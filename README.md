@@ -15,16 +15,12 @@ The amass tool does not only search a few Internet data sources and then perform
 $ go get -u github.com/caffix/amass
 ```
 
+At this point, the amass binary should be in *$GOPATH/bin*.
+
 
 2. Several wordlists can be found in the following directory:
 ```
 $ ls $GOPATH/src/github.com/caffix/amass/wordlists
-```
-
-
-3. Build the amass binary:
-```
-$ go build -o $GOPATH/bin/amass $GOPATH/src/github.com/caffix/amass/main.go
 ```
 
 
