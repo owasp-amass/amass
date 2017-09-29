@@ -11,10 +11,12 @@ import (
 	"github.com/irfansharif/cfilter"
 )
 
-const NUM_SEARCHES int = 8
+const NUM_SEARCHES int = 10
 
 func startSearches(domain string, subdomains chan string, done chan int) {
 	searches := []Searcher{
+		PGPSearch(domain, subdomains),
+		AskSearch(domain, subdomains),
 		CensysSearch(domain, subdomains),
 		CrtshSearch(domain, subdomains),
 		RobtexSearch(domain, subdomains),
@@ -51,6 +53,22 @@ func checkForDomains(candidate string, domains []string) bool {
 	return result
 }
 
+func getArchives(subdomains chan string) []Archiver {
+	archives := []Archiver{
+		WaybackMachineArchive(subdomains),
+		LibraryCongressArchive(subdomains),
+		ArchiveIsArchive(subdomains),
+		ArchiveItArchive(subdomains),
+		ArquivoArchive(subdomains),
+		BayerischeArchive(subdomains),
+		PermaArchive(subdomains),
+		UKWebArchive(subdomains),
+		UKGovArchive(subdomains),
+	}
+
+	return archives
+}
+
 // This is the driver function that performs a complete enumeration.
 func LookupSubdomainNames(domains []string, names chan *ValidSubdomain, wordlist *os.File) {
 	var completed int
@@ -64,7 +82,7 @@ func LookupSubdomainNames(domains []string, names chan *ValidSubdomain, wordlist
 	// initialize the dns resolver that will validate subdomains
 	dns := GoogleDNS(valid, subdomains)
 	// initialize the archives that will obtain additional subdomains
-	archive := WaybackMachineArchive(subdomains)
+	archives := getArchives(subdomains)
 	// when this timer fires, the program will end
 	t := time.NewTimer(5 * time.Second)
 	defer t.Stop()
@@ -100,8 +118,10 @@ loop:
 
 				// give it to the user!
 				names <- v
-				// check if this subdomain name has an archived web page
-				go archive.CheckHistory(v.Subdomain)
+				// check if this subdomain/host name has an archived web page
+				for _, a := range archives {
+					go a.CheckHistory(v.Subdomain)
+				}
 			}
 
 			activity = true

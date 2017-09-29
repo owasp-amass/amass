@@ -5,7 +5,7 @@
 [![](https://img.shields.io/badge/go-1.8-blue.svg)](https://github.com/moovweb/gvm) [![License](https://img.shields.io/hexpm/l/plug.svg)](https://www.apache.org/licenses/LICENSE-2.0)
 
 
-The amass tool not only searches a few Internet data sources and then performs brute force subdomain enumeration, it also searches a web archive to obtain web pages from the target organization without them being aware of it! Searching these web pages reveals additional subdomains and host names not likely to be provided by a wordlist file. All three methods can be employed together by amass, and have shown to be complementary.
+The amass tool not only searches a few Internet data sources and then performs brute force subdomain enumeration, it also searches web archives to obtain web pages from the target organization without them being aware of it! Searching these web pages reveals additional subdomains and host names not likely to be provided by a wordlist file. All three methods can be employed together by amass, and have shown to be complementary.
 
 
 ## Install
@@ -24,7 +24,7 @@ $ ls $GOPATH/src/github.com/caffix/amass/wordlists
 ```
 
 
-## Running amass
+## Using amass
 
 The most basic use of the tool:
 ```
@@ -32,7 +32,7 @@ $ amass example.com
 ```
 
 
-Get amass provide summary information:
+Get amass to provide summary information:
 ```
 $ amass -v example.com
 ```
@@ -50,7 +50,7 @@ $ amass -whois example.com
 ```
 
 
-You can have amass list out all the domains discovered with reverse whois before performing the enumeration:
+You can have amass list all the domains discovered with reverse whois before performing the enumeration:
 ```
 $ amass -whois -list example.com
 ```
@@ -75,7 +75,7 @@ All these options can be used together:
 $ amass -v -ip -whois -brute wordlist_filepath.txt example.com example1.com
 ```
 
-**Be sure that the target domain is the last parameter provided to amass.**
+**Be sure that the target domain is the last parameter provided to amass, followed by any extra domains.**
 
 
 ## Settings for the amass Maltego Local Transform
@@ -97,7 +97,7 @@ $ amass -v -ip -whois -brute wordlist_filepath.txt example.com example1.com
 
 ## Let me know what you think
 
-**NOTE: Still under development.**
+**NOTE: Still under development**
 
 **Author: Jeff Foley / @jeff_foley**
 
