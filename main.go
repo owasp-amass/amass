@@ -34,6 +34,7 @@ var AsciiArt string = `
 
 func main() {
 	var count int
+	var limit int64
 	var wordlist string
 	var show, ip, whois, list, help bool
 	var names chan *amass.ValidSubdomain = make(chan *amass.ValidSubdomain, 20)
@@ -43,6 +44,7 @@ func main() {
 	flag.BoolVar(&show, "v", false, "Print the summary information")
 	flag.BoolVar(&whois, "whois", false, "Include domains discoverd with reverse whois")
 	flag.BoolVar(&list, "list", false, "List all domains to be used in the search")
+	flag.Int64Var(&limit, "limit", 0, "Sets the number of max DNS queries per minute")
 	flag.StringVar(&wordlist, "brute", "", "Path to the brute force wordlist file")
 	flag.Parse()
 
@@ -99,7 +101,7 @@ func main() {
 		}
 	}()
 
-	amass.LookupSubdomainNames(domains, names, f)
+	amass.LookupSubdomainNames(domains, names, f, limit)
 
 	if show {
 		fmt.Printf("\n%d legitimate hosts and subdomains discovered.\n", count)

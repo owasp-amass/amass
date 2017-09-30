@@ -31,7 +31,7 @@ func main() {
 	}()
 
 	trx.AddUIMessage("The amass transform can take a few minutes to complete.", "Inform")
-	amass.LookupSubdomainNames(domains, names, nil)
+	amass.LookupSubdomainNames(domains, names, nil, 0)
 
 	fmt.Println(trx.ReturnOutput())
 }

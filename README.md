@@ -44,6 +44,14 @@ $ amass -ip example.com
 ```
 
 
+Throttle the rate of DNS queries by number per minute:
+```
+$ amass -limit 120 example.com
+```
+
+**The maximum rate supported is one DNS query every 50 milliseconds.**
+
+
 Allow amass to included additional domains in the search using reverse whois information:
 ```
 $ amass -whois example.com

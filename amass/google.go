@@ -92,10 +92,33 @@ func (gd *googleDNS) checkDomainForWildcards(domain string) *DNSWildcard {
 	return &DNSWildcard{HasWildcard: false, IP: ""}
 }
 
-func (gd *googleDNS) processSubdomains() {
+// do not use this service more than once every 1/20 a second
+func limitToDuration(limit int64) time.Duration {
+	if limit > 0 {
+		d := time.Duration(limit)
+
+		if d < 60 {
+			// we are dealing with number of seconds
+			return (60 / d) * time.Second
+		}
+
+		// make it is times per second
+		d = d / 60
+
+		m := 1000 / d
+		if d < 1000 && m > 20 {
+			return m * time.Millisecond
+		}
+	}
+
+	// use the default rate
+	return 50 * time.Millisecond
+}
+
+func (gd *googleDNS) processSubdomains(limit int64) {
 	wildcards := make(map[string]*DNSWildcard)
-	// do not use this service more than once every 1/20 a second
-	t := time.NewTicker(50 * time.Millisecond)
+
+	t := time.NewTicker(limitToDuration(limit))
 	defer t.Stop()
 
 	for range t.C {
@@ -136,13 +159,13 @@ func (gd *googleDNS) CheckSubdomains(sds []string) {
 	}
 }
 
-func GoogleDNS(valid chan *ValidSubdomain, subdomains chan string) DNSChecker {
+func GoogleDNS(valid chan *ValidSubdomain, subdomains chan string, limit int64) DNSChecker {
 	gd := new(googleDNS)
 
 	gd.valid = valid
 	gd.subdomains = subdomains
 	gd.next = make(chan string, 200)
 
-	go gd.processSubdomains()
+	go gd.processSubdomains(limit)
 	return gd
 }

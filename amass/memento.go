@@ -47,7 +47,8 @@ func (m *memento) processRequests() {
 				s := queue[0]
 				queue = queue[1:]
 
-				go crawl(m.url, strconv.Itoa(year), s, m.subdomains, done, 2*time.Minute)
+				go crawl(m.url, strconv.Itoa(year), s,
+					m.subdomains, done, 4*time.Minute)
 				running++
 			}
 		case <-done:

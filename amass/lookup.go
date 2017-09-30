@@ -70,7 +70,7 @@ func getArchives(subdomains chan string) []Archiver {
 }
 
 // This is the driver function that performs a complete enumeration.
-func LookupSubdomainNames(domains []string, names chan *ValidSubdomain, wordlist *os.File) {
+func LookupSubdomainNames(domains []string, names chan *ValidSubdomain, wordlist *os.File, limit int64) {
 	var completed int
 	var legitimate []string
 	var done chan int = make(chan int, 20)
@@ -80,7 +80,7 @@ func LookupSubdomainNames(domains []string, names chan *ValidSubdomain, wordlist
 
 	go executeSearchesForDomains(domains, subdomains, done)
 	// initialize the dns resolver that will validate subdomains
-	dns := GoogleDNS(valid, subdomains)
+	dns := GoogleDNS(valid, subdomains, limit)
 	// initialize the archives that will obtain additional subdomains
 	archives := getArchives(subdomains)
 	// when this timer fires, the program will end
