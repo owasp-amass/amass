@@ -13,7 +13,7 @@ import (
 
 func main() {
 	var domains []string
-	var names chan *amass.ValidSubdomain = make(chan *amass.ValidSubdomain, 10)
+	names := make(chan *amass.ValidSubdomain, 10)
 
 	lt := maltegolocal.ParseLocalArguments(os.Args)
 	domains = append(domains, lt.Value)

@@ -9,39 +9,37 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/irfansharif/cfilter"
 	"github.com/likexian/whois-go"
 	"github.com/likexian/whois-parser-go"
 )
 
 var (
-	badWordFilter *cfilter.CFilter
+	badWordFilter map[string]bool
 	once          sync.Once
 )
 
 func initializeFilter() {
-	badWordFilter = cfilter.New()
+	badWordFilter = make(map[string]bool)
 
-	badWordFilter.Insert([]byte("domain administrator"))
-	badWordFilter.Insert([]byte("private registration"))
-	badWordFilter.Insert([]byte("registration private"))
-	badWordFilter.Insert([]byte("registration"))
-	badWordFilter.Insert([]byte("domain manager"))
-	badWordFilter.Insert([]byte("domain name coordinator"))
-	badWordFilter.Insert([]byte("techcontact"))
-	badWordFilter.Insert([]byte("technical contact"))
-	badWordFilter.Insert([]byte("internet"))
-	badWordFilter.Insert([]byte("hostmaster"))
-	badWordFilter.Insert([]byte("united states"))
-	badWordFilter.Insert([]byte("information"))
-	badWordFilter.Insert([]byte("security officer"))
-	badWordFilter.Insert([]byte("chief information security officer"))
-	badWordFilter.Insert([]byte("chief information officer"))
-	badWordFilter.Insert([]byte("information officer"))
-	badWordFilter.Insert([]byte("information technology services"))
-	badWordFilter.Insert([]byte("domains by proxy"))
-	badWordFilter.Insert([]byte("perfect privacy"))
-
+	badWordFilter["domain administrator"] = true
+	badWordFilter["private registration"] = true
+	badWordFilter["registration private"] = true
+	badWordFilter["registration"] = true
+	badWordFilter["domain manager"] = true
+	badWordFilter["domain name coordinator"] = true
+	badWordFilter["techcontact"] = true
+	badWordFilter["technical contact"] = true
+	badWordFilter["internet"] = true
+	badWordFilter["hostmaster"] = true
+	badWordFilter["united states"] = true
+	badWordFilter["information"] = true
+	badWordFilter["security officer"] = true
+	badWordFilter["chief information security officer"] = true
+	badWordFilter["chief information officer"] = true
+	badWordFilter["information officer"] = true
+	badWordFilter["information technology services"] = true
+	badWordFilter["domains by proxy"] = true
+	badWordFilter["perfect privacy"] = true
 	return
 }
 
@@ -159,7 +157,7 @@ func filterList(list []string) []string {
 			continue
 		}
 
-		if !badWordFilter.Lookup([]byte(v)) {
+		if _, ok := badWordFilter[v]; !ok {
 			fl = append(fl, v)
 		}
 	}
@@ -230,7 +228,7 @@ func ReverseWhois(domain string) []string {
 		return nil
 	}
 
-	var done chan string = make(chan string, 10)
+	done := make(chan string, 10)
 
 	for _, d := range domainlist {
 		go attemptMatch(domain, d, tlist, done)

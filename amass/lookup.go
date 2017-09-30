@@ -7,8 +7,6 @@ import (
 	"os"
 	"strings"
 	"time"
-
-	"github.com/irfansharif/cfilter"
 )
 
 const NUM_SEARCHES int = 10
@@ -73,11 +71,12 @@ func getArchives(subdomains chan string) []Archiver {
 func LookupSubdomainNames(domains []string, names chan *ValidSubdomain, wordlist *os.File, limit int64) {
 	var completed int
 	var legitimate []string
-	var done chan int = make(chan int, 20)
-	var subdomains chan string = make(chan string, 200)
-	var valid chan *ValidSubdomain = make(chan *ValidSubdomain, 5)
-	totalSearches := NUM_SEARCHES * len(domains)
 
+	done := make(chan int, 20)
+	subdomains := make(chan string, 200)
+	valid := make(chan *ValidSubdomain, 5)
+	totalSearches := NUM_SEARCHES * len(domains)
+	// start the simple searches to get us started
 	go executeSearchesForDomains(domains, subdomains, done)
 	// initialize the dns resolver that will validate subdomains
 	dns := GoogleDNS(valid, subdomains, limit)
@@ -86,8 +85,8 @@ func LookupSubdomainNames(domains []string, names chan *ValidSubdomain, wordlist
 	// when this timer fires, the program will end
 	t := time.NewTimer(5 * time.Second)
 	defer t.Stop()
-	// cuckoo filter for not double-checking subdomain names
-	filter := cfilter.New()
+	// filter for not double-checking subdomain names
+	filter := make(map[string]bool)
 	// detect when the lookup process is finished
 	activity := false
 	//start brute forcing
@@ -99,12 +98,14 @@ loop:
 		case sd := <-subdomains: // new subdomains come in here
 			s := Trim252F(sd)
 
-			if s != "" && !filter.Lookup([]byte(s)) {
-				filter.Insert([]byte(s))
+			if s != "" {
+				if _, ok := filter[s]; !ok {
+					filter[s] = true
 
-				if checkForDomains(s, domains) {
-					// is this new name valid?
-					go dns.CheckSubdomain(s)
+					if checkForDomains(s, domains) {
+						// is this new name valid?
+						go dns.CheckSubdomain(s)
+					}
 				}
 			}
 

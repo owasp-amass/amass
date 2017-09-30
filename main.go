@@ -7,7 +7,9 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
 	"path"
+	"syscall"
 
 	"github.com/caffix/amass/amass"
 )
@@ -37,7 +39,7 @@ func main() {
 	var limit int64
 	var wordlist string
 	var show, ip, whois, list, help bool
-	var names chan *amass.ValidSubdomain = make(chan *amass.ValidSubdomain, 20)
+	names := make(chan *amass.ValidSubdomain, 20)
 
 	flag.BoolVar(&help, "h", false, "Show the program usage message")
 	flag.BoolVar(&ip, "ip", false, "Show the IP addresses for discovered names")
@@ -48,17 +50,11 @@ func main() {
 	flag.StringVar(&wordlist, "brute", "", "Path to the brute force wordlist file")
 	flag.Parse()
 
-	if help {
+	domains := flag.Args()
+	if help || len(domains) == 0 {
 		fmt.Println(AsciiArt)
 		fmt.Printf("Usage: %s [options] domain extra_domain1 extra_domain2... (e.g. google.com)\n", path.Base(os.Args[0]))
 		flag.PrintDefaults()
-		return
-	}
-
-	domains := flag.Args()
-	if domains == nil {
-		fmt.Println(AsciiArt)
-		fmt.Println("Use -h for usage information")
 		return
 	}
 
@@ -101,6 +97,20 @@ func main() {
 		}
 	}()
 
+	// if the user interrupts the program, check to print the summary information
+	sigs := make(chan os.Signal, 2)
+	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-sigs
+
+		if show {
+			fmt.Printf("\n%d legitimate hosts and subdomains discovered.\n", count)
+		}
+
+		os.Exit(0)
+	}()
+
+	// fire off the driver function for the enumeration process
 	amass.LookupSubdomainNames(domains, names, f, limit)
 
 	if show {

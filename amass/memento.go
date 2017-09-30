@@ -15,7 +15,6 @@ import (
 
 	"github.com/PuerkitoBio/gocrawl"
 	"github.com/PuerkitoBio/goquery"
-	"github.com/irfansharif/cfilter"
 )
 
 type memento struct {
@@ -31,7 +30,7 @@ func (m memento) String() string {
 func (m *memento) processRequests() {
 	var running int
 	var queue []string
-	var done chan int = make(chan int, 10)
+	done := make(chan int, 10)
 
 	t := time.NewTicker(1 * time.Second)
 	defer t.Stop()
@@ -81,7 +80,7 @@ type Ext struct {
 	*gocrawl.DefaultExtender
 	domainRE                *regexp.Regexp
 	mementoRE               *regexp.Regexp
-	filter                  *cfilter.CFilter
+	filter                  map[string]bool
 	base, year, sub, domain string
 	names                   chan string
 }
@@ -118,14 +117,14 @@ func (e *Ext) Filter(ctx *gocrawl.URLContext, isVisited bool) bool {
 		return false
 	}
 
-	if e.filter.Lookup([]byte(r)) {
+	if _, ok := e.filter[r]; ok {
 		return false
 	}
 
 	if u != r {
 		// the more refined version has been requested
 		// and will cause the reduced version to be filtered
-		e.filter.Insert([]byte(r))
+		e.filter[r] = true
 	}
 	return true
 }
@@ -151,8 +150,8 @@ func crawl(base, year, subdomain string, names chan string, done chan int, timeo
 
 	domainre, _ := regexp.Compile(SUBRE + domain)
 	mementore, _ := regexp.Compile(base + "/[0-9]+/")
-	// cuckoo filter for not double-checking URLs
-	filter := cfilter.New()
+	// filter for not double-checking URLs
+	filter := make(map[string]bool)
 
 	ext := &Ext{
 		DefaultExtender: &gocrawl.DefaultExtender{},
