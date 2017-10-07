@@ -9,7 +9,7 @@ import (
 
 type crtsh struct {
 	domain     string
-	subdomains chan string
+	subdomains chan *Subdomain
 }
 
 func (c crtsh) String() string {
@@ -40,7 +40,7 @@ func (c *crtsh) Search(done chan int) {
 	return
 }
 
-func CrtshSearch(domain string, subdomains chan string) Searcher {
+func CrtshSearch(domain string, subdomains chan *Subdomain) Searcher {
 	c := new(crtsh)
 
 	c.domain = domain

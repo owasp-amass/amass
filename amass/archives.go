@@ -3,38 +3,38 @@
 
 package amass
 
-func ArchiveItArchive(subdomains chan string) Archiver {
+func ArchiveItArchive(subdomains chan *Subdomain) Archiver {
 	return MementoWebArchive("https://wayback.archive-it.org/all", subdomains)
 }
 
-func ArchiveIsArchive(subdomains chan string) Archiver {
+func ArchiveIsArchive(subdomains chan *Subdomain) Archiver {
 	return MementoWebArchive("http://archive.is", subdomains)
 }
 
-func ArquivoArchive(subdomains chan string) Archiver {
+func ArquivoArchive(subdomains chan *Subdomain) Archiver {
 	return MementoWebArchive("http://arquivo.pt/wayback", subdomains)
 }
 
-func BayerischeArchive(subdomains chan string) Archiver {
+func BayerischeArchive(subdomains chan *Subdomain) Archiver {
 	return MementoWebArchive("http://langzeitarchivierung.bib-bvb.de/wayback", subdomains)
 }
 
-func LibraryCongressArchive(subdomains chan string) Archiver {
+func LibraryCongressArchive(subdomains chan *Subdomain) Archiver {
 	return MementoWebArchive("http://webarchive.loc.gov/all", subdomains)
 }
 
-func PermaArchive(subdomains chan string) Archiver {
+func PermaArchive(subdomains chan *Subdomain) Archiver {
 	return MementoWebArchive("http://perma-archives.org/warc", subdomains)
 }
 
-func UKWebArchive(subdomains chan string) Archiver {
+func UKWebArchive(subdomains chan *Subdomain) Archiver {
 	return MementoWebArchive("http://www.webarchive.org.uk/wayback/archive", subdomains)
 }
 
-func UKGovArchive(subdomains chan string) Archiver {
+func UKGovArchive(subdomains chan *Subdomain) Archiver {
 	return MementoWebArchive("http://webarchive.nationalarchives.gov.uk", subdomains)
 }
 
-func WaybackMachineArchive(subdomains chan string) Archiver {
+func WaybackMachineArchive(subdomains chan *Subdomain) Archiver {
 	return MementoWebArchive("http://web.archive.org/web", subdomains)
 }

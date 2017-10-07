@@ -57,14 +57,3 @@ func Trim252F(subdomain string) string {
 	}
 	return s
 }
-
-func ExtractDomain(subdomain string) string {
-	p := strings.Split(subdomain, ".")
-	l := len(p)
-
-	if l == 1 {
-		return ""
-	}
-
-	return strings.Join(p[l-2:], ".")
-}

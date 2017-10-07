@@ -7,6 +7,15 @@ import (
 	"fmt"
 )
 
+const (
+	SMART   = "smart"
+	FLIP    = "numflip"
+	BRUTE   = "brute"
+	SEARCH  = "search"
+	CRAWLER = "crawl"
+	DNSTag  = "dns"
+)
+
 type Searcher interface {
 	Domain() string
 	Quantity() int
@@ -17,17 +26,20 @@ type Searcher interface {
 }
 
 type Archiver interface {
-	CheckHistory(subdomain string)
+	CheckHistory(subdomain *Subdomain)
 	TotalUniqueSubdomains() int
 	fmt.Stringer
 }
 
-type DNSChecker interface {
-	CheckSubdomain(sd string)
-	CheckSubdomains(sds []string)
+type Guesser interface {
+	AddName(name *Subdomain)
+	Start()
 }
 
-type ValidSubdomain struct {
-	Subdomain string
-	Address   string
+type DNSChecker interface {
+	CheckSubdomain(sd *Subdomain)
+}
+
+type Subdomain struct {
+	Name, Domain, Address, Tag string
 }

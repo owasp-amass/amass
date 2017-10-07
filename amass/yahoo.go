@@ -12,7 +12,7 @@ type yahoo struct {
 	domain     string
 	quantity   int
 	limit      int
-	subdomains chan string
+	subdomains chan *Subdomain
 }
 
 func (y yahoo) String() string {
@@ -46,7 +46,7 @@ func (y *yahoo) Search(done chan int) {
 	return
 }
 
-func YahooSearch(domain string, subdomains chan string) Searcher {
+func YahooSearch(domain string, subdomains chan *Subdomain) Searcher {
 	y := new(yahoo)
 
 	y.domain = domain

@@ -12,7 +12,7 @@ type dogpile struct {
 	domain     string
 	quantity   int
 	limit      int
-	subdomains chan string
+	subdomains chan *Subdomain
 }
 
 func (d dogpile) String() string {
@@ -45,7 +45,7 @@ func (d *dogpile) Search(done chan int) {
 	return
 }
 
-func DogpileSearch(domain string, subdomains chan string) Searcher {
+func DogpileSearch(domain string, subdomains chan *Subdomain) Searcher {
 	d := new(dogpile)
 
 	d.domain = domain

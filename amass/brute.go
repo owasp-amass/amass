@@ -9,14 +9,23 @@ import (
 	"time"
 )
 
-func BruteForce(domains []string, wordlist *os.File, subdomains chan string) {
+func BruteForce(domains []string, wordlist *os.File, subdomains chan *Subdomain, limit int64) {
 	if wordlist == nil {
 		return
 	}
 
+	// do not generate more than one name every 20th of a second
+	l := limit / int64(len(domains))
+	t := time.NewTicker(LimitToDuration(l))
+	defer t.Stop()
+
 	scanner := bufio.NewScanner(wordlist)
 
-	for scanner.Scan() {
+	for range t.C {
+		if !scanner.Scan() {
+			break
+		}
+
 		word := scanner.Text()
 		if word == "" {
 			continue
@@ -25,12 +34,7 @@ func BruteForce(domains []string, wordlist *os.File, subdomains chan string) {
 		for _, d := range domains {
 			name := word + "." + d
 
-			// don't allow brute forcing to overwhelm the channel
-			if len(subdomains) == cap(subdomains) {
-				time.Sleep(2 * time.Second)
-			}
-
-			subdomains <- name
+			subdomains <- &Subdomain{Name: name, Domain: d, Tag: BRUTE}
 		}
 	}
 	return

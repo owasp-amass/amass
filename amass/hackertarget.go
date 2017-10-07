@@ -9,7 +9,7 @@ import (
 
 type hackertarget struct {
 	domain     string
-	subdomains chan string
+	subdomains chan *Subdomain
 }
 
 func (h hackertarget) String() string {
@@ -40,7 +40,7 @@ func (h *hackertarget) Search(done chan int) {
 	return
 }
 
-func HackerTargetSearch(domain string, subdomains chan string) Searcher {
+func HackerTargetSearch(domain string, subdomains chan *Subdomain) Searcher {
 	h := new(hackertarget)
 
 	h.domain = domain

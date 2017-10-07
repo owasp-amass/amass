@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/PuerkitoBio/gocrawl"
@@ -19,8 +20,8 @@ import (
 
 type memento struct {
 	url        string
-	subdomains chan string
-	requests   chan string
+	subdomains chan *Subdomain
+	requests   chan *Subdomain
 }
 
 func (m memento) String() string {
@@ -29,7 +30,7 @@ func (m memento) String() string {
 
 func (m *memento) processRequests() {
 	var running int
-	var queue []string
+	var queue []*Subdomain
 	done := make(chan int, 10)
 
 	t := time.NewTicker(1 * time.Second)
@@ -44,10 +45,14 @@ func (m *memento) processRequests() {
 		case <-t.C:
 			if running < 10 && len(queue) > 0 {
 				s := queue[0]
-				queue = queue[1:]
+				if len(queue) == 1 {
+					queue = []*Subdomain{}
+				} else {
+					queue = queue[1:]
+				}
 
 				go crawl(m.url, strconv.Itoa(year), s,
-					m.subdomains, done, 4*time.Minute)
+					m.subdomains, done, 1*time.Minute)
 				running++
 			}
 		case <-done:
@@ -56,7 +61,7 @@ func (m *memento) processRequests() {
 	}
 }
 
-func (m *memento) CheckHistory(subdomain string) {
+func (m *memento) CheckHistory(subdomain *Subdomain) {
 	m.requests <- subdomain
 	return
 }
@@ -65,12 +70,12 @@ func (m memento) TotalUniqueSubdomains() int {
 	return 0
 }
 
-func MementoWebArchive(u string, subdomains chan string) Archiver {
+func MementoWebArchive(u string, subdomains chan *Subdomain) Archiver {
 	m := new(memento)
 
 	m.url = u
 	m.subdomains = subdomains
-	m.requests = make(chan string, 100)
+	m.requests = make(chan *Subdomain, 100)
 
 	go m.processRequests()
 	return m
@@ -81,8 +86,9 @@ type Ext struct {
 	domainRE                *regexp.Regexp
 	mementoRE               *regexp.Regexp
 	filter                  map[string]bool
+	flock                   sync.RWMutex
 	base, year, sub, domain string
-	names                   chan string
+	names                   chan *Subdomain
 }
 
 func (e *Ext) reducedURL(u *url.URL) string {
@@ -117,14 +123,20 @@ func (e *Ext) Filter(ctx *gocrawl.URLContext, isVisited bool) bool {
 		return false
 	}
 
-	if _, ok := e.filter[r]; ok {
+	e.flock.RLock()
+	_, ok := e.filter[r]
+	e.flock.RUnlock()
+
+	if ok {
 		return false
 	}
 
 	if u != r {
 		// the more refined version has been requested
 		// and will cause the reduced version to be filtered
+		e.flock.Lock()
 		e.filter[r] = true
+		e.flock.Unlock()
 	}
 	return true
 }
@@ -136,13 +148,13 @@ func (e *Ext) Visit(ctx *gocrawl.URLContext, res *http.Response, doc *goquery.Do
 	}
 
 	for _, f := range e.domainRE.FindAllString(string(in), -1) {
-		e.names <- f
+		e.names <- &Subdomain{Name: f, Domain: e.domain, Tag: CRAWLER}
 	}
 	return nil, true
 }
 
-func crawl(base, year, subdomain string, names chan string, done chan int, timeout time.Duration) {
-	domain := ExtractDomain(subdomain)
+func crawl(base, year string, subdomain *Subdomain, names chan *Subdomain, done chan int, timeout time.Duration) {
+	domain := subdomain.Domain
 	if domain == "" {
 		done <- 1
 		return
@@ -160,7 +172,7 @@ func crawl(base, year, subdomain string, names chan string, done chan int, timeo
 		filter:          filter,
 		base:            base,
 		year:            year,
-		sub:             subdomain,
+		sub:             subdomain.Name,
 		domain:          domain,
 		names:           names,
 	}
@@ -173,7 +185,7 @@ func crawl(base, year, subdomain string, names chan string, done chan int, timeo
 	opts.MaxVisits = 100
 
 	c := gocrawl.NewCrawlerWithOptions(opts)
-	go c.Run(fmt.Sprintf("%s/%s/%s", base, year, subdomain))
+	go c.Run(fmt.Sprintf("%s/%s/%s", base, year, subdomain.Name))
 
 	<-time.After(timeout)
 	c.Stop()

@@ -6,6 +6,7 @@ package amass
 import (
 	"encoding/json"
 	"net/url"
+	"sync"
 	"time"
 )
 
@@ -29,11 +30,12 @@ type GoogleDNSResolve struct {
 }
 
 type googleDNS struct {
-	valid            chan *ValidSubdomain
-	subdomains, next chan string
+	valid, subdomains chan *Subdomain
+	lock              sync.Mutex
+	queue             []*Subdomain
 }
 
-func (gd *googleDNS) resolve(name, t string) string {
+func (gd *googleDNS) resolve(domain, name, t string) string {
 	u, _ := url.Parse("https://dns.google.com/resolve")
 	// do not send our location information with the query
 	u.RawQuery = url.Values{"name": {name}, "type": {t}, "edns_client_subnet": {"0.0.0.0/0"}}.Encode()
@@ -63,7 +65,7 @@ func (gd *googleDNS) resolve(name, t string) string {
 		if a.Type == 5 && a.Name[:ni] == name {
 			di := len(a.Data) - 1
 
-			gd.subdomains <- a.Data[:di]
+			gd.subdomains <- &Subdomain{Name: a.Data[:di], Domain: domain, Tag: DNSTag}
 		} else if a.Type == rt {
 			ip = a.Data
 			break
@@ -82,9 +84,9 @@ func (gd *googleDNS) checkDomainForWildcards(domain string) *DNSWildcard {
 	name2 := "45another34random99name." + domain
 	name3 := "just555little333me." + domain
 
-	ip1 := gd.resolve(name1, "A")
-	ip2 := gd.resolve(name2, "A")
-	ip3 := gd.resolve(name3, "A")
+	ip1 := gd.resolve(domain, name1, "A")
+	ip2 := gd.resolve(domain, name2, "A")
+	ip3 := gd.resolve(domain, name3, "A")
 
 	if (ip1 != "" && ip2 != "" && ip3 != "") && (ip1 == ip2 && ip2 == ip3) {
 		return &DNSWildcard{HasWildcard: true, IP: ip1}
@@ -92,8 +94,7 @@ func (gd *googleDNS) checkDomainForWildcards(domain string) *DNSWildcard {
 	return &DNSWildcard{HasWildcard: false, IP: ""}
 }
 
-// do not use this service more than once every 1/20 a second
-func limitToDuration(limit int64) time.Duration {
+func LimitToDuration(limit int64) time.Duration {
 	if limit > 0 {
 		d := time.Duration(limit)
 
@@ -102,29 +103,32 @@ func limitToDuration(limit int64) time.Duration {
 			return (60 / d) * time.Second
 		}
 
-		// make it is times per second
+		// make it times per second
 		d = d / 60
 
 		m := 1000 / d
-		if d < 1000 && m > 20 {
+		if d < 1000 && m > 10 {
 			return m * time.Millisecond
 		}
 	}
 
 	// use the default rate
-	return 50 * time.Millisecond
+	return 10 * time.Millisecond
 }
 
 func (gd *googleDNS) processSubdomains(limit int64) {
 	wildcards := make(map[string]*DNSWildcard)
 
-	t := time.NewTicker(limitToDuration(limit))
+	t := time.NewTicker(LimitToDuration(limit))
 	defer t.Stop()
 
 	for range t.C {
-		subdomain := <-gd.next
+		subdomain := gd.getNext()
+		if subdomain == nil {
+			continue
+		}
 
-		domain := ExtractDomain(subdomain)
+		domain := subdomain.Domain
 		if domain == "" {
 			continue
 		}
@@ -135,36 +139,51 @@ func (gd *googleDNS) processSubdomains(limit int64) {
 			wildcards[domain] = w
 		}
 
-		ip := gd.resolve(subdomain, "A")
+		ip := gd.resolve(domain, subdomain.Name, "A")
 		if ip == "" {
-			ip = gd.resolve(subdomain, "AAAA")
+			ip = gd.resolve(domain, subdomain.Name, "AAAA")
 		}
 
 		if ip == "" || (w.HasWildcard == true && w.IP == ip) {
 			continue
 		}
 
-		gd.valid <- &ValidSubdomain{Subdomain: subdomain, Address: ip}
+		subdomain.Address = ip
+		gd.valid <- subdomain
 	}
 	return
 }
 
-func (gd *googleDNS) CheckSubdomain(sd string) {
-	gd.next <- sd
-}
+func (gd *googleDNS) getNext() *Subdomain {
+	var l int
+	var s *Subdomain
 
-func (gd *googleDNS) CheckSubdomains(sds []string) {
-	for _, s := range sds {
-		gd.next <- s
+	gd.lock.Lock()
+
+	l = len(gd.queue)
+	if l > 1 {
+		s = gd.queue[0]
+		gd.queue = gd.queue[1:]
+	} else if l == 1 {
+		s = gd.queue[0]
+		gd.queue = []*Subdomain{}
 	}
+
+	gd.lock.Unlock()
+	return s
 }
 
-func GoogleDNS(valid chan *ValidSubdomain, subdomains chan string, limit int64) DNSChecker {
+func (gd *googleDNS) CheckSubdomain(sd *Subdomain) {
+	gd.lock.Lock()
+	gd.queue = append(gd.queue, sd)
+	gd.lock.Unlock()
+}
+
+func GoogleDNS(valid chan *Subdomain, subdomains chan *Subdomain, limit int64) DNSChecker {
 	gd := new(googleDNS)
 
 	gd.valid = valid
 	gd.subdomains = subdomains
-	gd.next = make(chan string, 200)
 
 	go gd.processSubdomains(limit)
 	return gd

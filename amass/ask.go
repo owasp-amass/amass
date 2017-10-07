@@ -12,7 +12,7 @@ type ask struct {
 	domain     string
 	quantity   int
 	limit      int
-	subdomains chan string
+	subdomains chan *Subdomain
 }
 
 func (a ask) String() string {
@@ -46,7 +46,7 @@ func (a *ask) Search(done chan int) {
 	return
 }
 
-func AskSearch(domain string, subdomains chan string) Searcher {
+func AskSearch(domain string, subdomains chan *Subdomain) Searcher {
 	a := new(ask)
 
 	a.domain = domain

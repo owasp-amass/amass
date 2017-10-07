@@ -9,7 +9,7 @@ import (
 
 type pgp struct {
 	domain     string
-	subdomains chan string
+	subdomains chan *Subdomain
 }
 
 func (p pgp) String() string {
@@ -40,7 +40,7 @@ func (p *pgp) Search(done chan int) {
 	return
 }
 
-func PGPSearch(domain string, subdomains chan string) Searcher {
+func PGPSearch(domain string, subdomains chan *Subdomain) Searcher {
 	p := new(pgp)
 
 	p.domain = domain

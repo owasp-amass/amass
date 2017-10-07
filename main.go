@@ -35,11 +35,11 @@ var AsciiArt string = `
 `
 
 func main() {
-	var count int
+	var count, maxSmart int
 	var limit int64
 	var wordlist string
 	var show, ip, whois, list, help bool
-	names := make(chan *amass.ValidSubdomain, 20)
+	names := make(chan *amass.Subdomain, 100)
 
 	flag.BoolVar(&help, "h", false, "Show the program usage message")
 	flag.BoolVar(&ip, "ip", false, "Show the IP addresses for discovered names")
@@ -48,6 +48,7 @@ func main() {
 	flag.BoolVar(&list, "list", false, "List all domains to be used in the search")
 	flag.Int64Var(&limit, "limit", 0, "Sets the number of max DNS queries per minute")
 	flag.StringVar(&wordlist, "brute", "", "Path to the brute force wordlist file")
+	flag.IntVar(&maxSmart, "smart", 0, "Number of smart guessing attempts to make")
 	flag.Parse()
 
 	domains := flag.Args()
@@ -83,15 +84,18 @@ func main() {
 		defer f.Close()
 	}
 
+	stats := make(map[string]int)
+
 	go func() {
 		for {
 			name := <-names
 
 			count++
+			stats[name.Tag]++
 			if ip {
-				fmt.Println(name.Subdomain + "," + name.Address)
+				fmt.Println(name.Name + "," + name.Address)
 			} else {
-				fmt.Println(name.Subdomain)
+				fmt.Println(name.Name)
 			}
 
 		}
@@ -104,16 +108,24 @@ func main() {
 		<-sigs
 
 		if show {
-			fmt.Printf("\n%d legitimate hosts and subdomains discovered.\n", count)
+			fmt.Printf("\n%d hosts and subdomains discovered - ", count)
+			for k, v := range stats {
+				fmt.Printf("%s: %d ", k, v)
+			}
+			fmt.Println()
 		}
 
 		os.Exit(0)
 	}()
 
 	// fire off the driver function for the enumeration process
-	amass.LookupSubdomainNames(domains, names, f, limit)
+	amass.LookupSubdomainNames(domains, names, f, maxSmart, limit)
 
 	if show {
-		fmt.Printf("\n%d legitimate hosts and subdomains discovered.\n", count)
+		fmt.Printf("\n%d hosts and subdomains discovered - ", count)
+		for k, v := range stats {
+			fmt.Printf("%s: %d ", k, v)
+		}
+		fmt.Println()
 	}
 }

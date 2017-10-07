@@ -12,7 +12,7 @@ type gigablast struct {
 	domain     string
 	quantity   int
 	limit      int
-	subdomains chan string
+	subdomains chan *Subdomain
 }
 
 func (g gigablast) String() string {
@@ -46,7 +46,7 @@ func (g *gigablast) Search(done chan int) {
 	return
 }
 
-func GigablastSearch(domain string, subdomains chan string) Searcher {
+func GigablastSearch(domain string, subdomains chan *Subdomain) Searcher {
 	g := new(gigablast)
 
 	g.domain = domain

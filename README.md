@@ -70,6 +70,12 @@ $ amass -brute wordlist_filepath.txt example.com
 ```
 
 
+Have amass make a selected number of smart guesses based on successfully resolved names:
+```
+$ amass -smart 50000 example.com
+```
+
+
 Add some additional domains to the search:
 ```
 $ amass example.com example1.com example2.com

@@ -13,7 +13,7 @@ import (
 
 func main() {
 	var domains []string
-	names := make(chan *amass.ValidSubdomain, 10)
+	names := make(chan *amass.Subdomain, 100)
 
 	lt := maltegolocal.ParseLocalArguments(os.Args)
 	domains = append(domains, lt.Value)
@@ -24,14 +24,14 @@ func main() {
 		for {
 			n := <-names
 
-			if n.Subdomain != domains[0] {
-				trx.AddEntity("maltego.DNSName", n.Subdomain)
+			if n.Domain != domains[0] {
+				trx.AddEntity("maltego.DNSName", n.Name)
 			}
 		}
 	}()
 
 	trx.AddUIMessage("The amass transform can take a few minutes to complete.", "Inform")
-	amass.LookupSubdomainNames(domains, names, nil, 0)
+	amass.LookupSubdomainNames(domains, names, nil, 0, 0)
 
 	fmt.Println(trx.ReturnOutput())
 }

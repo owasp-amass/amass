@@ -9,7 +9,7 @@ import (
 
 type censys struct {
 	domain     string
-	subdomains chan string
+	subdomains chan *Subdomain
 }
 
 func (c censys) String() string {
@@ -39,7 +39,7 @@ func (c *censys) Search(done chan int) {
 	return
 }
 
-func CensysSearch(domain string, subdomains chan string) Searcher {
+func CensysSearch(domain string, subdomains chan *Subdomain) Searcher {
 	c := new(censys)
 
 	c.domain = domain

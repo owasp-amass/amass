@@ -64,7 +64,7 @@ func PostFormWeb(u, body string) string {
 	return string(in)
 }
 
-func SearchQuery(s Searcher, subdomains chan string) int {
+func SearchQuery(s Searcher, subdomains chan *Subdomain) int {
 	var unique []string
 
 	re, err := regexp.Compile(SUBRE + s.Domain())
@@ -84,7 +84,7 @@ func SearchQuery(s Searcher, subdomains chan string) int {
 
 			if len(u) > 0 {
 				unique = append(unique, u...)
-				subdomains <- sd
+				subdomains <- &Subdomain{Name: sd, Domain: s.Domain(), Tag: SEARCH}
 			}
 		}
 

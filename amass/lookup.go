@@ -11,7 +11,7 @@ import (
 
 const NUM_SEARCHES int = 10
 
-func startSearches(domain string, subdomains chan string, done chan int) {
+func startSearches(domain string, subdomains chan *Subdomain, done chan int) {
 	searches := []Searcher{
 		PGPSearch(domain, subdomains),
 		AskSearch(domain, subdomains),
@@ -32,7 +32,7 @@ func startSearches(domain string, subdomains chan string, done chan int) {
 	return
 }
 
-func executeSearchesForDomains(domains []string, subdomains chan string, done chan int) {
+func executeSearchesForDomains(domains []string, subdomains chan *Subdomain, done chan int) {
 	for _, d := range domains {
 		startSearches(d, subdomains, done)
 	}
@@ -51,7 +51,20 @@ func checkForDomains(candidate string, domains []string) bool {
 	return result
 }
 
-func getArchives(subdomains chan string) []Archiver {
+func getDomainFromName(name string, domains []string) string {
+	var result string
+
+	for _, d := range domains {
+		if strings.HasSuffix(name, d) {
+			result = d
+			break
+		}
+	}
+
+	return result
+}
+
+func getArchives(subdomains chan *Subdomain) []Archiver {
 	archives := []Archiver{
 		WaybackMachineArchive(subdomains),
 		LibraryCongressArchive(subdomains),
@@ -68,13 +81,14 @@ func getArchives(subdomains chan string) []Archiver {
 }
 
 // This is the driver function that performs a complete enumeration.
-func LookupSubdomainNames(domains []string, names chan *ValidSubdomain, wordlist *os.File, limit int64) {
+func LookupSubdomainNames(domains []string, names chan *Subdomain, wordlist *os.File, maxSmart int, limit int64) {
 	var completed int
+	var ngramStarted bool
 	var legitimate []string
 
 	done := make(chan int, 20)
-	subdomains := make(chan string, 200)
-	valid := make(chan *ValidSubdomain, 5)
+	subdomains := make(chan *Subdomain, 200)
+	valid := make(chan *Subdomain, 5)
 	totalSearches := NUM_SEARCHES * len(domains)
 	// start the simple searches to get us started
 	go executeSearchesForDomains(domains, subdomains, done)
@@ -83,36 +97,47 @@ func LookupSubdomainNames(domains []string, names chan *ValidSubdomain, wordlist
 	// initialize the archives that will obtain additional subdomains
 	archives := getArchives(subdomains)
 	// when this timer fires, the program will end
-	t := time.NewTimer(5 * time.Second)
+	t := time.NewTimer(20 * time.Second)
 	defer t.Stop()
 	// filter for not double-checking subdomain names
 	filter := make(map[string]bool)
 	// detect when the lookup process is finished
 	activity := false
 	//start brute forcing
-	go BruteForce(domains, wordlist, subdomains)
-
+	go BruteForce(domains, wordlist, subdomains, limit)
+	// setup ngram guessers
+	ngrams := make(map[string]Guesser)
+	if maxSmart > 0 {
+		for _, d := range domains {
+			ngrams[d] = NgramGuess(d, subdomains, limit, maxSmart)
+		}
+	}
+	// setup number flipping guessers
+	numflip := make(map[string]Guesser)
+	for _, d := range domains {
+		numflip[d] = NumFlipGuess(d, subdomains)
+	}
 loop:
 	for {
 		select {
 		case sd := <-subdomains: // new subdomains come in here
-			s := Trim252F(sd)
+			sd.Name = Trim252F(sd.Name)
 
-			if s != "" {
-				if _, ok := filter[s]; !ok {
-					filter[s] = true
+			if sd.Name != "" {
+				if _, ok := filter[sd.Name]; !ok {
+					filter[sd.Name] = true
 
-					if checkForDomains(s, domains) {
+					if checkForDomains(sd.Name, domains) {
 						// is this new name valid?
-						go dns.CheckSubdomain(s)
+						dns.CheckSubdomain(sd)
 					}
 				}
 			}
 
 			activity = true
 		case v := <-valid: // subdomains that passed a dns lookup
-			v.Subdomain = Trim252F(v.Subdomain)
-			n := NewUniqueElements(legitimate, v.Subdomain)
+			v.Name = Trim252F(v.Name)
+			n := NewUniqueElements(legitimate, v.Name)
 
 			if len(n) > 0 {
 				legitimate = append(legitimate, n...)
@@ -121,7 +146,17 @@ loop:
 				names <- v
 				// check if this subdomain/host name has an archived web page
 				for _, a := range archives {
-					go a.CheckHistory(v.Subdomain)
+					a.CheckHistory(v)
+				}
+
+				// try flipping some numbers for more names
+				nf := numflip[v.Domain]
+				nf.AddName(v)
+
+				// send the name to the ngram guesser
+				if maxSmart > 0 && v.Domain != "" {
+					ng := ngrams[v.Domain]
+					ng.AddName(v)
 				}
 			}
 
@@ -129,12 +164,19 @@ loop:
 		case <-done: // searches that have finished
 			completed++
 		case <-t.C:
-			// we are not done if searches are still running
-			if !activity && completed == totalSearches {
+			if !ngramStarted && completed == totalSearches {
+				// searches are done, start ngram guessers
+				for _, g := range ngrams {
+					g.Start()
+				}
+
+				ngramStarted = true
+			} else if !activity && completed == totalSearches {
+				// we are not done if searches are still running
 				break loop
 			}
 			// keep the process going
-			t.Reset(5 * time.Second)
+			t.Reset(10 * time.Second)
 			activity = false
 		}
 	}

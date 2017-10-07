@@ -12,7 +12,7 @@ type bing struct {
 	domain     string
 	quantity   int
 	limit      int
-	subdomains chan string
+	subdomains chan *Subdomain
 }
 
 func (b bing) String() string {
@@ -47,7 +47,7 @@ func (b *bing) Search(done chan int) {
 	return
 }
 
-func BingSearch(domain string, subdomains chan string) Searcher {
+func BingSearch(domain string, subdomains chan *Subdomain) Searcher {
 	b := new(bing)
 
 	b.domain = domain
