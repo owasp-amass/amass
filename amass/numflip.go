@@ -86,15 +86,25 @@ func (nf *numFlipGuess) flipNumsInName(cur, total int, name *Subdomain) {
 func (nf *numFlipGuess) processName(name *Subdomain) {
 	var counter int
 
+	words := strings.Split(name.Name, ".")
+	l := len(words) - nf.firstNameLevel
+
 	// check how many numbers are in the name
-	for _, c := range name.Name {
-		if unicode.IsNumber(c) {
-			counter++
+	for i, w := range words {
+		if i >= l {
+			// don't consider the domain name portion
+			break
+		}
+
+		for _, c := range w {
+			if unicode.IsNumber(c) {
+				counter++
+			}
 		}
 	}
 
 	// don't process a name with too many numbers either
-	if counter == 0 || counter > 3 {
+	if counter == 0 || counter > 2 {
 		return
 	}
 
