@@ -164,15 +164,15 @@ loop:
 		case <-done: // searches that have finished
 			completed++
 		case <-t.C:
-			if !ngramStarted && completed == totalSearches {
+			if !ngramStarted && maxSmart > 0 && dns.TagQueriesFinished(SEARCH) {
 				// searches are done, start ngram guessers
 				for _, g := range ngrams {
 					g.Start()
 				}
 
 				ngramStarted = true
-			} else if !activity && completed == totalSearches {
-				// we are not done if searches are still running
+			} else if !activity && completed == totalSearches && dns.AllQueriesFinished() {
+				// we are done if searches are finished, no dns queries left, and no activity
 				break loop
 			}
 			// keep the process going

@@ -38,6 +38,8 @@ type Guesser interface {
 
 type DNSChecker interface {
 	CheckSubdomain(sd *Subdomain)
+	TagQueriesFinished(tag string) bool
+	AllQueriesFinished() bool
 }
 
 type Subdomain struct {

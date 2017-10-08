@@ -108,7 +108,7 @@ func main() {
 		<-sigs
 
 		if show {
-			fmt.Printf("\n%d hosts and subdomains discovered - ", count)
+			fmt.Printf("\n%d names discovered - ", count)
 			for k, v := range stats {
 				fmt.Printf("%s: %d ", k, v)
 			}
@@ -122,7 +122,7 @@ func main() {
 	amass.LookupSubdomainNames(domains, names, f, maxSmart, limit)
 
 	if show {
-		fmt.Printf("\n%d hosts and subdomains discovered - ", count)
+		fmt.Printf("\n%d names discovered - ", count)
 		for k, v := range stats {
 			fmt.Printf("%s: %d ", k, v)
 		}

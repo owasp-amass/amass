@@ -107,13 +107,13 @@ func LimitToDuration(limit int64) time.Duration {
 		d = d / 60
 
 		m := 1000 / d
-		if d < 1000 && m > 10 {
+		if d < 1000 && m > 5 {
 			return m * time.Millisecond
 		}
 	}
 
 	// use the default rate
-	return 10 * time.Millisecond
+	return 5 * time.Millisecond
 }
 
 func (gd *googleDNS) processSubdomains(limit int64) {
@@ -177,6 +177,33 @@ func (gd *googleDNS) CheckSubdomain(sd *Subdomain) {
 	gd.lock.Lock()
 	gd.queue = append(gd.queue, sd)
 	gd.lock.Unlock()
+}
+
+func (gd *googleDNS) TagQueriesFinished(tag string) bool {
+	result := true
+
+	gd.lock.Lock()
+	for _, element := range gd.queue {
+		if element.Tag == tag {
+			result = false
+			break
+		}
+	}
+	gd.lock.Unlock()
+
+	return result
+}
+
+func (gd *googleDNS) AllQueriesFinished() bool {
+	var result bool
+
+	gd.lock.Lock()
+	if len(gd.queue) == 0 {
+		result = true
+	}
+	gd.lock.Unlock()
+
+	return result
 }
 
 func GoogleDNS(valid chan *Subdomain, subdomains chan *Subdomain, limit int64) DNSChecker {

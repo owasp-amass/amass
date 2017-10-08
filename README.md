@@ -35,6 +35,10 @@ $ amass example.com
 Get amass to provide summary information:
 ```
 $ amass -v example.com
+www.example.com
+ns.example.com
+...
+865 names discovered - search: 820 numflip: 35 crawl: 7 dns: 3
 ```
 
 
@@ -72,7 +76,7 @@ $ amass -brute wordlist_filepath.txt example.com
 
 Have amass make a selected number of smart guesses based on successfully resolved names:
 ```
-$ amass -smart 50000 example.com
+$ amass -smart 10000 example.com
 ```
 
 
