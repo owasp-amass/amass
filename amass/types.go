@@ -12,7 +12,7 @@ const (
 	FLIP    = "numflip"
 	BRUTE   = "brute"
 	SEARCH  = "search"
-	CRAWLER = "crawl"
+	ARCHIVE = "archive"
 	DNSTag  = "dns"
 )
 

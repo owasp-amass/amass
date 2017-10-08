@@ -109,7 +109,7 @@ func LookupSubdomainNames(domains []string, names chan *Subdomain, wordlist *os.
 	ngrams := make(map[string]Guesser)
 	if maxSmart > 0 {
 		for _, d := range domains {
-			ngrams[d] = NgramGuess(d, subdomains, limit, maxSmart)
+			ngrams[d] = NgramGuess(d, subdomains, maxSmart)
 		}
 	}
 	// setup number flipping guessers
@@ -163,9 +163,11 @@ loop:
 			activity = true
 		case <-done: // searches that have finished
 			completed++
-		case <-t.C:
-			if !ngramStarted && maxSmart > 0 && dns.TagQueriesFinished(SEARCH) {
-				// searches are done, start ngram guessers
+		case <-t.C: // periodic checks happen in here
+			if !ngramStarted && maxSmart > 0 &&
+				dns.TagQueriesFinished(SEARCH) &&
+				dns.TagQueriesFinished(FLIP) {
+				// searches and number flips are done, start ngram guessers
 				for _, g := range ngrams {
 					g.Start()
 				}

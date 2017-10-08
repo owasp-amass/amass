@@ -148,7 +148,7 @@ func (e *Ext) Visit(ctx *gocrawl.URLContext, res *http.Response, doc *goquery.Do
 	}
 
 	for _, f := range e.domainRE.FindAllString(string(in), -1) {
-		e.names <- &Subdomain{Name: f, Domain: e.domain, Tag: CRAWLER}
+		e.names <- &Subdomain{Name: f, Domain: e.domain, Tag: ARCHIVE}
 	}
 	return nil, true
 }

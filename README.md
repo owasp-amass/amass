@@ -2,7 +2,7 @@
 
 ### Obtain a large number of names without revealing your location to the target organization
 
-[![](https://img.shields.io/badge/go-1.8-blue.svg)](https://github.com/moovweb/gvm) [![License](https://img.shields.io/hexpm/l/plug.svg)](https://www.apache.org/licenses/LICENSE-2.0)
+[![](https://img.shields.io/badge/go-1.8-blue.svg)](https://github.com/moovweb/gvm) [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
 
 
 The amass tool not only searches a few Internet data sources and then performs brute force subdomain enumeration, it also searches web archives to obtain web pages from the target organization without them being aware of it! Searching these web pages reveals additional subdomains and host names not likely to be provided by a wordlist file. All three methods can be employed together by amass, and have shown to be complementary.
@@ -38,7 +38,7 @@ $ amass -v example.com
 www.example.com
 ns.example.com
 ...
-865 names discovered - search: 820 numflip: 35 crawl: 7 dns: 3
+865 names discovered - search: 820 numflip: 35 archive: 7 dns: 3
 ```
 
 
@@ -53,7 +53,7 @@ Throttle the rate of DNS queries by number per minute:
 $ amass -limit 120 example.com
 ```
 
-**The maximum rate supported is one DNS query every 50 milliseconds.**
+**The maximum rate supported is one DNS query every 5 milliseconds.**
 
 
 Allow amass to included additional domains in the search using reverse whois information:
@@ -79,6 +79,8 @@ Have amass make a selected number of smart guesses based on successfully resolve
 $ amass -smart 10000 example.com
 ```
 
+This option can cause the enumeration to take significantly longer.
+
 
 Add some additional domains to the search:
 ```
@@ -90,10 +92,10 @@ In the above example, the domains example1.com and example2.com are simply appen
 
 All these options can be used together:
 ```
-$ amass -v -ip -whois -brute wordlist_filepath.txt example.com example1.com
+$ amass -v -ip -whois -brute wordlist.txt -smart 5000 -limit 240 example.com example1.com
 ```
 
-**Be sure that the target domain is the last parameter provided to amass, followed by any extra domains.**
+**Be sure that the target domain is the last parameter provided to amass, then followed by any extra domains.**
 
 
 ## Settings for the amass Maltego Local Transform
