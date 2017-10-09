@@ -164,10 +164,13 @@ loop:
 		case <-done: // searches that have finished
 			completed++
 		case <-t.C: // periodic checks happen in here
+			// we will build the ngram corpus as much as possible
 			if !ngramStarted && maxSmart > 0 &&
 				dns.TagQueriesFinished(SEARCH) &&
-				dns.TagQueriesFinished(FLIP) {
-				// searches and number flips are done, start ngram guessers
+				dns.TagQueriesFinished(FLIP) &&
+				dns.TagQueriesFinished(BRUTE) {
+
+				// searches, brute forcing, and number flips are done
 				for _, g := range ngrams {
 					g.Start()
 				}

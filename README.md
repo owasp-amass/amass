@@ -70,7 +70,7 @@ $ amass -whois -list example.com
 
 Have amass perform brute force subdomain enumeration as well:
 ```
-$ amass -brute wordlist_filepath.txt example.com
+$ amass -brute wordlist.txt example.com
 ```
 
 
@@ -79,7 +79,7 @@ Have amass make a selected number of smart guesses based on successfully resolve
 $ amass -smart 10000 example.com
 ```
 
-This option can cause the enumeration to take significantly longer.
+This option can cause the enumeration to take significantly longer, similar to brute forcing.
 
 
 Add some additional domains to the search:
