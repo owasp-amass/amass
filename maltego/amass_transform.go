@@ -24,7 +24,7 @@ func main() {
 		for {
 			n := <-names
 
-			if n.Domain != domains[0] {
+			if n.Domain == domains[0] {
 				trx.AddEntity("maltego.DNSName", n.Name)
 			}
 		}
