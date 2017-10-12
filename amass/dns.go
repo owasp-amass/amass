@@ -210,6 +210,36 @@ func reverseAddress(ip string) string {
 	return strings.Join(reversed, ".")
 }
 
+func (gd *googleDNS) oneNetworkDown(domain, ip string, limit time.Duration) {
+	parts := strings.Split(ip, ".")
+	sub, _ := strconv.Atoi(parts[2])
+
+	if sub == 1 {
+		return
+	}
+
+	parts[2] = strconv.Itoa(sub - 1)
+	parts[3] = "254"
+
+	gd.sweepIPAddressRange(domain, strings.Join(parts, "."), limit)
+	return
+}
+
+func (gd *googleDNS) oneNetworkUp(domain, ip string, limit time.Duration) {
+	parts := strings.Split(ip, ".")
+	sub, _ := strconv.Atoi(parts[2])
+
+	if sub == 254 {
+		return
+	}
+
+	parts[2] = strconv.Itoa(sub + 1)
+	parts[3] = "1"
+
+	gd.sweepIPAddressRange(domain, strings.Join(parts, "."), limit)
+	return
+}
+
 // performs reverse dns across the 254 addresses near the ip param
 func (gd *googleDNS) sweepIPAddressRange(domain, ip string, limit time.Duration) {
 	t := time.NewTicker(limit)
@@ -218,24 +248,10 @@ func (gd *googleDNS) sweepIPAddressRange(domain, ip string, limit time.Duration)
 	re, _ := regexp.Compile(SUBRE + domain)
 	parts := strings.Split(ip, ".")
 	li := len(parts) - 1
-	last := parts[li]
 	parts = parts[:li]
 	b := strings.Join(parts, ".")
-	val, _ := strconv.Atoi(last)
 
-	start := val - 20
-	if start <= 0 {
-		start = 1
-	}
-
-	stop := val + 20
-	if stop >= 255 {
-		stop = 254
-	}
-
-	for i := start; i <= stop; i++ {
-		<-t.C
-
+	for i := 1; i <= 254; i++ {
 		addr := b + "." + strconv.Itoa(i)
 		if addr == ip {
 			continue
@@ -247,6 +263,7 @@ func (gd *googleDNS) sweepIPAddressRange(domain, ip string, limit time.Duration)
 		}
 		gd.rfilter[addr] = true
 
+		<-t.C // we can't be going too fast
 		name, err := ReverseDNS(addr)
 		if err == nil && re.MatchString(name) {
 			// we know the name is valid
@@ -262,8 +279,15 @@ func (gd *googleDNS) sweepIPAddressRange(domain, ip string, limit time.Duration)
 				Domain: domain,
 				Tag:    DNSTag,
 			}
+			// keep looking
+			if i == 1 {
+				gd.oneNetworkDown(domain, ip, limit)
+			} else if i == 254 {
+				gd.oneNetworkUp(domain, ip, limit)
+			}
 		}
 	}
+	return
 }
 
 func (gd *googleDNS) processSubdomains(limit int64) {
@@ -330,6 +354,7 @@ func (gd *googleDNS) CheckSubdomain(sd *Subdomain) {
 	gd.lock.Lock()
 	gd.queue = append(gd.queue, sd)
 	gd.lock.Unlock()
+	return
 }
 
 func (gd *googleDNS) TagQueriesFinished(tag string) bool {

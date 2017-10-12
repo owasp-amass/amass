@@ -37,19 +37,6 @@ func executeSearchesForDomains(domains []string, subdomains chan *Subdomain, don
 	}
 }
 
-func checkForDomains(candidate string, domains []string) bool {
-	result := false
-
-	for _, d := range domains {
-		if strings.HasSuffix(candidate, d) {
-			result = true
-			break
-		}
-	}
-
-	return result
-}
-
 func getDomainFromName(name string, domains []string) string {
 	var result string
 
@@ -83,11 +70,10 @@ func getArchives(subdomains chan *Subdomain) []Archiver {
 func LookupSubdomainNames(domains []string, names chan *Subdomain, wordlist *os.File, maxSmart int, limit int64) {
 	var completed int
 	var ngramStarted bool
-	var legitimate []string
 
 	done := make(chan int, 20)
 	subdomains := make(chan *Subdomain, 200)
-	valid := make(chan *Subdomain, 5)
+	valid := make(chan *Subdomain, 100)
 	totalSearches := NUM_SEARCHES * len(domains)
 	// start the simple searches to get us started
 	go executeSearchesForDomains(domains, subdomains, done)
@@ -100,6 +86,8 @@ func LookupSubdomainNames(domains []string, names chan *Subdomain, wordlist *os.
 	defer t.Stop()
 	// filter for not double-checking subdomain names
 	filter := make(map[string]bool)
+	// make sure legitimate names are not provided more than once
+	legitimate := make(map[string]bool)
 	// detect when the lookup process is finished
 	activity := false
 	//start brute forcing
@@ -126,7 +114,11 @@ loop:
 				if _, ok := filter[sd.Name]; !ok {
 					filter[sd.Name] = true
 
-					if checkForDomains(sd.Name, domains) {
+					if sd.Domain == "" {
+						sd.Domain = getDomainFromName(sd.Name, domains)
+					}
+
+					if sd.Domain != "" {
 						// is this new name valid?
 						dns.CheckSubdomain(sd)
 					}
@@ -136,10 +128,9 @@ loop:
 			activity = true
 		case v := <-valid: // subdomains that passed a dns lookup
 			v.Name = Trim252F(v.Name)
-			n := NewUniqueElements(legitimate, v.Name)
 
-			if len(n) > 0 {
-				legitimate = append(legitimate, n...)
+			if _, ok := legitimate[v.Name]; !ok {
+				legitimate[v.Name] = true
 
 				// give it to the user!
 				names <- v
