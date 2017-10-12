@@ -197,6 +197,19 @@ func (gd *googleDNS) inspectAnswers(domain string, answers []GoogleDNSAnswer) {
 	return
 }
 
+func reverseAddress(ip string) string {
+	var reversed []string
+
+	parts := strings.Split(ip, ".")
+	li := len(parts) - 1
+
+	for i := li; i >= 0; i-- {
+		reversed = append(reversed, parts[i])
+	}
+
+	return strings.Join(reversed, ".")
+}
+
 // performs reverse dns across the 254 addresses near the ip param
 func (gd *googleDNS) sweepIPAddressRange(domain, ip string, limit time.Duration) {
 	t := time.NewTicker(limit)
@@ -224,8 +237,12 @@ func (gd *googleDNS) sweepIPAddressRange(domain, ip string, limit time.Duration)
 		<-t.C
 
 		addr := b + "." + strconv.Itoa(i)
+		if addr == ip {
+			continue
+		}
 
-		if _, ok := gd.rfilter[addr]; ok || addr == ip {
+		addr = reverseAddress(addr) + ".in-addr.arpa"
+		if _, ok := gd.rfilter[addr]; ok {
 			continue
 		}
 		gd.rfilter[addr] = true

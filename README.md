@@ -1,4 +1,4 @@
-# Subdomain and Host Enumeration
+# Subdomain Enumeration
 
 ### Obtain a large number of names without revealing your location to the target organization
 

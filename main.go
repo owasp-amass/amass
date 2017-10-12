@@ -108,11 +108,7 @@ func main() {
 		<-sigs
 
 		if show {
-			fmt.Printf("\n%d names discovered - ", count)
-			for k, v := range stats {
-				fmt.Printf("%s: %d ", k, v)
-			}
-			fmt.Println()
+			printResults(count, stats)
 		}
 
 		os.Exit(0)
@@ -122,10 +118,23 @@ func main() {
 	amass.LookupSubdomainNames(domains, names, f, maxSmart, limit)
 
 	if show {
-		fmt.Printf("\n%d names discovered - ", count)
-		for k, v := range stats {
-			fmt.Printf("%s: %d ", k, v)
-		}
-		fmt.Println()
+		printResults(count, stats)
 	}
+}
+
+func printResults(total int, stats map[string]int) {
+	count := 1
+	length := len(stats)
+
+	fmt.Printf("\n%d names discovered - ", total)
+
+	for k, v := range stats {
+		if count < length {
+			fmt.Printf("%s: %d, ", k, v)
+		} else {
+			fmt.Printf("%s: %d\n", k, v)
+		}
+		count++
+	}
+	return
 }

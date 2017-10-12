@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-const NUM_SEARCHES int = 10
+const NUM_SEARCHES int = 9
 
 func startSearches(domain string, subdomains chan *Subdomain, done chan int) {
 	searches := []Searcher{
@@ -18,7 +18,6 @@ func startSearches(domain string, subdomains chan *Subdomain, done chan int) {
 		CensysSearch(domain, subdomains),
 		CrtshSearch(domain, subdomains),
 		RobtexSearch(domain, subdomains),
-		HackerTargetSearch(domain, subdomains),
 		BingSearch(domain, subdomains),
 		DogpileSearch(domain, subdomains),
 		YahooSearch(domain, subdomains),
@@ -97,7 +96,7 @@ func LookupSubdomainNames(domains []string, names chan *Subdomain, wordlist *os.
 	// initialize the archives that will obtain additional subdomains
 	archives := getArchives(subdomains)
 	// when this timer fires, the program will end
-	t := time.NewTimer(20 * time.Second)
+	t := time.NewTimer(30 * time.Second)
 	defer t.Stop()
 	// filter for not double-checking subdomain names
 	filter := make(map[string]bool)
@@ -112,7 +111,7 @@ func LookupSubdomainNames(domains []string, names chan *Subdomain, wordlist *os.
 			ngrams[d] = NgramGuess(d, subdomains, maxSmart)
 		}
 	}
-	// setup number flipping guessers
+	// setup number flip guessers
 	numflip := make(map[string]Guesser)
 	for _, d := range domains {
 		numflip[d] = NumFlipGuess(d, subdomains)
