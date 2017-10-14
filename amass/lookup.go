@@ -81,6 +81,8 @@ func LookupSubdomainNames(domains []string, names chan *Subdomain, wordlist *os.
 	dns := GoogleDNS(valid, subdomains, limit)
 	// initialize the archives that will obtain additional subdomains
 	archives := getArchives(subdomains)
+	// shodan will help find nearby hosts
+	shodan := ShodanHostLookup(subdomains)
 	// when this timer fires, the program will end
 	t := time.NewTimer(30 * time.Second)
 	defer t.Stop()
@@ -138,6 +140,9 @@ loop:
 				for _, a := range archives {
 					a.CheckHistory(v)
 				}
+
+				// try looking for hosts nearby
+				shodan.FindHosts(v)
 
 				// try flipping some numbers for more names
 				nf := numflip[v.Domain]

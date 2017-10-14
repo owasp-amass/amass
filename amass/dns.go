@@ -257,14 +257,14 @@ func (gd *googleDNS) sweepIPAddressRange(domain, ip string, limit time.Duration)
 			continue
 		}
 
-		addr = reverseAddress(addr) + ".in-addr.arpa"
-		if _, ok := gd.rfilter[addr]; ok {
+		reversed := reverseAddress(addr) + ".in-addr.arpa"
+		if _, ok := gd.rfilter[reversed]; ok {
 			continue
 		}
-		gd.rfilter[addr] = true
+		gd.rfilter[reversed] = true
 
 		<-t.C // we can't be going too fast
-		name, err := ReverseDNS(addr)
+		name, err := ReverseDNS(reversed)
 		if err == nil && re.MatchString(name) {
 			// we know the name is valid
 			gd.valid <- &Subdomain{

@@ -52,7 +52,7 @@ func (m *memento) processRequests() {
 				}
 
 				go crawl(m.url, strconv.Itoa(year), s,
-					m.subdomains, done, 1*time.Minute)
+					m.subdomains, done, 10*time.Second)
 				running++
 			}
 		case <-done:
@@ -179,10 +179,10 @@ func crawl(base, year string, subdomain *Subdomain, names chan *Subdomain, done 
 
 	// Set custom options
 	opts := gocrawl.NewOptions(ext)
-	opts.CrawlDelay = 1 * time.Second
+	opts.CrawlDelay = 500 * time.Millisecond
 	opts.LogFlags = gocrawl.LogError
 	opts.SameHostOnly = true
-	opts.MaxVisits = 100
+	opts.MaxVisits = 20
 
 	c := gocrawl.NewCrawlerWithOptions(opts)
 	go c.Run(fmt.Sprintf("%s/%s/%s", base, year, subdomain.Name))

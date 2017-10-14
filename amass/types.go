@@ -14,6 +14,7 @@ const (
 	SEARCH  = "search"
 	ARCHIVE = "archive"
 	DNSTag  = "dns"
+	SHODAN  = "shodan"
 )
 
 type Searcher interface {
