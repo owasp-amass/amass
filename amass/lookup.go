@@ -101,11 +101,8 @@ func LookupSubdomainNames(domains []string, names chan *Subdomain, wordlist *os.
 			ngrams[d] = NgramGuess(d, subdomains, maxSmart)
 		}
 	}
-	// setup number flip guessers
-	numflip := make(map[string]Guesser)
-	for _, d := range domains {
-		numflip[d] = NumFlipGuess(d, subdomains)
-	}
+	// setup the number flip guesser
+	numflip := NumFlipGuess(subdomains)
 loop:
 	for {
 		select {
@@ -145,8 +142,7 @@ loop:
 				shodan.FindHosts(v)
 
 				// try flipping some numbers for more names
-				nf := numflip[v.Domain]
-				nf.AddName(v)
+				numflip.AddName(v)
 
 				// send the name to the ngram guesser
 				if maxSmart > 0 && v.Domain != "" {

@@ -247,32 +247,49 @@ func (gd *googleDNS) sweepIPAddressRange(domain, ip string, limit time.Duration)
 
 	re, _ := regexp.Compile(SUBRE + domain)
 	parts := strings.Split(ip, ".")
-	li := len(parts) - 1
-	parts = parts[:li]
+
+	if len(parts) != 4 {
+		// this only works for IPv4 right now
+		return
+	}
+
+	val, _ := strconv.Atoi(parts[3])
+	parts = parts[:3]
 	b := strings.Join(parts, ".")
 
-	for i := 1; i <= 254; i++ {
+	start := val - 20
+	if start <= 0 {
+		start = 1
+	}
+
+	stop := val + 20
+	if stop >= 255 {
+		stop = 254
+	}
+
+	for i := start; i <= stop; i++ {
 		addr := b + "." + strconv.Itoa(i)
 		if addr == ip {
+			gd.rfilter[addr] = true
 			continue
 		}
+
+		if _, ok := gd.rfilter[addr]; ok {
+			continue
+		}
+		gd.rfilter[addr] = true
 
 		reversed := reverseAddress(addr) + ".in-addr.arpa"
-		if _, ok := gd.rfilter[reversed]; ok {
-			continue
-		}
-		gd.rfilter[reversed] = true
-
 		<-t.C // we can't be going too fast
 		name, err := ReverseDNS(reversed)
 		if err == nil && re.MatchString(name) {
-			// we know the name is valid
+			/* we know the name is valid
 			gd.valid <- &Subdomain{
 				Name:    name,
 				Domain:  domain,
 				Address: addr,
 				Tag:     DNSTag,
-			}
+			}*/
 			// send the name back through anyway
 			gd.subdomains <- &Subdomain{
 				Name:   name,

@@ -13,132 +13,142 @@ import (
 )
 
 type numFlipGuess struct {
-	domainName          string
-	domainNameLastLevel int
-	firstNameLevel      int
-	lock                sync.Mutex
-	queue               []*Subdomain
-	subdomains          chan *Subdomain
-	re                  *regexp.Regexp
+	lock       sync.Mutex
+	queue      []*Subdomain
+	subdomains chan *Subdomain
+	filter     map[string]bool
 }
 
-func (nf *numFlipGuess) flipNumsInName(cur, total int, name *Subdomain) {
-	var i, index, counter int
+func (nf *numFlipGuess) flipNumsInName(name *Subdomain, first, second int) {
 	var before, after []rune
 
-	// find the char index for cur
-	for _, c := range name.Name {
-		if unicode.IsNumber(c) {
-			counter++
-		}
-
-		if counter == cur {
-			break
-		}
-		index++
-	}
-
-	// grab chunks of string before and after
-	for _, c := range name.Name {
-		if i < index {
+	// grab chunks of string before and after the first number
+	for i, c := range name.Name {
+		if i < first {
 			before = append(before, c)
 		}
 
-		if i > index {
+		if i > first {
 			after = append(after, c)
 		}
-		i++
 	}
 
 	// flip the number to make a new name
 	for n := 0; n < 10; n++ {
-		newName := &Subdomain{
-			Name:   string(before) + strconv.Itoa(n) + string(after),
-			Domain: nf.domainName,
+		sn := string(before) + strconv.Itoa(n) + string(after)
+		sd := &Subdomain{
+			Name:   sn,
+			Domain: name.Domain,
 			Tag:    FLIP,
 		}
 
-		if cur < total {
-			go nf.flipNumsInName(cur+1, total, newName)
-		}
+		if _, ok := nf.filter[sn]; !ok {
+			nf.filter[sn] = true
+			nf.subdomains <- sd
 
-		nf.subdomains <- newName
+			if second != -1 {
+				nf.flipNumsInName(sd, second, -1)
+			}
+		}
 	}
 
 	// send a version without the number in it
 	withoutNum := string(before) + string(after)
-	if nf.re.MatchString(withoutNum) {
-		wn := &Subdomain{
+	re, _ := regexp.Compile(SUBRE + name.Domain)
+
+	if _, ok := nf.filter[withoutNum]; !ok && re.MatchString(withoutNum) {
+		nf.filter[withoutNum] = true
+
+		sd := &Subdomain{
 			Name:   withoutNum,
-			Domain: nf.domainName,
+			Domain: name.Domain,
 			Tag:    FLIP,
 		}
 
-		if cur < total {
-			go nf.flipNumsInName(cur+1, total, wn)
-		}
+		nf.subdomains <- sd
 
-		nf.subdomains <- wn
+		if second != -1 {
+			nf.flipNumsInName(sd, second-1, -1)
+		}
 	}
 	return
 }
 
 func (nf *numFlipGuess) processName(name *Subdomain) {
-	var counter int
+	var index int
+
+	first := -1
+	second := -1
 
 	words := strings.Split(name.Name, ".")
-	l := len(words) - nf.firstNameLevel
+	l := len(words) - len(strings.Split(name.Domain, "."))
 
-	// check how many numbers are in the name
+	// we want the two rightmost numbers of the leftmost word
+loop:
 	for i, w := range words {
 		if i >= l {
 			// don't consider the domain name portion
 			break
 		}
 
-		for _, c := range w {
-			if unicode.IsNumber(c) {
-				counter++
+		for i, c := range w {
+			// if we are starting a new word and
+			// have the numbers, we are done
+			if i == 0 && first != -1 && second != -1 {
+				break loop
 			}
+
+			if unicode.IsNumber(c) {
+				if first == -1 {
+					first = index
+				} else if second == -1 {
+					second = index
+				} else {
+					first = second
+					second = index
+				}
+			}
+
+			index++
 		}
 	}
 
-	// don't process a name with too many numbers either
-	if counter == 0 || counter > 2 {
-		return
+	if first != -1 {
+		nf.flipNumsInName(name, first, second)
 	}
-
-	nf.flipNumsInName(1, counter, name)
 	return
 }
 
 func (nf *numFlipGuess) guessNames() {
-	t := time.NewTicker(500 * time.Millisecond)
-	defer t.Stop()
-
 	for {
-		select {
-		case <-t.C:
-			// check all the new names
-			nf.lock.Lock()
-			if len(nf.queue) > 0 {
-				for _, n := range nf.queue {
-					go nf.processName(n)
-				}
+		sd := nf.getNext()
 
-				// empty the queue
-				nf.queue = []*Subdomain{}
-			}
-			nf.lock.Unlock()
+		if sd != nil {
+			nf.processName(sd)
+		} else {
+			time.Sleep(500 * time.Millisecond)
 		}
 	}
 	return
 }
 
-func (nf *numFlipGuess) processDomainName(domain string) {
-	nf.domainName = domain
-	nf.firstNameLevel = len(strings.Split(domain, "."))
-	nf.domainNameLastLevel = nf.firstNameLevel - 1
+func (nf *numFlipGuess) getNext() *Subdomain {
+	var l int
+	var sd *Subdomain
+
+	nf.lock.Lock()
+	defer nf.lock.Unlock()
+
+	l = len(nf.queue)
+	if l > 1 {
+		sd = nf.queue[0]
+		nf.queue = nf.queue[1:]
+	} else if l == 1 {
+		sd = nf.queue[0]
+		nf.queue = []*Subdomain{}
+	}
+
+	return sd
 }
 
 func (nf *numFlipGuess) AddName(name *Subdomain) {
@@ -151,12 +161,12 @@ func (nf *numFlipGuess) Start() {
 	return
 }
 
-func NumFlipGuess(domain string, subdomains chan *Subdomain) Guesser {
+func NumFlipGuess(subdomains chan *Subdomain) Guesser {
 	nf := new(numFlipGuess)
 
-	nf.re, _ = regexp.Compile(SUBRE + domain)
 	nf.subdomains = subdomains
-	nf.processDomainName(domain)
+	nf.filter = make(map[string]bool)
+
 	go nf.guessNames()
 	return nf
 }
