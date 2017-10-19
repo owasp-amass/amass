@@ -7,9 +7,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
-	"regexp"
 	"strings"
-	"time"
 )
 
 func GetWebPage(url string) string {
@@ -62,34 +60,4 @@ func PostFormWeb(u, body string) string {
 	in, err := ioutil.ReadAll(resp.Body)
 	resp.Body.Close()
 	return string(in)
-}
-
-func SearchQuery(s Searcher, subdomains chan *Subdomain) int {
-	var unique []string
-
-	re, err := regexp.Compile(SUBRE + s.Domain())
-	if err != nil {
-		return 0
-	}
-
-	num := s.Limit() / s.Quantity()
-	for i := 0; i < num; i++ {
-		page := GetWebPage(s.URLByPageNum(i))
-		if page == "" {
-			return len(unique)
-		}
-
-		for _, sd := range re.FindAllString(page, -1) {
-			u := NewUniqueElements(unique, sd)
-
-			if len(u) > 0 {
-				unique = append(unique, u...)
-				subdomains <- &Subdomain{Name: sd, Domain: s.Domain(), Tag: SEARCH}
-			}
-		}
-
-		time.Sleep(1 * time.Second)
-	}
-
-	return len(unique)
 }

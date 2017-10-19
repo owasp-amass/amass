@@ -4,12 +4,68 @@
 package amass
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"time"
 )
 
-const NUM_SEARCHES int = 9
+const (
+	SMART   = "smart"
+	FLIP    = "numflip"
+	BRUTE   = "brute"
+	SEARCH  = "search"
+	ARCHIVE = "archive"
+	DNSTag  = "dns"
+	SHODAN  = "shodan"
+)
+
+type Amass struct {
+	wordlist   *os.File
+	maxSmart   int
+	limit      int64
+	dns        DNSChecker
+	subdomains chan *Subdomain
+	valid      chan *Subdomain
+	archives   []Archiver
+	shodan     *Shodan
+}
+
+type AmassConfig struct {
+	Wordlist *os.File
+	MaxSmart int
+	Rate     int64
+}
+
+type Searcher interface {
+	Domain() string
+	Quantity() int
+	Limit() int
+	URLByPageNum(page int) string
+	Search(done chan int)
+	fmt.Stringer
+}
+
+type Archiver interface {
+	CheckHistory(subdomain *Subdomain)
+	TotalUniqueSubdomains() int
+	fmt.Stringer
+}
+
+type Guesser interface {
+	AddName(name *Subdomain)
+	Start()
+}
+
+type DNSChecker interface {
+	CheckSubdomain(sd *Subdomain)
+	TagQueriesFinished(tag string) bool
+	AllQueriesFinished() bool
+}
+
+type Subdomain struct {
+	Name, Domain, Address, Tag string
+}
 
 func startSearches(domain string, subdomains chan *Subdomain, done chan int) {
 	searches := []Searcher{
@@ -67,22 +123,14 @@ func getArchives(subdomains chan *Subdomain) []Archiver {
 }
 
 // This is the driver function that performs a complete enumeration.
-func LookupSubdomainNames(domains []string, names chan *Subdomain, wordlist *os.File, maxSmart int, limit int64) {
+func (a *Amass) LookupSubdomainNames(domains []string, names chan *Subdomain) {
 	var completed int
 	var ngramStarted bool
 
 	done := make(chan int, 20)
-	subdomains := make(chan *Subdomain, 200)
-	valid := make(chan *Subdomain, 100)
 	totalSearches := NUM_SEARCHES * len(domains)
 	// start the simple searches to get us started
-	go executeSearchesForDomains(domains, subdomains, done)
-	// initialize the dns resolver that will validate subdomains
-	dns := GoogleDNS(valid, subdomains, limit)
-	// initialize the archives that will obtain additional subdomains
-	archives := getArchives(subdomains)
-	// shodan will help find nearby hosts
-	shodan := ShodanHostLookup(subdomains)
+	go executeSearchesForDomains(domains, a.subdomains, done)
 	// when this timer fires, the program will end
 	t := time.NewTimer(30 * time.Second)
 	defer t.Stop()
@@ -90,23 +138,25 @@ func LookupSubdomainNames(domains []string, names chan *Subdomain, wordlist *os.
 	filter := make(map[string]bool)
 	// make sure legitimate names are not provided more than once
 	legitimate := make(map[string]bool)
+	// initialize the dns resolver that will validate subdomains
+	dns := GoogleDNS(a.valid, a.subdomains, a.limit)
 	// detect when the lookup process is finished
 	activity := false
 	//start brute forcing
-	go BruteForce(domains, wordlist, subdomains, limit)
+	go BruteForce(domains, a.wordlist, a.subdomains, a.limit)
 	// setup ngram guessers
 	ngrams := make(map[string]Guesser)
-	if maxSmart > 0 {
+	if a.maxSmart > 0 {
 		for _, d := range domains {
-			ngrams[d] = NgramGuess(d, subdomains, maxSmart)
+			ngrams[d] = NgramGuess(d, a.subdomains, a.maxSmart)
 		}
 	}
 	// setup the number flip guesser
-	numflip := NumFlipGuess(subdomains)
+	numflip := NumFlipGuess(a.subdomains)
 loop:
 	for {
 		select {
-		case sd := <-subdomains: // new subdomains come in here
+		case sd := <-a.subdomains: // new subdomains come in here
 			sd.Name = Trim252F(sd.Name)
 
 			if sd.Name != "" {
@@ -125,7 +175,7 @@ loop:
 			}
 
 			activity = true
-		case v := <-valid: // subdomains that passed a dns lookup
+		case v := <-a.valid: // subdomains that passed a dns lookup
 			v.Name = Trim252F(v.Name)
 
 			if _, ok := legitimate[v.Name]; !ok {
@@ -134,18 +184,18 @@ loop:
 				// give it to the user!
 				names <- v
 				// check if this subdomain/host name has an archived web page
-				for _, a := range archives {
-					a.CheckHistory(v)
+				for _, ar := range a.archives {
+					ar.CheckHistory(v)
 				}
 
 				// try looking for hosts nearby
-				shodan.FindHosts(v)
+				a.shodan.FindHosts(v)
 
 				// try flipping some numbers for more names
 				numflip.AddName(v)
 
 				// send the name to the ngram guesser
-				if maxSmart > 0 && v.Domain != "" {
+				if a.maxSmart > 0 && v.Domain != "" {
 					ng := ngrams[v.Domain]
 					ng.AddName(v)
 				}
@@ -156,7 +206,7 @@ loop:
 			completed++
 		case <-t.C: // periodic checks happen in here
 			// we will build the ngram corpus as much as possible
-			if !ngramStarted && maxSmart > 0 &&
+			if !ngramStarted && a.maxSmart > 0 &&
 				dns.TagQueriesFinished(SEARCH) &&
 				dns.TagQueriesFinished(FLIP) &&
 				dns.TagQueriesFinished(BRUTE) {
@@ -177,4 +227,35 @@ loop:
 		}
 	}
 	return
+}
+
+func NewAmass() *Amass {
+	return NewAmassWithConfig(nil)
+}
+
+func NewAmassWithConfig(config *AmassConfig) *Amass {
+	a := new(Amass)
+
+	if config != nil {
+		if config.MaxSmart != 0 {
+			a.maxSmart = config.MaxSmart
+		}
+
+		if config.Rate != 0 {
+			a.limit = config.Rate
+		}
+
+		if config.Wordlist != nil {
+			a.wordlist = config.Wordlist
+		}
+	}
+
+	a.subdomains = make(chan *Subdomain, 200)
+	a.valid = make(chan *Subdomain, 100)
+
+	// initialize the archives that will obtain additional subdomains
+	a.archives = getArchives(a.subdomains)
+	// shodan will help find nearby hosts
+	a.shodan = ShodanHostLookup(a.subdomains)
+	return a
 }

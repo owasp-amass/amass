@@ -35,9 +35,9 @@ var AsciiArt string = `
 `
 
 func main() {
-	var count, maxSmart int
-	var limit int64
+	var count int
 	var wordlist string
+	var config amass.AmassConfig
 	var show, ip, whois, list, help bool
 	names := make(chan *amass.Subdomain, 100)
 
@@ -46,9 +46,9 @@ func main() {
 	flag.BoolVar(&show, "v", false, "Print the summary information")
 	flag.BoolVar(&whois, "whois", false, "Include domains discoverd with reverse whois")
 	flag.BoolVar(&list, "list", false, "List all domains to be used in the search")
-	flag.Int64Var(&limit, "limit", 0, "Sets the number of max DNS queries per minute")
+	flag.Int64Var(&config.Rate, "limit", 0, "Sets the number of max DNS queries per minute")
 	flag.StringVar(&wordlist, "brute", "", "Path to the brute force wordlist file")
-	flag.IntVar(&maxSmart, "smart", 0, "Number of smart guessing attempts to make")
+	flag.IntVar(&config.MaxSmart, "smart", 0, "Number of smart guessing attempts to make")
 	flag.Parse()
 
 	domains := flag.Args()
@@ -70,18 +70,17 @@ func main() {
 		return
 	}
 
-	var f *os.File
 	var err error
 
 	if wordlist != "" {
-		f, err = os.Open(wordlist)
+		config.Wordlist, err = os.Open(wordlist)
 
 		if err != nil {
 			fmt.Printf("Error opening the wordlist file: %v\n", err)
 			return
 		}
 
-		defer f.Close()
+		defer config.Wordlist.Close()
 	}
 
 	stats := make(map[string]int)
@@ -114,8 +113,13 @@ func main() {
 		os.Exit(0)
 	}()
 
+	a := amass.NewAmassWithConfig(&config)
+	if a == nil {
+		return
+	}
+
 	// fire off the driver function for the enumeration process
-	amass.LookupSubdomainNames(domains, names, f, maxSmart, limit)
+	a.LookupSubdomainNames(domains, names)
 
 	if show {
 		printResults(count, stats)
