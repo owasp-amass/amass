@@ -38,18 +38,12 @@ type AmassConfig struct {
 }
 
 type Searcher interface {
-	Domain() string
-	Quantity() int
-	Limit() int
-	URLByPageNum(page int) string
-	Search(done chan int)
+	Search(domain string, done chan int)
 	fmt.Stringer
 }
 
 type Archiver interface {
 	CheckHistory(subdomain *Subdomain)
-	TotalUniqueSubdomains() int
-	fmt.Stringer
 }
 
 type Guesser interface {
@@ -67,30 +61,26 @@ type Subdomain struct {
 	Name, Domain, Address, Tag string
 }
 
-func startSearches(domain string, subdomains chan *Subdomain, done chan int) {
+func startSearches(domains []string, subdomains chan *Subdomain, done chan int) {
 	searches := []Searcher{
-		PGPSearch(domain, subdomains),
-		AskSearch(domain, subdomains),
-		CensysSearch(domain, subdomains),
-		CrtshSearch(domain, subdomains),
-		RobtexSearch(domain, subdomains),
-		BingSearch(domain, subdomains),
-		DogpileSearch(domain, subdomains),
-		YahooSearch(domain, subdomains),
-		GigablastSearch(domain, subdomains),
+		PGPSearch(subdomains),
+		AskSearch(subdomains),
+		CensysSearch(subdomains),
+		CrtshSearch(subdomains),
+		RobtexSearch(subdomains),
+		BingSearch(subdomains),
+		DogpileSearch(subdomains),
+		YahooSearch(subdomains),
+		GigablastSearch(subdomains),
 	}
 
 	// fire off the searches
-	for _, s := range searches {
-		go s.Search(done)
+	for _, d := range domains {
+		for _, s := range searches {
+			go s.Search(d, done)
+		}
 	}
 	return
-}
-
-func executeSearchesForDomains(domains []string, subdomains chan *Subdomain, done chan int) {
-	for _, d := range domains {
-		startSearches(d, subdomains, done)
-	}
 }
 
 func getDomainFromName(name string, domains []string) string {
@@ -130,7 +120,7 @@ func (a *Amass) LookupSubdomainNames(domains []string, names chan *Subdomain) {
 	done := make(chan int, 20)
 	totalSearches := NUM_SEARCHES * len(domains)
 	// start the simple searches to get us started
-	go executeSearchesForDomains(domains, a.subdomains, done)
+	go startSearches(domains, a.subdomains, done)
 	// when this timer fires, the program will end
 	t := time.NewTimer(30 * time.Second)
 	defer t.Stop()
