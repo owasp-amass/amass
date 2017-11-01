@@ -13,6 +13,7 @@ import (
 
 const NUM_SEARCHES int = 9
 
+// searchEngine - A searcher that attempts to discover information using a web search engine
 type searchEngine struct {
 	name       string
 	quantity   int
@@ -21,15 +22,15 @@ type searchEngine struct {
 	callback   func(searchEngine, string, int) string
 }
 
-func (se searchEngine) String() string {
+func (se *searchEngine) String() string {
 	return se.name
 }
 
-func (se searchEngine) urlByPageNum(domain string, page int) string {
+func (se *searchEngine) urlByPageNum(domain string, page int) string {
 	return se.callback(se, domain, page)
 }
 
-func (se searchEngine) Search(domain string, done chan int) {
+func (se *searchEngine) Search(domain string, done chan int) {
 	var unique []string
 
 	re, err := regexp.Compile(SUBRE + domain)
@@ -169,24 +170,61 @@ func YahooSearch(subdomains chan *Subdomain) Searcher {
 	return y
 }
 
-func censysURLByPageNum(c searchEngine, domain string, page int) string {
+//--------------------------------------------------------------------------------------------
+// lookup - A searcher that attempts to discover information on a single web page
+type lookup struct {
+	name       string
+	subdomains chan *Subdomain
+	callback   func(string) string
+}
+
+func (l *lookup) String() string {
+	return l.name
+}
+
+func (l *lookup) Search(domain string, done chan int) {
+	var unique []string
+
+	re, err := regexp.Compile(SUBRE + domain)
+	if err != nil {
+		done <- 0
+		return
+	}
+
+	page := GetWebPage(l.callback(domain))
+	if page == "" {
+		break
+	}
+
+	for _, sd := range re.FindAllString(page, -1) {
+		u := NewUniqueElements(unique, sd)
+
+		if len(u) > 0 {
+			unique = append(unique, u...)
+			l.subdomains <- &Subdomain{Name: sd, Domain: domain, Tag: SEARCH}
+		}
+	}
+
+	done <- len(unique)
+	return
+}
+
+func censysURL(domain string) string {
 	format := "https://www.censys.io/domain/%s/table"
 
 	return fmt.Sprintf(format, domain)
 }
 
 func CensysSearch(subdomains chan *Subdomain) Searcher {
-	c := new(searchEngine)
+	c := new(lookup)
 
 	c.name = "Censys Search"
-	c.quantity = 1
-	c.limit = 1
 	c.subdomains = subdomains
-	c.callback = censysURLByPageNum
+	c.callback = censysURL
 	return c
 }
 
-func crtshURLByPageNum(c searchEngine, domain string, page int) string {
+func crtshURL(domain string) string {
 	u, _ := url.Parse("https://crt.sh/")
 	u.RawQuery = url.Values{"q": {"%25" + domain}}.Encode()
 
@@ -194,17 +232,15 @@ func crtshURLByPageNum(c searchEngine, domain string, page int) string {
 }
 
 func CrtshSearch(subdomains chan *Subdomain) Searcher {
-	c := new(searchEngine)
+	c := new(lookup)
 
 	c.name = "Crtsh Search"
-	c.quantity = 1
-	c.limit = 1
 	c.subdomains = subdomains
-	c.callback = crtshURLByPageNum
+	c.callback = crtshURL
 	return c
 }
 
-func pgpURLByPageNum(p searchEngine, domain string, page int) string {
+func pgpURL(domain string) string {
 	u, _ := url.Parse("http://pgp.mit.edu/pks/lookup")
 	u.RawQuery = url.Values{"search": {domain}, "op": {"index"}}.Encode()
 
@@ -212,28 +248,24 @@ func pgpURLByPageNum(p searchEngine, domain string, page int) string {
 }
 
 func PGPSearch(subdomains chan *Subdomain) Searcher {
-	p := new(searchEngine)
+	p := new(lookup)
 
 	p.name = "PGP Search"
-	p.quantity = 1
-	p.limit = 1
 	p.subdomains = subdomains
-	p.callback = pgpURLByPageNum
+	p.callback = pgpURL
 	return p
 }
 
-func robtexURLByPageNum(r searchEngine, domain string, page int) string {
+func robtexURL(domain string) string {
 	format := "https://www.robtex.com/dns-lookup/%s"
 
 	return fmt.Sprintf(format, domain)
 }
 
 func RobtexSearch(subdomains chan *Subdomain) Searcher {
-	r := new(searchEngine)
+	r := new(lookup)
 
 	r.name = "Robtex Search"
-	r.quantity = 1
-	r.limit = 1
 	r.subdomains = subdomains
 	r.callback = robtexURLByPageNum
 	return r

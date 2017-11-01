@@ -1,6 +1,6 @@
 # Subdomain Enumeration
 
-### Obtain a large number of names without revealing your location to the target organization
+### On the smart and quiet side
 
 [![](https://img.shields.io/badge/go-1.8-blue.svg)](https://github.com/moovweb/gvm) [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
 

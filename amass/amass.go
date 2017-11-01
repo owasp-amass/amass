@@ -21,20 +21,22 @@ const (
 )
 
 type Amass struct {
-	wordlist   *os.File
-	maxSmart   int
-	limit      int64
-	dns        DNSChecker
-	subdomains chan *Subdomain
-	valid      chan *Subdomain
-	archives   []Archiver
-	shodan     *Shodan
+	wordlist    *os.File
+	maxSmart    int
+	limit       int64
+	showReverse bool
+	dns         DNSChecker
+	subdomains  chan *Subdomain
+	valid       chan *Subdomain
+	archives    []Archiver
+	shodan      *Shodan
 }
 
 type AmassConfig struct {
-	Wordlist *os.File
-	MaxSmart int
-	Rate     int64
+	Wordlist    *os.File
+	MaxSmart    int
+	Rate        int64
+	ShowReverse bool
 }
 
 type Searcher interface {
@@ -129,7 +131,7 @@ func (a *Amass) LookupSubdomainNames(domains []string, names chan *Subdomain) {
 	// make sure legitimate names are not provided more than once
 	legitimate := make(map[string]bool)
 	// initialize the dns resolver that will validate subdomains
-	dns := GoogleDNS(a.valid, a.subdomains, a.limit)
+	dns := GoogleDNS(a.valid, a.subdomains, a.limit, a.showReverse)
 	// detect when the lookup process is finished
 	activity := false
 	//start brute forcing
@@ -238,10 +240,14 @@ func NewAmassWithConfig(config *AmassConfig) *Amass {
 		if config.Wordlist != nil {
 			a.wordlist = config.Wordlist
 		}
+
+		if config.ShowReverse {
+			a.showReverse = true
+		}
 	}
 
 	a.subdomains = make(chan *Subdomain, 200)
-	a.valid = make(chan *Subdomain, 100)
+	a.valid = make(chan *Subdomain, 50)
 
 	// initialize the archives that will obtain additional subdomains
 	a.archives = getArchives(a.subdomains)

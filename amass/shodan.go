@@ -30,7 +30,12 @@ func (s *Shodan) processRequests() {
 		}
 
 		re, _ := regexp.Compile(SUBRE + host.Domain)
+
 		parts := strings.Split(host.Address, ".")
+		if len(parts) < 4 {
+			continue
+		}
+
 		val, _ := strconv.Atoi(parts[3])
 		parts = parts[:3]
 		b := strings.Join(parts, ".")

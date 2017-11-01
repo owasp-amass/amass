@@ -39,10 +39,12 @@ func main() {
 	var wordlist string
 	var config amass.AmassConfig
 	var show, ip, whois, list, help bool
+
 	names := make(chan *amass.Subdomain, 100)
 
 	flag.BoolVar(&help, "h", false, "Show the program usage message")
 	flag.BoolVar(&ip, "ip", false, "Show the IP addresses for discovered names")
+	flag.BoolVar(&config.ShowReverse, "yield", false, "Show names discovered by reverse DNS")
 	flag.BoolVar(&show, "v", false, "Print the summary information")
 	flag.BoolVar(&whois, "whois", false, "Include domains discoverd with reverse whois")
 	flag.BoolVar(&list, "list", false, "List all domains to be used in the search")
@@ -60,10 +62,12 @@ func main() {
 	}
 
 	if whois {
+		// add the domains discovered by whois
 		domains = amass.UniqueAppend(domains, amass.ReverseWhois(flag.Arg(0))...)
 	}
 
 	if list {
+		// just show the domains and quit
 		for _, d := range domains {
 			fmt.Println(d)
 		}
@@ -73,6 +77,7 @@ func main() {
 	var err error
 
 	if wordlist != "" {
+		// open the brute force wordlist
 		config.Wordlist, err = os.Open(wordlist)
 
 		if err != nil {
@@ -85,6 +90,7 @@ func main() {
 
 	stats := make(map[string]int)
 
+	// collect all the names returned by the lookup
 	go func() {
 		for {
 			name := <-names
@@ -100,7 +106,7 @@ func main() {
 		}
 	}()
 
-	// if the user interrupts the program, check to print the summary information
+	// if the user interrupts the program, print the summary information
 	sigs := make(chan os.Signal, 2)
 	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
 	go func() {
@@ -122,10 +128,12 @@ func main() {
 	a.LookupSubdomainNames(domains, names)
 
 	if show {
+		// print the summary information
 		printResults(count, stats)
 	}
 }
 
+// printResults prints the summary information for the enumeration
 func printResults(total int, stats map[string]int) {
 	count := 1
 	length := len(stats)

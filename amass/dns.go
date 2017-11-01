@@ -15,14 +15,14 @@ import (
 	"time"
 )
 
-type GoogleDNSAnswer struct {
+type googleDNSAnswer struct {
 	Name string `json:"name"`
 	Type int    `json:"type"`
 	TTL  int    `json:"TTL"`
 	Data string `json:"data"`
 }
 
-type GoogleDNSResolve struct {
+type googleDNSResolve struct {
 	Status   int  `json:"Status"`
 	TC       bool `json:"TC"`
 	RD       bool `json:"RD"`
@@ -33,8 +33,8 @@ type GoogleDNSResolve struct {
 		Name string `json:"name"`
 		Type int    `json:"type"`
 	} `json:"Question"`
-	Answer    []GoogleDNSAnswer `json:"Answer"`
-	Authority []GoogleDNSAnswer `json:"Authority"`
+	Answer    []googleDNSAnswer `json:"Answer"`
+	Authority []googleDNSAnswer `json:"Authority"`
 }
 
 type googleDNS struct {
@@ -42,10 +42,11 @@ type googleDNS struct {
 	rfilter           map[string]bool
 	lock              sync.Mutex
 	queue             []*Subdomain
+	showReverse       bool
 }
 
-func Resolve(name, t string) ([]GoogleDNSAnswer, error) {
-	var answers []GoogleDNSAnswer
+func Resolve(name, t string) ([]googleDNSAnswer, error) {
+	var answers []googleDNSAnswer
 
 	u, _ := url.Parse("https://dns.google.com/resolve")
 	// do not send our location information with the query
@@ -56,7 +57,7 @@ func Resolve(name, t string) ([]GoogleDNSAnswer, error) {
 		return answers, errors.New("Failed to reach the Google DNS service")
 	}
 
-	var r GoogleDNSResolve
+	var r googleDNSResolve
 
 	err := json.Unmarshal([]byte(page), &r)
 	if err != nil {
@@ -106,7 +107,7 @@ type dnsWildcard struct {
 	IP          string
 }
 
-func getARecordData(answers []GoogleDNSAnswer) string {
+func getARecordData(answers []googleDNSAnswer) string {
 	for _, a := range answers {
 		if a.Type == 1 || a.Type == 28 {
 			return a.Data
@@ -160,7 +161,6 @@ func LimitToDuration(limit int64) time.Duration {
 
 func (gd *googleDNS) tryIP(name *Subdomain, t string, wildcard *dnsWildcard) bool {
 	answers, err := Resolve(name.Name, t)
-	//re, _ := regexp.Compile(SUBRE + name.Domain)
 
 	if err != nil {
 		gd.inspectError(name.Domain, err)
@@ -186,7 +186,7 @@ func (gd *googleDNS) inspectError(domain string, err error) {
 	return
 }
 
-func (gd *googleDNS) inspectAnswers(domain string, answers []GoogleDNSAnswer) {
+func (gd *googleDNS) inspectAnswers(domain string, answers []googleDNSAnswer) {
 	re, _ := regexp.Compile(SUBRE + domain)
 
 	for _, a := range answers {
@@ -283,14 +283,17 @@ func (gd *googleDNS) sweepIPAddressRange(domain, ip string, limit time.Duration)
 		<-t.C // we can't be going too fast
 		name, err := ReverseDNS(reversed)
 		if err == nil && re.MatchString(name) {
-			/* we know the name is valid
-			gd.valid <- &Subdomain{
-				Name:    name,
-				Domain:  domain,
-				Address: addr,
-				Tag:     DNSTag,
-			}*/
-			// send the name back through anyway
+			if gd.showReverse {
+				// name is valid in the reverse direction
+				gd.valid <- &Subdomain{
+					Name:    name,
+					Domain:  domain,
+					Address: addr,
+					Tag:     DNSTag,
+				}
+			}
+
+			// send the name to be resolved in the forward direction
 			gd.subdomains <- &Subdomain{
 				Name:   name,
 				Domain: domain,
@@ -401,12 +404,13 @@ func (gd *googleDNS) AllQueriesFinished() bool {
 	return result
 }
 
-func GoogleDNS(valid chan *Subdomain, subdomains chan *Subdomain, limit int64) DNSChecker {
+func GoogleDNS(valid chan *Subdomain, subdomains chan *Subdomain, limit int64, rShow bool) DNSChecker {
 	gd := new(googleDNS)
 
 	gd.valid = valid
 	gd.subdomains = subdomains
 	gd.rfilter = make(map[string]bool)
+	gd.showReverse = rShow
 
 	go gd.processSubdomains(limit)
 	return gd
