@@ -13,13 +13,19 @@ import (
 
 const NUM_SEARCHES int = 9
 
+// Searcher - represents all objects that perform searches for domain names
+type Searcher interface {
+	Search(domain string, done chan int)
+	fmt.Stringer
+}
+
 // searchEngine - A searcher that attempts to discover information using a web search engine
 type searchEngine struct {
 	name       string
 	quantity   int
 	limit      int
 	subdomains chan *Subdomain
-	callback   func(searchEngine, string, int) string
+	callback   func(*searchEngine, string, int) string
 }
 
 func (se *searchEngine) String() string {
@@ -62,7 +68,7 @@ func (se *searchEngine) Search(domain string, done chan int) {
 	return
 }
 
-func askURLByPageNum(a searchEngine, domain string, page int) string {
+func askURLByPageNum(a *searchEngine, domain string, page int) string {
 	pu := strconv.Itoa(a.quantity)
 	p := strconv.Itoa(page)
 
@@ -84,7 +90,7 @@ func AskSearch(subdomains chan *Subdomain) Searcher {
 	return a
 }
 
-func bingURLByPageNum(b searchEngine, domain string, page int) string {
+func bingURLByPageNum(b *searchEngine, domain string, page int) string {
 	count := strconv.Itoa(b.quantity)
 	first := strconv.Itoa((page * b.quantity) + 1)
 
@@ -106,7 +112,7 @@ func BingSearch(subdomains chan *Subdomain) Searcher {
 	return b
 }
 
-func dogpileURLByPageNum(d searchEngine, domain string, page int) string {
+func dogpileURLByPageNum(d *searchEngine, domain string, page int) string {
 	qsi := strconv.Itoa(d.quantity * page)
 
 	u, _ := url.Parse("http://www.dogpile.com/search/web")
@@ -127,7 +133,7 @@ func DogpileSearch(subdomains chan *Subdomain) Searcher {
 	return d
 }
 
-func gigablastURLByPageNum(g searchEngine, domain string, page int) string {
+func gigablastURLByPageNum(g *searchEngine, domain string, page int) string {
 	s := strconv.Itoa(g.quantity * page)
 
 	u, _ := url.Parse("http://www.gigablast.com/search")
@@ -149,7 +155,7 @@ func GigablastSearch(subdomains chan *Subdomain) Searcher {
 	return g
 }
 
-func yahooURLByPageNum(y searchEngine, domain string, page int) string {
+func yahooURLByPageNum(y *searchEngine, domain string, page int) string {
 	b := strconv.Itoa(y.quantity * page)
 	pz := strconv.Itoa(y.quantity)
 
@@ -193,7 +199,8 @@ func (l *lookup) Search(domain string, done chan int) {
 
 	page := GetWebPage(l.callback(domain))
 	if page == "" {
-		break
+		done <- 0
+		return
 	}
 
 	for _, sd := range re.FindAllString(page, -1) {
@@ -267,6 +274,6 @@ func RobtexSearch(subdomains chan *Subdomain) Searcher {
 
 	r.name = "Robtex Search"
 	r.subdomains = subdomains
-	r.callback = robtexURLByPageNum
+	r.callback = robtexURL
 	return r
 }

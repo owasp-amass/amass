@@ -4,7 +4,6 @@
 package amass
 
 import (
-	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -39,15 +38,6 @@ type AmassConfig struct {
 	ShowReverse bool
 }
 
-type Searcher interface {
-	Search(domain string, done chan int)
-	fmt.Stringer
-}
-
-type Archiver interface {
-	CheckHistory(subdomain *Subdomain)
-}
-
 type Guesser interface {
 	AddName(name *Subdomain)
 	Start()
@@ -63,55 +53,39 @@ type Subdomain struct {
 	Name, Domain, Address, Tag string
 }
 
-func startSearches(domains []string, subdomains chan *Subdomain, done chan int) {
-	searches := []Searcher{
-		PGPSearch(subdomains),
-		AskSearch(subdomains),
-		CensysSearch(subdomains),
-		CrtshSearch(subdomains),
-		RobtexSearch(subdomains),
-		BingSearch(subdomains),
-		DogpileSearch(subdomains),
-		YahooSearch(subdomains),
-		GigablastSearch(subdomains),
-	}
-
-	// fire off the searches
-	for _, d := range domains {
-		for _, s := range searches {
-			go s.Search(d, done)
-		}
-	}
-	return
+func NewAmass() *Amass {
+	return NewAmassWithConfig(nil)
 }
 
-func getDomainFromName(name string, domains []string) string {
-	var result string
+func NewAmassWithConfig(config *AmassConfig) *Amass {
+	a := new(Amass)
 
-	for _, d := range domains {
-		if strings.HasSuffix(name, d) {
-			result = d
-			break
+	if config != nil {
+		if config.MaxSmart > 0 {
+			a.maxSmart = config.MaxSmart
+		}
+
+		if config.Rate > 0 {
+			a.limit = config.Rate
+		}
+
+		if config.Wordlist != nil {
+			a.wordlist = config.Wordlist
+		}
+
+		if config.ShowReverse {
+			a.showReverse = true
 		}
 	}
 
-	return result
-}
+	a.subdomains = make(chan *Subdomain, 200)
+	a.valid = make(chan *Subdomain, 50)
 
-func getArchives(subdomains chan *Subdomain) []Archiver {
-	archives := []Archiver{
-		WaybackMachineArchive(subdomains),
-		LibraryCongressArchive(subdomains),
-		ArchiveIsArchive(subdomains),
-		ArchiveItArchive(subdomains),
-		ArquivoArchive(subdomains),
-		BayerischeArchive(subdomains),
-		PermaArchive(subdomains),
-		UKWebArchive(subdomains),
-		UKGovArchive(subdomains),
-	}
-
-	return archives
+	// initialize the archives that will obtain additional subdomains
+	a.archives = getArchives(a.subdomains)
+	// shodan will help find nearby hosts
+	a.shodan = ShodanHostLookup(a.subdomains)
+	return a
 }
 
 // This is the driver function that performs a complete enumeration.
@@ -221,37 +195,55 @@ loop:
 	return
 }
 
-func NewAmass() *Amass {
-	return NewAmassWithConfig(nil)
+/* Private functions */
+
+func startSearches(domains []string, subdomains chan *Subdomain, done chan int) {
+	searches := []Searcher{
+		PGPSearch(subdomains),
+		AskSearch(subdomains),
+		CensysSearch(subdomains),
+		CrtshSearch(subdomains),
+		RobtexSearch(subdomains),
+		BingSearch(subdomains),
+		DogpileSearch(subdomains),
+		YahooSearch(subdomains),
+		GigablastSearch(subdomains),
+	}
+
+	// fire off the searches
+	for _, d := range domains {
+		for _, s := range searches {
+			go s.Search(d, done)
+		}
+	}
+	return
 }
 
-func NewAmassWithConfig(config *AmassConfig) *Amass {
-	a := new(Amass)
+func getDomainFromName(name string, domains []string) string {
+	var result string
 
-	if config != nil {
-		if config.MaxSmart != 0 {
-			a.maxSmart = config.MaxSmart
-		}
-
-		if config.Rate != 0 {
-			a.limit = config.Rate
-		}
-
-		if config.Wordlist != nil {
-			a.wordlist = config.Wordlist
-		}
-
-		if config.ShowReverse {
-			a.showReverse = true
+	for _, d := range domains {
+		if strings.HasSuffix(name, d) {
+			result = d
+			break
 		}
 	}
 
-	a.subdomains = make(chan *Subdomain, 200)
-	a.valid = make(chan *Subdomain, 50)
+	return result
+}
 
-	// initialize the archives that will obtain additional subdomains
-	a.archives = getArchives(a.subdomains)
-	// shodan will help find nearby hosts
-	a.shodan = ShodanHostLookup(a.subdomains)
-	return a
+func getArchives(subdomains chan *Subdomain) []Archiver {
+	archives := []Archiver{
+		WaybackMachineArchive(subdomains),
+		LibraryCongressArchive(subdomains),
+		ArchiveIsArchive(subdomains),
+		ArchiveItArchive(subdomains),
+		ArquivoArchive(subdomains),
+		BayerischeArchive(subdomains),
+		PermaArchive(subdomains),
+		UKWebArchive(subdomains),
+		UKGovArchive(subdomains),
+	}
+
+	return archives
 }
