@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-const NUM_SEARCHES int = 9
+const NUM_SEARCHES int = 11
 
 // Searcher - represents all objects that perform searches for domain names
 type Searcher interface {
@@ -247,6 +247,21 @@ func CrtshSearch(subdomains chan *Subdomain) Searcher {
 	return c
 }
 
+func netcraftURL(domain string) string {
+	format := "https://searchdns.netcraft.com/?restriction=site+ends+with&host=%s"
+
+	return fmt.Sprintf(format, domain)
+}
+
+func NetcraftSearch(subdomains chan *Subdomain) Searcher {
+	n := new(lookup)
+
+	n.name = "Netcraft Search"
+	n.subdomains = subdomains
+	n.callback = netcraftURL
+	return n
+}
+
 func pgpURL(domain string) string {
 	u, _ := url.Parse("http://pgp.mit.edu/pks/lookup")
 	u.RawQuery = url.Values{"search": {domain}, "op": {"index"}}.Encode()
@@ -276,4 +291,19 @@ func RobtexSearch(subdomains chan *Subdomain) Searcher {
 	r.subdomains = subdomains
 	r.callback = robtexURL
 	return r
+}
+
+func virusTotalURL(domain string) string {
+	format := "https://www.virustotal.com/en/domain/%s/information/"
+
+	return fmt.Sprintf(format, domain)
+}
+
+func VirusTotalSearch(subdomains chan *Subdomain) Searcher {
+	vt := new(lookup)
+
+	vt.name = "VirusTotal Search"
+	vt.subdomains = subdomains
+	vt.callback = virusTotalURL
+	return vt
 }

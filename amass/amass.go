@@ -203,11 +203,13 @@ func startSearches(domains []string, subdomains chan *Subdomain, done chan int) 
 		AskSearch(subdomains),
 		CensysSearch(subdomains),
 		CrtshSearch(subdomains),
+		NetcraftSearch(subdomains),
 		RobtexSearch(subdomains),
 		BingSearch(subdomains),
 		DogpileSearch(subdomains),
 		YahooSearch(subdomains),
 		GigablastSearch(subdomains),
+		VirusTotalSearch(subdomains),
 	}
 
 	// fire off the searches
