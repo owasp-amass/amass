@@ -38,19 +38,19 @@ $ amass -v example.com
 www.example.com
 ns.example.com
 ...
-13242 names discovered - search: 211, dns: 4709, archive: 126, shodan: 169, numflip: 8027
+13242 names discovered - search: 211, dns: 4709, archive: 126, brute: 169, alterations: 8027
 ```
 
 
 Have amass print IP addresses with the discovered names:
 ```
-$ amass -ip example.com
+$ amass --ip example.com
 ```
 
 
 Throttle the rate of DNS queries by number per minute:
 ```
-$ amass -limit 120 example.com
+$ amass --freq 120 example.com
 ```
 
 **The maximum rate supported is one DNS query every 5 milliseconds.**
@@ -58,28 +58,20 @@ $ amass -limit 120 example.com
 
 Allow amass to included additional domains in the search using reverse whois information:
 ```
-$ amass -whois example.com
+$ amass --whois example.com
 ```
 
 
 You can have amass list all the domains discovered with reverse whois before performing the enumeration:
 ```
-$ amass -whois -list example.com
+$ amass --whois --list example.com
 ```
 
 
-Have amass perform brute force subdomain enumeration as well:
+Have amass perform brute force subdomain enumeration as well as word alterations:
 ```
-$ amass -brute wordlist.txt example.com
+$ amass --words wordlist.txt example.com
 ```
-
-
-Have amass make a selected number of smart guesses based on successfully resolved names:
-```
-$ amass -smart 10000 example.com
-```
-
-This option can cause the enumeration to take significantly longer, similar to brute forcing.
 
 
 Add some additional domains to the search:
@@ -92,7 +84,7 @@ In the above example, the domains example1.com and example2.com are simply appen
 
 All these options can be used together:
 ```
-$ amass -v -ip -whois -brute wordlist.txt -smart 5000 -limit 240 example.com example1.com
+$ amass -v --ip --whois --words wordlist.txt --freq 240 example.com example1.com
 ```
 
 **Be sure that the target domain is the last parameter provided to amass, then followed by any extra domains.**

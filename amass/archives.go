@@ -18,8 +18,7 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
-// Archiver - represents all objects that perform Memento
-// web archive searches for domain names
+// Archiver - represents all objects that perform Memento web archive searches for domain names
 type Archiver interface {
 	CheckHistory(subdomain *Subdomain)
 }
@@ -32,7 +31,6 @@ type memento struct {
 
 func (m *memento) CheckHistory(subdomain *Subdomain) {
 	m.requests <- subdomain
-	return
 }
 
 func MementoWebArchive(u string, subdomains chan *Subdomain) Archiver {
@@ -46,40 +44,40 @@ func MementoWebArchive(u string, subdomains chan *Subdomain) Archiver {
 	return m
 }
 
-func ArchiveItArchive(subdomains chan *Subdomain) Archiver {
-	return MementoWebArchive("https://wayback.archive-it.org/all", subdomains)
+func (a *Amass) ArchiveItArchive() Archiver {
+	return MementoWebArchive("https://wayback.archive-it.org/all", a.Names)
 }
 
-func ArchiveIsArchive(subdomains chan *Subdomain) Archiver {
-	return MementoWebArchive("http://archive.is", subdomains)
+func (a *Amass) ArchiveIsArchive() Archiver {
+	return MementoWebArchive("http://archive.is", a.Names)
 }
 
-func ArquivoArchive(subdomains chan *Subdomain) Archiver {
-	return MementoWebArchive("http://arquivo.pt/wayback", subdomains)
+func (a *Amass) ArquivoArchive() Archiver {
+	return MementoWebArchive("http://arquivo.pt/wayback", a.Names)
 }
 
-func BayerischeArchive(subdomains chan *Subdomain) Archiver {
-	return MementoWebArchive("http://langzeitarchivierung.bib-bvb.de/wayback", subdomains)
+func (a *Amass) BayerischeArchive() Archiver {
+	return MementoWebArchive("http://langzeitarchivierung.bib-bvb.de/wayback", a.Names)
 }
 
-func LibraryCongressArchive(subdomains chan *Subdomain) Archiver {
-	return MementoWebArchive("http://webarchive.loc.gov/all", subdomains)
+func (a *Amass) LibraryCongressArchive() Archiver {
+	return MementoWebArchive("http://webarchive.loc.gov/all", a.Names)
 }
 
-func PermaArchive(subdomains chan *Subdomain) Archiver {
-	return MementoWebArchive("http://perma-archives.org/warc", subdomains)
+func (a *Amass) PermaArchive() Archiver {
+	return MementoWebArchive("http://perma-archives.org/warc", a.Names)
 }
 
-func UKWebArchive(subdomains chan *Subdomain) Archiver {
-	return MementoWebArchive("http://www.webarchive.org.uk/wayback/archive", subdomains)
+func (a *Amass) UKWebArchive() Archiver {
+	return MementoWebArchive("http://www.webarchive.org.uk/wayback/archive", a.Names)
 }
 
-func UKGovArchive(subdomains chan *Subdomain) Archiver {
-	return MementoWebArchive("http://webarchive.nationalarchives.gov.uk", subdomains)
+func (a *Amass) UKGovArchive() Archiver {
+	return MementoWebArchive("http://webarchive.nationalarchives.gov.uk", a.Names)
 }
 
-func WaybackMachineArchive(subdomains chan *Subdomain) Archiver {
-	return MementoWebArchive("http://web.archive.org/web", subdomains)
+func (a *Amass) WaybackMachineArchive() Archiver {
+	return MementoWebArchive("http://web.archive.org/web", a.Names)
 }
 
 /* Private functions */
@@ -93,24 +91,25 @@ func (m *memento) processRequests() {
 	defer t.Stop()
 
 	year := time.Now().Year()
-	// only have up to 10 crawlers running at the same time
+	// Only have up to 10 crawlers running at the same time
 	for {
 		select {
 		case sd := <-m.requests:
 			queue = append(queue, sd)
 		case <-t.C:
-			if running < 10 && len(queue) > 0 {
-				s := queue[0]
-				if len(queue) == 1 {
-					queue = []*Subdomain{}
-				} else {
-					queue = queue[1:]
-				}
-
-				go crawl(m.url, strconv.Itoa(year), s,
-					m.subdomains, done, 10*time.Second)
-				running++
+			if running >= 10 || len(queue) <= 0 {
+				break
 			}
+
+			s := queue[0]
+			if len(queue) == 1 {
+				queue = []*Subdomain{}
+			} else {
+				queue = queue[1:]
+			}
+
+			go crawl(m.url, strconv.Itoa(year), s, m.subdomains, done, 10*time.Second)
+			running++
 		case <-done:
 			running--
 		}
@@ -168,7 +167,7 @@ func (e *ext) Filter(ctx *gocrawl.URLContext, isVisited bool) bool {
 	}
 
 	if u != r {
-		// the more refined version has been requested
+		// The more refined version has been requested
 		// and will cause the reduced version to be filtered
 		e.flock.Lock()
 		e.filter[r] = true
@@ -196,16 +195,11 @@ func crawl(base, year string, subdomain *Subdomain, names chan *Subdomain, done 
 		return
 	}
 
-	domainre, _ := regexp.Compile(SUBRE + domain)
-	mementore, _ := regexp.Compile(base + "/[0-9]+/")
-	// filter for not double-checking URLs
-	filter := make(map[string]bool)
-
 	ext := &ext{
 		DefaultExtender: &gocrawl.DefaultExtender{},
-		domainRE:        domainre,
-		mementoRE:       mementore,
-		filter:          filter,
+		domainRE:        SubdomainRegex(domain),
+		mementoRE:       regexp.MustCompile(base + "/[0-9]+/"),
+		filter:          make(map[string]bool), // Filter for not double-checking URLs
 		base:            base,
 		year:            year,
 		sub:             subdomain.Name,
@@ -226,5 +220,4 @@ func crawl(base, year string, subdomain *Subdomain, names chan *Subdomain, done 
 	<-time.After(timeout)
 	c.Stop()
 	done <- 1
-	return
 }

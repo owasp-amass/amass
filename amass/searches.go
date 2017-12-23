@@ -5,10 +5,17 @@ package amass
 
 import (
 	"fmt"
+	"io/ioutil"
+	"net/http"
 	"net/url"
 	"regexp"
 	"strconv"
+	"strings"
+	"sync"
 	"time"
+
+	"github.com/PuerkitoBio/gocrawl"
+	"github.com/PuerkitoBio/goquery"
 )
 
 const NUM_SEARCHES int = 11
@@ -39,12 +46,7 @@ func (se *searchEngine) urlByPageNum(domain string, page int) string {
 func (se *searchEngine) Search(domain string, done chan int) {
 	var unique []string
 
-	re, err := regexp.Compile(SUBRE + domain)
-	if err != nil {
-		done <- 0
-		return
-	}
-
+	re := SubdomainRegex(domain)
 	num := se.limit / se.quantity
 	for i := 0; i < num; i++ {
 		page := GetWebPage(se.urlByPageNum(domain, i))
@@ -63,7 +65,6 @@ func (se *searchEngine) Search(domain string, done chan int) {
 
 		time.Sleep(1 * time.Second)
 	}
-
 	done <- len(unique)
 	return
 }
@@ -71,43 +72,41 @@ func (se *searchEngine) Search(domain string, done chan int) {
 func askURLByPageNum(a *searchEngine, domain string, page int) string {
 	pu := strconv.Itoa(a.quantity)
 	p := strconv.Itoa(page)
-
 	u, _ := url.Parse("http://www.ask.com/web")
-	u.RawQuery = url.Values{"q": {domain}, "pu": {pu}, "page": {p}}.Encode()
 
+	u.RawQuery = url.Values{"q": {domain}, "pu": {pu}, "page": {p}}.Encode()
 	return u.String()
 }
 
-func AskSearch(subdomains chan *Subdomain) Searcher {
-	a := new(searchEngine)
+func (a *Amass) AskSearch() Searcher {
+	as := new(searchEngine)
 
-	a.name = "Ask Search"
+	as.name = "Ask Search"
 	// ask.com appears to be hardcoded at 10 results per page
-	a.quantity = 10
-	a.limit = 200
-	a.subdomains = subdomains
-	a.callback = askURLByPageNum
-	return a
+	as.quantity = 10
+	as.limit = 200
+	as.subdomains = a.Names
+	as.callback = askURLByPageNum
+	return as
 }
 
 func bingURLByPageNum(b *searchEngine, domain string, page int) string {
 	count := strconv.Itoa(b.quantity)
 	first := strconv.Itoa((page * b.quantity) + 1)
-
 	u, _ := url.Parse("http://www.bing.com/search")
+
 	u.RawQuery = url.Values{"q": {"domain:" + domain},
 		"count": {count}, "first": {first}, "FORM": {"PORE"}}.Encode()
-
 	return u.String()
 }
 
-func BingSearch(subdomains chan *Subdomain) Searcher {
+func (a *Amass) BingSearch() Searcher {
 	b := new(searchEngine)
 
 	b.name = "Bing Search"
 	b.quantity = 20
 	b.limit = 400
-	b.subdomains = subdomains
+	b.subdomains = a.Names
 	b.callback = bingURLByPageNum
 	return b
 }
@@ -117,18 +116,17 @@ func dogpileURLByPageNum(d *searchEngine, domain string, page int) string {
 
 	u, _ := url.Parse("http://www.dogpile.com/search/web")
 	u.RawQuery = url.Values{"qsi": {qsi}, "q": {"\"" + domain + "\""}}.Encode()
-
 	return u.String()
 }
 
-func DogpileSearch(subdomains chan *Subdomain) Searcher {
+func (a *Amass) DogpileSearch() Searcher {
 	d := new(searchEngine)
 
 	d.name = "Dogpile Search"
 	// Dogpile returns roughly 15 results per page
 	d.quantity = 15
 	d.limit = 300
-	d.subdomains = subdomains
+	d.subdomains = a.Names
 	d.callback = dogpileURLByPageNum
 	return d
 }
@@ -143,11 +141,11 @@ func gigablastURLByPageNum(g *searchEngine, domain string, page int) string {
 	return u.String()
 }
 
-func GigablastSearch(subdomains chan *Subdomain) Searcher {
+func (a *Amass) GigablastSearch() Searcher {
 	g := new(searchEngine)
 
 	g.name = "Gigablast Search"
-	g.subdomains = subdomains
+	g.subdomains = a.Names
 	// Gigablast.com appears to be hardcoded at 10 results per page
 	g.quantity = 10
 	g.limit = 200
@@ -165,13 +163,13 @@ func yahooURLByPageNum(y *searchEngine, domain string, page int) string {
 	return u.String()
 }
 
-func YahooSearch(subdomains chan *Subdomain) Searcher {
+func (a *Amass) YahooSearch() Searcher {
 	y := new(searchEngine)
 
 	y.name = "Yahoo Search"
 	y.quantity = 20
 	y.limit = 400
-	y.subdomains = subdomains
+	y.subdomains = a.Names
 	y.callback = yahooURLByPageNum
 	return y
 }
@@ -191,12 +189,7 @@ func (l *lookup) String() string {
 func (l *lookup) Search(domain string, done chan int) {
 	var unique []string
 
-	re, err := regexp.Compile(SUBRE + domain)
-	if err != nil {
-		done <- 0
-		return
-	}
-
+	re := SubdomainRegex(domain)
 	page := GetWebPage(l.callback(domain))
 	if page == "" {
 		done <- 0
@@ -222,28 +215,12 @@ func censysURL(domain string) string {
 	return fmt.Sprintf(format, domain)
 }
 
-func CensysSearch(subdomains chan *Subdomain) Searcher {
+func (a *Amass) CensysSearch() Searcher {
 	c := new(lookup)
 
 	c.name = "Censys Search"
-	c.subdomains = subdomains
+	c.subdomains = a.Names
 	c.callback = censysURL
-	return c
-}
-
-func crtshURL(domain string) string {
-	u, _ := url.Parse("https://crt.sh/")
-	u.RawQuery = url.Values{"q": {"%25" + domain}}.Encode()
-
-	return u.String()
-}
-
-func CrtshSearch(subdomains chan *Subdomain) Searcher {
-	c := new(lookup)
-
-	c.name = "Crtsh Search"
-	c.subdomains = subdomains
-	c.callback = crtshURL
 	return c
 }
 
@@ -253,11 +230,11 @@ func netcraftURL(domain string) string {
 	return fmt.Sprintf(format, domain)
 }
 
-func NetcraftSearch(subdomains chan *Subdomain) Searcher {
+func (a *Amass) NetcraftSearch() Searcher {
 	n := new(lookup)
 
 	n.name = "Netcraft Search"
-	n.subdomains = subdomains
+	n.subdomains = a.Names
 	n.callback = netcraftURL
 	return n
 }
@@ -269,11 +246,11 @@ func pgpURL(domain string) string {
 	return u.String()
 }
 
-func PGPSearch(subdomains chan *Subdomain) Searcher {
+func (a *Amass) PGPSearch() Searcher {
 	p := new(lookup)
 
 	p.name = "PGP Search"
-	p.subdomains = subdomains
+	p.subdomains = a.Names
 	p.callback = pgpURL
 	return p
 }
@@ -284,11 +261,11 @@ func robtexURL(domain string) string {
 	return fmt.Sprintf(format, domain)
 }
 
-func RobtexSearch(subdomains chan *Subdomain) Searcher {
+func (a *Amass) RobtexSearch() Searcher {
 	r := new(lookup)
 
 	r.name = "Robtex Search"
-	r.subdomains = subdomains
+	r.subdomains = a.Names
 	r.callback = robtexURL
 	return r
 }
@@ -299,11 +276,124 @@ func virusTotalURL(domain string) string {
 	return fmt.Sprintf(format, domain)
 }
 
-func VirusTotalSearch(subdomains chan *Subdomain) Searcher {
+func (a *Amass) VirusTotalSearch() Searcher {
 	vt := new(lookup)
 
 	vt.name = "VirusTotal Search"
-	vt.subdomains = subdomains
+	vt.subdomains = a.Names
 	vt.callback = virusTotalURL
 	return vt
+}
+
+//--------------------------------------------------------------------------------------------
+// crtshCrawl - A searcher that attempts to discover names from SSL certificates
+type crtshCrawl struct {
+	name       string
+	subdomains chan *Subdomain
+}
+
+func (a *Amass) CrtshSearch() Searcher {
+	c := new(crtshCrawl)
+
+	c.name = "Crtsh Search"
+	c.subdomains = a.Names
+	return c
+}
+
+func (c *crtshCrawl) String() string {
+	return c.name
+}
+
+func (c *crtshCrawl) Search(domain string, done chan int) {
+	url := "https://crt.sh/?q=" + domain
+
+	ctCrawl(url, "crt.sh", domain, c.subdomains, 30*time.Second)
+	done <- 1
+}
+
+type ctExt struct {
+	*gocrawl.DefaultExtender
+	re              *regexp.Regexp
+	filter          map[string]bool
+	flock           sync.RWMutex
+	service, domain string
+	names           chan *Subdomain
+}
+
+func (e *ctExt) Log(logFlags gocrawl.LogFlags, msgLevel gocrawl.LogFlags, msg string) {
+	return
+}
+
+func (e *ctExt) RequestRobots(ctx *gocrawl.URLContext, robotAgent string) (data []byte, doRequest bool) {
+	return nil, false
+}
+
+func (e *ctExt) Filter(ctx *gocrawl.URLContext, isVisited bool) bool {
+	if isVisited {
+		return false
+	}
+
+	u := ctx.URL().String()
+
+	if !strings.Contains(u, e.service) {
+		return false
+	}
+
+	e.flock.RLock()
+	_, ok := e.filter[u]
+	e.flock.RUnlock()
+
+	if ok {
+		return false
+	}
+
+	e.flock.Lock()
+	e.filter[u] = true
+	e.flock.Unlock()
+	return true
+}
+
+func (e *ctExt) Visit(ctx *gocrawl.URLContext, res *http.Response, doc *goquery.Document) (interface{}, bool) {
+	in, err := ioutil.ReadAll(res.Body)
+	if err == nil {
+		for _, sd := range e.re.FindAllString(string(in), -1) {
+			e.names <- &Subdomain{Name: sd, Domain: e.domain, Tag: SEARCH}
+		}
+	}
+	return nil, true
+}
+
+func ctCrawl(url, service, domain string, names chan *Subdomain, timeout time.Duration) {
+	ext := &ctExt{
+		DefaultExtender: &gocrawl.DefaultExtender{},
+		re:              SubdomainRegex(domain),
+		filter:          make(map[string]bool), // filter for not double-checking URLs
+		service:         service,
+		domain:          domain,
+		names:           names,
+	}
+
+	// Set custom options
+	opts := gocrawl.NewOptions(ext)
+	opts.CrawlDelay = 50 * time.Millisecond
+	opts.LogFlags = gocrawl.LogError
+	opts.SameHostOnly = true
+	opts.MaxVisits = 200
+
+	c := gocrawl.NewCrawlerWithOptions(opts)
+	go c.Run(url)
+
+	<-time.After(timeout)
+	c.Stop()
+}
+
+func GetWebPage(url string) string {
+	resp, err := http.Get(url)
+	if err != nil {
+		return ""
+	}
+
+	in, err := ioutil.ReadAll(resp.Body)
+	resp.Body.Close()
+	return string(in)
 }
