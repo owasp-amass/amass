@@ -5,6 +5,8 @@ package amass
 
 import (
 	"net"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -31,7 +33,6 @@ func (a *Amass) NextDNSRequest() *Subdomain {
 	}
 
 	next := a.DNSResolveQueue[0]
-
 	if len(a.DNSResolveQueue) > 1 {
 		a.DNSResolveQueue = a.DNSResolveQueue[1:]
 	} else {
@@ -48,7 +49,8 @@ func (a *Amass) DNSRequestQueueEmpty() bool {
 	return len(a.DNSResolveQueue) == 0
 }
 
-func (a *Amass) ProcessDNSRequests() {
+// processDNSRequests - Executed as a go-routine to perform the forward DNS queries
+func (a *Amass) processDNSRequests() {
 	wildcards := make(map[string]*recon.DnsWildcard)
 
 	t := time.NewTicker(a.Frequency)
@@ -60,7 +62,7 @@ func (a *Amass) ProcessDNSRequests() {
 			continue
 		}
 		domain := subdomain.Domain
-
+		// Obtain the DNS answers for the A or AAAA records related to the name
 		answers, err := a.dnsQuery(domain, subdomain.Name, "A")
 		if err != nil {
 			answers, err = a.dnsQuery(domain, subdomain.Name, "AAAA")
@@ -68,32 +70,32 @@ func (a *Amass) ProcessDNSRequests() {
 				continue
 			}
 		}
-
+		// Pull the IP address out of the DNS answers
 		ip := recon.GetARecordData(answers)
 		if ip == "" {
 			continue
 		}
-
+		// Check that we didn't receive a wildcard IP address
 		if matchesWildcard(domain, subdomain.Name, ip, wildcards) {
 			continue
 		}
-
 		// Return the successfully resolved name + address
 		subdomain.Address = ip
 		a.Resolved <- subdomain
 	}
 }
 
+// dnsQuery - Performs the DNS resolution and pulls names out of the errors or answers
 func (a *Amass) dnsQuery(domain, name, t string) ([]recon.DNSAnswer, error) {
 	answers, err := recon.ResolveDNS(name, t)
 	if err != nil {
 		a.inspectDNSError(domain, err)
 	}
-
 	a.inspectDNSAnswers(domain, answers)
 	return answers, err
 }
 
+// inspectDNSError - Checks the DNS error for names
 func (a *Amass) inspectDNSError(domain string, err error) {
 	re := SubdomainRegex(domain)
 
@@ -102,6 +104,7 @@ func (a *Amass) inspectDNSError(domain string, err error) {
 	}
 }
 
+// inspectDNSAnswers - Checks the DNS answers for names
 func (a *Amass) inspectDNSAnswers(domain string, answers []recon.DNSAnswer) {
 	re := SubdomainRegex(domain)
 
@@ -112,6 +115,7 @@ func (a *Amass) inspectDNSAnswers(domain string, answers []recon.DNSAnswer) {
 	}
 }
 
+// matchesWildcard - Checks subdomains in the wildcard cache for matches on the IP address
 func matchesWildcard(baseDomain, name, ip string, wildcards map[string]*recon.DnsWildcard) bool {
 	var result bool
 	parts := strings.Split(name, ".")
@@ -136,6 +140,7 @@ func matchesWildcard(baseDomain, name, ip string, wildcards map[string]*recon.Dn
 }
 
 /* Network infrastructure related routines */
+
 type CIDRData struct {
 	CIDR  *net.IPNet
 	Hosts []string
@@ -151,21 +156,25 @@ func (a *Amass) AttemptSweep(domain, addr string, filter func(string) bool) {
 	}
 }
 
+// GetCIDR - Checks the cache for CIDR information related to the IP address provided.
+// If the CIDR information isn't in the cache, it looks it up using the recon package
 func (a *Amass) GetCIDR(addr string) (*CIDRData, bool) {
 	a.mtx.Lock()
 	defer a.mtx.Unlock()
 
+	// Check the cache first for which CIDR this IP address falls within
 	ip := net.ParseIP(addr)
 	for _, data := range a.cidrCache {
 		if data.CIDR.Contains(ip) {
 			return data, true
 		}
 	}
-
+	// If the information was not within the cache, perform the lookup
 	cidr := recon.IPToCIDR(addr)
 	if cidr != "" {
 		_, ipnet, err := net.ParseCIDR(cidr)
 		if err == nil {
+			// Create the slice of all IP addresses within the CIDR
 			hosts, err := recon.Hosts(cidr)
 			if err == nil {
 				a.cidrCache[cidr] = &CIDRData{
@@ -209,20 +218,38 @@ func (a *Amass) sweepCIDRAddresses(domain, addr string, cidr *CIDRData, filter f
 func (a *Amass) getCIDRSubset(hosts []string, addr string, num int) []string {
 	offset := num / 2
 
-	for idx, ip := range hosts {
-		if addr == ip {
-			s := idx - offset
-			if s < 0 {
-				s = 0
-			}
+	// Closure determines whether an IP address is less than or greater than another
+	f := func(i int) bool {
+		p1 := strings.Split(addr, ".")
+		p2 := strings.Split(hosts[i], ".")
 
-			e := idx + offset
-			if e >= len(hosts) {
-				e = len(hosts) - 1
-			}
+		for idx := 0; idx < len(p1); idx++ {
+			n1, _ := strconv.Atoi(p1[idx])
+			n2, _ := strconv.Atoi(p2[idx])
 
-			return hosts[s:e]
+			if n2 < n1 {
+				return false
+			} else if n2 > n1 {
+				return true
+			}
 		}
+		return true
 	}
+	// Searches for the addr IP address in the hosts slice
+	idx := sort.Search(len(hosts), f)
+	if idx < len(hosts) && hosts[idx] == addr {
+		// Now we determine the hosts elements to be included in the new slice
+		s := idx - offset
+		if s < 0 {
+			s = 0
+		}
+
+		e := idx + offset
+		if e >= len(hosts) {
+			e = len(hosts) - 1
+		}
+		return hosts[s:e]
+	}
+	// In the worst case, return the entire hosts slice
 	return hosts
 }

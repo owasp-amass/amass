@@ -82,7 +82,7 @@ func NewAmassWithConfig(ac AmassConfig) *Amass {
 		cidrCache: make(map[string]*CIDRData),
 	}
 	// Start the go-routine that will process DNS queries at the frequency
-	go a.ProcessDNSRequests()
+	go a.processDNSRequests()
 	return a
 }
 
