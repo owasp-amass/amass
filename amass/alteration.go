@@ -4,18 +4,17 @@
 package amass
 
 import (
-	"bufio"
 	"strconv"
 	"strings"
 	"time"
 	"unicode"
 )
 
-// ExecuteAlterations - Runs all the DNS name alteration methods as go-routines
+// ExecuteAlterations - Runs all the DNS name alteration methods as goroutines
 func (a *Amass) ExecuteAlterations(name *Subdomain) {
 	go a.FlipNumbersInName(name)
 	go a.AppendNumbers(name)
-	go a.PrefixSuffixWords(name)
+	//go a.PrefixSuffixWords(name)
 }
 
 // FlipNumbersInName - Method to flip numbers in a subdomain name
@@ -72,25 +71,12 @@ func (a *Amass) AppendNumbers(name *Subdomain) {
 
 // PrefixSuffixWords - Method for adding words to the prefix and suffix of a subdomain name
 func (a *Amass) PrefixSuffixWords(name *Subdomain) {
-	// We cannot perform this operation without a wordlist
-	if a.Wordlist == nil {
-		return
-	}
 	// Frequency is the max speed DNS requests will be sent
 	t := time.NewTicker(a.Frequency)
 	defer t.Stop()
 
-	scanner := bufio.NewScanner(a.Wordlist)
-	for range t.C {
-		// Once we have used all the words, we are finished
-		if !scanner.Scan() {
-			break
-		}
-		// Get the next word in the list
-		word := scanner.Text()
-		if word == "" {
-			continue
-		}
+	for _, word := range a.Wordlist {
+		<-t.C
 		// Send the new names with the word as a prefix and suffix of the leftmost label
 		a.prefixWord(name.Name, word, name.Domain)
 		a.suffixWord(name.Name, word, name.Domain)

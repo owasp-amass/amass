@@ -44,33 +44,33 @@ ns.example.com
 
 Have amass print IP addresses with the discovered names:
 ```
-$ amass --ip example.com
+$ amass -ip example.com
 ```
 
 
 Throttle the rate of DNS queries by number per minute:
 ```
-$ amass --freq 120 example.com
+$ amass -freq 120 example.com
 ```
 
-**The maximum rate supported is one DNS query every 5 milliseconds.**
+**The maximum rate supported is one DNS query every 1 millisecond.**
 
 
 Allow amass to included additional domains in the search using reverse whois information:
 ```
-$ amass --whois example.com
+$ amass -whois example.com
 ```
 
 
 You can have amass list all the domains discovered with reverse whois before performing the enumeration:
 ```
-$ amass --whois --list example.com
+$ amass -whois -list example.com
 ```
 
 
 Have amass perform brute force subdomain enumeration as well as word alterations:
 ```
-$ amass --words wordlist.txt example.com
+$ amass -words wordlist.txt example.com
 ```
 
 
@@ -84,7 +84,7 @@ In the above example, the domains example1.com and example2.com are simply appen
 
 All these options can be used together:
 ```
-$ amass -v --ip --whois --words wordlist.txt --freq 240 example.com example1.com
+$ amass -v -ip -whois -words wordlist.txt -freq 240 example.com example1.com
 ```
 
 **Be sure that the target domain is the last parameter provided to amass, then followed by any extra domains.**

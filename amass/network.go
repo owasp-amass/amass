@@ -4,6 +4,8 @@
 package amass
 
 import (
+	"errors"
+	//"fmt"
 	"net"
 	"sort"
 	"strconv"
@@ -13,7 +15,39 @@ import (
 	"github.com/caffix/recon"
 )
 
+// Public & free DNS servers
+var nameservers []string = []string{
+	"8.8.8.8:53",        // Google
+	"64.6.64.6:53",      // Verisign
+	"9.9.9.9:53",        // Quad9
+	"84.200.69.80:53",   // DNS.WATCH
+	"8.26.56.26:53",     // Comodo Secure DNS
+	"208.67.222.222:53", // OpenDNS Home
+	"195.46.39.39:53",   // SafeDNS
+	"69.195.152.204:53", // OpenNIC
+	"216.146.35.35:53",  // Dyn
+	"37.235.1.174:53",   // FreeDNS
+	"198.101.242.72:53", // Alternate DNS
+	"77.88.8.8:53",      // Yandex.DNS
+	"91.239.100.100:53", // UncensoredDNS
+	"74.82.42.42:53",    // Hurricane Electric
+	"156.154.70.1:53",   // Neustar
+}
+
 /* DNS processing routines */
+
+// NextNameserver - Atomically increments the index and returns the server
+func (a *Amass) NextNameserver() string {
+	a.mtx.Lock()
+	defer a.mtx.Unlock()
+
+	a.DNSServerIndex++
+	// Check if it's time to go back to the first nameserver
+	if a.DNSServerIndex == len(nameservers) {
+		a.DNSServerIndex = 0
+	}
+	return nameservers[a.DNSServerIndex]
+}
 
 // AddDNSRequest - Appends a DNS name to the queue for resolution
 func (a *Amass) AddDNSRequest(name *Subdomain) {
@@ -51,47 +85,92 @@ func (a *Amass) DNSRequestQueueEmpty() bool {
 
 // processDNSRequests - Executed as a go-routine to perform the forward DNS queries
 func (a *Amass) processDNSRequests() {
-	wildcards := make(map[string]*recon.DnsWildcard)
-
 	t := time.NewTicker(a.Frequency)
 	defer t.Stop()
 
 	for range t.C {
 		subdomain := a.NextDNSRequest()
-		if subdomain == nil || subdomain.Domain == "" {
-			continue
+
+		if subdomain != nil && subdomain.Domain != "" {
+			go a.performDNSRequest(subdomain)
 		}
-		domain := subdomain.Domain
-		// Obtain the DNS answers for the A or AAAA records related to the name
-		answers, err := a.dnsQuery(domain, subdomain.Name, "A")
-		if err != nil {
-			answers, err = a.dnsQuery(domain, subdomain.Name, "AAAA")
-			if err != nil {
-				continue
+	}
+}
+
+func (a *Amass) performDNSRequest(subdomain *Subdomain) {
+	domain := subdomain.Domain
+	server := a.NextNameserver()
+
+	answers, err := a.dnsQuery(domain, subdomain.Name, server)
+	if err != nil {
+		return
+	}
+	// Pull the IP address out of the DNS answers
+	ipstr := recon.GetARecordData(answers)
+	if ipstr == "" {
+		return
+	}
+	/*if ipstr == "104.239.213.7" {
+		fmt.Printf("Query for %s on server %s returned 104.239.213.7\n", subdomain.Name, server)
+		return
+	}*/
+	subdomain.Address = ipstr
+	// Check that we didn't receive a wildcard IP address
+	if a.matchesWildcard(subdomain) {
+		return
+	}
+	// Return the successfully resolved names + address
+	for _, record := range answers {
+		if record.Type == 5 || (record.Type == 1 &&
+			strings.HasSuffix(record.Name, subdomain.Domain)) {
+			a.Resolved <- &Subdomain{
+				Name:    record.Name,
+				Domain:  subdomain.Domain,
+				Address: ipstr,
+				Tag:     subdomain.Tag,
 			}
 		}
-		// Pull the IP address out of the DNS answers
-		ip := recon.GetARecordData(answers)
-		if ip == "" {
-			continue
-		}
-		// Check that we didn't receive a wildcard IP address
-		if matchesWildcard(domain, subdomain.Name, ip, wildcards) {
-			continue
-		}
-		// Return the successfully resolved name + address
-		subdomain.Address = ip
-		a.Resolved <- subdomain
 	}
 }
 
 // dnsQuery - Performs the DNS resolution and pulls names out of the errors or answers
-func (a *Amass) dnsQuery(domain, name, t string) ([]recon.DNSAnswer, error) {
-	answers, err := recon.ResolveDNS(name, t)
+func (a *Amass) dnsQuery(domain, name, server string) ([]recon.DNSAnswer, error) {
+	var resolved bool
+	var answers []recon.DNSAnswer
+	var last recon.DNSAnswer
+
+	n := name
+	// Recursively resolve the CNAME records
+	for i := 0; i < 10; i++ {
+		a, err := recon.ResolveDNS(n, server, "CNAME")
+		if err != nil {
+			break
+		}
+
+		if strings.HasSuffix(n, domain) {
+			answers = append(answers, a)
+		}
+
+		n = a.Data
+		last = a
+		resolved = true
+	}
+	// Attempt to update the name to be resolved for an A or AAAA record
+	if resolved {
+		name = last.Name
+	}
+	// Obtain the DNS answers for the A or AAAA records related to the name
+	ans, err := recon.ResolveDNS(name, server, "A")
 	if err != nil {
 		a.inspectDNSError(domain, err)
+		ans, err = recon.ResolveDNS(name, server, "AAAA")
+		if err != nil {
+			a.inspectDNSError(domain, err)
+			return []recon.DNSAnswer{}, errors.New("No A or AAAA record resolved for the name")
+		}
 	}
-	a.inspectDNSAnswers(domain, answers)
+	a.inspectDNSAnswers(domain, ans)
+	answers = append(answers, ans)
 	return answers, err
 }
 
@@ -105,33 +184,34 @@ func (a *Amass) inspectDNSError(domain string, err error) {
 }
 
 // inspectDNSAnswers - Checks the DNS answers for names
-func (a *Amass) inspectDNSAnswers(domain string, answers []recon.DNSAnswer) {
+func (a *Amass) inspectDNSAnswers(domain string, answer recon.DNSAnswer) {
 	re := SubdomainRegex(domain)
 
-	for _, ans := range answers {
-		for _, sd := range re.FindAllString(ans.Data, -1) {
-			a.Names <- &Subdomain{Name: sd, Domain: domain, Tag: "dns"}
-		}
+	for _, sd := range re.FindAllString(answer.Data, -1) {
+		a.Names <- &Subdomain{Name: sd, Domain: domain, Tag: "dns"}
 	}
 }
 
 // matchesWildcard - Checks subdomains in the wildcard cache for matches on the IP address
-func matchesWildcard(baseDomain, name, ip string, wildcards map[string]*recon.DnsWildcard) bool {
-	var result bool
-	parts := strings.Split(name, ".")
+func (a *Amass) matchesWildcard(subdomain *Subdomain) bool {
+	a.mtx.Lock()
+	defer a.mtx.Unlock()
 
-	baseLen := len(strings.Split(baseDomain, "."))
+	var result bool
+	parts := strings.Split(subdomain.Name, ".")
+
+	baseLen := len(strings.Split(subdomain.Domain, "."))
 	// Iterate over all the subdomains looking for wildcards
 	for i := len(parts) - baseLen; i > 0; i-- {
 		sub := strings.Join(parts[i:], ".")
 
-		w, ok := wildcards[sub]
+		w, ok := a.wildcards[sub]
 		if !ok {
-			w = recon.CheckDomainForWildcard(sub)
-			wildcards[sub] = w
+			w = recon.CheckDomainForWildcard(sub, nameservers[0])
+			a.wildcards[sub] = w
 		}
 
-		if w.HasWildcard && w.IP == ip {
+		if w.HasWildcard && w.IP == subdomain.Address {
 			result = true
 			break
 		}
@@ -148,11 +228,11 @@ type CIDRData struct {
 
 // AttemptSweep - Initiates a sweep of a subset of the addresses within the CIDR
 // The filter param is optional and allows IP addresses to be filtered out
-func (a *Amass) AttemptSweep(domain, addr string, filter func(string) bool) {
+func (a *Amass) AttemptSweep(domain, addr string) {
 	// Check if the CIDR for this address needs to be swept
 	cidr, _ := a.GetCIDR(addr)
 	if cidr != nil {
-		go a.sweepCIDRAddresses(domain, addr, cidr, filter)
+		go a.sweepCIDRAddresses(domain, addr, cidr)
 	}
 }
 
@@ -188,8 +268,22 @@ func (a *Amass) GetCIDR(addr string) (*CIDRData, bool) {
 	return nil, false
 }
 
+// Checks the reverse DNS filter to prevent duplicate lookups.
+// Returns true if the host has been seen already
+func (a *Amass) checkReverseDNSFilter(host string) bool {
+	a.mtx.Lock()
+	defer a.mtx.Unlock()
+
+	if _, ok := a.rDNSFilter[host]; ok {
+		return true
+	}
+
+	a.rDNSFilter[host] = struct{}{}
+	return false
+}
+
 // Performs reverse dns across the CIDR that the addr param falls within
-func (a *Amass) sweepCIDRAddresses(domain, addr string, cidr *CIDRData, filter func(string) bool) {
+func (a *Amass) sweepCIDRAddresses(domain, addr string, cidr *CIDRData) {
 	t := time.NewTicker(a.Frequency)
 	defer t.Stop()
 
@@ -198,11 +292,12 @@ func (a *Amass) sweepCIDRAddresses(domain, addr string, cidr *CIDRData, filter f
 	hosts := a.getCIDRSubset(cidr.Hosts, addr, 50)
 	// Perform the reverse DNS queries for all the hosts
 	for _, host := range hosts {
-		if (filter != nil && filter(host)) || host == addr {
+		// Check that duplicate lookups are not being performed
+		if a.checkReverseDNSFilter(host) || host == addr {
 			continue
 		}
-		<-t.C // We can't be going too fast
-		name, err := recon.ReverseDNS(host)
+		<-t.C // Don't go too fast
+		name, err := recon.ReverseDNS(host, a.NextNameserver())
 		if err == nil && re.MatchString(name) {
 			// Send the name to be resolved in the forward direction
 			a.Names <- &Subdomain{
@@ -244,9 +339,9 @@ func (a *Amass) getCIDRSubset(hosts []string, addr string, num int) []string {
 			s = 0
 		}
 
-		e := idx + offset
-		if e >= len(hosts) {
-			e = len(hosts) - 1
+		e := idx + offset + 1
+		if e > len(hosts) {
+			e = len(hosts)
 		}
 		return hosts[s:e]
 	}

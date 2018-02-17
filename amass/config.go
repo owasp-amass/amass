@@ -4,24 +4,27 @@
 package amass
 
 import (
-	"os"
 	"time"
 )
 
 // AmassConfig - Passes along optional configurations
 type AmassConfig struct {
-	// The open file that contains words to use when generating names
-	Wordlist *os.File
+	// The list of words to use when generating names
+	Wordlist []string
 
 	// Sets the maximum number of DNS queries per minute
 	Frequency time.Duration
+
+	// Should we use the quiet DNS service?
+	QuietDNS bool
 }
 
 // DefaultConfig returns a config with values that have been tested and produce desirable results
 func DefaultConfig() AmassConfig {
 	return AmassConfig{
-		Wordlist:  nil,
-		Frequency: 5 * time.Millisecond,
+		Wordlist:  []string{},
+		Frequency: 1 * time.Millisecond,
+		QuietDNS:  true,
 	}
 }
 
@@ -34,5 +37,6 @@ func customConfig(ac AmassConfig) AmassConfig {
 		config.Frequency = ac.Frequency
 	}
 	config.Wordlist = ac.Wordlist
+	config.QuietDNS = ac.QuietDNS
 	return config
 }

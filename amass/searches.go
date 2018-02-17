@@ -18,7 +18,7 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
-const NUM_SEARCHES int = 11
+const NUM_SEARCHES int = 9
 
 // Searcher - represents all objects that perform searches for domain names
 type Searcher interface {
@@ -115,7 +115,7 @@ func dogpileURLByPageNum(d *searchEngine, domain string, page int) string {
 	qsi := strconv.Itoa(d.quantity * page)
 
 	u, _ := url.Parse("http://www.dogpile.com/search/web")
-	u.RawQuery = url.Values{"qsi": {qsi}, "q": {"\"" + domain + "\""}}.Encode()
+	u.RawQuery = url.Values{"qsi": {qsi}, "q": {domain}}.Encode()
 	return u.String()
 }
 
@@ -129,28 +129,6 @@ func (a *Amass) DogpileSearch() Searcher {
 	d.subdomains = a.Names
 	d.callback = dogpileURLByPageNum
 	return d
-}
-
-func gigablastURLByPageNum(g *searchEngine, domain string, page int) string {
-	s := strconv.Itoa(g.quantity * page)
-
-	u, _ := url.Parse("http://www.gigablast.com/search")
-	u.RawQuery = url.Values{"q": {domain}, "niceness": {"1"},
-		"icc": {"1"}, "dr": {"1"}, "spell": {"0"}, "s": {s}}.Encode()
-
-	return u.String()
-}
-
-func (a *Amass) GigablastSearch() Searcher {
-	g := new(searchEngine)
-
-	g.name = "Gigablast Search"
-	g.subdomains = a.Names
-	// Gigablast.com appears to be hardcoded at 10 results per page
-	g.quantity = 10
-	g.limit = 200
-	g.callback = gigablastURLByPageNum
-	return g
 }
 
 func yahooURLByPageNum(y *searchEngine, domain string, page int) string {
@@ -237,22 +215,6 @@ func (a *Amass) NetcraftSearch() Searcher {
 	n.subdomains = a.Names
 	n.callback = netcraftURL
 	return n
-}
-
-func pgpURL(domain string) string {
-	u, _ := url.Parse("http://pgp.mit.edu/pks/lookup")
-	u.RawQuery = url.Values{"search": {domain}, "op": {"index"}}.Encode()
-
-	return u.String()
-}
-
-func (a *Amass) PGPSearch() Searcher {
-	p := new(lookup)
-
-	p.name = "PGP Search"
-	p.subdomains = a.Names
-	p.callback = pgpURL
-	return p
 }
 
 func robtexURL(domain string) string {

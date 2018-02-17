@@ -8,7 +8,6 @@ import (
 	"os"
 	"regexp"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/caffix/amass/amass"
@@ -16,38 +15,37 @@ import (
 )
 
 func main() {
-	var domains []string
+	var domain string
 	names := make(chan *amass.Subdomain, 100)
 
 	lt := maltegolocal.ParseLocalArguments(os.Args)
-	domains = append(domains, lt.Value)
+	domain = lt.Value
 	trx := maltegolocal.MaltegoTransform{}
 
 	go func() {
 		for {
 			n := <-names
-			if n.Domain == domains[0] {
+			if n.Domain == domain {
 				trx.AddEntity("maltego.DNSName", n.Name)
 			}
 		}
 	}()
 
 	trx.AddUIMessage("The amass transform can take a few minutes to complete.", "Inform")
-	enumeration(domains, names, amass.DefaultConfig())
+	enumeration(domain, names, amass.DefaultConfig())
 	fmt.Println(trx.ReturnOutput())
 }
 
 // This is the driver function that performs a complete enumeration.
-func enumeration(domains []string, names chan *amass.Subdomain, config amass.AmassConfig) {
+func enumeration(domain string, names chan *amass.Subdomain, config amass.AmassConfig) {
 	var activity bool
 	var completed int
-	var filterLock sync.Mutex
 
 	done := make(chan int, 20)
 	a := amass.NewAmassWithConfig(config)
-	totalSearches := amass.NUM_SEARCHES * len(domains)
+	totalSearches := amass.NUM_SEARCHES
 	// Start the simple searches to get us started
-	startSearches(domains, a, done)
+	startSearches(domain, a, done)
 	// Get all the archives to be used
 	archives := getArchives(a)
 	// When this timer fires, the program will end
@@ -55,22 +53,10 @@ func enumeration(domains []string, names chan *amass.Subdomain, config amass.Ama
 	defer t.Stop()
 	// Filter for not double-checking subdomain names
 	filterNames := make(map[string]struct{})
-	// Filter for not double-checking IP addresses
-	filterRDNS := make(map[string]struct{})
-	filter := func(ip string) bool {
-		filterLock.Lock()
-		defer filterLock.Unlock()
-
-		if _, ok := filterRDNS[ip]; ok {
-			return true
-		}
-		filterRDNS[ip] = struct{}{}
-		return false
-	}
 	// Make sure resolved names are not provided to the user more than once
 	legitimate := make(map[string]struct{})
 	// Start brute forcing
-	go a.BruteForce(domains)
+	go a.BruteForce(domain, domain)
 loop:
 	for {
 		select {
@@ -82,7 +68,7 @@ loop:
 					filterNames[sd.Name] = struct{}{}
 
 					if sd.Domain == "" {
-						sd.Domain = getDomainFromName(sd.Name, domains)
+						sd.Domain = getDomainFromName(sd.Name, domain)
 					}
 
 					if sd.Domain != "" {
@@ -98,7 +84,7 @@ loop:
 			if _, ok := legitimate[r.Name]; !ok {
 				legitimate[r.Name] = struct{}{}
 
-				a.AttemptSweep(r.Domain, r.Address, filter)
+				a.AttemptSweep(r.Domain, r.Address)
 				// Give it to the user!
 				names <- r
 				// Check if this subdomain/host name has an archived web page
@@ -123,9 +109,8 @@ loop:
 	}
 }
 
-func startSearches(domains []string, a *amass.Amass, done chan int) {
+func startSearches(domain string, a *amass.Amass, done chan int) {
 	searches := []amass.Searcher{
-		a.PGPSearch(),
 		a.AskSearch(),
 		a.CensysSearch(),
 		a.CrtshSearch(),
@@ -134,15 +119,12 @@ func startSearches(domains []string, a *amass.Amass, done chan int) {
 		a.BingSearch(),
 		a.DogpileSearch(),
 		a.YahooSearch(),
-		a.GigablastSearch(),
 		a.VirusTotalSearch(),
 	}
 
 	// Fire off the searches
-	for _, d := range domains {
-		for _, s := range searches {
-			go s.Search(d, done)
-		}
+	for _, s := range searches {
+		go s.Search(domain, done)
 	}
 }
 
@@ -161,14 +143,11 @@ func getArchives(a *amass.Amass) []amass.Archiver {
 	return archives
 }
 
-func getDomainFromName(name string, domains []string) string {
+func getDomainFromName(name string, domain string) string {
 	var result string
 
-	for _, d := range domains {
-		if strings.HasSuffix(name, d) {
-			result = d
-			break
-		}
+	if strings.HasSuffix(name, domain) {
+		result = domain
 	}
 	return result
 }

@@ -4,11 +4,12 @@
 package amass
 
 import (
-	"os"
 	"regexp"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/caffix/recon"
 )
 
 const (
@@ -37,17 +38,29 @@ type Amass struct {
 	// The channel that will receive names that have been successfully resolved
 	Resolved chan *Subdomain
 
-	// The open file that contains words to use when generating names
-	Wordlist *os.File
+	// The slice that contains words to use when generating names
+	Wordlist []string
 
 	// Sets the maximum number of DNS queries per minute
 	Frequency time.Duration
+
+	// Keeps track of which DNS server is currently being queried
+	DNSServerIndex int
+
+	// Should we use the quiet DNS service?
+	QuietDNS bool
 
 	// Holds all the pending DNS name resolutions
 	DNSResolveQueue []*Subdomain
 
 	// The cache of CIDR network blocks that have already been looked up
 	cidrCache map[string]*CIDRData
+
+	// Keeps track of DNS wildcards discovered
+	wildcards map[string]*recon.DnsWildcard
+
+	// Prevents duplicate reverse DNS lookups being performed
+	rDNSFilter map[string]struct{}
 }
 
 // Subdomain - Contains information about a subdomain name
@@ -75,12 +88,17 @@ func NewAmassWithConfig(ac AmassConfig) *Amass {
 	config := customConfig(ac)
 
 	a := &Amass{
-		Names:     make(chan *Subdomain, defaultAmassChanSize),
-		Resolved:  make(chan *Subdomain, defaultAmassChanSize),
-		Wordlist:  config.Wordlist,
-		Frequency: config.Frequency,
-		cidrCache: make(map[string]*CIDRData),
+		Names:      make(chan *Subdomain, defaultAmassChanSize),
+		Resolved:   make(chan *Subdomain, defaultAmassChanSize),
+		Wordlist:   config.Wordlist,
+		Frequency:  config.Frequency,
+		QuietDNS:   config.QuietDNS,
+		cidrCache:  make(map[string]*CIDRData),
+		wildcards:  make(map[string]*recon.DnsWildcard),
+		rDNSFilter: make(map[string]struct{}),
 	}
+	// Do not perform reverse lookups on localhost
+	a.rDNSFilter["127.0.0.1"] = struct{}{}
 	// Start the go-routine that will process DNS queries at the frequency
 	go a.processDNSRequests()
 	return a
