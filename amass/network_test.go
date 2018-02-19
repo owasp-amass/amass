@@ -42,16 +42,6 @@ func TestDNSRequestQueue(t *testing.T) {
 	if a.DNSRequestQueueEmpty() == true {
 		t.Error("DNSRequestQueueEmpty returned: true after adding an entry")
 	}
-
-	// Check that the request added is returned by NextDNSRequest
-	if next := a.NextDNSRequest(); next == nil || next.Name != sd.Name {
-		t.Errorf("NextDNSRequest did not return the one entry: %v", sd)
-	}
-
-	// The queue should be empty again
-	if a.DNSRequestQueueEmpty() != true {
-		t.Error("DNSRequestQueueEmpty returned: false for an empty queue")
-	}
 }
 
 func TestGetCIDR(t *testing.T) {
@@ -74,20 +64,9 @@ func TestGetCIDR(t *testing.T) {
 		t.Errorf("No A record data was returned for %s", name)
 	}
 
-	data, cached := a.GetCIDR(ipstr)
-	// The data should not have been in the cache this time
+	data := a.GetCIDR(ipstr)
 	if data == nil {
-		t.Error("GetCIDR return nil for the CIDR data")
-	} else if cached == true {
-		t.Error("GetCIDR indicated the data was cached the first time we requested it")
-	}
-
-	// The data should be cached this time
-	data, cached = a.GetCIDR(ipstr)
-	if data == nil {
-		t.Error("GetCIDR return nil for the CIDR data")
-	} else if cached == false {
-		t.Error("GetCIDR indicated the data was not cached the second time we requested it")
+		t.Error("GetCIDR returned nil for the CIDR data")
 	}
 }
 

@@ -10,8 +10,7 @@ import (
 // BruteForce - Generates names from the provided wordlist + base
 // domain names and sends them on the Names channel for DNS resolution
 func (a *Amass) BruteForce(domain, root string) {
-	// Frequency is the max speed DNS requests will be sent
-	t := time.NewTicker(a.Frequency)
+	t := time.NewTicker(50 * time.Millisecond)
 	defer t.Stop()
 
 	for _, word := range a.Wordlist {

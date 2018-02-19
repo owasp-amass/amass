@@ -141,8 +141,9 @@ func printResults(total int, stats map[string]int) {
 }
 
 func spinner(spin chan struct{}) {
-	for range spin {
+	for {
 		for _, r := range `-\|/` {
+			<-spin
 			fmt.Printf("\r%c", r)
 			time.Sleep(75 * time.Millisecond)
 		}
@@ -260,10 +261,9 @@ func (e *Enumerator) NameAttempt(name *amass.Subdomain) {
 			return
 		}
 	}
+	go e.amass.AddDNSRequest(name)
 	// Show that we're continuing to work hard
 	e.Activity <- struct{}{}
-	// Is this new name valid?
-	e.amass.AddDNSRequest(name)
 }
 
 func (e *Enumerator) ResolvedName(name *amass.Subdomain) {

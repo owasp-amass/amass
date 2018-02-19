@@ -6,10 +6,7 @@ package amass
 import (
 	"regexp"
 	"strings"
-	"sync"
 	"time"
-
-	"github.com/caffix/recon"
 )
 
 const (
@@ -23,14 +20,20 @@ const (
 	// The default size of the channels within the Amass struct
 	defaultAmassChanSize = 500
 
+	// The number of goroutines fired off by each amass instantiation
+	numberofProcessingRoutines = 5
+
 	// This regular expression + the base domain will match on all names and subdomains
 	SUBRE = "(([a-zA-Z0-9]{1}|[a-zA-Z0-9]{1}[a-zA-Z0-9-]{0,61}[a-zA-Z0-9]{1})[.]{1})+"
 )
 
 // Amass - Contains amass state information
 type Amass struct {
-	// Mutex that protects the structure from concurrent access
-	mtx sync.Mutex
+	// The slice that contains words to use when generating names
+	Wordlist []string
+
+	// Sets the maximum number of DNS queries per minute
+	Frequency time.Duration
 
 	// The channel to send names on for DNS resolution and other processing
 	Names chan *Subdomain
@@ -38,29 +41,41 @@ type Amass struct {
 	// The channel that will receive names that have been successfully resolved
 	Resolved chan *Subdomain
 
-	// The slice that contains words to use when generating names
-	Wordlist []string
+	// Requests for the next DNS server to use are sent here
+	nextNameserver chan chan string
 
-	// Sets the maximum number of DNS queries per minute
-	Frequency time.Duration
+	// Tells the processNextNameserver goroutine to quit
+	nextNameserverQuit chan struct{}
 
-	// Keeps track of which DNS server is currently being queried
-	DNSServerIndex int
+	// New DNS requests are sent through this channel
+	addDNSRequest chan *Subdomain
 
-	// Should we use the quiet DNS service?
-	QuietDNS bool
+	// Requests are sent through this channel to check if the queue is empty
+	dnsRequestQueueEmpty chan chan bool
 
-	// Holds all the pending DNS name resolutions
-	DNSResolveQueue []*Subdomain
+	// Tells the processDNSRequests goroutine to quit
+	dnsRequestsQuit chan struct{}
 
-	// The cache of CIDR network blocks that have already been looked up
-	cidrCache map[string]*CIDRData
+	// Requests are sent through this channel for CIDR information
+	getCIDRInfo chan *getCIDR
 
-	// Keeps track of DNS wildcards discovered
-	wildcards map[string]*recon.DnsWildcard
+	// Tells the processGetCIDR goroutine to quit
+	getCIDRQuit chan struct{}
 
-	// Prevents duplicate reverse DNS lookups being performed
-	rDNSFilter map[string]struct{}
+	// Requests are sent through this channel to check DNS wildcard matches
+	wildcardMatches chan *wildcard
+
+	// Tells the processWildcardMatches goroutine to quit
+	wildcardMatchesQuit chan struct{}
+
+	// Requests to check the reverse DNS filter are sent through this channel
+	checkRDNSFilter chan *reverseDNSFilter
+
+	// Tells the processReverseDNSFilter goroutine to quit
+	reverseDNSFilterQuit chan struct{}
+
+	// Goroutines indicates completion on this channel
+	done chan struct{}
 }
 
 // Subdomain - Contains information about a subdomain name
@@ -88,20 +103,46 @@ func NewAmassWithConfig(ac AmassConfig) *Amass {
 	config := customConfig(ac)
 
 	a := &Amass{
-		Names:      make(chan *Subdomain, defaultAmassChanSize),
-		Resolved:   make(chan *Subdomain, defaultAmassChanSize),
-		Wordlist:   config.Wordlist,
-		Frequency:  config.Frequency,
-		QuietDNS:   config.QuietDNS,
-		cidrCache:  make(map[string]*CIDRData),
-		wildcards:  make(map[string]*recon.DnsWildcard),
-		rDNSFilter: make(map[string]struct{}),
+		Wordlist:             config.Wordlist,
+		Frequency:            config.Frequency,
+		Names:                make(chan *Subdomain, defaultAmassChanSize),
+		Resolved:             make(chan *Subdomain, defaultAmassChanSize),
+		nextNameserver:       make(chan chan string, defaultAmassChanSize),
+		nextNameserverQuit:   make(chan struct{}, 2),
+		addDNSRequest:        make(chan *Subdomain, defaultAmassChanSize),
+		dnsRequestQueueEmpty: make(chan chan bool, defaultAmassChanSize),
+		dnsRequestsQuit:      make(chan struct{}, 2),
+		getCIDRInfo:          make(chan *getCIDR, defaultAmassChanSize),
+		getCIDRQuit:          make(chan struct{}, 2),
+		wildcardMatches:      make(chan *wildcard, defaultAmassChanSize),
+		wildcardMatchesQuit:  make(chan struct{}, 2),
+		checkRDNSFilter:      make(chan *reverseDNSFilter, defaultAmassChanSize),
+		reverseDNSFilterQuit: make(chan struct{}, 2),
+		done:                 make(chan struct{}, numberofProcessingRoutines),
 	}
-	// Do not perform reverse lookups on localhost
-	a.rDNSFilter["127.0.0.1"] = struct{}{}
-	// Start the go-routine that will process DNS queries at the frequency
-	go a.processDNSRequests()
+	// Start all the goroutines
+	go a.initialize()
 	return a
+}
+
+func (a *Amass) initialize() {
+	go a.processNextNameserver()
+	go a.processDNSRequests()
+	go a.processWildcardMatches()
+	go a.processGetCIDR()
+	go a.processReverseDNSFilter()
+}
+
+func (a *Amass) Clean() {
+	a.nextNameserverQuit <- struct{}{}
+	a.dnsRequestsQuit <- struct{}{}
+	a.wildcardMatchesQuit <- struct{}{}
+	a.getCIDRQuit <- struct{}{}
+	a.reverseDNSFilterQuit <- struct{}{}
+
+	for i := 0; i < numberofProcessingRoutines; i++ {
+		<-a.done
+	}
 }
 
 // NewUniqueElements - Removes elements that have duplicates in the original or new elements

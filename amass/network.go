@@ -5,7 +5,6 @@ package amass
 
 import (
 	"errors"
-	//"fmt"
 	"net"
 	"sort"
 	"strconv"
@@ -17,91 +16,117 @@ import (
 
 // Public & free DNS servers
 var nameservers []string = []string{
-	"8.8.8.8:53",        // Google
-	"64.6.64.6:53",      // Verisign
-	"9.9.9.9:53",        // Quad9
-	"84.200.69.80:53",   // DNS.WATCH
-	"8.26.56.26:53",     // Comodo Secure DNS
-	"208.67.222.222:53", // OpenDNS Home
-	"195.46.39.39:53",   // SafeDNS
-	"69.195.152.204:53", // OpenNIC
-	"216.146.35.35:53",  // Dyn
-	"37.235.1.174:53",   // FreeDNS
-	"198.101.242.72:53", // Alternate DNS
-	"77.88.8.8:53",      // Yandex.DNS
-	"91.239.100.100:53", // UncensoredDNS
-	"74.82.42.42:53",    // Hurricane Electric
-	"156.154.70.1:53",   // Neustar
+	"8.8.8.8:53",         // Google
+	"64.6.64.6:53",       // Verisign
+	"9.9.9.9:53",         // Quad9
+	"84.200.69.80:53",    // DNS.WATCH
+	"8.26.56.26:53",      // Comodo Secure DNS
+	"208.67.222.222:53",  // OpenDNS Home
+	"195.46.39.39:53",    // SafeDNS
+	"69.195.152.204:53",  // OpenNIC
+	"216.146.35.35:53",   // Dyn
+	"37.235.1.174:53",    // FreeDNS
+	"198.101.242.72:53",  // Alternate DNS
+	"77.88.8.8:53",       // Yandex.DNS
+	"91.239.100.100:53",  // UncensoredDNS
+	"74.82.42.42:53",     // Hurricane Electric
+	"156.154.70.1:53",    // Neustar
+	"8.8.4.4:53",         // Google Secondary
+	"64.6.65.6:53",       // Verisign Secondary
+	"149.112.112.112:53", // Quad9 Secondary
+	"84.200.70.40:53",    // DNS.WATCH Secondary
+	"8.20.247.20:53",     // Comodo Secure DNS Secondary
+	"208.67.220.220:53",  // OpenDNS Home Secondary
+	"195.46.39.40:53",    // SafeDNS Secondary
+	"216.146.36.36:53",   // Dyn Secondary
+	"37.235.1.177:53",    // FreeDNS Secondary
+	"23.253.163.53:53",   // Alternate DNS Secondary
+	"77.88.8.1:53",       // Yandex.DNS Secondary
+	"89.233.43.71:53",    // UncensoredDNS Secondary
+	"156.154.71.1:53",    // Neustar Secondary
 }
 
 /* DNS processing routines */
 
-// NextNameserver - Atomically increments the index and returns the server
-func (a *Amass) NextNameserver() string {
-	a.mtx.Lock()
-	defer a.mtx.Unlock()
+func (a *Amass) processNextNameserver() {
+	var index int
+loop:
+	for {
+		select {
+		case result := <-a.nextNameserver:
+			index++
+			if index == len(nameservers) {
+				index = 0
+			}
 
-	a.DNSServerIndex++
-	// Check if it's time to go back to the first nameserver
-	if a.DNSServerIndex == len(nameservers) {
-		a.DNSServerIndex = 0
+			result <- nameservers[index]
+		case <-a.nextNameserverQuit:
+			break loop
+		}
 	}
-	return nameservers[a.DNSServerIndex]
+	a.done <- struct{}{}
+}
+
+// NextNameserver - Requests the next server from the goroutine
+func (a *Amass) NextNameserver() string {
+	result := make(chan string, 2)
+
+	a.nextNameserver <- result
+	return <-result
+}
+
+// processDNSRequests - Executed as a go-routine to handle DNS processing
+func (a *Amass) processDNSRequests() {
+	var queue []*Subdomain
+
+	t := time.NewTicker(a.Frequency)
+	defer t.Stop()
+loop:
+	for {
+		select {
+		case add := <-a.addDNSRequest:
+			queue = append(queue, add)
+		case ans := <-a.dnsRequestQueueEmpty:
+			if len(queue) == 0 {
+				ans <- true
+			} else {
+				ans <- false
+			}
+		case <-t.C: // Pops a DNS name off the queue for resolution
+			if len(queue) > 0 {
+				next := queue[0]
+				if next.Domain != "" {
+					go a.performDNSRequest(next)
+				}
+				// Remove the first slice element
+				if len(queue) > 1 {
+					queue = queue[1:]
+				} else {
+					queue = []*Subdomain{}
+				}
+			}
+		case <-a.dnsRequestsQuit:
+			break loop
+		}
+	}
+	a.done <- struct{}{}
 }
 
 // AddDNSRequest - Appends a DNS name to the queue for resolution
 func (a *Amass) AddDNSRequest(name *Subdomain) {
-	a.mtx.Lock()
-	defer a.mtx.Unlock()
-
-	a.DNSResolveQueue = append(a.DNSResolveQueue, name)
-}
-
-// NextDNSRequest - Pops a DNS name off the queue for resolution
-func (a *Amass) NextDNSRequest() *Subdomain {
-	a.mtx.Lock()
-	defer a.mtx.Unlock()
-
-	if len(a.DNSResolveQueue) == 0 {
-		return nil
-	}
-
-	next := a.DNSResolveQueue[0]
-	if len(a.DNSResolveQueue) > 1 {
-		a.DNSResolveQueue = a.DNSResolveQueue[1:]
-	} else {
-		a.DNSResolveQueue = []*Subdomain{}
-	}
-	return next
+	a.addDNSRequest <- name
 }
 
 // DNSRequestQueueEmpty - Checks if the queue for resolution is empty
 func (a *Amass) DNSRequestQueueEmpty() bool {
-	a.mtx.Lock()
-	defer a.mtx.Unlock()
+	result := make(chan bool, 2)
 
-	return len(a.DNSResolveQueue) == 0
-}
-
-// processDNSRequests - Executed as a go-routine to perform the forward DNS queries
-func (a *Amass) processDNSRequests() {
-	t := time.NewTicker(a.Frequency)
-	defer t.Stop()
-
-	for range t.C {
-		subdomain := a.NextDNSRequest()
-
-		if subdomain != nil && subdomain.Domain != "" {
-			go a.performDNSRequest(subdomain)
-		}
-	}
+	a.dnsRequestQueueEmpty <- result
+	return <-result
 }
 
 func (a *Amass) performDNSRequest(subdomain *Subdomain) {
-	domain := subdomain.Domain
-	server := a.NextNameserver()
-
-	answers, err := a.dnsQuery(domain, subdomain.Name, server)
+	answers, err := a.dnsQuery(subdomain.Domain, subdomain.Name, a.NextNameserver())
 	if err != nil {
 		return
 	}
@@ -110,10 +135,6 @@ func (a *Amass) performDNSRequest(subdomain *Subdomain) {
 	if ipstr == "" {
 		return
 	}
-	/*if ipstr == "104.239.213.7" {
-		fmt.Printf("Query for %s on server %s returned 104.239.213.7\n", subdomain.Name, server)
-		return
-	}*/
 	subdomain.Address = ipstr
 	// Check that we didn't receive a wildcard IP address
 	if a.matchesWildcard(subdomain) {
@@ -121,14 +142,15 @@ func (a *Amass) performDNSRequest(subdomain *Subdomain) {
 	}
 	// Return the successfully resolved names + address
 	for _, record := range answers {
-		if record.Type == 5 || (record.Type == 1 &&
-			strings.HasSuffix(record.Name, subdomain.Domain)) {
-			a.Resolved <- &Subdomain{
-				Name:    record.Name,
-				Domain:  subdomain.Domain,
-				Address: ipstr,
-				Tag:     subdomain.Tag,
-			}
+		if !strings.HasSuffix(record.Name, subdomain.Domain) {
+			continue
+		}
+
+		a.Resolved <- &Subdomain{
+			Name:    record.Name,
+			Domain:  subdomain.Domain,
+			Address: ipstr,
+			Tag:     subdomain.Tag,
 		}
 	}
 }
@@ -162,61 +184,65 @@ func (a *Amass) dnsQuery(domain, name, server string) ([]recon.DNSAnswer, error)
 	// Obtain the DNS answers for the A or AAAA records related to the name
 	ans, err := recon.ResolveDNS(name, server, "A")
 	if err != nil {
-		a.inspectDNSError(domain, err)
 		ans, err = recon.ResolveDNS(name, server, "AAAA")
 		if err != nil {
-			a.inspectDNSError(domain, err)
 			return []recon.DNSAnswer{}, errors.New("No A or AAAA record resolved for the name")
 		}
 	}
-	a.inspectDNSAnswers(domain, ans)
 	answers = append(answers, ans)
 	return answers, err
 }
 
-// inspectDNSError - Checks the DNS error for names
-func (a *Amass) inspectDNSError(domain string, err error) {
-	re := SubdomainRegex(domain)
-
-	for _, sd := range re.FindAllString(err.Error(), -1) {
-		a.Names <- &Subdomain{Name: sd, Domain: domain, Tag: "dns"}
-	}
+type wildcard struct {
+	Sub *Subdomain
+	Ans chan bool
 }
 
-// inspectDNSAnswers - Checks the DNS answers for names
-func (a *Amass) inspectDNSAnswers(domain string, answer recon.DNSAnswer) {
-	re := SubdomainRegex(domain)
+// Goroutine that keeps track of DNS wildcards discovered
+func (a *Amass) processWildcardMatches() {
+	wildcards := make(map[string]*recon.DnsWildcard)
+loop:
+	for {
+		select {
+		case req := <-a.wildcardMatches:
+			var answer bool
 
-	for _, sd := range re.FindAllString(answer.Data, -1) {
-		a.Names <- &Subdomain{Name: sd, Domain: domain, Tag: "dns"}
+			parts := strings.Split(req.Sub.Name, ".")
+			baseLen := len(strings.Split(req.Sub.Domain, "."))
+
+			// Iterate over all the subdomains looking for wildcards
+			for i := len(parts) - baseLen; i > 0; i-- {
+				sub := strings.Join(parts[i:], ".")
+
+				w, ok := wildcards[sub]
+				if !ok {
+					w = recon.CheckDomainForWildcard(sub, nameservers[0])
+					wildcards[sub] = w
+				}
+
+				if w.HasWildcard && w.IP == req.Sub.Address {
+					answer = true
+					break
+				}
+			}
+
+			req.Ans <- answer
+		case <-a.wildcardMatchesQuit:
+			break loop
+		}
 	}
+	a.done <- struct{}{}
 }
 
 // matchesWildcard - Checks subdomains in the wildcard cache for matches on the IP address
 func (a *Amass) matchesWildcard(subdomain *Subdomain) bool {
-	a.mtx.Lock()
-	defer a.mtx.Unlock()
+	answer := make(chan bool, 2)
 
-	var result bool
-	parts := strings.Split(subdomain.Name, ".")
-
-	baseLen := len(strings.Split(subdomain.Domain, "."))
-	// Iterate over all the subdomains looking for wildcards
-	for i := len(parts) - baseLen; i > 0; i-- {
-		sub := strings.Join(parts[i:], ".")
-
-		w, ok := a.wildcards[sub]
-		if !ok {
-			w = recon.CheckDomainForWildcard(sub, nameservers[0])
-			a.wildcards[sub] = w
-		}
-
-		if w.HasWildcard && w.IP == subdomain.Address {
-			result = true
-			break
-		}
+	a.wildcardMatches <- &wildcard{
+		Sub: subdomain,
+		Ans: answer,
 	}
-	return result
+	return <-answer
 }
 
 /* Network infrastructure related routines */
@@ -230,26 +256,19 @@ type CIDRData struct {
 // The filter param is optional and allows IP addresses to be filtered out
 func (a *Amass) AttemptSweep(domain, addr string) {
 	// Check if the CIDR for this address needs to be swept
-	cidr, _ := a.GetCIDR(addr)
-	if cidr != nil {
-		go a.sweepCIDRAddresses(domain, addr, cidr)
+	cidr := a.GetCIDR(addr)
+	if cidr == nil {
+		return
 	}
+	go a.sweepCIDRAddresses(domain, addr, cidr)
 }
 
-// GetCIDR - Checks the cache for CIDR information related to the IP address provided.
-// If the CIDR information isn't in the cache, it looks it up using the recon package
-func (a *Amass) GetCIDR(addr string) (*CIDRData, bool) {
-	a.mtx.Lock()
-	defer a.mtx.Unlock()
+type getCIDR struct {
+	Addr string
+	CIDR chan *CIDRData
+}
 
-	// Check the cache first for which CIDR this IP address falls within
-	ip := net.ParseIP(addr)
-	for _, data := range a.cidrCache {
-		if data.CIDR.Contains(ip) {
-			return data, true
-		}
-	}
-	// If the information was not within the cache, perform the lookup
+func obtainCIDR(addr string) (string, *CIDRData) {
 	cidr := recon.IPToCIDR(addr)
 	if cidr != "" {
 		_, ipnet, err := net.ParseCIDR(cidr)
@@ -257,29 +276,102 @@ func (a *Amass) GetCIDR(addr string) (*CIDRData, bool) {
 			// Create the slice of all IP addresses within the CIDR
 			hosts, err := recon.Hosts(cidr)
 			if err == nil {
-				a.cidrCache[cidr] = &CIDRData{
+				return cidr, &CIDRData{
 					CIDR:  ipnet,
 					Hosts: hosts,
 				}
-				return a.cidrCache[cidr], false
 			}
 		}
 	}
-	return nil, false
+	return "", nil
+}
+
+// processGetCIDR - The cache of CIDR network blocks that have already been looked up.
+// If the CIDR information isn't in the cache, it looks it up using the recon package
+func (a *Amass) processGetCIDR() {
+	cache := make(map[string]*CIDRData)
+loop:
+	for {
+		select {
+		case req := <-a.getCIDRInfo:
+			var answer *CIDRData
+
+			// Check the cache first for which CIDR this IP address falls within
+			ip := net.ParseIP(req.Addr)
+			for _, data := range cache {
+				if data.CIDR.Contains(ip) {
+					answer = data
+					break
+				}
+			}
+			// If the information was not within the cache, perform the lookup
+			if answer == nil {
+				cidr, data := obtainCIDR(req.Addr)
+				if cidr != "" {
+					cache[cidr] = data
+					answer = data
+				}
+			}
+
+			req.CIDR <- answer
+		case <-a.getCIDRQuit:
+			break loop
+		}
+	}
+	a.done <- struct{}{}
+}
+
+// GetCIDR - Checks the cache for CIDR information related to the IP address provided.
+func (a *Amass) GetCIDR(addr string) *CIDRData {
+	cidr := make(chan *CIDRData, 2)
+
+	a.getCIDRInfo <- &getCIDR{
+		Addr: addr,
+		CIDR: cidr,
+	}
+	return <-cidr
+}
+
+type reverseDNSFilter struct {
+	Host string
+	Ans  chan bool
+}
+
+// Prevents duplicate reverse DNS lookups being performed
+func (a *Amass) processReverseDNSFilter() {
+	filter := make(map[string]struct{})
+	// Do not perform reverse lookups on localhost
+	filter["127.0.0.1"] = struct{}{}
+loop:
+	for {
+		select {
+		case req := <-a.checkRDNSFilter:
+			var answer bool
+
+			if _, ok := filter[req.Host]; ok {
+				answer = true
+			} else {
+				filter[req.Host] = struct{}{}
+			}
+
+			req.Ans <- answer
+		case <-a.reverseDNSFilterQuit:
+			break loop
+		}
+	}
+	a.done <- struct{}{}
 }
 
 // Checks the reverse DNS filter to prevent duplicate lookups.
 // Returns true if the host has been seen already
 func (a *Amass) checkReverseDNSFilter(host string) bool {
-	a.mtx.Lock()
-	defer a.mtx.Unlock()
+	ans := make(chan bool, 2)
 
-	if _, ok := a.rDNSFilter[host]; ok {
-		return true
+	a.checkRDNSFilter <- &reverseDNSFilter{
+		Host: host,
+		Ans:  ans,
 	}
-
-	a.rDNSFilter[host] = struct{}{}
-	return false
+	return <-ans
 }
 
 // Performs reverse dns across the CIDR that the addr param falls within
