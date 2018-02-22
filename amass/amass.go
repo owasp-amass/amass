@@ -41,11 +41,14 @@ type Amass struct {
 	// The channel that will receive names that have been successfully resolved
 	Resolved chan *Subdomain
 
+	// The channel that will receive names that were not resolved
+	Failed chan *Subdomain
+
+	// Tells all the goroutines to terminate
+	quit chan struct{}
+
 	// Requests for the next DNS server to use are sent here
 	nextNameserver chan chan string
-
-	// Tells the processNextNameserver goroutine to quit
-	nextNameserverQuit chan struct{}
 
 	// New DNS requests are sent through this channel
 	addDNSRequest chan *Subdomain
@@ -53,28 +56,16 @@ type Amass struct {
 	// Requests are sent through this channel to check if the queue is empty
 	dnsRequestQueueEmpty chan chan bool
 
-	// Tells the processDNSRequests goroutine to quit
-	dnsRequestsQuit chan struct{}
-
 	// Requests are sent through this channel for CIDR information
 	getCIDRInfo chan *getCIDR
-
-	// Tells the processGetCIDR goroutine to quit
-	getCIDRQuit chan struct{}
 
 	// Requests are sent through this channel to check DNS wildcard matches
 	wildcardMatches chan *wildcard
 
-	// Tells the processWildcardMatches goroutine to quit
-	wildcardMatchesQuit chan struct{}
-
 	// Requests to check the reverse DNS filter are sent through this channel
 	checkRDNSFilter chan *reverseDNSFilter
 
-	// Tells the processReverseDNSFilter goroutine to quit
-	reverseDNSFilterQuit chan struct{}
-
-	// Goroutines indicates completion on this channel
+	// Goroutines indicate completion on this channel
 	done chan struct{}
 }
 
@@ -107,17 +98,14 @@ func NewAmassWithConfig(ac AmassConfig) *Amass {
 		Frequency:            config.Frequency,
 		Names:                make(chan *Subdomain, defaultAmassChanSize),
 		Resolved:             make(chan *Subdomain, defaultAmassChanSize),
+		Failed:               make(chan *Subdomain, defaultAmassChanSize),
+		quit:                 make(chan struct{}),
 		nextNameserver:       make(chan chan string, defaultAmassChanSize),
-		nextNameserverQuit:   make(chan struct{}, 2),
 		addDNSRequest:        make(chan *Subdomain, defaultAmassChanSize),
 		dnsRequestQueueEmpty: make(chan chan bool, defaultAmassChanSize),
-		dnsRequestsQuit:      make(chan struct{}, 2),
 		getCIDRInfo:          make(chan *getCIDR, defaultAmassChanSize),
-		getCIDRQuit:          make(chan struct{}, 2),
 		wildcardMatches:      make(chan *wildcard, defaultAmassChanSize),
-		wildcardMatchesQuit:  make(chan struct{}, 2),
 		checkRDNSFilter:      make(chan *reverseDNSFilter, defaultAmassChanSize),
-		reverseDNSFilterQuit: make(chan struct{}, 2),
 		done:                 make(chan struct{}, numberofProcessingRoutines),
 	}
 	// Start all the goroutines
@@ -134,11 +122,7 @@ func (a *Amass) initialize() {
 }
 
 func (a *Amass) Clean() {
-	a.nextNameserverQuit <- struct{}{}
-	a.dnsRequestsQuit <- struct{}{}
-	a.wildcardMatchesQuit <- struct{}{}
-	a.getCIDRQuit <- struct{}{}
-	a.reverseDNSFilterQuit <- struct{}{}
+	close(a.quit)
 
 	for i := 0; i < numberofProcessingRoutines; i++ {
 		<-a.done

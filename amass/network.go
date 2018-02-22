@@ -60,7 +60,7 @@ loop:
 			}
 
 			result <- nameservers[index]
-		case <-a.nextNameserverQuit:
+		case <-a.quit:
 			break loop
 		}
 	}
@@ -105,7 +105,7 @@ loop:
 					queue = []*Subdomain{}
 				}
 			}
-		case <-a.dnsRequestsQuit:
+		case <-a.quit:
 			break loop
 		}
 	}
@@ -128,16 +128,19 @@ func (a *Amass) DNSRequestQueueEmpty() bool {
 func (a *Amass) performDNSRequest(subdomain *Subdomain) {
 	answers, err := a.dnsQuery(subdomain.Domain, subdomain.Name, a.NextNameserver())
 	if err != nil {
+		a.Failed <- subdomain
 		return
 	}
 	// Pull the IP address out of the DNS answers
 	ipstr := recon.GetARecordData(answers)
 	if ipstr == "" {
+		a.Failed <- subdomain
 		return
 	}
 	subdomain.Address = ipstr
 	// Check that we didn't receive a wildcard IP address
 	if a.matchesWildcard(subdomain) {
+		a.Failed <- subdomain
 		return
 	}
 	// Return the successfully resolved names + address
@@ -198,25 +201,29 @@ type wildcard struct {
 	Ans chan bool
 }
 
+type dnsWildcard struct {
+	HasWildcard bool
+	IP          string
+}
+
 // Goroutine that keeps track of DNS wildcards discovered
 func (a *Amass) processWildcardMatches() {
-	wildcards := make(map[string]*recon.DnsWildcard)
+	wildcards := make(map[string]*dnsWildcard)
 loop:
 	for {
 		select {
 		case req := <-a.wildcardMatches:
 			var answer bool
 
-			parts := strings.Split(req.Sub.Name, ".")
-			baseLen := len(strings.Split(req.Sub.Domain, "."))
-
+			labels := strings.Split(req.Sub.Name, ".")
+			last := len(labels) - len(strings.Split(req.Sub.Domain, "."))
 			// Iterate over all the subdomains looking for wildcards
-			for i := len(parts) - baseLen; i > 0; i-- {
-				sub := strings.Join(parts[i:], ".")
+			for i := 1; i <= last; i++ {
+				sub := strings.Join(labels[i:], ".")
 
 				w, ok := wildcards[sub]
 				if !ok {
-					w = recon.CheckDomainForWildcard(sub, nameservers[0])
+					w = a.checkDomainForWildcard(sub, req.Sub.Domain, a.NextNameserver())
 					wildcards[sub] = w
 				}
 
@@ -225,13 +232,45 @@ loop:
 					break
 				}
 			}
-
 			req.Ans <- answer
-		case <-a.wildcardMatchesQuit:
+		case <-a.quit:
 			break loop
 		}
 	}
 	a.done <- struct{}{}
+}
+
+// checkDomainForWildcard detects if a domain returns an IP
+// address for "bad" names, and if so, which address is used
+func (a *Amass) checkDomainForWildcard(sub, root, server string) *dnsWildcard {
+	var ip1, ip2, ip3 string
+
+	name1 := "81very92unlikely03name." + sub
+	name2 := "45another34random99name." + sub
+	name3 := "just555little333me." + sub
+
+	if a1, err := a.dnsQuery(root, name1, server); err == nil {
+		ip1 = recon.GetARecordData(a1)
+	}
+
+	if a2, err := a.dnsQuery(root, name2, server); err == nil {
+		ip2 = recon.GetARecordData(a2)
+	}
+
+	if a3, err := a.dnsQuery(root, name3, server); err == nil {
+		ip3 = recon.GetARecordData(a3)
+	}
+
+	if ip1 != "" && (ip1 == ip2 && ip2 == ip3) {
+		return &dnsWildcard{
+			HasWildcard: true,
+			IP:          ip1,
+		}
+	}
+	return &dnsWildcard{
+		HasWildcard: false,
+		IP:          "",
+	}
 }
 
 // matchesWildcard - Checks subdomains in the wildcard cache for matches on the IP address
@@ -314,7 +353,7 @@ loop:
 			}
 
 			req.CIDR <- answer
-		case <-a.getCIDRQuit:
+		case <-a.quit:
 			break loop
 		}
 	}
@@ -355,7 +394,7 @@ loop:
 			}
 
 			req.Ans <- answer
-		case <-a.reverseDNSFilterQuit:
+		case <-a.quit:
 			break loop
 		}
 	}
