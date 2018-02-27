@@ -35,7 +35,7 @@ var AsciiArt string = `
         +o&&&&+.                                                    +oooo.                          
 
                                                   Subdomain Enumeration Tool
-                                                       Created by Jeff Foley
+                                           Coded By Jeff Foley - @jeff_foley
 
 `
 
@@ -43,10 +43,11 @@ func main() {
 	var freq int64
 	var count int
 	var wordlist string
-	var show, ip, whois, list, help bool
+	var show, ip, brute, whois, list, help bool
 
 	flag.BoolVar(&help, "h", false, "Show the program usage message")
 	flag.BoolVar(&ip, "ip", false, "Show the IP addresses for discovered names")
+	flag.BoolVar(&brute, "brute", false, "Execute brute forcing after searches")
 	flag.BoolVar(&show, "v", false, "Print the summary information")
 	flag.BoolVar(&whois, "whois", false, "Include domains discoverd with reverse whois")
 	flag.BoolVar(&list, "list", false, "List all domains to be used in the search")
@@ -97,11 +98,9 @@ func main() {
 	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-sigs
-
 		if show {
 			printResults(count, stats)
 		}
-
 		os.Exit(0)
 	}()
 
@@ -110,7 +109,7 @@ func main() {
 		Frequency: freqToDuration(freq),
 	}
 	// Fire off the driver function for enumeration
-	enum := amass.NewEnumerator(domains, names, config)
+	enum := amass.NewEnumerator(domains, names, config, brute)
 	go spinner(enum.Activity)
 	enum.Start()
 
@@ -135,7 +134,6 @@ func printResults(total int, stats map[string]int) {
 		}
 		count++
 	}
-	return
 }
 
 func spinner(spin chan struct{}) {
@@ -184,7 +182,6 @@ func getWordlist(path string) []string {
 			list = append(list, word)
 		}
 	}
-
 	return list
 }
 
@@ -201,10 +198,10 @@ func freqToDuration(freq int64) time.Duration {
 		d = d / 60
 
 		m := 1000 / d
-		if d < 1000 && m > 5 {
+		if d < 1000 && m > 1 {
 			return m * time.Millisecond
 		}
 	}
 	// use the default rate
-	return 5 * time.Millisecond
+	return 1 * time.Millisecond
 }

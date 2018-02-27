@@ -7,6 +7,7 @@ import (
 	"errors"
 	"math/rand"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 )
@@ -17,14 +18,17 @@ type lenDist struct {
 }
 
 type NgramGuesser struct {
-	Trained                 bool
-	totalNames              float64
-	averageNameLength       float64
-	numWordsWithLen         map[int]*lenDist
-	numWordsWithFirstChar   map[rune]*lenDist
-	numTimesCharFollowsChar map[rune]map[rune]*lenDist
-	ngrams                  map[rune]map[string]*lenDist
-	characters              map[rune]*lenDist
+	sync.Mutex
+	Trained                  bool
+	numGood, numBad, guesses int
+	good, bad                []string
+	totalNames               float64
+	averageNameLength        float64
+	numWordsWithLen          map[int]*lenDist
+	numWordsWithFirstChar    map[rune]*lenDist
+	numTimesCharFollowsChar  map[rune]map[rune]*lenDist
+	ngrams                   map[rune]map[string]*lenDist
+	characters               map[rune]*lenDist
 }
 
 const (
@@ -47,11 +51,14 @@ func init() {
 	}
 }
 
-func NewNgramGuesser(domain string) Guesser {
+func NewNgramGuesser() Guesser {
 	return &NgramGuesser{}
 }
 
-func (ng *NgramGuesser) Train(good, bad []string) {
+func (ng *NgramGuesser) Train() {
+	ng.Lock()
+	defer ng.Unlock()
+
 	// Reset the training data
 	ng.totalNames = 0
 	ng.averageNameLength = 0
@@ -61,7 +68,7 @@ func (ng *NgramGuesser) Train(good, bad []string) {
 	ng.ngrams = make(map[rune]map[string]*lenDist)
 	ng.characters = make(map[rune]*lenDist)
 
-	for _, name := range good {
+	for _, name := range ng.good {
 		labels := strings.Split(name, ".")
 		hostname := labels[0]
 		sample := float64(len(hostname))
@@ -111,7 +118,70 @@ func (ng *NgramGuesser) NextGuess() (string, error) {
 			guess = guess[:newLen]
 		}
 	}
+	ng.incGuesses()
 	return guess, nil
+}
+
+func (ng *NgramGuesser) NumGuesses() int {
+	ng.Lock()
+	defer ng.Unlock()
+
+	return ng.guesses
+}
+
+func (ng *NgramGuesser) incGuesses() {
+	ng.Lock()
+	defer ng.Unlock()
+
+	ng.guesses++
+}
+
+func (ng *NgramGuesser) AddGoodWords(words []string) {
+	ng.Lock()
+	defer ng.Unlock()
+
+	ng.good = append(ng.good, words...)
+	ng.numGood += len(words)
+}
+
+func (ng *NgramGuesser) AddBadWords(words []string) {
+	ng.Lock()
+	defer ng.Unlock()
+
+	ng.bad = append(ng.bad, words...)
+	ng.numBad += len(words)
+}
+
+func (ng *NgramGuesser) GoodWords() []string {
+	ng.Lock()
+	defer ng.Unlock()
+
+	return ng.good
+}
+
+func (ng *NgramGuesser) BadWords() []string {
+	ng.Lock()
+	defer ng.Unlock()
+
+	return ng.bad
+}
+
+func (ng *NgramGuesser) NumGood() int {
+	ng.Lock()
+	defer ng.Unlock()
+
+	return ng.numGood
+}
+
+func (ng *NgramGuesser) NumBad() int {
+	ng.Lock()
+	defer ng.Unlock()
+
+	return ng.numBad
+}
+
+func (ng *NgramGuesser) Tag() string {
+	return "ngram"
 }
 
 func newLenDist() *lenDist {
@@ -141,7 +211,6 @@ func (ng *NgramGuesser) updateNumWords(length int) {
 
 func (ng *NgramGuesser) updateFirstChar(word string) {
 	first, _ := utf8.DecodeRuneInString(word)
-
 	if first == '-' {
 		return
 	}

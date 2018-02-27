@@ -14,7 +14,9 @@ func TestBruteForce(t *testing.T) {
 	a := NewAmass()
 
 	a.Wordlist = []string{"foo", "bar"}
-	go a.BruteForce(domain, domain)
+	a.BruteForcing.AddWords(a.Wordlist)
+	a.BruteForcing.MoreSubs <- &Subdomain{Name: domain, Domain: domain}
+	a.BruteForcing.Start()
 
 	for i := 0; i < len(a.Wordlist); i++ {
 		sub := <-a.Names

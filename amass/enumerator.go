@@ -6,6 +6,7 @@ package amass
 import (
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/caffix/amass/amass/guess"
@@ -13,11 +14,19 @@ import (
 
 const (
 	defaultNumberOfGuesses = 10000
+
+	DataSourcePhase = 0
+	BruteForcePhase = 1
 )
 
 type Enumerator struct {
+	sync.Mutex
+
 	// User provided domains to be enumerated
 	Domains []string
+
+	// Determines if brute forcing techniques will be employed
+	Brute bool
 
 	// The configuration desired for the amass package
 	Config AmassConfig
@@ -27,6 +36,9 @@ type Enumerator struct {
 
 	// The signal channel for showing activity during the enumeration
 	Activity chan struct{}
+
+	// Keeps track of which of the multiple enumeration phases we are currently in
+	enumPhase int
 
 	// Filter for not double-checking subdomain names
 	nameFilter map[string]struct{}
@@ -45,11 +57,15 @@ type Enumerator struct {
 
 	// The slice of Archivers used to search web sites
 	archives []Archiver
+
+	// Will become trained to successfully resolved names and guess new names
+	guesser guess.Guesser
 }
 
-func NewEnumerator(domains []string, names chan *Subdomain, config AmassConfig) *Enumerator {
+func NewEnumerator(domains []string, names chan *Subdomain, config AmassConfig, brute bool) *Enumerator {
 	e := &Enumerator{
 		Domains:    domains,
+		Brute:      brute,
 		Config:     config,
 		Names:      names,
 		Activity:   make(chan struct{}),
@@ -58,10 +74,25 @@ func NewEnumerator(domains []string, names chan *Subdomain, config AmassConfig) 
 		subdomains: make(map[string]struct{}),
 		amass:      NewAmassWithConfig(config),
 		done:       make(chan int, 20),
+		guesser:    guess.NewNgramGuesser(),
 	}
 	// Get all the archives to be used
 	e.getArchives()
 	return e
+}
+
+func (e *Enumerator) setPhase(phase int) {
+	e.Lock()
+	defer e.Unlock()
+
+	e.enumPhase = phase
+}
+
+func (e *Enumerator) phase() int {
+	e.Lock()
+	defer e.Unlock()
+
+	return e.enumPhase
 }
 
 // This is the driver function that performs a complete enumeration.
@@ -75,15 +106,16 @@ func (e *Enumerator) Start() {
 	// When this timer fires, the enumeration will end
 	t := time.NewTimer(30 * time.Second)
 	defer t.Stop()
+
 	// Start brute forcing
 	for _, d := range e.Domains {
-		go e.amass.BruteForce(d, d)
+		e.amass.BruteForcing.MoreSubs <- &Subdomain{Name: d, Domain: d}
 	}
 
 	good := make(chan *Subdomain, 500)
 	bad := make(chan *Subdomain, 500)
 	// Start the smart guessers
-	go e.startGuessers(good, bad)
+	go e.maintainGuessers(good, bad)
 loop:
 	for {
 		select {
@@ -100,9 +132,19 @@ loop:
 		case <-e.done: // Searches that have finished
 			completed++
 		case <-t.C: // Periodic checks happen in here
+			// The phase is complete if searches are finished, no dns queries left, and no activity
 			if !activity && completed == totalSearches && e.amass.DNSRequestQueueEmpty() {
-				// We are done if searches are finished, no dns queries left, and no activity
-				break loop
+				if e.phase() == DataSourcePhase {
+					if e.Brute == false {
+						break loop
+					}
+
+					e.setPhase(BruteForcePhase)
+					e.amass.BruteForcing.AddWords(e.amass.Wordlist)
+					e.amass.BruteForcing.Start()
+				} else {
+					break loop
+				}
 			}
 			// Otherwise, keep the process going
 			t.Reset(5 * time.Second)
@@ -156,93 +198,87 @@ func (e *Enumerator) goodName(name *Subdomain) {
 	e.checkForRecursiveBruteForce(name)
 }
 
-func (e *Enumerator) startGuessers(good, bad chan *Subdomain) {
-	type nameData struct {
-		NumGood, NumBad int
-		Good, Bad       []string
-		Subs            map[string]struct{}
-		Guess           guess.Guesser
-	}
+func (e *Enumerator) maintainGuessers(good, bad chan *Subdomain) {
+	goodWords := make(map[string]struct{})
+	badWords := make(map[string]struct{})
 
-	t := time.NewTicker(50 * time.Millisecond)
+	t := time.NewTicker(5 * time.Millisecond)
 	defer t.Stop()
 
-	names := make(map[string]*nameData)
-	for _, domain := range e.Domains {
-		names[domain] = &nameData{
-			Subs:  make(map[string]struct{}),
-			Guess: guess.NewNgramGuesser(domain),
-		}
-	}
-
-	var numGuesses int
 	for {
 		select {
 		case g := <-good:
-			data := names[g.Domain]
-
-			data.NumGood++
-			data.Good = append(data.Good, g.Name)
-
 			labels := strings.Split(g.Name, ".")
-			subdomain := strings.Join(labels[1:], ".")
-			if _, ok := data.Subs[subdomain]; !ok {
-				data.Subs[subdomain] = struct{}{}
+
+			if _, found := goodWords[labels[0]]; !found {
+				e.guesser.AddGoodWords([]string{labels[0]})
+				goodWords[labels[0]] = struct{}{}
 			}
 
-			if data.NumGood%100 == 0 {
-				data.Guess.Train(data.Good, data.Bad)
+			// Train the ML algorithm again?
+			if e.guesser.NumGuesses() > 0 && e.guesser.NumGood()%25 == 0 {
+				var words []string
+
+				for w := range goodWords {
+					words = append(words, w)
+				}
+
+				e.guesser.Train()
 			}
 		case b := <-bad:
-			names[b.Domain].NumBad++
-			names[b.Domain].Bad = append(names[b.Domain].Bad, b.Name)
-		case <-t.C:
-			for domain, data := range names {
-				if next, err := data.Guess.NextGuess(); err == nil {
-					var subdomains []string
+			labels := strings.Split(b.Name, ".")
 
-					for k := range data.Subs {
-						subdomains = append(subdomains, k)
-					}
-					go e.processGuess(next, domain, subdomains)
-				}
-				numGuesses++
+			if _, found := badWords[labels[0]]; !found {
+				e.guesser.AddBadWords([]string{labels[0]})
+				badWords[labels[0]] = struct{}{}
 			}
-
-			if numGuesses >= defaultNumberOfGuesses {
+		case <-t.C:
+			e.attemptGuess()
+			if e.guesser.NumGuesses() > defaultNumberOfGuesses {
 				t.Stop()
 			}
 		}
 	}
 }
 
-func (e *Enumerator) processGuess(guess, domain string, subdomains []string) {
-	for _, sub := range subdomains {
-		e.amass.Names <- &Subdomain{
-			Name:   guess + "." + sub,
-			Domain: domain,
-			Tag:    SMART,
-		}
-		/*fmt.Printf("SMART GUESS: %v\n", &Subdomain{
-			Name:   guess + "." + sub,
-			Domain: domain,
-			Tag:    SMART,
-		})*/
-	}
+func (e *Enumerator) attemptGuess() {
+	num := e.guesser.NumGuesses()
 
+	if e.phase() != BruteForcePhase || num > defaultNumberOfGuesses {
+		return
+	}
+	// Check if the Guesser needs to be trained for the first time
+	if num == 0 {
+		e.guesser.Train()
+	}
+	// Make the next guess
+	if next, err := e.guesser.NextGuess(); err == nil {
+		go e.sendGuess(next)
+	}
+}
+
+// sendGuess will be executed as a goroutine to prevent blocking
+func (e *Enumerator) sendGuess(next string) {
+	e.amass.BruteForcing.MoreWords <- &Subdomain{
+		Name: next,
+		Tag:  e.guesser.Tag(),
+	}
 }
 
 func (e *Enumerator) startSearches() {
 	searches := []Searcher{
 		e.amass.AskSearch(),
+		e.amass.BaiduSearch(),
 		e.amass.CensysSearch(),
 		e.amass.CrtshSearch(),
+		//e.amass.GoogleSearch(),
 		e.amass.NetcraftSearch(),
 		e.amass.RobtexSearch(),
 		e.amass.BingSearch(),
 		e.amass.DogpileSearch(),
 		e.amass.YahooSearch(),
 		e.amass.VirusTotalSearch(),
+		e.amass.DNSDumpsterSearch(),
 	}
 
 	// Fire off the searches
@@ -286,7 +322,7 @@ func (e *Enumerator) checkForRecursiveBruteForce(name *Subdomain) {
 		return
 	}
 	// Otherwise, run the brute forcing on the proper subdomain
-	go e.amass.BruteForce(sub, name.Domain)
+	e.amass.BruteForcing.MoreSubs <- &Subdomain{Name: sub, Domain: name.Domain}
 }
 
 func getDomainFromName(name string, domains []string) string {

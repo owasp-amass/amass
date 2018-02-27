@@ -4,6 +4,14 @@
 package guess
 
 type Guesser interface {
-	Train(good, bad []string)
+	Train()
 	NextGuess() (string, error)
+	NumGuesses() int
+	AddGoodWords([]string)
+	AddBadWords([]string)
+	GoodWords() []string
+	BadWords() []string
+	NumGood() int
+	NumBad() int
+	Tag() string
 }

@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-const testDomain string = "google.com"
+const testDomain string = "twitter.com"
 
 func TestAskSearch(t *testing.T) {
 	a := NewAmass()
@@ -18,6 +18,18 @@ func TestAskSearch(t *testing.T) {
 	discovered := <-finished
 	if discovered <= 0 {
 		t.Errorf("AskSearch found %d subdomains", discovered)
+	}
+}
+
+func TestBaiduSearch(t *testing.T) {
+	a := NewAmass()
+	s := a.BaiduSearch()
+	finished := make(chan int, 2)
+
+	s.Search(testDomain, finished)
+	discovered := <-finished
+	if discovered <= 0 {
+		t.Errorf("BaiduSearch found %d subdomains", discovered)
 	}
 }
 
@@ -45,6 +57,19 @@ func TestDogpileSearch(t *testing.T) {
 	}
 }
 
+/* Google is too good at detecting out requests
+func TestGoogleSearch(t *testing.T) {
+	a := NewAmass()
+	s := a.GoogleSearch()
+	finished := make(chan int, 2)
+
+	s.Search(testDomain, finished)
+	discovered := <-finished
+	if discovered <= 0 {
+		t.Errorf("GoogleSearch found %d subdomains", discovered)
+	}
+}
+*/
 func TestYahooSearch(t *testing.T) {
 	a := NewAmass()
 	s := a.YahooSearch()
@@ -66,6 +91,18 @@ func TestCensysSearch(t *testing.T) {
 	discovered := <-finished
 	if discovered <= 0 {
 		t.Errorf("CensysSearch found %d subdomains", discovered)
+	}
+}
+
+func TestCrtshSearch(t *testing.T) {
+	a := NewAmass()
+	s := a.CrtshSearch()
+	finished := make(chan int, 2)
+
+	s.Search(testDomain, finished)
+	discovered := <-finished
+	if discovered <= 0 {
+		t.Errorf("CrtshSearch found %d subdomains", discovered)
 	}
 }
 
@@ -105,14 +142,14 @@ func TestVirusTotalSearch(t *testing.T) {
 	}
 }
 
-func TestCrtshSearch(t *testing.T) {
+func TestDNSDumpsterSearch(t *testing.T) {
 	a := NewAmass()
-	s := a.CrtshSearch()
+	s := a.DNSDumpsterSearch()
 	finished := make(chan int, 2)
 
 	s.Search(testDomain, finished)
 	discovered := <-finished
 	if discovered <= 0 {
-		t.Errorf("CrtshSearch found %d subdomains", discovered)
+		t.Errorf("DNSDumpsterSearch found %d subdomains", discovered)
 	}
 }

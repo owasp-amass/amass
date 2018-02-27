@@ -138,8 +138,8 @@ func (a *Amass) performDNSRequest(subdomain *Subdomain) {
 		return
 	}
 	subdomain.Address = ipstr
-	// Check that we didn't receive a wildcard IP address
-	if a.matchesWildcard(subdomain) {
+	// If the name didn't come from a search, check it doesn't match a wildcard IP address
+	if subdomain.Tag != SEARCH && a.matchesWildcard(subdomain) {
 		a.Failed <- subdomain
 		return
 	}

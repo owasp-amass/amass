@@ -11,8 +11,7 @@ import (
 
 const (
 	// Tags used to mark the data source with the Subdomain struct
-	SMART   = "smart"
-	ALT     = "alteration"
+	ALT     = "alt"
 	BRUTE   = "brute"
 	SEARCH  = "search"
 	ARCHIVE = "archive"
@@ -31,6 +30,9 @@ const (
 type Amass struct {
 	// The slice that contains words to use when generating names
 	Wordlist []string
+
+	// The instantiation of the brute forcing typing
+	BruteForcing *BruteForce
 
 	// Sets the maximum number of DNS queries per minute
 	Frequency time.Duration
@@ -108,6 +110,7 @@ func NewAmassWithConfig(ac AmassConfig) *Amass {
 		checkRDNSFilter:      make(chan *reverseDNSFilter, defaultAmassChanSize),
 		done:                 make(chan struct{}, numberofProcessingRoutines),
 	}
+	a.BruteForcing = NewBruteForce(a.Names)
 	// Start all the goroutines
 	go a.initialize()
 	return a
