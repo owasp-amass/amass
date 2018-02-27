@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	NUM_SEARCHES int = 11
+	NUM_SEARCHES int = 13
 	USER_AGENT       = "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36"
 	ACCEPT           = "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
 	ACCEPT_LANG      = "en-US,en;q=0.8"
@@ -289,6 +289,21 @@ func (a *Amass) RobtexSearch() Searcher {
 	r.subdomains = a.Names
 	r.callback = robtexURL
 	return r
+}
+
+func threatCrowdURL(domain string) string {
+	format := "https://www.threatcrowd.org/searchApi/v2/domain/report/?domain=%s"
+
+	return fmt.Sprintf(format, domain)
+}
+
+func (a *Amass) ThreatCrowdSearch() Searcher {
+	tc := new(lookup)
+
+	tc.name = "ThreatCrowd Search"
+	tc.subdomains = a.Names
+	tc.callback = threatCrowdURL
+	return tc
 }
 
 func virusTotalURL(domain string) string {

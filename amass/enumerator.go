@@ -34,9 +34,6 @@ type Enumerator struct {
 	// User provided channel to receive the name through
 	Names chan *Subdomain
 
-	// The signal channel for showing activity during the enumeration
-	Activity chan struct{}
-
 	// Keeps track of which of the multiple enumeration phases we are currently in
 	enumPhase int
 
@@ -62,13 +59,12 @@ type Enumerator struct {
 	guesser guess.Guesser
 }
 
-func NewEnumerator(domains []string, names chan *Subdomain, config AmassConfig, brute bool) *Enumerator {
+func NewEnumerator(domains []string, names chan *Subdomain, brute bool, config AmassConfig) *Enumerator {
 	e := &Enumerator{
 		Domains:    domains,
 		Brute:      brute,
 		Config:     config,
 		Names:      names,
-		Activity:   make(chan struct{}),
 		nameFilter: make(map[string]struct{}),
 		resolved:   make(map[string]struct{}),
 		subdomains: make(map[string]struct{}),
@@ -174,8 +170,6 @@ func (e *Enumerator) nameAttempt(name *Subdomain) {
 		}
 	}
 	go e.amass.AddDNSRequest(name)
-	// Show that we're continuing to work hard
-	e.Activity <- struct{}{}
 }
 
 func (e *Enumerator) goodName(name *Subdomain) {
@@ -271,12 +265,13 @@ func (e *Enumerator) startSearches() {
 		e.amass.BaiduSearch(),
 		e.amass.CensysSearch(),
 		e.amass.CrtshSearch(),
-		//e.amass.GoogleSearch(),
+		e.amass.GoogleSearch(),
 		e.amass.NetcraftSearch(),
 		e.amass.RobtexSearch(),
 		e.amass.BingSearch(),
 		e.amass.DogpileSearch(),
 		e.amass.YahooSearch(),
+		e.amass.ThreatCrowdSearch(),
 		e.amass.VirusTotalSearch(),
 		e.amass.DNSDumpsterSearch(),
 	}

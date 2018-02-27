@@ -19,6 +19,10 @@ import (
 	"github.com/caffix/recon"
 )
 
+const (
+	defaultWordlistURL = "https://raw.githubusercontent.com/caffix/amass/master/wordlists/namelist.txt"
+)
+
 var AsciiArt string = `
 
         .+++:.            :                             .+++.                   
@@ -39,26 +43,33 @@ var AsciiArt string = `
 
 `
 
+type outputParams struct {
+	Verbose  bool
+	PrintIPs bool
+	Names    chan *amass.Subdomain
+	Finish   chan struct{}
+	Done     chan struct{}
+}
+
 func main() {
 	var freq int64
-	var count int
 	var wordlist string
-	var show, ip, brute, whois, list, help bool
+	var verbose, ip, brute, whois, list, help bool
 
 	flag.BoolVar(&help, "h", false, "Show the program usage message")
 	flag.BoolVar(&ip, "ip", false, "Show the IP addresses for discovered names")
 	flag.BoolVar(&brute, "brute", false, "Execute brute forcing after searches")
-	flag.BoolVar(&show, "v", false, "Print the summary information")
+	flag.BoolVar(&verbose, "v", false, "Print the summary information")
 	flag.BoolVar(&whois, "whois", false, "Include domains discoverd with reverse whois")
 	flag.BoolVar(&list, "list", false, "List all domains to be used in the search")
 	flag.Int64Var(&freq, "freq", 0, "Sets the number of max DNS queries per minute")
-	flag.StringVar(&wordlist, "words", "", "Path to the wordlist file")
+	flag.StringVar(&wordlist, "words", "", "Path to a different wordlist file")
 	flag.Parse()
 
 	domains := flag.Args()
 	if help || len(domains) == 0 {
 		fmt.Println(AsciiArt)
-		fmt.Printf("Usage: %s [options] domain extra_domain1 extra_domain2... (e.g. google.com)\n", path.Base(os.Args[0]))
+		fmt.Printf("Usage: %s [options] domain domain2 domain3... (e.g. example.com)\n", path.Base(os.Args[0]))
 		flag.PrintDefaults()
 		return
 	}
@@ -76,79 +87,72 @@ func main() {
 		return
 	}
 
-	stats := make(map[string]int)
-	names := make(chan *amass.Subdomain, 100)
-	// Collect all the names returned by the enumeration
-	go func() {
-		for {
-			name := <-names
-
-			count++
-			stats[name.Tag]++
-			if ip {
-				fmt.Printf("\r%s\n", name.Name+","+name.Address)
-			} else {
-				fmt.Printf("\r%s\n", name.Name)
-			}
-		}
-	}()
-
-	// If the user interrupts the program, print the summary information
-	sigs := make(chan os.Signal, 2)
-	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		<-sigs
-		if show {
-			printResults(count, stats)
-		}
-		os.Exit(0)
-	}()
-
 	config := amass.AmassConfig{
 		Wordlist:  getWordlist(wordlist),
 		Frequency: freqToDuration(freq),
 	}
+	names := make(chan *amass.Subdomain, 100)
+	finish := make(chan struct{})
+	done := make(chan struct{})
+
 	// Fire off the driver function for enumeration
-	enum := amass.NewEnumerator(domains, names, config, brute)
-	go spinner(enum.Activity)
+	enum := amass.NewEnumerator(domains, names, brute, config)
+
+	go manageOutput(&outputParams{
+		Verbose:  verbose,
+		PrintIPs: ip,
+		Names:    names,
+		Finish:   finish,
+		Done:     done,
+	})
 	enum.Start()
-
-	if show {
-		// Print the summary information
-		printResults(count, stats)
-	}
+	finish <- struct{}{}
+	<-done
 }
 
-// PrintResults - Prints the summary information for the enumeration
-func printResults(total int, stats map[string]int) {
-	count := 1
-	length := len(stats)
+func manageOutput(params *outputParams) {
+	var total int
 
-	fmt.Printf("\r\n%d names discovered - ", total)
-
-	for k, v := range stats {
-		if count < length {
-			fmt.Printf("%s: %d, ", k, v)
-		} else {
-			fmt.Printf("%s: %d\n", k, v)
-		}
-		count++
-	}
-}
-
-func spinner(spin chan struct{}) {
+	stats := make(map[string]int)
+loop:
 	for {
-		for _, r := range `-\|/` {
-			<-spin
-			fmt.Printf("\r%c", r)
-			time.Sleep(75 * time.Millisecond)
+		select {
+		case name := <-params.Names: // Collect all the names returned by the enumeration
+			total++
+			stats[name.Tag]++
+			if params.PrintIPs {
+				fmt.Printf("\r%s\n", name.Name+","+name.Address)
+			} else {
+				fmt.Printf("\r%s\n", name.Name)
+			}
+		case <-params.Finish: // Prints the summary information for the enumeration
+			if params.Verbose {
+				fmt.Printf("\r\n%d names discovered - ", total)
+
+				cur, length := 1, len(stats)
+				for k, v := range stats {
+					if cur == length {
+						fmt.Printf("%s: %d\n", k, v)
+					} else {
+						fmt.Printf("%s: %d, ", k, v)
+					}
+					cur++
+				}
+			}
+			break loop
 		}
 	}
+	params.Done <- struct{}{}
 }
 
-const (
-	defaultWordlistURL = "https://raw.githubusercontent.com/caffix/amass/master/wordlists/namelist.txt"
-)
+// If the user interrupts the program, print the summary information
+func catchSignals(finish chan struct{}) {
+	sigs := make(chan os.Signal, 2)
+	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
+
+	<-sigs
+	finish <- struct{}{}
+}
 
 func getWordlist(path string) []string {
 	var list []string

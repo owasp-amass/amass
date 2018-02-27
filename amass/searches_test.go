@@ -57,7 +57,6 @@ func TestDogpileSearch(t *testing.T) {
 	}
 }
 
-/* Google is too good at detecting out requests
 func TestGoogleSearch(t *testing.T) {
 	a := NewAmass()
 	s := a.GoogleSearch()
@@ -69,7 +68,7 @@ func TestGoogleSearch(t *testing.T) {
 		t.Errorf("GoogleSearch found %d subdomains", discovered)
 	}
 }
-*/
+
 func TestYahooSearch(t *testing.T) {
 	a := NewAmass()
 	s := a.YahooSearch()
@@ -127,6 +126,18 @@ func TestRobtexSearch(t *testing.T) {
 	discovered := <-finished
 	if discovered <= 0 {
 		t.Errorf("RobtexSearch found %d subdomains", discovered)
+	}
+}
+
+func TestThreatCrowdSearch(t *testing.T) {
+	a := NewAmass()
+	s := a.ThreatCrowdSearch()
+	finished := make(chan int, 2)
+
+	s.Search(testDomain, finished)
+	discovered := <-finished
+	if discovered <= 0 {
+		t.Errorf("ThreatCrowdSearch found %d subdomains", discovered)
 	}
 }
 

@@ -5,7 +5,7 @@
 [![](https://img.shields.io/badge/go-1.8-blue.svg)](https://github.com/moovweb/gvm) [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
 
 
-The amass tool not only searches a few Internet data sources and then performs brute force subdomain enumeration, it also searches web archives to obtain web pages from the target organization without them being aware of it! Searching these web pages reveals additional subdomains and host names not likely to be provided by a wordlist file. All three methods can be employed together by amass, and have shown to be complementary.
+The amass tool searches Internet data sources, performs brute force subdomain enumeration, searches web archives, and uses machine learning to generate additional subdomain name guesses. DNS name resolution is performed across many public servers so the authoritative server will see the traffic coming from different locations.
 
 
 ## Install
@@ -26,7 +26,7 @@ $ ls $GOPATH/src/github.com/caffix/amass/wordlists
 
 ## Using amass
 
-The most basic use of the tool:
+The most basic use of the tool, which includes reverse DNS lookups and name alterations:
 ```
 $ amass example.com
 ```
@@ -45,6 +45,17 @@ ns.example.com
 Have amass print IP addresses with the discovered names:
 ```
 $ amass -ip example.com
+```
+
+Have amass perform brute force subdomain enumeration as well:
+```
+$ amass -brute example.com
+```
+
+
+Change the wordlist used during the brute forcing phase of the enumeration:
+```
+$ amass -words wordlist.txt example.com
 ```
 
 
@@ -68,12 +79,6 @@ $ amass -whois -list example.com
 ```
 
 
-Have amass perform brute force subdomain enumeration as well as word alterations:
-```
-$ amass -words wordlist.txt example.com
-```
-
-
 Add some additional domains to the search:
 ```
 $ amass example.com example1.com example2.com
@@ -84,7 +89,7 @@ In the above example, the domains example1.com and example2.com are simply appen
 
 All these options can be used together:
 ```
-$ amass -v -ip -whois -words wordlist.txt -freq 240 example.com example1.com
+$ amass -v -ip -whois -brute -words wordlist.txt -freq 240 example.com example1.com
 ```
 
 **Be sure that the target domain is the last parameter provided to amass, then followed by any extra domains.**
