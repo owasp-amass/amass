@@ -47,7 +47,7 @@ type outputParams struct {
 	Verbose  bool
 	PrintIPs bool
 	Names    chan *amass.Subdomain
-	Finish   chan struct{}
+	Output   chan struct{}
 	Done     chan struct{}
 }
 
@@ -92,7 +92,7 @@ func main() {
 		Frequency: freqToDuration(freq),
 	}
 	names := make(chan *amass.Subdomain, 100)
-	finish := make(chan struct{})
+	output := make(chan struct{})
 	done := make(chan struct{})
 
 	// Fire off the driver function for enumeration
@@ -102,11 +102,16 @@ func main() {
 		Verbose:  verbose,
 		PrintIPs: ip,
 		Names:    names,
-		Finish:   finish,
+		Output:   output,
 		Done:     done,
 	})
+
+	// Execute the signal handler
+	go catchSignals(output, done)
+
+	// Begin the enumeration process
 	enum.Start()
-	finish <- struct{}{}
+	output <- struct{}{}
 	<-done
 }
 
@@ -125,33 +130,42 @@ loop:
 			} else {
 				fmt.Printf("\r%s\n", name.Name)
 			}
-		case <-params.Finish: // Prints the summary information for the enumeration
+		case <-params.Output: // Prints the summary information for the enumeration
 			if params.Verbose {
-				fmt.Printf("\r\n%d names discovered - ", total)
-
-				cur, length := 1, len(stats)
-				for k, v := range stats {
-					if cur == length {
-						fmt.Printf("%s: %d\n", k, v)
-					} else {
-						fmt.Printf("%s: %d, ", k, v)
-					}
-					cur++
-				}
+				printStats(total, stats)
 			}
 			break loop
 		}
 	}
-	params.Done <- struct{}{}
+	close(params.Done)
+}
+
+func printStats(total int, stats map[string]int) {
+	fmt.Printf("\r\n%d names discovered - ", total)
+
+	cur, length := 1, len(stats)
+	for k, v := range stats {
+		if cur == length {
+			fmt.Printf("%s: %d\n", k, v)
+		} else {
+			fmt.Printf("%s: %d, ", k, v)
+		}
+		cur++
+	}
 }
 
 // If the user interrupts the program, print the summary information
-func catchSignals(finish chan struct{}) {
+func catchSignals(output, done chan struct{}) {
 	sigs := make(chan os.Signal, 2)
 	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
 
+	// Wait for a signal
 	<-sigs
-	finish <- struct{}{}
+	// Start final output operations
+	output <- struct{}{}
+	// Wait for the broadcast indicating completion
+	<-done
+	os.Exit(0)
 }
 
 func getWordlist(path string) []string {
