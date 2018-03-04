@@ -20,6 +20,17 @@ type dnsWildcard struct {
 	Answers     *stringset.StringSet
 }
 
+// matchesWildcard - Checks subdomains in the wildcard cache for matches on the IP address
+func (a *Amass) matchesWildcard(subdomain *Subdomain) bool {
+	answer := make(chan bool, 2)
+
+	a.wildcardMatches <- &wildcard{
+		Sub: subdomain,
+		Ans: answer,
+	}
+	return <-answer
+}
+
 // Goroutine that keeps track of DNS wildcards discovered
 func (a *Amass) processWildcardMatches() {
 	wildcards := make(map[string]*dnsWildcard)
@@ -54,15 +65,6 @@ loop:
 	a.done <- struct{}{}
 }
 
-func answersToStringSet(answers []recon.DNSAnswer) *stringset.StringSet {
-	ss := stringset.NewStringSet()
-
-	for _, a := range answers {
-		ss.Add(a.Data)
-	}
-	return ss
-}
-
 // checkDomainForWildcard detects if a domain returns an IP
 // address for "bad" names, and if so, which address is used
 func (a *Amass) checkDomainForWildcard(sub, root string) *dnsWildcard {
@@ -71,7 +73,7 @@ func (a *Amass) checkDomainForWildcard(sub, root string) *dnsWildcard {
 	name1 := "81very92unlikely03name." + sub
 	name2 := "45another34random99name." + sub
 	name3 := "just555little333me." + sub
-	server := "8.8.8.8:53"
+	server := a.NextNameserver()
 
 	if a1, err := a.dnsQuery(root, name1, server); err == nil {
 		ss1 = answersToStringSet(a1)
@@ -99,13 +101,11 @@ func (a *Amass) checkDomainForWildcard(sub, root string) *dnsWildcard {
 	}
 }
 
-// matchesWildcard - Checks subdomains in the wildcard cache for matches on the IP address
-func (a *Amass) matchesWildcard(subdomain *Subdomain) bool {
-	answer := make(chan bool, 2)
+func answersToStringSet(answers []recon.DNSAnswer) *stringset.StringSet {
+	ss := stringset.NewStringSet()
 
-	a.wildcardMatches <- &wildcard{
-		Sub: subdomain,
-		Ans: answer,
+	for _, a := range answers {
+		ss.Add(a.Data)
 	}
-	return <-answer
+	return ss
 }
