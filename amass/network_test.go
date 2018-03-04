@@ -45,8 +45,6 @@ func TestDNSRequestQueue(t *testing.T) {
 }
 
 func TestGetCIDR(t *testing.T) {
-	var answers []recon.DNSAnswer
-
 	a := NewAmass()
 	name := "www.claritysec.com"
 	server := nameservers[0]
@@ -56,10 +54,8 @@ func TestGetCIDR(t *testing.T) {
 	if err != nil {
 		t.Error("Failed to resolve the name: ", name)
 	}
-	answers = append(answers, ans)
-
 	// Now we can get the CIDR data related to the IP address
-	ipstr := recon.GetARecordData(answers)
+	ipstr := recon.GetARecordData(ans)
 	if ipstr == "" {
 		t.Errorf("No A record data was returned for %s", name)
 	}
