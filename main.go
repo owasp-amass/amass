@@ -39,7 +39,7 @@ var AsciiArt string = `
         +o&&&&+.                                                    +oooo.                          
 
                                                   Subdomain Enumeration Tool
-                                           Coded By Jeff Foley - @jeff_foley
+                                           Coded By Jeff Foley (@jeff_foley)
 
 `
 
@@ -61,9 +61,9 @@ func main() {
 	flag.BoolVar(&brute, "brute", false, "Execute brute forcing after searches")
 	flag.BoolVar(&verbose, "v", false, "Print the summary information")
 	flag.BoolVar(&whois, "whois", false, "Include domains discoverd with reverse whois")
-	flag.BoolVar(&list, "list", false, "List all domains to be used in the search")
+	flag.BoolVar(&list, "l", false, "List all domains to be used in an enumeration")
 	flag.Int64Var(&freq, "freq", 0, "Sets the number of max DNS queries per minute")
-	flag.StringVar(&wordlist, "words", "", "Path to a different wordlist file")
+	flag.StringVar(&wordlist, "w", "", "Path to a different wordlist file")
 	flag.Parse()
 
 	domains := flag.Args()
@@ -91,26 +91,24 @@ func main() {
 		Wordlist:  getWordlist(wordlist),
 		Frequency: freqToDuration(freq),
 	}
-	names := make(chan *amass.Subdomain, 100)
 	output := make(chan struct{})
 	done := make(chan struct{})
 
 	// Fire off the driver function for enumeration
-	enum := amass.NewEnumerator(domains, names, brute, config)
+	enum := amass.NewEnumerator(domains, brute, config)
 
 	go manageOutput(&outputParams{
 		Verbose:  verbose,
 		PrintIPs: ip,
-		Names:    names,
+		Names:    enum.Names,
 		Output:   output,
 		Done:     done,
 	})
-
 	// Execute the signal handler
 	go catchSignals(output, done)
-
 	// Begin the enumeration process
 	enum.Start()
+	// Signal for output to finish
 	output <- struct{}{}
 	<-done
 }
@@ -208,18 +206,16 @@ func freqToDuration(freq int64) time.Duration {
 		d := time.Duration(freq)
 
 		if d < 60 {
-			// we are dealing with number of seconds
+			// We are dealing with number of seconds
 			return (60 / d) * time.Second
 		}
-
-		// make it times per second
+		// Make it times per second
 		d = d / 60
-
 		m := 1000 / d
 		if d < 1000 && m > 1 {
 			return m * time.Millisecond
 		}
 	}
-	// use the default rate
+	// Use the default rate
 	return 1 * time.Millisecond
 }

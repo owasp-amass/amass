@@ -59,12 +59,12 @@ type Enumerator struct {
 	guesser guess.Guesser
 }
 
-func NewEnumerator(domains []string, names chan *Subdomain, brute bool, config AmassConfig) *Enumerator {
+func NewEnumerator(domains []string, brute bool, config AmassConfig) *Enumerator {
 	e := &Enumerator{
 		Domains:    domains,
 		Brute:      brute,
 		Config:     config,
-		Names:      names,
+		Names:      make(chan *Subdomain, 100),
 		nameFilter: make(map[string]struct{}),
 		resolved:   make(map[string]struct{}),
 		subdomains: make(map[string]struct{}),

@@ -173,115 +173,32 @@ func (a *Amass) dnsQuery(domain, name, server string) ([]recon.DNSAnswer, error)
 		}
 
 		if strings.HasSuffix(n, domain) {
-			answers = append(answers, a)
+			answers = append(answers, a[0])
 		}
 
-		n = a.Data
-		last = a
+		n = a[0].Data
+		last = a[0]
 		resolved = true
 	}
 	// Attempt to update the name to be resolved for an A or AAAA record
 	if resolved {
 		name = last.Name
 	}
-	// Obtain the DNS answers for the A or AAAA records related to the name
+	// Obtain the DNS answers for the A records related to the name
 	ans, err := recon.ResolveDNS(name, server, "A")
-	if err != nil {
-		ans, err = recon.ResolveDNS(name, server, "AAAA")
-		if err != nil {
-			return []recon.DNSAnswer{}, errors.New("No A or AAAA record resolved for the name")
-		}
+	if err == nil {
+		answers = append(answers, ans...)
 	}
-	answers = append(answers, ans)
-	return answers, err
-}
-
-type wildcard struct {
-	Sub *Subdomain
-	Ans chan bool
-}
-
-type dnsWildcard struct {
-	HasWildcard bool
-	IP          string
-}
-
-// Goroutine that keeps track of DNS wildcards discovered
-func (a *Amass) processWildcardMatches() {
-	wildcards := make(map[string]*dnsWildcard)
-loop:
-	for {
-		select {
-		case req := <-a.wildcardMatches:
-			var answer bool
-
-			labels := strings.Split(req.Sub.Name, ".")
-			last := len(labels) - len(strings.Split(req.Sub.Domain, "."))
-			// Iterate over all the subdomains looking for wildcards
-			for i := 1; i <= last; i++ {
-				sub := strings.Join(labels[i:], ".")
-
-				w, ok := wildcards[sub]
-				if !ok {
-					w = a.checkDomainForWildcard(sub, req.Sub.Domain, a.NextNameserver())
-					wildcards[sub] = w
-				}
-
-				if w.HasWildcard && w.IP == req.Sub.Address {
-					answer = true
-					break
-				}
-			}
-			req.Ans <- answer
-		case <-a.quit:
-			break loop
-		}
-	}
-	a.done <- struct{}{}
-}
-
-// checkDomainForWildcard detects if a domain returns an IP
-// address for "bad" names, and if so, which address is used
-func (a *Amass) checkDomainForWildcard(sub, root, server string) *dnsWildcard {
-	var ip1, ip2, ip3 string
-
-	name1 := "81very92unlikely03name." + sub
-	name2 := "45another34random99name." + sub
-	name3 := "just555little333me." + sub
-
-	if a1, err := a.dnsQuery(root, name1, server); err == nil {
-		ip1 = recon.GetARecordData(a1)
+	// Obtain the DNS answers for the AAAA records related to the name
+	ans, err = recon.ResolveDNS(name, server, "AAAA")
+	if err == nil {
+		answers = append(answers, ans...)
 	}
 
-	if a2, err := a.dnsQuery(root, name2, server); err == nil {
-		ip2 = recon.GetARecordData(a2)
+	if len(answers) == 0 {
+		return []recon.DNSAnswer{}, errors.New("No A, AAAA or CNAME records resolved for the name")
 	}
-
-	if a3, err := a.dnsQuery(root, name3, server); err == nil {
-		ip3 = recon.GetARecordData(a3)
-	}
-
-	if ip1 != "" && (ip1 == ip2 && ip2 == ip3) {
-		return &dnsWildcard{
-			HasWildcard: true,
-			IP:          ip1,
-		}
-	}
-	return &dnsWildcard{
-		HasWildcard: false,
-		IP:          "",
-	}
-}
-
-// matchesWildcard - Checks subdomains in the wildcard cache for matches on the IP address
-func (a *Amass) matchesWildcard(subdomain *Subdomain) bool {
-	answer := make(chan bool, 2)
-
-	a.wildcardMatches <- &wildcard{
-		Sub: subdomain,
-		Ans: answer,
-	}
-	return <-answer
+	return answers, nil
 }
 
 /* Network infrastructure related routines */
