@@ -2,7 +2,7 @@
 
 ### On the smart and quiet side
 
-[![](https://img.shields.io/badge/go-1.8-blue.svg)](https://github.com/moovweb/gvm) [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
+[![](https://img.shields.io/badge/go-1.10-blue.svg)](https://github.com/moovweb/gvm) [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
 
 
 The amass tool searches Internet data sources, performs brute force subdomain enumeration, searches web archives, and uses machine learning to generate additional subdomain name guesses. DNS name resolution is performed across many public servers so the authoritative server will see the traffic coming from different locations.
@@ -25,6 +25,17 @@ $ ls $GOPATH/src/github.com/caffix/amass/wordlists
 
 
 ## Using amass
+
+If you are using the amass package within your own Go code, be sure to properly seed the default pseudo-random number generator:
+```go
+import(
+    "math/rand"
+    "time"
+)
+
+rand.Seed(time.Now().UTC().UnixNano())
+```
+
 
 The most basic use of the tool, which includes reverse DNS lookups and name alterations:
 ```
@@ -55,7 +66,7 @@ $ amass -brute example.com
 
 Change the wordlist used during the brute forcing phase of the enumeration:
 ```
-$ amass -words wordlist.txt example.com
+$ amass -w wordlist.txt example.com
 ```
 
 
@@ -64,7 +75,7 @@ Throttle the rate of DNS queries by number per minute:
 $ amass -freq 120 example.com
 ```
 
-**The maximum rate supported is one DNS query every 1 millisecond.**
+**The maximum rate supported is one DNS query every 5 milliseconds.**
 
 
 Allow amass to included additional domains in the search using reverse whois information:
@@ -75,7 +86,7 @@ $ amass -whois example.com
 
 You can have amass list all the domains discovered with reverse whois before performing the enumeration:
 ```
-$ amass -whois -list example.com
+$ amass -whois -l example.com
 ```
 
 
@@ -89,7 +100,7 @@ In the above example, the domains example1.com and example2.com are simply appen
 
 All these options can be used together:
 ```
-$ amass -v -ip -whois -brute -words wordlist.txt -freq 240 example.com example1.com
+$ amass -v -ip -whois -brute -w wordlist.txt -freq 240 example.com example1.com
 ```
 
 **Be sure that the target domain is the last parameter provided to amass, then followed by any extra domains.**

@@ -11,9 +11,10 @@ import (
 )
 
 func TestPublicServers(t *testing.T) {
-	name := "www.claritysec.com"
+	a := NewAmass()
+	name := "google.com"
 
-	for _, server := range nameservers {
+	for _, server := range a.Nameservers() {
 		_, err := recon.ResolveDNS(name, server, "A")
 		if err != nil {
 			t.Errorf("Public DNS server (%s) failed to resolve (%s)", server, name)
@@ -47,10 +48,10 @@ func TestDNSRequestQueue(t *testing.T) {
 func TestGetCIDR(t *testing.T) {
 	a := NewAmass()
 	name := "www.claritysec.com"
-	server := nameservers[0]
+	servers := a.Nameservers()
 
 	// Lets get the IP address for a known name first
-	ans, err := recon.ResolveDNS(name, server, "A")
+	ans, err := recon.ResolveDNS(name, servers[0], "A")
 	if err != nil {
 		t.Error("Failed to resolve the name: ", name)
 	}

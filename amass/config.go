@@ -20,7 +20,7 @@ type AmassConfig struct {
 func DefaultConfig() AmassConfig {
 	return AmassConfig{
 		Wordlist:  []string{},
-		Frequency: 1 * time.Millisecond,
+		Frequency: 5 * time.Millisecond,
 	}
 }
 

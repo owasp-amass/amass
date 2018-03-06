@@ -4,27 +4,41 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
+	"io"
+	"math/rand"
+	"net/http"
 	"os"
-	"regexp"
-	"strings"
 	"time"
 
 	"github.com/caffix/amass/amass"
 	"github.com/sensepost/maltegolocal/maltegolocal"
 )
 
+const (
+	defaultWordlistURL = "https://raw.githubusercontent.com/caffix/amass/master/wordlists/namelist.txt"
+)
+
 func main() {
 	var domain string
-	names := make(chan *amass.Subdomain, 100)
 
 	lt := maltegolocal.ParseLocalArguments(os.Args)
 	domain = lt.Value
 	trx := maltegolocal.MaltegoTransform{}
 
+	config := amass.AmassConfig{
+		Wordlist:  getWordlist(""),
+		Frequency: amass.DefaultConfig().Frequency,
+	}
+	// Seed the pseudo-random number generator
+	rand.Seed(time.Now().UTC().UnixNano())
+	// Fire off the driver function for enumeration
+	enum := amass.NewEnumerator([]string{domain}, false, config)
+
 	go func() {
 		for {
-			n := <-names
+			n := <-enum.Names
 			if n.Domain == domain {
 				trx.AddEntity("maltego.DNSName", n.Name)
 			}
@@ -32,137 +46,42 @@ func main() {
 	}()
 
 	trx.AddUIMessage("The amass transform can take a few minutes to complete.", "Inform")
-	enumeration(domain, names, amass.DefaultConfig())
+	// Begin the enumeration process
+	enum.Start()
 	fmt.Println(trx.ReturnOutput())
 }
 
-// This is the driver function that performs a complete enumeration.
-func enumeration(domain string, names chan *amass.Subdomain, config amass.AmassConfig) {
-	var activity bool
-	var completed int
+func getWordlist(path string) []string {
+	var list []string
+	var wordlist io.Reader
 
-	done := make(chan int, 20)
-	a := amass.NewAmassWithConfig(config)
-	totalSearches := amass.NUM_SEARCHES
-	// Start the simple searches to get us started
-	startSearches(domain, a, done)
-	// Get all the archives to be used
-	archives := getArchives(a)
-	// When this timer fires, the program will end
-	t := time.NewTimer(30 * time.Second)
-	defer t.Stop()
-	// Filter for not double-checking subdomain names
-	filterNames := make(map[string]struct{})
-	// Make sure resolved names are not provided to the user more than once
-	legitimate := make(map[string]struct{})
-	// Start brute forcing
-	go a.BruteForce(domain, domain)
-loop:
-	for {
-		select {
-		case sd := <-a.Names: // New subdomains come in here
-			sd.Name = trim252F(sd.Name)
+	if path != "" {
+		// Open the wordlist
+		file, err := os.Open(path)
+		if err != nil {
+			fmt.Printf("Error opening the wordlist file: %v\n", err)
+			return list
+		}
+		defer file.Close()
+		wordlist = file
+	} else {
+		resp, err := http.Get(defaultWordlistURL)
+		if err != nil {
+			return list
+		}
+		defer resp.Body.Close()
+		wordlist = resp.Body
+	}
 
-			if sd.Name != "" {
-				if _, ok := filterNames[sd.Name]; !ok {
-					filterNames[sd.Name] = struct{}{}
-
-					if sd.Domain == "" {
-						sd.Domain = getDomainFromName(sd.Name, domain)
-					}
-
-					if sd.Domain != "" {
-						// Is this new name valid?
-						a.AddDNSRequest(sd)
-					}
-				}
-			}
-			activity = true
-		case r := <-a.Resolved: // Names that have been resolved via dns lookup
-			r.Name = trim252F(r.Name)
-
-			if _, ok := legitimate[r.Name]; !ok {
-				legitimate[r.Name] = struct{}{}
-
-				a.AttemptSweep(r.Domain, r.Address)
-				// Give it to the user!
-				names <- r
-				// Check if this subdomain/host name has an archived web page
-				for _, ar := range archives {
-					ar.CheckHistory(r)
-				}
-				// Try altering the names to create new names
-				a.ExecuteAlterations(r)
-			}
-			activity = true
-		case <-done: // Searches that have finished
-			completed++
-		case <-t.C: // Periodic checks happen in here
-			if !activity && completed == totalSearches && a.DNSRequestQueueEmpty() {
-				// We are done if searches are finished, no dns queries left, and no activity
-				break loop
-			}
-			// Otherwise, keep the process going
-			t.Reset(5 * time.Second)
-			activity = false
+	scanner := bufio.NewScanner(wordlist)
+	// Once we have used all the words, we are finished
+	for scanner.Scan() {
+		// Get the next word in the list
+		word := scanner.Text()
+		if word != "" {
+			// Add the word to the list
+			list = append(list, word)
 		}
 	}
-}
-
-func startSearches(domain string, a *amass.Amass, done chan int) {
-	searches := []amass.Searcher{
-		a.AskSearch(),
-		a.CensysSearch(),
-		a.CrtshSearch(),
-		a.NetcraftSearch(),
-		a.RobtexSearch(),
-		a.BingSearch(),
-		a.DogpileSearch(),
-		a.YahooSearch(),
-		a.VirusTotalSearch(),
-	}
-
-	// Fire off the searches
-	for _, s := range searches {
-		go s.Search(domain, done)
-	}
-}
-
-func getArchives(a *amass.Amass) []amass.Archiver {
-	archives := []amass.Archiver{
-		a.WaybackMachineArchive(),
-		a.LibraryCongressArchive(),
-		a.ArchiveIsArchive(),
-		a.ArchiveItArchive(),
-		a.ArquivoArchive(),
-		a.BayerischeArchive(),
-		a.PermaArchive(),
-		a.UKWebArchive(),
-		a.UKGovArchive(),
-	}
-	return archives
-}
-
-func getDomainFromName(name string, domain string) string {
-	var result string
-
-	if strings.HasSuffix(name, domain) {
-		result = domain
-	}
-	return result
-}
-
-func trim252F(subdomain string) string {
-	s := strings.ToLower(subdomain)
-
-	re, err := regexp.Compile("^((252f)|(2f)|(3d))+")
-	if err != nil {
-		return s
-	}
-
-	i := re.FindStringIndex(s)
-	if i != nil {
-		return s[i[1]:]
-	}
-	return s
+	return list
 }

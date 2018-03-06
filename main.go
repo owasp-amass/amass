@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"os"
 	"os/signal"
@@ -94,6 +95,8 @@ func main() {
 	output := make(chan struct{})
 	done := make(chan struct{})
 
+	// Seed the pseudo-random number generator
+	rand.Seed(time.Now().UTC().UnixNano())
 	// Fire off the driver function for enumeration
 	enum := amass.NewEnumerator(domains, brute, config)
 
@@ -217,5 +220,5 @@ func freqToDuration(freq int64) time.Duration {
 		}
 	}
 	// Use the default rate
-	return 1 * time.Millisecond
+	return amass.DefaultConfig().Frequency
 }

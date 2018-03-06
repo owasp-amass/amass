@@ -4,10 +4,18 @@
 package amass
 
 import (
+	"math/rand"
 	"strings"
 
 	"github.com/caffix/amass/amass/stringset"
 	"github.com/caffix/recon"
+)
+
+const (
+	maxNameLen  = 253
+	maxLabelLen = 63
+
+	ldhChars = "abcdefghijklmnopqrstuvwxyz0123456789-"
 )
 
 type wildcard struct {
@@ -20,8 +28,8 @@ type dnsWildcard struct {
 	Answers     *stringset.StringSet
 }
 
-// matchesWildcard - Checks subdomains in the wildcard cache for matches on the IP address
-func (a *Amass) matchesWildcard(subdomain *Subdomain) bool {
+// DNSWildcardMatch - Checks subdomains in the wildcard cache for matches on the IP address
+func (a *Amass) DNSWildcardMatch(subdomain *Subdomain) bool {
 	answer := make(chan bool, 2)
 
 	a.wildcardMatches <- &wildcard{
@@ -40,22 +48,28 @@ loop:
 		case req := <-a.wildcardMatches:
 			var answer bool
 
+			// Obtain the subdomain from the name
 			labels := strings.Split(req.Sub.Name, ".")
-			last := len(labels) - len(strings.Split(req.Sub.Domain, "."))
-			// Iterate over all the subdomains looking for wildcards
-			for i := 1; i <= last; i++ {
-				sub := strings.Join(labels[i:], ".")
-
-				w, ok := wildcards[sub]
-				if !ok {
-					w = a.checkDomainForWildcard(sub, req.Sub.Domain)
-					wildcards[sub] = w
+			sub := strings.Join(labels[1:], ".")
+			// See if detection has been performed for this subdomain
+			w, found := wildcards[sub]
+			if !found {
+				entry := &dnsWildcard{
+					HasWildcard: false,
+					Answers:     nil,
 				}
 
-				if w.HasWildcard && w.Answers.Contains(req.Sub.Address) {
-					answer = true
-					break
+				if ss := a.wildcardDetection(sub, req.Sub.Domain); ss != nil {
+					entry.HasWildcard = true
+					entry.Answers = ss
 				}
+
+				w = entry
+				wildcards[sub] = w
+			}
+			// Check if the subdomain and address in question match a wildcard
+			if w.HasWildcard && w.Answers.Contains(req.Sub.Address) {
+				answer = true
 			}
 			req.Ans <- answer
 		case <-a.quit:
@@ -65,40 +79,77 @@ loop:
 	a.done <- struct{}{}
 }
 
-// checkDomainForWildcard detects if a domain returns an IP
+// wildcardDetection detects if a domain returns an IP
 // address for "bad" names, and if so, which address is used
-func (a *Amass) checkDomainForWildcard(sub, root string) *dnsWildcard {
-	var ss1, ss2, ss3 *stringset.StringSet
+func (a *Amass) wildcardDetection(sub, root string) *stringset.StringSet {
+	var result *stringset.StringSet
 
-	name1 := "81very92unlikely03name." + sub
-	name2 := "45another34random99name." + sub
-	name3 := "just555little333me." + sub
 	server := a.NextNameserver()
 
-	if a1, err := a.dnsQuery(root, name1, server); err == nil {
-		ss1 = answersToStringSet(a1)
+	ss1 := a.checkForWildcard(sub, root, server)
+	if ss1 == nil {
+		return result
 	}
 
-	if a2, err := a.dnsQuery(root, name2, server); err == nil {
-		ss2 = answersToStringSet(a2)
+	ss2 := a.checkForWildcard(sub, root, server)
+	if ss2 == nil {
+		return result
 	}
 
-	if a3, err := a.dnsQuery(root, name3, server); err == nil {
-		ss3 = answersToStringSet(a3)
+	ss3 := a.checkForWildcard(sub, root, server)
+	if ss3 == nil {
+		return result
 	}
 
-	if ss1 != nil && ss2 != nil && ss3 != nil {
-		if !ss1.Empty() && (ss1.Equal(ss2) && ss2.Equal(ss3)) {
-			return &dnsWildcard{
-				HasWildcard: true,
-				Answers:     ss1,
-			}
+	if !ss1.Empty() && (ss1.Equal(ss2) && ss2.Equal(ss3)) {
+		result = ss1
+	}
+	return result
+}
+
+func (a *Amass) checkForWildcard(sub, root, server string) *stringset.StringSet {
+	var ss *stringset.StringSet
+
+	name := unlikelyName(sub)
+	if name != "" {
+		if ans, err := a.dnsQuery(root, name, server); err == nil {
+			ss = answersToStringSet(ans)
 		}
 	}
-	return &dnsWildcard{
-		HasWildcard: false,
-		Answers:     nil,
+	return ss
+}
+
+func unlikelyName(sub string) string {
+	var newlabel string
+	ldh := []byte(ldhChars)
+	ldhLen := len(ldh)
+
+	// Determine the max label length
+	l := maxNameLen - len(sub)
+	if l > maxLabelLen {
+		l = maxLabelLen / 2
+	} else if l < 1 {
+		return ""
 	}
+	// Shuffle our LDH characters
+	rand.Shuffle(ldhLen, func(i, j int) {
+		ldh[i], ldh[j] = ldh[j], ldh[i]
+	})
+
+	for i := 0; i < l; i++ {
+		sel := rand.Int() % ldhLen
+
+		// The first nor last char may be a hyphen
+		if (i == 0 || i == l-1) && ldh[sel] == '-' {
+			continue
+		}
+		newlabel = newlabel + string(ldh[sel])
+	}
+
+	if newlabel == "" {
+		return newlabel
+	}
+	return newlabel + "." + sub
 }
 
 func answersToStringSet(answers []recon.DNSAnswer) *stringset.StringSet {

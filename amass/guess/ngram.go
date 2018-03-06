@@ -8,7 +8,6 @@ import (
 	"math/rand"
 	"strings"
 	"sync"
-	"time"
 	"unicode/utf8"
 )
 
@@ -41,7 +40,6 @@ var (
 )
 
 func init() {
-	rand.Seed(time.Now().UTC().UnixNano())
 	allNgrams = []string{}
 
 	for _, c1 := range allChars {

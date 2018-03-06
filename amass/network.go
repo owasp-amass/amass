@@ -14,8 +14,7 @@ import (
 	"github.com/caffix/recon"
 )
 
-// Public & free DNS servers
-var nameservers []string = []string{
+var knownPublicServers = []string{
 	"8.8.8.8:53",         // Google
 	"64.6.64.6:53",       // Verisign
 	"9.9.9.9:53",         // Quad9
@@ -32,21 +31,40 @@ var nameservers []string = []string{
 	"74.82.42.42:53",     // Hurricane Electric
 	"156.154.70.1:53",    // Neustar
 	"8.8.4.4:53",         // Google Secondary
-	"64.6.65.6:53",       // Verisign Secondary
 	"149.112.112.112:53", // Quad9 Secondary
 	"84.200.70.40:53",    // DNS.WATCH Secondary
 	"8.20.247.20:53",     // Comodo Secure DNS Secondary
 	"208.67.220.220:53",  // OpenDNS Home Secondary
 	"195.46.39.40:53",    // SafeDNS Secondary
 	"216.146.36.36:53",   // Dyn Secondary
-	"37.235.1.177:53",    // FreeDNS Secondary
-	"23.253.163.53:53",   // Alternate DNS Secondary
 	"77.88.8.1:53",       // Yandex.DNS Secondary
 	"89.233.43.71:53",    // UncensoredDNS Secondary
 	"156.154.71.1:53",    // Neustar Secondary
+	//"37.235.1.177:53",    // FreeDNS Secondary
+	//"23.253.163.53:53",   // Alternate DNS Secondary
+	//"64.6.65.6:53",       // Verisign Secondary
+}
+
+// Public & free DNS servers
+var usableServers []string
+
+func init() {
+	usableServers = testPublicServers()
 }
 
 /* DNS processing routines */
+
+func testPublicServers() []string {
+	var working []string
+
+	for _, server := range knownPublicServers {
+		_, err := recon.ResolveDNS("google.com", server, "A")
+		if err == nil {
+			working = append(working, server)
+		}
+	}
+	return working
+}
 
 func (a *Amass) processNextNameserver() {
 	var index int
@@ -55,16 +73,20 @@ loop:
 		select {
 		case result := <-a.nextNameserver:
 			index++
-			if index == len(nameservers) {
+			if index == len(usableServers) {
 				index = 0
 			}
 
-			result <- nameservers[index]
+			result <- usableServers[index]
 		case <-a.quit:
 			break loop
 		}
 	}
 	a.done <- struct{}{}
+}
+
+func (a *Amass) Nameservers() []string {
+	return usableServers
 }
 
 // NextNameserver - Requests the next server from the goroutine
@@ -139,7 +161,7 @@ func (a *Amass) performDNSRequest(subdomain *Subdomain) {
 	}
 	subdomain.Address = ipstr
 	// If the name didn't come from a search, check it doesn't match a wildcard IP address
-	if subdomain.Tag != SEARCH && a.matchesWildcard(subdomain) {
+	if subdomain.Tag != SEARCH && a.DNSWildcardMatch(subdomain) {
 		a.Failed <- subdomain
 		return
 	}
@@ -161,44 +183,41 @@ func (a *Amass) performDNSRequest(subdomain *Subdomain) {
 // dnsQuery - Performs the DNS resolution and pulls names out of the errors or answers
 func (a *Amass) dnsQuery(domain, name, server string) ([]recon.DNSAnswer, error) {
 	var resolved bool
-	var answers []recon.DNSAnswer
-	var last recon.DNSAnswer
 
-	n := name
-	// Recursively resolve the CNAME records
-	for i := 0; i < 10; i++ {
-		a, err := recon.ResolveDNS(n, server, "CNAME")
-		if err != nil {
-			break
-		}
-
-		if strings.HasSuffix(n, domain) {
-			answers = append(answers, a[0])
-		}
-
-		n = a[0].Data
-		last = a[0]
-		resolved = true
-	}
-	// Attempt to update the name to be resolved for an A or AAAA record
-	if resolved {
-		name = last.Name
-	}
+	answers, name := recursiveCNAME(name, server)
 	// Obtain the DNS answers for the A records related to the name
 	ans, err := recon.ResolveDNS(name, server, "A")
 	if err == nil {
 		answers = append(answers, ans...)
+		resolved = true
 	}
 	// Obtain the DNS answers for the AAAA records related to the name
 	ans, err = recon.ResolveDNS(name, server, "AAAA")
 	if err == nil {
 		answers = append(answers, ans...)
+		resolved = true
 	}
 
-	if len(answers) == 0 {
-		return []recon.DNSAnswer{}, errors.New("No A, AAAA or CNAME records resolved for the name")
+	if !resolved {
+		return []recon.DNSAnswer{}, errors.New("No A or AAAA records resolved for the name")
 	}
 	return answers, nil
+}
+
+func recursiveCNAME(name, server string) ([]recon.DNSAnswer, string) {
+	var answers []recon.DNSAnswer
+
+	// Recursively resolve the CNAME records
+	for i := 0; i < 10; i++ {
+		a, err := recon.ResolveDNS(name, server, "CNAME")
+		if err != nil {
+			break
+		}
+
+		answers = append(answers, a[0])
+		name = a[0].Data
+	}
+	return answers, name
 }
 
 /* Network infrastructure related routines */
