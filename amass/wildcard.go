@@ -84,23 +84,24 @@ loop:
 func (a *Amass) wildcardDetection(sub, root string) *stringset.StringSet {
 	var result *stringset.StringSet
 
-	server := a.NextNameserver()
+	//server := a.NextNameserver()
+	// Only the most reliable server will be good enough
+	server := "8.8.8.8:53"
 
+	// Three unlikely names will be checked for this subdomain
 	ss1 := a.checkForWildcard(sub, root, server)
 	if ss1 == nil {
 		return result
 	}
-
 	ss2 := a.checkForWildcard(sub, root, server)
 	if ss2 == nil {
 		return result
 	}
-
 	ss3 := a.checkForWildcard(sub, root, server)
 	if ss3 == nil {
 		return result
 	}
-
+	// If they all provide the same records, we have a wildcard
 	if !ss1.Empty() && (ss1.Equal(ss2) && ss2.Equal(ss3)) {
 		result = ss1
 	}
