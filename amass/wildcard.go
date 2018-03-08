@@ -4,6 +4,7 @@
 package amass
 
 import (
+	//"fmt"
 	"math/rand"
 	"strings"
 
@@ -62,6 +63,7 @@ loop:
 				if ss := a.wildcardDetection(sub, req.Sub.Domain); ss != nil {
 					entry.HasWildcard = true
 					entry.Answers = ss
+					//fmt.Printf("WILDCARD for %s: %v\n", sub, ss.ToStrings())
 				}
 
 				w = entry

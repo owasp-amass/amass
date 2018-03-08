@@ -67,6 +67,12 @@ type Amass struct {
 	// Requests to check the reverse DNS filter are sent through this channel
 	checkRDNSFilter chan *reverseDNSFilter
 
+	// Searcher that performs reverse IP searches using Bing
+	bingIPSearch Searcher
+
+	// Searcher that performs reverse IP lookups using Shodan
+	shodanIPLookup Searcher
+
 	// Goroutines indicate completion on this channel
 	done chan struct{}
 }
@@ -110,6 +116,8 @@ func NewAmassWithConfig(ac AmassConfig) *Amass {
 		checkRDNSFilter:      make(chan *reverseDNSFilter, defaultAmassChanSize),
 		done:                 make(chan struct{}, numberofProcessingRoutines),
 	}
+	a.bingIPSearch = a.BingReverseIPSearch()
+	a.shodanIPLookup = a.ShodanReverseIPSearch()
 	a.BruteForcing = NewBruteForce(a.Names)
 	// Start all the goroutines
 	go a.initialize()

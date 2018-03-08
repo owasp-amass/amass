@@ -23,32 +23,32 @@ const (
 
 // Searcher - represents all objects that perform searches for domain names
 type Searcher interface {
-	Search(domain string, done chan int)
+	Search(domain, misc string, done chan int)
 	fmt.Stringer
 }
 
 // searchEngine - A searcher that attempts to discover information using a web search engine
 type searchEngine struct {
-	name       string
-	quantity   int
-	limit      int
-	subdomains chan *Subdomain
-	callback   func(*searchEngine, string, int) string
+	Name       string
+	Quantity   int
+	Limit      int
+	Subdomains chan *Subdomain
+	Callback   func(*searchEngine, string, int) string
 }
 
 func (se *searchEngine) String() string {
-	return se.name
+	return se.Name
 }
 
 func (se *searchEngine) urlByPageNum(domain string, page int) string {
-	return se.callback(se, domain, page)
+	return se.Callback(se, domain, page)
 }
 
-func (se *searchEngine) Search(domain string, done chan int) {
+func (se *searchEngine) Search(domain, misc string, done chan int) {
 	var unique []string
 
 	re := SubdomainRegex(domain)
-	num := se.limit / se.quantity
+	num := se.Limit / se.Quantity
 	for i := 0; i < num; i++ {
 		page := GetWebPage(se.urlByPageNum(domain, i))
 		if page == "" {
@@ -60,7 +60,11 @@ func (se *searchEngine) Search(domain string, done chan int) {
 
 			if len(u) > 0 {
 				unique = append(unique, u...)
-				se.subdomains <- &Subdomain{Name: sd, Domain: domain, Tag: SEARCH}
+				se.Subdomains <- &Subdomain{
+					Name:   sd,
+					Domain: domain,
+					Tag:    SEARCH,
+				}
 			}
 		}
 
@@ -70,7 +74,7 @@ func (se *searchEngine) Search(domain string, done chan int) {
 }
 
 func askURLByPageNum(a *searchEngine, domain string, page int) string {
-	pu := strconv.Itoa(a.quantity)
+	pu := strconv.Itoa(a.Quantity)
 	p := strconv.Itoa(page)
 	u, _ := url.Parse("http://www.ask.com/web")
 
@@ -79,15 +83,13 @@ func askURLByPageNum(a *searchEngine, domain string, page int) string {
 }
 
 func (a *Amass) AskSearch() Searcher {
-	as := new(searchEngine)
-
-	as.name = "Ask Search"
-	// ask.com appears to be hardcoded at 10 results per page
-	as.quantity = 10
-	as.limit = 200
-	as.subdomains = a.Names
-	as.callback = askURLByPageNum
-	return as
+	return &searchEngine{
+		Name:       "Ask Search",
+		Quantity:   10, // ask.com appears to be hardcoded at 10 results per page
+		Limit:      200,
+		Subdomains: a.Names,
+		Callback:   askURLByPageNum,
+	}
 }
 
 func baiduURLByPageNum(d *searchEngine, domain string, page int) string {
@@ -99,19 +101,18 @@ func baiduURLByPageNum(d *searchEngine, domain string, page int) string {
 }
 
 func (a *Amass) BaiduSearch() Searcher {
-	b := new(searchEngine)
-
-	b.name = "Baidu Search"
-	b.quantity = 20
-	b.limit = 200
-	b.subdomains = a.Names
-	b.callback = baiduURLByPageNum
-	return b
+	return &searchEngine{
+		Name:       "Baidu Search",
+		Quantity:   20,
+		Limit:      200,
+		Subdomains: a.Names,
+		Callback:   baiduURLByPageNum,
+	}
 }
 
 func bingURLByPageNum(b *searchEngine, domain string, page int) string {
-	count := strconv.Itoa(b.quantity)
-	first := strconv.Itoa((page * b.quantity) + 1)
+	count := strconv.Itoa(b.Quantity)
+	first := strconv.Itoa((page * b.Quantity) + 1)
 	u, _ := url.Parse("http://www.bing.com/search")
 
 	u.RawQuery = url.Values{"q": {"domain:" + domain},
@@ -120,18 +121,17 @@ func bingURLByPageNum(b *searchEngine, domain string, page int) string {
 }
 
 func (a *Amass) BingSearch() Searcher {
-	b := new(searchEngine)
-
-	b.name = "Bing Search"
-	b.quantity = 20
-	b.limit = 200
-	b.subdomains = a.Names
-	b.callback = bingURLByPageNum
-	return b
+	return &searchEngine{
+		Name:       "Bing Search",
+		Quantity:   20,
+		Limit:      200,
+		Subdomains: a.Names,
+		Callback:   bingURLByPageNum,
+	}
 }
 
 func dogpileURLByPageNum(d *searchEngine, domain string, page int) string {
-	qsi := strconv.Itoa(d.quantity * page)
+	qsi := strconv.Itoa(d.Quantity * page)
 	u, _ := url.Parse("http://www.dogpile.com/search/web")
 
 	u.RawQuery = url.Values{"qsi": {qsi}, "q": {domain}}.Encode()
@@ -139,15 +139,13 @@ func dogpileURLByPageNum(d *searchEngine, domain string, page int) string {
 }
 
 func (a *Amass) DogpileSearch() Searcher {
-	d := new(searchEngine)
-
-	d.name = "Dogpile Search"
-	// Dogpile returns roughly 15 results per page
-	d.quantity = 15
-	d.limit = 200
-	d.subdomains = a.Names
-	d.callback = dogpileURLByPageNum
-	return d
+	return &searchEngine{
+		Name:       "Dogpile Search",
+		Quantity:   15, // Dogpile returns roughly 15 results per page
+		Limit:      200,
+		Subdomains: a.Names,
+		Callback:   dogpileURLByPageNum,
+	}
 }
 
 func googleURLByPageNum(d *searchEngine, domain string, page int) string {
@@ -168,19 +166,18 @@ func googleURLByPageNum(d *searchEngine, domain string, page int) string {
 }
 
 func (a *Amass) GoogleSearch() Searcher {
-	g := new(searchEngine)
-
-	g.name = "Google Search"
-	g.quantity = 20
-	g.limit = 150
-	g.subdomains = a.Names
-	g.callback = googleURLByPageNum
-	return g
+	return &searchEngine{
+		Name:       "Google Search",
+		Quantity:   20,
+		Limit:      150,
+		Subdomains: a.Names,
+		Callback:   googleURLByPageNum,
+	}
 }
 
 func yahooURLByPageNum(y *searchEngine, domain string, page int) string {
-	b := strconv.Itoa(y.quantity * page)
-	pz := strconv.Itoa(y.quantity)
+	b := strconv.Itoa(y.Quantity * page)
+	pz := strconv.Itoa(y.Quantity)
 
 	u, _ := url.Parse("http://search.yahoo.com/search")
 	u.RawQuery = url.Values{"p": {"\"" + domain + "\""}, "b": {b}, "pz": {pz}}.Encode()
@@ -189,33 +186,32 @@ func yahooURLByPageNum(y *searchEngine, domain string, page int) string {
 }
 
 func (a *Amass) YahooSearch() Searcher {
-	y := new(searchEngine)
-
-	y.name = "Yahoo Search"
-	y.quantity = 20
-	y.limit = 200
-	y.subdomains = a.Names
-	y.callback = yahooURLByPageNum
-	return y
+	return &searchEngine{
+		Name:       "Yahoo Search",
+		Quantity:   20,
+		Limit:      200,
+		Subdomains: a.Names,
+		Callback:   yahooURLByPageNum,
+	}
 }
 
 //--------------------------------------------------------------------------------------------
 // lookup - A searcher that attempts to discover information on a single web page
 type lookup struct {
-	name       string
-	subdomains chan *Subdomain
-	callback   func(string) string
+	Name       string
+	Subdomains chan *Subdomain
+	Callback   func(string) string
 }
 
 func (l *lookup) String() string {
-	return l.name
+	return l.Name
 }
 
-func (l *lookup) Search(domain string, done chan int) {
+func (l *lookup) Search(domain, misc string, done chan int) {
 	var unique []string
 
 	re := SubdomainRegex(domain)
-	page := GetWebPage(l.callback(domain))
+	page := GetWebPage(l.Callback(domain))
 	if page == "" {
 		done <- 0
 		return
@@ -226,7 +222,11 @@ func (l *lookup) Search(domain string, done chan int) {
 
 		if len(u) > 0 {
 			unique = append(unique, u...)
-			l.subdomains <- &Subdomain{Name: sd, Domain: domain, Tag: SEARCH}
+			l.Subdomains <- &Subdomain{
+				Name:   sd,
+				Domain: domain,
+				Tag:    SEARCH,
+			}
 		}
 	}
 	done <- len(unique)
@@ -239,12 +239,11 @@ func censysURL(domain string) string {
 }
 
 func (a *Amass) CensysSearch() Searcher {
-	c := new(lookup)
-
-	c.name = "Censys Search"
-	c.subdomains = a.Names
-	c.callback = censysURL
-	return c
+	return &lookup{
+		Name:       "Censys Search",
+		Subdomains: a.Names,
+		Callback:   censysURL,
+	}
 }
 
 func crtshURL(domain string) string {
@@ -253,12 +252,11 @@ func crtshURL(domain string) string {
 
 // CrtshSearch - A searcher that attempts to discover names from SSL certificates
 func (a *Amass) CrtshSearch() Searcher {
-	c := new(lookup)
-
-	c.name = "Crtsh Search"
-	c.subdomains = a.Names
-	c.callback = crtshURL
-	return c
+	return &lookup{
+		Name:       "Crtsh Search",
+		Subdomains: a.Names,
+		Callback:   crtshURL,
+	}
 }
 
 func netcraftURL(domain string) string {
@@ -268,12 +266,11 @@ func netcraftURL(domain string) string {
 }
 
 func (a *Amass) NetcraftSearch() Searcher {
-	n := new(lookup)
-
-	n.name = "Netcraft Search"
-	n.subdomains = a.Names
-	n.callback = netcraftURL
-	return n
+	return &lookup{
+		Name:       "Netcraft Search",
+		Subdomains: a.Names,
+		Callback:   netcraftURL,
+	}
 }
 
 func robtexURL(domain string) string {
@@ -283,12 +280,11 @@ func robtexURL(domain string) string {
 }
 
 func (a *Amass) RobtexSearch() Searcher {
-	r := new(lookup)
-
-	r.name = "Robtex Search"
-	r.subdomains = a.Names
-	r.callback = robtexURL
-	return r
+	return &lookup{
+		Name:       "Robtex Search",
+		Subdomains: a.Names,
+		Callback:   robtexURL,
+	}
 }
 
 func threatCrowdURL(domain string) string {
@@ -298,12 +294,11 @@ func threatCrowdURL(domain string) string {
 }
 
 func (a *Amass) ThreatCrowdSearch() Searcher {
-	tc := new(lookup)
-
-	tc.name = "ThreatCrowd Search"
-	tc.subdomains = a.Names
-	tc.callback = threatCrowdURL
-	return tc
+	return &lookup{
+		Name:       "ThreatCrowd Search",
+		Subdomains: a.Names,
+		Callback:   threatCrowdURL,
+	}
 }
 
 func virusTotalURL(domain string) string {
@@ -313,29 +308,29 @@ func virusTotalURL(domain string) string {
 }
 
 func (a *Amass) VirusTotalSearch() Searcher {
-	vt := new(lookup)
-
-	vt.name = "VirusTotal Search"
-	vt.subdomains = a.Names
-	vt.callback = virusTotalURL
-	return vt
+	return &lookup{
+		Name:       "VirusTotal Search",
+		Subdomains: a.Names,
+		Callback:   virusTotalURL,
+	}
 }
 
 //--------------------------------------------------------------------------------------------
 
 type dumpster struct {
-	name, base string
-	subdomains chan *Subdomain
+	Name       string
+	Base       string
+	Subdomains chan *Subdomain
 }
 
 func (d *dumpster) String() string {
-	return d.name
+	return d.Name
 }
 
-func (d *dumpster) Search(domain string, done chan int) {
+func (d *dumpster) Search(domain, misc string, done chan int) {
 	var unique []string
 
-	page := GetWebPage(d.base)
+	page := GetWebPage(d.Base)
 	if page == "" {
 		done <- 0
 		return
@@ -359,7 +354,11 @@ func (d *dumpster) Search(domain string, done chan int) {
 
 		if len(u) > 0 {
 			unique = append(unique, u...)
-			d.subdomains <- &Subdomain{Name: sd, Domain: domain, Tag: SEARCH}
+			d.Subdomains <- &Subdomain{
+				Name:   sd,
+				Domain: domain,
+				Tag:    SEARCH,
+			}
 		}
 	}
 	done <- len(unique)
@@ -381,11 +380,11 @@ func (d *dumpster) postForm(token, domain string) string {
 		"targetip":            {domain},
 	}
 
-	req, err := http.NewRequest("POST", d.base, strings.NewReader(params.Encode()))
+	req, err := http.NewRequest("POST", d.Base, strings.NewReader(params.Encode()))
 	if err != nil {
 		return ""
 	}
-
+	// The CSRF token needs to be sent as a cookie
 	cookie := &http.Cookie{
 		Name:   "csrftoken",
 		Domain: "dnsdumpster.com",
@@ -404,19 +403,191 @@ func (d *dumpster) postForm(token, domain string) string {
 	if err != nil {
 		return ""
 	}
-
+	// Now, grab the entire page
 	in, err := ioutil.ReadAll(resp.Body)
 	resp.Body.Close()
 	return string(in)
 }
 
 func (a *Amass) DNSDumpsterSearch() Searcher {
-	d := new(dumpster)
+	return &dumpster{
+		Name:       "DNSDumpster",
+		Base:       "https://dnsdumpster.com/",
+		Subdomains: a.Names,
+	}
+}
 
-	d.name = "DNSDumpster"
-	d.base = "https://dnsdumpster.com/"
-	d.subdomains = a.Names
-	return d
+//--------------------------------------------------------------------------------------------
+// Searches and Lookups for Reverse IP
+
+type reverseIPSearchRequest struct {
+	Domain string
+	IP     string
+	Done   chan int
+}
+
+// reverseIPSearchEngine - A searcher that attempts to discover DNS names from an IP address using a search engine
+type reverseIPSearchEngine struct {
+	Name       string
+	Quantity   int
+	Limit      int
+	Subdomains chan *Subdomain
+	Callback   func(*reverseIPSearchEngine, string, int) string
+	Requests   chan *reverseIPSearchRequest
+}
+
+func (se *reverseIPSearchEngine) String() string {
+	return se.Name
+}
+
+func (se *reverseIPSearchEngine) urlByPageNum(ip string, page int) string {
+	return se.Callback(se, ip, page)
+}
+
+func (se *reverseIPSearchEngine) Search(domain, misc string, done chan int) {
+	se.Requests <- &reverseIPSearchRequest{
+		Domain: domain,
+		IP:     misc,
+		Done:   done,
+	}
+}
+
+func (se *reverseIPSearchEngine) performReverseIPSearches() {
+	t := time.NewTicker(1 * time.Second)
+	defer t.Stop()
+
+	for range t.C {
+		se.reverseIPSearch(<-se.Requests)
+	}
+}
+
+func (se *reverseIPSearchEngine) reverseIPSearch(request *reverseIPSearchRequest) {
+	var unique []string
+
+	re := SubdomainRegex(request.Domain)
+	num := se.Limit / se.Quantity
+	for i := 0; i < num; i++ {
+		page := GetWebPage(se.urlByPageNum(request.IP, i))
+		if page == "" {
+			break
+		}
+
+		for _, sd := range re.FindAllString(page, -1) {
+			u := NewUniqueElements(unique, sd)
+
+			if len(u) > 0 {
+				unique = append(unique, u...)
+				se.Subdomains <- &Subdomain{
+					Name:   sd,
+					Domain: request.Domain,
+					Tag:    SEARCH,
+				}
+			}
+		}
+		// Do not hit Bing too hard
+		time.Sleep(500 * time.Millisecond)
+	}
+	request.Done <- len(unique)
+}
+
+func bingReverseIPURLByPageNum(b *reverseIPSearchEngine, ip string, page int) string {
+	count := strconv.Itoa(b.Quantity)
+	first := strconv.Itoa((page * b.Quantity) + 1)
+	u, _ := url.Parse("http://www.bing.com/search")
+
+	u.RawQuery = url.Values{"q": {"ip:" + ip},
+		"count": {count}, "first": {first}, "FORM": {"PORE"}}.Encode()
+	return u.String()
+}
+
+func (a *Amass) BingReverseIPSearch() Searcher {
+	b := &reverseIPSearchEngine{
+		Name:       "Bing Reverse IP Search",
+		Quantity:   5,
+		Limit:      50,
+		Subdomains: a.Names,
+		Callback:   bingReverseIPURLByPageNum,
+		Requests:   make(chan *reverseIPSearchRequest, 200),
+	}
+	go b.performReverseIPSearches()
+	return b
+}
+
+type reverseIPLookupRequest struct {
+	Domain string
+	IP     string
+	Done   chan int
+}
+
+// reverseIPLookup - A searcher that attempts to discover DNS names from an IP address using a single web page
+type reverseIPLookup struct {
+	Name       string
+	Subdomains chan *Subdomain
+	Callback   func(string) string
+	Requests   chan *reverseIPLookupRequest
+}
+
+func (l *reverseIPLookup) String() string {
+	return l.Name
+}
+
+func (l *reverseIPLookup) Search(domain, misc string, done chan int) {
+	l.Requests <- &reverseIPLookupRequest{
+		Domain: domain,
+		IP:     misc,
+		Done:   done,
+	}
+}
+
+func (l *reverseIPLookup) performReverseIPLookups() {
+	t := time.NewTicker(1 * time.Second)
+	defer t.Stop()
+
+	for range t.C {
+		l.reverseIPLookup(<-l.Requests)
+	}
+}
+
+func (l *reverseIPLookup) reverseIPLookup(request *reverseIPLookupRequest) {
+	var unique []string
+
+	re := SubdomainRegex(request.Domain)
+	page := GetWebPage(l.Callback(request.IP))
+	if page == "" {
+		request.Done <- 0
+		return
+	}
+
+	for _, sd := range re.FindAllString(page, -1) {
+		u := NewUniqueElements(unique, sd)
+
+		if len(u) > 0 {
+			unique = append(unique, u...)
+			l.Subdomains <- &Subdomain{
+				Name:   sd,
+				Domain: request.Domain,
+				Tag:    SEARCH,
+			}
+		}
+	}
+	request.Done <- len(unique)
+}
+
+func shodanReverseIPURL(ip string) string {
+	format := "https://www.shodan.io/host/%s"
+
+	return fmt.Sprintf(format, ip)
+}
+
+func (a *Amass) ShodanReverseIPSearch() Searcher {
+	ss := &reverseIPLookup{
+		Name:       "Shodan Reverse IP Search",
+		Subdomains: a.Names,
+		Callback:   shodanReverseIPURL,
+		Requests:   make(chan *reverseIPLookupRequest, 200),
+	}
+	go ss.performReverseIPLookups()
+	return ss
 }
 
 //--------------------------------------------------------------------------------------------

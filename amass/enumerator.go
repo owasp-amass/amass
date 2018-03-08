@@ -279,7 +279,7 @@ func (e *Enumerator) startSearches() {
 	// Fire off the searches
 	for _, d := range e.Domains {
 		for _, s := range searches {
-			go s.Search(d, e.done)
+			go s.Search(d, "", e.done)
 		}
 	}
 }

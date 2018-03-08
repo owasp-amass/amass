@@ -1,14 +1,17 @@
 # Subdomain Enumeration
 
-### On the smart and quiet side
+### On the Smart and Quiet Side
 
 [![](https://img.shields.io/badge/go-1.10-blue.svg)](https://github.com/moovweb/gvm) [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
 
 
 The amass tool searches Internet data sources, performs brute force subdomain enumeration, searches web archives, and uses machine learning to generate additional subdomain name guesses. DNS name resolution is performed across many public servers so the authoritative server will see the traffic coming from different locations.
 
+## How to Install
 
-## Install
+A [precompiled version is available](https://github.com/caffix/amass/releases) for each release.
+
+If you would prefer to build your own binary from the latest version of the source code, make sure you have a correctly configured **Go >= 1.10** environment. More information about how to achieve this can be found [on the golang website.](https://golang.org/doc/install) Then, take the following steps:
 
 1. Download [amass](https://github.com/caffix/amass):
 ```
@@ -24,18 +27,7 @@ $ ls $GOPATH/src/github.com/caffix/amass/wordlists
 ```
 
 
-## Using amass
-
-If you are using the amass package within your own Go code, be sure to properly seed the default pseudo-random number generator:
-```go
-import(
-    "math/rand"
-    "time"
-)
-
-rand.Seed(time.Now().UTC().UnixNano())
-```
-
+## Using the Tool
 
 The most basic use of the tool, which includes reverse DNS lookups and name alterations:
 ```
@@ -106,6 +98,19 @@ $ amass -v -ip -whois -brute -w wordlist.txt -freq 240 example.com example1.com
 **Be sure that the target domain is the last parameter provided to amass, then followed by any extra domains.**
 
 
+## Integrating amass Into Your Work
+
+If you are using the amass package within your own Go code, be sure to properly seed the default pseudo-random number generator:
+```go
+import(
+    "math/rand"
+    "time"
+)
+
+rand.Seed(time.Now().UTC().UnixNano())
+```
+
+
 ## Settings for the amass Maltego Local Transform
 
 1. Setup a new local transform within Maltego:
@@ -123,7 +128,7 @@ $ amass -v -ip -whois -brute -w wordlist.txt -freq 240 example.com example1.com
 ![alt text](https://github.com/caffix/amass/blob/master/examples/maltegosetup3.png "Disable Debug")
 
 
-## Let me know what you think
+## Let Me Know What You Think
 
 **NOTE: Still under development**
 

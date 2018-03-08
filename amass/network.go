@@ -363,6 +363,9 @@ func (a *Amass) sweepCIDRAddresses(domain, addr string, cidr *CIDRData) {
 		if a.checkReverseDNSFilter(host) || host == addr {
 			continue
 		}
+		// Perform our reverse IP searches on the address
+		go a.executeReverseIPSearches(domain, addr)
+		// Perform a reverse DNS lookup for the address
 		<-t.C // Don't go too fast
 		name, err := recon.ReverseDNS(host, a.NextNameserver())
 		if err == nil && re.MatchString(name) {
@@ -373,6 +376,17 @@ func (a *Amass) sweepCIDRAddresses(domain, addr string, cidr *CIDRData) {
 				Tag:    "dns",
 			}
 		}
+	}
+}
+
+func (a *Amass) executeReverseIPSearches(domain, ip string) {
+	done := make(chan int)
+
+	go a.bingIPSearch.Search(domain, ip, done)
+	go a.shodanIPLookup.Search(domain, ip, done)
+
+	for i := 0; i < 2; i++ {
+		<-done
 	}
 }
 
