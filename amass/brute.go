@@ -4,129 +4,133 @@
 package amass
 
 import (
-	"sync"
+	"strings"
 	"time"
 )
 
-type BruteForce struct {
-	sync.Mutex
+type BruteForceService struct {
+	BaseAmassService
 
-	// Newly discovered words will show up on this channel
-	MoreWords chan *Subdomain
+	// The initial list of words provided to brute forcing
+	wordlist []string
 
-	// Newly discovered subdomains show up on this channel
-	MoreSubs chan *Subdomain
+	// Subdomains that have been worked on by brute forcing
+	subdomains map[string]struct{}
 
-	// The channel where new attempts will be sent
-	attempts chan *Subdomain
-
-	// BruteForce internal goroutines use this for comms
-	internal chan *Subdomain
-
-	// Each of the subdomains and accociated root domains
-	domains map[string]string
-
-	// The wordlist being used to generate the attempts
-	wordlist map[string]struct{}
-
-	// Status that indicates when the attempts should be sent
-	started bool
+	// Determines if recursive brute forcing will be employed
+	recursive bool
 }
 
-func NewBruteForce(names chan *Subdomain) *BruteForce {
-	bf := &BruteForce{
-		MoreWords: make(chan *Subdomain, 500),
-		MoreSubs:  make(chan *Subdomain, 50),
-		attempts:  names,
-		internal:  make(chan *Subdomain, 50),
-		domains:   make(map[string]string),
-		wordlist:  make(map[string]struct{}),
+func NewBruteForceService(in, out chan *AmassRequest) *BruteForceService {
+	bfs := &BruteForceService{
+		subdomains: make(map[string]struct{}),
+		recursive:  true,
 	}
-	go bf.processRequests()
-	return bf
+
+	bfs.BaseAmassService = *NewBaseAmassService("Brute Forcing Service", bfs)
+
+	bfs.input = in
+	bfs.output = out
+	return bfs
 }
 
-func (bf *BruteForce) AddWords(words []string) {
-	for _, w := range words {
-		bf.MoreWords <- &Subdomain{
-			Name: w,
-			Tag:  BRUTE,
-		}
-	}
+func (bfs *BruteForceService) OnStart() error {
+	bfs.BaseAmassService.OnStart()
+
+	go bfs.processRequests()
+	return nil
 }
 
-func (bf *BruteForce) Start() {
-	bf.Lock()
-	defer bf.Unlock()
-
-	bf.started = true
+func (bfs *BruteForceService) OnStop() error {
+	bfs.BaseAmassService.OnStop()
+	return nil
 }
 
-func (bf *BruteForce) hasStarted() bool {
-	bf.Lock()
-	defer bf.Unlock()
+func (bfs *BruteForceService) Wordlist() []string {
+	bfs.Lock()
+	defer bfs.Unlock()
 
-	return bf.started
+	return bfs.wordlist
 }
 
-// Goroutine that generates names from the provided wordlist + base
-// domain names and sends them on the attempts channel for DNS resolution
-func (bf *BruteForce) processRequests() {
-	var queue []*Subdomain
+func (bfs *BruteForceService) SetWordlist(words []string) {
+	bfs.Lock()
+	defer bfs.Unlock()
 
-	t := time.NewTicker(5 * time.Millisecond)
+	bfs.wordlist = words
+}
+
+func (bfs *BruteForceService) DisableRecursive() {
+	bfs.Lock()
+	defer bfs.Unlock()
+
+	bfs.recursive = false
+}
+
+func (bfs *BruteForceService) sendOut(req *AmassRequest) {
+	bfs.SetActive(true)
+	bfs.Output() <- req
+	bfs.SetActive(true)
+}
+
+func (bfs *BruteForceService) processRequests() {
+	t := time.NewTicker(5 * time.Second)
 	defer t.Stop()
-
+loop:
 	for {
 		select {
-		case word := <-bf.MoreWords:
-			if _, ok := bf.wordlist[word.Name]; !ok {
-				for subdomain, root := range bf.domains {
-					go bf.sendAttempt(&Subdomain{
-						Name:   word.Name + "." + subdomain,
-						Domain: root,
-						Tag:    word.Tag,
-					})
-				}
-
-				bf.wordlist[word.Name] = struct{}{}
-			}
-		case sub := <-bf.MoreSubs:
-			if _, ok := bf.domains[sub.Name]; !ok {
-				var words []string
-
-				for w := range bf.wordlist {
-					words = append(words, w)
-				}
-				go bf.wordlistForSubdomain(sub.Name, sub.Domain, words)
-				bf.domains[sub.Name] = sub.Domain
-			}
-		case next := <-bf.internal:
-			queue = append(queue, next)
+		case req := <-bfs.Input():
+			bfs.SetActive(true)
+			bfs.checkForNewSubdomain(req)
 		case <-t.C:
-			if bf.hasStarted() && len(queue) > 0 {
-				go bf.sendAttempt(queue[0])
-
-				if len(queue) == 1 {
-					queue = []*Subdomain{}
-				} else {
-					queue = queue[1:]
-				}
-			}
+			bfs.SetActive(false)
+		case <-bfs.Quit():
+			break loop
 		}
 	}
 }
 
-func (bf *BruteForce) wordlistForSubdomain(domain, root string, words []string) {
+func (bfs *BruteForceService) checkForNewSubdomain(req *AmassRequest) {
+	bfs.Lock()
+	defer bfs.Unlock()
+
+	// Check if we have seen the Domain already
+	if _, found := bfs.subdomains[req.Domain]; !found {
+		bfs.subdomains[req.Domain] = struct{}{}
+		go bfs.performBruteForcing(req.Domain, req.Domain, bfs.wordlist)
+	}
+	// If the Name is empty or recursive brute forcing is off, we are done here
+	if req.Name == "" || !bfs.recursive {
+		return
+	}
+
+	labels := strings.Split(req.Name, ".")
+	num := len(labels)
+	// Is this large enough to consider further?
+	if num < 3 {
+		return
+	}
+	// Have we already seen this subdomain?
+	sub := strings.Join(labels[1:], ".")
+	if _, found := bfs.subdomains[sub]; found {
+		return
+	}
+	bfs.subdomains[sub] = struct{}{}
+	// It needs to have more labels than the root domain
+	if num-1 <= len(strings.Split(req.Domain, ".")) {
+		return
+	}
+	// Otherwise, run the brute forcing on the proper subdomain
+	go bfs.performBruteForcing(sub, req.Domain, bfs.wordlist)
+}
+
+func (bfs *BruteForceService) performBruteForcing(subdomain, root string, words []string) {
 	for _, word := range words {
-		bf.internal <- &Subdomain{
-			Name:   word + "." + domain,
+		go bfs.sendOut(&AmassRequest{
+			Name:   word + "." + subdomain,
 			Domain: root,
 			Tag:    BRUTE,
-		}
+			Source: "Brute Forcing",
+		})
 	}
-}
-
-func (bf *BruteForce) sendAttempt(a *Subdomain) {
-	bf.attempts <- a
 }

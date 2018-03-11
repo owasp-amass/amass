@@ -26,19 +26,11 @@ func main() {
 	lt := maltegolocal.ParseLocalArguments(os.Args)
 	domain = lt.Value
 	trx := maltegolocal.MaltegoTransform{}
-
-	config := amass.AmassConfig{
-		Wordlist:  getWordlist(""),
-		Frequency: amass.DefaultConfig().Frequency,
-	}
-	// Seed the pseudo-random number generator
-	rand.Seed(time.Now().UTC().UnixNano())
-	// Fire off the driver function for enumeration
-	enum := amass.NewEnumerator([]string{domain}, false, config)
+	results := make(chan *amass.AmassRequest, 50)
 
 	go func() {
 		for {
-			n := <-enum.Names
+			n := <-results
 			if n.Domain == domain {
 				trx.AddEntity("maltego.DNSName", n.Name)
 			}
@@ -46,8 +38,18 @@ func main() {
 	}()
 
 	trx.AddUIMessage("The amass transform can take a few minutes to complete.", "Inform")
+
+	// Seed the pseudo-random number generator
+	rand.Seed(time.Now().UTC().UnixNano())
 	// Begin the enumeration process
-	enum.Start()
+	amass.StartAmass(&amass.AmassConfig{
+		Domains:      []string{domain},
+		Wordlist:     getWordlist(""),
+		BruteForcing: false,
+		Recursive:    false,
+		Frequency:    amass.DefaultConfig().Frequency,
+		Output:       results,
+	})
 	fmt.Println(trx.ReturnOutput())
 }
 

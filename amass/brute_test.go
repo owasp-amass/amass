@@ -7,21 +7,33 @@ import (
 	"testing"
 )
 
-func TestBruteForce(t *testing.T) {
+func TestBruteForceService(t *testing.T) {
 	var results []string
+
+	in := make(chan *AmassRequest)
+	out := make(chan *AmassRequest)
+	srv := NewBruteForceService(in, out)
+
+	words := []string{"foo", "bar"}
+	srv.SetWordlist(words)
+	srv.Start()
+
 	domain := "claritysec.com"
+	in <- &AmassRequest{
+		Name:   domain,
+		Domain: domain,
+	}
 
-	a := NewAmass()
+	var num int
+	for i := 0; i < len(words); i++ {
+		req := <-out
 
-	a.Wordlist = []string{"foo", "bar"}
-	a.BruteForcing.AddWords(a.Wordlist)
-	a.BruteForcing.MoreSubs <- &Subdomain{Name: domain, Domain: domain}
-	a.BruteForcing.Start()
+		num++
+		results = append(results, req.Name)
+	}
 
-	for i := 0; i < len(a.Wordlist); i++ {
-		sub := <-a.Names
-
-		results = append(results, sub.Name)
+	if num != len(words) {
+		t.Errorf("BruteForce returned only %d requests", num)
 	}
 
 	for _, name := range results {
@@ -29,4 +41,6 @@ func TestBruteForce(t *testing.T) {
 			t.Errorf("BruteForce returned an incorrectly generated subdomain name: %s", name)
 		}
 	}
+
+	srv.Stop()
 }

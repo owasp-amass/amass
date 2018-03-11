@@ -8,11 +8,13 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"math/rand"
 	"net/http"
 	"os"
 	"os/signal"
 	"path"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -46,26 +48,35 @@ var AsciiArt string = `
 
 type outputParams struct {
 	Verbose  bool
+	Sources  bool
 	PrintIPs bool
-	Names    chan *amass.Subdomain
-	Output   chan struct{}
+	FileOut  string
+	Results  chan *amass.AmassRequest
+	Finish   chan struct{}
 	Done     chan struct{}
 }
 
 func main() {
 	var freq int64
-	var wordlist string
-	var verbose, ip, brute, whois, list, help bool
+	var wordlist, file string
+	var verbose, extra, ip, brute, recursive, whois, list, help bool
 
 	flag.BoolVar(&help, "h", false, "Show the program usage message")
 	flag.BoolVar(&ip, "ip", false, "Show the IP addresses for discovered names")
 	flag.BoolVar(&brute, "brute", false, "Execute brute forcing after searches")
+	flag.BoolVar(&recursive, "norecursive", true, "Turn off recursive brute forcing")
 	flag.BoolVar(&verbose, "v", false, "Print the summary information")
+	flag.BoolVar(&extra, "vv", false, "Print the data source information")
 	flag.BoolVar(&whois, "whois", false, "Include domains discoverd with reverse whois")
 	flag.BoolVar(&list, "l", false, "List all domains to be used in an enumeration")
 	flag.Int64Var(&freq, "freq", 0, "Sets the number of max DNS queries per minute")
 	flag.StringVar(&wordlist, "w", "", "Path to a different wordlist file")
+	flag.StringVar(&file, "o", "", "Path to the output file")
 	flag.Parse()
+
+	if extra {
+		verbose = true
+	}
 
 	domains := flag.Args()
 	if help || len(domains) == 0 {
@@ -88,70 +99,134 @@ func main() {
 		return
 	}
 
-	config := amass.AmassConfig{
-		Wordlist:  getWordlist(wordlist),
-		Frequency: freqToDuration(freq),
-	}
-	output := make(chan struct{})
-	done := make(chan struct{})
-
 	// Seed the pseudo-random number generator
 	rand.Seed(time.Now().UTC().UnixNano())
-	// Fire off the driver function for enumeration
-	enum := amass.NewEnumerator(domains, brute, config)
+
+	finish := make(chan struct{})
+	done := make(chan struct{})
+	results := make(chan *amass.AmassRequest, 100)
 
 	go manageOutput(&outputParams{
 		Verbose:  verbose,
+		Sources:  extra,
 		PrintIPs: ip,
-		Names:    enum.Names,
-		Output:   output,
+		FileOut:  file,
+		Results:  results,
+		Finish:   finish,
 		Done:     done,
 	})
 	// Execute the signal handler
-	go catchSignals(output, done)
+	go catchSignals(finish, done)
 	// Begin the enumeration process
-	enum.Start()
+	amass.StartAmass(&amass.AmassConfig{
+		Domains:      domains,
+		Wordlist:     getWordlist(wordlist),
+		BruteForcing: brute,
+		Recursive:    recursive,
+		Frequency:    freqToDuration(freq),
+		Output:       results,
+	})
 	// Signal for output to finish
-	output <- struct{}{}
+	finish <- struct{}{}
 	<-done
+}
+
+type asnData struct {
+	Name      string
+	Netblocks map[string]int
 }
 
 func manageOutput(params *outputParams) {
 	var total int
+	var allLines string
 
-	stats := make(map[string]int)
+	tags := make(map[string]int)
+	asns := make(map[int]*asnData)
 loop:
 	for {
 		select {
-		case name := <-params.Names: // Collect all the names returned by the enumeration
+		case result := <-params.Results: // Collect all the names returned by the enumeration
 			total++
-			stats[name.Tag]++
+			updateData(result, tags, asns)
+
+			var line string
+			if params.Sources {
+				line += fmt.Sprintf("%-14s", "["+result.Source+"] ")
+			}
 			if params.PrintIPs {
-				fmt.Printf("\r%s\n", name.Name+","+name.Address)
+				line += fmt.Sprintf("%s\n", result.Name+","+result.Address)
 			} else {
-				fmt.Printf("\r%s\n", name.Name)
+				line += fmt.Sprintf("%s\n", result.Name)
 			}
-		case <-params.Output: // Prints the summary information for the enumeration
-			if params.Verbose {
-				printStats(total, stats)
-			}
+
+			// Add line to the others and print it out
+			allLines += line
+			fmt.Print(line)
+		case <-params.Finish:
 			break loop
 		}
 	}
+	// Check to print the summary information
+	if params.Verbose {
+		printSummary(total, tags, asns)
+	}
+	// Check to output the results to a file
+	if params.FileOut != "" {
+		ioutil.WriteFile(params.FileOut, []byte(allLines), 0644)
+	}
+	// Signal that output is complete
 	close(params.Done)
 }
 
-func printStats(total int, stats map[string]int) {
-	fmt.Printf("\r\n%d names discovered - ", total)
+func updateData(req *amass.AmassRequest, tags map[string]int, asns map[int]*asnData) {
+	tags[req.Tag]++
 
-	cur, length := 1, len(stats)
-	for k, v := range stats {
-		if cur == length {
-			fmt.Printf("%s: %d\n", k, v)
-		} else {
-			fmt.Printf("%s: %d, ", k, v)
+	// Update the ASN information
+	data, found := asns[req.ASN]
+	if !found {
+		asns[req.ASN] = &asnData{
+			Name:      req.ISP,
+			Netblocks: make(map[string]int),
 		}
-		cur++
+		data = asns[req.ASN]
+	}
+	// Increment how many IPs were in this netblock
+	data.Netblocks[req.Netblock.String()]++
+}
+
+func printSummary(total int, tags map[string]int, asns map[int]*asnData) {
+	fmt.Printf("\n%d names discovered - ", total)
+
+	// Print the stats using tag information
+	num, length := 1, len(tags)
+	for k, v := range tags {
+		fmt.Printf("%s: %d", k, v)
+		if num < length {
+			fmt.Print(", ")
+		}
+	}
+	fmt.Println("")
+
+	// Print a line across the terminal
+	for i := 0; i < 8; i++ {
+		fmt.Print("----------")
+	}
+	fmt.Println("")
+
+	// Print the ASN and netblock information
+	for asn, data := range asns {
+		fmt.Printf("ASN: %d - %s\n", asn, data.Name)
+
+		for cidr, ips := range data.Netblocks {
+			s := strconv.Itoa(ips)
+
+			fmt.Printf("\t%-18s\t%-3s ", cidr, s)
+			if ips == 1 {
+				fmt.Println("IP address")
+			} else {
+				fmt.Println("IP addresses")
+			}
+		}
 	}
 }
 

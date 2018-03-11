@@ -18,73 +18,147 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
+type ArchiveService struct {
+	BaseAmassService
+
+	responses chan *AmassRequest
+	archives  []Archiver
+}
+
+func NewArchiveService(in, out chan *AmassRequest) *ArchiveService {
+	as := &ArchiveService{
+		responses: make(chan *AmassRequest, 50),
+	}
+
+	as.BaseAmassService = *NewBaseAmassService("Web Archive Service", as)
+	as.archives = []Archiver{
+		WaybackMachineArchive(as.responses),
+		LibraryCongressArchive(as.responses),
+		ArchiveIsArchive(as.responses),
+		ArchiveItArchive(as.responses),
+		ArquivoArchive(as.responses),
+		UKWebArchive(as.responses),
+		UKGovArchive(as.responses),
+	}
+
+	as.input = in
+	as.output = out
+	return as
+}
+
+func (as *ArchiveService) OnStart() error {
+	as.BaseAmassService.OnStart()
+
+	go as.processRequests()
+	go as.processOutput()
+	return nil
+}
+
+func (as *ArchiveService) OnStop() error {
+	as.BaseAmassService.OnStop()
+	return nil
+}
+
+func (as *ArchiveService) sendOut(req *AmassRequest) {
+	as.Output() <- req
+}
+
+func (as *ArchiveService) processRequests() {
+loop:
+	for {
+		select {
+		case req := <-as.Input():
+			as.SetActive(true)
+			as.executeAllArchives(req)
+		case <-as.Quit():
+			break loop
+		}
+	}
+}
+
+func (as *ArchiveService) processOutput() {
+	t := time.NewTicker(5 * time.Second)
+	defer t.Stop()
+loop:
+	for {
+		select {
+		case out := <-as.responses:
+			go as.sendOut(out)
+			as.SetActive(true)
+		case <-t.C:
+			as.SetActive(false)
+		case <-as.Quit():
+			break loop
+		}
+	}
+}
+
+func (as *ArchiveService) executeAllArchives(req *AmassRequest) {
+	for _, archive := range as.archives {
+		go archive.Search(req)
+	}
+}
+
 // Archiver - represents all objects that perform Memento web archive searches for domain names
 type Archiver interface {
-	CheckHistory(subdomain *Subdomain)
+	Search(req *AmassRequest)
 }
 
 type memento struct {
-	url        string
-	subdomains chan *Subdomain
-	requests   chan *Subdomain
+	Name     string
+	URL      string
+	Output   chan<- *AmassRequest
+	Requests chan *AmassRequest
 }
 
-func (m *memento) CheckHistory(subdomain *Subdomain) {
-	m.requests <- subdomain
+func (m *memento) Search(req *AmassRequest) {
+	m.Requests <- req
 }
 
-func MementoWebArchive(u string, subdomains chan *Subdomain) Archiver {
-	m := new(memento)
-
-	m.url = u
-	m.subdomains = subdomains
-	m.requests = make(chan *Subdomain, 100)
-
+func MementoWebArchive(u, name string, out chan<- *AmassRequest) Archiver {
+	m := &memento{
+		Name:     name,
+		URL:      u,
+		Output:   out,
+		Requests: make(chan *AmassRequest, 100),
+	}
 	go m.processRequests()
 	return m
 }
 
-func (a *Amass) ArchiveItArchive() Archiver {
-	return MementoWebArchive("https://wayback.archive-it.org/all", a.Names)
+func ArchiveItArchive(out chan<- *AmassRequest) Archiver {
+	return MementoWebArchive("https://wayback.archive-it.org/all", "Archive-It", out)
 }
 
-func (a *Amass) ArchiveIsArchive() Archiver {
-	return MementoWebArchive("http://archive.is", a.Names)
+func ArchiveIsArchive(out chan<- *AmassRequest) Archiver {
+	return MementoWebArchive("http://archive.is", "Archive Today", out)
 }
 
-func (a *Amass) ArquivoArchive() Archiver {
-	return MementoWebArchive("http://arquivo.pt/wayback", a.Names)
+func ArquivoArchive(out chan<- *AmassRequest) Archiver {
+	return MementoWebArchive("http://arquivo.pt/wayback", "Arquivo Archive", out)
 }
 
-func (a *Amass) BayerischeArchive() Archiver {
-	return MementoWebArchive("http://langzeitarchivierung.bib-bvb.de/wayback", a.Names)
+func LibraryCongressArchive(out chan<- *AmassRequest) Archiver {
+	return MementoWebArchive("http://webarchive.loc.gov/all", "LoC Web Archive", out)
 }
 
-func (a *Amass) LibraryCongressArchive() Archiver {
-	return MementoWebArchive("http://webarchive.loc.gov/all", a.Names)
+func UKWebArchive(out chan<- *AmassRequest) Archiver {
+	return MementoWebArchive("http://www.webarchive.org.uk/wayback/archive", "Open UK Archive", out)
 }
 
-func (a *Amass) PermaArchive() Archiver {
-	return MementoWebArchive("http://perma-archives.org/warc", a.Names)
+func UKGovArchive(out chan<- *AmassRequest) Archiver {
+	return MementoWebArchive("http://webarchive.nationalarchives.gov.uk", "UK Gov Archive", out)
 }
 
-func (a *Amass) UKWebArchive() Archiver {
-	return MementoWebArchive("http://www.webarchive.org.uk/wayback/archive", a.Names)
-}
-
-func (a *Amass) UKGovArchive() Archiver {
-	return MementoWebArchive("http://webarchive.nationalarchives.gov.uk", a.Names)
-}
-
-func (a *Amass) WaybackMachineArchive() Archiver {
-	return MementoWebArchive("http://web.archive.org/web", a.Names)
+func WaybackMachineArchive(out chan<- *AmassRequest) Archiver {
+	return MementoWebArchive("http://web.archive.org/web", "Internet Archive", out)
 }
 
 /* Private functions */
 
 func (m *memento) processRequests() {
 	var running int
-	var queue []*Subdomain
+	var queue []*AmassRequest
 	done := make(chan int, 10)
 
 	t := time.NewTicker(1 * time.Second)
@@ -94,7 +168,7 @@ func (m *memento) processRequests() {
 	// Only have up to 10 crawlers running at the same time
 	for {
 		select {
-		case sd := <-m.requests:
+		case sd := <-m.Requests:
 			queue = append(queue, sd)
 		case <-t.C:
 			if running >= 10 || len(queue) <= 0 {
@@ -103,12 +177,12 @@ func (m *memento) processRequests() {
 
 			s := queue[0]
 			if len(queue) == 1 {
-				queue = []*Subdomain{}
+				queue = []*AmassRequest{}
 			} else {
 				queue = queue[1:]
 			}
 
-			go crawl(m.url, strconv.Itoa(year), s, m.subdomains, done, 10*time.Second)
+			go crawl(m.Name, m.URL, strconv.Itoa(year), s, m.Output, done, 10*time.Second)
 			running++
 		case <-done:
 			running--
@@ -123,7 +197,8 @@ type ext struct {
 	filter                  map[string]bool
 	flock                   sync.RWMutex
 	base, year, sub, domain string
-	names                   chan *Subdomain
+	names                   chan<- *AmassRequest
+	source                  string
 }
 
 func (e *ext) reducedURL(u *url.URL) string {
@@ -183,13 +258,18 @@ func (e *ext) Visit(ctx *gocrawl.URLContext, res *http.Response, doc *goquery.Do
 	}
 
 	for _, f := range e.domainRE.FindAllString(string(in), -1) {
-		e.names <- &Subdomain{Name: f, Domain: e.domain, Tag: ARCHIVE}
+		e.names <- &AmassRequest{
+			Name:   f,
+			Domain: e.domain,
+			Tag:    ARCHIVE,
+			Source: e.source,
+		}
 	}
 	return nil, true
 }
 
-func crawl(base, year string, subdomain *Subdomain, names chan *Subdomain, done chan int, timeout time.Duration) {
-	domain := subdomain.Domain
+func crawl(name, base, year string, req *AmassRequest, out chan<- *AmassRequest, done chan int, timeout time.Duration) {
+	domain := req.Domain
 	if domain == "" {
 		done <- 1
 		return
@@ -202,9 +282,10 @@ func crawl(base, year string, subdomain *Subdomain, names chan *Subdomain, done 
 		filter:          make(map[string]bool), // Filter for not double-checking URLs
 		base:            base,
 		year:            year,
-		sub:             subdomain.Name,
+		sub:             req.Name,
 		domain:          domain,
-		names:           names,
+		names:           out,
+		source:          name,
 	}
 
 	// Set custom options
@@ -215,7 +296,7 @@ func crawl(base, year string, subdomain *Subdomain, names chan *Subdomain, done 
 	opts.MaxVisits = 20
 
 	c := gocrawl.NewCrawlerWithOptions(opts)
-	go c.Run(fmt.Sprintf("%s/%s/%s", base, year, subdomain.Name))
+	go c.Run(fmt.Sprintf("%s/%s/%s", base, year, req.Name))
 
 	<-time.After(timeout)
 	c.Stop()

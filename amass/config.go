@@ -9,11 +9,23 @@ import (
 
 // AmassConfig - Passes along optional configurations
 type AmassConfig struct {
+	// The root domain names that the enumeration will target
+	Domains []string
+
 	// The list of words to use when generating names
 	Wordlist []string
 
+	// Will the enumeration including brute forcing techniques
+	BruteForcing bool
+
+	// Will recursive brute forcing be performed?
+	Recursive bool
+
 	// Sets the maximum number of DNS queries per minute
 	Frequency time.Duration
+
+	// The channel that will receive the results
+	Output chan *AmassRequest
 }
 
 // DefaultConfig returns a config with values that have been tested and produce desirable results

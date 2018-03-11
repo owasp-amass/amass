@@ -4,6 +4,8 @@
 package amass
 
 import (
+	"io/ioutil"
+	"net/http"
 	"regexp"
 	"strings"
 	"time"
@@ -11,133 +13,131 @@ import (
 
 const (
 	// Tags used to mark the data source with the Subdomain struct
+	DNS     = "dns"
 	ALT     = "alt"
 	BRUTE   = "brute"
 	SEARCH  = "search"
 	ARCHIVE = "archive"
 
-	// The default size of the channels within the Amass struct
-	defaultAmassChanSize = 500
-
-	// The number of goroutines fired off by each amass instantiation
-	numberofProcessingRoutines = 5
-
 	// This regular expression + the base domain will match on all names and subdomains
 	SUBRE = "(([a-zA-Z0-9]{1}|[a-zA-Z0-9]{1}[a-zA-Z0-9-]{0,61}[a-zA-Z0-9]{1})[.]{1})+"
+
+	USER_AGENT  = "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36"
+	ACCEPT      = "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+	ACCEPT_LANG = "en-US,en;q=0.8"
 )
 
-// Amass - Contains amass state information
-type Amass struct {
-	// The slice that contains words to use when generating names
-	Wordlist []string
+func StartAmass(config *AmassConfig) {
+	var resolved []chan *AmassRequest
+	var services []AmassService
 
-	// The instantiation of the brute forcing typing
-	BruteForcing *BruteForce
+	// Setup all the channels used by the AmassServices
+	search := make(chan *AmassRequest)
+	ngram := make(chan *AmassRequest)
+	brute := make(chan *AmassRequest)
+	dns := make(chan *AmassRequest)
+	dnsMux := make(chan *AmassRequest)
+	netblock := make(chan *AmassRequest)
+	netblockMux := make(chan *AmassRequest)
+	reverseip := make(chan *AmassRequest)
+	archive := make(chan *AmassRequest)
+	alt := make(chan *AmassRequest)
+	sweep := make(chan *AmassRequest)
+	resolved = append(resolved, netblock, archive, alt)
 
-	// Sets the maximum number of DNS queries per minute
-	Frequency time.Duration
+	// DNS and Reverse IP need the frequency set
+	config.Frequency *= 2
+	dnsSrv := NewDNSService(dns, dnsMux)
+	dnsSrv.SetFrequency(config.Frequency)
+	reverseipSrv := NewReverseIPService(reverseip, dns)
+	reverseipSrv.SetFrequency(config.Frequency)
+	// Add these service to the slice
+	services = append(services, dnsSrv, reverseipSrv)
 
-	// The channel to send names on for DNS resolution and other processing
-	Names chan *Subdomain
+	searchSrv := NewSubdomainSearchService(search, dns)
+	netblockSrv := NewNetblockService(netblock, netblockMux)
+	archiveSrv := NewArchiveService(archive, dns)
+	altSrv := NewAlterationService(alt, dns)
+	sweepSrv := NewSweepService(sweep, reverseip)
+	// Add these service to the slice
+	services = append(services, searchSrv, netblockSrv, archiveSrv, altSrv, sweepSrv)
 
-	// The channel that will receive names that have been successfully resolved
-	Resolved chan *Subdomain
+	// The BruteForceService will be created either way
+	bruteSrv := NewBruteForceService(brute, dns)
+	bruteSrv.SetWordlist(config.Wordlist)
+	// Same for the NgramService for guessing names
+	ngramSrv := NewNgramService(ngram, dns)
+	// Check if we will be linking brute forcing in and starting it
+	if config.BruteForcing {
+		resolved = append(resolved, brute, ngram)
+		// Add these service to the slice
+		services = append(services, bruteSrv, ngramSrv)
 
-	// The channel that will receive names that were not resolved
-	Failed chan *Subdomain
-
-	// Tells all the goroutines to terminate
-	quit chan struct{}
-
-	// Requests for the next DNS server to use are sent here
-	nextNameserver chan chan string
-
-	// New DNS requests are sent through this channel
-	addDNSRequest chan *Subdomain
-
-	// Requests are sent through this channel to check if the queue is empty
-	dnsRequestQueueEmpty chan chan bool
-
-	// Requests are sent through this channel for CIDR information
-	getCIDRInfo chan *getCIDR
-
-	// Requests are sent through this channel to check DNS wildcard matches
-	wildcardMatches chan *wildcard
-
-	// Requests to check the reverse DNS filter are sent through this channel
-	checkRDNSFilter chan *reverseDNSFilter
-
-	// Searcher that performs reverse IP searches using Bing
-	bingIPSearch Searcher
-
-	// Searcher that performs reverse IP lookups using Shodan
-	shodanIPLookup Searcher
-
-	// Goroutines indicate completion on this channel
-	done chan struct{}
-}
-
-// Subdomain - Contains information about a subdomain name
-type Subdomain struct {
-	// The discovered subdomain name
-	Name string
-
-	// The base domain that the name belongs to
-	Domain string
-
-	// The IP address that the name resolves to
-	Address string
-
-	// The data source that discovered the name within the amass package
-	Tag string
-}
-
-// NewAmass - Returns an Amass struct initialized with the default configuration
-func NewAmass() *Amass {
-	return NewAmassWithConfig(DefaultConfig())
-}
-
-// NewAmassWithConfig - Returns an Amass struct initialized with a custom configuration
-func NewAmassWithConfig(ac AmassConfig) *Amass {
-	config := customConfig(ac)
-
-	a := &Amass{
-		Wordlist:             config.Wordlist,
-		Frequency:            config.Frequency,
-		Names:                make(chan *Subdomain, defaultAmassChanSize),
-		Resolved:             make(chan *Subdomain, defaultAmassChanSize),
-		Failed:               make(chan *Subdomain, defaultAmassChanSize),
-		quit:                 make(chan struct{}),
-		nextNameserver:       make(chan chan string, defaultAmassChanSize),
-		addDNSRequest:        make(chan *Subdomain, defaultAmassChanSize),
-		dnsRequestQueueEmpty: make(chan chan bool, defaultAmassChanSize),
-		getCIDRInfo:          make(chan *getCIDR, defaultAmassChanSize),
-		wildcardMatches:      make(chan *wildcard, defaultAmassChanSize),
-		checkRDNSFilter:      make(chan *reverseDNSFilter, defaultAmassChanSize),
-		done:                 make(chan struct{}, numberofProcessingRoutines),
+		if !config.Recursive {
+			bruteSrv.DisableRecursive()
+			ngramSrv.DisableRecursive()
+		}
 	}
-	a.bingIPSearch = a.BingReverseIPSearch()
-	a.shodanIPLookup = a.ShodanReverseIPSearch()
-	a.BruteForcing = NewBruteForce(a.Names)
-	// Start all the goroutines
-	go a.initialize()
-	return a
-}
 
-func (a *Amass) initialize() {
-	go a.processNextNameserver()
-	go a.processDNSRequests()
-	go a.processWildcardMatches()
-	go a.processGetCIDR()
-	go a.processReverseDNSFilter()
-}
-
-func (a *Amass) Clean() {
-	close(a.quit)
-
-	for i := 0; i < numberofProcessingRoutines; i++ {
-		<-a.done
+	// Some service output needs to be sent in multiple directions
+	go requestMultiplexer(dnsMux, resolved...)
+	go requestMultiplexer(netblockMux, sweep, config.Output)
+	// Start all the services
+	for _, service := range services {
+		service.Start()
 	}
+	// Send all domains to the Search and Brute Forcing services
+	for _, domain := range config.Domains {
+		req := &AmassRequest{Domain: domain}
+
+		search <- req
+		if config.BruteForcing {
+			brute <- req
+		}
+	}
+	// We periodically check if all the services have finished
+	t := time.NewTicker(10 * time.Second)
+	defer t.Stop()
+loop:
+	for {
+		select {
+		case <-t.C:
+			done := true
+			for _, service := range services {
+				if service.IsActive() {
+					done = false
+					break
+				}
+			}
+
+			if done {
+				break loop
+			}
+		}
+	}
+	// Stop all the services
+	for _, service := range services {
+		service.Stop()
+	}
+}
+
+func requestMultiplexer(in chan *AmassRequest, outs ...chan *AmassRequest) {
+	filter := make(map[string]struct{})
+
+	for req := range in {
+		if _, found := filter[req.Name]; found {
+			continue
+		}
+		filter[req.Name] = struct{}{}
+
+		for _, out := range outs {
+			go sendOut(req, out)
+		}
+	}
+}
+
+func sendOut(req *AmassRequest, out chan *AmassRequest) {
+	out <- req
 }
 
 // NewUniqueElements - Removes elements that have duplicates in the original or new elements
@@ -182,4 +182,41 @@ func SubdomainRegex(domain string) *regexp.Regexp {
 	d := strings.Replace(domain, ".", "[.]", -1)
 
 	return regexp.MustCompile(SUBRE + d)
+}
+
+func GetWebPage(u string) string {
+	client := &http.Client{}
+
+	req, err := http.NewRequest("GET", u, nil)
+	if err != nil {
+		return ""
+	}
+
+	req.Header.Add("User-Agent", USER_AGENT)
+	req.Header.Add("Accept", ACCEPT)
+	req.Header.Add("Accept-Language", ACCEPT_LANG)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return ""
+	}
+
+	in, err := ioutil.ReadAll(resp.Body)
+	resp.Body.Close()
+	return string(in)
+}
+
+func trim252F(name string) string {
+	s := strings.ToLower(name)
+
+	re, err := regexp.Compile("^((252f)|(2f)|(3d))+")
+	if err != nil {
+		return s
+	}
+
+	i := re.FindStringIndex(s)
+	if i != nil {
+		return s[i[1]:]
+	}
+	return s
 }

@@ -23,7 +23,7 @@ At this point, the amass binary should be in *$GOPATH/bin*.
 
 2. Several wordlists can be found in the following directory:
 ```
-$ ls $GOPATH/src/github.com/caffix/amass/wordlists
+$ ls $GOPATH/src/github.com/caffix/amass/wordlists/
 ```
 
 
@@ -41,7 +41,16 @@ $ amass -v example.com
 www.example.com
 ns.example.com
 ...
-13242 names discovered - search: 211, dns: 4709, archive: 126, brute: 169, alterations: 8027
+13242 names discovered - search: 211, dns: 4709, archive: 126, brute: 169, alt: 8027
+```
+
+
+Have amass provide the source that discovered the subdomain name:
+```
+$ amass -vv example
+[Google] www.example.com
+[VirusTotal] ns.example.com
+...
 ```
 
 
@@ -50,9 +59,22 @@ Have amass print IP addresses with the discovered names:
 $ amass -ip example.com
 ```
 
+
+Have amass write the results to a text file:
+```
+$ amass -ip -o example.txt example.com
+```
+
+
 Have amass perform brute force subdomain enumeration as well:
 ```
 $ amass -brute example.com
+```
+
+
+By default, amass performs recursive brute forcing on new subdomains; this can be disabled:
+```
+$ amass -brute -norecursive example.com
 ```
 
 
