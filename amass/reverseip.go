@@ -15,22 +15,27 @@ import (
 type ReverseIPService struct {
 	BaseAmassService
 
-	frequency time.Duration
 	responses chan *AmassRequest
 	searches  []ReverseIper
+
+	// Ensures that the same IP is not sent out twice
+	filter map[string]struct{}
 }
 
-func NewReverseIPService(in, out chan *AmassRequest) *ReverseIPService {
+func NewReverseIPService(in, out chan *AmassRequest, config *AmassConfig) *ReverseIPService {
 	ris := &ReverseIPService{
 		responses: make(chan *AmassRequest, 50),
+		filter:    make(map[string]struct{}),
 	}
 
-	ris.BaseAmassService = *NewBaseAmassService("Reverse IP Service", ris)
+	ris.BaseAmassService = *NewBaseAmassService("Reverse IP Service", config, ris)
 	ris.searches = []ReverseIper{
 		//BingReverseIPSearch(ris.responses),
 		//ShodanReverseIPSearch(ris.responses),
 		ReverseDNSSearch(ris.responses),
 	}
+	// Do not perform reverse lookups on localhost
+	ris.filter["127.0.0.1"] = struct{}{}
 
 	ris.input = in
 	ris.output = out
@@ -50,42 +55,23 @@ func (ris *ReverseIPService) OnStop() error {
 	return nil
 }
 
-func (ris *ReverseIPService) Frequency() time.Duration {
-	ris.Lock()
-	defer ris.Unlock()
-
-	return ris.frequency
-}
-
-func (ris *ReverseIPService) SetFrequency(freq time.Duration) {
-	ris.Lock()
-	defer ris.Unlock()
-
-	ris.frequency = freq
-}
-
 func (ris *ReverseIPService) sendOut(req *AmassRequest) {
-	ris.Output() <- req
-	ris.SetActive(true)
+	go func() {
+		ris.SetActive(true)
+		ris.Output() <- req
+		ris.SetActive(true)
+	}()
 }
 
 func (ris *ReverseIPService) processRequests() {
-	filter := make(map[string]struct{})
-	// Do not perform reverse lookups on localhost
-	filter["127.0.0.1"] = struct{}{}
-
-	t := time.NewTicker(ris.Frequency())
+	t := time.NewTicker(ris.Config().Frequency)
 	defer t.Stop()
 loop:
 	for {
 		select {
 		case req := <-ris.Input():
-			if _, found := filter[req.Address]; !found {
-				filter[req.Address] = struct{}{}
-				ris.SetActive(true)
-				<-t.C
-				ris.executeAllSearches(req.Domain, req.Address)
-			}
+			<-t.C
+			go ris.executeAllSearches(req.Domain, req.Address)
 		case <-ris.Quit():
 			break loop
 		}
@@ -93,14 +79,13 @@ loop:
 }
 
 func (ris *ReverseIPService) processOutput() {
-	t := time.NewTicker(20 * time.Second)
+	t := time.NewTicker(10 * time.Second)
 	defer t.Stop()
 loop:
 	for {
 		select {
 		case out := <-ris.responses:
-			go ris.sendOut(out)
-			ris.SetActive(true)
+			ris.sendOut(out)
 		case <-t.C:
 			ris.SetActive(false)
 		case <-ris.Quit():
@@ -109,11 +94,29 @@ loop:
 	}
 }
 
+// Returns true if the IP is a duplicate entry in the filter.
+// If not, the IP is added to the filter
+func (ris *ReverseIPService) duplicate(ip string) bool {
+	ris.Lock()
+	defer ris.Unlock()
+
+	if _, found := ris.filter[ip]; found {
+		return true
+	}
+	ris.filter[ip] = struct{}{}
+	return false
+}
+
 func (ris *ReverseIPService) executeAllSearches(domain, ip string) {
 	done := make(chan int)
 
-	for _, search := range ris.searches {
-		go search.Search(domain, ip, done)
+	ris.SetActive(true)
+	if ip == "" || ris.duplicate(ip) {
+		return
+	}
+
+	for _, s := range ris.searches {
+		go s.Search(domain, ip, done)
 	}
 
 	for i := 0; i < len(ris.searches); i++ {

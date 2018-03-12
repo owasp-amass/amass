@@ -25,12 +25,12 @@ type SubdomainSearchService struct {
 	searches  []Searcher
 }
 
-func NewSubdomainSearchService(in, out chan *AmassRequest) *SubdomainSearchService {
+func NewSubdomainSearchService(in, out chan *AmassRequest, config *AmassConfig) *SubdomainSearchService {
 	sss := &SubdomainSearchService{
 		responses: make(chan *AmassRequest, 50),
 	}
 
-	sss.BaseAmassService = *NewBaseAmassService("Subdomain Name Search Service", sss)
+	sss.BaseAmassService = *NewBaseAmassService("Subdomain Name Search Service", config, sss)
 	sss.searches = []Searcher{
 		AskSearch(sss.responses),
 		BaiduSearch(sss.responses),
@@ -66,16 +66,24 @@ func (sss *SubdomainSearchService) OnStop() error {
 }
 
 func (sss *SubdomainSearchService) sendOut(req *AmassRequest) {
-	sss.Output() <- req
+	// Perform the channel write in a goroutine
+	go func() {
+		sss.SetActive(true)
+		sss.Output() <- req
+		sss.SetActive(true)
+	}()
 }
 
 func (sss *SubdomainSearchService) processRequests() {
+	t := time.NewTicker(20 * time.Second)
+	defer t.Stop()
 loop:
 	for {
 		select {
 		case req := <-sss.Input():
-			sss.SetActive(true)
 			sss.executeAllSearches(req.Domain)
+		case <-t.C:
+			sss.SetActive(false)
 		case <-sss.Quit():
 			break loop
 		}
@@ -97,14 +105,14 @@ loop:
 func (sss *SubdomainSearchService) executeAllSearches(domain string) {
 	done := make(chan int)
 
-	for _, search := range sss.searches {
-		go search.Search(domain, done)
+	sss.SetActive(true)
+	for _, s := range sss.searches {
+		go s.Search(domain, done)
 	}
 
 	for i := 0; i < NUM_SEARCHES; i++ {
 		<-done
 	}
-	sss.SetActive(false)
 }
 
 // Searcher - represents all types that perform searches for domain names

@@ -21,12 +21,10 @@ type NetblockService struct {
 	cache map[string]*cidrData
 }
 
-func NewNetblockService(in, out chan *AmassRequest) *NetblockService {
-	ns := &NetblockService{
-		cache: make(map[string]*cidrData),
-	}
+func NewNetblockService(in, out chan *AmassRequest, config *AmassConfig) *NetblockService {
+	ns := &NetblockService{cache: make(map[string]*cidrData)}
 
-	ns.BaseAmassService = *NewBaseAmassService("Netblock Service", ns)
+	ns.BaseAmassService = *NewBaseAmassService("Netblock Service", config, ns)
 
 	ns.input = in
 	ns.output = out
@@ -46,8 +44,11 @@ func (ns *NetblockService) OnStop() error {
 }
 
 func (ns *NetblockService) sendOut(req *AmassRequest) {
-	ns.SetActive(true)
-	ns.Output() <- req
+	// Perform the channel write in a goroutine
+	go func() {
+		ns.Output() <- req
+		ns.SetActive(true)
+	}()
 }
 
 func (ns *NetblockService) processRequests() {
@@ -57,8 +58,7 @@ loop:
 	for {
 		select {
 		case req := <-ns.Input():
-			ns.SetActive(true)
-			ns.performNetblockLookup(req)
+			go ns.performNetblockLookup(req)
 		case <-t.C:
 			ns.SetActive(false)
 		case <-ns.Quit():
@@ -67,17 +67,33 @@ loop:
 	}
 }
 
-func (ns *NetblockService) performNetblockLookup(req *AmassRequest) {
-	var answer *cidrData
+func (ns *NetblockService) cidrCacheEntry(addr string) *cidrData {
+	ns.Lock()
+	defer ns.Unlock()
 
-	// Check the cache first for which CIDR this IP address falls within
-	ip := net.ParseIP(req.Address)
+	var result *cidrData
+	// Check the cache for which CIDR this IP address falls within
+	ip := net.ParseIP(addr)
 	for _, data := range ns.cache {
 		if data.Netblock.Contains(ip) {
-			answer = data
+			result = data
 			break
 		}
 	}
+	return result
+}
+
+func (ns *NetblockService) setCIDRCacheEntry(cidr string, entry *cidrData) {
+	ns.Lock()
+	defer ns.Unlock()
+
+	ns.cache[cidr] = entry
+}
+
+func (ns *NetblockService) performNetblockLookup(req *AmassRequest) {
+	ns.SetActive(true)
+
+	answer := ns.cidrCacheEntry(req.Address)
 	// If the information was not within the cache, perform the lookup
 	if answer == nil {
 		record, cidr, err := recon.IPToCIDR(req.Address)
@@ -87,7 +103,7 @@ func (ns *NetblockService) performNetblockLookup(req *AmassRequest) {
 				Record:   record,
 			}
 
-			ns.cache[cidr.String()] = data
+			ns.setCIDRCacheEntry(cidr.String(), data)
 			answer = data
 		}
 	}
@@ -96,6 +112,6 @@ func (ns *NetblockService) performNetblockLookup(req *AmassRequest) {
 		req.Netblock = answer.Netblock
 		req.ASN = answer.Record.ASN
 		req.ISP = answer.Record.ISP
-		go ns.sendOut(req)
+		ns.sendOut(req)
 	}
 }

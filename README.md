@@ -114,7 +114,7 @@ In the above example, the domains example1.com and example2.com are simply appen
 
 All these options can be used together:
 ```
-$ amass -v -ip -whois -brute -w wordlist.txt -freq 240 example.com example1.com
+$ amass -vv -ip -whois -brute -norecursive -w words.txt -freq 240 -o out.txt ex1.com ex2.com
 ```
 
 **Be sure that the target domain is the last parameter provided to amass, then followed by any extra domains.**
@@ -125,11 +125,30 @@ $ amass -v -ip -whois -brute -w wordlist.txt -freq 240 example.com example1.com
 If you are using the amass package within your own Go code, be sure to properly seed the default pseudo-random number generator:
 ```go
 import(
+    "fmt"
     "math/rand"
     "time"
+
+    "github.com/caffix/amass/amass"
 )
 
-rand.Seed(time.Now().UTC().UnixNano())
+func main() {
+    output := make(chan *amass.AmassRequest)
+
+    go func() {
+        result := <-output
+
+        fmt.Println(result.Name)
+    }()
+
+    // Seed the default pseudo-random number generator
+    rand.Seed(time.Now().UTC().UnixNano())
+    // Begin the enumeration process
+    amass.StartAmass(&amass.AmassConfig{
+        Domains:      []string{"example.com"},
+        Output:       output,
+    })
+}
 ```
 
 

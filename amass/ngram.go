@@ -47,9 +47,6 @@ type NgramService struct {
 	// Subdomains names detected from input
 	subdomains map[string]string
 
-	// Determines if recursive brute forcing will be employed
-	recursive bool
-
 	startedGuessing         bool
 	numGood, guesses        int
 	totalNames              float64
@@ -61,11 +58,10 @@ type NgramService struct {
 	characters              map[rune]*lenDist
 }
 
-func NewNgramService(in, out chan *AmassRequest) *NgramService {
+func NewNgramService(in, out chan *AmassRequest, config *AmassConfig) *NgramService {
 	ns := &NgramService{
 		goodNames:               make(map[string]struct{}),
 		subdomains:              make(map[string]string),
-		recursive:               true,
 		numWordsWithLen:         make(map[int]*lenDist),
 		numWordsWithFirstChar:   make(map[rune]*lenDist),
 		numTimesCharFollowsChar: make(map[rune]map[rune]*lenDist),
@@ -73,7 +69,7 @@ func NewNgramService(in, out chan *AmassRequest) *NgramService {
 		characters:              make(map[rune]*lenDist),
 	}
 
-	ns.BaseAmassService = *NewBaseAmassService("Ngram Service", ns)
+	ns.BaseAmassService = *NewBaseAmassService("Ngram Service", config, ns)
 
 	ns.input = in
 	ns.output = out
@@ -84,7 +80,10 @@ func (ns *NgramService) OnStart() error {
 	ns.BaseAmassService.OnStart()
 
 	go ns.processRequests()
-	ns.SetActive(true)
+
+	if ns.Config().BruteForcing {
+		ns.SetActive(true)
+	}
 	return nil
 }
 
@@ -94,15 +93,10 @@ func (ns *NgramService) OnStop() error {
 	return nil
 }
 
-func (ns *NgramService) DisableRecursive() {
-	ns.Lock()
-	defer ns.Unlock()
-
-	ns.recursive = false
-}
-
 func (ns *NgramService) sendOut(req *AmassRequest) {
-	ns.Output() <- req
+	go func() {
+		ns.Output() <- req
+	}()
 }
 
 func (ns *NgramService) processRequests() {
@@ -141,7 +135,7 @@ func (ns *NgramService) inspectResolvedName(req *AmassRequest) {
 		ns.goodNames[req.Name] = struct{}{}
 	}
 	// Do not continue if recursive brute forcing is off
-	if !ns.recursive {
+	if !ns.Config().Recursive {
 		return
 	}
 	// Obtain each label from the subdomain name
@@ -162,7 +156,7 @@ func (ns *NgramService) inspectResolvedName(req *AmassRequest) {
 func (ns *NgramService) checkToBegin() {
 	var start bool
 
-	if ns.IsGuessing() {
+	if !ns.Config().BruteForcing || ns.IsGuessing() {
 		return
 	}
 	// Check if it's time to begin guessing
@@ -199,7 +193,7 @@ func (ns *NgramService) StartGuessing() {
 		}
 		// Send the guess to all known subdomains
 		for _, sub := range subs {
-			go ns.sendOut(&AmassRequest{
+			ns.sendOut(&AmassRequest{
 				Name:   word + "." + sub.Name,
 				Domain: sub.Domain,
 				Tag:    ns.Tag(),

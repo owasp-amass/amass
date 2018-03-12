@@ -13,12 +13,15 @@ import (
 
 type SweepService struct {
 	BaseAmassService
+
+	// Ensures that the same IP is not sent out twice
+	filter map[string]struct{}
 }
 
-func NewSweepService(in, out chan *AmassRequest) *SweepService {
-	ss := new(SweepService)
+func NewSweepService(in, out chan *AmassRequest, config *AmassConfig) *SweepService {
+	ss := &SweepService{filter: make(map[string]struct{})}
 
-	ss.BaseAmassService = *NewBaseAmassService("Sweep Service", ss)
+	ss.BaseAmassService = *NewBaseAmassService("Sweep Service", config, ss)
 
 	ss.input = in
 	ss.output = out
@@ -38,21 +41,21 @@ func (ss *SweepService) OnStop() error {
 }
 
 func (ss *SweepService) sendOut(req *AmassRequest) {
-	ss.SetActive(true)
-	ss.Output() <- req
+	// Perform the channel write in a goroutine
+	go func() {
+		ss.Output() <- req
+		ss.SetActive(true)
+	}()
 }
 
 func (ss *SweepService) processRequests() {
-	filter := make(map[string]struct{})
-
 	t := time.NewTicker(5 * time.Second)
 	defer t.Stop()
 loop:
 	for {
 		select {
 		case req := <-ss.Input():
-			ss.SetActive(true)
-			ss.AttemptSweep(req, filter)
+			go ss.AttemptSweep(req)
 		case <-t.C:
 			ss.SetActive(false)
 		case <-ss.Quit():
@@ -61,21 +64,37 @@ loop:
 	}
 }
 
+// Returns true if the IP is a duplicate entry in the filter.
+// If not, the IP is added to the filter
+func (ss *SweepService) duplicate(ip string) bool {
+	ss.Lock()
+	defer ss.Unlock()
+
+	if _, found := ss.filter[ip]; found {
+		return true
+	}
+	ss.filter[ip] = struct{}{}
+	return false
+}
+
 // AttemptSweep - Initiates a sweep of a subset of the addresses within the CIDR
-func (ss *SweepService) AttemptSweep(req *AmassRequest, filter map[string]struct{}) {
+func (ss *SweepService) AttemptSweep(req *AmassRequest) {
 	var newIPs []string
 
+	if req.Address == "" || req.Netblock == nil {
+		return
+	}
+	ss.SetActive(true)
 	// Get the subset of nearby IP addresses
 	ips := getCIDRSubset(hosts(req), req.Address, 200)
 	for _, ip := range ips {
-		if _, found := filter[ip]; !found {
-			filter[ip] = struct{}{}
+		if !ss.duplicate(ip) {
 			newIPs = append(newIPs, ip)
 		}
 	}
 	// Perform the reverse queries for all the new hosts
 	for _, ip := range newIPs {
-		go ss.sendOut(&AmassRequest{
+		ss.sendOut(&AmassRequest{
 			Domain:  req.Domain,
 			Address: ip,
 			Tag:     DNS,

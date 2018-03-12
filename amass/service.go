@@ -71,14 +71,18 @@ type BaseAmassService struct {
 	active  bool
 	quit    chan struct{}
 
+	// The configuration being used by the service
+	config *AmassConfig
+
 	// The specific service embedding BaseAmassService
 	service AmassService
 }
 
-func NewBaseAmassService(name string, service AmassService) *BaseAmassService {
+func NewBaseAmassService(name string, config *AmassConfig, service AmassService) *BaseAmassService {
 	return &BaseAmassService{
 		name:    name,
 		quit:    make(chan struct{}),
+		config:  config,
 		service: service,
 	}
 }
@@ -165,4 +169,8 @@ func (bas *BaseAmassService) SetStopped() {
 	defer bas.Unlock()
 
 	bas.stopped = true
+}
+
+func (bas *BaseAmassService) Config() *AmassConfig {
+	return bas.config
 }

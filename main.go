@@ -10,7 +10,6 @@ import (
 	"io"
 	"io/ioutil"
 	"math/rand"
-	"net/http"
 	"os"
 	"os/signal"
 	"path"
@@ -20,10 +19,6 @@ import (
 
 	"github.com/caffix/amass/amass"
 	"github.com/caffix/recon"
-)
-
-const (
-	defaultWordlistURL = "https://raw.githubusercontent.com/caffix/amass/master/wordlists/namelist.txt"
 )
 
 var AsciiArt string = `
@@ -99,7 +94,7 @@ func main() {
 		return
 	}
 
-	// Seed the pseudo-random number generator
+	// Seed the default pseudo-random number generator
 	rand.Seed(time.Now().UTC().UnixNano())
 
 	finish := make(chan struct{})
@@ -117,15 +112,22 @@ func main() {
 	})
 	// Execute the signal handler
 	go catchSignals(finish, done)
-	// Begin the enumeration process
-	amass.StartAmass(&amass.AmassConfig{
+	// Grab the words from an identified wordlist
+	var words []string
+	if wordlist != "" {
+		words = getWordlist(wordlist)
+	}
+	// Setup the amass configuration
+	config := amass.CustomConfig(&amass.AmassConfig{
 		Domains:      domains,
-		Wordlist:     getWordlist(wordlist),
+		Wordlist:     words,
 		BruteForcing: brute,
 		Recursive:    recursive,
 		Frequency:    freqToDuration(freq),
 		Output:       results,
 	})
+	// Begin the enumeration process
+	amass.StartAmass(config)
 	// Signal for output to finish
 	finish <- struct{}{}
 	<-done
@@ -204,6 +206,7 @@ func printSummary(total int, tags map[string]int, asns map[int]*asnData) {
 		if num < length {
 			fmt.Print(", ")
 		}
+		num++
 	}
 	fmt.Println("")
 
@@ -248,23 +251,14 @@ func getWordlist(path string) []string {
 	var list []string
 	var wordlist io.Reader
 
-	if path != "" {
-		// Open the wordlist
-		file, err := os.Open(path)
-		if err != nil {
-			fmt.Printf("Error opening the wordlist file: %v\n", err)
-			return list
-		}
-		defer file.Close()
-		wordlist = file
-	} else {
-		resp, err := http.Get(defaultWordlistURL)
-		if err != nil {
-			return list
-		}
-		defer resp.Body.Close()
-		wordlist = resp.Body
+	// Open the wordlist
+	file, err := os.Open(path)
+	if err != nil {
+		fmt.Printf("Error opening the wordlist file: %v\n", err)
+		return list
 	}
+	defer file.Close()
+	wordlist = file
 
 	scanner := bufio.NewScanner(wordlist)
 	// Once we have used all the words, we are finished

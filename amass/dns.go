@@ -95,18 +95,14 @@ type wildcard struct {
 type DNSService struct {
 	BaseAmassService
 
-	frequency time.Duration
 	// Requests are sent through this channel to check DNS wildcard matches
 	wildcards chan *wildcard
 }
 
-func NewDNSService(in, out chan *AmassRequest) *DNSService {
-	ds := &DNSService{
-		frequency: 5 * time.Millisecond,
-		wildcards: make(chan *wildcard, 50),
-	}
+func NewDNSService(in, out chan *AmassRequest, config *AmassConfig) *DNSService {
+	ds := &DNSService{wildcards: make(chan *wildcard, 50)}
 
-	ds.BaseAmassService = *NewBaseAmassService("DNS Service", ds)
+	ds.BaseAmassService = *NewBaseAmassService("DNS Service", config, ds)
 
 	ds.input = in
 	ds.output = out
@@ -126,25 +122,14 @@ func (ds *DNSService) OnStop() error {
 	return nil
 }
 
-func (ds *DNSService) Frequency() time.Duration {
-	ds.Lock()
-	defer ds.Unlock()
-
-	return ds.frequency
-}
-
-func (ds *DNSService) SetFrequency(freq time.Duration) {
-	ds.Lock()
-	defer ds.Unlock()
-
-	ds.frequency = freq
-}
-
 func (ds *DNSService) sendOut(req *AmassRequest) {
 	req.Name = trim252F(req.Name)
 
-	ds.Output() <- req
-	ds.SetActive(true)
+	// Perform the channel write in a goroutine
+	go func() {
+		ds.Output() <- req
+		ds.SetActive(true)
+	}()
 }
 
 func (ds *DNSService) processRequests() {
@@ -153,7 +138,7 @@ func (ds *DNSService) processRequests() {
 	// Filter for not double-checking subdomain names
 	filter := make(map[string]struct{})
 
-	t := time.NewTicker(ds.Frequency())
+	t := time.NewTicker(ds.Config().Frequency)
 	defer t.Stop()
 
 	check := time.NewTicker(5 * time.Second)
@@ -168,7 +153,7 @@ loop:
 				filter[add.Name] = struct{}{}
 				queue = append(queue, add)
 				// Mark the service as active
-				ds.BaseAmassService.SetActive(true)
+				ds.SetActive(true)
 			}
 		case <-t.C: // Pops a DNS name off the queue for resolution
 			if len(queue) > 0 {
@@ -195,7 +180,6 @@ loop:
 }
 
 func (ds *DNSService) performDNSRequest(req *AmassRequest) {
-	ds.SetActive(true)
 	answers, err := dnsQuery(req.Domain, req.Name, NextNameserver())
 	if err != nil {
 		return
@@ -225,7 +209,7 @@ func (ds *DNSService) performDNSRequest(req *AmassRequest) {
 			source = req.Source
 		}
 
-		go ds.sendOut(&AmassRequest{
+		ds.sendOut(&AmassRequest{
 			Name:    record.Name,
 			Domain:  req.Domain,
 			Address: ipstr,

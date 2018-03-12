@@ -25,12 +25,12 @@ type ArchiveService struct {
 	archives  []Archiver
 }
 
-func NewArchiveService(in, out chan *AmassRequest) *ArchiveService {
+func NewArchiveService(in, out chan *AmassRequest, config *AmassConfig) *ArchiveService {
 	as := &ArchiveService{
 		responses: make(chan *AmassRequest, 50),
 	}
 
-	as.BaseAmassService = *NewBaseAmassService("Web Archive Service", as)
+	as.BaseAmassService = *NewBaseAmassService("Web Archive Service", config, as)
 	as.archives = []Archiver{
 		WaybackMachineArchive(as.responses),
 		LibraryCongressArchive(as.responses),
@@ -60,7 +60,12 @@ func (as *ArchiveService) OnStop() error {
 }
 
 func (as *ArchiveService) sendOut(req *AmassRequest) {
-	as.Output() <- req
+	// Perform the channel write in a goroutine
+	go func() {
+		as.SetActive(true)
+		as.Output() <- req
+		as.SetActive(true)
+	}()
 }
 
 func (as *ArchiveService) processRequests() {
@@ -68,8 +73,7 @@ loop:
 	for {
 		select {
 		case req := <-as.Input():
-			as.SetActive(true)
-			as.executeAllArchives(req)
+			go as.executeAllArchives(req)
 		case <-as.Quit():
 			break loop
 		}
@@ -83,8 +87,7 @@ loop:
 	for {
 		select {
 		case out := <-as.responses:
-			go as.sendOut(out)
-			as.SetActive(true)
+			as.sendOut(out)
 		case <-t.C:
 			as.SetActive(false)
 		case <-as.Quit():
@@ -94,6 +97,8 @@ loop:
 }
 
 func (as *ArchiveService) executeAllArchives(req *AmassRequest) {
+	as.SetActive(true)
+
 	for _, archive := range as.archives {
 		go archive.Search(req)
 	}

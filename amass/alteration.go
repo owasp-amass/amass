@@ -14,10 +14,10 @@ type AlterationService struct {
 	BaseAmassService
 }
 
-func NewAlterationService(in, out chan *AmassRequest) *AlterationService {
+func NewAlterationService(in, out chan *AmassRequest, config *AmassConfig) *AlterationService {
 	as := new(AlterationService)
 
-	as.BaseAmassService = *NewBaseAmassService("Alteration Service", as)
+	as.BaseAmassService = *NewBaseAmassService("Alteration Service", config, as)
 
 	as.input = in
 	as.output = out
@@ -37,8 +37,11 @@ func (as *AlterationService) OnStop() error {
 }
 
 func (as *AlterationService) sendOut(req *AmassRequest) {
-	as.SetActive(true)
-	as.Output() <- req
+	// Perform the channel write in a goroutine
+	go func() {
+		as.Output() <- req
+		as.SetActive(true)
+	}()
 }
 
 func (as *AlterationService) processRequests() {
@@ -48,8 +51,7 @@ loop:
 	for {
 		select {
 		case req := <-as.Input():
-			as.SetActive(true)
-			as.executeAlterations(req)
+			go as.executeAlterations(req)
 		case <-t.C:
 			as.SetActive(false)
 		case <-as.Quit():
@@ -60,6 +62,8 @@ loop:
 
 // executeAlterations - Runs all the DNS name alteration methods as goroutines
 func (as *AlterationService) executeAlterations(req *AmassRequest) {
+	as.SetActive(true)
+
 	go as.flipNumbersInName(req)
 	go as.appendNumbers(req)
 	//go a.PrefixSuffixWords(name)
@@ -143,7 +147,7 @@ func (as *AlterationService) sendAlteredName(name, domain string) {
 	re := SubdomainRegex(domain)
 
 	if re.MatchString(name) {
-		go as.sendOut(&AmassRequest{
+		as.sendOut(&AmassRequest{
 			Name:   name,
 			Domain: domain,
 			Tag:    ALT,

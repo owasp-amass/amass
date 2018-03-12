@@ -19,20 +19,30 @@ const (
 	SEARCH  = "search"
 	ARCHIVE = "archive"
 
+	// An IPv4 regular expression
+	IPv4RE = "((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)[.]){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)"
 	// This regular expression + the base domain will match on all names and subdomains
 	SUBRE = "(([a-zA-Z0-9]{1}|[a-zA-Z0-9]{1}[a-zA-Z0-9-]{0,61}[a-zA-Z0-9]{1})[.]{1})+"
 
 	USER_AGENT  = "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36"
 	ACCEPT      = "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
 	ACCEPT_LANG = "en-US,en;q=0.8"
+
+	defaultWordlistURL = "https://raw.githubusercontent.com/caffix/amass/master/wordlists/namelist.txt"
 )
 
-func StartAmass(config *AmassConfig) {
+func StartAmass(config *AmassConfig) error {
 	var resolved []chan *AmassRequest
 	var services []AmassService
 
+	if err := CheckConfig(config); err != nil {
+		return err
+	}
 	// Setup all the channels used by the AmassServices
+	domains := make(chan *AmassRequest)
+	final := make(chan *AmassRequest)
 	search := make(chan *AmassRequest)
+	iphistory := make(chan *AmassRequest)
 	ngram := make(chan *AmassRequest)
 	brute := make(chan *AmassRequest)
 	dns := make(chan *AmassRequest)
@@ -43,58 +53,48 @@ func StartAmass(config *AmassConfig) {
 	archive := make(chan *AmassRequest)
 	alt := make(chan *AmassRequest)
 	sweep := make(chan *AmassRequest)
-	resolved = append(resolved, netblock, archive, alt)
+	resolved = append(resolved, netblock, archive, alt, brute, ngram)
 
 	// DNS and Reverse IP need the frequency set
 	config.Frequency *= 2
-	dnsSrv := NewDNSService(dns, dnsMux)
-	dnsSrv.SetFrequency(config.Frequency)
-	reverseipSrv := NewReverseIPService(reverseip, dns)
-	reverseipSrv.SetFrequency(config.Frequency)
+	dnsSrv := NewDNSService(dns, dnsMux, config)
+	reverseipSrv := NewReverseIPService(reverseip, dns, config)
 	// Add these service to the slice
 	services = append(services, dnsSrv, reverseipSrv)
 
-	searchSrv := NewSubdomainSearchService(search, dns)
-	netblockSrv := NewNetblockService(netblock, netblockMux)
-	archiveSrv := NewArchiveService(archive, dns)
-	altSrv := NewAlterationService(alt, dns)
-	sweepSrv := NewSweepService(sweep, reverseip)
+	searchSrv := NewSubdomainSearchService(search, dns, config)
+	iphistSrv := NewIPHistoryService(iphistory, netblock, config)
+	netblockSrv := NewNetblockService(netblock, netblockMux, config)
+	archiveSrv := NewArchiveService(archive, dns, config)
+	altSrv := NewAlterationService(alt, dns, config)
+	sweepSrv := NewSweepService(sweep, reverseip, config)
 	// Add these service to the slice
-	services = append(services, searchSrv, netblockSrv, archiveSrv, altSrv, sweepSrv)
+	services = append(services, searchSrv, iphistSrv, netblockSrv, archiveSrv, altSrv, sweepSrv)
 
-	// The BruteForceService will be created either way
-	bruteSrv := NewBruteForceService(brute, dns)
-	bruteSrv.SetWordlist(config.Wordlist)
-	// Same for the NgramService for guessing names
-	ngramSrv := NewNgramService(ngram, dns)
-	// Check if we will be linking brute forcing in and starting it
-	if config.BruteForcing {
-		resolved = append(resolved, brute, ngram)
-		// Add these service to the slice
-		services = append(services, bruteSrv, ngramSrv)
-
-		if !config.Recursive {
-			bruteSrv.DisableRecursive()
-			ngramSrv.DisableRecursive()
-		}
-	}
+	// The brute forcing related services are setup here
+	bruteSrv := NewBruteForceService(brute, dns, config)
+	ngramSrv := NewNgramService(ngram, dns, config)
+	// Add these service to the slice
+	services = append(services, bruteSrv, ngramSrv)
 
 	// Some service output needs to be sent in multiple directions
+	go requestMultiplexer(domains, search, brute, iphistory)
 	go requestMultiplexer(dnsMux, resolved...)
-	go requestMultiplexer(netblockMux, sweep, config.Output)
+	go requestMultiplexer(netblockMux, sweep, final)
+
+	// This is the where filtering is performed
+	go finalCheckpoint(final, config.Output)
+
 	// Start all the services
 	for _, service := range services {
 		service.Start()
 	}
-	// Send all domains to the Search and Brute Forcing services
-	for _, domain := range config.Domains {
-		req := &AmassRequest{Domain: domain}
 
-		search <- req
-		if config.BruteForcing {
-			brute <- req
-		}
+	// Send all domains to the appropriate services
+	for _, domain := range config.Domains {
+		domains <- &AmassRequest{Domain: domain}
 	}
+
 	// We periodically check if all the services have finished
 	t := time.NewTicker(10 * time.Second)
 	defer t.Stop()
@@ -103,6 +103,7 @@ loop:
 		select {
 		case <-t.C:
 			done := true
+
 			for _, service := range services {
 				if service.IsActive() {
 					done = false
@@ -119,20 +120,27 @@ loop:
 	for _, service := range services {
 		service.Stop()
 	}
+	return nil
 }
 
 func requestMultiplexer(in chan *AmassRequest, outs ...chan *AmassRequest) {
+	for req := range in {
+		for _, out := range outs {
+			go sendOut(req, out)
+		}
+	}
+}
+
+func finalCheckpoint(in, out chan *AmassRequest) {
 	filter := make(map[string]struct{})
 
 	for req := range in {
-		if _, found := filter[req.Name]; found {
+		if _, found := filter[req.Name]; req.Name == "" || found {
 			continue
 		}
 		filter[req.Name] = struct{}{}
 
-		for _, out := range outs {
-			go sendOut(req, out)
-		}
+		go sendOut(req, out)
 	}
 }
 
