@@ -1,0 +1,27 @@
+name: amass-simosx
+version: '1.0.0'
+summary: Subdomain enumeration
+description: |
+  The amass tool searches Internet data sources, performs brute-force 
+  subdomain enumeration, searches web archives, and uses machine learning
+  to generate additional subdomain name guesses. DNS name resolution
+  is performed across many public servers so the authoritative server
+  will see the traffic coming from different locations.
+
+grade: stable
+confinement: strict
+
+apps:
+  amass:
+    command: amass
+    plugs:
+      - home
+      - network
+      - removable-media
+
+parts:
+  amass:
+    # source: https://github.com/caffix/amass.git
+    source: ../
+    source-tag: 1.0.0
+    plugin: go
