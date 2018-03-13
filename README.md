@@ -13,6 +13,12 @@ The amass tool searches Internet data sources, performs brute force subdomain en
 
 A [precompiled version is available](https://github.com/caffix/amass/releases) for each release.
 
+If your operating environment supports [Snap](https://docs.snapcraft.io/core/install), you can [click here to install](https://snapcraft.io/amass), or perform the following from the command-line:
+```
+$ sudo snap install amass
+```
+ 
+
 #### From Source
 
 If you would prefer to build your own binary from the latest version of the source code, make sure you have a correctly configured **Go >= 1.10** environment. More information about how to achieve this can be found [on the golang website.](https://golang.org/doc/install) Then, take the following steps:

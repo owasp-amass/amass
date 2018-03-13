@@ -1,6 +1,6 @@
-name: amass-simosx
-version: '1.0.0'
-summary: Subdomain enumeration
+name: amass
+version: 'v1.0.1'
+summary: Subdomain Enumeration in Go
 description: |
   The amass tool searches Internet data sources, performs brute-force 
   subdomain enumeration, searches web archives, and uses machine learning
@@ -8,20 +8,22 @@ description: |
   is performed across many public servers so the authoritative server
   will see the traffic coming from different locations.
 
+
 grade: stable
 confinement: strict
+
 
 apps:
   amass:
     command: amass
-    plugs:
-      - home
-      - network
-      - removable-media
+    plugs: [home, network, removable-media]
+
 
 parts:
+  go:
+    source-tag: go1.10
   amass:
-    # source: https://github.com/caffix/amass.git
+    after: [go]
     source: ../
-    source-tag: 1.0.0
     plugin: go
+    go-importpath: github.com/caffix/amass
