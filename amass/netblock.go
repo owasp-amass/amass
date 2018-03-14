@@ -18,6 +18,7 @@ type cidrData struct {
 type NetblockService struct {
 	BaseAmassService
 
+	queue []*AmassRequest
 	cache map[string]*cidrData
 }
 
@@ -46,17 +47,37 @@ func (ns *NetblockService) OnStop() error {
 func (ns *NetblockService) processRequests() {
 	t := time.NewTicker(30 * time.Second)
 	defer t.Stop()
+
+	pull := time.NewTicker(500 * time.Millisecond)
+	defer pull.Stop()
 loop:
 	for {
 		select {
 		case req := <-ns.Input():
-			go ns.performNetblockLookup(req)
+			ns.queue = append(ns.queue, req)
+		case <-pull.C:
+			go ns.performNetblockLookup(ns.next())
 		case <-t.C:
 			ns.SetActive(false)
 		case <-ns.Quit():
 			break loop
 		}
 	}
+}
+
+func (ns *NetblockService) next() *AmassRequest {
+	var next *AmassRequest
+
+	if len(ns.queue) > 0 {
+		next = ns.queue[0]
+		// Remove the first slice element
+		if len(ns.queue) > 1 {
+			ns.queue = ns.queue[1:]
+		} else {
+			ns.queue = []*AmassRequest{}
+		}
+	}
+	return next
 }
 
 func (ns *NetblockService) cidrCacheEntry(addr string) *cidrData {
@@ -83,6 +104,10 @@ func (ns *NetblockService) setCIDRCacheEntry(cidr string, entry *cidrData) {
 }
 
 func (ns *NetblockService) performNetblockLookup(req *AmassRequest) {
+	if req == nil {
+		return
+	}
+
 	ns.SetActive(true)
 
 	answer := ns.cidrCacheEntry(req.Address)

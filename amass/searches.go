@@ -179,7 +179,7 @@ func AskSearch(out chan<- *AmassRequest) Searcher {
 	return &searchEngine{
 		Name:     "Ask",
 		Quantity: 10, // ask.com appears to be hardcoded at 10 results per page
-		Limit:    200,
+		Limit:    100,
 		Output:   out,
 		Callback: askURLByPageNum,
 	}
@@ -197,7 +197,7 @@ func BaiduSearch(out chan<- *AmassRequest) Searcher {
 	return &searchEngine{
 		Name:     "Baidu",
 		Quantity: 20,
-		Limit:    200,
+		Limit:    100,
 		Output:   out,
 		Callback: baiduURLByPageNum,
 	}
@@ -215,7 +215,7 @@ func bingURLByPageNum(b *searchEngine, domain string, page int) string {
 
 func BingSearch(out chan<- *AmassRequest) Searcher {
 	return &searchEngine{
-		Name:     "Bing",
+		Name:     "Bing Search",
 		Quantity: 20,
 		Limit:    200,
 		Output:   out,
@@ -235,7 +235,7 @@ func DogpileSearch(out chan<- *AmassRequest) Searcher {
 	return &searchEngine{
 		Name:     "Dogpile",
 		Quantity: 15, // Dogpile returns roughly 15 results per page
-		Limit:    200,
+		Limit:    90,
 		Output:   out,
 		Callback: dogpileURLByPageNum,
 	}
@@ -262,7 +262,7 @@ func GoogleSearch(out chan<- *AmassRequest) Searcher {
 	return &searchEngine{
 		Name:     "Google",
 		Quantity: 20,
-		Limit:    150,
+		Limit:    160,
 		Output:   out,
 		Callback: googleURLByPageNum,
 	}
@@ -282,7 +282,7 @@ func YahooSearch(out chan<- *AmassRequest) Searcher {
 	return &searchEngine{
 		Name:     "Yahoo",
 		Quantity: 20,
-		Limit:    200,
+		Limit:    160,
 		Output:   out,
 		Callback: yahooURLByPageNum,
 	}
@@ -337,19 +337,6 @@ func CensysSearch(out chan<- *AmassRequest) Searcher {
 		Name:     "Censys",
 		Output:   out,
 		Callback: censysURL,
-	}
-}
-
-func crtshURL(domain string) string {
-	return "https://crt.sh/?q=%25." + domain
-}
-
-// CrtshSearch - A searcher that attempts to discover names from SSL certificates
-func CrtshSearch(out chan<- *AmassRequest) Searcher {
-	return &lookup{
-		Name:     "crtsh",
-		Output:   out,
-		Callback: crtshURL,
 	}
 }
 
@@ -508,6 +495,90 @@ func DNSDumpsterSearch(out chan<- *AmassRequest) Searcher {
 	return &dumpster{
 		Name:   "DNSDumpster",
 		Base:   "https://dnsdumpster.com/",
+		Output: out,
+	}
+}
+
+//--------------------------------------------------------------------------------------------
+
+type crtsh struct {
+	Name   string
+	Base   string
+	Output chan<- *AmassRequest
+}
+
+func (c *crtsh) String() string {
+	return c.Name
+}
+
+func (c *crtsh) Search(domain string, done chan int) {
+	var unique []string
+
+	re := SubdomainRegex(domain)
+	reID := regexp.MustCompile("<TD style=\"text-align:center\"><A href=\"([?]id=[a-zA-Z0-9]*)\">[a-zA-Z0-9]*</A></TD>")
+	// Pull the page that lists all certs for this domain
+	page := GetWebPage(c.Base + "?q=%25." + domain)
+	if page == "" {
+		done <- 0
+		return
+	}
+	// Get the subdomain name the cert was issued to, and
+	// the Subject Alternative Name list from each cert
+	results := c.getSubmatches(page, reID)
+	for _, rel := range results {
+		// Do not go too fast
+		time.Sleep(50 * time.Millisecond)
+		// Pull the certificate web page
+		cert := GetWebPage(c.Base + rel)
+		if cert == "" {
+			continue
+		}
+		// Get all names off the certificate
+		names := c.getMatches(cert, re)
+		// Send unique names out
+		u := NewUniqueElements(unique, names...)
+		if len(u) > 0 {
+			unique = append(unique, u...)
+			c.sendAllNames(u, domain)
+		}
+	}
+	done <- len(unique)
+}
+
+func (c *crtsh) sendAllNames(names []string, domain string) {
+	for _, name := range names {
+		c.Output <- &AmassRequest{
+			Name:   name,
+			Domain: domain,
+			Tag:    SEARCH,
+			Source: c.Name,
+		}
+	}
+}
+
+func (c *crtsh) getMatches(content string, re *regexp.Regexp) []string {
+	var results []string
+
+	for _, s := range re.FindAllString(content, -1) {
+		results = append(results, s)
+	}
+	return results
+}
+
+func (c *crtsh) getSubmatches(content string, re *regexp.Regexp) []string {
+	var results []string
+
+	for _, subs := range re.FindAllStringSubmatch(content, -1) {
+		results = append(results, strings.TrimSpace(subs[1]))
+	}
+	return results
+}
+
+// CrtshSearch - A searcher that attempts to discover names from SSL certificates
+func CrtshSearch(out chan<- *AmassRequest) Searcher {
+	return &crtsh{
+		Name:   "Cert Search",
+		Base:   "https://crt.sh/",
 		Output: out,
 	}
 }

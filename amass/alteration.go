@@ -54,10 +54,8 @@ loop:
 
 // executeAlterations - Runs all the DNS name alteration methods as goroutines
 func (as *AlterationService) executeAlterations(req *AmassRequest) {
-	as.SetActive(true)
-
-	go as.flipNumbersInName(req)
-	go as.appendNumbers(req)
+	as.flipNumbersInName(req)
+	as.appendNumbers(req)
 	//go a.PrefixSuffixWords(name)
 }
 
@@ -92,7 +90,10 @@ func (as *AlterationService) secondNumberFlip(name, domain string, minIndex int)
 	for i := 0; i < 10; i++ {
 		n := name[:last] + strconv.Itoa(i) + name[last+1:]
 
+		as.SetActive(true)
 		as.sendAlteredName(n, domain)
+		// Do not go too fast
+		time.Sleep(as.Config().Frequency * 2)
 	}
 	// Take the second number out
 	as.sendAlteredName(name[:last]+name[last+1:], domain)
@@ -104,12 +105,15 @@ func (as *AlterationService) appendNumbers(req *AmassRequest) {
 	parts := strings.SplitN(n, ".", 2)
 
 	for i := 0; i < 10; i++ {
+		as.SetActive(true)
 		// Send a LABEL-NUM altered name
 		nhn := parts[0] + "-" + strconv.Itoa(i) + "." + parts[1]
 		as.sendAlteredName(nhn, req.Domain)
 		// Send a LABELNUM altered name
 		nn := parts[0] + strconv.Itoa(i) + "." + parts[1]
 		as.sendAlteredName(nn, req.Domain)
+		// Do not go too fast
+		time.Sleep(as.Config().Frequency * 2)
 	}
 }
 
@@ -139,7 +143,6 @@ func (as *AlterationService) suffixWord(name, word, domain string) {
 func (as *AlterationService) sendAlteredName(name, domain string) {
 	re := SubdomainRegex(domain)
 
-	as.SetActive(true)
 	if re.MatchString(name) {
 		as.SendOut(&AmassRequest{
 			Name:   name,

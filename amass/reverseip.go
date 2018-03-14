@@ -16,7 +16,10 @@ type ReverseIPService struct {
 	BaseAmassService
 
 	responses chan *AmassRequest
-	searches  []ReverseIper
+	dns       ReverseIper
+	others    []ReverseIper
+
+	queue []*AmassRequest
 
 	// Ensures that the same IP is not sent out twice
 	filter map[string]struct{}
@@ -29,10 +32,10 @@ func NewReverseIPService(in, out chan *AmassRequest, config *AmassConfig) *Rever
 	}
 
 	ris.BaseAmassService = *NewBaseAmassService("Reverse IP Service", config, ris)
-	ris.searches = []ReverseIper{
-		//BingReverseIPSearch(ris.responses),
-		//ShodanReverseIPSearch(ris.responses),
-		ReverseDNSSearch(ris.responses),
+	ris.dns = ReverseDNSSearch(ris.responses)
+	ris.others = []ReverseIper{
+		BingReverseIPSearch(ris.responses),
+		ShodanReverseIPSearch(ris.responses),
 	}
 	// Do not perform reverse lookups on localhost
 	ris.filter["127.0.0.1"] = struct{}{}
@@ -45,6 +48,7 @@ func NewReverseIPService(in, out chan *AmassRequest, config *AmassConfig) *Rever
 func (ris *ReverseIPService) OnStart() error {
 	ris.BaseAmassService.OnStart()
 
+	go ris.processAlternatives()
 	go ris.processRequests()
 	go ris.processOutput()
 	return nil
@@ -63,11 +67,49 @@ loop:
 		select {
 		case req := <-ris.Input():
 			<-t.C
-			go ris.executeAllSearches(req.Domain, req.Address)
+			go ris.execReverseDNS(req)
 		case <-ris.Quit():
 			break loop
 		}
 	}
+}
+
+func (ris *ReverseIPService) processAlternatives() {
+	t := time.NewTicker(1 * time.Second)
+	defer t.Stop()
+loop:
+	for {
+		select {
+		case <-t.C:
+			ris.execAlternatives(ris.nextFromQueue())
+		case <-ris.Quit():
+			break loop
+		}
+	}
+}
+
+func (ris *ReverseIPService) addToQueue(req *AmassRequest) {
+	ris.Lock()
+	defer ris.Unlock()
+
+	ris.queue = append(ris.queue, req)
+}
+
+func (ris *ReverseIPService) nextFromQueue() *AmassRequest {
+	ris.Lock()
+	defer ris.Unlock()
+
+	var next *AmassRequest
+	if len(ris.queue) > 0 {
+		next = ris.queue[0]
+		// Remove the first slice element
+		if len(ris.queue) > 1 {
+			ris.queue = ris.queue[1:]
+		} else {
+			ris.queue = []*AmassRequest{}
+		}
+	}
+	return next
 }
 
 func (ris *ReverseIPService) processOutput() {
@@ -100,19 +142,33 @@ func (ris *ReverseIPService) duplicate(ip string) bool {
 	return false
 }
 
-func (ris *ReverseIPService) executeAllSearches(domain, ip string) {
+func (ris *ReverseIPService) execReverseDNS(req *AmassRequest) {
 	done := make(chan int)
 
 	ris.SetActive(true)
-	if ip == "" || ris.duplicate(ip) {
+	if req.Address == "" || ris.duplicate(req.Address) {
 		return
 	}
 
-	for _, s := range ris.searches {
-		go s.Search(domain, ip, done)
+	ris.dns.Search(req.Domain, req.Address, done)
+	if <-done == 0 {
+		ris.addToQueue(req)
+	}
+}
+
+func (ris *ReverseIPService) execAlternatives(req *AmassRequest) {
+	if req == nil {
+		return
 	}
 
-	for i := 0; i < len(ris.searches); i++ {
+	done := make(chan int)
+
+	ris.SetActive(true)
+	for _, s := range ris.others {
+		go s.Search(req.Domain, req.Address, done)
+	}
+
+	for i := 0; i < len(ris.others); i++ {
 		ris.SetActive(true)
 		<-done
 		ris.SetActive(true)
@@ -173,10 +229,12 @@ func (se *reverseIPSearchEngine) Search(domain, ip string, done chan int) {
 }
 
 func bingReverseIPURLByPageNum(b *reverseIPSearchEngine, ip string, page int) string {
-	first := strconv.Itoa((page * b.Quantity) + 1)
-	u, _ := url.Parse("http://www.bing.com/search")
-
-	u.RawQuery = url.Values{"q": {"ip%3a" + ip},
+	first := "1"
+	if page > 0 {
+		first = strconv.Itoa(page * b.Quantity)
+	}
+	u, _ := url.Parse("https://www.bing.com/search")
+	u.RawQuery = url.Values{"q": {"ip:" + ip},
 		"first": {first}, "FORM": {"PORE"}}.Encode()
 	return u.String()
 }

@@ -85,7 +85,7 @@ func StartAmass(config *AmassConfig) error {
 		service.Start()
 	}
 	// We periodically check if all the services have finished
-	t := time.NewTicker(1 * time.Minute)
+	t := time.NewTicker(30 * time.Second)
 	defer t.Stop()
 	for range t.C {
 		done := true

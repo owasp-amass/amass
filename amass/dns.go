@@ -45,10 +45,10 @@ var knownPublicServers = []string{
 	"77.88.8.1:53",       // Yandex.DNS Secondary
 	"89.233.43.71:53",    // UncensoredDNS Secondary
 	"156.154.71.1:53",    // Neustar Secondary
-	//"37.235.1.174:53",    // FreeDNS
-	//"37.235.1.177:53",    // FreeDNS Secondary
-	//"23.253.163.53:53",   // Alternate DNS Secondary
-	//"64.6.65.6:53",       // Verisign Secondary
+	"37.235.1.174:53",    // FreeDNS
+	"37.235.1.177:53",    // FreeDNS Secondary
+	"23.253.163.53:53",   // Alternate DNS Secondary
+	"64.6.65.6:53",       // Verisign Secondary
 }
 
 // Public & free DNS servers
@@ -125,8 +125,8 @@ func NewDNSService(in, out chan *AmassRequest, config *AmassConfig) *DNSService 
 func (ds *DNSService) OnStart() error {
 	ds.BaseAmassService.OnStart()
 
-	go ds.processRequests()
 	go ds.processWildcardMatches()
+	go ds.processRequests()
 	go ds.executeInitialQueries()
 	return nil
 }
@@ -159,7 +159,7 @@ func (ds *DNSService) executeInitialQueries() {
 					Name:   sd,
 					Domain: domain,
 					Tag:    DNS,
-					Source: "DNS",
+					Source: "Forward DNS",
 				}
 			}
 		}
@@ -202,9 +202,6 @@ loop:
 }
 
 func (ds *DNSService) addToQueue(req *AmassRequest) {
-	ds.Lock()
-	defer ds.Unlock()
-
 	if _, found := ds.filter[req.Name]; req.Name != "" && !found {
 		ds.filter[req.Name] = struct{}{}
 		ds.queue = append(ds.queue, req)
@@ -212,10 +209,8 @@ func (ds *DNSService) addToQueue(req *AmassRequest) {
 }
 
 func (ds *DNSService) nextFromQueue() *AmassRequest {
-	ds.Lock()
-	defer ds.Unlock()
-
 	var next *AmassRequest
+
 	if len(ds.queue) > 0 {
 		next = ds.queue[0]
 		// Remove the first slice element
@@ -252,7 +247,7 @@ func (ds *DNSService) performDNSRequest(req *AmassRequest) {
 		}
 
 		tag := DNS
-		source := "DNS"
+		source := "Forward DNS"
 		if record.Name == req.Name {
 			tag = req.Tag
 			source = req.Source
