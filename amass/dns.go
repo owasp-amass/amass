@@ -376,41 +376,23 @@ func matchesWildcard(name, root, ip string, wildcards map[string]*dnsWildcard) b
 }
 
 // wildcardDetection detects if a domain returns an IP
-// address for "bad" names, and if so, which address is used
+// address for "bad" names, and if so, which address(es) are used
 func wildcardDetection(sub, root string) *stringset.StringSet {
-	var result *stringset.StringSet
-
-	server := NextNameserver()
-	// Three unlikely names will be checked for this subdomain
-	ss1 := checkForWildcard(sub, root, server)
-	if ss1 == nil {
-		return result
+	// An unlikely name will be checked for this subdomain
+	name := unlikelyName(sub)
+	if name == "" {
+		return nil
 	}
-	ss2 := checkForWildcard(sub, root, server)
-	if ss2 == nil {
-		return result
+	// Check if the name resolves
+	ans, err := dnsQuery(root, name, NextNameserver())
+	if err != nil {
+		return nil
 	}
-	ss3 := checkForWildcard(sub, root, server)
-	if ss3 == nil {
-		return result
-	}
-	// If they all provide the same records, we have a wildcard
-	if !ss1.Empty() && (ss1.Equal(ss2) && ss2.Equal(ss3)) {
-		result = ss1
+	result := answersToStringSet(ans)
+	if result.Empty() {
+		return nil
 	}
 	return result
-}
-
-func checkForWildcard(sub, root, server string) *stringset.StringSet {
-	var ss *stringset.StringSet
-
-	name := unlikelyName(sub)
-	if name != "" {
-		if ans, err := dnsQuery(root, name, server); err == nil {
-			ss = answersToStringSet(ans)
-		}
-	}
-	return ss
 }
 
 func unlikelyName(sub string) string {

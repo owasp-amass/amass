@@ -90,7 +90,7 @@ $ amass -brute -norecursive example.com
 
 Change the wordlist used during the brute forcing phase of the enumeration:
 ```
-$ amass -w wordlist.txt example.com
+$ amass -brute -w wordlist.txt example.com
 ```
 
 
@@ -102,7 +102,7 @@ $ amass -freq 120 example.com
 **The maximum rate supported is one DNS query every 5 milliseconds.**
 
 
-Allow amass to included additional domains in the search using reverse whois information:
+Allow amass to include additional domains in the search using reverse whois information:
 ```
 $ amass -whois example.com
 ```
@@ -116,10 +116,10 @@ $ amass -whois -l example.com
 
 Add some additional domains to the search:
 ```
-$ amass example.com example1.com example2.com
+$ amass example1.com example2.com example3.com
 ```
 
-In the above example, the domains example1.com and example2.com are simply appended to the list potentially provided by the reverse whois information.
+In the above example, the domains example2.com and example3.com are simply appended to the list potentially provided by the reverse whois information.
 
 
 All these options can be used together:
@@ -153,11 +153,13 @@ func main() {
 
     // Seed the default pseudo-random number generator
     rand.Seed(time.Now().UTC().UnixNano())
-    // Begin the enumeration process
-    amass.StartAmass(&amass.AmassConfig{
+    // Setup the amass configuration
+    config := amass.CustomConfig(&amass.AmassConfig{
         Domains:      []string{"example.com"},
         Output:       output,
     })
+    // Begin the enumeration process
+    amass.StartAmass(config)
 }
 ```
 
