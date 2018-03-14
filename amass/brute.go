@@ -109,14 +109,17 @@ func (bfs *BruteForceService) checkForNewSubdomain(req *AmassRequest) {
 }
 
 func (bfs *BruteForceService) performBruteForcing(subdomain, root string) {
-	bfs.SetActive(true)
-
 	for _, word := range bfs.Config().Wordlist {
+		bfs.SetActive(true)
+
 		bfs.SendOut(&AmassRequest{
 			Name:   word + "." + subdomain,
 			Domain: root,
 			Tag:    BRUTE,
 			Source: "Brute Forcing",
 		})
+		// Going too fast will overwhelm the dns
+		// service and overuse memory
+		time.Sleep(bfs.Config().Frequency * 2)
 	}
 }
