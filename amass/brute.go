@@ -29,6 +29,7 @@ func (bfs *BruteForceService) OnStart() error {
 	bfs.BaseAmassService.OnStart()
 
 	go bfs.processRequests()
+	go bfs.startRootDomains()
 	return nil
 }
 
@@ -37,17 +38,8 @@ func (bfs *BruteForceService) OnStop() error {
 	return nil
 }
 
-func (bfs *BruteForceService) sendOut(req *AmassRequest) {
-	// Perform the channel write in a goroutine
-	go func() {
-		bfs.SetActive(true)
-		bfs.Output() <- req
-		bfs.SetActive(true)
-	}()
-}
-
 func (bfs *BruteForceService) processRequests() {
-	t := time.NewTicker(5 * time.Second)
+	t := time.NewTicker(1 * time.Minute)
 	defer t.Stop()
 loop:
 	for {
@@ -75,15 +67,22 @@ func (bfs *BruteForceService) duplicate(sub string) bool {
 	return false
 }
 
-func (bfs *BruteForceService) checkForNewSubdomain(req *AmassRequest) {
+func (bfs *BruteForceService) startRootDomains() {
 	if !bfs.Config().BruteForcing {
 		return
 	}
+	// Look at each domain provided by the config
+	for _, domain := range bfs.Config().Domains {
+		// Check if we have seen the Domain already
+		if !bfs.duplicate(domain) {
+			go bfs.performBruteForcing(domain, domain)
+		}
+	}
+}
 
-	bfs.SetActive(true)
-	// Check if we have seen the Domain already
-	if !bfs.duplicate(req.Domain) {
-		go bfs.performBruteForcing(req.Domain, req.Domain)
+func (bfs *BruteForceService) checkForNewSubdomain(req *AmassRequest) {
+	if !bfs.Config().BruteForcing {
+		return
 	}
 	// If the Name is empty or recursive brute forcing is off, we are done here
 	if req.Name == "" || !bfs.Config().Recursive {
@@ -110,8 +109,10 @@ func (bfs *BruteForceService) checkForNewSubdomain(req *AmassRequest) {
 }
 
 func (bfs *BruteForceService) performBruteForcing(subdomain, root string) {
+	bfs.SetActive(true)
+
 	for _, word := range bfs.Config().Wordlist {
-		bfs.sendOut(&AmassRequest{
+		bfs.SendOut(&AmassRequest{
 			Name:   word + "." + subdomain,
 			Domain: root,
 			Tag:    BRUTE,

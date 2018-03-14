@@ -39,81 +39,66 @@ func StartAmass(config *AmassConfig) error {
 		return err
 	}
 	// Setup all the channels used by the AmassServices
-	domains := make(chan *AmassRequest)
-	final := make(chan *AmassRequest)
-	search := make(chan *AmassRequest)
-	iphistory := make(chan *AmassRequest)
-	ngram := make(chan *AmassRequest)
-	brute := make(chan *AmassRequest)
-	dns := make(chan *AmassRequest)
-	dnsMux := make(chan *AmassRequest)
-	netblock := make(chan *AmassRequest)
-	netblockMux := make(chan *AmassRequest)
-	reverseip := make(chan *AmassRequest)
-	archive := make(chan *AmassRequest)
-	alt := make(chan *AmassRequest)
-	sweep := make(chan *AmassRequest)
+	bufSize := 50
+	final := make(chan *AmassRequest, bufSize)
+	ngram := make(chan *AmassRequest, bufSize)
+	brute := make(chan *AmassRequest, bufSize)
+	dns := make(chan *AmassRequest, bufSize)
+	dnsMux := make(chan *AmassRequest, bufSize)
+	netblock := make(chan *AmassRequest, bufSize)
+	netblockMux := make(chan *AmassRequest, bufSize)
+	reverseip := make(chan *AmassRequest, bufSize)
+	archive := make(chan *AmassRequest, bufSize)
+	alt := make(chan *AmassRequest, bufSize)
+	sweep := make(chan *AmassRequest, bufSize)
 	resolved = append(resolved, netblock, archive, alt, brute, ngram)
-
 	// DNS and Reverse IP need the frequency set
 	config.Frequency *= 2
 	dnsSrv := NewDNSService(dns, dnsMux, config)
 	reverseipSrv := NewReverseIPService(reverseip, dns, config)
 	// Add these service to the slice
 	services = append(services, dnsSrv, reverseipSrv)
-
-	searchSrv := NewSubdomainSearchService(search, dns, config)
-	iphistSrv := NewIPHistoryService(iphistory, netblock, config)
+	// Setup the service that jump-start the process
+	searchSrv := NewSubdomainSearchService(nil, dns, config)
+	iphistSrv := NewIPHistoryService(nil, netblock, config)
+	// Add them to the services slice
+	services = append(services, searchSrv, iphistSrv)
+	// These services find more names based on previous findings
 	netblockSrv := NewNetblockService(netblock, netblockMux, config)
 	archiveSrv := NewArchiveService(archive, dns, config)
 	altSrv := NewAlterationService(alt, dns, config)
 	sweepSrv := NewSweepService(sweep, reverseip, config)
 	// Add these service to the slice
-	services = append(services, searchSrv, iphistSrv, netblockSrv, archiveSrv, altSrv, sweepSrv)
-
+	services = append(services, netblockSrv, archiveSrv, altSrv, sweepSrv)
 	// The brute forcing related services are setup here
 	bruteSrv := NewBruteForceService(brute, dns, config)
 	ngramSrv := NewNgramService(ngram, dns, config)
-	// Add these service to the slice
+	// Add these services to the slice
 	services = append(services, bruteSrv, ngramSrv)
-
 	// Some service output needs to be sent in multiple directions
-	go requestMultiplexer(domains, search, brute, iphistory)
 	go requestMultiplexer(dnsMux, resolved...)
 	go requestMultiplexer(netblockMux, sweep, final)
-
 	// This is the where filtering is performed
 	go finalCheckpoint(final, config.Output)
-
 	// Start all the services
 	for _, service := range services {
 		service.Start()
 	}
-
-	// Send all domains to the appropriate services
-	for _, domain := range config.Domains {
-		domains <- &AmassRequest{Domain: domain}
-	}
-
 	// We periodically check if all the services have finished
-	t := time.NewTicker(10 * time.Second)
+	t := time.NewTicker(1 * time.Minute)
 	defer t.Stop()
-loop:
-	for {
-		select {
-		case <-t.C:
-			done := true
+	for range t.C {
+		done := true
 
-			for _, service := range services {
-				if service.IsActive() {
-					done = false
-					break
-				}
+		for _, service := range services {
+			if service.IsActive() {
+				done = false
+				break
 			}
+		}
 
-			if done {
-				break loop
-			}
+		if done {
+			break
 		}
 	}
 	// Stop all the services
@@ -126,7 +111,7 @@ loop:
 func requestMultiplexer(in chan *AmassRequest, outs ...chan *AmassRequest) {
 	for req := range in {
 		for _, out := range outs {
-			go sendOut(req, out)
+			sendOut(req, out)
 		}
 	}
 }
@@ -139,13 +124,14 @@ func finalCheckpoint(in, out chan *AmassRequest) {
 			continue
 		}
 		filter[req.Name] = struct{}{}
-
-		go sendOut(req, out)
+		sendOut(req, out)
 	}
 }
 
 func sendOut(req *AmassRequest, out chan *AmassRequest) {
-	out <- req
+	go func() {
+		out <- req
+	}()
 }
 
 // NewUniqueElements - Removes elements that have duplicates in the original or new elements
@@ -212,19 +198,4 @@ func GetWebPage(u string) string {
 	in, err := ioutil.ReadAll(resp.Body)
 	resp.Body.Close()
 	return string(in)
-}
-
-func trim252F(name string) string {
-	s := strings.ToLower(name)
-
-	re, err := regexp.Compile("^((252f)|(2f)|(3d))+")
-	if err != nil {
-		return s
-	}
-
-	i := re.FindStringIndex(s)
-	if i != nil {
-		return s[i[1]:]
-	}
-	return s
 }

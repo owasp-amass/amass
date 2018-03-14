@@ -40,16 +40,8 @@ func (ss *SweepService) OnStop() error {
 	return nil
 }
 
-func (ss *SweepService) sendOut(req *AmassRequest) {
-	// Perform the channel write in a goroutine
-	go func() {
-		ss.Output() <- req
-		ss.SetActive(true)
-	}()
-}
-
 func (ss *SweepService) processRequests() {
-	t := time.NewTicker(5 * time.Second)
+	t := time.NewTicker(30 * time.Second)
 	defer t.Stop()
 loop:
 	for {
@@ -94,7 +86,7 @@ func (ss *SweepService) AttemptSweep(req *AmassRequest) {
 	}
 	// Perform the reverse queries for all the new hosts
 	for _, ip := range newIPs {
-		ss.sendOut(&AmassRequest{
+		ss.SendOut(&AmassRequest{
 			Domain:  req.Domain,
 			Address: ip,
 			Tag:     DNS,

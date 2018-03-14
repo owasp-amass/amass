@@ -51,6 +51,9 @@ type AmassService interface {
 	// Returns the output channel for the service
 	Output() chan<- *AmassRequest
 
+	// The request is sent non-blocking on the output chanel
+	SendOut(req *AmassRequest)
+
 	// Return true if the service is active
 	IsActive() bool
 
@@ -119,6 +122,13 @@ func (bas *BaseAmassService) Input() <-chan *AmassRequest {
 
 func (bas *BaseAmassService) Output() chan<- *AmassRequest {
 	return bas.output
+}
+
+func (bas *BaseAmassService) SendOut(req *AmassRequest) {
+	// Perform the channel write in a goroutine
+	go func() {
+		bas.output <- req
+	}()
 }
 
 func (bas *BaseAmassService) IsActive() bool {

@@ -55,14 +55,6 @@ func (ris *ReverseIPService) OnStop() error {
 	return nil
 }
 
-func (ris *ReverseIPService) sendOut(req *AmassRequest) {
-	go func() {
-		ris.SetActive(true)
-		ris.Output() <- req
-		ris.SetActive(true)
-	}()
-}
-
 func (ris *ReverseIPService) processRequests() {
 	t := time.NewTicker(ris.Config().Frequency)
 	defer t.Stop()
@@ -79,13 +71,14 @@ loop:
 }
 
 func (ris *ReverseIPService) processOutput() {
-	t := time.NewTicker(10 * time.Second)
+	t := time.NewTicker(30 * time.Second)
 	defer t.Stop()
 loop:
 	for {
 		select {
 		case out := <-ris.responses:
-			ris.sendOut(out)
+			ris.SetActive(true)
+			ris.SendOut(out)
 		case <-t.C:
 			ris.SetActive(false)
 		case <-ris.Quit():
@@ -122,6 +115,7 @@ func (ris *ReverseIPService) executeAllSearches(domain, ip string) {
 	for i := 0; i < len(ris.searches); i++ {
 		ris.SetActive(true)
 		<-done
+		ris.SetActive(true)
 	}
 }
 

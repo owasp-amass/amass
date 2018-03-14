@@ -8,37 +8,40 @@ import (
 )
 
 func TestBruteForceService(t *testing.T) {
-	var results []string
+	domains := []string{"claritysec.com", "twitter.com", "google.com", "github.com"}
 
 	in := make(chan *AmassRequest)
 	out := make(chan *AmassRequest)
-	srv := NewBruteForceService(in, out)
-
-	words := []string{"foo", "bar"}
-	srv.SetWordlist(words)
+	config := CustomConfig(&AmassConfig{
+		Domains:      domains,
+		Wordlist:     []string{"foo", "bar"},
+		BruteForcing: true,
+	})
+	srv := NewBruteForceService(in, out, config)
 	srv.Start()
 
-	domain := "claritysec.com"
-	in <- &AmassRequest{
-		Name:   domain,
-		Domain: domain,
+	// Setup the results we expect to see
+	results := make(map[string]int)
+	for _, domain := range domains {
+		for _, word := range config.Wordlist {
+			results[word+"."+domain] = 0
+		}
 	}
 
-	var num int
-	for i := 0; i < len(words); i++ {
+	num := len(results)
+	for i := 0; i < num; i++ {
 		req := <-out
 
-		num++
-		results = append(results, req.Name)
+		results[req.Name]++
 	}
 
-	if num != len(words) {
-		t.Errorf("BruteForce returned only %d requests", num)
+	if num != len(results) {
+		t.Errorf("BruteForce should have returned %d names, yet returned %d instead", num, len(results))
 	}
 
-	for _, name := range results {
-		if name != "foo.claritysec.com" && name != "bar.claritysec.com" {
-			t.Errorf("BruteForce returned an incorrectly generated subdomain name: %s", name)
+	for name, times := range results {
+		if times != 1 {
+			t.Errorf("BruteForce returned a subdomain name, %s, %d number of times", name, times)
 		}
 	}
 

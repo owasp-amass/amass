@@ -93,14 +93,8 @@ func (ns *NgramService) OnStop() error {
 	return nil
 }
 
-func (ns *NgramService) sendOut(req *AmassRequest) {
-	go func() {
-		ns.Output() <- req
-	}()
-}
-
 func (ns *NgramService) processRequests() {
-	t := time.NewTicker(20 * time.Second)
+	t := time.NewTicker(5 * time.Second)
 	defer t.Stop()
 
 	ns.SetLastInput(time.Now())
@@ -193,7 +187,7 @@ func (ns *NgramService) StartGuessing() {
 		}
 		// Send the guess to all known subdomains
 		for _, sub := range subs {
-			ns.sendOut(&AmassRequest{
+			ns.SendOut(&AmassRequest{
 				Name:   word + "." + sub.Name,
 				Domain: sub.Domain,
 				Tag:    ns.Tag(),

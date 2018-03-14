@@ -12,7 +12,7 @@ import (
 func TestDNSPublicServers(t *testing.T) {
 	name := "google.com"
 
-	for _, server := range Nameservers() {
+	for _, server := range knownPublicServers {
 		_, err := recon.ResolveDNS(name, server, "A")
 		if err != nil {
 			t.Errorf("Public DNS server (%s) failed to resolve (%s)", server, name)

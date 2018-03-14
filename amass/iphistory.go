@@ -28,7 +28,7 @@ func NewIPHistoryService(in, out chan *AmassRequest, config *AmassConfig) *IPHis
 func (ihs *IPHistoryService) OnStart() error {
 	ihs.BaseAmassService.OnStart()
 
-	go ihs.processRequests()
+	go ihs.executeAllSearches()
 	return nil
 }
 
@@ -37,33 +37,16 @@ func (ihs *IPHistoryService) OnStop() error {
 	return nil
 }
 
-func (ihs *IPHistoryService) sendOut(req *AmassRequest) {
-	// Perform the channel write in a goroutine
-	go func() {
-		ihs.SetActive(true)
-		ihs.Output() <- req
-		ihs.SetActive(true)
-	}()
-}
-
-func (ihs *IPHistoryService) processRequests() {
-	max := time.NewTicker(1 * time.Second)
-	defer max.Stop()
-
-	t := time.NewTicker(5 * time.Second)
-	defer t.Stop()
-loop:
-	for {
-		select {
-		case req := <-ihs.Input():
-			<-max.C
-			go ihs.LookupIPs(req)
-		case <-t.C:
-			ihs.SetActive(false)
-		case <-ihs.Quit():
-			break loop
+func (ihs *IPHistoryService) executeAllSearches() {
+	ihs.SetActive(true)
+	// Loop over all the root domains provided in the config
+	for _, domain := range ihs.Config().Domains {
+		if !ihs.duplicate(domain) {
+			ihs.LookupIPs(domain)
+			time.Sleep(1 * time.Second)
 		}
 	}
+	ihs.SetActive(false)
 }
 
 // Returns true if the domain is a duplicate entry in the filter.
@@ -80,14 +63,9 @@ func (ihs *IPHistoryService) duplicate(domain string) bool {
 }
 
 // LookupIPs - Attempts to obtain IP addresses from a root domain name
-func (ihs *IPHistoryService) LookupIPs(req *AmassRequest) {
-	ihs.SetActive(true)
-
-	if ihs.duplicate(req.Domain) {
-		return
-	}
+func (ihs *IPHistoryService) LookupIPs(domain string) {
 	// The ViewDNS IP History lookup sometimes reveals interesting results
-	page := GetWebPage("http://viewdns.info/iphistory/?domain=" + req.Domain)
+	page := GetWebPage("http://viewdns.info/iphistory/?domain=" + domain)
 	if page == "" {
 		return
 	}
@@ -103,8 +81,8 @@ func (ihs *IPHistoryService) LookupIPs(req *AmassRequest) {
 	}
 	// Each IP address could provide a netblock to investigate
 	for _, ip := range unique {
-		ihs.sendOut(&AmassRequest{
-			Domain:  req.Domain,
+		ihs.SendOut(&AmassRequest{
+			Domain:  domain,
 			Address: ip,
 			Tag:     DNS,
 			Source:  "IP History",

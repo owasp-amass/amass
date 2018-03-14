@@ -57,7 +57,7 @@ ns.example.com
 
 Have amass provide the source that discovered the subdomain name:
 ```
-$ amass -vv example
+$ amass -vv example.com
 [Google] www.example.com
 [VirusTotal] ns.example.com
 ...

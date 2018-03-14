@@ -21,13 +21,17 @@ const (
 type SubdomainSearchService struct {
 	BaseAmassService
 
-	responses chan *AmassRequest
-	searches  []Searcher
+	responses    chan *AmassRequest
+	searches     []Searcher
+	filter       map[string]struct{}
+	domainFilter map[string]struct{}
 }
 
 func NewSubdomainSearchService(in, out chan *AmassRequest, config *AmassConfig) *SubdomainSearchService {
 	sss := &SubdomainSearchService{
-		responses: make(chan *AmassRequest, 50),
+		responses:    make(chan *AmassRequest, 50),
+		filter:       make(map[string]struct{}),
+		domainFilter: make(map[string]struct{}),
 	}
 
 	sss.BaseAmassService = *NewBaseAmassService("Subdomain Name Search Service", config, sss)
@@ -55,7 +59,7 @@ func NewSubdomainSearchService(in, out chan *AmassRequest, config *AmassConfig) 
 func (sss *SubdomainSearchService) OnStart() error {
 	sss.BaseAmassService.OnStart()
 
-	go sss.processRequests()
+	go sss.executeAllSearches()
 	go sss.processOutput()
 	return nil
 }
@@ -65,54 +69,49 @@ func (sss *SubdomainSearchService) OnStop() error {
 	return nil
 }
 
-func (sss *SubdomainSearchService) sendOut(req *AmassRequest) {
-	// Perform the channel write in a goroutine
-	go func() {
-		sss.SetActive(true)
-		sss.Output() <- req
-		sss.SetActive(true)
-	}()
-}
-
-func (sss *SubdomainSearchService) processRequests() {
-	t := time.NewTicker(20 * time.Second)
-	defer t.Stop()
-loop:
-	for {
-		select {
-		case req := <-sss.Input():
-			sss.executeAllSearches(req.Domain)
-		case <-t.C:
-			sss.SetActive(false)
-		case <-sss.Quit():
-			break loop
-		}
-	}
-}
-
 func (sss *SubdomainSearchService) processOutput() {
 loop:
 	for {
 		select {
 		case out := <-sss.responses:
-			go sss.sendOut(out)
+			if !sss.duplicate(out.Name) {
+				sss.SendOut(out)
+			}
 		case <-sss.Quit():
 			break loop
 		}
 	}
 }
 
-func (sss *SubdomainSearchService) executeAllSearches(domain string) {
+// Returns true if the subdomain name is a duplicate entry in the filter.
+// If not, the subdomain name is added to the filter
+func (sss *SubdomainSearchService) duplicate(sub string) bool {
+	if _, found := sss.filter[sub]; found {
+		return true
+	}
+	sss.filter[sub] = struct{}{}
+	return false
+}
+
+func (sss *SubdomainSearchService) executeAllSearches() {
 	done := make(chan int)
 
 	sss.SetActive(true)
-	for _, s := range sss.searches {
-		go s.Search(domain, done)
+	// Loop over all the root domains provided in the config
+	for _, domain := range sss.Config().Domains {
+		if _, found := sss.domainFilter[domain]; found {
+			continue
+		}
+		// Kick off all the searches
+		for _, s := range sss.searches {
+			go s.Search(domain, done)
+		}
+		// Wait for them to complete
+		for i := 0; i < NUM_SEARCHES; i++ {
+			<-done
+		}
 	}
-
-	for i := 0; i < NUM_SEARCHES; i++ {
-		<-done
-	}
+	sss.SetActive(false)
 }
 
 // Searcher - represents all types that perform searches for domain names

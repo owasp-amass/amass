@@ -1,5 +1,5 @@
 name: amass
-version: 'v1.0.1'
+version: 'v1.0.2'
 summary: Subdomain Enumeration in Go
 description: |
   The amass tool searches Internet data sources, performs brute-force 
@@ -15,7 +15,7 @@ confinement: strict
 
 apps:
   amass:
-    command: amass
+    command: bin/amass
     plugs: [home, network, removable-media]
 
 
@@ -25,5 +25,6 @@ parts:
   amass:
     after: [go]
     source: ../
+    source-tag: v1.0.2
     plugin: go
     go-importpath: github.com/caffix/amass

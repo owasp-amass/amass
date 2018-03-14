@@ -36,16 +36,8 @@ func (as *AlterationService) OnStop() error {
 	return nil
 }
 
-func (as *AlterationService) sendOut(req *AmassRequest) {
-	// Perform the channel write in a goroutine
-	go func() {
-		as.Output() <- req
-		as.SetActive(true)
-	}()
-}
-
 func (as *AlterationService) processRequests() {
-	t := time.NewTicker(5 * time.Second)
+	t := time.NewTicker(30 * time.Second)
 	defer t.Stop()
 loop:
 	for {
@@ -142,12 +134,14 @@ func (as *AlterationService) suffixWord(name, word, domain string) {
 	as.sendAlteredName(n, domain)
 }
 */
+
 // Checks that the name is valid and sends along for DNS resolve
 func (as *AlterationService) sendAlteredName(name, domain string) {
 	re := SubdomainRegex(domain)
 
+	as.SetActive(true)
 	if re.MatchString(name) {
-		as.sendOut(&AmassRequest{
+		as.SendOut(&AmassRequest{
 			Name:   name,
 			Domain: domain,
 			Tag:    ALT,

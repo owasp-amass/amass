@@ -43,16 +43,8 @@ func (ns *NetblockService) OnStop() error {
 	return nil
 }
 
-func (ns *NetblockService) sendOut(req *AmassRequest) {
-	// Perform the channel write in a goroutine
-	go func() {
-		ns.Output() <- req
-		ns.SetActive(true)
-	}()
-}
-
 func (ns *NetblockService) processRequests() {
-	t := time.NewTicker(5 * time.Second)
+	t := time.NewTicker(30 * time.Second)
 	defer t.Stop()
 loop:
 	for {
@@ -112,6 +104,6 @@ func (ns *NetblockService) performNetblockLookup(req *AmassRequest) {
 		req.Netblock = answer.Netblock
 		req.ASN = answer.Record.ASN
 		req.ISP = answer.Record.ISP
-		ns.sendOut(req)
+		ns.SendOut(req)
 	}
 }

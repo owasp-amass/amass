@@ -30,7 +30,6 @@ var knownPublicServers = []string{
 	"195.46.39.39:53",    // SafeDNS
 	"69.195.152.204:53",  // OpenNIC
 	"216.146.35.35:53",   // Dyn
-	"37.235.1.174:53",    // FreeDNS
 	"198.101.242.72:53",  // Alternate DNS
 	"77.88.8.8:53",       // Yandex.DNS
 	"91.239.100.100:53",  // UncensoredDNS
@@ -46,6 +45,7 @@ var knownPublicServers = []string{
 	"77.88.8.1:53",       // Yandex.DNS Secondary
 	"89.233.43.71:53",    // UncensoredDNS Secondary
 	"156.154.71.1:53",    // Neustar Secondary
+	//"37.235.1.174:53",    // FreeDNS
 	//"37.235.1.177:53",    // FreeDNS Secondary
 	//"23.253.163.53:53",   // Alternate DNS Secondary
 	//"64.6.65.6:53",       // Verisign Secondary
@@ -95,12 +95,25 @@ type wildcard struct {
 type DNSService struct {
 	BaseAmassService
 
+	// The request queued up for DNS resolution
+	queue []*AmassRequest
+
+	// Ensures we do not resolve names more than once
+	filter map[string]struct{}
+
+	// Results from the initial queries are sent here
+	initial chan *AmassRequest
+
 	// Requests are sent through this channel to check DNS wildcard matches
 	wildcards chan *wildcard
 }
 
 func NewDNSService(in, out chan *AmassRequest, config *AmassConfig) *DNSService {
-	ds := &DNSService{wildcards: make(chan *wildcard, 50)}
+	ds := &DNSService{
+		filter:    make(map[string]struct{}),
+		initial:   make(chan *AmassRequest, 50),
+		wildcards: make(chan *wildcard, 50),
+	}
 
 	ds.BaseAmassService = *NewBaseAmassService("DNS Service", config, ds)
 
@@ -114,6 +127,7 @@ func (ds *DNSService) OnStart() error {
 
 	go ds.processRequests()
 	go ds.processWildcardMatches()
+	go ds.executeInitialQueries()
 	return nil
 }
 
@@ -122,54 +136,62 @@ func (ds *DNSService) OnStop() error {
 	return nil
 }
 
-func (ds *DNSService) sendOut(req *AmassRequest) {
-	req.Name = trim252F(req.Name)
+func (ds *DNSService) executeInitialQueries() {
+	// Loop over all the domains provided by the config
+	for _, domain := range ds.Config().Domains {
+		var answers []recon.DNSAnswer
 
-	// Perform the channel write in a goroutine
-	go func() {
-		ds.Output() <- req
-		ds.SetActive(true)
-	}()
+		// Obtain the DNS answers for the NS records related to the domain
+		ans, err := recon.ResolveDNS(domain, NextNameserver(), "NS")
+		if err == nil {
+			answers = append(answers, ans...)
+		}
+		// Obtain the DNS answers for the MX records related to the domain
+		ans, err = recon.ResolveDNS(domain, NextNameserver(), "MX")
+		if err == nil {
+			answers = append(answers, ans...)
+		}
+		// Only return names within the domain name of interest
+		re := SubdomainRegex(domain)
+		for _, a := range answers {
+			for _, sd := range re.FindAllString(a.Data, -1) {
+				ds.initial <- &AmassRequest{
+					Name:   sd,
+					Domain: domain,
+					Tag:    DNS,
+					Source: "DNS",
+				}
+			}
+		}
+	}
 }
 
 func (ds *DNSService) processRequests() {
-	var queue []*AmassRequest
-
-	// Filter for not double-checking subdomain names
-	filter := make(map[string]struct{})
-
 	t := time.NewTicker(ds.Config().Frequency)
 	defer t.Stop()
 
-	check := time.NewTicker(5 * time.Second)
+	check := time.NewTicker(30 * time.Second)
 	defer check.Stop()
 loop:
 	for {
 		select {
 		case add := <-ds.Input():
-			add.Name = trim252F(add.Name)
-
-			if _, found := filter[add.Name]; add.Name != "" && !found {
-				filter[add.Name] = struct{}{}
-				queue = append(queue, add)
-				// Mark the service as active
-				ds.SetActive(true)
-			}
+			// Mark the service as active
+			ds.SetActive(true)
+			ds.addToQueue(add)
+		case i := <-ds.initial:
+			// Mark the service as active
+			ds.SetActive(true)
+			ds.addToQueue(i)
 		case <-t.C: // Pops a DNS name off the queue for resolution
-			if len(queue) > 0 {
-				next := queue[0]
-				if next.Domain != "" {
-					go ds.performDNSRequest(next)
-				}
-				// Remove the first slice element
-				if len(queue) > 1 {
-					queue = queue[1:]
-				} else {
-					queue = []*AmassRequest{}
-				}
+			next := ds.nextFromQueue()
+
+			if next != nil && next.Domain != "" {
+				ds.SetActive(true)
+				go ds.performDNSRequest(next)
 			}
 		case <-check.C:
-			if len(queue) == 0 {
+			if len(ds.queue) == 0 {
 				// Mark the service as not active
 				ds.SetActive(false)
 			}
@@ -177,6 +199,33 @@ loop:
 			break loop
 		}
 	}
+}
+
+func (ds *DNSService) addToQueue(req *AmassRequest) {
+	ds.Lock()
+	defer ds.Unlock()
+
+	if _, found := ds.filter[req.Name]; req.Name != "" && !found {
+		ds.filter[req.Name] = struct{}{}
+		ds.queue = append(ds.queue, req)
+	}
+}
+
+func (ds *DNSService) nextFromQueue() *AmassRequest {
+	ds.Lock()
+	defer ds.Unlock()
+
+	var next *AmassRequest
+	if len(ds.queue) > 0 {
+		next = ds.queue[0]
+		// Remove the first slice element
+		if len(ds.queue) > 1 {
+			ds.queue = ds.queue[1:]
+		} else {
+			ds.queue = []*AmassRequest{}
+		}
+	}
+	return next
 }
 
 func (ds *DNSService) performDNSRequest(req *AmassRequest) {
@@ -208,8 +257,7 @@ func (ds *DNSService) performDNSRequest(req *AmassRequest) {
 			tag = req.Tag
 			source = req.Source
 		}
-
-		ds.sendOut(&AmassRequest{
+		ds.SendOut(&AmassRequest{
 			Name:    record.Name,
 			Domain:  req.Domain,
 			Address: ipstr,

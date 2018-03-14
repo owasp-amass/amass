@@ -23,11 +23,13 @@ type ArchiveService struct {
 
 	responses chan *AmassRequest
 	archives  []Archiver
+	filter    map[string]struct{}
 }
 
 func NewArchiveService(in, out chan *AmassRequest, config *AmassConfig) *ArchiveService {
 	as := &ArchiveService{
 		responses: make(chan *AmassRequest, 50),
+		filter:    make(map[string]struct{}),
 	}
 
 	as.BaseAmassService = *NewBaseAmassService("Web Archive Service", config, as)
@@ -59,15 +61,6 @@ func (as *ArchiveService) OnStop() error {
 	return nil
 }
 
-func (as *ArchiveService) sendOut(req *AmassRequest) {
-	// Perform the channel write in a goroutine
-	go func() {
-		as.SetActive(true)
-		as.Output() <- req
-		as.SetActive(true)
-	}()
-}
-
 func (as *ArchiveService) processRequests() {
 loop:
 	for {
@@ -81,19 +74,32 @@ loop:
 }
 
 func (as *ArchiveService) processOutput() {
-	t := time.NewTicker(5 * time.Second)
+	t := time.NewTicker(1 * time.Minute)
 	defer t.Stop()
 loop:
 	for {
 		select {
 		case out := <-as.responses:
-			as.sendOut(out)
+			as.SetActive(true)
+			if !as.duplicate(out.Name) {
+				as.SendOut(out)
+			}
 		case <-t.C:
 			as.SetActive(false)
 		case <-as.Quit():
 			break loop
 		}
 	}
+}
+
+// Returns true if the subdomain name is a duplicate entry in the filter.
+// If not, the subdomain name is added to the filter
+func (as *ArchiveService) duplicate(sub string) bool {
+	if _, found := as.filter[sub]; found {
+		return true
+	}
+	as.filter[sub] = struct{}{}
+	return false
 }
 
 func (as *ArchiveService) executeAllArchives(req *AmassRequest) {

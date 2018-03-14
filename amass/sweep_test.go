@@ -17,7 +17,7 @@ const (
 func TestSweepService(t *testing.T) {
 	in := make(chan *AmassRequest)
 	out := make(chan *AmassRequest)
-	srv := NewSweepService(in, out)
+	srv := NewSweepService(in, out, DefaultConfig())
 
 	_, ipnet, err := net.ParseCIDR(testCIDR)
 	if err != nil {
