@@ -315,7 +315,7 @@ func (l *reverseDNSLookup) String() string {
 func (l *reverseDNSLookup) Search(domain, ip string, done chan int) {
 	re := SubdomainRegex(domain)
 
-	name, err := recon.ReverseDNS(ip, NextNameserver())
+	name, err := recon.ReverseDNS(ip, Servers.NextNameserver())
 	if err == nil && re.MatchString(name) {
 		// Send the name to be resolved in the forward direction
 		l.Output <- &AmassRequest{

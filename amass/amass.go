@@ -199,3 +199,18 @@ func GetWebPage(u string) string {
 	resp.Body.Close()
 	return string(in)
 }
+
+func trim252F(name string) string {
+	s := strings.ToLower(name)
+
+	re, err := regexp.Compile("^((252f)|(2f)|(3d))+")
+	if err != nil {
+		return s
+	}
+
+	i := re.FindStringIndex(s)
+	if i != nil {
+		return s[i[1]:]
+	}
+	return s
+}

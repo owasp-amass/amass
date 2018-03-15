@@ -18,7 +18,10 @@ type cidrData struct {
 type NetblockService struct {
 	BaseAmassService
 
+	// Queue for requests waiting for Shadowserver data
 	queue []*AmassRequest
+
+	// Data cached from the Shadowserver requests
 	cache map[string]*cidrData
 }
 
@@ -48,15 +51,20 @@ func (ns *NetblockService) processRequests() {
 	t := time.NewTicker(30 * time.Second)
 	defer t.Stop()
 
-	pull := time.NewTicker(500 * time.Millisecond)
+	pull := time.NewTicker(5 * time.Second)
 	defer pull.Stop()
 loop:
 	for {
 		select {
 		case req := <-ns.Input():
-			ns.queue = append(ns.queue, req)
+			ns.SetActive(true)
+			if data := ns.cacheFetch(req.Address); data != nil {
+				ns.sendRequest(req, data)
+			} else {
+				ns.add(req)
+			}
 		case <-pull.C:
-			go ns.performNetblockLookup(ns.next())
+			go ns.netblockLookup()
 		case <-t.C:
 			ns.SetActive(false)
 		case <-ns.Quit():
@@ -65,22 +73,38 @@ loop:
 	}
 }
 
-func (ns *NetblockService) next() *AmassRequest {
-	var next *AmassRequest
+func (ns *NetblockService) add(req *AmassRequest) {
+	ns.Lock()
+	defer ns.Unlock()
 
-	if len(ns.queue) > 0 {
+	ns.queue = append(ns.queue, req)
+}
+
+func (ns *NetblockService) next() *AmassRequest {
+	ns.Lock()
+	defer ns.Unlock()
+
+	var next *AmassRequest
+	if len(ns.queue) == 1 {
 		next = ns.queue[0]
-		// Remove the first slice element
-		if len(ns.queue) > 1 {
-			ns.queue = ns.queue[1:]
-		} else {
-			ns.queue = []*AmassRequest{}
-		}
+		ns.queue = []*AmassRequest{}
+	} else if len(ns.queue) > 1 {
+		next = ns.queue[0]
+		ns.queue = ns.queue[1:]
 	}
 	return next
 }
 
-func (ns *NetblockService) cidrCacheEntry(addr string) *cidrData {
+func (ns *NetblockService) sendRequest(req *AmassRequest, data *cidrData) {
+	ns.SetActive(true)
+	// Add the netblock to the request and send it on it's way
+	req.Netblock = data.Netblock
+	req.ASN = data.Record.ASN
+	req.ISP = data.Record.ISP
+	ns.SendOut(req)
+}
+
+func (ns *NetblockService) cacheFetch(addr string) *cidrData {
 	ns.Lock()
 	defer ns.Unlock()
 
@@ -96,39 +120,57 @@ func (ns *NetblockService) cidrCacheEntry(addr string) *cidrData {
 	return result
 }
 
-func (ns *NetblockService) setCIDRCacheEntry(cidr string, entry *cidrData) {
+func (ns *NetblockService) cacheInsert(cidr string, entry *cidrData) {
 	ns.Lock()
 	defer ns.Unlock()
 
 	ns.cache[cidr] = entry
 }
 
-func (ns *NetblockService) performNetblockLookup(req *AmassRequest) {
+func (ns *NetblockService) netblockLookup() {
+	req := ns.next()
+	// Empty as much of the queue as possible
+	for req != nil {
+		data := ns.cacheFetch(req.Address)
+		if data == nil {
+			break
+		}
+		ns.sendRequest(req, data)
+		req = ns.next()
+	}
+	// Empty queue?
 	if req == nil {
 		return
 	}
-
+	// Perform a Shadowserver lookup
 	ns.SetActive(true)
-
-	answer := ns.cidrCacheEntry(req.Address)
-	// If the information was not within the cache, perform the lookup
-	if answer == nil {
-		record, cidr, err := recon.IPToCIDR(req.Address)
-		if err == nil {
-			data := &cidrData{
-				Netblock: cidr,
-				Record:   record,
-			}
-
-			ns.setCIDRCacheEntry(cidr.String(), data)
-			answer = data
-		}
+	// Get the AS record for the IP address
+	record, err := recon.IPToASRecord(req.Address)
+	if err != nil {
+		return
 	}
-	// Add the netblock to the request and send it on it's way
-	if answer != nil {
-		req.Netblock = answer.Netblock
-		req.ASN = answer.Record.ASN
-		req.ISP = answer.Record.ISP
-		ns.SendOut(req)
+	// Get the netblocks associated with the ASN
+	netblocks, err := recon.ASNToNetblocks(record.ASN)
+	if err != nil {
+		return
+	}
+	// Insert all the netblocks into the cache
+	ip := net.ParseIP(req.Address)
+	for _, nb := range netblocks {
+		_, cidr, err := net.ParseCIDR(nb)
+		if err != nil {
+			continue
+		}
+
+		data := &cidrData{
+			Netblock: cidr,
+			Record:   record,
+		}
+		ns.cacheInsert(cidr.String(), data)
+
+		// If this netblock belongs to the request, send it
+		if cidr.Contains(ip) {
+			ns.sendRequest(req, data)
+		}
 	}
 }

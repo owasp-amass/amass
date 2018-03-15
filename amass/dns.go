@@ -7,6 +7,7 @@ import (
 	"errors"
 	"math/rand"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/caffix/amass/amass/stringset"
@@ -20,6 +21,7 @@ const (
 	ldhChars = "abcdefghijklmnopqrstuvwxyz0123456789-"
 )
 
+// Public & free DNS servers
 var knownPublicServers = []string{
 	"8.8.8.8:53",         // Google
 	"64.6.64.6:53",       // Verisign
@@ -51,37 +53,125 @@ var knownPublicServers = []string{
 	"64.6.65.6:53",       // Verisign Secondary
 }
 
-// Public & free DNS servers
-var usableServers []string
+var Servers *PublicDNSMaintenance
+
+type serverStats struct {
+	Responding  bool
+	NumRequests int
+}
 
 func init() {
-	usableServers = testPublicServers()
+	Servers = NewPublicDNSMaintenance()
 }
 
-/* DNS processing routines */
+type PublicDNSMaintenance struct {
+	sync.Mutex
 
-func testPublicServers() []string {
-	var working []string
+	// List of servers that we know about
+	knownServers []string
 
-	for _, server := range knownPublicServers {
-		_, err := recon.ResolveDNS("google.com", server, "A")
-		if err == nil {
-			working = append(working, server)
+	// Tracking for which servers continue to be usable
+	usableServers map[string]*serverStats
+
+	// Requests for a server off the queue come here
+	nextServer chan chan string
+}
+
+func NewPublicDNSMaintenance() *PublicDNSMaintenance {
+	pdm := &PublicDNSMaintenance{
+		knownServers:  knownPublicServers,
+		usableServers: make(map[string]*serverStats),
+		nextServer:    make(chan chan string, 100),
+	}
+	pdm.testAllServers()
+	go pdm.processServerQueue()
+	return pdm
+}
+
+func (pdm *PublicDNSMaintenance) testAllServers() {
+	for _, server := range pdm.knownServers {
+		pdm.testServer(server)
+	}
+}
+
+func (pdm *PublicDNSMaintenance) testServer(server string) bool {
+	var resp bool
+
+	_, err := recon.ResolveDNS(pickRandomTestName(), server, "A")
+	if err == nil {
+		resp = true
+	}
+
+	if _, found := pdm.usableServers[server]; !found {
+		pdm.usableServers[server] = new(serverStats)
+	}
+
+	pdm.usableServers[server].NumRequests = 0
+	pdm.usableServers[server].Responding = resp
+	return resp
+}
+
+func pickRandomTestName() string {
+	num := rand.Int()
+	names := []string{"google.com", "twitter.com", "linkedin.com",
+		"facebook.com", "amazon.com", "github.com", "apple.com"}
+
+	sel := num % len(names)
+	return names[sel]
+}
+
+func (pdm *PublicDNSMaintenance) processServerQueue() {
+	var queue []string
+
+	for {
+		select {
+		case resp := <-pdm.nextServer:
+			if len(queue) == 0 {
+				queue = pdm.getServerList()
+			}
+			resp <- queue[0]
+
+			if len(queue) == 1 {
+				queue = []string{}
+			} else if len(queue) > 1 {
+				queue = queue[1:]
+			}
 		}
 	}
-	return working
 }
 
-func Nameservers() []string {
-	return usableServers
+func (pdm *PublicDNSMaintenance) getServerList() []string {
+	pdm.Lock()
+	defer pdm.Unlock()
+
+	// Check for servers that need to be tested
+	for svr, stats := range pdm.usableServers {
+		if !stats.Responding {
+			continue
+		}
+
+		stats.NumRequests++
+		if stats.NumRequests%50 == 0 {
+			pdm.testServer(svr)
+		}
+	}
+
+	var servers []string
+	// Build the slice of responding servers
+	for svr, stats := range pdm.usableServers {
+		if stats.Responding {
+			servers = append(servers, svr)
+		}
+	}
+	return servers
 }
 
-// NextNameserver - Requests the next server from the goroutine
-func NextNameserver() string {
-	num := rand.Int()
-	selection := num % len(usableServers)
+// NextNameserver - Requests the next server
+func (pdm *PublicDNSMaintenance) NextNameserver() string {
+	ans := make(chan string, 2)
 
-	return usableServers[selection]
+	pdm.nextServer <- ans
+	return <-ans
 }
 
 //-------------------------------------------------------------------------------------------
@@ -101,18 +191,18 @@ type DNSService struct {
 	// Ensures we do not resolve names more than once
 	filter map[string]struct{}
 
-	// Results from the initial queries are sent here
-	initial chan *AmassRequest
-
 	// Requests are sent through this channel to check DNS wildcard matches
 	wildcards chan *wildcard
+
+	// Results from the initial domain queries come here
+	initial chan *AmassRequest
 }
 
 func NewDNSService(in, out chan *AmassRequest, config *AmassConfig) *DNSService {
 	ds := &DNSService{
 		filter:    make(map[string]struct{}),
-		initial:   make(chan *AmassRequest, 50),
 		wildcards: make(chan *wildcard, 50),
+		initial:   make(chan *AmassRequest, 50),
 	}
 
 	ds.BaseAmassService = *NewBaseAmassService("DNS Service", config, ds)
@@ -142,12 +232,12 @@ func (ds *DNSService) executeInitialQueries() {
 		var answers []recon.DNSAnswer
 
 		// Obtain the DNS answers for the NS records related to the domain
-		ans, err := recon.ResolveDNS(domain, NextNameserver(), "NS")
+		ans, err := recon.ResolveDNS(domain, Servers.NextNameserver(), "NS")
 		if err == nil {
 			answers = append(answers, ans...)
 		}
 		// Obtain the DNS answers for the MX records related to the domain
-		ans, err = recon.ResolveDNS(domain, NextNameserver(), "MX")
+		ans, err = recon.ResolveDNS(domain, Servers.NextNameserver(), "MX")
 		if err == nil {
 			answers = append(answers, ans...)
 		}
@@ -188,6 +278,8 @@ loop:
 
 			if next != nil && next.Domain != "" {
 				ds.SetActive(true)
+
+				next.Name = trim252F(next.Name)
 				go ds.performDNSRequest(next)
 			}
 		case <-check.C:
@@ -224,7 +316,7 @@ func (ds *DNSService) nextFromQueue() *AmassRequest {
 }
 
 func (ds *DNSService) performDNSRequest(req *AmassRequest) {
-	answers, err := dnsQuery(req.Domain, req.Name, NextNameserver())
+	answers, err := dnsQuery(req.Domain, req.Name, Servers.NextNameserver())
 	if err != nil {
 		return
 	}
@@ -253,7 +345,7 @@ func (ds *DNSService) performDNSRequest(req *AmassRequest) {
 			source = req.Source
 		}
 		ds.SendOut(&AmassRequest{
-			Name:    record.Name,
+			Name:    trim252F(record.Name),
 			Domain:  req.Domain,
 			Address: ipstr,
 			Tag:     tag,
@@ -353,12 +445,15 @@ func matchesWildcard(name, root, ip string, wildcards map[string]*dnsWildcard) b
 				HasWildcard: false,
 				Answers:     nil,
 			}
-
-			if ss := wildcardDetection(sub, root); ss != nil {
-				entry.HasWildcard = true
-				entry.Answers = ss
+			// Try three times for good luck
+			for i := 0; i < 3; i++ {
+				// Does this subdomain have a wildcard?
+				if ss := wildcardDetection(sub, root); ss != nil {
+					entry.HasWildcard = true
+					entry.Answers = ss
+					break
+				}
 			}
-
 			w = entry
 			wildcards[sub] = w
 		}
@@ -379,7 +474,7 @@ func wildcardDetection(sub, root string) *stringset.StringSet {
 		return nil
 	}
 	// Check if the name resolves
-	ans, err := dnsQuery(root, name, NextNameserver())
+	ans, err := dnsQuery(root, name, Servers.NextNameserver())
 	if err != nil {
 		return nil
 	}
