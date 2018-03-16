@@ -7,13 +7,13 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"math/rand"
 	"os"
 	"os/signal"
 	"path"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -53,7 +53,7 @@ type outputParams struct {
 
 func main() {
 	var freq int64
-	var wordlist, file string
+	var wordlist, outfile, domainsfile string
 	var verbose, extra, ip, brute, recursive, whois, list, help bool
 
 	flag.BoolVar(&help, "h", false, "Show the program usage message")
@@ -66,14 +66,21 @@ func main() {
 	flag.BoolVar(&list, "l", false, "List all domains to be used in an enumeration")
 	flag.Int64Var(&freq, "freq", 0, "Sets the number of max DNS queries per minute")
 	flag.StringVar(&wordlist, "w", "", "Path to a different wordlist file")
-	flag.StringVar(&file, "o", "", "Path to the output file")
+	flag.StringVar(&outfile, "o", "", "Path to the output file")
+	flag.StringVar(&domainsfile, "d", "", "Path to a file providing root domain names")
 	flag.Parse()
 
 	if extra {
 		verbose = true
 	}
 
+	// Get root domain names provided from the command-line
 	domains := flag.Args()
+	// Now, get domains provided by a file
+	if domainsfile != "" {
+		domains = amass.UniqueAppend(domains, getLinesFromFile(domainsfile)...)
+	}
+	// Should the help output be provided?
 	if help || len(domains) == 0 {
 		fmt.Println(AsciiArt)
 		fmt.Printf("Usage: %s [options] domain domain2 domain3... (e.g. example.com)\n", path.Base(os.Args[0]))
@@ -105,7 +112,7 @@ func main() {
 		Verbose:  verbose,
 		Sources:  extra,
 		PrintIPs: ip,
-		FileOut:  file,
+		FileOut:  outfile,
 		Results:  results,
 		Finish:   finish,
 		Done:     done,
@@ -115,7 +122,7 @@ func main() {
 	// Grab the words from an identified wordlist
 	var words []string
 	if wordlist != "" {
-		words = getWordlist(wordlist)
+		words = getLinesFromFile(wordlist)
 	}
 	// Setup the amass configuration
 	config := amass.CustomConfig(&amass.AmassConfig{
@@ -247,30 +254,26 @@ func catchSignals(output, done chan struct{}) {
 	os.Exit(0)
 }
 
-func getWordlist(path string) []string {
-	var list []string
-	var wordlist io.Reader
+func getLinesFromFile(path string) []string {
+	var lines []string
 
-	// Open the wordlist
+	// Open the file
 	file, err := os.Open(path)
 	if err != nil {
-		fmt.Printf("Error opening the wordlist file: %v\n", err)
-		return list
+		fmt.Printf("Error opening the file %s: %v\n", path, err)
+		return lines
 	}
 	defer file.Close()
-	wordlist = file
-
-	scanner := bufio.NewScanner(wordlist)
-	// Once we have used all the words, we are finished
+	// Get each line from the file
+	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
-		// Get the next word in the list
-		word := scanner.Text()
-		if word != "" {
-			// Add the word to the list
-			list = append(list, word)
+		// Get the next line
+		text := scanner.Text()
+		if text != "" {
+			lines = append(lines, strings.TrimSpace(text))
 		}
 	}
-	return list
+	return lines
 }
 
 func freqToDuration(freq int64) time.Duration {

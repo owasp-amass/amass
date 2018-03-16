@@ -53,7 +53,7 @@ var knownPublicServers = []string{
 	"64.6.65.6:53",       // Verisign Secondary
 }
 
-var Servers *PublicDNSMaintenance
+var Servers *PublicDNSMonitor
 
 type serverStats struct {
 	Responding  bool
@@ -61,10 +61,11 @@ type serverStats struct {
 }
 
 func init() {
-	Servers = NewPublicDNSMaintenance()
+	Servers = NewPublicDNSMonitor()
 }
 
-type PublicDNSMaintenance struct {
+// Checks in real-time if the public DNS servers have become unusable
+type PublicDNSMonitor struct {
 	sync.Mutex
 
 	// List of servers that we know about
@@ -73,12 +74,12 @@ type PublicDNSMaintenance struct {
 	// Tracking for which servers continue to be usable
 	usableServers map[string]*serverStats
 
-	// Requests for a server off the queue come here
+	// Requests for a server from the queue come here
 	nextServer chan chan string
 }
 
-func NewPublicDNSMaintenance() *PublicDNSMaintenance {
-	pdm := &PublicDNSMaintenance{
+func NewPublicDNSMonitor() *PublicDNSMonitor {
+	pdm := &PublicDNSMonitor{
 		knownServers:  knownPublicServers,
 		usableServers: make(map[string]*serverStats),
 		nextServer:    make(chan chan string, 100),
@@ -88,13 +89,13 @@ func NewPublicDNSMaintenance() *PublicDNSMaintenance {
 	return pdm
 }
 
-func (pdm *PublicDNSMaintenance) testAllServers() {
+func (pdm *PublicDNSMonitor) testAllServers() {
 	for _, server := range pdm.knownServers {
 		pdm.testServer(server)
 	}
 }
 
-func (pdm *PublicDNSMaintenance) testServer(server string) bool {
+func (pdm *PublicDNSMonitor) testServer(server string) bool {
 	var resp bool
 
 	_, err := recon.ResolveDNS(pickRandomTestName(), server, "A")
@@ -120,7 +121,7 @@ func pickRandomTestName() string {
 	return names[sel]
 }
 
-func (pdm *PublicDNSMaintenance) processServerQueue() {
+func (pdm *PublicDNSMonitor) processServerQueue() {
 	var queue []string
 
 	for {
@@ -140,7 +141,7 @@ func (pdm *PublicDNSMaintenance) processServerQueue() {
 	}
 }
 
-func (pdm *PublicDNSMaintenance) getServerList() []string {
+func (pdm *PublicDNSMonitor) getServerList() []string {
 	pdm.Lock()
 	defer pdm.Unlock()
 
@@ -167,7 +168,7 @@ func (pdm *PublicDNSMaintenance) getServerList() []string {
 }
 
 // NextNameserver - Requests the next server
-func (pdm *PublicDNSMaintenance) NextNameserver() string {
+func (pdm *PublicDNSMonitor) NextNameserver() string {
 	ans := make(chan string, 2)
 
 	pdm.nextServer <- ans
