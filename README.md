@@ -45,6 +45,12 @@ $ amass example.com
 ```
 
 
+You can also provide the initial domain names via an input file:
+```
+$ amass -d domains.txt
+```
+
+
 Get amass to provide summary information:
 ```
 $ amass -v example.com
