@@ -7,6 +7,7 @@ import (
 	"bufio"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"time"
 )
@@ -15,6 +16,18 @@ import (
 type AmassConfig struct {
 	// The root domain names that the enumeration will target
 	Domains []string
+
+	// The ASNs that the enumeration will target
+	ASNs []int
+
+	// The CIDRs that the enumeration will target
+	CIDRs []*net.IPNet
+
+	// The IPs that the enumeration will target
+	IPs []net.IP
+
+	// The ports that will be checked for certificates
+	Ports []int
 
 	// The list of words to use when generating names
 	Wordlist []string
@@ -25,6 +38,9 @@ type AmassConfig struct {
 	// Will recursive brute forcing be performed?
 	Recursive bool
 
+	// Will discovered subdomain name alterations be generated?
+	Alterations bool
+
 	// Sets the maximum number of DNS queries per minute
 	Frequency time.Duration
 
@@ -33,9 +49,9 @@ type AmassConfig struct {
 }
 
 func CheckConfig(config *AmassConfig) error {
-	if len(config.Domains) == 0 {
+	/*if len(config.Domains) == 0 {
 		return errors.New("The configuration contains no domain names")
-	}
+	}*/
 
 	if len(config.Wordlist) == 0 {
 		return errors.New("The configuration contains no wordlist")
@@ -54,8 +70,10 @@ func CheckConfig(config *AmassConfig) error {
 // DefaultConfig returns a config with values that have been tested
 func DefaultConfig() *AmassConfig {
 	return &AmassConfig{
-		Recursive: true,
-		Frequency: 5 * time.Millisecond,
+		Ports:       []int{443},
+		Recursive:   true,
+		Alterations: true,
+		Frequency:   5 * time.Millisecond,
 	}
 }
 
@@ -64,6 +82,13 @@ func CustomConfig(ac *AmassConfig) *AmassConfig {
 	config := DefaultConfig()
 
 	config.Domains = ac.Domains
+	config.ASNs = ac.ASNs
+	config.CIDRs = ac.CIDRs
+	config.IPs = ac.IPs
+
+	if len(ac.Ports) > 0 {
+		config.Ports = ac.Ports
+	}
 
 	if len(ac.Wordlist) == 0 {
 		config.Wordlist = GetDefaultWordlist()

@@ -74,7 +74,7 @@ loop:
 }
 
 func (as *ArchiveService) processOutput() {
-	t := time.NewTicker(1 * time.Minute)
+	t := time.NewTicker(10 * time.Second)
 	defer t.Stop()
 loop:
 	for {

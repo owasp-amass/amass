@@ -4,7 +4,6 @@
 package amass
 
 import (
-	"net"
 	"sort"
 	"strconv"
 	"strings"
@@ -41,7 +40,7 @@ func (ss *SweepService) OnStop() error {
 }
 
 func (ss *SweepService) processRequests() {
-	t := time.NewTicker(30 * time.Second)
+	t := time.NewTicker(10 * time.Second)
 	defer t.Stop()
 loop:
 	for {
@@ -73,12 +72,12 @@ func (ss *SweepService) duplicate(ip string) bool {
 func (ss *SweepService) AttemptSweep(req *AmassRequest) {
 	var newIPs []string
 
-	if req.Address == "" || req.Netblock == nil {
+	if req.noSweep || req.Address == "" || req.Netblock == nil {
 		return
 	}
 	ss.SetActive(true)
 	// Get the subset of nearby IP addresses
-	ips := getCIDRSubset(hosts(req), req.Address, 200)
+	ips := getCIDRSubset(hosts(req.Netblock), req.Address, 200)
 	for _, ip := range ips {
 		if !ss.duplicate(ip) {
 			newIPs = append(newIPs, ip)
@@ -92,26 +91,6 @@ func (ss *SweepService) AttemptSweep(req *AmassRequest) {
 			Tag:     DNS,
 			Source:  "DNS",
 		})
-	}
-}
-
-func hosts(req *AmassRequest) []string {
-	ip := net.ParseIP(req.Address)
-
-	var ips []string
-	for ip := ip.Mask(req.Netblock.Mask); req.Netblock.Contains(ip); inc(ip) {
-		ips = append(ips, ip.String())
-	}
-	// Remove network address and broadcast address
-	return ips[1 : len(ips)-1]
-}
-
-func inc(ip net.IP) {
-	for j := len(ip) - 1; j >= 0; j-- {
-		ip[j]++
-		if ip[j] > 0 {
-			break
-		}
 	}
 }
 

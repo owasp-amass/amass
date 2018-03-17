@@ -5,6 +5,7 @@ package amass
 
 import (
 	"io/ioutil"
+	"net"
 	"net/http"
 	"regexp"
 	"strings"
@@ -46,6 +47,7 @@ func StartAmass(config *AmassConfig) error {
 	dns := make(chan *AmassRequest, bufSize)
 	dnsMux := make(chan *AmassRequest, bufSize)
 	netblock := make(chan *AmassRequest, bufSize)
+	activecert := make(chan *AmassRequest, bufSize)
 	netblockMux := make(chan *AmassRequest, bufSize)
 	reverseip := make(chan *AmassRequest, bufSize)
 	archive := make(chan *AmassRequest, bufSize)
@@ -60,9 +62,10 @@ func StartAmass(config *AmassConfig) error {
 	services = append(services, dnsSrv, reverseipSrv)
 	// Setup the service that jump-start the process
 	searchSrv := NewSubdomainSearchService(nil, dns, config)
+	actcertSrv := NewActiveCertService(activecert, dns, config)
 	iphistSrv := NewIPHistoryService(nil, netblock, config)
 	// Add them to the services slice
-	services = append(services, searchSrv, iphistSrv)
+	services = append(services, actcertSrv, iphistSrv)
 	// These services find more names based on previous findings
 	netblockSrv := NewNetblockService(netblock, netblockMux, config)
 	archiveSrv := NewArchiveService(archive, dns, config)
@@ -77,13 +80,15 @@ func StartAmass(config *AmassConfig) error {
 	services = append(services, bruteSrv, ngramSrv)
 	// Some service output needs to be sent in multiple directions
 	go requestMultiplexer(dnsMux, resolved...)
-	go requestMultiplexer(netblockMux, sweep, final)
+	go requestMultiplexer(netblockMux, sweep, activecert, final)
 	// This is the where filtering is performed
 	go finalCheckpoint(final, config.Output)
-	// Start all the services
+	// Start all the services, except the search service
 	for _, service := range services {
 		service.Start()
 	}
+
+	var searchesStarted bool
 	// We periodically check if all the services have finished
 	t := time.NewTicker(30 * time.Second)
 	defer t.Stop()
@@ -98,7 +103,11 @@ func StartAmass(config *AmassConfig) error {
 		}
 
 		if done {
-			break
+			if searchesStarted {
+				break
+			}
+			searchSrv.Start()
+			searchesStarted = true
 		}
 	}
 	// Stop all the services
@@ -213,4 +222,23 @@ func trim252F(name string) string {
 		return s[i[1]:]
 	}
 	return s
+}
+
+func hosts(cidr *net.IPNet) []string {
+	var ips []string
+
+	for ip := cidr.IP.Mask(cidr.Mask); cidr.Contains(ip); inc(ip) {
+		ips = append(ips, ip.String())
+	}
+	// Remove network address and broadcast address
+	return ips[1 : len(ips)-1]
+}
+
+func inc(ip net.IP) {
+	for j := len(ip) - 1; j >= 0; j-- {
+		ip[j]++
+		if ip[j] > 0 {
+			break
+		}
+	}
 }

@@ -39,7 +39,7 @@ func (bfs *BruteForceService) OnStop() error {
 }
 
 func (bfs *BruteForceService) processRequests() {
-	t := time.NewTicker(1 * time.Minute)
+	t := time.NewTicker(10 * time.Second)
 	defer t.Stop()
 loop:
 	for {

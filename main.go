@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math/rand"
+	"net"
 	"os"
 	"os/signal"
 	"path"
@@ -53,13 +54,17 @@ type outputParams struct {
 
 func main() {
 	var freq int64
-	var wordlist, outfile, domainsfile string
-	var verbose, extra, ip, brute, recursive, whois, list, help bool
+	var IPs []net.IP
+	var ASNs, Ports []int
+	var CIDRs []*net.IPNet
+	var wordlist, outfile, domainsfile, asns, ips, cidrs, ports string
+	var fwd, verbose, extra, addrs, brute, recursive, alts, whois, list, help bool
 
 	flag.BoolVar(&help, "h", false, "Show the program usage message")
-	flag.BoolVar(&ip, "ip", false, "Show the IP addresses for discovered names")
+	flag.BoolVar(&addrs, "addrs", false, "Show the IP addresses for discovered names")
 	flag.BoolVar(&brute, "brute", false, "Execute brute forcing after searches")
 	flag.BoolVar(&recursive, "norecursive", true, "Turn off recursive brute forcing")
+	flag.BoolVar(&alts, "noalts", true, "Disable generation of altered names")
 	flag.BoolVar(&verbose, "v", false, "Print the summary information")
 	flag.BoolVar(&extra, "vv", false, "Print the data source information")
 	flag.BoolVar(&whois, "whois", false, "Include domains discoverd with reverse whois")
@@ -67,21 +72,39 @@ func main() {
 	flag.Int64Var(&freq, "freq", 0, "Sets the number of max DNS queries per minute")
 	flag.StringVar(&wordlist, "w", "", "Path to a different wordlist file")
 	flag.StringVar(&outfile, "o", "", "Path to the output file")
-	flag.StringVar(&domainsfile, "d", "", "Path to a file providing root domain names")
+	flag.StringVar(&domainsfile, "df", "", "Path to a file providing root domain names")
+	flag.StringVar(&asns, "asns", "", "ASNs to be probed for certificates")
+	flag.StringVar(&ips, "ips", "", "IP addresses to be probed for certificates")
+	flag.StringVar(&cidrs, "cidrs", "", "CIDRs to be probed for certificates")
+	flag.StringVar(&ports, "p", "", "Ports to be checked for certificates")
 	flag.Parse()
 
 	if extra {
 		verbose = true
 	}
-
+	if asns != "" {
+		ASNs = parseInts(asns)
+		fwd = true
+	}
+	if ips != "" {
+		IPs = parseIPs(ips)
+		fwd = true
+	}
+	if cidrs != "" {
+		CIDRs = parseCIDRs(cidrs)
+		fwd = true
+	}
 	// Get root domain names provided from the command-line
 	domains := flag.Args()
 	// Now, get domains provided by a file
 	if domainsfile != "" {
 		domains = amass.UniqueAppend(domains, getLinesFromFile(domainsfile)...)
 	}
+	if len(domains) > 0 {
+		fwd = true
+	}
 	// Should the help output be provided?
-	if help || len(domains) == 0 {
+	if help || !fwd {
 		fmt.Println(AsciiArt)
 		fmt.Printf("Usage: %s [options] domain domain2 domain3... (e.g. example.com)\n", path.Base(os.Args[0]))
 		flag.PrintDefaults()
@@ -111,7 +134,7 @@ func main() {
 	go manageOutput(&outputParams{
 		Verbose:  verbose,
 		Sources:  extra,
-		PrintIPs: ip,
+		PrintIPs: addrs,
 		FileOut:  outfile,
 		Results:  results,
 		Finish:   finish,
@@ -127,9 +150,14 @@ func main() {
 	// Setup the amass configuration
 	config := amass.CustomConfig(&amass.AmassConfig{
 		Domains:      domains,
+		ASNs:         ASNs,
+		CIDRs:        CIDRs,
+		IPs:          IPs,
+		Ports:        Ports,
 		Wordlist:     words,
 		BruteForcing: brute,
 		Recursive:    recursive,
+		Alterations:  alts,
 		Frequency:    freqToDuration(freq),
 		Output:       results,
 	})
@@ -204,6 +232,10 @@ func updateData(req *amass.AmassRequest, tags map[string]int, asns map[int]*asnD
 }
 
 func printSummary(total int, tags map[string]int, asns map[int]*asnData) {
+	if total == 0 {
+		fmt.Println("No names were discovered")
+		return
+	}
 	fmt.Printf("\n%d names discovered - ", total)
 
 	// Print the stats using tag information
@@ -230,12 +262,7 @@ func printSummary(total int, tags map[string]int, asns map[int]*asnData) {
 		for cidr, ips := range data.Netblocks {
 			s := strconv.Itoa(ips)
 
-			fmt.Printf("\t%-18s\t%-3s ", cidr, s)
-			if ips == 1 {
-				fmt.Println("IP address")
-			} else {
-				fmt.Println("IP addresses")
-			}
+			fmt.Printf("\t%-18s\t%-3s Subdomain Name(s)\n", cidr, s)
 		}
 	}
 }
@@ -293,4 +320,52 @@ func freqToDuration(freq int64) time.Duration {
 	}
 	// Use the default rate
 	return amass.DefaultConfig().Frequency
+}
+
+func parseInts(s string) []int {
+	var results []int
+
+	nums := strings.Split(s, ",")
+
+	for _, n := range nums {
+		i, err := strconv.Atoi(n)
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+		results = append(results, i)
+	}
+	return results
+}
+
+func parseIPs(s string) []net.IP {
+	var results []net.IP
+
+	ips := strings.Split(s, ",")
+
+	for _, ip := range ips {
+		addr := net.ParseIP(ip)
+		if addr == nil {
+			fmt.Printf("%s is not a valid IP address\n", ip)
+			os.Exit(1)
+		}
+		results = append(results, addr)
+	}
+	return results
+}
+
+func parseCIDRs(s string) []*net.IPNet {
+	var results []*net.IPNet
+
+	cidrs := strings.Split(s, ",")
+
+	for _, cidr := range cidrs {
+		_, ipnet, err := net.ParseCIDR(cidr)
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+		results = append(results, ipnet)
+	}
+	return results
 }

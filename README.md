@@ -82,6 +82,12 @@ $ amass -ip -o example.txt example.com
 ```
 
 
+The amass feature that performs alterations on discovered names and attempt resolution can be disabled:
+```
+$ amass -noalts example.com
+```
+
+
 Have amass perform brute force subdomain enumeration as well:
 ```
 $ amass -brute example.com

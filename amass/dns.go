@@ -261,7 +261,7 @@ func (ds *DNSService) processRequests() {
 	t := time.NewTicker(ds.Config().Frequency)
 	defer t.Stop()
 
-	check := time.NewTicker(30 * time.Second)
+	check := time.NewTicker(5 * time.Second)
 	defer check.Stop()
 loop:
 	for {

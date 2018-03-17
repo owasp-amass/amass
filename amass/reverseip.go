@@ -113,7 +113,7 @@ func (ris *ReverseIPService) nextFromQueue() *AmassRequest {
 }
 
 func (ris *ReverseIPService) processOutput() {
-	t := time.NewTicker(30 * time.Second)
+	t := time.NewTicker(10 * time.Second)
 	defer t.Stop()
 loop:
 	for {

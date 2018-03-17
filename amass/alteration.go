@@ -37,7 +37,7 @@ func (as *AlterationService) OnStop() error {
 }
 
 func (as *AlterationService) processRequests() {
-	t := time.NewTicker(30 * time.Second)
+	t := time.NewTicker(5 * time.Second)
 	defer t.Stop()
 loop:
 	for {
@@ -54,6 +54,10 @@ loop:
 
 // executeAlterations - Runs all the DNS name alteration methods as goroutines
 func (as *AlterationService) executeAlterations(req *AmassRequest) {
+	if !as.Config().Alterations {
+		return
+	}
+
 	as.flipNumbersInName(req)
 	as.appendNumbers(req)
 	//go a.PrefixSuffixWords(name)
