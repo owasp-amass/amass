@@ -37,31 +37,13 @@ func TestSweepService(t *testing.T) {
 	srv.Stop()
 }
 
-func TestSweepHost(t *testing.T) {
-	_, ipnet, err := net.ParseCIDR(testCIDR)
-	if err != nil {
-		t.Errorf("Unable to parse the CIDR: %s", err)
-	}
-
-	ips := hosts(&AmassRequest{
-		Address:  testAddr,
-		Netblock: ipnet,
-	})
-	if len(ips) != 254 {
-		t.Errorf("hosts returned %d IP addresses instead of 254", len(ips))
-	}
-}
-
 func TestSweepGetCIDRSubset(t *testing.T) {
 	_, ipnet, err := net.ParseCIDR(testCIDR)
 	if err != nil {
 		t.Errorf("Unable to parse the CIDR: %s", err)
 	}
 
-	ips := hosts(&AmassRequest{
-		Address:  testAddr,
-		Netblock: ipnet,
-	})
+	ips := NetHosts(ipnet)
 
 	size := 50
 	offset := size / 2

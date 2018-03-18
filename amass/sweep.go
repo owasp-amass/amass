@@ -77,7 +77,7 @@ func (ss *SweepService) AttemptSweep(req *AmassRequest) {
 	}
 	ss.SetActive(true)
 	// Get the subset of nearby IP addresses
-	ips := getCIDRSubset(hosts(req.Netblock), req.Address, 200)
+	ips := getCIDRSubset(NetHosts(req.Netblock), req.Address, 200)
 	for _, ip := range ips {
 		if !ss.duplicate(ip) {
 			newIPs = append(newIPs, ip)

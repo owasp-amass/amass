@@ -47,7 +47,7 @@ func (acs *ActiveCertService) processRequests() {
 	t := time.NewTicker(10 * time.Second)
 	defer t.Stop()
 
-	pull := time.NewTicker(1 * time.Second)
+	pull := time.NewTicker(500 * time.Millisecond)
 	defer pull.Stop()
 loop:
 	for {
@@ -110,7 +110,7 @@ func (acs *ActiveCertService) handleRequest(req *AmassRequest) {
 	if req.Address != "" && !acs.duplicate(req.Address) {
 		acs.pullCertificate(req.Address)
 	} else if req.Netblock != nil {
-		ips := hosts(req.Netblock)
+		ips := NetHosts(req.Netblock)
 
 		for _, ip := range ips {
 			acs.add(&AmassRequest{

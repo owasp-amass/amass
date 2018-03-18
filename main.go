@@ -52,9 +52,13 @@ type outputParams struct {
 	Done     chan struct{}
 }
 
+type IPs struct {
+	Addrs  []net.IP
+	Ranges []*amass.IPRange
+}
+
 func main() {
 	var freq int64
-	var IPs []net.IP
 	var ASNs, Ports []int
 	var CIDRs []*net.IPNet
 	var wordlist, outfile, domainsfile, asns, ips, cidrs, ports string
@@ -86,8 +90,9 @@ func main() {
 		ASNs = parseInts(asns)
 		fwd = true
 	}
+	ipAddresses := &IPs{}
 	if ips != "" {
-		IPs = parseIPs(ips)
+		ipAddresses = parseIPs(ips)
 		fwd = true
 	}
 	if cidrs != "" {
@@ -152,7 +157,8 @@ func main() {
 		Domains:      domains,
 		ASNs:         ASNs,
 		CIDRs:        CIDRs,
-		IPs:          IPs,
+		IPs:          ipAddresses.Addrs,
+		Ranges:       ipAddresses.Ranges,
 		Ports:        Ports,
 		Wordlist:     words,
 		BruteForcing: brute,
@@ -338,20 +344,52 @@ func parseInts(s string) []int {
 	return results
 }
 
-func parseIPs(s string) []net.IP {
-	var results []net.IP
+func parseIPs(s string) *IPs {
+	results := new(IPs)
 
 	ips := strings.Split(s, ",")
 
 	for _, ip := range ips {
+		// Is this an IP range?
+		rng := parseRange(ip)
+		if rng != nil {
+			results.Ranges = append(results.Ranges, rng)
+			continue
+		}
 		addr := net.ParseIP(ip)
 		if addr == nil {
 			fmt.Printf("%s is not a valid IP address\n", ip)
 			os.Exit(1)
 		}
-		results = append(results, addr)
+		results.Addrs = append(results.Addrs, addr)
 	}
 	return results
+}
+
+func parseRange(s string) *amass.IPRange {
+	twoIPs := strings.Split(s, "-")
+	if twoIPs[0] == s {
+		// This is not an IP range
+		return nil
+	}
+	start := net.ParseIP(twoIPs[0])
+	end := net.ParseIP(twoIPs[1])
+	if end == nil {
+		num, err := strconv.Atoi(twoIPs[1])
+		if err == nil {
+			end = net.ParseIP(twoIPs[0])
+			end[len(end)-1] = byte(num)
+		}
+	}
+	if start == nil || end == nil {
+		// These should have parsed properly
+		fmt.Printf("%s is not a valid IP range\n", s)
+		os.Exit(1)
+	}
+	return &amass.IPRange{
+		Start: start,
+		End:   end,
+	}
 }
 
 func parseCIDRs(s string) []*net.IPNet {

@@ -118,13 +118,29 @@ func (ris *ReverseIPService) processOutput() {
 loop:
 	for {
 		select {
-		case out := <-ris.responses:
-			ris.SetActive(true)
-			ris.SendOut(out)
+		case req := <-ris.responses:
+			ris.performOutput(req)
 		case <-t.C:
 			ris.SetActive(false)
 		case <-ris.Quit():
 			break loop
+		}
+	}
+}
+
+func (ris *ReverseIPService) performOutput(req *AmassRequest) {
+	ris.SetActive(true)
+	// Check if the discovered name belongs to a root domain of interest
+	for _, domain := range ris.Config().Domains {
+		re := SubdomainRegex(domain)
+		re.Longest()
+
+		// Once we have a match, the domain is added to the request
+		if match := re.FindString(req.Name); match != "" {
+			req.Name = match
+			req.Domain = domain
+			ris.SendOut(req)
+			break
 		}
 	}
 }
@@ -201,7 +217,7 @@ func (se *reverseIPSearchEngine) urlByPageNum(ip string, page int) string {
 func (se *reverseIPSearchEngine) Search(domain, ip string, done chan int) {
 	var unique []string
 
-	re := SubdomainRegex(domain)
+	re := AnySubdomainRegex()
 	num := se.Limit / se.Quantity
 	for i := 0; i < num; i++ {
 		page := GetWebPage(se.urlByPageNum(ip, i))
@@ -216,7 +232,6 @@ func (se *reverseIPSearchEngine) Search(domain, ip string, done chan int) {
 				unique = append(unique, u...)
 				se.Output <- &AmassRequest{
 					Name:   sd,
-					Domain: domain,
 					Tag:    SEARCH,
 					Source: se.Name,
 				}
@@ -264,7 +279,7 @@ func (l *reverseIPLookup) String() string {
 func (l *reverseIPLookup) Search(domain, ip string, done chan int) {
 	var unique []string
 
-	re := SubdomainRegex(domain)
+	re := AnySubdomainRegex()
 	page := GetWebPage(l.Callback(ip))
 	if page == "" {
 		done <- 0
@@ -278,7 +293,6 @@ func (l *reverseIPLookup) Search(domain, ip string, done chan int) {
 			unique = append(unique, u...)
 			l.Output <- &AmassRequest{
 				Name:   sd,
-				Domain: domain,
 				Tag:    SEARCH,
 				Source: l.Name,
 			}
@@ -313,14 +327,13 @@ func (l *reverseDNSLookup) String() string {
 }
 
 func (l *reverseDNSLookup) Search(domain, ip string, done chan int) {
-	re := SubdomainRegex(domain)
+	re := AnySubdomainRegex()
 
 	name, err := recon.ReverseDNS(ip, Servers.NextNameserver())
 	if err == nil && re.MatchString(name) {
 		// Send the name to be resolved in the forward direction
 		l.Output <- &AmassRequest{
 			Name:   name,
-			Domain: domain,
 			Tag:    DNS,
 			Source: l.Name,
 		}

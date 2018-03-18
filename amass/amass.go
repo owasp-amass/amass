@@ -32,6 +32,14 @@ const (
 	defaultWordlistURL = "https://raw.githubusercontent.com/caffix/amass/master/wordlists/namelist.txt"
 )
 
+type IPRange struct {
+	// The first IP address in the range
+	Start net.IP
+
+	// The last IP address in the range
+	End net.IP
+}
+
 func StartAmass(config *AmassConfig) error {
 	var resolved []chan *AmassRequest
 	var services []AmassService
@@ -187,6 +195,10 @@ func SubdomainRegex(domain string) *regexp.Regexp {
 	return regexp.MustCompile(SUBRE + d)
 }
 
+func AnySubdomainRegex() *regexp.Regexp {
+	return regexp.MustCompile(SUBRE + "[a-zA-Z0-9-]{0,61}[.][a-zA-Z]")
+}
+
 func GetWebPage(u string) string {
 	client := &http.Client{}
 
@@ -224,7 +236,20 @@ func trim252F(name string) string {
 	return s
 }
 
-func hosts(cidr *net.IPNet) []string {
+func RangeHosts(rng *IPRange) []string {
+	var ips []string
+
+	stop := net.ParseIP(rng.End.String())
+	inc(stop)
+	for ip := net.ParseIP(rng.Start.String()); !ip.Equal(stop); inc(ip) {
+		ips = append(ips, ip.String())
+	}
+	return ips
+}
+
+// Obtained/modified the next two functions from the following:
+// https://gist.github.com/kotakanbe/d3059af990252ba89a82
+func NetHosts(cidr *net.IPNet) []string {
 	var ips []string
 
 	for ip := cidr.IP.Mask(cidr.Mask); cidr.Contains(ip); inc(ip) {

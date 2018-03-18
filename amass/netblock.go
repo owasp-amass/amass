@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/caffix/recon"
+	//"github.com/yl2chen/cidranger"
 )
 
 type cidrData struct {
@@ -29,6 +30,9 @@ type NetblockService struct {
 	// CIDR data cached from the Shadowserver requests
 	cidrCache map[string]*cidrData
 
+	// Fast lookup of an IP across all known CIDRs
+	//networks cidranger.Ranger
+
 	// ASN data cached from the Shadowserver requests
 	asnCache map[int]*asnData
 }
@@ -36,7 +40,8 @@ type NetblockService struct {
 func NewNetblockService(in, out chan *AmassRequest, config *AmassConfig) *NetblockService {
 	ns := &NetblockService{
 		cidrCache: make(map[string]*cidrData),
-		asnCache:  make(map[int]*asnData),
+		//networks:  cidranger.NewPCTrieRanger(),
+		asnCache: make(map[int]*asnData),
 	}
 
 	ns.BaseAmassService = *NewBaseAmassService("Netblock Service", config, ns)
@@ -76,6 +81,18 @@ func (ns *NetblockService) initialRequests() {
 			activeCertOnly: true,
 		})
 	}
+	// Enter all IP address requests from ranges
+	for _, rng := range ns.Config().Ranges {
+		ips := RangeHosts(rng)
+
+		for _, ip := range ips {
+			ns.add(&AmassRequest{
+				Address:        ip,
+				noSweep:        true,
+				activeCertOnly: true,
+			})
+		}
+	}
 	// Enter all IP address requests into the queue
 	for _, ip := range ns.Config().IPs {
 		ns.add(&AmassRequest{
@@ -90,7 +107,7 @@ func (ns *NetblockService) processRequests() {
 	t := time.NewTicker(10 * time.Second)
 	defer t.Stop()
 
-	pull := time.NewTicker(5 * time.Second)
+	pull := time.NewTicker(3 * time.Second)
 	defer pull.Stop()
 loop:
 	for {
@@ -136,7 +153,8 @@ func (ns *NetblockService) performLookup() {
 	req := ns.next()
 	// Empty as much of the queue as possible
 	for req != nil {
-		if req.Address == "" || !ns.completeAddrRequest(req) {
+		// Can we send it out now?
+		if !ns.completeAddrRequest(req) {
 			break
 		}
 		req = ns.next()
@@ -157,44 +175,60 @@ func (ns *NetblockService) performLookup() {
 }
 
 func (ns *NetblockService) sendRequest(req *AmassRequest, cidr *cidrData, asn *asnData) {
-	var required, passed bool
+	var required, pass bool
 
 	ns.SetActive(true)
-	// Check if this request should be stopped
+	// Add the netblock, etc to the request
+	req.Netblock = cidr.Netblock
+	req.ASN = asn.Record.ASN
+	req.ISP = asn.Record.ISP
+	// Check if this request should be stopped due to infrastructure contraints
 	if len(ns.Config().ASNs) > 0 {
 		required = true
 		for _, asn := range ns.Config().ASNs {
 			if asn == req.ASN {
-				passed = true
+				pass = true
 				break
 			}
 		}
 	}
-	if !passed && len(ns.Config().CIDRs) > 0 {
+	if !pass && len(ns.Config().CIDRs) > 0 {
 		required = true
 		for _, cidr := range ns.Config().CIDRs {
 			if cidr.String() == req.Netblock.String() {
-				passed = true
+				pass = true
 				break
 			}
 		}
 	}
-	if !passed && len(ns.Config().IPs) > 0 {
+	if !pass && len(ns.Config().Ranges) > 0 {
+		required = true
+		for _, rng := range ns.Config().Ranges {
+			ips := RangeHosts(rng)
+			for _, ip := range ips {
+				if ip == req.Address {
+					pass = true
+					break
+				}
+			}
+			if pass {
+				break
+			}
+		}
+	}
+	if !pass && len(ns.Config().IPs) > 0 {
 		required = true
 		for _, ip := range ns.Config().IPs {
 			if ip.String() == req.Address {
-				passed = true
+				pass = true
 				break
 			}
 		}
 	}
-	if required && !passed {
+	if required && !pass {
 		return
 	}
-	// Add the netblock to the request and send it on it's way
-	req.Netblock = cidr.Netblock
-	req.ASN = asn.Record.ASN
-	req.ISP = asn.Record.ISP
+	// Send it on it's way
 	ns.SendOut(req)
 }
 
@@ -214,17 +248,7 @@ func (ns *NetblockService) cidrCacheInsert(cidr string, entry *cidrData) {
 	defer ns.Unlock()
 
 	ns.cidrCache[cidr] = entry
-}
-
-func (ns *NetblockService) asnCacheFetch(asn int) *asnData {
-	ns.Lock()
-	defer ns.Unlock()
-
-	var result *asnData
-	if data, found := ns.asnCache[asn]; found {
-		result = data
-	}
-	return result
+	//ns.networks.Insert(cidranger.NewBasicRangerEntry(*entry.Netblock))
 }
 
 func (ns *NetblockService) insertAllNetblocks(netblocks []string, asn int) {
@@ -239,6 +263,17 @@ func (ns *NetblockService) insertAllNetblocks(netblocks []string, asn int) {
 			ASN:      asn,
 		})
 	}
+}
+
+func (ns *NetblockService) asnCacheFetch(asn int) *asnData {
+	ns.Lock()
+	defer ns.Unlock()
+
+	var result *asnData
+	if data, found := ns.asnCache[asn]; found {
+		result = data
+	}
+	return result
 }
 
 func (ns *NetblockService) asnCacheInsert(asn int, entry *asnData) {
@@ -264,7 +299,7 @@ func (ns *NetblockService) ASNLookup(req *AmassRequest) {
 		if err != nil {
 			return
 		}
-		ips := hosts(cidr)
+		ips := NetHosts(cidr)
 		record, err := recon.IPToASRecord(ips[0])
 		if err != nil {
 			return
@@ -293,7 +328,7 @@ func (ns *NetblockService) CIDRLookup(req *AmassRequest) {
 	// Does the data need to be obtained?
 	if data == nil {
 		// Get the AS recond as well
-		ips := hosts(req.Netblock)
+		ips := NetHosts(req.Netblock)
 		record, netblocks := ns.ipToData(ips[0])
 		if record == nil {
 			return
@@ -348,11 +383,18 @@ func (ns *NetblockService) ipToData(addr string) (*recon.ASRecord, []string) {
 }
 
 func (ns *NetblockService) ipToCIDR(addr string) string {
+	var result string
+
 	ns.Lock()
 	defer ns.Unlock()
 
-	var result string
-	// Check the cache for which CIDR this IP address falls within
+	// Check the tree for which CIDR this IP address falls within
+	/*entries, err := ns.networks.ContainingNetworks(net.ParseIP(addr))
+	if err == nil {
+		net := entries[0].Network()
+		return net.String()
+	}*/
+
 	ip := net.ParseIP(addr)
 	for cidr, data := range ns.cidrCache {
 		if data.Netblock.Contains(ip) {
@@ -364,6 +406,10 @@ func (ns *NetblockService) ipToCIDR(addr string) string {
 }
 
 func (ns *NetblockService) completeAddrRequest(req *AmassRequest) bool {
+	if req.Address == "" {
+		return false
+	}
+
 	cidr := ns.ipToCIDR(req.Address)
 	if cidr == "" {
 		return false
