@@ -44,6 +44,7 @@ The most basic use of the tool, which includes reverse DNS lookups and name alte
 $ amass example.com
 ```
 
+**Be sure that the target domain is the last parameter provided to amass, then followed by any extra domains.**
 
 You can also provide the initial domain names via an input file:
 ```
@@ -134,12 +135,34 @@ $ amass example1.com example2.com example3.com
 In the above example, the domains example2.com and example3.com are simply appended to the list potentially provided by the reverse whois information.
 
 
-All these options can be used together:
+#### Infrastructure Options
+
+**Caution:** If you use these options without specifying root domain names, amass will attempt to reach out to every IP address within the identified infrastructure and obtain names from TLS certificates. This is "loud" and can reveal your reconnaissance activities to the organization being investigated.
+
+If you do provide root domain names on the command-line, these options will simply serve as constraints to the amass output.
+
+To discover all domains hosted within target ASNs, use the following option:
 ```
-$ amass -vv -ip -whois -brute -norecursive -w words.txt -freq 240 -o out.txt ex1.com ex2.com
+$ amass -asn 13374,14618
 ```
 
-**Be sure that the target domain is the last parameter provided to amass, then followed by any extra domains.**
+
+To investigate within target CIDRs, use this option:
+```
+$ amass -net 192.184.113.0/24,104.154.0.0/15
+```
+
+
+To limit your enumeration to specific IPs or address ranges, use this option:
+```
+$ amass -addr 192.168.1.44,192.168.2.1-64
+```
+
+
+By default, port 443 will be checked for certificates, but the ports can be changed as follows:
+```
+$ amass -net 192.168.1.0/24 -p 80,443,8080
+```
 
 
 ## Integrating amass Into Your Work

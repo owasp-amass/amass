@@ -5,11 +5,20 @@ package amass
 
 import (
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
+	"net"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/caffix/recon"
 )
+
+type domainRequest struct {
+	Subdomain string
+	Result    chan string
+}
 
 type ActiveCertService struct {
 	BaseAmassService
@@ -19,10 +28,16 @@ type ActiveCertService struct {
 
 	// Ensures that the same IP is not used twice
 	filter map[string]struct{}
+
+	// Requests for root domain names come here
+	domains chan *domainRequest
 }
 
 func NewActiveCertService(in, out chan *AmassRequest, config *AmassConfig) *ActiveCertService {
-	acs := &ActiveCertService{filter: make(map[string]struct{})}
+	acs := &ActiveCertService{
+		filter:  make(map[string]struct{}),
+		domains: make(chan *domainRequest),
+	}
 
 	acs.BaseAmassService = *NewBaseAmassService("Active Certificate Service", config, acs)
 
@@ -34,6 +49,7 @@ func NewActiveCertService(in, out chan *AmassRequest, config *AmassConfig) *Acti
 func (acs *ActiveCertService) OnStart() error {
 	acs.BaseAmassService.OnStart()
 
+	go acs.processSubToRootDomain()
 	go acs.processRequests()
 	return nil
 }
@@ -47,19 +63,17 @@ func (acs *ActiveCertService) processRequests() {
 	t := time.NewTicker(10 * time.Second)
 	defer t.Stop()
 
-	pull := time.NewTicker(500 * time.Millisecond)
+	pull := time.NewTicker(250 * time.Millisecond)
 	defer pull.Stop()
 loop:
 	for {
 		select {
 		case req := <-acs.Input():
-			if req.activeCertOnly {
-				go acs.add(req)
-			}
+			acs.add(req)
 		case <-pull.C:
 			next := acs.next()
 			if next != nil {
-				go acs.handleRequest(next)
+				acs.handleRequest(next)
 			}
 		case <-t.C:
 			acs.SetActive(false)
@@ -70,17 +84,16 @@ loop:
 }
 
 func (acs *ActiveCertService) add(req *AmassRequest) {
-	acs.Lock()
-	defer acs.Unlock()
-
+	if !acs.Config().AddDomains {
+		return
+	}
+	acs.SetActive(true)
 	acs.queue = append(acs.queue, req)
 }
 
 func (acs *ActiveCertService) next() *AmassRequest {
-	acs.Lock()
-	defer acs.Unlock()
-
 	var next *AmassRequest
+
 	if len(acs.queue) == 1 {
 		next = acs.queue[0]
 		acs.queue = []*AmassRequest{}
@@ -106,79 +119,113 @@ func (acs *ActiveCertService) duplicate(ip string) bool {
 
 func (acs *ActiveCertService) handleRequest(req *AmassRequest) {
 	acs.SetActive(true)
-	// Which type of request is this?
-	if req.Address != "" && !acs.duplicate(req.Address) {
-		acs.pullCertificate(req.Address)
+	// Do not perform repetitive activities
+	if req.Address != "" && acs.duplicate(req.Address) {
+		return
+	}
+	// Otherwise, check which type of request it is
+	if req.Address != "" {
+		acs.pullCertificate(req)
 	} else if req.Netblock != nil {
 		ips := NetHosts(req.Netblock)
 
 		for _, ip := range ips {
 			acs.add(&AmassRequest{
-				Address:  ip,
-				Netblock: req.Netblock,
-				ASN:      req.ASN,
-				ISP:      req.ISP,
+				Address:    ip,
+				Netblock:   req.Netblock,
+				ASN:        req.ASN,
+				ISP:        req.ISP,
+				addDomains: req.addDomains,
 			})
 		}
 	}
 }
 
+func (acs *ActiveCertService) performOutput(req *AmassRequest) {
+	acs.SetActive(true)
+	// Check if the discovered name belongs to a root domain of interest
+	for _, domain := range acs.Config().Domains {
+		// If we have a match, the request can be sent out
+		if req.Domain == domain {
+			acs.SendOut(req)
+			break
+		}
+	}
+}
+
 // pullCertificate - Attempts to pull a cert from several ports on an IP
-func (acs *ActiveCertService) pullCertificate(addr string) {
-	var roots []string
+func (acs *ActiveCertService) pullCertificate(req *AmassRequest) {
 	var requests []*AmassRequest
 
 	// Check hosts for certificates that contain subdomain names
 	for _, port := range acs.Config().Ports {
+		acs.SetActive(true)
+
 		strPort := strconv.Itoa(port)
 		cfg := tls.Config{InsecureSkipVerify: true}
-
-		conn, err := tls.Dial("tcp", addr+":"+strPort, &cfg)
+		// Set a timeout for our attempt
+		d := &net.Dialer{
+			Timeout:  1 * time.Second,
+			Deadline: time.Now().Add(2 * time.Second),
+		}
+		// Attempt to acquire the certificate chain
+		conn, err := tls.DialWithDialer(d, "tcp", req.Address+":"+strPort, &cfg)
 		if err != nil {
 			continue
 		}
-
+		defer conn.Close()
+		// Get the correct certificate in the chain
 		certChain := conn.ConnectionState().PeerCertificates
 		cert := certChain[0]
-
-		var cn string
-		for _, name := range cert.Subject.Names {
-			oid := name.Type
-			if len(oid) == 4 && oid[0] == 2 && oid[1] == 5 && oid[2] == 4 {
-				if oid[3] == 3 {
-					cn = fmt.Sprintf("%s", name.Value)
-					break
-				}
-			}
-		}
-		root := removeAsteriskLabel(cn)
-		roots = append(roots, root)
-
-		var subdomains []string
-		for _, name := range cert.DNSNames {
-			subdomains = append(subdomains, removeAsteriskLabel(name))
-		}
-		subdomains = NewUniqueElements([]string{}, subdomains...)
-
-		for _, name := range subdomains {
-			requests = append(requests, &AmassRequest{
-				Name:   name,
-				Domain: root,
-				Tag:    "cert",
-				Source: "Active Cert",
-			})
-		}
-
+		// Create the new requests from names found within the cert
+		requests = acs.reqFromNames(namesFromCert(cert))
+		// Attempt to use IP addresses as well
 		for _, ip := range cert.IPAddresses {
 			acs.add(&AmassRequest{Address: ip.String()})
 		}
 	}
-	// Add the new root domain names to our Config
-	acs.Config().Domains = UniqueAppend(acs.Config().Domains, roots...)
+	// Get all uniques root domain names from the generated requests
+	var domains []string
+	for _, r := range requests {
+		domains = UniqueAppend(domains, r.Domain)
+	}
+	// If necessary, add the domains to the configuration
+	if req.addDomains {
+		acs.Config().Domains = UniqueAppend(acs.Config().Domains, domains...)
+	}
 	// Send all the new requests out
 	for _, req := range requests {
-		acs.SendOut(req)
+		acs.performOutput(req)
 	}
+}
+
+func namesFromCert(cert *x509.Certificate) []string {
+	var cn string
+
+	for _, name := range cert.Subject.Names {
+		oid := name.Type
+		if len(oid) == 4 && oid[0] == 2 && oid[1] == 5 && oid[2] == 4 {
+			if oid[3] == 3 {
+				cn = fmt.Sprintf("%s", name.Value)
+				break
+			}
+		}
+	}
+
+	var subdomains []string
+	// Add the subject common name to the list of subdomain names
+	commonName := removeAsteriskLabel(cn)
+	if commonName != "" {
+		subdomains = append(subdomains, commonName)
+	}
+	// Add the cert DNS names to the list of subdomain names
+	for _, name := range cert.DNSNames {
+		n := removeAsteriskLabel(name)
+		if n != "" {
+			subdomains = UniqueAppend(subdomains, n)
+		}
+	}
+	return subdomains
 }
 
 func removeAsteriskLabel(s string) string {
@@ -195,4 +242,111 @@ func removeAsteriskLabel(s string) string {
 		return ""
 	}
 	return strings.Join(labels[index:], ".")
+}
+
+func (acs *ActiveCertService) reqFromNames(subdomains []string) []*AmassRequest {
+	var requests []*AmassRequest
+
+	// For each subdomain name, attempt to make a new AmassRequest
+	for _, name := range subdomains {
+		answer := make(chan string, 2)
+
+		acs.domains <- &domainRequest{
+			Subdomain: name,
+			Result:    answer,
+		}
+		root := <-answer
+
+		if root != "" {
+			requests = append(requests, &AmassRequest{
+				Name:   name,
+				Domain: root,
+				Tag:    "cert",
+				Source: "Active Cert",
+			})
+		}
+	}
+	return requests
+}
+
+func (acs *ActiveCertService) processSubToRootDomain() {
+	var queue []*domainRequest
+
+	cache := make(map[string]struct{})
+
+	t := time.NewTicker(1 * time.Second)
+	defer t.Stop()
+loop:
+	for {
+		select {
+		case req := <-acs.domains:
+			queue = append(queue, req)
+		case <-t.C:
+			var next *domainRequest
+
+			if len(queue) == 1 {
+				next = queue[0]
+				queue = []*domainRequest{}
+			} else if len(queue) > 1 {
+				next = queue[0]
+				queue = queue[1:]
+			}
+
+			if next != nil {
+				next.Result <- rootDomainLookup(next.Subdomain, cache)
+			}
+		case <-acs.Quit():
+			break loop
+		}
+	}
+}
+
+func rootDomainLookup(name string, cache map[string]struct{}) string {
+	var domain string
+
+	// Obtain all parts of the subdomain name
+	labels := strings.Split(strings.TrimSpace(name), ".")
+	// Check the cache for all parts of the name
+	for i := len(labels) - 2; i >= 0; i-- {
+		sub := strings.Join(labels[i:], ".")
+
+		if _, found := cache[sub]; found {
+			domain = sub
+			break
+		}
+	}
+	// If the root domain was in the cache, return it now
+	if domain != "" {
+		return domain
+	}
+	// Check the DNS for all parts of the name
+	for i := len(labels) - 2; i >= 0; i-- {
+		sub := strings.Join(labels[i:], ".")
+
+		if checkDNSforDomain(sub) {
+			cache[sub] = struct{}{}
+			domain = sub
+			break
+		}
+	}
+	return domain
+}
+
+func checkDNSforDomain(domain string) bool {
+	server := Servers.NextNameserver()
+
+	// Check DNS for CNAME, A or AAAA records
+	_, err := recon.ResolveDNS(domain, server, "CNAME")
+	if err == nil {
+		return true
+	}
+	_, err = recon.ResolveDNS(domain, server, "A")
+	if err == nil {
+		return true
+	}
+	_, err = recon.ResolveDNS(domain, server, "AAAA")
+	if err == nil {
+		return true
+	}
+	return false
 }

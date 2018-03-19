@@ -49,6 +49,9 @@ type AmassConfig struct {
 
 	// The channel that will receive the results
 	Output chan *AmassRequest
+
+	// Indicate that Amass cannot add domains to the config
+	AddDomains bool
 }
 
 func CheckConfig(config *AmassConfig) error {
@@ -109,6 +112,7 @@ func CustomConfig(ac *AmassConfig) *AmassConfig {
 	}
 
 	config.Output = ac.Output
+	config.AddDomains = ac.AddDomains
 	return config
 }
 

@@ -13,7 +13,7 @@ func TestReverseIPBing(t *testing.T) {
 	s := BingReverseIPSearch(out)
 
 	go readOutput(out)
-	s.Search("utica.edu", "72.237.4.113", finished)
+	s.Search("72.237.4.113", finished)
 	discovered := <-finished
 	if discovered <= 0 {
 		t.Errorf("BingReverseIPSearch found %d subdomain names", discovered)
@@ -26,7 +26,7 @@ func TestReverseIPShodan(t *testing.T) {
 	s := ShodanReverseIPSearch(out)
 
 	go readOutput(out)
-	s.Search("utica.edu", "72.237.4.113", finished)
+	s.Search("72.237.4.113", finished)
 	discovered := <-finished
 	if discovered <= 0 {
 		t.Errorf("ShodanReverseIPSearch found %d subdomain names", discovered)
@@ -39,7 +39,7 @@ func TestReverseIPDNS(t *testing.T) {
 	s := ReverseDNSSearch(out)
 
 	go readOutput(out)
-	s.Search("utica.edu", "72.237.4.2", finished)
+	s.Search("72.237.4.2", finished)
 	discovered := <-finished
 	if discovered <= 0 {
 		t.Errorf("ReverseDNSSearch found %d PTR records", discovered)

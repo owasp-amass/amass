@@ -38,8 +38,8 @@ type AmassRequest struct {
 	// Sweeps will not be initiated from this request
 	noSweep bool
 
-	// This is exclusively for active cert service
-	activeCertOnly bool
+	// The ActiveCertService is allowed add domains to the config from this request
+	addDomains bool
 }
 
 type AmassService interface {

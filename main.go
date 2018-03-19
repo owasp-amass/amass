@@ -61,11 +61,11 @@ func main() {
 	var freq int64
 	var ASNs, Ports []int
 	var CIDRs []*net.IPNet
-	var wordlist, outfile, domainsfile, asns, ips, cidrs, ports string
-	var fwd, verbose, extra, addrs, brute, recursive, alts, whois, list, help bool
+	var wordlist, outfile, domainsfile, asns, addrs, cidrs, ports string
+	var fwd, verbose, extra, ips, brute, recursive, alts, whois, list, help bool
 
 	flag.BoolVar(&help, "h", false, "Show the program usage message")
-	flag.BoolVar(&addrs, "addrs", false, "Show the IP addresses for discovered names")
+	flag.BoolVar(&ips, "ip", false, "Show the IP addresses for discovered names")
 	flag.BoolVar(&brute, "brute", false, "Execute brute forcing after searches")
 	flag.BoolVar(&recursive, "norecursive", true, "Turn off recursive brute forcing")
 	flag.BoolVar(&alts, "noalts", true, "Disable generation of altered names")
@@ -77,9 +77,9 @@ func main() {
 	flag.StringVar(&wordlist, "w", "", "Path to a different wordlist file")
 	flag.StringVar(&outfile, "o", "", "Path to the output file")
 	flag.StringVar(&domainsfile, "df", "", "Path to a file providing root domain names")
-	flag.StringVar(&asns, "asns", "", "ASNs to be probed for certificates")
-	flag.StringVar(&ips, "ips", "", "IP addresses to be probed for certificates")
-	flag.StringVar(&cidrs, "cidrs", "", "CIDRs to be probed for certificates")
+	flag.StringVar(&asns, "asn", "", "ASNs to be probed for certificates")
+	flag.StringVar(&addrs, "addr", "", "IPs and ranges to be probed for certificates")
+	flag.StringVar(&cidrs, "net", "", "CIDRs to be probed for certificates")
 	flag.StringVar(&ports, "p", "", "Ports to be checked for certificates")
 	flag.Parse()
 
@@ -91,13 +91,16 @@ func main() {
 		fwd = true
 	}
 	ipAddresses := &IPs{}
-	if ips != "" {
-		ipAddresses = parseIPs(ips)
+	if addrs != "" {
+		ipAddresses = parseIPs(addrs)
 		fwd = true
 	}
 	if cidrs != "" {
 		CIDRs = parseCIDRs(cidrs)
 		fwd = true
+	}
+	if ports != "" {
+		Ports = parseInts(ports)
 	}
 	// Get root domain names provided from the command-line
 	domains := flag.Args()
@@ -139,7 +142,7 @@ func main() {
 	go manageOutput(&outputParams{
 		Verbose:  verbose,
 		Sources:  extra,
-		PrintIPs: addrs,
+		PrintIPs: ips,
 		FileOut:  outfile,
 		Results:  results,
 		Finish:   finish,
@@ -167,6 +170,10 @@ func main() {
 		Frequency:    freqToDuration(freq),
 		Output:       results,
 	})
+	// If no domains were provided, allow amass to discover them
+	if len(domains) == 0 {
+		config.AddDomains = true
+	}
 	// Begin the enumeration process
 	amass.StartAmass(config)
 	// Signal for output to finish

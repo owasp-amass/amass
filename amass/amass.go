@@ -97,8 +97,12 @@ func StartAmass(config *AmassConfig) error {
 	}
 
 	var searchesStarted bool
+	if !config.AddDomains {
+		searchSrv.Start()
+		searchesStarted = true
+	}
 	// We periodically check if all the services have finished
-	t := time.NewTicker(30 * time.Second)
+	t := time.NewTicker(5 * time.Second)
 	defer t.Stop()
 	for range t.C {
 		done := true
@@ -110,7 +114,7 @@ func StartAmass(config *AmassConfig) error {
 			}
 		}
 
-		if done {
+		if done && !searchSrv.IsActive() {
 			if searchesStarted {
 				break
 			}
@@ -119,6 +123,7 @@ func StartAmass(config *AmassConfig) error {
 		}
 	}
 	// Stop all the services
+	searchSrv.Stop()
 	for _, service := range services {
 		service.Stop()
 	}

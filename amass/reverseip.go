@@ -166,7 +166,7 @@ func (ris *ReverseIPService) execReverseDNS(req *AmassRequest) {
 		return
 	}
 
-	ris.dns.Search(req.Domain, req.Address, done)
+	ris.dns.Search(req.Address, done)
 	if <-done == 0 {
 		ris.addToQueue(req)
 	}
@@ -181,7 +181,7 @@ func (ris *ReverseIPService) execAlternatives(req *AmassRequest) {
 
 	ris.SetActive(true)
 	for _, s := range ris.others {
-		go s.Search(req.Domain, req.Address, done)
+		go s.Search(req.Address, done)
 	}
 
 	for i := 0; i < len(ris.others); i++ {
@@ -193,7 +193,7 @@ func (ris *ReverseIPService) execAlternatives(req *AmassRequest) {
 
 // ReverseIper - represents all types that perform reverse IP lookups
 type ReverseIper interface {
-	Search(domain, ip string, done chan int)
+	Search(ip string, done chan int)
 	fmt.Stringer
 }
 
@@ -214,7 +214,7 @@ func (se *reverseIPSearchEngine) urlByPageNum(ip string, page int) string {
 	return se.Callback(se, ip, page)
 }
 
-func (se *reverseIPSearchEngine) Search(domain, ip string, done chan int) {
+func (se *reverseIPSearchEngine) Search(ip string, done chan int) {
 	var unique []string
 
 	re := AnySubdomainRegex()
@@ -276,7 +276,7 @@ func (l *reverseIPLookup) String() string {
 	return l.Name
 }
 
-func (l *reverseIPLookup) Search(domain, ip string, done chan int) {
+func (l *reverseIPLookup) Search(ip string, done chan int) {
 	var unique []string
 
 	re := AnySubdomainRegex()
@@ -326,7 +326,7 @@ func (l *reverseDNSLookup) String() string {
 	return l.Name
 }
 
-func (l *reverseDNSLookup) Search(domain, ip string, done chan int) {
+func (l *reverseDNSLookup) Search(ip string, done chan int) {
 	re := AnySubdomainRegex()
 
 	name, err := recon.ReverseDNS(ip, Servers.NextNameserver())
@@ -338,6 +338,7 @@ func (l *reverseDNSLookup) Search(domain, ip string, done chan int) {
 			Source: l.Name,
 		}
 		done <- 1
+		return
 	}
 	done <- 0
 }

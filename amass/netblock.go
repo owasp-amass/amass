@@ -65,20 +65,24 @@ func (ns *NetblockService) OnStop() error {
 }
 
 func (ns *NetblockService) initialRequests() {
+	// Do root domain names need to be discovered?
+	if !ns.Config().AddDomains {
+		return
+	}
 	// Enter all ASN requests into the queue
 	for _, asn := range ns.Config().ASNs {
 		ns.add(&AmassRequest{
-			ASN:            asn,
-			noSweep:        true,
-			activeCertOnly: true,
+			ASN:        asn,
+			noSweep:    true,
+			addDomains: true,
 		})
 	}
 	// Enter all CIDR requests into the queue
 	for _, cidr := range ns.Config().CIDRs {
 		ns.add(&AmassRequest{
-			Netblock:       cidr,
-			noSweep:        true,
-			activeCertOnly: true,
+			Netblock:   cidr,
+			noSweep:    true,
+			addDomains: true,
 		})
 	}
 	// Enter all IP address requests from ranges
@@ -87,18 +91,18 @@ func (ns *NetblockService) initialRequests() {
 
 		for _, ip := range ips {
 			ns.add(&AmassRequest{
-				Address:        ip,
-				noSweep:        true,
-				activeCertOnly: true,
+				Address:    ip,
+				noSweep:    true,
+				addDomains: true,
 			})
 		}
 	}
 	// Enter all IP address requests into the queue
 	for _, ip := range ns.Config().IPs {
 		ns.add(&AmassRequest{
-			Address:        ip.String(),
-			noSweep:        true,
-			activeCertOnly: true,
+			Address:    ip.String(),
+			noSweep:    true,
+			addDomains: true,
 		})
 	}
 }
@@ -319,7 +323,7 @@ func (ns *NetblockService) ASNLookup(req *AmassRequest) {
 			continue
 		}
 		// Send the request for this netblock
-		ns.sendRequest(&AmassRequest{activeCertOnly: req.activeCertOnly}, c, data)
+		ns.sendRequest(&AmassRequest{addDomains: req.addDomains}, c, data)
 	}
 }
 

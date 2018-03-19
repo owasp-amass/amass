@@ -59,8 +59,8 @@ func NewSubdomainSearchService(in, out chan *AmassRequest, config *AmassConfig) 
 func (sss *SubdomainSearchService) OnStart() error {
 	sss.BaseAmassService.OnStart()
 
-	go sss.executeAllSearches()
 	go sss.processOutput()
+	go sss.executeAllSearches()
 	return nil
 }
 

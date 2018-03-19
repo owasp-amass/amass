@@ -192,18 +192,22 @@ type DNSService struct {
 	// Ensures we do not resolve names more than once
 	filter map[string]struct{}
 
+	// Provides a way to check if we're seeing a new root domain
+	domains map[string]struct{}
+
 	// Requests are sent through this channel to check DNS wildcard matches
 	wildcards chan *wildcard
 
 	// Results from the initial domain queries come here
-	initial chan *AmassRequest
+	internal chan *AmassRequest
 }
 
 func NewDNSService(in, out chan *AmassRequest, config *AmassConfig) *DNSService {
 	ds := &DNSService{
 		filter:    make(map[string]struct{}),
+		domains:   make(map[string]struct{}),
 		wildcards: make(chan *wildcard, 50),
-		initial:   make(chan *AmassRequest, 50),
+		internal:  make(chan *AmassRequest, 50),
 	}
 
 	ds.BaseAmassService = *NewBaseAmassService("DNS Service", config, ds)
@@ -218,7 +222,6 @@ func (ds *DNSService) OnStart() error {
 
 	go ds.processWildcardMatches()
 	go ds.processRequests()
-	go ds.executeInitialQueries()
 	return nil
 }
 
@@ -227,31 +230,28 @@ func (ds *DNSService) OnStop() error {
 	return nil
 }
 
-func (ds *DNSService) executeInitialQueries() {
-	// Loop over all the domains provided by the config
-	for _, domain := range ds.Config().Domains {
-		var answers []recon.DNSAnswer
+func (ds *DNSService) basicQueries(domain string) {
+	var answers []recon.DNSAnswer
 
-		// Obtain the DNS answers for the NS records related to the domain
-		ans, err := recon.ResolveDNS(domain, Servers.NextNameserver(), "NS")
-		if err == nil {
-			answers = append(answers, ans...)
-		}
-		// Obtain the DNS answers for the MX records related to the domain
-		ans, err = recon.ResolveDNS(domain, Servers.NextNameserver(), "MX")
-		if err == nil {
-			answers = append(answers, ans...)
-		}
-		// Only return names within the domain name of interest
-		re := SubdomainRegex(domain)
-		for _, a := range answers {
-			for _, sd := range re.FindAllString(a.Data, -1) {
-				ds.initial <- &AmassRequest{
-					Name:   sd,
-					Domain: domain,
-					Tag:    DNS,
-					Source: "Forward DNS",
-				}
+	// Obtain the DNS answers for the NS records related to the domain
+	ans, err := recon.ResolveDNS(domain, Servers.NextNameserver(), "NS")
+	if err == nil {
+		answers = append(answers, ans...)
+	}
+	// Obtain the DNS answers for the MX records related to the domain
+	ans, err = recon.ResolveDNS(domain, Servers.NextNameserver(), "MX")
+	if err == nil {
+		answers = append(answers, ans...)
+	}
+	// Only return names within the domain name of interest
+	re := SubdomainRegex(domain)
+	for _, a := range answers {
+		for _, sd := range re.FindAllString(a.Data, -1) {
+			ds.internal <- &AmassRequest{
+				Name:   sd,
+				Domain: domain,
+				Tag:    DNS,
+				Source: "Forward DNS",
 			}
 		}
 	}
@@ -270,7 +270,7 @@ loop:
 			// Mark the service as active
 			ds.SetActive(true)
 			ds.addToQueue(add)
-		case i := <-ds.initial:
+		case i := <-ds.internal:
 			// Mark the service as active
 			ds.SetActive(true)
 			ds.addToQueue(i)
@@ -295,6 +295,10 @@ loop:
 }
 
 func (ds *DNSService) addToQueue(req *AmassRequest) {
+	if _, found := ds.domains[req.Domain]; !found {
+		ds.domains[req.Domain] = struct{}{}
+		go ds.basicQueries(req.Domain)
+	}
 	if _, found := ds.filter[req.Name]; req.Name != "" && !found {
 		ds.filter[req.Name] = struct{}{}
 		ds.queue = append(ds.queue, req)
