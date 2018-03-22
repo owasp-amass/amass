@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/signal"
 	"path"
+	//"runtime/pprof"
 	"strconv"
 	"strings"
 	"syscall"
@@ -157,7 +158,6 @@ func main() {
 	}
 	// Setup the amass configuration
 	config := amass.CustomConfig(&amass.AmassConfig{
-		Domains:      domains,
 		ASNs:         ASNs,
 		CIDRs:        CIDRs,
 		IPs:          ipAddresses.Addrs,
@@ -170,10 +170,16 @@ func main() {
 		Frequency:    freqToDuration(freq),
 		Output:       results,
 	})
+	config.AddDomains(domains)
 	// If no domains were provided, allow amass to discover them
 	if len(domains) == 0 {
-		config.AddDomains = true
+		config.AdditionalDomains = true
 	}
+	/*
+		profFile, _ := os.Create("amass_debug.prof")
+		pprof.StartCPUProfile(profFile)
+		defer pprof.StopCPUProfile()
+	*/
 	// Begin the enumeration process
 	amass.StartAmass(config)
 	// Signal for output to finish

@@ -8,8 +8,8 @@ import (
 )
 
 const (
-	testDomain string = "twitter.com"
-	testIP     string = "104.244.42.65"
+	testDomain string = "utica.edu"
+	testIP     string = "72.237.4.113"
 )
 
 func TestSearchAsk(t *testing.T) {

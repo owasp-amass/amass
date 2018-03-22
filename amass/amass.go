@@ -97,7 +97,7 @@ func StartAmass(config *AmassConfig) error {
 	}
 
 	var searchesStarted bool
-	if !config.AddDomains {
+	if !config.AdditionalDomains {
 		searchSrv.Start()
 		searchesStarted = true
 	}
@@ -245,8 +245,8 @@ func RangeHosts(rng *IPRange) []string {
 	var ips []string
 
 	stop := net.ParseIP(rng.End.String())
-	inc(stop)
-	for ip := net.ParseIP(rng.Start.String()); !ip.Equal(stop); inc(ip) {
+	addrInc(stop)
+	for ip := net.ParseIP(rng.Start.String()); !ip.Equal(stop); addrInc(ip) {
 		ips = append(ips, ip.String())
 	}
 	return ips
@@ -257,18 +257,67 @@ func RangeHosts(rng *IPRange) []string {
 func NetHosts(cidr *net.IPNet) []string {
 	var ips []string
 
-	for ip := cidr.IP.Mask(cidr.Mask); cidr.Contains(ip); inc(ip) {
+	for ip := cidr.IP.Mask(cidr.Mask); cidr.Contains(ip); addrInc(ip) {
 		ips = append(ips, ip.String())
 	}
 	// Remove network address and broadcast address
 	return ips[1 : len(ips)-1]
 }
 
-func inc(ip net.IP) {
+func addrInc(ip net.IP) {
 	for j := len(ip) - 1; j >= 0; j-- {
 		ip[j]++
 		if ip[j] > 0 {
 			break
 		}
 	}
+}
+
+func addrDec(ip net.IP) {
+	for j := len(ip) - 1; j >= 0; j-- {
+		if ip[j] > 0 {
+			ip[j]--
+			break
+		}
+		ip[j]--
+	}
+}
+
+// getCIDRSubset - Returns a subset of the hosts slice with num elements around the addr element
+func CIDRSubset(cidr *net.IPNet, addr string, num int) []string {
+	first := net.ParseIP(addr)
+
+	if !cidr.Contains(first) {
+		return []string{addr}
+	}
+
+	offset := num / 2
+	// Get the first address
+	for i := 0; i < offset; i++ {
+		addrDec(first)
+		// Check that it is still within the CIDR
+		if !cidr.Contains(first) {
+			addrInc(first)
+			break
+		}
+	}
+	// Get the last address
+	last := net.ParseIP(addr)
+	for i := 0; i < offset; i++ {
+		addrInc(last)
+		// Check that it is still within the CIDR
+		if !cidr.Contains(last) {
+			addrDec(last)
+			break
+		}
+	}
+	// Check that the addresses are not the same
+	if first.Equal(last) {
+		return []string{first.String()}
+	}
+	// Return the IP addresses within the range
+	return RangeHosts(&IPRange{
+		Start: first,
+		End:   last,
+	})
 }

@@ -11,14 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/caffix/recon"
 )
-
-type domainRequest struct {
-	Subdomain string
-	Result    chan string
-}
 
 type ActiveCertService struct {
 	BaseAmassService
@@ -28,16 +21,10 @@ type ActiveCertService struct {
 
 	// Ensures that the same IP is not used twice
 	filter map[string]struct{}
-
-	// Requests for root domain names come here
-	domains chan *domainRequest
 }
 
 func NewActiveCertService(in, out chan *AmassRequest, config *AmassConfig) *ActiveCertService {
-	acs := &ActiveCertService{
-		filter:  make(map[string]struct{}),
-		domains: make(chan *domainRequest),
-	}
+	acs := &ActiveCertService{filter: make(map[string]struct{})}
 
 	acs.BaseAmassService = *NewBaseAmassService("Active Certificate Service", config, acs)
 
@@ -49,7 +36,6 @@ func NewActiveCertService(in, out chan *AmassRequest, config *AmassConfig) *Acti
 func (acs *ActiveCertService) OnStart() error {
 	acs.BaseAmassService.OnStart()
 
-	go acs.processSubToRootDomain()
 	go acs.processRequests()
 	return nil
 }
@@ -84,7 +70,7 @@ loop:
 }
 
 func (acs *ActiveCertService) add(req *AmassRequest) {
-	if !acs.Config().AddDomains {
+	if !acs.Config().AdditionalDomains {
 		return
 	}
 	acs.SetActive(true)
@@ -144,7 +130,7 @@ func (acs *ActiveCertService) handleRequest(req *AmassRequest) {
 func (acs *ActiveCertService) performOutput(req *AmassRequest) {
 	acs.SetActive(true)
 	// Check if the discovered name belongs to a root domain of interest
-	for _, domain := range acs.Config().Domains {
+	for _, domain := range acs.Config().Domains() {
 		// If we have a match, the request can be sent out
 		if req.Domain == domain {
 			acs.SendOut(req)
@@ -189,9 +175,9 @@ func (acs *ActiveCertService) pullCertificate(req *AmassRequest) {
 	for _, r := range requests {
 		domains = UniqueAppend(domains, r.Domain)
 	}
-	// If necessary, add the domains to the configuration
-	if req.addDomains {
-		acs.Config().Domains = UniqueAppend(acs.Config().Domains, domains...)
+	// Attempt to add the domains to the configuration
+	if acs.Config().AdditionalDomains {
+		acs.Config().AddDomains(domains)
 	}
 	// Send all the new requests out
 	for _, req := range requests {
@@ -249,13 +235,7 @@ func (acs *ActiveCertService) reqFromNames(subdomains []string) []*AmassRequest 
 
 	// For each subdomain name, attempt to make a new AmassRequest
 	for _, name := range subdomains {
-		answer := make(chan string, 2)
-
-		acs.domains <- &domainRequest{
-			Subdomain: name,
-			Result:    answer,
-		}
-		root := <-answer
+		root := SubdomainToDomain(name)
 
 		if root != "" {
 			requests = append(requests, &AmassRequest{
@@ -267,86 +247,4 @@ func (acs *ActiveCertService) reqFromNames(subdomains []string) []*AmassRequest 
 		}
 	}
 	return requests
-}
-
-func (acs *ActiveCertService) processSubToRootDomain() {
-	var queue []*domainRequest
-
-	cache := make(map[string]struct{})
-
-	t := time.NewTicker(1 * time.Second)
-	defer t.Stop()
-loop:
-	for {
-		select {
-		case req := <-acs.domains:
-			queue = append(queue, req)
-		case <-t.C:
-			var next *domainRequest
-
-			if len(queue) == 1 {
-				next = queue[0]
-				queue = []*domainRequest{}
-			} else if len(queue) > 1 {
-				next = queue[0]
-				queue = queue[1:]
-			}
-
-			if next != nil {
-				next.Result <- rootDomainLookup(next.Subdomain, cache)
-			}
-		case <-acs.Quit():
-			break loop
-		}
-	}
-}
-
-func rootDomainLookup(name string, cache map[string]struct{}) string {
-	var domain string
-
-	// Obtain all parts of the subdomain name
-	labels := strings.Split(strings.TrimSpace(name), ".")
-	// Check the cache for all parts of the name
-	for i := len(labels) - 2; i >= 0; i-- {
-		sub := strings.Join(labels[i:], ".")
-
-		if _, found := cache[sub]; found {
-			domain = sub
-			break
-		}
-	}
-	// If the root domain was in the cache, return it now
-	if domain != "" {
-		return domain
-	}
-	// Check the DNS for all parts of the name
-	for i := len(labels) - 2; i >= 0; i-- {
-		sub := strings.Join(labels[i:], ".")
-
-		if checkDNSforDomain(sub) {
-			cache[sub] = struct{}{}
-			domain = sub
-			break
-		}
-	}
-	return domain
-}
-
-func checkDNSforDomain(domain string) bool {
-	server := Servers.NextNameserver()
-
-	// Check DNS for CNAME, A or AAAA records
-	_, err := recon.ResolveDNS(domain, server, "CNAME")
-	if err == nil {
-		return true
-	}
-	_, err = recon.ResolveDNS(domain, server, "A")
-	if err == nil {
-		return true
-	}
-	_, err = recon.ResolveDNS(domain, server, "AAAA")
-	if err == nil {
-		return true
-	}
-	return false
 }

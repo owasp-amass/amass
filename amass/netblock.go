@@ -66,14 +66,13 @@ func (ns *NetblockService) OnStop() error {
 
 func (ns *NetblockService) initialRequests() {
 	// Do root domain names need to be discovered?
-	if !ns.Config().AddDomains {
+	if !ns.Config().AdditionalDomains {
 		return
 	}
 	// Enter all ASN requests into the queue
 	for _, asn := range ns.Config().ASNs {
 		ns.add(&AmassRequest{
 			ASN:        asn,
-			noSweep:    true,
 			addDomains: true,
 		})
 	}
@@ -81,7 +80,6 @@ func (ns *NetblockService) initialRequests() {
 	for _, cidr := range ns.Config().CIDRs {
 		ns.add(&AmassRequest{
 			Netblock:   cidr,
-			noSweep:    true,
 			addDomains: true,
 		})
 	}
@@ -92,7 +90,6 @@ func (ns *NetblockService) initialRequests() {
 		for _, ip := range ips {
 			ns.add(&AmassRequest{
 				Address:    ip,
-				noSweep:    true,
 				addDomains: true,
 			})
 		}
@@ -101,7 +98,6 @@ func (ns *NetblockService) initialRequests() {
 	for _, ip := range ns.Config().IPs {
 		ns.add(&AmassRequest{
 			Address:    ip.String(),
-			noSweep:    true,
 			addDomains: true,
 		})
 	}

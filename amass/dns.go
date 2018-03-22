@@ -5,12 +5,9 @@ package amass
 
 import (
 	"errors"
-	"math/rand"
 	"strings"
-	"sync"
 	"time"
 
-	"github.com/caffix/amass/amass/stringset"
 	"github.com/caffix/recon"
 )
 
@@ -21,166 +18,110 @@ const (
 	ldhChars = "abcdefghijklmnopqrstuvwxyz0123456789-"
 )
 
-// Public & free DNS servers
-var knownPublicServers = []string{
-	"8.8.8.8:53",         // Google
-	"64.6.64.6:53",       // Verisign
-	"9.9.9.9:53",         // Quad9
-	"84.200.69.80:53",    // DNS.WATCH
-	"8.26.56.26:53",      // Comodo Secure DNS
-	"208.67.222.222:53",  // OpenDNS Home
-	"195.46.39.39:53",    // SafeDNS
-	"69.195.152.204:53",  // OpenNIC
-	"216.146.35.35:53",   // Dyn
-	"198.101.242.72:53",  // Alternate DNS
-	"77.88.8.8:53",       // Yandex.DNS
-	"91.239.100.100:53",  // UncensoredDNS
-	"74.82.42.42:53",     // Hurricane Electric
-	"156.154.70.1:53",    // Neustar
-	"8.8.4.4:53",         // Google Secondary
-	"149.112.112.112:53", // Quad9 Secondary
-	"84.200.70.40:53",    // DNS.WATCH Secondary
-	"8.20.247.20:53",     // Comodo Secure DNS Secondary
-	"208.67.220.220:53",  // OpenDNS Home Secondary
-	"195.46.39.40:53",    // SafeDNS Secondary
-	"216.146.36.36:53",   // Dyn Secondary
-	"77.88.8.1:53",       // Yandex.DNS Secondary
-	"89.233.43.71:53",    // UncensoredDNS Secondary
-	"156.154.71.1:53",    // Neustar Secondary
-	"37.235.1.174:53",    // FreeDNS
-	"37.235.1.177:53",    // FreeDNS Secondary
-	"23.253.163.53:53",   // Alternate DNS Secondary
-	"64.6.65.6:53",       // Verisign Secondary
-}
-
-var Servers *PublicDNSMonitor
-
-type serverStats struct {
-	Responding  bool
-	NumRequests int
-}
-
-func init() {
-	Servers = NewPublicDNSMonitor()
-}
-
-// Checks in real-time if the public DNS servers have become unusable
-type PublicDNSMonitor struct {
-	sync.Mutex
-
-	// List of servers that we know about
-	knownServers []string
-
-	// Tracking for which servers continue to be usable
-	usableServers map[string]*serverStats
-
-	// Requests for a server from the queue come here
-	nextServer chan chan string
-}
-
-func NewPublicDNSMonitor() *PublicDNSMonitor {
-	pdm := &PublicDNSMonitor{
-		knownServers:  knownPublicServers,
-		usableServers: make(map[string]*serverStats),
-		nextServer:    make(chan chan string, 100),
-	}
-	pdm.testAllServers()
-	go pdm.processServerQueue()
-	return pdm
-}
-
-func (pdm *PublicDNSMonitor) testAllServers() {
-	for _, server := range pdm.knownServers {
-		pdm.testServer(server)
-	}
-}
-
-func (pdm *PublicDNSMonitor) testServer(server string) bool {
-	var resp bool
-
-	_, err := recon.ResolveDNS(pickRandomTestName(), server, "A")
-	if err == nil {
-		resp = true
-	}
-
-	if _, found := pdm.usableServers[server]; !found {
-		pdm.usableServers[server] = new(serverStats)
-	}
-
-	pdm.usableServers[server].NumRequests = 0
-	pdm.usableServers[server].Responding = resp
-	return resp
-}
-
-func pickRandomTestName() string {
-	num := rand.Int()
-	names := []string{"google.com", "twitter.com", "linkedin.com",
-		"facebook.com", "amazon.com", "github.com", "apple.com"}
-
-	sel := num % len(names)
-	return names[sel]
-}
-
-func (pdm *PublicDNSMonitor) processServerQueue() {
-	var queue []string
-
-	for {
-		select {
-		case resp := <-pdm.nextServer:
-			if len(queue) == 0 {
-				queue = pdm.getServerList()
-			}
-			resp <- queue[0]
-
-			if len(queue) == 1 {
-				queue = []string{}
-			} else if len(queue) > 1 {
-				queue = queue[1:]
-			}
-		}
-	}
-}
-
-func (pdm *PublicDNSMonitor) getServerList() []string {
-	pdm.Lock()
-	defer pdm.Unlock()
-
-	// Check for servers that need to be tested
-	for svr, stats := range pdm.usableServers {
-		if !stats.Responding {
-			continue
-		}
-
-		stats.NumRequests++
-		if stats.NumRequests%50 == 0 {
-			pdm.testServer(svr)
-		}
-	}
-
-	var servers []string
-	// Build the slice of responding servers
-	for svr, stats := range pdm.usableServers {
-		if stats.Responding {
-			servers = append(servers, svr)
-		}
-	}
-	return servers
-}
-
-// NextNameserver - Requests the next server
-func (pdm *PublicDNSMonitor) NextNameserver() string {
-	ans := make(chan string, 2)
-
-	pdm.nextServer <- ans
-	return <-ans
-}
-
-//-------------------------------------------------------------------------------------------
-// DNSService implementation
-
-type wildcard struct {
-	Req *AmassRequest
-	Ans chan bool
+// The SRV records often utilized by organizations on the Internet
+var popularSRVRecords = []string{
+	"_caldav._tcp",
+	"_caldavs._tcp",
+	"_ceph._tcp",
+	"_ceph-mon._tcp",
+	"_www._tcp",
+	"_http._tcp",
+	"_www-http._tcp",
+	"_http._sctp",
+	"_smtp._tcp",
+	"_smtp._udp",
+	"_submission._tcp",
+	"_submission._udp",
+	"_submissions._tcp",
+	"_pop2._tcp",
+	"_pop2._udp",
+	"_pop3._tcp",
+	"_pop3._udp",
+	"_hybrid-pop._tcp",
+	"_hybrid-pop._udp",
+	"_pop3s._tcp",
+	"_pop3s._udp",
+	"_imap._tcp",
+	"_imap._udp",
+	"_imap3._tcp",
+	"_imap3._udp",
+	"_imaps._tcp",
+	"_imaps._udp",
+	"_hip-nat-t._udp",
+	"_kerberos._tcp",
+	"_kerberos._udp",
+	"_kerberos-master._tcp",
+	"_kerberos-master._udp",
+	"_kpasswd._tcp",
+	"_kpasswd._udp",
+	"_kerberos-adm._tcp",
+	"_kerberos-adm._udp",
+	"_kerneros-iv._udp",
+	"_kftp-data._tcp",
+	"_kftp-data._udp",
+	"_kftp._tcp",
+	"_kftp._udp",
+	"_ktelnet._tcp",
+	"_ktelnet._udp",
+	"_afs3-kaserver._tcp",
+	"_afs3-kaserver._udp",
+	"_ldap._tcp",
+	"_ldap._udp",
+	"_ldaps._tcp",
+	"_ldaps._udp",
+	"_www-ldap-gw._tcp",
+	"_www-ldap-gw._udp",
+	"_msft-gc-ssl._tcp",
+	"_msft-gc-ssl._udp",
+	"_ldap-admin._tcp",
+	"_ldap-admin._udp",
+	"_avatars._tcp",
+	"_avatars-sec._tcp",
+	"_matrix-vnet._tcp",
+	"_puppet._tcp",
+	"_x-puppet._tcp",
+	"_stun._tcp",
+	"_stun._udp",
+	"_stun-behavior._tcp",
+	"_stun-behavior._udp",
+	"_stuns._tcp",
+	"_stuns._udp",
+	"_stun-behaviors._tcp",
+	"_stun-behaviors._udp",
+	"_stun-p1._tcp",
+	"_stun-p1._udp",
+	"_stun-p2._tcp",
+	"_stun-p2._udp",
+	"_stun-p3._tcp",
+	"_stun-p3._udp",
+	"_stun-port._tcp",
+	"_stun-port._udp",
+	"_sip._tcp",
+	"_sip._udp",
+	"_sip._sctp",
+	"_sips._tcp",
+	"_sips._udp",
+	"_sips._sctp",
+	"_xmpp-client._tcp",
+	"_xmpp-client._udp",
+	"_xmpp-server._tcp",
+	"_xmpp-server._udp",
+	"_jabber._tcp",
+	"_xmpp-bosh._tcp",
+	"_presence._tcp",
+	"_presence._udp",
+	"_rwhois._tcp",
+	"_rwhois._udp",
+	"_whoispp._tcp",
+	"_whoispp._udp",
+	"_ts3._udp",
+	"_tsdns._tcp",
+	"_matrix._tcp",
+	"_minecraft._tcp",
+	"_imps-server._tcp",
+	"_autodiscover._tcp",
+	"_nicname._tcp",
+	"_nicname._udp",
 }
 
 type DNSService struct {
@@ -195,19 +136,15 @@ type DNSService struct {
 	// Provides a way to check if we're seeing a new root domain
 	domains map[string]struct{}
 
-	// Requests are sent through this channel to check DNS wildcard matches
-	wildcards chan *wildcard
-
 	// Results from the initial domain queries come here
 	internal chan *AmassRequest
 }
 
 func NewDNSService(in, out chan *AmassRequest, config *AmassConfig) *DNSService {
 	ds := &DNSService{
-		filter:    make(map[string]struct{}),
-		domains:   make(map[string]struct{}),
-		wildcards: make(chan *wildcard, 50),
-		internal:  make(chan *AmassRequest, 50),
+		filter:   make(map[string]struct{}),
+		domains:  make(map[string]struct{}),
+		internal: make(chan *AmassRequest, 50),
 	}
 
 	ds.BaseAmassService = *NewBaseAmassService("DNS Service", config, ds)
@@ -220,7 +157,6 @@ func NewDNSService(in, out chan *AmassRequest, config *AmassConfig) *DNSService 
 func (ds *DNSService) OnStart() error {
 	ds.BaseAmassService.OnStart()
 
-	go ds.processWildcardMatches()
 	go ds.processRequests()
 	return nil
 }
@@ -233,15 +169,50 @@ func (ds *DNSService) OnStop() error {
 func (ds *DNSService) basicQueries(domain string) {
 	var answers []recon.DNSAnswer
 
+	// Obtain CNAME, A and AAAA records for the root domain name
+	ans, err := dnsQuery(domain, Resolvers.NextNameserver())
+	if err == nil {
+		answers = append(answers, ans...)
+	}
 	// Obtain the DNS answers for the NS records related to the domain
-	ans, err := recon.ResolveDNS(domain, Servers.NextNameserver(), "NS")
+	ans, err = recon.ResolveDNS(domain, Resolvers.NextNameserver(), "NS")
 	if err == nil {
 		answers = append(answers, ans...)
 	}
 	// Obtain the DNS answers for the MX records related to the domain
-	ans, err = recon.ResolveDNS(domain, Servers.NextNameserver(), "MX")
+	ans, err = recon.ResolveDNS(domain, Resolvers.NextNameserver(), "MX")
 	if err == nil {
 		answers = append(answers, ans...)
+	}
+	// Obtain the DNS answers for the TXT records related to the domain
+	ans, err = recon.ResolveDNS(domain, Resolvers.NextNameserver(), "TXT")
+	if err == nil {
+		answers = append(answers, ans...)
+	}
+	// Obtain the DNS answers for the SOA records related to the domain
+	ans, err = recon.ResolveDNS(domain, Resolvers.NextNameserver(), "SOA")
+	if err == nil {
+		answers = append(answers, ans...)
+	}
+	// Check all the popular SRV records
+	for _, name := range popularSRVRecords {
+		srvName := name + "." + domain
+
+		ans, err = recon.ResolveDNS(srvName, Resolvers.NextNameserver(), "SRV")
+		if err == nil {
+			answers = append(answers, ans...)
+			for _, a := range ans {
+				if srvName != a.Name {
+					continue
+				}
+				ds.internal <- &AmassRequest{
+					Name:   a.Name,
+					Domain: domain,
+					Tag:    DNS,
+					Source: "Forward DNS",
+				}
+			}
+		}
 	}
 	// Only return names within the domain name of interest
 	re := SubdomainRegex(domain)
@@ -321,7 +292,7 @@ func (ds *DNSService) nextFromQueue() *AmassRequest {
 }
 
 func (ds *DNSService) performDNSRequest(req *AmassRequest) {
-	answers, err := dnsQuery(req.Domain, req.Name, Servers.NextNameserver())
+	answers, err := dnsQuery(req.Name, Resolvers.NextNameserver())
 	if err != nil {
 		return
 	}
@@ -332,7 +303,7 @@ func (ds *DNSService) performDNSRequest(req *AmassRequest) {
 	}
 	req.Address = ipstr
 
-	match := ds.dnsWildcardMatch(req)
+	match := DetectDNSWildcard(req)
 	// If the name didn't come from a search, check it doesn't match a wildcard IP address
 	if req.Tag != SEARCH && match {
 		return
@@ -350,7 +321,7 @@ func (ds *DNSService) performDNSRequest(req *AmassRequest) {
 			source = req.Source
 		}
 		ds.SendOut(&AmassRequest{
-			Name:    trim252F(record.Name),
+			Name:    record.Name,
 			Domain:  req.Domain,
 			Address: ipstr,
 			Tag:     tag,
@@ -360,10 +331,18 @@ func (ds *DNSService) performDNSRequest(req *AmassRequest) {
 }
 
 // dnsQuery - Performs the DNS resolution and pulls names out of the errors or answers
-func dnsQuery(domain, name, server string) ([]recon.DNSAnswer, error) {
+func dnsQuery(name, server string) ([]recon.DNSAnswer, error) {
 	var resolved bool
 
-	answers, name := recursiveCNAME(name, server)
+	answers, n := serviceName(name, server)
+	if n != "" {
+		name = n
+	}
+	ans, n := recursiveCNAME(name, server)
+	if len(ans) > 0 {
+		answers = append(answers, ans...)
+		name = n
+	}
 	// Obtain the DNS answers for the A records related to the name
 	ans, err := recon.ResolveDNS(name, server, "A")
 	if err == nil {
@@ -383,6 +362,15 @@ func dnsQuery(domain, name, server string) ([]recon.DNSAnswer, error) {
 	return answers, nil
 }
 
+// serviceName - Obtain the DNS answers and target name for the  SRV record
+func serviceName(name, server string) ([]recon.DNSAnswer, string) {
+	ans, err := recon.ResolveDNS(name, server, "SRV")
+	if err == nil {
+		return ans, ans[0].Data
+	}
+	return nil, ""
+}
+
 func recursiveCNAME(name, server string) ([]recon.DNSAnswer, string) {
 	var answers []recon.DNSAnswer
 
@@ -397,137 +385,4 @@ func recursiveCNAME(name, server string) ([]recon.DNSAnswer, string) {
 		name = a[0].Data
 	}
 	return answers, name
-}
-
-//--------------------------------------------------------------------------------------------
-// Wildcard detection
-
-type dnsWildcard struct {
-	HasWildcard bool
-	Answers     *stringset.StringSet
-}
-
-// DNSWildcardMatch - Checks subdomains in the wildcard cache for matches on the IP address
-func (ds *DNSService) dnsWildcardMatch(req *AmassRequest) bool {
-	answer := make(chan bool, 2)
-
-	ds.wildcards <- &wildcard{
-		Req: req,
-		Ans: answer,
-	}
-	return <-answer
-}
-
-// Goroutine that keeps track of DNS wildcards discovered
-func (ds *DNSService) processWildcardMatches() {
-	wildcards := make(map[string]*dnsWildcard)
-loop:
-	for {
-		select {
-		case req := <-ds.wildcards:
-			r := req.Req
-			req.Ans <- matchesWildcard(r.Name, r.Domain, r.Address, wildcards)
-		case <-ds.Quit():
-			break loop
-		}
-	}
-}
-
-func matchesWildcard(name, root, ip string, wildcards map[string]*dnsWildcard) bool {
-	var answer bool
-
-	base := len(strings.Split(root, "."))
-	// Obtain all parts of the subdomain name
-	labels := strings.Split(name, ".")
-
-	for i := len(labels) - base; i > 0; i-- {
-		sub := strings.Join(labels[i:], ".")
-
-		// See if detection has been performed for this subdomain
-		w, found := wildcards[sub]
-		if !found {
-			entry := &dnsWildcard{
-				HasWildcard: false,
-				Answers:     nil,
-			}
-			// Try three times for good luck
-			for i := 0; i < 3; i++ {
-				// Does this subdomain have a wildcard?
-				if ss := wildcardDetection(sub, root); ss != nil {
-					entry.HasWildcard = true
-					entry.Answers = ss
-					break
-				}
-			}
-			w = entry
-			wildcards[sub] = w
-		}
-		// Check if the subdomain and address in question match a wildcard
-		if w.HasWildcard && w.Answers.Contains(ip) {
-			answer = true
-		}
-	}
-	return answer
-}
-
-// wildcardDetection detects if a domain returns an IP
-// address for "bad" names, and if so, which address(es) are used
-func wildcardDetection(sub, root string) *stringset.StringSet {
-	// An unlikely name will be checked for this subdomain
-	name := unlikelyName(sub)
-	if name == "" {
-		return nil
-	}
-	// Check if the name resolves
-	ans, err := dnsQuery(root, name, Servers.NextNameserver())
-	if err != nil {
-		return nil
-	}
-	result := answersToStringSet(ans)
-	if result.Empty() {
-		return nil
-	}
-	return result
-}
-
-func unlikelyName(sub string) string {
-	var newlabel string
-	ldh := []byte(ldhChars)
-	ldhLen := len(ldh)
-
-	// Determine the max label length
-	l := maxNameLen - len(sub)
-	if l > maxLabelLen {
-		l = maxLabelLen / 2
-	} else if l < 1 {
-		return ""
-	}
-	// Shuffle our LDH characters
-	rand.Shuffle(ldhLen, func(i, j int) {
-		ldh[i], ldh[j] = ldh[j], ldh[i]
-	})
-
-	for i := 0; i < l; i++ {
-		sel := rand.Int() % ldhLen
-
-		// The first nor last char may be a hyphen
-		if (i == 0 || i == l-1) && ldh[sel] == '-' {
-			continue
-		}
-		newlabel = newlabel + string(ldh[sel])
-	}
-
-	if newlabel == "" {
-		return newlabel
-	}
-	return newlabel + "." + sub
-}
-
-func answersToStringSet(answers []recon.DNSAnswer) *stringset.StringSet {
-	ss := stringset.NewStringSet()
-
-	for _, a := range answers {
-		ss.Add(a.Data)
-	}
-	return ss
 }

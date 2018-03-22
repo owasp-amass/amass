@@ -40,7 +40,7 @@ func (ihs *IPHistoryService) OnStop() error {
 func (ihs *IPHistoryService) executeAllSearches() {
 	ihs.SetActive(true)
 	// Loop over all the root domains provided in the config
-	for _, domain := range ihs.Config().Domains {
+	for _, domain := range ihs.Config().Domains() {
 		if !ihs.duplicate(domain) {
 			ihs.LookupIPs(domain)
 			time.Sleep(1 * time.Second)

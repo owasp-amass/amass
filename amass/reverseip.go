@@ -75,7 +75,7 @@ loop:
 }
 
 func (ris *ReverseIPService) processAlternatives() {
-	t := time.NewTicker(1 * time.Second)
+	t := time.NewTicker(500 * time.Millisecond)
 	defer t.Stop()
 loop:
 	for {
@@ -130,8 +130,18 @@ loop:
 
 func (ris *ReverseIPService) performOutput(req *AmassRequest) {
 	ris.SetActive(true)
+	if req.addDomains {
+		req.Domain = SubdomainToDomain(req.Name)
+		if req.Domain != "" {
+			if ris.Config().AdditionalDomains {
+				ris.Config().AddDomains([]string{req.Domain})
+			}
+			ris.SendOut(req)
+		}
+		return
+	}
 	// Check if the discovered name belongs to a root domain of interest
-	for _, domain := range ris.Config().Domains {
+	for _, domain := range ris.Config().Domains() {
 		re := SubdomainRegex(domain)
 		re.Longest()
 
@@ -159,14 +169,13 @@ func (ris *ReverseIPService) duplicate(ip string) bool {
 }
 
 func (ris *ReverseIPService) execReverseDNS(req *AmassRequest) {
-	done := make(chan int)
-
 	ris.SetActive(true)
 	if req.Address == "" || ris.duplicate(req.Address) {
 		return
 	}
 
-	ris.dns.Search(req.Address, done)
+	done := make(chan int)
+	ris.dns.Search(req, done)
 	if <-done == 0 {
 		ris.addToQueue(req)
 	}
@@ -177,13 +186,12 @@ func (ris *ReverseIPService) execAlternatives(req *AmassRequest) {
 		return
 	}
 
-	done := make(chan int)
-
 	ris.SetActive(true)
+	done := make(chan int)
 	for _, s := range ris.others {
-		go s.Search(req.Address, done)
+		go s.Search(req, done)
 	}
-
+	// Wait for the lookups to complete
 	for i := 0; i < len(ris.others); i++ {
 		ris.SetActive(true)
 		<-done
@@ -193,7 +201,7 @@ func (ris *ReverseIPService) execAlternatives(req *AmassRequest) {
 
 // ReverseIper - represents all types that perform reverse IP lookups
 type ReverseIper interface {
-	Search(ip string, done chan int)
+	Search(req *AmassRequest, done chan int)
 	fmt.Stringer
 }
 
@@ -214,13 +222,13 @@ func (se *reverseIPSearchEngine) urlByPageNum(ip string, page int) string {
 	return se.Callback(se, ip, page)
 }
 
-func (se *reverseIPSearchEngine) Search(ip string, done chan int) {
+func (se *reverseIPSearchEngine) Search(req *AmassRequest, done chan int) {
 	var unique []string
 
 	re := AnySubdomainRegex()
 	num := se.Limit / se.Quantity
 	for i := 0; i < num; i++ {
-		page := GetWebPage(se.urlByPageNum(ip, i))
+		page := GetWebPage(se.urlByPageNum(req.Address, i))
 		if page == "" {
 			break
 		}
@@ -231,9 +239,10 @@ func (se *reverseIPSearchEngine) Search(ip string, done chan int) {
 			if len(u) > 0 {
 				unique = append(unique, u...)
 				se.Output <- &AmassRequest{
-					Name:   sd,
-					Tag:    SEARCH,
-					Source: se.Name,
+					Name:       sd,
+					Tag:        SEARCH,
+					Source:     se.Name,
+					addDomains: req.addDomains,
 				}
 			}
 		}
@@ -276,11 +285,11 @@ func (l *reverseIPLookup) String() string {
 	return l.Name
 }
 
-func (l *reverseIPLookup) Search(ip string, done chan int) {
+func (l *reverseIPLookup) Search(req *AmassRequest, done chan int) {
 	var unique []string
 
 	re := AnySubdomainRegex()
-	page := GetWebPage(l.Callback(ip))
+	page := GetWebPage(l.Callback(req.Address))
 	if page == "" {
 		done <- 0
 		return
@@ -292,9 +301,10 @@ func (l *reverseIPLookup) Search(ip string, done chan int) {
 		if len(u) > 0 {
 			unique = append(unique, u...)
 			l.Output <- &AmassRequest{
-				Name:   sd,
-				Tag:    SEARCH,
-				Source: l.Name,
+				Name:       sd,
+				Tag:        SEARCH,
+				Source:     l.Name,
+				addDomains: req.addDomains,
 			}
 		}
 	}
@@ -326,16 +336,17 @@ func (l *reverseDNSLookup) String() string {
 	return l.Name
 }
 
-func (l *reverseDNSLookup) Search(ip string, done chan int) {
+func (l *reverseDNSLookup) Search(req *AmassRequest, done chan int) {
 	re := AnySubdomainRegex()
 
-	name, err := recon.ReverseDNS(ip, Servers.NextNameserver())
+	name, err := recon.ReverseDNS(req.Address, Resolvers.NextNameserver())
 	if err == nil && re.MatchString(name) {
 		// Send the name to be resolved in the forward direction
 		l.Output <- &AmassRequest{
-			Name:   name,
-			Tag:    DNS,
-			Source: l.Name,
+			Name:       name,
+			Tag:        DNS,
+			Source:     l.Name,
+			addDomains: req.addDomains,
 		}
 		done <- 1
 		return

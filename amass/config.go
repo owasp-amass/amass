@@ -9,13 +9,13 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"sync"
 	"time"
 )
 
 // AmassConfig - Passes along optional configurations
 type AmassConfig struct {
-	// The root domain names that the enumeration will target
-	Domains []string
+	sync.Mutex
 
 	// The ASNs that the enumeration will target
 	ASNs []int
@@ -51,14 +51,27 @@ type AmassConfig struct {
 	Output chan *AmassRequest
 
 	// Indicate that Amass cannot add domains to the config
-	AddDomains bool
+	AdditionalDomains bool
+
+	// The root domain names that the enumeration will target
+	domains []string
+}
+
+func (c *AmassConfig) AddDomains(names []string) {
+	c.Lock()
+	defer c.Unlock()
+
+	c.domains = UniqueAppend(c.domains, names...)
+}
+
+func (c *AmassConfig) Domains() []string {
+	c.Lock()
+	defer c.Unlock()
+
+	return c.domains
 }
 
 func CheckConfig(config *AmassConfig) error {
-	/*if len(config.Domains) == 0 {
-		return errors.New("The configuration contains no domain names")
-	}*/
-
 	if len(config.Wordlist) == 0 {
 		return errors.New("The configuration contains no wordlist")
 	}
@@ -87,7 +100,10 @@ func DefaultConfig() *AmassConfig {
 func CustomConfig(ac *AmassConfig) *AmassConfig {
 	config := DefaultConfig()
 
-	config.Domains = ac.Domains
+	if len(ac.Domains()) > 0 {
+		config.AddDomains(ac.Domains())
+	}
+
 	config.ASNs = ac.ASNs
 	config.CIDRs = ac.CIDRs
 	config.Ranges = ac.Ranges
@@ -112,7 +128,7 @@ func CustomConfig(ac *AmassConfig) *AmassConfig {
 	}
 
 	config.Output = ac.Output
-	config.AddDomains = ac.AddDomains
+	config.AdditionalDomains = ac.AdditionalDomains
 	return config
 }
 

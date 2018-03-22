@@ -5,13 +5,7 @@ package amass
 
 import (
 	"net"
-	"strconv"
 	"testing"
-)
-
-const (
-	testAddr string = "192.168.1.55"
-	testCIDR string = "192.168.1.0/24"
 )
 
 func TestSweepService(t *testing.T) {
@@ -33,38 +27,5 @@ func TestSweepService(t *testing.T) {
 	for i := 0; i < 51; i++ {
 		<-out
 	}
-
 	srv.Stop()
-}
-
-func TestSweepGetCIDRSubset(t *testing.T) {
-	_, ipnet, err := net.ParseCIDR(testCIDR)
-	if err != nil {
-		t.Errorf("Unable to parse the CIDR: %s", err)
-	}
-
-	ips := NetHosts(ipnet)
-
-	size := 50
-	offset := size / 2
-	subset := getCIDRSubset(ips, testAddr, size)
-	sslen := len(subset)
-
-	if sslen != size+1 {
-		t.Errorf("getCIDRSubset returned an incorrect number of elements: %d", sslen)
-	}
-
-	if subset[0] != "192.168.1."+strconv.Itoa(55-offset) {
-		t.Errorf("getCIDRSubset did not return the correct first element: %s", subset[0])
-	} else if subset[sslen-1] != "192.168.1."+strconv.Itoa(55+offset) {
-		t.Errorf("getCIDRSubset did not return the correct last element: %s", subset[sslen-1])
-	}
-
-	// Test the end of the slice edge case
-	subset = getCIDRSubset(ips, "192.168.1.250", size)
-	sslen = len(subset)
-
-	if sslen != offset+5 {
-		t.Error("getCIDRSubset returned an incorrect number of elements")
-	}
 }

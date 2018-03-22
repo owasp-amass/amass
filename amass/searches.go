@@ -73,9 +73,9 @@ func (sss *SubdomainSearchService) processOutput() {
 loop:
 	for {
 		select {
-		case out := <-sss.responses:
-			if !sss.duplicate(out.Name) {
-				sss.SendOut(out)
+		case req := <-sss.responses:
+			if !sss.duplicate(req.Name) {
+				sss.SendOut(req)
 			}
 		case <-sss.Quit():
 			break loop
@@ -98,7 +98,7 @@ func (sss *SubdomainSearchService) executeAllSearches() {
 
 	sss.SetActive(true)
 	// Loop over all the root domains provided in the config
-	for _, domain := range sss.Config().Domains {
+	for _, domain := range sss.Config().Domains() {
 		if _, found := sss.domainFilter[domain]; found {
 			continue
 		}
@@ -514,8 +514,6 @@ func (c *crtsh) String() string {
 func (c *crtsh) Search(domain string, done chan int) {
 	var unique []string
 
-	re := SubdomainRegex(domain)
-	reID := regexp.MustCompile("<TD style=\"text-align:center\"><A href=\"([?]id=[a-zA-Z0-9]*)\">[a-zA-Z0-9]*</A></TD>")
 	// Pull the page that lists all certs for this domain
 	page := GetWebPage(c.Base + "?q=%25." + domain)
 	if page == "" {
@@ -524,7 +522,7 @@ func (c *crtsh) Search(domain string, done chan int) {
 	}
 	// Get the subdomain name the cert was issued to, and
 	// the Subject Alternative Name list from each cert
-	results := c.getSubmatches(page, reID)
+	results := c.getSubmatches(page)
 	for _, rel := range results {
 		// Do not go too fast
 		time.Sleep(50 * time.Millisecond)
@@ -534,13 +532,15 @@ func (c *crtsh) Search(domain string, done chan int) {
 			continue
 		}
 		// Get all names off the certificate
-		names := c.getMatches(cert, re)
+		names := c.getMatches(cert, domain)
 		// Send unique names out
 		u := NewUniqueElements(unique, names...)
 		if len(u) > 0 {
 			unique = append(unique, u...)
-			c.sendAllNames(u, domain)
 		}
+	}
+	if len(unique) > 0 {
+		c.sendAllNames(unique, domain)
 	}
 	done <- len(unique)
 }
@@ -556,18 +556,20 @@ func (c *crtsh) sendAllNames(names []string, domain string) {
 	}
 }
 
-func (c *crtsh) getMatches(content string, re *regexp.Regexp) []string {
+func (c *crtsh) getMatches(content, domain string) []string {
 	var results []string
 
+	re := SubdomainRegex(domain)
 	for _, s := range re.FindAllString(content, -1) {
 		results = append(results, s)
 	}
 	return results
 }
 
-func (c *crtsh) getSubmatches(content string, re *regexp.Regexp) []string {
+func (c *crtsh) getSubmatches(content string) []string {
 	var results []string
 
+	re := regexp.MustCompile("<TD style=\"text-align:center\"><A href=\"([?]id=[a-zA-Z0-9]*)\">[a-zA-Z0-9]*</A></TD>")
 	for _, subs := range re.FindAllStringSubmatch(content, -1) {
 		results = append(results, strings.TrimSpace(subs[1]))
 	}

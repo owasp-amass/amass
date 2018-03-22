@@ -35,9 +35,6 @@ type AmassRequest struct {
 	// The exact data source that discovered the name
 	Source string
 
-	// Sweeps will not be initiated from this request
-	noSweep bool
-
 	// The ActiveCertService is allowed add domains to the config from this request
 	addDomains bool
 }

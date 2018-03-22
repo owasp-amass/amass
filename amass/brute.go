@@ -72,7 +72,7 @@ func (bfs *BruteForceService) startRootDomains() {
 		return
 	}
 	// Look at each domain provided by the config
-	for _, domain := range bfs.Config().Domains {
+	for _, domain := range bfs.Config().Domains() {
 		// Check if we have seen the Domain already
 		if !bfs.duplicate(domain) {
 			go bfs.performBruteForcing(domain, domain)

@@ -13,10 +13,10 @@ func TestBruteForceService(t *testing.T) {
 	in := make(chan *AmassRequest)
 	out := make(chan *AmassRequest)
 	config := CustomConfig(&AmassConfig{
-		Domains:      domains,
 		Wordlist:     []string{"foo", "bar"},
 		BruteForcing: true,
 	})
+	config.AddDomains(domains)
 	srv := NewBruteForceService(in, out, config)
 	srv.Start()
 
