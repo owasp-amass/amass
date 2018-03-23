@@ -104,7 +104,7 @@ func (bfs *BruteForceService) checkForNewSubdomain(req *AmassRequest) {
 	if num-1 <= len(strings.Split(req.Domain, ".")) {
 		return
 	}
-	// Otherwise, run the brute forcing on the proper subdomain
+	// Otherwise, run the brute forcing on the subdomain
 	go bfs.performBruteForcing(sub, req.Domain)
 }
 
@@ -120,6 +120,6 @@ func (bfs *BruteForceService) performBruteForcing(subdomain, root string) {
 		})
 		// Going too fast will overwhelm the dns
 		// service and overuse memory
-		time.Sleep(bfs.Config().Frequency * 2)
+		time.Sleep(bfs.Config().Frequency)
 	}
 }

@@ -14,7 +14,6 @@ import (
 
 const (
 	// Tags used to mark the data source with the Subdomain struct
-	DNS     = "dns"
 	ALT     = "alt"
 	BRUTE   = "brute"
 	SEARCH  = "search"

@@ -9,13 +9,16 @@ import (
 	"github.com/caffix/recon"
 )
 
-func TestDNSPublicServers(t *testing.T) {
+func TestDNSQuery(t *testing.T) {
 	name := "google.com"
+	server := "8.8.8.8:53"
 
-	for _, server := range knownPublicServers {
-		_, err := recon.ResolveDNS(name, server, "A")
-		if err != nil {
-			t.Errorf("Public DNS server (%s) failed to resolve (%s)", server, name)
-		}
+	answers, err := DNS.Query(name, server)
+	if err != nil {
+		t.Errorf("The DNS query for %s using the %s server failed: %s", name, server, err)
+	}
+
+	if ip := recon.GetARecordData(answers); ip == "" {
+		t.Errorf("The query for %s was successful, yet did not return a A or AAAA record", name)
 	}
 }

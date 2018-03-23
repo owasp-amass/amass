@@ -83,7 +83,7 @@ func (ss *SweepService) AttemptSweep(req *AmassRequest) {
 			ss.SendOut(&AmassRequest{
 				Domain:     req.Domain,
 				Address:    ip,
-				Tag:        DNS,
+				Tag:        "dns",
 				Source:     "DNS",
 				addDomains: req.addDomains,
 			})

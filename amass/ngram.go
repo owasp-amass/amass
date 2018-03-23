@@ -173,7 +173,7 @@ func (ns *NgramService) StartGuessing() {
 
 	numOfGuesses := maxGuesses / ns.NumSubdomains()
 
-	t := time.NewTicker(50 * time.Millisecond)
+	t := time.NewTicker(ns.Config().Frequency)
 	defer t.Stop()
 
 	subs := ns.Subdomains()

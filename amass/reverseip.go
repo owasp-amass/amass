@@ -344,7 +344,7 @@ func (l *reverseDNSLookup) Search(req *AmassRequest, done chan int) {
 		// Send the name to be resolved in the forward direction
 		l.Output <- &AmassRequest{
 			Name:       name,
-			Tag:        DNS,
+			Tag:        "dns",
 			Source:     l.Name,
 			addDomains: req.addDomains,
 		}

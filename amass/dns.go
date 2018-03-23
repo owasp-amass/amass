@@ -6,6 +6,7 @@ package amass
 import (
 	"errors"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/caffix/recon"
@@ -131,7 +132,10 @@ type DNSService struct {
 	queue []*AmassRequest
 
 	// Ensures we do not resolve names more than once
-	filter map[string]struct{}
+	inFilter map[string]struct{}
+
+	// Ensures we do not send out names more than once
+	outFilter map[string]struct{}
 
 	// Provides a way to check if we're seeing a new root domain
 	domains map[string]struct{}
@@ -142,9 +146,10 @@ type DNSService struct {
 
 func NewDNSService(in, out chan *AmassRequest, config *AmassConfig) *DNSService {
 	ds := &DNSService{
-		filter:   make(map[string]struct{}),
-		domains:  make(map[string]struct{}),
-		internal: make(chan *AmassRequest, 50),
+		inFilter:  make(map[string]struct{}),
+		outFilter: make(map[string]struct{}),
+		domains:   make(map[string]struct{}),
+		internal:  make(chan *AmassRequest, 50),
 	}
 
 	ds.BaseAmassService = *NewBaseAmassService("DNS Service", config, ds)
@@ -170,7 +175,7 @@ func (ds *DNSService) basicQueries(domain string) {
 	var answers []recon.DNSAnswer
 
 	// Obtain CNAME, A and AAAA records for the root domain name
-	ans, err := dnsQuery(domain, Resolvers.NextNameserver())
+	ans, err := DNS.Query(domain, Resolvers.NextNameserver())
 	if err == nil {
 		answers = append(answers, ans...)
 	}
@@ -208,7 +213,7 @@ func (ds *DNSService) basicQueries(domain string) {
 				ds.internal <- &AmassRequest{
 					Name:   a.Name,
 					Domain: domain,
-					Tag:    DNS,
+					Tag:    "dns",
 					Source: "Forward DNS",
 				}
 			}
@@ -221,7 +226,7 @@ func (ds *DNSService) basicQueries(domain string) {
 			ds.internal <- &AmassRequest{
 				Name:   sd,
 				Domain: domain,
-				Tag:    DNS,
+				Tag:    "dns",
 				Source: "Forward DNS",
 			}
 		}
@@ -265,13 +270,23 @@ loop:
 	}
 }
 
+func (ds *DNSService) duplicate(name string) bool {
+	ds.Lock()
+	defer ds.Unlock()
+
+	if _, found := ds.inFilter[name]; found {
+		return true
+	}
+	ds.inFilter[name] = struct{}{}
+	return false
+}
+
 func (ds *DNSService) addToQueue(req *AmassRequest) {
 	if _, found := ds.domains[req.Domain]; !found {
 		ds.domains[req.Domain] = struct{}{}
 		go ds.basicQueries(req.Domain)
 	}
-	if _, found := ds.filter[req.Name]; req.Name != "" && !found {
-		ds.filter[req.Name] = struct{}{}
+	if req.Name != "" && !ds.duplicate(req.Name) {
 		ds.queue = append(ds.queue, req)
 	}
 }
@@ -291,8 +306,19 @@ func (ds *DNSService) nextFromQueue() *AmassRequest {
 	return next
 }
 
+func (ds *DNSService) alreadySent(name string) bool {
+	ds.Lock()
+	defer ds.Unlock()
+
+	if _, found := ds.outFilter[name]; found {
+		return true
+	}
+	ds.outFilter[name] = struct{}{}
+	return false
+}
+
 func (ds *DNSService) performDNSRequest(req *AmassRequest) {
-	answers, err := dnsQuery(req.Name, Resolvers.NextNameserver())
+	answers, err := DNS.Query(req.Name, Resolvers.NextNameserver())
 	if err != nil {
 		return
 	}
@@ -310,18 +336,21 @@ func (ds *DNSService) performDNSRequest(req *AmassRequest) {
 	}
 	// Return the successfully resolved names + address
 	for _, record := range answers {
-		if !strings.HasSuffix(record.Name, req.Domain) {
+		name := removeLastDot(record.Name)
+
+		// Should this name be sent out?
+		if !strings.HasSuffix(name, req.Domain) || ds.alreadySent(name) {
 			continue
 		}
-
-		tag := DNS
+		// Check which tag and source info to attach
+		tag := "dns"
 		source := "Forward DNS"
-		if record.Name == req.Name {
+		if name == req.Name {
 			tag = req.Tag
 			source = req.Source
 		}
 		ds.SendOut(&AmassRequest{
-			Name:    record.Name,
+			Name:    name,
 			Domain:  req.Domain,
 			Address: ipstr,
 			Tag:     tag,
@@ -330,28 +359,63 @@ func (ds *DNSService) performDNSRequest(req *AmassRequest) {
 	}
 }
 
-// dnsQuery - Performs the DNS resolution and pulls names out of the errors or answers
-func dnsQuery(name, server string) ([]recon.DNSAnswer, error) {
-	var resolved bool
+//-------------------------------------------------------------------------------------------------
+// DNS Query
 
-	answers, n := serviceName(name, server)
+type queries struct {
+	sync.Mutex
+
+	// Caches the results from previous DNS queries
+	cache map[string][]recon.DNSAnswer
+}
+
+var DNS *queries
+
+func init() {
+	DNS = &queries{cache: make(map[string][]recon.DNSAnswer)}
+}
+
+func (q *queries) addToCache(name string, ans []recon.DNSAnswer) {
+	q.Lock()
+	defer q.Unlock()
+
+	q.cache[name] = ans
+}
+
+func (q *queries) cacheLookup(name string) []recon.DNSAnswer {
+	q.Lock()
+	defer q.Unlock()
+
+	if entry, found := q.cache[name]; found {
+		return entry
+	}
+	return []recon.DNSAnswer{}
+}
+
+// Query - Performs the DNS resolution and pulls names out of the errors or answers
+func (q *queries) Query(name, server string) ([]recon.DNSAnswer, error) {
+	var resolved bool
+	var answers []recon.DNSAnswer
+
+	ans, n := serviceName(name, server)
 	if n != "" {
+		answers = append(answers, ans...)
 		name = n
 	}
-	ans, n := recursiveCNAME(name, server)
+	ans, n = q.recursiveCNAME(name, server)
 	if len(ans) > 0 {
 		answers = append(answers, ans...)
 		name = n
 	}
 	// Obtain the DNS answers for the A records related to the name
-	ans, err := recon.ResolveDNS(name, server, "A")
-	if err == nil {
+	ans = q.Lookup(name, server, "A")
+	if len(ans) > 0 {
 		answers = append(answers, ans...)
 		resolved = true
 	}
 	// Obtain the DNS answers for the AAAA records related to the name
-	ans, err = recon.ResolveDNS(name, server, "AAAA")
-	if err == nil {
+	ans = q.Lookup(name, server, "AAAA")
+	if len(ans) > 0 {
 		answers = append(answers, ans...)
 		resolved = true
 	}
@@ -366,23 +430,47 @@ func dnsQuery(name, server string) ([]recon.DNSAnswer, error) {
 func serviceName(name, server string) ([]recon.DNSAnswer, string) {
 	ans, err := recon.ResolveDNS(name, server, "SRV")
 	if err == nil {
-		return ans, ans[0].Data
+		return ans, removeLastDot(ans[0].Data)
 	}
 	return nil, ""
 }
 
-func recursiveCNAME(name, server string) ([]recon.DNSAnswer, string) {
+func (q *queries) recursiveCNAME(name, server string) ([]recon.DNSAnswer, string) {
 	var answers []recon.DNSAnswer
 
 	// Recursively resolve the CNAME records
 	for i := 0; i < 10; i++ {
-		a, err := recon.ResolveDNS(name, server, "CNAME")
-		if err != nil {
+		a := q.Lookup(name, server, "CNAME")
+		if len(a) == 0 {
 			break
 		}
-
+		// Update the answers and current name
 		answers = append(answers, a[0])
-		name = a[0].Data
+		name = removeLastDot(a[0].Data)
 	}
 	return answers, name
+}
+
+func (q *queries) Lookup(name, server, t string) []recon.DNSAnswer {
+	var err error
+
+	// Check if we have this name already
+	a := q.cacheLookup(name)
+	if len(a) == 0 {
+		// Otherwise, perform the DNS query and add to the cache
+		a, err = recon.ResolveDNS(name, server, t)
+		if err == nil {
+			q.addToCache(name, a)
+		}
+	}
+	return a
+}
+
+func removeLastDot(name string) string {
+	sz := len(name)
+
+	if sz > 0 && name[sz-1] == '.' {
+		return name[:sz-1]
+	}
+	return name
 }

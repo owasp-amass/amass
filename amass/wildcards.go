@@ -102,7 +102,7 @@ func wildcardDetection(sub string) *stringset.StringSet {
 		return nil
 	}
 	// Check if the name resolves
-	ans, err := dnsQuery(name, Resolvers.NextNameserver())
+	ans, err := DNS.Query(name, Resolvers.NextNameserver())
 	if err != nil {
 		return nil
 	}

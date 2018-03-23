@@ -84,7 +84,7 @@ func (ihs *IPHistoryService) LookupIPs(domain string) {
 		ihs.SendOut(&AmassRequest{
 			Domain:  domain,
 			Address: ip,
-			Tag:     DNS,
+			Tag:     "dns",
 			Source:  "IP History",
 		})
 	}
