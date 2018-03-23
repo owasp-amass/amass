@@ -41,15 +41,17 @@ func main() {
 
 	// Seed the pseudo-random number generator
 	rand.Seed(time.Now().UTC().UnixNano())
-	// Begin the enumeration process
-	amass.StartAmass(&amass.AmassConfig{
-		Domains:      []string{domain},
+	// Setup the amass configuration
+	config := amass.CustomConfig(&amass.AmassConfig{
 		Wordlist:     getWordlist(""),
 		BruteForcing: false,
 		Recursive:    false,
-		Frequency:    amass.DefaultConfig().Frequency,
+		Alterations:  true,
 		Output:       results,
 	})
+	config.AddDomains([]string{domain})
+	// Begin the enumeration process
+	amass.StartAmass(config)
 	fmt.Println(trx.ReturnOutput())
 }
 
