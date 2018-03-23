@@ -138,7 +138,7 @@ type DNSService struct {
 	outFilter map[string]struct{}
 
 	// Provides a way to check if we're seeing a new root domain
-	domains map[string]struct{}
+	subdomains map[string]struct{}
 
 	// Results from the initial domain queries come here
 	internal chan *AmassRequest
@@ -146,10 +146,10 @@ type DNSService struct {
 
 func NewDNSService(in, out chan *AmassRequest, config *AmassConfig) *DNSService {
 	ds := &DNSService{
-		inFilter:  make(map[string]struct{}),
-		outFilter: make(map[string]struct{}),
-		domains:   make(map[string]struct{}),
-		internal:  make(chan *AmassRequest, 50),
+		inFilter:   make(map[string]struct{}),
+		outFilter:  make(map[string]struct{}),
+		subdomains: make(map[string]struct{}),
+		internal:   make(chan *AmassRequest, 50),
 	}
 
 	ds.BaseAmassService = *NewBaseAmassService("DNS Service", config, ds)
@@ -171,31 +171,31 @@ func (ds *DNSService) OnStop() error {
 	return nil
 }
 
-func (ds *DNSService) basicQueries(domain string) {
+func (ds *DNSService) basicQueries(subdomain, domain string) {
 	var answers []recon.DNSAnswer
 
 	// Obtain CNAME, A and AAAA records for the root domain name
-	ans, err := DNS.Query(domain, Resolvers.NextNameserver())
+	ans, err := DNS.Query(subdomain, Resolvers.NextNameserver())
 	if err == nil {
 		answers = append(answers, ans...)
 	}
 	// Obtain the DNS answers for the NS records related to the domain
-	ans, err = recon.ResolveDNS(domain, Resolvers.NextNameserver(), "NS")
+	ans, err = recon.ResolveDNS(subdomain, Resolvers.NextNameserver(), "NS")
 	if err == nil {
 		answers = append(answers, ans...)
 	}
 	// Obtain the DNS answers for the MX records related to the domain
-	ans, err = recon.ResolveDNS(domain, Resolvers.NextNameserver(), "MX")
+	ans, err = recon.ResolveDNS(subdomain, Resolvers.NextNameserver(), "MX")
 	if err == nil {
 		answers = append(answers, ans...)
 	}
 	// Obtain the DNS answers for the TXT records related to the domain
-	ans, err = recon.ResolveDNS(domain, Resolvers.NextNameserver(), "TXT")
+	ans, err = recon.ResolveDNS(subdomain, Resolvers.NextNameserver(), "TXT")
 	if err == nil {
 		answers = append(answers, ans...)
 	}
 	// Obtain the DNS answers for the SOA records related to the domain
-	ans, err = recon.ResolveDNS(domain, Resolvers.NextNameserver(), "SOA")
+	ans, err = recon.ResolveDNS(subdomain, Resolvers.NextNameserver(), "SOA")
 	if err == nil {
 		answers = append(answers, ans...)
 	}
@@ -282,13 +282,44 @@ func (ds *DNSService) duplicate(name string) bool {
 }
 
 func (ds *DNSService) addToQueue(req *AmassRequest) {
-	if _, found := ds.domains[req.Domain]; !found {
-		ds.domains[req.Domain] = struct{}{}
-		go ds.basicQueries(req.Domain)
-	}
+	ds.checkForNewSubdomain(req)
+
 	if req.Name != "" && !ds.duplicate(req.Name) {
 		ds.queue = append(ds.queue, req)
 	}
+}
+
+func (ds *DNSService) checkForNewSubdomain(req *AmassRequest) {
+	ds.Lock()
+	defer ds.Unlock()
+
+	// If the Name is empty, we are done here
+	if req.Name == "" {
+		return
+	}
+
+	labels := strings.Split(req.Name, ".")
+	num := len(labels)
+	// Is this large enough to consider further?
+	if num < 2 {
+		return
+	}
+	// Have we already seen this subdomain?
+	sub := strings.Join(labels[1:], ".")
+	if _, found := ds.subdomains[sub]; found {
+		return
+	}
+	ds.subdomains[sub] = struct{}{}
+	// It cannot have fewer labels than the root domain name
+	if num < len(strings.Split(req.Domain, ".")) {
+		return
+	}
+	// Does this subdomain have a wildcard?
+	if DetectDNSWildcard(req) {
+		return
+	}
+	// Otherwise, run the basic queries against this name
+	go ds.basicQueries(sub, req.Domain)
 }
 
 func (ds *DNSService) nextFromQueue() *AmassRequest {

@@ -104,6 +104,10 @@ func (bfs *BruteForceService) checkForNewSubdomain(req *AmassRequest) {
 	if num-1 <= len(strings.Split(req.Domain, ".")) {
 		return
 	}
+	// Does this subdomain have a wildcard?
+	if DetectDNSWildcard(req) {
+		return
+	}
 	// Otherwise, run the brute forcing on the subdomain
 	go bfs.performBruteForcing(sub, req.Domain)
 }
