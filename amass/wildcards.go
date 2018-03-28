@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/caffix/amass/amass/stringset"
-	"github.com/caffix/recon"
 )
 
 type wildcard struct {
@@ -21,19 +20,29 @@ type dnsWildcard struct {
 	Answers     *stringset.StringSet
 }
 
-// Requests are sent through this channel to check DNS wildcard matches
-var wildcardRequest chan *wildcard
+type Wildcards struct {
+	// Requests are sent through this channel to check DNS wildcard matches
+	Request chan *wildcard
 
-func init() {
-	wildcardRequest = make(chan *wildcard, 50)
-	go processWildcardMatches()
+	// The amass enumeration configuration
+	Config *AmassConfig
 }
 
-// DNSWildcardMatch - Checks subdomains in the wildcard cache for matches on the IP address
-func DetectDNSWildcard(req *AmassRequest) bool {
+func NewWildcardDetection(config *AmassConfig) *Wildcards {
+	wd := &Wildcards{
+		Request: make(chan *wildcard, 50),
+		Config:  config,
+	}
+
+	go wd.processWildcardMatches()
+	return wd
+}
+
+// DetectWildcard - Checks subdomains in the wildcard cache for matches on the IP address
+func (wd *Wildcards) DetectWildcard(req *AmassRequest) bool {
 	answer := make(chan bool, 2)
 
-	wildcardRequest <- &wildcard{
+	wd.Request <- &wildcard{
 		Req: req,
 		Ans: answer,
 	}
@@ -41,18 +50,18 @@ func DetectDNSWildcard(req *AmassRequest) bool {
 }
 
 // Goroutine that keeps track of DNS wildcards discovered
-func processWildcardMatches() {
+func (wd *Wildcards) processWildcardMatches() {
 	wildcards := make(map[string]*dnsWildcard)
 
 	for {
 		select {
-		case wr := <-wildcardRequest:
-			wr.Ans <- matchesWildcard(wr.Req, wildcards)
+		case wr := <-wd.Request:
+			wr.Ans <- wd.matchesWildcard(wr.Req, wildcards)
 		}
 	}
 }
 
-func matchesWildcard(req *AmassRequest, wildcards map[string]*dnsWildcard) bool {
+func (wd *Wildcards) matchesWildcard(req *AmassRequest, wildcards map[string]*dnsWildcard) bool {
 	var answer bool
 
 	name := req.Name
@@ -76,7 +85,7 @@ func matchesWildcard(req *AmassRequest, wildcards map[string]*dnsWildcard) bool 
 			// Try three times for good luck
 			for i := 0; i < 3; i++ {
 				// Does this subdomain have a wildcard?
-				if ss := wildcardDetection(sub); ss != nil {
+				if ss := wd.wildcardDetection(sub); ss != nil {
 					entry.HasWildcard = true
 					entry.Answers = ss
 					break
@@ -95,14 +104,14 @@ func matchesWildcard(req *AmassRequest, wildcards map[string]*dnsWildcard) bool 
 
 // wildcardDetection detects if a domain returns an IP
 // address for "bad" names, and if so, which address(es) are used
-func wildcardDetection(sub string) *stringset.StringSet {
+func (wd *Wildcards) wildcardDetection(sub string) *stringset.StringSet {
 	// An unlikely name will be checked for this subdomain
 	name := unlikelyName(sub)
 	if name == "" {
 		return nil
 	}
 	// Check if the name resolves
-	ans, err := DNS.Query(name, Resolvers.NextNameserver())
+	ans, err := wd.Config.dns.Query(name)
 	if err != nil {
 		return nil
 	}
@@ -146,7 +155,7 @@ func unlikelyName(sub string) string {
 	return newlabel + "." + sub
 }
 
-func answersToStringSet(answers []recon.DNSAnswer) *stringset.StringSet {
+func answersToStringSet(answers []DNSAnswer) *stringset.StringSet {
 	ss := stringset.NewStringSet()
 
 	for _, a := range answers {

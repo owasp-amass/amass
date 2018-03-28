@@ -5,9 +5,6 @@ package amass
 
 import (
 	"math/rand"
-	"sync"
-
-	"github.com/caffix/recon"
 )
 
 // Public & free DNS servers
@@ -44,124 +41,10 @@ var knownPublicServers = []string{
 	//"23.253.163.53:53",  // Alternate DNS Secondary
 }
 
-var Resolvers *PublicDNSMonitor
-
-type serverStats struct {
-	Responding  bool
-	NumRequests int
-}
-
-func init() {
-	Resolvers = NewPublicDNSMonitor()
-}
-
-// Checks in real-time if the public DNS servers have become unusable
-type PublicDNSMonitor struct {
-	sync.Mutex
-
-	// List of servers that we know about
-	knownServers []string
-
-	// Tracking for which servers continue to be usable
-	usableServers map[string]*serverStats
-
-	// Requests for a server from the queue come here
-	nextServer chan chan string
-}
-
-func NewPublicDNSMonitor() *PublicDNSMonitor {
-	pdm := &PublicDNSMonitor{
-		knownServers:  knownPublicServers,
-		usableServers: make(map[string]*serverStats),
-		nextServer:    make(chan chan string, 100),
-	}
-	pdm.testAllServers()
-	go pdm.processServerQueue()
-	return pdm
-}
-
-func (pdm *PublicDNSMonitor) testAllServers() {
-	for _, server := range pdm.knownServers {
-		pdm.testServer(server)
-	}
-}
-
-func (pdm *PublicDNSMonitor) testServer(server string) bool {
-	var resp bool
-
-	_, err := recon.ResolveDNS(pickRandomTestName(), server, "A")
-	if err == nil {
-		resp = true
-	}
-
-	if _, found := pdm.usableServers[server]; !found {
-		pdm.usableServers[server] = new(serverStats)
-	}
-
-	pdm.usableServers[server].NumRequests = 0
-	pdm.usableServers[server].Responding = resp
-	return resp
-}
-
-func pickRandomTestName() string {
-	num := rand.Int()
-	names := []string{"google.com", "twitter.com", "linkedin.com",
-		"facebook.com", "amazon.com", "github.com", "apple.com"}
-
-	sel := num % len(names)
-	return names[sel]
-}
-
-func (pdm *PublicDNSMonitor) processServerQueue() {
-	var queue []string
-
-	for {
-		select {
-		case resp := <-pdm.nextServer:
-			if len(queue) == 0 {
-				queue = pdm.getServerList()
-			}
-			resp <- queue[0]
-
-			if len(queue) == 1 {
-				queue = []string{}
-			} else if len(queue) > 1 {
-				queue = queue[1:]
-			}
-		}
-	}
-}
-
-func (pdm *PublicDNSMonitor) getServerList() []string {
-	pdm.Lock()
-	defer pdm.Unlock()
-
-	// Check for servers that need to be tested
-	for svr, stats := range pdm.usableServers {
-		if !stats.Responding {
-			continue
-		}
-
-		stats.NumRequests++
-		if stats.NumRequests%50 == 0 {
-			pdm.testServer(svr)
-		}
-	}
-
-	var servers []string
-	// Build the slice of responding servers
-	for svr, stats := range pdm.usableServers {
-		if stats.Responding {
-			servers = append(servers, svr)
-		}
-	}
-	return servers
-}
-
 // NextNameserver - Requests the next server
-func (pdm *PublicDNSMonitor) NextNameserver() string {
-	ans := make(chan string, 2)
+func NextNameserver() string {
+	r := rand.Int()
+	idx := r % len(knownPublicServers)
 
-	pdm.nextServer <- ans
-	return <-ans
+	return knownPublicServers[idx]
 }

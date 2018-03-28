@@ -4,12 +4,29 @@
 package amass
 
 import (
+	"bufio"
+	"context"
+	"errors"
+	"fmt"
 	"net"
+	"strconv"
+	"strings"
 	"time"
-
-	"github.com/caffix/recon"
 	//"github.com/yl2chen/cidranger"
 )
+
+const (
+	asnServer = "asn.shadowserver.org"
+	asnPort   = 43
+)
+
+type ASRecord struct {
+	ASN    int
+	Prefix string
+	ASName string
+	CN     string
+	ISP    string
+}
 
 type cidrData struct {
 	Netblock *net.IPNet
@@ -17,7 +34,7 @@ type cidrData struct {
 }
 
 type asnData struct {
-	Record    *recon.ASRecord
+	Record    *ASRecord
 	Netblocks []string
 }
 
@@ -288,19 +305,19 @@ func (ns *NetblockService) ASNLookup(req *AmassRequest) {
 	// Does the data need to be obtained?
 	if data == nil {
 		// Get the netblocks associated with the ASN
-		netblocks, err := recon.ASNToNetblocks(req.ASN)
+		netblocks, err := ns.ASNToNetblocks(req.ASN)
 		if err != nil {
 			return
 		}
 		// Insert all the new netblocks into the cache
 		ns.insertAllNetblocks(netblocks, req.ASN)
-		// Get the AS recond as well
+		// Get the AS record as well
 		_, cidr, err := net.ParseCIDR(netblocks[0])
 		if err != nil {
 			return
 		}
 		ips := NetHosts(cidr)
-		record, err := recon.IPToASRecord(ips[0])
+		record, err := ns.IPToASRecord(ips[0])
 		if err != nil {
 			return
 		}
@@ -327,7 +344,7 @@ func (ns *NetblockService) CIDRLookup(req *AmassRequest) {
 	data := ns.cidrCacheFetch(req.Netblock.String())
 	// Does the data need to be obtained?
 	if data == nil {
-		// Get the AS recond as well
+		// Get the AS record as well
 		ips := NetHosts(req.Netblock)
 		record, netblocks := ns.ipToData(ips[0])
 		if record == nil {
@@ -368,18 +385,117 @@ func (ns *NetblockService) IPLookup(req *AmassRequest) {
 	ns.completeAddrRequest(req)
 }
 
-func (ns *NetblockService) ipToData(addr string) (*recon.ASRecord, []string) {
+func (ns *NetblockService) ipToData(addr string) (*ASRecord, []string) {
 	// Get the AS record for the IP address
-	record, err := recon.IPToASRecord(addr)
+	record, err := ns.IPToASRecord(addr)
 	if err != nil {
 		return nil, []string{}
 	}
 	// Get the netblocks associated with the ASN
-	netblocks, err := recon.ASNToNetblocks(record.ASN)
+	netblocks, err := ns.ASNToNetblocks(record.ASN)
 	if err != nil {
 		return nil, []string{}
 	}
 	return record, netblocks
+}
+
+func (ns *NetblockService) IPToASRecord(ip string) (*ASRecord, error) {
+	dialString := fmt.Sprintf("%s:%d", asnServer, asnPort)
+
+	conn, err := ns.Config().DialContext(context.Background(), "tcp", dialString)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to connect to: %s", dialString)
+	}
+	defer conn.Close()
+
+	fmt.Fprintf(conn, "begin origin\n%s\nend\n", ip)
+	reader := bufio.NewReader(conn)
+
+	line, err := reader.ReadString('\n')
+	if err != nil {
+		return nil, fmt.Errorf("Failed to read origin response for IP: %s", ip)
+	}
+
+	record := parseOriginResponse(line)
+	if record == nil {
+		return nil, fmt.Errorf("Failed to parse origin response for IP: %s", ip)
+	}
+
+	return record, nil
+}
+
+func (ns *NetblockService) ASNToNetblocks(asn int) ([]string, error) {
+	dialString := fmt.Sprintf("%s:%d", asnServer, asnPort)
+
+	conn, err := ns.Config().DialContext(context.Background(), "tcp", dialString)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to connect to: %s", dialString)
+	}
+	defer conn.Close()
+
+	fmt.Fprintf(conn, "prefix %d\n", asn)
+	reader := bufio.NewReader(conn)
+
+	var blocks []string
+	for err == nil {
+		var line string
+
+		line, err = reader.ReadString('\n')
+		if len(line) > 0 {
+			blocks = append(blocks, strings.TrimSpace(line))
+		}
+	}
+
+	if len(blocks) == 0 {
+		return nil, fmt.Errorf("No netblocks returned for AS%d", asn)
+	}
+	return blocks, nil
+}
+
+func (ns *NetblockService) IPToCIDR(addr string) (*ASRecord, *net.IPNet, error) {
+	// Get the AS record for the IP address
+	record, err := ns.IPToASRecord(addr)
+	if err != nil {
+		return nil, nil, err
+	}
+	// Get the netblocks associated with the ASN
+	netblocks, err := ns.ASNToNetblocks(record.ASN)
+	if err != nil {
+		return nil, nil, err
+	}
+	// Convert the CIDR into Go net types, and select the correct netblock
+	var cidr *net.IPNet
+	ip := net.ParseIP(addr)
+	for _, nb := range netblocks {
+		_, ipnet, err := net.ParseCIDR(nb)
+
+		if err == nil && ipnet.Contains(ip) {
+			cidr = ipnet
+			break
+		}
+	}
+
+	if cidr != nil {
+		return record, cidr, nil
+	}
+	return nil, nil, errors.New("The IP address did not belong within the netblocks")
+}
+
+func parseOriginResponse(line string) *ASRecord {
+	fields := strings.Split(line, " | ")
+
+	asn, err := strconv.Atoi(fields[1])
+	if err != nil {
+		return nil
+	}
+
+	return &ASRecord{
+		ASN:    asn,
+		Prefix: strings.TrimSpace(fields[2]),
+		ASName: strings.TrimSpace(fields[3]),
+		CN:     strings.TrimSpace(fields[4]),
+		ISP:    strings.TrimSpace(fields[5]),
+	}
 }
 
 func (ns *NetblockService) ipToCIDR(addr string) string {

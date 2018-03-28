@@ -11,7 +11,10 @@ import (
 func TestSweepService(t *testing.T) {
 	in := make(chan *AmassRequest)
 	out := make(chan *AmassRequest)
-	srv := NewSweepService(in, out, DefaultConfig())
+	config := DefaultConfig()
+	config.Setup()
+
+	srv := NewSweepService(in, out, config)
 
 	_, ipnet, err := net.ParseCIDR(testCIDR)
 	if err != nil {

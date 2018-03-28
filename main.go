@@ -62,7 +62,7 @@ func main() {
 	var freq int64
 	var ASNs, Ports []int
 	var CIDRs []*net.IPNet
-	var wordlist, outfile, domainsfile, asns, addrs, cidrs, ports string
+	var wordlist, outfile, domainsfile, asns, addrs, cidrs, ports, proxy string
 	var fwd, verbose, extra, ips, brute, recursive, alts, whois, list, help bool
 
 	flag.BoolVar(&help, "h", false, "Show the program usage message")
@@ -82,6 +82,7 @@ func main() {
 	flag.StringVar(&addrs, "addr", "", "IPs and ranges to be probed for certificates")
 	flag.StringVar(&cidrs, "net", "", "CIDRs to be probed for certificates")
 	flag.StringVar(&ports, "p", "", "Ports to be checked for certificates")
+	flag.StringVar(&proxy, "proxy", "", "The URL used to reach the proxy")
 	flag.Parse()
 
 	if extra {
@@ -175,13 +176,20 @@ func main() {
 	if len(domains) == 0 {
 		config.AdditionalDomains = true
 	}
-	/*
-		profFile, _ := os.Create("amass_debug.prof")
-		pprof.StartCPUProfile(profFile)
-		defer pprof.StopCPUProfile()
-	*/
-	// Begin the enumeration process
-	amass.StartAmass(config)
+	// Check if a proxy connection should be setup
+	if proxy != "" {
+		err := config.SetupProxyConnection(proxy)
+		if err != nil {
+			fmt.Println("The proxy address provided failed to make a connection")
+			return
+		}
+	}
+
+	//profFile, _ := os.Create("amass_debug.prof")
+	//pprof.StartCPUProfile(profFile)
+	//defer pprof.StopCPUProfile()
+
+	amass.StartEnumeration(config)
 	// Signal for output to finish
 	finish <- struct{}{}
 	<-done

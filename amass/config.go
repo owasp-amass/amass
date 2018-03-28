@@ -5,12 +5,16 @@ package amass
 
 import (
 	"bufio"
+	"context"
 	"errors"
+	//"fmt"
 	"io"
 	"net"
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/gamexg/proxyclient"
 )
 
 // AmassConfig - Passes along optional configurations
@@ -55,6 +59,38 @@ type AmassConfig struct {
 
 	// The root domain names that the enumeration will target
 	domains []string
+
+	// Is responsible for performing simple DNS resolutions
+	dns *queries
+
+	// Performs lookups of root domain names from subdomain names
+	domainLookup *DomainLookup
+
+	// Detects DNS wildcards
+	wildcards *Wildcards
+
+	// The optional proxy connection for the enumeration to use
+	proxy proxyclient.ProxyClient
+}
+
+func (c *AmassConfig) Setup() {
+	// Setup the services potentially needed by all of amass
+	c.dns = newQueriesSubsystem(c)
+	c.domainLookup = NewDomainLookup(c)
+	c.wildcards = NewWildcardDetection(c)
+}
+
+func (c *AmassConfig) SetupProxyConnection(addr string) error {
+	client, err := proxyclient.NewProxyClient(addr)
+	if err == nil {
+		c.proxy = client
+		// Override the Go default DNS resolver
+		/*net.DefaultResolver = &net.Resolver{
+			//PreferGo: true,
+			Dial: c.DNSDialContext,
+		}*/
+	}
+	return err
 }
 
 func (c *AmassConfig) AddDomains(names []string) {
@@ -69,6 +105,30 @@ func (c *AmassConfig) Domains() []string {
 	defer c.Unlock()
 
 	return c.domains
+}
+
+func (c *AmassConfig) DNSDialContext(ctx context.Context, network, address string) (net.Conn, error) {
+	if c.proxy != nil {
+		return c.proxy.Dial(network, NextNameserver())
+	}
+
+	d := &net.Dialer{}
+	return d.DialContext(ctx, network, NextNameserver())
+}
+
+func (c *AmassConfig) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
+	/*d := &net.Dialer{
+		Resolver: &net.Resolver{
+			PreferGo: true,
+			Dial:     c.DNSDialContext,
+		},
+	}*/
+	if c.proxy != nil {
+		return c.proxy.Dial(network, address)
+	}
+	d := &net.Dialer{}
+	//fmt.Println(network + ": " + addr)
+	return d.DialContext(ctx, network, address)
 }
 
 func CheckConfig(config *AmassConfig) error {
@@ -88,12 +148,13 @@ func CheckConfig(config *AmassConfig) error {
 
 // DefaultConfig returns a config with values that have been tested
 func DefaultConfig() *AmassConfig {
-	return &AmassConfig{
+	config := &AmassConfig{
 		Ports:       []int{443},
 		Recursive:   true,
 		Alterations: true,
 		Frequency:   10 * time.Millisecond,
 	}
+	return config
 }
 
 // Ensures that all configuration elements have valid values
@@ -125,6 +186,10 @@ func CustomConfig(ac *AmassConfig) *AmassConfig {
 	// Check that the config values have been set appropriately
 	if ac.Frequency > config.Frequency {
 		config.Frequency = ac.Frequency
+	}
+
+	if ac.proxy != nil {
+		config.proxy = ac.proxy
 	}
 
 	config.Output = ac.Output

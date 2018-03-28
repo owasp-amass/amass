@@ -10,7 +10,10 @@ import (
 func TestNetblockService(t *testing.T) {
 	in := make(chan *AmassRequest)
 	out := make(chan *AmassRequest)
-	srv := NewNetblockService(in, out, DefaultConfig())
+	config := DefaultConfig()
+	config.Setup()
+
+	srv := NewNetblockService(in, out, config)
 
 	srv.Start()
 	in <- &AmassRequest{Address: "104.244.42.65"}

@@ -235,7 +235,7 @@ func (acs *ActiveCertService) reqFromNames(subdomains []string) []*AmassRequest 
 
 	// For each subdomain name, attempt to make a new AmassRequest
 	for _, name := range subdomains {
-		root := SubdomainToDomain(name)
+		root := acs.Config().domainLookup.SubdomainToDomain(name)
 
 		if root != "" {
 			requests = append(requests, &AmassRequest{

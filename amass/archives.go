@@ -31,7 +31,12 @@ func NewArchiveService(in, out chan *AmassRequest, config *AmassConfig) *Archive
 		responses: make(chan *AmassRequest, 50),
 		filter:    make(map[string]struct{}),
 	}
-
+	// Modify the crawler's http client to use our DialContext
+	gocrawl.HttpClient.Transport = &http.Transport{
+		DialContext:         config.DialContext,
+		TLSHandshakeTimeout: 10 * time.Second,
+	}
+	// Setup the service
 	as.BaseAmassService = *NewBaseAmassService("Web Archive Service", config, as)
 	as.archives = []Archiver{
 		WaybackMachineArchive(as.responses),
@@ -193,12 +198,47 @@ func (m *memento) processRequests() {
 				queue = queue[1:]
 			}
 
-			go crawl(m.Name, m.URL, strconv.Itoa(year), s, m.Output, done, 10*time.Second)
+			go m.crawl(strconv.Itoa(year), s, done, 10*time.Second)
 			running++
 		case <-done:
 			running--
 		}
 	}
+}
+
+func (m *memento) crawl(year string, req *AmassRequest, done chan int, timeout time.Duration) {
+	domain := req.Domain
+	if domain == "" {
+		done <- 1
+		return
+	}
+
+	ext := &ext{
+		DefaultExtender: &gocrawl.DefaultExtender{},
+		domainRE:        SubdomainRegex(domain),
+		mementoRE:       regexp.MustCompile(m.URL + "/[0-9]+/"),
+		filter:          make(map[string]bool), // Filter for not double-checking URLs
+		base:            m.URL,
+		year:            year,
+		sub:             req.Name,
+		domain:          domain,
+		names:           m.Output,
+		source:          m.Name,
+	}
+
+	// Set custom options
+	opts := gocrawl.NewOptions(ext)
+	opts.CrawlDelay = 500 * time.Millisecond
+	opts.LogFlags = gocrawl.LogError
+	opts.SameHostOnly = true
+	opts.MaxVisits = 20
+
+	c := gocrawl.NewCrawlerWithOptions(opts)
+	go c.Run(fmt.Sprintf("%s/%s/%s", m.URL, year, req.Name))
+
+	<-time.After(timeout)
+	c.Stop()
+	done <- 1
 }
 
 type ext struct {
@@ -277,39 +317,4 @@ func (e *ext) Visit(ctx *gocrawl.URLContext, res *http.Response, doc *goquery.Do
 		}
 	}
 	return nil, true
-}
-
-func crawl(name, base, year string, req *AmassRequest, out chan<- *AmassRequest, done chan int, timeout time.Duration) {
-	domain := req.Domain
-	if domain == "" {
-		done <- 1
-		return
-	}
-
-	ext := &ext{
-		DefaultExtender: &gocrawl.DefaultExtender{},
-		domainRE:        SubdomainRegex(domain),
-		mementoRE:       regexp.MustCompile(base + "/[0-9]+/"),
-		filter:          make(map[string]bool), // Filter for not double-checking URLs
-		base:            base,
-		year:            year,
-		sub:             req.Name,
-		domain:          domain,
-		names:           out,
-		source:          name,
-	}
-
-	// Set custom options
-	opts := gocrawl.NewOptions(ext)
-	opts.CrawlDelay = 500 * time.Millisecond
-	opts.LogFlags = gocrawl.LogError
-	opts.SameHostOnly = true
-	opts.MaxVisits = 20
-
-	c := gocrawl.NewCrawlerWithOptions(opts)
-	go c.Run(fmt.Sprintf("%s/%s/%s", base, year, req.Name))
-
-	<-time.After(timeout)
-	c.Stop()
-	done <- 1
 }

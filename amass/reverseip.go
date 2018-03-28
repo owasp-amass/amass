@@ -8,8 +8,6 @@ import (
 	"net/url"
 	"strconv"
 	"time"
-
-	"github.com/caffix/recon"
 )
 
 type ReverseIPService struct {
@@ -32,10 +30,10 @@ func NewReverseIPService(in, out chan *AmassRequest, config *AmassConfig) *Rever
 	}
 
 	ris.BaseAmassService = *NewBaseAmassService("Reverse IP Service", config, ris)
-	ris.dns = ReverseDNSSearch(ris.responses)
+	ris.dns = ReverseDNSSearch(ris.responses, config)
 	ris.others = []ReverseIper{
-		BingReverseIPSearch(ris.responses),
-		ShodanReverseIPSearch(ris.responses),
+		BingReverseIPSearch(ris.responses, config),
+		ShodanReverseIPSearch(ris.responses, config),
 	}
 	// Do not perform reverse lookups on localhost
 	ris.filter["127.0.0.1"] = struct{}{}
@@ -129,19 +127,21 @@ loop:
 }
 
 func (ris *ReverseIPService) performOutput(req *AmassRequest) {
+	config := ris.Config()
+
 	ris.SetActive(true)
 	if req.addDomains {
-		req.Domain = SubdomainToDomain(req.Name)
+		req.Domain = config.domainLookup.SubdomainToDomain(req.Name)
 		if req.Domain != "" {
-			if ris.Config().AdditionalDomains {
-				ris.Config().AddDomains([]string{req.Domain})
+			if config.AdditionalDomains {
+				config.AddDomains([]string{req.Domain})
 			}
 			ris.SendOut(req)
 		}
 		return
 	}
 	// Check if the discovered name belongs to a root domain of interest
-	for _, domain := range ris.Config().Domains() {
+	for _, domain := range config.Domains() {
 		re := SubdomainRegex(domain)
 		re.Longest()
 
@@ -212,6 +212,7 @@ type reverseIPSearchEngine struct {
 	Limit    int
 	Output   chan<- *AmassRequest
 	Callback func(*reverseIPSearchEngine, string, int) string
+	Config   *AmassConfig
 }
 
 func (se *reverseIPSearchEngine) String() string {
@@ -228,7 +229,8 @@ func (se *reverseIPSearchEngine) Search(req *AmassRequest, done chan int) {
 	re := AnySubdomainRegex()
 	num := se.Limit / se.Quantity
 	for i := 0; i < num; i++ {
-		page := GetWebPage(se.urlByPageNum(req.Address, i))
+		page := GetWebPageWithDialContext(
+			se.Config.DialContext, se.urlByPageNum(req.Address, i))
 		if page == "" {
 			break
 		}
@@ -263,13 +265,14 @@ func bingReverseIPURLByPageNum(b *reverseIPSearchEngine, ip string, page int) st
 	return u.String()
 }
 
-func BingReverseIPSearch(out chan<- *AmassRequest) ReverseIper {
+func BingReverseIPSearch(out chan<- *AmassRequest, config *AmassConfig) ReverseIper {
 	b := &reverseIPSearchEngine{
 		Name:     "Bing Reverse IP Search",
 		Quantity: 10,
 		Limit:    50,
 		Output:   out,
 		Callback: bingReverseIPURLByPageNum,
+		Config:   config,
 	}
 	return b
 }
@@ -279,6 +282,7 @@ type reverseIPLookup struct {
 	Name     string
 	Output   chan<- *AmassRequest
 	Callback func(string) string
+	Config   *AmassConfig
 }
 
 func (l *reverseIPLookup) String() string {
@@ -289,7 +293,7 @@ func (l *reverseIPLookup) Search(req *AmassRequest, done chan int) {
 	var unique []string
 
 	re := AnySubdomainRegex()
-	page := GetWebPage(l.Callback(req.Address))
+	page := GetWebPageWithDialContext(l.Config.DialContext, l.Callback(req.Address))
 	if page == "" {
 		done <- 0
 		return
@@ -317,11 +321,12 @@ func shodanReverseIPURL(ip string) string {
 	return fmt.Sprintf(format, ip)
 }
 
-func ShodanReverseIPSearch(out chan<- *AmassRequest) ReverseIper {
+func ShodanReverseIPSearch(out chan<- *AmassRequest, config *AmassConfig) ReverseIper {
 	ss := &reverseIPLookup{
 		Name:     "Shodan",
 		Output:   out,
 		Callback: shodanReverseIPURL,
+		Config:   config,
 	}
 	return ss
 }
@@ -330,6 +335,7 @@ func ShodanReverseIPSearch(out chan<- *AmassRequest) ReverseIper {
 type reverseDNSLookup struct {
 	Name   string
 	Output chan<- *AmassRequest
+	Config *AmassConfig
 }
 
 func (l *reverseDNSLookup) String() string {
@@ -339,7 +345,7 @@ func (l *reverseDNSLookup) String() string {
 func (l *reverseDNSLookup) Search(req *AmassRequest, done chan int) {
 	re := AnySubdomainRegex()
 
-	name, err := recon.ReverseDNS(req.Address, Resolvers.NextNameserver())
+	name, err := ReverseDNSWithDialContext(l.Config.DNSDialContext, req.Address)
 	if err == nil && re.MatchString(name) {
 		// Send the name to be resolved in the forward direction
 		l.Output <- &AmassRequest{
@@ -354,10 +360,11 @@ func (l *reverseDNSLookup) Search(req *AmassRequest, done chan int) {
 	done <- 0
 }
 
-func ReverseDNSSearch(out chan<- *AmassRequest) ReverseIper {
+func ReverseDNSSearch(out chan<- *AmassRequest, config *AmassConfig) ReverseIper {
 	ds := &reverseDNSLookup{
 		Name:   "Reverse DNS",
 		Output: out,
+		Config: config,
 	}
 	return ds
 }

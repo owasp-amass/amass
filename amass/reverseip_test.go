@@ -10,7 +10,10 @@ import (
 func TestReverseIPBing(t *testing.T) {
 	out := make(chan *AmassRequest, 2)
 	finished := make(chan int, 2)
-	s := BingReverseIPSearch(out)
+	config := DefaultConfig()
+	config.Setup()
+
+	s := BingReverseIPSearch(out, config)
 
 	go readOutput(out)
 	req := &AmassRequest{Address: "72.237.4.113"}
@@ -25,7 +28,10 @@ func TestReverseIPBing(t *testing.T) {
 func TestReverseIPShodan(t *testing.T) {
 	out := make(chan *AmassRequest, 2)
 	finished := make(chan int, 2)
-	s := ShodanReverseIPSearch(out)
+	config := DefaultConfig()
+	config.Setup()
+
+	s := ShodanReverseIPSearch(out, config)
 
 	go readOutput(out)
 	req := &AmassRequest{Address: "72.237.4.113"}
@@ -40,7 +46,10 @@ func TestReverseIPShodan(t *testing.T) {
 func TestReverseIPDNS(t *testing.T) {
 	out := make(chan *AmassRequest, 2)
 	finished := make(chan int, 2)
-	s := ReverseDNSSearch(out)
+	config := DefaultConfig()
+	config.Setup()
+
+	s := ReverseDNSSearch(out, config)
 
 	go readOutput(out)
 	req := &AmassRequest{Address: "72.237.4.2"}

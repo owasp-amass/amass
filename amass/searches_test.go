@@ -15,7 +15,10 @@ const (
 func TestSearchAsk(t *testing.T) {
 	out := make(chan *AmassRequest, 2)
 	finished := make(chan int, 2)
-	s := AskSearch(out)
+	config := DefaultConfig()
+	config.Setup()
+
+	s := AskSearch(out, config)
 
 	go readOutput(out)
 	s.Search(testDomain, finished)
@@ -28,7 +31,10 @@ func TestSearchAsk(t *testing.T) {
 func TestSearchBaidu(t *testing.T) {
 	out := make(chan *AmassRequest, 2)
 	finished := make(chan int, 2)
-	s := BaiduSearch(out)
+	config := DefaultConfig()
+	config.Setup()
+
+	s := BaiduSearch(out, config)
 
 	go readOutput(out)
 	s.Search(testDomain, finished)
@@ -41,7 +47,10 @@ func TestSearchBaidu(t *testing.T) {
 func TestSearchBing(t *testing.T) {
 	out := make(chan *AmassRequest, 2)
 	finished := make(chan int, 2)
-	s := BingSearch(out)
+	config := DefaultConfig()
+	config.Setup()
+
+	s := BingSearch(out, config)
 
 	go readOutput(out)
 	s.Search(testDomain, finished)
@@ -54,7 +63,10 @@ func TestSearchBing(t *testing.T) {
 func TestSearchDogpile(t *testing.T) {
 	out := make(chan *AmassRequest, 2)
 	finished := make(chan int, 2)
-	s := DogpileSearch(out)
+	config := DefaultConfig()
+	config.Setup()
+
+	s := DogpileSearch(out, config)
 
 	go readOutput(out)
 	s.Search(testDomain, finished)
@@ -67,7 +79,10 @@ func TestSearchDogpile(t *testing.T) {
 func TestSearchGoogle(t *testing.T) {
 	out := make(chan *AmassRequest, 2)
 	finished := make(chan int, 2)
-	s := GoogleSearch(out)
+	config := DefaultConfig()
+	config.Setup()
+
+	s := GoogleSearch(out, config)
 
 	go readOutput(out)
 	s.Search(testDomain, finished)
@@ -80,7 +95,10 @@ func TestSearchGoogle(t *testing.T) {
 func TestSearchYahoo(t *testing.T) {
 	out := make(chan *AmassRequest, 2)
 	finished := make(chan int, 2)
-	s := YahooSearch(out)
+	config := DefaultConfig()
+	config.Setup()
+
+	s := YahooSearch(out, config)
 
 	go readOutput(out)
 	s.Search(testDomain, finished)
@@ -93,7 +111,10 @@ func TestSearchYahoo(t *testing.T) {
 func TestSearchCensys(t *testing.T) {
 	out := make(chan *AmassRequest, 2)
 	finished := make(chan int, 2)
-	s := CensysSearch(out)
+	config := DefaultConfig()
+	config.Setup()
+
+	s := CensysSearch(out, config)
 
 	go readOutput(out)
 	s.Search(testDomain, finished)
@@ -106,7 +127,10 @@ func TestSearchCensys(t *testing.T) {
 func TestSearchCrtsh(t *testing.T) {
 	out := make(chan *AmassRequest, 2)
 	finished := make(chan int, 2)
-	s := CrtshSearch(out)
+	config := DefaultConfig()
+	config.Setup()
+
+	s := CrtshSearch(out, config)
 
 	go readOutput(out)
 	s.Search(testDomain, finished)
@@ -119,7 +143,10 @@ func TestSearchCrtsh(t *testing.T) {
 func TestSearchNetcraft(t *testing.T) {
 	out := make(chan *AmassRequest, 2)
 	finished := make(chan int, 2)
-	s := NetcraftSearch(out)
+	config := DefaultConfig()
+	config.Setup()
+
+	s := NetcraftSearch(out, config)
 
 	go readOutput(out)
 	s.Search(testDomain, finished)
@@ -132,7 +159,10 @@ func TestSearchNetcraft(t *testing.T) {
 func TestSearchRobtex(t *testing.T) {
 	out := make(chan *AmassRequest, 2)
 	finished := make(chan int, 2)
-	s := RobtexSearch(out)
+	config := DefaultConfig()
+	config.Setup()
+
+	s := RobtexSearch(out, config)
 
 	go readOutput(out)
 	s.Search(testDomain, finished)
@@ -145,7 +175,10 @@ func TestSearchRobtex(t *testing.T) {
 func TestSearchThreatCrowd(t *testing.T) {
 	out := make(chan *AmassRequest, 2)
 	finished := make(chan int, 2)
-	s := ThreatCrowdSearch(out)
+	config := DefaultConfig()
+	config.Setup()
+
+	s := ThreatCrowdSearch(out, config)
 
 	go readOutput(out)
 	s.Search(testDomain, finished)
@@ -158,7 +191,10 @@ func TestSearchThreatCrowd(t *testing.T) {
 func TestSearchVirusTotal(t *testing.T) {
 	out := make(chan *AmassRequest, 2)
 	finished := make(chan int, 2)
-	s := VirusTotalSearch(out)
+	config := DefaultConfig()
+	config.Setup()
+
+	s := VirusTotalSearch(out, config)
 
 	go readOutput(out)
 	s.Search(testDomain, finished)
@@ -171,7 +207,10 @@ func TestSearchVirusTotal(t *testing.T) {
 func TestSearchDNSDumpster(t *testing.T) {
 	out := make(chan *AmassRequest, 2)
 	finished := make(chan int, 2)
-	s := DNSDumpsterSearch(out)
+	config := DefaultConfig()
+	config.Setup()
+
+	s := DNSDumpsterSearch(out, config)
 
 	go readOutput(out)
 	s.Search(testDomain, finished)

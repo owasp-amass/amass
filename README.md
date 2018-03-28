@@ -165,6 +165,17 @@ $ amass -net 192.168.1.0/24 -p 80,443,8080
 ```
 
 
+#### Using a Proxy (still under development)
+
+The amass tool can send all its traffic through a proxy, such as socks4, socks4a, socks5, http and https. Do **not** use this to send the traffic through Tor, since that network does not support UDP traffic.
+```
+$ amass -vv -proxy socks5://user:password@192.168.1.1:5050 example.com
+```
+
+
+**Thank you** GameXG/ProxyClient for making it easy to implement this feature!
+
+
 ## Integrating amass Into Your Work
 
 If you are using the amass package within your own Go code, be sure to properly seed the default pseudo-random number generator:

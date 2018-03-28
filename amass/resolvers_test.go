@@ -4,18 +4,34 @@
 package amass
 
 import (
+	"context"
+	"net"
 	"testing"
-
-	"github.com/caffix/recon"
 )
 
-func TestResolversPublicServers(t *testing.T) {
-	name := "google.com"
+func ResolveDNS(name, server, qtype string) ([]DNSAnswer, error) {
+	dc := func(ctx context.Context, network, addr string) (net.Conn, error) {
+		d := &net.Dialer{}
 
+		return d.DialContext(ctx, network, server)
+	}
+	return ResolveDNSWithDialContext(dc, name, qtype)
+}
+
+func ReverseDNS(ip, server string) (string, error) {
+	dc := func(ctx context.Context, network, addr string) (net.Conn, error) {
+		d := &net.Dialer{}
+
+		return d.DialContext(ctx, network, server)
+	}
+	return ReverseDNSWithDialContext(dc, ip)
+}
+
+func TestResolversKnownPublicServers(t *testing.T) {
 	for _, server := range knownPublicServers {
-		_, err := recon.ResolveDNS(name, server, "A")
-		if err != nil {
-			t.Errorf("Public DNS server (%s) failed to resolve (%s)", server, name)
+		a, err := ResolveDNS(testDomain, server, "A")
+		if err != nil || len(a) == 0 {
+			t.Errorf("%s failed to resolve the A record for %s", server, testDomain)
 		}
 	}
 }

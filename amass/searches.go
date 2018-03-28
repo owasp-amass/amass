@@ -36,19 +36,19 @@ func NewSubdomainSearchService(in, out chan *AmassRequest, config *AmassConfig) 
 
 	sss.BaseAmassService = *NewBaseAmassService("Subdomain Name Search Service", config, sss)
 	sss.searches = []Searcher{
-		AskSearch(sss.responses),
-		BaiduSearch(sss.responses),
-		CensysSearch(sss.responses),
-		CrtshSearch(sss.responses),
-		GoogleSearch(sss.responses),
-		NetcraftSearch(sss.responses),
-		RobtexSearch(sss.responses),
-		BingSearch(sss.responses),
-		DogpileSearch(sss.responses),
-		YahooSearch(sss.responses),
-		ThreatCrowdSearch(sss.responses),
-		VirusTotalSearch(sss.responses),
-		DNSDumpsterSearch(sss.responses),
+		AskSearch(sss.responses, config),
+		BaiduSearch(sss.responses, config),
+		CensysSearch(sss.responses, config),
+		CrtshSearch(sss.responses, config),
+		GoogleSearch(sss.responses, config),
+		NetcraftSearch(sss.responses, config),
+		RobtexSearch(sss.responses, config),
+		BingSearch(sss.responses, config),
+		DogpileSearch(sss.responses, config),
+		YahooSearch(sss.responses, config),
+		ThreatCrowdSearch(sss.responses, config),
+		VirusTotalSearch(sss.responses, config),
+		DNSDumpsterSearch(sss.responses, config),
 	}
 
 	sss.input = in
@@ -127,6 +127,7 @@ type searchEngine struct {
 	Limit    int
 	Output   chan<- *AmassRequest
 	Callback func(*searchEngine, string, int) string
+	Config   *AmassConfig
 }
 
 func (se *searchEngine) String() string {
@@ -143,7 +144,8 @@ func (se *searchEngine) Search(domain string, done chan int) {
 	re := SubdomainRegex(domain)
 	num := se.Limit / se.Quantity
 	for i := 0; i < num; i++ {
-		page := GetWebPage(se.urlByPageNum(domain, i))
+		page := GetWebPageWithDialContext(
+			se.Config.DialContext, se.urlByPageNum(domain, i))
 		if page == "" {
 			break
 		}
@@ -161,7 +163,7 @@ func (se *searchEngine) Search(domain string, done chan int) {
 				}
 			}
 		}
-		time.Sleep(1 * time.Second)
+		time.Sleep(500 * time.Millisecond)
 	}
 	done <- len(unique)
 }
@@ -175,13 +177,14 @@ func askURLByPageNum(a *searchEngine, domain string, page int) string {
 	return u.String()
 }
 
-func AskSearch(out chan<- *AmassRequest) Searcher {
+func AskSearch(out chan<- *AmassRequest, config *AmassConfig) Searcher {
 	return &searchEngine{
 		Name:     "Ask",
 		Quantity: 10, // ask.com appears to be hardcoded at 10 results per page
 		Limit:    100,
 		Output:   out,
 		Callback: askURLByPageNum,
+		Config:   config,
 	}
 }
 
@@ -193,13 +196,14 @@ func baiduURLByPageNum(d *searchEngine, domain string, page int) string {
 	return u.String()
 }
 
-func BaiduSearch(out chan<- *AmassRequest) Searcher {
+func BaiduSearch(out chan<- *AmassRequest, config *AmassConfig) Searcher {
 	return &searchEngine{
 		Name:     "Baidu",
 		Quantity: 20,
 		Limit:    100,
 		Output:   out,
 		Callback: baiduURLByPageNum,
+		Config:   config,
 	}
 }
 
@@ -213,13 +217,14 @@ func bingURLByPageNum(b *searchEngine, domain string, page int) string {
 	return u.String()
 }
 
-func BingSearch(out chan<- *AmassRequest) Searcher {
+func BingSearch(out chan<- *AmassRequest, config *AmassConfig) Searcher {
 	return &searchEngine{
 		Name:     "Bing Search",
 		Quantity: 20,
 		Limit:    200,
 		Output:   out,
 		Callback: bingURLByPageNum,
+		Config:   config,
 	}
 }
 
@@ -231,13 +236,14 @@ func dogpileURLByPageNum(d *searchEngine, domain string, page int) string {
 	return u.String()
 }
 
-func DogpileSearch(out chan<- *AmassRequest) Searcher {
+func DogpileSearch(out chan<- *AmassRequest, config *AmassConfig) Searcher {
 	return &searchEngine{
 		Name:     "Dogpile",
 		Quantity: 15, // Dogpile returns roughly 15 results per page
 		Limit:    90,
 		Output:   out,
 		Callback: dogpileURLByPageNum,
+		Config:   config,
 	}
 }
 
@@ -258,13 +264,14 @@ func googleURLByPageNum(d *searchEngine, domain string, page int) string {
 	return u.String()
 }
 
-func GoogleSearch(out chan<- *AmassRequest) Searcher {
+func GoogleSearch(out chan<- *AmassRequest, config *AmassConfig) Searcher {
 	return &searchEngine{
 		Name:     "Google",
 		Quantity: 20,
 		Limit:    160,
 		Output:   out,
 		Callback: googleURLByPageNum,
+		Config:   config,
 	}
 }
 
@@ -278,13 +285,14 @@ func yahooURLByPageNum(y *searchEngine, domain string, page int) string {
 	return u.String()
 }
 
-func YahooSearch(out chan<- *AmassRequest) Searcher {
+func YahooSearch(out chan<- *AmassRequest, config *AmassConfig) Searcher {
 	return &searchEngine{
 		Name:     "Yahoo",
 		Quantity: 20,
 		Limit:    160,
 		Output:   out,
 		Callback: yahooURLByPageNum,
+		Config:   config,
 	}
 }
 
@@ -294,6 +302,7 @@ type lookup struct {
 	Name     string
 	Output   chan<- *AmassRequest
 	Callback func(string) string
+	Config   *AmassConfig
 }
 
 func (l *lookup) String() string {
@@ -304,7 +313,7 @@ func (l *lookup) Search(domain string, done chan int) {
 	var unique []string
 
 	re := SubdomainRegex(domain)
-	page := GetWebPage(l.Callback(domain))
+	page := GetWebPageWithDialContext(l.Config.DialContext, l.Callback(domain))
 	if page == "" {
 		done <- 0
 		return
@@ -332,11 +341,12 @@ func censysURL(domain string) string {
 	return fmt.Sprintf(format, domain)
 }
 
-func CensysSearch(out chan<- *AmassRequest) Searcher {
+func CensysSearch(out chan<- *AmassRequest, config *AmassConfig) Searcher {
 	return &lookup{
 		Name:     "Censys",
 		Output:   out,
 		Callback: censysURL,
+		Config:   config,
 	}
 }
 
@@ -346,11 +356,12 @@ func netcraftURL(domain string) string {
 	return fmt.Sprintf(format, domain)
 }
 
-func NetcraftSearch(out chan<- *AmassRequest) Searcher {
+func NetcraftSearch(out chan<- *AmassRequest, config *AmassConfig) Searcher {
 	return &lookup{
 		Name:     "Netcraft",
 		Output:   out,
 		Callback: netcraftURL,
+		Config:   config,
 	}
 }
 
@@ -360,11 +371,12 @@ func robtexURL(domain string) string {
 	return fmt.Sprintf(format, domain)
 }
 
-func RobtexSearch(out chan<- *AmassRequest) Searcher {
+func RobtexSearch(out chan<- *AmassRequest, config *AmassConfig) Searcher {
 	return &lookup{
 		Name:     "Robtex",
 		Output:   out,
 		Callback: robtexURL,
+		Config:   config,
 	}
 }
 
@@ -374,11 +386,12 @@ func threatCrowdURL(domain string) string {
 	return fmt.Sprintf(format, domain)
 }
 
-func ThreatCrowdSearch(out chan<- *AmassRequest) Searcher {
+func ThreatCrowdSearch(out chan<- *AmassRequest, config *AmassConfig) Searcher {
 	return &lookup{
 		Name:     "ThreatCrowd",
 		Output:   out,
 		Callback: threatCrowdURL,
+		Config:   config,
 	}
 }
 
@@ -388,11 +401,12 @@ func virusTotalURL(domain string) string {
 	return fmt.Sprintf(format, domain)
 }
 
-func VirusTotalSearch(out chan<- *AmassRequest) Searcher {
+func VirusTotalSearch(out chan<- *AmassRequest, config *AmassConfig) Searcher {
 	return &lookup{
 		Name:     "VirusTotal",
 		Output:   out,
 		Callback: virusTotalURL,
+		Config:   config,
 	}
 }
 
@@ -402,6 +416,7 @@ type dumpster struct {
 	Name   string
 	Base   string
 	Output chan<- *AmassRequest
+	Config *AmassConfig
 }
 
 func (d *dumpster) String() string {
@@ -411,7 +426,7 @@ func (d *dumpster) String() string {
 func (d *dumpster) Search(domain string, done chan int) {
 	var unique []string
 
-	page := GetWebPage(d.Base)
+	page := GetWebPageWithDialContext(d.Config.DialContext, d.Base)
 	if page == "" {
 		done <- 0
 		return
@@ -456,7 +471,12 @@ func (d *dumpster) getCSRFToken(page string) string {
 }
 
 func (d *dumpster) postForm(token, domain string) string {
-	client := &http.Client{}
+	client := &http.Client{
+		Transport: &http.Transport{
+			DialContext:         d.Config.DialContext,
+			TLSHandshakeTimeout: 10 * time.Second,
+		},
+	}
 	params := url.Values{
 		"csrfmiddlewaretoken": {token},
 		"targetip":            {domain},
@@ -491,11 +511,12 @@ func (d *dumpster) postForm(token, domain string) string {
 	return string(in)
 }
 
-func DNSDumpsterSearch(out chan<- *AmassRequest) Searcher {
+func DNSDumpsterSearch(out chan<- *AmassRequest, config *AmassConfig) Searcher {
 	return &dumpster{
 		Name:   "DNSDumpster",
 		Base:   "https://dnsdumpster.com/",
 		Output: out,
+		Config: config,
 	}
 }
 
@@ -505,6 +526,7 @@ type crtsh struct {
 	Name   string
 	Base   string
 	Output chan<- *AmassRequest
+	Config *AmassConfig
 }
 
 func (c *crtsh) String() string {
@@ -515,7 +537,7 @@ func (c *crtsh) Search(domain string, done chan int) {
 	var unique []string
 
 	// Pull the page that lists all certs for this domain
-	page := GetWebPage(c.Base + "?q=%25." + domain)
+	page := GetWebPageWithDialContext(c.Config.DialContext, c.Base+"?q=%25."+domain)
 	if page == "" {
 		done <- 0
 		return
@@ -527,7 +549,7 @@ func (c *crtsh) Search(domain string, done chan int) {
 		// Do not go too fast
 		time.Sleep(50 * time.Millisecond)
 		// Pull the certificate web page
-		cert := GetWebPage(c.Base + rel)
+		cert := GetWebPageWithDialContext(c.Config.DialContext, c.Base+rel)
 		if cert == "" {
 			continue
 		}
@@ -577,10 +599,11 @@ func (c *crtsh) getSubmatches(content string) []string {
 }
 
 // CrtshSearch - A searcher that attempts to discover names from SSL certificates
-func CrtshSearch(out chan<- *AmassRequest) Searcher {
+func CrtshSearch(out chan<- *AmassRequest, config *AmassConfig) Searcher {
 	return &crtsh{
 		Name:   "Cert Search",
 		Base:   "https://crt.sh/",
 		Output: out,
+		Config: config,
 	}
 }

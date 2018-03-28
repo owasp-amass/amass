@@ -4,6 +4,7 @@
 package amass
 
 import (
+	"context"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -39,13 +40,16 @@ type IPRange struct {
 	End net.IP
 }
 
-func StartAmass(config *AmassConfig) error {
+type dialCtx func(ctx context.Context, network, addr string) (net.Conn, error)
+
+func StartEnumeration(config *AmassConfig) error {
 	var resolved []chan *AmassRequest
 	var services []AmassService
 
 	if err := CheckConfig(config); err != nil {
 		return err
 	}
+	config.Setup()
 	// Setup all the channels used by the AmassServices
 	bufSize := 50
 	final := make(chan *AmassRequest, bufSize)
@@ -203,8 +207,8 @@ func AnySubdomainRegex() *regexp.Regexp {
 	return regexp.MustCompile(SUBRE + "[a-zA-Z0-9-]{0,61}[.][a-zA-Z]")
 }
 
-func GetWebPage(u string) string {
-	client := &http.Client{}
+func GetWebPageWithDialContext(dc dialCtx, u string) string {
+	client := &http.Client{Transport: &http.Transport{DialContext: dc}}
 
 	req, err := http.NewRequest("GET", u, nil)
 	if err != nil {
@@ -217,6 +221,10 @@ func GetWebPage(u string) string {
 
 	resp, err := client.Do(req)
 	if err != nil {
+		return ""
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return ""
 	}
 

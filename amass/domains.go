@@ -6,35 +6,43 @@ package amass
 import (
 	"strings"
 	"time"
-
-	"github.com/caffix/recon"
 )
 
-type domainRequest struct {
+type DomainRequest struct {
 	Subdomain string
 	Result    chan string
 }
 
-// Requests are sent here to check the root domain of a subdomain name
-var domainReqs chan *domainRequest
+type DomainLookup struct {
+	// Requests are sent here to check the root domain of a subdomain name
+	Requests chan *DomainRequest
 
-func init() {
-	domainReqs = make(chan *domainRequest, 50)
-	go processSubToRootDomain()
+	// The configuration being used by the amass enumeration
+	Config *AmassConfig
 }
 
-func SubdomainToDomain(name string) string {
+func NewDomainLookup(config *AmassConfig) *DomainLookup {
+	dl := &DomainLookup{
+		Requests: make(chan *DomainRequest, 50),
+		Config:   config,
+	}
+
+	go dl.processSubToRootDomain()
+	return dl
+}
+
+func (dl *DomainLookup) SubdomainToDomain(name string) string {
 	result := make(chan string, 2)
 
-	domainReqs <- &domainRequest{
+	dl.Requests <- &DomainRequest{
 		Subdomain: name,
 		Result:    result,
 	}
 	return <-result
 }
 
-func processSubToRootDomain() {
-	var queue []*domainRequest
+func (dl *DomainLookup) processSubToRootDomain() {
+	var queue []*DomainRequest
 
 	cache := make(map[string]struct{})
 
@@ -43,27 +51,27 @@ func processSubToRootDomain() {
 
 	for {
 		select {
-		case req := <-domainReqs:
+		case req := <-dl.Requests:
 			queue = append(queue, req)
 		case <-t.C:
-			var next *domainRequest
+			var next *DomainRequest
 
 			if len(queue) == 1 {
 				next = queue[0]
-				queue = []*domainRequest{}
+				queue = []*DomainRequest{}
 			} else if len(queue) > 1 {
 				next = queue[0]
 				queue = queue[1:]
 			}
 
 			if next != nil {
-				next.Result <- rootDomainLookup(next.Subdomain, cache)
+				next.Result <- dl.rootDomainLookup(next.Subdomain, cache)
 			}
 		}
 	}
 }
 
-func rootDomainLookup(name string, cache map[string]struct{}) string {
+func (dl *DomainLookup) rootDomainLookup(name string, cache map[string]struct{}) string {
 	var domain string
 
 	// Obtain all parts of the subdomain name
@@ -85,7 +93,7 @@ func rootDomainLookup(name string, cache map[string]struct{}) string {
 	for i := len(labels) - 2; i >= 0; i-- {
 		sub := strings.Join(labels[i:], ".")
 
-		if checkDNSforDomain(sub) {
+		if dl.checkDNSforDomain(sub) {
 			cache[sub] = struct{}{}
 			domain = sub
 			break
@@ -94,20 +102,8 @@ func rootDomainLookup(name string, cache map[string]struct{}) string {
 	return domain
 }
 
-func checkDNSforDomain(domain string) bool {
-	server := Resolvers.NextNameserver()
-
-	// Check DNS for CNAME, A or AAAA records
-	_, err := recon.ResolveDNS(domain, server, "CNAME")
-	if err == nil {
-		return true
-	}
-	_, err = recon.ResolveDNS(domain, server, "A")
-	if err == nil {
-		return true
-	}
-	_, err = recon.ResolveDNS(domain, server, "AAAA")
-	if err == nil {
+func (dl *DomainLookup) checkDNSforDomain(domain string) bool {
+	if _, err := dl.Config.dns.Query(domain); err == nil {
 		return true
 	}
 	return false

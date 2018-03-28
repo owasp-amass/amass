@@ -5,20 +5,19 @@ package amass
 
 import (
 	"testing"
-
-	"github.com/caffix/recon"
 )
 
 func TestDNSQuery(t *testing.T) {
 	name := "google.com"
-	server := "8.8.8.8:53"
+	config := DefaultConfig()
+	config.Setup()
 
-	answers, err := DNS.Query(name, server)
+	answers, err := config.dns.Query(name)
 	if err != nil {
-		t.Errorf("The DNS query for %s using the %s server failed: %s", name, server, err)
+		t.Errorf("The DNS query for %s failed: %s", name, err)
 	}
 
-	if ip := recon.GetARecordData(answers); ip == "" {
+	if ip := GetARecordData(answers); ip == "" {
 		t.Errorf("The query for %s was successful, yet did not return a A or AAAA record", name)
 	}
 }
