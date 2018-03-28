@@ -84,11 +84,11 @@ func (c *AmassConfig) SetupProxyConnection(addr string) error {
 	client, err := proxyclient.NewProxyClient(addr)
 	if err == nil {
 		c.proxy = client
-		// Override the Go default DNS resolver
-		/*net.DefaultResolver = &net.Resolver{
-			//PreferGo: true,
-			Dial: c.DNSDialContext,
-		}*/
+		// Override the Go default DNS resolver to prevent leakage
+		net.DefaultResolver = &net.Resolver{
+			PreferGo: true,
+			Dial:     c.DNSDialContext,
+		}
 	}
 	return err
 }
@@ -117,17 +117,16 @@ func (c *AmassConfig) DNSDialContext(ctx context.Context, network, address strin
 }
 
 func (c *AmassConfig) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
-	/*d := &net.Dialer{
+	if c.proxy != nil {
+		return c.proxy.Dial(network, address)
+	}
+
+	d := &net.Dialer{
 		Resolver: &net.Resolver{
 			PreferGo: true,
 			Dial:     c.DNSDialContext,
 		},
-	}*/
-	if c.proxy != nil {
-		return c.proxy.Dial(network, address)
 	}
-	d := &net.Dialer{}
-	//fmt.Println(network + ": " + addr)
 	return d.DialContext(ctx, network, address)
 }
 
