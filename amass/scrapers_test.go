@@ -12,7 +12,7 @@ const (
 	testIP     string = "72.237.4.113"
 )
 
-func TestSearchAsk(t *testing.T) {
+func TestScraperAsk(t *testing.T) {
 	out := make(chan *AmassRequest, 2)
 	finished := make(chan int, 2)
 	config := DefaultConfig()
@@ -21,14 +21,14 @@ func TestSearchAsk(t *testing.T) {
 	s := AskSearch(out, config)
 
 	go readOutput(out)
-	s.Search(testDomain, finished)
+	s.Scrape(testDomain, finished)
 	discovered := <-finished
 	if discovered <= 0 {
 		t.Errorf("AskSearch found %d subdomains", discovered)
 	}
 }
 
-func TestSearchBaidu(t *testing.T) {
+func TestScraperBaidu(t *testing.T) {
 	out := make(chan *AmassRequest, 2)
 	finished := make(chan int, 2)
 	config := DefaultConfig()
@@ -37,14 +37,14 @@ func TestSearchBaidu(t *testing.T) {
 	s := BaiduSearch(out, config)
 
 	go readOutput(out)
-	s.Search(testDomain, finished)
+	s.Scrape(testDomain, finished)
 	discovered := <-finished
 	if discovered <= 0 {
 		t.Errorf("BaiduSearch found %d subdomains", discovered)
 	}
 }
 
-func TestSearchBing(t *testing.T) {
+func TestScraperBing(t *testing.T) {
 	out := make(chan *AmassRequest, 2)
 	finished := make(chan int, 2)
 	config := DefaultConfig()
@@ -53,14 +53,14 @@ func TestSearchBing(t *testing.T) {
 	s := BingSearch(out, config)
 
 	go readOutput(out)
-	s.Search(testDomain, finished)
+	s.Scrape(testDomain, finished)
 	discovered := <-finished
 	if discovered <= 0 {
 		t.Errorf("BingSearch found %d subdomains", discovered)
 	}
 }
 
-func TestSearchDogpile(t *testing.T) {
+func TestScraperDogpile(t *testing.T) {
 	out := make(chan *AmassRequest, 2)
 	finished := make(chan int, 2)
 	config := DefaultConfig()
@@ -69,14 +69,14 @@ func TestSearchDogpile(t *testing.T) {
 	s := DogpileSearch(out, config)
 
 	go readOutput(out)
-	s.Search(testDomain, finished)
+	s.Scrape(testDomain, finished)
 	discovered := <-finished
 	if discovered <= 0 {
 		t.Errorf("DogpileSearch found %d subdomains", discovered)
 	}
 }
 
-func TestSearchGoogle(t *testing.T) {
+func TestScraperGoogle(t *testing.T) {
 	out := make(chan *AmassRequest, 2)
 	finished := make(chan int, 2)
 	config := DefaultConfig()
@@ -85,14 +85,14 @@ func TestSearchGoogle(t *testing.T) {
 	s := GoogleSearch(out, config)
 
 	go readOutput(out)
-	s.Search(testDomain, finished)
+	s.Scrape(testDomain, finished)
 	discovered := <-finished
 	if discovered <= 0 {
 		t.Errorf("GoogleSearch found %d subdomains", discovered)
 	}
 }
 
-func TestSearchYahoo(t *testing.T) {
+func TestScraperYahoo(t *testing.T) {
 	out := make(chan *AmassRequest, 2)
 	finished := make(chan int, 2)
 	config := DefaultConfig()
@@ -101,14 +101,14 @@ func TestSearchYahoo(t *testing.T) {
 	s := YahooSearch(out, config)
 
 	go readOutput(out)
-	s.Search(testDomain, finished)
+	s.Scrape(testDomain, finished)
 	discovered := <-finished
 	if discovered <= 0 {
 		t.Errorf("YahooSearch found %d subdomains", discovered)
 	}
 }
 
-func TestSearchCensys(t *testing.T) {
+func TestScraperCensys(t *testing.T) {
 	out := make(chan *AmassRequest, 2)
 	finished := make(chan int, 2)
 	config := DefaultConfig()
@@ -117,14 +117,14 @@ func TestSearchCensys(t *testing.T) {
 	s := CensysSearch(out, config)
 
 	go readOutput(out)
-	s.Search(testDomain, finished)
+	s.Scrape(testDomain, finished)
 	discovered := <-finished
 	if discovered <= 0 {
 		t.Errorf("CensysSearch found %d subdomains", discovered)
 	}
 }
 
-func TestSearchCrtsh(t *testing.T) {
+func TestScraperCrtsh(t *testing.T) {
 	out := make(chan *AmassRequest, 2)
 	finished := make(chan int, 2)
 	config := DefaultConfig()
@@ -133,14 +133,14 @@ func TestSearchCrtsh(t *testing.T) {
 	s := CrtshSearch(out, config)
 
 	go readOutput(out)
-	s.Search(testDomain, finished)
+	s.Scrape(testDomain, finished)
 	discovered := <-finished
 	if discovered <= 0 {
 		t.Errorf("CrtshSearch found %d subdomains", discovered)
 	}
 }
 
-func TestSearchNetcraft(t *testing.T) {
+func TestScraperNetcraft(t *testing.T) {
 	out := make(chan *AmassRequest, 2)
 	finished := make(chan int, 2)
 	config := DefaultConfig()
@@ -149,14 +149,14 @@ func TestSearchNetcraft(t *testing.T) {
 	s := NetcraftSearch(out, config)
 
 	go readOutput(out)
-	s.Search(testDomain, finished)
+	s.Scrape(testDomain, finished)
 	discovered := <-finished
 	if discovered <= 0 {
 		t.Errorf("NetcraftSearch found %d subdomains", discovered)
 	}
 }
 
-func TestSearchRobtex(t *testing.T) {
+func TestScraperRobtex(t *testing.T) {
 	out := make(chan *AmassRequest, 2)
 	finished := make(chan int, 2)
 	config := DefaultConfig()
@@ -165,14 +165,14 @@ func TestSearchRobtex(t *testing.T) {
 	s := RobtexSearch(out, config)
 
 	go readOutput(out)
-	s.Search(testDomain, finished)
+	s.Scrape(testDomain, finished)
 	discovered := <-finished
 	if discovered <= 0 {
 		t.Errorf("RobtexSearch found %d subdomains", discovered)
 	}
 }
 
-func TestSearchThreatCrowd(t *testing.T) {
+func TestScraperThreatCrowd(t *testing.T) {
 	out := make(chan *AmassRequest, 2)
 	finished := make(chan int, 2)
 	config := DefaultConfig()
@@ -181,14 +181,14 @@ func TestSearchThreatCrowd(t *testing.T) {
 	s := ThreatCrowdSearch(out, config)
 
 	go readOutput(out)
-	s.Search(testDomain, finished)
+	s.Scrape(testDomain, finished)
 	discovered := <-finished
 	if discovered <= 0 {
 		t.Errorf("ThreatCrowdSearch found %d subdomains", discovered)
 	}
 }
 
-func TestSearchVirusTotal(t *testing.T) {
+func TestScraperVirusTotal(t *testing.T) {
 	out := make(chan *AmassRequest, 2)
 	finished := make(chan int, 2)
 	config := DefaultConfig()
@@ -197,14 +197,14 @@ func TestSearchVirusTotal(t *testing.T) {
 	s := VirusTotalSearch(out, config)
 
 	go readOutput(out)
-	s.Search(testDomain, finished)
+	s.Scrape(testDomain, finished)
 	discovered := <-finished
 	if discovered <= 0 {
 		t.Errorf("VirusTotalSearch found %d subdomains", discovered)
 	}
 }
 
-func TestSearchDNSDumpster(t *testing.T) {
+func TestScraperDNSDumpster(t *testing.T) {
 	out := make(chan *AmassRequest, 2)
 	finished := make(chan int, 2)
 	config := DefaultConfig()
@@ -213,9 +213,15 @@ func TestSearchDNSDumpster(t *testing.T) {
 	s := DNSDumpsterSearch(out, config)
 
 	go readOutput(out)
-	s.Search(testDomain, finished)
+	s.Scrape(testDomain, finished)
 	discovered := <-finished
 	if discovered <= 0 {
 		t.Errorf("DNSDumpsterSearch found %d subdomains", discovered)
+	}
+}
+
+func readOutput(out chan *AmassRequest) {
+	for {
+		<-out
 	}
 }

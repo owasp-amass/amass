@@ -18,66 +18,66 @@ const (
 	NUM_SEARCHES int = 13
 )
 
-type SubdomainSearchService struct {
+type ScraperService struct {
 	BaseAmassService
 
 	responses    chan *AmassRequest
-	searches     []Searcher
+	scrapers     []Scraper
 	filter       map[string]struct{}
 	domainFilter map[string]struct{}
 }
 
-func NewSubdomainSearchService(in, out chan *AmassRequest, config *AmassConfig) *SubdomainSearchService {
-	sss := &SubdomainSearchService{
+func NewScraperService(in, out chan *AmassRequest, config *AmassConfig) *ScraperService {
+	ss := &ScraperService{
 		responses:    make(chan *AmassRequest, 50),
 		filter:       make(map[string]struct{}),
 		domainFilter: make(map[string]struct{}),
 	}
 
-	sss.BaseAmassService = *NewBaseAmassService("Subdomain Name Search Service", config, sss)
-	sss.searches = []Searcher{
-		AskSearch(sss.responses, config),
-		BaiduSearch(sss.responses, config),
-		CensysSearch(sss.responses, config),
-		CrtshSearch(sss.responses, config),
-		GoogleSearch(sss.responses, config),
-		NetcraftSearch(sss.responses, config),
-		RobtexSearch(sss.responses, config),
-		BingSearch(sss.responses, config),
-		DogpileSearch(sss.responses, config),
-		YahooSearch(sss.responses, config),
-		ThreatCrowdSearch(sss.responses, config),
-		VirusTotalSearch(sss.responses, config),
-		DNSDumpsterSearch(sss.responses, config),
+	ss.BaseAmassService = *NewBaseAmassService("Scraper Service", config, ss)
+	ss.scrapers = []Scraper{
+		AskSearch(ss.responses, config),
+		BaiduSearch(ss.responses, config),
+		CensysSearch(ss.responses, config),
+		CrtshSearch(ss.responses, config),
+		GoogleSearch(ss.responses, config),
+		NetcraftSearch(ss.responses, config),
+		RobtexSearch(ss.responses, config),
+		BingSearch(ss.responses, config),
+		DogpileSearch(ss.responses, config),
+		YahooSearch(ss.responses, config),
+		ThreatCrowdSearch(ss.responses, config),
+		VirusTotalSearch(ss.responses, config),
+		DNSDumpsterSearch(ss.responses, config),
 	}
 
-	sss.input = in
-	sss.output = out
-	return sss
+	ss.input = in
+	ss.output = out
+	return ss
 }
 
-func (sss *SubdomainSearchService) OnStart() error {
-	sss.BaseAmassService.OnStart()
+func (ss *ScraperService) OnStart() error {
+	ss.BaseAmassService.OnStart()
 
-	go sss.processOutput()
-	go sss.executeAllSearches()
+	go ss.processOutput()
+	go ss.executeAllScrapers()
 	return nil
 }
 
-func (sss *SubdomainSearchService) OnStop() error {
-	sss.BaseAmassService.OnStop()
+func (ss *ScraperService) OnStop() error {
+	ss.BaseAmassService.OnStop()
 	return nil
 }
 
-func (sss *SubdomainSearchService) processOutput() {
+func (ss *ScraperService) processOutput() {
 loop:
 	for {
 		select {
-		case req := <-sss.responses:
-			if !sss.duplicate(req.Name) {
-				sss.SendOut(req)
+		case req := <-ss.responses:
+			if !ss.duplicate(req.Name) {
+				ss.SendOut(req)
 			}
-		case <-sss.Quit():
+		case <-ss.Quit():
 			break loop
 		}
 	}
@@ -85,38 +85,38 @@ loop:
 
 // Returns true if the subdomain name is a duplicate entry in the filter.
 // If not, the subdomain name is added to the filter
-func (sss *SubdomainSearchService) duplicate(sub string) bool {
-	if _, found := sss.filter[sub]; found {
+func (ss *ScraperService) duplicate(sub string) bool {
+	if _, found := ss.filter[sub]; found {
 		return true
 	}
-	sss.filter[sub] = struct{}{}
+	ss.filter[sub] = struct{}{}
 	return false
 }
 
-func (sss *SubdomainSearchService) executeAllSearches() {
+func (ss *ScraperService) executeAllScrapers() {
 	done := make(chan int)
 
-	sss.SetActive(true)
+	ss.SetActive(true)
 	// Loop over all the root domains provided in the config
-	for _, domain := range sss.Config().Domains() {
-		if _, found := sss.domainFilter[domain]; found {
+	for _, domain := range ss.Config().Domains() {
+		if _, found := ss.domainFilter[domain]; found {
 			continue
 		}
 		// Kick off all the searches
-		for _, s := range sss.searches {
-			go s.Search(domain, done)
+		for _, s := range ss.scrapers {
+			go s.Scrape(domain, done)
 		}
 		// Wait for them to complete
 		for i := 0; i < NUM_SEARCHES; i++ {
 			<-done
 		}
 	}
-	sss.SetActive(false)
+	ss.SetActive(false)
 }
 
 // Searcher - represents all types that perform searches for domain names
-type Searcher interface {
-	Search(domain string, done chan int)
+type Scraper interface {
+	Scrape(domain string, done chan int)
 	fmt.Stringer
 }
 
@@ -138,7 +138,7 @@ func (se *searchEngine) urlByPageNum(domain string, page int) string {
 	return se.Callback(se, domain, page)
 }
 
-func (se *searchEngine) Search(domain string, done chan int) {
+func (se *searchEngine) Scrape(domain string, done chan int) {
 	var unique []string
 
 	re := SubdomainRegex(domain)
@@ -163,7 +163,7 @@ func (se *searchEngine) Search(domain string, done chan int) {
 				}
 			}
 		}
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(1 * time.Second)
 	}
 	done <- len(unique)
 }
@@ -177,7 +177,7 @@ func askURLByPageNum(a *searchEngine, domain string, page int) string {
 	return u.String()
 }
 
-func AskSearch(out chan<- *AmassRequest, config *AmassConfig) Searcher {
+func AskSearch(out chan<- *AmassRequest, config *AmassConfig) Scraper {
 	return &searchEngine{
 		Name:     "Ask",
 		Quantity: 10, // ask.com appears to be hardcoded at 10 results per page
@@ -196,7 +196,7 @@ func baiduURLByPageNum(d *searchEngine, domain string, page int) string {
 	return u.String()
 }
 
-func BaiduSearch(out chan<- *AmassRequest, config *AmassConfig) Searcher {
+func BaiduSearch(out chan<- *AmassRequest, config *AmassConfig) Scraper {
 	return &searchEngine{
 		Name:     "Baidu",
 		Quantity: 20,
@@ -217,7 +217,7 @@ func bingURLByPageNum(b *searchEngine, domain string, page int) string {
 	return u.String()
 }
 
-func BingSearch(out chan<- *AmassRequest, config *AmassConfig) Searcher {
+func BingSearch(out chan<- *AmassRequest, config *AmassConfig) Scraper {
 	return &searchEngine{
 		Name:     "Bing Search",
 		Quantity: 20,
@@ -236,7 +236,7 @@ func dogpileURLByPageNum(d *searchEngine, domain string, page int) string {
 	return u.String()
 }
 
-func DogpileSearch(out chan<- *AmassRequest, config *AmassConfig) Searcher {
+func DogpileSearch(out chan<- *AmassRequest, config *AmassConfig) Scraper {
 	return &searchEngine{
 		Name:     "Dogpile",
 		Quantity: 15, // Dogpile returns roughly 15 results per page
@@ -264,7 +264,7 @@ func googleURLByPageNum(d *searchEngine, domain string, page int) string {
 	return u.String()
 }
 
-func GoogleSearch(out chan<- *AmassRequest, config *AmassConfig) Searcher {
+func GoogleSearch(out chan<- *AmassRequest, config *AmassConfig) Scraper {
 	return &searchEngine{
 		Name:     "Google",
 		Quantity: 20,
@@ -285,7 +285,7 @@ func yahooURLByPageNum(y *searchEngine, domain string, page int) string {
 	return u.String()
 }
 
-func YahooSearch(out chan<- *AmassRequest, config *AmassConfig) Searcher {
+func YahooSearch(out chan<- *AmassRequest, config *AmassConfig) Scraper {
 	return &searchEngine{
 		Name:     "Yahoo",
 		Quantity: 20,
@@ -309,7 +309,7 @@ func (l *lookup) String() string {
 	return l.Name
 }
 
-func (l *lookup) Search(domain string, done chan int) {
+func (l *lookup) Scrape(domain string, done chan int) {
 	var unique []string
 
 	re := SubdomainRegex(domain)
@@ -341,7 +341,7 @@ func censysURL(domain string) string {
 	return fmt.Sprintf(format, domain)
 }
 
-func CensysSearch(out chan<- *AmassRequest, config *AmassConfig) Searcher {
+func CensysSearch(out chan<- *AmassRequest, config *AmassConfig) Scraper {
 	return &lookup{
 		Name:     "Censys",
 		Output:   out,
@@ -356,7 +356,7 @@ func netcraftURL(domain string) string {
 	return fmt.Sprintf(format, domain)
 }
 
-func NetcraftSearch(out chan<- *AmassRequest, config *AmassConfig) Searcher {
+func NetcraftSearch(out chan<- *AmassRequest, config *AmassConfig) Scraper {
 	return &lookup{
 		Name:     "Netcraft",
 		Output:   out,
@@ -371,7 +371,7 @@ func robtexURL(domain string) string {
 	return fmt.Sprintf(format, domain)
 }
 
-func RobtexSearch(out chan<- *AmassRequest, config *AmassConfig) Searcher {
+func RobtexSearch(out chan<- *AmassRequest, config *AmassConfig) Scraper {
 	return &lookup{
 		Name:     "Robtex",
 		Output:   out,
@@ -386,7 +386,7 @@ func threatCrowdURL(domain string) string {
 	return fmt.Sprintf(format, domain)
 }
 
-func ThreatCrowdSearch(out chan<- *AmassRequest, config *AmassConfig) Searcher {
+func ThreatCrowdSearch(out chan<- *AmassRequest, config *AmassConfig) Scraper {
 	return &lookup{
 		Name:     "ThreatCrowd",
 		Output:   out,
@@ -401,7 +401,7 @@ func virusTotalURL(domain string) string {
 	return fmt.Sprintf(format, domain)
 }
 
-func VirusTotalSearch(out chan<- *AmassRequest, config *AmassConfig) Searcher {
+func VirusTotalSearch(out chan<- *AmassRequest, config *AmassConfig) Scraper {
 	return &lookup{
 		Name:     "VirusTotal",
 		Output:   out,
@@ -423,7 +423,7 @@ func (d *dumpster) String() string {
 	return d.Name
 }
 
-func (d *dumpster) Search(domain string, done chan int) {
+func (d *dumpster) Scrape(domain string, done chan int) {
 	var unique []string
 
 	page := GetWebPageWithDialContext(d.Config.DialContext, d.Base)
@@ -511,7 +511,7 @@ func (d *dumpster) postForm(token, domain string) string {
 	return string(in)
 }
 
-func DNSDumpsterSearch(out chan<- *AmassRequest, config *AmassConfig) Searcher {
+func DNSDumpsterSearch(out chan<- *AmassRequest, config *AmassConfig) Scraper {
 	return &dumpster{
 		Name:   "DNSDumpster",
 		Base:   "https://dnsdumpster.com/",
@@ -533,7 +533,7 @@ func (c *crtsh) String() string {
 	return c.Name
 }
 
-func (c *crtsh) Search(domain string, done chan int) {
+func (c *crtsh) Scrape(domain string, done chan int) {
 	var unique []string
 
 	// Pull the page that lists all certs for this domain
@@ -599,7 +599,7 @@ func (c *crtsh) getSubmatches(content string) []string {
 }
 
 // CrtshSearch - A searcher that attempts to discover names from SSL certificates
-func CrtshSearch(out chan<- *AmassRequest, config *AmassConfig) Searcher {
+func CrtshSearch(out chan<- *AmassRequest, config *AmassConfig) Scraper {
 	return &crtsh{
 		Name:   "Cert Search",
 		Base:   "https://crt.sh/",

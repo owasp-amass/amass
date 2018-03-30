@@ -5,7 +5,37 @@ package amass
 
 import (
 	"testing"
+	"time"
 )
+
+func TestDNSService(t *testing.T) {
+	name := "www." + testDomain
+	in := make(chan *AmassRequest, 2)
+	out := make(chan *AmassRequest, 2)
+	config := DefaultConfig()
+	config.AddDomains([]string{testDomain})
+	config.Setup()
+
+	s := NewDNSService(in, out, config)
+	s.Start()
+
+	in <- &AmassRequest{
+		Name:   name,
+		Domain: testDomain,
+	}
+
+	timeout := time.NewTimer(3 * time.Second)
+	defer timeout.Stop()
+
+	select {
+	case <-out:
+		// Success
+	case <-timeout.C:
+		t.Errorf("DNSService timed out on the request for %s", name)
+	}
+
+	s.Stop()
+}
 
 func TestDNSQuery(t *testing.T) {
 	name := "google.com"

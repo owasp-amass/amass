@@ -205,7 +205,7 @@ func main() {
         Output:       output,
     })
     // Begin the enumeration process
-    amass.StartAmass(config)
+    amass.StartEnumeration(config)
 }
 ```
 

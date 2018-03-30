@@ -5,6 +5,7 @@ package amass
 
 import (
 	"testing"
+	"time"
 )
 
 func TestNetblockService(t *testing.T) {
@@ -18,9 +19,16 @@ func TestNetblockService(t *testing.T) {
 	srv.Start()
 	in <- &AmassRequest{Address: "104.244.42.65"}
 
-	req := <-out
-	if req.Netblock.String() != "104.244.42.0/24" {
-		t.Errorf("Address %s instead belongs in netblock %s\n", req.Address, req.Netblock.String())
+	quit := time.NewTimer(5 * time.Second)
+	defer quit.Stop()
+
+	select {
+	case req := <-out:
+		if req.Netblock.String() != "104.244.42.0/24" {
+			t.Errorf("Address %s instead belongs in netblock %s\n", req.Address, req.Netblock.String())
+		}
+	case <-quit.C:
+		t.Error("The request timed out")
 	}
 
 	srv.Stop()

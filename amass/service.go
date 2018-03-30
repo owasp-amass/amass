@@ -9,10 +9,21 @@ import (
 	"sync"
 )
 
+const (
+	TypeNorm int = iota
+	TypeNS
+	TypeMX
+	TypeSRV
+	TypeWeb
+)
+
 // AmassRequest - Contains data obtained throughout AmassService processing
 type AmassRequest struct {
 	// The subdomain name
 	Name string
+
+	// The type of host that this name refers to
+	Type int
 
 	// The base domain that the name belongs to
 	Domain string

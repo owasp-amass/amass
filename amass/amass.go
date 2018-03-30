@@ -68,11 +68,11 @@ func StartEnumeration(config *AmassConfig) error {
 	// DNS and Reverse IP need the frequency set
 	config.Frequency *= 2
 	dnsSrv := NewDNSService(dns, dnsMux, config)
-	reverseipSrv := NewReverseIPService(reverseip, dns, config)
+	reverseipSrv := NewReverseDNSService(reverseip, dns, config)
 	// Add these service to the slice
 	services = append(services, dnsSrv, reverseipSrv)
 	// Setup the service that jump-start the process
-	searchSrv := NewSubdomainSearchService(nil, dns, config)
+	searchSrv := NewScraperService(nil, dns, config)
 	actcertSrv := NewActiveCertService(activecert, dns, config)
 	iphistSrv := NewIPHistoryService(nil, netblock, config)
 	// Add them to the services slice
@@ -208,7 +208,16 @@ func AnySubdomainRegex() *regexp.Regexp {
 }
 
 func GetWebPageWithDialContext(dc dialCtx, u string) string {
-	client := &http.Client{Transport: &http.Transport{DialContext: dc}}
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+		Transport: &http.Transport{
+			DialContext:           dc,
+			MaxIdleConns:          200,
+			IdleConnTimeout:       90 * time.Second,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ExpectContinueTimeout: 5 * time.Second,
+		},
+	}
 
 	req, err := http.NewRequest("GET", u, nil)
 	if err != nil {
@@ -327,4 +336,17 @@ func CIDRSubset(cidr *net.IPNet, addr string, num int) []string {
 		Start: first,
 		End:   last,
 	})
+}
+
+func ReverseIP(ip string) string {
+	var reversed []string
+
+	parts := strings.Split(ip, ".")
+	li := len(parts) - 1
+
+	for i := li; i >= 0; i-- {
+		reversed = append(reversed, parts[i])
+	}
+
+	return strings.Join(reversed, ".")
 }
