@@ -151,7 +151,7 @@ func DefaultConfig() *AmassConfig {
 		Ports:       []int{443},
 		Recursive:   true,
 		Alterations: true,
-		Frequency:   10 * time.Millisecond,
+		Frequency:   25 * time.Millisecond,
 	}
 	return config
 }

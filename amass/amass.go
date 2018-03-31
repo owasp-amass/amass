@@ -17,7 +17,7 @@ const (
 	// Tags used to mark the data source with the Subdomain struct
 	ALT     = "alt"
 	BRUTE   = "brute"
-	SEARCH  = "search"
+	SCRAPE  = "scrape"
 	ARCHIVE = "archive"
 
 	// An IPv4 regular expression

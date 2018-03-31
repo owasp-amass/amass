@@ -19,7 +19,7 @@ func TestNetblockService(t *testing.T) {
 	srv.Start()
 	in <- &AmassRequest{Address: "104.244.42.65"}
 
-	quit := time.NewTimer(5 * time.Second)
+	quit := time.NewTimer(10 * time.Second)
 	defer quit.Stop()
 
 	select {

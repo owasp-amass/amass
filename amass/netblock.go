@@ -209,11 +209,11 @@ loop:
 		case cr := <-ns.requests:
 			switch cr.Type {
 			case "IP":
-				ns.IPLookup(cr)
+				ns.IPRequest(cr)
 			case "CIDR":
-				ns.CIDRLookup(cr)
+				ns.CIDRRequest(cr)
 			case "ASN":
-				ns.ASNLookup(cr)
+				ns.ASNRequest(cr)
 			}
 		case <-ns.Quit():
 			break loop
@@ -221,7 +221,7 @@ loop:
 	}
 }
 
-func (ns *NetblockService) IPLookup(r *cacheRequest) {
+func (ns *NetblockService) IPRequest(r *cacheRequest) {
 	// Is the data already available in the cache?
 	r.Req.ASN, r.Req.Netblock, r.Req.ISP = ns.ipSearch(r.Req.Address)
 	if r.Req.ASN != 0 {
@@ -272,7 +272,7 @@ loop:
 	return a, cidr, desc
 }
 
-func (ns *NetblockService) CIDRLookup(r *cacheRequest) {
+func (ns *NetblockService) CIDRRequest(r *cacheRequest) {
 	r.Req.ASN, r.Req.ISP = ns.cidrSearch(r.Req.Netblock)
 	// Does the data need to be obtained?
 	if r.Req.ASN != 0 {
@@ -315,7 +315,7 @@ loop:
 	return a, desc
 }
 
-func (ns *NetblockService) ASNLookup(r *cacheRequest) {
+func (ns *NetblockService) ASNRequest(r *cacheRequest) {
 	var record *ASRecord
 	// Does the data need to be obtained?
 	if _, found := ns.cache[r.Req.ASN]; !found {
@@ -347,33 +347,25 @@ func (ns *NetblockService) FetchOnlineData(addr string, asn int) *ASRecord {
 	if addr == "" && asn == 0 {
 		return nil
 	}
+
+	var cidr string
 	// If the ASN was not provided, look it up
 	if asn == 0 {
-		asn, _ = ns.originLookup(addr)
+		asn, cidr = ns.originLookup(addr)
 		if asn == 0 {
 			return nil
 		}
 	}
 	// Get the ASN record from the online source
-	name := "AS" + strconv.Itoa(asn) + ".asn.cymru.com"
-	ctx := ns.Config().DNSDialContext
-	answers, err := ResolveDNSWithDialContext(ctx, name, "TXT")
-	if err != nil {
-		return nil
-	}
-	// Parse the data returned
-	record := parseASNInfo(answers[0].Data)
+	record := ns.asnLookup(asn)
 	if record == nil {
 		return nil
 	}
 	// Get the netblocks associated with this ASN
 	record.Netblocks = ns.FetchOnlineNetblockData(asn)
 	// Just in case
-	if addr != "" {
-		a, cidr := ns.originLookup(addr)
-		if a != 0 {
-			record.Netblocks = UniqueAppend(record.Netblocks, cidr)
-		}
+	if cidr != "" {
+		record.Netblocks = UniqueAppend(record.Netblocks, cidr)
 	}
 	if len(record.Netblocks) == 0 {
 		return nil
@@ -382,12 +374,22 @@ func (ns *NetblockService) FetchOnlineData(addr string, asn int) *ASRecord {
 }
 
 func (ns *NetblockService) originLookup(addr string) (int, string) {
+	var err error
+	var answers []DNSAnswer
+
 	ctx := ns.Config().DNSDialContext
 	// TODO: Make the correct request based on ipv4 or ipv6 address
 
-	// Get the AS record for the IP address
+	// Get the AS number and CIDR for the IP address
 	name := ReverseIP(addr) + ".origin.asn.cymru.com"
-	answers, err := ResolveDNSWithDialContext(ctx, name, "TXT")
+	// Attempt multiple times since this is UDP
+	for i := 0; i < 3; i++ {
+		answers, err = ResolveDNSWithDialContext(ctx, name, "TXT")
+		if err == nil {
+			break
+		}
+	}
+	// Did we receive the DNS answer?
 	if err != nil {
 		return 0, ""
 	}
@@ -398,6 +400,34 @@ func (ns *NetblockService) originLookup(addr string) (int, string) {
 		return 0, ""
 	}
 	return asn, strings.TrimSpace(fields[1])
+}
+
+func (ns *NetblockService) asnLookup(asn int) *ASRecord {
+	var err error
+	var answers []DNSAnswer
+
+	ctx := ns.Config().DNSDialContext
+	// TODO: Make the correct request based on ipv4 or ipv6 address
+
+	// Get the AS record using the ASN
+	name := "AS" + strconv.Itoa(asn) + ".asn.cymru.com"
+	// Attempt multiple times since this is UDP
+	for i := 0; i < 3; i++ {
+		answers, err = ResolveDNSWithDialContext(ctx, name, "TXT")
+		if err == nil {
+			break
+		}
+	}
+	// Did we receive the DNS answer?
+	if err != nil {
+		return nil
+	}
+	// Parse the record returned
+	record := parseASNInfo(answers[0].Data)
+	if record == nil {
+		return nil
+	}
+	return record
 }
 
 func (ns *NetblockService) FetchOnlineNetblockData(asn int) []string {

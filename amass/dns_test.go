@@ -24,7 +24,7 @@ func TestDNSService(t *testing.T) {
 		Domain: testDomain,
 	}
 
-	timeout := time.NewTimer(3 * time.Second)
+	timeout := time.NewTimer(10 * time.Second)
 	defer timeout.Stop()
 
 	select {

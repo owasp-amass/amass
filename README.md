@@ -44,7 +44,7 @@ The most basic use of the tool, which includes reverse DNS lookups and name alte
 $ amass example.com
 ```
 
-**Be sure that the target domain is the last parameter provided to amass, then followed by any extra domains.**
+Be sure that the target **domain is the last parameter** provided to amass, then followed by any extra domains.
 
 You can also provide the initial domain names via an input file:
 ```
@@ -58,7 +58,7 @@ $ amass -v example.com
 www.example.com
 ns.example.com
 ...
-13242 names discovered - search: 211, dns: 4709, archive: 126, brute: 169, alt: 8027
+13242 names discovered - scrape: 211, dns: 4709, archive: 126, brute: 169, alt: 8027
 ```
 
 
@@ -111,8 +111,6 @@ Throttle the rate of DNS queries by number per minute:
 ```
 $ amass -freq 120 example.com
 ```
-
-**The maximum rate supported is one DNS query every 5 milliseconds.**
 
 
 Allow amass to include additional domains in the search using reverse whois information:

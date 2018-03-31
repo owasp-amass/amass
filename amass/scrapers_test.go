@@ -18,13 +18,13 @@ func TestScraperAsk(t *testing.T) {
 	config := DefaultConfig()
 	config.Setup()
 
-	s := AskSearch(out, config)
+	s := AskScrape(out, config)
 
 	go readOutput(out)
 	s.Scrape(testDomain, finished)
 	discovered := <-finished
 	if discovered <= 0 {
-		t.Errorf("AskSearch found %d subdomains", discovered)
+		t.Errorf("AskScrape found %d subdomains", discovered)
 	}
 }
 
@@ -34,13 +34,13 @@ func TestScraperBaidu(t *testing.T) {
 	config := DefaultConfig()
 	config.Setup()
 
-	s := BaiduSearch(out, config)
+	s := BaiduScrape(out, config)
 
 	go readOutput(out)
 	s.Scrape(testDomain, finished)
 	discovered := <-finished
 	if discovered <= 0 {
-		t.Errorf("BaiduSearch found %d subdomains", discovered)
+		t.Errorf("BaiduScrape found %d subdomains", discovered)
 	}
 }
 
@@ -50,13 +50,13 @@ func TestScraperBing(t *testing.T) {
 	config := DefaultConfig()
 	config.Setup()
 
-	s := BingSearch(out, config)
+	s := BingScrape(out, config)
 
 	go readOutput(out)
 	s.Scrape(testDomain, finished)
 	discovered := <-finished
 	if discovered <= 0 {
-		t.Errorf("BingSearch found %d subdomains", discovered)
+		t.Errorf("BingScrape found %d subdomains", discovered)
 	}
 }
 
@@ -66,13 +66,13 @@ func TestScraperDogpile(t *testing.T) {
 	config := DefaultConfig()
 	config.Setup()
 
-	s := DogpileSearch(out, config)
+	s := DogpileScrape(out, config)
 
 	go readOutput(out)
 	s.Scrape(testDomain, finished)
 	discovered := <-finished
 	if discovered <= 0 {
-		t.Errorf("DogpileSearch found %d subdomains", discovered)
+		t.Errorf("DogpileScrape found %d subdomains", discovered)
 	}
 }
 
@@ -82,13 +82,13 @@ func TestScraperGoogle(t *testing.T) {
 	config := DefaultConfig()
 	config.Setup()
 
-	s := GoogleSearch(out, config)
+	s := GoogleScrape(out, config)
 
 	go readOutput(out)
 	s.Scrape(testDomain, finished)
 	discovered := <-finished
 	if discovered <= 0 {
-		t.Errorf("GoogleSearch found %d subdomains", discovered)
+		t.Errorf("GoogleScrape found %d subdomains", discovered)
 	}
 }
 
@@ -98,13 +98,13 @@ func TestScraperYahoo(t *testing.T) {
 	config := DefaultConfig()
 	config.Setup()
 
-	s := YahooSearch(out, config)
+	s := YahooScrape(out, config)
 
 	go readOutput(out)
 	s.Scrape(testDomain, finished)
 	discovered := <-finished
 	if discovered <= 0 {
-		t.Errorf("YahooSearch found %d subdomains", discovered)
+		t.Errorf("YahooScrape found %d subdomains", discovered)
 	}
 }
 
@@ -114,13 +114,13 @@ func TestScraperCensys(t *testing.T) {
 	config := DefaultConfig()
 	config.Setup()
 
-	s := CensysSearch(out, config)
+	s := CensysScrape(out, config)
 
 	go readOutput(out)
 	s.Scrape(testDomain, finished)
 	discovered := <-finished
 	if discovered <= 0 {
-		t.Errorf("CensysSearch found %d subdomains", discovered)
+		t.Errorf("CensysScrape found %d subdomains", discovered)
 	}
 }
 
@@ -130,13 +130,13 @@ func TestScraperCrtsh(t *testing.T) {
 	config := DefaultConfig()
 	config.Setup()
 
-	s := CrtshSearch(out, config)
+	s := CrtshScrape(out, config)
 
 	go readOutput(out)
 	s.Scrape(testDomain, finished)
 	discovered := <-finished
 	if discovered <= 0 {
-		t.Errorf("CrtshSearch found %d subdomains", discovered)
+		t.Errorf("CrtshScrape found %d subdomains", discovered)
 	}
 }
 
@@ -146,13 +146,13 @@ func TestScraperNetcraft(t *testing.T) {
 	config := DefaultConfig()
 	config.Setup()
 
-	s := NetcraftSearch(out, config)
+	s := NetcraftScrape(out, config)
 
 	go readOutput(out)
 	s.Scrape(testDomain, finished)
 	discovered := <-finished
 	if discovered <= 0 {
-		t.Errorf("NetcraftSearch found %d subdomains", discovered)
+		t.Errorf("NetcraftScrape found %d subdomains", discovered)
 	}
 }
 
@@ -162,13 +162,13 @@ func TestScraperRobtex(t *testing.T) {
 	config := DefaultConfig()
 	config.Setup()
 
-	s := RobtexSearch(out, config)
+	s := RobtexScrape(out, config)
 
 	go readOutput(out)
 	s.Scrape(testDomain, finished)
 	discovered := <-finished
 	if discovered <= 0 {
-		t.Errorf("RobtexSearch found %d subdomains", discovered)
+		t.Errorf("RobtexScrape found %d subdomains", discovered)
 	}
 }
 
@@ -178,13 +178,13 @@ func TestScraperThreatCrowd(t *testing.T) {
 	config := DefaultConfig()
 	config.Setup()
 
-	s := ThreatCrowdSearch(out, config)
+	s := ThreatCrowdScrape(out, config)
 
 	go readOutput(out)
 	s.Scrape(testDomain, finished)
 	discovered := <-finished
 	if discovered <= 0 {
-		t.Errorf("ThreatCrowdSearch found %d subdomains", discovered)
+		t.Errorf("ThreatCrowdScrape found %d subdomains", discovered)
 	}
 }
 
@@ -194,13 +194,13 @@ func TestScraperVirusTotal(t *testing.T) {
 	config := DefaultConfig()
 	config.Setup()
 
-	s := VirusTotalSearch(out, config)
+	s := VirusTotalScrape(out, config)
 
 	go readOutput(out)
 	s.Scrape(testDomain, finished)
 	discovered := <-finished
 	if discovered <= 0 {
-		t.Errorf("VirusTotalSearch found %d subdomains", discovered)
+		t.Errorf("VirusTotalScrape found %d subdomains", discovered)
 	}
 }
 
@@ -210,13 +210,13 @@ func TestScraperDNSDumpster(t *testing.T) {
 	config := DefaultConfig()
 	config.Setup()
 
-	s := DNSDumpsterSearch(out, config)
+	s := DNSDumpsterScrape(out, config)
 
 	go readOutput(out)
 	s.Scrape(testDomain, finished)
 	discovered := <-finished
 	if discovered <= 0 {
-		t.Errorf("DNSDumpsterSearch found %d subdomains", discovered)
+		t.Errorf("DNSDumpsterScrape found %d subdomains", discovered)
 	}
 }
 

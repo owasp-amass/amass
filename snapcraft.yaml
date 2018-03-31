@@ -26,6 +26,5 @@ parts:
     after: [go]
     source: https://github.com/caffix/amass
     source-type: git
-    source-tag: v1.3.0
     plugin: go
     go-importpath: github.com/caffix/amass

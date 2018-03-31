@@ -150,14 +150,8 @@ type DNSService struct {
 	// Data collected about various subdomains
 	subdomains map[string]map[int][]string
 
-	// The channel that accepts new AmassRequests for the subdomain manager
-	subIn chan *AmassRequest
-
-	// The channel that outputs AmassRequests from the subdomain manager
-	subOut chan *AmassRequest
-
-	// Results from the initial domain queries come here
-	internal chan *AmassRequest
+	// The queue that accepts new AmassRequests for the subdomain manager
+	subQueue []*AmassRequest
 }
 
 func NewDNSService(in, out chan *AmassRequest, config *AmassConfig) *DNSService {
@@ -166,9 +160,7 @@ func NewDNSService(in, out chan *AmassRequest, config *AmassConfig) *DNSService 
 		inFilter:   make(map[string]struct{}),
 		outFilter:  make(map[string]struct{}),
 		subdomains: make(map[string]map[int][]string),
-		subIn:      make(chan *AmassRequest, 200),
-		subOut:     make(chan *AmassRequest, 200),
-		internal:   make(chan *AmassRequest, 200),
+		subQueue:   make([]*AmassRequest, 0, 50),
 	}
 
 	ds.BaseAmassService = *NewBaseAmassService("DNS Service", config, ds)
@@ -202,15 +194,11 @@ loop:
 		select {
 		case add := <-ds.Input():
 			ds.addToQueue(add)
-		case i := <-ds.internal:
-			ds.addToQueue(i)
 		case <-t.C:
 			// Pops a DNS name off the queue for resolution
 			if next := ds.nextFromQueue(); next != nil {
 				go ds.performDNSRequest(next)
 			}
-		case out := <-ds.subOut:
-			ds.SendOut(out)
 		case <-check.C:
 			if len(ds.queue) == 0 {
 				// Mark the service as NOT active
@@ -223,14 +211,16 @@ loop:
 }
 
 func (ds *DNSService) addToQueue(req *AmassRequest) {
-	req.Name = strings.TrimSpace(trim252F(req.Name))
+	ds.Lock()
+	defer ds.Unlock()
 
-	if req.Name != "" && !ds.duplicate(req.Name) && req.Domain != "" {
-		ds.queue = append(ds.queue, req)
-	}
+	ds.queue = append(ds.queue, req)
 }
 
 func (ds *DNSService) nextFromQueue() *AmassRequest {
+	ds.Lock()
+	defer ds.Unlock()
+
 	var next *AmassRequest
 
 	if len(ds.queue) > 0 {
@@ -253,19 +243,12 @@ func (ds *DNSService) duplicate(name string) bool {
 	return false
 }
 
-func (ds *DNSService) alreadySent(name string) bool {
-	ds.Lock()
-	defer ds.Unlock()
-
-	if _, found := ds.outFilter[name]; found {
-		return true
-	}
-	ds.outFilter[name] = struct{}{}
-	return false
-}
-
 func (ds *DNSService) performDNSRequest(req *AmassRequest) {
 	ds.SetActive(true)
+	// Some initial input validation
+	if req.Name == "" || ds.duplicate(req.Name) || req.Domain == "" {
+		return
+	}
 	// Query a DNS server for the new name
 	config := ds.Config()
 	answers, err := config.dns.Query(req.Name)
@@ -280,7 +263,7 @@ func (ds *DNSService) performDNSRequest(req *AmassRequest) {
 	req.Address = ipstr
 	// If the name didn't come from a search, check it doesn't match a wildcard IP address
 	match := ds.Config().wildcards.DetectWildcard(req)
-	if req.Tag != SEARCH && match {
+	if req.Tag != SCRAPE && match {
 		return
 	}
 	// Return the successfully resolved names + address
@@ -288,7 +271,7 @@ func (ds *DNSService) performDNSRequest(req *AmassRequest) {
 		name := removeLastDot(record.Name)
 
 		// Should this name be sent out?
-		if !strings.HasSuffix(name, req.Domain) || ds.alreadySent(name) {
+		if !strings.HasSuffix(name, req.Domain) {
 			continue
 		}
 		// Check which tag and source info to attach
@@ -299,37 +282,79 @@ func (ds *DNSService) performDNSRequest(req *AmassRequest) {
 			source = req.Source
 		}
 		// Send the name on to the subdomain manager gatekeeper
-		ds.subIn <- &AmassRequest{
+		ds.addToSubQueue(&AmassRequest{
 			Name:    name,
 			Domain:  req.Domain,
 			Address: ipstr,
 			Tag:     tag,
 			Source:  source,
-		}
+		})
 	}
 }
 
 // subdomainManager - Goroutine that handles the discovery of new subdomains
 // It is the last link in the chain before leaving the DNSService
 func (ds *DNSService) subdomainManager() {
+	t := time.NewTicker(ds.Config().Frequency)
+	defer t.Stop()
 loop:
 	for {
 		select {
-		case req := <-ds.subIn:
-			// Make sure we know about any new subdomains
-			ds.checkForNewSubdomain(req)
-			// Assign the correct type for Maltego
-			req.Type = ds.getTypeOfHost(req.Name)
-			// The subdomain manager is now done with it
-			go ds.subMgrSend(req)
+		case <-t.C:
+			ds.performSubManagement()
 		case <-ds.Quit():
 			break loop
 		}
 	}
 }
 
-func (ds *DNSService) subMgrSend(req *AmassRequest) {
-	ds.subOut <- req
+func (ds *DNSService) performSubManagement() {
+	if req := ds.nextFromSubQueue(); req != nil {
+		ds.SetActive(true)
+		// Do not process names we have already seen
+		if ds.alreadySent(req.Name) {
+			return
+		}
+		// Make sure we know about any new subdomains
+		ds.checkForNewSubdomain(req)
+		// Assign the correct type for Maltego
+		req.Type = ds.getTypeOfHost(req.Name)
+		// The subdomain manager is now done with it
+		ds.SendOut(req)
+	}
+}
+
+func (ds *DNSService) addToSubQueue(req *AmassRequest) {
+	ds.Lock()
+	defer ds.Unlock()
+
+	ds.subQueue = append(ds.subQueue, req)
+}
+
+func (ds *DNSService) nextFromSubQueue() *AmassRequest {
+	ds.Lock()
+	defer ds.Unlock()
+
+	var next *AmassRequest
+
+	if len(ds.subQueue) > 0 {
+		next = ds.subQueue[0]
+		// Remove the first slice element
+		if len(ds.subQueue) > 1 {
+			ds.subQueue = ds.subQueue[1:]
+		} else {
+			ds.subQueue = []*AmassRequest{}
+		}
+	}
+	return next
+}
+
+func (ds *DNSService) alreadySent(name string) bool {
+	if _, found := ds.outFilter[name]; found {
+		return true
+	}
+	ds.outFilter[name] = struct{}{}
+	return false
 }
 
 func (ds *DNSService) checkForNewSubdomain(req *AmassRequest) {
@@ -434,7 +459,7 @@ func (ds *DNSService) basicQueries(subdomain, domain string) {
 		answers = append(answers, ans...)
 	}
 	// Check all the popular SRV records
-	for _, name := range popularSRVRecords {
+	/*for _, name := range popularSRVRecords {
 		srvName := name + "." + domain
 
 		ans, err = ResolveDNSWithDialContext(dc, srvName, "SRV")
@@ -445,8 +470,8 @@ func (ds *DNSService) basicQueries(subdomain, domain string) {
 				if srvName != a.Name {
 					continue
 				}
-				ds.addSubdomainEntry(a.Name, a.Type)
-				go ds.sendOnInternal(&AmassRequest{
+				ds.addSubdomainEntry(a.Name, TypeSRV)
+				ds.addToQueue(&AmassRequest{
 					Name:   a.Name,
 					Domain: domain,
 					Tag:    "dns",
@@ -454,7 +479,7 @@ func (ds *DNSService) basicQueries(subdomain, domain string) {
 				})
 			}
 		}
-	}
+	}*/
 	// Only return names within the domain name of interest
 	re := SubdomainRegex(domain)
 	for _, a := range answers {
@@ -470,7 +495,7 @@ func (ds *DNSService) basicQueries(subdomain, domain string) {
 				ds.addSubdomainEntry(sd, rt)
 			}
 
-			go ds.sendOnInternal(&AmassRequest{
+			ds.addToQueue(&AmassRequest{
 				Name:   sd,
 				Type:   rt,
 				Domain: domain,
@@ -479,10 +504,6 @@ func (ds *DNSService) basicQueries(subdomain, domain string) {
 			})
 		}
 	}
-}
-
-func (ds *DNSService) sendOnInternal(req *AmassRequest) {
-	ds.internal <- req
 }
 
 //-------------------------------------------------------------------------------------------------
