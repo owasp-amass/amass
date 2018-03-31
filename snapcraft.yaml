@@ -1,6 +1,6 @@
 name: amass
-version: 'v1.2.1'
-summary: Powerful Subdomain Enumeration
+version: 'v1.3.0'
+summary: In-Depth Subdomain Enumeration
 description: |
   The amass tool searches Internet data sources, performs brute-force 
   subdomain enumeration, searches web archives, and uses machine learning
@@ -24,7 +24,7 @@ parts:
     source-tag: go1.10
   amass:
     after: [go]
-    source: ../
-    source-tag: v1.2.1
+    source: https://github.com/caffix/amass
+    source-tag: v1.3.0
     plugin: go
     go-importpath: github.com/caffix/amass
