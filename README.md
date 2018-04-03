@@ -1,8 +1,8 @@
-# Amass v1.3.0 - Jeff Foley (@jeff_foley)
+# Amass v1.3.1 - Jeff Foley (@jeff_foley)
 
 ### On the Smart and Quiet Side
 
-[![](https://img.shields.io/badge/go-1.10-blue.svg)](https://github.com/moovweb/gvm) [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)[![Snap Status](https://build.snapcraft.io/badge/caffix/amass.svg)](https://build.snapcraft.io/user/caffix/amass)
+[![](https://img.shields.io/badge/go-1.10-blue.svg)](https://github.com/moovweb/gvm) [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0) [![Snap Status](https://build.snapcraft.io/badge/caffix/amass.svg)](https://build.snapcraft.io/user/caffix/amass)
 
 
 The amass tool searches Internet data sources, performs brute force subdomain enumeration, searches web archives, and uses machine learning to generate additional subdomain name guesses. DNS name resolution is performed across many public servers so the authoritative server will see the traffic coming from different locations.
@@ -19,7 +19,7 @@ $ sudo snap install amass
 ```
 
 
-If you would like snap get you the latest unstable build of amass, type the following command:
+If you would like snap to get you the latest unstable build of amass, type the following command:
 ```
 $ sudo snap install --edge amass
 ```
@@ -180,7 +180,7 @@ $ amass -vv -proxy socks5://user:password@192.168.1.1:5050 example.com
 **Thank you** GameXG/ProxyClient for making it easy to implement this feature!
 
 
-## Integrating amass Into Your Work
+## Integrating Amass into Your Work
 
 If you are using the amass package within your own Go code, be sure to properly seed the default pseudo-random number generator:
 ```go
