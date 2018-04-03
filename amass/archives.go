@@ -33,8 +33,11 @@ func NewArchiveService(in, out chan *AmassRequest, config *AmassConfig) *Archive
 	}
 	// Modify the crawler's http client to use our DialContext
 	gocrawl.HttpClient.Transport = &http.Transport{
-		DialContext:         config.DialContext,
-		TLSHandshakeTimeout: 10 * time.Second,
+		DialContext:           config.DialContext,
+		MaxIdleConns:          200,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 5 * time.Second,
 	}
 	// Setup the service
 	as.BaseAmassService = *NewBaseAmassService("Web Archive Service", config, as)
@@ -155,11 +158,11 @@ func ArquivoArchive(out chan<- *AmassRequest) Archiver {
 }
 
 func LibraryCongressArchive(out chan<- *AmassRequest) Archiver {
-	return MementoWebArchive("http://webarchive.loc.gov/all", "LoC Web Archive", out)
+	return MementoWebArchive("http://webarchive.loc.gov/all", "LoC Archive", out)
 }
 
 func UKWebArchive(out chan<- *AmassRequest) Archiver {
-	return MementoWebArchive("http://www.webarchive.org.uk/wayback/archive", "Open UK Archive", out)
+	return MementoWebArchive("http://www.webarchive.org.uk/wayback/archive", "UK Archive", out)
 }
 
 func UKGovArchive(out chan<- *AmassRequest) Archiver {
@@ -167,7 +170,7 @@ func UKGovArchive(out chan<- *AmassRequest) Archiver {
 }
 
 func WaybackMachineArchive(out chan<- *AmassRequest) Archiver {
-	return MementoWebArchive("http://web.archive.org/web", "Internet Archive", out)
+	return MementoWebArchive("http://web.archive.org/web", "INet Archive", out)
 }
 
 /* Private functions */

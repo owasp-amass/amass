@@ -85,17 +85,6 @@ func (ns *NetblockService) initialRequests() {
 			addDomains: true,
 		})
 	}
-	// Enter all IP address requests from ranges
-	for _, rng := range ns.Config().Ranges {
-		ips := RangeHosts(rng)
-
-		for _, ip := range ips {
-			ns.performLookup(&AmassRequest{
-				Address:    ip,
-				addDomains: true,
-			})
-		}
-	}
 	// Enter all IP address requests into the queue
 	for _, ip := range ns.Config().IPs {
 		ns.performLookup(&AmassRequest{
@@ -122,9 +111,11 @@ loop:
 }
 
 func (ns *NetblockService) performLookup(req *AmassRequest) {
-	ns.SetActive(true)
-
 	var rt string
+
+	response := make(chan *AmassRequest, 2)
+
+	ns.SetActive(true)
 	// Which type of lookup will be performed?
 	if req.Address != "" {
 		rt = "IP"
@@ -133,8 +124,6 @@ func (ns *NetblockService) performLookup(req *AmassRequest) {
 	} else if req.ASN != 0 {
 		rt = "ASN"
 	}
-
-	response := make(chan *AmassRequest, 2)
 
 	ns.requests <- &cacheRequest{
 		Req:  req,
@@ -166,21 +155,6 @@ func (ns *NetblockService) sendRequest(req *AmassRequest) {
 		for _, cidr := range ns.Config().CIDRs {
 			if cidr.String() == req.Netblock.String() {
 				pass = true
-				break
-			}
-		}
-	}
-	if !pass && len(ns.Config().Ranges) > 0 {
-		required = true
-		for _, rng := range ns.Config().Ranges {
-			ips := RangeHosts(rng)
-			for _, ip := range ips {
-				if ip == req.Address {
-					pass = true
-					break
-				}
-			}
-			if pass {
 				break
 			}
 		}
@@ -383,11 +357,12 @@ func (ns *NetblockService) originLookup(addr string) (int, string) {
 	// Get the AS number and CIDR for the IP address
 	name := ReverseIP(addr) + ".origin.asn.cymru.com"
 	// Attempt multiple times since this is UDP
-	for i := 0; i < 3; i++ {
+	for i := 0; i < 10; i++ {
 		answers, err = ResolveDNSWithDialContext(ctx, name, "TXT")
 		if err == nil {
 			break
 		}
+		time.Sleep(ns.Config().Frequency)
 	}
 	// Did we receive the DNS answer?
 	if err != nil {
@@ -412,11 +387,12 @@ func (ns *NetblockService) asnLookup(asn int) *ASRecord {
 	// Get the AS record using the ASN
 	name := "AS" + strconv.Itoa(asn) + ".asn.cymru.com"
 	// Attempt multiple times since this is UDP
-	for i := 0; i < 3; i++ {
+	for i := 0; i < 10; i++ {
 		answers, err = ResolveDNSWithDialContext(ctx, name, "TXT")
 		if err == nil {
 			break
 		}
+		time.Sleep(ns.Config().Frequency)
 	}
 	// Did we receive the DNS answer?
 	if err != nil {

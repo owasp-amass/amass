@@ -9,7 +9,6 @@ import (
 	"net"
 	"regexp"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/miekg/dns"
@@ -150,8 +149,8 @@ type DNSService struct {
 	// Data collected about various subdomains
 	subdomains map[string]map[int][]string
 
-	// The queue that accepts new AmassRequests for the subdomain manager
-	subQueue []*AmassRequest
+	// The channel that accepts new AmassRequests for the subdomain manager
+	subMgrIn chan *AmassRequest
 }
 
 func NewDNSService(in, out chan *AmassRequest, config *AmassConfig) *DNSService {
@@ -160,7 +159,7 @@ func NewDNSService(in, out chan *AmassRequest, config *AmassConfig) *DNSService 
 		inFilter:   make(map[string]struct{}),
 		outFilter:  make(map[string]struct{}),
 		subdomains: make(map[string]map[int][]string),
-		subQueue:   make([]*AmassRequest, 0, 50),
+		subMgrIn:   make(chan *AmassRequest, 50),
 	}
 
 	ds.BaseAmassService = *NewBaseAmassService("DNS Service", config, ds)
@@ -193,12 +192,9 @@ loop:
 	for {
 		select {
 		case add := <-ds.Input():
-			ds.addToQueue(add)
+			go ds.addToQueue(add)
 		case <-t.C:
-			// Pops a DNS name off the queue for resolution
-			if next := ds.nextFromQueue(); next != nil {
-				go ds.performDNSRequest(next)
-			}
+			go ds.performDNSRequest()
 		case <-check.C:
 			if len(ds.queue) == 0 {
 				// Mark the service as NOT active
@@ -236,6 +232,9 @@ func (ds *DNSService) nextFromQueue() *AmassRequest {
 }
 
 func (ds *DNSService) duplicate(name string) bool {
+	ds.Lock()
+	defer ds.Unlock()
+
 	if _, found := ds.inFilter[name]; found {
 		return true
 	}
@@ -243,15 +242,40 @@ func (ds *DNSService) duplicate(name string) bool {
 	return false
 }
 
-func (ds *DNSService) performDNSRequest(req *AmassRequest) {
-	ds.SetActive(true)
+func attemptsByTag(tag string) int {
+	num := 1
+
+	switch tag {
+	case "dns", SCRAPE, ARCHIVE:
+		num = 3
+	}
+	return num
+}
+
+func (ds *DNSService) performDNSRequest() {
+	var err error
+	var answers []DNSAnswer
+
+	// Pops a DNS name off the queue for resolution
+	req := ds.nextFromQueue()
 	// Some initial input validation
-	if req.Name == "" || ds.duplicate(req.Name) || req.Domain == "" {
+	if req == nil || req.Name == "" || ds.duplicate(req.Name) || req.Domain == "" {
 		return
 	}
-	// Query a DNS server for the new name
-	config := ds.Config()
-	answers, err := config.dns.Query(req.Name)
+
+	ds.SetActive(true)
+	dns := ds.Config().dns
+	// Make multiple attempts based on source of the name
+	num := attemptsByTag(req.Tag)
+	for i := 0; i < num; i++ {
+		// Query a DNS server for the new name
+		answers, err = dns.Query(req.Name)
+		if err == nil {
+			break
+		}
+		time.Sleep(ds.Config().Frequency)
+	}
+	// If the name did not resolve, we are finished
 	if err != nil {
 		return
 	}
@@ -261,9 +285,10 @@ func (ds *DNSService) performDNSRequest(req *AmassRequest) {
 		return
 	}
 	req.Address = ipstr
-	// If the name didn't come from a search, check it doesn't match a wildcard IP address
-	match := ds.Config().wildcards.DetectWildcard(req)
-	if req.Tag != SCRAPE && match {
+
+	wild := ds.Config().wildcards
+	// If the name didn't come from a search, check for a wildcard IP address
+	if req.Tag != SCRAPE && wild.DetectWildcard(req) {
 		return
 	}
 	// Return the successfully resolved names + address
@@ -281,72 +306,43 @@ func (ds *DNSService) performDNSRequest(req *AmassRequest) {
 			tag = req.Tag
 			source = req.Source
 		}
-		// Send the name on to the subdomain manager gatekeeper
-		ds.addToSubQueue(&AmassRequest{
+		// Send the name to the subdomain manager
+		ds.subMgrIn <- &AmassRequest{
 			Name:    name,
 			Domain:  req.Domain,
 			Address: ipstr,
 			Tag:     tag,
 			Source:  source,
-		})
+		}
 	}
 }
 
 // subdomainManager - Goroutine that handles the discovery of new subdomains
 // It is the last link in the chain before leaving the DNSService
 func (ds *DNSService) subdomainManager() {
-	t := time.NewTicker(ds.Config().Frequency)
-	defer t.Stop()
 loop:
 	for {
 		select {
-		case <-t.C:
-			ds.performSubManagement()
+		case req := <-ds.subMgrIn:
+			ds.performSubManagement(req)
 		case <-ds.Quit():
 			break loop
 		}
 	}
 }
 
-func (ds *DNSService) performSubManagement() {
-	if req := ds.nextFromSubQueue(); req != nil {
-		ds.SetActive(true)
-		// Do not process names we have already seen
-		if ds.alreadySent(req.Name) {
-			return
-		}
-		// Make sure we know about any new subdomains
-		ds.checkForNewSubdomain(req)
-		// Assign the correct type for Maltego
-		req.Type = ds.getTypeOfHost(req.Name)
-		// The subdomain manager is now done with it
-		ds.SendOut(req)
+func (ds *DNSService) performSubManagement(req *AmassRequest) {
+	ds.SetActive(true)
+	// Do not process names we have already seen
+	if ds.alreadySent(req.Name) {
+		return
 	}
-}
-
-func (ds *DNSService) addToSubQueue(req *AmassRequest) {
-	ds.Lock()
-	defer ds.Unlock()
-
-	ds.subQueue = append(ds.subQueue, req)
-}
-
-func (ds *DNSService) nextFromSubQueue() *AmassRequest {
-	ds.Lock()
-	defer ds.Unlock()
-
-	var next *AmassRequest
-
-	if len(ds.subQueue) > 0 {
-		next = ds.subQueue[0]
-		// Remove the first slice element
-		if len(ds.subQueue) > 1 {
-			ds.subQueue = ds.subQueue[1:]
-		} else {
-			ds.subQueue = []*AmassRequest{}
-		}
-	}
-	return next
+	// Make sure we know about any new subdomains
+	ds.checkForNewSubdomain(req)
+	// Assign the correct type for Maltego
+	req.Type = ds.getTypeOfHost(req.Name)
+	// The subdomain manager is now done with it
+	ds.SendOut(req)
 }
 
 func (ds *DNSService) alreadySent(name string) bool {
@@ -383,6 +379,7 @@ func (ds *DNSService) checkForNewSubdomain(req *AmassRequest) {
 	}
 	// Otherwise, run the basic queries against this name
 	ds.basicQueries(sub, req.Domain)
+	go ds.queryServiceNames(sub, req.Domain)
 }
 
 func (ds *DNSService) dupSubdomain(sub string) bool {
@@ -400,15 +397,14 @@ func (ds *DNSService) addSubdomainEntry(name string, qt int) {
 	if _, found := ds.subdomains[sub]; !found {
 		ds.subdomains[sub] = make(map[int][]string)
 	}
-
 	ds.subdomains[sub][qt] = UniqueAppend(ds.subdomains[sub][qt], name)
 }
 
 func (ds *DNSService) getTypeOfHost(name string) int {
+	var qt int
+
 	labels := strings.Split(name, ".")
 	sub := strings.Join(labels[1:], ".")
-
-	var qt int
 loop:
 	for t := range ds.subdomains[sub] {
 		for _, n := range ds.subdomains[sub][t] {
@@ -458,28 +454,6 @@ func (ds *DNSService) basicQueries(subdomain, domain string) {
 	if err == nil {
 		answers = append(answers, ans...)
 	}
-	// Check all the popular SRV records
-	/*for _, name := range popularSRVRecords {
-		srvName := name + "." + domain
-
-		ans, err = ResolveDNSWithDialContext(dc, srvName, "SRV")
-		if err == nil {
-			answers = append(answers, ans...)
-			// Send the name of the service record itself as an AmassRequest
-			for _, a := range ans {
-				if srvName != a.Name {
-					continue
-				}
-				ds.addSubdomainEntry(a.Name, TypeSRV)
-				ds.addToQueue(&AmassRequest{
-					Name:   a.Name,
-					Domain: domain,
-					Tag:    "dns",
-					Source: "Forward DNS",
-				})
-			}
-		}
-	}*/
 	// Only return names within the domain name of interest
 	re := SubdomainRegex(domain)
 	for _, a := range answers {
@@ -494,7 +468,7 @@ func (ds *DNSService) basicQueries(subdomain, domain string) {
 				rt = TypeMX
 				ds.addSubdomainEntry(sd, rt)
 			}
-
+			// Put this on the DNSService.queue
 			ds.addToQueue(&AmassRequest{
 				Name:   sd,
 				Type:   rt,
@@ -506,12 +480,40 @@ func (ds *DNSService) basicQueries(subdomain, domain string) {
 	}
 }
 
+func (ds *DNSService) queryServiceNames(subdomain, domain string) {
+	var answers []DNSAnswer
+
+	dc := ds.Config().DNSDialContext
+	// Check all the popular SRV records
+	for _, name := range popularSRVRecords {
+		srvName := name + "." + subdomain
+
+		ans, err := ResolveDNSWithDialContext(dc, srvName, "SRV")
+		if err == nil {
+			answers = append(answers, ans...)
+			// Send the name of the service record itself as an AmassRequest
+			for _, a := range ans {
+				if srvName != a.Name {
+					continue
+				}
+				// Put this on the DNSService.queue
+				ds.addToQueue(&AmassRequest{
+					Name:   a.Name,
+					Domain: domain,
+					Tag:    "dns",
+					Source: "Forward DNS",
+				})
+			}
+		}
+		// Do not go too fast
+		time.Sleep(ds.Config().Frequency)
+	}
+}
+
 //-------------------------------------------------------------------------------------------------
 // DNS Query
 
 type queries struct {
-	sync.Mutex
-
 	// Configuration for the amass enumeration
 	config *AmassConfig
 }
@@ -592,50 +594,80 @@ func (q *queries) Lookup(name, t string) []DNSAnswer {
 // All usage of the miekg/dns package
 
 func ResolveDNSWithDialContext(dc dialCtx, name, qtype string) ([]DNSAnswer, error) {
-	var qt uint16
-
-	switch qtype {
-	case "CNAME":
-		qt = dns.TypeCNAME
-	case "A":
-		qt = dns.TypeA
-	case "AAAA":
-		qt = dns.TypeAAAA
-	case "PTR":
-		qt = dns.TypePTR
-	case "NS":
-		qt = dns.TypeNS
-	case "MX":
-		qt = dns.TypeMX
-	case "TXT":
-		qt = dns.TypeTXT
-	case "SOA":
-		qt = dns.TypeSOA
-	case "SPF":
-		qt = dns.TypeSPF
-	case "SRV":
-		qt = dns.TypeSRV
-	default:
-		return []DNSAnswer{}, errors.New("Unsupported DNS type")
+	qt, err := textToTypeNum(qtype)
+	if err != nil {
+		return []DNSAnswer{}, err
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	// Set the maximum time allowed for making the connection
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 
 	conn, err := dc(ctx, "udp", "")
 	if err != nil {
 		return []DNSAnswer{}, errors.New("Failed to connect to the server")
 	}
+	defer conn.Close()
 
-	ans := DNSExchange(conn, name, qt)
+	ans := DNSExchangeConn(conn, name, qt)
 	if len(ans) == 0 {
 		return []DNSAnswer{}, errors.New("The query was unsuccessful")
 	}
 	return ans, nil
 }
 
+func ReverseDNSWithDialContext(dc dialCtx, ip string) (string, error) {
+	var name string
+
+	addr := ReverseIP(ip) + ".in-addr.arpa"
+	answers, err := ResolveDNSWithDialContext(dc, addr, "PTR")
+	if err == nil {
+		if answers[0].Type == 12 {
+			l := len(answers[0].Data)
+
+			name = answers[0].Data[:l-1]
+		}
+
+		if name == "" {
+			err = errors.New("PTR record not found")
+		}
+	}
+	return name, err
+}
+
+func textToTypeNum(text string) (uint16, error) {
+	var qtype uint16
+
+	switch text {
+	case "CNAME":
+		qtype = dns.TypeCNAME
+	case "A":
+		qtype = dns.TypeA
+	case "AAAA":
+		qtype = dns.TypeAAAA
+	case "PTR":
+		qtype = dns.TypePTR
+	case "NS":
+		qtype = dns.TypeNS
+	case "MX":
+		qtype = dns.TypeMX
+	case "TXT":
+		qtype = dns.TypeTXT
+	case "SOA":
+		qtype = dns.TypeSOA
+	case "SPF":
+		qtype = dns.TypeSPF
+	case "SRV":
+		qtype = dns.TypeSRV
+	}
+
+	if qtype == 0 {
+		return qtype, errors.New("DNS message type not supported")
+	}
+	return qtype, nil
+}
+
 // DNSExchange - Encapsulates miekg/dns usage
-func DNSExchange(conn net.Conn, name string, qtype uint16) []DNSAnswer {
+func DNSExchangeConn(conn net.Conn, name string, qtype uint16) []DNSAnswer {
 	m := &dns.Msg{
 		MsgHdr: dns.MsgHdr{
 			Authoritative:     false,
@@ -658,8 +690,9 @@ func DNSExchange(conn net.Conn, name string, qtype uint16) []DNSAnswer {
 	var answers []DNSAnswer
 	// Perform the DNS query
 	co := &dns.Conn{Conn: conn}
-	defer conn.Close()
 	co.WriteMsg(m)
+	// Set the maximum time for receiving the answer
+	co.SetReadDeadline(time.Now().Add(3 * time.Second))
 	r, err := co.ReadMsg()
 	if err != nil {
 		return answers
@@ -669,8 +702,23 @@ func DNSExchange(conn net.Conn, name string, qtype uint16) []DNSAnswer {
 		return answers
 	}
 
+	data := extractRawData(r, qtype)
+
+	for _, a := range data {
+		answers = append(answers, DNSAnswer{
+			Name: name,
+			Type: int(qtype),
+			TTL:  0,
+			Data: strings.TrimSpace(a),
+		})
+	}
+	return answers
+}
+
+func extractRawData(msg *dns.Msg, qtype uint16) []string {
 	var data []string
-	for _, a := range r.Answer {
+
+	for _, a := range msg.Answer {
 		if a.Header().Rrtype == qtype {
 			switch qtype {
 			case dns.TypeA:
@@ -726,16 +774,7 @@ func DNSExchange(conn net.Conn, name string, qtype uint16) []DNSAnswer {
 			}
 		}
 	}
-
-	for _, a := range data {
-		answers = append(answers, DNSAnswer{
-			Name: name,
-			Type: int(qtype),
-			TTL:  0,
-			Data: strings.TrimSpace(a),
-		})
-	}
-	return answers
+	return data
 }
 
 // setupOptions - Returns the EDNS0_SUBNET option for hiding our location
@@ -755,25 +794,6 @@ func setupOptions() *dns.OPT {
 		},
 		Option: []dns.EDNS0{e},
 	}
-}
-
-func ReverseDNSWithDialContext(dc dialCtx, ip string) (string, error) {
-	var name string
-
-	addr := ReverseIP(ip) + ".in-addr.arpa"
-	answers, err := ResolveDNSWithDialContext(dc, addr, "PTR")
-	if err == nil {
-		if answers[0].Type == 12 {
-			l := len(answers[0].Data)
-
-			name = answers[0].Data[:l-1]
-		}
-
-		if name == "" {
-			err = errors.New("PTR record not found")
-		}
-	}
-	return name, err
 }
 
 // Goes through the DNS answers looking for A and AAAA records,

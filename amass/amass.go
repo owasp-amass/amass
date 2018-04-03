@@ -14,6 +14,8 @@ import (
 )
 
 const (
+	Version string = "v1.3.1"
+	Author  string = "Jeff Foley (@jeff_foley)"
 	// Tags used to mark the data source with the Subdomain struct
 	ALT     = "alt"
 	BRUTE   = "brute"
@@ -31,14 +33,6 @@ const (
 
 	defaultWordlistURL = "https://raw.githubusercontent.com/caffix/amass/master/wordlists/namelist.txt"
 )
-
-type IPRange struct {
-	// The first IP address in the range
-	Start net.IP
-
-	// The last IP address in the range
-	End net.IP
-}
 
 type dialCtx func(ctx context.Context, network, addr string) (net.Conn, error)
 
@@ -65,8 +59,7 @@ func StartEnumeration(config *AmassConfig) error {
 	alt := make(chan *AmassRequest, bufSize)
 	sweep := make(chan *AmassRequest, bufSize)
 	resolved = append(resolved, netblock, archive, alt, brute, ngram)
-	// DNS and Reverse IP need the frequency set
-	config.Frequency *= 2
+	// DNS and ReverseDNS need the frequency set
 	dnsSrv := NewDNSService(dns, dnsMux, config)
 	reverseipSrv := NewReverseDNSService(reverseip, dns, config)
 	// Add these service to the slice
@@ -257,12 +250,12 @@ func trim252F(name string) string {
 	return s
 }
 
-func RangeHosts(rng *IPRange) []string {
+func RangeHosts(start, end net.IP) []string {
 	var ips []string
 
-	stop := net.ParseIP(rng.End.String())
+	stop := net.ParseIP(end.String())
 	addrInc(stop)
-	for ip := net.ParseIP(rng.Start.String()); !ip.Equal(stop); addrInc(ip) {
+	for ip := net.ParseIP(start.String()); !ip.Equal(stop); addrInc(ip) {
 		ips = append(ips, ip.String())
 	}
 	return ips
@@ -332,10 +325,7 @@ func CIDRSubset(cidr *net.IPNet, addr string, num int) []string {
 		return []string{first.String()}
 	}
 	// Return the IP addresses within the range
-	return RangeHosts(&IPRange{
-		Start: first,
-		End:   last,
-	})
+	return RangeHosts(first, last)
 }
 
 func ReverseIP(ip string) string {

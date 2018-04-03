@@ -9,7 +9,6 @@ import (
 )
 
 func TestDNSService(t *testing.T) {
-	name := "www." + testDomain
 	in := make(chan *AmassRequest, 2)
 	out := make(chan *AmassRequest, 2)
 	config := DefaultConfig()
@@ -19,6 +18,7 @@ func TestDNSService(t *testing.T) {
 	s := NewDNSService(in, out, config)
 	s.Start()
 
+	name := "www." + testDomain
 	in <- &AmassRequest{
 		Name:   name,
 		Domain: testDomain,

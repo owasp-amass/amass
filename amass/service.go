@@ -9,11 +9,11 @@ import (
 	"sync"
 )
 
+// Node types used in the Maltego local transform
 const (
 	TypeNorm int = iota
 	TypeNS
 	TypeMX
-	TypeSRV
 	TypeWeb
 )
 

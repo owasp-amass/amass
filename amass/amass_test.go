@@ -15,12 +15,10 @@ const (
 )
 
 func TestAmassRangeHosts(t *testing.T) {
-	rng := &IPRange{
-		Start: net.ParseIP("72.237.4.1"),
-		End:   net.ParseIP("72.237.4.50"),
-	}
+	start := net.ParseIP("72.237.4.1")
+	end := net.ParseIP("72.237.4.50")
 
-	ips := RangeHosts(rng)
+	ips := RangeHosts(start, end)
 	if num := len(ips); num != 50 {
 		t.Errorf("%d IP address strings were returned by RangeHosts instead of %d\n", num, 50)
 	}

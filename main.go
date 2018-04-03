@@ -5,6 +5,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -21,9 +22,26 @@ import (
 
 	"github.com/caffix/amass/amass"
 	"github.com/caffix/recon"
+	"github.com/fatih/color"
 )
 
-var AsciiArt string = `
+type outputParams struct {
+	Verbose  bool
+	Sources  bool
+	PrintIPs bool
+	FileOut  string
+	Results  chan *amass.AmassRequest
+	Finish   chan struct{}
+	Done     chan struct{}
+}
+
+// Types that implement the flag.Value interface for parsing
+type parseIPs []net.IP
+type parseCIDRs []*net.IPNet
+type parseInts []int
+
+var (
+	banner string = `
 
         .+++:.            :                             .+++.                   
       +W@@@@@@8        &+W@#               o8W8:      +W@@@@@@#.   oW@@@W#+     
@@ -38,102 +56,79 @@ var AsciiArt string = `
       :W@@WWWW@@8       +              :&W@@@@&    &W  .o#@@W&.   :W@WWW@@&     
         +o&&&&+.                                                    +oooo.                          
 
-                                                  Subdomain Enumeration Tool
-                                           Coded By Jeff Foley (@jeff_foley)
-
 `
-
-type outputParams struct {
-	Verbose  bool
-	Sources  bool
-	PrintIPs bool
-	FileOut  string
-	Results  chan *amass.AmassRequest
-	Finish   chan struct{}
-	Done     chan struct{}
-}
-
-type IPs struct {
-	Addrs  []net.IP
-	Ranges []*amass.IPRange
-}
+	// Colors used to ease the reading of program output
+	y      = color.New(color.FgHiYellow)
+	g      = color.New(color.FgHiGreen)
+	r      = color.New(color.FgHiRed)
+	b      = color.New(color.FgHiBlue)
+	yellow = color.New(color.FgHiYellow).SprintFunc()
+	green  = color.New(color.FgHiGreen).SprintFunc()
+	blue   = color.New(color.FgHiBlue).SprintFunc()
+	// Command-line switches and provided parameters
+	help        = flag.Bool("h", false, "Show the program usage message")
+	version     = flag.Bool("version", false, "Print the version number of this amass binary")
+	ips         = flag.Bool("ip", false, "Show the IP addresses for discovered names")
+	brute       = flag.Bool("brute", false, "Execute brute forcing after searches")
+	recursive   = flag.Bool("norecursive", true, "Turn off recursive brute forcing")
+	alts        = flag.Bool("noalts", true, "Disable generation of altered names")
+	verbose     = flag.Bool("v", false, "Print the summary information")
+	extra       = flag.Bool("vv", false, "Print the data source information")
+	whois       = flag.Bool("whois", false, "Include domains discoverd with reverse whois")
+	list        = flag.Bool("l", false, "List all domains to be used in an enumeration")
+	freq        = flag.Int64("freq", 0, "Sets the number of max DNS queries per minute")
+	wordlist    = flag.String("w", "", "Path to a different wordlist file")
+	outfile     = flag.String("o", "", "Path to the output file")
+	domainsfile = flag.String("df", "", "Path to a file providing root domain names")
+	proxy       = flag.String("proxy", "", "The URL used to reach the proxy")
+)
 
 func main() {
-	var freq int64
-	var ASNs, Ports []int
-	var CIDRs []*net.IPNet
-	var wordlist, outfile, domainsfile, asns, addrs, cidrs, ports, proxy string
-	var fwd, verbose, extra, ips, brute, recursive, alts, whois, list, help bool
+	var addrs parseIPs
+	var cidrs parseCIDRs
+	var asns, ports parseInts
 
-	flag.BoolVar(&help, "h", false, "Show the program usage message")
-	flag.BoolVar(&ips, "ip", false, "Show the IP addresses for discovered names")
-	flag.BoolVar(&brute, "brute", false, "Execute brute forcing after searches")
-	flag.BoolVar(&recursive, "norecursive", true, "Turn off recursive brute forcing")
-	flag.BoolVar(&alts, "noalts", true, "Disable generation of altered names")
-	flag.BoolVar(&verbose, "v", false, "Print the summary information")
-	flag.BoolVar(&extra, "vv", false, "Print the data source information")
-	flag.BoolVar(&whois, "whois", false, "Include domains discoverd with reverse whois")
-	flag.BoolVar(&list, "l", false, "List all domains to be used in an enumeration")
-	flag.Int64Var(&freq, "freq", 0, "Sets the number of max DNS queries per minute")
-	flag.StringVar(&wordlist, "w", "", "Path to a different wordlist file")
-	flag.StringVar(&outfile, "o", "", "Path to the output file")
-	flag.StringVar(&domainsfile, "df", "", "Path to a file providing root domain names")
-	flag.StringVar(&asns, "asn", "", "ASNs to be probed for certificates")
-	flag.StringVar(&addrs, "addr", "", "IPs and ranges to be probed for certificates")
-	flag.StringVar(&cidrs, "net", "", "CIDRs to be probed for certificates")
-	flag.StringVar(&ports, "p", "", "Ports to be checked for certificates")
-	flag.StringVar(&proxy, "proxy", "", "The URL used to reach the proxy")
+	buf := new(bytes.Buffer)
+	flag.CommandLine.SetOutput(buf)
+
+	flag.Var(&addrs, "addr", "IPs and ranges to be probed for certificates")
+	flag.Var(&cidrs, "net", "CIDRs to be probed for certificates")
+	flag.Var(&asns, "asn", "ASNs to be probed for certificates")
+	flag.Var(&ports, "p", "Ports to be checked for certificates")
 	flag.Parse()
 
-	if extra {
-		verbose = true
+	// Should the help output be provided?
+	if *help {
+		printBanner()
+		g.Printf("Usage: %s [options] domain domain2 domain3... (e.g. example.com)\n", path.Base(os.Args[0]))
+		flag.PrintDefaults()
+		g.Println(buf.String())
+		return
 	}
-	if asns != "" {
-		ASNs = parseInts(asns)
-		fwd = true
+	if *version {
+		fmt.Printf("version %s\n", amass.Version)
+		return
 	}
-	ipAddresses := &IPs{}
-	if addrs != "" {
-		ipAddresses = parseIPs(addrs)
-		fwd = true
-	}
-	if cidrs != "" {
-		CIDRs = parseCIDRs(cidrs)
-		fwd = true
-	}
-	if ports != "" {
-		Ports = parseInts(ports)
+	if *extra {
+		*verbose = true
 	}
 	// Get root domain names provided from the command-line
 	domains := flag.Args()
 	// Now, get domains provided by a file
-	if domainsfile != "" {
-		domains = amass.UniqueAppend(domains, getLinesFromFile(domainsfile)...)
+	if *domainsfile != "" {
+		domains = amass.UniqueAppend(domains, getLinesFromFile(*domainsfile)...)
 	}
-	if len(domains) > 0 {
-		fwd = true
-	}
-	// Should the help output be provided?
-	if help || !fwd {
-		fmt.Println(AsciiArt)
-		fmt.Printf("Usage: %s [options] domain domain2 domain3... (e.g. example.com)\n", path.Base(os.Args[0]))
-		flag.PrintDefaults()
-		return
-	}
-
-	if whois {
+	if *whois {
 		// Add the domains discovered by whois
 		domains = amass.UniqueAppend(domains, recon.ReverseWhois(flag.Arg(0))...)
 	}
-
-	if list {
+	if *list {
 		// Just show the domains and quit
 		for _, d := range domains {
 			fmt.Println(d)
 		}
 		return
 	}
-
 	// Seed the default pseudo-random number generator
 	rand.Seed(time.Now().UTC().UnixNano())
 
@@ -142,10 +137,10 @@ func main() {
 	results := make(chan *amass.AmassRequest, 100)
 
 	go manageOutput(&outputParams{
-		Verbose:  verbose,
-		Sources:  extra,
-		PrintIPs: ips,
-		FileOut:  outfile,
+		Verbose:  *verbose,
+		Sources:  *extra,
+		PrintIPs: *ips,
+		FileOut:  *outfile,
 		Results:  results,
 		Finish:   finish,
 		Done:     done,
@@ -154,21 +149,20 @@ func main() {
 	go catchSignals(finish, done)
 	// Grab the words from an identified wordlist
 	var words []string
-	if wordlist != "" {
-		words = getLinesFromFile(wordlist)
+	if *wordlist != "" {
+		words = getLinesFromFile(*wordlist)
 	}
 	// Setup the amass configuration
 	config := amass.CustomConfig(&amass.AmassConfig{
-		ASNs:         ASNs,
-		CIDRs:        CIDRs,
-		IPs:          ipAddresses.Addrs,
-		Ranges:       ipAddresses.Ranges,
-		Ports:        Ports,
+		IPs:          addrs,
+		ASNs:         asns,
+		CIDRs:        cidrs,
+		Ports:        ports,
 		Wordlist:     words,
-		BruteForcing: brute,
-		Recursive:    recursive,
-		Alterations:  alts,
-		Frequency:    freqToDuration(freq),
+		BruteForcing: *brute,
+		Recursive:    *recursive,
+		Alterations:  *alts,
+		Frequency:    freqToDuration(*freq),
 		Output:       results,
 	})
 	config.AddDomains(domains)
@@ -177,22 +171,42 @@ func main() {
 		config.AdditionalDomains = true
 	}
 	// Check if a proxy connection should be setup
-	if proxy != "" {
-		err := config.SetupProxyConnection(proxy)
+	if *proxy != "" {
+		err := config.SetupProxyConnection(*proxy)
 		if err != nil {
-			fmt.Println("The proxy address provided failed to make a connection")
+			r.Println("The proxy address provided failed to make a connection")
 			return
 		}
 	}
-
 	//profFile, _ := os.Create("amass_debug.prof")
 	//pprof.StartCPUProfile(profFile)
 	//defer pprof.StopCPUProfile()
-
-	amass.StartEnumeration(config)
+	err := amass.StartEnumeration(config)
+	if err != nil {
+		r.Println(err)
+	}
 	// Signal for output to finish
 	finish <- struct{}{}
 	<-done
+}
+
+func printBanner() {
+	rightmost := 76
+	desc := "In-Depth Subdomain Enumeration"
+	author := "Coded By " + amass.Author
+
+	pad := func(num int) {
+		for i := 0; i < num; i++ {
+			fmt.Print(" ")
+		}
+	}
+	r.Println(banner)
+	pad(rightmost - len(amass.Version))
+	y.Println(amass.Version)
+	pad(rightmost - len(desc))
+	y.Println(desc)
+	pad(rightmost - len(author))
+	y.Printf("%s\n\n\n", author)
 }
 
 type asnData struct {
@@ -213,19 +227,19 @@ loop:
 			total++
 			updateData(result, tags, asns)
 
-			var line string
+			var source, comma, ip string
 			if params.Sources {
-				line += fmt.Sprintf("%-14s", "["+result.Source+"] ")
+				source = fmt.Sprintf("%-14s", "["+result.Source+"] ")
 			}
 			if params.PrintIPs {
-				line += fmt.Sprintf("%s\n", result.Name+","+result.Address)
-			} else {
-				line += fmt.Sprintf("%s\n", result.Name)
+				comma = ","
+				ip = result.Address
 			}
 
 			// Add line to the others and print it out
-			allLines += line
-			fmt.Print(line)
+			allLines += fmt.Sprintf("%s%s%s%s\n", source, result.Name, comma, ip)
+			fmt.Fprintf(color.Output, "%s%s%s%s\n",
+				blue(source), green(result.Name), green(comma), yellow(ip))
 		case <-params.Finish:
 			break loop
 		}
@@ -260,36 +274,47 @@ func updateData(req *amass.AmassRequest, tags map[string]int, asns map[int]*asnD
 
 func printSummary(total int, tags map[string]int, asns map[int]*asnData) {
 	if total == 0 {
-		fmt.Println("No names were discovered")
+		r.Println("No names were discovered")
 		return
 	}
-	fmt.Printf("\n%d names discovered - ", total)
+	pad := func(num int, chr string) {
+		for i := 0; i < num; i++ {
+			b.Print(chr)
+		}
+	}
 
+	fmt.Println()
+	// Print the header information
+	b.Print("Amass " + amass.Version)
+	num := 80 - (len(amass.Version) + len(amass.Author) + 6)
+	pad(num, " ")
+	b.Printf("%s\n", amass.Author)
+	pad(8, "----------")
+	fmt.Fprintf(color.Output, "\n%s%s", yellow(strconv.Itoa(total)), green(" names discovered - "))
 	// Print the stats using tag information
 	num, length := 1, len(tags)
 	for k, v := range tags {
-		fmt.Printf("%s: %d", k, v)
+		fmt.Fprintf(color.Output, "%s: %s", green(k), yellow(strconv.Itoa(v)))
 		if num < length {
-			fmt.Print(", ")
+			g.Print(", ")
 		}
 		num++
 	}
-	fmt.Println("")
-
-	// Print a line across the terminal
-	for i := 0; i < 8; i++ {
-		fmt.Print("----------")
-	}
-	fmt.Println("")
-
+	fmt.Println()
+	// Another line gets printed
+	pad(8, "----------")
+	fmt.Println()
 	// Print the ASN and netblock information
 	for asn, data := range asns {
-		fmt.Printf("ASN: %d - %s\n", asn, data.Name)
+		fmt.Fprintf(color.Output, "%s%s %s %s\n",
+			blue("ASN: "), yellow(strconv.Itoa(asn)), green("-"), green(data.Name))
 
 		for cidr, ips := range data.Netblocks {
-			s := strconv.Itoa(ips)
+			countstr := fmt.Sprintf("\t%-4s", strconv.Itoa(ips))
+			cidrstr := fmt.Sprintf("\t%-18s", cidr)
 
-			fmt.Printf("\t%-18s\t%-3s Subdomain Name(s)\n", cidr, s)
+			fmt.Fprintf(color.Output, "%s%s %s\n",
+				yellow(cidrstr), yellow(countstr), blue("Subdomain Name(s)"))
 		}
 	}
 }
@@ -349,49 +374,87 @@ func freqToDuration(freq int64) time.Duration {
 	return amass.DefaultConfig().Frequency
 }
 
-func parseInts(s string) []int {
-	var results []int
-
-	nums := strings.Split(s, ",")
-
-	for _, n := range nums {
-		i, err := strconv.Atoi(n)
-		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
-		}
-		results = append(results, i)
+// parseInts implementation of the flag.Value interface
+func (p *parseInts) String() string {
+	if p == nil {
+		return ""
 	}
-	return results
+
+	var nums []string
+	for _, n := range *p {
+		nums = append(nums, strconv.Itoa(n))
+	}
+	return strings.Join(nums, ",")
 }
 
-func parseIPs(s string) *IPs {
-	results := new(IPs)
+func (p *parseInts) Set(s string) error {
+	if s == "" {
+		return fmt.Errorf("Integer parsing failed")
+	}
+
+	nums := strings.Split(s, ",")
+	for _, n := range nums {
+		i, err := strconv.Atoi(strings.TrimSpace(n))
+		if err != nil {
+			return err
+		}
+		*p = append(*p, i)
+	}
+	return nil
+}
+
+// parseIPs implementation of the flag.Value interface
+func (p *parseIPs) String() string {
+	if p == nil {
+		return ""
+	}
+
+	var ipaddrs []string
+	for _, ipaddr := range *p {
+		ipaddrs = append(ipaddrs, ipaddr.String())
+	}
+	return strings.Join(ipaddrs, ",")
+}
+
+func (p *parseIPs) Set(s string) error {
+	if s == "" {
+		return fmt.Errorf("IP address parsing failed")
+	}
 
 	ips := strings.Split(s, ",")
-
 	for _, ip := range ips {
 		// Is this an IP range?
-		rng := parseRange(ip)
-		if rng != nil {
-			results.Ranges = append(results.Ranges, rng)
+		err := p.parseRange(ip)
+		if err == nil {
 			continue
 		}
 		addr := net.ParseIP(ip)
 		if addr == nil {
-			fmt.Printf("%s is not a valid IP address\n", ip)
-			os.Exit(1)
+			return fmt.Errorf("%s is not a valid IP address or range", ip)
 		}
-		results.Addrs = append(results.Addrs, addr)
+		*p = append(*p, addr)
 	}
-	return results
+	return nil
 }
 
-func parseRange(s string) *amass.IPRange {
+func (p *parseIPs) appendIPString(addrs []string) error {
+	for _, addr := range addrs {
+		ip := net.ParseIP(addr)
+		if ip == nil {
+			return fmt.Errorf("Failed to parse %s as an IP address", addr)
+		}
+
+		*p = append(*p, ip)
+	}
+	return nil
+}
+
+func (p *parseIPs) parseRange(s string) error {
 	twoIPs := strings.Split(s, "-")
+
 	if twoIPs[0] == s {
 		// This is not an IP range
-		return nil
+		return fmt.Errorf("%s is not a valid IP range", s)
 	}
 	start := net.ParseIP(twoIPs[0])
 	end := net.ParseIP(twoIPs[1])
@@ -404,27 +467,37 @@ func parseRange(s string) *amass.IPRange {
 	}
 	if start == nil || end == nil {
 		// These should have parsed properly
-		fmt.Printf("%s is not a valid IP range\n", s)
-		os.Exit(1)
+		return fmt.Errorf("%s is not a valid IP range", s)
 	}
-	return &amass.IPRange{
-		Start: start,
-		End:   end,
-	}
+	return p.appendIPString(amass.RangeHosts(start, end))
 }
 
-func parseCIDRs(s string) []*net.IPNet {
-	var results []*net.IPNet
+// parseCIDRs implementation of the flag.Value interface
+func (p *parseCIDRs) String() string {
+	if p == nil {
+		return ""
+	}
+
+	var cidrs []string
+	for _, ipnet := range *p {
+		cidrs = append(cidrs, ipnet.String())
+	}
+	return strings.Join(cidrs, ",")
+}
+
+func (p *parseCIDRs) Set(s string) error {
+	if s == "" {
+		return fmt.Errorf("%s is not a valid CIDR", s)
+	}
 
 	cidrs := strings.Split(s, ",")
-
 	for _, cidr := range cidrs {
 		_, ipnet, err := net.ParseCIDR(cidr)
 		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
+			return fmt.Errorf("Failed to parse %s as a CIDR", cidr)
 		}
-		results = append(results, ipnet)
+
+		*p = append(*p, ipnet)
 	}
-	return results
+	return nil
 }

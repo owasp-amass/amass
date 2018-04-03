@@ -30,9 +30,6 @@ type AmassConfig struct {
 	// The IPs that the enumeration will target
 	IPs []net.IP
 
-	// The IP address ranges that the enumeration will target
-	Ranges []*IPRange
-
 	// The ports that will be checked for certificates
 	Ports []int
 
@@ -151,7 +148,7 @@ func DefaultConfig() *AmassConfig {
 		Ports:       []int{443},
 		Recursive:   true,
 		Alterations: true,
-		Frequency:   25 * time.Millisecond,
+		Frequency:   50 * time.Millisecond,
 	}
 	return config
 }
@@ -166,7 +163,6 @@ func CustomConfig(ac *AmassConfig) *AmassConfig {
 
 	config.ASNs = ac.ASNs
 	config.CIDRs = ac.CIDRs
-	config.Ranges = ac.Ranges
 	config.IPs = ac.IPs
 
 	if len(ac.Ports) > 0 {

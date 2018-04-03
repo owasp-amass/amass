@@ -1,8 +1,8 @@
-# Subdomain Enumeration
+# Amass v1.3.0 - Jeff Foley (@jeff_foley)
 
 ### On the Smart and Quiet Side
 
-[![](https://img.shields.io/badge/go-1.10-blue.svg)](https://github.com/moovweb/gvm) [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
+[![](https://img.shields.io/badge/go-1.10-blue.svg)](https://github.com/moovweb/gvm) [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)[![Snap Status](https://build.snapcraft.io/badge/caffix/amass.svg)](https://build.snapcraft.io/user/caffix/amass)
 
 
 The amass tool searches Internet data sources, performs brute force subdomain enumeration, searches web archives, and uses machine learning to generate additional subdomain name guesses. DNS name resolution is performed across many public servers so the authoritative server will see the traffic coming from different locations.
@@ -16,6 +16,12 @@ A [precompiled version is available](https://github.com/caffix/amass/releases) f
 If your operating environment supports [Snap](https://docs.snapcraft.io/core/install), you can [click here to install](https://snapcraft.io/amass), or perform the following from the command-line:
 ```
 $ sudo snap install amass
+```
+
+
+If you would like snap get you the latest unstable build of amass, type the following command:
+```
+$ sudo snap install --edge amass
 ```
  
 
@@ -208,7 +214,7 @@ func main() {
 ```
 
 
-## Settings for the amass Maltego Local Transform
+## Settings for the Amass Maltego Local Transform
 
 1. Setup a new local transform within Maltego:
 
@@ -229,6 +235,6 @@ func main() {
 
 **NOTE: Still under development**
 
-**Author: Jeff Foley / @jeff_foley**
+**Author: Jeff Foley @jeff_foley**
 
 **Company: ClaritySec, Inc. / @claritysecinc**

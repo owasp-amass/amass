@@ -9,6 +9,7 @@ import (
 
 // Public & free DNS servers
 var knownPublicServers = []string{
+	"1.1.1.1:53",        // Cloudflare
 	"8.8.8.8:53",        // Google
 	"64.6.64.6:53",      // Verisign
 	"208.67.222.222:53", // OpenDNS Home
