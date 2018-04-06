@@ -154,7 +154,7 @@ func ArchiveIsArchive(out chan<- *AmassRequest) Archiver {
 }
 
 func ArquivoArchive(out chan<- *AmassRequest) Archiver {
-	return MementoWebArchive("http://arquivo.pt/wayback", "Arquivo Archive", out)
+	return MementoWebArchive("http://arquivo.pt/wayback", "Arquivo Arc", out)
 }
 
 func LibraryCongressArchive(out chan<- *AmassRequest) Archiver {
@@ -162,15 +162,15 @@ func LibraryCongressArchive(out chan<- *AmassRequest) Archiver {
 }
 
 func UKWebArchive(out chan<- *AmassRequest) Archiver {
-	return MementoWebArchive("http://www.webarchive.org.uk/wayback/archive", "UK Archive", out)
+	return MementoWebArchive("http://www.webarchive.org.uk/wayback/archive", "Open UK Arc", out)
 }
 
 func UKGovArchive(out chan<- *AmassRequest) Archiver {
-	return MementoWebArchive("http://webarchive.nationalarchives.gov.uk", "UK Gov Archive", out)
+	return MementoWebArchive("http://webarchive.nationalarchives.gov.uk", "UK Gov Arch", out)
 }
 
 func WaybackMachineArchive(out chan<- *AmassRequest) Archiver {
-	return MementoWebArchive("http://web.archive.org/web", "INet Archive", out)
+	return MementoWebArchive("http://web.archive.org/web", "Wayback Arc", out)
 }
 
 /* Private functions */

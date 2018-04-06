@@ -124,6 +124,54 @@ func TestScraperCensys(t *testing.T) {
 	}
 }
 
+func TestScraperCertDB(t *testing.T) {
+	out := make(chan *AmassRequest, 2)
+	finished := make(chan int, 2)
+	config := DefaultConfig()
+	config.Setup()
+
+	s := CertDBScrape(out, config)
+
+	go readOutput(out)
+	s.Scrape(testDomain, finished)
+	discovered := <-finished
+	if discovered <= 0 {
+		t.Errorf("CertDBScrape found %d subdomains", discovered)
+	}
+}
+
+func TestScraperFindSubDomains(t *testing.T) {
+	out := make(chan *AmassRequest, 2)
+	finished := make(chan int, 2)
+	config := DefaultConfig()
+	config.Setup()
+
+	s := FindSubDomainsScrape(out, config)
+
+	go readOutput(out)
+	s.Scrape(testDomain, finished)
+	discovered := <-finished
+	if discovered <= 0 {
+		t.Errorf("FindSubDomainsScrape found %d subdomains", discovered)
+	}
+}
+
+func TestScraperHackerTarget(t *testing.T) {
+	out := make(chan *AmassRequest, 2)
+	finished := make(chan int, 2)
+	config := DefaultConfig()
+	config.Setup()
+
+	s := HackerTargetScrape(out, config)
+
+	go readOutput(out)
+	s.Scrape(testDomain, finished)
+	discovered := <-finished
+	if discovered <= 0 {
+		t.Errorf("HackerTargetScrape found %d subdomains", discovered)
+	}
+}
+
 func TestScraperCrtsh(t *testing.T) {
 	out := make(chan *AmassRequest, 2)
 	finished := make(chan int, 2)
@@ -153,6 +201,22 @@ func TestScraperNetcraft(t *testing.T) {
 	discovered := <-finished
 	if discovered <= 0 {
 		t.Errorf("NetcraftScrape found %d subdomains", discovered)
+	}
+}
+
+func TestScraperPTRArchive(t *testing.T) {
+	out := make(chan *AmassRequest, 2)
+	finished := make(chan int, 2)
+	config := DefaultConfig()
+	config.Setup()
+
+	s := PTRArchiveScrape(out, config)
+
+	go readOutput(out)
+	s.Scrape(testDomain, finished)
+	discovered := <-finished
+	if discovered <= 0 {
+		t.Errorf("PTRArchiveScrape found %d subdomains", discovered)
 	}
 }
 

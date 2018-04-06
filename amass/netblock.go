@@ -80,10 +80,14 @@ func (ns *NetblockService) initialRequests() {
 	}
 	// Enter all CIDR requests into the queue
 	for _, cidr := range ns.Config().CIDRs {
-		ns.performLookup(&AmassRequest{
-			Netblock:   cidr,
-			addDomains: true,
-		})
+		ips := NetHosts(cidr)
+
+		for _, ip := range ips {
+			ns.performLookup(&AmassRequest{
+				Address:    ip,
+				addDomains: true,
+			})
+		}
 	}
 	// Enter all IP address requests into the queue
 	for _, ip := range ns.Config().IPs {
@@ -156,6 +160,16 @@ func (ns *NetblockService) sendRequest(req *AmassRequest) {
 			if cidr.String() == req.Netblock.String() {
 				pass = true
 				break
+			}
+		}
+		if req.Address != "" {
+			ip := net.ParseIP(req.Address)
+
+			for _, cidr := range ns.Config().CIDRs {
+				if cidr.Contains(ip) {
+					pass = true
+					break
+				}
 			}
 		}
 	}
@@ -272,15 +286,13 @@ func (ns *NetblockService) CIDRRequest(r *cacheRequest) {
 
 func (ns *NetblockService) cidrSearch(ipnet *net.IPNet) (int, string) {
 	var a int
-	var cidr *net.IPNet
 	var desc string
 loop:
 	// Check that the necessary data is already cached
 	for asn, record := range ns.cache {
 		for _, netblock := range record.Netblocks {
-			if netblock == cidr.String() {
+			if netblock == ipnet.String() {
 				a = asn
-				cidr = ipnet
 				desc = record.Description
 				break loop
 			}

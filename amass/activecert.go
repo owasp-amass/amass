@@ -4,13 +4,19 @@
 package amass
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"fmt"
-	"net"
 	"strconv"
 	"strings"
 	"time"
+)
+
+const (
+	defaultTLSConnectTimeout = 3 * time.Second
+	defaultHandshakeDeadline = 10 * time.Second
 )
 
 type ActiveCertService struct {
@@ -49,13 +55,15 @@ func (acs *ActiveCertService) processRequests() {
 	t := time.NewTicker(10 * time.Second)
 	defer t.Stop()
 
-	pull := time.NewTicker(250 * time.Millisecond)
+	pull := time.NewTicker(100 * time.Millisecond)
 	defer pull.Stop()
 loop:
 	for {
 		select {
 		case req := <-acs.Input():
-			acs.add(req)
+			if req.addDomains {
+				acs.add(req)
+			}
 		case <-pull.C:
 			next := acs.next()
 			if next != nil {
@@ -70,14 +78,16 @@ loop:
 }
 
 func (acs *ActiveCertService) add(req *AmassRequest) {
-	if !acs.Config().AdditionalDomains {
-		return
-	}
-	acs.SetActive(true)
+	acs.Lock()
+	defer acs.Unlock()
+
 	acs.queue = append(acs.queue, req)
 }
 
 func (acs *ActiveCertService) next() *AmassRequest {
+	acs.Lock()
+	defer acs.Unlock()
+
 	var next *AmassRequest
 
 	if len(acs.queue) == 1 {
@@ -111,7 +121,7 @@ func (acs *ActiveCertService) handleRequest(req *AmassRequest) {
 	}
 	// Otherwise, check which type of request it is
 	if req.Address != "" {
-		acs.pullCertificate(req)
+		go acs.pullCertificate(req)
 	} else if req.Netblock != nil {
 		ips := NetHosts(req.Netblock)
 
@@ -147,41 +157,52 @@ func (acs *ActiveCertService) pullCertificate(req *AmassRequest) {
 	for _, port := range acs.Config().Ports {
 		acs.SetActive(true)
 
-		strPort := strconv.Itoa(port)
-		cfg := tls.Config{InsecureSkipVerify: true}
-		// Set a timeout for our attempt
-		d := &net.Dialer{
-			Timeout:  1 * time.Second,
-			Deadline: time.Now().Add(2 * time.Second),
-		}
-		// Attempt to acquire the certificate chain
-		conn, err := tls.DialWithDialer(d, "tcp", req.Address+":"+strPort, &cfg)
+		cfg := &tls.Config{InsecureSkipVerify: true}
+		// Set the maximum time allowed for making the connection
+		ctx, cancel := context.WithTimeout(context.Background(), defaultTLSConnectTimeout)
+		defer cancel()
+		// Obtain the connection
+		conn, err := acs.Config().DialContext(ctx, "tcp", req.Address+":"+strconv.Itoa(port))
 		if err != nil {
 			continue
 		}
 		defer conn.Close()
+		c := tls.Client(conn, cfg)
+		// Attempt to acquire the certificate chain
+		errChan := make(chan error, 2)
+		// This goroutine will break us out of the handshake
+		time.AfterFunc(defaultHandshakeDeadline, func() {
+			errChan <- errors.New("Handshake timeout")
+		})
+		// Be sure we do not wait too long in this attempt
+		c.SetDeadline(time.Now().Add(defaultHandshakeDeadline))
+		// The handshake is performed in the goroutine
+		go func() {
+			errChan <- c.Handshake()
+		}()
+		// The error channel returns handshake or timeout error
+		if err = <-errChan; err != nil {
+			continue
+		}
 		// Get the correct certificate in the chain
-		certChain := conn.ConnectionState().PeerCertificates
+		certChain := c.ConnectionState().PeerCertificates
 		cert := certChain[0]
 		// Create the new requests from names found within the cert
-		requests = acs.reqFromNames(namesFromCert(cert))
-		// Attempt to use IP addresses as well
-		for _, ip := range cert.IPAddresses {
-			acs.add(&AmassRequest{Address: ip.String()})
-		}
-	}
-	// Get all uniques root domain names from the generated requests
-	var domains []string
-	for _, r := range requests {
-		domains = UniqueAppend(domains, r.Domain)
+		requests = append(requests, acs.reqFromNames(namesFromCert(cert))...)
 	}
 	// Attempt to add the domains to the configuration
 	if acs.Config().AdditionalDomains {
+		// Get all uniques root domain names from the generated requests
+		var domains []string
+		for _, r := range requests {
+			domains = UniqueAppend(domains, r.Domain)
+		}
+
 		acs.Config().AddDomains(domains)
 	}
 	// Send all the new requests out
-	for _, req := range requests {
-		acs.performOutput(req)
+	for _, r := range requests {
+		acs.performOutput(r)
 	}
 }
 

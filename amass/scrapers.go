@@ -34,17 +34,21 @@ func NewScraperService(in, out chan *AmassRequest, config *AmassConfig) *Scraper
 	ss.scrapers = []Scraper{
 		AskScrape(ss.responses, config),
 		BaiduScrape(ss.responses, config),
-		CensysScrape(ss.responses, config),
-		CrtshScrape(ss.responses, config),
-		GoogleScrape(ss.responses, config),
-		NetcraftScrape(ss.responses, config),
-		RobtexScrape(ss.responses, config),
 		BingScrape(ss.responses, config),
+		CensysScrape(ss.responses, config),
+		CertDBScrape(ss.responses, config),
+		CrtshScrape(ss.responses, config),
 		DogpileScrape(ss.responses, config),
-		YahooScrape(ss.responses, config),
+		DNSDumpsterScrape(ss.responses, config),
+		FindSubDomainsScrape(ss.responses, config),
+		GoogleScrape(ss.responses, config),
+		HackerTargetScrape(ss.responses, config),
+		NetcraftScrape(ss.responses, config),
+		PTRArchiveScrape(ss.responses, config),
+		RobtexScrape(ss.responses, config),
 		ThreatCrowdScrape(ss.responses, config),
 		VirusTotalScrape(ss.responses, config),
-		DNSDumpsterScrape(ss.responses, config),
+		YahooScrape(ss.responses, config),
 	}
 
 	ss.input = in
@@ -246,17 +250,17 @@ func DogpileScrape(out chan<- *AmassRequest, config *AmassConfig) Scraper {
 }
 
 func googleURLByPageNum(d *searchEngine, domain string, page int) string {
-	pn := strconv.Itoa(page)
-	u, _ := url.Parse("https://google.com/search")
+	start := strconv.Itoa(d.Quantity * page)
+	u, _ := url.Parse("https://www.google.com/search")
 
 	u.RawQuery = url.Values{
-		"q":      {domain},
+		"q":      {"site:" + domain},
 		"btnG":   {"Search"},
-		"h1":     {"en-US"},
+		"hl":     {"en"},
 		"biw":    {""},
 		"bih":    {""},
 		"gbv":    {"1"},
-		"start":  {pn},
+		"start":  {start},
 		"filter": {"0"},
 	}.Encode()
 	return u.String()
@@ -265,7 +269,7 @@ func googleURLByPageNum(d *searchEngine, domain string, page int) string {
 func GoogleScrape(out chan<- *AmassRequest, config *AmassConfig) Scraper {
 	return &searchEngine{
 		Name:     "Google",
-		Quantity: 20,
+		Quantity: 10,
 		Limit:    160,
 		Output:   out,
 		Callback: googleURLByPageNum,
@@ -348,6 +352,36 @@ func CensysScrape(out chan<- *AmassRequest, config *AmassConfig) Scraper {
 	}
 }
 
+func findSubDomainsURL(domain string) string {
+	format := "https://findsubdomains.com/subdomains-of/%s"
+
+	return fmt.Sprintf(format, domain)
+}
+
+func FindSubDomainsScrape(out chan<- *AmassRequest, config *AmassConfig) Scraper {
+	return &lookup{
+		Name:     "FindSubDmns",
+		Output:   out,
+		Callback: findSubDomainsURL,
+		Config:   config,
+	}
+}
+
+func hackertargetURL(domain string) string {
+	format := "http://api.hackertarget.com/hostsearch/?q=%s"
+
+	return fmt.Sprintf(format, domain)
+}
+
+func HackerTargetScrape(out chan<- *AmassRequest, config *AmassConfig) Scraper {
+	return &lookup{
+		Name:     "HackerTargt",
+		Output:   out,
+		Callback: hackertargetURL,
+		Config:   config,
+	}
+}
+
 func netcraftURL(domain string) string {
 	format := "https://searchdns.netcraft.com/?restriction=site+ends+with&host=%s"
 
@@ -359,6 +393,21 @@ func NetcraftScrape(out chan<- *AmassRequest, config *AmassConfig) Scraper {
 		Name:     "Netcraft",
 		Output:   out,
 		Callback: netcraftURL,
+		Config:   config,
+	}
+}
+
+func ptrArchiveURL(domain string) string {
+	format := "http://ptrarchive.com/tools/search2.htm?label=%s&date=ALL"
+
+	return fmt.Sprintf(format, domain)
+}
+
+func PTRArchiveScrape(out chan<- *AmassRequest, config *AmassConfig) Scraper {
+	return &lookup{
+		Name:     "PTRarchive",
+		Output:   out,
+		Callback: ptrArchiveURL,
 		Config:   config,
 	}
 }
@@ -552,12 +601,7 @@ func (c *crtsh) Scrape(domain string, done chan int) {
 			continue
 		}
 		// Get all names off the certificate
-		names := c.getMatches(cert, domain)
-		// Send unique names out
-		u := NewUniqueElements(unique, names...)
-		if len(u) > 0 {
-			unique = append(unique, u...)
-		}
+		unique = UniqueAppend(unique, c.getMatches(cert, domain)...)
 	}
 	if len(unique) > 0 {
 		c.sendAllNames(unique, domain)
@@ -599,8 +643,91 @@ func (c *crtsh) getSubmatches(content string) []string {
 // CrtshSearch - A searcher that attempts to discover names from SSL certificates
 func CrtshScrape(out chan<- *AmassRequest, config *AmassConfig) Scraper {
 	return &crtsh{
-		Name:   "Cert Scrape",
+		Name:   "crt.sh",
 		Base:   "https://crt.sh/",
+		Output: out,
+		Config: config,
+	}
+}
+
+//--------------------------------------------------------------------------------------------
+
+type certdb struct {
+	Name   string
+	Base   string
+	Output chan<- *AmassRequest
+	Config *AmassConfig
+}
+
+func (c *certdb) String() string {
+	return c.Name
+}
+
+func (c *certdb) Scrape(domain string, done chan int) {
+	var unique []string
+
+	// Pull the page that lists all certs for this domain
+	page := GetWebPageWithDialContext(c.Config.DialContext, c.Base+"/domain/"+domain)
+	if page == "" {
+		done <- 0
+		return
+	}
+	// Get the subdomain name the cert was issued to, and
+	// the Subject Alternative Name list from each cert
+	results := c.getSubmatches(page)
+	for _, rel := range results {
+		// Do not go too fast
+		time.Sleep(50 * time.Millisecond)
+		// Pull the certificate web page
+		cert := GetWebPageWithDialContext(c.Config.DialContext, c.Base+rel)
+		if cert == "" {
+			continue
+		}
+		// Get all names off the certificate
+		unique = UniqueAppend(unique, c.getMatches(cert, domain)...)
+	}
+	if len(unique) > 0 {
+		c.sendAllNames(unique, domain)
+	}
+	done <- len(unique)
+}
+
+func (c *certdb) sendAllNames(names []string, domain string) {
+	for _, name := range names {
+		c.Output <- &AmassRequest{
+			Name:   name,
+			Domain: domain,
+			Tag:    SCRAPE,
+			Source: c.Name,
+		}
+	}
+}
+
+func (c *certdb) getMatches(content, domain string) []string {
+	var results []string
+
+	re := SubdomainRegex(domain)
+	for _, s := range re.FindAllString(content, -1) {
+		results = append(results, s)
+	}
+	return results
+}
+
+func (c *certdb) getSubmatches(content string) []string {
+	var results []string
+
+	re := regexp.MustCompile("<a href=\"(/ssl-cert/[a-zA-Z0-9]*)\" class=\"see-more-link\">")
+	for _, subs := range re.FindAllStringSubmatch(content, -1) {
+		results = append(results, strings.TrimSpace(subs[1]))
+	}
+	return results
+}
+
+// CrtshSearch - A searcher that attempts to discover names from SSL certificates
+func CertDBScrape(out chan<- *AmassRequest, config *AmassConfig) Scraper {
+	return &certdb{
+		Name:   "CertDB",
+		Base:   "https://certdb.com",
 		Output: out,
 		Config: config,
 	}

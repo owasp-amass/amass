@@ -5,16 +5,18 @@ package amass
 
 import (
 	"math/rand"
+	"strings"
 )
 
 // Public & free DNS servers
-var knownPublicServers = []string{
+var PublicResolvers = []string{
 	"1.1.1.1:53",        // Cloudflare
 	"8.8.8.8:53",        // Google
 	"64.6.64.6:53",      // Verisign
 	"208.67.222.222:53", // OpenDNS Home
 	"77.88.8.8:53",      // Yandex.DNS
 	"74.82.42.42:53",    // Hurricane Electric
+	"1.0.0.1:53",        // Cloudflare Secondary
 	"8.8.4.4:53",        // Google Secondary
 	"208.67.220.220:53", // OpenDNS Home Secondary
 	"77.88.8.1:53",      // Yandex.DNS Secondary
@@ -42,10 +44,45 @@ var knownPublicServers = []string{
 	//"23.253.163.53:53",  // Alternate DNS Secondary
 }
 
-// NextNameserver - Requests the next server
-func NextNameserver() string {
-	r := rand.Int()
-	idx := r % len(knownPublicServers)
+type resolvers struct {
+	// Configuration for the amass enumeration
+	config *AmassConfig
 
-	return knownPublicServers[idx]
+	// The resolvers used for the current enumeration
+	choices []string
+}
+
+func newResolversSubsystem(config *AmassConfig) *resolvers {
+	c := config.Resolvers
+	if len(c) == 0 {
+		c = PublicResolvers
+	}
+
+	return &resolvers{
+		config:  config,
+		choices: checkResolverAddresses(c),
+	}
+}
+
+// NextNameserver - Requests the next server
+func (r *resolvers) Next() string {
+	rnd := rand.Int()
+	idx := rnd % len(r.choices)
+
+	return r.choices[idx]
+}
+
+// For now, this only checks that the port numbers are included
+func checkResolverAddresses(addrs []string) []string {
+	var results []string
+
+	for _, addr := range addrs {
+		a := addr
+
+		if parts := strings.Split(addr, ":"); parts[0] == addr {
+			a += ":53"
+		}
+		results = UniqueAppend(results, a)
+	}
+	return results
 }

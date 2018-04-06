@@ -27,8 +27,8 @@ func ReverseDNS(ip, server string) (string, error) {
 	return ReverseDNSWithDialContext(dc, ip)
 }
 
-func TestResolversKnownPublicServers(t *testing.T) {
-	for _, server := range knownPublicServers {
+func TestResolversPublicResolvers(t *testing.T) {
+	for _, server := range PublicResolvers {
 		a, err := ResolveDNS(testDomain, server, "A")
 		if err != nil || len(a) == 0 {
 			t.Errorf("%s failed to resolve the A record for %s", server, testDomain)

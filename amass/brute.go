@@ -120,7 +120,7 @@ func (bfs *BruteForceService) performBruteForcing(subdomain, root string) {
 			Name:   word + "." + subdomain,
 			Domain: root,
 			Tag:    BRUTE,
-			Source: "Brute Forcing",
+			Source: "Brute Force",
 		})
 		// Going too fast will overwhelm the dns
 		// service and overuse memory

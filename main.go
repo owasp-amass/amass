@@ -27,7 +27,6 @@ import (
 
 type outputParams struct {
 	Verbose  bool
-	Sources  bool
 	PrintIPs bool
 	FileOut  string
 	Results  chan *amass.AmassRequest
@@ -36,6 +35,7 @@ type outputParams struct {
 }
 
 // Types that implement the flag.Value interface for parsing
+type parseStrings []string
 type parseIPs []net.IP
 type parseCIDRs []*net.IPNet
 type parseInts []int
@@ -54,7 +54,7 @@ var (
      WW         +@W@8. &@+  :&    o@+ #@      :@W&@&         &@:  ..     :@o    
      :@W:      o@# +Wo &@+        :W: +@W&o++o@W. &@&  8@#o+&@W.  #@:    o@+    
       :W@@WWWW@@8       +              :&W@@@@&    &W  .o#@@W&.   :W@WWW@@&     
-        +o&&&&+.                                                    +oooo.                          
+        +o&&&&+.                                                    +oooo.      
 
 `
 	// Colors used to ease the reading of program output
@@ -72,55 +72,80 @@ var (
 	brute       = flag.Bool("brute", false, "Execute brute forcing after searches")
 	recursive   = flag.Bool("norecursive", true, "Turn off recursive brute forcing")
 	alts        = flag.Bool("noalts", true, "Disable generation of altered names")
-	verbose     = flag.Bool("v", false, "Print the summary information")
-	extra       = flag.Bool("vv", false, "Print the data source information")
+	verbose     = flag.Bool("v", false, "Print the data source and summary information")
 	whois       = flag.Bool("whois", false, "Include domains discoverd with reverse whois")
 	list        = flag.Bool("l", false, "List all domains to be used in an enumeration")
 	freq        = flag.Int64("freq", 0, "Sets the number of max DNS queries per minute")
 	wordlist    = flag.String("w", "", "Path to a different wordlist file")
 	outfile     = flag.String("o", "", "Path to the output file")
 	domainsfile = flag.String("df", "", "Path to a file providing root domain names")
+	resolvefile = flag.String("rf", "", "Path to a file providing preferred DNS resolvers")
 	proxy       = flag.String("proxy", "", "The URL used to reach the proxy")
 )
 
 func main() {
+	var netopts bool
 	var addrs parseIPs
 	var cidrs parseCIDRs
 	var asns, ports parseInts
+	var domains, resolvers parseStrings
 
-	buf := new(bytes.Buffer)
-	flag.CommandLine.SetOutput(buf)
+	// This is for the potentially required network flags
+	network := flag.NewFlagSet("net", flag.ContinueOnError)
+	network.Var(&addrs, "addr", "IPs and ranges separated by commas(can be used multiple times)")
+	network.Var(&cidrs, "cidr", "CIDRs separated by commas (can be used multiple times)")
+	network.Var(&asns, "asn", "ASNs separated by commas (can be used multiple times)")
+	network.Var(&ports, "p", "Ports separated by commas for discovering TLS certs (can be used multiple times)")
 
-	flag.Var(&addrs, "addr", "IPs and ranges to be probed for certificates")
-	flag.Var(&cidrs, "net", "CIDRs to be probed for certificates")
-	flag.Var(&asns, "asn", "ASNs to be probed for certificates")
-	flag.Var(&ports, "p", "Ports to be checked for certificates")
+	defaultBuf := new(bytes.Buffer)
+	flag.CommandLine.SetOutput(defaultBuf)
+	netBuf := new(bytes.Buffer)
+	network.SetOutput(netBuf)
+
+	flag.Var(&domains, "d", "Domain names separated by commas (can be used multiple times)")
+	flag.Var(&resolvers, "r", "IP addresses of preferred DNS resolvers (can be used multiple times)")
 	flag.Parse()
 
+	// Check if the 'net' subcommand flags need to be parsed
+	if len(flag.Args()) >= 2 {
+		err := network.Parse(flag.Args()[1:])
+		if err != nil {
+			r.Println(err)
+		}
+
+		if len(addrs) > 0 || len(cidrs) > 0 || len(asns) > 0 {
+			netopts = true
+		}
+	}
 	// Should the help output be provided?
 	if *help {
 		printBanner()
-		g.Printf("Usage: %s [options] domain domain2 domain3... (e.g. example.com)\n", path.Base(os.Args[0]))
+		g.Printf("Usage: %s [options] <-d domain> | <net>\n", path.Base(os.Args[0]))
 		flag.PrintDefaults()
-		g.Println(buf.String())
+		network.PrintDefaults()
+		g.Println(defaultBuf.String())
+
+		g.Println("Flags for the 'net' subcommand:")
+		g.Println(netBuf.String())
 		return
 	}
 	if *version {
 		fmt.Printf("version %s\n", amass.Version)
 		return
 	}
-	if *extra {
-		*verbose = true
-	}
-	// Get root domain names provided from the command-line
-	domains := flag.Args()
 	// Now, get domains provided by a file
 	if *domainsfile != "" {
 		domains = amass.UniqueAppend(domains, getLinesFromFile(*domainsfile)...)
 	}
-	if *whois {
-		// Add the domains discovered by whois
-		domains = amass.UniqueAppend(domains, recon.ReverseWhois(flag.Arg(0))...)
+	// Can an enumeration be performed with the provided parameters?
+	if len(domains) == 0 && !netopts {
+		r.Println("The required parameters were not provided")
+		r.Println("Use the -h switch for help information")
+		return
+	}
+	// If requested, obtain the additional domains from reverse whois information
+	if len(domains) > 0 && *whois {
+		domains = amass.UniqueAppend(domains, recon.ReverseWhois(domains[0])...)
 	}
 	if *list {
 		// Just show the domains and quit
@@ -128,6 +153,10 @@ func main() {
 			fmt.Println(d)
 		}
 		return
+	}
+	// Get the resolvers provided by file
+	if *resolvefile != "" {
+		resolvers = amass.UniqueAppend(resolvers, getLinesFromFile(*resolvefile)...)
 	}
 	// Seed the default pseudo-random number generator
 	rand.Seed(time.Now().UTC().UnixNano())
@@ -138,7 +167,6 @@ func main() {
 
 	go manageOutput(&outputParams{
 		Verbose:  *verbose,
-		Sources:  *extra,
 		PrintIPs: *ips,
 		FileOut:  *outfile,
 		Results:  results,
@@ -163,6 +191,7 @@ func main() {
 		Recursive:    *recursive,
 		Alterations:  *alts,
 		Frequency:    freqToDuration(*freq),
+		Resolvers:    resolvers,
 		Output:       results,
 	})
 	config.AddDomains(domains)
@@ -174,7 +203,7 @@ func main() {
 	if *proxy != "" {
 		err := config.SetupProxyConnection(*proxy)
 		if err != nil {
-			r.Println("The proxy address provided failed to make a connection")
+			r.Println("The proxy address failed to make a connection")
 			return
 		}
 	}
@@ -228,7 +257,7 @@ loop:
 			updateData(result, tags, asns)
 
 			var source, comma, ip string
-			if params.Sources {
+			if params.Verbose {
 				source = fmt.Sprintf("%-14s", "["+result.Source+"] ")
 			}
 			if params.PrintIPs {
@@ -372,6 +401,26 @@ func freqToDuration(freq int64) time.Duration {
 	}
 	// Use the default rate
 	return amass.DefaultConfig().Frequency
+}
+
+// parseStrings implementation of the flag.Value interface
+func (p *parseStrings) String() string {
+	if p == nil {
+		return ""
+	}
+	return strings.Join(*p, ",")
+}
+
+func (p *parseStrings) Set(s string) error {
+	if s == "" {
+		return fmt.Errorf("String parsing failed")
+	}
+
+	str := strings.Split(s, ",")
+	for _, s := range str {
+		*p = append(*p, strings.TrimSpace(s))
+	}
+	return nil
 }
 
 // parseInts implementation of the flag.Value interface

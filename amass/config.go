@@ -51,6 +51,9 @@ type AmassConfig struct {
 	// The channel that will receive the results
 	Output chan *AmassRequest
 
+	// Preferred DNS resolvers identified by the user
+	Resolvers []string
+
 	// Indicate that Amass cannot add domains to the config
 	AdditionalDomains bool
 
@@ -59,6 +62,9 @@ type AmassConfig struct {
 
 	// Is responsible for performing simple DNS resolutions
 	dns *queries
+
+	// Handles selecting the next DNS resolver to be used
+	resolver *resolvers
 
 	// Performs lookups of root domain names from subdomain names
 	domainLookup *DomainLookup
@@ -75,6 +81,7 @@ func (c *AmassConfig) Setup() {
 	c.dns = newQueriesSubsystem(c)
 	c.domainLookup = NewDomainLookup(c)
 	c.wildcards = NewWildcardDetection(c)
+	c.resolver = newResolversSubsystem(c)
 }
 
 func (c *AmassConfig) SetupProxyConnection(addr string) error {
@@ -105,16 +112,24 @@ func (c *AmassConfig) Domains() []string {
 }
 
 func (c *AmassConfig) DNSDialContext(ctx context.Context, network, address string) (net.Conn, error) {
+	resolver := c.resolver.Next()
+
 	if c.proxy != nil {
-		return c.proxy.Dial(network, NextNameserver())
+		if timeout, ok := ctx.Deadline(); ok {
+			return c.proxy.DialTimeout(network, resolver, timeout.Sub(time.Now()))
+		}
+		return c.proxy.Dial(network, resolver)
 	}
 
 	d := &net.Dialer{}
-	return d.DialContext(ctx, network, NextNameserver())
+	return d.DialContext(ctx, network, resolver)
 }
 
 func (c *AmassConfig) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
 	if c.proxy != nil {
+		if timeout, ok := ctx.Deadline(); ok {
+			return c.proxy.DialTimeout(network, address, timeout.Sub(time.Now()))
+		}
 		return c.proxy.Dial(network, address)
 	}
 
@@ -189,6 +204,7 @@ func CustomConfig(ac *AmassConfig) *AmassConfig {
 
 	config.Output = ac.Output
 	config.AdditionalDomains = ac.AdditionalDomains
+	config.Resolvers = ac.Resolvers
 	return config
 }
 
