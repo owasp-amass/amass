@@ -84,6 +84,8 @@ func (as *AlterationService) flipNumbersInName(req *AmassRequest) {
 
 func (as *AlterationService) secondNumberFlip(name, domain string, minIndex int) {
 	parts := strings.SplitN(name, ".", 2)
+
+	as.SetActive(true)
 	// Find the second character that is a number
 	last := strings.LastIndexFunc(parts[0], unicode.IsNumber)
 	if last < 0 || last < minIndex {
@@ -94,7 +96,6 @@ func (as *AlterationService) secondNumberFlip(name, domain string, minIndex int)
 	for i := 0; i < 10; i++ {
 		n := name[:last] + strconv.Itoa(i) + name[last+1:]
 
-		as.SetActive(true)
 		as.sendAlteredName(n, domain)
 		// Do not go too fast
 		time.Sleep(as.Config().Frequency)
@@ -108,8 +109,8 @@ func (as *AlterationService) appendNumbers(req *AmassRequest) {
 	n := req.Name
 	parts := strings.SplitN(n, ".", 2)
 
+	as.SetActive(true)
 	for i := 0; i < 10; i++ {
-		as.SetActive(true)
 		// Send a LABEL-NUM altered name
 		nhn := parts[0] + "-" + strconv.Itoa(i) + "." + parts[1]
 		as.sendAlteredName(nhn, req.Domain)

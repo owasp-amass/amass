@@ -256,10 +256,12 @@ func (ds *DNSService) performDNSRequest() {
 	var err error
 	var answers []DNSAnswer
 
-	// Pops a DNS name off the queue for resolution
 	req := ds.nextFromQueue()
-	// Some initial input validation
-	if req == nil || req.Name == "" || ds.duplicate(req.Name) || req.Domain == "" {
+	// Plow through the requests that are not of interest
+	for req != nil && (req.Name == "" || ds.duplicate(req.Name) || req.Domain == "") {
+		req = ds.nextFromQueue()
+	}
+	if req == nil {
 		return
 	}
 

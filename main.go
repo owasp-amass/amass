@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/caffix/amass/amass"
-	"github.com/caffix/recon"
 	"github.com/fatih/color"
 )
 
@@ -70,8 +69,8 @@ var (
 	version     = flag.Bool("version", false, "Print the version number of this amass binary")
 	ips         = flag.Bool("ip", false, "Show the IP addresses for discovered names")
 	brute       = flag.Bool("brute", false, "Execute brute forcing after searches")
-	recursive   = flag.Bool("norecursive", true, "Turn off recursive brute forcing")
-	alts        = flag.Bool("noalts", true, "Disable generation of altered names")
+	norecursive = flag.Bool("norecursive", false, "Turn off recursive brute forcing")
+	noalts      = flag.Bool("noalts", false, "Disable generation of altered names")
 	verbose     = flag.Bool("v", false, "Print the data source and summary information")
 	whois       = flag.Bool("whois", false, "Include domains discoverd with reverse whois")
 	list        = flag.Bool("l", false, "List all domains to be used in an enumeration")
@@ -92,10 +91,10 @@ func main() {
 
 	// This is for the potentially required network flags
 	network := flag.NewFlagSet("net", flag.ContinueOnError)
-	network.Var(&addrs, "addr", "IPs and ranges separated by commas(can be used multiple times)")
+	network.Var(&addrs, "addr", "IPs and ranges separated by commas (can be used multiple times)")
 	network.Var(&cidrs, "cidr", "CIDRs separated by commas (can be used multiple times)")
 	network.Var(&asns, "asn", "ASNs separated by commas (can be used multiple times)")
-	network.Var(&ports, "p", "Ports separated by commas for discovering TLS certs (can be used multiple times)")
+	network.Var(&ports, "p", "Ports used to discover TLS certs (can be used multiple times)")
 
 	defaultBuf := new(bytes.Buffer)
 	flag.CommandLine.SetOutput(defaultBuf)
@@ -143,17 +142,6 @@ func main() {
 		r.Println("Use the -h switch for help information")
 		return
 	}
-	// If requested, obtain the additional domains from reverse whois information
-	if len(domains) > 0 && *whois {
-		domains = amass.UniqueAppend(domains, recon.ReverseWhois(domains[0])...)
-	}
-	if *list {
-		// Just show the domains and quit
-		for _, d := range domains {
-			fmt.Println(d)
-		}
-		return
-	}
 	// Get the resolvers provided by file
 	if *resolvefile != "" {
 		resolvers = amass.UniqueAppend(resolvers, getLinesFromFile(*resolvefile)...)
@@ -181,6 +169,14 @@ func main() {
 		words = getLinesFromFile(*wordlist)
 	}
 	// Setup the amass configuration
+	alts := true
+	recursive := true
+	if *noalts {
+		alts = false
+	}
+	if *norecursive {
+		recursive = false
+	}
 	config := amass.CustomConfig(&amass.AmassConfig{
 		IPs:          addrs,
 		ASNs:         asns,
@@ -188,13 +184,26 @@ func main() {
 		Ports:        ports,
 		Wordlist:     words,
 		BruteForcing: *brute,
-		Recursive:    *recursive,
-		Alterations:  *alts,
+		Recursive:    recursive,
+		Alterations:  alts,
 		Frequency:    freqToDuration(*freq),
 		Resolvers:    resolvers,
 		Output:       results,
 	})
 	config.AddDomains(domains)
+	// If requested, obtain the additional domains from reverse whois information
+	if len(domains) > 0 && *whois {
+		if more := config.ReverseWhois(domains[0]); len(more) > 0 {
+			config.AddDomains(more)
+		}
+	}
+	if *list {
+		// Just show the domains and quit
+		for _, d := range config.Domains() {
+			g.Println(d)
+		}
+		return
+	}
 	// If no domains were provided, allow amass to discover them
 	if len(domains) == 0 {
 		config.AdditionalDomains = true

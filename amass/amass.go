@@ -43,7 +43,6 @@ func StartEnumeration(config *AmassConfig) error {
 	if err := CheckConfig(config); err != nil {
 		return err
 	}
-	config.Setup()
 	// Setup all the channels used by the AmassServices
 	bufSize := 50
 	final := make(chan *AmassRequest, bufSize)

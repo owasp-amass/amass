@@ -7,10 +7,12 @@ import (
 	"bufio"
 	"context"
 	"errors"
-	//"fmt"
 	"io"
 	"net"
 	"net/http"
+	"regexp"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -175,36 +177,31 @@ func CustomConfig(ac *AmassConfig) *AmassConfig {
 	if len(ac.Domains()) > 0 {
 		config.AddDomains(ac.Domains())
 	}
-
-	config.ASNs = ac.ASNs
-	config.CIDRs = ac.CIDRs
-	config.IPs = ac.IPs
-
 	if len(ac.Ports) > 0 {
 		config.Ports = ac.Ports
 	}
-
 	if len(ac.Wordlist) == 0 {
 		config.Wordlist = GetDefaultWordlist()
 	} else {
 		config.Wordlist = ac.Wordlist
 	}
-
-	config.BruteForcing = ac.BruteForcing
-	config.Recursive = ac.Recursive
-
 	// Check that the config values have been set appropriately
 	if ac.Frequency > config.Frequency {
 		config.Frequency = ac.Frequency
 	}
-
 	if ac.proxy != nil {
 		config.proxy = ac.proxy
 	}
-
+	config.ASNs = ac.ASNs
+	config.CIDRs = ac.CIDRs
+	config.IPs = ac.IPs
+	config.BruteForcing = ac.BruteForcing
+	config.Recursive = ac.Recursive
+	config.Alterations = ac.Alterations
 	config.Output = ac.Output
 	config.AdditionalDomains = ac.AdditionalDomains
 	config.Resolvers = ac.Resolvers
+	config.Setup()
 	return config
 }
 
@@ -230,4 +227,56 @@ func GetDefaultWordlist() []string {
 		}
 	}
 	return list
+}
+
+//--------------------------------------------------------------------------------------------------
+// ReverseWhois - Returns domain names that are related to the domain provided
+func (c *AmassConfig) ReverseWhois(domain string) []string {
+	var domains []string
+
+	page := GetWebPageWithDialContext(c.DialContext,
+		"http://viewdns.info/reversewhois/?q="+domain)
+	if page == "" {
+		return []string{}
+	}
+	// Pull the table we need from the page content
+	table := getViewDNSTable(page)
+	// Get the list of domain names discovered through
+	// the reverse DNS service
+	re := regexp.MustCompile("<tr><td>([a-zA-Z0-9]{1}[a-zA-Z0-9-]{0,61}[a-zA-Z0-9]{1}[.]{1}[a-zA-Z0-9-]+)</td><td>")
+	subs := re.FindAllStringSubmatch(table, -1)
+	for _, match := range subs {
+		sub := match[1]
+		if sub == "" {
+			continue
+		}
+		domains = append(domains, strings.TrimSpace(sub))
+	}
+	sort.Strings(domains)
+	return domains
+}
+
+func getViewDNSTable(page string) string {
+	var begin, end int
+	s := page
+
+	for i := 0; i < 4; i++ {
+		b := strings.Index(s, "<table")
+		if b == -1 {
+			return ""
+		}
+		begin += b + 6
+
+		if e := strings.Index(s[b:], "</table>"); e == -1 {
+			return ""
+		} else {
+			end = begin + e
+		}
+
+		s = page[end+8:]
+	}
+
+	i := strings.Index(page[begin:end], "<table")
+	i = strings.Index(page[begin+i+6:end], "<table")
+	return page[begin+i : end]
 }
