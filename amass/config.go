@@ -23,6 +23,9 @@ import (
 type AmassConfig struct {
 	sync.Mutex
 
+	// The channel that will receive the results
+	Output chan *AmassRequest
+
 	// The ASNs that the enumeration will target
 	ASNs []int
 
@@ -50,11 +53,11 @@ type AmassConfig struct {
 	// Will discovered subdomain name alterations be generated?
 	Alterations bool
 
+	// A blacklist of subdomain names that will not be investigated
+	Blacklist []string
+
 	// Sets the maximum number of DNS queries per minute
 	Frequency time.Duration
-
-	// The channel that will receive the results
-	Output chan *AmassRequest
 
 	// Preferred DNS resolvers identified by the user
 	Resolvers []string
@@ -89,19 +92,6 @@ func (c *AmassConfig) Setup() {
 	c.resolver = newResolversSubsystem(c)
 }
 
-func (c *AmassConfig) SetupProxyConnection(addr string) error {
-	client, err := proxyclient.NewProxyClient(addr)
-	if err == nil {
-		c.proxy = client
-		// Override the Go default DNS resolver to prevent leakage
-		net.DefaultResolver = &net.Resolver{
-			PreferGo: true,
-			Dial:     c.DNSDialContext,
-		}
-	}
-	return err
-}
-
 func (c *AmassConfig) AddDomains(names []string) {
 	c.Lock()
 	defer c.Unlock()
@@ -116,35 +106,16 @@ func (c *AmassConfig) Domains() []string {
 	return c.domains
 }
 
-func (c *AmassConfig) DNSDialContext(ctx context.Context, network, address string) (net.Conn, error) {
-	resolver := c.resolver.Next()
+func (c *AmassConfig) Blacklisted(name string) bool {
+	var resp bool
 
-	if c.proxy != nil {
-		if timeout, ok := ctx.Deadline(); ok {
-			return c.proxy.DialTimeout(network, resolver, timeout.Sub(time.Now()))
+	for _, bl := range c.Blacklist {
+		if match := strings.HasSuffix(name, bl); match {
+			resp = true
+			break
 		}
-		return c.proxy.Dial(network, resolver)
 	}
-
-	d := &net.Dialer{}
-	return d.DialContext(ctx, network, resolver)
-}
-
-func (c *AmassConfig) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
-	if c.proxy != nil {
-		if timeout, ok := ctx.Deadline(); ok {
-			return c.proxy.DialTimeout(network, address, timeout.Sub(time.Now()))
-		}
-		return c.proxy.Dial(network, address)
-	}
-
-	d := &net.Dialer{
-		Resolver: &net.Resolver{
-			PreferGo: true,
-			Dial:     c.DNSDialContext,
-		},
-	}
-	return d.DialContext(ctx, network, address)
+	return resp
 }
 
 func CheckConfig(config *AmassConfig) error {
@@ -208,6 +179,7 @@ func CustomConfig(ac *AmassConfig) *AmassConfig {
 	config.Output = ac.Output
 	config.AdditionalDomains = ac.AdditionalDomains
 	config.Resolvers = ac.Resolvers
+	config.Blacklist = ac.Blacklist
 	config.Setup()
 	return config
 }
@@ -286,4 +258,51 @@ func getViewDNSTable(page string) string {
 	i := strings.Index(page[begin:end], "<table")
 	i = strings.Index(page[begin+i+6:end], "<table")
 	return page[begin+i : end]
+}
+
+//--------------------------------------------------------------------------------------------------
+// Methods that handle networking that is specific to the Amass configuration
+
+func (c *AmassConfig) SetupProxyConnection(addr string) error {
+	client, err := proxyclient.NewProxyClient(addr)
+	if err == nil {
+		c.proxy = client
+		// Override the Go default DNS resolver to prevent leakage
+		net.DefaultResolver = &net.Resolver{
+			PreferGo: true,
+			Dial:     c.DNSDialContext,
+		}
+	}
+	return err
+}
+
+func (c *AmassConfig) DNSDialContext(ctx context.Context, network, address string) (net.Conn, error) {
+	resolver := c.resolver.Next()
+
+	if c.proxy != nil {
+		if timeout, ok := ctx.Deadline(); ok {
+			return c.proxy.DialTimeout(network, resolver, timeout.Sub(time.Now()))
+		}
+		return c.proxy.Dial(network, resolver)
+	}
+
+	d := &net.Dialer{}
+	return d.DialContext(ctx, network, resolver)
+}
+
+func (c *AmassConfig) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
+	if c.proxy != nil {
+		if timeout, ok := ctx.Deadline(); ok {
+			return c.proxy.DialTimeout(network, address, timeout.Sub(time.Now()))
+		}
+		return c.proxy.Dial(network, address)
+	}
+
+	d := &net.Dialer{
+		Resolver: &net.Resolver{
+			PreferGo: true,
+			Dial:     c.DNSDialContext,
+		},
+	}
+	return d.DialContext(ctx, network, address)
 }

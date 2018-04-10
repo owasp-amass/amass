@@ -57,7 +57,11 @@ func (as *AlterationService) executeAlterations(req *AmassRequest) {
 	if !as.Config().Alterations {
 		return
 	}
-
+	labels := strings.Split(req.Name, ".")
+	// Check the subdomain of the request name
+	if labels[1] == "_tcp" || labels[1] == "_udp" {
+		return
+	}
 	as.flipNumbersInName(req)
 	as.appendNumbers(req)
 	//go a.PrefixSuffixWords(name)

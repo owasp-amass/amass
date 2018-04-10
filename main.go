@@ -65,22 +65,23 @@ var (
 	green  = color.New(color.FgHiGreen).SprintFunc()
 	blue   = color.New(color.FgHiBlue).SprintFunc()
 	// Command-line switches and provided parameters
-	help         = flag.Bool("h", false, "Show the program usage message")
-	version      = flag.Bool("version", false, "Print the version number of this amass binary")
-	ips          = flag.Bool("ip", false, "Show the IP addresses for discovered names")
-	brute        = flag.Bool("brute", false, "Execute brute forcing after searches")
-	norecursive  = flag.Bool("non-recursive", false, "Turn off recursive brute forcing")
-	minrecursive = flag.Int("min-for-recursive", 0, "Number of subdomain discoveries before recursive brute forcing")
-	noalts       = flag.Bool("no-alts", false, "Disable generation of altered names")
-	verbose      = flag.Bool("v", false, "Print the data source and summary information")
-	whois        = flag.Bool("whois", false, "Include domains discoverd with reverse whois")
-	list         = flag.Bool("l", false, "List all domains to be used in an enumeration")
-	freq         = flag.Int64("freq", 0, "Sets the number of max DNS queries per minute")
-	wordlist     = flag.String("w", "", "Path to a different wordlist file")
-	outfile      = flag.String("o", "", "Path to the output file")
-	domainsfile  = flag.String("df", "", "Path to a file providing root domain names")
-	resolvefile  = flag.String("rf", "", "Path to a file providing preferred DNS resolvers")
-	proxy        = flag.String("proxy", "", "The URL used to reach the proxy")
+	help          = flag.Bool("h", false, "Show the program usage message")
+	version       = flag.Bool("version", false, "Print the version number of this amass binary")
+	ips           = flag.Bool("ip", false, "Show the IP addresses for discovered names")
+	brute         = flag.Bool("brute", false, "Execute brute forcing after searches")
+	norecursive   = flag.Bool("non-recursive", false, "Turn off recursive brute forcing")
+	minrecursive  = flag.Int("min-for-recursive", 0, "Number of subdomain discoveries before recursive brute forcing")
+	noalts        = flag.Bool("no-alts", false, "Disable generation of altered names")
+	verbose       = flag.Bool("v", false, "Print the data source and summary information")
+	whois         = flag.Bool("whois", false, "Include domains discoverd with reverse whois")
+	list          = flag.Bool("l", false, "List all domains to be used in an enumeration")
+	freq          = flag.Int64("freq", 0, "Sets the number of max DNS queries per minute")
+	wordlist      = flag.String("w", "", "Path to a different wordlist file")
+	outfile       = flag.String("o", "", "Path to the output file")
+	domainsfile   = flag.String("df", "", "Path to a file providing root domain names")
+	resolvefile   = flag.String("rf", "", "Path to a file providing preferred DNS resolvers")
+	blacklistfile = flag.String("blf", "", "Path to a file provideing blacklisted subdomains")
+	proxy         = flag.String("proxy", "", "The URL used to reach the proxy")
 )
 
 func main() {
@@ -88,7 +89,7 @@ func main() {
 	var addrs parseIPs
 	var cidrs parseCIDRs
 	var asns, ports parseInts
-	var domains, resolvers parseStrings
+	var domains, resolvers, blacklist parseStrings
 
 	// This is for the potentially required network flags
 	network := flag.NewFlagSet("net", flag.ContinueOnError)
@@ -104,6 +105,7 @@ func main() {
 
 	flag.Var(&domains, "d", "Domain names separated by commas (can be used multiple times)")
 	flag.Var(&resolvers, "r", "IP addresses of preferred DNS resolvers (can be used multiple times)")
+	flag.Var(&blacklist, "bl", "Blacklist of subdomain names that will not be investigated")
 	flag.Parse()
 
 	// Check if the 'net' subcommand flags need to be parsed
@@ -146,6 +148,10 @@ func main() {
 	// Get the resolvers provided by file
 	if *resolvefile != "" {
 		resolvers = amass.UniqueAppend(resolvers, getLinesFromFile(*resolvefile)...)
+	}
+	// Get the blacklisted subdomains provided by file
+	if *blacklistfile != "" {
+		blacklist = amass.UniqueAppend(blacklist, getLinesFromFile(*blacklistfile)...)
 	}
 	// Seed the default pseudo-random number generator
 	rand.Seed(time.Now().UTC().UnixNano())
@@ -190,6 +196,7 @@ func main() {
 		Alterations:     alts,
 		Frequency:       freqToDuration(*freq),
 		Resolvers:       resolvers,
+		Blacklist:       blacklist,
 		Output:          results,
 	})
 	config.AddDomains(domains)

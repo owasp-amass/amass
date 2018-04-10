@@ -258,13 +258,13 @@ func (ds *DNSService) performDNSRequest() {
 
 	req := ds.nextFromQueue()
 	// Plow through the requests that are not of interest
-	for req != nil && (req.Name == "" || ds.duplicate(req.Name) || req.Domain == "") {
+	for req != nil && (req.Name == "" || ds.duplicate(req.Name) ||
+		ds.Config().Blacklisted(req.Name) || req.Domain == "") {
 		req = ds.nextFromQueue()
 	}
 	if req == nil {
 		return
 	}
-
 	ds.SetActive(true)
 	dns := ds.Config().dns
 	// Make multiple attempts based on source of the name

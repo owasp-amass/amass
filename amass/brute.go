@@ -93,6 +93,10 @@ func (bfs *BruteForceService) checkForNewSubdomain(req *AmassRequest) {
 	if num-1 <= len(strings.Split(req.Domain, ".")) {
 		return
 	}
+	// Check the subdomain of the request name
+	if labels[1] == "_tcp" || labels[1] == "_udp" {
+		return
+	}
 	sub := strings.Join(labels[1:], ".")
 	if dis := bfs.subDiscoveries(sub); dis == bfs.Config().MinForRecursive {
 		go bfs.performBruteForcing(sub, req.Domain)
