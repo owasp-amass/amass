@@ -65,21 +65,22 @@ var (
 	green  = color.New(color.FgHiGreen).SprintFunc()
 	blue   = color.New(color.FgHiBlue).SprintFunc()
 	// Command-line switches and provided parameters
-	help        = flag.Bool("h", false, "Show the program usage message")
-	version     = flag.Bool("version", false, "Print the version number of this amass binary")
-	ips         = flag.Bool("ip", false, "Show the IP addresses for discovered names")
-	brute       = flag.Bool("brute", false, "Execute brute forcing after searches")
-	norecursive = flag.Bool("norecursive", false, "Turn off recursive brute forcing")
-	noalts      = flag.Bool("noalts", false, "Disable generation of altered names")
-	verbose     = flag.Bool("v", false, "Print the data source and summary information")
-	whois       = flag.Bool("whois", false, "Include domains discoverd with reverse whois")
-	list        = flag.Bool("l", false, "List all domains to be used in an enumeration")
-	freq        = flag.Int64("freq", 0, "Sets the number of max DNS queries per minute")
-	wordlist    = flag.String("w", "", "Path to a different wordlist file")
-	outfile     = flag.String("o", "", "Path to the output file")
-	domainsfile = flag.String("df", "", "Path to a file providing root domain names")
-	resolvefile = flag.String("rf", "", "Path to a file providing preferred DNS resolvers")
-	proxy       = flag.String("proxy", "", "The URL used to reach the proxy")
+	help         = flag.Bool("h", false, "Show the program usage message")
+	version      = flag.Bool("version", false, "Print the version number of this amass binary")
+	ips          = flag.Bool("ip", false, "Show the IP addresses for discovered names")
+	brute        = flag.Bool("brute", false, "Execute brute forcing after searches")
+	norecursive  = flag.Bool("non-recursive", false, "Turn off recursive brute forcing")
+	minrecursive = flag.Int("min-for-recursive", 0, "Number of subdomain discoveries before recursive brute forcing")
+	noalts       = flag.Bool("no-alts", false, "Disable generation of altered names")
+	verbose      = flag.Bool("v", false, "Print the data source and summary information")
+	whois        = flag.Bool("whois", false, "Include domains discoverd with reverse whois")
+	list         = flag.Bool("l", false, "List all domains to be used in an enumeration")
+	freq         = flag.Int64("freq", 0, "Sets the number of max DNS queries per minute")
+	wordlist     = flag.String("w", "", "Path to a different wordlist file")
+	outfile      = flag.String("o", "", "Path to the output file")
+	domainsfile  = flag.String("df", "", "Path to a file providing root domain names")
+	resolvefile  = flag.String("rf", "", "Path to a file providing preferred DNS resolvers")
+	proxy        = flag.String("proxy", "", "The URL used to reach the proxy")
 )
 
 func main() {
@@ -178,17 +179,18 @@ func main() {
 		recursive = false
 	}
 	config := amass.CustomConfig(&amass.AmassConfig{
-		IPs:          addrs,
-		ASNs:         asns,
-		CIDRs:        cidrs,
-		Ports:        ports,
-		Wordlist:     words,
-		BruteForcing: *brute,
-		Recursive:    recursive,
-		Alterations:  alts,
-		Frequency:    freqToDuration(*freq),
-		Resolvers:    resolvers,
-		Output:       results,
+		IPs:             addrs,
+		ASNs:            asns,
+		CIDRs:           cidrs,
+		Ports:           ports,
+		Wordlist:        words,
+		BruteForcing:    *brute,
+		Recursive:       recursive,
+		MinForRecursive: *minrecursive,
+		Alterations:     alts,
+		Frequency:       freqToDuration(*freq),
+		Resolvers:       resolvers,
+		Output:          results,
 	})
 	config.AddDomains(domains)
 	// If requested, obtain the additional domains from reverse whois information

@@ -44,6 +44,9 @@ type AmassConfig struct {
 	// Will recursive brute forcing be performed?
 	Recursive bool
 
+	// Minimum number of subdomain discoveries before performing recursive brute forcing
+	MinForRecursive int
+
 	// Will discovered subdomain name alterations be generated?
 	Alterations bool
 
@@ -162,10 +165,11 @@ func CheckConfig(config *AmassConfig) error {
 // DefaultConfig returns a config with values that have been tested
 func DefaultConfig() *AmassConfig {
 	config := &AmassConfig{
-		Ports:       []int{443},
-		Recursive:   true,
-		Alterations: true,
-		Frequency:   50 * time.Millisecond,
+		Ports:           []int{443},
+		Recursive:       true,
+		Alterations:     true,
+		Frequency:       50 * time.Millisecond,
+		MinForRecursive: 1,
 	}
 	return config
 }
@@ -191,6 +195,9 @@ func CustomConfig(ac *AmassConfig) *AmassConfig {
 	}
 	if ac.proxy != nil {
 		config.proxy = ac.proxy
+	}
+	if ac.MinForRecursive > config.MinForRecursive {
+		config.MinForRecursive = ac.MinForRecursive
 	}
 	config.ASNs = ac.ASNs
 	config.CIDRs = ac.CIDRs

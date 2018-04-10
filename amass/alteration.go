@@ -97,7 +97,8 @@ func (as *AlterationService) secondNumberFlip(name, domain string, minIndex int)
 		n := name[:last] + strconv.Itoa(i) + name[last+1:]
 
 		as.sendAlteredName(n, domain)
-		// Do not go too fast
+		// Going too fast will overwhelm the dns
+		// service and overuse memory
 		time.Sleep(as.Config().Frequency)
 	}
 	// Take the second number out
@@ -117,7 +118,8 @@ func (as *AlterationService) appendNumbers(req *AmassRequest) {
 		// Send a LABELNUM altered name
 		nn := parts[0] + strconv.Itoa(i) + "." + parts[1]
 		as.sendAlteredName(nn, req.Domain)
-		// Do not go too fast
+		// Going too fast will overwhelm the dns
+		// service and overuse memory
 		time.Sleep(as.Config().Frequency)
 	}
 }

@@ -12,11 +12,11 @@ type BruteForceService struct {
 	BaseAmassService
 
 	// Subdomains that have been worked on by brute forcing
-	subdomains map[string]struct{}
+	subdomains map[string]int
 }
 
 func NewBruteForceService(in, out chan *AmassRequest, config *AmassConfig) *BruteForceService {
-	bfs := &BruteForceService{subdomains: make(map[string]struct{})}
+	bfs := &BruteForceService{subdomains: make(map[string]int)}
 
 	bfs.BaseAmassService = *NewBaseAmassService("Brute Forcing Service", config, bfs)
 
@@ -56,15 +56,17 @@ loop:
 
 // Returns true if the subdomain name is a duplicate entry in the filter.
 // If not, the subdomain name is added to the filter
-func (bfs *BruteForceService) duplicate(sub string) bool {
+func (bfs *BruteForceService) subDiscoveries(sub string) int {
 	bfs.Lock()
 	defer bfs.Unlock()
 
-	if _, found := bfs.subdomains[sub]; found {
-		return true
+	if dis, found := bfs.subdomains[sub]; found {
+		dis += 1
+		bfs.subdomains[sub] = dis
+		return dis
 	}
-	bfs.subdomains[sub] = struct{}{}
-	return false
+	bfs.subdomains[sub] = 1
+	return 1
 }
 
 func (bfs *BruteForceService) startRootDomains() {
@@ -73,10 +75,7 @@ func (bfs *BruteForceService) startRootDomains() {
 	}
 	// Look at each domain provided by the config
 	for _, domain := range bfs.Config().Domains() {
-		// Check if we have seen the Domain already
-		if !bfs.duplicate(domain) {
-			go bfs.performBruteForcing(domain, domain)
-		}
+		go bfs.performBruteForcing(domain, domain)
 	}
 }
 
@@ -88,28 +87,16 @@ func (bfs *BruteForceService) checkForNewSubdomain(req *AmassRequest) {
 	if req.Name == "" || !bfs.Config().Recursive {
 		return
 	}
-
 	labels := strings.Split(req.Name, ".")
 	num := len(labels)
-	// Is this large enough to consider further?
-	if num < 3 {
-		return
-	}
-	// Have we already seen this subdomain?
-	sub := strings.Join(labels[1:], ".")
-	if bfs.duplicate(sub) {
-		return
-	}
 	// It needs to have more labels than the root domain
 	if num-1 <= len(strings.Split(req.Domain, ".")) {
 		return
 	}
-	// Does this subdomain have a wildcard?
-	if bfs.Config().wildcards.DetectWildcard(req) {
-		return
+	sub := strings.Join(labels[1:], ".")
+	if dis := bfs.subDiscoveries(sub); dis == bfs.Config().MinForRecursive {
+		go bfs.performBruteForcing(sub, req.Domain)
 	}
-	// Otherwise, run the brute forcing on the subdomain
-	go bfs.performBruteForcing(sub, req.Domain)
 }
 
 func (bfs *BruteForceService) performBruteForcing(subdomain, root string) {
