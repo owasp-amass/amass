@@ -29,7 +29,6 @@ type outputParams struct {
 	PrintIPs bool
 	FileOut  string
 	Results  chan *amass.AmassRequest
-	Finish   chan struct{}
 	Done     chan struct{}
 }
 
@@ -156,7 +155,6 @@ func main() {
 	// Seed the default pseudo-random number generator
 	rand.Seed(time.Now().UTC().UnixNano())
 
-	finish := make(chan struct{})
 	done := make(chan struct{})
 	results := make(chan *amass.AmassRequest, 100)
 
@@ -165,11 +163,10 @@ func main() {
 		PrintIPs: *ips,
 		FileOut:  *outfile,
 		Results:  results,
-		Finish:   finish,
 		Done:     done,
 	})
 	// Execute the signal handler
-	go catchSignals(finish, done)
+	go catchSignals(results, done)
 	// Grab the words from an identified wordlist
 	var words []string
 	if *wordlist != "" {
@@ -232,8 +229,7 @@ func main() {
 	if err != nil {
 		r.Println(err)
 	}
-	// Signal for output to finish
-	finish <- struct{}{}
+	// Wait for output manager to finish
 	<-done
 }
 
@@ -267,29 +263,25 @@ func manageOutput(params *outputParams) {
 
 	tags := make(map[string]int)
 	asns := make(map[int]*asnData)
-loop:
-	for {
-		select {
-		case result := <-params.Results: // Collect all the names returned by the enumeration
-			total++
-			updateData(result, tags, asns)
 
-			var source, comma, ip string
-			if params.Verbose {
-				source = fmt.Sprintf("%-14s", "["+result.Source+"] ")
-			}
-			if params.PrintIPs {
-				comma = ","
-				ip = result.Address
-			}
+	// Collect all the names returned by the enumeration
+	for result := range params.Results {
+		total++
+		updateData(result, tags, asns)
 
-			// Add line to the others and print it out
-			allLines += fmt.Sprintf("%s%s%s%s\n", source, result.Name, comma, ip)
-			fmt.Fprintf(color.Output, "%s%s%s%s\n",
-				blue(source), green(result.Name), green(comma), yellow(ip))
-		case <-params.Finish:
-			break loop
+		var source, comma, ip string
+		if params.Verbose {
+			source = fmt.Sprintf("%-14s", "["+result.Source+"] ")
 		}
+		if params.PrintIPs {
+			comma = ","
+			ip = result.Address
+		}
+
+		// Add line to the others and print it out
+		allLines += fmt.Sprintf("%s%s%s%s\n", source, result.Name, comma, ip)
+		fmt.Fprintf(color.Output, "%s%s%s%s\n",
+			blue(source), green(result.Name), green(comma), yellow(ip))
 	}
 	// Check to print the summary information
 	if params.Verbose {
@@ -367,14 +359,14 @@ func printSummary(total int, tags map[string]int, asns map[int]*asnData) {
 }
 
 // If the user interrupts the program, print the summary information
-func catchSignals(output, done chan struct{}) {
+func catchSignals(output chan *amass.AmassRequest, done chan struct{}) {
 	sigs := make(chan os.Signal, 2)
 	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
 
 	// Wait for a signal
 	<-sigs
 	// Start final output operations
-	output <- struct{}{}
+	close(output)
 	// Wait for the broadcast indicating completion
 	<-done
 	os.Exit(0)

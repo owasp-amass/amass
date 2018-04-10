@@ -1,8 +1,8 @@
-# Amass v1.3.2 - Jeff Foley (@jeff_foley)
+# Amass v1.4.0 - Jeff Foley (@jeff_foley)
 
 ### On the Smart and Quiet Side
 
-[![](https://img.shields.io/badge/go-1.10-blue.svg)](https://github.com/moovweb/gvm) [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0) [![GitHub issues](https://img.shields.io/github/issues/caffix/amass.svg)](https://github.com/caffix/amass) [![Snap Status](https://build.snapcraft.io/badge/caffix/amass.svg)](https://build.snapcraft.io/user/caffix/amass)
+[![](https://img.shields.io/badge/go-1.10-blue.svg)](https://github.com/moovweb/gvm) [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0) [![GitHub issues](https://img.shields.io/github/issues/caffix/amass.svg)](https://github.com/caffix/amass)
 
 
 ```
@@ -104,6 +104,18 @@ $ amass -v -d example.com -r 8.8.8.8,1.1.1.1
 ```
 
 
+If you would like to blacklist some subdomains:
+```
+$ amass -bl blah.example.com -d example.com
+```
+
+
+The blacklisted subdomains can be specified from a text file as well:
+```
+$ amass -blf data/blacklist.txt -d example.com
+```
+
+
 The resolvers file can be provided using the following command-line switch:
 ```
 $ amass -v -d example.com -rf data/resolvers.txt
@@ -125,6 +137,12 @@ $ amass -brute -d example.com
 By default, amass performs recursive brute forcing on new subdomains; this can be disabled:
 ```
 $ amass -brute -norecursive -d example.com
+```
+
+
+If you would like to perform recursive brute forcing after enough discoveries have been made:
+```
+$ amass -brute -min-for-recursive 3 -d example.com
 ```
 
 

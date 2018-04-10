@@ -122,6 +122,7 @@ func StartEnumeration(config *AmassConfig) error {
 	for _, service := range services {
 		service.Stop()
 	}
+	close(config.Output)
 	return nil
 }
 
