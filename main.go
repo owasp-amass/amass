@@ -8,7 +8,6 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"math/rand"
 	"net"
 	"os"
@@ -259,7 +258,15 @@ type asnData struct {
 
 func manageOutput(params *outputParams) {
 	var total int
-	var allLines string
+	var bufwr *bufio.Writer
+
+	if params.FileOut != "" {
+		fileptr, err := os.OpenFile(params.FileOut, os.O_WRONLY|os.O_CREATE, 0644)
+		if err == nil {
+			bufwr = bufio.NewWriter(fileptr)
+			defer fileptr.Close()
+		}
+	}
 
 	tags := make(map[string]int)
 	asns := make(map[int]*asnData)
@@ -277,19 +284,24 @@ func manageOutput(params *outputParams) {
 			comma = ","
 			ip = result.Address
 		}
-
 		// Add line to the others and print it out
-		allLines += fmt.Sprintf("%s%s%s%s\n", source, result.Name, comma, ip)
+		line := fmt.Sprintf("%s%s%s%s\n", source, result.Name, comma, ip)
 		fmt.Fprintf(color.Output, "%s%s%s%s\n",
 			blue(source), green(result.Name), green(comma), yellow(ip))
+		// Handle writing the line to a specified output file
+		if bufwr != nil {
+			bufwr.WriteString(line)
+			if total%10 == 0 {
+				bufwr.Flush()
+			}
+		}
+	}
+	if bufwr != nil {
+		bufwr.Flush()
 	}
 	// Check to print the summary information
 	if params.Verbose {
 		printSummary(total, tags, asns)
-	}
-	// Check to output the results to a file
-	if params.FileOut != "" {
-		ioutil.WriteFile(params.FileOut, []byte(allLines), 0644)
 	}
 	// Signal that output is complete
 	close(params.Done)
