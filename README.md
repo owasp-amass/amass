@@ -1,8 +1,6 @@
-# Amass v1.4.0 - Jeff Foley (@jeff_foley)
+# Amass 
 
-### On the Smart and Quiet Side
-
-[![GitHub release](https://img.shields.io/github/release/caffix/amass.svg)](https://github.com/caffix/amass/releases) [![Go Version](https://img.shields.io/badge/go-1.10-blue.svg)](https://golang.org/dl/) [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0) [![GitHub issues](https://img.shields.io/github/issues/caffix/amass.svg)](https://github.com/caffix/amass) [![Snap Status](https://build.snapcraft.io/badge/caffix/amass.svg)](https://build.snapcraft.io/user/caffix/amass) 
+[![GitHub release](https://img.shields.io/github/release/caffix/amass.svg)](https://github.com/caffix/amass/releases) [![GitHub issues](https://img.shields.io/github/issues/caffix/amass.svg)](https://github.com/caffix/amass/issues) [![Go Version](https://img.shields.io/badge/go-1.10-blue.svg)](https://golang.org/dl/) [![Snap Status](https://build.snapcraft.io/badge/caffix/amass.svg)](https://build.snapcraft.io/user/caffix/amass) [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0) [![Chat on Discord](https://img.shields.io/discord/433729817918308352.svg?logo=discord)](https://discord.gg/rtN8GMd) [![Follow on Twitter](https://img.shields.io/twitter/follow/jeff_foley.svg?style=social&logo=twitter)](https://twitter.com/jeff_foley)
 
 
 ```
@@ -24,8 +22,15 @@
 ```
 
 
+----
 
-The amass tool searches Internet data sources, performs brute force subdomain enumeration, searches web archives, and uses machine learning to generate additional subdomain name guesses. DNS name resolution is performed across many public servers so the authoritative server will see the traffic coming from different locations.
+Amass is the subdomain enumeration tool with the greatest number of disparate data sources that performs analysis of the resolved names in order to deliver the largest number of quality results.
+
+Amass scrapes data sources, performs brute forcing, crawls web archives, and uses machine learning to generate additional subdomain name guesses. The architecture makes it easy to add new types of guessing techniques as they are discovered.
+
+DNS name resolution is performed across many public servers so the authoritative server will see traffic coming from different locations.
+
+----
 
 
 ## How to Install
@@ -69,6 +74,12 @@ $ ls $GOPATH/src/github.com/caffix/amass/wordlists/
 The most basic use of the tool, which includes reverse DNS lookups and name alterations:
 ```
 $ amass -d example.com
+```
+
+
+Add some additional domains to the enumeration:
+```
+$ amass -d example1.com,example2.com -d example3.com
 ```
 
 
@@ -171,13 +182,7 @@ You can have amass list all the domains discovered with reverse whois before per
 $ amass -whois -l -d example.com
 ```
 
-
-Add some additional domains to the search:
-```
-$ amass -d example1.com,example2.com -d example3.com
-```
-
-In the above example, the domains example2.com and example3.com are simply appended to the list potentially provided by the reverse whois information.
+Only the first domain provided is used while performing the reverse whois operation.
 
 
 #### Network/Infrastructure Options
@@ -276,7 +281,7 @@ func main() {
 
 ## Community
 
- - [Discord Server](https://discord.gg/rtN8GMd)
+ - [Discord Server](https://discord.gg/rtN8GMd) - Discussing OSINT, network reconnaissance and developing security tools using the Go programming language
 
 
 ## Let Me Know What You Think
