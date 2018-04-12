@@ -5,18 +5,18 @@
 
 ```
 
-        .+++:.            :                             .+++.                   
-      +W@@@@@@8        &+W@#               o8W8:      +W@@@@@@#.   oW@@@W#+     
-     &@#+   .o@##.    .@@@o@W.o@@o       :@@#&W8o    .@#:  .:oW+  .@#+++&#&     
-    +@&        &@&     #@8 +@W@&8@+     :@W.   +@8   +@:          .@8           
-    8@          @@     8@o  8@8  WW    .@W      W@+  .@W.          o@#:         
-    WW          &@o    &@:  o@+  o@+   #@.      8@o   +W@#+.        +W@8:       
-    #@          :@W    &@+  &@+   @8  :@o       o@o     oW@@W+        oW@8      
-    o@+          @@&   &@+  &@+   #@  &@.      .W@W       .+#@&         o@W.    
-     WW         +@W@8. &@+  :&    o@+ #@      :@W&@&         &@:  ..     :@o    
-     :@W:      o@# +Wo &@+        :W: +@W&o++o@W. &@&  8@#o+&@W.  #@:    o@+    
-      :W@@WWWW@@8       +              :&W@@@@&    &W  .o#@@W&.   :W@WWW@@&     
-        +o&&&&+.                                                    +oooo.      
+                  .+++:.            :                             .+++.                   
+                +W@@@@@@8        &+W@#               o8W8:      +W@@@@@@#.   oW@@@W#+     
+               &@#+   .o@##.    .@@@o@W.o@@o       :@@#&W8o    .@#:  .:oW+  .@#+++&#&     
+              +@&        &@&     #@8 +@W@&8@+     :@W.   +@8   +@:          .@8           
+              8@          @@     8@o  8@8  WW    .@W      W@+  .@W.          o@#:         
+              WW          &@o    &@:  o@+  o@+   #@.      8@o   +W@#+.        +W@8:       
+              #@          :@W    &@+  &@+   @8  :@o       o@o     oW@@W+        oW@8      
+              o@+          @@&   &@+  &@+   #@  &@.      .W@W       .+#@&         o@W.    
+               WW         +@W@8. &@+  :&    o@+ #@      :@W&@&         &@:  ..     :@o    
+               :@W:      o@# +Wo &@+        :W: +@W&o++o@W. &@&  8@#o+&@W.  #@:    o@+    
+                :W@@WWWW@@8       +              :&W@@@@&    &W  .o#@@W&.   :W@WWW@@&     
+                  +o&&&&+.                                                    +oooo.      
 
 
 ```
@@ -26,7 +26,7 @@
 
 Amass is the subdomain enumeration tool with the greatest number of disparate data sources that performs analysis of the resolved names in order to deliver the largest number of quality results.
 
-Amass scrapes data sources, performs brute forcing, crawls web archives, and uses machine learning to generate additional subdomain name guesses. The architecture makes it easy to add new types of guessing techniques as they are discovered.
+Amass performs scraping of data sources, recursive brute forcing, crawling of web archives, permuting and altering of names, reverse DNS sweeping, and machine learning to obtain additional subdomain names. The architecture makes it easy to add new subdomain enumeration techniques as they are developed.
 
 DNS name resolution is performed across many public servers so the authoritative server will see traffic coming from different locations.
 
@@ -281,7 +281,7 @@ func main() {
 
 ## Community
 
- - [Discord Server](https://discord.gg/rtN8GMd) - Discussing OSINT, network reconnaissance and developing security tools using the Go programming language
+ - [Discord Server](https://discord.gg/rtN8GMd) - Discussing OSINT, network recon and developing security tools using Go
 
 
 ## Let Me Know What You Think
