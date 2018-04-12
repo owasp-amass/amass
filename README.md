@@ -2,7 +2,7 @@
 
 ### On the Smart and Quiet Side
 
-[![](https://img.shields.io/badge/go-1.10-blue.svg)](https://github.com/moovweb/gvm) [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0) [![GitHub issues](https://img.shields.io/github/issues/caffix/amass.svg)](https://github.com/caffix/amass)
+[![GitHub release](https://img.shields.io/github/release/caffix/amass.svg)](https://github.com/caffix/amass/releases) [![Go Version](https://img.shields.io/badge/go-1.10-blue.svg)](https://golang.org/dl/) [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0) [![GitHub issues](https://img.shields.io/github/issues/caffix/amass.svg)](https://github.com/caffix/amass) [![Snap Status](https://build.snapcraft.io/badge/caffix/amass.svg)](https://build.snapcraft.io/user/caffix/amass) 
 
 
 ```
@@ -19,6 +19,8 @@
      :@W:      o@# +Wo &@+        :W: +@W&o++o@W. &@&  8@#o+&@W.  #@:    o@+    
       :W@@WWWW@@8       +              :&W@@@@&    &W  .o#@@W&.   :W@WWW@@&     
         +o&&&&+.                                                    +oooo.      
+
+
 ```
 
 
@@ -237,18 +239,18 @@ func main() {
     output := make(chan *amass.AmassRequest)
 
     go func() {
-        result := <-output
-
-        fmt.Println(result.Name)
+        for result := range output {
+            fmt.Println(result.Name)
+        }
     }()
 
     // Seed the default pseudo-random number generator
     rand.Seed(time.Now().UTC().UnixNano())
-    // Setup the amass configuration
-    config := amass.CustomConfig(&amass.AmassConfig{
-        Domains:      []string{"example.com"},
-        Output:       output,
-    })
+
+    // Setup the most basic amass configuration
+    config := amass.CustomConfig(&amass.AmassConfig{Output: output})
+    config.AddDomains([]string{"example.com"})
+
     // Begin the enumeration process
     amass.StartEnumeration(config)
 }
@@ -270,6 +272,11 @@ func main() {
 3. Go into the Transform Manager, and disable the **debug info** option:
 
 ![alt text](https://github.com/caffix/amass/blob/master/examples/maltegosetup3.png "Disable Debug")
+
+
+## Community
+
+ - [Discord Server](https://discord.gg/rtN8GMd)
 
 
 ## Let Me Know What You Think
