@@ -4,6 +4,8 @@
 package amass
 
 import (
+	"bufio"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -412,21 +414,6 @@ func PTRArchiveScrape(out chan<- *AmassRequest, config *AmassConfig) Scraper {
 	}
 }
 
-func robtexURL(domain string) string {
-	format := "https://www.robtex.com/dns-lookup/%s"
-
-	return fmt.Sprintf(format, domain)
-}
-
-func RobtexScrape(out chan<- *AmassRequest, config *AmassConfig) Scraper {
-	return &lookup{
-		Name:     "Robtex",
-		Output:   out,
-		Callback: robtexURL,
-		Config:   config,
-	}
-}
-
 func threatCrowdURL(domain string) string {
 	format := "https://www.threatcrowd.org/searchApi/v2/domain/report/?domain=%s"
 
@@ -454,6 +441,108 @@ func VirusTotalScrape(out chan<- *AmassRequest, config *AmassConfig) Scraper {
 		Output:   out,
 		Callback: virusTotalURL,
 		Config:   config,
+	}
+}
+
+//--------------------------------------------------------------------------------------------
+
+type robtex struct {
+	Name   string
+	Base   string
+	Output chan<- *AmassRequest
+	Config *AmassConfig
+}
+
+func (r *robtex) String() string {
+	return r.Name
+}
+
+type robtexJSON struct {
+	Name string `json:"rrname"`
+	Data string `json:"rrdata"`
+	Type string `json:"rrtype"`
+}
+
+func (r *robtex) Scrape(domain string, done chan int) {
+	var ips []string
+	var unique []string
+
+	page := GetWebPageWithDialContext(
+		r.Config.DialContext, r.Base+"forward/"+domain)
+	if page == "" {
+		done <- 0
+		return
+	}
+
+	lines := r.parseJSON(page)
+	for _, line := range lines {
+		if line.Type == "A" {
+			ips = UniqueAppend(ips, line.Data)
+		}
+	}
+
+	var list string
+	for _, ip := range ips {
+		time.Sleep(500 * time.Millisecond)
+
+		pdns := GetWebPageWithDialContext(
+			r.Config.DialContext, r.Base+"reverse/"+ip)
+		if pdns == "" {
+			continue
+		}
+
+		rev := r.parseJSON(pdns)
+		for _, line := range rev {
+			list += line.Name + " "
+		}
+	}
+
+	re := SubdomainRegex(domain)
+	for _, sd := range re.FindAllString(list, -1) {
+		u := NewUniqueElements(unique, sd)
+
+		if len(u) > 0 {
+			unique = append(unique, u...)
+			r.Output <- &AmassRequest{
+				Name:   sd,
+				Domain: domain,
+				Tag:    SCRAPE,
+				Source: r.Name,
+			}
+		}
+	}
+	done <- len(unique)
+}
+
+func (r *robtex) parseJSON(page string) []robtexJSON {
+	var lines []robtexJSON
+
+	scanner := bufio.NewScanner(strings.NewReader(page))
+	for scanner.Scan() {
+		// Get the next line of JSON
+		line := scanner.Text()
+		if line == "" {
+			continue
+		}
+
+		var j robtexJSON
+
+		err := json.Unmarshal([]byte(line), &j)
+		if err != nil {
+			continue
+		}
+
+		lines = append(lines, j)
+	}
+	return lines
+}
+
+func RobtexScrape(out chan<- *AmassRequest, config *AmassConfig) Scraper {
+	return &robtex{
+		Name:   "Robtex",
+		Base:   "https://freeapi.robtex.com/pdns/",
+		Output: out,
+		Config: config,
 	}
 }
 
