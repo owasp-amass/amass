@@ -459,14 +459,12 @@ func parseASNInfo(line string) *ASRecord {
 	if err != nil {
 		t = time.Now()
 	}
-	// Obtain the portion of the description we are interested in
-	parts := strings.Split(fields[4], "-")
 
 	return &ASRecord{
 		ASN:            asn,
 		CC:             strings.TrimSpace(fields[1]),
 		Registry:       strings.TrimSpace(fields[2]),
 		AllocationDate: t,
-		Description:    strings.TrimSpace(parts[len(parts)-1]),
+		Description:    strings.TrimSpace(fields[4]),
 	}
 }
