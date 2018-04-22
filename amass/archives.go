@@ -178,7 +178,7 @@ func WaybackMachineArchive(out chan<- *AmassRequest) Archiver {
 func (m *memento) processRequests() {
 	var running int
 	var queue []*AmassRequest
-	done := make(chan int, 10)
+	done := make(chan struct{}, 10)
 
 	t := time.NewTicker(1 * time.Second)
 	defer t.Stop()
@@ -201,7 +201,7 @@ func (m *memento) processRequests() {
 				queue = queue[1:]
 			}
 
-			go m.crawl(strconv.Itoa(year), s, done, 10*time.Second)
+			go m.crawl(strconv.Itoa(year), s, done)
 			running++
 		case <-done:
 			running--
@@ -209,10 +209,10 @@ func (m *memento) processRequests() {
 	}
 }
 
-func (m *memento) crawl(year string, req *AmassRequest, done chan int, timeout time.Duration) {
+func (m *memento) crawl(year string, req *AmassRequest, done chan struct{}) {
 	domain := req.Domain
 	if domain == "" {
-		done <- 1
+		done <- struct{}{}
 		return
 	}
 
@@ -237,11 +237,8 @@ func (m *memento) crawl(year string, req *AmassRequest, done chan int, timeout t
 	opts.MaxVisits = 20
 
 	c := gocrawl.NewCrawlerWithOptions(opts)
-	go c.Run(fmt.Sprintf("%s/%s/%s", m.URL, year, req.Name))
-
-	<-time.After(timeout)
-	c.Stop()
-	done <- 1
+	c.Run(fmt.Sprintf("%s/%s/%s", m.URL, year, req.Name))
+	done <- struct{}{}
 }
 
 type ext struct {
