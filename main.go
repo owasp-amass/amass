@@ -78,7 +78,7 @@ var (
 	outfile       = flag.String("o", "", "Path to the output file")
 	domainsfile   = flag.String("df", "", "Path to a file providing root domain names")
 	resolvefile   = flag.String("rf", "", "Path to a file providing preferred DNS resolvers")
-	blacklistfile = flag.String("blf", "", "Path to a file provideing blacklisted subdomains")
+	blacklistfile = flag.String("blf", "", "Path to a file providing blacklisted subdomains")
 	proxy         = flag.String("proxy", "", "The URL used to reach the proxy")
 )
 

@@ -372,7 +372,7 @@ func (ds *DNSService) checkForNewSubdomain(req *AmassRequest) {
 		return
 	}
 	// It cannot have fewer labels than the root domain name
-	if num < len(strings.Split(req.Domain, ".")) {
+	if num-1 < len(strings.Split(req.Domain, ".")) {
 		return
 	}
 	// Does this subdomain have a wildcard?
@@ -439,7 +439,10 @@ func (ds *DNSService) basicQueries(subdomain, domain string) {
 	// Obtain the DNS answers for the NS records related to the domain
 	ans, err = ResolveDNSWithDialContext(dc, subdomain, "NS")
 	if err == nil {
-		answers = append(answers, ans...)
+		for _, a := range ans {
+			go ds.zoneTransfer(subdomain, domain, a.Data)
+			answers = append(answers, a)
+		}
 	}
 	// Obtain the DNS answers for the MX records related to the domain
 	ans, err = ResolveDNSWithDialContext(dc, subdomain, "MX")
@@ -510,6 +513,84 @@ func (ds *DNSService) queryServiceNames(subdomain, domain string) {
 		// Do not go too fast
 		time.Sleep(ds.Config().Frequency)
 	}
+}
+
+func (ds *DNSService) zoneTransfer(sub, domain, server string) {
+	// Set the maximum time allowed for making the connection
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+
+	a := ds.Config().dns.Lookup(server, "A")
+	if len(a) == 0 {
+		return
+	}
+	addr := a[0].Data
+
+	conn, err := ds.Config().DialContext(ctx, "udp", addr+":53")
+	if err != nil {
+		return
+	}
+	defer conn.Close()
+
+	co := &dns.Conn{Conn: conn}
+	xfr := &dns.Transfer{Conn: co}
+	xfr.SetDeadline(time.Now().Add(30 * time.Second))
+
+	m := &dns.Msg{}
+	m.SetAxfr(dns.Fqdn(sub))
+
+	in, err := xfr.In(m, "")
+	if err != nil {
+		return
+	}
+
+	for en := range in {
+		names := getXfrNames(en)
+		if names == nil {
+			continue
+		}
+
+		for _, name := range names {
+			ds.addToQueue(&AmassRequest{
+				Name:   name,
+				Domain: domain,
+				Tag:    "axfr",
+				Source: "DNS ZoneXFR",
+			})
+		}
+	}
+}
+
+func getXfrNames(en *dns.Envelope) []string {
+	var names []string
+
+	if en.Error != nil {
+		return nil
+	}
+
+	for _, a := range en.RR {
+		var name string
+
+		switch v := a.(type) {
+		case *dns.A:
+			name = v.Hdr.Name
+		case *dns.AAAA:
+			name = v.Hdr.Name
+		case *dns.NS:
+			name = v.Ns
+		case *dns.MX:
+			name = v.Mx
+		case *dns.CNAME:
+			name = v.Hdr.Name
+		case *dns.SRV:
+			name = v.Hdr.Name
+		default:
+			continue
+		}
+
+		names = append(names, name)
+	}
+	return names
 }
 
 //-------------------------------------------------------------------------------------------------

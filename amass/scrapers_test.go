@@ -108,6 +108,22 @@ func TestScraperYahoo(t *testing.T) {
 	}
 }
 
+func TestScraperCertSpotter(t *testing.T) {
+	out := make(chan *AmassRequest, 2)
+	finished := make(chan int, 2)
+	config := DefaultConfig()
+	config.Setup()
+
+	s := CertSpotterScrape(out, config)
+
+	go readOutput(out)
+	s.Scrape(testDomain, finished)
+	discovered := <-finished
+	if discovered <= 0 {
+		t.Errorf("CertSpotterScrape found %d subdomains", discovered)
+	}
+}
+
 func TestScraperCensys(t *testing.T) {
 	out := make(chan *AmassRequest, 2)
 	finished := make(chan int, 2)
@@ -137,6 +153,22 @@ func TestScraperCertDB(t *testing.T) {
 	discovered := <-finished
 	if discovered <= 0 {
 		t.Errorf("CertDBScrape found %d subdomains", discovered)
+	}
+}
+
+func TestScraperExalead(t *testing.T) {
+	out := make(chan *AmassRequest, 2)
+	finished := make(chan int, 2)
+	config := DefaultConfig()
+	config.Setup()
+
+	s := ExaleadScrape(out, config)
+
+	go readOutput(out)
+	s.Scrape(testDomain, finished)
+	discovered := <-finished
+	if discovered <= 0 {
+		t.Errorf("ExaleadScrape found %d subdomains", discovered)
 	}
 }
 
@@ -220,6 +252,22 @@ func TestScraperPTRArchive(t *testing.T) {
 	}
 }
 
+func TestScraperRiddler(t *testing.T) {
+	out := make(chan *AmassRequest, 2)
+	finished := make(chan int, 2)
+	config := DefaultConfig()
+	config.Setup()
+
+	s := RiddlerScrape(out, config)
+
+	go readOutput(out)
+	s.Scrape(testDomain, finished)
+	discovered := <-finished
+	if discovered <= 0 {
+		t.Errorf("RiddlerScrape found %d subdomains", discovered)
+	}
+}
+
 func TestScraperRobtex(t *testing.T) {
 	out := make(chan *AmassRequest, 2)
 	finished := make(chan int, 2)
@@ -233,6 +281,22 @@ func TestScraperRobtex(t *testing.T) {
 	discovered := <-finished
 	if discovered <= 0 {
 		t.Errorf("RobtexScrape found %d subdomains", discovered)
+	}
+}
+
+func TestScraperSiteDossier(t *testing.T) {
+	out := make(chan *AmassRequest, 2)
+	finished := make(chan int, 2)
+	config := DefaultConfig()
+	config.Setup()
+
+	s := SiteDossierScrape(out, config)
+
+	go readOutput(out)
+	s.Scrape(testDomain, finished)
+	discovered := <-finished
+	if discovered <= 0 {
+		t.Errorf("SiteDossierScrape found %d subdomains", discovered)
 	}
 }
 

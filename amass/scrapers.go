@@ -38,16 +38,20 @@ func NewScraperService(in, out chan *AmassRequest, config *AmassConfig) *Scraper
 		BaiduScrape(ss.responses, config),
 		BingScrape(ss.responses, config),
 		CensysScrape(ss.responses, config),
+		CertSpotterScrape(ss.responses, config),
 		CertDBScrape(ss.responses, config),
 		CrtshScrape(ss.responses, config),
 		DogpileScrape(ss.responses, config),
 		DNSDumpsterScrape(ss.responses, config),
+		ExaleadScrape(ss.responses, config),
 		FindSubDomainsScrape(ss.responses, config),
 		GoogleScrape(ss.responses, config),
 		HackerTargetScrape(ss.responses, config),
 		NetcraftScrape(ss.responses, config),
 		PTRArchiveScrape(ss.responses, config),
+		RiddlerScrape(ss.responses, config),
 		RobtexScrape(ss.responses, config),
+		SiteDossierScrape(ss.responses, config),
 		ThreatCrowdScrape(ss.responses, config),
 		VirusTotalScrape(ss.responses, config),
 		YahooScrape(ss.responses, config),
@@ -177,7 +181,7 @@ func askURLByPageNum(a *searchEngine, domain string, page int) string {
 	p := strconv.Itoa(page)
 	u, _ := url.Parse("http://www.ask.com/web")
 
-	u.RawQuery = url.Values{"q": {domain}, "pu": {pu}, "page": {p}}.Encode()
+	u.RawQuery = url.Values{"q": {"site:" + domain + "+-www"}, "pu": {pu}, "page": {p}}.Encode()
 	return u.String()
 }
 
@@ -216,7 +220,7 @@ func bingURLByPageNum(b *searchEngine, domain string, page int) string {
 	first := strconv.Itoa((page * b.Quantity) + 1)
 	u, _ := url.Parse("http://www.bing.com/search")
 
-	u.RawQuery = url.Values{"q": {"domain:" + domain},
+	u.RawQuery = url.Values{"q": {"domain:" + domain + "%20-www"},
 		"count": {count}, "first": {first}, "FORM": {"PORE"}}.Encode()
 	return u.String()
 }
@@ -236,7 +240,7 @@ func dogpileURLByPageNum(d *searchEngine, domain string, page int) string {
 	qsi := strconv.Itoa(d.Quantity * page)
 	u, _ := url.Parse("http://www.dogpile.com/search/web")
 
-	u.RawQuery = url.Values{"qsi": {qsi}, "q": {domain}}.Encode()
+	u.RawQuery = url.Values{"qsi": {qsi}, "q": {domain + "+-www"}}.Encode()
 	return u.String()
 }
 
@@ -256,7 +260,7 @@ func googleURLByPageNum(d *searchEngine, domain string, page int) string {
 	u, _ := url.Parse("https://www.google.com/search")
 
 	u.RawQuery = url.Values{
-		"q":      {"site:" + domain},
+		"q":      {"site:" + domain + "+-www"},
 		"btnG":   {"Search"},
 		"hl":     {"en"},
 		"biw":    {""},
@@ -284,7 +288,7 @@ func yahooURLByPageNum(y *searchEngine, domain string, page int) string {
 	pz := strconv.Itoa(y.Quantity)
 
 	u, _ := url.Parse("http://search.yahoo.com/search")
-	u.RawQuery = url.Values{"p": {"\"" + domain + "\""}, "b": {b}, "pz": {pz}}.Encode()
+	u.RawQuery = url.Values{"p": {"site:" + domain + "+-www"}, "b": {b}, "pz": {pz}}.Encode()
 
 	return u.String()
 }
@@ -354,6 +358,37 @@ func CensysScrape(out chan<- *AmassRequest, config *AmassConfig) Scraper {
 	}
 }
 
+func certSpotterURL(domain string) string {
+	format := "https://certspotter.com/api/v0/certs?domain=%s"
+
+	return fmt.Sprintf(format, domain)
+}
+
+func CertSpotterScrape(out chan<- *AmassRequest, config *AmassConfig) Scraper {
+	return &lookup{
+		Name:     "CertSpotter",
+		Output:   out,
+		Callback: certSpotterURL,
+		Config:   config,
+	}
+}
+
+func exaleadURL(domain string) string {
+	base := "http://www.exalead.com/search/web/results/"
+	format := base + "?q=site:%s+-www?elements_per_page=50"
+
+	return fmt.Sprintf(format, domain)
+}
+
+func ExaleadScrape(out chan<- *AmassRequest, config *AmassConfig) Scraper {
+	return &lookup{
+		Name:     "Exalead",
+		Output:   out,
+		Callback: exaleadURL,
+		Config:   config,
+	}
+}
+
 func findSubDomainsURL(domain string) string {
 	format := "https://findsubdomains.com/subdomains-of/%s"
 
@@ -410,6 +445,36 @@ func PTRArchiveScrape(out chan<- *AmassRequest, config *AmassConfig) Scraper {
 		Name:     "PTRarchive",
 		Output:   out,
 		Callback: ptrArchiveURL,
+		Config:   config,
+	}
+}
+
+func riddlerURL(domain string) string {
+	format := "https://riddler.io/search?q=pld:%s"
+
+	return fmt.Sprintf(format, domain)
+}
+
+func RiddlerScrape(out chan<- *AmassRequest, config *AmassConfig) Scraper {
+	return &lookup{
+		Name:     "Riddler",
+		Output:   out,
+		Callback: riddlerURL,
+		Config:   config,
+	}
+}
+
+func siteDossierURL(domain string) string {
+	format := "http://www.sitedossier.com/parentdomain/%s"
+
+	return fmt.Sprintf(format, domain)
+}
+
+func SiteDossierScrape(out chan<- *AmassRequest, config *AmassConfig) Scraper {
+	return &lookup{
+		Name:     "SiteDossier",
+		Output:   out,
+		Callback: siteDossierURL,
 		Config:   config,
 	}
 }

@@ -117,6 +117,12 @@ $ amass -v -d example.com -r 8.8.8.8,1.1.1.1
 ```
 
 
+The resolvers file can be provided using the following command-line switch:
+```
+$ amass -v -d example.com -rf data/resolvers.txt
+```
+
+
 If you would like to blacklist some subdomains:
 ```
 $ amass -bl blah.example.com -d example.com
@@ -126,12 +132,6 @@ $ amass -bl blah.example.com -d example.com
 The blacklisted subdomains can be specified from a text file as well:
 ```
 $ amass -blf data/blacklist.txt -d example.com
-```
-
-
-The resolvers file can be provided using the following command-line switch:
-```
-$ amass -v -d example.com -rf data/resolvers.txt
 ```
 
 
