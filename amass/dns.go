@@ -440,7 +440,10 @@ func (ds *DNSService) basicQueries(subdomain, domain string) {
 	ans, err = ResolveDNSWithDialContext(dc, subdomain, "NS")
 	if err == nil {
 		for _, a := range ans {
-			go ds.zoneTransfer(subdomain, domain, a.Data)
+			if ds.Config().AXFR {
+				go ds.zoneTransfer(subdomain, domain, a.Data)
+			}
+
 			answers = append(answers, a)
 		}
 	}
@@ -516,25 +519,26 @@ func (ds *DNSService) queryServiceNames(subdomain, domain string) {
 }
 
 func (ds *DNSService) zoneTransfer(sub, domain, server string) {
-	// Set the maximum time allowed for making the connection
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	defer cancel()
-
 	a := ds.Config().dns.Lookup(server, "A")
 	if len(a) == 0 {
 		return
 	}
 	addr := a[0].Data
 
-	conn, err := ds.Config().DialContext(ctx, "udp", addr+":53")
+	// Set the maximum time allowed for making the connection
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	conn, err := ds.Config().DialContext(ctx, "tcp", addr+":53")
 	if err != nil {
 		return
 	}
 	defer conn.Close()
 
-	co := &dns.Conn{Conn: conn}
-	xfr := &dns.Transfer{Conn: co}
-	xfr.SetDeadline(time.Now().Add(30 * time.Second))
+	xfr := &dns.Transfer{
+		Conn:        &dns.Conn{Conn: conn},
+		ReadTimeout: 10 * time.Second,
+	}
 
 	m := &dns.Msg{}
 	m.SetAxfr(dns.Fqdn(sub))
@@ -551,8 +555,10 @@ func (ds *DNSService) zoneTransfer(sub, domain, server string) {
 		}
 
 		for _, name := range names {
+			n := name[:len(name)-1]
+
 			ds.addToQueue(&AmassRequest{
-				Name:   name,
+				Name:   n,
 				Domain: domain,
 				Tag:    "axfr",
 				Source: "DNS ZoneXFR",
@@ -578,11 +584,11 @@ func getXfrNames(en *dns.Envelope) []string {
 			name = v.Hdr.Name
 		case *dns.NS:
 			name = v.Ns
-		case *dns.MX:
-			name = v.Mx
 		case *dns.CNAME:
 			name = v.Hdr.Name
 		case *dns.SRV:
+			name = v.Hdr.Name
+		case *dns.TXT:
 			name = v.Hdr.Name
 		default:
 			continue

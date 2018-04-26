@@ -53,6 +53,9 @@ type AmassConfig struct {
 	// Will discovered subdomain name alterations be generated?
 	Alterations bool
 
+	// Will DNS zone transfers be attempted against all discovered name servers
+	AXFR bool
+
 	// A blacklist of subdomain names that will not be investigated
 	Blacklist []string
 

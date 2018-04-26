@@ -211,7 +211,7 @@ loop:
 
 func (ns *NetblockService) IPRequest(r *cacheRequest) {
 	// Is the data already available in the cache?
-	r.Req.ASN, r.Req.Netblock, r.Req.ISP = ns.ipSearch(r.Req.Address)
+	r.Req.ASN, r.Req.Netblock, r.Req.Description = ns.ipSearch(r.Req.Address)
 	if r.Req.ASN != 0 {
 		// Return the cached data
 		r.Resp <- r.Req
@@ -226,7 +226,7 @@ func (ns *NetblockService) IPRequest(r *cacheRequest) {
 	// Add it to the cache
 	ns.cache[record.ASN] = record
 	// Lets try again
-	r.Req.ASN, r.Req.Netblock, r.Req.ISP = ns.ipSearch(r.Req.Address)
+	r.Req.ASN, r.Req.Netblock, r.Req.Description = ns.ipSearch(r.Req.Address)
 	if r.Req.ASN == 0 {
 		r.Resp <- nil
 		return
@@ -261,7 +261,7 @@ loop:
 }
 
 func (ns *NetblockService) CIDRRequest(r *cacheRequest) {
-	r.Req.ASN, r.Req.ISP = ns.cidrSearch(r.Req.Netblock)
+	r.Req.ASN, r.Req.Description = ns.cidrSearch(r.Req.Netblock)
 	// Does the data need to be obtained?
 	if r.Req.ASN != 0 {
 		r.Resp <- r.Req
@@ -276,7 +276,7 @@ func (ns *NetblockService) CIDRRequest(r *cacheRequest) {
 	// Add it to the cache
 	ns.cache[record.ASN] = record
 	// Lets try again
-	r.Req.ASN, r.Req.ISP = ns.cidrSearch(r.Req.Netblock)
+	r.Req.ASN, r.Req.Description = ns.cidrSearch(r.Req.Netblock)
 	if r.Req.ASN == 0 {
 		r.Resp <- nil
 		return
@@ -321,10 +321,10 @@ func (ns *NetblockService) ASNRequest(r *cacheRequest) {
 		}
 		// Send the request for this netblock
 		ns.sendRequest(&AmassRequest{
-			ASN:        record.ASN,
-			Netblock:   ipnet,
-			ISP:        record.Description,
-			addDomains: r.Req.addDomains,
+			ASN:         record.ASN,
+			Netblock:    ipnet,
+			Description: record.Description,
+			addDomains:  r.Req.addDomains,
 		})
 	}
 }

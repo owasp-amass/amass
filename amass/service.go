@@ -19,35 +19,16 @@ const (
 
 // AmassRequest - Contains data obtained throughout AmassService processing
 type AmassRequest struct {
-	// The subdomain name
-	Name string
-
-	// The type of host that this name refers to
-	Type int
-
-	// The base domain that the name belongs to
-	Domain string
-
-	// The IP address that the name resolves to
-	Address string
-
-	// The netblock that the address belongs to
-	Netblock *net.IPNet
-
-	// The ASN that the address belongs to
-	ASN int
-
-	// The name of the service provider associated with the ASN
-	ISP string
-
-	// The type of data source that discovered the name
-	Tag string
-
-	// The exact data source that discovered the name
-	Source string
-
-	// The ActiveCertService is allowed add domains to the config from this request
-	addDomains bool
+	Name        string
+	Type        int
+	Domain      string
+	Address     string
+	Netblock    *net.IPNet
+	ASN         int
+	Description string
+	Tag         string
+	Source      string
+	addDomains  bool
 }
 
 type AmassService interface {

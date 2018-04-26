@@ -127,11 +127,11 @@ func (acs *ActiveCertService) handleRequest(req *AmassRequest) {
 
 		for _, ip := range ips {
 			acs.add(&AmassRequest{
-				Address:    ip,
-				Netblock:   req.Netblock,
-				ASN:        req.ASN,
-				ISP:        req.ISP,
-				addDomains: req.addDomains,
+				Address:     ip,
+				Netblock:    req.Netblock,
+				ASN:         req.ASN,
+				Description: req.Description,
+				addDomains:  req.addDomains,
 			})
 		}
 	}

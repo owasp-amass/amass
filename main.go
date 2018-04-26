@@ -14,6 +14,7 @@ import (
 	"os/signal"
 	"path"
 	//"runtime/pprof"
+	"encoding/json"
 	"strconv"
 	"strings"
 	"syscall"
@@ -27,6 +28,7 @@ type outputParams struct {
 	Verbose  bool
 	PrintIPs bool
 	FileOut  string
+	JSONOut  string
 	Results  chan *amass.AmassRequest
 	Done     chan struct{}
 }
@@ -67,6 +69,7 @@ var (
 	version       = flag.Bool("version", false, "Print the version number of this amass binary")
 	ips           = flag.Bool("ip", false, "Show the IP addresses for discovered names")
 	brute         = flag.Bool("brute", false, "Execute brute forcing after searches")
+	axfr          = flag.Bool("axfr", false, "Attempt DNS zone transfers against all name servers")
 	norecursive   = flag.Bool("non-recursive", false, "Turn off recursive brute forcing")
 	minrecursive  = flag.Int("min-for-recursive", 0, "Number of subdomain discoveries before recursive brute forcing")
 	noalts        = flag.Bool("no-alts", false, "Disable generation of altered names")
@@ -76,6 +79,7 @@ var (
 	freq          = flag.Int64("freq", 0, "Sets the number of max DNS queries per minute")
 	wordlist      = flag.String("w", "", "Path to a different wordlist file")
 	outfile       = flag.String("o", "", "Path to the output file")
+	jsonfile      = flag.String("json", "", "Path to the JSON output file")
 	domainsfile   = flag.String("df", "", "Path to a file providing root domain names")
 	resolvefile   = flag.String("rf", "", "Path to a file providing preferred DNS resolvers")
 	blacklistfile = flag.String("blf", "", "Path to a file providing blacklisted subdomains")
@@ -161,6 +165,7 @@ func main() {
 		Verbose:  *verbose,
 		PrintIPs: *ips,
 		FileOut:  *outfile,
+		JSONOut:  *jsonfile,
 		Results:  results,
 		Done:     done,
 	})
@@ -189,6 +194,7 @@ func main() {
 		BruteForcing:    *brute,
 		Recursive:       recursive,
 		MinForRecursive: *minrecursive,
+		AXFR:            *axfr,
 		Alterations:     alts,
 		Frequency:       freqToDuration(*freq),
 		Resolvers:       resolvers,
@@ -256,9 +262,21 @@ type asnData struct {
 	Netblocks map[string]int
 }
 
+type jsonSave struct {
+	Name        string `json:"name"`
+	Domain      string `json:"domain"`
+	Address     string `json:"address"`
+	CIDR        string `json:"cidr"`
+	ASN         int    `json:"asn"`
+	Description string `json:"desc"`
+	Tag         string `json:"tag"`
+	Source      string `json:"source"`
+}
+
 func manageOutput(params *outputParams) {
 	var total int
 	var bufwr *bufio.Writer
+	var enc *json.Encoder
 
 	if params.FileOut != "" {
 		fileptr, err := os.OpenFile(params.FileOut, os.O_WRONLY|os.O_CREATE, 0644)
@@ -268,9 +286,16 @@ func manageOutput(params *outputParams) {
 		}
 	}
 
+	if params.JSONOut != "" {
+		fileptr, err := os.OpenFile(params.JSONOut, os.O_WRONLY|os.O_CREATE, 0644)
+		if err == nil {
+			enc = json.NewEncoder(fileptr)
+			defer fileptr.Close()
+		}
+	}
+
 	tags := make(map[string]int)
 	asns := make(map[int]*asnData)
-
 	// Collect all the names returned by the enumeration
 	for result := range params.Results {
 		total++
@@ -295,9 +320,19 @@ func manageOutput(params *outputParams) {
 				bufwr.Flush()
 			}
 		}
-	}
-	if bufwr != nil {
-		bufwr.Flush()
+		// Handle encoding the result as JSON
+		if enc != nil {
+			enc.Encode(&jsonSave{
+				Name:        result.Name,
+				Domain:      result.Domain,
+				Address:     result.Address,
+				CIDR:        result.Netblock.String(),
+				ASN:         result.ASN,
+				Description: result.Description,
+				Tag:         result.Tag,
+				Source:      result.Source,
+			})
+		}
 	}
 	// Check to print the summary information
 	if params.Verbose {
@@ -314,7 +349,7 @@ func updateData(req *amass.AmassRequest, tags map[string]int, asns map[int]*asnD
 	data, found := asns[req.ASN]
 	if !found {
 		asns[req.ASN] = &asnData{
-			Name:      req.ISP,
+			Name:      req.Description,
 			Netblocks: make(map[string]int),
 		}
 		data = asns[req.ASN]

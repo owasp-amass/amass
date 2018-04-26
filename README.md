@@ -107,7 +107,13 @@ $ amass -ip -d example.com
 
 Have amass write the results to a text file:
 ```
-$ amass -ip -o example.txt -d example.com
+$ amass -ip -o out.txt -d example.com
+```
+
+
+Have all the data collected written to a file as individual JSON objects:
+```
+$ amass -json out.txt -d example.com
 ```
 
 
@@ -139,6 +145,14 @@ The amass feature that performs alterations on discovered names and attempt reso
 ```
 $ amass -noalts -d example.com
 ```
+
+
+Attempt DNS zone transfers on all discovered authoritative name servers:
+```
+$ amass -axfr -d example.com
+```
+
+Caution, this is an active technique that will reveal your IP address to the target organization.
 
 
 Have amass perform brute force subdomain enumeration as well:
