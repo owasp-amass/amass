@@ -53,8 +53,8 @@ type AmassConfig struct {
 	// Will discovered subdomain name alterations be generated?
 	Alterations bool
 
-	// Will DNS zone transfers be attempted against all discovered name servers
-	AXFR bool
+	// Determines if active information gathering techniques will be used
+	Active bool
 
 	// A blacklist of subdomain names that will not be investigated
 	Blacklist []string
@@ -142,7 +142,7 @@ func DefaultConfig() *AmassConfig {
 		Ports:           []int{443},
 		Recursive:       true,
 		Alterations:     true,
-		Frequency:       50 * time.Millisecond,
+		Frequency:       25 * time.Millisecond,
 		MinForRecursive: 1,
 	}
 	return config
@@ -183,6 +183,7 @@ func CustomConfig(ac *AmassConfig) *AmassConfig {
 	config.AdditionalDomains = ac.AdditionalDomains
 	config.Resolvers = ac.Resolvers
 	config.Blacklist = ac.Blacklist
+	config.Active = ac.Active
 	config.Setup()
 	return config
 }
@@ -217,7 +218,7 @@ func (c *AmassConfig) ReverseWhois(domain string) []string {
 	var domains []string
 
 	page := GetWebPageWithDialContext(c.DialContext,
-		"http://viewdns.info/reversewhois/?q="+domain)
+		"http://viewdns.info/reversewhois/?q="+domain, nil)
 	if page == "" {
 		return []string{}
 	}

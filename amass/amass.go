@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	Version string = "v1.5.0"
+	Version string = "v1.5.1"
 	Author  string = "Jeff Foley (@jeff_foley)"
 	// Tags used to mark the data source with the Subdomain struct
 	ALT     = "alt"
@@ -27,7 +27,7 @@ const (
 	// This regular expression + the base domain will match on all names and subdomains
 	SUBRE = "(([a-zA-Z0-9]{1}|[a-zA-Z0-9]{1}[a-zA-Z0-9-]{0,61}[a-zA-Z0-9]{1})[.]{1})+"
 
-	USER_AGENT  = "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36"
+	USER_AGENT  = "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/65.0.3325.181 Safari/537.36"
 	ACCEPT      = "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
 	ACCEPT_LANG = "en-US,en;q=0.8"
 
@@ -200,7 +200,7 @@ func AnySubdomainRegex() *regexp.Regexp {
 	return regexp.MustCompile(SUBRE + "[a-zA-Z0-9-]{0,61}[.][a-zA-Z]")
 }
 
-func GetWebPageWithDialContext(dc dialCtx, u string) string {
+func GetWebPageWithDialContext(dc dialCtx, u string, hvals map[string]string) string {
 	client := &http.Client{
 		Timeout: 30 * time.Second,
 		Transport: &http.Transport{
@@ -220,6 +220,11 @@ func GetWebPageWithDialContext(dc dialCtx, u string) string {
 	req.Header.Add("User-Agent", USER_AGENT)
 	req.Header.Add("Accept", ACCEPT)
 	req.Header.Add("Accept-Language", ACCEPT_LANG)
+	if hvals != nil {
+		for k, v := range hvals {
+			req.Header.Add(k, v)
+		}
+	}
 
 	resp, err := client.Do(req)
 	if err != nil {

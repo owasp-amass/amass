@@ -69,7 +69,7 @@ var (
 	version       = flag.Bool("version", false, "Print the version number of this amass binary")
 	ips           = flag.Bool("ip", false, "Show the IP addresses for discovered names")
 	brute         = flag.Bool("brute", false, "Execute brute forcing after searches")
-	axfr          = flag.Bool("axfr", false, "Attempt DNS zone transfers against all name servers")
+	active        = flag.Bool("active", false, "Turn on active information gathering methods")
 	norecursive   = flag.Bool("non-recursive", false, "Turn off recursive brute forcing")
 	minrecursive  = flag.Int("min-for-recursive", 0, "Number of subdomain discoveries before recursive brute forcing")
 	noalts        = flag.Bool("no-alts", false, "Disable generation of altered names")
@@ -194,7 +194,7 @@ func main() {
 		BruteForcing:    *brute,
 		Recursive:       recursive,
 		MinForRecursive: *minrecursive,
-		AXFR:            *axfr,
+		Active:          *active,
 		Alterations:     alts,
 		Frequency:       freqToDuration(*freq),
 		Resolvers:       resolvers,
@@ -333,6 +333,9 @@ func manageOutput(params *outputParams) {
 				Source:      result.Source,
 			})
 		}
+	}
+	if bufwr != nil {
+		bufwr.Flush()
 	}
 	// Check to print the summary information
 	if params.Verbose {

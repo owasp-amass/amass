@@ -61,7 +61,7 @@ loop:
 	for {
 		select {
 		case req := <-acs.Input():
-			if req.addDomains {
+			if acs.Config().Active || req.addDomains {
 				acs.add(req)
 			}
 		case <-pull.C:
@@ -192,7 +192,7 @@ func (acs *ActiveCertService) pullCertificate(req *AmassRequest) {
 	}
 	// Attempt to add the domains to the configuration
 	if acs.Config().AdditionalDomains {
-		// Get all uniques root domain names from the generated requests
+		// Get all unique root domain names from the generated requests
 		var domains []string
 		for _, r := range requests {
 			domains = UniqueAppend(domains, r.Domain)

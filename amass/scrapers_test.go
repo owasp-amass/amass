@@ -8,8 +8,8 @@ import (
 )
 
 const (
-	testDomain string = "utica.edu"
-	testIP     string = "72.237.4.113"
+	testDomain string = "match.com"
+	testIP     string = "208.83.240.23"
 )
 
 func TestScraperAsk(t *testing.T) {
@@ -153,6 +153,22 @@ func TestScraperCertDB(t *testing.T) {
 	discovered := <-finished
 	if discovered <= 0 {
 		t.Errorf("CertDBScrape found %d subdomains", discovered)
+	}
+}
+
+func TestScraperDNSDB(t *testing.T) {
+	out := make(chan *AmassRequest, 2)
+	finished := make(chan int, 2)
+	config := DefaultConfig()
+	config.Setup()
+
+	s := DNSDBScrape(out, config)
+
+	go readOutput(out)
+	s.Scrape(testDomain, finished)
+	discovered := <-finished
+	if discovered <= 0 {
+		t.Errorf("DNSDBScrape found %d subdomains", discovered)
 	}
 }
 
@@ -313,6 +329,22 @@ func TestScraperThreatCrowd(t *testing.T) {
 	discovered := <-finished
 	if discovered <= 0 {
 		t.Errorf("ThreatCrowdScrape found %d subdomains", discovered)
+	}
+}
+
+func TestScraperThreatMiner(t *testing.T) {
+	out := make(chan *AmassRequest, 2)
+	finished := make(chan int, 2)
+	config := DefaultConfig()
+	config.Setup()
+
+	s := ThreatMinerScrape(out, config)
+
+	go readOutput(out)
+	s.Scrape(testDomain, finished)
+	discovered := <-finished
+	if discovered <= 0 {
+		t.Errorf("ThreatMinerScrape found %d subdomains", discovered)
 	}
 }
 

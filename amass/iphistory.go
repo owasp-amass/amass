@@ -66,7 +66,7 @@ func (ihs *IPHistoryService) duplicate(domain string) bool {
 func (ihs *IPHistoryService) LookupIPs(domain string) {
 	url := "http://viewdns.info/iphistory/?domain=" + domain
 	// The ViewDNS IP History lookup sometimes reveals interesting results
-	page := GetWebPageWithDialContext(ihs.Config().DialContext, url)
+	page := GetWebPageWithDialContext(ihs.Config().DialContext, url, nil)
 	if page == "" {
 		return
 	}

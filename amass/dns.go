@@ -440,7 +440,7 @@ func (ds *DNSService) basicQueries(subdomain, domain string) {
 	ans, err = ResolveDNSWithDialContext(dc, subdomain, "NS")
 	if err == nil {
 		for _, a := range ans {
-			if ds.Config().AXFR {
+			if ds.Config().Active {
 				go ds.zoneTransfer(subdomain, domain, a.Data)
 			}
 

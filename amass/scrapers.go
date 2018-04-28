@@ -42,6 +42,7 @@ func NewScraperService(in, out chan *AmassRequest, config *AmassConfig) *Scraper
 		CertDBScrape(ss.responses, config),
 		CrtshScrape(ss.responses, config),
 		DogpileScrape(ss.responses, config),
+		DNSDBScrape(ss.responses, config),
 		DNSDumpsterScrape(ss.responses, config),
 		ExaleadScrape(ss.responses, config),
 		FindSubDomainsScrape(ss.responses, config),
@@ -53,6 +54,7 @@ func NewScraperService(in, out chan *AmassRequest, config *AmassConfig) *Scraper
 		RobtexScrape(ss.responses, config),
 		SiteDossierScrape(ss.responses, config),
 		ThreatCrowdScrape(ss.responses, config),
+		ThreatMinerScrape(ss.responses, config),
 		VirusTotalScrape(ss.responses, config),
 		YahooScrape(ss.responses, config),
 	}
@@ -153,7 +155,7 @@ func (se *searchEngine) Scrape(domain string, done chan int) {
 	num := se.Limit / se.Quantity
 	for i := 0; i < num; i++ {
 		page := GetWebPageWithDialContext(
-			se.Config.DialContext, se.urlByPageNum(domain, i))
+			se.Config.DialContext, se.urlByPageNum(domain, i), nil)
 		if page == "" {
 			break
 		}
@@ -177,11 +179,11 @@ func (se *searchEngine) Scrape(domain string, done chan int) {
 }
 
 func askURLByPageNum(a *searchEngine, domain string, page int) string {
-	pu := strconv.Itoa(a.Quantity)
 	p := strconv.Itoa(page)
-	u, _ := url.Parse("http://www.ask.com/web")
+	u, _ := url.Parse("https://www.ask.com/web")
 
-	u.RawQuery = url.Values{"q": {"site:" + domain + "+-www"}, "pu": {pu}, "page": {p}}.Encode()
+	u.RawQuery = url.Values{"q": {"site:" + domain},
+		"o": {"0"}, "l": {"dir"}, "qo": {"pagination"}, "page": {p}}.Encode()
 	return u.String()
 }
 
@@ -220,7 +222,7 @@ func bingURLByPageNum(b *searchEngine, domain string, page int) string {
 	first := strconv.Itoa((page * b.Quantity) + 1)
 	u, _ := url.Parse("http://www.bing.com/search")
 
-	u.RawQuery = url.Values{"q": {"domain:" + domain + "%20-www"},
+	u.RawQuery = url.Values{"q": {"domain:" + domain},
 		"count": {count}, "first": {first}, "FORM": {"PORE"}}.Encode()
 	return u.String()
 }
@@ -240,7 +242,7 @@ func dogpileURLByPageNum(d *searchEngine, domain string, page int) string {
 	qsi := strconv.Itoa(d.Quantity * page)
 	u, _ := url.Parse("http://www.dogpile.com/search/web")
 
-	u.RawQuery = url.Values{"qsi": {qsi}, "q": {domain + "+-www"}}.Encode()
+	u.RawQuery = url.Values{"qsi": {qsi}, "q": {domain}}.Encode()
 	return u.String()
 }
 
@@ -260,7 +262,7 @@ func googleURLByPageNum(d *searchEngine, domain string, page int) string {
 	u, _ := url.Parse("https://www.google.com/search")
 
 	u.RawQuery = url.Values{
-		"q":      {"site:" + domain + "+-www"},
+		"q":      {"site:" + domain},
 		"btnG":   {"Search"},
 		"hl":     {"en"},
 		"biw":    {""},
@@ -284,20 +286,20 @@ func GoogleScrape(out chan<- *AmassRequest, config *AmassConfig) Scraper {
 }
 
 func yahooURLByPageNum(y *searchEngine, domain string, page int) string {
-	b := strconv.Itoa(y.Quantity * page)
+	b := strconv.Itoa(y.Quantity*page + 1)
 	pz := strconv.Itoa(y.Quantity)
 
-	u, _ := url.Parse("http://search.yahoo.com/search")
-	u.RawQuery = url.Values{"p": {"site:" + domain + "+-www"}, "b": {b}, "pz": {pz}}.Encode()
-
+	u, _ := url.Parse("https://search.yahoo.com/search")
+	u.RawQuery = url.Values{"p": {"site:" + domain},
+		"b": {b}, "pz": {pz}, "bct": {"0"}, "xargs": {"0"}}.Encode()
 	return u.String()
 }
 
 func YahooScrape(out chan<- *AmassRequest, config *AmassConfig) Scraper {
 	return &searchEngine{
 		Name:     "Yahoo",
-		Quantity: 20,
-		Limit:    160,
+		Quantity: 10,
+		Limit:    100,
 		Output:   out,
 		Callback: yahooURLByPageNum,
 		Config:   config,
@@ -321,7 +323,7 @@ func (l *lookup) Scrape(domain string, done chan int) {
 	var unique []string
 
 	re := SubdomainRegex(domain)
-	page := GetWebPageWithDialContext(l.Config.DialContext, l.Callback(domain))
+	page := GetWebPageWithDialContext(l.Config.DialContext, l.Callback(domain), nil)
 	if page == "" {
 		done <- 0
 		return
@@ -369,6 +371,21 @@ func CertSpotterScrape(out chan<- *AmassRequest, config *AmassConfig) Scraper {
 		Name:     "CertSpotter",
 		Output:   out,
 		Callback: certSpotterURL,
+		Config:   config,
+	}
+}
+
+func dnsdbURL(domain string) string {
+	format := "http://www.dnsdb.org/%s/"
+
+	return fmt.Sprintf(format, domain)
+}
+
+func DNSDBScrape(out chan<- *AmassRequest, config *AmassConfig) Scraper {
+	return &lookup{
+		Name:     "DNSDB",
+		Output:   out,
+		Callback: dnsdbURL,
 		Config:   config,
 	}
 }
@@ -494,6 +511,21 @@ func ThreatCrowdScrape(out chan<- *AmassRequest, config *AmassConfig) Scraper {
 	}
 }
 
+func threatMinerURL(domain string) string {
+	format := "https://www.threatminer.org/getData.php?e=subdomains_container&q=%s&t=0&rt=10&p=1"
+
+	return fmt.Sprintf(format, domain)
+}
+
+func ThreatMinerScrape(out chan<- *AmassRequest, config *AmassConfig) Scraper {
+	return &lookup{
+		Name:     "ThreatMiner",
+		Output:   out,
+		Callback: threatMinerURL,
+		Config:   config,
+	}
+}
+
 func virusTotalURL(domain string) string {
 	format := "https://www.virustotal.com/en/domain/%s/information/"
 
@@ -533,7 +565,7 @@ func (r *robtex) Scrape(domain string, done chan int) {
 	var unique []string
 
 	page := GetWebPageWithDialContext(
-		r.Config.DialContext, r.Base+"forward/"+domain)
+		r.Config.DialContext, r.Base+"forward/"+domain, nil)
 	if page == "" {
 		done <- 0
 		return
@@ -551,7 +583,7 @@ func (r *robtex) Scrape(domain string, done chan int) {
 		time.Sleep(500 * time.Millisecond)
 
 		pdns := GetWebPageWithDialContext(
-			r.Config.DialContext, r.Base+"reverse/"+ip)
+			r.Config.DialContext, r.Base+"reverse/"+ip, nil)
 		if pdns == "" {
 			continue
 		}
@@ -627,7 +659,7 @@ func (d *dumpster) String() string {
 func (d *dumpster) Scrape(domain string, done chan int) {
 	var unique []string
 
-	page := GetWebPageWithDialContext(d.Config.DialContext, d.Base)
+	page := GetWebPageWithDialContext(d.Config.DialContext, d.Base, nil)
 	if page == "" {
 		done <- 0
 		return
@@ -738,7 +770,7 @@ func (c *crtsh) Scrape(domain string, done chan int) {
 	var unique []string
 
 	// Pull the page that lists all certs for this domain
-	page := GetWebPageWithDialContext(c.Config.DialContext, c.Base+"?q=%25."+domain)
+	page := GetWebPageWithDialContext(c.Config.DialContext, c.Base+"?q=%25."+domain, nil)
 	if page == "" {
 		done <- 0
 		return
@@ -750,7 +782,7 @@ func (c *crtsh) Scrape(domain string, done chan int) {
 		// Do not go too fast
 		time.Sleep(50 * time.Millisecond)
 		// Pull the certificate web page
-		cert := GetWebPageWithDialContext(c.Config.DialContext, c.Base+rel)
+		cert := GetWebPageWithDialContext(c.Config.DialContext, c.Base+rel, nil)
 		if cert == "" {
 			continue
 		}
@@ -821,7 +853,7 @@ func (c *certdb) Scrape(domain string, done chan int) {
 	var unique []string
 
 	// Pull the page that lists all certs for this domain
-	page := GetWebPageWithDialContext(c.Config.DialContext, c.Base+"/domain/"+domain)
+	page := GetWebPageWithDialContext(c.Config.DialContext, c.Base+"/domain/"+domain, nil)
 	if page == "" {
 		done <- 0
 		return
@@ -833,7 +865,7 @@ func (c *certdb) Scrape(domain string, done chan int) {
 		// Do not go too fast
 		time.Sleep(50 * time.Millisecond)
 		// Pull the certificate web page
-		cert := GetWebPageWithDialContext(c.Config.DialContext, c.Base+rel)
+		cert := GetWebPageWithDialContext(c.Config.DialContext, c.Base+rel, nil)
 		if cert == "" {
 			continue
 		}
