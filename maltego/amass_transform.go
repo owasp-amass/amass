@@ -22,9 +22,8 @@ func main() {
 	results := make(chan *amass.AmassRequest, 50)
 
 	go func() {
-		for {
-			n := <-results
-			if n.Domain == domain {
+		for n := range results {
+			if n != nil && n.Domain == domain {
 				entity := trx.AddEntity("maltego.DNSName", n.Name)
 
 				switch n.Type {
