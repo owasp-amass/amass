@@ -14,13 +14,10 @@ type AlterationService struct {
 	BaseAmassService
 }
 
-func NewAlterationService(in, out chan *AmassRequest, config *AmassConfig) *AlterationService {
+func NewAlterationService(config *AmassConfig) *AlterationService {
 	as := new(AlterationService)
 
 	as.BaseAmassService = *NewBaseAmassService("Alteration Service", config, as)
-
-	as.input = in
-	as.output = out
 	return as
 }
 
@@ -37,14 +34,17 @@ func (as *AlterationService) OnStop() error {
 }
 
 func (as *AlterationService) processRequests() {
-	t := time.NewTicker(5 * time.Second)
+	t := time.NewTicker(as.Config().Frequency)
 	defer t.Stop()
+
+	check := time.NewTicker(5 * time.Second)
+	defer check.Stop()
 loop:
 	for {
 		select {
-		case req := <-as.Input():
-			go as.executeAlterations(req)
 		case <-t.C:
+			go as.executeAlterations()
+		case <-check.C:
 			as.SetActive(false)
 		case <-as.Quit():
 			break loop
@@ -53,10 +53,20 @@ loop:
 }
 
 // executeAlterations - Runs all the DNS name alteration methods as goroutines
-func (as *AlterationService) executeAlterations(req *AmassRequest) {
+func (as *AlterationService) executeAlterations() {
+	req := as.NextRequest()
+	if req == nil {
+		return
+	}
+
 	if !as.Config().Alterations {
 		return
 	}
+
+	if !as.Config().IsDomainInScope(req.Name) {
+		return
+	}
+
 	labels := strings.Split(req.Name, ".")
 	// Check the subdomain of the request name
 	if labels[1] == "_tcp" || labels[1] == "_udp" {
@@ -155,7 +165,7 @@ func (as *AlterationService) sendAlteredName(name, domain string) {
 	re := SubdomainRegex(domain)
 
 	if re.MatchString(name) {
-		as.SendOut(&AmassRequest{
+		as.Config().dns.SendRequest(&AmassRequest{
 			Name:   name,
 			Domain: domain,
 			Tag:    ALT,

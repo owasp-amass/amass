@@ -29,7 +29,7 @@ type outputParams struct {
 	PrintIPs bool
 	FileOut  string
 	JSONOut  string
-	Results  chan *amass.AmassRequest
+	Results  chan *amass.AmassOutput
 	Done     chan struct{}
 }
 
@@ -83,7 +83,7 @@ var (
 	domainsfile   = flag.String("df", "", "Path to a file providing root domain names")
 	resolvefile   = flag.String("rf", "", "Path to a file providing preferred DNS resolvers")
 	blacklistfile = flag.String("blf", "", "Path to a file providing blacklisted subdomains")
-	proxy         = flag.String("proxy", "", "The URL used to reach the proxy")
+	neo4j         = flag.String("neo4j", "", "URL in the format of user:password@address:port")
 )
 
 func main() {
@@ -159,7 +159,7 @@ func main() {
 	rand.Seed(time.Now().UTC().UnixNano())
 
 	done := make(chan struct{})
-	results := make(chan *amass.AmassRequest, 100)
+	results := make(chan *amass.AmassOutput, 100)
 
 	go manageOutput(&outputParams{
 		Verbose:  *verbose,
@@ -199,12 +199,13 @@ func main() {
 		Frequency:       freqToDuration(*freq),
 		Resolvers:       resolvers,
 		Blacklist:       blacklist,
+		Neo4jPath:       *neo4j,
 		Output:          results,
 	})
 	config.AddDomains(domains)
 	// If requested, obtain the additional domains from reverse whois information
 	if len(domains) > 0 && *whois {
-		if more := config.ReverseWhois(domains[0]); len(more) > 0 {
+		if more := amass.ReverseWhois(domains[0]); len(more) > 0 {
 			config.AddDomains(more)
 		}
 	}
@@ -214,18 +215,6 @@ func main() {
 			g.Println(d)
 		}
 		return
-	}
-	// If no domains were provided, allow amass to discover them
-	if len(domains) == 0 {
-		config.AdditionalDomains = true
-	}
-	// Check if a proxy connection should be setup
-	if *proxy != "" {
-		err := config.SetupProxyConnection(*proxy)
-		if err != nil {
-			r.Println("The proxy address failed to make a connection")
-			return
-		}
 	}
 	//profFile, _ := os.Create("amass_debug.prof")
 	//pprof.StartCPUProfile(profFile)
@@ -262,15 +251,18 @@ type asnData struct {
 	Netblocks map[string]int
 }
 
-type jsonSave struct {
-	Name        string `json:"name"`
-	Domain      string `json:"domain"`
-	Address     string `json:"address"`
+type jsonAddr struct {
+	IP          string `json:"ip"`
 	CIDR        string `json:"cidr"`
 	ASN         int    `json:"asn"`
 	Description string `json:"desc"`
-	Tag         string `json:"tag"`
-	Source      string `json:"source"`
+}
+type jsonSave struct {
+	Name      string     `json:"name"`
+	Domain    string     `json:"domain"`
+	Addresses []jsonAddr `json:"addresses"`
+	Tag       string     `json:"tag"`
+	Source    string     `json:"source"`
 }
 
 func manageOutput(params *outputParams) {
@@ -301,18 +293,24 @@ func manageOutput(params *outputParams) {
 		total++
 		updateData(result, tags, asns)
 
-		var source, comma, ip string
+		var source, comma, ips string
 		if params.Verbose {
 			source = fmt.Sprintf("%-14s", "["+result.Source+"] ")
 		}
 		if params.PrintIPs {
 			comma = ","
-			ip = result.Address
+
+			for i, a := range result.Addresses {
+				if i != 0 {
+					ips += ","
+				}
+				ips += a.Address.String()
+			}
 		}
 		// Add line to the others and print it out
-		line := fmt.Sprintf("%s%s%s%s\n", source, result.Name, comma, ip)
+		line := fmt.Sprintf("%s%s%s%s\n", source, result.Name, comma, ips)
 		fmt.Fprintf(color.Output, "%s%s%s%s\n",
-			blue(source), green(result.Name), green(comma), yellow(ip))
+			blue(source), green(result.Name), green(comma), yellow(ips))
 		// Handle writing the line to a specified output file
 		if bufwr != nil {
 			bufwr.WriteString(line)
@@ -322,16 +320,22 @@ func manageOutput(params *outputParams) {
 		}
 		// Handle encoding the result as JSON
 		if enc != nil {
-			enc.Encode(&jsonSave{
-				Name:        result.Name,
-				Domain:      result.Domain,
-				Address:     result.Address,
-				CIDR:        result.Netblock.String(),
-				ASN:         result.ASN,
-				Description: result.Description,
-				Tag:         result.Tag,
-				Source:      result.Source,
-			})
+			save := &jsonSave{
+				Name:   result.Name,
+				Domain: result.Domain,
+				Tag:    result.Tag,
+				Source: result.Source,
+			}
+
+			for _, addr := range result.Addresses {
+				save.Addresses = append(save.Addresses, jsonAddr{
+					IP:          addr.Address.String(),
+					CIDR:        addr.Netblock.String(),
+					ASN:         addr.ASN,
+					Description: addr.Description,
+				})
+			}
+			enc.Encode(save)
 		}
 	}
 	if bufwr != nil {
@@ -345,20 +349,22 @@ func manageOutput(params *outputParams) {
 	close(params.Done)
 }
 
-func updateData(req *amass.AmassRequest, tags map[string]int, asns map[int]*asnData) {
-	tags[req.Tag]++
+func updateData(output *amass.AmassOutput, tags map[string]int, asns map[int]*asnData) {
+	tags[output.Tag]++
 
 	// Update the ASN information
-	data, found := asns[req.ASN]
-	if !found {
-		asns[req.ASN] = &asnData{
-			Name:      req.Description,
-			Netblocks: make(map[string]int),
+	for _, addr := range output.Addresses {
+		data, found := asns[addr.ASN]
+		if !found {
+			asns[addr.ASN] = &asnData{
+				Name:      addr.Description,
+				Netblocks: make(map[string]int),
+			}
+			data = asns[addr.ASN]
 		}
-		data = asns[req.ASN]
+		// Increment how many IPs were in this netblock
+		data.Netblocks[addr.Netblock.String()]++
 	}
-	// Increment how many IPs were in this netblock
-	data.Netblocks[req.Netblock.String()]++
 }
 
 func printSummary(total int, tags map[string]int, asns map[int]*asnData) {
@@ -409,7 +415,7 @@ func printSummary(total int, tags map[string]int, asns map[int]*asnData) {
 }
 
 // If the user interrupts the program, print the summary information
-func catchSignals(output chan *amass.AmassRequest, done chan struct{}) {
+func catchSignals(output chan *amass.AmassOutput, done chan struct{}) {
 	sigs := make(chan os.Signal, 2)
 	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
 
@@ -546,14 +552,9 @@ func (p *parseIPs) Set(s string) error {
 	return nil
 }
 
-func (p *parseIPs) appendIPString(addrs []string) error {
+func (p *parseIPs) appendIPs(addrs []net.IP) error {
 	for _, addr := range addrs {
-		ip := net.ParseIP(addr)
-		if ip == nil {
-			return fmt.Errorf("Failed to parse %s as an IP address", addr)
-		}
-
-		*p = append(*p, ip)
+		*p = append(*p, addr)
 	}
 	return nil
 }
@@ -578,7 +579,7 @@ func (p *parseIPs) parseRange(s string) error {
 		// These should have parsed properly
 		return fmt.Errorf("%s is not a valid IP range", s)
 	}
-	return p.appendIPString(amass.RangeHosts(start, end))
+	return p.appendIPs(amass.RangeHosts(start, end))
 }
 
 // parseCIDRs implementation of the flag.Value interface

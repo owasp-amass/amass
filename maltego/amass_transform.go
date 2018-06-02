@@ -19,7 +19,7 @@ func main() {
 	lt := maltegolocal.ParseLocalArguments(os.Args)
 	domain = lt.Value
 	trx := maltegolocal.MaltegoTransform{}
-	results := make(chan *amass.AmassRequest, 50)
+	results := make(chan *amass.AmassOutput, 50)
 
 	go func() {
 		for n := range results {

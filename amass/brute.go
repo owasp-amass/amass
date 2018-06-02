@@ -15,13 +15,10 @@ type BruteForceService struct {
 	subdomains map[string]int
 }
 
-func NewBruteForceService(in, out chan *AmassRequest, config *AmassConfig) *BruteForceService {
+func NewBruteForceService(config *AmassConfig) *BruteForceService {
 	bfs := &BruteForceService{subdomains: make(map[string]int)}
 
 	bfs.BaseAmassService = *NewBaseAmassService("Brute Forcing Service", config, bfs)
-
-	bfs.input = in
-	bfs.output = out
 	return bfs
 }
 
@@ -39,14 +36,17 @@ func (bfs *BruteForceService) OnStop() error {
 }
 
 func (bfs *BruteForceService) processRequests() {
-	t := time.NewTicker(10 * time.Second)
+	t := time.NewTicker(bfs.Config().Frequency)
 	defer t.Stop()
+
+	check := time.NewTicker(5 * time.Second)
+	defer check.Stop()
 loop:
 	for {
 		select {
-		case req := <-bfs.Input():
-			go bfs.checkForNewSubdomain(req)
 		case <-t.C:
+			go bfs.checkForNewSubdomain()
+		case <-check.C:
 			bfs.SetActive(false)
 		case <-bfs.Quit():
 			break loop
@@ -79,14 +79,25 @@ func (bfs *BruteForceService) startRootDomains() {
 	}
 }
 
-func (bfs *BruteForceService) checkForNewSubdomain(req *AmassRequest) {
+func (bfs *BruteForceService) checkForNewSubdomain() {
+	req := bfs.NextRequest()
+	if req == nil {
+		return
+	}
+
 	if !bfs.Config().BruteForcing {
 		return
 	}
+
 	// If the Name is empty or recursive brute forcing is off, we are done here
 	if req.Name == "" || !bfs.Config().Recursive {
 		return
 	}
+
+	if !bfs.Config().IsDomainInScope(req.Name) {
+		return
+	}
+
 	labels := strings.Split(req.Name, ".")
 	num := len(labels)
 	// It needs to have more labels than the root domain
@@ -99,7 +110,7 @@ func (bfs *BruteForceService) checkForNewSubdomain(req *AmassRequest) {
 	}
 	sub := strings.Join(labels[1:], ".")
 	if dis := bfs.subDiscoveries(sub); dis == bfs.Config().MinForRecursive {
-		go bfs.performBruteForcing(sub, req.Domain)
+		bfs.performBruteForcing(sub, req.Domain)
 	}
 }
 
@@ -107,7 +118,7 @@ func (bfs *BruteForceService) performBruteForcing(subdomain, root string) {
 	for _, word := range bfs.Config().Wordlist {
 		bfs.SetActive(true)
 
-		bfs.SendOut(&AmassRequest{
+		bfs.Config().dns.SendRequest(&AmassRequest{
 			Name:   word + "." + subdomain,
 			Domain: root,
 			Tag:    BRUTE,

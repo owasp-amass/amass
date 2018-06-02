@@ -48,9 +48,9 @@ func TestAmassCIDRSubset(t *testing.T) {
 		t.Errorf("CIDRSubset returned an incorrect number of elements: %d", sslen)
 	}
 
-	if subset[0] != "192.168.1."+strconv.Itoa(55-offset) {
+	if subset[0].String() != "192.168.1."+strconv.Itoa(55-offset) {
 		t.Errorf("CIDRSubset did not return the correct first element: %s", subset[0])
-	} else if subset[sslen-1] != "192.168.1."+strconv.Itoa(55+offset) {
+	} else if subset[sslen-1].String() != "192.168.1."+strconv.Itoa(55+offset) {
 		t.Errorf("CIDRSubset did not return the correct last element: %s", subset[sslen-1])
 	}
 

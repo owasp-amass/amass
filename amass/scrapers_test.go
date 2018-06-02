@@ -16,7 +16,6 @@ func TestScraperAsk(t *testing.T) {
 	out := make(chan *AmassRequest, 2)
 	finished := make(chan int, 2)
 	config := DefaultConfig()
-	config.Setup()
 
 	s := AskScrape(out, config)
 
@@ -32,7 +31,6 @@ func TestScraperBaidu(t *testing.T) {
 	out := make(chan *AmassRequest, 2)
 	finished := make(chan int, 2)
 	config := DefaultConfig()
-	config.Setup()
 
 	s := BaiduScrape(out, config)
 
@@ -48,7 +46,6 @@ func TestScraperBing(t *testing.T) {
 	out := make(chan *AmassRequest, 2)
 	finished := make(chan int, 2)
 	config := DefaultConfig()
-	config.Setup()
 
 	s := BingScrape(out, config)
 
@@ -64,7 +61,6 @@ func TestScraperDogpile(t *testing.T) {
 	out := make(chan *AmassRequest, 2)
 	finished := make(chan int, 2)
 	config := DefaultConfig()
-	config.Setup()
 
 	s := DogpileScrape(out, config)
 
@@ -80,7 +76,6 @@ func TestScraperGoogle(t *testing.T) {
 	out := make(chan *AmassRequest, 2)
 	finished := make(chan int, 2)
 	config := DefaultConfig()
-	config.Setup()
 
 	s := GoogleScrape(out, config)
 
@@ -96,7 +91,6 @@ func TestScraperYahoo(t *testing.T) {
 	out := make(chan *AmassRequest, 2)
 	finished := make(chan int, 2)
 	config := DefaultConfig()
-	config.Setup()
 
 	s := YahooScrape(out, config)
 
@@ -112,7 +106,6 @@ func TestScraperCertSpotter(t *testing.T) {
 	out := make(chan *AmassRequest, 2)
 	finished := make(chan int, 2)
 	config := DefaultConfig()
-	config.Setup()
 
 	s := CertSpotterScrape(out, config)
 
@@ -128,7 +121,6 @@ func TestScraperCensys(t *testing.T) {
 	out := make(chan *AmassRequest, 2)
 	finished := make(chan int, 2)
 	config := DefaultConfig()
-	config.Setup()
 
 	s := CensysScrape(out, config)
 
@@ -144,7 +136,6 @@ func TestScraperCertDB(t *testing.T) {
 	out := make(chan *AmassRequest, 2)
 	finished := make(chan int, 2)
 	config := DefaultConfig()
-	config.Setup()
 
 	s := CertDBScrape(out, config)
 
@@ -160,7 +151,6 @@ func TestScraperDNSDB(t *testing.T) {
 	out := make(chan *AmassRequest, 2)
 	finished := make(chan int, 2)
 	config := DefaultConfig()
-	config.Setup()
 
 	s := DNSDBScrape(out, config)
 
@@ -176,7 +166,6 @@ func TestScraperExalead(t *testing.T) {
 	out := make(chan *AmassRequest, 2)
 	finished := make(chan int, 2)
 	config := DefaultConfig()
-	config.Setup()
 
 	s := ExaleadScrape(out, config)
 
@@ -192,7 +181,6 @@ func TestScraperFindSubDomains(t *testing.T) {
 	out := make(chan *AmassRequest, 2)
 	finished := make(chan int, 2)
 	config := DefaultConfig()
-	config.Setup()
 
 	s := FindSubDomainsScrape(out, config)
 
@@ -208,7 +196,6 @@ func TestScraperHackerTarget(t *testing.T) {
 	out := make(chan *AmassRequest, 2)
 	finished := make(chan int, 2)
 	config := DefaultConfig()
-	config.Setup()
 
 	s := HackerTargetScrape(out, config)
 
@@ -224,7 +211,6 @@ func TestScraperCrtsh(t *testing.T) {
 	out := make(chan *AmassRequest, 2)
 	finished := make(chan int, 2)
 	config := DefaultConfig()
-	config.Setup()
 
 	s := CrtshScrape(out, config)
 
@@ -240,7 +226,6 @@ func TestScraperNetcraft(t *testing.T) {
 	out := make(chan *AmassRequest, 2)
 	finished := make(chan int, 2)
 	config := DefaultConfig()
-	config.Setup()
 
 	s := NetcraftScrape(out, config)
 
@@ -256,7 +241,6 @@ func TestScraperPTRArchive(t *testing.T) {
 	out := make(chan *AmassRequest, 2)
 	finished := make(chan int, 2)
 	config := DefaultConfig()
-	config.Setup()
 
 	s := PTRArchiveScrape(out, config)
 
@@ -272,7 +256,6 @@ func TestScraperRiddler(t *testing.T) {
 	out := make(chan *AmassRequest, 2)
 	finished := make(chan int, 2)
 	config := DefaultConfig()
-	config.Setup()
 
 	s := RiddlerScrape(out, config)
 
@@ -288,7 +271,6 @@ func TestScraperRobtex(t *testing.T) {
 	out := make(chan *AmassRequest, 2)
 	finished := make(chan int, 2)
 	config := DefaultConfig()
-	config.Setup()
 
 	s := RobtexScrape(out, config)
 
@@ -304,7 +286,6 @@ func TestScraperSiteDossier(t *testing.T) {
 	out := make(chan *AmassRequest, 2)
 	finished := make(chan int, 2)
 	config := DefaultConfig()
-	config.Setup()
 
 	s := SiteDossierScrape(out, config)
 
@@ -320,7 +301,6 @@ func TestScraperThreatCrowd(t *testing.T) {
 	out := make(chan *AmassRequest, 2)
 	finished := make(chan int, 2)
 	config := DefaultConfig()
-	config.Setup()
 
 	s := ThreatCrowdScrape(out, config)
 
@@ -336,7 +316,6 @@ func TestScraperThreatMiner(t *testing.T) {
 	out := make(chan *AmassRequest, 2)
 	finished := make(chan int, 2)
 	config := DefaultConfig()
-	config.Setup()
 
 	s := ThreatMinerScrape(out, config)
 
@@ -352,7 +331,6 @@ func TestScraperVirusTotal(t *testing.T) {
 	out := make(chan *AmassRequest, 2)
 	finished := make(chan int, 2)
 	config := DefaultConfig()
-	config.Setup()
 
 	s := VirusTotalScrape(out, config)
 
@@ -368,7 +346,6 @@ func TestScraperDNSDumpster(t *testing.T) {
 	out := make(chan *AmassRequest, 2)
 	finished := make(chan int, 2)
 	config := DefaultConfig()
-	config.Setup()
 
 	s := DNSDumpsterScrape(out, config)
 

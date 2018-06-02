@@ -21,11 +21,12 @@ type ScraperService struct {
 
 	responses    chan *AmassRequest
 	scrapers     []Scraper
+	dnsdb        Scraper
 	filter       map[string]struct{}
 	domainFilter map[string]struct{}
 }
 
-func NewScraperService(in, out chan *AmassRequest, config *AmassConfig) *ScraperService {
+func NewScraperService(config *AmassConfig) *ScraperService {
 	ss := &ScraperService{
 		responses:    make(chan *AmassRequest, 50),
 		filter:       make(map[string]struct{}),
@@ -33,6 +34,7 @@ func NewScraperService(in, out chan *AmassRequest, config *AmassConfig) *Scraper
 	}
 
 	ss.BaseAmassService = *NewBaseAmassService("Scraper Service", config, ss)
+	ss.dnsdb = DNSDBScrape(ss.responses, config)
 	ss.scrapers = []Scraper{
 		AskScrape(ss.responses, config),
 		BaiduScrape(ss.responses, config),
@@ -42,7 +44,7 @@ func NewScraperService(in, out chan *AmassRequest, config *AmassConfig) *Scraper
 		CertDBScrape(ss.responses, config),
 		CrtshScrape(ss.responses, config),
 		DogpileScrape(ss.responses, config),
-		DNSDBScrape(ss.responses, config),
+		ss.dnsdb,
 		DNSDumpsterScrape(ss.responses, config),
 		ExaleadScrape(ss.responses, config),
 		FindSubDomainsScrape(ss.responses, config),
@@ -59,8 +61,6 @@ func NewScraperService(in, out chan *AmassRequest, config *AmassConfig) *Scraper
 		YahooScrape(ss.responses, config),
 	}
 
-	ss.input = in
-	ss.output = out
 	return ss
 }
 
@@ -77,6 +77,25 @@ func (ss *ScraperService) OnStop() error {
 	return nil
 }
 
+func (ss *ScraperService) processRequests() {
+	done := make(chan int)
+
+	t := time.NewTicker(ss.Config().Frequency)
+	defer t.Stop()
+loop:
+	for {
+		select {
+		case <-t.C:
+			if req := ss.NextRequest(); req != nil {
+				ss.dnsdb.Scrape(req.Name, done)
+				<-done
+			}
+		case <-ss.Quit():
+			break loop
+		}
+	}
+}
+
 func (ss *ScraperService) processOutput() {
 loop:
 	for {
@@ -85,7 +104,7 @@ loop:
 			req.Name = strings.TrimSpace(trim252F(req.Name))
 
 			if !ss.duplicate(req.Name) {
-				ss.SendOut(req)
+				ss.Config().dns.SendRequest(req)
 			}
 		case <-ss.Quit():
 			break loop
@@ -155,7 +174,7 @@ func (se *searchEngine) Scrape(domain string, done chan int) {
 	num := se.Limit / se.Quantity
 	for i := 0; i < num; i++ {
 		page := GetWebPageWithDialContext(
-			se.Config.DialContext, se.urlByPageNum(domain, i), nil)
+			DialContext, se.urlByPageNum(domain, i), nil)
 		if page == "" {
 			break
 		}
@@ -323,7 +342,7 @@ func (l *lookup) Scrape(domain string, done chan int) {
 	var unique []string
 
 	re := SubdomainRegex(domain)
-	page := GetWebPageWithDialContext(l.Config.DialContext, l.Callback(domain), nil)
+	page := GetWebPageWithDialContext(DialContext, l.Callback(domain), nil)
 	if page == "" {
 		done <- 0
 		return
@@ -565,7 +584,7 @@ func (r *robtex) Scrape(domain string, done chan int) {
 	var unique []string
 
 	page := GetWebPageWithDialContext(
-		r.Config.DialContext, r.Base+"forward/"+domain, nil)
+		DialContext, r.Base+"forward/"+domain, nil)
 	if page == "" {
 		done <- 0
 		return
@@ -583,7 +602,7 @@ func (r *robtex) Scrape(domain string, done chan int) {
 		time.Sleep(500 * time.Millisecond)
 
 		pdns := GetWebPageWithDialContext(
-			r.Config.DialContext, r.Base+"reverse/"+ip, nil)
+			DialContext, r.Base+"reverse/"+ip, nil)
 		if pdns == "" {
 			continue
 		}
@@ -659,7 +678,7 @@ func (d *dumpster) String() string {
 func (d *dumpster) Scrape(domain string, done chan int) {
 	var unique []string
 
-	page := GetWebPageWithDialContext(d.Config.DialContext, d.Base, nil)
+	page := GetWebPageWithDialContext(DialContext, d.Base, nil)
 	if page == "" {
 		done <- 0
 		return
@@ -706,7 +725,7 @@ func (d *dumpster) getCSRFToken(page string) string {
 func (d *dumpster) postForm(token, domain string) string {
 	client := &http.Client{
 		Transport: &http.Transport{
-			DialContext:         d.Config.DialContext,
+			DialContext:         DialContext,
 			TLSHandshakeTimeout: 10 * time.Second,
 		},
 	}
@@ -770,7 +789,7 @@ func (c *crtsh) Scrape(domain string, done chan int) {
 	var unique []string
 
 	// Pull the page that lists all certs for this domain
-	page := GetWebPageWithDialContext(c.Config.DialContext, c.Base+"?q=%25."+domain, nil)
+	page := GetWebPageWithDialContext(DialContext, c.Base+"?q=%25."+domain, nil)
 	if page == "" {
 		done <- 0
 		return
@@ -782,7 +801,7 @@ func (c *crtsh) Scrape(domain string, done chan int) {
 		// Do not go too fast
 		time.Sleep(50 * time.Millisecond)
 		// Pull the certificate web page
-		cert := GetWebPageWithDialContext(c.Config.DialContext, c.Base+rel, nil)
+		cert := GetWebPageWithDialContext(DialContext, c.Base+rel, nil)
 		if cert == "" {
 			continue
 		}
@@ -853,7 +872,7 @@ func (c *certdb) Scrape(domain string, done chan int) {
 	var unique []string
 
 	// Pull the page that lists all certs for this domain
-	page := GetWebPageWithDialContext(c.Config.DialContext, c.Base+"/domain/"+domain, nil)
+	page := GetWebPageWithDialContext(DialContext, c.Base+"/domain/"+domain, nil)
 	if page == "" {
 		done <- 0
 		return
@@ -865,7 +884,7 @@ func (c *certdb) Scrape(domain string, done chan int) {
 		// Do not go too fast
 		time.Sleep(50 * time.Millisecond)
 		// Pull the certificate web page
-		cert := GetWebPageWithDialContext(c.Config.DialContext, c.Base+rel, nil)
+		cert := GetWebPageWithDialContext(DialContext, c.Base+rel, nil)
 		if cert == "" {
 			continue
 		}

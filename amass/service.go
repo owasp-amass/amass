@@ -5,30 +5,16 @@ package amass
 
 import (
 	"errors"
-	"net"
 	"sync"
-)
-
-// Node types used in the Maltego local transform
-const (
-	TypeNorm int = iota
-	TypeNS
-	TypeMX
-	TypeWeb
 )
 
 // AmassRequest - Contains data obtained throughout AmassService processing
 type AmassRequest struct {
-	Name        string
-	Type        int
-	Domain      string
-	Address     string
-	Netblock    *net.IPNet
-	ASN         int
-	Description string
-	Tag         string
-	Source      string
-	addDomains  bool
+	Name    string
+	Domain  string
+	Records []DNSAnswer
+	Tag     string
+	Source  string
 }
 
 type AmassService interface {
@@ -40,14 +26,8 @@ type AmassService interface {
 	Stop() error
 	OnStop() error
 
-	// Returns the input channel for the service
-	Input() <-chan *AmassRequest
-
-	// Returns the output channel for the service
-	Output() chan<- *AmassRequest
-
-	// The request is sent non-blocking on the output chanel
-	SendOut(req *AmassRequest)
+	NextRequest() *AmassRequest
+	SendRequest(req *AmassRequest)
 
 	// Return true if the service is active
 	IsActive() bool
@@ -64,13 +44,10 @@ type BaseAmassService struct {
 	name    string
 	started bool
 	stopped bool
-	input   <-chan *AmassRequest
-	output  chan<- *AmassRequest
+	queue   []*AmassRequest
 	active  bool
 	quit    chan struct{}
-
-	// The configuration being used by the service
-	config *AmassConfig
+	config  *AmassConfig
 
 	// The specific service embedding BaseAmassService
 	service AmassService
@@ -79,6 +56,7 @@ type BaseAmassService struct {
 func NewBaseAmassService(name string, config *AmassConfig, service AmassService) *BaseAmassService {
 	return &BaseAmassService{
 		name:    name,
+		queue:   make([]*AmassRequest, 0, 50),
 		quit:    make(chan struct{}),
 		config:  config,
 		service: service,
@@ -111,19 +89,33 @@ func (bas *BaseAmassService) OnStop() error {
 	return nil
 }
 
-func (bas *BaseAmassService) Input() <-chan *AmassRequest {
-	return bas.input
+func (bas *BaseAmassService) NextRequest() *AmassRequest {
+	bas.Lock()
+	defer bas.Unlock()
+
+	if len(bas.queue) == 0 {
+		return nil
+	}
+
+	var next *AmassRequest
+
+	if len(bas.queue) > 0 {
+		next = bas.queue[0]
+		// Remove the first slice element
+		if len(bas.queue) > 1 {
+			bas.queue = bas.queue[1:]
+		} else {
+			bas.queue = []*AmassRequest{}
+		}
+	}
+	return next
 }
 
-func (bas *BaseAmassService) Output() chan<- *AmassRequest {
-	return bas.output
-}
+func (bas *BaseAmassService) SendRequest(req *AmassRequest) {
+	bas.Lock()
+	defer bas.Unlock()
 
-func (bas *BaseAmassService) SendOut(req *AmassRequest) {
-	// Perform the channel write in a goroutine
-	go func() {
-		bas.output <- req
-	}()
+	bas.queue = append(bas.queue, req)
 }
 
 func (bas *BaseAmassService) IsActive() bool {

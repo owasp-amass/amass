@@ -26,14 +26,14 @@ type ArchiveService struct {
 	filter    map[string]struct{}
 }
 
-func NewArchiveService(in, out chan *AmassRequest, config *AmassConfig) *ArchiveService {
+func NewArchiveService(config *AmassConfig) *ArchiveService {
 	as := &ArchiveService{
 		responses: make(chan *AmassRequest, 50),
 		filter:    make(map[string]struct{}),
 	}
 	// Modify the crawler's http client to use our DialContext
 	gocrawl.HttpClient.Transport = &http.Transport{
-		DialContext:           config.DialContext,
+		DialContext:           DialContext,
 		MaxIdleConns:          200,
 		IdleConnTimeout:       90 * time.Second,
 		TLSHandshakeTimeout:   10 * time.Second,
@@ -51,8 +51,6 @@ func NewArchiveService(in, out chan *AmassRequest, config *AmassConfig) *Archive
 		UKGovArchive(as.responses),
 	}
 
-	as.input = in
-	as.output = out
 	return as
 }
 
@@ -70,11 +68,13 @@ func (as *ArchiveService) OnStop() error {
 }
 
 func (as *ArchiveService) processRequests() {
+	t := time.NewTicker(as.Config().Frequency)
+	defer t.Stop()
 loop:
 	for {
 		select {
-		case req := <-as.Input():
-			go as.executeAllArchives(req)
+		case <-t.C:
+			go as.executeAllArchives()
 		case <-as.Quit():
 			break loop
 		}
@@ -90,7 +90,7 @@ loop:
 		case out := <-as.responses:
 			as.SetActive(true)
 			if !as.duplicate(out.Name) {
-				as.SendOut(out)
+				as.Config().dns.SendRequest(out)
 			}
 		case <-t.C:
 			as.SetActive(false)
@@ -110,9 +110,17 @@ func (as *ArchiveService) duplicate(sub string) bool {
 	return false
 }
 
-func (as *ArchiveService) executeAllArchives(req *AmassRequest) {
-	as.SetActive(true)
+func (as *ArchiveService) executeAllArchives() {
+	req := as.NextRequest()
+	if req == nil {
+		return
+	}
 
+	if !as.Config().IsDomainInScope(req.Name) {
+		return
+	}
+
+	as.SetActive(true)
 	for _, archive := range as.archives {
 		go archive.Search(req)
 	}

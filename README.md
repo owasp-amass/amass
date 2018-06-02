@@ -117,6 +117,12 @@ $ amass -json out.txt -d example.com
 ```
 
 
+Have amass send all the DNS and infrastructure enumerations to the Neo4j graph database:
+```
+$ amass -neo4j neo4j:DoNotUseThisPassword@localhost:7687 -d example.com
+```
+
+
 Specify your own DNS resolvers on the command-line or from a file:
 ```
 $ amass -v -d example.com -r 8.8.8.8,1.1.1.1
@@ -230,18 +236,6 @@ By default, port 443 will be checked for certificates, but the ports can be chan
 $ amass net -cidr 192.168.1.0/24 -p 80,443,8080
 ```
 
-
-#### Using a Proxy (still under development)
-
-The amass tool can send all its traffic through a proxy, such as socks4, socks4a, socks5, http and https. Do **not** use this to send the traffic through Tor, since that network does not support UDP traffic.
-```
-$ amass -v -proxy socks5://user:password@192.168.1.1:5050 example.com
-```
-
-
-**Thank you** GameXG/ProxyClient for making it easy to implement this feature!
-
-
 ## Integrating Amass into Your Work
 
 If you are using the amass package within your own Go code, be sure to properly seed the default pseudo-random number generator:
@@ -296,6 +290,15 @@ func main() {
 ## Community
 
  - [Discord Server](https://discord.gg/rtN8GMd) - Discussing OSINT, network recon and developing security tools using Go
+
+
+## Mentions
+
+ - [Subdomain enumeration](http://10degres.net/subdomain-enumeration/)
+ - [Asset Discovery: Doing Reconnaissance the Hard Way](https://0xpatrik.com/asset-discovery/)
+ - [Subdomain Enumeration Tool: Amass](https://n0where.net/subdomain-enumeration-tool-amass)
+ - [Go is for everyone](https://changelog.com/gotime/71)
+ - [Top Five Ways the Red Team breached the External Perimeter](https://medium.com/@adam.toscher/top-five-ways-the-red-team-breached-the-external-perimeter-262f99dc9d17)
 
 
 ## Let Me Know What You Think
