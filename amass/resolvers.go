@@ -5,6 +5,7 @@ package amass
 
 import (
 	"math/rand"
+	"strings"
 )
 
 var (
@@ -58,4 +59,17 @@ func NextResolverAddress() string {
 	idx := rnd % len(resolvers)
 
 	return resolvers[idx]
+}
+
+func SetCustomResolvers(resolvers []string) {
+	for _, r := range resolvers {
+		addr := r
+
+		parts := strings.Split(addr, ":")
+		if len(parts) == 1 && parts[0] == addr {
+			addr += ":53"
+		}
+
+		CustomResolvers = UniqueAppend(CustomResolvers, addr)
+	}
 }

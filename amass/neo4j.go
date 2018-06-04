@@ -195,7 +195,7 @@ func (n *Neo4j) insertNS(name, domain, target, tdomain, tag, source string) {
 	n.conn.ExecNeo("MERGE (n:Subdomain {name: {name}}) "+
 		"ON CREATE SET n.tag = {tag}, n.source = {source}", params)
 
-	n.conn.ExecNeo("MERGE (n:Subdomain {name: {target}}) "+
+	n.conn.ExecNeo("MERGE (n:Subdomain:NS {name: {target}}) "+
 		"ON CREATE SET n.tag = {tag}, n.source = {source}", params)
 
 	if target != tdomain {
@@ -222,7 +222,7 @@ func (n *Neo4j) insertMX(name, domain, target, tdomain, tag, source string) {
 	n.conn.ExecNeo("MERGE (n:Subdomain {name: {name}}) "+
 		"ON CREATE SET n.tag = {tag}, n.source = {source}", params)
 
-	n.conn.ExecNeo("MERGE (n:Subdomain {name: {target}}) "+
+	n.conn.ExecNeo("MERGE (n:Subdomain:MX {name: {target}}) "+
 		"ON CREATE SET n.tag = {tag}, n.source = {source}", params)
 
 	if target != tdomain {

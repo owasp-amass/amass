@@ -283,6 +283,7 @@ func (g *Graph) insertNS(name, domain, target, tdomain, tag, source string) {
 	sub := g.Subdomains[name]
 	ns := g.Subdomains[target]
 	ns.Properties["type"] = "TypeNS"
+	ns.Labels = append(ns.Labels, "NS")
 	NewEdge(sub, ns, "NS_TO")
 }
 
@@ -315,6 +316,7 @@ func (g *Graph) insertMX(name, domain, target, tdomain, tag, source string) {
 	sub := g.Subdomains[name]
 	mx := g.Subdomains[target]
 	mx.Properties["type"] = "TypeMX"
+	mx.Labels = append(mx.Labels, "MX")
 	NewEdge(sub, mx, "MX_TO")
 }
 

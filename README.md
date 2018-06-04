@@ -207,9 +207,7 @@ Only the first domain provided is used while performing the reverse whois operat
 
 #### Network/Infrastructure Options
 
-**Caution:** If you use these options without specifying root domain names, amass will attempt to reach out to every IP address within the identified infrastructure and obtain names from TLS certificates. This is "loud" and can reveal your reconnaissance activities to the organization being investigated.
-
-If you do provide root domain names on the command-line, these options will simply serve as constraints to the amass output.
+**Caution:** If you use these options, amass will attempt to reach out to every IP address within the identified infrastructure and obtain names from TLS certificates. This is "loud" and can reveal your reconnaissance activities to the organization being investigated.
 
 All the flags shown here require the 'net' subcommand to be specified **first**.
 
@@ -225,7 +223,7 @@ $ amass net -cidr 192.184.113.0/24,104.154.0.0/15
 ```
 
 
-To limit your enumeration to specific IPs or address ranges, use this option:
+For specific IPs or address ranges, use this option:
 ```
 $ amass net -addr 192.168.1.44,192.168.2.1-64
 ```

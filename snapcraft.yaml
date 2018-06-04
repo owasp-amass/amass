@@ -1,5 +1,5 @@
 name: amass
-version: 'v2.0.0'
+version: 'v2.0.1'
 summary: In-Depth Subdomain Enumeration
 description: |
   The amass tool searches Internet data sources, performs brute-force 

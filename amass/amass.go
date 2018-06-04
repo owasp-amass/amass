@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	Version string = "v2.0.0"
+	Version string = "v2.0.1"
 	Author  string = "Jeff Foley (@jeff_foley)"
 	// Tags used to mark the data source with the Subdomain struct
 	ALT     = "alt"
@@ -50,8 +50,8 @@ func StartEnumeration(config *AmassConfig) error {
 		return err
 	}
 
-	for _, r := range config.Resolvers {
-		CustomResolvers = append(CustomResolvers, r)
+	if len(config.Resolvers) > 0 {
+		SetCustomResolvers(config.Resolvers)
 	}
 
 	dnsSrv := NewDNSService(config)
