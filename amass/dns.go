@@ -961,7 +961,7 @@ func SubdomainToDomain(name string) string {
 	// Obtain all parts of the subdomain name
 	labels := strings.Split(strings.TrimSpace(name), ".")
 	// Check the cache for all parts of the name
-	for i := len(labels) - 2; i >= 0; i-- {
+	for i := len(labels); i >= 0; i-- {
 		sub := strings.Join(labels[i:], ".")
 
 		if checkRootDomainCache(sub) {
