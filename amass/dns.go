@@ -10,7 +10,6 @@ import (
 	"math/rand"
 	"net"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/miekg/dns"
@@ -148,6 +147,9 @@ type DNSService struct {
 	// Data collected about various subdomains
 	subdomains map[string]map[int][]string
 
+	// Domains discovered by the SubdomainToDomain method call
+	domains map[string]struct{}
+
 	// The channel that accepts new AmassRequests for the subdomain manager
 	subMgrIn chan *AmassRequest
 
@@ -160,6 +162,7 @@ func NewDNSService(config *AmassConfig) *DNSService {
 		inFilter:    make(map[string]struct{}),
 		outFilter:   make(map[string]struct{}),
 		subdomains:  make(map[string]map[int][]string),
+		domains:     make(map[string]struct{}),
 		subMgrIn:    make(chan *AmassRequest, 50),
 		wildcardReq: make(chan *wildcard, 50),
 	}
@@ -306,6 +309,40 @@ func nameToRecords(name string) ([]DNSAnswer, error) {
 		return nil, fmt.Errorf("No records resolved for the name: %s", name)
 	}
 	return answers, nil
+}
+
+func (ds *DNSService) SubdomainToDomain(name string) string {
+	ds.Lock()
+	defer ds.Unlock()
+
+	var domain string
+
+	// Obtain all parts of the subdomain name
+	labels := strings.Split(strings.TrimSpace(name), ".")
+	// Check the cache for all parts of the name
+	for i := len(labels); i >= 0; i-- {
+		sub := strings.Join(labels[i:], ".")
+
+		if _, ok := ds.domains[sub]; ok {
+			domain = sub
+			break
+		}
+	}
+	// If the root domain was in the cache, return it now
+	if domain != "" {
+		return domain
+	}
+	// Check the DNS for all parts of the name
+	for i := len(labels) - 2; i >= 0; i-- {
+		sub := strings.Join(labels[i:], ".")
+
+		if _, err := ResolveDNS(sub, "NS"); err == nil {
+			ds.domains[sub] = struct{}{}
+			domain = sub
+			break
+		}
+	}
+	return domain
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -924,64 +961,4 @@ func removeLastDot(name string) string {
 		return name[:sz-1]
 	}
 	return name
-}
-
-//-------------------------------------------------------------------------------------------------
-// Root domain lookups and caching
-
-var (
-	rootDomainMutex sync.Mutex
-	rootDomainCache map[string]struct{}
-)
-
-func init() {
-	rootDomainCache = make(map[string]struct{})
-}
-
-func checkRootDomainCache(domain string) bool {
-	rootDomainMutex.Lock()
-	defer rootDomainMutex.Unlock()
-
-	if _, ok := rootDomainCache[domain]; ok {
-		return true
-	}
-	return false
-}
-
-func setRootDomainCache(domain string) {
-	rootDomainMutex.Lock()
-	defer rootDomainMutex.Unlock()
-
-	rootDomainCache[domain] = struct{}{}
-}
-
-func SubdomainToDomain(name string) string {
-	var domain string
-
-	// Obtain all parts of the subdomain name
-	labels := strings.Split(strings.TrimSpace(name), ".")
-	// Check the cache for all parts of the name
-	for i := len(labels); i >= 0; i-- {
-		sub := strings.Join(labels[i:], ".")
-
-		if checkRootDomainCache(sub) {
-			domain = sub
-			break
-		}
-	}
-	// If the root domain was in the cache, return it now
-	if domain != "" {
-		return domain
-	}
-	// Check the DNS for all parts of the name
-	for i := len(labels) - 2; i >= 0; i-- {
-		sub := strings.Join(labels[i:], ".")
-
-		if _, err := ResolveDNS(sub, "NS"); err == nil {
-			setRootDomainCache(sub)
-			domain = sub
-			break
-		}
-	}
-	return domain
 }

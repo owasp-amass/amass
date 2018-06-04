@@ -162,7 +162,7 @@ func (dms *DataManagerService) insertDomain(domain string) {
 
 func (dms *DataManagerService) insertCNAME(req *AmassRequest, recidx int) {
 	target := strings.ToLower(removeLastDot(req.Records[recidx].Data))
-	domain := strings.ToLower(SubdomainToDomain(target))
+	domain := strings.ToLower(dms.Config().dns.SubdomainToDomain(target))
 
 	if target == "" || domain == "" {
 		return
@@ -238,7 +238,7 @@ func (dms *DataManagerService) insertAAAA(req *AmassRequest, recidx int) {
 
 func (dms *DataManagerService) insertPTR(req *AmassRequest, recidx int) {
 	target := strings.ToLower(removeLastDot(req.Records[recidx].Data))
-	domain := strings.ToLower(SubdomainToDomain(target))
+	domain := strings.ToLower(dms.Config().dns.SubdomainToDomain(target))
 
 	if target == "" || domain == "" {
 		return
@@ -281,7 +281,7 @@ func (dms *DataManagerService) insertSRV(req *AmassRequest, recidx int) {
 
 func (dms *DataManagerService) insertNS(req *AmassRequest, recidx int) {
 	target := strings.ToLower(removeLastDot(req.Records[recidx].Data))
-	domain := strings.ToLower(SubdomainToDomain(target))
+	domain := strings.ToLower(dms.Config().dns.SubdomainToDomain(target))
 
 	if target == "" || domain == "" {
 		return
@@ -307,7 +307,7 @@ func (dms *DataManagerService) insertNS(req *AmassRequest, recidx int) {
 
 func (dms *DataManagerService) insertMX(req *AmassRequest, recidx int) {
 	target := strings.ToLower(removeLastDot(req.Records[recidx].Data))
-	domain := strings.ToLower(SubdomainToDomain(target))
+	domain := strings.ToLower(dms.Config().dns.SubdomainToDomain(target))
 
 	if target == "" || domain == "" {
 		return

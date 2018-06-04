@@ -71,7 +71,7 @@ type AmassConfig struct {
 
 	// The services used during the enumeration
 	scrape  AmassService
-	dns     AmassService
+	dns     *DNSService
 	data    AmassService
 	archive AmassService
 	alt     AmassService

@@ -69,6 +69,12 @@ func PullCertificate(addr string, config *AmassConfig, add bool) {
 	}
 
 	for _, req := range requests {
+		d := config.dns.SubdomainToDomain(req.Name)
+		if d == "" {
+			continue
+		}
+		req.Domain = d
+
 		for _, domain := range config.Domains() {
 			if req.Domain == domain {
 				config.dns.SendRequest(req)
@@ -128,16 +134,11 @@ func reqFromNames(subdomains []string) []*AmassRequest {
 
 	// For each subdomain name, attempt to make a new AmassRequest
 	for _, name := range subdomains {
-		root := SubdomainToDomain(name)
-
-		if root != "" {
-			requests = append(requests, &AmassRequest{
-				Name:   name,
-				Domain: root,
-				Tag:    "cert",
-				Source: "Active Cert",
-			})
-		}
+		requests = append(requests, &AmassRequest{
+			Name:   name,
+			Tag:    "cert",
+			Source: "Active Cert",
+		})
 	}
 	return requests
 }
