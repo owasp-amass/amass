@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	Version string = "v2.0.1"
+	Version string = "v2.0.2"
 	Author  string = "Jeff Foley (@jeff_foley)"
 	// Tags used to mark the data source with the Subdomain struct
 	ALT     = "alt"
@@ -23,8 +23,6 @@ const (
 	TypeNS
 	TypeMX
 	TypeWeb
-
-	defaultWordlistURL = "https://raw.githubusercontent.com/caffix/amass/master/wordlists/namelist.txt"
 )
 
 type AmassAddressInfo struct {

@@ -8,10 +8,13 @@ import (
 	"errors"
 	"io"
 	"net"
-	"net/http"
 	"strings"
 	"sync"
 	"time"
+)
+
+const (
+	defaultWordlistURL = "https://raw.githubusercontent.com/caffix/amass/master/wordlists/namelist.txt"
 )
 
 // AmassConfig - Passes along optional configurations
@@ -114,8 +117,8 @@ func (c *AmassConfig) Blacklisted(name string) bool {
 }
 
 func CheckConfig(config *AmassConfig) error {
-	if len(config.Wordlist) == 0 {
-		return errors.New("The configuration contains no wordlist")
+	if config.BruteForcing && len(config.Wordlist) == 0 {
+		return errors.New("The configuration contains no word list for brute forcing")
 	}
 
 	if config.Frequency < DefaultConfig().Frequency {
@@ -150,7 +153,7 @@ func CustomConfig(ac *AmassConfig) *AmassConfig {
 	if len(ac.Ports) > 0 {
 		config.Ports = ac.Ports
 	}
-	if len(ac.Wordlist) == 0 {
+	if ac.BruteForcing && len(ac.Wordlist) == 0 {
 		config.Wordlist = GetDefaultWordlist()
 	} else {
 		config.Wordlist = ac.Wordlist
@@ -180,12 +183,11 @@ func GetDefaultWordlist() []string {
 	var list []string
 	var wordlist io.Reader
 
-	resp, err := http.Get(defaultWordlistURL)
-	if err != nil {
+	page := GetWebPageWithDialContext(DialContext, defaultWordlistURL, nil)
+	if page == "" {
 		return list
 	}
-	defer resp.Body.Close()
-	wordlist = resp.Body
+	wordlist = strings.NewReader(page)
 
 	scanner := bufio.NewScanner(wordlist)
 	// Once we have used all the words, we are finished
