@@ -117,6 +117,12 @@ $ amass -json out.txt -d example.com
 ```
 
 
+Have amass output the DNS and infrastructure findings as a network graph:
+```
+$ amass -visjs vis.html -d example.com
+```
+
+
 Have amass send all the DNS and infrastructure enumerations to the Neo4j graph database:
 ```
 $ amass -neo4j neo4j:DoNotUseThisPassword@localhost:7687 -d example.com

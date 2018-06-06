@@ -15,6 +15,7 @@ type Neo4j struct {
 	conn   bolt.Conn
 }
 
+// url param will typically look like the following: neo4j:DoNotUseThisPassword@localhost:7687
 func NewNeo4j(url string) (*Neo4j, error) {
 	var err error
 

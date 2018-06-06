@@ -80,6 +80,7 @@ var (
 	wordlist      = flag.String("w", "", "Path to a different wordlist file")
 	outfile       = flag.String("o", "", "Path to the output file")
 	jsonfile      = flag.String("json", "", "Path to the JSON output file")
+	visjsfile     = flag.String("visjs", "", "Path to the Visjs output HTML file")
 	domainsfile   = flag.String("df", "", "Path to a file providing root domain names")
 	resolvefile   = flag.String("rf", "", "Path to a file providing preferred DNS resolvers")
 	blacklistfile = flag.String("blf", "", "Path to a file providing blacklisted subdomains")
@@ -223,6 +224,7 @@ func main() {
 	if err != nil {
 		r.Println(err)
 	}
+	writeVisjsOutput(*visjsfile, config.Graph.ToVisjs())
 	// Wait for output manager to finish
 	<-done
 }
@@ -412,6 +414,17 @@ func printSummary(total int, tags map[string]int, asns map[int]*asnData) {
 				yellow(cidrstr), yellow(countstr), blue("Subdomain Name(s)"))
 		}
 	}
+}
+
+func writeVisjsOutput(path, html string) {
+	fileptr, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE, 0644)
+	if err != nil {
+		return
+	}
+	defer fileptr.Close()
+
+	fileptr.WriteString(html)
+	fileptr.Sync()
 }
 
 // If the user interrupts the program, print the summary information

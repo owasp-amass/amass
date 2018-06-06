@@ -21,6 +21,8 @@ const (
 type AmassConfig struct {
 	sync.Mutex
 
+	Graph *Graph
+
 	// The channel that will receive the results
 	Output chan *AmassOutput
 

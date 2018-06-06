@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	Version string = "v2.0.3"
+	Version string = "v2.1.0"
 	Author  string = "Jeff Foley (@jeff_foley)"
 	// Tags used to mark the data source with the Subdomain struct
 	ALT     = "alt"
