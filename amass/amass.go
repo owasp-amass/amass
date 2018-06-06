@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	Version string = "v2.1.0"
+	Version string = "v2.1.1"
 	Author  string = "Jeff Foley (@jeff_foley)"
 	// Tags used to mark the data source with the Subdomain struct
 	ALT     = "alt"
@@ -134,7 +134,7 @@ func obtainAdditionalDomains(config *AmassConfig) {
 	}
 
 	var running int
-	done := make(chan struct{}, 50)
+	done := make(chan struct{}, 100)
 
 	t := time.NewTicker(100 * time.Millisecond)
 	defer t.Stop()
@@ -142,7 +142,7 @@ loop:
 	for {
 		select {
 		case <-t.C:
-			if running >= 50 || len(ips) <= 0 {
+			if running >= 100 || len(ips) <= 0 {
 				break
 			}
 
@@ -160,6 +160,15 @@ loop:
 			running--
 			if running == 0 && len(ips) <= 0 {
 				break loop
+			}
+		}
+	}
+
+	if config.Whois {
+		domains := config.Domains()
+		for _, domain := range domains {
+			if more := ReverseWhois(domain); len(more) > 0 {
+				config.AddDomains(more)
 			}
 		}
 	}

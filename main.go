@@ -75,7 +75,6 @@ var (
 	noalts        = flag.Bool("noalts", false, "Disable generation of altered names")
 	verbose       = flag.Bool("v", false, "Print the data source and summary information")
 	whois         = flag.Bool("whois", false, "Include domains discoverd with reverse whois")
-	list          = flag.Bool("l", false, "List all domains to be used in an enumeration")
 	freq          = flag.Int64("freq", 0, "Sets the number of max DNS queries per minute")
 	wordlist      = flag.String("w", "", "Path to a different wordlist file")
 	outfile       = flag.String("o", "", "Path to the output file")
@@ -191,6 +190,7 @@ func main() {
 		ASNs:            asns,
 		CIDRs:           cidrs,
 		Ports:           ports,
+		Whois:           *whois,
 		Wordlist:        words,
 		BruteForcing:    *brute,
 		Recursive:       recursive,
@@ -203,19 +203,8 @@ func main() {
 		Neo4jPath:       *neo4j,
 		Output:          results,
 	})
-	config.AddDomains(domains)
-	// If requested, obtain the additional domains from reverse whois information
-	if len(domains) > 0 && *whois {
-		if more := amass.ReverseWhois(domains[0]); len(more) > 0 {
-			config.AddDomains(more)
-		}
-	}
-	if *list {
-		// Just show the domains and quit
-		for _, d := range config.Domains() {
-			g.Println(d)
-		}
-		return
+	if len(domains) > 0 {
+		config.AddDomains(domains)
 	}
 	//profFile, _ := os.Create("amass_debug.prof")
 	//pprof.StartCPUProfile(profFile)
@@ -224,7 +213,9 @@ func main() {
 	if err != nil {
 		r.Println(err)
 	}
-	writeVisjsOutput(*visjsfile, config.Graph.ToVisjs())
+	if *visjsfile != "" {
+		writeVisjsOutput(*visjsfile, config.Graph.ToVisjs())
+	}
 	// Wait for output manager to finish
 	<-done
 }

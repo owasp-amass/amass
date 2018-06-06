@@ -15,9 +15,8 @@ import (
 )
 
 const (
-	defaultTLSConnectTimeout = 3 * time.Second
-	defaultHandshakeDeadline = 10 * time.Second
-	defaultCertPullFrequency = 100 * time.Millisecond
+	defaultTLSConnectTimeout = 1 * time.Second
+	defaultHandshakeDeadline = 3 * time.Second
 )
 
 // pullCertificate - Attempts to pull a cert from several ports on an IP
@@ -57,7 +56,7 @@ func PullCertificate(addr string, config *AmassConfig, add bool) {
 		certChain := c.ConnectionState().PeerCertificates
 		cert := certChain[0]
 		// Create the new requests from names found within the cert
-		requests = append(requests, reqFromNames(namesFromCert(cert))...)
+		requests = append(requests, reqFromNames(namesFromCert(cert), config)...)
 	}
 	// Get all unique root domain names from the generated requests
 	if add {
@@ -69,12 +68,6 @@ func PullCertificate(addr string, config *AmassConfig, add bool) {
 	}
 
 	for _, req := range requests {
-		d := config.dns.SubdomainToDomain(req.Name)
-		if d == "" {
-			continue
-		}
-		req.Domain = d
-
 		for _, domain := range config.Domains() {
 			if req.Domain == domain {
 				config.dns.SendRequest(req)
@@ -129,13 +122,14 @@ func removeAsteriskLabel(s string) string {
 	return strings.Join(labels[index:], ".")
 }
 
-func reqFromNames(subdomains []string) []*AmassRequest {
+func reqFromNames(subdomains []string, config *AmassConfig) []*AmassRequest {
 	var requests []*AmassRequest
 
 	// For each subdomain name, attempt to make a new AmassRequest
 	for _, name := range subdomains {
 		requests = append(requests, &AmassRequest{
 			Name:   name,
+			Domain: config.dns.SubdomainToDomain(name),
 			Tag:    "cert",
 			Source: "Active Cert",
 		})

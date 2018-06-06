@@ -38,6 +38,9 @@ type AmassConfig struct {
 	// The ports that will be checked for certificates
 	Ports []int
 
+	// Will whois info be used to add additional domains?
+	Whois bool
+
 	// The list of words to use when generating names
 	Wordlist []string
 
@@ -136,7 +139,7 @@ func CheckConfig(config *AmassConfig) error {
 // DefaultConfig returns a config with values that have been tested
 func DefaultConfig() *AmassConfig {
 	config := &AmassConfig{
-		Ports:           []int{443},
+		Ports:           []int{80, 443},
 		Recursive:       true,
 		Alterations:     true,
 		Frequency:       25 * time.Millisecond,
@@ -170,6 +173,7 @@ func CustomConfig(ac *AmassConfig) *AmassConfig {
 	config.ASNs = ac.ASNs
 	config.CIDRs = ac.CIDRs
 	config.IPs = ac.IPs
+	config.Whois = ac.Whois
 	config.BruteForcing = ac.BruteForcing
 	config.Recursive = ac.Recursive
 	config.Alterations = ac.Alterations
