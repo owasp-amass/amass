@@ -105,6 +105,23 @@ func StartEnumeration(config *AmassConfig) error {
 }
 
 func obtainAdditionalDomains(config *AmassConfig) {
+	ips := allIPsInConfig(config)
+
+	if len(ips) > 0 {
+		pullAllCertificates(ips, config)
+	}
+
+	if config.Whois {
+		domains := config.Domains()
+		for _, domain := range domains {
+			if more := ReverseWhois(domain); len(more) > 0 {
+				config.AddDomains(more)
+			}
+		}
+	}
+}
+
+func allIPsInConfig(config *AmassConfig) []net.IP {
 	var ips []net.IP
 
 	ips = append(ips, config.IPs...)
@@ -128,11 +145,10 @@ func obtainAdditionalDomains(config *AmassConfig) {
 			ips = append(ips, NetHosts(ipnet)...)
 		}
 	}
+	return ips
+}
 
-	if len(ips) == 0 {
-		return
-	}
-
+func pullAllCertificates(ips []net.IP, config *AmassConfig) {
 	var running int
 	done := make(chan struct{}, 100)
 
@@ -160,15 +176,6 @@ loop:
 			running--
 			if running == 0 && len(ips) <= 0 {
 				break loop
-			}
-		}
-	}
-
-	if config.Whois {
-		domains := config.Domains()
-		for _, domain := range domains {
-			if more := ReverseWhois(domain); len(more) > 0 {
-				config.AddDomains(more)
 			}
 		}
 	}
