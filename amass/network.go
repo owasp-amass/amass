@@ -40,13 +40,50 @@ type ASRecord struct {
 }
 
 var (
-	// Caches the infrastructure data collected from online sources
+	// Cache for the infrastructure data collected from online sources
 	netDataLock  sync.Mutex
 	netDataCache map[int]*ASRecord
+	// Domains discovered by the SubdomainToDomain method call
+	domainLock  sync.Mutex
+	domainCache map[string]struct{}
 )
 
 func init() {
 	netDataCache = make(map[int]*ASRecord)
+	domainCache = make(map[string]struct{})
+}
+
+func SubdomainToDomain(name string) string {
+	domainLock.Lock()
+	defer domainLock.Unlock()
+
+	var domain string
+
+	// Obtain all parts of the subdomain name
+	labels := strings.Split(strings.TrimSpace(name), ".")
+	// Check the cache for all parts of the name
+	for i := len(labels); i >= 0; i-- {
+		sub := strings.Join(labels[i:], ".")
+
+		if _, ok := domainCache[sub]; ok {
+			domain = sub
+			break
+		}
+	}
+	if domain != "" {
+		return domain
+	}
+	// Check the DNS for all parts of the name
+	for i := len(labels) - 2; i >= 0; i-- {
+		sub := strings.Join(labels[i:], ".")
+
+		if _, err := ResolveDNS(sub, "NS"); err == nil {
+			domainCache[sub] = struct{}{}
+			domain = sub
+			break
+		}
+	}
+	return domain
 }
 
 func IPRequest(addr string) (int, *net.IPNet, string) {
@@ -201,15 +238,8 @@ func originLookup(addr string) (int, string) {
 	} else {
 		return 0, ""
 	}
-	// Attempt multiple times since this is UDP
-	for i := 0; i < 10; i++ {
-		answers, err = ResolveDNS(name, "TXT")
-		if err == nil {
-			break
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	// Did we receive the DNS answer?
+
+	answers, err = ResolveDNS(name, "TXT")
 	if err != nil {
 		return 0, ""
 	}
@@ -228,15 +258,8 @@ func asnLookup(asn int) *ASRecord {
 
 	// Get the AS record using the ASN
 	name := "AS" + strconv.Itoa(asn) + ".asn.cymru.com"
-	// Attempt multiple times since this is UDP
-	for i := 0; i < 10; i++ {
-		answers, err = ResolveDNS(name, "TXT")
-		if err == nil {
-			break
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	// Did we receive the DNS answer?
+
+	answers, err = ResolveDNS(name, "TXT")
 	if err != nil {
 		return nil
 	}

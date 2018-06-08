@@ -101,7 +101,7 @@ func (c *AmassConfig) IsDomainInScope(name string) bool {
 	var discovered bool
 
 	for _, d := range c.Domains() {
-		if strings.HasSuffix(name, d) {
+		if name == d || strings.HasSuffix(name, "."+d) {
 			discovered = true
 			break
 		}
@@ -142,7 +142,7 @@ func DefaultConfig() *AmassConfig {
 		Ports:           []int{80, 443},
 		Recursive:       true,
 		Alterations:     true,
-		Frequency:       25 * time.Millisecond,
+		Frequency:       10 * time.Millisecond,
 		MinForRecursive: 1,
 	}
 	return config
@@ -154,6 +154,9 @@ func CustomConfig(ac *AmassConfig) *AmassConfig {
 
 	if len(ac.Domains()) > 0 {
 		config.AddDomains(ac.Domains())
+	}
+	if len(config.Resolvers) > 0 {
+		SetCustomResolvers(config.Resolvers)
 	}
 	if len(ac.Ports) > 0 {
 		config.Ports = ac.Ports

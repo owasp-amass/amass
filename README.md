@@ -33,6 +33,9 @@ DNS name resolution is performed across many public servers so the authoritative
 ----
 
 
+![alt text](https://github.com/caffix/amass/blob/master/examples/network_06062018.png "Internet Satellite Imagery")
+
+
 ## How to Install
 
 #### Prebuilt
@@ -298,6 +301,8 @@ func main() {
 
 ## Mentions
 
+ - [Best Hacking Tools List for Hackers & Security Professionals 2018](http://kalilinuxtutorials.com/best-hacking-tools-list/amp/)
+ - [Amass - Subdomain Enumeration Tool](https://hydrasky.com/network-security/kali-tools/amass-subdomain-enumeration-tool/)
  - [Subdomain enumeration](http://10degres.net/subdomain-enumeration/)
  - [Asset Discovery: Doing Reconnaissance the Hard Way](https://0xpatrik.com/asset-discovery/)
  - [Subdomain Enumeration Tool: Amass](https://n0where.net/subdomain-enumeration-tool-amass)

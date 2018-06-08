@@ -20,11 +20,11 @@ const (
 )
 
 // pullCertificate - Attempts to pull a cert from several ports on an IP
-func PullCertificate(addr string, config *AmassConfig, add bool) {
+func PullCertificateNames(addr string, ports []int) []*AmassRequest {
 	var requests []*AmassRequest
 
 	// Check hosts for certificates that contain subdomain names
-	for _, port := range config.Ports {
+	for _, port := range ports {
 		cfg := &tls.Config{InsecureSkipVerify: true}
 		// Set the maximum time allowed for making the connection
 		ctx, cancel := context.WithTimeout(context.Background(), defaultTLSConnectTimeout)
@@ -56,25 +56,9 @@ func PullCertificate(addr string, config *AmassConfig, add bool) {
 		certChain := c.ConnectionState().PeerCertificates
 		cert := certChain[0]
 		// Create the new requests from names found within the cert
-		requests = append(requests, reqFromNames(namesFromCert(cert), config)...)
+		requests = append(requests, reqFromNames(namesFromCert(cert))...)
 	}
-	// Get all unique root domain names from the generated requests
-	if add {
-		var domains []string
-		for _, r := range requests {
-			domains = UniqueAppend(domains, r.Domain)
-		}
-		config.AddDomains(domains)
-	}
-
-	for _, req := range requests {
-		for _, domain := range config.Domains() {
-			if req.Domain == domain {
-				config.dns.SendRequest(req)
-				break
-			}
-		}
-	}
+	return requests
 }
 
 func namesFromCert(cert *x509.Certificate) []string {
@@ -122,14 +106,14 @@ func removeAsteriskLabel(s string) string {
 	return strings.Join(labels[index:], ".")
 }
 
-func reqFromNames(subdomains []string, config *AmassConfig) []*AmassRequest {
+func reqFromNames(subdomains []string) []*AmassRequest {
 	var requests []*AmassRequest
 
 	// For each subdomain name, attempt to make a new AmassRequest
 	for _, name := range subdomains {
 		requests = append(requests, &AmassRequest{
 			Name:   name,
-			Domain: config.dns.SubdomainToDomain(name),
+			Domain: SubdomainToDomain(name),
 			Tag:    "cert",
 			Source: "Active Cert",
 		})

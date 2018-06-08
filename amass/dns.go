@@ -147,9 +147,6 @@ type DNSService struct {
 	// Data collected about various subdomains
 	subdomains map[string]map[int][]string
 
-	// Domains discovered by the SubdomainToDomain method call
-	domains map[string]struct{}
-
 	// The channel that accepts new AmassRequests for the subdomain manager
 	subMgrIn chan *AmassRequest
 
@@ -162,7 +159,6 @@ func NewDNSService(config *AmassConfig) *DNSService {
 		inFilter:    make(map[string]struct{}),
 		outFilter:   make(map[string]struct{}),
 		subdomains:  make(map[string]map[int][]string),
-		domains:     make(map[string]struct{}),
 		subMgrIn:    make(chan *AmassRequest, 50),
 		wildcardReq: make(chan *wildcard, 50),
 	}
@@ -309,40 +305,6 @@ func nameToRecords(name string) ([]DNSAnswer, error) {
 		return nil, fmt.Errorf("No records resolved for the name: %s", name)
 	}
 	return answers, nil
-}
-
-func (ds *DNSService) SubdomainToDomain(name string) string {
-	ds.Lock()
-	defer ds.Unlock()
-
-	var domain string
-
-	// Obtain all parts of the subdomain name
-	labels := strings.Split(strings.TrimSpace(name), ".")
-	// Check the cache for all parts of the name
-	for i := len(labels); i >= 0; i-- {
-		sub := strings.Join(labels[i:], ".")
-
-		if _, ok := ds.domains[sub]; ok {
-			domain = sub
-			break
-		}
-	}
-	// If the root domain was in the cache, return it now
-	if domain != "" {
-		return domain
-	}
-	// Check the DNS for all parts of the name
-	for i := len(labels) - 2; i >= 0; i-- {
-		sub := strings.Join(labels[i:], ".")
-
-		if _, err := ResolveDNS(sub, "NS"); err == nil {
-			ds.domains[sub] = struct{}{}
-			domain = sub
-			break
-		}
-	}
-	return domain
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -812,32 +774,48 @@ func textToTypeNum(text string) (uint16, error) {
 
 // DNSExchange - Encapsulates miekg/dns usage
 func DNSExchangeConn(conn net.Conn, name string, qtype uint16) []DNSAnswer {
-	m := &dns.Msg{
-		MsgHdr: dns.MsgHdr{
-			Authoritative:     false,
-			AuthenticatedData: false,
-			CheckingDisabled:  false,
-			RecursionDesired:  true,
-			Opcode:            dns.OpcodeQuery,
-			Id:                dns.Id(),
-			Rcode:             dns.RcodeSuccess,
-		},
-		Question: make([]dns.Question, 1),
-	}
-	m.Question[0] = dns.Question{
-		Name:   dns.Fqdn(name),
-		Qtype:  qtype,
-		Qclass: uint16(dns.ClassINET),
-	}
-	m.Extra = append(m.Extra, setupOptions())
-
+	var err error
+	var m, r *dns.Msg
 	var answers []DNSAnswer
-	// Perform the DNS query
-	co := &dns.Conn{Conn: conn}
-	co.WriteMsg(m)
-	// Set the maximum time for receiving the answer
-	co.SetReadDeadline(time.Now().Add(3 * time.Second))
-	r, err := co.ReadMsg()
+
+	tries := 3
+	if qtype == dns.TypeNS || qtype == dns.TypeMX ||
+		qtype == dns.TypeSOA || qtype == dns.TypeSPF {
+		tries = 7
+	} else if qtype == dns.TypeTXT {
+		tries = 10
+	}
+
+	for i := 0; i < tries; i++ {
+		m = &dns.Msg{
+			MsgHdr: dns.MsgHdr{
+				Authoritative:     false,
+				AuthenticatedData: false,
+				CheckingDisabled:  false,
+				RecursionDesired:  true,
+				Opcode:            dns.OpcodeQuery,
+				Id:                dns.Id(),
+				Rcode:             dns.RcodeSuccess,
+			},
+			Question: make([]dns.Question, 1),
+		}
+		m.Question[0] = dns.Question{
+			Name:   dns.Fqdn(name),
+			Qtype:  qtype,
+			Qclass: uint16(dns.ClassINET),
+		}
+		m.Extra = append(m.Extra, setupOptions())
+
+		// Perform the DNS query
+		co := &dns.Conn{Conn: conn}
+		co.WriteMsg(m)
+		// Set the maximum time for receiving the answer
+		co.SetReadDeadline(time.Now().Add(3 * time.Second))
+		r, err = co.ReadMsg()
+		if err == nil {
+			break
+		}
+	}
 	if err != nil {
 		return answers
 	}
@@ -846,9 +824,7 @@ func DNSExchangeConn(conn net.Conn, name string, qtype uint16) []DNSAnswer {
 		return answers
 	}
 
-	data := extractRawData(r, qtype)
-
-	for _, a := range data {
+	for _, a := range extractRawData(r, qtype) {
 		answers = append(answers, DNSAnswer{
 			Name: name,
 			Type: int(qtype),

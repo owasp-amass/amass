@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	Version string = "v2.1.1"
+	Version string = "v2.1.2"
 	Author  string = "Jeff Foley (@jeff_foley)"
 	// Tags used to mark the data source with the Subdomain struct
 	ALT     = "alt"
@@ -48,14 +48,8 @@ func StartEnumeration(config *AmassConfig) error {
 		return err
 	}
 
-	if len(config.Resolvers) > 0 {
-		SetCustomResolvers(config.Resolvers)
-	}
-
 	dnsSrv := NewDNSService(config)
 	config.dns = dnsSrv
-
-	obtainAdditionalDomains(config)
 
 	scrapeSrv := NewScraperService(config)
 	config.scrape = scrapeSrv
@@ -104,7 +98,7 @@ func StartEnumeration(config *AmassConfig) error {
 	return nil
 }
 
-func obtainAdditionalDomains(config *AmassConfig) {
+func ObtainAdditionalDomains(config *AmassConfig) {
 	ips := allIPsInConfig(config)
 
 	if len(ips) > 0 {
@@ -182,7 +176,13 @@ loop:
 }
 
 func executeActiveCert(addr string, config *AmassConfig, done chan struct{}) {
-	PullCertificate(addr, config, true)
+	var domains []string
+
+	for _, r := range PullCertificateNames(addr, config.Ports) {
+		domains = UniqueAppend(domains, r.Domain)
+	}
+
+	config.AddDomains(domains)
 	done <- struct{}{}
 }
 

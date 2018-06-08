@@ -160,7 +160,7 @@ func (dms *DataManagerService) insertDomain(domain string) {
 
 func (dms *DataManagerService) insertCNAME(req *AmassRequest, recidx int) {
 	target := strings.ToLower(removeLastDot(req.Records[recidx].Data))
-	domain := strings.ToLower(dms.Config().dns.SubdomainToDomain(target))
+	domain := strings.ToLower(SubdomainToDomain(target))
 
 	if target == "" || domain == "" {
 		return
@@ -199,7 +199,7 @@ func (dms *DataManagerService) insertA(req *AmassRequest, recidx int) {
 
 	// Check if active certificate access should be used on this address
 	if dms.Config().Active && dms.Config().IsDomainInScope(req.Name) {
-		PullCertificate(addr, dms.Config(), false)
+		dms.obtainNamesFromCertificate(addr)
 	}
 
 	_, cidr, _ := IPRequest(addr)
@@ -225,7 +225,7 @@ func (dms *DataManagerService) insertAAAA(req *AmassRequest, recidx int) {
 
 	// Check if active certificate access should be used on this address
 	if dms.Config().Active && dms.Config().IsDomainInScope(req.Name) {
-		PullCertificate(addr, dms.Config(), false)
+		dms.obtainNamesFromCertificate(addr)
 	}
 
 	_, cidr, _ := IPRequest(addr)
@@ -234,9 +234,20 @@ func (dms *DataManagerService) insertAAAA(req *AmassRequest, recidx int) {
 	}
 }
 
+func (dms *DataManagerService) obtainNamesFromCertificate(addr string) {
+	for _, r := range PullCertificateNames(addr, dms.Config().Ports) {
+		for _, domain := range dms.Config().Domains() {
+			if r.Domain == domain {
+				dms.Config().dns.SendRequest(r)
+				break
+			}
+		}
+	}
+}
+
 func (dms *DataManagerService) insertPTR(req *AmassRequest, recidx int) {
 	target := strings.ToLower(removeLastDot(req.Records[recidx].Data))
-	domain := strings.ToLower(dms.Config().dns.SubdomainToDomain(target))
+	domain := strings.ToLower(SubdomainToDomain(target))
 
 	if target == "" || domain == "" {
 		return
@@ -279,7 +290,7 @@ func (dms *DataManagerService) insertSRV(req *AmassRequest, recidx int) {
 
 func (dms *DataManagerService) insertNS(req *AmassRequest, recidx int) {
 	target := strings.ToLower(removeLastDot(req.Records[recidx].Data))
-	domain := strings.ToLower(dms.Config().dns.SubdomainToDomain(target))
+	domain := strings.ToLower(SubdomainToDomain(target))
 
 	if target == "" || domain == "" {
 		return
@@ -305,7 +316,7 @@ func (dms *DataManagerService) insertNS(req *AmassRequest, recidx int) {
 
 func (dms *DataManagerService) insertMX(req *AmassRequest, recidx int) {
 	target := strings.ToLower(removeLastDot(req.Records[recidx].Data))
-	domain := strings.ToLower(dms.Config().dns.SubdomainToDomain(target))
+	domain := strings.ToLower(SubdomainToDomain(target))
 
 	if target == "" || domain == "" {
 		return

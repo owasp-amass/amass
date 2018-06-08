@@ -75,6 +75,7 @@ var (
 	noalts        = flag.Bool("noalts", false, "Disable generation of altered names")
 	verbose       = flag.Bool("v", false, "Print the data source and summary information")
 	whois         = flag.Bool("whois", false, "Include domains discoverd with reverse whois")
+	list          = flag.Bool("l", false, "List all domains to be used in an enumeration")
 	freq          = flag.Int64("freq", 0, "Sets the number of max DNS queries per minute")
 	wordlist      = flag.String("w", "", "Path to a different wordlist file")
 	outfile       = flag.String("o", "", "Path to the output file")
@@ -206,6 +207,11 @@ func main() {
 	if len(domains) > 0 {
 		config.AddDomains(domains)
 	}
+	amass.ObtainAdditionalDomains(config)
+	if *list {
+		listDomains(config, *outfile)
+		return
+	}
 	//profFile, _ := os.Create("amass_debug.prof")
 	//pprof.StartCPUProfile(profFile)
 	//defer pprof.StopCPUProfile()
@@ -218,6 +224,32 @@ func main() {
 	}
 	// Wait for output manager to finish
 	<-done
+}
+
+func listDomains(config *amass.AmassConfig, outfile string) {
+	var fileptr *os.File
+	var bufwr *bufio.Writer
+
+	if outfile != "" {
+		fileptr, err := os.OpenFile(outfile, os.O_WRONLY|os.O_CREATE, 0644)
+		if err == nil {
+			bufwr = bufio.NewWriter(fileptr)
+			defer fileptr.Close()
+		}
+	}
+
+	for _, d := range config.Domains() {
+		g.Println(d)
+
+		if bufwr != nil {
+			bufwr.WriteString(d + "\n")
+			bufwr.Flush()
+		}
+	}
+
+	if bufwr != nil {
+		fileptr.Sync()
+	}
 }
 
 func printBanner() {
@@ -262,20 +294,21 @@ func manageOutput(params *outputParams) {
 	var total int
 	var bufwr *bufio.Writer
 	var enc *json.Encoder
+	var outptr, jsonptr *os.File
 
 	if params.FileOut != "" {
-		fileptr, err := os.OpenFile(params.FileOut, os.O_WRONLY|os.O_CREATE, 0644)
+		outptr, err := os.OpenFile(params.FileOut, os.O_WRONLY|os.O_CREATE, 0644)
 		if err == nil {
-			bufwr = bufio.NewWriter(fileptr)
-			defer fileptr.Close()
+			bufwr = bufio.NewWriter(outptr)
+			defer outptr.Close()
 		}
 	}
 
 	if params.JSONOut != "" {
-		fileptr, err := os.OpenFile(params.JSONOut, os.O_WRONLY|os.O_CREATE, 0644)
+		jsonptr, err := os.OpenFile(params.JSONOut, os.O_WRONLY|os.O_CREATE, 0644)
 		if err == nil {
-			enc = json.NewEncoder(fileptr)
-			defer fileptr.Close()
+			enc = json.NewEncoder(jsonptr)
+			defer jsonptr.Close()
 		}
 	}
 
@@ -307,9 +340,7 @@ func manageOutput(params *outputParams) {
 		// Handle writing the line to a specified output file
 		if bufwr != nil {
 			bufwr.WriteString(line)
-			if total%10 == 0 {
-				bufwr.Flush()
-			}
+			bufwr.Flush()
 		}
 		// Handle encoding the result as JSON
 		if enc != nil {
@@ -331,8 +362,11 @@ func manageOutput(params *outputParams) {
 			enc.Encode(save)
 		}
 	}
-	if bufwr != nil {
-		bufwr.Flush()
+	if outptr != nil {
+		outptr.Sync()
+	}
+	if jsonptr != nil {
+		jsonptr.Sync()
 	}
 	// Check to print the summary information
 	if params.Verbose {
