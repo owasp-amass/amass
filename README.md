@@ -26,7 +26,7 @@
 
 Amass is the subdomain enumeration tool with the greatest number of disparate data sources that performs analysis of the resolved names in order to deliver the largest number of quality results.
 
-Amass performs scraping of data sources, recursive brute forcing, crawling of web archives, permuting and altering of names, reverse DNS sweeping, and machine learning to obtain additional subdomain names. The architecture makes it easy to add new subdomain enumeration techniques as they are developed.
+Amass performs scraping of data sources, recursive brute forcing, crawling of web archives, permuting and altering of names and reverse DNS sweeping to obtain additional subdomain names.
 
 DNS name resolution is performed across many public servers so the authoritative server will see traffic coming from different locations.
 
@@ -256,7 +256,7 @@ import(
 )
 
 func main() {
-    output := make(chan *amass.AmassRequest)
+    output := make(chan *amass.AmassOutput)
 
     go func() {
         for result := range output {
