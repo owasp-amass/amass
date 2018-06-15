@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/caffix/amass/amass/internal/utils"
 )
 
 const (
@@ -56,6 +58,9 @@ type AmassConfig struct {
 	// Will discovered subdomain name alterations be generated?
 	Alterations bool
 
+	// Only access the data sources for names and return results?
+	NoDNS bool
+
 	// Determines if active information gathering techniques will be used
 	Active bool
 
@@ -73,21 +78,13 @@ type AmassConfig struct {
 
 	// The root domain names that the enumeration will target
 	domains []string
-
-	// The services used during the enumeration
-	scrape  AmassService
-	dns     *DNSService
-	data    AmassService
-	archive AmassService
-	alt     AmassService
-	brute   AmassService
 }
 
 func (c *AmassConfig) AddDomains(names []string) {
 	c.Lock()
 	defer c.Unlock()
 
-	c.domains = UniqueAppend(c.domains, names...)
+	c.domains = utils.UniqueAppend(c.domains, names...)
 }
 
 func (c *AmassConfig) Domains() []string {
@@ -122,6 +119,18 @@ func (c *AmassConfig) Blacklisted(name string) bool {
 }
 
 func CheckConfig(config *AmassConfig) error {
+	if config.Output == nil {
+		return errors.New("The configuration did not have an output channel")
+	}
+
+	if config.NoDNS && config.BruteForcing {
+		return errors.New("Brute forcing cannot be performed without DNS resolution")
+	}
+
+	if config.NoDNS && config.Active {
+		return errors.New("Active enumeration cannot be performed without DNS resolution")
+	}
+
 	if config.BruteForcing && len(config.Wordlist) == 0 {
 		return errors.New("The configuration contains no word list for brute forcing")
 	}
@@ -130,8 +139,8 @@ func CheckConfig(config *AmassConfig) error {
 		return errors.New("The configuration contains a invalid frequency")
 	}
 
-	if config.Output == nil {
-		return errors.New("The configuration did not have an output channel")
+	if config.NoDNS && config.Neo4jPath != "" {
+		return errors.New("Data cannot be provided to Neo4j without DNS resolution")
 	}
 	return nil
 }
@@ -180,6 +189,7 @@ func CustomConfig(ac *AmassConfig) *AmassConfig {
 	config.BruteForcing = ac.BruteForcing
 	config.Recursive = ac.Recursive
 	config.Alterations = ac.Alterations
+	config.NoDNS = ac.NoDNS
 	config.Output = ac.Output
 	config.Resolvers = ac.Resolvers
 	config.Blacklist = ac.Blacklist
@@ -192,7 +202,7 @@ func GetDefaultWordlist() []string {
 	var list []string
 	var wordlist io.Reader
 
-	page := GetWebPageWithDialContext(DialContext, defaultWordlistURL, nil)
+	page := utils.GetWebPage(defaultWordlistURL, nil)
 	if page == "" {
 		return list
 	}

@@ -6,17 +6,24 @@ package amass
 import (
 	"strings"
 	"time"
+
+	evbus "github.com/asaskevich/EventBus"
 )
 
 type BruteForceService struct {
 	BaseAmassService
 
+	bus evbus.Bus
+
 	// Subdomains that have been worked on by brute forcing
 	subdomains map[string]int
 }
 
-func NewBruteForceService(config *AmassConfig) *BruteForceService {
-	bfs := &BruteForceService{subdomains: make(map[string]int)}
+func NewBruteForceService(config *AmassConfig, bus evbus.Bus) *BruteForceService {
+	bfs := &BruteForceService{
+		bus:        bus,
+		subdomains: make(map[string]int),
+	}
 
 	bfs.BaseAmassService = *NewBaseAmassService("Brute Forcing Service", config, bfs)
 	return bfs
@@ -25,6 +32,7 @@ func NewBruteForceService(config *AmassConfig) *BruteForceService {
 func (bfs *BruteForceService) OnStart() error {
 	bfs.BaseAmassService.OnStart()
 
+	bfs.bus.SubscribeAsync(RESOLVED, bfs.SendRequest, false)
 	go bfs.processRequests()
 	go bfs.startRootDomains()
 	return nil
@@ -32,22 +40,19 @@ func (bfs *BruteForceService) OnStart() error {
 
 func (bfs *BruteForceService) OnStop() error {
 	bfs.BaseAmassService.OnStop()
+
+	bfs.bus.Unsubscribe(RESOLVED, bfs.SendRequest)
 	return nil
 }
 
 func (bfs *BruteForceService) processRequests() {
 	t := time.NewTicker(bfs.Config().Frequency)
 	defer t.Stop()
-
-	check := time.NewTicker(5 * time.Second)
-	defer check.Stop()
 loop:
 	for {
 		select {
 		case <-t.C:
 			go bfs.checkForNewSubdomain()
-		case <-check.C:
-			bfs.SetActive(false)
 		case <-bfs.Quit():
 			break loop
 		}
@@ -88,7 +93,6 @@ func (bfs *BruteForceService) checkForNewSubdomain() {
 	if !bfs.Config().BruteForcing {
 		return
 	}
-
 	// If the Name is empty or recursive brute forcing is off, we are done here
 	if req.Name == "" || !bfs.Config().Recursive {
 		return
@@ -116,9 +120,9 @@ func (bfs *BruteForceService) checkForNewSubdomain() {
 
 func (bfs *BruteForceService) performBruteForcing(subdomain, root string) {
 	for _, word := range bfs.Config().Wordlist {
-		bfs.SetActive(true)
+		bfs.SetActive()
 
-		bfs.Config().dns.SendRequest(&AmassRequest{
+		bfs.bus.Publish(DNSQUERY, &AmassRequest{
 			Name:   word + "." + subdomain,
 			Domain: root,
 			Tag:    BRUTE,

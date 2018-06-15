@@ -25,12 +25,16 @@ import (
 )
 
 type outputParams struct {
-	Verbose  bool
-	PrintIPs bool
-	FileOut  string
-	JSONOut  string
-	Results  chan *amass.AmassOutput
-	Done     chan struct{}
+	Verbose       bool
+	PrintIPs      bool
+	NoDNS         bool
+	FileOut       string
+	JSONOut       string
+	VisjsOut      string
+	GraphistryOut string
+	Config        *amass.AmassConfig
+	Results       chan *amass.AmassOutput
+	Done          chan struct{}
 }
 
 // Types that implement the flag.Value interface for parsing
@@ -65,26 +69,28 @@ var (
 	green  = color.New(color.FgHiGreen).SprintFunc()
 	blue   = color.New(color.FgHiBlue).SprintFunc()
 	// Command-line switches and provided parameters
-	help          = flag.Bool("h", false, "Show the program usage message")
-	version       = flag.Bool("version", false, "Print the version number of this amass binary")
-	ips           = flag.Bool("ip", false, "Show the IP addresses for discovered names")
-	brute         = flag.Bool("brute", false, "Execute brute forcing after searches")
-	active        = flag.Bool("active", false, "Turn on active information gathering methods")
-	norecursive   = flag.Bool("norecursive", false, "Turn off recursive brute forcing")
-	minrecursive  = flag.Int("min-for-recursive", 0, "Number of subdomain discoveries before recursive brute forcing")
-	noalts        = flag.Bool("noalts", false, "Disable generation of altered names")
-	verbose       = flag.Bool("v", false, "Print the data source and summary information")
-	whois         = flag.Bool("whois", false, "Include domains discoverd with reverse whois")
-	list          = flag.Bool("l", false, "List all domains to be used in an enumeration")
-	freq          = flag.Int64("freq", 0, "Sets the number of max DNS queries per minute")
-	wordlist      = flag.String("w", "", "Path to a different wordlist file")
-	outfile       = flag.String("o", "", "Path to the output file")
-	jsonfile      = flag.String("json", "", "Path to the JSON output file")
-	visjsfile     = flag.String("visjs", "", "Path to the Visjs output HTML file")
-	domainsfile   = flag.String("df", "", "Path to a file providing root domain names")
-	resolvefile   = flag.String("rf", "", "Path to a file providing preferred DNS resolvers")
-	blacklistfile = flag.String("blf", "", "Path to a file providing blacklisted subdomains")
-	neo4j         = flag.String("neo4j", "", "URL in the format of user:password@address:port")
+	help           = flag.Bool("h", false, "Show the program usage message")
+	version        = flag.Bool("version", false, "Print the version number of this amass binary")
+	ips            = flag.Bool("ip", false, "Show the IP addresses for discovered names")
+	brute          = flag.Bool("brute", false, "Execute brute forcing after searches")
+	active         = flag.Bool("active", false, "Turn on active information gathering methods")
+	norecursive    = flag.Bool("norecursive", false, "Turn off recursive brute forcing")
+	minrecursive   = flag.Int("min-for-recursive", 0, "Number of subdomain discoveries before recursive brute forcing")
+	nodns          = flag.Bool("nodns", false, "Disable DNS resolution of names and dependent features")
+	noalts         = flag.Bool("noalts", false, "Disable generation of altered names")
+	verbose        = flag.Bool("v", false, "Print the data source and summary information")
+	whois          = flag.Bool("whois", false, "Include domains discoverd with reverse whois")
+	list           = flag.Bool("l", false, "List all domains to be used in an enumeration")
+	freq           = flag.Int64("freq", 0, "Sets the number of max DNS queries per minute")
+	wordlist       = flag.String("w", "", "Path to a different wordlist file")
+	outfile        = flag.String("o", "", "Path to the output file")
+	jsonfile       = flag.String("json", "", "Path to the JSON output file")
+	visjsfile      = flag.String("visjs", "", "Path to the Visjs output HTML file")
+	graphistryfile = flag.String("graphistry", "", "Path to the Graphistry JSON file")
+	domainsfile    = flag.String("df", "", "Path to a file providing root domain names")
+	resolvefile    = flag.String("rf", "", "Path to a file providing preferred DNS resolvers")
+	blacklistfile  = flag.String("blf", "", "Path to a file providing blacklisted subdomains")
+	neo4j          = flag.String("neo4j", "", "URL in the format of user:password@address:port")
 )
 
 func main() {
@@ -138,9 +144,13 @@ func main() {
 		fmt.Printf("version %s\n", amass.Version)
 		return
 	}
+	if *nodns && *ips {
+		r.Println("IP addresses cannot be provided without DNS resolution")
+		return
+	}
 	// Now, get domains provided by a file
 	if *domainsfile != "" {
-		domains = amass.UniqueAppend(domains, getLinesFromFile(*domainsfile)...)
+		domains = UniqueAppend(domains, getLinesFromFile(*domainsfile)...)
 	}
 	// Can an enumeration be performed with the provided parameters?
 	if len(domains) == 0 && !netopts {
@@ -150,11 +160,11 @@ func main() {
 	}
 	// Get the resolvers provided by file
 	if *resolvefile != "" {
-		resolvers = amass.UniqueAppend(resolvers, getLinesFromFile(*resolvefile)...)
+		resolvers = UniqueAppend(resolvers, getLinesFromFile(*resolvefile)...)
 	}
 	// Get the blacklisted subdomains provided by file
 	if *blacklistfile != "" {
-		blacklist = amass.UniqueAppend(blacklist, getLinesFromFile(*blacklistfile)...)
+		blacklist = UniqueAppend(blacklist, getLinesFromFile(*blacklistfile)...)
 	}
 	// Seed the default pseudo-random number generator
 	rand.Seed(time.Now().UTC().UnixNano())
@@ -163,12 +173,15 @@ func main() {
 	results := make(chan *amass.AmassOutput, 100)
 
 	go manageOutput(&outputParams{
-		Verbose:  *verbose,
-		PrintIPs: *ips,
-		FileOut:  *outfile,
-		JSONOut:  *jsonfile,
-		Results:  results,
-		Done:     done,
+		Verbose:       *verbose,
+		PrintIPs:      *ips,
+		NoDNS:         *nodns,
+		FileOut:       *outfile,
+		JSONOut:       *jsonfile,
+		VisjsOut:      *visjsfile,
+		GraphistryOut: *graphistryfile,
+		Results:       results,
+		Done:          done,
 	})
 	// Execute the signal handler
 	go catchSignals(results, done)
@@ -198,6 +211,7 @@ func main() {
 		MinForRecursive: *minrecursive,
 		Active:          *active,
 		Alterations:     alts,
+		NoDNS:           *nodns,
 		Frequency:       freqToDuration(*freq),
 		Resolvers:       resolvers,
 		Blacklist:       blacklist,
@@ -218,9 +232,7 @@ func main() {
 	err := amass.StartEnumeration(config)
 	if err != nil {
 		r.Println(err)
-	}
-	if *visjsfile != "" {
-		writeVisjsOutput(*visjsfile, config.Graph.ToVisjs())
+		return
 	}
 	// Wait for output manager to finish
 	<-done
@@ -282,6 +294,7 @@ type jsonAddr struct {
 	ASN         int    `json:"asn"`
 	Description string `json:"desc"`
 }
+
 type jsonSave struct {
 	Name      string     `json:"name"`
 	Domain    string     `json:"domain"`
@@ -362,6 +375,10 @@ func manageOutput(params *outputParams) {
 			enc.Encode(save)
 		}
 	}
+
+	amass.WriteVisjsFile(params.VisjsOut, params.Config)
+	amass.WriteGraphistryFile(params.GraphistryOut, params.Config)
+
 	if outptr != nil {
 		outptr.Sync()
 	}
@@ -426,6 +443,10 @@ func printSummary(total int, tags map[string]int, asns map[int]*asnData) {
 	// Another line gets printed
 	pad(8, "----------")
 	fmt.Println()
+
+	if len(asns) == 0 {
+		return
+	}
 	// Print the ASN and netblock information
 	for asn, data := range asns {
 		fmt.Fprintf(color.Output, "%s%s %s %s\n",
@@ -439,17 +460,6 @@ func printSummary(total int, tags map[string]int, asns map[int]*asnData) {
 				yellow(cidrstr), yellow(countstr), blue("Subdomain Name(s)"))
 		}
 	}
-}
-
-func writeVisjsOutput(path, html string) {
-	fileptr, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE, 0644)
-	if err != nil {
-		return
-	}
-	defer fileptr.Close()
-
-	fileptr.WriteString(html)
-	fileptr.Sync()
 }
 
 // If the user interrupts the program, print the summary information
@@ -617,7 +627,7 @@ func (p *parseIPs) parseRange(s string) error {
 		// These should have parsed properly
 		return fmt.Errorf("%s is not a valid IP range", s)
 	}
-	return p.appendIPs(amass.RangeHosts(start, end))
+	return p.appendIPs(RangeHosts(start, end))
 }
 
 // parseCIDRs implementation of the flag.Value interface
@@ -648,4 +658,63 @@ func (p *parseCIDRs) Set(s string) error {
 		*p = append(*p, ipnet)
 	}
 	return nil
+}
+
+// NewUniqueElements - Removes elements that have duplicates in the original or new elements
+func NewUniqueElements(orig []string, add ...string) []string {
+	var n []string
+
+	for _, av := range add {
+		found := false
+		s := strings.ToLower(av)
+
+		// Check the original slice for duplicates
+		for _, ov := range orig {
+			if s == strings.ToLower(ov) {
+				found = true
+				break
+			}
+		}
+		// Check that we didn't already add it in
+		if !found {
+			for _, nv := range n {
+				if s == nv {
+					found = true
+					break
+				}
+			}
+		}
+		// If no duplicates were found, add the entry in
+		if !found {
+			n = append(n, s)
+		}
+	}
+	return n
+}
+
+// UniqueAppend - Behaves like the Go append, but does not add duplicate elements
+func UniqueAppend(orig []string, add ...string) []string {
+	return append(orig, NewUniqueElements(orig, add...)...)
+}
+
+func RangeHosts(start, end net.IP) []net.IP {
+	var ips []net.IP
+
+	stop := net.ParseIP(end.String())
+	addrInc(stop)
+	for ip := net.ParseIP(start.String()); !ip.Equal(stop); addrInc(ip) {
+		addr := net.ParseIP(ip.String())
+
+		ips = append(ips, addr)
+	}
+	return ips
+}
+
+func addrInc(ip net.IP) {
+	for j := len(ip) - 1; j >= 0; j-- {
+		ip[j]++
+		if ip[j] > 0 {
+			break
+		}
+	}
 }

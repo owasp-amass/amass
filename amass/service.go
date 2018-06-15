@@ -6,6 +6,7 @@ package amass
 import (
 	"errors"
 	"sync"
+	"time"
 )
 
 // AmassRequest - Contains data obtained throughout AmassService processing
@@ -29,8 +30,8 @@ type AmassService interface {
 	NextRequest() *AmassRequest
 	SendRequest(req *AmassRequest)
 
-	// Return true if the service is active
 	IsActive() bool
+	SetActive()
 
 	// Returns a channel that is closed when the service is stopped
 	Quit() <-chan struct{}
@@ -45,7 +46,7 @@ type BaseAmassService struct {
 	started bool
 	stopped bool
 	queue   []*AmassRequest
-	active  bool
+	active  time.Time
 	quit    chan struct{}
 	config  *AmassConfig
 
@@ -122,14 +123,17 @@ func (bas *BaseAmassService) IsActive() bool {
 	bas.Lock()
 	defer bas.Unlock()
 
-	return bas.active
+	if time.Now().Sub(bas.active) > 10*time.Second {
+		return false
+	}
+	return true
 }
 
-func (bas *BaseAmassService) SetActive(active bool) {
+func (bas *BaseAmassService) SetActive() {
 	bas.Lock()
 	defer bas.Unlock()
 
-	bas.active = active
+	bas.active = time.Now()
 }
 
 func (bas *BaseAmassService) Quit() <-chan struct{} {

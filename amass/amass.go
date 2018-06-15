@@ -5,18 +5,28 @@ package amass
 
 import (
 	"net"
-	"strings"
+	"os"
 	"time"
+
+	evbus "github.com/asaskevich/EventBus"
+	"github.com/caffix/amass/amass/internal/utils"
+	"github.com/caffix/amass/amass/internal/viz"
 )
 
 const (
-	Version string = "v2.1.2"
+	Version string = "v2.2.0"
 	Author  string = "Jeff Foley (@jeff_foley)"
 	// Tags used to mark the data source with the Subdomain struct
 	ALT     = "alt"
 	BRUTE   = "brute"
+	CERT    = "cert"
 	SCRAPE  = "scrape"
 	ARCHIVE = "archive"
+
+	// Topics used in the EventBus
+	DNSQUERY = "amass:dnsquery"
+	RESOLVED = "amass:resolved"
+	OUTPUT   = "amass:output"
 
 	// Node types used in the Maltego local transform
 	TypeNorm int = iota
@@ -47,26 +57,21 @@ func StartEnumeration(config *AmassConfig) error {
 	if err := CheckConfig(config); err != nil {
 		return err
 	}
+	utils.SetDialContext(DialContext)
 
-	dnsSrv := NewDNSService(config)
-	config.dns = dnsSrv
+	bus := evbus.New()
+	bus.SubscribeAsync(OUTPUT, func(out *AmassOutput) { config.Output <- out }, false)
 
-	scrapeSrv := NewScraperService(config)
-	config.scrape = scrapeSrv
+	services = append(services, NewSourcesService(config, bus))
+	if !config.NoDNS {
+		services = append(services,
+			NewDNSService(config, bus),
+			NewDataManagerService(config, bus),
+			NewAlterationService(config, bus),
+			NewBruteForceService(config, bus),
+		)
+	}
 
-	dataMgrSrv := NewDataManagerService(config)
-	config.data = dataMgrSrv
-
-	archiveSrv := NewArchiveService(config)
-	config.archive = archiveSrv
-
-	altSrv := NewAlterationService(config)
-	config.alt = altSrv
-
-	bruteSrv := NewBruteForceService(config)
-	config.brute = bruteSrv
-
-	services = append(services, scrapeSrv, dnsSrv, dataMgrSrv, archiveSrv, altSrv, bruteSrv)
 	for _, service := range services {
 		if err := service.Start(); err != nil {
 			return err
@@ -74,7 +79,7 @@ func StartEnumeration(config *AmassConfig) error {
 	}
 
 	// We periodically check if all the services have finished
-	t := time.NewTicker(5 * time.Second)
+	t := time.NewTicker(1 * time.Second)
 	defer t.Stop()
 	for range t.C {
 		done := true
@@ -96,6 +101,38 @@ func StartEnumeration(config *AmassConfig) error {
 	}
 	close(config.Output)
 	return nil
+}
+
+func WriteVisjsFile(path string, config *AmassConfig) {
+	if path == "" {
+		return
+	}
+
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE, 0644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+
+	nodes, edges := config.Graph.VizData()
+	viz.WriteVisjsData(nodes, edges, f)
+	f.Sync()
+}
+
+func WriteGraphistryFile(path string, config *AmassConfig) {
+	if path == "" {
+		return
+	}
+
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE, 0644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+
+	nodes, edges := config.Graph.VizData()
+	viz.WriteGraphistryData(nodes, edges, f)
+	f.Sync()
 }
 
 func ObtainAdditionalDomains(config *AmassConfig) {
@@ -121,7 +158,7 @@ func allIPsInConfig(config *AmassConfig) []net.IP {
 	ips = append(ips, config.IPs...)
 
 	for _, cidr := range config.CIDRs {
-		ips = append(ips, NetHosts(cidr)...)
+		ips = append(ips, utils.NetHosts(cidr)...)
 	}
 
 	for _, asn := range config.ASNs {
@@ -136,7 +173,7 @@ func allIPsInConfig(config *AmassConfig) []net.IP {
 				continue
 			}
 
-			ips = append(ips, NetHosts(ipnet)...)
+			ips = append(ips, utils.NetHosts(ipnet)...)
 		}
 	}
 	return ips
@@ -179,46 +216,9 @@ func executeActiveCert(addr string, config *AmassConfig, done chan struct{}) {
 	var domains []string
 
 	for _, r := range PullCertificateNames(addr, config.Ports) {
-		domains = UniqueAppend(domains, r.Domain)
+		domains = utils.UniqueAppend(domains, r.Domain)
 	}
 
 	config.AddDomains(domains)
 	done <- struct{}{}
-}
-
-// NewUniqueElements - Removes elements that have duplicates in the original or new elements
-func NewUniqueElements(orig []string, add ...string) []string {
-	var n []string
-
-	for _, av := range add {
-		found := false
-		s := strings.ToLower(av)
-
-		// Check the original slice for duplicates
-		for _, ov := range orig {
-			if s == strings.ToLower(ov) {
-				found = true
-				break
-			}
-		}
-		// Check that we didn't already add it in
-		if !found {
-			for _, nv := range n {
-				if s == nv {
-					found = true
-					break
-				}
-			}
-		}
-		// If no duplicates were found, add the entry in
-		if !found {
-			n = append(n, s)
-		}
-	}
-	return n
-}
-
-// UniqueAppend - Behaves like the Go append, but does not add duplicate elements
-func UniqueAppend(orig []string, add ...string) []string {
-	return append(orig, NewUniqueElements(orig, add...)...)
 }

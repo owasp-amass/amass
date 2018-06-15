@@ -35,8 +35,9 @@ func (n *Neo4j) insertDomain(domain, tag, source string) {
 		"source": source,
 	}
 
-	n.conn.ExecNeo("MERGE (n:Subdomain:Domain {name: {name}}) "+
-		"ON CREATE SET n.tag = {tag}, n.source = {source}", params)
+	n.conn.ExecNeo("MERGE (n:Subdomain {name: {name}}) "+
+		"ON CREATE SET n.tag = {tag}, n.source = {source} "+
+		"SET n:Subdomain:Domain", params)
 }
 
 func (n *Neo4j) insertCNAME(name, domain, target, tdomain, tag, source string) {
@@ -196,8 +197,9 @@ func (n *Neo4j) insertNS(name, domain, target, tdomain, tag, source string) {
 	n.conn.ExecNeo("MERGE (n:Subdomain {name: {name}}) "+
 		"ON CREATE SET n.tag = {tag}, n.source = {source}", params)
 
-	n.conn.ExecNeo("MERGE (n:Subdomain:NS {name: {target}}) "+
-		"ON CREATE SET n.tag = {tag}, n.source = {source}", params)
+	n.conn.ExecNeo("MERGE (n:Subdomain {name: {target}}) "+
+		"ON CREATE SET n.tag = {tag}, n.source = {source} "+
+		"SET n:Subdomain:NS", params)
 
 	if target != tdomain {
 		n.conn.ExecNeo("MATCH (domain:Domain {name: {tdomain}}) "+
@@ -223,8 +225,9 @@ func (n *Neo4j) insertMX(name, domain, target, tdomain, tag, source string) {
 	n.conn.ExecNeo("MERGE (n:Subdomain {name: {name}}) "+
 		"ON CREATE SET n.tag = {tag}, n.source = {source}", params)
 
-	n.conn.ExecNeo("MERGE (n:Subdomain:MX {name: {target}}) "+
-		"ON CREATE SET n.tag = {tag}, n.source = {source}", params)
+	n.conn.ExecNeo("MERGE (n:Subdomain {name: {target}}) "+
+		"ON CREATE SET n.tag = {tag}, n.source = {source} "+
+		"SET n:Subdomain:MX", params)
 
 	if target != tdomain {
 		n.conn.ExecNeo("MATCH (domain:Domain {name: {tdomain}}) "+

@@ -7,6 +7,8 @@ import (
 	"net"
 	"strconv"
 	"sync"
+
+	"github.com/caffix/amass/amass/internal/viz"
 )
 
 type Edge struct {
@@ -85,6 +87,64 @@ func (g *Graph) NewEdge(from, to int, label string) *Edge {
 	return e
 }
 
+func (g *Graph) VizData() ([]viz.Node, []viz.Edge) {
+	var nodes []viz.Node
+	var edges []viz.Edge
+
+	for _, edge := range g.edges {
+		edges = append(edges, viz.Edge{
+			From:  edge.From,
+			To:    edge.To,
+			Title: edge.Label,
+		})
+	}
+
+	for idx, node := range g.nodes {
+		var label, title, source string
+		t := node.Labels[0]
+
+		switch t {
+		case "Subdomain":
+			label = node.Properties["name"]
+			title = t + ": " + label
+			source = node.Properties["source"]
+		case "Domain":
+			label = node.Properties["name"]
+			title = t + ": " + label
+			source = node.Properties["source"]
+		case "IPAddress":
+			label = node.Properties["addr"]
+			title = t + ": " + label
+		case "PTR":
+			label = node.Properties["name"]
+			title = t + ": " + label
+		case "NS":
+			label = node.Properties["name"]
+			title = t + ": " + label
+			source = node.Properties["source"]
+		case "MX":
+			label = node.Properties["name"]
+			title = t + ": " + label
+			source = node.Properties["source"]
+		case "Netblock":
+			label = node.Properties["cidr"]
+			title = t + ": " + label
+		case "AS":
+			label = node.Properties["asn"]
+			title = t + ": " + label + ", Desc: " + node.Properties["desc"]
+		}
+
+		nodes = append(nodes, viz.Node{
+			ID:     idx,
+			Type:   t,
+			Label:  label,
+			Title:  title,
+			Source: source,
+		})
+	}
+	return nodes, edges
+}
+
 func (g *Graph) insertDomain(domain, tag, source string) {
 	g.Lock()
 	defer g.Unlock()
@@ -93,13 +153,19 @@ func (g *Graph) insertDomain(domain, tag, source string) {
 		return
 	}
 
-	d := g.NewNode("Domain")
-	d.Labels = append(d.Labels, "Subdomain")
-	d.Properties["name"] = domain
-	d.Properties["tag"] = tag
-	d.Properties["source"] = source
-	g.Domains[domain] = d
-	g.Subdomains[domain] = d
+	if d, found := g.Subdomains[domain]; !found {
+		d := g.NewNode("Domain")
+		d.Labels = append(d.Labels, "Subdomain")
+		d.Properties["name"] = domain
+		d.Properties["tag"] = tag
+		d.Properties["source"] = source
+		g.Domains[domain] = d
+		g.Subdomains[domain] = d
+	} else {
+		d.Labels = []string{"Domain", "Subdomain"}
+		g.Domains[domain] = d
+	}
+
 }
 
 func (g *Graph) insertCNAME(name, domain, target, tdomain, tag, source string) {
@@ -284,13 +350,15 @@ func (g *Graph) insertNS(name, domain, target, tdomain, tag, source string) {
 		g.Subdomains[name] = sub
 	}
 
-	if _, found := g.Subdomains[target]; !found {
+	if ns, found := g.Subdomains[target]; !found {
 		sub := g.NewNode("NS")
 		sub.Properties["name"] = target
 		sub.Properties["tag"] = tag
 		sub.Properties["source"] = source
 		sub.Labels = append(sub.Labels, "Subdomain")
 		g.Subdomains[target] = sub
+	} else {
+		ns.Labels = []string{"NS", "Subdomain"}
 	}
 
 	if target != tdomain {
@@ -316,13 +384,15 @@ func (g *Graph) insertMX(name, domain, target, tdomain, tag, source string) {
 		g.Subdomains[name] = sub
 	}
 
-	if _, found := g.Subdomains[target]; !found {
+	if mx, found := g.Subdomains[target]; !found {
 		sub := g.NewNode("MX")
 		sub.Properties["name"] = target
 		sub.Properties["tag"] = tag
 		sub.Properties["source"] = source
 		sub.Labels = append(sub.Labels, "Subdomain")
 		g.Subdomains[target] = sub
+	} else {
+		mx.Labels = []string{"MX", "Subdomain"}
 	}
 
 	if target != tdomain {
@@ -360,141 +430,4 @@ func (g *Graph) insertInfrastructure(addr string, asn int, cidr *net.IPNet, desc
 
 	as := g.ASNs[asn].idx
 	g.NewEdge(as, n, "HAS_PREFIX")
-}
-
-const HTMLStart string = `<!doctype html>
-<html>
-<head>
-  <meta http-equiv="content-type" content="text/html; charset=UTF8">
-  <title>Amass Internet Satellite Imagery</title>
-
-  <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/vis/4.21.0/vis.min.js"></script>
-  <link type="text/css" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/vis/4.21.0/vis.min.css">
-
-  <style type="text/css">
-    #thenetwork {
-      width: 1200px;
-      height: 800px;
-      border: 1px solid lightgray;
-    }
-  </style>
-  
-</head>
-
-<body>
-
-<h2>DNS and Network Infrastructure Enumeration</h2>
-
-<div id="thenetwork"></div>
-
-<script type="text/javascript">
-  var network;
-
-  function redrawAll() {
-    var container = document.getElementById('thenetwork');
-    var options = {
-    nodes: {
-      shape: 'dot',
-      size: 25,
-      color: {
-        border: 'rgb(23,32,42)'
-      },
-      font: {
-    	size: 12,
-    	face: 'Tahoma',
-    	align: 'center'
-      }
-    },
-    edges: {
-      color: {
-        color: 'rgb(166,172,175)',
-        hover: 'black'
-      },
-      font: {
-        color: 'rgb(166,172,175)',
-        size: 12,
-        align: 'middle'
-      },
-      width: 0.15,
-      hoverWidth: 0.5
-    },
-    interaction: {
-      hover: true,
-      tooltipDelay: 200,
-      zoomView: true
-    },
-    physics: {
-      forceAtlas2Based: {
-        gravitationalConstant: -26,
-        centralGravity: 0.005,
-        springLength: 230,
-        springConstant: 0.18
-      },
-      maxVelocity: 50,
-      solver: 'forceAtlas2Based',
-      timestep: 0.2,
-      stabilization: {iterations: 50}
-    }
-  };
-`
-
-const HTMLEnd string = `
-    var data = {nodes: nodes, edges: edges};
-
-    network = new vis.Network(container, data, options);
-  }
-
-  redrawAll()
-
-</script>
-
-</body>
-</html>
-`
-
-func (g *Graph) ToVisjs() string {
-	nodes := "var nodes = [\n"
-	for idx, node := range g.nodes {
-		idxStr := strconv.Itoa(idx + 1)
-
-		switch node.Labels[0] {
-		case "Subdomain":
-			nodes += "{id: " + idxStr + ", title: 'Subdomain: " + node.Properties["name"] +
-				"', color: {background: 'green'}},\n"
-		case "Domain":
-			nodes += "{id: " + idxStr + ", title: 'Domain: " + node.Properties["name"] +
-				"', color: {background: 'red'}},\n"
-		case "IPAddress":
-			nodes += "{id: " + idxStr + ", title: 'IP: " + node.Properties["addr"] +
-				"', color: {background: 'orange'}},\n"
-		case "PTR":
-			nodes += "{id: " + idxStr + ", title: 'PTR: " + node.Properties["name"] +
-				"', color: {background: 'yellow'}},\n"
-		case "NS":
-			nodes += "{id: " + idxStr + ", title: 'NS: " + node.Properties["name"] +
-				"', color: {background: 'cyan'}},\n"
-		case "MX":
-			nodes += "{id: " + idxStr + ", title: 'MX: " + node.Properties["name"] +
-				"', color: {background: 'purple'}},\n"
-		case "Netblock":
-			nodes += "{id: " + idxStr + ", title: 'Netblock: " + node.Properties["cidr"] +
-				"', color: {background: 'pink'}},\n"
-		case "AS":
-			nodes += "{id: " + idxStr + ", title: 'ASN: " +
-				node.Properties["asn"] + ", Desc: " + node.Properties["desc"] +
-				"', color: {background: 'blue'}},\n"
-		}
-
-	}
-	nodes += "];\n"
-
-	edges := "var edges = [\n"
-	for _, edge := range g.edges {
-		from := strconv.Itoa(edge.From + 1)
-		to := strconv.Itoa(edge.To + 1)
-		edges += "{from: " + from + ", to: " + to + ", title: '" + edge.Label + "'},\n"
-	}
-	edges += "];\n"
-
-	return HTMLStart + nodes + edges + HTMLEnd
 }

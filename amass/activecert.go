@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/caffix/amass/amass/internal/utils"
 )
 
 const (
@@ -84,7 +86,7 @@ func namesFromCert(cert *x509.Certificate) []string {
 	for _, name := range cert.DNSNames {
 		n := removeAsteriskLabel(name)
 		if n != "" {
-			subdomains = UniqueAppend(subdomains, n)
+			subdomains = utils.UniqueAppend(subdomains, n)
 		}
 	}
 	return subdomains

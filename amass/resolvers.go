@@ -4,8 +4,12 @@
 package amass
 
 import (
+	"context"
 	"math/rand"
+	"net"
 	"strings"
+
+	"github.com/caffix/amass/amass/internal/utils"
 )
 
 var (
@@ -70,6 +74,23 @@ func SetCustomResolvers(resolvers []string) {
 			addr += ":53"
 		}
 
-		CustomResolvers = UniqueAppend(CustomResolvers, addr)
+		CustomResolvers = utils.UniqueAppend(CustomResolvers, addr)
 	}
+}
+
+func DNSDialContext(ctx context.Context, network, address string) (net.Conn, error) {
+	d := &net.Dialer{}
+
+	return d.DialContext(ctx, network, NextResolverAddress())
+}
+
+func DialContext(ctx context.Context, network, address string) (net.Conn, error) {
+	d := &net.Dialer{
+		// Override the Go default DNS resolver to prevent leakage
+		Resolver: &net.Resolver{
+			PreferGo: true,
+			Dial:     DNSDialContext,
+		},
+	}
+	return d.DialContext(ctx, network, address)
 }

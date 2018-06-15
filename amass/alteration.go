@@ -8,14 +8,19 @@ import (
 	"strings"
 	"time"
 	"unicode"
+
+	evbus "github.com/asaskevich/EventBus"
+	"github.com/caffix/amass/amass/internal/utils"
 )
 
 type AlterationService struct {
 	BaseAmassService
+
+	bus evbus.Bus
 }
 
-func NewAlterationService(config *AmassConfig) *AlterationService {
-	as := new(AlterationService)
+func NewAlterationService(config *AmassConfig, bus evbus.Bus) *AlterationService {
+	as := &AlterationService{bus: bus}
 
 	as.BaseAmassService = *NewBaseAmassService("Alteration Service", config, as)
 	return as
@@ -24,28 +29,26 @@ func NewAlterationService(config *AmassConfig) *AlterationService {
 func (as *AlterationService) OnStart() error {
 	as.BaseAmassService.OnStart()
 
+	as.bus.SubscribeAsync(RESOLVED, as.SendRequest, false)
 	go as.processRequests()
 	return nil
 }
 
 func (as *AlterationService) OnStop() error {
 	as.BaseAmassService.OnStop()
+
+	as.bus.Unsubscribe(RESOLVED, as.SendRequest)
 	return nil
 }
 
 func (as *AlterationService) processRequests() {
 	t := time.NewTicker(as.Config().Frequency)
 	defer t.Stop()
-
-	check := time.NewTicker(5 * time.Second)
-	defer check.Stop()
 loop:
 	for {
 		select {
 		case <-t.C:
 			go as.executeAlterations()
-		case <-check.C:
-			as.SetActive(false)
 		case <-as.Quit():
 			break loop
 		}
@@ -99,7 +102,7 @@ func (as *AlterationService) flipNumbersInName(req *AmassRequest) {
 func (as *AlterationService) secondNumberFlip(name, domain string, minIndex int) {
 	parts := strings.SplitN(name, ".", 2)
 
-	as.SetActive(true)
+	as.SetActive()
 	// Find the second character that is a number
 	last := strings.LastIndexFunc(parts[0], unicode.IsNumber)
 	if last < 0 || last < minIndex {
@@ -124,7 +127,7 @@ func (as *AlterationService) appendNumbers(req *AmassRequest) {
 	n := req.Name
 	parts := strings.SplitN(n, ".", 2)
 
-	as.SetActive(true)
+	as.SetActive()
 	for i := 0; i < 10; i++ {
 		// Send a LABEL-NUM altered name
 		nhn := parts[0] + "-" + strconv.Itoa(i) + "." + parts[1]
@@ -162,10 +165,10 @@ func (as *AlterationService) suffixWord(name, word, domain string) {
 
 // Checks that the name is valid and sends along for DNS resolve
 func (as *AlterationService) sendAlteredName(name, domain string) {
-	re := SubdomainRegex(domain)
+	re := utils.SubdomainRegex(domain)
 
 	if re.MatchString(name) {
-		as.Config().dns.SendRequest(&AmassRequest{
+		as.bus.Publish(DNSQUERY, &AmassRequest{
 			Name:   name,
 			Domain: domain,
 			Tag:    ALT,

@@ -24,16 +24,12 @@
 
 ----
 
-Amass is the subdomain enumeration tool with the greatest number of disparate data sources that performs analysis of the resolved names in order to deliver the largest number of quality results.
-
-Amass performs scraping of data sources, recursive brute forcing, crawling of web archives, permuting and altering of names and reverse DNS sweeping to obtain additional subdomain names.
-
-DNS name resolution is performed across many public servers so the authoritative server will see traffic coming from different locations.
+The Amass tool performs scraping of data sources, recursive brute forcing, crawling of web archives, permuting and altering of names and reverse DNS sweeping to obtain additional subdomain names. Additionally, Amass uses the IP addresses obtained during resolution to discover associated netblocks and ASNs. All the information is then used to build maps of the target networks.
 
 ----
 
 
-![alt text](https://github.com/caffix/amass/blob/master/examples/network_06062018.png "Internet Satellite Imagery")
+![Image of a network graph](https://github.com/caffix/amass/blob/master/examples/network_06092018.png "Internet Satellite Imagery")
 
 
 ## How to Install
@@ -86,6 +82,12 @@ $ amass -d example1.com,example2.com -d example3.com
 ```
 
 
+Run Amass in a purely passive mode of execution that does not perform DNS resolution:
+```
+$ amass -nodns -d example.com
+```
+
+
 You can also provide the initial domain names via an input file:
 ```
 $ amass -df domains.txt
@@ -94,11 +96,11 @@ $ amass -df domains.txt
 
 Get amass to provide the sources that discovered the subdomain names and print summary information:
 ```
-$ amass -v -d example.com
+$ amass -v -ip -brute -min-for-recursive 3 -d example.com
 [Google] www.example.com
 [VirusTotal] ns.example.com
 ...
-13242 names discovered - scrape: 211, dns: 4709, archive: 126, brute: 169, alt: 8027
+13139 names discovered - archive: 171, cert: 2671, scrape: 6290, brute: 991, dns: 250, alt: 2766
 ```
 
 
@@ -123,6 +125,12 @@ $ amass -json out.txt -d example.com
 Have amass output the DNS and infrastructure findings as a network graph:
 ```
 $ amass -visjs vis.html -d example.com
+```
+
+
+Output a file for Graphistry containing the data set in JSON format:
+```
+$ amass -graphistry network.json -d example.com
 ```
 
 
@@ -156,7 +164,7 @@ $ amass -blf data/blacklist.txt -d example.com
 ```
 
 
-The amass feature that performs alterations on discovered names and attempt resolution can be disabled:
+The amass feature that performs alterations on discovered names can be disabled:
 ```
 $ amass -noalts -d example.com
 ```
@@ -281,17 +289,17 @@ func main() {
 
 1. Setup a new local transform within Maltego:
 
-![alt text](https://github.com/caffix/amass/blob/master/examples/maltegosetup1.png "Setup")
+![Image of Maltego setup process](https://github.com/caffix/amass/blob/master/examples/maltegosetup1.png "Setup")
 
 
 2. Configure the local transform to properly execute the go program:
 
-![alt text](https://github.com/caffix/amass/blob/master/examples/maltegosetup2.png "Configure")
+![Image of Maltego configuration](https://github.com/caffix/amass/blob/master/examples/maltegosetup2.png "Configure")
 
 
 3. Go into the Transform Manager, and disable the **debug info** option:
 
-![alt text](https://github.com/caffix/amass/blob/master/examples/maltegosetup3.png "Disable Debug")
+![Image of disabling debugging in Maltego](https://github.com/caffix/amass/blob/master/examples/maltegosetup3.png "Disable Debug")
 
 
 ## Community
