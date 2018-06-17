@@ -4,6 +4,7 @@
 package sources
 
 import (
+	"log"
 	"net/url"
 	"strconv"
 	"time"
@@ -17,7 +18,7 @@ const (
 	dogpileLimit        int    = 90
 )
 
-func DogpileQuery(domain, sub string) []string {
+func DogpileQuery(domain, sub string, l *log.Logger) []string {
 	var unique []string
 
 	if domain != sub {
@@ -27,8 +28,10 @@ func DogpileQuery(domain, sub string) []string {
 	re := utils.SubdomainRegex(domain)
 	num := dogpileLimit / dogpileQuantity
 	for i := 0; i < num; i++ {
-		page := utils.GetWebPage(dogpileURLByPageNum(domain, i), nil)
-		if page == "" {
+		u := dogpileURLByPageNum(domain, i)
+		page, err := utils.GetWebPage(u, nil)
+		if err != nil {
+			l.Printf("Dogpile error: %s: %v", u, err)
 			break
 		}
 

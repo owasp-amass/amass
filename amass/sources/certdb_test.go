@@ -4,13 +4,20 @@
 package sources
 
 import (
+	"bytes"
+	"io"
+	"log"
 	"testing"
 )
 
 func TestCertDBQuery(t *testing.T) {
-	names := CertDBQuery(testDomain, testDomain)
+	var b bytes.Buffer
+	wr := io.Writer(&b)
+	l := log.New(wr, "", log.Lmicroseconds)
+
+	names := CertDBQuery(testDomain, testDomain, l)
 
 	if len(names) <= 0 {
-		t.Errorf("CertDBQuery did not find any subdomains")
+		t.Errorf("CertDBQuery did not find any subdomains: %s", b)
 	}
 }

@@ -5,6 +5,7 @@ package sources
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/caffix/amass/amass/internal/utils"
 )
@@ -13,7 +14,7 @@ const (
 	ThreatCrowdSourceString string = "ThreatCrowd"
 )
 
-func ThreatCrowdQuery(domain, sub string) []string {
+func ThreatCrowdQuery(domain, sub string, l *log.Logger) []string {
 	var unique []string
 
 	if domain != sub {
@@ -21,8 +22,10 @@ func ThreatCrowdQuery(domain, sub string) []string {
 	}
 
 	re := utils.SubdomainRegex(domain)
-	page := utils.GetWebPage(threatCrowdURL(domain), nil)
-	if page == "" {
+	url := threatCrowdURL(domain)
+	page, err := utils.GetWebPage(url, nil)
+	if err != nil {
+		l.Printf("ThreatCrowd error: %s: %v", url, err)
 		return unique
 	}
 

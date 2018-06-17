@@ -5,6 +5,7 @@ package sources
 
 import (
 	"fmt"
+	"log"
 	"regexp"
 	"strconv"
 	"time"
@@ -18,7 +19,7 @@ const (
 	waybackURL                 string = "http://web.archive.org/web"
 )
 
-func WaybackMachineQuery(domain, sub string) []string {
+func WaybackMachineQuery(domain, sub string, l *log.Logger) []string {
 	if sub == "" {
 		return []string{}
 	}
@@ -26,12 +27,14 @@ func WaybackMachineQuery(domain, sub string) []string {
 	year := strconv.Itoa(time.Now().Year())
 	ext := &ext{
 		DefaultExtender: &gocrawl.DefaultExtender{},
+		source:          WaybackMachineSourceString,
 		domainRE:        utils.SubdomainRegex(domain),
 		mementoRE:       regexp.MustCompile(waybackURL + "/[0-9]+/"),
 		filter:          make(map[string]bool), // Filter for not double-checking URLs
 		base:            waybackURL,
 		year:            year,
 		sub:             sub,
+		logger:          l,
 	}
 
 	// Set custom options

@@ -4,13 +4,20 @@
 package sources
 
 import (
+	"bytes"
+	"io"
+	"log"
 	"testing"
 )
 
 func TestNetcraftQuery(t *testing.T) {
-	names := NetcraftQuery(testDomain, testDomain)
+	var b bytes.Buffer
+	wr := io.Writer(&b)
+	l := log.New(wr, "", log.Lmicroseconds)
+
+	names := NetcraftQuery(testDomain, testDomain, l)
 
 	if len(names) <= 0 {
-		t.Errorf("NetcraftQuery did not find any subdomains")
+		t.Errorf("NetcraftQuery did not find any subdomains: %s", b)
 	}
 }

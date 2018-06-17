@@ -6,6 +6,7 @@ package sources
 import (
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -18,16 +19,18 @@ import (
 	"github.com/caffix/amass/amass/internal/utils"
 )
 
-type Query func(domain, sub string) []string
+type Query func(domain, sub string, l *log.Logger) []string
 
 type ext struct {
 	*gocrawl.DefaultExtender
+	source          string
 	domainRE        *regexp.Regexp
 	mementoRE       *regexp.Regexp
 	filter          map[string]bool
 	flock           sync.RWMutex
 	base, year, sub string
 	names           []string
+	logger          *log.Logger
 }
 
 func init() {
@@ -52,6 +55,7 @@ func (e *ext) reducedURL(u *url.URL) string {
 }
 
 func (e *ext) Log(logFlags gocrawl.LogFlags, msgLevel gocrawl.LogFlags, msg string) {
+	e.logger.Printf("%s error: %s", e.source, msg)
 	return
 }
 

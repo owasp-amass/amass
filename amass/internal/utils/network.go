@@ -5,6 +5,7 @@ package utils
 
 import (
 	"context"
+	"errors"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -34,7 +35,7 @@ func SetDialContext(dc DialCtx) {
 	DialContext = dc
 }
 
-func GetWebPage(url string, hvals map[string]string) string {
+func GetWebPage(url string, hvals map[string]string) (string, error) {
 	client := &http.Client{
 		Timeout: 30 * time.Second,
 		Transport: &http.Transport{
@@ -48,7 +49,7 @@ func GetWebPage(url string, hvals map[string]string) string {
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return ""
+		return "", err
 	}
 
 	req.Header.Add("User-Agent", USER_AGENT)
@@ -61,13 +62,15 @@ func GetWebPage(url string, hvals map[string]string) string {
 	}
 
 	resp, err := client.Do(req)
-	if err != nil || (resp.StatusCode < 200 || resp.StatusCode >= 300) {
-		return ""
+	if err != nil {
+		return "", err
+	} else if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", errors.New(resp.Status)
 	}
 
 	in, err := ioutil.ReadAll(resp.Body)
 	resp.Body.Close()
-	return string(in)
+	return string(in), nil
 }
 
 // Obtained/modified the next two functions from the following:

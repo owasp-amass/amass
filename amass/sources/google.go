@@ -4,6 +4,7 @@
 package sources
 
 import (
+	"log"
 	"net/url"
 	"strconv"
 	"time"
@@ -17,7 +18,7 @@ const (
 	googleLimit        int    = 160
 )
 
-func GoogleQuery(domain, sub string) []string {
+func GoogleQuery(domain, sub string, l *log.Logger) []string {
 	var unique []string
 
 	if domain != sub {
@@ -27,8 +28,10 @@ func GoogleQuery(domain, sub string) []string {
 	re := utils.SubdomainRegex(domain)
 	num := googleLimit / googleQuantity
 	for i := 0; i < num; i++ {
-		page := utils.GetWebPage(googleURLByPageNum(domain, i), nil)
-		if page == "" {
+		u := googleURLByPageNum(domain, i)
+		page, err := utils.GetWebPage(u, nil)
+		if err != nil {
+			l.Printf("Google error: %s: %v", u, err)
 			break
 		}
 

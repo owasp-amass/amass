@@ -10,14 +10,14 @@ import (
 	"testing"
 )
 
-func TestHackerTargetQuery(t *testing.T) {
+func TestRobtexQuery(t *testing.T) {
 	var b bytes.Buffer
 	wr := io.Writer(&b)
 	l := log.New(wr, "", log.Lmicroseconds)
 
-	names := HackerTargetQuery(testDomain, testDomain, l)
+	names := RobtexQuery(testDomain, testDomain, l)
 
 	if len(names) <= 0 {
-		t.Errorf("HackerTargetQuery did not find any subdomains: %s", b)
+		t.Errorf("RobtexQuery did not find any subdomains: %s", b)
 	}
 }

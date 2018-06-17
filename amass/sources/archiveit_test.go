@@ -4,6 +4,9 @@
 package sources
 
 import (
+	"bytes"
+	"io"
+	"log"
 	"testing"
 )
 
@@ -13,9 +16,13 @@ const (
 )
 
 func TestArchiveItQuery(t *testing.T) {
-	names := ArchiveItQuery(testDomain, testSubdomain)
+	var b bytes.Buffer
+	wr := io.Writer(&b)
+	l := log.New(wr, "", log.Lmicroseconds)
+
+	names := ArchiveItQuery(testDomain, testSubdomain, l)
 
 	if len(names) <= 0 {
-		t.Errorf("ArchiveItQuery did not find any subdomains")
+		t.Errorf("ArchiveItQuery did not find any subdomains: %s", b)
 	}
 }

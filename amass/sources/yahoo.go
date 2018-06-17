@@ -4,6 +4,7 @@
 package sources
 
 import (
+	"log"
 	"net/url"
 	"strconv"
 	"time"
@@ -17,7 +18,7 @@ const (
 	yahooLimit        int    = 100
 )
 
-func YahooQuery(domain, sub string) []string {
+func YahooQuery(domain, sub string, l *log.Logger) []string {
 	var unique []string
 
 	if domain != sub {
@@ -27,8 +28,10 @@ func YahooQuery(domain, sub string) []string {
 	re := utils.SubdomainRegex(domain)
 	num := yahooLimit / yahooQuantity
 	for i := 0; i < num; i++ {
-		page := utils.GetWebPage(yahooURLByPageNum(domain, i), nil)
-		if page == "" {
+		u := yahooURLByPageNum(domain, i)
+		page, err := utils.GetWebPage(u, nil)
+		if err != nil {
+			l.Printf("Yahoo error: %s: %v", u, err)
 			break
 		}
 

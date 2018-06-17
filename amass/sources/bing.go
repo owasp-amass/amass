@@ -4,6 +4,7 @@
 package sources
 
 import (
+	"log"
 	"net/url"
 	"strconv"
 	"time"
@@ -17,7 +18,7 @@ const (
 	bingLimit        int    = 200
 )
 
-func BingQuery(domain, sub string) []string {
+func BingQuery(domain, sub string, l *log.Logger) []string {
 	var unique []string
 
 	if domain != sub {
@@ -27,8 +28,10 @@ func BingQuery(domain, sub string) []string {
 	re := utils.SubdomainRegex(domain)
 	num := bingLimit / bingQuantity
 	for i := 0; i < num; i++ {
-		page := utils.GetWebPage(bingURLByPageNum(domain, i), nil)
-		if page == "" {
+		u := bingURLByPageNum(domain, i)
+		page, err := utils.GetWebPage(u, nil)
+		if err != nil {
+			l.Printf("Bing error: %s: %v", u, err)
 			break
 		}
 

@@ -148,11 +148,17 @@ func (dms *DataManagerService) insertDomain(domain string) {
 		Source: "Forward DNS",
 	})
 
-	addrs := LookupIPHistory(domain)
+	addrs, err := LookupIPHistory(domain)
+	if err != nil {
+		dms.Config().Log.Printf("LookupIPHistory error: %v", err)
+		return
+	}
+
 	for _, addr := range addrs {
-		_, cidr, _ := IPRequest(addr)
-		if cidr != nil {
+		if _, cidr, _, err := IPRequest(addr); err == nil {
 			dms.AttemptSweep(domain, addr, cidr)
+		} else {
+			dms.Config().Log.Printf("%v", err)
 		}
 	}
 }
@@ -195,9 +201,10 @@ func (dms *DataManagerService) insertA(req *AmassRequest, recidx int) {
 		dms.obtainNamesFromCertificate(addr)
 	}
 
-	_, cidr, _ := IPRequest(addr)
-	if cidr != nil {
+	if _, cidr, _, err := IPRequest(addr); err == nil {
 		dms.AttemptSweep(req.Domain, addr, cidr)
+	} else {
+		dms.Config().Log.Printf("%v", err)
 	}
 }
 
@@ -218,9 +225,10 @@ func (dms *DataManagerService) insertAAAA(req *AmassRequest, recidx int) {
 		dms.obtainNamesFromCertificate(addr)
 	}
 
-	_, cidr, _ := IPRequest(addr)
-	if cidr != nil {
+	if _, cidr, _, err := IPRequest(addr); err == nil {
 		dms.AttemptSweep(req.Domain, addr, cidr)
+	} else {
+		dms.Config().Log.Printf("%v", err)
 	}
 }
 
@@ -316,8 +324,9 @@ func (dms *DataManagerService) insertMX(req *AmassRequest, recidx int) {
 }
 
 func (dms *DataManagerService) insertInfrastructure(addr string) {
-	asn, cidr, desc := IPRequest(addr)
-	if asn == 0 {
+	asn, cidr, desc, err := IPRequest(addr)
+	if err != nil {
+		dms.Config().Log.Printf("%v", err)
 		return
 	}
 

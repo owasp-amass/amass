@@ -4,13 +4,20 @@
 package sources
 
 import (
+	"bytes"
+	"io"
+	"log"
 	"testing"
 )
 
 func TestGoogleQuery(t *testing.T) {
-	names := GoogleQuery(testDomain, testDomain)
+	var b bytes.Buffer
+	wr := io.Writer(&b)
+	l := log.New(wr, "", log.Lmicroseconds)
+
+	names := GoogleQuery(testDomain, testDomain, l)
 
 	if len(names) <= 0 {
-		t.Errorf("GoogleQuery did not find any subdomains")
+		t.Errorf("GoogleQuery did not find any subdomains: %s", b)
 	}
 }

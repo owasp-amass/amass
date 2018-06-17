@@ -4,13 +4,20 @@
 package sources
 
 import (
+	"bytes"
+	"io"
+	"log"
 	"testing"
 )
 
 func TestDNSDumpsterQuery(t *testing.T) {
-	names := DNSDumpsterQuery(testDomain, testDomain)
+	var b bytes.Buffer
+	wr := io.Writer(&b)
+	l := log.New(wr, "", log.Lmicroseconds)
+
+	names := DNSDumpsterQuery(testDomain, testDomain, l)
 
 	if len(names) <= 0 {
-		t.Errorf("DNSDumpsterQuery did not find any subdomains")
+		t.Errorf("DNSDumpsterQuery did not find any subdomains: %s", b)
 	}
 }

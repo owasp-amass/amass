@@ -2,6 +2,7 @@ package sources
 
 import (
 	"fmt"
+	"log"
 	"regexp"
 	"strconv"
 	"time"
@@ -15,7 +16,7 @@ const (
 	ukgovArchiveURL          string = "http://webarchive.nationalarchives.gov.uk"
 )
 
-func UKGovArchiveQuery(domain, sub string) []string {
+func UKGovArchiveQuery(domain, sub string, l *log.Logger) []string {
 	if sub == "" {
 		return []string{}
 	}
@@ -23,12 +24,14 @@ func UKGovArchiveQuery(domain, sub string) []string {
 	year := strconv.Itoa(time.Now().Year())
 	ext := &ext{
 		DefaultExtender: &gocrawl.DefaultExtender{},
+		source:          UKGovArchiveSourceString,
 		domainRE:        utils.SubdomainRegex(domain),
 		mementoRE:       regexp.MustCompile(ukgovArchiveURL + "/[0-9]+/"),
 		filter:          make(map[string]bool), // Filter for not double-checking URLs
 		base:            ukgovArchiveURL,
 		year:            year,
 		sub:             sub,
+		logger:          l,
 	}
 
 	// Set custom options

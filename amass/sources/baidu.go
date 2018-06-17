@@ -4,6 +4,7 @@
 package sources
 
 import (
+	"log"
 	"net/url"
 	"strconv"
 	"time"
@@ -17,7 +18,7 @@ const (
 	baiduLimit        int    = 100
 )
 
-func BaiduQuery(domain, sub string) []string {
+func BaiduQuery(domain, sub string, l *log.Logger) []string {
 	var unique []string
 
 	if domain != sub {
@@ -27,8 +28,10 @@ func BaiduQuery(domain, sub string) []string {
 	re := utils.SubdomainRegex(domain)
 	num := baiduLimit / baiduQuantity
 	for i := 0; i < num; i++ {
-		page := utils.GetWebPage(baiduURLByPageNum(domain, i), nil)
-		if page == "" {
+		u := baiduURLByPageNum(domain, i)
+		page, err := utils.GetWebPage(u, nil)
+		if err != nil {
+			l.Printf("Baidu error: %s: %v", u, err)
 			break
 		}
 

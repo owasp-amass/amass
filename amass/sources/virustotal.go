@@ -5,6 +5,7 @@ package sources
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/caffix/amass/amass/internal/utils"
 )
@@ -13,7 +14,7 @@ const (
 	VirusTotalSourceString string = "VirusTotal"
 )
 
-func VirusTotalQuery(domain, sub string) []string {
+func VirusTotalQuery(domain, sub string, l *log.Logger) []string {
 	var unique []string
 
 	if domain != sub {
@@ -21,8 +22,10 @@ func VirusTotalQuery(domain, sub string) []string {
 	}
 
 	re := utils.SubdomainRegex(domain)
-	page := utils.GetWebPage(virusTotalURL(domain), nil)
-	if page == "" {
+	url := virusTotalURL(domain)
+	page, err := utils.GetWebPage(url, nil)
+	if err != nil {
+		l.Printf("VirusTotal error: %s: %v", url, err)
 		return unique
 	}
 

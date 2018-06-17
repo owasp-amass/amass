@@ -4,6 +4,7 @@
 package sources
 
 import (
+	"log"
 	"regexp"
 	"strings"
 	"time"
@@ -15,7 +16,7 @@ const (
 	CertDBSourceString string = "CertDB"
 )
 
-func CertDBQuery(domain, sub string) []string {
+func CertDBQuery(domain, sub string, l *log.Logger) []string {
 	var unique []string
 
 	if domain != sub {
@@ -23,8 +24,10 @@ func CertDBQuery(domain, sub string) []string {
 	}
 
 	// Pull the page that lists all certs for this domain
-	page := utils.GetWebPage("https://certdb.com/domain/"+domain, nil)
-	if page == "" {
+	url := "https://certdb.com/domain/" + domain
+	page, err := utils.GetWebPage(url, nil)
+	if err != nil {
+		l.Printf("CertDB error: %s: %v", url, err)
 		return unique
 	}
 	// Get the subdomain name the cert was issued to, and
@@ -33,8 +36,10 @@ func CertDBQuery(domain, sub string) []string {
 		// Do not go too fast
 		time.Sleep(50 * time.Millisecond)
 		// Pull the certificate web page
-		cert := utils.GetWebPage("https://certdb.com"+rel, nil)
-		if cert == "" {
+		url = "https://certdb.com" + rel
+		cert, err := utils.GetWebPage(url, nil)
+		if err != nil {
+			l.Printf("CertDB error: %s: %v", url, err)
 			continue
 		}
 		// Get all names off the certificate

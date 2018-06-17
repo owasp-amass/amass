@@ -4,13 +4,20 @@
 package sources
 
 import (
+	"bytes"
+	"io"
+	"log"
 	"testing"
 )
 
 func TestExaleadQuery(t *testing.T) {
-	names := ExaleadQuery(testDomain, testDomain)
+	var b bytes.Buffer
+	wr := io.Writer(&b)
+	l := log.New(wr, "", log.Lmicroseconds)
+
+	names := ExaleadQuery(testDomain, testDomain, l)
 
 	if len(names) <= 0 {
-		t.Errorf("ExaleadQuery did not find any subdomains")
+		t.Errorf("ExaleadQuery did not find any subdomains: %s", b)
 	}
 }

@@ -5,7 +5,6 @@ package amass
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"math/rand"
 	"net"
@@ -220,54 +219,52 @@ func (ds *DNSService) performDNSRequest() {
 	}
 	ds.SetActive()
 
-	answers, err = nameToRecords(req.Name)
+	answers, err = ds.nameToRecords(req.Name)
 	if err != nil {
 		return
 	}
 	req.Records = answers
 
-	if req.Tag != SCRAPE && ds.DetectWildcard(req) {
+	if req.Tag != SCRAPE && req.Tag != CERT && ds.DetectWildcard(req) {
 		return
 	}
 	// Make sure we know about any new subdomains
 	ds.checkForNewSubdomain(req)
 	// The subdomain manager is now done with it
-	ds.bus.Publish(RESOLVED, &AmassRequest{
-		Name:    req.Name,
-		Domain:  req.Domain,
-		Records: answers,
-		Tag:     req.Tag,
-		Source:  req.Source,
-	})
+	ds.bus.Publish(RESOLVED, req)
 }
 
-func nameToRecords(name string) ([]DNSAnswer, error) {
+func (ds *DNSService) nameToRecords(name string) ([]DNSAnswer, error) {
 	var answers []DNSAnswer
 
-	ans, err := ResolveDNS(name, "CNAME")
-	if err == nil {
-		answers = append(answers, ans[0])
-		return answers, nil
-	}
-
-	ans, err = ResolveDNS(name, "PTR")
-	if err == nil {
+	if ans, err := ResolveDNS(name, "CNAME"); err == nil {
 		answers = append(answers, ans...)
 		return answers, nil
+	} else {
+		ds.Config().Log.Printf("DNS CNAME record query error: %s: %v", name, err)
 	}
 
-	ans, err = ResolveDNS(name, "A")
-	if err == nil {
+	if ans, err := ResolveDNS(name, "PTR"); err == nil {
 		answers = append(answers, ans...)
+		return answers, nil
+	} else {
+		ds.Config().Log.Printf("DNS PTR record query error: %s: %v", name, err)
 	}
 
-	ans, err = ResolveDNS(name, "AAAA")
-	if err == nil {
+	if ans, err := ResolveDNS(name, "A"); err == nil {
 		answers = append(answers, ans...)
+	} else {
+		ds.Config().Log.Printf("DNS A record query error: %s: %v", name, err)
+	}
+
+	if ans, err := ResolveDNS(name, "AAAA"); err == nil {
+		answers = append(answers, ans...)
+	} else {
+		ds.Config().Log.Printf("DNS AAAA record query error: %s: %v", name, err)
 	}
 
 	if len(answers) == 0 {
-		return nil, fmt.Errorf("No records resolved for the name: %s", name)
+		return nil, fmt.Errorf("No DNS records resolved for the name: %s", name)
 	}
 	return answers, nil
 }
@@ -320,32 +317,35 @@ func (ds *DNSService) basicQueries(subdomain, domain string) {
 	var answers []DNSAnswer
 
 	// Obtain the DNS answers for the NS records related to the domain
-	ans, err := ResolveDNS(subdomain, "NS")
-	if err == nil {
+	if ans, err := ResolveDNS(subdomain, "NS"); err == nil {
 		for _, a := range ans {
 			if ds.Config().Active {
 				go ds.zoneTransfer(subdomain, domain, a.Data)
 			}
-
 			answers = append(answers, a)
 		}
+	} else {
+		ds.Config().Log.Printf("DNS NS record query error: %s: %v", subdomain, err)
 	}
 	// Obtain the DNS answers for the MX records related to the domain
-	ans, err = ResolveDNS(subdomain, "MX")
-	if err == nil {
+	if ans, err := ResolveDNS(subdomain, "MX"); err == nil {
 		for _, a := range ans {
 			answers = append(answers, a)
 		}
+	} else {
+		ds.Config().Log.Printf("DNS MX record query error: %s: %v", subdomain, err)
 	}
 	// Obtain the DNS answers for the TXT records related to the domain
-	ans, err = ResolveDNS(subdomain, "TXT")
-	if err == nil {
+	if ans, err := ResolveDNS(subdomain, "TXT"); err == nil {
 		answers = append(answers, ans...)
+	} else {
+		ds.Config().Log.Printf("DNS TXT record query error: %s: %v", subdomain, err)
 	}
 	// Obtain the DNS answers for the SOA records related to the domain
-	ans, err = ResolveDNS(subdomain, "SOA")
-	if err == nil {
+	if ans, err := ResolveDNS(subdomain, "SOA"); err == nil {
 		answers = append(answers, ans...)
+	} else {
+		ds.Config().Log.Printf("DNS SOA record query error: %s: %v", subdomain, err)
 	}
 
 	ds.bus.Publish(RESOLVED, &AmassRequest{
@@ -364,9 +364,10 @@ func (ds *DNSService) queryServiceNames(subdomain, domain string) {
 	for _, name := range popularSRVRecords {
 		srvName := name + "." + subdomain
 
-		ans, err := ResolveDNS(srvName, "SRV")
-		if err == nil {
+		if ans, err := ResolveDNS(srvName, "SRV"); err == nil {
 			answers = append(answers, ans...)
+		} else {
+			ds.Config().Log.Printf("DNS SRV record query error: %s: %v", srvName, err)
 		}
 		// Do not go too fast
 		time.Sleep(ds.Config().Frequency)
@@ -384,6 +385,7 @@ func (ds *DNSService) queryServiceNames(subdomain, domain string) {
 func (ds *DNSService) zoneTransfer(sub, domain, server string) {
 	a, err := ResolveDNS(server, "A")
 	if err != nil {
+		ds.Config().Log.Printf("DNS A record query error: %s: %v", server, err)
 		return
 	}
 	addr := a[0].Data
@@ -394,6 +396,7 @@ func (ds *DNSService) zoneTransfer(sub, domain, server string) {
 
 	conn, err := DialContext(ctx, "tcp", addr+":53")
 	if err != nil {
+		ds.Config().Log.Printf("DNS zone transfer error: Failed to obtain TCP connection to %s: %v", addr+":53", err)
 		return
 	}
 	defer conn.Close()
@@ -408,6 +411,7 @@ func (ds *DNSService) zoneTransfer(sub, domain, server string) {
 
 	in, err := xfr.In(m, "")
 	if err != nil {
+		ds.Config().Log.Printf("DNS zone transfer error: %s: %v", addr+":53", err)
 		return
 	}
 
@@ -561,19 +565,22 @@ func (ds *DNSService) wildcardDetection(sub string) []DNSAnswer {
 		return nil
 	}
 	// Check if the name resolves
-	a, err := ResolveDNS(name, "CNAME")
-	if err == nil {
+	if a, err := ResolveDNS(name, "CNAME"); err == nil {
 		answers = append(answers, a...)
+	} else {
+		ds.Config().Log.Printf("DNS wildcard detection CNAME query error: %s: %v", name, err)
 	}
 
-	a, err = ResolveDNS(name, "A")
-	if err == nil {
+	if a, err := ResolveDNS(name, "A"); err == nil {
 		answers = append(answers, a...)
+	} else {
+		ds.Config().Log.Printf("DNS wildcard detection A query error: %s: %v", name, err)
 	}
 
-	a, err = ResolveDNS(name, "AAAA")
-	if err == nil {
+	if a, err := ResolveDNS(name, "AAAA"); err == nil {
 		answers = append(answers, a...)
+	} else {
+		ds.Config().Log.Printf("DNS wildcard detection AAAA query error: %s: %v", name, err)
 	}
 
 	if len(answers) == 0 {
@@ -621,18 +628,18 @@ func unlikelyName(sub string) string {
 func ResolveDNS(name, qtype string) ([]DNSAnswer, error) {
 	qt, err := textToTypeNum(qtype)
 	if err != nil {
-		return []DNSAnswer{}, err
+		return nil, err
 	}
 
 	conn, err := DNSDialContext(context.Background(), "udp", "")
 	if err != nil {
-		return []DNSAnswer{}, errors.New("Failed to connect to the server")
+		return nil, fmt.Errorf("Failed to obtain UDP connection to the DNS resolver: %v", err)
 	}
 	defer conn.Close()
 
-	ans := DNSExchangeConn(conn, name, qt)
-	if len(ans) == 0 {
-		return []DNSAnswer{}, errors.New("The query was unsuccessful")
+	ans, err := DNSExchangeConn(conn, name, qt)
+	if err != nil {
+		return nil, err
 	}
 	return ans, nil
 }
@@ -646,7 +653,7 @@ func ReverseDNS(addr string) (string, error) {
 	} else if len(ip) == net.IPv6len {
 		ptr = utils.IPv6NibbleFormat(utils.HexString(ip)) + ".ip6.arpa"
 	} else {
-		return "", errors.New("Invalid IP address parameter")
+		return "", fmt.Errorf("Invalid IP address parameter: %s", addr)
 	}
 
 	answers, err := ResolveDNS(ptr, "PTR")
@@ -658,7 +665,7 @@ func ReverseDNS(addr string) (string, error) {
 		}
 
 		if name == "" {
-			err = errors.New("PTR record not found")
+			err = fmt.Errorf("PTR record not found for IP address: %s", addr)
 		}
 	}
 	return name, err
@@ -691,16 +698,15 @@ func textToTypeNum(text string) (uint16, error) {
 	}
 
 	if qtype == 0 {
-		return qtype, errors.New("DNS message type not supported")
+		return qtype, fmt.Errorf("DNS message type '%s' not supported", text)
 	}
 	return qtype, nil
 }
 
 // DNSExchange - Encapsulates miekg/dns usage
-func DNSExchangeConn(conn net.Conn, name string, qtype uint16) []DNSAnswer {
+func DNSExchangeConn(conn net.Conn, name string, qtype uint16) ([]DNSAnswer, error) {
 	var err error
 	var m, r *dns.Msg
-	var answers []DNSAnswer
 
 	tries := 3
 	if qtype == dns.TypeNS || qtype == dns.TypeMX ||
@@ -732,7 +738,9 @@ func DNSExchangeConn(conn net.Conn, name string, qtype uint16) []DNSAnswer {
 
 		// Perform the DNS query
 		co := &dns.Conn{Conn: conn}
-		co.WriteMsg(m)
+		if err = co.WriteMsg(m); err != nil {
+			return nil, fmt.Errorf("DNS error: Failed to write msg to the resolver: %v", err)
+		}
 		// Set the maximum time for receiving the answer
 		co.SetReadDeadline(time.Now().Add(2 * time.Second))
 		r, err = co.ReadMsg()
@@ -741,13 +749,14 @@ func DNSExchangeConn(conn net.Conn, name string, qtype uint16) []DNSAnswer {
 		}
 	}
 	if err != nil {
-		return answers
+		return nil, err
 	}
 	// Check that the query was successful
 	if r != nil && r.Rcode != dns.RcodeSuccess {
-		return answers
+		return nil, fmt.Errorf("Resolver returned an error %v", r)
 	}
 
+	var answers []DNSAnswer
 	for _, a := range extractRawData(r, qtype) {
 		answers = append(answers, DNSAnswer{
 			Name: name,
@@ -756,7 +765,11 @@ func DNSExchangeConn(conn net.Conn, name string, qtype uint16) []DNSAnswer {
 			Data: strings.TrimSpace(a),
 		})
 	}
-	return answers
+
+	if len(answers) == 0 {
+		return nil, fmt.Errorf("DNS query for %s, type %d returned 0 records", name, qtype)
+	}
+	return answers, nil
 }
 
 func extractRawData(msg *dns.Msg, qtype uint16) []string {

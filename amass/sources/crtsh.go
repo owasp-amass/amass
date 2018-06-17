@@ -4,6 +4,7 @@
 package sources
 
 import (
+	"log"
 	"regexp"
 	"strings"
 	"time"
@@ -15,7 +16,7 @@ const (
 	CrtshSourceString string = "crt.sh"
 )
 
-func CrtshQuery(domain, sub string) []string {
+func CrtshQuery(domain, sub string, l *log.Logger) []string {
 	var unique []string
 
 	if domain != sub {
@@ -23,8 +24,10 @@ func CrtshQuery(domain, sub string) []string {
 	}
 
 	// Pull the page that lists all certs for this domain
-	page := utils.GetWebPage("https://crt.sh/?q=%25."+domain, nil)
-	if page == "" {
+	url := "https://crt.sh/?q=%25." + domain
+	page, err := utils.GetWebPage(url, nil)
+	if err != nil {
+		l.Printf("Crtsh error: %s: %v", url, err)
 		return unique
 	}
 	// Get the subdomain name the cert was issued to, and
@@ -34,8 +37,10 @@ func CrtshQuery(domain, sub string) []string {
 		// Do not go too fast
 		time.Sleep(50 * time.Millisecond)
 		// Pull the certificate web page
-		cert := utils.GetWebPage("https://crt.sh/"+rel, nil)
-		if cert == "" {
+		url = "https://crt.sh/" + rel
+		cert, err := utils.GetWebPage(url, nil)
+		if err != nil {
+			l.Printf("Crtsh error: %s: %v", url, err)
 			continue
 		}
 		// Get all names off the certificate

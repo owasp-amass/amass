@@ -4,13 +4,20 @@
 package sources
 
 import (
+	"bytes"
+	"io"
+	"log"
 	"testing"
 )
 
 func TestCrtshQuery(t *testing.T) {
-	names := CrtshQuery(testDomain, testDomain)
+	var b bytes.Buffer
+	wr := io.Writer(&b)
+	l := log.New(wr, "", log.Lmicroseconds)
+
+	names := CrtshQuery(testDomain, testDomain, l)
 
 	if len(names) <= 0 {
-		t.Errorf("CrtshQuery did not find any subdomains")
+		t.Errorf("CrtshQuery did not find any subdomains: %s", b)
 	}
 }

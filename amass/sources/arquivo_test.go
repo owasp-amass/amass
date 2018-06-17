@@ -4,13 +4,20 @@
 package sources
 
 import (
+	"bytes"
+	"io"
+	"log"
 	"testing"
 )
 
 func TestArquivoQuery(t *testing.T) {
-	names := ArquivoQuery(testDomain, testSubdomain)
+	var b bytes.Buffer
+	wr := io.Writer(&b)
+	l := log.New(wr, "", log.Lmicroseconds)
+
+	names := ArquivoQuery(testDomain, testSubdomain, l)
 
 	if len(names) <= 0 {
-		t.Errorf("ArquivoQuery did not find any subdomains")
+		t.Errorf("ArquivoQuery did not find any subdomains: %s", b)
 	}
 }

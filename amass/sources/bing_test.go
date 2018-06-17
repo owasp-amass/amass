@@ -4,13 +4,20 @@
 package sources
 
 import (
+	"bytes"
+	"io"
+	"log"
 	"testing"
 )
 
 func TestBingQuery(t *testing.T) {
-	names := BingQuery(testDomain, testDomain)
+	var b bytes.Buffer
+	wr := io.Writer(&b)
+	l := log.New(wr, "", log.Lmicroseconds)
+
+	names := BingQuery(testDomain, testDomain, l)
 
 	if len(names) <= 0 {
-		t.Errorf("BingQuery did not find any subdomains")
+		t.Errorf("BingQuery did not find any subdomains: %s", b)
 	}
 }

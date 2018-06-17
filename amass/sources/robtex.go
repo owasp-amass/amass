@@ -6,6 +6,7 @@ package sources
 import (
 	"bufio"
 	"encoding/json"
+	"log"
 	"strings"
 	"time"
 
@@ -22,7 +23,7 @@ type robtexJSON struct {
 	Type string `json:"rrtype"`
 }
 
-func RobtexQuery(domain, sub string) []string {
+func RobtexQuery(domain, sub string, log *log.Logger) []string {
 	var ips []string
 	var unique []string
 
@@ -30,8 +31,10 @@ func RobtexQuery(domain, sub string) []string {
 		return unique
 	}
 
-	page := utils.GetWebPage("https://freeapi.robtex.com/pdns/forward/"+domain, nil)
-	if page == "" {
+	url := "https://freeapi.robtex.com/pdns/forward/" + domain
+	page, err := utils.GetWebPage(url, nil)
+	if err != nil {
+		log.Printf("Robtex error: %s: %v", url, err)
 		return unique
 	}
 
@@ -46,8 +49,10 @@ func RobtexQuery(domain, sub string) []string {
 	for _, ip := range ips {
 		time.Sleep(500 * time.Millisecond)
 
-		pdns := utils.GetWebPage("https://freeapi.robtex.com/pdns/reverse/"+ip, nil)
-		if pdns == "" {
+		url = "https://freeapi.robtex.com/pdns/reverse/" + ip
+		pdns, err := utils.GetWebPage(url, nil)
+		if err != nil {
+			log.Printf("Robtex error: %s: %v", url, err)
 			continue
 		}
 

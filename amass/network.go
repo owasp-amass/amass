@@ -6,6 +6,7 @@ package amass
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"regexp"
@@ -75,68 +76,70 @@ func SubdomainToDomain(name string) string {
 	return domain
 }
 
-func IPRequest(addr string) (int, *net.IPNet, string) {
+func IPRequest(addr string) (int, *net.IPNet, string, error) {
 	netDataLock.Lock()
 	defer netDataLock.Unlock()
 
 	// Is the data already available in the cache?
 	asn, cidr, desc := ipSearch(addr)
 	if asn != 0 {
-		return asn, cidr, desc
+		return asn, cidr, desc, nil
 	}
 	// Need to pull the online data
-	record := fetchOnlineData(addr, 0)
-	if record == nil {
-		return 0, nil, ""
+	record, err := fetchOnlineData(addr, 0)
+	if err != nil {
+		return 0, nil, "", err
 	}
 	// Add it to the cache
 	netDataCache[record.ASN] = record
 	// Lets try again
 	asn, cidr, desc = ipSearch(addr)
 	if asn == 0 {
-		return 0, nil, ""
+		return 0, nil, "", fmt.Errorf("IPRequest failed to find data for %s after an online search", addr)
 	}
-	return asn, cidr, desc
+	return asn, cidr, desc, nil
 }
 
-func ASNRequest(asn int) *ASRecord {
+func ASNRequest(asn int) (*ASRecord, error) {
 	netDataLock.Lock()
 	defer netDataLock.Unlock()
 
+	var err error
+
 	record, found := netDataCache[asn]
 	if !found {
-		record = fetchOnlineData("", asn)
-		if record == nil {
-			return nil
+		record, err = fetchOnlineData("", asn)
+		if err != nil {
+			return nil, err
 		}
 		// Insert the AS record into the cache
 		netDataCache[record.ASN] = record
 	}
-	return record
+	return record, nil
 }
 
-func CIDRRequest(cidr *net.IPNet) (int, string) {
+func CIDRRequest(cidr *net.IPNet) (int, string, error) {
 	netDataLock.Lock()
 	defer netDataLock.Unlock()
 
 	asn, desc := cidrSearch(cidr)
 	// Does the data need to be obtained?
 	if asn != 0 {
-		return asn, desc
+		return asn, desc, nil
 	}
 	// Need to pull the online data
-	record := fetchOnlineData(cidr.IP.String(), 0)
-	if record == nil {
-		return 0, ""
+	record, err := fetchOnlineData(cidr.IP.String(), 0)
+	if err != nil {
+		return 0, "", err
 	}
 	// Add it to the cache
 	netDataCache[record.ASN] = record
 	// Lets try again
 	asn, desc = cidrSearch(cidr)
 	if asn == 0 {
-		return 0, ""
+		return 0, "", fmt.Errorf("CIDRRequest failed to find data for %s after an online search", cidr)
 	}
-	return asn, desc
+	return asn, desc, nil
 }
 
 func cidrSearch(ipnet *net.IPNet) (int, string) {
@@ -182,40 +185,43 @@ loop:
 	return a, cidr, desc
 }
 
-func fetchOnlineData(addr string, asn int) *ASRecord {
+func fetchOnlineData(addr string, asn int) (*ASRecord, error) {
 	if addr == "" && asn == 0 {
-		return nil
+		return nil, fmt.Errorf("fetchOnlineData params are insufficient: addr: %s asn: %d", addr, asn)
 	}
 
+	var err error
 	var cidr string
 	// If the ASN was not provided, look it up
 	if asn == 0 {
-		asn, cidr = originLookup(addr)
-		if asn == 0 {
-			return nil
+		asn, cidr, err = originLookup(addr)
+		if err != nil {
+			return nil, err
 		}
 	}
 	record, ok := netDataCache[asn]
 	if !ok {
 		// Get the ASN record from the online source
-		record = asnLookup(asn)
-		if record == nil {
-			return nil
+		record, err = asnLookup(asn)
+		if err != nil {
+			return nil, err
 		}
 		// Get the netblocks associated with this ASN
-		record.Netblocks = fetchOnlineNetblockData(asn)
+		record.Netblocks, err = fetchOnlineNetblockData(asn)
+		if err != nil {
+			return nil, err
+		}
 	}
-	// Just in case
 	if cidr != "" {
 		record.Netblocks = utils.UniqueAppend(record.Netblocks, cidr)
 	}
 	if len(record.Netblocks) == 0 {
-		return nil
+		return nil, fmt.Errorf("fetchOnlineData failed to obtain netblocks for ASN: %d", asn)
 	}
-	return record
+	return record, nil
 }
 
-func originLookup(addr string) (int, string) {
+func originLookup(addr string) (int, string, error) {
 	var err error
 	var name string
 	var answers []DNSAnswer
@@ -225,23 +231,23 @@ func originLookup(addr string) (int, string) {
 	} else if len(ip) == net.IPv6len {
 		name = utils.IPv6NibbleFormat(utils.HexString(ip)) + ".origin6.asn.cymru.com"
 	} else {
-		return 0, ""
+		return 0, "", fmt.Errorf("originLookup param is insufficient: addr: %s", ip)
 	}
 
 	answers, err = ResolveDNS(name, "TXT")
 	if err != nil {
-		return 0, ""
+		return 0, "", fmt.Errorf("originLookup: DNS TXT record query error: %s: %v", name, err)
 	}
 	// Retrieve the ASN
 	fields := strings.Split(answers[0].Data, " | ")
 	asn, err := strconv.Atoi(fields[0])
 	if err != nil {
-		return 0, ""
+		return 0, "", fmt.Errorf("originLookup: Failed to extract the ASN: %s: %v", fields[0], err)
 	}
-	return asn, strings.TrimSpace(fields[1])
+	return asn, strings.TrimSpace(fields[1]), nil
 }
 
-func asnLookup(asn int) *ASRecord {
+func asnLookup(asn int) (*ASRecord, error) {
 	var err error
 	var answers []DNSAnswer
 
@@ -250,23 +256,24 @@ func asnLookup(asn int) *ASRecord {
 
 	answers, err = ResolveDNS(name, "TXT")
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("asnLookup: DNS TXT record query error: %s: %v", name, err)
 	}
 	// Parse the record returned
 	record := parseASNInfo(answers[0].Data)
 	if record == nil {
-		return nil
+		return nil, fmt.Errorf("asnLookup: Failed to parse data: %s", answers[0].Data)
 	}
-	return record
+	return record, nil
 }
 
-func fetchOnlineNetblockData(asn int) []string {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+func fetchOnlineNetblockData(asn int) ([]string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	conn, err := DialContext(ctx, "tcp", "asn.shadowserver.org:43")
+	addr := "asn.shadowserver.org:43"
+	conn, err := DialContext(ctx, "tcp", addr)
 	if err != nil {
-		return []string{}
+		return nil, fmt.Errorf("fetchOnlineNetblockData error: %s: %v", addr, err)
 	}
 	defer conn.Close()
 
@@ -284,9 +291,9 @@ func fetchOnlineNetblockData(asn int) []string {
 	}
 
 	if len(blocks) == 0 {
-		return []string{}
+		return nil, errors.New("fetchOnlineNetblockData error: No netblocks acquired")
 	}
-	return blocks
+	return blocks, nil
 }
 
 func parseASNInfo(line string) *ASRecord {
@@ -312,16 +319,17 @@ func parseASNInfo(line string) *ASRecord {
 }
 
 // LookupIPHistory - Attempts to obtain IP addresses used by a root domain name
-func LookupIPHistory(domain string) []string {
-	url := "http://viewdns.info/iphistory/?domain=" + domain
-	// The ViewDNS IP History lookup sometimes reveals interesting results
-	page := utils.GetWebPage(url, nil)
-	if page == "" {
-		return nil
-	}
-	// Look for IP addresses in the web page returned
+func LookupIPHistory(domain string) ([]string, error) {
 	var unique []string
 
+	url := "http://viewdns.info/iphistory/?domain=" + domain
+	// The ViewDNS IP History lookup sometimes reveals interesting results
+	page, err := utils.GetWebPage(url, nil)
+	if err != nil {
+		return unique, err
+	}
+
+	// Look for IP addresses in the web page returned
 	re := regexp.MustCompile(utils.IPv4RE)
 	for _, sd := range re.FindAllString(page, -1) {
 		u := utils.NewUniqueElements(unique, sd)
@@ -331,17 +339,17 @@ func LookupIPHistory(domain string) []string {
 		}
 	}
 	// Each IP address could provide a netblock to investigate
-	return unique
+	return unique, nil
 }
 
 //--------------------------------------------------------------------------------------------------
 // ReverseWhois - Returns domain names that are related to the domain provided
-func ReverseWhois(domain string) []string {
+func ReverseWhois(domain string) ([]string, error) {
 	var domains []string
 
-	page := utils.GetWebPage("http://viewdns.info/reversewhois/?q="+domain, nil)
-	if page == "" {
-		return []string{}
+	page, err := utils.GetWebPage("http://viewdns.info/reversewhois/?q="+domain, nil)
+	if err != nil {
+		return domains, err
 	}
 	// Pull the table we need from the page content
 	table := getViewDNSTable(page)
@@ -357,7 +365,7 @@ func ReverseWhois(domain string) []string {
 		domains = append(domains, strings.TrimSpace(sub))
 	}
 	sort.Strings(domains)
-	return domains
+	return domains, nil
 }
 
 func getViewDNSTable(page string) string {

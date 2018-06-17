@@ -4,6 +4,7 @@
 package sources
 
 import (
+	"log"
 	"net/url"
 	"regexp"
 	"strings"
@@ -16,7 +17,7 @@ const (
 	entrustBaseURL      string = "http://ipv4info.com"
 )
 
-func EntrustQuery(domain, sub string) []string {
+func EntrustQuery(domain, sub string, l *log.Logger) []string {
 	var unique []string
 
 	if domain != sub {
@@ -32,8 +33,9 @@ func EntrustQuery(domain, sub string) []string {
 		"limit":          {"5000"},
 	}.Encode()
 
-	page := utils.GetWebPage(u.String(), nil)
-	if page == "" {
+	page, err := utils.GetWebPage(u.String(), nil)
+	if err != nil {
+		l.Printf("Entrust error: %s: %v", u.String(), err)
 		return unique
 	}
 	content := strings.Replace(page, "u003d", " ", -1)

@@ -7,6 +7,8 @@ import (
 	"bufio"
 	"errors"
 	"io"
+	"io/ioutil"
+	"log"
 	"net"
 	"strings"
 	"sync"
@@ -27,6 +29,9 @@ type AmassConfig struct {
 
 	// The channel that will receive the results
 	Output chan *AmassOutput
+
+	// Logger for error messages
+	Log *log.Logger
 
 	// The ASNs that the enumeration will target
 	ASNs []int
@@ -148,6 +153,7 @@ func CheckConfig(config *AmassConfig) error {
 // DefaultConfig returns a config with values that have been tested
 func DefaultConfig() *AmassConfig {
 	config := &AmassConfig{
+		Log:             log.New(ioutil.Discard, "", 0),
 		Ports:           []int{80, 443},
 		Recursive:       true,
 		Alterations:     true,
@@ -159,6 +165,7 @@ func DefaultConfig() *AmassConfig {
 
 // Ensures that all configuration elements have valid values
 func CustomConfig(ac *AmassConfig) *AmassConfig {
+	var err error
 	config := DefaultConfig()
 
 	if len(ac.Domains()) > 0 {
@@ -167,11 +174,17 @@ func CustomConfig(ac *AmassConfig) *AmassConfig {
 	if len(config.Resolvers) > 0 {
 		SetCustomResolvers(config.Resolvers)
 	}
+	if ac.Log != nil {
+		config.Log = ac.Log
+	}
 	if len(ac.Ports) > 0 {
 		config.Ports = ac.Ports
 	}
 	if ac.BruteForcing && len(ac.Wordlist) == 0 {
-		config.Wordlist = GetDefaultWordlist()
+		if config.Wordlist, err = GetDefaultWordlist(); err != nil {
+			config.Log.Printf("Configuration error: %v", err)
+			return nil
+		}
 	} else {
 		config.Wordlist = ac.Wordlist
 	}
@@ -198,13 +211,13 @@ func CustomConfig(ac *AmassConfig) *AmassConfig {
 	return config
 }
 
-func GetDefaultWordlist() []string {
+func GetDefaultWordlist() ([]string, error) {
 	var list []string
 	var wordlist io.Reader
 
-	page := utils.GetWebPage(defaultWordlistURL, nil)
-	if page == "" {
-		return list
+	page, err := utils.GetWebPage(defaultWordlistURL, nil)
+	if err != nil {
+		return list, err
 	}
 	wordlist = strings.NewReader(page)
 
@@ -218,5 +231,5 @@ func GetDefaultWordlist() []string {
 			list = append(list, word)
 		}
 	}
-	return list
+	return list, nil
 }

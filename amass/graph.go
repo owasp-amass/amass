@@ -88,6 +88,9 @@ func (g *Graph) NewEdge(from, to int, label string) *Edge {
 }
 
 func (g *Graph) VizData() ([]viz.Node, []viz.Edge) {
+	g.Lock()
+	defer g.Unlock()
+
 	var nodes []viz.Node
 	var edges []viz.Edge
 

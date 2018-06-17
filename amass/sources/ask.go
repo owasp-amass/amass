@@ -4,6 +4,7 @@
 package sources
 
 import (
+	"log"
 	"net/url"
 	"strconv"
 	"time"
@@ -17,7 +18,7 @@ const (
 	askLimit        int    = 100
 )
 
-func AskQuery(domain, sub string) []string {
+func AskQuery(domain, sub string, l *log.Logger) []string {
 	var unique []string
 
 	if domain != sub {
@@ -27,8 +28,10 @@ func AskQuery(domain, sub string) []string {
 	re := utils.SubdomainRegex(domain)
 	num := askLimit / askQuantity
 	for i := 0; i < num; i++ {
-		page := utils.GetWebPage(askURLByPageNum(domain, i), nil)
-		if page == "" {
+		u := askURLByPageNum(domain, i)
+		page, err := utils.GetWebPage(u, nil)
+		if err != nil {
+			l.Printf("Ask error: %s: %v", u, err)
 			break
 		}
 

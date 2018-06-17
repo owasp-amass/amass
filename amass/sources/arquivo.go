@@ -2,6 +2,7 @@ package sources
 
 import (
 	"fmt"
+	"log"
 	"regexp"
 	"strconv"
 	"time"
@@ -15,7 +16,7 @@ const (
 	arquivoURL          string = "http://arquivo.pt/wayback"
 )
 
-func ArquivoQuery(domain, sub string) []string {
+func ArquivoQuery(domain, sub string, l *log.Logger) []string {
 	if sub == "" {
 		return []string{}
 	}
@@ -23,12 +24,14 @@ func ArquivoQuery(domain, sub string) []string {
 	year := strconv.Itoa(time.Now().Year())
 	ext := &ext{
 		DefaultExtender: &gocrawl.DefaultExtender{},
+		source:          ArquivoSourceString,
 		domainRE:        utils.SubdomainRegex(domain),
 		mementoRE:       regexp.MustCompile(arquivoURL + "/[0-9]+/"),
 		filter:          make(map[string]bool), // Filter for not double-checking URLs
 		base:            arquivoURL,
 		year:            year,
 		sub:             sub,
+		logger:          l,
 	}
 
 	// Set custom options

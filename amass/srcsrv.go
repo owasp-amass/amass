@@ -18,6 +18,169 @@ type source struct {
 	Str   string
 }
 
+var srcs = []*source{
+	&source{
+		Query: sources.ArchiveItQuery,
+		Str:   sources.ArchiveItSourceString,
+		Tag:   ARCHIVE,
+	},
+	&source{
+		Query: sources.ArchiveTodayQuery,
+		Str:   sources.ArchiveTodaySourceString,
+		Tag:   ARCHIVE,
+	},
+	&source{
+		Query: sources.ArquivoQuery,
+		Str:   sources.ArquivoSourceString,
+		Tag:   ARCHIVE,
+	},
+	&source{
+		Query: sources.AskQuery,
+		Str:   sources.AskSourceString,
+		Tag:   SCRAPE,
+	},
+	&source{
+		Query: sources.BaiduQuery,
+		Str:   sources.BaiduSourceString,
+		Tag:   SCRAPE,
+	},
+	&source{
+		Query: sources.BingQuery,
+		Str:   sources.BingSourceString,
+		Tag:   SCRAPE,
+	},
+	&source{
+		Query: sources.CensysQuery,
+		Str:   sources.CensysSourceString,
+		Tag:   SCRAPE,
+	},
+	&source{
+		Query: sources.CertDBQuery,
+		Str:   sources.CertDBSourceString,
+		Tag:   CERT,
+	},
+	&source{
+		Query: sources.CertSpotterQuery,
+		Str:   sources.CertSpotterSourceString,
+		Tag:   CERT,
+	},
+	&source{
+		Query: sources.CrtshQuery,
+		Str:   sources.CrtshSourceString,
+		Tag:   CERT,
+	},
+	&source{
+		Query: sources.DNSDBQuery,
+		Str:   sources.DNSDBSourceString,
+		Tag:   SCRAPE,
+	},
+	&source{
+		Query: sources.DNSDumpsterQuery,
+		Str:   sources.DNSDumpsterSourceString,
+		Tag:   SCRAPE,
+	},
+	&source{
+		Query: sources.DogpileQuery,
+		Str:   sources.DogpileSourceString,
+		Tag:   SCRAPE,
+	},
+	&source{
+		Query: sources.EntrustQuery,
+		Str:   sources.EntrustSourceString,
+		Tag:   CERT,
+	},
+	&source{
+		Query: sources.ExaleadQuery,
+		Str:   sources.ExaleadSourceString,
+		Tag:   SCRAPE,
+	},
+	&source{
+		Query: sources.FindSubdomainsQuery,
+		Str:   sources.FindSubdomainsSourceString,
+		Tag:   SCRAPE,
+	},
+	&source{
+		Query: sources.GoogleQuery,
+		Str:   sources.GoogleSourceString,
+		Tag:   SCRAPE,
+	},
+	&source{
+		Query: sources.HackerTargetQuery,
+		Str:   sources.HackerTargetSourceString,
+		Tag:   SCRAPE,
+	},
+	&source{
+		Query: sources.IPv4InfoQuery,
+		Str:   sources.IPv4InfoSourceString,
+		Tag:   SCRAPE,
+	},
+	&source{
+		Query: sources.LoCArchiveQuery,
+		Str:   sources.LoCArchiveSourceString,
+		Tag:   ARCHIVE,
+	},
+	&source{
+		Query: sources.NetcraftQuery,
+		Str:   sources.NetcraftSourceString,
+		Tag:   SCRAPE,
+	},
+	&source{
+		Query: sources.OpenUKArchiveQuery,
+		Str:   sources.OpenUKArchiveSourceString,
+		Tag:   ARCHIVE,
+	},
+	&source{
+		Query: sources.PTRArchiveQuery,
+		Str:   sources.PTRArchiveSourceString,
+		Tag:   SCRAPE,
+	},
+	&source{
+		Query: sources.RiddlerQuery,
+		Str:   sources.RiddlerSourceString,
+		Tag:   SCRAPE,
+	},
+	&source{
+		Query: sources.RobtexQuery,
+		Str:   sources.RobtexSourceString,
+		Tag:   SCRAPE,
+	},
+	&source{
+		Query: sources.SiteDossierQuery,
+		Str:   sources.SiteDossierSourceString,
+		Tag:   SCRAPE,
+	},
+	&source{
+		Query: sources.ThreatCrowdQuery,
+		Str:   sources.ThreatCrowdSourceString,
+		Tag:   SCRAPE,
+	},
+	&source{
+		Query: sources.ThreatMinerQuery,
+		Str:   sources.ThreatMinerSourceString,
+		Tag:   SCRAPE,
+	},
+	&source{
+		Query: sources.UKGovArchiveQuery,
+		Str:   sources.UKGovArchiveSourceString,
+		Tag:   ARCHIVE,
+	},
+	&source{
+		Query: sources.VirusTotalQuery,
+		Str:   sources.VirusTotalSourceString,
+		Tag:   SCRAPE,
+	},
+	&source{
+		Query: sources.WaybackMachineQuery,
+		Str:   sources.WaybackMachineSourceString,
+		Tag:   ARCHIVE,
+	},
+	&source{
+		Query: sources.YahooQuery,
+		Str:   sources.YahooSourceString,
+		Tag:   SCRAPE,
+	},
+}
+
 type SourcesService struct {
 	BaseAmassService
 
@@ -33,175 +196,13 @@ func NewSourcesService(config *AmassConfig, bus evbus.Bus) *SourcesService {
 	ss := &SourcesService{
 		bus:          bus,
 		responses:    make(chan *AmassRequest, 50),
+		sources:      srcs,
 		inFilter:     make(map[string]struct{}),
 		outFilter:    make(map[string]struct{}),
 		domainFilter: make(map[string]struct{}),
 	}
 
 	ss.BaseAmassService = *NewBaseAmassService("Sources Service", config, ss)
-
-	ss.sources = []*source{
-		&source{
-			Query: sources.ArchiveItQuery,
-			Str:   sources.ArchiveItSourceString,
-			Tag:   ARCHIVE,
-		},
-		&source{
-			Query: sources.ArchiveTodayQuery,
-			Str:   sources.ArchiveTodaySourceString,
-			Tag:   ARCHIVE,
-		},
-		&source{
-			Query: sources.ArquivoQuery,
-			Str:   sources.ArquivoSourceString,
-			Tag:   ARCHIVE,
-		},
-		&source{
-			Query: sources.AskQuery,
-			Str:   sources.AskSourceString,
-			Tag:   SCRAPE,
-		},
-		&source{
-			Query: sources.BaiduQuery,
-			Str:   sources.BaiduSourceString,
-			Tag:   SCRAPE,
-		},
-		&source{
-			Query: sources.BingQuery,
-			Str:   sources.BingSourceString,
-			Tag:   SCRAPE,
-		},
-		&source{
-			Query: sources.CensysQuery,
-			Str:   sources.CensysSourceString,
-			Tag:   SCRAPE,
-		},
-		&source{
-			Query: sources.CertDBQuery,
-			Str:   sources.CertDBSourceString,
-			Tag:   CERT,
-		},
-		&source{
-			Query: sources.CertSpotterQuery,
-			Str:   sources.CertSpotterSourceString,
-			Tag:   CERT,
-		},
-		&source{
-			Query: sources.CrtshQuery,
-			Str:   sources.CrtshSourceString,
-			Tag:   CERT,
-		},
-		&source{
-			Query: sources.DNSDBQuery,
-			Str:   sources.DNSDBSourceString,
-			Tag:   SCRAPE,
-		},
-		&source{
-			Query: sources.DNSDumpsterQuery,
-			Str:   sources.DNSDumpsterSourceString,
-			Tag:   SCRAPE,
-		},
-		&source{
-			Query: sources.DogpileQuery,
-			Str:   sources.DogpileSourceString,
-			Tag:   SCRAPE,
-		},
-		&source{
-			Query: sources.EntrustQuery,
-			Str:   sources.EntrustSourceString,
-			Tag:   CERT,
-		},
-		&source{
-			Query: sources.ExaleadQuery,
-			Str:   sources.ExaleadSourceString,
-			Tag:   SCRAPE,
-		},
-		&source{
-			Query: sources.FindSubdomainsQuery,
-			Str:   sources.FindSubdomainsSourceString,
-			Tag:   SCRAPE,
-		},
-		&source{
-			Query: sources.GoogleQuery,
-			Str:   sources.GoogleSourceString,
-			Tag:   SCRAPE,
-		},
-		&source{
-			Query: sources.HackerTargetQuery,
-			Str:   sources.HackerTargetSourceString,
-			Tag:   SCRAPE,
-		},
-		&source{
-			Query: sources.IPv4InfoQuery,
-			Str:   sources.IPv4InfoSourceString,
-			Tag:   SCRAPE,
-		},
-		&source{
-			Query: sources.LoCArchiveQuery,
-			Str:   sources.LoCArchiveSourceString,
-			Tag:   ARCHIVE,
-		},
-		&source{
-			Query: sources.NetcraftQuery,
-			Str:   sources.NetcraftSourceString,
-			Tag:   SCRAPE,
-		},
-		&source{
-			Query: sources.OpenUKArchiveQuery,
-			Str:   sources.OpenUKArchiveSourceString,
-			Tag:   ARCHIVE,
-		},
-		&source{
-			Query: sources.PTRArchiveQuery,
-			Str:   sources.PTRArchiveSourceString,
-			Tag:   SCRAPE,
-		},
-		&source{
-			Query: sources.RiddlerQuery,
-			Str:   sources.RiddlerSourceString,
-			Tag:   SCRAPE,
-		},
-		&source{
-			Query: sources.RobtexQuery,
-			Str:   sources.RobtexSourceString,
-			Tag:   SCRAPE,
-		},
-		&source{
-			Query: sources.SiteDossierQuery,
-			Str:   sources.SiteDossierSourceString,
-			Tag:   SCRAPE,
-		},
-		&source{
-			Query: sources.ThreatCrowdQuery,
-			Str:   sources.ThreatCrowdSourceString,
-			Tag:   SCRAPE,
-		},
-		&source{
-			Query: sources.ThreatMinerQuery,
-			Str:   sources.ThreatMinerSourceString,
-			Tag:   SCRAPE,
-		},
-		&source{
-			Query: sources.UKGovArchiveQuery,
-			Str:   sources.UKGovArchiveSourceString,
-			Tag:   ARCHIVE,
-		},
-		&source{
-			Query: sources.VirusTotalQuery,
-			Str:   sources.VirusTotalSourceString,
-			Tag:   SCRAPE,
-		},
-		&source{
-			Query: sources.WaybackMachineQuery,
-			Str:   sources.WaybackMachineSourceString,
-			Tag:   ARCHIVE,
-		},
-		&source{
-			Query: sources.YahooQuery,
-			Str:   sources.YahooSourceString,
-			Tag:   SCRAPE,
-		},
-	}
 	return ss
 }
 
@@ -325,7 +326,7 @@ func (ss *SourcesService) queryAllSources() {
 }
 
 func (ss *SourcesService) queryOneSource(s *source, domain, sub string) {
-	names := s.Query(domain, sub)
+	names := s.Query(domain, sub, ss.Config().Log)
 	for _, name := range names {
 		ss.responses <- &AmassRequest{
 			Name:   name,

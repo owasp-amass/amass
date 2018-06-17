@@ -4,13 +4,20 @@
 package sources
 
 import (
+	"bytes"
+	"io"
+	"log"
 	"testing"
 )
 
 func TestArchiveTodayQuery(t *testing.T) {
-	names := ArchiveTodayQuery(testDomain, testSubdomain)
+	var b bytes.Buffer
+	wr := io.Writer(&b)
+	l := log.New(wr, "", log.Lmicroseconds)
+
+	names := ArchiveTodayQuery(testDomain, testSubdomain, l)
 
 	if len(names) <= 0 {
-		t.Errorf("ArchiveTodayQuery did not find any subdomains")
+		t.Errorf("ArchiveTodayQuery did not find any subdomains: %s", b)
 	}
 }

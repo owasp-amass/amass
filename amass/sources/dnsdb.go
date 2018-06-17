@@ -5,6 +5,7 @@ package sources
 
 import (
 	"fmt"
+	"log"
 	"regexp"
 	"strings"
 	"sync"
@@ -26,7 +27,7 @@ func init() {
 	dnsdbFilter = make(map[string][]string)
 }
 
-func DNSDBQuery(domain, sub string) []string {
+func DNSDBQuery(domain, sub string, l *log.Logger) []string {
 	dnsdbLock.Lock()
 	defer dnsdbLock.Unlock()
 
@@ -46,8 +47,9 @@ func DNSDBQuery(domain, sub string) []string {
 	dnsdbFilter[name] = unique
 
 	url := dnsdbURL(domain, sub)
-	page := utils.GetWebPage(url, nil)
-	if page == "" {
+	page, err := utils.GetWebPage(url, nil)
+	if err != nil {
+		l.Printf("DNSDB error: %s: %v", url, err)
 		return unique
 	}
 
@@ -62,8 +64,9 @@ func DNSDBQuery(domain, sub string) []string {
 		// Do not go too fast
 		time.Sleep(50 * time.Millisecond)
 		// Pull the certificate web page
-		another := utils.GetWebPage(url+rel, nil)
-		if another == "" {
+		another, err := utils.GetWebPage(url+rel, nil)
+		if err != nil {
+			l.Printf("DNSDB error: %s: %v", url+rel, err)
 			continue
 		}
 

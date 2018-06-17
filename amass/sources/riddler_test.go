@@ -4,13 +4,20 @@
 package sources
 
 import (
+	"bytes"
+	"io"
+	"log"
 	"testing"
 )
 
 func TestRiddlerQuery(t *testing.T) {
-	names := RiddlerQuery(testDomain, testDomain)
+	var b bytes.Buffer
+	wr := io.Writer(&b)
+	l := log.New(wr, "", log.Lmicroseconds)
+
+	names := RiddlerQuery(testDomain, testDomain, l)
 
 	if len(names) <= 0 {
-		t.Errorf("RiddlerQuery did not find any subdomains")
+		t.Errorf("RiddlerQuery did not find any subdomains: %s", b)
 	}
 }

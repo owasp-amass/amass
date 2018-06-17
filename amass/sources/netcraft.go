@@ -5,6 +5,7 @@ package sources
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/caffix/amass/amass/internal/utils"
 )
@@ -13,19 +14,21 @@ const (
 	NetcraftSourceString string = "Netcraft"
 )
 
-func NetcraftQuery(domain, sub string) []string {
+func NetcraftQuery(domain, sub string, l *log.Logger) []string {
 	var unique []string
 
 	if domain != sub {
 		return unique
 	}
 
-	re := utils.SubdomainRegex(domain)
-	page := utils.GetWebPage(netcraftURL(domain), nil)
-	if page == "" {
+	url := netcraftURL(domain)
+	page, err := utils.GetWebPage(url, nil)
+	if err != nil {
+		l.Printf("Netcraft error: %s, %v", url, err)
 		return unique
 	}
 
+	re := utils.SubdomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
 		if u := utils.NewUniqueElements(unique, sd); len(u) > 0 {
 			unique = append(unique, u...)

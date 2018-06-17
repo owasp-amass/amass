@@ -5,6 +5,7 @@ package sources
 
 import (
 	"fmt"
+	"log"
 	"regexp"
 
 	"github.com/caffix/amass/amass/internal/utils"
@@ -15,30 +16,38 @@ const (
 	ipv4infoBaseURL      string = "http://ipv4info.com"
 )
 
-func IPv4InfoQuery(domain, sub string) []string {
+func IPv4InfoQuery(domain, sub string, l *log.Logger) []string {
 	var unique []string
 
 	if domain != sub {
 		return []string{}
 	}
 
-	page := utils.GetWebPage(ipv4infoURL(domain), nil)
-	if page == "" {
+	url := ipv4infoURL(domain)
+	page, err := utils.GetWebPage(url, nil)
+	if err != nil {
+		l.Printf("IPv4info error: %s: %v", url, err)
 		return unique
 	}
 
-	page = utils.GetWebPage(ipv4infoIPSubmatch(page, domain), nil)
-	if page == "" {
+	url = ipv4infoIPSubmatch(page, domain)
+	page, err = utils.GetWebPage(url, nil)
+	if err != nil {
+		l.Printf("IPv4info error: %s: %v", url, err)
 		return unique
 	}
 
-	page = utils.GetWebPage(ipv4infoDomainSubmatch(page, domain), nil)
-	if page == "" {
+	url = ipv4infoDomainSubmatch(page, domain)
+	page, err = utils.GetWebPage(url, nil)
+	if err != nil {
+		l.Printf("IPv4info error: %s: %v", url, err)
 		return unique
 	}
 
-	page = utils.GetWebPage(ipv4infoSubdomainSubmatch(page, domain), nil)
-	if page == "" {
+	url = ipv4infoSubdomainSubmatch(page, domain)
+	page, err = utils.GetWebPage(url, nil)
+	if err != nil {
+		l.Printf("IPv4info error: %s: %v", url, err)
 		return unique
 	}
 

@@ -5,6 +5,7 @@ package sources
 
 import (
 	"io/ioutil"
+	"log"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -18,25 +19,29 @@ const (
 	DNSDumpsterSourceString string = "DNSDumpster"
 )
 
-func DNSDumpsterQuery(domain, sub string) []string {
+func DNSDumpsterQuery(domain, sub string, l *log.Logger) []string {
 	var unique []string
 
 	if domain != sub {
 		return unique
 	}
 
-	page := utils.GetWebPage("https://dnsdumpster.com/", nil)
-	if page == "" {
+	u := "https://dnsdumpster.com/"
+	page, err := utils.GetWebPage(u, nil)
+	if err != nil {
+		l.Printf("DNSDumpster error: %s: %v", u, err)
 		return unique
 	}
 
 	token := dumpsterGetCSRFToken(page)
 	if token == "" {
+		l.Printf("DNSDumpster error: %s: Failed to obtain the CSRF token", u)
 		return unique
 	}
 
-	page = dumpsterPostForm(token, domain)
-	if page == "" {
+	page, err = dumpsterPostForm(token, domain)
+	if err != nil {
+		l.Printf("DNSDumpster error: %s: %v", u, err)
 		return unique
 	}
 
@@ -58,7 +63,7 @@ func dumpsterGetCSRFToken(page string) string {
 	return ""
 }
 
-func dumpsterPostForm(token, domain string) string {
+func dumpsterPostForm(token, domain string) (string, error) {
 	client := &http.Client{
 		Transport: &http.Transport{
 			DialContext:         utils.DialContext,
@@ -72,7 +77,8 @@ func dumpsterPostForm(token, domain string) string {
 
 	req, err := http.NewRequest("POST", "https://dnsdumpster.com/", strings.NewReader(params.Encode()))
 	if err != nil {
-		return ""
+
+		return "", err
 	}
 	// The CSRF token needs to be sent as a cookie
 	cookie := &http.Cookie{
@@ -91,10 +97,10 @@ func dumpsterPostForm(token, domain string) string {
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return ""
+		return "", err
 	}
 	// Now, grab the entire page
 	in, err := ioutil.ReadAll(resp.Body)
 	resp.Body.Close()
-	return string(in)
+	return string(in), nil
 }

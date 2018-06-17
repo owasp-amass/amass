@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
+	"log"
 	"math/rand"
 	"net"
 	"os"
@@ -25,15 +26,13 @@ import (
 )
 
 type outputParams struct {
+	Config        *amass.AmassConfig
 	Verbose       bool
 	PrintIPs      bool
-	NoDNS         bool
 	FileOut       string
 	JSONOut       string
 	VisjsOut      string
 	GraphistryOut string
-	Config        *amass.AmassConfig
-	Results       chan *amass.AmassOutput
 	Done          chan struct{}
 }
 
@@ -83,6 +82,7 @@ var (
 	list           = flag.Bool("l", false, "List all domains to be used in an enumeration")
 	freq           = flag.Int64("freq", 0, "Sets the number of max DNS queries per minute")
 	wordlist       = flag.String("w", "", "Path to a different wordlist file")
+	logfile        = flag.String("log", "", "Path to the log file where errors will be written")
 	outfile        = flag.String("o", "", "Path to the output file")
 	jsonfile       = flag.String("json", "", "Path to the JSON output file")
 	visjsfile      = flag.String("visjs", "", "Path to the Visjs output HTML file")
@@ -166,23 +166,12 @@ func main() {
 	if *blacklistfile != "" {
 		blacklist = UniqueAppend(blacklist, getLinesFromFile(*blacklistfile)...)
 	}
+
 	// Seed the default pseudo-random number generator
 	rand.Seed(time.Now().UTC().UnixNano())
 
 	done := make(chan struct{})
 	results := make(chan *amass.AmassOutput, 100)
-
-	go manageOutput(&outputParams{
-		Verbose:       *verbose,
-		PrintIPs:      *ips,
-		NoDNS:         *nodns,
-		FileOut:       *outfile,
-		JSONOut:       *jsonfile,
-		VisjsOut:      *visjsfile,
-		GraphistryOut: *graphistryfile,
-		Results:       results,
-		Done:          done,
-	})
 	// Execute the signal handler
 	go catchSignals(results, done)
 	// Grab the words from an identified wordlist
@@ -221,11 +210,35 @@ func main() {
 	if len(domains) > 0 {
 		config.AddDomains(domains)
 	}
+	// Setup the log file for saving error messages
+	if *logfile != "" {
+		fileptr, err := os.OpenFile(*logfile, os.O_WRONLY|os.O_CREATE, 0644)
+		if err != nil {
+			r.Printf("Failed to open the log file: %v", err)
+			return
+		}
+		defer func() {
+			fileptr.Sync()
+			fileptr.Close()
+		}()
+		config.Log = log.New(fileptr, "", log.Lmicroseconds)
+	}
 	amass.ObtainAdditionalDomains(config)
 	if *list {
 		listDomains(config, *outfile)
 		return
 	}
+
+	go manageOutput(&outputParams{
+		Config:        config,
+		Verbose:       *verbose,
+		PrintIPs:      *ips,
+		FileOut:       *outfile,
+		JSONOut:       *jsonfile,
+		VisjsOut:      *visjsfile,
+		GraphistryOut: *graphistryfile,
+		Done:          done,
+	})
 	//profFile, _ := os.Create("amass_debug.prof")
 	//pprof.StartCPUProfile(profFile)
 	//defer pprof.StopCPUProfile()
@@ -305,30 +318,37 @@ type jsonSave struct {
 
 func manageOutput(params *outputParams) {
 	var total int
+	var err error
 	var bufwr *bufio.Writer
 	var enc *json.Encoder
 	var outptr, jsonptr *os.File
 
 	if params.FileOut != "" {
-		outptr, err := os.OpenFile(params.FileOut, os.O_WRONLY|os.O_CREATE, 0644)
+		outptr, err = os.OpenFile(params.FileOut, os.O_WRONLY|os.O_CREATE, 0644)
 		if err == nil {
 			bufwr = bufio.NewWriter(outptr)
-			defer outptr.Close()
+			defer func() {
+				outptr.Sync()
+				outptr.Close()
+			}()
 		}
 	}
 
 	if params.JSONOut != "" {
-		jsonptr, err := os.OpenFile(params.JSONOut, os.O_WRONLY|os.O_CREATE, 0644)
+		jsonptr, err = os.OpenFile(params.JSONOut, os.O_WRONLY|os.O_CREATE, 0644)
 		if err == nil {
 			enc = json.NewEncoder(jsonptr)
-			defer jsonptr.Close()
+			defer func() {
+				jsonptr.Sync()
+				jsonptr.Close()
+			}()
 		}
 	}
 
 	tags := make(map[string]int)
 	asns := make(map[int]*asnData)
 	// Collect all the names returned by the enumeration
-	for result := range params.Results {
+	for result := range params.Config.Output {
 		total++
 		updateData(result, tags, asns)
 
@@ -378,13 +398,6 @@ func manageOutput(params *outputParams) {
 
 	amass.WriteVisjsFile(params.VisjsOut, params.Config)
 	amass.WriteGraphistryFile(params.GraphistryOut, params.Config)
-
-	if outptr != nil {
-		outptr.Sync()
-	}
-	if jsonptr != nil {
-		jsonptr.Sync()
-	}
 	// Check to print the summary information
 	if params.Verbose {
 		printSummary(total, tags, asns)
@@ -440,13 +453,13 @@ func printSummary(total int, tags map[string]int, asns map[int]*asnData) {
 		num++
 	}
 	fmt.Println()
-	// Another line gets printed
-	pad(8, "----------")
-	fmt.Println()
 
 	if len(asns) == 0 {
 		return
 	}
+	// Another line gets printed
+	pad(8, "----------")
+	fmt.Println()
 	// Print the ASN and netblock information
 	for asn, data := range asns {
 		fmt.Fprintf(color.Output, "%s%s %s %s\n",

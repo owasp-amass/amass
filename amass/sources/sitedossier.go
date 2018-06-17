@@ -5,6 +5,7 @@ package sources
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/caffix/amass/amass/internal/utils"
 )
@@ -13,7 +14,7 @@ const (
 	SiteDossierSourceString string = "SiteDossier"
 )
 
-func SiteDossierQuery(domain, sub string) []string {
+func SiteDossierQuery(domain, sub string, l *log.Logger) []string {
 	var unique []string
 
 	if domain != sub {
@@ -21,8 +22,10 @@ func SiteDossierQuery(domain, sub string) []string {
 	}
 
 	re := utils.SubdomainRegex(domain)
-	page := utils.GetWebPage(siteDossierURL(domain), nil)
-	if page == "" {
+	url := siteDossierURL(domain)
+	page, err := utils.GetWebPage(url, nil)
+	if err != nil {
+		l.Printf("SiteDossier error: %s: %v", url, err)
 		return unique
 	}
 

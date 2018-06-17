@@ -4,13 +4,20 @@
 package sources
 
 import (
+	"bytes"
+	"io"
+	"log"
 	"testing"
 )
 
 func TestThreatMinerQuery(t *testing.T) {
-	names := ThreatMinerQuery(testDomain, testDomain)
+	var b bytes.Buffer
+	wr := io.Writer(&b)
+	l := log.New(wr, "", log.Lmicroseconds)
+
+	names := ThreatMinerQuery(testDomain, testDomain, l)
 
 	if len(names) <= 0 {
-		t.Errorf("ThreatMinerQuery did not find any subdomains")
+		t.Errorf("ThreatMinerQuery did not find any subdomains: %s", b)
 	}
 }

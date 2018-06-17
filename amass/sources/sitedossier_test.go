@@ -4,13 +4,20 @@
 package sources
 
 import (
+	"bytes"
+	"io"
+	"log"
 	"testing"
 )
 
 func TestSiteDossierQuery(t *testing.T) {
-	names := SiteDossierQuery(testDomain, testDomain)
+	var b bytes.Buffer
+	wr := io.Writer(&b)
+	l := log.New(wr, "", log.Lmicroseconds)
+
+	names := SiteDossierQuery(testDomain, testDomain, l)
 
 	if len(names) <= 0 {
-		t.Errorf("SiteDossierQuery did not find any subdomains")
+		t.Errorf("SiteDossierQuery did not find any subdomains: %s", b)
 	}
 }

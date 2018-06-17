@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	Version string = "v2.2.0"
+	Version string = "v2.2.1"
 	Author  string = "Jeff Foley (@jeff_foley)"
 	// Tags used to mark the data source with the Subdomain struct
 	ALT     = "alt"
@@ -145,7 +145,13 @@ func ObtainAdditionalDomains(config *AmassConfig) {
 	if config.Whois {
 		domains := config.Domains()
 		for _, domain := range domains {
-			if more := ReverseWhois(domain); len(more) > 0 {
+			more, err := ReverseWhois(domain)
+			if err != nil {
+				config.Log.Printf("ReverseWhois error: %v", err)
+				continue
+			}
+
+			if len(more) > 0 {
 				config.AddDomains(more)
 			}
 		}
@@ -162,8 +168,9 @@ func allIPsInConfig(config *AmassConfig) []net.IP {
 	}
 
 	for _, asn := range config.ASNs {
-		record := ASNRequest(asn)
-		if record == nil {
+		record, err := ASNRequest(asn)
+		if err != nil {
+			config.Log.Printf("%v", err)
 			continue
 		}
 

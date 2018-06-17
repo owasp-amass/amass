@@ -4,13 +4,20 @@
 package sources
 
 import (
+	"bytes"
+	"io"
+	"log"
 	"testing"
 )
 
 func TestOpenUKArchiveQuery(t *testing.T) {
-	names := OpenUKArchiveQuery(testDomain, testDomain)
+	var b bytes.Buffer
+	wr := io.Writer(&b)
+	l := log.New(wr, "", log.Lmicroseconds)
+
+	names := OpenUKArchiveQuery(testDomain, testDomain, l)
 
 	if len(names) <= 0 {
-		t.Errorf("OpenUKArchiveQuery did not find any subdomains")
+		t.Errorf("OpenUKArchiveQuery did not find any subdomains: %s", b)
 	}
 }

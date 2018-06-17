@@ -5,6 +5,7 @@ package sources
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/caffix/amass/amass/internal/utils"
 )
@@ -13,7 +14,7 @@ const (
 	ThreatMinerSourceString string = "ThreatMiner"
 )
 
-func ThreatMinerQuery(domain, sub string) []string {
+func ThreatMinerQuery(domain, sub string, l *log.Logger) []string {
 	var unique []string
 
 	if domain != sub {
@@ -21,8 +22,10 @@ func ThreatMinerQuery(domain, sub string) []string {
 	}
 
 	re := utils.SubdomainRegex(domain)
-	page := utils.GetWebPage(threatMinerURL(domain), nil)
-	if page == "" {
+	url := threatMinerURL(domain)
+	page, err := utils.GetWebPage(url, nil)
+	if err != nil {
+		l.Printf("ThreatMiner error: %s: %v", url, err)
 		return unique
 	}
 

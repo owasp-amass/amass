@@ -4,13 +4,20 @@
 package sources
 
 import (
+	"bytes"
+	"io"
+	"log"
 	"testing"
 )
 
 func TestAskQuery(t *testing.T) {
-	names := AskQuery(testDomain, testDomain)
+	var b bytes.Buffer
+	wr := io.Writer(&b)
+	l := log.New(wr, "", log.Lmicroseconds)
+
+	names := AskQuery(testDomain, testDomain, l)
 
 	if len(names) <= 0 {
-		t.Errorf("AskQuery did not find any subdomains")
+		t.Errorf("AskQuery did not find any subdomains: %s", b)
 	}
 }
