@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	Version string = "v2.2.1"
+	Version string = "v2.3.0"
 	Author  string = "Jeff Foley (@jeff_foley)"
 	// Tags used to mark the data source with the Subdomain struct
 	ALT     = "alt"
@@ -132,6 +132,22 @@ func WriteGraphistryFile(path string, config *AmassConfig) {
 
 	nodes, edges := config.Graph.VizData()
 	viz.WriteGraphistryData(nodes, edges, f)
+	f.Sync()
+}
+
+func WriteGephiFile(path string, config *AmassConfig) {
+	if path == "" {
+		return
+	}
+
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE, 0644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+
+	nodes, edges := config.Graph.VizData()
+	viz.WriteGephiData(nodes, edges, f)
 	f.Sync()
 }
 

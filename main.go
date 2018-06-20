@@ -33,6 +33,7 @@ type outputParams struct {
 	JSONOut       string
 	VisjsOut      string
 	GraphistryOut string
+	GephiOut      string
 	Done          chan struct{}
 }
 
@@ -82,19 +83,20 @@ var (
 	list           = flag.Bool("l", false, "List all domains to be used in an enumeration")
 	freq           = flag.Int64("freq", 0, "Sets the number of max DNS queries per minute")
 	wordlist       = flag.String("w", "", "Path to a different wordlist file")
-	logfile        = flag.String("log", "", "Path to the log file where errors will be written")
-	outfile        = flag.String("o", "", "Path to the output file")
-	jsonfile       = flag.String("json", "", "Path to the JSON output file")
-	visjsfile      = flag.String("visjs", "", "Path to the Visjs output HTML file")
-	graphistryfile = flag.String("graphistry", "", "Path to the Graphistry JSON file")
-	domainsfile    = flag.String("df", "", "Path to a file providing root domain names")
-	resolvefile    = flag.String("rf", "", "Path to a file providing preferred DNS resolvers")
-	blacklistfile  = flag.String("blf", "", "Path to a file providing blacklisted subdomains")
+	allpath        = flag.String("oA", "", "Path prefix used for naming all output files")
+	logpath        = flag.String("log", "", "Path to the log file where errors will be written")
+	outpath        = flag.String("o", "", "Path to the output file")
+	jsonpath       = flag.String("json", "", "Path to the JSON output file")
+	visjspath      = flag.String("visjs", "", "Path to the Visjs output HTML file")
+	graphistrypath = flag.String("graphistry", "", "Path to the Graphistry JSON file")
+	gexfpath       = flag.String("gephi", "", "Path to the Graph Exchange XML Format (GEXF) file")
+	domainspath    = flag.String("df", "", "Path to a file providing root domain names")
+	resolvepath    = flag.String("rf", "", "Path to a file providing preferred DNS resolvers")
+	blacklistpath  = flag.String("blf", "", "Path to a file providing blacklisted subdomains")
 	neo4j          = flag.String("neo4j", "", "URL in the format of user:password@address:port")
 )
 
 func main() {
-	var netopts bool
 	var addrs parseIPs
 	var cidrs parseCIDRs
 	var asns, ports parseInts
@@ -123,12 +125,8 @@ func main() {
 		if err != nil {
 			r.Println(err)
 		}
-
-		if len(addrs) > 0 || len(cidrs) > 0 || len(asns) > 0 {
-			netopts = true
-		}
 	}
-	// Should the help output be provided?
+	// Some input validation
 	if *help {
 		printBanner()
 		g.Printf("Usage: %s [options] <-d domain> | <net>\n", path.Base(os.Args[0]))
@@ -148,23 +146,35 @@ func main() {
 		r.Println("IP addresses cannot be provided without DNS resolution")
 		return
 	}
-	// Now, get domains provided by a file
-	if *domainsfile != "" {
-		domains = UniqueAppend(domains, getLinesFromFile(*domainsfile)...)
+
+	var words []string
+	if *wordlist != "" {
+		words = getLinesFromFile(*wordlist)
 	}
-	// Can an enumeration be performed with the provided parameters?
-	if len(domains) == 0 && !netopts {
-		r.Println("The required parameters were not provided")
-		r.Println("Use the -h switch for help information")
-		return
+	if *domainspath != "" {
+		domains = UniqueAppend(domains, getLinesFromFile(*domainspath)...)
 	}
-	// Get the resolvers provided by file
-	if *resolvefile != "" {
-		resolvers = UniqueAppend(resolvers, getLinesFromFile(*resolvefile)...)
+	if *resolvepath != "" {
+		resolvers = UniqueAppend(resolvers, getLinesFromFile(*resolvepath)...)
 	}
-	// Get the blacklisted subdomains provided by file
-	if *blacklistfile != "" {
-		blacklist = UniqueAppend(blacklist, getLinesFromFile(*blacklistfile)...)
+	if *blacklistpath != "" {
+		blacklist = UniqueAppend(blacklist, getLinesFromFile(*blacklistpath)...)
+	}
+
+	// Prepare output files
+	logfile := *logpath
+	txt := *outpath
+	jsonfile := *jsonpath
+	visjs := *visjspath
+	gexf := *gexfpath
+	graphistry := *graphistrypath
+	if *allpath != "" {
+		logfile = *allpath + ".log"
+		txt = *allpath
+		jsonfile = *allpath + ".json"
+		visjs = *allpath + ".html"
+		gexf = *allpath + ".gexf"
+		graphistry = *allpath + "_graphistry.json"
 	}
 
 	// Seed the default pseudo-random number generator
@@ -174,11 +184,7 @@ func main() {
 	results := make(chan *amass.AmassOutput, 100)
 	// Execute the signal handler
 	go catchSignals(results, done)
-	// Grab the words from an identified wordlist
-	var words []string
-	if *wordlist != "" {
-		words = getLinesFromFile(*wordlist)
-	}
+
 	// Setup the amass configuration
 	alts := true
 	recursive := true
@@ -211,8 +217,8 @@ func main() {
 		config.AddDomains(domains)
 	}
 	// Setup the log file for saving error messages
-	if *logfile != "" {
-		fileptr, err := os.OpenFile(*logfile, os.O_WRONLY|os.O_CREATE, 0644)
+	if logfile != "" {
+		fileptr, err := os.OpenFile(logfile, os.O_WRONLY|os.O_CREATE, 0644)
 		if err != nil {
 			r.Printf("Failed to open the log file: %v", err)
 			return
@@ -225,7 +231,13 @@ func main() {
 	}
 	amass.ObtainAdditionalDomains(config)
 	if *list {
-		listDomains(config, *outfile)
+		listDomains(config, txt)
+		return
+	}
+	// Can an enumeration be performed with the provided parameters?
+	if len(config.Domains()) == 0 {
+		r.Println("The parameters required for identifying a target were not provided")
+		r.Println("Use the -h switch for help information")
 		return
 	}
 
@@ -233,10 +245,11 @@ func main() {
 		Config:        config,
 		Verbose:       *verbose,
 		PrintIPs:      *ips,
-		FileOut:       *outfile,
-		JSONOut:       *jsonfile,
-		VisjsOut:      *visjsfile,
-		GraphistryOut: *graphistryfile,
+		FileOut:       txt,
+		JSONOut:       jsonfile,
+		VisjsOut:      visjs,
+		GraphistryOut: graphistry,
+		GephiOut:      gexf,
 		Done:          done,
 	})
 	//profFile, _ := os.Create("amass_debug.prof")
@@ -249,6 +262,20 @@ func main() {
 	}
 	// Wait for output manager to finish
 	<-done
+}
+
+// If the user interrupts the program, print the summary information
+func catchSignals(output chan *amass.AmassOutput, done chan struct{}) {
+	sigs := make(chan os.Signal, 2)
+	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
+
+	// Wait for a signal
+	<-sigs
+	// Start final output operations
+	close(output)
+	// Wait for the broadcast indicating completion
+	<-done
+	os.Exit(1)
 }
 
 func listDomains(config *amass.AmassConfig, outfile string) {
@@ -316,17 +343,58 @@ type jsonSave struct {
 	Source    string     `json:"source"`
 }
 
+func WriteJSONData(f *os.File, result *amass.AmassOutput) {
+	save := &jsonSave{
+		Name:   result.Name,
+		Domain: result.Domain,
+		Tag:    result.Tag,
+		Source: result.Source,
+	}
+
+	for _, addr := range result.Addresses {
+		save.Addresses = append(save.Addresses, jsonAddr{
+			IP:          addr.Address.String(),
+			CIDR:        addr.Netblock.String(),
+			ASN:         addr.ASN,
+			Description: addr.Description,
+		})
+	}
+
+	enc := json.NewEncoder(f)
+	enc.Encode(save)
+}
+
+func WriteTextData(f *os.File, source, name, comma, ips string) {
+	fmt.Fprintf(f, "%s%s%s%s\n", source, name, comma, ips)
+}
+
+func ResultToLine(result *amass.AmassOutput, params *outputParams) (string, string, string, string) {
+	var source, comma, ips string
+
+	if params.Verbose {
+		source = fmt.Sprintf("%-14s", "["+result.Source+"] ")
+	}
+	if params.PrintIPs {
+		comma = ","
+
+		for i, a := range result.Addresses {
+			if i != 0 {
+				ips += ","
+			}
+			ips += a.Address.String()
+		}
+	}
+	return source, result.Name, comma, ips
+}
+
 func manageOutput(params *outputParams) {
 	var total int
 	var err error
-	var bufwr *bufio.Writer
-	var enc *json.Encoder
 	var outptr, jsonptr *os.File
 
 	if params.FileOut != "" {
 		outptr, err = os.OpenFile(params.FileOut, os.O_WRONLY|os.O_CREATE, 0644)
 		if err == nil {
-			bufwr = bufio.NewWriter(outptr)
 			defer func() {
 				outptr.Sync()
 				outptr.Close()
@@ -337,7 +405,6 @@ func manageOutput(params *outputParams) {
 	if params.JSONOut != "" {
 		jsonptr, err = os.OpenFile(params.JSONOut, os.O_WRONLY|os.O_CREATE, 0644)
 		if err == nil {
-			enc = json.NewEncoder(jsonptr)
 			defer func() {
 				jsonptr.Sync()
 				jsonptr.Close()
@@ -352,52 +419,22 @@ func manageOutput(params *outputParams) {
 		total++
 		updateData(result, tags, asns)
 
-		var source, comma, ips string
-		if params.Verbose {
-			source = fmt.Sprintf("%-14s", "["+result.Source+"] ")
-		}
-		if params.PrintIPs {
-			comma = ","
-
-			for i, a := range result.Addresses {
-				if i != 0 {
-					ips += ","
-				}
-				ips += a.Address.String()
-			}
-		}
-		// Add line to the others and print it out
-		line := fmt.Sprintf("%s%s%s%s\n", source, result.Name, comma, ips)
+		source, name, comma, ips := ResultToLine(result, params)
 		fmt.Fprintf(color.Output, "%s%s%s%s\n",
-			blue(source), green(result.Name), green(comma), yellow(ips))
+			blue(source), green(name), green(comma), yellow(ips))
 		// Handle writing the line to a specified output file
-		if bufwr != nil {
-			bufwr.WriteString(line)
-			bufwr.Flush()
+		if outptr != nil {
+			WriteTextData(outptr, source, name, comma, ips)
 		}
 		// Handle encoding the result as JSON
-		if enc != nil {
-			save := &jsonSave{
-				Name:   result.Name,
-				Domain: result.Domain,
-				Tag:    result.Tag,
-				Source: result.Source,
-			}
-
-			for _, addr := range result.Addresses {
-				save.Addresses = append(save.Addresses, jsonAddr{
-					IP:          addr.Address.String(),
-					CIDR:        addr.Netblock.String(),
-					ASN:         addr.ASN,
-					Description: addr.Description,
-				})
-			}
-			enc.Encode(save)
+		if jsonptr != nil {
+			WriteJSONData(jsonptr, result)
 		}
 	}
 
 	amass.WriteVisjsFile(params.VisjsOut, params.Config)
 	amass.WriteGraphistryFile(params.GraphistryOut, params.Config)
+	amass.WriteGephiFile(params.GephiOut, params.Config)
 	// Check to print the summary information
 	if params.Verbose {
 		printSummary(total, tags, asns)
@@ -473,20 +510,6 @@ func printSummary(total int, tags map[string]int, asns map[int]*asnData) {
 				yellow(cidrstr), yellow(countstr), blue("Subdomain Name(s)"))
 		}
 	}
-}
-
-// If the user interrupts the program, print the summary information
-func catchSignals(output chan *amass.AmassOutput, done chan struct{}) {
-	sigs := make(chan os.Signal, 2)
-	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
-
-	// Wait for a signal
-	<-sigs
-	// Start final output operations
-	close(output)
-	// Wait for the broadcast indicating completion
-	<-done
-	os.Exit(0)
 }
 
 func getLinesFromFile(path string) []string {

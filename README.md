@@ -116,6 +116,12 @@ $ amass -ip -o out.txt -d example.com
 ```
 
 
+Log all error messages to a text file:
+```
+$ amass -log amass.log -d example.com
+```
+
+
 Have all the data collected written to a file as individual JSON objects:
 ```
 $ amass -json out.txt -d example.com
@@ -131,6 +137,18 @@ $ amass -visjs vis.html -d example.com
 Output a file for Graphistry containing the data set in JSON format:
 ```
 $ amass -graphistry network.json -d example.com
+```
+
+
+Output a Graph Exchange XML Format (GEXF) file for Gephi:
+```
+$ amass -gephi network.gexf -d example.com
+```
+
+
+Have amass output to all the available file formats using a provided file name prefix:
+```
+$ amass -v -ip -oA amass_scan -d example.com
 ```
 
 
