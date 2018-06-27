@@ -92,7 +92,7 @@ func setFetcherConfig(f *fetchbot.Fetcher) {
 			ExpectContinueTimeout: 5 * time.Second,
 		},
 	}
-	f.CrawlDelay = 500 * time.Millisecond
+	f.CrawlDelay = 1 * time.Second
 	f.DisablePoliteness = true
 	f.UserAgent = utils.USER_AGENT
 }

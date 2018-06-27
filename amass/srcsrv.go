@@ -18,22 +18,7 @@ type source struct {
 	Str   string
 }
 
-var srcs = []*source{
-	&source{
-		Query: sources.ArchiveItQuery,
-		Str:   sources.ArchiveItSourceString,
-		Tag:   ARCHIVE,
-	},
-	&source{
-		Query: sources.ArchiveTodayQuery,
-		Str:   sources.ArchiveTodaySourceString,
-		Tag:   ARCHIVE,
-	},
-	&source{
-		Query: sources.ArquivoQuery,
-		Str:   sources.ArquivoSourceString,
-		Tag:   ARCHIVE,
-	},
+var directs = []*source{
 	&source{
 		Query: sources.AskQuery,
 		Str:   sources.AskSourceString,
@@ -115,19 +100,9 @@ var srcs = []*source{
 		Tag:   SCRAPE,
 	},
 	&source{
-		Query: sources.LoCArchiveQuery,
-		Str:   sources.LoCArchiveSourceString,
-		Tag:   ARCHIVE,
-	},
-	&source{
 		Query: sources.NetcraftQuery,
 		Str:   sources.NetcraftSourceString,
 		Tag:   SCRAPE,
-	},
-	&source{
-		Query: sources.OpenUKArchiveQuery,
-		Str:   sources.OpenUKArchiveSourceString,
-		Tag:   ARCHIVE,
 	},
 	&source{
 		Query: sources.PTRArchiveQuery,
@@ -155,24 +130,9 @@ var srcs = []*source{
 		Tag:   SCRAPE,
 	},
 	&source{
-		Query: sources.ThreatMinerQuery,
-		Str:   sources.ThreatMinerSourceString,
-		Tag:   SCRAPE,
-	},
-	&source{
-		Query: sources.UKGovArchiveQuery,
-		Str:   sources.UKGovArchiveSourceString,
-		Tag:   ARCHIVE,
-	},
-	&source{
 		Query: sources.VirusTotalQuery,
 		Str:   sources.VirusTotalSourceString,
 		Tag:   SCRAPE,
-	},
-	&source{
-		Query: sources.WaybackMachineQuery,
-		Str:   sources.WaybackMachineSourceString,
-		Tag:   ARCHIVE,
 	},
 	&source{
 		Query: sources.YahooQuery,
@@ -181,22 +141,65 @@ var srcs = []*source{
 	},
 }
 
+var throttles = []*source{
+	&source{
+		Query: sources.ArchiveItQuery,
+		Str:   sources.ArchiveItSourceString,
+		Tag:   ARCHIVE,
+	},
+	&source{
+		Query: sources.ArchiveTodayQuery,
+		Str:   sources.ArchiveTodaySourceString,
+		Tag:   ARCHIVE,
+	},
+	&source{
+		Query: sources.ArquivoQuery,
+		Str:   sources.ArquivoSourceString,
+		Tag:   ARCHIVE,
+	},
+	&source{
+		Query: sources.LoCArchiveQuery,
+		Str:   sources.LoCArchiveSourceString,
+		Tag:   ARCHIVE,
+	},
+	&source{
+		Query: sources.OpenUKArchiveQuery,
+		Str:   sources.OpenUKArchiveSourceString,
+		Tag:   ARCHIVE,
+	},
+	&source{
+		Query: sources.UKGovArchiveQuery,
+		Str:   sources.UKGovArchiveSourceString,
+		Tag:   ARCHIVE,
+	},
+	&source{
+		Query: sources.WaybackMachineQuery,
+		Str:   sources.WaybackMachineSourceString,
+		Tag:   ARCHIVE,
+	},
+}
+
+type throttleQueueEntry struct {
+	s      *source
+	domain string
+	sub    string
+}
+
 type SourcesService struct {
 	BaseAmassService
 
-	bus          evbus.Bus
-	responses    chan *AmassRequest
-	sources      []*source
-	inFilter     map[string]struct{}
-	outFilter    map[string]struct{}
-	domainFilter map[string]struct{}
+	bus           evbus.Bus
+	responses     chan *AmassRequest
+	throttleQueue []*throttleQueueEntry
+	inFilter      map[string]struct{}
+	outFilter     map[string]struct{}
+	domainFilter  map[string]struct{}
 }
 
 func NewSourcesService(config *AmassConfig, bus evbus.Bus) *SourcesService {
 	ss := &SourcesService{
 		bus:          bus,
 		responses:    make(chan *AmassRequest, 50),
-		sources:      srcs,
 		inFilter:     make(map[string]struct{}),
 		outFilter:    make(map[string]struct{}),
 		domainFilter: make(map[string]struct{}),
@@ -212,6 +215,7 @@ func (ss *SourcesService) OnStart() error {
 	ss.bus.SubscribeAsync(RESOLVED, ss.SendRequest, false)
 	go ss.processRequests()
 	go ss.processOutput()
+	go ss.processThrottleQueue()
 	go ss.queryAllSources()
 	return nil
 }
@@ -245,8 +249,12 @@ func (ss *SourcesService) handleRequest(req *AmassRequest) {
 	}
 
 	ss.SetActive()
-	for _, s := range ss.sources {
-		go ss.queryOneSource(s, req.Domain, req.Name)
+	for _, d := range directs {
+		go ss.queryOneSource(d, req.Domain, req.Name)
+	}
+
+	for _, t := range throttles {
+		go ss.queryThrottledSource(t, req.Domain, req.Name)
 	}
 }
 
@@ -333,6 +341,67 @@ func (ss *SourcesService) queryOneSource(s *source, domain, sub string) {
 			Domain: domain,
 			Tag:    s.Tag,
 			Source: s.Str,
+		}
+	}
+}
+
+func (ss *SourcesService) queryThrottledSource(s *source, domain, sub string) {
+	ss.Lock()
+	defer ss.Unlock()
+
+	ss.throttleQueue = append(ss.throttleQueue, &throttleQueueEntry{
+		s:      s,
+		domain: domain,
+		sub:    sub,
+	})
+}
+
+func (ss *SourcesService) nextThrottleQueueEntry() *throttleQueueEntry {
+	ss.Lock()
+	defer ss.Unlock()
+
+	if len(ss.throttleQueue) == 0 {
+		return nil
+	}
+
+	entry := ss.throttleQueue[0]
+
+	if len(ss.throttleQueue) == 1 {
+		ss.throttleQueue = []*throttleQueueEntry{}
+		return entry
+	}
+
+	ss.throttleQueue = ss.throttleQueue[1:]
+	return entry
+}
+
+const MAX_THROTTLED int = 10
+
+func (ss *SourcesService) processThrottleQueue() {
+	var running int
+	done := make(chan struct{}, MAX_THROTTLED)
+
+	t := time.NewTicker(100 * time.Millisecond)
+	defer t.Stop()
+
+	for {
+		select {
+		case <-t.C:
+			if running >= MAX_THROTTLED {
+				continue
+			}
+
+			if th := ss.nextThrottleQueueEntry(); th != nil {
+				running++
+				go func() {
+					ss.queryOneSource(th.s, th.domain, th.sub)
+					done <- struct{}{}
+				}()
+			}
+		case <-done:
+			running--
+		case <-ss.Quit():
+			return
 		}
 	}
 }
