@@ -18,6 +18,6 @@ func TestAskQuery(t *testing.T) {
 	names := AskQuery(testDomain, testDomain, l)
 
 	if len(names) <= 0 {
-		t.Errorf("AskQuery did not find any subdomains: %s", b)
+		t.Errorf("AskQuery did not find any subdomains: %s", b.String())
 	}
 }

@@ -18,6 +18,6 @@ func TestThreatCrowdQuery(t *testing.T) {
 	names := ThreatCrowdQuery(testDomain, testDomain, l)
 
 	if len(names) <= 0 {
-		t.Errorf("ThreatCrowdQuery did not find any subdomains: %s", b)
+		t.Errorf("ThreatCrowdQuery did not find any subdomains: %s", b.String())
 	}
 }

@@ -61,7 +61,7 @@ func certdbGetMatches(content, domain string) []string {
 func certdbGetSubmatches(content string) []string {
 	var results []string
 
-	re := regexp.MustCompile("<a href=\"(/ssl-cert/[a-zA-Z0-9]*)\" class=\"see-more-link\">")
+	re := regexp.MustCompile("href=\"(/ssl-cert/[a-zA-Z0-9]*)\"")
 	for _, subs := range re.FindAllStringSubmatch(content, -1) {
 		results = append(results, strings.TrimSpace(subs[1]))
 	}

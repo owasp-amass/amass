@@ -18,6 +18,6 @@ func TestCertSpotterQuery(t *testing.T) {
 	names := CertSpotterQuery(testDomain, testDomain, l)
 
 	if len(names) <= 0 {
-		t.Errorf("CertSpotterQuery did not find any subdomains: %s", b)
+		t.Errorf("CertSpotterQuery did not find any subdomains: %s", b.String())
 	}
 }

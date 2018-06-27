@@ -18,6 +18,6 @@ func TestGoogleQuery(t *testing.T) {
 	names := GoogleQuery(testDomain, testDomain, l)
 
 	if len(names) <= 0 {
-		t.Errorf("GoogleQuery did not find any subdomains: %s", b)
+		t.Errorf("GoogleQuery did not find any subdomains: %s", b.String())
 	}
 }

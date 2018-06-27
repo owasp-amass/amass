@@ -18,6 +18,6 @@ func TestThreatMinerQuery(t *testing.T) {
 	names := ThreatMinerQuery(testDomain, testDomain, l)
 
 	if len(names) <= 0 {
-		t.Errorf("ThreatMinerQuery did not find any subdomains: %s", b)
+		t.Errorf("ThreatMinerQuery did not find any subdomains: %s", b.String())
 	}
 }

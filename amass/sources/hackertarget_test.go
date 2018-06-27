@@ -18,6 +18,6 @@ func TestHackerTargetQuery(t *testing.T) {
 	names := HackerTargetQuery(testDomain, testDomain, l)
 
 	if len(names) <= 0 {
-		t.Errorf("HackerTargetQuery did not find any subdomains: %s", b)
+		t.Errorf("HackerTargetQuery did not find any subdomains: %s", b.String())
 	}
 }

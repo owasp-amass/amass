@@ -18,6 +18,6 @@ func TestLoCArchiveQuery(t *testing.T) {
 	names := LoCArchiveQuery(testDomain, testDomain, l)
 
 	if len(names) <= 0 {
-		t.Errorf("LoCArchiveQuery did not find any subdomains: %s", b)
+		t.Errorf("LoCArchiveQuery did not find any subdomains: %s", b.String())
 	}
 }

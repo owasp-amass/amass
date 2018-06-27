@@ -18,6 +18,6 @@ func TestYahooQuery(t *testing.T) {
 	names := YahooQuery(testDomain, testDomain, l)
 
 	if len(names) <= 0 {
-		t.Errorf("YahooQuery did not find any subdomains: %s", b)
+		t.Errorf("YahooQuery did not find any subdomains: %s", b.String())
 	}
 }

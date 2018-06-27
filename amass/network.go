@@ -159,13 +159,25 @@ loop:
 	return a, desc
 }
 
+func compareCIDRSizes(first, second *net.IPNet) int {
+	var result int = 0
+
+	s1, _ := first.Mask.Size()
+	s2, _ := second.Mask.Size()
+	if s1 > s2 {
+		result = 1
+	} else if s2 > s1 {
+		result = -1
+	}
+	return result
+}
+
 func ipSearch(addr string) (int, *net.IPNet, string) {
 	var a int
 	var cidr *net.IPNet
 	var desc string
 
 	ip := net.ParseIP(addr)
-loop:
 	// Check that the necessary data is already cached
 	for asn, record := range netDataCache {
 		for _, netblock := range record.Netblocks {
@@ -175,10 +187,13 @@ loop:
 			}
 
 			if ipnet.Contains(ip) {
+				// Select the smallest CIDR
+				if cidr != nil && compareCIDRSizes(cidr, ipnet) == 1 {
+					continue
+				}
 				a = asn
 				cidr = ipnet
 				desc = record.Description
-				break loop
 			}
 		}
 	}

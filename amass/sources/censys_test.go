@@ -18,6 +18,6 @@ func TestCensysQuery(t *testing.T) {
 	names := CensysQuery(testDomain, testDomain, l)
 
 	if len(names) <= 0 {
-		t.Errorf("CensysQuery did not find any subdomains: %s", b)
+		t.Errorf("CensysQuery did not find any subdomains: %s", b.String())
 	}
 }

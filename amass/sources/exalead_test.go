@@ -18,6 +18,6 @@ func TestExaleadQuery(t *testing.T) {
 	names := ExaleadQuery(testDomain, testDomain, l)
 
 	if len(names) <= 0 {
-		t.Errorf("ExaleadQuery did not find any subdomains: %s", b)
+		t.Errorf("ExaleadQuery did not find any subdomains: %s", b.String())
 	}
 }

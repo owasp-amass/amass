@@ -24,7 +24,7 @@
 
 ----
 
-The Amass tool performs scraping of data sources, recursive brute forcing, crawling of web archives, permuting and altering of names and reverse DNS sweeping to obtain additional subdomain names. Additionally, Amass uses the IP addresses obtained during resolution to discover associated netblocks and ASNs. All the information is then used to build maps of the target networks.
+The Amass tool obtains subdomain names by scraping data sources, recursive brute forcing, crawling web archives, permuting and altering names, and reverse DNS sweeping. Additionally, Amass uses the IP addresses obtained during resolution to discover associated netblocks and ASNs. All the information is then used to build maps of the target networks.
 
 ----
 
@@ -327,6 +327,7 @@ func main() {
 
 ## Mentions
 
+ - [Amass - In-depth Subdomain Enumeration](https://www.kitploit.com/2018/06/amass-in-depth-subdomain-enumeration.html)
  - [Best Hacking Tools List for Hackers & Security Professionals 2018](http://kalilinuxtutorials.com/best-hacking-tools-list/amp/)
  - [Amass - Subdomain Enumeration Tool](https://hydrasky.com/network-security/kali-tools/amass-subdomain-enumeration-tool/)
  - [Subdomain enumeration](http://10degres.net/subdomain-enumeration/)

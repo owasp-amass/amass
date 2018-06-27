@@ -18,6 +18,6 @@ func TestRobtexQuery(t *testing.T) {
 	names := RobtexQuery(testDomain, testDomain, l)
 
 	if len(names) <= 0 {
-		t.Errorf("RobtexQuery did not find any subdomains: %s", b)
+		t.Errorf("RobtexQuery did not find any subdomains: %s", b.String())
 	}
 }

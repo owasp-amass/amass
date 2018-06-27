@@ -18,6 +18,6 @@ func TestDogpileQuery(t *testing.T) {
 	names := DogpileQuery(testDomain, testDomain, l)
 
 	if len(names) <= 0 {
-		t.Errorf("DogpileQuery did not find any subdomains: %s", b)
+		t.Errorf("DogpileQuery did not find any subdomains: %s", b.String())
 	}
 }

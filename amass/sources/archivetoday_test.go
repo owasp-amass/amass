@@ -18,6 +18,6 @@ func TestArchiveTodayQuery(t *testing.T) {
 	names := ArchiveTodayQuery(testDomain, testSubdomain, l)
 
 	if len(names) <= 0 {
-		t.Errorf("ArchiveTodayQuery did not find any subdomains: %s", b)
+		t.Errorf("ArchiveTodayQuery did not find any subdomains: %s", b.String())
 	}
 }

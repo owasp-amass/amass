@@ -18,6 +18,6 @@ func TestUKGovArchiveQuery(t *testing.T) {
 	names := UKGovArchiveQuery(testDomain, testDomain, l)
 
 	if len(names) <= 0 {
-		t.Errorf("UKGovArchiveQuery did not find any subdomains: %s", b)
+		t.Errorf("UKGovArchiveQuery did not find any subdomains: %s", b.String())
 	}
 }

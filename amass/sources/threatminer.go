@@ -38,7 +38,7 @@ func ThreatMinerQuery(domain, sub string, l *log.Logger) []string {
 }
 
 func threatMinerURL(domain string) string {
-	format := "https://www.threatminer.org/getData.php?e=subdomains_container&q=%s&t=0&rt=10&p=1"
+	format := "https://www.threatminer.org/domain.php?q=%s"
 
 	return fmt.Sprintf(format, domain)
 }

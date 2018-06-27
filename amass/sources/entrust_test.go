@@ -18,6 +18,6 @@ func TestEntrustQuery(t *testing.T) {
 	names := EntrustQuery(testDomain, testDomain, l)
 
 	if len(names) <= 0 {
-		t.Errorf("EntrustQuery did not find any subdomains: %s", b)
+		t.Errorf("EntrustQuery did not find any subdomains: %s", b.String())
 	}
 }

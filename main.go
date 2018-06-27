@@ -33,7 +33,8 @@ type outputParams struct {
 	JSONOut       string
 	VisjsOut      string
 	GraphistryOut string
-	GephiOut      string
+	GEXFOut       string
+	D3Out         string
 	Done          chan struct{}
 }
 
@@ -85,11 +86,12 @@ var (
 	wordlist       = flag.String("w", "", "Path to a different wordlist file")
 	allpath        = flag.String("oA", "", "Path prefix used for naming all output files")
 	logpath        = flag.String("log", "", "Path to the log file where errors will be written")
-	outpath        = flag.String("o", "", "Path to the output file")
+	outpath        = flag.String("o", "", "Path to the text output file")
 	jsonpath       = flag.String("json", "", "Path to the JSON output file")
 	visjspath      = flag.String("visjs", "", "Path to the Visjs output HTML file")
 	graphistrypath = flag.String("graphistry", "", "Path to the Graphistry JSON file")
-	gexfpath       = flag.String("gephi", "", "Path to the Graph Exchange XML Format (GEXF) file")
+	gexfpath       = flag.String("gexf", "", "Path to the Gephi Graph Exchange XML Format (GEXF) file")
+	d3path         = flag.String("d3", "", "Path to the D3 v4 force simulation HTML file")
 	domainspath    = flag.String("df", "", "Path to a file providing root domain names")
 	resolvepath    = flag.String("rf", "", "Path to a file providing preferred DNS resolvers")
 	blacklistpath  = flag.String("blf", "", "Path to a file providing blacklisted subdomains")
@@ -165,14 +167,16 @@ func main() {
 	logfile := *logpath
 	txt := *outpath
 	jsonfile := *jsonpath
+	d3 := *d3path
 	visjs := *visjspath
 	gexf := *gexfpath
 	graphistry := *graphistrypath
 	if *allpath != "" {
 		logfile = *allpath + ".log"
-		txt = *allpath
+		txt = *allpath + ".txt"
 		jsonfile = *allpath + ".json"
-		visjs = *allpath + ".html"
+		d3 = *allpath + "_d3.html"
+		visjs = *allpath + "_visjs.html"
 		gexf = *allpath + ".gexf"
 		graphistry = *allpath + "_graphistry.json"
 	}
@@ -249,7 +253,8 @@ func main() {
 		JSONOut:       jsonfile,
 		VisjsOut:      visjs,
 		GraphistryOut: graphistry,
-		GephiOut:      gexf,
+		GEXFOut:       gexf,
+		D3Out:         d3,
 		Done:          done,
 	})
 	//profFile, _ := os.Create("amass_debug.prof")
@@ -434,7 +439,8 @@ func manageOutput(params *outputParams) {
 
 	amass.WriteVisjsFile(params.VisjsOut, params.Config)
 	amass.WriteGraphistryFile(params.GraphistryOut, params.Config)
-	amass.WriteGephiFile(params.GephiOut, params.Config)
+	amass.WriteGEXFFile(params.GEXFOut, params.Config)
+	amass.WriteD3File(params.D3Out, params.Config)
 	// Check to print the summary information
 	if params.Verbose {
 		printSummary(total, tags, asns)

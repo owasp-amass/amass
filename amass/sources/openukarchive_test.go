@@ -18,6 +18,6 @@ func TestOpenUKArchiveQuery(t *testing.T) {
 	names := OpenUKArchiveQuery(testDomain, testDomain, l)
 
 	if len(names) <= 0 {
-		t.Errorf("OpenUKArchiveQuery did not find any subdomains: %s", b)
+		t.Errorf("OpenUKArchiveQuery did not find any subdomains: %s", b.String())
 	}
 }

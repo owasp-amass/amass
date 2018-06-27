@@ -18,6 +18,6 @@ func TestFindSubdomainsQuery(t *testing.T) {
 	names := FindSubdomainsQuery(testDomain, testDomain, l)
 
 	if len(names) <= 0 {
-		t.Errorf("FindSubdomainsQuery did not find any subdomains: %s", b)
+		t.Errorf("FindSubdomainsQuery did not find any subdomains: %s", b.String())
 	}
 }

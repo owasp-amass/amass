@@ -18,6 +18,6 @@ func TestWaybackMachineQuery(t *testing.T) {
 	names := WaybackMachineQuery(testDomain, testDomain, l)
 
 	if len(names) <= 0 {
-		t.Errorf("WaybackMachineQuery did not find any subdomains: %s", b)
+		t.Errorf("WaybackMachineQuery did not find any subdomains: %s", b.String())
 	}
 }

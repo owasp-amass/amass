@@ -18,6 +18,6 @@ func TestDNSDumpsterQuery(t *testing.T) {
 	names := DNSDumpsterQuery(testDomain, testDomain, l)
 
 	if len(names) <= 0 {
-		t.Errorf("DNSDumpsterQuery did not find any subdomains: %s", b)
+		t.Errorf("DNSDumpsterQuery did not find any subdomains: %s", b.String())
 	}
 }

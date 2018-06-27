@@ -135,7 +135,7 @@ func WriteGraphistryFile(path string, config *AmassConfig) {
 	f.Sync()
 }
 
-func WriteGephiFile(path string, config *AmassConfig) {
+func WriteGEXFFile(path string, config *AmassConfig) {
 	if path == "" {
 		return
 	}
@@ -147,7 +147,23 @@ func WriteGephiFile(path string, config *AmassConfig) {
 	defer f.Close()
 
 	nodes, edges := config.Graph.VizData()
-	viz.WriteGephiData(nodes, edges, f)
+	viz.WriteGEXFData(nodes, edges, f)
+	f.Sync()
+}
+
+func WriteD3File(path string, config *AmassConfig) {
+	if path == "" {
+		return
+	}
+
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE, 0644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+
+	nodes, edges := config.Graph.VizData()
+	viz.WriteD3Data(nodes, edges, f)
 	f.Sync()
 }
 

@@ -18,6 +18,6 @@ func TestArquivoQuery(t *testing.T) {
 	names := ArquivoQuery(testDomain, testSubdomain, l)
 
 	if len(names) <= 0 {
-		t.Errorf("ArquivoQuery did not find any subdomains: %s", b)
+		t.Errorf("ArquivoQuery did not find any subdomains: %s", b.String())
 	}
 }

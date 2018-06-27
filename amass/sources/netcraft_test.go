@@ -18,6 +18,6 @@ func TestNetcraftQuery(t *testing.T) {
 	names := NetcraftQuery(testDomain, testDomain, l)
 
 	if len(names) <= 0 {
-		t.Errorf("NetcraftQuery did not find any subdomains: %s", b)
+		t.Errorf("NetcraftQuery did not find any subdomains: %s", b.String())
 	}
 }

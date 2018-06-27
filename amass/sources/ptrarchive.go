@@ -38,7 +38,7 @@ func PTRArchiveQuery(domain, sub string, l *log.Logger) []string {
 }
 
 func ptrArchiveURL(domain string) string {
-	format := "http://ptrarchive.com/tools/search2.htm?label=%s&date=ALL"
+	format := "http://ptrarchive.com/tools/search3.htm?label=%s&date=ALL"
 
 	return fmt.Sprintf(format, domain)
 }

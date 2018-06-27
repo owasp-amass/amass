@@ -18,6 +18,6 @@ func TestBingQuery(t *testing.T) {
 	names := BingQuery(testDomain, testDomain, l)
 
 	if len(names) <= 0 {
-		t.Errorf("BingQuery did not find any subdomains: %s", b)
+		t.Errorf("BingQuery did not find any subdomains: %s", b.String())
 	}
 }

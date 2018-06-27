@@ -18,6 +18,6 @@ func TestSiteDossierQuery(t *testing.T) {
 	names := SiteDossierQuery(testDomain, testDomain, l)
 
 	if len(names) <= 0 {
-		t.Errorf("SiteDossierQuery did not find any subdomains: %s", b)
+		t.Errorf("SiteDossierQuery did not find any subdomains: %s", b.String())
 	}
 }

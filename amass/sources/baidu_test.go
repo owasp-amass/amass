@@ -18,6 +18,6 @@ func TestBaiduQuery(t *testing.T) {
 	names := BaiduQuery(testDomain, testDomain, l)
 
 	if len(names) <= 0 {
-		t.Errorf("BaiduQuery did not find any subdomains: %s", b)
+		t.Errorf("BaiduQuery did not find any subdomains: %s", b.String())
 	}
 }

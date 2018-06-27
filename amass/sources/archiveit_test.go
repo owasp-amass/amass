@@ -23,6 +23,6 @@ func TestArchiveItQuery(t *testing.T) {
 	names := ArchiveItQuery(testDomain, testSubdomain, l)
 
 	if len(names) <= 0 {
-		t.Errorf("ArchiveItQuery did not find any subdomains: %s", b)
+		t.Errorf("ArchiveItQuery did not find any subdomains: %s", b.String())
 	}
 }

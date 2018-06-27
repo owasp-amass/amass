@@ -18,6 +18,6 @@ func TestDNSDBQuery(t *testing.T) {
 	names := DNSDBQuery(testDomain, testDomain, l)
 
 	if len(names) <= 0 {
-		t.Errorf("DNSDBQuery did not find any subdomains: %s", b)
+		t.Errorf("DNSDBQuery did not find any subdomains: %s", b.String())
 	}
 }
