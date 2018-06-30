@@ -76,25 +76,7 @@ $ amass -d example.com
 ```
 
 
-Add some additional domains to the enumeration:
-```
-$ amass -d example1.com,example2.com -d example3.com
-```
-
-
-Run Amass in a purely passive mode of execution that does not perform DNS resolution:
-```
-$ amass -nodns -d example.com
-```
-
-
-You can also provide the initial domain names via an input file:
-```
-$ amass -df domains.txt
-```
-
-
-Get amass to provide the sources that discovered the subdomain names and print summary information:
+The example below is a good place to start with amass:
 ```
 $ amass -v -ip -brute -min-for-recursive 3 -d example.com
 [Google] www.example.com
@@ -104,52 +86,37 @@ $ amass -v -ip -brute -min-for-recursive 3 -d example.com
 ```
 
 
-Have amass print IP addresses with the discovered names:
+Add some additional domains to the enumeration:
 ```
-$ amass -ip -d example.com
-```
-
-
-Have amass write the results to a text file:
-```
-$ amass -ip -o out.txt -d example.com
+$ amass -d example1.com,example2.com -d example3.com
 ```
 
 
-Log all error messages to a text file:
-```
-$ amass -log amass.log -d example.com
-```
+Additional switches available through the amass CLI:
 
+| Flag | Description | Example |
+|------|-------------|---------|
+| -active | Enable active recon methods | amass -active -d example.com net -p 80,443,8080 |
+| -bl  | Blacklist undesired subdomains from the enumeration | amass -bl blah.example.com -d example.com |
+| -blf | Identify blacklisted subdomains from a file | amass -blf data/blacklist.txt -d example.com |
+| -brute | Perform brute force subdomain enumeration | amass -brute -d example.com |
+| -df  | Specify the domains to be enumerated via text file | amass -df domains.txt |
+| -freq | Throttle the rate of DNS queries by number per minute | amass -freq 120 -d example.com |
+| -ip  | Print IP addresses with the discovered names | amass -ip -d example.com |
+| -json | All discoveries written as individual JSON objects | amass -json out.json -d example.com |
+| -l   | List all the domains to be used during enumeration | amass -whois -l -d example.com |
+| -log | Log all error messages to a file | amass -log amass.log -d example.com |
+| -min-for-recursive | Discoveries required for recursive brute forcing | amass -brute -min-for-recursive 3 -d example.com |
+| -noalts | Disable alterations of discovered names | amass -noalts -d example.com |
+| -nodns | A purely passive mode of execution | amass -nodns -d example.com |
+| -norecursive | Disable recursive brute forcing | amass -brute -norecursive -d example.com |
+| -o   | Write the results to a text file | amass -o out.txt -d example.com |
+| -oA  | Output to all available file formats with prefix | amass -oA amass_scan -d example.com |
+| -r   | Specify your own DNS resolvers | amass -r 8.8.8.8,1.1.1.1 -d example.com |
+| -rf  | Specify DNS resolvers with a file | amass -rf data/resolvers.txt -d example.com |
+| -w   | Change the wordlist used during brute forcing | amass -brute -w wordlist.txt -d example.com |
+| -whois | Search using reverse whois information | amass -whois -d example.com |
 
-Have all the data collected written to a file as individual JSON objects:
-```
-$ amass -json out.txt -d example.com
-```
-
-
-Have amass output the DNS and infrastructure findings as a network graph:
-```
-$ amass -visjs vis.html -d example.com
-```
-
-
-Output a file for Graphistry containing the data set in JSON format:
-```
-$ amass -graphistry network.json -d example.com
-```
-
-
-Output a Graph Exchange XML Format (GEXF) file for Gephi:
-```
-$ amass -gephi network.gexf -d example.com
-```
-
-
-Have amass output to all the available file formats using a provided file name prefix:
-```
-$ amass -v -ip -oA amass_scan -d example.com
-```
 
 
 Have amass send all the DNS and infrastructure enumerations to the Neo4j graph database:
@@ -158,86 +125,15 @@ $ amass -neo4j neo4j:DoNotUseThisPassword@localhost:7687 -d example.com
 ```
 
 
-Specify your own DNS resolvers on the command-line or from a file:
-```
-$ amass -v -d example.com -r 8.8.8.8,1.1.1.1
-```
+Here are switches for outputting the DNS and infrastructure findings as a network graph:
 
+| Flag | Description | Example |
+|------|-------------|---------|
+| -d3  | Output a D3.js v4 force simulation HTML file | amass -d3 network.html -d example |
+| -visjs | Output HTML that employs VisJS | amass -visjs network.html -d example.com |
+| -graphistry | Output Graphistry JSON | amass -graphistry network.json -d example.com |
+| -gephi | Output a Graph Exchange XML Format (GEXF) file | amass -gephi network.gexf -d example.com |
 
-The resolvers file can be provided using the following command-line switch:
-```
-$ amass -v -d example.com -rf data/resolvers.txt
-```
-
-
-If you would like to blacklist some subdomains:
-```
-$ amass -bl blah.example.com -d example.com
-```
-
-
-The blacklisted subdomains can be specified from a text file as well:
-```
-$ amass -blf data/blacklist.txt -d example.com
-```
-
-
-The amass feature that performs alterations on discovered names can be disabled:
-```
-$ amass -noalts -d example.com
-```
-
-
-Use active information gathering techniques to attempt DNS zone transfers on all discovered authoritative name servers and obtain TLS/SSL certificates for discovered hosts on all specified ports:
-```
-$ amass -active -d example.com net -p 80,443,8080
-```
-
-Caution, this is an active technique that will reveal your IP address to the target organization.
-
-
-Have amass perform brute force subdomain enumeration as well:
-```
-$ amass -brute -d example.com
-```
-
-
-By default, amass performs recursive brute forcing on new subdomains; this can be disabled:
-```
-$ amass -brute -norecursive -d example.com
-```
-
-
-If you would like to perform recursive brute forcing after enough discoveries have been made:
-```
-$ amass -brute -min-for-recursive 3 -d example.com
-```
-
-
-Change the wordlist used during the brute forcing phase of the enumeration:
-```
-$ amass -brute -w wordlist.txt -d example.com
-```
-
-
-Throttle the rate of DNS queries by number per minute:
-```
-$ amass -freq 120 -d example.com
-```
-
-
-Allow amass to include additional domains in the search using reverse whois information:
-```
-$ amass -whois -d example.com
-```
-
-
-You can have amass list all the domains discovered with reverse whois before performing the enumeration:
-```
-$ amass -whois -l -d example.com
-```
-
-Only the first domain provided is used while performing the reverse whois operation.
 
 
 #### Network/Infrastructure Options
