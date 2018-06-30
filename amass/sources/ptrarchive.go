@@ -5,26 +5,32 @@ package sources
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/caffix/amass/amass/internal/utils"
 )
 
-const (
-	PTRArchiveSourceString string = "PTRarchive"
-)
+type PTRArchive struct {
+	BaseDataSource
+}
 
-func PTRArchiveQuery(domain, sub string, l *log.Logger) []string {
+func NewPTRArchive() DataSource {
+	p := new(PTRArchive)
+
+	p.BaseDataSource = *NewBaseDataSource(SCRAPE, "PTRarchive")
+	return p
+}
+
+func (p *PTRArchive) Query(domain, sub string) []string {
 	var unique []string
 
 	if domain != sub {
 		return unique
 	}
 
-	url := ptrArchiveURL(domain)
+	url := p.getURL(domain)
 	page, err := utils.GetWebPage(url, nil)
 	if err != nil {
-		l.Printf("PTRArchive error: %s: %v", url, err)
+		p.Log(fmt.Sprintf("%s: %v", url, err))
 		return unique
 	}
 
@@ -37,7 +43,7 @@ func PTRArchiveQuery(domain, sub string, l *log.Logger) []string {
 	return unique
 }
 
-func ptrArchiveURL(domain string) string {
+func (p *PTRArchive) getURL(domain string) string {
 	format := "http://ptrarchive.com/tools/search3.htm?label=%s&date=ALL"
 
 	return fmt.Sprintf(format, domain)

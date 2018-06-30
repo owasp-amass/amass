@@ -4,7 +4,7 @@
 package sources
 
 import (
-	"log"
+	"fmt"
 	"net/url"
 	"strconv"
 	"time"
@@ -12,13 +12,23 @@ import (
 	"github.com/caffix/amass/amass/internal/utils"
 )
 
-const (
-	BaiduSourceString string = "Baidu"
-	baiduQuantity     int    = 20
-	baiduLimit        int    = 100
-)
+type Baidu struct {
+	BaseDataSource
+	quantity int
+	limit    int
+}
 
-func BaiduQuery(domain, sub string, l *log.Logger) []string {
+func NewBaidu() DataSource {
+	b := &Baidu{
+		quantity: 20,
+		limit:    100,
+	}
+
+	b.BaseDataSource = *NewBaseDataSource(SCRAPE, "Baidu")
+	return b
+}
+
+func (b *Baidu) Query(domain, sub string) []string {
 	var unique []string
 
 	if domain != sub {
@@ -26,12 +36,12 @@ func BaiduQuery(domain, sub string, l *log.Logger) []string {
 	}
 
 	re := utils.SubdomainRegex(domain)
-	num := baiduLimit / baiduQuantity
+	num := b.limit / b.quantity
 	for i := 0; i < num; i++ {
-		u := baiduURLByPageNum(domain, i)
+		u := b.urlByPageNum(domain, i)
 		page, err := utils.GetWebPage(u, nil)
 		if err != nil {
-			l.Printf("Baidu error: %s: %v", u, err)
+			b.Log(fmt.Sprintf("%s: %v", u, err))
 			break
 		}
 
@@ -45,7 +55,7 @@ func BaiduQuery(domain, sub string, l *log.Logger) []string {
 	return unique
 }
 
-func baiduURLByPageNum(domain string, page int) string {
+func (b *Baidu) urlByPageNum(domain string, page int) string {
 	pn := strconv.Itoa(page)
 	u, _ := url.Parse("https://www.baidu.com/s")
 

@@ -1,18 +1,24 @@
 package sources
 
-import (
-	"log"
-)
+type OpenUKArchive struct {
+	BaseDataSource
+	baseURL string
+}
 
-const (
-	OpenUKArchiveSourceString string = "Open UK Arc"
-	openukArchiveURL          string = "http://www.webarchive.org.uk/wayback/archive"
-)
+func NewOpenUKArchive() DataSource {
+	o := &OpenUKArchive{baseURL: "http://www.webarchive.org.uk/wayback/archive"}
 
-func OpenUKArchiveQuery(domain, sub string, l *log.Logger) []string {
+	o.BaseDataSource = *NewBaseDataSource(ARCHIVE, "Open UK Arc")
+	return o
+}
+
+func (o *OpenUKArchive) Query(domain, sub string) []string {
 	if sub == "" {
 		return []string{}
 	}
+	return runArchiveCrawler(o.baseURL, domain, sub, o)
+}
 
-	return runArchiveCrawler(openukArchiveURL, domain, sub, l)
+func (o *OpenUKArchive) Subdomains() bool {
+	return true
 }

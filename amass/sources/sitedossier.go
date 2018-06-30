@@ -5,16 +5,22 @@ package sources
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/caffix/amass/amass/internal/utils"
 )
 
-const (
-	SiteDossierSourceString string = "SiteDossier"
-)
+type SiteDossier struct {
+	BaseDataSource
+}
 
-func SiteDossierQuery(domain, sub string, l *log.Logger) []string {
+func NewSiteDossier() DataSource {
+	s := new(SiteDossier)
+
+	s.BaseDataSource = *NewBaseDataSource(SCRAPE, "SiteDossier")
+	return s
+}
+
+func (s *SiteDossier) Query(domain, sub string) []string {
 	var unique []string
 
 	if domain != sub {
@@ -22,10 +28,10 @@ func SiteDossierQuery(domain, sub string, l *log.Logger) []string {
 	}
 
 	re := utils.SubdomainRegex(domain)
-	url := siteDossierURL(domain)
+	url := s.getURL(domain)
 	page, err := utils.GetWebPage(url, nil)
 	if err != nil {
-		l.Printf("SiteDossier error: %s: %v", url, err)
+		s.Log(fmt.Sprintf("%s: %v", url, err))
 		return unique
 	}
 
@@ -37,7 +43,7 @@ func SiteDossierQuery(domain, sub string, l *log.Logger) []string {
 	return unique
 }
 
-func siteDossierURL(domain string) string {
+func (s *SiteDossier) getURL(domain string) string {
 	format := "http://www.sitedossier.com/parentdomain/%s"
 
 	return fmt.Sprintf(format, domain)

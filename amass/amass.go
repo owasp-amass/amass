@@ -9,19 +9,21 @@ import (
 	"time"
 
 	evbus "github.com/asaskevich/EventBus"
+	"github.com/caffix/amass/amass/internal/dns"
 	"github.com/caffix/amass/amass/internal/utils"
 	"github.com/caffix/amass/amass/internal/viz"
 )
 
 const (
-	Version string = "v2.3.1"
+	Version string = "v2.3.2"
 	Author  string = "Jeff Foley (@jeff_foley)"
 	// Tags used to mark the data source with the Subdomain struct
 	ALT     = "alt"
+	ARCHIVE = "archive"
+	API     = "api"
 	BRUTE   = "brute"
 	CERT    = "cert"
 	SCRAPE  = "scrape"
-	ARCHIVE = "archive"
 
 	// Topics used in the EventBus
 	DNSQUERY = "amass:dnsquery"
@@ -57,7 +59,7 @@ func StartEnumeration(config *AmassConfig) error {
 	if err := CheckConfig(config); err != nil {
 		return err
 	}
-	utils.SetDialContext(DialContext)
+	utils.SetDialContext(dns.DialContext)
 
 	bus := evbus.New()
 	bus.SubscribeAsync(OUTPUT, func(out *AmassOutput) { config.Output <- out }, false)

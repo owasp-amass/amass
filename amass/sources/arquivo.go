@@ -3,19 +3,25 @@
 
 package sources
 
-import (
-	"log"
-)
+type Arquivo struct {
+	BaseDataSource
+	baseURL string
+}
 
-const (
-	ArquivoSourceString string = "Arquivo Arc"
-	arquivoURL          string = "http://arquivo.pt/wayback"
-)
+func NewArquivo() DataSource {
+	a := &Arquivo{baseURL: "http://arquivo.pt/wayback"}
 
-func ArquivoQuery(domain, sub string, l *log.Logger) []string {
+	a.BaseDataSource = *NewBaseDataSource(ARCHIVE, "Arquivo Arc")
+	return a
+}
+
+func (a *Arquivo) Query(domain, sub string) []string {
 	if sub == "" {
 		return []string{}
 	}
+	return runArchiveCrawler(a.baseURL, domain, sub, a)
+}
 
-	return runArchiveCrawler(arquivoURL, domain, sub, l)
+func (a *Arquivo) Subdomains() bool {
+	return true
 }

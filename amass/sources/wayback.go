@@ -3,19 +3,25 @@
 
 package sources
 
-import (
-	"log"
-)
+type WaybackMachine struct {
+	BaseDataSource
+	baseURL string
+}
 
-const (
-	WaybackMachineSourceString string = "Wayback Arc"
-	waybackURL                 string = "http://web.archive.org/web"
-)
+func NewWaybackMachine() DataSource {
+	w := &WaybackMachine{baseURL: "http://web.archive.org/web"}
 
-func WaybackMachineQuery(domain, sub string, l *log.Logger) []string {
+	w.BaseDataSource = *NewBaseDataSource(ARCHIVE, "Wayback Arc")
+	return w
+}
+
+func (w *WaybackMachine) Query(domain, sub string) []string {
 	if sub == "" {
 		return []string{}
 	}
+	return runArchiveCrawler(w.baseURL, domain, sub, w)
+}
 
-	return runArchiveCrawler(waybackURL, domain, sub, l)
+func (w *WaybackMachine) Subdomains() bool {
+	return true
 }

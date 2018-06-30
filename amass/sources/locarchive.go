@@ -3,19 +3,25 @@
 
 package sources
 
-import (
-	"log"
-)
+type LoCArchive struct {
+	BaseDataSource
+	baseURL string
+}
 
-const (
-	LoCArchiveSourceString string = "LoC Archive"
-	locArchiveURL          string = "http://webarchive.loc.gov/all"
-)
+func NewLoCArchive() DataSource {
+	la := &LoCArchive{baseURL: "http://webarchive.loc.gov/all"}
 
-func LoCArchiveQuery(domain, sub string, l *log.Logger) []string {
+	la.BaseDataSource = *NewBaseDataSource(ARCHIVE, "LoC Archive")
+	return la
+}
+
+func (la *LoCArchive) Query(domain, sub string) []string {
 	if sub == "" {
 		return []string{}
 	}
+	return runArchiveCrawler(la.baseURL, domain, sub, la)
+}
 
-	return runArchiveCrawler(locArchiveURL, domain, sub, l)
+func (la *LoCArchive) Subdomains() bool {
+	return true
 }

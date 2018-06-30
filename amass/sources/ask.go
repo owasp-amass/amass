@@ -4,7 +4,7 @@
 package sources
 
 import (
-	"log"
+	"fmt"
 	"net/url"
 	"strconv"
 	"time"
@@ -12,13 +12,23 @@ import (
 	"github.com/caffix/amass/amass/internal/utils"
 )
 
-const (
-	AskSourceString string = "Ask Scrape"
-	askQuantity     int    = 10 // ask.com appears to be hardcoded at 10 results per page
-	askLimit        int    = 100
-)
+type Ask struct {
+	BaseDataSource
+	quantity int
+	limit    int
+}
 
-func AskQuery(domain, sub string, l *log.Logger) []string {
+func NewAsk() DataSource {
+	a := &Ask{
+		quantity: 10, // ask.com appears to be hardcoded at 10 results per page
+		limit:    100,
+	}
+
+	a.BaseDataSource = *NewBaseDataSource(SCRAPE, "Ask Scrape")
+	return a
+}
+
+func (a *Ask) Query(domain, sub string) []string {
 	var unique []string
 
 	if domain != sub {
@@ -26,12 +36,12 @@ func AskQuery(domain, sub string, l *log.Logger) []string {
 	}
 
 	re := utils.SubdomainRegex(domain)
-	num := askLimit / askQuantity
+	num := a.limit / a.quantity
 	for i := 0; i < num; i++ {
-		u := askURLByPageNum(domain, i)
+		u := a.urlByPageNum(domain, i)
 		page, err := utils.GetWebPage(u, nil)
 		if err != nil {
-			l.Printf("Ask error: %s: %v", u, err)
+			a.Log(fmt.Sprintf("%s: %v", u, err))
 			break
 		}
 
@@ -45,7 +55,7 @@ func AskQuery(domain, sub string, l *log.Logger) []string {
 	return unique
 }
 
-func askURLByPageNum(domain string, page int) string {
+func (a *Ask) urlByPageNum(domain string, page int) string {
 	p := strconv.Itoa(page)
 	u, _ := url.Parse("https://www.ask.com/web")
 

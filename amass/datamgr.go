@@ -4,6 +4,7 @@
 package amass
 
 import (
+	"fmt"
 	"net"
 	"regexp"
 	"strconv"
@@ -122,6 +123,8 @@ func (dms *DataManagerService) manageData() {
 			dms.insertNS(req, i)
 		case dns.TypeMX:
 			dms.insertMX(req, i)
+		case dns.TypeTXT:
+			dms.insertTXT(req, i)
 		}
 	}
 }
@@ -321,6 +324,26 @@ func (dms *DataManagerService) insertMX(req *AmassRequest, recidx int) {
 			Source: "Forward DNS",
 		})
 	}
+}
+
+func (dms *DataManagerService) insertTXT(req *AmassRequest, recidx int) {
+	if !dms.Config().IsDomainInScope(req.Name) {
+		return
+	}
+
+	re := utils.SubdomainRegex(req.Domain)
+	txt := req.Records[recidx].Data
+
+	for _, name := range re.FindAllString(txt, -1) {
+		dms.bus.Publish(DNSQUERY, &AmassRequest{
+			Name:   name,
+			Domain: req.Domain,
+			Tag:    "dns",
+			Source: "Forward DNS",
+		})
+	}
+
+	fmt.Printf("%s resolved TXT record: %s\n", req.Name, txt)
 }
 
 func (dms *DataManagerService) insertInfrastructure(addr string) {
@@ -542,4 +565,13 @@ func (dms *DataManagerService) sendOutput(output []*AmassOutput) {
 			dms.bus.Publish(OUTPUT, o)
 		}
 	}
+}
+
+func removeLastDot(name string) string {
+	sz := len(name)
+
+	if sz > 0 && name[sz-1] == '.' {
+		return name[:sz-1]
+	}
+	return name
 }

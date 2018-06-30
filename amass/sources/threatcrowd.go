@@ -5,16 +5,22 @@ package sources
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/caffix/amass/amass/internal/utils"
 )
 
-const (
-	ThreatCrowdSourceString string = "ThreatCrowd"
-)
+type ThreatCrowd struct {
+	BaseDataSource
+}
 
-func ThreatCrowdQuery(domain, sub string, l *log.Logger) []string {
+func NewThreatCrowd() DataSource {
+	t := new(ThreatCrowd)
+
+	t.BaseDataSource = *NewBaseDataSource(SCRAPE, "ThreatCrowd")
+	return t
+}
+
+func (t *ThreatCrowd) Query(domain, sub string) []string {
 	var unique []string
 
 	if domain != sub {
@@ -22,10 +28,10 @@ func ThreatCrowdQuery(domain, sub string, l *log.Logger) []string {
 	}
 
 	re := utils.SubdomainRegex(domain)
-	url := threatCrowdURL(domain)
+	url := t.getURL(domain)
 	page, err := utils.GetWebPage(url, nil)
 	if err != nil {
-		l.Printf("ThreatCrowd error: %s: %v", url, err)
+		t.Log(fmt.Sprintf("%s: %v", url, err))
 		return unique
 	}
 
@@ -37,7 +43,7 @@ func ThreatCrowdQuery(domain, sub string, l *log.Logger) []string {
 	return unique
 }
 
-func threatCrowdURL(domain string) string {
+func (t *ThreatCrowd) getURL(domain string) string {
 	format := "https://www.threatcrowd.org/searchApi/v2/domain/report/?domain=%s"
 
 	return fmt.Sprintf(format, domain)

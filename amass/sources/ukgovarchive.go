@@ -3,19 +3,25 @@
 
 package sources
 
-import (
-	"log"
-)
+type UKGovArchive struct {
+	BaseDataSource
+	baseURL string
+}
 
-const (
-	UKGovArchiveSourceString string = "UK Gov Arch"
-	ukgovArchiveURL          string = "http://webarchive.nationalarchives.gov.uk"
-)
+func NewUKGovArchive() DataSource {
+	u := &UKGovArchive{baseURL: "http://webarchive.nationalarchives.gov.uk"}
 
-func UKGovArchiveQuery(domain, sub string, l *log.Logger) []string {
+	u.BaseDataSource = *NewBaseDataSource(ARCHIVE, "UK Gov Arch")
+	return u
+}
+
+func (u *UKGovArchive) Query(domain, sub string) []string {
 	if sub == "" {
 		return []string{}
 	}
+	return runArchiveCrawler(u.baseURL, domain, sub, u)
+}
 
-	return runArchiveCrawler(ukgovArchiveURL, domain, sub, l)
+func (u *UKGovArchive) Subdomains() bool {
+	return true
 }

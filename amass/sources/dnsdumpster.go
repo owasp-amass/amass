@@ -4,8 +4,8 @@
 package sources
 
 import (
+	"fmt"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -15,11 +15,18 @@ import (
 	"github.com/caffix/amass/amass/internal/utils"
 )
 
-const (
-	DNSDumpsterSourceString string = "DNSDumpster"
-)
+type DNSDumpster struct {
+	BaseDataSource
+}
 
-func DNSDumpsterQuery(domain, sub string, l *log.Logger) []string {
+func NewDNSDumpster() DataSource {
+	d := new(DNSDumpster)
+
+	d.BaseDataSource = *NewBaseDataSource(SCRAPE, "DNSDumpster")
+	return d
+}
+
+func (d *DNSDumpster) Query(domain, sub string) []string {
 	var unique []string
 
 	if domain != sub {
@@ -29,19 +36,19 @@ func DNSDumpsterQuery(domain, sub string, l *log.Logger) []string {
 	u := "https://dnsdumpster.com/"
 	page, err := utils.GetWebPage(u, nil)
 	if err != nil {
-		l.Printf("DNSDumpster error: %s: %v", u, err)
+		d.Log(fmt.Sprintf("%s: %v", u, err))
 		return unique
 	}
 
-	token := dumpsterGetCSRFToken(page)
+	token := d.getCSRFToken(page)
 	if token == "" {
-		l.Printf("DNSDumpster error: %s: Failed to obtain the CSRF token", u)
+		d.Log(fmt.Sprintf("%s: Failed to obtain the CSRF token", u))
 		return unique
 	}
 
-	page, err = dumpsterPostForm(token, domain)
+	page, err = d.postForm(token, domain)
 	if err != nil {
-		l.Printf("DNSDumpster error: %s: %v", u, err)
+		d.Log(fmt.Sprintf("%s: %v", u, err))
 		return unique
 	}
 
@@ -54,7 +61,7 @@ func DNSDumpsterQuery(domain, sub string, l *log.Logger) []string {
 	return unique
 }
 
-func dumpsterGetCSRFToken(page string) string {
+func (d *DNSDumpster) getCSRFToken(page string) string {
 	re := regexp.MustCompile("<input type='hidden' name='csrfmiddlewaretoken' value='([a-zA-Z0-9]*)' />")
 
 	if subs := re.FindStringSubmatch(page); len(subs) == 2 {
@@ -63,7 +70,7 @@ func dumpsterGetCSRFToken(page string) string {
 	return ""
 }
 
-func dumpsterPostForm(token, domain string) (string, error) {
+func (d *DNSDumpster) postForm(token, domain string) (string, error) {
 	client := &http.Client{
 		Transport: &http.Transport{
 			DialContext:         utils.DialContext,
@@ -77,7 +84,7 @@ func dumpsterPostForm(token, domain string) (string, error) {
 
 	req, err := http.NewRequest("POST", "https://dnsdumpster.com/", strings.NewReader(params.Encode()))
 	if err != nil {
-
+		d.Log(fmt.Sprintf("Failed to setup the POST request: %v", err))
 		return "", err
 	}
 	// The CSRF token needs to be sent as a cookie
@@ -97,6 +104,7 @@ func dumpsterPostForm(token, domain string) (string, error) {
 
 	resp, err := client.Do(req)
 	if err != nil {
+		d.Log(fmt.Sprintf("The POST request failed: %v", err))
 		return "", err
 	}
 	// Now, grab the entire page

@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/caffix/amass/amass/internal/dns"
 	"github.com/caffix/amass/amass/internal/utils"
 )
 
@@ -32,7 +33,7 @@ func PullCertificateNames(addr string, ports []int) []*AmassRequest {
 		ctx, cancel := context.WithTimeout(context.Background(), defaultTLSConnectTimeout)
 		defer cancel()
 		// Obtain the connection
-		conn, err := DialContext(ctx, "tcp", addr+":"+strconv.Itoa(port))
+		conn, err := dns.DialContext(ctx, "tcp", addr+":"+strconv.Itoa(port))
 		if err != nil {
 			continue
 		}

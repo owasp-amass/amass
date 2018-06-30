@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/caffix/amass/amass/internal/dns"
 	"github.com/caffix/amass/amass/internal/utils"
 )
 
@@ -67,7 +68,7 @@ func SubdomainToDomain(name string) string {
 	for i := len(labels) - 2; i >= 0; i-- {
 		sub := strings.Join(labels[i:], ".")
 
-		if _, err := ResolveDNS(sub, "NS"); err == nil {
+		if _, err := dns.Resolve(sub, "NS"); err == nil {
 			domainCache[sub] = struct{}{}
 			domain = sub
 			break
@@ -239,7 +240,7 @@ func fetchOnlineData(addr string, asn int) (*ASRecord, error) {
 func originLookup(addr string) (int, string, error) {
 	var err error
 	var name string
-	var answers []DNSAnswer
+	var answers []dns.DNSAnswer
 
 	if ip := net.ParseIP(addr); len(ip.To4()) == net.IPv4len {
 		name = utils.ReverseIP(addr) + ".origin.asn.cymru.com"
@@ -249,7 +250,7 @@ func originLookup(addr string) (int, string, error) {
 		return 0, "", fmt.Errorf("originLookup param is insufficient: addr: %s", ip)
 	}
 
-	answers, err = ResolveDNS(name, "TXT")
+	answers, err = dns.Resolve(name, "TXT")
 	if err != nil {
 		return 0, "", fmt.Errorf("originLookup: DNS TXT record query error: %s: %v", name, err)
 	}
@@ -264,12 +265,12 @@ func originLookup(addr string) (int, string, error) {
 
 func asnLookup(asn int) (*ASRecord, error) {
 	var err error
-	var answers []DNSAnswer
+	var answers []dns.DNSAnswer
 
 	// Get the AS record using the ASN
 	name := "AS" + strconv.Itoa(asn) + ".asn.cymru.com"
 
-	answers, err = ResolveDNS(name, "TXT")
+	answers, err = dns.Resolve(name, "TXT")
 	if err != nil {
 		return nil, fmt.Errorf("asnLookup: DNS TXT record query error: %s: %v", name, err)
 	}
@@ -286,7 +287,7 @@ func fetchOnlineNetblockData(asn int) ([]string, error) {
 	defer cancel()
 
 	addr := "asn.shadowserver.org:43"
-	conn, err := DialContext(ctx, "tcp", addr)
+	conn, err := dns.DialContext(ctx, "tcp", addr)
 	if err != nil {
 		return nil, fmt.Errorf("fetchOnlineNetblockData error: %s: %v", addr, err)
 	}

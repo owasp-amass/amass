@@ -4,7 +4,7 @@
 package sources
 
 import (
-	"log"
+	"fmt"
 	"regexp"
 	"strings"
 	"time"
@@ -12,11 +12,18 @@ import (
 	"github.com/caffix/amass/amass/internal/utils"
 )
 
-const (
-	CrtshSourceString string = "crt.sh"
-)
+type Crtsh struct {
+	BaseDataSource
+}
 
-func CrtshQuery(domain, sub string, l *log.Logger) []string {
+func NewCrtsh() DataSource {
+	c := new(Crtsh)
+
+	c.BaseDataSource = *NewBaseDataSource(CERT, "crt.sh")
+	return c
+}
+
+func (c *Crtsh) Query(domain, sub string) []string {
 	var unique []string
 
 	if domain != sub {
@@ -27,12 +34,12 @@ func CrtshQuery(domain, sub string, l *log.Logger) []string {
 	url := "https://crt.sh/?q=%25." + domain
 	page, err := utils.GetWebPage(url, nil)
 	if err != nil {
-		l.Printf("Crtsh error: %s: %v", url, err)
+		c.Log(fmt.Sprintf("%s: %v", url, err))
 		return unique
 	}
 	// Get the subdomain name the cert was issued to, and
 	// the Subject Alternative Name list from each cert
-	results := crtshGetSubmatches(page)
+	results := c.getSubmatches(page)
 	for _, rel := range results {
 		// Do not go too fast
 		time.Sleep(50 * time.Millisecond)
@@ -40,16 +47,16 @@ func CrtshQuery(domain, sub string, l *log.Logger) []string {
 		url = "https://crt.sh/" + rel
 		cert, err := utils.GetWebPage(url, nil)
 		if err != nil {
-			l.Printf("Crtsh error: %s: %v", url, err)
+			c.Log(fmt.Sprintf("%s: %v", url, err))
 			continue
 		}
 		// Get all names off the certificate
-		unique = utils.UniqueAppend(unique, crtshGetMatches(cert, domain)...)
+		unique = utils.UniqueAppend(unique, c.getMatches(cert, domain)...)
 	}
 	return unique
 }
 
-func crtshGetMatches(content, domain string) []string {
+func (c *Crtsh) getMatches(content, domain string) []string {
 	var results []string
 
 	re := utils.SubdomainRegex(domain)
@@ -59,7 +66,7 @@ func crtshGetMatches(content, domain string) []string {
 	return results
 }
 
-func crtshGetSubmatches(content string) []string {
+func (c *Crtsh) getSubmatches(content string) []string {
 	var results []string
 
 	re := regexp.MustCompile("<TD style=\"text-align:center\"><A href=\"([?]id=[a-zA-Z0-9]*)\">[a-zA-Z0-9]*</A></TD>")

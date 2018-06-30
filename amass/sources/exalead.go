@@ -5,26 +5,32 @@ package sources
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/caffix/amass/amass/internal/utils"
 )
 
-const (
-	ExaleadSourceString string = "Exalead"
-)
+type Exalead struct {
+	BaseDataSource
+}
 
-func ExaleadQuery(domain, sub string, l *log.Logger) []string {
+func NewExalead() DataSource {
+	e := new(Exalead)
+
+	e.BaseDataSource = *NewBaseDataSource(SCRAPE, "Exalead")
+	return e
+}
+
+func (e *Exalead) Query(domain, sub string) []string {
 	var unique []string
 
 	if domain != sub {
 		return unique
 	}
 
-	url := exaleadURL(domain)
+	url := e.getURL(domain)
 	page, err := utils.GetWebPage(url, nil)
 	if err != nil {
-		l.Printf("Exalead error: %s: %v", url, err)
+		e.Log(fmt.Sprintf("%s: %v", url, err))
 		return unique
 	}
 
@@ -37,7 +43,7 @@ func ExaleadQuery(domain, sub string, l *log.Logger) []string {
 	return unique
 }
 
-func exaleadURL(domain string) string {
+func (e *Exalead) getURL(domain string) string {
 	base := "http://www.exalead.com/search/web/results/"
 	format := base + "?q=site:%s+-www?elements_per_page=50"
 

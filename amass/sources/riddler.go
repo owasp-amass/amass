@@ -5,26 +5,32 @@ package sources
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/caffix/amass/amass/internal/utils"
 )
 
-const (
-	RiddlerSourceString string = "Riddler"
-)
+type Riddler struct {
+	BaseDataSource
+}
 
-func RiddlerQuery(domain, sub string, l *log.Logger) []string {
+func NewRiddler() DataSource {
+	r := new(Riddler)
+
+	r.BaseDataSource = *NewBaseDataSource(SCRAPE, "Riddler")
+	return r
+}
+
+func (r *Riddler) Query(domain, sub string) []string {
 	var unique []string
 
 	if domain != sub {
 		return unique
 	}
 
-	url := riddlerURL(domain)
+	url := r.getURL(domain)
 	page, err := utils.GetWebPage(url, nil)
 	if err != nil {
-		l.Printf("Riddler error: %s: %v", url, err)
+		r.Log(fmt.Sprintf("%s: %v", url, err))
 		return unique
 	}
 
@@ -37,7 +43,7 @@ func RiddlerQuery(domain, sub string, l *log.Logger) []string {
 	return unique
 }
 
-func riddlerURL(domain string) string {
+func (r *Riddler) getURL(domain string) string {
 	format := "https://riddler.io/search?q=pld:%s"
 
 	return fmt.Sprintf(format, domain)

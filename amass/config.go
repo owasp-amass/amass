@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/caffix/amass/amass/internal/dns"
 	"github.com/caffix/amass/amass/internal/utils"
 )
 
@@ -172,7 +173,7 @@ func CustomConfig(ac *AmassConfig) *AmassConfig {
 		config.AddDomains(ac.Domains())
 	}
 	if len(config.Resolvers) > 0 {
-		SetCustomResolvers(config.Resolvers)
+		dns.SetCustomResolvers(config.Resolvers)
 	}
 	if ac.Log != nil {
 		config.Log = ac.Log

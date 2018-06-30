@@ -4,7 +4,7 @@
 package sources
 
 import (
-	"log"
+	"fmt"
 	"net/url"
 	"regexp"
 	"strings"
@@ -12,30 +12,28 @@ import (
 	"github.com/caffix/amass/amass/internal/utils"
 )
 
-const (
-	EntrustSourceString string = "Entrust"
-	entrustBaseURL      string = "http://ipv4info.com"
-)
+type Entrust struct {
+	BaseDataSource
+}
 
-func EntrustQuery(domain, sub string, l *log.Logger) []string {
+func NewEntrust() DataSource {
+	e := new(Entrust)
+
+	e.BaseDataSource = *NewBaseDataSource(CERT, "Entrust")
+	return e
+}
+
+func (e *Entrust) Query(domain, sub string) []string {
 	var unique []string
 
 	if domain != sub {
 		return []string{}
 	}
 
-	u, _ := url.Parse("https://ctsearch.entrust.com/api/v1/certificates")
-	u.RawQuery = url.Values{
-		"fields":         {"subjectO,issuerDN,subjectDN,signAlg,san,sn,subjectCNReversed,cert"},
-		"domain":         {domain},
-		"includeExpired": {"true"},
-		"exactMatch":     {"false"},
-		"limit":          {"5000"},
-	}.Encode()
-
-	page, err := utils.GetWebPage(u.String(), nil)
+	u := e.getURL(domain)
+	page, err := utils.GetWebPage(u, nil)
 	if err != nil {
-		l.Printf("Entrust error: %s: %v", u.String(), err)
+		e.Log(fmt.Sprintf("%s: %v", u, err))
 		return unique
 	}
 	content := strings.Replace(page, "u003d", " ", -1)
@@ -47,9 +45,8 @@ func EntrustQuery(domain, sub string, l *log.Logger) []string {
 		}
 	}
 
-	for _, name := range entrustExtractReversedSubmatches(page) {
-		match := re.FindString(name)
-		if match != "" {
+	for _, name := range e.extractReversedSubmatches(page) {
+		if match := re.FindString(name); match != "" {
 			if u := utils.NewUniqueElements(unique, match); len(u) > 0 {
 				unique = append(unique, u...)
 			}
@@ -58,7 +55,20 @@ func EntrustQuery(domain, sub string, l *log.Logger) []string {
 	return unique
 }
 
-func entrustExtractReversedSubmatches(content string) []string {
+func (e *Entrust) getURL(domain string) string {
+	u, _ := url.Parse("https://ctsearch.entrust.com/api/v1/certificates")
+
+	u.RawQuery = url.Values{
+		"fields":         {"subjectO,issuerDN,subjectDN,signAlg,san,sn,subjectCNReversed,cert"},
+		"domain":         {domain},
+		"includeExpired": {"true"},
+		"exactMatch":     {"false"},
+		"limit":          {"5000"},
+	}.Encode()
+	return u.String()
+}
+
+func (e *Entrust) extractReversedSubmatches(content string) []string {
 	var rev, results []string
 
 	re := regexp.MustCompile("\"valueReversed\": \"(.*)\"")
@@ -67,14 +77,14 @@ func entrustExtractReversedSubmatches(content string) []string {
 	}
 
 	for _, r := range rev {
-		s := entrustReverseSubdomain(r)
+		s := e.reverseSubdomain(r)
 
 		results = append(results, removeAsteriskLabel(s))
 	}
 	return results
 }
 
-func entrustReverseSubdomain(name string) string {
+func (e *Entrust) reverseSubdomain(name string) string {
 	var result []string
 
 	s := strings.Split(name, "")
@@ -82,20 +92,4 @@ func entrustReverseSubdomain(name string) string {
 		result = append(result, s[i])
 	}
 	return strings.Join(result, "")
-}
-
-func removeAsteriskLabel(s string) string {
-	var index int
-
-	labels := strings.Split(s, ".")
-	for i := len(labels) - 1; i >= 0; i-- {
-		if strings.TrimSpace(labels[i]) == "*" {
-			break
-		}
-		index = i
-	}
-	if index == len(labels)-1 {
-		return ""
-	}
-	return strings.Join(labels[index:], ".")
 }

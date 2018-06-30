@@ -5,26 +5,32 @@ package sources
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/caffix/amass/amass/internal/utils"
 )
 
-const (
-	HackerTargetSourceString string = "HackerTargt"
-)
+type HackerTarget struct {
+	BaseDataSource
+}
 
-func HackerTargetQuery(domain, sub string, l *log.Logger) []string {
+func NewHackerTarget() DataSource {
+	h := new(HackerTarget)
+
+	h.BaseDataSource = *NewBaseDataSource(SCRAPE, "HackerTargt")
+	return h
+}
+
+func (h *HackerTarget) Query(domain, sub string) []string {
 	var unique []string
 
 	if domain != sub {
 		return unique
 	}
 
-	url := hackertargetURL(domain)
+	url := h.getURL(domain)
 	page, err := utils.GetWebPage(url, nil)
 	if err != nil {
-		l.Printf("HackerTarget error: %s: %v", url, err)
+		h.Log(fmt.Sprintf("%s: %v", url, err))
 		return unique
 	}
 
@@ -37,7 +43,7 @@ func HackerTargetQuery(domain, sub string, l *log.Logger) []string {
 	return unique
 }
 
-func hackertargetURL(domain string) string {
+func (h *HackerTarget) getURL(domain string) string {
 	format := "http://api.hackertarget.com/hostsearch/?q=%s"
 
 	return fmt.Sprintf(format, domain)

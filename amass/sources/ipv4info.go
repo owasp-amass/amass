@@ -5,49 +5,59 @@ package sources
 
 import (
 	"fmt"
-	"log"
 	"regexp"
+	"time"
 
 	"github.com/caffix/amass/amass/internal/utils"
 )
 
-const (
-	IPv4InfoSourceString string = "IPv4info"
-	ipv4infoBaseURL      string = "http://ipv4info.com"
-)
+type IPv4Info struct {
+	BaseDataSource
+	baseURL string
+}
 
-func IPv4InfoQuery(domain, sub string, l *log.Logger) []string {
+func NewIPv4Info() DataSource {
+	i := &IPv4Info{baseURL: "http://ipv4info.com"}
+
+	i.BaseDataSource = *NewBaseDataSource(SCRAPE, "IPv4info")
+	return i
+}
+
+func (i *IPv4Info) Query(domain, sub string) []string {
 	var unique []string
 
 	if domain != sub {
 		return []string{}
 	}
 
-	url := ipv4infoURL(domain)
+	url := i.getURL(domain)
 	page, err := utils.GetWebPage(url, nil)
 	if err != nil {
-		l.Printf("IPv4info error: %s: %v", url, err)
+		i.Log(fmt.Sprintf("%s: %v", url, err))
 		return unique
 	}
+	time.Sleep(1 * time.Second)
 
-	url = ipv4infoIPSubmatch(page, domain)
+	url = i.ipSubmatch(page, domain)
 	page, err = utils.GetWebPage(url, nil)
 	if err != nil {
-		l.Printf("IPv4info error: %s: %v", url, err)
+		i.Log(fmt.Sprintf("%s: %v", url, err))
 		return unique
 	}
+	time.Sleep(1 * time.Second)
 
-	url = ipv4infoDomainSubmatch(page, domain)
+	url = i.domainSubmatch(page, domain)
 	page, err = utils.GetWebPage(url, nil)
 	if err != nil {
-		l.Printf("IPv4info error: %s: %v", url, err)
+		i.Log(fmt.Sprintf("%s: %v", url, err))
 		return unique
 	}
+	time.Sleep(1 * time.Second)
 
-	url = ipv4infoSubdomainSubmatch(page, domain)
+	url = i.subdomainSubmatch(page, domain)
 	page, err = utils.GetWebPage(url, nil)
 	if err != nil {
-		l.Printf("IPv4info error: %s: %v", url, err)
+		i.Log(fmt.Sprintf("%s: %v", url, err))
 		return unique
 	}
 
@@ -60,35 +70,35 @@ func IPv4InfoQuery(domain, sub string, l *log.Logger) []string {
 	return unique
 }
 
-func ipv4infoURL(domain string) string {
-	format := ipv4infoBaseURL + "/search/%s"
+func (i *IPv4Info) getURL(domain string) string {
+	format := i.baseURL + "/search/%s"
 
 	return fmt.Sprintf(format, domain)
 }
 
-func ipv4infoIPSubmatch(content, domain string) string {
+func (i *IPv4Info) ipSubmatch(content, domain string) string {
 	re := regexp.MustCompile("/ip-address/(.*)/" + domain)
 	subs := re.FindAllString(content, -1)
 	if len(subs) == 0 {
 		return ""
 	}
-	return ipv4infoBaseURL + subs[0]
+	return i.baseURL + subs[0]
 }
 
-func ipv4infoDomainSubmatch(content, domain string) string {
+func (i *IPv4Info) domainSubmatch(content, domain string) string {
 	re := regexp.MustCompile("/dns/(.*?)/" + domain)
 	subs := re.FindAllString(content, -1)
 	if len(subs) == 0 {
 		return ""
 	}
-	return ipv4infoBaseURL + subs[0]
+	return i.baseURL + subs[0]
 }
 
-func ipv4infoSubdomainSubmatch(content, domain string) string {
+func (i *IPv4Info) subdomainSubmatch(content, domain string) string {
 	re := regexp.MustCompile("/subdomains/(.*?)/" + domain)
 	subs := re.FindAllString(content, -1)
 	if len(subs) == 0 {
 		return ""
 	}
-	return ipv4infoBaseURL + subs[0]
+	return i.baseURL + subs[0]
 }

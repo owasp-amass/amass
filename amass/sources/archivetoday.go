@@ -3,19 +3,25 @@
 
 package sources
 
-import (
-	"log"
-)
+type ArchiveToday struct {
+	BaseDataSource
+	baseURL string
+}
 
-const (
-	ArchiveTodaySourceString string = "Archive Today"
-	archiveTodayURL          string = "http://archive.is"
-)
+func NewArchiveToday() DataSource {
+	a := &ArchiveToday{baseURL: "http://archive.is"}
 
-func ArchiveTodayQuery(domain, sub string, l *log.Logger) []string {
+	a.BaseDataSource = *NewBaseDataSource(ARCHIVE, "Archive Today")
+	return a
+}
+
+func (a *ArchiveToday) Query(domain, sub string) []string {
 	if sub == "" {
 		return []string{}
 	}
+	return runArchiveCrawler(a.baseURL, domain, sub, a)
+}
 
-	return runArchiveCrawler(archiveTodayURL, domain, sub, l)
+func (a *ArchiveToday) Subdomains() bool {
+	return true
 }

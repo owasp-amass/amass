@@ -5,26 +5,32 @@ package sources
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/caffix/amass/amass/internal/utils"
 )
 
-const (
-	FindSubdomainsSourceString string = "FindSubDmns"
-)
+type FindSubdomains struct {
+	BaseDataSource
+}
 
-func FindSubdomainsQuery(domain, sub string, l *log.Logger) []string {
+func NewFindSubdomains() DataSource {
+	f := new(FindSubdomains)
+
+	f.BaseDataSource = *NewBaseDataSource(SCRAPE, "FindSubDmns")
+	return f
+}
+
+func (f *FindSubdomains) Query(domain, sub string) []string {
 	var unique []string
 
 	if domain != sub {
 		return unique
 	}
 
-	url := findSubDomainsURL(domain)
+	url := f.getURL(domain)
 	page, err := utils.GetWebPage(url, nil)
 	if err != nil {
-		l.Printf("FindSubdomain error: %s: %v", url, err)
+		f.Log(fmt.Sprintf("%s: %v", url, err))
 		return unique
 	}
 
@@ -37,7 +43,7 @@ func FindSubdomainsQuery(domain, sub string, l *log.Logger) []string {
 	return unique
 }
 
-func findSubDomainsURL(domain string) string {
+func (f *FindSubdomains) getURL(domain string) string {
 	format := "https://findsubdomains.com/subdomains-of/%s"
 
 	return fmt.Sprintf(format, domain)

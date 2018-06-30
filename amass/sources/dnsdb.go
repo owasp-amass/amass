@@ -5,7 +5,6 @@ package sources
 
 import (
 	"fmt"
-	"log"
 	"regexp"
 	"strings"
 	"sync"
@@ -14,22 +13,22 @@ import (
 	"github.com/caffix/amass/amass/internal/utils"
 )
 
-const (
-	DNSDBSourceString string = "DNSDB"
-)
-
-var (
-	dnsdbFilter map[string][]string
-	dnsdbLock   sync.Mutex
-)
-
-func init() {
-	dnsdbFilter = make(map[string][]string)
+type DNSDB struct {
+	BaseDataSource
+	sync.Mutex
+	filter map[string][]string
 }
 
-func DNSDBQuery(domain, sub string, l *log.Logger) []string {
-	dnsdbLock.Lock()
-	defer dnsdbLock.Unlock()
+func NewDNSDB() DataSource {
+	d := &DNSDB{filter: make(map[string][]string)}
+
+	d.BaseDataSource = *NewBaseDataSource(SCRAPE, "DNSDB")
+	return d
+}
+
+func (d *DNSDB) Query(domain, sub string) []string {
+	d.Lock()
+	defer d.Unlock()
 
 	var unique []string
 
@@ -41,15 +40,15 @@ func DNSDBQuery(domain, sub string, l *log.Logger) []string {
 		name = strings.Join(sparts[1:], ".")
 	}
 
-	if n, ok := dnsdbFilter[name]; ok {
+	if n, ok := d.filter[name]; ok {
 		return n
 	}
-	dnsdbFilter[name] = unique
+	d.filter[name] = unique
 
-	url := dnsdbURL(domain, sub)
+	url := d.getURL(domain, sub)
 	page, err := utils.GetWebPage(url, nil)
 	if err != nil {
-		l.Printf("DNSDB error: %s: %v", url, err)
+		d.Log(fmt.Sprintf("%s: %v", url, err))
 		return unique
 	}
 
@@ -60,13 +59,13 @@ func DNSDBQuery(domain, sub string, l *log.Logger) []string {
 		}
 	}
 
-	for _, rel := range dnsdbGetSubmatches(page) {
+	for _, rel := range d.getSubmatches(page) {
 		// Do not go too fast
 		time.Sleep(50 * time.Millisecond)
 		// Pull the certificate web page
 		another, err := utils.GetWebPage(url+rel, nil)
 		if err != nil {
-			l.Printf("DNSDB error: %s: %v", url+rel, err)
+			d.Log(fmt.Sprintf("%s: %v", url+rel, err))
 			continue
 		}
 
@@ -76,11 +75,15 @@ func DNSDBQuery(domain, sub string, l *log.Logger) []string {
 			}
 		}
 	}
-	dnsdbFilter[name] = unique
+	d.filter[name] = unique
 	return unique
 }
 
-func dnsdbURL(domain, sub string) string {
+func (d *DNSDB) Subdomains() bool {
+	return true
+}
+
+func (d *DNSDB) getURL(domain, sub string) string {
 	format := "http://www.dnsdb.org/%s/"
 	url := fmt.Sprintf(format, domain)
 	dparts := strings.Split(domain, ".")
@@ -97,7 +100,7 @@ func dnsdbURL(domain, sub string) string {
 	return url
 }
 
-func dnsdbGetSubmatches(content string) []string {
+func (d *DNSDB) getSubmatches(content string) []string {
 	var results []string
 
 	re := regexp.MustCompile("<br/><a href=\"([a-z0-9])\">[a-z0-9]</a>")

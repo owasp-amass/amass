@@ -5,16 +5,22 @@ package sources
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/caffix/amass/amass/internal/utils"
 )
 
-const (
-	VirusTotalSourceString string = "VirusTotal"
-)
+type VirusTotal struct {
+	BaseDataSource
+}
 
-func VirusTotalQuery(domain, sub string, l *log.Logger) []string {
+func NewVirusTotal() DataSource {
+	v := new(VirusTotal)
+
+	v.BaseDataSource = *NewBaseDataSource(SCRAPE, "VirusTotal")
+	return v
+}
+
+func (v *VirusTotal) Query(domain, sub string) []string {
 	var unique []string
 
 	if domain != sub {
@@ -22,10 +28,10 @@ func VirusTotalQuery(domain, sub string, l *log.Logger) []string {
 	}
 
 	re := utils.SubdomainRegex(domain)
-	url := virusTotalURL(domain)
+	url := v.getURL(domain)
 	page, err := utils.GetWebPage(url, nil)
 	if err != nil {
-		l.Printf("VirusTotal error: %s: %v", url, err)
+		v.Log(fmt.Sprintf("%s: %v", url, err))
 		return unique
 	}
 
@@ -37,7 +43,7 @@ func VirusTotalQuery(domain, sub string, l *log.Logger) []string {
 	return unique
 }
 
-func virusTotalURL(domain string) string {
+func (v *VirusTotal) getURL(domain string) string {
 	format := "https://www.virustotal.com/en/domain/%s/information/"
 
 	return fmt.Sprintf(format, domain)

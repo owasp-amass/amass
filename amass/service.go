@@ -7,13 +7,15 @@ import (
 	"errors"
 	"sync"
 	"time"
+
+	"github.com/caffix/amass/amass/internal/dns"
 )
 
 // AmassRequest - Contains data obtained throughout AmassService processing
 type AmassRequest struct {
 	Name    string
 	Domain  string
-	Records []DNSAnswer
+	Records []dns.DNSAnswer
 	Tag     string
 	Source  string
 }

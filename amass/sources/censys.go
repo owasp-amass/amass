@@ -5,16 +5,22 @@ package sources
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/caffix/amass/amass/internal/utils"
 )
 
-const (
-	CensysSourceString string = "Censys"
-)
+type Censys struct {
+	BaseDataSource
+}
 
-func CensysQuery(domain, sub string, l *log.Logger) []string {
+func NewCensys() DataSource {
+	c := new(Censys)
+
+	c.BaseDataSource = *NewBaseDataSource(SCRAPE, "Censys")
+	return c
+}
+
+func (c *Censys) Query(domain, sub string) []string {
 	var unique []string
 
 	if domain != sub {
@@ -22,10 +28,10 @@ func CensysQuery(domain, sub string, l *log.Logger) []string {
 	}
 
 	re := utils.SubdomainRegex(domain)
-	url := censysURL(domain)
+	url := c.getURL(domain)
 	page, err := utils.GetWebPage(url, nil)
 	if err != nil {
-		l.Printf("Censys error: %s: %v", url, err)
+		c.Log(fmt.Sprintf("%s: %v", url, err))
 		return unique
 	}
 
@@ -37,7 +43,7 @@ func CensysQuery(domain, sub string, l *log.Logger) []string {
 	return unique
 }
 
-func censysURL(domain string) string {
+func (c *Censys) getURL(domain string) string {
 	format := "https://www.censys.io/domain/%s/table"
 
 	return fmt.Sprintf(format, domain)

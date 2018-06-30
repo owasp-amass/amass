@@ -5,26 +5,32 @@ package sources
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/caffix/amass/amass/internal/utils"
 )
 
-const (
-	CertSpotterSourceString string = "CertSpotter"
-)
+type CertSpotter struct {
+	BaseDataSource
+}
 
-func CertSpotterQuery(domain, sub string, l *log.Logger) []string {
+func NewCertSpotter() DataSource {
+	c := new(CertSpotter)
+
+	c.BaseDataSource = *NewBaseDataSource(CERT, "CertSpotter")
+	return c
+}
+
+func (c *CertSpotter) Query(domain, sub string) []string {
 	var unique []string
 
 	if domain != sub {
 		return unique
 	}
 
-	url := certSpotterURL(domain)
+	url := c.getURL(domain)
 	page, err := utils.GetWebPage(url, nil)
 	if err != nil {
-		l.Printf("CertSpotter error: %s: %v", url, err)
+		c.Log(fmt.Sprintf("%s: %v", url, err))
 		return unique
 	}
 
@@ -37,7 +43,7 @@ func CertSpotterQuery(domain, sub string, l *log.Logger) []string {
 	return unique
 }
 
-func certSpotterURL(domain string) string {
+func (c *CertSpotter) getURL(domain string) string {
 	format := "https://certspotter.com/api/v0/certs?domain=%s"
 
 	return fmt.Sprintf(format, domain)

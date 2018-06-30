@@ -3,19 +3,25 @@
 
 package sources
 
-import (
-	"log"
-)
+type ArchiveIt struct {
+	BaseDataSource
+	baseURL string
+}
 
-const (
-	ArchiveItSourceString string = "Archive-It"
-	archiveItURL          string = "https://wayback.archive-it.org/all"
-)
+func NewArchiveIt() DataSource {
+	a := &ArchiveIt{baseURL: "https://wayback.archive-it.org/all"}
 
-func ArchiveItQuery(domain, sub string, l *log.Logger) []string {
+	a.BaseDataSource = *NewBaseDataSource(ARCHIVE, "Archive-It")
+	return a
+}
+
+func (a *ArchiveIt) Query(domain, sub string) []string {
 	if sub == "" {
 		return []string{}
 	}
+	return runArchiveCrawler(a.baseURL, domain, sub, a)
+}
 
-	return runArchiveCrawler(archiveItURL, domain, sub, l)
+func (a *ArchiveIt) Subdomains() bool {
+	return true
 }

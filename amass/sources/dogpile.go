@@ -4,7 +4,7 @@
 package sources
 
 import (
-	"log"
+	"fmt"
 	"net/url"
 	"strconv"
 	"time"
@@ -12,13 +12,23 @@ import (
 	"github.com/caffix/amass/amass/internal/utils"
 )
 
-const (
-	DogpileSourceString string = "Dogpile"
-	dogpileQuantity     int    = 15 // Dogpile returns roughly 15 results per page
-	dogpileLimit        int    = 90
-)
+type Dogpile struct {
+	BaseDataSource
+	quantity int
+	limit    int
+}
 
-func DogpileQuery(domain, sub string, l *log.Logger) []string {
+func NewDogpile() DataSource {
+	d := &Dogpile{
+		quantity: 15, // Dogpile returns roughly 15 results per page
+		limit:    90,
+	}
+
+	d.BaseDataSource = *NewBaseDataSource(SCRAPE, "Dogpile")
+	return d
+}
+
+func (d *Dogpile) Query(domain, sub string) []string {
 	var unique []string
 
 	if domain != sub {
@@ -26,12 +36,12 @@ func DogpileQuery(domain, sub string, l *log.Logger) []string {
 	}
 
 	re := utils.SubdomainRegex(domain)
-	num := dogpileLimit / dogpileQuantity
+	num := d.limit / d.quantity
 	for i := 0; i < num; i++ {
-		u := dogpileURLByPageNum(domain, i)
+		u := d.urlByPageNum(domain, i)
 		page, err := utils.GetWebPage(u, nil)
 		if err != nil {
-			l.Printf("Dogpile error: %s: %v", u, err)
+			d.Log(fmt.Sprintf("%s: %v", u, err))
 			break
 		}
 
@@ -45,8 +55,8 @@ func DogpileQuery(domain, sub string, l *log.Logger) []string {
 	return unique
 }
 
-func dogpileURLByPageNum(domain string, page int) string {
-	qsi := strconv.Itoa(dogpileQuantity * page)
+func (d *Dogpile) urlByPageNum(domain string, page int) string {
+	qsi := strconv.Itoa(d.quantity * page)
 	u, _ := url.Parse("http://www.dogpile.com/search/web")
 
 	u.RawQuery = url.Values{"qsi": {qsi}, "q": {domain}}.Encode()

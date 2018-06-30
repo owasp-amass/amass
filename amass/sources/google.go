@@ -4,7 +4,7 @@
 package sources
 
 import (
-	"log"
+	"fmt"
 	"net/url"
 	"strconv"
 	"time"
@@ -12,13 +12,23 @@ import (
 	"github.com/caffix/amass/amass/internal/utils"
 )
 
-const (
-	GoogleSourceString string = "Google"
-	googleQuantity     int    = 10
-	googleLimit        int    = 160
-)
+type Google struct {
+	BaseDataSource
+	quantity int
+	limit    int
+}
 
-func GoogleQuery(domain, sub string, l *log.Logger) []string {
+func NewGoogle() DataSource {
+	g := &Google{
+		quantity: 10,
+		limit:    160,
+	}
+
+	g.BaseDataSource = *NewBaseDataSource(SCRAPE, "Google")
+	return g
+}
+
+func (g *Google) Query(domain, sub string) []string {
 	var unique []string
 
 	if domain != sub {
@@ -26,12 +36,12 @@ func GoogleQuery(domain, sub string, l *log.Logger) []string {
 	}
 
 	re := utils.SubdomainRegex(domain)
-	num := googleLimit / googleQuantity
+	num := g.limit / g.quantity
 	for i := 0; i < num; i++ {
-		u := googleURLByPageNum(domain, i)
+		u := g.urlByPageNum(domain, i)
 		page, err := utils.GetWebPage(u, nil)
 		if err != nil {
-			l.Printf("Google error: %s: %v", u, err)
+			g.Log(fmt.Sprintf("%s: %v", u, err))
 			break
 		}
 
@@ -45,8 +55,8 @@ func GoogleQuery(domain, sub string, l *log.Logger) []string {
 	return unique
 }
 
-func googleURLByPageNum(domain string, page int) string {
-	start := strconv.Itoa(googleQuantity * page)
+func (g *Google) urlByPageNum(domain string, page int) string {
+	start := strconv.Itoa(g.quantity * page)
 	u, _ := url.Parse("https://www.google.com/search")
 
 	u.RawQuery = url.Values{

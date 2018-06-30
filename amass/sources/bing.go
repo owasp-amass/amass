@@ -4,7 +4,7 @@
 package sources
 
 import (
-	"log"
+	"fmt"
 	"net/url"
 	"strconv"
 	"time"
@@ -12,13 +12,23 @@ import (
 	"github.com/caffix/amass/amass/internal/utils"
 )
 
-const (
-	BingSourceString string = "Bing Scrape"
-	bingQuantity     int    = 20
-	bingLimit        int    = 200
-)
+type Bing struct {
+	BaseDataSource
+	quantity int
+	limit    int
+}
 
-func BingQuery(domain, sub string, l *log.Logger) []string {
+func NewBing() DataSource {
+	b := &Bing{
+		quantity: 20,
+		limit:    200,
+	}
+
+	b.BaseDataSource = *NewBaseDataSource(SCRAPE, "Bing Scrape")
+	return b
+}
+
+func (b *Bing) Query(domain, sub string) []string {
 	var unique []string
 
 	if domain != sub {
@@ -26,12 +36,12 @@ func BingQuery(domain, sub string, l *log.Logger) []string {
 	}
 
 	re := utils.SubdomainRegex(domain)
-	num := bingLimit / bingQuantity
+	num := b.limit / b.quantity
 	for i := 0; i < num; i++ {
-		u := bingURLByPageNum(domain, i)
+		u := b.urlByPageNum(domain, i)
 		page, err := utils.GetWebPage(u, nil)
 		if err != nil {
-			l.Printf("Bing error: %s: %v", u, err)
+			b.Log(fmt.Sprintf("%s: %v", u, err))
 			break
 		}
 
@@ -45,9 +55,9 @@ func BingQuery(domain, sub string, l *log.Logger) []string {
 	return unique
 }
 
-func bingURLByPageNum(domain string, page int) string {
-	count := strconv.Itoa(bingQuantity)
-	first := strconv.Itoa((page * bingQuantity) + 1)
+func (b *Bing) urlByPageNum(domain string, page int) string {
+	count := strconv.Itoa(b.quantity)
+	first := strconv.Itoa((page * b.quantity) + 1)
 	u, _ := url.Parse("http://www.bing.com/search")
 
 	u.RawQuery = url.Values{"q": {"domain:" + domain},

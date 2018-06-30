@@ -4,7 +4,7 @@
 package sources
 
 import (
-	"log"
+	"fmt"
 	"net/url"
 	"strconv"
 	"time"
@@ -12,13 +12,23 @@ import (
 	"github.com/caffix/amass/amass/internal/utils"
 )
 
-const (
-	YahooSourceString string = "Yahoo"
-	yahooQuantity     int    = 10
-	yahooLimit        int    = 100
-)
+type Yahoo struct {
+	BaseDataSource
+	quantity int
+	limit    int
+}
 
-func YahooQuery(domain, sub string, l *log.Logger) []string {
+func NewYahoo() DataSource {
+	y := &Yahoo{
+		quantity: 10,
+		limit:    100,
+	}
+
+	y.BaseDataSource = *NewBaseDataSource(SCRAPE, "Yahoo")
+	return y
+}
+
+func (y *Yahoo) Query(domain, sub string) []string {
 	var unique []string
 
 	if domain != sub {
@@ -26,12 +36,12 @@ func YahooQuery(domain, sub string, l *log.Logger) []string {
 	}
 
 	re := utils.SubdomainRegex(domain)
-	num := yahooLimit / yahooQuantity
+	num := y.limit / y.quantity
 	for i := 0; i < num; i++ {
-		u := yahooURLByPageNum(domain, i)
+		u := y.urlByPageNum(domain, i)
 		page, err := utils.GetWebPage(u, nil)
 		if err != nil {
-			l.Printf("Yahoo error: %s: %v", u, err)
+			y.Log(fmt.Sprintf("%s: %v", u, err))
 			break
 		}
 
@@ -45,9 +55,9 @@ func YahooQuery(domain, sub string, l *log.Logger) []string {
 	return unique
 }
 
-func yahooURLByPageNum(domain string, page int) string {
-	b := strconv.Itoa(yahooQuantity*page + 1)
-	pz := strconv.Itoa(yahooQuantity)
+func (y *Yahoo) urlByPageNum(domain string, page int) string {
+	b := strconv.Itoa(y.quantity*page + 1)
+	pz := strconv.Itoa(y.quantity)
 
 	u, _ := url.Parse("https://search.yahoo.com/search")
 	u.RawQuery = url.Values{"p": {"site:" + domain},

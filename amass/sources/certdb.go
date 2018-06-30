@@ -4,7 +4,7 @@
 package sources
 
 import (
-	"log"
+	"fmt"
 	"regexp"
 	"strings"
 	"time"
@@ -12,11 +12,18 @@ import (
 	"github.com/caffix/amass/amass/internal/utils"
 )
 
-const (
-	CertDBSourceString string = "CertDB"
-)
+type CertDB struct {
+	BaseDataSource
+}
 
-func CertDBQuery(domain, sub string, l *log.Logger) []string {
+func NewCertDB() DataSource {
+	c := new(CertDB)
+
+	c.BaseDataSource = *NewBaseDataSource(CERT, "CertDB")
+	return c
+}
+
+func (c *CertDB) Query(domain, sub string) []string {
 	var unique []string
 
 	if domain != sub {
@@ -27,28 +34,28 @@ func CertDBQuery(domain, sub string, l *log.Logger) []string {
 	url := "https://certdb.com/domain/" + domain
 	page, err := utils.GetWebPage(url, nil)
 	if err != nil {
-		l.Printf("CertDB error: %s: %v", url, err)
+		c.Log(fmt.Sprintf("%s: %v", url, err))
 		return unique
 	}
 	// Get the subdomain name the cert was issued to, and
 	// the Subject Alternative Name list from each cert
-	for _, rel := range certdbGetSubmatches(page) {
+	for _, rel := range c.getSubmatches(page) {
 		// Do not go too fast
 		time.Sleep(50 * time.Millisecond)
 		// Pull the certificate web page
 		url = "https://certdb.com" + rel
 		cert, err := utils.GetWebPage(url, nil)
 		if err != nil {
-			l.Printf("CertDB error: %s: %v", url, err)
+			c.Log(fmt.Sprintf("%s: %v", url, err))
 			continue
 		}
 		// Get all names off the certificate
-		unique = utils.UniqueAppend(unique, certdbGetMatches(cert, domain)...)
+		unique = utils.UniqueAppend(unique, c.getMatches(cert, domain)...)
 	}
 	return unique
 }
 
-func certdbGetMatches(content, domain string) []string {
+func (c *CertDB) getMatches(content, domain string) []string {
 	var results []string
 
 	re := utils.SubdomainRegex(domain)
@@ -58,7 +65,7 @@ func certdbGetMatches(content, domain string) []string {
 	return results
 }
 
-func certdbGetSubmatches(content string) []string {
+func (c *CertDB) getSubmatches(content string) []string {
 	var results []string
 
 	re := regexp.MustCompile("href=\"(/ssl-cert/[a-zA-Z0-9]*)\"")

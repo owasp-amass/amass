@@ -6,16 +6,23 @@ package sources
 import (
 	"bufio"
 	"encoding/json"
-	"log"
+	"fmt"
 	"strings"
 	"time"
 
 	"github.com/caffix/amass/amass/internal/utils"
 )
 
-const (
-	RobtexSourceString string = "Robtex"
-)
+type Robtex struct {
+	BaseDataSource
+}
+
+func NewRobtex() DataSource {
+	r := new(Robtex)
+
+	r.BaseDataSource = *NewBaseDataSource(API, "Robtex")
+	return r
+}
 
 type robtexJSON struct {
 	Name string `json:"rrname"`
@@ -23,7 +30,7 @@ type robtexJSON struct {
 	Type string `json:"rrtype"`
 }
 
-func RobtexQuery(domain, sub string, log *log.Logger) []string {
+func (r *Robtex) Query(domain, sub string) []string {
 	var ips []string
 	var unique []string
 
@@ -34,12 +41,11 @@ func RobtexQuery(domain, sub string, log *log.Logger) []string {
 	url := "https://freeapi.robtex.com/pdns/forward/" + domain
 	page, err := utils.GetWebPage(url, nil)
 	if err != nil {
-		log.Printf("Robtex error: %s: %v", url, err)
+		r.Log(fmt.Sprintf("%s: %v", url, err))
 		return unique
 	}
 
-	lines := robtexParseJSON(page)
-	for _, line := range lines {
+	for _, line := range r.parseJSON(page) {
 		if line.Type == "A" {
 			ips = utils.UniqueAppend(ips, line.Data)
 		}
@@ -52,12 +58,11 @@ func RobtexQuery(domain, sub string, log *log.Logger) []string {
 		url = "https://freeapi.robtex.com/pdns/reverse/" + ip
 		pdns, err := utils.GetWebPage(url, nil)
 		if err != nil {
-			log.Printf("Robtex error: %s: %v", url, err)
+			r.Log(fmt.Sprintf("%s: %v", url, err))
 			continue
 		}
 
-		rev := robtexParseJSON(pdns)
-		for _, line := range rev {
+		for _, line := range r.parseJSON(pdns) {
 			list += line.Name + " "
 		}
 	}
@@ -71,7 +76,7 @@ func RobtexQuery(domain, sub string, log *log.Logger) []string {
 	return unique
 }
 
-func robtexParseJSON(page string) []robtexJSON {
+func (r *Robtex) parseJSON(page string) []robtexJSON {
 	var lines []robtexJSON
 
 	scanner := bufio.NewScanner(strings.NewReader(page))

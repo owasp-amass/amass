@@ -5,26 +5,32 @@ package sources
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/caffix/amass/amass/internal/utils"
 )
 
-const (
-	NetcraftSourceString string = "Netcraft"
-)
+type Netcraft struct {
+	BaseDataSource
+}
 
-func NetcraftQuery(domain, sub string, l *log.Logger) []string {
+func NewNetcraft() DataSource {
+	d := new(Netcraft)
+
+	d.BaseDataSource = *NewBaseDataSource(SCRAPE, "Netcraft")
+	return d
+}
+
+func (n *Netcraft) Query(domain, sub string) []string {
 	var unique []string
 
 	if domain != sub {
 		return unique
 	}
 
-	url := netcraftURL(domain)
+	url := n.getURL(domain)
 	page, err := utils.GetWebPage(url, nil)
 	if err != nil {
-		l.Printf("Netcraft error: %s, %v", url, err)
+		n.Log(fmt.Sprintf("%s, %v", url, err))
 		return unique
 	}
 
@@ -37,7 +43,7 @@ func NetcraftQuery(domain, sub string, l *log.Logger) []string {
 	return unique
 }
 
-func netcraftURL(domain string) string {
+func (n *Netcraft) getURL(domain string) string {
 	format := "https://searchdns.netcraft.com/?restriction=site+ends+with&host=%s"
 
 	return fmt.Sprintf(format, domain)
