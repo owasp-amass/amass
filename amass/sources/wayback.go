@@ -3,6 +3,8 @@
 
 package sources
 
+import "fmt"
+
 type WaybackMachine struct {
 	BaseDataSource
 	baseURL string
@@ -19,7 +21,12 @@ func (w *WaybackMachine) Query(domain, sub string) []string {
 	if sub == "" {
 		return []string{}
 	}
-	return runArchiveCrawler(w.baseURL, domain, sub, w)
+
+	names, err := w.crawl(w.baseURL, domain, sub)
+	if err != nil {
+		w.log(fmt.Sprintf("%v", err))
+	}
+	return names
 }
 
 func (w *WaybackMachine) Subdomains() bool {

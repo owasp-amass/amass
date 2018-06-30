@@ -30,7 +30,7 @@ func (f *FindSubdomains) Query(domain, sub string) []string {
 	url := f.getURL(domain)
 	page, err := utils.GetWebPage(url, nil)
 	if err != nil {
-		f.Log(fmt.Sprintf("%s: %v", url, err))
+		f.log(fmt.Sprintf("%s: %v", url, err))
 		return unique
 	}
 

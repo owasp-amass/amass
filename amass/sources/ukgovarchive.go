@@ -3,6 +3,8 @@
 
 package sources
 
+import "fmt"
+
 type UKGovArchive struct {
 	BaseDataSource
 	baseURL string
@@ -19,7 +21,12 @@ func (u *UKGovArchive) Query(domain, sub string) []string {
 	if sub == "" {
 		return []string{}
 	}
-	return runArchiveCrawler(u.baseURL, domain, sub, u)
+
+	names, err := u.crawl(u.baseURL, domain, sub)
+	if err != nil {
+		u.log(fmt.Sprintf("%v", err))
+	}
+	return names
 }
 
 func (u *UKGovArchive) Subdomains() bool {

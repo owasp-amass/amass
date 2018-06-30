@@ -31,7 +31,7 @@ func (c *Censys) Query(domain, sub string) []string {
 	url := c.getURL(domain)
 	page, err := utils.GetWebPage(url, nil)
 	if err != nil {
-		c.Log(fmt.Sprintf("%s: %v", url, err))
+		c.log(fmt.Sprintf("%s: %v", url, err))
 		return unique
 	}
 

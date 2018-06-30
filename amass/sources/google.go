@@ -41,7 +41,7 @@ func (g *Google) Query(domain, sub string) []string {
 		u := g.urlByPageNum(domain, i)
 		page, err := utils.GetWebPage(u, nil)
 		if err != nil {
-			g.Log(fmt.Sprintf("%s: %v", u, err))
+			g.log(fmt.Sprintf("%s: %v", u, err))
 			break
 		}
 

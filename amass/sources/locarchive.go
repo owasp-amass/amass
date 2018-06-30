@@ -3,6 +3,8 @@
 
 package sources
 
+import "fmt"
+
 type LoCArchive struct {
 	BaseDataSource
 	baseURL string
@@ -19,7 +21,12 @@ func (la *LoCArchive) Query(domain, sub string) []string {
 	if sub == "" {
 		return []string{}
 	}
-	return runArchiveCrawler(la.baseURL, domain, sub, la)
+
+	names, err := la.crawl(la.baseURL, domain, sub)
+	if err != nil {
+		la.log(fmt.Sprintf("%v", err))
+	}
+	return names
 }
 
 func (la *LoCArchive) Subdomains() bool {

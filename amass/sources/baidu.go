@@ -41,7 +41,7 @@ func (b *Baidu) Query(domain, sub string) []string {
 		u := b.urlByPageNum(domain, i)
 		page, err := utils.GetWebPage(u, nil)
 		if err != nil {
-			b.Log(fmt.Sprintf("%s: %v", u, err))
+			b.log(fmt.Sprintf("%s: %v", u, err))
 			break
 		}
 

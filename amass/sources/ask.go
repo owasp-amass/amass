@@ -41,7 +41,7 @@ func (a *Ask) Query(domain, sub string) []string {
 		u := a.urlByPageNum(domain, i)
 		page, err := utils.GetWebPage(u, nil)
 		if err != nil {
-			a.Log(fmt.Sprintf("%s: %v", u, err))
+			a.log(fmt.Sprintf("%s: %v", u, err))
 			break
 		}
 

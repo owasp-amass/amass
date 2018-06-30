@@ -31,7 +31,7 @@ func (t *ThreatCrowd) Query(domain, sub string) []string {
 	url := t.getURL(domain)
 	page, err := utils.GetWebPage(url, nil)
 	if err != nil {
-		t.Log(fmt.Sprintf("%s: %v", url, err))
+		t.log(fmt.Sprintf("%s: %v", url, err))
 		return unique
 	}
 

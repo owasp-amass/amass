@@ -48,7 +48,7 @@ func (d *DNSDB) Query(domain, sub string) []string {
 	url := d.getURL(domain, sub)
 	page, err := utils.GetWebPage(url, nil)
 	if err != nil {
-		d.Log(fmt.Sprintf("%s: %v", url, err))
+		d.log(fmt.Sprintf("%s: %v", url, err))
 		return unique
 	}
 
@@ -65,7 +65,7 @@ func (d *DNSDB) Query(domain, sub string) []string {
 		// Pull the certificate web page
 		another, err := utils.GetWebPage(url+rel, nil)
 		if err != nil {
-			d.Log(fmt.Sprintf("%s: %v", url+rel, err))
+			d.log(fmt.Sprintf("%s: %v", url+rel, err))
 			continue
 		}
 

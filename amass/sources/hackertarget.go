@@ -30,7 +30,7 @@ func (h *HackerTarget) Query(domain, sub string) []string {
 	url := h.getURL(domain)
 	page, err := utils.GetWebPage(url, nil)
 	if err != nil {
-		h.Log(fmt.Sprintf("%s: %v", url, err))
+		h.log(fmt.Sprintf("%s: %v", url, err))
 		return unique
 	}
 

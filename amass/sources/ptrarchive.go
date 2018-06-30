@@ -30,7 +30,7 @@ func (p *PTRArchive) Query(domain, sub string) []string {
 	url := p.getURL(domain)
 	page, err := utils.GetWebPage(url, nil)
 	if err != nil {
-		p.Log(fmt.Sprintf("%s: %v", url, err))
+		p.log(fmt.Sprintf("%s: %v", url, err))
 		return unique
 	}
 

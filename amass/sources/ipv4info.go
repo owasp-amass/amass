@@ -33,7 +33,7 @@ func (i *IPv4Info) Query(domain, sub string) []string {
 	url := i.getURL(domain)
 	page, err := utils.GetWebPage(url, nil)
 	if err != nil {
-		i.Log(fmt.Sprintf("%s: %v", url, err))
+		i.log(fmt.Sprintf("%s: %v", url, err))
 		return unique
 	}
 	time.Sleep(1 * time.Second)
@@ -41,7 +41,7 @@ func (i *IPv4Info) Query(domain, sub string) []string {
 	url = i.ipSubmatch(page, domain)
 	page, err = utils.GetWebPage(url, nil)
 	if err != nil {
-		i.Log(fmt.Sprintf("%s: %v", url, err))
+		i.log(fmt.Sprintf("%s: %v", url, err))
 		return unique
 	}
 	time.Sleep(1 * time.Second)
@@ -49,7 +49,7 @@ func (i *IPv4Info) Query(domain, sub string) []string {
 	url = i.domainSubmatch(page, domain)
 	page, err = utils.GetWebPage(url, nil)
 	if err != nil {
-		i.Log(fmt.Sprintf("%s: %v", url, err))
+		i.log(fmt.Sprintf("%s: %v", url, err))
 		return unique
 	}
 	time.Sleep(1 * time.Second)
@@ -57,7 +57,7 @@ func (i *IPv4Info) Query(domain, sub string) []string {
 	url = i.subdomainSubmatch(page, domain)
 	page, err = utils.GetWebPage(url, nil)
 	if err != nil {
-		i.Log(fmt.Sprintf("%s: %v", url, err))
+		i.log(fmt.Sprintf("%s: %v", url, err))
 		return unique
 	}
 

@@ -34,7 +34,7 @@ func (c *Crtsh) Query(domain, sub string) []string {
 	url := "https://crt.sh/?q=%25." + domain
 	page, err := utils.GetWebPage(url, nil)
 	if err != nil {
-		c.Log(fmt.Sprintf("%s: %v", url, err))
+		c.log(fmt.Sprintf("%s: %v", url, err))
 		return unique
 	}
 	// Get the subdomain name the cert was issued to, and
@@ -47,7 +47,7 @@ func (c *Crtsh) Query(domain, sub string) []string {
 		url = "https://crt.sh/" + rel
 		cert, err := utils.GetWebPage(url, nil)
 		if err != nil {
-			c.Log(fmt.Sprintf("%s: %v", url, err))
+			c.log(fmt.Sprintf("%s: %v", url, err))
 			continue
 		}
 		// Get all names off the certificate

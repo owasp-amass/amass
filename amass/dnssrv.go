@@ -335,4 +335,5 @@ var popularSRVRecords = []string{
 	"_autodiscover._tcp",
 	"_nicname._tcp",
 	"_nicname._udp",
+	"_collab-edge._tls",
 }

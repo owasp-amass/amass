@@ -41,7 +41,7 @@ func (d *Dogpile) Query(domain, sub string) []string {
 		u := d.urlByPageNum(domain, i)
 		page, err := utils.GetWebPage(u, nil)
 		if err != nil {
-			d.Log(fmt.Sprintf("%s: %v", u, err))
+			d.log(fmt.Sprintf("%s: %v", u, err))
 			break
 		}
 

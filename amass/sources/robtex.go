@@ -41,7 +41,7 @@ func (r *Robtex) Query(domain, sub string) []string {
 	url := "https://freeapi.robtex.com/pdns/forward/" + domain
 	page, err := utils.GetWebPage(url, nil)
 	if err != nil {
-		r.Log(fmt.Sprintf("%s: %v", url, err))
+		r.log(fmt.Sprintf("%s: %v", url, err))
 		return unique
 	}
 
@@ -58,7 +58,7 @@ func (r *Robtex) Query(domain, sub string) []string {
 		url = "https://freeapi.robtex.com/pdns/reverse/" + ip
 		pdns, err := utils.GetWebPage(url, nil)
 		if err != nil {
-			r.Log(fmt.Sprintf("%s: %v", url, err))
+			r.log(fmt.Sprintf("%s: %v", url, err))
 			continue
 		}
 

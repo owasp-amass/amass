@@ -33,7 +33,7 @@ func (e *Entrust) Query(domain, sub string) []string {
 	u := e.getURL(domain)
 	page, err := utils.GetWebPage(u, nil)
 	if err != nil {
-		e.Log(fmt.Sprintf("%s: %v", u, err))
+		e.log(fmt.Sprintf("%s: %v", u, err))
 		return unique
 	}
 	content := strings.Replace(page, "u003d", " ", -1)

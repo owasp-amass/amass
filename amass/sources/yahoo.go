@@ -41,7 +41,7 @@ func (y *Yahoo) Query(domain, sub string) []string {
 		u := y.urlByPageNum(domain, i)
 		page, err := utils.GetWebPage(u, nil)
 		if err != nil {
-			y.Log(fmt.Sprintf("%s: %v", u, err))
+			y.log(fmt.Sprintf("%s: %v", u, err))
 			break
 		}
 

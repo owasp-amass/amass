@@ -36,19 +36,19 @@ func (d *DNSDumpster) Query(domain, sub string) []string {
 	u := "https://dnsdumpster.com/"
 	page, err := utils.GetWebPage(u, nil)
 	if err != nil {
-		d.Log(fmt.Sprintf("%s: %v", u, err))
+		d.log(fmt.Sprintf("%s: %v", u, err))
 		return unique
 	}
 
 	token := d.getCSRFToken(page)
 	if token == "" {
-		d.Log(fmt.Sprintf("%s: Failed to obtain the CSRF token", u))
+		d.log(fmt.Sprintf("%s: Failed to obtain the CSRF token", u))
 		return unique
 	}
 
 	page, err = d.postForm(token, domain)
 	if err != nil {
-		d.Log(fmt.Sprintf("%s: %v", u, err))
+		d.log(fmt.Sprintf("%s: %v", u, err))
 		return unique
 	}
 
@@ -84,7 +84,7 @@ func (d *DNSDumpster) postForm(token, domain string) (string, error) {
 
 	req, err := http.NewRequest("POST", "https://dnsdumpster.com/", strings.NewReader(params.Encode()))
 	if err != nil {
-		d.Log(fmt.Sprintf("Failed to setup the POST request: %v", err))
+		d.log(fmt.Sprintf("Failed to setup the POST request: %v", err))
 		return "", err
 	}
 	// The CSRF token needs to be sent as a cookie
@@ -104,7 +104,7 @@ func (d *DNSDumpster) postForm(token, domain string) (string, error) {
 
 	resp, err := client.Do(req)
 	if err != nil {
-		d.Log(fmt.Sprintf("The POST request failed: %v", err))
+		d.log(fmt.Sprintf("The POST request failed: %v", err))
 		return "", err
 	}
 	// Now, grab the entire page

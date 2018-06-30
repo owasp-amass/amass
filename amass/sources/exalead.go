@@ -30,7 +30,7 @@ func (e *Exalead) Query(domain, sub string) []string {
 	url := e.getURL(domain)
 	page, err := utils.GetWebPage(url, nil)
 	if err != nil {
-		e.Log(fmt.Sprintf("%s: %v", url, err))
+		e.log(fmt.Sprintf("%s: %v", url, err))
 		return unique
 	}
 

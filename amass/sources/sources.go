@@ -28,20 +28,17 @@ type DataSource interface {
 	// Returns subdomain names from the data source
 	Query(domain, sub string) []string
 
-	// Returns one of the types defined above in the constants
-	Type() string
-
-	// Returns true if the data source supports subdomain name searches
-	Subdomains() bool
-
 	// Sets the logger to be used by this data source
 	SetLogger(l *log.Logger)
 
 	// Returns the data source's associated organization
 	String() string
 
-	// The data source logs messages through this method
-	Log(msg string)
+	// Returns true if the data source supports subdomain name searches
+	Subdomains() bool
+
+	// Returns one of the types defined above in the constants
+	Type() string
 }
 
 // The common functionalities and default behaviors for all data sources
@@ -50,6 +47,13 @@ type BaseDataSource struct {
 	SourceType   string
 	Organization string
 	logger       *log.Logger
+}
+
+func NewBaseDataSource(stype, org string) *BaseDataSource {
+	return &BaseDataSource{
+		SourceType:   stype,
+		Organization: org,
+	}
 }
 
 // Place holder that get implemented by each data source
@@ -76,18 +80,117 @@ func (bds *BaseDataSource) String() string {
 }
 
 // All data sources send log messages through this method
-func (bds *BaseDataSource) Log(msg string) {
+func (bds *BaseDataSource) log(msg string) {
 	if bds.logger == nil {
 		return
 	}
 	bds.logger.Printf("%s: %s", bds.Organization, msg)
 }
 
-func NewBaseDataSource(stype, org string) *BaseDataSource {
-	return &BaseDataSource{
-		SourceType:   stype,
-		Organization: org,
+//-------------------------------------------------------------------------------------------------
+// Web archive crawler implementation
+//-------------------------------------------------------------------------------------------------
+
+func (bds *BaseDataSource) crawl(base, domain, sub string) ([]string, error) {
+	var results []string
+
+	year := strconv.Itoa(time.Now().Year())
+	mux := fetchbot.NewMux()
+	links := make(chan string, 50)
+	names := make(chan string, 50)
+	linksFilter := make(map[string]struct{})
+
+	mux.HandleErrors(fetchbot.HandlerFunc(func(ctx *fetchbot.Context, res *http.Response, err error) {
+		bds.log(fmt.Sprintf("Crawler error: %s %s - %v", ctx.Cmd.Method(), ctx.Cmd.URL(), err))
+	}))
+
+	mux.Response().Method("GET").ContentType("text/html").Handler(fetchbot.HandlerFunc(
+		func(ctx *fetchbot.Context, res *http.Response, err error) {
+			// Enqueue all links as HEAD requests
+			if err := bds.linksAndNames(domain, ctx, res, links, names); err != nil {
+				bds.log(fmt.Sprintf("%v", err))
+			}
+		}))
+
+	f := fetchbot.New(fetchbot.HandlerFunc(func(ctx *fetchbot.Context, res *http.Response, err error) {
+		mux.Handle(ctx, res, err)
+	}))
+	setFetcherConfig(f)
+
+	q := f.Start()
+	u := fmt.Sprintf("%s/%s/%s", base, year, sub)
+	if _, err := q.SendStringGet(u); err != nil {
+		return results, fmt.Errorf("Crawler error: GET %s - %v", u, err)
 	}
+
+	t := time.NewTimer(10 * time.Second)
+loop:
+	for {
+		select {
+		case l := <-links:
+			if _, ok := linksFilter[l]; ok {
+				continue
+			}
+			linksFilter[l] = struct{}{}
+
+			q.SendStringGet(l)
+		case n := <-names:
+			results = utils.UniqueAppend(results, n)
+		case <-t.C:
+			go func() {
+				q.Cancel()
+			}()
+		case <-q.Done():
+			close(names)
+			break loop
+		}
+	}
+	// Makes sure all the names were collected
+	for name := range names {
+		results = utils.UniqueAppend(results, name)
+	}
+	return results, nil
+}
+
+func (bds *BaseDataSource) linksAndNames(domain string, ctx *fetchbot.Context, res *http.Response, links, names chan string) error {
+	// Process the body to find the links
+	doc, err := goquery.NewDocumentFromResponse(res)
+	if err != nil {
+		return fmt.Errorf("Crawler error: %s %s - %s\n", ctx.Cmd.Method(), ctx.Cmd.URL(), err)
+	}
+
+	re := utils.SubdomainRegex(domain)
+	doc.Find("a[href]").Each(func(i int, s *goquery.Selection) {
+		val, _ := s.Attr("href")
+		// Resolve address
+		u, err := ctx.Cmd.URL().Parse(val)
+		if err != nil {
+			bds.log(fmt.Sprintf("Crawler failed to parse: %s - %v\n", val, err))
+			return
+		}
+
+		if sub := re.FindString(u.String()); sub != "" {
+			names <- sub
+			links <- u.String()
+		}
+	})
+	return nil
+}
+
+func setFetcherConfig(f *fetchbot.Fetcher) {
+	f.HttpClient = &http.Client{
+		Timeout: 10 * time.Second,
+		Transport: &http.Transport{
+			DialContext:           utils.DialContext,
+			MaxIdleConns:          200,
+			IdleConnTimeout:       5 * time.Second,
+			TLSHandshakeTimeout:   5 * time.Second,
+			ExpectContinueTimeout: 5 * time.Second,
+		},
+	}
+	f.CrawlDelay = 1 * time.Second
+	f.DisablePoliteness = true
+	f.UserAgent = utils.USER_AGENT
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -141,115 +244,4 @@ func removeAsteriskLabel(s string) string {
 		return ""
 	}
 	return strings.Join(labels[index:], ".")
-}
-
-//-------------------------------------------------------------------------------------------------
-// Web archive crawler implementation
-//-------------------------------------------------------------------------------------------------
-
-func runArchiveCrawler(base, domain, sub string, ds DataSource) []string {
-	year := strconv.Itoa(time.Now().Year())
-	mux := fetchbot.NewMux()
-	links := make(chan string, 50)
-	names := make(chan string, 50)
-	linksFilter := make(map[string]struct{})
-
-	mux.HandleErrors(fetchbot.HandlerFunc(func(ctx *fetchbot.Context, res *http.Response, err error) {
-		ds.Log(fmt.Sprintf("Crawler error: %s %s - %v", ctx.Cmd.Method(), ctx.Cmd.URL(), err))
-	}))
-
-	mux.Response().Method("GET").ContentType("text/html").Handler(fetchbot.HandlerFunc(
-		func(ctx *fetchbot.Context, res *http.Response, err error) {
-			// Enqueue all links as HEAD requests
-			linksAndNames(domain, ctx, res, links, names, ds)
-		}))
-
-	f := fetchbot.New(fetchbot.HandlerFunc(func(ctx *fetchbot.Context, res *http.Response, err error) {
-		if err == nil {
-			ds.Log(fmt.Sprintf("[%d] %s %s - %s\n",
-				res.StatusCode, ctx.Cmd.Method(),
-				ctx.Cmd.URL(), res.Header.Get("Content-Type")))
-		}
-		mux.Handle(ctx, res, err)
-	}))
-	setFetcherConfig(f)
-
-	q := f.Start()
-	u := fmt.Sprintf("%s/%s/%s", base, year, sub)
-	_, err := q.SendStringGet(u)
-	if err != nil {
-		ds.Log(fmt.Sprintf("Crawler error: GET %s - %v", u, err))
-		return nil
-	}
-
-	var results []string
-	t := time.NewTimer(10 * time.Second)
-loop:
-	for {
-		select {
-		case l := <-links:
-			if _, ok := linksFilter[l]; ok {
-				continue
-			}
-			linksFilter[l] = struct{}{}
-
-			q.SendStringGet(l)
-		case n := <-names:
-			results = utils.UniqueAppend(results, n)
-		case <-t.C:
-			go func() {
-				q.Cancel()
-			}()
-		case <-q.Done():
-			close(names)
-			break loop
-		}
-	}
-	// Makes sure all the names were collected
-	for name := range names {
-		results = utils.UniqueAppend(results, name)
-	}
-	return results
-}
-
-func setFetcherConfig(f *fetchbot.Fetcher) {
-	f.HttpClient = &http.Client{
-		Timeout: 10 * time.Second,
-		Transport: &http.Transport{
-			DialContext:           utils.DialContext,
-			MaxIdleConns:          200,
-			IdleConnTimeout:       5 * time.Second,
-			TLSHandshakeTimeout:   5 * time.Second,
-			ExpectContinueTimeout: 5 * time.Second,
-		},
-	}
-	f.CrawlDelay = 1 * time.Second
-	f.DisablePoliteness = true
-	f.UserAgent = utils.USER_AGENT
-}
-
-func linksAndNames(domain string, ctx *fetchbot.Context, res *http.Response, links, names chan string, ds DataSource) {
-	// Process the body to find the links
-	doc, err := goquery.NewDocumentFromResponse(res)
-	if err != nil {
-		ds.Log(fmt.Sprintf("Crawler error: %s %s - %s\n",
-			ctx.Cmd.Method(), ctx.Cmd.URL(), err))
-		return
-	}
-
-	re := utils.SubdomainRegex(domain)
-	doc.Find("a[href]").Each(func(i int, s *goquery.Selection) {
-		val, _ := s.Attr("href")
-		// Resolve address
-		u, err := ctx.Cmd.URL().Parse(val)
-		if err != nil {
-			ds.Log(fmt.Sprintf("Crawler error: resolve URL %s - %v\n", val, err))
-			return
-		}
-
-		if sub := re.FindString(u.String()); sub != "" {
-			names <- sub
-			links <- u.String()
-		}
-	})
 }

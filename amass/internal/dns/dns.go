@@ -47,6 +47,21 @@ func ObtainAllRecords(name string) ([]DNSAnswer, error) {
 		answers = append(answers, ans...)
 	}
 
+	var hasA bool
+	if ans, err := Resolve(name, "A"); err == nil {
+		hasA = true
+		answers = append(answers, ans...)
+	}
+
+	if ans, err := Resolve(name, "AAAA"); err == nil {
+		hasA = true
+		answers = append(answers, ans...)
+	}
+
+	if hasA {
+		return answers, nil
+	}
+
 	if ans, err := Resolve(name, "CNAME"); err == nil {
 		answers = append(answers, ans...)
 		return answers, nil
@@ -57,11 +72,7 @@ func ObtainAllRecords(name string) ([]DNSAnswer, error) {
 		return answers, nil
 	}
 
-	if ans, err := Resolve(name, "A"); err == nil {
-		answers = append(answers, ans...)
-	}
-
-	if ans, err := Resolve(name, "AAAA"); err == nil {
+	if ans, err := Resolve(name, "SRV"); err == nil {
 		answers = append(answers, ans...)
 	}
 

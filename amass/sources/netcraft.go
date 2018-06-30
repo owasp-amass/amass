@@ -30,7 +30,7 @@ func (n *Netcraft) Query(domain, sub string) []string {
 	url := n.getURL(domain)
 	page, err := utils.GetWebPage(url, nil)
 	if err != nil {
-		n.Log(fmt.Sprintf("%s, %v", url, err))
+		n.log(fmt.Sprintf("%s, %v", url, err))
 		return unique
 	}
 

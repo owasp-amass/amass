@@ -31,7 +31,7 @@ func (v *VirusTotal) Query(domain, sub string) []string {
 	url := v.getURL(domain)
 	page, err := utils.GetWebPage(url, nil)
 	if err != nil {
-		v.Log(fmt.Sprintf("%s: %v", url, err))
+		v.log(fmt.Sprintf("%s: %v", url, err))
 		return unique
 	}
 

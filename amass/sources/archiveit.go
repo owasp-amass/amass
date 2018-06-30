@@ -3,6 +3,8 @@
 
 package sources
 
+import "fmt"
+
 type ArchiveIt struct {
 	BaseDataSource
 	baseURL string
@@ -19,7 +21,12 @@ func (a *ArchiveIt) Query(domain, sub string) []string {
 	if sub == "" {
 		return []string{}
 	}
-	return runArchiveCrawler(a.baseURL, domain, sub, a)
+
+	names, err := a.crawl(a.baseURL, domain, sub)
+	if err != nil {
+		a.log(fmt.Sprintf("%v", err))
+	}
+	return names
 }
 
 func (a *ArchiveIt) Subdomains() bool {

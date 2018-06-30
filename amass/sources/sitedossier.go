@@ -31,7 +31,7 @@ func (s *SiteDossier) Query(domain, sub string) []string {
 	url := s.getURL(domain)
 	page, err := utils.GetWebPage(url, nil)
 	if err != nil {
-		s.Log(fmt.Sprintf("%s: %v", url, err))
+		s.log(fmt.Sprintf("%s: %v", url, err))
 		return unique
 	}
 
