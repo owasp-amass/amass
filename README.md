@@ -132,7 +132,7 @@ Here are switches for outputting the DNS and infrastructure findings as a networ
 | -d3  | Output a D3.js v4 force simulation HTML file | amass -d3 network.html -d example |
 | -visjs | Output HTML that employs VisJS | amass -visjs network.html -d example.com |
 | -graphistry | Output Graphistry JSON | amass -graphistry network.json -d example.com |
-| -gephi | Output a Graph Exchange XML Format (GEXF) file | amass -gephi network.gexf -d example.com |
+| -gephi | Output to Graph Exchange XML Format (GEXF) | amass -gephi network.gexf -d example.com |
 
 
 

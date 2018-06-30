@@ -4,7 +4,7 @@
 package amass
 
 import (
-	"fmt"
+	//"fmt"
 	"net"
 	"regexp"
 	"strconv"
@@ -343,7 +343,7 @@ func (dms *DataManagerService) insertTXT(req *AmassRequest, recidx int) {
 		})
 	}
 
-	fmt.Printf("%s resolved TXT record: %s\n", req.Name, txt)
+	//fmt.Printf("%s resolved TXT record: %s\n", req.Name, txt)
 }
 
 func (dms *DataManagerService) insertInfrastructure(addr string) {
