@@ -1,6 +1,12 @@
 # Amass 
 
-[![GitHub release](https://img.shields.io/github/release/caffix/amass.svg)](https://github.com/caffix/amass/releases) [![GitHub issues](https://img.shields.io/github/issues/caffix/amass.svg)](https://github.com/caffix/amass/issues) [![Go Version](https://img.shields.io/badge/go-1.10-blue.svg)](https://golang.org/dl/) [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0) [![Chat on Discord](https://img.shields.io/discord/433729817918308352.svg?logo=discord)](https://discord.gg/rtN8GMd) [![Follow on Twitter](https://img.shields.io/twitter/follow/jeff_foley.svg?style=social&logo=twitter)](https://twitter.com/jeff_foley)
+[![GitHub issues](https://img.shields.io/github/issues/caffix/amass.svg)](https://github.com/caffix/amass/issues) 
+[![GitHub release](https://img.shields.io/github/release/caffix/amass.svg)](https://github.com/caffix/amass/releases) 
+[![Go Version](https://img.shields.io/badge/go-1.10-blue.svg)](https://golang.org/dl/) 
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0) 
+[![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg)](https://github.com/caffix/amass/blob/master/CONTRIBUTING.md)
+[![Chat on Discord](https://img.shields.io/discord/433729817918308352.svg?logo=discord)](https://discord.gg/rtN8GMd) 
+[![Follow on Twitter](https://img.shields.io/twitter/follow/jeff_foley.svg?style=social&logo=twitter)](https://twitter.com/jeff_foley)
 
 
 ```
@@ -21,16 +27,13 @@
 
 ```
 
-
 ----
 
-The Amass tool obtains subdomain names by scraping data sources, recursive brute forcing, crawling web archives, permuting and altering names, and reverse DNS sweeping. Additionally, Amass uses the IP addresses obtained during resolution to discover associated netblocks and ASNs. All the information is then used to build maps of the target networks.
+The Amass tool obtains subdomain names by scraping data sources, recursive brute forcing, crawling web archives, permuting/altering names and reverse DNS sweeping. Additionally, Amass uses the IP addresses obtained during resolution to discover associated netblocks and ASNs. All the information is then used to build maps of the target networks.
 
 ----
-
 
 ![Image of a network graph](https://github.com/caffix/amass/blob/master/examples/network_06092018.png "Internet Satellite Imagery")
-
 
 ## How to Install
 
@@ -43,12 +46,10 @@ If your operating environment supports [Snap](https://docs.snapcraft.io/core/ins
 $ sudo snap install amass
 ```
 
-
 If you would like snap to get you the latest unstable build of amass, type the following command:
 ```
 $ sudo snap install --edge amass
 ```
- 
 
 #### From Source
 
@@ -61,12 +62,10 @@ $ go get -u github.com/caffix/amass
 
 At this point, the amass binary should be in *$GOPATH/bin*.
 
-
 2. Several wordlists can be found in the following directory:
 ```
 $ ls $GOPATH/src/github.com/caffix/amass/wordlists/
 ```
-
 
 ## Using the Tool
 
@@ -74,7 +73,6 @@ The most basic use of the tool, which includes reverse DNS lookups and name alte
 ```
 $ amass -d example.com
 ```
-
 
 The example below is a good place to start with amass:
 ```
@@ -85,12 +83,10 @@ $ amass -v -ip -brute -min-for-recursive 3 -d example.com
 13139 names discovered - archive: 171, cert: 2671, scrape: 6290, brute: 991, dns: 250, alt: 2766
 ```
 
-
 Add some additional domains to the enumeration:
 ```
 $ amass -d example1.com,example2.com -d example3.com
 ```
-
 
 Additional switches available through the amass CLI:
 
@@ -118,12 +114,10 @@ Additional switches available through the amass CLI:
 | -whois | Search using reverse whois information | amass -whois -d example.com |
 
 
-
 Have amass send all the DNS and infrastructure enumerations to the Neo4j graph database:
 ```
 $ amass -neo4j neo4j:DoNotUseThisPassword@localhost:7687 -d example.com
 ```
-
 
 Here are switches for outputting the DNS and infrastructure findings as a network graph:
 
@@ -133,7 +127,6 @@ Here are switches for outputting the DNS and infrastructure findings as a networ
 | -visjs | Output HTML that employs VisJS | amass -visjs network.html -d example.com |
 | -graphistry | Output Graphistry JSON | amass -graphistry network.json -d example.com |
 | -gephi | Output to Graph Exchange XML Format (GEXF) | amass -gephi network.gexf -d example.com |
-
 
 
 #### Network/Infrastructure Options
@@ -147,18 +140,15 @@ To discover all domains hosted within target ASNs, use the following option:
 $ amass net -asn 13374,14618
 ```
 
-
 To investigate within target CIDRs, use this option:
 ```
 $ amass net -cidr 192.184.113.0/24,104.154.0.0/15
 ```
 
-
 For specific IPs or address ranges, use this option:
 ```
 $ amass net -addr 192.168.1.44,192.168.2.1-64
 ```
-
 
 By default, port 443 will be checked for certificates, but the ports can be changed as follows:
 ```
@@ -198,28 +188,23 @@ func main() {
 }
 ```
 
-
 ## Settings for the Amass Maltego Local Transform
 
 1. Setup a new local transform within Maltego:
 
 ![Image of Maltego setup process](https://github.com/caffix/amass/blob/master/examples/maltegosetup1.png "Setup")
 
-
 2. Configure the local transform to properly execute the go program:
 
 ![Image of Maltego configuration](https://github.com/caffix/amass/blob/master/examples/maltegosetup2.png "Configure")
-
 
 3. Go into the Transform Manager, and disable the **debug info** option:
 
 ![Image of disabling debugging in Maltego](https://github.com/caffix/amass/blob/master/examples/maltegosetup3.png "Disable Debug")
 
-
 ## Community
 
  - [Discord Server](https://discord.gg/rtN8GMd) - Discussing OSINT, network recon and developing security tools using Go
-
 
 ## Mentions
 
@@ -230,7 +215,6 @@ func main() {
  - [Asset Discovery: Doing Reconnaissance the Hard Way](https://0xpatrik.com/asset-discovery/)
  - [Go is for everyone](https://changelog.com/gotime/71)
  - [Top Five Ways the Red Team breached the External Perimeter](https://medium.com/@adam.toscher/top-five-ways-the-red-team-breached-the-external-perimeter-262f99dc9d17)
-
 
 ## Let Me Know What You Think
 
