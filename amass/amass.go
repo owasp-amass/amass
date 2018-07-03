@@ -6,6 +6,7 @@ package amass
 import (
 	"net"
 	"os"
+	"sync"
 	"time"
 
 	evbus "github.com/asaskevich/EventBus"
@@ -55,6 +56,8 @@ type AmassOutput struct {
 
 func StartEnumeration(config *AmassConfig) error {
 	var services []AmassService
+	var filterMutex sync.Mutex
+	filter := make(map[string]struct{})
 
 	if err := CheckConfig(config); err != nil {
 		return err
@@ -62,7 +65,15 @@ func StartEnumeration(config *AmassConfig) error {
 	utils.SetDialContext(dns.DialContext)
 
 	bus := evbus.New()
-	bus.SubscribeAsync(OUTPUT, func(out *AmassOutput) { config.Output <- out }, false)
+	bus.SubscribeAsync(OUTPUT, func(out *AmassOutput) {
+		filterMutex.Lock()
+		defer filterMutex.Unlock()
+
+		if _, found := filter[out.Name]; !found {
+			filter[out.Name] = struct{}{}
+			config.Output <- out
+		}
+	}, false)
 
 	services = append(services, NewSourcesService(config, bus))
 	if !config.NoDNS {

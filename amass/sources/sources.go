@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/PuerkitoBio/fetchbot"
@@ -93,6 +94,8 @@ func (bds *BaseDataSource) log(msg string) {
 
 func (bds *BaseDataSource) crawl(base, domain, sub string) ([]string, error) {
 	var results []string
+	var filterMutex sync.Mutex
+	filter := make(map[string]struct{})
 
 	year := strconv.Itoa(time.Now().Year())
 	mux := fetchbot.NewMux()
@@ -106,10 +109,16 @@ func (bds *BaseDataSource) crawl(base, domain, sub string) ([]string, error) {
 
 	mux.Response().Method("GET").ContentType("text/html").Handler(fetchbot.HandlerFunc(
 		func(ctx *fetchbot.Context, res *http.Response, err error) {
-			// Enqueue all links as HEAD requests
-			if err := bds.linksAndNames(domain, ctx, res, links, names); err != nil {
-				bds.log(fmt.Sprintf("%v", err))
+			filterMutex.Lock()
+			defer filterMutex.Unlock()
+
+			u := res.Request.URL.String()
+			if _, found := filter[u]; found {
+				return
 			}
+			filter[u] = struct{}{}
+
+			go bds.linksAndNames(domain, ctx, res, links, names)
 		}))
 
 	f := fetchbot.New(fetchbot.HandlerFunc(func(ctx *fetchbot.Context, res *http.Response, err error) {
@@ -152,11 +161,12 @@ loop:
 	return results, nil
 }
 
-func (bds *BaseDataSource) linksAndNames(domain string, ctx *fetchbot.Context, res *http.Response, links, names chan string) error {
+func (bds *BaseDataSource) linksAndNames(domain string, ctx *fetchbot.Context, res *http.Response, links, names chan string) {
 	// Process the body to find the links
 	doc, err := goquery.NewDocumentFromResponse(res)
 	if err != nil {
-		return fmt.Errorf("Crawler error: %s %s - %s\n", ctx.Cmd.Method(), ctx.Cmd.URL(), err)
+		bds.log(fmt.Sprintf("Crawler error: %s %s - %s\n", ctx.Cmd.Method(), ctx.Cmd.URL(), err))
+		return
 	}
 
 	re := utils.SubdomainRegex(domain)
@@ -174,7 +184,6 @@ func (bds *BaseDataSource) linksAndNames(domain string, ctx *fetchbot.Context, r
 			links <- u.String()
 		}
 	})
-	return nil
 }
 
 func setFetcherConfig(f *fetchbot.Fetcher) {

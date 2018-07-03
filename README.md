@@ -74,6 +74,11 @@ The most basic use of the tool, which includes reverse DNS lookups and name alte
 $ amass -d example.com
 ```
 
+If you need amass to only use the passive data sources and not resolve the names:
+```
+$ amass -nodns -d example.com
+```
+
 The example below is a good place to start with amass:
 ```
 $ amass -v -ip -brute -min-for-recursive 3 -d example.com
@@ -98,6 +103,7 @@ Additional switches available through the amass CLI:
 | -brute | Perform brute force subdomain enumeration | amass -brute -d example.com |
 | -df  | Specify the domains to be enumerated via text file | amass -df domains.txt |
 | -freq | Throttle the rate of DNS queries by number per minute | amass -freq 120 -d example.com |
+| -h   | Show the amass usage information | amass -h |
 | -ip  | Print IP addresses with the discovered names | amass -ip -d example.com |
 | -json | All discoveries written as individual JSON objects | amass -json out.json -d example.com |
 | -l   | List all the domains to be used during enumeration | amass -whois -l -d example.com |
@@ -110,6 +116,8 @@ Additional switches available through the amass CLI:
 | -oA  | Output to all available file formats with prefix | amass -oA amass_scan -d example.com |
 | -r   | Specify your own DNS resolvers | amass -r 8.8.8.8,1.1.1.1 -d example.com |
 | -rf  | Specify DNS resolvers with a file | amass -rf data/resolvers.txt -d example.com |
+| -v   | Output includes data source and summary information | amass -v -d example.com |
+| -version | Print the version number of amass | amass -version |
 | -w   | Change the wordlist used during brute forcing | amass -brute -w wordlist.txt -d example.com |
 | -whois | Search using reverse whois information | amass -whois -d example.com |
 
@@ -124,9 +132,9 @@ Here are switches for outputting the DNS and infrastructure findings as a networ
 | Flag | Description | Example |
 |------|-------------|---------|
 | -d3  | Output a D3.js v4 force simulation HTML file | amass -d3 network.html -d example |
-| -visjs | Output HTML that employs VisJS | amass -visjs network.html -d example.com |
+| -gexf | Output to Graph Exchange XML Format (GEXF) | amass -gephi network.gexf -d example.com |
 | -graphistry | Output Graphistry JSON | amass -graphistry network.json -d example.com |
-| -gephi | Output to Graph Exchange XML Format (GEXF) | amass -gephi network.gexf -d example.com |
+| -visjs | Output HTML that employs VisJS | amass -visjs network.html -d example.com |
 
 
 #### Network/Infrastructure Options
@@ -216,10 +224,3 @@ func main() {
  - [Go is for everyone](https://changelog.com/gotime/71)
  - [Top Five Ways the Red Team breached the External Perimeter](https://medium.com/@adam.toscher/top-five-ways-the-red-team-breached-the-external-perimeter-262f99dc9d17)
 
-## Let Me Know What You Think
-
-**NOTE: Still under development**
-
-**Author: Jeff Foley @jeff_foley**
-
-**Company: ClaritySec, Inc. / @claritysecinc**

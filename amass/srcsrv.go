@@ -106,6 +106,11 @@ func (ss *SourcesService) handleRequest(req *AmassRequest) {
 		go ss.queryOneSource(source, req.Domain, req.Name)
 	}
 
+	// Do not queue requests that were not resolved
+	if len(req.Records) == 0 {
+		return
+	}
+
 	for _, source := range ss.throttles {
 		if subsrch && !source.Subdomains() {
 			continue
@@ -126,14 +131,13 @@ func (ss *SourcesService) processOutput() {
 }
 
 func (ss *SourcesService) handleOutput(req *AmassRequest) {
-	re := regexp.MustCompile("^((252f)|(2f)|(3d))+")
+	re := regexp.MustCompile("^((20)|(25)|(2f)|(3d)|(40))+")
 
 	// Clean up the names scraped from the web
-	req.Name = strings.ToLower(req.Name)
 	if i := re.FindStringIndex(req.Name); i != nil {
 		req.Name = req.Name[i[1]:]
 	}
-	req.Name = strings.TrimSpace(req.Name)
+	req.Name = strings.TrimSpace(strings.ToLower(req.Name))
 
 	if ss.outDup(req.Name) {
 		return
@@ -150,6 +154,7 @@ func (ss *SourcesService) handleOutput(req *AmassRequest) {
 	} else {
 		ss.bus.Publish(DNSQUERY, req)
 	}
+	ss.SendRequest(req)
 }
 
 func (ss *SourcesService) inDup(sub string) bool {
