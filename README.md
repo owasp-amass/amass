@@ -1,4 +1,4 @@
-# Amass 
+# [![OWASP Logo](https://www.owasp.org/images/b/b1/Logo3.jpg =100x32) Amass]
 
 [![GitHub issues](https://img.shields.io/github/issues/caffix/amass.svg)](https://github.com/caffix/amass/issues) 
 [![GitHub release](https://img.shields.io/github/release/caffix/amass.svg)](https://github.com/caffix/amass/releases) 
@@ -29,7 +29,7 @@
 
 ----
 
-The Amass tool obtains subdomain names by scraping data sources, recursive brute forcing, crawling web archives, permuting/altering names and reverse DNS sweeping. Additionally, Amass uses the IP addresses obtained during resolution to discover associated netblocks and ASNs. All the information is then used to build maps of the target networks.
+The OWASP Amass tool obtains subdomain names by scraping data sources, recursive brute forcing, crawling web archives, permuting/altering names and reverse DNS sweeping. Additionally, Amass uses the IP addresses obtained during resolution to discover associated netblocks and ASNs. All the information is then used to build maps of the target networks.
 
 ----
 
@@ -46,7 +46,7 @@ If your operating environment supports [Snap](https://docs.snapcraft.io/core/ins
 $ sudo snap install amass
 ```
 
-If you would like snap to get you the latest unstable build of amass, type the following command:
+If you would like snap to get you the latest unstable build of OWASP Amass, type the following command:
 ```
 $ sudo snap install --edge amass
 ```
@@ -163,7 +163,7 @@ By default, port 443 will be checked for certificates, but the ports can be chan
 $ amass net -cidr 192.168.1.0/24 -p 80,443,8080
 ```
 
-## Integrating Amass into Your Work
+## Integrating OWASP Amass into Your Work
 
 If you are using the amass package within your own Go code, be sure to properly seed the default pseudo-random number generator:
 ```go
@@ -196,7 +196,7 @@ func main() {
 }
 ```
 
-## Settings for the Amass Maltego Local Transform
+## Settings for the OWASP Amass Maltego Local Transform
 
 1. Setup a new local transform within Maltego:
 
