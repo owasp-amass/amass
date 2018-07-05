@@ -1,4 +1,4 @@
-# [![OWASP Logo](https://www.owasp.org/images/b/b1/Logo3.jpg) Amass](https://www.owasp.org/)
+# [![OWASP Logo](https://www.owasp.org/images/2/2f/Owasp_logo_flat2_icon.jpg =32x32) OWASP Amass](https://www.owasp.org/)
 
 [![GitHub issues](https://img.shields.io/github/issues/caffix/amass.svg)](https://github.com/caffix/amass/issues) 
 [![GitHub release](https://img.shields.io/github/release/caffix/amass.svg)](https://github.com/caffix/amass/releases) 
