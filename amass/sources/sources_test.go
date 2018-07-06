@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	TestDomain    string = "utica.edu"
-	TestSubdomain string = "www.utica.edu"
+	TestDomain    string = "owasp.org"
+	TestSubdomain string = "www.owasp.org"
 )
 
 func TestAllSources(t *testing.T) {

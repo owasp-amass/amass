@@ -2,29 +2,45 @@ name: amass
 version: 'v2.3.3'
 summary: In-Depth Subdomain Enumeration
 description: |
-  The amass tool searches Internet data sources, performs brute-force 
-  subdomain enumeration, searches web archives, and uses machine learning
-  to generate additional subdomain name guesses. DNS name resolution
-  is performed across many public servers so the authoritative server
-  will see the traffic coming from different locations.
-
-
+  The OWASP Amass tool obtains subdomain names by scraping data sources, 
+  recursive brute forcing, crawling web archives, permuting/altering names 
+  and reverse DNS sweeping. Additionally, Amass uses the IP addresses 
+  obtained during resolution to discover associated netblocks and ASNs. All 
+  the information is then used to build maps of the target networks.
+icon: images/snapcraft_icon.png
 grade: stable
 confinement: strict
 
 
 apps:
+
   amass:
     command: bin/amass
     plugs: [home, network, removable-media]
 
+  amass_maltego:
+    command: bin/amass_maltego
+    plugs: [home, network, removable-media]
+
 
 parts:
+
   go:
-    source-tag: go1.10
+    source-tag: go1.10.3
+
   amass:
     after: [go]
     source: https://github.com/caffix/amass
     source-type: git
     plugin: go
     go-importpath: github.com/caffix/amass
+  
+  amass_maltego:
+    after: [go]
+    source: https://github.com/caffix/amass
+    source-type: git
+    plugin: go
+    go-importpath: github.com/caffix/amass
+    override-build: |
+      export GOBIN=$GOPATH/bin
+      go install maltego/amass_maltego.go

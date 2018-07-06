@@ -16,7 +16,7 @@ type HackerTarget struct {
 func NewHackerTarget() DataSource {
 	h := new(HackerTarget)
 
-	h.BaseDataSource = *NewBaseDataSource(SCRAPE, "HackerTargt")
+	h.BaseDataSource = *NewBaseDataSource(SCRAPE, "HackerTarget")
 	return h
 }
 

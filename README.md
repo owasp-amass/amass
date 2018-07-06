@@ -1,4 +1,4 @@
-# [![OWASP Logo](https://github.com/caffix/amass/blob/master/img/owasp_logo.png) OWASP Amass](https://www.owasp.org/)
+# [![OWASP Logo](https://github.com/caffix/amass/blob/master/images/owasp_logo.png) OWASP Amass](https://www.owasp.org/)
 
 [![GitHub issues](https://img.shields.io/github/issues/caffix/amass.svg)](https://github.com/caffix/amass/issues) 
 [![GitHub release](https://img.shields.io/github/release/caffix/amass.svg)](https://github.com/caffix/amass/releases) 
@@ -33,7 +33,7 @@ The OWASP Amass tool obtains subdomain names by scraping data sources, recursive
 
 ----
 
-![Image of a network graph](https://github.com/caffix/amass/blob/master/img/network_06092018.png "Internet Satellite Imagery")
+![Image of a network graph](https://github.com/caffix/amass/blob/master/images/network_06092018.png "Internet Satellite Imagery")
 
 ## How to Install
 
@@ -200,15 +200,15 @@ func main() {
 
 1. Setup a new local transform within Maltego:
 
-![Maltego setup process](https://github.com/caffix/amass/blob/master/img/maltegosetup1.png "Setup")
+![Maltego setup process](https://github.com/caffix/amass/blob/master/images/maltegosetup1.png "Setup")
 
 2. Configure the local transform to properly execute the go program:
 
-![Maltego configuration](https://github.com/caffix/amass/blob/master/img/maltegosetup2.png "Configure")
+![Maltego configuration](https://github.com/caffix/amass/blob/master/images/maltegosetup2.png "Configure")
 
 3. Go into the Transform Manager, and disable the **debug info** option:
 
-![Disabling debug](https://github.com/caffix/amass/blob/master/img/maltegosetup3.png "Disable Debug")
+![Disabling debug](https://github.com/caffix/amass/blob/master/images/maltegosetup3.png "Disable Debug")
 
 ## Community
 
