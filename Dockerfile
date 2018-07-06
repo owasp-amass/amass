@@ -1,6 +1,10 @@
-FROM golang:latest 
-RUN mkdir /app 
-ADD . /app/ 
-WORKDIR /app 
-RUN go get github.com/caffix/amass && go build -o main . 
-CMD ["/app/main"]
+FROM golang:alpine as build
+WORKDIR /go/src/github.com/caffix/amass
+COPY . .
+RUN apk --no-cache add git \
+  && go get -u -v golang.org/x/vgo \
+  && vgo install
+  
+FROM alpine:latest
+COPY --from=build /go/bin/amass /bin/amass 
+ENTRYPOINT ["/bin/amass"]
