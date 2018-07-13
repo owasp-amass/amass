@@ -6,6 +6,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -14,8 +15,8 @@ import (
 	"os"
 	"os/signal"
 	"path"
-	//"runtime/pprof"
-	"encoding/json"
+	"runtime"
+	"runtime/pprof"
 	"strconv"
 	"strings"
 	"syscall"
@@ -257,14 +258,16 @@ func main() {
 		D3Out:         d3,
 		Done:          done,
 	})
-	//profFile, _ := os.Create("amass_debug.prof")
-	//pprof.StartCPUProfile(profFile)
-	//defer pprof.StopCPUProfile()
+
 	err := amass.StartEnumeration(config)
 	if err != nil {
 		r.Println(err)
 		return
 	}
+	profFile, _ := os.Create("amass_mem.prof")
+	defer profFile.Close()
+	runtime.GC()
+	pprof.WriteHeapProfile(profFile)
 	// Wait for output manager to finish
 	<-done
 }

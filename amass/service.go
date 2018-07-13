@@ -25,6 +25,9 @@ type AmassService interface {
 	Start() error
 	OnStart() error
 
+	// OPSEC for the service
+	List() string
+
 	// Stop the service
 	Stop() error
 	OnStop() error
@@ -77,6 +80,10 @@ func (bas *BaseAmassService) Start() error {
 
 func (bas *BaseAmassService) OnStart() error {
 	return nil
+}
+
+func (bas *BaseAmassService) List() string {
+	return "N/A"
 }
 
 func (bas *BaseAmassService) Stop() error {
