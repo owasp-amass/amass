@@ -4,16 +4,19 @@
 package amass
 
 import (
-	//"fmt"
 	"net"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/OWASP/Amass/amass/internal/utils"
 	evbus "github.com/asaskevich/EventBus"
-	"github.com/caffix/amass/amass/internal/utils"
 	"github.com/miekg/dns"
+)
+
+var (
+	WebRegex *regexp.Regexp = regexp.MustCompile("web|www")
 )
 
 type DataManagerService struct {
@@ -79,7 +82,7 @@ loop:
 }
 
 func (dms *DataManagerService) processOutput() {
-	t := time.NewTicker(3 * time.Second)
+	t := time.NewTicker(2 * time.Second)
 	defer t.Stop()
 loop:
 	for {
@@ -331,9 +334,12 @@ func (dms *DataManagerService) insertTXT(req *AmassRequest, recidx int) {
 		return
 	}
 
-	re := utils.SubdomainRegex(req.Domain)
-	txt := req.Records[recidx].Data
+	re := dms.Config().DomainRegex(req.Domain)
+	if re == nil {
+		return
+	}
 
+	txt := req.Records[recidx].Data
 	for _, name := range re.FindAllString(txt, -1) {
 		dms.bus.Publish(DNSQUERY, &AmassRequest{
 			Name:   name,
@@ -342,8 +348,6 @@ func (dms *DataManagerService) insertTXT(req *AmassRequest, recidx int) {
 			Source: "Forward DNS",
 		})
 	}
-
-	//fmt.Printf("%s resolved TXT record: %s\n", req.Name, txt)
 }
 
 func (dms *DataManagerService) insertInfrastructure(addr string) {
@@ -460,8 +464,7 @@ func (dms *DataManagerService) buildSubdomainOutput(sub *Node) *AmassOutput {
 	if sub.Labels[0] != "NS" && sub.Labels[0] != "MX" {
 		labels := strings.Split(output.Name, ".")
 
-		re := regexp.MustCompile("web|www")
-		if re.FindString(labels[0]) != "" {
+		if WebRegex.FindString(labels[0]) != "" {
 			t = TypeWeb
 		}
 	} else {

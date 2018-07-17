@@ -5,7 +5,7 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/caffix/amass/amass"
+	"github.com/OWASP/Amass/amass"
 )
 
 func main() {
@@ -22,7 +22,7 @@ func main() {
 
 	// Setup the most basic amass configuration
 	config := amass.CustomConfig(&amass.AmassConfig{Output: output})
-	config.AddDomains([]string{"freelancer.com"})
+	config.AddDomain("example.com")
 
 	// Begin the enumeration process
 	amass.StartEnumeration(config)

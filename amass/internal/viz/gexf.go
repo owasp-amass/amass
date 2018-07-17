@@ -120,7 +120,7 @@ func WriteGEXFData(nodes []Node, edges []Edge, output io.Writer) {
 		Viz:     XMLNSVIZ,
 		Meta: gexfMeta{
 			LastModified: time.Now().UTC().Format("2006-01-02"),
-			Creator:      "Amass - https://github.com/caffix/amass",
+			Creator:      "Amass - https://github.com/OWASP/Amass",
 			Desc:         "Internet Satellite Imagery",
 		},
 		Graph: gexfGraph{

@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/caffix/amass/amass/internal/dns"
+	"github.com/OWASP/Amass/amass/internal/dns"
 )
 
 // AmassRequest - Contains data obtained throughout AmassService processing
@@ -24,6 +24,9 @@ type AmassService interface {
 	// Start the service
 	Start() error
 	OnStart() error
+
+	// OPSEC for the service
+	List() string
 
 	// Stop the service
 	Stop() error
@@ -79,6 +82,10 @@ func (bas *BaseAmassService) OnStart() error {
 	return nil
 }
 
+func (bas *BaseAmassService) List() string {
+	return "N/A"
+}
+
 func (bas *BaseAmassService) Stop() error {
 	if bas.IsStopped() {
 		return errors.New(bas.name + " service has already been stopped")
@@ -125,7 +132,7 @@ func (bas *BaseAmassService) IsActive() bool {
 	bas.Lock()
 	defer bas.Unlock()
 
-	if time.Now().Sub(bas.active) > 10*time.Second {
+	if time.Now().Sub(bas.active) > 5*time.Second {
 		return false
 	}
 	return true

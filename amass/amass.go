@@ -9,14 +9,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/OWASP/Amass/amass/internal/dns"
+	"github.com/OWASP/Amass/amass/internal/utils"
+	"github.com/OWASP/Amass/amass/internal/viz"
 	evbus "github.com/asaskevich/EventBus"
-	"github.com/caffix/amass/amass/internal/dns"
-	"github.com/caffix/amass/amass/internal/utils"
-	"github.com/caffix/amass/amass/internal/viz"
 )
 
 const (
-	Version string = "v2.3.3"
+	Version string = "v2.4.0"
 	Author  string = "Jeff Foley (@jeff_foley)"
 	// Tags used to mark the data source with the Subdomain struct
 	ALT     = "alt"
@@ -196,8 +196,8 @@ func ObtainAdditionalDomains(config *AmassConfig) {
 				continue
 			}
 
-			if len(more) > 0 {
-				config.AddDomains(more)
+			for _, domain := range more {
+				config.AddDomain(domain)
 			}
 		}
 	}
@@ -271,6 +271,8 @@ func executeActiveCert(addr string, config *AmassConfig, done chan struct{}) {
 		domains = utils.UniqueAppend(domains, r.Domain)
 	}
 
-	config.AddDomains(domains)
+	for _, domain := range domains {
+		config.AddDomain(domain)
+	}
 	done <- struct{}{}
 }

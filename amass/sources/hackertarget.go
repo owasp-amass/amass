@@ -6,7 +6,7 @@ package sources
 import (
 	"fmt"
 
-	"github.com/caffix/amass/amass/internal/utils"
+	"github.com/OWASP/Amass/amass/internal/utils"
 )
 
 type HackerTarget struct {
@@ -16,7 +16,7 @@ type HackerTarget struct {
 func NewHackerTarget() DataSource {
 	h := new(HackerTarget)
 
-	h.BaseDataSource = *NewBaseDataSource(SCRAPE, "HackerTargt")
+	h.BaseDataSource = *NewBaseDataSource(SCRAPE, "HackerTarget")
 	return h
 }
 

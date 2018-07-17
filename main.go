@@ -6,6 +6,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -14,14 +15,14 @@ import (
 	"os"
 	"os/signal"
 	"path"
+	//"runtime"
 	//"runtime/pprof"
-	"encoding/json"
 	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
-	"github.com/caffix/amass/amass"
+	"github.com/OWASP/Amass/amass"
 	"github.com/fatih/color"
 )
 
@@ -217,8 +218,8 @@ func main() {
 		Neo4jPath:       *neo4j,
 		Output:          results,
 	})
-	if len(domains) > 0 {
-		config.AddDomains(domains)
+	for _, domain := range domains {
+		config.AddDomain(domain)
 	}
 	// Setup the log file for saving error messages
 	if logfile != "" {
@@ -240,8 +241,7 @@ func main() {
 	}
 	// Can an enumeration be performed with the provided parameters?
 	if len(config.Domains()) == 0 {
-		r.Println("The parameters required for identifying a target were not provided")
-		r.Println("Use the -h switch for help information")
+		r.Println("No root domain names were provided or discovered")
 		return
 	}
 
@@ -257,14 +257,16 @@ func main() {
 		D3Out:         d3,
 		Done:          done,
 	})
-	//profFile, _ := os.Create("amass_debug.prof")
-	//pprof.StartCPUProfile(profFile)
-	//defer pprof.StopCPUProfile()
+
 	err := amass.StartEnumeration(config)
 	if err != nil {
 		r.Println(err)
 		return
 	}
+	//profFile, _ := os.Create("amass_mem.prof")
+	//defer profFile.Close()
+	//runtime.GC()
+	//pprof.WriteHeapProfile(profFile)
 	// Wait for output manager to finish
 	<-done
 }

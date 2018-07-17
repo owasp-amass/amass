@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/caffix/amass/amass/internal/viz"
+	"github.com/OWASP/Amass/amass/internal/viz"
 )
 
 type Edge struct {
