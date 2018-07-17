@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/OWASP/Amass/amass/sources"
 	evbus "github.com/asaskevich/EventBus"
-	"github.com/caffix/amass/amass/sources"
 )
 
 type entry struct {
@@ -42,7 +42,9 @@ func NewSourcesService(config *AmassConfig, bus evbus.Bus) *SourcesService {
 
 	for _, source := range sources.GetAllSources() {
 		if source.Type() == ARCHIVE {
-			ss.throttles = append(ss.throttles, source)
+			if config.UseWebArchives {
+				ss.throttles = append(ss.throttles, source)
+			}
 		} else {
 			ss.directs = append(ss.directs, source)
 		}

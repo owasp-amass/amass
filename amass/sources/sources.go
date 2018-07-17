@@ -12,9 +12,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/OWASP/Amass/amass/internal/utils"
 	"github.com/PuerkitoBio/fetchbot"
 	"github.com/PuerkitoBio/goquery"
-	"github.com/caffix/amass/amass/internal/utils"
 )
 
 const (
@@ -118,7 +118,7 @@ func (bds *BaseDataSource) crawl(base, domain, sub string) ([]string, error) {
 			}
 			filter[u] = struct{}{}
 
-			go bds.linksAndNames(domain, ctx, res, links, names)
+			bds.linksAndNames(domain, ctx, res, links, names)
 		}))
 
 	f := fetchbot.New(fetchbot.HandlerFunc(func(ctx *fetchbot.Context, res *http.Response, err error) {
@@ -214,6 +214,7 @@ func GetAllSources() []DataSource {
 		NewCensys(),
 		NewCertDB(),
 		NewCertSpotter(),
+		NewCommonCrawl(),
 		NewCrtsh(),
 		NewDNSDB(),
 		NewDNSDumpster(),

@@ -6,7 +6,7 @@ package sources
 import (
 	"fmt"
 
-	"github.com/caffix/amass/amass/internal/utils"
+	"github.com/OWASP/Amass/amass/internal/utils"
 )
 
 type FindSubdomains struct {
@@ -16,7 +16,7 @@ type FindSubdomains struct {
 func NewFindSubdomains() DataSource {
 	f := new(FindSubdomains)
 
-	f.BaseDataSource = *NewBaseDataSource(SCRAPE, "FindSubDmns")
+	f.BaseDataSource = *NewBaseDataSource(SCRAPE, "FindSubDomains")
 	return f
 }
 

@@ -10,16 +10,17 @@ import (
 	"io/ioutil"
 	"log"
 	"net"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/caffix/amass/amass/internal/dns"
-	"github.com/caffix/amass/amass/internal/utils"
+	"github.com/OWASP/Amass/amass/internal/dns"
+	"github.com/OWASP/Amass/amass/internal/utils"
 )
 
 const (
-	defaultWordlistURL = "https://raw.githubusercontent.com/caffix/amass/master/wordlists/namelist.txt"
+	defaultWordlistURL = "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/namelist.txt"
 )
 
 // AmassConfig - Passes along optional configurations
@@ -70,6 +71,9 @@ type AmassConfig struct {
 	// Determines if active information gathering techniques will be used
 	Active bool
 
+	// Use web archive data sources, which causes the enumeration to take longer
+	UseWebArchives bool
+
 	// A blacklist of subdomain names that will not be investigated
 	Blacklist []string
 
@@ -84,13 +88,30 @@ type AmassConfig struct {
 
 	// The root domain names that the enumeration will target
 	domains []string
+
+	// The regular expressions for the root domains added to the enumeration
+	regexps map[string]*regexp.Regexp
 }
 
-func (c *AmassConfig) AddDomains(names []string) {
+func (c *AmassConfig) AddDomain(domain string) {
 	c.Lock()
 	defer c.Unlock()
 
-	c.domains = utils.UniqueAppend(c.domains, names...)
+	c.domains = utils.UniqueAppend(c.domains, domain)
+
+	if _, found := c.regexps[domain]; !found {
+		c.regexps[domain] = utils.SubdomainRegex(domain)
+	}
+}
+
+func (c *AmassConfig) DomainRegex(domain string) *regexp.Regexp {
+	c.Lock()
+	defer c.Unlock()
+
+	if re, found := c.regexps[domain]; found {
+		return re
+	}
+	return nil
 }
 
 func (c *AmassConfig) Domains() []string {
@@ -160,6 +181,7 @@ func DefaultConfig() *AmassConfig {
 		Alterations:     true,
 		Frequency:       10 * time.Millisecond,
 		MinForRecursive: 1,
+		regexps:         make(map[string]*regexp.Regexp),
 	}
 	return config
 }
@@ -169,8 +191,8 @@ func CustomConfig(ac *AmassConfig) *AmassConfig {
 	var err error
 	config := DefaultConfig()
 
-	if len(ac.Domains()) > 0 {
-		config.AddDomains(ac.Domains())
+	for _, domain := range ac.Domains() {
+		config.AddDomain(domain)
 	}
 	if len(config.Resolvers) > 0 {
 		dns.SetCustomResolvers(config.Resolvers)

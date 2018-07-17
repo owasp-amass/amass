@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/caffix/amass/amass/internal/dns"
+	"github.com/OWASP/Amass/amass/internal/dns"
 )
 
 // AmassRequest - Contains data obtained throughout AmassService processing
@@ -132,7 +132,7 @@ func (bas *BaseAmassService) IsActive() bool {
 	bas.Lock()
 	defer bas.Unlock()
 
-	if time.Now().Sub(bas.active) > 10*time.Second {
+	if time.Now().Sub(bas.active) > 5*time.Second {
 		return false
 	}
 	return true

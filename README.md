@@ -1,10 +1,10 @@
-# [![OWASP Logo](https://github.com/caffix/amass/blob/master/images/owasp_logo.png) OWASP Amass](https://www.owasp.org/)
+# [![OWASP Logo](https://github.com/OWASP/Amass/blob/master/images/owasp_logo.png) OWASP Amass](https://www.owasp.org/index.php/OWASP_Amass_Project)
 
-[![GitHub issues](https://img.shields.io/github/issues/caffix/amass.svg)](https://github.com/caffix/amass/issues) 
-[![GitHub release](https://img.shields.io/github/release/caffix/amass.svg)](https://github.com/caffix/amass/releases) 
+[![GitHub issues](https://img.shields.io/github/issues/OWASP/Amass.svg)](https://github.com/OWASP/Amass/issues) 
+[![GitHub release](https://img.shields.io/github/release/OWASP/Amass.svg)](https://github.com/OWASP/Amass/releases) 
 [![Go Version](https://img.shields.io/badge/go-1.10-blue.svg)](https://golang.org/dl/) 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0) 
-[![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg)](https://github.com/caffix/amass/blob/master/CONTRIBUTING.md)
+[![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg)](https://github.com/OWASP/Amass/blob/master/CONTRIBUTING.md)
 [![Chat on Discord](https://img.shields.io/discord/433729817918308352.svg?logo=discord)](https://discord.gg/rtN8GMd) 
 [![Follow on Twitter](https://img.shields.io/twitter/follow/jeff_foley.svg?style=social&logo=twitter)](https://twitter.com/jeff_foley)
 
@@ -33,13 +33,13 @@ The OWASP Amass tool obtains subdomain names by scraping data sources, recursive
 
 ----
 
-![Image of a network graph](https://github.com/caffix/amass/blob/master/images/network_06092018.png "Internet Satellite Imagery")
+![Image of a network graph](https://github.com/OWASP/Amass/blob/master/images/network_06092018.png "Internet Satellite Imagery")
 
 ## How to Install
 
 #### Prebuilt
 
-A [precompiled version is available](https://github.com/caffix/amass/releases) for each release.
+A [precompiled version is available](https://github.com/OWASP/Amass/releases) for each release.
 
 If your operating environment supports [Snap](https://docs.snapcraft.io/core/install), you can [click here to install](https://snapcraft.io/amass), or perform the following from the command-line:
 ```
@@ -55,16 +55,16 @@ $ sudo snap install --edge amass
 
 If you would prefer to build your own binary from the latest version of the source code, make sure you have a correctly configured **Go >= 1.10** environment. More information about how to achieve this can be found [on the golang website.](https://golang.org/doc/install) Then, take the following steps:
 
-1. Download [amass](https://github.com/caffix/amass):
+1. Download [amass](https://github.com/OWASP/Amass/releases):
 ```
-$ go get -u github.com/caffix/amass
+$ go get -u github.com/OWASP/Amass
 ```
 
 At this point, the amass binary should be in *$GOPATH/bin*.
 
 2. Several wordlists can be found in the following directory:
 ```
-$ ls $GOPATH/src/github.com/caffix/amass/wordlists/
+$ ls $GOPATH/src/github.com/OWASP/Amass/wordlists/
 ```
 
 ## Using the Tool
@@ -172,7 +172,7 @@ import(
     "math/rand"
     "time"
 
-    "github.com/caffix/amass/amass"
+    "github.com/OWASP/Amass/amass"
 )
 
 func main() {
@@ -200,15 +200,15 @@ func main() {
 
 1. Setup a new local transform within Maltego:
 
-![Maltego setup process](https://github.com/caffix/amass/blob/master/images/maltegosetup1.png "Setup")
+![Maltego setup process](https://github.com/OWASP/Amass/blob/master/images/maltegosetup1.png "Setup")
 
 2. Configure the local transform to properly execute the go program:
 
-![Maltego configuration](https://github.com/caffix/amass/blob/master/images/maltegosetup2.png "Configure")
+![Maltego configuration](https://github.com/OWASP/Amass/blob/master/images/maltegosetup2.png "Configure")
 
 3. Go into the Transform Manager, and disable the **debug info** option:
 
-![Disabling debug](https://github.com/caffix/amass/blob/master/images/maltegosetup3.png "Disable Debug")
+![Disabling debug](https://github.com/OWASP/Amass/blob/master/images/maltegosetup3.png "Disable Debug")
 
 ## Community
 

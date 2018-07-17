@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/caffix/amass/amass/internal/utils"
+	"github.com/OWASP/Amass/amass/internal/utils"
 )
 
 type DNSDB struct {

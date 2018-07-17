@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/OWASP/Amass/amass/internal/dns"
 	evbus "github.com/asaskevich/EventBus"
-	"github.com/caffix/amass/amass/internal/dns"
 )
 
 type DNSService struct {

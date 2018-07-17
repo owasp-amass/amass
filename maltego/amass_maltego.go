@@ -9,7 +9,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/caffix/amass/amass"
+	"github.com/OWASP/Amass/amass"
 	"github.com/sensepost/maltegolocal/maltegolocal"
 )
 
@@ -55,7 +55,7 @@ func main() {
 		Alterations:  true,
 		Output:       results,
 	})
-	config.AddDomains([]string{domain})
+	config.AddDomain(domain)
 	// Begin the enumeration process
 	amass.StartEnumeration(config)
 	time.Sleep(2 * time.Second)
