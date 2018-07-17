@@ -1,8 +1,5 @@
-<<<<<<< HEAD
-# [![OWASP Logo](https://github.com/OWASP/Amass/blob/master/images/owasp_logo.png) OWASP Amass](https://www.owasp.org/)
-=======
+
 # [![OWASP Logo](https://github.com/OWASP/Amass/blob/master/images/owasp_logo.png) OWASP Amass](https://www.owasp.org/index.php/OWASP_Amass_Project)
->>>>>>> 141e8fe68cf13a1ac2dd72b200039889cf8cf4a9
 
 [![GitHub issues](https://img.shields.io/github/issues/OWASP/Amass.svg)](https://github.com/OWASP/Amass/issues) 
 [![GitHub release](https://img.shields.io/github/release/OWASP/Amass.svg)](https://github.com/OWASP/Amass/releases) 
@@ -59,11 +56,7 @@ $ sudo snap install --edge amass
 
 If you would prefer to build your own binary from the latest version of the source code, make sure you have a correctly configured **Go >= 1.10** environment. More information about how to achieve this can be found [on the golang website.](https://golang.org/doc/install) Then, take the following steps:
 
-<<<<<<< HEAD
-1. Download [amass](https://github.com/OWASP/Amass):
-=======
 1. Download [amass](https://github.com/OWASP/Amass/releases):
->>>>>>> 141e8fe68cf13a1ac2dd72b200039889cf8cf4a9
 ```
 $ go get -u github.com/OWASP/Amass
 ```
