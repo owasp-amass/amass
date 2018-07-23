@@ -190,9 +190,8 @@ func main() {
 
     // Setup the most basic amass configuration
     config := amass.CustomConfig(&amass.AmassConfig{Output: output})
-    config.AddDomains([]string{"example.com"})
+    config.AddDomain("example.com")
 
-    // Begin the enumeration process
     amass.StartEnumeration(config)
 }
 ```
@@ -217,6 +216,7 @@ func main() {
 
 ## Mentions
 
+ - [Doing Recon the Correct Way](https://enciphers.com/doing-recon-the-correct-way/)
  - [Discovering subdomains](https://www.sjoerdlangkemper.nl/2018/06/20/discovering-subdomains/)
  - [Best Hacking Tools List for Hackers & Security Professionals 2018](http://kalilinuxtutorials.com/best-hacking-tools-list/amp/)
  - [Amass - Subdomain Enumeration Tool](https://hydrasky.com/network-security/kali-tools/amass-subdomain-enumeration-tool/)

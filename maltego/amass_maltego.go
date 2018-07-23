@@ -9,8 +9,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/NoobieDog/maltegolocal"
 	"github.com/OWASP/Amass/amass"
-	"github.com/sensepost/maltegolocal/maltegolocal"
 )
 
 func main() {
