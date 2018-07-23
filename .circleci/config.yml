@@ -32,8 +32,8 @@ jobs:
       - checkout
 
       - run:
-        name: "Build Snap"
-        command: snapcraft
+          name: "Build Snap"
+          command: snapcraft
       - persist_to_workspace:
           root: .
           paths:
