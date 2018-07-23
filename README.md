@@ -1,8 +1,9 @@
 
 # [![OWASP Logo](https://github.com/OWASP/Amass/blob/master/images/owasp_logo.png) OWASP Amass](https://www.owasp.org/index.php/OWASP_Amass_Project)
 
-[![GitHub issues](https://img.shields.io/github/issues/OWASP/Amass.svg)](https://github.com/OWASP/Amass/issues) 
-[![GitHub release](https://img.shields.io/github/release/OWASP/Amass.svg)](https://github.com/OWASP/Amass/releases) 
+[![GitHub Issues](https://img.shields.io/github/issues/OWASP/Amass.svg)](https://github.com/OWASP/Amass/issues) 
+[![CircleCI Status](https://circleci.com/gh/OWASP/Amass/tree/master.svg?style=shield)](https://circleci.com/gh/OWASP/Amass/tree/master)
+[![GitHub Release](https://img.shields.io/github/release/OWASP/Amass.svg)](https://github.com/OWASP/Amass/releases) 
 [![Go Version](https://img.shields.io/badge/go-1.10-blue.svg)](https://golang.org/dl/) 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0) 
 [![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg)](https://github.com/OWASP/Amass/blob/master/CONTRIBUTING.md)
