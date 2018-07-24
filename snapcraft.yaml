@@ -33,6 +33,7 @@ parts:
     plugin: go
     go-importpath: github.com/OWASP/Amass
     override-build: |
+      go get -u github.com/OWASP/Amass
       go build -o $GOPATH/bin/amass main.go
       mkdir $SNAPCRAFT_PART_INSTALL/bin
       mv $GOPATH/bin/amass $SNAPCRAFT_PART_INSTALL/bin/amass
@@ -45,6 +46,7 @@ parts:
     go-importpath: github.com/OWASP/Amass
     override-build: |
       export GOBIN=$GOPATH/bin
+      go get -u github.com/OWASP/Amass
       go install maltego/amass_maltego.go
       mkdir $SNAPCRAFT_PART_INSTALL/bin
       mv $GOBIN/amass_maltego $SNAPCRAFT_PART_INSTALL/bin/maltego
