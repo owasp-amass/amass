@@ -28,15 +28,14 @@ jobs:
   build:
     docker:
       - image: snapcore/snapcraft:stable
+
+    working_directory: /go/src/github.com/OWASP/Amass
     steps:
       - checkout
-      
+
       - run:
           name: "Build Snap"
-          command: |
-            go get -d github.com/OWASP/Amass
-            cd $GOPATH/src/github.com/OWASP/Amass
-            snapcraft
+          command: snapcraft
       - persist_to_workspace:
           root: .
           paths:
