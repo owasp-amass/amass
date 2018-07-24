@@ -27,7 +27,7 @@ jobs:
 
   build:
     docker:
-      - image: cibuilds/snapcraft:stable
+      - image: snapcore/snapcraft:stable
     steps:
       - checkout
 
@@ -41,7 +41,7 @@ jobs:
 
   publish:
     docker:
-      - image: cibuilds/snapcraft:stable
+      - image: snapcore/snapcraft:stable
     steps:
       - attach_workspace:
           at: .
