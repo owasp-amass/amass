@@ -28,13 +28,10 @@ parts:
 
   amass:
     after: [go]
-    source: .
+    source: https://github.com/OWASP/Amass
+    source-type: git
     plugin: go
     go-importpath: github.com/OWASP/Amass
-    build-packages:
-      - git
-    stage-packages:
-      - git
     override-build: |
       echo "\nStarting override-build for amass part:"
       export GOPATH=$(dirname $SNAPCRAFT_PART_INSTALL)/go
@@ -47,13 +44,10 @@ parts:
   
   maltego:
     after: [amass]
-    source: .
+    source: https://github.com/OWASP/Amass
+    source-type: git
     plugin: go
     go-importpath: github.com/OWASP/Amass
-    build-packages:
-      - git
-    stage-packages:
-      - git
     override-build: |
       echo "\nStarting override-build for maltego part:"
       cd $GOPATH/src/github.com/OWASP/Amass/maltego
