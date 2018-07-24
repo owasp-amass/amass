@@ -50,8 +50,10 @@ parts:
     go-importpath: github.com/OWASP/Amass
     override-build: |
       echo "\nStarting override-build for maltego part:"
-      cd $GOPATH/src/github.com/OWASP/Amass/maltego
-      go build -o $GOPATH/bin/maltego amass_maltego.go
+      export GOPATH=$(dirname $SNAPCRAFT_PART_INSTALL)/go
+      cd $GOPATH/src/github.com/OWASP/Amass
+      go get -u ./...
+      go build -o $GOPATH/bin/maltego maltego/amass_maltego.go
       mkdir $SNAPCRAFT_PART_INSTALL/bin
       mv $GOPATH/bin/maltego $SNAPCRAFT_PART_INSTALL/bin/maltego
       strip --remove-section=.comment --remove-section=.note $SNAPCRAFT_PART_INSTALL/bin/maltego
