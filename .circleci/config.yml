@@ -15,6 +15,8 @@ jobs:
 
     working_directory: /go/src/github.com/OWASP/Amass
     steps:
+      - checkout
+
       # specify any bash command here prefixed with `run: `
       - run:
           name: "Test Amass"
@@ -27,6 +29,8 @@ jobs:
     docker:
       - image: snapcore/snapcraft:stable
     steps:
+      - checkout
+      
       - run:
           name: "Build Snap"
           command: |
