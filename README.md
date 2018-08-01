@@ -10,25 +10,6 @@
 [![Chat on Discord](https://img.shields.io/discord/433729817918308352.svg?logo=discord)](https://discord.gg/rtN8GMd) 
 [![Follow on Twitter](https://img.shields.io/twitter/follow/jeff_foley.svg?logo=twitter)](https://twitter.com/jeff_foley)
 
-
-```
-
-                  .+++:.            :                             .+++.                   
-                +W@@@@@@8        &+W@#               o8W8:      +W@@@@@@#.   oW@@@W#+     
-               &@#+   .o@##.    .@@@o@W.o@@o       :@@#&W8o    .@#:  .:oW+  .@#+++&#&     
-              +@&        &@&     #@8 +@W@&8@+     :@W.   +@8   +@:          .@8           
-              8@          @@     8@o  8@8  WW    .@W      W@+  .@W.          o@#:         
-              WW          &@o    &@:  o@+  o@+   #@.      8@o   +W@#+.        +W@8:       
-              #@          :@W    &@+  &@+   @8  :@o       o@o     oW@@W+        oW@8      
-              o@+          @@&   &@+  &@+   #@  &@.      .W@W       .+#@&         o@W.    
-               WW         +@W@8. &@+  :&    o@+ #@      :@W&@&         &@:  ..     :@o    
-               :@W:      o@# +Wo &@+        :W: +@W&o++o@W. &@&  8@#o+&@W.  #@:    o@+    
-                :W@@WWWW@@8       +              :&W@@@@&    &W  .o#@@W&.   :W@WWW@@&     
-                  +o&&&&+.                                                    +oooo.      
-
-
-```
-
 ----
 
 The OWASP Amass tool obtains subdomain names by scraping data sources, recursive brute forcing, crawling web archives, permuting/altering names and reverse DNS sweeping. Additionally, Amass uses the IP addresses obtained during resolution to discover associated netblocks and ASNs. All the information is then used to build maps of the target networks.
@@ -76,7 +57,7 @@ The most basic use of the tool, which includes reverse DNS lookups and name alte
 $ amass -d example.com
 ```
 
-If you need amass to only use the passive data sources and not resolve the names:
+**If you need Amass to run faster** and only use the passive data sources:
 ```
 $ amass -nodns -d example.com
 ```
@@ -217,6 +198,7 @@ func main() {
 
 ## Mentions
 
+ - [Paul's Security Weekly #564: Technical Segment - Bug Bounty Hunting](https://wiki.securityweekly.com/Episode564)
  - [Doing Recon the Correct Way](https://enciphers.com/doing-recon-the-correct-way/)
  - [Discovering subdomains](https://www.sjoerdlangkemper.nl/2018/06/20/discovering-subdomains/)
  - [Best Hacking Tools List for Hackers & Security Professionals 2018](http://kalilinuxtutorials.com/best-hacking-tools-list/amp/)
@@ -225,4 +207,3 @@ func main() {
  - [Asset Discovery: Doing Reconnaissance the Hard Way](https://0xpatrik.com/asset-discovery/)
  - [Go is for everyone](https://changelog.com/gotime/71)
  - [Top Five Ways the Red Team breached the External Perimeter](https://medium.com/@adam.toscher/top-five-ways-the-red-team-breached-the-external-perimeter-262f99dc9d17)
-

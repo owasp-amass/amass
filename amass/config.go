@@ -15,8 +15,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/OWASP/Amass/amass/internal/dns"
-	"github.com/OWASP/Amass/amass/internal/utils"
+	"github.com/OWASP/Amass/amass/utils"
+	"github.com/OWASP/Amass/amass/utils/dns"
 )
 
 const (
@@ -179,7 +179,7 @@ func DefaultConfig() *AmassConfig {
 		Ports:           []int{80, 443},
 		Recursive:       true,
 		Alterations:     true,
-		Frequency:       10 * time.Millisecond,
+		Frequency:       1 * time.Millisecond,
 		MinForRecursive: 1,
 		regexps:         make(map[string]*regexp.Regexp),
 	}

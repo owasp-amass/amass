@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/OWASP/Amass/amass/internal/utils"
+	"github.com/OWASP/Amass/amass/utils"
 )
 
 type Bing struct {

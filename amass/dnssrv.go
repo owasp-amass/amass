@@ -4,11 +4,16 @@
 package amass
 
 import (
+	"context"
+	"fmt"
 	"strings"
+	"syscall"
 	"time"
 
-	"github.com/OWASP/Amass/amass/internal/dns"
+	udns "github.com/OWASP/Amass/amass/utils/dns"
 	evbus "github.com/asaskevich/EventBus"
+	"github.com/miekg/dns"
+	"golang.org/x/sync/semaphore"
 )
 
 type DNSService struct {
@@ -17,17 +22,40 @@ type DNSService struct {
 	bus evbus.Bus
 
 	// Ensures we do not resolve names more than once
-	inFilter map[string]struct{}
+	filter map[string]struct{}
 
 	// Data collected about various subdomains
 	subdomains map[string]map[int][]string
+
+	// Enforces a maximum number of DNS queries sent at any given moment
+	sem *semaphore.Weighted
 }
 
 func NewDNSService(config *AmassConfig, bus evbus.Bus) *DNSService {
+	var lim syscall.Rlimit
+
+	err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &lim)
+	if err != nil {
+		config.Log.Printf("Error obtaining the rlimit: %v", err)
+
+		lim.Cur = lim.Max
+		if err = syscall.Setrlimit(syscall.RLIMIT_NOFILE, &lim); err != nil {
+			config.Log.Printf("Error setting the rlimit: %v", err)
+		}
+	}
+
+	syscall.Getrlimit(syscall.RLIMIT_NOFILE, &lim)
+
+	weight := (int64(lim.Cur) / 10) * 9
+	if weight <= 0 || weight > 10000 {
+		weight = 10000
+	}
+
 	ds := &DNSService{
 		bus:        bus,
-		inFilter:   make(map[string]struct{}),
+		filter:     make(map[string]struct{}),
 		subdomains: make(map[string]map[int][]string),
+		sem:        semaphore.NewWeighted(weight),
 	}
 
 	ds.BaseAmassService = *NewBaseAmassService("DNS Service", config, ds)
@@ -56,7 +84,7 @@ loop:
 	for {
 		select {
 		case <-t.C:
-			go ds.performDNSRequest()
+			ds.performRequest()
 		case <-ds.Quit():
 			break loop
 		}
@@ -67,17 +95,14 @@ func (ds *DNSService) duplicate(name string) bool {
 	ds.Lock()
 	defer ds.Unlock()
 
-	if _, found := ds.inFilter[name]; found {
+	if _, found := ds.filter[name]; found {
 		return true
 	}
-	ds.inFilter[name] = struct{}{}
+	ds.filter[name] = struct{}{}
 	return false
 }
 
-func (ds *DNSService) performDNSRequest() {
-	var err error
-	var answers []dns.DNSAnswer
-
+func (ds *DNSService) performRequest() {
 	req := ds.NextRequest()
 	// Plow through the requests that are not of interest
 	for req != nil && (req.Name == "" || req.Domain == "" ||
@@ -87,23 +112,95 @@ func (ds *DNSService) performDNSRequest() {
 	if req == nil {
 		return
 	}
-	ds.SetActive()
 
-	answers, err = dns.ObtainAllRecords(req.Name)
-	if err != nil {
-		ds.Config().Log.Printf("DNS resolution error: %s: %v", req.Name, err)
+	ds.sem.Acquire(context.Background(), 6)
+	ds.SetActive()
+	go ds.completeQueries(req)
+}
+
+var InitialQueryTypes = []uint16{
+	dns.TypeTXT,
+	dns.TypeA,
+	dns.TypeAAAA,
+	dns.TypeCNAME,
+	dns.TypePTR,
+	dns.TypeSRV,
+}
+
+func (ds *DNSService) completeQueries(req *AmassRequest) {
+	defer ds.sem.Release(6)
+
+	var answers []udns.DNSAnswer
+
+	for _, t := range InitialQueryTypes {
+		tries := 3
+		if t == dns.TypeTXT {
+			tries = 10
+		}
+
+		for i := 0; i < tries; i++ {
+			a, err, again := ds.executeQuery(req.Name, t)
+			if err == nil {
+				answers = append(answers, a...)
+				break
+			}
+			ds.Config().Log.Print(err)
+			if !again {
+				break
+			}
+		}
+	}
+
+	req.Records = answers
+	if len(req.Records) == 0 {
 		return
 	}
-	req.Records = answers
 
 	if req.Tag != SCRAPE && req.Tag != CERT &&
-		dns.DetectWildcard(req.Domain, req.Name, req.Records) {
+		udns.DetectWildcard(req.Domain, req.Name, req.Records) {
 		return
 	}
 	// Make sure we know about any new subdomains
 	ds.checkForNewSubdomain(req)
-	// The subdomain manager is now done with it
 	ds.bus.Publish(RESOLVED, req)
+}
+
+func (ds *DNSService) executeQuery(name string, qtype uint16) ([]udns.DNSAnswer, error, bool) {
+	var answers []udns.DNSAnswer
+
+	conn, err := udns.DNSDialContext(context.Background(), "udp", "")
+	if err != nil {
+		return nil, fmt.Errorf("DNS error: Failed to create UDP connection to resolver: %v", err), false
+	}
+	defer conn.Close()
+
+	co := &dns.Conn{Conn: conn}
+	msg := udns.QueryMessage(name, qtype)
+
+	co.SetWriteDeadline(time.Now().Add(1 * time.Second))
+	if err = co.WriteMsg(msg); err != nil {
+		return nil, fmt.Errorf("DNS error: Failed to write query msg: %v", err), false
+	}
+
+	co.SetReadDeadline(time.Now().Add(1 * time.Second))
+	r, err := co.ReadMsg()
+	if err != nil {
+		return nil, fmt.Errorf("DNS error: Failed to read query response: %v", err), true
+	}
+	// Check that the query was successful
+	if r != nil && r.Rcode != dns.RcodeSuccess {
+		return nil, fmt.Errorf("DNS error: Resolver returned an error %v", r), false
+	}
+
+	for _, a := range udns.ExtractRawData(r, qtype) {
+		answers = append(answers, udns.DNSAnswer{
+			Name: name,
+			Type: int(qtype),
+			TTL:  0,
+			Data: strings.TrimSpace(a),
+		})
+	}
+	return answers, nil, false
 }
 
 func (ds *DNSService) checkForNewSubdomain(req *AmassRequest) {
@@ -114,7 +211,7 @@ func (ds *DNSService) checkForNewSubdomain(req *AmassRequest) {
 		return
 	}
 	// Do not further evaluate service subdomains
-	if labels[1] == "_tcp" || labels[1] == "_udp" {
+	if labels[1] == "_tcp" || labels[1] == "_udp" || labels[1] == "_tls" {
 		return
 	}
 	sub := strings.Join(labels[1:], ".")
@@ -131,7 +228,7 @@ func (ds *DNSService) checkForNewSubdomain(req *AmassRequest) {
 		return
 	}
 	// Does this subdomain have a wildcard?
-	if dns.DetectWildcard(req.Domain, req.Name, req.Records) {
+	if udns.DetectWildcard(req.Domain, req.Name, req.Records) {
 		return
 	}
 	// Otherwise, run the basic queries against this name
@@ -151,10 +248,10 @@ func (ds *DNSService) dupSubdomain(sub string) bool {
 }
 
 func (ds *DNSService) basicQueries(subdomain, domain string) {
-	var answers []dns.DNSAnswer
+	var answers []udns.DNSAnswer
 
 	// Obtain the DNS answers for the NS records related to the domain
-	if ans, err := dns.Resolve(subdomain, "NS"); err == nil {
+	if ans, err := udns.Resolve(subdomain, "NS"); err == nil {
 		for _, a := range ans {
 			if ds.Config().Active {
 				go ds.attemptZoneXFR(domain, subdomain, a.Data)
@@ -165,7 +262,7 @@ func (ds *DNSService) basicQueries(subdomain, domain string) {
 		ds.Config().Log.Printf("DNS NS record query error: %s: %v", subdomain, err)
 	}
 	// Obtain the DNS answers for the MX records related to the domain
-	if ans, err := dns.Resolve(subdomain, "MX"); err == nil {
+	if ans, err := udns.Resolve(subdomain, "MX"); err == nil {
 		for _, a := range ans {
 			answers = append(answers, a)
 		}
@@ -173,7 +270,7 @@ func (ds *DNSService) basicQueries(subdomain, domain string) {
 		ds.Config().Log.Printf("DNS MX record query error: %s: %v", subdomain, err)
 	}
 	// Obtain the DNS answers for the SOA records related to the domain
-	if ans, err := dns.Resolve(subdomain, "SOA"); err == nil {
+	if ans, err := udns.Resolve(subdomain, "SOA"); err == nil {
 		answers = append(answers, ans...)
 	} else {
 		ds.Config().Log.Printf("DNS SOA record query error: %s: %v", subdomain, err)
@@ -189,7 +286,7 @@ func (ds *DNSService) basicQueries(subdomain, domain string) {
 }
 
 func (ds *DNSService) attemptZoneXFR(domain, sub, server string) {
-	if names, err := dns.ZoneTransfer(domain, sub, server); err == nil {
+	if names, err := udns.ZoneTransfer(domain, sub, server); err == nil {
 		for _, name := range names {
 			ds.SendRequest(&AmassRequest{
 				Name:   name,
@@ -204,13 +301,13 @@ func (ds *DNSService) attemptZoneXFR(domain, sub, server string) {
 }
 
 func (ds *DNSService) queryServiceNames(subdomain, domain string) {
-	var answers []dns.DNSAnswer
+	var answers []udns.DNSAnswer
 
 	// Check all the popular SRV records
 	for _, name := range popularSRVRecords {
 		srvName := name + "." + subdomain
 
-		if ans, err := dns.Resolve(srvName, "SRV"); err == nil {
+		if ans, err := udns.Resolve(srvName, "SRV"); err == nil {
 			answers = append(answers, ans...)
 		} else {
 			ds.Config().Log.Printf("DNS SRV record query error: %s: %v", srvName, err)

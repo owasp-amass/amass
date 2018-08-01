@@ -379,7 +379,7 @@ func ResultToLine(result *amass.AmassOutput, params *outputParams) (string, stri
 	var source, comma, ips string
 
 	if params.Verbose {
-		source = fmt.Sprintf("%-14s", "["+result.Source+"] ")
+		source = fmt.Sprintf("%-18s", "["+result.Source+"] ")
 	}
 	if params.PrintIPs {
 		comma = ","

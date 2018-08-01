@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/OWASP/Amass/amass/internal/utils"
+	"github.com/OWASP/Amass/amass/utils"
 	"github.com/miekg/dns"
 )
 
@@ -40,48 +40,6 @@ func Resolve(name, qtype string) ([]DNSAnswer, error) {
 	return ans, nil
 }
 
-func ObtainAllRecords(name string) ([]DNSAnswer, error) {
-	var answers []DNSAnswer
-
-	if ans, err := Resolve(name, "TXT"); err == nil {
-		answers = append(answers, ans...)
-	}
-
-	var hasA bool
-	if ans, err := Resolve(name, "A"); err == nil {
-		hasA = true
-		answers = append(answers, ans...)
-	}
-
-	if ans, err := Resolve(name, "AAAA"); err == nil {
-		hasA = true
-		answers = append(answers, ans...)
-	}
-
-	if hasA {
-		return answers, nil
-	}
-
-	if ans, err := Resolve(name, "CNAME"); err == nil {
-		answers = append(answers, ans...)
-		return answers, nil
-	}
-
-	if ans, err := Resolve(name, "PTR"); err == nil {
-		answers = append(answers, ans...)
-		return answers, nil
-	}
-
-	if ans, err := Resolve(name, "SRV"); err == nil {
-		answers = append(answers, ans...)
-	}
-
-	if len(answers) == 0 {
-		return nil, fmt.Errorf("No DNS records were resolved for the name: %s", name)
-	}
-	return answers, nil
-}
-
 func Reverse(addr string) (string, error) {
 	var name, ptr string
 
@@ -109,6 +67,28 @@ func Reverse(addr string) (string, error) {
 	return name, err
 }
 
+func QueryMessage(name string, qtype uint16) *dns.Msg {
+	m := &dns.Msg{
+		MsgHdr: dns.MsgHdr{
+			Authoritative:     false,
+			AuthenticatedData: false,
+			CheckingDisabled:  false,
+			RecursionDesired:  true,
+			Opcode:            dns.OpcodeQuery,
+			Id:                dns.Id(),
+			Rcode:             dns.RcodeSuccess,
+		},
+		Question: make([]dns.Question, 1),
+	}
+	m.Question[0] = dns.Question{
+		Name:   dns.Fqdn(name),
+		Qtype:  qtype,
+		Qclass: uint16(dns.ClassINET),
+	}
+	m.Extra = append(m.Extra, setupOptions())
+	return m
+}
+
 // ExchangeConn - Encapsulates miekg/dns usage
 func ExchangeConn(conn net.Conn, name string, qtype uint16) ([]DNSAnswer, error) {
 	var err error
@@ -123,24 +103,7 @@ func ExchangeConn(conn net.Conn, name string, qtype uint16) ([]DNSAnswer, error)
 	}
 
 	for i := 0; i < tries; i++ {
-		m = &dns.Msg{
-			MsgHdr: dns.MsgHdr{
-				Authoritative:     false,
-				AuthenticatedData: false,
-				CheckingDisabled:  false,
-				RecursionDesired:  true,
-				Opcode:            dns.OpcodeQuery,
-				Id:                dns.Id(),
-				Rcode:             dns.RcodeSuccess,
-			},
-			Question: make([]dns.Question, 1),
-		}
-		m.Question[0] = dns.Question{
-			Name:   dns.Fqdn(name),
-			Qtype:  qtype,
-			Qclass: uint16(dns.ClassINET),
-		}
-		m.Extra = append(m.Extra, setupOptions())
+		m = QueryMessage(name, qtype)
 
 		// Perform the DNS query
 		co := &dns.Conn{Conn: conn}
@@ -163,7 +126,7 @@ func ExchangeConn(conn net.Conn, name string, qtype uint16) ([]DNSAnswer, error)
 	}
 
 	var answers []DNSAnswer
-	for _, a := range extractRawData(r, qtype) {
+	for _, a := range ExtractRawData(r, qtype) {
 		answers = append(answers, DNSAnswer{
 			Name: name,
 			Type: int(qtype),
@@ -293,7 +256,7 @@ func textToTypeNum(text string) (uint16, error) {
 	return qtype, nil
 }
 
-func extractRawData(msg *dns.Msg, qtype uint16) []string {
+func ExtractRawData(msg *dns.Msg, qtype uint16) []string {
 	var data []string
 
 	for _, a := range msg.Answer {

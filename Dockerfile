@@ -6,5 +6,5 @@ RUN apk --no-cache add git \
   && vgo install
   
 FROM alpine:latest
-COPY --from=build /go/bin/amass /bin/amass 
+COPY --from=build /go/bin/Amass /bin/amass 
 ENTRYPOINT ["/bin/amass"]

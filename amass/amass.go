@@ -9,14 +9,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/OWASP/Amass/amass/internal/dns"
-	"github.com/OWASP/Amass/amass/internal/utils"
-	"github.com/OWASP/Amass/amass/internal/viz"
+	"github.com/OWASP/Amass/amass/utils"
+	"github.com/OWASP/Amass/amass/utils/dns"
+	"github.com/OWASP/Amass/amass/utils/viz"
 	evbus "github.com/asaskevich/EventBus"
 )
 
 const (
-	Version string = "v2.4.1"
+	Version string = "v2.4.2"
 	Author  string = "Jeff Foley (@jeff_foley)"
 	// Tags used to mark the data source with the Subdomain struct
 	ALT     = "alt"

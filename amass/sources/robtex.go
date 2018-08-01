@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/OWASP/Amass/amass/internal/utils"
+	"github.com/OWASP/Amass/amass/utils"
 )
 
 type Robtex struct {

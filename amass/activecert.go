@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/OWASP/Amass/amass/internal/dns"
-	"github.com/OWASP/Amass/amass/internal/utils"
+	"github.com/OWASP/Amass/amass/utils"
+	"github.com/OWASP/Amass/amass/utils/dns"
 )
 
 const (

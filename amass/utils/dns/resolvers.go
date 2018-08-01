@@ -9,7 +9,7 @@ import (
 	"net"
 	"strings"
 
-	"github.com/OWASP/Amass/amass/internal/utils"
+	"github.com/OWASP/Amass/amass/utils"
 )
 
 var (
@@ -61,7 +61,6 @@ func NextResolverAddress() string {
 
 	rnd := rand.Int()
 	idx := rnd % len(resolvers)
-
 	return resolvers[idx]
 }
 
@@ -86,7 +85,6 @@ func DNSDialContext(ctx context.Context, network, address string) (net.Conn, err
 
 func DialContext(ctx context.Context, network, address string) (net.Conn, error) {
 	d := &net.Dialer{
-		// Override the Go default DNS resolver to prevent leakage
 		Resolver: &net.Resolver{
 			PreferGo: true,
 			Dial:     DNSDialContext,

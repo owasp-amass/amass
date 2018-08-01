@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/OWASP/Amass/amass/internal/dns"
+	"github.com/OWASP/Amass/amass/utils/dns"
 )
 
 // AmassRequest - Contains data obtained throughout AmassService processing
