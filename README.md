@@ -43,9 +43,19 @@ If you would prefer to build your own binary from the latest version of the sour
 $ go get -u github.com/OWASP/Amass
 ```
 
-At this point, the amass binary should be in *$GOPATH/bin*.
+2. Move to the downloaded Amass code:
+```
+$ cd $GOPATH/src/github.com/OWASP/Amass
+```
 
-2. Several wordlists can be found in the following directory:
+3. Build the command binaries from the downloaded source code:
+```
+$ go install ./...
+```
+
+At this point, the amass and maltego binary should be in *$GOPATH/bin*.
+
+4. Several wordlists can be found in the following directory:
 ```
 $ ls $GOPATH/src/github.com/OWASP/Amass/wordlists/
 ```

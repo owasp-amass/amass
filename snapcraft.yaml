@@ -1,5 +1,5 @@
 name: amass
-version: 'v2.4.1'
+version: 'v2.4.2'
 summary: In-Depth DNS Enumeration
 description: |
   The OWASP Amass tool obtains subdomain names by scraping data sources, 
@@ -37,7 +37,7 @@ parts:
       export GOPATH=$(dirname $SNAPCRAFT_PART_INSTALL)/go
       cd $GOPATH/src/github.com/OWASP/Amass
       go get -u ./...
-      go build -o $GOPATH/bin/amass main.go
+      go install ./...
       mkdir $SNAPCRAFT_PART_INSTALL/bin
       mv $GOPATH/bin/amass $SNAPCRAFT_PART_INSTALL/bin/amass
       strip --remove-section=.comment --remove-section=.note $SNAPCRAFT_PART_INSTALL/bin/amass
@@ -53,7 +53,7 @@ parts:
       export GOPATH=$(dirname $SNAPCRAFT_PART_INSTALL)/go
       cd $GOPATH/src/github.com/OWASP/Amass
       go get -u ./...
-      go build -o $GOPATH/bin/maltego maltego/amass_maltego.go
+      go install ./...
       mkdir $SNAPCRAFT_PART_INSTALL/bin
       mv $GOPATH/bin/maltego $SNAPCRAFT_PART_INSTALL/bin/maltego
       strip --remove-section=.comment --remove-section=.note $SNAPCRAFT_PART_INSTALL/bin/maltego
