@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"syscall"
 	"time"
 
 	udns "github.com/OWASP/Amass/amass/utils/dns"
@@ -32,22 +31,9 @@ type DNSService struct {
 }
 
 func NewDNSService(config *AmassConfig, bus evbus.Bus) *DNSService {
-	var lim syscall.Rlimit
-
-	err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &lim)
-	if err != nil {
-		config.Log.Printf("Error obtaining the rlimit: %v", err)
-
-		lim.Cur = lim.Max
-		if err = syscall.Setrlimit(syscall.RLIMIT_NOFILE, &lim); err != nil {
-			config.Log.Printf("Error setting the rlimit: %v", err)
-		}
-	}
-
-	syscall.Getrlimit(syscall.RLIMIT_NOFILE, &lim)
-
-	weight := (int64(lim.Cur) / 10) * 9
-	if weight <= 0 || weight > 10000 {
+	// Obtain the proper weight based on file resource limits
+	weight := (int64(GetFileLimit()) / 10) * 9
+	if weight <= 0 {
 		weight = 10000
 	}
 
