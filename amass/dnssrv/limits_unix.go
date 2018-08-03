@@ -3,7 +3,7 @@
 
 // +build darwin dragonfly freebsd linux netbsd openbsd
 
-package amass
+package dnssrv
 
 import (
 	"syscall"

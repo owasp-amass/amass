@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/sources"
 	evbus "github.com/asaskevich/EventBus"
 )
@@ -19,10 +20,10 @@ type entry struct {
 }
 
 type SourcesService struct {
-	BaseAmassService
+	core.BaseAmassService
 
 	bus           evbus.Bus
-	responses     chan *AmassRequest
+	responses     chan *core.AmassRequest
 	directs       []sources.DataSource
 	throttles     []sources.DataSource
 	throttleQueue []*entry
@@ -31,18 +32,18 @@ type SourcesService struct {
 	domainFilter  map[string]struct{}
 }
 
-func NewSourcesService(config *AmassConfig, bus evbus.Bus) *SourcesService {
+func NewSourcesService(config *core.AmassConfig, bus evbus.Bus) *SourcesService {
 	ss := &SourcesService{
 		bus:          bus,
-		responses:    make(chan *AmassRequest, 50),
+		responses:    make(chan *core.AmassRequest, 50),
 		inFilter:     make(map[string]struct{}),
 		outFilter:    make(map[string]struct{}),
 		domainFilter: make(map[string]struct{}),
 	}
 
 	for _, source := range sources.GetAllSources() {
-		if source.Type() == ARCHIVE {
-			if config.UseWebArchives {
+		if source.Type() == core.ARCHIVE {
+			if false {
 				ss.throttles = append(ss.throttles, source)
 			}
 		} else {
@@ -51,14 +52,14 @@ func NewSourcesService(config *AmassConfig, bus evbus.Bus) *SourcesService {
 		source.SetLogger(config.Log)
 	}
 
-	ss.BaseAmassService = *NewBaseAmassService("Sources Service", config, ss)
+	ss.BaseAmassService = *core.NewBaseAmassService("Sources Service", config, ss)
 	return ss
 }
 
 func (ss *SourcesService) OnStart() error {
 	ss.BaseAmassService.OnStart()
 
-	ss.bus.SubscribeAsync(RESOLVED, ss.SendRequest, false)
+	ss.bus.SubscribeAsync(core.RESOLVED, ss.SendRequest, false)
 	go ss.processRequests()
 	go ss.processOutput()
 	go ss.processThrottleQueue()
@@ -69,7 +70,7 @@ func (ss *SourcesService) OnStart() error {
 func (ss *SourcesService) OnStop() error {
 	ss.BaseAmassService.OnStop()
 
-	ss.bus.Unsubscribe(RESOLVED, ss.SendRequest)
+	ss.bus.Unsubscribe(core.RESOLVED, ss.SendRequest)
 	return nil
 }
 
@@ -89,7 +90,7 @@ func (ss *SourcesService) processRequests() {
 	}
 }
 
-func (ss *SourcesService) handleRequest(req *AmassRequest) {
+func (ss *SourcesService) handleRequest(req *core.AmassRequest) {
 	if ss.inDup(req.Name) || !ss.Config().IsDomainInScope(req.Name) {
 		return
 	}
@@ -132,7 +133,7 @@ func (ss *SourcesService) processOutput() {
 	}
 }
 
-func (ss *SourcesService) handleOutput(req *AmassRequest) {
+func (ss *SourcesService) handleOutput(req *core.AmassRequest) {
 	re := regexp.MustCompile("^((20)|(25)|(2f)|(3d)|(40))+")
 
 	// Clean up the names scraped from the web
@@ -147,14 +148,14 @@ func (ss *SourcesService) handleOutput(req *AmassRequest) {
 
 	ss.SetActive()
 	if ss.Config().NoDNS {
-		ss.bus.Publish(OUTPUT, &AmassOutput{
+		ss.bus.Publish(core.OUTPUT, &AmassOutput{
 			Name:   req.Name,
 			Domain: req.Domain,
 			Tag:    req.Tag,
 			Source: req.Source,
 		})
 	} else {
-		ss.bus.Publish(DNSQUERY, req)
+		ss.bus.Publish(core.DNSQUERY, req)
 	}
 	ss.SendRequest(req)
 }
@@ -189,7 +190,7 @@ func (ss *SourcesService) queryAllSources() {
 			continue
 		}
 
-		ss.SendRequest(&AmassRequest{
+		ss.SendRequest(&core.AmassRequest{
 			Name:   domain,
 			Domain: domain,
 		})
@@ -198,7 +199,7 @@ func (ss *SourcesService) queryAllSources() {
 
 func (ss *SourcesService) queryOneSource(source sources.DataSource, domain, sub string) {
 	for _, name := range source.Query(domain, sub) {
-		ss.responses <- &AmassRequest{
+		ss.responses <- &core.AmassRequest{
 			Name:   name,
 			Domain: domain,
 			Tag:    source.Type(),

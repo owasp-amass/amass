@@ -1,24 +1,13 @@
 // Copyright 2017 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
-package amass
+package core
 
 import (
 	"errors"
 	"sync"
 	"time"
-
-	"github.com/OWASP/Amass/amass/utils/dns"
 )
-
-// AmassRequest - Contains data obtained throughout AmassService processing
-type AmassRequest struct {
-	Name    string
-	Domain  string
-	Records []dns.DNSAnswer
-	Tag     string
-	Source  string
-}
 
 type AmassService interface {
 	// Start the service
@@ -97,6 +86,13 @@ func (bas *BaseAmassService) Stop() error {
 
 func (bas *BaseAmassService) OnStop() error {
 	return nil
+}
+
+func (bas *BaseAmassService) NumOfRequests() int {
+	bas.Lock()
+	defer bas.Unlock()
+
+	return len(bas.queue)
 }
 
 func (bas *BaseAmassService) NextRequest() *AmassRequest {

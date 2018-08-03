@@ -1,7 +1,7 @@
 // Copyright 2017 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
-package dns
+package dnssrv
 
 import (
 	"context"
@@ -10,18 +10,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
 	"github.com/miekg/dns"
 )
 
-type DNSAnswer struct {
-	Name string `json:"name"`
-	Type int    `json:"type"`
-	TTL  int    `json:"TTL"`
-	Data string `json:"data"`
-}
-
-func Resolve(name, qtype string) ([]DNSAnswer, error) {
+func Resolve(name, qtype string) ([]core.DNSAnswer, error) {
 	qt, err := textToTypeNum(qtype)
 	if err != nil {
 		return nil, err
@@ -90,7 +84,7 @@ func QueryMessage(name string, qtype uint16) *dns.Msg {
 }
 
 // ExchangeConn - Encapsulates miekg/dns usage
-func ExchangeConn(conn net.Conn, name string, qtype uint16) ([]DNSAnswer, error) {
+func ExchangeConn(conn net.Conn, name string, qtype uint16) ([]core.DNSAnswer, error) {
 	var err error
 	var m, r *dns.Msg
 
@@ -125,9 +119,9 @@ func ExchangeConn(conn net.Conn, name string, qtype uint16) ([]DNSAnswer, error)
 		return nil, fmt.Errorf("Resolver returned an error %v", r)
 	}
 
-	var answers []DNSAnswer
+	var answers []core.DNSAnswer
 	for _, a := range ExtractRawData(r, qtype) {
-		answers = append(answers, DNSAnswer{
+		answers = append(answers, core.DNSAnswer{
 			Name: name,
 			Type: int(qtype),
 			TTL:  0,
@@ -264,27 +258,27 @@ func ExtractRawData(msg *dns.Msg, qtype uint16) []string {
 			switch qtype {
 			case dns.TypeA:
 				if t, ok := a.(*dns.A); ok {
-					data = append(data, t.A.String())
+					data = append(data, utils.CopyString(t.A.String()))
 				}
 			case dns.TypeAAAA:
 				if t, ok := a.(*dns.AAAA); ok {
-					data = append(data, t.AAAA.String())
+					data = append(data, utils.CopyString(t.AAAA.String()))
 				}
 			case dns.TypeCNAME:
 				if t, ok := a.(*dns.CNAME); ok {
-					data = append(data, t.Target)
+					data = append(data, utils.CopyString(t.Target))
 				}
 			case dns.TypePTR:
 				if t, ok := a.(*dns.PTR); ok {
-					data = append(data, t.Ptr)
+					data = append(data, utils.CopyString(t.Ptr))
 				}
 			case dns.TypeNS:
 				if t, ok := a.(*dns.NS); ok {
-					data = append(data, t.Ns)
+					data = append(data, utils.CopyString(t.Ns))
 				}
 			case dns.TypeMX:
 				if t, ok := a.(*dns.MX); ok {
-					data = append(data, t.Mx)
+					data = append(data, utils.CopyString(t.Mx))
 				}
 			case dns.TypeTXT:
 				if t, ok := a.(*dns.TXT); ok {
@@ -310,7 +304,7 @@ func ExtractRawData(msg *dns.Msg, qtype uint16) []string {
 				}
 			case dns.TypeSRV:
 				if t, ok := a.(*dns.SRV); ok {
-					data = append(data, t.Target)
+					data = append(data, utils.CopyString(t.Target))
 				}
 			}
 		}

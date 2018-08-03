@@ -9,26 +9,27 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/OWASP/Amass/amass/core"
 	evbus "github.com/asaskevich/EventBus"
 )
 
 type AlterationService struct {
-	BaseAmassService
+	core.BaseAmassService
 
 	bus evbus.Bus
 }
 
-func NewAlterationService(config *AmassConfig, bus evbus.Bus) *AlterationService {
+func NewAlterationService(config *core.AmassConfig, bus evbus.Bus) *AlterationService {
 	as := &AlterationService{bus: bus}
 
-	as.BaseAmassService = *NewBaseAmassService("Alteration Service", config, as)
+	as.BaseAmassService = *core.NewBaseAmassService("Alteration Service", config, as)
 	return as
 }
 
 func (as *AlterationService) OnStart() error {
 	as.BaseAmassService.OnStart()
 
-	as.bus.SubscribeAsync(RESOLVED, as.SendRequest, false)
+	as.bus.SubscribeAsync(core.RESOLVED, as.SendRequest, false)
 	go as.processRequests()
 	return nil
 }
@@ -36,7 +37,7 @@ func (as *AlterationService) OnStart() error {
 func (as *AlterationService) OnStop() error {
 	as.BaseAmassService.OnStop()
 
-	as.bus.Unsubscribe(RESOLVED, as.SendRequest)
+	as.bus.Unsubscribe(core.RESOLVED, as.SendRequest)
 	return nil
 }
 
@@ -71,7 +72,7 @@ func (as *AlterationService) executeAlterations() {
 
 	labels := strings.Split(req.Name, ".")
 	// Check the subdomain of the request name
-	if labels[1] == "_tcp" || labels[1] == "_udp" {
+	if labels[1] == "_tcp" || labels[1] == "_udp" || labels[1] == "_tls" {
 		return
 	}
 	as.flipNumbersInName(req)
@@ -79,7 +80,7 @@ func (as *AlterationService) executeAlterations() {
 }
 
 // flipNumbersInName - Method to flip numbers in a subdomain name
-func (as *AlterationService) flipNumbersInName(req *AmassRequest) {
+func (as *AlterationService) flipNumbersInName(req *core.AmassRequest) {
 	n := req.Name
 	parts := strings.SplitN(n, ".", 2)
 	// Find the first character that is a number
@@ -118,7 +119,7 @@ func (as *AlterationService) secondNumberFlip(name, domain string, minIndex int)
 }
 
 // appendNumbers - Method for appending a number to a subdomain name
-func (as *AlterationService) appendNumbers(req *AmassRequest) {
+func (as *AlterationService) appendNumbers(req *core.AmassRequest) {
 	n := req.Name
 	parts := strings.SplitN(n, ".", 2)
 
@@ -137,10 +138,10 @@ func (as *AlterationService) appendNumbers(req *AmassRequest) {
 func (as *AlterationService) sendAlteredName(name, domain string) {
 	re := as.Config().DomainRegex(domain)
 	if re != nil && re.MatchString(name) {
-		as.bus.Publish(DNSQUERY, &AmassRequest{
+		as.bus.Publish(core.DNSQUERY, &core.AmassRequest{
 			Name:   name,
 			Domain: domain,
-			Tag:    ALT,
+			Tag:    core.ALT,
 			Source: "Alterations",
 		})
 	}

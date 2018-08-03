@@ -1,7 +1,7 @@
 // Copyright 2017 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
-package amass
+package handlers
 
 import (
 	"net"
@@ -28,7 +28,11 @@ func NewNeo4j(url string) (*Neo4j, error) {
 	return neo4j, nil
 }
 
-func (n *Neo4j) insertDomain(domain, tag, source string) {
+func (n *Neo4j) Close() {
+	n.conn.Close()
+}
+
+func (n *Neo4j) InsertDomain(domain, tag, source string) {
 	params := map[string]interface{}{
 		"name":   domain,
 		"tag":    tag,
@@ -40,7 +44,7 @@ func (n *Neo4j) insertDomain(domain, tag, source string) {
 		"SET n:Subdomain:Domain", params)
 }
 
-func (n *Neo4j) insertCNAME(name, domain, target, tdomain, tag, source string) {
+func (n *Neo4j) InsertCNAME(name, domain, target, tdomain, tag, source string) {
 	params := map[string]interface{}{
 		"sname":   name,
 		"sdomain": domain,
@@ -73,7 +77,7 @@ func (n *Neo4j) insertCNAME(name, domain, target, tdomain, tag, source string) {
 		"MERGE (source)-[:CNAME_TO]->(target)", params)
 }
 
-func (n *Neo4j) insertA(name, domain, addr, tag, source string) {
+func (n *Neo4j) InsertA(name, domain, addr, tag, source string) {
 	params := map[string]interface{}{
 		"name":   name,
 		"domain": domain,
@@ -99,7 +103,7 @@ func (n *Neo4j) insertA(name, domain, addr, tag, source string) {
 		"MERGE (source)-[:A_TO]->(address)", params)
 }
 
-func (n *Neo4j) insertAAAA(name, domain, addr, tag, source string) {
+func (n *Neo4j) InsertAAAA(name, domain, addr, tag, source string) {
 	params := map[string]interface{}{
 		"name":   name,
 		"domain": domain,
@@ -125,7 +129,7 @@ func (n *Neo4j) insertAAAA(name, domain, addr, tag, source string) {
 		"MERGE (source)-[:AAAA_TO]->(address)", params)
 }
 
-func (n *Neo4j) insertPTR(name, domain, target, tag, source string) {
+func (n *Neo4j) InsertPTR(name, domain, target, tag, source string) {
 	params := map[string]interface{}{
 		"name":   name,
 		"domain": domain,
@@ -150,7 +154,7 @@ func (n *Neo4j) insertPTR(name, domain, target, tag, source string) {
 		"MERGE (ptr)-[:PTR_TO]->(target)", params)
 }
 
-func (n *Neo4j) insertSRV(name, domain, service, target, tag, source string) {
+func (n *Neo4j) InsertSRV(name, domain, service, target, tag, source string) {
 	params := map[string]interface{}{
 		"name":    name,
 		"domain":  domain,
@@ -184,7 +188,7 @@ func (n *Neo4j) insertSRV(name, domain, service, target, tag, source string) {
 		"MERGE (srv)-[:SRV_TO]->(target)", params)
 }
 
-func (n *Neo4j) insertNS(name, domain, target, tdomain, tag, source string) {
+func (n *Neo4j) InsertNS(name, domain, target, tdomain, tag, source string) {
 	params := map[string]interface{}{
 		"name":    name,
 		"domain":  domain,
@@ -212,7 +216,7 @@ func (n *Neo4j) insertNS(name, domain, target, tdomain, tag, source string) {
 		"MERGE (source)-[:NS_TO]->(nameserver)", params)
 }
 
-func (n *Neo4j) insertMX(name, domain, target, tdomain, tag, source string) {
+func (n *Neo4j) InsertMX(name, domain, target, tdomain, tag, source string) {
 	params := map[string]interface{}{
 		"name":    name,
 		"domain":  domain,
@@ -240,7 +244,7 @@ func (n *Neo4j) insertMX(name, domain, target, tdomain, tag, source string) {
 		"MERGE (source)-[:MX_TO]->(mailserver)", params)
 }
 
-func (n *Neo4j) insertInfrastructure(addr string, asn int, cidr *net.IPNet, desc string) {
+func (n *Neo4j) InsertInfrastructure(addr string, asn int, cidr *net.IPNet, desc string) {
 	params := map[string]interface{}{
 		"addr": addr,
 		"asn":  asn,

@@ -1,12 +1,14 @@
 // Copyright 2017 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
-package dns
+package dnssrv
 
 import (
 	"math/rand"
 	"strings"
 	"sync"
+
+	"github.com/OWASP/Amass/amass/core"
 )
 
 const (
@@ -18,7 +20,7 @@ const (
 
 type wildcard struct {
 	HasWildcard bool
-	Answers     []DNSAnswer
+	Answers     []core.DNSAnswer
 }
 
 var (
@@ -31,7 +33,7 @@ func init() {
 }
 
 // DetectWildcard - Checks subdomains in the wildcard cache for matches on the IP address
-func DetectWildcard(domain, subdomain string, records []DNSAnswer) bool {
+func DetectWildcard(domain, subdomain string, records []core.DNSAnswer) bool {
 	wildcardsLock.Lock()
 	defer wildcardsLock.Unlock()
 
@@ -70,7 +72,7 @@ func DetectWildcard(domain, subdomain string, records []DNSAnswer) bool {
 	return answer
 }
 
-func compareAnswers(ans1, ans2 []DNSAnswer) bool {
+func compareAnswers(ans1, ans2 []core.DNSAnswer) bool {
 	var match bool
 loop:
 	for _, a1 := range ans1 {
@@ -86,8 +88,8 @@ loop:
 
 // wildcardDetection detects if a domain returns an IP
 // address for "bad" names, and if so, which address(es) are used
-func wildcardDetection(sub string) []DNSAnswer {
-	var answers []DNSAnswer
+func wildcardDetection(sub string) []core.DNSAnswer {
+	var answers []core.DNSAnswer
 
 	name := unlikelyName(sub)
 	if name == "" {

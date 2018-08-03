@@ -62,3 +62,10 @@ func NewUniqueElements(orig []string, add ...string) []string {
 func UniqueAppend(orig []string, add ...string) []string {
 	return append(orig, NewUniqueElements(orig, add...)...)
 }
+
+func CopyString(src string) string {
+	str := make([]byte, len(src))
+
+	copy(str, src)
+	return string(str)
+}

@@ -9,21 +9,18 @@ import (
 )
 
 func main() {
-	output := make(chan *amass.AmassOutput)
+	enum := amass.NewEnumeration()
 
 	go func() {
-		for result := range output {
+		for result := range enum.Output {
 			fmt.Println(result.Name)
 		}
 	}()
 
 	// Seed the default pseudo-random number generator
 	rand.Seed(time.Now().UTC().UnixNano())
-
 	// Setup the most basic amass configuration
-	config := amass.CustomConfig(&amass.AmassConfig{Output: output})
-	config.AddDomain("example.com")
-
+	enum.AddDomain("example.com")
 	// Begin the enumeration process
-	amass.StartEnumeration(config)
+	enum.Start()
 }

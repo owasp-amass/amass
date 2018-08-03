@@ -13,8 +13,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
-	"github.com/OWASP/Amass/amass/utils/dns"
+	"github.com/OWASP/Amass/amass/dnssrv"
 )
 
 const (
@@ -23,8 +24,8 @@ const (
 )
 
 // pullCertificate - Attempts to pull a cert from several ports on an IP
-func PullCertificateNames(addr string, ports []int) []*AmassRequest {
-	var requests []*AmassRequest
+func PullCertificateNames(addr string, ports []int) []*core.AmassRequest {
+	var requests []*core.AmassRequest
 
 	// Check hosts for certificates that contain subdomain names
 	for _, port := range ports {
@@ -33,7 +34,7 @@ func PullCertificateNames(addr string, ports []int) []*AmassRequest {
 		ctx, cancel := context.WithTimeout(context.Background(), defaultTLSConnectTimeout)
 		defer cancel()
 		// Obtain the connection
-		conn, err := dns.DialContext(ctx, "tcp", addr+":"+strconv.Itoa(port))
+		conn, err := dnssrv.DialContext(ctx, "tcp", addr+":"+strconv.Itoa(port))
 		if err != nil {
 			continue
 		}
@@ -109,12 +110,12 @@ func removeAsteriskLabel(s string) string {
 	return strings.Join(labels[index:], ".")
 }
 
-func reqFromNames(subdomains []string) []*AmassRequest {
-	var requests []*AmassRequest
+func reqFromNames(subdomains []string) []*core.AmassRequest {
+	var requests []*core.AmassRequest
 
 	// For each subdomain name, attempt to make a new AmassRequest
 	for _, name := range subdomains {
-		requests = append(requests, &AmassRequest{
+		requests = append(requests, &core.AmassRequest{
 			Name:   name,
 			Domain: SubdomainToDomain(name),
 			Tag:    "cert",

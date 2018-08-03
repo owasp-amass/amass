@@ -16,8 +16,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
-	"github.com/OWASP/Amass/amass/utils/dns"
+	"github.com/OWASP/Amass/amass/dnssrv"
 )
 
 type ASRecord struct {
@@ -68,7 +69,7 @@ func SubdomainToDomain(name string) string {
 	for i := len(labels) - 2; i >= 0; i-- {
 		sub := strings.Join(labels[i:], ".")
 
-		if _, err := dns.Resolve(sub, "NS"); err == nil {
+		if _, err := dnssrv.Resolve(sub, "NS"); err == nil {
 			domainCache[sub] = struct{}{}
 			domain = sub
 			break
@@ -240,7 +241,7 @@ func fetchOnlineData(addr string, asn int) (*ASRecord, error) {
 func originLookup(addr string) (int, string, error) {
 	var err error
 	var name string
-	var answers []dns.DNSAnswer
+	var answers []core.DNSAnswer
 
 	if ip := net.ParseIP(addr); len(ip.To4()) == net.IPv4len {
 		name = utils.ReverseIP(addr) + ".origin.asn.cymru.com"
@@ -250,7 +251,7 @@ func originLookup(addr string) (int, string, error) {
 		return 0, "", fmt.Errorf("originLookup param is insufficient: addr: %s", ip)
 	}
 
-	answers, err = dns.Resolve(name, "TXT")
+	answers, err = dnssrv.Resolve(name, "TXT")
 	if err != nil {
 		return 0, "", fmt.Errorf("originLookup: DNS TXT record query error: %s: %v", name, err)
 	}
@@ -265,12 +266,12 @@ func originLookup(addr string) (int, string, error) {
 
 func asnLookup(asn int) (*ASRecord, error) {
 	var err error
-	var answers []dns.DNSAnswer
+	var answers []core.DNSAnswer
 
 	// Get the AS record using the ASN
 	name := "AS" + strconv.Itoa(asn) + ".asn.cymru.com"
 
-	answers, err = dns.Resolve(name, "TXT")
+	answers, err = dnssrv.Resolve(name, "TXT")
 	if err != nil {
 		return nil, fmt.Errorf("asnLookup: DNS TXT record query error: %s: %v", name, err)
 	}
@@ -287,21 +288,20 @@ func fetchOnlineNetblockData(asn int) ([]string, error) {
 	defer cancel()
 
 	addr := "asn.shadowserver.org:43"
-	conn, err := dns.DialContext(ctx, "tcp", addr)
+	conn, err := dnssrv.DialContext(ctx, "tcp", addr)
 	if err != nil {
 		return nil, fmt.Errorf("fetchOnlineNetblockData error: %s: %v", addr, err)
 	}
 	defer conn.Close()
 
 	fmt.Fprintf(conn, "prefix %d\n", asn)
-	reader := bufio.NewReader(conn)
+	scanner := bufio.NewScanner(conn)
 
 	var blocks []string
-	for err == nil {
-		var line string
+	for scanner.Scan() {
+		line := scanner.Text()
 
-		line, err = reader.ReadString('\n')
-		if len(line) > 0 {
+		if err := scanner.Err(); err == nil {
 			blocks = append(blocks, strings.TrimSpace(line))
 		}
 	}

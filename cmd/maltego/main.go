@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass"
+	"github.com/OWASP/Amass/amass/core"
 	"github.com/sensepost/maltegolocal/maltegolocal"
 )
 
@@ -19,23 +20,24 @@ func main() {
 	lt := maltegolocal.ParseLocalArguments(os.Args)
 	domain = lt.Value
 	trx := maltegolocal.MaltegoTransform{}
-	results := make(chan *amass.AmassOutput, 50)
+	
+	enum := amass.NewEnumeration()
 
 	go func() {
-		for n := range results {
+		for n := range enum.Output {
 			if n != nil && n.Domain == domain {
 				entity := trx.AddEntity("maltego.DNSName", n.Name)
 
 				switch n.Type {
-				case amass.TypeNorm:
+				case core.TypeNorm:
 					entity.AddProperty("Fqdn", "DNS Name", "", n.Name)
-				case amass.TypeNS:
+				case core.TypeNS:
 					entity.SetType("maltego.NSRecord")
 					entity.AddProperty("fqdn", "NS Record", "", n.Name)
-				case amass.TypeMX:
+				case core.TypeMX:
 					entity.SetType("maltego.MXRecord")
 					entity.AddProperty("fqdn", "MX Record", "", n.Name)
-				case amass.TypeWeb:
+				case core.TypeWeb:
 					entity.SetType("maltego.Website")
 					entity.AddProperty("fqdn", "Website", "", n.Name)
 				}
@@ -45,19 +47,11 @@ func main() {
 	}()
 
 	trx.AddUIMessage("The amass transform can take a few minutes to complete.", "Inform")
-
 	// Seed the pseudo-random number generator
 	rand.Seed(time.Now().UTC().UnixNano())
-	// Setup the amass configuration
-	config := amass.CustomConfig(&amass.AmassConfig{
-		BruteForcing: false,
-		Recursive:    false,
-		Alterations:  true,
-		Output:       results,
-	})
-	config.AddDomain(domain)
+	enum.AddDomain(domain)
 	// Begin the enumeration process
-	amass.StartEnumeration(config)
+	enum.Start()
 	time.Sleep(2 * time.Second)
 	fmt.Println(trx.ReturnOutput())
 }

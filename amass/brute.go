@@ -7,11 +7,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/OWASP/Amass/amass/core"
 	evbus "github.com/asaskevich/EventBus"
 )
 
 type BruteForceService struct {
-	BaseAmassService
+	core.BaseAmassService
 
 	bus evbus.Bus
 
@@ -19,20 +20,20 @@ type BruteForceService struct {
 	subdomains map[string]int
 }
 
-func NewBruteForceService(config *AmassConfig, bus evbus.Bus) *BruteForceService {
+func NewBruteForceService(config *core.AmassConfig, bus evbus.Bus) *BruteForceService {
 	bfs := &BruteForceService{
 		bus:        bus,
 		subdomains: make(map[string]int),
 	}
 
-	bfs.BaseAmassService = *NewBaseAmassService("Brute Forcing Service", config, bfs)
+	bfs.BaseAmassService = *core.NewBaseAmassService("Brute Forcing Service", config, bfs)
 	return bfs
 }
 
 func (bfs *BruteForceService) OnStart() error {
 	bfs.BaseAmassService.OnStart()
 
-	bfs.bus.SubscribeAsync(RESOLVED, bfs.SendRequest, false)
+	bfs.bus.SubscribeAsync(core.RESOLVED, bfs.SendRequest, false)
 	go bfs.processRequests()
 	go bfs.startRootDomains()
 	return nil
@@ -41,7 +42,7 @@ func (bfs *BruteForceService) OnStart() error {
 func (bfs *BruteForceService) OnStop() error {
 	bfs.BaseAmassService.OnStop()
 
-	bfs.bus.Unsubscribe(RESOLVED, bfs.SendRequest)
+	bfs.bus.Unsubscribe(core.RESOLVED, bfs.SendRequest)
 	return nil
 }
 
@@ -122,10 +123,10 @@ func (bfs *BruteForceService) performBruteForcing(subdomain, root string) {
 	for _, word := range bfs.Config().Wordlist {
 		bfs.SetActive()
 
-		bfs.bus.Publish(DNSQUERY, &AmassRequest{
+		bfs.bus.Publish(core.DNSQUERY, &core.AmassRequest{
 			Name:   word + "." + subdomain,
 			Domain: root,
-			Tag:    BRUTE,
+			Tag:    core.BRUTE,
 			Source: "Brute Force",
 		})
 		// Going too fast will overwhelm the dns

@@ -1,7 +1,7 @@
 // Copyright 2017 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
-package amass
+package handlers
 
 import (
 	"net"
@@ -32,9 +32,9 @@ type Graph struct {
 	PTRs       map[string]*Node
 	Netblocks  map[string]*Node
 	ASNs       map[int]*Node
-	nodes      []*Node
+	Nodes      []*Node
 	curNodeIdx int
-	edges      []*Edge
+	Edges      []*Edge
 	curEdgeIdx int
 }
 
@@ -57,16 +57,16 @@ func (g *Graph) NewNode(label string) *Node {
 
 	g.curNodeIdx++
 
-	g.nodes = append(g.nodes, n)
+	g.Nodes = append(g.Nodes, n)
 	n.Labels = append(n.Labels, label)
 	return n
 }
 
 func (g *Graph) NewEdge(from, to int, label string) *Edge {
 	// Do not insert duplicate edges
-	n := g.nodes[from]
+	n := g.Nodes[from]
 	for _, idx := range n.Edges {
-		edge := g.edges[idx]
+		edge := g.Edges[idx]
 		if edge.Label == label && edge.From == from && edge.To == to {
 			return nil
 		}
@@ -81,9 +81,9 @@ func (g *Graph) NewEdge(from, to int, label string) *Edge {
 
 	g.curEdgeIdx++
 
-	g.nodes[from].Edges = append(g.nodes[from].Edges, e.idx)
-	g.nodes[to].Edges = append(g.nodes[to].Edges, e.idx)
-	g.edges = append(g.edges, e)
+	g.Nodes[from].Edges = append(g.Nodes[from].Edges, e.idx)
+	g.Nodes[to].Edges = append(g.Nodes[to].Edges, e.idx)
+	g.Edges = append(g.Edges, e)
 	return e
 }
 
@@ -94,7 +94,7 @@ func (g *Graph) VizData() ([]viz.Node, []viz.Edge) {
 	var nodes []viz.Node
 	var edges []viz.Edge
 
-	for _, edge := range g.edges {
+	for _, edge := range g.Edges {
 		edges = append(edges, viz.Edge{
 			From:  edge.From,
 			To:    edge.To,
@@ -102,7 +102,7 @@ func (g *Graph) VizData() ([]viz.Node, []viz.Edge) {
 		})
 	}
 
-	for idx, node := range g.nodes {
+	for idx, node := range g.Nodes {
 		var label, title, source string
 		t := node.Labels[0]
 
@@ -148,7 +148,7 @@ func (g *Graph) VizData() ([]viz.Node, []viz.Edge) {
 	return nodes, edges
 }
 
-func (g *Graph) insertDomain(domain, tag, source string) {
+func (g *Graph) InsertDomain(domain, tag, source string) {
 	g.Lock()
 	defer g.Unlock()
 
@@ -171,7 +171,7 @@ func (g *Graph) insertDomain(domain, tag, source string) {
 
 }
 
-func (g *Graph) insertCNAME(name, domain, target, tdomain, tag, source string) {
+func (g *Graph) InsertCNAME(name, domain, target, tdomain, tag, source string) {
 	g.Lock()
 	defer g.Unlock()
 
@@ -209,7 +209,7 @@ func (g *Graph) insertCNAME(name, domain, target, tdomain, tag, source string) {
 	g.NewEdge(s1, s2, "CNAME_TO")
 }
 
-func (g *Graph) insertA(name, domain, addr, tag, source string) {
+func (g *Graph) InsertA(name, domain, addr, tag, source string) {
 	g.Lock()
 	defer g.Unlock()
 
@@ -240,7 +240,7 @@ func (g *Graph) insertA(name, domain, addr, tag, source string) {
 	g.NewEdge(s, a, "A_TO")
 }
 
-func (g *Graph) insertAAAA(name, domain, addr, tag, source string) {
+func (g *Graph) InsertAAAA(name, domain, addr, tag, source string) {
 	g.Lock()
 	defer g.Unlock()
 
@@ -271,7 +271,7 @@ func (g *Graph) insertAAAA(name, domain, addr, tag, source string) {
 	g.NewEdge(s, a, "AAAA_TO")
 }
 
-func (g *Graph) insertPTR(name, domain, target, tag, source string) {
+func (g *Graph) InsertPTR(name, domain, target, tag, source string) {
 	g.Lock()
 	defer g.Unlock()
 
@@ -300,7 +300,7 @@ func (g *Graph) insertPTR(name, domain, target, tag, source string) {
 	g.NewEdge(p, s, "PTR_TO")
 }
 
-func (g *Graph) insertSRV(name, domain, service, target, tag, source string) {
+func (g *Graph) InsertSRV(name, domain, service, target, tag, source string) {
 	g.Lock()
 	defer g.Unlock()
 
@@ -341,7 +341,7 @@ func (g *Graph) insertSRV(name, domain, service, target, tag, source string) {
 	g.NewEdge(srv, t, "SRV_TO")
 }
 
-func (g *Graph) insertNS(name, domain, target, tdomain, tag, source string) {
+func (g *Graph) InsertNS(name, domain, target, tdomain, tag, source string) {
 	g.Lock()
 	defer g.Unlock()
 
@@ -375,7 +375,7 @@ func (g *Graph) insertNS(name, domain, target, tdomain, tag, source string) {
 	g.NewEdge(sub, ns, "NS_TO")
 }
 
-func (g *Graph) insertMX(name, domain, target, tdomain, tag, source string) {
+func (g *Graph) InsertMX(name, domain, target, tdomain, tag, source string) {
 	g.Lock()
 	defer g.Unlock()
 
@@ -409,7 +409,7 @@ func (g *Graph) insertMX(name, domain, target, tdomain, tag, source string) {
 	g.NewEdge(sub, mx, "MX_TO")
 }
 
-func (g *Graph) insertInfrastructure(addr string, asn int, cidr *net.IPNet, desc string) {
+func (g *Graph) InsertInfrastructure(addr string, asn int, cidr *net.IPNet, desc string) {
 	g.Lock()
 	defer g.Unlock()
 

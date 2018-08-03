@@ -3,7 +3,7 @@
 
 // +build windows
 
-package amass
+package dnssrv
 
 func GetFileLimit() int {
 	return 10000

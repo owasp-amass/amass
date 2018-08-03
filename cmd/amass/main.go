@@ -5,45 +5,25 @@ package main
 
 import (
 	"bufio"
+	"io/ioutil"
 	"bytes"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
 	"math/rand"
-	"net"
 	"os"
 	"os/signal"
 	"path"
-	//"runtime"
-	//"runtime/pprof"
-	"strconv"
+	"runtime"
+	"runtime/pprof"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/OWASP/Amass/amass"
+	"github.com/OWASP/Amass/amass/utils"
 	"github.com/fatih/color"
 )
-
-type outputParams struct {
-	Config        *amass.AmassConfig
-	Verbose       bool
-	PrintIPs      bool
-	FileOut       string
-	JSONOut       string
-	VisjsOut      string
-	GraphistryOut string
-	GEXFOut       string
-	D3Out         string
-	Done          chan struct{}
-}
-
-// Types that implement the flag.Value interface for parsing
-type parseStrings []string
-type parseIPs []net.IP
-type parseCIDRs []*net.IPNet
-type parseInts []int
 
 var (
 	banner string = `
@@ -131,7 +111,7 @@ func main() {
 	}
 	// Some input validation
 	if *help {
-		printBanner()
+		PrintBanner()
 		g.Printf("Usage: %s [options] <-d domain> | <net>\n", path.Base(os.Args[0]))
 		flag.PrintDefaults()
 		network.PrintDefaults()
@@ -152,16 +132,16 @@ func main() {
 
 	var words []string
 	if *wordlist != "" {
-		words = getLinesFromFile(*wordlist)
+		words = GetLinesFromFile(*wordlist)
 	}
 	if *domainspath != "" {
-		domains = UniqueAppend(domains, getLinesFromFile(*domainspath)...)
+		domains = utils.UniqueAppend(domains, GetLinesFromFile(*domainspath)...)
 	}
 	if *resolvepath != "" {
-		resolvers = UniqueAppend(resolvers, getLinesFromFile(*resolvepath)...)
+		resolvers = utils.UniqueAppend(resolvers, GetLinesFromFile(*resolvepath)...)
 	}
 	if *blacklistpath != "" {
-		blacklist = UniqueAppend(blacklist, getLinesFromFile(*blacklistpath)...)
+		blacklist = utils.UniqueAppend(blacklist, GetLinesFromFile(*blacklistpath)...)
 	}
 
 	// Prepare output files
@@ -188,7 +168,7 @@ func main() {
 	done := make(chan struct{})
 	results := make(chan *amass.AmassOutput, 100)
 	// Execute the signal handler
-	go catchSignals(results, done)
+	go CatchSignals(results, done)
 
 	// Setup the amass configuration
 	alts := true
@@ -199,7 +179,8 @@ func main() {
 	if *norecursive {
 		recursive = false
 	}
-	config := amass.CustomConfig(&amass.AmassConfig{
+	enum := &amass.Enumeration{
+		Log:             log.New(ioutil.Discard, "", 0),
 		IPs:             addrs,
 		ASNs:            asns,
 		CIDRs:           cidrs,
@@ -212,14 +193,14 @@ func main() {
 		Active:          *active,
 		Alterations:     alts,
 		NoDNS:           *nodns,
-		Frequency:       freqToDuration(*freq),
+		Frequency:       FreqToDuration(*freq),
 		Resolvers:       resolvers,
 		Blacklist:       blacklist,
 		Neo4jPath:       *neo4j,
 		Output:          results,
-	})
+	}
 	for _, domain := range domains {
-		config.AddDomain(domain)
+		enum.AddDomain(domain)
 	}
 	// Setup the log file for saving error messages
 	if logfile != "" {
@@ -232,21 +213,21 @@ func main() {
 			fileptr.Sync()
 			fileptr.Close()
 		}()
-		config.Log = log.New(fileptr, "", log.Lmicroseconds)
+		enum.Log = log.New(fileptr, "", log.Lmicroseconds)
 	}
-	amass.ObtainAdditionalDomains(config)
+	enum.ObtainAdditionalDomains()
 	if *list {
-		listDomains(config, txt)
+		ListDomains(enum, txt)
 		return
 	}
 	// Can an enumeration be performed with the provided parameters?
-	if len(config.Domains()) == 0 {
+	if len(enum.Domains()) == 0 {
 		r.Println("No root domain names were provided or discovered")
 		return
 	}
 
-	go manageOutput(&outputParams{
-		Config:        config,
+	go ManageOutput(&OutputParams{
+		Enum: enum,
 		Verbose:       *verbose,
 		PrintIPs:      *ips,
 		FileOut:       txt,
@@ -258,21 +239,21 @@ func main() {
 		Done:          done,
 	})
 
-	err := amass.StartEnumeration(config)
+	err := enum.Start()
 	if err != nil {
 		r.Println(err)
 		return
 	}
-	//profFile, _ := os.Create("amass_mem.prof")
-	//defer profFile.Close()
-	//runtime.GC()
-	//pprof.WriteHeapProfile(profFile)
+	profFile, _ := os.Create("amass_mem.prof")
+	defer profFile.Close()
+	runtime.GC()
+	pprof.WriteHeapProfile(profFile)
 	// Wait for output manager to finish
 	<-done
 }
 
 // If the user interrupts the program, print the summary information
-func catchSignals(output chan *amass.AmassOutput, done chan struct{}) {
+func CatchSignals(output chan *amass.AmassOutput, done chan struct{}) {
 	sigs := make(chan os.Signal, 2)
 	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
 
@@ -285,242 +266,7 @@ func catchSignals(output chan *amass.AmassOutput, done chan struct{}) {
 	os.Exit(1)
 }
 
-func listDomains(config *amass.AmassConfig, outfile string) {
-	var fileptr *os.File
-	var bufwr *bufio.Writer
-
-	if outfile != "" {
-		fileptr, err := os.OpenFile(outfile, os.O_WRONLY|os.O_CREATE, 0644)
-		if err == nil {
-			bufwr = bufio.NewWriter(fileptr)
-			defer fileptr.Close()
-		}
-	}
-
-	for _, d := range config.Domains() {
-		g.Println(d)
-
-		if bufwr != nil {
-			bufwr.WriteString(d + "\n")
-			bufwr.Flush()
-		}
-	}
-
-	if bufwr != nil {
-		fileptr.Sync()
-	}
-}
-
-func printBanner() {
-	rightmost := 76
-	desc := "In-Depth Subdomain Enumeration"
-	author := "Coded By " + amass.Author
-
-	pad := func(num int) {
-		for i := 0; i < num; i++ {
-			fmt.Print(" ")
-		}
-	}
-	r.Println(banner)
-	pad(rightmost - len(amass.Version))
-	y.Println(amass.Version)
-	pad(rightmost - len(desc))
-	y.Println(desc)
-	pad(rightmost - len(author))
-	y.Printf("%s\n\n\n", author)
-}
-
-type asnData struct {
-	Name      string
-	Netblocks map[string]int
-}
-
-type jsonAddr struct {
-	IP          string `json:"ip"`
-	CIDR        string `json:"cidr"`
-	ASN         int    `json:"asn"`
-	Description string `json:"desc"`
-}
-
-type jsonSave struct {
-	Name      string     `json:"name"`
-	Domain    string     `json:"domain"`
-	Addresses []jsonAddr `json:"addresses"`
-	Tag       string     `json:"tag"`
-	Source    string     `json:"source"`
-}
-
-func WriteJSONData(f *os.File, result *amass.AmassOutput) {
-	save := &jsonSave{
-		Name:   result.Name,
-		Domain: result.Domain,
-		Tag:    result.Tag,
-		Source: result.Source,
-	}
-
-	for _, addr := range result.Addresses {
-		save.Addresses = append(save.Addresses, jsonAddr{
-			IP:          addr.Address.String(),
-			CIDR:        addr.Netblock.String(),
-			ASN:         addr.ASN,
-			Description: addr.Description,
-		})
-	}
-
-	enc := json.NewEncoder(f)
-	enc.Encode(save)
-}
-
-func WriteTextData(f *os.File, source, name, comma, ips string) {
-	fmt.Fprintf(f, "%s%s%s%s\n", source, name, comma, ips)
-}
-
-func ResultToLine(result *amass.AmassOutput, params *outputParams) (string, string, string, string) {
-	var source, comma, ips string
-
-	if params.Verbose {
-		source = fmt.Sprintf("%-18s", "["+result.Source+"] ")
-	}
-	if params.PrintIPs {
-		comma = ","
-
-		for i, a := range result.Addresses {
-			if i != 0 {
-				ips += ","
-			}
-			ips += a.Address.String()
-		}
-	}
-	return source, result.Name, comma, ips
-}
-
-func manageOutput(params *outputParams) {
-	var total int
-	var err error
-	var outptr, jsonptr *os.File
-
-	if params.FileOut != "" {
-		outptr, err = os.OpenFile(params.FileOut, os.O_WRONLY|os.O_CREATE, 0644)
-		if err == nil {
-			defer func() {
-				outptr.Sync()
-				outptr.Close()
-			}()
-		}
-	}
-
-	if params.JSONOut != "" {
-		jsonptr, err = os.OpenFile(params.JSONOut, os.O_WRONLY|os.O_CREATE, 0644)
-		if err == nil {
-			defer func() {
-				jsonptr.Sync()
-				jsonptr.Close()
-			}()
-		}
-	}
-
-	tags := make(map[string]int)
-	asns := make(map[int]*asnData)
-	// Collect all the names returned by the enumeration
-	for result := range params.Config.Output {
-		total++
-		updateData(result, tags, asns)
-
-		source, name, comma, ips := ResultToLine(result, params)
-		fmt.Fprintf(color.Output, "%s%s%s%s\n",
-			blue(source), green(name), green(comma), yellow(ips))
-		// Handle writing the line to a specified output file
-		if outptr != nil {
-			WriteTextData(outptr, source, name, comma, ips)
-		}
-		// Handle encoding the result as JSON
-		if jsonptr != nil {
-			WriteJSONData(jsonptr, result)
-		}
-	}
-
-	amass.WriteVisjsFile(params.VisjsOut, params.Config)
-	amass.WriteGraphistryFile(params.GraphistryOut, params.Config)
-	amass.WriteGEXFFile(params.GEXFOut, params.Config)
-	amass.WriteD3File(params.D3Out, params.Config)
-	// Check to print the summary information
-	if params.Verbose {
-		printSummary(total, tags, asns)
-	}
-	// Signal that output is complete
-	close(params.Done)
-}
-
-func updateData(output *amass.AmassOutput, tags map[string]int, asns map[int]*asnData) {
-	tags[output.Tag]++
-
-	// Update the ASN information
-	for _, addr := range output.Addresses {
-		data, found := asns[addr.ASN]
-		if !found {
-			asns[addr.ASN] = &asnData{
-				Name:      addr.Description,
-				Netblocks: make(map[string]int),
-			}
-			data = asns[addr.ASN]
-		}
-		// Increment how many IPs were in this netblock
-		data.Netblocks[addr.Netblock.String()]++
-	}
-}
-
-func printSummary(total int, tags map[string]int, asns map[int]*asnData) {
-	if total == 0 {
-		r.Println("No names were discovered")
-		return
-	}
-	pad := func(num int, chr string) {
-		for i := 0; i < num; i++ {
-			b.Print(chr)
-		}
-	}
-
-	fmt.Println()
-	// Print the header information
-	b.Print("Amass " + amass.Version)
-	num := 80 - (len(amass.Version) + len(amass.Author) + 6)
-	pad(num, " ")
-	b.Printf("%s\n", amass.Author)
-	pad(8, "----------")
-	fmt.Fprintf(color.Output, "\n%s%s", yellow(strconv.Itoa(total)), green(" names discovered - "))
-	// Print the stats using tag information
-	num, length := 1, len(tags)
-	for k, v := range tags {
-		fmt.Fprintf(color.Output, "%s: %s", green(k), yellow(strconv.Itoa(v)))
-		if num < length {
-			g.Print(", ")
-		}
-		num++
-	}
-	fmt.Println()
-
-	if len(asns) == 0 {
-		return
-	}
-	// Another line gets printed
-	pad(8, "----------")
-	fmt.Println()
-	// Print the ASN and netblock information
-	for asn, data := range asns {
-		fmt.Fprintf(color.Output, "%s%s %s %s\n",
-			blue("ASN: "), yellow(strconv.Itoa(asn)), green("-"), green(data.Name))
-
-		for cidr, ips := range data.Netblocks {
-			countstr := fmt.Sprintf("\t%-4s", strconv.Itoa(ips))
-			cidrstr := fmt.Sprintf("\t%-18s", cidr)
-
-			fmt.Fprintf(color.Output, "%s%s %s\n",
-				yellow(cidrstr), yellow(countstr), blue("Subdomain Name(s)"))
-		}
-	}
-}
-
-func getLinesFromFile(path string) []string {
+func GetLinesFromFile(path string) []string {
 	var lines []string
 
 	// Open the file
@@ -542,7 +288,7 @@ func getLinesFromFile(path string) []string {
 	return lines
 }
 
-func freqToDuration(freq int64) time.Duration {
+func FreqToDuration(freq int64) time.Duration {
 	if freq > 0 {
 		d := time.Duration(freq)
 
@@ -558,207 +304,5 @@ func freqToDuration(freq int64) time.Duration {
 		}
 	}
 	// Use the default rate
-	return amass.DefaultConfig().Frequency
-}
-
-// parseStrings implementation of the flag.Value interface
-func (p *parseStrings) String() string {
-	if p == nil {
-		return ""
-	}
-	return strings.Join(*p, ",")
-}
-
-func (p *parseStrings) Set(s string) error {
-	if s == "" {
-		return fmt.Errorf("String parsing failed")
-	}
-
-	str := strings.Split(s, ",")
-	for _, s := range str {
-		*p = append(*p, strings.TrimSpace(s))
-	}
-	return nil
-}
-
-// parseInts implementation of the flag.Value interface
-func (p *parseInts) String() string {
-	if p == nil {
-		return ""
-	}
-
-	var nums []string
-	for _, n := range *p {
-		nums = append(nums, strconv.Itoa(n))
-	}
-	return strings.Join(nums, ",")
-}
-
-func (p *parseInts) Set(s string) error {
-	if s == "" {
-		return fmt.Errorf("Integer parsing failed")
-	}
-
-	nums := strings.Split(s, ",")
-	for _, n := range nums {
-		i, err := strconv.Atoi(strings.TrimSpace(n))
-		if err != nil {
-			return err
-		}
-		*p = append(*p, i)
-	}
-	return nil
-}
-
-// parseIPs implementation of the flag.Value interface
-func (p *parseIPs) String() string {
-	if p == nil {
-		return ""
-	}
-
-	var ipaddrs []string
-	for _, ipaddr := range *p {
-		ipaddrs = append(ipaddrs, ipaddr.String())
-	}
-	return strings.Join(ipaddrs, ",")
-}
-
-func (p *parseIPs) Set(s string) error {
-	if s == "" {
-		return fmt.Errorf("IP address parsing failed")
-	}
-
-	ips := strings.Split(s, ",")
-	for _, ip := range ips {
-		// Is this an IP range?
-		err := p.parseRange(ip)
-		if err == nil {
-			continue
-		}
-		addr := net.ParseIP(ip)
-		if addr == nil {
-			return fmt.Errorf("%s is not a valid IP address or range", ip)
-		}
-		*p = append(*p, addr)
-	}
-	return nil
-}
-
-func (p *parseIPs) appendIPs(addrs []net.IP) error {
-	for _, addr := range addrs {
-		*p = append(*p, addr)
-	}
-	return nil
-}
-
-func (p *parseIPs) parseRange(s string) error {
-	twoIPs := strings.Split(s, "-")
-
-	if twoIPs[0] == s {
-		// This is not an IP range
-		return fmt.Errorf("%s is not a valid IP range", s)
-	}
-	start := net.ParseIP(twoIPs[0])
-	end := net.ParseIP(twoIPs[1])
-	if end == nil {
-		num, err := strconv.Atoi(twoIPs[1])
-		if err == nil {
-			end = net.ParseIP(twoIPs[0])
-			end[len(end)-1] = byte(num)
-		}
-	}
-	if start == nil || end == nil {
-		// These should have parsed properly
-		return fmt.Errorf("%s is not a valid IP range", s)
-	}
-	return p.appendIPs(RangeHosts(start, end))
-}
-
-// parseCIDRs implementation of the flag.Value interface
-func (p *parseCIDRs) String() string {
-	if p == nil {
-		return ""
-	}
-
-	var cidrs []string
-	for _, ipnet := range *p {
-		cidrs = append(cidrs, ipnet.String())
-	}
-	return strings.Join(cidrs, ",")
-}
-
-func (p *parseCIDRs) Set(s string) error {
-	if s == "" {
-		return fmt.Errorf("%s is not a valid CIDR", s)
-	}
-
-	cidrs := strings.Split(s, ",")
-	for _, cidr := range cidrs {
-		_, ipnet, err := net.ParseCIDR(cidr)
-		if err != nil {
-			return fmt.Errorf("Failed to parse %s as a CIDR", cidr)
-		}
-
-		*p = append(*p, ipnet)
-	}
-	return nil
-}
-
-// NewUniqueElements - Removes elements that have duplicates in the original or new elements
-func NewUniqueElements(orig []string, add ...string) []string {
-	var n []string
-
-	for _, av := range add {
-		found := false
-		s := strings.ToLower(av)
-
-		// Check the original slice for duplicates
-		for _, ov := range orig {
-			if s == strings.ToLower(ov) {
-				found = true
-				break
-			}
-		}
-		// Check that we didn't already add it in
-		if !found {
-			for _, nv := range n {
-				if s == nv {
-					found = true
-					break
-				}
-			}
-		}
-		// If no duplicates were found, add the entry in
-		if !found {
-			n = append(n, s)
-		}
-	}
-	return n
-}
-
-// UniqueAppend - Behaves like the Go append, but does not add duplicate elements
-func UniqueAppend(orig []string, add ...string) []string {
-	return append(orig, NewUniqueElements(orig, add...)...)
-}
-
-func RangeHosts(start, end net.IP) []net.IP {
-	var ips []net.IP
-
-	stop := net.ParseIP(end.String())
-	addrInc(stop)
-	for ip := net.ParseIP(start.String()); !ip.Equal(stop); addrInc(ip) {
-		addr := net.ParseIP(ip.String())
-
-		ips = append(ips, addr)
-	}
-	return ips
-}
-
-func addrInc(ip net.IP) {
-	for j := len(ip) - 1; j >= 0; j-- {
-		ip[j]++
-		if ip[j] > 0 {
-			break
-		}
-	}
+	return amass.DefaultFrequency
 }
