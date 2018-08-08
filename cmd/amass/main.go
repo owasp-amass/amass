@@ -5,10 +5,10 @@ package main
 
 import (
 	"bufio"
-	"io/ioutil"
 	"bytes"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"math/rand"
 	"os"
@@ -227,7 +227,7 @@ func main() {
 	}
 
 	go ManageOutput(&OutputParams{
-		Enum: enum,
+		Enum:          enum,
 		Verbose:       *verbose,
 		PrintIPs:      *ips,
 		FileOut:       txt,

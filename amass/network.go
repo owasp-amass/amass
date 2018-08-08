@@ -17,8 +17,8 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
-	"github.com/OWASP/Amass/amass/utils"
 	"github.com/OWASP/Amass/amass/dnssrv"
+	"github.com/OWASP/Amass/amass/utils"
 )
 
 type ASRecord struct {

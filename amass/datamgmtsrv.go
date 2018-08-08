@@ -25,7 +25,7 @@ type DataManagerService struct {
 	core.BaseAmassService
 
 	bus     evbus.Bus
-	Graph *handlers.Graph
+	Graph   *handlers.Graph
 	neo4j   *handlers.Neo4j
 	domains map[string]struct{}
 }
@@ -582,4 +582,3 @@ func removeLastDot(name string) string {
 	}
 	return name
 }
-

@@ -4,16 +4,15 @@
 package amass
 
 import (
+	"bufio"
+	"errors"
 	"io"
 	"io/ioutil"
 	"log"
 	"net"
 	"os"
-	"sync"
-	"time"
-	"bufio"
-	"errors"
 	"strings"
+	"time"
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/dnssrv"
@@ -24,10 +23,10 @@ import (
 )
 
 const (
-	Version string = "v2.5.0"
-	Author  string = "Jeff Foley (@jeff_foley)"
+	Version = "v2.5.1"
+	Author  = "Jeff Foley (@jeff_foley)"
 
-	DefaultFrequency time.Duration = 10 * time.Millisecond
+	DefaultFrequency   = 10 * time.Millisecond
 	defaultWordlistURL = "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/namelist.txt"
 )
 
@@ -159,23 +158,23 @@ func (e *Enumeration) generateAmassConfig() (*core.AmassConfig, error) {
 	}
 
 	config := &core.AmassConfig{
-		Log: e.Log,
-		ASNs: e.ASNs,
-		CIDRs: e.CIDRs,
-		IPs: e.IPs,
-		Ports: e.Ports,
-		Whois: e.Whois,
-		Wordlist: e.Wordlist,
-		BruteForcing: e.BruteForcing,
-		Recursive: e.Recursive,
+		Log:             e.Log,
+		ASNs:            e.ASNs,
+		CIDRs:           e.CIDRs,
+		IPs:             e.IPs,
+		Ports:           e.Ports,
+		Whois:           e.Whois,
+		Wordlist:        e.Wordlist,
+		BruteForcing:    e.BruteForcing,
+		Recursive:       e.Recursive,
 		MinForRecursive: e.MinForRecursive,
-		Alterations: e.Alterations,
-		NoDNS: e.NoDNS,
-		Active: e.Active,
-		Blacklist: e.Blacklist,
-		Frequency: e.Frequency,
-		Resolvers: e.Resolvers,
-		Neo4jPath: e.Neo4jPath,
+		Alterations:     e.Alterations,
+		NoDNS:           e.NoDNS,
+		Active:          e.Active,
+		Blacklist:       e.Blacklist,
+		Frequency:       e.Frequency,
+		Resolvers:       e.Resolvers,
+		Neo4jPath:       e.Neo4jPath,
 	}
 
 	for _, domain := range e.Domains() {
@@ -186,8 +185,6 @@ func (e *Enumeration) generateAmassConfig() (*core.AmassConfig, error) {
 
 func (e *Enumeration) Start() error {
 	var services []core.AmassService
-	var filterMutex sync.Mutex
-	filter := make(map[string]struct{})
 
 	config, err := e.generateAmassConfig()
 	if err != nil {
@@ -196,15 +193,7 @@ func (e *Enumeration) Start() error {
 	utils.SetDialContext(dnssrv.DialContext)
 
 	bus := evbus.New()
-	bus.SubscribeAsync(core.OUTPUT, func(out *AmassOutput) {
-		filterMutex.Lock()
-		defer filterMutex.Unlock()
-
-		if _, found := filter[out.Name]; !found {
-			filter[out.Name] = struct{}{}
-			e.Output <- out
-		}
-	}, false)
+	bus.SubscribeAsync(core.OUTPUT, e.sendOutput, false)
 
 	services = append(services, NewSourcesService(config, bus))
 	var data *DataManagerService
@@ -250,8 +239,15 @@ func (e *Enumeration) Start() error {
 	for _, service := range services {
 		service.Stop()
 	}
+
+	bus.Unsubscribe(core.OUTPUT, e.sendOutput)
+	bus.WaitAsync()
 	close(e.Output)
 	return nil
+}
+
+func (e *Enumeration) sendOutput(out *AmassOutput) {
+	e.Output <- out
 }
 
 func (e *Enumeration) WriteVisjsFile(path string) {

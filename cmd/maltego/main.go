@@ -20,7 +20,7 @@ func main() {
 	lt := maltegolocal.ParseLocalArguments(os.Args)
 	domain = lt.Value
 	trx := maltegolocal.MaltegoTransform{}
-	
+
 	enum := amass.NewEnumeration()
 
 	go func() {

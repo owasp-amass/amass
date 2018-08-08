@@ -4,22 +4,22 @@
 package core
 
 const (
-        // Topics used in the EventBus
-        DNSQUERY = "amass:dnsquery"
-        RESOLVED = "amass:resolved"
-        OUTPUT   = "amass:output"
+	// Topics used in the EventBus
+	DNSQUERY = "amass:dnsquery"
+	RESOLVED = "amass:resolved"
+	OUTPUT   = "amass:output"
 
-        // Tags used to mark the data source with the Subdomain struct
-        ALT     = "alt"
-        ARCHIVE = "archive"
-        API     = "api"
-        BRUTE   = "brute"
-        CERT    = "cert"
-        SCRAPE  = "scrape"
+	// Tags used to mark the data source with the Subdomain struct
+	ALT     = "alt"
+	ARCHIVE = "archive"
+	API     = "api"
+	BRUTE   = "brute"
+	CERT    = "cert"
+	SCRAPE  = "scrape"
 
-        // Node types used in the Maltego local transform
-        TypeNorm int = iota
-        TypeNS
-        TypeMX
-        TypeWeb
+	// Node types used in the Maltego local transform
+	TypeNorm int = iota
+	TypeNS
+	TypeMX
+	TypeWeb
 )
