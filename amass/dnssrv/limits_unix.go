@@ -9,8 +9,8 @@ import (
 	"syscall"
 )
 
-func GetFileLimit() int {
-	var limit int = 10000
+func GetFileLimit() int64 {
+	var limit int64 = defaultNumOpenFiles
 	var lim syscall.Rlimit
 
 	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &lim); err == nil {
@@ -19,7 +19,7 @@ func GetFileLimit() int {
 	}
 
 	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &lim); err == nil {
-		limit = int(lim.Cur)
+		limit = int64(lim.Cur)
 	}
 	return limit
 }

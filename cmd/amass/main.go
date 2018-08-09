@@ -14,8 +14,8 @@ import (
 	"os"
 	"os/signal"
 	"path"
-	"runtime"
-	"runtime/pprof"
+	//"runtime"
+	//"runtime/pprof"
 	"strings"
 	"syscall"
 	"time"
@@ -244,10 +244,10 @@ func main() {
 		r.Println(err)
 		return
 	}
-	profFile, _ := os.Create("amass_mem.prof")
-	defer profFile.Close()
-	runtime.GC()
-	pprof.WriteHeapProfile(profFile)
+	//profFile, _ := os.Create("amass_mem.prof")
+	//defer profFile.Close()
+	//runtime.GC()
+	//pprof.WriteHeapProfile(profFile)
 	// Wait for output manager to finish
 	<-done
 }

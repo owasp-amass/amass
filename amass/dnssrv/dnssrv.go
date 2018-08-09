@@ -12,8 +12,13 @@ import (
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
 	evbus "github.com/asaskevich/EventBus"
+	"github.com/irfansharif/cfilter"
 	"github.com/miekg/dns"
 	"golang.org/x/sync/semaphore"
+)
+
+const (
+	defaultNumOpenFiles int64 = 10000
 )
 
 type DNSService struct {
@@ -22,7 +27,7 @@ type DNSService struct {
 	bus evbus.Bus
 
 	// Ensures we do not resolve names more than once
-	filter map[string]struct{}
+	filter *cfilter.CFilter
 
 	// Data collected about various subdomains
 	subdomains map[string]map[int][]string
@@ -33,14 +38,14 @@ type DNSService struct {
 
 func NewDNSService(config *core.AmassConfig, bus evbus.Bus) *DNSService {
 	// Obtain the proper weight based on file resource limits
-	weight := (int64(GetFileLimit()) / 10) * 9
+	weight := (GetFileLimit() / 10) * 9
 	if weight <= 0 {
-		weight = 10000
+		weight = defaultNumOpenFiles
 	}
 
 	ds := &DNSService{
 		bus:        bus,
-		filter:     make(map[string]struct{}),
+		filter:     cfilter.New(),
 		subdomains: make(map[string]map[int][]string),
 		sem:        semaphore.NewWeighted(weight),
 	}
@@ -79,13 +84,10 @@ loop:
 }
 
 func (ds *DNSService) duplicate(name string) bool {
-	ds.Lock()
-	defer ds.Unlock()
-
-	if _, found := ds.filter[name]; found {
+	if ds.filter.Lookup([]byte(name)) {
 		return true
 	}
-	ds.filter[name] = struct{}{}
+	ds.filter.Insert([]byte(name))
 	return false
 }
 

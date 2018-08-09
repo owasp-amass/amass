@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	Version = "v2.5.1"
+	Version = "v2.5.2"
 	Author  = "Jeff Foley (@jeff_foley)"
 
 	DefaultFrequency   = 10 * time.Millisecond

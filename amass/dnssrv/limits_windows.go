@@ -5,6 +5,6 @@
 
 package dnssrv
 
-func GetFileLimit() int {
-	return 10000
+func GetFileLimit() int64 {
+	return defaultNumOpenFiles
 }
