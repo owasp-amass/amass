@@ -26,22 +26,6 @@ import (
 )
 
 var (
-	banner string = `
-
-        .+++:.            :                             .+++.                   
-      +W@@@@@@8        &+W@#               o8W8:      +W@@@@@@#.   oW@@@W#+     
-     &@#+   .o@##.    .@@@o@W.o@@o       :@@#&W8o    .@#:  .:oW+  .@#+++&#&     
-    +@&        &@&     #@8 +@W@&8@+     :@W.   +@8   +@:          .@8           
-    8@          @@     8@o  8@8  WW    .@W      W@+  .@W.          o@#:         
-    WW          &@o    &@:  o@+  o@+   #@.      8@o   +W@#+.        +W@8:       
-    #@          :@W    &@+  &@+   @8  :@o       o@o     oW@@W+        oW@8      
-    o@+          @@&   &@+  &@+   #@  &@.      .W@W       .+#@&         o@W.    
-     WW         +@W@8. &@+  :&    o@+ #@      :@W&@&         &@:  ..     :@o    
-     :@W:      o@# +Wo &@+        :W: +@W&o++o@W. &@&  8@#o+&@W.  #@:    o@+    
-      :W@@WWWW@@8       +              :&W@@@@&    &W  .o#@@W&.   :W@WWW@@&     
-        +o&&&&+.                                                    +oooo.      
-
-`
 	// Colors used to ease the reading of program output
 	y      = color.New(color.FgHiYellow)
 	g      = color.New(color.FgHiGreen)
@@ -80,45 +64,22 @@ var (
 )
 
 func main() {
-	var addrs parseIPs
-	var cidrs parseCIDRs
-	var asns, ports parseInts
 	var domains, resolvers, blacklist parseStrings
-
-	// This is for the potentially required network flags
-	network := flag.NewFlagSet("net", flag.ContinueOnError)
-	network.Var(&addrs, "addr", "IPs and ranges separated by commas (can be used multiple times)")
-	network.Var(&cidrs, "cidr", "CIDRs separated by commas (can be used multiple times)")
-	network.Var(&asns, "asn", "ASNs separated by commas (can be used multiple times)")
-	network.Var(&ports, "p", "Ports used to discover TLS certs (can be used multiple times)")
 
 	defaultBuf := new(bytes.Buffer)
 	flag.CommandLine.SetOutput(defaultBuf)
-	netBuf := new(bytes.Buffer)
-	network.SetOutput(netBuf)
 
 	flag.Var(&domains, "d", "Domain names separated by commas (can be used multiple times)")
 	flag.Var(&resolvers, "r", "IP addresses of preferred DNS resolvers (can be used multiple times)")
 	flag.Var(&blacklist, "bl", "Blacklist of subdomain names that will not be investigated")
 	flag.Parse()
 
-	// Check if the 'net' subcommand flags need to be parsed
-	if len(flag.Args()) >= 2 {
-		err := network.Parse(flag.Args()[1:])
-		if err != nil {
-			r.Println(err)
-		}
-	}
 	// Some input validation
 	if *help {
 		PrintBanner()
-		g.Printf("Usage: %s [options] <-d domain> | <net>\n", path.Base(os.Args[0]))
+		g.Printf("Usage: %s [options] <-d domain>\n", path.Base(os.Args[0]))
 		flag.PrintDefaults()
-		network.PrintDefaults()
 		g.Println(defaultBuf.String())
-
-		g.Println("Flags for the 'net' subcommand:")
-		g.Println(netBuf.String())
 		return
 	}
 	if *version {
@@ -131,6 +92,7 @@ func main() {
 	}
 
 	var words []string
+	// Obtain parameters from provided files
 	if *wordlist != "" {
 		words = GetLinesFromFile(*wordlist)
 	}
@@ -181,10 +143,6 @@ func main() {
 	}
 	enum := &amass.Enumeration{
 		Log:             log.New(ioutil.Discard, "", 0),
-		IPs:             addrs,
-		ASNs:            asns,
-		CIDRs:           cidrs,
-		Ports:           ports,
 		Whois:           *whois,
 		Wordlist:        words,
 		BruteForcing:    *brute,

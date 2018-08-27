@@ -96,15 +96,15 @@ func ListDomains(enum *amass.Enumeration, outfile string) {
 
 func PrintBanner() {
 	rightmost := 76
-	desc := "In-Depth Subdomain Enumeration"
-	author := "Coded By " + amass.Author
+	desc := "In-Depth DNS Enumeration"
+	author := "Authored By " + amass.Author
 
 	pad := func(num int) {
 		for i := 0; i < num; i++ {
 			fmt.Print(" ")
 		}
 	}
-	r.Println(banner)
+	r.Println(amass.Banner)
 	pad(rightmost - len(amass.Version))
 	y.Println(amass.Version)
 	pad(rightmost - len(desc))

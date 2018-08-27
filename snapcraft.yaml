@@ -1,5 +1,5 @@
 name: amass
-version: 'v2.5.2'
+version: 'v2.6.0'
 summary: In-Depth DNS Enumeration
 description: |
   The OWASP Amass tool obtains subdomain names by scraping data sources, 
@@ -19,6 +19,10 @@ apps:
 
   maltego:
     command: bin/maltego
+    plugs: [home, network, removable-media]
+  
+  netnames:
+    command: bin/netnames
     plugs: [home, network, removable-media]
 
 
@@ -55,5 +59,21 @@ parts:
       go get -u ./...
       go install ./...
       mkdir $SNAPCRAFT_PART_INSTALL/bin
-      mv $GOPATH/bin/maltego $SNAPCRAFT_PART_INSTALL/bin/maltego
+      mv $GOPATH/bin/amass.maltego $SNAPCRAFT_PART_INSTALL/bin/maltego
       strip --remove-section=.comment --remove-section=.note $SNAPCRAFT_PART_INSTALL/bin/maltego
+
+  netnames:
+      after: [amass]
+      source: https://github.com/OWASP/Amass
+      source-type: git
+      plugin: go
+      go-importpath: github.com/OWASP/Amass
+      override-build: |
+        echo "\nStarting override-build for certsweep part:"
+        export GOPATH=$(dirname $SNAPCRAFT_PART_INSTALL)/go
+        cd $GOPATH/src/github.com/OWASP/Amass
+        go get -u ./...
+        go install ./...
+        mkdir $SNAPCRAFT_PART_INSTALL/bin
+        mv $GOPATH/bin/amass.netnames $SNAPCRAFT_PART_INSTALL/bin/netnames
+        strip --remove-section=.comment --remove-section=.note $SNAPCRAFT_PART_INSTALL/bin/netnames

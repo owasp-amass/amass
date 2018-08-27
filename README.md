@@ -24,6 +24,18 @@ The OWASP Amass tool obtains subdomain names by scraping data sources, recursive
 
 A [precompiled version is available](https://github.com/OWASP/Amass/releases) for each release.
 
+If you are on a distribution such as **Kali Linux**, and have never used snap previously, follow these steps to access snap packages:
+```
+$ sudo apt install snapd
+
+$ sudo systemctl start snapd
+```
+
+Add the snap binaries to your PATH using a method similar to the following:
+```
+$ export PATH=$PATH:/snap/bin
+```
+
 If your operating environment supports [Snap](https://docs.snapcraft.io/core/install), you can [click here to install](https://snapcraft.io/amass), or perform the following from the command-line:
 ```
 $ sudo snap install amass
@@ -40,22 +52,19 @@ If you would prefer to build your own binary from the latest version of the sour
 
 1. Download [amass](https://github.com/OWASP/Amass/releases):
 ```
-$ go get -u github.com/OWASP/Amass
+$ go get -u github.com/OWASP/Amass/...
 ```
 
-2. Move to the downloaded Amass code:
+2. If you wish to rebuild the binaries from the source code:
 ```
 $ cd $GOPATH/src/github.com/OWASP/Amass
-```
 
-3. Build the command binaries from the downloaded source code:
-```
 $ go install ./...
 ```
 
-At this point, the amass and maltego binary should be in *$GOPATH/bin*.
+At this point, the binaries should be in *$GOPATH/bin*.
 
-4. Several wordlists can be found in the following directory:
+3. Several wordlists can be found in the following directory:
 ```
 $ ls $GOPATH/src/github.com/OWASP/Amass/wordlists/
 ```
@@ -70,6 +79,11 @@ $ amass -d example.com
 **If you need Amass to run faster** and only use the passive data sources:
 ```
 $ amass -nodns -d example.com
+```
+
+If you are running Amass within a virtual machine, you may want to slow it down a bit:
+```
+$ amass -freq 480 -d example.com
 ```
 
 The example below is a good place to start with amass:
@@ -130,30 +144,28 @@ Here are switches for outputting the DNS and infrastructure findings as a networ
 | -visjs | Output HTML that employs VisJS | amass -visjs network.html -d example.com |
 
 
-#### Network/Infrastructure Options
+#### amass.netnames
 
-**Caution:** If you use these options, amass will attempt to reach out to every IP address within the identified infrastructure and obtain names from TLS certificates. This is "loud" and can reveal your reconnaissance activities to the organization being investigated.
-
-All the flags shown here require the 'net' subcommand to be specified **first**.
+**Caution:** If you use the amass.netnames tool, it will attempt to reach out to every IP address within the identified infrastructure and obtain names from TLS certificates. This is "loud" and can reveal your reconnaissance activities to the organization being investigated.
 
 To discover all domains hosted within target ASNs, use the following option:
 ```
-$ amass net -asn 13374,14618
+$ amass.netnames -asn 13374,14618
 ```
 
 To investigate within target CIDRs, use this option:
 ```
-$ amass net -cidr 192.184.113.0/24,104.154.0.0/15
+$ amass.netnames -cidr 192.184.113.0/24,104.154.0.0/15
 ```
 
 For specific IPs or address ranges, use this option:
 ```
-$ amass net -addr 192.168.1.44,192.168.2.1-64
+$ amass.netnames -addr 192.168.1.44,192.168.2.1-64
 ```
 
 By default, port 443 will be checked for certificates, but the ports can be changed as follows:
 ```
-$ amass net -cidr 192.168.1.0/24 -p 80,443,8080
+$ amass.netnames -cidr 192.168.1.0/24 -p 80,443,8080
 ```
 
 ## Integrating OWASP Amass into Your Work

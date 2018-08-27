@@ -22,8 +22,25 @@ import (
 	evbus "github.com/asaskevich/EventBus"
 )
 
+var Banner string = `
+
+        .+++:.            :                             .+++.                   
+      +W@@@@@@8        &+W@#               o8W8:      +W@@@@@@#.   oW@@@W#+     
+     &@#+   .o@##.    .@@@o@W.o@@o       :@@#&W8o    .@#:  .:oW+  .@#+++&#&     
+    +@&        &@&     #@8 +@W@&8@+     :@W.   +@8   +@:          .@8           
+    8@          @@     8@o  8@8  WW    .@W      W@+  .@W.          o@#:         
+    WW          &@o    &@:  o@+  o@+   #@.      8@o   +W@#+.        +W@8:       
+    #@          :@W    &@+  &@+   @8  :@o       o@o     oW@@W+        oW@8      
+    o@+          @@&   &@+  &@+   #@  &@.      .W@W       .+#@&         o@W.    
+     WW         +@W@8. &@+  :&    o@+ #@      :@W&@&         &@:  ..     :@o    
+     :@W:      o@# +Wo &@+        :W: +@W&o++o@W. &@&  8@#o+&@W.  #@:    o@+    
+      :W@@WWWW@@8       +              :&W@@@@&    &W  .o#@@W&.   :W@WWW@@&     
+        +o&&&&+.                                                    +oooo.      
+
+`
+
 const (
-	Version = "v2.5.2"
+	Version = "v2.6.0"
 	Author  = "Jeff Foley (@jeff_foley)"
 
 	DefaultFrequency   = 10 * time.Millisecond
@@ -315,12 +332,6 @@ func (e *Enumeration) WriteD3File(path string) {
 }
 
 func (e *Enumeration) ObtainAdditionalDomains() {
-	ips := e.allIPsInConfig()
-
-	if len(ips) > 0 {
-		e.pullAllCertificates(ips)
-	}
-
 	if e.Whois {
 		for _, domain := range e.domains {
 			more, err := ReverseWhois(domain)
@@ -334,80 +345,6 @@ func (e *Enumeration) ObtainAdditionalDomains() {
 			}
 		}
 	}
-}
-
-func (e *Enumeration) allIPsInConfig() []net.IP {
-	var ips []net.IP
-
-	ips = append(ips, e.IPs...)
-
-	for _, cidr := range e.CIDRs {
-		ips = append(ips, utils.NetHosts(cidr)...)
-	}
-
-	for _, asn := range e.ASNs {
-		record, err := ASNRequest(asn)
-		if err != nil {
-			e.Log.Printf("%v", err)
-			continue
-		}
-
-		for _, cidr := range record.Netblocks {
-			_, ipnet, err := net.ParseCIDR(cidr)
-			if err != nil {
-				continue
-			}
-
-			ips = append(ips, utils.NetHosts(ipnet)...)
-		}
-	}
-	return ips
-}
-
-func (e *Enumeration) pullAllCertificates(ips []net.IP) {
-	var running int
-	done := make(chan struct{}, 100)
-
-	t := time.NewTicker(100 * time.Millisecond)
-	defer t.Stop()
-loop:
-	for {
-		select {
-		case <-t.C:
-			if running >= 100 || len(ips) <= 0 {
-				break
-			}
-
-			running++
-
-			addr := ips[0]
-			if len(ips) == 1 {
-				ips = []net.IP{}
-			} else {
-				ips = ips[1:]
-			}
-
-			go e.executeActiveCert(addr.String(), done)
-		case <-done:
-			running--
-			if running == 0 && len(ips) <= 0 {
-				break loop
-			}
-		}
-	}
-}
-
-func (e *Enumeration) executeActiveCert(addr string, done chan struct{}) {
-	var domains []string
-
-	for _, r := range PullCertificateNames(addr, e.Ports) {
-		domains = utils.UniqueAppend(domains, r.Domain)
-	}
-
-	for _, domain := range domains {
-		e.AddDomain(domain)
-	}
-	done <- struct{}{}
 }
 
 func getDefaultWordlist() ([]string, error) {

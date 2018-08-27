@@ -7,12 +7,14 @@ import (
 	"fmt"
 	"net/url"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/OWASP/Amass/amass/utils"
 )
 
 type Google struct {
+	sync.Mutex
 	BaseDataSource
 	quantity int
 	limit    int
@@ -21,7 +23,7 @@ type Google struct {
 func NewGoogle() DataSource {
 	g := &Google{
 		quantity: 10,
-		limit:    160,
+		limit:    100,
 	}
 
 	g.BaseDataSource = *NewBaseDataSource(SCRAPE, "Google")
@@ -29,16 +31,15 @@ func NewGoogle() DataSource {
 }
 
 func (g *Google) Query(domain, sub string) []string {
+	g.Lock()
+	defer g.Unlock()
+
 	var unique []string
 
-	if domain != sub {
-		return unique
-	}
-
-	re := utils.SubdomainRegex(domain)
+	re := utils.SubdomainRegex(sub)
 	num := g.limit / g.quantity
 	for i := 0; i < num; i++ {
-		u := g.urlByPageNum(domain, i)
+		u := g.urlByPageNum(sub, i)
 		page, err := utils.GetWebPage(u, nil)
 		if err != nil {
 			g.log(fmt.Sprintf("%s: %v", u, err))
@@ -70,4 +71,8 @@ func (g *Google) urlByPageNum(domain string, page int) string {
 		"filter": {"0"},
 	}.Encode()
 	return u.String()
+}
+
+func (g *Google) Subdomains() bool {
+	return true
 }

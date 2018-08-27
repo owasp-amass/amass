@@ -67,7 +67,7 @@ func (bds *BaseDataSource) Type() string {
 }
 
 // If a data source supports searching on subdomains,
-// this get implemented by the data source and returns true
+// this gets implemented by the data source and returns true
 func (bds *BaseDataSource) Subdomains() bool {
 	return false
 }
