@@ -274,7 +274,7 @@ func ExtractRawData(msg *dns.Msg, qtype uint16) []string {
 				}
 			case dns.TypeNS:
 				if t, ok := a.(*dns.NS); ok {
-					data = append(data, utils.CopyString(t.Ns))
+					data = append(data, realName(t.Hdr)+","+removeLastDot(t.Ns))
 				}
 			case dns.TypeMX:
 				if t, ok := a.(*dns.MX); ok {
@@ -310,6 +310,21 @@ func ExtractRawData(msg *dns.Msg, qtype uint16) []string {
 		}
 	}
 	return data
+}
+
+func realName(hdr dns.RR_Header) string {
+	pieces := strings.Split(hdr.Name, " ")
+
+	return removeLastDot(pieces[len(pieces)-1])
+}
+
+func removeLastDot(name string) string {
+	sz := len(name)
+
+	if sz > 0 && name[sz-1] == '.' {
+		return name[:sz-1]
+	}
+	return name
 }
 
 // setupOptions - Returns the EDNS0_SUBNET option for hiding our location

@@ -241,6 +241,9 @@ func (ds *DNSService) basicQueries(subdomain, domain string) {
 	// Obtain the DNS answers for the NS records related to the domain
 	if ans, err := Resolve(subdomain, "NS"); err == nil {
 		for _, a := range ans {
+			pieces := strings.Split(a.Data, ",")
+			a.Data = pieces[len(pieces)-1]
+
 			if ds.Config().Active {
 				go ds.attemptZoneXFR(domain, subdomain, a.Data)
 			}

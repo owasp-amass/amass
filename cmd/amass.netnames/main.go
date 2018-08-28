@@ -33,7 +33,7 @@ func main() {
 	flag.Var(&addrs, "addr", "IPs and ranges (192.168.1.1-254) separated by commas")
 	flag.Var(&cidrs, "cidr", "CIDRs separated by commas (can be used multiple times)")
 	flag.Var(&asns, "asn", "ASNs separated by commas (can be used multiple times)")
-	flag.Var(&ports, "p", "Ports separated by commas (default: 80,443)")
+	flag.Var(&ports, "p", "Ports separated by commas (default: 443)")
 	flag.Parse()
 
 	if *help {
@@ -48,7 +48,7 @@ func main() {
 	go CatchSignals(results, done)
 
 	if len(ports) == 0 {
-		ports = append(ports, 80, 443)
+		ports = []int{443}
 	}
 
 	if ips := AllIPsInScope(addrs, cidrs, asns); len(ips) > 0 {
