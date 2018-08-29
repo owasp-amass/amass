@@ -1,5 +1,5 @@
 name: amass
-version: 'v2.6.0'
+version: 'v2.6.1'
 summary: In-Depth DNS Enumeration
 description: |
   The OWASP Amass tool obtains subdomain names by scraping data sources, 

@@ -6,7 +6,6 @@ package dnssrv
 import (
 	"math/rand"
 	"strings"
-	"sync"
 
 	"github.com/OWASP/Amass/amass/core"
 )
@@ -18,54 +17,27 @@ const (
 	ldhChars = "abcdefghijklmnopqrstuvwxyz0123456789-"
 )
 
-type wildcard struct {
-	HasWildcard bool
-	Answers     []core.DNSAnswer
-}
-
-var (
-	wildcardsLock sync.Mutex
-	wildcards     map[string]*wildcard
-)
-
-func init() {
-	wildcards = make(map[string]*wildcard)
-}
-
 // DetectWildcard - Checks subdomains in the wildcard cache for matches on the IP address
 func DetectWildcard(domain, subdomain string, records []core.DNSAnswer) bool {
-	wildcardsLock.Lock()
-	defer wildcardsLock.Unlock()
-
 	var answer bool
 
 	base := len(strings.Split(domain, "."))
-	// Obtain all parts of the subdomain name
 	labels := strings.Split(subdomain, ".")
-
 	for i := len(labels) - base; i > 0; i-- {
-		sub := strings.Join(labels[i:], ".")
+		var isWildcard bool
+		var answers []core.DNSAnswer
 
-		// See if detection has been performed for this subdomain
-		w, found := wildcards[sub]
-		if !found {
-			entry := &wildcard{
-				HasWildcard: false,
-				Answers:     nil,
+		sub := strings.Join(labels[i:], ".")
+		// Try three times for good luck
+		for i := 0; i < 3; i++ {
+			// Does this subdomain have a wildcard?
+			if a := wildcardTestResolution(sub); a != nil {
+				isWildcard = true
+				answers = append(answers, a...)
 			}
-			// Try three times for good luck
-			for i := 0; i < 3; i++ {
-				// Does this subdomain have a wildcard?
-				if a := wildcardDetection(sub); a != nil {
-					entry.HasWildcard = true
-					entry.Answers = append(entry.Answers, a...)
-				}
-			}
-			w = entry
-			wildcards[sub] = w
 		}
 		// Check if the subdomain and address in question match a wildcard
-		if w.HasWildcard && compareAnswers(records, w.Answers) {
+		if isWildcard && compareAnswers(records, answers) {
 			answer = true
 		}
 	}
@@ -88,7 +60,7 @@ loop:
 
 // wildcardDetection detects if a domain returns an IP
 // address for "bad" names, and if so, which address(es) are used
-func wildcardDetection(sub string) []core.DNSAnswer {
+func wildcardTestResolution(sub string) []core.DNSAnswer {
 	var answers []core.DNSAnswer
 
 	name := unlikelyName(sub)
@@ -99,11 +71,9 @@ func wildcardDetection(sub string) []core.DNSAnswer {
 	if a, err := Resolve(name, "CNAME"); err == nil {
 		answers = append(answers, a...)
 	}
-
 	if a, err := Resolve(name, "A"); err == nil {
 		answers = append(answers, a...)
 	}
-
 	if a, err := Resolve(name, "AAAA"); err == nil {
 		answers = append(answers, a...)
 	}

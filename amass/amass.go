@@ -40,7 +40,7 @@ var Banner string = `
 `
 
 const (
-	Version = "v2.6.0"
+	Version = "v2.6.1"
 	Author  = "Jeff Foley (@jeff_foley)"
 
 	DefaultFrequency   = 10 * time.Millisecond
