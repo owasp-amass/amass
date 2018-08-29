@@ -315,6 +315,9 @@ func fetchOnlineNetblockData(asn int) ([]string, error) {
 
 func parseASNInfo(line string) *ASRecord {
 	fields := strings.Split(line, " | ")
+	if len(fields) < 5 {
+		return nil
+	}
 
 	asn, err := strconv.Atoi(fields[0])
 	if err != nil {
