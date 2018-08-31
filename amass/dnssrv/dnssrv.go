@@ -62,6 +62,14 @@ func (ds *DNSService) OnStart() error {
 	return nil
 }
 
+func (ds *DNSService) OnPause() error {
+	return nil
+}
+
+func (ds *DNSService) OnResume() error {
+	return nil
+}
+
 func (ds *DNSService) OnStop() error {
 	ds.BaseAmassService.OnStop()
 
@@ -71,16 +79,20 @@ func (ds *DNSService) OnStop() error {
 
 func (ds *DNSService) processRequests() {
 	t := time.NewTicker(ds.Config().Frequency)
-	defer t.Stop()
 loop:
 	for {
 		select {
 		case <-t.C:
 			ds.performRequest()
+		case <-ds.PauseChan():
+			t.Stop()
+		case <-ds.ResumeChan():
+			t = time.NewTicker(ds.Config().Frequency)
 		case <-ds.Quit():
 			break loop
 		}
 	}
+	t.Stop()
 }
 
 func (ds *DNSService) duplicate(name string) bool {

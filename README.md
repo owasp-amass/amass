@@ -46,6 +46,11 @@ If you would like snap to get you the latest unstable build of OWASP Amass, type
 $ sudo snap install --edge amass
 ```
 
+Periodically, execute the following command to update all your snap packages:
+```
+$ sudo snap refresh
+```
+
 #### From Source
 
 If you would prefer to build your own binary from the latest version of the source code, make sure you have a correctly configured **Go >= 1.10** environment. More information about how to achieve this can be found [on the golang website.](https://golang.org/doc/install) Then, take the following steps:

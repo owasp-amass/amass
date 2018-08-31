@@ -39,6 +39,14 @@ func (bfs *BruteForceService) OnStart() error {
 	return nil
 }
 
+func (bfs *BruteForceService) OnPause() error {
+	return nil
+}
+
+func (bfs *BruteForceService) OnResume() error {
+	return nil
+}
+
 func (bfs *BruteForceService) OnStop() error {
 	bfs.BaseAmassService.OnStop()
 
@@ -48,16 +56,20 @@ func (bfs *BruteForceService) OnStop() error {
 
 func (bfs *BruteForceService) processRequests() {
 	t := time.NewTicker(bfs.Config().Frequency)
-	defer t.Stop()
 loop:
 	for {
 		select {
 		case <-t.C:
 			go bfs.checkForNewSubdomain()
+		case <-bfs.PauseChan():
+			t.Stop()
+		case <-bfs.ResumeChan():
+			t = time.NewTicker(bfs.Config().Frequency)
 		case <-bfs.Quit():
 			break loop
 		}
 	}
+	t.Stop()
 }
 
 // Returns true if the subdomain name is a duplicate entry in the filter.

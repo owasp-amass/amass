@@ -67,6 +67,14 @@ func (ss *SourcesService) OnStart() error {
 	return nil
 }
 
+func (ss *SourcesService) OnPause() error {
+	return nil
+}
+
+func (ss *SourcesService) OnResume() error {
+	return nil
+}
+
 func (ss *SourcesService) OnStop() error {
 	ss.BaseAmassService.OnStop()
 
@@ -75,19 +83,23 @@ func (ss *SourcesService) OnStop() error {
 }
 
 func (ss *SourcesService) processRequests() {
-	t := time.NewTicker(1 * time.Second)
-	defer t.Stop()
-
+	t := time.NewTicker(time.Second)
+loop:
 	for {
 		select {
 		case <-t.C:
 			if req := ss.NextRequest(); req != nil {
 				go ss.handleRequest(req)
 			}
+		case <-ss.PauseChan():
+			t.Stop()
+		case <-ss.ResumeChan():
+			t = time.NewTicker(time.Second)
 		case <-ss.Quit():
-			return
+			break loop
 		}
 	}
+	t.Stop()
 }
 
 func (ss *SourcesService) handleRequest(req *core.AmassRequest) {
@@ -243,8 +255,7 @@ func (ss *SourcesService) processThrottleQueue() {
 	done := make(chan struct{}, MAX_THROTTLED)
 
 	t := time.NewTicker(100 * time.Millisecond)
-	defer t.Stop()
-
+loop:
 	for {
 		select {
 		case <-t.C:
@@ -261,8 +272,13 @@ func (ss *SourcesService) processThrottleQueue() {
 			}
 		case <-done:
 			running--
+		case <-ss.PauseChan():
+			t.Stop()
+		case <-ss.ResumeChan():
+			t = time.NewTicker(100 * time.Millisecond)
 		case <-ss.Quit():
-			return
+			break loop
 		}
 	}
+	t.Stop()
 }

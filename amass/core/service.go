@@ -17,6 +17,14 @@ type AmassService interface {
 	// OPSEC for the service
 	List() string
 
+	// Pause the service
+	Pause() error
+	OnPause() error
+
+	// Resume the service
+	Resume() error
+	OnResume() error
+
 	// Stop the service
 	Stop() error
 	OnStop() error
@@ -26,6 +34,10 @@ type AmassService interface {
 
 	IsActive() bool
 	SetActive()
+
+	// Returns channels that fire during Pause/Resume operations
+	PauseChan() <-chan struct{}
+	ResumeChan() <-chan struct{}
 
 	// Returns a channel that is closed when the service is stopped
 	Quit() <-chan struct{}
@@ -41,6 +53,8 @@ type BaseAmassService struct {
 	stopped bool
 	queue   []*AmassRequest
 	active  time.Time
+	pause   chan struct{}
+	resume  chan struct{}
 	quit    chan struct{}
 	config  *AmassConfig
 
@@ -52,6 +66,8 @@ func NewBaseAmassService(name string, config *AmassConfig, service AmassService)
 	return &BaseAmassService{
 		name:    name,
 		queue:   make([]*AmassRequest, 0, 50),
+		pause:   make(chan struct{}),
+		resume:  make(chan struct{}),
 		quit:    make(chan struct{}),
 		config:  config,
 		service: service,
@@ -73,6 +89,22 @@ func (bas *BaseAmassService) OnStart() error {
 
 func (bas *BaseAmassService) List() string {
 	return "N/A"
+}
+
+func (bas *BaseAmassService) Pause() error {
+	return bas.service.OnPause()
+}
+
+func (bas *BaseAmassService) OnPause() error {
+	return nil
+}
+
+func (bas *BaseAmassService) Resume() error {
+	return bas.service.OnResume()
+}
+
+func (bas *BaseAmassService) OnResume() error {
+	return nil
 }
 
 func (bas *BaseAmassService) Stop() error {
@@ -139,6 +171,14 @@ func (bas *BaseAmassService) SetActive() {
 	defer bas.Unlock()
 
 	bas.active = time.Now()
+}
+
+func (bas *BaseAmassService) PauseChan() <-chan struct{} {
+	return bas.pause
+}
+
+func (bas *BaseAmassService) ResumeChan() <-chan struct{} {
+	return bas.resume
 }
 
 func (bas *BaseAmassService) Quit() <-chan struct{} {

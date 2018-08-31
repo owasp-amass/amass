@@ -59,6 +59,14 @@ func (dms *DataManagerService) OnStart() error {
 	return nil
 }
 
+func (dms *DataManagerService) OnPause() error {
+	return nil
+}
+
+func (dms *DataManagerService) OnResume() error {
+	return nil
+}
+
 func (dms *DataManagerService) OnStop() error {
 	dms.BaseAmassService.OnStop()
 
@@ -72,21 +80,24 @@ func (dms *DataManagerService) OnStop() error {
 
 func (dms *DataManagerService) processRequests() {
 	t := time.NewTicker(dms.Config().Frequency)
-	defer t.Stop()
 loop:
 	for {
 		select {
 		case <-t.C:
 			dms.manageData()
+		case <-dms.PauseChan():
+			t.Stop()
+		case <-dms.ResumeChan():
+			t = time.NewTicker(dms.Config().Frequency)
 		case <-dms.Quit():
 			break loop
 		}
 	}
+	t.Stop()
 }
 
 func (dms *DataManagerService) processOutput() {
 	t := time.NewTicker(2 * time.Second)
-	defer t.Stop()
 loop:
 	for {
 		select {
@@ -94,10 +105,15 @@ loop:
 			if dms.NumOfRequests() < 25 {
 				dms.discoverOutput()
 			}
+		case <-dms.PauseChan():
+			t.Stop()
+		case <-dms.ResumeChan():
+			t = time.NewTicker(dms.Config().Frequency)
 		case <-dms.Quit():
 			break loop
 		}
 	}
+	t.Stop()
 	dms.discoverOutput()
 }
 

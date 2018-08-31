@@ -8,17 +8,17 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"math/rand"
 	"os"
 	"os/signal"
 	"path"
-	//"runtime"
-	//"runtime/pprof"
 	"strings"
 	"syscall"
 	"time"
+
+	//"runtime"
+	//"runtime/pprof"
 
 	"github.com/OWASP/Amass/amass"
 	"github.com/OWASP/Amass/amass/utils"
@@ -129,9 +129,6 @@ func main() {
 
 	done := make(chan struct{})
 	results := make(chan *amass.AmassOutput, 100)
-	// Execute the signal handler
-	go CatchSignals(results, done)
-
 	// Setup the amass configuration
 	alts := true
 	recursive := true
@@ -141,22 +138,21 @@ func main() {
 	if *norecursive {
 		recursive = false
 	}
-	enum := &amass.Enumeration{
-		Log:             log.New(ioutil.Discard, "", 0),
-		Whois:           *whois,
-		Wordlist:        words,
-		BruteForcing:    *brute,
-		Recursive:       recursive,
-		MinForRecursive: *minrecursive,
-		Active:          *active,
-		Alterations:     alts,
-		NoDNS:           *nodns,
-		Frequency:       FreqToDuration(*freq),
-		Resolvers:       resolvers,
-		Blacklist:       blacklist,
-		Neo4jPath:       *neo4j,
-		Output:          results,
-	}
+	enum := amass.NewEnumeration()
+	enum.Whois = *whois
+	enum.Wordlist = words
+	enum.BruteForcing = *brute
+	enum.Recursive = recursive
+	enum.MinForRecursive = *minrecursive
+	enum.Active = *active
+	enum.Alterations = alts
+	enum.NoDNS = *nodns
+	enum.Frequency = FreqToDuration(*freq)
+	enum.Resolvers = resolvers
+	enum.Blacklist = blacklist
+	enum.Neo4jPath = *neo4j
+	enum.Output = results
+
 	for _, domain := range domains {
 		enum.AddDomain(domain)
 	}
@@ -202,6 +198,8 @@ func main() {
 		r.Println(err)
 		return
 	}
+	// Execute the signal handler
+	go CatchSignals(enum, results, done)
 	//profFile, _ := os.Create("amass_mem.prof")
 	//defer profFile.Close()
 	//runtime.GC()
@@ -211,16 +209,29 @@ func main() {
 }
 
 // If the user interrupts the program, print the summary information
-func CatchSignals(output chan *amass.AmassOutput, done chan struct{}) {
-	sigs := make(chan os.Signal, 2)
-	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
+func CatchSignals(e *amass.Enumeration, output chan *amass.AmassOutput, done chan struct{}) {
+	quit := make(chan os.Signal, 1)
+	pause := make(chan os.Signal, 1)
+	resume := make(chan os.Signal, 1)
 
-	// Wait for a signal
-	<-sigs
-	// Start final output operations
-	close(output)
-	// Wait for the broadcast indicating completion
-	<-done
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+	signal.Notify(pause, syscall.SIGTSTP)
+	signal.Notify(resume, syscall.SIGCONT)
+loop:
+	for {
+		select {
+		case <-pause:
+			e.Pause()
+		case <-resume:
+			e.Resume()
+		case <-quit:
+			// Start final output operations
+			close(output)
+			// Wait for the broadcast indicating completion
+			<-done
+			break loop
+		}
+	}
 	os.Exit(1)
 }
 

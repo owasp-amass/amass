@@ -4,7 +4,7 @@ Thank you for considering making contributions to Amass! Start by taking a look 
 
 Please follow standard github best practices: fork the repo, branch from the tip of develop, make some commits, and submit a pull request to develop. 
 
-Please make sure to use `gofmt` before every commit - the easiest way to do this is have your editor run it for you upon saving a file.
+Please make sure to use `gofmt` before every commit - the easiest way to do this is have your editor run it for you upon saving a file. Otherwise, run the following command in the project root directory: `go fmt ./...`
 
 ## Forking
 

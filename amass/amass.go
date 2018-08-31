@@ -40,7 +40,7 @@ var Banner string = `
 `
 
 const (
-	Version = "v2.6.1"
+	Version = "v2.6.2"
 	Author  = "Jeff Foley (@jeff_foley)"
 
 	DefaultFrequency   = 10 * time.Millisecond
@@ -123,6 +123,13 @@ type Enumeration struct {
 
 	// The root domain names that the enumeration will target
 	domains []string
+
+	// Pause/Resume channels for halting the enumeration
+	pause  chan struct{}
+	resume chan struct{}
+
+	// Broadcast channel that indicates no further writes to the output channel
+	done chan struct{}
 }
 
 func NewEnumeration() *Enumeration {
@@ -134,6 +141,9 @@ func NewEnumeration() *Enumeration {
 		Alterations:     true,
 		Frequency:       10 * time.Millisecond,
 		MinForRecursive: 1,
+		pause:           make(chan struct{}),
+		resume:          make(chan struct{}),
+		done:            make(chan struct{}),
 	}
 }
 
@@ -234,37 +244,61 @@ func (e *Enumeration) Start() error {
 	if data != nil {
 		e.Graph = data.Graph
 	}
-
 	// Periodically check if all the services have finished
-	t := time.NewTicker(1 * time.Second)
-	defer t.Stop()
-	for range t.C {
-		done := true
+	t := time.NewTicker(time.Second)
+loop:
+	for {
+		select {
+		case <-e.pause:
+			t.Stop()
+		case <-e.resume:
+			t = time.NewTicker(time.Second)
+		case <-t.C:
+			done := true
 
-		for _, service := range services {
-			if service.IsActive() {
-				done = false
-				break
+			for _, service := range services {
+				if service.IsActive() {
+					done = false
+					break
+				}
+			}
+
+			if done {
+				break loop
 			}
 		}
 
-		if done {
-			break
-		}
 	}
+	t.Stop()
 	// Stop all the services
 	for _, service := range services {
 		service.Stop()
 	}
-
+	// Wait for output to finish being handled
 	bus.Unsubscribe(core.OUTPUT, e.sendOutput)
 	bus.WaitAsync()
+	close(e.done)
+	time.Sleep(2 * time.Second)
 	close(e.Output)
 	return nil
 }
 
+func (e *Enumeration) Pause() {
+	e.pause <- struct{}{}
+}
+
+func (e *Enumeration) Resume() {
+	e.resume <- struct{}{}
+}
+
 func (e *Enumeration) sendOutput(out *AmassOutput) {
-	e.Output <- out
+	// Check if the output channel has been closed
+	select {
+	case <-e.done:
+		return
+	default:
+		e.Output <- out
+	}
 }
 
 func (e *Enumeration) WriteVisjsFile(path string) {
