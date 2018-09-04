@@ -193,15 +193,13 @@ func main() {
             fmt.Println(result.Name)
         }
     }()
-
     // Seed the default pseudo-random number generator
     rand.Seed(time.Now().UTC().UnixNano())
-
     // Setup the most basic amass configuration
-    config := amass.CustomConfig(&amass.AmassConfig{Output: output})
-    config.AddDomain("example.com")
-
-    amass.StartEnumeration(config)
+    enum := amass.NewEnumeration()
+    enum.Output = output
+    enum.AddDomain("example.com")
+    enum.Start()
 }
 ```
 

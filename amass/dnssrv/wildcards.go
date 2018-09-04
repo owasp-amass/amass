@@ -86,12 +86,12 @@ func wildcardTestResolution(sub string) []core.DNSAnswer {
 
 func unlikelyName(sub string) string {
 	var newlabel string
-	ldh := []byte(ldhChars)
+	ldh := []rune(ldhChars)
 	ldhLen := len(ldh)
 
 	// Determine the max label length
-	l := maxNameLen - len(sub)
-	if l > maxLabelLen {
+	l := maxNameLen - (len(sub) + 1)
+	if l >= maxLabelLen {
 		l = maxLabelLen / 2
 	} else if l < 1 {
 		return ""
@@ -101,6 +101,7 @@ func unlikelyName(sub string) string {
 		ldh[i], ldh[j] = ldh[j], ldh[i]
 	})
 
+	l = (rand.Int() % l) + 1
 	for i := 0; i < l; i++ {
 		sel := rand.Int() % ldhLen
 

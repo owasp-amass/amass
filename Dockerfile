@@ -2,9 +2,8 @@ FROM golang:alpine as build
 WORKDIR /go/src/github.com/OWASP/Amass
 COPY . .
 RUN apk --no-cache add git \
-  && go get -u -v golang.org/x/vgo \
-  && vgo install
+  && go get -u github.com/OWASP/Amass/...
   
 FROM alpine:latest
-COPY --from=build /go/bin/Amass /bin/amass 
+COPY --from=build /go/bin/amass /bin/amass 
 ENTRYPOINT ["/bin/amass"]

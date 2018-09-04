@@ -11,10 +11,8 @@ import (
 	"log"
 	"math/rand"
 	"os"
-	"os/signal"
 	"path"
 	"strings"
-	"syscall"
 	"time"
 
 	//"runtime"
@@ -199,40 +197,13 @@ func main() {
 		return
 	}
 	// Execute the signal handler
-	go CatchSignals(enum, results, done)
+	go SignalHandler(enum, results, done)
 	//profFile, _ := os.Create("amass_mem.prof")
 	//defer profFile.Close()
 	//runtime.GC()
 	//pprof.WriteHeapProfile(profFile)
 	// Wait for output manager to finish
 	<-done
-}
-
-// If the user interrupts the program, print the summary information
-func CatchSignals(e *amass.Enumeration, output chan *amass.AmassOutput, done chan struct{}) {
-	quit := make(chan os.Signal, 1)
-	pause := make(chan os.Signal, 1)
-	resume := make(chan os.Signal, 1)
-
-	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
-	signal.Notify(pause, syscall.SIGTSTP)
-	signal.Notify(resume, syscall.SIGCONT)
-loop:
-	for {
-		select {
-		case <-pause:
-			e.Pause()
-		case <-resume:
-			e.Resume()
-		case <-quit:
-			// Start final output operations
-			close(output)
-			// Wait for the broadcast indicating completion
-			<-done
-			break loop
-		}
-	}
-	os.Exit(1)
 }
 
 func GetLinesFromFile(path string) []string {
