@@ -52,9 +52,9 @@ type AmassConfig struct {
 	Alterations bool
 
 	// Only access the data sources for names and return results?
-	NoDNS bool
+	Passive bool
 
-	// Determines if active information gathering techniques will be used
+	// Determines if zone transfers will be attempted
 	Active bool
 
 	// A blacklist of subdomain names that will not be investigated

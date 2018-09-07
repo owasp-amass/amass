@@ -37,10 +37,10 @@ var (
 	version        = flag.Bool("version", false, "Print the version number of this amass binary")
 	ips            = flag.Bool("ip", false, "Show the IP addresses for discovered names")
 	brute          = flag.Bool("brute", false, "Execute brute forcing after searches")
-	active         = flag.Bool("active", false, "Turn on active information gathering methods")
+	active         = flag.Bool("active", false, "Attempt zone transfers and certificate name grabs")
 	norecursive    = flag.Bool("norecursive", false, "Turn off recursive brute forcing")
 	minrecursive   = flag.Int("min-for-recursive", 0, "Number of subdomain discoveries before recursive brute forcing")
-	nodns          = flag.Bool("nodns", false, "Disable DNS resolution of names and dependent features")
+	passive        = flag.Bool("passive", false, "Disable DNS resolution of names and dependent features")
 	noalts         = flag.Bool("noalts", false, "Disable generation of altered names")
 	verbose        = flag.Bool("v", false, "Print the data source and summary information")
 	whois          = flag.Bool("whois", false, "Include domains discoverd with reverse whois")
@@ -62,11 +62,13 @@ var (
 )
 
 func main() {
+	var ports parseInts
 	var domains, resolvers, blacklist parseStrings
 
 	defaultBuf := new(bytes.Buffer)
 	flag.CommandLine.SetOutput(defaultBuf)
 
+	flag.Var(&ports, "p", "Ports separated by commas (default: 80,443)")
 	flag.Var(&domains, "d", "Domain names separated by commas (can be used multiple times)")
 	flag.Var(&resolvers, "r", "IP addresses of preferred DNS resolvers (can be used multiple times)")
 	flag.Var(&blacklist, "bl", "Blacklist of subdomain names that will not be investigated")
@@ -144,7 +146,7 @@ func main() {
 	enum.MinForRecursive = *minrecursive
 	enum.Active = *active
 	enum.Alterations = alts
-	enum.NoDNS = *nodns
+	enum.Passive = *passive
 	enum.Frequency = FreqToDuration(*freq)
 	enum.Resolvers = resolvers
 	enum.Blacklist = blacklist
@@ -191,13 +193,14 @@ func main() {
 		Done:          done,
 	})
 
+	// Execute the signal handler
+	go SignalHandler(enum, results, done)
+
 	err := enum.Start()
 	if err != nil {
 		r.Println(err)
 		return
 	}
-	// Execute the signal handler
-	go SignalHandler(enum, results, done)
 	//profFile, _ := os.Create("amass_mem.prof")
 	//defer profFile.Close()
 	//runtime.GC()

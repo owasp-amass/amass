@@ -224,8 +224,9 @@ func PrintSummary(total int, tags map[string]int, asns map[int]*ASNData) {
 
 	fmt.Println()
 	// Print the header information
-	b.Print("Amass " + amass.Version)
-	num := 80 - (len(amass.Version) + len(amass.Author) + 6)
+	title := "OWASP Amass v"
+	b.Print(title + amass.Version)
+	num := 80 - (len(title) + len(amass.Version) + len(amass.Author))
 	pad(num, " ")
 	b.Printf("%s\n", amass.Author)
 	pad(8, "----------")

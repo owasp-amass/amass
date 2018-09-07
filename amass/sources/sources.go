@@ -218,6 +218,7 @@ func GetAllSources() []DataSource {
 		NewCrtsh(),
 		NewDNSDB(),
 		NewDNSDumpster(),
+		NewDNSTable(),
 		NewDogpile(),
 		NewEntrust(),
 		NewExalead(),

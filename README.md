@@ -16,7 +16,10 @@ The OWASP Amass tool obtains subdomain names by scraping data sources, recursive
 
 ----
 
-![Image of a network graph](https://github.com/OWASP/Amass/blob/master/images/network_06092018.png "Internet Satellite Imagery")
+Terminal capture presented at Facebook (and shared publically) for the Sept. 2018 OWASP London Chapter meeting:
+[![asciicast](https://asciinema.org/a/v6B1qdMRlLRUflpkwRPhvCTaY.png)](https://asciinema.org/a/v6B1qdMRlLRUflpkwRPhvCTaY)
+
+![Network graph](https://github.com/OWASP/Amass/blob/master/images/network_06092018.png "Internet Satellite Imagery")
 
 ## How to Install
 
@@ -51,6 +54,18 @@ Periodically, execute the following command to update all your snap packages:
 $ sudo snap refresh
 ```
 
+#### Using Docker
+
+1. Build the [Docker](https://docs.docker.com/) image:
+```
+sudo docker build -t amass https://github.com/OWASP/Amass.git
+```
+
+2. Run the Docker image:
+```
+sudo docker run amass --passive -d example.com
+```
+
 #### From Source
 
 If you would prefer to build your own binary from the latest version of the source code, make sure you have a correctly configured **Go >= 1.10** environment. More information about how to achieve this can be found [on the golang website.](https://golang.org/doc/install) Then, take the following steps:
@@ -83,7 +98,7 @@ $ amass -d example.com
 
 **If you need Amass to run faster** and only use the passive data sources:
 ```
-$ amass -nodns -d example.com
+$ amass --passive -d example.com
 ```
 
 If you are running Amass within a virtual machine, you may want to slow it down a bit:
@@ -122,7 +137,7 @@ Additional switches available through the amass CLI:
 | -log | Log all error messages to a file | amass -log amass.log -d example.com |
 | -min-for-recursive | Discoveries required for recursive brute forcing | amass -brute -min-for-recursive 3 -d example.com |
 | -noalts | Disable alterations of discovered names | amass -noalts -d example.com |
-| -nodns | A purely passive mode of execution | amass -nodns -d example.com |
+| -passive | A purely passive mode of execution | amass --passive -d example.com |
 | -norecursive | Disable recursive brute forcing | amass -brute -norecursive -d example.com |
 | -o   | Write the results to a text file | amass -o out.txt -d example.com |
 | -oA  | Output to all available file formats with prefix | amass -oA amass_scan -d example.com |

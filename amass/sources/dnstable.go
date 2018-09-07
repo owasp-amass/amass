@@ -9,28 +9,28 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
-type HackerTarget struct {
+type DNSTable struct {
 	BaseDataSource
 }
 
-func NewHackerTarget() DataSource {
-	h := new(HackerTarget)
+func NewDNSTable() DataSource {
+	h := new(DNSTable)
 
-	h.BaseDataSource = *NewBaseDataSource(API, "HackerTarget")
+	h.BaseDataSource = *NewBaseDataSource(SCRAPE, "DNSTable")
 	return h
 }
 
-func (h *HackerTarget) Query(domain, sub string) []string {
+func (d *DNSTable) Query(domain, sub string) []string {
 	var unique []string
 
 	if domain != sub {
 		return unique
 	}
 
-	url := h.getURL(domain)
+	url := d.getURL(domain)
 	page, err := utils.GetWebPage(url, nil)
 	if err != nil {
-		h.log(fmt.Sprintf("%s: %v", url, err))
+		d.log(fmt.Sprintf("%s: %v", url, err))
 		return unique
 	}
 
@@ -43,8 +43,8 @@ func (h *HackerTarget) Query(domain, sub string) []string {
 	return unique
 }
 
-func (h *HackerTarget) getURL(domain string) string {
-	format := "http://api.hackertarget.com/hostsearch/?q=%s"
+func (d *DNSTable) getURL(domain string) string {
+	format := "https://dnstable.com/domain/%s"
 
 	return fmt.Sprintf(format, domain)
 }

@@ -40,8 +40,8 @@ var Banner string = `
 `
 
 const (
-	Version = "v2.6.3"
-	Author  = "Jeff Foley (@jeff_foley)"
+	Version = "2.6.4"
+	Author  = "https://github.com/OWASP/Amass"
 
 	DefaultFrequency   = 10 * time.Millisecond
 	defaultWordlistURL = "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/namelist.txt"
@@ -104,7 +104,7 @@ type Enumeration struct {
 	Alterations bool
 
 	// Only access the data sources for names and return results?
-	NoDNS bool
+	Passive bool
 
 	// Determines if active information gathering techniques will be used
 	Active bool
@@ -160,11 +160,11 @@ func (e *Enumeration) generateAmassConfig() (*core.AmassConfig, error) {
 		return nil, errors.New("The configuration did not have an output channel")
 	}
 
-	if e.NoDNS && e.BruteForcing {
+	if e.Passive && e.BruteForcing {
 		return nil, errors.New("Brute forcing cannot be performed without DNS resolution")
 	}
 
-	if e.NoDNS && e.Active {
+	if e.Passive && e.Active {
 		return nil, errors.New("Active enumeration cannot be performed without DNS resolution")
 	}
 
@@ -172,7 +172,7 @@ func (e *Enumeration) generateAmassConfig() (*core.AmassConfig, error) {
 		return nil, errors.New("The configuration contains a invalid frequency")
 	}
 
-	if e.NoDNS && e.Neo4jPath != "" {
+	if e.Passive && e.Neo4jPath != "" {
 		return nil, errors.New("Data cannot be provided to Neo4j without DNS resolution")
 	}
 
@@ -196,7 +196,7 @@ func (e *Enumeration) generateAmassConfig() (*core.AmassConfig, error) {
 		Recursive:       e.Recursive,
 		MinForRecursive: e.MinForRecursive,
 		Alterations:     e.Alterations,
-		NoDNS:           e.NoDNS,
+		Passive:         e.Passive,
 		Active:          e.Active,
 		Blacklist:       e.Blacklist,
 		Frequency:       e.Frequency,
@@ -224,7 +224,7 @@ func (e *Enumeration) Start() error {
 
 	services = append(services, NewSourcesService(config, bus))
 	var data *DataManagerService
-	if !config.NoDNS {
+	if !config.Passive {
 		data = NewDataManagerService(config, bus)
 
 		services = append(services,
