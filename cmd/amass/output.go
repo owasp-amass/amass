@@ -15,16 +15,12 @@ import (
 )
 
 type OutputParams struct {
-	Enum          *amass.Enumeration
-	Verbose       bool
-	PrintIPs      bool
-	FileOut       string
-	JSONOut       string
-	VisjsOut      string
-	GraphistryOut string
-	GEXFOut       string
-	D3Out         string
-	Done          chan struct{}
+	Enum     *amass.Enumeration
+	Verbose  bool
+	PrintIPs bool
+	FileOut  string
+	JSONOut  string
+	Done     chan struct{}
 }
 
 type ASNData struct {
@@ -180,11 +176,6 @@ func ManageOutput(params *OutputParams) {
 			WriteJSONData(jsonptr, result)
 		}
 	}
-
-	params.Enum.WriteVisjsFile(params.VisjsOut)
-	params.Enum.WriteGraphistryFile(params.GraphistryOut)
-	params.Enum.WriteGEXFFile(params.GEXFOut)
-	params.Enum.WriteD3File(params.D3Out)
 	// Check to print the summary information
 	if params.Verbose {
 		PrintSummary(total, tags, asns)

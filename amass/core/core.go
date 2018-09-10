@@ -6,6 +6,7 @@ package core
 const (
 	// Topics used in the EventBus
 	DNSQUERY = "amass:dnsquery"
+	DNSSWEEP = "amass.dnssweep"
 	RESOLVED = "amass:resolved"
 	OUTPUT   = "amass:output"
 

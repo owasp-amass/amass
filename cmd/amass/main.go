@@ -33,32 +33,29 @@ var (
 	green  = color.New(color.FgHiGreen).SprintFunc()
 	blue   = color.New(color.FgHiBlue).SprintFunc()
 	// Command-line switches and provided parameters
-	help           = flag.Bool("h", false, "Show the program usage message")
-	version        = flag.Bool("version", false, "Print the version number of this amass binary")
-	ips            = flag.Bool("ip", false, "Show the IP addresses for discovered names")
-	brute          = flag.Bool("brute", false, "Execute brute forcing after searches")
-	active         = flag.Bool("active", false, "Attempt zone transfers and certificate name grabs")
-	norecursive    = flag.Bool("norecursive", false, "Turn off recursive brute forcing")
-	minrecursive   = flag.Int("min-for-recursive", 0, "Number of subdomain discoveries before recursive brute forcing")
-	passive        = flag.Bool("passive", false, "Disable DNS resolution of names and dependent features")
-	noalts         = flag.Bool("noalts", false, "Disable generation of altered names")
-	verbose        = flag.Bool("v", false, "Print the data source and summary information")
-	whois          = flag.Bool("whois", false, "Include domains discoverd with reverse whois")
-	list           = flag.Bool("l", false, "List all domains to be used in an enumeration")
-	freq           = flag.Int64("freq", 0, "Sets the number of max DNS queries per minute")
-	wordlist       = flag.String("w", "", "Path to a different wordlist file")
-	allpath        = flag.String("oA", "", "Path prefix used for naming all output files")
-	logpath        = flag.String("log", "", "Path to the log file where errors will be written")
-	outpath        = flag.String("o", "", "Path to the text output file")
-	jsonpath       = flag.String("json", "", "Path to the JSON output file")
-	visjspath      = flag.String("visjs", "", "Path to the Visjs output HTML file")
-	graphistrypath = flag.String("graphistry", "", "Path to the Graphistry JSON file")
-	gexfpath       = flag.String("gexf", "", "Path to the Gephi Graph Exchange XML Format (GEXF) file")
-	d3path         = flag.String("d3", "", "Path to the D3 v4 force simulation HTML file")
-	domainspath    = flag.String("df", "", "Path to a file providing root domain names")
-	resolvepath    = flag.String("rf", "", "Path to a file providing preferred DNS resolvers")
-	blacklistpath  = flag.String("blf", "", "Path to a file providing blacklisted subdomains")
-	neo4j          = flag.String("neo4j", "", "URL in the format of user:password@address:port")
+	help          = flag.Bool("h", false, "Show the program usage message")
+	version       = flag.Bool("version", false, "Print the version number of this amass binary")
+	ips           = flag.Bool("ip", false, "Show the IP addresses for discovered names")
+	brute         = flag.Bool("brute", false, "Execute brute forcing after searches")
+	active        = flag.Bool("active", false, "Attempt zone transfers and certificate name grabs")
+	norecursive   = flag.Bool("norecursive", false, "Turn off recursive brute forcing")
+	minrecursive  = flag.Int("min-for-recursive", 0, "Number of subdomain discoveries before recursive brute forcing")
+	passive       = flag.Bool("passive", false, "Disable DNS resolution of names and dependent features")
+	noalts        = flag.Bool("noalts", false, "Disable generation of altered names")
+	verbose       = flag.Bool("v", false, "Print the data source and summary information")
+	whois         = flag.Bool("whois", false, "Include domains discoverd with reverse whois")
+	list          = flag.Bool("l", false, "List all domains to be used in an enumeration")
+	freq          = flag.Int64("freq", 0, "Sets the number of max DNS queries per minute")
+	wordlist      = flag.String("w", "", "Path to a different wordlist file")
+	allpath       = flag.String("oA", "", "Path prefix used for naming all output files")
+	logpath       = flag.String("log", "", "Path to the log file where errors will be written")
+	outpath       = flag.String("o", "", "Path to the text output file")
+	jsonpath      = flag.String("json", "", "Path to the JSON output file")
+	datapath      = flag.String("do", "", "Path to data operations output file")
+	domainspath   = flag.String("df", "", "Path to a file providing root domain names")
+	resolvepath   = flag.String("rf", "", "Path to a file providing preferred DNS resolvers")
+	blacklistpath = flag.String("blf", "", "Path to a file providing blacklisted subdomains")
+	neo4j         = flag.String("neo4j", "", "URL in the format of user:password@address:port")
 )
 
 func main() {
@@ -86,7 +83,7 @@ func main() {
 		fmt.Printf("version %s\n", amass.Version)
 		return
 	}
-	if *nodns && *ips {
+	if *passive && *ips {
 		r.Println("IP addresses cannot be provided without DNS resolution")
 		return
 	}
@@ -110,18 +107,12 @@ func main() {
 	logfile := *logpath
 	txt := *outpath
 	jsonfile := *jsonpath
-	d3 := *d3path
-	visjs := *visjspath
-	gexf := *gexfpath
-	graphistry := *graphistrypath
+	datafile := *datapath
 	if *allpath != "" {
 		logfile = *allpath + ".log"
 		txt = *allpath + ".txt"
 		jsonfile = *allpath + ".json"
-		d3 = *allpath + "_d3.html"
-		visjs = *allpath + "_visjs.html"
-		gexf = *allpath + ".gexf"
-		graphistry = *allpath + "_graphistry.json"
+		datafile = *allpath + "_data.json"
 	}
 
 	// Seed the default pseudo-random number generator
@@ -150,7 +141,6 @@ func main() {
 	enum.Frequency = FreqToDuration(*freq)
 	enum.Resolvers = resolvers
 	enum.Blacklist = blacklist
-	enum.Neo4jPath = *neo4j
 	enum.Output = results
 
 	for _, domain := range domains {
@@ -169,6 +159,19 @@ func main() {
 		}()
 		enum.Log = log.New(fileptr, "", log.Lmicroseconds)
 	}
+	// Setup the data operations output file
+	if datafile != "" {
+		fileptr, err := os.OpenFile(datafile, os.O_WRONLY|os.O_CREATE, 0644)
+		if err != nil {
+			r.Printf("Failed to open the data operations output file: %v", err)
+			return
+		}
+		defer func() {
+			fileptr.Sync()
+			fileptr.Close()
+		}()
+		enum.DataOptsWriter = fileptr
+	}
 	enum.ObtainAdditionalDomains()
 	if *list {
 		ListDomains(enum, txt)
@@ -181,16 +184,12 @@ func main() {
 	}
 
 	go ManageOutput(&OutputParams{
-		Enum:          enum,
-		Verbose:       *verbose,
-		PrintIPs:      *ips,
-		FileOut:       txt,
-		JSONOut:       jsonfile,
-		VisjsOut:      visjs,
-		GraphistryOut: graphistry,
-		GEXFOut:       gexf,
-		D3Out:         d3,
-		Done:          done,
+		Enum:     enum,
+		Verbose:  *verbose,
+		PrintIPs: *ips,
+		FileOut:  txt,
+		JSONOut:  jsonfile,
+		Done:     done,
 	})
 
 	// Execute the signal handler

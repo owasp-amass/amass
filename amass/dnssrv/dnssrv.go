@@ -6,6 +6,7 @@ package dnssrv
 import (
 	"context"
 	"fmt"
+	"net"
 	"strings"
 	"time"
 
@@ -58,6 +59,7 @@ func (ds *DNSService) OnStart() error {
 	ds.BaseAmassService.OnStart()
 
 	ds.bus.SubscribeAsync(core.DNSQUERY, ds.SendRequest, false)
+	ds.bus.SubscribeAsync(core.DNSSWEEP, ds.ReverseDNSSweep, false)
 	go ds.processRequests()
 	return nil
 }
@@ -74,6 +76,7 @@ func (ds *DNSService) OnStop() error {
 	ds.BaseAmassService.OnStop()
 
 	ds.bus.Unsubscribe(core.DNSQUERY, ds.SendRequest)
+	ds.bus.Unsubscribe(core.DNSSWEEP, ds.ReverseDNSSweep)
 	return nil
 }
 
@@ -326,4 +329,28 @@ func (ds *DNSService) queryServiceNames(subdomain, domain string) {
 		Tag:     "dns",
 		Source:  "Forward DNS",
 	})
+}
+
+func (ds *DNSService) ReverseDNSSweep(domain, addr string, cidr *net.IPNet) {
+	// Get the subset of 200 nearby IP addresses
+	ips := utils.CIDRSubset(cidr, addr, 200)
+	// Go through the IP addresses
+	for _, ip := range ips {
+		var ptr string
+
+		if len(ip.To4()) == net.IPv4len {
+			ptr = utils.ReverseIP(ip.String()) + ".in-addr.arpa"
+		} else if len(ip) == net.IPv6len {
+			ptr = utils.IPv6NibbleFormat(utils.HexString(ip)) + ".ip6.arpa"
+		} else {
+			continue
+		}
+
+		ds.SendRequest(&core.AmassRequest{
+			Name:   ptr,
+			Domain: domain,
+			Tag:    "dns",
+			Source: "Reverse DNS",
+		})
+	}
 }

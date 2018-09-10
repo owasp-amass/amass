@@ -12,7 +12,6 @@ import (
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/handlers"
-	"github.com/OWASP/Amass/amass/utils"
 	evbus "github.com/asaskevich/EventBus"
 	"github.com/miekg/dns"
 )
@@ -24,10 +23,10 @@ var (
 type DataManagerService struct {
 	core.BaseAmassService
 
-	bus     evbus.Bus
-	Graph   *handlers.Graph
-	neo4j   *handlers.Neo4j
-	domains map[string]struct{}
+	bus      evbus.Bus
+	Graph    *handlers.Graph
+	Handlers []handlers.DataHandler
+	domains  map[string]struct{}
 }
 
 func NewDataManagerService(config *core.AmassConfig, bus evbus.Bus) *DataManagerService {
@@ -41,18 +40,14 @@ func NewDataManagerService(config *core.AmassConfig, bus evbus.Bus) *DataManager
 }
 
 func (dms *DataManagerService) OnStart() error {
-	var err error
-
 	dms.BaseAmassService.OnStart()
 
 	dms.bus.SubscribeAsync(core.RESOLVED, dms.SendRequest, false)
 
 	dms.Graph = handlers.NewGraph()
-	if dms.Config().Neo4jPath != "" {
-		dms.neo4j, err = handlers.NewNeo4j(dms.Config().Neo4jPath)
-		if err != nil {
-			return err
-		}
+	dms.Handlers = append(dms.Handlers, dms.Graph)
+	if dms.Config().DataOptsWriter != nil {
+		dms.Handlers = append(dms.Handlers, handlers.NewDataOptsHandler(dms.Config().DataOptsWriter))
 	}
 	go dms.processRequests()
 	go dms.processOutput()
@@ -71,10 +66,6 @@ func (dms *DataManagerService) OnStop() error {
 	dms.BaseAmassService.OnStop()
 
 	dms.bus.Unsubscribe(core.RESOLVED, dms.SendRequest)
-
-	if dms.neo4j != nil {
-		dms.neo4j.Close()
-	}
 	return nil
 }
 
@@ -102,7 +93,7 @@ loop:
 	for {
 		select {
 		case <-t.C:
-			if dms.NumOfRequests() < 25 {
+			if dms.NumOfRequests() < 100 {
 				dms.discoverOutput()
 			}
 		case <-dms.PauseChan():
@@ -163,9 +154,8 @@ func (dms *DataManagerService) insertDomain(domain string) {
 	}
 	dms.domains[domain] = struct{}{}
 
-	dms.Graph.InsertDomain(domain, "dns", "Forward DNS")
-	if dms.neo4j != nil {
-		dms.neo4j.InsertDomain(domain, "dns", "Forward DNS")
+	for _, handler := range dms.Handlers {
+		handler.InsertDomain(domain, "dns", "Forward DNS")
 	}
 
 	dms.bus.Publish(core.DNSQUERY, &core.AmassRequest{
@@ -198,9 +188,8 @@ func (dms *DataManagerService) insertCNAME(req *core.AmassRequest, recidx int) {
 	}
 
 	dms.insertDomain(domain)
-	dms.Graph.InsertCNAME(req.Name, req.Domain, target, domain, req.Tag, req.Source)
-	if dms.neo4j != nil {
-		dms.neo4j.InsertCNAME(req.Name, req.Domain, target, domain, req.Tag, req.Source)
+	for _, handler := range dms.Handlers {
+		handler.InsertCNAME(req.Name, req.Domain, target, domain, req.Tag, req.Source)
 	}
 
 	dms.bus.Publish(core.DNSQUERY, &core.AmassRequest{
@@ -217,9 +206,8 @@ func (dms *DataManagerService) insertA(req *core.AmassRequest, recidx int) {
 		return
 	}
 
-	dms.Graph.InsertA(req.Name, req.Domain, addr, req.Tag, req.Source)
-	if dms.neo4j != nil {
-		dms.neo4j.InsertA(req.Name, req.Domain, addr, req.Tag, req.Source)
+	for _, handler := range dms.Handlers {
+		handler.InsertA(req.Name, req.Domain, addr, req.Tag, req.Source)
 	}
 
 	dms.insertInfrastructure(addr)
@@ -241,9 +229,8 @@ func (dms *DataManagerService) insertAAAA(req *core.AmassRequest, recidx int) {
 		return
 	}
 
-	dms.Graph.InsertAAAA(req.Name, req.Domain, addr, req.Tag, req.Source)
-	if dms.neo4j != nil {
-		dms.neo4j.InsertAAAA(req.Name, req.Domain, addr, req.Tag, req.Source)
+	for _, handler := range dms.Handlers {
+		handler.InsertAAAA(req.Name, req.Domain, addr, req.Tag, req.Source)
 	}
 
 	dms.insertInfrastructure(addr)
@@ -278,9 +265,8 @@ func (dms *DataManagerService) insertPTR(req *core.AmassRequest, recidx int) {
 	}
 
 	dms.insertDomain(domain)
-	dms.Graph.InsertPTR(req.Name, domain, target, req.Tag, req.Source)
-	if dms.neo4j != nil {
-		dms.neo4j.InsertPTR(req.Name, domain, target, req.Tag, req.Source)
+	for _, handler := range dms.Handlers {
+		handler.InsertPTR(req.Name, domain, target, req.Tag, req.Source)
 	}
 
 	dms.bus.Publish(core.DNSQUERY, &core.AmassRequest{
@@ -298,9 +284,8 @@ func (dms *DataManagerService) insertSRV(req *core.AmassRequest, recidx int) {
 		return
 	}
 
-	dms.Graph.InsertSRV(req.Name, req.Domain, service, target, req.Tag, req.Source)
-	if dms.neo4j != nil {
-		dms.neo4j.InsertSRV(req.Name, req.Domain, service, target, req.Tag, req.Source)
+	for _, handler := range dms.Handlers {
+		handler.InsertSRV(req.Name, req.Domain, service, target, req.Tag, req.Source)
 	}
 }
 
@@ -313,9 +298,8 @@ func (dms *DataManagerService) insertNS(req *core.AmassRequest, recidx int) {
 	}
 
 	dms.insertDomain(domain)
-	dms.Graph.InsertNS(req.Name, req.Domain, target, domain, req.Tag, req.Source)
-	if dms.neo4j != nil {
-		dms.neo4j.InsertNS(req.Name, req.Domain, target, domain, req.Tag, req.Source)
+	for _, handler := range dms.Handlers {
+		handler.InsertNS(req.Name, req.Domain, target, domain, req.Tag, req.Source)
 	}
 
 	if target != domain {
@@ -336,9 +320,8 @@ func (dms *DataManagerService) insertMX(req *core.AmassRequest, recidx int) {
 	}
 
 	dms.insertDomain(domain)
-	dms.Graph.InsertMX(req.Name, req.Domain, target, domain, req.Tag, req.Source)
-	if dms.neo4j != nil {
-		dms.neo4j.InsertMX(req.Name, req.Domain, target, domain, req.Tag, req.Source)
+	for _, handler := range dms.Handlers {
+		handler.InsertMX(req.Name, req.Domain, target, domain, req.Tag, req.Source)
 	}
 
 	if target != domain {
@@ -355,12 +338,10 @@ func (dms *DataManagerService) insertTXT(req *core.AmassRequest, recidx int) {
 	if !dms.Config().IsDomainInScope(req.Name) {
 		return
 	}
-
 	re := dms.Config().DomainRegex(req.Domain)
 	if re == nil {
 		return
 	}
-
 	txt := req.Records[recidx].Data
 	for _, name := range re.FindAllString(txt, -1) {
 		dms.bus.Publish(core.DNSQUERY, &core.AmassRequest{
@@ -379,9 +360,8 @@ func (dms *DataManagerService) insertInfrastructure(addr string) {
 		return
 	}
 
-	dms.Graph.InsertInfrastructure(addr, asn, cidr, desc)
-	if dms.neo4j != nil {
-		dms.neo4j.InsertInfrastructure(addr, asn, cidr, desc)
+	for _, handler := range dms.Handlers {
+		handler.InsertInfrastructure(addr, asn, cidr, desc)
 	}
 }
 
@@ -391,27 +371,7 @@ func (dms *DataManagerService) AttemptSweep(domain, addr string, cidr *net.IPNet
 		return
 	}
 
-	// Get the subset of 200 nearby IP addresses
-	ips := utils.CIDRSubset(cidr, addr, 200)
-	// Go through the IP addresses
-	for _, ip := range ips {
-		var ptr string
-
-		if len(ip.To4()) == net.IPv4len {
-			ptr = utils.ReverseIP(ip.String()) + ".in-addr.arpa"
-		} else if len(ip) == net.IPv6len {
-			ptr = utils.IPv6NibbleFormat(utils.HexString(ip)) + ".ip6.arpa"
-		} else {
-			continue
-		}
-
-		dms.bus.Publish(core.DNSQUERY, &core.AmassRequest{
-			Name:   ptr,
-			Domain: utils.CopyString(domain),
-			Tag:    "dns",
-			Source: "Reverse DNS",
-		})
-	}
+	dms.bus.Publish(core.DNSSWEEP, domain, addr, cidr)
 }
 
 func (dms *DataManagerService) discoverOutput() {
