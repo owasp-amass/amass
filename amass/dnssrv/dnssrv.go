@@ -127,8 +127,6 @@ var InitialQueryTypes = []uint16{
 	dns.TypeA,
 	dns.TypeAAAA,
 	dns.TypeCNAME,
-	dns.TypePTR,
-	dns.TypeSRV,
 }
 
 func (ds *DNSService) completeQueries(req *core.AmassRequest) {
@@ -307,28 +305,30 @@ func (ds *DNSService) attemptZoneXFR(domain, sub, server string) {
 }
 
 func (ds *DNSService) queryServiceNames(subdomain, domain string) {
-	var answers []core.DNSAnswer
-
 	// Check all the popular SRV records
 	for _, name := range popularSRVRecords {
 		srvName := name + "." + subdomain
 
-		if ans, err := Resolve(srvName, "SRV"); err == nil {
-			answers = append(answers, ans...)
-		} else {
-			ds.Config().Log.Printf("DNS SRV record query error: %s: %v", srvName, err)
-		}
-		// Do not go too fast
-		time.Sleep(ds.Config().Frequency)
-	}
+		for i := 0; i < 3; i++ {
+			// Do not go too fast
+			time.Sleep(ds.Config().Frequency)
 
-	ds.bus.Publish(core.RESOLVED, &core.AmassRequest{
-		Name:    subdomain,
-		Domain:  domain,
-		Records: answers,
-		Tag:     "dns",
-		Source:  "Forward DNS",
-	})
+			a, err, again := ds.executeQuery(srvName, dns.TypeSRV)
+			if err == nil {
+				ds.bus.Publish(core.RESOLVED, &core.AmassRequest{
+					Name:    srvName,
+					Domain:  domain,
+					Records: a,
+					Tag:     "dns",
+					Source:  "Forward DNS",
+				})
+				break
+			}
+			if !again {
+				break
+			}
+		}
+	}
 }
 
 func (ds *DNSService) ReverseDNSSweep(domain, addr string, cidr *net.IPNet) {
@@ -346,11 +346,28 @@ func (ds *DNSService) ReverseDNSSweep(domain, addr string, cidr *net.IPNet) {
 			continue
 		}
 
-		ds.SendRequest(&core.AmassRequest{
-			Name:   ptr,
-			Domain: domain,
-			Tag:    "dns",
-			Source: "Reverse DNS",
-		})
+		if ds.duplicate(ptr) {
+			continue
+		}
+
+		for i := 0; i < 3; i++ {
+			// Do not go too fast
+			time.Sleep(ds.Config().Frequency)
+
+			a, err, again := ds.executeQuery(ptr, dns.TypePTR)
+			if err == nil {
+				ds.bus.Publish(core.RESOLVED, &core.AmassRequest{
+					Name:    ptr,
+					Domain:  domain,
+					Records: a,
+					Tag:     "dns",
+					Source:  "Reverse DNS",
+				})
+				break
+			}
+			if !again {
+				break
+			}
+		}
 	}
 }

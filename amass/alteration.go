@@ -11,6 +11,7 @@ import (
 
 	"github.com/OWASP/Amass/amass/core"
 	evbus "github.com/asaskevich/EventBus"
+	"github.com/miekg/dns"
 )
 
 type AlterationService struct {
@@ -82,13 +83,25 @@ func (as *AlterationService) executeAlterations() {
 		return
 	}
 
-	labels := strings.Split(req.Name, ".")
-	// Check the subdomain of the request name
-	if labels[1] == "_tcp" || labels[1] == "_udp" || labels[1] == "_tls" {
+	if ok := as.correctRecordTypes(req); !ok {
 		return
 	}
 	as.flipNumbersInName(req)
 	as.appendNumbers(req)
+}
+
+func (as *AlterationService) correctRecordTypes(req *core.AmassRequest) bool {
+	var ok bool
+
+	for _, r := range req.Records {
+		t := uint16(r.Type)
+
+		if t == dns.TypeTXT || t == dns.TypeA || t == dns.TypeAAAA || t == dns.TypeCNAME {
+			ok = true
+			break
+		}
+	}
+	return ok
 }
 
 // flipNumbersInName - Method to flip numbers in a subdomain name

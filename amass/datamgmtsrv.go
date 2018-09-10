@@ -88,14 +88,12 @@ loop:
 }
 
 func (dms *DataManagerService) processOutput() {
-	t := time.NewTicker(2 * time.Second)
+	t := time.NewTicker(5 * time.Second)
 loop:
 	for {
 		select {
 		case <-t.C:
-			if dms.NumOfRequests() < 100 {
-				dms.discoverOutput()
-			}
+			dms.discoverOutput()
 		case <-dms.PauseChan():
 			t.Stop()
 		case <-dms.ResumeChan():
