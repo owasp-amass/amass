@@ -32,19 +32,20 @@ func (n *Neo4j) Close() {
 	n.conn.Close()
 }
 
-func (n *Neo4j) InsertDomain(domain, tag, source string) {
+func (n *Neo4j) InsertDomain(domain, tag, source string) error {
 	params := map[string]interface{}{
 		"name":   domain,
 		"tag":    tag,
 		"source": source,
 	}
 
-	n.conn.ExecNeo("MERGE (n:Subdomain {name: {name}}) "+
+	_, err := n.conn.ExecNeo("MERGE (n:Subdomain {name: {name}}) "+
 		"ON CREATE SET n.tag = {tag}, n.source = {source} "+
 		"SET n:Subdomain:Domain", params)
+	return err
 }
 
-func (n *Neo4j) InsertCNAME(name, domain, target, tdomain, tag, source string) {
+func (n *Neo4j) InsertCNAME(name, domain, target, tdomain, tag, source string) error {
 	params := map[string]interface{}{
 		"sname":   name,
 		"sdomain": domain,
@@ -55,29 +56,42 @@ func (n *Neo4j) InsertCNAME(name, domain, target, tdomain, tag, source string) {
 	}
 
 	if name != domain {
-		n.conn.ExecNeo("MERGE (n:Subdomain {name: {sname}}) "+
+		_, err := n.conn.ExecNeo("MERGE (n:Subdomain {name: {sname}}) "+
 			"ON CREATE SET n.tag = {tag}, n.source = {source}", params)
+		if err != nil {
+			return err
+		}
 
-		n.conn.ExecNeo("MATCH (domain:Domain {name: {sdomain}}) "+
+		_, err = n.conn.ExecNeo("MATCH (domain:Domain {name: {sdomain}}) "+
 			"MATCH (target:Subdomain {name: {sname}}) "+
 			"MERGE (domain)-[:ROOT_OF]->(target)", params)
+		if err != nil {
+			return err
+		}
 	}
 
 	if target != tdomain {
-		n.conn.ExecNeo("MERGE (n:Subdomain {name: {tname}}) "+
+		_, err := n.conn.ExecNeo("MERGE (n:Subdomain {name: {tname}}) "+
 			"ON CREATE SET n.tag = {tag}, n.source = {source}", params)
+		if err != nil {
+			return err
+		}
 
-		n.conn.ExecNeo("MATCH (domain:Domain {name: {tdomain}}) "+
+		_, err = n.conn.ExecNeo("MATCH (domain:Domain {name: {tdomain}}) "+
 			"MATCH (target:Subdomain {name: {tname}}) "+
 			"MERGE (domain)-[:ROOT_OF]->(target)", params)
+		if err != nil {
+			return err
+		}
 	}
 
-	n.conn.ExecNeo("MATCH (source:Subdomain {name: {sname}}) "+
+	_, err := n.conn.ExecNeo("MATCH (source:Subdomain {name: {sname}}) "+
 		"MATCH (target:Subdomain {name: {tname}}) "+
 		"MERGE (source)-[:CNAME_TO]->(target)", params)
+	return err
 }
 
-func (n *Neo4j) InsertA(name, domain, addr, tag, source string) {
+func (n *Neo4j) InsertA(name, domain, addr, tag, source string) error {
 	params := map[string]interface{}{
 		"name":   name,
 		"domain": domain,
@@ -88,22 +102,32 @@ func (n *Neo4j) InsertA(name, domain, addr, tag, source string) {
 	}
 
 	if name != domain {
-		n.conn.ExecNeo("MERGE (n:Subdomain {name: {name}}) "+
+		_, err := n.conn.ExecNeo("MERGE (n:Subdomain {name: {name}}) "+
 			"ON CREATE SET n.tag = {tag}, n.source = {source}", params)
+		if err != nil {
+			return err
+		}
 
-		n.conn.ExecNeo("MATCH (domain:Domain {name: {domain}}) "+
+		_, err = n.conn.ExecNeo("MATCH (domain:Domain {name: {domain}}) "+
 			"MATCH (target:Subdomain {name: {name}}) "+
 			"MERGE (domain)-[:ROOT_OF]->(target)", params)
+		if err != nil {
+			return err
+		}
 	}
 
-	n.conn.ExecNeo("MERGE (:IPAddress {addr: {addr}, type: {type}})", params)
+	_, err := n.conn.ExecNeo("MERGE (:IPAddress {addr: {addr}, type: {type}})", params)
+	if err != nil {
+		return err
+	}
 
-	n.conn.ExecNeo("MATCH (source:Subdomain {name: {name}}) "+
+	_, err = n.conn.ExecNeo("MATCH (source:Subdomain {name: {name}}) "+
 		"MATCH (address:IPAddress {addr: {addr}, type: {type}}) "+
 		"MERGE (source)-[:A_TO]->(address)", params)
+	return err
 }
 
-func (n *Neo4j) InsertAAAA(name, domain, addr, tag, source string) {
+func (n *Neo4j) InsertAAAA(name, domain, addr, tag, source string) error {
 	params := map[string]interface{}{
 		"name":   name,
 		"domain": domain,
@@ -114,22 +138,32 @@ func (n *Neo4j) InsertAAAA(name, domain, addr, tag, source string) {
 	}
 
 	if name != domain {
-		n.conn.ExecNeo("MERGE (n:Subdomain {name: {name}}) "+
+		_, err := n.conn.ExecNeo("MERGE (n:Subdomain {name: {name}}) "+
 			"ON CREATE SET n.tag = {tag}, n.source = {source}", params)
+		if err != nil {
+			return err
+		}
 
-		n.conn.ExecNeo("MATCH (domain:Domain {name: {domain}}) "+
+		_, err = n.conn.ExecNeo("MATCH (domain:Domain {name: {domain}}) "+
 			"MATCH (target:Subdomain {name: {name}}) "+
 			"MERGE (domain)-[:ROOT_OF]->(target)", params)
+		if err != nil {
+			return err
+		}
 	}
 
-	n.conn.ExecNeo("MERGE (:IPAddress {addr: {addr}, type: {type}})", params)
+	_, err := n.conn.ExecNeo("MERGE (:IPAddress {addr: {addr}, type: {type}})", params)
+	if err != nil {
+		return err
+	}
 
-	n.conn.ExecNeo("MATCH (source:Subdomain {name: {name}}) "+
+	_, err = n.conn.ExecNeo("MATCH (source:Subdomain {name: {name}}) "+
 		"MATCH (address:IPAddress {addr: {addr}, type: {type}}) "+
 		"MERGE (source)-[:AAAA_TO]->(address)", params)
+	return err
 }
 
-func (n *Neo4j) InsertPTR(name, domain, target, tag, source string) {
+func (n *Neo4j) InsertPTR(name, domain, target, tag, source string) error {
 	params := map[string]interface{}{
 		"name":   name,
 		"domain": domain,
@@ -139,22 +173,32 @@ func (n *Neo4j) InsertPTR(name, domain, target, tag, source string) {
 	}
 
 	if target != domain {
-		n.conn.ExecNeo("MERGE (n:Subdomain {name: {target}}) "+
+		_, err := n.conn.ExecNeo("MERGE (n:Subdomain {name: {target}}) "+
 			"ON CREATE SET n.tag = {tag}, n.source = {source}", params)
+		if err != nil {
+			return err
+		}
 
-		n.conn.ExecNeo("MATCH (domain:Domain {name: {domain}}), "+
+		_, err = n.conn.ExecNeo("MATCH (domain:Domain {name: {domain}}), "+
 			"(target:Subdomain {name: {target}}) "+
 			"MERGE (domain)-[:ROOT_OF]->(target)", params)
+		if err != nil {
+			return err
+		}
 	}
 
-	n.conn.ExecNeo("MERGE (:PTR {name: {name}})", params)
+	_, err := n.conn.ExecNeo("MERGE (:PTR {name: {name}})", params)
+	if err != nil {
+		return err
+	}
 
-	n.conn.ExecNeo("MATCH (ptr:PTR {name: {name}}), "+
+	_, err = n.conn.ExecNeo("MATCH (ptr:PTR {name: {name}}), "+
 		"(target:Subdomain {name: {target}}) "+
 		"MERGE (ptr)-[:PTR_TO]->(target)", params)
+	return err
 }
 
-func (n *Neo4j) InsertSRV(name, domain, service, target, tag, source string) {
+func (n *Neo4j) InsertSRV(name, domain, service, target, tag, source string) error {
 	params := map[string]interface{}{
 		"name":    name,
 		"domain":  domain,
@@ -165,30 +209,46 @@ func (n *Neo4j) InsertSRV(name, domain, service, target, tag, source string) {
 	}
 
 	if name != domain {
-		n.conn.ExecNeo("MERGE (n:Subdomain {name: {name}}) "+
+		_, err := n.conn.ExecNeo("MERGE (n:Subdomain {name: {name}}) "+
 			"ON CREATE SET n.tag = {tag}, n.source = {source}", params)
+		if err != nil {
+			return err
+		}
 	}
 
-	n.conn.ExecNeo("MERGE (n:Subdomain {name: {service}}) "+
+	_, err := n.conn.ExecNeo("MERGE (n:Subdomain {name: {service}}) "+
 		"ON CREATE SET n.tag = {tag}, n.source = {source}", params)
+	if err != nil {
+		return err
+	}
 
-	n.conn.ExecNeo("MERGE (n:Subdomain {name: {target}}) "+
+	_, err = n.conn.ExecNeo("MERGE (n:Subdomain {name: {target}}) "+
 		"ON CREATE SET n.tag = {tag}, n.source = {source}", params)
+	if err != nil {
+		return err
+	}
 
-	n.conn.ExecNeo("MATCH (domain:Domain {name: {domain}}), "+
+	_, err = n.conn.ExecNeo("MATCH (domain:Domain {name: {domain}}), "+
 		"(srv:Subdomain {name: {service}}) "+
 		"MERGE (domain)-[:ROOT_OF]->(srv)", params)
+	if err != nil {
+		return err
+	}
 
-	n.conn.ExecNeo("MATCH (srv:Subdomain {name: {service}}), "+
+	_, err = n.conn.ExecNeo("MATCH (srv:Subdomain {name: {service}}), "+
 		"(source:Subdomain {name: {name}}) "+
 		"MERGE (srv)-[:SERVICE_FOR]->(source)", params)
+	if err != nil {
+		return err
+	}
 
-	n.conn.ExecNeo("MATCH (srv:Subdomain {name: {service}}), "+
+	_, err = n.conn.ExecNeo("MATCH (srv:Subdomain {name: {service}}), "+
 		"(target:Subdomain {name: {target}}) "+
 		"MERGE (srv)-[:SRV_TO]->(target)", params)
+	return err
 }
 
-func (n *Neo4j) InsertNS(name, domain, target, tdomain, tag, source string) {
+func (n *Neo4j) InsertNS(name, domain, target, tdomain, tag, source string) error {
 	params := map[string]interface{}{
 		"name":    name,
 		"domain":  domain,
@@ -198,25 +258,35 @@ func (n *Neo4j) InsertNS(name, domain, target, tdomain, tag, source string) {
 		"source":  source,
 	}
 
-	n.conn.ExecNeo("MERGE (n:Subdomain {name: {name}}) "+
+	_, err := n.conn.ExecNeo("MERGE (n:Subdomain {name: {name}}) "+
 		"ON CREATE SET n.tag = {tag}, n.source = {source}", params)
+	if err != nil {
+		return err
+	}
 
-	n.conn.ExecNeo("MERGE (n:Subdomain {name: {target}}) "+
+	_, err = n.conn.ExecNeo("MERGE (n:Subdomain {name: {target}}) "+
 		"ON CREATE SET n.tag = {tag}, n.source = {source} "+
 		"SET n:Subdomain:NS", params)
-
-	if target != tdomain {
-		n.conn.ExecNeo("MATCH (domain:Domain {name: {tdomain}}) "+
-			"MATCH (nameserver:Subdomain {name: {target}}) "+
-			"MERGE (domain)-[:ROOT_OF]->(nameserver)", params)
+	if err != nil {
+		return err
 	}
 
-	n.conn.ExecNeo("MATCH (source:Subdomain {name: {name}}) "+
+	if target != tdomain {
+		_, err = n.conn.ExecNeo("MATCH (domain:Domain {name: {tdomain}}) "+
+			"MATCH (nameserver:Subdomain {name: {target}}) "+
+			"MERGE (domain)-[:ROOT_OF]->(nameserver)", params)
+		if err != nil {
+			return err
+		}
+	}
+
+	_, err = n.conn.ExecNeo("MATCH (source:Subdomain {name: {name}}) "+
 		"MATCH (nameserver:Subdomain {name: {target}}) "+
 		"MERGE (source)-[:NS_TO]->(nameserver)", params)
+	return err
 }
 
-func (n *Neo4j) InsertMX(name, domain, target, tdomain, tag, source string) {
+func (n *Neo4j) InsertMX(name, domain, target, tdomain, tag, source string) error {
 	params := map[string]interface{}{
 		"name":    name,
 		"domain":  domain,
@@ -226,25 +296,35 @@ func (n *Neo4j) InsertMX(name, domain, target, tdomain, tag, source string) {
 		"source":  source,
 	}
 
-	n.conn.ExecNeo("MERGE (n:Subdomain {name: {name}}) "+
+	_, err := n.conn.ExecNeo("MERGE (n:Subdomain {name: {name}}) "+
 		"ON CREATE SET n.tag = {tag}, n.source = {source}", params)
-
-	n.conn.ExecNeo("MERGE (n:Subdomain {name: {target}}) "+
-		"ON CREATE SET n.tag = {tag}, n.source = {source} "+
-		"SET n:Subdomain:MX", params)
-
-	if target != tdomain {
-		n.conn.ExecNeo("MATCH (domain:Domain {name: {tdomain}}) "+
-			"MATCH (mailserver:Subdomain {name: {target}}) "+
-			"MERGE (domain)-[:ROOT_OF]->(mailserver)", params)
+	if err != nil {
+		return err
 	}
 
-	n.conn.ExecNeo("MATCH (source:Subdomain {name: {name}}) "+
+	_, err = n.conn.ExecNeo("MERGE (n:Subdomain {name: {target}}) "+
+		"ON CREATE SET n.tag = {tag}, n.source = {source} "+
+		"SET n:Subdomain:MX", params)
+	if err != nil {
+		return err
+	}
+
+	if target != tdomain {
+		_, err = n.conn.ExecNeo("MATCH (domain:Domain {name: {tdomain}}) "+
+			"MATCH (mailserver:Subdomain {name: {target}}) "+
+			"MERGE (domain)-[:ROOT_OF]->(mailserver)", params)
+		if err != nil {
+			return err
+		}
+	}
+
+	_, err = n.conn.ExecNeo("MATCH (source:Subdomain {name: {name}}) "+
 		"MATCH (mailserver:Subdomain {name: {target}}) "+
 		"MERGE (source)-[:MX_TO]->(mailserver)", params)
+	return err
 }
 
-func (n *Neo4j) InsertInfrastructure(addr string, asn int, cidr *net.IPNet, desc string) {
+func (n *Neo4j) InsertInfrastructure(addr string, asn int, cidr *net.IPNet, desc string) error {
 	params := map[string]interface{}{
 		"addr": addr,
 		"asn":  asn,
@@ -252,15 +332,25 @@ func (n *Neo4j) InsertInfrastructure(addr string, asn int, cidr *net.IPNet, desc
 		"desc": desc,
 	}
 
-	n.conn.ExecNeo("MERGE (:Netblock {cidr: {cidr}})", params)
+	_, err := n.conn.ExecNeo("MERGE (:Netblock {cidr: {cidr}})", params)
+	if err != nil {
+		return err
+	}
 
-	n.conn.ExecNeo("MATCH (address:IPAddress {addr: {addr}}) "+
+	_, err = n.conn.ExecNeo("MATCH (address:IPAddress {addr: {addr}}) "+
 		"MATCH (netblock:Netblock {cidr: {cidr}}) "+
 		"MERGE (netblock)-[:CONTAINS]->(address)", params)
+	if err != nil {
+		return err
+	}
 
-	n.conn.ExecNeo("MERGE (:AS {asn: {asn}, desc: {desc}})", params)
+	_, err = n.conn.ExecNeo("MERGE (:AS {asn: {asn}, desc: {desc}})", params)
+	if err != nil {
+		return err
+	}
 
-	n.conn.ExecNeo("MATCH (as:AS {asn: {asn}}) "+
+	_, err = n.conn.ExecNeo("MATCH (as:AS {asn: {asn}}) "+
 		"MATCH (netblock:Netblock {cidr: {cidr}}) "+
 		"MERGE (as)-[:HAS_PREFIX]->(netblock)", params)
+	return err
 }
