@@ -66,7 +66,7 @@ func SubdomainToDomain(name string) string {
 		return domain
 	}
 	// Check the DNS for all parts of the name
-	for i := 0; i < len(labels); i++ {
+	for i := 0; i < len(labels)-1; i++ {
 		sub := strings.Join(labels[i:], ".")
 
 		if ns, err := dnssrv.Resolve(sub, "NS"); err == nil {

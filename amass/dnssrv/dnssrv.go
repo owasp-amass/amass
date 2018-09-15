@@ -5,7 +5,6 @@ package dnssrv
 
 import (
 	"context"
-	"fmt"
 	"net"
 	"strings"
 	"time"
@@ -14,7 +13,6 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 	evbus "github.com/asaskevich/EventBus"
 	"github.com/irfansharif/cfilter"
-	"github.com/miekg/dns"
 	"golang.org/x/sync/semaphore"
 )
 
@@ -122,86 +120,37 @@ func (ds *DNSService) performRequest() {
 	go ds.completeQueries(req)
 }
 
-var InitialQueryTypes = []uint16{
-	dns.TypeTXT,
-	dns.TypeA,
-	dns.TypeAAAA,
-	dns.TypeCNAME,
+var InitialQueryTypes = []string{
+	"TXT",
+	"A",
+	"AAAA",
+	"CNAME",
 }
 
 func (ds *DNSService) completeQueries(req *core.AmassRequest) {
 	defer ds.sem.Release(6)
 
 	var answers []core.DNSAnswer
-
 	for _, t := range InitialQueryTypes {
-		tries := 3
-		if t == dns.TypeTXT {
-			tries = 10
+		a, err := Resolve(req.Name, t)
+		if err == nil {
+			answers = append(answers, a...)
+			break
 		}
-
-		for i := 0; i < tries; i++ {
-			a, err, again := ds.executeQuery(req.Name, t)
-			if err == nil {
-				answers = append(answers, a...)
-				break
-			}
-			ds.Config().Log.Print(err)
-			if !again {
-				break
-			}
-		}
+		ds.Config().Log.Print(err)
+		time.Sleep(ds.Config().Frequency)
 	}
 
 	req.Records = answers
 	if len(req.Records) == 0 {
 		return
 	}
-
 	if req.Tag != core.CERT && DetectWildcard(req.Domain, req.Name, req.Records) {
 		return
 	}
 	// Make sure we know about any new subdomains
 	ds.checkForNewSubdomain(req)
 	ds.bus.Publish(core.RESOLVED, req)
-}
-
-func (ds *DNSService) executeQuery(name string, qtype uint16) ([]core.DNSAnswer, error, bool) {
-	var answers []core.DNSAnswer
-
-	conn, err := DNSDialContext(context.Background(), "udp", "")
-	if err != nil {
-		return nil, fmt.Errorf("DNS error: Failed to create UDP connection to resolver: %v", err), false
-	}
-	defer conn.Close()
-
-	co := &dns.Conn{Conn: conn}
-	msg := QueryMessage(name, qtype)
-
-	co.SetWriteDeadline(time.Now().Add(1 * time.Second))
-	if err = co.WriteMsg(msg); err != nil {
-		return nil, fmt.Errorf("DNS error: Failed to write query msg: %v", err), false
-	}
-
-	co.SetReadDeadline(time.Now().Add(1 * time.Second))
-	r, err := co.ReadMsg()
-	if err != nil {
-		return nil, fmt.Errorf("DNS error: Failed to read query response: %v", err), true
-	}
-	// Check that the query was successful
-	if r != nil && r.Rcode != dns.RcodeSuccess {
-		return nil, fmt.Errorf("DNS error: Resolver returned an error %v", r), false
-	}
-
-	for _, a := range ExtractRawData(r, qtype) {
-		answers = append(answers, core.DNSAnswer{
-			Name: utils.CopyString(name),
-			Type: int(qtype),
-			TTL:  0,
-			Data: strings.TrimSpace(a),
-		})
-	}
-	return answers, nil, false
 }
 
 func (ds *DNSService) checkForNewSubdomain(req *core.AmassRequest) {
@@ -309,25 +258,20 @@ func (ds *DNSService) queryServiceNames(subdomain, domain string) {
 	for _, name := range popularSRVRecords {
 		srvName := name + "." + subdomain
 
-		for i := 0; i < 3; i++ {
-			// Do not go too fast
-			time.Sleep(ds.Config().Frequency)
-
-			a, err, again := ds.executeQuery(srvName, dns.TypeSRV)
-			if err == nil {
-				ds.bus.Publish(core.RESOLVED, &core.AmassRequest{
-					Name:    srvName,
-					Domain:  domain,
-					Records: a,
-					Tag:     "dns",
-					Source:  "Forward DNS",
-				})
-				break
-			}
-			if !again {
-				break
-			}
+		if ds.duplicate(srvName) {
+			continue
 		}
+
+		if a, err := Resolve(srvName, "SRV"); err == nil {
+			ds.bus.Publish(core.RESOLVED, &core.AmassRequest{
+				Name:    srvName,
+				Domain:  domain,
+				Records: a,
+				Tag:     "dns",
+				Source:  "Forward DNS",
+			})
+		}
+		time.Sleep(ds.Config().Frequency)
 	}
 }
 
@@ -336,38 +280,27 @@ func (ds *DNSService) ReverseDNSSweep(domain, addr string, cidr *net.IPNet) {
 	ips := utils.CIDRSubset(cidr, addr, 200)
 	// Go through the IP addresses
 	for _, ip := range ips {
-		var ptr string
+		a := ip.String()
 
-		if len(ip.To4()) == net.IPv4len {
-			ptr = utils.ReverseIP(ip.String()) + ".in-addr.arpa"
-		} else if len(ip) == net.IPv6len {
-			ptr = utils.IPv6NibbleFormat(utils.HexString(ip)) + ".ip6.arpa"
-		} else {
+		if ds.duplicate(a) {
 			continue
 		}
 
-		if ds.duplicate(ptr) {
-			continue
+		ptrName, answer, err := Reverse(a)
+		if err == nil {
+			ds.bus.Publish(core.RESOLVED, &core.AmassRequest{
+				Name:   ptrName,
+				Domain: domain,
+				Records: []core.DNSAnswer{{
+					Name: ptrName,
+					Type: 12,
+					TTL:  0,
+					Data: answer,
+				}},
+				Tag:    "dns",
+				Source: "Reverse DNS",
+			})
 		}
-
-		for i := 0; i < 3; i++ {
-			// Do not go too fast
-			time.Sleep(ds.Config().Frequency)
-
-			a, err, again := ds.executeQuery(ptr, dns.TypePTR)
-			if err == nil {
-				ds.bus.Publish(core.RESOLVED, &core.AmassRequest{
-					Name:    ptr,
-					Domain:  domain,
-					Records: a,
-					Tag:     "dns",
-					Source:  "Reverse DNS",
-				})
-				break
-			}
-			if !again {
-				break
-			}
-		}
+		time.Sleep(ds.Config().Frequency)
 	}
 }

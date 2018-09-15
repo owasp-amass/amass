@@ -34,7 +34,7 @@ func Resolve(name, qtype string) ([]core.DNSAnswer, error) {
 	return ans, nil
 }
 
-func Reverse(addr string) (string, error) {
+func Reverse(addr string) (string, string, error) {
 	var name, ptr string
 
 	ip := net.ParseIP(addr)
@@ -43,22 +43,27 @@ func Reverse(addr string) (string, error) {
 	} else if len(ip) == net.IPv6len {
 		ptr = utils.IPv6NibbleFormat(utils.HexString(ip)) + ".ip6.arpa"
 	} else {
-		return "", fmt.Errorf("Invalid IP address parameter: %s", addr)
+		return ptr, "", fmt.Errorf("Invalid IP address parameter: %s", addr)
 	}
 
 	answers, err := Resolve(ptr, "PTR")
-	if err == nil {
-		if answers[0].Type == 12 {
-			l := len(answers[0].Data)
+	if err != nil {
+		return ptr, name, err
+	}
 
-			name = answers[0].Data[:l-1]
-		}
-
-		if name == "" {
-			err = fmt.Errorf("PTR record not found for IP address: %s", addr)
+	for _, a := range answers {
+		if a.Type == 12 {
+			name = removeLastDot(a.Data)
+			break
 		}
 	}
-	return name, err
+
+	if name == "" {
+		err = fmt.Errorf("PTR record not found for IP address: %s", addr)
+	} else if strings.HasSuffix(name, ".in-addr.arpa") || strings.HasSuffix(name, ".ip6.arpa") {
+		err = fmt.Errorf("Invalid target in PTR record answer: %s", name)
+	}
+	return ptr, name, err
 }
 
 func QueryMessage(name string, qtype uint16) *dns.Msg {
@@ -86,7 +91,8 @@ func QueryMessage(name string, qtype uint16) *dns.Msg {
 // ExchangeConn - Encapsulates miekg/dns usage
 func ExchangeConn(conn net.Conn, name string, qtype uint16) ([]core.DNSAnswer, error) {
 	var err error
-	var m, r *dns.Msg
+	var r *dns.Msg
+	var answers []core.DNSAnswer
 
 	tries := 3
 	if qtype == dns.TypeNS || qtype == dns.TypeMX ||
@@ -97,29 +103,31 @@ func ExchangeConn(conn net.Conn, name string, qtype uint16) ([]core.DNSAnswer, e
 	}
 
 	for i := 0; i < tries; i++ {
-		m = QueryMessage(name, qtype)
-
-		// Perform the DNS query
 		co := &dns.Conn{Conn: conn}
-		if err = co.WriteMsg(m); err != nil {
-			return nil, fmt.Errorf("DNS error: Failed to write msg to the resolver: %v", err)
+		msg := QueryMessage(name, qtype)
+
+		co.SetWriteDeadline(time.Now().Add(1 * time.Second))
+		if err = co.WriteMsg(msg); err != nil {
+			return nil, fmt.Errorf("DNS error: Failed to write query msg: %v", err)
 		}
-		// Set the maximum time for receiving the answer
-		co.SetReadDeadline(time.Now().Add(2 * time.Second))
+
+		co.SetReadDeadline(time.Now().Add(1 * time.Second))
 		r, err = co.ReadMsg()
 		if err == nil {
 			break
 		}
+		// Do not go too fast
+		time.Sleep(100 * time.Millisecond)
 	}
 	if err != nil {
-		return nil, err
-	}
-	// Check that the query was successful
-	if r != nil && r.Rcode != dns.RcodeSuccess {
-		return nil, fmt.Errorf("Resolver returned an error %v", r)
+		return nil, fmt.Errorf("DNS error: Failed to read query response %d times: %v", tries, err)
 	}
 
-	var answers []core.DNSAnswer
+	// Check that the query was successful
+	if r != nil && r.Rcode != dns.RcodeSuccess {
+		return nil, fmt.Errorf("DNS error: Resolver returned an error %v", r)
+	}
+
 	for _, a := range ExtractRawData(r, qtype) {
 		answers = append(answers, core.DNSAnswer{
 			Name: name,

@@ -6,28 +6,28 @@ package main
 import (
 	"flag"
 	"fmt"
+	"math/rand"
 	"net"
 	"os"
-	"os/signal"
 	"path"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/OWASP/Amass/amass"
+	"github.com/OWASP/Amass/amass/dnssrv"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
 var (
-	filter     map[string]struct{}
-	filterLock sync.Mutex
+	wg      sync.WaitGroup
+	results chan string
 )
 
 func main() {
 	var addrs parseIPs
 	var cidrs parseCIDRs
 	var asns, ports parseInts
-	filter = make(map[string]struct{})
+	results = make(chan string, 50)
 
 	help := flag.Bool("h", false, "Show the program usage message")
 	flag.Var(&addrs, "addr", "IPs and ranges (192.168.1.1-254) separated by commas")
@@ -42,25 +42,40 @@ func main() {
 		return
 	}
 
-	done := make(chan struct{})
-	results := make(chan string, 10)
-	// Execute the signal handler
-	go CatchSignals(results, done)
-
 	if len(ports) == 0 {
 		ports = []int{443}
 	}
 
-	if ips := AllIPsInScope(addrs, cidrs, asns); len(ips) > 0 {
-		go PullAllCertificates(ips, ports, results)
+	rand.Seed(time.Now().UTC().UnixNano())
 
-		for domain := range results {
+	ips := AllIPsInScope(addrs, cidrs, asns)
+	if len(ips) == 0 {
+		fmt.Println("The parameters identified no hosts")
+		return
+	}
+
+	go PullAllCertificates(ips, ports)
+	go ReverseDNS(ips)
+	go UniquePrint()
+	// Wait for DNS queries and certificate pulls
+	wg.Add(2)
+	wg.Wait()
+	// Wait for all the prints to finish
+	wg.Add(1)
+	close(results)
+	wg.Wait()
+}
+
+func UniquePrint() {
+	filter := make(map[string]struct{})
+
+	for domain := range results {
+		if _, found := filter[domain]; domain != "" && !found {
+			filter[domain] = struct{}{}
 			fmt.Println(domain)
 		}
-	} else {
-		fmt.Println("The parameters identified no hosts")
 	}
-	close(done)
+	wg.Done()
 }
 
 func AllIPsInScope(addrs parseIPs, cidrs parseCIDRs, asns parseInts) []net.IP {
@@ -90,40 +105,45 @@ func AllIPsInScope(addrs parseIPs, cidrs parseCIDRs, asns parseInts) []net.IP {
 	return ips
 }
 
-func PullAllCertificates(ips []net.IP, ports parseInts, output chan string) {
-	var running int
+func ReverseDNS(ips []net.IP) {
+	for _, ip := range ips {
+		if _, answer, err := dnssrv.Reverse(ip.String()); err == nil {
+			results <- amass.SubdomainToDomain(answer)
+		}
+		time.Sleep(time.Millisecond)
+	}
+	wg.Done()
+}
+
+func PullAllCertificates(ips []net.IP, ports parseInts) {
+	var running, idx int
 	done := make(chan struct{}, 100)
 
-	t := time.NewTicker(100 * time.Millisecond)
+	t := time.NewTicker(25 * time.Millisecond)
 	defer t.Stop()
 loop:
 	for {
 		select {
 		case <-t.C:
-			if running >= 100 || len(ips) <= 0 {
+			if running >= 100 || idx >= len(ips) {
 				continue
 			}
 
 			running++
-			addr := ips[0]
-			if len(ips) == 1 {
-				ips = []net.IP{}
-			} else {
-				ips = ips[1:]
-			}
-
-			go ObtainCert(addr.String(), ports, output, done)
+			addr := ips[idx]
+			go ObtainCert(addr.String(), ports, done)
+			idx++
 		case <-done:
 			running--
-			if running == 0 && len(ips) <= 0 {
-				close(output)
+			if running == 0 && idx >= len(ips) {
 				break loop
 			}
 		}
 	}
+	wg.Done()
 }
 
-func ObtainCert(addr string, ports parseInts, output chan string, done chan struct{}) {
+func ObtainCert(addr string, ports parseInts, done chan struct{}) {
 	var domains []string
 
 	for _, r := range amass.PullCertificateNames(addr, ports) {
@@ -131,31 +151,7 @@ func ObtainCert(addr string, ports parseInts, output chan string, done chan stru
 	}
 
 	for _, domain := range domains {
-		FilteredSend(domain, output)
+		results <- domain
 	}
 	done <- struct{}{}
-}
-
-func FilteredSend(domain string, output chan string) {
-	filterLock.Lock()
-	defer filterLock.Unlock()
-
-	if _, found := filter[domain]; !found {
-		output <- domain
-		filter[domain] = struct{}{}
-	}
-}
-
-// If the user interrupts the program, print the summary information
-func CatchSignals(output chan string, done chan struct{}) {
-	sigs := make(chan os.Signal, 2)
-	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
-
-	// Wait for a signal
-	<-sigs
-	// Start final output operations
-	close(output)
-	// Wait for the broadcast indicating completion
-	<-done
-	os.Exit(1)
 }
