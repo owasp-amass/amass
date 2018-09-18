@@ -38,7 +38,7 @@ var Banner string = `
 `
 
 const (
-	Version = "2.6.6"
+	Version = "2.6.7"
 	Author  = "https://github.com/OWASP/Amass"
 
 	DefaultFrequency   = 10 * time.Millisecond
@@ -137,7 +137,7 @@ func NewEnumeration() *Enumeration {
 		Ports:           []int{80, 443},
 		Recursive:       true,
 		Alterations:     true,
-		Frequency:       10 * time.Millisecond,
+		Frequency:       25 * time.Millisecond,
 		MinForRecursive: 1,
 		pause:           make(chan struct{}),
 		resume:          make(chan struct{}),

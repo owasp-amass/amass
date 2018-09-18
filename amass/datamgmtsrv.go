@@ -246,11 +246,8 @@ func (dms *DataManagerService) insertAAAA(req *core.AmassRequest, recidx int) {
 
 func (dms *DataManagerService) obtainNamesFromCertificate(addr string) {
 	for _, r := range PullCertificateNames(addr, dms.Config().Ports) {
-		for _, domain := range dms.Config().Domains() {
-			if r.Domain == domain {
-				dms.bus.Publish(core.DNSQUERY, r)
-				break
-			}
+		if dms.Config().IsDomainInScope(r.Domain) {
+			dms.bus.Publish(core.DNSQUERY, r)
 		}
 	}
 }

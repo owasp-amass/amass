@@ -15,9 +15,6 @@ import (
 	"strings"
 	"time"
 
-	//"runtime"
-	//"runtime/pprof"
-
 	"github.com/OWASP/Amass/amass"
 	"github.com/OWASP/Amass/amass/utils"
 	"github.com/fatih/color"
@@ -55,7 +52,6 @@ var (
 	domainspath   = flag.String("df", "", "Path to a file providing root domain names")
 	resolvepath   = flag.String("rf", "", "Path to a file providing preferred DNS resolvers")
 	blacklistpath = flag.String("blf", "", "Path to a file providing blacklisted subdomains")
-	neo4j         = flag.String("neo4j", "", "URL in the format of user:password@address:port")
 )
 
 func main() {
@@ -200,10 +196,6 @@ func main() {
 		r.Println(err)
 		return
 	}
-	//profFile, _ := os.Create("amass_mem.prof")
-	//defer profFile.Close()
-	//runtime.GC()
-	//pprof.WriteHeapProfile(profFile)
 	// Wait for output manager to finish
 	<-done
 }

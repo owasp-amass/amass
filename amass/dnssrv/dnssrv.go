@@ -276,9 +276,15 @@ func (ds *DNSService) queryServiceNames(subdomain, domain string) {
 }
 
 func (ds *DNSService) ReverseDNSSweep(domain, addr string, cidr *net.IPNet) {
-	// Get the subset of 200 nearby IP addresses
-	ips := utils.CIDRSubset(cidr, addr, 200)
-	// Go through the IP addresses
+	var ips []net.IP
+
+	// Get a subset of nearby IP addresses
+	if ds.Config().Active {
+		ips = utils.CIDRSubset(cidr, addr, 500)
+	} else {
+		ips = utils.CIDRSubset(cidr, addr, 100)
+	}
+
 	for _, ip := range ips {
 		a := ip.String()
 

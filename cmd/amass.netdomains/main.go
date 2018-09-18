@@ -24,12 +24,14 @@ var (
 )
 
 func main() {
+	var org string
 	var addrs parseIPs
 	var cidrs parseCIDRs
 	var asns, ports parseInts
 	results = make(chan string, 50)
 
 	help := flag.Bool("h", false, "Show the program usage message")
+	flag.StringVar(&org, "org", "", "Search string used against AS description information")
 	flag.Var(&addrs, "addr", "IPs and ranges (192.168.1.1-254) separated by commas")
 	flag.Var(&cidrs, "cidr", "CIDRs separated by commas (can be used multiple times)")
 	flag.Var(&asns, "asn", "ASNs separated by commas (can be used multiple times)")
@@ -39,6 +41,18 @@ func main() {
 	if *help {
 		fmt.Printf("Usage: %s [--addr IP] [--cidr CIDR] [--asn number] [-p number]\n", path.Base(os.Args[0]))
 		flag.PrintDefaults()
+		return
+	}
+
+	if org != "" {
+		asns, desc, err := amass.LookupASNsByName(org)
+		if err == nil {
+			for idx, asn := range asns {
+				fmt.Printf("%d, %s\n", asn, desc[idx])
+			}
+		} else {
+			fmt.Printf("%v\n", err)
+		}
 		return
 	}
 
@@ -55,7 +69,7 @@ func main() {
 	}
 
 	go PullAllCertificates(ips, ports)
-	go ReverseDNS(ips)
+	go PerformAllReverseDNS(ips)
 	go UniquePrint()
 	// Wait for DNS queries and certificate pulls
 	wg.Add(2)
@@ -105,27 +119,48 @@ func AllIPsInScope(addrs parseIPs, cidrs parseCIDRs, asns parseInts) []net.IP {
 	return ips
 }
 
-func ReverseDNS(ips []net.IP) {
-	for _, ip := range ips {
-		if _, answer, err := dnssrv.Reverse(ip.String()); err == nil {
-			results <- amass.SubdomainToDomain(answer)
-		}
-		time.Sleep(time.Millisecond)
-	}
-	wg.Done()
-}
+func PerformAllReverseDNS(ips []net.IP) {
+	var idx int
+	output := make(chan string, 100)
 
-func PullAllCertificates(ips []net.IP, ports parseInts) {
-	var running, idx int
-	done := make(chan struct{}, 100)
-
-	t := time.NewTicker(25 * time.Millisecond)
+	t := time.NewTicker(time.Millisecond)
 	defer t.Stop()
 loop:
 	for {
 		select {
 		case <-t.C:
+			go ReverseDNS(ips[idx], output)
+			idx++
+			if idx >= len(ips) {
+				break loop
+			}
+		case o := <-output:
+			results <- o
+		}
+	}
+	wg.Done()
+}
+
+func ReverseDNS(ip net.IP, output chan string) {
+	if _, answer, err := dnssrv.Reverse(ip.String()); err == nil {
+		output <- amass.SubdomainToDomain(answer)
+	}
+}
+
+func PullAllCertificates(ips []net.IP, ports parseInts) {
+	var running, idx int
+	done := make(chan struct{}, 100)
+loop:
+	for {
+		select {
+		case <-done:
+			running--
+			if running == 0 && idx >= len(ips) {
+				break loop
+			}
+		default:
 			if running >= 100 || idx >= len(ips) {
+				time.Sleep(100 * time.Millisecond)
 				continue
 			}
 
@@ -133,11 +168,6 @@ loop:
 			addr := ips[idx]
 			go ObtainCert(addr.String(), ports, done)
 			idx++
-		case <-done:
-			running--
-			if running == 0 && idx >= len(ips) {
-				break loop
-			}
 		}
 	}
 	wg.Done()

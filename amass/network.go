@@ -338,6 +338,40 @@ func parseASNInfo(line string) *ASRecord {
 	}
 }
 
+func LookupASNsByName(s string) ([]int, []string, error) {
+	var asns []int
+	var desc []string
+
+	s = strings.ToLower(s)
+	url := "https://www.cidr-report.org/as2.0/autnums.html"
+	page, err := utils.GetWebPage(url, nil)
+	if err != nil {
+		return asns, desc, err
+	}
+
+	re := regexp.MustCompile(">AS([0-9]+).*</a> (.*)")
+	results := re.FindAllStringSubmatchIndex(page, -1)
+	if len(results) == 0 {
+		return asns, desc, errors.New("No ASNs were discovered in the results")
+	}
+
+	for _, n := range results {
+		asn, err := strconv.Atoi(page[n[2]:n[3]])
+		if err != nil {
+			continue
+		}
+
+		d := page[n[4]:n[5]]
+		if !strings.Contains(strings.ToLower(d), s) {
+			continue
+		}
+
+		asns = append(asns, asn)
+		desc = append(desc, d)
+	}
+	return asns, desc, nil
+}
+
 // LookupIPHistory - Attempts to obtain IP addresses used by a root domain name
 func LookupIPHistory(domain string) ([]string, error) {
 	var unique []string
