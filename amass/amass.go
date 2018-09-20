@@ -38,7 +38,7 @@ var Banner string = `
 `
 
 const (
-	Version = "2.6.7"
+	Version = "2.6.8"
 	Author  = "https://github.com/OWASP/Amass"
 
 	DefaultFrequency   = 10 * time.Millisecond

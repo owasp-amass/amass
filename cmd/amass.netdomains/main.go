@@ -45,10 +45,10 @@ func main() {
 	}
 
 	if org != "" {
-		asns, desc, err := amass.LookupASNsByName(org)
+		records, err := amass.LookupASNsByName(org)
 		if err == nil {
-			for idx, asn := range asns {
-				fmt.Printf("%d, %s\n", asn, desc[idx])
+			for _, a := range records {
+				fmt.Printf("%d, %s, %s, %s\n", a.ASN, a.CC, a.Registry, a.Description)
 			}
 		} else {
 			fmt.Printf("%v\n", err)

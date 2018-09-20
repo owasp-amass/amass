@@ -332,44 +332,45 @@ func parseASNInfo(line string) *ASRecord {
 	return &ASRecord{
 		ASN:            asn,
 		CC:             strings.TrimSpace(fields[1]),
-		Registry:       strings.TrimSpace(fields[2]),
+		Registry:       strings.ToUpper(strings.TrimSpace(fields[2])),
 		AllocationDate: t,
 		Description:    strings.TrimSpace(fields[4]),
 	}
 }
 
-func LookupASNsByName(s string) ([]int, []string, error) {
+func LookupASNsByName(s string) ([]ASRecord, error) {
 	var asns []int
-	var desc []string
+	var records []ASRecord
 
 	s = strings.ToLower(s)
-	url := "https://www.cidr-report.org/as2.0/autnums.html"
+	url := "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/asnlist.txt"
 	page, err := utils.GetWebPage(url, nil)
 	if err != nil {
-		return asns, desc, err
+		return records, err
 	}
 
-	re := regexp.MustCompile(">AS([0-9]+).*</a> (.*)")
-	results := re.FindAllStringSubmatchIndex(page, -1)
-	if len(results) == 0 {
-		return asns, desc, errors.New("No ASNs were discovered in the results")
-	}
+	scanner := bufio.NewScanner(strings.NewReader(page))
+	for scanner.Scan() {
+		line := scanner.Text()
 
-	for _, n := range results {
-		asn, err := strconv.Atoi(page[n[2]:n[3]])
-		if err != nil {
-			continue
+		if err := scanner.Err(); err == nil {
+			parts := strings.Split(strings.TrimSpace(line), ",")
+
+			if strings.Contains(strings.ToLower(parts[1]), s) {
+				a, err := strconv.Atoi(parts[0])
+				if err == nil {
+					asns = append(asns, a)
+				}
+			}
 		}
-
-		d := page[n[4]:n[5]]
-		if !strings.Contains(strings.ToLower(d), s) {
-			continue
-		}
-
-		asns = append(asns, asn)
-		desc = append(desc, d)
 	}
-	return asns, desc, nil
+
+	for _, asn := range asns {
+		if a, err := ASNRequest(asn); err == nil {
+			records = append(records, *a)
+		}
+	}
+	return records, nil
 }
 
 // LookupIPHistory - Attempts to obtain IP addresses used by a root domain name
