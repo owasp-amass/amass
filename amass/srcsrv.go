@@ -43,9 +43,7 @@ func NewSourcesService(config *core.AmassConfig, bus evbus.Bus) *SourcesService 
 
 	for _, source := range sources.GetAllSources() {
 		if source.Type() == core.ARCHIVE {
-			//if false {
 			ss.throttles = append(ss.throttles, source)
-			//}
 		} else {
 			ss.directs = append(ss.directs, source)
 		}
@@ -84,6 +82,7 @@ func (ss *SourcesService) OnStop() error {
 
 func (ss *SourcesService) processRequests() {
 	t := time.NewTicker(time.Second)
+	defer t.Stop()
 loop:
 	for {
 		select {
@@ -99,15 +98,12 @@ loop:
 			break loop
 		}
 	}
-	t.Stop()
 }
 
 func (ss *SourcesService) handleRequest(req *core.AmassRequest) {
 	if ss.inDup(req.Name) || !ss.Config().IsDomainInScope(req.Name) {
 		return
 	}
-
-	ss.SetActive()
 
 	var subsrch bool
 	if req.Name != req.Domain {
@@ -118,6 +114,7 @@ func (ss *SourcesService) handleRequest(req *core.AmassRequest) {
 		if subsrch && !source.Subdomains() {
 			continue
 		}
+		ss.SetActive()
 		go ss.queryOneSource(source, req.Domain, req.Name)
 	}
 
@@ -130,6 +127,7 @@ func (ss *SourcesService) handleRequest(req *core.AmassRequest) {
 		if subsrch && !source.Subdomains() {
 			continue
 		}
+		ss.SetActive()
 		ss.throttleAdd(source, req.Domain, req.Name)
 	}
 }

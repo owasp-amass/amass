@@ -70,25 +70,29 @@ func (dms *DataManagerService) OnStop() error {
 }
 
 func (dms *DataManagerService) processRequests() {
-	t := time.NewTicker(dms.Config().Frequency)
-loop:
+	var paused bool
+
 	for {
 		select {
-		case <-t.C:
-			dms.manageData()
 		case <-dms.PauseChan():
-			t.Stop()
+			paused = true
 		case <-dms.ResumeChan():
-			t = time.NewTicker(dms.Config().Frequency)
+			paused = false
 		case <-dms.Quit():
-			break loop
+			return
+		default:
+			if paused {
+				time.Sleep(time.Second)
+			} else {
+				dms.manageData()
+			}
 		}
 	}
-	t.Stop()
 }
 
 func (dms *DataManagerService) processOutput() {
 	t := time.NewTicker(5 * time.Second)
+	defer t.Stop()
 loop:
 	for {
 		select {
@@ -97,12 +101,11 @@ loop:
 		case <-dms.PauseChan():
 			t.Stop()
 		case <-dms.ResumeChan():
-			t = time.NewTicker(dms.Config().Frequency)
+			t = time.NewTicker(5 * time.Second)
 		case <-dms.Quit():
 			break loop
 		}
 	}
-	t.Stop()
 	dms.discoverOutput()
 }
 

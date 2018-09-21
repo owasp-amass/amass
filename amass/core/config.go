@@ -10,7 +10,6 @@ import (
 	"regexp"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/OWASP/Amass/amass/utils"
 )
@@ -60,9 +59,6 @@ type AmassConfig struct {
 
 	// A blacklist of subdomain names that will not be investigated
 	Blacklist []string
-
-	// Sets the maximum number of DNS queries per minute
-	Frequency time.Duration
 
 	// Preferred DNS resolvers identified by the user
 	Resolvers []string

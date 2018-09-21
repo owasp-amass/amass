@@ -79,21 +79,24 @@ func (ds *DNSService) OnStop() error {
 }
 
 func (ds *DNSService) processRequests() {
-	t := time.NewTicker(ds.Config().Frequency)
-loop:
+	var paused bool
+
 	for {
 		select {
-		case <-t.C:
-			ds.performRequest()
 		case <-ds.PauseChan():
-			t.Stop()
+			paused = true
 		case <-ds.ResumeChan():
-			t = time.NewTicker(ds.Config().Frequency)
+			paused = false
 		case <-ds.Quit():
-			break loop
+			return
+		default:
+			if paused {
+				time.Sleep(time.Second)
+			} else {
+				go ds.performRequest()
+			}
 		}
 	}
-	t.Stop()
 }
 
 func (ds *DNSService) duplicate(name string) bool {
@@ -115,7 +118,7 @@ func (ds *DNSService) performRequest() {
 		return
 	}
 
-	ds.sem.Acquire(context.Background(), 6)
+	ds.sem.Acquire(context.Background(), 4)
 	ds.SetActive()
 	go ds.completeQueries(req)
 }
@@ -128,7 +131,7 @@ var InitialQueryTypes = []string{
 }
 
 func (ds *DNSService) completeQueries(req *core.AmassRequest) {
-	defer ds.sem.Release(6)
+	defer ds.sem.Release(4)
 
 	var answers []core.DNSAnswer
 	for _, t := range InitialQueryTypes {
@@ -138,7 +141,6 @@ func (ds *DNSService) completeQueries(req *core.AmassRequest) {
 			break
 		}
 		ds.Config().Log.Print(err)
-		time.Sleep(ds.Config().Frequency)
 	}
 
 	req.Records = answers
@@ -271,7 +273,6 @@ func (ds *DNSService) queryServiceNames(subdomain, domain string) {
 				Source:  "Forward DNS",
 			})
 		}
-		time.Sleep(ds.Config().Frequency)
 	}
 }
 
@@ -292,8 +293,7 @@ func (ds *DNSService) ReverseDNSSweep(domain, addr string, cidr *net.IPNet) {
 			continue
 		}
 
-		ptrName, answer, err := Reverse(a)
-		if err == nil {
+		if ptrName, answer, err := Reverse(a); err == nil {
 			ds.bus.Publish(core.RESOLVED, &core.AmassRequest{
 				Name:   ptrName,
 				Domain: domain,
@@ -307,6 +307,5 @@ func (ds *DNSService) ReverseDNSSweep(domain, addr string, cidr *net.IPNet) {
 				Source: "Reverse DNS",
 			})
 		}
-		time.Sleep(ds.Config().Frequency)
 	}
 }

@@ -42,7 +42,6 @@ var (
 	verbose       = flag.Bool("v", false, "Print the data source and summary information")
 	whois         = flag.Bool("whois", false, "Include domains discoverd with reverse whois")
 	list          = flag.Bool("l", false, "List all domains to be used in an enumeration")
-	freq          = flag.Int64("freq", 0, "Sets the number of max DNS queries per minute")
 	wordlist      = flag.String("w", "", "Path to a different wordlist file")
 	allpath       = flag.String("oA", "", "Path prefix used for naming all output files")
 	logpath       = flag.String("log", "", "Path to the log file where errors will be written")
@@ -134,7 +133,6 @@ func main() {
 	enum.Active = *active
 	enum.Alterations = alts
 	enum.Passive = *passive
-	enum.Frequency = FreqToDuration(*freq)
 	enum.Resolvers = resolvers
 	enum.Blacklist = blacklist
 	enum.Output = results
@@ -220,23 +218,4 @@ func GetLinesFromFile(path string) []string {
 		}
 	}
 	return lines
-}
-
-func FreqToDuration(freq int64) time.Duration {
-	if freq > 0 {
-		d := time.Duration(freq)
-
-		if d < 60 {
-			// We are dealing with number of seconds
-			return (60 / d) * time.Second
-		}
-		// Make it times per second
-		d = d / 60
-		m := 1000 / d
-		if d < 1000 && m > 1 {
-			return m * time.Millisecond
-		}
-	}
-	// Use the default rate
-	return amass.DefaultFrequency
 }

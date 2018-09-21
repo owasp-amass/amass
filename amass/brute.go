@@ -55,21 +55,24 @@ func (bfs *BruteForceService) OnStop() error {
 }
 
 func (bfs *BruteForceService) processRequests() {
-	t := time.NewTicker(bfs.Config().Frequency)
-loop:
+	var paused bool
+
 	for {
 		select {
-		case <-t.C:
-			go bfs.checkForNewSubdomain()
 		case <-bfs.PauseChan():
-			t.Stop()
+			paused = true
 		case <-bfs.ResumeChan():
-			t = time.NewTicker(bfs.Config().Frequency)
+			paused = false
 		case <-bfs.Quit():
-			break loop
+			return
+		default:
+			if paused {
+				time.Sleep(time.Second)
+			} else {
+				go bfs.checkForNewSubdomain()
+			}
 		}
 	}
-	t.Stop()
 }
 
 // Returns true if the subdomain name is a duplicate entry in the filter.
@@ -141,8 +144,5 @@ func (bfs *BruteForceService) performBruteForcing(subdomain, root string) {
 			Tag:    core.BRUTE,
 			Source: "Brute Force",
 		})
-		// Going too fast will overwhelm the dns
-		// service and overuse memory
-		time.Sleep(bfs.Config().Frequency)
 	}
 }

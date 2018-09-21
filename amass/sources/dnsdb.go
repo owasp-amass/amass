@@ -95,7 +95,10 @@ func (d *DNSDB) getURL(domain, sub string) string {
 
 	delta := len(sparts) - len(dparts)
 	for i := delta - 1; i >= 0; i-- {
-		url += sparts[i] + "/"
+		url += sparts[i]
+		if i != 0 {
+			url += "/"
+		}
 	}
 	return url
 }

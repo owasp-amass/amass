@@ -63,7 +63,7 @@ loop:
 func wildcardTestResolution(sub string) []core.DNSAnswer {
 	var answers []core.DNSAnswer
 
-	name := unlikelyName(sub)
+	name := UnlikelyName(sub)
 	if name == "" {
 		return nil
 	}
@@ -84,7 +84,7 @@ func wildcardTestResolution(sub string) []core.DNSAnswer {
 	return answers
 }
 
-func unlikelyName(sub string) string {
+func UnlikelyName(sub string) string {
 	var newlabel string
 	ldh := []rune(ldhChars)
 	ldhLen := len(ldh)

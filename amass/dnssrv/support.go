@@ -21,17 +21,31 @@ func Resolve(name, qtype string) ([]core.DNSAnswer, error) {
 		return nil, err
 	}
 
-	conn, err := DNSDialContext(context.Background(), "udp", "")
-	if err != nil {
-		return nil, fmt.Errorf("Failed to obtain UDP connection to the DNS resolver: %v", err)
+	tries := 3
+	if qtype == "NS" || qtype == "MX" || qtype == "SOA" || qtype == "SPF" {
+		tries = 7
+	} else if qtype == "TXT" {
+		tries = 10
 	}
-	defer conn.Close()
 
-	ans, err := ExchangeConn(conn, name, qt)
-	if err != nil {
-		return nil, err
+	var ans []core.DNSAnswer
+	for i := 0; i < tries; i++ {
+		var conn net.Conn
+
+		conn, err = DNSDialContext(context.Background(), "udp", "")
+		if err != nil {
+			return ans, fmt.Errorf("Failed to obtain UDP connection to the DNS resolver: %v", err)
+		}
+		defer conn.Close()
+
+		ans, err = ExchangeConn(conn, name, qt)
+		if err == nil {
+			break
+		} else {
+			time.Sleep(100 * time.Millisecond)
+		}
 	}
-	return ans, nil
+	return ans, err
 }
 
 func Reverse(addr string) (string, string, error) {
@@ -94,35 +108,19 @@ func ExchangeConn(conn net.Conn, name string, qtype uint16) ([]core.DNSAnswer, e
 	var r *dns.Msg
 	var answers []core.DNSAnswer
 
-	tries := 3
-	if qtype == dns.TypeNS || qtype == dns.TypeMX ||
-		qtype == dns.TypeSOA || qtype == dns.TypeSPF {
-		tries = 7
-	} else if qtype == dns.TypeTXT {
-		tries = 10
+	co := &dns.Conn{Conn: conn}
+	msg := QueryMessage(name, qtype)
+
+	co.SetWriteDeadline(time.Now().Add(1 * time.Second))
+	if err = co.WriteMsg(msg); err != nil {
+		return nil, fmt.Errorf("DNS error: Failed to write query msg: %v", err)
 	}
 
-	for i := 0; i < tries; i++ {
-		co := &dns.Conn{Conn: conn}
-		msg := QueryMessage(name, qtype)
-
-		co.SetWriteDeadline(time.Now().Add(1 * time.Second))
-		if err = co.WriteMsg(msg); err != nil {
-			return nil, fmt.Errorf("DNS error: Failed to write query msg: %v", err)
-		}
-
-		co.SetReadDeadline(time.Now().Add(1 * time.Second))
-		r, err = co.ReadMsg()
-		if err == nil {
-			break
-		}
-		// Do not go too fast
-		time.Sleep(100 * time.Millisecond)
-	}
+	co.SetReadDeadline(time.Now().Add(1 * time.Second))
+	r, err = co.ReadMsg()
 	if err != nil {
-		return nil, fmt.Errorf("DNS error: Failed to read query response %d times: %v", tries, err)
+		return nil, fmt.Errorf("DNS error: Failed to read query response: %v", err)
 	}
-
 	// Check that the query was successful
 	if r != nil && r.Rcode != dns.RcodeSuccess {
 		return nil, fmt.Errorf("DNS error: Resolver returned an error %v", r)

@@ -51,21 +51,24 @@ func (as *AlterationService) OnStop() error {
 }
 
 func (as *AlterationService) processRequests() {
-	t := time.NewTicker(as.Config().Frequency)
-loop:
+	var paused bool
+
 	for {
 		select {
-		case <-t.C:
-			go as.executeAlterations()
 		case <-as.PauseChan():
-			t.Stop()
+			paused = true
 		case <-as.ResumeChan():
-			t = time.NewTicker(as.Config().Frequency)
+			paused = false
 		case <-as.Quit():
-			break loop
+			return
+		default:
+			if paused {
+				time.Sleep(time.Second)
+			} else {
+				go as.executeAlterations()
+			}
 		}
 	}
-	t.Stop()
 }
 
 // executeAlterations - Runs all the DNS name alteration methods as goroutines

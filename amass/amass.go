@@ -38,10 +38,9 @@ var Banner string = `
 `
 
 const (
-	Version = "2.6.8"
+	Version = "2.7.0"
 	Author  = "https://github.com/OWASP/Amass"
 
-	DefaultFrequency   = 10 * time.Millisecond
 	defaultWordlistURL = "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/namelist.txt"
 )
 
@@ -110,9 +109,6 @@ type Enumeration struct {
 	// A blacklist of subdomain names that will not be investigated
 	Blacklist []string
 
-	// Sets the maximum number of DNS queries per minute
-	Frequency time.Duration
-
 	// Preferred DNS resolvers identified by the user
 	Resolvers []string
 
@@ -137,7 +133,6 @@ func NewEnumeration() *Enumeration {
 		Ports:           []int{80, 443},
 		Recursive:       true,
 		Alterations:     true,
-		Frequency:       25 * time.Millisecond,
 		MinForRecursive: 1,
 		pause:           make(chan struct{}),
 		resume:          make(chan struct{}),
@@ -164,10 +159,6 @@ func (e *Enumeration) generateAmassConfig() (*core.AmassConfig, error) {
 
 	if e.Passive && e.Active {
 		return nil, errors.New("Active enumeration cannot be performed without DNS resolution")
-	}
-
-	if e.Frequency < DefaultFrequency {
-		return nil, errors.New("The configuration contains a invalid frequency")
 	}
 
 	if e.Passive && e.DataOptsWriter != nil {
@@ -197,7 +188,6 @@ func (e *Enumeration) generateAmassConfig() (*core.AmassConfig, error) {
 		Passive:         e.Passive,
 		Active:          e.Active,
 		Blacklist:       e.Blacklist,
-		Frequency:       e.Frequency,
 		Resolvers:       e.Resolvers,
 		DataOptsWriter:  e.DataOptsWriter,
 	}

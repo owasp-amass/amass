@@ -12,7 +12,7 @@
 
 ----
 
-The OWASP Amass tool obtains subdomain names by scraping data sources, recursive brute forcing, crawling web archives, permuting/altering names and reverse DNS sweeping. Additionally, Amass uses the IP addresses obtained during resolution to discover associated netblocks and ASNs. All the information is then used to build maps of the target networks.
+The OWASP Amass tool suite obtains subdomain names by scraping data sources, recursive brute forcing, crawling web archives, permuting/altering names and reverse DNS sweeping. Additionally, Amass uses the IP addresses obtained during resolution to discover associated netblocks and ASNs. All the information is then used to build maps of the target networks.
 
 ----
 
@@ -98,11 +98,6 @@ $ amass -d example.com
 $ amass --passive -d example.com
 ```
 
-If you are running Amass within a virtual machine, you may want to slow it down a bit:
-```
-$ amass -freq 480 -d example.com
-```
-
 The example below is a good place to start with amass:
 ```
 $ amass -v -ip -brute -min-for-recursive 3 -d example.com
@@ -128,7 +123,6 @@ Switches available through the amass CLI:
 | -d   | Provide a domain name to include in the enumeration | amass -d example.com |
 | -df  | Specify the domains to be enumerated via text file | amass -df domains.txt |
 | -do  | Write all the data operations to a JSON file | amass -do data.json -d example.com |
-| -freq | Throttle the rate of DNS queries by number per minute | amass -freq 120 -d example.com |
 | -h   | Show the amass usage information | amass -h |
 | -ip  | Print IP addresses with the discovered names | amass -ip -d example.com |
 | -json | All discoveries written as individual JSON objects | amass -json out.json -d example.com |
@@ -155,9 +149,9 @@ Switches available through the amass CLI:
 Lookup ASNs by searching the descriptions registered by organizations:
 ```
 $ amass.netdomains -org Facebook
-32934, FACEBOOK - Facebook, Inc., US
-54115, FACEBOOK-CORP - Facebook Inc, US
-63293, FACEBOOK-OFFNET - Facebook, Inc., US
+32934, US, ARIN, FACEBOOK - Facebook, Inc., US
+54115, US, ARIN, FACEBOOK-CORP - Facebook Inc, US
+63293, US, ARIN, FACEBOOK-OFFNET - Facebook, Inc., US
 ```
 
 To discover all domains hosted within target ASNs, use the following option:
