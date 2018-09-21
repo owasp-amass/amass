@@ -111,12 +111,12 @@ func ExchangeConn(conn net.Conn, name string, qtype uint16) ([]core.DNSAnswer, e
 	co := &dns.Conn{Conn: conn}
 	msg := QueryMessage(name, qtype)
 
-	co.SetWriteDeadline(time.Now().Add(1 * time.Second))
+	co.SetWriteDeadline(time.Now().Add(2 * time.Second))
 	if err = co.WriteMsg(msg); err != nil {
 		return nil, fmt.Errorf("DNS error: Failed to write query msg: %v", err)
 	}
 
-	co.SetReadDeadline(time.Now().Add(1 * time.Second))
+	co.SetReadDeadline(time.Now().Add(2 * time.Second))
 	r, err = co.ReadMsg()
 	if err != nil {
 		return nil, fmt.Errorf("DNS error: Failed to read query response: %v", err)
