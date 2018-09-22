@@ -3,12 +3,9 @@
 
 package dnssrv
 
-import (
-	"testing"
-)
-
 const TestDomain string = "owasp.org"
 
+/*
 func TestResolversPublicResolvers(t *testing.T) {
 	for _, server := range PublicResolvers {
 		CustomResolvers = []string{server}
@@ -20,3 +17,4 @@ func TestResolversPublicResolvers(t *testing.T) {
 	}
 	CustomResolvers = []string{}
 }
+*/

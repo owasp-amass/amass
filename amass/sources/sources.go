@@ -190,7 +190,7 @@ func setFetcherConfig(f *fetchbot.Fetcher) {
 	f.HttpClient = &http.Client{
 		Timeout: 10 * time.Second,
 		Transport: &http.Transport{
-			DialContext:           utils.DialContext,
+			//DialContext:           utils.DialContext,
 			MaxIdleConns:          200,
 			IdleConnTimeout:       5 * time.Second,
 			TLSHandshakeTimeout:   5 * time.Second,

@@ -36,9 +36,10 @@ func Resolve(name, qtype string) ([]core.DNSAnswer, error) {
 		if err != nil {
 			return ans, fmt.Errorf("Failed to obtain UDP connection to the DNS resolver: %v", err)
 		}
-		defer conn.Close()
 
 		ans, err = ExchangeConn(conn, name, qt)
+		conn.Close()
+		MaxConnections.Release(1)
 		if err == nil {
 			break
 		} else {
@@ -159,6 +160,7 @@ func ZoneTransfer(domain, sub, server string) ([]string, error) {
 		return results, fmt.Errorf("Zone xfr error: Failed to obtain TCP connection to %s: %v", addr+":53", err)
 	}
 	defer conn.Close()
+	defer MaxConnections.Release(1)
 
 	xfr := &dns.Transfer{
 		Conn:        &dns.Conn{Conn: conn},

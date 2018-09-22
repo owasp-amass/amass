@@ -11,6 +11,11 @@ import (
 	"strings"
 
 	"github.com/OWASP/Amass/amass/utils"
+	"golang.org/x/sync/semaphore"
+)
+
+const (
+	defaultNumOpenFiles int64 = 10000
 )
 
 var (
@@ -27,9 +32,19 @@ var (
 	}
 
 	CustomResolvers = []string{}
+
+	// Enforces a maximum number of open connections at any given moment
+	MaxConnections *semaphore.Weighted
 )
 
 func init() {
+	// Obtain the proper weight based on file resource limits
+	weight := (GetFileLimit() / 10) * 8
+	if weight <= 0 {
+		weight = defaultNumOpenFiles
+	}
+	MaxConnections = semaphore.NewWeighted(weight)
+
 	url := "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/nameservers.txt"
 	page, err := utils.GetWebPage(url, nil)
 	if err != nil {
@@ -75,6 +90,7 @@ func SetCustomResolvers(resolvers []string) {
 func DNSDialContext(ctx context.Context, network, address string) (net.Conn, error) {
 	d := &net.Dialer{}
 
+	MaxConnections.Acquire(ctx, 1)
 	return d.DialContext(ctx, network, NextResolverAddress())
 }
 
@@ -85,5 +101,7 @@ func DialContext(ctx context.Context, network, address string) (net.Conn, error)
 			Dial:     DNSDialContext,
 		},
 	}
+
+	MaxConnections.Acquire(ctx, 1)
 	return d.DialContext(ctx, network, address)
 }

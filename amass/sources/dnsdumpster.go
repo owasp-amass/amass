@@ -73,7 +73,7 @@ func (d *DNSDumpster) getCSRFToken(page string) string {
 func (d *DNSDumpster) postForm(token, domain string) (string, error) {
 	client := &http.Client{
 		Transport: &http.Transport{
-			DialContext:         utils.DialContext,
+			//DialContext:         utils.DialContext,
 			TLSHandshakeTimeout: 10 * time.Second,
 		},
 	}

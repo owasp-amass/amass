@@ -39,6 +39,7 @@ func PullCertificateNames(addr string, ports []int) []*core.AmassRequest {
 			continue
 		}
 		defer conn.Close()
+		defer dnssrv.MaxConnections.Release(1)
 		c := tls.Client(conn, cfg)
 		// Attempt to acquire the certificate chain
 		errChan := make(chan error, 2)

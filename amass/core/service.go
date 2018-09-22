@@ -160,7 +160,7 @@ func (bas *BaseAmassService) IsActive() bool {
 	bas.Lock()
 	defer bas.Unlock()
 
-	if time.Now().Sub(bas.active) > 5*time.Second {
+	if time.Now().Sub(bas.active) > 2*time.Second {
 		return false
 	}
 	return true

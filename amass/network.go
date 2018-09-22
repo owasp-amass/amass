@@ -294,6 +294,7 @@ func fetchOnlineNetblockData(asn int) ([]string, error) {
 		return nil, fmt.Errorf("fetchOnlineNetblockData error: %s: %v", addr, err)
 	}
 	defer conn.Close()
+	defer dnssrv.MaxConnections.Release(1)
 
 	fmt.Fprintf(conn, "prefix %d\n", asn)
 	scanner := bufio.NewScanner(conn)
