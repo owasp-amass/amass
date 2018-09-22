@@ -5,8 +5,6 @@ package amass
 
 import (
 	"net"
-	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
@@ -14,10 +12,6 @@ import (
 	"github.com/OWASP/Amass/amass/handlers"
 	evbus "github.com/asaskevich/EventBus"
 	"github.com/miekg/dns"
-)
-
-var (
-	WebRegex *regexp.Regexp = regexp.MustCompile("web|www")
 )
 
 type DataManagerService struct {
@@ -70,51 +64,54 @@ func (dms *DataManagerService) OnStop() error {
 }
 
 func (dms *DataManagerService) processRequests() {
-	var paused bool
+	t := time.NewTicker(500 * time.Millisecond)
+	defer t.Stop()
 
 	for {
 		select {
+		case <-t.C:
+			if req := dms.NextRequest(); req != nil {
+				dms.manageData(req)
+			}
 		case <-dms.PauseChan():
-			paused = true
+			t.Stop()
 		case <-dms.ResumeChan():
-			paused = false
+			t = time.NewTicker(500 * time.Millisecond)
 		case <-dms.Quit():
 			return
-		default:
-			if paused {
-				time.Sleep(time.Second)
-			} else {
-				dms.manageData()
-			}
 		}
 	}
 }
 
 func (dms *DataManagerService) processOutput() {
-	t := time.NewTicker(5 * time.Second)
+	t := time.NewTicker(time.Second)
 	defer t.Stop()
 loop:
 	for {
 		select {
 		case <-t.C:
-			dms.discoverOutput()
+			dms.sendOutput(dms.Graph.GetNewOutput())
 		case <-dms.PauseChan():
 			t.Stop()
 		case <-dms.ResumeChan():
-			t = time.NewTicker(5 * time.Second)
+			t = time.NewTicker(time.Second)
 		case <-dms.Quit():
 			break loop
 		}
 	}
-	dms.discoverOutput()
+	dms.sendOutput(dms.Graph.GetNewOutput())
 }
 
-func (dms *DataManagerService) manageData() {
-	req := dms.NextRequest()
-	if req == nil {
-		return
+func (dms *DataManagerService) sendOutput(output []*core.AmassOutput) {
+	for _, o := range output {
+		dms.SetActive()
+		if dms.Config().IsDomainInScope(o.Name) {
+			dms.bus.Publish(core.OUTPUT, o)
+		}
 	}
+}
 
+func (dms *DataManagerService) manageData(req *core.AmassRequest) {
 	dms.SetActive()
 	req.Name = strings.ToLower(req.Name)
 	req.Domain = strings.ToLower(req.Domain)
@@ -370,183 +367,6 @@ func (dms *DataManagerService) AttemptSweep(domain, addr string, cidr *net.IPNet
 	}
 
 	dms.bus.Publish(core.DNSSWEEP, domain, addr, cidr)
-}
-
-func (dms *DataManagerService) discoverOutput() {
-	dms.Graph.Lock()
-	defer dms.Graph.Unlock()
-
-	for key, domain := range dms.Graph.Domains {
-		output := dms.findSubdomainOutput(domain)
-
-		for _, o := range output {
-			o.Domain = key
-		}
-
-		go dms.sendOutput(output)
-	}
-}
-
-func (dms *DataManagerService) findSubdomainOutput(domain *handlers.Node) []*AmassOutput {
-	var output []*AmassOutput
-
-	if o := dms.buildSubdomainOutput(domain); o != nil {
-		output = append(output, o)
-	}
-
-	for _, idx := range domain.Edges {
-		edge := dms.Graph.Edges[idx]
-		if edge.Label != "ROOT_OF" {
-			continue
-		}
-
-		n := dms.Graph.Nodes[edge.To]
-		if o := dms.buildSubdomainOutput(n); o != nil {
-			output = append(output, o)
-		}
-
-		cname := n
-		for {
-			prev := cname
-
-			for _, i := range cname.Edges {
-				e := dms.Graph.Edges[i]
-				if e.Label == "CNAME_TO" {
-					cname = dms.Graph.Nodes[e.To]
-					break
-				}
-			}
-
-			if cname == prev {
-				break
-			}
-
-			if o := dms.buildSubdomainOutput(cname); o != nil {
-				output = append(output, o)
-			}
-		}
-	}
-	return output
-}
-
-func (dms *DataManagerService) buildSubdomainOutput(sub *handlers.Node) *AmassOutput {
-	if _, ok := sub.Properties["sent"]; ok {
-		return nil
-	}
-
-	output := &AmassOutput{
-		Name:   sub.Properties["name"],
-		Tag:    sub.Properties["tag"],
-		Source: sub.Properties["source"],
-	}
-
-	t := core.TypeNorm
-	if sub.Labels[0] != "NS" && sub.Labels[0] != "MX" {
-		labels := strings.Split(output.Name, ".")
-
-		if WebRegex.FindString(labels[0]) != "" {
-			t = core.TypeWeb
-		}
-	} else {
-		if sub.Labels[0] == "NS" {
-			t = core.TypeNS
-		} else if sub.Labels[0] == "MX" {
-			t = core.TypeMX
-		}
-	}
-	output.Type = t
-
-	cname := dms.traverseCNAME(sub)
-
-	var addrs []*handlers.Node
-	for _, idx := range cname.Edges {
-		edge := dms.Graph.Edges[idx]
-		if edge.Label == "A_TO" || edge.Label == "AAAA_TO" {
-			n := dms.Graph.Nodes[edge.To]
-
-			addrs = append(addrs, n)
-		}
-	}
-
-	if len(addrs) == 0 {
-		return nil
-	}
-
-	for _, addr := range addrs {
-		if i := dms.obtainInfrastructureData(addr); i != nil {
-			output.Addresses = append(output.Addresses, *i)
-		}
-	}
-
-	if len(output.Addresses) == 0 {
-		return nil
-	}
-
-	sub.Properties["sent"] = "yes"
-	return output
-}
-
-func (dms *DataManagerService) traverseCNAME(sub *handlers.Node) *handlers.Node {
-	cname := sub
-	for {
-		prev := cname
-		for _, idx := range cname.Edges {
-			edge := dms.Graph.Edges[idx]
-			if edge.Label == "CNAME_TO" {
-				cname = dms.Graph.Nodes[edge.To]
-				break
-			}
-		}
-
-		if cname == prev {
-			break
-		}
-	}
-	return cname
-}
-
-func (dms *DataManagerService) obtainInfrastructureData(addr *handlers.Node) *AmassAddressInfo {
-	infr := &AmassAddressInfo{Address: net.ParseIP(addr.Properties["addr"])}
-
-	var nb *handlers.Node
-	for _, idx := range addr.Edges {
-		edge := dms.Graph.Edges[idx]
-		if edge.Label == "CONTAINS" {
-			nb = dms.Graph.Nodes[edge.From]
-			break
-		}
-	}
-
-	if nb == nil {
-		return nil
-	}
-	_, infr.Netblock, _ = net.ParseCIDR(nb.Properties["cidr"])
-
-	var as *handlers.Node
-	for _, idx := range nb.Edges {
-		edge := dms.Graph.Edges[idx]
-		if edge.Label == "HAS_PREFIX" {
-			as = dms.Graph.Nodes[edge.From]
-			break
-		}
-	}
-
-	if as == nil {
-		return nil
-	}
-
-	infr.ASN, _ = strconv.Atoi(as.Properties["asn"])
-	infr.Description = as.Properties["desc"]
-	return infr
-}
-
-func (dms *DataManagerService) sendOutput(output []*AmassOutput) {
-	for _, o := range output {
-		dms.SetActive()
-		if dms.Config().IsDomainInScope(o.Name) {
-			dms.bus.Publish(core.OUTPUT, o)
-		}
-	}
 }
 
 func removeLastDot(name string) string {

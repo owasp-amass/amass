@@ -65,7 +65,7 @@ func NewDNSService(config *core.AmassConfig, bus evbus.Bus) *DNSService {
 func (ds *DNSService) OnStart() error {
 	ds.BaseAmassService.OnStart()
 
-	ds.bus.SubscribeAsync(core.DNSQUERY, ds.SendRequest, false)
+	ds.bus.SubscribeAsync(core.DNSQUERY, ds.queueRequest, false)
 	ds.bus.SubscribeAsync(core.DNSSWEEP, ds.ReverseDNSSweep, false)
 	go ds.processRequests()
 	return nil
@@ -82,9 +82,19 @@ func (ds *DNSService) OnResume() error {
 func (ds *DNSService) OnStop() error {
 	ds.BaseAmassService.OnStop()
 
-	ds.bus.Unsubscribe(core.DNSQUERY, ds.SendRequest)
+	ds.bus.Unsubscribe(core.DNSQUERY, ds.queueRequest)
 	ds.bus.Unsubscribe(core.DNSSWEEP, ds.ReverseDNSSweep)
 	return nil
+}
+
+func (ds *DNSService) queueRequest(req *core.AmassRequest) {
+	if req == nil || req.Name == "" || req.Domain == "" {
+		return
+	}
+	if ds.duplicate(req.Name) || ds.Config().Blacklisted(req.Name) {
+		return
+	}
+	ds.SendRequest(req)
 }
 
 func (ds *DNSService) processRequests() {
@@ -101,9 +111,12 @@ func (ds *DNSService) processRequests() {
 		default:
 			if paused {
 				time.Sleep(time.Second)
+				continue
+			}
+			if req := ds.NextRequest(); req != nil {
+				go ds.performRequest(req)
 			} else {
-				ds.performRequest()
-				time.Sleep(time.Millisecond)
+				time.Sleep(100 * time.Millisecond)
 			}
 		}
 	}
@@ -117,20 +130,7 @@ func (ds *DNSService) duplicate(name string) bool {
 	return false
 }
 
-func (ds *DNSService) performRequest() {
-	req := ds.NextRequest()
-	// Plow through the requests that are not of interest
-	for req != nil && (req.Name == "" || req.Domain == "" ||
-		ds.duplicate(req.Name) || ds.Config().Blacklisted(req.Name)) {
-		req = ds.NextRequest()
-	}
-	if req == nil {
-		return
-	}
-	go ds.completeQueries(req)
-}
-
-func (ds *DNSService) completeQueries(req *core.AmassRequest) {
+func (ds *DNSService) performRequest(req *core.AmassRequest) {
 	var answers []core.DNSAnswer
 
 	ds.SetActive()
@@ -264,7 +264,7 @@ func (ds *DNSService) attemptZoneXFR(domain, sub, server string) {
 				Name:   name,
 				Domain: domain,
 				Tag:    "axfr",
-				Source: "DNS ZoneXFR",
+				Source: "DNS Zone XFR",
 			})
 		}
 	} else {
@@ -305,7 +305,6 @@ func (ds *DNSService) ReverseDNSSweep(domain, addr string, cidr *net.IPNet) {
 
 	for _, ip := range ips {
 		a := ip.String()
-
 		if ds.duplicate(a) {
 			continue
 		}

@@ -38,31 +38,15 @@ var Banner string = `
 `
 
 const (
-	Version = "2.7.1"
+	Version = "2.7.2"
 	Author  = "https://github.com/OWASP/Amass"
 
 	defaultWordlistURL = "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/namelist.txt"
 )
 
-type AmassAddressInfo struct {
-	Address     net.IP
-	Netblock    *net.IPNet
-	ASN         int
-	Description string
-}
-
-type AmassOutput struct {
-	Name      string
-	Domain    string
-	Addresses []AmassAddressInfo
-	Tag       string
-	Source    string
-	Type      int
-}
-
 type Enumeration struct {
 	// The channel that will receive the results
-	Output chan *AmassOutput
+	Output chan *core.AmassOutput
 
 	// Graph built from the data collected
 	Graph *handlers.Graph
@@ -128,7 +112,7 @@ type Enumeration struct {
 
 func NewEnumeration() *Enumeration {
 	return &Enumeration{
-		Output:          make(chan *AmassOutput, 100),
+		Output:          make(chan *core.AmassOutput, 100),
 		Log:             log.New(ioutil.Discard, "", 0),
 		Ports:           []int{80, 443},
 		Recursive:       true,
@@ -279,7 +263,7 @@ func (e *Enumeration) Resume() {
 	e.resume <- struct{}{}
 }
 
-func (e *Enumeration) sendOutput(out *AmassOutput) {
+func (e *Enumeration) sendOutput(out *core.AmassOutput) {
 	// Check if the output channel has been closed
 	select {
 	case <-e.done:

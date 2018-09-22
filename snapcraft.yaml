@@ -1,8 +1,8 @@
 name: amass
-version: '2.7.1'
-summary: In-Depth DNS Enumeration
+version: '2.7.2'
+summary: In-Depth DNS Enumeration and Network Mapping
 description: |
-  The OWASP Amass tool obtains subdomain names by scraping data sources, 
+  The OWASP Amass tool suite obtains subdomain names by scraping data sources, 
   recursive brute forcing, crawling web archives, permuting/altering names 
   and reverse DNS sweeping. Additionally, Amass uses the IP addresses 
   obtained during resolution to discover associated netblocks and ASNs. All 

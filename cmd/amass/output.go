@@ -11,6 +11,7 @@ import (
 	"strconv"
 
 	"github.com/OWASP/Amass/amass"
+	"github.com/OWASP/Amass/amass/core"
 	"github.com/fatih/color"
 )
 
@@ -43,7 +44,7 @@ type JsonSave struct {
 	Source    string     `json:"source"`
 }
 
-func WriteJSONData(f *os.File, result *amass.AmassOutput) {
+func WriteJSONData(f *os.File, result *core.AmassOutput) {
 	save := &JsonSave{
 		Name:   result.Name,
 		Domain: result.Domain,
@@ -113,7 +114,7 @@ func WriteTextData(f *os.File, source, name, comma, ips string) {
 	fmt.Fprintf(f, "%s%s%s%s\n", source, name, comma, ips)
 }
 
-func ResultToLine(result *amass.AmassOutput, params *OutputParams) (string, string, string, string) {
+func ResultToLine(result *core.AmassOutput, params *OutputParams) (string, string, string, string) {
 	var source, comma, ips string
 
 	if params.Verbose {
@@ -184,7 +185,7 @@ func ManageOutput(params *OutputParams) {
 	close(params.Done)
 }
 
-func UpdateData(output *amass.AmassOutput, tags map[string]int, asns map[int]*ASNData) {
+func UpdateData(output *core.AmassOutput, tags map[string]int, asns map[int]*ASNData) {
 	tags[output.Tag]++
 
 	// Update the ASN information

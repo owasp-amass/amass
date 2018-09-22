@@ -33,9 +33,14 @@ func NewBruteForceService(config *core.AmassConfig, bus evbus.Bus) *BruteForceSe
 func (bfs *BruteForceService) OnStart() error {
 	bfs.BaseAmassService.OnStart()
 
-	bfs.bus.SubscribeAsync(core.RESOLVED, bfs.SendRequest, false)
-	go bfs.processRequests()
-	go bfs.startRootDomains()
+	if bfs.Config().BruteForcing {
+		go bfs.startRootDomains()
+
+		if bfs.Config().Recursive {
+			bfs.bus.SubscribeAsync(core.RESOLVED, bfs.SendRequest, false)
+			go bfs.processRequests()
+		}
+	}
 	return nil
 }
 
@@ -50,27 +55,28 @@ func (bfs *BruteForceService) OnResume() error {
 func (bfs *BruteForceService) OnStop() error {
 	bfs.BaseAmassService.OnStop()
 
-	bfs.bus.Unsubscribe(core.RESOLVED, bfs.SendRequest)
+	if bfs.Config().BruteForcing && bfs.Config().Recursive {
+		bfs.bus.Unsubscribe(core.RESOLVED, bfs.SendRequest)
+	}
 	return nil
 }
 
 func (bfs *BruteForceService) processRequests() {
-	var paused bool
+	t := time.NewTicker(1 * time.Millisecond)
+	defer t.Stop()
 
 	for {
 		select {
+		case <-t.C:
+			if req := bfs.NextRequest(); req != nil {
+				bfs.checkForNewSubdomain(req)
+			}
 		case <-bfs.PauseChan():
-			paused = true
+			t.Stop()
 		case <-bfs.ResumeChan():
-			paused = false
+			t = time.NewTicker(1 * time.Millisecond)
 		case <-bfs.Quit():
 			return
-		default:
-			if paused {
-				time.Sleep(time.Second)
-			} else {
-				go bfs.checkForNewSubdomain()
-			}
 		}
 	}
 }
@@ -91,30 +97,14 @@ func (bfs *BruteForceService) subDiscoveries(sub string) int {
 }
 
 func (bfs *BruteForceService) startRootDomains() {
-	if !bfs.Config().BruteForcing {
-		return
-	}
 	// Look at each domain provided by the config
 	for _, domain := range bfs.Config().Domains() {
 		go bfs.performBruteForcing(domain, domain)
 	}
 }
 
-func (bfs *BruteForceService) checkForNewSubdomain() {
-	req := bfs.NextRequest()
-	if req == nil {
-		return
-	}
-
-	if !bfs.Config().BruteForcing {
-		return
-	}
-	// If the Name is empty or recursive brute forcing is off, we are done here
-	if req.Name == "" || !bfs.Config().Recursive {
-		return
-	}
-
-	if !bfs.Config().IsDomainInScope(req.Name) {
+func (bfs *BruteForceService) checkForNewSubdomain(req *core.AmassRequest) {
+	if req.Name == "" || !bfs.Config().IsDomainInScope(req.Name) {
 		return
 	}
 
@@ -144,5 +134,6 @@ func (bfs *BruteForceService) performBruteForcing(subdomain, root string) {
 			Tag:    core.BRUTE,
 			Source: "Brute Force",
 		})
+		time.Sleep(500 * time.Microsecond)
 	}
 }

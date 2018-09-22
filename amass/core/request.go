@@ -3,6 +3,8 @@
 
 package core
 
+import "net"
+
 type DNSAnswer struct {
 	Name string `json:"name"`
 	Type int    `json:"type"`
@@ -17,4 +19,20 @@ type AmassRequest struct {
 	Records []DNSAnswer
 	Tag     string
 	Source  string
+}
+
+type AmassAddressInfo struct {
+	Address     net.IP
+	Netblock    *net.IPNet
+	ASN         int
+	Description string
+}
+
+type AmassOutput struct {
+	Name      string
+	Domain    string
+	Addresses []AmassAddressInfo
+	Tag       string
+	Source    string
+	Type      int
 }

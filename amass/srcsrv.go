@@ -81,7 +81,7 @@ func (ss *SourcesService) OnStop() error {
 }
 
 func (ss *SourcesService) processRequests() {
-	t := time.NewTicker(time.Second)
+	t := time.NewTicker(100 * time.Millisecond)
 	defer t.Stop()
 loop:
 	for {
@@ -93,7 +93,7 @@ loop:
 		case <-ss.PauseChan():
 			t.Stop()
 		case <-ss.ResumeChan():
-			t = time.NewTicker(time.Second)
+			t = time.NewTicker(100 * time.Millisecond)
 		case <-ss.Quit():
 			break loop
 		}
@@ -162,7 +162,7 @@ func (ss *SourcesService) handleOutput(req *core.AmassRequest) {
 
 	ss.SetActive()
 	if ss.Config().Passive {
-		ss.bus.Publish(core.OUTPUT, &AmassOutput{
+		ss.bus.Publish(core.OUTPUT, &core.AmassOutput{
 			Name:   req.Name,
 			Domain: req.Domain,
 			Tag:    req.Tag,
@@ -257,6 +257,7 @@ func (ss *SourcesService) processThrottleQueue() {
 	done := make(chan struct{}, MAX_THROTTLED)
 
 	t := time.NewTicker(100 * time.Millisecond)
+	defer t.Stop()
 loop:
 	for {
 		select {
@@ -282,5 +283,4 @@ loop:
 			break loop
 		}
 	}
-	t.Stop()
 }

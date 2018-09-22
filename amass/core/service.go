@@ -66,6 +66,7 @@ func NewBaseAmassService(name string, config *AmassConfig, service AmassService)
 	return &BaseAmassService{
 		name:    name,
 		queue:   make([]*AmassRequest, 0, 50),
+		active:  time.Now(),
 		pause:   make(chan struct{}),
 		resume:  make(chan struct{}),
 		quit:    make(chan struct{}),
@@ -160,7 +161,7 @@ func (bas *BaseAmassService) IsActive() bool {
 	bas.Lock()
 	defer bas.Unlock()
 
-	if time.Now().Sub(bas.active) > 2*time.Second {
+	if time.Now().Sub(bas.active) > 3*time.Second {
 		return false
 	}
 	return true

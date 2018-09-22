@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass"
+	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
 	"github.com/fatih/color"
 )
@@ -114,7 +115,7 @@ func main() {
 	rand.Seed(time.Now().UTC().UnixNano())
 
 	done := make(chan struct{})
-	results := make(chan *amass.AmassOutput, 100)
+	results := make(chan *core.AmassOutput, 100)
 	// Setup the amass configuration
 	alts := true
 	recursive := true
