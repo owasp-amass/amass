@@ -64,7 +64,7 @@ func (dms *DataManagerService) OnStop() error {
 }
 
 func (dms *DataManagerService) processRequests() {
-	t := time.NewTicker(500 * time.Millisecond)
+	t := time.NewTicker(100 * time.Millisecond)
 	defer t.Stop()
 
 	for {
@@ -76,7 +76,7 @@ func (dms *DataManagerService) processRequests() {
 		case <-dms.PauseChan():
 			t.Stop()
 		case <-dms.ResumeChan():
-			t = time.NewTicker(500 * time.Millisecond)
+			t = time.NewTicker(100 * time.Millisecond)
 		case <-dms.Quit():
 			return
 		}
@@ -146,7 +146,6 @@ func (dms *DataManagerService) insertDomain(domain string) {
 	if domain == "" {
 		return
 	}
-
 	if _, ok := dms.domains[domain]; ok {
 		return
 	}

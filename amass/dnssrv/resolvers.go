@@ -127,12 +127,12 @@ func Resolve(name, qtype string) ([]core.DNSAnswer, error) {
 		var again bool
 		var conn net.Conn
 
-		if e := MaxConnections.Acquire(context.TODO(), 1); e != nil {
-			continue
+		for !MaxConnections.TryAcquire(1) {
+			time.Sleep(500 * time.Millisecond)
 		}
 
 		d := &net.Dialer{}
-		conn, err = d.DialContext(context.TODO(), "udp", NextResolverAddress())
+		conn, err = d.Dial("udp", NextResolverAddress())
 		if err != nil {
 			MaxConnections.Release(1)
 			time.Sleep(time.Second)

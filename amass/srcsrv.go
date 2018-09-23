@@ -81,7 +81,7 @@ func (ss *SourcesService) OnStop() error {
 }
 
 func (ss *SourcesService) processRequests() {
-	t := time.NewTicker(100 * time.Millisecond)
+	t := time.NewTicker(time.Second)
 	defer t.Stop()
 loop:
 	for {
@@ -93,7 +93,7 @@ loop:
 		case <-ss.PauseChan():
 			t.Stop()
 		case <-ss.ResumeChan():
-			t = time.NewTicker(100 * time.Millisecond)
+			t = time.NewTicker(time.Second)
 		case <-ss.Quit():
 			break loop
 		}
