@@ -43,7 +43,7 @@ func NewSourcesService(config *core.AmassConfig, bus evbus.Bus) *SourcesService 
 
 	for _, source := range sources.GetAllSources() {
 		if source.Type() == core.ARCHIVE {
-			ss.throttles = append(ss.throttles, source)
+			//ss.throttles = append(ss.throttles, source)
 		} else {
 			ss.directs = append(ss.directs, source)
 		}

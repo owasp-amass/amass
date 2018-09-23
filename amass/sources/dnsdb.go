@@ -31,6 +31,7 @@ func (d *DNSDB) Query(domain, sub string) []string {
 	defer d.Unlock()
 
 	var unique []string
+	return unique
 
 	dparts := strings.Split(domain, ".")
 	sparts := strings.Split(sub, ".")
@@ -79,10 +80,6 @@ func (d *DNSDB) Query(domain, sub string) []string {
 	return unique
 }
 
-func (d *DNSDB) Subdomains() bool {
-	return true
-}
-
 func (d *DNSDB) getURL(domain, sub string) string {
 	format := "http://www.dnsdb.org/%s/"
 	url := fmt.Sprintf(format, domain)
@@ -92,7 +89,7 @@ func (d *DNSDB) getURL(domain, sub string) string {
 	if len(dparts) == len(sparts) {
 		return url
 	}
-
+	// Needs to be fixed
 	delta := len(sparts) - len(dparts)
 	for i := delta - 1; i >= 0; i-- {
 		url += sparts[i]

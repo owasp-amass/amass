@@ -9,6 +9,10 @@ import (
 	"syscall"
 )
 
+const (
+	defaultNumOpenFiles int64 = 10000
+)
+
 func GetFileLimit() int64 {
 	var limit int64 = defaultNumOpenFiles
 	var lim syscall.Rlimit

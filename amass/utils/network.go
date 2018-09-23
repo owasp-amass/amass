@@ -39,7 +39,7 @@ func GetWebPage(url string, hvals map[string]string) (string, error) {
 	client := &http.Client{
 		Timeout: 30 * time.Second,
 		Transport: &http.Transport{
-			//DialContext:           DialContext,
+			DialContext:           DialContext,
 			MaxIdleConns:          200,
 			IdleConnTimeout:       90 * time.Second,
 			TLSHandshakeTimeout:   10 * time.Second,

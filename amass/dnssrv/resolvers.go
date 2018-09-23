@@ -15,11 +15,6 @@ import (
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
 	"github.com/miekg/dns"
-	"golang.org/x/sync/semaphore"
-)
-
-const (
-	defaultNumOpenFiles int64 = 10000
 )
 
 var (
@@ -36,18 +31,11 @@ var (
 	}
 
 	CustomResolvers = []string{}
-
-	// Enforces a maximum number of open connections at any given moment
-	MaxConnections *semaphore.Weighted
 )
 
 func init() {
-	// Obtain the proper weight based on file resource limits
-	weight := (GetFileLimit() / 10) * 8
-	if weight <= 0 {
-		weight = defaultNumOpenFiles
-	}
-	MaxConnections = semaphore.NewWeighted(weight)
+	// Attempt to raise the max file descriptors
+	GetFileLimit()
 
 	url := "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/nameservers.txt"
 	page, err := utils.GetWebPage(url, nil)
@@ -93,7 +81,6 @@ func SetCustomResolvers(resolvers []string) {
 func DNSDialContext(ctx context.Context, network, address string) (net.Conn, error) {
 	d := &net.Dialer{}
 
-	//MaxConnections.Acquire(ctx, 1)
 	return d.DialContext(ctx, network, NextResolverAddress())
 }
 
@@ -104,8 +91,6 @@ func DialContext(ctx context.Context, network, address string) (net.Conn, error)
 			Dial:     DNSDialContext,
 		},
 	}
-
-	//MaxConnections.Acquire(ctx, 1)
 	return d.DialContext(ctx, network, address)
 }
 
@@ -127,22 +112,17 @@ func Resolve(name, qtype string) ([]core.DNSAnswer, error) {
 		var again bool
 		var conn net.Conn
 
-		for !MaxConnections.TryAcquire(1) {
-			time.Sleep(500 * time.Millisecond)
-		}
-
 		d := &net.Dialer{}
-		conn, err = d.Dial("udp", NextResolverAddress())
-		if err != nil {
-			MaxConnections.Release(1)
+		for {
+			conn, err = d.Dial("udp", NextResolverAddress())
+			if err == nil {
+				break
+			}
 			time.Sleep(time.Second)
-			err = fmt.Errorf("Failed to obtain UDP connection to the DNS resolver: %v", err)
-			continue
 		}
 
 		ans, err, again = ExchangeConn(conn, name, qt)
 		conn.Close()
-		MaxConnections.Release(1)
 		if !again {
 			break
 		}
@@ -191,12 +171,12 @@ func ExchangeConn(conn net.Conn, name string, qtype uint16) ([]core.DNSAnswer, e
 	co := &dns.Conn{Conn: conn}
 	msg := QueryMessage(name, qtype)
 
-	co.SetWriteDeadline(time.Now().Add(5 * time.Second))
+	co.SetWriteDeadline(time.Now().Add(1 * time.Second))
 	if err = co.WriteMsg(msg); err != nil {
 		return nil, fmt.Errorf("DNS error: Failed to write query msg: %v", err), true
 	}
 
-	co.SetReadDeadline(time.Now().Add(5 * time.Second))
+	co.SetReadDeadline(time.Now().Add(3 * time.Second))
 	r, err = co.ReadMsg()
 	if err != nil {
 		return nil, fmt.Errorf("DNS error: Failed to read query response: %v", err), true
@@ -276,7 +256,7 @@ func ZoneTransfer(domain, sub, server string) ([]string, error) {
 	addr := a[0].Data
 
 	// Set the maximum time allowed for making the connection
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	conn, err := DialContext(ctx, "tcp", addr+":53")

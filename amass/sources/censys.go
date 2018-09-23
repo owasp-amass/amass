@@ -27,7 +27,6 @@ func (c *Censys) Query(domain, sub string) []string {
 		return unique
 	}
 
-	re := utils.SubdomainRegex(domain)
 	url := c.getURL(domain)
 	page, err := utils.GetWebPage(url, nil)
 	if err != nil {
@@ -35,6 +34,7 @@ func (c *Censys) Query(domain, sub string) []string {
 		return unique
 	}
 
+	re := utils.SubdomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
 		if u := utils.NewUniqueElements(unique, sd); len(u) > 0 {
 			unique = append(unique, u...)

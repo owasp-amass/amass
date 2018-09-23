@@ -308,20 +308,23 @@ func (ds *DNSService) ReverseDNSSweep(domain, addr string, cidr *net.IPNet) {
 		if ds.duplicate(a) {
 			continue
 		}
+		go ds.reverseDNSRoutine(domain, a)
+	}
+}
 
-		if ptrName, answer, err := Reverse(a); err == nil {
-			ds.bus.Publish(core.RESOLVED, &core.AmassRequest{
-				Name:   ptrName,
-				Domain: domain,
-				Records: []core.DNSAnswer{{
-					Name: ptrName,
-					Type: 12,
-					TTL:  0,
-					Data: answer,
-				}},
-				Tag:    "dns",
-				Source: "Reverse DNS",
-			})
-		}
+func (ds *DNSService) reverseDNSRoutine(domain, ip string) {
+	if name, answer, err := Reverse(ip); err == nil {
+		ds.bus.Publish(core.RESOLVED, &core.AmassRequest{
+			Name:   name,
+			Domain: domain,
+			Records: []core.DNSAnswer{{
+				Name: name,
+				Type: 12,
+				TTL:  0,
+				Data: answer,
+			}},
+			Tag:    "dns",
+			Source: "Reverse DNS",
+		})
 	}
 }

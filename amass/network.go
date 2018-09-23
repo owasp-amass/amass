@@ -285,7 +285,7 @@ func asnLookup(asn int) (*ASRecord, error) {
 }
 
 func fetchOnlineNetblockData(asn int) ([]string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	addr := "asn.shadowserver.org:43"
