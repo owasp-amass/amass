@@ -209,18 +209,16 @@ import(
 )
 
 func main() {
-    output := make(chan *amass.AmassOutput)
+    rand.Seed(time.Now().UTC().UnixNano())
+
+    enum := amass.NewEnumeration()
 
     go func() {
-        for result := range output {
+        for result := range enum.Output {
             fmt.Println(result.Name)
         }
     }()
-    // Seed the default pseudo-random number generator
-    rand.Seed(time.Now().UTC().UnixNano())
-    // Setup the most basic amass configuration
-    enum := amass.NewEnumeration()
-    enum.Output = output
+
     enum.AddDomain("example.com")
     enum.Start()
 }
