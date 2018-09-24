@@ -68,6 +68,7 @@ func wildcardTestResolution(sub string) []core.DNSAnswer {
 		return nil
 	}
 	// Check if the name resolves
+	MaxConnections.Acquire(3)
 	if a, err := Resolve(name, "CNAME"); err == nil {
 		answers = append(answers, a...)
 	}
@@ -77,6 +78,7 @@ func wildcardTestResolution(sub string) []core.DNSAnswer {
 	if a, err := Resolve(name, "AAAA"); err == nil {
 		answers = append(answers, a...)
 	}
+	MaxConnections.Release(3)
 
 	if len(answers) == 0 {
 		return nil

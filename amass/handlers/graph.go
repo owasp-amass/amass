@@ -26,10 +26,24 @@ type Edge struct {
 
 type Node struct {
 	sync.Mutex
-	Edges      []int
 	Labels     []string
 	Properties map[string]string
+	edges      []int
 	idx        int
+}
+
+func (n *Node) Edges() []int {
+	n.Lock()
+	defer n.Unlock()
+
+	return n.edges
+}
+
+func (n *Node) AddEdge(e int) {
+	n.Lock()
+	defer n.Unlock()
+
+	n.edges = append(n.edges, e)
 }
 
 type Graph struct {
@@ -78,10 +92,7 @@ func (g *Graph) NewEdge(from, to int, label string) *Edge {
 	defer g.Unlock()
 
 	// Do not insert duplicate edges
-	n := g.Nodes[from]
-	n.Lock()
-	defer n.Unlock()
-	for _, idx := range n.Edges {
+	for _, idx := range g.Nodes[from].Edges() {
 		edge := g.Edges[idx]
 		if edge.Label == label && edge.From == from && edge.To == to {
 			return nil
@@ -96,10 +107,8 @@ func (g *Graph) NewEdge(from, to int, label string) *Edge {
 	}
 
 	g.curEdgeIdx++
-	g.Nodes[from].Edges = append(g.Nodes[from].Edges, e.idx)
-	g.Nodes[to].Lock()
-	g.Nodes[to].Edges = append(g.Nodes[to].Edges, e.idx)
-	g.Nodes[to].Unlock()
+	g.Nodes[from].AddEdge(e.idx)
+	g.Nodes[to].AddEdge(e.idx)
 	g.Edges = append(g.Edges, e)
 	return e
 }
@@ -437,10 +446,7 @@ func (g *Graph) findSubdomainOutput(domain *Node) []*core.AmassOutput {
 		output = append(output, o)
 	}
 
-	domain.Lock()
-	edges := domain.Edges
-	domain.Unlock()
-	for _, idx := range edges {
+	for _, idx := range domain.Edges() {
 		edge := g.Edges[idx]
 		if edge.Label != "ROOT_OF" {
 			continue
@@ -453,11 +459,8 @@ func (g *Graph) findSubdomainOutput(domain *Node) []*core.AmassOutput {
 
 		for cname := n; ; {
 			prev := cname
-			cname.Lock()
-			cEdges := cname.Edges
-			cname.Unlock()
 
-			for _, i := range cEdges {
+			for _, i := range cname.Edges() {
 				e := g.Edges[i]
 				if e.Label == "CNAME_TO" {
 					cname = g.Nodes[e.To]
@@ -511,10 +514,7 @@ func (g *Graph) buildSubdomainOutput(sub *Node) *core.AmassOutput {
 
 	var addrs []*Node
 
-	cname.Lock()
-	edges := cname.Edges
-	cname.Unlock()
-	for _, idx := range edges {
+	for _, idx := range cname.Edges() {
 		edge := g.Edges[idx]
 		if edge.Label == "A_TO" || edge.Label == "AAAA_TO" {
 			addrs = append(addrs, g.Nodes[edge.To])
@@ -546,10 +546,7 @@ func (g *Graph) traverseCNAME(sub *Node) *Node {
 	for {
 		prev := cname
 
-		cname.Lock()
-		edges := cname.Edges
-		cname.Unlock()
-		for _, idx := range edges {
+		for _, idx := range cname.Edges() {
 			edge := g.Edges[idx]
 			if edge.Label == "CNAME_TO" {
 				cname = g.Nodes[edge.To]
@@ -569,10 +566,7 @@ func (g *Graph) obtainInfrastructureData(addr *Node) *core.AmassAddressInfo {
 
 	var nb *Node
 
-	addr.Lock()
-	edges := addr.Edges
-	addr.Unlock()
-	for _, idx := range edges {
+	for _, idx := range addr.Edges() {
 		edge := g.Edges[idx]
 		if edge.Label == "CONTAINS" {
 			nb = g.Nodes[edge.From]
@@ -585,11 +579,8 @@ func (g *Graph) obtainInfrastructureData(addr *Node) *core.AmassAddressInfo {
 
 	_, infr.Netblock, _ = net.ParseCIDR(nb.Properties["cidr"])
 
-	nb.Lock()
-	edges = nb.Edges
-	nb.Unlock()
 	var as *Node
-	for _, idx := range edges {
+	for _, idx := range nb.Edges() {
 		edge := g.Edges[idx]
 		if edge.Label == "HAS_PREFIX" {
 			as = g.Nodes[edge.From]

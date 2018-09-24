@@ -9,12 +9,12 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"net"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
-	"github.com/OWASP/Amass/amass/dnssrv"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -34,7 +34,8 @@ func PullCertificateNames(addr string, ports []int) []*core.AmassRequest {
 		ctx, cancel := context.WithTimeout(context.Background(), defaultTLSConnectTimeout)
 		defer cancel()
 		// Obtain the connection
-		conn, err := dnssrv.DialContext(ctx, "tcp", addr+":"+strconv.Itoa(port))
+		d := net.Dialer{}
+		conn, err := d.DialContext(ctx, "tcp", addr+":"+strconv.Itoa(port))
 		if err != nil {
 			continue
 		}

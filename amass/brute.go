@@ -62,7 +62,7 @@ func (bfs *BruteForceService) OnStop() error {
 }
 
 func (bfs *BruteForceService) processRequests() {
-	t := time.NewTicker(1 * time.Millisecond)
+	t := time.NewTicker(10 * time.Millisecond)
 	defer t.Stop()
 
 	for {
@@ -74,7 +74,7 @@ func (bfs *BruteForceService) processRequests() {
 		case <-bfs.PauseChan():
 			t.Stop()
 		case <-bfs.ResumeChan():
-			t = time.NewTicker(1 * time.Millisecond)
+			t = time.NewTicker(10 * time.Millisecond)
 		case <-bfs.Quit():
 			return
 		}
@@ -134,6 +134,6 @@ func (bfs *BruteForceService) performBruteForcing(subdomain, root string) {
 			Tag:    core.BRUTE,
 			Source: "Brute Force",
 		})
-		time.Sleep(500 * time.Microsecond)
+		time.Sleep(1 * time.Millisecond)
 	}
 }

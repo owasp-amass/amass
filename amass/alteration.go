@@ -55,7 +55,7 @@ func (as *AlterationService) OnStop() error {
 }
 
 func (as *AlterationService) processRequests() {
-	t := time.NewTicker(1 * time.Millisecond)
+	t := time.NewTicker(10 * time.Millisecond)
 	defer t.Stop()
 
 	for {
@@ -67,7 +67,7 @@ func (as *AlterationService) processRequests() {
 		case <-as.PauseChan():
 			t.Stop()
 		case <-as.ResumeChan():
-			t = time.NewTicker(1 * time.Millisecond)
+			t = time.NewTicker(10 * time.Millisecond)
 		case <-as.Quit():
 			return
 		}

@@ -69,6 +69,8 @@ func SubdomainToDomain(name string) string {
 	for i := 0; i < len(labels)-1; i++ {
 		sub := strings.Join(labels[i:], ".")
 
+		dnssrv.MaxConnections.Acquire(1)
+		defer dnssrv.MaxConnections.Release(1)
 		if ns, err := dnssrv.Resolve(sub, "NS"); err == nil {
 			pieces := strings.Split(ns[0].Data, ",")
 			domainCache[pieces[0]] = struct{}{}
@@ -252,6 +254,9 @@ func originLookup(addr string) (int, string, error) {
 		return 0, "", fmt.Errorf("originLookup param is insufficient: addr: %s", ip)
 	}
 
+	dnssrv.MaxConnections.Acquire(1)
+	defer dnssrv.MaxConnections.Release(1)
+
 	answers, err = dnssrv.Resolve(name, "TXT")
 	if err != nil {
 		return 0, "", fmt.Errorf("originLookup: DNS TXT record query error: %s: %v", name, err)
@@ -272,6 +277,9 @@ func asnLookup(asn int) (*ASRecord, error) {
 	// Get the AS record using the ASN
 	name := "AS" + strconv.Itoa(asn) + ".asn.cymru.com"
 
+	dnssrv.MaxConnections.Acquire(1)
+	defer dnssrv.MaxConnections.Release(1)
+
 	answers, err = dnssrv.Resolve(name, "TXT")
 	if err != nil {
 		return nil, fmt.Errorf("asnLookup: DNS TXT record query error: %s: %v", name, err)
@@ -285,11 +293,15 @@ func asnLookup(asn int) (*ASRecord, error) {
 }
 
 func fetchOnlineNetblockData(asn int) ([]string, error) {
+	dnssrv.MaxConnections.Acquire(1)
+	defer dnssrv.MaxConnections.Release(1)
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	addr := "asn.shadowserver.org:43"
-	conn, err := dnssrv.DialContext(ctx, "tcp", addr)
+	d := net.Dialer{}
+	conn, err := d.DialContext(ctx, "tcp", addr)
 	if err != nil {
 		return nil, fmt.Errorf("fetchOnlineNetblockData error: %s: %v", addr, err)
 	}

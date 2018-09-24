@@ -64,21 +64,27 @@ func (dms *DataManagerService) OnStop() error {
 }
 
 func (dms *DataManagerService) processRequests() {
-	t := time.NewTicker(100 * time.Millisecond)
-	defer t.Stop()
+	var paused bool
 
 	for {
 		select {
-		case <-t.C:
-			if req := dms.NextRequest(); req != nil {
-				dms.manageData(req)
-			}
 		case <-dms.PauseChan():
-			t.Stop()
+			paused = true
 		case <-dms.ResumeChan():
-			t = time.NewTicker(100 * time.Millisecond)
+			paused = false
 		case <-dms.Quit():
 			return
+		default:
+			if paused {
+				time.Sleep(time.Second)
+				continue
+			}
+			if req := dms.NextRequest(); req != nil {
+				dms.SetActive()
+				dms.manageData(req)
+			} else {
+				time.Sleep(100 * time.Millisecond)
+			}
 		}
 	}
 }
@@ -86,25 +92,26 @@ func (dms *DataManagerService) processRequests() {
 func (dms *DataManagerService) processOutput() {
 	t := time.NewTicker(time.Second)
 	defer t.Stop()
-loop:
+
 	for {
 		select {
 		case <-t.C:
-			dms.sendOutput(dms.Graph.GetNewOutput())
+			if out := dms.Graph.GetNewOutput(); len(out) > 0 {
+				dms.SetActive()
+				dms.sendOutput(out)
+			}
 		case <-dms.PauseChan():
 			t.Stop()
 		case <-dms.ResumeChan():
 			t = time.NewTicker(time.Second)
 		case <-dms.Quit():
-			break loop
+			return
 		}
 	}
-	dms.sendOutput(dms.Graph.GetNewOutput())
 }
 
 func (dms *DataManagerService) sendOutput(output []*core.AmassOutput) {
 	for _, o := range output {
-		dms.SetActive()
 		if dms.Config().IsDomainInScope(o.Name) {
 			dms.bus.Publish(core.OUTPUT, o)
 		}
@@ -112,7 +119,6 @@ func (dms *DataManagerService) sendOutput(output []*core.AmassOutput) {
 }
 
 func (dms *DataManagerService) manageData(req *core.AmassRequest) {
-	dms.SetActive()
 	req.Name = strings.ToLower(req.Name)
 	req.Domain = strings.ToLower(req.Domain)
 
@@ -140,6 +146,7 @@ func (dms *DataManagerService) manageData(req *core.AmassRequest) {
 			dms.insertTXT(req, i)
 		}
 	}
+	dms.SetActive()
 }
 
 func (dms *DataManagerService) insertDomain(domain string) {

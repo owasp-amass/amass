@@ -6,6 +6,7 @@ package sources
 import (
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -187,10 +188,11 @@ func (bds *BaseDataSource) linksAndNames(domain string, ctx *fetchbot.Context, r
 }
 
 func setFetcherConfig(f *fetchbot.Fetcher) {
+	d := net.Dialer{}
 	f.HttpClient = &http.Client{
 		Timeout: 10 * time.Second,
 		Transport: &http.Transport{
-			DialContext:           utils.DialContext,
+			DialContext:           d.DialContext,
 			MaxIdleConns:          200,
 			IdleConnTimeout:       5 * time.Second,
 			TLSHandshakeTimeout:   5 * time.Second,
@@ -216,7 +218,7 @@ func GetAllSources() []DataSource {
 		NewCertSpotter(),
 		NewCommonCrawl(),
 		NewCrtsh(),
-		NewDNSDB(),
+		//NewDNSDB(),
 		NewDNSDumpster(),
 		NewDNSTable(),
 		NewDogpile(),

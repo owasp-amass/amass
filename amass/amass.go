@@ -38,7 +38,7 @@ var Banner string = `
 `
 
 const (
-	Version = "2.7.3"
+	Version = "2.7.4"
 	Author  = "https://github.com/OWASP/Amass"
 
 	defaultWordlistURL = "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/namelist.txt"
@@ -184,18 +184,17 @@ func (e *Enumeration) generateAmassConfig() (*core.AmassConfig, error) {
 
 func (e *Enumeration) Start() error {
 	var services []core.AmassService
+	var data *DataManagerService
 
 	config, err := e.generateAmassConfig()
 	if err != nil {
 		return err
 	}
-	utils.SetDialContext(dnssrv.DialContext)
 
 	bus := evbus.New()
 	bus.SubscribeAsync(core.OUTPUT, e.sendOutput, false)
 
 	services = append(services, NewSourcesService(config, bus))
-	var data *DataManagerService
 	if !config.Passive {
 		data = NewDataManagerService(config, bus)
 
@@ -207,8 +206,8 @@ func (e *Enumeration) Start() error {
 		)
 	}
 
-	for _, service := range services {
-		if err := service.Start(); err != nil {
+	for _, srv := range services {
+		if err := srv.Start(); err != nil {
 			return err
 		}
 	}
@@ -217,19 +216,19 @@ func (e *Enumeration) Start() error {
 		e.Graph = data.Graph
 	}
 	// Periodically check if all the services have finished
-	t := time.NewTicker(time.Second)
+	t := time.NewTicker(3 * time.Second)
 loop:
 	for {
 		select {
 		case <-e.pause:
 			t.Stop()
 		case <-e.resume:
-			t = time.NewTicker(time.Second)
+			t = time.NewTicker(3 * time.Second)
 		case <-t.C:
 			done := true
 
-			for _, service := range services {
-				if service.IsActive() {
+			for _, srv := range services {
+				if srv.IsActive() {
 					done = false
 					break
 				}
@@ -239,18 +238,18 @@ loop:
 				break loop
 			}
 		}
-
 	}
 	t.Stop()
+	// Wait for output to finish being handled
+	bus.WaitAsync()
 	// Stop all the services
 	for _, service := range services {
 		service.Stop()
 	}
-	// Wait for output to finish being handled
-	bus.Unsubscribe(core.OUTPUT, e.sendOutput)
 	bus.WaitAsync()
-	close(e.done)
 	time.Sleep(2 * time.Second)
+	close(e.done)
+	bus.Unsubscribe(core.OUTPUT, e.sendOutput)
 	close(e.Output)
 	return nil
 }

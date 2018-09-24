@@ -6,6 +6,7 @@ package sources
 import (
 	"fmt"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -71,9 +72,10 @@ func (d *DNSDumpster) getCSRFToken(page string) string {
 }
 
 func (d *DNSDumpster) postForm(token, domain string) (string, error) {
+	dial := net.Dialer{}
 	client := &http.Client{
 		Transport: &http.Transport{
-			DialContext:         utils.DialContext,
+			DialContext:         dial.DialContext,
 			TLSHandshakeTimeout: 10 * time.Second,
 		},
 	}

@@ -10,11 +10,11 @@ import (
 )
 
 const (
-	defaultNumOpenFiles int64 = 10000
+	defaultNumOpenFiles int = 10000
 )
 
-func GetFileLimit() int64 {
-	var limit int64 = defaultNumOpenFiles
+func GetFileLimit() int {
+	var limit int = defaultNumOpenFiles
 	var lim syscall.Rlimit
 
 	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &lim); err == nil {
@@ -23,7 +23,7 @@ func GetFileLimit() int64 {
 	}
 
 	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &lim); err == nil {
-		limit = int64(lim.Cur)
+		limit = int(lim.Cur)
 	}
 	return limit
 }

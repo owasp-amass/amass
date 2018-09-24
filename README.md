@@ -93,11 +93,6 @@ The most basic use of the tool, which includes reverse DNS lookups and name alte
 $ amass -d example.com
 ```
 
-**If you need Amass to run faster** and only use the passive data sources:
-```
-$ amass --passive -d example.com
-```
-
 The example below is a good place to start with amass:
 ```
 $ amass -v -ip -brute -min-for-recursive 3 -d example.com
@@ -141,6 +136,26 @@ Switches available through the amass CLI:
 | -w   | Change the wordlist used during brute forcing | amass -brute -w wordlist.txt -d example.com |
 | -whois | Search using reverse whois information | amass -whois -d example.com |
 
+**If you need Amass to run faster**, then you have three choices:
+
+1. Only use the passive data sources:
+```
+$ amass --passive -d example.com
+```
+
+2. Turn off the subdomain name alteration / permutation service:
+```
+$ amass --noalts -d example.com
+```
+
+3. Increase the maximum number of file descriptors for a process:
+
+The following Linux/Unix command will show you the hard limit for file descriptors used by amass.
+```
+$ ulimit -Hn
+```
+
+The superuser can change this hard limit to grant a larger number of file descriptors to running processes. Raising this limit will cause amass to perform more DNS resolutions simultaneously, and allow enumerations to complete faster. On Linux systems, this can usually be accomplished within the **/etc/security/limits.conf** file.
 
 #### amass.netdomains
 

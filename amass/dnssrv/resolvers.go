@@ -31,11 +31,13 @@ var (
 	}
 
 	CustomResolvers = []string{}
+
+	MaxConnections *utils.Semaphore
 )
 
 func init() {
-	// Attempt to raise the max file descriptors
-	GetFileLimit()
+	max := (GetFileLimit() / 10) * 9
+	MaxConnections = utils.NewSemaphore(max)
 
 	url := "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/nameservers.txt"
 	page, err := utils.GetWebPage(url, nil)
@@ -78,22 +80,6 @@ func SetCustomResolvers(resolvers []string) {
 	}
 }
 
-func DNSDialContext(ctx context.Context, network, address string) (net.Conn, error) {
-	d := &net.Dialer{}
-
-	return d.DialContext(ctx, network, NextResolverAddress())
-}
-
-func DialContext(ctx context.Context, network, address string) (net.Conn, error) {
-	d := &net.Dialer{
-		Resolver: &net.Resolver{
-			PreferGo: true,
-			Dial:     DNSDialContext,
-		},
-	}
-	return d.DialContext(ctx, network, address)
-}
-
 func Resolve(name, qtype string) ([]core.DNSAnswer, error) {
 	qt, err := textToTypeNum(qtype)
 	if err != nil {
@@ -113,12 +99,10 @@ func Resolve(name, qtype string) ([]core.DNSAnswer, error) {
 		var conn net.Conn
 
 		d := &net.Dialer{}
-		for {
-			conn, err = d.Dial("udp", NextResolverAddress())
-			if err == nil {
-				break
-			}
+		conn, err = d.Dial("udp", NextResolverAddress())
+		if err != nil {
 			time.Sleep(time.Second)
+			continue
 		}
 
 		ans, err, again = ExchangeConn(conn, name, qt)
@@ -259,7 +243,8 @@ func ZoneTransfer(domain, sub, server string) ([]string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	conn, err := DialContext(ctx, "tcp", addr+":53")
+	d := net.Dialer{}
+	conn, err := d.DialContext(ctx, "tcp", addr+":53")
 	if err != nil {
 		return results, fmt.Errorf("Zone xfr error: Failed to obtain TCP connection to %s: %v", addr+":53", err)
 	}

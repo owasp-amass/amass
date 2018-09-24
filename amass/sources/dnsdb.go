@@ -31,7 +31,9 @@ func (d *DNSDB) Query(domain, sub string) []string {
 	defer d.Unlock()
 
 	var unique []string
-	return unique
+	if domain != sub {
+		return unique
+	}
 
 	dparts := strings.Split(domain, ".")
 	sparts := strings.Split(sub, ".")

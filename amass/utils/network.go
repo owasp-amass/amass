@@ -4,7 +4,6 @@
 package utils
 
 import (
-	"context"
 	"errors"
 	"io/ioutil"
 	"net"
@@ -19,27 +18,12 @@ const (
 	ACCEPT_LANG = "en-US,en;q=0.8"
 )
 
-type DialCtx func(ctx context.Context, network, addr string) (net.Conn, error)
-
-var (
-	DialContext DialCtx
-)
-
-func init() {
-	d := &net.Dialer{}
-
-	DialContext = d.DialContext
-}
-
-func SetDialContext(dc DialCtx) {
-	DialContext = dc
-}
-
 func GetWebPage(url string, hvals map[string]string) (string, error) {
+	d := net.Dialer{}
 	client := &http.Client{
 		Timeout: 30 * time.Second,
 		Transport: &http.Transport{
-			DialContext:           DialContext,
+			DialContext:           d.DialContext,
 			MaxIdleConns:          200,
 			IdleConnTimeout:       90 * time.Second,
 			TLSHandshakeTimeout:   10 * time.Second,

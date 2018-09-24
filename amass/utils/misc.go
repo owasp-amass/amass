@@ -15,6 +15,33 @@ const (
 	SUBRE = "(([_a-zA-Z0-9]{1}|[a-zA-Z0-9]{1}[a-zA-Z0-9-]{0,61}[a-zA-Z0-9]{1})[.]{1})+"
 )
 
+type Semaphore struct {
+	c chan struct{}
+}
+
+func NewSemaphore(max int) *Semaphore {
+	sem := &Semaphore{
+		c: make(chan struct{}, max),
+	}
+
+	for i := 0; i < max; i++ {
+		sem.c <- struct{}{}
+	}
+	return sem
+}
+
+func (s *Semaphore) Acquire(num int) {
+	for i := 0; i < num; i++ {
+		<-s.c
+	}
+}
+
+func (s *Semaphore) Release(num int) {
+	for i := 0; i < num; i++ {
+		s.c <- struct{}{}
+	}
+}
+
 func SubdomainRegex(domain string) *regexp.Regexp {
 	// Change all the periods into literal periods for the regex
 	d := strings.Replace(domain, ".", "[.]", -1)

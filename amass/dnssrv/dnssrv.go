@@ -16,8 +16,8 @@ import (
 )
 
 var (
-	InitialQueryTypesLen int64 = 4
-	InitialQueryTypes          = []string{
+	InitialQueryTypesLen int = 4
+	InitialQueryTypes        = []string{
 		"TXT",
 		"A",
 		"AAAA",
@@ -114,6 +114,7 @@ func (ds *DNSService) processRequests() {
 				continue
 			}
 			if req := ds.NextRequest(); req != nil {
+				MaxConnections.Acquire(InitialQueryTypesLen)
 				go ds.performRequest(req)
 			} else {
 				time.Sleep(100 * time.Millisecond)
@@ -131,12 +132,13 @@ func (ds *DNSService) duplicate(name string) bool {
 }
 
 func (ds *DNSService) performRequest(req *core.AmassRequest) {
+	defer MaxConnections.Release(InitialQueryTypesLen)
+
 	var answers []core.DNSAnswer
 
 	ds.SetActive()
 	for _, t := range InitialQueryTypes {
-		a, err := Resolve(req.Name, t)
-		if err == nil {
+		if a, err := Resolve(req.Name, t); err == nil {
 			if ds.goodDNSRecords(a) {
 				answers = append(answers, a...)
 			}
@@ -219,6 +221,8 @@ func (ds *DNSService) dupSubdomain(sub string) bool {
 func (ds *DNSService) basicQueries(subdomain, domain string) {
 	var answers []core.DNSAnswer
 
+	MaxConnections.Acquire(3)
+	defer MaxConnections.Release(3)
 	// Obtain the DNS answers for the NS records related to the domain
 	if ans, err := Resolve(subdomain, "NS"); err == nil {
 		for _, a := range ans {
@@ -258,6 +262,9 @@ func (ds *DNSService) basicQueries(subdomain, domain string) {
 }
 
 func (ds *DNSService) attemptZoneXFR(domain, sub, server string) {
+	MaxConnections.Acquire(1)
+	defer MaxConnections.Release(1)
+
 	if names, err := ZoneTransfer(domain, sub, server); err == nil {
 		for _, name := range names {
 			ds.SendRequest(&core.AmassRequest{
@@ -281,6 +288,7 @@ func (ds *DNSService) queryServiceNames(subdomain, domain string) {
 			continue
 		}
 
+		MaxConnections.Acquire(1)
 		if a, err := Resolve(srvName, "SRV"); err == nil {
 			ds.bus.Publish(core.RESOLVED, &core.AmassRequest{
 				Name:    srvName,
@@ -290,6 +298,7 @@ func (ds *DNSService) queryServiceNames(subdomain, domain string) {
 				Source:  "Forward DNS",
 			})
 		}
+		MaxConnections.Release(1)
 	}
 }
 
@@ -308,11 +317,16 @@ func (ds *DNSService) ReverseDNSSweep(domain, addr string, cidr *net.IPNet) {
 		if ds.duplicate(a) {
 			continue
 		}
+
+		MaxConnections.Acquire(1)
 		go ds.reverseDNSRoutine(domain, a)
 	}
 }
 
 func (ds *DNSService) reverseDNSRoutine(domain, ip string) {
+	defer MaxConnections.Release(1)
+
+	ds.SetActive()
 	if name, answer, err := Reverse(ip); err == nil {
 		ds.bus.Publish(core.RESOLVED, &core.AmassRequest{
 			Name:   name,
