@@ -38,7 +38,7 @@ var Banner string = `
 `
 
 const (
-	Version = "2.7.4"
+	Version = "2.7.5"
 	Author  = "https://github.com/OWASP/Amass"
 
 	defaultWordlistURL = "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/namelist.txt"
@@ -240,12 +240,11 @@ loop:
 		}
 	}
 	t.Stop()
-	// Wait for output to finish being handled
-	bus.WaitAsync()
 	// Stop all the services
 	for _, service := range services {
 		service.Stop()
 	}
+	// Wait for output to finish being handled
 	bus.WaitAsync()
 	time.Sleep(2 * time.Second)
 	close(e.done)

@@ -7,18 +7,23 @@ package dnssrv
 
 import (
 	"syscall"
+
+	"golang.org/x/sys/unix"
 )
 
 const (
-	defaultNumOpenFiles int = 10000
+	defaultNumOpenFiles uint64 = 100000
 )
 
 func GetFileLimit() int {
-	var limit int = defaultNumOpenFiles
+	var limit int = int(defaultNumOpenFiles)
 	var lim syscall.Rlimit
 
 	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &lim); err == nil {
 		lim.Cur = lim.Max
+		if lim.Cur == unix.RLIM_INFINITY || lim.Cur > defaultNumOpenFiles {
+			lim.Cur = defaultNumOpenFiles
+		}
 		syscall.Setrlimit(syscall.RLIMIT_NOFILE, &lim)
 	}
 

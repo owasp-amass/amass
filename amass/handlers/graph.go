@@ -87,6 +87,66 @@ func (g *Graph) NewNode(label string) *Node {
 	return n
 }
 
+func (g *Graph) DomainNode(domain string) *Node {
+	g.Lock()
+	defer g.Unlock()
+
+	if domain == "" {
+		return nil
+	}
+	return g.Domains[domain]
+}
+
+func (g *Graph) SubdomainNode(sub string) *Node {
+	g.Lock()
+	defer g.Unlock()
+
+	if sub == "" {
+		return nil
+	}
+	return g.Subdomains[sub]
+}
+
+func (g *Graph) AddressNode(addr string) *Node {
+	g.Lock()
+	defer g.Unlock()
+
+	if addr == "" {
+		return nil
+	}
+	return g.Addresses[addr]
+}
+
+func (g *Graph) PTRNode(ptr string) *Node {
+	g.Lock()
+	defer g.Unlock()
+
+	if ptr == "" {
+		return nil
+	}
+	return g.PTRs[ptr]
+}
+
+func (g *Graph) NetblockNode(nb string) *Node {
+	g.Lock()
+	defer g.Unlock()
+
+	if nb == "" {
+		return nil
+	}
+	return g.Netblocks[nb]
+}
+
+func (g *Graph) ASNNode(asn int) *Node {
+	g.Lock()
+	defer g.Unlock()
+
+	if asn == 0 {
+		return nil
+	}
+	return g.ASNs[asn]
+}
+
 func (g *Graph) NewEdge(from, to int, label string) *Edge {
 	g.Lock()
 	defer g.Unlock()
@@ -175,22 +235,26 @@ func (g *Graph) VizData() ([]viz.Node, []viz.Edge) {
 }
 
 func (g *Graph) InsertSubdomain(name, tag, source string) {
-	sub := g.NewNode("Subdomain")
+	if g.SubdomainNode(name) != nil {
+		return
+	}
 
+	sub := g.NewNode("Subdomain")
 	sub.Properties["name"] = name
 	sub.Properties["tag"] = tag
 	sub.Properties["source"] = source
+
 	g.Lock()
 	g.Subdomains[name] = sub
 	g.Unlock()
 }
 
 func (g *Graph) InsertDomain(domain, tag, source string) error {
-	if _, found := g.Domains[domain]; found {
+	if g.DomainNode(domain) != nil {
 		return nil
 	}
 
-	if d, found := g.Subdomains[domain]; !found {
+	if d := g.SubdomainNode(domain); d == nil {
 		d := g.NewNode("Domain")
 		d.Labels = append(d.Labels, "Subdomain")
 		d.Properties["name"] = domain
@@ -211,39 +275,26 @@ func (g *Graph) InsertDomain(domain, tag, source string) error {
 
 func (g *Graph) InsertCNAME(name, domain, target, tdomain, tag, source string) error {
 	if name != domain {
-		if _, found := g.Subdomains[name]; !found {
-			g.InsertSubdomain(name, tag, source)
-		}
-		d := g.Domains[domain].idx
-		s := g.Subdomains[name].idx
-		g.NewEdge(d, s, "ROOT_OF")
+		g.InsertSubdomain(name, tag, source)
+		g.NewEdge(g.DomainNode(domain).idx, g.SubdomainNode(name).idx, "ROOT_OF")
 	}
 
 	if target != tdomain {
-		if _, found := g.Subdomains[target]; !found {
-			g.InsertSubdomain(target, tag, source)
-		}
-		d := g.Domains[tdomain].idx
-		s := g.Subdomains[target].idx
-		g.NewEdge(d, s, "ROOT_OF")
+		g.InsertSubdomain(target, tag, source)
+		g.NewEdge(g.DomainNode(tdomain).idx, g.SubdomainNode(target).idx, "ROOT_OF")
 	}
-	s1 := g.Subdomains[name].idx
-	s2 := g.Subdomains[target].idx
-	g.NewEdge(s1, s2, "CNAME_TO")
+
+	g.NewEdge(g.SubdomainNode(name).idx, g.SubdomainNode(target).idx, "CNAME_TO")
 	return nil
 }
 
 func (g *Graph) InsertA(name, domain, addr, tag, source string) error {
 	if name != domain {
-		if _, found := g.Subdomains[name]; !found {
-			g.InsertSubdomain(name, tag, source)
-		}
-		d := g.Domains[domain].idx
-		s := g.Subdomains[name].idx
-		g.NewEdge(d, s, "ROOT_OF")
+		g.InsertSubdomain(name, tag, source)
+		g.NewEdge(g.DomainNode(domain).idx, g.SubdomainNode(name).idx, "ROOT_OF")
 	}
 
-	if _, found := g.Addresses[addr]; !found {
+	if g.AddressNode(addr) == nil {
 		a := g.NewNode("IPAddress")
 		a.Properties["addr"] = addr
 		a.Properties["type"] = "IPv4"
@@ -251,23 +302,18 @@ func (g *Graph) InsertA(name, domain, addr, tag, source string) error {
 		g.Addresses[addr] = a
 		g.Unlock()
 	}
-	s := g.Subdomains[name].idx
-	a := g.Addresses[addr].idx
-	g.NewEdge(s, a, "A_TO")
+
+	g.NewEdge(g.SubdomainNode(name).idx, g.AddressNode(addr).idx, "A_TO")
 	return nil
 }
 
 func (g *Graph) InsertAAAA(name, domain, addr, tag, source string) error {
 	if name != domain {
-		if _, found := g.Subdomains[name]; !found {
-			g.InsertSubdomain(name, tag, source)
-		}
-		d := g.Domains[domain].idx
-		s := g.Subdomains[name].idx
-		g.NewEdge(d, s, "ROOT_OF")
+		g.InsertSubdomain(name, tag, source)
+		g.NewEdge(g.DomainNode(domain).idx, g.SubdomainNode(name).idx, "ROOT_OF")
 	}
 
-	if _, found := g.Addresses[addr]; !found {
+	if g.AddressNode(addr) == nil {
 		a := g.NewNode("IPAddress")
 		a.Properties["addr"] = addr
 		a.Properties["type"] = "IPv6"
@@ -275,68 +321,51 @@ func (g *Graph) InsertAAAA(name, domain, addr, tag, source string) error {
 		g.Addresses[addr] = a
 		g.Unlock()
 	}
-	s := g.Subdomains[name].idx
-	a := g.Addresses[addr].idx
-	g.NewEdge(s, a, "AAAA_TO")
+
+	g.NewEdge(g.SubdomainNode(name).idx, g.AddressNode(addr).idx, "AAAA_TO")
 	return nil
 }
 
 func (g *Graph) InsertPTR(name, domain, target, tag, source string) error {
 	if target != domain {
-		if _, found := g.Subdomains[target]; !found {
-			g.InsertSubdomain(target, tag, source)
-		}
-		d := g.Domains[domain].idx
-		s := g.Subdomains[target].idx
-		g.NewEdge(d, s, "ROOT_OF")
+		g.InsertSubdomain(target, tag, source)
+		g.NewEdge(g.DomainNode(domain).idx, g.SubdomainNode(target).idx, "ROOT_OF")
 	}
 
-	if _, found := g.PTRs[name]; !found {
+	if g.PTRNode(name) == nil {
 		ptr := g.NewNode("PTR")
 		ptr.Properties["name"] = name
 		g.Lock()
 		g.PTRs[name] = ptr
 		g.Unlock()
 	}
-	p := g.PTRs[name].idx
-	s := g.Subdomains[target].idx
-	g.NewEdge(p, s, "PTR_TO")
+
+	g.NewEdge(g.PTRNode(name).idx, g.SubdomainNode(target).idx, "PTR_TO")
 	return nil
 }
 
 func (g *Graph) InsertSRV(name, domain, service, target, tag, source string) error {
 	if name != domain {
-		if _, found := g.Subdomains[name]; !found {
-			g.InsertSubdomain(name, tag, source)
-		}
+		g.InsertSubdomain(name, tag, source)
 	}
+	g.InsertSubdomain(service, tag, source)
+	g.InsertSubdomain(target, tag, source)
 
-	if _, found := g.Subdomains[service]; !found {
-		g.InsertSubdomain(service, tag, source)
-	}
+	d := g.DomainNode(domain).idx
+	sub := g.SubdomainNode(name).idx
+	t := g.SubdomainNode(target).idx
+	srv := g.SubdomainNode(service).idx
 
-	if _, found := g.Subdomains[target]; !found {
-		g.InsertSubdomain(target, tag, source)
-	}
-
-	d := g.Domains[domain].idx
-	srv := g.Subdomains[service].idx
 	g.NewEdge(d, srv, "ROOT_OF")
-
-	sub := g.Subdomains[name].idx
 	g.NewEdge(srv, sub, "SERVICE_FOR")
-
-	t := g.Subdomains[target].idx
 	g.NewEdge(srv, t, "SRV_TO")
 	return nil
 }
 
 func (g *Graph) InsertNS(name, domain, target, tdomain, tag, source string) error {
-	if _, found := g.Subdomains[name]; !found {
-		g.InsertSubdomain(name, tag, source)
-	}
+	g.InsertSubdomain(name, tag, source)
 
-	if ns, found := g.Subdomains[target]; !found {
+	if ns := g.SubdomainNode(target); ns == nil {
 		sub := g.NewNode("NS")
 		sub.Properties["name"] = target
 		sub.Properties["tag"] = tag
@@ -350,22 +379,16 @@ func (g *Graph) InsertNS(name, domain, target, tdomain, tag, source string) erro
 	}
 
 	if target != tdomain {
-		d := g.Domains[tdomain].idx
-		s := g.Subdomains[target].idx
-		g.NewEdge(d, s, "ROOT_OF")
+		g.NewEdge(g.DomainNode(tdomain).idx, g.SubdomainNode(target).idx, "ROOT_OF")
 	}
-	sub := g.Subdomains[name].idx
-	ns := g.Subdomains[target].idx
-	g.NewEdge(sub, ns, "NS_TO")
+	g.NewEdge(g.SubdomainNode(name).idx, g.SubdomainNode(target).idx, "NS_TO")
 	return nil
 }
 
 func (g *Graph) InsertMX(name, domain, target, tdomain, tag, source string) error {
-	if _, found := g.Subdomains[name]; !found {
-		g.InsertSubdomain(name, tag, source)
-	}
+	g.InsertSubdomain(name, tag, source)
 
-	if mx, found := g.Subdomains[target]; !found {
+	if mx := g.SubdomainNode(target); mx == nil {
 		sub := g.NewNode("MX")
 		sub.Properties["name"] = target
 		sub.Properties["tag"] = tag
@@ -379,13 +402,9 @@ func (g *Graph) InsertMX(name, domain, target, tdomain, tag, source string) erro
 	}
 
 	if target != tdomain {
-		d := g.Domains[tdomain].idx
-		mx := g.Subdomains[target].idx
-		g.NewEdge(d, mx, "ROOT_OF")
+		g.NewEdge(g.DomainNode(tdomain).idx, g.SubdomainNode(target).idx, "ROOT_OF")
 	}
-	sub := g.Subdomains[name].idx
-	mx := g.Subdomains[target].idx
-	g.NewEdge(sub, mx, "MX_TO")
+	g.NewEdge(g.SubdomainNode(name).idx, g.SubdomainNode(target).idx, "MX_TO")
 	return nil
 }
 
@@ -398,11 +417,11 @@ func (g *Graph) InsertInfrastructure(addr string, asn int, cidr *net.IPNet, desc
 		g.Netblocks[nb] = n
 		g.Unlock()
 	}
-	a := g.Addresses[addr].idx
-	n := g.Netblocks[nb].idx
-	g.NewEdge(n, a, "CONTAINS")
 
-	if _, found := g.ASNs[asn]; !found {
+	n := g.NetblockNode(nb).idx
+	g.NewEdge(n, g.AddressNode(addr).idx, "CONTAINS")
+
+	if a := g.ASNNode(asn); a == nil {
 		as := g.NewNode("AS")
 		as.Properties["asn"] = strconv.Itoa(asn)
 		as.Properties["desc"] = desc
@@ -410,8 +429,7 @@ func (g *Graph) InsertInfrastructure(addr string, asn int, cidr *net.IPNet, desc
 		g.ASNs[asn] = as
 		g.Unlock()
 	}
-	as := g.ASNs[asn].idx
-	g.NewEdge(as, n, "HAS_PREFIX")
+	g.NewEdge(g.ASNNode(asn).idx, n, "HAS_PREFIX")
 	return nil
 }
 

@@ -10,6 +10,7 @@ import (
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/handlers"
+	"github.com/OWASP/Amass/amass/utils"
 	evbus "github.com/asaskevich/EventBus"
 	"github.com/miekg/dns"
 )
@@ -17,16 +18,17 @@ import (
 type DataManagerService struct {
 	core.BaseAmassService
 
-	bus      evbus.Bus
-	Graph    *handlers.Graph
-	Handlers []handlers.DataHandler
-	domains  map[string]struct{}
+	bus                  evbus.Bus
+	Graph                *handlers.Graph
+	Handlers             []handlers.DataHandler
+	maxDataInputRoutines *utils.Semaphore
+	domains              []string
 }
 
 func NewDataManagerService(config *core.AmassConfig, bus evbus.Bus) *DataManagerService {
 	dms := &DataManagerService{
-		bus:     bus,
-		domains: make(map[string]struct{}),
+		bus:                  bus,
+		maxDataInputRoutines: utils.NewSemaphore(100),
 	}
 
 	dms.BaseAmassService = *core.NewBaseAmassService("Data Manager Service", config, dms)
@@ -81,7 +83,9 @@ func (dms *DataManagerService) processRequests() {
 			}
 			if req := dms.NextRequest(); req != nil {
 				dms.SetActive()
-				dms.manageData(req)
+				dms.maxDataInputRoutines.Acquire(1)
+				dms.SetActive()
+				go dms.manageData(req)
 			} else {
 				time.Sleep(100 * time.Millisecond)
 			}
@@ -98,7 +102,7 @@ func (dms *DataManagerService) processOutput() {
 		case <-t.C:
 			if out := dms.Graph.GetNewOutput(); len(out) > 0 {
 				dms.SetActive()
-				dms.sendOutput(out)
+				go dms.sendOutput(out)
 			}
 		case <-dms.PauseChan():
 			t.Stop()
@@ -113,6 +117,7 @@ func (dms *DataManagerService) processOutput() {
 func (dms *DataManagerService) sendOutput(output []*core.AmassOutput) {
 	for _, o := range output {
 		if dms.Config().IsDomainInScope(o.Name) {
+			dms.SetActive()
 			dms.bus.Publish(core.OUTPUT, o)
 		}
 	}
@@ -147,16 +152,30 @@ func (dms *DataManagerService) manageData(req *core.AmassRequest) {
 		}
 	}
 	dms.SetActive()
+	dms.maxDataInputRoutines.Release(1)
+}
+
+func (dms *DataManagerService) checkDomain(domain string) bool {
+	dms.Lock()
+	dom := dms.domains
+	dms.Unlock()
+
+	for _, d := range dom {
+		if strings.Compare(d, domain) == 0 {
+			return true
+		}
+	}
+
+	dms.Lock()
+	dms.domains = append(dms.domains, domain)
+	dms.Unlock()
+	return false
 }
 
 func (dms *DataManagerService) insertDomain(domain string) {
-	if domain == "" {
+	if domain == "" || dms.checkDomain(domain) {
 		return
 	}
-	if _, ok := dms.domains[domain]; ok {
-		return
-	}
-	dms.domains[domain] = struct{}{}
 
 	for _, handler := range dms.Handlers {
 		handler.InsertDomain(domain, "dns", "Forward DNS")
@@ -371,7 +390,6 @@ func (dms *DataManagerService) AttemptSweep(domain, addr string, cidr *net.IPNet
 	if !dms.Config().IsDomainInScope(domain) {
 		return
 	}
-
 	dms.bus.Publish(core.DNSSWEEP, domain, addr, cidr)
 }
 

@@ -134,6 +134,5 @@ func (bfs *BruteForceService) performBruteForcing(subdomain, root string) {
 			Tag:    core.BRUTE,
 			Source: "Brute Force",
 		})
-		time.Sleep(1 * time.Millisecond)
 	}
 }

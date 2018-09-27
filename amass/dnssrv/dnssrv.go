@@ -146,6 +146,7 @@ func (ds *DNSService) performRequest(req *core.AmassRequest) {
 			ds.Config().Log.Print(err)
 		}
 	}
+	ds.SetActive()
 
 	req.Records = answers
 	if len(req.Records) == 0 {
@@ -157,6 +158,7 @@ func (ds *DNSService) performRequest(req *core.AmassRequest) {
 	// Make sure we know about any new subdomains
 	ds.checkForNewSubdomain(req)
 	ds.bus.Publish(core.RESOLVED, req)
+	ds.SetActive()
 }
 
 func (ds *DNSService) goodDNSRecords(records []core.DNSAnswer) bool {

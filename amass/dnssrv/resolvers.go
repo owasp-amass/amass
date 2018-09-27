@@ -32,12 +32,16 @@ var (
 
 	CustomResolvers = []string{}
 
-	MaxConnections *utils.Semaphore
+	NumOfFileDescriptors int
+	MaxConnections       *utils.Semaphore
+	ErrorTimes           chan time.Time
 )
 
 func init() {
-	max := (GetFileLimit() / 10) * 9
-	MaxConnections = utils.NewSemaphore(max)
+	NumOfFileDescriptors = (GetFileLimit() / 10) * 9
+	MaxConnections = utils.NewSemaphore(NumOfFileDescriptors)
+	ErrorTimes = make(chan time.Time, NumOfFileDescriptors)
+	go ModifyMaxConnections()
 
 	url := "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/nameservers.txt"
 	page, err := utils.GetWebPage(url, nil)
@@ -52,6 +56,57 @@ func init() {
 
 		if err := scanner.Err(); err == nil {
 			PublicResolvers = utils.UniqueAppend(PublicResolvers, addr)
+		}
+	}
+}
+
+func ModifyMaxConnections() {
+	var count int
+	var window []time.Time
+
+	last := time.Now()
+	dur := 4 * time.Second
+
+	// Start off with a reasonable load to the
+	// network, and adjust based on performance
+	if NumOfFileDescriptors > 4096 {
+		count = NumOfFileDescriptors - 4096
+		MaxConnections.Acquire(count)
+	}
+
+	for {
+		select {
+		case t := <-ErrorTimes:
+			window = append(window, t)
+			// Only perform the check across unique windows of time
+			if time.Since(last) < dur {
+				continue
+			}
+			// Remove slice elements outside our time window
+			var idx int
+			for i, v := range window {
+				if t.Sub(v) < dur {
+					break
+				}
+				idx = i + 1
+			}
+			window = window[idx:]
+			// Check if we must reduce the number of simultaneous connections
+			winlen := len(window)
+			curNum := NumOfFileDescriptors - count
+			delta := curNum / 4
+			high := curNum / 15
+			low := curNum / 100
+			// Reduce if 5 percent or more of the connection timeout.
+			// Increase if the number of errors <= 0.2 precent
+			if curNum > 1024 && winlen >= high {
+				count += delta
+				go MaxConnections.Acquire(delta)
+			} else if winlen <= low {
+				count -= delta
+				MaxConnections.Release(delta)
+			}
+			last = time.Now()
 		}
 	}
 }
@@ -155,14 +210,16 @@ func ExchangeConn(conn net.Conn, name string, qtype uint16) ([]core.DNSAnswer, e
 	co := &dns.Conn{Conn: conn}
 	msg := QueryMessage(name, qtype)
 
-	co.SetWriteDeadline(time.Now().Add(1 * time.Second))
+	co.SetWriteDeadline(time.Now().Add(2 * time.Second))
 	if err = co.WriteMsg(msg); err != nil {
+		ErrorTimes <- time.Now()
 		return nil, fmt.Errorf("DNS error: Failed to write query msg: %v", err), true
 	}
 
-	co.SetReadDeadline(time.Now().Add(3 * time.Second))
+	co.SetReadDeadline(time.Now().Add(2 * time.Second))
 	r, err = co.ReadMsg()
 	if err != nil {
+		ErrorTimes <- time.Now()
 		return nil, fmt.Errorf("DNS error: Failed to read query response: %v", err), true
 	}
 	// Check that the query was successful
