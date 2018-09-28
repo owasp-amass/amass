@@ -114,7 +114,7 @@ func NewEnumeration() *Enumeration {
 	return &Enumeration{
 		Output:          make(chan *core.AmassOutput, 100),
 		Log:             log.New(ioutil.Discard, "", 0),
-		Ports:           []int{80, 443},
+		Ports:           []int{443},
 		Recursive:       true,
 		Alterations:     true,
 		MinForRecursive: 1,
@@ -150,7 +150,7 @@ func (e *Enumeration) generateAmassConfig() (*core.AmassConfig, error) {
 	}
 
 	if len(e.Ports) == 0 {
-		e.Ports = []int{80, 443}
+		e.Ports = []int{443}
 	}
 
 	if e.BruteForcing && len(e.Wordlist) == 0 {
