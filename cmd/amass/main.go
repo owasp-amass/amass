@@ -61,7 +61,7 @@ func main() {
 	defaultBuf := new(bytes.Buffer)
 	flag.CommandLine.SetOutput(defaultBuf)
 
-	flag.Var(&ports, "p", "Ports separated by commas (default: 80,443)")
+	flag.Var(&ports, "p", "Ports separated by commas (default: 443)")
 	flag.Var(&domains, "d", "Domain names separated by commas (can be used multiple times)")
 	flag.Var(&resolvers, "r", "IP addresses of preferred DNS resolvers (can be used multiple times)")
 	flag.Var(&blacklist, "bl", "Blacklist of subdomain names that will not be investigated")
