@@ -32,12 +32,96 @@ var (
 	CustomResolvers = []string{}
 
 	NumOfFileDescriptors int
+	MinConnections       int = 512
 	MaxConnections       *utils.Semaphore
+	ExchangeTimes        chan time.Time
+	ErrorTimes           chan time.Time
+	WindowDuration       time.Duration = 4 * time.Second
 )
 
 func init() {
 	NumOfFileDescriptors = (GetFileLimit() / 10) * 9
 	MaxConnections = utils.NewSemaphore(NumOfFileDescriptors)
+	ExchangeTimes = make(chan time.Time, int(float32(NumOfFileDescriptors)*1.5))
+	ErrorTimes = make(chan time.Time, int(float32(NumOfFileDescriptors)*1.5))
+	go ModifyMaxConnections()
+}
+
+func ModifyMaxConnections() {
+	var count int
+	var xchgWin, errWin []time.Time
+
+	last := time.Now()
+	// Start off with a reasonable load to the
+	// network, and adjust based on performance
+	if NumOfFileDescriptors > MinConnections {
+		count = NumOfFileDescriptors - MinConnections
+		go MaxConnections.Acquire(count)
+	}
+
+	t := time.NewTicker(WindowDuration)
+	defer t.Stop()
+
+	for {
+		select {
+		case xchg := <-ExchangeTimes:
+			xchgWin = append(xchgWin, xchg)
+		case err := <-ErrorTimes:
+			errWin = append(errWin, err)
+		case <-t.C:
+			end := time.Now()
+			total := numInWindow(last, end, xchgWin)
+			if total >= MinConnections {
+				failures := numInWindow(last, end, errWin)
+				// Check if we must reduce the number of simultaneous connections
+				potential := NumOfFileDescriptors - count
+				delta := potential / 4
+				// Reduce if 10 percent or more of the connections timeout
+				if result := analyzeConnResults(total, failures); result == 1 {
+					count -= delta
+					MaxConnections.Release(delta)
+				} else if result == -1 && potential > MinConnections {
+					count += delta
+					go MaxConnections.Acquire(delta)
+				}
+			}
+			// Remove all the old slice elements
+			last = end
+			xchgWin = []time.Time{}
+			errWin = []time.Time{}
+		}
+	}
+}
+
+func analyzeConnResults(total, failures int) int {
+	if failures == 0 {
+		return 1
+	}
+
+	frac := total / failures
+	if frac == 0 {
+		return -1
+	}
+
+	percent := 100 / frac
+	if percent >= 20 {
+		return -1
+	} else if percent <= 10 {
+		return 1
+	}
+	return 0
+}
+
+func numInWindow(x, y time.Time, s []time.Time) int {
+	var count int
+
+	for _, v := range s {
+		if v.Before(x) || v.After(y) {
+			continue
+		}
+		count++
+	}
+	return count
 }
 
 // NextResolverAddress - Requests the next server
@@ -139,15 +223,18 @@ func ExchangeConn(conn net.Conn, name string, qtype uint16) ([]core.DNSAnswer, e
 
 	co := &dns.Conn{Conn: conn}
 	msg := QueryMessage(name, qtype)
+	ExchangeTimes <- time.Now()
 
-	co.SetWriteDeadline(time.Now().Add(2 * time.Second))
+	co.SetWriteDeadline(time.Now().Add(WindowDuration))
 	if err = co.WriteMsg(msg); err != nil {
+		ErrorTimes <- time.Now()
 		return nil, fmt.Errorf("DNS error: Failed to write query msg: %v", err), true
 	}
 
-	co.SetReadDeadline(time.Now().Add(4 * time.Second))
+	co.SetReadDeadline(time.Now().Add(WindowDuration))
 	r, err = co.ReadMsg()
 	if err != nil {
+		ErrorTimes <- time.Now()
 		return nil, fmt.Errorf("DNS error: Failed to read query response: %v", err), true
 	}
 	// Check that the query was successful

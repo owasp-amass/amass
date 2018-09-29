@@ -38,7 +38,7 @@ var Banner string = `
 `
 
 const (
-	Version = "2.7.8"
+	Version = "2.7.9"
 	Author  = "https://github.com/OWASP/Amass"
 
 	defaultWordlistURL = "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/namelist.txt"

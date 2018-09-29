@@ -81,7 +81,6 @@ func (g *Graph) NewNode(label string) *Node {
 	}
 
 	g.curNodeIdx++
-
 	g.Nodes = append(g.Nodes, n)
 	n.Labels = append(n.Labels, label)
 	return n
