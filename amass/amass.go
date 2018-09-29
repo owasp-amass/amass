@@ -38,7 +38,7 @@ var Banner string = `
 `
 
 const (
-	Version = "2.7.5"
+	Version = "2.7.6"
 	Author  = "https://github.com/OWASP/Amass"
 
 	defaultWordlistURL = "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/namelist.txt"
@@ -47,6 +47,9 @@ const (
 type Enumeration struct {
 	// The channel that will receive the results
 	Output chan *core.AmassOutput
+
+	// Broadcast channel that indicates no further writes to the output channel
+	Done chan struct{}
 
 	// Graph built from the data collected
 	Graph *handlers.Graph
@@ -105,22 +108,19 @@ type Enumeration struct {
 	// Pause/Resume channels for halting the enumeration
 	pause  chan struct{}
 	resume chan struct{}
-
-	// Broadcast channel that indicates no further writes to the output channel
-	done chan struct{}
 }
 
 func NewEnumeration() *Enumeration {
 	return &Enumeration{
 		Output:          make(chan *core.AmassOutput, 100),
+		Done:            make(chan struct{}),
 		Log:             log.New(ioutil.Discard, "", 0),
-		Ports:           []int{80, 443},
+		Ports:           []int{443},
 		Recursive:       true,
 		Alterations:     true,
 		MinForRecursive: 1,
 		pause:           make(chan struct{}),
 		resume:          make(chan struct{}),
-		done:            make(chan struct{}),
 	}
 }
 
@@ -150,7 +150,7 @@ func (e *Enumeration) generateAmassConfig() (*core.AmassConfig, error) {
 	}
 
 	if len(e.Ports) == 0 {
-		e.Ports = []int{80, 443}
+		e.Ports = []int{443}
 	}
 
 	if e.BruteForcing && len(e.Wordlist) == 0 {
@@ -246,9 +246,9 @@ loop:
 	}
 	// Wait for output to finish being handled
 	bus.WaitAsync()
-	time.Sleep(2 * time.Second)
-	close(e.done)
+	close(e.Done)
 	bus.Unsubscribe(core.OUTPUT, e.sendOutput)
+	time.Sleep(2 * time.Second)
 	close(e.Output)
 	return nil
 }
@@ -264,7 +264,7 @@ func (e *Enumeration) Resume() {
 func (e *Enumeration) sendOutput(out *core.AmassOutput) {
 	// Check if the output channel has been closed
 	select {
-	case <-e.done:
+	case <-e.Done:
 		return
 	default:
 		e.Output <- out

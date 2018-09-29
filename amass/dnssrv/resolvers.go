@@ -34,13 +34,15 @@ var (
 
 	NumOfFileDescriptors int
 	MaxConnections       *utils.Semaphore
+	ExchangeTimes        chan time.Time
 	ErrorTimes           chan time.Time
 )
 
 func init() {
 	NumOfFileDescriptors = (GetFileLimit() / 10) * 9
 	MaxConnections = utils.NewSemaphore(NumOfFileDescriptors)
-	ErrorTimes = make(chan time.Time, NumOfFileDescriptors)
+	ExchangeTimes = make(chan time.Time, int(float32(NumOfFileDescriptors)*1.5))
+	ErrorTimes = make(chan time.Time, int(float32(NumOfFileDescriptors)*1.5))
 	go ModifyMaxConnections()
 
 	url := "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/nameservers.txt"
@@ -62,53 +64,77 @@ func init() {
 
 func ModifyMaxConnections() {
 	var count int
-	var window []time.Time
+	var xchgWin, errWin []time.Time
 
 	last := time.Now()
-	dur := 4 * time.Second
-
 	// Start off with a reasonable load to the
 	// network, and adjust based on performance
 	if NumOfFileDescriptors > 4096 {
 		count = NumOfFileDescriptors - 4096
-		MaxConnections.Acquire(count)
+		go MaxConnections.Acquire(count)
 	}
+
+	t := time.NewTicker(2 * time.Second)
+	defer t.Stop()
 
 	for {
 		select {
-		case t := <-ErrorTimes:
-			window = append(window, t)
-			// Only perform the check across unique windows of time
-			if time.Since(last) < dur {
-				continue
-			}
-			// Remove slice elements outside our time window
-			var idx int
-			for i, v := range window {
-				if t.Sub(v) < dur {
-					break
-				}
-				idx = i + 1
-			}
-			window = window[idx:]
+		case xchg := <-ExchangeTimes:
+			xchgWin = append(xchgWin, xchg)
+		case err := <-ErrorTimes:
+			errWin = append(errWin, err)
+		case <-t.C:
+			end := time.Now()
+			total := numInWindow(last, end, xchgWin)
+			failures := numInWindow(last, end, errWin)
 			// Check if we must reduce the number of simultaneous connections
-			winlen := len(window)
-			curNum := NumOfFileDescriptors - count
-			delta := curNum / 4
-			high := curNum / 15
-			low := curNum / 100
-			// Reduce if 5 percent or more of the connection timeout.
-			// Increase if the number of errors <= 0.2 precent
-			if curNum > 1024 && winlen >= high {
-				count += delta
-				go MaxConnections.Acquire(delta)
-			} else if winlen <= low {
+			potential := NumOfFileDescriptors - count
+			delta := potential / 4
+			// Reduce if 10 percent or more of the connections timeout
+			if result := analyzeConnResults(total, failures); result == 1 {
 				count -= delta
 				MaxConnections.Release(delta)
+			} else if result == -1 && potential > 256 {
+				count += delta
+				go MaxConnections.Acquire(delta)
 			}
-			last = time.Now()
+			// Remove all the old slice elements
+			last = end
+			xchgWin = []time.Time{}
+			errWin = []time.Time{}
 		}
 	}
+}
+
+func analyzeConnResults(total, failures int) int {
+	if failures == 0 {
+		return 1
+	}
+
+	frac := total / failures
+	if frac == 0 {
+		return -1
+	}
+
+	percent := 100 / frac
+	if percent >= 20 {
+		return -1
+	} else if percent <= 10 {
+		return 1
+	}
+	return 0
+}
+
+func numInWindow(x, y time.Time, s []time.Time) int {
+	var count int
+
+	for _, v := range s {
+		if v.Before(x) || v.After(y) {
+			continue
+		}
+		count++
+	}
+	return count
 }
 
 // NextResolverAddress - Requests the next server
@@ -209,6 +235,7 @@ func ExchangeConn(conn net.Conn, name string, qtype uint16) ([]core.DNSAnswer, e
 
 	co := &dns.Conn{Conn: conn}
 	msg := QueryMessage(name, qtype)
+	ExchangeTimes <- time.Now()
 
 	co.SetWriteDeadline(time.Now().Add(2 * time.Second))
 	if err = co.WriteMsg(msg); err != nil {

@@ -79,7 +79,6 @@ func (as *AlterationService) executeAlterations(req *core.AmassRequest) {
 	if !as.Config().IsDomainInScope(req.Name) || !as.correctRecordTypes(req) {
 		return
 	}
-
 	as.flipNumbersInName(req)
 	as.appendNumbers(req)
 }
@@ -156,6 +155,7 @@ func (as *AlterationService) appendNumbers(req *core.AmassRequest) {
 // Checks that the name is valid and sends along for DNS resolve
 func (as *AlterationService) sendAlteredName(name, domain string) {
 	re := as.Config().DomainRegex(domain)
+
 	if re != nil && re.MatchString(name) {
 		as.bus.Publish(core.DNSQUERY, &core.AmassRequest{
 			Name:   name,

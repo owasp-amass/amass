@@ -9,13 +9,13 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/OWASP/Amass/amass"
-	"github.com/OWASP/Amass/amass/core"
 )
 
 // If the user interrupts the program, print the summary information
-func SignalHandler(e *amass.Enumeration, output chan *core.AmassOutput, done chan struct{}) {
+func SignalHandler(e *amass.Enumeration) {
 	quit := make(chan os.Signal, 1)
 	pause := make(chan os.Signal, 1)
 	resume := make(chan os.Signal, 1)
@@ -32,9 +32,10 @@ loop:
 			e.Resume()
 		case <-quit:
 			// Start final output operations
-			close(output)
-			// Wait for the broadcast indicating completion
-			<-done
+			close(e.Done)
+			time.Sleep(time.Second)
+			close(e.Output)
+			time.Sleep(time.Second)
 			break loop
 		}
 	}

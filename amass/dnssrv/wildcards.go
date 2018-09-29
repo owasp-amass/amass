@@ -18,30 +18,22 @@ const (
 )
 
 // DetectWildcard - Checks subdomains in the wildcard cache for matches on the IP address
-func DetectWildcard(domain, subdomain string, records []core.DNSAnswer) bool {
-	var answer bool
-
+func HasWildcard(domain, subdomain string) bool {
 	base := len(strings.Split(domain, "."))
 	labels := strings.Split(subdomain, ".")
-	for i := len(labels) - base; i > 0; i-- {
-		var isWildcard bool
-		var answers []core.DNSAnswer
 
+	for i := len(labels) - base; i > 0; i-- {
 		sub := strings.Join(labels[i:], ".")
+
 		// Try three times for good luck
 		for i := 0; i < 3; i++ {
 			// Does this subdomain have a wildcard?
-			if a := wildcardTestResolution(sub); a != nil {
-				isWildcard = true
-				answers = append(answers, a...)
+			if wildcardTestResolution(sub) != nil {
+				return true
 			}
 		}
-		// Check if the subdomain and address in question match a wildcard
-		if isWildcard && compareAnswers(records, answers) {
-			answer = true
-		}
 	}
-	return answer
+	return false
 }
 
 func compareAnswers(ans1, ans2 []core.DNSAnswer) bool {

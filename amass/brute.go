@@ -104,7 +104,7 @@ func (bfs *BruteForceService) startRootDomains() {
 }
 
 func (bfs *BruteForceService) checkForNewSubdomain(req *core.AmassRequest) {
-	if req.Name == "" || !bfs.Config().IsDomainInScope(req.Name) {
+	if req.Name == "" || req.Domain == "" || !bfs.Config().IsDomainInScope(req.Name) {
 		return
 	}
 
@@ -119,8 +119,8 @@ func (bfs *BruteForceService) checkForNewSubdomain(req *core.AmassRequest) {
 		return
 	}
 	sub := strings.Join(labels[1:], ".")
-	if dis := bfs.subDiscoveries(sub); dis == bfs.Config().MinForRecursive {
-		bfs.performBruteForcing(sub, req.Domain)
+	if bfs.subDiscoveries(sub) == bfs.Config().MinForRecursive {
+		go bfs.performBruteForcing(sub, req.Domain)
 	}
 }
 

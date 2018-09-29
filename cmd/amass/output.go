@@ -21,7 +21,6 @@ type OutputParams struct {
 	PrintIPs bool
 	FileOut  string
 	JSONOut  string
-	Done     chan struct{}
 }
 
 type ASNData struct {
@@ -181,8 +180,6 @@ func ManageOutput(params *OutputParams) {
 	if params.Verbose {
 		PrintSummary(total, tags, asns)
 	}
-	// Signal that output is complete
-	close(params.Done)
 }
 
 func UpdateData(output *core.AmassOutput, tags map[string]int, asns map[int]*ASNData) {

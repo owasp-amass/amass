@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass"
-	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
 	"github.com/fatih/color"
 )
@@ -37,7 +36,7 @@ var (
 	brute         = flag.Bool("brute", false, "Execute brute forcing after searches")
 	active        = flag.Bool("active", false, "Attempt zone transfers and certificate name grabs")
 	norecursive   = flag.Bool("norecursive", false, "Turn off recursive brute forcing")
-	minrecursive  = flag.Int("min-for-recursive", 0, "Number of subdomain discoveries before recursive brute forcing")
+	minrecursive  = flag.Int("min-for-recursive", 1, "Number of subdomain discoveries before recursive brute forcing")
 	passive       = flag.Bool("passive", false, "Disable DNS resolution of names and dependent features")
 	noalts        = flag.Bool("noalts", false, "Disable generation of altered names")
 	verbose       = flag.Bool("v", false, "Print the data source and summary information")
@@ -61,7 +60,7 @@ func main() {
 	defaultBuf := new(bytes.Buffer)
 	flag.CommandLine.SetOutput(defaultBuf)
 
-	flag.Var(&ports, "p", "Ports separated by commas (default: 80,443)")
+	flag.Var(&ports, "p", "Ports separated by commas (default: 443)")
 	flag.Var(&domains, "d", "Domain names separated by commas (can be used multiple times)")
 	flag.Var(&resolvers, "r", "IP addresses of preferred DNS resolvers (can be used multiple times)")
 	flag.Var(&blacklist, "bl", "Blacklist of subdomain names that will not be investigated")
@@ -113,9 +112,6 @@ func main() {
 
 	// Seed the default pseudo-random number generator
 	rand.Seed(time.Now().UTC().UnixNano())
-
-	done := make(chan struct{})
-	results := make(chan *core.AmassOutput, 100)
 	// Setup the amass configuration
 	alts := true
 	recursive := true
@@ -136,7 +132,6 @@ func main() {
 	enum.Passive = *passive
 	enum.Resolvers = resolvers
 	enum.Blacklist = blacklist
-	enum.Output = results
 
 	for _, domain := range domains {
 		enum.AddDomain(domain)
@@ -184,11 +179,10 @@ func main() {
 		PrintIPs: *ips,
 		FileOut:  txt,
 		JSONOut:  jsonfile,
-		Done:     done,
 	})
 
 	// Execute the signal handler
-	go SignalHandler(enum, results, done)
+	go SignalHandler(enum)
 
 	err := enum.Start()
 	if err != nil {
@@ -196,7 +190,7 @@ func main() {
 		return
 	}
 	// Wait for output manager to finish
-	<-done
+	time.Sleep(time.Second)
 }
 
 func GetLinesFromFile(path string) []string {
