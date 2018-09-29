@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/OWASP/Amass/amass"
 )
@@ -23,8 +22,6 @@ func SignalHandler(e *amass.Enumeration) {
 	<-quit
 	// Start final output operations
 	close(e.Done)
-	time.Sleep(time.Second)
-	close(e.Output)
-	time.Sleep(time.Second)
+	<-Finished
 	os.Exit(1)
 }

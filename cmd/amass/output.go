@@ -180,6 +180,7 @@ func ManageOutput(params *OutputParams) {
 	if params.Verbose {
 		PrintSummary(total, tags, asns)
 	}
+	close(Finished)
 }
 
 func UpdateData(output *core.AmassOutput, tags map[string]int, asns map[int]*ASNData) {

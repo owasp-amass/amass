@@ -60,9 +60,6 @@ type AmassConfig struct {
 	// A blacklist of subdomain names that will not be investigated
 	Blacklist []string
 
-	// Preferred DNS resolvers identified by the user
-	Resolvers []string
-
 	// The writer used to save the data operations performed
 	DataOptsWriter io.Writer
 

@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/OWASP/Amass/amass"
 )
@@ -33,9 +32,7 @@ loop:
 		case <-quit:
 			// Start final output operations
 			close(e.Done)
-			time.Sleep(time.Second)
-			close(e.Output)
-			time.Sleep(time.Second)
+			<-Finished
 			break loop
 		}
 	}

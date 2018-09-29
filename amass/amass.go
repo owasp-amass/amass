@@ -38,7 +38,7 @@ var Banner string = `
 `
 
 const (
-	Version = "2.7.6"
+	Version = "2.7.7"
 	Author  = "https://github.com/OWASP/Amass"
 
 	defaultWordlistURL = "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/namelist.txt"
@@ -95,9 +95,6 @@ type Enumeration struct {
 
 	// A blacklist of subdomain names that will not be investigated
 	Blacklist []string
-
-	// Preferred DNS resolvers identified by the user
-	Resolvers []string
 
 	// The writer used to save the data operations performed
 	DataOptsWriter io.Writer
@@ -172,7 +169,6 @@ func (e *Enumeration) generateAmassConfig() (*core.AmassConfig, error) {
 		Passive:         e.Passive,
 		Active:          e.Active,
 		Blacklist:       e.Blacklist,
-		Resolvers:       e.Resolvers,
 		DataOptsWriter:  e.DataOptsWriter,
 	}
 
@@ -193,7 +189,7 @@ func (e *Enumeration) Start() error {
 
 	bus := evbus.New()
 	bus.SubscribeAsync(core.OUTPUT, e.sendOutput, false)
-
+	// Select the correct services to be used in this enumeration
 	services = append(services, NewSourcesService(config, bus))
 	if !config.Passive {
 		data = NewDataManagerService(config, bus)
@@ -215,11 +211,16 @@ func (e *Enumeration) Start() error {
 	if data != nil {
 		e.Graph = data.Graph
 	}
+	// When done, we want to know if the enumeration completed
+	completed := true
 	// Periodically check if all the services have finished
 	t := time.NewTicker(3 * time.Second)
 loop:
 	for {
 		select {
+		case <-e.Done:
+			completed = false
+			break loop
 		case <-e.pause:
 			t.Stop()
 		case <-e.resume:
@@ -246,9 +247,11 @@ loop:
 	}
 	// Wait for output to finish being handled
 	bus.WaitAsync()
-	close(e.Done)
+	if completed {
+		close(e.Done)
+	}
 	bus.Unsubscribe(core.OUTPUT, e.sendOutput)
-	time.Sleep(2 * time.Second)
+	time.Sleep(1 * time.Second)
 	close(e.Output)
 	return nil
 }

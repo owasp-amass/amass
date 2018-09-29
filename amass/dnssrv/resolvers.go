@@ -4,7 +4,6 @@
 package dnssrv
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"math/rand"
@@ -36,6 +35,7 @@ var (
 	MaxConnections       *utils.Semaphore
 	ExchangeTimes        chan time.Time
 	ErrorTimes           chan time.Time
+	WindowDuration       time.Duration = time.Second
 )
 
 func init() {
@@ -44,22 +44,6 @@ func init() {
 	ExchangeTimes = make(chan time.Time, int(float32(NumOfFileDescriptors)*1.5))
 	ErrorTimes = make(chan time.Time, int(float32(NumOfFileDescriptors)*1.5))
 	go ModifyMaxConnections()
-
-	url := "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/nameservers.txt"
-	page, err := utils.GetWebPage(url, nil)
-	if err != nil {
-		return
-	}
-
-	PublicResolvers = []string{}
-	scanner := bufio.NewScanner(strings.NewReader(page))
-	for scanner.Scan() {
-		addr := strings.TrimSpace(scanner.Text())
-
-		if err := scanner.Err(); err == nil {
-			PublicResolvers = utils.UniqueAppend(PublicResolvers, addr)
-		}
-	}
 }
 
 func ModifyMaxConnections() {
@@ -74,7 +58,7 @@ func ModifyMaxConnections() {
 		go MaxConnections.Acquire(count)
 	}
 
-	t := time.NewTicker(2 * time.Second)
+	t := time.NewTicker(WindowDuration)
 	defer t.Stop()
 
 	for {
@@ -182,7 +166,7 @@ func Resolve(name, qtype string) ([]core.DNSAnswer, error) {
 		d := &net.Dialer{}
 		conn, err = d.Dial("udp", NextResolverAddress())
 		if err != nil {
-			time.Sleep(time.Second)
+			time.Sleep(WindowDuration)
 			continue
 		}
 
@@ -191,6 +175,7 @@ func Resolve(name, qtype string) ([]core.DNSAnswer, error) {
 		if !again {
 			break
 		}
+		time.Sleep(WindowDuration)
 	}
 	return ans, err
 }
@@ -237,13 +222,13 @@ func ExchangeConn(conn net.Conn, name string, qtype uint16) ([]core.DNSAnswer, e
 	msg := QueryMessage(name, qtype)
 	ExchangeTimes <- time.Now()
 
-	co.SetWriteDeadline(time.Now().Add(2 * time.Second))
+	co.SetWriteDeadline(time.Now().Add(WindowDuration))
 	if err = co.WriteMsg(msg); err != nil {
 		ErrorTimes <- time.Now()
 		return nil, fmt.Errorf("DNS error: Failed to write query msg: %v", err), true
 	}
 
-	co.SetReadDeadline(time.Now().Add(2 * time.Second))
+	co.SetReadDeadline(time.Now().Add(WindowDuration))
 	r, err = co.ReadMsg()
 	if err != nil {
 		ErrorTimes <- time.Now()

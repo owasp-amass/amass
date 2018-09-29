@@ -16,11 +16,13 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass"
+	"github.com/OWASP/Amass/amass/dnssrv"
 	"github.com/OWASP/Amass/amass/utils"
 	"github.com/fatih/color"
 )
 
 var (
+	Finished chan struct{}
 	// Colors used to ease the reading of program output
 	y      = color.New(color.FgHiYellow)
 	g      = color.New(color.FgHiGreen)
@@ -88,15 +90,16 @@ func main() {
 	if *wordlist != "" {
 		words = GetLinesFromFile(*wordlist)
 	}
+	if *blacklistpath != "" {
+		blacklist = utils.UniqueAppend(blacklist, GetLinesFromFile(*blacklistpath)...)
+	}
 	if *domainspath != "" {
 		domains = utils.UniqueAppend(domains, GetLinesFromFile(*domainspath)...)
 	}
 	if *resolvepath != "" {
 		resolvers = utils.UniqueAppend(resolvers, GetLinesFromFile(*resolvepath)...)
 	}
-	if *blacklistpath != "" {
-		blacklist = utils.UniqueAppend(blacklist, GetLinesFromFile(*blacklistpath)...)
-	}
+	dnssrv.SetCustomResolvers(resolvers)
 
 	// Prepare output files
 	logfile := *logpath
@@ -130,7 +133,6 @@ func main() {
 	enum.Active = *active
 	enum.Alterations = alts
 	enum.Passive = *passive
-	enum.Resolvers = resolvers
 	enum.Blacklist = blacklist
 
 	for _, domain := range domains {
@@ -173,6 +175,7 @@ func main() {
 		return
 	}
 
+	Finished = make(chan struct{})
 	go ManageOutput(&OutputParams{
 		Enum:     enum,
 		Verbose:  *verbose,
@@ -190,7 +193,7 @@ func main() {
 		return
 	}
 	// Wait for output manager to finish
-	time.Sleep(time.Second)
+	<-Finished
 }
 
 func GetLinesFromFile(path string) []string {
