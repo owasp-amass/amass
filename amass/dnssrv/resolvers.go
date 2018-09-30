@@ -32,15 +32,18 @@ var (
 	CustomResolvers = []string{}
 
 	NumOfFileDescriptors int
-	MinConnections       int = 512
+	MinConnections       int = 2048
 	MaxConnections       *utils.Semaphore
 	ExchangeTimes        chan time.Time
 	ErrorTimes           chan time.Time
-	WindowDuration       time.Duration = 4 * time.Second
+	WindowDuration       time.Duration = 2 * time.Second
 )
 
 func init() {
 	NumOfFileDescriptors = (GetFileLimit() / 10) * 9
+	if MinConnections > NumOfFileDescriptors {
+		MinConnections = NumOfFileDescriptors
+	}
 	MaxConnections = utils.NewSemaphore(NumOfFileDescriptors)
 	ExchangeTimes = make(chan time.Time, int(float32(NumOfFileDescriptors)*1.5))
 	ErrorTimes = make(chan time.Time, int(float32(NumOfFileDescriptors)*1.5))
@@ -56,12 +59,11 @@ func ModifyMaxConnections() {
 	// network, and adjust based on performance
 	if NumOfFileDescriptors > MinConnections {
 		count = NumOfFileDescriptors - MinConnections
-		go MaxConnections.Acquire(count)
+		MaxConnections.Acquire(count)
 	}
 
 	t := time.NewTicker(WindowDuration)
 	defer t.Stop()
-
 	for {
 		select {
 		case xchg := <-ExchangeTimes:
@@ -71,19 +73,20 @@ func ModifyMaxConnections() {
 		case <-t.C:
 			end := time.Now()
 			total := numInWindow(last, end, xchgWin)
-			if total >= MinConnections {
-				failures := numInWindow(last, end, errWin)
-				// Check if we must reduce the number of simultaneous connections
-				potential := NumOfFileDescriptors - count
-				delta := potential / 4
-				// Reduce if 10 percent or more of the connections timeout
-				if result := analyzeConnResults(total, failures); result == 1 {
-					count -= delta
-					MaxConnections.Release(delta)
-				} else if result == -1 && potential > MinConnections {
-					count += delta
-					go MaxConnections.Acquire(delta)
-				}
+			if total < MinConnections {
+				continue
+			}
+			failures := numInWindow(last, end, errWin)
+			// Check if we must reduce the number of simultaneous connections
+			potential := NumOfFileDescriptors - count
+			delta := MinConnections / 10
+			// Reduce if 10 percent or more of the connections timeout
+			if result := analyzeConnResults(total, failures); result == 1 {
+				count -= delta
+				MaxConnections.Release(delta)
+			} else if result == -1 && (potential-delta) >= MinConnections {
+				count += delta
+				go MaxConnections.Acquire(delta)
 			}
 			// Remove all the old slice elements
 			last = end
@@ -106,7 +109,7 @@ func analyzeConnResults(total, failures int) int {
 	percent := 100 / frac
 	if percent >= 20 {
 		return -1
-	} else if percent <= 10 {
+	} else if percent < 20 {
 		return 1
 	}
 	return 0

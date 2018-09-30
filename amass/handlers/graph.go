@@ -233,7 +233,7 @@ func (g *Graph) VizData() ([]viz.Node, []viz.Edge) {
 	return nodes, edges
 }
 
-func (g *Graph) InsertSubdomain(name, tag, source string) {
+func (g *Graph) InsertSubdomain(name, domain, tag, source string) {
 	if g.SubdomainNode(name) != nil {
 		return
 	}
@@ -246,6 +246,12 @@ func (g *Graph) InsertSubdomain(name, tag, source string) {
 	g.Lock()
 	g.Subdomains[name] = sub
 	g.Unlock()
+
+	if d := g.DomainNode(domain); d != nil {
+		if s := g.SubdomainNode(name); s != nil {
+			g.NewEdge(d.idx, s.idx, "ROOT_OF")
+		}
+	}
 }
 
 func (g *Graph) InsertDomain(domain, tag, source string) error {
@@ -274,95 +280,127 @@ func (g *Graph) InsertDomain(domain, tag, source string) error {
 
 func (g *Graph) InsertCNAME(name, domain, target, tdomain, tag, source string) error {
 	if name != domain {
-		g.InsertSubdomain(name, tag, source)
-		g.NewEdge(g.DomainNode(domain).idx, g.SubdomainNode(name).idx, "ROOT_OF")
+		g.InsertSubdomain(name, domain, tag, source)
 	}
-
 	if target != tdomain {
-		g.InsertSubdomain(target, tag, source)
-		g.NewEdge(g.DomainNode(tdomain).idx, g.SubdomainNode(target).idx, "ROOT_OF")
+		g.InsertSubdomain(target, tdomain, tag, source)
 	}
-
 	g.NewEdge(g.SubdomainNode(name).idx, g.SubdomainNode(target).idx, "CNAME_TO")
 	return nil
 }
 
 func (g *Graph) InsertA(name, domain, addr, tag, source string) error {
 	if name != domain {
-		g.InsertSubdomain(name, tag, source)
-		g.NewEdge(g.DomainNode(domain).idx, g.SubdomainNode(name).idx, "ROOT_OF")
+		g.InsertSubdomain(name, domain, tag, source)
 	}
 
-	if g.AddressNode(addr) == nil {
-		a := g.NewNode("IPAddress")
-		a.Properties["addr"] = addr
-		a.Properties["type"] = "IPv4"
-		g.Lock()
-		g.Addresses[addr] = a
-		g.Unlock()
+	a := g.AddressNode(addr)
+	if a == nil {
+		a = g.NewNode("IPAddress")
+		if a != nil {
+			a.Properties["addr"] = addr
+			a.Properties["type"] = "IPv4"
+			g.Lock()
+			g.Addresses[addr] = a
+			g.Unlock()
+		}
 	}
 
-	g.NewEdge(g.SubdomainNode(name).idx, g.AddressNode(addr).idx, "A_TO")
+	if s := g.SubdomainNode(name); s != nil && a != nil {
+		g.NewEdge(s.idx, a.idx, "A_TO")
+		return nil
+	}
+
 	return nil
 }
 
 func (g *Graph) InsertAAAA(name, domain, addr, tag, source string) error {
 	if name != domain {
-		g.InsertSubdomain(name, tag, source)
-		g.NewEdge(g.DomainNode(domain).idx, g.SubdomainNode(name).idx, "ROOT_OF")
+		g.InsertSubdomain(name, domain, tag, source)
 	}
 
-	if g.AddressNode(addr) == nil {
-		a := g.NewNode("IPAddress")
-		a.Properties["addr"] = addr
-		a.Properties["type"] = "IPv6"
-		g.Lock()
-		g.Addresses[addr] = a
-		g.Unlock()
+	a := g.AddressNode(addr)
+	if a == nil {
+		a = g.NewNode("IPAddress")
+		if a != nil {
+			a.Properties["addr"] = addr
+			a.Properties["type"] = "IPv6"
+			g.Lock()
+			g.Addresses[addr] = a
+			g.Unlock()
+		}
 	}
 
-	g.NewEdge(g.SubdomainNode(name).idx, g.AddressNode(addr).idx, "AAAA_TO")
+	if s := g.SubdomainNode(name); s != nil && a != nil {
+		g.NewEdge(s.idx, a.idx, "AAAA_TO")
+		return nil
+	}
+	// TODO: add a proper error message
 	return nil
 }
 
 func (g *Graph) InsertPTR(name, domain, target, tag, source string) error {
 	if target != domain {
-		g.InsertSubdomain(target, tag, source)
-		g.NewEdge(g.DomainNode(domain).idx, g.SubdomainNode(target).idx, "ROOT_OF")
+		g.InsertSubdomain(target, domain, tag, source)
 	}
 
-	if g.PTRNode(name) == nil {
-		ptr := g.NewNode("PTR")
-		ptr.Properties["name"] = name
-		g.Lock()
-		g.PTRs[name] = ptr
-		g.Unlock()
+	ptr := g.PTRNode(name)
+	if ptr == nil {
+		ptr = g.NewNode("PTR")
+		if ptr != nil {
+			ptr.Properties["name"] = name
+			g.Lock()
+			g.PTRs[name] = ptr
+			g.Unlock()
+		}
 	}
 
-	g.NewEdge(g.PTRNode(name).idx, g.SubdomainNode(target).idx, "PTR_TO")
+	if s := g.SubdomainNode(target); s != nil && ptr != nil {
+		g.NewEdge(ptr.idx, s.idx, "PTR_TO")
+		return nil
+	}
+	// TODO: add a proper error message
 	return nil
 }
 
 func (g *Graph) InsertSRV(name, domain, service, target, tag, source string) error {
 	if name != domain {
-		g.InsertSubdomain(name, tag, source)
+		g.InsertSubdomain(name, domain, tag, source)
 	}
-	g.InsertSubdomain(service, tag, source)
-	g.InsertSubdomain(target, tag, source)
+	g.InsertSubdomain(service, domain, tag, source)
+	g.InsertSubdomain(target, domain, tag, source)
 
-	d := g.DomainNode(domain).idx
-	sub := g.SubdomainNode(name).idx
-	t := g.SubdomainNode(target).idx
-	srv := g.SubdomainNode(service).idx
+	d := g.DomainNode(domain)
+	if d == nil {
+		// TODO: add a proper error message
+		return nil
+	}
 
-	g.NewEdge(d, srv, "ROOT_OF")
-	g.NewEdge(srv, sub, "SERVICE_FOR")
-	g.NewEdge(srv, t, "SRV_TO")
+	sub := g.SubdomainNode(name)
+	if sub == nil {
+		// TODO: add a proper error message
+		return nil
+	}
+
+	t := g.SubdomainNode(target)
+	if t == nil {
+		// TODO: add a proper error message
+		return nil
+	}
+
+	srv := g.SubdomainNode(service)
+	if srv == nil {
+		// TODO: add a proper error message
+		return nil
+	}
+	g.NewEdge(d.idx, srv.idx, "ROOT_OF")
+	g.NewEdge(srv.idx, sub.idx, "SERVICE_FOR")
+	g.NewEdge(srv.idx, t.idx, "SRV_TO")
 	return nil
 }
 
 func (g *Graph) InsertNS(name, domain, target, tdomain, tag, source string) error {
-	g.InsertSubdomain(name, tag, source)
+	g.InsertSubdomain(name, domain, tag, source)
 
 	if ns := g.SubdomainNode(target); ns == nil {
 		sub := g.NewNode("NS")
@@ -385,7 +423,7 @@ func (g *Graph) InsertNS(name, domain, target, tdomain, tag, source string) erro
 }
 
 func (g *Graph) InsertMX(name, domain, target, tdomain, tag, source string) error {
-	g.InsertSubdomain(name, tag, source)
+	g.InsertSubdomain(name, domain, tag, source)
 
 	if mx := g.SubdomainNode(target); mx == nil {
 		sub := g.NewNode("MX")
