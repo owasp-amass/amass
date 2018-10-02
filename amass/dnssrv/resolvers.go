@@ -59,7 +59,7 @@ func NewResolver(addr string) *Resolver {
 		MaxResolutions: utils.NewSemaphore(NumOfFileDescriptors),
 		ExchangeTimes:  make(chan time.Time, int(float32(NumOfFileDescriptors)*1.5)),
 		ErrorTimes:     make(chan time.Time, int(float32(NumOfFileDescriptors)*1.5)),
-		WindowDuration: 2 * time.Second,
+		WindowDuration: time.Second,
 		done:           make(chan struct{}),
 	}
 	go r.MonitorPerformance()
@@ -155,7 +155,7 @@ loop:
 		case <-t.C:
 			end := time.Now()
 			total := numInWindow(last, end, xchgWin)
-			if total < 2048 {
+			if total < 1000 {
 				continue
 			}
 
@@ -194,9 +194,9 @@ func analyzeConnResults(total, failures int) int {
 	}
 
 	percent := 100 / frac
-	if percent >= 10 {
+	if percent >= 5 {
 		return -1
-	} else if percent < 10 {
+	} else if percent < 5 {
 		return 1
 	}
 	return 0

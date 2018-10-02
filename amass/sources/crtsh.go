@@ -29,7 +29,6 @@ func (c *Crtsh) Query(domain, sub string) []string {
 	if domain != sub {
 		return unique
 	}
-
 	// Pull the page that lists all certs for this domain
 	url := "https://crt.sh/?q=%25." + domain
 	page, err := utils.GetWebPage(url, nil)
