@@ -152,7 +152,7 @@ func (ds *DNSService) performRequest(req *core.AmassRequest) {
 	if len(req.Records) == 0 {
 		return
 	}
-	if HasWildcard(req.Domain, req.Name) {
+	if req.Tag != core.CERT && HasWildcard(req.Domain, req.Name) {
 		return
 	}
 	// Make sure we know about any new subdomains

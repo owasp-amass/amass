@@ -6,7 +6,6 @@ package sources
 import (
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
@@ -14,10 +13,13 @@ import (
 
 type Crtsh struct {
 	BaseDataSource
+	MaxRequests *utils.Semaphore
 }
 
 func NewCrtsh(srv core.AmassService) DataSource {
-	c := new(Crtsh)
+	c := &Crtsh{
+		MaxRequests: utils.NewSemaphore(10),
+	}
 
 	c.BaseDataSource = *NewBaseDataSource(srv, CERT, "crt.sh")
 	return c
@@ -39,28 +41,48 @@ func (c *Crtsh) Query(domain, sub string) []string {
 	c.Service.SetActive()
 	// Get the subdomain name the cert was issued to, and
 	// the Subject Alternative Name list from each cert
+	var idx int
+	done := make(chan []string, 10)
 	results := c.getSubmatches(page)
-	t := time.NewTicker(50 * time.Millisecond)
-	defer t.Stop()
 loop:
-	for _, rel := range results {
+	for {
 		c.Service.SetActive()
 
 		select {
 		case <-c.Service.Quit():
 			break loop
-		case <-t.C:
-			url = "https://crt.sh/" + rel
-			cert, err := utils.GetWebPage(url, nil)
-			if err != nil {
-				c.Service.Config().Log.Printf("%s: %v", url, err)
-				continue
+		case res := <-done:
+			if len(res) > 0 {
+				unique = utils.UniqueAppend(unique, res...)
 			}
-			// Get all names off the certificate
-			unique = utils.UniqueAppend(unique, c.getMatches(cert, domain)...)
+			c.MaxRequests.Release(1)
+		default:
+			if idx+1 >= len(results) {
+				if c.MaxRequests.TryAcquire(10) {
+					break loop
+				} else {
+					continue
+				}
+			}
+			if c.MaxRequests.TryAcquire(1) {
+				go c.GetRoutine(results[idx], domain, done)
+				idx++
+			}
 		}
 	}
 	return unique
+}
+
+func (c *Crtsh) GetRoutine(id, domain string, done chan []string) {
+	url := "https://crt.sh/" + id
+	cert, err := utils.GetWebPage(url, nil)
+	if err != nil {
+		c.Service.Config().Log.Printf("%s: %v", url, err)
+		done <- []string{}
+		return
+	}
+	// Get all names off the certificate
+	done <- c.getMatches(cert, domain)
 }
 
 func (c *Crtsh) getMatches(content, domain string) []string {
@@ -78,7 +100,7 @@ func (c *Crtsh) getSubmatches(content string) []string {
 
 	re := regexp.MustCompile("<TD style=\"text-align:center\"><A href=\"([?]id=[a-zA-Z0-9]*)\">[a-zA-Z0-9]*</A></TD>")
 	for _, subs := range re.FindAllStringSubmatch(content, -1) {
-		results = append(results, strings.TrimSpace(subs[1]))
+		results = utils.UniqueAppend(results, strings.TrimSpace(subs[1]))
 	}
 	return results
 }
