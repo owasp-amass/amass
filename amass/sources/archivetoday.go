@@ -3,17 +3,17 @@
 
 package sources
 
-import "fmt"
+import "github.com/OWASP/Amass/amass/core"
 
 type ArchiveToday struct {
 	BaseDataSource
 	baseURL string
 }
 
-func NewArchiveToday() DataSource {
+func NewArchiveToday(srv core.AmassService) DataSource {
 	a := &ArchiveToday{baseURL: "http://archive.is"}
 
-	a.BaseDataSource = *NewBaseDataSource(ARCHIVE, "Archive Today")
+	a.BaseDataSource = *NewBaseDataSource(srv, ARCHIVE, "Archive Today")
 	return a
 }
 
@@ -24,7 +24,7 @@ func (a *ArchiveToday) Query(domain, sub string) []string {
 
 	names, err := a.crawl(a.baseURL, domain, sub)
 	if err != nil {
-		a.log(fmt.Sprintf("%v", err))
+		a.Service.Config().Log.Printf("%v", err)
 	}
 	return names
 }

@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -16,10 +17,10 @@ type IPv4Info struct {
 	baseURL string
 }
 
-func NewIPv4Info() DataSource {
+func NewIPv4Info(srv core.AmassService) DataSource {
 	i := &IPv4Info{baseURL: "http://ipv4info.com"}
 
-	i.BaseDataSource = *NewBaseDataSource(SCRAPE, "IPv4info")
+	i.BaseDataSource = *NewBaseDataSource(srv, SCRAPE, "IPv4info")
 	return i
 }
 
@@ -33,33 +34,37 @@ func (i *IPv4Info) Query(domain, sub string) []string {
 	url := i.getURL(domain)
 	page, err := utils.GetWebPage(url, nil)
 	if err != nil {
-		i.log(fmt.Sprintf("%s: %v", url, err))
+		i.Service.Config().Log.Printf("%s: %v", url, err)
 		return unique
 	}
-	time.Sleep(1 * time.Second)
+	time.Sleep(time.Second)
+	i.Service.SetActive()
 
 	url = i.ipSubmatch(page, domain)
 	page, err = utils.GetWebPage(url, nil)
 	if err != nil {
-		i.log(fmt.Sprintf("%s: %v", url, err))
+		i.Service.Config().Log.Printf("%s: %v", url, err)
 		return unique
 	}
-	time.Sleep(1 * time.Second)
+	time.Sleep(time.Second)
+	i.Service.SetActive()
 
 	url = i.domainSubmatch(page, domain)
 	page, err = utils.GetWebPage(url, nil)
 	if err != nil {
-		i.log(fmt.Sprintf("%s: %v", url, err))
+		i.Service.Config().Log.Printf("%s: %v", url, err)
 		return unique
 	}
-	time.Sleep(1 * time.Second)
+	time.Sleep(time.Second)
+	i.Service.SetActive()
 
 	url = i.subdomainSubmatch(page, domain)
 	page, err = utils.GetWebPage(url, nil)
 	if err != nil {
-		i.log(fmt.Sprintf("%s: %v", url, err))
+		i.Service.Config().Log.Printf("%s: %v", url, err)
 		return unique
 	}
+	i.Service.SetActive()
 
 	re := utils.SubdomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {

@@ -4,11 +4,11 @@
 package sources
 
 import (
-	"fmt"
 	"regexp"
 	"strings"
 	"time"
 
+	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -16,10 +16,10 @@ type Crtsh struct {
 	BaseDataSource
 }
 
-func NewCrtsh() DataSource {
+func NewCrtsh(srv core.AmassService) DataSource {
 	c := new(Crtsh)
 
-	c.BaseDataSource = *NewBaseDataSource(CERT, "crt.sh")
+	c.BaseDataSource = *NewBaseDataSource(srv, CERT, "crt.sh")
 	return c
 }
 
@@ -34,24 +34,32 @@ func (c *Crtsh) Query(domain, sub string) []string {
 	url := "https://crt.sh/?q=%25." + domain
 	page, err := utils.GetWebPage(url, nil)
 	if err != nil {
-		c.log(fmt.Sprintf("%s: %v", url, err))
+		c.Service.Config().Log.Printf("%s: %v", url, err)
 		return unique
 	}
+	c.Service.SetActive()
 	// Get the subdomain name the cert was issued to, and
 	// the Subject Alternative Name list from each cert
 	results := c.getSubmatches(page)
+	t := time.NewTicker(50 * time.Millisecond)
+	defer t.Stop()
+loop:
 	for _, rel := range results {
-		// Do not go too fast
-		time.Sleep(50 * time.Millisecond)
-		// Pull the certificate web page
-		url = "https://crt.sh/" + rel
-		cert, err := utils.GetWebPage(url, nil)
-		if err != nil {
-			c.log(fmt.Sprintf("%s: %v", url, err))
-			continue
+		c.Service.SetActive()
+
+		select {
+		case <-c.Service.Quit():
+			break loop
+		case <-t.C:
+			url = "https://crt.sh/" + rel
+			cert, err := utils.GetWebPage(url, nil)
+			if err != nil {
+				c.Service.Config().Log.Printf("%s: %v", url, err)
+				continue
+			}
+			// Get all names off the certificate
+			unique = utils.UniqueAppend(unique, c.getMatches(cert, domain)...)
 		}
-		// Get all names off the certificate
-		unique = utils.UniqueAppend(unique, c.getMatches(cert, domain)...)
 	}
 	return unique
 }

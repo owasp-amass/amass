@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -19,10 +20,10 @@ type DNSDB struct {
 	filter map[string][]string
 }
 
-func NewDNSDB() DataSource {
+func NewDNSDB(srv core.AmassService) DataSource {
 	d := &DNSDB{filter: make(map[string][]string)}
 
-	d.BaseDataSource = *NewBaseDataSource(SCRAPE, "DNSDB")
+	d.BaseDataSource = *NewBaseDataSource(srv, SCRAPE, "DNSDB")
 	return d
 }
 
@@ -51,9 +52,10 @@ func (d *DNSDB) Query(domain, sub string) []string {
 	url := d.getURL(domain, sub)
 	page, err := utils.GetWebPage(url, nil)
 	if err != nil {
-		d.log(fmt.Sprintf("%s: %v", url, err))
+		d.Service.Config().Log.Printf("%s: %v", url, err)
 		return unique
 	}
+	d.Service.SetActive()
 
 	re := utils.SubdomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
@@ -62,19 +64,26 @@ func (d *DNSDB) Query(domain, sub string) []string {
 		}
 	}
 
+	t := time.NewTicker(50 * time.Millisecond)
+	defer t.Stop()
+loop:
 	for _, rel := range d.getSubmatches(page) {
-		// Do not go too fast
-		time.Sleep(50 * time.Millisecond)
-		// Pull the certificate web page
-		another, err := utils.GetWebPage(url+rel, nil)
-		if err != nil {
-			d.log(fmt.Sprintf("%s: %v", url+rel, err))
-			continue
-		}
+		d.Service.SetActive()
 
-		for _, sd := range re.FindAllString(another, -1) {
-			if u := utils.NewUniqueElements(unique, sd); len(u) > 0 {
-				unique = append(unique, u...)
+		select {
+		case <-d.Service.Quit():
+			break loop
+		case <-t.C:
+			another, err := utils.GetWebPage(url+rel, nil)
+			if err != nil {
+				d.Service.Config().Log.Printf("%s: %v", url+rel, err)
+				continue
+			}
+
+			for _, sd := range re.FindAllString(another, -1) {
+				if u := utils.NewUniqueElements(unique, sd); len(u) > 0 {
+					unique = append(unique, u...)
+				}
 			}
 		}
 	}

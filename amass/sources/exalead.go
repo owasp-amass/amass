@@ -6,6 +6,7 @@ package sources
 import (
 	"fmt"
 
+	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -13,10 +14,10 @@ type Exalead struct {
 	BaseDataSource
 }
 
-func NewExalead() DataSource {
+func NewExalead(srv core.AmassService) DataSource {
 	e := new(Exalead)
 
-	e.BaseDataSource = *NewBaseDataSource(SCRAPE, "Exalead")
+	e.BaseDataSource = *NewBaseDataSource(srv, SCRAPE, "Exalead")
 	return e
 }
 
@@ -30,9 +31,10 @@ func (e *Exalead) Query(domain, sub string) []string {
 	url := e.getURL(domain)
 	page, err := utils.GetWebPage(url, nil)
 	if err != nil {
-		e.log(fmt.Sprintf("%s: %v", url, err))
+		e.Service.Config().Log.Printf("%s: %v", url, err)
 		return unique
 	}
+	e.Service.SetActive()
 
 	re := utils.SubdomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {

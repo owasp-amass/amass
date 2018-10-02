@@ -32,6 +32,10 @@ func (n *Neo4j) Close() {
 	n.conn.Close()
 }
 
+func (n *Neo4j) String() string {
+	return "Neo4j Database Handler"
+}
+
 func (n *Neo4j) InsertDomain(domain, tag, source string) error {
 	params := map[string]interface{}{
 		"name":   domain,

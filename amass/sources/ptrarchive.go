@@ -6,6 +6,7 @@ package sources
 import (
 	"fmt"
 
+	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -13,10 +14,10 @@ type PTRArchive struct {
 	BaseDataSource
 }
 
-func NewPTRArchive() DataSource {
+func NewPTRArchive(srv core.AmassService) DataSource {
 	p := new(PTRArchive)
 
-	p.BaseDataSource = *NewBaseDataSource(SCRAPE, "PTRarchive")
+	p.BaseDataSource = *NewBaseDataSource(srv, SCRAPE, "PTRarchive")
 	return p
 }
 
@@ -30,9 +31,10 @@ func (p *PTRArchive) Query(domain, sub string) []string {
 	url := p.getURL(domain)
 	page, err := utils.GetWebPage(url, nil)
 	if err != nil {
-		p.log(fmt.Sprintf("%s: %v", url, err))
+		p.Service.Config().Log.Printf("%s: %v", url, err)
 		return unique
 	}
+	p.Service.SetActive()
 
 	re := utils.SubdomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {

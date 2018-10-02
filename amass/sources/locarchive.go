@@ -3,17 +3,17 @@
 
 package sources
 
-import "fmt"
+import "github.com/OWASP/Amass/amass/core"
 
 type LoCArchive struct {
 	BaseDataSource
 	baseURL string
 }
 
-func NewLoCArchive() DataSource {
+func NewLoCArchive(srv core.AmassService) DataSource {
 	la := &LoCArchive{baseURL: "http://webarchive.loc.gov/all"}
 
-	la.BaseDataSource = *NewBaseDataSource(ARCHIVE, "LoC Archive")
+	la.BaseDataSource = *NewBaseDataSource(srv, ARCHIVE, "LoC Archive")
 	return la
 }
 
@@ -24,7 +24,7 @@ func (la *LoCArchive) Query(domain, sub string) []string {
 
 	names, err := la.crawl(la.baseURL, domain, sub)
 	if err != nil {
-		la.log(fmt.Sprintf("%v", err))
+		la.Service.Config().Log.Printf("%v", err)
 	}
 	return names
 }

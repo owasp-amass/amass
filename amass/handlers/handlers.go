@@ -4,6 +4,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net"
 )
 
@@ -20,6 +21,8 @@ const (
 )
 
 type DataHandler interface {
+	fmt.Stringer
+
 	InsertDomain(domain, tag, source string) error
 
 	InsertCNAME(name, domain, target, tdomain, tag, source string) error

@@ -4,10 +4,10 @@
 package sources
 
 import (
-	"fmt"
 	"net/url"
 	"time"
 
+	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -31,10 +31,10 @@ type CommonCrawl struct {
 	baseURL string
 }
 
-func NewCommonCrawl() DataSource {
+func NewCommonCrawl(srv core.AmassService) DataSource {
 	cc := &CommonCrawl{baseURL: "http://index.commoncrawl.org/"}
 
-	cc.BaseDataSource = *NewBaseDataSource(SCRAPE, "Common Crawl")
+	cc.BaseDataSource = *NewBaseDataSource(srv, SCRAPE, "Common Crawl")
 	return cc
 }
 
@@ -46,20 +46,29 @@ func (cc *CommonCrawl) Query(domain, sub string) []string {
 	}
 
 	re := utils.SubdomainRegex(domain)
+	t := time.NewTicker(time.Second)
+	defer t.Stop()
+loop:
 	for _, index := range CommonCrawlIndexes {
-		u := cc.getURL(index, domain)
-		page, err := utils.GetWebPage(u, nil)
-		if err != nil {
-			cc.log(fmt.Sprintf("%s: %v", u, err))
-			continue
-		}
+		cc.Service.SetActive()
 
-		for _, sd := range re.FindAllString(page, -1) {
-			if u := utils.NewUniqueElements(unique, sd); len(u) > 0 {
-				unique = append(unique, u...)
+		select {
+		case <-cc.Service.Quit():
+			break loop
+		case <-t.C:
+			u := cc.getURL(index, domain)
+			page, err := utils.GetWebPage(u, nil)
+			if err != nil {
+				cc.Service.Config().Log.Printf("%s: %v", u, err)
+				continue
+			}
+
+			for _, sd := range re.FindAllString(page, -1) {
+				if u := utils.NewUniqueElements(unique, sd); len(u) > 0 {
+					unique = append(unique, u...)
+				}
 			}
 		}
-		time.Sleep(1 * time.Second)
 	}
 	return unique
 }

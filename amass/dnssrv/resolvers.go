@@ -29,64 +29,151 @@ var (
 		"77.88.8.1:53",   // Yandex.DNS Secondary
 	}
 
-	CustomResolvers = []string{}
+	Resolvers []*Resolver
 
 	NumOfFileDescriptors int
-	MinConnections       int = 2048
 	MaxConnections       *utils.Semaphore
-	ExchangeTimes        chan time.Time
-	ErrorTimes           chan time.Time
-	WindowDuration       time.Duration = 2 * time.Second
 )
 
 func init() {
 	NumOfFileDescriptors = (GetFileLimit() / 10) * 9
-	if MinConnections > NumOfFileDescriptors {
-		MinConnections = NumOfFileDescriptors
-	}
 	MaxConnections = utils.NewSemaphore(NumOfFileDescriptors)
-	ExchangeTimes = make(chan time.Time, int(float32(NumOfFileDescriptors)*1.5))
-	ErrorTimes = make(chan time.Time, int(float32(NumOfFileDescriptors)*1.5))
-	go ModifyMaxConnections()
+
+	for _, addr := range PublicResolvers {
+		Resolvers = append(Resolvers, NewResolver(addr))
+	}
 }
 
-func ModifyMaxConnections() {
+type Resolver struct {
+	Address        string
+	MaxResolutions *utils.Semaphore
+	ExchangeTimes  chan time.Time
+	ErrorTimes     chan time.Time
+	WindowDuration time.Duration
+	done           chan struct{}
+}
+
+func NewResolver(addr string) *Resolver {
+	r := &Resolver{
+		Address:        addr,
+		MaxResolutions: utils.NewSemaphore(NumOfFileDescriptors),
+		ExchangeTimes:  make(chan time.Time, int(float32(NumOfFileDescriptors)*1.5)),
+		ErrorTimes:     make(chan time.Time, int(float32(NumOfFileDescriptors)*1.5)),
+		WindowDuration: 2 * time.Second,
+		done:           make(chan struct{}),
+	}
+	go r.MonitorPerformance()
+	return r
+}
+
+func (r *Resolver) Stop() {
+	close(r.done)
+}
+
+func (r *Resolver) Resolve(name string, qtype uint16) ([]core.DNSAnswer, error, bool) {
+	defer r.MaxResolutions.Release(1)
+
+	d := &net.Dialer{}
+	conn, err := d.Dial("udp", r.Address)
+	if err != nil {
+		return []core.DNSAnswer{}, err, false
+	}
+	defer conn.Close()
+
+	return r.ExchangeConn(conn, name, qtype)
+}
+
+// ExchangeConn - Encapsulates miekg/dns usage
+func (r *Resolver) ExchangeConn(conn net.Conn, name string, qtype uint16) ([]core.DNSAnswer, error, bool) {
+	var err error
+	var rd *dns.Msg
+	var answers []core.DNSAnswer
+
+	co := &dns.Conn{Conn: conn}
+	msg := QueryMessage(name, qtype)
+	r.ExchangeTimes <- time.Now()
+
+	co.SetWriteDeadline(time.Now().Add(r.WindowDuration))
+	if err = co.WriteMsg(msg); err != nil {
+		r.ErrorTimes <- time.Now()
+		return nil, fmt.Errorf("DNS error: Failed to write query msg: %v", err), true
+	}
+
+	co.SetReadDeadline(time.Now().Add(r.WindowDuration))
+	rd, err = co.ReadMsg()
+	if err != nil {
+		r.ErrorTimes <- time.Now()
+		return nil, fmt.Errorf("DNS error: Failed to read query response: %v", err), true
+	}
+	// Check that the query was successful
+	if r != nil && rd.Rcode != dns.RcodeSuccess {
+		again := true
+		if rd.Rcode == 3 {
+			again = false
+		}
+		return nil, fmt.Errorf("DNS query for %s, type %d returned error %d", name, qtype, rd.Rcode), again
+	}
+
+	for _, a := range ExtractRawData(rd, qtype) {
+		answers = append(answers, core.DNSAnswer{
+			Name: name,
+			Type: int(qtype),
+			TTL:  0,
+			Data: strings.TrimSpace(a),
+		})
+	}
+
+	if len(answers) == 0 {
+		return nil, fmt.Errorf("DNS query for %s, type %d returned 0 records", name, qtype), false
+	}
+	return answers, nil, false
+}
+
+func (r *Resolver) MonitorPerformance() {
 	var count int
 	var xchgWin, errWin []time.Time
 
 	last := time.Now()
 	// Start off with a reasonable load to the
 	// network, and adjust based on performance
-	if NumOfFileDescriptors > MinConnections {
-		count = NumOfFileDescriptors - MinConnections
-		MaxConnections.Acquire(count)
+	if NumOfFileDescriptors > 256 {
+		count = NumOfFileDescriptors - 256
+		r.MaxResolutions.Acquire(count)
 	}
 
-	t := time.NewTicker(WindowDuration)
+	t := time.NewTicker(r.WindowDuration)
 	defer t.Stop()
+loop:
 	for {
 		select {
-		case xchg := <-ExchangeTimes:
+		case <-r.done:
+			break loop
+		case xchg := <-r.ExchangeTimes:
 			xchgWin = append(xchgWin, xchg)
-		case err := <-ErrorTimes:
+		case err := <-r.ErrorTimes:
 			errWin = append(errWin, err)
 		case <-t.C:
 			end := time.Now()
 			total := numInWindow(last, end, xchgWin)
-			if total < MinConnections {
+			if total < 2048 {
 				continue
 			}
+
 			failures := numInWindow(last, end, errWin)
 			// Check if we must reduce the number of simultaneous connections
 			potential := NumOfFileDescriptors - count
-			delta := MinConnections / 10
+			delta := 16
+			alt := (NumOfFileDescriptors - count) / 10
+			if alt > delta {
+				delta = alt
+			}
 			// Reduce if 10 percent or more of the connections timeout
 			if result := analyzeConnResults(total, failures); result == 1 {
 				count -= delta
-				MaxConnections.Release(delta)
-			} else if result == -1 && (potential-delta) >= MinConnections {
+				r.MaxResolutions.Release(delta)
+			} else if result == -1 && (potential-delta) > 0 {
 				count += delta
-				go MaxConnections.Acquire(delta)
+				go r.MaxResolutions.Acquire(delta)
 			}
 			// Remove all the old slice elements
 			last = end
@@ -107,9 +194,9 @@ func analyzeConnResults(total, failures int) int {
 	}
 
 	percent := 100 / frac
-	if percent >= 20 {
+	if percent >= 10 {
 		return -1
-	} else if percent < 20 {
+	} else if percent < 10 {
 		return 1
 	}
 	return 0
@@ -128,17 +215,27 @@ func numInWindow(x, y time.Time, s []time.Time) int {
 }
 
 // NextResolverAddress - Requests the next server
-func NextResolverAddress() string {
-	rnd := rand.Int()
-	if l := len(CustomResolvers); l > 0 {
-		return CustomResolvers[rnd%l]
-	}
+func NextResolver() *Resolver {
+	for {
+		rnd := rand.Int()
+		r := Resolvers[rnd%len(Resolvers)]
 
-	idx := rnd % len(PublicResolvers)
-	return PublicResolvers[idx]
+		if r.MaxResolutions.TryAcquire(1) {
+			return r
+		}
+	}
 }
 
 func SetCustomResolvers(resolvers []string) {
+	if len(resolvers) <= 0 {
+		return
+	}
+
+	for _, r := range Resolvers {
+		r.Stop()
+	}
+	Resolvers = []*Resolver{}
+
 	for _, r := range resolvers {
 		addr := r
 
@@ -147,7 +244,7 @@ func SetCustomResolvers(resolvers []string) {
 			addr += ":53"
 		}
 
-		CustomResolvers = utils.UniqueAppend(CustomResolvers, addr)
+		Resolvers = append(Resolvers, NewResolver(addr))
 	}
 }
 
@@ -164,24 +261,16 @@ func Resolve(name, qtype string) ([]core.DNSAnswer, error) {
 		tries = 10
 	}
 
+	var again bool
 	var ans []core.DNSAnswer
 	for i := 0; i < tries; i++ {
-		var again bool
-		var conn net.Conn
+		r := NextResolver()
 
-		d := &net.Dialer{}
-		conn, err = d.Dial("udp", NextResolverAddress())
-		if err != nil {
-			time.Sleep(2 * time.Second)
-			continue
-		}
-
-		ans, err, again = ExchangeConn(conn, name, qt)
-		conn.Close()
+		ans, err, again = r.Resolve(name, qt)
 		if !again {
 			break
 		}
-		time.Sleep(2 * time.Second)
+		time.Sleep(time.Second)
 	}
 	return ans, err
 }
@@ -216,52 +305,6 @@ func Reverse(addr string) (string, string, error) {
 		err = fmt.Errorf("Invalid target in PTR record answer: %s", name)
 	}
 	return ptr, name, err
-}
-
-// ExchangeConn - Encapsulates miekg/dns usage
-func ExchangeConn(conn net.Conn, name string, qtype uint16) ([]core.DNSAnswer, error, bool) {
-	var err error
-	var r *dns.Msg
-	var answers []core.DNSAnswer
-
-	co := &dns.Conn{Conn: conn}
-	msg := QueryMessage(name, qtype)
-	ExchangeTimes <- time.Now()
-
-	co.SetWriteDeadline(time.Now().Add(WindowDuration))
-	if err = co.WriteMsg(msg); err != nil {
-		ErrorTimes <- time.Now()
-		return nil, fmt.Errorf("DNS error: Failed to write query msg: %v", err), true
-	}
-
-	co.SetReadDeadline(time.Now().Add(WindowDuration))
-	r, err = co.ReadMsg()
-	if err != nil {
-		ErrorTimes <- time.Now()
-		return nil, fmt.Errorf("DNS error: Failed to read query response: %v", err), true
-	}
-	// Check that the query was successful
-	if r != nil && r.Rcode != dns.RcodeSuccess {
-		again := true
-		if r.Rcode == 3 {
-			again = false
-		}
-		return nil, fmt.Errorf("DNS query for %s, type %d returned error %d", name, qtype, r.Rcode), again
-	}
-
-	for _, a := range ExtractRawData(r, qtype) {
-		answers = append(answers, core.DNSAnswer{
-			Name: name,
-			Type: int(qtype),
-			TTL:  0,
-			Data: strings.TrimSpace(a),
-		})
-	}
-
-	if len(answers) == 0 {
-		return nil, fmt.Errorf("DNS query for %s, type %d returned 0 records", name, qtype), false
-	}
-	return answers, nil, false
 }
 
 func QueryMessage(name string, qtype uint16) *dns.Msg {

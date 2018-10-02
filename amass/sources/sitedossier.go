@@ -6,6 +6,7 @@ package sources
 import (
 	"fmt"
 
+	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -13,10 +14,10 @@ type SiteDossier struct {
 	BaseDataSource
 }
 
-func NewSiteDossier() DataSource {
+func NewSiteDossier(srv core.AmassService) DataSource {
 	s := new(SiteDossier)
 
-	s.BaseDataSource = *NewBaseDataSource(SCRAPE, "SiteDossier")
+	s.BaseDataSource = *NewBaseDataSource(srv, SCRAPE, "SiteDossier")
 	return s
 }
 
@@ -31,9 +32,10 @@ func (s *SiteDossier) Query(domain, sub string) []string {
 	url := s.getURL(domain)
 	page, err := utils.GetWebPage(url, nil)
 	if err != nil {
-		s.log(fmt.Sprintf("%s: %v", url, err))
+		s.Service.Config().Log.Printf("%s: %v", url, err)
 		return unique
 	}
+	s.Service.SetActive()
 
 	for _, sd := range re.FindAllString(page, -1) {
 		if u := utils.NewUniqueElements(unique, sd); len(u) > 0 {

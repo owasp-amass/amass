@@ -40,17 +40,15 @@ func NewSourcesService(config *core.AmassConfig, bus evbus.Bus) *SourcesService 
 		outFilter:    make(map[string]struct{}),
 		domainFilter: make(map[string]struct{}),
 	}
+	ss.BaseAmassService = *core.NewBaseAmassService("Sources Service", config, ss)
 
-	for _, source := range sources.GetAllSources() {
+	for _, source := range sources.GetAllSources(ss) {
 		if source.Type() == core.ARCHIVE {
-			//ss.throttles = append(ss.throttles, source)
+			ss.throttles = append(ss.throttles, source)
 		} else {
 			ss.directs = append(ss.directs, source)
 		}
-		source.SetLogger(config.Log)
 	}
-
-	ss.BaseAmassService = *core.NewBaseAmassService("Sources Service", config, ss)
 	return ss
 }
 
@@ -127,7 +125,6 @@ func (ss *SourcesService) handleRequest(req *core.AmassRequest) {
 		if subsrch && !source.Subdomains() {
 			continue
 		}
-		ss.SetActive()
 		ss.throttleAdd(source, req.Domain, req.Name)
 	}
 }
@@ -258,7 +255,6 @@ func (ss *SourcesService) processThrottleQueue() {
 
 	t := time.NewTicker(100 * time.Millisecond)
 	defer t.Stop()
-loop:
 	for {
 		select {
 		case <-t.C:
@@ -280,7 +276,7 @@ loop:
 		case <-ss.ResumeChan():
 			t = time.NewTicker(100 * time.Millisecond)
 		case <-ss.Quit():
-			break loop
+			return
 		}
 	}
 }

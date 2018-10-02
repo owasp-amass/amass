@@ -6,6 +6,7 @@ package sources
 import (
 	"fmt"
 
+	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -13,10 +14,10 @@ type HackerTarget struct {
 	BaseDataSource
 }
 
-func NewHackerTarget() DataSource {
+func NewHackerTarget(srv core.AmassService) DataSource {
 	h := new(HackerTarget)
 
-	h.BaseDataSource = *NewBaseDataSource(API, "HackerTarget")
+	h.BaseDataSource = *NewBaseDataSource(srv, API, "HackerTarget")
 	return h
 }
 
@@ -30,9 +31,10 @@ func (h *HackerTarget) Query(domain, sub string) []string {
 	url := h.getURL(domain)
 	page, err := utils.GetWebPage(url, nil)
 	if err != nil {
-		h.log(fmt.Sprintf("%s: %v", url, err))
+		h.Service.Config().Log.Printf("%s: %v", url, err)
 		return unique
 	}
+	h.Service.SetActive()
 
 	re := utils.SubdomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {

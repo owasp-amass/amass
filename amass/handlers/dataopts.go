@@ -17,6 +17,10 @@ func NewDataOptsHandler(w io.Writer) *DataOptsHandler {
 	return &DataOptsHandler{Enc: json.NewEncoder(w)}
 }
 
+func (d *DataOptsHandler) String() string {
+	return "Data Operations Storage Handler"
+}
+
 func DataOptsDriver(data []JSONFileFormat, handler DataHandler) error {
 	var err error
 

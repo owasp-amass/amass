@@ -6,6 +6,7 @@ package sources
 import (
 	"fmt"
 
+	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -13,10 +14,10 @@ type VirusTotal struct {
 	BaseDataSource
 }
 
-func NewVirusTotal() DataSource {
+func NewVirusTotal(srv core.AmassService) DataSource {
 	v := new(VirusTotal)
 
-	v.BaseDataSource = *NewBaseDataSource(SCRAPE, "VirusTotal")
+	v.BaseDataSource = *NewBaseDataSource(srv, SCRAPE, "VirusTotal")
 	return v
 }
 
@@ -31,9 +32,10 @@ func (v *VirusTotal) Query(domain, sub string) []string {
 	url := v.getURL(domain)
 	page, err := utils.GetWebPage(url, nil)
 	if err != nil {
-		v.log(fmt.Sprintf("%s: %v", url, err))
+		v.Service.Config().Log.Printf("%s: %v", url, err)
 		return unique
 	}
+	v.Service.SetActive()
 
 	for _, sd := range re.FindAllString(page, -1) {
 		if u := utils.NewUniqueElements(unique, sd); len(u) > 0 {

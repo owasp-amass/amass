@@ -6,6 +6,7 @@ package sources
 import (
 	"fmt"
 
+	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -13,10 +14,10 @@ type FindSubdomains struct {
 	BaseDataSource
 }
 
-func NewFindSubdomains() DataSource {
+func NewFindSubdomains(srv core.AmassService) DataSource {
 	f := new(FindSubdomains)
 
-	f.BaseDataSource = *NewBaseDataSource(SCRAPE, "FindSubDomains")
+	f.BaseDataSource = *NewBaseDataSource(srv, SCRAPE, "FindSubDomains")
 	return f
 }
 
@@ -30,9 +31,10 @@ func (f *FindSubdomains) Query(domain, sub string) []string {
 	url := f.getURL(domain)
 	page, err := utils.GetWebPage(url, nil)
 	if err != nil {
-		f.log(fmt.Sprintf("%s: %v", url, err))
+		f.Service.Config().Log.Printf("%s: %v", url, err)
 		return unique
 	}
+	f.Service.SetActive()
 
 	re := utils.SubdomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {

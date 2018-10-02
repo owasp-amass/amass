@@ -4,11 +4,11 @@
 package sources
 
 import (
-	"fmt"
 	"net/url"
 	"strconv"
 	"time"
 
+	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -18,13 +18,13 @@ type Google struct {
 	limit    int
 }
 
-func NewGoogle() DataSource {
+func NewGoogle(srv core.AmassService) DataSource {
 	g := &Google{
 		quantity: 10,
 		limit:    100,
 	}
 
-	g.BaseDataSource = *NewBaseDataSource(SCRAPE, "Google")
+	g.BaseDataSource = *NewBaseDataSource(srv, SCRAPE, "Google")
 	return g
 }
 
@@ -37,20 +37,29 @@ func (g *Google) Query(domain, sub string) []string {
 
 	re := utils.SubdomainRegex(sub)
 	num := g.limit / g.quantity
+	t := time.NewTicker(time.Second)
+	defer t.Stop()
+loop:
 	for i := 0; i < num; i++ {
-		u := g.urlByPageNum(sub, i)
-		page, err := utils.GetWebPage(u, nil)
-		if err != nil {
-			g.log(fmt.Sprintf("%s: %v", u, err))
-			break
-		}
+		g.Service.SetActive()
 
-		for _, sd := range re.FindAllString(page, -1) {
-			if u := utils.NewUniqueElements(unique, sd); len(u) > 0 {
-				unique = append(unique, u...)
+		select {
+		case <-g.Service.Quit():
+			break loop
+		case <-t.C:
+			u := g.urlByPageNum(sub, i)
+			page, err := utils.GetWebPage(u, nil)
+			if err != nil {
+				g.Service.Config().Log.Printf("%s: %v", u, err)
+				break
+			}
+
+			for _, sd := range re.FindAllString(page, -1) {
+				if u := utils.NewUniqueElements(unique, sd); len(u) > 0 {
+					unique = append(unique, u...)
+				}
 			}
 		}
-		time.Sleep(1 * time.Second)
 	}
 	return unique
 }

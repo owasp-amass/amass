@@ -4,6 +4,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net"
 	"regexp"
 	"strconv"
@@ -69,6 +70,10 @@ func NewGraph() *Graph {
 		Netblocks:  make(map[string]*Node),
 		ASNs:       make(map[int]*Node),
 	}
+}
+
+func (g *Graph) String() string {
+	return "Graph Handler"
 }
 
 func (g *Graph) NewNode(label string) *Node {
@@ -260,7 +265,10 @@ func (g *Graph) InsertDomain(domain, tag, source string) error {
 	}
 
 	if d := g.SubdomainNode(domain); d == nil {
-		d := g.NewNode("Domain")
+		d = g.NewNode("Domain")
+		if d == nil {
+			return fmt.Errorf("Failed to create new domain node for %s", domain)
+		}
 		d.Labels = append(d.Labels, "Subdomain")
 		d.Properties["name"] = domain
 		d.Properties["tag"] = tag
@@ -285,7 +293,18 @@ func (g *Graph) InsertCNAME(name, domain, target, tdomain, tag, source string) e
 	if target != tdomain {
 		g.InsertSubdomain(target, tdomain, tag, source)
 	}
-	g.NewEdge(g.SubdomainNode(name).idx, g.SubdomainNode(target).idx, "CNAME_TO")
+
+	s := g.SubdomainNode(name)
+	if s == nil {
+		return fmt.Errorf("Failed to obtain a reference to the node for %s", name)
+	}
+
+	t := g.SubdomainNode(target)
+	if t == nil {
+		return fmt.Errorf("Failed to obtain a reference to the node for %s", target)
+	}
+
+	g.NewEdge(s.idx, t.idx, "CNAME_TO")
 	return nil
 }
 
@@ -310,8 +329,7 @@ func (g *Graph) InsertA(name, domain, addr, tag, source string) error {
 		g.NewEdge(s.idx, a.idx, "A_TO")
 		return nil
 	}
-
-	return nil
+	return fmt.Errorf("Failed to insert the A_TO edge between %s and %s", addr, name)
 }
 
 func (g *Graph) InsertAAAA(name, domain, addr, tag, source string) error {
@@ -335,8 +353,7 @@ func (g *Graph) InsertAAAA(name, domain, addr, tag, source string) error {
 		g.NewEdge(s.idx, a.idx, "AAAA_TO")
 		return nil
 	}
-	// TODO: add a proper error message
-	return nil
+	return fmt.Errorf("Failed to insert the AAAA_TO edge between %s and %s", addr, name)
 }
 
 func (g *Graph) InsertPTR(name, domain, target, tag, source string) error {
@@ -359,8 +376,7 @@ func (g *Graph) InsertPTR(name, domain, target, tag, source string) error {
 		g.NewEdge(ptr.idx, s.idx, "PTR_TO")
 		return nil
 	}
-	// TODO: add a proper error message
-	return nil
+	return fmt.Errorf("Failed to insert the PTR_TO edge between %s and %s", name, target)
 }
 
 func (g *Graph) InsertSRV(name, domain, service, target, tag, source string) error {
@@ -372,26 +388,22 @@ func (g *Graph) InsertSRV(name, domain, service, target, tag, source string) err
 
 	d := g.DomainNode(domain)
 	if d == nil {
-		// TODO: add a proper error message
-		return nil
+		return fmt.Errorf("Failed to obtain a reference to the domain node for %s", domain)
 	}
 
 	sub := g.SubdomainNode(name)
 	if sub == nil {
-		// TODO: add a proper error message
-		return nil
+		return fmt.Errorf("Failed to obtain a reference to the node for %s", name)
 	}
 
 	t := g.SubdomainNode(target)
 	if t == nil {
-		// TODO: add a proper error message
-		return nil
+		return fmt.Errorf("Failed to obtain a reference to the node for %s", target)
 	}
 
 	srv := g.SubdomainNode(service)
 	if srv == nil {
-		// TODO: add a proper error message
-		return nil
+		return fmt.Errorf("Failed to obtain a reference to the node for %s", service)
 	}
 	g.NewEdge(d.idx, srv.idx, "ROOT_OF")
 	g.NewEdge(srv.idx, sub.idx, "SERVICE_FOR")
@@ -402,71 +414,106 @@ func (g *Graph) InsertSRV(name, domain, service, target, tag, source string) err
 func (g *Graph) InsertNS(name, domain, target, tdomain, tag, source string) error {
 	g.InsertSubdomain(name, domain, tag, source)
 
-	if ns := g.SubdomainNode(target); ns == nil {
-		sub := g.NewNode("NS")
-		sub.Properties["name"] = target
-		sub.Properties["tag"] = tag
-		sub.Properties["source"] = source
-		sub.Labels = append(sub.Labels, "Subdomain")
-		g.Lock()
-		g.Subdomains[target] = sub
-		g.Unlock()
+	ns := g.SubdomainNode(target)
+	if ns == nil {
+		ns = g.NewNode("NS")
+		if ns != nil {
+			ns.Properties["name"] = target
+			ns.Properties["tag"] = tag
+			ns.Properties["source"] = source
+			ns.Labels = append(ns.Labels, "Subdomain")
+			g.Lock()
+			g.Subdomains[target] = ns
+			g.Unlock()
+		}
 	} else {
 		ns.Labels = []string{"NS", "Subdomain"}
 	}
 
 	if target != tdomain {
-		g.NewEdge(g.DomainNode(tdomain).idx, g.SubdomainNode(target).idx, "ROOT_OF")
+		if td := g.DomainNode(tdomain); td != nil && ns != nil {
+			g.NewEdge(td.idx, ns.idx, "ROOT_OF")
+		} else {
+			return fmt.Errorf("Failed to insert the ROOT_OF edge between %s and %s", tdomain, target)
+		}
 	}
-	g.NewEdge(g.SubdomainNode(name).idx, g.SubdomainNode(target).idx, "NS_TO")
-	return nil
+
+	if s := g.SubdomainNode(name); s != nil && ns != nil {
+		g.NewEdge(s.idx, ns.idx, "NS_TO")
+		return nil
+	}
+	return fmt.Errorf("Failed to insert the NS_TO edge between %s and %s", target, name)
 }
 
 func (g *Graph) InsertMX(name, domain, target, tdomain, tag, source string) error {
 	g.InsertSubdomain(name, domain, tag, source)
 
-	if mx := g.SubdomainNode(target); mx == nil {
-		sub := g.NewNode("MX")
-		sub.Properties["name"] = target
-		sub.Properties["tag"] = tag
-		sub.Properties["source"] = source
-		sub.Labels = append(sub.Labels, "Subdomain")
-		g.Lock()
-		g.Subdomains[target] = sub
-		g.Unlock()
+	mx := g.SubdomainNode(target)
+	if mx == nil {
+		mx = g.NewNode("MX")
+		if mx != nil {
+			mx.Properties["name"] = target
+			mx.Properties["tag"] = tag
+			mx.Properties["source"] = source
+			mx.Labels = append(mx.Labels, "Subdomain")
+			g.Lock()
+			g.Subdomains[target] = mx
+			g.Unlock()
+		}
 	} else {
 		mx.Labels = []string{"MX", "Subdomain"}
 	}
 
 	if target != tdomain {
-		g.NewEdge(g.DomainNode(tdomain).idx, g.SubdomainNode(target).idx, "ROOT_OF")
+		if td := g.DomainNode(tdomain); td != nil && mx != nil {
+			g.NewEdge(td.idx, mx.idx, "ROOT_OF")
+		} else {
+			return fmt.Errorf("Failed to insert the ROOT_OF edge between %s and %s", tdomain, target)
+		}
 	}
-	g.NewEdge(g.SubdomainNode(name).idx, g.SubdomainNode(target).idx, "MX_TO")
-	return nil
+
+	if s := g.SubdomainNode(name); s != nil && mx != nil {
+		g.NewEdge(s.idx, mx.idx, "MX_TO")
+		return nil
+	}
+	return fmt.Errorf("Failed to insert the MX_TO edge between %s and %s", target, name)
 }
 
 func (g *Graph) InsertInfrastructure(addr string, asn int, cidr *net.IPNet, desc string) error {
-	nb := cidr.String()
-	if _, found := g.Netblocks[nb]; !found {
-		n := g.NewNode("Netblock")
-		n.Properties["cidr"] = nb
-		g.Lock()
-		g.Netblocks[nb] = n
-		g.Unlock()
+	str := cidr.String()
+	nb := g.NetblockNode(str)
+	if nb == nil {
+		nb = g.NewNode("Netblock")
+		if nb != nil {
+			nb.Properties["cidr"] = str
+			g.Lock()
+			g.Netblocks[str] = nb
+			g.Unlock()
+		}
 	}
 
-	n := g.NetblockNode(nb).idx
-	g.NewEdge(n, g.AddressNode(addr).idx, "CONTAINS")
-
-	if a := g.ASNNode(asn); a == nil {
-		as := g.NewNode("AS")
-		as.Properties["asn"] = strconv.Itoa(asn)
-		as.Properties["desc"] = desc
-		g.Lock()
-		g.ASNs[asn] = as
-		g.Unlock()
+	if ip := g.AddressNode(addr); nb != nil && ip != nil {
+		g.NewEdge(nb.idx, ip.idx, "CONTAINS")
+	} else {
+		return fmt.Errorf("Failed to insert the CONTAINS edge between %s and %s", str, addr)
 	}
-	g.NewEdge(g.ASNNode(asn).idx, n, "HAS_PREFIX")
+
+	a := g.ASNNode(asn)
+	if a == nil {
+		a = g.NewNode("AS")
+		if a != nil {
+			a.Properties["asn"] = strconv.Itoa(asn)
+			a.Properties["desc"] = desc
+			g.Lock()
+			g.ASNs[asn] = a
+			g.Unlock()
+		}
+	}
+
+	if a == nil {
+		return fmt.Errorf("Failed to insert the HAS_PREFIX edge between AS%d and %s", asn, str)
+	}
+	g.NewEdge(a.idx, nb.idx, "HAS_PREFIX")
 	return nil
 }
 

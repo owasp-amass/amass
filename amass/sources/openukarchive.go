@@ -3,17 +3,17 @@
 
 package sources
 
-import "fmt"
+import "github.com/OWASP/Amass/amass/core"
 
 type OpenUKArchive struct {
 	BaseDataSource
 	baseURL string
 }
 
-func NewOpenUKArchive() DataSource {
+func NewOpenUKArchive(srv core.AmassService) DataSource {
 	o := &OpenUKArchive{baseURL: "http://www.webarchive.org.uk/wayback/archive"}
 
-	o.BaseDataSource = *NewBaseDataSource(ARCHIVE, "Open UK Arc")
+	o.BaseDataSource = *NewBaseDataSource(srv, ARCHIVE, "Open UK Arc")
 	return o
 }
 
@@ -24,7 +24,7 @@ func (o *OpenUKArchive) Query(domain, sub string) []string {
 
 	names, err := o.crawl(o.baseURL, domain, sub)
 	if err != nil {
-		o.log(fmt.Sprintf("%v", err))
+		o.Service.Config().Log.Printf("%v", err)
 	}
 	return names
 }

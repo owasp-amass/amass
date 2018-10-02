@@ -3,17 +3,17 @@
 
 package sources
 
-import "fmt"
+import "github.com/OWASP/Amass/amass/core"
 
 type ArchiveIt struct {
 	BaseDataSource
 	baseURL string
 }
 
-func NewArchiveIt() DataSource {
+func NewArchiveIt(srv core.AmassService) DataSource {
 	a := &ArchiveIt{baseURL: "https://wayback.archive-it.org/all"}
 
-	a.BaseDataSource = *NewBaseDataSource(ARCHIVE, "Archive-It")
+	a.BaseDataSource = *NewBaseDataSource(srv, ARCHIVE, "Archive-It")
 	return a
 }
 
@@ -24,7 +24,7 @@ func (a *ArchiveIt) Query(domain, sub string) []string {
 
 	names, err := a.crawl(a.baseURL, domain, sub)
 	if err != nil {
-		a.log(fmt.Sprintf("%v", err))
+		a.Service.Config().Log.Printf("%v", err)
 	}
 	return names
 }

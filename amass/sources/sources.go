@@ -5,7 +5,6 @@ package sources
 
 import (
 	"fmt"
-	"log"
 	"net"
 	"net/http"
 	"strconv"
@@ -13,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
 	"github.com/PuerkitoBio/fetchbot"
 	"github.com/PuerkitoBio/goquery"
@@ -30,9 +30,6 @@ type DataSource interface {
 	// Returns subdomain names from the data source
 	Query(domain, sub string) []string
 
-	// Sets the logger to be used by this data source
-	SetLogger(l *log.Logger)
-
 	// Returns the data source's associated organization
 	String() string
 
@@ -46,20 +43,21 @@ type DataSource interface {
 // The common functionalities and default behaviors for all data sources
 // Most of the base methods are not implemented by each data source
 type BaseDataSource struct {
+	Service      core.AmassService
 	SourceType   string
 	Organization string
-	logger       *log.Logger
 }
 
-func NewBaseDataSource(stype, org string) *BaseDataSource {
+func NewBaseDataSource(srv core.AmassService, stype, org string) *BaseDataSource {
 	return &BaseDataSource{
+		Service:      srv,
 		SourceType:   stype,
 		Organization: org,
 	}
 }
 
 // Place holder that get implemented by each data source
-func (bds *BaseDataSource) Query(domain, sub string) []string {
+func (bds *BaseDataSource) Query(srv core.AmassService, domain, sub string) []string {
 	return []string{}
 }
 
@@ -73,20 +71,8 @@ func (bds *BaseDataSource) Subdomains() bool {
 	return false
 }
 
-func (bds *BaseDataSource) SetLogger(l *log.Logger) {
-	bds.logger = l
-}
-
 func (bds *BaseDataSource) String() string {
 	return bds.Organization
-}
-
-// All data sources send log messages through this method
-func (bds *BaseDataSource) log(msg string) {
-	if bds.logger == nil {
-		return
-	}
-	bds.logger.Printf("%s: %s", bds.Organization, msg)
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -105,7 +91,7 @@ func (bds *BaseDataSource) crawl(base, domain, sub string) ([]string, error) {
 	linksFilter := make(map[string]struct{})
 
 	mux.HandleErrors(fetchbot.HandlerFunc(func(ctx *fetchbot.Context, res *http.Response, err error) {
-		bds.log(fmt.Sprintf("Crawler error: %s %s - %v", ctx.Cmd.Method(), ctx.Cmd.URL(), err))
+		bds.Service.Config().Log.Printf("Crawler error: %s %s - %v", ctx.Cmd.Method(), ctx.Cmd.URL(), err)
 	}))
 
 	mux.Response().Method("GET").ContentType("text/html").Handler(fetchbot.HandlerFunc(
@@ -151,13 +137,10 @@ loop:
 				q.Cancel()
 			}()
 		case <-q.Done():
-			close(names)
+			break loop
+		case <-bds.Service.Quit():
 			break loop
 		}
-	}
-	// Makes sure all the names were collected
-	for name := range names {
-		results = utils.UniqueAppend(results, name)
 	}
 	return results, nil
 }
@@ -166,7 +149,7 @@ func (bds *BaseDataSource) linksAndNames(domain string, ctx *fetchbot.Context, r
 	// Process the body to find the links
 	doc, err := goquery.NewDocumentFromResponse(res)
 	if err != nil {
-		bds.log(fmt.Sprintf("Crawler error: %s %s - %s\n", ctx.Cmd.Method(), ctx.Cmd.URL(), err))
+		bds.Service.Config().Log.Printf("Crawler error: %s %s - %s\n", ctx.Cmd.Method(), ctx.Cmd.URL(), err)
 		return
 	}
 
@@ -176,7 +159,7 @@ func (bds *BaseDataSource) linksAndNames(domain string, ctx *fetchbot.Context, r
 		// Resolve address
 		u, err := ctx.Cmd.URL().Parse(val)
 		if err != nil {
-			bds.log(fmt.Sprintf("Crawler failed to parse: %s - %v\n", val, err))
+			bds.Service.Config().Log.Printf("Crawler failed to parse: %s - %v\n", val, err)
 			return
 		}
 
@@ -206,40 +189,40 @@ func setFetcherConfig(f *fetchbot.Fetcher) {
 
 //-------------------------------------------------------------------------------------------------
 
-func GetAllSources() []DataSource {
+func GetAllSources(srv core.AmassService) []DataSource {
 	return []DataSource{
-		NewArchiveIt(),
-		NewArchiveToday(),
-		NewArquivo(),
-		NewAsk(),
-		NewBaidu(),
-		NewCensys(),
-		NewCertDB(),
-		NewCertSpotter(),
-		NewCommonCrawl(),
-		NewCrtsh(),
-		//NewDNSDB(),
-		NewDNSDumpster(),
-		NewDNSTable(),
-		NewDogpile(),
-		NewEntrust(),
-		NewExalead(),
-		NewFindSubdomains(),
-		NewGoogle(),
-		NewHackerTarget(),
-		NewIPv4Info(),
-		NewLoCArchive(),
-		NewNetcraft(),
-		NewOpenUKArchive(),
-		NewPTRArchive(),
-		NewRiddler(),
-		NewRobtex(),
-		NewSiteDossier(),
-		NewThreatCrowd(),
-		NewUKGovArchive(),
-		NewVirusTotal(),
-		NewWaybackMachine(),
-		NewYahoo(),
+		NewArchiveIt(srv),
+		NewArchiveToday(srv),
+		NewArquivo(srv),
+		NewAsk(srv),
+		NewBaidu(srv),
+		NewCensys(srv),
+		NewCertDB(srv),
+		NewCertSpotter(srv),
+		NewCommonCrawl(srv),
+		NewCrtsh(srv),
+		//NewDNSDB(srv),
+		NewDNSDumpster(srv),
+		NewDNSTable(srv),
+		NewDogpile(srv),
+		NewEntrust(srv),
+		NewExalead(srv),
+		NewFindSubdomains(srv),
+		NewGoogle(srv),
+		NewHackerTarget(srv),
+		NewIPv4Info(srv),
+		NewLoCArchive(srv),
+		NewNetcraft(srv),
+		NewOpenUKArchive(srv),
+		NewPTRArchive(srv),
+		NewRiddler(srv),
+		NewRobtex(srv),
+		NewSiteDossier(srv),
+		NewThreatCrowd(srv),
+		NewUKGovArchive(srv),
+		NewVirusTotal(srv),
+		NewWaybackMachine(srv),
+		NewYahoo(srv),
 	}
 }
 

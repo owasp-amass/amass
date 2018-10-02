@@ -6,6 +6,7 @@ package sources
 import (
 	"fmt"
 
+	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -13,10 +14,10 @@ type Netcraft struct {
 	BaseDataSource
 }
 
-func NewNetcraft() DataSource {
+func NewNetcraft(srv core.AmassService) DataSource {
 	d := new(Netcraft)
 
-	d.BaseDataSource = *NewBaseDataSource(SCRAPE, "Netcraft")
+	d.BaseDataSource = *NewBaseDataSource(srv, SCRAPE, "Netcraft")
 	return d
 }
 
@@ -30,9 +31,10 @@ func (n *Netcraft) Query(domain, sub string) []string {
 	url := n.getURL(domain)
 	page, err := utils.GetWebPage(url, nil)
 	if err != nil {
-		n.log(fmt.Sprintf("%s, %v", url, err))
+		n.Service.Config().Log.Printf("%s, %v", url, err)
 		return unique
 	}
+	n.Service.SetActive()
 
 	re := utils.SubdomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {

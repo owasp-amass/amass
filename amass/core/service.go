@@ -44,6 +44,9 @@ type AmassService interface {
 
 	// String description of the service
 	String() string
+
+	// Returns the enumeration configuration
+	Config() *AmassConfig
 }
 
 type BaseAmassService struct {

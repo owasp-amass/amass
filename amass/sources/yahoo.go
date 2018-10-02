@@ -4,11 +4,11 @@
 package sources
 
 import (
-	"fmt"
 	"net/url"
 	"strconv"
 	"time"
 
+	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -18,13 +18,13 @@ type Yahoo struct {
 	limit    int
 }
 
-func NewYahoo() DataSource {
+func NewYahoo(srv core.AmassService) DataSource {
 	y := &Yahoo{
 		quantity: 10,
 		limit:    100,
 	}
 
-	y.BaseDataSource = *NewBaseDataSource(SCRAPE, "Yahoo")
+	y.BaseDataSource = *NewBaseDataSource(srv, SCRAPE, "Yahoo")
 	return y
 }
 
@@ -37,20 +37,29 @@ func (y *Yahoo) Query(domain, sub string) []string {
 
 	re := utils.SubdomainRegex(domain)
 	num := y.limit / y.quantity
+	t := time.NewTicker(time.Second)
+	defer t.Stop()
+loop:
 	for i := 0; i < num; i++ {
-		u := y.urlByPageNum(domain, i)
-		page, err := utils.GetWebPage(u, nil)
-		if err != nil {
-			y.log(fmt.Sprintf("%s: %v", u, err))
-			break
-		}
+		y.Service.SetActive()
 
-		for _, sd := range re.FindAllString(page, -1) {
-			if u := utils.NewUniqueElements(unique, sd); len(u) > 0 {
-				unique = append(unique, u...)
+		select {
+		case <-y.Service.Quit():
+			break loop
+		case <-t.C:
+			u := y.urlByPageNum(domain, i)
+			page, err := utils.GetWebPage(u, nil)
+			if err != nil {
+				y.Service.Config().Log.Printf("%s: %v", u, err)
+				break
+			}
+
+			for _, sd := range re.FindAllString(page, -1) {
+				if u := utils.NewUniqueElements(unique, sd); len(u) > 0 {
+					unique = append(unique, u...)
+				}
 			}
 		}
-		time.Sleep(1 * time.Second)
 	}
 	return unique
 }

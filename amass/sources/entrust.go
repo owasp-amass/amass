@@ -4,11 +4,11 @@
 package sources
 
 import (
-	"fmt"
 	"net/url"
 	"regexp"
 	"strings"
 
+	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -16,10 +16,10 @@ type Entrust struct {
 	BaseDataSource
 }
 
-func NewEntrust() DataSource {
+func NewEntrust(srv core.AmassService) DataSource {
 	e := new(Entrust)
 
-	e.BaseDataSource = *NewBaseDataSource(CERT, "Entrust")
+	e.BaseDataSource = *NewBaseDataSource(srv, CERT, "Entrust")
 	return e
 }
 
@@ -33,11 +33,12 @@ func (e *Entrust) Query(domain, sub string) []string {
 	u := e.getURL(domain)
 	page, err := utils.GetWebPage(u, nil)
 	if err != nil {
-		e.log(fmt.Sprintf("%s: %v", u, err))
+		e.Service.Config().Log.Printf("%s: %v", u, err)
 		return unique
 	}
 	content := strings.Replace(page, "u003d", " ", -1)
 
+	e.Service.SetActive()
 	re := utils.SubdomainRegex(domain)
 	for _, sd := range re.FindAllString(content, -1) {
 		if u := utils.NewUniqueElements(unique, sd); len(u) > 0 {
@@ -46,6 +47,7 @@ func (e *Entrust) Query(domain, sub string) []string {
 	}
 
 	for _, name := range e.extractReversedSubmatches(page) {
+		e.Service.SetActive()
 		if match := re.FindString(name); match != "" {
 			if u := utils.NewUniqueElements(unique, match); len(u) > 0 {
 				unique = append(unique, u...)

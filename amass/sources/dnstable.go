@@ -6,6 +6,7 @@ package sources
 import (
 	"fmt"
 
+	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -13,10 +14,10 @@ type DNSTable struct {
 	BaseDataSource
 }
 
-func NewDNSTable() DataSource {
+func NewDNSTable(srv core.AmassService) DataSource {
 	h := new(DNSTable)
 
-	h.BaseDataSource = *NewBaseDataSource(SCRAPE, "DNSTable")
+	h.BaseDataSource = *NewBaseDataSource(srv, SCRAPE, "DNSTable")
 	return h
 }
 
@@ -30,9 +31,10 @@ func (d *DNSTable) Query(domain, sub string) []string {
 	url := d.getURL(domain)
 	page, err := utils.GetWebPage(url, nil)
 	if err != nil {
-		d.log(fmt.Sprintf("%s: %v", url, err))
+		d.Service.Config().Log.Printf("%s: %v", url, err)
 		return unique
 	}
+	d.Service.SetActive()
 
 	re := utils.SubdomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {

@@ -4,11 +4,11 @@
 package sources
 
 import (
-	"fmt"
 	"net/url"
 	"strconv"
 	"time"
 
+	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -18,13 +18,13 @@ type Dogpile struct {
 	limit    int
 }
 
-func NewDogpile() DataSource {
+func NewDogpile(srv core.AmassService) DataSource {
 	d := &Dogpile{
 		quantity: 15, // Dogpile returns roughly 15 results per page
 		limit:    90,
 	}
 
-	d.BaseDataSource = *NewBaseDataSource(SCRAPE, "Dogpile")
+	d.BaseDataSource = *NewBaseDataSource(srv, SCRAPE, "Dogpile")
 	return d
 }
 
@@ -37,20 +37,29 @@ func (d *Dogpile) Query(domain, sub string) []string {
 
 	re := utils.SubdomainRegex(domain)
 	num := d.limit / d.quantity
+	t := time.NewTicker(time.Second)
+	defer t.Stop()
+loop:
 	for i := 0; i < num; i++ {
-		u := d.urlByPageNum(domain, i)
-		page, err := utils.GetWebPage(u, nil)
-		if err != nil {
-			d.log(fmt.Sprintf("%s: %v", u, err))
-			break
-		}
+		d.Service.SetActive()
 
-		for _, sd := range re.FindAllString(page, -1) {
-			if u := utils.NewUniqueElements(unique, sd); len(u) > 0 {
-				unique = append(unique, u...)
+		select {
+		case <-d.Service.Quit():
+			break loop
+		case <-t.C:
+			u := d.urlByPageNum(domain, i)
+			page, err := utils.GetWebPage(u, nil)
+			if err != nil {
+				d.Service.Config().Log.Printf("%s: %v", u, err)
+				break
+			}
+
+			for _, sd := range re.FindAllString(page, -1) {
+				if u := utils.NewUniqueElements(unique, sd); len(u) > 0 {
+					unique = append(unique, u...)
+				}
 			}
 		}
-		time.Sleep(1 * time.Second)
 	}
 	return unique
 }

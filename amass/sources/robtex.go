@@ -6,10 +6,10 @@ package sources
 import (
 	"bufio"
 	"encoding/json"
-	"fmt"
 	"strings"
 	"time"
 
+	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -17,10 +17,10 @@ type Robtex struct {
 	BaseDataSource
 }
 
-func NewRobtex() DataSource {
+func NewRobtex(srv core.AmassService) DataSource {
 	r := new(Robtex)
 
-	r.BaseDataSource = *NewBaseDataSource(API, "Robtex")
+	r.BaseDataSource = *NewBaseDataSource(srv, API, "Robtex")
 	return r
 }
 
@@ -41,9 +41,10 @@ func (r *Robtex) Query(domain, sub string) []string {
 	url := "https://freeapi.robtex.com/pdns/forward/" + domain
 	page, err := utils.GetWebPage(url, nil)
 	if err != nil {
-		r.log(fmt.Sprintf("%s: %v", url, err))
+		r.Service.Config().Log.Printf("%s: %v", url, err)
 		return unique
 	}
+	r.Service.SetActive()
 
 	for _, line := range r.parseJSON(page) {
 		if line.Type == "A" {
@@ -52,18 +53,26 @@ func (r *Robtex) Query(domain, sub string) []string {
 	}
 
 	var list string
+	t := time.NewTicker(500 * time.Millisecond)
+	defer t.Stop()
+loop:
 	for _, ip := range ips {
-		time.Sleep(500 * time.Millisecond)
+		r.Service.SetActive()
 
-		url = "https://freeapi.robtex.com/pdns/reverse/" + ip
-		pdns, err := utils.GetWebPage(url, nil)
-		if err != nil {
-			r.log(fmt.Sprintf("%s: %v", url, err))
-			continue
-		}
+		select {
+		case <-r.Service.Quit():
+			break loop
+		case <-t.C:
+			url = "https://freeapi.robtex.com/pdns/reverse/" + ip
+			pdns, err := utils.GetWebPage(url, nil)
+			if err != nil {
+				r.Service.Config().Log.Printf("%s: %v", url, err)
+				continue
+			}
 
-		for _, line := range r.parseJSON(pdns) {
-			list += line.Name + " "
+			for _, line := range r.parseJSON(pdns) {
+				list += line.Name + " "
+			}
 		}
 	}
 
@@ -88,12 +97,10 @@ func (r *Robtex) parseJSON(page string) []robtexJSON {
 		}
 
 		var j robtexJSON
-
 		err := json.Unmarshal([]byte(line), &j)
 		if err != nil {
 			continue
 		}
-
 		lines = append(lines, j)
 	}
 	return lines

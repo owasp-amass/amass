@@ -5,9 +5,9 @@ package sources
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/url"
 
+	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -15,10 +15,10 @@ type CertDB struct {
 	BaseDataSource
 }
 
-func NewCertDB() DataSource {
+func NewCertDB(srv core.AmassService) DataSource {
 	c := new(CertDB)
 
-	c.BaseDataSource = *NewBaseDataSource(API, "CertDB")
+	c.BaseDataSource = *NewBaseDataSource(srv, API, "CertDB")
 	return c
 }
 
@@ -32,13 +32,14 @@ func (c *CertDB) Query(domain, sub string) []string {
 	u := c.getURL(domain)
 	page, err := utils.GetWebPage(u, nil)
 	if err != nil {
-		c.log(fmt.Sprintf("%s: %v", u, err))
+		c.Service.Config().Log.Printf("%s: %v", u, err)
 		return unique
 	}
 
+	c.Service.SetActive()
 	var names []string
 	if err := json.Unmarshal([]byte(page), &names); err != nil {
-		c.log(fmt.Sprintf("Failed to unmarshal JSON: %v", err))
+		c.Service.Config().Log.Printf("Failed to unmarshal JSON: %v", err)
 		return unique
 	}
 

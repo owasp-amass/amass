@@ -6,6 +6,7 @@ package sources
 import (
 	"fmt"
 
+	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -13,10 +14,10 @@ type Riddler struct {
 	BaseDataSource
 }
 
-func NewRiddler() DataSource {
+func NewRiddler(srv core.AmassService) DataSource {
 	r := new(Riddler)
 
-	r.BaseDataSource = *NewBaseDataSource(SCRAPE, "Riddler")
+	r.BaseDataSource = *NewBaseDataSource(srv, SCRAPE, "Riddler")
 	return r
 }
 
@@ -30,9 +31,10 @@ func (r *Riddler) Query(domain, sub string) []string {
 	url := r.getURL(domain)
 	page, err := utils.GetWebPage(url, nil)
 	if err != nil {
-		r.log(fmt.Sprintf("%s: %v", url, err))
+		r.Service.Config().Log.Printf("%s: %v", url, err)
 		return unique
 	}
+	r.Service.SetActive()
 
 	re := utils.SubdomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {

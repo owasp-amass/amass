@@ -4,11 +4,11 @@
 package sources
 
 import (
-	"fmt"
 	"net/url"
 	"strconv"
 	"time"
 
+	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -18,13 +18,13 @@ type Ask struct {
 	limit    int
 }
 
-func NewAsk() DataSource {
+func NewAsk(srv core.AmassService) DataSource {
 	a := &Ask{
 		quantity: 10, // ask.com appears to be hardcoded at 10 results per page
 		limit:    100,
 	}
 
-	a.BaseDataSource = *NewBaseDataSource(SCRAPE, "Ask Scrape")
+	a.BaseDataSource = *NewBaseDataSource(srv, SCRAPE, "Ask Scrape")
 	return a
 }
 
@@ -37,20 +37,29 @@ func (a *Ask) Query(domain, sub string) []string {
 
 	re := utils.SubdomainRegex(domain)
 	num := a.limit / a.quantity
+	t := time.NewTicker(time.Second)
+	defer t.Stop()
+loop:
 	for i := 0; i < num; i++ {
-		u := a.urlByPageNum(domain, i)
-		page, err := utils.GetWebPage(u, nil)
-		if err != nil {
-			a.log(fmt.Sprintf("%s: %v", u, err))
-			break
-		}
+		a.Service.SetActive()
 
-		for _, sd := range re.FindAllString(page, -1) {
-			if u := utils.NewUniqueElements(unique, sd); len(u) > 0 {
-				unique = append(unique, u...)
+		select {
+		case <-a.Service.Quit():
+			break loop
+		case <-t.C:
+			u := a.urlByPageNum(domain, i)
+			page, err := utils.GetWebPage(u, nil)
+			if err != nil {
+				a.Service.Config().Log.Printf("%s: %v", u, err)
+				break
+			}
+
+			for _, sd := range re.FindAllString(page, -1) {
+				if u := utils.NewUniqueElements(unique, sd); len(u) > 0 {
+					unique = append(unique, u...)
+				}
 			}
 		}
-		time.Sleep(1 * time.Second)
 	}
 	return unique
 }

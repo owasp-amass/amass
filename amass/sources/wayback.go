@@ -3,17 +3,17 @@
 
 package sources
 
-import "fmt"
+import "github.com/OWASP/Amass/amass/core"
 
 type WaybackMachine struct {
 	BaseDataSource
 	baseURL string
 }
 
-func NewWaybackMachine() DataSource {
+func NewWaybackMachine(srv core.AmassService) DataSource {
 	w := &WaybackMachine{baseURL: "http://web.archive.org/web"}
 
-	w.BaseDataSource = *NewBaseDataSource(ARCHIVE, "Wayback Arc")
+	w.BaseDataSource = *NewBaseDataSource(srv, ARCHIVE, "Wayback Arc")
 	return w
 }
 
@@ -24,7 +24,7 @@ func (w *WaybackMachine) Query(domain, sub string) []string {
 
 	names, err := w.crawl(w.baseURL, domain, sub)
 	if err != nil {
-		w.log(fmt.Sprintf("%v", err))
+		w.Service.Config().Log.Printf("%v", err)
 	}
 	return names
 }

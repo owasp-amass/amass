@@ -6,6 +6,7 @@ package sources
 import (
 	"fmt"
 
+	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -13,10 +14,10 @@ type Censys struct {
 	BaseDataSource
 }
 
-func NewCensys() DataSource {
+func NewCensys(srv core.AmassService) DataSource {
 	c := new(Censys)
 
-	c.BaseDataSource = *NewBaseDataSource(SCRAPE, "Censys")
+	c.BaseDataSource = *NewBaseDataSource(srv, SCRAPE, "Censys")
 	return c
 }
 
@@ -30,10 +31,11 @@ func (c *Censys) Query(domain, sub string) []string {
 	url := c.getURL(domain)
 	page, err := utils.GetWebPage(url, nil)
 	if err != nil {
-		c.log(fmt.Sprintf("%s: %v", url, err))
+		c.Service.Config().Log.Printf("%s: %v", url, err)
 		return unique
 	}
 
+	c.Service.SetActive()
 	re := utils.SubdomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
 		if u := utils.NewUniqueElements(unique, sd); len(u) > 0 {

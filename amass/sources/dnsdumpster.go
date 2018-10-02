@@ -4,7 +4,6 @@
 package sources
 
 import (
-	"fmt"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -13,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -20,10 +20,10 @@ type DNSDumpster struct {
 	BaseDataSource
 }
 
-func NewDNSDumpster() DataSource {
+func NewDNSDumpster(srv core.AmassService) DataSource {
 	d := new(DNSDumpster)
 
-	d.BaseDataSource = *NewBaseDataSource(SCRAPE, "DNSDumpster")
+	d.BaseDataSource = *NewBaseDataSource(srv, SCRAPE, "DNSDumpster")
 	return d
 }
 
@@ -37,21 +37,23 @@ func (d *DNSDumpster) Query(domain, sub string) []string {
 	u := "https://dnsdumpster.com/"
 	page, err := utils.GetWebPage(u, nil)
 	if err != nil {
-		d.log(fmt.Sprintf("%s: %v", u, err))
+		d.Service.Config().Log.Printf("%s: %v", u, err)
 		return unique
 	}
 
 	token := d.getCSRFToken(page)
 	if token == "" {
-		d.log(fmt.Sprintf("%s: Failed to obtain the CSRF token", u))
+		d.Service.Config().Log.Printf("%s: Failed to obtain the CSRF token", u)
 		return unique
 	}
+	d.Service.SetActive()
 
 	page, err = d.postForm(token, domain)
 	if err != nil {
-		d.log(fmt.Sprintf("%s: %v", u, err))
+		d.Service.Config().Log.Printf("%s: %v", u, err)
 		return unique
 	}
+	d.Service.SetActive()
 
 	re := utils.SubdomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
@@ -86,7 +88,7 @@ func (d *DNSDumpster) postForm(token, domain string) (string, error) {
 
 	req, err := http.NewRequest("POST", "https://dnsdumpster.com/", strings.NewReader(params.Encode()))
 	if err != nil {
-		d.log(fmt.Sprintf("Failed to setup the POST request: %v", err))
+		d.Service.Config().Log.Printf("Failed to setup the POST request: %v", err)
 		return "", err
 	}
 	// The CSRF token needs to be sent as a cookie
@@ -106,7 +108,7 @@ func (d *DNSDumpster) postForm(token, domain string) (string, error) {
 
 	resp, err := client.Do(req)
 	if err != nil {
-		d.log(fmt.Sprintf("The POST request failed: %v", err))
+		d.Service.Config().Log.Printf("The POST request failed: %v", err)
 		return "", err
 	}
 	// Now, grab the entire page

@@ -36,6 +36,25 @@ func (s *Semaphore) Acquire(num int) {
 	}
 }
 
+func (s *Semaphore) TryAcquire(num int) bool {
+	var count int
+loop:
+	for i := 0; i < num; i++ {
+		select {
+		case <-s.c:
+			count++
+		default:
+			break loop
+		}
+	}
+
+	if count == num {
+		return true
+	}
+	s.Release(count)
+	return false
+}
+
 func (s *Semaphore) Release(num int) {
 	for i := 0; i < num; i++ {
 		s.c <- struct{}{}

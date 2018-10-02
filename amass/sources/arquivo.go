@@ -3,17 +3,17 @@
 
 package sources
 
-import "fmt"
+import "github.com/OWASP/Amass/amass/core"
 
 type Arquivo struct {
 	BaseDataSource
 	baseURL string
 }
 
-func NewArquivo() DataSource {
+func NewArquivo(srv core.AmassService) DataSource {
 	a := &Arquivo{baseURL: "http://arquivo.pt/wayback"}
 
-	a.BaseDataSource = *NewBaseDataSource(ARCHIVE, "Arquivo Arc")
+	a.BaseDataSource = *NewBaseDataSource(srv, ARCHIVE, "Arquivo Arc")
 	return a
 }
 
@@ -24,7 +24,7 @@ func (a *Arquivo) Query(domain, sub string) []string {
 
 	names, err := a.crawl(a.baseURL, domain, sub)
 	if err != nil {
-		a.log(fmt.Sprintf("%v", err))
+		a.Service.Config().Log.Printf("%v", err)
 	}
 	return names
 }
