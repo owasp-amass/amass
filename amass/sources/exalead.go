@@ -17,7 +17,7 @@ type Exalead struct {
 func NewExalead(srv core.AmassService) DataSource {
 	e := new(Exalead)
 
-	e.BaseDataSource = *NewBaseDataSource(srv, SCRAPE, "Exalead")
+	e.BaseDataSource = *NewBaseDataSource(srv, core.SCRAPE, "Exalead")
 	return e
 }
 

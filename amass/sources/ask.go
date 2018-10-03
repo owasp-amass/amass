@@ -24,7 +24,7 @@ func NewAsk(srv core.AmassService) DataSource {
 		limit:    100,
 	}
 
-	a.BaseDataSource = *NewBaseDataSource(srv, SCRAPE, "Ask Scrape")
+	a.BaseDataSource = *NewBaseDataSource(srv, core.SCRAPE, "Ask Scrape")
 	return a
 }
 

@@ -17,7 +17,7 @@ type SiteDossier struct {
 func NewSiteDossier(srv core.AmassService) DataSource {
 	s := new(SiteDossier)
 
-	s.BaseDataSource = *NewBaseDataSource(srv, SCRAPE, "SiteDossier")
+	s.BaseDataSource = *NewBaseDataSource(srv, core.SCRAPE, "SiteDossier")
 	return s
 }
 

@@ -34,7 +34,7 @@ type CommonCrawl struct {
 func NewCommonCrawl(srv core.AmassService) DataSource {
 	cc := &CommonCrawl{baseURL: "http://index.commoncrawl.org/"}
 
-	cc.BaseDataSource = *NewBaseDataSource(srv, SCRAPE, "Common Crawl")
+	cc.BaseDataSource = *NewBaseDataSource(srv, core.SCRAPE, "Common Crawl")
 	return cc
 }
 

@@ -13,7 +13,7 @@ type ArchiveToday struct {
 func NewArchiveToday(srv core.AmassService) DataSource {
 	a := &ArchiveToday{baseURL: "http://archive.is"}
 
-	a.BaseDataSource = *NewBaseDataSource(srv, ARCHIVE, "Archive Today")
+	a.BaseDataSource = *NewBaseDataSource(srv, core.ARCHIVE, "Archive Today")
 	return a
 }
 

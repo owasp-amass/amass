@@ -17,7 +17,7 @@ type Netcraft struct {
 func NewNetcraft(srv core.AmassService) DataSource {
 	d := new(Netcraft)
 
-	d.BaseDataSource = *NewBaseDataSource(srv, SCRAPE, "Netcraft")
+	d.BaseDataSource = *NewBaseDataSource(srv, core.SCRAPE, "Netcraft")
 	return d
 }
 

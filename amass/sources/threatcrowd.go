@@ -17,7 +17,7 @@ type ThreatCrowd struct {
 func NewThreatCrowd(srv core.AmassService) DataSource {
 	t := new(ThreatCrowd)
 
-	t.BaseDataSource = *NewBaseDataSource(srv, SCRAPE, "ThreatCrowd")
+	t.BaseDataSource = *NewBaseDataSource(srv, core.SCRAPE, "ThreatCrowd")
 	return t
 }
 

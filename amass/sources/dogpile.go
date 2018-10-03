@@ -24,7 +24,7 @@ func NewDogpile(srv core.AmassService) DataSource {
 		limit:    90,
 	}
 
-	d.BaseDataSource = *NewBaseDataSource(srv, SCRAPE, "Dogpile")
+	d.BaseDataSource = *NewBaseDataSource(srv, core.SCRAPE, "Dogpile")
 	return d
 }
 

@@ -24,7 +24,7 @@ func NewGoogle(srv core.AmassService) DataSource {
 		limit:    100,
 	}
 
-	g.BaseDataSource = *NewBaseDataSource(srv, SCRAPE, "Google")
+	g.BaseDataSource = *NewBaseDataSource(srv, core.SCRAPE, "Google")
 	return g
 }
 

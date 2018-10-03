@@ -24,7 +24,7 @@ func NewBaidu(srv core.AmassService) DataSource {
 		limit:    100,
 	}
 
-	b.BaseDataSource = *NewBaseDataSource(srv, SCRAPE, "Baidu")
+	b.BaseDataSource = *NewBaseDataSource(srv, core.SCRAPE, "Baidu")
 	return b
 }
 

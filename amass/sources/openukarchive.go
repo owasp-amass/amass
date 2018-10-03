@@ -13,7 +13,7 @@ type OpenUKArchive struct {
 func NewOpenUKArchive(srv core.AmassService) DataSource {
 	o := &OpenUKArchive{baseURL: "http://www.webarchive.org.uk/wayback/archive"}
 
-	o.BaseDataSource = *NewBaseDataSource(srv, ARCHIVE, "Open UK Arc")
+	o.BaseDataSource = *NewBaseDataSource(srv, core.ARCHIVE, "Open UK Arc")
 	return o
 }
 

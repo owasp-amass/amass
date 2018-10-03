@@ -18,13 +18,6 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
-const (
-	ARCHIVE = "archive"
-	API     = "api"
-	CERT    = "cert"
-	SCRAPE  = "scrape"
-)
-
 // All data sources are handled through this interface in amass
 type DataSource interface {
 	// Returns subdomain names from the data source
@@ -128,7 +121,6 @@ loop:
 				continue
 			}
 			linksFilter[l] = struct{}{}
-
 			q.SendStringGet(l)
 		case n := <-names:
 			results = utils.UniqueAppend(results, n)

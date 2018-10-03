@@ -13,7 +13,7 @@ type Arquivo struct {
 func NewArquivo(srv core.AmassService) DataSource {
 	a := &Arquivo{baseURL: "http://arquivo.pt/wayback"}
 
-	a.BaseDataSource = *NewBaseDataSource(srv, ARCHIVE, "Arquivo Arc")
+	a.BaseDataSource = *NewBaseDataSource(srv, core.ARCHIVE, "Arquivo Arc")
 	return a
 }
 

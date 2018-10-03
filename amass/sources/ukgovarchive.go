@@ -13,7 +13,7 @@ type UKGovArchive struct {
 func NewUKGovArchive(srv core.AmassService) DataSource {
 	u := &UKGovArchive{baseURL: "http://webarchive.nationalarchives.gov.uk"}
 
-	u.BaseDataSource = *NewBaseDataSource(srv, ARCHIVE, "UK Gov Arch")
+	u.BaseDataSource = *NewBaseDataSource(srv, core.ARCHIVE, "UK Gov Arch")
 	return u
 }
 

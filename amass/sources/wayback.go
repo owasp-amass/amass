@@ -13,7 +13,7 @@ type WaybackMachine struct {
 func NewWaybackMachine(srv core.AmassService) DataSource {
 	w := &WaybackMachine{baseURL: "http://web.archive.org/web"}
 
-	w.BaseDataSource = *NewBaseDataSource(srv, ARCHIVE, "Wayback Arc")
+	w.BaseDataSource = *NewBaseDataSource(srv, core.ARCHIVE, "Wayback Arc")
 	return w
 }
 

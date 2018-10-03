@@ -17,7 +17,7 @@ type Riddler struct {
 func NewRiddler(srv core.AmassService) DataSource {
 	r := new(Riddler)
 
-	r.BaseDataSource = *NewBaseDataSource(srv, SCRAPE, "Riddler")
+	r.BaseDataSource = *NewBaseDataSource(srv, core.SCRAPE, "Riddler")
 	return r
 }
 

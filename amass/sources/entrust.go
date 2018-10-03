@@ -19,7 +19,7 @@ type Entrust struct {
 func NewEntrust(srv core.AmassService) DataSource {
 	e := new(Entrust)
 
-	e.BaseDataSource = *NewBaseDataSource(srv, CERT, "Entrust")
+	e.BaseDataSource = *NewBaseDataSource(srv, core.CERT, "Entrust")
 	return e
 }
 

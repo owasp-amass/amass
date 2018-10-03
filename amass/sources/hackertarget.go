@@ -17,7 +17,7 @@ type HackerTarget struct {
 func NewHackerTarget(srv core.AmassService) DataSource {
 	h := new(HackerTarget)
 
-	h.BaseDataSource = *NewBaseDataSource(srv, API, "HackerTarget")
+	h.BaseDataSource = *NewBaseDataSource(srv, core.API, "HackerTarget")
 	return h
 }
 

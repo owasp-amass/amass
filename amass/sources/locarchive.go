@@ -13,7 +13,7 @@ type LoCArchive struct {
 func NewLoCArchive(srv core.AmassService) DataSource {
 	la := &LoCArchive{baseURL: "http://webarchive.loc.gov/all"}
 
-	la.BaseDataSource = *NewBaseDataSource(srv, ARCHIVE, "LoC Archive")
+	la.BaseDataSource = *NewBaseDataSource(srv, core.ARCHIVE, "LoC Archive")
 	return la
 }
 

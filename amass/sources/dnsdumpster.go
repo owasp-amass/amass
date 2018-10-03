@@ -23,7 +23,7 @@ type DNSDumpster struct {
 func NewDNSDumpster(srv core.AmassService) DataSource {
 	d := new(DNSDumpster)
 
-	d.BaseDataSource = *NewBaseDataSource(srv, SCRAPE, "DNSDumpster")
+	d.BaseDataSource = *NewBaseDataSource(srv, core.SCRAPE, "DNSDumpster")
 	return d
 }
 

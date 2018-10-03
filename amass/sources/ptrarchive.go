@@ -17,7 +17,7 @@ type PTRArchive struct {
 func NewPTRArchive(srv core.AmassService) DataSource {
 	p := new(PTRArchive)
 
-	p.BaseDataSource = *NewBaseDataSource(srv, SCRAPE, "PTRarchive")
+	p.BaseDataSource = *NewBaseDataSource(srv, core.SCRAPE, "PTRarchive")
 	return p
 }
 

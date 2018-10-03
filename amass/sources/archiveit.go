@@ -13,7 +13,7 @@ type ArchiveIt struct {
 func NewArchiveIt(srv core.AmassService) DataSource {
 	a := &ArchiveIt{baseURL: "https://wayback.archive-it.org/all"}
 
-	a.BaseDataSource = *NewBaseDataSource(srv, ARCHIVE, "Archive-It")
+	a.BaseDataSource = *NewBaseDataSource(srv, core.ARCHIVE, "Archive-It")
 	return a
 }
 

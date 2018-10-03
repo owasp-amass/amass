@@ -17,7 +17,7 @@ type FindSubdomains struct {
 func NewFindSubdomains(srv core.AmassService) DataSource {
 	f := new(FindSubdomains)
 
-	f.BaseDataSource = *NewBaseDataSource(srv, SCRAPE, "FindSubDomains")
+	f.BaseDataSource = *NewBaseDataSource(srv, core.SCRAPE, "FindSubDomains")
 	return f
 }
 

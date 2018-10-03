@@ -24,7 +24,7 @@ func NewBing(srv core.AmassService) DataSource {
 		limit:    200,
 	}
 
-	b.BaseDataSource = *NewBaseDataSource(srv, SCRAPE, "Bing Scrape")
+	b.BaseDataSource = *NewBaseDataSource(srv, core.SCRAPE, "Bing Scrape")
 	return b
 }
 

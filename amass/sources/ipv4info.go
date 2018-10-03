@@ -20,7 +20,7 @@ type IPv4Info struct {
 func NewIPv4Info(srv core.AmassService) DataSource {
 	i := &IPv4Info{baseURL: "http://ipv4info.com"}
 
-	i.BaseDataSource = *NewBaseDataSource(srv, SCRAPE, "IPv4info")
+	i.BaseDataSource = *NewBaseDataSource(srv, core.SCRAPE, "IPv4info")
 	return i
 }
 

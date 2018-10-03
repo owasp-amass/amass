@@ -6,10 +6,13 @@ package sources
 import (
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
 )
+
+const MAXCRTConns int = 10
 
 type Crtsh struct {
 	BaseDataSource
@@ -18,10 +21,10 @@ type Crtsh struct {
 
 func NewCrtsh(srv core.AmassService) DataSource {
 	c := &Crtsh{
-		MaxRequests: utils.NewSemaphore(10),
+		MaxRequests: utils.NewSemaphore(MAXCRTConns),
 	}
 
-	c.BaseDataSource = *NewBaseDataSource(srv, CERT, "crt.sh")
+	c.BaseDataSource = *NewBaseDataSource(srv, core.CERT, "crt.sh")
 	return c
 }
 
@@ -42,8 +45,10 @@ func (c *Crtsh) Query(domain, sub string) []string {
 	// Get the subdomain name the cert was issued to, and
 	// the Subject Alternative Name list from each cert
 	var idx int
-	done := make(chan []string, 10)
+	names := make(chan []string, MAXCRTConns)
 	results := c.getSubmatches(page)
+	t := time.NewTicker(100 * time.Millisecond)
+	defer t.Stop()
 loop:
 	for {
 		c.Service.SetActive()
@@ -51,21 +56,18 @@ loop:
 		select {
 		case <-c.Service.Quit():
 			break loop
-		case res := <-done:
+		case res := <-names:
 			if len(res) > 0 {
 				unique = utils.UniqueAppend(unique, res...)
 			}
 			c.MaxRequests.Release(1)
-		default:
-			if idx+1 >= len(results) {
-				if c.MaxRequests.TryAcquire(10) {
+		case <-t.C:
+			if idx >= len(results) {
+				if c.MaxRequests.TryAcquire(MAXCRTConns) {
 					break loop
-				} else {
-					continue
 				}
-			}
-			if c.MaxRequests.TryAcquire(1) {
-				go c.GetRoutine(results[idx], domain, done)
+			} else if c.MaxRequests.TryAcquire(1) {
+				go c.GetRoutine(results[idx], domain, names)
 				idx++
 			}
 		}
@@ -73,16 +75,16 @@ loop:
 	return unique
 }
 
-func (c *Crtsh) GetRoutine(id, domain string, done chan []string) {
+func (c *Crtsh) GetRoutine(id, domain string, names chan []string) {
 	url := "https://crt.sh/" + id
 	cert, err := utils.GetWebPage(url, nil)
 	if err != nil {
 		c.Service.Config().Log.Printf("%s: %v", url, err)
-		done <- []string{}
+		names <- []string{}
 		return
 	}
 	// Get all names off the certificate
-	done <- c.getMatches(cert, domain)
+	names <- c.getMatches(cert, domain)
 }
 
 func (c *Crtsh) getMatches(content, domain string) []string {

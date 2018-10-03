@@ -23,7 +23,7 @@ type DNSDB struct {
 func NewDNSDB(srv core.AmassService) DataSource {
 	d := &DNSDB{filter: make(map[string][]string)}
 
-	d.BaseDataSource = *NewBaseDataSource(srv, SCRAPE, "DNSDB")
+	d.BaseDataSource = *NewBaseDataSource(srv, core.SCRAPE, "DNSDB")
 	return d
 }
 

@@ -24,7 +24,7 @@ func NewYahoo(srv core.AmassService) DataSource {
 		limit:    100,
 	}
 
-	y.BaseDataSource = *NewBaseDataSource(srv, SCRAPE, "Yahoo")
+	y.BaseDataSource = *NewBaseDataSource(srv, core.SCRAPE, "Yahoo")
 	return y
 }
 

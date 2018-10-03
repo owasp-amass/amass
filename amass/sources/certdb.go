@@ -18,7 +18,7 @@ type CertDB struct {
 func NewCertDB(srv core.AmassService) DataSource {
 	c := new(CertDB)
 
-	c.BaseDataSource = *NewBaseDataSource(srv, API, "CertDB")
+	c.BaseDataSource = *NewBaseDataSource(srv, core.API, "CertDB")
 	return c
 }
 

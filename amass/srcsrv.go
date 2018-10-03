@@ -10,6 +10,7 @@ import (
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/sources"
+	"github.com/OWASP/Amass/amass/utils"
 	evbus "github.com/asaskevich/EventBus"
 )
 
@@ -247,30 +248,27 @@ func (ss *SourcesService) throttleNext() *entry {
 	return e
 }
 
-const MAX_THROTTLED int = 20
-
 func (ss *SourcesService) processThrottleQueue() {
-	var running int
-	done := make(chan struct{}, MAX_THROTTLED)
+	max := utils.NewSemaphore(20)
+	done := make(chan struct{}, 20)
 
 	t := time.NewTicker(100 * time.Millisecond)
 	defer t.Stop()
 	for {
 		select {
 		case <-t.C:
-			if running >= MAX_THROTTLED {
+			if !max.TryAcquire(1) {
 				continue
-			}
-
-			if th := ss.throttleNext(); th != nil {
-				running++
+			} else if th := ss.throttleNext(); th != nil {
 				go func() {
 					ss.queryOneSource(th.Source, th.Domain, th.Sub)
 					done <- struct{}{}
 				}()
+			} else {
+				max.Release(1)
 			}
 		case <-done:
-			running--
+			max.Release(1)
 		case <-ss.PauseChan():
 			t.Stop()
 		case <-ss.ResumeChan():

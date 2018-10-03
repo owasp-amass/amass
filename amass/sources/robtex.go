@@ -20,7 +20,7 @@ type Robtex struct {
 func NewRobtex(srv core.AmassService) DataSource {
 	r := new(Robtex)
 
-	r.BaseDataSource = *NewBaseDataSource(srv, API, "Robtex")
+	r.BaseDataSource = *NewBaseDataSource(srv, core.API, "Robtex")
 	return r
 }
 

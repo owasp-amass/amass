@@ -17,7 +17,7 @@ type VirusTotal struct {
 func NewVirusTotal(srv core.AmassService) DataSource {
 	v := new(VirusTotal)
 
-	v.BaseDataSource = *NewBaseDataSource(srv, SCRAPE, "VirusTotal")
+	v.BaseDataSource = *NewBaseDataSource(srv, core.SCRAPE, "VirusTotal")
 	return v
 }
 

@@ -17,7 +17,7 @@ type DNSTable struct {
 func NewDNSTable(srv core.AmassService) DataSource {
 	h := new(DNSTable)
 
-	h.BaseDataSource = *NewBaseDataSource(srv, SCRAPE, "DNSTable")
+	h.BaseDataSource = *NewBaseDataSource(srv, core.SCRAPE, "DNSTable")
 	return h
 }
 

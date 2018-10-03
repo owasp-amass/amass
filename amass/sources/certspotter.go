@@ -17,7 +17,7 @@ type CertSpotter struct {
 func NewCertSpotter(srv core.AmassService) DataSource {
 	c := new(CertSpotter)
 
-	c.BaseDataSource = *NewBaseDataSource(srv, CERT, "CertSpotter")
+	c.BaseDataSource = *NewBaseDataSource(srv, core.CERT, "CertSpotter")
 	return c
 }
 
