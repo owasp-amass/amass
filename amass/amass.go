@@ -15,7 +15,6 @@ import (
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/dnssrv"
-	"github.com/OWASP/Amass/amass/handlers"
 	"github.com/OWASP/Amass/amass/utils"
 	evbus "github.com/asaskevich/EventBus"
 )
@@ -50,9 +49,6 @@ type Enumeration struct {
 
 	// Broadcast channel that indicates no further writes to the output channel
 	Done chan struct{}
-
-	// Graph built from the data collected
-	Graph *handlers.Graph
 
 	// Logger for error messages
 	Log *log.Logger
@@ -179,9 +175,6 @@ func (e *Enumeration) generateAmassConfig() (*core.AmassConfig, error) {
 }
 
 func (e *Enumeration) Start() error {
-	var services []core.AmassService
-	var data *DataManagerService
-
 	config, err := e.generateAmassConfig()
 	if err != nil {
 		return err
@@ -189,13 +182,15 @@ func (e *Enumeration) Start() error {
 
 	bus := evbus.New()
 	bus.SubscribeAsync(core.OUTPUT, e.sendOutput, false)
-	// Select the correct services to be used in this enumeration
-	services = append(services, NewSourcesService(config, bus))
-	if !config.Passive {
-		data = NewDataManagerService(config, bus)
 
+	// Select the correct services to be used in this enumeration
+	services := []core.AmassService{
+		NewSubdomainService(config, bus),
+		NewSourcesService(config, bus),
+	}
+	if !config.Passive {
 		services = append(services,
-			data,
+			NewDataManagerService(config, bus),
 			dnssrv.NewDNSService(config, bus),
 			NewAlterationService(config, bus),
 			NewBruteForceService(config, bus),
@@ -206,10 +201,6 @@ func (e *Enumeration) Start() error {
 		if err := srv.Start(); err != nil {
 			return err
 		}
-	}
-
-	if data != nil {
-		e.Graph = data.Graph
 	}
 	// When done, we want to know if the enumeration completed
 	completed := true

@@ -178,15 +178,15 @@ func (dms *DataManagerService) insertDomain(domain string) {
 	}
 
 	for _, handler := range dms.Handlers {
-		if err := handler.InsertDomain(domain, "dns", "Forward DNS"); err != nil {
+		if err := handler.InsertDomain(domain, core.DNS, "Forward DNS"); err != nil {
 			dms.Config().Log.Printf("%s failed to insert domain: %v", handler, err)
 		}
 	}
 
-	dms.bus.Publish(core.DNSQUERY, &core.AmassRequest{
+	dms.bus.Publish(core.NEWNAME, &core.AmassRequest{
 		Name:   domain,
 		Domain: domain,
-		Tag:    "dns",
+		Tag:    core.DNS,
 		Source: "Forward DNS",
 	})
 
@@ -220,10 +220,10 @@ func (dms *DataManagerService) insertCNAME(req *core.AmassRequest, recidx int) {
 		}
 	}
 
-	dms.bus.Publish(core.DNSQUERY, &core.AmassRequest{
+	dms.bus.Publish(core.NEWNAME, &core.AmassRequest{
 		Name:   target,
 		Domain: domain,
-		Tag:    "dns",
+		Tag:    core.DNS,
 		Source: "Forward DNS",
 	})
 }
@@ -281,7 +281,7 @@ func (dms *DataManagerService) insertAAAA(req *core.AmassRequest, recidx int) {
 func (dms *DataManagerService) obtainNamesFromCertificate(addr string) {
 	for _, r := range PullCertificateNames(addr, dms.Config().Ports) {
 		if dms.Config().IsDomainInScope(r.Domain) {
-			dms.bus.Publish(core.DNSQUERY, r)
+			dms.bus.Publish(core.NEWNAME, r)
 		}
 	}
 }
@@ -300,10 +300,10 @@ func (dms *DataManagerService) insertPTR(req *core.AmassRequest, recidx int) {
 		}
 	}
 
-	dms.bus.Publish(core.DNSQUERY, &core.AmassRequest{
+	dms.bus.Publish(core.NEWNAME, &core.AmassRequest{
 		Name:   target,
 		Domain: domain,
-		Tag:    "dns",
+		Tag:    core.DNS,
 		Source: "Reverse DNS",
 	})
 }
@@ -340,10 +340,10 @@ func (dms *DataManagerService) insertNS(req *core.AmassRequest, recidx int) {
 	}
 
 	if target != domain {
-		dms.bus.Publish(core.DNSQUERY, &core.AmassRequest{
+		dms.bus.Publish(core.NEWNAME, &core.AmassRequest{
 			Name:   target,
 			Domain: domain,
-			Tag:    "dns",
+			Tag:    core.DNS,
 			Source: "Forward DNS",
 		})
 	}
@@ -365,10 +365,10 @@ func (dms *DataManagerService) insertMX(req *core.AmassRequest, recidx int) {
 	}
 
 	if target != domain {
-		dms.bus.Publish(core.DNSQUERY, &core.AmassRequest{
+		dms.bus.Publish(core.NEWNAME, &core.AmassRequest{
 			Name:   target,
 			Domain: domain,
-			Tag:    "dns",
+			Tag:    core.DNS,
 			Source: "Forward DNS",
 		})
 	}
@@ -384,10 +384,10 @@ func (dms *DataManagerService) insertTXT(req *core.AmassRequest, recidx int) {
 	}
 	txt := req.Records[recidx].Data
 	for _, name := range re.FindAllString(txt, -1) {
-		dms.bus.Publish(core.DNSQUERY, &core.AmassRequest{
+		dms.bus.Publish(core.NEWNAME, &core.AmassRequest{
 			Name:   name,
 			Domain: req.Domain,
-			Tag:    "dns",
+			Tag:    core.DNS,
 			Source: "Forward DNS",
 		})
 	}

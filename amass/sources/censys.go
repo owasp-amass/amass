@@ -17,7 +17,7 @@ type Censys struct {
 func NewCensys(srv core.AmassService) DataSource {
 	c := new(Censys)
 
-	c.BaseDataSource = *NewBaseDataSource(srv, core.SCRAPE, "Censys")
+	c.BaseDataSource = *NewBaseDataSource(srv, core.CERT, "Censys")
 	return c
 }
 

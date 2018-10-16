@@ -115,12 +115,11 @@ func removeAsteriskLabel(s string) string {
 func reqFromNames(subdomains []string) []*core.AmassRequest {
 	var requests []*core.AmassRequest
 
-	// For each subdomain name, attempt to make a new AmassRequest
 	for _, name := range subdomains {
 		requests = append(requests, &core.AmassRequest{
 			Name:   name,
 			Domain: SubdomainToDomain(name),
-			Tag:    "cert",
+			Tag:    core.CERT,
 			Source: "Active Cert",
 		})
 	}

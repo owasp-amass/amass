@@ -157,7 +157,7 @@ func (as *AlterationService) sendAlteredName(name, domain string) {
 	re := as.Config().DomainRegex(domain)
 
 	if re != nil && re.MatchString(name) {
-		as.bus.Publish(core.DNSQUERY, &core.AmassRequest{
+		as.bus.Publish(core.NEWNAME, &core.AmassRequest{
 			Name:   name,
 			Domain: domain,
 			Tag:    core.ALT,

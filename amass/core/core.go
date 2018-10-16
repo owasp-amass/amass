@@ -5,6 +5,8 @@ package core
 
 const (
 	// Topics used in the EventBus
+	NEWNAME  = "amass:newname"
+	NEWSUB   = "amass:newsubdomain"
 	DNSQUERY = "amass:dnsquery"
 	DNSSWEEP = "amass.dnssweep"
 	RESOLVED = "amass:resolved"
@@ -14,8 +16,10 @@ const (
 	ALT     = "alt"
 	ARCHIVE = "archive"
 	API     = "api"
+	AXFR    = "axfr"
 	BRUTE   = "brute"
 	CERT    = "cert"
+	DNS     = "dns"
 	SCRAPE  = "scrape"
 
 	// Node types used in the Maltego local transform
@@ -24,3 +28,10 @@ const (
 	TypeMX
 	TypeWeb
 )
+
+func TrustedTag(tag string) bool {
+	if tag == ARCHIVE || tag == AXFR || tag == CERT || tag == DNS {
+		return true
+	}
+	return false
+}

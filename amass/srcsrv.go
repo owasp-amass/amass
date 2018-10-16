@@ -157,18 +157,8 @@ func (ss *SourcesService) handleOutput(req *core.AmassRequest) {
 	if ss.outDup(req.Name) {
 		return
 	}
-
 	ss.SetActive()
-	if ss.Config().Passive {
-		ss.bus.Publish(core.OUTPUT, &core.AmassOutput{
-			Name:   req.Name,
-			Domain: req.Domain,
-			Tag:    req.Tag,
-			Source: req.Source,
-		})
-	} else {
-		ss.bus.Publish(core.DNSQUERY, req)
-	}
+	ss.bus.Publish(core.NEWNAME, req)
 	ss.SendRequest(req)
 }
 
