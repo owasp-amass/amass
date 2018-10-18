@@ -11,18 +11,16 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-const (
-	defaultNumOpenFiles uint64 = 100000
-)
-
+// GetFileLimit raises the number of open files limit to the current hard limit. The
+// value returned is equal to the new limit
 func GetFileLimit() int {
-	var limit int = int(defaultNumOpenFiles)
 	var lim syscall.Rlimit
 
+	limit := 100000
 	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &lim); err == nil {
 		lim.Cur = lim.Max
-		if lim.Cur == unix.RLIM_INFINITY || lim.Cur > defaultNumOpenFiles {
-			lim.Cur = defaultNumOpenFiles
+		if lim.Cur == unix.RLIM_INFINITY || lim.Cur > 100000 {
+			lim.Cur = 100000
 		}
 		syscall.Setrlimit(syscall.RLIMIT_NOFILE, &lim)
 	}

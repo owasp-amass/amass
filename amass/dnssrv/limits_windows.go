@@ -9,6 +9,8 @@ const (
 	defaultNumOpenFiles int = 10000
 )
 
+// GetFileLimit raises the number of open files limit to the current hard limit. The
+// value returned is equal to the new limit
 func GetFileLimit() int {
 	return defaultNumOpenFiles
 }

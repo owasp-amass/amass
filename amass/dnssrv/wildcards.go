@@ -17,7 +17,7 @@ const (
 	ldhChars = "abcdefghijklmnopqrstuvwxyz0123456789-"
 )
 
-// DetectWildcard - Checks subdomains in the wildcard cache for matches on the IP address
+// HasWildcard checks subdomains for a DNS wildcard
 func HasWildcard(domain, subdomain string) bool {
 	base := len(strings.Split(domain, "."))
 	labels := strings.Split(subdomain, ".")
@@ -78,6 +78,7 @@ func wildcardTestResolution(sub string) []core.DNSAnswer {
 	return answers
 }
 
+// UnlikelyName takes a subdomain name and returns an unlikely DNS name within that subdomain
 func UnlikelyName(sub string) string {
 	var newlabel string
 	ldh := []rune(ldhChars)

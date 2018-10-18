@@ -16,8 +16,9 @@ import (
 )
 
 var (
-	InitialQueryTypesLen int = 4
-	InitialQueryTypes        = []string{
+	// InitialQueryTypes include the DNS record types that are
+	// initially requested for a discovered name
+	InitialQueryTypes = []string{
 		"TXT",
 		"A",
 		"AAAA",
@@ -31,6 +32,8 @@ var (
 	}
 )
 
+// DNSService is the AmassService that handles all DNS name resolution requests within
+// the architecture. This is achieved by receiving all the DNSQUERY and DNSSWEEP events
 type DNSService struct {
 	core.BaseAmassService
 
@@ -42,6 +45,8 @@ type DNSService struct {
 	cidrBlacklist []*net.IPNet
 }
 
+// NewDNSService requires the enumeration configuration and event bus as parameters.
+// The object returned is initialized, but has not yet been started
 func NewDNSService(config *core.AmassConfig, bus evbus.Bus) *DNSService {
 	ds := &DNSService{
 		bus:    bus,
@@ -58,34 +63,38 @@ func NewDNSService(config *core.AmassConfig, bus evbus.Bus) *DNSService {
 	return ds
 }
 
+// OnStart implements the AmassService interface
 func (ds *DNSService) OnStart() error {
 	ds.BaseAmassService.OnStart()
 
-	ds.bus.SubscribeAsync(core.NEWSUB, ds.NewSubdomain, false)
-	ds.bus.SubscribeAsync(core.DNSQUERY, ds.AddRequest, false)
-	ds.bus.SubscribeAsync(core.DNSSWEEP, ds.ReverseDNSSweep, false)
+	ds.bus.SubscribeAsync(core.NEWSUB, ds.newSubdomain, false)
+	ds.bus.SubscribeAsync(core.DNSQUERY, ds.addRequest, false)
+	ds.bus.SubscribeAsync(core.DNSSWEEP, ds.reverseDNSSweep, false)
 	go ds.processRequests()
 	return nil
 }
 
+// OnPause implements the AmassService interface
 func (ds *DNSService) OnPause() error {
 	return nil
 }
 
+// OnResume implements the AmassService interface
 func (ds *DNSService) OnResume() error {
 	return nil
 }
 
+// OnStop implements the AmassService interface
 func (ds *DNSService) OnStop() error {
 	ds.BaseAmassService.OnStop()
 
-	ds.bus.Unsubscribe(core.NEWSUB, ds.NewSubdomain)
-	ds.bus.Unsubscribe(core.DNSQUERY, ds.AddRequest)
-	ds.bus.Unsubscribe(core.DNSSWEEP, ds.ReverseDNSSweep)
+	ds.bus.Unsubscribe(core.NEWSUB, ds.newSubdomain)
+	ds.bus.Unsubscribe(core.DNSQUERY, ds.addRequest)
+	ds.bus.Unsubscribe(core.DNSSWEEP, ds.reverseDNSSweep)
 	return nil
 }
 
-func (ds *DNSService) AddRequest(req *core.AmassRequest) {
+func (ds *DNSService) addRequest(req *core.AmassRequest) {
 	if req == nil || req.Name == "" || req.Domain == "" {
 		return
 	}
@@ -112,7 +121,7 @@ func (ds *DNSService) processRequests() {
 				continue
 			}
 			if req := ds.NextRequest(); req != nil {
-				MaxConnections.Acquire(InitialQueryTypesLen)
+				MaxConnections.Acquire(len(InitialQueryTypes))
 				go ds.performRequest(req)
 			} else {
 				time.Sleep(100 * time.Millisecond)
@@ -130,7 +139,7 @@ func (ds *DNSService) duplicate(name string) bool {
 }
 
 func (ds *DNSService) performRequest(req *core.AmassRequest) {
-	defer MaxConnections.Release(InitialQueryTypesLen)
+	defer MaxConnections.Release(len(InitialQueryTypes))
 
 	var answers []core.DNSAnswer
 
@@ -168,7 +177,7 @@ func (ds *DNSService) goodDNSRecords(records []core.DNSAnswer) bool {
 	return true
 }
 
-func (ds *DNSService) NewSubdomain(req *core.AmassRequest, times int) {
+func (ds *DNSService) newSubdomain(req *core.AmassRequest, times int) {
 	if times != 1 || HasWildcard(req.Domain, req.Name) {
 		return
 	}
@@ -261,7 +270,7 @@ func (ds *DNSService) queryServiceNames(subdomain, domain string) {
 	}
 }
 
-func (ds *DNSService) ReverseDNSSweep(domain, addr string, cidr *net.IPNet) {
+func (ds *DNSService) reverseDNSSweep(domain, addr string, cidr *net.IPNet) {
 	var ips []net.IP
 
 	// Get a subset of nearby IP addresses
