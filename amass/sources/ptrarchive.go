@@ -10,10 +10,12 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
+// PTRArchive is data source object type that implements the DataSource interface.
 type PTRArchive struct {
 	BaseDataSource
 }
 
+// NewPTRArchive returns an initialized PTRArchive as a DataSource.
 func NewPTRArchive(srv core.AmassService) DataSource {
 	p := new(PTRArchive)
 
@@ -21,6 +23,7 @@ func NewPTRArchive(srv core.AmassService) DataSource {
 	return p
 }
 
+// Query returns the subdomain names discovered when querying this data source.
 func (p *PTRArchive) Query(domain, sub string) []string {
 	var unique []string
 

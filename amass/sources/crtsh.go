@@ -12,22 +12,25 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
-const MAXCRTConns int = 10
+const maxCRTConns int = 10
 
+// Crtsh is data source object type that implements the DataSource interface.
 type Crtsh struct {
 	BaseDataSource
 	MaxRequests *utils.Semaphore
 }
 
+// NewCrtsh returns an initialized Crtsh as a DataSource.
 func NewCrtsh(srv core.AmassService) DataSource {
 	c := &Crtsh{
-		MaxRequests: utils.NewSemaphore(MAXCRTConns),
+		MaxRequests: utils.NewSemaphore(maxCRTConns),
 	}
 
 	c.BaseDataSource = *NewBaseDataSource(srv, core.CERT, "crt.sh")
 	return c
 }
 
+// Query returns the subdomain names discovered when querying this data source.
 func (c *Crtsh) Query(domain, sub string) []string {
 	var unique []string
 
@@ -45,7 +48,7 @@ func (c *Crtsh) Query(domain, sub string) []string {
 	// Get the subdomain name the cert was issued to, and
 	// the Subject Alternative Name list from each cert
 	var idx int
-	names := make(chan []string, MAXCRTConns)
+	names := make(chan []string, maxCRTConns)
 	results := c.getSubmatches(page)
 	t := time.NewTicker(100 * time.Millisecond)
 	defer t.Stop()
@@ -63,11 +66,11 @@ loop:
 			c.MaxRequests.Release(1)
 		case <-t.C:
 			if idx >= len(results) {
-				if c.MaxRequests.TryAcquire(MAXCRTConns) {
+				if c.MaxRequests.TryAcquire(maxCRTConns) {
 					break loop
 				}
 			} else if c.MaxRequests.TryAcquire(1) {
-				go c.GetRoutine(results[idx], domain, names)
+				go c.getRoutine(results[idx], domain, names)
 				idx++
 			}
 		}
@@ -75,7 +78,7 @@ loop:
 	return unique
 }
 
-func (c *Crtsh) GetRoutine(id, domain string, names chan []string) {
+func (c *Crtsh) getRoutine(id, domain string, names chan []string) {
 	url := "https://crt.sh/" + id
 	cert, err := utils.GetWebPage(url, nil)
 	if err != nil {

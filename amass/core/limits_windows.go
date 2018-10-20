@@ -3,7 +3,7 @@
 
 // +build windows
 
-package dnssrv
+package core
 
 const (
 	defaultNumOpenFiles int = 10000

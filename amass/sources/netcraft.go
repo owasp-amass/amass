@@ -10,10 +10,12 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
+// Netcraft is data source object type that implements the DataSource interface.
 type Netcraft struct {
 	BaseDataSource
 }
 
+// NewNetcraft returns an initialized Netcraft as a DataSource.
 func NewNetcraft(srv core.AmassService) DataSource {
 	d := new(Netcraft)
 
@@ -21,6 +23,7 @@ func NewNetcraft(srv core.AmassService) DataSource {
 	return d
 }
 
+// Query returns the subdomain names discovered when querying this data source.
 func (n *Netcraft) Query(domain, sub string) []string {
 	var unique []string
 

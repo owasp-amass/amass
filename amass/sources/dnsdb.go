@@ -14,12 +14,14 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
+// DNSDB is data source object type that implements the DataSource interface.
 type DNSDB struct {
 	BaseDataSource
 	sync.Mutex
 	filter map[string][]string
 }
 
+// NewDNSDB returns an initialized DNSDB as a DataSource.
 func NewDNSDB(srv core.AmassService) DataSource {
 	d := &DNSDB{filter: make(map[string][]string)}
 
@@ -27,6 +29,7 @@ func NewDNSDB(srv core.AmassService) DataSource {
 	return d
 }
 
+// Query returns the subdomain names discovered when querying this data source.
 func (d *DNSDB) Query(domain, sub string) []string {
 	d.Lock()
 	defer d.Unlock()

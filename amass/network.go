@@ -21,6 +21,7 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
+// ASRecord stores all autonomous system information needed by Amass
 type ASRecord struct {
 	ASN            int
 	Prefix         string
@@ -45,6 +46,8 @@ func init() {
 	domainCache = make(map[string]struct{})
 }
 
+// SubdomainToDomain returns the first subdomain name of the provided
+// parameter that responds to a DNS query for the NS record type.
 func SubdomainToDomain(name string) string {
 	domainLock.Lock()
 	defer domainLock.Unlock()
@@ -69,8 +72,8 @@ func SubdomainToDomain(name string) string {
 	for i := 0; i < len(labels)-1; i++ {
 		sub := strings.Join(labels[i:], ".")
 
-		dnssrv.MaxConnections.Acquire(1)
-		defer dnssrv.MaxConnections.Release(1)
+		core.MaxConnections.Acquire(1)
+		defer core.MaxConnections.Release(1)
 		if ns, err := dnssrv.Resolve(sub, "NS"); err == nil {
 			pieces := strings.Split(ns[0].Data, ",")
 			domainCache[pieces[0]] = struct{}{}
@@ -81,6 +84,7 @@ func SubdomainToDomain(name string) string {
 	return domain
 }
 
+// IPRequest returns the ASN, CIDR and AS Description that contain the provided IP address.
 func IPRequest(addr string) (int, *net.IPNet, string, error) {
 	netDataLock.Lock()
 	defer netDataLock.Unlock()
@@ -105,6 +109,7 @@ func IPRequest(addr string) (int, *net.IPNet, string, error) {
 	return asn, cidr, desc, nil
 }
 
+// ASNRequest returns the completed ASRecord for the provided ASN.
 func ASNRequest(asn int) (*ASRecord, error) {
 	netDataLock.Lock()
 	defer netDataLock.Unlock()
@@ -123,6 +128,7 @@ func ASNRequest(asn int) (*ASRecord, error) {
 	return record, nil
 }
 
+// CIDRRequest returns the ASN and AS Description that contain the provided CIDR.
 func CIDRRequest(cidr *net.IPNet) (int, string, error) {
 	netDataLock.Lock()
 	defer netDataLock.Unlock()
@@ -165,7 +171,7 @@ loop:
 }
 
 func compareCIDRSizes(first, second *net.IPNet) int {
-	var result int = 0
+	var result int
 
 	s1, _ := first.Mask.Size()
 	s2, _ := second.Mask.Size()
@@ -254,8 +260,8 @@ func originLookup(addr string) (int, string, error) {
 		return 0, "", fmt.Errorf("originLookup param is insufficient: addr: %s", ip)
 	}
 
-	dnssrv.MaxConnections.Acquire(1)
-	defer dnssrv.MaxConnections.Release(1)
+	core.MaxConnections.Acquire(1)
+	defer core.MaxConnections.Release(1)
 
 	answers, err = dnssrv.Resolve(name, "TXT")
 	if err != nil {
@@ -277,8 +283,8 @@ func asnLookup(asn int) (*ASRecord, error) {
 	// Get the AS record using the ASN
 	name := "AS" + strconv.Itoa(asn) + ".asn.cymru.com"
 
-	dnssrv.MaxConnections.Acquire(1)
-	defer dnssrv.MaxConnections.Release(1)
+	core.MaxConnections.Acquire(1)
+	defer core.MaxConnections.Release(1)
 
 	answers, err = dnssrv.Resolve(name, "TXT")
 	if err != nil {
@@ -293,8 +299,8 @@ func asnLookup(asn int) (*ASRecord, error) {
 }
 
 func fetchOnlineNetblockData(asn int) ([]string, error) {
-	dnssrv.MaxConnections.Acquire(1)
-	defer dnssrv.MaxConnections.Release(1)
+	core.MaxConnections.Acquire(1)
+	defer core.MaxConnections.Release(1)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -350,6 +356,8 @@ func parseASNInfo(line string) *ASRecord {
 	}
 }
 
+// LookupASNsByName returns ASRecord objects for autonomous systems with
+// descriptions that contain the string provided by the parameter.
 func LookupASNsByName(s string) ([]ASRecord, error) {
 	var asns []int
 	var records []ASRecord
@@ -385,7 +393,7 @@ func LookupASNsByName(s string) ([]ASRecord, error) {
 	return records, nil
 }
 
-// LookupIPHistory - Attempts to obtain IP addresses used by a root domain name
+// LookupIPHistory attempts to obtain IP addresses used by a root domain name
 func LookupIPHistory(domain string) ([]string, error) {
 	var unique []string
 
@@ -409,8 +417,7 @@ func LookupIPHistory(domain string) ([]string, error) {
 	return unique, nil
 }
 
-//--------------------------------------------------------------------------------------------------
-// ReverseWhois - Returns domain names that are related to the domain provided
+// ReverseWhois returns domain names that are related to the domain provided
 func ReverseWhois(domain string) ([]string, error) {
 	var domains []string
 
@@ -446,12 +453,11 @@ func getViewDNSTable(page string) string {
 		}
 		begin += b + 6
 
-		if e := strings.Index(s[b:], "</table>"); e == -1 {
-			return ""
-		} else {
+		if e := strings.Index(s[b:], "</table>"); e != -1 {
 			end = begin + e
+		} else {
+			return ""
 		}
-
 		s = page[end+8:]
 	}
 	i := strings.Index(page[begin:end], "<table")

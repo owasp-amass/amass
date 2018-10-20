@@ -10,10 +10,12 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
+// HackerTarget is data source object type that implements the DataSource interface.
 type HackerTarget struct {
 	BaseDataSource
 }
 
+// NewHackerTarget returns an initialized HackerTarget as a DataSource.
 func NewHackerTarget(srv core.AmassService) DataSource {
 	h := new(HackerTarget)
 
@@ -21,6 +23,7 @@ func NewHackerTarget(srv core.AmassService) DataSource {
 	return h
 }
 
+// Query returns the subdomain names discovered when querying this data source.
 func (h *HackerTarget) Query(domain, sub string) []string {
 	var unique []string
 

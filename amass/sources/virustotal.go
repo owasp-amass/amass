@@ -10,10 +10,12 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
+// VirusTotal is data source object type that implements the DataSource interface.
 type VirusTotal struct {
 	BaseDataSource
 }
 
+// NewVirusTotal returns an initialized VirusTotal as a DataSource.
 func NewVirusTotal(srv core.AmassService) DataSource {
 	v := new(VirusTotal)
 
@@ -21,6 +23,7 @@ func NewVirusTotal(srv core.AmassService) DataSource {
 	return v
 }
 
+// Query returns the subdomain names discovered when querying this data source.
 func (v *VirusTotal) Query(domain, sub string) []string {
 	var unique []string
 

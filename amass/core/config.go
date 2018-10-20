@@ -14,7 +14,7 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
-// AmassConfig - Passes along optional configurations
+// AmassConfig passes along optional Amass enumeration configurations
 type AmassConfig struct {
 	sync.Mutex
 
@@ -70,6 +70,7 @@ type AmassConfig struct {
 	regexps map[string]*regexp.Regexp
 }
 
+// DomainRegex returns the Regexp object for the domain name identified by the parameter.
 func (c *AmassConfig) DomainRegex(domain string) *regexp.Regexp {
 	c.Lock()
 	defer c.Unlock()
@@ -80,6 +81,7 @@ func (c *AmassConfig) DomainRegex(domain string) *regexp.Regexp {
 	return nil
 }
 
+// AddDomain appends the domain name provided in the parameter to the list in the configuration.
 func (c *AmassConfig) AddDomain(domain string) {
 	c.domains = utils.UniqueAppend(c.domains, domain)
 
@@ -90,6 +92,7 @@ func (c *AmassConfig) AddDomain(domain string) {
 	c.regexps[domain] = utils.SubdomainRegex(domain)
 }
 
+// Domains returns the list of domain names currently in the configuration.
 func (c *AmassConfig) Domains() []string {
 	c.Lock()
 	defer c.Unlock()
@@ -97,6 +100,7 @@ func (c *AmassConfig) Domains() []string {
 	return c.domains
 }
 
+// IsDomainInScope returns true if the DNS name in the parameter ends with a domain in the config list.
 func (c *AmassConfig) IsDomainInScope(name string) bool {
 	var discovered bool
 
@@ -109,6 +113,17 @@ func (c *AmassConfig) IsDomainInScope(name string) bool {
 	return discovered
 }
 
+// WhichDomain returns the domain in the config list that the DNS name in the parameter end with.
+func (c *AmassConfig) WhichDomain(name string) string {
+	for _, d := range c.Domains() {
+		if name == d || strings.HasSuffix(name, "."+d) {
+			return d
+		}
+	}
+	return ""
+}
+
+// Blacklisted returns true is the name in the parameter ends with a subdomain name in the config blacklist.
 func (c *AmassConfig) Blacklisted(name string) bool {
 	var resp bool
 

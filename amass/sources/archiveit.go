@@ -5,11 +5,13 @@ package sources
 
 import "github.com/OWASP/Amass/amass/core"
 
+// ArchiveIt is data source object type that implements the DataSource interface.
 type ArchiveIt struct {
 	BaseDataSource
 	baseURL string
 }
 
+// NewArchiveIt returns an initialized ArchiveIt as a DataSource.
 func NewArchiveIt(srv core.AmassService) DataSource {
 	a := &ArchiveIt{baseURL: "https://wayback.archive-it.org/all"}
 
@@ -17,6 +19,7 @@ func NewArchiveIt(srv core.AmassService) DataSource {
 	return a
 }
 
+// Query returns the subdomain names discovered when querying this data source.
 func (a *ArchiveIt) Query(domain, sub string) []string {
 	if sub == "" {
 		return []string{}
@@ -29,6 +32,7 @@ func (a *ArchiveIt) Query(domain, sub string) []string {
 	return names
 }
 
+// Subdomains returns true when the data source can query for subdomain names.
 func (a *ArchiveIt) Subdomains() bool {
 	return true
 }

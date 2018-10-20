@@ -12,11 +12,13 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
+// IPv4Info is data source object type that implements the DataSource interface.
 type IPv4Info struct {
 	BaseDataSource
 	baseURL string
 }
 
+// NewIPv4Info returns an initialized IPv4Info as a DataSource.
 func NewIPv4Info(srv core.AmassService) DataSource {
 	i := &IPv4Info{baseURL: "http://ipv4info.com"}
 
@@ -24,6 +26,7 @@ func NewIPv4Info(srv core.AmassService) DataSource {
 	return i
 }
 
+// Query returns the subdomain names discovered when querying this data source.
 func (i *IPv4Info) Query(domain, sub string) []string {
 	var unique []string
 

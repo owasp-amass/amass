@@ -13,11 +13,19 @@ import (
 )
 
 const (
-	USER_AGENT  = "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/65.0.3325.181 Safari/537.36"
-	ACCEPT      = "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
-	ACCEPT_LANG = "en-US,en;q=0.8"
+	// UserAgent is the default user agent used by Amass during HTTP requests.
+	UserAgent = "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/65.0.3325.181 Safari/537.36"
+
+	// Accept is the default HTTP Accept header value used by Amass.
+	Accept = "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+
+	// AcceptLang is the default HTTP Accept-Language header value used by Amass.
+	AcceptLang = "en-US,en;q=0.8"
 )
 
+// GetWebPage returns a string containing the entire web page indicated
+// by the url parameter when successful. Header values can optionally be
+// provided using the hvals parameter.
 func GetWebPage(url string, hvals map[string]string) (string, error) {
 	d := net.Dialer{}
 	client := &http.Client{
@@ -36,9 +44,9 @@ func GetWebPage(url string, hvals map[string]string) (string, error) {
 		return "", err
 	}
 
-	req.Header.Add("User-Agent", USER_AGENT)
-	req.Header.Add("Accept", ACCEPT)
-	req.Header.Add("Accept-Language", ACCEPT_LANG)
+	req.Header.Add("User-Agent", UserAgent)
+	req.Header.Add("Accept", Accept)
+	req.Header.Add("Accept-Language", AcceptLang)
 	if hvals != nil {
 		for k, v := range hvals {
 			req.Header.Add(k, v)
@@ -57,7 +65,9 @@ func GetWebPage(url string, hvals map[string]string) (string, error) {
 	return string(in), nil
 }
 
-// Obtained/modified the next two functions from the following:
+// NetHosts returns a slice containing all the IP addresses within
+// the CIDR provided by the parameter. This implementation was
+// obtained/modified from the following:
 // https://gist.github.com/kotakanbe/d3059af990252ba89a82
 func NetHosts(cidr *net.IPNet) []net.IP {
 	var ips []net.IP
@@ -71,6 +81,8 @@ func NetHosts(cidr *net.IPNet) []net.IP {
 	return ips[1 : len(ips)-1]
 }
 
+// RangeHosts returns all the IP addresses (inclusive) between
+// the start and stop addresses provided by the parameters.
 func RangeHosts(start, end net.IP) []net.IP {
 	var ips []net.IP
 
@@ -103,7 +115,8 @@ func addrDec(ip net.IP) {
 	}
 }
 
-// getCIDRSubset - Returns a subset of the hosts slice with num elements around the addr element
+// CIDRSubset returns a subset of the IP addresses contained within
+// the cidr parameter with num elements around the addr element.
 func CIDRSubset(cidr *net.IPNet, addr string, num int) []net.IP {
 	first := net.ParseIP(addr)
 
@@ -139,6 +152,7 @@ func CIDRSubset(cidr *net.IPNet, addr string, num int) []net.IP {
 	return RangeHosts(first, last)
 }
 
+// ReverseIP returns an IP address that is the ip parameter with the numbers reversed.
 func ReverseIP(ip string) string {
 	var reversed []string
 
@@ -152,6 +166,8 @@ func ReverseIP(ip string) string {
 	return strings.Join(reversed, ".")
 }
 
+// IPv6NibbleFormat expects an IPv6 address in the ip parameter and
+// returns the address in nibble format.
 func IPv6NibbleFormat(ip string) string {
 	var reversed []string
 
@@ -165,6 +181,7 @@ func IPv6NibbleFormat(ip string) string {
 	return strings.Join(reversed, ".")
 }
 
+// HexString returns a string that is the hex representation of the byte slice parameter.
 func HexString(b []byte) string {
 	hexDigit := "0123456789abcdef"
 	s := make([]byte, len(b)*2)

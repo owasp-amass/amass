@@ -14,6 +14,8 @@ import (
 	"github.com/irfansharif/cfilter"
 )
 
+// SubdomainService is the AmassService that handles all newly discovered names
+// within the architecture. This is achieved by receiving all the RESOLVED events.
 type SubdomainService struct {
 	core.BaseAmassService
 
@@ -28,6 +30,8 @@ type SubdomainService struct {
 	maxRoutines *utils.Semaphore
 }
 
+// NewSubdomainService requires the enumeration configuration and event bus as parameters.
+// The object returned is initialized, but has not yet been started.
 func NewSubdomainService(config *core.AmassConfig, bus evbus.Bus) *SubdomainService {
 	ss := &SubdomainService{
 		bus:         bus,
@@ -40,6 +44,7 @@ func NewSubdomainService(config *core.AmassConfig, bus evbus.Bus) *SubdomainServ
 	return ss
 }
 
+// OnStart implements the AmassService interface
 func (ss *SubdomainService) OnStart() error {
 	ss.BaseAmassService.OnStart()
 
@@ -48,14 +53,17 @@ func (ss *SubdomainService) OnStart() error {
 	return nil
 }
 
+// OnPause implements the AmassService interface
 func (ss *SubdomainService) OnPause() error {
 	return nil
 }
 
+// OnResume implements the AmassService interface
 func (ss *SubdomainService) OnResume() error {
 	return nil
 }
 
+// OnStop implements the AmassService interface
 func (ss *SubdomainService) OnStop() error {
 	ss.BaseAmassService.OnStop()
 

@@ -10,10 +10,12 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
+// FindSubdomains is data source object type that implements the DataSource interface.
 type FindSubdomains struct {
 	BaseDataSource
 }
 
+// NewFindSubdomains returns an initialized FindSubdomains as a DataSource.
 func NewFindSubdomains(srv core.AmassService) DataSource {
 	f := new(FindSubdomains)
 
@@ -21,6 +23,7 @@ func NewFindSubdomains(srv core.AmassService) DataSource {
 	return f
 }
 
+// Query returns the subdomain names discovered when querying this data source.
 func (f *FindSubdomains) Query(domain, sub string) []string {
 	var unique []string
 

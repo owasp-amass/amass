@@ -5,11 +5,13 @@ package sources
 
 import "github.com/OWASP/Amass/amass/core"
 
+// ArchiveToday is data source object type that implements the DataSource interface.
 type ArchiveToday struct {
 	BaseDataSource
 	baseURL string
 }
 
+// NewArchiveToday returns an initialized ArchiveToday as a DataSource.
 func NewArchiveToday(srv core.AmassService) DataSource {
 	a := &ArchiveToday{baseURL: "http://archive.is"}
 
@@ -17,6 +19,7 @@ func NewArchiveToday(srv core.AmassService) DataSource {
 	return a
 }
 
+// Query returns the subdomain names discovered when querying this data source.
 func (a *ArchiveToday) Query(domain, sub string) []string {
 	if sub == "" {
 		return []string{}
@@ -29,6 +32,7 @@ func (a *ArchiveToday) Query(domain, sub string) []string {
 	return names
 }
 
+// Subdomains returns true when the data source can query for subdomain names.
 func (a *ArchiveToday) Subdomains() bool {
 	return true
 }

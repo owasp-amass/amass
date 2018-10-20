@@ -5,11 +5,13 @@ package sources
 
 import "github.com/OWASP/Amass/amass/core"
 
+// OpenUKArchive is data source object type that implements the DataSource interface.
 type OpenUKArchive struct {
 	BaseDataSource
 	baseURL string
 }
 
+// NewOpenUKArchive returns an initialized OpenUKArchive as a DataSource.
 func NewOpenUKArchive(srv core.AmassService) DataSource {
 	o := &OpenUKArchive{baseURL: "http://www.webarchive.org.uk/wayback/archive"}
 
@@ -17,6 +19,7 @@ func NewOpenUKArchive(srv core.AmassService) DataSource {
 	return o
 }
 
+// Query returns the subdomain names discovered when querying this data source.
 func (o *OpenUKArchive) Query(domain, sub string) []string {
 	if sub == "" {
 		return []string{}
@@ -29,6 +32,7 @@ func (o *OpenUKArchive) Query(domain, sub string) []string {
 	return names
 }
 
+// Subdomains returns true when the data source can query for subdomain names.
 func (o *OpenUKArchive) Subdomains() bool {
 	return true
 }

@@ -10,10 +10,12 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
+// SiteDossier is data source object type that implements the DataSource interface.
 type SiteDossier struct {
 	BaseDataSource
 }
 
+// NewSiteDossier returns an initialized SiteDossier as a DataSource.
 func NewSiteDossier(srv core.AmassService) DataSource {
 	s := new(SiteDossier)
 
@@ -21,6 +23,7 @@ func NewSiteDossier(srv core.AmassService) DataSource {
 	return s
 }
 
+// Query returns the subdomain names discovered when querying this data source.
 func (s *SiteDossier) Query(domain, sub string) []string {
 	var unique []string
 

@@ -10,10 +10,12 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
+// CertSpotter is data source object type that implements the DataSource interface.
 type CertSpotter struct {
 	BaseDataSource
 }
 
+// NewCertSpotter returns an initialized CertSpotter as a DataSource.
 func NewCertSpotter(srv core.AmassService) DataSource {
 	c := new(CertSpotter)
 
@@ -21,6 +23,7 @@ func NewCertSpotter(srv core.AmassService) DataSource {
 	return c
 }
 
+// Query returns the subdomain names discovered when querying this data source.
 func (c *CertSpotter) Query(domain, sub string) []string {
 	var unique []string
 

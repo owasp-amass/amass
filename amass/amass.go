@@ -19,7 +19,8 @@ import (
 	evbus "github.com/asaskevich/EventBus"
 )
 
-var Banner string = `
+// Banner is the ASCII art logo used within help output.
+var Banner = `
 
         .+++:.            :                             .+++.                   
       +W@@@@@@8        &+W@#               o8W8:      +W@@@@@@#.   oW@@@W#+     
@@ -37,12 +38,16 @@ var Banner string = `
 `
 
 const (
-	Version = "2.7.11"
-	Author  = "https://github.com/OWASP/Amass"
+	// Version is used to display the current version of Amass.
+	Version = "2.8.0"
+
+	// Author is used to display the developer of the amass package.
+	Author = "https://github.com/OWASP/Amass"
 
 	defaultWordlistURL = "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/namelist.txt"
 )
 
+// Enumeration is the object type used to execute a DNS enumeration with Amass.
 type Enumeration struct {
 	// The channel that will receive the results
 	Output chan *core.AmassOutput
@@ -103,6 +108,7 @@ type Enumeration struct {
 	resume chan struct{}
 }
 
+// NewEnumeration returns an initialized Enumeration that has not been started yet.
 func NewEnumeration() *Enumeration {
 	return &Enumeration{
 		Output:          make(chan *core.AmassOutput, 100),
@@ -117,10 +123,12 @@ func NewEnumeration() *Enumeration {
 	}
 }
 
+// AddDomain appends another DNS domain name to an Enumeration.
 func (e *Enumeration) AddDomain(domain string) {
 	e.domains = utils.UniqueAppend(e.domains, domain)
 }
 
+// Domains returns the current set of DNS domain names assigned to an Enumeration.
 func (e *Enumeration) Domains() []string {
 	return e.domains
 }
@@ -174,6 +182,7 @@ func (e *Enumeration) generateAmassConfig() (*core.AmassConfig, error) {
 	return config, nil
 }
 
+// Start begins the DNS enumeration process for the Amass Enumeration object.
 func (e *Enumeration) Start() error {
 	config, err := e.generateAmassConfig()
 	if err != nil {
@@ -247,10 +256,12 @@ loop:
 	return nil
 }
 
+// Pause temporarily halts the DNS enumeration.
 func (e *Enumeration) Pause() {
 	e.pause <- struct{}{}
 }
 
+// Resume causes a previously paused enumeration to resume execution.
 func (e *Enumeration) Resume() {
 	e.resume <- struct{}{}
 }
@@ -265,6 +276,7 @@ func (e *Enumeration) sendOutput(out *core.AmassOutput) {
 	}
 }
 
+// ObtainAdditionalDomains discovers and appends DNS domain names related to the current set of names.
 func (e *Enumeration) ObtainAdditionalDomains() {
 	if e.Whois {
 		for _, domain := range e.domains {

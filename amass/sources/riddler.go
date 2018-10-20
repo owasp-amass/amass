@@ -10,10 +10,12 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
+// Riddler is data source object type that implements the DataSource interface.
 type Riddler struct {
 	BaseDataSource
 }
 
+// NewRiddler returns an initialized Riddler as a DataSource.
 func NewRiddler(srv core.AmassService) DataSource {
 	r := new(Riddler)
 
@@ -21,6 +23,7 @@ func NewRiddler(srv core.AmassService) DataSource {
 	return r
 }
 
+// Query returns the subdomain names discovered when querying this data source.
 func (r *Riddler) Query(domain, sub string) []string {
 	var unique []string
 

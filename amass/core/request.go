@@ -5,6 +5,7 @@ package core
 
 import "net"
 
+// DNSAnswer is the type used by Amass to represent a DNS record.
 type DNSAnswer struct {
 	Name string `json:"name"`
 	Type int    `json:"type"`
@@ -12,7 +13,7 @@ type DNSAnswer struct {
 	Data string `json:"data"`
 }
 
-// AmassRequest - Contains data obtained throughout AmassService processing
+// AmassRequest contains data obtained throughout AmassService processing
 type AmassRequest struct {
 	Name    string
 	Domain  string
@@ -21,13 +22,7 @@ type AmassRequest struct {
 	Source  string
 }
 
-type AmassAddressInfo struct {
-	Address     net.IP
-	Netblock    *net.IPNet
-	ASN         int
-	Description string
-}
-
+// AmassOutput contains all the output data for an enumerated DNS name.
 type AmassOutput struct {
 	Name      string
 	Domain    string
@@ -35,4 +30,12 @@ type AmassOutput struct {
 	Tag       string
 	Source    string
 	Type      int
+}
+
+// AmassAddressInfo stores all network addressing info for the AmassOutput type.
+type AmassAddressInfo struct {
+	Address     net.IP
+	Netblock    *net.IPNet
+	ASN         int
+	Description string
 }

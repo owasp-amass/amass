@@ -14,12 +14,16 @@ import (
 	"github.com/miekg/dns"
 )
 
+// AlterationService is the AmassService that handles all DNS name permutation within
+// the architecture. This is achieved by receiving all the RESOLVED events.
 type AlterationService struct {
 	core.BaseAmassService
 
 	bus evbus.Bus
 }
 
+// NewAlterationService requires the enumeration configuration and event bus as parameters.
+// The object returned is initialized, but has not yet been started.
 func NewAlterationService(config *core.AmassConfig, bus evbus.Bus) *AlterationService {
 	as := &AlterationService{bus: bus}
 
@@ -27,6 +31,7 @@ func NewAlterationService(config *core.AmassConfig, bus evbus.Bus) *AlterationSe
 	return as
 }
 
+// OnStart implements the AmassService interface
 func (as *AlterationService) OnStart() error {
 	as.BaseAmassService.OnStart()
 
@@ -37,14 +42,17 @@ func (as *AlterationService) OnStart() error {
 	return nil
 }
 
+// OnPause implements the AmassService interface
 func (as *AlterationService) OnPause() error {
 	return nil
 }
 
+// OnResume implements the AmassService interface
 func (as *AlterationService) OnResume() error {
 	return nil
 }
 
+// OnStop implements the AmassService interface
 func (as *AlterationService) OnStop() error {
 	as.BaseAmassService.OnStop()
 
@@ -74,7 +82,7 @@ func (as *AlterationService) processRequests() {
 	}
 }
 
-// executeAlterations - Runs all the DNS name alteration methods as goroutines
+// executeAlterations runs all the DNS name alteration methods as goroutines.
 func (as *AlterationService) executeAlterations(req *core.AmassRequest) {
 	if !as.Config().IsDomainInScope(req.Name) || !as.correctRecordTypes(req) {
 		return
@@ -97,7 +105,7 @@ func (as *AlterationService) correctRecordTypes(req *core.AmassRequest) bool {
 	return ok
 }
 
-// flipNumbersInName - Method to flip numbers in a subdomain name
+// flipNumbersInName flips numbers in a subdomain name.
 func (as *AlterationService) flipNumbersInName(req *core.AmassRequest) {
 	n := req.Name
 	parts := strings.SplitN(n, ".", 2)
@@ -136,7 +144,7 @@ func (as *AlterationService) secondNumberFlip(name, domain string, minIndex int)
 	as.sendAlteredName(name[:last]+name[last+1:], domain)
 }
 
-// appendNumbers - Method for appending a number to a subdomain name
+// appendNumbers appends a number to a subdomain name.
 func (as *AlterationService) appendNumbers(req *core.AmassRequest) {
 	n := req.Name
 	parts := strings.SplitN(n, ".", 2)
@@ -152,7 +160,7 @@ func (as *AlterationService) appendNumbers(req *core.AmassRequest) {
 	}
 }
 
-// Checks that the name is valid and sends along for DNS resolve
+// sendAlteredName checks that the provided name is valid and sends it along to the SubdomainService.
 func (as *AlterationService) sendAlteredName(name, domain string) {
 	re := as.Config().DomainRegex(domain)
 

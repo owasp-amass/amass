@@ -4,7 +4,7 @@
 package amass
 
 import (
-	"net"
+	"regexp"
 	"strings"
 	"time"
 
@@ -15,6 +15,8 @@ import (
 	"github.com/miekg/dns"
 )
 
+// DataManagerService is the AmassService that handles all data collected
+// within the architecture. This is achieved by watching all the RESOLVED events.
 type DataManagerService struct {
 	core.BaseAmassService
 
@@ -25,6 +27,8 @@ type DataManagerService struct {
 	domains              []string
 }
 
+// NewDataManagerService requires the enumeration configuration and event bus as parameters.
+// The object returned is initialized, but has not yet been started.
 func NewDataManagerService(config *core.AmassConfig, bus evbus.Bus) *DataManagerService {
 	dms := &DataManagerService{
 		bus:                  bus,
@@ -35,6 +39,7 @@ func NewDataManagerService(config *core.AmassConfig, bus evbus.Bus) *DataManager
 	return dms
 }
 
+// OnStart implements the AmassService interface
 func (dms *DataManagerService) OnStart() error {
 	dms.BaseAmassService.OnStart()
 
@@ -50,14 +55,17 @@ func (dms *DataManagerService) OnStart() error {
 	return nil
 }
 
+// OnPause implements the AmassService interface
 func (dms *DataManagerService) OnPause() error {
 	return nil
 }
 
+// OnResume implements the AmassService interface
 func (dms *DataManagerService) OnResume() error {
 	return nil
 }
 
+// OnStop implements the AmassService interface
 func (dms *DataManagerService) OnStop() error {
 	dms.BaseAmassService.OnStop()
 
@@ -87,7 +95,7 @@ func (dms *DataManagerService) processRequests() {
 				dms.SetActive()
 				go dms.manageData(req)
 			} else {
-				time.Sleep(100 * time.Millisecond)
+				time.Sleep(10 * time.Millisecond)
 			}
 		}
 	}
@@ -149,6 +157,8 @@ func (dms *DataManagerService) manageData(req *core.AmassRequest) {
 			dms.insertMX(req, i)
 		case dns.TypeTXT:
 			dms.insertTXT(req, i)
+		case dns.TypeSPF:
+			dms.insertSPF(req, i)
 		}
 	}
 	dms.SetActive()
@@ -198,7 +208,7 @@ func (dms *DataManagerService) insertDomain(domain string) {
 
 	for _, addr := range addrs {
 		if _, cidr, _, err := IPRequest(addr); err == nil {
-			dms.AttemptSweep(domain, addr, cidr)
+			dms.bus.Publish(core.DNSSWEEP, addr, cidr)
 		} else {
 			dms.Config().Log.Printf("%v", err)
 		}
@@ -247,7 +257,7 @@ func (dms *DataManagerService) insertA(req *core.AmassRequest, recidx int) {
 	}
 
 	if _, cidr, _, err := IPRequest(addr); err == nil {
-		dms.AttemptSweep(req.Domain, addr, cidr)
+		dms.bus.Publish(core.DNSSWEEP, addr, cidr)
 	} else {
 		dms.Config().Log.Printf("%v", err)
 	}
@@ -272,7 +282,7 @@ func (dms *DataManagerService) insertAAAA(req *core.AmassRequest, recidx int) {
 	}
 
 	if _, cidr, _, err := IPRequest(addr); err == nil {
-		dms.AttemptSweep(req.Domain, addr, cidr)
+		dms.bus.Publish(core.DNSSWEEP, addr, cidr)
 	} else {
 		dms.Config().Log.Printf("%v", err)
 	}
@@ -378,15 +388,40 @@ func (dms *DataManagerService) insertTXT(req *core.AmassRequest, recidx int) {
 	if !dms.Config().IsDomainInScope(req.Name) {
 		return
 	}
-	re := dms.Config().DomainRegex(req.Domain)
-	if re == nil {
+	dms.findNamesAndAddresses(req.Records[recidx].Data)
+}
+
+func (dms *DataManagerService) insertSPF(req *core.AmassRequest, recidx int) {
+	if !dms.Config().IsDomainInScope(req.Name) {
 		return
 	}
-	txt := req.Records[recidx].Data
-	for _, name := range re.FindAllString(txt, -1) {
+	dms.findNamesAndAddresses(req.Records[recidx].Data)
+}
+
+func (dms *DataManagerService) findNamesAndAddresses(data string) {
+	ipre := regexp.MustCompile(utils.IPv4RE)
+	for _, ip := range ipre.FindAllString(data, -1) {
+		if _, cidr, _, err := IPRequest(ip); err == nil {
+			dms.bus.Publish(core.DNSSWEEP, ip, cidr)
+		} else {
+			dms.Config().Log.Printf("%v", err)
+		}
+	}
+
+	subre := utils.AnySubdomainRegex()
+	for _, name := range subre.FindAllString(data, -1) {
+		if !dms.Config().IsDomainInScope(name) {
+			continue
+		}
+
+		domain := dms.Config().WhichDomain(name)
+		if domain == "" {
+			continue
+		}
+
 		dms.bus.Publish(core.NEWNAME, &core.AmassRequest{
 			Name:   name,
-			Domain: req.Domain,
+			Domain: domain,
 			Tag:    core.DNS,
 			Source: "Forward DNS",
 		})
@@ -405,14 +440,6 @@ func (dms *DataManagerService) insertInfrastructure(addr string) {
 			dms.Config().Log.Printf("%s failed to insert infrastructure data: %v", handler, err)
 		}
 	}
-}
-
-// AttemptSweep - Initiates a sweep of a subset of the addresses within the CIDR
-func (dms *DataManagerService) AttemptSweep(domain, addr string, cidr *net.IPNet) {
-	if !dms.Config().IsDomainInScope(domain) {
-		return
-	}
-	dms.bus.Publish(core.DNSSWEEP, domain, addr, cidr)
 }
 
 func removeLastDot(name string) string {

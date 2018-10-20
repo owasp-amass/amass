@@ -3,8 +3,10 @@
 
 package core
 
+import "github.com/OWASP/Amass/amass/utils"
+
+// Various types used throughout Amass
 const (
-	// Topics used in the EventBus
 	NEWNAME  = "amass:newname"
 	NEWSUB   = "amass:newsubdomain"
 	DNSQUERY = "amass:dnsquery"
@@ -12,7 +14,6 @@ const (
 	RESOLVED = "amass:resolved"
 	OUTPUT   = "amass:output"
 
-	// Tags used to mark the data source with the Subdomain struct
 	ALT     = "alt"
 	ARCHIVE = "archive"
 	API     = "api"
@@ -22,13 +23,27 @@ const (
 	DNS     = "dns"
 	SCRAPE  = "scrape"
 
-	// Node types used in the Maltego local transform
 	TypeNorm int = iota
 	TypeNS
 	TypeMX
 	TypeWeb
 )
 
+var (
+	// NumOfFileDescriptors is the maximum number of file descriptors or handles to be in use at once.
+	NumOfFileDescriptors int
+
+	// MaxConnections creates a limit for how many network connections will be in use at once.
+	MaxConnections *utils.Semaphore
+)
+
+func init() {
+	NumOfFileDescriptors = (GetFileLimit() / 10) * 9
+	MaxConnections = utils.NewSemaphore(NumOfFileDescriptors)
+}
+
+// TrustedTag returns true when the tag parameter is of a type that should be trusted even
+// facing DNS wildcards.
 func TrustedTag(tag string) bool {
 	if tag == ARCHIVE || tag == AXFR || tag == CERT || tag == DNS {
 		return true

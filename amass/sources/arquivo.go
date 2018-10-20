@@ -5,11 +5,13 @@ package sources
 
 import "github.com/OWASP/Amass/amass/core"
 
+// Arquivo is data source object type that implements the DataSource interface.
 type Arquivo struct {
 	BaseDataSource
 	baseURL string
 }
 
+// NewArquivo returns an initialized Arquivo as a DataSource.
 func NewArquivo(srv core.AmassService) DataSource {
 	a := &Arquivo{baseURL: "http://arquivo.pt/wayback"}
 
@@ -17,6 +19,7 @@ func NewArquivo(srv core.AmassService) DataSource {
 	return a
 }
 
+// Query returns the subdomain names discovered when querying this data source.
 func (a *Arquivo) Query(domain, sub string) []string {
 	if sub == "" {
 		return []string{}
@@ -29,6 +32,7 @@ func (a *Arquivo) Query(domain, sub string) []string {
 	return names
 }
 
+// Subdomains returns true when the data source can query for subdomain names.
 func (a *Arquivo) Subdomains() bool {
 	return true
 }

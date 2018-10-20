@@ -10,10 +10,12 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
+// ThreatCrowd is data source object type that implements the DataSource interface.
 type ThreatCrowd struct {
 	BaseDataSource
 }
 
+// NewThreatCrowd returns an initialized ThreatCrowd as a DataSource.
 func NewThreatCrowd(srv core.AmassService) DataSource {
 	t := new(ThreatCrowd)
 
@@ -21,6 +23,7 @@ func NewThreatCrowd(srv core.AmassService) DataSource {
 	return t
 }
 
+// Query returns the subdomain names discovered when querying this data source.
 func (t *ThreatCrowd) Query(domain, sub string) []string {
 	var unique []string
 

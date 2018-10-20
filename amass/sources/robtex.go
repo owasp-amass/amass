@@ -13,10 +13,12 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
+// Robtex is data source object type that implements the DataSource interface.
 type Robtex struct {
 	BaseDataSource
 }
 
+// NewRobtex returns an initialized Robtex as a DataSource.
 func NewRobtex(srv core.AmassService) DataSource {
 	r := new(Robtex)
 
@@ -30,6 +32,7 @@ type robtexJSON struct {
 	Type string `json:"rrtype"`
 }
 
+// Query returns the subdomain names discovered when querying this data source.
 func (r *Robtex) Query(domain, sub string) []string {
 	var ips []string
 	var unique []string

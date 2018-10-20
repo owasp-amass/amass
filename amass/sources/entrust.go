@@ -12,10 +12,12 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
+// Entrust is data source object type that implements the DataSource interface.
 type Entrust struct {
 	BaseDataSource
 }
 
+// NewEntrust returns an initialized Entrust as a DataSource.
 func NewEntrust(srv core.AmassService) DataSource {
 	e := new(Entrust)
 
@@ -23,6 +25,7 @@ func NewEntrust(srv core.AmassService) DataSource {
 	return e
 }
 
+// Query returns the subdomain names discovered when querying this data source.
 func (e *Entrust) Query(domain, sub string) []string {
 	var unique []string
 

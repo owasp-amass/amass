@@ -12,25 +12,27 @@ import (
 )
 
 var (
-	CommonCrawlIndexes = []string{
-		"CC-MAIN-2016-18",
-		"CC-MAIN-2016-26",
-		"CC-MAIN-2016-44",
-		"CC-MAIN-2017-04",
-		"CC-MAIN-2017-17",
-		"CC-MAIN-2017-26",
-		"CC-MAIN-2017-43",
-		"CC-MAIN-2018-05",
+	commonCrawlIndexes = []string{
+		"CC-MAIN-2018-39",
 		"CC-MAIN-2018-17",
-		"CC-MAIN-2018-26",
+		"CC-MAIN-2018-05",
+		"CC-MAIN-2017-43",
+		"CC-MAIN-2017-26",
+		"CC-MAIN-2017-17",
+		"CC-MAIN-2017-04",
+		"CC-MAIN-2016-44",
+		"CC-MAIN-2016-26",
+		"CC-MAIN-2016-18",
 	}
 )
 
+// CommonCrawl is data source object type that implements the DataSource interface.
 type CommonCrawl struct {
 	BaseDataSource
 	baseURL string
 }
 
+// NewCommonCrawl returns an initialized CommonCrawl as a DataSource.
 func NewCommonCrawl(srv core.AmassService) DataSource {
 	cc := &CommonCrawl{baseURL: "http://index.commoncrawl.org/"}
 
@@ -38,6 +40,7 @@ func NewCommonCrawl(srv core.AmassService) DataSource {
 	return cc
 }
 
+// Query returns the subdomain names discovered when querying this data source.
 func (cc *CommonCrawl) Query(domain, sub string) []string {
 	var unique []string
 
@@ -49,7 +52,7 @@ func (cc *CommonCrawl) Query(domain, sub string) []string {
 	t := time.NewTicker(time.Second)
 	defer t.Stop()
 loop:
-	for _, index := range CommonCrawlIndexes {
+	for _, index := range commonCrawlIndexes {
 		cc.Service.SetActive()
 
 		select {

@@ -16,10 +16,12 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
+// DNSDumpster is data source object type that implements the DataSource interface.
 type DNSDumpster struct {
 	BaseDataSource
 }
 
+// NewDNSDumpster returns an initialized DNSDumpster as a DataSource.
 func NewDNSDumpster(srv core.AmassService) DataSource {
 	d := new(DNSDumpster)
 
@@ -27,6 +29,7 @@ func NewDNSDumpster(srv core.AmassService) DataSource {
 	return d
 }
 
+// Query returns the subdomain names discovered when querying this data source.
 func (d *DNSDumpster) Query(domain, sub string) []string {
 	var unique []string
 
@@ -99,9 +102,9 @@ func (d *DNSDumpster) postForm(token, domain string) (string, error) {
 	}
 	req.AddCookie(cookie)
 
-	req.Header.Set("User-Agent", utils.USER_AGENT)
-	req.Header.Set("Accept", utils.ACCEPT)
-	req.Header.Set("Accept-Language", utils.ACCEPT_LANG)
+	req.Header.Set("User-Agent", utils.UserAgent)
+	req.Header.Set("Accept", utils.Accept)
+	req.Header.Set("Accept-Language", utils.AcceptLang)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Referer", "https://dnsdumpster.com")
 	req.Header.Set("X-CSRF-Token", token)

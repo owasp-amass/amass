@@ -33,7 +33,7 @@ var (
 )
 
 // DNSService is the AmassService that handles all DNS name resolution requests within
-// the architecture. This is achieved by receiving all the DNSQUERY and DNSSWEEP events
+// the architecture. This is achieved by receiving all the DNSQUERY and DNSSWEEP events.
 type DNSService struct {
 	core.BaseAmassService
 
@@ -46,7 +46,7 @@ type DNSService struct {
 }
 
 // NewDNSService requires the enumeration configuration and event bus as parameters.
-// The object returned is initialized, but has not yet been started
+// The object returned is initialized, but has not yet been started.
 func NewDNSService(config *core.AmassConfig, bus evbus.Bus) *DNSService {
 	ds := &DNSService{
 		bus:    bus,
@@ -121,7 +121,7 @@ func (ds *DNSService) processRequests() {
 				continue
 			}
 			if req := ds.NextRequest(); req != nil {
-				MaxConnections.Acquire(len(InitialQueryTypes))
+				core.MaxConnections.Acquire(len(InitialQueryTypes))
 				go ds.performRequest(req)
 			} else {
 				time.Sleep(100 * time.Millisecond)
@@ -139,7 +139,7 @@ func (ds *DNSService) duplicate(name string) bool {
 }
 
 func (ds *DNSService) performRequest(req *core.AmassRequest) {
-	defer MaxConnections.Release(len(InitialQueryTypes))
+	defer core.MaxConnections.Release(len(InitialQueryTypes))
 
 	var answers []core.DNSAnswer
 
@@ -189,8 +189,8 @@ func (ds *DNSService) newSubdomain(req *core.AmassRequest, times int) {
 func (ds *DNSService) basicQueries(subdomain, domain string) {
 	var answers []core.DNSAnswer
 
-	MaxConnections.Acquire(3)
-	defer MaxConnections.Release(3)
+	core.MaxConnections.Acquire(4)
+	defer core.MaxConnections.Release(4)
 	// Obtain the DNS answers for the NS records related to the domain
 	if ans, err := Resolve(subdomain, "NS"); err == nil {
 		for _, a := range ans {
@@ -219,19 +219,27 @@ func (ds *DNSService) basicQueries(subdomain, domain string) {
 	} else {
 		ds.Config().Log.Printf("DNS SOA record query error: %s: %v", subdomain, err)
 	}
+	// Obtain the DNS answers for the SPF records related to the domain
+	if ans, err := Resolve(subdomain, "SPF"); err == nil {
+		answers = append(answers, ans...)
+	} else {
+		ds.Config().Log.Printf("DNS SPF record query error: %s: %v", subdomain, err)
+	}
 
-	ds.bus.Publish(core.RESOLVED, &core.AmassRequest{
-		Name:    subdomain,
-		Domain:  domain,
-		Records: answers,
-		Tag:     core.DNS,
-		Source:  "Forward DNS",
-	})
+	if len(answers) > 0 {
+		ds.bus.Publish(core.RESOLVED, &core.AmassRequest{
+			Name:    subdomain,
+			Domain:  domain,
+			Records: answers,
+			Tag:     core.DNS,
+			Source:  "Forward DNS",
+		})
+	}
 }
 
 func (ds *DNSService) attemptZoneXFR(domain, sub, server string) {
-	MaxConnections.Acquire(1)
-	defer MaxConnections.Release(1)
+	core.MaxConnections.Acquire(1)
+	defer core.MaxConnections.Release(1)
 
 	if names, err := ZoneTransfer(domain, sub, server); err == nil {
 		for _, name := range names {
@@ -256,7 +264,7 @@ func (ds *DNSService) queryServiceNames(subdomain, domain string) {
 			continue
 		}
 
-		MaxConnections.Acquire(1)
+		core.MaxConnections.Acquire(1)
 		if a, err := Resolve(srvName, "SRV"); err == nil {
 			ds.bus.Publish(core.RESOLVED, &core.AmassRequest{
 				Name:    srvName,
@@ -266,11 +274,11 @@ func (ds *DNSService) queryServiceNames(subdomain, domain string) {
 				Source:  "Forward DNS",
 			})
 		}
-		MaxConnections.Release(1)
+		core.MaxConnections.Release(1)
 	}
 }
 
-func (ds *DNSService) reverseDNSSweep(domain, addr string, cidr *net.IPNet) {
+func (ds *DNSService) reverseDNSSweep(addr string, cidr *net.IPNet) {
 	var ips []net.IP
 
 	// Get a subset of nearby IP addresses
@@ -286,27 +294,39 @@ func (ds *DNSService) reverseDNSSweep(domain, addr string, cidr *net.IPNet) {
 			continue
 		}
 
-		MaxConnections.Acquire(1)
-		go ds.reverseDNSRoutine(domain, a)
+		core.MaxConnections.Acquire(1)
+		go ds.reverseDNSRoutine(a)
 	}
 }
 
-func (ds *DNSService) reverseDNSRoutine(domain, ip string) {
-	defer MaxConnections.Release(1)
+func (ds *DNSService) reverseDNSRoutine(ip string) {
+	defer core.MaxConnections.Release(1)
 
 	ds.SetActive()
-	if name, answer, err := Reverse(ip); err == nil {
-		ds.bus.Publish(core.RESOLVED, &core.AmassRequest{
-			Name:   name,
-			Domain: domain,
-			Records: []core.DNSAnswer{{
-				Name: name,
-				Type: 12,
-				TTL:  0,
-				Data: answer,
-			}},
-			Tag:    core.DNS,
-			Source: "Reverse DNS",
-		})
+	ptr, answer, err := Reverse(ip)
+	if err != nil {
+		return
 	}
+
+	if !ds.Config().IsDomainInScope(answer) {
+		return
+	}
+
+	domain := ds.Config().WhichDomain(answer)
+	if domain == "" {
+		return
+	}
+
+	ds.bus.Publish(core.RESOLVED, &core.AmassRequest{
+		Name:   ptr,
+		Domain: domain,
+		Records: []core.DNSAnswer{{
+			Name: ptr,
+			Type: 12,
+			TTL:  0,
+			Data: answer,
+		}},
+		Tag:    core.DNS,
+		Source: "Reverse DNS",
+	})
 }

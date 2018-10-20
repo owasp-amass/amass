@@ -12,12 +12,14 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
+// Google is data source object type that implements the DataSource interface.
 type Google struct {
 	BaseDataSource
 	quantity int
 	limit    int
 }
 
+// NewGoogle returns an initialized Google as a DataSource.
 func NewGoogle(srv core.AmassService) DataSource {
 	g := &Google{
 		quantity: 10,
@@ -28,6 +30,7 @@ func NewGoogle(srv core.AmassService) DataSource {
 	return g
 }
 
+// Query returns the subdomain names discovered when querying this data source.
 func (g *Google) Query(domain, sub string) []string {
 	var unique []string
 

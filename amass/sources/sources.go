@@ -18,7 +18,7 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
-// All data sources are handled through this interface in amass
+// DataSource is the interface that all data sources types in Amass implement.
 type DataSource interface {
 	// Returns subdomain names from the data source
 	Query(domain, sub string) []string
@@ -33,14 +33,16 @@ type DataSource interface {
 	Type() string
 }
 
-// The common functionalities and default behaviors for all data sources
-// Most of the base methods are not implemented by each data source
+// BaseDataSource provides common functionalities and default behaviors to all
+// Amass data sources. Most of the base methods are not implemented by each data
+// source.
 type BaseDataSource struct {
 	Service      core.AmassService
 	SourceType   string
 	Organization string
 }
 
+// NewBaseDataSource returns an initialized BaseDataSource object.
 func NewBaseDataSource(srv core.AmassService, stype, org string) *BaseDataSource {
 	return &BaseDataSource{
 		Service:      srv,
@@ -49,21 +51,23 @@ func NewBaseDataSource(srv core.AmassService, stype, org string) *BaseDataSource
 	}
 }
 
-// Place holder that get implemented by each data source
+// Query is a placeholder that gets implemented by each data source.
 func (bds *BaseDataSource) Query(srv core.AmassService, domain, sub string) []string {
 	return []string{}
 }
 
+// Type returns the data source type identified during initialization.
 func (bds *BaseDataSource) Type() string {
 	return bds.SourceType
 }
 
-// If a data source supports searching on subdomains,
-// this gets implemented by the data source and returns true
+// Subdomains returns true if a data source supports searching on subdomains.
+// This gets implemented by the data source and returns true if necessary.
 func (bds *BaseDataSource) Subdomains() bool {
 	return false
 }
 
+// String returns the string that represents the source providing the data.
 func (bds *BaseDataSource) String() string {
 	return bds.Organization
 }
@@ -176,11 +180,12 @@ func setFetcherConfig(f *fetchbot.Fetcher) {
 	}
 	f.CrawlDelay = 1 * time.Second
 	f.DisablePoliteness = true
-	f.UserAgent = utils.USER_AGENT
+	f.UserAgent = utils.UserAgent
 }
 
 //-------------------------------------------------------------------------------------------------
 
+// GetAllSources returns a slice of all data sources, initialized and ready.
 func GetAllSources(srv core.AmassService) []DataSource {
 	return []DataSource{
 		NewArchiveIt(srv),

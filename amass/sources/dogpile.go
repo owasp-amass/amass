@@ -12,12 +12,14 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
+// Dogpile is data source object type that implements the DataSource interface.
 type Dogpile struct {
 	BaseDataSource
 	quantity int
 	limit    int
 }
 
+// NewDogpile returns an initialized Dogpile as a DataSource.
 func NewDogpile(srv core.AmassService) DataSource {
 	d := &Dogpile{
 		quantity: 15, // Dogpile returns roughly 15 results per page
@@ -28,6 +30,7 @@ func NewDogpile(srv core.AmassService) DataSource {
 	return d
 }
 
+// Query returns the subdomain names discovered when querying this data source.
 func (d *Dogpile) Query(domain, sub string) []string {
 	var unique []string
 

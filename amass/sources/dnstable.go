@@ -10,10 +10,12 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
+// DNSTable is data source object type that implements the DataSource interface.
 type DNSTable struct {
 	BaseDataSource
 }
 
+// NewDNSTable returns an initialized DNSTable as a DataSource.
 func NewDNSTable(srv core.AmassService) DataSource {
 	h := new(DNSTable)
 
@@ -21,6 +23,7 @@ func NewDNSTable(srv core.AmassService) DataSource {
 	return h
 }
 
+// Query returns the subdomain names discovered when querying this data source.
 func (d *DNSTable) Query(domain, sub string) []string {
 	var unique []string
 

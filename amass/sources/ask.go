@@ -12,12 +12,14 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
+// Ask is data source object type that implements the DataSource interface.
 type Ask struct {
 	BaseDataSource
 	quantity int
 	limit    int
 }
 
+// NewAsk returns an initialized Ask as a DataSource.
 func NewAsk(srv core.AmassService) DataSource {
 	a := &Ask{
 		quantity: 10, // ask.com appears to be hardcoded at 10 results per page
@@ -28,6 +30,7 @@ func NewAsk(srv core.AmassService) DataSource {
 	return a
 }
 
+// Query returns the subdomain names discovered when querying this data source.
 func (a *Ask) Query(domain, sub string) []string {
 	var unique []string
 

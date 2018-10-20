@@ -9,6 +9,7 @@ import (
 	"time"
 )
 
+// AmassService is the object type for a service running within the Amass enumeration architecture.
 type AmassService interface {
 	// Start the service
 	Start() error
@@ -49,6 +50,8 @@ type AmassService interface {
 	Config() *AmassConfig
 }
 
+// BaseAmassService provides common mechanisms to all Amass services in the enumeration architecture.
+// It is used to compose a type that completely meets the AmassService interface.
 type BaseAmassService struct {
 	sync.Mutex
 	name    string
@@ -65,6 +68,7 @@ type BaseAmassService struct {
 	service AmassService
 }
 
+// NewBaseAmassService returns an initialized BaseAmassService object.
 func NewBaseAmassService(name string, config *AmassConfig, service AmassService) *BaseAmassService {
 	return &BaseAmassService{
 		name:    name,
@@ -78,41 +82,50 @@ func NewBaseAmassService(name string, config *AmassConfig, service AmassService)
 	}
 }
 
+// Start calls the OnStart method implemented for the AmassService.
 func (bas *BaseAmassService) Start() error {
-	if bas.IsStarted() {
+	if bas.isStarted() {
 		return errors.New(bas.name + " service has already been started")
-	} else if bas.IsStopped() {
+	} else if bas.isStopped() {
 		return errors.New(bas.name + " service has been stopped")
 	}
 	return bas.service.OnStart()
 }
 
+// OnStart is a placeholder that should be implemented by an AmassService
+// that has code to execute during service start.
 func (bas *BaseAmassService) OnStart() error {
 	return nil
 }
 
+// List implements the AmassService interface
 func (bas *BaseAmassService) List() string {
 	return "N/A"
 }
 
+// Pause implements the AmassService interface
 func (bas *BaseAmassService) Pause() error {
 	return bas.service.OnPause()
 }
 
+// OnPause implements the AmassService interface
 func (bas *BaseAmassService) OnPause() error {
 	return nil
 }
 
+// Resume implements the AmassService interface
 func (bas *BaseAmassService) Resume() error {
 	return bas.service.OnResume()
 }
 
+// OnResume implements the AmassService interface
 func (bas *BaseAmassService) OnResume() error {
 	return nil
 }
 
+// Stop alls the OnStop method implemented for the AmassService.
 func (bas *BaseAmassService) Stop() error {
-	if bas.IsStopped() {
+	if bas.isStopped() {
 		return errors.New(bas.name + " service has already been stopped")
 	}
 	err := bas.service.OnStop()
@@ -120,10 +133,13 @@ func (bas *BaseAmassService) Stop() error {
 	return err
 }
 
+// OnStop is a placeholder that should be implemented by an AmassService
+// that has code to execute during service stop.
 func (bas *BaseAmassService) OnStop() error {
 	return nil
 }
 
+// NumOfRequests returns the current length of the service request queue.
 func (bas *BaseAmassService) NumOfRequests() int {
 	bas.Lock()
 	defer bas.Unlock()
@@ -131,6 +147,7 @@ func (bas *BaseAmassService) NumOfRequests() int {
 	return len(bas.queue)
 }
 
+// NextRequest returns the first entry on the service queue or nil when the queue is empty.
 func (bas *BaseAmassService) NextRequest() *AmassRequest {
 	bas.Lock()
 	defer bas.Unlock()
@@ -153,6 +170,7 @@ func (bas *BaseAmassService) NextRequest() *AmassRequest {
 	return next
 }
 
+// SendRequest appends the entry provided by the parameter to the service queue.
 func (bas *BaseAmassService) SendRequest(req *AmassRequest) {
 	bas.Lock()
 	defer bas.Unlock()
@@ -160,6 +178,7 @@ func (bas *BaseAmassService) SendRequest(req *AmassRequest) {
 	bas.queue = append(bas.queue, req)
 }
 
+// IsActive returns true if SetActive has been called for the service within the last 5 seconds.
 func (bas *BaseAmassService) IsActive() bool {
 	bas.Lock()
 	defer bas.Unlock()
@@ -170,6 +189,7 @@ func (bas *BaseAmassService) IsActive() bool {
 	return true
 }
 
+// SetActive marks the service as being active at time.Now() for future checks performed by the IsActive method.
 func (bas *BaseAmassService) SetActive() {
 	bas.Lock()
 	defer bas.Unlock()
@@ -177,50 +197,41 @@ func (bas *BaseAmassService) SetActive() {
 	bas.active = time.Now()
 }
 
+// PauseChan returns the pause channel for the service.
 func (bas *BaseAmassService) PauseChan() <-chan struct{} {
 	return bas.pause
 }
 
+// ResumeChan returns the resume channel for the service.
 func (bas *BaseAmassService) ResumeChan() <-chan struct{} {
 	return bas.resume
 }
 
+// Quit return the quit channel for the service.
 func (bas *BaseAmassService) Quit() <-chan struct{} {
 	return bas.quit
 }
 
+// String returns the name of the service.
 func (bas *BaseAmassService) String() string {
 	return bas.name
 }
 
-func (bas *BaseAmassService) IsStarted() bool {
+// Config returns the Amass enumeration configuration that was provided to the AmassService.
+func (bas *BaseAmassService) Config() *AmassConfig {
+	return bas.config
+}
+
+func (bas *BaseAmassService) isStarted() bool {
 	bas.Lock()
 	defer bas.Unlock()
 
 	return bas.started
 }
 
-func (bas *BaseAmassService) SetStarted() {
-	bas.Lock()
-	defer bas.Unlock()
-
-	bas.started = true
-}
-
-func (bas *BaseAmassService) IsStopped() bool {
+func (bas *BaseAmassService) isStopped() bool {
 	bas.Lock()
 	defer bas.Unlock()
 
 	return bas.stopped
-}
-
-func (bas *BaseAmassService) SetStopped() {
-	bas.Lock()
-	defer bas.Unlock()
-
-	bas.stopped = true
-}
-
-func (bas *BaseAmassService) Config() *AmassConfig {
-	return bas.config
 }

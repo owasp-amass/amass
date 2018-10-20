@@ -12,12 +12,14 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
+// Bing is data source object type that implements the DataSource interface.
 type Bing struct {
 	BaseDataSource
 	quantity int
 	limit    int
 }
 
+// NewBing returns an initialized Bing as a DataSource.
 func NewBing(srv core.AmassService) DataSource {
 	b := &Bing{
 		quantity: 20,
@@ -28,6 +30,7 @@ func NewBing(srv core.AmassService) DataSource {
 	return b
 }
 
+// Query returns the subdomain names discovered when querying this data source.
 func (b *Bing) Query(domain, sub string) []string {
 	var unique []string
 

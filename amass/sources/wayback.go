@@ -5,11 +5,13 @@ package sources
 
 import "github.com/OWASP/Amass/amass/core"
 
+// WaybackMachine is data source object type that implements the DataSource interface.
 type WaybackMachine struct {
 	BaseDataSource
 	baseURL string
 }
 
+// NewWaybackMachine returns an initialized WaybackMachine as a DataSource.
 func NewWaybackMachine(srv core.AmassService) DataSource {
 	w := &WaybackMachine{baseURL: "http://web.archive.org/web"}
 
@@ -17,6 +19,7 @@ func NewWaybackMachine(srv core.AmassService) DataSource {
 	return w
 }
 
+// Query returns the subdomain names discovered when querying this data source.
 func (w *WaybackMachine) Query(domain, sub string) []string {
 	if sub == "" {
 		return []string{}
@@ -29,6 +32,7 @@ func (w *WaybackMachine) Query(domain, sub string) []string {
 	return names
 }
 
+// Subdomains returns true when the data source can query for subdomain names.
 func (w *WaybackMachine) Subdomains() bool {
 	return true
 }

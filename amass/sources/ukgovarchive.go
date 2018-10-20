@@ -5,11 +5,13 @@ package sources
 
 import "github.com/OWASP/Amass/amass/core"
 
+// UKGovArchive is data source object type that implements the DataSource interface.
 type UKGovArchive struct {
 	BaseDataSource
 	baseURL string
 }
 
+// NewUKGovArchive returns an initialized UKGovArchive as a DataSource.
 func NewUKGovArchive(srv core.AmassService) DataSource {
 	u := &UKGovArchive{baseURL: "http://webarchive.nationalarchives.gov.uk"}
 
@@ -17,6 +19,7 @@ func NewUKGovArchive(srv core.AmassService) DataSource {
 	return u
 }
 
+// Query returns the subdomain names discovered when querying this data source.
 func (u *UKGovArchive) Query(domain, sub string) []string {
 	if sub == "" {
 		return []string{}
@@ -29,6 +32,7 @@ func (u *UKGovArchive) Query(domain, sub string) []string {
 	return names
 }
 
+// Subdomains returns true when the data source can query for subdomain names.
 func (u *UKGovArchive) Subdomains() bool {
 	return true
 }

@@ -12,12 +12,14 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
+// Baidu is data source object type that implements the DataSource interface.
 type Baidu struct {
 	BaseDataSource
 	quantity int
 	limit    int
 }
 
+// NewBaidu returns an initialized Baidu as a DataSource.
 func NewBaidu(srv core.AmassService) DataSource {
 	b := &Baidu{
 		quantity: 20,
@@ -28,6 +30,7 @@ func NewBaidu(srv core.AmassService) DataSource {
 	return b
 }
 
+// Query returns the subdomain names discovered when querying this data source.
 func (b *Baidu) Query(domain, sub string) []string {
 	var unique []string
 

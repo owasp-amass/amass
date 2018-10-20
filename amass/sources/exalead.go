@@ -10,10 +10,12 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
+// Exalead is data source object type that implements the DataSource interface.
 type Exalead struct {
 	BaseDataSource
 }
 
+// NewExalead returns an initialized Exalead as a DataSource.
 func NewExalead(srv core.AmassService) DataSource {
 	e := new(Exalead)
 
@@ -21,6 +23,7 @@ func NewExalead(srv core.AmassService) DataSource {
 	return e
 }
 
+// Query returns the subdomain names discovered when querying this data source.
 func (e *Exalead) Query(domain, sub string) []string {
 	var unique []string
 

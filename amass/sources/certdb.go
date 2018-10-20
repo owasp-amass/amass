@@ -11,10 +11,12 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
+// CertDB is data source object type that implements the DataSource interface.
 type CertDB struct {
 	BaseDataSource
 }
 
+// NewCertDB returns an initialized CertDB as a DataSource.
 func NewCertDB(srv core.AmassService) DataSource {
 	c := new(CertDB)
 
@@ -22,6 +24,7 @@ func NewCertDB(srv core.AmassService) DataSource {
 	return c
 }
 
+// Query returns the subdomain names discovered when querying this data source.
 func (c *CertDB) Query(domain, sub string) []string {
 	var unique []string
 

@@ -5,11 +5,13 @@ package sources
 
 import "github.com/OWASP/Amass/amass/core"
 
+// LoCArchive is data source object type that implements the DataSource interface.
 type LoCArchive struct {
 	BaseDataSource
 	baseURL string
 }
 
+// NewLoCArchive returns an initialized LoCArchive as a DataSource.
 func NewLoCArchive(srv core.AmassService) DataSource {
 	la := &LoCArchive{baseURL: "http://webarchive.loc.gov/all"}
 
@@ -17,6 +19,7 @@ func NewLoCArchive(srv core.AmassService) DataSource {
 	return la
 }
 
+// Query returns the subdomain names discovered when querying this data source.
 func (la *LoCArchive) Query(domain, sub string) []string {
 	if sub == "" {
 		return []string{}
@@ -29,6 +32,7 @@ func (la *LoCArchive) Query(domain, sub string) []string {
 	return names
 }
 
+// Subdomains returns true when the data source can query for subdomain names.
 func (la *LoCArchive) Subdomains() bool {
 	return true
 }

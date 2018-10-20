@@ -12,12 +12,14 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
+// Yahoo is data source object type that implements the DataSource interface.
 type Yahoo struct {
 	BaseDataSource
 	quantity int
 	limit    int
 }
 
+// NewYahoo returns an initialized Yahoo as a DataSource.
 func NewYahoo(srv core.AmassService) DataSource {
 	y := &Yahoo{
 		quantity: 10,
@@ -28,6 +30,7 @@ func NewYahoo(srv core.AmassService) DataSource {
 	return y
 }
 
+// Query returns the subdomain names discovered when querying this data source.
 func (y *Yahoo) Query(domain, sub string) []string {
 	var unique []string
 

@@ -17,10 +17,6 @@ import (
 )
 
 var (
-	// MaxConnections creates a limit for how many network connections will be in use at once.
-	// TODO: move this to amass/core
-	MaxConnections *utils.Semaphore
-
 	// Public & free DNS servers
 	publicResolvers = []string{
 		"1.1.1.1:53",     // Cloudflare
@@ -33,14 +29,10 @@ var (
 		"77.88.8.1:53",   // Yandex.DNS Secondary
 	}
 
-	resolvers            []*resolver
-	numOfFileDescriptors int
+	resolvers []*resolver
 )
 
 func init() {
-	numOfFileDescriptors = (GetFileLimit() / 10) * 9
-	MaxConnections = utils.NewSemaphore(numOfFileDescriptors)
-
 	for _, addr := range publicResolvers {
 		resolvers = append(resolvers, newResolver(addr))
 	}
@@ -58,9 +50,9 @@ type resolver struct {
 func newResolver(addr string) *resolver {
 	r := &resolver{
 		Address:        addr,
-		MaxResolutions: utils.NewSemaphore(numOfFileDescriptors),
-		ExchangeTimes:  make(chan time.Time, int(float32(numOfFileDescriptors)*1.5)),
-		ErrorTimes:     make(chan time.Time, int(float32(numOfFileDescriptors)*1.5)),
+		MaxResolutions: utils.NewSemaphore(core.NumOfFileDescriptors),
+		ExchangeTimes:  make(chan time.Time, int(float32(core.NumOfFileDescriptors)*1.5)),
+		ErrorTimes:     make(chan time.Time, int(float32(core.NumOfFileDescriptors)*1.5)),
 		WindowDuration: time.Second,
 		done:           make(chan struct{}),
 	}
@@ -138,8 +130,8 @@ func (r *resolver) monitorPerformance() {
 	last := time.Now()
 	// Start off with a reasonable load to the
 	// network, and adjust based on performance
-	if numOfFileDescriptors > 256 {
-		count = numOfFileDescriptors - 256
+	if core.NumOfFileDescriptors > 256 {
+		count = core.NumOfFileDescriptors - 256
 		r.MaxResolutions.Acquire(count)
 	}
 
@@ -163,9 +155,9 @@ loop:
 
 			failures := numInWindow(last, end, errWin)
 			// Check if we must reduce the number of simultaneous connections
-			potential := numOfFileDescriptors - count
+			potential := core.NumOfFileDescriptors - count
 			delta := 16
-			alt := (numOfFileDescriptors - count) / 10
+			alt := (core.NumOfFileDescriptors - count) / 10
 			if alt > delta {
 				delta = alt
 			}
