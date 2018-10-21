@@ -74,16 +74,6 @@ func (ds *DNSService) OnStart() error {
 	return nil
 }
 
-// OnPause implements the AmassService interface
-func (ds *DNSService) OnPause() error {
-	return nil
-}
-
-// OnResume implements the AmassService interface
-func (ds *DNSService) OnResume() error {
-	return nil
-}
-
 // OnStop implements the AmassService interface
 func (ds *DNSService) OnStop() error {
 	ds.BaseAmassService.OnStop()

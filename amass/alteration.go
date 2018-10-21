@@ -42,16 +42,6 @@ func (as *AlterationService) OnStart() error {
 	return nil
 }
 
-// OnPause implements the AmassService interface
-func (as *AlterationService) OnPause() error {
-	return nil
-}
-
-// OnResume implements the AmassService interface
-func (as *AlterationService) OnResume() error {
-	return nil
-}
-
 // OnStop implements the AmassService interface
 func (as *AlterationService) OnStop() error {
 	as.BaseAmassService.OnStop()

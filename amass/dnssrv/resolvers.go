@@ -77,7 +77,7 @@ func (r *resolver) resolve(name string, qtype uint16) ([]core.DNSAnswer, bool, e
 	return r.exchangeConn(conn, name, qtype)
 }
 
-// ExchangeConn - Encapsulates miekg/dns usage
+// exchangeConn encapsulates miekg/dns usage
 func (r *resolver) exchangeConn(conn net.Conn, name string, qtype uint16) ([]core.DNSAnswer, bool, error) {
 	var err error
 	var rd *dns.Msg
@@ -152,16 +152,15 @@ loop:
 			if total < 1000 {
 				continue
 			}
-
-			failures := numInWindow(last, end, errWin)
 			// Check if we must reduce the number of simultaneous connections
+			failures := numInWindow(last, end, errWin)
 			potential := core.NumOfFileDescriptors - count
 			delta := 16
 			alt := (core.NumOfFileDescriptors - count) / 10
 			if alt > delta {
 				delta = alt
 			}
-			// Reduce if 10 percent or more of the connections timeout
+			// Reduce if the percentage of timed out connections is too high
 			if result := analyzeConnResults(total, failures); result == 1 {
 				count -= delta
 				r.MaxResolutions.Release(delta)
@@ -188,9 +187,9 @@ func analyzeConnResults(total, failures int) int {
 	}
 
 	percent := 100 / frac
-	if percent >= 5 {
+	if percent >= 2 {
 		return -1
-	} else if percent < 5 {
+	} else if percent < 2 {
 		return 1
 	}
 	return 0

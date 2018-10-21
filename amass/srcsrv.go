@@ -12,6 +12,7 @@ import (
 	"github.com/OWASP/Amass/amass/sources"
 	"github.com/OWASP/Amass/amass/utils"
 	evbus "github.com/asaskevich/EventBus"
+	"github.com/irfansharif/cfilter"
 )
 
 type entry struct {
@@ -30,7 +31,7 @@ type SourcesService struct {
 	directs       []sources.DataSource
 	throttles     []sources.DataSource
 	throttleQueue []*entry
-	filter        map[string]struct{}
+	filter        *cfilter.CFilter
 	domainFilter  map[string]struct{}
 }
 
@@ -40,7 +41,7 @@ func NewSourcesService(config *core.AmassConfig, bus evbus.Bus) *SourcesService 
 	ss := &SourcesService{
 		bus:          bus,
 		responses:    make(chan *core.AmassRequest, 50),
-		filter:       make(map[string]struct{}),
+		filter:       cfilter.New(),
 		domainFilter: make(map[string]struct{}),
 	}
 	ss.BaseAmassService = *core.NewBaseAmassService("Sources Service", config, ss)
@@ -64,16 +65,6 @@ func (ss *SourcesService) OnStart() error {
 	go ss.processOutput()
 	go ss.processThrottleQueue()
 	go ss.queryAllSources()
-	return nil
-}
-
-// OnPause implements the AmassService interface
-func (ss *SourcesService) OnPause() error {
-	return nil
-}
-
-// OnResume implements the AmassService interface
-func (ss *SourcesService) OnResume() error {
 	return nil
 }
 
@@ -160,19 +151,15 @@ func (ss *SourcesService) handleOutput(req *core.AmassRequest) {
 		req.Name = req.Name[1:]
 	}
 
-	ss.SetActive()
 	ss.bus.Publish(core.NEWNAME, req)
 	ss.SendRequest(req)
 }
 
-func (ss *SourcesService) duplicate(sub string) bool {
-	ss.Lock()
-	defer ss.Unlock()
-
-	if _, found := ss.filter[sub]; found {
+func (ss *SourcesService) duplicate(name string) bool {
+	if ss.filter.Lookup([]byte(name)) {
 		return true
 	}
-	ss.filter[sub] = struct{}{}
+	ss.filter.Insert([]byte(name))
 	return false
 }
 
