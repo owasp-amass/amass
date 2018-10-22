@@ -4,6 +4,8 @@
 package amass
 
 import (
+	"time"
+
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/dnssrv"
 	evbus "github.com/asaskevich/EventBus"
@@ -78,5 +80,7 @@ func (bfs *BruteForceService) performBruteForcing(subdomain, root string) {
 			Tag:    core.BRUTE,
 			Source: "Brute Force",
 		})
+		// Going too fast with large word lists has proven to cause memory issues
+		time.Sleep(time.Millisecond)
 	}
 }
