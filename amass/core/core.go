@@ -12,6 +12,7 @@ const (
 	DNSQUERY = "amass:dnsquery"
 	DNSSWEEP = "amass.dnssweep"
 	RESOLVED = "amass:resolved"
+	CHECKED  = "amass:checked"
 	OUTPUT   = "amass:output"
 
 	ALT     = "alt"
@@ -22,11 +23,6 @@ const (
 	CERT    = "cert"
 	DNS     = "dns"
 	SCRAPE  = "scrape"
-
-	TypeNorm int = iota
-	TypeNS
-	TypeMX
-	TypeWeb
 )
 
 var (

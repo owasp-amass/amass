@@ -63,11 +63,28 @@ type AmassConfig struct {
 	// The writer used to save the data operations performed
 	DataOptsWriter io.Writer
 
+	graph *Graph
 	// The root domain names that the enumeration will target
 	domains []string
 
 	// The regular expressions for the root domains added to the enumeration
 	regexps map[string]*regexp.Regexp
+}
+
+// Graph returns the Amass graph that contains all enumeration findings.
+func (c *AmassConfig) Graph() *Graph {
+	c.Lock()
+	defer c.Unlock()
+
+	return c.graph
+}
+
+// SetGraph assigns a Graph to the current configuration.
+func (c *AmassConfig) SetGraph(g *Graph) {
+	c.Lock()
+	defer c.Unlock()
+
+	c.graph = g
 }
 
 // DomainRegex returns the Regexp object for the domain name identified by the parameter.

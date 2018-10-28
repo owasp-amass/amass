@@ -37,7 +37,7 @@ func NewSubdomainService(config *core.AmassConfig, bus evbus.Bus) *SubdomainServ
 		bus:         bus,
 		filter:      cfilter.New(),
 		subdomains:  make(map[string]int),
-		maxRoutines: utils.NewSemaphore(100),
+		maxRoutines: utils.NewSemaphore(500),
 	}
 
 	ss.BaseAmassService = *core.NewBaseAmassService("Subdomain Service", config, ss)
@@ -49,6 +49,7 @@ func (ss *SubdomainService) OnStart() error {
 	ss.BaseAmassService.OnStart()
 
 	ss.bus.SubscribeAsync(core.NEWNAME, ss.SendRequest, false)
+	ss.bus.SubscribeAsync(core.RESOLVED, ss.performCheck, false)
 	go ss.processRequests()
 	return nil
 }
@@ -68,6 +69,7 @@ func (ss *SubdomainService) OnStop() error {
 	ss.BaseAmassService.OnStop()
 
 	ss.bus.Unsubscribe(core.NEWNAME, ss.SendRequest)
+	ss.bus.Unsubscribe(core.CHECKED, ss.performCheck)
 	return nil
 }
 
@@ -118,7 +120,6 @@ func (ss *SubdomainService) performRequest(req *core.AmassRequest) {
 		return
 	}
 
-	ss.SetActive()
 	if ss.Config().Passive {
 		ss.bus.Publish(core.OUTPUT, &core.AmassOutput{
 			Name:   req.Name,
@@ -128,13 +129,19 @@ func (ss *SubdomainService) performRequest(req *core.AmassRequest) {
 		})
 		return
 	}
+	ss.bus.Publish(core.DNSQUERY, req)
+}
+
+func (ss *SubdomainService) performCheck(req *core.AmassRequest) {
+	ss.SetActive()
+
 	if !ss.duplicate(req.Name) && ss.Config().IsDomainInScope(req.Name) {
 		ss.checkForNewSubdomain(req)
 	}
 	if !core.TrustedTag(req.Tag) && dnssrv.HasWildcard(req.Domain, req.Name) {
 		return
 	}
-	ss.bus.Publish(core.DNSQUERY, req)
+	ss.bus.Publish(core.CHECKED, req)
 }
 
 func (ss *SubdomainService) timesForSubdomain(sub string) int {
@@ -166,8 +173,12 @@ func (ss *SubdomainService) checkForNewSubdomain(req *core.AmassRequest) {
 	if labels[1] == "_tcp" || labels[1] == "_udp" || labels[1] == "_tls" {
 		return
 	}
-
+	// CNAMEs are not a proper subdomain
 	sub := strings.Join(labels[1:], ".")
+	if ss.Config().Graph().CNAMENode(sub) != nil {
+		return
+	}
+
 	ss.bus.Publish(core.NEWSUB, &core.AmassRequest{
 		Name:   sub,
 		Domain: req.Domain,

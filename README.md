@@ -16,7 +16,7 @@ The OWASP Amass tool suite obtains subdomain names by scraping data sources, rec
 
 ----
 
-![Network graph](https://github.com/OWASP/Amass/blob/master/images/network_06092018.png "Internet Satellite Imagery")
+![Network graph](https://github.com/OWASP/Amass/blob/master/images/network_06092018.png "Amass Network Mapping")
 
 ## How to Install
 
@@ -243,7 +243,9 @@ $ amass.viz -i owasp.json --maltego owasp.csv
 
 ## Community
 
-[![Follow on Twitter](https://img.shields.io/twitter/follow/jeff_foley.svg?logo=twitter)](https://twitter.com/jeff_foley)
+[![Chat on Discord](https://img.shields.io/discord/433729817918308352.svg?logo=discord)](https://discord.gg/rtN8GMd) 
+[![Follow on Twitter](https://img.shields.io/twitter/follow/jeff_foley.svg?logo=twitter)](https://twitter.com/jeff_foley) 
+[![Follow on Twitter](https://img.shields.io/twitter/follow/emtunc.svg?logo=twitter)](https://twitter.com/emtunc) 
 
  - [Discord Server](https://discord.gg/rtN8GMd) - Discussing OSINT, network recon and developing security tools using Go
 

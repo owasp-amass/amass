@@ -36,7 +36,7 @@ func (as *AlterationService) OnStart() error {
 	as.BaseAmassService.OnStart()
 
 	if as.Config().Alterations {
-		as.bus.SubscribeAsync(core.RESOLVED, as.SendRequest, false)
+		as.bus.SubscribeAsync(core.CHECKED, as.SendRequest, false)
 		go as.processRequests()
 	}
 	return nil
@@ -47,7 +47,7 @@ func (as *AlterationService) OnStop() error {
 	as.BaseAmassService.OnStop()
 
 	if as.Config().Alterations {
-		as.bus.Unsubscribe(core.RESOLVED, as.SendRequest)
+		as.bus.Unsubscribe(core.CHECKED, as.SendRequest)
 	}
 	return nil
 }

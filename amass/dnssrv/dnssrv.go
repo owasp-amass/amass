@@ -20,9 +20,9 @@ var (
 	// initially requested for a discovered name
 	InitialQueryTypes = []string{
 		"TXT",
+		"CNAME",
 		"A",
 		"AAAA",
-		"CNAME",
 	}
 
 	badSubnets = []string{
@@ -138,6 +138,10 @@ func (ds *DNSService) performRequest(req *core.AmassRequest) {
 		if a, err := Resolve(req.Name, t); err == nil {
 			if ds.goodDNSRecords(a) {
 				answers = append(answers, a...)
+			}
+			// Do not continue if a CNAME was discovered
+			if t == "CNAME" {
+				break
 			}
 		} else {
 			ds.Config().Log.Print(err)
@@ -295,10 +299,6 @@ func (ds *DNSService) reverseDNSRoutine(ip string) {
 	ds.SetActive()
 	ptr, answer, err := Reverse(ip)
 	if err != nil {
-		return
-	}
-
-	if !ds.Config().IsDomainInScope(answer) {
 		return
 	}
 

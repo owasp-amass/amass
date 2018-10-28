@@ -175,6 +175,7 @@ func (e *Enumeration) generateAmassConfig() (*core.AmassConfig, error) {
 		Blacklist:       e.Blacklist,
 		DataOptsWriter:  e.DataOptsWriter,
 	}
+	config.SetGraph(core.NewGraph())
 
 	for _, domain := range e.Domains() {
 		config.AddDomain(domain)

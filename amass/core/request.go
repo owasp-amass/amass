@@ -29,7 +29,6 @@ type AmassOutput struct {
 	Addresses []AmassAddressInfo
 	Tag       string
 	Source    string
-	Type      int
 }
 
 // AmassAddressInfo stores all network addressing info for the AmassOutput type.

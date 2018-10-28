@@ -21,7 +21,6 @@ type DataManagerService struct {
 	core.BaseAmassService
 
 	bus                  evbus.Bus
-	Graph                *handlers.Graph
 	Handlers             []handlers.DataHandler
 	maxDataInputRoutines *utils.Semaphore
 	domains              []string
@@ -43,10 +42,9 @@ func NewDataManagerService(config *core.AmassConfig, bus evbus.Bus) *DataManager
 func (dms *DataManagerService) OnStart() error {
 	dms.BaseAmassService.OnStart()
 
-	dms.bus.SubscribeAsync(core.RESOLVED, dms.SendRequest, false)
+	dms.bus.SubscribeAsync(core.CHECKED, dms.SendRequest, false)
 
-	dms.Graph = handlers.NewGraph()
-	dms.Handlers = append(dms.Handlers, dms.Graph)
+	dms.Handlers = append(dms.Handlers, dms.Config().Graph())
 	if dms.Config().DataOptsWriter != nil {
 		dms.Handlers = append(dms.Handlers, handlers.NewDataOptsHandler(dms.Config().DataOptsWriter))
 	}
@@ -69,7 +67,7 @@ func (dms *DataManagerService) OnResume() error {
 func (dms *DataManagerService) OnStop() error {
 	dms.BaseAmassService.OnStop()
 
-	dms.bus.Unsubscribe(core.RESOLVED, dms.SendRequest)
+	dms.bus.Unsubscribe(core.CHECKED, dms.SendRequest)
 	return nil
 }
 
@@ -108,7 +106,7 @@ func (dms *DataManagerService) processOutput() {
 	for {
 		select {
 		case <-t.C:
-			if out := dms.Graph.GetNewOutput(); len(out) > 0 {
+			if out := dms.Config().Graph().GetNewOutput(); len(out) > 0 {
 				dms.SetActive()
 				go dms.sendOutput(out)
 			}
@@ -183,6 +181,7 @@ func (dms *DataManagerService) checkDomain(domain string) bool {
 }
 
 func (dms *DataManagerService) insertDomain(domain string) {
+	domain = strings.ToLower(domain)
 	if domain == "" || dms.checkDomain(domain) {
 		return
 	}

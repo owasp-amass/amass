@@ -32,7 +32,7 @@ func WriteMaltegoData(output io.Writer, nodes []Node, edges []Edge) {
 	// Start the graph tranersal from the autonomous systems
 	for idx, node := range nodes {
 		if node.Type == "AS" {
-			writeFromTree(output, idx, nodes, edges, filter)
+			traverseTree(output, idx, nodes, edges, filter)
 		}
 	}
 }
@@ -54,7 +54,7 @@ func typeToIndex(t string) int {
 	case "Subdomain":
 		idx = 1
 	case "PTR":
-		idx = 1
+		idx = 8
 	case "CNAME":
 		idx = 8
 	case "IPAddress":
@@ -89,7 +89,7 @@ func writeMaltegoTableLine(out io.Writer, data1, type1, data2, type2 string) {
 	fmt.Fprintln(out, strings.Join(row, ","))
 }
 
-func writeFromTree(out io.Writer, id int, nodes []Node, edges []Edge, filter map[int]struct{}) {
+func traverseTree(out io.Writer, id int, nodes []Node, edges []Edge, filter map[int]struct{}) {
 	d1 := nodes[id].Label
 	t1 := nodes[id].Type
 
@@ -110,26 +110,28 @@ func writeFromTree(out io.Writer, id int, nodes []Node, edges []Edge, filter map
 	}
 
 	for _, edge := range edges {
+		subFrom := from
 		n, found := selectNextEdge(id, from, edge)
-		if !found && t1 == "Subdomain" {
-			n, found = selectNextEdge(id, true, edge)
-			if nodes[n].Type != "NS" && nodes[n].Type != "MX" {
-				continue
-			}
+		if !found && (t1 == "Subdomain" || t1 == "Domain") {
+			subFrom = true
+			n, found = selectNextEdge(id, subFrom, edge)
 		}
 		if !found {
 			continue
 		}
 		d2 := nodes[n].Label
 		t2 := nodes[n].Type
-		if t2 == "PTR" {
-			t1 = "CNAME"
+		// Need to properly handle CNAME records
+		if strings.Contains(edge.Title, "CNAME") {
+			if subFrom {
+				writeMaltegoTableLine(out, d1, "CNAME", d2, t2)
+			} else {
+				writeMaltegoTableLine(out, d1, t1, d2, "CNAME")
+			}
+		} else {
+			writeMaltegoTableLine(out, d1, t1, d2, t2)
 		}
-		if t1 == "Subdomain" && t2 == "Subdomain" {
-			t1 = "CNAME"
-		}
-		writeMaltegoTableLine(out, d1, t1, d2, t2)
-		writeFromTree(out, n, nodes, edges, filter)
+		traverseTree(out, n, nodes, edges, filter)
 	}
 }
 

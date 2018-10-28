@@ -1,22 +1,15 @@
 // Copyright 2017 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
-package handlers
+package core
 
 import (
 	"fmt"
 	"net"
-	"regexp"
 	"strconv"
-	"strings"
 	"sync"
 
-	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils/viz"
-)
-
-var (
-	WebRegex *regexp.Regexp = regexp.MustCompile("web|www")
 )
 
 type Edge struct {
@@ -73,7 +66,7 @@ func NewGraph() *Graph {
 }
 
 func (g *Graph) String() string {
-	return "Graph Handler"
+	return "Amass Graph"
 }
 
 func (g *Graph) NewNode(label string) *Node {
@@ -109,6 +102,21 @@ func (g *Graph) SubdomainNode(sub string) *Node {
 		return nil
 	}
 	return g.Subdomains[sub]
+}
+
+func (g *Graph) CNAMENode(sub string) *Node {
+	n := g.SubdomainNode(sub)
+	if n == nil {
+		return nil
+	}
+
+	for _, edgeIdx := range n.edges {
+		edge := g.Edges[edgeIdx]
+		if edge.From == n.idx && edge.Label == "CNAME_TO" {
+			return n
+		}
+	}
+	return nil
 }
 
 func (g *Graph) AddressNode(addr string) *Node {
@@ -517,10 +525,10 @@ func (g *Graph) InsertInfrastructure(addr string, asn int, cidr *net.IPNet, desc
 	return nil
 }
 
-func (g *Graph) GetNewOutput() []*core.AmassOutput {
+func (g *Graph) GetNewOutput() []*AmassOutput {
 	var domains []string
 	var dNodes []*Node
-	var results []*core.AmassOutput
+	var results []*AmassOutput
 
 	g.Lock()
 	for d, n := range g.Domains {
@@ -535,14 +543,13 @@ func (g *Graph) GetNewOutput() []*core.AmassOutput {
 		for _, o := range output {
 			o.Domain = domain
 		}
-
 		results = append(results, output...)
 	}
 	return results
 }
 
-func (g *Graph) findSubdomainOutput(domain *Node) []*core.AmassOutput {
-	var output []*core.AmassOutput
+func (g *Graph) findSubdomainOutput(domain *Node) []*AmassOutput {
+	var output []*AmassOutput
 
 	if o := g.buildSubdomainOutput(domain); o != nil {
 		output = append(output, o)
@@ -582,7 +589,7 @@ func (g *Graph) findSubdomainOutput(domain *Node) []*core.AmassOutput {
 	return output
 }
 
-func (g *Graph) buildSubdomainOutput(sub *Node) *core.AmassOutput {
+func (g *Graph) buildSubdomainOutput(sub *Node) *AmassOutput {
 	sub.Lock()
 	_, ok := sub.Properties["sent"]
 	sub.Unlock()
@@ -590,32 +597,14 @@ func (g *Graph) buildSubdomainOutput(sub *Node) *core.AmassOutput {
 		return nil
 	}
 
-	output := &core.AmassOutput{
+	output := &AmassOutput{
 		Name:   sub.Properties["name"],
 		Tag:    sub.Properties["tag"],
 		Source: sub.Properties["source"],
 	}
 
-	t := core.TypeNorm
-	if sub.Labels[0] != "NS" && sub.Labels[0] != "MX" {
-		labels := strings.Split(output.Name, ".")
-
-		if WebRegex.FindString(labels[0]) != "" {
-			t = core.TypeWeb
-		}
-	} else {
-		if sub.Labels[0] == "NS" {
-			t = core.TypeNS
-		} else if sub.Labels[0] == "MX" {
-			t = core.TypeMX
-		}
-	}
-	output.Type = t
-
-	cname := g.traverseCNAME(sub)
-
 	var addrs []*Node
-
+	cname := g.traverseCNAME(sub)
 	for _, idx := range cname.Edges() {
 		edge := g.Edges[idx]
 		if edge.Label == "A_TO" || edge.Label == "AAAA_TO" {
@@ -636,7 +625,6 @@ func (g *Graph) buildSubdomainOutput(sub *Node) *core.AmassOutput {
 	if len(output.Addresses) == 0 {
 		return nil
 	}
-
 	sub.Lock()
 	sub.Properties["sent"] = "yes"
 	sub.Unlock()
@@ -663,8 +651,8 @@ func (g *Graph) traverseCNAME(sub *Node) *Node {
 	return cname
 }
 
-func (g *Graph) obtainInfrastructureData(addr *Node) *core.AmassAddressInfo {
-	infr := &core.AmassAddressInfo{Address: net.ParseIP(addr.Properties["addr"])}
+func (g *Graph) obtainInfrastructureData(addr *Node) *AmassAddressInfo {
+	infr := &AmassAddressInfo{Address: net.ParseIP(addr.Properties["addr"])}
 
 	var nb *Node
 

@@ -60,7 +60,7 @@ func NewSourcesService(config *core.AmassConfig, bus evbus.Bus) *SourcesService 
 func (ss *SourcesService) OnStart() error {
 	ss.BaseAmassService.OnStart()
 
-	ss.bus.SubscribeAsync(core.RESOLVED, ss.SendRequest, false)
+	ss.bus.SubscribeAsync(core.CHECKED, ss.SendRequest, false)
 	go ss.processRequests()
 	go ss.processOutput()
 	go ss.processThrottleQueue()
@@ -72,7 +72,7 @@ func (ss *SourcesService) OnStart() error {
 func (ss *SourcesService) OnStop() error {
 	ss.BaseAmassService.OnStop()
 
-	ss.bus.Unsubscribe(core.RESOLVED, ss.SendRequest)
+	ss.bus.Unsubscribe(core.CHECKED, ss.SendRequest)
 	return nil
 }
 
