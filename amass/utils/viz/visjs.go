@@ -9,7 +9,7 @@ import (
 	"strconv"
 )
 
-const HTMLStart string = `<!doctype html>
+const htmlStart string = `<!doctype html>
 <html>
 <head>
   <meta http-equiv="content-type" content="text/html; charset=UTF8">
@@ -30,7 +30,7 @@ const HTMLStart string = `<!doctype html>
 
 <body>
 
-<h2>DNS and Network Infrastructure Enumeration</h2>
+<h2>Amass Network Mapping</h2>
 
 <div id="thenetwork"></div>
 
@@ -85,7 +85,7 @@ const HTMLStart string = `<!doctype html>
   };
 `
 
-const HTMLEnd string = `
+const htmlEnd string = `
     var data = {nodes: nodes, edges: edges};
 
     network = new vis.Network(container, data, options);
@@ -99,10 +99,11 @@ const HTMLEnd string = `
 </html>
 `
 
-func WriteVisjsData(nodes []Node, edges []Edge, output io.Writer) {
+// WriteVisjsData generates a HTML file that displays the Amass graph using Visjs.
+func WriteVisjsData(output io.Writer, nodes []Node, edges []Edge) {
 	bufwr := bufio.NewWriter(output)
 
-	bufwr.WriteString(HTMLStart)
+	bufwr.WriteString(htmlStart)
 	bufwr.Flush()
 
 	nStr := "var nodes = [\n"
@@ -151,6 +152,6 @@ func WriteVisjsData(nodes []Node, edges []Edge, output io.Writer) {
 	bufwr.WriteString(eStr)
 	bufwr.Flush()
 
-	bufwr.WriteString(HTMLEnd)
+	bufwr.WriteString(htmlEnd)
 	bufwr.Flush()
 }

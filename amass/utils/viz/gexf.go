@@ -12,18 +12,18 @@ import (
 )
 
 const (
-	XMLNS    string = "http://www.gephi.org/gexf"
-	XMLNSVIZ string = "http://www.gephi.org/gexf/viz"
+	xmlNS    string = "http://www.gephi.org/gexf"
+	xmlNSVIZ string = "http://www.gephi.org/gexf/viz"
 
-	ClassNode string = "node"
-	ClassEdge string = "edge"
+	classNode string = "node"
+	classEdge string = "edge"
 
-	ModeStatic  string = "static"
-	ModeDynamic string = "dynamic"
+	modeStatic  string = "static"
+	modeDynamic string = "dynamic"
 
-	EdgeTypeDirected   string = "directed"
-	EdgeTypeUndirected string = "undirected"
-	EdgeTypeMutual     string = "mutual"
+	edgeTypeDirected   string = "directed"
+	edgeTypeUndirected string = "undirected"
+	edgeTypeMutual     string = "mutual"
 )
 
 type gexfAttrValue struct {
@@ -105,7 +105,8 @@ var (
 	gexfBlue   = &gexfColor{R: 26, G: 69, B: 243}
 )
 
-func WriteGEXFData(nodes []Node, edges []Edge, output io.Writer) {
+// WriteGEXFData generates a GEXF file to display the Amass graph using Gephi.
+func WriteGEXFData(output io.Writer, nodes []Node, edges []Edge) {
 	bufwr := bufio.NewWriter(output)
 
 	bufwr.WriteString("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
@@ -113,21 +114,21 @@ func WriteGEXFData(nodes []Node, edges []Edge, output io.Writer) {
 
 	doc := &gexf{
 		XMLName: xml.Name{
-			Space: XMLNS,
+			Space: xmlNS,
 			Local: "gexf",
 		},
 		Version: "1.3",
-		Viz:     XMLNSVIZ,
+		Viz:     xmlNSVIZ,
 		Meta: gexfMeta{
 			LastModified: time.Now().UTC().Format("2006-01-02"),
 			Creator:      "Amass - https://github.com/OWASP/Amass",
-			Desc:         "Internet Satellite Imagery",
+			Desc:         "Amass Network Mapping",
 		},
 		Graph: gexfGraph{
-			Mode:     ModeStatic,
-			EdgeType: EdgeTypeDirected,
+			Mode:     modeStatic,
+			EdgeType: edgeTypeDirected,
 			Attrs: gexfAttributes{
-				Class: ClassNode,
+				Class: classNode,
 				Attrs: []gexfAttribute{
 					{ID: "0", Title: "Title", Type: "string"},
 					{ID: "1", Title: "Source", Type: "string"},

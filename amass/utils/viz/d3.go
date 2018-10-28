@@ -276,7 +276,8 @@ type d3Graph struct {
 	Edges  []d3Edge
 }
 
-func WriteD3Data(nodes []Node, edges []Edge, output io.Writer) {
+// WriteD3Data generates a HTML file that displays the Amass graph using D3.
+func WriteD3Data(output io.Writer, nodes []Node, edges []Edge) {
 	colors := map[string]string{
 		"Subdomain": "green",
 		"Domain":    "red",

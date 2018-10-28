@@ -57,14 +57,14 @@ func main() {
 	}
 
 	nodes, edges := graph.VizData()
-	WriteMaltegoFile(*maltegopath, nodes, edges)
-	WriteVisjsFile(*visjspath, nodes, edges)
-	WriteGraphistryFile(*graphistrypath, nodes, edges)
-	WriteGEXFFile(*gexfpath, nodes, edges)
-	WriteD3File(*d3path, nodes, edges)
+	writeMaltegoFile(*maltegopath, nodes, edges)
+	writeVisjsFile(*visjspath, nodes, edges)
+	writeGraphistryFile(*graphistrypath, nodes, edges)
+	writeGEXFFile(*gexfpath, nodes, edges)
+	writeD3File(*d3path, nodes, edges)
 }
 
-func WriteMaltegoFile(path string, nodes []viz.Node, edges []viz.Edge) {
+func writeMaltegoFile(path string, nodes []viz.Node, edges []viz.Edge) {
 	if path == "" {
 		return
 	}
@@ -75,11 +75,11 @@ func WriteMaltegoFile(path string, nodes []viz.Node, edges []viz.Edge) {
 	}
 	defer f.Close()
 
-	viz.WriteMaltegoData(nodes, edges, f)
+	viz.WriteMaltegoData(f, nodes, edges)
 	f.Sync()
 }
 
-func WriteVisjsFile(path string, nodes []viz.Node, edges []viz.Edge) {
+func writeVisjsFile(path string, nodes []viz.Node, edges []viz.Edge) {
 	if path == "" {
 		return
 	}
@@ -90,11 +90,11 @@ func WriteVisjsFile(path string, nodes []viz.Node, edges []viz.Edge) {
 	}
 	defer f.Close()
 
-	viz.WriteVisjsData(nodes, edges, f)
+	viz.WriteVisjsData(f, nodes, edges)
 	f.Sync()
 }
 
-func WriteGraphistryFile(path string, nodes []viz.Node, edges []viz.Edge) {
+func writeGraphistryFile(path string, nodes []viz.Node, edges []viz.Edge) {
 	if path == "" {
 		return
 	}
@@ -105,11 +105,11 @@ func WriteGraphistryFile(path string, nodes []viz.Node, edges []viz.Edge) {
 	}
 	defer f.Close()
 
-	viz.WriteGraphistryData(nodes, edges, f)
+	viz.WriteGraphistryData(f, nodes, edges)
 	f.Sync()
 }
 
-func WriteGEXFFile(path string, nodes []viz.Node, edges []viz.Edge) {
+func writeGEXFFile(path string, nodes []viz.Node, edges []viz.Edge) {
 	if path == "" {
 		return
 	}
@@ -120,11 +120,11 @@ func WriteGEXFFile(path string, nodes []viz.Node, edges []viz.Edge) {
 	}
 	defer f.Close()
 
-	viz.WriteGEXFData(nodes, edges, f)
+	viz.WriteGEXFData(f, nodes, edges)
 	f.Sync()
 }
 
-func WriteD3File(path string, nodes []viz.Node, edges []viz.Edge) {
+func writeD3File(path string, nodes []viz.Node, edges []viz.Edge) {
 	if path == "" {
 		return
 	}
@@ -135,6 +135,6 @@ func WriteD3File(path string, nodes []viz.Node, edges []viz.Edge) {
 	}
 	defer f.Close()
 
-	viz.WriteD3Data(nodes, edges, f)
+	viz.WriteD3Data(f, nodes, edges)
 	f.Sync()
 }

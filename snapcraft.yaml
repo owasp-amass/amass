@@ -32,7 +32,7 @@ apps:
 
 parts:
   go:
-    source-tag: go1.10
+    source-tag: go1.11
 
   amass:
     after: [go]

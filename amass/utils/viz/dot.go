@@ -41,7 +41,8 @@ type dotGraph struct {
 	Edges []dotEdge
 }
 
-func WriteDOTData(nodes []Node, edges []Edge, output io.Writer) {
+// WriteDOTData generates a DOT file to display the Amass graph.
+func WriteDOTData(output io.Writer, nodes []Node, edges []Edge) {
 	colors := map[string]string{
 		"Subdomain": "green",
 		"Domain":    "red",
@@ -53,7 +54,7 @@ func WriteDOTData(nodes []Node, edges []Edge, output io.Writer) {
 		"AS":        "blue",
 	}
 
-	graph := &dotGraph{Name: "Amass - Internet Satellite Imagery"}
+	graph := &dotGraph{Name: "Amass Network Mapping"}
 
 	for idx, node := range nodes {
 		graph.Nodes = append(graph.Nodes, dotNode{

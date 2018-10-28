@@ -12,7 +12,9 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
-func WriteMaltegoData(nodes []Node, edges []Edge, output io.Writer) {
+// WriteMaltegoData converts the Amass graph nodes and edges into a
+// structured table format (CSV) that can be input by Maltego.
+func WriteMaltegoData(output io.Writer, nodes []Node, edges []Edge) {
 	filter := make(map[int]struct{})
 	types := []string{
 		"maltego.Domain",
@@ -25,9 +27,9 @@ func WriteMaltegoData(nodes []Node, edges []Edge, output io.Writer) {
 		"maltego.Company",
 		"maltego.DNSName",
 	}
-
+	// Print the column types in the first row
 	fmt.Fprintln(output, strings.Join(types, ","))
-
+	// Start the graph tranersal from the autonomous systems
 	for idx, node := range nodes {
 		if node.Type == "AS" {
 			writeFromTree(output, idx, nodes, edges, filter)
