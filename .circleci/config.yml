@@ -27,7 +27,7 @@ jobs:
 
   build:
     docker:
-      - image: snapcore/snapcraft:stable
+      - image: snapcore/snapcraft:edge
 
     working_directory: /go/src/github.com/OWASP/Amass
     steps:
