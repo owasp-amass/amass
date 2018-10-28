@@ -13,7 +13,7 @@ const d3Template = `
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>Amass - Internet Satellite Imagery</title>
+    <title>Amass Network Mapping</title>
     <script src="https://d3js.org/d3.v4.min.js"></script>
     <style>
         div#tooltip {
@@ -288,7 +288,7 @@ func WriteD3Data(nodes []Node, edges []Edge, output io.Writer) {
 		"AS":        "blue",
 	}
 
-	graph := &d3Graph{Name: "Amass - Internet Satellite Imagery"}
+	graph := &d3Graph{Name: "Amass Network Mapping"}
 
 	for idx, node := range nodes {
 		label := node.Title

@@ -39,7 +39,7 @@ var Banner = `
 
 const (
 	// Version is used to display the current version of Amass.
-	Version = "2.8.0"
+	Version = "2.8.1"
 
 	// Author is used to display the developer of the amass package.
 	Author = "https://github.com/OWASP/Amass"

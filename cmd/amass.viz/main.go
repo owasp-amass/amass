@@ -16,6 +16,7 @@ import (
 var (
 	help           = flag.Bool("h", false, "Show the program usage message")
 	input          = flag.String("i", "", "The Amass data operations JSON file")
+	maltegopath    = flag.String("maltego", "", "Path to the Maltego csv file")
 	visjspath      = flag.String("visjs", "", "Path to the Visjs output HTML file")
 	graphistrypath = flag.String("graphistry", "", "Path to the Graphistry JSON file")
 	gexfpath       = flag.String("gexf", "", "Path to the Gephi Graph Exchange XML Format (GEXF) file")
@@ -26,7 +27,7 @@ func main() {
 	flag.Parse()
 
 	if *help {
-		fmt.Printf("Usage: %s -i infile --visjs of1 --gexf of2 --d3 of3 --graphistry of4\n", path.Base(os.Args[0]))
+		fmt.Printf("Usage: %s -i infile --maltego of1 --visjs of2 --gexf of3 --d3 of4 --graphistry of5\n", path.Base(os.Args[0]))
 		flag.PrintDefaults()
 		return
 	}
@@ -56,10 +57,26 @@ func main() {
 	}
 
 	nodes, edges := graph.VizData()
+	WriteMaltegoFile(*maltegopath, nodes, edges)
 	WriteVisjsFile(*visjspath, nodes, edges)
 	WriteGraphistryFile(*graphistrypath, nodes, edges)
 	WriteGEXFFile(*gexfpath, nodes, edges)
 	WriteD3File(*d3path, nodes, edges)
+}
+
+func WriteMaltegoFile(path string, nodes []viz.Node, edges []viz.Edge) {
+	if path == "" {
+		return
+	}
+
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE, 0644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+
+	viz.WriteMaltegoData(nodes, edges, f)
+	f.Sync()
 }
 
 func WriteVisjsFile(path string, nodes []viz.Node, edges []viz.Edge) {

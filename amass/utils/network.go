@@ -6,6 +6,7 @@ package utils
 import (
 	"errors"
 	"io/ioutil"
+	"math/big"
 	"net"
 	"net/http"
 	"strings"
@@ -79,6 +80,47 @@ func NetHosts(cidr *net.IPNet) []net.IP {
 	}
 	// Remove network address and broadcast address
 	return ips[1 : len(ips)-1]
+}
+
+// NetFirstLast return the first and last IP address of
+// the provided CIDR/netblock.
+func NetFirstLast(cidr *net.IPNet) (net.IP, net.IP) {
+	firstIP := cidr.IP
+	prefixLen, bits := cidr.Mask.Size()
+	if prefixLen == bits {
+		lastIP := make([]byte, len(firstIP))
+		copy(lastIP, firstIP)
+		return firstIP, lastIP
+	}
+	firstIPInt, bits := ipToInt(firstIP)
+	hostLen := uint(bits) - uint(prefixLen)
+	lastIPInt := big.NewInt(1)
+	lastIPInt.Lsh(lastIPInt, hostLen)
+	lastIPInt.Sub(lastIPInt, big.NewInt(1))
+	lastIPInt.Or(lastIPInt, firstIPInt)
+	return firstIP, intToIP(lastIPInt, bits)
+}
+
+func ipToInt(ip net.IP) (*big.Int, int) {
+	val := &big.Int{}
+	val.SetBytes([]byte(ip))
+	if len(ip) == net.IPv4len {
+		return val, 32
+	} else if len(ip) == net.IPv6len {
+		return val, 128
+	}
+	return val, 0
+}
+
+func intToIP(ipInt *big.Int, bits int) net.IP {
+	ipBytes := ipInt.Bytes()
+	ret := make([]byte, bits/8)
+	// Pack our IP bytes into the end of the return array,
+	// since big.Int.Bytes() removes front zero padding.
+	for i := 1; i <= len(ipBytes); i++ {
+		ret[len(ret)-i] = ipBytes[len(ipBytes)-i]
+	}
+	return net.IP(ret)
 }
 
 // RangeHosts returns all the IP addresses (inclusive) between

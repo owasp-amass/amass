@@ -8,7 +8,7 @@
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0) 
 [![Contribute Yes](https://img.shields.io/badge/contribute-yes-brightgreen.svg)](https://github.com/OWASP/Amass/blob/master/CONTRIBUTING.md)
 [![Chat on Discord](https://img.shields.io/discord/433729817918308352.svg?logo=discord)](https://discord.gg/rtN8GMd) 
-[![Follow on Twitter](https://img.shields.io/twitter/follow/jeff_foley.svg?logo=twitter)](https://twitter.com/jeff_foley)
+[![Packaging status](https://repology.org/badge/vertical-allrepos/amass.svg)](https://repology.org/metapackage/amass/versions)
 
 ----
 
@@ -197,6 +197,7 @@ Switches for outputting the DNS and infrastructure findings as a network graph:
 
 | Flag | Description | Example |
 |------|-------------|---------|
+| -maltego | Output a Maltego Graph Table CSV file | amass.viz -maltego net.csv -i data_ops.json |
 | -d3  | Output a D3.js v4 force simulation HTML file | amass.viz -d3 net.html -i data_ops.json |
 | -gexf | Output to Graph Exchange XML Format (GEXF) | amass.viz -gephi net.gexf -i data_ops.json |
 | -graphistry | Output Graphistry JSON | amass.viz -graphistry net.json -i data_ops.json |
@@ -239,26 +240,34 @@ func main() {
 }
 ```
 
-## Settings for the OWASP Amass Maltego Local Transform
+## Importing OWASP Amass Results into Maltego
 
-1. Setup a new local transform within Maltego:
+1. Output your Amass enumeration data using the '-do' flag:
+```
+$ amass -v -ip --active -brute -do owasp.json -d owasp.org
+```
 
-![Maltego setup process](https://github.com/OWASP/Amass/blob/master/images/maltegosetup1.png "Setup")
+2. Convert the Amass data into a Maltego graph table CSV file:
+```
+$ amass.viz -i owasp.json --maltego owasp.csv
+```
 
-2. Configure the local transform to properly execute the go program:
+3. Import the CSV file with the correct Connectivity Table settings:
 
-![Maltego configuration](https://github.com/OWASP/Amass/blob/master/images/maltegosetup2.png "Configure")
+![Connectivity table](https://github.com/OWASP/Amass/blob/master/images/maltego_graph_import_wizard.png "Connectivity Table Settings")
 
-3. Go into the Transform Manager, and disable the **debug info** option:
+4. All the Amass findings will be brought into your Maltego Graph:
 
-![Disabling debug](https://github.com/OWASP/Amass/blob/master/images/maltegosetup3.png "Disable Debug")
+![Maltego results](https://github.com/OWASP/Amass/blob/master/images/maltego_results.png "Maltego Results")
 
 ## Community
+[![Follow on Twitter](https://img.shields.io/twitter/follow/jeff_foley.svg?logo=twitter)](https://twitter.com/jeff_foley)
 
  - [Discord Server](https://discord.gg/rtN8GMd) - Discussing OSINT, network recon and developing security tools using Go
 
 ## Mentions
 
+ - [Amass, the best application to search for subdomains](https://www.h1rd.com/hacking/amass-para-buscar-subdominios)
  - [Subdomain Takeover: Finding Candidates](https://0xpatrik.com/subdomain-takeover-candidates/)
  - [Paul's Security Weekly #564: Technical Segment - Bug Bounty Hunting](https://wiki.securityweekly.com/Episode564)
  - [The Bug Hunters Methodology v3(ish)](https://www.youtube.com/watch?v=Qw1nNPiH_Go)
