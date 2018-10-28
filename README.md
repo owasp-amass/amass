@@ -4,10 +4,11 @@
 [![GitHub Issues](https://img.shields.io/github/issues/OWASP/Amass.svg)](https://github.com/OWASP/Amass/issues) 
 [![CircleCI Status](https://circleci.com/gh/OWASP/Amass/tree/master.svg?style=shield)](https://circleci.com/gh/OWASP/Amass/tree/master)
 [![GitHub Release](https://img.shields.io/github/release/OWASP/Amass.svg)](https://github.com/OWASP/Amass/releases) 
+[![Go Version](https://img.shields.io/badge/go-1.10-blue.svg)](https://golang.org/dl/) 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0) 
 [![Contribute Yes](https://img.shields.io/badge/contribute-yes-brightgreen.svg)](https://github.com/OWASP/Amass/blob/master/CONTRIBUTING.md) 
 [![Chat on Discord](https://img.shields.io/discord/433729817918308352.svg?logo=discord)](https://discord.gg/rtN8GMd) 
-[![Packaging status](https://repology.org/badge/vertical-allrepos/amass.svg)](https://repology.org/metapackage/amass/versions) 
+
 
 ----
 
@@ -18,6 +19,8 @@ The OWASP Amass tool suite obtains subdomain names by scraping data sources, rec
 ![Network graph](https://github.com/OWASP/Amass/blob/master/images/network_06092018.png "Internet Satellite Imagery")
 
 ## How to Install
+
+[![Packaging status](https://repology.org/badge/vertical-allrepos/amass.svg)](https://repology.org/metapackage/amass/versions) 
 
 #### Prebuilt
 
@@ -85,7 +88,7 @@ At this point, the binaries should be in *$GOPATH/bin*.
 $ ls $GOPATH/src/github.com/OWASP/Amass/wordlists/
 ```
 
-## Using the Tool
+## Using the Tool Suite
 
 The most basic use of the tool, which includes reverse DNS lookups and name alterations:
 ```
@@ -134,27 +137,6 @@ Switches available through the amass CLI:
 | -version | Print the version number of amass | amass -version |
 | -w   | Change the wordlist used during brute forcing | amass -brute -w wordlist.txt -d example.com |
 | -whois | Search using reverse whois information | amass -whois -d example.com |
-
-**If you need Amass to run faster**, then you have three choices:
-
-1. Only use the passive data sources:
-```
-$ amass --passive -d example.com
-```
-
-2. Turn off the subdomain name alteration / permutation service:
-```
-$ amass --noalts -d example.com
-```
-
-3. Increase the maximum number of file descriptors for a process:
-
-The following Linux/Unix command will show you the hard limit for file descriptors used by amass.
-```
-$ ulimit -Hn
-```
-
-The superuser can change this hard limit to grant a larger number of file descriptors to running processes. Raising this limit will cause amass to perform more DNS resolutions simultaneously, and allow enumerations to complete faster. On Linux systems, this can usually be accomplished within the **/etc/security/limits.conf** file.
 
 #### amass.netdomains
 
@@ -260,6 +242,7 @@ $ amass.viz -i owasp.json --maltego owasp.csv
 ![Maltego results](https://github.com/OWASP/Amass/blob/master/images/maltego_results.png "Maltego Results")
 
 ## Community
+
 [![Follow on Twitter](https://img.shields.io/twitter/follow/jeff_foley.svg?logo=twitter)](https://twitter.com/jeff_foley)
 
  - [Discord Server](https://discord.gg/rtN8GMd) - Discussing OSINT, network recon and developing security tools using Go
@@ -280,7 +263,7 @@ $ amass.viz -i owasp.json --maltego owasp.csv
  - [Go is for everyone](https://changelog.com/gotime/71)
  - [Top Five Ways the Red Team breached the External Perimeter](https://medium.com/@adam.toscher/top-five-ways-the-red-team-breached-the-external-perimeter-262f99dc9d17)
 
-## Example Amass Terminal Capture 
+## Amass Terminal Capture 
 
 Presented at Facebook (and shared publically) for the Sept. 2018 OWASP London Chapter meeting:
 
