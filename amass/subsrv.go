@@ -120,7 +120,7 @@ func (ss *SubdomainService) performRequest(req *core.AmassRequest) {
 		return
 	}
 
-	if ss.Config().Passive {
+	if ss.Config().Passive && !ss.duplicate(req.Name) {
 		ss.bus.Publish(core.OUTPUT, &core.AmassOutput{
 			Name:   req.Name,
 			Domain: req.Domain,
