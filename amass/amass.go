@@ -39,12 +39,25 @@ var Banner = `
 
 const (
 	// Version is used to display the current version of Amass.
-	Version = "2.8.1"
+	Version = "2.8.2"
 
 	// Author is used to display the developer of the amass package.
 	Author = "https://github.com/OWASP/Amass"
 
 	defaultWordlistURL = "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/namelist.txt"
+)
+
+// EnumerationTiming represents a speed band for the enumeration to execute within.
+type EnumerationTiming int
+
+// The various timing/speed templates for an Amass enumeration.
+const (
+	Paranoid EnumerationTiming = iota
+	Sneaky
+	Polite
+	Normal
+	Aggressive
+	Insane
 )
 
 // Enumeration is the object type used to execute a DNS enumeration with Amass.
@@ -88,6 +101,9 @@ type Enumeration struct {
 	// Will discovered subdomain name alterations be generated?
 	Alterations bool
 
+	// Indicates a speed band for the enumeration to execute within
+	Timing EnumerationTiming
+
 	// Only access the data sources for names and return results?
 	Passive bool
 
@@ -116,8 +132,9 @@ func NewEnumeration() *Enumeration {
 		Log:             log.New(ioutil.Discard, "", 0),
 		Ports:           []int{443},
 		Recursive:       true,
-		Alterations:     true,
 		MinForRecursive: 1,
+		Alterations:     true,
+		Timing:          Normal,
 		pause:           make(chan struct{}),
 		resume:          make(chan struct{}),
 	}
@@ -176,6 +193,7 @@ func (e *Enumeration) generateAmassConfig() (*core.AmassConfig, error) {
 		DataOptsWriter:  e.DataOptsWriter,
 	}
 	config.SetGraph(core.NewGraph())
+	config.MaxFlow = utils.NewSemaphore(timingToMaxFlow(e.Timing))
 
 	for _, domain := range e.Domains() {
 		config.AddDomain(domain)
@@ -213,14 +231,13 @@ func (e *Enumeration) Start() error {
 		}
 	}
 	// When done, we want to know if the enumeration completed
-	completed := true
+	var completed bool
 	// Periodically check if all the services have finished
 	t := time.NewTicker(3 * time.Second)
 loop:
 	for {
 		select {
 		case <-e.Done:
-			completed = false
 			break loop
 		case <-e.pause:
 			t.Stop()
@@ -237,6 +254,7 @@ loop:
 			}
 
 			if done {
+				completed = true
 				break loop
 			}
 		}
@@ -247,11 +265,11 @@ loop:
 		service.Stop()
 	}
 	// Wait for output to finish being handled
+	bus.Unsubscribe(core.OUTPUT, e.sendOutput)
 	bus.WaitAsync()
 	if completed {
 		close(e.Done)
 	}
-	bus.Unsubscribe(core.OUTPUT, e.sendOutput)
 	time.Sleep(1 * time.Second)
 	close(e.Output)
 	return nil
@@ -292,6 +310,25 @@ func (e *Enumeration) ObtainAdditionalDomains() {
 			}
 		}
 	}
+}
+
+func timingToMaxFlow(t EnumerationTiming) int {
+	var result int
+	switch t {
+	case Paranoid:
+		result = 1
+	case Sneaky:
+		result = 10
+	case Polite:
+		result = 25
+	case Normal:
+		result = 50
+	case Aggressive:
+		result = 100
+	case Insane:
+		result = 250
+	}
+	return result
 }
 
 func getDefaultWordlist() ([]string, error) {

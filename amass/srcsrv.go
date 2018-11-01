@@ -12,7 +12,10 @@ import (
 	"github.com/OWASP/Amass/amass/sources"
 	"github.com/OWASP/Amass/amass/utils"
 	evbus "github.com/asaskevich/EventBus"
-	"github.com/irfansharif/cfilter"
+)
+
+var (
+	nameStripRE = regexp.MustCompile("^((20)|(25)|(2f)|(3d)|(40))+")
 )
 
 type entry struct {
@@ -31,18 +34,18 @@ type SourcesService struct {
 	directs       []sources.DataSource
 	throttles     []sources.DataSource
 	throttleQueue []*entry
-	filter        *cfilter.CFilter
-	domainFilter  map[string]struct{}
+	filter        *utils.NameFilter
+	outfilter     *utils.NameFilter
 }
 
 // NewSourcesService requires the enumeration configuration and event bus as parameters.
 // The object returned is initialized, but has not yet been started.
 func NewSourcesService(config *core.AmassConfig, bus evbus.Bus) *SourcesService {
 	ss := &SourcesService{
-		bus:          bus,
-		responses:    make(chan *core.AmassRequest, 50),
-		filter:       cfilter.New(),
-		domainFilter: make(map[string]struct{}),
+		bus:       bus,
+		responses: make(chan *core.AmassRequest, 50),
+		filter:    utils.NewNameFilter(),
+		outfilter: utils.NewNameFilter(),
 	}
 	ss.BaseAmassService = *core.NewBaseAmassService("Sources Service", config, ss)
 
@@ -97,7 +100,7 @@ loop:
 }
 
 func (ss *SourcesService) handleRequest(req *core.AmassRequest) {
-	if ss.duplicate(req.Name) || !ss.Config().IsDomainInScope(req.Name) {
+	if ss.filter.Duplicate(req.Name) || !ss.Config().IsDomainInScope(req.Name) {
 		return
 	}
 
@@ -139,10 +142,8 @@ func (ss *SourcesService) processOutput() {
 }
 
 func (ss *SourcesService) handleOutput(req *core.AmassRequest) {
-	re := regexp.MustCompile("^((20)|(25)|(2f)|(3d)|(40))+")
-
 	// Clean up the names scraped from the web
-	if i := re.FindStringIndex(req.Name); i != nil {
+	if i := nameStripRE.FindStringIndex(req.Name); i != nil {
 		req.Name = req.Name[i[1]:]
 	}
 	req.Name = strings.TrimSpace(strings.ToLower(req.Name))
@@ -150,27 +151,18 @@ func (ss *SourcesService) handleOutput(req *core.AmassRequest) {
 	if len(req.Name) > 1 && req.Name[0] == '.' {
 		req.Name = req.Name[1:]
 	}
-
+	if ss.outfilter.Duplicate(req.Name + req.Source) {
+		return
+	}
+	ss.Config().MaxFlow.Acquire(1)
 	ss.bus.Publish(core.NEWNAME, req)
 	ss.SendRequest(req)
-}
-
-func (ss *SourcesService) duplicate(name string) bool {
-	if ss.filter.Lookup([]byte(name)) {
-		return true
-	}
-	ss.filter.Insert([]byte(name))
-	return false
 }
 
 func (ss *SourcesService) queryAllSources() {
 	ss.SetActive()
 
 	for _, domain := range ss.Config().Domains() {
-		if _, found := ss.domainFilter[domain]; found {
-			continue
-		}
-
 		ss.SendRequest(&core.AmassRequest{
 			Name:   domain,
 			Domain: domain,

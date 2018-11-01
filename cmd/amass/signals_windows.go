@@ -14,7 +14,7 @@ import (
 )
 
 // If the user interrupts the program, print the summary information
-func SignalHandler(e *amass.Enumeration) {
+func signalHandler(e *amass.Enumeration) {
 	quit := make(chan os.Signal, 1)
 
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
@@ -22,6 +22,6 @@ func SignalHandler(e *amass.Enumeration) {
 	<-quit
 	// Start final output operations
 	close(e.Done)
-	<-Finished
+	<-finished
 	os.Exit(1)
 }

@@ -14,7 +14,7 @@ import (
 )
 
 // If the user interrupts the program, print the summary information
-func SignalHandler(e *amass.Enumeration) {
+func signalHandler(e *amass.Enumeration) {
 	quit := make(chan os.Signal, 1)
 	pause := make(chan os.Signal, 1)
 	resume := make(chan os.Signal, 1)
@@ -32,7 +32,7 @@ loop:
 		case <-quit:
 			// Start final output operations
 			close(e.Done)
-			<-Finished
+			<-finished
 			break loop
 		}
 	}

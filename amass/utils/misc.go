@@ -6,6 +6,8 @@ package utils
 import (
 	"regexp"
 	"strings"
+
+	"github.com/irfansharif/cfilter"
 )
 
 const (
@@ -68,6 +70,54 @@ func (s *Semaphore) Release(num int) {
 	}
 }
 
+type filterRequest struct {
+	Name   string
+	Result chan bool
+}
+
+// NameFilter implements an object that performs filtering of strings
+// to ensure that only unique items get through the filter.
+type NameFilter struct {
+	filter   *cfilter.CFilter
+	requests chan filterRequest
+	quit     chan struct{}
+}
+
+// NewNameFilter returns an initialized NameFilter.
+func NewNameFilter() *NameFilter {
+	nf := &NameFilter{
+		filter:   cfilter.New(),
+		requests: make(chan filterRequest),
+		quit:     make(chan struct{}),
+	}
+	go nf.processRequests()
+	return nf
+}
+
+// Duplicate checks if the name provided has been seen before by this filter.
+func (nf *NameFilter) Duplicate(name string) bool {
+	result := make(chan bool)
+
+	nf.requests <- filterRequest{Name: name, Result: result}
+	return <-result
+}
+
+func (nf *NameFilter) processRequests() {
+	for {
+		select {
+		case <-nf.quit:
+			return
+		case r := <-nf.requests:
+			if nf.filter.Lookup([]byte(r.Name)) {
+				r.Result <- true
+			} else {
+				nf.filter.Insert([]byte(r.Name))
+				r.Result <- false
+			}
+		}
+	}
+}
+
 // SubdomainRegex returns a Regexp object initialized to match
 // subdomain names that end with the domain provided by the parameter.
 func SubdomainRegex(domain string) *regexp.Regexp {
@@ -125,4 +175,21 @@ func CopyString(src string) string {
 
 	copy(str, src)
 	return string(str)
+}
+
+// RemoveAsteriskLabel returns the provided DNS name with all asterisk labels removed.
+func RemoveAsteriskLabel(s string) string {
+	var index int
+
+	labels := strings.Split(s, ".")
+	for i := len(labels) - 1; i >= 0; i-- {
+		if strings.TrimSpace(labels[i]) == "*" {
+			break
+		}
+		index = i
+	}
+	if index == len(labels)-1 {
+		return ""
+	}
+	return strings.Join(labels[index:], ".")
 }

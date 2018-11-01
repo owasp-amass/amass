@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
-	"github.com/OWASP/Amass/amass/dnssrv"
 	evbus "github.com/asaskevich/EventBus"
 )
 
@@ -55,32 +54,33 @@ func (bfs *BruteForceService) OnStop() error {
 func (bfs *BruteForceService) startRootDomains() {
 	// Look at each domain provided by the config
 	for _, domain := range bfs.Config().Domains() {
-		go bfs.performBruteForcing(domain, domain)
+		bfs.performBruteForcing(domain, domain)
 	}
 }
 
 func (bfs *BruteForceService) newSubdomain(req *core.AmassRequest, times int) {
 	if times == bfs.Config().MinForRecursive {
-		// Does this subdomain have a wildcard?
-		if dnssrv.HasWildcard(req.Domain, req.Name) {
-			return
-		}
-
-		bfs.performBruteForcing(req.Name, req.Domain)
+		go bfs.performBruteForcing(req.Name, req.Domain)
 	}
 }
 
 func (bfs *BruteForceService) performBruteForcing(subdomain, root string) {
+	t := time.NewTicker(time.Second)
+	defer t.Stop()
 	for _, word := range bfs.Config().Wordlist {
-		bfs.SetActive()
-
-		bfs.bus.Publish(core.NEWNAME, &core.AmassRequest{
-			Name:   word + "." + subdomain,
-			Domain: root,
-			Tag:    core.BRUTE,
-			Source: "Brute Force",
-		})
-		// Going too fast with large word lists has proven to cause memory issues
-		time.Sleep(time.Millisecond)
+		select {
+		case <-t.C:
+			bfs.SetActive()
+		case <-bfs.Quit():
+			return
+		default:
+			bfs.Config().MaxFlow.Acquire(1)
+			bfs.bus.Publish(core.NEWNAME, &core.AmassRequest{
+				Name:   word + "." + subdomain,
+				Domain: root,
+				Tag:    core.BRUTE,
+				Source: "Brute Force",
+			})
+		}
 	}
 }

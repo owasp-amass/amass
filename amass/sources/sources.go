@@ -8,7 +8,6 @@ import (
 	"net"
 	"net/http"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -221,20 +220,4 @@ func GetAllSources(srv core.AmassService) []DataSource {
 		NewWaybackMachine(srv),
 		NewYahoo(srv),
 	}
-}
-
-func removeAsteriskLabel(s string) string {
-	var index int
-
-	labels := strings.Split(s, ".")
-	for i := len(labels) - 1; i >= 0; i-- {
-		if strings.TrimSpace(labels[i]) == "*" {
-			break
-		}
-		index = i
-	}
-	if index == len(labels)-1 {
-		return ""
-	}
-	return strings.Join(labels[index:], ".")
 }

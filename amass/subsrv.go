@@ -11,7 +11,6 @@ import (
 	"github.com/OWASP/Amass/amass/dnssrv"
 	"github.com/OWASP/Amass/amass/utils"
 	evbus "github.com/asaskevich/EventBus"
-	"github.com/irfansharif/cfilter"
 )
 
 // SubdomainService is the AmassService that handles all newly discovered names
@@ -22,22 +21,19 @@ type SubdomainService struct {
 	bus evbus.Bus
 
 	// Ensures we do not completely process names more than once
-	filter *cfilter.CFilter
+	filter *utils.NameFilter
 
 	// Subdomain names that have been seen and how many times
 	subdomains map[string]int
-
-	maxRoutines *utils.Semaphore
 }
 
 // NewSubdomainService requires the enumeration configuration and event bus as parameters.
 // The object returned is initialized, but has not yet been started.
 func NewSubdomainService(config *core.AmassConfig, bus evbus.Bus) *SubdomainService {
 	ss := &SubdomainService{
-		bus:         bus,
-		filter:      cfilter.New(),
-		subdomains:  make(map[string]int),
-		maxRoutines: utils.NewSemaphore(500),
+		bus:        bus,
+		filter:     utils.NewNameFilter(),
+		subdomains: make(map[string]int),
 	}
 
 	ss.BaseAmassService = *core.NewBaseAmassService("Subdomain Service", config, ss)
@@ -92,7 +88,6 @@ func (ss *SubdomainService) processRequests() {
 			}
 			if req := ss.NextRequest(); req != nil {
 				count = 0
-				ss.maxRoutines.Acquire(1)
 				go ss.performRequest(req)
 			} else {
 				count++
@@ -105,28 +100,23 @@ func (ss *SubdomainService) processRequests() {
 	}
 }
 
-func (ss *SubdomainService) duplicate(name string) bool {
-	if ss.filter.Lookup([]byte(name)) {
-		return true
-	}
-	ss.filter.Insert([]byte(name))
-	return false
-}
-
 func (ss *SubdomainService) performRequest(req *core.AmassRequest) {
-	defer ss.maxRoutines.Release(1)
-
 	if req == nil || req.Name == "" || req.Domain == "" {
+		ss.Config().MaxFlow.Release(1)
 		return
 	}
-
-	if ss.Config().Passive && !ss.duplicate(req.Name) {
-		ss.bus.Publish(core.OUTPUT, &core.AmassOutput{
-			Name:   req.Name,
-			Domain: req.Domain,
-			Tag:    req.Tag,
-			Source: req.Source,
-		})
+	req.Name = strings.ToLower(utils.RemoveAsteriskLabel(req.Name))
+	req.Domain = strings.ToLower(req.Domain)
+	if ss.Config().Passive {
+		if !ss.filter.Duplicate(req.Name) {
+			ss.bus.Publish(core.OUTPUT, &core.AmassOutput{
+				Name:   req.Name,
+				Domain: req.Domain,
+				Tag:    req.Tag,
+				Source: req.Source,
+			})
+		}
+		ss.Config().MaxFlow.Release(1)
 		return
 	}
 	ss.bus.Publish(core.DNSQUERY, req)
@@ -135,10 +125,10 @@ func (ss *SubdomainService) performRequest(req *core.AmassRequest) {
 func (ss *SubdomainService) performCheck(req *core.AmassRequest) {
 	ss.SetActive()
 
-	if !ss.duplicate(req.Name) && ss.Config().IsDomainInScope(req.Name) {
-		ss.checkForNewSubdomain(req)
+	if ss.Config().IsDomainInScope(req.Name) {
+		ss.checkSubdomain(req)
 	}
-	if !core.TrustedTag(req.Tag) && dnssrv.HasWildcard(req.Domain, req.Name) {
+	if !core.TrustedTag(req.Tag) && dnssrv.MatchesWildcard(req) {
 		return
 	}
 	ss.bus.Publish(core.CHECKED, req)
@@ -158,7 +148,7 @@ func (ss *SubdomainService) timesForSubdomain(sub string) int {
 	return times
 }
 
-func (ss *SubdomainService) checkForNewSubdomain(req *core.AmassRequest) {
+func (ss *SubdomainService) checkSubdomain(req *core.AmassRequest) {
 	labels := strings.Split(req.Name, ".")
 	num := len(labels)
 	// Is this large enough to consider further?

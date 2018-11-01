@@ -22,7 +22,7 @@ import (
 )
 
 var (
-	Finished chan struct{}
+	finished chan struct{}
 	// Colors used to ease the reading of program output
 	y      = color.New(color.FgHiYellow)
 	g      = color.New(color.FgHiGreen)
@@ -41,6 +41,7 @@ var (
 	minrecursive  = flag.Int("min-for-recursive", 1, "Number of subdomain discoveries before recursive brute forcing")
 	passive       = flag.Bool("passive", false, "Disable DNS resolution of names and dependent features")
 	noalts        = flag.Bool("noalts", false, "Disable generation of altered names")
+	timing        = flag.Int("T", int(amass.Normal), "Timing templates 0 (slowest) through 5 (fastest)")
 	verbose       = flag.Bool("v", false, "Print the data source and summary information")
 	whois         = flag.Bool("whois", false, "Include domains discoverd with reverse whois")
 	list          = flag.Bool("l", false, "List all domains to be used in an enumeration")
@@ -70,7 +71,7 @@ func main() {
 
 	// Some input validation
 	if *help {
-		PrintBanner()
+		printBanner()
 		g.Printf("Usage: %s [options] <-d domain>\n", path.Base(os.Args[0]))
 		flag.PrintDefaults()
 		g.Println(defaultBuf.String())
@@ -88,16 +89,16 @@ func main() {
 	var words []string
 	// Obtain parameters from provided files
 	if *wordlist != "" {
-		words = GetLinesFromFile(*wordlist)
+		words = getLinesFromFile(*wordlist)
 	}
 	if *blacklistpath != "" {
-		blacklist = utils.UniqueAppend(blacklist, GetLinesFromFile(*blacklistpath)...)
+		blacklist = utils.UniqueAppend(blacklist, getLinesFromFile(*blacklistpath)...)
 	}
 	if *domainspath != "" {
-		domains = utils.UniqueAppend(domains, GetLinesFromFile(*domainspath)...)
+		domains = utils.UniqueAppend(domains, getLinesFromFile(*domainspath)...)
 	}
 	if *resolvepath != "" {
-		resolvers = utils.UniqueAppend(resolvers, GetLinesFromFile(*resolvepath)...)
+		resolvers = utils.UniqueAppend(resolvers, getLinesFromFile(*resolvepath)...)
 	}
 	dnssrv.SetCustomResolvers(resolvers)
 
@@ -132,6 +133,7 @@ func main() {
 	enum.MinForRecursive = *minrecursive
 	enum.Active = *active
 	enum.Alterations = alts
+	enum.Timing = amass.EnumerationTiming(*timing)
 	enum.Passive = *passive
 	enum.Blacklist = blacklist
 
@@ -166,7 +168,7 @@ func main() {
 	}
 	enum.ObtainAdditionalDomains()
 	if *list {
-		ListDomains(enum, txt)
+		listDomains(enum, txt)
 		return
 	}
 	// Can an enumeration be performed with the provided parameters?
@@ -175,8 +177,8 @@ func main() {
 		return
 	}
 
-	Finished = make(chan struct{})
-	go ManageOutput(&OutputParams{
+	finished = make(chan struct{})
+	go manageOutput(&outputParams{
 		Enum:     enum,
 		Verbose:  *verbose,
 		PrintIPs: *ips,
@@ -185,7 +187,7 @@ func main() {
 	})
 
 	// Execute the signal handler
-	go SignalHandler(enum)
+	go signalHandler(enum)
 
 	err := enum.Start()
 	if err != nil {
@@ -193,10 +195,10 @@ func main() {
 		return
 	}
 	// Wait for output manager to finish
-	<-Finished
+	<-finished
 }
 
-func GetLinesFromFile(path string) []string {
+func getLinesFromFile(path string) []string {
 	var lines []string
 
 	// Open the file

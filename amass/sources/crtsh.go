@@ -59,7 +59,7 @@ func (c *Crtsh) Query(domain, sub string) []string {
 		} else if err != nil {
 			c.Service.Config().Log.Printf("%s: %v", url, err)
 		}
-		unique = utils.UniqueAppend(unique, removeAsteriskLabel(line.Name))
+		unique = utils.UniqueAppend(unique, line.Name)
 	}
 	return unique
 }

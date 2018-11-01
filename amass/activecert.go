@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"net"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
@@ -82,34 +81,18 @@ func namesFromCert(cert *x509.Certificate) []string {
 
 	var subdomains []string
 	// Add the subject common name to the list of subdomain names
-	commonName := removeAsteriskLabel(cn)
+	commonName := utils.RemoveAsteriskLabel(cn)
 	if commonName != "" {
 		subdomains = append(subdomains, commonName)
 	}
 	// Add the cert DNS names to the list of subdomain names
 	for _, name := range cert.DNSNames {
-		n := removeAsteriskLabel(name)
+		n := utils.RemoveAsteriskLabel(name)
 		if n != "" {
 			subdomains = utils.UniqueAppend(subdomains, n)
 		}
 	}
 	return subdomains
-}
-
-func removeAsteriskLabel(s string) string {
-	var index int
-
-	labels := strings.Split(s, ".")
-	for i := len(labels) - 1; i >= 0; i-- {
-		if strings.TrimSpace(labels[i]) == "*" {
-			break
-		}
-		index = i
-	}
-	if index == len(labels)-1 {
-		return ""
-	}
-	return strings.Join(labels[index:], ".")
 }
 
 func reqFromNames(subdomains []string) []*core.AmassRequest {

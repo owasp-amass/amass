@@ -15,7 +15,7 @@ import (
 	"github.com/fatih/color"
 )
 
-type OutputParams struct {
+type outputParams struct {
 	Enum     *amass.Enumeration
 	Verbose  bool
 	PrintIPs bool
@@ -23,28 +23,28 @@ type OutputParams struct {
 	JSONOut  string
 }
 
-type ASNData struct {
+type asnData struct {
 	Name      string
 	Netblocks map[string]int
 }
 
-type JsonAddr struct {
+type jsonAddr struct {
 	IP          string `json:"ip"`
 	CIDR        string `json:"cidr"`
 	ASN         int    `json:"asn"`
 	Description string `json:"desc"`
 }
 
-type JsonSave struct {
+type jsonSave struct {
 	Name      string     `json:"name"`
 	Domain    string     `json:"domain"`
-	Addresses []JsonAddr `json:"addresses"`
+	Addresses []jsonAddr `json:"addresses"`
 	Tag       string     `json:"tag"`
 	Source    string     `json:"source"`
 }
 
-func WriteJSONData(f *os.File, result *core.AmassOutput) {
-	save := &JsonSave{
+func writeJSONData(f *os.File, result *core.AmassOutput) {
+	save := &jsonSave{
 		Name:   result.Name,
 		Domain: result.Domain,
 		Tag:    result.Tag,
@@ -52,7 +52,7 @@ func WriteJSONData(f *os.File, result *core.AmassOutput) {
 	}
 
 	for _, addr := range result.Addresses {
-		save.Addresses = append(save.Addresses, JsonAddr{
+		save.Addresses = append(save.Addresses, jsonAddr{
 			IP:          addr.Address.String(),
 			CIDR:        addr.Netblock.String(),
 			ASN:         addr.ASN,
@@ -64,7 +64,7 @@ func WriteJSONData(f *os.File, result *core.AmassOutput) {
 	enc.Encode(save)
 }
 
-func ListDomains(enum *amass.Enumeration, outfile string) {
+func listDomains(enum *amass.Enumeration, outfile string) {
 	var fileptr *os.File
 	var bufwr *bufio.Writer
 
@@ -90,7 +90,7 @@ func ListDomains(enum *amass.Enumeration, outfile string) {
 	}
 }
 
-func PrintBanner() {
+func printBanner() {
 	rightmost := 76
 	desc := "In-Depth DNS Enumeration"
 	author := "Authored By " + amass.Author
@@ -109,11 +109,11 @@ func PrintBanner() {
 	y.Printf("%s\n\n\n", author)
 }
 
-func WriteTextData(f *os.File, source, name, comma, ips string) {
+func writeTextData(f *os.File, source, name, comma, ips string) {
 	fmt.Fprintf(f, "%s%s%s%s\n", source, name, comma, ips)
 }
 
-func ResultToLine(result *core.AmassOutput, params *OutputParams) (string, string, string, string) {
+func resultToLine(result *core.AmassOutput, params *outputParams) (string, string, string, string) {
 	var source, comma, ips string
 
 	if params.Verbose {
@@ -132,7 +132,7 @@ func ResultToLine(result *core.AmassOutput, params *OutputParams) (string, strin
 	return source, result.Name, comma, ips
 }
 
-func ManageOutput(params *OutputParams) {
+func manageOutput(params *outputParams) {
 	var total int
 	var err error
 	var outptr, jsonptr *os.File
@@ -158,39 +158,39 @@ func ManageOutput(params *OutputParams) {
 	}
 
 	tags := make(map[string]int)
-	asns := make(map[int]*ASNData)
+	asns := make(map[int]*asnData)
 	// Collect all the names returned by the enumeration
 	for result := range params.Enum.Output {
 		total++
-		UpdateData(result, tags, asns)
+		updateData(result, tags, asns)
 
-		source, name, comma, ips := ResultToLine(result, params)
+		source, name, comma, ips := resultToLine(result, params)
 		fmt.Fprintf(color.Output, "%s%s%s%s\n",
 			blue(source), green(name), green(comma), yellow(ips))
 		// Handle writing the line to a specified output file
 		if outptr != nil {
-			WriteTextData(outptr, source, name, comma, ips)
+			writeTextData(outptr, source, name, comma, ips)
 		}
 		// Handle encoding the result as JSON
 		if jsonptr != nil {
-			WriteJSONData(jsonptr, result)
+			writeJSONData(jsonptr, result)
 		}
 	}
 	// Check to print the summary information
 	if params.Verbose {
-		PrintSummary(total, tags, asns)
+		printSummary(total, tags, asns)
 	}
-	close(Finished)
+	close(finished)
 }
 
-func UpdateData(output *core.AmassOutput, tags map[string]int, asns map[int]*ASNData) {
+func updateData(output *core.AmassOutput, tags map[string]int, asns map[int]*asnData) {
 	tags[output.Tag]++
 
 	// Update the ASN information
 	for _, addr := range output.Addresses {
 		data, found := asns[addr.ASN]
 		if !found {
-			asns[addr.ASN] = &ASNData{
+			asns[addr.ASN] = &asnData{
 				Name:      addr.Description,
 				Netblocks: make(map[string]int),
 			}
@@ -201,7 +201,7 @@ func UpdateData(output *core.AmassOutput, tags map[string]int, asns map[int]*ASN
 	}
 }
 
-func PrintSummary(total int, tags map[string]int, asns map[int]*ASNData) {
+func printSummary(total int, tags map[string]int, asns map[int]*asnData) {
 	if total == 0 {
 		r.Println("No names were discovered")
 		return

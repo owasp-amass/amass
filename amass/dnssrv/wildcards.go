@@ -6,6 +6,7 @@ package dnssrv
 import (
 	"math/rand"
 	"strings"
+	"sync"
 
 	"github.com/OWASP/Amass/amass/core"
 )
@@ -16,6 +17,57 @@ const (
 
 	ldhChars = "abcdefghijklmnopqrstuvwxyz0123456789-"
 )
+
+type wildcard struct {
+	HasWildcard bool
+	Answers     []core.DNSAnswer
+}
+
+var (
+	wildcardsLock sync.Mutex
+	wildcards     map[string]*wildcard
+)
+
+func init() {
+	wildcards = make(map[string]*wildcard)
+}
+
+// MatchesWildcard returns true if the request provided resolved to a DNS wildcard.
+func MatchesWildcard(req *core.AmassRequest) bool {
+	wildcardsLock.Lock()
+	defer wildcardsLock.Unlock()
+
+	base := len(strings.Split(req.Domain, "."))
+	labels := strings.Split(req.Name, ".")
+
+	var answer bool
+	for i := len(labels) - base; i > 0; i-- {
+		sub := strings.Join(labels[i:], ".")
+
+		// See if detection has been performed for this subdomain
+		w, found := wildcards[sub]
+		if !found {
+			entry := &wildcard{
+				HasWildcard: false,
+				Answers:     nil,
+			}
+			// Try three times for good luck
+			for i := 0; i < 3; i++ {
+				if a := wildcardTestResolution(sub); a != nil {
+					entry.HasWildcard = true
+					entry.Answers = append(entry.Answers, a...)
+				}
+			}
+			w = entry
+			wildcards[sub] = w
+		}
+		// Check if the subdomain and address in question match a wildcard
+		if w.HasWildcard && compareAnswers(req.Records, w.Answers) {
+			answer = true
+		}
+	}
+	return answer
+}
 
 // HasWildcard checks subdomains for a DNS wildcard
 func HasWildcard(domain, subdomain string) bool {

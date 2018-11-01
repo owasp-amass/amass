@@ -346,7 +346,7 @@ func setupOptions() *dns.OPT {
 
 // ZoneTransfer attempts a DNS zone transfer using the server identified in the parameters.
 // The returned slice contains all the names discovered from the zone transfer
-func ZoneTransfer(domain, sub, server string) ([]string, error) {
+func ZoneTransfer(sub, domain, server string) ([]string, error) {
 	var results []string
 
 	a, err := Resolve(server, "A")

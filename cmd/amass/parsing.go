@@ -126,10 +126,10 @@ func (p *parseIPs) parseRange(s string) error {
 		// These should have parsed properly
 		return fmt.Errorf("%s is not a valid IP range", s)
 	}
-	return p.appendIPs(RangeHosts(start, end))
+	return p.appendIPs(rangeHosts(start, end))
 }
 
-func RangeHosts(start, end net.IP) []net.IP {
+func rangeHosts(start, end net.IP) []net.IP {
 	var ips []net.IP
 
 	stop := net.ParseIP(end.String())

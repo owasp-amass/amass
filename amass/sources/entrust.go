@@ -84,7 +84,7 @@ func (e *Entrust) extractReversedSubmatches(content string) []string {
 	for _, r := range rev {
 		s := e.reverseSubdomain(r)
 
-		results = append(results, removeAsteriskLabel(s))
+		results = append(results, utils.RemoveAsteriskLabel(s))
 	}
 	return results
 }

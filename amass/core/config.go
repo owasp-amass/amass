@@ -21,6 +21,9 @@ type AmassConfig struct {
 	// Logger for error messages
 	Log *log.Logger
 
+	// MaxFlow is a Semaphore that restricts the number of names moving through the architecture
+	MaxFlow *utils.Semaphore
+
 	// The ASNs that the enumeration will target
 	ASNs []int
 
@@ -64,6 +67,7 @@ type AmassConfig struct {
 	DataOptsWriter io.Writer
 
 	graph *Graph
+
 	// The root domain names that the enumeration will target
 	domains []string
 
