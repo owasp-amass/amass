@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
-	"github.com/OWASP/Amass/amass/dnssrv"
 	"github.com/OWASP/Amass/amass/utils"
 	evbus "github.com/asaskevich/EventBus"
 )
@@ -128,24 +127,7 @@ func (ss *SubdomainService) performCheck(req *core.AmassRequest) {
 	if ss.Config().IsDomainInScope(req.Name) {
 		ss.checkSubdomain(req)
 	}
-	if !core.TrustedTag(req.Tag) && dnssrv.MatchesWildcard(req) {
-		return
-	}
 	ss.bus.Publish(core.CHECKED, req)
-}
-
-func (ss *SubdomainService) timesForSubdomain(sub string) int {
-	ss.Lock()
-	defer ss.Unlock()
-
-	times, ok := ss.subdomains[sub]
-	if ok {
-		times++
-	} else {
-		times = 1
-	}
-	ss.subdomains[sub] = times
-	return times
 }
 
 func (ss *SubdomainService) checkSubdomain(req *core.AmassRequest) {
@@ -175,4 +157,18 @@ func (ss *SubdomainService) checkSubdomain(req *core.AmassRequest) {
 		Tag:    req.Tag,
 		Source: req.Source,
 	}, ss.timesForSubdomain(sub))
+}
+
+func (ss *SubdomainService) timesForSubdomain(sub string) int {
+	ss.Lock()
+	defer ss.Unlock()
+
+	times, ok := ss.subdomains[sub]
+	if ok {
+		times++
+	} else {
+		times = 1
+	}
+	ss.subdomains[sub] = times
+	return times
 }
