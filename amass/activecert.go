@@ -15,12 +15,125 @@ import (
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
+	evbus "github.com/asaskevich/EventBus"
 )
 
 const (
 	defaultTLSConnectTimeout = 3 * time.Second
-	defaultHandshakeDeadline = 10 * time.Second
+	defaultHandshakeDeadline = 5 * time.Second
 )
+
+// ActiveCertService is the AmassService that handles all active certificate activities
+// within the architecture.
+type ActiveCertService struct {
+	core.BaseAmassService
+
+	bus       evbus.Bus
+	maxPulls  *utils.Semaphore
+	filter    *utils.StringFilter
+	addrQueue []string
+}
+
+// NewActiveCertService requires the enumeration configuration and event bus as parameters.
+// The object returned is initialized, but has not yet been started.
+func NewActiveCertService(config *core.AmassConfig, bus evbus.Bus) *ActiveCertService {
+	acs := &ActiveCertService{
+		bus:      bus,
+		maxPulls: utils.NewSemaphore(25),
+		filter:   utils.NewStringFilter(),
+	}
+
+	acs.BaseAmassService = *core.NewBaseAmassService("Active Certificate Service", config, acs)
+	return acs
+}
+
+// OnStart implements the AmassService interface
+func (acs *ActiveCertService) OnStart() error {
+	acs.BaseAmassService.OnStart()
+
+	if acs.Config().Active {
+		acs.bus.SubscribeAsync(core.ACTIVECERT, acs.queueAddress, false)
+	}
+	go acs.processRequests()
+	return nil
+}
+
+// OnStop implements the AmassService interface
+func (acs *ActiveCertService) OnStop() error {
+	acs.BaseAmassService.OnStop()
+
+	if acs.Config().Active {
+		acs.bus.Unsubscribe(core.ACTIVECERT, acs.queueAddress)
+	}
+	return nil
+}
+
+func (acs *ActiveCertService) queueAddress(addr string) {
+	acs.Lock()
+	defer acs.Unlock()
+
+	if acs.filter.Duplicate(addr) {
+		return
+	}
+	acs.addrQueue = append(acs.addrQueue, addr)
+}
+
+func (acs *ActiveCertService) nextAddress() string {
+	acs.Lock()
+	defer acs.Unlock()
+
+	if len(acs.addrQueue) == 0 {
+		return ""
+	}
+
+	next := acs.addrQueue[0]
+	// Remove the first slice element
+	if len(acs.addrQueue) > 1 {
+		acs.addrQueue = acs.addrQueue[1:]
+	} else {
+		acs.addrQueue = []string{}
+	}
+	return next
+}
+
+func (acs *ActiveCertService) processRequests() {
+	var paused bool
+
+	for {
+		select {
+		case <-acs.PauseChan():
+			paused = true
+		case <-acs.ResumeChan():
+			paused = false
+		case <-acs.Quit():
+			return
+		default:
+			if paused {
+				time.Sleep(time.Second)
+				continue
+			}
+			if acs.maxPulls.TryAcquire(1) {
+				if addr := acs.nextAddress(); addr == "" {
+					acs.maxPulls.Release(1)
+					time.Sleep(100 * time.Millisecond)
+				} else {
+					go acs.performRequest(addr)
+				}
+			}
+		}
+	}
+}
+
+func (acs *ActiveCertService) performRequest(addr string) {
+	defer acs.maxPulls.Release(1)
+
+	/*acs.SetActive()
+	for _, r := range PullCertificateNames(addr, acs.Config().Ports) {
+		if acs.Config().IsDomainInScope(r.Name) {
+			acs.bus.Publish(core.NEWNAME, r)
+		}
+	}*/
+}
 
 // PullCertificateNames attempts to pull a cert from one or more ports on an IP.
 func PullCertificateNames(addr string, ports []int) []*core.AmassRequest {

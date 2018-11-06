@@ -20,7 +20,7 @@ type SubdomainService struct {
 	bus evbus.Bus
 
 	// Ensures we do not completely process names more than once
-	filter *utils.NameFilter
+	filter *utils.StringFilter
 
 	// Subdomain names that have been seen and how many times
 	subdomains map[string]int
@@ -31,7 +31,7 @@ type SubdomainService struct {
 func NewSubdomainService(config *core.AmassConfig, bus evbus.Bus) *SubdomainService {
 	ss := &SubdomainService{
 		bus:        bus,
-		filter:     utils.NewNameFilter(),
+		filter:     utils.NewStringFilter(),
 		subdomains: make(map[string]int),
 	}
 

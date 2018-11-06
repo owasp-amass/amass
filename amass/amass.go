@@ -222,6 +222,7 @@ func (e *Enumeration) Start() error {
 			dnssrv.NewDNSService(config, bus),
 			NewAlterationService(config, bus),
 			NewBruteForceService(config, bus),
+			NewActiveCertService(config, bus),
 		)
 	}
 

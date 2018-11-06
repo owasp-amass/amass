@@ -20,19 +20,15 @@ import (
 type DataManagerService struct {
 	core.BaseAmassService
 
-	bus                  evbus.Bus
-	Handlers             []handlers.DataHandler
-	maxDataInputRoutines *utils.Semaphore
-	domains              []string
+	bus      evbus.Bus
+	Handlers []handlers.DataHandler
+	domains  []string
 }
 
 // NewDataManagerService requires the enumeration configuration and event bus as parameters.
 // The object returned is initialized, but has not yet been started.
 func NewDataManagerService(config *core.AmassConfig, bus evbus.Bus) *DataManagerService {
-	dms := &DataManagerService{
-		bus:                  bus,
-		maxDataInputRoutines: utils.NewSemaphore(10),
-	}
+	dms := &DataManagerService{bus: bus}
 
 	dms.BaseAmassService = *core.NewBaseAmassService("Data Manager Service", config, dms)
 	return dms
@@ -88,7 +84,6 @@ func (dms *DataManagerService) processRequests() {
 				continue
 			}
 			if req := dms.NextRequest(); req != nil {
-				dms.maxDataInputRoutines.Acquire(1)
 				dms.SetActive()
 				dms.manageData(req)
 			} else {
@@ -157,7 +152,6 @@ func (dms *DataManagerService) manageData(req *core.AmassRequest) {
 			dms.insertSPF(req, i)
 		}
 	}
-	dms.maxDataInputRoutines.Release(1)
 }
 
 func (dms *DataManagerService) publishRequest(req *core.AmassRequest) {
@@ -235,7 +229,7 @@ func (dms *DataManagerService) insertA(req *core.AmassRequest, recidx int) {
 	dms.insertInfrastructure(addr)
 	// Check if active certificate access should be used on this address
 	if dms.Config().Active && dms.Config().IsDomainInScope(req.Name) {
-		dms.obtainNamesFromCertificate(addr)
+		dms.bus.Publish(core.ACTIVECERT, addr)
 	}
 	if _, cidr, _, err := IPRequest(addr); err == nil {
 		dms.bus.Publish(core.DNSSWEEP, addr, cidr)
@@ -257,20 +251,12 @@ func (dms *DataManagerService) insertAAAA(req *core.AmassRequest, recidx int) {
 	dms.insertInfrastructure(addr)
 	// Check if active certificate access should be used on this address
 	if dms.Config().Active && dms.Config().IsDomainInScope(req.Name) {
-		dms.obtainNamesFromCertificate(addr)
+		dms.bus.Publish(core.ACTIVECERT, addr)
 	}
 	if _, cidr, _, err := IPRequest(addr); err == nil {
 		dms.bus.Publish(core.DNSSWEEP, addr, cidr)
 	} else {
 		dms.Config().Log.Printf("%v", err)
-	}
-}
-
-func (dms *DataManagerService) obtainNamesFromCertificate(addr string) {
-	for _, r := range PullCertificateNames(addr, dms.Config().Ports) {
-		if dms.Config().IsDomainInScope(r.Name) {
-			go dms.publishRequest(r)
-		}
 	}
 }
 

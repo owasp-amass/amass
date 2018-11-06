@@ -156,16 +156,12 @@ func (bas *BaseAmassService) NextRequest() *AmassRequest {
 		return nil
 	}
 
-	var next *AmassRequest
-
-	if len(bas.queue) > 0 {
-		next = bas.queue[0]
-		// Remove the first slice element
-		if len(bas.queue) > 1 {
-			bas.queue = bas.queue[1:]
-		} else {
-			bas.queue = []*AmassRequest{}
-		}
+	next := bas.queue[0]
+	// Remove the first slice element
+	if len(bas.queue) > 1 {
+		bas.queue = bas.queue[1:]
+	} else {
+		bas.queue = []*AmassRequest{}
 	}
 	return next
 }

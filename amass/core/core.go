@@ -7,13 +7,14 @@ import "github.com/OWASP/Amass/amass/utils"
 
 // Various types used throughout Amass
 const (
-	NEWNAME  = "amass:newname"
-	NEWSUB   = "amass:newsubdomain"
-	DNSQUERY = "amass:dnsquery"
-	DNSSWEEP = "amass.dnssweep"
-	RESOLVED = "amass:resolved"
-	CHECKED  = "amass:checked"
-	OUTPUT   = "amass:output"
+	NEWNAME    = "amass:newname"
+	NEWSUB     = "amass:newsubdomain"
+	DNSQUERY   = "amass:dnsquery"
+	DNSSWEEP   = "amass.dnssweep"
+	RESOLVED   = "amass:resolved"
+	CHECKED    = "amass:checked"
+	ACTIVECERT = "amass:activecert"
+	OUTPUT     = "amass:output"
 
 	ALT     = "alt"
 	ARCHIVE = "archive"

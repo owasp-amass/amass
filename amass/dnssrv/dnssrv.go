@@ -68,7 +68,7 @@ type DNSService struct {
 	bus evbus.Bus
 
 	// Ensures we do not resolve names more than once
-	filter *utils.NameFilter
+	filter *utils.StringFilter
 
 	wildcards        map[string]*wildcard
 	wildcardRequests chan wildcardRequest
@@ -81,7 +81,7 @@ type DNSService struct {
 func NewDNSService(config *core.AmassConfig, bus evbus.Bus) *DNSService {
 	ds := &DNSService{
 		bus:              bus,
-		filter:           utils.NewNameFilter(),
+		filter:           utils.NewStringFilter(),
 		wildcards:        make(map[string]*wildcard),
 		wildcardRequests: make(chan wildcardRequest),
 	}
@@ -259,7 +259,7 @@ func (ds *DNSService) basicQueries(subdomain, domain string) {
 	}
 
 	if len(answers) > 0 {
-		go ds.sendResolved(&core.AmassRequest{
+		ds.sendResolved(&core.AmassRequest{
 			Name:    subdomain,
 			Domain:  domain,
 			Records: answers,
@@ -298,7 +298,7 @@ func (ds *DNSService) queryServiceNames(subdomain, domain string) {
 
 		core.MaxConnections.Acquire(1)
 		if a, err := Resolve(srvName, "SRV"); err == nil {
-			go ds.sendResolved(&core.AmassRequest{
+			ds.sendResolved(&core.AmassRequest{
 				Name:    srvName,
 				Domain:  domain,
 				Records: a,
@@ -344,7 +344,7 @@ func (ds *DNSService) reverseDNSRoutine(ip string) {
 		return
 	}
 
-	go ds.sendResolved(&core.AmassRequest{
+	ds.sendResolved(&core.AmassRequest{
 		Name:   ptr,
 		Domain: domain,
 		Records: []core.DNSAnswer{{

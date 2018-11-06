@@ -34,8 +34,8 @@ type SourcesService struct {
 	directs       []sources.DataSource
 	throttles     []sources.DataSource
 	throttleQueue []*entry
-	filter        *utils.NameFilter
-	outfilter     *utils.NameFilter
+	filter        *utils.StringFilter
+	outfilter     *utils.StringFilter
 }
 
 // NewSourcesService requires the enumeration configuration and event bus as parameters.
@@ -44,8 +44,8 @@ func NewSourcesService(config *core.AmassConfig, bus evbus.Bus) *SourcesService 
 	ss := &SourcesService{
 		bus:       bus,
 		responses: make(chan *core.AmassRequest, 50),
-		filter:    utils.NewNameFilter(),
-		outfilter: utils.NewNameFilter(),
+		filter:    utils.NewStringFilter(),
+		outfilter: utils.NewStringFilter(),
 	}
 	ss.BaseAmassService = *core.NewBaseAmassService("Sources Service", config, ss)
 

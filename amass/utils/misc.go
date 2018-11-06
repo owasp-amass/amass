@@ -71,47 +71,47 @@ func (s *Semaphore) Release(num int) {
 }
 
 type filterRequest struct {
-	Name   string
+	String string
 	Result chan bool
 }
 
-// NameFilter implements an object that performs filtering of strings
+// StringFilter implements an object that performs filtering of strings
 // to ensure that only unique items get through the filter.
-type NameFilter struct {
+type StringFilter struct {
 	filter   *cfilter.CFilter
 	requests chan filterRequest
 	quit     chan struct{}
 }
 
-// NewNameFilter returns an initialized NameFilter.
-func NewNameFilter() *NameFilter {
-	nf := &NameFilter{
+// NewStringFilter returns an initialized NameFilter.
+func NewStringFilter() *StringFilter {
+	sf := &StringFilter{
 		filter:   cfilter.New(),
 		requests: make(chan filterRequest),
 		quit:     make(chan struct{}),
 	}
-	go nf.processRequests()
-	return nf
+	go sf.processRequests()
+	return sf
 }
 
 // Duplicate checks if the name provided has been seen before by this filter.
-func (nf *NameFilter) Duplicate(name string) bool {
+func (sf *StringFilter) Duplicate(s string) bool {
 	result := make(chan bool)
 
-	nf.requests <- filterRequest{Name: name, Result: result}
+	sf.requests <- filterRequest{String: s, Result: result}
 	return <-result
 }
 
-func (nf *NameFilter) processRequests() {
+func (sf *StringFilter) processRequests() {
 	for {
 		select {
-		case <-nf.quit:
+		case <-sf.quit:
 			return
-		case r := <-nf.requests:
-			if nf.filter.Lookup([]byte(r.Name)) {
+		case r := <-sf.requests:
+			if sf.filter.Lookup([]byte(r.String)) {
 				r.Result <- true
 			} else {
-				nf.filter.Insert([]byte(r.Name))
+				sf.filter.Insert([]byte(r.String))
 				r.Result <- false
 			}
 		}
