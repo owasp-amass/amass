@@ -47,19 +47,6 @@ const (
 	defaultWordlistURL = "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/namelist.txt"
 )
 
-// EnumerationTiming represents a speed band for the enumeration to execute within.
-type EnumerationTiming int
-
-// The various timing/speed templates for an Amass enumeration.
-const (
-	Paranoid EnumerationTiming = iota
-	Sneaky
-	Polite
-	Normal
-	Aggressive
-	Insane
-)
-
 // Enumeration is the object type used to execute a DNS enumeration with Amass.
 type Enumeration struct {
 	// The channel that will receive the results
@@ -102,7 +89,7 @@ type Enumeration struct {
 	Alterations bool
 
 	// Indicates a speed band for the enumeration to execute within
-	Timing EnumerationTiming
+	Timing core.EnumerationTiming
 
 	// Only access the data sources for names and return results?
 	Passive bool
@@ -134,7 +121,7 @@ func NewEnumeration() *Enumeration {
 		Recursive:       true,
 		MinForRecursive: 1,
 		Alterations:     true,
-		Timing:          Normal,
+		Timing:          core.Normal,
 		pause:           make(chan struct{}),
 		resume:          make(chan struct{}),
 	}
@@ -187,13 +174,14 @@ func (e *Enumeration) generateAmassConfig() (*core.AmassConfig, error) {
 		Recursive:       e.Recursive,
 		MinForRecursive: e.MinForRecursive,
 		Alterations:     e.Alterations,
+		Timing:          e.Timing,
 		Passive:         e.Passive,
 		Active:          e.Active,
 		Blacklist:       e.Blacklist,
 		DataOptsWriter:  e.DataOptsWriter,
 	}
 	config.SetGraph(core.NewGraph())
-	config.MaxFlow = utils.NewSemaphore(timingToMaxFlow(e.Timing))
+	config.MaxFlow = utils.NewSemaphore(core.TimingToMaxFlow(e.Timing))
 
 	for _, domain := range e.Domains() {
 		config.AddDomain(domain)
@@ -311,25 +299,6 @@ func (e *Enumeration) ObtainAdditionalDomains() {
 			}
 		}
 	}
-}
-
-func timingToMaxFlow(t EnumerationTiming) int {
-	var result int
-	switch t {
-	case Paranoid:
-		result = 1
-	case Sneaky:
-		result = 10
-	case Polite:
-		result = 25
-	case Normal:
-		result = 50
-	case Aggressive:
-		result = 100
-	case Insane:
-		result = 250
-	}
-	return result
 }
 
 func getDefaultWordlist() ([]string, error) {

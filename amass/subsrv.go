@@ -24,6 +24,8 @@ type SubdomainService struct {
 
 	// Subdomain names that have been seen and how many times
 	subdomains map[string]int
+
+	releases chan struct{}
 }
 
 // NewSubdomainService requires the enumeration configuration and event bus as parameters.
@@ -33,6 +35,7 @@ func NewSubdomainService(config *core.AmassConfig, bus evbus.Bus) *SubdomainServ
 		bus:        bus,
 		filter:     utils.NewStringFilter(),
 		subdomains: make(map[string]int),
+		releases:   make(chan struct{}, 100),
 	}
 
 	ss.BaseAmassService = *core.NewBaseAmassService("Subdomain Service", config, ss)
@@ -45,7 +48,9 @@ func (ss *SubdomainService) OnStart() error {
 
 	ss.bus.SubscribeAsync(core.NEWNAME, ss.SendRequest, false)
 	ss.bus.SubscribeAsync(core.RESOLVED, ss.performCheck, false)
+	ss.bus.SubscribeAsync(core.RELEASEREQ, ss.sendRelease, false)
 	go ss.processRequests()
+	go ss.processReleases()
 	return nil
 }
 
@@ -65,6 +70,7 @@ func (ss *SubdomainService) OnStop() error {
 
 	ss.bus.Unsubscribe(core.NEWNAME, ss.SendRequest)
 	ss.bus.Unsubscribe(core.CHECKED, ss.performCheck)
+	ss.bus.Unsubscribe(core.RELEASEREQ, ss.sendRelease)
 	return nil
 }
 
@@ -101,7 +107,7 @@ func (ss *SubdomainService) processRequests() {
 
 func (ss *SubdomainService) performRequest(req *core.AmassRequest) {
 	if req == nil || req.Name == "" || req.Domain == "" {
-		ss.Config().MaxFlow.Release(1)
+		ss.sendRelease()
 		return
 	}
 	req.Name = strings.ToLower(utils.RemoveAsteriskLabel(req.Name))
@@ -115,7 +121,7 @@ func (ss *SubdomainService) performRequest(req *core.AmassRequest) {
 				Source: req.Source,
 			})
 		}
-		ss.Config().MaxFlow.Release(1)
+		ss.sendRelease()
 		return
 	}
 	ss.bus.Publish(core.DNSQUERY, req)
@@ -171,4 +177,23 @@ func (ss *SubdomainService) timesForSubdomain(sub string) int {
 	}
 	ss.subdomains[sub] = times
 	return times
+}
+
+func (ss *SubdomainService) sendRelease() {
+	ss.releases <- struct{}{}
+}
+
+func (ss *SubdomainService) processReleases() {
+	t := time.NewTicker(core.TimingToReleaseDelay(ss.Config().Timing))
+	defer t.Stop()
+
+	for {
+		select {
+		case <-ss.Quit():
+			return
+		case <-ss.releases:
+			<-t.C
+			ss.Config().MaxFlow.Release(1)
+		}
+	}
 }

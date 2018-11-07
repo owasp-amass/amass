@@ -74,6 +74,7 @@ func (as *AlterationService) processRequests() {
 
 // executeAlterations runs all the DNS name alteration methods as goroutines.
 func (as *AlterationService) executeAlterations(req *core.AmassRequest) {
+	as.SetActive()
 	if !as.Config().IsDomainInScope(req.Name) || !as.correctRecordTypes(req) {
 		return
 	}
@@ -154,7 +155,6 @@ func (as *AlterationService) sendAlteredName(name, domain string) {
 
 	if re != nil && re.MatchString(name) {
 		as.Config().MaxFlow.Acquire(1)
-		as.SetActive()
 		as.bus.Publish(core.NEWNAME, &core.AmassRequest{
 			Name:   name,
 			Domain: domain,

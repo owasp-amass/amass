@@ -3,18 +3,23 @@
 
 package core
 
-import "github.com/OWASP/Amass/amass/utils"
+import (
+	"time"
+
+	"github.com/OWASP/Amass/amass/utils"
+)
 
 // Various types used throughout Amass
 const (
-	NEWNAME    = "amass:newname"
-	NEWSUB     = "amass:newsubdomain"
+	ACTIVECERT = "amass:activecert"
+	CHECKED    = "amass:checked"
 	DNSQUERY   = "amass:dnsquery"
 	DNSSWEEP   = "amass.dnssweep"
-	RESOLVED   = "amass:resolved"
-	CHECKED    = "amass:checked"
-	ACTIVECERT = "amass:activecert"
+	NEWNAME    = "amass:newname"
+	NEWSUB     = "amass:newsubdomain"
 	OUTPUT     = "amass:output"
+	RELEASEREQ = "amass:releaserequest"
+	RESOLVED   = "amass:resolved"
 
 	ALT     = "alt"
 	ARCHIVE = "archive"
@@ -24,6 +29,19 @@ const (
 	CERT    = "cert"
 	DNS     = "dns"
 	SCRAPE  = "scrape"
+)
+
+// EnumerationTiming represents a speed band for the enumeration to execute within.
+type EnumerationTiming int
+
+// The various timing/speed templates for an Amass enumeration.
+const (
+	Paranoid EnumerationTiming = iota
+	Sneaky
+	Polite
+	Normal
+	Aggressive
+	Insane
 )
 
 var (
@@ -46,4 +64,46 @@ func TrustedTag(tag string) bool {
 		return true
 	}
 	return false
+}
+
+// TimingToMaxFlow returns the maximum number of names Amass should handle at once.
+func TimingToMaxFlow(t EnumerationTiming) int {
+	var result int
+
+	switch t {
+	case Paranoid:
+		result = 3
+	case Sneaky:
+		result = 5
+	case Polite:
+		result = 20
+	case Normal:
+		result = 40
+	case Aggressive:
+		result = 200
+	case Insane:
+		result = 1000
+	}
+	return result
+}
+
+// TimingToReleaseDelay returns the minimum delay between each MaxFlow semaphore release.
+func TimingToReleaseDelay(t EnumerationTiming) time.Duration {
+	var result time.Duration
+
+	switch t {
+	case Paranoid:
+		result = 250 * time.Millisecond
+	case Sneaky:
+		result = 100 * time.Millisecond
+	case Polite:
+		result = 33 * time.Millisecond
+	case Normal:
+		result = 20 * time.Millisecond
+	case Aggressive:
+		result = 4 * time.Millisecond
+	case Insane:
+		result = time.Millisecond
+	}
+	return result
 }

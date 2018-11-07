@@ -12,12 +12,14 @@ import (
 	"github.com/OWASP/Amass/amass/utils/viz"
 )
 
+// Edge represents a graph edge.
 type Edge struct {
 	From, To int
 	Label    string
 	idx      int
 }
 
+// Node represents a graph node.
 type Node struct {
 	sync.Mutex
 	Labels     []string
@@ -26,6 +28,7 @@ type Node struct {
 	idx        int
 }
 
+// Edges returns a slice of edge indicies that are connected to this node.
 func (n *Node) Edges() []int {
 	n.Lock()
 	defer n.Unlock()
@@ -33,6 +36,7 @@ func (n *Node) Edges() []int {
 	return n.edges
 }
 
+// AddEdge appends the provided edge index to the list of edges connected to this node.
 func (n *Node) AddEdge(e int) {
 	n.Lock()
 	defer n.Unlock()
@@ -40,6 +44,7 @@ func (n *Node) AddEdge(e int) {
 	n.edges = append(n.edges, e)
 }
 
+// Graph is the object for managing a network infrastructure link graph.
 type Graph struct {
 	sync.Mutex
 	Domains    map[string]*Node
@@ -54,6 +59,7 @@ type Graph struct {
 	curEdgeIdx int
 }
 
+// NewGraph returns an intialized Graph object.
 func NewGraph() *Graph {
 	return &Graph{
 		Domains:    make(map[string]*Node),
@@ -65,10 +71,12 @@ func NewGraph() *Graph {
 	}
 }
 
+// String implements the Amass data handler interface.
 func (g *Graph) String() string {
 	return "Amass Graph"
 }
 
+// NewNode returns an intialized Node object.
 func (g *Graph) NewNode(label string) *Node {
 	g.Lock()
 	defer g.Unlock()
@@ -84,7 +92,7 @@ func (g *Graph) NewNode(label string) *Node {
 	return n
 }
 
-func (g *Graph) DomainNode(domain string) *Node {
+func (g *Graph) domainNode(domain string) *Node {
 	g.Lock()
 	defer g.Unlock()
 
@@ -94,7 +102,7 @@ func (g *Graph) DomainNode(domain string) *Node {
 	return g.Domains[domain]
 }
 
-func (g *Graph) SubdomainNode(sub string) *Node {
+func (g *Graph) subdomainNode(sub string) *Node {
 	g.Lock()
 	defer g.Unlock()
 
@@ -104,8 +112,9 @@ func (g *Graph) SubdomainNode(sub string) *Node {
 	return g.Subdomains[sub]
 }
 
+// CNAMENode returns the Node for the subdomain name provided if it's a CNAME.
 func (g *Graph) CNAMENode(sub string) *Node {
-	n := g.SubdomainNode(sub)
+	n := g.subdomainNode(sub)
 	if n == nil {
 		return nil
 	}
@@ -119,7 +128,7 @@ func (g *Graph) CNAMENode(sub string) *Node {
 	return nil
 }
 
-func (g *Graph) AddressNode(addr string) *Node {
+func (g *Graph) addressNode(addr string) *Node {
 	g.Lock()
 	defer g.Unlock()
 
@@ -129,7 +138,7 @@ func (g *Graph) AddressNode(addr string) *Node {
 	return g.Addresses[addr]
 }
 
-func (g *Graph) PTRNode(ptr string) *Node {
+func (g *Graph) ptrNode(ptr string) *Node {
 	g.Lock()
 	defer g.Unlock()
 
@@ -139,7 +148,7 @@ func (g *Graph) PTRNode(ptr string) *Node {
 	return g.PTRs[ptr]
 }
 
-func (g *Graph) NetblockNode(nb string) *Node {
+func (g *Graph) netblockNode(nb string) *Node {
 	g.Lock()
 	defer g.Unlock()
 
@@ -149,7 +158,7 @@ func (g *Graph) NetblockNode(nb string) *Node {
 	return g.Netblocks[nb]
 }
 
-func (g *Graph) ASNNode(asn int) *Node {
+func (g *Graph) asnNode(asn int) *Node {
 	g.Lock()
 	defer g.Unlock()
 
@@ -159,6 +168,7 @@ func (g *Graph) ASNNode(asn int) *Node {
 	return g.ASNs[asn]
 }
 
+// NewEdge returns an initialized Edge object.
 func (g *Graph) NewEdge(from, to int, label string) *Edge {
 	g.Lock()
 	defer g.Unlock()
@@ -185,6 +195,7 @@ func (g *Graph) NewEdge(from, to int, label string) *Edge {
 	return e
 }
 
+// VizData returns the current state of the Graph as viz package Nodes and Edges.
 func (g *Graph) VizData() ([]viz.Node, []viz.Edge) {
 	g.Lock()
 	defer g.Unlock()
@@ -246,8 +257,8 @@ func (g *Graph) VizData() ([]viz.Node, []viz.Edge) {
 	return nodes, edges
 }
 
-func (g *Graph) InsertSubdomain(name, domain, tag, source string) {
-	if g.SubdomainNode(name) != nil {
+func (g *Graph) insertSubdomain(name, domain, tag, source string) {
+	if g.subdomainNode(name) != nil {
 		return
 	}
 
@@ -260,19 +271,20 @@ func (g *Graph) InsertSubdomain(name, domain, tag, source string) {
 	g.Subdomains[name] = sub
 	g.Unlock()
 
-	if d := g.DomainNode(domain); d != nil {
-		if s := g.SubdomainNode(name); s != nil {
+	if d := g.domainNode(domain); d != nil {
+		if s := g.subdomainNode(name); s != nil {
 			g.NewEdge(d.idx, s.idx, "ROOT_OF")
 		}
 	}
 }
 
+// InsertDomain implements the Amass data handler interface.
 func (g *Graph) InsertDomain(domain, tag, source string) error {
-	if g.DomainNode(domain) != nil {
+	if g.domainNode(domain) != nil {
 		return nil
 	}
 
-	if d := g.SubdomainNode(domain); d == nil {
+	if d := g.subdomainNode(domain); d == nil {
 		d = g.NewNode("Domain")
 		if d == nil {
 			return fmt.Errorf("Failed to create new domain node for %s", domain)
@@ -294,20 +306,21 @@ func (g *Graph) InsertDomain(domain, tag, source string) error {
 	return nil
 }
 
+// InsertCNAME implements the Amass data handler interface.
 func (g *Graph) InsertCNAME(name, domain, target, tdomain, tag, source string) error {
 	if name != domain {
-		g.InsertSubdomain(name, domain, tag, source)
+		g.insertSubdomain(name, domain, tag, source)
 	}
 	if target != tdomain {
-		g.InsertSubdomain(target, tdomain, tag, source)
+		g.insertSubdomain(target, tdomain, tag, source)
 	}
 
-	s := g.SubdomainNode(name)
+	s := g.subdomainNode(name)
 	if s == nil {
 		return fmt.Errorf("Failed to obtain a reference to the node for %s", name)
 	}
 
-	t := g.SubdomainNode(target)
+	t := g.subdomainNode(target)
 	if t == nil {
 		return fmt.Errorf("Failed to obtain a reference to the node for %s", target)
 	}
@@ -316,12 +329,13 @@ func (g *Graph) InsertCNAME(name, domain, target, tdomain, tag, source string) e
 	return nil
 }
 
+// InsertA implements the Amass data handler interface.
 func (g *Graph) InsertA(name, domain, addr, tag, source string) error {
 	if name != domain {
-		g.InsertSubdomain(name, domain, tag, source)
+		g.insertSubdomain(name, domain, tag, source)
 	}
 
-	a := g.AddressNode(addr)
+	a := g.addressNode(addr)
 	if a == nil {
 		a = g.NewNode("IPAddress")
 		if a != nil {
@@ -333,19 +347,20 @@ func (g *Graph) InsertA(name, domain, addr, tag, source string) error {
 		}
 	}
 
-	if s := g.SubdomainNode(name); s != nil && a != nil {
+	if s := g.subdomainNode(name); s != nil && a != nil {
 		g.NewEdge(s.idx, a.idx, "A_TO")
 		return nil
 	}
 	return fmt.Errorf("Failed to insert the A_TO edge between %s and %s", addr, name)
 }
 
+// InsertAAAA implements the Amass data handler interface.
 func (g *Graph) InsertAAAA(name, domain, addr, tag, source string) error {
 	if name != domain {
-		g.InsertSubdomain(name, domain, tag, source)
+		g.insertSubdomain(name, domain, tag, source)
 	}
 
-	a := g.AddressNode(addr)
+	a := g.addressNode(addr)
 	if a == nil {
 		a = g.NewNode("IPAddress")
 		if a != nil {
@@ -357,19 +372,20 @@ func (g *Graph) InsertAAAA(name, domain, addr, tag, source string) error {
 		}
 	}
 
-	if s := g.SubdomainNode(name); s != nil && a != nil {
+	if s := g.subdomainNode(name); s != nil && a != nil {
 		g.NewEdge(s.idx, a.idx, "AAAA_TO")
 		return nil
 	}
 	return fmt.Errorf("Failed to insert the AAAA_TO edge between %s and %s", addr, name)
 }
 
+// InsertPTR implements the Amass data handler interface.
 func (g *Graph) InsertPTR(name, domain, target, tag, source string) error {
 	if target != domain {
-		g.InsertSubdomain(target, domain, tag, source)
+		g.insertSubdomain(target, domain, tag, source)
 	}
 
-	ptr := g.PTRNode(name)
+	ptr := g.ptrNode(name)
 	if ptr == nil {
 		ptr = g.NewNode("PTR")
 		if ptr != nil {
@@ -380,36 +396,37 @@ func (g *Graph) InsertPTR(name, domain, target, tag, source string) error {
 		}
 	}
 
-	if s := g.SubdomainNode(target); s != nil && ptr != nil {
+	if s := g.subdomainNode(target); s != nil && ptr != nil {
 		g.NewEdge(ptr.idx, s.idx, "PTR_TO")
 		return nil
 	}
 	return fmt.Errorf("Failed to insert the PTR_TO edge between %s and %s", name, target)
 }
 
+// InsertSRV implements the Amass data handler interface.
 func (g *Graph) InsertSRV(name, domain, service, target, tag, source string) error {
 	if name != domain {
-		g.InsertSubdomain(name, domain, tag, source)
+		g.insertSubdomain(name, domain, tag, source)
 	}
-	g.InsertSubdomain(service, domain, tag, source)
-	g.InsertSubdomain(target, domain, tag, source)
+	g.insertSubdomain(service, domain, tag, source)
+	g.insertSubdomain(target, domain, tag, source)
 
-	d := g.DomainNode(domain)
+	d := g.domainNode(domain)
 	if d == nil {
 		return fmt.Errorf("Failed to obtain a reference to the domain node for %s", domain)
 	}
 
-	sub := g.SubdomainNode(name)
+	sub := g.subdomainNode(name)
 	if sub == nil {
 		return fmt.Errorf("Failed to obtain a reference to the node for %s", name)
 	}
 
-	t := g.SubdomainNode(target)
+	t := g.subdomainNode(target)
 	if t == nil {
 		return fmt.Errorf("Failed to obtain a reference to the node for %s", target)
 	}
 
-	srv := g.SubdomainNode(service)
+	srv := g.subdomainNode(service)
 	if srv == nil {
 		return fmt.Errorf("Failed to obtain a reference to the node for %s", service)
 	}
@@ -419,10 +436,11 @@ func (g *Graph) InsertSRV(name, domain, service, target, tag, source string) err
 	return nil
 }
 
+// InsertNS implements the Amass data handler interface.
 func (g *Graph) InsertNS(name, domain, target, tdomain, tag, source string) error {
-	g.InsertSubdomain(name, domain, tag, source)
+	g.insertSubdomain(name, domain, tag, source)
 
-	ns := g.SubdomainNode(target)
+	ns := g.subdomainNode(target)
 	if ns == nil {
 		ns = g.NewNode("NS")
 		if ns != nil {
@@ -439,24 +457,25 @@ func (g *Graph) InsertNS(name, domain, target, tdomain, tag, source string) erro
 	}
 
 	if target != tdomain {
-		if td := g.DomainNode(tdomain); td != nil && ns != nil {
+		if td := g.domainNode(tdomain); td != nil && ns != nil {
 			g.NewEdge(td.idx, ns.idx, "ROOT_OF")
 		} else {
 			return fmt.Errorf("Failed to insert the ROOT_OF edge between %s and %s", tdomain, target)
 		}
 	}
 
-	if s := g.SubdomainNode(name); s != nil && ns != nil {
+	if s := g.subdomainNode(name); s != nil && ns != nil {
 		g.NewEdge(s.idx, ns.idx, "NS_TO")
 		return nil
 	}
 	return fmt.Errorf("Failed to insert the NS_TO edge between %s and %s", target, name)
 }
 
+// InsertMX implements the Amass data handler interface.
 func (g *Graph) InsertMX(name, domain, target, tdomain, tag, source string) error {
-	g.InsertSubdomain(name, domain, tag, source)
+	g.insertSubdomain(name, domain, tag, source)
 
-	mx := g.SubdomainNode(target)
+	mx := g.subdomainNode(target)
 	if mx == nil {
 		mx = g.NewNode("MX")
 		if mx != nil {
@@ -473,23 +492,24 @@ func (g *Graph) InsertMX(name, domain, target, tdomain, tag, source string) erro
 	}
 
 	if target != tdomain {
-		if td := g.DomainNode(tdomain); td != nil && mx != nil {
+		if td := g.domainNode(tdomain); td != nil && mx != nil {
 			g.NewEdge(td.idx, mx.idx, "ROOT_OF")
 		} else {
 			return fmt.Errorf("Failed to insert the ROOT_OF edge between %s and %s", tdomain, target)
 		}
 	}
 
-	if s := g.SubdomainNode(name); s != nil && mx != nil {
+	if s := g.subdomainNode(name); s != nil && mx != nil {
 		g.NewEdge(s.idx, mx.idx, "MX_TO")
 		return nil
 	}
 	return fmt.Errorf("Failed to insert the MX_TO edge between %s and %s", target, name)
 }
 
+// InsertInfrastructure implements the Amass data handler interface.
 func (g *Graph) InsertInfrastructure(addr string, asn int, cidr *net.IPNet, desc string) error {
 	str := cidr.String()
-	nb := g.NetblockNode(str)
+	nb := g.netblockNode(str)
 	if nb == nil {
 		nb = g.NewNode("Netblock")
 		if nb != nil {
@@ -500,13 +520,13 @@ func (g *Graph) InsertInfrastructure(addr string, asn int, cidr *net.IPNet, desc
 		}
 	}
 
-	if ip := g.AddressNode(addr); nb != nil && ip != nil {
+	if ip := g.addressNode(addr); nb != nil && ip != nil {
 		g.NewEdge(nb.idx, ip.idx, "CONTAINS")
 	} else {
 		return fmt.Errorf("Failed to insert the CONTAINS edge between %s and %s", str, addr)
 	}
 
-	a := g.ASNNode(asn)
+	a := g.asnNode(asn)
 	if a == nil {
 		a = g.NewNode("AS")
 		if a != nil {
@@ -525,6 +545,7 @@ func (g *Graph) InsertInfrastructure(addr string, asn int, cidr *net.IPNet, desc
 	return nil
 }
 
+// GetNewOutput returns new findings within the enumeration Graph.
 func (g *Graph) GetNewOutput() []*AmassOutput {
 	var domains []string
 	var dNodes []*Node

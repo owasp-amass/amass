@@ -231,11 +231,6 @@ func (dms *DataManagerService) insertA(req *core.AmassRequest, recidx int) {
 	if dms.Config().Active && dms.Config().IsDomainInScope(req.Name) {
 		dms.bus.Publish(core.ACTIVECERT, addr)
 	}
-	if _, cidr, _, err := IPRequest(addr); err == nil {
-		dms.bus.Publish(core.DNSSWEEP, addr, cidr)
-	} else {
-		dms.Config().Log.Printf("%v", err)
-	}
 }
 
 func (dms *DataManagerService) insertAAAA(req *core.AmassRequest, recidx int) {
@@ -252,11 +247,6 @@ func (dms *DataManagerService) insertAAAA(req *core.AmassRequest, recidx int) {
 	// Check if active certificate access should be used on this address
 	if dms.Config().Active && dms.Config().IsDomainInScope(req.Name) {
 		dms.bus.Publish(core.ACTIVECERT, addr)
-	}
-	if _, cidr, _, err := IPRequest(addr); err == nil {
-		dms.bus.Publish(core.DNSSWEEP, addr, cidr)
-	} else {
-		dms.Config().Log.Printf("%v", err)
 	}
 }
 
@@ -398,6 +388,10 @@ func (dms *DataManagerService) insertInfrastructure(addr string) {
 		dms.Config().Log.Printf("%v", err)
 		return
 	}
+
+	// Request the reverse DNS sweep for the addr
+	dms.bus.Publish(core.DNSSWEEP, addr, cidr)
+
 	for _, handler := range dms.Handlers {
 		if err := handler.InsertInfrastructure(addr, asn, cidr, desc); err != nil {
 			dms.Config().Log.Printf("%s failed to insert infrastructure data: %v", handler, err)

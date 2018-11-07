@@ -54,6 +54,9 @@ type AmassConfig struct {
 	// Will discovered subdomain name alterations be generated?
 	Alterations bool
 
+	// Indicates a speed band for the enumeration to execute within
+	Timing EnumerationTiming
+
 	// Only access the data sources for names and return results?
 	Passive bool
 

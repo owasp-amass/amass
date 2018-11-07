@@ -134,7 +134,7 @@ func (ss *SourcesService) processOutput() {
 	for {
 		select {
 		case req := <-ss.responses:
-			ss.handleOutput(req)
+			go ss.handleOutput(req)
 		case <-ss.Quit():
 			return
 		}

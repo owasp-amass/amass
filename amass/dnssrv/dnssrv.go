@@ -119,16 +119,12 @@ func (ds *DNSService) OnStop() error {
 }
 
 func (ds *DNSService) addRequest(req *core.AmassRequest) {
-	if req == nil || req.Name == "" || req.Domain == "" {
-		ds.Config().MaxFlow.Release(1)
-		return
-	}
 	if ds.filter.Duplicate(req.Name) || ds.Config().Blacklisted(req.Name) {
-		ds.Config().MaxFlow.Release(1)
+		ds.bus.Publish(core.RELEASEREQ)
 		return
 	}
 	if !core.TrustedTag(req.Tag) && ds.GetWildcardType(req) == WildcardTypeDynamic {
-		ds.Config().MaxFlow.Release(1)
+		ds.bus.Publish(core.RELEASEREQ)
 		return
 	}
 	ds.SendRequest(req)
@@ -159,7 +155,6 @@ func (ds *DNSService) processRequests() {
 			}
 			if req := ds.NextRequest(); req != nil {
 				core.MaxConnections.Acquire(len(InitialQueryTypes))
-				ds.Config().MaxFlow.Release(1)
 				go ds.performRequest(req)
 			} else {
 				time.Sleep(100 * time.Millisecond)
@@ -169,6 +164,7 @@ func (ds *DNSService) processRequests() {
 }
 
 func (ds *DNSService) performRequest(req *core.AmassRequest) {
+	defer ds.bus.Publish(core.RELEASEREQ)
 	defer core.MaxConnections.Release(len(InitialQueryTypes))
 
 	ds.SetActive()
@@ -313,11 +309,11 @@ func (ds *DNSService) queryServiceNames(subdomain, domain string) {
 func (ds *DNSService) reverseDNSSweep(addr string, cidr *net.IPNet) {
 	var ips []net.IP
 
-	// Get a subset of nearby IP addresses
+	// Get information about nearby IP addresses
 	if ds.Config().Active {
 		ips = utils.CIDRSubset(cidr, addr, 500)
 	} else {
-		ips = utils.CIDRSubset(cidr, addr, 100)
+		ips = utils.CIDRSubset(cidr, addr, 250)
 	}
 
 	for _, ip := range ips {
@@ -325,12 +321,14 @@ func (ds *DNSService) reverseDNSSweep(addr string, cidr *net.IPNet) {
 		if ds.filter.Duplicate(a) {
 			continue
 		}
+		//ds.Config().MaxFlow.Acquire(1)
 		core.MaxConnections.Acquire(1)
 		go ds.reverseDNSRoutine(a)
 	}
 }
 
 func (ds *DNSService) reverseDNSRoutine(ip string) {
+	//defer ds.bus.Publish(core.RELEASEREQ)
 	defer core.MaxConnections.Release(1)
 
 	ds.SetActive()
@@ -338,12 +336,10 @@ func (ds *DNSService) reverseDNSRoutine(ip string) {
 	if err != nil {
 		return
 	}
-
 	domain := ds.Config().WhichDomain(answer)
 	if domain == "" {
 		return
 	}
-
 	ds.sendResolved(&core.AmassRequest{
 		Name:   ptr,
 		Domain: domain,

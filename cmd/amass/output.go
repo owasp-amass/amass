@@ -92,7 +92,8 @@ func listDomains(enum *amass.Enumeration, outfile string) {
 
 func printBanner() {
 	rightmost := 76
-	desc := "In-Depth DNS Enumeration"
+	version := "Version " + amass.Version
+	desc := "In-Depth DNS Enumeration and Network Mapping"
 	author := "Authored By " + amass.Author
 
 	pad := func(num int) {
@@ -101,12 +102,12 @@ func printBanner() {
 		}
 	}
 	r.Println(amass.Banner)
-	pad(rightmost - len(amass.Version))
-	y.Println(amass.Version)
-	pad(rightmost - len(desc))
-	y.Println(desc)
+	pad(rightmost - len(version))
+	y.Println(version)
 	pad(rightmost - len(author))
-	y.Printf("%s\n\n\n", author)
+	y.Println(author)
+	pad(rightmost - len(desc))
+	y.Printf("%s\n\n\n", desc)
 }
 
 func writeTextData(f *os.File, source, name, comma, ips string) {

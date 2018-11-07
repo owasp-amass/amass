@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass"
+	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/dnssrv"
 	"github.com/OWASP/Amass/amass/utils"
 	"github.com/fatih/color"
@@ -41,7 +42,7 @@ var (
 	minrecursive  = flag.Int("min-for-recursive", 1, "Number of subdomain discoveries before recursive brute forcing")
 	passive       = flag.Bool("passive", false, "Disable DNS resolution of names and dependent features")
 	noalts        = flag.Bool("noalts", false, "Disable generation of altered names")
-	timing        = flag.Int("T", int(amass.Normal), "Timing templates 0 (slowest) through 5 (fastest)")
+	timing        = flag.Int("T", int(core.Normal), "Timing templates 0 (slowest) through 5 (fastest)")
 	verbose       = flag.Bool("v", false, "Print the data source and summary information")
 	whois         = flag.Bool("whois", false, "Include domains discoverd with reverse whois")
 	list          = flag.Bool("l", false, "List all domains to be used in an enumeration")
@@ -70,7 +71,7 @@ func main() {
 	flag.Parse()
 
 	// Some input validation
-	if *help {
+	if *help || len(os.Args) == 1 {
 		printBanner()
 		g.Printf("Usage: %s [options] <-d domain>\n", path.Base(os.Args[0]))
 		flag.PrintDefaults()
@@ -133,7 +134,7 @@ func main() {
 	enum.MinForRecursive = *minrecursive
 	enum.Active = *active
 	enum.Alterations = alts
-	enum.Timing = amass.EnumerationTiming(*timing)
+	enum.Timing = core.EnumerationTiming(*timing)
 	enum.Passive = *passive
 	enum.Blacklist = blacklist
 
