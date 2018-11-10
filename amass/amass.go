@@ -253,9 +253,7 @@ loop:
 	for _, service := range services {
 		service.Stop()
 	}
-	// Wait for output to finish being handled
 	bus.Unsubscribe(core.OUTPUT, e.sendOutput)
-	bus.WaitAsync()
 	if completed {
 		close(e.Done)
 	}

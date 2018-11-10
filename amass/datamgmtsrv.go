@@ -269,7 +269,7 @@ func (dms *DataManagerService) insertPTR(req *core.AmassRequest, recidx int) {
 		Name:   target,
 		Domain: domain,
 		Tag:    core.DNS,
-		Source: "Reverse DNS",
+		Source: req.Source,
 	})
 }
 

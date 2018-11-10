@@ -112,27 +112,26 @@ func (acs *ActiveCertService) processRequests() {
 				time.Sleep(time.Second)
 				continue
 			}
-			if acs.maxPulls.TryAcquire(1) {
-				if addr := acs.nextAddress(); addr == "" {
-					acs.maxPulls.Release(1)
-					time.Sleep(100 * time.Millisecond)
-				} else {
-					go acs.performRequest(addr)
-				}
+			if addr := acs.nextAddress(); addr != "" {
+				go acs.performRequest(addr)
+			} else {
+				time.Sleep(100 * time.Millisecond)
 			}
 		}
 	}
 }
 
 func (acs *ActiveCertService) performRequest(addr string) {
+	acs.maxPulls.Acquire(1)
 	defer acs.maxPulls.Release(1)
 
-	/*acs.SetActive()
+	acs.SetActive()
 	for _, r := range PullCertificateNames(addr, acs.Config().Ports) {
 		if acs.Config().IsDomainInScope(r.Name) {
+			acs.Config().MaxFlow.Acquire(1)
 			acs.bus.Publish(core.NEWNAME, r)
 		}
-	}*/
+	}
 }
 
 // PullCertificateNames attempts to pull a cert from one or more ports on an IP.

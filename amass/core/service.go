@@ -89,6 +89,7 @@ func (bas *BaseAmassService) Start() error {
 	} else if bas.isStopped() {
 		return errors.New(bas.name + " service has been stopped")
 	}
+	bas.started = true
 	return bas.service.OnStart()
 }
 
@@ -129,6 +130,7 @@ func (bas *BaseAmassService) Stop() error {
 		return errors.New(bas.name + " service has already been stopped")
 	}
 	err := bas.service.OnStop()
+	bas.stopped = true
 	close(bas.quit)
 	return err
 }

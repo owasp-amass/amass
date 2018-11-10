@@ -164,7 +164,7 @@ func (ds *DNSService) processRequests() {
 }
 
 func (ds *DNSService) performRequest(req *core.AmassRequest) {
-	defer ds.bus.Publish(core.RELEASEREQ)
+	ds.bus.Publish(core.RELEASEREQ)
 	defer core.MaxConnections.Release(len(InitialQueryTypes))
 
 	ds.SetActive()
@@ -182,7 +182,6 @@ func (ds *DNSService) performRequest(req *core.AmassRequest) {
 			ds.Config().Log.Print(err)
 		}
 	}
-	ds.SetActive()
 
 	req.Records = answers
 	if len(req.Records) == 0 {
@@ -321,14 +320,12 @@ func (ds *DNSService) reverseDNSSweep(addr string, cidr *net.IPNet) {
 		if ds.filter.Duplicate(a) {
 			continue
 		}
-		//ds.Config().MaxFlow.Acquire(1)
 		core.MaxConnections.Acquire(1)
 		go ds.reverseDNSRoutine(a)
 	}
 }
 
 func (ds *DNSService) reverseDNSRoutine(ip string) {
-	//defer ds.bus.Publish(core.RELEASEREQ)
 	defer core.MaxConnections.Release(1)
 
 	ds.SetActive()

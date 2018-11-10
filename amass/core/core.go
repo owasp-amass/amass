@@ -72,13 +72,13 @@ func TimingToMaxFlow(t EnumerationTiming) int {
 
 	switch t {
 	case Paranoid:
-		result = 3
-	case Sneaky:
 		result = 5
+	case Sneaky:
+		result = 10
 	case Polite:
-		result = 20
+		result = 30
 	case Normal:
-		result = 40
+		result = 50
 	case Aggressive:
 		result = 200
 	case Insane:
@@ -93,13 +93,13 @@ func TimingToReleaseDelay(t EnumerationTiming) time.Duration {
 
 	switch t {
 	case Paranoid:
-		result = 250 * time.Millisecond
+		result = 200 * time.Millisecond
 	case Sneaky:
 		result = 100 * time.Millisecond
 	case Polite:
 		result = 33 * time.Millisecond
 	case Normal:
-		result = 20 * time.Millisecond
+		result = 10 * time.Millisecond
 	case Aggressive:
 		result = 4 * time.Millisecond
 	case Insane:

@@ -187,13 +187,18 @@ func (ss *SubdomainService) processReleases() {
 	t := time.NewTicker(core.TimingToReleaseDelay(ss.Config().Timing))
 	defer t.Stop()
 
+	var rcount int
 	for {
 		select {
 		case <-ss.Quit():
 			return
+		case <-t.C:
+			if rcount > 0 {
+				ss.Config().MaxFlow.Release(1)
+				rcount--
+			}
 		case <-ss.releases:
-			<-t.C
-			ss.Config().MaxFlow.Release(1)
+			rcount++
 		}
 	}
 }
