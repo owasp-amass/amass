@@ -185,6 +185,15 @@ func (ds *DNSService) performRequest(req *core.AmassRequest) {
 
 	req.Records = answers
 	if len(req.Records) == 0 {
+		// Check if this unresolved name should be output by the enumeration
+		if ds.Config().IncludeUnresolvable && ds.Config().IsDomainInScope(req.Name) {
+			ds.bus.Publish(core.OUTPUT, &core.AmassOutput{
+				Name:   req.Name,
+				Domain: req.Domain,
+				Tag:    req.Tag,
+				Source: req.Source,
+			})
+		}
 		return
 	}
 	go ds.sendResolved(req)
@@ -421,7 +430,7 @@ func (ds *DNSService) getWildcard(sub string) *wildcard {
 		for i := 0; i < numOfWildcardTests; i++ {
 			a := ds.wildcardTestResults(sub)
 			if a == nil {
-				ds.Config().Log.Printf("%s has no DNS wildcard", sub)
+				// There is no DNS wildcard
 				return entry
 			}
 			set[i] = a
@@ -438,12 +447,11 @@ func (ds *DNSService) getWildcard(sub string) *wildcard {
 		if match {
 			entry.WildcardType = WildcardTypeStatic
 			entry.Answers = set[0]
-			ds.Config().Log.Printf("%s has a static DNS wildcard: %v", sub, set[0])
+			ds.Config().Log.Printf("%s has a static DNS wildcard", sub)
 		} else {
 			entry.WildcardType = WildcardTypeDynamic
 			ds.Config().Log.Printf("%s has a dynamic DNS wildcard", sub)
 		}
-		ds.wildcards[sub] = entry
 	}
 	return entry
 }

@@ -3,7 +3,7 @@
 
 [![GitHub Issues](https://img.shields.io/github/issues/OWASP/Amass.svg)](https://github.com/OWASP/Amass/issues) 
 [![CircleCI Status](https://circleci.com/gh/OWASP/Amass/tree/master.svg?style=shield)](https://circleci.com/gh/OWASP/Amass/tree/master)
-[![GitHub Release](https://img.shields.io/github/release/OWASP/Amass.svg)](https://github.com/OWASP/Amass/releases) 
+[![Amass Version](https://img.shields.io/github/release/OWASP/Amass.svg)](https://github.com/OWASP/Amass/tags) 
 [![Go Version](https://img.shields.io/badge/go-1.10-blue.svg)](https://golang.org/dl/) 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0) 
 [![Contribute Yes](https://img.shields.io/badge/contribute-yes-brightgreen.svg)](https://github.com/OWASP/Amass/blob/master/CONTRIBUTING.md) 
@@ -121,6 +121,7 @@ Switches available through the amass CLI:
 | -df  | Specify the domains to be enumerated via text file | amass -df domains.txt |
 | -do  | Write all the data operations to a JSON file | amass -do data.json -d example.com |
 | -h   | Show the amass usage information | amass -h |
+| -include-unresolvable | Output DNS names that did not resolve | amass -include-unresolvable -d example.com |
 | -ip  | Print IP addresses with the discovered names | amass -ip -d example.com |
 | -json | All discoveries written as individual JSON objects | amass -json out.json -d example.com |
 | -l   | List all the domains to be used during enumeration | amass -whois -l -d example.com |
@@ -143,33 +144,14 @@ Switches available through the amass CLI:
 
 **Caution:** If you use the amass.netdomains tool, it will attempt to reach out to every IP address within the identified infrastructure and obtain domains names from reverse DNS requests and TLS certificates. This is "loud" and can reveal your reconnaissance activities to the organization being investigated.
 
-Lookup ASNs by searching the descriptions registered by organizations:
-```
-$ amass.netdomains -org Facebook
-32934, US, ARIN, FACEBOOK - Facebook, Inc., US
-54115, US, ARIN, FACEBOOK-CORP - Facebook Inc, US
-63293, US, ARIN, FACEBOOK-OFFNET - Facebook, Inc., US
-```
+| Flag | Description | Example |
+|------|-------------|---------|
+| -org | Search string provided against AS description information | amass.netdomains -org Facebook |
+| -asn  | ASNs separated by commas (can be used multiple times) | amass.netdomains -asn 13374,14618 |
+| -cidr | CIDRs separated by commas (can be used multiple times) | amass.netdomains -cidr 104.154.0.0/15 |
+| -addr | IPs and ranges (192.168.1.1-254) separated by commas | amass.netdomains -addr 192.168.2.1-64 |
+| -p | Ports separated by commas (default: 443) | amass.netdomains -cidr 104.154.0.0/15 -p 443,8080 |
 
-To discover all domains hosted within target ASNs, use the following option:
-```
-$ amass.netdomains -asn 13374,14618
-```
-
-To investigate target CIDRs, use this option:
-```
-$ amass.netdomains -cidr 192.184.113.0/24,104.154.0.0/15
-```
-
-For specific IPs or address ranges, use this option:
-```
-$ amass.netdomains -addr 192.168.1.44,192.168.2.1-64
-```
-
-By default, port 443 will be checked for certificates, but the ports can be changed as follows:
-```
-$ amass.netdomains -cidr 192.168.1.0/24 -p 80,443,8080
-```
 
 #### amass.viz
 

@@ -63,6 +63,9 @@ type AmassConfig struct {
 	// Determines if zone transfers will be attempted
 	Active bool
 
+	// Determines if unresolved DNS names will be output by the enumeration
+	IncludeUnresolvable bool
+
 	// A blacklist of subdomain names that will not be investigated
 	Blacklist []string
 

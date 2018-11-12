@@ -41,8 +41,8 @@ const (
 	// Version is used to display the current version of Amass.
 	Version = "2.8.3"
 
-	// Author is used to display the developer of the amass package.
-	Author = "https://github.com/OWASP/Amass"
+	// Author is used to display the founder of the amass package.
+	Author = "caffix (@jeff_foley)"
 
 	defaultWordlistURL = "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/namelist.txt"
 )
@@ -96,6 +96,9 @@ type Enumeration struct {
 
 	// Determines if active information gathering techniques will be used
 	Active bool
+
+	// Determines if unresolved DNS names will be output by the enumeration
+	IncludeUnresolvable bool
 
 	// A blacklist of subdomain names that will not be investigated
 	Blacklist []string
@@ -163,22 +166,23 @@ func (e *Enumeration) generateAmassConfig() (*core.AmassConfig, error) {
 	}
 
 	config := &core.AmassConfig{
-		Log:             e.Log,
-		ASNs:            e.ASNs,
-		CIDRs:           e.CIDRs,
-		IPs:             e.IPs,
-		Ports:           e.Ports,
-		Whois:           e.Whois,
-		Wordlist:        e.Wordlist,
-		BruteForcing:    e.BruteForcing,
-		Recursive:       e.Recursive,
-		MinForRecursive: e.MinForRecursive,
-		Alterations:     e.Alterations,
-		Timing:          e.Timing,
-		Passive:         e.Passive,
-		Active:          e.Active,
-		Blacklist:       e.Blacklist,
-		DataOptsWriter:  e.DataOptsWriter,
+		Log:                 e.Log,
+		ASNs:                e.ASNs,
+		CIDRs:               e.CIDRs,
+		IPs:                 e.IPs,
+		Ports:               e.Ports,
+		Whois:               e.Whois,
+		Wordlist:            e.Wordlist,
+		BruteForcing:        e.BruteForcing,
+		Recursive:           e.Recursive,
+		MinForRecursive:     e.MinForRecursive,
+		Alterations:         e.Alterations,
+		Timing:              e.Timing,
+		Passive:             e.Passive,
+		Active:              e.Active,
+		IncludeUnresolvable: e.IncludeUnresolvable,
+		Blacklist:           e.Blacklist,
+		DataOptsWriter:      e.DataOptsWriter,
 	}
 	config.SetGraph(core.NewGraph())
 	config.MaxFlow = utils.NewSemaphore(core.TimingToMaxFlow(e.Timing))
@@ -314,9 +318,8 @@ func getDefaultWordlist() ([]string, error) {
 	for scanner.Scan() {
 		// Get the next word in the list
 		word := scanner.Text()
-		if word != "" {
-			// Add the word to the list
-			list = append(list, word)
+		if err := scanner.Err(); err == nil && word != "" {
+			list = utils.UniqueAppend(list, word)
 		}
 	}
 	return list, nil

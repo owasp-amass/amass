@@ -32,7 +32,7 @@ func main() {
 	var asns, ports parseInts
 
 	help := flag.Bool("h", false, "Show the program usage message")
-	flag.StringVar(&org, "org", "", "Search string used against AS description information")
+	flag.StringVar(&org, "org", "", "Search string provided against AS description information")
 	flag.Var(&addrs, "addr", "IPs and ranges (192.168.1.1-254) separated by commas")
 	flag.Var(&cidrs, "cidr", "CIDRs separated by commas (can be used multiple times)")
 	flag.Var(&asns, "asn", "ASNs separated by commas (can be used multiple times)")

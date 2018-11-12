@@ -176,12 +176,12 @@ func (bas *BaseAmassService) SendRequest(req *AmassRequest) {
 	bas.queue = append(bas.queue, req)
 }
 
-// IsActive returns true if SetActive has been called for the service within the last 5 seconds.
+// IsActive returns true if SetActive has been called for the service within the last 10 seconds.
 func (bas *BaseAmassService) IsActive() bool {
 	bas.Lock()
 	defer bas.Unlock()
 
-	if time.Now().Sub(bas.active) > 5*time.Second {
+	if time.Now().Sub(bas.active) > 10*time.Second {
 		return false
 	}
 	return true
