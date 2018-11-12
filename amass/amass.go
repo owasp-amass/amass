@@ -39,7 +39,7 @@ var Banner = `
 
 const (
 	// Version is used to display the current version of Amass.
-	Version = "2.8.2"
+	Version = "2.8.3"
 
 	// Author is used to display the developer of the amass package.
 	Author = "https://github.com/OWASP/Amass"
@@ -197,7 +197,7 @@ func (e *Enumeration) Start() error {
 	}
 
 	bus := evbus.New()
-	bus.SubscribeAsync(core.OUTPUT, e.sendOutput, false)
+	bus.SubscribeAsync(core.OUTPUT, e.sendOutput, true)
 
 	// Select the correct services to be used in this enumeration
 	services := []core.AmassService{
@@ -257,7 +257,7 @@ loop:
 	if completed {
 		close(e.Done)
 	}
-	time.Sleep(1 * time.Second)
+	time.Sleep(2 * time.Second)
 	close(e.Output)
 	return nil
 }

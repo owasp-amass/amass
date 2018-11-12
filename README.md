@@ -133,6 +133,7 @@ Switches available through the amass CLI:
 | -oA  | Output to all available file formats with prefix | amass -oA amass_scan -d example.com |
 | -r   | Specify your own DNS resolvers | amass -r 8.8.8.8,1.1.1.1 -d example.com |
 | -rf  | Specify DNS resolvers with a file | amass -rf data/resolvers.txt -d example.com |
+| -T   | Timing templates 0 (slowest) through 5 (fastest) (default 3) | amass -T 5 -d example.com |
 | -v   | Output includes data source and summary information | amass -v -d example.com |
 | -version | Print the version number of amass | amass -version |
 | -w   | Change the wordlist used during brute forcing | amass -brute -w wordlist.txt -d example.com |
@@ -251,6 +252,8 @@ $ amass.viz -i owasp.json --maltego owasp.csv
 
 ## Mentions
 
+ - [Getting started in Bug Bounty](https://medium.com/@ehsahil/getting-started-in-bug-bounty-7052da28445a)
+ - [Source code disclosure via exposed .git folder](https://pentester.land/tutorials/2018/10/25/source-code-disclosure-via-exposed-git-folder.html)
  - [Amass, the best application to search for subdomains](https://www.h1rd.com/hacking/amass-para-buscar-subdominios)
  - [Subdomain Takeover: Finding Candidates](https://0xpatrik.com/subdomain-takeover-candidates/)
  - [Paul's Security Weekly #564: Technical Segment - Bug Bounty Hunting](https://wiki.securityweekly.com/Episode564)

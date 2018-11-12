@@ -53,7 +53,6 @@ func SubdomainToDomain(name string) string {
 	defer domainLock.Unlock()
 
 	var domain string
-
 	// Obtain all parts of the subdomain name
 	labels := strings.Split(strings.TrimSpace(name), ".")
 	// Check the cache for all parts of the name

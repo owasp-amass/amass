@@ -8,6 +8,8 @@ import (
 	"net"
 	"strconv"
 	"strings"
+
+	"github.com/OWASP/Amass/amass/utils"
 )
 
 // Types that implement the flag.Value interface for parsing
@@ -126,29 +128,7 @@ func (p *parseIPs) parseRange(s string) error {
 		// These should have parsed properly
 		return fmt.Errorf("%s is not a valid IP range", s)
 	}
-	return p.appendIPs(RangeHosts(start, end))
-}
-
-func RangeHosts(start, end net.IP) []net.IP {
-	var ips []net.IP
-
-	stop := net.ParseIP(end.String())
-	addrInc(stop)
-	for ip := net.ParseIP(start.String()); !ip.Equal(stop); addrInc(ip) {
-		addr := net.ParseIP(ip.String())
-
-		ips = append(ips, addr)
-	}
-	return ips
-}
-
-func addrInc(ip net.IP) {
-	for j := len(ip) - 1; j >= 0; j-- {
-		ip[j]++
-		if ip[j] > 0 {
-			break
-		}
-	}
+	return p.appendIPs(utils.RangeHosts(start, end))
 }
 
 // parseCIDRs implementation of the flag.Value interface
