@@ -34,6 +34,14 @@
   revision = "d46933a94f05c6657d7b923fcf5ac563ee37ec79"
 
 [[projects]]
+  branch = "master"
+  digest = "1:33591945055c2d2bb82db58216a7d58bc0f6cdf34d30fcff8b9820e3a0d411cb"
+  name = "github.com/caffix/amass"
+  packages = ["amass/core"]
+  pruneopts = "UT"
+  revision = "1b04d135afff5d9d936b2e52e2d6cee13f45e79b"
+
+[[projects]]
   digest = "1:865079840386857c809b72ce300be7580cb50d3d3129ce11bf9aa6ca2bc1934a"
   name = "github.com/fatih/color"
   packages = ["."]
@@ -139,6 +147,7 @@
     "github.com/PuerkitoBio/fetchbot",
     "github.com/PuerkitoBio/goquery",
     "github.com/asaskevich/EventBus",
+    "github.com/caffix/amass/amass/core",
     "github.com/fatih/color",
     "github.com/irfansharif/cfilter",
     "github.com/johnnadratowski/golang-neo4j-bolt-driver",
