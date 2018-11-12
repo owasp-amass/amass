@@ -107,3 +107,24 @@ func TimingToReleaseDelay(t EnumerationTiming) time.Duration {
 	}
 	return result
 }
+
+// TimingToReleasesPerSecond returns the number of releases performed on MaxFlow each second.
+func TimingToReleasesPerSecond(t EnumerationTiming) int {
+	var result int
+
+	switch t {
+	case Paranoid:
+		result = 5
+	case Sneaky:
+		result = 10
+	case Polite:
+		result = 30
+	case Normal:
+		result = 100
+	case Aggressive:
+		result = 250
+	case Insane:
+		result = 1000
+	}
+	return result
+}

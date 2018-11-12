@@ -80,21 +80,14 @@ func (ss *SourcesService) OnStop() error {
 }
 
 func (ss *SourcesService) processRequests() {
-	t := time.NewTicker(time.Second)
-	defer t.Stop()
-loop:
 	for {
 		select {
-		case <-t.C:
-			if req := ss.NextRequest(); req != nil {
-				go ss.handleRequest(req)
-			}
 		case <-ss.PauseChan():
-			t.Stop()
-		case <-ss.ResumeChan():
-			t = time.NewTicker(time.Second)
+			<-ss.ResumeChan()
 		case <-ss.Quit():
-			break loop
+			return
+		case req := <-ss.RequestChan():
+			go ss.handleRequest(req)
 		}
 	}
 }

@@ -227,10 +227,21 @@ $ amass.viz -i owasp.json --maltego owasp.csv
 ## Community
 
 [![Chat on Discord](https://img.shields.io/discord/433729817918308352.svg?logo=discord)](https://discord.gg/rtN8GMd) 
-[![Follow on Twitter](https://img.shields.io/twitter/follow/jeff_foley.svg?logo=twitter)](https://twitter.com/jeff_foley) 
+
+### Author
+
+Jeff Foley
+
+ - OWASP: [Caffix](https://www.owasp.org/index.php/User:Caffix)
+ - Twitter: [![Follow on Twitter](https://img.shields.io/twitter/follow/jeff_foley.svg?logo=twitter)](https://twitter.com/jeff_foley) 
+ - GitHub: [@caffix](https://github.com/caffix)
+
+### Contributors
+
+This project improves thanks to all the people who contribute.
+
 [![Follow on Twitter](https://img.shields.io/twitter/follow/emtunc.svg?logo=twitter)](https://twitter.com/emtunc) 
 
- - [Discord Server](https://discord.gg/rtN8GMd) - Discussing OSINT, network recon and developing security tools using Go
 
 ## Mentions
 

@@ -97,21 +97,13 @@ func (acs *ActiveCertService) nextAddress() string {
 }
 
 func (acs *ActiveCertService) processRequests() {
-	var paused bool
-
 	for {
 		select {
 		case <-acs.PauseChan():
-			paused = true
-		case <-acs.ResumeChan():
-			paused = false
+			<-acs.ResumeChan()
 		case <-acs.Quit():
 			return
 		default:
-			if paused {
-				time.Sleep(time.Second)
-				continue
-			}
 			if addr := acs.nextAddress(); addr != "" {
 				go acs.performRequest(addr)
 			} else {

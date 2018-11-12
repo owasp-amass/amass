@@ -127,7 +127,6 @@ func (r *resolver) monitorPerformance() {
 	var count int
 	var xchgWin, errWin []time.Time
 
-	last := time.Now()
 	// Start off with a reasonable load to the
 	// network, and adjust based on performance
 	if core.NumOfFileDescriptors > 256 {
@@ -147,13 +146,12 @@ loop:
 		case err := <-r.ErrorTimes:
 			errWin = append(errWin, err)
 		case <-t.C:
-			end := time.Now()
-			total := numInWindow(last, end, xchgWin)
+			total := len(xchgWin)
 			if total < 1000 {
 				continue
 			}
 			// Check if we must reduce the number of simultaneous connections
-			failures := numInWindow(last, end, errWin)
+			failures := len(errWin)
 			potential := core.NumOfFileDescriptors - count
 			delta := 16
 			alt := (core.NumOfFileDescriptors - count) / 10
@@ -169,7 +167,6 @@ loop:
 				go r.MaxResolutions.Acquire(delta)
 			}
 			// Remove all the old slice elements
-			last = end
 			xchgWin = []time.Time{}
 			errWin = []time.Time{}
 		}

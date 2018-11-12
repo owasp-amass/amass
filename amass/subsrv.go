@@ -26,16 +26,20 @@ type SubdomainService struct {
 	subdomains map[string]int
 
 	releases chan struct{}
+
+	completions chan time.Time
 }
 
 // NewSubdomainService requires the enumeration configuration and event bus as parameters.
 // The object returned is initialized, but has not yet been started.
 func NewSubdomainService(config *core.AmassConfig, bus evbus.Bus) *SubdomainService {
+	max := core.TimingToMaxFlow(config.Timing) + core.TimingToReleasesPerSecond(config.Timing)
 	ss := &SubdomainService{
-		bus:        bus,
-		filter:     utils.NewStringFilter(),
-		subdomains: make(map[string]int),
-		releases:   make(chan struct{}, 100),
+		bus:         bus,
+		filter:      utils.NewStringFilter(),
+		subdomains:  make(map[string]int),
+		releases:    make(chan struct{}, max),
+		completions: make(chan time.Time, max),
 	}
 
 	ss.BaseAmassService = *core.NewBaseAmassService("Subdomain Service", config, ss)
@@ -75,34 +79,40 @@ func (ss *SubdomainService) OnStop() error {
 }
 
 func (ss *SubdomainService) processRequests() {
-	var count int
-	var paused bool
+	var perSec []int
+	var completionTimes []time.Time
 
+	t := time.NewTicker(time.Second)
+	defer t.Stop()
+	logTick := time.NewTicker(time.Minute)
+	defer logTick.Stop()
 	for {
 		select {
 		case <-ss.PauseChan():
-			paused = true
-		case <-ss.ResumeChan():
-			paused = false
+			<-ss.ResumeChan()
 		case <-ss.Quit():
 			return
-		default:
-			if paused {
-				time.Sleep(time.Second)
-				continue
+		case comp := <-ss.completions:
+			completionTimes = append(completionTimes, comp)
+		case <-t.C:
+			perSec = append(perSec, len(completionTimes))
+			completionTimes = []time.Time{}
+		case <-logTick.C:
+			num := len(perSec)
+			var total int
+			for _, s := range perSec {
+				total += s
 			}
-			if req := ss.NextRequest(); req != nil {
-				count = 0
-				go ss.performRequest(req)
-			} else {
-				count++
-				if count == 10 {
-					time.Sleep(100 * time.Millisecond)
-					count = 0
-				}
-			}
+			ss.Config().Log.Printf("Average requests processed: %d per second", total/num)
+			perSec = []int{}
+		case req := <-ss.RequestChan():
+			go ss.performRequest(req)
 		}
 	}
+}
+
+func (ss *SubdomainService) sendCompletionTime(t time.Time) {
+	ss.completions <- t
 }
 
 func (ss *SubdomainService) performRequest(req *core.AmassRequest) {
@@ -110,6 +120,9 @@ func (ss *SubdomainService) performRequest(req *core.AmassRequest) {
 		ss.sendRelease()
 		return
 	}
+
+	ss.SetActive()
+	go ss.sendCompletionTime(time.Now())
 	req.Name = strings.ToLower(utils.RemoveAsteriskLabel(req.Name))
 	req.Domain = strings.ToLower(req.Domain)
 	if ss.Config().Passive {
@@ -132,6 +145,9 @@ func (ss *SubdomainService) performCheck(req *core.AmassRequest) {
 
 	if ss.Config().IsDomainInScope(req.Name) {
 		ss.checkSubdomain(req)
+	}
+	if req.Tag == core.DNS {
+		ss.sendCompletionTime(time.Now())
 	}
 	ss.bus.Publish(core.CHECKED, req)
 }

@@ -68,27 +68,15 @@ func (dms *DataManagerService) OnStop() error {
 }
 
 func (dms *DataManagerService) processRequests() {
-	var paused bool
-
 	for {
 		select {
 		case <-dms.PauseChan():
-			paused = true
-		case <-dms.ResumeChan():
-			paused = false
+			<-dms.ResumeChan()
 		case <-dms.Quit():
 			return
-		default:
-			if paused {
-				time.Sleep(time.Second)
-				continue
-			}
-			if req := dms.NextRequest(); req != nil {
-				dms.SetActive()
-				dms.manageData(req)
-			} else {
-				time.Sleep(10 * time.Millisecond)
-			}
+		case req := <-dms.RequestChan():
+			dms.SetActive()
+			dms.manageData(req)
 		}
 	}
 }

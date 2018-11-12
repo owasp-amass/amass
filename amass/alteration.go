@@ -6,7 +6,6 @@ package amass
 import (
 	"strconv"
 	"strings"
-	"time"
 	"unicode"
 
 	"github.com/OWASP/Amass/amass/core"
@@ -53,21 +52,14 @@ func (as *AlterationService) OnStop() error {
 }
 
 func (as *AlterationService) processRequests() {
-	t := time.NewTicker(10 * time.Millisecond)
-	defer t.Stop()
-
 	for {
 		select {
-		case <-t.C:
-			if req := as.NextRequest(); req != nil {
-				as.executeAlterations(req)
-			}
 		case <-as.PauseChan():
-			t.Stop()
-		case <-as.ResumeChan():
-			t = time.NewTicker(10 * time.Millisecond)
+			<-as.ResumeChan()
 		case <-as.Quit():
 			return
+		case req := <-as.RequestChan():
+			as.executeAlterations(req)
 		}
 	}
 }

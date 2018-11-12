@@ -264,6 +264,7 @@ func getLinesFromFile(path string) []string {
 
 func writeLogsAndMessages(logs *io.PipeReader, logfile *os.File) {
 	wildcard := regexp.MustCompile("DNS wildcard")
+	avg := regexp.MustCompile("Average requests")
 
 	scanner := bufio.NewScanner(logs)
 	for scanner.Scan() {
@@ -282,6 +283,10 @@ func writeLogsAndMessages(logs *io.PipeReader, logfile *os.File) {
 		line = strings.Join(parts[1:], " ")
 		// Check for Amass DNS wildcard messages
 		if wildcard.FindString(line) != "" {
+			r.Fprintln(os.Stderr, line)
+		}
+		// Check for the Amass average requests processed messages
+		if avg.FindString(line) != "" {
 			r.Fprintln(os.Stderr, line)
 		}
 	}

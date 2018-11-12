@@ -138,27 +138,15 @@ func (ds *DNSService) sendResolved(req *core.AmassRequest) {
 }
 
 func (ds *DNSService) processRequests() {
-	var paused bool
-
 	for {
 		select {
 		case <-ds.PauseChan():
-			paused = true
-		case <-ds.ResumeChan():
-			paused = false
+			<-ds.ResumeChan()
 		case <-ds.Quit():
 			return
-		default:
-			if paused {
-				time.Sleep(time.Second)
-				continue
-			}
-			if req := ds.NextRequest(); req != nil {
-				core.MaxConnections.Acquire(len(InitialQueryTypes))
-				go ds.performRequest(req)
-			} else {
-				time.Sleep(100 * time.Millisecond)
-			}
+		case req := <-ds.RequestChan():
+			core.MaxConnections.Acquire(len(InitialQueryTypes))
+			go ds.performRequest(req)
 		}
 	}
 }
