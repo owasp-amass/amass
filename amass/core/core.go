@@ -72,17 +72,17 @@ func TimingToMaxFlow(t EnumerationTiming) int {
 
 	switch t {
 	case Paranoid:
-		result = 5
-	case Sneaky:
 		result = 10
-	case Polite:
+	case Sneaky:
 		result = 30
+	case Polite:
+		result = 100
 	case Normal:
-		result = 50
+		result = 333
 	case Aggressive:
-		result = 200
-	case Insane:
 		result = 1000
+	case Insane:
+		result = 10000
 	}
 	return result
 }
@@ -93,17 +93,17 @@ func TimingToReleaseDelay(t EnumerationTiming) time.Duration {
 
 	switch t {
 	case Paranoid:
-		result = 200 * time.Millisecond
-	case Sneaky:
 		result = 100 * time.Millisecond
-	case Polite:
+	case Sneaky:
 		result = 33 * time.Millisecond
-	case Normal:
+	case Polite:
 		result = 10 * time.Millisecond
+	case Normal:
+		result = 3 * time.Millisecond
 	case Aggressive:
-		result = 4 * time.Millisecond
-	case Insane:
 		result = time.Millisecond
+	case Insane:
+		result = 100 * time.Microsecond
 	}
 	return result
 }
@@ -114,17 +114,17 @@ func TimingToReleasesPerSecond(t EnumerationTiming) int {
 
 	switch t {
 	case Paranoid:
-		result = 5
-	case Sneaky:
 		result = 10
-	case Polite:
+	case Sneaky:
 		result = 30
-	case Normal:
+	case Polite:
 		result = 100
+	case Normal:
+		result = 333
 	case Aggressive:
-		result = 250
-	case Insane:
 		result = 1000
+	case Insane:
+		result = 10000
 	}
 	return result
 }

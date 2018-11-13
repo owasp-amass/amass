@@ -106,7 +106,10 @@ func (bas *BaseAmassService) List() string {
 
 // Pause implements the AmassService interface
 func (bas *BaseAmassService) Pause() error {
-	return bas.service.OnPause()
+	err := bas.service.OnPause()
+
+	bas.pause <- struct{}{}
+	return err
 }
 
 // OnPause implements the AmassService interface
@@ -116,7 +119,10 @@ func (bas *BaseAmassService) OnPause() error {
 
 // Resume implements the AmassService interface
 func (bas *BaseAmassService) Resume() error {
-	return bas.service.OnResume()
+	err := bas.service.OnResume()
+
+	bas.resume <- struct{}{}
+	return err
 }
 
 // OnResume implements the AmassService interface
@@ -129,6 +135,7 @@ func (bas *BaseAmassService) Stop() error {
 	if bas.isStopped() {
 		return errors.New(bas.name + " service has already been stopped")
 	}
+	bas.Resume()
 	err := bas.service.OnStop()
 	bas.stopped = true
 	close(bas.quit)

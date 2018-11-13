@@ -70,9 +70,6 @@ type Enumeration struct {
 	// The ports that will be checked for certificates
 	Ports []int
 
-	// Will whois info be used to add additional domains?
-	Whois bool
-
 	// The list of words to use when generating names
 	Wordlist []string
 
@@ -144,23 +141,18 @@ func (e *Enumeration) generateAmassConfig() (*core.AmassConfig, error) {
 	if e.Output == nil {
 		return nil, errors.New("The configuration did not have an output channel")
 	}
-
 	if e.Passive && e.BruteForcing {
 		return nil, errors.New("Brute forcing cannot be performed without DNS resolution")
 	}
-
 	if e.Passive && e.Active {
 		return nil, errors.New("Active enumeration cannot be performed without DNS resolution")
 	}
-
 	if e.Passive && e.DataOptsWriter != nil {
 		return nil, errors.New("Data operations cannot be saved without DNS resolution")
 	}
-
 	if len(e.Ports) == 0 {
 		e.Ports = []int{443}
 	}
-
 	if e.BruteForcing && len(e.Wordlist) == 0 {
 		e.Wordlist, _ = getDefaultWordlist()
 	}
@@ -171,7 +163,6 @@ func (e *Enumeration) generateAmassConfig() (*core.AmassConfig, error) {
 		CIDRs:               e.CIDRs,
 		IPs:                 e.IPs,
 		Ports:               e.Ports,
-		Whois:               e.Whois,
 		Wordlist:            e.Wordlist,
 		BruteForcing:        e.BruteForcing,
 		Recursive:           e.Recursive,
@@ -202,7 +193,6 @@ func (e *Enumeration) Start() error {
 
 	bus := evbus.New()
 	bus.SubscribeAsync(core.OUTPUT, e.sendOutput, true)
-
 	// Select the correct services to be used in this enumeration
 	services := []core.AmassService{
 		NewSubdomainService(config, bus),
@@ -223,9 +213,8 @@ func (e *Enumeration) Start() error {
 			return err
 		}
 	}
-	// When done, we want to know if the enumeration completed
+
 	var completed bool
-	// Periodically check if all the services have finished
 	t := time.NewTicker(3 * time.Second)
 loop:
 	for {
@@ -257,6 +246,7 @@ loop:
 	for _, service := range services {
 		service.Stop()
 	}
+	time.Sleep(time.Second)
 	bus.Unsubscribe(core.OUTPUT, e.sendOutput)
 	if completed {
 		close(e.Done)
@@ -283,23 +273,6 @@ func (e *Enumeration) sendOutput(out *core.AmassOutput) {
 		return
 	default:
 		e.Output <- out
-	}
-}
-
-// ObtainAdditionalDomains discovers and appends DNS domain names related to the current set of names.
-func (e *Enumeration) ObtainAdditionalDomains() {
-	if e.Whois {
-		for _, domain := range e.domains {
-			more, err := ReverseWhois(domain)
-			if err != nil {
-				e.Log.Printf("ReverseWhois error: %v", err)
-				continue
-			}
-
-			for _, domain := range more {
-				e.AddDomain(domain)
-			}
-		}
 	}
 }
 

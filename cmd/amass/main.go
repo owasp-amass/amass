@@ -28,7 +28,7 @@ import (
 
 type outputParams struct {
 	Enum     *amass.Enumeration
-	Verbose  bool
+	PrintSrc bool
 	PrintIPs bool
 	FileOut  string
 	JSONOut  string
@@ -75,10 +75,8 @@ var (
 	minrecursive  = flag.Int("min-for-recursive", 1, "Number of subdomain discoveries before recursive brute forcing")
 	passive       = flag.Bool("passive", false, "Disable DNS resolution of names and dependent features")
 	noalts        = flag.Bool("noalts", false, "Disable generation of altered names")
+	sources       = flag.Bool("src", false, "Print data sources for the discovered names")
 	timing        = flag.Int("T", int(core.Normal), "Timing templates 0 (slowest) through 5 (fastest)")
-	verbose       = flag.Bool("v", false, "Print the data source and summary information")
-	whois         = flag.Bool("whois", false, "Include domains discoverd with reverse whois")
-	list          = flag.Bool("l", false, "List all domains to be used in an enumeration")
 	wordlist      = flag.String("w", "", "Path to a different wordlist file")
 	allpath       = flag.String("oA", "", "Path prefix used for naming all output files")
 	logpath       = flag.String("log", "", "Path to the log file where errors will be written")
@@ -128,14 +126,17 @@ func main() {
 	if *blacklistpath != "" {
 		blacklist = utils.UniqueAppend(blacklist, getLinesFromFile(*blacklistpath)...)
 	}
-	if *domainspath != "" {
-		domains = utils.UniqueAppend(domains, getLinesFromFile(*domainspath)...)
-	}
 	if *resolvepath != "" {
 		resolvers = utils.UniqueAppend(resolvers, getLinesFromFile(*resolvepath)...)
 	}
 	dnssrv.SetCustomResolvers(resolvers)
-
+	if *domainspath != "" {
+		domains = utils.UniqueAppend(domains, getLinesFromFile(*domainspath)...)
+	}
+	if len(domains) == 0 {
+		r.Println("No root domain names were provided")
+		return
+	}
 	// Prepare output files
 	logfile := *logpath
 	txt := *outpath
@@ -147,7 +148,6 @@ func main() {
 		jsonfile = *allpath + ".json"
 		datafile = *allpath + "_data.json"
 	}
-
 	// Seed the default pseudo-random number generator
 	rand.Seed(time.Now().UTC().UnixNano())
 	// Setup the amass configuration
@@ -163,7 +163,6 @@ func main() {
 	rLog, wLog := io.Pipe()
 	enum := amass.NewEnumeration()
 	enum.Log = log.New(wLog, "", log.Lmicroseconds)
-	enum.Whois = *whois
 	enum.Wordlist = words
 	enum.BruteForcing = *brute
 	enum.Recursive = recursive
@@ -174,7 +173,6 @@ func main() {
 	enum.Timing = core.EnumerationTiming(*timing)
 	enum.Passive = *passive
 	enum.Blacklist = blacklist
-
 	for _, domain := range domains {
 		enum.AddDomain(domain)
 	}
@@ -207,22 +205,11 @@ func main() {
 		}()
 		enum.DataOptsWriter = fileptr
 	}
-	enum.ObtainAdditionalDomains()
-	if *list {
-		listDomains(enum, txt)
-		return
-	}
-
-	// Can an enumeration be performed with the provided parameters?
-	if len(enum.Domains()) == 0 {
-		r.Println("No root domain names were provided or discovered")
-		return
-	}
 
 	finished = make(chan struct{})
 	go manageOutput(&outputParams{
 		Enum:     enum,
-		Verbose:  *verbose,
+		PrintSrc: *sources,
 		PrintIPs: *ips,
 		FileOut:  txt,
 		JSONOut:  jsonfile,
@@ -312,32 +299,6 @@ func writeJSONData(f *os.File, result *core.AmassOutput) {
 	enc.Encode(save)
 }
 
-func listDomains(enum *amass.Enumeration, outfile string) {
-	var fileptr *os.File
-	var bufwr *bufio.Writer
-
-	if outfile != "" {
-		fileptr, err := os.OpenFile(outfile, os.O_WRONLY|os.O_CREATE, 0644)
-		if err == nil {
-			bufwr = bufio.NewWriter(fileptr)
-			defer fileptr.Close()
-		}
-	}
-
-	for _, d := range enum.Domains() {
-		g.Println(d)
-
-		if bufwr != nil {
-			bufwr.WriteString(d + "\n")
-			bufwr.Flush()
-		}
-	}
-
-	if bufwr != nil {
-		fileptr.Sync()
-	}
-}
-
 func printBanner() {
 	rightmost := 76
 	version := "Version " + amass.Version
@@ -361,7 +322,7 @@ func printBanner() {
 func resultToLine(result *core.AmassOutput, params *outputParams) (string, string, string, string) {
 	var source, comma, ips string
 
-	if params.Verbose {
+	if params.PrintSrc {
 		source = fmt.Sprintf("%-18s", "["+result.Source+"] ")
 	}
 	if params.PrintIPs {
@@ -409,9 +370,11 @@ func manageOutput(params *outputParams) {
 	asns := make(map[int]*asnData)
 	// Collect all the names returned by the enumeration
 	for result := range params.Enum.Output {
+		if params.Enum.Passive || len(result.Addresses) > 0 {
+			total++
+		}
 		// Do not count unresolved names
 		if len(result.Addresses) > 0 {
-			total++
 			updateData(result, tags, asns)
 		}
 
@@ -427,8 +390,9 @@ func manageOutput(params *outputParams) {
 			writeJSONData(jsonptr, result)
 		}
 	}
-	// Check to print the summary information
-	if params.Verbose {
+	if total == 0 {
+		r.Println("No names were discovered")
+	} else if !params.Enum.Passive {
 		printSummary(total, tags, asns)
 	}
 	close(finished)
@@ -453,53 +417,49 @@ func updateData(output *core.AmassOutput, tags map[string]int, asns map[int]*asn
 }
 
 func printSummary(total int, tags map[string]int, asns map[int]*asnData) {
-	if total == 0 {
-		r.Println("No names were discovered")
-		return
-	}
 	pad := func(num int, chr string) {
 		for i := 0; i < num; i++ {
-			b.Print(chr)
+			b.Fprint(os.Stderr, chr)
 		}
 	}
 
-	fmt.Println()
+	fmt.Fprintln(os.Stderr)
 	// Print the header information
 	title := "OWASP Amass v"
 	site := "https://github.com/OWASP/Amass"
-	b.Print(title + amass.Version)
+	b.Fprint(os.Stderr, title+amass.Version)
 	num := 80 - (len(title) + len(amass.Version) + len(site))
 	pad(num, " ")
-	b.Printf("%s\n", site)
+	b.Fprintf(os.Stderr, "%s\n", site)
 	pad(8, "----------")
-	fmt.Fprintf(color.Output, "\n%s%s", yellow(strconv.Itoa(total)), green(" names discovered - "))
+	fmt.Fprintf(color.Error, "\n%s%s", yellow(strconv.Itoa(total)), green(" names discovered - "))
 	// Print the stats using tag information
 	num, length := 1, len(tags)
 	for k, v := range tags {
-		fmt.Fprintf(color.Output, "%s: %s", green(k), yellow(strconv.Itoa(v)))
+		fmt.Fprintf(color.Error, "%s: %s", green(k), yellow(strconv.Itoa(v)))
 		if num < length {
-			g.Print(", ")
+			g.Fprint(os.Stderr, ", ")
 		}
 		num++
 	}
-	fmt.Println()
+	fmt.Fprintln(os.Stderr)
 
 	if len(asns) == 0 {
 		return
 	}
 	// Another line gets printed
 	pad(8, "----------")
-	fmt.Println()
+	fmt.Fprintln(os.Stderr)
 	// Print the ASN and netblock information
 	for asn, data := range asns {
-		fmt.Fprintf(color.Output, "%s%s %s %s\n",
+		fmt.Fprintf(color.Error, "%s%s %s %s\n",
 			blue("ASN: "), yellow(strconv.Itoa(asn)), green("-"), green(data.Name))
 
 		for cidr, ips := range data.Netblocks {
 			countstr := fmt.Sprintf("\t%-4s", strconv.Itoa(ips))
 			cidrstr := fmt.Sprintf("\t%-18s", cidr)
 
-			fmt.Fprintf(color.Output, "%s%s %s\n",
+			fmt.Fprintf(color.Error, "%s%s %s\n",
 				yellow(cidrstr), yellow(countstr), blue("Subdomain Name(s)"))
 		}
 	}

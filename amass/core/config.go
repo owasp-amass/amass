@@ -36,9 +36,6 @@ type AmassConfig struct {
 	// The ports that will be checked for certificates
 	Ports []int
 
-	// Will whois info be used to add additional domains?
-	Whois bool
-
 	// The list of words to use when generating names
 	Wordlist []string
 

@@ -20,12 +20,14 @@ import (
 )
 
 var (
-	started = make(chan struct{}, 50)
-	done    = make(chan struct{}, 50)
-	results = make(chan string, 100)
+	started   = make(chan struct{}, 50)
+	done      = make(chan struct{}, 50)
+	results   = make(chan string, 100)
+	whoisChan = make(chan string, 100)
 )
 
 func main() {
+	var whois bool
 	var org string
 	var addrs parseIPs
 	var cidrs parseCIDRs
@@ -36,6 +38,7 @@ func main() {
 	flag.Var(&addrs, "addr", "IPs and ranges (192.168.1.1-254) separated by commas")
 	flag.Var(&cidrs, "cidr", "CIDRs separated by commas (can be used multiple times)")
 	flag.Var(&asns, "asn", "ASNs separated by commas (can be used multiple times)")
+	flag.BoolVar(&whois, "whois", false, "All discovered domains are run through reverse whois")
 	flag.Var(&ports, "p", "Ports separated by commas (default: 443)")
 	flag.Parse()
 
@@ -82,10 +85,29 @@ loop:
 			if count == 0 {
 				break loop
 			}
-		case domain := <-results:
+		case d := <-results:
+			if !filter.Duplicate(d) {
+				if whois {
+					go getWhoisDomains(d)
+				}
+				fmt.Println(d)
+			}
+		case domain := <-whoisChan:
 			if !filter.Duplicate(domain) {
 				fmt.Println(domain)
 			}
+		}
+	}
+}
+
+func getWhoisDomains(d string) {
+	domains, err := amass.ReverseWhois(d)
+	if err != nil {
+		return
+	}
+	for _, domain := range domains {
+		if name := strings.TrimSpace(domain); name != "" {
+			results <- name
 		}
 	}
 }

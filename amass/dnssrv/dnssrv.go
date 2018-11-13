@@ -379,6 +379,7 @@ func (ds *DNSService) processWildcardRequests() {
 		case <-ds.Quit():
 			return
 		case r := <-ds.wildcardRequests:
+			ds.SetActive()
 			r.WildcardType <- ds.performWildcardRequest(r.Request)
 		}
 	}
@@ -416,6 +417,7 @@ func (ds *DNSService) getWildcard(sub string) *wildcard {
 		// Query multiple times with unlikely names against this subdomain
 		set := make([][]core.DNSAnswer, numOfWildcardTests)
 		for i := 0; i < numOfWildcardTests; i++ {
+			ds.SetActive()
 			a := ds.wildcardTestResults(sub)
 			if a == nil {
 				// There is no DNS wildcard
