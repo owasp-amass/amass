@@ -108,7 +108,9 @@ func (bas *BaseAmassService) List() string {
 func (bas *BaseAmassService) Pause() error {
 	err := bas.service.OnPause()
 
-	bas.pause <- struct{}{}
+	go func() {
+		bas.pause <- struct{}{}
+	}()
 	return err
 }
 
@@ -121,7 +123,9 @@ func (bas *BaseAmassService) OnPause() error {
 func (bas *BaseAmassService) Resume() error {
 	err := bas.service.OnResume()
 
-	bas.resume <- struct{}{}
+	go func() {
+		bas.resume <- struct{}{}
+	}()
 	return err
 }
 

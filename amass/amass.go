@@ -9,7 +9,6 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
-	"net"
 	"strings"
 	"time"
 
@@ -55,56 +54,7 @@ type Enumeration struct {
 	// Broadcast channel that indicates no further writes to the output channel
 	Done chan struct{}
 
-	// Logger for error messages
-	Log *log.Logger
-
-	// The ASNs that the enumeration will target
-	ASNs []int
-
-	// The CIDRs that the enumeration will target
-	CIDRs []*net.IPNet
-
-	// The IPs that the enumeration will target
-	IPs []net.IP
-
-	// The ports that will be checked for certificates
-	Ports []int
-
-	// The list of words to use when generating names
-	Wordlist []string
-
-	// Will the enumeration including brute forcing techniques
-	BruteForcing bool
-
-	// Will recursive brute forcing be performed?
-	Recursive bool
-
-	// Minimum number of subdomain discoveries before performing recursive brute forcing
-	MinForRecursive int
-
-	// Will discovered subdomain name alterations be generated?
-	Alterations bool
-
-	// Indicates a speed band for the enumeration to execute within
-	Timing core.EnumerationTiming
-
-	// Only access the data sources for names and return results?
-	Passive bool
-
-	// Determines if active information gathering techniques will be used
-	Active bool
-
-	// Determines if unresolved DNS names will be output by the enumeration
-	IncludeUnresolvable bool
-
-	// A blacklist of subdomain names that will not be investigated
-	Blacklist []string
-
-	// The writer used to save the data operations performed
-	DataOptsWriter io.Writer
-
-	// The root domain names that the enumeration will target
-	domains []string
+	Config *core.AmassConfig
 
 	// Pause/Resume channels for halting the enumeration
 	pause  chan struct{}
@@ -113,81 +63,50 @@ type Enumeration struct {
 
 // NewEnumeration returns an initialized Enumeration that has not been started yet.
 func NewEnumeration() *Enumeration {
-	return &Enumeration{
-		Output:          make(chan *core.AmassOutput, 100),
-		Done:            make(chan struct{}),
-		Log:             log.New(ioutil.Discard, "", 0),
-		Ports:           []int{443},
-		Recursive:       true,
-		MinForRecursive: 1,
-		Alterations:     true,
-		Timing:          core.Normal,
-		pause:           make(chan struct{}),
-		resume:          make(chan struct{}),
+	enum := &Enumeration{
+		Output: make(chan *core.AmassOutput, 100),
+		Done:   make(chan struct{}),
+		Config: &core.AmassConfig{
+			Log:             log.New(ioutil.Discard, "", 0),
+			Ports:           []int{443},
+			Recursive:       true,
+			MinForRecursive: 1,
+			Alterations:     true,
+			Timing:          core.Normal,
+		},
+		pause:  make(chan struct{}),
+		resume: make(chan struct{}),
 	}
+	enum.Config.SetGraph(core.NewGraph())
+	return enum
 }
 
-// AddDomain appends another DNS domain name to an Enumeration.
-func (e *Enumeration) AddDomain(domain string) {
-	e.domains = utils.UniqueAppend(e.domains, domain)
-}
-
-// Domains returns the current set of DNS domain names assigned to an Enumeration.
-func (e *Enumeration) Domains() []string {
-	return e.domains
-}
-
-func (e *Enumeration) generateAmassConfig() (*core.AmassConfig, error) {
+func (e *Enumeration) checkConfig() error {
 	if e.Output == nil {
-		return nil, errors.New("The configuration did not have an output channel")
+		return errors.New("The configuration did not have an output channel")
 	}
-	if e.Passive && e.BruteForcing {
-		return nil, errors.New("Brute forcing cannot be performed without DNS resolution")
+	if e.Config.Passive && e.Config.BruteForcing {
+		return errors.New("Brute forcing cannot be performed without DNS resolution")
 	}
-	if e.Passive && e.Active {
-		return nil, errors.New("Active enumeration cannot be performed without DNS resolution")
+	if e.Config.Passive && e.Config.Active {
+		return errors.New("Active enumeration cannot be performed without DNS resolution")
 	}
-	if e.Passive && e.DataOptsWriter != nil {
-		return nil, errors.New("Data operations cannot be saved without DNS resolution")
+	if e.Config.Passive && e.Config.DataOptsWriter != nil {
+		return errors.New("Data operations cannot be saved without DNS resolution")
 	}
-	if len(e.Ports) == 0 {
-		e.Ports = []int{443}
+	if len(e.Config.Ports) == 0 {
+		e.Config.Ports = []int{443}
 	}
-	if e.BruteForcing && len(e.Wordlist) == 0 {
-		e.Wordlist, _ = getDefaultWordlist()
+	if e.Config.BruteForcing && len(e.Config.Wordlist) == 0 {
+		e.Config.Wordlist, _ = getDefaultWordlist()
 	}
-
-	config := &core.AmassConfig{
-		Log:                 e.Log,
-		ASNs:                e.ASNs,
-		CIDRs:               e.CIDRs,
-		IPs:                 e.IPs,
-		Ports:               e.Ports,
-		Wordlist:            e.Wordlist,
-		BruteForcing:        e.BruteForcing,
-		Recursive:           e.Recursive,
-		MinForRecursive:     e.MinForRecursive,
-		Alterations:         e.Alterations,
-		Timing:              e.Timing,
-		Passive:             e.Passive,
-		Active:              e.Active,
-		IncludeUnresolvable: e.IncludeUnresolvable,
-		Blacklist:           e.Blacklist,
-		DataOptsWriter:      e.DataOptsWriter,
-	}
-	config.SetGraph(core.NewGraph())
-	config.MaxFlow = utils.NewSemaphore(core.TimingToMaxFlow(e.Timing))
-
-	for _, domain := range e.Domains() {
-		config.AddDomain(domain)
-	}
-	return config, nil
+	e.Config.MaxFlow = utils.NewSemaphore(core.TimingToMaxFlow(e.Config.Timing))
+	return nil
 }
 
 // Start begins the DNS enumeration process for the Amass Enumeration object.
 func (e *Enumeration) Start() error {
-	config, err := e.generateAmassConfig()
-	if err != nil {
+	if err := e.checkConfig(); err != nil {
 		return err
 	}
 
@@ -195,16 +114,16 @@ func (e *Enumeration) Start() error {
 	bus.SubscribeAsync(core.OUTPUT, e.sendOutput, true)
 	// Select the correct services to be used in this enumeration
 	services := []core.AmassService{
-		NewSubdomainService(config, bus),
-		NewSourcesService(config, bus),
+		NewSubdomainService(e.Config, bus),
+		NewSourcesService(e.Config, bus),
 	}
-	if !config.Passive {
+	if !e.Config.Passive {
 		services = append(services,
-			NewDataManagerService(config, bus),
-			dnssrv.NewDNSService(config, bus),
-			NewAlterationService(config, bus),
-			NewBruteForceService(config, bus),
-			NewActiveCertService(config, bus),
+			NewDataManagerService(e.Config, bus),
+			dnssrv.NewDNSService(e.Config, bus),
+			NewAlterationService(e.Config, bus),
+			NewBruteForceService(e.Config, bus),
+			NewActiveCertService(e.Config, bus),
 		)
 	}
 
@@ -280,7 +199,7 @@ func getDefaultWordlist() ([]string, error) {
 	var list []string
 	var wordlist io.Reader
 
-	page, err := utils.GetWebPage(defaultWordlistURL, nil)
+	page, err := utils.RequestWebPage(defaultWordlistURL, nil, nil, "", "")
 	if err != nil {
 		return list, err
 	}

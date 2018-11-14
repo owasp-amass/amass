@@ -33,7 +33,7 @@ func (v *VirusTotal) Query(domain, sub string) []string {
 
 	re := utils.SubdomainRegex(domain)
 	url := v.getURL(domain)
-	page, err := utils.GetWebPage(url, nil)
+	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
 		v.Service.Config().Log.Printf("%s: %v", url, err)
 		return unique

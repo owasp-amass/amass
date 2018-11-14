@@ -32,7 +32,7 @@ func (n *Netcraft) Query(domain, sub string) []string {
 	}
 
 	url := n.getURL(domain)
-	page, err := utils.GetWebPage(url, nil)
+	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
 		n.Service.Config().Log.Printf("%s, %v", url, err)
 		return unique

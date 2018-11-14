@@ -162,19 +162,19 @@ func main() {
 
 	rLog, wLog := io.Pipe()
 	enum := amass.NewEnumeration()
-	enum.Log = log.New(wLog, "", log.Lmicroseconds)
-	enum.Wordlist = words
-	enum.BruteForcing = *brute
-	enum.Recursive = recursive
-	enum.MinForRecursive = *minrecursive
-	enum.Active = *active
-	enum.IncludeUnresolvable = *unresolved
-	enum.Alterations = alts
-	enum.Timing = core.EnumerationTiming(*timing)
-	enum.Passive = *passive
-	enum.Blacklist = blacklist
+	enum.Config.Log = log.New(wLog, "", log.Lmicroseconds)
+	enum.Config.Wordlist = words
+	enum.Config.BruteForcing = *brute
+	enum.Config.Recursive = recursive
+	enum.Config.MinForRecursive = *minrecursive
+	enum.Config.Active = *active
+	enum.Config.IncludeUnresolvable = *unresolved
+	enum.Config.Alterations = alts
+	enum.Config.Timing = core.EnumerationTiming(*timing)
+	enum.Config.Passive = *passive
+	enum.Config.Blacklist = blacklist
 	for _, domain := range domains {
-		enum.AddDomain(domain)
+		enum.Config.AddDomain(domain)
 	}
 
 	// Setup the log file for saving error messages
@@ -203,7 +203,7 @@ func main() {
 			fileptr.Sync()
 			fileptr.Close()
 		}()
-		enum.DataOptsWriter = fileptr
+		enum.Config.DataOptsWriter = fileptr
 	}
 
 	finished = make(chan struct{})
@@ -370,7 +370,7 @@ func manageOutput(params *outputParams) {
 	asns := make(map[int]*asnData)
 	// Collect all the names returned by the enumeration
 	for result := range params.Enum.Output {
-		if params.Enum.Passive || len(result.Addresses) > 0 {
+		if params.Enum.Config.Passive || len(result.Addresses) > 0 {
 			total++
 		}
 		// Do not count unresolved names
@@ -392,7 +392,7 @@ func manageOutput(params *outputParams) {
 	}
 	if total == 0 {
 		r.Println("No names were discovered")
-	} else if !params.Enum.Passive {
+	} else if !params.Enum.Config.Passive {
 		printSummary(total, tags, asns)
 	}
 	close(finished)

@@ -5,6 +5,7 @@ package utils
 
 import (
 	"errors"
+	"io"
 	"io/ioutil"
 	"math/big"
 	"net"
@@ -24,10 +25,29 @@ const (
 	AcceptLang = "en-US,en;q=0.8"
 )
 
-// GetWebPage returns a string containing the entire web page indicated
-// by the url parameter when successful. Header values can optionally be
-// provided using the hvals parameter.
-func GetWebPage(url string, hvals map[string]string) (string, error) {
+// RequestWebPage returns a string containing the entire response for
+// the url parameter when successful.
+func RequestWebPage(url string, body io.Reader, hvals map[string]string, uid, secret string) (string, error) {
+	method := "GET"
+	if body != nil {
+		method = "POST"
+	}
+	req, err := http.NewRequest(method, url, body)
+	if err != nil {
+		return "", err
+	}
+	if uid != "" && secret != "" {
+		req.SetBasicAuth(uid, secret)
+	}
+	req.Header.Set("User-Agent", UserAgent)
+	req.Header.Set("Accept", Accept)
+	req.Header.Set("Accept-Language", AcceptLang)
+	if hvals != nil {
+		for k, v := range hvals {
+			req.Header.Set(k, v)
+		}
+	}
+
 	d := net.Dialer{}
 	client := &http.Client{
 		Timeout: 30 * time.Second,
@@ -39,21 +59,6 @@ func GetWebPage(url string, hvals map[string]string) (string, error) {
 			ExpectContinueTimeout: 5 * time.Second,
 		},
 	}
-
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return "", err
-	}
-
-	req.Header.Add("User-Agent", UserAgent)
-	req.Header.Add("Accept", Accept)
-	req.Header.Add("Accept-Language", AcceptLang)
-	if hvals != nil {
-		for k, v := range hvals {
-			req.Header.Add(k, v)
-		}
-	}
-
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", err

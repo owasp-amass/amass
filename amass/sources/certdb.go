@@ -33,7 +33,7 @@ func (c *CertDB) Query(domain, sub string) []string {
 	}
 
 	u := c.getURL(domain)
-	page, err := utils.GetWebPage(u, nil)
+	page, err := utils.RequestWebPage(u, nil, nil, "", "")
 	if err != nil {
 		c.Service.Config().Log.Printf("%s: %v", u, err)
 		return unique

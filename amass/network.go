@@ -368,7 +368,7 @@ func LookupASNsByName(s string) ([]ASRecord, error) {
 
 	s = strings.ToLower(s)
 	url := "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/asnlist.txt"
-	page, err := utils.GetWebPage(url, nil)
+	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
 		return records, err
 	}
@@ -403,7 +403,7 @@ func LookupIPHistory(domain string) ([]string, error) {
 
 	url := "http://viewdns.info/iphistory/?domain=" + domain
 	// The ViewDNS IP History lookup sometimes reveals interesting results
-	page, err := utils.GetWebPage(url, nil)
+	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
 		return unique, err
 	}
@@ -425,7 +425,7 @@ func LookupIPHistory(domain string) ([]string, error) {
 func ReverseWhois(domain string) ([]string, error) {
 	var domains []string
 
-	page, err := utils.GetWebPage("http://viewdns.info/reversewhois/?q="+domain, nil)
+	page, err := utils.RequestWebPage("http://viewdns.info/reversewhois/?q="+domain, nil, nil, "", "")
 	if err != nil {
 		return domains, err
 	}

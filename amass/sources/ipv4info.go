@@ -35,7 +35,7 @@ func (i *IPv4Info) Query(domain, sub string) []string {
 	}
 
 	url := i.getURL(domain)
-	page, err := utils.GetWebPage(url, nil)
+	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
 		i.Service.Config().Log.Printf("%s: %v", url, err)
 		return unique
@@ -44,7 +44,7 @@ func (i *IPv4Info) Query(domain, sub string) []string {
 	i.Service.SetActive()
 
 	url = i.ipSubmatch(page, domain)
-	page, err = utils.GetWebPage(url, nil)
+	page, err = utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
 		i.Service.Config().Log.Printf("%s: %v", url, err)
 		return unique
@@ -53,7 +53,7 @@ func (i *IPv4Info) Query(domain, sub string) []string {
 	i.Service.SetActive()
 
 	url = i.domainSubmatch(page, domain)
-	page, err = utils.GetWebPage(url, nil)
+	page, err = utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
 		i.Service.Config().Log.Printf("%s: %v", url, err)
 		return unique
@@ -62,7 +62,7 @@ func (i *IPv4Info) Query(domain, sub string) []string {
 	i.Service.SetActive()
 
 	url = i.subdomainSubmatch(page, domain)
-	page, err = utils.GetWebPage(url, nil)
+	page, err = utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
 		i.Service.Config().Log.Printf("%s: %v", url, err)
 		return unique

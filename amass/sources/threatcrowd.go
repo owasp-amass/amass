@@ -33,7 +33,7 @@ func (t *ThreatCrowd) Query(domain, sub string) []string {
 
 	re := utils.SubdomainRegex(domain)
 	url := t.getURL(domain)
-	page, err := utils.GetWebPage(url, nil)
+	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
 		t.Service.Config().Log.Printf("%s: %v", url, err)
 		return unique

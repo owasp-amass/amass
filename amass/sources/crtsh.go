@@ -44,7 +44,7 @@ func (c *Crtsh) Query(domain, sub string) []string {
 	}
 	// Pull the page that lists all certs for this domain
 	url := c.getURL(domain)
-	page, err := utils.GetWebPage(url, nil)
+	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
 		c.Service.Config().Log.Printf("%s: %v", url, err)
 		return unique

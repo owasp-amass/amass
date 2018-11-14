@@ -53,7 +53,7 @@ func (d *DNSDB) Query(domain, sub string) []string {
 	d.filter[name] = unique
 
 	url := d.getURL(domain, sub)
-	page, err := utils.GetWebPage(url, nil)
+	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
 		d.Service.Config().Log.Printf("%s: %v", url, err)
 		return unique
@@ -77,7 +77,7 @@ loop:
 		case <-d.Service.Quit():
 			break loop
 		case <-t.C:
-			another, err := utils.GetWebPage(url+rel, nil)
+			another, err := utils.RequestWebPage(url+rel, nil, nil, "", "")
 			if err != nil {
 				d.Service.Config().Log.Printf("%s: %v", url+rel, err)
 				continue

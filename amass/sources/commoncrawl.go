@@ -60,7 +60,7 @@ loop:
 			break loop
 		case <-t.C:
 			u := cc.getURL(index, domain)
-			page, err := utils.GetWebPage(u, nil)
+			page, err := utils.RequestWebPage(u, nil, nil, "", "")
 			if err != nil {
 				cc.Service.Config().Log.Printf("%s: %v", u, err)
 				continue

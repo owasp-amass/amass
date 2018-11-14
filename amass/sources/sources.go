@@ -17,36 +17,46 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
+// Possible return values from the DataSource.APIKeyRequired method.
+const (
+	APIKeyRequired int = iota
+	APIKeyNotRequired
+	APIkeyOptional
+)
+
 // DataSource is the interface that all data sources types in Amass implement.
 type DataSource interface {
 	// Returns subdomain names from the data source
 	Query(domain, sub string) []string
 
-	// Returns the data source's associated organization
+	// Returns the data source name that maps to an API key in the config
 	String() string
 
 	// Returns true if the data source supports subdomain name searches
 	Subdomains() bool
 
-	// Returns one of the types defined above in the constants
+	// Returns one of the data source types defined in the core package
 	Type() string
+
+	// Indicates if an API key is required by the data source
+	APIKeyRequired() int
 }
 
 // BaseDataSource provides common functionalities and default behaviors to all
 // Amass data sources. Most of the base methods are not implemented by each data
 // source.
 type BaseDataSource struct {
-	Service      core.AmassService
-	SourceType   string
-	Organization string
+	Service    core.AmassService
+	SourceType string
+	Name       string
 }
 
 // NewBaseDataSource returns an initialized BaseDataSource object.
-func NewBaseDataSource(srv core.AmassService, stype, org string) *BaseDataSource {
+func NewBaseDataSource(srv core.AmassService, stype, name string) *BaseDataSource {
 	return &BaseDataSource{
-		Service:      srv,
-		SourceType:   stype,
-		Organization: org,
+		Service:    srv,
+		SourceType: stype,
+		Name:       name,
 	}
 }
 
@@ -66,9 +76,14 @@ func (bds *BaseDataSource) Subdomains() bool {
 	return false
 }
 
+// APIKeyRequired serves as a default implementation of the DataSource interface.
+func (bds *BaseDataSource) APIKeyRequired() int {
+	return APIKeyNotRequired
+}
+
 // String returns the string that represents the source providing the data.
 func (bds *BaseDataSource) String() string {
-	return bds.Organization
+	return bds.Name
 }
 
 //-------------------------------------------------------------------------------------------------

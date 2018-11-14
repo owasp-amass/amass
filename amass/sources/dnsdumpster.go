@@ -38,7 +38,7 @@ func (d *DNSDumpster) Query(domain, sub string) []string {
 	}
 
 	u := "https://dnsdumpster.com/"
-	page, err := utils.GetWebPage(u, nil)
+	page, err := utils.RequestWebPage(u, nil, nil, "", "")
 	if err != nil {
 		d.Service.Config().Log.Printf("%s: %v", u, err)
 		return unique

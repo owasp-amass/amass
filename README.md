@@ -198,7 +198,7 @@ func main() {
         }
     }()
 
-    enum.AddDomain("example.com")
+    enum.Config.AddDomain("example.com")
     enum.Start()
 }
 ```

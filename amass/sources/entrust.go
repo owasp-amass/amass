@@ -34,7 +34,7 @@ func (e *Entrust) Query(domain, sub string) []string {
 	}
 
 	u := e.getURL(domain)
-	page, err := utils.GetWebPage(u, nil)
+	page, err := utils.RequestWebPage(u, nil, nil, "", "")
 	if err != nil {
 		e.Service.Config().Log.Printf("%s: %v", u, err)
 		return unique

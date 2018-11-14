@@ -33,7 +33,7 @@ func (s *SiteDossier) Query(domain, sub string) []string {
 
 	re := utils.SubdomainRegex(domain)
 	url := s.getURL(domain)
-	page, err := utils.GetWebPage(url, nil)
+	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
 		s.Service.Config().Log.Printf("%s: %v", url, err)
 		return unique

@@ -32,7 +32,7 @@ func (d *DNSTable) Query(domain, sub string) []string {
 	}
 
 	url := d.getURL(domain)
-	page, err := utils.GetWebPage(url, nil)
+	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
 		d.Service.Config().Log.Printf("%s: %v", url, err)
 		return unique

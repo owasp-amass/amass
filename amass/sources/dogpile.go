@@ -51,7 +51,7 @@ loop:
 			break loop
 		case <-t.C:
 			u := d.urlByPageNum(domain, i)
-			page, err := utils.GetWebPage(u, nil)
+			page, err := utils.RequestWebPage(u, nil, nil, "", "")
 			if err != nil {
 				d.Service.Config().Log.Printf("%s: %v", u, err)
 				break
