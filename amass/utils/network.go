@@ -23,6 +23,9 @@ const (
 
 	// AcceptLang is the default HTTP Accept-Language header value used by Amass.
 	AcceptLang = "en-US,en;q=0.8"
+
+	// AcceptEncoding is the default HTTP Accept-Encoding header value used by Amass.
+	AcceptEncoding = "gzip"
 )
 
 // RequestWebPage returns a string containing the entire response for
@@ -42,6 +45,7 @@ func RequestWebPage(url string, body io.Reader, hvals map[string]string, uid, se
 	req.Header.Set("User-Agent", UserAgent)
 	req.Header.Set("Accept", Accept)
 	req.Header.Set("Accept-Language", AcceptLang)
+	req.Header.Set("Accept-Encoding", AcceptEncoding)
 	if hvals != nil {
 		for k, v := range hvals {
 			req.Header.Set(k, v)

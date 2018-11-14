@@ -31,15 +31,15 @@ func (t *ThreatCrowd) Query(domain, sub string) []string {
 		return unique
 	}
 
-	re := utils.SubdomainRegex(domain)
 	url := t.getURL(domain)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
 		t.Service.Config().Log.Printf("%s: %v", url, err)
 		return unique
 	}
-	t.Service.SetActive()
 
+	t.Service.SetActive()
+	re := t.Service.Config().DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
 		if u := utils.NewUniqueElements(unique, sd); len(u) > 0 {
 			unique = append(unique, u...)
