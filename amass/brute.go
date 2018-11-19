@@ -15,15 +15,19 @@ import (
 type BruteForceService struct {
 	core.BaseAmassService
 
-	bus evbus.Bus
+	Bus    evbus.Bus
+	Config *core.AmassConfig
 }
 
 // NewBruteForceService requires the enumeration configuration and event bus as parameters.
 // The object returned is initialized, but has not yet been started.
-func NewBruteForceService(config *core.AmassConfig, bus evbus.Bus) *BruteForceService {
-	bfs := &BruteForceService{bus: bus}
+func NewBruteForceService(bus evbus.Bus, config *core.AmassConfig) *BruteForceService {
+	bfs := &BruteForceService{
+		Bus:    bus,
+		Config: config,
+	}
 
-	bfs.BaseAmassService = *core.NewBaseAmassService("Brute Forcing Service", config, bfs)
+	bfs.BaseAmassService = *core.NewBaseAmassService("Brute Forcing", bfs)
 	return bfs
 }
 
@@ -31,11 +35,11 @@ func NewBruteForceService(config *core.AmassConfig, bus evbus.Bus) *BruteForceSe
 func (bfs *BruteForceService) OnStart() error {
 	bfs.BaseAmassService.OnStart()
 
-	if bfs.Config().BruteForcing {
+	if bfs.Config.BruteForcing {
 		go bfs.startRootDomains()
 
-		if bfs.Config().Recursive {
-			bfs.bus.SubscribeAsync(core.NEWSUB, bfs.newSubdomain, false)
+		if bfs.Config.Recursive {
+			bfs.Bus.SubscribeAsync(core.NEWSUB, bfs.newSubdomain, false)
 		}
 	}
 	return nil
@@ -45,21 +49,21 @@ func (bfs *BruteForceService) OnStart() error {
 func (bfs *BruteForceService) OnStop() error {
 	bfs.BaseAmassService.OnStop()
 
-	if bfs.Config().BruteForcing && bfs.Config().Recursive {
-		bfs.bus.Unsubscribe(core.NEWSUB, bfs.newSubdomain)
+	if bfs.Config.BruteForcing && bfs.Config.Recursive {
+		bfs.Bus.Unsubscribe(core.NEWSUB, bfs.newSubdomain)
 	}
 	return nil
 }
 
 func (bfs *BruteForceService) startRootDomains() {
 	// Look at each domain provided by the config
-	for _, domain := range bfs.Config().Domains() {
+	for _, domain := range bfs.Config.Domains() {
 		bfs.performBruteForcing(domain, domain)
 	}
 }
 
 func (bfs *BruteForceService) newSubdomain(req *core.AmassRequest, times int) {
-	if times == bfs.Config().MinForRecursive {
+	if times == bfs.Config.MinForRecursive {
 		go bfs.performBruteForcing(req.Name, req.Domain)
 	}
 }
@@ -67,19 +71,19 @@ func (bfs *BruteForceService) newSubdomain(req *core.AmassRequest, times int) {
 func (bfs *BruteForceService) performBruteForcing(subdomain, root string) {
 	t := time.NewTicker(time.Second)
 	defer t.Stop()
-	for _, word := range bfs.Config().Wordlist {
+	for _, word := range bfs.Config.Wordlist {
 		select {
 		case <-t.C:
 			bfs.SetActive()
 		case <-bfs.Quit():
 			return
 		default:
-			bfs.Config().MaxFlow.Acquire(1)
-			bfs.bus.Publish(core.NEWNAME, &core.AmassRequest{
+			bfs.Config.MaxFlow.Acquire(1)
+			bfs.Bus.Publish(core.NEWNAME, &core.AmassRequest{
 				Name:   word + "." + subdomain,
 				Domain: root,
 				Tag:    core.BRUTE,
-				Source: "Brute Force",
+				Source: bfs.String(),
 			})
 		}
 	}

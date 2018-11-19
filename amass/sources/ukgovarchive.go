@@ -3,36 +3,97 @@
 
 package sources
 
-import "github.com/OWASP/Amass/amass/core"
+import (
+	"github.com/OWASP/Amass/amass/core"
+	"github.com/OWASP/Amass/amass/utils"
+	evbus "github.com/asaskevich/EventBus"
+)
 
-// UKGovArchive is data source object type that implements the DataSource interface.
+// UKGovArchive is the AmassService that handles access to the UKGovArchive data source.
 type UKGovArchive struct {
-	BaseDataSource
-	baseURL string
+	core.BaseAmassService
+
+	Bus        evbus.Bus
+	Config     *core.AmassConfig
+	baseURL    string
+	SourceType string
+	filter     *utils.StringFilter
 }
 
-// NewUKGovArchive returns an initialized UKGovArchive as a DataSource.
-func NewUKGovArchive(srv core.AmassService) DataSource {
-	u := &UKGovArchive{baseURL: "http://webarchive.nationalarchives.gov.uk"}
+// NewUKGovArchive requires the enumeration configuration and event bus as parameters.
+// The object returned is initialized, but has not yet been started.
+func NewUKGovArchive(bus evbus.Bus, config *core.AmassConfig) *UKGovArchive {
+	u := &UKGovArchive{
+		Bus:        bus,
+		Config:     config,
+		baseURL:    "http://webarchive.nationalarchives.gov.uk",
+		SourceType: core.ARCHIVE,
+		filter:     utils.NewStringFilter(),
+	}
 
-	u.BaseDataSource = *NewBaseDataSource(srv, core.ARCHIVE, "UK Gov Arch")
+	u.BaseAmassService = *core.NewBaseAmassService("UKGovArchive", u)
 	return u
 }
 
-// Query returns the subdomain names discovered when querying this data source.
-func (u *UKGovArchive) Query(domain, sub string) []string {
-	if sub == "" {
-		return []string{}
-	}
+// OnStart implements the AmassService interface
+func (u *UKGovArchive) OnStart() error {
+	u.BaseAmassService.OnStart()
 
-	names, err := u.crawl(u.baseURL, domain, sub)
-	if err != nil {
-		u.Service.Config().Log.Printf("%v", err)
-	}
-	return names
+	u.Bus.SubscribeAsync(core.CHECKED, u.SendRequest, false)
+	go u.startRootDomains()
+	go u.processRequests()
+	return nil
 }
 
-// Subdomains returns true when the data source can query for subdomain names.
-func (u *UKGovArchive) Subdomains() bool {
-	return true
+// OnStop implements the AmassService interface
+func (u *UKGovArchive) OnStop() error {
+	u.BaseAmassService.OnStop()
+
+	u.Bus.Unsubscribe(core.CHECKED, u.SendRequest)
+	return nil
+}
+
+func (u *UKGovArchive) startRootDomains() {
+	// Look at each domain provided by the config
+	for _, domain := range u.Config.Domains() {
+		u.executeQuery(domain, domain)
+	}
+}
+
+func (u *UKGovArchive) processRequests() {
+	for {
+		select {
+		case <-u.Quit():
+			return
+		case req := <-u.RequestChan():
+			u.executeQuery(req.Name, req.Domain)
+		}
+	}
+}
+
+func (u *UKGovArchive) executeQuery(sn, domain string) {
+	if sn == "" || domain == "" {
+		return
+	}
+	if u.filter.Duplicate(sn) {
+		return
+	}
+
+	names, err := crawl(u, u.baseURL, domain, sn)
+	if err != nil {
+		u.Config.Log.Printf("%s: %v", u.String(), err)
+		return
+	}
+
+	for _, n := range names {
+		go func(name string) {
+			u.Config.MaxFlow.Acquire(1)
+			u.Bus.Publish(core.NEWNAME, &core.AmassRequest{
+				Name:   cleanName(name),
+				Domain: domain,
+				Tag:    u.SourceType,
+				Source: u.String(),
+			})
+		}(n)
+	}
 }

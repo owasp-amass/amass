@@ -10,61 +10,96 @@ import (
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
+	evbus "github.com/asaskevich/EventBus"
 )
 
-// Dogpile is data source object type that implements the DataSource interface.
+// Dogpile is the AmassService that handles access to the Dogpile data source.
 type Dogpile struct {
-	BaseDataSource
-	quantity int
-	limit    int
+	core.BaseAmassService
+
+	Bus        evbus.Bus
+	Config     *core.AmassConfig
+	quantity   int
+	limit      int
+	SourceType string
+	filter     *utils.StringFilter
 }
 
-// NewDogpile returns an initialized Dogpile as a DataSource.
-func NewDogpile(srv core.AmassService) DataSource {
+// NewDogpile requires the enumeration configuration and event bus as parameters.
+// The object returned is initialized, but has not yet been started.
+func NewDogpile(bus evbus.Bus, config *core.AmassConfig) *Dogpile {
 	d := &Dogpile{
-		quantity: 15, // Dogpile returns roughly 15 results per page
-		limit:    90,
+		Bus:        bus,
+		Config:     config,
+		quantity:   15, // Dogpile returns roughly 15 results per page
+		limit:      90,
+		SourceType: core.SCRAPE,
+		filter:     utils.NewStringFilter(),
 	}
 
-	d.BaseDataSource = *NewBaseDataSource(srv, core.SCRAPE, "Dogpile")
+	d.BaseAmassService = *core.NewBaseAmassService("Dogpile", d)
 	return d
 }
 
-// Query returns the subdomain names discovered when querying this data source.
-func (d *Dogpile) Query(domain, sub string) []string {
-	var unique []string
+// OnStart implements the AmassService interface
+func (d *Dogpile) OnStart() error {
+	d.BaseAmassService.OnStart()
 
-	if domain != sub {
-		return unique
+	go d.startRootDomains()
+	return nil
+}
+
+// OnStop implements the AmassService interface
+func (d *Dogpile) OnStop() error {
+	d.BaseAmassService.OnStop()
+	return nil
+}
+
+func (d *Dogpile) startRootDomains() {
+	// Look at each domain provided by the config
+	for _, domain := range d.Config.Domains() {
+		d.executeQuery(domain)
 	}
+}
 
-	re := utils.SubdomainRegex(domain)
+func (d *Dogpile) executeQuery(domain string) {
+	re := d.Config.DomainRegex(domain)
 	num := d.limit / d.quantity
 	t := time.NewTicker(time.Second)
 	defer t.Stop()
-loop:
+
 	for i := 0; i < num; i++ {
-		d.Service.SetActive()
+		d.SetActive()
 
 		select {
-		case <-d.Service.Quit():
-			break loop
+		case <-d.Quit():
+			return
 		case <-t.C:
 			u := d.urlByPageNum(domain, i)
 			page, err := utils.RequestWebPage(u, nil, nil, "", "")
 			if err != nil {
-				d.Service.Config().Log.Printf("%s: %v", u, err)
-				break
+				d.Config.Log.Printf("%s: %s: %v", d.String(), u, err)
+				return
 			}
 
 			for _, sd := range re.FindAllString(page, -1) {
-				if u := utils.NewUniqueElements(unique, sd); len(u) > 0 {
-					unique = append(unique, u...)
+				n := cleanName(sd)
+
+				if d.filter.Duplicate(n) {
+					continue
 				}
+				go func(name string) {
+					d.Config.MaxFlow.Acquire(1)
+					d.Bus.Publish(core.NEWNAME, &core.AmassRequest{
+						Name:   name,
+						Domain: domain,
+						Tag:    d.SourceType,
+						Source: d.String(),
+					})
+				}(n)
 			}
 		}
 	}
-	return unique
 }
 
 func (d *Dogpile) urlByPageNum(domain string, page int) string {

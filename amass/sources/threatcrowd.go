@@ -8,44 +8,80 @@ import (
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
+	evbus "github.com/asaskevich/EventBus"
 )
 
-// ThreatCrowd is data source object type that implements the DataSource interface.
+// ThreatCrowd is the AmassService that handles access to the ThreatCrowd data source.
 type ThreatCrowd struct {
-	BaseDataSource
+	core.BaseAmassService
+
+	Bus        evbus.Bus
+	Config     *core.AmassConfig
+	SourceType string
+	filter     *utils.StringFilter
 }
 
-// NewThreatCrowd returns an initialized ThreatCrowd as a DataSource.
-func NewThreatCrowd(srv core.AmassService) DataSource {
-	t := new(ThreatCrowd)
+// NewThreatCrowd requires the enumeration configuration and event bus as parameters.
+// The object returned is initialized, but has not yet been started.
+func NewThreatCrowd(bus evbus.Bus, config *core.AmassConfig) *ThreatCrowd {
+	t := &ThreatCrowd{
+		Bus:        bus,
+		Config:     config,
+		SourceType: core.SCRAPE,
+		filter:     utils.NewStringFilter(),
+	}
 
-	t.BaseDataSource = *NewBaseDataSource(srv, core.SCRAPE, "ThreatCrowd")
+	t.BaseAmassService = *core.NewBaseAmassService("ThreatCrowd", t)
 	return t
 }
 
-// Query returns the subdomain names discovered when querying this data source.
-func (t *ThreatCrowd) Query(domain, sub string) []string {
-	var unique []string
+// OnStart implements the AmassService interface
+func (t *ThreatCrowd) OnStart() error {
+	t.BaseAmassService.OnStart()
 
-	if domain != sub {
-		return unique
+	go t.startRootDomains()
+	return nil
+}
+
+// OnStop implements the AmassService interface
+func (t *ThreatCrowd) OnStop() error {
+	t.BaseAmassService.OnStop()
+	return nil
+}
+
+func (t *ThreatCrowd) startRootDomains() {
+	// Look at each domain provided by the config
+	for _, domain := range t.Config.Domains() {
+		t.executeQuery(domain)
 	}
+}
 
+func (t *ThreatCrowd) executeQuery(domain string) {
 	url := t.getURL(domain)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		t.Service.Config().Log.Printf("%s: %v", url, err)
-		return unique
+		t.Config.Log.Printf("%s: %s: %v", t.String(), url, err)
+		return
 	}
 
-	t.Service.SetActive()
-	re := t.Service.Config().DomainRegex(domain)
+	t.SetActive()
+	re := t.Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
-		if u := utils.NewUniqueElements(unique, sd); len(u) > 0 {
-			unique = append(unique, u...)
+		n := cleanName(sd)
+
+		if t.filter.Duplicate(n) {
+			continue
 		}
+		go func(name string) {
+			t.Config.MaxFlow.Acquire(1)
+			t.Bus.Publish(core.NEWNAME, &core.AmassRequest{
+				Name:   name,
+				Domain: domain,
+				Tag:    t.SourceType,
+				Source: t.String(),
+			})
+		}(n)
 	}
-	return unique
 }
 
 func (t *ThreatCrowd) getURL(domain string) string {

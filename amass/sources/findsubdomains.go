@@ -8,44 +8,80 @@ import (
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
+	evbus "github.com/asaskevich/EventBus"
 )
 
-// FindSubdomains is data source object type that implements the DataSource interface.
+// FindSubdomains is the AmassService that handles access to the FindSubdomains data source.
 type FindSubdomains struct {
-	BaseDataSource
+	core.BaseAmassService
+
+	Bus        evbus.Bus
+	Config     *core.AmassConfig
+	SourceType string
+	filter     *utils.StringFilter
 }
 
-// NewFindSubdomains returns an initialized FindSubdomains as a DataSource.
-func NewFindSubdomains(srv core.AmassService) DataSource {
-	f := new(FindSubdomains)
+// NewFindSubdomains requires the enumeration configuration and event bus as parameters.
+// The object returned is initialized, but has not yet been started.
+func NewFindSubdomains(bus evbus.Bus, config *core.AmassConfig) *FindSubdomains {
+	f := &FindSubdomains{
+		Bus:        bus,
+		Config:     config,
+		SourceType: core.SCRAPE,
+		filter:     utils.NewStringFilter(),
+	}
 
-	f.BaseDataSource = *NewBaseDataSource(srv, core.SCRAPE, "FindSubDomains")
+	f.BaseAmassService = *core.NewBaseAmassService("FindSubdomains", f)
 	return f
 }
 
-// Query returns the subdomain names discovered when querying this data source.
-func (f *FindSubdomains) Query(domain, sub string) []string {
-	var unique []string
+// OnStart implements the AmassService interface
+func (f *FindSubdomains) OnStart() error {
+	f.BaseAmassService.OnStart()
 
-	if domain != sub {
-		return unique
+	go f.startRootDomains()
+	return nil
+}
+
+// OnStop implements the AmassService interface
+func (f *FindSubdomains) OnStop() error {
+	f.BaseAmassService.OnStop()
+	return nil
+}
+
+func (f *FindSubdomains) startRootDomains() {
+	// Look at each domain provided by the config
+	for _, domain := range f.Config.Domains() {
+		f.executeQuery(domain)
 	}
+}
 
+func (f *FindSubdomains) executeQuery(domain string) {
 	url := f.getURL(domain)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		f.Service.Config().Log.Printf("%s: %v", url, err)
-		return unique
+		f.Config.Log.Printf("%s: %s: %v", f.String(), url, err)
+		return
 	}
-	f.Service.SetActive()
 
-	re := utils.SubdomainRegex(domain)
+	f.SetActive()
+	re := f.Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
-		if u := utils.NewUniqueElements(unique, sd); len(u) > 0 {
-			unique = append(unique, u...)
+		n := cleanName(sd)
+
+		if f.filter.Duplicate(n) {
+			continue
 		}
+		go func(name string) {
+			f.Config.MaxFlow.Acquire(1)
+			f.Bus.Publish(core.NEWNAME, &core.AmassRequest{
+				Name:   name,
+				Domain: domain,
+				Tag:    f.SourceType,
+				Source: f.String(),
+			})
+		}(n)
 	}
-	return unique
 }
 
 func (f *FindSubdomains) getURL(domain string) string {

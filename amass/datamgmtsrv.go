@@ -20,17 +20,26 @@ import (
 type DataManagerService struct {
 	core.BaseAmassService
 
-	bus      evbus.Bus
-	Handlers []handlers.DataHandler
-	domains  []string
+	Bus           evbus.Bus
+	Config        *core.AmassConfig
+	Handlers      []handlers.DataHandler
+	filter        *utils.StringFilter
+	domainFilter  *utils.StringFilter
+	maxInsertions *utils.Semaphore
 }
 
 // NewDataManagerService requires the enumeration configuration and event bus as parameters.
 // The object returned is initialized, but has not yet been started.
-func NewDataManagerService(config *core.AmassConfig, bus evbus.Bus) *DataManagerService {
-	dms := &DataManagerService{bus: bus}
+func NewDataManagerService(bus evbus.Bus, config *core.AmassConfig) *DataManagerService {
+	dms := &DataManagerService{
+		Bus:           bus,
+		Config:        config,
+		filter:        utils.NewStringFilter(),
+		domainFilter:  utils.NewStringFilter(),
+		maxInsertions: utils.NewSemaphore(10),
+	}
 
-	dms.BaseAmassService = *core.NewBaseAmassService("Data Manager Service", config, dms)
+	dms.BaseAmassService = *core.NewBaseAmassService("Data Manager", dms)
 	return dms
 }
 
@@ -38,24 +47,13 @@ func NewDataManagerService(config *core.AmassConfig, bus evbus.Bus) *DataManager
 func (dms *DataManagerService) OnStart() error {
 	dms.BaseAmassService.OnStart()
 
-	dms.bus.SubscribeAsync(core.CHECKED, dms.SendRequest, false)
-
-	dms.Handlers = append(dms.Handlers, dms.Config().Graph())
-	if dms.Config().DataOptsWriter != nil {
-		dms.Handlers = append(dms.Handlers, handlers.NewDataOptsHandler(dms.Config().DataOptsWriter))
+	dms.Handlers = append(dms.Handlers, dms.Config.Graph())
+	if dms.Config.DataOptsWriter != nil {
+		dms.Handlers = append(dms.Handlers, handlers.NewDataOptsHandler(dms.Config.DataOptsWriter))
 	}
+	dms.Bus.SubscribeAsync(core.CHECKED, dms.SendRequest, false)
 	go dms.processRequests()
 	go dms.processOutput()
-	return nil
-}
-
-// OnPause implements the AmassService interface
-func (dms *DataManagerService) OnPause() error {
-	return nil
-}
-
-// OnResume implements the AmassService interface
-func (dms *DataManagerService) OnResume() error {
 	return nil
 }
 
@@ -63,7 +61,7 @@ func (dms *DataManagerService) OnResume() error {
 func (dms *DataManagerService) OnStop() error {
 	dms.BaseAmassService.OnStop()
 
-	dms.bus.Unsubscribe(core.CHECKED, dms.SendRequest)
+	dms.Bus.Unsubscribe(core.CHECKED, dms.SendRequest)
 	return nil
 }
 
@@ -75,8 +73,8 @@ func (dms *DataManagerService) processRequests() {
 		case <-dms.Quit():
 			return
 		case req := <-dms.RequestChan():
-			dms.SetActive()
-			dms.manageData(req)
+			dms.maxInsertions.Acquire(1)
+			go dms.manageData(req)
 		}
 	}
 }
@@ -87,33 +85,36 @@ func (dms *DataManagerService) processOutput() {
 
 	for {
 		select {
-		case <-t.C:
-			if out := dms.Config().Graph().GetNewOutput(); len(out) > 0 {
-				dms.sendOutput(out)
-			}
+		case <-dms.Quit():
+			return
 		case <-dms.PauseChan():
 			t.Stop()
 		case <-dms.ResumeChan():
 			t = time.NewTicker(time.Second)
-		case <-dms.Quit():
-			return
+		case <-t.C:
+			dms.sendOutput()
 		}
 	}
 }
 
-func (dms *DataManagerService) sendOutput(output []*core.AmassOutput) {
-	dms.SetActive()
-	for _, o := range output {
-		if dms.Config().IsDomainInScope(o.Name) {
-			dms.bus.Publish(core.OUTPUT, o)
+func (dms *DataManagerService) sendOutput() {
+	if out := dms.Config.Graph().GetNewOutput(); len(out) > 0 {
+		dms.SetActive()
+		for _, o := range out {
+			if !dms.filter.Duplicate(o.Name) && dms.Config.IsDomainInScope(o.Name) {
+				dms.Bus.Publish(core.OUTPUT, o)
+			}
 		}
 	}
 }
 
 func (dms *DataManagerService) manageData(req *core.AmassRequest) {
+	defer dms.maxInsertions.Release(1)
+
 	req.Name = strings.ToLower(req.Name)
 	req.Domain = strings.ToLower(req.Domain)
 
+	dms.SetActive()
 	dms.insertDomain(req.Domain)
 	for i, r := range req.Records {
 		r.Name = strings.ToLower(r.Name)
@@ -143,23 +144,12 @@ func (dms *DataManagerService) manageData(req *core.AmassRequest) {
 }
 
 func (dms *DataManagerService) publishRequest(req *core.AmassRequest) {
-	dms.Config().MaxFlow.Acquire(1)
-	dms.bus.Publish(core.NEWNAME, req)
+	dms.Config.MaxFlow.Acquire(1)
+	dms.Bus.Publish(core.NEWNAME, req)
 }
 
 func (dms *DataManagerService) checkDomain(domain string) bool {
-	dms.Lock()
-	dom := dms.domains
-	dms.Unlock()
-	for _, d := range dom {
-		if strings.Compare(d, domain) == 0 {
-			return true
-		}
-	}
-	dms.Lock()
-	dms.domains = append(dms.domains, domain)
-	dms.Unlock()
-	return false
+	return dms.domainFilter.Duplicate(domain)
 }
 
 func (dms *DataManagerService) insertDomain(domain string) {
@@ -169,7 +159,7 @@ func (dms *DataManagerService) insertDomain(domain string) {
 	}
 	for _, handler := range dms.Handlers {
 		if err := handler.InsertDomain(domain, core.DNS, "Forward DNS"); err != nil {
-			dms.Config().Log.Printf("%s failed to insert domain: %v", handler, err)
+			dms.Config.Log.Printf("%s failed to insert domain: %v", handler, err)
 		}
 	}
 	go dms.publishRequest(&core.AmassRequest{
@@ -193,7 +183,7 @@ func (dms *DataManagerService) insertCNAME(req *core.AmassRequest, recidx int) {
 	for _, handler := range dms.Handlers {
 		err := handler.InsertCNAME(req.Name, req.Domain, target, domain, req.Tag, req.Source)
 		if err != nil {
-			dms.Config().Log.Printf("%s failed to insert CNAME: %v", handler, err)
+			dms.Config.Log.Printf("%s failed to insert CNAME: %v", handler, err)
 		}
 	}
 	go dms.publishRequest(&core.AmassRequest{
@@ -211,13 +201,17 @@ func (dms *DataManagerService) insertA(req *core.AmassRequest, recidx int) {
 	}
 	for _, handler := range dms.Handlers {
 		if err := handler.InsertA(req.Name, req.Domain, addr, req.Tag, req.Source); err != nil {
-			dms.Config().Log.Printf("%s failed to insert A record: %v", handler, err)
+			dms.Config.Log.Printf("%s failed to insert A record: %v", handler, err)
 		}
 	}
 	dms.insertInfrastructure(addr)
-	// Check if active certificate access should be used on this address
-	if dms.Config().Active && dms.Config().IsDomainInScope(req.Name) {
-		dms.bus.Publish(core.ACTIVECERT, addr)
+	if dms.Config.IsDomainInScope(req.Name) {
+		dms.Bus.Publish(core.NEWADDR, &core.AmassRequest{
+			Domain:  req.Domain,
+			Address: addr,
+			Tag:     req.Tag,
+			Source:  req.Source,
+		})
 	}
 }
 
@@ -228,13 +222,17 @@ func (dms *DataManagerService) insertAAAA(req *core.AmassRequest, recidx int) {
 	}
 	for _, handler := range dms.Handlers {
 		if err := handler.InsertAAAA(req.Name, req.Domain, addr, req.Tag, req.Source); err != nil {
-			dms.Config().Log.Printf("%s failed to insert AAAA record: %v", handler, err)
+			dms.Config.Log.Printf("%s failed to insert AAAA record: %v", handler, err)
 		}
 	}
 	dms.insertInfrastructure(addr)
-	// Check if active certificate access should be used on this address
-	if dms.Config().Active && dms.Config().IsDomainInScope(req.Name) {
-		dms.bus.Publish(core.ACTIVECERT, addr)
+	if dms.Config.IsDomainInScope(req.Name) {
+		dms.Bus.Publish(core.NEWADDR, &core.AmassRequest{
+			Domain:  req.Domain,
+			Address: addr,
+			Tag:     req.Tag,
+			Source:  req.Source,
+		})
 	}
 }
 
@@ -243,14 +241,14 @@ func (dms *DataManagerService) insertPTR(req *core.AmassRequest, recidx int) {
 	if target == "" {
 		return
 	}
-	domain := dms.Config().WhichDomain(target)
+	domain := dms.Config.WhichDomain(target)
 	if domain == "" {
 		return
 	}
 	dms.insertDomain(domain)
 	for _, handler := range dms.Handlers {
 		if err := handler.InsertPTR(req.Name, domain, target, req.Tag, req.Source); err != nil {
-			dms.Config().Log.Printf("%s failed to insert PTR record: %v", handler, err)
+			dms.Config.Log.Printf("%s failed to insert PTR record: %v", handler, err)
 		}
 	}
 	go dms.publishRequest(&core.AmassRequest{
@@ -271,7 +269,7 @@ func (dms *DataManagerService) insertSRV(req *core.AmassRequest, recidx int) {
 	for _, handler := range dms.Handlers {
 		err := handler.InsertSRV(req.Name, req.Domain, service, target, req.Tag, req.Source)
 		if err != nil {
-			dms.Config().Log.Printf("%s failed to insert SRV record: %v", handler, err)
+			dms.Config.Log.Printf("%s failed to insert SRV record: %v", handler, err)
 		}
 	}
 }
@@ -290,7 +288,7 @@ func (dms *DataManagerService) insertNS(req *core.AmassRequest, recidx int) {
 	for _, handler := range dms.Handlers {
 		err := handler.InsertNS(req.Name, req.Domain, target, domain, req.Tag, req.Source)
 		if err != nil {
-			dms.Config().Log.Printf("%s failed to insert NS record: %v", handler, err)
+			dms.Config.Log.Printf("%s failed to insert NS record: %v", handler, err)
 		}
 	}
 	if target != domain {
@@ -316,7 +314,7 @@ func (dms *DataManagerService) insertMX(req *core.AmassRequest, recidx int) {
 	for _, handler := range dms.Handlers {
 		err := handler.InsertMX(req.Name, req.Domain, target, domain, req.Tag, req.Source)
 		if err != nil {
-			dms.Config().Log.Printf("%s failed to insert MX record: %v", handler, err)
+			dms.Config.Log.Printf("%s failed to insert MX record: %v", handler, err)
 		}
 	}
 	if target != domain {
@@ -330,14 +328,14 @@ func (dms *DataManagerService) insertMX(req *core.AmassRequest, recidx int) {
 }
 
 func (dms *DataManagerService) insertTXT(req *core.AmassRequest, recidx int) {
-	if !dms.Config().IsDomainInScope(req.Name) {
+	if !dms.Config.IsDomainInScope(req.Name) {
 		return
 	}
 	dms.findNamesAndAddresses(req.Records[recidx].Data)
 }
 
 func (dms *DataManagerService) insertSPF(req *core.AmassRequest, recidx int) {
-	if !dms.Config().IsDomainInScope(req.Name) {
+	if !dms.Config.IsDomainInScope(req.Name) {
 		return
 	}
 	dms.findNamesAndAddresses(req.Records[recidx].Data)
@@ -346,18 +344,19 @@ func (dms *DataManagerService) insertSPF(req *core.AmassRequest, recidx int) {
 func (dms *DataManagerService) findNamesAndAddresses(data string) {
 	ipre := regexp.MustCompile(utils.IPv4RE)
 	for _, ip := range ipre.FindAllString(data, -1) {
-		if _, cidr, _, err := IPRequest(ip); err == nil {
-			dms.bus.Publish(core.DNSSWEEP, ip, cidr)
-		} else {
-			dms.Config().Log.Printf("%v", err)
-		}
+		dms.Bus.Publish(core.NEWADDR, &core.AmassRequest{
+			Address: ip,
+			Tag:     core.DNS,
+			Source:  "Forward DNS",
+		})
 	}
+
 	subre := utils.AnySubdomainRegex()
 	for _, name := range subre.FindAllString(data, -1) {
-		if !dms.Config().IsDomainInScope(name) {
+		if !dms.Config.IsDomainInScope(name) {
 			continue
 		}
-		domain := dms.Config().WhichDomain(name)
+		domain := dms.Config.WhichDomain(name)
 		if domain == "" {
 			continue
 		}
@@ -373,16 +372,13 @@ func (dms *DataManagerService) findNamesAndAddresses(data string) {
 func (dms *DataManagerService) insertInfrastructure(addr string) {
 	asn, cidr, desc, err := IPRequest(addr)
 	if err != nil {
-		dms.Config().Log.Printf("%v", err)
+		dms.Config.Log.Printf("%v", err)
 		return
 	}
 
-	// Request the reverse DNS sweep for the addr
-	dms.bus.Publish(core.DNSSWEEP, addr, cidr)
-
 	for _, handler := range dms.Handlers {
 		if err := handler.InsertInfrastructure(addr, asn, cidr, desc); err != nil {
-			dms.Config().Log.Printf("%s failed to insert infrastructure data: %v", handler, err)
+			dms.Config.Log.Printf("%s failed to insert infrastructure data: %v", handler, err)
 		}
 	}
 }

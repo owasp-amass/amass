@@ -8,44 +8,80 @@ import (
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
+	evbus "github.com/asaskevich/EventBus"
 )
 
-// CertSpotter is data source object type that implements the DataSource interface.
+// CertSpotter is the AmassService that handles access to the CertSpotter data source.
 type CertSpotter struct {
-	BaseDataSource
+	core.BaseAmassService
+
+	Bus        evbus.Bus
+	Config     *core.AmassConfig
+	SourceType string
+	filter     *utils.StringFilter
 }
 
-// NewCertSpotter returns an initialized CertSpotter as a DataSource.
-func NewCertSpotter(srv core.AmassService) DataSource {
-	c := new(CertSpotter)
+// NewCertSpotter requires the enumeration configuration and event bus as parameters.
+// The object returned is initialized, but has not yet been started.
+func NewCertSpotter(bus evbus.Bus, config *core.AmassConfig) *CertSpotter {
+	c := &CertSpotter{
+		Bus:        bus,
+		Config:     config,
+		SourceType: core.CERT,
+		filter:     utils.NewStringFilter(),
+	}
 
-	c.BaseDataSource = *NewBaseDataSource(srv, core.CERT, "CertSpotter")
+	c.BaseAmassService = *core.NewBaseAmassService("CertSpotter", c)
 	return c
 }
 
-// Query returns the subdomain names discovered when querying this data source.
-func (c *CertSpotter) Query(domain, sub string) []string {
-	var unique []string
+// OnStart implements the AmassService interface
+func (c *CertSpotter) OnStart() error {
+	c.BaseAmassService.OnStart()
 
-	if domain != sub {
-		return unique
+	go c.startRootDomains()
+	return nil
+}
+
+// OnStop implements the AmassService interface
+func (c *CertSpotter) OnStop() error {
+	c.BaseAmassService.OnStop()
+	return nil
+}
+
+func (c *CertSpotter) startRootDomains() {
+	// Look at each domain provided by the config
+	for _, domain := range c.Config.Domains() {
+		c.executeQuery(domain)
 	}
+}
 
+func (c *CertSpotter) executeQuery(domain string) {
 	url := c.getURL(domain)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		c.Service.Config().Log.Printf("%s: %v", url, err)
-		return unique
+		c.Config.Log.Printf("%s: %s: %v", c.String(), url, err)
+		return
 	}
 
-	c.Service.SetActive()
-	re := utils.SubdomainRegex(domain)
+	c.SetActive()
+	re := c.Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
-		if u := utils.NewUniqueElements(unique, sd); len(u) > 0 {
-			unique = append(unique, u...)
+		n := cleanName(sd)
+
+		if c.filter.Duplicate(n) {
+			continue
 		}
+		go func(name string) {
+			c.Config.MaxFlow.Acquire(1)
+			c.Bus.Publish(core.NEWNAME, &core.AmassRequest{
+				Name:   name,
+				Domain: domain,
+				Tag:    c.SourceType,
+				Source: c.String(),
+			})
+		}(n)
 	}
-	return unique
 }
 
 func (c *CertSpotter) getURL(domain string) string {

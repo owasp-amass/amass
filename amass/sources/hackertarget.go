@@ -8,44 +8,80 @@ import (
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
+	evbus "github.com/asaskevich/EventBus"
 )
 
-// HackerTarget is data source object type that implements the DataSource interface.
+// HackerTarget is the AmassService that handles access to the HackerTarget data source.
 type HackerTarget struct {
-	BaseDataSource
+	core.BaseAmassService
+
+	Bus        evbus.Bus
+	Config     *core.AmassConfig
+	SourceType string
+	filter     *utils.StringFilter
 }
 
-// NewHackerTarget returns an initialized HackerTarget as a DataSource.
-func NewHackerTarget(srv core.AmassService) DataSource {
-	h := new(HackerTarget)
+// NewHackerTarget requires the enumeration configuration and event bus as parameters.
+// The object returned is initialized, but has not yet been started.
+func NewHackerTarget(bus evbus.Bus, config *core.AmassConfig) *HackerTarget {
+	h := &HackerTarget{
+		Bus:        bus,
+		Config:     config,
+		SourceType: core.API,
+		filter:     utils.NewStringFilter(),
+	}
 
-	h.BaseDataSource = *NewBaseDataSource(srv, core.API, "HackerTarget")
+	h.BaseAmassService = *core.NewBaseAmassService("HackerTarget", h)
 	return h
 }
 
-// Query returns the subdomain names discovered when querying this data source.
-func (h *HackerTarget) Query(domain, sub string) []string {
-	var unique []string
+// OnStart implements the AmassService interface
+func (h *HackerTarget) OnStart() error {
+	h.BaseAmassService.OnStart()
 
-	if domain != sub {
-		return unique
+	go h.startRootDomains()
+	return nil
+}
+
+// OnStop implements the AmassService interface
+func (h *HackerTarget) OnStop() error {
+	h.BaseAmassService.OnStop()
+	return nil
+}
+
+func (h *HackerTarget) startRootDomains() {
+	// Look at each domain provided by the config
+	for _, domain := range h.Config.Domains() {
+		h.executeQuery(domain)
 	}
+}
 
+func (h *HackerTarget) executeQuery(domain string) {
 	url := h.getURL(domain)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		h.Service.Config().Log.Printf("%s: %v", url, err)
-		return unique
+		h.Config.Log.Printf("%s: %s: %v", h.String(), url, err)
+		return
 	}
-	h.Service.SetActive()
 
-	re := utils.SubdomainRegex(domain)
+	h.SetActive()
+	re := h.Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
-		if u := utils.NewUniqueElements(unique, sd); len(u) > 0 {
-			unique = append(unique, u...)
+		n := cleanName(sd)
+
+		if h.filter.Duplicate(n) {
+			continue
 		}
+		go func(name string) {
+			h.Config.MaxFlow.Acquire(1)
+			h.Bus.Publish(core.NEWNAME, &core.AmassRequest{
+				Name:   name,
+				Domain: domain,
+				Tag:    h.SourceType,
+				Source: h.String(),
+			})
+		}(n)
 	}
-	return unique
 }
 
 func (h *HackerTarget) getURL(domain string) string {

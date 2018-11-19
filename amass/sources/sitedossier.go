@@ -8,44 +8,80 @@ import (
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
+	evbus "github.com/asaskevich/EventBus"
 )
 
-// SiteDossier is data source object type that implements the DataSource interface.
+// Exalead is the AmassService that handles access to the Exalead data source.
 type SiteDossier struct {
-	BaseDataSource
+	core.BaseAmassService
+
+	Bus        evbus.Bus
+	Config     *core.AmassConfig
+	SourceType string
+	filter     *utils.StringFilter
 }
 
-// NewSiteDossier returns an initialized SiteDossier as a DataSource.
-func NewSiteDossier(srv core.AmassService) DataSource {
-	s := new(SiteDossier)
+// NewSiteDossier requires the enumeration configuration and event bus as parameters.
+// The object returned is initialized, but has not yet been started.
+func NewSiteDossier(bus evbus.Bus, config *core.AmassConfig) *SiteDossier {
+	s := &SiteDossier{
+		Bus:        bus,
+		Config:     config,
+		SourceType: core.SCRAPE,
+		filter:     utils.NewStringFilter(),
+	}
 
-	s.BaseDataSource = *NewBaseDataSource(srv, core.SCRAPE, "SiteDossier")
+	s.BaseAmassService = *core.NewBaseAmassService("SiteDossier", s)
 	return s
 }
 
-// Query returns the subdomain names discovered when querying this data source.
-func (s *SiteDossier) Query(domain, sub string) []string {
-	var unique []string
+// OnStart implements the AmassService interface
+func (s *SiteDossier) OnStart() error {
+	s.BaseAmassService.OnStart()
 
-	if domain != sub {
-		return unique
+	go s.startRootDomains()
+	return nil
+}
+
+// OnStop implements the AmassService interface
+func (s *SiteDossier) OnStop() error {
+	s.BaseAmassService.OnStop()
+	return nil
+}
+
+func (s *SiteDossier) startRootDomains() {
+	// Look at each domain provided by the config
+	for _, domain := range s.Config.Domains() {
+		s.executeQuery(domain)
 	}
+}
 
-	re := utils.SubdomainRegex(domain)
+func (s *SiteDossier) executeQuery(domain string) {
 	url := s.getURL(domain)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		s.Service.Config().Log.Printf("%s: %v", url, err)
-		return unique
+		s.Config.Log.Printf("%s: %s: %v", s.String(), url, err)
+		return
 	}
-	s.Service.SetActive()
 
+	s.SetActive()
+	re := s.Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
-		if u := utils.NewUniqueElements(unique, sd); len(u) > 0 {
-			unique = append(unique, u...)
+		n := cleanName(sd)
+
+		if s.filter.Duplicate(n) {
+			continue
 		}
+		go func(name string) {
+			s.Config.MaxFlow.Acquire(1)
+			s.Bus.Publish(core.NEWNAME, &core.AmassRequest{
+				Name:   name,
+				Domain: domain,
+				Tag:    s.SourceType,
+				Source: s.String(),
+			})
+		}(n)
 	}
-	return unique
 }
 
 func (s *SiteDossier) getURL(domain string) string {

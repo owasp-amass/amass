@@ -10,54 +10,98 @@ import (
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
+	evbus "github.com/asaskevich/EventBus"
 )
 
-// Entrust is data source object type that implements the DataSource interface.
+// Entrust is the AmassService that handles access to the Entrust data source.
 type Entrust struct {
-	BaseDataSource
+	core.BaseAmassService
+
+	Bus        evbus.Bus
+	Config     *core.AmassConfig
+	SourceType string
+	filter     *utils.StringFilter
 }
 
-// NewEntrust returns an initialized Entrust as a DataSource.
-func NewEntrust(srv core.AmassService) DataSource {
-	e := new(Entrust)
+// NewEntrust requires the enumeration configuration and event bus as parameters.
+// The object returned is initialized, but has not yet been started.
+func NewEntrust(bus evbus.Bus, config *core.AmassConfig) *Entrust {
+	e := &Entrust{
+		Bus:        bus,
+		Config:     config,
+		SourceType: core.CERT,
+		filter:     utils.NewStringFilter(),
+	}
 
-	e.BaseDataSource = *NewBaseDataSource(srv, core.CERT, "Entrust")
+	e.BaseAmassService = *core.NewBaseAmassService("Entrust", e)
 	return e
 }
 
-// Query returns the subdomain names discovered when querying this data source.
-func (e *Entrust) Query(domain, sub string) []string {
-	var unique []string
+// OnStart implements the AmassService interface
+func (e *Entrust) OnStart() error {
+	e.BaseAmassService.OnStart()
 
-	if domain != sub {
-		return []string{}
+	go e.startRootDomains()
+	return nil
+}
+
+// OnStop implements the AmassService interface
+func (e *Entrust) OnStop() error {
+	e.BaseAmassService.OnStop()
+	return nil
+}
+
+func (e *Entrust) startRootDomains() {
+	// Look at each domain provided by the config
+	for _, domain := range e.Config.Domains() {
+		e.executeQuery(domain)
 	}
+}
 
+func (e *Entrust) executeQuery(domain string) {
 	u := e.getURL(domain)
 	page, err := utils.RequestWebPage(u, nil, nil, "", "")
 	if err != nil {
-		e.Service.Config().Log.Printf("%s: %v", u, err)
-		return unique
+		e.Config.Log.Printf("%s: %s: %v", e.String(), u, err)
+		return
 	}
 	content := strings.Replace(page, "u003d", " ", -1)
 
-	e.Service.SetActive()
-	re := utils.SubdomainRegex(domain)
+	e.SetActive()
+	re := e.Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(content, -1) {
-		if u := utils.NewUniqueElements(unique, sd); len(u) > 0 {
-			unique = append(unique, u...)
+		n := cleanName(sd)
+
+		if e.filter.Duplicate(n) {
+			continue
 		}
+		go func(name string) {
+			e.Config.MaxFlow.Acquire(1)
+			e.Bus.Publish(core.NEWNAME, &core.AmassRequest{
+				Name:   name,
+				Domain: domain,
+				Tag:    e.SourceType,
+				Source: e.String(),
+			})
+		}(n)
 	}
 
 	for _, name := range e.extractReversedSubmatches(page) {
-		e.Service.SetActive()
 		if match := re.FindString(name); match != "" {
-			if u := utils.NewUniqueElements(unique, match); len(u) > 0 {
-				unique = append(unique, u...)
+			if e.filter.Duplicate(match) {
+				continue
 			}
+			go func(name string) {
+				e.Config.MaxFlow.Acquire(1)
+				e.Bus.Publish(core.NEWNAME, &core.AmassRequest{
+					Name:   name,
+					Domain: domain,
+					Tag:    e.SourceType,
+					Source: e.String(),
+				})
+			}(match)
 		}
 	}
-	return unique
 }
 
 func (e *Entrust) getURL(domain string) string {

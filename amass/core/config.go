@@ -69,7 +69,12 @@ type AmassConfig struct {
 	regexps map[string]*regexp.Regexp
 
 	// The API keys used by various data sources
-	apikeys map[string]string
+	apikeys map[string]*APIKey
+}
+
+type APIKey struct {
+	UID    string
+	Secret string
 }
 
 // Graph returns the Amass graph that contains all enumeration findings.
@@ -104,11 +109,16 @@ func (c *AmassConfig) AddDomain(domain string) {
 	c.Lock()
 	defer c.Unlock()
 
-	c.domains = utils.UniqueAppend(c.domains, domain)
+	d := strings.TrimSpace(domain)
+	if d == "" {
+		return
+	}
+
+	c.domains = utils.UniqueAppend(c.domains, d)
 	if c.regexps == nil {
 		c.regexps = make(map[string]*regexp.Regexp)
 	}
-	c.regexps[domain] = utils.SubdomainRegex(domain)
+	c.regexps[d] = utils.SubdomainRegex(d)
 }
 
 // Domains returns the list of domain names currently in the configuration.
@@ -123,8 +133,9 @@ func (c *AmassConfig) Domains() []string {
 func (c *AmassConfig) IsDomainInScope(name string) bool {
 	var discovered bool
 
+	n := strings.TrimSpace(name)
 	for _, d := range c.Domains() {
-		if name == d || strings.HasSuffix(name, "."+d) {
+		if n == d || strings.HasSuffix(n, "."+d) {
 			discovered = true
 			break
 		}
@@ -134,8 +145,10 @@ func (c *AmassConfig) IsDomainInScope(name string) bool {
 
 // WhichDomain returns the domain in the config list that the DNS name in the parameter end with.
 func (c *AmassConfig) WhichDomain(name string) string {
+	n := strings.TrimSpace(name)
+
 	for _, d := range c.Domains() {
-		if name == d || strings.HasSuffix(name, "."+d) {
+		if n == d || strings.HasSuffix(n, "."+d) {
 			return d
 		}
 	}
@@ -146,8 +159,9 @@ func (c *AmassConfig) WhichDomain(name string) string {
 func (c *AmassConfig) Blacklisted(name string) bool {
 	var resp bool
 
+	n := strings.TrimSpace(name)
 	for _, bl := range c.Blacklist {
-		if match := strings.HasSuffix(name, bl); match {
+		if match := strings.HasSuffix(n, bl); match {
 			resp = true
 			break
 		}
@@ -156,20 +170,25 @@ func (c *AmassConfig) Blacklisted(name string) bool {
 }
 
 // AddAPIKey adds the data source and API key association provided to the configuration.
-func (c *AmassConfig) AddAPIKey(source, apikey string) {
+func (c *AmassConfig) AddAPIKey(source string, ak *APIKey) {
 	c.Lock()
 	defer c.Unlock()
 
-	c.apikeys[source] = apikey
+	idx := strings.TrimSpace(source)
+	if idx == "" {
+		return
+	}
+	c.apikeys[idx] = ak
 }
 
 // GetAPIKey returns the API key associated with the provided data source name.
-func (c *AmassConfig) GetAPIKey(source string) string {
+func (c *AmassConfig) GetAPIKey(source string) *APIKey {
 	c.Lock()
 	defer c.Unlock()
 
-	if apikey, found := c.apikeys[source]; found {
+	idx := strings.TrimSpace(source)
+	if apikey, found := c.apikeys[idx]; found {
 		return apikey
 	}
-	return ""
+	return nil
 }

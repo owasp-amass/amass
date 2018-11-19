@@ -9,50 +9,85 @@ import (
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
+	evbus "github.com/asaskevich/EventBus"
 )
 
-// CertDB is data source object type that implements the DataSource interface.
+// CertDB is the AmassService that handles access to the CertDB data source.
 type CertDB struct {
-	BaseDataSource
+	core.BaseAmassService
+
+	Bus        evbus.Bus
+	Config     *core.AmassConfig
+	SourceType string
+	filter     *utils.StringFilter
 }
 
-// NewCertDB returns an initialized CertDB as a DataSource.
-func NewCertDB(srv core.AmassService) DataSource {
-	c := new(CertDB)
+// NewCertDB requires the enumeration configuration and event bus as parameters.
+// The object returned is initialized, but has not yet been started.
+func NewCertDB(bus evbus.Bus, config *core.AmassConfig) *CertDB {
+	c := &CertDB{
+		Bus:        bus,
+		Config:     config,
+		SourceType: core.CERT,
+		filter:     utils.NewStringFilter(),
+	}
 
-	c.BaseDataSource = *NewBaseDataSource(srv, core.CERT, "CertDB")
+	c.BaseAmassService = *core.NewBaseAmassService("CertDB", c)
 	return c
 }
 
-// Query returns the subdomain names discovered when querying this data source.
-func (c *CertDB) Query(domain, sub string) []string {
-	var unique []string
+// OnStart implements the AmassService interface
+func (c *CertDB) OnStart() error {
+	c.BaseAmassService.OnStart()
 
-	if domain != sub {
-		return unique
+	go c.startRootDomains()
+	return nil
+}
+
+// OnStop implements the AmassService interface
+func (c *CertDB) OnStop() error {
+	c.BaseAmassService.OnStop()
+	return nil
+}
+
+func (c *CertDB) startRootDomains() {
+	// Look at each domain provided by the config
+	for _, domain := range c.Config.Domains() {
+		c.executeQuery(domain)
 	}
+}
 
+func (c *CertDB) executeQuery(domain string) {
 	u := c.getURL(domain)
 	page, err := utils.RequestWebPage(u, nil, nil, "", "")
 	if err != nil {
-		c.Service.Config().Log.Printf("%s: %v", u, err)
-		return unique
+		c.Config.Log.Printf("%s: %s: %v", c.String(), u, err)
+		return
 	}
 
-	c.Service.SetActive()
 	var names []string
 	if err := json.Unmarshal([]byte(page), &names); err != nil {
-		c.Service.Config().Log.Printf("Failed to unmarshal JSON: %v", err)
-		return unique
+		c.Config.Log.Printf("%s: Failed to unmarshal JSON: %v", c.String(), err)
+		return
 	}
 
-	re := utils.SubdomainRegex(domain)
+	c.SetActive()
+	re := c.Config.DomainRegex(domain)
 	for _, name := range names {
-		if n := re.FindString(name); n != "" {
-			unique = utils.UniqueAppend(unique, n)
+		n := re.FindString(name)
+		if n == "" || c.filter.Duplicate(n) {
+			continue
 		}
+		go func(name string) {
+			c.Config.MaxFlow.Acquire(1)
+			c.Bus.Publish(core.NEWNAME, &core.AmassRequest{
+				Name:   name,
+				Domain: domain,
+				Tag:    c.SourceType,
+				Source: c.String(),
+			})
+		}(n)
 	}
-	return unique
 }
 
 func (c *CertDB) getURL(domain string) string {

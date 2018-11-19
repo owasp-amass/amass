@@ -14,57 +14,93 @@ import (
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
+	evbus "github.com/asaskevich/EventBus"
 )
 
-// DNSDumpster is data source object type that implements the DataSource interface.
+// DNSDumpster is the AmassService that handles access to the DNSDumpster data source.
 type DNSDumpster struct {
-	BaseDataSource
+	core.BaseAmassService
+
+	Bus        evbus.Bus
+	Config     *core.AmassConfig
+	SourceType string
+	filter     *utils.StringFilter
 }
 
-// NewDNSDumpster returns an initialized DNSDumpster as a DataSource.
-func NewDNSDumpster(srv core.AmassService) DataSource {
-	d := new(DNSDumpster)
+// NewDNSDumpster requires the enumeration configuration and event bus as parameters.
+// The object returned is initialized, but has not yet been started.
+func NewDNSDumpster(bus evbus.Bus, config *core.AmassConfig) *DNSDumpster {
+	d := &DNSDumpster{
+		Bus:        bus,
+		Config:     config,
+		SourceType: core.SCRAPE,
+		filter:     utils.NewStringFilter(),
+	}
 
-	d.BaseDataSource = *NewBaseDataSource(srv, core.SCRAPE, "DNSDumpster")
+	d.BaseAmassService = *core.NewBaseAmassService("DNSDumpster", d)
 	return d
 }
 
-// Query returns the subdomain names discovered when querying this data source.
-func (d *DNSDumpster) Query(domain, sub string) []string {
-	var unique []string
+// OnStart implements the AmassService interface
+func (d *DNSDumpster) OnStart() error {
+	d.BaseAmassService.OnStart()
 
-	if domain != sub {
-		return unique
+	go d.startRootDomains()
+	return nil
+}
+
+// OnStop implements the AmassService interface
+func (d *DNSDumpster) OnStop() error {
+	d.BaseAmassService.OnStop()
+	return nil
+}
+
+func (d *DNSDumpster) startRootDomains() {
+	// Look at each domain provided by the config
+	for _, domain := range d.Config.Domains() {
+		d.executeQuery(domain)
 	}
+}
 
+func (d *DNSDumpster) executeQuery(domain string) {
 	u := "https://dnsdumpster.com/"
 	page, err := utils.RequestWebPage(u, nil, nil, "", "")
 	if err != nil {
-		d.Service.Config().Log.Printf("%s: %v", u, err)
-		return unique
+		d.Config.Log.Printf("%s: %s: %v", d.String(), u, err)
+		return
 	}
 
 	token := d.getCSRFToken(page)
 	if token == "" {
-		d.Service.Config().Log.Printf("%s: Failed to obtain the CSRF token", u)
-		return unique
+		d.Config.Log.Printf("%s: %s: Failed to obtain the CSRF token", d.String(), u)
+		return
 	}
-	d.Service.SetActive()
 
+	d.SetActive()
 	page, err = d.postForm(token, domain)
 	if err != nil {
-		d.Service.Config().Log.Printf("%s: %v", u, err)
-		return unique
+		d.Config.Log.Printf("%s: %s: %v", d.String(), u, err)
+		return
 	}
-	d.Service.SetActive()
 
-	re := utils.SubdomainRegex(domain)
+	d.SetActive()
+	re := d.Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
-		if u := utils.NewUniqueElements(unique, sd); len(u) > 0 {
-			unique = append(unique, u...)
+		n := cleanName(sd)
+
+		if d.filter.Duplicate(n) {
+			continue
 		}
+		go func(name string) {
+			d.Config.MaxFlow.Acquire(1)
+			d.Bus.Publish(core.NEWNAME, &core.AmassRequest{
+				Name:   name,
+				Domain: domain,
+				Tag:    d.SourceType,
+				Source: d.String(),
+			})
+		}(n)
 	}
-	return unique
 }
 
 func (d *DNSDumpster) getCSRFToken(page string) string {
@@ -91,7 +127,7 @@ func (d *DNSDumpster) postForm(token, domain string) (string, error) {
 
 	req, err := http.NewRequest("POST", "https://dnsdumpster.com/", strings.NewReader(params.Encode()))
 	if err != nil {
-		d.Service.Config().Log.Printf("Failed to setup the POST request: %v", err)
+		d.Config.Log.Printf("%s: Failed to setup the POST request: %v", d.String(), err)
 		return "", err
 	}
 	// The CSRF token needs to be sent as a cookie
@@ -111,7 +147,7 @@ func (d *DNSDumpster) postForm(token, domain string) (string, error) {
 
 	resp, err := client.Do(req)
 	if err != nil {
-		d.Service.Config().Log.Printf("The POST request failed: %v", err)
+		d.Config.Log.Printf("%s: The POST request failed: %v", d.String(), err)
 		return "", err
 	}
 	// Now, grab the entire page

@@ -8,44 +8,80 @@ import (
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
+	evbus "github.com/asaskevich/EventBus"
 )
 
-// Exalead is data source object type that implements the DataSource interface.
+// Exalead is the AmassService that handles access to the Exalead data source.
 type Exalead struct {
-	BaseDataSource
+	core.BaseAmassService
+
+	Bus        evbus.Bus
+	Config     *core.AmassConfig
+	SourceType string
+	filter     *utils.StringFilter
 }
 
-// NewExalead returns an initialized Exalead as a DataSource.
-func NewExalead(srv core.AmassService) DataSource {
-	e := new(Exalead)
+// NewExalead requires the enumeration configuration and event bus as parameters.
+// The object returned is initialized, but has not yet been started.
+func NewExalead(bus evbus.Bus, config *core.AmassConfig) *Exalead {
+	e := &Exalead{
+		Bus:        bus,
+		Config:     config,
+		SourceType: core.SCRAPE,
+		filter:     utils.NewStringFilter(),
+	}
 
-	e.BaseDataSource = *NewBaseDataSource(srv, core.SCRAPE, "Exalead")
+	e.BaseAmassService = *core.NewBaseAmassService("Exalead", e)
 	return e
 }
 
-// Query returns the subdomain names discovered when querying this data source.
-func (e *Exalead) Query(domain, sub string) []string {
-	var unique []string
+// OnStart implements the AmassService interface
+func (e *Exalead) OnStart() error {
+	e.BaseAmassService.OnStart()
 
-	if domain != sub {
-		return unique
+	go e.startRootDomains()
+	return nil
+}
+
+// OnStop implements the AmassService interface
+func (e *Exalead) OnStop() error {
+	e.BaseAmassService.OnStop()
+	return nil
+}
+
+func (e *Exalead) startRootDomains() {
+	// Look at each domain provided by the config
+	for _, domain := range e.Config.Domains() {
+		e.executeQuery(domain)
 	}
+}
 
+func (e *Exalead) executeQuery(domain string) {
 	url := e.getURL(domain)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		e.Service.Config().Log.Printf("%s: %v", url, err)
-		return unique
+		e.Config.Log.Printf("%s: %s: %v", e.String(), url, err)
+		return
 	}
-	e.Service.SetActive()
 
-	re := utils.SubdomainRegex(domain)
+	e.SetActive()
+	re := e.Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
-		if u := utils.NewUniqueElements(unique, sd); len(u) > 0 {
-			unique = append(unique, u...)
+		n := cleanName(sd)
+
+		if e.filter.Duplicate(n) {
+			continue
 		}
+		go func(name string) {
+			e.Config.MaxFlow.Acquire(1)
+			e.Bus.Publish(core.NEWNAME, &core.AmassRequest{
+				Name:   name,
+				Domain: domain,
+				Tag:    e.SourceType,
+				Source: e.String(),
+			})
+		}(n)
 	}
-	return unique
 }
 
 func (e *Exalead) getURL(domain string) string {

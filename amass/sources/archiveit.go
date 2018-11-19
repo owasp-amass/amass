@@ -3,36 +3,97 @@
 
 package sources
 
-import "github.com/OWASP/Amass/amass/core"
+import (
+	"github.com/OWASP/Amass/amass/core"
+	"github.com/OWASP/Amass/amass/utils"
+	evbus "github.com/asaskevich/EventBus"
+)
 
-// ArchiveIt is data source object type that implements the DataSource interface.
+// ArchiveIt is the AmassService that handles access to the ArchiveIt data source.
 type ArchiveIt struct {
-	BaseDataSource
-	baseURL string
+	core.BaseAmassService
+
+	Bus        evbus.Bus
+	Config     *core.AmassConfig
+	baseURL    string
+	SourceType string
+	filter     *utils.StringFilter
 }
 
-// NewArchiveIt returns an initialized ArchiveIt as a DataSource.
-func NewArchiveIt(srv core.AmassService) DataSource {
-	a := &ArchiveIt{baseURL: "https://wayback.archive-it.org/all"}
+// NewArchiveIt requires the enumeration configuration and event bus as parameters.
+// The object returned is initialized, but has not yet been started.
+func NewArchiveIt(bus evbus.Bus, config *core.AmassConfig) *ArchiveIt {
+	a := &ArchiveIt{
+		Bus:        bus,
+		Config:     config,
+		baseURL:    "https://wayback.archive-it.org/all",
+		SourceType: core.ARCHIVE,
+		filter:     utils.NewStringFilter(),
+	}
 
-	a.BaseDataSource = *NewBaseDataSource(srv, core.ARCHIVE, "Archive-It")
+	a.BaseAmassService = *core.NewBaseAmassService("ArchiveIt", a)
 	return a
 }
 
-// Query returns the subdomain names discovered when querying this data source.
-func (a *ArchiveIt) Query(domain, sub string) []string {
-	if sub == "" {
-		return []string{}
-	}
+// OnStart implements the AmassService interface
+func (a *ArchiveIt) OnStart() error {
+	a.BaseAmassService.OnStart()
 
-	names, err := a.crawl(a.baseURL, domain, sub)
-	if err != nil {
-		a.Service.Config().Log.Printf("%v", err)
-	}
-	return names
+	a.Bus.SubscribeAsync(core.CHECKED, a.SendRequest, false)
+	go a.startRootDomains()
+	go a.processRequests()
+	return nil
 }
 
-// Subdomains returns true when the data source can query for subdomain names.
-func (a *ArchiveIt) Subdomains() bool {
-	return true
+// OnStop implements the AmassService interface
+func (a *ArchiveIt) OnStop() error {
+	a.BaseAmassService.OnStop()
+
+	a.Bus.Unsubscribe(core.CHECKED, a.SendRequest)
+	return nil
+}
+
+func (a *ArchiveIt) startRootDomains() {
+	// Look at each domain provided by the config
+	for _, domain := range a.Config.Domains() {
+		a.executeQuery(domain, domain)
+	}
+}
+
+func (a *ArchiveIt) processRequests() {
+	for {
+		select {
+		case <-a.Quit():
+			return
+		case req := <-a.RequestChan():
+			a.executeQuery(req.Name, req.Domain)
+		}
+	}
+}
+
+func (a *ArchiveIt) executeQuery(sn, domain string) {
+	if sn == "" || domain == "" {
+		return
+	}
+	if a.filter.Duplicate(sn) {
+		return
+	}
+
+	names, err := crawl(a, a.baseURL, domain, sn)
+	if err != nil {
+		a.Config.Log.Printf("%s: %v", a.String(), err)
+		return
+	}
+
+	for _, n := range names {
+		go func(name string) {
+			a.Config.MaxFlow.Acquire(1)
+			a.Bus.Publish(core.NEWNAME, &core.AmassRequest{
+				Name:   cleanName(name),
+				Domain: domain,
+				Tag:    a.SourceType,
+				Source: a.String(),
+			})
+		}(n)
+	}
 }

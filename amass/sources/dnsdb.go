@@ -7,91 +7,117 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
+	evbus "github.com/asaskevich/EventBus"
 )
 
-// DNSDB is data source object type that implements the DataSource interface.
+// DNSDB is the AmassService that handles access to the DNSDB data source.
 type DNSDB struct {
-	BaseDataSource
-	sync.Mutex
-	filter map[string][]string
+	core.BaseAmassService
+
+	Bus        evbus.Bus
+	Config     *core.AmassConfig
+	SourceType string
+	filter     *utils.StringFilter
 }
 
-// NewDNSDB returns an initialized DNSDB as a DataSource.
-func NewDNSDB(srv core.AmassService) DataSource {
-	d := &DNSDB{filter: make(map[string][]string)}
+// NewDNSDB requires the enumeration configuration and event bus as parameters.
+// The object returned is initialized, but has not yet been started.
+func NewDNSDB(config *core.AmassConfig, bus evbus.Bus) *DNSDB {
+	d := &DNSDB{
+		Bus:        bus,
+		Config:     config,
+		SourceType: core.SCRAPE,
+		filter:     utils.NewStringFilter(),
+	}
 
-	d.BaseDataSource = *NewBaseDataSource(srv, core.SCRAPE, "DNSDB")
+	d.BaseAmassService = *core.NewBaseAmassService("DNSDB", d)
 	return d
 }
 
-// Query returns the subdomain names discovered when querying this data source.
-func (d *DNSDB) Query(domain, sub string) []string {
-	d.Lock()
-	defer d.Unlock()
+// OnStart implements the AmassService interface
+func (d *DNSDB) OnStart() error {
+	d.BaseAmassService.OnStart()
 
-	var unique []string
-	if domain != sub {
-		return unique
+	go d.startRootDomains()
+	return nil
+}
+
+// OnStop implements the AmassService interface
+func (d *DNSDB) OnStop() error {
+	d.BaseAmassService.OnStop()
+	return nil
+}
+
+func (d *DNSDB) startRootDomains() {
+	// Look at each domain provided by the config
+	for _, domain := range d.Config.Domains() {
+		d.executeQuery(domain)
+	}
+}
+
+func (d *DNSDB) executeQuery(domain string) {
+	if d.filter.Duplicate(domain) {
+		return
 	}
 
-	dparts := strings.Split(domain, ".")
-	sparts := strings.Split(sub, ".")
-
-	name := sub
-	if len(dparts) < len(sparts) {
-		name = strings.Join(sparts[1:], ".")
-	}
-
-	if n, ok := d.filter[name]; ok {
-		return n
-	}
-	d.filter[name] = unique
-
-	url := d.getURL(domain, sub)
+	url := d.getURL(domain, domain)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		d.Service.Config().Log.Printf("%s: %v", url, err)
-		return unique
+		d.Config.Log.Printf("%s: %s: %v", d.String(), url, err)
+		return
 	}
-	d.Service.SetActive()
 
-	re := utils.SubdomainRegex(domain)
+	var names []string
+	d.SetActive()
+	re := d.Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
-		if u := utils.NewUniqueElements(unique, sd); len(u) > 0 {
-			unique = append(unique, u...)
+		if u := utils.NewUniqueElements(names, cleanName(sd)); len(u) > 0 {
+			names = append(names, u...)
 		}
 	}
 
-	t := time.NewTicker(50 * time.Millisecond)
+	t := time.NewTicker(time.Second)
 	defer t.Stop()
 loop:
 	for _, rel := range d.getSubmatches(page) {
-		d.Service.SetActive()
+		d.SetActive()
 
 		select {
-		case <-d.Service.Quit():
+		case <-d.Quit():
 			break loop
 		case <-t.C:
 			another, err := utils.RequestWebPage(url+rel, nil, nil, "", "")
 			if err != nil {
-				d.Service.Config().Log.Printf("%s: %v", url+rel, err)
+				d.Config.Log.Printf("%s: %s: %v", d.String(), url+rel, err)
 				continue
 			}
 
 			for _, sd := range re.FindAllString(another, -1) {
-				if u := utils.NewUniqueElements(unique, sd); len(u) > 0 {
-					unique = append(unique, u...)
+				if u := utils.NewUniqueElements(names, cleanName(sd)); len(u) > 0 {
+					names = append(names, u...)
 				}
 			}
 		}
 	}
-	d.filter[name] = unique
-	return unique
+
+	for _, n := range names {
+		if d.filter.Duplicate(n) {
+			continue
+		}
+		go func(name string) {
+			d.Config.MaxFlow.Acquire(1)
+			d.Bus.Publish(core.NEWNAME, &core.AmassRequest{
+				Name:   name,
+				Domain: domain,
+				Tag:    d.SourceType,
+				Source: d.String(),
+			})
+		}(n)
+	}
 }
 
 func (d *DNSDB) getURL(domain, sub string) string {

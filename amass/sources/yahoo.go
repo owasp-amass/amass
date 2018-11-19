@@ -10,61 +10,90 @@ import (
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
+	evbus "github.com/asaskevich/EventBus"
 )
 
-// Yahoo is data source object type that implements the DataSource interface.
+// Yahoo is the AmassService that handles access to the Yahoo data source.
 type Yahoo struct {
-	BaseDataSource
-	quantity int
-	limit    int
+	core.BaseAmassService
+
+	Bus        evbus.Bus
+	Config     *core.AmassConfig
+	quantity   int
+	limit      int
+	SourceType string
+	filter     *utils.StringFilter
 }
 
-// NewYahoo returns an initialized Yahoo as a DataSource.
-func NewYahoo(srv core.AmassService) DataSource {
+// NewYahoo requires the enumeration configuration and event bus as parameters.
+// The object returned is initialized, but has not yet been started.
+func NewYahoo(bus evbus.Bus, config *core.AmassConfig) *Yahoo {
 	y := &Yahoo{
-		quantity: 10,
-		limit:    100,
+		Bus:        bus,
+		Config:     config,
+		quantity:   10,
+		limit:      100,
+		SourceType: core.SCRAPE,
+		filter:     utils.NewStringFilter(),
 	}
 
-	y.BaseDataSource = *NewBaseDataSource(srv, core.SCRAPE, "Yahoo")
+	y.BaseAmassService = *core.NewBaseAmassService("Yahoo", y)
 	return y
 }
 
-// Query returns the subdomain names discovered when querying this data source.
-func (y *Yahoo) Query(domain, sub string) []string {
-	var unique []string
+// OnStart implements the AmassService interface
+func (y *Yahoo) OnStart() error {
+	y.BaseAmassService.OnStart()
 
-	if domain != sub {
-		return unique
+	go y.startRootDomains()
+	return nil
+}
+
+func (y *Yahoo) startRootDomains() {
+	// Look at each domain provided by the config
+	for _, domain := range y.Config.Domains() {
+		y.executeQuery(domain)
 	}
+}
 
-	re := utils.SubdomainRegex(domain)
+func (y *Yahoo) executeQuery(domain string) {
+	re := y.Config.DomainRegex(domain)
 	num := y.limit / y.quantity
 	t := time.NewTicker(time.Second)
 	defer t.Stop()
-loop:
+
 	for i := 0; i < num; i++ {
-		y.Service.SetActive()
+		y.SetActive()
 
 		select {
-		case <-y.Service.Quit():
-			break loop
+		case <-y.Quit():
+			return
 		case <-t.C:
 			u := y.urlByPageNum(domain, i)
 			page, err := utils.RequestWebPage(u, nil, nil, "", "")
 			if err != nil {
-				y.Service.Config().Log.Printf("%s: %v", u, err)
-				break
+				y.Config.Log.Printf("%s: %s: %v", y.String(), u, err)
+				return
 			}
 
 			for _, sd := range re.FindAllString(page, -1) {
-				if u := utils.NewUniqueElements(unique, sd); len(u) > 0 {
-					unique = append(unique, u...)
+				n := cleanName(sd)
+
+				if y.filter.Duplicate(n) {
+					continue
 				}
+				go func(name string) {
+					y.Config.MaxFlow.Acquire(1)
+					y.Bus.Publish(core.NEWNAME, &core.AmassRequest{
+						Name:   name,
+						Domain: domain,
+						Tag:    y.SourceType,
+						Source: y.String(),
+					})
+				}(n)
 			}
 		}
 	}
-	return unique
 }
 
 func (y *Yahoo) urlByPageNum(domain string, page int) string {

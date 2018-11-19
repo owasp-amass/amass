@@ -8,44 +8,80 @@ import (
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
+	evbus "github.com/asaskevich/EventBus"
 )
 
-// PTRArchive is data source object type that implements the DataSource interface.
+// Exalead is the AmassService that handles access to the Exalead data source.
 type PTRArchive struct {
-	BaseDataSource
+	core.BaseAmassService
+
+	Bus        evbus.Bus
+	Config     *core.AmassConfig
+	SourceType string
+	filter     *utils.StringFilter
 }
 
-// NewPTRArchive returns an initialized PTRArchive as a DataSource.
-func NewPTRArchive(srv core.AmassService) DataSource {
-	p := new(PTRArchive)
+// NewPTRArchive requires the enumeration configuration and event bus as parameters.
+// The object returned is initialized, but has not yet been started.
+func NewPTRArchive(bus evbus.Bus, config *core.AmassConfig) *PTRArchive {
+	p := &PTRArchive{
+		Bus:        bus,
+		Config:     config,
+		SourceType: core.SCRAPE,
+		filter:     utils.NewStringFilter(),
+	}
 
-	p.BaseDataSource = *NewBaseDataSource(srv, core.SCRAPE, "PTRarchive")
+	p.BaseAmassService = *core.NewBaseAmassService("PTRArchive", p)
 	return p
 }
 
-// Query returns the subdomain names discovered when querying this data source.
-func (p *PTRArchive) Query(domain, sub string) []string {
-	var unique []string
+// OnStart implements the AmassService interface
+func (p *PTRArchive) OnStart() error {
+	p.BaseAmassService.OnStart()
 
-	if domain != sub {
-		return unique
+	go p.startRootDomains()
+	return nil
+}
+
+// OnStop implements the AmassService interface
+func (p *PTRArchive) OnStop() error {
+	p.BaseAmassService.OnStop()
+	return nil
+}
+
+func (p *PTRArchive) startRootDomains() {
+	// Look at each domain provided by the config
+	for _, domain := range p.Config.Domains() {
+		p.executeQuery(domain)
 	}
+}
 
+func (p *PTRArchive) executeQuery(domain string) {
 	url := p.getURL(domain)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		p.Service.Config().Log.Printf("%s: %v", url, err)
-		return unique
+		p.Config.Log.Printf("%s: %s: %v", p.String(), url, err)
+		return
 	}
-	p.Service.SetActive()
 
-	re := utils.SubdomainRegex(domain)
+	p.SetActive()
+	re := p.Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
-		if u := utils.NewUniqueElements(unique, sd); len(u) > 0 {
-			unique = append(unique, u...)
+		n := cleanName(sd)
+
+		if p.filter.Duplicate(n) {
+			continue
 		}
+		go func(name string) {
+			p.Config.MaxFlow.Acquire(1)
+			p.Bus.Publish(core.NEWNAME, &core.AmassRequest{
+				Name:   name,
+				Domain: domain,
+				Tag:    p.SourceType,
+				Source: p.String(),
+			})
+		}(n)
 	}
-	return unique
 }
 
 func (p *PTRArchive) getURL(domain string) string {

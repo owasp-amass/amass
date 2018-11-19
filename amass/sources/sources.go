@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"regexp"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -15,82 +17,69 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 	"github.com/PuerkitoBio/fetchbot"
 	"github.com/PuerkitoBio/goquery"
+	evbus "github.com/asaskevich/EventBus"
 )
 
-// Possible return values from the DataSource.APIKeyRequired method.
-const (
-	APIKeyRequired int = iota
-	APIKeyNotRequired
-	APIkeyOptional
+var (
+	nameStripRE = regexp.MustCompile("^((20)|(25)|(2f)|(3d)|(40))+")
 )
 
-// DataSource is the interface that all data sources types in Amass implement.
-type DataSource interface {
-	// Returns subdomain names from the data source
-	Query(domain, sub string) []string
-
-	// Returns the data source name that maps to an API key in the config
-	String() string
-
-	// Returns true if the data source supports subdomain name searches
-	Subdomains() bool
-
-	// Returns one of the data source types defined in the core package
-	Type() string
-
-	// Indicates if an API key is required by the data source
-	APIKeyRequired() int
-}
-
-// BaseDataSource provides common functionalities and default behaviors to all
-// Amass data sources. Most of the base methods are not implemented by each data
-// source.
-type BaseDataSource struct {
-	Service    core.AmassService
-	SourceType string
-	Name       string
-}
-
-// NewBaseDataSource returns an initialized BaseDataSource object.
-func NewBaseDataSource(srv core.AmassService, stype, name string) *BaseDataSource {
-	return &BaseDataSource{
-		Service:    srv,
-		SourceType: stype,
-		Name:       name,
+// GetAllSources returns a slice of all data source services, initialized and ready.
+func GetAllSources(bus evbus.Bus, config *core.AmassConfig) []core.AmassService {
+	return []core.AmassService{
+		NewArchiveIt(bus, config),
+		NewArchiveToday(bus, config),
+		NewArquivo(bus, config),
+		NewAsk(bus, config),
+		NewBaidu(bus, config),
+		NewCensys(bus, config),
+		NewCertDB(bus, config),
+		NewCertSpotter(bus, config),
+		NewCommonCrawl(bus, config),
+		NewCrtsh(bus, config),
+		//NewDNSDB(bus, config),
+		NewDNSDumpster(bus, config),
+		NewDNSTable(bus, config),
+		NewDogpile(bus, config),
+		NewEntrust(bus, config),
+		NewExalead(bus, config),
+		NewFindSubdomains(bus, config),
+		NewGoogle(bus, config),
+		NewHackerTarget(bus, config),
+		NewIPv4Info(bus, config),
+		NewLoCArchive(bus, config),
+		NewNetcraft(bus, config),
+		NewOpenUKArchive(bus, config),
+		NewPTRArchive(bus, config),
+		NewRiddler(bus, config),
+		NewRobtex(bus, config),
+		NewSiteDossier(bus, config),
+		NewThreatCrowd(bus, config),
+		NewUKGovArchive(bus, config),
+		NewVirusTotal(bus, config),
+		NewWayback(bus, config),
+		NewYahoo(bus, config),
 	}
 }
 
-// Query is a placeholder that gets implemented by each data source.
-func (bds *BaseDataSource) Query(srv core.AmassService, domain, sub string) []string {
-	return []string{}
-}
-
-// Type returns the data source type identified during initialization.
-func (bds *BaseDataSource) Type() string {
-	return bds.SourceType
-}
-
-// Subdomains returns true if a data source supports searching on subdomains.
-// This gets implemented by the data source and returns true if necessary.
-func (bds *BaseDataSource) Subdomains() bool {
-	return false
-}
-
-// APIKeyRequired serves as a default implementation of the DataSource interface.
-func (bds *BaseDataSource) APIKeyRequired() int {
-	return APIKeyNotRequired
-}
-
-// String returns the string that represents the source providing the data.
-func (bds *BaseDataSource) String() string {
-	return bds.Name
+// Clean up the names scraped from the web.
+func cleanName(name string) string {
+	if i := nameStripRE.FindStringIndex(name); i != nil {
+		name = name[i[1]:]
+	}
+	name = strings.TrimSpace(strings.ToLower(name))
+	// Remove dots at the beginning of names
+	if len(name) > 1 && name[0] == '.' {
+		name = name[1:]
+	}
+	return name
 }
 
 //-------------------------------------------------------------------------------------------------
 // Web archive crawler implementation
 //-------------------------------------------------------------------------------------------------
 
-func (bds *BaseDataSource) crawl(base, domain, sub string) ([]string, error) {
+func crawl(service core.AmassService, base, domain, sub string) ([]string, error) {
 	var results []string
 	var filterMutex sync.Mutex
 	filter := make(map[string]struct{})
@@ -102,7 +91,7 @@ func (bds *BaseDataSource) crawl(base, domain, sub string) ([]string, error) {
 	linksFilter := make(map[string]struct{})
 
 	mux.HandleErrors(fetchbot.HandlerFunc(func(ctx *fetchbot.Context, res *http.Response, err error) {
-		bds.Service.Config().Log.Printf("Crawler error: %s %s - %v", ctx.Cmd.Method(), ctx.Cmd.URL(), err)
+		//service.Config.Log.Printf("Crawler error: %s %s - %v", ctx.Cmd.Method(), ctx.Cmd.URL(), err)
 	}))
 
 	mux.Response().Method("GET").ContentType("text/html").Handler(fetchbot.HandlerFunc(
@@ -116,7 +105,7 @@ func (bds *BaseDataSource) crawl(base, domain, sub string) ([]string, error) {
 			}
 			filter[u] = struct{}{}
 
-			bds.linksAndNames(domain, ctx, res, links, names)
+			linksAndNames(domain, ctx, res, links, names)
 		}))
 
 	f := fetchbot.New(fetchbot.HandlerFunc(func(ctx *fetchbot.Context, res *http.Response, err error) {
@@ -148,19 +137,18 @@ loop:
 			}()
 		case <-q.Done():
 			break loop
-		case <-bds.Service.Quit():
+		case <-service.Quit():
 			break loop
 		}
 	}
 	return results, nil
 }
 
-func (bds *BaseDataSource) linksAndNames(domain string, ctx *fetchbot.Context, res *http.Response, links, names chan string) {
+func linksAndNames(domain string, ctx *fetchbot.Context, res *http.Response, links, names chan string) error {
 	// Process the body to find the links
 	doc, err := goquery.NewDocumentFromResponse(res)
 	if err != nil {
-		bds.Service.Config().Log.Printf("Crawler error: %s %s - %s\n", ctx.Cmd.Method(), ctx.Cmd.URL(), err)
-		return
+		return fmt.Errorf("Crawler error: %s %s - %s\n", ctx.Cmd.Method(), ctx.Cmd.URL(), err)
 	}
 
 	re := utils.SubdomainRegex(domain)
@@ -169,7 +157,6 @@ func (bds *BaseDataSource) linksAndNames(domain string, ctx *fetchbot.Context, r
 		// Resolve address
 		u, err := ctx.Cmd.URL().Parse(val)
 		if err != nil {
-			bds.Service.Config().Log.Printf("Crawler failed to parse: %s - %v\n", val, err)
 			return
 		}
 
@@ -178,6 +165,7 @@ func (bds *BaseDataSource) linksAndNames(domain string, ctx *fetchbot.Context, r
 			links <- u.String()
 		}
 	})
+	return nil
 }
 
 func setFetcherConfig(f *fetchbot.Fetcher) {
@@ -195,44 +183,4 @@ func setFetcherConfig(f *fetchbot.Fetcher) {
 	f.CrawlDelay = 1 * time.Second
 	f.DisablePoliteness = true
 	f.UserAgent = utils.UserAgent
-}
-
-//-------------------------------------------------------------------------------------------------
-
-// GetAllSources returns a slice of all data sources, initialized and ready.
-func GetAllSources(srv core.AmassService) []DataSource {
-	return []DataSource{
-		NewArchiveIt(srv),
-		NewArchiveToday(srv),
-		NewArquivo(srv),
-		NewAsk(srv),
-		NewBaidu(srv),
-		NewCensys(srv),
-		NewCertDB(srv),
-		NewCertSpotter(srv),
-		NewCommonCrawl(srv),
-		NewCrtsh(srv),
-		//NewDNSDB(srv),
-		NewDNSDumpster(srv),
-		NewDNSTable(srv),
-		NewDogpile(srv),
-		NewEntrust(srv),
-		NewExalead(srv),
-		NewFindSubdomains(srv),
-		NewGoogle(srv),
-		NewHackerTarget(srv),
-		NewIPv4Info(srv),
-		NewLoCArchive(srv),
-		NewNetcraft(srv),
-		NewOpenUKArchive(srv),
-		NewPTRArchive(srv),
-		NewRiddler(srv),
-		NewRobtex(srv),
-		NewSiteDossier(srv),
-		NewThreatCrowd(srv),
-		NewUKGovArchive(srv),
-		NewVirusTotal(srv),
-		NewWaybackMachine(srv),
-		NewYahoo(srv),
-	}
 }

@@ -17,6 +17,7 @@ type DNSAnswer struct {
 type AmassRequest struct {
 	Name    string
 	Domain  string
+	Address string
 	Records []DNSAnswer
 	Tag     string
 	Source  string

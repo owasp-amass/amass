@@ -8,44 +8,80 @@ import (
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
+	evbus "github.com/asaskevich/EventBus"
 )
 
-// DNSTable is data source object type that implements the DataSource interface.
+// DNSTable is the AmassService that handles access to the DNSTable data source.
 type DNSTable struct {
-	BaseDataSource
+	core.BaseAmassService
+
+	Bus        evbus.Bus
+	Config     *core.AmassConfig
+	SourceType string
+	filter     *utils.StringFilter
 }
 
-// NewDNSTable returns an initialized DNSTable as a DataSource.
-func NewDNSTable(srv core.AmassService) DataSource {
-	h := new(DNSTable)
-
-	h.BaseDataSource = *NewBaseDataSource(srv, core.SCRAPE, "DNSTable")
-	return h
-}
-
-// Query returns the subdomain names discovered when querying this data source.
-func (d *DNSTable) Query(domain, sub string) []string {
-	var unique []string
-
-	if domain != sub {
-		return unique
+// NewDNSTable requires the enumeration configuration and event bus as parameters.
+// The object returned is initialized, but has not yet been started.
+func NewDNSTable(bus evbus.Bus, config *core.AmassConfig) *DNSTable {
+	d := &DNSTable{
+		Bus:        bus,
+		Config:     config,
+		SourceType: core.SCRAPE,
+		filter:     utils.NewStringFilter(),
 	}
 
+	d.BaseAmassService = *core.NewBaseAmassService("DNSTable", d)
+	return d
+}
+
+// OnStart implements the AmassService interface
+func (d *DNSTable) OnStart() error {
+	d.BaseAmassService.OnStart()
+
+	go d.startRootDomains()
+	return nil
+}
+
+// OnStop implements the AmassService interface
+func (d *DNSTable) OnStop() error {
+	d.BaseAmassService.OnStop()
+	return nil
+}
+
+func (d *DNSTable) startRootDomains() {
+	// Look at each domain provided by the config
+	for _, domain := range d.Config.Domains() {
+		d.executeQuery(domain)
+	}
+}
+
+func (d *DNSTable) executeQuery(domain string) {
 	url := d.getURL(domain)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		d.Service.Config().Log.Printf("%s: %v", url, err)
-		return unique
+		d.Config.Log.Printf("%s: %s: %v", d.String(), url, err)
+		return
 	}
-	d.Service.SetActive()
 
-	re := utils.SubdomainRegex(domain)
+	d.SetActive()
+	re := d.Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
-		if u := utils.NewUniqueElements(unique, sd); len(u) > 0 {
-			unique = append(unique, u...)
+		n := cleanName(sd)
+
+		if d.filter.Duplicate(n) {
+			continue
 		}
+		go func(name string) {
+			d.Config.MaxFlow.Acquire(1)
+			d.Bus.Publish(core.NEWNAME, &core.AmassRequest{
+				Name:   name,
+				Domain: domain,
+				Tag:    d.SourceType,
+				Source: d.String(),
+			})
+		}(n)
 	}
-	return unique
 }
 
 func (d *DNSTable) getURL(domain string) string {

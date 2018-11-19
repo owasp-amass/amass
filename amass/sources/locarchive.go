@@ -3,36 +3,97 @@
 
 package sources
 
-import "github.com/OWASP/Amass/amass/core"
+import (
+	"github.com/OWASP/Amass/amass/core"
+	"github.com/OWASP/Amass/amass/utils"
+	evbus "github.com/asaskevich/EventBus"
+)
 
-// LoCArchive is data source object type that implements the DataSource interface.
+// LoCArchive is the AmassService that handles access to the LoCArchive data source.
 type LoCArchive struct {
-	BaseDataSource
-	baseURL string
+	core.BaseAmassService
+
+	Bus        evbus.Bus
+	Config     *core.AmassConfig
+	baseURL    string
+	SourceType string
+	filter     *utils.StringFilter
 }
 
-// NewLoCArchive returns an initialized LoCArchive as a DataSource.
-func NewLoCArchive(srv core.AmassService) DataSource {
-	la := &LoCArchive{baseURL: "http://webarchive.loc.gov/all"}
-
-	la.BaseDataSource = *NewBaseDataSource(srv, core.ARCHIVE, "LoC Archive")
-	return la
-}
-
-// Query returns the subdomain names discovered when querying this data source.
-func (la *LoCArchive) Query(domain, sub string) []string {
-	if sub == "" {
-		return []string{}
+// NewLoCArchive requires the enumeration configuration and event bus as parameters.
+// The object returned is initialized, but has not yet been started.
+func NewLoCArchive(bus evbus.Bus, config *core.AmassConfig) *LoCArchive {
+	l := &LoCArchive{
+		Bus:        bus,
+		Config:     config,
+		baseURL:    "http://webarchive.loc.gov/all",
+		SourceType: core.ARCHIVE,
+		filter:     utils.NewStringFilter(),
 	}
 
-	names, err := la.crawl(la.baseURL, domain, sub)
+	l.BaseAmassService = *core.NewBaseAmassService("LoCArchive", l)
+	return l
+}
+
+// OnStart implements the AmassService interface
+func (l *LoCArchive) OnStart() error {
+	l.BaseAmassService.OnStart()
+
+	l.Bus.SubscribeAsync(core.CHECKED, l.SendRequest, false)
+	go l.startRootDomains()
+	go l.processRequests()
+	return nil
+}
+
+// OnStop implements the AmassService interface
+func (l *LoCArchive) OnStop() error {
+	l.BaseAmassService.OnStop()
+
+	l.Bus.Unsubscribe(core.CHECKED, l.SendRequest)
+	return nil
+}
+
+func (l *LoCArchive) startRootDomains() {
+	// Look at each domain provided by the config
+	for _, domain := range l.Config.Domains() {
+		l.executeQuery(domain, domain)
+	}
+}
+
+func (l *LoCArchive) processRequests() {
+	for {
+		select {
+		case <-l.Quit():
+			return
+		case req := <-l.RequestChan():
+			l.executeQuery(req.Name, req.Domain)
+		}
+	}
+}
+
+func (l *LoCArchive) executeQuery(sn, domain string) {
+	if sn == "" || domain == "" {
+		return
+	}
+	if l.filter.Duplicate(sn) {
+		return
+	}
+
+	names, err := crawl(l, l.baseURL, domain, sn)
 	if err != nil {
-		la.Service.Config().Log.Printf("%v", err)
+		l.Config.Log.Printf("%s: %v", l.String(), err)
+		return
 	}
-	return names
-}
 
-// Subdomains returns true when the data source can query for subdomain names.
-func (la *LoCArchive) Subdomains() bool {
-	return true
+	for _, n := range names {
+		go func(name string) {
+			l.Config.MaxFlow.Acquire(1)
+			l.Bus.Publish(core.NEWNAME, &core.AmassRequest{
+				Name:   name,
+				Domain: domain,
+				Tag:    l.SourceType,
+				Source: l.String(),
+			})
+		}(n)
+	}
 }

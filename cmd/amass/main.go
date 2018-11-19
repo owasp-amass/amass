@@ -94,6 +94,13 @@ func main() {
 
 	defaultBuf := new(bytes.Buffer)
 	flag.CommandLine.SetOutput(defaultBuf)
+	flag.Usage = func() {
+		printBanner()
+		g.Fprintf(os.Stderr, "Usage: %s [options] <-d domain>\n", path.Base(os.Args[0]))
+		flag.PrintDefaults()
+		g.Fprintln(os.Stderr, defaultBuf.String())
+		os.Exit(1)
+	}
 
 	flag.Var(&ports, "p", "Ports separated by commas (default: 443)")
 	flag.Var(&domains, "d", "Domain names separated by commas (can be used multiple times)")
@@ -103,18 +110,18 @@ func main() {
 
 	// Some input validation
 	if *help || len(os.Args) == 1 {
-		printBanner()
-		g.Printf("Usage: %s [options] <-d domain>\n", path.Base(os.Args[0]))
-		flag.PrintDefaults()
-		g.Println(defaultBuf.String())
-		return
+		flag.Usage()
 	}
 	if *version {
-		fmt.Printf("version %s\n", amass.Version)
+		fmt.Fprintf(os.Stderr, "version %s\n", amass.Version)
 		return
 	}
 	if *passive && *ips {
-		r.Println("IP addresses cannot be provided without DNS resolution")
+		r.Fprintln(os.Stderr, "IP addresses cannot be provided without DNS resolution")
+		return
+	}
+	if *passive && *brute {
+		r.Fprintln(os.Stderr, "Brute forcing cannot be performed without DNS resolution")
 		return
 	}
 
@@ -307,16 +314,16 @@ func printBanner() {
 
 	pad := func(num int) {
 		for i := 0; i < num; i++ {
-			fmt.Print(" ")
+			fmt.Fprint(os.Stderr, " ")
 		}
 	}
-	r.Println(amass.Banner)
+	r.Fprintln(os.Stderr, amass.Banner)
 	pad(rightmost - len(version))
-	y.Println(version)
+	y.Fprintln(os.Stderr, version)
 	pad(rightmost - len(author))
-	y.Println(author)
+	y.Fprintln(os.Stderr, author)
 	pad(rightmost - len(desc))
-	y.Printf("%s\n\n\n", desc)
+	y.Fprintf(os.Stderr, "%s\n\n\n", desc)
 }
 
 func resultToLine(result *core.AmassOutput, params *outputParams) (string, string, string, string) {
@@ -392,7 +399,7 @@ func manageOutput(params *outputParams) {
 	}
 	if total == 0 {
 		r.Println("No names were discovered")
-	} else if !params.Enum.Config.Passive {
+	} else {
 		printSummary(total, tags, asns)
 	}
 	close(finished)

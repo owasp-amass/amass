@@ -11,19 +11,17 @@ import (
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
+	evbus "github.com/asaskevich/EventBus"
 )
 
-// Robtex is data source object type that implements the DataSource interface.
+// Robtex is the AmassService that handles access to the Robtex data source.
 type Robtex struct {
-	BaseDataSource
-}
+	core.BaseAmassService
 
-// NewRobtex returns an initialized Robtex as a DataSource.
-func NewRobtex(srv core.AmassService) DataSource {
-	r := new(Robtex)
-
-	r.BaseDataSource = *NewBaseDataSource(srv, core.API, "Robtex")
-	return r
+	Bus        evbus.Bus
+	Config     *core.AmassConfig
+	SourceType string
+	filter     *utils.StringFilter
 }
 
 type robtexJSON struct {
@@ -32,26 +30,61 @@ type robtexJSON struct {
 	Type string `json:"rrtype"`
 }
 
-// Query returns the subdomain names discovered when querying this data source.
-func (r *Robtex) Query(domain, sub string) []string {
-	var ips []string
-	var unique []string
-
-	if domain != sub {
-		return unique
+// NewRobtex requires the enumeration configuration and event bus as parameters.
+// The object returned is initialized, but has not yet been started.
+func NewRobtex(bus evbus.Bus, config *core.AmassConfig) *Robtex {
+	r := &Robtex{
+		Bus:        bus,
+		Config:     config,
+		SourceType: core.API,
+		filter:     utils.NewStringFilter(),
 	}
+
+	r.BaseAmassService = *core.NewBaseAmassService("Robtex", r)
+	return r
+}
+
+// OnStart implements the AmassService interface
+func (r *Robtex) OnStart() error {
+	r.BaseAmassService.OnStart()
+
+	go r.startRootDomains()
+	return nil
+}
+
+// OnStop implements the AmassService interface
+func (r *Robtex) OnStop() error {
+	r.BaseAmassService.OnStop()
+	return nil
+}
+
+func (r *Robtex) startRootDomains() {
+	// Look at each domain provided by the config
+	for _, domain := range r.Config.Domains() {
+		r.executeQuery(domain)
+	}
+}
+
+func (r *Robtex) executeQuery(domain string) {
+	var ips []string
 
 	url := "https://freeapi.robtex.com/pdns/forward/" + domain
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		r.Service.Config().Log.Printf("%s: %v", url, err)
-		return unique
+		r.Config.Log.Printf("%s: %s: %v", r.String(), url, err)
+		return
 	}
-	r.Service.SetActive()
 
 	for _, line := range r.parseJSON(page) {
 		if line.Type == "A" {
 			ips = utils.UniqueAppend(ips, line.Data)
+			// Inform the Address Service of this finding
+			r.Bus.Publish(core.NEWADDR, &core.AmassRequest{
+				Domain:  domain,
+				Address: line.Data,
+				Tag:     r.SourceType,
+				Source:  r.String(),
+			})
 		}
 	}
 
@@ -60,16 +93,16 @@ func (r *Robtex) Query(domain, sub string) []string {
 	defer t.Stop()
 loop:
 	for _, ip := range ips {
-		r.Service.SetActive()
+		r.SetActive()
 
 		select {
-		case <-r.Service.Quit():
+		case <-r.Quit():
 			break loop
 		case <-t.C:
 			url = "https://freeapi.robtex.com/pdns/reverse/" + ip
 			pdns, err := utils.RequestWebPage(url, nil, nil, "", "")
 			if err != nil {
-				r.Service.Config().Log.Printf("%s: %v", url, err)
+				r.Config.Log.Printf("%s: %s: %v", r.String(), url, err)
 				continue
 			}
 
@@ -79,13 +112,24 @@ loop:
 		}
 	}
 
-	re := utils.SubdomainRegex(domain)
+	r.SetActive()
+	re := r.Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(list, -1) {
-		if u := utils.NewUniqueElements(unique, sd); len(u) > 0 {
-			unique = append(unique, u...)
+		n := cleanName(sd)
+
+		if r.filter.Duplicate(n) {
+			continue
 		}
+		go func(name string) {
+			r.Config.MaxFlow.Acquire(1)
+			r.Bus.Publish(core.NEWNAME, &core.AmassRequest{
+				Name:   name,
+				Domain: domain,
+				Tag:    r.SourceType,
+				Source: r.String(),
+			})
+		}(n)
 	}
-	return unique
 }
 
 func (r *Robtex) parseJSON(page string) []robtexJSON {

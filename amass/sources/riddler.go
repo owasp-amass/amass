@@ -8,44 +8,80 @@ import (
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
+	evbus "github.com/asaskevich/EventBus"
 )
 
-// Riddler is data source object type that implements the DataSource interface.
+// Riddler is the AmassService that handles access to the Riddler data source.
 type Riddler struct {
-	BaseDataSource
+	core.BaseAmassService
+
+	Bus        evbus.Bus
+	Config     *core.AmassConfig
+	SourceType string
+	filter     *utils.StringFilter
 }
 
-// NewRiddler returns an initialized Riddler as a DataSource.
-func NewRiddler(srv core.AmassService) DataSource {
-	r := new(Riddler)
+// NewRiddler requires the enumeration configuration and event bus as parameters.
+// The object returned is initialized, but has not yet been started.
+func NewRiddler(bus evbus.Bus, config *core.AmassConfig) *Riddler {
+	r := &Riddler{
+		Bus:        bus,
+		Config:     config,
+		SourceType: core.SCRAPE,
+		filter:     utils.NewStringFilter(),
+	}
 
-	r.BaseDataSource = *NewBaseDataSource(srv, core.SCRAPE, "Riddler")
+	r.BaseAmassService = *core.NewBaseAmassService("Riddler", r)
 	return r
 }
 
-// Query returns the subdomain names discovered when querying this data source.
-func (r *Riddler) Query(domain, sub string) []string {
-	var unique []string
+// OnStart implements the AmassService interface
+func (r *Riddler) OnStart() error {
+	r.BaseAmassService.OnStart()
 
-	if domain != sub {
-		return unique
+	go r.startRootDomains()
+	return nil
+}
+
+// OnStop implements the AmassService interface
+func (r *Riddler) OnStop() error {
+	r.BaseAmassService.OnStop()
+	return nil
+}
+
+func (r *Riddler) startRootDomains() {
+	// Look at each domain provided by the config
+	for _, domain := range r.Config.Domains() {
+		r.executeQuery(domain)
 	}
+}
 
+func (r *Riddler) executeQuery(domain string) {
 	url := r.getURL(domain)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		r.Service.Config().Log.Printf("%s: %v", url, err)
-		return unique
+		r.Config.Log.Printf("%s: %s: %v", r.String(), url, err)
+		return
 	}
-	r.Service.SetActive()
 
-	re := utils.SubdomainRegex(domain)
+	r.SetActive()
+	re := r.Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
-		if u := utils.NewUniqueElements(unique, sd); len(u) > 0 {
-			unique = append(unique, u...)
+		n := cleanName(sd)
+
+		if r.filter.Duplicate(n) {
+			continue
 		}
+		go func(name string) {
+			r.Config.MaxFlow.Acquire(1)
+			r.Bus.Publish(core.NEWNAME, &core.AmassRequest{
+				Name:   name,
+				Domain: domain,
+				Tag:    r.SourceType,
+				Source: r.String(),
+			})
+		}(n)
 	}
-	return unique
 }
 
 func (r *Riddler) getURL(domain string) string {

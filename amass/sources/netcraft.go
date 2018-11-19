@@ -8,44 +8,80 @@ import (
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
+	evbus "github.com/asaskevich/EventBus"
 )
 
-// Netcraft is data source object type that implements the DataSource interface.
+// Netcraft is the AmassService that handles access to the Netcraft data source.
 type Netcraft struct {
-	BaseDataSource
+	core.BaseAmassService
+
+	Bus        evbus.Bus
+	Config     *core.AmassConfig
+	SourceType string
+	filter     *utils.StringFilter
 }
 
-// NewNetcraft returns an initialized Netcraft as a DataSource.
-func NewNetcraft(srv core.AmassService) DataSource {
-	d := new(Netcraft)
-
-	d.BaseDataSource = *NewBaseDataSource(srv, core.SCRAPE, "Netcraft")
-	return d
-}
-
-// Query returns the subdomain names discovered when querying this data source.
-func (n *Netcraft) Query(domain, sub string) []string {
-	var unique []string
-
-	if domain != sub {
-		return unique
+// Netcraft requires the enumeration configuration and event bus as parameters.
+// The object returned is initialized, but has not yet been started.
+func NewNetcraft(bus evbus.Bus, config *core.AmassConfig) *Netcraft {
+	n := &Netcraft{
+		Bus:        bus,
+		Config:     config,
+		SourceType: core.SCRAPE,
+		filter:     utils.NewStringFilter(),
 	}
 
+	n.BaseAmassService = *core.NewBaseAmassService("Netcraft", n)
+	return n
+}
+
+// OnStart implements the AmassService interface
+func (n *Netcraft) OnStart() error {
+	n.BaseAmassService.OnStart()
+
+	go n.startRootDomains()
+	return nil
+}
+
+// OnStop implements the AmassService interface
+func (n *Netcraft) OnStop() error {
+	n.BaseAmassService.OnStop()
+	return nil
+}
+
+func (n *Netcraft) startRootDomains() {
+	// Look at each domain provided by the config
+	for _, domain := range n.Config.Domains() {
+		n.executeQuery(domain)
+	}
+}
+
+func (n *Netcraft) executeQuery(domain string) {
 	url := n.getURL(domain)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		n.Service.Config().Log.Printf("%s, %v", url, err)
-		return unique
+		n.Config.Log.Printf("%s: %s, %v", n.String(), url, err)
+		return
 	}
-	n.Service.SetActive()
 
-	re := utils.SubdomainRegex(domain)
+	n.SetActive()
+	re := n.Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
-		if u := utils.NewUniqueElements(unique, sd); len(u) > 0 {
-			unique = append(unique, u...)
+		name := cleanName(sd)
+
+		if n.filter.Duplicate(name) {
+			continue
 		}
+		go func(name string) {
+			n.Config.MaxFlow.Acquire(1)
+			n.Bus.Publish(core.NEWNAME, &core.AmassRequest{
+				Name:   name,
+				Domain: domain,
+				Tag:    n.SourceType,
+				Source: n.String(),
+			})
+		}(name)
 	}
-	return unique
 }
 
 func (n *Netcraft) getURL(domain string) string {

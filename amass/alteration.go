@@ -18,15 +18,19 @@ import (
 type AlterationService struct {
 	core.BaseAmassService
 
-	bus evbus.Bus
+	Bus    evbus.Bus
+	Config *core.AmassConfig
 }
 
 // NewAlterationService requires the enumeration configuration and event bus as parameters.
 // The object returned is initialized, but has not yet been started.
-func NewAlterationService(config *core.AmassConfig, bus evbus.Bus) *AlterationService {
-	as := &AlterationService{bus: bus}
+func NewAlterationService(bus evbus.Bus, config *core.AmassConfig) *AlterationService {
+	as := &AlterationService{
+		Bus:    bus,
+		Config: config,
+	}
 
-	as.BaseAmassService = *core.NewBaseAmassService("Alteration Service", config, as)
+	as.BaseAmassService = *core.NewBaseAmassService("Alteration", as)
 	return as
 }
 
@@ -34,8 +38,8 @@ func NewAlterationService(config *core.AmassConfig, bus evbus.Bus) *AlterationSe
 func (as *AlterationService) OnStart() error {
 	as.BaseAmassService.OnStart()
 
-	if as.Config().Alterations {
-		as.bus.SubscribeAsync(core.CHECKED, as.SendRequest, false)
+	if as.Config.Alterations {
+		as.Bus.SubscribeAsync(core.CHECKED, as.SendRequest, false)
 		go as.processRequests()
 	}
 	return nil
@@ -45,8 +49,8 @@ func (as *AlterationService) OnStart() error {
 func (as *AlterationService) OnStop() error {
 	as.BaseAmassService.OnStop()
 
-	if as.Config().Alterations {
-		as.bus.Unsubscribe(core.CHECKED, as.SendRequest)
+	if as.Config.Alterations {
+		as.Bus.Unsubscribe(core.CHECKED, as.SendRequest)
 	}
 	return nil
 }
@@ -67,7 +71,7 @@ func (as *AlterationService) processRequests() {
 // executeAlterations runs all the DNS name alteration methods as goroutines.
 func (as *AlterationService) executeAlterations(req *core.AmassRequest) {
 	as.SetActive()
-	if !as.Config().IsDomainInScope(req.Name) || !as.correctRecordTypes(req) {
+	if !as.Config.IsDomainInScope(req.Name) || !as.correctRecordTypes(req) {
 		return
 	}
 	as.flipNumbersInName(req)
@@ -143,11 +147,11 @@ func (as *AlterationService) appendNumbers(req *core.AmassRequest) {
 
 // sendAlteredName checks that the provided name is valid and sends it along to the SubdomainService.
 func (as *AlterationService) sendAlteredName(name, domain string) {
-	re := as.Config().DomainRegex(domain)
+	re := as.Config.DomainRegex(domain)
 
 	if re != nil && re.MatchString(name) {
-		as.Config().MaxFlow.Acquire(1)
-		as.bus.Publish(core.NEWNAME, &core.AmassRequest{
+		as.Config.MaxFlow.Acquire(1)
+		as.Bus.Publish(core.NEWNAME, &core.AmassRequest{
 			Name:   name,
 			Domain: domain,
 			Tag:    core.ALT,

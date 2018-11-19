@@ -9,6 +9,7 @@ import (
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
+	evbus "github.com/asaskevich/EventBus"
 )
 
 var (
@@ -26,58 +27,94 @@ var (
 	}
 )
 
-// CommonCrawl is data source object type that implements the DataSource interface.
+// CommonCrawl is the AmassService that handles access to the CommonCrawl data source.
 type CommonCrawl struct {
-	BaseDataSource
-	baseURL string
+	core.BaseAmassService
+
+	Bus        evbus.Bus
+	Config     *core.AmassConfig
+	baseURL    string
+	SourceType string
+	filter     *utils.StringFilter
 }
 
-// NewCommonCrawl returns an initialized CommonCrawl as a DataSource.
-func NewCommonCrawl(srv core.AmassService) DataSource {
-	cc := &CommonCrawl{baseURL: "http://index.commoncrawl.org/"}
-
-	cc.BaseDataSource = *NewBaseDataSource(srv, core.SCRAPE, "Common Crawl")
-	return cc
-}
-
-// Query returns the subdomain names discovered when querying this data source.
-func (cc *CommonCrawl) Query(domain, sub string) []string {
-	var unique []string
-
-	if domain != sub {
-		return []string{}
+// NewCommonCrawl requires the enumeration configuration and event bus as parameters.
+// The object returned is initialized, but has not yet been started.
+func NewCommonCrawl(bus evbus.Bus, config *core.AmassConfig) *CommonCrawl {
+	c := &CommonCrawl{
+		Bus:        bus,
+		Config:     config,
+		baseURL:    "http://index.commoncrawl.org/",
+		SourceType: core.SCRAPE,
+		filter:     utils.NewStringFilter(),
 	}
 
-	re := utils.SubdomainRegex(domain)
+	c.BaseAmassService = *core.NewBaseAmassService("CommonCrawl", c)
+	return c
+}
+
+// OnStart implements the AmassService interface
+func (c *CommonCrawl) OnStart() error {
+	c.BaseAmassService.OnStart()
+
+	go c.startRootDomains()
+	return nil
+}
+
+// OnStop implements the AmassService interface
+func (c *CommonCrawl) OnStop() error {
+	c.BaseAmassService.OnStop()
+	return nil
+}
+
+func (c *CommonCrawl) startRootDomains() {
+	// Look at each domain provided by the config
+	for _, domain := range c.Config.Domains() {
+		c.executeQuery(domain)
+	}
+}
+
+func (c *CommonCrawl) executeQuery(domain string) {
+	re := c.Config.DomainRegex(domain)
 	t := time.NewTicker(time.Second)
 	defer t.Stop()
-loop:
+
 	for _, index := range commonCrawlIndexes {
-		cc.Service.SetActive()
+		c.SetActive()
 
 		select {
-		case <-cc.Service.Quit():
-			break loop
+		case <-c.Quit():
+			return
 		case <-t.C:
-			u := cc.getURL(index, domain)
+			u := c.getURL(index, domain)
 			page, err := utils.RequestWebPage(u, nil, nil, "", "")
 			if err != nil {
-				cc.Service.Config().Log.Printf("%s: %v", u, err)
+				c.Config.Log.Printf("%s: %s: %v", c.String(), u, err)
 				continue
 			}
 
 			for _, sd := range re.FindAllString(page, -1) {
-				if u := utils.NewUniqueElements(unique, sd); len(u) > 0 {
-					unique = append(unique, u...)
+				n := cleanName(sd)
+
+				if c.filter.Duplicate(sd) {
+					continue
 				}
+				go func(name string) {
+					c.Config.MaxFlow.Acquire(1)
+					c.Bus.Publish(core.NEWNAME, &core.AmassRequest{
+						Name:   name,
+						Domain: domain,
+						Tag:    c.SourceType,
+						Source: c.String(),
+					})
+				}(n)
 			}
 		}
 	}
-	return unique
 }
 
-func (cc *CommonCrawl) getURL(index, domain string) string {
-	u, _ := url.Parse(cc.baseURL + index + "-index")
+func (c *CommonCrawl) getURL(index, domain string) string {
+	u, _ := url.Parse(c.baseURL + index + "-index")
 
 	u.RawQuery = url.Values{
 		"url":    {"*." + domain},

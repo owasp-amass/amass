@@ -14,6 +14,7 @@ import (
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/dnssrv"
+	"github.com/OWASP/Amass/amass/sources"
 	"github.com/OWASP/Amass/amass/utils"
 	evbus "github.com/asaskevich/EventBus"
 )
@@ -41,7 +42,7 @@ const (
 	Version = "2.8.3"
 
 	// Author is used to display the founder of the amass package.
-	Author = "caffix (@jeff_foley)"
+	Author = "Jeff Foley - @jeff_foley"
 
 	defaultWordlistURL = "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/namelist.txt"
 )
@@ -114,18 +115,20 @@ func (e *Enumeration) Start() error {
 	bus.SubscribeAsync(core.OUTPUT, e.sendOutput, true)
 	// Select the correct services to be used in this enumeration
 	services := []core.AmassService{
-		NewSubdomainService(e.Config, bus),
-		NewSourcesService(e.Config, bus),
+		NewNameService(bus, e.Config),
+		NewAddressService(bus, e.Config),
 	}
 	if !e.Config.Passive {
 		services = append(services,
-			NewDataManagerService(e.Config, bus),
-			dnssrv.NewDNSService(e.Config, bus),
-			NewAlterationService(e.Config, bus),
-			NewBruteForceService(e.Config, bus),
-			NewActiveCertService(e.Config, bus),
+			NewDataManagerService(bus, e.Config),
+			dnssrv.NewDNSService(bus, e.Config),
+			NewAlterationService(bus, e.Config),
+			NewBruteForceService(bus, e.Config),
+			NewActiveCertService(bus, e.Config),
 		)
 	}
+	// Grab all the data sources
+	services = append(services, sources.GetAllSources(bus, e.Config)...)
 
 	for _, srv := range services {
 		if err := srv.Start(); err != nil {
@@ -133,7 +136,6 @@ func (e *Enumeration) Start() error {
 		}
 	}
 
-	var completed bool
 	t := time.NewTicker(3 * time.Second)
 loop:
 	for {
@@ -155,21 +157,16 @@ loop:
 			}
 
 			if done {
-				completed = true
 				break loop
 			}
 		}
 	}
 	t.Stop()
-	// Stop all the services
-	for _, service := range services {
-		service.Stop()
+	for _, srv := range services {
+		srv.Stop()
 	}
 	time.Sleep(time.Second)
 	bus.Unsubscribe(core.OUTPUT, e.sendOutput)
-	if completed {
-		close(e.Done)
-	}
 	time.Sleep(2 * time.Second)
 	close(e.Output)
 	return nil
@@ -186,13 +183,7 @@ func (e *Enumeration) Resume() {
 }
 
 func (e *Enumeration) sendOutput(out *core.AmassOutput) {
-	// Check if the output channel has been closed
-	select {
-	case <-e.Done:
-		return
-	default:
-		e.Output <- out
-	}
+	e.Output <- out
 }
 
 func getDefaultWordlist() ([]string, error) {

@@ -10,78 +10,108 @@ import (
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
+	evbus "github.com/asaskevich/EventBus"
 )
 
-// IPv4Info is data source object type that implements the DataSource interface.
+// IPv4Info is the AmassService that handles access to the IPv4Info data source.
 type IPv4Info struct {
-	BaseDataSource
-	baseURL string
+	core.BaseAmassService
+
+	Bus        evbus.Bus
+	Config     *core.AmassConfig
+	baseURL    string
+	SourceType string
+	filter     *utils.StringFilter
 }
 
-// NewIPv4Info returns an initialized IPv4Info as a DataSource.
-func NewIPv4Info(srv core.AmassService) DataSource {
-	i := &IPv4Info{baseURL: "http://ipv4info.com"}
+// NewIPv4Info requires the enumeration configuration and event bus as parameters.
+// The object returned is initialized, but has not yet been started.
+func NewIPv4Info(bus evbus.Bus, config *core.AmassConfig) *IPv4Info {
+	i := &IPv4Info{
+		Bus:        bus,
+		Config:     config,
+		baseURL:    "http://ipv4info.com",
+		SourceType: core.SCRAPE,
+		filter:     utils.NewStringFilter(),
+	}
 
-	i.BaseDataSource = *NewBaseDataSource(srv, core.SCRAPE, "IPv4info")
+	i.BaseAmassService = *core.NewBaseAmassService("IPv4Info", i)
 	return i
 }
 
-// Query returns the subdomain names discovered when querying this data source.
-func (i *IPv4Info) Query(domain, sub string) []string {
-	var unique []string
+// OnStart implements the AmassService interface
+func (i *IPv4Info) OnStart() error {
+	i.BaseAmassService.OnStart()
 
-	if domain != sub {
-		return []string{}
+	go i.startRootDomains()
+	return nil
+}
+
+// OnStop implements the AmassService interface
+func (i *IPv4Info) OnStop() error {
+	i.BaseAmassService.OnStop()
+	return nil
+}
+
+func (i *IPv4Info) startRootDomains() {
+	// Look at each domain provided by the config
+	for _, domain := range i.Config.Domains() {
+		i.executeQuery(domain)
 	}
+}
 
+func (i *IPv4Info) executeQuery(domain string) {
 	url := i.getURL(domain)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		i.Service.Config().Log.Printf("%s: %v", url, err)
-		return unique
+		i.Config.Log.Printf("%s: %s: %v", i.String(), url, err)
+		return
 	}
-	time.Sleep(time.Second)
-	i.Service.SetActive()
 
+	i.SetActive()
+	time.Sleep(time.Second)
 	url = i.ipSubmatch(page, domain)
 	page, err = utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		i.Service.Config().Log.Printf("%s: %v", url, err)
-		return unique
+		i.Config.Log.Printf("%s: %s: %v", i.String(), url, err)
+		return
 	}
-	time.Sleep(time.Second)
-	i.Service.SetActive()
 
+	i.SetActive()
+	time.Sleep(time.Second)
 	url = i.domainSubmatch(page, domain)
 	page, err = utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		i.Service.Config().Log.Printf("%s: %v", url, err)
-		return unique
+		i.Config.Log.Printf("%s: %s: %v", i.String(), url, err)
+		return
 	}
-	time.Sleep(time.Second)
-	i.Service.SetActive()
 
+	i.SetActive()
+	time.Sleep(time.Second)
 	url = i.subdomainSubmatch(page, domain)
 	page, err = utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		i.Service.Config().Log.Printf("%s: %v", url, err)
-		return unique
+		i.Config.Log.Printf("%s: %s: %v", i.String(), url, err)
+		return
 	}
-	i.Service.SetActive()
 
-	re := utils.SubdomainRegex(domain)
+	re := i.Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
-		if u := utils.NewUniqueElements(unique, sd); len(u) > 0 {
-			unique = append(unique, u...)
+		n := cleanName(sd)
+
+		if i.filter.Duplicate(n) {
+			continue
 		}
+		go func(name string) {
+			i.Config.MaxFlow.Acquire(1)
+			i.Bus.Publish(core.NEWNAME, &core.AmassRequest{
+				Name:   name,
+				Domain: domain,
+				Tag:    i.SourceType,
+				Source: i.String(),
+			})
+		}(n)
 	}
-	return unique
-}
-
-func (i *IPv4Info) getURL(domain string) string {
-	format := i.baseURL + "/search/%s"
-
-	return fmt.Sprintf(format, domain)
 }
 
 func (i *IPv4Info) ipSubmatch(content, domain string) string {
@@ -109,4 +139,10 @@ func (i *IPv4Info) subdomainSubmatch(content, domain string) string {
 		return ""
 	}
 	return i.baseURL + subs[0]
+}
+
+func (i *IPv4Info) getURL(domain string) string {
+	format := i.baseURL + "/search/%s"
+
+	return fmt.Sprintf(format, domain)
 }

@@ -3,36 +3,97 @@
 
 package sources
 
-import "github.com/OWASP/Amass/amass/core"
+import (
+	"github.com/OWASP/Amass/amass/core"
+	"github.com/OWASP/Amass/amass/utils"
+	evbus "github.com/asaskevich/EventBus"
+)
 
-// ArchiveToday is data source object type that implements the DataSource interface.
+// ArchiveToday is the AmassService that handles access to the ArchiveToday data source.
 type ArchiveToday struct {
-	BaseDataSource
-	baseURL string
+	core.BaseAmassService
+
+	Bus        evbus.Bus
+	Config     *core.AmassConfig
+	baseURL    string
+	SourceType string
+	filter     *utils.StringFilter
 }
 
-// NewArchiveToday returns an initialized ArchiveToday as a DataSource.
-func NewArchiveToday(srv core.AmassService) DataSource {
-	a := &ArchiveToday{baseURL: "http://archive.is"}
+// NewArchiveToday requires the enumeration configuration and event bus as parameters.
+// The object returned is initialized, but has not yet been started.
+func NewArchiveToday(bus evbus.Bus, config *core.AmassConfig) *ArchiveToday {
+	a := &ArchiveToday{
+		Bus:        bus,
+		Config:     config,
+		baseURL:    "http://archive.is",
+		SourceType: core.ARCHIVE,
+		filter:     utils.NewStringFilter(),
+	}
 
-	a.BaseDataSource = *NewBaseDataSource(srv, core.ARCHIVE, "Archive Today")
+	a.BaseAmassService = *core.NewBaseAmassService("ArchiveToday", a)
 	return a
 }
 
-// Query returns the subdomain names discovered when querying this data source.
-func (a *ArchiveToday) Query(domain, sub string) []string {
-	if sub == "" {
-		return []string{}
-	}
+// OnStart implements the AmassService interface
+func (a *ArchiveToday) OnStart() error {
+	a.BaseAmassService.OnStart()
 
-	names, err := a.crawl(a.baseURL, domain, sub)
-	if err != nil {
-		a.Service.Config().Log.Printf("%v", err)
-	}
-	return names
+	a.Bus.SubscribeAsync(core.CHECKED, a.SendRequest, false)
+	go a.startRootDomains()
+	go a.processRequests()
+	return nil
 }
 
-// Subdomains returns true when the data source can query for subdomain names.
-func (a *ArchiveToday) Subdomains() bool {
-	return true
+// OnStop implements the AmassService interface
+func (a *ArchiveToday) OnStop() error {
+	a.BaseAmassService.OnStop()
+
+	a.Bus.Unsubscribe(core.CHECKED, a.SendRequest)
+	return nil
+}
+
+func (a *ArchiveToday) startRootDomains() {
+	// Look at each domain provided by the config
+	for _, domain := range a.Config.Domains() {
+		a.executeQuery(domain, domain)
+	}
+}
+
+func (a *ArchiveToday) processRequests() {
+	for {
+		select {
+		case <-a.Quit():
+			return
+		case req := <-a.RequestChan():
+			a.executeQuery(req.Name, req.Domain)
+		}
+	}
+}
+
+func (a *ArchiveToday) executeQuery(sn, domain string) {
+	if sn == "" || domain == "" {
+		return
+	}
+	if a.filter.Duplicate(sn) {
+		return
+	}
+
+	names, err := crawl(a, a.baseURL, domain, sn)
+	if err != nil {
+		a.Config.Log.Printf("%s: %v", a.String(), err)
+		return
+	}
+
+	for _, n := range names {
+		go func(name string) {
+			a.Config.MaxFlow.Acquire(1)
+			a.Bus.Publish(core.NEWNAME, &core.AmassRequest{
+				Name:   cleanName(name),
+				Domain: domain,
+				Tag:    a.SourceType,
+				Source: a.String(),
+			})
+		}(n)
+	}
 }

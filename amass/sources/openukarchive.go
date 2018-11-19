@@ -3,36 +3,97 @@
 
 package sources
 
-import "github.com/OWASP/Amass/amass/core"
+import (
+	"github.com/OWASP/Amass/amass/core"
+	"github.com/OWASP/Amass/amass/utils"
+	evbus "github.com/asaskevich/EventBus"
+)
 
-// OpenUKArchive is data source object type that implements the DataSource interface.
+// OpenUKArchive is the AmassService that handles access to the OpenUKArchive data source.
 type OpenUKArchive struct {
-	BaseDataSource
-	baseURL string
+	core.BaseAmassService
+
+	Bus        evbus.Bus
+	Config     *core.AmassConfig
+	baseURL    string
+	SourceType string
+	filter     *utils.StringFilter
 }
 
-// NewOpenUKArchive returns an initialized OpenUKArchive as a DataSource.
-func NewOpenUKArchive(srv core.AmassService) DataSource {
-	o := &OpenUKArchive{baseURL: "http://www.webarchive.org.uk/wayback/archive"}
+// NewOpenUKArchive requires the enumeration configuration and event bus as parameters.
+// The object returned is initialized, but has not yet been started.
+func NewOpenUKArchive(bus evbus.Bus, config *core.AmassConfig) *OpenUKArchive {
+	o := &OpenUKArchive{
+		Bus:        bus,
+		Config:     config,
+		baseURL:    "http://www.webarchive.org.uk/wayback/archive",
+		SourceType: core.ARCHIVE,
+		filter:     utils.NewStringFilter(),
+	}
 
-	o.BaseDataSource = *NewBaseDataSource(srv, core.ARCHIVE, "Open UK Arc")
+	o.BaseAmassService = *core.NewBaseAmassService("OpenUKArchive", o)
 	return o
 }
 
-// Query returns the subdomain names discovered when querying this data source.
-func (o *OpenUKArchive) Query(domain, sub string) []string {
-	if sub == "" {
-		return []string{}
-	}
+// OnStart implements the AmassService interface
+func (o *OpenUKArchive) OnStart() error {
+	o.BaseAmassService.OnStart()
 
-	names, err := o.crawl(o.baseURL, domain, sub)
-	if err != nil {
-		o.Service.Config().Log.Printf("%v", err)
-	}
-	return names
+	o.Bus.SubscribeAsync(core.CHECKED, o.SendRequest, false)
+	go o.startRootDomains()
+	go o.processRequests()
+	return nil
 }
 
-// Subdomains returns true when the data source can query for subdomain names.
-func (o *OpenUKArchive) Subdomains() bool {
-	return true
+// OnStop implements the AmassService interface
+func (o *OpenUKArchive) OnStop() error {
+	o.BaseAmassService.OnStop()
+
+	o.Bus.Unsubscribe(core.CHECKED, o.SendRequest)
+	return nil
+}
+
+func (o *OpenUKArchive) startRootDomains() {
+	// Look at each domain provided by the config
+	for _, domain := range o.Config.Domains() {
+		o.executeQuery(domain, domain)
+	}
+}
+
+func (o *OpenUKArchive) processRequests() {
+	for {
+		select {
+		case <-o.Quit():
+			return
+		case req := <-o.RequestChan():
+			o.executeQuery(req.Name, req.Domain)
+		}
+	}
+}
+
+func (o *OpenUKArchive) executeQuery(sn, domain string) {
+	if sn == "" || domain == "" {
+		return
+	}
+	if o.filter.Duplicate(sn) {
+		return
+	}
+
+	names, err := crawl(o, o.baseURL, domain, sn)
+	if err != nil {
+		o.Config.Log.Printf("%s: %v", o.String(), err)
+		return
+	}
+
+	for _, n := range names {
+		go func(name string) {
+			o.Config.MaxFlow.Acquire(1)
+			o.Bus.Publish(core.NEWNAME, &core.AmassRequest{
+				Name:   cleanName(name),
+				Domain: domain,
+				Tag:    o.SourceType,
+				Source: o.String(),
+			})
+		}(n)
+	}
 }
