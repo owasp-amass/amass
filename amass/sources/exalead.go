@@ -18,7 +18,6 @@ type Exalead struct {
 	Bus        evbus.Bus
 	Config     *core.AmassConfig
 	SourceType string
-	filter     *utils.StringFilter
 }
 
 // NewExalead requires the enumeration configuration and event bus as parameters.
@@ -28,7 +27,6 @@ func NewExalead(bus evbus.Bus, config *core.AmassConfig) *Exalead {
 		Bus:        bus,
 		Config:     config,
 		SourceType: core.SCRAPE,
-		filter:     utils.NewStringFilter(),
 	}
 
 	e.BaseAmassService = *core.NewBaseAmassService("Exalead", e)
@@ -69,18 +67,16 @@ func (e *Exalead) executeQuery(domain string) {
 	for _, sd := range re.FindAllString(page, -1) {
 		n := cleanName(sd)
 
-		if e.filter.Duplicate(n) {
+		if core.DataSourceNameFilter.Duplicate(n) {
 			continue
 		}
-		go func(name string) {
-			e.Config.MaxFlow.Acquire(1)
-			e.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-				Name:   name,
-				Domain: domain,
-				Tag:    e.SourceType,
-				Source: e.String(),
-			})
-		}(n)
+
+		e.Bus.Publish(core.NEWNAME, &core.AmassRequest{
+			Name:   n,
+			Domain: domain,
+			Tag:    e.SourceType,
+			Source: e.String(),
+		})
 	}
 }
 

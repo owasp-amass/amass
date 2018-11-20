@@ -22,7 +22,6 @@ type Baidu struct {
 	quantity   int
 	limit      int
 	SourceType string
-	filter     *utils.StringFilter
 }
 
 // NewBaidu requires the enumeration configuration and event bus as parameters.
@@ -34,7 +33,6 @@ func NewBaidu(bus evbus.Bus, config *core.AmassConfig) *Baidu {
 		quantity:   20,
 		limit:      100,
 		SourceType: core.SCRAPE,
-		filter:     utils.NewStringFilter(),
 	}
 
 	b.BaseAmassService = *core.NewBaseAmassService("Baidu", b)
@@ -85,18 +83,16 @@ func (b *Baidu) executeQuery(domain string) {
 			for _, sd := range re.FindAllString(page, -1) {
 				n := cleanName(sd)
 
-				if b.filter.Duplicate(n) {
+				if core.DataSourceNameFilter.Duplicate(n) {
 					continue
 				}
-				go func(name string) {
-					b.Config.MaxFlow.Acquire(1)
-					b.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-						Name:   name,
-						Domain: domain,
-						Tag:    b.SourceType,
-						Source: b.String(),
-					})
-				}(n)
+
+				b.Bus.Publish(core.NEWNAME, &core.AmassRequest{
+					Name:   n,
+					Domain: domain,
+					Tag:    b.SourceType,
+					Source: b.String(),
+				})
 			}
 		}
 	}

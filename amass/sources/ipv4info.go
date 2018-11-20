@@ -21,7 +21,6 @@ type IPv4Info struct {
 	Config     *core.AmassConfig
 	baseURL    string
 	SourceType string
-	filter     *utils.StringFilter
 }
 
 // NewIPv4Info requires the enumeration configuration and event bus as parameters.
@@ -32,7 +31,6 @@ func NewIPv4Info(bus evbus.Bus, config *core.AmassConfig) *IPv4Info {
 		Config:     config,
 		baseURL:    "http://ipv4info.com",
 		SourceType: core.SCRAPE,
-		filter:     utils.NewStringFilter(),
 	}
 
 	i.BaseAmassService = *core.NewBaseAmassService("IPv4Info", i)
@@ -99,18 +97,16 @@ func (i *IPv4Info) executeQuery(domain string) {
 	for _, sd := range re.FindAllString(page, -1) {
 		n := cleanName(sd)
 
-		if i.filter.Duplicate(n) {
+		if core.DataSourceNameFilter.Duplicate(n) {
 			continue
 		}
-		go func(name string) {
-			i.Config.MaxFlow.Acquire(1)
-			i.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-				Name:   name,
-				Domain: domain,
-				Tag:    i.SourceType,
-				Source: i.String(),
-			})
-		}(n)
+
+		i.Bus.Publish(core.NEWNAME, &core.AmassRequest{
+			Name:   n,
+			Domain: domain,
+			Tag:    i.SourceType,
+			Source: i.String(),
+		})
 	}
 }
 

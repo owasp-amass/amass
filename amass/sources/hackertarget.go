@@ -18,7 +18,6 @@ type HackerTarget struct {
 	Bus        evbus.Bus
 	Config     *core.AmassConfig
 	SourceType string
-	filter     *utils.StringFilter
 }
 
 // NewHackerTarget requires the enumeration configuration and event bus as parameters.
@@ -28,7 +27,6 @@ func NewHackerTarget(bus evbus.Bus, config *core.AmassConfig) *HackerTarget {
 		Bus:        bus,
 		Config:     config,
 		SourceType: core.API,
-		filter:     utils.NewStringFilter(),
 	}
 
 	h.BaseAmassService = *core.NewBaseAmassService("HackerTarget", h)
@@ -69,18 +67,16 @@ func (h *HackerTarget) executeQuery(domain string) {
 	for _, sd := range re.FindAllString(page, -1) {
 		n := cleanName(sd)
 
-		if h.filter.Duplicate(n) {
+		if core.DataSourceNameFilter.Duplicate(n) {
 			continue
 		}
-		go func(name string) {
-			h.Config.MaxFlow.Acquire(1)
-			h.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-				Name:   name,
-				Domain: domain,
-				Tag:    h.SourceType,
-				Source: h.String(),
-			})
-		}(n)
+
+		h.Bus.Publish(core.NEWNAME, &core.AmassRequest{
+			Name:   n,
+			Domain: domain,
+			Tag:    h.SourceType,
+			Source: h.String(),
+		})
 	}
 }
 

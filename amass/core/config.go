@@ -21,7 +21,7 @@ type AmassConfig struct {
 	Log *log.Logger
 
 	// MaxFlow is a Semaphore that restricts the number of names moving through the architecture
-	MaxFlow *utils.Semaphore
+	MaxFlow utils.Semaphore
 
 	// The ports that will be checked for certificates
 	Ports []int

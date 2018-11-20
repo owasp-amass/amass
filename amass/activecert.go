@@ -30,7 +30,7 @@ type ActiveCertService struct {
 
 	Bus       evbus.Bus
 	Config    *core.AmassConfig
-	maxPulls  *utils.Semaphore
+	maxPulls  utils.Semaphore
 	filter    *utils.StringFilter
 	addrQueue chan string
 }
@@ -41,7 +41,7 @@ func NewActiveCertService(bus evbus.Bus, config *core.AmassConfig) *ActiveCertSe
 	acs := &ActiveCertService{
 		Bus:       bus,
 		Config:    config,
-		maxPulls:  utils.NewSemaphore(25),
+		maxPulls:  utils.NewSimpleSemaphore(25),
 		filter:    utils.NewStringFilter(),
 		addrQueue: make(chan string, 50),
 	}
@@ -57,6 +57,7 @@ func (acs *ActiveCertService) OnStart() error {
 	if acs.Config.Active {
 		acs.Bus.SubscribeAsync(core.ACTIVECERT, acs.queueAddress, false)
 	}
+
 	go acs.processRequests()
 	return nil
 }
@@ -75,9 +76,10 @@ func (acs *ActiveCertService) queueAddress(addr string) {
 	if acs.filter.Duplicate(addr) {
 		return
 	}
-	go func() {
-		acs.addrQueue <- addr
-	}()
+
+	acs.SetActive()
+	acs.maxPulls.Acquire(1)
+	acs.addrQueue <- addr
 }
 
 func (acs *ActiveCertService) processRequests() {
@@ -94,18 +96,18 @@ func (acs *ActiveCertService) processRequests() {
 }
 
 func (acs *ActiveCertService) performRequest(addr string) {
-	acs.maxPulls.Acquire(1)
 	defer acs.maxPulls.Release(1)
 
 	acs.SetActive()
 	for _, r := range PullCertificateNames(addr, acs.Config.Ports) {
-		if acs.Config.IsDomainInScope(r.Name) {
-			acs.SetActive()
+		domain := acs.Config.WhichDomain(r.Name)
+
+		if domain != "" && core.DataSourceNameFilter.Duplicate(r.Name) {
 			r.Source = acs.String()
-			acs.Config.MaxFlow.Acquire(1)
 			acs.Bus.Publish(core.NEWNAME, r)
 		}
 	}
+	acs.SetActive()
 }
 
 // PullCertificateNames attempts to pull a cert from one or more ports on an IP.

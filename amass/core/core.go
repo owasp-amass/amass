@@ -4,6 +4,9 @@
 package core
 
 import (
+	"errors"
+	"io/ioutil"
+	"log"
 	"time"
 
 	"github.com/OWASP/Amass/amass/utils"
@@ -19,7 +22,6 @@ const (
 	NEWNAME    = "amass:newname"
 	NEWSUB     = "amass:newsubdomain"
 	OUTPUT     = "amass:output"
-	RELEASEREQ = "amass:releaserequest"
 	RESOLVED   = "amass:resolved"
 
 	ALT     = "alt"
@@ -31,9 +33,6 @@ const (
 	DNS     = "dns"
 	SCRAPE  = "scrape"
 )
-
-// EnumerationTiming represents a speed band for the enumeration to execute within.
-type EnumerationTiming int
 
 // The various timing/speed templates for an Amass enumeration.
 const (
@@ -50,12 +49,102 @@ var (
 	NumOfFileDescriptors int
 
 	// MaxConnections creates a limit for how many network connections will be in use at once.
-	MaxConnections *utils.Semaphore
+	MaxConnections utils.Semaphore
+
+	// DataSourceNameFilter provides a single output filter for all name sources.
+	DataSourceNameFilter = utils.NewStringFilter()
 )
+
+// EnumerationTiming represents a speed band for the enumeration to execute within.
+type EnumerationTiming int
+
+// Enumeration is the object type used to execute a DNS enumeration with Amass.
+type Enumeration struct {
+	// The channel that will receive the results
+	Output chan *AmassOutput
+
+	// Broadcast channel that indicates no further writes to the output channel
+	Done chan struct{}
+
+	Config *AmassConfig
+
+	// Pause/Resume channels for halting the enumeration
+	pause  chan struct{}
+	resume chan struct{}
+}
 
 func init() {
 	NumOfFileDescriptors = (GetFileLimit() / 10) * 9
-	MaxConnections = utils.NewSemaphore(NumOfFileDescriptors)
+	MaxConnections = utils.NewSimpleSemaphore(NumOfFileDescriptors)
+}
+
+// NewEnumeration returns an initialized Enumeration that has not been started yet.
+func NewEnumeration() *Enumeration {
+	enum := &Enumeration{
+		Output: make(chan *AmassOutput, 100),
+		Done:   make(chan struct{}),
+		Config: &AmassConfig{
+			Log:             log.New(ioutil.Discard, "", 0),
+			Ports:           []int{443},
+			Recursive:       true,
+			MinForRecursive: 1,
+			Alterations:     true,
+			Timing:          Normal,
+		},
+		pause:  make(chan struct{}),
+		resume: make(chan struct{}),
+	}
+	enum.Config.SetGraph(NewGraph())
+	return enum
+}
+
+// CheckConfig runs some sanity checks on the enumeration configuration.
+func (e *Enumeration) CheckConfig() error {
+	if e.Output == nil {
+		return errors.New("The configuration did not have an output channel")
+	}
+	if e.Config.Passive && e.Config.BruteForcing {
+		return errors.New("Brute forcing cannot be performed without DNS resolution")
+	}
+	if e.Config.Passive && e.Config.Active {
+		return errors.New("Active enumeration cannot be performed without DNS resolution")
+	}
+	if e.Config.Passive && e.Config.DataOptsWriter != nil {
+		return errors.New("Data operations cannot be saved without DNS resolution")
+	}
+	if len(e.Config.Ports) == 0 {
+		e.Config.Ports = []int{443}
+	}
+
+	e.Config.MaxFlow = utils.NewTimedSemaphore(
+		TimingToMaxFlow(e.Config.Timing),
+		TimingToReleaseDelay(e.Config.Timing))
+	return nil
+}
+
+// Pause temporarily halts the enumeration.
+func (e *Enumeration) Pause() {
+	e.pause <- struct{}{}
+}
+
+// PauseChan returns the channel that is signaled when Pause is called.
+func (e *Enumeration) PauseChan() <-chan struct{} {
+	return e.pause
+}
+
+// Resume causes a previously paused enumeration to resume execution.
+func (e *Enumeration) Resume() {
+	e.resume <- struct{}{}
+}
+
+// ResumeChan returns the channel that is signaled when Resume is called.
+func (e *Enumeration) ResumeChan() <-chan struct{} {
+	return e.resume
+}
+
+// SendOutput is a wrapper for sending enumeration output to the appropriate channel.
+func (e *Enumeration) SendOutput(out *AmassOutput) {
+	e.Output <- out
 }
 
 // TrustedTag returns true when the tag parameter is of a type that should be trusted even

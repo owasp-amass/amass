@@ -85,15 +85,18 @@ func (l *LoCArchive) executeQuery(sn, domain string) {
 		return
 	}
 
-	for _, n := range names {
-		go func(name string) {
-			l.Config.MaxFlow.Acquire(1)
-			l.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-				Name:   name,
-				Domain: domain,
-				Tag:    l.SourceType,
-				Source: l.String(),
-			})
-		}(n)
+	for _, name := range names {
+		n := cleanName(name)
+
+		if core.DataSourceNameFilter.Duplicate(n) {
+			continue
+		}
+
+		l.Bus.Publish(core.NEWNAME, &core.AmassRequest{
+			Name:   n,
+			Domain: domain,
+			Tag:    l.SourceType,
+			Source: l.String(),
+		})
 	}
 }

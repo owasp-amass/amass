@@ -130,7 +130,7 @@ func performAllReverseDNS(ips []net.IP) {
 }
 
 func pullAllCertificates(ips []net.IP, ports parseInts) {
-	maxPulls := utils.NewSemaphore(100)
+	maxPulls := utils.NewSimpleSemaphore(100)
 
 	for _, ip := range ips {
 		core.MaxConnections.Acquire(1)

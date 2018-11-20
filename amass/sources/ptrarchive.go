@@ -18,7 +18,6 @@ type PTRArchive struct {
 	Bus        evbus.Bus
 	Config     *core.AmassConfig
 	SourceType string
-	filter     *utils.StringFilter
 }
 
 // NewPTRArchive requires the enumeration configuration and event bus as parameters.
@@ -28,7 +27,6 @@ func NewPTRArchive(bus evbus.Bus, config *core.AmassConfig) *PTRArchive {
 		Bus:        bus,
 		Config:     config,
 		SourceType: core.SCRAPE,
-		filter:     utils.NewStringFilter(),
 	}
 
 	p.BaseAmassService = *core.NewBaseAmassService("PTRArchive", p)
@@ -69,18 +67,16 @@ func (p *PTRArchive) executeQuery(domain string) {
 	for _, sd := range re.FindAllString(page, -1) {
 		n := cleanName(sd)
 
-		if p.filter.Duplicate(n) {
+		if core.DataSourceNameFilter.Duplicate(n) {
 			continue
 		}
-		go func(name string) {
-			p.Config.MaxFlow.Acquire(1)
-			p.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-				Name:   name,
-				Domain: domain,
-				Tag:    p.SourceType,
-				Source: p.String(),
-			})
-		}(n)
+
+		p.Bus.Publish(core.NEWNAME, &core.AmassRequest{
+			Name:   n,
+			Domain: domain,
+			Tag:    p.SourceType,
+			Source: p.String(),
+		})
 	}
 }
 

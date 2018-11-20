@@ -20,7 +20,6 @@ type Censys struct {
 	Bus        evbus.Bus
 	Config     *core.AmassConfig
 	SourceType string
-	filter     *utils.StringFilter
 }
 
 // NewCensys requires the enumeration configuration and event bus as parameters.
@@ -30,7 +29,6 @@ func NewCensys(bus evbus.Bus, config *core.AmassConfig) *Censys {
 		Bus:        bus,
 		Config:     config,
 		SourceType: core.CERT,
-		filter:     utils.NewStringFilter(),
 	}
 
 	c.BaseAmassService = *core.NewBaseAmassService("Censys", c)
@@ -87,18 +85,16 @@ func (c *Censys) executeQuery(domain string) {
 	c.SetActive()
 	re := c.Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
-		if c.filter.Duplicate(sd) {
+		if core.DataSourceNameFilter.Duplicate(sd) {
 			continue
 		}
-		go func(name string) {
-			c.Config.MaxFlow.Acquire(1)
-			c.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-				Name:   name,
-				Domain: domain,
-				Tag:    c.SourceType,
-				Source: c.String(),
-			})
-		}(sd)
+
+		c.Bus.Publish(core.NEWNAME, &core.AmassRequest{
+			Name:   sd,
+			Domain: domain,
+			Tag:    c.SourceType,
+			Source: c.String(),
+		})
 	}
 }
 

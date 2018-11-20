@@ -18,7 +18,6 @@ type SiteDossier struct {
 	Bus        evbus.Bus
 	Config     *core.AmassConfig
 	SourceType string
-	filter     *utils.StringFilter
 }
 
 // NewSiteDossier requires the enumeration configuration and event bus as parameters.
@@ -28,7 +27,6 @@ func NewSiteDossier(bus evbus.Bus, config *core.AmassConfig) *SiteDossier {
 		Bus:        bus,
 		Config:     config,
 		SourceType: core.SCRAPE,
-		filter:     utils.NewStringFilter(),
 	}
 
 	s.BaseAmassService = *core.NewBaseAmassService("SiteDossier", s)
@@ -69,18 +67,16 @@ func (s *SiteDossier) executeQuery(domain string) {
 	for _, sd := range re.FindAllString(page, -1) {
 		n := cleanName(sd)
 
-		if s.filter.Duplicate(n) {
+		if core.DataSourceNameFilter.Duplicate(n) {
 			continue
 		}
-		go func(name string) {
-			s.Config.MaxFlow.Acquire(1)
-			s.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-				Name:   name,
-				Domain: domain,
-				Tag:    s.SourceType,
-				Source: s.String(),
-			})
-		}(n)
+
+		s.Bus.Publish(core.NEWNAME, &core.AmassRequest{
+			Name:   n,
+			Domain: domain,
+			Tag:    s.SourceType,
+			Source: s.String(),
+		})
 	}
 }
 

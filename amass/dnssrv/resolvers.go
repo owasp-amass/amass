@@ -40,7 +40,7 @@ func init() {
 
 type resolver struct {
 	Address        string
-	MaxResolutions *utils.Semaphore
+	MaxResolutions utils.Semaphore
 	ExchangeTimes  chan time.Time
 	ErrorTimes     chan time.Time
 	WindowDuration time.Duration
@@ -50,7 +50,7 @@ type resolver struct {
 func newResolver(addr string) *resolver {
 	r := &resolver{
 		Address:        addr,
-		MaxResolutions: utils.NewSemaphore(core.NumOfFileDescriptors),
+		MaxResolutions: utils.NewSimpleSemaphore(core.NumOfFileDescriptors),
 		ExchangeTimes:  make(chan time.Time, int(float32(core.NumOfFileDescriptors)*1.5)),
 		ErrorTimes:     make(chan time.Time, int(float32(core.NumOfFileDescriptors)*1.5)),
 		WindowDuration: time.Second,

@@ -85,15 +85,18 @@ func (a *ArchiveIt) executeQuery(sn, domain string) {
 		return
 	}
 
-	for _, n := range names {
-		go func(name string) {
-			a.Config.MaxFlow.Acquire(1)
-			a.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-				Name:   cleanName(name),
-				Domain: domain,
-				Tag:    a.SourceType,
-				Source: a.String(),
-			})
-		}(n)
+	for _, name := range names {
+		n := cleanName(name)
+
+		if core.DataSourceNameFilter.Duplicate(n) {
+			continue
+		}
+
+		a.Bus.Publish(core.NEWNAME, &core.AmassRequest{
+			Name:   n,
+			Domain: domain,
+			Tag:    a.SourceType,
+			Source: a.String(),
+		})
 	}
 }

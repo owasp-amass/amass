@@ -24,7 +24,6 @@ type DNSDumpster struct {
 	Bus        evbus.Bus
 	Config     *core.AmassConfig
 	SourceType string
-	filter     *utils.StringFilter
 }
 
 // NewDNSDumpster requires the enumeration configuration and event bus as parameters.
@@ -34,7 +33,6 @@ func NewDNSDumpster(bus evbus.Bus, config *core.AmassConfig) *DNSDumpster {
 		Bus:        bus,
 		Config:     config,
 		SourceType: core.SCRAPE,
-		filter:     utils.NewStringFilter(),
 	}
 
 	d.BaseAmassService = *core.NewBaseAmassService("DNSDumpster", d)
@@ -88,18 +86,16 @@ func (d *DNSDumpster) executeQuery(domain string) {
 	for _, sd := range re.FindAllString(page, -1) {
 		n := cleanName(sd)
 
-		if d.filter.Duplicate(n) {
+		if core.DataSourceNameFilter.Duplicate(n) {
 			continue
 		}
-		go func(name string) {
-			d.Config.MaxFlow.Acquire(1)
-			d.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-				Name:   name,
-				Domain: domain,
-				Tag:    d.SourceType,
-				Source: d.String(),
-			})
-		}(n)
+
+		d.Bus.Publish(core.NEWNAME, &core.AmassRequest{
+			Name:   n,
+			Domain: domain,
+			Tag:    d.SourceType,
+			Source: d.String(),
+		})
 	}
 }
 

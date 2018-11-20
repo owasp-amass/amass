@@ -17,59 +17,6 @@ const (
 	SUBRE = "(([_a-zA-Z0-9]{1}|[a-zA-Z0-9]{1}[a-zA-Z0-9-]{0,61}[a-zA-Z0-9]{1})[.]{1})+"
 )
 
-// Semaphore implements a synchronization object
-// type capable of being a counting semaphore.
-type Semaphore struct {
-	c chan struct{}
-}
-
-// NewSemaphore returns a Semaphore initialized to max resource counts.
-func NewSemaphore(max int) *Semaphore {
-	sem := &Semaphore{
-		c: make(chan struct{}, max),
-	}
-
-	for i := 0; i < max; i++ {
-		sem.c <- struct{}{}
-	}
-	return sem
-}
-
-// Acquire blocks until num resource counts have been obtained.
-func (s *Semaphore) Acquire(num int) {
-	for i := 0; i < num; i++ {
-		<-s.c
-	}
-}
-
-// TryAcquire attempts to obtain num resource counts without blocking.
-// The method returns true when successful in acquiring the resource counts.
-func (s *Semaphore) TryAcquire(num int) bool {
-	var count int
-loop:
-	for i := 0; i < num; i++ {
-		select {
-		case <-s.c:
-			count++
-		default:
-			break loop
-		}
-	}
-
-	if count == num {
-		return true
-	}
-	s.Release(count)
-	return false
-}
-
-// Release causes num resource counts to be released.
-func (s *Semaphore) Release(num int) {
-	for i := 0; i < num; i++ {
-		s.c <- struct{}{}
-	}
-}
-
 type filterRequest struct {
 	String string
 	Result chan bool

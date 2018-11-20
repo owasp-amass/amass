@@ -5,10 +5,7 @@ package amass
 
 import (
 	"bufio"
-	"errors"
 	"io"
-	"io/ioutil"
-	"log"
 	"strings"
 	"time"
 
@@ -47,72 +44,17 @@ const (
 	defaultWordlistURL = "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/namelist.txt"
 )
 
-// Enumeration is the object type used to execute a DNS enumeration with Amass.
-type Enumeration struct {
-	// The channel that will receive the results
-	Output chan *core.AmassOutput
-
-	// Broadcast channel that indicates no further writes to the output channel
-	Done chan struct{}
-
-	Config *core.AmassConfig
-
-	// Pause/Resume channels for halting the enumeration
-	pause  chan struct{}
-	resume chan struct{}
-}
-
-// NewEnumeration returns an initialized Enumeration that has not been started yet.
-func NewEnumeration() *Enumeration {
-	enum := &Enumeration{
-		Output: make(chan *core.AmassOutput, 100),
-		Done:   make(chan struct{}),
-		Config: &core.AmassConfig{
-			Log:             log.New(ioutil.Discard, "", 0),
-			Ports:           []int{443},
-			Recursive:       true,
-			MinForRecursive: 1,
-			Alterations:     true,
-			Timing:          core.Normal,
-		},
-		pause:  make(chan struct{}),
-		resume: make(chan struct{}),
-	}
-	enum.Config.SetGraph(core.NewGraph())
-	return enum
-}
-
-func (e *Enumeration) checkConfig() error {
-	if e.Output == nil {
-		return errors.New("The configuration did not have an output channel")
-	}
-	if e.Config.Passive && e.Config.BruteForcing {
-		return errors.New("Brute forcing cannot be performed without DNS resolution")
-	}
-	if e.Config.Passive && e.Config.Active {
-		return errors.New("Active enumeration cannot be performed without DNS resolution")
-	}
-	if e.Config.Passive && e.Config.DataOptsWriter != nil {
-		return errors.New("Data operations cannot be saved without DNS resolution")
-	}
-	if len(e.Config.Ports) == 0 {
-		e.Config.Ports = []int{443}
+// Start begins the DNS enumeration process for the Amass Enumeration object.
+func StartEnumeration(e *core.Enumeration) error {
+	if err := e.CheckConfig(); err != nil {
+		return err
 	}
 	if e.Config.BruteForcing && len(e.Config.Wordlist) == 0 {
 		e.Config.Wordlist, _ = getDefaultWordlist()
 	}
-	e.Config.MaxFlow = utils.NewSemaphore(core.TimingToMaxFlow(e.Config.Timing))
-	return nil
-}
-
-// Start begins the DNS enumeration process for the Amass Enumeration object.
-func (e *Enumeration) Start() error {
-	if err := e.checkConfig(); err != nil {
-		return err
-	}
 
 	bus := evbus.New()
-	bus.SubscribeAsync(core.OUTPUT, e.sendOutput, true)
+	bus.SubscribeAsync(core.OUTPUT, e.SendOutput, true)
 	// Select the correct services to be used in this enumeration
 	services := []core.AmassService{
 		NewNameService(bus, e.Config),
@@ -142,9 +84,9 @@ loop:
 		select {
 		case <-e.Done:
 			break loop
-		case <-e.pause:
+		case <-e.PauseChan():
 			t.Stop()
-		case <-e.resume:
+		case <-e.ResumeChan():
 			t = time.NewTicker(3 * time.Second)
 		case <-t.C:
 			done := true
@@ -166,24 +108,10 @@ loop:
 		srv.Stop()
 	}
 	time.Sleep(time.Second)
-	bus.Unsubscribe(core.OUTPUT, e.sendOutput)
+	bus.Unsubscribe(core.OUTPUT, e.SendOutput)
 	time.Sleep(2 * time.Second)
 	close(e.Output)
 	return nil
-}
-
-// Pause temporarily halts the DNS enumeration.
-func (e *Enumeration) Pause() {
-	e.pause <- struct{}{}
-}
-
-// Resume causes a previously paused enumeration to resume execution.
-func (e *Enumeration) Resume() {
-	e.resume <- struct{}{}
-}
-
-func (e *Enumeration) sendOutput(out *core.AmassOutput) {
-	e.Output <- out
 }
 
 func getDefaultWordlist() ([]string, error) {

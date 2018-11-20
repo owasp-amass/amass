@@ -48,6 +48,9 @@ type AmassService interface {
 
 	// String description of the service
 	String() string
+
+	// Enum returns the Enumeration this service is supporting
+	Enum() *Enumeration
 }
 
 // BaseAmassService provides common mechanisms to all Amass services in the enumeration architecture.
@@ -66,6 +69,8 @@ type BaseAmassService struct {
 
 	// The specific service embedding BaseAmassService
 	service AmassService
+	// The enumeration that this service is supporting
+	enumeration *Enumeration
 }
 
 // NewBaseAmassService returns an initialized BaseAmassService object.
@@ -151,9 +156,7 @@ func (bas *BaseAmassService) OnStop() error {
 
 // SendRequest adds the request provided by the parameter to the service request channel.
 func (bas *BaseAmassService) SendRequest(req *AmassRequest) {
-	go func() {
-		bas.queue <- req
-	}()
+	bas.queue <- req
 }
 
 // RequestChan returns the channel that provides new service requests.
@@ -174,9 +177,7 @@ func (bas *BaseAmassService) IsActive() bool {
 
 // SetActive marks the service as being active at time.Now() for future checks performed by the IsActive method.
 func (bas *BaseAmassService) SetActive() {
-	go func(t time.Time) {
-		bas.setactive <- t
-	}(time.Now())
+	bas.setactive <- time.Now()
 }
 
 func (bas *BaseAmassService) processActivity() {
@@ -212,4 +213,9 @@ func (bas *BaseAmassService) Quit() <-chan struct{} {
 // String returns the name of the service.
 func (bas *BaseAmassService) String() string {
 	return bas.name
+}
+
+// Enum returns the Enumeration this service is supporting.
+func (bas *BaseAmassService) Enum() *Enumeration {
+	return bas.enumeration
 }

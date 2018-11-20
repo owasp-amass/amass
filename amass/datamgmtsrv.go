@@ -20,23 +20,21 @@ import (
 type DataManagerService struct {
 	core.BaseAmassService
 
-	Bus           evbus.Bus
-	Config        *core.AmassConfig
-	Handlers      []handlers.DataHandler
-	filter        *utils.StringFilter
-	domainFilter  *utils.StringFilter
-	maxInsertions *utils.Semaphore
+	Bus          evbus.Bus
+	Config       *core.AmassConfig
+	Handlers     []handlers.DataHandler
+	filter       *utils.StringFilter
+	domainFilter *utils.StringFilter
 }
 
 // NewDataManagerService requires the enumeration configuration and event bus as parameters.
 // The object returned is initialized, but has not yet been started.
 func NewDataManagerService(bus evbus.Bus, config *core.AmassConfig) *DataManagerService {
 	dms := &DataManagerService{
-		Bus:           bus,
-		Config:        config,
-		filter:        utils.NewStringFilter(),
-		domainFilter:  utils.NewStringFilter(),
-		maxInsertions: utils.NewSemaphore(10),
+		Bus:          bus,
+		Config:       config,
+		filter:       utils.NewStringFilter(),
+		domainFilter: utils.NewStringFilter(),
 	}
 
 	dms.BaseAmassService = *core.NewBaseAmassService("Data Manager", dms)
@@ -51,9 +49,9 @@ func (dms *DataManagerService) OnStart() error {
 	if dms.Config.DataOptsWriter != nil {
 		dms.Handlers = append(dms.Handlers, handlers.NewDataOptsHandler(dms.Config.DataOptsWriter))
 	}
+
 	dms.Bus.SubscribeAsync(core.CHECKED, dms.SendRequest, false)
 	go dms.processRequests()
-	go dms.processOutput()
 	return nil
 }
 
@@ -66,33 +64,19 @@ func (dms *DataManagerService) OnStop() error {
 }
 
 func (dms *DataManagerService) processRequests() {
+	t := time.NewTicker(time.Second)
+	defer t.Stop()
+
 	for {
 		select {
 		case <-dms.PauseChan():
 			<-dms.ResumeChan()
 		case <-dms.Quit():
 			return
-		case req := <-dms.RequestChan():
-			dms.maxInsertions.Acquire(1)
-			go dms.manageData(req)
-		}
-	}
-}
-
-func (dms *DataManagerService) processOutput() {
-	t := time.NewTicker(time.Second)
-	defer t.Stop()
-
-	for {
-		select {
-		case <-dms.Quit():
-			return
-		case <-dms.PauseChan():
-			t.Stop()
-		case <-dms.ResumeChan():
-			t = time.NewTicker(time.Second)
 		case <-t.C:
 			dms.sendOutput()
+		case req := <-dms.RequestChan():
+			dms.manageData(req)
 		}
 	}
 }
@@ -109,8 +93,6 @@ func (dms *DataManagerService) sendOutput() {
 }
 
 func (dms *DataManagerService) manageData(req *core.AmassRequest) {
-	defer dms.maxInsertions.Release(1)
-
 	req.Name = strings.ToLower(req.Name)
 	req.Domain = strings.ToLower(req.Domain)
 
@@ -143,8 +125,10 @@ func (dms *DataManagerService) manageData(req *core.AmassRequest) {
 	}
 }
 
-func (dms *DataManagerService) publishRequest(req *core.AmassRequest) {
-	dms.Config.MaxFlow.Acquire(1)
+func (dms *DataManagerService) sendNewName(req *core.AmassRequest) {
+	if core.DataSourceNameFilter.Duplicate(req.Name) {
+		return
+	}
 	dms.Bus.Publish(core.NEWNAME, req)
 }
 
@@ -162,7 +146,7 @@ func (dms *DataManagerService) insertDomain(domain string) {
 			dms.Config.Log.Printf("%s failed to insert domain: %v", handler, err)
 		}
 	}
-	go dms.publishRequest(&core.AmassRequest{
+	dms.sendNewName(&core.AmassRequest{
 		Name:   domain,
 		Domain: domain,
 		Tag:    core.DNS,
@@ -186,7 +170,7 @@ func (dms *DataManagerService) insertCNAME(req *core.AmassRequest, recidx int) {
 			dms.Config.Log.Printf("%s failed to insert CNAME: %v", handler, err)
 		}
 	}
-	go dms.publishRequest(&core.AmassRequest{
+	dms.sendNewName(&core.AmassRequest{
 		Name:   target,
 		Domain: domain,
 		Tag:    core.DNS,
@@ -251,7 +235,7 @@ func (dms *DataManagerService) insertPTR(req *core.AmassRequest, recidx int) {
 			dms.Config.Log.Printf("%s failed to insert PTR record: %v", handler, err)
 		}
 	}
-	go dms.publishRequest(&core.AmassRequest{
+	dms.sendNewName(&core.AmassRequest{
 		Name:   target,
 		Domain: domain,
 		Tag:    core.DNS,
@@ -292,7 +276,7 @@ func (dms *DataManagerService) insertNS(req *core.AmassRequest, recidx int) {
 		}
 	}
 	if target != domain {
-		go dms.publishRequest(&core.AmassRequest{
+		dms.sendNewName(&core.AmassRequest{
 			Name:   target,
 			Domain: domain,
 			Tag:    core.DNS,
@@ -318,7 +302,7 @@ func (dms *DataManagerService) insertMX(req *core.AmassRequest, recidx int) {
 		}
 	}
 	if target != domain {
-		go dms.publishRequest(&core.AmassRequest{
+		dms.sendNewName(&core.AmassRequest{
 			Name:   target,
 			Domain: domain,
 			Tag:    core.DNS,
@@ -360,7 +344,7 @@ func (dms *DataManagerService) findNamesAndAddresses(data string) {
 		if domain == "" {
 			continue
 		}
-		go dms.publishRequest(&core.AmassRequest{
+		dms.sendNewName(&core.AmassRequest{
 			Name:   name,
 			Domain: domain,
 			Tag:    core.DNS,

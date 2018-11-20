@@ -10,11 +10,11 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/OWASP/Amass/amass"
+	"github.com/OWASP/Amass/amass/core"
 )
 
 // If the user interrupts the program, print the summary information
-func signalHandler(e *amass.Enumeration) {
+func signalHandler(e *core.Enumeration) {
 	quit := make(chan os.Signal, 1)
 	pause := make(chan os.Signal, 1)
 	resume := make(chan os.Signal, 1)

@@ -27,7 +27,7 @@ import (
 )
 
 type outputParams struct {
-	Enum     *amass.Enumeration
+	Enum     *core.Enumeration
 	PrintSrc bool
 	PrintIPs bool
 	FileOut  string
@@ -168,7 +168,7 @@ func main() {
 	}
 
 	rLog, wLog := io.Pipe()
-	enum := amass.NewEnumeration()
+	enum := core.NewEnumeration()
 	enum.Config.Log = log.New(wLog, "", log.Lmicroseconds)
 	enum.Config.Wordlist = words
 	enum.Config.BruteForcing = *brute
@@ -225,7 +225,7 @@ func main() {
 	// Execute the signal handler
 	go signalHandler(enum)
 
-	err := enum.Start()
+	err := amass.StartEnumeration(enum)
 	if err != nil {
 		r.Println(err)
 		return

@@ -85,15 +85,18 @@ func (u *UKGovArchive) executeQuery(sn, domain string) {
 		return
 	}
 
-	for _, n := range names {
-		go func(name string) {
-			u.Config.MaxFlow.Acquire(1)
-			u.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-				Name:   cleanName(name),
-				Domain: domain,
-				Tag:    u.SourceType,
-				Source: u.String(),
-			})
-		}(n)
+	for _, name := range names {
+		n := cleanName(name)
+
+		if core.DataSourceNameFilter.Duplicate(n) {
+			continue
+		}
+
+		u.Bus.Publish(core.NEWNAME, &core.AmassRequest{
+			Name:   n,
+			Domain: domain,
+			Tag:    u.SourceType,
+			Source: u.String(),
+		})
 	}
 }

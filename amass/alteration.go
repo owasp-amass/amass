@@ -30,7 +30,7 @@ func NewAlterationService(bus evbus.Bus, config *core.AmassConfig) *AlterationSe
 		Config: config,
 	}
 
-	as.BaseAmassService = *core.NewBaseAmassService("Alteration", as)
+	as.BaseAmassService = *core.NewBaseAmassService("Alterations", as)
 	return as
 }
 
@@ -149,13 +149,17 @@ func (as *AlterationService) appendNumbers(req *core.AmassRequest) {
 func (as *AlterationService) sendAlteredName(name, domain string) {
 	re := as.Config.DomainRegex(domain)
 
-	if re != nil && re.MatchString(name) {
-		as.Config.MaxFlow.Acquire(1)
-		as.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-			Name:   name,
-			Domain: domain,
-			Tag:    core.ALT,
-			Source: "Alterations",
-		})
+	if re == nil || !re.MatchString(name) {
+		return
 	}
+	if core.DataSourceNameFilter.Duplicate(name) {
+		return
+	}
+
+	as.Bus.Publish(core.NEWNAME, &core.AmassRequest{
+		Name:   name,
+		Domain: domain,
+		Tag:    core.ALT,
+		Source: as.String(),
+	})
 }

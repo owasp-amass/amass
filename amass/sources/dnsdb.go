@@ -21,7 +21,6 @@ type DNSDB struct {
 	Bus        evbus.Bus
 	Config     *core.AmassConfig
 	SourceType string
-	filter     *utils.StringFilter
 }
 
 // NewDNSDB requires the enumeration configuration and event bus as parameters.
@@ -31,7 +30,6 @@ func NewDNSDB(config *core.AmassConfig, bus evbus.Bus) *DNSDB {
 		Bus:        bus,
 		Config:     config,
 		SourceType: core.SCRAPE,
-		filter:     utils.NewStringFilter(),
 	}
 
 	d.BaseAmassService = *core.NewBaseAmassService("DNSDB", d)
@@ -60,7 +58,7 @@ func (d *DNSDB) startRootDomains() {
 }
 
 func (d *DNSDB) executeQuery(domain string) {
-	if d.filter.Duplicate(domain) {
+	if core.DataSourceNameFilter.Duplicate(domain) {
 		return
 	}
 
@@ -105,18 +103,15 @@ loop:
 	}
 
 	for _, n := range names {
-		if d.filter.Duplicate(n) {
+		if core.DataSourceNameFilter.Duplicate(n) {
 			continue
 		}
-		go func(name string) {
-			d.Config.MaxFlow.Acquire(1)
-			d.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-				Name:   name,
-				Domain: domain,
-				Tag:    d.SourceType,
-				Source: d.String(),
-			})
-		}(n)
+		d.Bus.Publish(core.NEWNAME, &core.AmassRequest{
+			Name:   n,
+			Domain: domain,
+			Tag:    d.SourceType,
+			Source: d.String(),
+		})
 	}
 }
 

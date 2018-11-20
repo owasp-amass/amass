@@ -20,7 +20,6 @@ type Entrust struct {
 	Bus        evbus.Bus
 	Config     *core.AmassConfig
 	SourceType string
-	filter     *utils.StringFilter
 }
 
 // NewEntrust requires the enumeration configuration and event bus as parameters.
@@ -30,7 +29,6 @@ func NewEntrust(bus evbus.Bus, config *core.AmassConfig) *Entrust {
 		Bus:        bus,
 		Config:     config,
 		SourceType: core.CERT,
-		filter:     utils.NewStringFilter(),
 	}
 
 	e.BaseAmassService = *core.NewBaseAmassService("Entrust", e)
@@ -72,34 +70,30 @@ func (e *Entrust) executeQuery(domain string) {
 	for _, sd := range re.FindAllString(content, -1) {
 		n := cleanName(sd)
 
-		if e.filter.Duplicate(n) {
+		if core.DataSourceNameFilter.Duplicate(n) {
 			continue
 		}
-		go func(name string) {
-			e.Config.MaxFlow.Acquire(1)
-			e.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-				Name:   name,
-				Domain: domain,
-				Tag:    e.SourceType,
-				Source: e.String(),
-			})
-		}(n)
+
+		e.Bus.Publish(core.NEWNAME, &core.AmassRequest{
+			Name:   n,
+			Domain: domain,
+			Tag:    e.SourceType,
+			Source: e.String(),
+		})
 	}
 
 	for _, name := range e.extractReversedSubmatches(page) {
 		if match := re.FindString(name); match != "" {
-			if e.filter.Duplicate(match) {
+			if core.DataSourceNameFilter.Duplicate(match) {
 				continue
 			}
-			go func(name string) {
-				e.Config.MaxFlow.Acquire(1)
-				e.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-					Name:   name,
-					Domain: domain,
-					Tag:    e.SourceType,
-					Source: e.String(),
-				})
-			}(match)
+
+			e.Bus.Publish(core.NEWNAME, &core.AmassRequest{
+				Name:   match,
+				Domain: domain,
+				Tag:    e.SourceType,
+				Source: e.String(),
+			})
 		}
 	}
 }

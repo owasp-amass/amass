@@ -117,14 +117,16 @@ func (ds *DNSService) OnStop() error {
 }
 
 func (ds *DNSService) addRequest(req *core.AmassRequest) {
+	ds.SetActive()
 	if ds.filter.Duplicate(req.Name) || ds.Config.Blacklisted(req.Name) {
-		ds.Bus.Publish(core.RELEASEREQ)
+		ds.Config.MaxFlow.Release(1)
 		return
 	}
 	if !core.TrustedTag(req.Tag) && ds.GetWildcardType(req) == WildcardTypeDynamic {
-		ds.Bus.Publish(core.RELEASEREQ)
+		ds.Config.MaxFlow.Release(1)
 		return
 	}
+	core.MaxConnections.Acquire(len(InitialQueryTypes))
 	ds.SendRequest(req)
 }
 
@@ -149,9 +151,8 @@ func (ds *DNSService) processRequests() {
 }
 
 func (ds *DNSService) performRequest(req *core.AmassRequest) {
-	core.MaxConnections.Acquire(len(InitialQueryTypes))
+	defer ds.Config.MaxFlow.Release(1)
 	defer core.MaxConnections.Release(len(InitialQueryTypes))
-	ds.Bus.Publish(core.RELEASEREQ)
 
 	ds.SetActive()
 	var answers []core.DNSAnswer
@@ -182,7 +183,7 @@ func (ds *DNSService) performRequest(req *core.AmassRequest) {
 		}
 		return
 	}
-	go ds.sendResolved(req)
+	ds.sendResolved(req)
 }
 
 func (ds *DNSService) goodDNSRecords(records []core.DNSAnswer) bool {
@@ -316,11 +317,13 @@ func (ds *DNSService) reverseDNSSweep(addr string, cidr *net.IPNet) {
 			continue
 		}
 		core.MaxConnections.Acquire(1)
+		ds.Config.MaxFlow.Acquire(1)
 		go ds.reverseDNSRoutine(a)
 	}
 }
 
 func (ds *DNSService) reverseDNSRoutine(ip string) {
+	defer ds.Config.MaxFlow.Release(1)
 	defer core.MaxConnections.Release(1)
 
 	ds.SetActive()

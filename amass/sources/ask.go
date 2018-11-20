@@ -22,7 +22,6 @@ type Ask struct {
 	quantity   int
 	limit      int
 	SourceType string
-	filter     *utils.StringFilter
 }
 
 // NewAsk requires the enumeration configuration and event bus as parameters.
@@ -34,7 +33,6 @@ func NewAsk(bus evbus.Bus, config *core.AmassConfig) *Ask {
 		quantity:   10, // ask.com appears to be hardcoded at 10 results per page
 		limit:      100,
 		SourceType: core.SCRAPE,
-		filter:     utils.NewStringFilter(),
 	}
 
 	a.BaseAmassService = *core.NewBaseAmassService("Ask", a)
@@ -85,18 +83,16 @@ func (a *Ask) executeQuery(domain string) {
 			for _, sd := range re.FindAllString(page, -1) {
 				n := cleanName(sd)
 
-				if a.filter.Duplicate(n) {
+				if core.DataSourceNameFilter.Duplicate(n) {
 					continue
 				}
-				go func(name string) {
-					a.Config.MaxFlow.Acquire(1)
-					a.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-						Name:   name,
-						Domain: domain,
-						Tag:    a.SourceType,
-						Source: a.String(),
-					})
-				}(n)
+
+				a.Bus.Publish(core.NEWNAME, &core.AmassRequest{
+					Name:   n,
+					Domain: domain,
+					Tag:    a.SourceType,
+					Source: a.String(),
+				})
 			}
 		}
 	}

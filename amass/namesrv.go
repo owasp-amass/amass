@@ -4,6 +4,7 @@
 package amass
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -51,12 +52,10 @@ func NewNameService(bus evbus.Bus, config *core.AmassConfig) *NameService {
 func (ns *NameService) OnStart() error {
 	ns.BaseAmassService.OnStart()
 
-	ns.Bus.SubscribeAsync(core.NEWNAME, ns.SendRequest, false)
+	ns.Bus.SubscribeAsync(core.NEWNAME, ns.addRequest, false)
 	ns.Bus.SubscribeAsync(core.RESOLVED, ns.performCheck, false)
-	ns.Bus.SubscribeAsync(core.RELEASEREQ, ns.sendRelease, false)
 	go ns.processTimesRequests()
 	go ns.processRequests()
-	go ns.processReleases()
 	return nil
 }
 
@@ -64,20 +63,39 @@ func (ns *NameService) OnStart() error {
 func (ns *NameService) OnStop() error {
 	ns.BaseAmassService.OnStop()
 
-	ns.Bus.Unsubscribe(core.NEWNAME, ns.SendRequest)
+	ns.Bus.Unsubscribe(core.NEWNAME, ns.addRequest)
 	ns.Bus.Unsubscribe(core.RESOLVED, ns.performCheck)
-	ns.Bus.Unsubscribe(core.RELEASEREQ, ns.sendRelease)
 	return nil
+}
+
+func (ns *NameService) addRequest(req *core.AmassRequest) {
+	ns.SetActive()
+	fmt.Println(req.Name)
+	if req == nil || req.Name == "" || req.Domain == "" {
+		return
+	}
+
+	req.Name = strings.ToLower(utils.RemoveAsteriskLabel(req.Name))
+	req.Domain = strings.ToLower(req.Domain)
+	if ns.filter.Duplicate(req.Name) {
+		return
+	}
+
+	if !ns.Config.Passive {
+		ns.Config.MaxFlow.Acquire(1)
+	}
+	ns.SendRequest(req)
 }
 
 func (ns *NameService) processRequests() {
 	var perSec []int
 	var completionTimes []time.Time
-
+	last := time.Now()
 	t := time.NewTicker(time.Second)
 	defer t.Stop()
 	logTick := time.NewTicker(time.Minute)
 	defer logTick.Stop()
+
 	for {
 		select {
 		case <-ns.PauseChan():
@@ -87,8 +105,15 @@ func (ns *NameService) processRequests() {
 		case comp := <-ns.completions:
 			completionTimes = append(completionTimes, comp)
 		case <-t.C:
-			perSec = append(perSec, len(completionTimes))
+			var num int
+			for _, com := range completionTimes {
+				if com.After(last) {
+					num++
+				}
+			}
+			perSec = append(perSec, num)
 			completionTimes = []time.Time{}
+			last = time.Now()
 		case <-logTick.C:
 			num := len(perSec)
 			var total int
@@ -108,16 +133,8 @@ func (ns *NameService) sendCompletionTime(t time.Time) {
 }
 
 func (ns *NameService) performRequest(req *core.AmassRequest) {
-	if req == nil || req.Name == "" || req.Domain == "" || ns.filter.Duplicate(req.Name) {
-		// This is a bad request, and the resource needs to be released immediately
-		ns.Config.MaxFlow.Release(1)
-		return
-	}
-
 	ns.SetActive()
-	go ns.sendCompletionTime(time.Now())
-	req.Name = strings.ToLower(utils.RemoveAsteriskLabel(req.Name))
-	req.Domain = strings.ToLower(req.Domain)
+	ns.sendCompletionTime(time.Now())
 	if ns.Config.Passive {
 		ns.Bus.Publish(core.OUTPUT, &core.AmassOutput{
 			Name:   req.Name,
@@ -125,7 +142,6 @@ func (ns *NameService) performRequest(req *core.AmassRequest) {
 			Tag:    req.Tag,
 			Source: req.Source,
 		})
-		ns.sendRelease()
 		return
 	}
 	ns.Bus.Publish(core.DNSQUERY, req)
@@ -198,30 +214,6 @@ func (ns *NameService) processTimesRequests() {
 			}
 			subdomains[req.Subdomain] = times
 			req.Times <- times
-		}
-	}
-}
-
-func (ns *NameService) sendRelease() {
-	ns.releases <- struct{}{}
-}
-
-func (ns *NameService) processReleases() {
-	t := time.NewTicker(core.TimingToReleaseDelay(ns.Config.Timing))
-	defer t.Stop()
-
-	var rcount int
-	for {
-		select {
-		case <-ns.Quit():
-			return
-		case <-t.C:
-			if rcount > 0 {
-				ns.Config.MaxFlow.Release(1)
-				rcount--
-			}
-		case <-ns.releases:
-			rcount++
 		}
 	}
 }

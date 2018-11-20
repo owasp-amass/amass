@@ -35,7 +35,6 @@ type CommonCrawl struct {
 	Config     *core.AmassConfig
 	baseURL    string
 	SourceType string
-	filter     *utils.StringFilter
 }
 
 // NewCommonCrawl requires the enumeration configuration and event bus as parameters.
@@ -46,7 +45,6 @@ func NewCommonCrawl(bus evbus.Bus, config *core.AmassConfig) *CommonCrawl {
 		Config:     config,
 		baseURL:    "http://index.commoncrawl.org/",
 		SourceType: core.SCRAPE,
-		filter:     utils.NewStringFilter(),
 	}
 
 	c.BaseAmassService = *core.NewBaseAmassService("CommonCrawl", c)
@@ -96,18 +94,16 @@ func (c *CommonCrawl) executeQuery(domain string) {
 			for _, sd := range re.FindAllString(page, -1) {
 				n := cleanName(sd)
 
-				if c.filter.Duplicate(sd) {
+				if core.DataSourceNameFilter.Duplicate(sd) {
 					continue
 				}
-				go func(name string) {
-					c.Config.MaxFlow.Acquire(1)
-					c.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-						Name:   name,
-						Domain: domain,
-						Tag:    c.SourceType,
-						Source: c.String(),
-					})
-				}(n)
+
+				c.Bus.Publish(core.NEWNAME, &core.AmassRequest{
+					Name:   n,
+					Domain: domain,
+					Tag:    c.SourceType,
+					Source: c.String(),
+				})
 			}
 		}
 	}

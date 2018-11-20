@@ -18,7 +18,6 @@ type FindSubdomains struct {
 	Bus        evbus.Bus
 	Config     *core.AmassConfig
 	SourceType string
-	filter     *utils.StringFilter
 }
 
 // NewFindSubdomains requires the enumeration configuration and event bus as parameters.
@@ -28,7 +27,6 @@ func NewFindSubdomains(bus evbus.Bus, config *core.AmassConfig) *FindSubdomains 
 		Bus:        bus,
 		Config:     config,
 		SourceType: core.SCRAPE,
-		filter:     utils.NewStringFilter(),
 	}
 
 	f.BaseAmassService = *core.NewBaseAmassService("FindSubdomains", f)
@@ -69,18 +67,16 @@ func (f *FindSubdomains) executeQuery(domain string) {
 	for _, sd := range re.FindAllString(page, -1) {
 		n := cleanName(sd)
 
-		if f.filter.Duplicate(n) {
+		if core.DataSourceNameFilter.Duplicate(n) {
 			continue
 		}
-		go func(name string) {
-			f.Config.MaxFlow.Acquire(1)
-			f.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-				Name:   name,
-				Domain: domain,
-				Tag:    f.SourceType,
-				Source: f.String(),
-			})
-		}(n)
+
+		f.Bus.Publish(core.NEWNAME, &core.AmassRequest{
+			Name:   n,
+			Domain: domain,
+			Tag:    f.SourceType,
+			Source: f.String(),
+		})
 	}
 }
 

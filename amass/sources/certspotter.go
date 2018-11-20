@@ -18,7 +18,6 @@ type CertSpotter struct {
 	Bus        evbus.Bus
 	Config     *core.AmassConfig
 	SourceType string
-	filter     *utils.StringFilter
 }
 
 // NewCertSpotter requires the enumeration configuration and event bus as parameters.
@@ -28,7 +27,6 @@ func NewCertSpotter(bus evbus.Bus, config *core.AmassConfig) *CertSpotter {
 		Bus:        bus,
 		Config:     config,
 		SourceType: core.CERT,
-		filter:     utils.NewStringFilter(),
 	}
 
 	c.BaseAmassService = *core.NewBaseAmassService("CertSpotter", c)
@@ -69,18 +67,16 @@ func (c *CertSpotter) executeQuery(domain string) {
 	for _, sd := range re.FindAllString(page, -1) {
 		n := cleanName(sd)
 
-		if c.filter.Duplicate(n) {
+		if core.DataSourceNameFilter.Duplicate(n) {
 			continue
 		}
-		go func(name string) {
-			c.Config.MaxFlow.Acquire(1)
-			c.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-				Name:   name,
-				Domain: domain,
-				Tag:    c.SourceType,
-				Source: c.String(),
-			})
-		}(n)
+
+		c.Bus.Publish(core.NEWNAME, &core.AmassRequest{
+			Name:   n,
+			Domain: domain,
+			Tag:    c.SourceType,
+			Source: c.String(),
+		})
 	}
 }
 

@@ -22,7 +22,6 @@ type Yahoo struct {
 	quantity   int
 	limit      int
 	SourceType string
-	filter     *utils.StringFilter
 }
 
 // NewYahoo requires the enumeration configuration and event bus as parameters.
@@ -34,7 +33,6 @@ func NewYahoo(bus evbus.Bus, config *core.AmassConfig) *Yahoo {
 		quantity:   10,
 		limit:      100,
 		SourceType: core.SCRAPE,
-		filter:     utils.NewStringFilter(),
 	}
 
 	y.BaseAmassService = *core.NewBaseAmassService("Yahoo", y)
@@ -79,18 +77,16 @@ func (y *Yahoo) executeQuery(domain string) {
 			for _, sd := range re.FindAllString(page, -1) {
 				n := cleanName(sd)
 
-				if y.filter.Duplicate(n) {
+				if core.DataSourceNameFilter.Duplicate(n) {
 					continue
 				}
-				go func(name string) {
-					y.Config.MaxFlow.Acquire(1)
-					y.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-						Name:   name,
-						Domain: domain,
-						Tag:    y.SourceType,
-						Source: y.String(),
-					})
-				}(n)
+
+				y.Bus.Publish(core.NEWNAME, &core.AmassRequest{
+					Name:   n,
+					Domain: domain,
+					Tag:    y.SourceType,
+					Source: y.String(),
+				})
 			}
 		}
 	}

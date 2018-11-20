@@ -18,7 +18,6 @@ type VirusTotal struct {
 	Bus        evbus.Bus
 	Config     *core.AmassConfig
 	SourceType string
-	filter     *utils.StringFilter
 }
 
 // NewVirusTotal requires the enumeration configuration and event bus as parameters.
@@ -28,7 +27,6 @@ func NewVirusTotal(bus evbus.Bus, config *core.AmassConfig) *VirusTotal {
 		Bus:        bus,
 		Config:     config,
 		SourceType: core.SCRAPE,
-		filter:     utils.NewStringFilter(),
 	}
 
 	v.BaseAmassService = *core.NewBaseAmassService("VirusTotal", v)
@@ -69,18 +67,16 @@ func (v *VirusTotal) executeQuery(domain string) {
 	for _, sd := range re.FindAllString(page, -1) {
 		n := cleanName(sd)
 
-		if v.filter.Duplicate(n) {
+		if core.DataSourceNameFilter.Duplicate(n) {
 			continue
 		}
-		go func(name string) {
-			v.Config.MaxFlow.Acquire(1)
-			v.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-				Name:   name,
-				Domain: domain,
-				Tag:    v.SourceType,
-				Source: v.String(),
-			})
-		}(n)
+
+		v.Bus.Publish(core.NEWNAME, &core.AmassRequest{
+			Name:   n,
+			Domain: domain,
+			Tag:    v.SourceType,
+			Source: v.String(),
+		})
 	}
 }
 

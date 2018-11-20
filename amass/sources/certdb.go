@@ -19,7 +19,6 @@ type CertDB struct {
 	Bus        evbus.Bus
 	Config     *core.AmassConfig
 	SourceType string
-	filter     *utils.StringFilter
 }
 
 // NewCertDB requires the enumeration configuration and event bus as parameters.
@@ -29,7 +28,6 @@ func NewCertDB(bus evbus.Bus, config *core.AmassConfig) *CertDB {
 		Bus:        bus,
 		Config:     config,
 		SourceType: core.CERT,
-		filter:     utils.NewStringFilter(),
 	}
 
 	c.BaseAmassService = *core.NewBaseAmassService("CertDB", c)
@@ -75,18 +73,16 @@ func (c *CertDB) executeQuery(domain string) {
 	re := c.Config.DomainRegex(domain)
 	for _, name := range names {
 		n := re.FindString(name)
-		if n == "" || c.filter.Duplicate(n) {
+		if n == "" || core.DataSourceNameFilter.Duplicate(n) {
 			continue
 		}
-		go func(name string) {
-			c.Config.MaxFlow.Acquire(1)
-			c.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-				Name:   name,
-				Domain: domain,
-				Tag:    c.SourceType,
-				Source: c.String(),
-			})
-		}(n)
+
+		c.Bus.Publish(core.NEWNAME, &core.AmassRequest{
+			Name:   n,
+			Domain: domain,
+			Tag:    c.SourceType,
+			Source: c.String(),
+		})
 	}
 }
 

@@ -30,7 +30,6 @@ type Crtsh struct {
 	Bus        evbus.Bus
 	Config     *core.AmassConfig
 	SourceType string
-	filter     *utils.StringFilter
 }
 
 // NewCrtsh requires the enumeration configuration and event bus as parameters.
@@ -40,7 +39,6 @@ func NewCrtsh(bus evbus.Bus, config *core.AmassConfig) *Crtsh {
 		Bus:        bus,
 		Config:     config,
 		SourceType: core.CERT,
-		filter:     utils.NewStringFilter(),
 	}
 
 	c.BaseAmassService = *core.NewBaseAmassService("Crtsh", c)
@@ -85,19 +83,16 @@ func (c *Crtsh) executeQuery(domain string) {
 		} else if err != nil {
 			c.Config.Log.Printf("%s: %s: %v", c.String(), url, err)
 			continue
-		} else if c.filter.Duplicate(line.Name) {
+		} else if core.DataSourceNameFilter.Duplicate(line.Name) {
 			continue
 		}
 
-		go func(name string) {
-			c.Config.MaxFlow.Acquire(1)
-			c.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-				Name:   name,
-				Domain: domain,
-				Tag:    c.SourceType,
-				Source: c.String(),
-			})
-		}(line.Name)
+		c.Bus.Publish(core.NEWNAME, &core.AmassRequest{
+			Name:   line.Name,
+			Domain: domain,
+			Tag:    c.SourceType,
+			Source: c.String(),
+		})
 	}
 }
 

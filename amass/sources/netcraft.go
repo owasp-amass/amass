@@ -18,7 +18,6 @@ type Netcraft struct {
 	Bus        evbus.Bus
 	Config     *core.AmassConfig
 	SourceType string
-	filter     *utils.StringFilter
 }
 
 // Netcraft requires the enumeration configuration and event bus as parameters.
@@ -28,7 +27,6 @@ func NewNetcraft(bus evbus.Bus, config *core.AmassConfig) *Netcraft {
 		Bus:        bus,
 		Config:     config,
 		SourceType: core.SCRAPE,
-		filter:     utils.NewStringFilter(),
 	}
 
 	n.BaseAmassService = *core.NewBaseAmassService("Netcraft", n)
@@ -69,18 +67,16 @@ func (n *Netcraft) executeQuery(domain string) {
 	for _, sd := range re.FindAllString(page, -1) {
 		name := cleanName(sd)
 
-		if n.filter.Duplicate(name) {
+		if core.DataSourceNameFilter.Duplicate(name) {
 			continue
 		}
-		go func(name string) {
-			n.Config.MaxFlow.Acquire(1)
-			n.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-				Name:   name,
-				Domain: domain,
-				Tag:    n.SourceType,
-				Source: n.String(),
-			})
-		}(name)
+
+		n.Bus.Publish(core.NEWNAME, &core.AmassRequest{
+			Name:   name,
+			Domain: domain,
+			Tag:    n.SourceType,
+			Source: n.String(),
+		})
 	}
 }
 

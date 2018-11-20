@@ -188,18 +188,19 @@ import(
 )
 
 func main() {
-    rand.Seed(time.Now().UTC().UnixNano())
+    // Seed the default pseudo-random number generator
+	rand.Seed(time.Now().UTC().UnixNano())
 
-    enum := amass.NewEnumeration()
-
-    go func() {
-        for result := range enum.Output {
-            fmt.Println(result.Name)
-        }
-    }()
-
-    enum.Config.AddDomain("example.com")
-    enum.Start()
+	enum := core.NewEnumeration()
+	go func() {
+		for result := range enum.Output {
+			fmt.Println(result.Name)
+		}
+	}()
+	// Setup the most basic amass configuration
+	enum.Config.AddDomain("example.com")
+	// Begin the enumeration process
+	amass.StartEnumeration(enum)
 }
 ```
 
@@ -240,10 +241,12 @@ Jeff Foley [![Follow on Twitter](https://img.shields.io/twitter/follow/jeff_fole
 This project improves thanks to all the people who contribute.
 
 [![Follow on Twitter](https://img.shields.io/twitter/follow/emtunc.svg?logo=twitter)](https://twitter.com/emtunc) 
+[![Follow on Twitter](https://img.shields.io/twitter/follow/ylcodes.svg?logo=twitter)](https://twitter.com/ylcodes) 
 
 
 ## Mentions
 
+ - [Subdomains Enumeration Cheat Sheet](https://pentester.land/cheatsheets/2018/11/14/subdomains-enumeration-cheatsheet.html)
  - [Getting started in Bug Bounty](https://medium.com/@ehsahil/getting-started-in-bug-bounty-7052da28445a)
  - [Source code disclosure via exposed .git folder](https://pentester.land/tutorials/2018/10/25/source-code-disclosure-via-exposed-git-folder.html)
  - [Amass, the best application to search for subdomains](https://www.h1rd.com/hacking/amass-para-buscar-subdominios)

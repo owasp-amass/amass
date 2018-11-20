@@ -18,7 +18,6 @@ type ThreatCrowd struct {
 	Bus        evbus.Bus
 	Config     *core.AmassConfig
 	SourceType string
-	filter     *utils.StringFilter
 }
 
 // NewThreatCrowd requires the enumeration configuration and event bus as parameters.
@@ -28,7 +27,6 @@ func NewThreatCrowd(bus evbus.Bus, config *core.AmassConfig) *ThreatCrowd {
 		Bus:        bus,
 		Config:     config,
 		SourceType: core.SCRAPE,
-		filter:     utils.NewStringFilter(),
 	}
 
 	t.BaseAmassService = *core.NewBaseAmassService("ThreatCrowd", t)
@@ -69,18 +67,16 @@ func (t *ThreatCrowd) executeQuery(domain string) {
 	for _, sd := range re.FindAllString(page, -1) {
 		n := cleanName(sd)
 
-		if t.filter.Duplicate(n) {
+		if core.DataSourceNameFilter.Duplicate(n) {
 			continue
 		}
-		go func(name string) {
-			t.Config.MaxFlow.Acquire(1)
-			t.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-				Name:   name,
-				Domain: domain,
-				Tag:    t.SourceType,
-				Source: t.String(),
-			})
-		}(n)
+
+		t.Bus.Publish(core.NEWNAME, &core.AmassRequest{
+			Name:   n,
+			Domain: domain,
+			Tag:    t.SourceType,
+			Source: t.String(),
+		})
 	}
 }
 

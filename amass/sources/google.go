@@ -22,7 +22,6 @@ type Google struct {
 	quantity   int
 	limit      int
 	SourceType string
-	filter     *utils.StringFilter
 }
 
 // NewGoogle requires the enumeration configuration and event bus as parameters.
@@ -34,7 +33,6 @@ func NewGoogle(bus evbus.Bus, config *core.AmassConfig) *Google {
 		quantity:   10,
 		limit:      100,
 		SourceType: core.SCRAPE,
-		filter:     utils.NewStringFilter(),
 	}
 
 	g.BaseAmassService = *core.NewBaseAmassService("Google", g)
@@ -85,18 +83,16 @@ func (g *Google) executeQuery(domain string) {
 			for _, sd := range re.FindAllString(page, -1) {
 				n := cleanName(sd)
 
-				if g.filter.Duplicate(n) {
+				if core.DataSourceNameFilter.Duplicate(n) {
 					continue
 				}
-				go func(name string) {
-					g.Config.MaxFlow.Acquire(1)
-					g.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-						Name:   name,
-						Domain: domain,
-						Tag:    g.SourceType,
-						Source: g.String(),
-					})
-				}(n)
+
+				g.Bus.Publish(core.NEWNAME, &core.AmassRequest{
+					Name:   n,
+					Domain: domain,
+					Tag:    g.SourceType,
+					Source: g.String(),
+				})
 			}
 		}
 	}

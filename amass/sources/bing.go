@@ -22,7 +22,6 @@ type Bing struct {
 	quantity   int
 	limit      int
 	SourceType string
-	filter     *utils.StringFilter
 }
 
 // NewBing requires the enumeration configuration and event bus as parameters.
@@ -34,7 +33,6 @@ func NewBing(config *core.AmassConfig, bus evbus.Bus) *Bing {
 		quantity:   20,
 		limit:      200,
 		SourceType: core.SCRAPE,
-		filter:     utils.NewStringFilter(),
 	}
 
 	b.BaseAmassService = *core.NewBaseAmassService("Bing", b)
@@ -85,18 +83,16 @@ func (b *Bing) executeQuery(domain string) {
 			for _, sd := range re.FindAllString(page, -1) {
 				n := cleanName(sd)
 
-				if b.filter.Duplicate(n) {
+				if core.DataSourceNameFilter.Duplicate(n) {
 					continue
 				}
-				go func(name string) {
-					b.Config.MaxFlow.Acquire(1)
-					b.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-						Name:   name,
-						Domain: domain,
-						Tag:    b.SourceType,
-						Source: b.String(),
-					})
-				}(n)
+
+				b.Bus.Publish(core.NEWNAME, &core.AmassRequest{
+					Name:   n,
+					Domain: domain,
+					Tag:    b.SourceType,
+					Source: b.String(),
+				})
 			}
 		}
 	}

@@ -4,6 +4,7 @@
 package amass
 
 import (
+	"strings"
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
@@ -64,7 +65,7 @@ func (bfs *BruteForceService) startRootDomains() {
 
 func (bfs *BruteForceService) newSubdomain(req *core.AmassRequest, times int) {
 	if times == bfs.Config.MinForRecursive {
-		go bfs.performBruteForcing(req.Name, req.Domain)
+		bfs.performBruteForcing(req.Name, req.Domain)
 	}
 }
 
@@ -78,9 +79,13 @@ func (bfs *BruteForceService) performBruteForcing(subdomain, root string) {
 		case <-bfs.Quit():
 			return
 		default:
-			bfs.Config.MaxFlow.Acquire(1)
+			name := strings.ToLower(word + "." + subdomain)
+
+			if core.DataSourceNameFilter.Duplicate(name) {
+				continue
+			}
 			bfs.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-				Name:   word + "." + subdomain,
+				Name:   name,
 				Domain: root,
 				Tag:    core.BRUTE,
 				Source: bfs.String(),

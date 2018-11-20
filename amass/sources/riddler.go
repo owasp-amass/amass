@@ -18,7 +18,6 @@ type Riddler struct {
 	Bus        evbus.Bus
 	Config     *core.AmassConfig
 	SourceType string
-	filter     *utils.StringFilter
 }
 
 // NewRiddler requires the enumeration configuration and event bus as parameters.
@@ -28,7 +27,6 @@ func NewRiddler(bus evbus.Bus, config *core.AmassConfig) *Riddler {
 		Bus:        bus,
 		Config:     config,
 		SourceType: core.SCRAPE,
-		filter:     utils.NewStringFilter(),
 	}
 
 	r.BaseAmassService = *core.NewBaseAmassService("Riddler", r)
@@ -69,18 +67,16 @@ func (r *Riddler) executeQuery(domain string) {
 	for _, sd := range re.FindAllString(page, -1) {
 		n := cleanName(sd)
 
-		if r.filter.Duplicate(n) {
+		if core.DataSourceNameFilter.Duplicate(n) {
 			continue
 		}
-		go func(name string) {
-			r.Config.MaxFlow.Acquire(1)
-			r.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-				Name:   name,
-				Domain: domain,
-				Tag:    r.SourceType,
-				Source: r.String(),
-			})
-		}(n)
+
+		r.Bus.Publish(core.NEWNAME, &core.AmassRequest{
+			Name:   n,
+			Domain: domain,
+			Tag:    r.SourceType,
+			Source: r.String(),
+		})
 	}
 }
 

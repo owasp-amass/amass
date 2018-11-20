@@ -21,7 +21,6 @@ type Robtex struct {
 	Bus        evbus.Bus
 	Config     *core.AmassConfig
 	SourceType string
-	filter     *utils.StringFilter
 }
 
 type robtexJSON struct {
@@ -37,7 +36,6 @@ func NewRobtex(bus evbus.Bus, config *core.AmassConfig) *Robtex {
 		Bus:        bus,
 		Config:     config,
 		SourceType: core.API,
-		filter:     utils.NewStringFilter(),
 	}
 
 	r.BaseAmassService = *core.NewBaseAmassService("Robtex", r)
@@ -117,18 +115,16 @@ loop:
 	for _, sd := range re.FindAllString(list, -1) {
 		n := cleanName(sd)
 
-		if r.filter.Duplicate(n) {
+		if core.DataSourceNameFilter.Duplicate(n) {
 			continue
 		}
-		go func(name string) {
-			r.Config.MaxFlow.Acquire(1)
-			r.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-				Name:   name,
-				Domain: domain,
-				Tag:    r.SourceType,
-				Source: r.String(),
-			})
-		}(n)
+
+		r.Bus.Publish(core.NEWNAME, &core.AmassRequest{
+			Name:   n,
+			Domain: domain,
+			Tag:    r.SourceType,
+			Source: r.String(),
+		})
 	}
 }
 
