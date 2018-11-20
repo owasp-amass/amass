@@ -6,12 +6,14 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"compress/gzip"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"log"
 	"math/rand"
+	"net/http"
 	"os"
 	"path"
 	"regexp"
@@ -236,16 +238,43 @@ func main() {
 
 func getLinesFromFile(path string) []string {
 	var lines []string
+	var reader io.Reader
 
 	// Open the file
 	file, err := os.Open(path)
 	if err != nil {
-		fmt.Printf("Error opening the file %s: %v\n", path, err)
+		r.Fprintf(os.Stderr, "Error opening the file %s: %v\n", path, err)
 		return lines
 	}
 	defer file.Close()
+	reader = file
+
+	// We need to determine if this is a gzipped file or a plain text file, so we
+	// first read the first 512 bytes to pass them down to http.DetectContentType
+	// for mime detection. The file is rewinded before passing it along to the
+	// next reader
+	head := make([]byte, 512)
+	if _, err = file.Read(head); err != nil {
+		r.Fprintf(os.Stderr, "Error reading the first 512 bytes from %s: %s\n", path, err)
+		return lines
+	}
+	if _, err = file.Seek(0, 0); err != nil {
+		r.Fprintf(os.Stderr, "Error rewinding the file %s: %s\n", path, err)
+		return lines
+	}
+
+	// Read the file as gzip if it's actually compressed
+	if mt := http.DetectContentType(head); mt == "application/gzip" || mt == "application/x-gzip" {
+		gzReader, err := gzip.NewReader(file)
+		if err != nil {
+			r.Fprintf(os.Stderr, "Error gz-reading the file %s: %v\n", path, err)
+			return lines
+		}
+		defer gzReader.Close()
+		reader = gzReader
+	}
 	// Get each line from the file
-	scanner := bufio.NewScanner(file)
+	scanner := bufio.NewScanner(reader)
 	for scanner.Scan() {
 		// Get the next line
 		text := scanner.Text()
