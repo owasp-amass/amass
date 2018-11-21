@@ -57,20 +57,20 @@ func StartEnumeration(e *core.Enumeration) error {
 	bus.SubscribeAsync(core.OUTPUT, e.SendOutput, true)
 	// Select the correct services to be used in this enumeration
 	services := []core.AmassService{
-		NewNameService(bus, e.Config),
-		NewAddressService(bus, e.Config),
+		NewNameService(e, bus, e.Config),
+		NewAddressService(e, bus, e.Config),
 	}
 	if !e.Config.Passive {
 		services = append(services,
-			NewDataManagerService(bus, e.Config),
-			dnssrv.NewDNSService(bus, e.Config),
-			NewAlterationService(bus, e.Config),
-			NewBruteForceService(bus, e.Config),
-			NewActiveCertService(bus, e.Config),
+			NewDataManagerService(e, bus, e.Config),
+			dnssrv.NewDNSService(e, bus, e.Config),
+			NewAlterationService(e, bus, e.Config),
+			NewBruteForceService(e, bus, e.Config),
+			NewActiveCertService(e, bus, e.Config),
 		)
 	}
 	// Grab all the data sources
-	services = append(services, sources.GetAllSources(bus, e.Config)...)
+	services = append(services, sources.GetAllSources(e, bus, e.Config)...)
 
 	for _, srv := range services {
 		if err := srv.Start(); err != nil {

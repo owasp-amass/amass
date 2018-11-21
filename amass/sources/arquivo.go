@@ -22,7 +22,7 @@ type Arquivo struct {
 
 // NewArquivo requires the enumeration configuration and event bus as parameters.
 // The object returned is initialized, but has not yet been started.
-func NewArquivo(bus evbus.Bus, config *core.AmassConfig) *Arquivo {
+func NewArquivo(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *Arquivo {
 	a := &Arquivo{
 		Bus:        bus,
 		Config:     config,
@@ -31,7 +31,7 @@ func NewArquivo(bus evbus.Bus, config *core.AmassConfig) *Arquivo {
 		filter:     utils.NewStringFilter(),
 	}
 
-	a.BaseAmassService = *core.NewBaseAmassService("Arquivo", a)
+	a.BaseAmassService = *core.NewBaseAmassService(e, "Arquivo", a)
 	return a
 }
 
@@ -86,17 +86,16 @@ func (a *Arquivo) executeQuery(sn, domain string) {
 	}
 
 	for _, name := range names {
-		n := cleanName(name)
-
-		if core.DataSourceNameFilter.Duplicate(n) {
-			continue
-		}
-
-		a.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-			Name:   n,
+		req := &core.AmassRequest{
+			Name:   cleanName(name),
 			Domain: domain,
 			Tag:    a.SourceType,
 			Source: a.String(),
-		})
+		}
+
+		if a.Enum().DupDataSourceName(req) {
+			continue
+		}
+		a.Bus.Publish(core.NEWNAME, req)
 	}
 }

@@ -24,13 +24,13 @@ type AlterationService struct {
 
 // NewAlterationService requires the enumeration configuration and event bus as parameters.
 // The object returned is initialized, but has not yet been started.
-func NewAlterationService(bus evbus.Bus, config *core.AmassConfig) *AlterationService {
+func NewAlterationService(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *AlterationService {
 	as := &AlterationService{
 		Bus:    bus,
 		Config: config,
 	}
 
-	as.BaseAmassService = *core.NewBaseAmassService("Alterations", as)
+	as.BaseAmassService = *core.NewBaseAmassService(e, "Alterations", as)
 	return as
 }
 
@@ -148,18 +148,19 @@ func (as *AlterationService) appendNumbers(req *core.AmassRequest) {
 // sendAlteredName checks that the provided name is valid and sends it along to the SubdomainService.
 func (as *AlterationService) sendAlteredName(name, domain string) {
 	re := as.Config.DomainRegex(domain)
-
 	if re == nil || !re.MatchString(name) {
 		return
 	}
-	if core.DataSourceNameFilter.Duplicate(name) {
-		return
-	}
 
-	as.Bus.Publish(core.NEWNAME, &core.AmassRequest{
+	req := &core.AmassRequest{
 		Name:   name,
 		Domain: domain,
 		Tag:    core.ALT,
 		Source: as.String(),
-	})
+	}
+
+	if as.Enum().DupDataSourceName(req) {
+		return
+	}
+	as.Bus.Publish(core.NEWNAME, req)
 }

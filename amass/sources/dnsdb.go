@@ -25,14 +25,14 @@ type DNSDB struct {
 
 // NewDNSDB requires the enumeration configuration and event bus as parameters.
 // The object returned is initialized, but has not yet been started.
-func NewDNSDB(config *core.AmassConfig, bus evbus.Bus) *DNSDB {
+func NewDNSDB(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *DNSDB {
 	d := &DNSDB{
 		Bus:        bus,
 		Config:     config,
 		SourceType: core.SCRAPE,
 	}
 
-	d.BaseAmassService = *core.NewBaseAmassService("DNSDB", d)
+	d.BaseAmassService = *core.NewBaseAmassService(e, "DNSDB", d)
 	return d
 }
 
@@ -58,10 +58,6 @@ func (d *DNSDB) startRootDomains() {
 }
 
 func (d *DNSDB) executeQuery(domain string) {
-	if core.DataSourceNameFilter.Duplicate(domain) {
-		return
-	}
-
 	url := d.getURL(domain, domain)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
@@ -103,15 +99,17 @@ loop:
 	}
 
 	for _, n := range names {
-		if core.DataSourceNameFilter.Duplicate(n) {
-			continue
-		}
-		d.Bus.Publish(core.NEWNAME, &core.AmassRequest{
+		req := &core.AmassRequest{
 			Name:   n,
 			Domain: domain,
 			Tag:    d.SourceType,
 			Source: d.String(),
-		})
+		}
+
+		if d.Enum().DupDataSourceName(req) {
+			continue
+		}
+		d.Bus.Publish(core.NEWNAME, req)
 	}
 }
 

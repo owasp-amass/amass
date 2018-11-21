@@ -34,14 +34,14 @@ type Crtsh struct {
 
 // NewCrtsh requires the enumeration configuration and event bus as parameters.
 // The object returned is initialized, but has not yet been started.
-func NewCrtsh(bus evbus.Bus, config *core.AmassConfig) *Crtsh {
+func NewCrtsh(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *Crtsh {
 	c := &Crtsh{
 		Bus:        bus,
 		Config:     config,
 		SourceType: core.CERT,
 	}
 
-	c.BaseAmassService = *core.NewBaseAmassService("Crtsh", c)
+	c.BaseAmassService = *core.NewBaseAmassService(e, "Crtsh", c)
 	return c
 }
 
@@ -83,16 +83,19 @@ func (c *Crtsh) executeQuery(domain string) {
 		} else if err != nil {
 			c.Config.Log.Printf("%s: %s: %v", c.String(), url, err)
 			continue
-		} else if core.DataSourceNameFilter.Duplicate(line.Name) {
-			continue
 		}
 
-		c.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-			Name:   line.Name,
+		req := &core.AmassRequest{
+			Name:   cleanName(line.Name),
 			Domain: domain,
 			Tag:    c.SourceType,
 			Source: c.String(),
-		})
+		}
+
+		if c.Enum().DupDataSourceName(req) {
+			continue
+		}
+		c.Bus.Publish(core.NEWNAME, req)
 	}
 }
 

@@ -22,14 +22,14 @@ type ThreatCrowd struct {
 
 // NewThreatCrowd requires the enumeration configuration and event bus as parameters.
 // The object returned is initialized, but has not yet been started.
-func NewThreatCrowd(bus evbus.Bus, config *core.AmassConfig) *ThreatCrowd {
+func NewThreatCrowd(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *ThreatCrowd {
 	t := &ThreatCrowd{
 		Bus:        bus,
 		Config:     config,
 		SourceType: core.SCRAPE,
 	}
 
-	t.BaseAmassService = *core.NewBaseAmassService("ThreatCrowd", t)
+	t.BaseAmassService = *core.NewBaseAmassService(e, "ThreatCrowd", t)
 	return t
 }
 
@@ -65,18 +65,17 @@ func (t *ThreatCrowd) executeQuery(domain string) {
 	t.SetActive()
 	re := t.Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
-		n := cleanName(sd)
-
-		if core.DataSourceNameFilter.Duplicate(n) {
-			continue
-		}
-
-		t.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-			Name:   n,
+		req := &core.AmassRequest{
+			Name:   cleanName(sd),
 			Domain: domain,
 			Tag:    t.SourceType,
 			Source: t.String(),
-		})
+		}
+
+		if t.Enum().DupDataSourceName(req) {
+			continue
+		}
+		t.Bus.Publish(core.NEWNAME, req)
 	}
 }
 

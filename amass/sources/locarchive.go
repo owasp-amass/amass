@@ -22,7 +22,7 @@ type LoCArchive struct {
 
 // NewLoCArchive requires the enumeration configuration and event bus as parameters.
 // The object returned is initialized, but has not yet been started.
-func NewLoCArchive(bus evbus.Bus, config *core.AmassConfig) *LoCArchive {
+func NewLoCArchive(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *LoCArchive {
 	l := &LoCArchive{
 		Bus:        bus,
 		Config:     config,
@@ -31,7 +31,7 @@ func NewLoCArchive(bus evbus.Bus, config *core.AmassConfig) *LoCArchive {
 		filter:     utils.NewStringFilter(),
 	}
 
-	l.BaseAmassService = *core.NewBaseAmassService("LoCArchive", l)
+	l.BaseAmassService = *core.NewBaseAmassService(e, "LoCArchive", l)
 	return l
 }
 
@@ -86,17 +86,16 @@ func (l *LoCArchive) executeQuery(sn, domain string) {
 	}
 
 	for _, name := range names {
-		n := cleanName(name)
-
-		if core.DataSourceNameFilter.Duplicate(n) {
-			continue
-		}
-
-		l.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-			Name:   n,
+		req := &core.AmassRequest{
+			Name:   cleanName(name),
 			Domain: domain,
 			Tag:    l.SourceType,
 			Source: l.String(),
-		})
+		}
+
+		if l.Enum().DupDataSourceName(req) {
+			continue
+		}
+		l.Bus.Publish(core.NEWNAME, req)
 	}
 }

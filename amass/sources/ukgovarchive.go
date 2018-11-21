@@ -22,7 +22,7 @@ type UKGovArchive struct {
 
 // NewUKGovArchive requires the enumeration configuration and event bus as parameters.
 // The object returned is initialized, but has not yet been started.
-func NewUKGovArchive(bus evbus.Bus, config *core.AmassConfig) *UKGovArchive {
+func NewUKGovArchive(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *UKGovArchive {
 	u := &UKGovArchive{
 		Bus:        bus,
 		Config:     config,
@@ -31,7 +31,7 @@ func NewUKGovArchive(bus evbus.Bus, config *core.AmassConfig) *UKGovArchive {
 		filter:     utils.NewStringFilter(),
 	}
 
-	u.BaseAmassService = *core.NewBaseAmassService("UKGovArchive", u)
+	u.BaseAmassService = *core.NewBaseAmassService(e, "UKGovArchive", u)
 	return u
 }
 
@@ -86,17 +86,16 @@ func (u *UKGovArchive) executeQuery(sn, domain string) {
 	}
 
 	for _, name := range names {
-		n := cleanName(name)
-
-		if core.DataSourceNameFilter.Duplicate(n) {
-			continue
-		}
-
-		u.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-			Name:   n,
+		req := &core.AmassRequest{
+			Name:   cleanName(name),
 			Domain: domain,
 			Tag:    u.SourceType,
 			Source: u.String(),
-		})
+		}
+
+		if u.Enum().DupDataSourceName(req) {
+			continue
+		}
+		u.Bus.Publish(core.NEWNAME, req)
 	}
 }

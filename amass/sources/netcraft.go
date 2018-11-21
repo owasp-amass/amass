@@ -22,14 +22,14 @@ type Netcraft struct {
 
 // Netcraft requires the enumeration configuration and event bus as parameters.
 // The object returned is initialized, but has not yet been started.
-func NewNetcraft(bus evbus.Bus, config *core.AmassConfig) *Netcraft {
+func NewNetcraft(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *Netcraft {
 	n := &Netcraft{
 		Bus:        bus,
 		Config:     config,
 		SourceType: core.SCRAPE,
 	}
 
-	n.BaseAmassService = *core.NewBaseAmassService("Netcraft", n)
+	n.BaseAmassService = *core.NewBaseAmassService(e, "Netcraft", n)
 	return n
 }
 
@@ -65,18 +65,17 @@ func (n *Netcraft) executeQuery(domain string) {
 	n.SetActive()
 	re := n.Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
-		name := cleanName(sd)
-
-		if core.DataSourceNameFilter.Duplicate(name) {
-			continue
-		}
-
-		n.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-			Name:   name,
+		req := &core.AmassRequest{
+			Name:   cleanName(sd),
 			Domain: domain,
 			Tag:    n.SourceType,
 			Source: n.String(),
-		})
+		}
+
+		if n.Enum().DupDataSourceName(req) {
+			continue
+		}
+		n.Bus.Publish(core.NEWNAME, req)
 	}
 }
 

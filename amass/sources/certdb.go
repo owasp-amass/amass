@@ -23,14 +23,14 @@ type CertDB struct {
 
 // NewCertDB requires the enumeration configuration and event bus as parameters.
 // The object returned is initialized, but has not yet been started.
-func NewCertDB(bus evbus.Bus, config *core.AmassConfig) *CertDB {
+func NewCertDB(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *CertDB {
 	c := &CertDB{
 		Bus:        bus,
 		Config:     config,
 		SourceType: core.CERT,
 	}
 
-	c.BaseAmassService = *core.NewBaseAmassService("CertDB", c)
+	c.BaseAmassService = *core.NewBaseAmassService(e, "CertDB", c)
 	return c
 }
 
@@ -73,16 +73,21 @@ func (c *CertDB) executeQuery(domain string) {
 	re := c.Config.DomainRegex(domain)
 	for _, name := range names {
 		n := re.FindString(name)
-		if n == "" || core.DataSourceNameFilter.Duplicate(n) {
+		if n == "" {
 			continue
 		}
 
-		c.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-			Name:   n,
+		req := &core.AmassRequest{
+			Name:   cleanName(n),
 			Domain: domain,
 			Tag:    c.SourceType,
 			Source: c.String(),
-		})
+		}
+
+		if c.Enum().DupDataSourceName(req) {
+			continue
+		}
+		c.Bus.Publish(core.NEWNAME, req)
 	}
 }
 

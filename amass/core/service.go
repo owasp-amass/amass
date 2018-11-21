@@ -74,17 +74,18 @@ type BaseAmassService struct {
 }
 
 // NewBaseAmassService returns an initialized BaseAmassService object.
-func NewBaseAmassService(n string, srv AmassService) *BaseAmassService {
+func NewBaseAmassService(e *Enumeration, n string, srv AmassService) *BaseAmassService {
 	return &BaseAmassService{
-		name:      n,
-		active:    time.Now(),
-		setactive: make(chan time.Time, 100),
-		isactive:  make(chan chan time.Time, 100),
-		queue:     make(chan *AmassRequest, 100),
-		pause:     make(chan struct{}, 10),
-		resume:    make(chan struct{}, 10),
-		quit:      make(chan struct{}),
-		service:   srv,
+		name:        n,
+		active:      time.Now(),
+		setactive:   make(chan time.Time, 100),
+		isactive:    make(chan chan time.Time, 100),
+		queue:       make(chan *AmassRequest, 100),
+		pause:       make(chan struct{}, 10),
+		resume:      make(chan struct{}, 10),
+		quit:        make(chan struct{}),
+		service:     srv,
+		enumeration: e,
 	}
 }
 

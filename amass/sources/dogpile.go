@@ -26,7 +26,7 @@ type Dogpile struct {
 
 // NewDogpile requires the enumeration configuration and event bus as parameters.
 // The object returned is initialized, but has not yet been started.
-func NewDogpile(bus evbus.Bus, config *core.AmassConfig) *Dogpile {
+func NewDogpile(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *Dogpile {
 	d := &Dogpile{
 		Bus:        bus,
 		Config:     config,
@@ -35,7 +35,7 @@ func NewDogpile(bus evbus.Bus, config *core.AmassConfig) *Dogpile {
 		SourceType: core.SCRAPE,
 	}
 
-	d.BaseAmassService = *core.NewBaseAmassService("Dogpile", d)
+	d.BaseAmassService = *core.NewBaseAmassService(e, "Dogpile", d)
 	return d
 }
 
@@ -81,18 +81,17 @@ func (d *Dogpile) executeQuery(domain string) {
 			}
 
 			for _, sd := range re.FindAllString(page, -1) {
-				n := cleanName(sd)
-
-				if core.DataSourceNameFilter.Duplicate(n) {
-					continue
-				}
-
-				d.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-					Name:   n,
+				req := &core.AmassRequest{
+					Name:   cleanName(sd),
 					Domain: domain,
 					Tag:    d.SourceType,
 					Source: d.String(),
-				})
+				}
+
+				if d.Enum().DupDataSourceName(req) {
+					continue
+				}
+				d.Bus.Publish(core.NEWNAME, req)
 			}
 		}
 	}

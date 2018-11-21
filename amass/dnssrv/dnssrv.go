@@ -75,7 +75,7 @@ type DNSService struct {
 
 // NewDNSService requires the enumeration configuration and event bus as parameters.
 // The object returned is initialized, but has not yet been started.
-func NewDNSService(bus evbus.Bus, config *core.AmassConfig) *DNSService {
+func NewDNSService(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *DNSService {
 	ds := &DNSService{
 		Bus:              bus,
 		Config:           config,
@@ -90,7 +90,7 @@ func NewDNSService(bus evbus.Bus, config *core.AmassConfig) *DNSService {
 		}
 	}
 
-	ds.BaseAmassService = *core.NewBaseAmassService("DNS Service", ds)
+	ds.BaseAmassService = *core.NewBaseAmassService(e, "DNS Service", ds)
 	return ds
 }
 
@@ -118,14 +118,18 @@ func (ds *DNSService) OnStop() error {
 
 func (ds *DNSService) addRequest(req *core.AmassRequest) {
 	ds.SetActive()
-	if ds.filter.Duplicate(req.Name) || ds.Config.Blacklisted(req.Name) {
+
+	if ds.Config.Blacklisted(req.Name) {
+		ds.Config.MaxFlow.Release(1)
+		return
+	} else if !core.TrustedTag(req.Tag) && ds.GetWildcardType(req) == WildcardTypeDynamic {
+		ds.Config.MaxFlow.Release(1)
+		return
+	} else if ds.filter.Duplicate(req.Name) {
 		ds.Config.MaxFlow.Release(1)
 		return
 	}
-	if !core.TrustedTag(req.Tag) && ds.GetWildcardType(req) == WildcardTypeDynamic {
-		ds.Config.MaxFlow.Release(1)
-		return
-	}
+
 	core.MaxConnections.Acquire(len(InitialQueryTypes))
 	ds.SendRequest(req)
 }

@@ -26,7 +26,7 @@ type Google struct {
 
 // NewGoogle requires the enumeration configuration and event bus as parameters.
 // The object returned is initialized, but has not yet been started.
-func NewGoogle(bus evbus.Bus, config *core.AmassConfig) *Google {
+func NewGoogle(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *Google {
 	g := &Google{
 		Bus:        bus,
 		Config:     config,
@@ -35,7 +35,7 @@ func NewGoogle(bus evbus.Bus, config *core.AmassConfig) *Google {
 		SourceType: core.SCRAPE,
 	}
 
-	g.BaseAmassService = *core.NewBaseAmassService("Google", g)
+	g.BaseAmassService = *core.NewBaseAmassService(e, "Google", g)
 	return g
 }
 
@@ -81,18 +81,17 @@ func (g *Google) executeQuery(domain string) {
 			}
 
 			for _, sd := range re.FindAllString(page, -1) {
-				n := cleanName(sd)
-
-				if core.DataSourceNameFilter.Duplicate(n) {
-					continue
-				}
-
-				g.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-					Name:   n,
+				req := &core.AmassRequest{
+					Name:   cleanName(sd),
 					Domain: domain,
 					Tag:    g.SourceType,
 					Source: g.String(),
-				})
+				}
+
+				if g.Enum().DupDataSourceName(req) {
+					continue
+				}
+				g.Bus.Publish(core.NEWNAME, req)
 			}
 		}
 	}

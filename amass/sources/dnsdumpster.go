@@ -28,14 +28,14 @@ type DNSDumpster struct {
 
 // NewDNSDumpster requires the enumeration configuration and event bus as parameters.
 // The object returned is initialized, but has not yet been started.
-func NewDNSDumpster(bus evbus.Bus, config *core.AmassConfig) *DNSDumpster {
+func NewDNSDumpster(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *DNSDumpster {
 	d := &DNSDumpster{
 		Bus:        bus,
 		Config:     config,
 		SourceType: core.SCRAPE,
 	}
 
-	d.BaseAmassService = *core.NewBaseAmassService("DNSDumpster", d)
+	d.BaseAmassService = *core.NewBaseAmassService(e, "DNSDumpster", d)
 	return d
 }
 
@@ -84,18 +84,17 @@ func (d *DNSDumpster) executeQuery(domain string) {
 	d.SetActive()
 	re := d.Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
-		n := cleanName(sd)
-
-		if core.DataSourceNameFilter.Duplicate(n) {
-			continue
-		}
-
-		d.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-			Name:   n,
+		req := &core.AmassRequest{
+			Name:   cleanName(sd),
 			Domain: domain,
 			Tag:    d.SourceType,
 			Source: d.String(),
-		})
+		}
+
+		if d.Enum().DupDataSourceName(req) {
+			continue
+		}
+		d.Bus.Publish(core.NEWNAME, req)
 	}
 }
 

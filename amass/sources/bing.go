@@ -26,7 +26,7 @@ type Bing struct {
 
 // NewBing requires the enumeration configuration and event bus as parameters.
 // The object returned is initialized, but has not yet been started.
-func NewBing(config *core.AmassConfig, bus evbus.Bus) *Bing {
+func NewBing(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *Bing {
 	b := &Bing{
 		Bus:        bus,
 		Config:     config,
@@ -35,7 +35,7 @@ func NewBing(config *core.AmassConfig, bus evbus.Bus) *Bing {
 		SourceType: core.SCRAPE,
 	}
 
-	b.BaseAmassService = *core.NewBaseAmassService("Bing", b)
+	b.BaseAmassService = *core.NewBaseAmassService(e, "Bing", b)
 	return b
 }
 
@@ -81,18 +81,17 @@ func (b *Bing) executeQuery(domain string) {
 			}
 
 			for _, sd := range re.FindAllString(page, -1) {
-				n := cleanName(sd)
-
-				if core.DataSourceNameFilter.Duplicate(n) {
-					continue
-				}
-
-				b.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-					Name:   n,
+				req := &core.AmassRequest{
+					Name:   cleanName(sd),
 					Domain: domain,
 					Tag:    b.SourceType,
 					Source: b.String(),
-				})
+				}
+
+				if b.Enum().DupDataSourceName(req) {
+					continue
+				}
+				b.Bus.Publish(core.NEWNAME, req)
 			}
 		}
 	}

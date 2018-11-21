@@ -29,7 +29,7 @@ type DataManagerService struct {
 
 // NewDataManagerService requires the enumeration configuration and event bus as parameters.
 // The object returned is initialized, but has not yet been started.
-func NewDataManagerService(bus evbus.Bus, config *core.AmassConfig) *DataManagerService {
+func NewDataManagerService(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *DataManagerService {
 	dms := &DataManagerService{
 		Bus:          bus,
 		Config:       config,
@@ -37,7 +37,7 @@ func NewDataManagerService(bus evbus.Bus, config *core.AmassConfig) *DataManager
 		domainFilter: utils.NewStringFilter(),
 	}
 
-	dms.BaseAmassService = *core.NewBaseAmassService("Data Manager", dms)
+	dms.BaseAmassService = *core.NewBaseAmassService(e, "Data Manager", dms)
 	return dms
 }
 
@@ -126,7 +126,7 @@ func (dms *DataManagerService) manageData(req *core.AmassRequest) {
 }
 
 func (dms *DataManagerService) sendNewName(req *core.AmassRequest) {
-	if core.DataSourceNameFilter.Duplicate(req.Name) {
+	if dms.Enum().DupDataSourceName(req) {
 		return
 	}
 	dms.Bus.Publish(core.NEWNAME, req)

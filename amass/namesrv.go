@@ -4,7 +4,7 @@
 package amass
 
 import (
-	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -29,11 +29,12 @@ type NameService struct {
 	timesChan   chan *timesRequest
 	releases    chan struct{}
 	completions chan time.Time
+	sanityRE    *regexp.Regexp
 }
 
 // NewNameService requires the enumeration configuration and event bus as parameters.
 // The object returned is initialized, but has not yet been started.
-func NewNameService(bus evbus.Bus, config *core.AmassConfig) *NameService {
+func NewNameService(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *NameService {
 	max := core.TimingToMaxFlow(config.Timing) + core.TimingToReleasesPerSecond(config.Timing)
 	ns := &NameService{
 		Bus:         bus,
@@ -42,9 +43,10 @@ func NewNameService(bus evbus.Bus, config *core.AmassConfig) *NameService {
 		timesChan:   make(chan *timesRequest, max),
 		releases:    make(chan struct{}, max),
 		completions: make(chan time.Time, max),
+		sanityRE:    utils.AnySubdomainRegex(),
 	}
 
-	ns.BaseAmassService = *core.NewBaseAmassService("Name Service", ns)
+	ns.BaseAmassService = *core.NewBaseAmassService(e, "Name Service", ns)
 	return ns
 }
 
@@ -70,14 +72,13 @@ func (ns *NameService) OnStop() error {
 
 func (ns *NameService) addRequest(req *core.AmassRequest) {
 	ns.SetActive()
-	fmt.Println(req.Name)
 	if req == nil || req.Name == "" || req.Domain == "" {
 		return
 	}
 
 	req.Name = strings.ToLower(utils.RemoveAsteriskLabel(req.Name))
 	req.Domain = strings.ToLower(req.Domain)
-	if ns.filter.Duplicate(req.Name) {
+	if !ns.sanityRE.MatchString(req.Name) {
 		return
 	}
 
@@ -136,12 +137,14 @@ func (ns *NameService) performRequest(req *core.AmassRequest) {
 	ns.SetActive()
 	ns.sendCompletionTime(time.Now())
 	if ns.Config.Passive {
-		ns.Bus.Publish(core.OUTPUT, &core.AmassOutput{
-			Name:   req.Name,
-			Domain: req.Domain,
-			Tag:    req.Tag,
-			Source: req.Source,
-		})
+		if !ns.filter.Duplicate(req.Name) {
+			ns.Bus.Publish(core.OUTPUT, &core.AmassOutput{
+				Name:   req.Name,
+				Domain: req.Domain,
+				Tag:    req.Tag,
+				Source: req.Source,
+			})
+		}
 		return
 	}
 	ns.Bus.Publish(core.DNSQUERY, req)

@@ -22,14 +22,14 @@ type PTRArchive struct {
 
 // NewPTRArchive requires the enumeration configuration and event bus as parameters.
 // The object returned is initialized, but has not yet been started.
-func NewPTRArchive(bus evbus.Bus, config *core.AmassConfig) *PTRArchive {
+func NewPTRArchive(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *PTRArchive {
 	p := &PTRArchive{
 		Bus:        bus,
 		Config:     config,
 		SourceType: core.SCRAPE,
 	}
 
-	p.BaseAmassService = *core.NewBaseAmassService("PTRArchive", p)
+	p.BaseAmassService = *core.NewBaseAmassService(e, "PTRArchive", p)
 	return p
 }
 
@@ -65,18 +65,17 @@ func (p *PTRArchive) executeQuery(domain string) {
 	p.SetActive()
 	re := p.Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
-		n := cleanName(sd)
-
-		if core.DataSourceNameFilter.Duplicate(n) {
-			continue
-		}
-
-		p.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-			Name:   n,
+		req := &core.AmassRequest{
+			Name:   cleanName(sd),
 			Domain: domain,
 			Tag:    p.SourceType,
 			Source: p.String(),
-		})
+		}
+
+		if p.Enum().DupDataSourceName(req) {
+			continue
+		}
+		p.Bus.Publish(core.NEWNAME, req)
 	}
 }
 

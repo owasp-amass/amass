@@ -22,14 +22,14 @@ type FindSubdomains struct {
 
 // NewFindSubdomains requires the enumeration configuration and event bus as parameters.
 // The object returned is initialized, but has not yet been started.
-func NewFindSubdomains(bus evbus.Bus, config *core.AmassConfig) *FindSubdomains {
+func NewFindSubdomains(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *FindSubdomains {
 	f := &FindSubdomains{
 		Bus:        bus,
 		Config:     config,
 		SourceType: core.SCRAPE,
 	}
 
-	f.BaseAmassService = *core.NewBaseAmassService("FindSubdomains", f)
+	f.BaseAmassService = *core.NewBaseAmassService(e, "FindSubdomains", f)
 	return f
 }
 
@@ -65,18 +65,17 @@ func (f *FindSubdomains) executeQuery(domain string) {
 	f.SetActive()
 	re := f.Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
-		n := cleanName(sd)
-
-		if core.DataSourceNameFilter.Duplicate(n) {
-			continue
-		}
-
-		f.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-			Name:   n,
+		req := &core.AmassRequest{
+			Name:   cleanName(sd),
 			Domain: domain,
 			Tag:    f.SourceType,
 			Source: f.String(),
-		})
+		}
+
+		if f.Enum().DupDataSourceName(req) {
+			continue
+		}
+		f.Bus.Publish(core.NEWNAME, req)
 	}
 }
 

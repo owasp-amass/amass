@@ -39,7 +39,7 @@ type CommonCrawl struct {
 
 // NewCommonCrawl requires the enumeration configuration and event bus as parameters.
 // The object returned is initialized, but has not yet been started.
-func NewCommonCrawl(bus evbus.Bus, config *core.AmassConfig) *CommonCrawl {
+func NewCommonCrawl(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *CommonCrawl {
 	c := &CommonCrawl{
 		Bus:        bus,
 		Config:     config,
@@ -47,7 +47,7 @@ func NewCommonCrawl(bus evbus.Bus, config *core.AmassConfig) *CommonCrawl {
 		SourceType: core.SCRAPE,
 	}
 
-	c.BaseAmassService = *core.NewBaseAmassService("CommonCrawl", c)
+	c.BaseAmassService = *core.NewBaseAmassService(e, "CommonCrawl", c)
 	return c
 }
 
@@ -92,18 +92,17 @@ func (c *CommonCrawl) executeQuery(domain string) {
 			}
 
 			for _, sd := range re.FindAllString(page, -1) {
-				n := cleanName(sd)
-
-				if core.DataSourceNameFilter.Duplicate(sd) {
-					continue
-				}
-
-				c.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-					Name:   n,
+				req := &core.AmassRequest{
+					Name:   cleanName(sd),
 					Domain: domain,
 					Tag:    c.SourceType,
 					Source: c.String(),
-				})
+				}
+
+				if c.Enum().DupDataSourceName(req) {
+					continue
+				}
+				c.Bus.Publish(core.NEWNAME, req)
 			}
 		}
 	}

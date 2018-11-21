@@ -26,7 +26,7 @@ type Ask struct {
 
 // NewAsk requires the enumeration configuration and event bus as parameters.
 // The object returned is initialized, but has not yet been started.
-func NewAsk(bus evbus.Bus, config *core.AmassConfig) *Ask {
+func NewAsk(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *Ask {
 	a := &Ask{
 		Bus:        bus,
 		Config:     config,
@@ -35,7 +35,7 @@ func NewAsk(bus evbus.Bus, config *core.AmassConfig) *Ask {
 		SourceType: core.SCRAPE,
 	}
 
-	a.BaseAmassService = *core.NewBaseAmassService("Ask", a)
+	a.BaseAmassService = *core.NewBaseAmassService(e, "Ask", a)
 	return a
 }
 
@@ -81,18 +81,17 @@ func (a *Ask) executeQuery(domain string) {
 			}
 
 			for _, sd := range re.FindAllString(page, -1) {
-				n := cleanName(sd)
-
-				if core.DataSourceNameFilter.Duplicate(n) {
-					continue
-				}
-
-				a.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-					Name:   n,
+				req := &core.AmassRequest{
+					Name:   cleanName(sd),
 					Domain: domain,
 					Tag:    a.SourceType,
 					Source: a.String(),
-				})
+				}
+
+				if a.Enum().DupDataSourceName(req) {
+					continue
+				}
+				a.Bus.Publish(core.NEWNAME, req)
 			}
 		}
 	}

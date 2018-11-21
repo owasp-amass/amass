@@ -22,7 +22,7 @@ type OpenUKArchive struct {
 
 // NewOpenUKArchive requires the enumeration configuration and event bus as parameters.
 // The object returned is initialized, but has not yet been started.
-func NewOpenUKArchive(bus evbus.Bus, config *core.AmassConfig) *OpenUKArchive {
+func NewOpenUKArchive(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *OpenUKArchive {
 	o := &OpenUKArchive{
 		Bus:        bus,
 		Config:     config,
@@ -31,7 +31,7 @@ func NewOpenUKArchive(bus evbus.Bus, config *core.AmassConfig) *OpenUKArchive {
 		filter:     utils.NewStringFilter(),
 	}
 
-	o.BaseAmassService = *core.NewBaseAmassService("OpenUKArchive", o)
+	o.BaseAmassService = *core.NewBaseAmassService(e, "OpenUKArchive", o)
 	return o
 }
 
@@ -86,17 +86,16 @@ func (o *OpenUKArchive) executeQuery(sn, domain string) {
 	}
 
 	for _, name := range names {
-		n := cleanName(name)
-
-		if core.DataSourceNameFilter.Duplicate(n) {
-			continue
-		}
-
-		o.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-			Name:   n,
+		req := &core.AmassRequest{
+			Name:   cleanName(name),
 			Domain: domain,
 			Tag:    o.SourceType,
 			Source: o.String(),
-		})
+		}
+
+		if o.Enum().DupDataSourceName(req) {
+			continue
+		}
+		o.Bus.Publish(core.NEWNAME, req)
 	}
 }

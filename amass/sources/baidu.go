@@ -26,7 +26,7 @@ type Baidu struct {
 
 // NewBaidu requires the enumeration configuration and event bus as parameters.
 // The object returned is initialized, but has not yet been started.
-func NewBaidu(bus evbus.Bus, config *core.AmassConfig) *Baidu {
+func NewBaidu(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *Baidu {
 	b := &Baidu{
 		Bus:        bus,
 		Config:     config,
@@ -35,7 +35,7 @@ func NewBaidu(bus evbus.Bus, config *core.AmassConfig) *Baidu {
 		SourceType: core.SCRAPE,
 	}
 
-	b.BaseAmassService = *core.NewBaseAmassService("Baidu", b)
+	b.BaseAmassService = *core.NewBaseAmassService(e, "Baidu", b)
 	return b
 }
 
@@ -81,18 +81,17 @@ func (b *Baidu) executeQuery(domain string) {
 			}
 
 			for _, sd := range re.FindAllString(page, -1) {
-				n := cleanName(sd)
-
-				if core.DataSourceNameFilter.Duplicate(n) {
-					continue
-				}
-
-				b.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-					Name:   n,
+				req := &core.AmassRequest{
+					Name:   cleanName(sd),
 					Domain: domain,
 					Tag:    b.SourceType,
 					Source: b.String(),
-				})
+				}
+
+				if b.Enum().DupDataSourceName(req) {
+					continue
+				}
+				b.Bus.Publish(core.NEWNAME, req)
 			}
 		}
 	}

@@ -22,7 +22,7 @@ type ArchiveToday struct {
 
 // NewArchiveToday requires the enumeration configuration and event bus as parameters.
 // The object returned is initialized, but has not yet been started.
-func NewArchiveToday(bus evbus.Bus, config *core.AmassConfig) *ArchiveToday {
+func NewArchiveToday(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *ArchiveToday {
 	a := &ArchiveToday{
 		Bus:        bus,
 		Config:     config,
@@ -31,7 +31,7 @@ func NewArchiveToday(bus evbus.Bus, config *core.AmassConfig) *ArchiveToday {
 		filter:     utils.NewStringFilter(),
 	}
 
-	a.BaseAmassService = *core.NewBaseAmassService("ArchiveToday", a)
+	a.BaseAmassService = *core.NewBaseAmassService(e, "ArchiveToday", a)
 	return a
 }
 
@@ -86,16 +86,16 @@ func (a *ArchiveToday) executeQuery(sn, domain string) {
 	}
 
 	for _, name := range names {
-		n := cleanName(name)
-		if core.DataSourceNameFilter.Duplicate(n) {
-			continue
-		}
-
-		a.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-			Name:   n,
+		req := &core.AmassRequest{
+			Name:   cleanName(name),
 			Domain: domain,
 			Tag:    a.SourceType,
 			Source: a.String(),
-		})
+		}
+
+		if a.Enum().DupDataSourceName(req) {
+			continue
+		}
+		a.Bus.Publish(core.NEWNAME, req)
 	}
 }

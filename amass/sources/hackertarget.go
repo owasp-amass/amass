@@ -22,14 +22,14 @@ type HackerTarget struct {
 
 // NewHackerTarget requires the enumeration configuration and event bus as parameters.
 // The object returned is initialized, but has not yet been started.
-func NewHackerTarget(bus evbus.Bus, config *core.AmassConfig) *HackerTarget {
+func NewHackerTarget(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *HackerTarget {
 	h := &HackerTarget{
 		Bus:        bus,
 		Config:     config,
 		SourceType: core.API,
 	}
 
-	h.BaseAmassService = *core.NewBaseAmassService("HackerTarget", h)
+	h.BaseAmassService = *core.NewBaseAmassService(e, "HackerTarget", h)
 	return h
 }
 
@@ -65,18 +65,17 @@ func (h *HackerTarget) executeQuery(domain string) {
 	h.SetActive()
 	re := h.Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
-		n := cleanName(sd)
-
-		if core.DataSourceNameFilter.Duplicate(n) {
-			continue
-		}
-
-		h.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-			Name:   n,
+		req := &core.AmassRequest{
+			Name:   cleanName(sd),
 			Domain: domain,
 			Tag:    h.SourceType,
 			Source: h.String(),
-		})
+		}
+
+		if h.Enum().DupDataSourceName(req) {
+			continue
+		}
+		h.Bus.Publish(core.NEWNAME, req)
 	}
 }
 

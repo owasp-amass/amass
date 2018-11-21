@@ -50,9 +50,6 @@ var (
 
 	// MaxConnections creates a limit for how many network connections will be in use at once.
 	MaxConnections utils.Semaphore
-
-	// DataSourceNameFilter provides a single output filter for all name sources.
-	DataSourceNameFilter = utils.NewStringFilter()
 )
 
 // EnumerationTiming represents a speed band for the enumeration to execute within.
@@ -67,6 +64,9 @@ type Enumeration struct {
 	Done chan struct{}
 
 	Config *AmassConfig
+
+	trustedNameFilter *utils.StringFilter
+	otherNameFilter   *utils.StringFilter
 
 	// Pause/Resume channels for halting the enumeration
 	pause  chan struct{}
@@ -91,11 +91,28 @@ func NewEnumeration() *Enumeration {
 			Alterations:     true,
 			Timing:          Normal,
 		},
-		pause:  make(chan struct{}),
-		resume: make(chan struct{}),
+		trustedNameFilter: utils.NewStringFilter(),
+		otherNameFilter:   utils.NewStringFilter(),
+		pause:             make(chan struct{}),
+		resume:            make(chan struct{}),
 	}
 	enum.Config.SetGraph(NewGraph())
 	return enum
+}
+
+// DataSourceNameFilter provides a single output filter for all name sources.
+func (e *Enumeration) DupDataSourceName(req *AmassRequest) bool {
+	if req == nil {
+		return true
+	}
+
+	tt := TrustedTag(req.Tag)
+	if !tt && e.otherNameFilter.Duplicate(req.Name) {
+		return true
+	} else if tt && e.trustedNameFilter.Duplicate(req.Name) {
+		return true
+	}
+	return false
 }
 
 // CheckConfig runs some sanity checks on the enumeration configuration.
@@ -150,7 +167,7 @@ func (e *Enumeration) SendOutput(out *AmassOutput) {
 // TrustedTag returns true when the tag parameter is of a type that should be trusted even
 // facing DNS wildcards.
 func TrustedTag(tag string) bool {
-	if tag == ARCHIVE || tag == AXFR || tag == CERT || tag == DNS {
+	if tag == DNS || tag == CERT || tag == ARCHIVE || tag == AXFR {
 		return true
 	}
 	return false

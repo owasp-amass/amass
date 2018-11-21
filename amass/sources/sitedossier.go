@@ -22,14 +22,14 @@ type SiteDossier struct {
 
 // NewSiteDossier requires the enumeration configuration and event bus as parameters.
 // The object returned is initialized, but has not yet been started.
-func NewSiteDossier(bus evbus.Bus, config *core.AmassConfig) *SiteDossier {
+func NewSiteDossier(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *SiteDossier {
 	s := &SiteDossier{
 		Bus:        bus,
 		Config:     config,
 		SourceType: core.SCRAPE,
 	}
 
-	s.BaseAmassService = *core.NewBaseAmassService("SiteDossier", s)
+	s.BaseAmassService = *core.NewBaseAmassService(e, "SiteDossier", s)
 	return s
 }
 
@@ -65,18 +65,17 @@ func (s *SiteDossier) executeQuery(domain string) {
 	s.SetActive()
 	re := s.Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
-		n := cleanName(sd)
-
-		if core.DataSourceNameFilter.Duplicate(n) {
-			continue
-		}
-
-		s.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-			Name:   n,
+		req := &core.AmassRequest{
+			Name:   cleanName(sd),
 			Domain: domain,
 			Tag:    s.SourceType,
 			Source: s.String(),
-		})
+		}
+
+		if s.Enum().DupDataSourceName(req) {
+			continue
+		}
+		s.Bus.Publish(core.NEWNAME, req)
 	}
 }
 

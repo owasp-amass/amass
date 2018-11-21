@@ -21,14 +21,14 @@ type AddressService struct {
 
 // NewAddressService requires the enumeration configuration and event bus as parameters.
 // The object returned is initialized, but has not yet been started.
-func NewAddressService(bus evbus.Bus, config *core.AmassConfig) *AddressService {
+func NewAddressService(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *AddressService {
 	as := &AddressService{
 		Bus:    bus,
 		Config: config,
 		filter: utils.NewStringFilter(),
 	}
 
-	as.BaseAmassService = *core.NewBaseAmassService("Address Service", as)
+	as.BaseAmassService = *core.NewBaseAmassService(e, "Address Service", as)
 	return as
 }
 

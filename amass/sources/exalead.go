@@ -22,14 +22,14 @@ type Exalead struct {
 
 // NewExalead requires the enumeration configuration and event bus as parameters.
 // The object returned is initialized, but has not yet been started.
-func NewExalead(bus evbus.Bus, config *core.AmassConfig) *Exalead {
+func NewExalead(enum *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *Exalead {
 	e := &Exalead{
 		Bus:        bus,
 		Config:     config,
 		SourceType: core.SCRAPE,
 	}
 
-	e.BaseAmassService = *core.NewBaseAmassService("Exalead", e)
+	e.BaseAmassService = *core.NewBaseAmassService(enum, "Exalead", e)
 	return e
 }
 
@@ -65,18 +65,17 @@ func (e *Exalead) executeQuery(domain string) {
 	e.SetActive()
 	re := e.Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
-		n := cleanName(sd)
-
-		if core.DataSourceNameFilter.Duplicate(n) {
-			continue
-		}
-
-		e.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-			Name:   n,
+		req := &core.AmassRequest{
+			Name:   cleanName(sd),
 			Domain: domain,
 			Tag:    e.SourceType,
 			Source: e.String(),
-		})
+		}
+
+		if e.Enum().DupDataSourceName(req) {
+			continue
+		}
+		e.Bus.Publish(core.NEWNAME, req)
 	}
 }
 

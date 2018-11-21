@@ -31,14 +31,14 @@ type robtexJSON struct {
 
 // NewRobtex requires the enumeration configuration and event bus as parameters.
 // The object returned is initialized, but has not yet been started.
-func NewRobtex(bus evbus.Bus, config *core.AmassConfig) *Robtex {
+func NewRobtex(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *Robtex {
 	r := &Robtex{
 		Bus:        bus,
 		Config:     config,
 		SourceType: core.API,
 	}
 
-	r.BaseAmassService = *core.NewBaseAmassService("Robtex", r)
+	r.BaseAmassService = *core.NewBaseAmassService(e, "Robtex", r)
 	return r
 }
 
@@ -113,18 +113,17 @@ loop:
 	r.SetActive()
 	re := r.Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(list, -1) {
-		n := cleanName(sd)
-
-		if core.DataSourceNameFilter.Duplicate(n) {
-			continue
-		}
-
-		r.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-			Name:   n,
+		req := &core.AmassRequest{
+			Name:   cleanName(sd),
 			Domain: domain,
 			Tag:    r.SourceType,
 			Source: r.String(),
-		})
+		}
+
+		if r.Enum().DupDataSourceName(req) {
+			continue
+		}
+		r.Bus.Publish(core.NEWNAME, req)
 	}
 }
 

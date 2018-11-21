@@ -22,14 +22,14 @@ type VirusTotal struct {
 
 // NewVirusTotal requires the enumeration configuration and event bus as parameters.
 // The object returned is initialized, but has not yet been started.
-func NewVirusTotal(bus evbus.Bus, config *core.AmassConfig) *VirusTotal {
+func NewVirusTotal(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *VirusTotal {
 	v := &VirusTotal{
 		Bus:        bus,
 		Config:     config,
 		SourceType: core.SCRAPE,
 	}
 
-	v.BaseAmassService = *core.NewBaseAmassService("VirusTotal", v)
+	v.BaseAmassService = *core.NewBaseAmassService(e, "VirusTotal", v)
 	return v
 }
 
@@ -65,18 +65,17 @@ func (v *VirusTotal) executeQuery(domain string) {
 
 	v.SetActive()
 	for _, sd := range re.FindAllString(page, -1) {
-		n := cleanName(sd)
-
-		if core.DataSourceNameFilter.Duplicate(n) {
-			continue
-		}
-
-		v.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-			Name:   n,
+		req := &core.AmassRequest{
+			Name:   cleanName(sd),
 			Domain: domain,
 			Tag:    v.SourceType,
 			Source: v.String(),
-		})
+		}
+
+		if v.Enum().DupDataSourceName(req) {
+			continue
+		}
+		v.Bus.Publish(core.NEWNAME, req)
 	}
 }
 

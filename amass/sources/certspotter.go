@@ -22,14 +22,14 @@ type CertSpotter struct {
 
 // NewCertSpotter requires the enumeration configuration and event bus as parameters.
 // The object returned is initialized, but has not yet been started.
-func NewCertSpotter(bus evbus.Bus, config *core.AmassConfig) *CertSpotter {
+func NewCertSpotter(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *CertSpotter {
 	c := &CertSpotter{
 		Bus:        bus,
 		Config:     config,
 		SourceType: core.CERT,
 	}
 
-	c.BaseAmassService = *core.NewBaseAmassService("CertSpotter", c)
+	c.BaseAmassService = *core.NewBaseAmassService(e, "CertSpotter", c)
 	return c
 }
 
@@ -65,18 +65,17 @@ func (c *CertSpotter) executeQuery(domain string) {
 	c.SetActive()
 	re := c.Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
-		n := cleanName(sd)
-
-		if core.DataSourceNameFilter.Duplicate(n) {
-			continue
-		}
-
-		c.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-			Name:   n,
+		req := &core.AmassRequest{
+			Name:   cleanName(sd),
 			Domain: domain,
 			Tag:    c.SourceType,
 			Source: c.String(),
-		})
+		}
+
+		if c.Enum().DupDataSourceName(req) {
+			continue
+		}
+		c.Bus.Publish(core.NEWNAME, req)
 	}
 }
 

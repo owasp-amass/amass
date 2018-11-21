@@ -22,14 +22,14 @@ type Riddler struct {
 
 // NewRiddler requires the enumeration configuration and event bus as parameters.
 // The object returned is initialized, but has not yet been started.
-func NewRiddler(bus evbus.Bus, config *core.AmassConfig) *Riddler {
+func NewRiddler(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *Riddler {
 	r := &Riddler{
 		Bus:        bus,
 		Config:     config,
 		SourceType: core.SCRAPE,
 	}
 
-	r.BaseAmassService = *core.NewBaseAmassService("Riddler", r)
+	r.BaseAmassService = *core.NewBaseAmassService(e, "Riddler", r)
 	return r
 }
 
@@ -65,18 +65,17 @@ func (r *Riddler) executeQuery(domain string) {
 	r.SetActive()
 	re := r.Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
-		n := cleanName(sd)
-
-		if core.DataSourceNameFilter.Duplicate(n) {
-			continue
-		}
-
-		r.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-			Name:   n,
+		req := &core.AmassRequest{
+			Name:   cleanName(sd),
 			Domain: domain,
 			Tag:    r.SourceType,
 			Source: r.String(),
-		})
+		}
+
+		if r.Enum().DupDataSourceName(req) {
+			continue
+		}
+		r.Bus.Publish(core.NEWNAME, req)
 	}
 }
 

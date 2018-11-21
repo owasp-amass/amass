@@ -24,14 +24,14 @@ type Censys struct {
 
 // NewCensys requires the enumeration configuration and event bus as parameters.
 // The object returned is initialized, but has not yet been started.
-func NewCensys(bus evbus.Bus, config *core.AmassConfig) *Censys {
+func NewCensys(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *Censys {
 	c := &Censys{
 		Bus:        bus,
 		Config:     config,
 		SourceType: core.CERT,
 	}
 
-	c.BaseAmassService = *core.NewBaseAmassService("Censys", c)
+	c.BaseAmassService = *core.NewBaseAmassService(e, "Censys", c)
 	return c
 }
 
@@ -85,16 +85,17 @@ func (c *Censys) executeQuery(domain string) {
 	c.SetActive()
 	re := c.Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
-		if core.DataSourceNameFilter.Duplicate(sd) {
-			continue
-		}
-
-		c.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-			Name:   sd,
+		req := &core.AmassRequest{
+			Name:   cleanName(sd),
 			Domain: domain,
 			Tag:    c.SourceType,
 			Source: c.String(),
-		})
+		}
+
+		if c.Enum().DupDataSourceName(req) {
+			continue
+		}
+		c.Bus.Publish(core.NEWNAME, req)
 	}
 }
 

@@ -25,7 +25,7 @@ type IPv4Info struct {
 
 // NewIPv4Info requires the enumeration configuration and event bus as parameters.
 // The object returned is initialized, but has not yet been started.
-func NewIPv4Info(bus evbus.Bus, config *core.AmassConfig) *IPv4Info {
+func NewIPv4Info(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *IPv4Info {
 	i := &IPv4Info{
 		Bus:        bus,
 		Config:     config,
@@ -33,7 +33,7 @@ func NewIPv4Info(bus evbus.Bus, config *core.AmassConfig) *IPv4Info {
 		SourceType: core.SCRAPE,
 	}
 
-	i.BaseAmassService = *core.NewBaseAmassService("IPv4Info", i)
+	i.BaseAmassService = *core.NewBaseAmassService(e, "IPv4Info", i)
 	return i
 }
 
@@ -95,18 +95,17 @@ func (i *IPv4Info) executeQuery(domain string) {
 
 	re := i.Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
-		n := cleanName(sd)
-
-		if core.DataSourceNameFilter.Duplicate(n) {
-			continue
-		}
-
-		i.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-			Name:   n,
+		req := &core.AmassRequest{
+			Name:   cleanName(sd),
 			Domain: domain,
 			Tag:    i.SourceType,
 			Source: i.String(),
-		})
+		}
+
+		if i.Enum().DupDataSourceName(req) {
+			continue
+		}
+		i.Bus.Publish(core.NEWNAME, req)
 	}
 }
 

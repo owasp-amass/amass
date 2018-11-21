@@ -24,14 +24,14 @@ type Entrust struct {
 
 // NewEntrust requires the enumeration configuration and event bus as parameters.
 // The object returned is initialized, but has not yet been started.
-func NewEntrust(bus evbus.Bus, config *core.AmassConfig) *Entrust {
+func NewEntrust(enum *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *Entrust {
 	e := &Entrust{
 		Bus:        bus,
 		Config:     config,
 		SourceType: core.CERT,
 	}
 
-	e.BaseAmassService = *core.NewBaseAmassService("Entrust", e)
+	e.BaseAmassService = *core.NewBaseAmassService(enum, "Entrust", e)
 	return e
 }
 
@@ -68,32 +68,32 @@ func (e *Entrust) executeQuery(domain string) {
 	e.SetActive()
 	re := e.Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(content, -1) {
-		n := cleanName(sd)
-
-		if core.DataSourceNameFilter.Duplicate(n) {
-			continue
-		}
-
-		e.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-			Name:   n,
+		req := &core.AmassRequest{
+			Name:   cleanName(sd),
 			Domain: domain,
 			Tag:    e.SourceType,
 			Source: e.String(),
-		})
+		}
+
+		if e.Enum().DupDataSourceName(req) {
+			continue
+		}
+		e.Bus.Publish(core.NEWNAME, req)
 	}
 
 	for _, name := range e.extractReversedSubmatches(page) {
 		if match := re.FindString(name); match != "" {
-			if core.DataSourceNameFilter.Duplicate(match) {
-				continue
-			}
-
-			e.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-				Name:   match,
+			req := &core.AmassRequest{
+				Name:   cleanName(match),
 				Domain: domain,
 				Tag:    e.SourceType,
 				Source: e.String(),
-			})
+			}
+
+			if e.Enum().DupDataSourceName(req) {
+				continue
+			}
+			e.Bus.Publish(core.NEWNAME, req)
 		}
 	}
 }

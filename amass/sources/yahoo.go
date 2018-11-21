@@ -26,7 +26,7 @@ type Yahoo struct {
 
 // NewYahoo requires the enumeration configuration and event bus as parameters.
 // The object returned is initialized, but has not yet been started.
-func NewYahoo(bus evbus.Bus, config *core.AmassConfig) *Yahoo {
+func NewYahoo(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *Yahoo {
 	y := &Yahoo{
 		Bus:        bus,
 		Config:     config,
@@ -35,7 +35,7 @@ func NewYahoo(bus evbus.Bus, config *core.AmassConfig) *Yahoo {
 		SourceType: core.SCRAPE,
 	}
 
-	y.BaseAmassService = *core.NewBaseAmassService("Yahoo", y)
+	y.BaseAmassService = *core.NewBaseAmassService(e, "Yahoo", y)
 	return y
 }
 
@@ -75,18 +75,17 @@ func (y *Yahoo) executeQuery(domain string) {
 			}
 
 			for _, sd := range re.FindAllString(page, -1) {
-				n := cleanName(sd)
-
-				if core.DataSourceNameFilter.Duplicate(n) {
-					continue
-				}
-
-				y.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-					Name:   n,
+				req := &core.AmassRequest{
+					Name:   cleanName(sd),
 					Domain: domain,
 					Tag:    y.SourceType,
 					Source: y.String(),
-				})
+				}
+
+				if y.Enum().DupDataSourceName(req) {
+					continue
+				}
+				y.Bus.Publish(core.NEWNAME, req)
 			}
 		}
 	}

@@ -22,13 +22,13 @@ type BruteForceService struct {
 
 // NewBruteForceService requires the enumeration configuration and event bus as parameters.
 // The object returned is initialized, but has not yet been started.
-func NewBruteForceService(bus evbus.Bus, config *core.AmassConfig) *BruteForceService {
+func NewBruteForceService(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *BruteForceService {
 	bfs := &BruteForceService{
 		Bus:    bus,
 		Config: config,
 	}
 
-	bfs.BaseAmassService = *core.NewBaseAmassService("Brute Forcing", bfs)
+	bfs.BaseAmassService = *core.NewBaseAmassService(e, "Brute Forcing", bfs)
 	return bfs
 }
 
@@ -79,17 +79,17 @@ func (bfs *BruteForceService) performBruteForcing(subdomain, root string) {
 		case <-bfs.Quit():
 			return
 		default:
-			name := strings.ToLower(word + "." + subdomain)
-
-			if core.DataSourceNameFilter.Duplicate(name) {
-				continue
-			}
-			bfs.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-				Name:   name,
+			req := &core.AmassRequest{
+				Name:   strings.ToLower(word + "." + subdomain),
 				Domain: root,
 				Tag:    core.BRUTE,
 				Source: bfs.String(),
-			})
+			}
+
+			if bfs.Enum().DupDataSourceName(req) {
+				continue
+			}
+			bfs.Bus.Publish(core.NEWNAME, req)
 		}
 	}
 }

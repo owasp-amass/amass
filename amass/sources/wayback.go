@@ -22,7 +22,7 @@ type Wayback struct {
 
 // NewWayback requires the enumeration configuration and event bus as parameters.
 // The object returned is initialized, but has not yet been started.
-func NewWayback(bus evbus.Bus, config *core.AmassConfig) *Wayback {
+func NewWayback(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *Wayback {
 	w := &Wayback{
 		Bus:        bus,
 		Config:     config,
@@ -31,7 +31,7 @@ func NewWayback(bus evbus.Bus, config *core.AmassConfig) *Wayback {
 		filter:     utils.NewStringFilter(),
 	}
 
-	w.BaseAmassService = *core.NewBaseAmassService("Wayback", w)
+	w.BaseAmassService = *core.NewBaseAmassService(e, "Wayback", w)
 	return w
 }
 
@@ -86,17 +86,16 @@ func (w *Wayback) executeQuery(sn, domain string) {
 	}
 
 	for _, name := range names {
-		n := cleanName(name)
-
-		if core.DataSourceNameFilter.Duplicate(n) {
-			continue
-		}
-
-		w.Bus.Publish(core.NEWNAME, &core.AmassRequest{
-			Name:   n,
+		req := &core.AmassRequest{
+			Name:   cleanName(name),
 			Domain: domain,
 			Tag:    w.SourceType,
 			Source: w.String(),
-		})
+		}
+
+		if w.Enum().DupDataSourceName(req) {
+			continue
+		}
+		w.Bus.Publish(core.NEWNAME, req)
 	}
 }

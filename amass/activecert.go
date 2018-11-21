@@ -37,7 +37,7 @@ type ActiveCertService struct {
 
 // NewActiveCertService requires the enumeration configuration and event bus as parameters.
 // The object returned is initialized, but has not yet been started.
-func NewActiveCertService(bus evbus.Bus, config *core.AmassConfig) *ActiveCertService {
+func NewActiveCertService(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *ActiveCertService {
 	acs := &ActiveCertService{
 		Bus:       bus,
 		Config:    config,
@@ -46,7 +46,7 @@ func NewActiveCertService(bus evbus.Bus, config *core.AmassConfig) *ActiveCertSe
 		addrQueue: make(chan string, 50),
 	}
 
-	acs.BaseAmassService = *core.NewBaseAmassService("Active Cert", acs)
+	acs.BaseAmassService = *core.NewBaseAmassService(e, "Active Cert", acs)
 	return acs
 }
 
@@ -102,7 +102,8 @@ func (acs *ActiveCertService) performRequest(addr string) {
 	for _, r := range PullCertificateNames(addr, acs.Config.Ports) {
 		domain := acs.Config.WhichDomain(r.Name)
 
-		if domain != "" && core.DataSourceNameFilter.Duplicate(r.Name) {
+		if domain != "" && !acs.Enum().DupDataSourceName(r) {
+			r.Domain = domain
 			r.Source = acs.String()
 			acs.Bus.Publish(core.NEWNAME, r)
 		}
