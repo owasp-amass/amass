@@ -10,26 +10,18 @@ import (
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
-	evbus "github.com/asaskevich/EventBus"
 )
 
 // Entrust is the AmassService that handles access to the Entrust data source.
 type Entrust struct {
 	core.BaseAmassService
 
-	Bus        evbus.Bus
-	Config     *core.AmassConfig
 	SourceType string
 }
 
-// NewEntrust requires the enumeration configuration and event bus as parameters.
-// The object returned is initialized, but has not yet been started.
-func NewEntrust(enum *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *Entrust {
-	e := &Entrust{
-		Bus:        bus,
-		Config:     config,
-		SourceType: core.CERT,
-	}
+// NewEntrust returns he object initialized, but not yet started.
+func NewEntrust(enum *core.Enumeration) *Entrust {
+	e := &Entrust{SourceType: core.CERT}
 
 	e.BaseAmassService = *core.NewBaseAmassService(enum, "Entrust", e)
 	return e
@@ -51,7 +43,7 @@ func (e *Entrust) OnStop() error {
 
 func (e *Entrust) startRootDomains() {
 	// Look at each domain provided by the config
-	for _, domain := range e.Config.Domains() {
+	for _, domain := range e.Enum().Config.Domains() {
 		e.executeQuery(domain)
 	}
 }
@@ -60,13 +52,13 @@ func (e *Entrust) executeQuery(domain string) {
 	u := e.getURL(domain)
 	page, err := utils.RequestWebPage(u, nil, nil, "", "")
 	if err != nil {
-		e.Config.Log.Printf("%s: %s: %v", e.String(), u, err)
+		e.Enum().Log.Printf("%s: %s: %v", e.String(), u, err)
 		return
 	}
 	content := strings.Replace(page, "u003d", " ", -1)
 
 	e.SetActive()
-	re := e.Config.DomainRegex(domain)
+	re := e.Enum().Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(content, -1) {
 		req := &core.AmassRequest{
 			Name:   cleanName(sd),
@@ -78,7 +70,7 @@ func (e *Entrust) executeQuery(domain string) {
 		if e.Enum().DupDataSourceName(req) {
 			continue
 		}
-		e.Bus.Publish(core.NEWNAME, req)
+		e.Enum().Bus.Publish(core.NEWNAME, req)
 	}
 
 	for _, name := range e.extractReversedSubmatches(page) {
@@ -93,7 +85,7 @@ func (e *Entrust) executeQuery(domain string) {
 			if e.Enum().DupDataSourceName(req) {
 				continue
 			}
-			e.Bus.Publish(core.NEWNAME, req)
+			e.Enum().Bus.Publish(core.NEWNAME, req)
 		}
 	}
 }

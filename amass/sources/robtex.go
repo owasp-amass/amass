@@ -11,15 +11,12 @@ import (
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
-	evbus "github.com/asaskevich/EventBus"
 )
 
 // Robtex is the AmassService that handles access to the Robtex data source.
 type Robtex struct {
 	core.BaseAmassService
 
-	Bus        evbus.Bus
-	Config     *core.AmassConfig
 	SourceType string
 }
 
@@ -29,14 +26,9 @@ type robtexJSON struct {
 	Type string `json:"rrtype"`
 }
 
-// NewRobtex requires the enumeration configuration and event bus as parameters.
-// The object returned is initialized, but has not yet been started.
-func NewRobtex(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *Robtex {
-	r := &Robtex{
-		Bus:        bus,
-		Config:     config,
-		SourceType: core.API,
-	}
+// NewRobtex returns he object initialized, but not yet started.
+func NewRobtex(e *core.Enumeration) *Robtex {
+	r := &Robtex{SourceType: core.API}
 
 	r.BaseAmassService = *core.NewBaseAmassService(e, "Robtex", r)
 	return r
@@ -58,7 +50,7 @@ func (r *Robtex) OnStop() error {
 
 func (r *Robtex) startRootDomains() {
 	// Look at each domain provided by the config
-	for _, domain := range r.Config.Domains() {
+	for _, domain := range r.Enum().Config.Domains() {
 		r.executeQuery(domain)
 	}
 }
@@ -69,7 +61,7 @@ func (r *Robtex) executeQuery(domain string) {
 	url := "https://freeapi.robtex.com/pdns/forward/" + domain
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		r.Config.Log.Printf("%s: %s: %v", r.String(), url, err)
+		r.Enum().Log.Printf("%s: %s: %v", r.String(), url, err)
 		return
 	}
 
@@ -77,7 +69,7 @@ func (r *Robtex) executeQuery(domain string) {
 		if line.Type == "A" {
 			ips = utils.UniqueAppend(ips, line.Data)
 			// Inform the Address Service of this finding
-			r.Bus.Publish(core.NEWADDR, &core.AmassRequest{
+			r.Enum().Bus.Publish(core.NEWADDR, &core.AmassRequest{
 				Domain:  domain,
 				Address: line.Data,
 				Tag:     r.SourceType,
@@ -100,7 +92,7 @@ loop:
 			url = "https://freeapi.robtex.com/pdns/reverse/" + ip
 			pdns, err := utils.RequestWebPage(url, nil, nil, "", "")
 			if err != nil {
-				r.Config.Log.Printf("%s: %s: %v", r.String(), url, err)
+				r.Enum().Log.Printf("%s: %s: %v", r.String(), url, err)
 				continue
 			}
 
@@ -111,7 +103,7 @@ loop:
 	}
 
 	r.SetActive()
-	re := r.Config.DomainRegex(domain)
+	re := r.Enum().Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(list, -1) {
 		req := &core.AmassRequest{
 			Name:   cleanName(sd),
@@ -123,7 +115,7 @@ loop:
 		if r.Enum().DupDataSourceName(req) {
 			continue
 		}
-		r.Bus.Publish(core.NEWNAME, req)
+		r.Enum().Bus.Publish(core.NEWNAME, req)
 	}
 }
 

@@ -10,7 +10,6 @@ import (
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
-	evbus "github.com/asaskevich/EventBus"
 )
 
 type crtData struct {
@@ -27,19 +26,12 @@ type crtData struct {
 type Crtsh struct {
 	core.BaseAmassService
 
-	Bus        evbus.Bus
-	Config     *core.AmassConfig
 	SourceType string
 }
 
-// NewCrtsh requires the enumeration configuration and event bus as parameters.
-// The object returned is initialized, but has not yet been started.
-func NewCrtsh(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *Crtsh {
-	c := &Crtsh{
-		Bus:        bus,
-		Config:     config,
-		SourceType: core.CERT,
-	}
+// NewCrtsh returns he object initialized, but not yet started.
+func NewCrtsh(e *core.Enumeration) *Crtsh {
+	c := &Crtsh{SourceType: core.CERT}
 
 	c.BaseAmassService = *core.NewBaseAmassService(e, "Crtsh", c)
 	return c
@@ -61,7 +53,7 @@ func (c *Crtsh) OnStop() error {
 
 func (c *Crtsh) startRootDomains() {
 	// Look at each domain provided by the config
-	for _, domain := range c.Config.Domains() {
+	for _, domain := range c.Enum().Config.Domains() {
 		c.executeQuery(domain)
 	}
 }
@@ -70,7 +62,7 @@ func (c *Crtsh) executeQuery(domain string) {
 	url := c.getURL(domain)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		c.Config.Log.Printf("%s: %s: %v", c.String(), url, err)
+		c.Enum().Log.Printf("%s: %s: %v", c.String(), url, err)
 		return
 	}
 
@@ -81,7 +73,7 @@ func (c *Crtsh) executeQuery(domain string) {
 		if err := lines.Decode(&line); err == io.EOF {
 			break
 		} else if err != nil {
-			c.Config.Log.Printf("%s: %s: %v", c.String(), url, err)
+			c.Enum().Log.Printf("%s: %s: %v", c.String(), url, err)
 			continue
 		}
 
@@ -95,7 +87,7 @@ func (c *Crtsh) executeQuery(domain string) {
 		if c.Enum().DupDataSourceName(req) {
 			continue
 		}
-		c.Bus.Publish(core.NEWNAME, req)
+		c.Enum().Bus.Publish(core.NEWNAME, req)
 	}
 }
 

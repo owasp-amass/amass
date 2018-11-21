@@ -10,26 +10,20 @@ import (
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
-	evbus "github.com/asaskevich/EventBus"
 )
 
 // Yahoo is the AmassService that handles access to the Yahoo data source.
 type Yahoo struct {
 	core.BaseAmassService
 
-	Bus        evbus.Bus
-	Config     *core.AmassConfig
 	quantity   int
 	limit      int
 	SourceType string
 }
 
-// NewYahoo requires the enumeration configuration and event bus as parameters.
-// The object returned is initialized, but has not yet been started.
-func NewYahoo(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *Yahoo {
+// NewYahoo returns he object initialized, but not yet started.
+func NewYahoo(e *core.Enumeration) *Yahoo {
 	y := &Yahoo{
-		Bus:        bus,
-		Config:     config,
 		quantity:   10,
 		limit:      100,
 		SourceType: core.SCRAPE,
@@ -49,13 +43,13 @@ func (y *Yahoo) OnStart() error {
 
 func (y *Yahoo) startRootDomains() {
 	// Look at each domain provided by the config
-	for _, domain := range y.Config.Domains() {
+	for _, domain := range y.Enum().Config.Domains() {
 		y.executeQuery(domain)
 	}
 }
 
 func (y *Yahoo) executeQuery(domain string) {
-	re := y.Config.DomainRegex(domain)
+	re := y.Enum().Config.DomainRegex(domain)
 	num := y.limit / y.quantity
 	t := time.NewTicker(time.Second)
 	defer t.Stop()
@@ -70,7 +64,7 @@ func (y *Yahoo) executeQuery(domain string) {
 			u := y.urlByPageNum(domain, i)
 			page, err := utils.RequestWebPage(u, nil, nil, "", "")
 			if err != nil {
-				y.Config.Log.Printf("%s: %s: %v", y.String(), u, err)
+				y.Enum().Log.Printf("%s: %s: %v", y.String(), u, err)
 				return
 			}
 
@@ -85,7 +79,7 @@ func (y *Yahoo) executeQuery(domain string) {
 				if y.Enum().DupDataSourceName(req) {
 					continue
 				}
-				y.Bus.Publish(core.NEWNAME, req)
+				y.Enum().Bus.Publish(core.NEWNAME, req)
 			}
 		}
 	}

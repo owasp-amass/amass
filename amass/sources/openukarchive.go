@@ -6,26 +6,20 @@ package sources
 import (
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
-	evbus "github.com/asaskevich/EventBus"
 )
 
 // OpenUKArchive is the AmassService that handles access to the OpenUKArchive data source.
 type OpenUKArchive struct {
 	core.BaseAmassService
 
-	Bus        evbus.Bus
-	Config     *core.AmassConfig
 	baseURL    string
 	SourceType string
 	filter     *utils.StringFilter
 }
 
-// NewOpenUKArchive requires the enumeration configuration and event bus as parameters.
-// The object returned is initialized, but has not yet been started.
-func NewOpenUKArchive(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *OpenUKArchive {
+// NewOpenUKArchive returns he object initialized, but not yet started.
+func NewOpenUKArchive(e *core.Enumeration) *OpenUKArchive {
 	o := &OpenUKArchive{
-		Bus:        bus,
-		Config:     config,
 		baseURL:    "http://www.webarchive.org.uk/wayback/archive",
 		SourceType: core.ARCHIVE,
 		filter:     utils.NewStringFilter(),
@@ -39,7 +33,7 @@ func NewOpenUKArchive(e *core.Enumeration, bus evbus.Bus, config *core.AmassConf
 func (o *OpenUKArchive) OnStart() error {
 	o.BaseAmassService.OnStart()
 
-	o.Bus.SubscribeAsync(core.CHECKED, o.SendRequest, false)
+	o.Enum().Bus.SubscribeAsync(core.CHECKED, o.SendRequest, false)
 	go o.startRootDomains()
 	go o.processRequests()
 	return nil
@@ -49,13 +43,13 @@ func (o *OpenUKArchive) OnStart() error {
 func (o *OpenUKArchive) OnStop() error {
 	o.BaseAmassService.OnStop()
 
-	o.Bus.Unsubscribe(core.CHECKED, o.SendRequest)
+	o.Enum().Bus.Unsubscribe(core.CHECKED, o.SendRequest)
 	return nil
 }
 
 func (o *OpenUKArchive) startRootDomains() {
 	// Look at each domain provided by the config
-	for _, domain := range o.Config.Domains() {
+	for _, domain := range o.Enum().Config.Domains() {
 		o.executeQuery(domain, domain)
 	}
 }
@@ -81,7 +75,7 @@ func (o *OpenUKArchive) executeQuery(sn, domain string) {
 
 	names, err := crawl(o, o.baseURL, domain, sn)
 	if err != nil {
-		o.Config.Log.Printf("%s: %v", o.String(), err)
+		o.Enum().Log.Printf("%s: %v", o.String(), err)
 		return
 	}
 
@@ -96,6 +90,6 @@ func (o *OpenUKArchive) executeQuery(sn, domain string) {
 		if o.Enum().DupDataSourceName(req) {
 			continue
 		}
-		o.Bus.Publish(core.NEWNAME, req)
+		o.Enum().Bus.Publish(core.NEWNAME, req)
 	}
 }

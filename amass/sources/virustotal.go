@@ -8,26 +8,18 @@ import (
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
-	evbus "github.com/asaskevich/EventBus"
 )
 
 // VirusTotal is the AmassService that handles access to the VirusTotal data source.
 type VirusTotal struct {
 	core.BaseAmassService
 
-	Bus        evbus.Bus
-	Config     *core.AmassConfig
 	SourceType string
 }
 
-// NewVirusTotal requires the enumeration configuration and event bus as parameters.
-// The object returned is initialized, but has not yet been started.
-func NewVirusTotal(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *VirusTotal {
-	v := &VirusTotal{
-		Bus:        bus,
-		Config:     config,
-		SourceType: core.SCRAPE,
-	}
+// NewVirusTotal returns he object initialized, but not yet started.
+func NewVirusTotal(e *core.Enumeration) *VirusTotal {
+	v := &VirusTotal{SourceType: core.SCRAPE}
 
 	v.BaseAmassService = *core.NewBaseAmassService(e, "VirusTotal", v)
 	return v
@@ -49,17 +41,17 @@ func (v *VirusTotal) OnStop() error {
 
 func (v *VirusTotal) startRootDomains() {
 	// Look at each domain provided by the config
-	for _, domain := range v.Config.Domains() {
+	for _, domain := range v.Enum().Config.Domains() {
 		v.executeQuery(domain)
 	}
 }
 
 func (v *VirusTotal) executeQuery(domain string) {
-	re := v.Config.DomainRegex(domain)
+	re := v.Enum().Config.DomainRegex(domain)
 	url := v.getURL(domain)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		v.Config.Log.Printf("%s: %s: %v", v.String(), url, err)
+		v.Enum().Log.Printf("%s: %s: %v", v.String(), url, err)
 		return
 	}
 
@@ -75,7 +67,7 @@ func (v *VirusTotal) executeQuery(domain string) {
 		if v.Enum().DupDataSourceName(req) {
 			continue
 		}
-		v.Bus.Publish(core.NEWNAME, req)
+		v.Enum().Bus.Publish(core.NEWNAME, req)
 	}
 }
 

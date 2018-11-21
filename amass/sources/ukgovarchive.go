@@ -6,26 +6,20 @@ package sources
 import (
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
-	evbus "github.com/asaskevich/EventBus"
 )
 
 // UKGovArchive is the AmassService that handles access to the UKGovArchive data source.
 type UKGovArchive struct {
 	core.BaseAmassService
 
-	Bus        evbus.Bus
-	Config     *core.AmassConfig
 	baseURL    string
 	SourceType string
 	filter     *utils.StringFilter
 }
 
-// NewUKGovArchive requires the enumeration configuration and event bus as parameters.
-// The object returned is initialized, but has not yet been started.
-func NewUKGovArchive(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *UKGovArchive {
+// NewUKGovArchive returns he object initialized, but not yet started.
+func NewUKGovArchive(e *core.Enumeration) *UKGovArchive {
 	u := &UKGovArchive{
-		Bus:        bus,
-		Config:     config,
 		baseURL:    "http://webarchive.nationalarchives.gov.uk",
 		SourceType: core.ARCHIVE,
 		filter:     utils.NewStringFilter(),
@@ -39,7 +33,7 @@ func NewUKGovArchive(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfi
 func (u *UKGovArchive) OnStart() error {
 	u.BaseAmassService.OnStart()
 
-	u.Bus.SubscribeAsync(core.CHECKED, u.SendRequest, false)
+	u.Enum().Bus.SubscribeAsync(core.CHECKED, u.SendRequest, false)
 	go u.startRootDomains()
 	go u.processRequests()
 	return nil
@@ -49,13 +43,13 @@ func (u *UKGovArchive) OnStart() error {
 func (u *UKGovArchive) OnStop() error {
 	u.BaseAmassService.OnStop()
 
-	u.Bus.Unsubscribe(core.CHECKED, u.SendRequest)
+	u.Enum().Bus.Unsubscribe(core.CHECKED, u.SendRequest)
 	return nil
 }
 
 func (u *UKGovArchive) startRootDomains() {
 	// Look at each domain provided by the config
-	for _, domain := range u.Config.Domains() {
+	for _, domain := range u.Enum().Config.Domains() {
 		u.executeQuery(domain, domain)
 	}
 }
@@ -81,7 +75,7 @@ func (u *UKGovArchive) executeQuery(sn, domain string) {
 
 	names, err := crawl(u, u.baseURL, domain, sn)
 	if err != nil {
-		u.Config.Log.Printf("%s: %v", u.String(), err)
+		u.Enum().Log.Printf("%s: %v", u.String(), err)
 		return
 	}
 
@@ -96,6 +90,6 @@ func (u *UKGovArchive) executeQuery(sn, domain string) {
 		if u.Enum().DupDataSourceName(req) {
 			continue
 		}
-		u.Bus.Publish(core.NEWNAME, req)
+		u.Enum().Bus.Publish(core.NEWNAME, req)
 	}
 }

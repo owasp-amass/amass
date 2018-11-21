@@ -8,26 +8,18 @@ import (
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
-	evbus "github.com/asaskevich/EventBus"
 )
 
 // CertSpotter is the AmassService that handles access to the CertSpotter data source.
 type CertSpotter struct {
 	core.BaseAmassService
 
-	Bus        evbus.Bus
-	Config     *core.AmassConfig
 	SourceType string
 }
 
-// NewCertSpotter requires the enumeration configuration and event bus as parameters.
-// The object returned is initialized, but has not yet been started.
-func NewCertSpotter(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *CertSpotter {
-	c := &CertSpotter{
-		Bus:        bus,
-		Config:     config,
-		SourceType: core.CERT,
-	}
+// NewCertSpotter returns he object initialized, but not yet started.
+func NewCertSpotter(e *core.Enumeration) *CertSpotter {
+	c := &CertSpotter{SourceType: core.CERT}
 
 	c.BaseAmassService = *core.NewBaseAmassService(e, "CertSpotter", c)
 	return c
@@ -49,7 +41,7 @@ func (c *CertSpotter) OnStop() error {
 
 func (c *CertSpotter) startRootDomains() {
 	// Look at each domain provided by the config
-	for _, domain := range c.Config.Domains() {
+	for _, domain := range c.Enum().Config.Domains() {
 		c.executeQuery(domain)
 	}
 }
@@ -58,12 +50,12 @@ func (c *CertSpotter) executeQuery(domain string) {
 	url := c.getURL(domain)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		c.Config.Log.Printf("%s: %s: %v", c.String(), url, err)
+		c.Enum().Log.Printf("%s: %s: %v", c.String(), url, err)
 		return
 	}
 
 	c.SetActive()
-	re := c.Config.DomainRegex(domain)
+	re := c.Enum().Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
 		req := &core.AmassRequest{
 			Name:   cleanName(sd),
@@ -75,7 +67,7 @@ func (c *CertSpotter) executeQuery(domain string) {
 		if c.Enum().DupDataSourceName(req) {
 			continue
 		}
-		c.Bus.Publish(core.NEWNAME, req)
+		c.Enum().Bus.Publish(core.NEWNAME, req)
 	}
 }
 

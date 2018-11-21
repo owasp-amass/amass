@@ -92,6 +92,8 @@ func NewTimedSemaphore(max int, delay time.Duration) Semaphore {
 	for i := 0; i < max; i++ {
 		sem.c <- struct{}{}
 	}
+
+	go sem.processReleases()
 	return sem
 }
 

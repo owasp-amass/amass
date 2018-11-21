@@ -9,7 +9,6 @@ import (
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
-	evbus "github.com/asaskevich/EventBus"
 )
 
 var (
@@ -31,18 +30,13 @@ var (
 type CommonCrawl struct {
 	core.BaseAmassService
 
-	Bus        evbus.Bus
-	Config     *core.AmassConfig
 	baseURL    string
 	SourceType string
 }
 
-// NewCommonCrawl requires the enumeration configuration and event bus as parameters.
-// The object returned is initialized, but has not yet been started.
-func NewCommonCrawl(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *CommonCrawl {
+// NewCommonCrawl returns he object initialized, but not yet started.
+func NewCommonCrawl(e *core.Enumeration) *CommonCrawl {
 	c := &CommonCrawl{
-		Bus:        bus,
-		Config:     config,
 		baseURL:    "http://index.commoncrawl.org/",
 		SourceType: core.SCRAPE,
 	}
@@ -67,13 +61,13 @@ func (c *CommonCrawl) OnStop() error {
 
 func (c *CommonCrawl) startRootDomains() {
 	// Look at each domain provided by the config
-	for _, domain := range c.Config.Domains() {
+	for _, domain := range c.Enum().Config.Domains() {
 		c.executeQuery(domain)
 	}
 }
 
 func (c *CommonCrawl) executeQuery(domain string) {
-	re := c.Config.DomainRegex(domain)
+	re := c.Enum().Config.DomainRegex(domain)
 	t := time.NewTicker(time.Second)
 	defer t.Stop()
 
@@ -87,7 +81,7 @@ func (c *CommonCrawl) executeQuery(domain string) {
 			u := c.getURL(index, domain)
 			page, err := utils.RequestWebPage(u, nil, nil, "", "")
 			if err != nil {
-				c.Config.Log.Printf("%s: %s: %v", c.String(), u, err)
+				c.Enum().Log.Printf("%s: %s: %v", c.String(), u, err)
 				continue
 			}
 
@@ -102,7 +96,7 @@ func (c *CommonCrawl) executeQuery(domain string) {
 				if c.Enum().DupDataSourceName(req) {
 					continue
 				}
-				c.Bus.Publish(core.NEWNAME, req)
+				c.Enum().Bus.Publish(core.NEWNAME, req)
 			}
 		}
 	}

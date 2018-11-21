@@ -8,26 +8,18 @@ import (
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
-	evbus "github.com/asaskevich/EventBus"
 )
 
 // ThreatCrowd is the AmassService that handles access to the ThreatCrowd data source.
 type ThreatCrowd struct {
 	core.BaseAmassService
 
-	Bus        evbus.Bus
-	Config     *core.AmassConfig
 	SourceType string
 }
 
-// NewThreatCrowd requires the enumeration configuration and event bus as parameters.
-// The object returned is initialized, but has not yet been started.
-func NewThreatCrowd(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *ThreatCrowd {
-	t := &ThreatCrowd{
-		Bus:        bus,
-		Config:     config,
-		SourceType: core.SCRAPE,
-	}
+// NewThreatCrowd returns he object initialized, but not yet started.
+func NewThreatCrowd(e *core.Enumeration) *ThreatCrowd {
+	t := &ThreatCrowd{SourceType: core.SCRAPE}
 
 	t.BaseAmassService = *core.NewBaseAmassService(e, "ThreatCrowd", t)
 	return t
@@ -49,7 +41,7 @@ func (t *ThreatCrowd) OnStop() error {
 
 func (t *ThreatCrowd) startRootDomains() {
 	// Look at each domain provided by the config
-	for _, domain := range t.Config.Domains() {
+	for _, domain := range t.Enum().Config.Domains() {
 		t.executeQuery(domain)
 	}
 }
@@ -58,12 +50,12 @@ func (t *ThreatCrowd) executeQuery(domain string) {
 	url := t.getURL(domain)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		t.Config.Log.Printf("%s: %s: %v", t.String(), url, err)
+		t.Enum().Log.Printf("%s: %s: %v", t.String(), url, err)
 		return
 	}
 
 	t.SetActive()
-	re := t.Config.DomainRegex(domain)
+	re := t.Enum().Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
 		req := &core.AmassRequest{
 			Name:   cleanName(sd),
@@ -75,7 +67,7 @@ func (t *ThreatCrowd) executeQuery(domain string) {
 		if t.Enum().DupDataSourceName(req) {
 			continue
 		}
-		t.Bus.Publish(core.NEWNAME, req)
+		t.Enum().Bus.Publish(core.NEWNAME, req)
 	}
 }
 

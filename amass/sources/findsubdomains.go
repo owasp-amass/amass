@@ -8,26 +8,18 @@ import (
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
-	evbus "github.com/asaskevich/EventBus"
 )
 
 // FindSubdomains is the AmassService that handles access to the FindSubdomains data source.
 type FindSubdomains struct {
 	core.BaseAmassService
 
-	Bus        evbus.Bus
-	Config     *core.AmassConfig
 	SourceType string
 }
 
-// NewFindSubdomains requires the enumeration configuration and event bus as parameters.
-// The object returned is initialized, but has not yet been started.
-func NewFindSubdomains(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *FindSubdomains {
-	f := &FindSubdomains{
-		Bus:        bus,
-		Config:     config,
-		SourceType: core.SCRAPE,
-	}
+// NewFindSubdomains returns he object initialized, but not yet started.
+func NewFindSubdomains(e *core.Enumeration) *FindSubdomains {
+	f := &FindSubdomains{SourceType: core.SCRAPE}
 
 	f.BaseAmassService = *core.NewBaseAmassService(e, "FindSubdomains", f)
 	return f
@@ -49,7 +41,7 @@ func (f *FindSubdomains) OnStop() error {
 
 func (f *FindSubdomains) startRootDomains() {
 	// Look at each domain provided by the config
-	for _, domain := range f.Config.Domains() {
+	for _, domain := range f.Enum().Config.Domains() {
 		f.executeQuery(domain)
 	}
 }
@@ -58,12 +50,12 @@ func (f *FindSubdomains) executeQuery(domain string) {
 	url := f.getURL(domain)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		f.Config.Log.Printf("%s: %s: %v", f.String(), url, err)
+		f.Enum().Log.Printf("%s: %s: %v", f.String(), url, err)
 		return
 	}
 
 	f.SetActive()
-	re := f.Config.DomainRegex(domain)
+	re := f.Enum().Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
 		req := &core.AmassRequest{
 			Name:   cleanName(sd),
@@ -75,7 +67,7 @@ func (f *FindSubdomains) executeQuery(domain string) {
 		if f.Enum().DupDataSourceName(req) {
 			continue
 		}
-		f.Bus.Publish(core.NEWNAME, req)
+		f.Enum().Bus.Publish(core.NEWNAME, req)
 	}
 }
 

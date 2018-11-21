@@ -10,26 +10,20 @@ import (
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
-	evbus "github.com/asaskevich/EventBus"
 )
 
 // Bing is the AmassService that handles access to the Bing data source.
 type Bing struct {
 	core.BaseAmassService
 
-	Bus        evbus.Bus
-	Config     *core.AmassConfig
 	quantity   int
 	limit      int
 	SourceType string
 }
 
-// NewBing requires the enumeration configuration and event bus as parameters.
-// The object returned is initialized, but has not yet been started.
-func NewBing(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *Bing {
+// NewBing returns he object initialized, but not yet started.
+func NewBing(e *core.Enumeration) *Bing {
 	b := &Bing{
-		Bus:        bus,
-		Config:     config,
 		quantity:   20,
 		limit:      200,
 		SourceType: core.SCRAPE,
@@ -55,13 +49,13 @@ func (b *Bing) OnStop() error {
 
 func (b *Bing) startRootDomains() {
 	// Look at each domain provided by the config
-	for _, domain := range b.Config.Domains() {
+	for _, domain := range b.Enum().Config.Domains() {
 		b.executeQuery(domain)
 	}
 }
 
 func (b *Bing) executeQuery(domain string) {
-	re := b.Config.DomainRegex(domain)
+	re := b.Enum().Config.DomainRegex(domain)
 	num := b.limit / b.quantity
 	t := time.NewTicker(time.Second)
 	defer t.Stop()
@@ -76,7 +70,7 @@ func (b *Bing) executeQuery(domain string) {
 			u := b.urlByPageNum(domain, i)
 			page, err := utils.RequestWebPage(u, nil, nil, "", "")
 			if err != nil {
-				b.Config.Log.Printf("%s: %s: %v", b.String(), u, err)
+				b.Enum().Log.Printf("%s: %s: %v", b.String(), u, err)
 				return
 			}
 
@@ -91,7 +85,7 @@ func (b *Bing) executeQuery(domain string) {
 				if b.Enum().DupDataSourceName(req) {
 					continue
 				}
-				b.Bus.Publish(core.NEWNAME, req)
+				b.Enum().Bus.Publish(core.NEWNAME, req)
 			}
 		}
 	}

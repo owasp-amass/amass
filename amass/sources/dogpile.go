@@ -10,26 +10,20 @@ import (
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
-	evbus "github.com/asaskevich/EventBus"
 )
 
 // Dogpile is the AmassService that handles access to the Dogpile data source.
 type Dogpile struct {
 	core.BaseAmassService
 
-	Bus        evbus.Bus
-	Config     *core.AmassConfig
 	quantity   int
 	limit      int
 	SourceType string
 }
 
-// NewDogpile requires the enumeration configuration and event bus as parameters.
-// The object returned is initialized, but has not yet been started.
-func NewDogpile(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *Dogpile {
+// NewDogpile returns he object initialized, but not yet started.
+func NewDogpile(e *core.Enumeration) *Dogpile {
 	d := &Dogpile{
-		Bus:        bus,
-		Config:     config,
 		quantity:   15, // Dogpile returns roughly 15 results per page
 		limit:      90,
 		SourceType: core.SCRAPE,
@@ -55,13 +49,13 @@ func (d *Dogpile) OnStop() error {
 
 func (d *Dogpile) startRootDomains() {
 	// Look at each domain provided by the config
-	for _, domain := range d.Config.Domains() {
+	for _, domain := range d.Enum().Config.Domains() {
 		d.executeQuery(domain)
 	}
 }
 
 func (d *Dogpile) executeQuery(domain string) {
-	re := d.Config.DomainRegex(domain)
+	re := d.Enum().Config.DomainRegex(domain)
 	num := d.limit / d.quantity
 	t := time.NewTicker(time.Second)
 	defer t.Stop()
@@ -76,7 +70,7 @@ func (d *Dogpile) executeQuery(domain string) {
 			u := d.urlByPageNum(domain, i)
 			page, err := utils.RequestWebPage(u, nil, nil, "", "")
 			if err != nil {
-				d.Config.Log.Printf("%s: %s: %v", d.String(), u, err)
+				d.Enum().Log.Printf("%s: %s: %v", d.String(), u, err)
 				return
 			}
 
@@ -91,7 +85,7 @@ func (d *Dogpile) executeQuery(domain string) {
 				if d.Enum().DupDataSourceName(req) {
 					continue
 				}
-				d.Bus.Publish(core.NEWNAME, req)
+				d.Enum().Bus.Publish(core.NEWNAME, req)
 			}
 		}
 	}

@@ -8,26 +8,18 @@ import (
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
-	evbus "github.com/asaskevich/EventBus"
 )
 
 // Exalead is the AmassService that handles access to the Exalead data source.
 type PTRArchive struct {
 	core.BaseAmassService
 
-	Bus        evbus.Bus
-	Config     *core.AmassConfig
 	SourceType string
 }
 
-// NewPTRArchive requires the enumeration configuration and event bus as parameters.
-// The object returned is initialized, but has not yet been started.
-func NewPTRArchive(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *PTRArchive {
-	p := &PTRArchive{
-		Bus:        bus,
-		Config:     config,
-		SourceType: core.SCRAPE,
-	}
+// NewPTRArchive returns he object initialized, but not yet started.
+func NewPTRArchive(e *core.Enumeration) *PTRArchive {
+	p := &PTRArchive{SourceType: core.SCRAPE}
 
 	p.BaseAmassService = *core.NewBaseAmassService(e, "PTRArchive", p)
 	return p
@@ -49,7 +41,7 @@ func (p *PTRArchive) OnStop() error {
 
 func (p *PTRArchive) startRootDomains() {
 	// Look at each domain provided by the config
-	for _, domain := range p.Config.Domains() {
+	for _, domain := range p.Enum().Config.Domains() {
 		p.executeQuery(domain)
 	}
 }
@@ -58,12 +50,12 @@ func (p *PTRArchive) executeQuery(domain string) {
 	url := p.getURL(domain)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		p.Config.Log.Printf("%s: %s: %v", p.String(), url, err)
+		p.Enum().Log.Printf("%s: %s: %v", p.String(), url, err)
 		return
 	}
 
 	p.SetActive()
-	re := p.Config.DomainRegex(domain)
+	re := p.Enum().Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
 		req := &core.AmassRequest{
 			Name:   cleanName(sd),
@@ -75,7 +67,7 @@ func (p *PTRArchive) executeQuery(domain string) {
 		if p.Enum().DupDataSourceName(req) {
 			continue
 		}
-		p.Bus.Publish(core.NEWNAME, req)
+		p.Enum().Bus.Publish(core.NEWNAME, req)
 	}
 }
 

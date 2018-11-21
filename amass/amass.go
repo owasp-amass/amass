@@ -13,7 +13,6 @@ import (
 	"github.com/OWASP/Amass/amass/dnssrv"
 	"github.com/OWASP/Amass/amass/sources"
 	"github.com/OWASP/Amass/amass/utils"
-	evbus "github.com/asaskevich/EventBus"
 )
 
 // Banner is the ASCII art logo used within help output.
@@ -53,24 +52,20 @@ func StartEnumeration(e *core.Enumeration) error {
 		e.Config.Wordlist, _ = getDefaultWordlist()
 	}
 
-	bus := evbus.New()
-	bus.SubscribeAsync(core.OUTPUT, e.SendOutput, true)
+	e.Bus.SubscribeAsync(core.OUTPUT, e.SendOutput, true)
 	// Select the correct services to be used in this enumeration
-	services := []core.AmassService{
-		NewNameService(e, bus, e.Config),
-		NewAddressService(e, bus, e.Config),
-	}
+	services := []core.AmassService{NewNameService(e), NewAddressService(e)}
 	if !e.Config.Passive {
 		services = append(services,
-			NewDataManagerService(e, bus, e.Config),
-			dnssrv.NewDNSService(e, bus, e.Config),
-			NewAlterationService(e, bus, e.Config),
-			NewBruteForceService(e, bus, e.Config),
-			NewActiveCertService(e, bus, e.Config),
+			NewDataManagerService(e),
+			dnssrv.NewDNSService(e),
+			NewAlterationService(e),
+			NewBruteForceService(e),
+			NewActiveCertService(e),
 		)
 	}
 	// Grab all the data sources
-	services = append(services, sources.GetAllSources(e, bus, e.Config)...)
+	services = append(services, sources.GetAllSources(e)...)
 
 	for _, srv := range services {
 		if err := srv.Start(); err != nil {
@@ -108,7 +103,7 @@ loop:
 		srv.Stop()
 	}
 	time.Sleep(time.Second)
-	bus.Unsubscribe(core.OUTPUT, e.SendOutput)
+	e.Bus.Unsubscribe(core.OUTPUT, e.SendOutput)
 	time.Sleep(2 * time.Second)
 	close(e.Output)
 	return nil

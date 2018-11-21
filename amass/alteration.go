@@ -9,7 +9,6 @@ import (
 	"unicode"
 
 	"github.com/OWASP/Amass/amass/core"
-	evbus "github.com/asaskevich/EventBus"
 	"github.com/miekg/dns"
 )
 
@@ -17,18 +16,11 @@ import (
 // the architecture. This is achieved by receiving all the RESOLVED events.
 type AlterationService struct {
 	core.BaseAmassService
-
-	Bus    evbus.Bus
-	Config *core.AmassConfig
 }
 
-// NewAlterationService requires the enumeration configuration and event bus as parameters.
-// The object returned is initialized, but has not yet been started.
-func NewAlterationService(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *AlterationService {
-	as := &AlterationService{
-		Bus:    bus,
-		Config: config,
-	}
+// NewAlterationService returns he object initialized, but not yet started.
+func NewAlterationService(e *core.Enumeration) *AlterationService {
+	as := new(AlterationService)
 
 	as.BaseAmassService = *core.NewBaseAmassService(e, "Alterations", as)
 	return as
@@ -38,8 +30,8 @@ func NewAlterationService(e *core.Enumeration, bus evbus.Bus, config *core.Amass
 func (as *AlterationService) OnStart() error {
 	as.BaseAmassService.OnStart()
 
-	if as.Config.Alterations {
-		as.Bus.SubscribeAsync(core.CHECKED, as.SendRequest, false)
+	if as.Enum().Config.Alterations {
+		as.Enum().Bus.SubscribeAsync(core.CHECKED, as.SendRequest, false)
 		go as.processRequests()
 	}
 	return nil
@@ -49,8 +41,8 @@ func (as *AlterationService) OnStart() error {
 func (as *AlterationService) OnStop() error {
 	as.BaseAmassService.OnStop()
 
-	if as.Config.Alterations {
-		as.Bus.Unsubscribe(core.CHECKED, as.SendRequest)
+	if as.Enum().Config.Alterations {
+		as.Enum().Bus.Unsubscribe(core.CHECKED, as.SendRequest)
 	}
 	return nil
 }
@@ -71,7 +63,7 @@ func (as *AlterationService) processRequests() {
 // executeAlterations runs all the DNS name alteration methods as goroutines.
 func (as *AlterationService) executeAlterations(req *core.AmassRequest) {
 	as.SetActive()
-	if !as.Config.IsDomainInScope(req.Name) || !as.correctRecordTypes(req) {
+	if !as.Enum().Config.IsDomainInScope(req.Name) || !as.correctRecordTypes(req) {
 		return
 	}
 	as.flipNumbersInName(req)
@@ -147,7 +139,7 @@ func (as *AlterationService) appendNumbers(req *core.AmassRequest) {
 
 // sendAlteredName checks that the provided name is valid and sends it along to the SubdomainService.
 func (as *AlterationService) sendAlteredName(name, domain string) {
-	re := as.Config.DomainRegex(domain)
+	re := as.Enum().Config.DomainRegex(domain)
 	if re == nil || !re.MatchString(name) {
 		return
 	}
@@ -162,5 +154,5 @@ func (as *AlterationService) sendAlteredName(name, domain string) {
 	if as.Enum().DupDataSourceName(req) {
 		return
 	}
-	as.Bus.Publish(core.NEWNAME, req)
+	as.Enum().Bus.Publish(core.NEWNAME, req)
 }

@@ -5,11 +5,13 @@ package core
 
 import (
 	"errors"
+	"io"
 	"io/ioutil"
 	"log"
 	"time"
 
 	"github.com/OWASP/Amass/amass/utils"
+	evbus "github.com/asaskevich/EventBus"
 )
 
 // Various types used throughout Amass
@@ -57,13 +59,27 @@ type EnumerationTiming int
 
 // Enumeration is the object type used to execute a DNS enumeration with Amass.
 type Enumeration struct {
+	Config *AmassConfig
+
+	Bus evbus.Bus
+
+	// Link graph that collects all the information gathered by the enumeration
+	Graph *Graph
+
 	// The channel that will receive the results
 	Output chan *AmassOutput
 
 	// Broadcast channel that indicates no further writes to the output channel
 	Done chan struct{}
 
-	Config *AmassConfig
+	// Logger for error messages
+	Log *log.Logger
+
+	// The writer used to save the data operations performed
+	DataOptsWriter io.Writer
+
+	// MaxFlow is a Semaphore that restricts the number of names moving through the architecture
+	MaxFlow utils.Semaphore
 
 	trustedNameFilter *utils.StringFilter
 	otherNameFilter   *utils.StringFilter
@@ -81,22 +97,23 @@ func init() {
 // NewEnumeration returns an initialized Enumeration that has not been started yet.
 func NewEnumeration() *Enumeration {
 	enum := &Enumeration{
-		Output: make(chan *AmassOutput, 100),
-		Done:   make(chan struct{}),
 		Config: &AmassConfig{
-			Log:             log.New(ioutil.Discard, "", 0),
 			Ports:           []int{443},
 			Recursive:       true,
 			MinForRecursive: 1,
 			Alterations:     true,
 			Timing:          Normal,
 		},
+		Bus:               evbus.New(),
+		Graph:             NewGraph(),
+		Output:            make(chan *AmassOutput, 100),
+		Done:              make(chan struct{}),
+		Log:               log.New(ioutil.Discard, "", 0),
 		trustedNameFilter: utils.NewStringFilter(),
 		otherNameFilter:   utils.NewStringFilter(),
 		pause:             make(chan struct{}),
 		resume:            make(chan struct{}),
 	}
-	enum.Config.SetGraph(NewGraph())
 	return enum
 }
 
@@ -126,16 +143,16 @@ func (e *Enumeration) CheckConfig() error {
 	if e.Config.Passive && e.Config.Active {
 		return errors.New("Active enumeration cannot be performed without DNS resolution")
 	}
-	if e.Config.Passive && e.Config.DataOptsWriter != nil {
+	if e.Config.Passive && e.DataOptsWriter != nil {
 		return errors.New("Data operations cannot be saved without DNS resolution")
 	}
 	if len(e.Config.Ports) == 0 {
 		e.Config.Ports = []int{443}
 	}
 
-	e.Config.MaxFlow = utils.NewTimedSemaphore(
-		TimingToMaxFlow(e.Config.Timing),
-		TimingToReleaseDelay(e.Config.Timing))
+	e.MaxFlow = utils.NewTimedSemaphore(
+		e.Config.Timing.ToMaxFlow(),
+		e.Config.Timing.ToReleaseDelay())
 	return nil
 }
 
@@ -173,8 +190,8 @@ func TrustedTag(tag string) bool {
 	return false
 }
 
-// TimingToMaxFlow returns the maximum number of names Amass should handle at once.
-func TimingToMaxFlow(t EnumerationTiming) int {
+// ToMaxFlow returns the maximum number of names Amass should handle at once.
+func (t EnumerationTiming) ToMaxFlow() int {
 	var result int
 
 	switch t {
@@ -194,8 +211,8 @@ func TimingToMaxFlow(t EnumerationTiming) int {
 	return result
 }
 
-// TimingToReleaseDelay returns the minimum delay between each MaxFlow semaphore release.
-func TimingToReleaseDelay(t EnumerationTiming) time.Duration {
+// ToReleaseDelay returns the minimum delay between each MaxFlow semaphore release.
+func (t EnumerationTiming) ToReleaseDelay() time.Duration {
 	var result time.Duration
 
 	switch t {
@@ -215,8 +232,8 @@ func TimingToReleaseDelay(t EnumerationTiming) time.Duration {
 	return result
 }
 
-// TimingToReleasesPerSecond returns the number of releases performed on MaxFlow each second.
-func TimingToReleasesPerSecond(t EnumerationTiming) int {
+// ToReleasesPerSecond returns the number of releases performed on MaxFlow each second.
+func (t EnumerationTiming) ToReleasesPerSecond() int {
 	var result int
 
 	switch t {

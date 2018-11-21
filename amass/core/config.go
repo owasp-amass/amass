@@ -4,8 +4,6 @@
 package core
 
 import (
-	"io"
-	"log"
 	"regexp"
 	"strings"
 	"sync"
@@ -16,12 +14,6 @@ import (
 // AmassConfig passes along optional Amass enumeration configurations
 type AmassConfig struct {
 	sync.Mutex
-
-	// Logger for error messages
-	Log *log.Logger
-
-	// MaxFlow is a Semaphore that restricts the number of names moving through the architecture
-	MaxFlow utils.Semaphore
 
 	// The ports that will be checked for certificates
 	Ports []int
@@ -56,12 +48,6 @@ type AmassConfig struct {
 	// A blacklist of subdomain names that will not be investigated
 	Blacklist []string
 
-	// The writer used to save the data operations performed
-	DataOptsWriter io.Writer
-
-	// Link graph that collects all the information gathered by the enumeration
-	graph *Graph
-
 	// The root domain names that the enumeration will target
 	domains []string
 
@@ -75,22 +61,6 @@ type AmassConfig struct {
 type APIKey struct {
 	UID    string
 	Secret string
-}
-
-// Graph returns the Amass graph that contains all enumeration findings.
-func (c *AmassConfig) Graph() *Graph {
-	c.Lock()
-	defer c.Unlock()
-
-	return c.graph
-}
-
-// SetGraph assigns a Graph to the current configuration.
-func (c *AmassConfig) SetGraph(g *Graph) {
-	c.Lock()
-	defer c.Unlock()
-
-	c.graph = g
 }
 
 // DomainRegex returns the Regexp object for the domain name identified by the parameter.

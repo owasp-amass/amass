@@ -15,7 +15,6 @@ import (
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
-	evbus "github.com/asaskevich/EventBus"
 )
 
 const (
@@ -28,19 +27,14 @@ const (
 type ActiveCertService struct {
 	core.BaseAmassService
 
-	Bus       evbus.Bus
-	Config    *core.AmassConfig
 	maxPulls  utils.Semaphore
 	filter    *utils.StringFilter
 	addrQueue chan string
 }
 
-// NewActiveCertService requires the enumeration configuration and event bus as parameters.
-// The object returned is initialized, but has not yet been started.
-func NewActiveCertService(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *ActiveCertService {
+// NewActiveCertService returns he object initialized, but not yet started.
+func NewActiveCertService(e *core.Enumeration) *ActiveCertService {
 	acs := &ActiveCertService{
-		Bus:       bus,
-		Config:    config,
 		maxPulls:  utils.NewSimpleSemaphore(25),
 		filter:    utils.NewStringFilter(),
 		addrQueue: make(chan string, 50),
@@ -54,8 +48,8 @@ func NewActiveCertService(e *core.Enumeration, bus evbus.Bus, config *core.Amass
 func (acs *ActiveCertService) OnStart() error {
 	acs.BaseAmassService.OnStart()
 
-	if acs.Config.Active {
-		acs.Bus.SubscribeAsync(core.ACTIVECERT, acs.queueAddress, false)
+	if acs.Enum().Config.Active {
+		acs.Enum().Bus.SubscribeAsync(core.ACTIVECERT, acs.queueAddress, false)
 	}
 
 	go acs.processRequests()
@@ -66,8 +60,8 @@ func (acs *ActiveCertService) OnStart() error {
 func (acs *ActiveCertService) OnStop() error {
 	acs.BaseAmassService.OnStop()
 
-	if acs.Config.Active {
-		acs.Bus.Unsubscribe(core.ACTIVECERT, acs.queueAddress)
+	if acs.Enum().Config.Active {
+		acs.Enum().Bus.Unsubscribe(core.ACTIVECERT, acs.queueAddress)
 	}
 	return nil
 }
@@ -99,13 +93,13 @@ func (acs *ActiveCertService) performRequest(addr string) {
 	defer acs.maxPulls.Release(1)
 
 	acs.SetActive()
-	for _, r := range PullCertificateNames(addr, acs.Config.Ports) {
-		domain := acs.Config.WhichDomain(r.Name)
+	for _, r := range PullCertificateNames(addr, acs.Enum().Config.Ports) {
+		domain := acs.Enum().Config.WhichDomain(r.Name)
 
 		if domain != "" && !acs.Enum().DupDataSourceName(r) {
 			r.Domain = domain
 			r.Source = acs.String()
-			acs.Bus.Publish(core.NEWNAME, r)
+			acs.Enum().Bus.Publish(core.NEWNAME, r)
 		}
 	}
 	acs.SetActive()

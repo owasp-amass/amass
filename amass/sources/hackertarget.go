@@ -8,26 +8,18 @@ import (
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
-	evbus "github.com/asaskevich/EventBus"
 )
 
 // HackerTarget is the AmassService that handles access to the HackerTarget data source.
 type HackerTarget struct {
 	core.BaseAmassService
 
-	Bus        evbus.Bus
-	Config     *core.AmassConfig
 	SourceType string
 }
 
-// NewHackerTarget requires the enumeration configuration and event bus as parameters.
-// The object returned is initialized, but has not yet been started.
-func NewHackerTarget(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *HackerTarget {
-	h := &HackerTarget{
-		Bus:        bus,
-		Config:     config,
-		SourceType: core.API,
-	}
+// NewHackerTarget returns he object initialized, but not yet started.
+func NewHackerTarget(e *core.Enumeration) *HackerTarget {
+	h := &HackerTarget{SourceType: core.API}
 
 	h.BaseAmassService = *core.NewBaseAmassService(e, "HackerTarget", h)
 	return h
@@ -49,7 +41,7 @@ func (h *HackerTarget) OnStop() error {
 
 func (h *HackerTarget) startRootDomains() {
 	// Look at each domain provided by the config
-	for _, domain := range h.Config.Domains() {
+	for _, domain := range h.Enum().Config.Domains() {
 		h.executeQuery(domain)
 	}
 }
@@ -58,12 +50,12 @@ func (h *HackerTarget) executeQuery(domain string) {
 	url := h.getURL(domain)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		h.Config.Log.Printf("%s: %s: %v", h.String(), url, err)
+		h.Enum().Log.Printf("%s: %s: %v", h.String(), url, err)
 		return
 	}
 
 	h.SetActive()
-	re := h.Config.DomainRegex(domain)
+	re := h.Enum().Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
 		req := &core.AmassRequest{
 			Name:   cleanName(sd),
@@ -75,7 +67,7 @@ func (h *HackerTarget) executeQuery(domain string) {
 		if h.Enum().DupDataSourceName(req) {
 			continue
 		}
-		h.Bus.Publish(core.NEWNAME, req)
+		h.Enum().Bus.Publish(core.NEWNAME, req)
 	}
 }
 

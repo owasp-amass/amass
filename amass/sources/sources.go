@@ -17,7 +17,6 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 	"github.com/PuerkitoBio/fetchbot"
 	"github.com/PuerkitoBio/goquery"
-	evbus "github.com/asaskevich/EventBus"
 )
 
 var (
@@ -25,40 +24,41 @@ var (
 )
 
 // GetAllSources returns a slice of all data source services, initialized and ready.
-func GetAllSources(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) []core.AmassService {
+func GetAllSources(e *core.Enumeration) []core.AmassService {
 	return []core.AmassService{
-		NewArchiveIt(e, bus, config),
-		NewArchiveToday(e, bus, config),
-		NewArquivo(e, bus, config),
-		NewAsk(e, bus, config),
-		NewBaidu(e, bus, config),
-		NewCensys(e, bus, config),
-		NewCertDB(e, bus, config),
-		NewCertSpotter(e, bus, config),
-		NewCommonCrawl(e, bus, config),
-		NewCrtsh(e, bus, config),
-		//NewDNSDB(bus, config),
-		NewDNSDumpster(e, bus, config),
-		NewDNSTable(e, bus, config),
-		NewDogpile(e, bus, config),
-		NewEntrust(e, bus, config),
-		NewExalead(e, bus, config),
-		NewFindSubdomains(e, bus, config),
-		NewGoogle(e, bus, config),
-		NewHackerTarget(e, bus, config),
-		NewIPv4Info(e, bus, config),
-		NewLoCArchive(e, bus, config),
-		NewNetcraft(e, bus, config),
-		NewOpenUKArchive(e, bus, config),
-		NewPTRArchive(e, bus, config),
-		NewRiddler(e, bus, config),
-		NewRobtex(e, bus, config),
-		NewSiteDossier(e, bus, config),
-		NewThreatCrowd(e, bus, config),
-		NewUKGovArchive(e, bus, config),
-		NewVirusTotal(e, bus, config),
-		NewWayback(e, bus, config),
-		NewYahoo(e, bus, config),
+		NewArchiveIt(e),
+		NewArchiveToday(e),
+		NewArquivo(e),
+		NewAsk(e),
+		NewBaidu(e),
+		NewBing(e),
+		NewCensys(e),
+		NewCertDB(e),
+		NewCertSpotter(e),
+		NewCommonCrawl(e),
+		NewCrtsh(e),
+		//NewDNSDB(e),
+		NewDNSDumpster(e),
+		NewDNSTable(e),
+		NewDogpile(e),
+		NewEntrust(e),
+		NewExalead(e),
+		NewFindSubdomains(e),
+		NewGoogle(e),
+		NewHackerTarget(e),
+		NewIPv4Info(e),
+		NewLoCArchive(e),
+		NewNetcraft(e),
+		NewOpenUKArchive(e),
+		NewPTRArchive(e),
+		NewRiddler(e),
+		NewRobtex(e),
+		NewSiteDossier(e),
+		NewThreatCrowd(e),
+		NewUKGovArchive(e),
+		NewVirusTotal(e),
+		NewWayback(e),
+		NewYahoo(e),
 	}
 }
 

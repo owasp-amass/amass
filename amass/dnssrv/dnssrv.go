@@ -11,7 +11,6 @@ import (
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
-	evbus "github.com/asaskevich/EventBus"
 	"github.com/miekg/dns"
 )
 
@@ -65,20 +64,15 @@ var (
 type DNSService struct {
 	core.BaseAmassService
 
-	Bus              evbus.Bus
-	Config           *core.AmassConfig
 	filter           *utils.StringFilter
 	wildcards        map[string]*wildcard
 	wildcardRequests chan wildcardRequest
 	cidrBlacklist    []*net.IPNet
 }
 
-// NewDNSService requires the enumeration configuration and event bus as parameters.
-// The object returned is initialized, but has not yet been started.
-func NewDNSService(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *DNSService {
+// NewDNSService returns he object initialized, but not yet started.
+func NewDNSService(e *core.Enumeration) *DNSService {
 	ds := &DNSService{
-		Bus:              bus,
-		Config:           config,
 		filter:           utils.NewStringFilter(),
 		wildcards:        make(map[string]*wildcard),
 		wildcardRequests: make(chan wildcardRequest),
@@ -98,9 +92,9 @@ func NewDNSService(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig)
 func (ds *DNSService) OnStart() error {
 	ds.BaseAmassService.OnStart()
 
-	ds.Bus.SubscribeAsync(core.NEWSUB, ds.newSubdomain, false)
-	ds.Bus.SubscribeAsync(core.DNSQUERY, ds.addRequest, false)
-	ds.Bus.SubscribeAsync(core.DNSSWEEP, ds.reverseDNSSweep, false)
+	ds.Enum().Bus.SubscribeAsync(core.NEWSUB, ds.newSubdomain, false)
+	ds.Enum().Bus.SubscribeAsync(core.DNSQUERY, ds.addRequest, false)
+	ds.Enum().Bus.SubscribeAsync(core.DNSSWEEP, ds.reverseDNSSweep, false)
 	go ds.processRequests()
 	go ds.processWildcardRequests()
 	return nil
@@ -110,23 +104,20 @@ func (ds *DNSService) OnStart() error {
 func (ds *DNSService) OnStop() error {
 	ds.BaseAmassService.OnStop()
 
-	ds.Bus.Unsubscribe(core.NEWSUB, ds.newSubdomain)
-	ds.Bus.Unsubscribe(core.DNSQUERY, ds.addRequest)
-	ds.Bus.Unsubscribe(core.DNSSWEEP, ds.reverseDNSSweep)
+	ds.Enum().Bus.Unsubscribe(core.NEWSUB, ds.newSubdomain)
+	ds.Enum().Bus.Unsubscribe(core.DNSQUERY, ds.addRequest)
+	ds.Enum().Bus.Unsubscribe(core.DNSSWEEP, ds.reverseDNSSweep)
 	return nil
 }
 
 func (ds *DNSService) addRequest(req *core.AmassRequest) {
 	ds.SetActive()
 
-	if ds.Config.Blacklisted(req.Name) {
-		ds.Config.MaxFlow.Release(1)
+	if ds.Enum().Config.Blacklisted(req.Name) {
+		ds.Enum().MaxFlow.Release(1)
 		return
 	} else if !core.TrustedTag(req.Tag) && ds.GetWildcardType(req) == WildcardTypeDynamic {
-		ds.Config.MaxFlow.Release(1)
-		return
-	} else if ds.filter.Duplicate(req.Name) {
-		ds.Config.MaxFlow.Release(1)
+		ds.Enum().MaxFlow.Release(1)
 		return
 	}
 
@@ -138,7 +129,7 @@ func (ds *DNSService) sendResolved(req *core.AmassRequest) {
 	if !core.TrustedTag(req.Tag) && ds.MatchesWildcard(req) {
 		return
 	}
-	ds.Bus.Publish(core.RESOLVED, req)
+	ds.Enum().Bus.Publish(core.RESOLVED, req)
 }
 
 func (ds *DNSService) processRequests() {
@@ -155,7 +146,7 @@ func (ds *DNSService) processRequests() {
 }
 
 func (ds *DNSService) performRequest(req *core.AmassRequest) {
-	defer ds.Config.MaxFlow.Release(1)
+	defer ds.Enum().MaxFlow.Release(1)
 	defer core.MaxConnections.Release(len(InitialQueryTypes))
 
 	ds.SetActive()
@@ -170,15 +161,15 @@ func (ds *DNSService) performRequest(req *core.AmassRequest) {
 				break
 			}
 		} else {
-			ds.Config.Log.Printf("DNS: %v", err)
+			ds.Enum().Log.Printf("DNS: %v", err)
 		}
 	}
 
 	req.Records = answers
 	if len(req.Records) == 0 {
 		// Check if this unresolved name should be output by the enumeration
-		if ds.Config.IncludeUnresolvable && ds.Config.IsDomainInScope(req.Name) {
-			ds.Bus.Publish(core.OUTPUT, &core.AmassOutput{
+		if ds.Enum().Config.IncludeUnresolvable && ds.Enum().Config.IsDomainInScope(req.Name) {
+			ds.Enum().Bus.Publish(core.OUTPUT, &core.AmassOutput{
 				Name:   req.Name,
 				Domain: req.Domain,
 				Tag:    req.Tag,
@@ -224,13 +215,13 @@ func (ds *DNSService) basicQueries(subdomain, domain string) {
 			pieces := strings.Split(a.Data, ",")
 			a.Data = pieces[len(pieces)-1]
 
-			if ds.Config.Active {
+			if ds.Enum().Config.Active {
 				go ds.attemptZoneXFR(subdomain, domain, a.Data)
 			}
 			answers = append(answers, a)
 		}
 	} else {
-		ds.Config.Log.Printf("DNS: NS record query error: %s: %v", subdomain, err)
+		ds.Enum().Log.Printf("DNS: NS record query error: %s: %v", subdomain, err)
 	}
 	// Obtain the DNS answers for the MX records related to the domain
 	if ans, err := Resolve(subdomain, "MX"); err == nil {
@@ -238,19 +229,19 @@ func (ds *DNSService) basicQueries(subdomain, domain string) {
 			answers = append(answers, a)
 		}
 	} else {
-		ds.Config.Log.Printf("DNS: MX record query error: %s: %v", subdomain, err)
+		ds.Enum().Log.Printf("DNS: MX record query error: %s: %v", subdomain, err)
 	}
 	// Obtain the DNS answers for the SOA records related to the domain
 	if ans, err := Resolve(subdomain, "SOA"); err == nil {
 		answers = append(answers, ans...)
 	} else {
-		ds.Config.Log.Printf("DNS: SOA record query error: %s: %v", subdomain, err)
+		ds.Enum().Log.Printf("DNS: SOA record query error: %s: %v", subdomain, err)
 	}
 	// Obtain the DNS answers for the SPF records related to the domain
 	if ans, err := Resolve(subdomain, "SPF"); err == nil {
 		answers = append(answers, ans...)
 	} else {
-		ds.Config.Log.Printf("DNS: SPF record query error: %s: %v", subdomain, err)
+		ds.Enum().Log.Printf("DNS: SPF record query error: %s: %v", subdomain, err)
 	}
 
 	if len(answers) > 0 {
@@ -278,7 +269,7 @@ func (ds *DNSService) attemptZoneXFR(sub, domain, server string) {
 			})
 		}
 	} else {
-		ds.Config.Log.Printf("DNS: Zone xfr failed: %s: %v", sub, err)
+		ds.Enum().Log.Printf("DNS: Zone xfr failed: %s: %v", sub, err)
 	}
 }
 
@@ -309,7 +300,7 @@ func (ds *DNSService) reverseDNSSweep(addr string, cidr *net.IPNet) {
 	var ips []net.IP
 
 	// Get information about nearby IP addresses
-	if ds.Config.Active {
+	if ds.Enum().Config.Active {
 		ips = utils.CIDRSubset(cidr, addr, 500)
 	} else {
 		ips = utils.CIDRSubset(cidr, addr, 250)
@@ -321,13 +312,13 @@ func (ds *DNSService) reverseDNSSweep(addr string, cidr *net.IPNet) {
 			continue
 		}
 		core.MaxConnections.Acquire(1)
-		ds.Config.MaxFlow.Acquire(1)
+		ds.Enum().MaxFlow.Acquire(1)
 		go ds.reverseDNSRoutine(a)
 	}
 }
 
 func (ds *DNSService) reverseDNSRoutine(ip string) {
-	defer ds.Config.MaxFlow.Release(1)
+	defer ds.Enum().MaxFlow.Release(1)
 	defer core.MaxConnections.Release(1)
 
 	ds.SetActive()
@@ -336,7 +327,7 @@ func (ds *DNSService) reverseDNSRoutine(ip string) {
 		return
 	}
 	// Check that the name discovered is in scope
-	domain := ds.Config.WhichDomain(answer)
+	domain := ds.Enum().Config.WhichDomain(answer)
 	if domain == "" {
 		return
 	}
@@ -443,10 +434,10 @@ func (ds *DNSService) getWildcard(sub string) *wildcard {
 		if match {
 			entry.WildcardType = WildcardTypeStatic
 			entry.Answers = set[0]
-			ds.Config.Log.Printf("%s has a static DNS wildcard", sub)
+			ds.Enum().Log.Printf("%s has a static DNS wildcard", sub)
 		} else {
 			entry.WildcardType = WildcardTypeDynamic
-			ds.Config.Log.Printf("%s has a dynamic DNS wildcard", sub)
+			ds.Enum().Log.Printf("%s has a dynamic DNS wildcard", sub)
 		}
 	}
 	return entry

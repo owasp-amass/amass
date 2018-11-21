@@ -8,26 +8,18 @@ import (
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
-	evbus "github.com/asaskevich/EventBus"
 )
 
 // Exalead is the AmassService that handles access to the Exalead data source.
 type Exalead struct {
 	core.BaseAmassService
 
-	Bus        evbus.Bus
-	Config     *core.AmassConfig
 	SourceType string
 }
 
-// NewExalead requires the enumeration configuration and event bus as parameters.
-// The object returned is initialized, but has not yet been started.
-func NewExalead(enum *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *Exalead {
-	e := &Exalead{
-		Bus:        bus,
-		Config:     config,
-		SourceType: core.SCRAPE,
-	}
+// NewExalead returns he object initialized, but not yet started.
+func NewExalead(enum *core.Enumeration) *Exalead {
+	e := &Exalead{SourceType: core.SCRAPE}
 
 	e.BaseAmassService = *core.NewBaseAmassService(enum, "Exalead", e)
 	return e
@@ -49,7 +41,7 @@ func (e *Exalead) OnStop() error {
 
 func (e *Exalead) startRootDomains() {
 	// Look at each domain provided by the config
-	for _, domain := range e.Config.Domains() {
+	for _, domain := range e.Enum().Config.Domains() {
 		e.executeQuery(domain)
 	}
 }
@@ -58,12 +50,12 @@ func (e *Exalead) executeQuery(domain string) {
 	url := e.getURL(domain)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		e.Config.Log.Printf("%s: %s: %v", e.String(), url, err)
+		e.Enum().Log.Printf("%s: %s: %v", e.String(), url, err)
 		return
 	}
 
 	e.SetActive()
-	re := e.Config.DomainRegex(domain)
+	re := e.Enum().Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
 		req := &core.AmassRequest{
 			Name:   cleanName(sd),
@@ -75,7 +67,7 @@ func (e *Exalead) executeQuery(domain string) {
 		if e.Enum().DupDataSourceName(req) {
 			continue
 		}
-		e.Bus.Publish(core.NEWNAME, req)
+		e.Enum().Bus.Publish(core.NEWNAME, req)
 	}
 }
 

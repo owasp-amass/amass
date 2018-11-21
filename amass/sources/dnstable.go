@@ -8,26 +8,18 @@ import (
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
-	evbus "github.com/asaskevich/EventBus"
 )
 
 // DNSTable is the AmassService that handles access to the DNSTable data source.
 type DNSTable struct {
 	core.BaseAmassService
 
-	Bus        evbus.Bus
-	Config     *core.AmassConfig
 	SourceType string
 }
 
-// NewDNSTable requires the enumeration configuration and event bus as parameters.
-// The object returned is initialized, but has not yet been started.
-func NewDNSTable(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *DNSTable {
-	d := &DNSTable{
-		Bus:        bus,
-		Config:     config,
-		SourceType: core.SCRAPE,
-	}
+// NewDNSTable returns he object initialized, but not yet started.
+func NewDNSTable(e *core.Enumeration) *DNSTable {
+	d := &DNSTable{SourceType: core.SCRAPE}
 
 	d.BaseAmassService = *core.NewBaseAmassService(e, "DNSTable", d)
 	return d
@@ -49,7 +41,7 @@ func (d *DNSTable) OnStop() error {
 
 func (d *DNSTable) startRootDomains() {
 	// Look at each domain provided by the config
-	for _, domain := range d.Config.Domains() {
+	for _, domain := range d.Enum().Config.Domains() {
 		d.executeQuery(domain)
 	}
 }
@@ -58,12 +50,12 @@ func (d *DNSTable) executeQuery(domain string) {
 	url := d.getURL(domain)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		d.Config.Log.Printf("%s: %s: %v", d.String(), url, err)
+		d.Enum().Log.Printf("%s: %s: %v", d.String(), url, err)
 		return
 	}
 
 	d.SetActive()
-	re := d.Config.DomainRegex(domain)
+	re := d.Enum().Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
 		req := &core.AmassRequest{
 			Name:   cleanName(sd),
@@ -75,7 +67,7 @@ func (d *DNSTable) executeQuery(domain string) {
 		if d.Enum().DupDataSourceName(req) {
 			continue
 		}
-		d.Bus.Publish(core.NEWNAME, req)
+		d.Enum().Bus.Publish(core.NEWNAME, req)
 	}
 }
 

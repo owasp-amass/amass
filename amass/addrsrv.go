@@ -6,7 +6,6 @@ package amass
 import (
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
-	evbus "github.com/asaskevich/EventBus"
 )
 
 // AddressService is the AmassService that handles all newly discovered IP addresses
@@ -14,19 +13,12 @@ import (
 type AddressService struct {
 	core.BaseAmassService
 
-	Bus    evbus.Bus
-	Config *core.AmassConfig
 	filter *utils.StringFilter
 }
 
-// NewAddressService requires the enumeration configuration and event bus as parameters.
-// The object returned is initialized, but has not yet been started.
-func NewAddressService(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *AddressService {
-	as := &AddressService{
-		Bus:    bus,
-		Config: config,
-		filter: utils.NewStringFilter(),
-	}
+// NewAddressService returns he object initialized, but not yet started.
+func NewAddressService(e *core.Enumeration) *AddressService {
+	as := &AddressService{filter: utils.NewStringFilter()}
 
 	as.BaseAmassService = *core.NewBaseAmassService(e, "Address Service", as)
 	return as
@@ -36,7 +28,7 @@ func NewAddressService(e *core.Enumeration, bus evbus.Bus, config *core.AmassCon
 func (as *AddressService) OnStart() error {
 	as.BaseAmassService.OnStart()
 
-	as.Bus.SubscribeAsync(core.NEWADDR, as.SendRequest, false)
+	as.Enum().Bus.SubscribeAsync(core.NEWADDR, as.SendRequest, false)
 	go as.processRequests()
 	return nil
 }
@@ -45,7 +37,7 @@ func (as *AddressService) OnStart() error {
 func (as *AddressService) OnStop() error {
 	as.BaseAmassService.OnStop()
 
-	as.Bus.Unsubscribe(core.NEWADDR, as.SendRequest)
+	as.Enum().Bus.Unsubscribe(core.NEWADDR, as.SendRequest)
 	return nil
 }
 
@@ -70,12 +62,12 @@ func (as *AddressService) performRequest(req *core.AmassRequest) {
 	as.SetActive()
 	_, cidr, _, err := IPRequest(req.Address)
 	if err != nil {
-		as.Config.Log.Printf("%v", err)
+		as.Enum().Log.Printf("%v", err)
 		return
 	}
 	// Request the reverse DNS sweep for the addr
-	as.Bus.Publish(core.DNSSWEEP, req.Address, cidr)
-	if as.Config.Active {
-		as.Bus.Publish(core.ACTIVECERT, req.Address)
+	as.Enum().Bus.Publish(core.DNSSWEEP, req.Address, cidr)
+	if as.Enum().Config.Active {
+		as.Enum().Bus.Publish(core.ACTIVECERT, req.Address)
 	}
 }

@@ -8,26 +8,18 @@ import (
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
-	evbus "github.com/asaskevich/EventBus"
 )
 
 // Netcraft is the AmassService that handles access to the Netcraft data source.
 type Netcraft struct {
 	core.BaseAmassService
 
-	Bus        evbus.Bus
-	Config     *core.AmassConfig
 	SourceType string
 }
 
-// Netcraft requires the enumeration configuration and event bus as parameters.
-// The object returned is initialized, but has not yet been started.
-func NewNetcraft(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *Netcraft {
-	n := &Netcraft{
-		Bus:        bus,
-		Config:     config,
-		SourceType: core.SCRAPE,
-	}
+// Netcraft returns he object initialized, but not yet started.
+func NewNetcraft(e *core.Enumeration) *Netcraft {
+	n := &Netcraft{SourceType: core.SCRAPE}
 
 	n.BaseAmassService = *core.NewBaseAmassService(e, "Netcraft", n)
 	return n
@@ -49,7 +41,7 @@ func (n *Netcraft) OnStop() error {
 
 func (n *Netcraft) startRootDomains() {
 	// Look at each domain provided by the config
-	for _, domain := range n.Config.Domains() {
+	for _, domain := range n.Enum().Config.Domains() {
 		n.executeQuery(domain)
 	}
 }
@@ -58,12 +50,12 @@ func (n *Netcraft) executeQuery(domain string) {
 	url := n.getURL(domain)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		n.Config.Log.Printf("%s: %s, %v", n.String(), url, err)
+		n.Enum().Log.Printf("%s: %s, %v", n.String(), url, err)
 		return
 	}
 
 	n.SetActive()
-	re := n.Config.DomainRegex(domain)
+	re := n.Enum().Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
 		req := &core.AmassRequest{
 			Name:   cleanName(sd),
@@ -75,7 +67,7 @@ func (n *Netcraft) executeQuery(domain string) {
 		if n.Enum().DupDataSourceName(req) {
 			continue
 		}
-		n.Bus.Publish(core.NEWNAME, req)
+		n.Enum().Bus.Publish(core.NEWNAME, req)
 	}
 }
 

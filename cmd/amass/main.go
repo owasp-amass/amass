@@ -171,7 +171,7 @@ func main() {
 
 	rLog, wLog := io.Pipe()
 	enum := core.NewEnumeration()
-	enum.Config.Log = log.New(wLog, "", log.Lmicroseconds)
+	enum.Log = log.New(wLog, "", log.Lmicroseconds)
 	enum.Config.Wordlist = words
 	enum.Config.BruteForcing = *brute
 	enum.Config.Recursive = recursive
@@ -212,7 +212,7 @@ func main() {
 			fileptr.Sync()
 			fileptr.Close()
 		}()
-		enum.Config.DataOptsWriter = fileptr
+		enum.DataOptsWriter = fileptr
 	}
 
 	finished = make(chan struct{})

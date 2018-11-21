@@ -18,19 +18,12 @@ import (
 type DNSDB struct {
 	core.BaseAmassService
 
-	Bus        evbus.Bus
-	Config     *core.AmassConfig
 	SourceType string
 }
 
-// NewDNSDB requires the enumeration configuration and event bus as parameters.
-// The object returned is initialized, but has not yet been started.
+// NewDNSDB returns he object initialized, but not yet started.
 func NewDNSDB(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *DNSDB {
-	d := &DNSDB{
-		Bus:        bus,
-		Config:     config,
-		SourceType: core.SCRAPE,
-	}
+	d := &DNSDB{SourceType: core.SCRAPE}
 
 	d.BaseAmassService = *core.NewBaseAmassService(e, "DNSDB", d)
 	return d
@@ -52,7 +45,7 @@ func (d *DNSDB) OnStop() error {
 
 func (d *DNSDB) startRootDomains() {
 	// Look at each domain provided by the config
-	for _, domain := range d.Config.Domains() {
+	for _, domain := range d.Enum().Config.Domains() {
 		d.executeQuery(domain)
 	}
 }
@@ -61,13 +54,13 @@ func (d *DNSDB) executeQuery(domain string) {
 	url := d.getURL(domain, domain)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		d.Config.Log.Printf("%s: %s: %v", d.String(), url, err)
+		d.Enum().Log.Printf("%s: %s: %v", d.String(), url, err)
 		return
 	}
 
 	var names []string
 	d.SetActive()
-	re := d.Config.DomainRegex(domain)
+	re := d.Enum().Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
 		if u := utils.NewUniqueElements(names, cleanName(sd)); len(u) > 0 {
 			names = append(names, u...)
@@ -86,7 +79,7 @@ loop:
 		case <-t.C:
 			another, err := utils.RequestWebPage(url+rel, nil, nil, "", "")
 			if err != nil {
-				d.Config.Log.Printf("%s: %s: %v", d.String(), url+rel, err)
+				d.Enum().Log.Printf("%s: %s: %v", d.String(), url+rel, err)
 				continue
 			}
 
@@ -109,7 +102,7 @@ loop:
 		if d.Enum().DupDataSourceName(req) {
 			continue
 		}
-		d.Bus.Publish(core.NEWNAME, req)
+		d.Enum().Bus.Publish(core.NEWNAME, req)
 	}
 }
 

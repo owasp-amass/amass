@@ -10,25 +10,19 @@ import (
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
-	evbus "github.com/asaskevich/EventBus"
 )
 
 // IPv4Info is the AmassService that handles access to the IPv4Info data source.
 type IPv4Info struct {
 	core.BaseAmassService
 
-	Bus        evbus.Bus
-	Config     *core.AmassConfig
 	baseURL    string
 	SourceType string
 }
 
-// NewIPv4Info requires the enumeration configuration and event bus as parameters.
-// The object returned is initialized, but has not yet been started.
-func NewIPv4Info(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *IPv4Info {
+// NewIPv4Info returns he object initialized, but not yet started.
+func NewIPv4Info(e *core.Enumeration) *IPv4Info {
 	i := &IPv4Info{
-		Bus:        bus,
-		Config:     config,
 		baseURL:    "http://ipv4info.com",
 		SourceType: core.SCRAPE,
 	}
@@ -53,7 +47,7 @@ func (i *IPv4Info) OnStop() error {
 
 func (i *IPv4Info) startRootDomains() {
 	// Look at each domain provided by the config
-	for _, domain := range i.Config.Domains() {
+	for _, domain := range i.Enum().Config.Domains() {
 		i.executeQuery(domain)
 	}
 }
@@ -62,7 +56,7 @@ func (i *IPv4Info) executeQuery(domain string) {
 	url := i.getURL(domain)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		i.Config.Log.Printf("%s: %s: %v", i.String(), url, err)
+		i.Enum().Log.Printf("%s: %s: %v", i.String(), url, err)
 		return
 	}
 
@@ -71,7 +65,7 @@ func (i *IPv4Info) executeQuery(domain string) {
 	url = i.ipSubmatch(page, domain)
 	page, err = utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		i.Config.Log.Printf("%s: %s: %v", i.String(), url, err)
+		i.Enum().Log.Printf("%s: %s: %v", i.String(), url, err)
 		return
 	}
 
@@ -80,7 +74,7 @@ func (i *IPv4Info) executeQuery(domain string) {
 	url = i.domainSubmatch(page, domain)
 	page, err = utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		i.Config.Log.Printf("%s: %s: %v", i.String(), url, err)
+		i.Enum().Log.Printf("%s: %s: %v", i.String(), url, err)
 		return
 	}
 
@@ -89,11 +83,11 @@ func (i *IPv4Info) executeQuery(domain string) {
 	url = i.subdomainSubmatch(page, domain)
 	page, err = utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		i.Config.Log.Printf("%s: %s: %v", i.String(), url, err)
+		i.Enum().Log.Printf("%s: %s: %v", i.String(), url, err)
 		return
 	}
 
-	re := i.Config.DomainRegex(domain)
+	re := i.Enum().Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
 		req := &core.AmassRequest{
 			Name:   cleanName(sd),
@@ -105,7 +99,7 @@ func (i *IPv4Info) executeQuery(domain string) {
 		if i.Enum().DupDataSourceName(req) {
 			continue
 		}
-		i.Bus.Publish(core.NEWNAME, req)
+		i.Enum().Bus.Publish(core.NEWNAME, req)
 	}
 }
 

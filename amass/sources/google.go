@@ -10,26 +10,20 @@ import (
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
-	evbus "github.com/asaskevich/EventBus"
 )
 
 // Google is the AmassService that handles access to the Google search engine data source.
 type Google struct {
 	core.BaseAmassService
 
-	Bus        evbus.Bus
-	Config     *core.AmassConfig
 	quantity   int
 	limit      int
 	SourceType string
 }
 
-// NewGoogle requires the enumeration configuration and event bus as parameters.
-// The object returned is initialized, but has not yet been started.
-func NewGoogle(e *core.Enumeration, bus evbus.Bus, config *core.AmassConfig) *Google {
+// NewGoogle returns he object initialized, but not yet started.
+func NewGoogle(e *core.Enumeration) *Google {
 	g := &Google{
-		Bus:        bus,
-		Config:     config,
 		quantity:   10,
 		limit:      100,
 		SourceType: core.SCRAPE,
@@ -55,13 +49,13 @@ func (g *Google) OnStop() error {
 
 func (g *Google) startRootDomains() {
 	// Look at each domain provided by the config
-	for _, domain := range g.Config.Domains() {
+	for _, domain := range g.Enum().Config.Domains() {
 		g.executeQuery(domain)
 	}
 }
 
 func (g *Google) executeQuery(domain string) {
-	re := g.Config.DomainRegex(domain)
+	re := g.Enum().Config.DomainRegex(domain)
 	num := g.limit / g.quantity
 	t := time.NewTicker(time.Second)
 	defer t.Stop()
@@ -76,7 +70,7 @@ func (g *Google) executeQuery(domain string) {
 			u := g.urlByPageNum(domain, i)
 			page, err := utils.RequestWebPage(u, nil, nil, "", "")
 			if err != nil {
-				g.Config.Log.Printf("%s: %s: %v", g.String(), u, err)
+				g.Enum().Log.Printf("%s: %s: %v", g.String(), u, err)
 				return
 			}
 
@@ -91,7 +85,7 @@ func (g *Google) executeQuery(domain string) {
 				if g.Enum().DupDataSourceName(req) {
 					continue
 				}
-				g.Bus.Publish(core.NEWNAME, req)
+				g.Enum().Bus.Publish(core.NEWNAME, req)
 			}
 		}
 	}
