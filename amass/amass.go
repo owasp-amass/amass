@@ -5,14 +5,23 @@ package amass
 
 import (
 	"bufio"
+	"errors"
+	"fmt"
 	"io"
+	"io/ioutil"
+	"log"
+	"net"
+	"net/http"
+	"regexp"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
-	"github.com/OWASP/Amass/amass/core"
-	"github.com/OWASP/Amass/amass/dnssrv"
-	"github.com/OWASP/Amass/amass/sources"
 	"github.com/OWASP/Amass/amass/utils"
+	"github.com/PuerkitoBio/fetchbot"
+	"github.com/PuerkitoBio/goquery"
+	evbus "github.com/asaskevich/EventBus"
 )
 
 // Banner is the ASCII art logo used within help output.
@@ -43,8 +52,152 @@ const (
 	defaultWordlistURL = "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/namelist.txt"
 )
 
+// Various types used throughout Amass
+const (
+	ACTIVECERT = "amass:activecert"
+	CHECKED    = "amass:checked"
+	DNSQUERY   = "amass:dnsquery"
+	DNSSWEEP   = "amass:dnssweep"
+	NEWADDR    = "amass:newaddress"
+	NEWNAME    = "amass:newname"
+	NEWSUB     = "amass:newsubdomain"
+	OUTPUT     = "amass:output"
+	RESOLVED   = "amass:resolved"
+
+	ALT     = "alt"
+	ARCHIVE = "archive"
+	API     = "api"
+	AXFR    = "axfr"
+	BRUTE   = "brute"
+	CERT    = "cert"
+	DNS     = "dns"
+	SCRAPE  = "scrape"
+)
+
+// The various timing/speed templates for an Amass enumeration.
+const (
+	Paranoid EnumerationTiming = iota
+	Sneaky
+	Polite
+	Normal
+	Aggressive
+	Insane
+)
+
+var (
+	// NumOfFileDescriptors is the maximum number of file descriptors or handles to be in use at once.
+	NumOfFileDescriptors int
+
+	// MaxConnections creates a limit for how many network connections will be in use at once.
+	MaxConnections utils.Semaphore
+
+	nameStripRE = regexp.MustCompile("^((20)|(25)|(2f)|(3d)|(40))+")
+)
+
+// EnumerationTiming represents a speed band for the enumeration to execute within.
+type EnumerationTiming int
+
+// Enumeration is the object type used to execute a DNS enumeration with Amass.
+type Enumeration struct {
+	Config *AmassConfig
+
+	Bus evbus.Bus
+
+	// Link graph that collects all the information gathered by the enumeration
+	Graph *Graph
+
+	// The channel that will receive the results
+	Output chan *AmassOutput
+
+	// Broadcast channel that indicates no further writes to the output channel
+	Done chan struct{}
+
+	// Logger for error messages
+	Log *log.Logger
+
+	// The writer used to save the data operations performed
+	DataOptsWriter io.Writer
+
+	// MaxFlow is a Semaphore that restricts the number of names moving through the architecture
+	MaxFlow utils.Semaphore
+
+	trustedNameFilter *utils.StringFilter
+	otherNameFilter   *utils.StringFilter
+
+	// Pause/Resume channels for halting the enumeration
+	pause  chan struct{}
+	resume chan struct{}
+}
+
+func init() {
+	NumOfFileDescriptors = (GetFileLimit() / 10) * 9
+	MaxConnections = utils.NewSimpleSemaphore(NumOfFileDescriptors)
+}
+
+// NewEnumeration returns an initialized Enumeration that has not been started yet.
+func NewEnumeration() *Enumeration {
+	enum := &Enumeration{
+		Config: &AmassConfig{
+			Ports:           []int{443},
+			Recursive:       true,
+			MinForRecursive: 1,
+			Alterations:     true,
+			Timing:          Normal,
+		},
+		Bus:               evbus.New(),
+		Graph:             NewGraph(),
+		Output:            make(chan *AmassOutput, 100),
+		Done:              make(chan struct{}),
+		Log:               log.New(ioutil.Discard, "", 0),
+		trustedNameFilter: utils.NewStringFilter(),
+		otherNameFilter:   utils.NewStringFilter(),
+		pause:             make(chan struct{}),
+		resume:            make(chan struct{}),
+	}
+	return enum
+}
+
+// DataSourceNameFilter provides a single output filter for all name sources.
+func (e *Enumeration) DupDataSourceName(req *AmassRequest) bool {
+	if req == nil {
+		return true
+	}
+
+	tt := TrustedTag(req.Tag)
+	if !tt && e.otherNameFilter.Duplicate(req.Name) {
+		return true
+	} else if tt && e.trustedNameFilter.Duplicate(req.Name) {
+		return true
+	}
+	return false
+}
+
+// CheckConfig runs some sanity checks on the enumeration configuration.
+func (e *Enumeration) CheckConfig() error {
+	if e.Output == nil {
+		return errors.New("The configuration did not have an output channel")
+	}
+	if e.Config.Passive && e.Config.BruteForcing {
+		return errors.New("Brute forcing cannot be performed without DNS resolution")
+	}
+	if e.Config.Passive && e.Config.Active {
+		return errors.New("Active enumeration cannot be performed without DNS resolution")
+	}
+	if e.Config.Passive && e.DataOptsWriter != nil {
+		return errors.New("Data operations cannot be saved without DNS resolution")
+	}
+	if len(e.Config.Ports) == 0 {
+		e.Config.Ports = []int{443}
+	}
+
+	e.MaxFlow = utils.NewTimedSemaphore(
+		e.Config.Timing.ToMaxFlow(),
+		e.Config.Timing.ToReleaseDelay())
+	return nil
+}
+
 // Start begins the DNS enumeration process for the Amass Enumeration object.
-func StartEnumeration(e *core.Enumeration) error {
+func (e *Enumeration) Start() error {
 	if err := e.CheckConfig(); err != nil {
 		return err
 	}
@@ -52,20 +205,20 @@ func StartEnumeration(e *core.Enumeration) error {
 		e.Config.Wordlist, _ = getDefaultWordlist()
 	}
 
-	e.Bus.SubscribeAsync(core.OUTPUT, e.SendOutput, true)
+	e.Bus.SubscribeAsync(OUTPUT, e.SendOutput, true)
 	// Select the correct services to be used in this enumeration
-	services := []core.AmassService{NewNameService(e), NewAddressService(e)}
+	services := []AmassService{NewNameService(e), NewAddressService(e)}
 	if !e.Config.Passive {
 		services = append(services,
 			NewDataManagerService(e),
-			dnssrv.NewDNSService(e),
+			NewDNSService(e),
 			NewAlterationService(e),
 			NewBruteForceService(e),
 			NewActiveCertService(e),
 		)
 	}
 	// Grab all the data sources
-	services = append(services, sources.GetAllSources(e)...)
+	services = append(services, GetAllSources(e)...)
 
 	for _, srv := range services {
 		if err := srv.Start(); err != nil {
@@ -103,10 +256,107 @@ loop:
 		srv.Stop()
 	}
 	time.Sleep(time.Second)
-	e.Bus.Unsubscribe(core.OUTPUT, e.SendOutput)
+	e.Bus.Unsubscribe(OUTPUT, e.SendOutput)
 	time.Sleep(2 * time.Second)
 	close(e.Output)
 	return nil
+}
+
+// Pause temporarily halts the enumeration.
+func (e *Enumeration) Pause() {
+	e.pause <- struct{}{}
+}
+
+// PauseChan returns the channel that is signaled when Pause is called.
+func (e *Enumeration) PauseChan() <-chan struct{} {
+	return e.pause
+}
+
+// Resume causes a previously paused enumeration to resume execution.
+func (e *Enumeration) Resume() {
+	e.resume <- struct{}{}
+}
+
+// ResumeChan returns the channel that is signaled when Resume is called.
+func (e *Enumeration) ResumeChan() <-chan struct{} {
+	return e.resume
+}
+
+// SendOutput is a wrapper for sending enumeration output to the appropriate channel.
+func (e *Enumeration) SendOutput(out *AmassOutput) {
+	e.Output <- out
+}
+
+// TrustedTag returns true when the tag parameter is of a type that should be trusted even
+// facing DNS wildcards.
+func TrustedTag(tag string) bool {
+	if tag == DNS || tag == CERT || tag == ARCHIVE || tag == AXFR {
+		return true
+	}
+	return false
+}
+
+// ToMaxFlow returns the maximum number of names Amass should handle at once.
+func (t EnumerationTiming) ToMaxFlow() int {
+	var result int
+
+	switch t {
+	case Paranoid:
+		result = 10
+	case Sneaky:
+		result = 30
+	case Polite:
+		result = 100
+	case Normal:
+		result = 333
+	case Aggressive:
+		result = 1000
+	case Insane:
+		result = 10000
+	}
+	return result
+}
+
+// ToReleaseDelay returns the minimum delay between each MaxFlow semaphore release.
+func (t EnumerationTiming) ToReleaseDelay() time.Duration {
+	var result time.Duration
+
+	switch t {
+	case Paranoid:
+		result = 100 * time.Millisecond
+	case Sneaky:
+		result = 33 * time.Millisecond
+	case Polite:
+		result = 10 * time.Millisecond
+	case Normal:
+		result = 3 * time.Millisecond
+	case Aggressive:
+		result = time.Millisecond
+	case Insane:
+		result = 100 * time.Microsecond
+	}
+	return result
+}
+
+// ToReleasesPerSecond returns the number of releases performed on MaxFlow each second.
+func (t EnumerationTiming) ToReleasesPerSecond() int {
+	var result int
+
+	switch t {
+	case Paranoid:
+		result = 10
+	case Sneaky:
+		result = 30
+	case Polite:
+		result = 100
+	case Normal:
+		result = 333
+	case Aggressive:
+		result = 1000
+	case Insane:
+		result = 10000
+	}
+	return result
 }
 
 func getDefaultWordlist() ([]string, error) {
@@ -129,4 +379,166 @@ func getDefaultWordlist() ([]string, error) {
 		}
 	}
 	return list, nil
+}
+
+// GetAllSources returns a slice of all data source services, initialized and ready.
+func GetAllSources(e *Enumeration) []AmassService {
+	return []AmassService{
+		NewArchiveIt(e),
+		NewArchiveToday(e),
+		NewArquivo(e),
+		NewAsk(e),
+		NewBaidu(e),
+		NewBing(e),
+		NewCensys(e),
+		NewCertDB(e),
+		NewCertSpotter(e),
+		NewCommonCrawl(e),
+		NewCrtsh(e),
+		//NewDNSDB(e),
+		NewDNSDumpster(e),
+		NewDNSTable(e),
+		NewDogpile(e),
+		NewEntrust(e),
+		NewExalead(e),
+		NewFindSubdomains(e),
+		NewGoogle(e),
+		NewHackerTarget(e),
+		NewIPv4Info(e),
+		NewLoCArchive(e),
+		NewNetcraft(e),
+		NewOpenUKArchive(e),
+		NewPTRArchive(e),
+		NewRiddler(e),
+		NewRobtex(e),
+		NewSiteDossier(e),
+		NewThreatCrowd(e),
+		NewUKGovArchive(e),
+		NewVirusTotal(e),
+		NewWayback(e),
+		NewYahoo(e),
+	}
+}
+
+// Clean up the names scraped from the web.
+func cleanName(name string) string {
+	if i := nameStripRE.FindStringIndex(name); i != nil {
+		name = name[i[1]:]
+	}
+	name = strings.TrimSpace(strings.ToLower(name))
+	// Remove dots at the beginning of names
+	if len(name) > 1 && name[0] == '.' {
+		name = name[1:]
+	}
+	return name
+}
+
+//-------------------------------------------------------------------------------------------------
+// Web archive crawler implementation
+//-------------------------------------------------------------------------------------------------
+
+func crawl(service AmassService, base, domain, sub string) ([]string, error) {
+	var results []string
+	var filterMutex sync.Mutex
+	filter := make(map[string]struct{})
+
+	year := strconv.Itoa(time.Now().Year())
+	mux := fetchbot.NewMux()
+	links := make(chan string, 50)
+	names := make(chan string, 50)
+	linksFilter := make(map[string]struct{})
+
+	mux.HandleErrors(fetchbot.HandlerFunc(func(ctx *fetchbot.Context, res *http.Response, err error) {
+		//service.Config.Log.Printf("Crawler error: %s %s - %v", ctx.Cmd.Method(), ctx.Cmd.URL(), err)
+	}))
+
+	mux.Response().Method("GET").ContentType("text/html").Handler(fetchbot.HandlerFunc(
+		func(ctx *fetchbot.Context, res *http.Response, err error) {
+			filterMutex.Lock()
+			defer filterMutex.Unlock()
+
+			u := res.Request.URL.String()
+			if _, found := filter[u]; found {
+				return
+			}
+			filter[u] = struct{}{}
+
+			linksAndNames(domain, ctx, res, links, names)
+		}))
+
+	f := fetchbot.New(fetchbot.HandlerFunc(func(ctx *fetchbot.Context, res *http.Response, err error) {
+		mux.Handle(ctx, res, err)
+	}))
+	setFetcherConfig(f)
+
+	q := f.Start()
+	u := fmt.Sprintf("%s/%s/%s", base, year, sub)
+	if _, err := q.SendStringGet(u); err != nil {
+		return results, fmt.Errorf("Crawler error: GET %s - %v", u, err)
+	}
+
+	t := time.NewTimer(10 * time.Second)
+loop:
+	for {
+		select {
+		case l := <-links:
+			if _, ok := linksFilter[l]; ok {
+				continue
+			}
+			linksFilter[l] = struct{}{}
+			q.SendStringGet(l)
+		case n := <-names:
+			results = utils.UniqueAppend(results, n)
+		case <-t.C:
+			go func() {
+				q.Cancel()
+			}()
+		case <-q.Done():
+			break loop
+		case <-service.Quit():
+			break loop
+		}
+	}
+	return results, nil
+}
+
+func linksAndNames(domain string, ctx *fetchbot.Context, res *http.Response, links, names chan string) error {
+	// Process the body to find the links
+	doc, err := goquery.NewDocumentFromResponse(res)
+	if err != nil {
+		return fmt.Errorf("Crawler error: %s %s - %s\n", ctx.Cmd.Method(), ctx.Cmd.URL(), err)
+	}
+
+	re := utils.SubdomainRegex(domain)
+	doc.Find("a[href]").Each(func(i int, s *goquery.Selection) {
+		val, _ := s.Attr("href")
+		// Resolve address
+		u, err := ctx.Cmd.URL().Parse(val)
+		if err != nil {
+			return
+		}
+
+		if sub := re.FindString(u.String()); sub != "" {
+			names <- sub
+			links <- u.String()
+		}
+	})
+	return nil
+}
+
+func setFetcherConfig(f *fetchbot.Fetcher) {
+	d := net.Dialer{}
+	f.HttpClient = &http.Client{
+		Timeout: 10 * time.Second,
+		Transport: &http.Transport{
+			DialContext:           d.DialContext,
+			MaxIdleConns:          200,
+			IdleConnTimeout:       5 * time.Second,
+			TLSHandshakeTimeout:   5 * time.Second,
+			ExpectContinueTimeout: 5 * time.Second,
+		},
+	}
+	f.CrawlDelay = 1 * time.Second
+	f.DisablePoliteness = true
+	f.UserAgent = utils.UserAgent
 }

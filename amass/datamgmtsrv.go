@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/handlers"
 	"github.com/OWASP/Amass/amass/utils"
 	"github.com/miekg/dns"
@@ -17,7 +16,7 @@ import (
 // DataManagerService is the AmassService that handles all data collected
 // within the architecture. This is achieved by watching all the RESOLVED events.
 type DataManagerService struct {
-	core.BaseAmassService
+	BaseAmassService
 
 	Handlers     []handlers.DataHandler
 	filter       *utils.StringFilter
@@ -25,13 +24,13 @@ type DataManagerService struct {
 }
 
 // NewDataManagerService returns he object initialized, but not yet started.
-func NewDataManagerService(e *core.Enumeration) *DataManagerService {
+func NewDataManagerService(e *Enumeration) *DataManagerService {
 	dms := &DataManagerService{
 		filter:       utils.NewStringFilter(),
 		domainFilter: utils.NewStringFilter(),
 	}
 
-	dms.BaseAmassService = *core.NewBaseAmassService(e, "Data Manager", dms)
+	dms.BaseAmassService = *NewBaseAmassService(e, "Data Manager", dms)
 	return dms
 }
 
@@ -44,7 +43,7 @@ func (dms *DataManagerService) OnStart() error {
 		dms.Handlers = append(dms.Handlers, handlers.NewDataOptsHandler(dms.Enum().DataOptsWriter))
 	}
 
-	dms.Enum().Bus.SubscribeAsync(core.CHECKED, dms.SendRequest, false)
+	dms.Enum().Bus.SubscribeAsync(CHECKED, dms.SendRequest, false)
 	go dms.processRequests()
 	return nil
 }
@@ -53,7 +52,7 @@ func (dms *DataManagerService) OnStart() error {
 func (dms *DataManagerService) OnStop() error {
 	dms.BaseAmassService.OnStop()
 
-	dms.Enum().Bus.Unsubscribe(core.CHECKED, dms.SendRequest)
+	dms.Enum().Bus.Unsubscribe(CHECKED, dms.SendRequest)
 	return nil
 }
 
@@ -80,13 +79,13 @@ func (dms *DataManagerService) sendOutput() {
 		dms.SetActive()
 		for _, o := range out {
 			if !dms.filter.Duplicate(o.Name) && dms.Enum().Config.IsDomainInScope(o.Name) {
-				dms.Enum().Bus.Publish(core.OUTPUT, o)
+				dms.Enum().Bus.Publish(OUTPUT, o)
 			}
 		}
 	}
 }
 
-func (dms *DataManagerService) manageData(req *core.AmassRequest) {
+func (dms *DataManagerService) manageData(req *AmassRequest) {
 	req.Name = strings.ToLower(req.Name)
 	req.Domain = strings.ToLower(req.Domain)
 
@@ -119,11 +118,11 @@ func (dms *DataManagerService) manageData(req *core.AmassRequest) {
 	}
 }
 
-func (dms *DataManagerService) sendNewName(req *core.AmassRequest) {
+func (dms *DataManagerService) sendNewName(req *AmassRequest) {
 	if dms.Enum().DupDataSourceName(req) {
 		return
 	}
-	dms.Enum().Bus.Publish(core.NEWNAME, req)
+	dms.Enum().Bus.Publish(NEWNAME, req)
 }
 
 func (dms *DataManagerService) checkDomain(domain string) bool {
@@ -136,19 +135,19 @@ func (dms *DataManagerService) insertDomain(domain string) {
 		return
 	}
 	for _, handler := range dms.Handlers {
-		if err := handler.InsertDomain(domain, core.DNS, "Forward DNS"); err != nil {
+		if err := handler.InsertDomain(domain, DNS, "Forward DNS"); err != nil {
 			dms.Enum().Log.Printf("%s failed to insert domain: %v", handler, err)
 		}
 	}
-	dms.sendNewName(&core.AmassRequest{
+	dms.sendNewName(&AmassRequest{
 		Name:   domain,
 		Domain: domain,
-		Tag:    core.DNS,
+		Tag:    DNS,
 		Source: "Forward DNS",
 	})
 }
 
-func (dms *DataManagerService) insertCNAME(req *core.AmassRequest, recidx int) {
+func (dms *DataManagerService) insertCNAME(req *AmassRequest, recidx int) {
 	target := removeLastDot(req.Records[recidx].Data)
 	if target == "" {
 		return
@@ -164,15 +163,15 @@ func (dms *DataManagerService) insertCNAME(req *core.AmassRequest, recidx int) {
 			dms.Enum().Log.Printf("%s failed to insert CNAME: %v", handler, err)
 		}
 	}
-	dms.sendNewName(&core.AmassRequest{
+	dms.sendNewName(&AmassRequest{
 		Name:   target,
 		Domain: domain,
-		Tag:    core.DNS,
+		Tag:    DNS,
 		Source: "Forward DNS",
 	})
 }
 
-func (dms *DataManagerService) insertA(req *core.AmassRequest, recidx int) {
+func (dms *DataManagerService) insertA(req *AmassRequest, recidx int) {
 	addr := req.Records[recidx].Data
 	if addr == "" {
 		return
@@ -184,7 +183,7 @@ func (dms *DataManagerService) insertA(req *core.AmassRequest, recidx int) {
 	}
 	dms.insertInfrastructure(addr)
 	if dms.Enum().Config.IsDomainInScope(req.Name) {
-		dms.Enum().Bus.Publish(core.NEWADDR, &core.AmassRequest{
+		dms.Enum().Bus.Publish(NEWADDR, &AmassRequest{
 			Domain:  req.Domain,
 			Address: addr,
 			Tag:     req.Tag,
@@ -193,7 +192,7 @@ func (dms *DataManagerService) insertA(req *core.AmassRequest, recidx int) {
 	}
 }
 
-func (dms *DataManagerService) insertAAAA(req *core.AmassRequest, recidx int) {
+func (dms *DataManagerService) insertAAAA(req *AmassRequest, recidx int) {
 	addr := req.Records[recidx].Data
 	if addr == "" {
 		return
@@ -205,7 +204,7 @@ func (dms *DataManagerService) insertAAAA(req *core.AmassRequest, recidx int) {
 	}
 	dms.insertInfrastructure(addr)
 	if dms.Enum().Config.IsDomainInScope(req.Name) {
-		dms.Enum().Bus.Publish(core.NEWADDR, &core.AmassRequest{
+		dms.Enum().Bus.Publish(NEWADDR, &AmassRequest{
 			Domain:  req.Domain,
 			Address: addr,
 			Tag:     req.Tag,
@@ -214,7 +213,7 @@ func (dms *DataManagerService) insertAAAA(req *core.AmassRequest, recidx int) {
 	}
 }
 
-func (dms *DataManagerService) insertPTR(req *core.AmassRequest, recidx int) {
+func (dms *DataManagerService) insertPTR(req *AmassRequest, recidx int) {
 	target := removeLastDot(req.Records[recidx].Data)
 	if target == "" {
 		return
@@ -229,15 +228,15 @@ func (dms *DataManagerService) insertPTR(req *core.AmassRequest, recidx int) {
 			dms.Enum().Log.Printf("%s failed to insert PTR record: %v", handler, err)
 		}
 	}
-	dms.sendNewName(&core.AmassRequest{
+	dms.sendNewName(&AmassRequest{
 		Name:   target,
 		Domain: domain,
-		Tag:    core.DNS,
+		Tag:    DNS,
 		Source: req.Source,
 	})
 }
 
-func (dms *DataManagerService) insertSRV(req *core.AmassRequest, recidx int) {
+func (dms *DataManagerService) insertSRV(req *AmassRequest, recidx int) {
 	service := removeLastDot(req.Records[recidx].Name)
 	target := removeLastDot(req.Records[recidx].Data)
 	if target == "" || service == "" {
@@ -252,7 +251,7 @@ func (dms *DataManagerService) insertSRV(req *core.AmassRequest, recidx int) {
 	}
 }
 
-func (dms *DataManagerService) insertNS(req *core.AmassRequest, recidx int) {
+func (dms *DataManagerService) insertNS(req *AmassRequest, recidx int) {
 	pieces := strings.Split(req.Records[recidx].Data, ",")
 	target := pieces[len(pieces)-1]
 	if target == "" {
@@ -270,16 +269,16 @@ func (dms *DataManagerService) insertNS(req *core.AmassRequest, recidx int) {
 		}
 	}
 	if target != domain {
-		dms.sendNewName(&core.AmassRequest{
+		dms.sendNewName(&AmassRequest{
 			Name:   target,
 			Domain: domain,
-			Tag:    core.DNS,
+			Tag:    DNS,
 			Source: "Forward DNS",
 		})
 	}
 }
 
-func (dms *DataManagerService) insertMX(req *core.AmassRequest, recidx int) {
+func (dms *DataManagerService) insertMX(req *AmassRequest, recidx int) {
 	target := removeLastDot(req.Records[recidx].Data)
 	if target == "" {
 		return
@@ -296,23 +295,23 @@ func (dms *DataManagerService) insertMX(req *core.AmassRequest, recidx int) {
 		}
 	}
 	if target != domain {
-		dms.sendNewName(&core.AmassRequest{
+		dms.sendNewName(&AmassRequest{
 			Name:   target,
 			Domain: domain,
-			Tag:    core.DNS,
+			Tag:    DNS,
 			Source: "Forward DNS",
 		})
 	}
 }
 
-func (dms *DataManagerService) insertTXT(req *core.AmassRequest, recidx int) {
+func (dms *DataManagerService) insertTXT(req *AmassRequest, recidx int) {
 	if !dms.Enum().Config.IsDomainInScope(req.Name) {
 		return
 	}
 	dms.findNamesAndAddresses(req.Records[recidx].Data)
 }
 
-func (dms *DataManagerService) insertSPF(req *core.AmassRequest, recidx int) {
+func (dms *DataManagerService) insertSPF(req *AmassRequest, recidx int) {
 	if !dms.Enum().Config.IsDomainInScope(req.Name) {
 		return
 	}
@@ -322,9 +321,9 @@ func (dms *DataManagerService) insertSPF(req *core.AmassRequest, recidx int) {
 func (dms *DataManagerService) findNamesAndAddresses(data string) {
 	ipre := regexp.MustCompile(utils.IPv4RE)
 	for _, ip := range ipre.FindAllString(data, -1) {
-		dms.Enum().Bus.Publish(core.NEWADDR, &core.AmassRequest{
+		dms.Enum().Bus.Publish(NEWADDR, &AmassRequest{
 			Address: ip,
-			Tag:     core.DNS,
+			Tag:     DNS,
 			Source:  "Forward DNS",
 		})
 	}
@@ -338,10 +337,10 @@ func (dms *DataManagerService) findNamesAndAddresses(data string) {
 		if domain == "" {
 			continue
 		}
-		dms.sendNewName(&core.AmassRequest{
+		dms.sendNewName(&AmassRequest{
 			Name:   name,
 			Domain: domain,
-			Tag:    core.DNS,
+			Tag:    DNS,
 			Source: "Forward DNS",
 		})
 	}

@@ -13,7 +13,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -25,7 +24,7 @@ const (
 // ActiveCertService is the AmassService that handles all active certificate activities
 // within the architecture.
 type ActiveCertService struct {
-	core.BaseAmassService
+	BaseAmassService
 
 	maxPulls  utils.Semaphore
 	filter    *utils.StringFilter
@@ -33,14 +32,14 @@ type ActiveCertService struct {
 }
 
 // NewActiveCertService returns he object initialized, but not yet started.
-func NewActiveCertService(e *core.Enumeration) *ActiveCertService {
+func NewActiveCertService(e *Enumeration) *ActiveCertService {
 	acs := &ActiveCertService{
 		maxPulls:  utils.NewSimpleSemaphore(25),
 		filter:    utils.NewStringFilter(),
 		addrQueue: make(chan string, 50),
 	}
 
-	acs.BaseAmassService = *core.NewBaseAmassService(e, "Active Cert", acs)
+	acs.BaseAmassService = *NewBaseAmassService(e, "Active Cert", acs)
 	return acs
 }
 
@@ -49,7 +48,7 @@ func (acs *ActiveCertService) OnStart() error {
 	acs.BaseAmassService.OnStart()
 
 	if acs.Enum().Config.Active {
-		acs.Enum().Bus.SubscribeAsync(core.ACTIVECERT, acs.queueAddress, false)
+		acs.Enum().Bus.SubscribeAsync(ACTIVECERT, acs.queueAddress, false)
 	}
 
 	go acs.processRequests()
@@ -61,7 +60,7 @@ func (acs *ActiveCertService) OnStop() error {
 	acs.BaseAmassService.OnStop()
 
 	if acs.Enum().Config.Active {
-		acs.Enum().Bus.Unsubscribe(core.ACTIVECERT, acs.queueAddress)
+		acs.Enum().Bus.Unsubscribe(ACTIVECERT, acs.queueAddress)
 	}
 	return nil
 }
@@ -99,15 +98,15 @@ func (acs *ActiveCertService) performRequest(addr string) {
 		if domain != "" && !acs.Enum().DupDataSourceName(r) {
 			r.Domain = domain
 			r.Source = acs.String()
-			acs.Enum().Bus.Publish(core.NEWNAME, r)
+			acs.Enum().Bus.Publish(NEWNAME, r)
 		}
 	}
 	acs.SetActive()
 }
 
 // PullCertificateNames attempts to pull a cert from one or more ports on an IP.
-func PullCertificateNames(addr string, ports []int) []*core.AmassRequest {
-	var requests []*core.AmassRequest
+func PullCertificateNames(addr string, ports []int) []*AmassRequest {
+	var requests []*AmassRequest
 
 	// Check hosts for certificates that contain subdomain names
 	for _, port := range ports {
@@ -178,14 +177,14 @@ func namesFromCert(cert *x509.Certificate) []string {
 	return subdomains
 }
 
-func reqFromNames(subdomains []string) []*core.AmassRequest {
-	var requests []*core.AmassRequest
+func reqFromNames(subdomains []string) []*AmassRequest {
+	var requests []*AmassRequest
 
 	for _, name := range subdomains {
-		requests = append(requests, &core.AmassRequest{
+		requests = append(requests, &AmassRequest{
 			Name:   name,
 			Domain: SubdomainToDomain(name),
-			Tag:    core.CERT,
+			Tag:    CERT,
 		})
 	}
 	return requests

@@ -4,23 +4,22 @@
 package amass
 
 import (
-	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
 // AddressService is the AmassService that handles all newly discovered IP addresses
 // within the architecture. This is achieved by receiving all the NEWADDR events.
 type AddressService struct {
-	core.BaseAmassService
+	BaseAmassService
 
 	filter *utils.StringFilter
 }
 
 // NewAddressService returns he object initialized, but not yet started.
-func NewAddressService(e *core.Enumeration) *AddressService {
+func NewAddressService(e *Enumeration) *AddressService {
 	as := &AddressService{filter: utils.NewStringFilter()}
 
-	as.BaseAmassService = *core.NewBaseAmassService(e, "Address Service", as)
+	as.BaseAmassService = *NewBaseAmassService(e, "Address Service", as)
 	return as
 }
 
@@ -28,7 +27,7 @@ func NewAddressService(e *core.Enumeration) *AddressService {
 func (as *AddressService) OnStart() error {
 	as.BaseAmassService.OnStart()
 
-	as.Enum().Bus.SubscribeAsync(core.NEWADDR, as.SendRequest, false)
+	as.Enum().Bus.SubscribeAsync(NEWADDR, as.SendRequest, false)
 	go as.processRequests()
 	return nil
 }
@@ -37,7 +36,7 @@ func (as *AddressService) OnStart() error {
 func (as *AddressService) OnStop() error {
 	as.BaseAmassService.OnStop()
 
-	as.Enum().Bus.Unsubscribe(core.NEWADDR, as.SendRequest)
+	as.Enum().Bus.Unsubscribe(NEWADDR, as.SendRequest)
 	return nil
 }
 
@@ -54,7 +53,7 @@ func (as *AddressService) processRequests() {
 	}
 }
 
-func (as *AddressService) performRequest(req *core.AmassRequest) {
+func (as *AddressService) performRequest(req *AmassRequest) {
 	if req == nil || req.Address == "" || as.filter.Duplicate(req.Address) {
 		return
 	}
@@ -66,8 +65,8 @@ func (as *AddressService) performRequest(req *core.AmassRequest) {
 		return
 	}
 	// Request the reverse DNS sweep for the addr
-	as.Enum().Bus.Publish(core.DNSSWEEP, req.Address, cidr)
+	as.Enum().Bus.Publish(DNSSWEEP, req.Address, cidr)
 	if as.Enum().Config.Active {
-		as.Enum().Bus.Publish(core.ACTIVECERT, req.Address)
+		as.Enum().Bus.Publish(ACTIVECERT, req.Address)
 	}
 }

@@ -6,21 +6,19 @@ package amass
 import (
 	"strings"
 	"time"
-
-	"github.com/OWASP/Amass/amass/core"
 )
 
 // BruteForceService is the AmassService that handles all brute force name generation
 // within the architecture. This is achieved by watching all the NEWSUB events.
 type BruteForceService struct {
-	core.BaseAmassService
+	BaseAmassService
 }
 
 // NewBruteForceService returns he object initialized, but not yet started.
-func NewBruteForceService(e *core.Enumeration) *BruteForceService {
+func NewBruteForceService(e *Enumeration) *BruteForceService {
 	bfs := new(BruteForceService)
 
-	bfs.BaseAmassService = *core.NewBaseAmassService(e, "Brute Forcing", bfs)
+	bfs.BaseAmassService = *NewBaseAmassService(e, "Brute Forcing", bfs)
 	return bfs
 }
 
@@ -32,7 +30,7 @@ func (bfs *BruteForceService) OnStart() error {
 		go bfs.startRootDomains()
 
 		if bfs.Enum().Config.Recursive {
-			bfs.Enum().Bus.SubscribeAsync(core.NEWSUB, bfs.newSubdomain, false)
+			bfs.Enum().Bus.SubscribeAsync(NEWSUB, bfs.newSubdomain, false)
 		}
 	}
 	return nil
@@ -43,7 +41,7 @@ func (bfs *BruteForceService) OnStop() error {
 	bfs.BaseAmassService.OnStop()
 
 	if bfs.Enum().Config.BruteForcing && bfs.Enum().Config.Recursive {
-		bfs.Enum().Bus.Unsubscribe(core.NEWSUB, bfs.newSubdomain)
+		bfs.Enum().Bus.Unsubscribe(NEWSUB, bfs.newSubdomain)
 	}
 	return nil
 }
@@ -55,7 +53,7 @@ func (bfs *BruteForceService) startRootDomains() {
 	}
 }
 
-func (bfs *BruteForceService) newSubdomain(req *core.AmassRequest, times int) {
+func (bfs *BruteForceService) newSubdomain(req *AmassRequest, times int) {
 	if times == bfs.Enum().Config.MinForRecursive {
 		bfs.performBruteForcing(req.Name, req.Domain)
 	}
@@ -71,17 +69,17 @@ func (bfs *BruteForceService) performBruteForcing(subdomain, root string) {
 		case <-bfs.Quit():
 			return
 		default:
-			req := &core.AmassRequest{
+			req := &AmassRequest{
 				Name:   strings.ToLower(word + "." + subdomain),
 				Domain: root,
-				Tag:    core.BRUTE,
+				Tag:    BRUTE,
 				Source: bfs.String(),
 			}
 
 			if bfs.Enum().DupDataSourceName(req) {
 				continue
 			}
-			bfs.Enum().Bus.Publish(core.NEWNAME, req)
+			bfs.Enum().Bus.Publish(NEWNAME, req)
 		}
 	}
 }

@@ -9,7 +9,7 @@ import (
 	"os"
 	"path"
 
-	"github.com/OWASP/Amass/amass/core"
+	"github.com/OWASP/Amass/amass"
 	"github.com/OWASP/Amass/amass/handlers"
 	"github.com/OWASP/Amass/amass/utils/viz"
 )
@@ -50,7 +50,7 @@ func main() {
 		return
 	}
 
-	graph := core.NewGraph()
+	graph := amass.NewGraph()
 	err = handlers.DataOptsDriver(opts, graph)
 	if err != nil {
 		fmt.Printf("Failed to build the network graph: %v\n", err)

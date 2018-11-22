@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -20,7 +19,7 @@ type timesRequest struct {
 // NameService is the AmassService that handles all newly discovered names
 // within the architecture. This is achieved by receiving all the RESOLVED events.
 type NameService struct {
-	core.BaseAmassService
+	BaseAmassService
 
 	filter      *utils.StringFilter
 	timesChan   chan *timesRequest
@@ -31,7 +30,7 @@ type NameService struct {
 
 // NewNameService requires the enumeration configuration and event bus as parameters.
 // The object returned is initialized, but has not yet been started.
-func NewNameService(e *core.Enumeration) *NameService {
+func NewNameService(e *Enumeration) *NameService {
 	max := e.Config.Timing.ToMaxFlow() + e.Config.Timing.ToReleasesPerSecond()
 	ns := &NameService{
 		filter:      utils.NewStringFilter(),
@@ -41,7 +40,7 @@ func NewNameService(e *core.Enumeration) *NameService {
 		sanityRE:    utils.AnySubdomainRegex(),
 	}
 
-	ns.BaseAmassService = *core.NewBaseAmassService(e, "Name Service", ns)
+	ns.BaseAmassService = *NewBaseAmassService(e, "Name Service", ns)
 	return ns
 }
 
@@ -49,8 +48,8 @@ func NewNameService(e *core.Enumeration) *NameService {
 func (ns *NameService) OnStart() error {
 	ns.BaseAmassService.OnStart()
 
-	ns.Enum().Bus.SubscribeAsync(core.NEWNAME, ns.addRequest, false)
-	ns.Enum().Bus.SubscribeAsync(core.RESOLVED, ns.performCheck, false)
+	ns.Enum().Bus.SubscribeAsync(NEWNAME, ns.addRequest, false)
+	ns.Enum().Bus.SubscribeAsync(RESOLVED, ns.performCheck, false)
 	go ns.processTimesRequests()
 	go ns.processRequests()
 	return nil
@@ -60,12 +59,12 @@ func (ns *NameService) OnStart() error {
 func (ns *NameService) OnStop() error {
 	ns.BaseAmassService.OnStop()
 
-	ns.Enum().Bus.Unsubscribe(core.NEWNAME, ns.addRequest)
-	ns.Enum().Bus.Unsubscribe(core.RESOLVED, ns.performCheck)
+	ns.Enum().Bus.Unsubscribe(NEWNAME, ns.addRequest)
+	ns.Enum().Bus.Unsubscribe(RESOLVED, ns.performCheck)
 	return nil
 }
 
-func (ns *NameService) addRequest(req *core.AmassRequest) {
+func (ns *NameService) addRequest(req *AmassRequest) {
 	ns.SetActive()
 	if req == nil || req.Name == "" || req.Domain == "" {
 		return
@@ -128,12 +127,12 @@ func (ns *NameService) sendCompletionTime(t time.Time) {
 	ns.completions <- t
 }
 
-func (ns *NameService) performRequest(req *core.AmassRequest) {
+func (ns *NameService) performRequest(req *AmassRequest) {
 	ns.SetActive()
 	ns.sendCompletionTime(time.Now())
 	if ns.Enum().Config.Passive {
 		if !ns.filter.Duplicate(req.Name) {
-			ns.Enum().Bus.Publish(core.OUTPUT, &core.AmassOutput{
+			ns.Enum().Bus.Publish(OUTPUT, &AmassOutput{
 				Name:   req.Name,
 				Domain: req.Domain,
 				Tag:    req.Tag,
@@ -142,22 +141,22 @@ func (ns *NameService) performRequest(req *core.AmassRequest) {
 		}
 		return
 	}
-	ns.Enum().Bus.Publish(core.DNSQUERY, req)
+	ns.Enum().Bus.Publish(DNSQUERY, req)
 }
 
-func (ns *NameService) performCheck(req *core.AmassRequest) {
+func (ns *NameService) performCheck(req *AmassRequest) {
 	ns.SetActive()
 
 	if ns.Enum().Config.IsDomainInScope(req.Name) {
 		ns.checkSubdomain(req)
 	}
-	if req.Tag == core.DNS {
+	if req.Tag == DNS {
 		ns.sendCompletionTime(time.Now())
 	}
-	ns.Enum().Bus.Publish(core.CHECKED, req)
+	ns.Enum().Bus.Publish(CHECKED, req)
 }
 
-func (ns *NameService) checkSubdomain(req *core.AmassRequest) {
+func (ns *NameService) checkSubdomain(req *AmassRequest) {
 	labels := strings.Split(req.Name, ".")
 	num := len(labels)
 	// Is this large enough to consider further?
@@ -178,7 +177,7 @@ func (ns *NameService) checkSubdomain(req *core.AmassRequest) {
 		return
 	}
 
-	ns.Enum().Bus.Publish(core.NEWSUB, &core.AmassRequest{
+	ns.Enum().Bus.Publish(NEWSUB, &AmassRequest{
 		Name:   sub,
 		Domain: req.Domain,
 		Tag:    req.Tag,

@@ -22,14 +22,12 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass"
-	"github.com/OWASP/Amass/amass/core"
-	"github.com/OWASP/Amass/amass/dnssrv"
 	"github.com/OWASP/Amass/amass/utils"
 	"github.com/fatih/color"
 )
 
 type outputParams struct {
-	Enum     *core.Enumeration
+	Enum     *amass.Enumeration
 	PrintSrc bool
 	PrintIPs bool
 	FileOut  string
@@ -78,7 +76,7 @@ var (
 	passive       = flag.Bool("passive", false, "Disable DNS resolution of names and dependent features")
 	noalts        = flag.Bool("noalts", false, "Disable generation of altered names")
 	sources       = flag.Bool("src", false, "Print data sources for the discovered names")
-	timing        = flag.Int("T", int(core.Normal), "Timing templates 0 (slowest) through 5 (fastest)")
+	timing        = flag.Int("T", int(amass.Normal), "Timing templates 0 (slowest) through 5 (fastest)")
 	wordlist      = flag.String("w", "", "Path to a different wordlist file")
 	allpath       = flag.String("oA", "", "Path prefix used for naming all output files")
 	logpath       = flag.String("log", "", "Path to the log file where errors will be written")
@@ -98,9 +96,9 @@ func main() {
 	flag.CommandLine.SetOutput(defaultBuf)
 	flag.Usage = func() {
 		printBanner()
-		g.Fprintf(os.Stderr, "Usage: %s [options] <-d domain>\n", path.Base(os.Args[0]))
+		g.Fprintf(color.Error, "Usage: %s [options] <-d domain>\n", path.Base(os.Args[0]))
 		flag.PrintDefaults()
-		g.Fprintln(os.Stderr, defaultBuf.String())
+		g.Fprintln(color.Error, defaultBuf.String())
 		os.Exit(1)
 	}
 
@@ -115,15 +113,15 @@ func main() {
 		flag.Usage()
 	}
 	if *version {
-		fmt.Fprintf(os.Stderr, "version %s\n", amass.Version)
+		fmt.Fprintf(color.Error, "version %s\n", amass.Version)
 		return
 	}
 	if *passive && *ips {
-		r.Fprintln(os.Stderr, "IP addresses cannot be provided without DNS resolution")
+		r.Fprintln(color.Error, "IP addresses cannot be provided without DNS resolution")
 		return
 	}
 	if *passive && *brute {
-		r.Fprintln(os.Stderr, "Brute forcing cannot be performed without DNS resolution")
+		r.Fprintln(color.Error, "Brute forcing cannot be performed without DNS resolution")
 		return
 	}
 
@@ -138,7 +136,7 @@ func main() {
 	if *resolvepath != "" {
 		resolvers = utils.UniqueAppend(resolvers, getLinesFromFile(*resolvepath)...)
 	}
-	dnssrv.SetCustomResolvers(resolvers)
+	amass.SetCustomResolvers(resolvers)
 	if *domainspath != "" {
 		domains = utils.UniqueAppend(domains, getLinesFromFile(*domainspath)...)
 	}
@@ -170,7 +168,7 @@ func main() {
 	}
 
 	rLog, wLog := io.Pipe()
-	enum := core.NewEnumeration()
+	enum := amass.NewEnumeration()
 	enum.Log = log.New(wLog, "", log.Lmicroseconds)
 	enum.Config.Wordlist = words
 	enum.Config.BruteForcing = *brute
@@ -179,7 +177,7 @@ func main() {
 	enum.Config.Active = *active
 	enum.Config.IncludeUnresolvable = *unresolved
 	enum.Config.Alterations = alts
-	enum.Config.Timing = core.EnumerationTiming(*timing)
+	enum.Config.Timing = amass.EnumerationTiming(*timing)
 	enum.Config.Passive = *passive
 	enum.Config.Blacklist = blacklist
 	for _, domain := range domains {
@@ -227,8 +225,7 @@ func main() {
 	// Execute the signal handler
 	go signalHandler(enum)
 
-	err := amass.StartEnumeration(enum)
-	if err != nil {
+	if err := enum.Start(); err != nil {
 		r.Println(err)
 		return
 	}
@@ -243,7 +240,7 @@ func getLinesFromFile(path string) []string {
 	// Open the file
 	file, err := os.Open(path)
 	if err != nil {
-		r.Fprintf(os.Stderr, "Error opening the file %s: %v\n", path, err)
+		r.Fprintf(color.Error, "Error opening the file %s: %v\n", path, err)
 		return lines
 	}
 	defer file.Close()
@@ -255,11 +252,11 @@ func getLinesFromFile(path string) []string {
 	// next reader
 	head := make([]byte, 512)
 	if _, err = file.Read(head); err != nil {
-		r.Fprintf(os.Stderr, "Error reading the first 512 bytes from %s: %s\n", path, err)
+		r.Fprintf(color.Error, "Error reading the first 512 bytes from %s: %s\n", path, err)
 		return lines
 	}
 	if _, err = file.Seek(0, 0); err != nil {
-		r.Fprintf(os.Stderr, "Error rewinding the file %s: %s\n", path, err)
+		r.Fprintf(color.Error, "Error rewinding the file %s: %s\n", path, err)
 		return lines
 	}
 
@@ -267,7 +264,7 @@ func getLinesFromFile(path string) []string {
 	if mt := http.DetectContentType(head); mt == "application/gzip" || mt == "application/x-gzip" {
 		gzReader, err := gzip.NewReader(file)
 		if err != nil {
-			r.Fprintf(os.Stderr, "Error gz-reading the file %s: %v\n", path, err)
+			r.Fprintf(color.Error, "Error gz-reading the file %s: %v\n", path, err)
 			return lines
 		}
 		defer gzReader.Close()
@@ -294,7 +291,7 @@ func writeLogsAndMessages(logs *io.PipeReader, logfile *os.File) {
 		line := scanner.Text()
 
 		if err := scanner.Err(); err != nil {
-			fmt.Fprintf(os.Stderr, "Error reading the Amass logs: %v\n", err)
+			fmt.Fprintf(color.Error, "Error reading the Amass logs: %v\n", err)
 			break
 		}
 
@@ -306,16 +303,16 @@ func writeLogsAndMessages(logs *io.PipeReader, logfile *os.File) {
 		line = strings.Join(parts[1:], " ")
 		// Check for Amass DNS wildcard messages
 		if wildcard.FindString(line) != "" {
-			r.Fprintln(os.Stderr, line)
+			r.Fprintln(color.Error, line)
 		}
 		// Check for the Amass average requests processed messages
 		if avg.FindString(line) != "" {
-			r.Fprintln(os.Stderr, line)
+			r.Fprintln(color.Error, line)
 		}
 	}
 }
 
-func writeJSONData(f *os.File, result *core.AmassOutput) {
+func writeJSONData(f *os.File, result *amass.AmassOutput) {
 	save := &jsonSave{
 		Name:   result.Name,
 		Domain: result.Domain,
@@ -343,19 +340,19 @@ func printBanner() {
 
 	pad := func(num int) {
 		for i := 0; i < num; i++ {
-			fmt.Fprint(os.Stderr, " ")
+			fmt.Fprint(color.Error, " ")
 		}
 	}
-	r.Fprintln(os.Stderr, amass.Banner)
+	r.Fprintln(color.Error, amass.Banner)
 	pad(rightmost - len(version))
-	y.Fprintln(os.Stderr, version)
+	y.Fprintln(color.Error, version)
 	pad(rightmost - len(author))
-	y.Fprintln(os.Stderr, author)
+	y.Fprintln(color.Error, author)
 	pad(rightmost - len(desc))
-	y.Fprintf(os.Stderr, "%s\n\n\n", desc)
+	y.Fprintf(color.Error, "%s\n\n\n", desc)
 }
 
-func resultToLine(result *core.AmassOutput, params *outputParams) (string, string, string, string) {
+func resultToLine(result *amass.AmassOutput, params *outputParams) (string, string, string, string) {
 	var source, comma, ips string
 
 	if params.PrintSrc {
@@ -434,7 +431,7 @@ func manageOutput(params *outputParams) {
 	close(finished)
 }
 
-func updateData(output *core.AmassOutput, tags map[string]int, asns map[int]*asnData) {
+func updateData(output *amass.AmassOutput, tags map[string]int, asns map[int]*asnData) {
 	tags[output.Tag]++
 
 	// Update the ASN information
@@ -455,18 +452,18 @@ func updateData(output *core.AmassOutput, tags map[string]int, asns map[int]*asn
 func printSummary(total int, tags map[string]int, asns map[int]*asnData) {
 	pad := func(num int, chr string) {
 		for i := 0; i < num; i++ {
-			b.Fprint(os.Stderr, chr)
+			b.Fprint(color.Error, chr)
 		}
 	}
 
-	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(color.Error)
 	// Print the header information
 	title := "OWASP Amass v"
 	site := "https://github.com/OWASP/Amass"
-	b.Fprint(os.Stderr, title+amass.Version)
+	b.Fprint(color.Error, title+amass.Version)
 	num := 80 - (len(title) + len(amass.Version) + len(site))
 	pad(num, " ")
-	b.Fprintf(os.Stderr, "%s\n", site)
+	b.Fprintf(color.Error, "%s\n", site)
 	pad(8, "----------")
 	fmt.Fprintf(color.Error, "\n%s%s", yellow(strconv.Itoa(total)), green(" names discovered - "))
 	// Print the stats using tag information
@@ -474,18 +471,18 @@ func printSummary(total int, tags map[string]int, asns map[int]*asnData) {
 	for k, v := range tags {
 		fmt.Fprintf(color.Error, "%s: %s", green(k), yellow(strconv.Itoa(v)))
 		if num < length {
-			g.Fprint(os.Stderr, ", ")
+			g.Fprint(color.Error, ", ")
 		}
 		num++
 	}
-	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(color.Error)
 
 	if len(asns) == 0 {
 		return
 	}
 	// Another line gets printed
 	pad(8, "----------")
-	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(color.Error)
 	// Print the ASN and netblock information
 	for asn, data := range asns {
 		fmt.Fprintf(color.Error, "%s%s %s %s\n",

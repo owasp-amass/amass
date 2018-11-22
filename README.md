@@ -191,7 +191,7 @@ func main() {
     // Seed the default pseudo-random number generator
 	rand.Seed(time.Now().UTC().UnixNano())
 
-	enum := core.NewEnumeration()
+	enum := amass.NewEnumeration()
 	go func() {
 		for result := range enum.Output {
 			fmt.Println(result.Name)
@@ -199,8 +199,7 @@ func main() {
 	}()
 	// Setup the most basic amass configuration
 	enum.Config.AddDomain("example.com")
-	// Begin the enumeration process
-	amass.StartEnumeration(enum)
+	enum.Start()
 }
 ```
 

@@ -14,8 +14,6 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass"
-	"github.com/OWASP/Amass/amass/core"
-	"github.com/OWASP/Amass/amass/dnssrv"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -114,16 +112,16 @@ func getWhoisDomains(d string) {
 
 func performAllReverseDNS(ips []net.IP) {
 	for _, ip := range ips {
-		core.MaxConnections.Acquire(1)
+		amass.MaxConnections.Acquire(1)
 		started <- struct{}{}
 
 		go func(ip net.IP) {
-			if _, answer, err := dnssrv.Reverse(ip.String()); err == nil {
+			if _, answer, err := amass.Reverse(ip.String()); err == nil {
 				if d := strings.TrimSpace(amass.SubdomainToDomain(answer)); d != "" {
 					results <- d
 				}
 			}
-			core.MaxConnections.Release(1)
+			amass.MaxConnections.Release(1)
 			done <- struct{}{}
 		}(ip)
 	}
@@ -133,7 +131,7 @@ func pullAllCertificates(ips []net.IP, ports parseInts) {
 	maxPulls := utils.NewSimpleSemaphore(100)
 
 	for _, ip := range ips {
-		core.MaxConnections.Acquire(1)
+		amass.MaxConnections.Acquire(1)
 		maxPulls.Acquire(1)
 		started <- struct{}{}
 
@@ -148,7 +146,7 @@ func pullAllCertificates(ips []net.IP, ports parseInts) {
 				}
 			}
 			maxPulls.Release(1)
-			core.MaxConnections.Release(1)
+			amass.MaxConnections.Release(1)
 			done <- struct{}{}
 		}(ip)
 	}

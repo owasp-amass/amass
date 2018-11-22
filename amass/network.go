@@ -16,8 +16,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/OWASP/Amass/amass/core"
-	"github.com/OWASP/Amass/amass/dnssrv"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -71,9 +69,9 @@ func SubdomainToDomain(name string) string {
 	for i := 0; i < len(labels)-1; i++ {
 		sub := strings.Join(labels[i:], ".")
 
-		core.MaxConnections.Acquire(1)
-		defer core.MaxConnections.Release(1)
-		if ns, err := dnssrv.Resolve(sub, "NS"); err == nil {
+		MaxConnections.Acquire(1)
+		defer MaxConnections.Release(1)
+		if ns, err := Resolve(sub, "NS"); err == nil {
 			pieces := strings.Split(ns[0].Data, ",")
 			domainCache[pieces[0]] = struct{}{}
 			domain = pieces[0]
@@ -239,12 +237,12 @@ func fetchOnlineData(addr string, asn int) (*ASRecord, error) {
 }
 
 func originLookup(addr string) (int, string, error) {
-	core.MaxConnections.Acquire(1)
-	defer core.MaxConnections.Release(1)
+	MaxConnections.Acquire(1)
+	defer MaxConnections.Release(1)
 
 	var err error
 	var name string
-	var answers []core.DNSAnswer
+	var answers []DNSAnswer
 	if ip := net.ParseIP(addr); len(ip.To4()) == net.IPv4len {
 		name = utils.ReverseIP(addr) + ".origin.asn.cymru.com"
 	} else if len(ip) == net.IPv6len {
@@ -253,7 +251,7 @@ func originLookup(addr string) (int, string, error) {
 		return 0, "", fmt.Errorf("originLookup param is insufficient: addr: %s", ip)
 	}
 
-	answers, err = dnssrv.Resolve(name, "TXT")
+	answers, err = Resolve(name, "TXT")
 	if err != nil {
 		return 0, "", fmt.Errorf("originLookup: DNS TXT record query error: %s: %v", name, err)
 	}
@@ -267,14 +265,14 @@ func originLookup(addr string) (int, string, error) {
 }
 
 func asnLookup(asn int) (*ASRecord, error) {
-	core.MaxConnections.Acquire(1)
-	defer core.MaxConnections.Release(1)
+	MaxConnections.Acquire(1)
+	defer MaxConnections.Release(1)
 
 	var err error
-	var answers []core.DNSAnswer
+	var answers []DNSAnswer
 	name := "AS" + strconv.Itoa(asn) + ".asn.cymru.com"
 
-	answers, err = dnssrv.Resolve(name, "TXT")
+	answers, err = Resolve(name, "TXT")
 	if err != nil {
 		return nil, fmt.Errorf("asnLookup: DNS TXT record query error: %s: %v", name, err)
 	}
@@ -287,8 +285,8 @@ func asnLookup(asn int) (*ASRecord, error) {
 }
 
 func fetchOnlineNetblockData(asn int) ([]string, error) {
-	core.MaxConnections.Acquire(1)
-	defer core.MaxConnections.Release(1)
+	MaxConnections.Acquire(1)
+	defer MaxConnections.Release(1)
 
 	ip := nameToAddress("asn.shadowserver.org")
 	if ip == "" {
@@ -325,10 +323,10 @@ func fetchOnlineNetblockData(asn int) ([]string, error) {
 }
 
 func nameToAddress(name string) string {
-	core.MaxConnections.Acquire(1)
-	defer core.MaxConnections.Release(1)
+	MaxConnections.Acquire(1)
+	defer MaxConnections.Release(1)
 
-	answers, err := dnssrv.Resolve(name, "A")
+	answers, err := Resolve(name, "A")
 	if err != nil {
 		return ""
 	}
