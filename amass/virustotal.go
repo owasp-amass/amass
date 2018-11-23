@@ -56,17 +56,12 @@ func (v *VirusTotal) executeQuery(domain string) {
 
 	v.SetActive()
 	for _, sd := range re.FindAllString(page, -1) {
-		req := &AmassRequest{
+		v.Enum().NewNameEvent(&AmassRequest{
 			Name:   cleanName(sd),
 			Domain: domain,
 			Tag:    v.SourceType,
 			Source: v.String(),
-		}
-
-		if v.Enum().DupDataSourceName(req) {
-			continue
-		}
-		v.Enum().Bus.Publish(NEWNAME, req)
+		})
 	}
 }
 

@@ -26,18 +26,12 @@ const (
 type ActiveCertService struct {
 	BaseAmassService
 
-	maxPulls  utils.Semaphore
-	filter    *utils.StringFilter
-	addrQueue chan string
+	maxPulls utils.Semaphore
 }
 
 // NewActiveCertService returns he object initialized, but not yet started.
 func NewActiveCertService(e *Enumeration) *ActiveCertService {
-	acs := &ActiveCertService{
-		maxPulls:  utils.NewSimpleSemaphore(25),
-		filter:    utils.NewStringFilter(),
-		addrQueue: make(chan string, 50),
-	}
+	acs := &ActiveCertService{maxPulls: utils.NewSimpleSemaphore(25)}
 
 	acs.BaseAmassService = *NewBaseAmassService(e, "Active Cert", acs)
 	return acs
@@ -47,32 +41,8 @@ func NewActiveCertService(e *Enumeration) *ActiveCertService {
 func (acs *ActiveCertService) OnStart() error {
 	acs.BaseAmassService.OnStart()
 
-	if acs.Enum().Config.Active {
-		acs.Enum().Bus.SubscribeAsync(ACTIVECERT, acs.queueAddress, false)
-	}
-
 	go acs.processRequests()
 	return nil
-}
-
-// OnStop implements the AmassService interface
-func (acs *ActiveCertService) OnStop() error {
-	acs.BaseAmassService.OnStop()
-
-	if acs.Enum().Config.Active {
-		acs.Enum().Bus.Unsubscribe(ACTIVECERT, acs.queueAddress)
-	}
-	return nil
-}
-
-func (acs *ActiveCertService) queueAddress(addr string) {
-	if acs.filter.Duplicate(addr) {
-		return
-	}
-
-	acs.SetActive()
-	acs.maxPulls.Acquire(1)
-	acs.addrQueue <- addr
 }
 
 func (acs *ActiveCertService) processRequests() {
@@ -82,23 +52,22 @@ func (acs *ActiveCertService) processRequests() {
 			<-acs.ResumeChan()
 		case <-acs.Quit():
 			return
-		case addr := <-acs.addrQueue:
-			go acs.performRequest(addr)
+		case req := <-acs.RequestChan():
+			go acs.performRequest(req)
 		}
 	}
 }
 
-func (acs *ActiveCertService) performRequest(addr string) {
+func (acs *ActiveCertService) performRequest(req *AmassRequest) {
+	acs.maxPulls.Acquire(1)
 	defer acs.maxPulls.Release(1)
 
 	acs.SetActive()
-	for _, r := range PullCertificateNames(addr, acs.Enum().Config.Ports) {
-		domain := acs.Enum().Config.WhichDomain(r.Name)
-
-		if domain != "" && !acs.Enum().DupDataSourceName(r) {
+	for _, r := range PullCertificateNames(req.Address, acs.Enum().Config.Ports) {
+		if domain := acs.Enum().Config.WhichDomain(r.Name); domain != "" {
 			r.Domain = domain
 			r.Source = acs.String()
-			acs.Enum().Bus.Publish(NEWNAME, r)
+			acs.Enum().NewNameEvent(r)
 		}
 	}
 	acs.SetActive()

@@ -59,32 +59,22 @@ func (e *Entrust) executeQuery(domain string) {
 	e.SetActive()
 	re := e.Enum().Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(content, -1) {
-		req := &AmassRequest{
+		e.Enum().NewNameEvent(&AmassRequest{
 			Name:   cleanName(sd),
 			Domain: domain,
 			Tag:    e.SourceType,
 			Source: e.String(),
-		}
-
-		if e.Enum().DupDataSourceName(req) {
-			continue
-		}
-		e.Enum().Bus.Publish(NEWNAME, req)
+		})
 	}
 
 	for _, name := range e.extractReversedSubmatches(page) {
 		if match := re.FindString(name); match != "" {
-			req := &AmassRequest{
+			e.Enum().NewNameEvent(&AmassRequest{
 				Name:   cleanName(match),
 				Domain: domain,
 				Tag:    e.SourceType,
 				Source: e.String(),
-			}
-
-			if e.Enum().DupDataSourceName(req) {
-				continue
-			}
-			e.Enum().Bus.Publish(NEWNAME, req)
+			})
 		}
 	}
 }

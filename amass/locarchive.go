@@ -32,17 +32,8 @@ func NewLoCArchive(e *Enumeration) *LoCArchive {
 func (l *LoCArchive) OnStart() error {
 	l.BaseAmassService.OnStart()
 
-	l.Enum().Bus.SubscribeAsync(CHECKED, l.SendRequest, false)
 	go l.startRootDomains()
 	go l.processRequests()
-	return nil
-}
-
-// OnStop implements the AmassService interface
-func (l *LoCArchive) OnStop() error {
-	l.BaseAmassService.OnStop()
-
-	l.Enum().Bus.Unsubscribe(CHECKED, l.SendRequest)
 	return nil
 }
 
@@ -79,16 +70,11 @@ func (l *LoCArchive) executeQuery(sn, domain string) {
 	}
 
 	for _, name := range names {
-		req := &AmassRequest{
+		l.Enum().NewNameEvent(&AmassRequest{
 			Name:   cleanName(name),
 			Domain: domain,
 			Tag:    l.SourceType,
 			Source: l.String(),
-		}
-
-		if l.Enum().DupDataSourceName(req) {
-			continue
-		}
-		l.Enum().Bus.Publish(NEWNAME, req)
+		})
 	}
 }

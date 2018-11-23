@@ -21,7 +21,6 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 	"github.com/PuerkitoBio/fetchbot"
 	"github.com/PuerkitoBio/goquery"
-	evbus "github.com/asaskevich/EventBus"
 )
 
 // Banner is the ASCII art logo used within help output.
@@ -52,17 +51,9 @@ const (
 	defaultWordlistURL = "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/namelist.txt"
 )
 
-// Various types used throughout Amass
+// Request tag types
 const (
-	ACTIVECERT = "amass:activecert"
-	CHECKED    = "amass:checked"
-	DNSQUERY   = "amass:dnsquery"
-	DNSSWEEP   = "amass:dnssweep"
-	NEWADDR    = "amass:newaddress"
-	NEWNAME    = "amass:newname"
-	NEWSUB     = "amass:newsubdomain"
-	OUTPUT     = "amass:output"
-	RESOLVED   = "amass:resolved"
+	OUTPUT = "amass:output"
 
 	ALT     = "alt"
 	ARCHIVE = "archive"
@@ -101,8 +92,6 @@ type EnumerationTiming int
 type Enumeration struct {
 	Config *AmassConfig
 
-	Bus evbus.Bus
-
 	// Link graph that collects all the information gathered by the enumeration
 	Graph *Graph
 
@@ -120,6 +109,15 @@ type Enumeration struct {
 
 	// MaxFlow is a Semaphore that restricts the number of names moving through the architecture
 	MaxFlow utils.Semaphore
+
+	nameService  *NameService
+	addrService  *AddressService
+	dnsService   *DNSService
+	dataService  *DataManagerService
+	altService   *AlterationService
+	bruteService *BruteForceService
+	activeCert   *ActiveCertService
+	dataSources  []AmassService
 
 	trustedNameFilter *utils.StringFilter
 	otherNameFilter   *utils.StringFilter
@@ -144,7 +142,6 @@ func NewEnumeration() *Enumeration {
 			Alterations:     true,
 			Timing:          Normal,
 		},
-		Bus:               evbus.New(),
 		Graph:             NewGraph(),
 		Output:            make(chan *AmassOutput, 100),
 		Done:              make(chan struct{}),
@@ -154,26 +151,21 @@ func NewEnumeration() *Enumeration {
 		pause:             make(chan struct{}),
 		resume:            make(chan struct{}),
 	}
+	enum.nameService = NewNameService(enum)
+	enum.addrService = NewAddressService(enum)
+	enum.dnsService = NewDNSService(enum)
+	enum.dataService = NewDataManagerService(enum)
+	enum.altService = NewAlterationService(enum)
+	enum.bruteService = NewBruteForceService(enum)
+	enum.activeCert = NewActiveCertService(enum)
+	enum.dataSources = GetAllSources(enum)
 	return enum
-}
-
-// DataSourceNameFilter provides a single output filter for all name sources.
-func (e *Enumeration) DupDataSourceName(req *AmassRequest) bool {
-	if req == nil {
-		return true
-	}
-
-	tt := TrustedTag(req.Tag)
-	if !tt && e.otherNameFilter.Duplicate(req.Name) {
-		return true
-	} else if tt && e.trustedNameFilter.Duplicate(req.Name) {
-		return true
-	}
-	return false
 }
 
 // CheckConfig runs some sanity checks on the enumeration configuration.
 func (e *Enumeration) CheckConfig() error {
+	var err error
+
 	if e.Output == nil {
 		return errors.New("The configuration did not have an output channel")
 	}
@@ -189,11 +181,14 @@ func (e *Enumeration) CheckConfig() error {
 	if len(e.Config.Ports) == 0 {
 		e.Config.Ports = []int{443}
 	}
+	if len(e.Config.Wordlist) == 0 {
+		e.Config.Wordlist, err = getDefaultWordlist()
+	}
 
 	e.MaxFlow = utils.NewTimedSemaphore(
 		e.Config.Timing.ToMaxFlow(),
 		e.Config.Timing.ToReleaseDelay())
-	return nil
+	return err
 }
 
 // Start begins the DNS enumeration process for the Amass Enumeration object.
@@ -201,24 +196,18 @@ func (e *Enumeration) Start() error {
 	if err := e.CheckConfig(); err != nil {
 		return err
 	}
-	if e.Config.BruteForcing && len(e.Config.Wordlist) == 0 {
-		e.Config.Wordlist, _ = getDefaultWordlist()
-	}
 
-	e.Bus.SubscribeAsync(OUTPUT, e.SendOutput, true)
 	// Select the correct services to be used in this enumeration
-	services := []AmassService{NewNameService(e), NewAddressService(e)}
+	var services []AmassService
 	if !e.Config.Passive {
-		services = append(services,
-			NewDataManagerService(e),
-			NewDNSService(e),
-			NewAlterationService(e),
-			NewBruteForceService(e),
-			NewActiveCertService(e),
-		)
+		services = append(services, e.dnsService, e.dataService, e.activeCert)
+	}
+	services = append(services, e.nameService, e.addrService)
+	if !e.Config.Passive {
+		services = append(services, e.altService, e.bruteService)
 	}
 	// Grab all the data sources
-	services = append(services, GetAllSources(e)...)
+	services = append(services, e.dataSources...)
 
 	for _, srv := range services {
 		if err := srv.Start(); err != nil {
@@ -255,8 +244,6 @@ loop:
 	for _, srv := range services {
 		srv.Stop()
 	}
-	time.Sleep(time.Second)
-	e.Bus.Unsubscribe(OUTPUT, e.SendOutput)
 	time.Sleep(2 * time.Second)
 	close(e.Output)
 	return nil
@@ -282,8 +269,117 @@ func (e *Enumeration) ResumeChan() <-chan struct{} {
 	return e.resume
 }
 
-// SendOutput is a wrapper for sending enumeration output to the appropriate channel.
-func (e *Enumeration) SendOutput(out *AmassOutput) {
+//-------------------------------------------------------------------------------------------------
+// Various events that takes place between Amass engine services
+//-------------------------------------------------------------------------------------------------
+
+// NewNameEvent signals the NameService of a newly discovered DNS name.
+func (e *Enumeration) NewNameEvent(req *AmassRequest) {
+	if req == nil || req.Name == "" || req.Domain == "" {
+		return
+	}
+
+	req.Name = strings.ToLower(utils.RemoveAsteriskLabel(req.Name))
+	req.Domain = strings.ToLower(req.Domain)
+
+	tt := TrustedTag(req.Tag)
+	if !tt && e.otherNameFilter.Duplicate(req.Name) {
+		return
+	} else if tt && e.trustedNameFilter.Duplicate(req.Name) {
+		return
+	}
+
+	if !e.Config.Passive {
+		e.MaxFlow.Acquire(1)
+	}
+	e.nameService.SendRequest(req)
+}
+
+// NewAddressEvent signals the NameService of a newly discovered DNS name.
+func (e *Enumeration) NewAddressEvent(req *AmassRequest) {
+	if req == nil || req.Address == "" {
+		return
+	}
+	e.addrService.SendRequest(req)
+}
+
+// NewSubdomainEvent signals the services of a newly discovered subdomain name.
+func (e *Enumeration) NewSubdomainEvent(req *AmassRequest, times int) {
+	if req == nil || req.Name == "" || req.Domain == "" {
+		return
+	}
+
+	// CNAMEs are not a proper subdomain
+	if e.Graph.CNAMENode(req.Name) != nil {
+		return
+	}
+
+	if e.Config.BruteForcing && e.Config.Recursive {
+		e.bruteService.NewSubdomain(req, times)
+	}
+	e.dnsService.NewSubdomain(req, times)
+}
+
+// ResolveNameEvent sends a request to be resolved by the DNS service.
+func (e *Enumeration) ResolveNameEvent(req *AmassRequest) {
+	if req == nil || req.Name == "" || req.Domain == "" {
+		if !e.Config.Passive {
+			e.MaxFlow.Release(1)
+		}
+		return
+	}
+
+	if e.Config.Blacklisted(req.Name) || (!TrustedTag(req.Tag) &&
+		e.dnsService.GetWildcardType(req) == WildcardTypeDynamic) {
+		if !e.Config.Passive {
+			e.MaxFlow.Release(1)
+		}
+		return
+	}
+	e.dnsService.SendRequest(req)
+}
+
+// ResolvedNameEvent signals the NameService of a newly resolved DNS name.
+func (e *Enumeration) ResolvedNameEvent(req *AmassRequest) {
+	if !TrustedTag(req.Tag) && e.dnsService.MatchesWildcard(req) {
+		return
+	}
+	e.nameService.Resolved(req)
+}
+
+// CheckedNameEvent signals all services interested in acting on new validated DNS names.
+func (e *Enumeration) CheckedNameEvent(req *AmassRequest) {
+	e.dataService.SendRequest(req)
+
+	if e.Config.Alterations {
+		e.altService.SendRequest(req)
+	}
+}
+
+// ReverseDNSSweepEvent requests that a reverse DNS sweep be performed.
+func (e *Enumeration) ReverseDNSSweepEvent(req *AmassRequest) {
+	if e.Config.Passive {
+		return
+	}
+
+	_, cidr, _, err := IPRequest(req.Address)
+	if err != nil {
+		e.Log.Printf("%v", err)
+		return
+	}
+
+	e.dnsService.ReverseDNSSweep(req.Address, cidr)
+}
+
+// ActiveCertEvent requests that a certificate be pulled and parsed for DNS names.
+func (e *Enumeration) ActiveCertEvent(req *AmassRequest) {
+	if e.Config.Active {
+		e.activeCert.SendRequest(req)
+	}
+}
+
+// OutputEvent sends enumeration output to the package API caller.
+func (e *Enumeration) OutputEvent(out *AmassOutput) {
 	e.Output <- out
 }
 
@@ -361,19 +457,16 @@ func (t EnumerationTiming) ToReleasesPerSecond() int {
 
 func getDefaultWordlist() ([]string, error) {
 	var list []string
-	var wordlist io.Reader
 
 	page, err := utils.RequestWebPage(defaultWordlistURL, nil, nil, "", "")
 	if err != nil {
 		return list, err
 	}
-	wordlist = strings.NewReader(page)
 
-	scanner := bufio.NewScanner(wordlist)
-	// Once we have used all the words, we are finished
+	scanner := bufio.NewScanner(strings.NewReader(page))
 	for scanner.Scan() {
 		// Get the next word in the list
-		word := scanner.Text()
+		word := strings.TrimSpace(scanner.Text())
 		if err := scanner.Err(); err == nil && word != "" {
 			list = utils.UniqueAppend(list, word)
 		}

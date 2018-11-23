@@ -45,7 +45,7 @@ func RequestWebPage(url string, body io.Reader, hvals map[string]string, uid, se
 	req.Header.Set("User-Agent", UserAgent)
 	req.Header.Set("Accept", Accept)
 	req.Header.Set("Accept-Language", AcceptLang)
-	req.Header.Set("Accept-Encoding", AcceptEncoding)
+	//req.Header.Set("Accept-Encoding", AcceptEncoding)
 	if hvals != nil {
 		for k, v := range hvals {
 			req.Header.Set(k, v)

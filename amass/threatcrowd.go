@@ -56,17 +56,12 @@ func (t *ThreatCrowd) executeQuery(domain string) {
 	t.SetActive()
 	re := t.Enum().Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
-		req := &AmassRequest{
+		t.Enum().NewNameEvent(&AmassRequest{
 			Name:   cleanName(sd),
 			Domain: domain,
 			Tag:    t.SourceType,
 			Source: t.String(),
-		}
-
-		if t.Enum().DupDataSourceName(req) {
-			continue
-		}
-		t.Enum().Bus.Publish(NEWNAME, req)
+		})
 	}
 }
 

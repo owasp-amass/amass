@@ -28,20 +28,6 @@ func (bfs *BruteForceService) OnStart() error {
 
 	if bfs.Enum().Config.BruteForcing {
 		go bfs.startRootDomains()
-
-		if bfs.Enum().Config.Recursive {
-			bfs.Enum().Bus.SubscribeAsync(NEWSUB, bfs.newSubdomain, false)
-		}
-	}
-	return nil
-}
-
-// OnStop implements the AmassService interface
-func (bfs *BruteForceService) OnStop() error {
-	bfs.BaseAmassService.OnStop()
-
-	if bfs.Enum().Config.BruteForcing && bfs.Enum().Config.Recursive {
-		bfs.Enum().Bus.Unsubscribe(NEWSUB, bfs.newSubdomain)
 	}
 	return nil
 }
@@ -53,7 +39,7 @@ func (bfs *BruteForceService) startRootDomains() {
 	}
 }
 
-func (bfs *BruteForceService) newSubdomain(req *AmassRequest, times int) {
+func (bfs *BruteForceService) NewSubdomain(req *AmassRequest, times int) {
 	if times == bfs.Enum().Config.MinForRecursive {
 		bfs.performBruteForcing(req.Name, req.Domain)
 	}
@@ -62,6 +48,7 @@ func (bfs *BruteForceService) newSubdomain(req *AmassRequest, times int) {
 func (bfs *BruteForceService) performBruteForcing(subdomain, root string) {
 	t := time.NewTicker(time.Second)
 	defer t.Stop()
+
 	for _, word := range bfs.Enum().Config.Wordlist {
 		select {
 		case <-t.C:
@@ -69,17 +56,12 @@ func (bfs *BruteForceService) performBruteForcing(subdomain, root string) {
 		case <-bfs.Quit():
 			return
 		default:
-			req := &AmassRequest{
+			bfs.Enum().NewNameEvent(&AmassRequest{
 				Name:   strings.ToLower(word + "." + subdomain),
 				Domain: root,
 				Tag:    BRUTE,
 				Source: bfs.String(),
-			}
-
-			if bfs.Enum().DupDataSourceName(req) {
-				continue
-			}
-			bfs.Enum().Bus.Publish(NEWNAME, req)
+			})
 		}
 	}
 }

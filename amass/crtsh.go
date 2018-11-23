@@ -76,17 +76,12 @@ func (c *Crtsh) executeQuery(domain string) {
 			continue
 		}
 
-		req := &AmassRequest{
+		c.Enum().NewNameEvent(&AmassRequest{
 			Name:   cleanName(line.Name),
 			Domain: domain,
 			Tag:    c.SourceType,
 			Source: c.String(),
-		}
-
-		if c.Enum().DupDataSourceName(req) {
-			continue
-		}
-		c.Enum().Bus.Publish(NEWNAME, req)
+		})
 	}
 }
 

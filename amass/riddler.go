@@ -56,17 +56,12 @@ func (r *Riddler) executeQuery(domain string) {
 	r.SetActive()
 	re := r.Enum().Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
-		req := &AmassRequest{
+		r.Enum().NewNameEvent(&AmassRequest{
 			Name:   cleanName(sd),
 			Domain: domain,
 			Tag:    r.SourceType,
 			Source: r.String(),
-		}
-
-		if r.Enum().DupDataSourceName(req) {
-			continue
-		}
-		r.Enum().Bus.Publish(NEWNAME, req)
+		})
 	}
 }
 

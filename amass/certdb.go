@@ -68,17 +68,12 @@ func (c *CertDB) executeQuery(domain string) {
 			continue
 		}
 
-		req := &AmassRequest{
+		c.Enum().NewNameEvent(&AmassRequest{
 			Name:   cleanName(n),
 			Domain: domain,
 			Tag:    c.SourceType,
 			Source: c.String(),
-		}
-
-		if c.Enum().DupDataSourceName(req) {
-			continue
-		}
-		c.Enum().Bus.Publish(NEWNAME, req)
+		})
 	}
 }
 

@@ -88,47 +88,12 @@ func NewDNSService(e *Enumeration) *DNSService {
 }
 
 // OnStart implements the AmassService interface
-func (ds *DNSService) OnStart() error {
+func (ds DNSService) OnStart() error {
 	ds.BaseAmassService.OnStart()
 
-	ds.Enum().Bus.SubscribeAsync(NEWSUB, ds.newSubdomain, false)
-	ds.Enum().Bus.SubscribeAsync(DNSQUERY, ds.addRequest, false)
-	ds.Enum().Bus.SubscribeAsync(DNSSWEEP, ds.reverseDNSSweep, false)
 	go ds.processRequests()
 	go ds.processWildcardRequests()
 	return nil
-}
-
-// OnStop implements the AmassService interface
-func (ds *DNSService) OnStop() error {
-	ds.BaseAmassService.OnStop()
-
-	ds.Enum().Bus.Unsubscribe(NEWSUB, ds.newSubdomain)
-	ds.Enum().Bus.Unsubscribe(DNSQUERY, ds.addRequest)
-	ds.Enum().Bus.Unsubscribe(DNSSWEEP, ds.reverseDNSSweep)
-	return nil
-}
-
-func (ds *DNSService) addRequest(req *AmassRequest) {
-	ds.SetActive()
-
-	if ds.Enum().Config.Blacklisted(req.Name) {
-		ds.Enum().MaxFlow.Release(1)
-		return
-	} else if !TrustedTag(req.Tag) && ds.GetWildcardType(req) == WildcardTypeDynamic {
-		ds.Enum().MaxFlow.Release(1)
-		return
-	}
-
-	MaxConnections.Acquire(len(InitialQueryTypes))
-	ds.SendRequest(req)
-}
-
-func (ds *DNSService) sendResolved(req *AmassRequest) {
-	if !TrustedTag(req.Tag) && ds.MatchesWildcard(req) {
-		return
-	}
-	ds.Enum().Bus.Publish(RESOLVED, req)
 }
 
 func (ds *DNSService) processRequests() {
@@ -146,9 +111,11 @@ func (ds *DNSService) processRequests() {
 
 func (ds *DNSService) performRequest(req *AmassRequest) {
 	defer ds.Enum().MaxFlow.Release(1)
-	defer MaxConnections.Release(len(InitialQueryTypes))
 
 	ds.SetActive()
+	MaxConnections.Acquire(len(InitialQueryTypes))
+	defer MaxConnections.Release(len(InitialQueryTypes))
+
 	var answers []DNSAnswer
 	for _, t := range InitialQueryTypes {
 		if a, err := Resolve(req.Name, t); err == nil {
@@ -168,7 +135,7 @@ func (ds *DNSService) performRequest(req *AmassRequest) {
 	if len(req.Records) == 0 {
 		// Check if this unresolved name should be output by the enumeration
 		if ds.Enum().Config.IncludeUnresolvable && ds.Enum().Config.IsDomainInScope(req.Name) {
-			ds.Enum().Bus.Publish(OUTPUT, &AmassOutput{
+			ds.Enum().OutputEvent(&AmassOutput{
 				Name:   req.Name,
 				Domain: req.Domain,
 				Tag:    req.Tag,
@@ -177,7 +144,7 @@ func (ds *DNSService) performRequest(req *AmassRequest) {
 		}
 		return
 	}
-	ds.sendResolved(req)
+	ds.Enum().ResolvedNameEvent(req)
 }
 
 func (ds *DNSService) goodDNSRecords(records []DNSAnswer) bool {
@@ -195,7 +162,7 @@ func (ds *DNSService) goodDNSRecords(records []DNSAnswer) bool {
 	return true
 }
 
-func (ds *DNSService) newSubdomain(req *AmassRequest, times int) {
+func (ds *DNSService) NewSubdomain(req *AmassRequest, times int) {
 	if times != 1 {
 		return
 	}
@@ -244,7 +211,7 @@ func (ds *DNSService) basicQueries(subdomain, domain string) {
 	}
 
 	if len(answers) > 0 {
-		ds.sendResolved(&AmassRequest{
+		ds.Enum().ResolvedNameEvent(&AmassRequest{
 			Name:    subdomain,
 			Domain:  domain,
 			Records: answers,
@@ -283,7 +250,7 @@ func (ds *DNSService) queryServiceNames(subdomain, domain string) {
 
 		MaxConnections.Acquire(1)
 		if a, err := Resolve(srvName, "SRV"); err == nil {
-			ds.sendResolved(&AmassRequest{
+			ds.Enum().ResolvedNameEvent(&AmassRequest{
 				Name:    srvName,
 				Domain:  domain,
 				Records: a,
@@ -295,7 +262,7 @@ func (ds *DNSService) queryServiceNames(subdomain, domain string) {
 	}
 }
 
-func (ds *DNSService) reverseDNSSweep(addr string, cidr *net.IPNet) {
+func (ds *DNSService) ReverseDNSSweep(addr string, cidr *net.IPNet) {
 	var ips []net.IP
 
 	// Get information about nearby IP addresses
@@ -330,7 +297,7 @@ func (ds *DNSService) reverseDNSRoutine(ip string) {
 	if domain == "" {
 		return
 	}
-	ds.sendResolved(&AmassRequest{
+	ds.Enum().ResolvedNameEvent(&AmassRequest{
 		Name:   ptr,
 		Domain: domain,
 		Records: []DNSAnswer{{

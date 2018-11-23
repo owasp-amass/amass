@@ -56,17 +56,12 @@ func (h *HackerTarget) executeQuery(domain string) {
 	h.SetActive()
 	re := h.Enum().Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
-		req := &AmassRequest{
+		h.Enum().NewNameEvent(&AmassRequest{
 			Name:   cleanName(sd),
 			Domain: domain,
 			Tag:    h.SourceType,
 			Source: h.String(),
-		}
-
-		if h.Enum().DupDataSourceName(req) {
-			continue
-		}
-		h.Enum().Bus.Publish(NEWNAME, req)
+		})
 	}
 }
 

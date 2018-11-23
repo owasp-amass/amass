@@ -32,17 +32,8 @@ func NewOpenUKArchive(e *Enumeration) *OpenUKArchive {
 func (o *OpenUKArchive) OnStart() error {
 	o.BaseAmassService.OnStart()
 
-	o.Enum().Bus.SubscribeAsync(CHECKED, o.SendRequest, false)
 	go o.startRootDomains()
 	go o.processRequests()
-	return nil
-}
-
-// OnStop implements the AmassService interface
-func (o *OpenUKArchive) OnStop() error {
-	o.BaseAmassService.OnStop()
-
-	o.Enum().Bus.Unsubscribe(CHECKED, o.SendRequest)
 	return nil
 }
 
@@ -79,16 +70,11 @@ func (o *OpenUKArchive) executeQuery(sn, domain string) {
 	}
 
 	for _, name := range names {
-		req := &AmassRequest{
+		o.Enum().NewNameEvent(&AmassRequest{
 			Name:   cleanName(name),
 			Domain: domain,
 			Tag:    o.SourceType,
 			Source: o.String(),
-		}
-
-		if o.Enum().DupDataSourceName(req) {
-			continue
-		}
-		o.Enum().Bus.Publish(NEWNAME, req)
+		})
 	}
 }

@@ -74,17 +74,12 @@ func (d *Dogpile) executeQuery(domain string) {
 			}
 
 			for _, sd := range re.FindAllString(page, -1) {
-				req := &AmassRequest{
+				d.Enum().NewNameEvent(&AmassRequest{
 					Name:   cleanName(sd),
 					Domain: domain,
 					Tag:    d.SourceType,
 					Source: d.String(),
-				}
-
-				if d.Enum().DupDataSourceName(req) {
-					continue
-				}
-				d.Enum().Bus.Publish(NEWNAME, req)
+				})
 			}
 		}
 	}

@@ -68,17 +68,12 @@ func (y *Yahoo) executeQuery(domain string) {
 			}
 
 			for _, sd := range re.FindAllString(page, -1) {
-				req := &AmassRequest{
+				y.Enum().NewNameEvent(&AmassRequest{
 					Name:   cleanName(sd),
 					Domain: domain,
 					Tag:    y.SourceType,
 					Source: y.String(),
-				}
-
-				if y.Enum().DupDataSourceName(req) {
-					continue
-				}
-				y.Enum().Bus.Publish(NEWNAME, req)
+				})
 			}
 		}
 	}

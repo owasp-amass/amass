@@ -56,17 +56,12 @@ func (n *Netcraft) executeQuery(domain string) {
 	n.SetActive()
 	re := n.Enum().Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
-		req := &AmassRequest{
+		n.Enum().NewNameEvent(&AmassRequest{
 			Name:   cleanName(sd),
 			Domain: domain,
 			Tag:    n.SourceType,
 			Source: n.String(),
-		}
-
-		if n.Enum().DupDataSourceName(req) {
-			continue
-		}
-		n.Enum().Bus.Publish(NEWNAME, req)
+		})
 	}
 }
 

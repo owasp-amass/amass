@@ -32,17 +32,8 @@ func NewArchiveIt(e *Enumeration) *ArchiveIt {
 func (a *ArchiveIt) OnStart() error {
 	a.BaseAmassService.OnStart()
 
-	a.Enum().Bus.SubscribeAsync(CHECKED, a.SendRequest, false)
 	go a.startRootDomains()
 	go a.processRequests()
-	return nil
-}
-
-// OnStop implements the AmassService interface
-func (a *ArchiveIt) OnStop() error {
-	a.BaseAmassService.OnStop()
-
-	a.Enum().Bus.Unsubscribe(CHECKED, a.SendRequest)
 	return nil
 }
 
@@ -79,16 +70,11 @@ func (a *ArchiveIt) executeQuery(sn, domain string) {
 	}
 
 	for _, name := range names {
-		req := &AmassRequest{
+		a.Enum().NewNameEvent(&AmassRequest{
 			Name:   cleanName(name),
 			Domain: domain,
 			Tag:    a.SourceType,
 			Source: a.String(),
-		}
-
-		if a.Enum().DupDataSourceName(req) {
-			continue
-		}
-		a.Enum().Bus.Publish(NEWNAME, req)
+		})
 	}
 }

@@ -56,17 +56,12 @@ func (c *CertSpotter) executeQuery(domain string) {
 	c.SetActive()
 	re := c.Enum().Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
-		req := &AmassRequest{
+		c.Enum().NewNameEvent(&AmassRequest{
 			Name:   cleanName(sd),
 			Domain: domain,
 			Tag:    c.SourceType,
 			Source: c.String(),
-		}
-
-		if c.Enum().DupDataSourceName(req) {
-			continue
-		}
-		c.Enum().Bus.Publish(NEWNAME, req)
+		})
 	}
 }
 

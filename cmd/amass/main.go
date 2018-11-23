@@ -406,10 +406,8 @@ func manageOutput(params *outputParams) {
 		if params.Enum.Config.Passive || len(result.Addresses) > 0 {
 			total++
 		}
-		// Do not count unresolved names
-		if len(result.Addresses) > 0 {
-			updateData(result, tags, asns)
-		}
+
+		updateData(result, tags, asns)
 
 		source, name, comma, ips := resultToLine(result, params)
 		fmt.Fprintf(color.Output, "%s%s%s%s\n",

@@ -88,17 +88,12 @@ func (i *IPv4Info) executeQuery(domain string) {
 
 	re := i.Enum().Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
-		req := &AmassRequest{
+		i.Enum().NewNameEvent(&AmassRequest{
 			Name:   cleanName(sd),
 			Domain: domain,
 			Tag:    i.SourceType,
 			Source: i.String(),
-		}
-
-		if i.Enum().DupDataSourceName(req) {
-			continue
-		}
-		i.Enum().Bus.Publish(NEWNAME, req)
+		})
 	}
 }
 

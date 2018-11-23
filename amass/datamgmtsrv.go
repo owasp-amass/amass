@@ -43,16 +43,7 @@ func (dms *DataManagerService) OnStart() error {
 		dms.Handlers = append(dms.Handlers, handlers.NewDataOptsHandler(dms.Enum().DataOptsWriter))
 	}
 
-	dms.Enum().Bus.SubscribeAsync(CHECKED, dms.SendRequest, false)
 	go dms.processRequests()
-	return nil
-}
-
-// OnStop implements the AmassService interface
-func (dms *DataManagerService) OnStop() error {
-	dms.BaseAmassService.OnStop()
-
-	dms.Enum().Bus.Unsubscribe(CHECKED, dms.SendRequest)
 	return nil
 }
 
@@ -79,7 +70,7 @@ func (dms *DataManagerService) sendOutput() {
 		dms.SetActive()
 		for _, o := range out {
 			if !dms.filter.Duplicate(o.Name) && dms.Enum().Config.IsDomainInScope(o.Name) {
-				dms.Enum().Bus.Publish(OUTPUT, o)
+				dms.Enum().OutputEvent(o)
 			}
 		}
 	}
@@ -97,32 +88,25 @@ func (dms *DataManagerService) manageData(req *AmassRequest) {
 
 		switch uint16(r.Type) {
 		case dns.TypeA:
-			dms.insertA(req, i)
+			go dms.insertA(req, i)
 		case dns.TypeAAAA:
-			dms.insertAAAA(req, i)
+			go dms.insertAAAA(req, i)
 		case dns.TypeCNAME:
-			dms.insertCNAME(req, i)
+			go dms.insertCNAME(req, i)
 		case dns.TypePTR:
-			dms.insertPTR(req, i)
+			go dms.insertPTR(req, i)
 		case dns.TypeSRV:
-			dms.insertSRV(req, i)
+			go dms.insertSRV(req, i)
 		case dns.TypeNS:
-			dms.insertNS(req, i)
+			go dms.insertNS(req, i)
 		case dns.TypeMX:
-			dms.insertMX(req, i)
+			go dms.insertMX(req, i)
 		case dns.TypeTXT:
-			dms.insertTXT(req, i)
+			go dms.insertTXT(req, i)
 		case dns.TypeSPF:
-			dms.insertSPF(req, i)
+			go dms.insertSPF(req, i)
 		}
 	}
-}
-
-func (dms *DataManagerService) sendNewName(req *AmassRequest) {
-	if dms.Enum().DupDataSourceName(req) {
-		return
-	}
-	dms.Enum().Bus.Publish(NEWNAME, req)
 }
 
 func (dms *DataManagerService) checkDomain(domain string) bool {
@@ -139,7 +123,7 @@ func (dms *DataManagerService) insertDomain(domain string) {
 			dms.Enum().Log.Printf("%s failed to insert domain: %v", handler, err)
 		}
 	}
-	dms.sendNewName(&AmassRequest{
+	dms.Enum().NewNameEvent(&AmassRequest{
 		Name:   domain,
 		Domain: domain,
 		Tag:    DNS,
@@ -163,7 +147,7 @@ func (dms *DataManagerService) insertCNAME(req *AmassRequest, recidx int) {
 			dms.Enum().Log.Printf("%s failed to insert CNAME: %v", handler, err)
 		}
 	}
-	dms.sendNewName(&AmassRequest{
+	dms.Enum().NewNameEvent(&AmassRequest{
 		Name:   target,
 		Domain: domain,
 		Tag:    DNS,
@@ -183,7 +167,7 @@ func (dms *DataManagerService) insertA(req *AmassRequest, recidx int) {
 	}
 	dms.insertInfrastructure(addr)
 	if dms.Enum().Config.IsDomainInScope(req.Name) {
-		dms.Enum().Bus.Publish(NEWADDR, &AmassRequest{
+		dms.Enum().NewAddressEvent(&AmassRequest{
 			Domain:  req.Domain,
 			Address: addr,
 			Tag:     req.Tag,
@@ -204,7 +188,7 @@ func (dms *DataManagerService) insertAAAA(req *AmassRequest, recidx int) {
 	}
 	dms.insertInfrastructure(addr)
 	if dms.Enum().Config.IsDomainInScope(req.Name) {
-		dms.Enum().Bus.Publish(NEWADDR, &AmassRequest{
+		dms.Enum().NewAddressEvent(&AmassRequest{
 			Domain:  req.Domain,
 			Address: addr,
 			Tag:     req.Tag,
@@ -228,7 +212,7 @@ func (dms *DataManagerService) insertPTR(req *AmassRequest, recidx int) {
 			dms.Enum().Log.Printf("%s failed to insert PTR record: %v", handler, err)
 		}
 	}
-	dms.sendNewName(&AmassRequest{
+	dms.Enum().NewNameEvent(&AmassRequest{
 		Name:   target,
 		Domain: domain,
 		Tag:    DNS,
@@ -269,7 +253,7 @@ func (dms *DataManagerService) insertNS(req *AmassRequest, recidx int) {
 		}
 	}
 	if target != domain {
-		dms.sendNewName(&AmassRequest{
+		dms.Enum().NewNameEvent(&AmassRequest{
 			Name:   target,
 			Domain: domain,
 			Tag:    DNS,
@@ -295,7 +279,7 @@ func (dms *DataManagerService) insertMX(req *AmassRequest, recidx int) {
 		}
 	}
 	if target != domain {
-		dms.sendNewName(&AmassRequest{
+		dms.Enum().NewNameEvent(&AmassRequest{
 			Name:   target,
 			Domain: domain,
 			Tag:    DNS,
@@ -321,7 +305,7 @@ func (dms *DataManagerService) insertSPF(req *AmassRequest, recidx int) {
 func (dms *DataManagerService) findNamesAndAddresses(data string) {
 	ipre := regexp.MustCompile(utils.IPv4RE)
 	for _, ip := range ipre.FindAllString(data, -1) {
-		dms.Enum().Bus.Publish(NEWADDR, &AmassRequest{
+		dms.Enum().NewAddressEvent(&AmassRequest{
 			Address: ip,
 			Tag:     DNS,
 			Source:  "Forward DNS",
@@ -337,7 +321,7 @@ func (dms *DataManagerService) findNamesAndAddresses(data string) {
 		if domain == "" {
 			continue
 		}
-		dms.sendNewName(&AmassRequest{
+		dms.Enum().NewNameEvent(&AmassRequest{
 			Name:   name,
 			Domain: domain,
 			Tag:    DNS,

@@ -30,18 +30,7 @@ func (as *AlterationService) OnStart() error {
 	as.BaseAmassService.OnStart()
 
 	if as.Enum().Config.Alterations {
-		as.Enum().Bus.SubscribeAsync(CHECKED, as.SendRequest, false)
 		go as.processRequests()
-	}
-	return nil
-}
-
-// OnStop implements the AmassService interface
-func (as *AlterationService) OnStop() error {
-	as.BaseAmassService.OnStop()
-
-	if as.Enum().Config.Alterations {
-		as.Enum().Bus.Unsubscribe(CHECKED, as.SendRequest)
 	}
 	return nil
 }
@@ -143,15 +132,10 @@ func (as *AlterationService) sendAlteredName(name, domain string) {
 		return
 	}
 
-	req := &AmassRequest{
+	as.Enum().NewNameEvent(&AmassRequest{
 		Name:   name,
 		Domain: domain,
 		Tag:    ALT,
 		Source: as.String(),
-	}
-
-	if as.Enum().DupDataSourceName(req) {
-		return
-	}
-	as.Enum().Bus.Publish(NEWNAME, req)
+	})
 }

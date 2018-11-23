@@ -56,17 +56,12 @@ func (p *PTRArchive) executeQuery(domain string) {
 	p.SetActive()
 	re := p.Enum().Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
-		req := &AmassRequest{
+		p.Enum().NewNameEvent(&AmassRequest{
 			Name:   cleanName(sd),
 			Domain: domain,
 			Tag:    p.SourceType,
 			Source: p.String(),
-		}
-
-		if p.Enum().DupDataSourceName(req) {
-			continue
-		}
-		p.Enum().Bus.Publish(NEWNAME, req)
+		})
 	}
 }
 

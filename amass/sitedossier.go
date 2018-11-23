@@ -56,17 +56,12 @@ func (s *SiteDossier) executeQuery(domain string) {
 	s.SetActive()
 	re := s.Enum().Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
-		req := &AmassRequest{
+		s.Enum().NewNameEvent(&AmassRequest{
 			Name:   cleanName(sd),
 			Domain: domain,
 			Tag:    s.SourceType,
 			Source: s.String(),
-		}
-
-		if s.Enum().DupDataSourceName(req) {
-			continue
-		}
-		s.Enum().Bus.Publish(NEWNAME, req)
+		})
 	}
 }
 

@@ -75,17 +75,12 @@ func (d *DNSDumpster) executeQuery(domain string) {
 	d.SetActive()
 	re := d.Enum().Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
-		req := &AmassRequest{
+		d.Enum().NewNameEvent(&AmassRequest{
 			Name:   cleanName(sd),
 			Domain: domain,
 			Tag:    d.SourceType,
 			Source: d.String(),
-		}
-
-		if d.Enum().DupDataSourceName(req) {
-			continue
-		}
-		d.Enum().Bus.Publish(NEWNAME, req)
+		})
 	}
 }
 

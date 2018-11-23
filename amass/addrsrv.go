@@ -27,16 +27,7 @@ func NewAddressService(e *Enumeration) *AddressService {
 func (as *AddressService) OnStart() error {
 	as.BaseAmassService.OnStart()
 
-	as.Enum().Bus.SubscribeAsync(NEWADDR, as.SendRequest, false)
 	go as.processRequests()
-	return nil
-}
-
-// OnStop implements the AmassService interface
-func (as *AddressService) OnStop() error {
-	as.BaseAmassService.OnStop()
-
-	as.Enum().Bus.Unsubscribe(NEWADDR, as.SendRequest)
 	return nil
 }
 
@@ -54,19 +45,11 @@ func (as *AddressService) processRequests() {
 }
 
 func (as *AddressService) performRequest(req *AmassRequest) {
-	if req == nil || req.Address == "" || as.filter.Duplicate(req.Address) {
+	if as.filter.Duplicate(req.Address) {
 		return
 	}
 
 	as.SetActive()
-	_, cidr, _, err := IPRequest(req.Address)
-	if err != nil {
-		as.Enum().Log.Printf("%v", err)
-		return
-	}
-	// Request the reverse DNS sweep for the addr
-	as.Enum().Bus.Publish(DNSSWEEP, req.Address, cidr)
-	if as.Enum().Config.Active {
-		as.Enum().Bus.Publish(ACTIVECERT, req.Address)
-	}
+	as.Enum().ReverseDNSSweepEvent(req)
+	as.Enum().ActiveCertEvent(req)
 }

@@ -90,17 +90,12 @@ loop:
 	}
 
 	for _, n := range names {
-		req := &AmassRequest{
-			Name:   n,
+		d.Enum().NewNameEvent(&AmassRequest{
+			Name:   cleanName(n),
 			Domain: domain,
 			Tag:    d.SourceType,
 			Source: d.String(),
-		}
-
-		if d.Enum().DupDataSourceName(req) {
-			continue
-		}
-		d.Enum().Bus.Publish(NEWNAME, req)
+		})
 	}
 }
 

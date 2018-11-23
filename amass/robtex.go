@@ -68,7 +68,7 @@ func (r *Robtex) executeQuery(domain string) {
 		if line.Type == "A" {
 			ips = utils.UniqueAppend(ips, line.Data)
 			// Inform the Address Service of this finding
-			r.Enum().Bus.Publish(NEWADDR, &AmassRequest{
+			r.Enum().NewAddressEvent(&AmassRequest{
 				Domain:  domain,
 				Address: line.Data,
 				Tag:     r.SourceType,
@@ -104,17 +104,12 @@ loop:
 	r.SetActive()
 	re := r.Enum().Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(list, -1) {
-		req := &AmassRequest{
+		r.Enum().NewNameEvent(&AmassRequest{
 			Name:   cleanName(sd),
 			Domain: domain,
 			Tag:    r.SourceType,
 			Source: r.String(),
-		}
-
-		if r.Enum().DupDataSourceName(req) {
-			continue
-		}
-		r.Enum().Bus.Publish(NEWNAME, req)
+		})
 	}
 }
 

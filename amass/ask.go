@@ -74,17 +74,12 @@ func (a *Ask) executeQuery(domain string) {
 			}
 
 			for _, sd := range re.FindAllString(page, -1) {
-				req := &AmassRequest{
+				a.Enum().NewNameEvent(&AmassRequest{
 					Name:   cleanName(sd),
 					Domain: domain,
 					Tag:    a.SourceType,
 					Source: a.String(),
-				}
-
-				if a.Enum().DupDataSourceName(req) {
-					continue
-				}
-				a.Enum().Bus.Publish(NEWNAME, req)
+				})
 			}
 		}
 	}

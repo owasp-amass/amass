@@ -32,17 +32,8 @@ func NewUKGovArchive(e *Enumeration) *UKGovArchive {
 func (u *UKGovArchive) OnStart() error {
 	u.BaseAmassService.OnStart()
 
-	u.Enum().Bus.SubscribeAsync(CHECKED, u.SendRequest, false)
 	go u.startRootDomains()
 	go u.processRequests()
-	return nil
-}
-
-// OnStop implements the AmassService interface
-func (u *UKGovArchive) OnStop() error {
-	u.BaseAmassService.OnStop()
-
-	u.Enum().Bus.Unsubscribe(CHECKED, u.SendRequest)
 	return nil
 }
 
@@ -79,16 +70,11 @@ func (u *UKGovArchive) executeQuery(sn, domain string) {
 	}
 
 	for _, name := range names {
-		req := &AmassRequest{
+		u.Enum().NewNameEvent(&AmassRequest{
 			Name:   cleanName(name),
 			Domain: domain,
 			Tag:    u.SourceType,
 			Source: u.String(),
-		}
-
-		if u.Enum().DupDataSourceName(req) {
-			continue
-		}
-		u.Enum().Bus.Publish(NEWNAME, req)
+		})
 	}
 }

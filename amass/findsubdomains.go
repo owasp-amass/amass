@@ -56,17 +56,12 @@ func (f *FindSubdomains) executeQuery(domain string) {
 	f.SetActive()
 	re := f.Enum().Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
-		req := &AmassRequest{
+		f.Enum().NewNameEvent(&AmassRequest{
 			Name:   cleanName(sd),
 			Domain: domain,
 			Tag:    f.SourceType,
 			Source: f.String(),
-		}
-
-		if f.Enum().DupDataSourceName(req) {
-			continue
-		}
-		f.Enum().Bus.Publish(NEWNAME, req)
+		})
 	}
 }
 

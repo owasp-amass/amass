@@ -32,17 +32,8 @@ func NewWayback(e *Enumeration) *Wayback {
 func (w *Wayback) OnStart() error {
 	w.BaseAmassService.OnStart()
 
-	w.Enum().Bus.SubscribeAsync(CHECKED, w.SendRequest, false)
 	go w.startRootDomains()
 	go w.processRequests()
-	return nil
-}
-
-// OnStop implements the AmassService interface
-func (w *Wayback) OnStop() error {
-	w.BaseAmassService.OnStop()
-
-	w.Enum().Bus.Unsubscribe(CHECKED, w.SendRequest)
 	return nil
 }
 
@@ -79,16 +70,11 @@ func (w *Wayback) executeQuery(sn, domain string) {
 	}
 
 	for _, name := range names {
-		req := &AmassRequest{
+		w.Enum().NewNameEvent(&AmassRequest{
 			Name:   cleanName(name),
 			Domain: domain,
 			Tag:    w.SourceType,
 			Source: w.String(),
-		}
-
-		if w.Enum().DupDataSourceName(req) {
-			continue
-		}
-		w.Enum().Bus.Publish(NEWNAME, req)
+		})
 	}
 }

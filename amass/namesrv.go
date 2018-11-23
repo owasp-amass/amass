@@ -48,8 +48,6 @@ func NewNameService(e *Enumeration) *NameService {
 func (ns *NameService) OnStart() error {
 	ns.BaseAmassService.OnStart()
 
-	ns.Enum().Bus.SubscribeAsync(NEWNAME, ns.addRequest, false)
-	ns.Enum().Bus.SubscribeAsync(RESOLVED, ns.performCheck, false)
 	go ns.processTimesRequests()
 	go ns.processRequests()
 	return nil
@@ -58,28 +56,7 @@ func (ns *NameService) OnStart() error {
 // OnStop implements the AmassService interface
 func (ns *NameService) OnStop() error {
 	ns.BaseAmassService.OnStop()
-
-	ns.Enum().Bus.Unsubscribe(NEWNAME, ns.addRequest)
-	ns.Enum().Bus.Unsubscribe(RESOLVED, ns.performCheck)
 	return nil
-}
-
-func (ns *NameService) addRequest(req *AmassRequest) {
-	ns.SetActive()
-	if req == nil || req.Name == "" || req.Domain == "" {
-		return
-	}
-
-	req.Name = strings.ToLower(utils.RemoveAsteriskLabel(req.Name))
-	req.Domain = strings.ToLower(req.Domain)
-	if !ns.sanityRE.MatchString(req.Name) {
-		return
-	}
-
-	if !ns.Enum().Config.Passive {
-		ns.Enum().MaxFlow.Acquire(1)
-	}
-	ns.SendRequest(req)
 }
 
 func (ns *NameService) processRequests() {
@@ -132,7 +109,7 @@ func (ns *NameService) performRequest(req *AmassRequest) {
 	ns.sendCompletionTime(time.Now())
 	if ns.Enum().Config.Passive {
 		if !ns.filter.Duplicate(req.Name) {
-			ns.Enum().Bus.Publish(OUTPUT, &AmassOutput{
+			ns.Enum().OutputEvent(&AmassOutput{
 				Name:   req.Name,
 				Domain: req.Domain,
 				Tag:    req.Tag,
@@ -141,19 +118,19 @@ func (ns *NameService) performRequest(req *AmassRequest) {
 		}
 		return
 	}
-	ns.Enum().Bus.Publish(DNSQUERY, req)
+	ns.Enum().ResolveNameEvent(req)
 }
 
-func (ns *NameService) performCheck(req *AmassRequest) {
+func (ns *NameService) Resolved(req *AmassRequest) {
 	ns.SetActive()
 
 	if ns.Enum().Config.IsDomainInScope(req.Name) {
-		ns.checkSubdomain(req)
+		go ns.checkSubdomain(req)
 	}
 	if req.Tag == DNS {
 		ns.sendCompletionTime(time.Now())
 	}
-	ns.Enum().Bus.Publish(CHECKED, req)
+	ns.Enum().CheckedNameEvent(req)
 }
 
 func (ns *NameService) checkSubdomain(req *AmassRequest) {
@@ -171,13 +148,9 @@ func (ns *NameService) checkSubdomain(req *AmassRequest) {
 	if labels[1] == "_tcp" || labels[1] == "_udp" || labels[1] == "_tls" {
 		return
 	}
-	// CNAMEs are not a proper subdomain
-	sub := strings.Join(labels[1:], ".")
-	if ns.Enum().Graph.CNAMENode(sub) != nil {
-		return
-	}
 
-	ns.Enum().Bus.Publish(NEWSUB, &AmassRequest{
+	sub := strings.Join(labels[1:], ".")
+	ns.Enum().NewSubdomainEvent(&AmassRequest{
 		Name:   sub,
 		Domain: req.Domain,
 		Tag:    req.Tag,
