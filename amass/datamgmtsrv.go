@@ -60,14 +60,13 @@ func (dms *DataManagerService) processRequests() {
 		case <-t.C:
 			dms.sendOutput()
 		case req := <-dms.RequestChan():
-			dms.manageData(req)
+			go dms.manageData(req)
 		}
 	}
 }
 
 func (dms *DataManagerService) sendOutput() {
 	if out := dms.Enum().Graph.GetNewOutput(); len(out) > 0 {
-		dms.SetActive()
 		for _, o := range out {
 			if !dms.filter.Duplicate(o.Name) && dms.Enum().Config.IsDomainInScope(o.Name) {
 				dms.Enum().OutputEvent(o)
@@ -88,24 +87,25 @@ func (dms *DataManagerService) manageData(req *AmassRequest) {
 
 		switch uint16(r.Type) {
 		case dns.TypeA:
-			go dms.insertA(req, i)
+			dms.insertA(req, i)
 		case dns.TypeAAAA:
-			go dms.insertAAAA(req, i)
+			dms.insertAAAA(req, i)
 		case dns.TypeCNAME:
-			go dms.insertCNAME(req, i)
+			dms.insertCNAME(req, i)
 		case dns.TypePTR:
-			go dms.insertPTR(req, i)
+			dms.insertPTR(req, i)
 		case dns.TypeSRV:
-			go dms.insertSRV(req, i)
+			dms.insertSRV(req, i)
 		case dns.TypeNS:
-			go dms.insertNS(req, i)
+			dms.insertNS(req, i)
 		case dns.TypeMX:
-			go dms.insertMX(req, i)
+			dms.insertMX(req, i)
 		case dns.TypeTXT:
-			go dms.insertTXT(req, i)
+			dms.insertTXT(req, i)
 		case dns.TypeSPF:
-			go dms.insertSPF(req, i)
+			dms.insertSPF(req, i)
 		}
+		dms.SetActive()
 	}
 }
 

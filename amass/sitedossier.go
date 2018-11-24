@@ -29,6 +29,7 @@ func (s *SiteDossier) OnStart() error {
 	s.BaseAmassService.OnStart()
 
 	go s.startRootDomains()
+	go s.processRequests()
 	return nil
 }
 
@@ -36,6 +37,20 @@ func (s *SiteDossier) OnStart() error {
 func (s *SiteDossier) OnStop() error {
 	s.BaseAmassService.OnStop()
 	return nil
+}
+
+func (s *SiteDossier) processRequests() {
+	for {
+		select {
+		case <-s.PauseChan():
+			<-s.ResumeChan()
+		case <-s.Quit():
+			return
+		case <-s.RequestChan():
+			// This data source just throws away the checked DNS names
+			s.SetActive()
+		}
+	}
 }
 
 func (s *SiteDossier) startRootDomains() {

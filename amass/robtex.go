@@ -38,6 +38,7 @@ func (r *Robtex) OnStart() error {
 	r.BaseAmassService.OnStart()
 
 	go r.startRootDomains()
+	go r.processRequests()
 	return nil
 }
 
@@ -45,6 +46,20 @@ func (r *Robtex) OnStart() error {
 func (r *Robtex) OnStop() error {
 	r.BaseAmassService.OnStop()
 	return nil
+}
+
+func (r *Robtex) processRequests() {
+	for {
+		select {
+		case <-r.PauseChan():
+			<-r.ResumeChan()
+		case <-r.Quit():
+			return
+		case <-r.RequestChan():
+			// This data source just throws away the checked DNS names
+			r.SetActive()
+		}
+	}
 }
 
 func (r *Robtex) startRootDomains() {

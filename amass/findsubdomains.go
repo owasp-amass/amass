@@ -29,6 +29,7 @@ func (f *FindSubdomains) OnStart() error {
 	f.BaseAmassService.OnStart()
 
 	go f.startRootDomains()
+	go f.processRequests()
 	return nil
 }
 
@@ -36,6 +37,20 @@ func (f *FindSubdomains) OnStart() error {
 func (f *FindSubdomains) OnStop() error {
 	f.BaseAmassService.OnStop()
 	return nil
+}
+
+func (f *FindSubdomains) processRequests() {
+	for {
+		select {
+		case <-f.PauseChan():
+			<-f.ResumeChan()
+		case <-f.Quit():
+			return
+		case <-f.RequestChan():
+			// This data source just throws away the checked DNS names
+			f.SetActive()
+		}
+	}
 }
 
 func (f *FindSubdomains) startRootDomains() {

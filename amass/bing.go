@@ -37,6 +37,7 @@ func (b *Bing) OnStart() error {
 	b.BaseAmassService.OnStart()
 
 	go b.startRootDomains()
+	go b.processRequests()
 	return nil
 }
 
@@ -44,6 +45,20 @@ func (b *Bing) OnStart() error {
 func (b *Bing) OnStop() error {
 	b.BaseAmassService.OnStop()
 	return nil
+}
+
+func (b *Bing) processRequests() {
+	for {
+		select {
+		case <-b.PauseChan():
+			<-b.ResumeChan()
+		case <-b.Quit():
+			return
+		case <-b.RequestChan():
+			// This data source just throws away the checked DNS names
+			b.SetActive()
+		}
+	}
 }
 
 func (b *Bing) startRootDomains() {

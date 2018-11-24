@@ -29,6 +29,7 @@ func (h *HackerTarget) OnStart() error {
 	h.BaseAmassService.OnStart()
 
 	go h.startRootDomains()
+	go h.processRequests()
 	return nil
 }
 
@@ -36,6 +37,20 @@ func (h *HackerTarget) OnStart() error {
 func (h *HackerTarget) OnStop() error {
 	h.BaseAmassService.OnStop()
 	return nil
+}
+
+func (h *HackerTarget) processRequests() {
+	for {
+		select {
+		case <-h.PauseChan():
+			<-h.ResumeChan()
+		case <-h.Quit():
+			return
+		case <-h.RequestChan():
+			// This data source just throws away the checked DNS names
+			h.SetActive()
+		}
+	}
 }
 
 func (h *HackerTarget) startRootDomains() {

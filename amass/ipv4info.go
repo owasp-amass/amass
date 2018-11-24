@@ -35,6 +35,7 @@ func (i *IPv4Info) OnStart() error {
 	i.BaseAmassService.OnStart()
 
 	go i.startRootDomains()
+	go i.processRequests()
 	return nil
 }
 
@@ -42,6 +43,20 @@ func (i *IPv4Info) OnStart() error {
 func (i *IPv4Info) OnStop() error {
 	i.BaseAmassService.OnStop()
 	return nil
+}
+
+func (i *IPv4Info) processRequests() {
+	for {
+		select {
+		case <-i.PauseChan():
+			<-i.ResumeChan()
+		case <-i.Quit():
+			return
+		case <-i.RequestChan():
+			// This data source just throws away the checked DNS names
+			i.SetActive()
+		}
+	}
 }
 
 func (i *IPv4Info) startRootDomains() {

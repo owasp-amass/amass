@@ -92,7 +92,7 @@ func (ns *NameService) processRequests() {
 			for _, s := range perSec {
 				total += s
 			}
-			ns.Enum().Log.Printf("Average requests processed: %d/sec", total/num)
+			ns.Enum().Log.Printf("Average DNS names processed: %d/sec", total/num)
 			perSec = []int{}
 		case req := <-ns.RequestChan():
 			go ns.performRequest(req)
@@ -131,6 +131,7 @@ func (ns *NameService) Resolved(req *AmassRequest) {
 		ns.sendCompletionTime(time.Now())
 	}
 	ns.Enum().CheckedNameEvent(req)
+	ns.SetActive()
 }
 
 func (ns *NameService) checkSubdomain(req *AmassRequest) {

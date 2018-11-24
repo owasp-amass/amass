@@ -29,6 +29,7 @@ func (r *Riddler) OnStart() error {
 	r.BaseAmassService.OnStart()
 
 	go r.startRootDomains()
+	go r.processRequests()
 	return nil
 }
 
@@ -36,6 +37,20 @@ func (r *Riddler) OnStart() error {
 func (r *Riddler) OnStop() error {
 	r.BaseAmassService.OnStop()
 	return nil
+}
+
+func (r *Riddler) processRequests() {
+	for {
+		select {
+		case <-r.PauseChan():
+			<-r.ResumeChan()
+		case <-r.Quit():
+			return
+		case <-r.RequestChan():
+			// This data source just throws away the checked DNS names
+			r.SetActive()
+		}
+	}
 }
 
 func (r *Riddler) startRootDomains() {

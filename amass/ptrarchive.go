@@ -29,6 +29,7 @@ func (p *PTRArchive) OnStart() error {
 	p.BaseAmassService.OnStart()
 
 	go p.startRootDomains()
+	go p.processRequests()
 	return nil
 }
 
@@ -36,6 +37,20 @@ func (p *PTRArchive) OnStart() error {
 func (p *PTRArchive) OnStop() error {
 	p.BaseAmassService.OnStop()
 	return nil
+}
+
+func (p *PTRArchive) processRequests() {
+	for {
+		select {
+		case <-p.PauseChan():
+			<-p.ResumeChan()
+		case <-p.Quit():
+			return
+		case <-p.RequestChan():
+			// This data source just throws away the checked DNS names
+			p.SetActive()
+		}
+	}
 }
 
 func (p *PTRArchive) startRootDomains() {

@@ -43,7 +43,7 @@ var Banner = `
 
 const (
 	// Version is used to display the current version of Amass.
-	Version = "2.8.3"
+	Version = "2.8.4"
 
 	// Author is used to display the founder of the amass package.
 	Author = "Jeff Foley - @jeff_foley"
@@ -292,7 +292,7 @@ func (e *Enumeration) NewNameEvent(req *AmassRequest) {
 	if !e.Config.Passive {
 		e.MaxFlow.Acquire(1)
 	}
-	e.nameService.SendRequest(req)
+	go e.nameService.SendRequest(req)
 }
 
 // NewAddressEvent signals the NameService of a newly discovered DNS name.
@@ -300,7 +300,7 @@ func (e *Enumeration) NewAddressEvent(req *AmassRequest) {
 	if req == nil || req.Address == "" {
 		return
 	}
-	e.addrService.SendRequest(req)
+	go e.addrService.SendRequest(req)
 }
 
 // NewSubdomainEvent signals the services of a newly discovered subdomain name.
@@ -315,9 +315,9 @@ func (e *Enumeration) NewSubdomainEvent(req *AmassRequest, times int) {
 	}
 
 	if e.Config.BruteForcing && e.Config.Recursive {
-		e.bruteService.NewSubdomain(req, times)
+		go e.bruteService.NewSubdomain(req, times)
 	}
-	e.dnsService.NewSubdomain(req, times)
+	go e.dnsService.NewSubdomain(req, times)
 }
 
 // ResolveNameEvent sends a request to be resolved by the DNS service.
@@ -336,7 +336,7 @@ func (e *Enumeration) ResolveNameEvent(req *AmassRequest) {
 		}
 		return
 	}
-	e.dnsService.SendRequest(req)
+	go e.dnsService.SendRequest(req)
 }
 
 // ResolvedNameEvent signals the NameService of a newly resolved DNS name.
@@ -344,15 +344,19 @@ func (e *Enumeration) ResolvedNameEvent(req *AmassRequest) {
 	if !TrustedTag(req.Tag) && e.dnsService.MatchesWildcard(req) {
 		return
 	}
-	e.nameService.Resolved(req)
+	go e.nameService.Resolved(req)
 }
 
 // CheckedNameEvent signals all services interested in acting on new validated DNS names.
 func (e *Enumeration) CheckedNameEvent(req *AmassRequest) {
-	e.dataService.SendRequest(req)
+	go e.dataService.SendRequest(req)
 
 	if e.Config.Alterations {
-		e.altService.SendRequest(req)
+		go e.altService.SendRequest(req)
+	}
+
+	for _, source := range e.dataSources {
+		go source.SendRequest(req)
 	}
 }
 
@@ -368,13 +372,13 @@ func (e *Enumeration) ReverseDNSSweepEvent(req *AmassRequest) {
 		return
 	}
 
-	e.dnsService.ReverseDNSSweep(req.Address, cidr)
+	go e.dnsService.ReverseDNSSweep(req.Address, cidr)
 }
 
 // ActiveCertEvent requests that a certificate be pulled and parsed for DNS names.
 func (e *Enumeration) ActiveCertEvent(req *AmassRequest) {
 	if e.Config.Active {
-		e.activeCert.SendRequest(req)
+		go e.activeCert.SendRequest(req)
 	}
 }
 

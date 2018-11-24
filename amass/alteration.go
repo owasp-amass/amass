@@ -132,6 +132,7 @@ func (as *AlterationService) sendAlteredName(name, domain string) {
 		return
 	}
 
+	as.SetActive()
 	as.Enum().NewNameEvent(&AmassRequest{
 		Name:   name,
 		Domain: domain,

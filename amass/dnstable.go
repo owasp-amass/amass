@@ -29,6 +29,7 @@ func (d *DNSTable) OnStart() error {
 	d.BaseAmassService.OnStart()
 
 	go d.startRootDomains()
+	go d.processRequests()
 	return nil
 }
 
@@ -36,6 +37,20 @@ func (d *DNSTable) OnStart() error {
 func (d *DNSTable) OnStop() error {
 	d.BaseAmassService.OnStop()
 	return nil
+}
+
+func (d *DNSTable) processRequests() {
+	for {
+		select {
+		case <-d.PauseChan():
+			<-d.ResumeChan()
+		case <-d.Quit():
+			return
+		case <-d.RequestChan():
+			// This data source just throws away the checked DNS names
+			d.SetActive()
+		}
+	}
 }
 
 func (d *DNSTable) startRootDomains() {

@@ -37,7 +37,22 @@ func (y *Yahoo) OnStart() error {
 	y.BaseAmassService.OnStart()
 
 	go y.startRootDomains()
+	go y.processRequest()
 	return nil
+}
+
+func (y *Yahoo) processRequest() {
+	for {
+		select {
+		case <-y.PauseChan():
+			<-y.ResumeChan()
+		case <-y.Quit():
+			return
+		case <-y.RequestChan():
+			// This data source just throws away the checked DNS names
+			y.SetActive()
+		}
+	}
 }
 
 func (y *Yahoo) startRootDomains() {

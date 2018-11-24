@@ -29,6 +29,7 @@ func (c *CertSpotter) OnStart() error {
 	c.BaseAmassService.OnStart()
 
 	go c.startRootDomains()
+	go c.processRequests()
 	return nil
 }
 
@@ -36,6 +37,20 @@ func (c *CertSpotter) OnStart() error {
 func (c *CertSpotter) OnStop() error {
 	c.BaseAmassService.OnStop()
 	return nil
+}
+
+func (c *CertSpotter) processRequests() {
+	for {
+		select {
+		case <-c.PauseChan():
+			<-c.ResumeChan()
+		case <-c.Quit():
+			return
+		case <-c.RequestChan():
+			// This data source just throws away the checked DNS names
+			c.SetActive()
+		}
+	}
 }
 
 func (c *CertSpotter) startRootDomains() {

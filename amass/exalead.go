@@ -29,6 +29,7 @@ func (e *Exalead) OnStart() error {
 	e.BaseAmassService.OnStart()
 
 	go e.startRootDomains()
+	go e.processRequests()
 	return nil
 }
 
@@ -36,6 +37,20 @@ func (e *Exalead) OnStart() error {
 func (e *Exalead) OnStop() error {
 	e.BaseAmassService.OnStop()
 	return nil
+}
+
+func (e *Exalead) processRequests() {
+	for {
+		select {
+		case <-e.PauseChan():
+			<-e.ResumeChan()
+		case <-e.Quit():
+			return
+		case <-e.RequestChan():
+			// This data source just throws away the checked DNS names
+			e.SetActive()
+		}
+	}
 }
 
 func (e *Exalead) startRootDomains() {

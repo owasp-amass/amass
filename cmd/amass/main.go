@@ -61,6 +61,8 @@ var (
 	g      = color.New(color.FgHiGreen)
 	r      = color.New(color.FgHiRed)
 	b      = color.New(color.FgHiBlue)
+	fgR    = color.New(color.FgRed)
+	fgY    = color.New(color.FgYellow)
 	yellow = color.New(color.FgHiYellow).SprintFunc()
 	green  = color.New(color.FgHiGreen).SprintFunc()
 	blue   = color.New(color.FgHiBlue).SprintFunc()
@@ -284,7 +286,7 @@ func getLinesFromFile(path string) []string {
 
 func writeLogsAndMessages(logs *io.PipeReader, logfile *os.File) {
 	wildcard := regexp.MustCompile("DNS wildcard")
-	avg := regexp.MustCompile("Average requests")
+	avg := regexp.MustCompile("Average DNS names")
 
 	scanner := bufio.NewScanner(logs)
 	for scanner.Scan() {
@@ -303,11 +305,11 @@ func writeLogsAndMessages(logs *io.PipeReader, logfile *os.File) {
 		line = strings.Join(parts[1:], " ")
 		// Check for Amass DNS wildcard messages
 		if wildcard.FindString(line) != "" {
-			r.Fprintln(color.Error, line)
+			fgR.Fprintln(color.Error, line)
 		}
-		// Check for the Amass average requests processed messages
+		// Check for the Amass average DNS names messages
 		if avg.FindString(line) != "" {
-			r.Fprintln(color.Error, line)
+			fgY.Fprintln(color.Error, line)
 		}
 	}
 }

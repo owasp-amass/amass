@@ -29,6 +29,7 @@ func (n *Netcraft) OnStart() error {
 	n.BaseAmassService.OnStart()
 
 	go n.startRootDomains()
+	go n.processRequests()
 	return nil
 }
 
@@ -36,6 +37,20 @@ func (n *Netcraft) OnStart() error {
 func (n *Netcraft) OnStop() error {
 	n.BaseAmassService.OnStop()
 	return nil
+}
+
+func (n *Netcraft) processRequests() {
+	for {
+		select {
+		case <-n.PauseChan():
+			<-n.ResumeChan()
+		case <-n.Quit():
+			return
+		case <-n.RequestChan():
+			// This data source just throws away the checked DNS names
+			n.SetActive()
+		}
+	}
 }
 
 func (n *Netcraft) startRootDomains() {

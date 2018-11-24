@@ -35,6 +35,7 @@ func (d *DNSDumpster) OnStart() error {
 	d.BaseAmassService.OnStart()
 
 	go d.startRootDomains()
+	go d.processRequests()
 	return nil
 }
 
@@ -42,6 +43,20 @@ func (d *DNSDumpster) OnStart() error {
 func (d *DNSDumpster) OnStop() error {
 	d.BaseAmassService.OnStop()
 	return nil
+}
+
+func (d *DNSDumpster) processRequests() {
+	for {
+		select {
+		case <-d.PauseChan():
+			<-d.ResumeChan()
+		case <-d.Quit():
+			return
+		case <-d.RequestChan():
+			// This data source just throws away the checked DNS names
+			d.SetActive()
+		}
+	}
 }
 
 func (d *DNSDumpster) startRootDomains() {

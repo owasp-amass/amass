@@ -37,6 +37,7 @@ func (g *Google) OnStart() error {
 	g.BaseAmassService.OnStart()
 
 	go g.startRootDomains()
+	go g.processRequests()
 	return nil
 }
 
@@ -44,6 +45,20 @@ func (g *Google) OnStart() error {
 func (g *Google) OnStop() error {
 	g.BaseAmassService.OnStop()
 	return nil
+}
+
+func (g *Google) processRequests() {
+	for {
+		select {
+		case <-g.PauseChan():
+			<-g.ResumeChan()
+		case <-g.Quit():
+			return
+		case <-g.RequestChan():
+			// This data source just throws away the checked DNS names
+			g.SetActive()
+		}
+	}
 }
 
 func (g *Google) startRootDomains() {

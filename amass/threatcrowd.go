@@ -29,6 +29,7 @@ func (t *ThreatCrowd) OnStart() error {
 	t.BaseAmassService.OnStart()
 
 	go t.startRootDomains()
+	go t.processRequests()
 	return nil
 }
 
@@ -36,6 +37,20 @@ func (t *ThreatCrowd) OnStart() error {
 func (t *ThreatCrowd) OnStop() error {
 	t.BaseAmassService.OnStop()
 	return nil
+}
+
+func (t *ThreatCrowd) processRequests() {
+	for {
+		select {
+		case <-t.PauseChan():
+			<-t.ResumeChan()
+		case <-t.Quit():
+			return
+		case <-t.RequestChan():
+			// This data source just throws away the checked DNS names
+			t.SetActive()
+		}
+	}
 }
 
 func (t *ThreatCrowd) startRootDomains() {

@@ -45,11 +45,11 @@ func (as *AddressService) processRequests() {
 }
 
 func (as *AddressService) performRequest(req *AmassRequest) {
+	as.SetActive()
+
 	if as.filter.Duplicate(req.Address) {
 		return
 	}
-
-	as.SetActive()
 	as.Enum().ReverseDNSSweepEvent(req)
 	as.Enum().ActiveCertEvent(req)
 }

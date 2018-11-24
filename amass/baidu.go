@@ -37,6 +37,7 @@ func (b *Baidu) OnStart() error {
 	b.BaseAmassService.OnStart()
 
 	go b.startRootDomains()
+	go b.processRequests()
 	return nil
 }
 
@@ -44,6 +45,20 @@ func (b *Baidu) OnStart() error {
 func (b *Baidu) OnStop() error {
 	b.BaseAmassService.OnStop()
 	return nil
+}
+
+func (b *Baidu) processRequests() {
+	for {
+		select {
+		case <-b.PauseChan():
+			<-b.ResumeChan()
+		case <-b.Quit():
+			return
+		case <-b.RequestChan():
+			// This data source just throws away the checked DNS names
+			b.SetActive()
+		}
+	}
 }
 
 func (b *Baidu) startRootDomains() {

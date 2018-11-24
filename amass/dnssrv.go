@@ -129,6 +129,7 @@ func (ds *DNSService) performRequest(req *AmassRequest) {
 		} else {
 			ds.Enum().Log.Printf("DNS: %v", err)
 		}
+		ds.SetActive()
 	}
 
 	req.Records = answers
@@ -144,6 +145,8 @@ func (ds *DNSService) performRequest(req *AmassRequest) {
 		}
 		return
 	}
+
+	ds.SetActive()
 	ds.Enum().ResolvedNameEvent(req)
 }
 
@@ -166,6 +169,7 @@ func (ds *DNSService) NewSubdomain(req *AmassRequest, times int) {
 	if times != 1 {
 		return
 	}
+	ds.SetActive()
 	ds.basicQueries(req.Name, req.Domain)
 	go ds.queryServiceNames(req.Name, req.Domain)
 }
@@ -175,6 +179,8 @@ func (ds *DNSService) basicQueries(subdomain, domain string) {
 
 	MaxConnections.Acquire(4)
 	defer MaxConnections.Release(4)
+
+	ds.SetActive()
 	// Obtain the DNS answers for the NS records related to the domain
 	if ans, err := Resolve(subdomain, "NS"); err == nil {
 		for _, a := range ans {
@@ -189,6 +195,8 @@ func (ds *DNSService) basicQueries(subdomain, domain string) {
 	} else {
 		ds.Enum().Log.Printf("DNS: NS record query error: %s: %v", subdomain, err)
 	}
+
+	ds.SetActive()
 	// Obtain the DNS answers for the MX records related to the domain
 	if ans, err := Resolve(subdomain, "MX"); err == nil {
 		for _, a := range ans {
@@ -197,12 +205,16 @@ func (ds *DNSService) basicQueries(subdomain, domain string) {
 	} else {
 		ds.Enum().Log.Printf("DNS: MX record query error: %s: %v", subdomain, err)
 	}
+
+	ds.SetActive()
 	// Obtain the DNS answers for the SOA records related to the domain
 	if ans, err := Resolve(subdomain, "SOA"); err == nil {
 		answers = append(answers, ans...)
 	} else {
 		ds.Enum().Log.Printf("DNS: SOA record query error: %s: %v", subdomain, err)
 	}
+
+	ds.SetActive()
 	// Obtain the DNS answers for the SPF records related to the domain
 	if ans, err := Resolve(subdomain, "SPF"); err == nil {
 		answers = append(answers, ans...)
@@ -211,6 +223,7 @@ func (ds *DNSService) basicQueries(subdomain, domain string) {
 	}
 
 	if len(answers) > 0 {
+		ds.SetActive()
 		ds.Enum().ResolvedNameEvent(&AmassRequest{
 			Name:    subdomain,
 			Domain:  domain,
@@ -240,7 +253,7 @@ func (ds *DNSService) attemptZoneXFR(sub, domain, server string) {
 }
 
 func (ds *DNSService) queryServiceNames(subdomain, domain string) {
-	// Check all the popular SRV records
+	ds.SetActive()
 	for _, name := range popularSRVRecords {
 		srvName := name + "." + subdomain
 
@@ -259,6 +272,7 @@ func (ds *DNSService) queryServiceNames(subdomain, domain string) {
 			})
 		}
 		MaxConnections.Release(1)
+		ds.SetActive()
 	}
 }
 
@@ -309,6 +323,7 @@ func (ds *DNSService) reverseDNSRoutine(ip string) {
 		Tag:    DNS,
 		Source: "Reverse DNS",
 	})
+	ds.SetActive()
 }
 
 // MatchesWildcard returns true if the request provided resolved to a DNS wildcard.

@@ -29,6 +29,7 @@ func (v *VirusTotal) OnStart() error {
 	v.BaseAmassService.OnStart()
 
 	go v.startRootDomains()
+	go v.processRequests()
 	return nil
 }
 
@@ -36,6 +37,20 @@ func (v *VirusTotal) OnStart() error {
 func (v *VirusTotal) OnStop() error {
 	v.BaseAmassService.OnStop()
 	return nil
+}
+
+func (v *VirusTotal) processRequests() {
+	for {
+		select {
+		case <-v.PauseChan():
+			<-v.ResumeChan()
+		case <-v.Quit():
+			return
+		case <-v.RequestChan():
+			// This data source just throws away the checked DNS names
+			v.SetActive()
+		}
+	}
 }
 
 func (v *VirusTotal) startRootDomains() {
