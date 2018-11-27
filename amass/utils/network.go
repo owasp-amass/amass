@@ -4,6 +4,7 @@
 package utils
 
 import (
+	"crypto/tls"
 	"errors"
 	"io"
 	"io/ioutil"
@@ -61,6 +62,7 @@ func RequestWebPage(url string, body io.Reader, hvals map[string]string, uid, se
 			IdleConnTimeout:       90 * time.Second,
 			TLSHandshakeTimeout:   10 * time.Second,
 			ExpectContinueTimeout: 5 * time.Second,
+			TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
 		},
 	}
 	resp, err := client.Do(req)
