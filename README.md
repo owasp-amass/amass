@@ -207,7 +207,7 @@ func main() {
 
 1. Output your Amass enumeration data using the '-do' flag:
 ```
-$ amass -src -ip --active -brute -do owasp.json -d owasp.org
+$ amass -src -ip -active -brute -do owasp.json -d owasp.org
 ```
 
 2. Convert the Amass data into a Maltego graph table CSV file:
