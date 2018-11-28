@@ -48,6 +48,9 @@ type Config struct {
 	// A blacklist of subdomain names that will not be investigated
 	Blacklist []string
 
+	// List of services that should not be run
+	DisabledServices []string
+
 	// The root domain names that the enumeration will target
 	domains []string
 
@@ -162,4 +165,22 @@ func (c *Config) GetAPIKey(source string) *APIKey {
 		return apikey
 	}
 	return nil
+}
+
+// ExcludeDisabledServices returns a filtered list of input services excluding DisabledServices
+func (c *AmassConfig) ExcludeDisabledServices(services []AmassService) []AmassService {
+	enabled := make([]AmassService, 0)
+	for _, service := range services {
+		include := true
+		for _, match := range c.DisabledServices {
+			if match == service.String() {
+				include = false
+				break
+			}
+		}
+		if include {
+			enabled = append(enabled, service)
+		}
+	}
+	return enabled
 }
