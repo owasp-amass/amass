@@ -7,9 +7,9 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
-// Wayback is the AmassService that handles access to the Wayback data source.
+// Wayback is the Service that handles access to the Wayback data source.
 type Wayback struct {
-	BaseAmassService
+	BaseService
 
 	baseURL    string
 	SourceType string
@@ -24,13 +24,13 @@ func NewWayback(e *Enumeration) *Wayback {
 		filter:     utils.NewStringFilter(),
 	}
 
-	w.BaseAmassService = *NewBaseAmassService(e, "Wayback", w)
+	w.BaseService = *NewBaseService(e, "Wayback", w)
 	return w
 }
 
-// OnStart implements the AmassService interface
+// OnStart implements the Service interface
 func (w *Wayback) OnStart() error {
-	w.BaseAmassService.OnStart()
+	w.BaseService.OnStart()
 
 	go w.startRootDomains()
 	go w.processRequests()
@@ -70,7 +70,7 @@ func (w *Wayback) executeQuery(sn, domain string) {
 	}
 
 	for _, name := range names {
-		w.Enum().NewNameEvent(&AmassRequest{
+		w.Enum().NewNameEvent(&Request{
 			Name:   cleanName(name),
 			Domain: domain,
 			Tag:    w.SourceType,

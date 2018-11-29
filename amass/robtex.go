@@ -12,9 +12,9 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
-// Robtex is the AmassService that handles access to the Robtex data source.
+// Robtex is the Service that handles access to the Robtex data source.
 type Robtex struct {
-	BaseAmassService
+	BaseService
 
 	SourceType string
 }
@@ -29,22 +29,16 @@ type robtexJSON struct {
 func NewRobtex(e *Enumeration) *Robtex {
 	r := &Robtex{SourceType: API}
 
-	r.BaseAmassService = *NewBaseAmassService(e, "Robtex", r)
+	r.BaseService = *NewBaseService(e, "Robtex", r)
 	return r
 }
 
-// OnStart implements the AmassService interface
+// OnStart implements the Service interface
 func (r *Robtex) OnStart() error {
-	r.BaseAmassService.OnStart()
+	r.BaseService.OnStart()
 
 	go r.startRootDomains()
 	go r.processRequests()
-	return nil
-}
-
-// OnStop implements the AmassService interface
-func (r *Robtex) OnStop() error {
-	r.BaseAmassService.OnStop()
 	return nil
 }
 
@@ -83,7 +77,7 @@ func (r *Robtex) executeQuery(domain string) {
 		if line.Type == "A" {
 			ips = utils.UniqueAppend(ips, line.Data)
 			// Inform the Address Service of this finding
-			r.Enum().NewAddressEvent(&AmassRequest{
+			r.Enum().NewAddressEvent(&Request{
 				Domain:  domain,
 				Address: line.Data,
 				Tag:     r.SourceType,
@@ -119,7 +113,7 @@ loop:
 	r.SetActive()
 	re := r.Enum().Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(list, -1) {
-		r.Enum().NewNameEvent(&AmassRequest{
+		r.Enum().NewNameEvent(&Request{
 			Name:   cleanName(sd),
 			Domain: domain,
 			Tag:    r.SourceType,

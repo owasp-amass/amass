@@ -9,9 +9,9 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
-// Exalead is the AmassService that handles access to the Exalead data source.
+// PTRArchive is the Service that handles access to the Exalead data source.
 type PTRArchive struct {
-	BaseAmassService
+	BaseService
 
 	SourceType string
 }
@@ -20,22 +20,16 @@ type PTRArchive struct {
 func NewPTRArchive(e *Enumeration) *PTRArchive {
 	p := &PTRArchive{SourceType: SCRAPE}
 
-	p.BaseAmassService = *NewBaseAmassService(e, "PTRArchive", p)
+	p.BaseService = *NewBaseService(e, "PTRArchive", p)
 	return p
 }
 
-// OnStart implements the AmassService interface
+// OnStart implements the Service interface
 func (p *PTRArchive) OnStart() error {
-	p.BaseAmassService.OnStart()
+	p.BaseService.OnStart()
 
 	go p.startRootDomains()
 	go p.processRequests()
-	return nil
-}
-
-// OnStop implements the AmassService interface
-func (p *PTRArchive) OnStop() error {
-	p.BaseAmassService.OnStop()
 	return nil
 }
 
@@ -71,8 +65,13 @@ func (p *PTRArchive) executeQuery(domain string) {
 	p.SetActive()
 	re := p.Enum().Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
-		p.Enum().NewNameEvent(&AmassRequest{
-			Name:   cleanName(sd),
+		name := cleanName(sd)
+		if name == "automated_programs_unauthorized."+domain {
+			continue
+		}
+
+		p.Enum().NewNameEvent(&Request{
+			Name:   name,
 			Domain: domain,
 			Tag:    p.SourceType,
 			Source: p.String(),

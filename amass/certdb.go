@@ -10,9 +10,9 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
-// CertDB is the AmassService that handles access to the CertDB data source.
+// CertDB is the Service that handles access to the CertDB data source.
 type CertDB struct {
-	BaseAmassService
+	BaseService
 
 	SourceType string
 }
@@ -21,22 +21,16 @@ type CertDB struct {
 func NewCertDB(e *Enumeration) *CertDB {
 	c := &CertDB{SourceType: CERT}
 
-	c.BaseAmassService = *NewBaseAmassService(e, "CertDB", c)
+	c.BaseService = *NewBaseService(e, "CertDB", c)
 	return c
 }
 
-// OnStart implements the AmassService interface
+// OnStart implements the Service interface
 func (c *CertDB) OnStart() error {
-	c.BaseAmassService.OnStart()
+	c.BaseService.OnStart()
 
 	go c.startRootDomains()
 	go c.processRequests()
-	return nil
-}
-
-// OnStop implements the AmassService interface
-func (c *CertDB) OnStop() error {
-	c.BaseAmassService.OnStop()
 	return nil
 }
 
@@ -83,7 +77,7 @@ func (c *CertDB) executeQuery(domain string) {
 			continue
 		}
 
-		c.Enum().NewNameEvent(&AmassRequest{
+		c.Enum().NewNameEvent(&Request{
 			Name:   cleanName(n),
 			Domain: domain,
 			Tag:    c.SourceType,

@@ -12,9 +12,9 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
-// DNSDB is the AmassService that handles access to the DNSDB data source.
+// DNSDB is the Service that handles access to the DNSDB data source.
 type DNSDB struct {
-	BaseAmassService
+	BaseService
 
 	SourceType string
 }
@@ -23,22 +23,16 @@ type DNSDB struct {
 func NewDNSDB(e *Enumeration) *DNSDB {
 	d := &DNSDB{SourceType: SCRAPE}
 
-	d.BaseAmassService = *NewBaseAmassService(e, "DNSDB", d)
+	d.BaseService = *NewBaseService(e, "DNSDB", d)
 	return d
 }
 
-// OnStart implements the AmassService interface
+// OnStart implements the Service interface
 func (d *DNSDB) OnStart() error {
-	d.BaseAmassService.OnStart()
+	d.BaseService.OnStart()
 
 	go d.startRootDomains()
 	go d.processRequests()
-	return nil
-}
-
-// OnStop implements the AmassService interface
-func (d *DNSDB) OnStop() error {
-	d.BaseAmassService.OnStop()
 	return nil
 }
 
@@ -105,7 +99,7 @@ loop:
 	}
 
 	for _, n := range names {
-		d.Enum().NewNameEvent(&AmassRequest{
+		d.Enum().NewNameEvent(&Request{
 			Name:   cleanName(n),
 			Domain: domain,
 			Tag:    d.SourceType,

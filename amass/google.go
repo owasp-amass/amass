@@ -11,9 +11,9 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
-// Google is the AmassService that handles access to the Google search engine data source.
+// Google is the Service that handles access to the Google search engine data source.
 type Google struct {
-	BaseAmassService
+	BaseService
 
 	quantity   int
 	limit      int
@@ -28,22 +28,16 @@ func NewGoogle(e *Enumeration) *Google {
 		SourceType: SCRAPE,
 	}
 
-	g.BaseAmassService = *NewBaseAmassService(e, "Google", g)
+	g.BaseService = *NewBaseService(e, "Google", g)
 	return g
 }
 
-// OnStart implements the AmassService interface
+// OnStart implements the Service interface
 func (g *Google) OnStart() error {
-	g.BaseAmassService.OnStart()
+	g.BaseService.OnStart()
 
 	go g.startRootDomains()
 	go g.processRequests()
-	return nil
-}
-
-// OnStop implements the AmassService interface
-func (g *Google) OnStop() error {
-	g.BaseAmassService.OnStop()
 	return nil
 }
 
@@ -89,7 +83,7 @@ func (g *Google) executeQuery(domain string) {
 			}
 
 			for _, sd := range re.FindAllString(page, -1) {
-				g.Enum().NewNameEvent(&AmassRequest{
+				g.Enum().NewNameEvent(&Request{
 					Name:   cleanName(sd),
 					Domain: domain,
 					Tag:    g.SourceType,

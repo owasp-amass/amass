@@ -11,9 +11,9 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
-// Ask is the AmassService that handles access to the Ask data source.
+// Ask is the Service that handles access to the Ask data source.
 type Ask struct {
-	BaseAmassService
+	BaseService
 
 	quantity   int
 	limit      int
@@ -28,22 +28,16 @@ func NewAsk(e *Enumeration) *Ask {
 		SourceType: SCRAPE,
 	}
 
-	a.BaseAmassService = *NewBaseAmassService(e, "Ask", a)
+	a.BaseService = *NewBaseService(e, "Ask", a)
 	return a
 }
 
-// OnStart implements the AmassService interface
+// OnStart implements the Service interface
 func (a *Ask) OnStart() error {
-	a.BaseAmassService.OnStart()
+	a.BaseService.OnStart()
 
 	go a.startRootDomains()
 	go a.processRequests()
-	return nil
-}
-
-// OnStop implements the AmassService interface
-func (a *Ask) OnStop() error {
-	a.BaseAmassService.OnStop()
 	return nil
 }
 
@@ -89,7 +83,7 @@ func (a *Ask) executeQuery(domain string) {
 			}
 
 			for _, sd := range re.FindAllString(page, -1) {
-				a.Enum().NewNameEvent(&AmassRequest{
+				a.Enum().NewNameEvent(&Request{
 					Name:   cleanName(sd),
 					Domain: domain,
 					Tag:    a.SourceType,

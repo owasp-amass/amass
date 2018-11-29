@@ -7,9 +7,9 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
-// OpenUKArchive is the AmassService that handles access to the OpenUKArchive data source.
+// OpenUKArchive is the Service that handles access to the OpenUKArchive data source.
 type OpenUKArchive struct {
-	BaseAmassService
+	BaseService
 
 	baseURL    string
 	SourceType string
@@ -24,13 +24,13 @@ func NewOpenUKArchive(e *Enumeration) *OpenUKArchive {
 		filter:     utils.NewStringFilter(),
 	}
 
-	o.BaseAmassService = *NewBaseAmassService(e, "OpenUKArchive", o)
+	o.BaseService = *NewBaseService(e, "OpenUKArchive", o)
 	return o
 }
 
-// OnStart implements the AmassService interface
+// OnStart implements the Service interface
 func (o *OpenUKArchive) OnStart() error {
-	o.BaseAmassService.OnStart()
+	o.BaseService.OnStart()
 
 	go o.startRootDomains()
 	go o.processRequests()
@@ -70,7 +70,7 @@ func (o *OpenUKArchive) executeQuery(sn, domain string) {
 	}
 
 	for _, name := range names {
-		o.Enum().NewNameEvent(&AmassRequest{
+		o.Enum().NewNameEvent(&Request{
 			Name:   cleanName(name),
 			Domain: domain,
 			Tag:    o.SourceType,

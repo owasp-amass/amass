@@ -11,9 +11,9 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
-// Bing is the AmassService that handles access to the Bing data source.
+// Bing is the Service that handles access to the Bing data source.
 type Bing struct {
-	BaseAmassService
+	BaseService
 
 	quantity   int
 	limit      int
@@ -28,22 +28,16 @@ func NewBing(e *Enumeration) *Bing {
 		SourceType: SCRAPE,
 	}
 
-	b.BaseAmassService = *NewBaseAmassService(e, "Bing", b)
+	b.BaseService = *NewBaseService(e, "Bing", b)
 	return b
 }
 
-// OnStart implements the AmassService interface
+// OnStart implements the Service interface
 func (b *Bing) OnStart() error {
-	b.BaseAmassService.OnStart()
+	b.BaseService.OnStart()
 
 	go b.startRootDomains()
 	go b.processRequests()
-	return nil
-}
-
-// OnStop implements the AmassService interface
-func (b *Bing) OnStop() error {
-	b.BaseAmassService.OnStop()
 	return nil
 }
 
@@ -89,7 +83,7 @@ func (b *Bing) executeQuery(domain string) {
 			}
 
 			for _, sd := range re.FindAllString(page, -1) {
-				b.Enum().NewNameEvent(&AmassRequest{
+				b.Enum().NewNameEvent(&Request{
 					Name:   cleanName(sd),
 					Domain: domain,
 					Tag:    b.SourceType,

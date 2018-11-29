@@ -11,9 +11,9 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
-// IPv4Info is the AmassService that handles access to the IPv4Info data source.
+// IPv4Info is the Service that handles access to the IPv4Info data source.
 type IPv4Info struct {
-	BaseAmassService
+	BaseService
 
 	baseURL    string
 	SourceType string
@@ -26,22 +26,16 @@ func NewIPv4Info(e *Enumeration) *IPv4Info {
 		SourceType: SCRAPE,
 	}
 
-	i.BaseAmassService = *NewBaseAmassService(e, "IPv4Info", i)
+	i.BaseService = *NewBaseService(e, "IPv4Info", i)
 	return i
 }
 
-// OnStart implements the AmassService interface
+// OnStart implements the Service interface
 func (i *IPv4Info) OnStart() error {
-	i.BaseAmassService.OnStart()
+	i.BaseService.OnStart()
 
 	go i.startRootDomains()
 	go i.processRequests()
-	return nil
-}
-
-// OnStop implements the AmassService interface
-func (i *IPv4Info) OnStop() error {
-	i.BaseAmassService.OnStop()
 	return nil
 }
 
@@ -103,7 +97,7 @@ func (i *IPv4Info) executeQuery(domain string) {
 
 	re := i.Enum().Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
-		i.Enum().NewNameEvent(&AmassRequest{
+		i.Enum().NewNameEvent(&Request{
 			Name:   cleanName(sd),
 			Domain: domain,
 			Tag:    i.SourceType,

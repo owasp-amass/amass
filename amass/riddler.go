@@ -9,9 +9,9 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
-// Riddler is the AmassService that handles access to the Riddler data source.
+// Riddler is the Service that handles access to the Riddler data source.
 type Riddler struct {
-	BaseAmassService
+	BaseService
 
 	SourceType string
 }
@@ -20,22 +20,16 @@ type Riddler struct {
 func NewRiddler(e *Enumeration) *Riddler {
 	r := &Riddler{SourceType: SCRAPE}
 
-	r.BaseAmassService = *NewBaseAmassService(e, "Riddler", r)
+	r.BaseService = *NewBaseService(e, "Riddler", r)
 	return r
 }
 
-// OnStart implements the AmassService interface
+// OnStart implements the Service interface
 func (r *Riddler) OnStart() error {
-	r.BaseAmassService.OnStart()
+	r.BaseService.OnStart()
 
 	go r.startRootDomains()
 	go r.processRequests()
-	return nil
-}
-
-// OnStop implements the AmassService interface
-func (r *Riddler) OnStop() error {
-	r.BaseAmassService.OnStop()
 	return nil
 }
 
@@ -71,7 +65,7 @@ func (r *Riddler) executeQuery(domain string) {
 	r.SetActive()
 	re := r.Enum().Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
-		r.Enum().NewNameEvent(&AmassRequest{
+		r.Enum().NewNameEvent(&Request{
 			Name:   cleanName(sd),
 			Domain: domain,
 			Tag:    r.SourceType,

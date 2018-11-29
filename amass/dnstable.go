@@ -9,9 +9,9 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
-// DNSTable is the AmassService that handles access to the DNSTable data source.
+// DNSTable is the Service that handles access to the DNSTable data source.
 type DNSTable struct {
-	BaseAmassService
+	BaseService
 
 	SourceType string
 }
@@ -20,22 +20,16 @@ type DNSTable struct {
 func NewDNSTable(e *Enumeration) *DNSTable {
 	d := &DNSTable{SourceType: SCRAPE}
 
-	d.BaseAmassService = *NewBaseAmassService(e, "DNSTable", d)
+	d.BaseService = *NewBaseService(e, "DNSTable", d)
 	return d
 }
 
-// OnStart implements the AmassService interface
+// OnStart implements the Service interface
 func (d *DNSTable) OnStart() error {
-	d.BaseAmassService.OnStart()
+	d.BaseService.OnStart()
 
 	go d.startRootDomains()
 	go d.processRequests()
-	return nil
-}
-
-// OnStop implements the AmassService interface
-func (d *DNSTable) OnStop() error {
-	d.BaseAmassService.OnStop()
 	return nil
 }
 
@@ -71,7 +65,7 @@ func (d *DNSTable) executeQuery(domain string) {
 	d.SetActive()
 	re := d.Enum().Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
-		d.Enum().NewNameEvent(&AmassRequest{
+		d.Enum().NewNameEvent(&Request{
 			Name:   cleanName(sd),
 			Domain: domain,
 			Tag:    d.SourceType,

@@ -16,10 +16,10 @@ type timesRequest struct {
 	Times     chan int
 }
 
-// NameService is the AmassService that handles all newly discovered names
+// NameService is the Service that handles all newly discovered names
 // within the architecture. This is achieved by receiving all the RESOLVED events.
 type NameService struct {
-	BaseAmassService
+	BaseService
 
 	filter      *utils.StringFilter
 	timesChan   chan *timesRequest
@@ -40,22 +40,16 @@ func NewNameService(e *Enumeration) *NameService {
 		sanityRE:    utils.AnySubdomainRegex(),
 	}
 
-	ns.BaseAmassService = *NewBaseAmassService(e, "Name Service", ns)
+	ns.BaseService = *NewBaseService(e, "Name Service", ns)
 	return ns
 }
 
-// OnStart implements the AmassService interface
+// OnStart implements the Service interface
 func (ns *NameService) OnStart() error {
-	ns.BaseAmassService.OnStart()
+	ns.BaseService.OnStart()
 
 	go ns.processTimesRequests()
 	go ns.processRequests()
-	return nil
-}
-
-// OnStop implements the AmassService interface
-func (ns *NameService) OnStop() error {
-	ns.BaseAmassService.OnStop()
 	return nil
 }
 
@@ -104,12 +98,12 @@ func (ns *NameService) sendCompletionTime(t time.Time) {
 	ns.completions <- t
 }
 
-func (ns *NameService) performRequest(req *AmassRequest) {
+func (ns *NameService) performRequest(req *Request) {
 	ns.SetActive()
 	ns.sendCompletionTime(time.Now())
 	if ns.Enum().Config.Passive {
 		if !ns.filter.Duplicate(req.Name) {
-			ns.Enum().OutputEvent(&AmassOutput{
+			ns.Enum().OutputEvent(&Output{
 				Name:   req.Name,
 				Domain: req.Domain,
 				Tag:    req.Tag,
@@ -121,7 +115,8 @@ func (ns *NameService) performRequest(req *AmassRequest) {
 	ns.Enum().ResolveNameEvent(req)
 }
 
-func (ns *NameService) Resolved(req *AmassRequest) {
+// Resolved is called when a name has been resolved by the DNS Service.
+func (ns *NameService) Resolved(req *Request) {
 	ns.SetActive()
 
 	if ns.Enum().Config.IsDomainInScope(req.Name) {
@@ -134,7 +129,7 @@ func (ns *NameService) Resolved(req *AmassRequest) {
 	ns.SetActive()
 }
 
-func (ns *NameService) checkSubdomain(req *AmassRequest) {
+func (ns *NameService) checkSubdomain(req *Request) {
 	labels := strings.Split(req.Name, ".")
 	num := len(labels)
 	// Is this large enough to consider further?
@@ -151,7 +146,7 @@ func (ns *NameService) checkSubdomain(req *AmassRequest) {
 	}
 
 	sub := strings.Join(labels[1:], ".")
-	ns.Enum().NewSubdomainEvent(&AmassRequest{
+	ns.Enum().NewSubdomainEvent(&Request{
 		Name:   sub,
 		Domain: req.Domain,
 		Tag:    req.Tag,

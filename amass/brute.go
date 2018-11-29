@@ -8,23 +8,23 @@ import (
 	"time"
 )
 
-// BruteForceService is the AmassService that handles all brute force name generation
+// BruteForceService is the Service that handles all brute force name generation
 // within the architecture. This is achieved by watching all the NEWSUB events.
 type BruteForceService struct {
-	BaseAmassService
+	BaseService
 }
 
 // NewBruteForceService returns he object initialized, but not yet started.
 func NewBruteForceService(e *Enumeration) *BruteForceService {
 	bfs := new(BruteForceService)
 
-	bfs.BaseAmassService = *NewBaseAmassService(e, "Brute Forcing", bfs)
+	bfs.BaseService = *NewBaseService(e, "Brute Forcing", bfs)
 	return bfs
 }
 
-// OnStart implements the AmassService interface
+// OnStart implements the Service interface
 func (bfs *BruteForceService) OnStart() error {
-	bfs.BaseAmassService.OnStart()
+	bfs.BaseService.OnStart()
 
 	if bfs.Enum().Config.BruteForcing {
 		go bfs.startRootDomains()
@@ -39,7 +39,8 @@ func (bfs *BruteForceService) startRootDomains() {
 	}
 }
 
-func (bfs *BruteForceService) NewSubdomain(req *AmassRequest, times int) {
+// NewSubdomain is called by the Name Service when proper subdomains are discovered.
+func (bfs *BruteForceService) NewSubdomain(req *Request, times int) {
 	if times == bfs.Enum().Config.MinForRecursive {
 		bfs.performBruteForcing(req.Name, req.Domain)
 	}
@@ -56,7 +57,7 @@ func (bfs *BruteForceService) performBruteForcing(subdomain, root string) {
 		case <-bfs.Quit():
 			return
 		default:
-			bfs.Enum().NewNameEvent(&AmassRequest{
+			bfs.Enum().NewNameEvent(&Request{
 				Name:   strings.ToLower(word + "." + subdomain),
 				Domain: root,
 				Tag:    BRUTE,

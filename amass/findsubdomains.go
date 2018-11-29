@@ -9,9 +9,9 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
-// FindSubdomains is the AmassService that handles access to the FindSubdomains data source.
+// FindSubdomains is the Service that handles access to the FindSubdomains data source.
 type FindSubdomains struct {
-	BaseAmassService
+	BaseService
 
 	SourceType string
 }
@@ -20,22 +20,16 @@ type FindSubdomains struct {
 func NewFindSubdomains(e *Enumeration) *FindSubdomains {
 	f := &FindSubdomains{SourceType: SCRAPE}
 
-	f.BaseAmassService = *NewBaseAmassService(e, "FindSubdomains", f)
+	f.BaseService = *NewBaseService(e, "FindSubdomains", f)
 	return f
 }
 
-// OnStart implements the AmassService interface
+// OnStart implements the Service interface
 func (f *FindSubdomains) OnStart() error {
-	f.BaseAmassService.OnStart()
+	f.BaseService.OnStart()
 
 	go f.startRootDomains()
 	go f.processRequests()
-	return nil
-}
-
-// OnStop implements the AmassService interface
-func (f *FindSubdomains) OnStop() error {
-	f.BaseAmassService.OnStop()
 	return nil
 }
 
@@ -71,7 +65,7 @@ func (f *FindSubdomains) executeQuery(domain string) {
 	f.SetActive()
 	re := f.Enum().Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
-		f.Enum().NewNameEvent(&AmassRequest{
+		f.Enum().NewNameEvent(&Request{
 			Name:   cleanName(sd),
 			Domain: domain,
 			Tag:    f.SourceType,

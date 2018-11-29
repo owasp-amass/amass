@@ -11,9 +11,9 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
-// Yahoo is the AmassService that handles access to the Yahoo data source.
+// Yahoo is the Service that handles access to the Yahoo data source.
 type Yahoo struct {
-	BaseAmassService
+	BaseService
 
 	quantity   int
 	limit      int
@@ -28,13 +28,13 @@ func NewYahoo(e *Enumeration) *Yahoo {
 		SourceType: SCRAPE,
 	}
 
-	y.BaseAmassService = *NewBaseAmassService(e, "Yahoo", y)
+	y.BaseService = *NewBaseService(e, "Yahoo", y)
 	return y
 }
 
-// OnStart implements the AmassService interface
+// OnStart implements the Service interface
 func (y *Yahoo) OnStart() error {
-	y.BaseAmassService.OnStart()
+	y.BaseService.OnStart()
 
 	go y.startRootDomains()
 	go y.processRequest()
@@ -83,7 +83,7 @@ func (y *Yahoo) executeQuery(domain string) {
 			}
 
 			for _, sd := range re.FindAllString(page, -1) {
-				y.Enum().NewNameEvent(&AmassRequest{
+				y.Enum().NewNameEvent(&Request{
 					Name:   cleanName(sd),
 					Domain: domain,
 					Tag:    y.SourceType,

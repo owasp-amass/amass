@@ -9,9 +9,9 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
-// ThreatCrowd is the AmassService that handles access to the ThreatCrowd data source.
+// ThreatCrowd is the Service that handles access to the ThreatCrowd data source.
 type ThreatCrowd struct {
-	BaseAmassService
+	BaseService
 
 	SourceType string
 }
@@ -20,22 +20,16 @@ type ThreatCrowd struct {
 func NewThreatCrowd(e *Enumeration) *ThreatCrowd {
 	t := &ThreatCrowd{SourceType: SCRAPE}
 
-	t.BaseAmassService = *NewBaseAmassService(e, "ThreatCrowd", t)
+	t.BaseService = *NewBaseService(e, "ThreatCrowd", t)
 	return t
 }
 
-// OnStart implements the AmassService interface
+// OnStart implements the Service interface
 func (t *ThreatCrowd) OnStart() error {
-	t.BaseAmassService.OnStart()
+	t.BaseService.OnStart()
 
 	go t.startRootDomains()
 	go t.processRequests()
-	return nil
-}
-
-// OnStop implements the AmassService interface
-func (t *ThreatCrowd) OnStop() error {
-	t.BaseAmassService.OnStop()
 	return nil
 }
 
@@ -71,7 +65,7 @@ func (t *ThreatCrowd) executeQuery(domain string) {
 	t.SetActive()
 	re := t.Enum().Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
-		t.Enum().NewNameEvent(&AmassRequest{
+		t.Enum().NewNameEvent(&Request{
 			Name:   cleanName(sd),
 			Domain: domain,
 			Tag:    t.SourceType,

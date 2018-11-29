@@ -7,9 +7,9 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
-// UKGovArchive is the AmassService that handles access to the UKGovArchive data source.
+// UKGovArchive is the Service that handles access to the UKGovArchive data source.
 type UKGovArchive struct {
-	BaseAmassService
+	BaseService
 
 	baseURL    string
 	SourceType string
@@ -24,13 +24,13 @@ func NewUKGovArchive(e *Enumeration) *UKGovArchive {
 		filter:     utils.NewStringFilter(),
 	}
 
-	u.BaseAmassService = *NewBaseAmassService(e, "UKGovArchive", u)
+	u.BaseService = *NewBaseService(e, "UKGovArchive", u)
 	return u
 }
 
-// OnStart implements the AmassService interface
+// OnStart implements the Service interface
 func (u *UKGovArchive) OnStart() error {
-	u.BaseAmassService.OnStart()
+	u.BaseService.OnStart()
 
 	go u.startRootDomains()
 	go u.processRequests()
@@ -70,7 +70,7 @@ func (u *UKGovArchive) executeQuery(sn, domain string) {
 	}
 
 	for _, name := range names {
-		u.Enum().NewNameEvent(&AmassRequest{
+		u.Enum().NewNameEvent(&Request{
 			Name:   cleanName(name),
 			Domain: domain,
 			Tag:    u.SourceType,

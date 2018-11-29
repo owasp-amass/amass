@@ -21,9 +21,9 @@ type crtData struct {
 	NotAfter          string `json:"not_after"`
 }
 
-// Crtsh is the AmassService that handles access to the Crtsh data source.
+// Crtsh is the Service that handles access to the Crtsh data source.
 type Crtsh struct {
-	BaseAmassService
+	BaseService
 
 	SourceType string
 }
@@ -32,22 +32,16 @@ type Crtsh struct {
 func NewCrtsh(e *Enumeration) *Crtsh {
 	c := &Crtsh{SourceType: CERT}
 
-	c.BaseAmassService = *NewBaseAmassService(e, "Crtsh", c)
+	c.BaseService = *NewBaseService(e, "Crtsh", c)
 	return c
 }
 
-// OnStart implements the AmassService interface
+// OnStart implements the Service interface
 func (c *Crtsh) OnStart() error {
-	c.BaseAmassService.OnStart()
+	c.BaseService.OnStart()
 
 	go c.startRootDomains()
 	go c.processRequests()
-	return nil
-}
-
-// OnStop implements the AmassService interface
-func (c *Crtsh) OnStop() error {
-	c.BaseAmassService.OnStop()
 	return nil
 }
 
@@ -91,7 +85,7 @@ func (c *Crtsh) executeQuery(domain string) {
 			continue
 		}
 
-		c.Enum().NewNameEvent(&AmassRequest{
+		c.Enum().NewNameEvent(&Request{
 			Name:   cleanName(line.Name),
 			Domain: domain,
 			Tag:    c.SourceType,

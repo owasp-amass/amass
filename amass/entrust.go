@@ -11,9 +11,9 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
-// Entrust is the AmassService that handles access to the Entrust data source.
+// Entrust is the Service that handles access to the Entrust data source.
 type Entrust struct {
-	BaseAmassService
+	BaseService
 
 	SourceType string
 }
@@ -22,22 +22,16 @@ type Entrust struct {
 func NewEntrust(enum *Enumeration) *Entrust {
 	e := &Entrust{SourceType: CERT}
 
-	e.BaseAmassService = *NewBaseAmassService(enum, "Entrust", e)
+	e.BaseService = *NewBaseService(enum, "Entrust", e)
 	return e
 }
 
-// OnStart implements the AmassService interface
+// OnStart implements the Service interface
 func (e *Entrust) OnStart() error {
-	e.BaseAmassService.OnStart()
+	e.BaseService.OnStart()
 
 	go e.startRootDomains()
 	go e.processRequests()
-	return nil
-}
-
-// OnStop implements the AmassService interface
-func (e *Entrust) OnStop() error {
-	e.BaseAmassService.OnStop()
 	return nil
 }
 
@@ -74,7 +68,7 @@ func (e *Entrust) executeQuery(domain string) {
 	e.SetActive()
 	re := e.Enum().Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(content, -1) {
-		e.Enum().NewNameEvent(&AmassRequest{
+		e.Enum().NewNameEvent(&Request{
 			Name:   cleanName(sd),
 			Domain: domain,
 			Tag:    e.SourceType,
@@ -84,7 +78,7 @@ func (e *Entrust) executeQuery(domain string) {
 
 	for _, name := range e.extractReversedSubmatches(page) {
 		if match := re.FindString(name); match != "" {
-			e.Enum().NewNameEvent(&AmassRequest{
+			e.Enum().NewNameEvent(&Request{
 				Name:   cleanName(match),
 				Domain: domain,
 				Tag:    e.SourceType,

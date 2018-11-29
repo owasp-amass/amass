@@ -7,9 +7,9 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
-// LoCArchive is the AmassService that handles access to the LoCArchive data source.
+// LoCArchive is the Service that handles access to the LoCArchive data source.
 type LoCArchive struct {
-	BaseAmassService
+	BaseService
 
 	baseURL    string
 	SourceType string
@@ -24,13 +24,13 @@ func NewLoCArchive(e *Enumeration) *LoCArchive {
 		filter:     utils.NewStringFilter(),
 	}
 
-	l.BaseAmassService = *NewBaseAmassService(e, "LoCArchive", l)
+	l.BaseService = *NewBaseService(e, "LoCArchive", l)
 	return l
 }
 
-// OnStart implements the AmassService interface
+// OnStart implements the Service interface
 func (l *LoCArchive) OnStart() error {
-	l.BaseAmassService.OnStart()
+	l.BaseService.OnStart()
 
 	go l.startRootDomains()
 	go l.processRequests()
@@ -70,7 +70,7 @@ func (l *LoCArchive) executeQuery(sn, domain string) {
 	}
 
 	for _, name := range names {
-		l.Enum().NewNameEvent(&AmassRequest{
+		l.Enum().NewNameEvent(&Request{
 			Name:   cleanName(name),
 			Domain: domain,
 			Tag:    l.SourceType,
