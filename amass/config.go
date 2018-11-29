@@ -49,7 +49,7 @@ type Config struct {
 	Blacklist []string
 
 	// List of services that should not be run
-	DisabledServices []string
+	DisabledDataSources []string
 
 	// The root domain names that the enumeration will target
 	domains []string
@@ -167,12 +167,12 @@ func (c *Config) GetAPIKey(source string) *APIKey {
 	return nil
 }
 
-// ExcludeDisabledServices returns a filtered list of input services excluding DisabledServices
-func (c *AmassConfig) ExcludeDisabledServices(services []AmassService) []AmassService {
+// ExcludeDisabledDataSources returns a filtered list of input services excluding DisabledDataSources
+func (c *AmassConfig) ExcludeDisabledDataSources(services []AmassService) []AmassService {
 	enabled := make([]AmassService, 0)
 	for _, service := range services {
 		include := true
-		for _, match := range c.DisabledServices {
+		for _, match := range c.DisabledDataSources {
 			if match == service.String() {
 				include = false
 				break

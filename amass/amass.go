@@ -209,8 +209,8 @@ func (e *Enumeration) Start() error {
 	// Grab all the data sources
 	services = append(services, e.dataSources...)
 
-	// Remove disabled services by name
-	services = e.Config.ExcludeDisabledServices(services)
+	// Remove disabled data sources by name
+	services = e.Config.ExcludeDisabledDataSources(services)
 
 	for _, srv := range services {
 		if err := srv.Start(); err != nil {
