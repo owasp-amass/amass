@@ -185,21 +185,7 @@ func main() {
 	for _, domain := range domains {
 		enum.Config.AddDomain(domain)
 	}
-
-	// Setup the log file for saving error messages
-	var logFilePtr *os.File
-	if logfile != "" {
-		logFilePtr, err := os.OpenFile(logfile, os.O_WRONLY|os.O_CREATE, 0644)
-		if err != nil {
-			r.Printf("Failed to open the log file: %v", err)
-			return
-		}
-		defer func() {
-			logFilePtr.Sync()
-			logFilePtr.Close()
-		}()
-	}
-	go writeLogsAndMessages(rLog, logFilePtr)
+	go writeLogsAndMessages(rLog, logfile)
 
 	// Setup the data operations output file
 	if datafile != "" {
@@ -223,7 +209,6 @@ func main() {
 		FileOut:  txt,
 		JSONOut:  jsonfile,
 	})
-
 	// Execute the signal handler
 	go signalHandler(enum)
 
@@ -284,9 +269,22 @@ func getLinesFromFile(path string) []string {
 	return lines
 }
 
-func writeLogsAndMessages(logs *io.PipeReader, logfile *os.File) {
+func writeLogsAndMessages(logs *io.PipeReader, logfile string) {
 	wildcard := regexp.MustCompile("DNS wildcard")
 	avg := regexp.MustCompile("Average DNS names")
+
+	var filePtr *os.File
+	if logfile != "" {
+		filePtr, err := os.OpenFile(logfile, os.O_WRONLY|os.O_CREATE, 0644)
+		if err != nil {
+			r.Printf("Failed to open the log file: %v", err)
+		} else {
+			defer func() {
+				filePtr.Sync()
+				filePtr.Close()
+			}()
+		}
+	}
 
 	scanner := bufio.NewScanner(logs)
 	for scanner.Scan() {
@@ -297,8 +295,8 @@ func writeLogsAndMessages(logs *io.PipeReader, logfile *os.File) {
 			break
 		}
 
-		if logfile != nil {
-			fmt.Fprintln(logfile, line)
+		if filePtr != nil {
+			fmt.Fprintln(filePtr, line)
 		}
 		// Remove the timestamp
 		parts := strings.Split(line, " ")
@@ -314,7 +312,7 @@ func writeLogsAndMessages(logs *io.PipeReader, logfile *os.File) {
 	}
 }
 
-func writeJSONData(f *os.File, result *amass.AmassOutput) {
+func writeJSONData(f *os.File, result *amass.Output) {
 	save := &jsonSave{
 		Name:   result.Name,
 		Domain: result.Domain,
@@ -354,7 +352,7 @@ func printBanner() {
 	y.Fprintf(color.Error, "%s\n\n\n", desc)
 }
 
-func resultToLine(result *amass.AmassOutput, params *outputParams) (string, string, string, string) {
+func resultToLine(result *amass.Output, params *outputParams) (string, string, string, string) {
 	var source, comma, ips string
 
 	if params.PrintSrc {
@@ -431,7 +429,7 @@ func manageOutput(params *outputParams) {
 	close(finished)
 }
 
-func updateData(output *amass.AmassOutput, tags map[string]int, asns map[int]*asnData) {
+func updateData(output *amass.Output, tags map[string]int, asns map[int]*asnData) {
 	tags[output.Tag]++
 
 	// Update the ASN information

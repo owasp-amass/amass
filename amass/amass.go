@@ -295,7 +295,7 @@ func (e *Enumeration) NewNameEvent(req *Request) {
 	go e.nameService.SendRequest(req)
 }
 
-// NewAddressEvent signals the NameService of a newly discovered DNS name.
+// NewAddressEvent signals the AddressService of a newly discovered address.
 func (e *Enumeration) NewAddressEvent(req *Request) {
 	if req == nil || req.Address == "" {
 		return

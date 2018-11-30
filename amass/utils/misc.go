@@ -14,7 +14,7 @@ const (
 	// IPv4RE is a regular expression that will match an IPv4 address.
 	IPv4RE = "((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)[.]){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)"
 	// SUBRE is a regular expression that will match on all subdomains once the domain is appended.
-	SUBRE = "(([_a-zA-Z0-9]{1}|[a-zA-Z0-9]{1}[a-zA-Z0-9-_]{0,61}[a-zA-Z0-9]{1})[.]{1})+"
+	SUBRE = "(([_a-zA-Z0-9]{1}[_a-zA-Z0-9-]{0,61}[a-zA-Z0-9]{1})[.]{1})+"
 )
 
 type filterRequest struct {
