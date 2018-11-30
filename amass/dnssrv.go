@@ -93,6 +93,10 @@ func (ds DNSService) OnStart() error {
 
 	go ds.processRequests()
 	go ds.processWildcardRequests()
+
+	for _, domain := range ds.Enum().Config.Domains() {
+		go ds.basicQueries(domain, domain)
+	}
 	return nil
 }
 
@@ -239,17 +243,12 @@ func (ds *DNSService) attemptZoneXFR(sub, domain, server string) {
 	MaxConnections.Acquire(1)
 	defer MaxConnections.Release(1)
 
-	if names, err := ZoneTransfer(sub, domain, server); err == nil {
-		for _, name := range names {
-			ds.SendRequest(&Request{
-				Name:   name,
-				Domain: domain,
-				Tag:    AXFR,
-				Source: "DNS Zone XFR",
-			})
+	if requests, err := ZoneTransfer(sub, domain, server); err == nil {
+		for _, req := range requests {
+			ds.Enum().ResolvedNameEvent(req)
 		}
 	} else {
-		ds.Enum().Log.Printf("DNS: Zone xfr failed: %s: %v", sub, err)
+		ds.Enum().Log.Printf("DNS: Zone XFR failed: %s: %v", sub, err)
 	}
 }
 

@@ -124,11 +124,9 @@ func checkForPrivateAddress(addr string) (int, *net.IPNet, string, error) {
 	if private192.Contains(ip) {
 		return 0, private192, desc, nil
 	}
-
 	if private172.Contains(ip) {
 		return 0, private172, desc, nil
 	}
-
 	if private10.Contains(ip) {
 		return 0, private10, desc, nil
 	}

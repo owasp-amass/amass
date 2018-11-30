@@ -341,13 +341,16 @@ func setupOptions() *dns.OPT {
 }
 
 // ZoneTransfer attempts a DNS zone transfer using the server identified in the parameters.
-// The returned slice contains all the names discovered from the zone transfer
-func ZoneTransfer(sub, domain, server string) ([]string, error) {
-	var results []string
+// The returned slice contains all the records discovered from the zone transfer
+func ZoneTransfer(sub, domain, server string) ([]*Request, error) {
+	var results []*Request
 
 	a, err := Resolve(server, "A")
 	if err != nil {
-		return results, fmt.Errorf("DNS A record query error: %s: %v", server, err)
+		a, err = Resolve(server, "AAAA")
+		if err != nil {
+			return results, fmt.Errorf("DNS server has no A or AAAA record: %s: %v", server, err)
+		}
 	}
 	addr := a[0].Data
 
@@ -376,15 +379,13 @@ func ZoneTransfer(sub, domain, server string) ([]string, error) {
 	}
 
 	for en := range in {
-		names := getXfrNames(en)
-		if names == nil {
+		reqs := getXfrRequests(en, domain)
+		if reqs == nil {
 			continue
 		}
 
-		for _, name := range names {
-			n := name[:len(name)-1]
-
-			results = append(results, n)
+		for _, r := range reqs {
+			results = append(results, r)
 		}
 	}
 	return results, nil
@@ -394,36 +395,82 @@ func ZoneTransfer(sub, domain, server string) ([]string, error) {
 // Support functions
 //-------------------------------------------------------------------------------------------------
 
-func getXfrNames(en *dns.Envelope) []string {
-	var names []string
-
+func getXfrRequests(en *dns.Envelope, domain string) []*Request {
 	if en.Error != nil {
 		return nil
 	}
 
+	reqs := make(map[string]*Request)
 	for _, a := range en.RR {
-		var name string
+		var record DNSAnswer
 
 		switch v := a.(type) {
-		case *dns.A:
-			name = v.Hdr.Name
-		case *dns.AAAA:
-			name = v.Hdr.Name
-		case *dns.NS:
-			name = v.Ns
 		case *dns.CNAME:
-			name = v.Hdr.Name
-		case *dns.SRV:
-			name = v.Hdr.Name
+			record.Name = removeLastDot(v.Hdr.Name)
+			record.Type = int(dns.TypeCNAME)
+			record.Data = removeLastDot(v.Target)
+		case *dns.A:
+			record.Name = removeLastDot(v.Hdr.Name)
+			record.Type = int(dns.TypeA)
+			record.Data = v.A.String()
+		case *dns.AAAA:
+			record.Name = removeLastDot(v.Hdr.Name)
+			record.Type = int(dns.TypeAAAA)
+			record.Data = v.AAAA.String()
+		case *dns.PTR:
+			record.Name = removeLastDot(v.Hdr.Name)
+			record.Type = int(dns.TypePTR)
+			record.Data = removeLastDot(v.Ptr)
+		case *dns.NS:
+			record.Name = realName(v.Hdr)
+			record.Type = int(dns.TypeNS)
+			record.Data = removeLastDot(v.Ns)
+		case *dns.MX:
+			record.Name = removeLastDot(v.Hdr.Name)
+			record.Type = int(dns.TypeMX)
+			record.Data = removeLastDot(v.Mx)
 		case *dns.TXT:
-			name = v.Hdr.Name
+			record.Name = removeLastDot(v.Hdr.Name)
+			record.Type = int(dns.TypeTXT)
+			for _, piece := range v.Txt {
+				record.Data += piece + " "
+			}
+		case *dns.SOA:
+			record.Name = removeLastDot(v.Hdr.Name)
+			record.Type = int(dns.TypeSOA)
+			record.Data = v.Ns + " " + v.Mbox
+		case *dns.SPF:
+			record.Name = removeLastDot(v.Hdr.Name)
+			record.Type = int(dns.TypeSPF)
+			for _, piece := range v.Txt {
+				record.Data += piece + " "
+			}
+		case *dns.SRV:
+			record.Name = removeLastDot(v.Hdr.Name)
+			record.Type = int(dns.TypeSRV)
+			record.Data = removeLastDot(v.Target)
 		default:
 			continue
 		}
 
-		names = append(names, name)
+		if r, found := reqs[record.Name]; found {
+			r.Records = append(r.Records, record)
+		} else {
+			reqs[record.Name] = &Request{
+				Name:    record.Name,
+				Domain:  domain,
+				Records: []DNSAnswer{record},
+				Tag:     AXFR,
+				Source:  "DNS Zone XFR",
+			}
+		}
 	}
-	return names
+
+	var requests []*Request
+	for _, r := range reqs {
+		requests = append(requests, r)
+	}
+	return requests
 }
 
 func textToTypeNum(text string) (uint16, error) {
