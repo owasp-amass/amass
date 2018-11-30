@@ -25,9 +25,9 @@ var (
 	}
 )
 
-// CommonCrawl is the AmassService that handles access to the CommonCrawl data source.
+// CommonCrawl is the Service that handles access to the CommonCrawl data source.
 type CommonCrawl struct {
-	BaseAmassService
+	BaseService
 
 	baseURL    string
 	SourceType string
@@ -40,22 +40,16 @@ func NewCommonCrawl(e *Enumeration) *CommonCrawl {
 		SourceType: SCRAPE,
 	}
 
-	c.BaseAmassService = *NewBaseAmassService(e, "CommonCrawl", c)
+	c.BaseService = *NewBaseService(e, "CommonCrawl", c)
 	return c
 }
 
-// OnStart implements the AmassService interface
+// OnStart implements the Service interface
 func (c *CommonCrawl) OnStart() error {
-	c.BaseAmassService.OnStart()
+	c.BaseService.OnStart()
 
 	go c.startRootDomains()
 	go c.processRequests()
-	return nil
-}
-
-// OnStop implements the AmassService interface
-func (c *CommonCrawl) OnStop() error {
-	c.BaseAmassService.OnStop()
 	return nil
 }
 
@@ -100,7 +94,7 @@ func (c *CommonCrawl) executeQuery(domain string) {
 			}
 
 			for _, sd := range re.FindAllString(page, -1) {
-				c.Enum().NewNameEvent(&AmassRequest{
+				c.Enum().NewNameEvent(&Request{
 					Name:   cleanName(sd),
 					Domain: domain,
 					Tag:    c.SourceType,

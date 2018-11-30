@@ -9,9 +9,9 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
-// CertSpotter is the AmassService that handles access to the CertSpotter data source.
+// CertSpotter is the Service that handles access to the CertSpotter data source.
 type CertSpotter struct {
-	BaseAmassService
+	BaseService
 
 	SourceType string
 }
@@ -20,22 +20,16 @@ type CertSpotter struct {
 func NewCertSpotter(e *Enumeration) *CertSpotter {
 	c := &CertSpotter{SourceType: CERT}
 
-	c.BaseAmassService = *NewBaseAmassService(e, "CertSpotter", c)
+	c.BaseService = *NewBaseService(e, "CertSpotter", c)
 	return c
 }
 
-// OnStart implements the AmassService interface
+// OnStart implements the Service interface
 func (c *CertSpotter) OnStart() error {
-	c.BaseAmassService.OnStart()
+	c.BaseService.OnStart()
 
 	go c.startRootDomains()
 	go c.processRequests()
-	return nil
-}
-
-// OnStop implements the AmassService interface
-func (c *CertSpotter) OnStop() error {
-	c.BaseAmassService.OnStop()
 	return nil
 }
 
@@ -71,7 +65,7 @@ func (c *CertSpotter) executeQuery(domain string) {
 	c.SetActive()
 	re := c.Enum().Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
-		c.Enum().NewNameEvent(&AmassRequest{
+		c.Enum().NewNameEvent(&Request{
 			Name:   cleanName(sd),
 			Domain: domain,
 			Tag:    c.SourceType,

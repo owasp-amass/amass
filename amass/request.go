@@ -13,8 +13,8 @@ type DNSAnswer struct {
 	Data string `json:"data"`
 }
 
-// AmassRequest contains data obtained throughout AmassService processing
-type AmassRequest struct {
+// Request contains data obtained throughout Service processing
+type Request struct {
 	Name    string
 	Domain  string
 	Address string
@@ -23,17 +23,17 @@ type AmassRequest struct {
 	Source  string
 }
 
-// AmassOutput contains all the output data for an enumerated DNS name.
-type AmassOutput struct {
+// Output contains all the output data for an enumerated DNS name.
+type Output struct {
 	Name      string
 	Domain    string
-	Addresses []AmassAddressInfo
+	Addresses []AddressInfo
 	Tag       string
 	Source    string
 }
 
-// AmassAddressInfo stores all network addressing info for the AmassOutput type.
-type AmassAddressInfo struct {
+// AddressInfo stores all network addressing info for the Output type.
+type AddressInfo struct {
 	Address     net.IP
 	Netblock    *net.IPNet
 	ASN         int

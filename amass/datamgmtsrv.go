@@ -13,10 +13,10 @@ import (
 	"github.com/miekg/dns"
 )
 
-// DataManagerService is the AmassService that handles all data collected
+// DataManagerService is the Service that handles all data collected
 // within the architecture. This is achieved by watching all the RESOLVED events.
 type DataManagerService struct {
-	BaseAmassService
+	BaseService
 
 	Handlers     []handlers.DataHandler
 	filter       *utils.StringFilter
@@ -30,13 +30,13 @@ func NewDataManagerService(e *Enumeration) *DataManagerService {
 		domainFilter: utils.NewStringFilter(),
 	}
 
-	dms.BaseAmassService = *NewBaseAmassService(e, "Data Manager", dms)
+	dms.BaseService = *NewBaseService(e, "Data Manager", dms)
 	return dms
 }
 
-// OnStart implements the AmassService interface
+// OnStart implements the Service interface
 func (dms *DataManagerService) OnStart() error {
-	dms.BaseAmassService.OnStart()
+	dms.BaseService.OnStart()
 
 	dms.Handlers = append(dms.Handlers, dms.Enum().Graph)
 	if dms.Enum().DataOptsWriter != nil {
@@ -75,7 +75,7 @@ func (dms *DataManagerService) sendOutput() {
 	}
 }
 
-func (dms *DataManagerService) manageData(req *AmassRequest) {
+func (dms *DataManagerService) manageData(req *Request) {
 	req.Name = strings.ToLower(req.Name)
 	req.Domain = strings.ToLower(req.Domain)
 
@@ -123,7 +123,7 @@ func (dms *DataManagerService) insertDomain(domain string) {
 			dms.Enum().Log.Printf("%s failed to insert domain: %v", handler, err)
 		}
 	}
-	dms.Enum().NewNameEvent(&AmassRequest{
+	dms.Enum().NewNameEvent(&Request{
 		Name:   domain,
 		Domain: domain,
 		Tag:    DNS,
@@ -131,7 +131,7 @@ func (dms *DataManagerService) insertDomain(domain string) {
 	})
 }
 
-func (dms *DataManagerService) insertCNAME(req *AmassRequest, recidx int) {
+func (dms *DataManagerService) insertCNAME(req *Request, recidx int) {
 	target := removeLastDot(req.Records[recidx].Data)
 	if target == "" {
 		return
@@ -147,7 +147,7 @@ func (dms *DataManagerService) insertCNAME(req *AmassRequest, recidx int) {
 			dms.Enum().Log.Printf("%s failed to insert CNAME: %v", handler, err)
 		}
 	}
-	dms.Enum().NewNameEvent(&AmassRequest{
+	dms.Enum().NewNameEvent(&Request{
 		Name:   target,
 		Domain: domain,
 		Tag:    DNS,
@@ -155,7 +155,7 @@ func (dms *DataManagerService) insertCNAME(req *AmassRequest, recidx int) {
 	})
 }
 
-func (dms *DataManagerService) insertA(req *AmassRequest, recidx int) {
+func (dms *DataManagerService) insertA(req *Request, recidx int) {
 	addr := req.Records[recidx].Data
 	if addr == "" {
 		return
@@ -167,7 +167,7 @@ func (dms *DataManagerService) insertA(req *AmassRequest, recidx int) {
 	}
 	dms.insertInfrastructure(addr)
 	if dms.Enum().Config.IsDomainInScope(req.Name) {
-		dms.Enum().NewAddressEvent(&AmassRequest{
+		dms.Enum().NewAddressEvent(&Request{
 			Domain:  req.Domain,
 			Address: addr,
 			Tag:     req.Tag,
@@ -176,7 +176,7 @@ func (dms *DataManagerService) insertA(req *AmassRequest, recidx int) {
 	}
 }
 
-func (dms *DataManagerService) insertAAAA(req *AmassRequest, recidx int) {
+func (dms *DataManagerService) insertAAAA(req *Request, recidx int) {
 	addr := req.Records[recidx].Data
 	if addr == "" {
 		return
@@ -188,7 +188,7 @@ func (dms *DataManagerService) insertAAAA(req *AmassRequest, recidx int) {
 	}
 	dms.insertInfrastructure(addr)
 	if dms.Enum().Config.IsDomainInScope(req.Name) {
-		dms.Enum().NewAddressEvent(&AmassRequest{
+		dms.Enum().NewAddressEvent(&Request{
 			Domain:  req.Domain,
 			Address: addr,
 			Tag:     req.Tag,
@@ -197,7 +197,7 @@ func (dms *DataManagerService) insertAAAA(req *AmassRequest, recidx int) {
 	}
 }
 
-func (dms *DataManagerService) insertPTR(req *AmassRequest, recidx int) {
+func (dms *DataManagerService) insertPTR(req *Request, recidx int) {
 	target := removeLastDot(req.Records[recidx].Data)
 	if target == "" {
 		return
@@ -212,7 +212,7 @@ func (dms *DataManagerService) insertPTR(req *AmassRequest, recidx int) {
 			dms.Enum().Log.Printf("%s failed to insert PTR record: %v", handler, err)
 		}
 	}
-	dms.Enum().NewNameEvent(&AmassRequest{
+	dms.Enum().NewNameEvent(&Request{
 		Name:   target,
 		Domain: domain,
 		Tag:    DNS,
@@ -220,7 +220,7 @@ func (dms *DataManagerService) insertPTR(req *AmassRequest, recidx int) {
 	})
 }
 
-func (dms *DataManagerService) insertSRV(req *AmassRequest, recidx int) {
+func (dms *DataManagerService) insertSRV(req *Request, recidx int) {
 	service := removeLastDot(req.Records[recidx].Name)
 	target := removeLastDot(req.Records[recidx].Data)
 	if target == "" || service == "" {
@@ -235,7 +235,7 @@ func (dms *DataManagerService) insertSRV(req *AmassRequest, recidx int) {
 	}
 }
 
-func (dms *DataManagerService) insertNS(req *AmassRequest, recidx int) {
+func (dms *DataManagerService) insertNS(req *Request, recidx int) {
 	pieces := strings.Split(req.Records[recidx].Data, ",")
 	target := pieces[len(pieces)-1]
 	if target == "" {
@@ -253,7 +253,7 @@ func (dms *DataManagerService) insertNS(req *AmassRequest, recidx int) {
 		}
 	}
 	if target != domain {
-		dms.Enum().NewNameEvent(&AmassRequest{
+		dms.Enum().NewNameEvent(&Request{
 			Name:   target,
 			Domain: domain,
 			Tag:    DNS,
@@ -262,7 +262,7 @@ func (dms *DataManagerService) insertNS(req *AmassRequest, recidx int) {
 	}
 }
 
-func (dms *DataManagerService) insertMX(req *AmassRequest, recidx int) {
+func (dms *DataManagerService) insertMX(req *Request, recidx int) {
 	target := removeLastDot(req.Records[recidx].Data)
 	if target == "" {
 		return
@@ -279,7 +279,7 @@ func (dms *DataManagerService) insertMX(req *AmassRequest, recidx int) {
 		}
 	}
 	if target != domain {
-		dms.Enum().NewNameEvent(&AmassRequest{
+		dms.Enum().NewNameEvent(&Request{
 			Name:   target,
 			Domain: domain,
 			Tag:    DNS,
@@ -288,14 +288,14 @@ func (dms *DataManagerService) insertMX(req *AmassRequest, recidx int) {
 	}
 }
 
-func (dms *DataManagerService) insertTXT(req *AmassRequest, recidx int) {
+func (dms *DataManagerService) insertTXT(req *Request, recidx int) {
 	if !dms.Enum().Config.IsDomainInScope(req.Name) {
 		return
 	}
 	dms.findNamesAndAddresses(req.Records[recidx].Data)
 }
 
-func (dms *DataManagerService) insertSPF(req *AmassRequest, recidx int) {
+func (dms *DataManagerService) insertSPF(req *Request, recidx int) {
 	if !dms.Enum().Config.IsDomainInScope(req.Name) {
 		return
 	}
@@ -305,7 +305,7 @@ func (dms *DataManagerService) insertSPF(req *AmassRequest, recidx int) {
 func (dms *DataManagerService) findNamesAndAddresses(data string) {
 	ipre := regexp.MustCompile(utils.IPv4RE)
 	for _, ip := range ipre.FindAllString(data, -1) {
-		dms.Enum().NewAddressEvent(&AmassRequest{
+		dms.Enum().NewAddressEvent(&Request{
 			Address: ip,
 			Tag:     DNS,
 			Source:  "Forward DNS",
@@ -321,7 +321,7 @@ func (dms *DataManagerService) findNamesAndAddresses(data string) {
 		if domain == "" {
 			continue
 		}
-		dms.Enum().NewNameEvent(&AmassRequest{
+		dms.Enum().NewNameEvent(&Request{
 			Name:   name,
 			Domain: domain,
 			Tag:    DNS,

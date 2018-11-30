@@ -15,8 +15,8 @@ const (
 	APIkeyOptional
 )
 
-// AmassService is the object type for a service running within the Amass enumeration architecture.
-type AmassService interface {
+// Service is the object type for a service running within the Amass enumeration architecture.
+type Service interface {
 	// Start the service
 	Start() error
 	OnStart() error
@@ -33,8 +33,8 @@ type AmassService interface {
 	Stop() error
 	OnStop() error
 
-	SendRequest(req *AmassRequest)
-	RequestChan() <-chan *AmassRequest
+	SendRequest(req *Request)
+	RequestChan() <-chan *Request
 
 	IsActive() bool
 	SetActive()
@@ -53,36 +53,36 @@ type AmassService interface {
 	Enum() *Enumeration
 }
 
-// BaseAmassService provides common mechanisms to all Amass services in the enumeration architecture.
+// BaseService provides common mechanisms to all Amass services in the enumeration architecture.
 // It is used to compose a type that completely meets the AmassService interface.
-type BaseAmassService struct {
+type BaseService struct {
 	name      string
 	started   bool
 	stopped   bool
 	active    time.Time
 	setactive chan time.Time
 	isactive  chan chan time.Time
-	queue     chan *AmassRequest
+	queue     chan *Request
 	pause     chan struct{}
 	resume    chan struct{}
 	quit      chan struct{}
 
 	// The specific service embedding BaseAmassService
-	service AmassService
+	service Service
 	// The enumeration that this service is supporting
 	enumeration *Enumeration
 }
 
-// NewBaseAmassService returns an initialized BaseAmassService object.
-func NewBaseAmassService(e *Enumeration, n string, srv AmassService) *BaseAmassService {
+// NewBaseService returns an initialized BaseService object.
+func NewBaseService(e *Enumeration, n string, srv Service) *BaseService {
 	max := e.Config.Timing.ToMaxFlow() + e.Config.Timing.ToReleasesPerSecond()
 
-	return &BaseAmassService{
+	return &BaseService{
 		name:        n,
 		active:      time.Now(),
 		setactive:   make(chan time.Time, max),
 		isactive:    make(chan chan time.Time, max),
-		queue:       make(chan *AmassRequest, max),
+		queue:       make(chan *Request, max),
 		pause:       make(chan struct{}, 10),
 		resume:      make(chan struct{}, 10),
 		quit:        make(chan struct{}),
@@ -91,8 +91,8 @@ func NewBaseAmassService(e *Enumeration, n string, srv AmassService) *BaseAmassS
 	}
 }
 
-// Start calls the OnStart method implemented for the AmassService.
-func (bas *BaseAmassService) Start() error {
+// Start calls the OnStart method implemented for the Service.
+func (bas *BaseService) Start() error {
 	if bas.started {
 		return errors.New(bas.name + " has already been started")
 	} else if bas.stopped {
@@ -103,14 +103,14 @@ func (bas *BaseAmassService) Start() error {
 	return bas.service.OnStart()
 }
 
-// OnStart is a placeholder that should be implemented by an AmassService
+// OnStart is a placeholder that should be implemented by an Service
 // that has code to execute during service start.
-func (bas *BaseAmassService) OnStart() error {
+func (bas *BaseService) OnStart() error {
 	return nil
 }
 
-// Pause implements the AmassService interface
-func (bas *BaseAmassService) Pause() error {
+// Pause implements the Service interface
+func (bas *BaseService) Pause() error {
 	err := bas.service.OnPause()
 
 	go func() {
@@ -119,13 +119,13 @@ func (bas *BaseAmassService) Pause() error {
 	return err
 }
 
-// OnPause implements the AmassService interface
-func (bas *BaseAmassService) OnPause() error {
+// OnPause implements the Service interface
+func (bas *BaseService) OnPause() error {
 	return nil
 }
 
-// Resume implements the AmassService interface
-func (bas *BaseAmassService) Resume() error {
+// Resume implements the Service interface
+func (bas *BaseService) Resume() error {
 	err := bas.service.OnResume()
 
 	go func() {
@@ -134,13 +134,13 @@ func (bas *BaseAmassService) Resume() error {
 	return err
 }
 
-// OnResume implements the AmassService interface
-func (bas *BaseAmassService) OnResume() error {
+// OnResume implements the Service interface
+func (bas *BaseService) OnResume() error {
 	return nil
 }
 
-// Stop calls the OnStop method implemented for the AmassService.
-func (bas *BaseAmassService) Stop() error {
+// Stop calls the OnStop method implemented for the Service.
+func (bas *BaseService) Stop() error {
 	if bas.stopped {
 		return errors.New(bas.name + " has already been stopped")
 	}
@@ -151,24 +151,24 @@ func (bas *BaseAmassService) Stop() error {
 	return err
 }
 
-// OnStop is a placeholder that should be implemented by an AmassService
+// OnStop is a placeholder that should be implemented by an Service
 // that has code to execute during service stop.
-func (bas *BaseAmassService) OnStop() error {
+func (bas *BaseService) OnStop() error {
 	return nil
 }
 
 // SendRequest adds the request provided by the parameter to the service request channel.
-func (bas *BaseAmassService) SendRequest(req *AmassRequest) {
+func (bas *BaseService) SendRequest(req *Request) {
 	bas.queue <- req
 }
 
 // RequestChan returns the channel that provides new service requests.
-func (bas *BaseAmassService) RequestChan() <-chan *AmassRequest {
+func (bas *BaseService) RequestChan() <-chan *Request {
 	return bas.queue
 }
 
 // IsActive returns true if SetActive has been called for the service within the last 10 seconds.
-func (bas *BaseAmassService) IsActive() bool {
+func (bas *BaseService) IsActive() bool {
 	a := make(chan time.Time)
 
 	bas.isactive <- a
@@ -179,11 +179,11 @@ func (bas *BaseAmassService) IsActive() bool {
 }
 
 // SetActive marks the service as being active at time.Now() for future checks performed by the IsActive method.
-func (bas *BaseAmassService) SetActive() {
+func (bas *BaseService) SetActive() {
 	bas.setactive <- time.Now()
 }
 
-func (bas *BaseAmassService) processActivity() {
+func (bas *BaseService) processActivity() {
 	for {
 		select {
 		case <-bas.Quit():
@@ -199,26 +199,26 @@ func (bas *BaseAmassService) processActivity() {
 }
 
 // PauseChan returns the pause channel for the service.
-func (bas *BaseAmassService) PauseChan() <-chan struct{} {
+func (bas *BaseService) PauseChan() <-chan struct{} {
 	return bas.pause
 }
 
 // ResumeChan returns the resume channel for the service.
-func (bas *BaseAmassService) ResumeChan() <-chan struct{} {
+func (bas *BaseService) ResumeChan() <-chan struct{} {
 	return bas.resume
 }
 
 // Quit return the quit channel for the service.
-func (bas *BaseAmassService) Quit() <-chan struct{} {
+func (bas *BaseService) Quit() <-chan struct{} {
 	return bas.quit
 }
 
 // String returns the name of the service.
-func (bas *BaseAmassService) String() string {
+func (bas *BaseService) String() string {
 	return bas.name
 }
 
 // Enum returns the Enumeration this service is supporting.
-func (bas *BaseAmassService) Enum() *Enumeration {
+func (bas *BaseService) Enum() *Enumeration {
 	return bas.enumeration
 }

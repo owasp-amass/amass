@@ -162,9 +162,6 @@ func (g *Graph) asnNode(asn int) *Node {
 	g.Lock()
 	defer g.Unlock()
 
-	if asn == 0 {
-		return nil
-	}
 	return g.ASNs[asn]
 }
 
@@ -546,10 +543,10 @@ func (g *Graph) InsertInfrastructure(addr string, asn int, cidr *net.IPNet, desc
 }
 
 // GetNewOutput returns new findings within the enumeration Graph.
-func (g *Graph) GetNewOutput() []*AmassOutput {
+func (g *Graph) GetNewOutput() []*Output {
 	var domains []string
 	var dNodes []*Node
-	var results []*AmassOutput
+	var results []*Output
 
 	g.Lock()
 	for d, n := range g.Domains {
@@ -569,8 +566,8 @@ func (g *Graph) GetNewOutput() []*AmassOutput {
 	return results
 }
 
-func (g *Graph) findSubdomainOutput(domain *Node) []*AmassOutput {
-	var output []*AmassOutput
+func (g *Graph) findSubdomainOutput(domain *Node) []*Output {
+	var output []*Output
 
 	if o := g.buildSubdomainOutput(domain); o != nil {
 		output = append(output, o)
@@ -610,7 +607,7 @@ func (g *Graph) findSubdomainOutput(domain *Node) []*AmassOutput {
 	return output
 }
 
-func (g *Graph) buildSubdomainOutput(sub *Node) *AmassOutput {
+func (g *Graph) buildSubdomainOutput(sub *Node) *Output {
 	sub.Lock()
 	_, ok := sub.Properties["sent"]
 	sub.Unlock()
@@ -618,7 +615,7 @@ func (g *Graph) buildSubdomainOutput(sub *Node) *AmassOutput {
 		return nil
 	}
 
-	output := &AmassOutput{
+	output := &Output{
 		Name:   sub.Properties["name"],
 		Tag:    sub.Properties["tag"],
 		Source: sub.Properties["source"],
@@ -672,8 +669,8 @@ func (g *Graph) traverseCNAME(sub *Node) *Node {
 	return cname
 }
 
-func (g *Graph) obtainInfrastructureData(addr *Node) *AmassAddressInfo {
-	infr := &AmassAddressInfo{Address: net.ParseIP(addr.Properties["addr"])}
+func (g *Graph) obtainInfrastructureData(addr *Node) *AddressInfo {
+	infr := &AddressInfo{Address: net.ParseIP(addr.Properties["addr"])}
 
 	var nb *Node
 

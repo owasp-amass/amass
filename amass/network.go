@@ -31,6 +31,10 @@ type ASRecord struct {
 }
 
 var (
+	// The private network address ranges
+	private192 *net.IPNet
+	private172 *net.IPNet
+	private10  *net.IPNet
 	// Cache for the infrastructure data collected from online sources
 	netDataLock  sync.Mutex
 	netDataCache map[int]*ASRecord
@@ -40,6 +44,9 @@ var (
 )
 
 func init() {
+	_, private192, _ = net.ParseCIDR("192.168.0.0/16")
+	_, private172, _ = net.ParseCIDR("172.16.0.0/12")
+	_, private10, _ = net.ParseCIDR("10.0.0.0/8")
 	netDataCache = make(map[int]*ASRecord)
 	domainCache = make(map[string]struct{})
 }
@@ -86,8 +93,13 @@ func IPRequest(addr string) (int, *net.IPNet, string, error) {
 	netDataLock.Lock()
 	defer netDataLock.Unlock()
 
+	// Does the address fall into a private network range?
+	asn, cidr, desc, err := checkForPrivateAddress(addr)
+	if err == nil {
+		return asn, cidr, desc, nil
+	}
 	// Is the data already available in the cache?
-	asn, cidr, desc := ipSearch(addr)
+	asn, cidr, desc = ipSearch(addr)
 	if asn != 0 {
 		return asn, cidr, desc, nil
 	}
@@ -103,6 +115,24 @@ func IPRequest(addr string) (int, *net.IPNet, string, error) {
 		return 0, nil, "", fmt.Errorf("IPRequest failed to find data for %s after an online search", addr)
 	}
 	return asn, cidr, desc, nil
+}
+
+func checkForPrivateAddress(addr string) (int, *net.IPNet, string, error) {
+	ip := net.ParseIP(addr)
+	desc := "Private Networks"
+
+	if private192.Contains(ip) {
+		return 0, private192, desc, nil
+	}
+
+	if private172.Contains(ip) {
+		return 0, private172, desc, nil
+	}
+
+	if private10.Contains(ip) {
+		return 0, private10, desc, nil
+	}
+	return 0, nil, "", errors.New("The address is not private")
 }
 
 // ASNRequest returns the completed ASRecord for the provided ASN.

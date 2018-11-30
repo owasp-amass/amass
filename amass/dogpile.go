@@ -11,9 +11,9 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
-// Dogpile is the AmassService that handles access to the Dogpile data source.
+// Dogpile is the Service that handles access to the Dogpile data source.
 type Dogpile struct {
-	BaseAmassService
+	BaseService
 
 	quantity   int
 	limit      int
@@ -28,22 +28,16 @@ func NewDogpile(e *Enumeration) *Dogpile {
 		SourceType: SCRAPE,
 	}
 
-	d.BaseAmassService = *NewBaseAmassService(e, "Dogpile", d)
+	d.BaseService = *NewBaseService(e, "Dogpile", d)
 	return d
 }
 
-// OnStart implements the AmassService interface
+// OnStart implements the Service interface
 func (d *Dogpile) OnStart() error {
-	d.BaseAmassService.OnStart()
+	d.BaseService.OnStart()
 
 	go d.startRootDomains()
 	go d.processRequests()
-	return nil
-}
-
-// OnStop implements the AmassService interface
-func (d *Dogpile) OnStop() error {
-	d.BaseAmassService.OnStop()
 	return nil
 }
 
@@ -89,7 +83,7 @@ func (d *Dogpile) executeQuery(domain string) {
 			}
 
 			for _, sd := range re.FindAllString(page, -1) {
-				d.Enum().NewNameEvent(&AmassRequest{
+				d.Enum().NewNameEvent(&Request{
 					Name:   cleanName(sd),
 					Domain: domain,
 					Tag:    d.SourceType,

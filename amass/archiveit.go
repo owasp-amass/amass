@@ -7,9 +7,9 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
-// ArchiveIt is the AmassService that handles access to the ArchiveIt data source.
+// ArchiveIt is the Service that handles access to the ArchiveIt data source.
 type ArchiveIt struct {
-	BaseAmassService
+	BaseService
 
 	baseURL    string
 	SourceType string
@@ -24,13 +24,13 @@ func NewArchiveIt(e *Enumeration) *ArchiveIt {
 		filter:     utils.NewStringFilter(),
 	}
 
-	a.BaseAmassService = *NewBaseAmassService(e, "ArchiveIt", a)
+	a.BaseService = *NewBaseService(e, "ArchiveIt", a)
 	return a
 }
 
-// OnStart implements the AmassService interface
+// OnStart implements the Service interface
 func (a *ArchiveIt) OnStart() error {
-	a.BaseAmassService.OnStart()
+	a.BaseService.OnStart()
 
 	go a.startRootDomains()
 	go a.processRequests()
@@ -70,7 +70,7 @@ func (a *ArchiveIt) executeQuery(sn, domain string) {
 	}
 
 	for _, name := range names {
-		a.Enum().NewNameEvent(&AmassRequest{
+		a.Enum().NewNameEvent(&Request{
 			Name:   cleanName(name),
 			Domain: domain,
 			Tag:    a.SourceType,

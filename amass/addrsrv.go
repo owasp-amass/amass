@@ -7,10 +7,10 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
-// AddressService is the AmassService that handles all newly discovered IP addresses
+// AddressService is the Service that handles all newly discovered IP addresses
 // within the architecture. This is achieved by receiving all the NEWADDR events.
 type AddressService struct {
-	BaseAmassService
+	BaseService
 
 	filter *utils.StringFilter
 }
@@ -19,13 +19,13 @@ type AddressService struct {
 func NewAddressService(e *Enumeration) *AddressService {
 	as := &AddressService{filter: utils.NewStringFilter()}
 
-	as.BaseAmassService = *NewBaseAmassService(e, "Address Service", as)
+	as.BaseService = *NewBaseService(e, "Address Service", as)
 	return as
 }
 
-// OnStart implements the AmassService interface
+// OnStart implements the Service interface
 func (as *AddressService) OnStart() error {
-	as.BaseAmassService.OnStart()
+	as.BaseService.OnStart()
 
 	go as.processRequests()
 	return nil
@@ -44,7 +44,7 @@ func (as *AddressService) processRequests() {
 	}
 }
 
-func (as *AddressService) performRequest(req *AmassRequest) {
+func (as *AddressService) performRequest(req *Request) {
 	as.SetActive()
 
 	if as.filter.Duplicate(req.Address) {

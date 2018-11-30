@@ -11,9 +11,9 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
-// Baidu is the AmassService that handles access to the Baidu data source.
+// Baidu is the Service that handles access to the Baidu data source.
 type Baidu struct {
-	BaseAmassService
+	BaseService
 
 	quantity   int
 	limit      int
@@ -28,22 +28,16 @@ func NewBaidu(e *Enumeration) *Baidu {
 		SourceType: SCRAPE,
 	}
 
-	b.BaseAmassService = *NewBaseAmassService(e, "Baidu", b)
+	b.BaseService = *NewBaseService(e, "Baidu", b)
 	return b
 }
 
-// OnStart implements the AmassService interface
+// OnStart implements the Service interface
 func (b *Baidu) OnStart() error {
-	b.BaseAmassService.OnStart()
+	b.BaseService.OnStart()
 
 	go b.startRootDomains()
 	go b.processRequests()
-	return nil
-}
-
-// OnStop implements the AmassService interface
-func (b *Baidu) OnStop() error {
-	b.BaseAmassService.OnStop()
 	return nil
 }
 
@@ -89,7 +83,7 @@ func (b *Baidu) executeQuery(domain string) {
 			}
 
 			for _, sd := range re.FindAllString(page, -1) {
-				b.Enum().NewNameEvent(&AmassRequest{
+				b.Enum().NewNameEvent(&Request{
 					Name:   cleanName(sd),
 					Domain: domain,
 					Tag:    b.SourceType,

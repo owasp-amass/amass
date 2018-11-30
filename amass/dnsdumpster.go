@@ -15,9 +15,9 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
-// DNSDumpster is the AmassService that handles access to the DNSDumpster data source.
+// DNSDumpster is the Service that handles access to the DNSDumpster data source.
 type DNSDumpster struct {
-	BaseAmassService
+	BaseService
 
 	SourceType string
 }
@@ -26,22 +26,16 @@ type DNSDumpster struct {
 func NewDNSDumpster(e *Enumeration) *DNSDumpster {
 	d := &DNSDumpster{SourceType: SCRAPE}
 
-	d.BaseAmassService = *NewBaseAmassService(e, "DNSDumpster", d)
+	d.BaseService = *NewBaseService(e, "DNSDumpster", d)
 	return d
 }
 
-// OnStart implements the AmassService interface
+// OnStart implements the Service interface
 func (d *DNSDumpster) OnStart() error {
-	d.BaseAmassService.OnStart()
+	d.BaseService.OnStart()
 
 	go d.startRootDomains()
 	go d.processRequests()
-	return nil
-}
-
-// OnStop implements the AmassService interface
-func (d *DNSDumpster) OnStop() error {
-	d.BaseAmassService.OnStop()
 	return nil
 }
 
@@ -90,7 +84,7 @@ func (d *DNSDumpster) executeQuery(domain string) {
 	d.SetActive()
 	re := d.Enum().Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
-		d.Enum().NewNameEvent(&AmassRequest{
+		d.Enum().NewNameEvent(&Request{
 			Name:   cleanName(sd),
 			Domain: domain,
 			Tag:    d.SourceType,

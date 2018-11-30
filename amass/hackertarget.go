@@ -9,9 +9,9 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
-// HackerTarget is the AmassService that handles access to the HackerTarget data source.
+// HackerTarget is the Service that handles access to the HackerTarget data source.
 type HackerTarget struct {
-	BaseAmassService
+	BaseService
 
 	SourceType string
 }
@@ -20,22 +20,16 @@ type HackerTarget struct {
 func NewHackerTarget(e *Enumeration) *HackerTarget {
 	h := &HackerTarget{SourceType: API}
 
-	h.BaseAmassService = *NewBaseAmassService(e, "HackerTarget", h)
+	h.BaseService = *NewBaseService(e, "HackerTarget", h)
 	return h
 }
 
-// OnStart implements the AmassService interface
+// OnStart implements the Service interface
 func (h *HackerTarget) OnStart() error {
-	h.BaseAmassService.OnStart()
+	h.BaseService.OnStart()
 
 	go h.startRootDomains()
 	go h.processRequests()
-	return nil
-}
-
-// OnStop implements the AmassService interface
-func (h *HackerTarget) OnStop() error {
-	h.BaseAmassService.OnStop()
 	return nil
 }
 
@@ -71,7 +65,7 @@ func (h *HackerTarget) executeQuery(domain string) {
 	h.SetActive()
 	re := h.Enum().Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
-		h.Enum().NewNameEvent(&AmassRequest{
+		h.Enum().NewNameEvent(&Request{
 			Name:   cleanName(sd),
 			Domain: domain,
 			Tag:    h.SourceType,

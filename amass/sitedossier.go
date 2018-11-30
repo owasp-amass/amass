@@ -9,9 +9,9 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
-// Exalead is the AmassService that handles access to the Exalead data source.
+// SiteDossier is the Service that handles access to the SiteDossier data source.
 type SiteDossier struct {
-	BaseAmassService
+	BaseService
 
 	SourceType string
 }
@@ -20,22 +20,16 @@ type SiteDossier struct {
 func NewSiteDossier(e *Enumeration) *SiteDossier {
 	s := &SiteDossier{SourceType: SCRAPE}
 
-	s.BaseAmassService = *NewBaseAmassService(e, "SiteDossier", s)
+	s.BaseService = *NewBaseService(e, "SiteDossier", s)
 	return s
 }
 
-// OnStart implements the AmassService interface
+// OnStart implements the Service interface
 func (s *SiteDossier) OnStart() error {
-	s.BaseAmassService.OnStart()
+	s.BaseService.OnStart()
 
 	go s.startRootDomains()
 	go s.processRequests()
-	return nil
-}
-
-// OnStop implements the AmassService interface
-func (s *SiteDossier) OnStop() error {
-	s.BaseAmassService.OnStop()
 	return nil
 }
 
@@ -71,7 +65,7 @@ func (s *SiteDossier) executeQuery(domain string) {
 	s.SetActive()
 	re := s.Enum().Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
-		s.Enum().NewNameEvent(&AmassRequest{
+		s.Enum().NewNameEvent(&Request{
 			Name:   cleanName(sd),
 			Domain: domain,
 			Tag:    s.SourceType,

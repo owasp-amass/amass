@@ -9,33 +9,27 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
-// Netcraft is the AmassService that handles access to the Netcraft data source.
+// Netcraft is the Service that handles access to the Netcraft data source.
 type Netcraft struct {
-	BaseAmassService
+	BaseService
 
 	SourceType string
 }
 
-// Netcraft returns he object initialized, but not yet started.
+// NewNetcraft returns he object initialized, but not yet started.
 func NewNetcraft(e *Enumeration) *Netcraft {
 	n := &Netcraft{SourceType: SCRAPE}
 
-	n.BaseAmassService = *NewBaseAmassService(e, "Netcraft", n)
+	n.BaseService = *NewBaseService(e, "Netcraft", n)
 	return n
 }
 
-// OnStart implements the AmassService interface
+// OnStart implements the Service interface
 func (n *Netcraft) OnStart() error {
-	n.BaseAmassService.OnStart()
+	n.BaseService.OnStart()
 
 	go n.startRootDomains()
 	go n.processRequests()
-	return nil
-}
-
-// OnStop implements the AmassService interface
-func (n *Netcraft) OnStop() error {
-	n.BaseAmassService.OnStop()
 	return nil
 }
 
@@ -71,7 +65,7 @@ func (n *Netcraft) executeQuery(domain string) {
 	n.SetActive()
 	re := n.Enum().Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
-		n.Enum().NewNameEvent(&AmassRequest{
+		n.Enum().NewNameEvent(&Request{
 			Name:   cleanName(sd),
 			Domain: domain,
 			Tag:    n.SourceType,

@@ -11,23 +11,23 @@ import (
 	"github.com/miekg/dns"
 )
 
-// AlterationService is the AmassService that handles all DNS name permutation within
+// AlterationService is the Service that handles all DNS name permutation within
 // the architecture. This is achieved by receiving all the RESOLVED events.
 type AlterationService struct {
-	BaseAmassService
+	BaseService
 }
 
 // NewAlterationService returns he object initialized, but not yet started.
 func NewAlterationService(e *Enumeration) *AlterationService {
 	as := new(AlterationService)
 
-	as.BaseAmassService = *NewBaseAmassService(e, "Alterations", as)
+	as.BaseService = *NewBaseService(e, "Alterations", as)
 	return as
 }
 
-// OnStart implements the AmassService interface
+// OnStart implements the Service interface
 func (as *AlterationService) OnStart() error {
-	as.BaseAmassService.OnStart()
+	as.BaseService.OnStart()
 
 	if as.Enum().Config.Alterations {
 		go as.processRequests()
@@ -49,7 +49,7 @@ func (as *AlterationService) processRequests() {
 }
 
 // executeAlterations runs all the DNS name alteration methods as goroutines.
-func (as *AlterationService) executeAlterations(req *AmassRequest) {
+func (as *AlterationService) executeAlterations(req *Request) {
 	as.SetActive()
 	if !as.Enum().Config.IsDomainInScope(req.Name) || !as.correctRecordTypes(req) {
 		return
@@ -58,7 +58,7 @@ func (as *AlterationService) executeAlterations(req *AmassRequest) {
 	as.appendNumbers(req)
 }
 
-func (as *AlterationService) correctRecordTypes(req *AmassRequest) bool {
+func (as *AlterationService) correctRecordTypes(req *Request) bool {
 	var ok bool
 
 	for _, r := range req.Records {
@@ -73,7 +73,7 @@ func (as *AlterationService) correctRecordTypes(req *AmassRequest) bool {
 }
 
 // flipNumbersInName flips numbers in a subdomain name.
-func (as *AlterationService) flipNumbersInName(req *AmassRequest) {
+func (as *AlterationService) flipNumbersInName(req *Request) {
 	n := req.Name
 	parts := strings.SplitN(n, ".", 2)
 	// Find the first character that is a number
@@ -111,7 +111,7 @@ func (as *AlterationService) secondNumberFlip(name, domain string, minIndex int)
 }
 
 // appendNumbers appends a number to a subdomain name.
-func (as *AlterationService) appendNumbers(req *AmassRequest) {
+func (as *AlterationService) appendNumbers(req *Request) {
 	n := req.Name
 	parts := strings.SplitN(n, ".", 2)
 
@@ -133,7 +133,7 @@ func (as *AlterationService) sendAlteredName(name, domain string) {
 	}
 
 	as.SetActive()
-	as.Enum().NewNameEvent(&AmassRequest{
+	as.Enum().NewNameEvent(&Request{
 		Name:   name,
 		Domain: domain,
 		Tag:    ALT,

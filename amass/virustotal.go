@@ -9,9 +9,9 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
-// VirusTotal is the AmassService that handles access to the VirusTotal data source.
+// VirusTotal is the Service that handles access to the VirusTotal data source.
 type VirusTotal struct {
-	BaseAmassService
+	BaseService
 
 	SourceType string
 }
@@ -20,22 +20,16 @@ type VirusTotal struct {
 func NewVirusTotal(e *Enumeration) *VirusTotal {
 	v := &VirusTotal{SourceType: SCRAPE}
 
-	v.BaseAmassService = *NewBaseAmassService(e, "VirusTotal", v)
+	v.BaseService = *NewBaseService(e, "VirusTotal", v)
 	return v
 }
 
-// OnStart implements the AmassService interface
+// OnStart implements the Service interface
 func (v *VirusTotal) OnStart() error {
-	v.BaseAmassService.OnStart()
+	v.BaseService.OnStart()
 
 	go v.startRootDomains()
 	go v.processRequests()
-	return nil
-}
-
-// OnStop implements the AmassService interface
-func (v *VirusTotal) OnStop() error {
-	v.BaseAmassService.OnStop()
 	return nil
 }
 
@@ -71,7 +65,7 @@ func (v *VirusTotal) executeQuery(domain string) {
 
 	v.SetActive()
 	for _, sd := range re.FindAllString(page, -1) {
-		v.Enum().NewNameEvent(&AmassRequest{
+		v.Enum().NewNameEvent(&Request{
 			Name:   cleanName(sd),
 			Domain: domain,
 			Tag:    v.SourceType,

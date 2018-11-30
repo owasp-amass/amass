@@ -11,9 +11,9 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
-// Censys is the AmassService that handles access to the Censys data source.
+// Censys is the Service that handles access to the Censys data source.
 type Censys struct {
-	BaseAmassService
+	BaseService
 
 	SourceType string
 }
@@ -22,22 +22,16 @@ type Censys struct {
 func NewCensys(e *Enumeration) *Censys {
 	c := &Censys{SourceType: CERT}
 
-	c.BaseAmassService = *NewBaseAmassService(e, "Censys", c)
+	c.BaseService = *NewBaseService(e, "Censys", c)
 	return c
 }
 
-// OnStart implements the AmassService interface
+// OnStart implements the Service interface
 func (c *Censys) OnStart() error {
-	c.BaseAmassService.OnStart()
+	c.BaseService.OnStart()
 
 	go c.startRootDomains()
 	go c.processRequests()
-	return nil
-}
-
-// OnStop implements the AmassService interface
-func (c *Censys) OnStop() error {
-	c.BaseAmassService.OnStop()
 	return nil
 }
 
@@ -91,7 +85,7 @@ func (c *Censys) executeQuery(domain string) {
 	c.SetActive()
 	re := c.Enum().Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
-		c.Enum().NewNameEvent(&AmassRequest{
+		c.Enum().NewNameEvent(&Request{
 			Name:   cleanName(sd),
 			Domain: domain,
 			Tag:    c.SourceType,

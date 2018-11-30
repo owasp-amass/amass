@@ -24,7 +24,7 @@ const (
 // ActiveCertService is the AmassService that handles all active certificate activities
 // within the architecture.
 type ActiveCertService struct {
-	BaseAmassService
+	BaseService
 
 	maxPulls utils.Semaphore
 }
@@ -33,13 +33,13 @@ type ActiveCertService struct {
 func NewActiveCertService(e *Enumeration) *ActiveCertService {
 	acs := &ActiveCertService{maxPulls: utils.NewSimpleSemaphore(25)}
 
-	acs.BaseAmassService = *NewBaseAmassService(e, "Active Cert", acs)
+	acs.BaseService = *NewBaseService(e, "Active Cert", acs)
 	return acs
 }
 
-// OnStart implements the AmassService interface
+// OnStart implements the Service interface
 func (acs *ActiveCertService) OnStart() error {
-	acs.BaseAmassService.OnStart()
+	acs.BaseService.OnStart()
 
 	go acs.processRequests()
 	return nil
@@ -58,7 +58,7 @@ func (acs *ActiveCertService) processRequests() {
 	}
 }
 
-func (acs *ActiveCertService) performRequest(req *AmassRequest) {
+func (acs *ActiveCertService) performRequest(req *Request) {
 	acs.maxPulls.Acquire(1)
 	defer acs.maxPulls.Release(1)
 
@@ -74,8 +74,8 @@ func (acs *ActiveCertService) performRequest(req *AmassRequest) {
 }
 
 // PullCertificateNames attempts to pull a cert from one or more ports on an IP.
-func PullCertificateNames(addr string, ports []int) []*AmassRequest {
-	var requests []*AmassRequest
+func PullCertificateNames(addr string, ports []int) []*Request {
+	var requests []*Request
 
 	// Check hosts for certificates that contain subdomain names
 	for _, port := range ports {
@@ -146,11 +146,11 @@ func namesFromCert(cert *x509.Certificate) []string {
 	return subdomains
 }
 
-func reqFromNames(subdomains []string) []*AmassRequest {
-	var requests []*AmassRequest
+func reqFromNames(subdomains []string) []*Request {
+	var requests []*Request
 
 	for _, name := range subdomains {
-		requests = append(requests, &AmassRequest{
+		requests = append(requests, &Request{
 			Name:   name,
 			Domain: SubdomainToDomain(name),
 			Tag:    CERT,

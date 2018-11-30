@@ -9,9 +9,9 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
-// Exalead is the AmassService that handles access to the Exalead data source.
+// Exalead is the Service that handles access to the Exalead data source.
 type Exalead struct {
-	BaseAmassService
+	BaseService
 
 	SourceType string
 }
@@ -20,22 +20,16 @@ type Exalead struct {
 func NewExalead(enum *Enumeration) *Exalead {
 	e := &Exalead{SourceType: SCRAPE}
 
-	e.BaseAmassService = *NewBaseAmassService(enum, "Exalead", e)
+	e.BaseService = *NewBaseService(enum, "Exalead", e)
 	return e
 }
 
-// OnStart implements the AmassService interface
+// OnStart implements the Service interface
 func (e *Exalead) OnStart() error {
-	e.BaseAmassService.OnStart()
+	e.BaseService.OnStart()
 
 	go e.startRootDomains()
 	go e.processRequests()
-	return nil
-}
-
-// OnStop implements the AmassService interface
-func (e *Exalead) OnStop() error {
-	e.BaseAmassService.OnStop()
 	return nil
 }
 
@@ -71,7 +65,7 @@ func (e *Exalead) executeQuery(domain string) {
 	e.SetActive()
 	re := e.Enum().Config.DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
-		e.Enum().NewNameEvent(&AmassRequest{
+		e.Enum().NewNameEvent(&Request{
 			Name:   cleanName(sd),
 			Domain: domain,
 			Tag:    e.SourceType,
