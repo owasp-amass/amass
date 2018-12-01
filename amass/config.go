@@ -48,6 +48,9 @@ type Config struct {
 	// A blacklist of subdomain names that will not be investigated
 	Blacklist []string
 
+	// A list of data sources that should not be utilized
+	DisabledDataSources []string
+
 	// The root domain names that the enumeration will target
 	domains []string
 
@@ -138,6 +141,26 @@ func (c *Config) Blacklisted(name string) bool {
 		}
 	}
 	return resp
+}
+
+// ExcludeDisabledDataSources returns a filtered list of data sources excluding DisabledDataSources
+func (c *Config) ExcludeDisabledDataSources(services []Service) []Service {
+	var enabled []Service
+
+	for _, s := range services {
+		include := true
+
+		for _, disabled := range c.DisabledDataSources {
+			if strings.EqualFold(disabled, s.String()) {
+				include = false
+				break
+			}
+		}
+		if include {
+			enabled = append(enabled, s)
+		}
+	}
+	return enabled
 }
 
 // AddAPIKey adds the data source and API key association provided to the configuration.
