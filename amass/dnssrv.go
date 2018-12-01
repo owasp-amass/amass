@@ -240,6 +240,10 @@ func (ds *DNSService) basicQueries(subdomain, domain string) {
 }
 
 func (ds *DNSService) attemptZoneXFR(sub, domain, server string) {
+	if ds.filter.Duplicate(sub + server) {
+		return
+	}
+
 	MaxConnections.Acquire(1)
 	defer MaxConnections.Release(1)
 
