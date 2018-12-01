@@ -656,7 +656,7 @@ func (g *Graph) traverseCNAME(sub *Node) *Node {
 
 		for _, idx := range cname.Edges() {
 			edge := g.Edges[idx]
-			if edge.Label == "CNAME_TO" {
+			if edge.Label == "CNAME_TO" || edge.Label == "SRV_TO" {
 				cname = g.Nodes[edge.To]
 				break
 			}
