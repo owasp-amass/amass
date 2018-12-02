@@ -184,6 +184,9 @@ func (e *Enumeration) CheckConfig() error {
 	if len(e.Config.Wordlist) == 0 {
 		e.Config.Wordlist, err = getDefaultWordlist()
 	}
+	if len(e.Config.DisabledDataSources) > 0 {
+		e.dataSources = e.Config.ExcludeDisabledDataSources(e.dataSources)
+	}
 
 	e.MaxFlow = utils.NewTimedSemaphore(
 		e.Config.Timing.ToMaxFlow(),
@@ -208,8 +211,6 @@ func (e *Enumeration) Start() error {
 	}
 	// Grab all the data sources
 	services = append(services, e.dataSources...)
-	// Remove disabled data sources by name
-	services = e.Config.ExcludeDisabledDataSources(services)
 
 	for _, srv := range services {
 		if err := srv.Start(); err != nil {
@@ -517,6 +518,16 @@ func GetAllSources(e *Enumeration) []Service {
 		NewWayback(e),
 		NewYahoo(e),
 	}
+}
+
+// GetAllSourceNames returns the names of all the available data sources.
+func (e *Enumeration) GetAllSourceNames() []string {
+	var names []string
+
+	for _, source := range e.dataSources {
+		names = append(names, source.String())
+	}
+	return names
 }
 
 // Clean up the names scraped from the web.
