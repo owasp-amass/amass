@@ -68,6 +68,7 @@ var (
 	blue   = color.New(color.FgHiBlue).SprintFunc()
 	// Command-line switches and provided parameters
 	help          = flag.Bool("h", false, "Show the program usage message")
+	list          = flag.Bool("list", false, "Print the names of all available data sources")
 	version       = flag.Bool("version", false, "Print the version number of this amass binary")
 	unresolved    = flag.Bool("include-unresolvable", false, "Output DNS names that did not resolve")
 	ips           = flag.Bool("ip", false, "Show the IP addresses for discovered names")
@@ -86,13 +87,15 @@ var (
 	jsonpath      = flag.String("json", "", "Path to the JSON output file")
 	datapath      = flag.String("do", "", "Path to data operations output file")
 	domainspath   = flag.String("df", "", "Path to a file providing root domain names")
+	excludepath   = flag.String("ef", "", "Path to a file providing data sources to exclude")
+	includepath   = flag.String("if", "", "Path to a file providing data sources to include")
 	resolvepath   = flag.String("rf", "", "Path to a file providing preferred DNS resolvers")
 	blacklistpath = flag.String("blf", "", "Path to a file providing blacklisted subdomains")
 )
 
 func main() {
 	var ports parseInts
-	var domains, resolvers, blacklist parseStrings
+	var domains, included, excluded, resolvers, blacklist parseStrings
 
 	defaultBuf := new(bytes.Buffer)
 	flag.CommandLine.SetOutput(defaultBuf)
@@ -106,6 +109,8 @@ func main() {
 
 	flag.Var(&ports, "p", "Ports separated by commas (default: 443)")
 	flag.Var(&domains, "d", "Domain names separated by commas (can be used multiple times)")
+	flag.Var(&excluded, "exclude", "Data source names separated by commas to be excluded")
+	flag.Var(&included, "include", "Data source names separated by commas to be included")
 	flag.Var(&resolvers, "r", "IP addresses of preferred DNS resolvers (can be used multiple times)")
 	flag.Var(&blacklist, "bl", "Blacklist of subdomain names that will not be investigated")
 	flag.Parse()
@@ -113,6 +118,15 @@ func main() {
 	// Some input validation
 	if *help || len(os.Args) == 1 {
 		flag.Usage()
+	}
+	// Check if the user has requested the data source names
+	if *list {
+		enum := amass.NewEnumeration()
+
+		for _, name := range enum.GetAllSourceNames() {
+			g.Println(name)
+		}
+		return
 	}
 	if *version {
 		fmt.Fprintf(color.Error, "version %s\n", amass.Version)
@@ -134,6 +148,12 @@ func main() {
 	}
 	if *blacklistpath != "" {
 		blacklist = utils.UniqueAppend(blacklist, getLinesFromFile(*blacklistpath)...)
+	}
+	if *excludepath != "" {
+		excluded = utils.UniqueAppend(excluded, getLinesFromFile(*excludepath)...)
+	}
+	if *includepath != "" {
+		included = utils.UniqueAppend(included, getLinesFromFile(*includepath)...)
 	}
 	if *resolvepath != "" {
 		resolvers = utils.UniqueAppend(resolvers, getLinesFromFile(*resolvepath)...)
@@ -182,6 +202,7 @@ func main() {
 	enum.Config.Timing = amass.EnumerationTiming(*timing)
 	enum.Config.Passive = *passive
 	enum.Config.Blacklist = blacklist
+	enum.Config.DisabledDataSources = compileDisabledSources(enum, included, excluded)
 	for _, domain := range domains {
 		enum.Config.AddDomain(domain)
 	}
@@ -269,6 +290,68 @@ func getLinesFromFile(path string) []string {
 	return lines
 }
 
+func compileDisabledSources(enum *amass.Enumeration, include, exclude []string) []string {
+	var inc, disable []string
+
+	master := enum.GetAllSourceNames()
+	// Check that the include names are valid
+	if len(include) > 0 {
+		for _, incname := range include {
+			var found bool
+
+			for _, name := range master {
+				if strings.EqualFold(name, incname) {
+					found = true
+					inc = append(inc, incname)
+					break
+				}
+			}
+
+			if !found {
+				r.Fprintf(color.Error, "%s is not an available data source\n", incname)
+			}
+		}
+	}
+	// Check that the exclude names are valid
+	if len(exclude) > 0 {
+		for _, exclname := range exclude {
+			var found bool
+
+			for _, name := range master {
+				if strings.EqualFold(name, exclname) {
+					found = true
+					disable = append(disable, exclname)
+					break
+				}
+			}
+
+			if !found {
+				r.Fprintf(color.Error, "%s is not an available data source\n", exclname)
+			}
+		}
+	}
+
+	if len(inc) == 0 {
+		return disable
+	}
+	// Data sources missing from the include list are disabled
+	for _, name := range master {
+		var found bool
+
+		for _, incname := range inc {
+			if strings.EqualFold(name, incname) {
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			disable = utils.UniqueAppend(disable, name)
+		}
+	}
+	return disable
+}
+
 func writeLogsAndMessages(logs *io.PipeReader, logfile string) {
 	wildcard := regexp.MustCompile("DNS wildcard")
 	avg := regexp.MustCompile("Average DNS names")
@@ -277,7 +360,7 @@ func writeLogsAndMessages(logs *io.PipeReader, logfile string) {
 	if logfile != "" {
 		filePtr, err := os.OpenFile(logfile, os.O_WRONLY|os.O_CREATE, 0644)
 		if err != nil {
-			r.Printf("Failed to open the log file: %v", err)
+			r.Fprintf(color.Error, "Failed to open the log file: %v\n", err)
 		} else {
 			defer func() {
 				filePtr.Sync()

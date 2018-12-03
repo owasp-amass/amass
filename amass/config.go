@@ -143,7 +143,7 @@ func (c *Config) Blacklisted(name string) bool {
 	return resp
 }
 
-// ExcludeDisabledDataSources returns a filtered list of data sources excluding DisabledDataSources
+// ExcludeDisabledDataSources returns a list of data sources excluding DisabledDataSources.
 func (c *Config) ExcludeDisabledDataSources(services []Service) []Service {
 	var enabled []Service
 
