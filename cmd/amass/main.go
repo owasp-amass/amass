@@ -68,7 +68,7 @@ var (
 	blue   = color.New(color.FgHiBlue).SprintFunc()
 	// Command-line switches and provided parameters
 	help          = flag.Bool("h", false, "Show the program usage message")
-	list          = flag.Bool("l", false, "Print the names of all available data sources")
+	list          = flag.Bool("list", false, "Print the names of all available data sources")
 	version       = flag.Bool("version", false, "Print the version number of this amass binary")
 	unresolved    = flag.Bool("include-unresolvable", false, "Output DNS names that did not resolve")
 	ips           = flag.Bool("ip", false, "Show the IP addresses for discovered names")
@@ -109,8 +109,8 @@ func main() {
 
 	flag.Var(&ports, "p", "Ports separated by commas (default: 443)")
 	flag.Var(&domains, "d", "Domain names separated by commas (can be used multiple times)")
-	flag.Var(&excluded, "e", "Data source names separated by commas to be excluded")
-	flag.Var(&included, "i", "Data source names separated by commas to be included")
+	flag.Var(&excluded, "exclude", "Data source names separated by commas to be excluded")
+	flag.Var(&included, "include", "Data source names separated by commas to be included")
 	flag.Var(&resolvers, "r", "IP addresses of preferred DNS resolvers (can be used multiple times)")
 	flag.Var(&blacklist, "bl", "Blacklist of subdomain names that will not be investigated")
 	flag.Parse()

@@ -121,10 +121,15 @@ Switches available through the amass CLI:
 | -d   | Provide a domain name to include in the enumeration | amass -d example.com |
 | -df  | Specify the domains to be enumerated via text file | amass -df domains.txt |
 | -do  | Write all the data operations to a JSON file | amass -do data.json -d example.com |
+| -ef  | Path to a file providing data sources to exclude | amass -ef exclude.txt -d example.com |
+| -exclude | Data source names separated by commas to be excluded | amass -exclude crtsh -d example.com |
 | -h   | Show the amass usage information | amass -h |
+| -if  | Path to a file providing data sources to include | amass -if include.txt -d example.com |
 | -include-unresolvable | Output DNS names that did not resolve | amass -include-unresolvable -d example.com |
+| -include | Data source names separated by commas to be included | amass -include crtsh -d example.com |
 | -ip  | Print IP addresses with the discovered names | amass -ip -d example.com |
 | -json | All discoveries written as individual JSON objects | amass -json out.json -d example.com |
+| -list | Print the names of all available data sources | amass -l |
 | -log | Log all error messages to a file | amass -log amass.log -d example.com |
 | -min-for-recursive | Number of subdomain names required for recursive brute forcing to begin | amass -brute -min-for-recursive 3 -d example.com |
 | -noalts | Disable alterations of discovered names | amass -noalts -d example.com |
@@ -241,6 +246,7 @@ This project improves thanks to all the people who contribute.
 
 [![Follow on Twitter](https://img.shields.io/twitter/follow/emtunc.svg?logo=twitter)](https://twitter.com/emtunc) 
 [![Follow on Twitter](https://img.shields.io/twitter/follow/ylcodes.svg?logo=twitter)](https://twitter.com/ylcodes) 
+[![Follow on Twitter](https://img.shields.io/twitter/follow/rbadguy1.svg?logo=twitter)](https://twitter.com/rbadguy1) 
 
 
 ## Mentions
