@@ -44,10 +44,6 @@ If your operating environment supports [Snap](https://docs.snapcraft.io/core/ins
 $ sudo snap install amass
 ```
 
-If you would like snap to get you the latest unstable build of OWASP Amass, type the following command:
-```
-$ sudo snap install --edge amass
-```
 
 Periodically, execute the following command to update all your snap packages:
 ```
