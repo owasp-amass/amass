@@ -114,7 +114,7 @@ Switches available through the amass CLI:
 | -bl  | Blacklist undesired subdomains from the enumeration | amass -bl blah.example.com -d example.com |
 | -blf | Identify blacklisted subdomains from a file | amass -blf data/blacklist.txt -d example.com |
 | -brute | Perform brute force subdomain enumeration | amass -brute -d example.com |
-| -config | Path to the INI configuration file | amass -config amass_settings.ini |
+| -config | Path to the INI configuration file | amass -src -ip -config amass_settings.ini |
 | -d   | Provide a domain name to include in the enumeration | amass -d example.com |
 | -df  | Specify the domains to be enumerated via text file | amass -df domains.txt |
 | -do  | Write all the data operations to a JSON file | amass -do data.json -d example.com |

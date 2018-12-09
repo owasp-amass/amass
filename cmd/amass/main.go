@@ -163,10 +163,7 @@ func main() {
 	if *domainspath != "" {
 		domains = utils.UniqueAppend(domains, getLinesFromFile(*domainspath)...)
 	}
-	if len(domains) == 0 {
-		r.Println("No root domain names were provided")
-		return
-	}
+
 	// Prepare output files
 	logfile := *logpath
 	txt := *outpath
@@ -213,6 +210,10 @@ func main() {
 	enum.Config.DisabledDataSources = compileDisabledSources(enum, included, excluded)
 	for _, domain := range domains {
 		enum.Config.AddDomain(domain)
+	}
+	if len(enum.Config.Domains()) == 0 {
+		r.Fprintln(color.Error, "No root domain names were provided")
+		return
 	}
 	go writeLogsAndMessages(rLog, logfile)
 
