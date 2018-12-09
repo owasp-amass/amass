@@ -118,6 +118,7 @@ Switches available through the amass CLI:
 | -bl  | Blacklist undesired subdomains from the enumeration | amass -bl blah.example.com -d example.com |
 | -blf | Identify blacklisted subdomains from a file | amass -blf data/blacklist.txt -d example.com |
 | -brute | Perform brute force subdomain enumeration | amass -brute -d example.com |
+| -config | Path to the INI configuration file | amass -config amass_settings.ini |
 | -d   | Provide a domain name to include in the enumeration | amass -d example.com |
 | -df  | Specify the domains to be enumerated via text file | amass -df domains.txt |
 | -do  | Write all the data operations to a JSON file | amass -do data.json -d example.com |
@@ -241,10 +242,13 @@ This project improves thanks to all the people who contribute.
 
 [![Follow on Twitter](https://img.shields.io/twitter/follow/emtunc.svg?logo=twitter)](https://twitter.com/emtunc) 
 [![Follow on Twitter](https://img.shields.io/twitter/follow/ylcodes.svg?logo=twitter)](https://twitter.com/ylcodes) 
+[![Follow on Twitter](https://img.shields.io/twitter/follow/fork_while_fork.svg?logo=twitter)]
+(https://twitter.com/fork_while_fork)
 
 
 ## Mentions
 
+ - [Black Hat Training, Making the Cloud Rain Shells!: Discovery and Recon](http://aae20181020102.cno.io.s3-website-us-east-1.amazonaws.com/making-the-cloud-rain-shells!/discovery-and-recon/)
  - [Subdomains Enumeration Cheat Sheet](https://pentester.land/cheatsheets/2018/11/14/subdomains-enumeration-cheatsheet.html)
  - [Getting started in Bug Bounty](https://medium.com/@ehsahil/getting-started-in-bug-bounty-7052da28445a)
  - [Source code disclosure via exposed .git folder](https://pentester.land/tutorials/2018/10/25/source-code-disclosure-via-exposed-git-folder.html)

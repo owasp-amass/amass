@@ -69,6 +69,7 @@ var (
 	// Command-line switches and provided parameters
 	help          = flag.Bool("h", false, "Show the program usage message")
 	version       = flag.Bool("version", false, "Print the version number of this amass binary")
+	config        = flag.String("config", "", "Path to the INI configuration file")
 	unresolved    = flag.Bool("include-unresolvable", false, "Output DNS names that did not resolve")
 	ips           = flag.Bool("ip", false, "Show the IP addresses for discovered names")
 	brute         = flag.Bool("brute", false, "Execute brute forcing after searches")
@@ -171,6 +172,13 @@ func main() {
 
 	rLog, wLog := io.Pipe()
 	enum := amass.NewEnumeration()
+	// Check if a configuration file was provided, and if so, load the settings
+	if *config != "" {
+		if err := enum.Config.LoadSettings(*config); err != nil {
+			r.Fprintf(color.Error, "Failed to load the configuration file: %v\n", err)
+			return
+		}
+	}
 	enum.Log = log.New(wLog, "", log.Lmicroseconds)
 	enum.Config.Wordlist = words
 	enum.Config.BruteForcing = *brute
@@ -191,7 +199,7 @@ func main() {
 	if datafile != "" {
 		fileptr, err := os.OpenFile(datafile, os.O_WRONLY|os.O_CREATE, 0644)
 		if err != nil {
-			r.Printf("Failed to open the data operations output file: %v", err)
+			r.Fprintf(color.Error, "Failed to open the data operations output file: %v\n", err)
 			return
 		}
 		defer func() {

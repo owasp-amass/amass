@@ -4,11 +4,24 @@
 package amass
 
 import (
+	"bufio"
+	"compress/gzip"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 
 	"github.com/OWASP/Amass/amass/utils"
+	"github.com/go-ini/ini"
+)
+
+const (
+	defaultWordlistURL = "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/namelist.txt"
 )
 
 // Config passes along Amass enumeration configurations
@@ -16,40 +29,40 @@ type Config struct {
 	sync.Mutex
 
 	// The ports that will be checked for certificates
-	Ports []int
+	Ports []int `ini:"port,omniempty,allowshadow"`
 
 	// The list of words to use when generating names
 	Wordlist []string
 
 	// Will the enumeration including brute forcing techniques
-	BruteForcing bool
+	BruteForcing bool `ini:"brute_forcing"`
 
 	// Will recursive brute forcing be performed?
-	Recursive bool
+	Recursive bool `ini:"recursive_brute_forcing"`
 
 	// Minimum number of subdomain discoveries before performing recursive brute forcing
-	MinForRecursive int
+	MinForRecursive int `ini:"minimum_for_recursive"`
 
 	// Will discovered subdomain name alterations be generated?
-	Alterations bool
+	Alterations bool `ini:"alterations"`
 
 	// Indicates a speed band for the enumeration to execute within
 	Timing EnumerationTiming
 
 	// Only access the data sources for names and return results?
-	Passive bool
+	Passive bool `ini:"passive"`
 
 	// Determines if zone transfers will be attempted
-	Active bool
+	Active bool `ini:"active"`
 
 	// Determines if unresolved DNS names will be output by the enumeration
-	IncludeUnresolvable bool
+	IncludeUnresolvable bool `ini:"include_unresolvable"`
 
 	// A blacklist of subdomain names that will not be investigated
-	Blacklist []string
+	Blacklist []string `ini:"blacklist,omniempty,allowshadow"`
 
 	// A list of data sources that should not be utilized
-	DisabledDataSources []string
+	DisabledDataSources []string `ini:"disabled_data_source,omniempty,allowshadow"`
 
 	// The root domain names that the enumeration will target
 	domains []string
@@ -65,6 +78,25 @@ type Config struct {
 type APIKey struct {
 	UID    string
 	Secret string
+}
+
+// CheckSettings runs some sanity checks on the configuration options selected.
+func (c *Config) CheckSettings() error {
+	var err error
+
+	if c.Passive && c.BruteForcing {
+		return errors.New("Brute forcing cannot be performed without DNS resolution")
+	}
+	if c.Passive && c.Active {
+		return errors.New("Active enumeration cannot be performed without DNS resolution")
+	}
+	if len(c.Ports) == 0 {
+		c.Ports = []int{443}
+	}
+	if len(c.Wordlist) == 0 {
+		c.Wordlist, err = getDefaultWordlist()
+	}
+	return err
 }
 
 // DomainRegex returns the Regexp object for the domain name identified by the parameter.
@@ -185,4 +217,109 @@ func (c *Config) GetAPIKey(source string) *APIKey {
 		return apikey
 	}
 	return nil
+}
+
+// LoadSettings parses settings from an .ini file and assigns them to the Config.
+func (c *Config) LoadSettings(path string) error {
+	cfg, err := ini.LoadSources(ini.LoadOptions{
+		Insensitive:  true,
+		AllowShadows: true,
+	}, path)
+	if err != nil {
+		return err
+	}
+	// Get the easy ones out of the way using mapping
+	if err = cfg.MapTo(c); err != nil {
+		return err
+	}
+	// Attempt to load a wordlist provided via the configuration file
+	if cfg.Section(ini.DEFAULT_SECTION).HasKey("wordlist_file") {
+		wordlist := cfg.Section(ini.DEFAULT_SECTION).Key("wordlist_file").String()
+
+		if list, err := getWordList(wordlist); err == nil {
+			c.Wordlist = list
+		} else {
+			return err
+		}
+	}
+	// Attempt to load the timing setting via the configuration file
+	if cfg.Section(ini.DEFAULT_SECTION).HasKey("timing") {
+		tstr := cfg.Section(ini.DEFAULT_SECTION).Key("timing").String()
+
+		if timing, err := strconv.Atoi(tstr); err == nil && timing >= 0 && timing <= 5 {
+			c.Timing = EnumerationTiming(timing)
+		} else {
+			return fmt.Errorf("%s is not a valid enumeration timing value", tstr)
+		}
+	}
+
+	domains := cfg.Section(ini.DEFAULT_SECTION).Key("domain").ValueWithShadows()
+	for _, domain := range domains {
+		c.AddDomain(domain)
+	}
+	return nil
+}
+
+func getWordList(path string) ([]string, error) {
+	var lines []string
+	var reader io.Reader
+
+	// Open the file
+	file, err := os.Open(path)
+	if err != nil {
+		return lines, fmt.Errorf("Error opening the file %s: %v", path, err)
+	}
+	defer file.Close()
+	reader = file
+
+	// We need to determine if this is a gzipped file or a plain text file, so we
+	// first read the first 512 bytes to pass them down to http.DetectContentType
+	// for mime detection. The file is rewinded before passing it along to the
+	// next reader
+	head := make([]byte, 512)
+	if _, err = file.Read(head); err != nil {
+		return lines, fmt.Errorf("Error reading the first 512 bytes from %s: %s", path, err)
+	}
+	if _, err = file.Seek(0, 0); err != nil {
+		return lines, fmt.Errorf("Error rewinding the file %s: %s", path, err)
+	}
+
+	// Read the file as gzip if it's actually compressed
+	if mt := http.DetectContentType(head); mt == "application/gzip" || mt == "application/x-gzip" {
+		gzReader, err := gzip.NewReader(file)
+		if err != nil {
+			return lines, fmt.Errorf("Error gz-reading the file %s: %v", path, err)
+		}
+		defer gzReader.Close()
+		reader = gzReader
+	}
+	// Get each line from the file
+	scanner := bufio.NewScanner(reader)
+	for scanner.Scan() {
+		// Get the next line
+		text := scanner.Text()
+		if text != "" {
+			lines = append(lines, strings.TrimSpace(text))
+		}
+	}
+	return lines, nil
+}
+
+func getDefaultWordlist() ([]string, error) {
+	var list []string
+
+	page, err := utils.RequestWebPage(defaultWordlistURL, nil, nil, "", "")
+	if err != nil {
+		return list, err
+	}
+
+	scanner := bufio.NewScanner(strings.NewReader(page))
+	for scanner.Scan() {
+		// Get the next word in the list
+		word := strings.TrimSpace(scanner.Text())
+		if err := scanner.Err(); err == nil && word != "" {
+			list = utils.UniqueAppend(list, word)
+		}
+	}
+	return list, nil
 }
