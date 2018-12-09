@@ -156,12 +156,20 @@ func main() {
 	if *includepath != "" {
 		included = utils.UniqueAppend(included, getLinesFromFile(*includepath)...)
 	}
+	if *domainspath != "" {
+		domains = utils.UniqueAppend(domains, getLinesFromFile(*domainspath)...)
+	}
 	if *resolvepath != "" {
 		resolvers = utils.UniqueAppend(resolvers, getLinesFromFile(*resolvepath)...)
 	}
-	amass.SetCustomResolvers(resolvers)
-	if *domainspath != "" {
-		domains = utils.UniqueAppend(domains, getLinesFromFile(*domainspath)...)
+	// Check if a config file was provided that has DNS resolvers specified
+	if *config != "" {
+		if r, err := amass.GetResolversFromSettings(*config); err == nil {
+			resolvers = utils.UniqueAppend(resolvers, r...)
+		}
+	}
+	if len(resolvers) > 0 {
+		amass.SetCustomResolvers(resolvers)
 	}
 
 	// Prepare output files

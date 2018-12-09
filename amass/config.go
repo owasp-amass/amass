@@ -59,10 +59,10 @@ type Config struct {
 	IncludeUnresolvable bool `ini:"include_unresolvable"`
 
 	// A blacklist of subdomain names that will not be investigated
-	Blacklist []string `ini:"blacklist,omniempty,allowshadow"`
+	Blacklist []string
 
 	// A list of data sources that should not be utilized
-	DisabledDataSources []string `ini:"disabled_data_source,omniempty,allowshadow"`
+	DisabledDataSources []string
 
 	// The root domain names that the enumeration will target
 	domains []string
@@ -226,38 +226,71 @@ func (c *Config) LoadSettings(path string) error {
 		AllowShadows: true,
 	}, path)
 	if err != nil {
-		return err
+		return fmt.Errorf("Failed to load the configuration file: %v", err)
 	}
 	// Get the easy ones out of the way using mapping
 	if err = cfg.MapTo(c); err != nil {
-		return err
+		return fmt.Errorf("Error mapping configuration settings to internal values: %v", err)
 	}
 	// Attempt to load a wordlist provided via the configuration file
 	if cfg.Section(ini.DEFAULT_SECTION).HasKey("wordlist_file") {
 		wordlist := cfg.Section(ini.DEFAULT_SECTION).Key("wordlist_file").String()
 
-		if list, err := getWordList(wordlist); err == nil {
-			c.Wordlist = list
-		} else {
-			return err
+		list, err := getWordList(wordlist)
+		if err != nil {
+			return fmt.Errorf("Unable to load the file in the wordlist_file setting: %s: %v", wordlist, err)
 		}
+		c.Wordlist = list
 	}
 	// Attempt to load the timing setting via the configuration file
 	if cfg.Section(ini.DEFAULT_SECTION).HasKey("timing") {
 		tstr := cfg.Section(ini.DEFAULT_SECTION).Key("timing").String()
 
-		if timing, err := strconv.Atoi(tstr); err == nil && timing >= 0 && timing <= 5 {
-			c.Timing = EnumerationTiming(timing)
-		} else {
+		timing, err := strconv.Atoi(tstr)
+		if err != nil || timing < 0 || timing > 5 {
 			return fmt.Errorf("%s is not a valid enumeration timing value", tstr)
 		}
+		c.Timing = EnumerationTiming(timing)
 	}
-
-	domains := cfg.Section(ini.DEFAULT_SECTION).Key("domain").ValueWithShadows()
-	for _, domain := range domains {
-		c.AddDomain(domain)
+	// Load up all the DNS domain names
+	if domains, err := cfg.GetSection("domains"); err == nil {
+		for _, domain := range domains.Key("domain").ValueWithShadows() {
+			c.AddDomain(domain)
+		}
+	}
+	// Load up all the blacklisted subdomain names
+	if blacklisted, err := cfg.GetSection("blacklisted"); err == nil {
+		c.Blacklist = utils.UniqueAppend(c.Blacklist,
+			blacklisted.Key("subdomain").ValueWithShadows()...)
+	}
+	// Load up all the disabled data source names
+	if disabled, err := cfg.GetSection("disabled_data_sources"); err == nil {
+		c.DisabledDataSources = utils.UniqueAppend(
+			c.DisabledDataSources, disabled.Key("data_source").ValueWithShadows()...)
 	}
 	return nil
+}
+
+// GetResolversFromSettings loads the configuration file and returns all resolvers found.
+func GetResolversFromSettings(path string) ([]string, error) {
+	cfg, err := ini.LoadSources(ini.LoadOptions{
+		Insensitive:  true,
+		AllowShadows: true,
+	}, path)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to load the configuration file: %v", err)
+	}
+	// Check that the resolvers section exists in the config file
+	sec, err := cfg.GetSection("resolvers")
+	if err != nil {
+		return nil, fmt.Errorf("The config file does not contain a resolvers section: %v", err)
+	}
+
+	resolvers := sec.Key("resolver").ValueWithShadows()
+	if len(resolvers) == 0 {
+		return nil, errors.New("No resolver keys were found in the resolvers section")
+	}
+	return resolvers, nil
 }
 
 func getWordList(path string) ([]string, error) {
