@@ -42,7 +42,7 @@ var Banner = `
 
 const (
 	// Version is used to display the current version of Amass.
-	Version = "2.8.4"
+	Version = "2.8.5"
 
 	// Author is used to display the founder of the amass package.
 	Author = "Jeff Foley - @jeff_foley"
@@ -165,6 +165,8 @@ func (e *Enumeration) Start() error {
 		return errors.New("The enumeration did not have an output channel")
 	} else if e.Config.Passive && e.DataOptsWriter != nil {
 		return errors.New("Data operations cannot be saved without DNS resolution")
+	} else if len(e.Config.DisabledDataSources) > 0 {
+		e.dataSources = e.Config.ExcludeDisabledDataSources(e.dataSources)
 	} else if err := e.Config.CheckSettings(); err != nil {
 		return err
 	}
@@ -182,8 +184,6 @@ func (e *Enumeration) Start() error {
 	}
 	// Grab all the data sources
 	services = append(services, e.dataSources...)
-	// Remove disabled data sources by name
-	services = e.Config.ExcludeDisabledDataSources(services)
 
 	for _, srv := range services {
 		if err := srv.Start(); err != nil {
@@ -472,6 +472,16 @@ func GetAllSources(e *Enumeration) []Service {
 		NewWayback(e),
 		NewYahoo(e),
 	}
+}
+
+// GetAllSourceNames returns the names of all the available data sources.
+func (e *Enumeration) GetAllSourceNames() []string {
+	var names []string
+
+	for _, source := range e.dataSources {
+		names = append(names, source.String())
+	}
+	return names
 }
 
 // Clean up the names scraped from the web.
