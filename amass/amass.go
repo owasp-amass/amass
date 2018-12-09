@@ -132,13 +132,7 @@ func init() {
 // NewEnumeration returns an initialized Enumeration that has not been started yet.
 func NewEnumeration() *Enumeration {
 	enum := &Enumeration{
-		Config: &Config{
-			Ports:           []int{443},
-			Recursive:       true,
-			MinForRecursive: 1,
-			Alterations:     true,
-			Timing:          Normal,
-		},
+		Config:            new(Config),
 		Graph:             NewGraph(),
 		Output:            make(chan *Output, 100),
 		Done:              make(chan struct{}),
@@ -466,6 +460,7 @@ func GetAllSources(e *Enumeration) []Service {
 		NewRiddler(e),
 		NewRobtex(e),
 		NewSiteDossier(e),
+		NewSecurityTrails(e),
 		NewThreatCrowd(e),
 		NewUKGovArchive(e),
 		NewVirusTotal(e),

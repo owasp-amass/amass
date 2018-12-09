@@ -185,7 +185,8 @@ func main() {
 	}
 	// Seed the default pseudo-random number generator
 	rand.Seed(time.Now().UTC().UnixNano())
-	// Setup the amass configuration
+
+	// Setup the amass enumeration settings
 	alts := true
 	recursive := true
 	if *noalts {
@@ -194,16 +195,8 @@ func main() {
 	if *norecursive {
 		recursive = false
 	}
-
 	rLog, wLog := io.Pipe()
 	enum := amass.NewEnumeration()
-	// Check if a configuration file was provided, and if so, load the settings
-	if *config != "" {
-		if err := enum.Config.LoadSettings(*config); err != nil {
-			r.Fprintf(color.Error, "Failed to load the configuration file: %v\n", err)
-			return
-		}
-	}
 	enum.Log = log.New(wLog, "", log.Lmicroseconds)
 	enum.Config.Wordlist = words
 	enum.Config.BruteForcing = *brute
@@ -216,6 +209,13 @@ func main() {
 	enum.Config.Passive = *passive
 	enum.Config.Blacklist = blacklist
 	enum.Config.DisabledDataSources = compileDisabledSources(enum, included, excluded)
+	// Check if a configuration file was provided, and if so, load the settings
+	if *config != "" {
+		if err := enum.Config.LoadSettings(*config); err != nil {
+			r.Fprintf(color.Error, "Failed to load the configuration file: %v\n", err)
+			return
+		}
+	}
 	for _, domain := range domains {
 		enum.Config.AddDomain(domain)
 	}
@@ -223,8 +223,8 @@ func main() {
 		r.Fprintln(color.Error, "No root domain names were provided")
 		return
 	}
-	go writeLogsAndMessages(rLog, logfile)
 
+	go writeLogsAndMessages(rLog, logfile)
 	// Setup the data operations output file
 	if datafile != "" {
 		fileptr, err := os.OpenFile(datafile, os.O_WRONLY|os.O_CREATE, 0644)
@@ -247,9 +247,8 @@ func main() {
 		FileOut:  txt,
 		JSONOut:  jsonfile,
 	})
-	// Execute the signal handler
-	go signalHandler(enum)
 
+	go signalHandler(enum)
 	if err := enum.Start(); err != nil {
 		r.Println(err)
 		return

@@ -29,7 +29,7 @@ type Config struct {
 	sync.Mutex
 
 	// The ports that will be checked for certificates
-	Ports []int `ini:"port,omniempty,allowshadow"`
+	Ports []int `ini:"port,,allowshadow"`
 
 	// The list of words to use when generating names
 	Wordlist []string
@@ -76,8 +76,8 @@ type Config struct {
 
 // APIKey contains values required for authenticating with web APIs.
 type APIKey struct {
-	UID    string
-	Secret string
+	UID    string `ini:"apikey"`
+	Secret string `ini:"secret"`
 }
 
 // CheckSettings runs some sanity checks on the configuration options selected.
@@ -90,12 +90,16 @@ func (c *Config) CheckSettings() error {
 	if c.Passive && c.Active {
 		return errors.New("Active enumeration cannot be performed without DNS resolution")
 	}
+	if c.MinForRecursive == 0 {
+		c.MinForRecursive = 1
+	}
 	if len(c.Ports) == 0 {
 		c.Ports = []int{443}
 	}
 	if len(c.Wordlist) == 0 {
 		c.Wordlist, err = getDefaultWordlist()
 	}
+	fmt.Printf("%v\n", c)
 	return err
 }
 
@@ -204,7 +208,11 @@ func (c *Config) AddAPIKey(source string, ak *APIKey) {
 	if idx == "" {
 		return
 	}
-	c.apikeys[idx] = ak
+
+	if c.apikeys == nil {
+		c.apikeys = make(map[string]*APIKey)
+	}
+	c.apikeys[strings.ToLower(idx)] = ak
 }
 
 // GetAPIKey returns the API key associated with the provided data source name.
@@ -213,7 +221,7 @@ func (c *Config) GetAPIKey(source string) *APIKey {
 	defer c.Unlock()
 
 	idx := strings.TrimSpace(source)
-	if apikey, found := c.apikeys[idx]; found {
+	if apikey, found := c.apikeys[strings.ToLower(idx)]; found {
 		return apikey
 	}
 	return nil
@@ -267,6 +275,21 @@ func (c *Config) LoadSettings(path string) error {
 	if disabled, err := cfg.GetSection("disabled_data_sources"); err == nil {
 		c.DisabledDataSources = utils.UniqueAppend(
 			c.DisabledDataSources, disabled.Key("data_source").ValueWithShadows()...)
+	}
+	// Load up all API key information from data source sections
+	for _, section := range cfg.Sections() {
+		name := section.Name()
+		// Skip sections that are not related to data sources
+		if name == "default" || name == "domains" || name == "resolvers" ||
+			name == "blacklisted" || name == "disabled_data_sources" {
+			continue
+		}
+
+		key := new(APIKey)
+		// Parse the API key information and assign to the Config
+		if err := section.MapTo(key); err == nil {
+			c.AddAPIKey(name, key)
+		}
 	}
 	return nil
 }
