@@ -50,10 +50,10 @@ type Config struct {
 	Timing EnumerationTiming
 
 	// Only access the data sources for names and return results?
-	Passive bool `ini:"passive"`
+	Passive bool
 
 	// Determines if zone transfers will be attempted
-	Active bool `ini:"active"`
+	Active bool
 
 	// Determines if unresolved DNS names will be output by the enumeration
 	IncludeUnresolvable bool `ini:"include_unresolvable"`
@@ -259,6 +259,16 @@ func (c *Config) LoadSettings(path string) error {
 			return fmt.Errorf("%s is not a valid enumeration timing value", tstr)
 		}
 		c.Timing = EnumerationTiming(timing)
+	}
+	// Attempt to load a special mode of operation specified by the user
+	if cfg.Section(ini.DEFAULT_SECTION).HasKey("mode") {
+		mode := cfg.Section(ini.DEFAULT_SECTION).Key("mode").String()
+
+		if mode == "passive" {
+			c.Passive = true
+		} else if mode == "active" {
+			c.Active = true
+		}
 	}
 	// Load up all the DNS domain names
 	if domains, err := cfg.GetSection("domains"); err == nil {
