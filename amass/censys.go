@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/OWASP/Amass/amass/utils"
 )
@@ -16,11 +17,15 @@ type Censys struct {
 	BaseService
 
 	SourceType string
+	RateLimit  time.Duration
 }
 
 // NewCensys returns he object initialized, but not yet started.
 func NewCensys(e *Enumeration) *Censys {
-	c := &Censys{SourceType: CERT}
+	c := &Censys{
+		SourceType: CERT,
+		RateLimit:  3 * time.Second,
+	}
 
 	c.BaseService = *NewBaseService(e, "Censys", c)
 	return c
@@ -53,6 +58,8 @@ func (c *Censys) startRootDomains() {
 	// Look at each domain provided by the config
 	for _, domain := range c.Enum().Config.Domains() {
 		c.executeQuery(domain)
+		// Honor the rate limit
+		time.Sleep(c.RateLimit)
 	}
 }
 
@@ -70,7 +77,6 @@ func (c *Censys) executeQuery(domain string) {
 		body := bytes.NewBuffer(jsonStr)
 		headers := map[string]string{"Content-Type": "application/json"}
 		page, err = utils.RequestWebPage(url, body, headers, key.UID, key.Secret)
-		fmt.Println(page)
 	} else {
 		url = c.webURL(domain)
 

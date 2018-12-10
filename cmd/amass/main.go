@@ -70,6 +70,7 @@ var (
 	help          = flag.Bool("h", false, "Show the program usage message")
 	list          = flag.Bool("list", false, "Print the names of all available data sources")
 	version       = flag.Bool("version", false, "Print the version number of this amass binary")
+	config        = flag.String("config", "", "Path to the INI configuration file")
 	unresolved    = flag.Bool("include-unresolvable", false, "Output DNS names that did not resolve")
 	ips           = flag.Bool("ip", false, "Show the IP addresses for discovered names")
 	brute         = flag.Bool("brute", false, "Execute brute forcing after searches")
@@ -155,17 +156,22 @@ func main() {
 	if *includepath != "" {
 		included = utils.UniqueAppend(included, getLinesFromFile(*includepath)...)
 	}
-	if *resolvepath != "" {
-		resolvers = utils.UniqueAppend(resolvers, getLinesFromFile(*resolvepath)...)
-	}
-	amass.SetCustomResolvers(resolvers)
 	if *domainspath != "" {
 		domains = utils.UniqueAppend(domains, getLinesFromFile(*domainspath)...)
 	}
-	if len(domains) == 0 {
-		r.Println("No root domain names were provided")
-		return
+	if *resolvepath != "" {
+		resolvers = utils.UniqueAppend(resolvers, getLinesFromFile(*resolvepath)...)
 	}
+	// Check if a config file was provided that has DNS resolvers specified
+	if *config != "" {
+		if r, err := amass.GetResolversFromSettings(*config); err == nil {
+			resolvers = utils.UniqueAppend(resolvers, r...)
+		}
+	}
+	if len(resolvers) > 0 {
+		amass.SetCustomResolvers(resolvers)
+	}
+
 	// Prepare output files
 	logfile := *logpath
 	txt := *outpath
@@ -179,7 +185,8 @@ func main() {
 	}
 	// Seed the default pseudo-random number generator
 	rand.Seed(time.Now().UTC().UnixNano())
-	// Setup the amass configuration
+
+	// Setup the amass enumeration settings
 	alts := true
 	recursive := true
 	if *noalts {
@@ -188,7 +195,6 @@ func main() {
 	if *norecursive {
 		recursive = false
 	}
-
 	rLog, wLog := io.Pipe()
 	enum := amass.NewEnumeration()
 	enum.Log = log.New(wLog, "", log.Lmicroseconds)
@@ -203,16 +209,27 @@ func main() {
 	enum.Config.Passive = *passive
 	enum.Config.Blacklist = blacklist
 	enum.Config.DisabledDataSources = compileDisabledSources(enum, included, excluded)
+	// Check if a configuration file was provided, and if so, load the settings
+	if *config != "" {
+		if err := enum.Config.LoadSettings(*config); err != nil {
+			r.Fprintf(color.Error, "Failed to load the configuration file: %v\n", err)
+			return
+		}
+	}
 	for _, domain := range domains {
 		enum.Config.AddDomain(domain)
 	}
-	go writeLogsAndMessages(rLog, logfile)
+	if len(enum.Config.Domains()) == 0 {
+		r.Fprintln(color.Error, "No root domain names were provided")
+		return
+	}
 
+	go writeLogsAndMessages(rLog, logfile)
 	// Setup the data operations output file
 	if datafile != "" {
 		fileptr, err := os.OpenFile(datafile, os.O_WRONLY|os.O_CREATE, 0644)
 		if err != nil {
-			r.Printf("Failed to open the data operations output file: %v", err)
+			r.Fprintf(color.Error, "Failed to open the data operations output file: %v\n", err)
 			return
 		}
 		defer func() {
@@ -230,9 +247,8 @@ func main() {
 		FileOut:  txt,
 		JSONOut:  jsonfile,
 	})
-	// Execute the signal handler
-	go signalHandler(enum)
 
+	go signalHandler(enum)
 	if err := enum.Start(); err != nil {
 		r.Println(err)
 		return

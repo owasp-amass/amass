@@ -4,7 +4,6 @@
 package amass
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
 	"io"
@@ -43,12 +42,10 @@ var Banner = `
 
 const (
 	// Version is used to display the current version of Amass.
-	Version = "2.8.5"
+	Version = "2.8.6"
 
 	// Author is used to display the founder of the amass package.
 	Author = "Jeff Foley - @jeff_foley"
-
-	defaultWordlistURL = "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/namelist.txt"
 )
 
 // Request tag types
@@ -135,13 +132,7 @@ func init() {
 // NewEnumeration returns an initialized Enumeration that has not been started yet.
 func NewEnumeration() *Enumeration {
 	enum := &Enumeration{
-		Config: &Config{
-			Ports:           []int{443},
-			Recursive:       true,
-			MinForRecursive: 1,
-			Alterations:     true,
-			Timing:          Normal,
-		},
+		Config:            new(Config),
 		Graph:             NewGraph(),
 		Output:            make(chan *Output, 100),
 		Done:              make(chan struct{}),
@@ -162,43 +153,19 @@ func NewEnumeration() *Enumeration {
 	return enum
 }
 
-// CheckConfig runs some sanity checks on the enumeration configuration.
-func (e *Enumeration) CheckConfig() error {
-	var err error
-
-	if e.Output == nil {
-		return errors.New("The configuration did not have an output channel")
-	}
-	if e.Config.Passive && e.Config.BruteForcing {
-		return errors.New("Brute forcing cannot be performed without DNS resolution")
-	}
-	if e.Config.Passive && e.Config.Active {
-		return errors.New("Active enumeration cannot be performed without DNS resolution")
-	}
-	if e.Config.Passive && e.DataOptsWriter != nil {
-		return errors.New("Data operations cannot be saved without DNS resolution")
-	}
-	if len(e.Config.Ports) == 0 {
-		e.Config.Ports = []int{443}
-	}
-	if len(e.Config.Wordlist) == 0 {
-		e.Config.Wordlist, err = getDefaultWordlist()
-	}
-	if len(e.Config.DisabledDataSources) > 0 {
-		e.dataSources = e.Config.ExcludeDisabledDataSources(e.dataSources)
-	}
-
-	e.MaxFlow = utils.NewTimedSemaphore(
-		e.Config.Timing.ToMaxFlow(),
-		e.Config.Timing.ToReleaseDelay())
-	return err
-}
-
 // Start begins the DNS enumeration process for the Amass Enumeration object.
 func (e *Enumeration) Start() error {
-	if err := e.CheckConfig(); err != nil {
+	if e.Output == nil {
+		return errors.New("The enumeration did not have an output channel")
+	} else if e.Config.Passive && e.DataOptsWriter != nil {
+		return errors.New("Data operations cannot be saved without DNS resolution")
+	} else if len(e.Config.DisabledDataSources) > 0 {
+		e.dataSources = e.Config.ExcludeDisabledDataSources(e.dataSources)
+	} else if err := e.Config.CheckSettings(); err != nil {
 		return err
 	}
+
+	e.MaxFlow = utils.NewTimedSemaphore(e.Config.Timing.ToMaxFlow(), e.Config.Timing.ToReleaseDelay())
 
 	// Select the correct services to be used in this enumeration
 	var services []Service
@@ -462,25 +429,6 @@ func (t EnumerationTiming) ToReleasesPerSecond() int {
 	return result
 }
 
-func getDefaultWordlist() ([]string, error) {
-	var list []string
-
-	page, err := utils.RequestWebPage(defaultWordlistURL, nil, nil, "", "")
-	if err != nil {
-		return list, err
-	}
-
-	scanner := bufio.NewScanner(strings.NewReader(page))
-	for scanner.Scan() {
-		// Get the next word in the list
-		word := strings.TrimSpace(scanner.Text())
-		if err := scanner.Err(); err == nil && word != "" {
-			list = utils.UniqueAppend(list, word)
-		}
-	}
-	return list, nil
-}
-
 // GetAllSources returns a slice of all data source services, initialized and ready.
 func GetAllSources(e *Enumeration) []Service {
 	return []Service{
@@ -512,6 +460,7 @@ func GetAllSources(e *Enumeration) []Service {
 		NewRiddler(e),
 		NewRobtex(e),
 		NewSiteDossier(e),
+		NewSecurityTrails(e),
 		NewThreatCrowd(e),
 		NewUKGovArchive(e),
 		NewVirusTotal(e),
