@@ -99,7 +99,6 @@ func (c *Config) CheckSettings() error {
 	if len(c.Wordlist) == 0 {
 		c.Wordlist, err = getDefaultWordlist()
 	}
-	fmt.Printf("%v\n", c)
 	return err
 }
 
