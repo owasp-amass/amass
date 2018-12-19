@@ -3,8 +3,7 @@
 
 [![GitHub Issues](https://img.shields.io/github/issues/OWASP/Amass.svg)](https://github.com/OWASP/Amass/issues) 
 [![CircleCI Status](https://circleci.com/gh/OWASP/Amass/tree/master.svg?style=shield)](https://circleci.com/gh/OWASP/Amass/tree/master)
-[
-![GitHub tag](https://img.shields.io/github/tag/OWASP/Amass.svg)](https://github.com/OWASP/Amass/tags) 
+[![GitHub tag](https://img.shields.io/github/tag/OWASP/Amass.svg)](https://github.com/OWASP/Amass/tags) 
 [![Go Version](https://img.shields.io/badge/go-1.10-blue.svg)](https://golang.org/dl/) 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0) 
 [![Contribute Yes](https://img.shields.io/badge/contribute-yes-brightgreen.svg)](https://github.com/OWASP/Amass/blob/master/CONTRIBUTING.md) 
@@ -114,7 +113,7 @@ Switches available through the amass CLI:
 | -bl  | Blacklist undesired subdomains from the enumeration | amass -bl blah.example.com -d example.com |
 | -blf | Identify blacklisted subdomains from a file | amass -blf data/blacklist.txt -d example.com |
 | -brute | Perform brute force subdomain enumeration | amass -brute -d example.com |
-| -config | Path to the INI configuration file | amass -src -ip -config amass_settings.ini |
+| -config | Path to the INI configuration file | amass -config amass_settings.ini |
 | -d   | Provide a domain name to include in the enumeration | amass -d example.com |
 | -df  | Specify the domains to be enumerated via text file | amass -df domains.txt |
 | -do  | Write all the data operations to a JSON file | amass -do data.json -d example.com |
@@ -243,9 +242,9 @@ This project improves thanks to all the people who contribute:
 
 [![Follow on Twitter](https://img.shields.io/twitter/follow/emtunc.svg?logo=twitter)](https://twitter.com/emtunc) 
 [![Follow on Twitter](https://img.shields.io/twitter/follow/ylcodes.svg?logo=twitter)](https://twitter.com/ylcodes) 
-[![Follow on Twitter](https://img.shields.io/twitter/follow/fork_while_fork.svg?logo=twitter)]
-(https://twitter.com/fork_while_fork)
+[![Follow on Twitter](https://img.shields.io/twitter/follow/fork_while_fork.svg?logo=twitter)](https://twitter.com/fork_while_fork) 
 [![Follow on Twitter](https://img.shields.io/twitter/follow/rbadguy1.svg?logo=twitter)](https://twitter.com/rbadguy1) 
+[![Follow on Twitter](https://img.shields.io/twitter/follow/adam_zinger.svg?logo=twitter)](https://twitter.com/adam_zinger) 
 
 
 ## Mentions

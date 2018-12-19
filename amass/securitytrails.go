@@ -83,10 +83,9 @@ func (st *SecurityTrails) executeQuery(domain string) {
 		return
 	}
 	// Extract the subdomain names from the REST API results
-	type subJSON struct {
+	var subs struct {
 		Subdomains []string `json:"subdomains"`
 	}
-	var subs subJSON
 	if err := json.Unmarshal([]byte(page), &subs); err != nil {
 		return
 	}
