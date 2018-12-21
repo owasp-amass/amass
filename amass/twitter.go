@@ -4,7 +4,6 @@
 package amass
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -19,6 +18,7 @@ import (
 type Twitter struct {
 	BaseService
 
+	API        *APIKey
 	SourceType string
 	RateLimit  time.Duration
 	client     *twitter.Client
@@ -39,8 +39,12 @@ func NewTwitter(e *Enumeration) *Twitter {
 func (t *Twitter) OnStart() error {
 	t.BaseService.OnStart()
 
-	if key := t.Enum().Config.GetAPIKey(t.String()); key != nil {
-		if bearer, err := getBearerToken(key.UID, key.Secret); err == nil {
+	t.API = t.Enum().Config.GetAPIKey(t.String())
+	if t.API == nil || t.API.Key == "" || t.API.Secret == "" {
+		t.Enum().Log.Printf("%s: API key data was not provided", t.String())
+	}
+	if t.API != nil && t.API.Key != "" && t.API.Secret != "" {
+		if bearer, err := t.getBearerToken(); err == nil {
 			config := &oauth2.Config{}
 			token := &oauth2.Token{AccessToken: bearer}
 			// OAuth2 http.Client will automatically authorize Requests
@@ -49,7 +53,6 @@ func (t *Twitter) OnStart() error {
 			t.client = twitter.NewClient(httpClient)
 		}
 	}
-
 	go t.startRootDomains()
 	go t.processRequests()
 	return nil
@@ -107,27 +110,24 @@ func (t *Twitter) executeQuery(domain string) {
 	}
 }
 
-func getBearerToken(consumerKey, consumerSecret string) (string, error) {
-	b64Token := base64.StdEncoding.EncodeToString(
-		[]byte(fmt.Sprintf("%s:%s", consumerKey, consumerSecret)))
-	headers := map[string]string{
-		"Authorization": "Basic " + b64Token,
-		"Content-Type":  "application/x-www-form-urlencoded;charset=UTF-8",
-	}
-	page, err := utils.RequestWebPage("https://api.twitter.com/oauth2/token",
-		strings.NewReader("grant_type=client_credentials"), headers, "", "")
+func (t *Twitter) getBearerToken() (string, error) {
+	headers := map[string]string{"Content-Type": "application/x-www-form-urlencoded;charset=UTF-8"}
+	page, err := utils.RequestWebPage(
+		"https://api.twitter.com/oauth2/token",
+		strings.NewReader("grant_type=client_credentials"),
+		headers, t.API.Key, t.API.Secret)
 	if err != nil {
-		return "", fmt.Errorf("/token request failed: %+v", err)
+		return "", fmt.Errorf("token request failed: %+v", err)
 	}
 
 	var v struct {
 		AccessToken string `json:"access_token"`
 	}
 	if err := json.Unmarshal([]byte(page), &v); err != nil {
-		return "", fmt.Errorf("error parsing json in /token response: %+v", err)
+		return "", fmt.Errorf("error parsing json in token response: %+v", err)
 	}
 	if v.AccessToken == "" {
-		return "", fmt.Errorf("/token response does not have access_token")
+		return "", fmt.Errorf("token response does not have access_token")
 	}
 	return v.AccessToken, nil
 }

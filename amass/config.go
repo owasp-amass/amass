@@ -76,8 +76,10 @@ type Config struct {
 
 // APIKey contains values required for authenticating with web APIs.
 type APIKey struct {
-	UID    string `ini:"apikey"`
-	Secret string `ini:"secret"`
+	Username string `ini:"username"`
+	Password string `ini:"password"`
+	Key      string `ini:"apikey"`
+	Secret   string `ini:"secret"`
 }
 
 // CheckSettings runs some sanity checks on the configuration options selected.
