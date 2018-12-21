@@ -14,6 +14,7 @@ import (
 type BinaryEdge struct {
 	BaseService
 
+	API        *APIKey
 	SourceType string
 	RateLimit  time.Duration
 }
@@ -33,6 +34,10 @@ func NewBinaryEdge(e *Enumeration) *BinaryEdge {
 func (be *BinaryEdge) OnStart() error {
 	be.BaseService.OnStart()
 
+	be.API = be.Enum().Config.GetAPIKey(be.String())
+	if be.API == nil || be.API.Key == "" {
+		be.Enum().Log.Printf("%s: API key data was not provided", be.String())
+	}
 	go be.startRootDomains()
 	go be.processRequests()
 	return nil
@@ -62,14 +67,13 @@ func (be *BinaryEdge) startRootDomains() {
 }
 
 func (be *BinaryEdge) executeQuery(domain string) {
-	api := be.Enum().Config.GetAPIKey(be.String())
-	if api == nil {
+	if be.API == nil || be.API.Key == "" {
 		return
 	}
 
 	url := be.restURL(domain)
 	headers := map[string]string{
-		"X-KEY":        api.Key,
+		"X-KEY":        be.API.Key,
 		"Content-Type": "application/json",
 	}
 

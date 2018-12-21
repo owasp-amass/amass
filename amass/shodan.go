@@ -15,8 +15,8 @@ import (
 type Shodan struct {
 	BaseService
 
-	SourceType string
 	API        *APIKey
+	SourceType string
 	RateLimit  time.Duration
 }
 
@@ -36,6 +36,9 @@ func (s *Shodan) OnStart() error {
 	s.BaseService.OnStart()
 
 	s.API = s.Enum().Config.GetAPIKey(s.String())
+	if s.API == nil || s.API.Key == "" {
+		s.Enum().Log.Printf("%s: API key data was not provided", s.String())
+	}
 	go s.startRootDomains()
 	go s.processRequests()
 	return nil
@@ -65,7 +68,7 @@ func (s *Shodan) startRootDomains() {
 }
 
 func (s *Shodan) executeQuery(domain string) {
-	if s.API == nil {
+	if s.API == nil || s.API.Key == "" {
 		return
 	}
 

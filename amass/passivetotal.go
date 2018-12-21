@@ -14,6 +14,7 @@ import (
 type PassiveTotal struct {
 	BaseService
 
+	API        *APIKey
 	SourceType string
 	RateLimit  time.Duration
 }
@@ -33,6 +34,10 @@ func NewPassiveTotal(e *Enumeration) *PassiveTotal {
 func (pt *PassiveTotal) OnStart() error {
 	pt.BaseService.OnStart()
 
+	pt.API = pt.Enum().Config.GetAPIKey(pt.String())
+	if pt.API == nil || pt.API.Username == "" || pt.API.Key == "" {
+		pt.Enum().Log.Printf("%s: API key data was not provided", pt.String())
+	}
 	go pt.startRootDomains()
 	go pt.processRequests()
 	return nil
@@ -62,14 +67,13 @@ func (pt *PassiveTotal) startRootDomains() {
 }
 
 func (pt *PassiveTotal) executeQuery(domain string) {
-	api := pt.Enum().Config.GetAPIKey(pt.String())
-	if api == nil {
+	if pt.API == nil || pt.API.Username == "" || pt.API.Key == "" {
 		return
 	}
 
 	url := pt.restURL(domain)
 	headers := map[string]string{"Content-Type": "application/json"}
-	page, err := utils.RequestWebPage(url, nil, headers, api.Username, api.Key)
+	page, err := utils.RequestWebPage(url, nil, headers, pt.API.Username, pt.API.Key)
 	if err != nil {
 		pt.Enum().Log.Printf("%s: %s: %v", pt.String(), url, err)
 		return

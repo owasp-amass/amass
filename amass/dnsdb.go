@@ -18,6 +18,7 @@ import (
 type DNSDB struct {
 	BaseService
 
+	API        *APIKey
 	SourceType string
 	RateLimit  time.Duration
 }
@@ -37,6 +38,10 @@ func NewDNSDB(e *Enumeration) *DNSDB {
 func (d *DNSDB) OnStart() error {
 	d.BaseService.OnStart()
 
+	d.API = d.Enum().Config.GetAPIKey(d.String())
+	if d.API == nil || d.API.Key == "" {
+		d.Enum().Log.Printf("%s: API key data was not provided", d.String())
+	}
 	go d.startRootDomains()
 	go d.processRequests()
 	return nil
@@ -66,9 +71,9 @@ func (d *DNSDB) startRootDomains() {
 }
 
 func (d *DNSDB) executeQuery(domain string) {
-	if api := d.Enum().Config.GetAPIKey(d.String()); api != nil {
+	if d.API != nil && d.API.Key != "" {
 		headers := map[string]string{
-			"X-API-KEY":    api.Key,
+			"X-API-KEY":    d.API.Key,
 			"Accept":       "application/json",
 			"Content-Type": "application/json",
 		}
@@ -80,7 +85,7 @@ func (d *DNSDB) executeQuery(domain string) {
 			return
 		}
 
-		d.parseJSON(page, domain)
+		d.passiveDNSJSON(page, domain)
 		return
 	}
 	d.scrape(domain)
@@ -90,7 +95,9 @@ func (d *DNSDB) restURL(domain string) string {
 	return fmt.Sprintf("https://api.dnsdb.info/lookup/rrset/name/*.%s", domain)
 }
 
-func (d *DNSDB) parseJSON(page, domain string) {
+func (d *DNSDB) passiveDNSJSON(page, domain string) {
+	var unique []string
+
 	d.SetActive()
 	re := d.Enum().Config.DomainRegex(domain)
 	scanner := bufio.NewScanner(strings.NewReader(page))
@@ -109,13 +116,17 @@ func (d *DNSDB) parseJSON(page, domain string) {
 			continue
 		}
 		if re.MatchString(j.Name) {
-			d.Enum().NewNameEvent(&Request{
-				Name:   j.Name,
-				Domain: domain,
-				Tag:    API,
-				Source: d.String(),
-			})
+			unique = utils.UniqueAppend(unique, j.Name)
 		}
+	}
+
+	for _, name := range unique {
+		d.Enum().NewNameEvent(&Request{
+			Name:   name,
+			Domain: domain,
+			Tag:    API,
+			Source: d.String(),
+		})
 	}
 }
 

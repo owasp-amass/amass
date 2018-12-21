@@ -15,6 +15,7 @@ import (
 type SecurityTrails struct {
 	BaseService
 
+	API        *APIKey
 	SourceType string
 	RateLimit  time.Duration
 }
@@ -34,6 +35,10 @@ func NewSecurityTrails(e *Enumeration) *SecurityTrails {
 func (st *SecurityTrails) OnStart() error {
 	st.BaseService.OnStart()
 
+	st.API = st.Enum().Config.GetAPIKey(st.String())
+	if st.API == nil || st.API.Key == "" {
+		st.Enum().Log.Printf("%s: API key data was not provided", st.String())
+	}
 	go st.startRootDomains()
 	go st.processRequests()
 	return nil
@@ -63,14 +68,13 @@ func (st *SecurityTrails) startRootDomains() {
 }
 
 func (st *SecurityTrails) executeQuery(domain string) {
-	api := st.Enum().Config.GetAPIKey(st.String())
-	if api == nil {
+	if st.API == nil || st.API.Key == "" {
 		return
 	}
 
 	url := st.restURL(domain)
 	headers := map[string]string{
-		"APIKEY":       api.Key,
+		"APIKEY":       st.API.Key,
 		"Content-Type": "application/json",
 	}
 

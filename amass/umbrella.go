@@ -14,6 +14,7 @@ import (
 type Umbrella struct {
 	BaseService
 
+	API        *APIKey
 	SourceType string
 	RateLimit  time.Duration
 }
@@ -33,6 +34,10 @@ func NewUmbrella(e *Enumeration) *Umbrella {
 func (u *Umbrella) OnStart() error {
 	u.BaseService.OnStart()
 
+	u.API = u.Enum().Config.GetAPIKey(u.String())
+	if u.API == nil || u.API.Key == "" {
+		u.Enum().Log.Printf("%s: API key data was not provided", u.String())
+	}
 	go u.startRootDomains()
 	go u.processRequests()
 	return nil
@@ -62,14 +67,13 @@ func (u *Umbrella) startRootDomains() {
 }
 
 func (u *Umbrella) executeQuery(domain string) {
-	api := u.Enum().Config.GetAPIKey(u.String())
-	if api == nil {
+	if u.API == nil || u.API.Key == "" {
 		return
 	}
 
 	url := u.restURL(domain)
 	headers := map[string]string{
-		"Authorization": "Bearer " + api.Key,
+		"Authorization": "Bearer " + u.API.Key,
 		"Content-Type":  "application/json",
 	}
 	page, err := utils.RequestWebPage(url, nil, headers, "", "")

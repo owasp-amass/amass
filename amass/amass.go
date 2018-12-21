@@ -442,6 +442,7 @@ func GetAllSources(e *Enumeration) []Service {
 		NewCensys(e),
 		NewCertDB(e),
 		NewCertSpotter(e),
+		NewCIRCL(e),
 		NewCommonCrawl(e),
 		NewCrtsh(e),
 		NewDNSDB(e),

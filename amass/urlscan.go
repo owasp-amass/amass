@@ -16,6 +16,7 @@ import (
 type URLScan struct {
 	BaseService
 
+	API        *APIKey
 	SourceType string
 	RateLimit  time.Duration
 }
@@ -35,6 +36,10 @@ func NewURLScan(e *Enumeration) *URLScan {
 func (u *URLScan) OnStart() error {
 	u.BaseService.OnStart()
 
+	u.API = u.Enum().Config.GetAPIKey(u.String())
+	if u.API == nil || u.API.Key == "" {
+		u.Enum().Log.Printf("%s: API key data was not provided", u.String())
+	}
 	go u.startRootDomains()
 	go u.processRequests()
 	return nil
@@ -135,13 +140,12 @@ func (u *URLScan) getSubsFromResult(id string) []string {
 }
 
 func (u *URLScan) attemptSubmission(domain string) string {
-	api := u.Enum().Config.GetAPIKey(u.String())
-	if api == nil {
+	if u.API == nil || u.API.Key == "" {
 		return ""
 	}
 
 	headers := map[string]string{
-		"API-Key":      api.Key,
+		"API-Key":      u.API.Key,
 		"Content-Type": "application/json",
 	}
 	url := "https://urlscan.io/api/v1/scan/"
