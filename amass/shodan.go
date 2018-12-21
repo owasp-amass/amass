@@ -16,7 +16,7 @@ type Shodan struct {
 	BaseService
 
 	SourceType string
-	APIKey     *APIKey
+	API        *APIKey
 	RateLimit  time.Duration
 }
 
@@ -35,7 +35,7 @@ func NewShodan(e *Enumeration) *Shodan {
 func (s *Shodan) OnStart() error {
 	s.BaseService.OnStart()
 
-	s.APIKey = s.Enum().Config.GetAPIKey(s.String())
+	s.API = s.Enum().Config.GetAPIKey(s.String())
 	go s.startRootDomains()
 	go s.processRequests()
 	return nil
@@ -65,29 +65,23 @@ func (s *Shodan) startRootDomains() {
 }
 
 func (s *Shodan) executeQuery(domain string) {
-	var err error
-	var url, page string
-
-	if s.APIKey == nil {
+	if s.API == nil {
 		return
 	}
 
-	url = s.restURL(domain)
+	url := s.restURL(domain)
 	headers := map[string]string{"Content-Type": "application/json"}
-
-	page, err = utils.RequestWebPage(url, nil, headers, "", "")
+	page, err := utils.RequestWebPage(url, nil, headers, "", "")
 	if err != nil {
 		s.Enum().Log.Printf("%s: %s: %v", s.String(), url, err)
 		return
 	}
 	// Extract the subdomain names from the REST API results
-	type h struct {
-		Hostnames []string `json:"hostnames"`
+	var matches struct {
+		Matches []struct {
+			Hostnames []string `json:"hostnames"`
+		} `json:"matches"`
 	}
-	type m struct {
-		Matches []*h `json:"matches"`
-	}
-	var matches m
 	if err := json.Unmarshal([]byte(page), &matches); err != nil {
 		return
 	}
@@ -110,5 +104,5 @@ func (s *Shodan) executeQuery(domain string) {
 }
 
 func (s *Shodan) restURL(domain string) string {
-	return fmt.Sprintf("https://api.shodan.io/shodan/host/search?key=%s&query=hostname:%s", s.APIKey.UID, domain)
+	return fmt.Sprintf("https://api.shodan.io/shodan/host/search?key=%s&query=hostname:%s", s.API.Key, domain)
 }

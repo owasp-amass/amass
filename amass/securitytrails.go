@@ -63,21 +63,18 @@ func (st *SecurityTrails) startRootDomains() {
 }
 
 func (st *SecurityTrails) executeQuery(domain string) {
-	var err error
-	var url, page string
-
-	key := st.Enum().Config.GetAPIKey(st.String())
-	if key == nil {
+	api := st.Enum().Config.GetAPIKey(st.String())
+	if api == nil {
 		return
 	}
 
-	url = st.restURL(domain)
+	url := st.restURL(domain)
 	headers := map[string]string{
-		"APIKEY":       key.UID,
+		"APIKEY":       api.Key,
 		"Content-Type": "application/json",
 	}
 
-	page, err = utils.RequestWebPage(url, nil, headers, "", "")
+	page, err := utils.RequestWebPage(url, nil, headers, "", "")
 	if err != nil {
 		st.Enum().Log.Printf("%s: %s: %v", st.String(), url, err)
 		return

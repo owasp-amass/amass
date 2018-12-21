@@ -62,21 +62,18 @@ func (be *BinaryEdge) startRootDomains() {
 }
 
 func (be *BinaryEdge) executeQuery(domain string) {
-	var err error
-	var url, page string
-
-	key := be.Enum().Config.GetAPIKey(be.String())
-	if key == nil {
+	api := be.Enum().Config.GetAPIKey(be.String())
+	if api == nil {
 		return
 	}
 
-	url = be.restURL(domain)
+	url := be.restURL(domain)
 	headers := map[string]string{
-		"X-KEY":        key.UID,
+		"X-KEY":        api.Key,
 		"Content-Type": "application/json",
 	}
 
-	page, err = utils.RequestWebPage(url, nil, headers, "", "")
+	page, err := utils.RequestWebPage(url, nil, headers, "", "")
 	if err != nil {
 		be.Enum().Log.Printf("%s: %s: %v", be.String(), url, err)
 		return

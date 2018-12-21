@@ -62,41 +62,38 @@ func (u *Umbrella) startRootDomains() {
 }
 
 func (u *Umbrella) executeQuery(domain string) {
-	var err error
-	var url, page string
-
-	key := u.Enum().Config.GetAPIKey(u.String())
-	if key == nil {
+	api := u.Enum().Config.GetAPIKey(u.String())
+	if api == nil {
 		return
 	}
 
-	url = u.restURL()
-	headers := map[string]string{"Content-Type": "application/json"}
-	page, err = utils.RequestWebPage(url, nil, headers, key.UID, key.Secret)
+	url := u.restURL(domain)
+	headers := map[string]string{
+		"Authorization": "Bearer " + api.Key,
+		"Content-Type":  "application/json",
+	}
+	page, err := utils.RequestWebPage(url, nil, headers, "", "")
 	if err != nil {
 		u.Enum().Log.Printf("%s: %s: %v", u.String(), url, err)
 		return
 	}
 	// Extract the subdomain names from the REST API results
-	type tb struct {
-		Name  string
-		Score int
+	var results struct {
+		Related []struct {
+			Name string
+		} `json:"tb1"`
+		Found bool `json:"found"`
 	}
-	type r struct {
-		Related []*tb `json:"tb1"`
-		Found   bool  `json:"found"`
-	}
-	var result r
-	if err := json.Unmarshal([]byte(page), &result); err != nil {
+	if err := json.Unmarshal([]byte(page), &results); err != nil {
 		return
 	}
-	if !result.Found {
+	if !results.Found {
 		return
 	}
 
 	u.SetActive()
 	re := u.Enum().Config.DomainRegex(domain)
-	for _, n := range result.Related {
+	for _, n := range results.Related {
 		if !re.MatchString(n.Name) {
 			continue
 		}
@@ -109,6 +106,6 @@ func (u *Umbrella) executeQuery(domain string) {
 	}
 }
 
-func (u *Umbrella) restURL() string {
-	return "https://www.censys.io/api/v1/search/certificates"
+func (u *Umbrella) restURL(domain string) string {
+	return "https://investigate.api.umbrella.com/links/name/" + domain + ".json"
 }

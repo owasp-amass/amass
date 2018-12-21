@@ -39,8 +39,8 @@ func NewTwitter(e *Enumeration) *Twitter {
 func (t *Twitter) OnStart() error {
 	t.BaseService.OnStart()
 
-	if key := t.Enum().Config.GetAPIKey(t.String()); key != nil {
-		if bearer, err := getBearerToken(key.UID, key.Secret); err == nil {
+	if api := t.Enum().Config.GetAPIKey(t.String()); api != nil {
+		if bearer, err := getBearerToken(api.Key, api.Secret); err == nil {
 			config := &oauth2.Config{}
 			token := &oauth2.Token{AccessToken: bearer}
 			// OAuth2 http.Client will automatically authorize Requests

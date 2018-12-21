@@ -66,9 +66,9 @@ func (d *DNSDB) startRootDomains() {
 }
 
 func (d *DNSDB) executeQuery(domain string) {
-	if key := d.Enum().Config.GetAPIKey(d.String()); key != nil {
+	if api := d.Enum().Config.GetAPIKey(d.String()); api != nil {
 		headers := map[string]string{
-			"X-API-KEY":    key.UID,
+			"X-API-KEY":    api.Key,
 			"Accept":       "application/json",
 			"Content-Type": "application/json",
 		}
@@ -177,7 +177,7 @@ loop:
 }
 
 func (d *DNSDB) getURL(domain, sub string) string {
-	url := fmt.Sprintf("http://www.dnsdb.org/%s/", domain)
+	url := fmt.Sprintf("https://www.dnsdb.org/%s/", domain)
 	dlen := len(strings.Split(domain, "."))
 	sparts := strings.Split(sub, ".")
 	slen := len(sparts)
@@ -208,7 +208,7 @@ func (d *DNSDB) followIndicies(page, domain string) []string {
 	}
 
 	for _, idx := range indicies {
-		url := fmt.Sprintf("http://www.dnsdb.org/%s/%s", domain, idx)
+		url := fmt.Sprintf("https://www.dnsdb.org/%s/%s", domain, idx)
 		ipage, err := utils.RequestWebPage(url, nil, nil, "", "")
 		if err != nil {
 			continue
