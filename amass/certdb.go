@@ -5,7 +5,9 @@ package amass
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/url"
+	"strings"
 
 	"github.com/OWASP/Amass/amass/utils"
 )
@@ -14,12 +16,13 @@ import (
 type CertDB struct {
 	BaseService
 
+	API        *APIKey
 	SourceType string
 }
 
 // NewCertDB returns he object initialized, but not yet started.
 func NewCertDB(e *Enumeration) *CertDB {
-	c := &CertDB{SourceType: CERT}
+	c := &CertDB{SourceType: API}
 
 	c.BaseService = *NewBaseService(e, "CertDB", c)
 	return c
@@ -28,6 +31,13 @@ func NewCertDB(e *Enumeration) *CertDB {
 // OnStart implements the Service interface
 func (c *CertDB) OnStart() error {
 	c.BaseService.OnStart()
+
+	c.API = c.Enum().Config.GetAPIKey(c.String())
+	if c.API == nil || c.API.Username == "" || c.API.Password == "" {
+		c.Enum().Log.Printf("%s: API key data was not provided", c.String())
+	} else {
+		c.authenticate()
+	}
 
 	go c.startRootDomains()
 	go c.processRequests()
@@ -56,6 +66,10 @@ func (c *CertDB) startRootDomains() {
 }
 
 func (c *CertDB) executeQuery(domain string) {
+	if !utils.CheckCookie("http://certdb.com", "user_token") {
+		return
+	}
+
 	u := c.getURL(domain)
 	page, err := utils.RequestWebPage(u, nil, nil, "", "")
 	if err != nil {
@@ -63,35 +77,64 @@ func (c *CertDB) executeQuery(domain string) {
 		return
 	}
 
-	var names []string
-	if err := json.Unmarshal([]byte(page), &names); err != nil {
+	var results []struct {
+		Domains []struct {
+			Domain string `json:"domain"`
+		}
+	}
+
+	if err := json.Unmarshal([]byte(page), &results); err != nil {
 		c.Enum().Log.Printf("%s: Failed to unmarshal JSON: %v", c.String(), err)
 		return
 	}
 
 	c.SetActive()
 	re := c.Enum().Config.DomainRegex(domain)
-	for _, name := range names {
-		n := re.FindString(name)
-		if n == "" {
-			continue
-		}
+	for _, domains := range results {
+		for _, name := range domains.Domains {
+			n := re.FindString(name.Domain)
+			if n == "" {
+				continue
+			}
 
-		c.Enum().NewNameEvent(&Request{
-			Name:   cleanName(n),
-			Domain: domain,
-			Tag:    c.SourceType,
-			Source: c.String(),
-		})
+			c.Enum().NewNameEvent(&Request{
+				Name:   cleanName(n),
+				Domain: domain,
+				Tag:    c.SourceType,
+				Source: c.String(),
+			})
+		}
 	}
 }
 
+func (c *CertDB) getAuthURL() string {
+	return "https://account.spyse.com/login"
+}
+
+func (c *CertDB) getAuthBody() string {
+	return fmt.Sprintf("Login[email]=%s&Login[password]=%s", c.API.Username, c.API.Password)
+}
+
 func (c *CertDB) getURL(domain string) string {
-	u, _ := url.Parse("https://certdb.com/api")
+	u, _ := url.Parse("https://certdb.com/show-more/")
 
 	u.RawQuery = url.Values{
-		"q":             {domain},
-		"response_type": {"3"},
+		"from_url": {fmt.Sprintf("https://certdb.com/search?q=%s", domain)},
+		"page":     {"1"},
 	}.Encode()
 	return u.String()
+}
+
+func (c *CertDB) authenticate() {
+	u := c.getAuthURL()
+	body := strings.NewReader(c.getAuthBody())
+	headers := map[string]string{
+		"Content-Type": "application/x-www-form-urlencoded",
+	}
+	_, err := utils.RequestWebPage(u, body, headers, "", "")
+	if err != nil {
+		c.Enum().Log.Printf("%s: Could not authenticate", c.String())
+		return
+	}
+	utils.CopyCookies("http://account.spyse.com", "http://certdb.com")
 }
