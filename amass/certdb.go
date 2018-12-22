@@ -22,9 +22,7 @@ type CertDB struct {
 
 // NewCertDB returns he object initialized, but not yet started.
 func NewCertDB(e *Enumeration) *CertDB {
-	c := &CertDB{
-		SourceType: API,
-	}
+	c := &CertDB{SourceType: API}
 
 	c.BaseService = *NewBaseService(e, "CertDB", c)
 	return c
@@ -40,23 +38,9 @@ func (c *CertDB) OnStart() error {
 	}
 
 	c.authenticate()
-	utils.FakeCertDBSSO()
 	go c.startRootDomains()
 	go c.processRequests()
 	return nil
-}
-
-func (c *CertDB) authenticate() {
-	u := c.getAuthURL()
-	body := strings.NewReader(c.getAuthBody())
-	headers := map[string]string{
-		"Content-Type": "application/x-www-form-urlencoded",
-	}
-	_, err := utils.RequestWebPage(u, body, headers, "", "")
-	if err == nil {
-		c.Enum().Log.Printf("%s: Could not authenticate", c.String())
-		return
-	}
 }
 
 func (c *CertDB) processRequests() {
@@ -74,10 +58,6 @@ func (c *CertDB) processRequests() {
 }
 
 func (c *CertDB) startRootDomains() {
-	key := c.Enum().Config.GetAPIKey(c.String())
-	if key == nil {
-		return
-	}
 	// Look at each domain provided by the config
 	for _, domain := range c.Enum().Config.Domains() {
 		c.executeQuery(domain)
@@ -138,4 +118,18 @@ func (c *CertDB) getURL(domain string) string {
 		"page":     {"1"},
 	}.Encode()
 	return u.String()
+}
+
+func (c *CertDB) authenticate() {
+	u := c.getAuthURL()
+	body := strings.NewReader(c.getAuthBody())
+	headers := map[string]string{
+		"Content-Type": "application/x-www-form-urlencoded",
+	}
+	_, err := utils.RequestWebPage(u, body, headers, "", "")
+	if err != nil {
+		c.Enum().Log.Printf("%s: Could not authenticate", c.String())
+		return
+	}
+	utils.CopyCookies("http://account.spyse.com", "http://certdb.com")
 }

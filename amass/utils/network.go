@@ -55,14 +55,13 @@ func init() {
 	defaultClient.Transport, _ = cfrt.New(defaultClient.Transport)
 }
 
-func FakeCertDBSSO() {
-	// The auth token for certdb is issued by spyse.com so we need to copy the
-	// cookies so they work for certdb.com. Browsers hit a few endpoints that
-	// do some CORS magic to reissue the cookie for the other sites. This skips
-	// all that and just copies them directly.
-	spyseURL, _ := url.Parse("http://account.spyse.com")
-	certdbURL, _ := url.Parse("http://certdb.com")
-	defaultClient.Jar.SetCookies(certdbURL, defaultClient.Jar.Cookies(spyseURL))
+// CopyCookies copies cookies from one domain to another. Some of our data
+// sources rely on shared auth tokens and this avoids sending extra requests
+// to have the site reissue cookies for the other domains.
+func CopyCookies(src string, dest string) {
+	srcURL, _ := url.Parse(src)
+	destURL, _ := url.Parse(dest)
+	defaultClient.Jar.SetCookies(destURL, defaultClient.Jar.Cookies(srcURL))
 }
 
 // RequestWebPage returns a string containing the entire response for
