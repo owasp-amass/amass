@@ -35,7 +35,7 @@ jobs:
 
       - run:
           name: "Build Snap"
-          command: snapcraft
+          command: apt update && snapcraft
       - persist_to_workspace:
           root: .
           paths:
