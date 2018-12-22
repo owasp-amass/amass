@@ -27,7 +27,7 @@ jobs:
 
   build:
     docker:
-      - image: cibuilds/snapcraft:stable
+      - image: snapcore/snapcraft:stable
 
     working_directory: /go/src/github.com/OWASP/Amass
     steps:
@@ -35,7 +35,7 @@ jobs:
 
       - run:
           name: "Build Snap"
-          command: snapcraft
+          command: apt update && snapcraft
       - persist_to_workspace:
           root: .
           paths:
@@ -43,7 +43,7 @@ jobs:
 
   publish:
     docker:
-      - image: cibuilds/snapcraft:stable
+      - image: snapcore/snapcraft:stable
     steps:
       - attach_workspace:
           at: .
