@@ -11,6 +11,8 @@ import (
 	"math/big"
 	"net"
 	"net/http"
+	"net/http/cookiejar"
+	"net/url"
 	"strings"
 	"time"
 
@@ -33,6 +35,7 @@ var (
 )
 
 func init() {
+	jar, _ := cookiejar.New(nil)
 	defaultClient = &http.Client{
 		Timeout: 15 * time.Second,
 		Transport: &http.Transport{
@@ -47,18 +50,29 @@ func init() {
 			ExpectContinueTimeout: 5 * time.Second,
 			TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
 		},
+		Jar: jar,
 	}
 	defaultClient.Transport, _ = cfrt.New(defaultClient.Transport)
 }
 
+func FakeCertDBSSO() {
+	// The auth token for certdb is issued by spyse.com so we need to copy the
+	// cookies so they work for certdb.com. Browsers hit a few endpoints that
+	// do some CORS magic to reissue the cookie for the other sites. This skips
+	// all that and just copies them directly.
+	spyseURL, _ := url.Parse("http://account.spyse.com")
+	certdbURL, _ := url.Parse("http://certdb.com")
+	defaultClient.Jar.SetCookies(certdbURL, defaultClient.Jar.Cookies(spyseURL))
+}
+
 // RequestWebPage returns a string containing the entire response for
-// the url parameter when successful.
-func RequestWebPage(url string, body io.Reader, hvals map[string]string, uid, secret string) (string, error) {
+// the urlstring parameter when successful.
+func RequestWebPage(urlstring string, body io.Reader, hvals map[string]string, uid, secret string) (string, error) {
 	method := "GET"
 	if body != nil {
 		method = "POST"
 	}
-	req, err := http.NewRequest(method, url, body)
+	req, err := http.NewRequest(method, urlstring, body)
 	if err != nil {
 		return "", err
 	}
