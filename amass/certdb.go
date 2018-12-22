@@ -35,9 +35,10 @@ func (c *CertDB) OnStart() error {
 	c.API = c.Enum().Config.GetAPIKey(c.String())
 	if c.API == nil || c.API.Username == "" || c.API.Password == "" {
 		c.Enum().Log.Printf("%s: API key data was not provided", c.String())
+	} else {
+		c.authenticate()
 	}
 
-	c.authenticate()
 	go c.startRootDomains()
 	go c.processRequests()
 	return nil
@@ -65,6 +66,10 @@ func (c *CertDB) startRootDomains() {
 }
 
 func (c *CertDB) executeQuery(domain string) {
+	if !utils.CheckCookie("http://certdb.com", "user_token") {
+		return
+	}
+
 	u := c.getURL(domain)
 	page, err := utils.RequestWebPage(u, nil, nil, "", "")
 	if err != nil {

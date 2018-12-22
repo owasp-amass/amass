@@ -64,6 +64,19 @@ func CopyCookies(src string, dest string) {
 	defaultClient.Jar.SetCookies(destURL, defaultClient.Jar.Cookies(srcURL))
 }
 
+// CheckCookie checks if a cookie exists in the cookie jar for a given host
+func CheckCookie(urlString string, cookieName string) bool {
+	cookieURL, _ := url.Parse(urlString)
+	found := false
+	for _, cookie := range defaultClient.Jar.Cookies(cookieURL) {
+		if cookie.Name == cookieName {
+			found = true
+			break
+		}
+	}
+	return found
+}
+
 // RequestWebPage returns a string containing the entire response for
 // the urlstring parameter when successful.
 func RequestWebPage(urlstring string, body io.Reader, hvals map[string]string, uid, secret string) (string, error) {
