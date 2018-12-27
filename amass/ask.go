@@ -98,7 +98,12 @@ func (a *Ask) urlByPageNum(domain string, page int) string {
 	p := strconv.Itoa(page)
 	u, _ := url.Parse("https://www.ask.com/web")
 
-	u.RawQuery = url.Values{"q": {"site:" + domain},
-		"o": {"0"}, "l": {"dir"}, "qo": {"pagination"}, "page": {p}}.Encode()
+	u.RawQuery = url.Values{
+		"q":    {"site:" + domain + " -www." + domain},
+		"o":    {"0"},
+		"l":    {"dir"},
+		"qo":   {"pagination"},
+		"page": {p},
+	}.Encode()
 	return u.String()
 }

@@ -99,7 +99,11 @@ func (b *Bing) urlByPageNum(domain string, page int) string {
 	first := strconv.Itoa((page * b.quantity) + 1)
 	u, _ := url.Parse("http://www.bing.com/search")
 
-	u.RawQuery = url.Values{"q": {"domain:" + domain},
-		"count": {count}, "first": {first}, "FORM": {"PORE"}}.Encode()
+	u.RawQuery = url.Values{
+		"q":     {"domain:" + domain + " -www." + domain},
+		"count": {count},
+		"first": {first},
+		"FORM":  {"PORE"},
+	}.Encode()
 	return u.String()
 }

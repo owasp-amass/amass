@@ -193,13 +193,15 @@ func main() {
 	rand.Seed(time.Now().UTC().UnixNano())
 
 	enum := amass.NewEnumeration()
+	// Setup the most basic amass configuration
+	enum.Config.AddDomain("example.com")
+	
 	go func() {
 		for result := range enum.Output {
 			fmt.Println(result.Name)
 		}
 	}()
-	// Setup the most basic amass configuration
-	enum.Config.AddDomain("example.com")
+	
 	enum.Start()
 }
 ```

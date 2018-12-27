@@ -26,6 +26,10 @@ import (
 	"github.com/fatih/color"
 )
 
+const (
+	exampleConfigFileURL = "https://github.com/OWASP/Amass/blob/master/examples/amass_config.ini"
+)
+
 type outputParams struct {
 	Enum     *amass.Enumeration
 	PrintSrc bool
@@ -70,13 +74,13 @@ var (
 	help          = flag.Bool("h", false, "Show the program usage message")
 	list          = flag.Bool("list", false, "Print the names of all available data sources")
 	version       = flag.Bool("version", false, "Print the version number of this amass binary")
-	config        = flag.String("config", "", "Path to the INI configuration file")
+	config        = flag.String("config", "", "Path to the INI configuration file. Additional details below")
 	unresolved    = flag.Bool("include-unresolvable", false, "Output DNS names that did not resolve")
 	ips           = flag.Bool("ip", false, "Show the IP addresses for discovered names")
 	brute         = flag.Bool("brute", false, "Execute brute forcing after searches")
 	active        = flag.Bool("active", false, "Attempt zone transfers and certificate name grabs")
 	norecursive   = flag.Bool("norecursive", false, "Turn off recursive brute forcing")
-	minrecursive  = flag.Int("min-for-recursive", 1, "Number of subdomain discoveries before recursive brute forcing")
+	minrecursive  = flag.Int("min-for-recursive", 0, "Number of subdomain discoveries before recursive brute forcing")
 	passive       = flag.Bool("passive", false, "Disable DNS resolution of names and dependent features")
 	noalts        = flag.Bool("noalts", false, "Disable generation of altered names")
 	sources       = flag.Bool("src", false, "Print data sources for the discovered names")
@@ -105,6 +109,7 @@ func main() {
 		g.Fprintf(color.Error, "Usage: %s [options] <-d domain>\n", path.Base(os.Args[0]))
 		flag.PrintDefaults()
 		g.Fprintln(color.Error, defaultBuf.String())
+		g.Fprintf(color.Error, "An example configuration file can be found here: \n%s\n\n", exampleConfigFileURL)
 		os.Exit(1)
 	}
 
@@ -212,7 +217,7 @@ func main() {
 	// Check if a configuration file was provided, and if so, load the settings
 	if *config != "" {
 		if err := enum.Config.LoadSettings(*config); err != nil {
-			r.Fprintf(color.Error, "Failed to load the configuration file: %v\n", err)
+			r.Fprintf(color.Error, "Configuration file error: %v\n", err)
 			return
 		}
 	}

@@ -99,7 +99,7 @@ func (g *Google) urlByPageNum(domain string, page int) string {
 	u, _ := url.Parse("https://www.google.com/search")
 
 	u.RawQuery = url.Values{
-		"q":      {"site:" + domain},
+		"q":      {"site:" + domain + " -www." + domain},
 		"btnG":   {"Search"},
 		"hl":     {"en"},
 		"biw":    {""},

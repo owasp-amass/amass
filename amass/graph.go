@@ -8,6 +8,7 @@ import (
 	"net"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/OWASP/Amass/amass/utils/viz"
 )
@@ -643,9 +644,23 @@ func (g *Graph) buildSubdomainOutput(sub *Node) *Output {
 	if len(output.Addresses) == 0 {
 		return nil
 	}
+
 	sub.Lock()
+	defer sub.Unlock()
+	if _, started := sub.Properties["started"]; !started {
+		sub.Properties["started"] = "yes"
+		go func(n *Node) {
+			time.Sleep(5 * time.Second)
+			n.Lock()
+			n.Properties["finished"] = "yes"
+			n.Unlock()
+		}(sub)
+		return nil
+	}
+	if _, finished := sub.Properties["finished"]; !finished {
+		return nil
+	}
 	sub.Properties["sent"] = "yes"
-	sub.Unlock()
 	return output
 }
 

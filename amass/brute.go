@@ -6,6 +6,8 @@ package amass
 import (
 	"strings"
 	"time"
+
+	"github.com/miekg/dns"
 )
 
 // BruteForceService is the Service that handles all brute force name generation
@@ -29,7 +31,42 @@ func (bfs *BruteForceService) OnStart() error {
 	if bfs.Enum().Config.BruteForcing {
 		go bfs.startRootDomains()
 	}
+	go bfs.processRequests()
 	return nil
+}
+
+func (bfs *BruteForceService) processRequests() {
+	for {
+		select {
+		case <-bfs.PauseChan():
+			<-bfs.ResumeChan()
+		case <-bfs.Quit():
+			return
+		case req := <-bfs.RequestChan():
+			if bfs.goodRequest(req) {
+				bfs.performBruteForcing(req.Name, req.Domain)
+			}
+		}
+	}
+}
+
+func (bfs *BruteForceService) goodRequest(req *Request) bool {
+	bfs.SetActive()
+
+	if !bfs.Enum().Config.IsDomainInScope(req.Name) {
+		return false
+	}
+
+	var ok bool
+	for _, r := range req.Records {
+		t := uint16(r.Type)
+
+		if t == dns.TypeA || t == dns.TypeAAAA {
+			ok = true
+			break
+		}
+	}
+	return ok
 }
 
 func (bfs *BruteForceService) startRootDomains() {
