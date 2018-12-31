@@ -325,6 +325,10 @@ func (e *Enumeration) CheckedNameEvent(req *Request) {
 		go e.altService.SendRequest(req)
 	}
 
+	if e.Config.MinForRecursive == 0 {
+		go e.bruteService.SendRequest(req)
+	}
+
 	for _, source := range e.dataSources {
 		go source.SendRequest(req)
 	}
@@ -372,17 +376,17 @@ func (t EnumerationTiming) ToMaxFlow() int {
 
 	switch t {
 	case Paranoid:
-		result = 10
-	case Sneaky:
 		result = 30
-	case Polite:
+	case Sneaky:
 		result = 100
-	case Normal:
+	case Polite:
 		result = 333
-	case Aggressive:
+	case Normal:
 		result = 1000
-	case Insane:
+	case Aggressive:
 		result = 10000
+	case Insane:
+		result = 100000
 	}
 	return result
 }
@@ -393,17 +397,17 @@ func (t EnumerationTiming) ToReleaseDelay() time.Duration {
 
 	switch t {
 	case Paranoid:
-		result = 100 * time.Millisecond
-	case Sneaky:
 		result = 33 * time.Millisecond
-	case Polite:
+	case Sneaky:
 		result = 10 * time.Millisecond
-	case Normal:
+	case Polite:
 		result = 3 * time.Millisecond
-	case Aggressive:
+	case Normal:
 		result = time.Millisecond
-	case Insane:
+	case Aggressive:
 		result = 100 * time.Microsecond
+	case Insane:
+		result = 10 * time.Microsecond
 	}
 	return result
 }
@@ -414,17 +418,17 @@ func (t EnumerationTiming) ToReleasesPerSecond() int {
 
 	switch t {
 	case Paranoid:
-		result = 10
-	case Sneaky:
 		result = 30
-	case Polite:
+	case Sneaky:
 		result = 100
-	case Normal:
+	case Polite:
 		result = 333
-	case Aggressive:
+	case Normal:
 		result = 1000
-	case Insane:
+	case Aggressive:
 		result = 10000
+	case Insane:
+		result = 100000
 	}
 	return result
 }
