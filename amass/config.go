@@ -92,9 +92,6 @@ func (c *Config) CheckSettings() error {
 	if c.Passive && c.Active {
 		return errors.New("Active enumeration cannot be performed without DNS resolution")
 	}
-	if c.MinForRecursive == 0 {
-		c.MinForRecursive = 1
-	}
 	if len(c.Ports) == 0 {
 		c.Ports = []int{443}
 	}

@@ -97,7 +97,12 @@ func (b *Baidu) executeQuery(domain string) {
 func (b *Baidu) urlByPageNum(domain string, page int) string {
 	pn := strconv.Itoa(page)
 	u, _ := url.Parse("https://www.baidu.com/s")
+	query := "site:" + domain + " -site:www." + domain
 
-	u.RawQuery = url.Values{"pn": {pn}, "wd": {domain}, "oq": {domain}}.Encode()
+	u.RawQuery = url.Values{
+		"pn": {pn},
+		"wd": {query},
+		"oq": {query},
+	}.Encode()
 	return u.String()
 }

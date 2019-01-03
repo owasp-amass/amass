@@ -99,7 +99,12 @@ func (y *Yahoo) urlByPageNum(domain string, page int) string {
 	pz := strconv.Itoa(y.quantity)
 
 	u, _ := url.Parse("https://search.yahoo.com/search")
-	u.RawQuery = url.Values{"p": {"site:" + domain},
-		"b": {b}, "pz": {pz}, "bct": {"0"}, "xargs": {"0"}}.Encode()
+	u.RawQuery = url.Values{
+		"p":     {"site:" + domain + " -domain:www." + domain},
+		"b":     {b},
+		"pz":    {pz},
+		"bct":   {"0"},
+		"xargs": {"0"},
+	}.Encode()
 	return u.String()
 }
