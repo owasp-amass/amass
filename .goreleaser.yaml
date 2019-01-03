@@ -1,0 +1,103 @@
+# This is an example goreleaser.yaml file with some sane defaults.
+# Make sure to check the documentation at http://goreleaser.com
+before:
+  hooks:
+    - go get -u ./...
+builds:
+  - 
+    main: ./cmd/amass/main.go
+    goos:
+      - freebsd
+      - windows
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - 386
+      - arm
+      - arm64
+    goarm:
+      - 6
+      - 7
+    env:
+      - CGO_ENABLED=0
+  
+  - 
+    main: ./cmd/amass.netdomains/main.go
+    goos:
+      - freebsd
+      - windows
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - 386
+      - arm
+      - arm64
+    goarm:
+      - 6
+      - 7
+    env:
+      - CGO_ENABLED=0
+  
+  - 
+    main: ./cmd/amass.db/main.go
+    goos:
+      - freebsd
+      - windows
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - 386
+      - arm
+      - arm64
+    goarm:
+      - 6
+      - 7
+    env:
+      - CGO_ENABLED=0
+  
+  - 
+    main: ./cmd/amass.viz/main.go
+    goos:
+      - freebsd
+      - windows
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - 386
+      - arm
+      - arm64
+    goarm:
+      - 6
+      - 7
+    env:
+      - CGO_ENABLED=0
+
+archive:
+  name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+  replacements:
+    darwin: macos
+    386: i386
+  wrap_in_directory: true
+  format: zip
+  files:
+    - LICENSE
+    - README.md
+    - doc/*
+    - wordlists/*
+  
+checksum:
+  name_template: 'checksums.txt'
+
+snapshot:
+  name_template: "{{ .Tag }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+    - '^docs:'
+    - '^test:'
