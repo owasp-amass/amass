@@ -10,13 +10,16 @@
 [![Chat on Discord](https://img.shields.io/discord/433729817918308352.svg?logo=discord)](https://discord.gg/rtN8GMd) 
 
 
+<p align="center">
+  <img alt="DNS Enumeration" src="https://github.com/OWASP/Amass/blob/master/images/amass.gif" width="656" height="702" />
+</p>
+
+
 ----
 
 The OWASP Amass tool suite obtains subdomain names by scraping data sources, recursive brute forcing, crawling web archives, permuting/altering names and reverse DNS sweeping. Additionally, Amass uses the IP addresses obtained during resolution to discover associated netblocks and ASNs. All the information is then used to build maps of the target networks.
 
 ----
-
-![Amass Execution](https://github.com/OWASP/Amass/blob/master/images/amass.gif "DNS Enumeration")
 
 
 ## How to Install
