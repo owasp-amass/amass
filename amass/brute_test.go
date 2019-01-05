@@ -3,35 +3,40 @@
 
 package amass
 
-/*
 import (
 	"testing"
+
+	"github.com/OWASP/Amass/amass/utils"
 )
 
 func TestBruteForceService(t *testing.T) {
 	domains := []string{"claritysec.com", "twitter.com", "google.com", "github.com"}
 
-	config := CustomConfig(&AmassConfig{
-		Wordlist:     []string{"foo", "bar"},
-		BruteForcing: true,
-	})
-	config.AddDomains(domains)
-	srv := NewBruteForceService(config)
-	srv.Start()
+	e := NewEnumeration()
+
+	e.Config.Wordlist = []string{"foo", "bar"}
+	e.Config.BruteForcing = true
+	e.Config.Passive = true
+	e.Config.AddDomains(domains)
+	e.MaxFlow = utils.NewTimedSemaphore(e.Config.Timing.ToMaxFlow(), e.Config.Timing.ToReleaseDelay())
+
+	e.bruteService.Start()
+	defer e.bruteService.Stop()
+	e.nameService.Start()
+	defer e.nameService.Stop()
 
 	// Setup the results we expect to see
 	results := make(map[string]int)
 	for _, domain := range domains {
-		for _, word := range config.Wordlist {
+		for _, word := range e.Config.Wordlist {
 			results[word+"."+domain] = 0
 		}
 	}
 
 	num := len(results)
 	for i := 0; i < num; i++ {
-		req := <-out
-
-		results[req.Name]++
+		res := <-e.Output
+		results[res.Name]++
 	}
 
 	if num != len(results) {
@@ -44,6 +49,4 @@ func TestBruteForceService(t *testing.T) {
 		}
 	}
 
-	srv.Stop()
 }
-*/
