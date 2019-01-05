@@ -10,6 +10,9 @@
 [![Chat on Discord](https://img.shields.io/discord/433729817918308352.svg?logo=discord)](https://discord.gg/rtN8GMd) 
 
 
+----
+
+
 <p align="center">
   <img alt="DNS Enumeration" src="https://github.com/OWASP/Amass/blob/master/images/amass.gif" width="656" height="702" />
 </p>

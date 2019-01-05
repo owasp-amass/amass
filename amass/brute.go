@@ -51,11 +51,15 @@ func (bfs *BruteForceService) processRequests() {
 }
 
 func (bfs *BruteForceService) goodRequest(req *Request) bool {
-	bfs.SetActive()
+	if !bfs.Enum().Config.BruteForcing || !bfs.Enum().Config.Recursive {
+		return false
+	}
 
 	if !bfs.Enum().Config.IsDomainInScope(req.Name) {
 		return false
 	}
+
+	bfs.SetActive()
 
 	var ok bool
 	for _, r := range req.Records {
@@ -72,14 +76,17 @@ func (bfs *BruteForceService) goodRequest(req *Request) bool {
 func (bfs *BruteForceService) startRootDomains() {
 	// Look at each domain provided by the config
 	for _, domain := range bfs.Enum().Config.Domains() {
-		bfs.performBruteForcing(domain, domain)
+		bfs.SendRequest(&Request{
+			Name:   domain,
+			Domain: domain,
+		})
 	}
 }
 
 // NewSubdomain is called by the Name Service when proper subdomains are discovered.
 func (bfs *BruteForceService) NewSubdomain(req *Request, times int) {
 	if times == bfs.Enum().Config.MinForRecursive {
-		bfs.performBruteForcing(req.Name, req.Domain)
+		bfs.SendRequest(req)
 	}
 }
 
@@ -87,6 +94,7 @@ func (bfs *BruteForceService) performBruteForcing(subdomain, root string) {
 	t := time.NewTicker(time.Second)
 	defer t.Stop()
 
+	bfs.SetActive()
 	for _, word := range bfs.Enum().Config.Wordlist {
 		select {
 		case <-t.C:

@@ -7,72 +7,48 @@ builds:
   - 
     main: ./cmd/amass/main.go
     goos:
-      - freebsd
       - windows
       - linux
       - darwin
     goarch:
       - amd64
       - 386
-      - arm
-      - arm64
-    goarm:
-      - 6
-      - 7
     env:
       - CGO_ENABLED=0
   
   - 
     main: ./cmd/amass.netdomains/main.go
     goos:
-      - freebsd
       - windows
       - linux
       - darwin
     goarch:
       - amd64
       - 386
-      - arm
-      - arm64
-    goarm:
-      - 6
-      - 7
     env:
       - CGO_ENABLED=0
   
   - 
     main: ./cmd/amass.db/main.go
     goos:
-      - freebsd
       - windows
       - linux
       - darwin
     goarch:
       - amd64
       - 386
-      - arm
-      - arm64
-    goarm:
-      - 6
-      - 7
     env:
       - CGO_ENABLED=0
   
   - 
     main: ./cmd/amass.viz/main.go
     goos:
-      - freebsd
       - windows
       - linux
       - darwin
     goarch:
       - amd64
       - 386
-      - arm
-      - arm64
-    goarm:
-      - 6
-      - 7
     env:
       - CGO_ENABLED=0
 
@@ -86,11 +62,10 @@ archive:
   files:
     - LICENSE
     - README.md
-    - doc/*
     - wordlists/*
   
 checksum:
-  name_template: 'checksums.txt'
+  name_template: "{{ .ProjectName }}_checksums.txt"
 
 snapshot:
   name_template: "{{ .Tag }}-next"
@@ -99,5 +74,5 @@ changelog:
   sort: asc
   filters:
     exclude:
-    - '^docs:'
+    - '^doc:'
     - '^test:'

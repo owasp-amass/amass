@@ -325,7 +325,7 @@ func (e *Enumeration) CheckedNameEvent(req *Request) {
 		go e.altService.SendRequest(req)
 	}
 
-	if e.Config.MinForRecursive == 0 {
+	if e.Config.BruteForcing && e.Config.Recursive && e.Config.MinForRecursive == 0 {
 		go e.bruteService.SendRequest(req)
 	}
 
