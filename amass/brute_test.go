@@ -25,19 +25,19 @@ func TestBruteForceService(t *testing.T) {
 	defer e.bruteService.Stop()
 	e.nameService.Start()
 	defer e.nameService.Stop()
-	timer := time.NewTicker(time.Millisecond * 400)
-	defer timer.Stop()
 
 	expected := len(e.Config.Wordlist) * len(domains)
 	results := make(map[string]int)
 
+	timer := time.NewTimer(time.Second)
+	defer timer.Stop()
 loop:
 	for {
 		select {
 		case res := <-e.Output:
 			results[res.Name]++
 		case <-timer.C:
-			// break on a max 400 ms for this test
+			// break on a max 1s for this test
 			break loop
 		}
 	}
