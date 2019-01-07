@@ -73,12 +73,6 @@ const (
 )
 
 var (
-	// NumOfFileDescriptors is the maximum number of file descriptors or handles to be in use at once.
-	NumOfFileDescriptors int
-
-	// MaxConnections creates a limit for how many network connections will be in use at once.
-	MaxConnections utils.Semaphore
-
 	nameStripRE = regexp.MustCompile("^((20)|(25)|(2f)|(3d)|(40))+")
 )
 
@@ -122,11 +116,6 @@ type Enumeration struct {
 	// Pause/Resume channels for halting the enumeration
 	pause  chan struct{}
 	resume chan struct{}
-}
-
-func init() {
-	NumOfFileDescriptors = (GetFileLimit() / 10) * 9
-	MaxConnections = utils.NewSimpleSemaphore(NumOfFileDescriptors)
 }
 
 // NewEnumeration returns an initialized Enumeration that has not been started yet.
