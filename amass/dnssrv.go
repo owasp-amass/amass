@@ -117,9 +117,6 @@ func (ds *DNSService) performRequest(req *Request) {
 	defer ds.Enum().MaxFlow.Release(1)
 
 	ds.SetActive()
-	MaxConnections.Acquire(len(InitialQueryTypes))
-	defer MaxConnections.Release(len(InitialQueryTypes))
-
 	var answers []DNSAnswer
 	for _, t := range InitialQueryTypes {
 		if a, err := Resolve(req.Name, t); err == nil {
@@ -182,9 +179,6 @@ func (ds *DNSService) NewSubdomain(req *Request, times int) {
 func (ds *DNSService) basicQueries(subdomain, domain string) {
 	var answers []DNSAnswer
 
-	MaxConnections.Acquire(4)
-	defer MaxConnections.Release(4)
-
 	ds.SetActive()
 	// Obtain the DNS answers for the NS records related to the domain
 	if ans, err := Resolve(subdomain, "NS"); err == nil {
@@ -244,9 +238,6 @@ func (ds *DNSService) attemptZoneXFR(sub, domain, server string) {
 		return
 	}
 
-	MaxConnections.Acquire(1)
-	defer MaxConnections.Release(1)
-
 	if requests, err := ZoneTransfer(sub, domain, server); err == nil {
 		for _, req := range requests {
 			ds.Enum().ResolvedNameEvent(req)
@@ -265,7 +256,6 @@ func (ds *DNSService) queryServiceNames(subdomain, domain string) {
 			continue
 		}
 
-		MaxConnections.Acquire(1)
 		if a, err := Resolve(srvName, "SRV"); err == nil {
 			ds.Enum().ResolvedNameEvent(&Request{
 				Name:    srvName,
@@ -275,8 +265,6 @@ func (ds *DNSService) queryServiceNames(subdomain, domain string) {
 				Source:  "Forward DNS",
 			})
 		}
-		MaxConnections.Release(1)
-		ds.SetActive()
 	}
 }
 
@@ -296,7 +284,6 @@ func (ds *DNSService) ReverseDNSSweep(addr string, cidr *net.IPNet) {
 		if ds.filter.Duplicate(a) {
 			continue
 		}
-		MaxConnections.Acquire(1)
 		ds.Enum().MaxFlow.Acquire(1)
 		go ds.reverseDNSRoutine(a)
 	}
@@ -304,7 +291,6 @@ func (ds *DNSService) ReverseDNSSweep(addr string, cidr *net.IPNet) {
 
 func (ds *DNSService) reverseDNSRoutine(ip string) {
 	defer ds.Enum().MaxFlow.Release(1)
-	defer MaxConnections.Release(1)
 
 	ds.SetActive()
 	ptr, answer, err := Reverse(ip)
@@ -451,7 +437,6 @@ func (ds *DNSService) wildcardTestResults(sub string) []DNSAnswer {
 		return nil
 	}
 	// Check if the name resolves
-	MaxConnections.Acquire(3)
 	if a, err := Resolve(name, "CNAME"); err == nil {
 		answers = append(answers, a...)
 	}
@@ -461,7 +446,6 @@ func (ds *DNSService) wildcardTestResults(sub string) []DNSAnswer {
 	if a, err := Resolve(name, "AAAA"); err == nil {
 		answers = append(answers, a...)
 	}
-	MaxConnections.Release(3)
 
 	if len(answers) == 0 {
 		return nil
