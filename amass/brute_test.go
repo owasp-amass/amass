@@ -5,6 +5,7 @@ package amass
 
 import (
 	"testing"
+	"time"
 
 	"github.com/OWASP/Amass/amass/utils"
 )
@@ -24,29 +25,24 @@ func TestBruteForceService(t *testing.T) {
 	defer e.bruteService.Stop()
 	e.nameService.Start()
 	defer e.nameService.Stop()
+	timer := time.NewTicker(time.Millisecond * 400)
+	defer timer.Stop()
 
-	// Setup the results we expect to see
+	expected := len(e.Config.Wordlist) * len(domains)
 	results := make(map[string]int)
-	for _, domain := range domains {
-		for _, word := range e.Config.Wordlist {
-			results[word+"."+domain] = 0
+
+loop:
+	for {
+		select {
+		case res := <-e.Output:
+			results[res.Name]++
+		case <-timer.C:
+			// break on a max 400 ms for this test
+			break loop
 		}
 	}
 
-	num := len(results)
-	for i := 0; i < num; i++ {
-		res := <-e.Output
-		results[res.Name]++
+	if expected != len(results) {
+		t.Errorf("BruteForce should have returned %d names, yet returned %d instead", expected, len(results))
 	}
-
-	if num != len(results) {
-		t.Errorf("BruteForce should have returned %d names, yet returned %d instead", num, len(results))
-	}
-
-	for name, times := range results {
-		if times != 1 {
-			t.Errorf("BruteForce returned a subdomain name, %s, %d number of times", name, times)
-		}
-	}
-
 }
