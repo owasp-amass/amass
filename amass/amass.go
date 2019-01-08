@@ -284,7 +284,7 @@ func (e *Enumeration) NewSubdomainEvent(req *Request, times int) {
 		return
 	}
 
-	if e.Config.BruteForcing && e.Config.Recursive {
+	if e.Config.BruteForcing && e.Config.Recursive && e.Config.MinForRecursive > 0 {
 		go e.bruteService.NewSubdomain(req, times)
 	}
 	go e.dnsService.NewSubdomain(req, times)

@@ -51,7 +51,7 @@ func (bfs *BruteForceService) processRequests() {
 }
 
 func (bfs *BruteForceService) goodRequest(req *Request) bool {
-	if !bfs.Enum().Config.BruteForcing || !bfs.Enum().Config.Recursive {
+	if !bfs.Enum().Config.BruteForcing {
 		return false
 	}
 
