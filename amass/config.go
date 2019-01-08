@@ -112,6 +112,13 @@ func (c *Config) DomainRegex(domain string) *regexp.Regexp {
 	return nil
 }
 
+// AddDomains appends the domain names provided in the parameter to the list in the configuration.
+func (c *Config) AddDomains(domains []string) {
+	for _, d := range domains {
+		c.AddDomain(d)
+	}
+}
+
 // AddDomain appends the domain name provided in the parameter to the list in the configuration.
 func (c *Config) AddDomain(domain string) {
 	c.Lock()
@@ -151,7 +158,7 @@ func (c *Config) IsDomainInScope(name string) bool {
 	return discovered
 }
 
-// WhichDomain returns the domain in the config list that the DNS name in the parameter end with.
+// WhichDomain returns the domain in the config list that the DNS name in the parameter ends with.
 func (c *Config) WhichDomain(name string) string {
 	n := strings.TrimSpace(name)
 

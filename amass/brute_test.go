@@ -3,47 +3,46 @@
 
 package amass
 
-/*
 import (
 	"testing"
+	"time"
+
+	"github.com/OWASP/Amass/amass/utils"
 )
 
 func TestBruteForceService(t *testing.T) {
 	domains := []string{"claritysec.com", "twitter.com", "google.com", "github.com"}
 
-	config := CustomConfig(&AmassConfig{
-		Wordlist:     []string{"foo", "bar"},
-		BruteForcing: true,
-	})
-	config.AddDomains(domains)
-	srv := NewBruteForceService(config)
-	srv.Start()
+	e := NewEnumeration()
 
-	// Setup the results we expect to see
+	e.Config.Wordlist = []string{"foo", "bar"}
+	e.Config.BruteForcing = true
+	e.Config.Passive = true
+	e.Config.AddDomains(domains)
+	e.MaxFlow = utils.NewTimedSemaphore(e.Config.Timing.ToMaxFlow(), e.Config.Timing.ToReleaseDelay())
+
+	e.bruteService.Start()
+	defer e.bruteService.Stop()
+	e.nameService.Start()
+	defer e.nameService.Stop()
+
+	expected := len(e.Config.Wordlist) * len(domains)
 	results := make(map[string]int)
-	for _, domain := range domains {
-		for _, word := range config.Wordlist {
-			results[word+"."+domain] = 0
+
+	timer := time.NewTimer(time.Second)
+	defer timer.Stop()
+loop:
+	for {
+		select {
+		case res := <-e.Output:
+			results[res.Name]++
+		case <-timer.C:
+			// break on a max 1s for this test
+			break loop
 		}
 	}
 
-	num := len(results)
-	for i := 0; i < num; i++ {
-		req := <-out
-
-		results[req.Name]++
+	if expected != len(results) {
+		t.Errorf("BruteForce should have returned %d names, yet returned %d instead", expected, len(results))
 	}
-
-	if num != len(results) {
-		t.Errorf("BruteForce should have returned %d names, yet returned %d instead", num, len(results))
-	}
-
-	for name, times := range results {
-		if times != 1 {
-			t.Errorf("BruteForce returned a subdomain name, %s, %d number of times", name, times)
-		}
-	}
-
-	srv.Stop()
 }
-*/

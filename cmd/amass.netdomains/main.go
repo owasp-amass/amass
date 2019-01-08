@@ -119,7 +119,6 @@ func getWhoisDomains(d string) {
 
 func performAllReverseDNS(ips []net.IP) {
 	for _, ip := range ips {
-		amass.MaxConnections.Acquire(1)
 		started <- struct{}{}
 
 		go func(ip net.IP) {
@@ -128,7 +127,6 @@ func performAllReverseDNS(ips []net.IP) {
 					results <- d
 				}
 			}
-			amass.MaxConnections.Release(1)
 			done <- struct{}{}
 		}(ip)
 	}
@@ -138,7 +136,6 @@ func pullAllCertificates(ips []net.IP, ports parseInts) {
 	maxPulls := utils.NewSimpleSemaphore(100)
 
 	for _, ip := range ips {
-		amass.MaxConnections.Acquire(1)
 		maxPulls.Acquire(1)
 		started <- struct{}{}
 
@@ -153,7 +150,6 @@ func pullAllCertificates(ips []net.IP, ports parseInts) {
 				}
 			}
 			maxPulls.Release(1)
-			amass.MaxConnections.Release(1)
 			done <- struct{}{}
 		}(ip)
 	}
