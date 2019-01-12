@@ -7,14 +7,14 @@
 [![Go Version](https://img.shields.io/badge/go-1.10-blue.svg)](https://golang.org/dl/) 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0) 
 [![Contribute Yes](https://img.shields.io/badge/contribute-yes-brightgreen.svg)](https://github.com/OWASP/Amass/blob/master/CONTRIBUTING.md) 
-[![Chat on Discord](https://img.shields.io/discord/433729817918308352.svg?logo=discord)](https://discord.gg/rtN8GMd) 
+[![Packaging status](https://repology.org/badge/vertical-allrepos/amass.svg)](https://repology.org/metapackage/amass/versions) 
 
 
 ----
 
 
 <p align="center">
-  <img alt="DNS Enumeration" src="https://github.com/OWASP/Amass/blob/master/images/amass.gif" width="656" height="702" />
+  <img alt="DNS Enumeration" src="https://github.com/OWASP/Amass/blob/master/images/amass.gif" width="577" height="685" />
 </p>
 
 
@@ -27,30 +27,14 @@ The OWASP Amass tool suite obtains subdomain names by scraping data sources, rec
 
 ## How to Install
 
-
 #### Prebuilt
 
-[![Packaging status](https://repology.org/badge/vertical-allrepos/amass.svg)](https://repology.org/metapackage/amass/versions) 
-
 A [precompiled version is available](https://github.com/OWASP/Amass/releases) for each release.
-
-If you are on a distribution such as **Kali Linux**, and have never used snap previously, follow these steps to access snap packages:
-```
-$ sudo apt install snapd
-
-$ sudo systemctl start snapd
-```
-
-Add the snap binaries to your PATH using a method similar to the following:
-```
-$ export PATH=$PATH:/snap/bin
-```
 
 If your operating environment supports [Snap](https://docs.snapcraft.io/core/install), you can [click here to install](https://snapcraft.io/amass), or perform the following from the command-line:
 ```
 $ sudo snap install amass
 ```
-
 
 Periodically, execute the following command to update all your snap packages:
 ```
@@ -71,9 +55,9 @@ sudo docker run amass --passive -d example.com
 
 #### From Source
 
-If you would prefer to build your own binary from the latest version of the source code, make sure you have a correctly configured **Go >= 1.10** environment. More information about how to achieve this can be found [on the golang website.](https://golang.org/doc/install) Then, take the following steps:
+If you prefer to build your own binary from the latest release of the source code, make sure you have a correctly configured **Go >= 1.10** environment. More information about how to achieve this can be found [on the golang website.](https://golang.org/doc/install) Then, take the following steps:
 
-1. Download [amass](https://github.com/OWASP/Amass/releases):
+1. Download OWASP Amass:
 ```
 $ go get -u github.com/OWASP/Amass/...
 ```
@@ -92,6 +76,7 @@ At this point, the binaries should be in *$GOPATH/bin*.
 $ ls $GOPATH/src/github.com/OWASP/Amass/wordlists/
 ```
 
+
 ## Documentation
 
 Go to the [User's Guide](https://github.com/OWASP/Amass/blob/master/doc/user_guide.md) for additional information.
@@ -99,12 +84,12 @@ Go to the [User's Guide](https://github.com/OWASP/Amass/blob/master/doc/user_gui
 
 ## Community
 
-[![Chat on Discord](https://img.shields.io/discord/433729817918308352.svg?logo=discord)](https://discord.gg/rtN8GMd) 
+Join our Discord server: [![Chat on Discord](https://img.shields.io/discord/433729817918308352.svg?logo=discord)](https://discord.gg/rtN8GMd) 
 
 
 ### Project Lead
 
-Jeff Foley [![Follow on Twitter](https://img.shields.io/twitter/follow/jeff_foley.svg?logo=twitter)](https://twitter.com/jeff_foley) 
+[![Follow on Twitter](https://img.shields.io/twitter/follow/jeff_foley.svg?logo=twitter)](https://twitter.com/jeff_foley) 
 
  - OWASP: [Caffix](https://www.owasp.org/index.php/User:Caffix)
  - GitHub: [@caffix](https://github.com/caffix)

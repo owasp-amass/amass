@@ -80,18 +80,18 @@ func (s *Shodan) executeQuery(domain string) {
 		return
 	}
 	// Extract the subdomain names from the REST API results
-	var matches struct {
+	var m struct {
 		Matches []struct {
 			Hostnames []string `json:"hostnames"`
 		} `json:"matches"`
 	}
-	if err := json.Unmarshal([]byte(page), &matches); err != nil {
+	if err := json.Unmarshal([]byte(page), &m); err != nil {
 		return
 	}
 
 	s.SetActive()
 	re := s.Enum().Config.DomainRegex(domain)
-	for _, match := range matches.Matches {
+	for _, match := range m.Matches {
 		for _, host := range match.Hostnames {
 			if !re.MatchString(host) {
 				continue

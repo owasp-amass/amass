@@ -5,21 +5,9 @@ package amass
 
 import (
 	"encoding/json"
-	"io"
-	"strings"
 
 	"github.com/OWASP/Amass/amass/utils"
 )
-
-type crtData struct {
-	IssuerID          int    `json:"issuer_ca_id"`
-	IssuerName        string `json:"issuer_name"`
-	Name              string `json:"name_value"`
-	MinCertID         int    `json:"min_cert_id"`
-	MinEntryTimestamp string `json:"min_entry_timestamp"`
-	NotBefore         string `json:"not_before"`
-	NotAfter          string `json:"not_after"`
-}
 
 // Crtsh is the Service that handles access to the Crtsh data source.
 type Crtsh struct {
@@ -75,18 +63,16 @@ func (c *Crtsh) executeQuery(domain string) {
 	}
 
 	c.SetActive()
-	lines := json.NewDecoder(strings.NewReader(page))
-	for {
-		var line crtData
-		if err := lines.Decode(&line); err == io.EOF {
-			break
-		} else if err != nil {
-			c.Enum().Log.Printf("%s: %s: %v", c.String(), url, err)
-			continue
-		}
-
+	// Extract the subdomain names from the results
+	var results []struct {
+		Name string `json:"name_value"`
+	}
+	if err := json.Unmarshal([]byte(page), &results); err != nil {
+		return
+	}
+	for _, line := range results {
 		c.Enum().NewNameEvent(&Request{
-			Name:   cleanName(line.Name),
+			Name:   line.Name,
 			Domain: domain,
 			Tag:    c.SourceType,
 			Source: c.String(),
