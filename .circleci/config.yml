@@ -5,19 +5,11 @@ version: 2
 jobs:
   test:
     docker:
-      # specify the version
       - image: circleci/golang:1.11.4
-      
-      # Specify service dependencies here if necessary
-      # CircleCI maintains a library of pre-built images
-      # documented at https://circleci.com/docs/2.0/circleci-images/
-      # - image: circleci/postgres:9.4
 
     working_directory: /go/src/github.com/OWASP/Amass
     steps:
       - checkout
-
-      # specify any bash command here prefixed with `run: `
       - run:
           name: "Test Amass"
           command: |
@@ -25,7 +17,19 @@ jobs:
             cd amass
             go test -v -race ./...
 
-  build:
+  binaries:
+    docker:
+      - image: circleci/golang:1.11.4
+
+    working_directory: /go/src/github.com/OWASP/Amass
+    steps:
+      - checkout
+      - run:
+          name: "Build Amass Binaries"
+          command: |
+            curl -sL https://git.io/goreleaser | bash
+
+  buildsnap:
     docker:
       - image: snapcore/snapcraft:stable
 
@@ -34,21 +38,21 @@ jobs:
       - checkout
 
       - run:
-          name: "Build Snap"
+          name: "Build Snap Package"
           command: apt update && snapcraft
       - persist_to_workspace:
           root: .
           paths:
             - "*.snap"
 
-  publish:
+  pubsnap:
     docker:
       - image: snapcore/snapcraft:stable
     steps:
       - attach_workspace:
           at: .
       - run:
-          name: "Publish to Store"
+          name: "Publish to Snap Store"
           command: |
             mkdir .snapcraft
             echo $SNAPCRAFT_LOGIN_FILE | base64 --decode --ignore-garbage > .snapcraft/snapcraft.cfg
@@ -59,15 +63,21 @@ workflows:
   main:
     jobs:
       - test
-      - build:
+      - binaries:
           requires:
             - test
           filters:
             branches:
               only: master
-      - publish:
+      - buildsnap:
           requires:
-            - build
+            - test
+          filters:
+            branches:
+              only: master
+      - pubsnap:
+          requires:
+            - buildsnap
           filters:
             branches:
               only: master

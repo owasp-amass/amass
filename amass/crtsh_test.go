@@ -3,13 +3,16 @@
 
 package amass
 
-/*
 import (
 	"sync"
 	"testing"
+	"time"
 )
 
 func TestCrtsh(t *testing.T) {
+	if *datasources == false {
+		return
+	}
 
 	expected := 100
 	e := NewEnumeration()
@@ -19,17 +22,23 @@ func TestCrtsh(t *testing.T) {
 	e.Config.AddDomain("letsencrypt.owasp-amass.com")
 	e.dataSources = []Service{NewCrtsh(e)}
 
-	results := make(map[string]bool)
+	results := make(map[string]struct{})
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		for {
-			req, ok := <-e.Output
-			if !ok {
-				break
-			}
-			results[req.Name] = true
+		t := time.NewTimer(10 * time.Second)
+		defer t.Stop()
 
+		for {
+			select {
+			case req := <-e.Output:
+				results[req.Name] = struct{}{}
+				if expected == len(results) {
+					return
+				}
+			case <-t.C:
+				return
+			}
 		}
 	}()
 
@@ -39,6 +48,4 @@ func TestCrtsh(t *testing.T) {
 	if expected != len(results) {
 		t.Errorf("Found %d names, expected %d instead", len(results), expected)
 	}
-
 }
-*/
