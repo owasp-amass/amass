@@ -82,7 +82,7 @@ var (
 	// Command-line switches and provided parameters
 	help          = flag.Bool("h", false, "Show the program usage message")
 	list          = flag.Bool("list", false, "Print the names of all available data sources")
-	version       = flag.Bool("version", false, "Print the version number of this amass binary")
+	vprint        = flag.Bool("version", false, "Print the version number of this amass binary")
 	config        = flag.String("config", "", "Path to the INI configuration file. Additional details below")
 	unresolved    = flag.Bool("include-unresolvable", false, "Output DNS names that did not resolve")
 	ips           = flag.Bool("ip", false, "Show the IP addresses for discovered names")
@@ -143,7 +143,7 @@ func main() {
 		}
 		return
 	}
-	if *version {
+	if *vprint {
 		fmt.Fprintf(color.Error, "version %s\n", amass.Version)
 		return
 	}
