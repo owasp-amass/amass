@@ -124,12 +124,12 @@ func NewEnumeration() *Enumeration {
 		Config:            new(Config),
 		Graph:             NewGraph(),
 		Output:            make(chan *Output, 100),
-		Done:              make(chan struct{}),
+		Done:              make(chan struct{}, 2),
 		Log:               log.New(ioutil.Discard, "", 0),
 		trustedNameFilter: utils.NewStringFilter(),
 		otherNameFilter:   utils.NewStringFilter(),
-		pause:             make(chan struct{}),
-		resume:            make(chan struct{}),
+		pause:             make(chan struct{}, 2),
+		resume:            make(chan struct{}, 2),
 	}
 	enum.nameService = NewNameService(enum)
 	enum.addrService = NewAddressService(enum)
@@ -195,7 +195,7 @@ loop:
 			}
 
 			if done {
-				break loop
+				close(e.Done)
 			}
 		}
 	}
@@ -203,7 +203,6 @@ loop:
 	for _, srv := range services {
 		srv.Stop()
 	}
-	time.Sleep(2 * time.Second)
 	close(e.Output)
 	return nil
 }
@@ -347,7 +346,12 @@ func (e *Enumeration) ActiveCertEvent(req *Request) {
 
 // OutputEvent sends enumeration output to the package API caller.
 func (e *Enumeration) OutputEvent(out *Output) {
-	e.Output <- out
+	select {
+	case <-e.Done:
+		return
+	default:
+		e.Output <- out
+	}
 }
 
 // TrustedTag returns true when the tag parameter is of a type that should be trusted even

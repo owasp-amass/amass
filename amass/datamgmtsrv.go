@@ -69,7 +69,7 @@ func (dms *DataManagerService) sendOutput() {
 	if out := dms.Enum().Graph.GetNewOutput(); len(out) > 0 {
 		for _, o := range out {
 			if !dms.filter.Duplicate(o.Name) && dms.Enum().Config.IsDomainInScope(o.Name) {
-				dms.Enum().OutputEvent(o)
+				go dms.Enum().OutputEvent(o)
 			}
 		}
 	}
