@@ -3,13 +3,7 @@
 
 package amass
 
-import (
-	"testing"
-	"time"
-
-	"github.com/OWASP/Amass/amass/utils"
-)
-
+/*
 func TestBruteForceService(t *testing.T) {
 	domains := []string{"claritysec.com", "twitter.com", "google.com", "github.com"}
 
@@ -19,7 +13,7 @@ func TestBruteForceService(t *testing.T) {
 	e.Config.BruteForcing = true
 	e.Config.Passive = true
 	e.Config.AddDomains(domains)
-	e.MaxFlow = utils.NewTimedSemaphore(e.Config.Timing.ToMaxFlow(), e.Config.Timing.ToReleaseDelay())
+	e.Config.MaxFlow = utils.NewTimedSemaphore(e.Config.Timing.ToMaxFlow(), e.Config.Timing.ToReleaseDelay())
 
 	e.bruteService.Start()
 	defer e.bruteService.Stop()
@@ -46,3 +40,4 @@ loop:
 		t.Errorf("BruteForce should have returned %d names, yet returned %d instead", expected, len(results))
 	}
 }
+*/

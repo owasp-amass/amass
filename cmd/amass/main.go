@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass"
+	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
 	"github.com/fatih/color"
 )
@@ -93,7 +94,7 @@ var (
 	passive       = flag.Bool("passive", false, "Disable DNS resolution of names and dependent features")
 	noalts        = flag.Bool("noalts", false, "Disable generation of altered names")
 	sources       = flag.Bool("src", false, "Print data sources for the discovered names")
-	timing        = flag.Int("T", int(amass.Normal), "Timing templates 0 (slowest) through 5 (fastest)")
+	timing        = flag.Int("T", int(core.Normal), "Timing templates 0 (slowest) through 5 (fastest)")
 	wordlist      = flag.String("w", "", "Path to a different wordlist file")
 	allpath       = flag.String("oA", "", "Path prefix used for naming all output files")
 	logpath       = flag.String("log", "", "Path to the log file where errors will be written")
@@ -178,7 +179,7 @@ func main() {
 	}
 	// Check if a config file was provided that has DNS resolvers specified
 	if *config != "" {
-		if r, err := amass.GetResolversFromSettings(*config); err == nil {
+		if r, err := core.GetResolversFromSettings(*config); err == nil {
 			resolvers = utils.UniqueAppend(resolvers, r...)
 		}
 	}
@@ -211,7 +212,7 @@ func main() {
 	}
 	rLog, wLog := io.Pipe()
 	enum := amass.NewEnumeration()
-	enum.Log = log.New(wLog, "", log.Lmicroseconds)
+	enum.Config.Log = log.New(wLog, "", log.Lmicroseconds)
 	enum.Config.Wordlist = words
 	enum.Config.BruteForcing = *brute
 	enum.Config.Recursive = recursive
@@ -219,7 +220,7 @@ func main() {
 	enum.Config.Active = *active
 	enum.Config.IncludeUnresolvable = *unresolved
 	enum.Config.Alterations = alts
-	enum.Config.Timing = amass.EnumerationTiming(*timing)
+	enum.Config.Timing = core.EnumerationTiming(*timing)
 	enum.Config.Passive = *passive
 	enum.Config.Blacklist = blacklist
 	enum.Config.DisabledDataSources = compileDisabledSources(enum, included, excluded)
@@ -250,7 +251,7 @@ func main() {
 			fileptr.Sync()
 			fileptr.Close()
 		}()
-		enum.DataOptsWriter = fileptr
+		enum.Config.DataOptsWriter = fileptr
 	}
 
 	finished = make(chan struct{})
@@ -438,7 +439,7 @@ func writeLogsAndMessages(logs *io.PipeReader, logfile string) {
 	}
 }
 
-func writeJSONData(f *os.File, result *amass.Output) {
+func writeJSONData(f *os.File, result *core.Output) {
 	save := &jsonSave{
 		Name:   result.Name,
 		Domain: result.Domain,
@@ -478,7 +479,7 @@ func printBanner() {
 	y.Fprintf(color.Error, "%s\n\n\n", desc)
 }
 
-func resultToLine(result *amass.Output, params *outputParams) (string, string, string, string) {
+func resultToLine(result *core.Output, params *outputParams) (string, string, string, string) {
 	var source, comma, ips string
 
 	if params.PrintSrc {
@@ -555,7 +556,7 @@ func manageOutput(params *outputParams) {
 	close(finished)
 }
 
-func updateData(output *amass.Output, tags map[string]int, asns map[int]*asnData) {
+func updateData(output *core.Output, tags map[string]int, asns map[int]*asnData) {
 	tags[output.Tag]++
 
 	// Update the ASN information

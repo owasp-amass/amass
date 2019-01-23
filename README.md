@@ -109,6 +109,7 @@ This project improves thanks to all the people who contribute:
 
 ## Mentions
 
+- [A More Advanced Recon Automation #1 (Subdomains)](https://poc-server.com/blog/2019/01/18/advanced-recon-subdomains/)
 - [Abusing access control on a large online e-commerce site to register as supplier](https://medium.com/@fbotes2/governit-754becf85cbc)
 - [Black Hat Training, Making the Cloud Rain Shells!: Discovery and Recon](https://www.blackhat.com/eu-18/training/schedule/index.html#aws--azure-exploitation-making-the-cloud-rain-shells-11060)
 - [Subdomains Enumeration Cheat Sheet](https://pentester.land/cheatsheets/2018/11/14/subdomains-enumeration-cheatsheet.html)

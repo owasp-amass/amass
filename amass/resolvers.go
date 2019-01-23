@@ -12,14 +12,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
 	"github.com/miekg/dns"
-)
-
-const (
-	// NumOfResolutions is equal to the maximum queries to
-	// be sent to a single resolver at any given moment
-	NumOfResolutions int = 1000000
 )
 
 var (
@@ -52,7 +47,7 @@ type resolveRequest struct {
 }
 
 type resolveResult struct {
-	Records []DNSAnswer
+	Records []core.DNSAnswer
 	Again   bool
 	Err     error
 }
@@ -60,13 +55,13 @@ type resolveResult struct {
 type resolver struct {
 	sync.Mutex
 	Address        string
-	MaxResolutions utils.Semaphore
-	ExchangeTimes  chan time.Time
-	ErrorTimes     chan time.Time
+	Available      bool
+	ExchangeTimes  *utils.Queue
+	ErrorTimes     *utils.Queue
 	WindowDuration time.Duration
 	Dialer         *net.Dialer
 	Conn           net.Conn
-	XchgChan       chan *resolveRequest
+	XchgQueue      *utils.Queue
 	Xchgs          map[uint16]*resolveRequest
 	Done           chan struct{}
 }
@@ -80,15 +75,15 @@ func newResolver(addr string) *resolver {
 
 	r := &resolver{
 		Address:        addr,
-		MaxResolutions: utils.NewSimpleSemaphore(NumOfResolutions),
-		ExchangeTimes:  make(chan time.Time, int(float32(NumOfResolutions)*1.5)),
-		ErrorTimes:     make(chan time.Time, int(float32(NumOfResolutions)*1.5)),
-		WindowDuration: time.Second,
+		Available:      true,
+		ExchangeTimes:  utils.NewQueue(),
+		ErrorTimes:     utils.NewQueue(),
+		WindowDuration: 2 * time.Second,
 		Dialer:         d,
 		Conn:           conn,
-		XchgChan:       make(chan *resolveRequest, NumOfResolutions),
+		XchgQueue:      utils.NewQueue(),
 		Xchgs:          make(map[uint16]*resolveRequest),
-		Done:           make(chan struct{}),
+		Done:           make(chan struct{}, 2),
 	}
 	go r.monitorPerformance()
 	go r.checkForTimeouts()
@@ -145,7 +140,6 @@ func (r *resolver) checkForTimeouts() {
 			r.Unlock()
 
 			for _, req := range timeouts {
-				r.ErrorTimes <- now
 				req.Result <- &resolveResult{
 					Records: nil,
 					Again:   true,
@@ -156,37 +150,101 @@ func (r *resolver) checkForTimeouts() {
 	}
 }
 
-func (r *resolver) resolve(name string, qtype uint16) ([]DNSAnswer, bool, error) {
-	defer r.MaxResolutions.Release(1)
-
+func (r *resolver) resolve(name string, qtype uint16) ([]core.DNSAnswer, bool, error) {
 	resultChan := make(chan *resolveResult)
-	r.XchgChan <- &resolveRequest{
+	r.XchgQueue.Append(&resolveRequest{
 		Name:   name,
 		Qtype:  qtype,
 		Result: resultChan,
-	}
-
+	})
 	result := <-resultChan
 	return result.Records, result.Again, result.Err
 }
 
 // exchanges encapsulates miekg/dns usage
 func (r *resolver) exchanges() {
+	curIdx := 0
+	maxIdx := 2
+	delays := []int{50, 75, 100}
 	co := &dns.Conn{Conn: r.Conn}
-	msgs := make(chan *dns.Msg, NumOfResolutions)
+	msgs := make(chan *dns.Msg, 1000)
 	go r.readMessages(co, msgs)
 
 	for {
 		select {
 		case <-r.Done:
 			return
-		case req := <-r.XchgChan:
+		case read := <-msgs:
+			curIdx = 0
+			req := r.pullRequest(read.MsgHdr.Id)
+			if req == nil {
+				continue
+			}
+			// Check that the query was successful
+			if read.Rcode != dns.RcodeSuccess {
+				var again bool
+				if read.Rcode != 3 {
+					again = true
+					r.ErrorTimes.Append(time.Now())
+				}
+				r.returnRequest(req, &resolveResult{
+					Records: nil,
+					Again:   again,
+					Err:     fmt.Errorf("DNS query for %s, type %d returned error %d", req.Name, req.Qtype, read.Rcode),
+				})
+				continue
+			}
+
+			var answers []core.DNSAnswer
+			for _, a := range extractRawData(read, req.Qtype) {
+				answers = append(answers, core.DNSAnswer{
+					Name: req.Name,
+					Type: int(req.Qtype),
+					TTL:  0,
+					Data: strings.TrimSpace(a),
+				})
+			}
+			if len(answers) == 0 {
+				r.returnRequest(req, &resolveResult{
+					Records: nil,
+					Again:   false,
+					Err:     fmt.Errorf("DNS query for %s, type %d returned 0 records", req.Name, req.Qtype),
+				})
+				continue
+			}
+			r.returnRequest(req, &resolveResult{
+				Records: answers,
+				Again:   false,
+				Err:     nil,
+			})
+		default:
+			r.Lock()
+			avail := r.Available
+			r.Unlock()
+			if !avail {
+				time.Sleep(time.Duration(delays[curIdx]) * time.Millisecond)
+				if curIdx < maxIdx {
+					curIdx++
+				}
+				continue
+			}
+			element, ok := r.XchgQueue.Next()
+			if !ok {
+				time.Sleep(time.Duration(delays[curIdx]) * time.Millisecond)
+				if curIdx < maxIdx {
+					curIdx++
+				}
+				continue
+			}
+			curIdx = 0
+
+			req := element.(*resolveRequest)
 			msg := queryMessage(req.Name, req.Qtype)
-			r.ExchangeTimes <- time.Now()
+			r.ExchangeTimes.Append(time.Now())
 
 			co.SetWriteDeadline(time.Now().Add(r.WindowDuration))
 			if err := co.WriteMsg(msg); err != nil {
-				r.ErrorTimes <- time.Now()
+				r.ErrorTimes.Append(time.Now())
 				req.Result <- &resolveResult{
 					Records: nil,
 					Again:   true,
@@ -196,51 +254,12 @@ func (r *resolver) exchanges() {
 			}
 			req.Timestamp = time.Now()
 			r.queueRequest(msg.MsgHdr.Id, req)
-		case read := <-msgs:
-			req := r.pullRequest(read.MsgHdr.Id)
-			if req == nil {
-				continue
-			}
-			// Check that the query was successful
-			if read.Rcode != dns.RcodeSuccess {
-				again := true
-				if read.Rcode == 3 {
-					again = false
-				}
-				req.Result <- &resolveResult{
-					Records: nil,
-					Again:   again,
-					Err: fmt.Errorf(
-						"DNS query for %s, type %d returned error %d",
-						req.Name, req.Qtype, read.Rcode),
-				}
-				continue
-			}
-
-			var answers []DNSAnswer
-			for _, a := range extractRawData(read, req.Qtype) {
-				answers = append(answers, DNSAnswer{
-					Name: req.Name,
-					Type: int(req.Qtype),
-					TTL:  0,
-					Data: strings.TrimSpace(a),
-				})
-			}
-			if len(answers) == 0 {
-				req.Result <- &resolveResult{
-					Records: nil,
-					Again:   false,
-					Err:     fmt.Errorf("DNS query for %s, type %d returned 0 records", req.Name, req.Qtype),
-				}
-				continue
-			}
-			req.Result <- &resolveResult{
-				Records: answers,
-				Again:   false,
-				Err:     nil,
-			}
 		}
 	}
+}
+
+func (r *resolver) returnRequest(req *resolveRequest, res *resolveResult) {
+	req.Result <- res
 }
 
 func (r *resolver) readMessages(co *dns.Conn, msgs chan *dns.Msg) {
@@ -251,7 +270,7 @@ func (r *resolver) readMessages(co *dns.Conn, msgs chan *dns.Msg) {
 		default:
 			rd, err := co.ReadMsg()
 			if rd == nil || err != nil {
-				r.ErrorTimes <- time.Now()
+				r.ErrorTimes.Append(time.Now())
 				continue
 			}
 			msgs <- rd
@@ -260,79 +279,93 @@ func (r *resolver) readMessages(co *dns.Conn, msgs chan *dns.Msg) {
 }
 
 func (r *resolver) monitorPerformance() {
-	var count int
-	var xchgWin, errWin []time.Time
-
-	// Start off with a reasonable load to the
-	// network, and adjust based on performance
-	count = NumOfResolutions - 1000
-	r.MaxResolutions.Acquire(count)
-
 	t := time.NewTicker(r.WindowDuration)
 	defer t.Stop()
-
 	for {
 		select {
 		case <-r.Done:
 			return
-		case xchg := <-r.ExchangeTimes:
-			xchgWin = append(xchgWin, xchg)
-		case err := <-r.ErrorTimes:
-			errWin = append(errWin, err)
 		case <-t.C:
-			total := len(xchgWin)
-			if total < 1000 {
-				continue
-			}
+			now := time.Now()
+			xchgWin := timesQueueElements(r.ExchangeTimes, now)
+			errWin := timesQueueElements(r.ErrorTimes, now)
 			// Check if we must reduce the number of simultaneous connections
+			total := len(xchgWin)
 			failures := len(errWin)
-			potential := NumOfResolutions - count
-			delta := 50
-			alt := (NumOfResolutions - count) / 10
-			if alt > delta {
-				delta = alt
-			}
 			// Reduce if the percentage of timed out connections is too high
-			if result := analyzeConnResults(total, failures); result == 1 {
-				count -= delta
-				r.MaxResolutions.Release(delta)
-			} else if result == -1 && (potential-delta) > 0 {
-				count += delta
-				go r.MaxResolutions.Acquire(delta)
-			}
-			// Remove all the old slice elements
-			xchgWin = []time.Time{}
-			errWin = []time.Time{}
+			avail := r.analyzeConnResults(total, failures)
+			r.Lock()
+			r.Available = avail
+			r.Unlock()
 		}
 	}
 }
 
-func analyzeConnResults(total, failures int) int {
-	if failures == 0 {
-		return 1
+func (r *resolver) analyzeConnResults(total, failures int) bool {
+	if total < 100 || failures == 0 {
+		return true
 	}
 	frac := float64(total) / float64(failures)
 	if frac == 0 {
-		return -1
+		return false
 	}
 	percent := float64(100) / frac
-	if percent >= 5.0 {
-		return -1
-	} else if percent < 5.0 {
-		return 1
+	if percent > 10.0 {
+		return false
+	} else if percent <= 10.0 {
+		return true
 	}
-	return 0
+	return true
+}
+
+func timesQueueElements(queue *utils.Queue, end time.Time) []time.Time {
+	var entries []time.Time
+
+	for {
+		element, ok := queue.Next()
+		if !ok {
+			break
+		}
+		t := element.(time.Time)
+		if t.After(end) {
+			break
+		}
+		entries = append(entries, t)
+	}
+	return entries
 }
 
 // nextResolver requests the next DNS resolution server
 func nextResolver() *resolver {
+	curIdx := 0
+	maxIdx := 7
+	delays := []int{250, 500, 750, 1000, 1250, 1500, 1750, 2000}
+
 	for {
 		rnd := rand.Int()
 		r := resolvers[rnd%len(resolvers)]
 
-		if r.MaxResolutions.TryAcquire(1) {
+		r.Lock()
+		avail := r.Available
+		r.Unlock()
+		if avail {
 			return r
 		}
+
+		if curIdx < maxIdx {
+			curIdx++
+		} else {
+			for _, r := range resolvers {
+				r.Lock()
+				avail := r.Available
+				r.Unlock()
+
+				if avail {
+					return r
+				}
+			}
+		}
+		time.Sleep(time.Duration(delays[curIdx]) * time.Millisecond)
 	}
 }
 
@@ -354,35 +387,27 @@ func SetCustomResolvers(res []string) {
 		if len(parts) == 1 && parts[0] == addr {
 			addr += ":53"
 		}
-
 		resolvers = append(resolvers, newResolver(addr))
 	}
 }
 
 // Resolve allows all components to make DNS requests without using the DNSService object
-func Resolve(name, qtype string) ([]DNSAnswer, error) {
+func Resolve(name, qtype string) ([]core.DNSAnswer, error) {
 	qt, err := textToTypeNum(qtype)
 	if err != nil {
 		return nil, err
 	}
 
-	tries := 3
-	if qtype == "NS" || qtype == "MX" || qtype == "SOA" || qtype == "SPF" {
-		tries = 7
-	} else if qtype == "TXT" {
-		tries = 10
-	}
-
 	var again bool
-	var ans []DNSAnswer
-	for i := 0; i < tries; i++ {
+	var ans []core.DNSAnswer
+	for i := 0; i < 10; i++ {
 		r := nextResolver()
 
 		ans, again, err = r.resolve(name, qt)
 		if !again {
 			break
 		}
-		time.Sleep(time.Duration(i) * time.Second)
+		time.Sleep(time.Duration(i+1) * (time.Duration(100) * time.Millisecond))
 	}
 	return ans, err
 }
@@ -463,8 +488,8 @@ func setupOptions() *dns.OPT {
 
 // ZoneTransfer attempts a DNS zone transfer using the server identified in the parameters.
 // The returned slice contains all the records discovered from the zone transfer
-func ZoneTransfer(sub, domain, server string) ([]*Request, error) {
-	var results []*Request
+func ZoneTransfer(sub, domain, server string) ([]*core.Request, error) {
+	var results []*core.Request
 
 	a, err := Resolve(server, "A")
 	if err != nil {
@@ -516,14 +541,14 @@ func ZoneTransfer(sub, domain, server string) ([]*Request, error) {
 // Support functions
 //-------------------------------------------------------------------------------------------------
 
-func getXfrRequests(en *dns.Envelope, domain string) []*Request {
+func getXfrRequests(en *dns.Envelope, domain string) []*core.Request {
 	if en.Error != nil {
 		return nil
 	}
 
-	reqs := make(map[string]*Request)
+	reqs := make(map[string]*core.Request)
 	for _, a := range en.RR {
-		var record DNSAnswer
+		var record core.DNSAnswer
 
 		switch v := a.(type) {
 		case *dns.CNAME:
@@ -577,17 +602,17 @@ func getXfrRequests(en *dns.Envelope, domain string) []*Request {
 		if r, found := reqs[record.Name]; found {
 			r.Records = append(r.Records, record)
 		} else {
-			reqs[record.Name] = &Request{
+			reqs[record.Name] = &core.Request{
 				Name:    record.Name,
 				Domain:  domain,
-				Records: []DNSAnswer{record},
-				Tag:     AXFR,
+				Records: []core.DNSAnswer{record},
+				Tag:     core.AXFR,
 				Source:  "DNS Zone XFR",
 			}
 		}
 	}
 
-	var requests []*Request
+	var requests []*core.Request
 	for _, r := range reqs {
 		requests = append(requests, r)
 	}
