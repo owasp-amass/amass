@@ -64,8 +64,7 @@ var (
 type DNSService struct {
 	core.BaseService
 
-	maxResolutions   utils.Semaphore
-	completions      *utils.Queue
+	queries          *utils.Queue
 	filter           *utils.StringFilter
 	wildcards        map[string]*wildcard
 	wildcardRequests chan wildcardRequest
@@ -75,8 +74,7 @@ type DNSService struct {
 // NewDNSService returns he object initialized, but not yet started.
 func NewDNSService(config *core.Config, bus *core.EventBus) *DNSService {
 	ds := &DNSService{
-		maxResolutions:   utils.NewSimpleSemaphore(1000000),
-		completions:      utils.NewQueue(),
+		queries:          utils.NewQueue(),
 		filter:           utils.NewStringFilter(),
 		wildcards:        make(map[string]*wildcard),
 		wildcardRequests: make(chan wildcardRequest),
@@ -110,8 +108,6 @@ func (ds *DNSService) OnStart() error {
 }
 
 func (ds *DNSService) resolvedName(req *core.Request) {
-	defer ds.sendCompletionTime(time.Now())
-
 	if !TrustedTag(req.Tag) && ds.MatchesWildcard(req) {
 		return
 	}
@@ -126,7 +122,6 @@ func (ds *DNSService) processRequests() {
 		case <-ds.Quit():
 			return
 		case req := <-ds.RequestChan():
-			ds.maxResolutions.Acquire(1)
 			go ds.performRequest(req)
 		}
 	}
@@ -148,23 +143,23 @@ func (ds *DNSService) processMetrics() {
 		case <-ds.Quit():
 			return
 		case <-t.C:
-			perSec = append(perSec, ds.calcCompPerSec(last))
+			perSec = append(perSec, ds.queriesPerSec(last))
 			last = time.Now()
 		case <-logTick.C:
-			ds.logAvgCompPerSec(perSec)
+			ds.logAvgQueriesPerSec(perSec)
 			perSec = []int{}
 		}
 	}
 }
 
-func (ds *DNSService) sendCompletionTime(t time.Time) {
-	ds.completions.Append(t)
+func (ds *DNSService) sendQueryTime(t time.Time) {
+	ds.queries.Append(t)
 }
 
-func (ds *DNSService) calcCompPerSec(last time.Time) int {
+func (ds *DNSService) queriesPerSec(last time.Time) int {
 	var num int
 	for {
-		element, ok := ds.completions.Next()
+		element, ok := ds.queries.Next()
 		if !ok {
 			break
 		}
@@ -176,19 +171,17 @@ func (ds *DNSService) calcCompPerSec(last time.Time) int {
 	return num
 }
 
-func (ds *DNSService) logAvgCompPerSec(perSec []int) {
+func (ds *DNSService) logAvgQueriesPerSec(perSec []int) {
 	var total int
 	for _, s := range perSec {
 		total += s
 	}
 	if num := len(perSec); num > 0 {
-		ds.Config().Log.Printf("Average DNS names processed: %d/sec", total/num)
+		ds.Config().Log.Printf("Average DNS queries performed: %d/sec", total/num)
 	}
 }
 
 func (ds *DNSService) performRequest(req *core.Request) {
-	defer ds.maxResolutions.Release(1)
-
 	if req == nil || req.Name == "" || req.Domain == "" {
 		return
 	}
@@ -196,12 +189,12 @@ func (ds *DNSService) performRequest(req *core.Request) {
 	ds.SetActive()
 	if ds.Config().Blacklisted(req.Name) || (!TrustedTag(req.Tag) &&
 		ds.GetWildcardType(req) == WildcardTypeDynamic) {
-		ds.sendCompletionTime(time.Now())
 		return
 	}
 
 	var answers []core.DNSAnswer
 	for _, t := range InitialQueryTypes {
+		ds.sendQueryTime(time.Now())
 		if a, err := Resolve(req.Name, t); err == nil {
 			if ds.goodDNSRecords(a) {
 				answers = append(answers, a...)
@@ -227,7 +220,6 @@ func (ds *DNSService) performRequest(req *core.Request) {
 				Source: req.Source,
 			})
 		}
-		ds.sendCompletionTime(time.Now())
 		return
 	}
 	ds.resolvedName(req)
@@ -265,6 +257,7 @@ func (ds *DNSService) basicQueries(subdomain, domain string) {
 
 	ds.SetActive()
 	// Obtain the DNS answers for the NS records related to the domain
+	ds.sendQueryTime(time.Now())
 	if ans, err := Resolve(subdomain, "NS"); err == nil {
 		for _, a := range ans {
 			pieces := strings.Split(a.Data, ",")
@@ -281,6 +274,7 @@ func (ds *DNSService) basicQueries(subdomain, domain string) {
 
 	ds.SetActive()
 	// Obtain the DNS answers for the MX records related to the domain
+	ds.sendQueryTime(time.Now())
 	if ans, err := Resolve(subdomain, "MX"); err == nil {
 		for _, a := range ans {
 			answers = append(answers, a)
@@ -291,6 +285,7 @@ func (ds *DNSService) basicQueries(subdomain, domain string) {
 
 	ds.SetActive()
 	// Obtain the DNS answers for the SOA records related to the domain
+	ds.sendQueryTime(time.Now())
 	if ans, err := Resolve(subdomain, "SOA"); err == nil {
 		answers = append(answers, ans...)
 	} else {
@@ -299,6 +294,7 @@ func (ds *DNSService) basicQueries(subdomain, domain string) {
 
 	ds.SetActive()
 	// Obtain the DNS answers for the SPF records related to the domain
+	ds.sendQueryTime(time.Now())
 	if ans, err := Resolve(subdomain, "SPF"); err == nil {
 		answers = append(answers, ans...)
 	} else {
@@ -339,7 +335,7 @@ func (ds *DNSService) queryServiceNames(subdomain, domain string) {
 		if ds.filter.Duplicate(srvName) {
 			continue
 		}
-
+		ds.sendQueryTime(time.Now())
 		if a, err := Resolve(srvName, "SRV"); err == nil {
 			ds.resolvedName(&core.Request{
 				Name:    srvName,
@@ -378,6 +374,7 @@ func (ds *DNSService) reverseDNSSweep(addr string, cidr *net.IPNet) {
 
 func (ds *DNSService) reverseDNSQuery(ip string) {
 	ds.SetActive()
+	ds.sendQueryTime(time.Now())
 	ptr, answer, err := Reverse(ip)
 	if err != nil {
 		return
@@ -521,12 +518,15 @@ func (ds *DNSService) wildcardTestResults(sub string) []core.DNSAnswer {
 		return nil
 	}
 	// Check if the name resolves
+	ds.sendQueryTime(time.Now())
 	if a, err := Resolve(name, "CNAME"); err == nil {
 		answers = append(answers, a...)
 	}
+	ds.sendQueryTime(time.Now())
 	if a, err := Resolve(name, "A"); err == nil {
 		answers = append(answers, a...)
 	}
+	ds.sendQueryTime(time.Now())
 	if a, err := Resolve(name, "AAAA"); err == nil {
 		answers = append(answers, a...)
 	}

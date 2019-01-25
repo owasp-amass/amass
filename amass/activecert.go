@@ -32,7 +32,7 @@ type ActiveCertService struct {
 
 // NewActiveCertService returns he object initialized, but not yet started.
 func NewActiveCertService(config *core.Config, bus *core.EventBus) *ActiveCertService {
-	acs := &ActiveCertService{maxPulls: utils.NewSimpleSemaphore(25)}
+	acs := &ActiveCertService{maxPulls: utils.NewSimpleSemaphore(100)}
 
 	acs.BaseService = *core.NewBaseService(acs, "Active Cert", config, bus)
 	return acs
@@ -42,8 +42,10 @@ func NewActiveCertService(config *core.Config, bus *core.EventBus) *ActiveCertSe
 func (acs *ActiveCertService) OnStart() error {
 	acs.BaseService.OnStart()
 
-	acs.Bus().Subscribe(core.ActiveCertTopic, acs.activeCertEvent)
-	go acs.processRequests()
+	if acs.Config().Active {
+		acs.Bus().Subscribe(core.ActiveCertTopic, acs.SendRequest)
+		go acs.processRequests()
+	}
 	return nil
 }
 
@@ -55,19 +57,13 @@ func (acs *ActiveCertService) processRequests() {
 		case <-acs.Quit():
 			return
 		case req := <-acs.RequestChan():
+			acs.maxPulls.Acquire(1)
 			go acs.performRequest(req)
 		}
 	}
 }
 
-func (acs *ActiveCertService) activeCertEvent(req *core.Request) {
-	if acs.Config().Active {
-		acs.SendRequest(req)
-	}
-}
-
 func (acs *ActiveCertService) performRequest(req *core.Request) {
-	acs.maxPulls.Acquire(1)
 	defer acs.maxPulls.Release(1)
 
 	acs.SetActive()
@@ -78,7 +74,6 @@ func (acs *ActiveCertService) performRequest(req *core.Request) {
 			acs.Bus().Publish(core.NewNameTopic, r)
 		}
 	}
-	acs.SetActive()
 }
 
 // PullCertificateNames attempts to pull a cert from one or more ports on an IP.
