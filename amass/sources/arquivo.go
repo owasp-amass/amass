@@ -52,7 +52,9 @@ func (a *Arquivo) processRequests() {
 		case <-a.Quit():
 			return
 		case req := <-a.RequestChan():
-			a.executeQuery(req.Name, req.Domain)
+			if a.Config().IsDomainInScope(req.Name) {
+				a.executeQuery(req.Name, req.Domain)
+			}
 		}
 	}
 }

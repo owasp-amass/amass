@@ -28,12 +28,18 @@ var (
 		"64.6.64.6:53",      // Verisign
 		"77.88.8.8:53",      // Yandex.DNS
 		"74.82.42.42:53",    // Hurricane Electric
+		"45.77.165.194:53",  // Fourth Estate
+		"91.239.100.100:53", // UncensoredDNS
+		"99.192.182.100:53", // Tenta
 		"1.0.0.1:53",        // Cloudflare Secondary
 		"8.8.4.4:53",        // Google Secondary
 		"9.9.9.10:53",       // Quad9 Secondary
 		"209.244.0.4:53",    // Level3 Secondary
 		"208.67.222.222:53", // OpenDNS Secondary
+		"64.6.65.6:53",      // Verisign Secondary
 		"77.88.8.1:53",      // Yandex.DNS Secondary
+		"89.233.43.71:53",   // UncensoredDNS Secondary
+		"99.192.182.101:53", // Tenta Secondary
 	}
 
 	resolvers []*resolver

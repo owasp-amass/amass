@@ -24,19 +24,20 @@ const (
 )
 
 // Different data operations require different parameters to be provided:
-// Domain: Timestamp, Type, Domain, Tag, and Source
-// Subdomain: Timestamp, Type, Name, Domain, Tag and Source
-// CNAME: Timestamp, Type, Name, Domain, TargetName, TargetDomain, Tag and Source
-// A: Timestamp, Type, Name, Domain, Address, Tag and Source
-// AAAA: Timestamp, Type, Name, Domain, Address, Tag and Source
-// PTR: Timestamp, Type, Name, Domain, TargetName, Tag and Source
-// SRV: Timestamp, Type, Name, Domain, Service, TargetName, Tag and Source
-// NS: Timestamp, Type, Name, Domain, TargetName, TargetDomain, Tag and Source
-// MX: Timestamp, Type, Name, Domain, TargetName, TargetDomain, Tag and Source
-// Infrastructure: Timestamp, Type, Address, ASN, CIDR and Description
+// Domain: UUID, Timestamp, Type, Domain, Tag, and Source
+// Subdomain: UUID, Timestamp, Type, Name, Domain, Tag and Source
+// CNAME: UUID, Timestamp, Type, Name, Domain, TargetName, TargetDomain, Tag and Source
+// A: UUID, Timestamp, Type, Name, Domain, Address, Tag and Source
+// AAAA: UUID, Timestamp, Type, Name, Domain, Address, Tag and Source
+// PTR: UUID, Timestamp, Type, Name, Domain, TargetName, Tag and Source
+// SRV: UUID, Timestamp, Type, Name, Domain, Service, TargetName, Tag and Source
+// NS: UUID, Timestamp, Type, Name, Domain, TargetName, TargetDomain, Tag and Source
+// MX: UUID, Timestamp, Type, Name, Domain, TargetName, TargetDomain, Tag and Source
+// Infrastructure: UUID, Timestamp, Type, Address, ASN, CIDR and Description
 
 // DataOptsParams defines the parameters for Amass data operations.
 type DataOptsParams struct {
+	UUID         string `json:"uuid"`
 	Timestamp    string `json:"timestamp"`
 	Type         string `json:"type"`
 	Name         string `json:"name"`
