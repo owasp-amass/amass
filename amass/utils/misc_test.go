@@ -67,7 +67,6 @@ func TestUniqueAppend(t *testing.T) {
 	}
 	for _, tt := range tests {
 		s := UniqueAppend(tt.orig, tt.event)
-		fmt.Println(s)
 		i := 0
 		for _, x := range s {
 			if x != tt.expected[i] {
