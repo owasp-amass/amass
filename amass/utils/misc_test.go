@@ -12,13 +12,13 @@ func TestSubdomainRegex(t *testing.T) {
 		expected string
 	}{
 
-		{"subdomain", "owasp.org", "subdomain.owasp.org", "subdomain.owasp.org"},
-		{"nested subdomain", "owasp.org", "sub.subdomain.owasp.org", "sub.subdomain.owasp.org"},
-		{"subdomain-dashes", "owasp.org", "sub-domain.owasp.org", "sub-domain.owasp.org"},
-		{"subdomain-dashes", "owasp.org", "sub-d.sub-domain.owasp.org", "sub-d.sub-domain.owasp.org"},
-		{"double period", "owasp.org", "sub..owasp.org", ""},
-		{"wrong domain", "owasp.org", ".sub-d.sub-domain.owasp.com", ""},
-		{"sub end with dash", "owasp.org", "sub-.owasp.org", ""},
+		{"Test1: Subdomain", "owasp.org", "subdomain.owasp.org", "subdomain.owasp.org"},
+		{"Test2: Nested subdomain", "owasp.org", "sub.subdomain.owasp.org", "sub.subdomain.owasp.org"},
+		{"Test3: Subdomain-dashes", "owasp.org", "sub-domain.owasp.org", "sub-domain.owasp.org"},
+		{"Test4: Subdomain-dashes again", "owasp.org", "sub-d.sub-domain.owasp.org", "sub-d.sub-domain.owasp.org"},
+		{"Test5: Double period", "owasp.org", "sub..owasp.org", ""},
+		{"Test6: Wrong domain", "owasp.org", ".sub-d.sub-domain.owasp.com", ""},
+		{"Test7: Sub end with dash", "owasp.org", "sub-.owasp.org", ""},
 	}
 	for _, tt := range tests {
 		s := SubdomainRegex(tt.domain)
@@ -82,10 +82,10 @@ func TestRemoveAsteriskLabel(t *testing.T) {
 		expected string
 	}{
 
-		{"subdomain", "*.subdomain.owasp.org", "subdomain.owasp.org"},
-		{"nested subdomain", "*.subdomain.owasp.org", "subdomain.owasp.org"},
-		{"subdomain-dashes", "*.sub-domain.owasp.org", "sub-domain.owasp.org"},
-		{"subdomain-dashes", "*.sub-d.sub-domain.owasp.org", "sub-d.sub-domain.owasp.org"},
+		{"Test1: Subdomain", "*.subdomain.owasp.org", "subdomain.owasp.org"},
+		{"Test2: Nested subdomain", "*.subdomain.owasp.org", "subdomain.owasp.org"},
+		{"Test3: Subdomain-dashes", "*.sub-domain.owasp.org", "sub-domain.owasp.org"},
+		{"Test4: Subdomain-dashes", "*.sub-d.sub-domain.owasp.org", "sub-d.sub-domain.owasp.org"},
 	}
 	for _, tt := range tests {
 		s := RemoveAsteriskLabel(tt.event)
