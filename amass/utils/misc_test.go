@@ -6,7 +6,6 @@ import (
 )
 
 func TestSubdomainRegex(t *testing.T) {
-	//use structs and arrays to make a table of test cases, lead with a name to call the test and then parameters for testing
 	tests := []struct {
 		name     string
 		domain   string
