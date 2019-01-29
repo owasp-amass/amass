@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -24,16 +25,16 @@ const (
 // ActiveCertService is the AmassService that handles all active certificate activities
 // within the architecture.
 type ActiveCertService struct {
-	BaseService
+	core.BaseService
 
 	maxPulls utils.Semaphore
 }
 
 // NewActiveCertService returns he object initialized, but not yet started.
-func NewActiveCertService(e *Enumeration) *ActiveCertService {
+func NewActiveCertService(config *core.Config, bus *core.EventBus) *ActiveCertService {
 	acs := &ActiveCertService{maxPulls: utils.NewSimpleSemaphore(25)}
 
-	acs.BaseService = *NewBaseService(e, "Active Cert", acs)
+	acs.BaseService = *core.NewBaseService(acs, "Active Cert", config, bus)
 	return acs
 }
 
@@ -41,6 +42,7 @@ func NewActiveCertService(e *Enumeration) *ActiveCertService {
 func (acs *ActiveCertService) OnStart() error {
 	acs.BaseService.OnStart()
 
+	acs.Bus().Subscribe(core.ActiveCertTopic, acs.activeCertEvent)
 	go acs.processRequests()
 	return nil
 }
@@ -58,24 +60,30 @@ func (acs *ActiveCertService) processRequests() {
 	}
 }
 
-func (acs *ActiveCertService) performRequest(req *Request) {
+func (acs *ActiveCertService) activeCertEvent(req *core.Request) {
+	if acs.Config().Active {
+		acs.SendRequest(req)
+	}
+}
+
+func (acs *ActiveCertService) performRequest(req *core.Request) {
 	acs.maxPulls.Acquire(1)
 	defer acs.maxPulls.Release(1)
 
 	acs.SetActive()
-	for _, r := range PullCertificateNames(req.Address, acs.Enum().Config.Ports) {
-		if domain := acs.Enum().Config.WhichDomain(r.Name); domain != "" {
+	for _, r := range PullCertificateNames(req.Address, acs.Config().Ports) {
+		if domain := acs.Config().WhichDomain(r.Name); domain != "" {
 			r.Domain = domain
 			r.Source = acs.String()
-			acs.Enum().NewNameEvent(r)
+			acs.Bus().Publish(core.NewNameTopic, r)
 		}
 	}
 	acs.SetActive()
 }
 
 // PullCertificateNames attempts to pull a cert from one or more ports on an IP.
-func PullCertificateNames(addr string, ports []int) []*Request {
-	var requests []*Request
+func PullCertificateNames(addr string, ports []int) []*core.Request {
+	var requests []*core.Request
 
 	// Check hosts for certificates that contain subdomain names
 	for _, port := range ports {
@@ -146,14 +154,14 @@ func namesFromCert(cert *x509.Certificate) []string {
 	return subdomains
 }
 
-func reqFromNames(subdomains []string) []*Request {
-	var requests []*Request
+func reqFromNames(subdomains []string) []*core.Request {
+	var requests []*core.Request
 
 	for _, name := range subdomains {
-		requests = append(requests, &Request{
+		requests = append(requests, &core.Request{
 			Name:   name,
 			Domain: SubdomainToDomain(name),
-			Tag:    CERT,
+			Tag:    core.CERT,
 		})
 	}
 	return requests

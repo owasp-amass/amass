@@ -7,20 +7,24 @@ import (
 	"strings"
 	"time"
 
+	"github.com/OWASP/Amass/amass/core"
+	"github.com/OWASP/Amass/amass/utils"
 	"github.com/miekg/dns"
 )
 
 // BruteForceService is the Service that handles all brute force name generation
 // within the architecture. This is achieved by watching all the NEWSUB events.
 type BruteForceService struct {
-	BaseService
+	core.BaseService
+
+	filter *utils.StringFilter
 }
 
 // NewBruteForceService returns he object initialized, but not yet started.
-func NewBruteForceService(e *Enumeration) *BruteForceService {
-	bfs := new(BruteForceService)
+func NewBruteForceService(config *core.Config, bus *core.EventBus) *BruteForceService {
+	bfs := &BruteForceService{filter: utils.NewStringFilter()}
 
-	bfs.BaseService = *NewBaseService(e, "Brute Forcing", bfs)
+	bfs.BaseService = *core.NewBaseService(bfs, "Brute Forcing", config, bus)
 	return bfs
 }
 
@@ -28,7 +32,14 @@ func NewBruteForceService(e *Enumeration) *BruteForceService {
 func (bfs *BruteForceService) OnStart() error {
 	bfs.BaseService.OnStart()
 
-	if bfs.Enum().Config.BruteForcing {
+	if bfs.Config().BruteForcing {
+		if bfs.Config().Recursive {
+			if bfs.Config().MinForRecursive == 0 {
+				bfs.Bus().Subscribe(core.NameResolvedTopic, bfs.SendRequest)
+			} else {
+				bfs.Bus().Subscribe(core.NewSubdomainTopic, bfs.NewSubdomain)
+			}
+		}
 		go bfs.startRootDomains()
 	}
 	go bfs.processRequests()
@@ -50,12 +61,12 @@ func (bfs *BruteForceService) processRequests() {
 	}
 }
 
-func (bfs *BruteForceService) goodRequest(req *Request) bool {
-	if !bfs.Enum().Config.BruteForcing {
+func (bfs *BruteForceService) goodRequest(req *core.Request) bool {
+	if !bfs.Config().BruteForcing {
 		return false
 	}
 
-	if !bfs.Enum().Config.IsDomainInScope(req.Name) {
+	if !bfs.Config().IsDomainInScope(req.Name) {
 		return false
 	}
 
@@ -75,34 +86,37 @@ func (bfs *BruteForceService) goodRequest(req *Request) bool {
 
 func (bfs *BruteForceService) startRootDomains() {
 	// Look at each domain provided by the config
-	for _, domain := range bfs.Enum().Config.Domains() {
+	for _, domain := range bfs.Config().Domains() {
 		bfs.performBruteForcing(domain, domain)
 	}
 }
 
 // NewSubdomain is called by the Name Service when proper subdomains are discovered.
-func (bfs *BruteForceService) NewSubdomain(req *Request, times int) {
-	if times == bfs.Enum().Config.MinForRecursive {
+func (bfs *BruteForceService) NewSubdomain(req *core.Request, times int) {
+	if times == bfs.Config().MinForRecursive {
 		bfs.SendRequest(req)
 	}
 }
 
 func (bfs *BruteForceService) performBruteForcing(subdomain, root string) {
-	t := time.NewTicker(time.Second)
-	defer t.Stop()
+	if bfs.filter.Duplicate(subdomain) {
+		return
+	}
 
 	bfs.SetActive()
-	for _, word := range bfs.Enum().Config.Wordlist {
+	t := time.NewTicker(time.Second)
+	defer t.Stop()
+	for _, word := range bfs.Config().Wordlist {
 		select {
 		case <-t.C:
 			bfs.SetActive()
 		case <-bfs.Quit():
 			return
 		default:
-			bfs.Enum().NewNameEvent(&Request{
+			bfs.Bus().Publish(core.NewNameTopic, &core.Request{
 				Name:   strings.ToLower(word + "." + subdomain),
 				Domain: root,
-				Tag:    BRUTE,
+				Tag:    core.BRUTE,
 				Source: bfs.String(),
 			})
 		}

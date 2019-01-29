@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -265,7 +266,7 @@ func fetchOnlineData(addr string, asn int) (*ASRecord, error) {
 func originLookup(addr string) (int, string, error) {
 	var err error
 	var name string
-	var answers []DNSAnswer
+	var answers []core.DNSAnswer
 	if ip := net.ParseIP(addr); len(ip.To4()) == net.IPv4len {
 		name = utils.ReverseIP(addr) + ".origin.asn.cymru.com"
 	} else if len(ip) == net.IPv6len {
@@ -289,7 +290,7 @@ func originLookup(addr string) (int, string, error) {
 
 func asnLookup(asn int) (*ASRecord, error) {
 	var err error
-	var answers []DNSAnswer
+	var answers []core.DNSAnswer
 	name := "AS" + strconv.Itoa(asn) + ".asn.cymru.com"
 
 	answers, err = Resolve(name, "TXT")

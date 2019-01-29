@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/OWASP/Amass/amass/core"
+	"github.com/OWASP/Amass/amass/handlers"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -19,28 +21,27 @@ type timesRequest struct {
 // NameService is the Service that handles all newly discovered names
 // within the architecture. This is achieved by receiving all the RESOLVED events.
 type NameService struct {
-	BaseService
+	core.BaseService
 
-	filter      *utils.StringFilter
-	timesChan   chan *timesRequest
-	releases    chan struct{}
-	completions chan time.Time
-	sanityRE    *regexp.Regexp
+	filter            *utils.StringFilter
+	times             *utils.Queue
+	sanityRE          *regexp.Regexp
+	trustedNameFilter *utils.StringFilter
+	otherNameFilter   *utils.StringFilter
+	graph             *handlers.Graph
 }
 
 // NewNameService requires the enumeration configuration and event bus as parameters.
 // The object returned is initialized, but has not yet been started.
-func NewNameService(e *Enumeration) *NameService {
-	max := e.Config.Timing.ToMaxFlow() + e.Config.Timing.ToReleasesPerSecond()
+func NewNameService(config *core.Config, bus *core.EventBus) *NameService {
 	ns := &NameService{
-		filter:      utils.NewStringFilter(),
-		timesChan:   make(chan *timesRequest, max),
-		releases:    make(chan struct{}, max),
-		completions: make(chan time.Time, max),
-		sanityRE:    utils.AnySubdomainRegex(),
+		filter:            utils.NewStringFilter(),
+		times:             utils.NewQueue(),
+		sanityRE:          utils.AnySubdomainRegex(),
+		trustedNameFilter: utils.NewStringFilter(),
+		otherNameFilter:   utils.NewStringFilter(),
 	}
-
-	ns.BaseService = *NewBaseService(e, "Name Service", ns)
+	ns.BaseService = *core.NewBaseService(ns, "Name Service", config, bus)
 	return ns
 }
 
@@ -48,64 +49,53 @@ func NewNameService(e *Enumeration) *NameService {
 func (ns *NameService) OnStart() error {
 	ns.BaseService.OnStart()
 
+	ns.Bus().Subscribe(core.NewNameTopic, ns.newNameEvent)
+	ns.Bus().Subscribe(core.NameResolvedTopic, ns.Resolved)
 	go ns.processTimesRequests()
 	go ns.processRequests()
 	return nil
 }
 
-func (ns *NameService) processRequests() {
-	var perSec []int
-	var completionTimes []time.Time
-	last := time.Now()
-	t := time.NewTicker(time.Second)
-	defer t.Stop()
-	logTick := time.NewTicker(time.Minute)
-	defer logTick.Stop()
+// RegisterGraph makes the Graph available to the NameService.
+func (ns *NameService) RegisterGraph(graph *handlers.Graph) {
+	ns.graph = graph
+}
 
+func (ns *NameService) newNameEvent(req *core.Request) {
+	if req == nil || req.Name == "" || req.Domain == "" {
+		return
+	}
+
+	req.Name = strings.ToLower(utils.RemoveAsteriskLabel(req.Name))
+	req.Domain = strings.ToLower(req.Domain)
+
+	tt := TrustedTag(req.Tag)
+	if !tt && ns.otherNameFilter.Duplicate(req.Name) {
+		return
+	} else if tt && ns.trustedNameFilter.Duplicate(req.Name) {
+		return
+	}
+	ns.SendRequest(req)
+}
+
+func (ns *NameService) processRequests() {
 	for {
 		select {
 		case <-ns.PauseChan():
 			<-ns.ResumeChan()
 		case <-ns.Quit():
 			return
-		case comp := <-ns.completions:
-			completionTimes = append(completionTimes, comp)
-		case <-t.C:
-			var num int
-			for _, com := range completionTimes {
-				if com.After(last) {
-					num++
-				}
-			}
-			perSec = append(perSec, num)
-			completionTimes = []time.Time{}
-			last = time.Now()
-		case <-logTick.C:
-			num := len(perSec)
-			var total int
-			for _, s := range perSec {
-				total += s
-			}
-			if num > 0 {
-				ns.Enum().Log.Printf("Average DNS names processed: %d/sec", total/num)
-			}
-			perSec = []int{}
 		case req := <-ns.RequestChan():
-			go ns.performRequest(req)
+			ns.performRequest(req)
 		}
 	}
 }
 
-func (ns *NameService) sendCompletionTime(t time.Time) {
-	ns.completions <- t
-}
-
-func (ns *NameService) performRequest(req *Request) {
+func (ns *NameService) performRequest(req *core.Request) {
 	ns.SetActive()
-	ns.sendCompletionTime(time.Now())
-	if ns.Enum().Config.Passive {
+	if ns.Config().Passive {
 		if !ns.filter.Duplicate(req.Name) {
-			ns.Enum().OutputEvent(&Output{
+			ns.Bus().Publish(core.OutputTopic, &core.Output{
 				Name:   req.Name,
 				Domain: req.Domain,
 				Tag:    req.Tag,
@@ -114,24 +104,19 @@ func (ns *NameService) performRequest(req *Request) {
 		}
 		return
 	}
-	ns.Enum().ResolveNameEvent(req)
+	ns.Bus().Publish(core.ResolveNameTopic, req)
 }
 
 // Resolved is called when a name has been resolved by the DNS Service.
-func (ns *NameService) Resolved(req *Request) {
+func (ns *NameService) Resolved(req *core.Request) {
 	ns.SetActive()
 
-	if ns.Enum().Config.IsDomainInScope(req.Name) {
-		go ns.checkSubdomain(req)
+	if ns.Config().IsDomainInScope(req.Name) {
+		ns.checkSubdomain(req)
 	}
-	if req.Tag == DNS {
-		ns.sendCompletionTime(time.Now())
-	}
-	ns.Enum().CheckedNameEvent(req)
-	ns.SetActive()
 }
 
-func (ns *NameService) checkSubdomain(req *Request) {
+func (ns *NameService) checkSubdomain(req *core.Request) {
 	labels := strings.Split(req.Name, ".")
 	num := len(labels)
 	// Is this large enough to consider further?
@@ -148,7 +133,12 @@ func (ns *NameService) checkSubdomain(req *Request) {
 	}
 
 	sub := strings.Join(labels[1:], ".")
-	ns.Enum().NewSubdomainEvent(&Request{
+	// CNAMEs are not a proper subdomain
+	if ns.graph.CNAMENode(sub) {
+		return
+	}
+
+	ns.Bus().Publish(core.NewSubdomainTopic, &core.Request{
 		Name:   sub,
 		Domain: req.Domain,
 		Tag:    req.Tag,
@@ -159,21 +149,35 @@ func (ns *NameService) checkSubdomain(req *Request) {
 func (ns *NameService) timesForSubdomain(sub string) int {
 	times := make(chan int)
 
-	ns.timesChan <- &timesRequest{
+	ns.times.Append(&timesRequest{
 		Subdomain: sub,
 		Times:     times,
-	}
+	})
 	return <-times
 }
 
 func (ns *NameService) processTimesRequests() {
+	curIdx := 0
+	maxIdx := 9
+	delays := []int{10, 25, 50, 75, 100, 150, 250, 500, 750, 1000}
 	subdomains := make(map[string]int)
 
 	for {
 		select {
 		case <-ns.Quit():
 			return
-		case req := <-ns.timesChan:
+		default:
+			element, ok := ns.times.Next()
+			if !ok {
+				if curIdx < maxIdx {
+					curIdx++
+				}
+				time.Sleep(time.Duration(delays[curIdx]) * time.Millisecond)
+				continue
+			}
+
+			curIdx = 0
+			req := element.(*timesRequest)
 			times, ok := subdomains[req.Subdomain]
 			if ok {
 				times++
