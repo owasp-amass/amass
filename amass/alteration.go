@@ -45,24 +45,24 @@ func (as *AlterationService) processRequests() {
 		case <-as.Quit():
 			return
 		case req := <-as.RequestChan():
-			as.executeAlterations(req)
+			go as.executeAlterations(req)
 		}
 	}
 }
 
 // executeAlterations runs all the DNS name alteration methods as goroutines.
 func (as *AlterationService) executeAlterations(req *core.Request) {
-	as.SetActive()
-	if !as.Config().IsDomainInScope(req.Name) || !as.correctRecordTypes(req) {
+	if !as.correctRecordTypes(req) || !as.Config().IsDomainInScope(req.Name) {
 		return
 	}
+
+	as.SetActive()
 	as.flipNumbersInName(req)
 	as.appendNumbers(req)
 }
 
 func (as *AlterationService) correctRecordTypes(req *core.Request) bool {
 	var ok bool
-
 	for _, r := range req.Records {
 		t := uint16(r.Type)
 
@@ -134,7 +134,6 @@ func (as *AlterationService) sendAlteredName(name, domain string) {
 		return
 	}
 
-	as.SetActive()
 	as.Bus().Publish(core.NewNameTopic, &core.Request{
 		Name:   name,
 		Domain: domain,

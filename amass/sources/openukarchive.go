@@ -52,7 +52,9 @@ func (o *OpenUKArchive) processRequests() {
 		case <-o.Quit():
 			return
 		case req := <-o.RequestChan():
-			o.executeQuery(req.Name, req.Domain)
+			if o.Config().IsDomainInScope(req.Name) {
+				o.executeQuery(req.Name, req.Domain)
+			}
 		}
 	}
 }

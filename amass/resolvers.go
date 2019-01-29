@@ -20,14 +20,21 @@ import (
 var (
 	// Public & free DNS servers
 	publicResolvers = []string{
-		"1.1.1.1:53",     // Cloudflare
-		"8.8.8.8:53",     // Google
-		"64.6.64.6:53",   // Verisign
-		"77.88.8.8:53",   // Yandex.DNS
-		"74.82.42.42:53", // Hurricane Electric
-		"1.0.0.1:53",     // Cloudflare Secondary
-		"8.8.4.4:53",     // Google Secondary
-		"77.88.8.1:53",   // Yandex.DNS Secondary
+		"1.1.1.1:53",        // Cloudflare
+		"8.8.8.8:53",        // Google
+		"209.244.0.3:53",    // Level3
+		"64.6.64.6:53",      // Verisign
+		"77.88.8.8:53",      // Yandex.DNS
+		"74.82.42.42:53",    // Hurricane Electric
+		"45.77.165.194:53",  // Fourth Estate
+		"91.239.100.100:53", // UncensoredDNS
+		"1.0.0.1:53",        // Cloudflare Secondary
+		"8.8.4.4:53",        // Google Secondary
+		"9.9.9.10:53",       // Quad9 Secondary
+		"209.244.0.4:53",    // Level3 Secondary
+		"64.6.65.6:53",      // Verisign Secondary
+		"77.88.8.1:53",      // Yandex.DNS Secondary
+		"89.233.43.71:53",   // UncensoredDNS Secondary
 	}
 
 	resolvers []*resolver
@@ -53,7 +60,7 @@ type resolveResult struct {
 }
 
 type resolver struct {
-	sync.Mutex
+	sync.RWMutex
 	Address        string
 	Available      bool
 	ExchangeTimes  *utils.Queue
@@ -62,6 +69,8 @@ type resolver struct {
 	Dialer         *net.Dialer
 	Conn           net.Conn
 	XchgQueue      *utils.Queue
+	XchgChan       chan *resolveRequest
+	XchgsLock      sync.Mutex
 	Xchgs          map[uint16]*resolveRequest
 	Done           chan struct{}
 }
@@ -82,9 +91,11 @@ func newResolver(addr string) *resolver {
 		Dialer:         d,
 		Conn:           conn,
 		XchgQueue:      utils.NewQueue(),
+		XchgChan:       make(chan *resolveRequest, 100),
 		Xchgs:          make(map[uint16]*resolveRequest),
 		Done:           make(chan struct{}, 2),
 	}
+	go r.fillXchgChan()
 	go r.monitorPerformance()
 	go r.checkForTimeouts()
 	go r.exchanges()
@@ -98,25 +109,24 @@ func (r *resolver) stop() {
 }
 
 func (r *resolver) queueRequest(id uint16, req *resolveRequest) {
-	r.Lock()
+	r.XchgsLock.Lock()
 	r.Xchgs[id] = req
-	r.Unlock()
+	r.XchgsLock.Unlock()
 }
 
 func (r *resolver) pullRequest(id uint16) *resolveRequest {
 	var res *resolveRequest
 
-	r.Lock()
+	r.XchgsLock.Lock()
 	res = r.Xchgs[id]
 	delete(r.Xchgs, id)
-	r.Unlock()
+	r.XchgsLock.Unlock()
 	return res
 }
 
 func (r *resolver) checkForTimeouts() {
-	t := time.NewTicker(r.WindowDuration)
+	t := time.NewTicker(time.Second)
 	defer t.Stop()
-
 	for {
 		select {
 		case <-r.Done:
@@ -126,9 +136,9 @@ func (r *resolver) checkForTimeouts() {
 			var ids []uint16
 			var timeouts []*resolveRequest
 
-			r.Lock()
+			r.XchgsLock.Lock()
 			for key, req := range r.Xchgs {
-				if now.After(req.Timestamp.Add(r.WindowDuration)) {
+				if now.After(req.Timestamp.Add(time.Second)) {
 					ids = append(ids, key)
 					timeouts = append(timeouts, req)
 				}
@@ -137,9 +147,10 @@ func (r *resolver) checkForTimeouts() {
 			for _, id := range ids {
 				delete(r.Xchgs, id)
 			}
-			r.Unlock()
+			r.XchgsLock.Unlock()
 
 			for _, req := range timeouts {
+				r.ErrorTimes.Append(time.Now())
 				req.Result <- &resolveResult{
 					Records: nil,
 					Again:   true,
@@ -161,21 +172,50 @@ func (r *resolver) resolve(name string, qtype uint16) ([]core.DNSAnswer, bool, e
 	return result.Records, result.Again, result.Err
 }
 
+func (r *resolver) fillXchgChan() {
+	curIdx := 0
+	maxIdx := 7
+	delays := []int{10, 25, 50, 75, 100, 150, 250, 500}
+	for {
+		select {
+		case <-r.Done:
+			return
+		default:
+			r.RLock()
+			avail := r.Available
+			r.RUnlock()
+			if !avail {
+				time.Sleep(time.Duration(delays[curIdx]) * time.Millisecond)
+				if curIdx < maxIdx {
+					curIdx++
+				}
+				continue
+			}
+			element, ok := r.XchgQueue.Next()
+			if !ok {
+				time.Sleep(time.Duration(delays[curIdx]) * time.Millisecond)
+				if curIdx < maxIdx {
+					curIdx++
+				}
+				continue
+			}
+			curIdx = 0
+			r.XchgChan <- element.(*resolveRequest)
+		}
+	}
+}
+
 // exchanges encapsulates miekg/dns usage
 func (r *resolver) exchanges() {
-	curIdx := 0
-	maxIdx := 2
-	delays := []int{50, 75, 100}
 	co := &dns.Conn{Conn: r.Conn}
 	msgs := make(chan *dns.Msg, 1000)
-	go r.readMessages(co, msgs)
 
+	go r.readMessages(co, msgs)
 	for {
 		select {
 		case <-r.Done:
 			return
 		case read := <-msgs:
-			curIdx = 0
 			req := r.pullRequest(read.MsgHdr.Id)
 			if req == nil {
 				continue
@@ -217,28 +257,7 @@ func (r *resolver) exchanges() {
 				Again:   false,
 				Err:     nil,
 			})
-		default:
-			r.Lock()
-			avail := r.Available
-			r.Unlock()
-			if !avail {
-				time.Sleep(time.Duration(delays[curIdx]) * time.Millisecond)
-				if curIdx < maxIdx {
-					curIdx++
-				}
-				continue
-			}
-			element, ok := r.XchgQueue.Next()
-			if !ok {
-				time.Sleep(time.Duration(delays[curIdx]) * time.Millisecond)
-				if curIdx < maxIdx {
-					curIdx++
-				}
-				continue
-			}
-			curIdx = 0
-
-			req := element.(*resolveRequest)
+		case req := <-r.XchgChan:
 			msg := queryMessage(req.Name, req.Qtype)
 			r.ExchangeTimes.Append(time.Now())
 
@@ -287,35 +306,28 @@ func (r *resolver) monitorPerformance() {
 			return
 		case <-t.C:
 			now := time.Now()
-			xchgWin := timesQueueElements(r.ExchangeTimes, now)
-			errWin := timesQueueElements(r.ErrorTimes, now)
-			// Check if we must reduce the number of simultaneous connections
-			total := len(xchgWin)
-			failures := len(errWin)
-			// Reduce if the percentage of timed out connections is too high
-			avail := r.analyzeConnResults(total, failures)
-			r.Lock()
-			r.Available = avail
-			r.Unlock()
+			total := len(timesQueueElements(r.ExchangeTimes, now))
+			failures := len(timesQueueElements(r.ErrorTimes, now))
+			r.calcAvailability(total, failures)
 		}
 	}
 }
 
-func (r *resolver) analyzeConnResults(total, failures int) bool {
-	if total < 100 || failures == 0 {
-		return true
+func (r *resolver) calcAvailability(total, failures int) {
+	avail := true
+	if total > 50 && failures != 0 {
+		avail = false
+		frac := float64(total) / float64(failures)
+		if frac > 0 {
+			percent := float64(100) / frac
+			if percent <= 10.0 {
+				avail = true
+			}
+		}
 	}
-	frac := float64(total) / float64(failures)
-	if frac == 0 {
-		return false
-	}
-	percent := float64(100) / frac
-	if percent > 10.0 {
-		return false
-	} else if percent <= 10.0 {
-		return true
-	}
-	return true
+	r.Lock()
+	r.Available = avail
+	r.Unlock()
 }
 
 func timesQueueElements(queue *utils.Queue, end time.Time) []time.Time {
@@ -337,35 +349,33 @@ func timesQueueElements(queue *utils.Queue, end time.Time) []time.Time {
 
 // nextResolver requests the next DNS resolution server
 func nextResolver() *resolver {
-	curIdx := 0
-	maxIdx := 7
-	delays := []int{250, 500, 750, 1000, 1250, 1500, 1750, 2000}
-
+	var attempts int
+	max := len(resolvers)
 	for {
 		rnd := rand.Int()
 		r := resolvers[rnd%len(resolvers)]
 
-		r.Lock()
+		r.RLock()
 		avail := r.Available
-		r.Unlock()
+		r.RUnlock()
 		if avail {
 			return r
 		}
 
-		if curIdx < maxIdx {
-			curIdx++
-		} else {
-			for _, r := range resolvers {
-				r.Lock()
-				avail := r.Available
-				r.Unlock()
+		attempts++
+		if attempts <= max {
+			continue
+		}
 
-				if avail {
-					return r
-				}
+		for _, resolver := range resolvers {
+			resolver.RLock()
+			avail = resolver.Available
+			resolver.RUnlock()
+			if avail {
+				return resolver
 			}
 		}
-		time.Sleep(time.Duration(delays[curIdx]) * time.Millisecond)
+		time.Sleep(500 * time.Millisecond)
 	}
 }
 

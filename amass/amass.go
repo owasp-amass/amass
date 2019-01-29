@@ -13,6 +13,7 @@ import (
 	"github.com/OWASP/Amass/amass/handlers"
 	"github.com/OWASP/Amass/amass/sources"
 	"github.com/OWASP/Amass/amass/utils"
+	"github.com/google/uuid"
 )
 
 // Banner is the ASCII art logo used within help output.
@@ -67,7 +68,7 @@ type Enumeration struct {
 // NewEnumeration returns an initialized Enumeration that has not been started yet.
 func NewEnumeration() *Enumeration {
 	return &Enumeration{
-		Config:      new(core.Config),
+		Config:      &core.Config{UUID: uuid.New()},
 		Graph:       handlers.NewGraph(),
 		Output:      make(chan *core.Output, 100),
 		Done:        make(chan struct{}, 2),

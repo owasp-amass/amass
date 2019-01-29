@@ -187,13 +187,12 @@ func (bas *BaseService) processRequests() {
 		default:
 			element, ok := bas.queue.Next()
 			if !ok {
+				time.Sleep(time.Duration(delays[curIdx]) * time.Millisecond)
 				if curIdx < maxIdx {
 					curIdx++
 				}
-				time.Sleep(time.Duration(delays[curIdx]) * time.Millisecond)
 				continue
 			}
-
 			curIdx = 0
 			bas.requests <- element.(*Request)
 		}

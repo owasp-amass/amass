@@ -52,7 +52,9 @@ func (u *UKGovArchive) processRequests() {
 		case <-u.Quit():
 			return
 		case req := <-u.RequestChan():
-			u.executeQuery(req.Name, req.Domain)
+			if u.Config().IsDomainInScope(req.Name) {
+				u.executeQuery(req.Name, req.Domain)
+			}
 		}
 	}
 }

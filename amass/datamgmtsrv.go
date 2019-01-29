@@ -106,6 +106,7 @@ func (dms *DataManagerService) insertDomain(domain string) {
 	}
 	for _, handler := range dms.Handlers {
 		err := handler.Insert(&handlers.DataOptsParams{
+			UUID:      dms.Config().UUID.String(),
 			Timestamp: time.Now().Format(time.RFC3339),
 			Type:      handlers.OptDomain,
 			Domain:    domain,
@@ -136,6 +137,7 @@ func (dms *DataManagerService) insertCNAME(req *core.Request, recidx int) {
 	dms.insertDomain(domain)
 	for _, handler := range dms.Handlers {
 		err := handler.Insert(&handlers.DataOptsParams{
+			UUID:         dms.Config().UUID.String(),
 			Timestamp:    time.Now().Format(time.RFC3339),
 			Type:         handlers.OptCNAME,
 			Name:         req.Name,
@@ -164,6 +166,7 @@ func (dms *DataManagerService) insertA(req *core.Request, recidx int) {
 	}
 	for _, handler := range dms.Handlers {
 		err := handler.Insert(&handlers.DataOptsParams{
+			UUID:      dms.Config().UUID.String(),
 			Timestamp: time.Now().Format(time.RFC3339),
 			Type:      handlers.OptA,
 			Name:      req.Name,
@@ -194,6 +197,7 @@ func (dms *DataManagerService) insertAAAA(req *core.Request, recidx int) {
 	}
 	for _, handler := range dms.Handlers {
 		err := handler.Insert(&handlers.DataOptsParams{
+			UUID:      dms.Config().UUID.String(),
 			Timestamp: time.Now().Format(time.RFC3339),
 			Type:      handlers.OptAAAA,
 			Name:      req.Name,
@@ -229,6 +233,7 @@ func (dms *DataManagerService) insertPTR(req *core.Request, recidx int) {
 	dms.insertDomain(domain)
 	for _, handler := range dms.Handlers {
 		err := handler.Insert(&handlers.DataOptsParams{
+			UUID:       dms.Config().UUID.String(),
 			Timestamp:  time.Now().Format(time.RFC3339),
 			Type:       handlers.OptPTR,
 			Name:       req.Name,
@@ -258,6 +263,7 @@ func (dms *DataManagerService) insertSRV(req *core.Request, recidx int) {
 
 	for _, handler := range dms.Handlers {
 		err := handler.Insert(&handlers.DataOptsParams{
+			UUID:       dms.Config().UUID.String(),
 			Timestamp:  time.Now().Format(time.RFC3339),
 			Type:       handlers.OptSRV,
 			Name:       req.Name,
@@ -286,6 +292,7 @@ func (dms *DataManagerService) insertNS(req *core.Request, recidx int) {
 	dms.insertDomain(domain)
 	for _, handler := range dms.Handlers {
 		err := handler.Insert(&handlers.DataOptsParams{
+			UUID:         dms.Config().UUID.String(),
 			Timestamp:    time.Now().Format(time.RFC3339),
 			Type:         handlers.OptNS,
 			Name:         req.Name,
@@ -321,6 +328,7 @@ func (dms *DataManagerService) insertMX(req *core.Request, recidx int) {
 	dms.insertDomain(domain)
 	for _, handler := range dms.Handlers {
 		err := handler.Insert(&handlers.DataOptsParams{
+			UUID:         dms.Config().UUID.String(),
 			Timestamp:    time.Now().Format(time.RFC3339),
 			Type:         handlers.OptMX,
 			Name:         req.Name,
@@ -395,6 +403,7 @@ func (dms *DataManagerService) insertInfrastructure(addr string) {
 
 	for _, handler := range dms.Handlers {
 		err := handler.Insert(&handlers.DataOptsParams{
+			UUID:        dms.Config().UUID.String(),
 			Timestamp:   time.Now().Format(time.RFC3339),
 			Type:        handlers.OptInfrastructure,
 			Address:     addr,
