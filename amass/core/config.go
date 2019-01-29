@@ -13,34 +13,24 @@ import (
 	"net/http"
 	"os"
 	"regexp"
-	"strconv"
 	"strings"
 	"sync"
 
 	"github.com/OWASP/Amass/amass/utils"
 	"github.com/go-ini/ini"
+	"github.com/google/uuid"
 )
 
 const (
 	defaultWordlistURL = "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/namelist.txt"
 )
 
-// The various timing/speed templates for an Amass enumeration.
-const (
-	Paranoid EnumerationTiming = iota
-	Sneaky
-	Polite
-	Normal
-	Aggressive
-	Insane
-)
-
-// EnumerationTiming represents a speed band for the enumeration to execute within.
-type EnumerationTiming int
-
 // Config passes along Amass enumeration configurations
 type Config struct {
 	sync.Mutex
+
+	// A Universally Unique Identifier (UUID) for the enumeration
+	UUID uuid.UUID
 
 	// Logger for error messages
 	Log *log.Logger
@@ -65,9 +55,6 @@ type Config struct {
 
 	// Will discovered subdomain name alterations be generated?
 	Alterations bool `ini:"alterations"`
-
-	// Indicates a speed band for the enumeration to execute within
-	Timing EnumerationTiming
 
 	// Only access the data sources for names and return results?
 	Passive bool
@@ -274,16 +261,6 @@ func (c *Config) LoadSettings(path string) error {
 			return fmt.Errorf("Unable to load the file in the wordlist_file setting: %s: %v", wordlist, err)
 		}
 		c.Wordlist = list
-	}
-	// Attempt to load the timing setting via the configuration file
-	if cfg.Section(ini.DEFAULT_SECTION).HasKey("timing") {
-		tstr := cfg.Section(ini.DEFAULT_SECTION).Key("timing").String()
-
-		timing, err := strconv.Atoi(tstr)
-		if err != nil || timing < 0 || timing > 5 {
-			return fmt.Errorf("%s is not a valid enumeration timing value", tstr)
-		}
-		c.Timing = EnumerationTiming(timing)
 	}
 	// Attempt to load a special mode of operation specified by the user
 	if cfg.Section(ini.DEFAULT_SECTION).HasKey("mode") {

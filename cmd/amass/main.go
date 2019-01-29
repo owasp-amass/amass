@@ -94,7 +94,6 @@ var (
 	passive       = flag.Bool("passive", false, "Disable DNS resolution of names and dependent features")
 	noalts        = flag.Bool("noalts", false, "Disable generation of altered names")
 	sources       = flag.Bool("src", false, "Print data sources for the discovered names")
-	timing        = flag.Int("T", int(core.Normal), "Timing templates 0 (slowest) through 5 (fastest)")
 	wordlist      = flag.String("w", "", "Path to a different wordlist file")
 	allpath       = flag.String("oA", "", "Path prefix used for naming all output files")
 	logpath       = flag.String("log", "", "Path to the log file where errors will be written")
@@ -200,7 +199,6 @@ func main() {
 	}
 	// Seed the default pseudo-random number generator
 	rand.Seed(time.Now().UTC().UnixNano())
-
 	// Setup the amass enumeration settings
 	alts := true
 	recursive := true
@@ -220,7 +218,6 @@ func main() {
 	enum.Config.Active = *active
 	enum.Config.IncludeUnresolvable = *unresolved
 	enum.Config.Alterations = alts
-	enum.Config.Timing = core.EnumerationTiming(*timing)
 	enum.Config.Passive = *passive
 	enum.Config.Blacklist = blacklist
 	enum.Config.DisabledDataSources = compileDisabledSources(enum, included, excluded)
@@ -398,11 +395,13 @@ func compileDisabledSources(enum *amass.Enumeration, include, exclude []string) 
 
 func writeLogsAndMessages(logs *io.PipeReader, logfile string) {
 	wildcard := regexp.MustCompile("DNS wildcard")
-	avg := regexp.MustCompile("Average DNS names")
+	avg := regexp.MustCompile("Average DNS queries")
 
 	var filePtr *os.File
 	if logfile != "" {
-		filePtr, err := os.OpenFile(logfile, os.O_WRONLY|os.O_CREATE, 0644)
+		var err error
+
+		filePtr, err = os.OpenFile(logfile, os.O_WRONLY|os.O_CREATE, 0644)
 		if err != nil {
 			r.Fprintf(color.Error, "Failed to open the log file: %v\n", err)
 		} else {

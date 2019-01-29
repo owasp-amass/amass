@@ -52,7 +52,9 @@ func (w *Wayback) processRequests() {
 		case <-w.Quit():
 			return
 		case req := <-w.RequestChan():
-			w.executeQuery(req.Name, req.Domain)
+			if w.Config().IsDomainInScope(req.Name) {
+				w.executeQuery(req.Name, req.Domain)
+			}
 		}
 	}
 }

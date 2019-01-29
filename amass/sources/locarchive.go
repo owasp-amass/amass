@@ -51,7 +51,9 @@ func (l *LoCArchive) processRequests() {
 		case <-l.Quit():
 			return
 		case req := <-l.RequestChan():
-			l.executeQuery(req.Name, req.Domain)
+			if l.Config().IsDomainInScope(req.Name) {
+				l.executeQuery(req.Name, req.Domain)
+			}
 		}
 	}
 }
