@@ -55,6 +55,12 @@ sudo docker build -t amass https://github.com/OWASP/Amass.git
 sudo docker run amass --passive -d example.com
 ```
 
+The wordlists maintained in the Amass git repository are available in `/wordlists/` within the docker container. For example, to use `all.txt`:
+
+```bash
+sudo docker run amass -w /wordlists/all.txt -d example.com
+```
+
 ### From Source
 
 If you prefer to build your own binary from the latest release of the source code, make sure you have a correctly configured **Go >= 1.10** environment. More information about how to achieve this can be found [on the golang website.](https://golang.org/doc/install) Then, take the following steps:
@@ -109,6 +115,7 @@ This project improves thanks to all the people who contribute:
 
 ## Mentions
 
+- [A penetration tester’s guide to subdomain enumeration](https://blog.appsecco.com/a-penetration-testers-guide-to-sub-domain-enumeration-7d842d5570f6)
 - [Abusing access control on a large online e-commerce site to register as supplier](https://medium.com/@fbotes2/governit-754becf85cbc)
 - [Black Hat Training, Making the Cloud Rain Shells!: Discovery and Recon](https://www.blackhat.com/eu-18/training/schedule/index.html#aws--azure-exploitation-making-the-cloud-rain-shells-11060)
 - [Subdomains Enumeration Cheat Sheet](https://pentester.land/cheatsheets/2018/11/14/subdomains-enumeration-cheatsheet.html)
