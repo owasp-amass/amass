@@ -433,7 +433,7 @@ func (n *Neo4j) insertInfrastructure(data *DataOptsParams) error {
 		"addr":      data.Address,
 		"asn":       data.ASN,
 		"cidr":      data.CIDR,
-		"desc":      data.Description,
+		"asndesc":   data.Description,
 	}
 
 	_, err := n.conn.ExecNeo("MERGE (n:netblock {cidr: {cidr}, enum: {uuid}}) "+
@@ -450,7 +450,7 @@ func (n *Neo4j) insertInfrastructure(data *DataOptsParams) error {
 	}
 
 	_, err = n.conn.ExecNeo("MERGE (n:as {asn: {asn}, enum: {uuid}}) "+
-		"ON CREATE SET n.desc = {desc}, n.timestamp = {timestamp}", params)
+		"ON CREATE SET n.description = {asndesc}, n.timestamp = {timestamp}", params)
 	if err != nil {
 		return err
 	}

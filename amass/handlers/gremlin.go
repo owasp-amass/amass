@@ -6,42 +6,61 @@ package handlers
 import (
 	"log"
 	"strconv"
+	"time"
 
 	"github.com/qasaur/gremgo"
 )
 
 // Gremlin is the client object for a Gremlin/TinkerPop graph database connection.
 type Gremlin struct {
-	client gremgo.Client
+	Log      *log.Logger
+	URL      string
+	username string
+	password string
+	pool     *gremgo.Pool
 }
 
 // NewGremlin returns a client object that implements the Amass DataHandler interface.
 // The url param typically looks like the following: localhost:8182
-func NewGremlin(url, username, password string, l *log.Logger) (*Gremlin, error) {
+func NewGremlin(url, user, pass string, l *log.Logger) (*Gremlin, error) {
+	g := &Gremlin{
+		Log:      l,
+		URL:      url,
+		username: user,
+		password: pass,
+		pool: &gremgo.Pool{
+			MaxActive:   10,
+			IdleTimeout: 30 * time.Second,
+		},
+	}
+	g.pool.Dial = g.getClient
+	return g, nil
+}
+
+func (g *Gremlin) getClient() (*gremgo.Client, error) {
 	errs := make(chan error)
 	go func(e chan error) {
 		err := <-e
-		l.Println("Gremlin: Lost connection to the database: " + err.Error())
+		g.Log.Println("Gremlin: Lost connection to the database: " + err.Error())
 	}(errs)
 
 	var err error
 	var grem gremgo.Client
 	var config gremgo.DialerConfig
-	if username != "" && password != "" {
-		config = gremgo.SetAuthentication(username, password)
+	if g.username != "" && g.password != "" {
+		config = gremgo.SetAuthentication(g.username, g.password)
+		dialer := gremgo.NewDialer("ws://"+g.URL, config)
+		grem, err = gremgo.Dial(dialer, errs)
+	} else {
+		dialer := gremgo.NewDialer("ws://" + g.URL)
+		grem, err = gremgo.Dial(dialer, errs)
 	}
-
-	dialer := gremgo.NewDialer("ws://"+url, config)
-	grem, err = gremgo.Dial(dialer, errs)
-	if err != nil {
-		return nil, err
-	}
-	return &Gremlin{client: grem}, nil
+	return &grem, err
 }
 
 // Close cleans up the Gremlin client object.
 func (g *Gremlin) Close() {
-	g.client.Close()
+	return
 }
 
 // String returns a description for the Gremlin client object.
@@ -85,11 +104,17 @@ func (g *Gremlin) insertDomain(data *DataOptsParams) error {
 		"source":    data.Source,
 	}
 
-	_, err := g.client.Execute(
+	conn, err := g.pool.Get()
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	_, err = conn.Client.Execute(
 		"g.V().hasLabel('domain').has('name', domain).has('enum', uuid).fold()."+
 			"coalesce(unfold(),addV('domain').property('enum', uuid)."+
 			"property('timestamp', timestamp).property('name', domain)."+
-			"property('tag', tag).property('source', source)",
+			"property('tag', tag).property('source', source))",
 		bindings,
 		map[string]string{},
 	)
@@ -102,7 +127,7 @@ func (g *Gremlin) insertSubdomain(data *DataOptsParams) error {
 
 func (g *Gremlin) insertSub(label string, data *DataOptsParams) error {
 	bindings := map[string]string{
-		"label":     label,
+		"nodelabel": label,
 		"uuid":      data.UUID,
 		"timestamp": data.Timestamp,
 		"name":      data.Name,
@@ -111,28 +136,23 @@ func (g *Gremlin) insertSub(label string, data *DataOptsParams) error {
 		"source":    data.Source,
 	}
 
-	err := g.insertDomain(data)
-	if err != nil {
+	if err := g.insertDomain(data); err != nil {
 		return err
 	}
 
 	if data.Name != data.Domain {
-		_, err = g.client.Execute(
-			"g.V().hasLabel(label).has('name', name).has('enum', uuid).fold()."+
-				"coalesce(unfold(),g.addV(label).property('name', name).property('enum', uuid)."+
-				"property('timestamp', timestamp).property('tag', tag).property('source', source))",
-			bindings,
-			map[string]string{},
-		)
+		conn, err := g.pool.Get()
 		if err != nil {
 			return err
 		}
+		defer conn.Close()
 
-		_, err = g.client.Execute(
-			"d = g.V().hasLabel('domain').has('name', domain).has('enum', uuid).next() "+
-				"s = g.V().hasLabel(label).has('name', name).has('enum', uuid).next() "+
-				"g.V(d).out('root_of').hasLabel(label).has('name', name).has('enum', uuid).fold()."+
-				"coalesce(unfold(), d.addE('root_of').to(s))",
+		_, err = conn.Client.Execute(
+			"g.V().hasLabel(nodelabel).has('name', name).has('enum', uuid).fold().coalesce(unfold(),"+
+				"V().hasLabel('domain').has('name', domain).has('enum', uuid)."+
+				"addE('root_of').to("+
+				"addV(nodelabel).property('name', name).property('enum', uuid)."+
+				"property('timestamp', timestamp).property('tag', tag).property('source', source)))",
 			bindings,
 			map[string]string{},
 		)
@@ -171,11 +191,19 @@ func (g *Gremlin) insertCNAME(data *DataOptsParams) error {
 		return err
 	}
 
-	_, err = g.client.Execute(
-		"s = g.V().hasLabel('subdomain').has('name', sname).has('enum', uuid).next() "+
-			"t = g.V().hasLabel('domain','subdomain').has('name', tname).has('enum', uuid).next() "+
-			"g.V(s).out('cname_to').hasLabel('domain','subdomain').has('name', tname).has('enum', uuid).fold()."+
-			"coalesce(unfold(), s.addE('cname_to').to(t))",
+	conn, err := g.pool.Get()
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	_, err = conn.Client.Execute(
+		"g.V().hasLabel('subdomain').has('name', sname).has('enum', uuid)."+
+			"out('cname_to').hasLabel('domain','subdomain').has('name', tname).has('enum', uuid)."+
+			"fold().coalesce(unfold(),"+
+			"V().hasLabel('subdomain').has('name', sname).has('enum', uuid)."+
+			"addE('cname_to').to("+
+			"V().hasLabel('domain','subdomain').has('name', tname).has('enum', uuid)))",
 		bindings,
 		map[string]string{},
 	)
@@ -198,22 +226,18 @@ func (g *Gremlin) insertA(data *DataOptsParams) error {
 		return err
 	}
 
-	_, err := g.client.Execute(
-		"g.V().hasLabel('address').has('addr', addr).has('type', type).has('enum', uuid).fold()."+
-			"coalesce(unfold(),addV('address').property('addr', addr).property('type', type).property('enum', uuid)."+
-			"property('timestamp', timestamp).property('tag', tag).property('source', source))",
-		bindings,
-		map[string]string{},
-	)
+	conn, err := g.pool.Get()
 	if err != nil {
 		return err
 	}
+	defer conn.Close()
 
-	_, err = g.client.Execute(
-		"s = g.V().hasLabel('domain','subdomain').has('name', name).has('enum', uuid).next() "+
-			"a = g.V().hasLabel('address').has('addr', addr).has('enum', uuid).next() "+
-			"g.V(s).out('a_to').hasLabel('address').has('addr', addr).has('enum', uuid).fold()."+
-			"coalesce(unfold(), s.addE('a_to').to(a))",
+	_, err = conn.Client.Execute(
+		"g.V().hasLabel('address').has('addr', addr).has('type', type).has('enum', uuid).fold().coalesce(unfold(),"+
+			"g.V().hasLabel('domain','subdomain','ns','mx').has('name', name).has('enum', uuid)."+
+			"addE('a_to').to("+
+			"addV('address').property('addr', addr).property('type', type).property('enum', uuid)."+
+			"property('timestamp', timestamp).property('tag', tag).property('source', source)))",
 		bindings,
 		map[string]string{},
 	)
@@ -232,28 +256,22 @@ func (g *Gremlin) insertAAAA(data *DataOptsParams) error {
 		"source":    data.Source,
 	}
 
-	if data.Name != data.Domain {
-		if err := g.insertSubdomain(data); err != nil {
-			return err
-		}
-	}
-
-	_, err := g.client.Execute(
-		"g.V().hasLabel('address').has('addr', addr).has('type', type).has('enum', uuid).fold()."+
-			"coalesce(unfold(),addV('address').property('addr', addr).property('type', type).property('enum', uuid)."+
-			"property('timestamp', timestamp).property('tag', tag).property('source', source))",
-		bindings,
-		map[string]string{},
-	)
-	if err != nil {
+	if err := g.insertSubdomain(data); err != nil {
 		return err
 	}
 
-	_, err = g.client.Execute(
-		"s = g.V().hasLabel('domain','subdomain').has('name', name).has('enum', uuid).next() "+
-			"a = g.V().hasLabel('address').has('addr', addr).has('enum', uuid).next() "+
-			"g.V(s).out('aaaa_to').hasLabel('address').has('addr', addr).has('enum', uuid).fold()."+
-			"coalesce(unfold(), s.addE('aaaa_to').to(a))",
+	conn, err := g.pool.Get()
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	_, err = conn.Client.Execute(
+		"g.V().hasLabel('address').has('addr', addr).has('type', type).has('enum', uuid).fold().coalesce(unfold(),"+
+			"g.V().hasLabel('domain','subdomain','ns','mx').has('name', name).has('enum', uuid)."+
+			"addE('a_to').to("+
+			"addV('address').property('addr', addr).property('type', type).property('enum', uuid)."+
+			"property('timestamp', timestamp).property('tag', tag).property('source', source)))",
 		bindings,
 		map[string]string{},
 	)
@@ -283,22 +301,18 @@ func (g *Gremlin) insertPTR(data *DataOptsParams) error {
 		return err
 	}
 
-	_, err = g.client.Execute(
-		"g.V().hasLabel('ptr').has('name', name).has('enum', uuid).fold()."+
-			"coalesce(unfold(),addV('ptr').property('name', name).property('enum', uuid)."+
-			"property('timestamp', timestamp).property('tag', tag).property('source', source))",
-		bindings,
-		map[string]string{},
-	)
+	conn, err := g.pool.Get()
 	if err != nil {
 		return err
 	}
+	defer conn.Close()
 
-	_, err = g.client.Execute(
-		"p = g.V().hasLabel('ptr').has('name', name).has('enum', uuid).next() "+
-			"t = g.V().hasLabel('domain','subdomain').has('name', target).has('enum', uuid).next() "+
-			"g.V(p).out('ptr_to').hasLabel('domain','subdomain').has('name', target).has('enum', uuid).fold()."+
-			"coalesce(unfold(), p.addE('ptr_to').to(t))",
+	_, err = conn.Client.Execute(
+		"g.V().hasLabel('ptr').has('name', name).has('enum', uuid).fold().coalesce(unfold(),"+
+			"addV('ptr').property('name', name).property('enum', uuid).property('timestamp', timestamp)."+
+			"property('tag', tag).property('source', source)."+
+			"addE('ptr_to').to("+
+			"V().hasLabel('domain','subdomain').has('name', target).has('enum', uuid)))",
 		bindings,
 		map[string]string{},
 	)
@@ -345,11 +359,17 @@ func (g *Gremlin) insertSRV(data *DataOptsParams) error {
 		return err
 	}
 
-	_, err = g.client.Execute(
-		"s = g.V().hasLabel('domain','subdomain').has('name', name).has('enum', uuid).next() "+
-			"srv = g.V().hasLabel('subdomain').has('name', service).has('enum', uuid).next() "+
-			"g.V(srv).out('service_for').hasLabel('domain','subdomain').has('name', name).has('enum', uuid).fold()."+
-			"coalesce(unfold(), srv.addE('service_for').to(s))",
+	conn, err := g.pool.Get()
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	_, err = conn.Client.Execute(
+		"g.V().hasLabel('subdomain').has('name', service).has('enum', uuid).out('service_for')."+
+			"hasLabel('domain','subdomain').has('name', name).has('enum', uuid).fold().coalesce(unfold(),"+
+			"V().hasLabel('subdomain').has('name', service).has('enum', uuid).addE('service_for').to("+
+			"V().hasLabel('domain','subdomain').has('name', name).has('enum', uuid)))",
 		bindings,
 		map[string]string{},
 	)
@@ -357,11 +377,11 @@ func (g *Gremlin) insertSRV(data *DataOptsParams) error {
 		return err
 	}
 
-	_, err = g.client.Execute(
-		"t = g.V().hasLabel('subdomain').has('name', target).has('enum', uuid).next() "+
-			"srv = g.V().hasLabel('subdomain').has('name', service).has('enum', uuid).next() "+
-			"g.V(srv).out('srv_to').hasLabel('subdomain').has('name', target).has('enum', uuid).fold()."+
-			"coalesce(unfold(), srv.addE('srv_to').to(t))",
+	_, err = conn.Client.Execute(
+		"g.V().hasLabel('subdomain').has('name', service).has('enum', uuid).out('srv_to')."+
+			"hasLabel('subdomain').has('name', target).has('enum', uuid).fold().coalesce(unfold(),"+
+			"V().hasLabel('subdomain').has('name', service).has('enum', uuid).addE('srv_to').to("+
+			"V().hasLabel('subdomain').has('name', target).has('enum', uuid)))",
 		bindings,
 		map[string]string{},
 	)
@@ -396,11 +416,18 @@ func (g *Gremlin) insertNS(data *DataOptsParams) error {
 		return err
 	}
 
-	_, err = g.client.Execute(
-		"s = g.V().hasLabel('domain','subdomain').has('name', name).has('enum', uuid).next() "+
-			"ns = g.V().hasLabel('ns').has('name', target).has('enum', uuid).next() "+
-			"g.V(s).out('ns_to').hasLabel('ns').has('name', target).has('enum', uuid).fold()."+
-			"coalesce(unfold(), s.addE('ns_to').to(ns))",
+	conn, err := g.pool.Get()
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	_, err = conn.Client.Execute(
+		"g.V().hasLabel('domain','subdomain').has('name', name).has('enum', uuid).out('ns_to')."+
+			"hasLabel('ns').has('name', target).has('enum', uuid).fold().coalesce(unfold(),"+
+			"V().hasLabel('domain','subdomain').has('name', name).has('enum', uuid)."+
+			"addE('ns_to').to("+
+			"V().hasLabel('ns').has('name', target).has('enum', uuid)))",
 		bindings,
 		map[string]string{},
 	)
@@ -435,11 +462,18 @@ func (g *Gremlin) insertMX(data *DataOptsParams) error {
 		return err
 	}
 
-	_, err = g.client.Execute(
-		"s = g.V().hasLabel('domain','subdomain').has('name', name).has('enum', uuid).next() "+
-			"mx = g.V().hasLabel('mx').has('name', target).has('enum', uuid).next() "+
-			"g.V(s).out('mx_to').hasLabel('mx').has('name', target).has('enum', uuid).fold()."+
-			"coalesce(unfold(), s.addE('mx_to').to(mx))",
+	conn, err := g.pool.Get()
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	_, err = conn.Client.Execute(
+		"g.V().hasLabel('domain','subdomain').has('name', name).has('enum', uuid).out('mx_to')."+
+			"hasLabel('mx').has('name', target).has('enum', uuid).fold().coalesce(unfold(),"+
+			"V().hasLabel('domain','subdomain').has('name', name).has('enum', uuid)."+
+			"addE('mx_to').to("+
+			"V().hasLabel('mx').has('name', target).has('enum', uuid)))",
 		bindings,
 		map[string]string{},
 	)
@@ -453,13 +487,18 @@ func (g *Gremlin) insertInfrastructure(data *DataOptsParams) error {
 		"addr":      data.Address,
 		"asn":       strconv.Itoa(data.ASN),
 		"cidr":      data.CIDR,
-		"desc":      data.Description,
+		"asndesc":   data.Description,
 	}
 
-	_, err := g.client.Execute(
-		"g.V().hasLabel('netblock').has('cidr', cidr).has('enum', uuid).fold()."+
-			"coalesce(unfold(),addV('netblock').property('cidr', cidr).property('enum', uuid)."+
-			"property('timestamp', timestamp).property('tag', tag).property('source', source))",
+	conn, err := g.pool.Get()
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	_, err = conn.Client.Execute(
+		"g.V().hasLabel('netblock').has('cidr', cidr).has('enum', uuid).fold().coalesce(unfold(),"+
+			"addV('netblock').property('cidr', cidr).property('enum', uuid).property('timestamp', timestamp))",
 		bindings,
 		map[string]string{},
 	)
@@ -467,11 +506,12 @@ func (g *Gremlin) insertInfrastructure(data *DataOptsParams) error {
 		return err
 	}
 
-	_, err = g.client.Execute(
-		"a = g.V().hasLabel('address').has('addr', addr).has('enum', uuid).next() "+
-			"nb = g.V().hasLabel('netblock').has('cidr', cidr).has('enum', uuid).next() "+
-			"g.V(nb).out('contains').hasLabel('address').has('addr', addr).has('enum', uuid).fold()."+
-			"coalesce(unfold(), nb.addE('contains').to(a))",
+	_, err = conn.Client.Execute(
+		"g.V().hasLabel('netblock').has('cidr', cidr).has('enum', uuid).out('contains')."+
+			"hasLabel('address').has('addr', addr).has('enum', uuid).fold().coalesce(unfold(),"+
+			"V().hasLabel('netblock').has('cidr', cidr).has('enum', uuid)."+
+			"addE('contains').to("+
+			"V().hasLabel('address').has('addr', addr).has('enum', uuid)))",
 		bindings,
 		map[string]string{},
 	)
@@ -479,10 +519,10 @@ func (g *Gremlin) insertInfrastructure(data *DataOptsParams) error {
 		return err
 	}
 
-	_, err = g.client.Execute(
-		"g.V().hasLabel('as').has('asn', asn).has('enum', uuid).fold()."+
-			"coalesce(unfold(),addV('as').property('asn', asn).property('desc', desc).property('enum', uuid)."+
-			"property('timestamp', timestamp).property('tag', tag).property('source', source))",
+	_, err = conn.Client.Execute(
+		"g.V().hasLabel('as').has('asn', asn).has('enum', uuid).fold().coalesce(unfold(),"+
+			"addV('as').property('asn', asn).property('description', asndesc)."+
+			"property('enum', uuid).property('timestamp', timestamp))",
 		bindings,
 		map[string]string{},
 	)
@@ -490,11 +530,12 @@ func (g *Gremlin) insertInfrastructure(data *DataOptsParams) error {
 		return err
 	}
 
-	_, err = g.client.Execute(
-		"a = g.V().hasLabel('as').has('asn', asn).has('enum', uuid).next() "+
-			"nb = g.V().hasLabel('netblock').has('cidr', cidr).has('enum', uuid).next() "+
-			"g.V(a).out('has_prefix').hasLabel('netblock').has('cidr', cidr).has('enum', uuid).fold()."+
-			"coalesce(unfold(), a.addE('has_prefix').to(nb))",
+	_, err = conn.Client.Execute(
+		"g.V().hasLabel('as').has('asn', asn).has('enum', uuid).out('has_prefix')."+
+			"hasLabel('netblock').has('cidr', cidr).has('enum', uuid).fold().coalesce(unfold(),"+
+			"V().hasLabel('as').has('asn', asn).has('enum', uuid)."+
+			"addE('has_prefix').to("+
+			"V().hasLabel('netblock').has('cidr', cidr).has('enum', uuid)))",
 		bindings,
 		map[string]string{},
 	)

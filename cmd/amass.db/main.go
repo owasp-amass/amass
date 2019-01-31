@@ -47,8 +47,8 @@ func main() {
 		return
 	}
 
-	if *neo4j == "" {
-		fmt.Println("The '-neo4j' flag must be provided with the Neo4j connection URL")
+	if *neo4j == "" && *grem == "" {
+		fmt.Println("The '-neo4j' or '-grem' flag must be provided with the connection URL")
 		return
 	}
 
