@@ -98,3 +98,17 @@ changelog:
     exclude:
     - '^doc:'
     - '^test:'
+
+brew:
+  # Reporitory to push the tap to.
+  github:
+    owner: OWASP
+    name: homebrew-amass
+
+  # Your app's homepage.
+  # Default is empty.
+  homepage: 'https://www.owasp.org/index.php/OWASP_Amass_Project'
+
+  # Your app's description.
+  # Default is empty.
+  description: 'In-depth DNS Enumeration and Network Mapping'
