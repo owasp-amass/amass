@@ -46,8 +46,10 @@ const (
 type Enumeration struct {
 	Config *core.Config
 
+	Bus *core.EventBus
+
 	// Link graph that collects all the information gathered by the enumeration
-	Graph *handlers.Graph
+	Graph handlers.DataHandler
 
 	// The channel that will receive the results
 	Output chan *core.Output
@@ -67,8 +69,12 @@ type Enumeration struct {
 
 // NewEnumeration returns an initialized Enumeration that has not been started yet.
 func NewEnumeration() *Enumeration {
-	return &Enumeration{
-		Config:      &core.Config{UUID: uuid.New()},
+	e := &Enumeration{
+		Config: &core.Config{
+			UUID: uuid.New(),
+			Log:  log.New(ioutil.Discard, "", 0),
+		},
+		Bus:         core.NewEventBus(),
 		Graph:       handlers.NewGraph(),
 		Output:      make(chan *core.Output, 100),
 		Done:        make(chan struct{}, 2),
@@ -77,6 +83,8 @@ func NewEnumeration() *Enumeration {
 		filter:      utils.NewStringFilter(),
 		outputQueue: utils.NewQueue(),
 	}
+	e.dataSources = sources.GetAllSources(e.Config, e.Bus)
+	return e
 }
 
 // Start begins the DNS enumeration process for the Amass Enumeration object.
@@ -89,14 +97,15 @@ func (e *Enumeration) Start() error {
 		return err
 	}
 
-	if e.Config.Log == nil {
-		e.Config.Log = log.New(ioutil.Discard, "", 0)
+	if e.Config.GremlinURL != "" {
+		gremlin := handlers.NewGremlin(e.Config.GremlinURL,
+			e.Config.GremlinUser, e.Config.GremlinPass, e.Config.Log)
+		e.Graph = gremlin
+		defer gremlin.Close()
 	}
 
-	bus := core.NewEventBus()
-	bus.Subscribe(core.OutputTopic, e.sendOutput)
+	e.Bus.Subscribe(core.OutputTopic, e.sendOutput)
 
-	e.dataSources = sources.GetAllSources(e.Config, bus)
 	if len(e.Config.DisabledDataSources) > 0 {
 		e.dataSources = e.Config.ExcludeDisabledDataSources(e.dataSources)
 	}
@@ -104,19 +113,19 @@ func (e *Enumeration) Start() error {
 	// Select the correct services to be used in this enumeration
 	var services []core.Service
 	if !e.Config.Passive {
-		dms := NewDataManagerService(e.Config, bus)
+		dms := NewDataManagerService(e.Config, e.Bus)
 		dms.AddDataHandler(e.Graph)
 		if e.Config.DataOptsWriter != nil {
 			dms.AddDataHandler(handlers.NewDataOptsHandler(e.Config.DataOptsWriter))
 		}
-		services = append(services, NewDNSService(e.Config, bus), dms, NewActiveCertService(e.Config, bus))
+		services = append(services, NewDNSService(e.Config, e.Bus), dms, NewActiveCertService(e.Config, e.Bus))
 	}
 
-	namesrv := NewNameService(e.Config, bus)
+	namesrv := NewNameService(e.Config, e.Bus)
 	namesrv.RegisterGraph(e.Graph)
-	services = append(services, namesrv, NewAddressService(e.Config, bus))
+	services = append(services, namesrv, NewAddressService(e.Config, e.Bus))
 	if !e.Config.Passive {
-		services = append(services, NewAlterationService(e.Config, bus), NewBruteForceService(e.Config, bus))
+		services = append(services, NewAlterationService(e.Config, e.Bus), NewBruteForceService(e.Config, e.Bus))
 	}
 
 	// Grab all the data sources
@@ -128,7 +137,7 @@ func (e *Enumeration) Start() error {
 	}
 
 	t := time.NewTicker(3 * time.Second)
-	out := time.NewTicker(time.Second)
+	out := time.NewTicker(5 * time.Second)
 	go e.processOutput()
 loop:
 	for {
@@ -161,7 +170,6 @@ loop:
 	for _, srv := range services {
 		srv.Stop()
 	}
-	bus.Stop()
 	return nil
 }
 
@@ -183,7 +191,6 @@ loop:
 				time.Sleep(time.Duration(delays[curIdx]) * time.Millisecond)
 				continue
 			}
-
 			curIdx = 0
 			e.Output <- element.(*core.Output)
 		}
@@ -196,10 +203,18 @@ func (e *Enumeration) checkForOutput() {
 	case <-e.Done:
 		return
 	default:
-		if out := e.Graph.GetNewOutput(); len(out) > 0 {
+		if out := e.Graph.GetUnreadOutput(e.Config.UUID.String()); len(out) > 0 {
 			for _, o := range out {
-				if !e.filter.Duplicate(o.Name) && e.Config.IsDomainInScope(o.Name) {
-					e.outputQueue.Append(o)
+				if time.Now().Add(10*time.Second).After(o.Timestamp) && !e.filter.Duplicate(o.Name) {
+					e.Graph.MarkAsRead(&handlers.DataOptsParams{
+						UUID:   e.Config.UUID.String(),
+						Name:   o.Name,
+						Domain: o.Domain,
+					})
+
+					if e.Config.IsDomainInScope(o.Name) {
+						e.outputQueue.Append(o)
+					}
 				}
 			}
 		}

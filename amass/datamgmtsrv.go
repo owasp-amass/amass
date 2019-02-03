@@ -57,7 +57,7 @@ func (dms *DataManagerService) processRequests() {
 		case <-dms.Quit():
 			return
 		case req := <-dms.RequestChan():
-			go dms.manageData(req)
+			dms.manageData(req)
 		}
 	}
 }

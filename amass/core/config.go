@@ -38,6 +38,11 @@ type Config struct {
 	// The writer used to save the data operations performed
 	DataOptsWriter io.Writer
 
+	// The settings for connecting with Gremlin Server
+	GremlinURL  string
+	GremlinUser string
+	GremlinPass string
+
 	// The ports that will be checked for certificates
 	Ports []int `ini:"port,,allowshadow"`
 
@@ -288,12 +293,18 @@ func (c *Config) LoadSettings(path string) error {
 		c.DisabledDataSources = utils.UniqueAppend(
 			c.DisabledDataSources, disabled.Key("data_source").ValueWithShadows()...)
 	}
+	// Load up all the Gremlin Server settings
+	if gremlin, err := cfg.GetSection("gremlin"); err == nil {
+		c.GremlinURL = gremlin.Key("url").String()
+		c.GremlinUser = gremlin.Key("username").String()
+		c.GremlinPass = gremlin.Key("password").String()
+	}
 	// Load up all API key information from data source sections
 	for _, section := range cfg.Sections() {
 		name := section.Name()
 		// Skip sections that are not related to data sources
 		if name == "default" || name == "domains" || name == "resolvers" ||
-			name == "blacklisted" || name == "disabled_data_sources" {
+			name == "blacklisted" || name == "disabled_data_sources" || name == "gremlin" {
 			continue
 		}
 

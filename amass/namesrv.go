@@ -28,7 +28,7 @@ type NameService struct {
 	sanityRE          *regexp.Regexp
 	trustedNameFilter *utils.StringFilter
 	otherNameFilter   *utils.StringFilter
-	graph             *handlers.Graph
+	graph             handlers.DataHandler
 }
 
 // NewNameService requires the enumeration configuration and event bus as parameters.
@@ -57,7 +57,7 @@ func (ns *NameService) OnStart() error {
 }
 
 // RegisterGraph makes the Graph available to the NameService.
-func (ns *NameService) RegisterGraph(graph *handlers.Graph) {
+func (ns *NameService) RegisterGraph(graph handlers.DataHandler) {
 	ns.graph = graph
 }
 
@@ -134,7 +134,12 @@ func (ns *NameService) checkSubdomain(req *core.Request) {
 
 	sub := strings.Join(labels[1:], ".")
 	// CNAMEs are not a proper subdomain
-	if ns.graph.CNAMENode(sub) {
+	cname := ns.graph.IsCNAMENode(&handlers.DataOptsParams{
+		UUID:   ns.Config().UUID.String(),
+		Name:   req.Name,
+		Domain: req.Domain,
+	})
+	if cname {
 		return
 	}
 

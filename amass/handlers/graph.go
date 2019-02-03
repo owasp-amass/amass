@@ -139,9 +139,20 @@ func (g *Graph) subdomainNode(sub string) *node {
 	return g.subdomains[sub]
 }
 
-// CNAMENode returns the Node for the subdomain name provided if it's a CNAME.
-func (g *Graph) CNAMENode(sub string) bool {
-	n := g.subdomainNode(sub)
+// MarkAsRead implements the Amass DataHandler interface.
+func (g *Graph) MarkAsRead(data *DataOptsParams) error {
+	n := g.subdomainNode(data.Name)
+	if n == nil {
+		return nil
+	}
+
+	n.Properties["read"] = "yes"
+	return nil
+}
+
+// IsCNAMENode implements the Amass DataHandler interface.
+func (g *Graph) IsCNAMENode(data *DataOptsParams) bool {
+	n := g.subdomainNode(data.Name)
 	if n == nil {
 		return false
 	}
@@ -291,6 +302,7 @@ func (g *Graph) insertDomain(data *DataOptsParams) error {
 			return fmt.Errorf("Failed to create new domain node for %s", data.Domain)
 		}
 		d.Labels = append(d.Labels, "Subdomain")
+		d.Properties["timestamp"] = data.Timestamp
 		d.Properties["name"] = data.Domain
 		d.Properties["tag"] = data.Tag
 		d.Properties["source"] = data.Source
@@ -313,6 +325,7 @@ func (g *Graph) insertSubdomain(data *DataOptsParams) error {
 	}
 
 	sub := g.newNode("Subdomain")
+	sub.Properties["timestamp"] = data.Timestamp
 	sub.Properties["name"] = data.Name
 	sub.Properties["tag"] = data.Tag
 	sub.Properties["source"] = data.Source
@@ -367,6 +380,7 @@ func (g *Graph) insertA(data *DataOptsParams) error {
 	if a == nil {
 		a = g.newNode("IPAddress")
 		if a != nil {
+			a.Properties["timestamp"] = data.Timestamp
 			a.Properties["addr"] = data.Address
 			a.Properties["type"] = "IPv4"
 			g.Lock()
@@ -391,6 +405,7 @@ func (g *Graph) insertAAAA(data *DataOptsParams) error {
 	if a == nil {
 		a = g.newNode("IPAddress")
 		if a != nil {
+			a.Properties["timestamp"] = data.Timestamp
 			a.Properties["addr"] = data.Address
 			a.Properties["type"] = "IPv6"
 			g.Lock()
@@ -415,6 +430,7 @@ func (g *Graph) insertPTR(data *DataOptsParams) error {
 	if ptr == nil {
 		ptr = g.newNode("PTR")
 		if ptr != nil {
+			ptr.Properties["timestamp"] = data.Timestamp
 			ptr.Properties["name"] = data.Name
 			g.Lock()
 			g.ptrs[data.Name] = ptr
@@ -480,6 +496,7 @@ func (g *Graph) insertNS(data *DataOptsParams) error {
 	if ns == nil {
 		ns = g.newNode("NS")
 		if ns != nil {
+			ns.Properties["timestamp"] = data.Timestamp
 			ns.Properties["name"] = data.TargetName
 			ns.Properties["tag"] = data.Tag
 			ns.Properties["source"] = data.Source
@@ -514,6 +531,7 @@ func (g *Graph) insertMX(data *DataOptsParams) error {
 	if mx == nil {
 		mx = g.newNode("MX")
 		if mx != nil {
+			mx.Properties["timestamp"] = data.Timestamp
 			mx.Properties["name"] = data.TargetName
 			mx.Properties["tag"] = data.Tag
 			mx.Properties["source"] = data.Source
@@ -546,6 +564,7 @@ func (g *Graph) insertInfrastructure(data *DataOptsParams) error {
 	if nb == nil {
 		nb = g.newNode("Netblock")
 		if nb != nil {
+			nb.Properties["timestamp"] = data.Timestamp
 			nb.Properties["cidr"] = data.CIDR
 			g.Lock()
 			g.netblocks[data.CIDR] = nb
@@ -563,6 +582,7 @@ func (g *Graph) insertInfrastructure(data *DataOptsParams) error {
 	if a == nil {
 		a = g.newNode("AS")
 		if a != nil {
+			a.Properties["timestamp"] = data.Timestamp
 			a.Properties["asn"] = strconv.Itoa(data.ASN)
 			a.Properties["desc"] = data.Description
 			g.Lock()
@@ -578,8 +598,8 @@ func (g *Graph) insertInfrastructure(data *DataOptsParams) error {
 	return nil
 }
 
-// GetNewOutput returns new findings within the enumeration Graph.
-func (g *Graph) GetNewOutput() []*core.Output {
+// GetUnreadOutput returns new findings within the enumeration Graph.
+func (g *Graph) GetUnreadOutput(uuid string) []*core.Output {
 	var domains []string
 	var dNodes []*node
 	var results []*core.Output
@@ -642,16 +662,21 @@ func (g *Graph) findSubdomainOutput(domain *node) []*core.Output {
 
 func (g *Graph) buildSubdomainOutput(sub *node) *core.Output {
 	sub.Lock()
-	_, ok := sub.Properties["sent"]
+	_, ok := sub.Properties["read"]
 	sub.Unlock()
 	if ok {
 		return nil
 	}
 
+	ts, err := time.Parse(time.RFC3339, sub.Properties["timestamp"])
+	if err != nil {
+		return nil
+	}
 	output := &core.Output{
-		Name:   sub.Properties["name"],
-		Tag:    sub.Properties["tag"],
-		Source: sub.Properties["source"],
+		Timestamp: ts,
+		Name:      sub.Properties["name"],
+		Tag:       sub.Properties["tag"],
+		Source:    sub.Properties["source"],
 	}
 
 	var addrs []*node
@@ -662,7 +687,6 @@ func (g *Graph) buildSubdomainOutput(sub *node) *core.Output {
 			addrs = append(addrs, g.nodes[e.To])
 		}
 	}
-
 	if len(addrs) == 0 {
 		return nil
 	}
@@ -672,27 +696,9 @@ func (g *Graph) buildSubdomainOutput(sub *node) *core.Output {
 			output.Addresses = append(output.Addresses, *i)
 		}
 	}
-
 	if len(output.Addresses) == 0 {
 		return nil
 	}
-
-	sub.Lock()
-	defer sub.Unlock()
-	if _, started := sub.Properties["started"]; !started {
-		sub.Properties["started"] = "yes"
-		go func(n *node) {
-			time.Sleep(5 * time.Second)
-			n.Lock()
-			n.Properties["finished"] = "yes"
-			n.Unlock()
-		}(sub)
-		return nil
-	}
-	if _, finished := sub.Properties["finished"]; !finished {
-		return nil
-	}
-	sub.Properties["sent"] = "yes"
 	return output
 }
 
