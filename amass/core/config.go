@@ -304,7 +304,7 @@ func (c *Config) LoadSettings(path string) error {
 		name := section.Name()
 		// Skip sections that are not related to data sources
 		if name == "default" || name == "domains" || name == "resolvers" ||
-			name == "blacklisted" || name == "disabled_data_sources" {
+			name == "blacklisted" || name == "disabled_data_sources" || name == "gremlin" {
 			continue
 		}
 
