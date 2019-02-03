@@ -93,7 +93,7 @@ func (bfs *BruteForceService) startRootDomains() {
 
 // NewSubdomain is called by the Name Service when proper subdomains are discovered.
 func (bfs *BruteForceService) NewSubdomain(req *core.Request, times int) {
-	if times == bfs.Config().MinForRecursive {
+	if times >= bfs.Config().MinForRecursive {
 		bfs.SendRequest(req)
 	}
 }
