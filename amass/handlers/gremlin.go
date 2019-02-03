@@ -4,11 +4,20 @@
 package handlers
 
 import (
+	"encoding/json"
 	"log"
+	"net"
 	"strconv"
 	"time"
 
-	"github.com/qasaur/gremgo"
+	"github.com/OWASP/Amass/amass/core"
+	"github.com/OWASP/Amass/amass/utils"
+	gremgo "github.com/schwartzmx/gremgo-neptune"
+)
+
+const (
+	// GremlinMaxConnections defines the limited number of concurrent connections to the Gremlin Server.
+	GremlinMaxConnections int = 25
 )
 
 // Gremlin is the client object for a Gremlin/TinkerPop graph database connection.
@@ -18,23 +27,30 @@ type Gremlin struct {
 	username string
 	password string
 	pool     *gremgo.Pool
+	requests *utils.Queue
+	avail    utils.Semaphore
+	done     chan struct{}
 }
 
 // NewGremlin returns a client object that implements the Amass DataHandler interface.
-// The url param typically looks like the following: localhost:8182
-func NewGremlin(url, user, pass string, l *log.Logger) (*Gremlin, error) {
+// The url param typically looks like the following: ws://localhost:8182
+func NewGremlin(url, user, pass string, l *log.Logger) *Gremlin {
 	g := &Gremlin{
 		Log:      l,
 		URL:      url,
 		username: user,
 		password: pass,
 		pool: &gremgo.Pool{
-			MaxActive:   10,
-			IdleTimeout: 30 * time.Second,
+			MaxActive:   GremlinMaxConnections,
+			IdleTimeout: 5 * time.Second,
 		},
+		requests: utils.NewQueue(),
+		avail:    utils.NewSimpleSemaphore(GremlinMaxConnections),
+		done:     make(chan struct{}, 2),
 	}
 	g.pool.Dial = g.getClient
-	return g, nil
+	go g.processInsertRequests()
+	return g
 }
 
 func (g *Gremlin) getClient() (*gremgo.Client, error) {
@@ -49,18 +65,18 @@ func (g *Gremlin) getClient() (*gremgo.Client, error) {
 	var config gremgo.DialerConfig
 	if g.username != "" && g.password != "" {
 		config = gremgo.SetAuthentication(g.username, g.password)
-		dialer := gremgo.NewDialer("ws://"+g.URL, config)
+		dialer := gremgo.NewDialer(g.URL, config)
 		grem, err = gremgo.Dial(dialer, errs)
 	} else {
-		dialer := gremgo.NewDialer("ws://" + g.URL)
+		dialer := gremgo.NewDialer(g.URL)
 		grem, err = gremgo.Dial(dialer, errs)
 	}
 	return &grem, err
 }
 
-// Close cleans up the Gremlin client object.
+// Close implements the Amass DataHandler interface.
 func (g *Gremlin) Close() {
-	return
+	g.done <- struct{}{}
 }
 
 // String returns a description for the Gremlin client object.
@@ -68,10 +84,97 @@ func (g *Gremlin) String() string {
 	return "Gremlin TinkerPop Handler"
 }
 
+// MarkAsRead implements the Amass DataHandler interface.
+func (g *Gremlin) MarkAsRead(data *DataOptsParams) error {
+	g.avail.Acquire(1)
+	defer g.avail.Release(1)
+
+	bindings := map[string]string{
+		"uuid":   data.UUID,
+		"name":   data.Name,
+		"domain": data.Domain,
+	}
+
+	conn, err := g.pool.Get()
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	_, err = conn.Client.ExecuteWithBindings(
+		// Find the domain name for the vertex
+		"g.V().hasLabel('domain').has('name', domain).has('enum', uuid).out('root_of')."+
+			// Find the subdomain name related vertex in the graph
+			"hasLabel('domain','subdomain','ns','mx').has('name', name).has('enum', uuid)."+
+			// Mark the subdomain name related vertex as read
+			"property('read', 'yes')",
+		bindings,
+		map[string]string{},
+	)
+	return err
+}
+
+// IsCNAMENode implements the Amass DataHandler interface.
+func (g *Gremlin) IsCNAMENode(data *DataOptsParams) bool {
+	g.avail.Acquire(1)
+	defer g.avail.Release(1)
+
+	bindings := map[string]string{
+		"uuid":   data.UUID,
+		"name":   data.Name,
+		"domain": data.Domain,
+	}
+
+	conn, err := g.pool.Get()
+	if err != nil {
+		return false
+	}
+	defer conn.Close()
+
+	var resp []gremgo.Response
+	resp, err = conn.Client.ExecuteWithBindings(
+		// Find the vertex in the graph and determine if it is a CNAME
+		"g.V().hasLabel('subdomain').has('name', name).has('enum', uuid).outE('cname_to').count()",
+		bindings,
+		map[string]string{},
+	)
+	if err != nil {
+		return false
+	}
+
+	var count struct {
+		List []struct {
+			Value int64 `json:"@value"`
+		} `json:"@value"`
+	}
+	if err = json.Unmarshal(resp[0].Result.Data, &count); err == nil {
+		if len(count.List) > 0 && count.List[0].Value > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+type gremlinRequest struct {
+	Params *DataOptsParams
+	Err    chan error
+}
+
 // Insert implements the Amass DataHandler interface.
 func (g *Gremlin) Insert(data *DataOptsParams) error {
-	var err error
+	e := make(chan error)
+	g.requests.Append(&gremlinRequest{
+		Params: data,
+		Err:    e,
+	})
+	return <-e
+}
 
+func (g *Gremlin) insertData(data *DataOptsParams) error {
+	g.avail.Acquire(1)
+	defer g.avail.Release(1)
+
+	var err error
 	switch data.Type {
 	case OptDomain:
 		err = g.insertDomain(data)
@@ -95,6 +198,30 @@ func (g *Gremlin) Insert(data *DataOptsParams) error {
 	return err
 }
 
+func (g *Gremlin) processInsertRequests() {
+	curIdx := 0
+	maxIdx := 7
+	delays := []int{10, 25, 50, 75, 100, 150, 250, 500}
+	for {
+		select {
+		case <-g.done:
+			return
+		default:
+			element, ok := g.requests.Next()
+			if !ok {
+				time.Sleep(time.Duration(delays[curIdx]) * time.Millisecond)
+				if curIdx < maxIdx {
+					curIdx++
+				}
+				continue
+			}
+			curIdx = 0
+			req := element.(*gremlinRequest)
+			req.Err <- g.insertData(req.Params)
+		}
+	}
+}
+
 func (g *Gremlin) insertDomain(data *DataOptsParams) error {
 	bindings := map[string]string{
 		"uuid":      data.UUID,
@@ -110,11 +237,12 @@ func (g *Gremlin) insertDomain(data *DataOptsParams) error {
 	}
 	defer conn.Close()
 
-	_, err = conn.Client.Execute(
-		"g.V().hasLabel('domain').has('name', domain).has('enum', uuid).fold()."+
-			"coalesce(unfold(),addV('domain').property('enum', uuid)."+
-			"property('timestamp', timestamp).property('name', domain)."+
-			"property('tag', tag).property('source', source))",
+	_, err = conn.Client.ExecuteWithBindings(
+		// Does this domain vertex already exist in the graph?
+		"g.V().hasLabel('domain').has('name', domain).has('enum', uuid).fold().coalesce(unfold(),"+
+			// Add the new domain vertex to the graph
+			"g.addV('domain').property('name', domain).property('type', 'domain').property('enum', uuid)."+
+			"property('timestamp', timestamp).property('tag', tag).property('source', source))",
 		bindings,
 		map[string]string{},
 	)
@@ -147,11 +275,15 @@ func (g *Gremlin) insertSub(label string, data *DataOptsParams) error {
 		}
 		defer conn.Close()
 
-		_, err = conn.Client.Execute(
+		_, err = conn.Client.ExecuteWithBindings(
+			// Does this subdomain name related vertex already exist in the graph?
 			"g.V().hasLabel(nodelabel).has('name', name).has('enum', uuid).fold().coalesce(unfold(),"+
-				"V().hasLabel('domain').has('name', domain).has('enum', uuid)."+
+				// Find the appropriate domain vertex in the graph
+				"g.V().hasLabel('domain').has('name', domain).has('enum', uuid)."+
+				// Add the new edge
 				"addE('root_of').to("+
-				"addV(nodelabel).property('name', name).property('enum', uuid)."+
+				// Add the new subdomain name related vertex for the edge to point to
+				"g.addV(nodelabel).property('name', name).property('type', nodelabel).property('enum', uuid)."+
 				"property('timestamp', timestamp).property('tag', tag).property('source', source)))",
 			bindings,
 			map[string]string{},
@@ -197,13 +329,17 @@ func (g *Gremlin) insertCNAME(data *DataOptsParams) error {
 	}
 	defer conn.Close()
 
-	_, err = conn.Client.Execute(
+	_, err = conn.Client.ExecuteWithBindings(
+		// Does this 'cname_to' edge already exist in the graph?
 		"g.V().hasLabel('subdomain').has('name', sname).has('enum', uuid)."+
-			"out('cname_to').hasLabel('domain','subdomain').has('name', tname).has('enum', uuid)."+
-			"fold().coalesce(unfold(),"+
-			"V().hasLabel('subdomain').has('name', sname).has('enum', uuid)."+
+			"out('cname_to').hasLabel('domain','subdomain').has('name', tname)."+
+			"has('enum', uuid).fold().coalesce(unfold(),"+
+			// Find the CNAME subdomain vertex in the graph
+			"g.V().hasLabel('subdomain').has('name', sname).has('enum', uuid)."+
+			// Add the new edge
 			"addE('cname_to').to("+
-			"V().hasLabel('domain','subdomain').has('name', tname).has('enum', uuid)))",
+			// Identify the subdomain name related vertex to point the edge to
+			"g.V().hasLabel('domain','subdomain','ns','mx').has('name', tname).has('enum', uuid)))",
 		bindings,
 		map[string]string{},
 	)
@@ -217,7 +353,7 @@ func (g *Gremlin) insertA(data *DataOptsParams) error {
 		"name":      data.Name,
 		"domain":    data.Domain,
 		"addr":      data.Address,
-		"type":      "IPv4",
+		"addrtype":  "IPv4",
 		"tag":       data.Tag,
 		"source":    data.Source,
 	}
@@ -232,12 +368,16 @@ func (g *Gremlin) insertA(data *DataOptsParams) error {
 	}
 	defer conn.Close()
 
-	_, err = conn.Client.Execute(
-		"g.V().hasLabel('address').has('addr', addr).has('type', type).has('enum', uuid).fold().coalesce(unfold(),"+
+	_, err = conn.Client.ExecuteWithBindings(
+		// Does this address already exist in the graph?
+		"g.V().hasLabel('address').has('addr', addr).has('addrtype', addrtype).has('enum', uuid).fold().coalesce(unfold(),"+
+			// Find the subdomain name related vertex in the graph
 			"g.V().hasLabel('domain','subdomain','ns','mx').has('name', name).has('enum', uuid)."+
+			// Add the new edge
 			"addE('a_to').to("+
-			"addV('address').property('addr', addr).property('type', type).property('enum', uuid)."+
-			"property('timestamp', timestamp).property('tag', tag).property('source', source)))",
+			// Add the new address vertex that the edge should point to
+			"addV('address').property('addr', addr).property('addrtype', addrtype).property('enum', uuid)."+
+			"property('type', 'address').property('timestamp', timestamp).property('tag', tag).property('source', source)))",
 		bindings,
 		map[string]string{},
 	)
@@ -251,7 +391,7 @@ func (g *Gremlin) insertAAAA(data *DataOptsParams) error {
 		"name":      data.Name,
 		"domain":    data.Domain,
 		"addr":      data.Address,
-		"type":      "IPv6",
+		"addrtype":  "IPv6",
 		"tag":       data.Tag,
 		"source":    data.Source,
 	}
@@ -266,12 +406,16 @@ func (g *Gremlin) insertAAAA(data *DataOptsParams) error {
 	}
 	defer conn.Close()
 
-	_, err = conn.Client.Execute(
-		"g.V().hasLabel('address').has('addr', addr).has('type', type).has('enum', uuid).fold().coalesce(unfold(),"+
+	_, err = conn.Client.ExecuteWithBindings(
+		// Does this address already exist in the graph?
+		"g.V().hasLabel('address').has('addr', addr).has('addrtype', addrtype).has('enum', uuid).fold().coalesce(unfold(),"+
+			// Find the subdomain name related vertex in the graph
 			"g.V().hasLabel('domain','subdomain','ns','mx').has('name', name).has('enum', uuid)."+
-			"addE('a_to').to("+
-			"addV('address').property('addr', addr).property('type', type).property('enum', uuid)."+
-			"property('timestamp', timestamp).property('tag', tag).property('source', source)))",
+			// Add the new edge
+			"addE('aaaa_to').to("+
+			// Add the new address vertex that the edge should point to
+			"addV('address').property('addr', addr).property('addrtype', addrtype).property('enum', uuid)."+
+			"property('type', 'address').property('timestamp', timestamp).property('tag', tag).property('source', source)))",
 		bindings,
 		map[string]string{},
 	)
@@ -307,12 +451,16 @@ func (g *Gremlin) insertPTR(data *DataOptsParams) error {
 	}
 	defer conn.Close()
 
-	_, err = conn.Client.Execute(
+	_, err = conn.Client.ExecuteWithBindings(
+		// Does the 'ptr_to' edge already exist between the ptr and the subdomain?
 		"g.V().hasLabel('ptr').has('name', name).has('enum', uuid).fold().coalesce(unfold(),"+
-			"addV('ptr').property('name', name).property('enum', uuid).property('timestamp', timestamp)."+
-			"property('tag', tag).property('source', source)."+
+			// Add the ptr vertex into the graph
+			"g.addV('ptr').property('name', name).property('type', 'ptr').property('enum', uuid)."+
+			"property('timestamp', timestamp).property('tag', tag).property('source', source)."+
+			// Add the new edge
 			"addE('ptr_to').to("+
-			"V().hasLabel('domain','subdomain').has('name', target).has('enum', uuid)))",
+			// Identify the domain/subdomain vertex to point the edge to
+			"g.V().hasLabel('domain','subdomain').has('name', target).has('enum', uuid)))",
 		bindings,
 		map[string]string{},
 	)
@@ -365,11 +513,16 @@ func (g *Gremlin) insertSRV(data *DataOptsParams) error {
 	}
 	defer conn.Close()
 
-	_, err = conn.Client.Execute(
+	_, err = conn.Client.ExecuteWithBindings(
+		// Does the 'srv_to' edge already exist between the two subdomains?
 		"g.V().hasLabel('subdomain').has('name', service).has('enum', uuid).out('service_for')."+
 			"hasLabel('domain','subdomain').has('name', name).has('enum', uuid).fold().coalesce(unfold(),"+
-			"V().hasLabel('subdomain').has('name', service).has('enum', uuid).addE('service_for').to("+
-			"V().hasLabel('domain','subdomain').has('name', name).has('enum', uuid)))",
+			// Find the subdomain in the graph
+			"g.V().hasLabel('subdomain').has('name', service).has('enum', uuid)."+
+			// Add the new edge
+			"addE('service_for').to("+
+			// Identify the subdomain vertex to point the edge to
+			"g.V().hasLabel('domain','subdomain').has('name', name).has('enum', uuid)))",
 		bindings,
 		map[string]string{},
 	)
@@ -377,11 +530,16 @@ func (g *Gremlin) insertSRV(data *DataOptsParams) error {
 		return err
 	}
 
-	_, err = conn.Client.Execute(
+	_, err = conn.Client.ExecuteWithBindings(
+		// Does the 'srv_to' edge already exist between the two subdomains?
 		"g.V().hasLabel('subdomain').has('name', service).has('enum', uuid).out('srv_to')."+
 			"hasLabel('subdomain').has('name', target).has('enum', uuid).fold().coalesce(unfold(),"+
-			"V().hasLabel('subdomain').has('name', service).has('enum', uuid).addE('srv_to').to("+
-			"V().hasLabel('subdomain').has('name', target).has('enum', uuid)))",
+			// Find the subdomain in the graph
+			"g.V().hasLabel('subdomain').has('name', service).has('enum', uuid)."+
+			// Add the new edge
+			"addE('srv_to').to("+
+			// Identify the subdomain vertex to point the edge to
+			"g.V().hasLabel('subdomain').has('name', target).has('enum', uuid)))",
 		bindings,
 		map[string]string{},
 	)
@@ -422,12 +580,16 @@ func (g *Gremlin) insertNS(data *DataOptsParams) error {
 	}
 	defer conn.Close()
 
-	_, err = conn.Client.Execute(
+	_, err = conn.Client.ExecuteWithBindings(
+		// Does the 'ns_to' edge already exist between the domain/subdomain and the ns?
 		"g.V().hasLabel('domain','subdomain').has('name', name).has('enum', uuid).out('ns_to')."+
 			"hasLabel('ns').has('name', target).has('enum', uuid).fold().coalesce(unfold(),"+
-			"V().hasLabel('domain','subdomain').has('name', name).has('enum', uuid)."+
+			// Find the domain/subdomain in the graph
+			"g.V().hasLabel('domain','subdomain').has('name', name).has('enum', uuid)."+
+			// Add the new edge
 			"addE('ns_to').to("+
-			"V().hasLabel('ns').has('name', target).has('enum', uuid)))",
+			// Identify the ns vertex to point the edge to
+			"g.V().hasLabel('ns').has('name', target).has('enum', uuid)))",
 		bindings,
 		map[string]string{},
 	)
@@ -468,12 +630,16 @@ func (g *Gremlin) insertMX(data *DataOptsParams) error {
 	}
 	defer conn.Close()
 
-	_, err = conn.Client.Execute(
+	_, err = conn.Client.ExecuteWithBindings(
+		// Does the 'mx_to' edge already exist between the domain/subdomain and the mx?
 		"g.V().hasLabel('domain','subdomain').has('name', name).has('enum', uuid).out('mx_to')."+
 			"hasLabel('mx').has('name', target).has('enum', uuid).fold().coalesce(unfold(),"+
-			"V().hasLabel('domain','subdomain').has('name', name).has('enum', uuid)."+
+			// Find the domain/subdomain in the graph
+			"g.V().hasLabel('domain','subdomain').has('name', name).has('enum', uuid)."+
+			// Add the new edge
 			"addE('mx_to').to("+
-			"V().hasLabel('mx').has('name', target).has('enum', uuid)))",
+			// Identify the mx vertex to point the edge to
+			"g.V().hasLabel('mx').has('name', target).has('enum', uuid)))",
 		bindings,
 		map[string]string{},
 	)
@@ -496,9 +662,12 @@ func (g *Gremlin) insertInfrastructure(data *DataOptsParams) error {
 	}
 	defer conn.Close()
 
-	_, err = conn.Client.Execute(
+	_, err = conn.Client.ExecuteWithBindings(
+		// Does this netblock already exist in the graph?
 		"g.V().hasLabel('netblock').has('cidr', cidr).has('enum', uuid).fold().coalesce(unfold(),"+
-			"addV('netblock').property('cidr', cidr).property('enum', uuid).property('timestamp', timestamp))",
+			// Add the new netblock vertex
+			"g.addV('netblock').property('cidr', cidr).property('enum', uuid)."+
+			"property('type', 'netblock').property('timestamp', timestamp))",
 		bindings,
 		map[string]string{},
 	)
@@ -506,12 +675,16 @@ func (g *Gremlin) insertInfrastructure(data *DataOptsParams) error {
 		return err
 	}
 
-	_, err = conn.Client.Execute(
+	_, err = conn.Client.ExecuteWithBindings(
+		// Does the 'contains' edge already exist between the netblock and the address?
 		"g.V().hasLabel('netblock').has('cidr', cidr).has('enum', uuid).out('contains')."+
 			"hasLabel('address').has('addr', addr).has('enum', uuid).fold().coalesce(unfold(),"+
-			"V().hasLabel('netblock').has('cidr', cidr).has('enum', uuid)."+
+			// Find the netblock in the graph
+			"g.V().hasLabel('netblock').has('cidr', cidr).has('enum', uuid)."+
+			// Add the new edge
 			"addE('contains').to("+
-			"V().hasLabel('address').has('addr', addr).has('enum', uuid)))",
+			// Identify the address vertex to point the edge to
+			"g.V().hasLabel('address').has('addr', addr).has('enum', uuid)))",
 		bindings,
 		map[string]string{},
 	)
@@ -519,10 +692,12 @@ func (g *Gremlin) insertInfrastructure(data *DataOptsParams) error {
 		return err
 	}
 
-	_, err = conn.Client.Execute(
+	_, err = conn.Client.ExecuteWithBindings(
+		// Does this AS already exist in the graph?
 		"g.V().hasLabel('as').has('asn', asn).has('enum', uuid).fold().coalesce(unfold(),"+
-			"addV('as').property('asn', asn).property('description', asndesc)."+
-			"property('enum', uuid).property('timestamp', timestamp))",
+			// Add the new AS vertex
+			"g.addV('as').property('asn', asn).property('description', asndesc)."+
+			"property('type', 'as').property('enum', uuid).property('timestamp', timestamp))",
 		bindings,
 		map[string]string{},
 	)
@@ -530,14 +705,207 @@ func (g *Gremlin) insertInfrastructure(data *DataOptsParams) error {
 		return err
 	}
 
-	_, err = conn.Client.Execute(
+	_, err = conn.Client.ExecuteWithBindings(
+		// Does the 'has_prefix' edge already exist between the AS and the netblock?
 		"g.V().hasLabel('as').has('asn', asn).has('enum', uuid).out('has_prefix')."+
 			"hasLabel('netblock').has('cidr', cidr).has('enum', uuid).fold().coalesce(unfold(),"+
-			"V().hasLabel('as').has('asn', asn).has('enum', uuid)."+
+			// Find the AS in the graph
+			"g.V().hasLabel('as').has('asn', asn).has('enum', uuid)."+
+			// Add the new edge
 			"addE('has_prefix').to("+
-			"V().hasLabel('netblock').has('cidr', cidr).has('enum', uuid)))",
+			// Identify the netblock vertex to point the edge to
+			"g.V().hasLabel('netblock').has('cidr', cidr).has('enum', uuid)))",
 		bindings,
 		map[string]string{},
 	)
 	return err
+}
+
+// GetUnreadOutput implements the Amass DataHandler interface.
+func (g *Gremlin) GetUnreadOutput(uuid string) []*core.Output {
+	g.avail.Acquire(1)
+	defer g.avail.Release(1)
+
+	bindings := map[string]string{"uuid": uuid}
+
+	conn, err := g.pool.Get()
+	if err != nil {
+		return nil
+	}
+	defer conn.Close()
+
+	var resp []gremgo.Response
+	resp, err = conn.Client.ExecuteWithBindings(
+		// Find the vertices connected to all the domain names
+		"g.V().hasLabel('domain').has('enum', uuid).out('root_of')."+
+			// We are only interested in the vertices not yet marked
+			"has('enum', uuid).not(has('read','yes'))."+
+			// Traverse all the 'cname_to' and 'srv_to' edges
+			"until(outE('cname_to','srv_to').count().is(0).or().loops().is(10))."+
+			"repeat(out('cname_to','srv_to'))."+
+			// Traverse to the address vertices
+			"out('a_to','aaaa_to').hasLabel('address').has('enum', uuid)."+
+			// Traverse to the netblock vertex
+			"in('contains').hasLabel('netblock').has('enum', uuid)."+
+			// Complete the path by reaching the AS
+			"in('has_prefix').hasLabel('as').has('enum', uuid).path().by(valueMap())",
+		bindings,
+		map[string]string{},
+	)
+	if err == nil {
+		var output []*core.Output
+
+		for _, r := range resp {
+			for _, out := range parseGremlinResponse(&r) {
+				output = append(output, out)
+			}
+		}
+		return output
+	}
+	return nil
+}
+
+type gOutput struct {
+	List []struct {
+		Path gPath `json:"@value"`
+	} `json:"@value"`
+}
+
+type gPath struct {
+	Objects struct {
+		Vertices []struct {
+			Properties []interface{} `json:"@value"`
+		} `json:"@value"`
+	} `json:"objects"`
+}
+
+func parseGremlinResponse(resp *gremgo.Response) []*core.Output {
+	var o gOutput
+	if err := json.Unmarshal(resp.Result.Data, &o); err != nil {
+		return nil
+	}
+
+	t := make(map[string]*core.Output)
+	// Generate core.Output for each path returned by the graph
+	for _, p := range o.List {
+		var vertices []*DataOptsParams
+
+		// Convert the vertex properties into a DataOptsParams struct
+		for _, vert := range p.Path.Objects.Vertices {
+			data := propertiesToData(vert.Properties)
+			vertices = append(vertices, data)
+		}
+		if len(vertices) == 0 {
+			continue
+		}
+		// Convert the path of vertices into core.Output structs
+		for _, out := range dataToOutput(vertices) {
+			// Maintain the master list of findings
+			if _, found := t[out.Name]; found {
+				tmp := t[out.Name]
+				// Check for duplicate addresses
+				for _, n := range out.Addresses {
+					var dup bool
+
+					for _, addr := range tmp.Addresses {
+						if addr.Address.String() == n.Address.String() {
+							dup = true
+							break
+						}
+					}
+					if !dup {
+						tmp.Addresses = append(tmp.Addresses, n)
+					}
+				}
+				t[out.Name] = tmp
+			} else {
+				t[out.Name] = out
+			}
+		}
+	}
+
+	var output []*core.Output
+	for _, out := range t {
+		output = append(output, out)
+	}
+	return output
+}
+
+func dataToOutput(path []*DataOptsParams) []*core.Output {
+	var domain string
+	var addrinfo core.AddressInfo
+
+	for _, v := range path {
+		switch v.Type {
+		case "domain":
+			domain = v.Name
+		case "address":
+			addrinfo.Address = net.ParseIP(v.Address)
+		case "netblock":
+			_, addrinfo.Netblock, _ = net.ParseCIDR(v.CIDR)
+		case "as":
+			addrinfo.ASN = v.ASN
+			addrinfo.Description = v.Description
+		}
+	}
+
+	var output []*core.Output
+	for _, v := range path {
+		if v.Type == "subdomain" || v.Type == "ns" || v.Type == "mx" {
+			ts, _ := time.Parse(time.RFC3339, v.Timestamp)
+			o := &core.Output{
+				Timestamp: ts,
+				Name:      v.Name,
+				Domain:    domain,
+				Addresses: []core.AddressInfo{addrinfo},
+				Tag:       v.Tag,
+				Source:    v.Source,
+			}
+			output = append(output, o)
+		}
+	}
+	return output
+}
+
+func propertiesToData(props []interface{}) *DataOptsParams {
+	var k string
+	m := make(map[string]string)
+
+	for _, p := range props {
+		switch p.(type) {
+		case string:
+			k = p.(string)
+		default:
+			propertyMap := p.(map[string]interface{})
+			list := propertyMap["@value"].([]interface{})
+			m[k] = list[0].(string)
+		}
+	}
+
+	data := new(DataOptsParams)
+	for key, value := range m {
+		switch key {
+		case "enum":
+			data.UUID = value
+		case "timestamp":
+			data.Timestamp = value
+		case "type":
+			data.Type = value
+		case "name":
+			data.Name = value
+		case "addr":
+			data.Address = value
+		case "cidr":
+			data.CIDR = value
+		case "asn":
+			data.ASN, _ = strconv.Atoi(value)
+		case "description":
+			data.Description = value
+		case "tag":
+			data.Tag = value
+		case "source":
+			data.Source = value
+		}
+	}
+	return data
 }

@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+
+	"github.com/OWASP/Amass/amass/core"
 )
 
 // These strings represent the various Amass data operations.
@@ -57,7 +59,17 @@ type DataOptsParams struct {
 type DataHandler interface {
 	fmt.Stringer
 
+	// Inserts data operations into the graph.
 	Insert(data *DataOptsParams) error
+
+	// Sets a 'read' property on the vertex matching Name, Domain and UUID.
+	MarkAsRead(data *DataOptsParams) error
+
+	// Return true if the Name, Domain and UUID match a CNAME in the graph.
+	IsCNAMENode(data *DataOptsParams) bool
+
+	// Returns complete paths in the graph that have not yet been marked.
+	GetUnreadOutput(uuid string) []*core.Output
 }
 
 // DataOptsDriver uses a slice of DataOptsParams to populate another Amass DataHandler.

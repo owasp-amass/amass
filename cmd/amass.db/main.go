@@ -62,8 +62,8 @@ func main() {
 		defer neo.Close()
 		db = neo
 	} else if *grem != "" {
-		g, err := handlers.NewGremlin(*grem, *user, *pass, nil)
-		if err != nil {
+		g := handlers.NewGremlin(*grem, *user, *pass, nil)
+		if g == nil {
 			fmt.Println("Failed to connect with the database")
 			return
 		}
