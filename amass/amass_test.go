@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	datasources = flag.Bool("datasources", false, "Run data source integration tests")
+	network = flag.Bool("network", false, "Run tests that require connectivity (take more time)")
 )
 
 // TestMain will parse the test flags and setup for integration tests.
