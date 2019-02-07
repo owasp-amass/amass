@@ -524,17 +524,14 @@ func (ds *DNSService) wildcardTestResults(sub string) []core.DNSAnswer {
 }
 
 func compareAnswers(ans1, ans2 []core.DNSAnswer) bool {
-	var match bool
-loop:
 	for _, a1 := range ans1 {
 		for _, a2 := range ans2 {
 			if strings.EqualFold(a1.Data, a2.Data) {
-				match = true
-				break loop
+				return true
 			}
 		}
 	}
-	return match
+	return false
 }
 
 // UnlikelyName takes a subdomain name and returns an unlikely DNS name within that subdomain
