@@ -17,8 +17,8 @@ var (
 	domains  = []string{"claritysec.com", "twitter.com", "google.com", "github.com"}
 	wordlist = []string{"foo", "bar"}
 
-	// Resolved bruteTestRequestss
-	bruteTestRequestss = []*core.Request{
+	// Resolved bruteTestRequests
+	bruteTestRequests = []*core.Request{
 		&core.Request{
 			Name:    "test.claritysec.com",
 			Domain:  "claritysec.com",
@@ -104,14 +104,14 @@ func TestBruteForceMinForRecursive(t *testing.T) {
 	defer srv.Stop()
 
 	// Should be filtered
-	bus.Publish(core.NewSubdomainTopic, bruteTestRequestss[0], 1)
+	bus.Publish(core.NewSubdomainTopic, bruteTestRequests[0], 1)
 
 	// Should pass
-	bus.Publish(core.NewSubdomainTopic, bruteTestRequestss[1], 2)
-	bus.Publish(core.NewSubdomainTopic, bruteTestRequestss[2], 3)
-	bus.Publish(core.NewSubdomainTopic, bruteTestRequestss[3], 4)
+	bus.Publish(core.NewSubdomainTopic, bruteTestRequests[1], 2)
+	bus.Publish(core.NewSubdomainTopic, bruteTestRequests[2], 3)
+	bus.Publish(core.NewSubdomainTopic, bruteTestRequests[3], 4)
 
-	expected := len(config.Wordlist) * (len(bruteTestRequestss) - 1 + len(domains))
+	expected := len(config.Wordlist) * (len(bruteTestRequests) - 1 + len(domains))
 	results := make(map[string]int)
 	done := time.After(time.Second)
 
