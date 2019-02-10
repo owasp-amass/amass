@@ -448,7 +448,7 @@ func (ds *DNSService) performWildcardRequest(req *core.Request) int {
 		} else if w.WildcardType == WildcardTypeStatic {
 			if len(req.Records) == 0 {
 				return WildcardTypeStatic
-			} else if ds.compareAnswers(req.Records, w.Answers) {
+			} else if compareAnswers(req.Records, w.Answers) {
 				return WildcardTypeStatic
 			}
 		}
@@ -479,7 +479,7 @@ func (ds *DNSService) getWildcard(sub string) *wildcard {
 		// Check if we have a static DNS wildcard
 		match := true
 		for i := 0; i < numOfWildcardTests-1; i++ {
-			if !ds.compareAnswers(set[i], set[i+1]) {
+			if !compareAnswers(set[i], set[i+1]) {
 				match = false
 				break
 			}
@@ -494,20 +494,6 @@ func (ds *DNSService) getWildcard(sub string) *wildcard {
 		}
 	}
 	return entry
-}
-
-func (ds *DNSService) compareAnswers(ans1, ans2 []core.DNSAnswer) bool {
-	var match bool
-loop:
-	for _, a1 := range ans1 {
-		for _, a2 := range ans2 {
-			if strings.EqualFold(a1.Data, a2.Data) {
-				match = true
-				break loop
-			}
-		}
-	}
-	return match
 }
 
 func (ds *DNSService) wildcardTestResults(sub string) []core.DNSAnswer {
@@ -535,6 +521,17 @@ func (ds *DNSService) wildcardTestResults(sub string) []core.DNSAnswer {
 		return nil
 	}
 	return answers
+}
+
+func compareAnswers(ans1, ans2 []core.DNSAnswer) bool {
+	for _, a1 := range ans1 {
+		for _, a2 := range ans2 {
+			if strings.EqualFold(a1.Data, a2.Data) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // UnlikelyName takes a subdomain name and returns an unlikely DNS name within that subdomain

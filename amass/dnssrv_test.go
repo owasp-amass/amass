@@ -3,35 +3,65 @@
 
 package amass
 
-/*
 import (
+	"bufio"
+	"io"
+	"log"
+	"regexp"
 	"testing"
 	"time"
+
+	"github.com/OWASP/Amass/amass/core"
 )
 
-func TestDNSService(t *testing.T) {
-	config := DefaultConfig()
-	config.AddDomains([]string{testDomain})
-
-	s := NewDNSService(config)
-	s.Start()
-
-	name := "www." + testDomain
-	s.SendRequest(&AmassRequest{
-		Name:   name,
-		Domain: testDomain,
-	})
-
-	timeout := time.NewTimer(10 * time.Second)
-	defer timeout.Stop()
-
-	select {
-	case <-out:
-		// Success
-	case <-timeout.C:
-		t.Errorf("DNSService timed out on the request for %s", name)
+func TestDNSStaticWildcard(t *testing.T) {
+	if *network == false {
+		t.Skip()
 	}
 
-	s.Stop()
+	resolveReq := &core.Request{
+		Name:   "random.wildcard.owasp-amass.com",
+		Domain: "wildcard.owasp-amass.com",
+	}
+
+	config := &core.Config{}
+
+	rLog, wLog := io.Pipe()
+	config.Log = log.New(wLog, "", log.Lmicroseconds)
+
+	bus := core.NewEventBus()
+	defer bus.Stop()
+
+	srv := NewDNSService(config, bus)
+	srv.Start()
+	defer srv.Stop()
+
+	// Use dnssrv to resolve the request
+	bus.Publish(core.ResolveNameTopic, resolveReq)
+
+	timeout := time.After(time.Second * 30)
+	success := make(chan struct{})
+
+	go func(success chan struct{}, rLog *io.PipeReader) {
+		wildcard := regexp.MustCompile("static DNS wildcard")
+		scanner := bufio.NewScanner(rLog)
+		for scanner.Scan() {
+			line := scanner.Text()
+
+			if err := scanner.Err(); err != nil {
+				break
+			}
+
+			if wildcard.MatchString(line) {
+				success <- struct{}{}
+				break
+			}
+		}
+	}(success, rLog)
+
+	select {
+	case <-timeout:
+		t.Errorf("Wildcard detection failed")
+	case <-success:
+	}
 }
-*/
