@@ -42,16 +42,16 @@ type graphistryREST struct {
 // WriteGraphistryData generates a JSON file to display the Amass graph using Graphistry.
 func WriteGraphistryData(output io.Writer, nodes []Node, edges []Edge) {
 	colors := map[string]int{
-		"Subdomain": 3,
-		"Domain":    5,
-		"IPAddress": 7,
-		"PTR":       10,
-		"NS":        0,
-		"MX":        9,
-		"Netblock":  4,
-		"AS":        1,
+		"subdomain": 3,
+		"domain":    5,
+		"address":   7,
+		"ptr":       10,
+		"ns":        0,
+		"mx":        9,
+		"netblock":  4,
+		"as":        1,
 	}
-	name := "Amass_" + time.Now().Format("Jan_2_2006_15_04_05")
+	name := "OWASP_Amass_" + time.Now().Format("Jan_2_2006_15_04_05")
 	restJSON := &graphistryREST{
 		Name: name,
 		Type: "edgelist",

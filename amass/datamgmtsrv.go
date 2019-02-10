@@ -69,8 +69,8 @@ func (dms *DataManagerService) manageData(req *core.Request) {
 	dms.SetActive()
 	dms.insertDomain(req.Domain)
 	for i, r := range req.Records {
-		r.Name = strings.ToLower(r.Name)
-		r.Data = strings.ToLower(r.Data)
+		req.Records[i].Name = strings.ToLower(r.Name)
+		req.Records[i].Data = strings.ToLower(r.Data)
 
 		switch uint16(r.Type) {
 		case dns.TypeA:
@@ -130,7 +130,7 @@ func (dms *DataManagerService) insertCNAME(req *core.Request, recidx int) {
 	if target == "" {
 		return
 	}
-	domain := SubdomainToDomain(target)
+	domain := strings.ToLower(SubdomainToDomain(target))
 	if domain == "" {
 		return
 	}
@@ -226,7 +226,7 @@ func (dms *DataManagerService) insertPTR(req *core.Request, recidx int) {
 	if target == "" {
 		return
 	}
-	domain := dms.Config().WhichDomain(target)
+	domain := strings.ToLower(dms.Config().WhichDomain(target))
 	if domain == "" {
 		return
 	}
@@ -285,7 +285,7 @@ func (dms *DataManagerService) insertNS(req *core.Request, recidx int) {
 	if target == "" {
 		return
 	}
-	domain := SubdomainToDomain(target)
+	domain := strings.ToLower(SubdomainToDomain(target))
 	if domain == "" {
 		return
 	}
@@ -321,7 +321,7 @@ func (dms *DataManagerService) insertMX(req *core.Request, recidx int) {
 	if target == "" {
 		return
 	}
-	domain := SubdomainToDomain(target)
+	domain := strings.ToLower(SubdomainToDomain(target))
 	if domain == "" {
 		return
 	}
@@ -381,7 +381,7 @@ func (dms *DataManagerService) findNamesAndAddresses(data string) {
 		if !dms.Config().IsDomainInScope(name) {
 			continue
 		}
-		domain := dms.Config().WhichDomain(name)
+		domain := strings.ToLower(dms.Config().WhichDomain(name))
 		if domain == "" {
 			continue
 		}

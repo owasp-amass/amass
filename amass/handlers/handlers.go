@@ -70,6 +70,9 @@ type DataHandler interface {
 
 	// Returns complete paths in the graph that have not yet been marked.
 	GetUnreadOutput(uuid string) []*core.Output
+
+	// Signals the handler to prepare for closing
+	Close()
 }
 
 // DataOptsDriver uses a slice of DataOptsParams to populate another Amass DataHandler.

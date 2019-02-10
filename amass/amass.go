@@ -97,6 +97,7 @@ func (e *Enumeration) Start() error {
 		return err
 	}
 
+	defer e.Graph.Close()
 	if e.Config.GremlinURL != "" {
 		gremlin := handlers.NewGremlin(e.Config.GremlinURL,
 			e.Config.GremlinUser, e.Config.GremlinPass, e.Config.Log)
@@ -137,7 +138,7 @@ func (e *Enumeration) Start() error {
 	}
 
 	t := time.NewTicker(3 * time.Second)
-	out := time.NewTicker(5 * time.Second)
+	go e.checkForOutput()
 	go e.processOutput()
 loop:
 	for {
@@ -146,12 +147,8 @@ loop:
 			break loop
 		case <-e.PauseChan():
 			t.Stop()
-			out.Stop()
 		case <-e.ResumeChan():
 			t = time.NewTicker(3 * time.Second)
-			out = time.NewTicker(time.Second)
-		case <-out.C:
-			e.checkForOutput()
 		case <-t.C:
 			done := true
 			for _, srv := range services {
@@ -166,7 +163,6 @@ loop:
 		}
 	}
 	t.Stop()
-	out.Stop()
 	for _, srv := range services {
 		srv.Stop()
 	}
@@ -199,11 +195,19 @@ loop:
 }
 
 func (e *Enumeration) checkForOutput() {
-	select {
-	case <-e.Done:
-		return
-	default:
-		if out := e.Graph.GetUnreadOutput(e.Config.UUID.String()); len(out) > 0 {
+	t := time.NewTicker(10 * time.Second)
+	defer t.Stop()
+
+	for {
+		select {
+		case <-e.Done:
+			return
+		case <-t.C:
+			out := e.Graph.GetUnreadOutput(e.Config.UUID.String())
+			if len(out) == 0 {
+				continue
+			}
+
 			for _, o := range out {
 				if time.Now().Add(10*time.Second).After(o.Timestamp) && !e.filter.Duplicate(o.Name) {
 					e.Graph.MarkAsRead(&handlers.DataOptsParams{

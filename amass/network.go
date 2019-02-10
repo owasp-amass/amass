@@ -249,9 +249,12 @@ func fetchOnlineData(addr string, asn int) (*ASRecord, error) {
 		if err != nil {
 			return nil, err
 		}
-		record.Netblocks, err = fetchOnlineNetblockData(asn)
+		record.Netblocks, err = fetchHackerTargetNetblockData(addr)
 		if err != nil {
-			return nil, err
+			record.Netblocks, err = fetchShadowServerNetblockData(asn)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	if cidr != "" {
@@ -305,7 +308,21 @@ func asnLookup(asn int) (*ASRecord, error) {
 	return record, nil
 }
 
-func fetchOnlineNetblockData(asn int) ([]string, error) {
+func fetchHackerTargetNetblockData(addr string) ([]string, error) {
+	u := "https://api.hackertarget.com/aslookup/?q=" + addr
+	page, err := utils.RequestWebPage(u, nil, nil, "", "")
+	if err != nil {
+		return nil, err
+	}
+
+	parts := strings.Split(page, ",")
+	if len(parts) < 3 {
+		return nil, errors.New("fetch netblock data did not receive complete result")
+	}
+	return []string{parts[2]}, nil
+}
+
+func fetchShadowServerNetblockData(asn int) ([]string, error) {
 	ip := nameToAddress("asn.shadowserver.org")
 	if ip == "" {
 		return nil, errors.New("fetchOnlineNetblockData error: Failed to resolve asn.shadowserver.org")
