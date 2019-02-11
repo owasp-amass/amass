@@ -195,7 +195,7 @@ loop:
 }
 
 func (e *Enumeration) checkForOutput() {
-	t := time.NewTicker(10 * time.Second)
+	t := time.NewTicker(5 * time.Second)
 	defer t.Stop()
 
 	for {
