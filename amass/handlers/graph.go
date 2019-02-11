@@ -527,8 +527,9 @@ func (g *Graph) getSubdomainNames(domain string) []string {
 	names := []string{domain}
 
 	// This path identifies the names that have been marked as 'read'
-	read := cayley.StartPath(g.store, quad.String(domain)).Out(
-		quad.String("root_of")).Has(quad.String("read"), quad.String("yes"))
+	read := cayley.StartPath(g.store, quad.String(domain)).Out(quad.String(
+		"root_of")).Has(quad.String("type"), quad.String("subdomain"),
+		quad.String("ns"), quad.String("mx")).Has(quad.String("read"), quad.String("yes"))
 	// All the DNS name related nodes that have not already been read
 	p := cayley.StartPath(g.store, quad.String(domain)).Out(quad.String("root_of")).Has(
 		quad.String("type"), quad.String("subdomain"), quad.String("ns"), quad.String("mx")).Except(read)
