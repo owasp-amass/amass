@@ -31,7 +31,7 @@ func WriteMaltegoData(output io.Writer, nodes []Node, edges []Edge) {
 	fmt.Fprintln(output, strings.Join(types, ","))
 	// Start the graph tranersal from the autonomous systems
 	for idx, node := range nodes {
-		if node.Type == "AS" {
+		if node.Type == "as" {
 			traverseTree(output, idx, nodes, edges, filter)
 		}
 	}
@@ -49,25 +49,25 @@ func typeToIndex(t string) int {
 	var idx int
 
 	switch t {
-	case "Domain":
+	case "domain":
 		idx = 0
-	case "Subdomain":
+	case "subdomain":
 		idx = 1
-	case "PTR":
+	case "ptr":
 		idx = 8
-	case "CNAME":
+	case "cname":
 		idx = 8
-	case "IPAddress":
+	case "address":
 		idx = 4
-	case "NS":
+	case "ns":
 		idx = 2
-	case "MX":
+	case "mx":
 		idx = 3
-	case "Netblock":
+	case "netblock":
 		idx = 5
-	case "AS":
+	case "as":
 		idx = 6
-	case "Company":
+	case "company":
 		idx = 7
 	}
 	return idx
@@ -78,12 +78,12 @@ func writeMaltegoTableLine(out io.Writer, data1, type1, data2, type2 string) {
 
 	idx1 := typeToIndex(type1)
 	row[idx1] = data1
-	if type1 == "Netblock" {
+	if type1 == "netblock" {
 		row[idx1] = cidrToMaltegoNetblock(data1)
 	}
 	idx2 := typeToIndex(type2)
 	row[idx2] = data2
-	if type2 == "Netblock" {
+	if type2 == "netblock" {
 		row[idx2] = cidrToMaltegoNetblock(data2)
 	}
 	fmt.Fprintln(out, strings.Join(row, ","))
@@ -94,25 +94,24 @@ func traverseTree(out io.Writer, id int, nodes []Node, edges []Edge, filter map[
 	t1 := nodes[id].Type
 
 	var from bool
-	if t1 == "Netblock" || t1 == "AS" {
+	if t1 == "netblock" || t1 == "as" {
 		from = true
 	}
 
 	if checkFilter(id, filter) {
 		return
 	}
-
 	// Print the line containing the AS company
-	if t1 == "AS" {
+	if t1 == "as" {
 		parts := strings.Split(nodes[id].Title, ":")
 		company := strings.Replace(strings.TrimSpace(parts[2]), ",", "", -1)
-		writeMaltegoTableLine(out, d1, t1, company, "Company")
+		writeMaltegoTableLine(out, d1, t1, company, "company")
 	}
 
 	for _, edge := range edges {
 		subFrom := from
 		n, found := selectNextEdge(id, from, edge)
-		if !found && (t1 == "Subdomain" || t1 == "Domain") {
+		if !found && (t1 == "subdomain" || t1 == "domain") {
 			subFrom = true
 			n, found = selectNextEdge(id, subFrom, edge)
 		}
@@ -122,11 +121,11 @@ func traverseTree(out io.Writer, id int, nodes []Node, edges []Edge, filter map[
 		d2 := nodes[n].Label
 		t2 := nodes[n].Type
 		// Need to properly handle CNAME records
-		if strings.Contains(edge.Title, "CNAME") {
+		if strings.Contains(edge.Title, "cname") {
 			if subFrom {
-				writeMaltegoTableLine(out, d1, "CNAME", d2, t2)
+				writeMaltegoTableLine(out, d1, "cname", d2, t2)
 			} else {
-				writeMaltegoTableLine(out, d1, t1, d2, "CNAME")
+				writeMaltegoTableLine(out, d1, t1, d2, "cname")
 			}
 		} else {
 			writeMaltegoTableLine(out, d1, t1, d2, t2)

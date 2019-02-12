@@ -98,7 +98,7 @@ func (bfs *BruteForceService) NewSubdomain(req *core.Request, times int) {
 	}
 }
 
-func (bfs *BruteForceService) performBruteForcing(subdomain, root string) {
+func (bfs *BruteForceService) performBruteForcing(subdomain, domain string) {
 	if bfs.filter.Duplicate(subdomain) {
 		return
 	}
@@ -106,16 +106,18 @@ func (bfs *BruteForceService) performBruteForcing(subdomain, root string) {
 	bfs.SetActive()
 	t := time.NewTicker(time.Second)
 	defer t.Stop()
+	fire := time.NewTicker(100 * time.Microsecond)
+	defer fire.Stop()
 	for _, word := range bfs.Config().Wordlist {
 		select {
-		case <-t.C:
-			bfs.SetActive()
 		case <-bfs.Quit():
 			return
-		default:
+		case <-t.C:
+			bfs.SetActive()
+		case <-fire.C:
 			bfs.Bus().Publish(core.NewNameTopic, &core.Request{
 				Name:   strings.ToLower(word + "." + subdomain),
-				Domain: root,
+				Domain: domain,
 				Tag:    core.BRUTE,
 				Source: bfs.String(),
 			})

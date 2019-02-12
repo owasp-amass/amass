@@ -13,7 +13,7 @@ const htmlStart string = `<!doctype html>
 <html>
 <head>
   <meta http-equiv="content-type" content="text/html; charset=UTF8">
-  <title>Amass Internet Satellite Imagery</title>
+  <title>OWASP Amass Network Mapping</title>
 
   <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/vis/4.21.0/vis.min.js"></script>
   <link type="text/css" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/vis/4.21.0/vis.min.css">
@@ -30,7 +30,7 @@ const htmlStart string = `<!doctype html>
 
 <body>
 
-<h2>Amass Network Mapping</h2>
+<h2>OWASP Amass Network Mapping</h2>
 
 <div id="thenetwork"></div>
 
@@ -111,28 +111,28 @@ func WriteVisjsData(output io.Writer, nodes []Node, edges []Edge) {
 		idxStr := strconv.Itoa(idx + 1)
 
 		switch node.Type {
-		case "Subdomain":
+		case "subdomain":
 			nStr += "{id: " + idxStr + ", title: '" + node.Title +
 				", Source: " + node.Source + "', color: {background: 'green'}},\n"
-		case "Domain":
+		case "domain":
 			nStr += "{id: " + idxStr + ", title: '" + node.Title +
 				", Source: " + node.Source + "', color: {background: 'red'}},\n"
-		case "IPAddress":
+		case "address":
 			nStr += "{id: " + idxStr + ", title: '" + node.Title +
 				"', color: {background: 'orange'}},\n"
-		case "PTR":
+		case "ptr":
 			nStr += "{id: " + idxStr + ", title: '" + node.Title +
 				"', color: {background: 'yellow'}},\n"
-		case "NS":
+		case "ns":
 			nStr += "{id: " + idxStr + ", title: '" + node.Title +
 				", Source: " + node.Source + "', color: {background: 'cyan'}},\n"
-		case "MX":
+		case "mx":
 			nStr += "{id: " + idxStr + ", title: '" + node.Title +
 				", Source: " + node.Source + "', color: {background: 'purple'}},\n"
-		case "Netblock":
+		case "netblock":
 			nStr += "{id: " + idxStr + ", title: '" + node.Title +
 				"', color: {background: 'pink'}},\n"
-		case "AS":
+		case "as":
 			nStr += "{id: " + idxStr + ", title: '" + node.Title +
 				"', color: {background: 'blue'}},\n"
 		}

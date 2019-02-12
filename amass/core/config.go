@@ -38,6 +38,9 @@ type Config struct {
 	// The writer used to save the data operations performed
 	DataOptsWriter io.Writer
 
+	// The directory that stores the bolt db and other files created
+	Dir string
+
 	// The settings for connecting with Gremlin Server
 	GremlinURL  string
 	GremlinUser string
@@ -261,7 +264,7 @@ func (c *Config) LoadSettings(path string) error {
 	if cfg.Section(ini.DEFAULT_SECTION).HasKey("wordlist_file") {
 		wordlist := cfg.Section(ini.DEFAULT_SECTION).Key("wordlist_file").String()
 
-		list, err := getWordList(wordlist)
+		list, err := GetWordlistFromFile(wordlist)
 		if err != nil {
 			return fmt.Errorf("Unable to load the file in the wordlist_file setting: %s: %v", wordlist, err)
 		}
@@ -339,14 +342,14 @@ func GetResolversFromSettings(path string) ([]string, error) {
 	return resolvers, nil
 }
 
-func getWordList(path string) ([]string, error) {
-	var lines []string
+// GetWordlistFromFile reads a wordlist text or gzip file
+// and returns the slice of words
+func GetWordlistFromFile(path string) ([]string, error) {
 	var reader io.Reader
 
-	// Open the file
 	file, err := os.Open(path)
 	if err != nil {
-		return lines, fmt.Errorf("Error opening the file %s: %v", path, err)
+		return nil, fmt.Errorf("Error opening the file %s: %v", path, err)
 	}
 	defer file.Close()
 	reader = file
@@ -357,48 +360,42 @@ func getWordList(path string) ([]string, error) {
 	// next reader
 	head := make([]byte, 512)
 	if _, err = file.Read(head); err != nil {
-		return lines, fmt.Errorf("Error reading the first 512 bytes from %s: %s", path, err)
+		return nil, fmt.Errorf("Error reading the first 512 bytes from %s: %s", path, err)
 	}
 	if _, err = file.Seek(0, 0); err != nil {
-		return lines, fmt.Errorf("Error rewinding the file %s: %s", path, err)
+		return nil, fmt.Errorf("Error rewinding the file %s: %s", path, err)
 	}
 
 	// Read the file as gzip if it's actually compressed
 	if mt := http.DetectContentType(head); mt == "application/gzip" || mt == "application/x-gzip" {
 		gzReader, err := gzip.NewReader(file)
 		if err != nil {
-			return lines, fmt.Errorf("Error gz-reading the file %s: %v", path, err)
+			return nil, fmt.Errorf("Error gz-reading the file %s: %v", path, err)
 		}
 		defer gzReader.Close()
 		reader = gzReader
 	}
-	// Get each line from the file
-	scanner := bufio.NewScanner(reader)
-	for scanner.Scan() {
-		// Get the next line
-		text := scanner.Text()
-		if text != "" {
-			lines = append(lines, strings.TrimSpace(text))
-		}
-	}
-	return lines, nil
+	return getWordList(reader)
 }
 
 func getDefaultWordlist() ([]string, error) {
-	var list []string
-
 	page, err := utils.RequestWebPage(defaultWordlistURL, nil, nil, "", "")
 	if err != nil {
-		return list, err
+		return nil, err
 	}
+	return getWordList(strings.NewReader(page))
+}
 
-	scanner := bufio.NewScanner(strings.NewReader(page))
+func getWordList(reader io.Reader) ([]string, error) {
+	var words []string
+
+	scanner := bufio.NewScanner(reader)
 	for scanner.Scan() {
 		// Get the next word in the list
-		word := strings.TrimSpace(scanner.Text())
-		if err := scanner.Err(); err == nil && word != "" {
-			list = utils.UniqueAppend(list, word)
+		w := strings.TrimSpace(scanner.Text())
+		if err := scanner.Err(); err == nil && w != "" {
+			words = utils.UniqueAppend(words, w)
 		}
 	}
-	return list, nil
+	return words, nil
 }

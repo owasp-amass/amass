@@ -20,6 +20,11 @@ func NewDataOptsHandler(w io.Writer) *DataOptsHandler {
 	return &DataOptsHandler{Enc: json.NewEncoder(w)}
 }
 
+// Close implements the Amass DataHandler interface.
+func (d *DataOptsHandler) Close() {
+	return
+}
+
 // String returns a description for the DataOptsHandler object.
 func (d *DataOptsHandler) String() string {
 	return "Data Operations Storage Handler"

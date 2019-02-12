@@ -44,17 +44,17 @@ type dotGraph struct {
 // WriteDOTData generates a DOT file to display the Amass graph.
 func WriteDOTData(output io.Writer, nodes []Node, edges []Edge) {
 	colors := map[string]string{
-		"Subdomain": "green",
-		"Domain":    "red",
-		"IPAddress": "orange",
-		"PTR":       "yellow",
-		"NS":        "cyan",
-		"MX":        "purple",
-		"Netblock":  "pink",
-		"AS":        "blue",
+		"subdomain": "green",
+		"domain":    "red",
+		"address":   "orange",
+		"ptr":       "yellow",
+		"ns":        "cyan",
+		"mx":        "purple",
+		"netblock":  "pink",
+		"as":        "blue",
 	}
 
-	graph := &dotGraph{Name: "Amass Network Mapping"}
+	graph := &dotGraph{Name: "OWASP Amass Network Mapping"}
 
 	for idx, node := range nodes {
 		graph.Nodes = append(graph.Nodes, dotNode{

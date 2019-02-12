@@ -13,7 +13,7 @@ const d3Template = `
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>Amass Network Mapping</title>
+    <title>OWASP Amass Network Mapping</title>
     <script src="https://d3js.org/d3.v4.min.js"></script>
     <style>
         div#tooltip {
@@ -279,17 +279,17 @@ type d3Graph struct {
 // WriteD3Data generates a HTML file that displays the Amass graph using D3.
 func WriteD3Data(output io.Writer, nodes []Node, edges []Edge) {
 	colors := map[string]string{
-		"Subdomain": "green",
-		"Domain":    "red",
-		"IPAddress": "orange",
-		"PTR":       "yellow",
-		"NS":        "cyan",
-		"MX":        "purple",
-		"Netblock":  "pink",
-		"AS":        "blue",
+		"subdomain": "green",
+		"domain":    "red",
+		"address":   "orange",
+		"ptr":       "yellow",
+		"ns":        "cyan",
+		"mx":        "purple",
+		"netblock":  "pink",
+		"as":        "blue",
 	}
 
-	graph := &d3Graph{Name: "Amass Network Mapping"}
+	graph := &d3Graph{Name: "OWASP Amass Network Mapping"}
 
 	for idx, node := range nodes {
 		label := node.Title

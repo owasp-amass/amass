@@ -121,8 +121,8 @@ func WriteGEXFData(output io.Writer, nodes []Node, edges []Edge) {
 		Viz:     xmlNSVIZ,
 		Meta: gexfMeta{
 			LastModified: time.Now().UTC().Format("2006-01-02"),
-			Creator:      "Amass - https://github.com/OWASP/Amass",
-			Desc:         "Amass Network Mapping",
+			Creator:      "OWASP Amass - https://github.com/OWASP/Amass",
+			Desc:         "OWASP Amass Network Mapping",
 		},
 		Graph: gexfGraph{
 			Mode:     modeStatic,
@@ -142,21 +142,21 @@ func WriteGEXFData(output io.Writer, nodes []Node, edges []Edge) {
 		var color *gexfColor
 
 		switch n.Type {
-		case "Subdomain":
+		case "subdomain":
 			color = gexfGreen
-		case "Domain":
+		case "domain":
 			color = gexfRed
-		case "IPAddress":
+		case "address":
 			color = gexfOrange
-		case "PTR":
+		case "ptr":
 			color = gexfYellow
-		case "NS":
+		case "ns":
 			color = gexfCyan
-		case "MX":
+		case "mx":
 			color = gexfPurple
-		case "Netblock":
+		case "netblock":
 			color = gexfPink
-		case "AS":
+		case "as":
 			color = gexfBlue
 		}
 
