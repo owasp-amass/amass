@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io/ioutil"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
@@ -75,7 +76,6 @@ func NewEnumeration() *Enumeration {
 			Log:  log.New(ioutil.Discard, "", 0),
 		},
 		Bus:         core.NewEventBus(),
-		Graph:       handlers.NewGraph(),
 		Output:      make(chan *core.Output, 100),
 		Done:        make(chan struct{}, 2),
 		pause:       make(chan struct{}, 2),
@@ -96,13 +96,19 @@ func (e *Enumeration) Start() error {
 	} else if err := e.Config.CheckSettings(); err != nil {
 		return err
 	}
-
-	defer e.Graph.Close()
+	// Select the graph that will store the enumeration findings
 	if e.Config.GremlinURL != "" {
 		gremlin := handlers.NewGremlin(e.Config.GremlinURL,
 			e.Config.GremlinUser, e.Config.GremlinPass, e.Config.Log)
 		e.Graph = gremlin
 		defer gremlin.Close()
+	} else {
+		graph := handlers.NewGraph(e.Config.Dir)
+		if graph == nil {
+			return errors.New("Failed to create the graph")
+		}
+		e.Graph = graph
+		defer graph.Close()
 	}
 
 	e.Bus.Subscribe(core.OutputTopic, e.sendOutput)
@@ -137,9 +143,11 @@ func (e *Enumeration) Start() error {
 		}
 	}
 
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go e.checkForOutput(&wg)
+	go e.processOutput(&wg)
 	t := time.NewTicker(3 * time.Second)
-	go e.checkForOutput()
-	go e.processOutput()
 loop:
 	for {
 		select {
@@ -166,10 +174,13 @@ loop:
 	for _, srv := range services {
 		srv.Stop()
 	}
+	wg.Wait()
 	return nil
 }
 
-func (e *Enumeration) processOutput() {
+func (e *Enumeration) processOutput(wg *sync.WaitGroup) {
+	defer wg.Done()
+
 	curIdx := 0
 	maxIdx := 7
 	delays := []int{250, 500, 750, 1000, 1250, 1500, 1750, 2000}
@@ -191,23 +202,29 @@ loop:
 			e.Output <- element.(*core.Output)
 		}
 	}
+	time.Sleep(5 * time.Second)
+	// Handle all remaining elements on the queue
+	for {
+		element, ok := e.outputQueue.Next()
+		if !ok {
+			break
+		}
+		e.Output <- element.(*core.Output)
+	}
 	close(e.Output)
 }
 
-func (e *Enumeration) checkForOutput() {
+func (e *Enumeration) checkForOutput(wg *sync.WaitGroup) {
 	t := time.NewTicker(5 * time.Second)
 	defer t.Stop()
-
+	defer wg.Done()
+loop:
 	for {
 		select {
 		case <-e.Done:
-			return
+			break loop
 		case <-t.C:
 			out := e.Graph.GetUnreadOutput(e.Config.UUID.String())
-			if len(out) == 0 {
-				continue
-			}
-
 			for _, o := range out {
 				if time.Now().Add(10*time.Second).After(o.Timestamp) && !e.filter.Duplicate(o.Name) {
 					e.Graph.MarkAsRead(&handlers.DataOptsParams{
@@ -220,6 +237,21 @@ func (e *Enumeration) checkForOutput() {
 						e.outputQueue.Append(o)
 					}
 				}
+			}
+		}
+	}
+	// Handle all remaining pieces of output
+	out := e.Graph.GetUnreadOutput(e.Config.UUID.String())
+	for _, o := range out {
+		if !e.filter.Duplicate(o.Name) {
+			e.Graph.MarkAsRead(&handlers.DataOptsParams{
+				UUID:   e.Config.UUID.String(),
+				Name:   o.Name,
+				Domain: o.Domain,
+			})
+
+			if e.Config.IsDomainInScope(o.Name) {
+				e.outputQueue.Append(o)
 			}
 		}
 	}

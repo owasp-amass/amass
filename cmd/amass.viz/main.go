@@ -49,7 +49,7 @@ func main() {
 		return
 	}
 
-	graph := handlers.NewGraph()
+	graph := handlers.NewGraph("")
 	err = handlers.DataOptsDriver(opts, graph)
 	if err != nil {
 		fmt.Printf("Failed to build the network graph: %v\n", err)

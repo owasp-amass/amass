@@ -156,10 +156,14 @@ func main() {
 		return
 	}
 
+	var err error
 	var words []string
 	// Obtain parameters from provided files
 	if *wordlist != "" {
-		words = getLinesFromFile(*wordlist)
+		words, err = core.GetWordlistFromFile(*wordlist)
+		if err != nil {
+			r.Fprintf(color.Error, "%v\n", err)
+		}
 	}
 	if *blacklistpath != "" {
 		blacklist = utils.UniqueAppend(blacklist, getLinesFromFile(*blacklistpath)...)
