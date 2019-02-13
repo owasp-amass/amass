@@ -19,49 +19,49 @@ type BufferOver struct {
 
 // NewBufferOver returns he object initialized, but not yet started.
 func NewBufferOver(config *core.Config, bus *core.EventBus) *BufferOver {
-	h := &BufferOver{SourceType: core.API}
+	b := &BufferOver{SourceType: core.API}
 
-	h.BaseService = *core.NewBaseService(h, "BufferOver", config, bus)
-	return h
+	b.BaseService = *core.NewBaseService(b, "BufferOver", config, bus)
+	return b
 }
 
 // OnStart implements the Service interface
-func (h *BufferOver) OnStart() error {
-	h.BaseService.OnStart()
+func (b *BufferOver) OnStart() error {
+	b.BaseService.OnStart()
 
-	go h.startRootDomains()
+	go b.startRootDomains()
 	return nil
 }
 
-func (h *BufferOver) startRootDomains() {
+func (b *BufferOver) startRootDomains() {
 	// Look at each domain provided by the config
-	for _, domain := range h.Config().Domains() {
-		h.executeQuery(domain)
+	for _, domain := range b.Config().Domains() {
+		b.executeQuery(domain)
 	}
 }
 
-func (h *BufferOver) executeQuery(domain string) {
-	url := h.getURL(domain)
+func (b *BufferOver) executeQuery(domain string) {
+	url := b.getURL(domain)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		h.Config().Log.Printf("%s: %s: %v", h.String(), url, err)
+		b.Config().Log.Printf("%s: %s: %v", b.String(), url, err)
 		return
 	}
 
-	h.SetActive()
-	re := h.Config().DomainRegex(domain)
+	b.SetActive()
+	re := b.Config().DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
-		h.Bus().Publish(core.NewNameTopic, &core.Request{
+		b.Bus().Publish(core.NewNameTopic, &core.Request{
 			Name:   cleanName(sd),
 			Domain: domain,
-			Tag:    h.SourceType,
-			Source: h.String(),
+			Tag:    b.SourceType,
+			Source: b.String(),
 		})
 	}
 }
 
-func (h *BufferOver) getURL(domain string) string {
-	format := "dns.bufferover.run?q=%s"
+func (b *BufferOver) getURL(domain string) string {
+	format := "https://dns.bufferover.run/dns?q=%s"
 
 	return fmt.Sprintf(format, domain)
 }
