@@ -46,6 +46,7 @@ func GetAllSources(config *core.Config, bus *core.EventBus) []core.Service {
 		NewBaidu(config, bus),
 		NewBinaryEdge(config, bus),
 		NewBing(config, bus),
+		NewBufferOver(config, bus),
 		NewCensys(config, bus),
 		NewCertDB(config, bus),
 		NewCertSpotter(config, bus),
