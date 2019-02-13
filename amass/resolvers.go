@@ -417,7 +417,7 @@ func Resolve(name, qtype string) ([]core.DNSAnswer, error) {
 		if !again {
 			break
 		}
-		time.Sleep(time.Duration(i+1) * (time.Duration(100) * time.Millisecond))
+		time.Sleep(time.Duration(i+1) * (time.Duration(500) * time.Millisecond))
 	}
 	return ans, err
 }

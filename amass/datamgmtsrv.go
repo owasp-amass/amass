@@ -65,6 +65,9 @@ func (dms *DataManagerService) processRequests() {
 func (dms *DataManagerService) manageData(req *core.Request) {
 	req.Name = strings.ToLower(req.Name)
 	req.Domain = strings.ToLower(req.Domain)
+	if dms.filter.Duplicate(req.Name) {
+		return
+	}
 
 	dms.SetActive()
 	dms.insertDomain(req.Domain)
