@@ -11,9 +11,9 @@ import (
 	"github.com/OWASP/Amass/amass/core"
 )
 
-func TestCrtsh(t *testing.T) {
+func TestWayback(t *testing.T) {
 	config := &core.Config{}
-	config.AddDomain("letsencrypt.owasp-amass.com")
+	config.AddDomain("google.com")
 	buf := new(strings.Builder)
 	config.Log = log.New(buf, "", log.Lmicroseconds)
 
@@ -24,25 +24,28 @@ func TestCrtsh(t *testing.T) {
 	})
 	defer bus.Stop()
 
-	srv := NewCrtsh(config, bus)
+	srv := NewWayback(config, bus)
 	srv.Start()
 	defer srv.Stop()
 
-	expected := 100
-	results := make(map[string]int)
-	done := time.After(time.Second * 10)
+	count := 0
+	expected := 10
+	done := time.After(time.Second * 30)
 
 loop:
 	for {
 		select {
-		case req := <-out:
-			results[req.Name]++
+		case <-out:
+			count++
+			if count == expected {
+				return
+			}
 		case <-done:
 			break loop
 		}
 	}
 
-	if expected != len(results) {
-		t.Errorf("Found %d names, expected %d instead", len(results), expected)
+	if count < expected {
+		t.Errorf("Found %d names, expected at least %d instead", count, expected)
 	}
 }
