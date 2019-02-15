@@ -66,14 +66,20 @@ type Enumeration struct {
 
 	filter      *utils.StringFilter
 	outputQueue *utils.Queue
+
+	metricsLock       sync.Mutex
+	dnsQueriesPerSec  int
+	dnsNamesRemaining int
 }
 
 // NewEnumeration returns an initialized Enumeration that has not been started yet.
 func NewEnumeration() *Enumeration {
 	e := &Enumeration{
 		Config: &core.Config{
-			UUID: uuid.New(),
-			Log:  log.New(ioutil.Discard, "", 0),
+			UUID:        uuid.New(),
+			Log:         log.New(ioutil.Discard, "", 0),
+			Alterations: true,
+			Recursive:   true,
 		},
 		Bus:         core.NewEventBus(),
 		Output:      make(chan *core.Output, 100),
@@ -148,6 +154,8 @@ func (e *Enumeration) Start() error {
 	go e.checkForOutput(&wg)
 	go e.processOutput(&wg)
 	t := time.NewTicker(3 * time.Second)
+	logTick := time.NewTicker(time.Minute)
+	defer logTick.Stop()
 loop:
 	for {
 		select {
@@ -157,6 +165,8 @@ loop:
 			t.Stop()
 		case <-e.ResumeChan():
 			t = time.NewTicker(3 * time.Second)
+		case <-logTick.C:
+			e.processMetrics(services)
 		case <-t.C:
 			done := true
 			for _, srv := range services {
@@ -176,6 +186,44 @@ loop:
 	}
 	wg.Wait()
 	return nil
+}
+
+// DNSQueriesPerSec returns the number of DNS queries the enumeration has performed per second.
+func (e *Enumeration) DNSQueriesPerSec() int {
+	e.metricsLock.Lock()
+	defer e.metricsLock.Unlock()
+
+	return e.dnsQueriesPerSec
+}
+
+// DNSNamesRemaining returns the number of discovered DNS names yet to be handled by the enumeration.
+func (e *Enumeration) DNSNamesRemaining() int {
+	e.metricsLock.Lock()
+	defer e.metricsLock.Unlock()
+
+	return e.dnsNamesRemaining
+}
+
+func (e *Enumeration) processMetrics(services []core.Service) {
+	var total, remaining int
+
+	if e.Config.Passive {
+		return
+	}
+
+	for _, srv := range services {
+		stats := srv.Stats()
+
+		remaining += stats.NamesRemaining
+		total += stats.DNSQueriesPerSec
+	}
+
+	e.Config.Log.Printf("Average DNS queries performed: %d/sec, DNS names remaining: %d", total, remaining)
+
+	e.metricsLock.Lock()
+	e.dnsQueriesPerSec = total
+	e.dnsNamesRemaining = remaining
+	e.metricsLock.Unlock()
 }
 
 func (e *Enumeration) processOutput(wg *sync.WaitGroup) {

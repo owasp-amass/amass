@@ -6,6 +6,8 @@ package amass
 import (
 	"net"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
@@ -34,6 +36,10 @@ var (
 type DNSService struct {
 	core.BaseService
 
+	metrics    *core.MetricsCollector
+	totalLock  sync.Mutex
+	totalNames int
+
 	filter        *utils.StringFilter
 	cidrBlacklist []*net.IPNet
 }
@@ -56,6 +62,9 @@ func NewDNSService(config *core.Config, bus *core.EventBus) *DNSService {
 func (ds *DNSService) OnStart() error {
 	ds.BaseService.OnStart()
 
+	ds.metrics = core.NewMetricsCollector(ds)
+	ds.metrics.NamesRemainingCallback(ds.namesRemaining)
+
 	ds.Bus().Subscribe(core.ResolveNameTopic, ds.SendRequest)
 	ds.Bus().Subscribe(core.ReverseSweepTopic, ds.dnsSweep)
 	ds.Bus().Subscribe(core.NewSubdomainTopic, ds.newSubdomain)
@@ -64,6 +73,12 @@ func (ds *DNSService) OnStart() error {
 	for _, domain := range ds.Config().Domains() {
 		go ds.basicQueries(domain, domain)
 	}
+	return nil
+}
+
+// OnStop implements the Service interface.
+func (ds *DNSService) OnStop() error {
+	ds.metrics.Stop()
 	return nil
 }
 
@@ -82,12 +97,41 @@ func (ds *DNSService) processRequests() {
 		case <-ds.Quit():
 			return
 		case req := <-ds.RequestChan():
+			ds.incTotalNames()
 			go ds.performRequest(req)
 		}
 	}
 }
 
+// Stats implements the Service interface
+func (ds *DNSService) Stats() *core.ServiceStats {
+	return ds.metrics.Stats()
+}
+
+func (ds *DNSService) namesRemaining() int {
+	ds.totalLock.Lock()
+	defer ds.totalLock.Unlock()
+
+	return ds.totalNames
+}
+
+func (ds *DNSService) incTotalNames() {
+	ds.totalLock.Lock()
+	defer ds.totalLock.Unlock()
+
+	ds.totalNames++
+}
+
+func (ds *DNSService) decTotalNames() {
+	ds.totalLock.Lock()
+	defer ds.totalLock.Unlock()
+
+	ds.totalNames--
+}
+
 func (ds *DNSService) performRequest(req *core.Request) {
+	defer ds.decTotalNames()
+
 	if req == nil || req.Name == "" || req.Domain == "" {
 		return
 	}
@@ -111,6 +155,7 @@ func (ds *DNSService) performRequest(req *core.Request) {
 		} else {
 			ds.Config().Log.Printf("DNS: %v", err)
 		}
+		ds.metrics.QueryTime(time.Now())
 		ds.SetActive()
 	}
 
@@ -175,6 +220,7 @@ func (ds *DNSService) basicQueries(subdomain, domain string) {
 	} else {
 		ds.Config().Log.Printf("DNS: NS record query error: %s: %v", subdomain, err)
 	}
+	ds.metrics.QueryTime(time.Now())
 
 	ds.SetActive()
 	// Obtain the DNS answers for the MX records related to the domain
@@ -185,6 +231,7 @@ func (ds *DNSService) basicQueries(subdomain, domain string) {
 	} else {
 		ds.Config().Log.Printf("DNS: MX record query error: %s: %v", subdomain, err)
 	}
+	ds.metrics.QueryTime(time.Now())
 
 	ds.SetActive()
 	// Obtain the DNS answers for the SOA records related to the domain
@@ -193,6 +240,7 @@ func (ds *DNSService) basicQueries(subdomain, domain string) {
 	} else {
 		ds.Config().Log.Printf("DNS: SOA record query error: %s: %v", subdomain, err)
 	}
+	ds.metrics.QueryTime(time.Now())
 
 	ds.SetActive()
 	// Obtain the DNS answers for the SPF records related to the domain
@@ -201,6 +249,7 @@ func (ds *DNSService) basicQueries(subdomain, domain string) {
 	} else {
 		ds.Config().Log.Printf("DNS: SPF record query error: %s: %v", subdomain, err)
 	}
+	ds.metrics.QueryTime(time.Now())
 
 	if len(answers) > 0 {
 		ds.SetActive()
@@ -245,6 +294,7 @@ func (ds *DNSService) queryServiceNames(subdomain, domain string) {
 				Source:  "Forward DNS",
 			})
 		}
+		ds.metrics.QueryTime(time.Now())
 	}
 }
 
@@ -275,6 +325,7 @@ func (ds *DNSService) reverseDNSSweep(addr string, cidr *net.IPNet) {
 func (ds *DNSService) reverseDNSQuery(ip string) {
 	ds.SetActive()
 	ptr, answer, err := Reverse(ip)
+	ds.metrics.QueryTime(time.Now())
 	if err != nil {
 		return
 	}

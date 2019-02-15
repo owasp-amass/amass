@@ -136,7 +136,7 @@ func (ns *NameService) checkSubdomain(req *core.Request) {
 	// CNAMEs are not a proper subdomain
 	cname := ns.graph.IsCNAMENode(&handlers.DataOptsParams{
 		UUID:   ns.Config().UUID.String(),
-		Name:   req.Name,
+		Name:   sub,
 		Domain: req.Domain,
 	})
 	if cname {

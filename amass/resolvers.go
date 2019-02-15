@@ -62,9 +62,6 @@ type resolveResult struct {
 type resolver struct {
 	sync.RWMutex
 	Address        string
-	Available      bool
-	ExchangeTimes  *utils.Queue
-	ErrorTimes     *utils.Queue
 	WindowDuration time.Duration
 	Dialer         *net.Dialer
 	Conn           net.Conn
@@ -84,10 +81,7 @@ func newResolver(addr string) *resolver {
 
 	r := &resolver{
 		Address:        addr,
-		Available:      true,
-		ExchangeTimes:  utils.NewQueue(),
-		ErrorTimes:     utils.NewQueue(),
-		WindowDuration: 2 * time.Second,
+		WindowDuration: 5 * time.Second,
 		Dialer:         d,
 		Conn:           conn,
 		XchgQueue:      utils.NewQueue(),
@@ -96,7 +90,6 @@ func newResolver(addr string) *resolver {
 		Done:           make(chan struct{}, 2),
 	}
 	go r.fillXchgChan()
-	go r.monitorPerformance()
 	go r.checkForTimeouts()
 	go r.exchanges()
 	return r
@@ -138,7 +131,7 @@ func (r *resolver) checkForTimeouts() {
 
 			r.XchgsLock.Lock()
 			for key, req := range r.Xchgs {
-				if now.After(req.Timestamp.Add(time.Second)) {
+				if now.After(req.Timestamp.Add(r.WindowDuration)) {
 					ids = append(ids, key)
 					timeouts = append(timeouts, req)
 				}
@@ -150,7 +143,6 @@ func (r *resolver) checkForTimeouts() {
 			r.XchgsLock.Unlock()
 
 			for _, req := range timeouts {
-				r.ErrorTimes.Append(time.Now())
 				req.Result <- &resolveResult{
 					Records: nil,
 					Again:   true,
@@ -181,16 +173,6 @@ func (r *resolver) fillXchgChan() {
 		case <-r.Done:
 			return
 		default:
-			r.RLock()
-			avail := r.Available
-			r.RUnlock()
-			if !avail {
-				time.Sleep(time.Duration(delays[curIdx]) * time.Millisecond)
-				if curIdx < maxIdx {
-					curIdx++
-				}
-				continue
-			}
 			element, ok := r.XchgQueue.Next()
 			if !ok {
 				time.Sleep(time.Duration(delays[curIdx]) * time.Millisecond)
@@ -223,9 +205,8 @@ func (r *resolver) exchanges() {
 			// Check that the query was successful
 			if read.Rcode != dns.RcodeSuccess {
 				var again bool
-				if read.Rcode != 3 {
+				if read.Rcode == dns.RcodeRefused {
 					again = true
-					r.ErrorTimes.Append(time.Now())
 				}
 				r.returnRequest(req, &resolveResult{
 					Records: nil,
@@ -259,11 +240,9 @@ func (r *resolver) exchanges() {
 			})
 		case req := <-r.XchgChan:
 			msg := queryMessage(req.Name, req.Qtype)
-			r.ExchangeTimes.Append(time.Now())
 
 			co.SetWriteDeadline(time.Now().Add(r.WindowDuration))
 			if err := co.WriteMsg(msg); err != nil {
-				r.ErrorTimes.Append(time.Now())
 				req.Result <- &resolveResult{
 					Records: nil,
 					Again:   true,
@@ -289,7 +268,6 @@ func (r *resolver) readMessages(co *dns.Conn, msgs chan *dns.Msg) {
 		default:
 			rd, err := co.ReadMsg()
 			if rd == nil || err != nil {
-				r.ErrorTimes.Append(time.Now())
 				continue
 			}
 			msgs <- rd
@@ -297,86 +275,10 @@ func (r *resolver) readMessages(co *dns.Conn, msgs chan *dns.Msg) {
 	}
 }
 
-func (r *resolver) monitorPerformance() {
-	t := time.NewTicker(r.WindowDuration)
-	defer t.Stop()
-	for {
-		select {
-		case <-r.Done:
-			return
-		case <-t.C:
-			now := time.Now()
-			total := len(timesQueueElements(r.ExchangeTimes, now))
-			failures := len(timesQueueElements(r.ErrorTimes, now))
-			r.calcAvailability(total, failures)
-		}
-	}
-}
-
-func (r *resolver) calcAvailability(total, failures int) {
-	avail := true
-	if total > 50 && failures != 0 {
-		avail = false
-		frac := float64(total) / float64(failures)
-		if frac > 0 {
-			percent := float64(100) / frac
-			if percent <= 10.0 {
-				avail = true
-			}
-		}
-	}
-	r.Lock()
-	r.Available = avail
-	r.Unlock()
-}
-
-func timesQueueElements(queue *utils.Queue, end time.Time) []time.Time {
-	var entries []time.Time
-
-	for {
-		element, ok := queue.Next()
-		if !ok {
-			break
-		}
-		t := element.(time.Time)
-		if t.After(end) {
-			break
-		}
-		entries = append(entries, t)
-	}
-	return entries
-}
-
 // nextResolver requests the next DNS resolution server
 func nextResolver() *resolver {
-	var attempts int
-	max := len(resolvers)
-	for {
-		rnd := rand.Int()
-		r := resolvers[rnd%len(resolvers)]
-
-		r.RLock()
-		avail := r.Available
-		r.RUnlock()
-		if avail {
-			return r
-		}
-
-		attempts++
-		if attempts <= max {
-			continue
-		}
-
-		for _, resolver := range resolvers {
-			resolver.RLock()
-			avail = resolver.Available
-			resolver.RUnlock()
-			if avail {
-				return resolver
-			}
-		}
-		time.Sleep(500 * time.Millisecond)
-	}
+	rnd := rand.Int()
+	return resolvers[rnd%len(resolvers)]
 }
 
 // SetCustomResolvers modifies the set of resolvers used during enumeration
@@ -410,14 +312,13 @@ func Resolve(name, qtype string) ([]core.DNSAnswer, error) {
 
 	var again bool
 	var ans []core.DNSAnswer
-	for i := 0; i < 10; i++ {
+	for {
 		r := nextResolver()
 
 		ans, again, err = r.resolve(name, qt)
 		if !again {
 			break
 		}
-		time.Sleep(time.Duration(i+1) * (time.Duration(500) * time.Millisecond))
 	}
 	return ans, err
 }
