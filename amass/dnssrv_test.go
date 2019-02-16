@@ -1,6 +1,8 @@
 // Copyright 2017 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
+// +build dns
+
 package amass
 
 import (
@@ -15,10 +17,6 @@ import (
 )
 
 func TestDNSStaticWildcard(t *testing.T) {
-	if *network == false {
-		t.Skip()
-	}
-
 	resolveReq := &core.Request{
 		Name:   "random.wildcard.owasp-amass.com",
 		Domain: "wildcard.owasp-amass.com",
