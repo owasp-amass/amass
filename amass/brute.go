@@ -26,7 +26,7 @@ type BruteForceService struct {
 	core.BaseService
 
 	metrics    *core.MetricsCollector
-	totalLock  sync.Mutex
+	totalLock  sync.RWMutex
 	totalNames int
 
 	max    utils.Semaphore
@@ -35,9 +35,8 @@ type BruteForceService struct {
 
 // NewBruteForceService returns he object initialized, but not yet started.
 func NewBruteForceService(config *core.Config, bus *core.EventBus) *BruteForceService {
-	num := (len(resolvers) * 500) / len(BruteForceQueryTypes)
 	bfs := &BruteForceService{
-		max:    utils.NewSimpleSemaphore(num),
+		max:    utils.NewSimpleSemaphore(10000),
 		filter: utils.NewStringFilter(),
 	}
 
@@ -155,23 +154,22 @@ func (bfs *BruteForceService) bruteForceResolution(word, sub, domain string) {
 	if word == "" || sub == "" || domain == "" {
 		return
 	}
-	if labels := strings.Split(word, "."); len(labels) > 1 {
-		word = labels[len(labels)-1]
-	}
 
-	name := word + sub
+	bfs.SetActive()
+	name := word + "." + sub
 	var answers []core.DNSAnswer
 	for _, t := range BruteForceQueryTypes {
 		if a, err := Resolve(name, t); err == nil {
 			answers = append(answers, a...)
 			// Do not continue if a CNAME was discovered
 			if t == "CNAME" {
+				bfs.metrics.QueryTime(time.Now())
 				break
 			}
 		}
+		bfs.SetActive()
 		bfs.metrics.QueryTime(time.Now())
 	}
-	bfs.metrics.QueryTime(time.Now())
 
 	req := &core.Request{
 		Name:    name,
@@ -186,14 +184,14 @@ func (bfs *BruteForceService) bruteForceResolution(word, sub, domain string) {
 	bfs.Bus().Publish(core.NameResolvedTopic, req)
 }
 
-// Stats implements the Service interface
+// Stats implements the Service interface.
 func (bfs *BruteForceService) Stats() *core.ServiceStats {
 	return bfs.metrics.Stats()
 }
 
 func (bfs *BruteForceService) namesRemaining() int {
-	bfs.totalLock.Lock()
-	defer bfs.totalLock.Unlock()
+	bfs.totalLock.RLock()
+	defer bfs.totalLock.RUnlock()
 
 	return bfs.totalNames
 }

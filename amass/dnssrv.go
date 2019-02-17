@@ -37,7 +37,7 @@ type DNSService struct {
 	core.BaseService
 
 	metrics    *core.MetricsCollector
-	totalLock  sync.Mutex
+	totalLock  sync.RWMutex
 	totalNames int
 
 	filter        *utils.StringFilter
@@ -109,8 +109,8 @@ func (ds *DNSService) Stats() *core.ServiceStats {
 }
 
 func (ds *DNSService) namesRemaining() int {
-	ds.totalLock.Lock()
-	defer ds.totalLock.Unlock()
+	ds.totalLock.RLock()
+	defer ds.totalLock.RUnlock()
 
 	return ds.totalNames
 }
@@ -318,11 +318,14 @@ func (ds *DNSService) reverseDNSSweep(addr string, cidr *net.IPNet) {
 		if ds.filter.Duplicate(a) {
 			continue
 		}
+		ds.incTotalNames()
 		ds.reverseDNSQuery(a)
 	}
 }
 
 func (ds *DNSService) reverseDNSQuery(ip string) {
+	defer ds.decTotalNames()
+
 	ds.SetActive()
 	ptr, answer, err := Reverse(ip)
 	ds.metrics.QueryTime(time.Now())

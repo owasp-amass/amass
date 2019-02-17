@@ -67,7 +67,7 @@ type Enumeration struct {
 	filter      *utils.StringFilter
 	outputQueue *utils.Queue
 
-	metricsLock       sync.Mutex
+	metricsLock       sync.RWMutex
 	dnsQueriesPerSec  int
 	dnsNamesRemaining int
 }
@@ -131,14 +131,16 @@ func (e *Enumeration) Start() error {
 		if e.Config.DataOptsWriter != nil {
 			dms.AddDataHandler(handlers.NewDataOptsHandler(e.Config.DataOptsWriter))
 		}
-		services = append(services, NewDNSService(e.Config, e.Bus), dms, NewActiveCertService(e.Config, e.Bus))
+		services = append(services, NewDNSService(e.Config, e.Bus),
+			dms, NewActiveCertService(e.Config, e.Bus))
 	}
 
 	namesrv := NewNameService(e.Config, e.Bus)
 	namesrv.RegisterGraph(e.Graph)
 	services = append(services, namesrv, NewAddressService(e.Config, e.Bus))
 	if !e.Config.Passive {
-		services = append(services, NewAlterationService(e.Config, e.Bus), NewBruteForceService(e.Config, e.Bus))
+		services = append(services, NewAlterationService(e.Config, e.Bus),
+			NewBruteForceService(e.Config, e.Bus))
 	}
 
 	// Grab all the data sources
@@ -190,27 +192,26 @@ loop:
 
 // DNSQueriesPerSec returns the number of DNS queries the enumeration has performed per second.
 func (e *Enumeration) DNSQueriesPerSec() int {
-	e.metricsLock.Lock()
-	defer e.metricsLock.Unlock()
+	e.metricsLock.RLock()
+	defer e.metricsLock.RUnlock()
 
 	return e.dnsQueriesPerSec
 }
 
 // DNSNamesRemaining returns the number of discovered DNS names yet to be handled by the enumeration.
 func (e *Enumeration) DNSNamesRemaining() int {
-	e.metricsLock.Lock()
-	defer e.metricsLock.Unlock()
+	e.metricsLock.RLock()
+	defer e.metricsLock.RUnlock()
 
 	return e.dnsNamesRemaining
 }
 
 func (e *Enumeration) processMetrics(services []core.Service) {
-	var total, remaining int
-
 	if e.Config.Passive {
 		return
 	}
 
+	var total, remaining int
 	for _, srv := range services {
 		stats := srv.Stats()
 
@@ -247,7 +248,10 @@ loop:
 				continue
 			}
 			curIdx = 0
-			e.Output <- element.(*core.Output)
+			output := element.(*core.Output)
+			if !e.filter.Duplicate(output.Name) {
+				e.Output <- output
+			}
 		}
 	}
 	time.Sleep(5 * time.Second)
@@ -257,7 +261,10 @@ loop:
 		if !ok {
 			break
 		}
-		e.Output <- element.(*core.Output)
+		output := element.(*core.Output)
+		if !e.filter.Duplicate(output.Name) {
+			e.Output <- output
+		}
 	}
 	close(e.Output)
 }
@@ -274,7 +281,7 @@ loop:
 		case <-t.C:
 			out := e.Graph.GetUnreadOutput(e.Config.UUID.String())
 			for _, o := range out {
-				if time.Now().Add(10*time.Second).After(o.Timestamp) && !e.filter.Duplicate(o.Name) {
+				if time.Now().Add(10 * time.Second).After(o.Timestamp) {
 					e.Graph.MarkAsRead(&handlers.DataOptsParams{
 						UUID:   e.Config.UUID.String(),
 						Name:   o.Name,
@@ -310,7 +317,7 @@ func (e *Enumeration) sendOutput(o *core.Output) {
 	case <-e.Done:
 		return
 	default:
-		if !e.filter.Duplicate(o.Name) && e.Config.IsDomainInScope(o.Name) {
+		if e.Config.IsDomainInScope(o.Name) {
 			e.outputQueue.Append(o)
 		}
 	}

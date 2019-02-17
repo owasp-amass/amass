@@ -521,7 +521,8 @@ func (g *Graph) GetUnreadOutput(uuid string) []*core.Output {
 	g.Lock()
 	defer g.Unlock()
 
-	p := cayley.StartPath(g.store).Has(quad.String("type"), quad.String("domain"))
+	p := cayley.StartPath(g.store).LabelContext(
+		quad.String(uuid)).Has(quad.String("type"), quad.String("domain"))
 	it, _ := p.BuildIterator().Optimize()
 	it, _ = g.store.OptimizeIterator(it)
 	defer it.Close()
@@ -533,7 +534,7 @@ func (g *Graph) GetUnreadOutput(uuid string) []*core.Output {
 		value := g.store.NameOf(token)
 		domain := quad.NativeOf(value).(string)
 
-		names := g.getSubdomainNames(domain)
+		names := g.getSubdomainNames(domain, uuid)
 		for _, name := range names {
 			if o := g.buildOutput(name); o != nil {
 				o.Domain = domain
@@ -544,20 +545,21 @@ func (g *Graph) GetUnreadOutput(uuid string) []*core.Output {
 	return results
 }
 
-func (g *Graph) getSubdomainNames(domain string) []string {
+func (g *Graph) getSubdomainNames(domain, uuid string) []string {
 	names := []string{domain}
 
 	d := quad.String(domain)
+	u := quad.String(uuid)
 	root := quad.String("root_of")
 	t := quad.String("type")
 	s := quad.String("subdomain")
 	ns := quad.String("ns")
 	mx := quad.String("mx")
 	// This path identifies the names that have been marked as 'read'
-	read := cayley.StartPath(g.store, d).Out(root).Has(
+	read := cayley.StartPath(g.store, d).LabelContext(u).Out(root).Has(
 		t, s, ns, mx).Has(quad.String("read"), quad.String("yes"))
 	// All the DNS name related nodes that have not already been read
-	p := cayley.StartPath(g.store, d).Out(root).Has(t, s, ns, mx).Except(read)
+	p := cayley.StartPath(g.store, d).LabelContext(u).Out(root).Has(t, s, ns, mx).Except(read)
 	it, _ := p.BuildIterator().Optimize()
 	it, _ = g.store.OptimizeIterator(it)
 	defer it.Close()

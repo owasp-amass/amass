@@ -4,12 +4,12 @@
 package amass
 
 import (
-	"math/rand"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
+	"github.com/google/uuid"
 )
 
 const (
@@ -165,35 +165,7 @@ func compareAnswers(ans1, ans2 []core.DNSAnswer) bool {
 
 // UnlikelyName takes a subdomain name and returns an unlikely DNS name within that subdomain
 func UnlikelyName(sub string) string {
-	var newlabel string
-	ldh := []rune(ldhChars)
-	ldhLen := len(ldh)
+	newlabel := uuid.New().String()
 
-	// Determine the max label length
-	l := maxDNSNameLen - (len(sub) + 1)
-	if l > maxLabelLen {
-		l = maxLabelLen
-	} else if l < 1 {
-		return ""
-	}
-	// Shuffle our LDH characters
-	rand.Shuffle(ldhLen, func(i, j int) {
-		ldh[i], ldh[j] = ldh[j], ldh[i]
-	})
-
-	l = (rand.Int() % l) + 1
-	for i := 0; i < l; i++ {
-		sel := rand.Int() % ldhLen
-
-		// The first nor last char may be a hyphen
-		if (i == 0 || i == l-1) && ldh[sel] == '-' {
-			continue
-		}
-		newlabel = newlabel + string(ldh[sel])
-	}
-
-	if newlabel == "" {
-		return newlabel
-	}
 	return newlabel + "." + sub
 }
