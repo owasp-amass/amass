@@ -15,6 +15,7 @@ type queueNode struct {
 // Queue implements a FIFO data structure.
 type Queue struct {
 	sync.Mutex
+	size       int
 	head, tail *queueNode
 }
 
@@ -30,6 +31,7 @@ func (q *Queue) Append(data interface{}) {
 	q.Lock()
 	defer q.Unlock()
 
+	q.size++
 	if q.head == nil {
 		q.head = element
 	}
@@ -51,6 +53,7 @@ func (q *Queue) Next() (interface{}, bool) {
 		return nil, false
 	}
 
+	q.size--
 	element := q.head
 	q.head = element.Next
 	if q.tail == element {
@@ -69,4 +72,9 @@ func (q *Queue) Empty() bool {
 		return true
 	}
 	return false
+}
+
+// Len returns the current length of the Queue
+func (q *Queue) Len() int {
+	return q.size
 }

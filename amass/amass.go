@@ -66,14 +66,20 @@ type Enumeration struct {
 
 	filter      *utils.StringFilter
 	outputQueue *utils.Queue
+
+	metricsLock       sync.RWMutex
+	dnsQueriesPerSec  int
+	dnsNamesRemaining int
 }
 
 // NewEnumeration returns an initialized Enumeration that has not been started yet.
 func NewEnumeration() *Enumeration {
 	e := &Enumeration{
 		Config: &core.Config{
-			UUID: uuid.New(),
-			Log:  log.New(ioutil.Discard, "", 0),
+			UUID:        uuid.New(),
+			Log:         log.New(ioutil.Discard, "", 0),
+			Alterations: true,
+			Recursive:   true,
 		},
 		Bus:         core.NewEventBus(),
 		Output:      make(chan *core.Output, 100),
@@ -125,14 +131,16 @@ func (e *Enumeration) Start() error {
 		if e.Config.DataOptsWriter != nil {
 			dms.AddDataHandler(handlers.NewDataOptsHandler(e.Config.DataOptsWriter))
 		}
-		services = append(services, NewDNSService(e.Config, e.Bus), dms, NewActiveCertService(e.Config, e.Bus))
+		services = append(services, NewDNSService(e.Config, e.Bus),
+			dms, NewActiveCertService(e.Config, e.Bus))
 	}
 
 	namesrv := NewNameService(e.Config, e.Bus)
 	namesrv.RegisterGraph(e.Graph)
 	services = append(services, namesrv, NewAddressService(e.Config, e.Bus))
 	if !e.Config.Passive {
-		services = append(services, NewAlterationService(e.Config, e.Bus), NewBruteForceService(e.Config, e.Bus))
+		services = append(services, NewAlterationService(e.Config, e.Bus),
+			NewBruteForceService(e.Config, e.Bus))
 	}
 
 	// Grab all the data sources
@@ -148,6 +156,8 @@ func (e *Enumeration) Start() error {
 	go e.checkForOutput(&wg)
 	go e.processOutput(&wg)
 	t := time.NewTicker(3 * time.Second)
+	logTick := time.NewTicker(time.Minute)
+	defer logTick.Stop()
 loop:
 	for {
 		select {
@@ -157,6 +167,8 @@ loop:
 			t.Stop()
 		case <-e.ResumeChan():
 			t = time.NewTicker(3 * time.Second)
+		case <-logTick.C:
+			e.processMetrics(services)
 		case <-t.C:
 			done := true
 			for _, srv := range services {
@@ -176,6 +188,43 @@ loop:
 	}
 	wg.Wait()
 	return nil
+}
+
+// DNSQueriesPerSec returns the number of DNS queries the enumeration has performed per second.
+func (e *Enumeration) DNSQueriesPerSec() int {
+	e.metricsLock.RLock()
+	defer e.metricsLock.RUnlock()
+
+	return e.dnsQueriesPerSec
+}
+
+// DNSNamesRemaining returns the number of discovered DNS names yet to be handled by the enumeration.
+func (e *Enumeration) DNSNamesRemaining() int {
+	e.metricsLock.RLock()
+	defer e.metricsLock.RUnlock()
+
+	return e.dnsNamesRemaining
+}
+
+func (e *Enumeration) processMetrics(services []core.Service) {
+	if e.Config.Passive {
+		return
+	}
+
+	var total, remaining int
+	for _, srv := range services {
+		stats := srv.Stats()
+
+		remaining += stats.NamesRemaining
+		total += stats.DNSQueriesPerSec
+	}
+
+	e.Config.Log.Printf("Average DNS queries performed: %d/sec, DNS names remaining: %d", total, remaining)
+
+	e.metricsLock.Lock()
+	e.dnsQueriesPerSec = total
+	e.dnsNamesRemaining = remaining
+	e.metricsLock.Unlock()
 }
 
 func (e *Enumeration) processOutput(wg *sync.WaitGroup) {
@@ -199,7 +248,10 @@ loop:
 				continue
 			}
 			curIdx = 0
-			e.Output <- element.(*core.Output)
+			output := element.(*core.Output)
+			if !e.filter.Duplicate(output.Name) {
+				e.Output <- output
+			}
 		}
 	}
 	time.Sleep(5 * time.Second)
@@ -209,7 +261,10 @@ loop:
 		if !ok {
 			break
 		}
-		e.Output <- element.(*core.Output)
+		output := element.(*core.Output)
+		if !e.filter.Duplicate(output.Name) {
+			e.Output <- output
+		}
 	}
 	close(e.Output)
 }
@@ -226,7 +281,7 @@ loop:
 		case <-t.C:
 			out := e.Graph.GetUnreadOutput(e.Config.UUID.String())
 			for _, o := range out {
-				if time.Now().Add(10*time.Second).After(o.Timestamp) && !e.filter.Duplicate(o.Name) {
+				if time.Now().Add(10 * time.Second).After(o.Timestamp) {
 					e.Graph.MarkAsRead(&handlers.DataOptsParams{
 						UUID:   e.Config.UUID.String(),
 						Name:   o.Name,
@@ -262,7 +317,7 @@ func (e *Enumeration) sendOutput(o *core.Output) {
 	case <-e.Done:
 		return
 	default:
-		if !e.filter.Duplicate(o.Name) && e.Config.IsDomainInScope(o.Name) {
+		if e.Config.IsDomainInScope(o.Name) {
 			e.outputQueue.Append(o)
 		}
 	}

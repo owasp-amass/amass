@@ -18,6 +18,13 @@ const (
 	APIkeyOptional
 )
 
+// ServiceStats provides metrics from an Amass service.
+type ServiceStats struct {
+	DNSQueriesPerSec int
+	NamesRemaining   int
+	AddrsRemaining   int
+}
+
 // Service is the object type for a service running within the Amass enumeration architecture.
 type Service interface {
 	// Start the service
@@ -57,6 +64,9 @@ type Service interface {
 
 	// Returns the event bus that handles communication for the enumeration
 	Bus() *EventBus
+
+	// Returns current ServiceStats that provide performance metrics
+	Stats() *ServiceStats
 }
 
 // BaseService provides common mechanisms to all Amass services in the enumeration architecture.
@@ -167,7 +177,7 @@ func (bas *BaseService) OnStop() error {
 
 // SendRequest adds the request provided by the parameter to the service request channel.
 func (bas *BaseService) SendRequest(req *Request) {
-	bas.requests <- req
+	bas.queue.Append(req)
 }
 
 // RequestChan returns the channel that provides new service requests.
@@ -178,7 +188,7 @@ func (bas *BaseService) RequestChan() <-chan *Request {
 func (bas *BaseService) processRequests() {
 	curIdx := 0
 	maxIdx := 7
-	delays := []int{250, 500, 750, 1000, 1250, 1500, 1750, 2000}
+	delays := []int{25, 50, 75, 100, 150, 250, 500, 750}
 
 	for {
 		select {
@@ -246,4 +256,9 @@ func (bas *BaseService) Config() *Config {
 // Bus returns the EventBus that handles communication for the enumeration.
 func (bas *BaseService) Bus() *EventBus {
 	return bas.bus
+}
+
+// Stats returns current ServiceStats that provide performance metrics
+func (bas *BaseService) Stats() *ServiceStats {
+	return new(ServiceStats)
 }

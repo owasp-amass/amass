@@ -394,7 +394,7 @@ func getWordList(reader io.Reader) ([]string, error) {
 		// Get the next word in the list
 		w := strings.TrimSpace(scanner.Text())
 		if err := scanner.Err(); err == nil && w != "" {
-			words = utils.UniqueAppend(words, w)
+			words = append(words, w)
 		}
 	}
 	return words, nil
