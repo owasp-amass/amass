@@ -36,7 +36,7 @@ type BruteForceService struct {
 // NewBruteForceService returns he object initialized, but not yet started.
 func NewBruteForceService(config *core.Config, bus *core.EventBus) *BruteForceService {
 	bfs := &BruteForceService{
-		max:    utils.NewSimpleSemaphore(1000),
+		max:    utils.NewSimpleSemaphore(10000),
 		filter: utils.NewStringFilter(),
 	}
 

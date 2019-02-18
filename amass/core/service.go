@@ -11,6 +11,11 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
+const (
+	// The length of the chan that pulls requests off the queue.
+	ServiceRequestChanLength int = 1000
+)
+
 // Possible values for the AmassService.APIKeyRequired field.
 const (
 	APIKeyRequired int = iota
@@ -52,6 +57,7 @@ type Service interface {
 	// Returns channels that fire during Pause/Resume operations
 	PauseChan() <-chan struct{}
 	ResumeChan() <-chan struct{}
+	RequestLen() int
 
 	// Returns a channel that is closed when the service is stopped
 	Quit() <-chan struct{}
@@ -99,7 +105,7 @@ func NewBaseService(srv Service, name string, config *Config, bus *EventBus) *Ba
 		name:     name,
 		active:   time.Now(),
 		queue:    utils.NewQueue(),
-		requests: make(chan *Request, 1000),
+		requests: make(chan *Request, ServiceRequestChanLength),
 		pause:    make(chan struct{}, 10),
 		resume:   make(chan struct{}, 10),
 		quit:     make(chan struct{}),
@@ -207,6 +213,10 @@ func (bas *BaseService) processRequests() {
 			bas.requests <- element.(*Request)
 		}
 	}
+}
+
+func (bas *BaseService) RequestLen() int {
+	return bas.queue.Len()
 }
 
 // IsActive returns true if SetActive has been called for the service within the last 10 seconds.

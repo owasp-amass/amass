@@ -68,7 +68,7 @@ type resolver struct {
 	XchgQueue      *utils.Queue
 	XchgChan       chan *resolveRequest
 	XchgsLock      sync.Mutex
-	Xchgs          map[uint16]*resolveRequest
+	Xchgs          map[uint16][]*resolveRequest
 	Done           chan struct{}
 	rcodeStats     map[int]int64
 	attempts       int64
@@ -90,8 +90,8 @@ func newResolver(addr string) *resolver {
 		Dialer:         d,
 		Conn:           conn,
 		XchgQueue:      utils.NewQueue(),
-		XchgChan:       make(chan *resolveRequest, 100),
-		Xchgs:          make(map[uint16]*resolveRequest),
+		XchgChan:       make(chan *resolveRequest, 1000),
+		Xchgs:          make(map[uint16][]*resolveRequest),
 		Done:           make(chan struct{}, 2),
 		rcodeStats:     make(map[int]int64),
 		last:           time.Now(),
@@ -112,22 +112,39 @@ func (r *resolver) stop() {
 
 func (r *resolver) queueRequest(id uint16, req *resolveRequest) {
 	r.XchgsLock.Lock()
-	r.Xchgs[id] = req
+	r.Xchgs[id] = append(r.Xchgs[id], req)
 	r.XchgsLock.Unlock()
 }
 
-func (r *resolver) pullRequest(id uint16) *resolveRequest {
-	var res *resolveRequest
-
+func (r *resolver) pullRequest(id uint16, name string) *resolveRequest {
 	r.XchgsLock.Lock()
-	res = r.Xchgs[id]
+	defer r.XchgsLock.Unlock()
+
+	var idx int
+	var found bool
+	for i, req := range r.Xchgs[id] {
+		if req.Name == name {
+			idx = i
+			found = true
+			break
+		}
+	}
+	if !found {
+		return nil
+	}
+
+	res := r.Xchgs[id][idx]
+	if len(r.Xchgs[id]) > 1 {
+		r.Xchgs[id] = append(r.Xchgs[id][:idx], r.Xchgs[id][idx+1:]...)
+		return res
+	}
+	// There was only one element in the slice
 	delete(r.Xchgs, id)
-	r.XchgsLock.Unlock()
 	return res
 }
 
 func (r *resolver) checkForTimeouts() {
-	t := time.NewTicker(time.Second)
+	t := time.NewTicker(r.WindowDuration)
 	defer t.Stop()
 	for {
 		select {
@@ -138,19 +155,22 @@ func (r *resolver) checkForTimeouts() {
 			var ids []uint16
 			var timeouts []*resolveRequest
 
+			// Discover requests that have timed out
 			r.XchgsLock.Lock()
-			for key, req := range r.Xchgs {
-				if now.After(req.Timestamp.Add(r.WindowDuration)) {
-					ids = append(ids, key)
-					timeouts = append(timeouts, req)
+			for id := range r.Xchgs {
+				for _, req := range r.Xchgs[id] {
+					if now.After(req.Timestamp.Add(r.WindowDuration)) {
+						ids = append(ids, id)
+						timeouts = append(timeouts, req)
+					}
 				}
 			}
-
-			for _, id := range ids {
-				delete(r.Xchgs, id)
-			}
 			r.XchgsLock.Unlock()
-
+			// Remove the timed out requests from the map
+			for i, id := range ids {
+				r.pullRequest(id, timeouts[i].Name)
+			}
+			// Complete handling of the timed out requests
 			r.updateTimeouts(len(timeouts))
 			for _, req := range timeouts {
 				req.Result <- &resolveResult{
@@ -229,7 +249,11 @@ func (r *resolver) exchanges() {
 }
 
 func (r *resolver) processMessage(msg *dns.Msg) {
-	req := r.pullRequest(msg.MsgHdr.Id)
+	if len(msg.Question) == 0 {
+		return
+	}
+
+	req := r.pullRequest(msg.MsgHdr.Id, removeLastDot(msg.Question[0].Name))
 	if req == nil {
 		return
 	}
