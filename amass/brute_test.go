@@ -4,11 +4,6 @@
 package amass
 
 import (
-	"log"
-	"strings"
-	"testing"
-	"time"
-
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/miekg/dns"
 )
@@ -42,6 +37,7 @@ var (
 	}
 )
 
+/*
 func TestBruteForceRootDomains(t *testing.T) {
 	config := &core.Config{}
 	config.Wordlist = wordlist
@@ -129,3 +125,4 @@ loop:
 		t.Errorf("Got %d names, expected %d instead", len(results), expected)
 	}
 }
+*/
