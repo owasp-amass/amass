@@ -86,7 +86,7 @@ func newResolver(addr string) *resolver {
 
 	r := &resolver{
 		Address:        addr,
-		WindowDuration: 3 * time.Second,
+		WindowDuration: 2 * time.Second,
 		Dialer:         d,
 		Conn:           conn,
 		XchgQueue:      utils.NewQueue(),
@@ -391,7 +391,7 @@ func nextResolver() *resolver {
 			}
 		}
 		attempts = 0
-		time.Sleep(time.Duration(randomInt(100, 300)) * time.Millisecond)
+		time.Sleep(time.Duration(randomInt(100, 1000)) * time.Millisecond)
 	}
 }
 
