@@ -61,7 +61,7 @@ func (b *BufferOver) executeQuery(domain string) {
 }
 
 func (b *BufferOver) getURL(domain string) string {
-	format := "https://dns.bufferover.run/dns?q=%s"
+	format := "https://dns.bufferover.run/dns?q=.%s"
 
 	return fmt.Sprintf(format, domain)
 }

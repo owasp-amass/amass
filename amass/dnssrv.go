@@ -209,7 +209,6 @@ func (ds *DNSService) newSubdomain(req *core.Request, times int) {
 }
 
 func (ds *DNSService) processSubdomain(req *core.Request) {
-	ds.SetActive()
 	ds.basicQueries(req.Name, req.Domain)
 	ds.queryServiceNames(req.Name, req.Domain)
 }
@@ -316,7 +315,6 @@ func (ds *DNSService) queryServiceNames(subdomain, domain string) {
 }
 
 func (ds *DNSService) dnsSweep(addr string, cidr *net.IPNet) {
-	ds.SetActive()
 	go ds.reverseDNSSweep(addr, cidr)
 }
 

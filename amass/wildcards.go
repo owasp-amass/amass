@@ -18,9 +18,6 @@ const (
 	maxDNSNameLen  = 253
 	maxDNSLabelLen = 63
 	maxLabelLen    = 24
-
-	// The hyphen has been removed
-	ldhChars = "abcdefghijklmnopqrstuvwxyz0123456789"
 )
 
 // Names for the different types of wildcards that can be detected.
@@ -163,9 +160,21 @@ func compareAnswers(ans1, ans2 []core.DNSAnswer) bool {
 	return false
 }
 
-// UnlikelyName takes a subdomain name and returns an unlikely DNS name within that subdomain
+// UnlikelyName takes a subdomain name and returns an unlikely DNS name within that subdomain.
 func UnlikelyName(sub string) string {
 	newlabel := uuid.New().String()
 
+	// Determine the max label length
+	l := maxDNSNameLen - (len(sub) + 1)
+	if l > maxLabelLen {
+		l = maxLabelLen
+	} else if l < 1 {
+		return ""
+	}
+	if len(newlabel) > l {
+		newlabel = newlabel[:l]
+	}
+	// Remove hyphens from the beginning and end of the label
+	newlabel = strings.Trim(newlabel, "-")
 	return newlabel + "." + sub
 }
