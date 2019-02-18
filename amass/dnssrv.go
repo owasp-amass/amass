@@ -97,7 +97,6 @@ func (ds *DNSService) processRequests() {
 		case <-ds.Quit():
 			return
 		case req := <-ds.RequestChan():
-			ds.incTotalNames()
 			go ds.performRequest(req)
 		}
 	}
@@ -130,6 +129,7 @@ func (ds *DNSService) decTotalNames() {
 }
 
 func (ds *DNSService) performRequest(req *core.Request) {
+	ds.incTotalNames()
 	defer ds.decTotalNames()
 
 	if req == nil || req.Name == "" || req.Domain == "" {
@@ -142,6 +142,7 @@ func (ds *DNSService) performRequest(req *core.Request) {
 		return
 	}
 
+	ds.SetActive()
 	var answers []core.DNSAnswer
 	for _, t := range InitialQueryTypes {
 		if a, err := Resolve(req.Name, t); err == nil {
@@ -150,6 +151,7 @@ func (ds *DNSService) performRequest(req *core.Request) {
 			}
 			// Do not continue if a CNAME was discovered
 			if t == "CNAME" {
+				ds.metrics.QueryTime(time.Now())
 				break
 			}
 		} else {
@@ -203,9 +205,11 @@ func (ds *DNSService) processSubdomain(req *core.Request) {
 }
 
 func (ds *DNSService) basicQueries(subdomain, domain string) {
-	var answers []core.DNSAnswer
+	ds.incTotalNames()
+	defer ds.decTotalNames()
 
 	ds.SetActive()
+	var answers []core.DNSAnswer
 	// Obtain the DNS answers for the NS records related to the domain
 	if ans, err := Resolve(subdomain, "NS"); err == nil {
 		for _, a := range ans {
@@ -285,6 +289,7 @@ func (ds *DNSService) queryServiceNames(subdomain, domain string) {
 		if ds.filter.Duplicate(srvName) {
 			continue
 		}
+		ds.incTotalNames()
 		if a, err := Resolve(srvName, "SRV"); err == nil {
 			ds.resolvedName(&core.Request{
 				Name:    srvName,
@@ -295,6 +300,8 @@ func (ds *DNSService) queryServiceNames(subdomain, domain string) {
 			})
 		}
 		ds.metrics.QueryTime(time.Now())
+		ds.SetActive()
+		ds.decTotalNames()
 	}
 }
 
@@ -318,12 +325,12 @@ func (ds *DNSService) reverseDNSSweep(addr string, cidr *net.IPNet) {
 		if ds.filter.Duplicate(a) {
 			continue
 		}
-		ds.incTotalNames()
 		ds.reverseDNSQuery(a)
 	}
 }
 
 func (ds *DNSService) reverseDNSQuery(ip string) {
+	ds.incTotalNames()
 	defer ds.decTotalNames()
 
 	ds.SetActive()
@@ -337,6 +344,8 @@ func (ds *DNSService) reverseDNSQuery(ip string) {
 	if domain == "" {
 		return
 	}
+
+	ds.SetActive()
 	ds.resolvedName(&core.Request{
 		Name:   ptr,
 		Domain: domain,

@@ -127,7 +127,7 @@ func (as *AlterationService) appendNumbers(req *core.Request) {
 	}
 }
 
-// sendAlteredName checks that the provided name is valid and sends it along to the SubdomainService.
+// sendAlteredName checks that the provided name is valid before publishing it as a new name.
 func (as *AlterationService) sendAlteredName(name, domain string) {
 	re := as.Config().DomainRegex(domain)
 	if re == nil || !re.MatchString(name) {

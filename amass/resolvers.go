@@ -19,7 +19,7 @@ import (
 
 const (
 	// ResolutionTimeout is the maximum time spent retrying a resolution request.
-	ResolutionTimeout time.Duration = time.Minute
+	ResolutionTimeout time.Duration = 10 * time.Second
 )
 
 var (

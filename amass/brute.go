@@ -36,7 +36,7 @@ type BruteForceService struct {
 // NewBruteForceService returns he object initialized, but not yet started.
 func NewBruteForceService(config *core.Config, bus *core.EventBus) *BruteForceService {
 	bfs := &BruteForceService{
-		max:    utils.NewSimpleSemaphore(10000),
+		max:    utils.NewSimpleSemaphore(1000),
 		filter: utils.NewStringFilter(),
 	}
 
@@ -134,28 +134,36 @@ func (bfs *BruteForceService) performBruteForcing(subdomain, domain string) {
 	bfs.totalNames += len(bfs.Config().Wordlist)
 	bfs.totalLock.Unlock()
 
-	bfs.SetActive()
-	for _, word := range bfs.Config().Wordlist {
+	var idx int
+	t := time.NewTicker(time.Second)
+	defer t.Stop()
+	for {
 		select {
 		case <-bfs.Quit():
 			return
+		case <-t.C:
+			bfs.SetActive()
 		default:
+			if idx >= len(bfs.Config().Wordlist) {
+				return
+			}
 			bfs.max.Acquire(1)
-			go bfs.bruteForceResolution(strings.ToLower(word), subdomain, domain)
+			word := strings.ToLower(bfs.Config().Wordlist[idx])
+			go bfs.bruteForceResolution(word, subdomain, domain)
+			idx++
 		}
 	}
 }
 
 func (bfs *BruteForceService) bruteForceResolution(word, sub, domain string) {
-	defer bfs.max.Release(1)
 	defer bfs.SetActive()
+	defer bfs.max.Release(1)
 	defer bfs.decTotalNames()
 
 	if word == "" || sub == "" || domain == "" {
 		return
 	}
 
-	bfs.SetActive()
 	name := word + "." + sub
 	var answers []core.DNSAnswer
 	for _, t := range BruteForceQueryTypes {
@@ -167,8 +175,8 @@ func (bfs *BruteForceService) bruteForceResolution(word, sub, domain string) {
 				break
 			}
 		}
-		bfs.SetActive()
 		bfs.metrics.QueryTime(time.Now())
+		bfs.SetActive()
 	}
 
 	req := &core.Request{
@@ -178,6 +186,8 @@ func (bfs *BruteForceService) bruteForceResolution(word, sub, domain string) {
 		Tag:     core.BRUTE,
 		Source:  bfs.String(),
 	}
+
+	bfs.SetActive()
 	if len(answers) == 0 || MatchesWildcard(req) {
 		return
 	}
