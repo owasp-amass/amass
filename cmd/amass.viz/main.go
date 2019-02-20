@@ -56,7 +56,7 @@ func main() {
 		return
 	}
 
-	nodes, edges := graph.VizData()
+	nodes, edges := graph.VizData(opts[0].UUID)
 	writeMaltegoFile(*maltegopath, nodes, edges)
 	writeVisjsFile(*visjspath, nodes, edges)
 	writeGraphistryFile(*graphistrypath, nodes, edges)

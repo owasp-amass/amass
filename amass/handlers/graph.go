@@ -40,7 +40,7 @@ func NewGraph(path string) *Graph {
 		if err != nil {
 			return nil
 		}
-		path = filepath.Join(path, ".amass")
+		path = filepath.Join(path, "amass")
 	}
 	// If the directory does not yet exist, create it
 	if err = os.MkdirAll(path, 0755); err != nil {
@@ -149,7 +149,7 @@ func (g *Graph) MarkAsRead(data *DataOptsParams) error {
 	g.Lock()
 	defer g.Unlock()
 
-	if t := g.propertyValue(quad.String(data.Name), "type"); t != "" {
+	if t := g.propertyValue(quad.String(data.Name), "type", data.UUID); t != "" {
 		g.store.AddQuad(quad.Make(data.Name, "read", "yes", data.UUID))
 	}
 	return nil
@@ -160,14 +160,14 @@ func (g *Graph) IsCNAMENode(data *DataOptsParams) bool {
 	g.Lock()
 	defer g.Unlock()
 
-	if r := g.propertyValue(quad.String(data.Name), "cname_to"); r != "" {
+	if r := g.propertyValue(quad.String(data.Name), "cname_to", data.UUID); r != "" {
 		return true
 	}
 	return false
 }
 
 // VizData returns the current state of the Graph as viz package Nodes and Edges.
-func (g *Graph) VizData() ([]viz.Node, []viz.Edge) {
+func (g *Graph) VizData(uuid string) ([]viz.Node, []viz.Edge) {
 	g.Lock()
 	defer g.Unlock()
 
@@ -182,20 +182,20 @@ func (g *Graph) VizData() ([]viz.Node, []viz.Edge) {
 		}
 
 		var source string
-		t := g.propertyValue(node, "type")
+		t := g.propertyValue(node, "type", uuid)
 		title := t + ": " + label
 
 		switch t {
 		case "subdomain":
-			source = g.propertyValue(node, "source")
+			source = g.propertyValue(node, "source", uuid)
 		case "domain":
-			source = g.propertyValue(node, "source")
+			source = g.propertyValue(node, "source", uuid)
 		case "ns":
-			source = g.propertyValue(node, "source")
+			source = g.propertyValue(node, "source", uuid)
 		case "mx":
-			source = g.propertyValue(node, "source")
+			source = g.propertyValue(node, "source", uuid)
 		case "as":
-			title = title + ", Desc: " + g.propertyValue(node, "description")
+			title = title + ", Desc: " + g.propertyValue(node, "description", uuid)
 		}
 
 		rnodes[label] = idx
@@ -250,7 +250,7 @@ func (g *Graph) insertDomain(data *DataOptsParams) error {
 		return errors.New("Graph: insertDomain: no domain name provided")
 	}
 	// Check if the domain has already been inserted
-	if val := g.propertyValue(quad.String(data.Domain), "type"); val != "" {
+	if val := g.propertyValue(quad.String(data.Domain), "type", data.UUID); val != "" {
 		return nil
 	}
 
@@ -277,7 +277,7 @@ func (g *Graph) insertSub(label string, data *DataOptsParams) error {
 
 	if data.Name != data.Domain {
 		// Check if this subdomain related node has already been inserted
-		if val := g.propertyValue(quad.String(data.Name), "type"); val != "" {
+		if val := g.propertyValue(quad.String(data.Name), "type", data.UUID); val != "" {
 			return nil
 		}
 
@@ -319,7 +319,7 @@ func (g *Graph) insertA(data *DataOptsParams) error {
 		return err
 	}
 	// Check if the address has already been inserted
-	if val := g.propertyValue(quad.String(data.Address), "type"); val != "" {
+	if val := g.propertyValue(quad.String(data.Address), "type", data.UUID); val != "" {
 		return nil
 	}
 
@@ -337,7 +337,7 @@ func (g *Graph) insertAAAA(data *DataOptsParams) error {
 		return err
 	}
 	// Check if the address has already been inserted
-	if val := g.propertyValue(quad.String(data.Address), "type"); val != "" {
+	if val := g.propertyValue(quad.String(data.Address), "type", data.UUID); val != "" {
 		return nil
 	}
 
@@ -457,13 +457,14 @@ func (g *Graph) swapNodeType(name, newtype, uuid string) bool {
 		return false
 	}
 	// Check that a node with 'name' as a subject already exists
-	oldtype := g.propertyValue(quad.String(name), "type")
+	oldtype := g.propertyValue(quad.String(name), "type", uuid)
 	if oldtype == "" {
 		return false
 	}
 	// Get the predicates for this subject
+	u := quad.String(uuid)
 	var predicates []quad.Value
-	p := cayley.StartPath(g.store, quad.String(name)).OutPredicates().Unique()
+	p := cayley.StartPath(g.store, quad.String(name)).LabelContext(u).OutPredicates().Unique()
 	p.Iterate(nil).EachValue(nil, func(val quad.Value) {
 		predicates = append(predicates, val)
 	})
@@ -472,7 +473,7 @@ func (g *Graph) swapNodeType(name, newtype, uuid string) bool {
 	for _, predicate := range predicates {
 		kstr := quad.ToString(predicate)
 
-		path := cayley.StartPath(g.store, quad.String(name)).Out(predicate)
+		path := cayley.StartPath(g.store, quad.String(name)).LabelContext(u).Out(predicate)
 		path.Iterate(nil).EachValue(nil, func(val quad.Value) {
 			vstr := quad.ToString(val)
 
@@ -493,7 +494,7 @@ func (g *Graph) swapNodeType(name, newtype, uuid string) bool {
 
 func (g *Graph) insertInfrastructure(data *DataOptsParams) error {
 	// Check if the netblock has not been inserted
-	if val := g.propertyValue(quad.String(data.CIDR), "type"); val == "" {
+	if val := g.propertyValue(quad.String(data.CIDR), "type", data.UUID); val == "" {
 		t := cayley.NewTransaction()
 		t.AddQuad(quad.Make(data.CIDR, "type", "netblock", data.UUID))
 		t.AddQuad(quad.Make(data.CIDR, "timestamp", data.Timestamp, data.UUID))
@@ -504,7 +505,7 @@ func (g *Graph) insertInfrastructure(data *DataOptsParams) error {
 
 	asn := strconv.Itoa(data.ASN)
 	// Check if the netblock has not been inserted
-	if val := g.propertyValue(quad.String(asn), "type"); val == "" {
+	if val := g.propertyValue(quad.String(asn), "type", data.UUID); val == "" {
 		t := cayley.NewTransaction()
 		t.AddQuad(quad.Make(asn, "type", "as", data.UUID))
 		t.AddQuad(quad.Make(asn, "timestamp", data.Timestamp, data.UUID))
@@ -536,7 +537,7 @@ func (g *Graph) GetUnreadOutput(uuid string) []*core.Output {
 
 		names := g.getSubdomainNames(domain, uuid)
 		for _, name := range names {
-			if o := g.buildOutput(name); o != nil {
+			if o := g.buildOutput(name, uuid); o != nil {
 				o.Domain = domain
 				results = append(results, o)
 			}
@@ -571,23 +572,23 @@ func (g *Graph) getSubdomainNames(domain, uuid string) []string {
 		sub := quad.NativeOf(value).(string)
 
 		// Check for a SRV name
-		if srv := g.propertyValue(quad.String(sub), "srv_to"); srv != "" {
+		if srv := g.propertyValue(quad.String(sub), "srv_to", uuid); srv != "" {
 			names = append(names, srv)
 		}
 		// Grab all the CNAMEs chained to this subdomain name
-		if n := g.getCNAMEs(sub); len(n) > 0 {
+		if n := g.getCNAMEs(sub, uuid); len(n) > 0 {
 			names = append(names, n...)
 		}
 	}
 	return names
 }
 
-func (g *Graph) getCNAMEs(sub string) []string {
+func (g *Graph) getCNAMEs(sub, uuid string) []string {
 	names := []string{sub}
 
 	cname := quad.String(sub)
 	for i := 0; i < 10; i++ {
-		target := g.propertyValue(cname, "cname_to")
+		target := g.propertyValue(cname, "cname_to", uuid)
 		if target == "" {
 			break
 		}
@@ -598,24 +599,24 @@ func (g *Graph) getCNAMEs(sub string) []string {
 	return names
 }
 
-func (g *Graph) buildOutput(sub string) *core.Output {
+func (g *Graph) buildOutput(sub, uuid string) *core.Output {
 	qsub := quad.String(sub)
-	ts, err := time.Parse(time.RFC3339, g.propertyValue(qsub, "timestamp"))
+	ts, err := time.Parse(time.RFC3339, g.propertyValue(qsub, "timestamp", uuid))
 	if err != nil {
 		return nil
 	}
 	output := &core.Output{
 		Timestamp: ts,
 		Name:      sub,
-		Tag:       g.propertyValue(qsub, "tag"),
-		Source:    g.propertyValue(qsub, "source"),
+		Tag:       g.propertyValue(qsub, "tag", uuid),
+		Source:    g.propertyValue(qsub, "source", uuid),
 	}
 	// Traverse CNAME and SRV records
 	target := sub
 	for i := 0; i < 10; i++ {
-		next := g.propertyValue(quad.String(target), "cname_to")
+		next := g.propertyValue(quad.String(target), "cname_to", uuid)
 		if next == "" {
-			next = g.propertyValue(quad.String(target), "srv_to")
+			next = g.propertyValue(quad.String(target), "srv_to", uuid)
 			if next == "" {
 				break
 			}
@@ -623,7 +624,8 @@ func (g *Graph) buildOutput(sub string) *core.Output {
 		target = next
 	}
 	// Get all the IPv4 addresses
-	pv4 := cayley.StartPath(g.store, quad.String(target)).Out(quad.String("a_to"))
+	u := quad.String(uuid)
+	pv4 := cayley.StartPath(g.store, quad.String(target)).LabelContext(u).Out(quad.String("a_to"))
 	itv4, _ := pv4.BuildIterator().Optimize()
 	itv4, _ = g.store.OptimizeIterator(itv4)
 	defer itv4.Close()
@@ -634,12 +636,12 @@ func (g *Graph) buildOutput(sub string) *core.Output {
 		value := g.store.NameOf(token)
 		addr := quad.NativeOf(value).(string)
 
-		if i := g.buildAddrInfo(addr); i != nil {
+		if i := g.buildAddrInfo(addr, uuid); i != nil {
 			output.Addresses = append(output.Addresses, *i)
 		}
 	}
 	// Get all the IPv6 addresses
-	pv6 := cayley.StartPath(g.store, quad.String(target)).Out(quad.String("aaaa_to"))
+	pv6 := cayley.StartPath(g.store, quad.String(target)).LabelContext(u).Out(quad.String("aaaa_to"))
 	itv6, _ := pv6.BuildIterator().Optimize()
 	itv6, _ = g.store.OptimizeIterator(itv6)
 	defer itv6.Close()
@@ -650,7 +652,7 @@ func (g *Graph) buildOutput(sub string) *core.Output {
 		value := g.store.NameOf(token)
 		addr := quad.NativeOf(value).(string)
 
-		if i := g.buildAddrInfo(addr); i != nil {
+		if i := g.buildAddrInfo(addr, uuid); i != nil {
 			output.Addresses = append(output.Addresses, *i)
 		}
 	}
@@ -661,10 +663,11 @@ func (g *Graph) buildOutput(sub string) *core.Output {
 	return output
 }
 
-func (g *Graph) buildAddrInfo(addr string) *core.AddressInfo {
+func (g *Graph) buildAddrInfo(addr, uuid string) *core.AddressInfo {
 	ainfo := &core.AddressInfo{Address: net.ParseIP(addr)}
 
-	nb := cayley.StartPath(g.store, quad.String(addr)).In(quad.String("contains"))
+	u := quad.String(uuid)
+	nb := cayley.StartPath(g.store, quad.String(addr)).LabelContext(u).In(quad.String("contains"))
 	itnb, _ := nb.BuildIterator().Optimize()
 	itnb, _ = g.store.OptimizeIterator(itnb)
 	defer itnb.Close()
@@ -685,7 +688,7 @@ func (g *Graph) buildAddrInfo(addr string) *core.AddressInfo {
 	}
 	_, ainfo.Netblock, _ = net.ParseCIDR(cidr)
 
-	p := cayley.StartPath(g.store, quad.String(cidr)).In(quad.String("has_prefix"))
+	p := cayley.StartPath(g.store, quad.String(cidr)).LabelContext(u).In(quad.String("has_prefix"))
 	itasn, _ := p.BuildIterator().Optimize()
 	itasn, _ = g.store.OptimizeIterator(itasn)
 	defer itasn.Close()
@@ -706,16 +709,16 @@ func (g *Graph) buildAddrInfo(addr string) *core.AddressInfo {
 	}
 
 	ainfo.ASN, _ = strconv.Atoi(asn)
-	ainfo.Description = g.propertyValue(quad.String(asn), "description")
+	ainfo.Description = g.propertyValue(quad.String(asn), "description", uuid)
 	return ainfo
 }
 
-func (g *Graph) propertyValue(node quad.Value, pname string) string {
-	if quad.ToString(node) == "" || pname == "" {
+func (g *Graph) propertyValue(node quad.Value, pname, uuid string) string {
+	if quad.ToString(node) == "" || pname == "" || uuid == "" {
 		return ""
 	}
 
-	p := cayley.StartPath(g.store, node).Out(quad.String(pname))
+	p := cayley.StartPath(g.store, node).LabelContext(quad.String(uuid)).Out(quad.String(pname))
 	it, _ := p.BuildIterator().Optimize()
 	it, _ = g.store.OptimizeIterator(it)
 	defer it.Close()
