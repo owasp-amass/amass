@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"time"
 
 	"github.com/OWASP/Amass/amass/core"
 	bolt "github.com/johnnadratowski/golang-neo4j-bolt-driver"
@@ -47,39 +48,6 @@ func (n *Neo4j) Close() {
 // String returns a description for the Neo4j client object.
 func (n *Neo4j) String() string {
 	return "Neo4j Database Handler"
-}
-
-// MarkAsRead implements the Amass DataHandler interface.
-func (n *Neo4j) MarkAsRead(data *DataOptsParams) error {
-	params := map[string]interface{}{
-		"uuid":   data.UUID,
-		"name":   data.Name,
-		"domain": data.Domain,
-	}
-
-	for _, label := range []string{"domain", "subdomain", "ns", "mx"} {
-		n.conn.ExecNeo("MATCH (domain:domain {name: {domain}, enum: {uuid}}) "+
-			"MATCH (target:"+label+" {name: {name}, enum: {uuid}}) "+
-			"MATCH (domain)-[:root_of]->(target) "+
-			"SET target.read = 'yes'", params)
-	}
-	return nil
-}
-
-// IsCNAMENode implements the Amass DataHandler interface.
-func (n *Neo4j) IsCNAMENode(data *DataOptsParams) bool {
-	params := map[string]interface{}{
-		"uuid":   data.UUID,
-		"name":   data.Name,
-		"domain": data.Domain,
-	}
-
-	result, _ := n.conn.ExecNeo("MATCH (d:domain {name: {domain}, enum: {uuid}}) "+
-		"MATCH (c:subdomain {name: {name}, enum: {uuid}}) "+
-		"MATCH (d)-[:root_of]->(c)-[:cname_to]->(t) "+
-		"RETURN count(t)", params)
-	fmt.Printf("%v\n", result.Metadata())
-	return false
 }
 
 // Insert implements the Amass DataHandler interface.
@@ -494,7 +462,55 @@ func (n *Neo4j) insertInfrastructure(data *DataOptsParams) error {
 	return err
 }
 
-// GetUnreadOutput implements the Amass DataHandler interface.
-func (n *Neo4j) GetUnreadOutput(uuid string) []*core.Output {
+// EnumerationList returns a list of enumeration IDs found in the data.
+func (n *Neo4j) EnumerationList() []string {
+	return []string{}
+}
+
+// EnumerationDomains returns the domains that were involved in the provided enumeration.
+func (n *Neo4j) EnumerationDomains(uuid string) []string {
+	return []string{}
+}
+
+// EnumerationDateRange returns the date range associated with the provided enumeration UUID.
+func (n *Neo4j) EnumerationDateRange(uuid string) (time.Time, time.Time) {
+	return time.Now(), time.Now()
+}
+
+// GetOutput implements the Amass DataHandler interface.
+func (n *Neo4j) GetOutput(uuid string, marked bool) []*core.Output {
 	return nil
+}
+
+// MarkAsRead implements the Amass DataHandler interface.
+func (n *Neo4j) MarkAsRead(data *DataOptsParams) error {
+	params := map[string]interface{}{
+		"uuid":   data.UUID,
+		"name":   data.Name,
+		"domain": data.Domain,
+	}
+
+	for _, label := range []string{"domain", "subdomain", "ns", "mx"} {
+		n.conn.ExecNeo("MATCH (domain:domain {name: {domain}, enum: {uuid}}) "+
+			"MATCH (target:"+label+" {name: {name}, enum: {uuid}}) "+
+			"MATCH (domain)-[:root_of]->(target) "+
+			"SET target.read = 'yes'", params)
+	}
+	return nil
+}
+
+// IsCNAMENode implements the Amass DataHandler interface.
+func (n *Neo4j) IsCNAMENode(data *DataOptsParams) bool {
+	params := map[string]interface{}{
+		"uuid":   data.UUID,
+		"name":   data.Name,
+		"domain": data.Domain,
+	}
+
+	result, _ := n.conn.ExecNeo("MATCH (d:domain {name: {domain}, enum: {uuid}}) "+
+		"MATCH (c:subdomain {name: {name}, enum: {uuid}}) "+
+		"MATCH (d)-[:root_of]->(c)-[:cname_to]->(t) "+
+		"RETURN count(t)", params)
+	fmt.Printf("%v\n", result.Metadata())
+	return false
 }

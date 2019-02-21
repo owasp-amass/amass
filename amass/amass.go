@@ -279,7 +279,7 @@ loop:
 		case <-e.Done:
 			break loop
 		case <-t.C:
-			out := e.Graph.GetUnreadOutput(e.Config.UUID.String())
+			out := e.Graph.GetOutput(e.Config.UUID.String(), false)
 			for _, o := range out {
 				if time.Now().Add(10 * time.Second).After(o.Timestamp) {
 					e.Graph.MarkAsRead(&handlers.DataOptsParams{
@@ -296,7 +296,7 @@ loop:
 		}
 	}
 	// Handle all remaining pieces of output
-	out := e.Graph.GetUnreadOutput(e.Config.UUID.String())
+	out := e.Graph.GetOutput(e.Config.UUID.String(), false)
 	for _, o := range out {
 		if !e.filter.Duplicate(o.Name) {
 			e.Graph.MarkAsRead(&handlers.DataOptsParams{

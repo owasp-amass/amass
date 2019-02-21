@@ -84,77 +84,6 @@ func (g *Gremlin) String() string {
 	return "Gremlin TinkerPop Handler"
 }
 
-// MarkAsRead implements the Amass DataHandler interface.
-func (g *Gremlin) MarkAsRead(data *DataOptsParams) error {
-	g.avail.Acquire(1)
-	defer g.avail.Release(1)
-
-	bindings := map[string]string{
-		"uuid":   data.UUID,
-		"name":   data.Name,
-		"domain": data.Domain,
-	}
-
-	conn, err := g.pool.Get()
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-
-	_, err = conn.Client.Execute(
-		// Find the domain name for the vertex
-		"g.V().hasLabel('domain').has('name', domain).has('enum', uuid).out('root_of')."+
-			// Find the subdomain name related vertex in the graph
-			"hasLabel('domain','subdomain','ns','mx').has('name', name).has('enum', uuid)."+
-			// Mark the subdomain name related vertex as read
-			"property('read', 'yes')",
-		bindings,
-		map[string]string{},
-	)
-	return err
-}
-
-// IsCNAMENode implements the Amass DataHandler interface.
-func (g *Gremlin) IsCNAMENode(data *DataOptsParams) bool {
-	g.avail.Acquire(1)
-	defer g.avail.Release(1)
-
-	bindings := map[string]string{
-		"uuid":   data.UUID,
-		"name":   data.Name,
-		"domain": data.Domain,
-	}
-
-	conn, err := g.pool.Get()
-	if err != nil {
-		return false
-	}
-	defer conn.Close()
-
-	resp, err := conn.Client.Execute(
-		// Find the vertex in the graph and determine if it is a CNAME
-		"g.V().hasLabel('subdomain').has('name', name).has('enum', uuid).outE('cname_to').count()",
-		bindings,
-		map[string]string{},
-	)
-	if err != nil {
-		return false
-	}
-
-	b, err := json.Marshal(resp)
-	if err != nil {
-		return false
-	}
-
-	var count [1][]int64
-	if err = json.Unmarshal(b, &count); err == nil {
-		if len(count[0]) > 0 && count[0][0] > 0 {
-			return true
-		}
-	}
-	return false
-}
-
 type gremlinRequest struct {
 	Params *DataOptsParams
 	Err    chan error
@@ -721,8 +650,23 @@ func (g *Gremlin) insertInfrastructure(data *DataOptsParams) error {
 	return err
 }
 
-// GetUnreadOutput implements the Amass DataHandler interface.
-func (g *Gremlin) GetUnreadOutput(uuid string) []*core.Output {
+// EnumerationList returns a list of enumeration IDs found in the data.
+func (g *Gremlin) EnumerationList() []string {
+	return []string{}
+}
+
+// EnumerationDomains returns the domains that were involved in the provided enumeration.
+func (g *Gremlin) EnumerationDomains(uuid string) []string {
+	return []string{}
+}
+
+// EnumerationDateRange returns the date range associated with the provided enumeration UUID.
+func (g *Gremlin) EnumerationDateRange(uuid string) (time.Time, time.Time) {
+	return time.Now(), time.Now()
+}
+
+// GetOutput implements the Amass DataHandler interface.
+func (g *Gremlin) GetOutput(uuid string, marked bool) []*core.Output {
 	g.avail.Acquire(1)
 	defer g.avail.Release(1)
 
@@ -734,23 +678,25 @@ func (g *Gremlin) GetUnreadOutput(uuid string) []*core.Output {
 	}
 	defer conn.Close()
 
-	resp, err := conn.Client.Execute(
-		// Find the vertices connected to all the domain names
-		"g.V().hasLabel('domain').has('enum', uuid).out('root_of')."+
-			// We are only interested in the vertices not yet marked
-			"has('enum', uuid).not(has('read','yes'))."+
-			// Traverse all the 'cname_to' and 'srv_to' edges
-			"until(outE('cname_to','srv_to').count().is(0).or().loops().is(10))."+
-			"repeat(out('cname_to','srv_to'))."+
-			// Traverse to the address vertices
-			"out('a_to','aaaa_to').hasLabel('address').has('enum', uuid)."+
-			// Traverse to the netblock vertex
-			"in('contains').hasLabel('netblock').has('enum', uuid)."+
-			// Complete the path by reaching the AS
-			"in('has_prefix').hasLabel('as').has('enum', uuid).path().by(valueMap())",
-		bindings,
-		map[string]string{},
-	)
+	// Find the vertices connected to all the domain names
+	query := "g.V().hasLabel('domain').has('enum', uuid).out('root_of').has('enum', uuid)."
+
+	if !marked {
+		// We are only interested in the vertices not yet marked
+		query = query + "not(has('read','yes'))."
+	}
+
+	// Traverse all the 'cname_to' and 'srv_to' edges
+	query = query + "until(outE('cname_to','srv_to').count().is(0).or().loops().is(10))." +
+		"repeat(out('cname_to','srv_to'))." +
+		// Traverse to the address vertices
+		"out('a_to','aaaa_to').hasLabel('address').has('enum', uuid)." +
+		// Traverse to the netblock vertex
+		"in('contains').hasLabel('netblock').has('enum', uuid)." +
+		// Complete the path by reaching the AS
+		"in('has_prefix').hasLabel('as').has('enum', uuid).path().by(valueMap())"
+
+	resp, err := conn.Client.Execute(query, bindings, map[string]string{})
 	if err == nil {
 		var output []*core.Output
 
@@ -896,4 +842,75 @@ func propertiesToData(props map[string][]string) *DataOptsParams {
 		}
 	}
 	return data
+}
+
+// MarkAsRead implements the Amass DataHandler interface.
+func (g *Gremlin) MarkAsRead(data *DataOptsParams) error {
+	g.avail.Acquire(1)
+	defer g.avail.Release(1)
+
+	bindings := map[string]string{
+		"uuid":   data.UUID,
+		"name":   data.Name,
+		"domain": data.Domain,
+	}
+
+	conn, err := g.pool.Get()
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	_, err = conn.Client.Execute(
+		// Find the domain name for the vertex
+		"g.V().hasLabel('domain').has('name', domain).has('enum', uuid).out('root_of')."+
+			// Find the subdomain name related vertex in the graph
+			"hasLabel('domain','subdomain','ns','mx').has('name', name).has('enum', uuid)."+
+			// Mark the subdomain name related vertex as read
+			"property('read', 'yes')",
+		bindings,
+		map[string]string{},
+	)
+	return err
+}
+
+// IsCNAMENode implements the Amass DataHandler interface.
+func (g *Gremlin) IsCNAMENode(data *DataOptsParams) bool {
+	g.avail.Acquire(1)
+	defer g.avail.Release(1)
+
+	bindings := map[string]string{
+		"uuid":   data.UUID,
+		"name":   data.Name,
+		"domain": data.Domain,
+	}
+
+	conn, err := g.pool.Get()
+	if err != nil {
+		return false
+	}
+	defer conn.Close()
+
+	resp, err := conn.Client.Execute(
+		// Find the vertex in the graph and determine if it is a CNAME
+		"g.V().hasLabel('subdomain').has('name', name).has('enum', uuid).outE('cname_to').count()",
+		bindings,
+		map[string]string{},
+	)
+	if err != nil {
+		return false
+	}
+
+	b, err := json.Marshal(resp)
+	if err != nil {
+		return false
+	}
+
+	var count [1][]int64
+	if err = json.Unmarshal(b, &count); err == nil {
+		if len(count[0]) > 0 && count[0][0] > 0 {
+			return true
+		}
+	}
+	return false
 }

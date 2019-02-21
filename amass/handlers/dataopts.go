@@ -6,6 +6,7 @@ package handlers
 import (
 	"encoding/json"
 	"io"
+	"time"
 
 	"github.com/OWASP/Amass/amass/core"
 )
@@ -35,6 +36,26 @@ func (d *DataOptsHandler) Insert(data *DataOptsParams) error {
 	return d.Enc.Encode(data)
 }
 
+// EnumerationList returns a list of enumeration IDs found in the data.
+func (d *DataOptsHandler) EnumerationList() []string {
+	return []string{}
+}
+
+// EnumerationDomains returns the domains that were involved in the provided enumeration.
+func (d *DataOptsHandler) EnumerationDomains(uuid string) []string {
+	return []string{}
+}
+
+// EnumerationDateRange returns the date range associated with the provided enumeration UUID.
+func (d *DataOptsHandler) EnumerationDateRange(uuid string) (time.Time, time.Time) {
+	return time.Now(), time.Now()
+}
+
+// GetOutput implements the Amass DataHandler interface.
+func (d *DataOptsHandler) GetOutput(uuid string, marked bool) []*core.Output {
+	return nil
+}
+
 // MarkAsRead implements the Amass DataHandler interface.
 func (d *DataOptsHandler) MarkAsRead(data *DataOptsParams) error {
 	return nil
@@ -43,9 +64,4 @@ func (d *DataOptsHandler) MarkAsRead(data *DataOptsParams) error {
 // IsCNAMENode implements the Amass DataHandler interface.
 func (d *DataOptsHandler) IsCNAMENode(data *DataOptsParams) bool {
 	return false
-}
-
-// GetUnreadOutput implements the Amass DataHandler interface.
-func (d *DataOptsHandler) GetUnreadOutput(uuid string) []*core.Output {
-	return nil
 }

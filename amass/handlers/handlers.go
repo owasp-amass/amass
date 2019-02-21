@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/OWASP/Amass/amass/core"
 )
@@ -62,16 +63,25 @@ type DataHandler interface {
 	// Inserts data operations into the graph.
 	Insert(data *DataOptsParams) error
 
+	// Returns a list of enumeration IDs found in the data.
+	EnumerationList() []string
+
+	// Returns the domains that were involved in the provided enumeration.
+	EnumerationDomains(uuid string) []string
+
+	// Returns the date range associated with the provided enumeration UUID.
+	EnumerationDateRange(uuid string) (time.Time, time.Time)
+
+	// Returns complete paths in the graph, with the option of only unmarked results.
+	GetOutput(uuid string, marked bool) []*core.Output
+
 	// Sets a 'read' property on the vertex matching Name, Domain and UUID.
 	MarkAsRead(data *DataOptsParams) error
 
 	// Return true if the Name, Domain and UUID match a CNAME in the graph.
 	IsCNAMENode(data *DataOptsParams) bool
 
-	// Returns complete paths in the graph that have not yet been marked.
-	GetUnreadOutput(uuid string) []*core.Output
-
-	// Signals the handler to prepare for closing
+	// Signals the handler to prepare for closing.
 	Close()
 }
 

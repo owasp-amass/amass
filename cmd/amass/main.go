@@ -83,7 +83,7 @@ var (
 	// Command-line switches and provided parameters
 	help          = flag.Bool("h", false, "Show the program usage message")
 	list          = flag.Bool("list", false, "Print the names of all available data sources")
-	vprint        = flag.Bool("version", false, "Print the version number of this amass binary")
+	vprint        = flag.Bool("version", false, "Print the version number of this Amass binary")
 	config        = flag.String("config", "", "Path to the INI configuration file. Additional details below")
 	unresolved    = flag.Bool("include-unresolvable", false, "Output DNS names that did not resolve")
 	ips           = flag.Bool("ip", false, "Show the IP addresses for discovered names")
@@ -115,7 +115,7 @@ func main() {
 	flag.CommandLine.SetOutput(defaultBuf)
 	flag.Usage = func() {
 		printBanner()
-		g.Fprintf(color.Error, "Usage: %s [options] <-d domain>\n", path.Base(os.Args[0]))
+		g.Fprintf(color.Error, "Usage: %s [options] <-d domain>\n\n", path.Base(os.Args[0]))
 		flag.PrintDefaults()
 		g.Fprintln(color.Error, defaultBuf.String())
 		g.Fprintf(color.Error, "An example configuration file can be found here: \n%s\n\n", exampleConfigFileURL)
@@ -465,7 +465,7 @@ func writeJSONData(f *os.File, result *core.Output) {
 func printBanner() {
 	rightmost := 76
 	version := "Version " + amass.Version
-	desc := "In-Depth DNS Enumeration and Network Mapping"
+	desc := "In-depth DNS Enumeration and Network Mapping"
 	author := "Authored By " + amass.Author
 
 	pad := func(num int) {

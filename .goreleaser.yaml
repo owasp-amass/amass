@@ -39,6 +39,24 @@ builds:
         goarch: 386
   
   - 
+    main: ./cmd/amass.viz/main.go
+    binary: amass.viz
+    goos:
+      - windows
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - 386
+    env:
+      - CGO_ENABLED=0
+    ignore:
+      - goos: darwin
+        goarch: 386
+      - goos: windows
+        goarch: 386
+
+  - 
     main: ./cmd/amass.db/main.go
     binary: amass.db
     goos:
@@ -55,10 +73,10 @@ builds:
         goarch: 386
       - goos: windows
         goarch: 386
-  
+
   - 
-    main: ./cmd/amass.viz/main.go
-    binary: amass.viz
+    main: ./cmd/amass.tracker/main.go
+    binary: amass.tracker
     goos:
       - windows
       - linux

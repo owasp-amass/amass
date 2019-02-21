@@ -24,6 +24,10 @@ apps:
     command: bin/db
     plugs: [home, network, removable-media]
 
+  tracker:
+    command: bin/tracker
+    plugs: [home, network, removable-media]
+
 
 parts:
   go:
@@ -92,3 +96,19 @@ parts:
       mkdir $SNAPCRAFT_PART_INSTALL/bin
       mv $GOPATH/bin/amass.db $SNAPCRAFT_PART_INSTALL/bin/db
       strip --remove-section=.comment --remove-section=.note $SNAPCRAFT_PART_INSTALL/bin/db
+
+  tracker:
+    after: [amass]
+    source: https://github.com/OWASP/Amass
+    source-type: git
+    plugin: go
+    go-importpath: github.com/OWASP/Amass
+    override-build: |
+      echo "\nStarting override-build for tracker part:"
+      export GOPATH=$(dirname $SNAPCRAFT_PART_INSTALL)/go
+      cd $GOPATH/src/github.com/OWASP/Amass
+      go get -u ./...
+      go install ./...
+      mkdir $SNAPCRAFT_PART_INSTALL/bin
+      mv $GOPATH/bin/amass.tracker $SNAPCRAFT_PART_INSTALL/bin/tracker
+      strip --remove-section=.comment --remove-section=.note $SNAPCRAFT_PART_INSTALL/bin/tracker
