@@ -11,7 +11,7 @@ import (
 	"github.com/OWASP/Amass/amass/core"
 )
 
-func TestThreaTCrowd(t *testing.T) {
+func TestThreatCrowd(t *testing.T) {
 	config := &core.Config{}
 	config.AddDomain("google.com")
 	buf := new(strings.Builder)
