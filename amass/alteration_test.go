@@ -31,6 +31,7 @@ var (
 )
 
 func TestAlterations(t *testing.T) {
+
 	config := &core.Config{}
 	config.Alterations = true
 	// insert config options here
@@ -49,6 +50,7 @@ func TestAlterations(t *testing.T) {
 	defer bus.Stop()
 
 	srv := NewAlterationService(config, bus)
+
 	srv.Start()
 	defer srv.Stop()
 
@@ -71,4 +73,254 @@ loop:
 	if expected != len(results) {
 		t.Errorf("Got %d names, expected %d instead", len(results), expected)
 	}
+}
+
+func TestCorrectRecordTypes(t *testing.T) {
+	var (
+		alterationTestRequests = []*core.Request{
+			&core.Request{
+				Name:    "test1.owasp.org",
+				Domain:  "owasp.org",
+				Records: []core.DNSAnswer{core.DNSAnswer{Type: int(dns.TypeA)}},
+			},
+			&core.Request{
+				Name:    "test.twitter.com",
+				Domain:  "twitter.com",
+				Records: []core.DNSAnswer{core.DNSAnswer{Type: int(dns.TypeA)}},
+			},
+		}
+	)
+
+	expected := true
+	for _, tests := range alterationTestRequests {
+		as := new(AlterationService)
+		foo := as.correctRecordTypes(tests)
+		if foo != expected {
+			t.Errorf("correctRecordtype() in %v returned %v, expected %v", tests.Name, foo, expected)
+		}
+
+	}
+}
+
+func TestFlipNumbersInName(t *testing.T) {
+	var (
+		flipTestsRequests = []*core.Request{
+			&core.Request{
+				Name:    "test1.owasp.org",
+				Domain:  "owasp.org",
+				Records: []core.DNSAnswer{core.DNSAnswer{Type: int(dns.TypeA)}},
+			},
+			&core.Request{
+				Name:    "test2.twitter.com",
+				Domain:  "twitter.com",
+				Records: []core.DNSAnswer{core.DNSAnswer{Type: int(dns.TypeA)}},
+			},
+		}
+	)
+	config := &core.Config{}
+	config.Alterations = true
+	for _, tests := range flipTestsRequests {
+		config.AddDomain(tests.Domain)
+	}
+
+	buf := new(strings.Builder)
+	config.Log = log.New(buf, "", log.Lmicroseconds)
+	bus := core.NewEventBus()
+	as := NewAlterationService(config, bus)
+	out := make(chan *core.Request)
+
+	bus.Subscribe(core.NewNameTopic, func(req *core.Request) {
+		out <- req
+	})
+	defer bus.Stop()
+
+	for _, tests := range flipTestsRequests {
+		as.flipNumbersInName(tests)
+		results := make(map[string]int)
+		done := time.After(time.Second)
+
+		bus.Publish(core.NameResolvedTopic, alterationTestRequests[0])
+	loop:
+		for {
+			select {
+			case req := <-out:
+				results[req.Name]++
+			case <-done:
+				break loop
+			}
+		}
+		expected := 11
+		if len(results) != expected {
+			t.Errorf("returned map only %v long, expected %v", len(results), expected)
+		}
+	}
+
+}
+
+func TestSecondNumberFlip(t *testing.T) {
+	var (
+		secondTestsRequests = []*core.Request{
+			&core.Request{
+				Name:    "test1.owasp.org",
+				Domain:  "owasp.org",
+				Records: []core.DNSAnswer{core.DNSAnswer{Type: int(dns.TypeA)}},
+			},
+			&core.Request{
+				Name:    "test2.twitter.com",
+				Domain:  "twitter.com",
+				Records: []core.DNSAnswer{core.DNSAnswer{Type: int(dns.TypeA)}},
+			},
+		}
+	)
+	config := &core.Config{}
+	config.Alterations = true
+	for _, tests := range secondTestsRequests {
+		config.AddDomain(tests.Domain)
+	}
+
+	buf := new(strings.Builder)
+	config.Log = log.New(buf, "", log.Lmicroseconds)
+	bus := core.NewEventBus()
+	as := NewAlterationService(config, bus)
+	out := make(chan *core.Request)
+
+	bus.Subscribe(core.NewNameTopic, func(req *core.Request) {
+		out <- req
+	})
+	defer bus.Stop()
+
+	for _, tests := range secondTestsRequests {
+		as.secondNumberFlip(tests.Name, tests.Domain, -1)
+		results := make(map[string]int)
+		done := time.After(time.Second)
+
+		bus.Publish(core.NameResolvedTopic, alterationTestRequests[0])
+	loop:
+		for {
+			select {
+			case req := <-out:
+				results[req.Name]++
+			case <-done:
+				break loop
+			}
+		}
+		expected := 11
+		if len(results) != expected {
+			t.Errorf("returned map is %v long, expected %v", len(results), expected)
+		}
+	}
+
+}
+
+func TestAppendNumbers(t *testing.T) {
+	var (
+		appendTestsRequests = []*core.Request{
+			&core.Request{
+				Name:    "test1.owasp.org",
+				Domain:  "owasp.org",
+				Records: []core.DNSAnswer{core.DNSAnswer{Type: int(dns.TypeA)}},
+			},
+			&core.Request{
+				Name:    "test2.twitter.com",
+				Domain:  "twitter.com",
+				Records: []core.DNSAnswer{core.DNSAnswer{Type: int(dns.TypeA)}},
+			},
+		}
+	)
+	config := &core.Config{}
+	config.Alterations = true
+	for _, tests := range appendTestsRequests {
+		config.AddDomain(tests.Domain)
+	}
+
+	buf := new(strings.Builder)
+	config.Log = log.New(buf, "", log.Lmicroseconds)
+	bus := core.NewEventBus()
+	as := NewAlterationService(config, bus)
+	out := make(chan *core.Request)
+
+	bus.Subscribe(core.NewNameTopic, func(req *core.Request) {
+		out <- req
+	})
+	defer bus.Stop()
+
+	for _, tests := range appendTestsRequests {
+		as.appendNumbers(tests)
+		results := make(map[string]int)
+		done := time.After(time.Second)
+
+		bus.Publish(core.NameResolvedTopic, alterationTestRequests[0])
+
+	loop:
+		for {
+			select {
+			case req := <-out:
+				results[req.Name]++
+			case <-done:
+				break loop
+			}
+		}
+		expected := 20
+		if len(results) != expected {
+			t.Errorf("returned map is %v long, expected %v", len(results), expected)
+		}
+	}
+}
+
+func TestSendAlteredName(t *testing.T) {
+	var (
+		appendTestsRequests = []*core.Request{
+			&core.Request{
+				Name:    "test1.owasp.org",
+				Domain:  "owasp.org",
+				Records: []core.DNSAnswer{core.DNSAnswer{Type: int(dns.TypeA)}},
+			},
+			&core.Request{
+				Name:    "test2.twitter.com",
+				Domain:  "twitter.com",
+				Records: []core.DNSAnswer{core.DNSAnswer{Type: int(dns.TypeA)}},
+			},
+		}
+	)
+	config := &core.Config{}
+	config.Alterations = true
+	for _, tests := range appendTestsRequests {
+		config.AddDomain(tests.Domain)
+	}
+
+	buf := new(strings.Builder)
+	config.Log = log.New(buf, "", log.Lmicroseconds)
+	bus := core.NewEventBus()
+	as := NewAlterationService(config, bus)
+	out := make(chan *core.Request)
+
+	bus.Subscribe(core.NewNameTopic, func(req *core.Request) {
+		out <- req
+	})
+	defer bus.Stop()
+
+	for _, tests := range appendTestsRequests {
+		as.appendNumbers(tests)
+		results := []string{}
+		done := time.After(time.Second)
+
+		bus.Publish(core.NameResolvedTopic, alterationTestRequests[0])
+
+	loop:
+		for {
+			select {
+			case req := <-out:
+				results = append(results, req.Name)
+			case <-done:
+				break loop
+			}
+		}
+		for _, change := range results {
+			if strings.Contains(change, tests.Domain) != true {
+				t.Errorf("Test %v found a unaltered name.", tests.Name)
+			}
+
+		}
+	}
+
 }
