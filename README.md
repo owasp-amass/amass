@@ -25,7 +25,7 @@ The OWASP Amass tool suite obtains subdomain names by scraping data sources, rec
 **Information gathering techniques used:**
 
 * DNS: Basic enumeration, Brute forcing (upon request), Reverse DNS sweeping, Subdomain name alterations/permutations, Zone transfers (upon request)
-* Scraping: Ask, Baidu, Bing, CommonCrawl, DNSDB, DNSDumpster, DNSTable, Dogpile, Exalead, FindSubdomains, Google, IPv4Info, Netcraft, Riddler, SiteDossier, ThreatCrowd, VirusTotal, Yahoo
+* Scraping: Ask, Baidu, Bing, CommonCrawl, DNSDB, DNSDumpster, DNSTable, Dogpile, Exalead, FindSubdomains, Google, IPv4Info, Netcraft, PTRArchive, Riddler, SiteDossier, ThreatCrowd, VirusTotal, Yahoo
 * Certificates: Active pulls (upon request), Censys, CertDB, CertSpotter, Crtsh, Entrust
 * APIs: BinaryEdge, BufferOver, CIRCL, HackerTarget, PassiveTotal, Robtex, SecurityTrails, Shodan, Twitter, Umbrella, URLScan
 * Web Archives: ArchiveIt, ArchiveToday, Arquivo, LoCArchive, OpenUKArchive, UKGovArchive, Wayback
