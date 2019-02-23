@@ -19,7 +19,7 @@ import (
 
 const (
 	// ResolutionTimeout is the maximum time spent retrying a resolution request.
-	ResolutionTimeout time.Duration = 10 * time.Second
+	ResolutionTimeout time.Duration = 30 * time.Second
 )
 
 var (
@@ -463,7 +463,7 @@ func Resolve(name, qtype string) ([]core.DNSAnswer, error) {
 		}
 
 		attempts++
-		if attempts > 1 && time.Now().After(started.Add(ResolutionTimeout)) {
+		if attempts > 10 && time.Now().After(started.Add(ResolutionTimeout)) {
 			break
 		}
 	}

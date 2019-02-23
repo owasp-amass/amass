@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	timeFormat string = "01/02 15:04:05 2006"
+	timeFormat string = "01/02 15:04:05 2006 MST"
 )
 
 // Types that implement the flag.Value interface for parsing
@@ -39,11 +39,13 @@ var (
 	green  = color.New(color.FgHiGreen).SprintFunc()
 	blue   = color.New(color.FgHiBlue).SprintFunc()
 	// Command-line switches and provided parameters
-	help   = flag.Bool("h", false, "Show the program usage message")
-	list   = flag.Bool("list", false, "Print information for all available enumerations")
-	vprint = flag.Bool("version", false, "Print the version number of this Amass binary")
-	all    = flag.Bool("all", false, "Include all enumerations in the tracking")
-	last   = flag.Int("last", 2, "The number of recent enumerations to include in the tracking")
+	help     = flag.Bool("h", false, "Show the program usage message")
+	list     = flag.Bool("list", false, "Print information for all available enumerations")
+	vprint   = flag.Bool("version", false, "Print the version number of this Amass binary")
+	dir      = flag.String("dir", "", "Path to the directory containing the graph database")
+	all      = flag.Bool("all", false, "Include all enumerations in the tracking")
+	last     = flag.Int("last", 2, "The number of recent enumerations to include in the tracking")
+	startStr = flag.String("start", "", "Exclude all enumerations before (format: "+timeFormat+")")
 )
 
 func main() {
@@ -73,9 +75,38 @@ func main() {
 		r.Fprintln(color.Error, "No root domain names were provided")
 		return
 	}
+	if *startStr != "" && (*last != 2 || *all) {
+		r.Fprintln(color.Error, "The start flag cannot be used with the last or all flags")
+		return
+	}
+
+	var err error
+	var start time.Time
+	if *startStr != "" {
+		start, err = time.Parse(timeFormat, *startStr)
+		if err != nil {
+			r.Fprintf(color.Error, "%s is not in the correct format: %s\n", *startStr, timeFormat)
+			return
+		}
+	}
 
 	rand.Seed(time.Now().UTC().UnixNano())
-	graph := handlers.NewGraph("")
+	// Check that the default graph database directory exists in the CWD
+	if *dir == "" {
+		if finfo, err := os.Stat(handlers.DefaultGraphDBDirectory); os.IsNotExist(err) || !finfo.IsDir() {
+			r.Fprintln(color.Error, "Failed to open the graph database")
+			return
+		}
+	} else if finfo, err := os.Stat(*dir); os.IsNotExist(err) || !finfo.IsDir() {
+		r.Fprintln(color.Error, "Failed to open the graph database")
+		return
+	}
+
+	graph := handlers.NewGraph(*dir)
+	if graph == nil {
+		r.Fprintln(color.Error, "Failed to open the graph database")
+		return
+	}
 
 	var enums []string
 	// Obtain the enumerations that include the provided domain
@@ -85,7 +116,34 @@ func main() {
 		}
 	}
 
+	// The minimum is 2 in order to perform tracking analysis
+	if *last < 2 {
+		*last = 2
+	}
+
+	var begin int
 	enums, earliest, latest := orderedEnumsAndDateRanges(enums, graph)
+	// Filter out enumerations that begin before the start date/time
+	if *startStr != "" {
+		for _, e := range earliest {
+			if !e.Before(start) {
+				break
+			}
+			begin++
+		}
+	} else { // Or the number of enumerations from the end of the timeline
+		if len(enums) < *last {
+			r.Fprintf(color.Error, "%d enumerations are not available\n", *last)
+			return
+		}
+		if *all == false {
+			begin = len(enums) - *last
+		}
+	}
+	enums = enums[begin:]
+	earliest = earliest[begin:]
+	latest = latest[begin:]
+
 	// Check if the user has requested the list of enumerations
 	if *list {
 		for i := range enums {
@@ -94,32 +152,16 @@ func main() {
 		return
 	}
 
-	// By default, the two most recent enumerations are used
-	if *last < 2 {
-		*last = 2
-	}
-	if len(enums) < *last {
-		r.Fprintf(color.Error, "%d enumerations are not available\n", *last)
-		return
-	}
-
-	var begin int
-	if *all == false {
-		begin = len(enums) - *last
-	}
-
 	var prev string
-	for _, enum := range enums[begin:] {
+	for i, enum := range enums {
 		if prev == "" {
 			prev = enum
 			continue
 		}
 
-		e1, l1 := graph.EnumerationDateRange(prev)
-		e2, l2 := graph.EnumerationDateRange(enum)
 		fmt.Fprintf(color.Output, "%s\t%s%s%s\n%s\t%s%s%s\n\n", blue("Between"),
-			yellow(e1.Format(timeFormat)), blue(" -> "), yellow(l1.Format(timeFormat)), blue("and"),
-			yellow(e2.Format(timeFormat)), blue(" -> "), yellow(l2.Format(timeFormat)))
+			yellow(earliest[i-1].Format(timeFormat)), blue(" -> "), yellow(latest[i-1].Format(timeFormat)),
+			blue("and"), yellow(earliest[i].Format(timeFormat)), blue(" -> "), yellow(latest[i].Format(timeFormat)))
 
 		out1 := getEnumDataInScope(domains[0], prev, graph)
 		out2 := getEnumDataInScope(domains[0], enum, graph)

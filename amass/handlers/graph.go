@@ -23,6 +23,11 @@ import (
 	"github.com/cayleygraph/cayley/quad"
 )
 
+const (
+	// DefaultGraphDBDirectory is the directory name used by default for the graph database.
+	DefaultGraphDBDirectory string = "amass_output"
+)
+
 // Graph is the object for managing a network infrastructure link graph.
 type Graph struct {
 	sync.Mutex
@@ -40,7 +45,7 @@ func NewGraph(path string) *Graph {
 		if err != nil {
 			return nil
 		}
-		path = filepath.Join(path, "amass_output")
+		path = filepath.Join(path, DefaultGraphDBDirectory)
 	}
 	// If the directory does not yet exist, create it
 	if err = os.MkdirAll(path, 0755); err != nil {
