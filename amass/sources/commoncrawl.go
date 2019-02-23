@@ -13,6 +13,8 @@ import (
 
 var (
 	commonCrawlIndexes = []string{
+		"CC-MAIN-2019-04",
+		"CC-MAIN-2018-47",
 		"CC-MAIN-2018-39",
 		"CC-MAIN-2018-17",
 		"CC-MAIN-2018-05",
