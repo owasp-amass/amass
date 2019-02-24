@@ -58,7 +58,6 @@ func main() {
 		g.Fprintf(color.Error, "Usage: %s [options] -d domain\n\n", path.Base(os.Args[0]))
 		flag.PrintDefaults()
 		g.Fprintln(color.Error, defaultBuf.String())
-		os.Exit(1)
 	}
 	flag.Var(&domains, "d", "Domain names separated by commas (can be used multiple times)")
 	flag.Parse()
@@ -66,18 +65,19 @@ func main() {
 	// Some input validation
 	if *help || len(os.Args) == 1 {
 		flag.Usage()
+		return
 	}
 	if *vprint {
 		fmt.Fprintf(color.Error, "version %s\n", amass.Version)
-		return
+		os.Exit(1)
 	}
 	if len(domains) == 0 {
 		r.Fprintln(color.Error, "No root domain names were provided")
-		return
+		os.Exit(1)
 	}
 	if *startStr != "" && (*last != 2 || *all) {
 		r.Fprintln(color.Error, "The start flag cannot be used with the last or all flags")
-		return
+		os.Exit(1)
 	}
 
 	var err error
@@ -86,7 +86,7 @@ func main() {
 		start, err = time.Parse(timeFormat, *startStr)
 		if err != nil {
 			r.Fprintf(color.Error, "%s is not in the correct format: %s\n", *startStr, timeFormat)
-			return
+			os.Exit(1)
 		}
 	}
 
@@ -95,17 +95,17 @@ func main() {
 	if *dir == "" {
 		if finfo, err := os.Stat(handlers.DefaultGraphDBDirectory); os.IsNotExist(err) || !finfo.IsDir() {
 			r.Fprintln(color.Error, "Failed to open the graph database")
-			return
+			os.Exit(1)
 		}
 	} else if finfo, err := os.Stat(*dir); os.IsNotExist(err) || !finfo.IsDir() {
 		r.Fprintln(color.Error, "Failed to open the graph database")
-		return
+		os.Exit(1)
 	}
 
 	graph := handlers.NewGraph(*dir)
 	if graph == nil {
 		r.Fprintln(color.Error, "Failed to open the graph database")
-		return
+		os.Exit(1)
 	}
 
 	var enums []string
@@ -134,7 +134,7 @@ func main() {
 	} else { // Or the number of enumerations from the end of the timeline
 		if len(enums) < *last {
 			r.Fprintf(color.Error, "%d enumerations are not available\n", *last)
-			return
+			os.Exit(1)
 		}
 		if *all == false {
 			begin = len(enums) - *last
@@ -158,11 +158,20 @@ func main() {
 			prev = enum
 			continue
 		}
-
-		fmt.Fprintf(color.Output, "%s\t%s%s%s\n%s\t%s%s%s\n\n", blue("Between"),
+		if i != 1 {
+			fmt.Println()
+		}
+		for i := 0; i < 8; i++ {
+			b.Fprint(color.Output, "----------")
+		}
+		fmt.Println()
+		fmt.Fprintf(color.Output, "%s\t%s%s%s\n%s\t%s%s%s\n", blue("Between"),
 			yellow(earliest[i-1].Format(timeFormat)), blue(" -> "), yellow(latest[i-1].Format(timeFormat)),
 			blue("and"), yellow(earliest[i].Format(timeFormat)), blue(" -> "), yellow(latest[i].Format(timeFormat)))
-
+		for i := 0; i < 8; i++ {
+			b.Fprint(color.Output, "----------")
+		}
+		fmt.Println()
 		out1 := getEnumDataInScope(domains[0], prev, graph)
 		out2 := getEnumDataInScope(domains[0], enum, graph)
 		for _, d := range diffEnumOutput(domains[0], out1, out2) {

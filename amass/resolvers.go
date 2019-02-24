@@ -17,11 +17,6 @@ import (
 	"github.com/miekg/dns"
 )
 
-const (
-	// ResolutionTimeout is the maximum time spent retrying a resolution request.
-	ResolutionTimeout time.Duration = 30 * time.Second
-)
-
 var (
 	// Public & free DNS servers
 	publicResolvers = []string{
@@ -261,7 +256,7 @@ func (r *resolver) processMessage(msg *dns.Msg) {
 	// Check that the query was successful
 	if msg.Rcode != dns.RcodeSuccess {
 		var again bool
-		if msg.Rcode == dns.RcodeRefused {
+		if msg.Rcode == dns.RcodeRefused || msg.Rcode == dns.RcodeServerFailure {
 			again = true
 		}
 		r.returnRequest(req, &resolveResult{
@@ -453,17 +448,10 @@ func Resolve(name, qtype string) ([]core.DNSAnswer, error) {
 	}
 
 	var again bool
-	var attempts int
-	started := time.Now()
 	var ans []core.DNSAnswer
 	for {
 		ans, again, err = nextResolver().resolve(name, qt)
 		if !again {
-			break
-		}
-
-		attempts++
-		if attempts > 10 && time.Now().After(started.Add(ResolutionTimeout)) {
 			break
 		}
 	}
