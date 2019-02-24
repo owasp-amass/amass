@@ -31,7 +31,7 @@ type StringFilter struct {
 	quit     chan struct{}
 }
 
-// NewStringFilter returns an initialized NameFilter.
+// NewStringFilter returns an initialized StringFilter.
 func NewStringFilter() *StringFilter {
 	sf := &StringFilter{
 		filter:   cfilter.New(),

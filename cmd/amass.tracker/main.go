@@ -17,6 +17,7 @@ import (
 	"github.com/OWASP/Amass/amass"
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/handlers"
+	"github.com/OWASP/Amass/amass/utils"
 	"github.com/fatih/color"
 )
 
@@ -43,9 +44,9 @@ var (
 	list     = flag.Bool("list", false, "Print information for all available enumerations")
 	vprint   = flag.Bool("version", false, "Print the version number of this Amass binary")
 	dir      = flag.String("dir", "", "Path to the directory containing the graph database")
-	all      = flag.Bool("all", false, "Include all enumerations in the tracking")
-	last     = flag.Int("last", 2, "The number of recent enumerations to include in the tracking")
+	last     = flag.Int("last", 0, "The number of recent enumerations to include in the tracking")
 	startStr = flag.String("start", "", "Exclude all enumerations before (format: "+timeFormat+")")
+	history  = flag.Bool("history", false, "Show the difference between all enumeration pairs")
 )
 
 func main() {
@@ -75,8 +76,12 @@ func main() {
 		r.Fprintln(color.Error, "No root domain names were provided")
 		os.Exit(1)
 	}
-	if *startStr != "" && (*last != 2 || *all) {
+	if *startStr != "" && *last != 0 {
 		r.Fprintln(color.Error, "The start flag cannot be used with the last or all flags")
+		os.Exit(1)
+	}
+	if *last == 1 {
+		r.Fprintln(color.Error, "Tracking requires more than one enumeration")
 		os.Exit(1)
 	}
 
@@ -116,9 +121,9 @@ func main() {
 		}
 	}
 
-	// The minimum is 2 in order to perform tracking analysis
-	if *last < 2 {
-		*last = 2
+	// The default is to use all the enumerations available
+	if *last == 0 {
+		*last = len(enums)
 	}
 
 	var begin int
@@ -136,9 +141,8 @@ func main() {
 			r.Fprintf(color.Error, "%d enumerations are not available\n", *last)
 			os.Exit(1)
 		}
-		if *all == false {
-			begin = len(enums) - *last
-		}
+
+		begin = len(enums) - *last
 	}
 	enums = enums[begin:]
 	earliest = earliest[begin:]
@@ -152,7 +156,41 @@ func main() {
 		return
 	}
 
+	if *history {
+		completeHistoryOutput(domains[0], enums, earliest, latest, graph)
+		return
+	}
+	cumulativeOutput(domains[0], enums, earliest, latest, graph)
+}
+
+func cumulativeOutput(domain string, enums []string, ea, la []time.Time, h handlers.DataHandler) {
+	idx := len(enums) - 1
+	filter := utils.NewStringFilter()
+
+	var cum []*core.Output
+	for _, enum := range enums[:idx] {
+		for _, out := range getEnumDataInScope(domain, enum, h) {
+			if !filter.Duplicate(out.Name) {
+				cum = append(cum, out)
+			}
+		}
+	}
+
+	blueLine()
+	fmt.Fprintf(color.Output, "%s\t%s%s%s\n%s\t%s%s%s\n", blue("Between"),
+		yellow(ea[0].Format(timeFormat)), blue(" -> "), yellow(la[0].Format(timeFormat)),
+		blue("and"), yellow(ea[idx].Format(timeFormat)), blue(" -> "), yellow(la[idx].Format(timeFormat)))
+	blueLine()
+
+	out := getEnumDataInScope(domain, enums[idx], h)
+	for _, d := range diffEnumOutput(domain, cum, out) {
+		fmt.Fprintln(color.Output, d)
+	}
+}
+
+func completeHistoryOutput(domain string, enums []string, ea, la []time.Time, h handlers.DataHandler) {
 	var prev string
+
 	for i, enum := range enums {
 		if prev == "" {
 			prev = enum
@@ -161,24 +199,27 @@ func main() {
 		if i != 1 {
 			fmt.Println()
 		}
-		for i := 0; i < 8; i++ {
-			b.Fprint(color.Output, "----------")
-		}
-		fmt.Println()
+
+		blueLine()
 		fmt.Fprintf(color.Output, "%s\t%s%s%s\n%s\t%s%s%s\n", blue("Between"),
-			yellow(earliest[i-1].Format(timeFormat)), blue(" -> "), yellow(latest[i-1].Format(timeFormat)),
-			blue("and"), yellow(earliest[i].Format(timeFormat)), blue(" -> "), yellow(latest[i].Format(timeFormat)))
-		for i := 0; i < 8; i++ {
-			b.Fprint(color.Output, "----------")
-		}
-		fmt.Println()
-		out1 := getEnumDataInScope(domains[0], prev, graph)
-		out2 := getEnumDataInScope(domains[0], enum, graph)
-		for _, d := range diffEnumOutput(domains[0], out1, out2) {
+			yellow(ea[i-1].Format(timeFormat)), blue(" -> "), yellow(la[i-1].Format(timeFormat)),
+			blue("and"), yellow(ea[i].Format(timeFormat)), blue(" -> "), yellow(la[i].Format(timeFormat)))
+		blueLine()
+
+		out1 := getEnumDataInScope(domain, prev, h)
+		out2 := getEnumDataInScope(domain, enum, h)
+		for _, d := range diffEnumOutput(domain, out1, out2) {
 			fmt.Fprintln(color.Output, d)
 		}
 		prev = enum
 	}
+}
+
+func blueLine() {
+	for i := 0; i < 8; i++ {
+		b.Fprint(color.Output, "----------")
+	}
+	fmt.Println()
 }
 
 func getEnumDataInScope(domain, enum string, h handlers.DataHandler) []*core.Output {
