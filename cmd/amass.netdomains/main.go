@@ -4,27 +4,33 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"math/rand"
 	"net"
 	"os"
 	"path"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/OWASP/Amass/amass"
 	"github.com/OWASP/Amass/amass/utils"
+	"github.com/fatih/color"
 )
 
-// Types that implement the flag.Value interface for parsing
-type parseStrings []string
-type parseIPs []net.IP
-type parseCIDRs []*net.IPNet
-type parseInts []int
-
 var (
+	// Colors used to ease the reading of program output
+	y      = color.New(color.FgHiYellow)
+	g      = color.New(color.FgHiGreen)
+	r      = color.New(color.FgHiRed)
+	b      = color.New(color.FgHiBlue)
+	fgR    = color.New(color.FgRed)
+	fgY    = color.New(color.FgYellow)
+	yellow = color.New(color.FgHiYellow).SprintFunc()
+	green  = color.New(color.FgHiGreen).SprintFunc()
+	blue   = color.New(color.FgHiBlue).SprintFunc()
+
 	started   = make(chan struct{}, 50)
 	done      = make(chan struct{}, 50)
 	results   = make(chan string, 100)
@@ -34,9 +40,9 @@ var (
 func main() {
 	var whois bool
 	var org string
-	var addrs parseIPs
-	var cidrs parseCIDRs
-	var asns, ports parseInts
+	var addrs utils.ParseIPs
+	var cidrs utils.ParseCIDRs
+	var asns, ports utils.ParseInts
 
 	help := flag.Bool("h", false, "Show the program usage message")
 	flag.StringVar(&org, "org", "", "Search string provided against AS description information")
@@ -45,11 +51,19 @@ func main() {
 	flag.Var(&asns, "asn", "ASNs separated by commas (can be used multiple times)")
 	flag.BoolVar(&whois, "whois", false, "All discovered domains are run through reverse whois")
 	flag.Var(&ports, "p", "Ports separated by commas (default: 443)")
+
+	defaultBuf := new(bytes.Buffer)
+	flag.CommandLine.SetOutput(defaultBuf)
+	flag.Usage = func() {
+		amass.PrintBanner()
+		g.Fprintf(color.Error, "Usage: %s [--addr IP] [--cidr CIDR] [--asn number] [-p number]\n\n", path.Base(os.Args[0]))
+		flag.PrintDefaults()
+		g.Fprintln(color.Error, defaultBuf.String())
+	}
 	flag.Parse()
 
-	if *help {
-		fmt.Printf("Usage: %s [--addr IP] [--cidr CIDR] [--asn number] [-p number]\n", path.Base(os.Args[0]))
-		flag.PrintDefaults()
+	if *help || len(os.Args) == 1 {
+		flag.Usage()
 		return
 	}
 	if len(ports) == 0 {
@@ -71,8 +85,8 @@ func main() {
 
 	ips := allIPsInScope(addrs, cidrs, asns)
 	if len(ips) == 0 {
-		fmt.Println("The parameters identified no hosts")
-		return
+		r.Fprintln(color.Error, "The parameters identified no hosts")
+		os.Exit(1)
 	}
 	// Begin discovering all the domain names
 	go performAllReverseDNS(ips)
@@ -95,11 +109,11 @@ loop:
 				if whois {
 					go getWhoisDomains(d)
 				}
-				fmt.Println(d)
+				g.Println(d)
 			}
 		case domain := <-whoisChan:
 			if !filter.Duplicate(domain) {
-				fmt.Println(domain)
+				g.Println(domain)
 			}
 		}
 	}
@@ -132,7 +146,7 @@ func performAllReverseDNS(ips []net.IP) {
 	}
 }
 
-func pullAllCertificates(ips []net.IP, ports parseInts) {
+func pullAllCertificates(ips []net.IP, ports utils.ParseInts) {
 	maxPulls := utils.NewSimpleSemaphore(100)
 
 	for _, ip := range ips {
@@ -155,7 +169,7 @@ func pullAllCertificates(ips []net.IP, ports parseInts) {
 	}
 }
 
-func allIPsInScope(addrs parseIPs, cidrs parseCIDRs, asns parseInts) []net.IP {
+func allIPsInScope(addrs utils.ParseIPs, cidrs utils.ParseCIDRs, asns utils.ParseInts) []net.IP {
 	var ips []net.IP
 
 	ips = append(ips, addrs...)
@@ -180,147 +194,4 @@ func allIPsInScope(addrs parseIPs, cidrs parseCIDRs, asns parseInts) []net.IP {
 		}
 	}
 	return ips
-}
-
-// parseStrings implementation of the flag.Value interface
-func (p *parseStrings) String() string {
-	if p == nil {
-		return ""
-	}
-	return strings.Join(*p, ",")
-}
-
-func (p *parseStrings) Set(s string) error {
-	if s == "" {
-		return fmt.Errorf("String parsing failed")
-	}
-
-	str := strings.Split(s, ",")
-	for _, s := range str {
-		*p = append(*p, strings.TrimSpace(s))
-	}
-	return nil
-}
-
-// parseInts implementation of the flag.Value interface
-func (p *parseInts) String() string {
-	if p == nil {
-		return ""
-	}
-
-	var nums []string
-	for _, n := range *p {
-		nums = append(nums, strconv.Itoa(n))
-	}
-	return strings.Join(nums, ",")
-}
-
-func (p *parseInts) Set(s string) error {
-	if s == "" {
-		return fmt.Errorf("Integer parsing failed")
-	}
-
-	nums := strings.Split(s, ",")
-	for _, n := range nums {
-		i, err := strconv.Atoi(strings.TrimSpace(n))
-		if err != nil {
-			return err
-		}
-		*p = append(*p, i)
-	}
-	return nil
-}
-
-// parseIPs implementation of the flag.Value interface
-func (p *parseIPs) String() string {
-	if p == nil {
-		return ""
-	}
-
-	var ipaddrs []string
-	for _, ipaddr := range *p {
-		ipaddrs = append(ipaddrs, ipaddr.String())
-	}
-	return strings.Join(ipaddrs, ",")
-}
-
-func (p *parseIPs) Set(s string) error {
-	if s == "" {
-		return fmt.Errorf("IP address parsing failed")
-	}
-
-	ips := strings.Split(s, ",")
-	for _, ip := range ips {
-		// Is this an IP range?
-		err := p.parseRange(ip)
-		if err == nil {
-			continue
-		}
-		addr := net.ParseIP(ip)
-		if addr == nil {
-			return fmt.Errorf("%s is not a valid IP address or range", ip)
-		}
-		*p = append(*p, addr)
-	}
-	return nil
-}
-
-func (p *parseIPs) appendIPs(addrs []net.IP) error {
-	for _, addr := range addrs {
-		*p = append(*p, addr)
-	}
-	return nil
-}
-
-func (p *parseIPs) parseRange(s string) error {
-	twoIPs := strings.Split(s, "-")
-
-	if twoIPs[0] == s {
-		// This is not an IP range
-		return fmt.Errorf("%s is not a valid IP range", s)
-	}
-	start := net.ParseIP(twoIPs[0])
-	end := net.ParseIP(twoIPs[1])
-	if end == nil {
-		num, err := strconv.Atoi(twoIPs[1])
-		if err == nil {
-			end = net.ParseIP(twoIPs[0])
-			end[len(end)-1] = byte(num)
-		}
-	}
-	if start == nil || end == nil {
-		// These should have parsed properly
-		return fmt.Errorf("%s is not a valid IP range", s)
-	}
-	return p.appendIPs(utils.RangeHosts(start, end))
-}
-
-// parseCIDRs implementation of the flag.Value interface
-func (p *parseCIDRs) String() string {
-	if p == nil {
-		return ""
-	}
-
-	var cidrs []string
-	for _, ipnet := range *p {
-		cidrs = append(cidrs, ipnet.String())
-	}
-	return strings.Join(cidrs, ",")
-}
-
-func (p *parseCIDRs) Set(s string) error {
-	if s == "" {
-		return fmt.Errorf("%s is not a valid CIDR", s)
-	}
-
-	cidrs := strings.Split(s, ",")
-	for _, cidr := range cidrs {
-		_, ipnet, err := net.ParseCIDR(cidr)
-		if err != nil {
-			return fmt.Errorf("Failed to parse %s as a CIDR", cidr)
-		}
-
-		*p = append(*p, ipnet)
-	}
-	return nil
 }

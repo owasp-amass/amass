@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	// The length of the chan that pulls requests off the queue.
+	// ServiceRequestChanLength is the length of the chan that pulls requests off the queue.
 	ServiceRequestChanLength int = 1000
 )
 
@@ -215,6 +215,7 @@ func (bas *BaseService) processRequests() {
 	}
 }
 
+// RequestLen returns the current length of the request queue.
 func (bas *BaseService) RequestLen() int {
 	return bas.queue.Len()
 }

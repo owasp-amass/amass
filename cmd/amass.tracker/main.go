@@ -25,9 +25,6 @@ const (
 	timeFormat string = "01/02 15:04:05 2006 MST"
 )
 
-// Types that implement the flag.Value interface for parsing
-type parseStrings []string
-
 var (
 	// Colors used to ease the reading of program output
 	y      = color.New(color.FgHiYellow)
@@ -50,12 +47,12 @@ var (
 )
 
 func main() {
-	var domains parseStrings
+	var domains utils.ParseStrings
 
 	defaultBuf := new(bytes.Buffer)
 	flag.CommandLine.SetOutput(defaultBuf)
 	flag.Usage = func() {
-		printBanner()
+		amass.PrintBanner()
 		g.Fprintf(color.Error, "Usage: %s [options] -d domain\n\n", path.Base(os.Args[0]))
 		flag.PrintDefaults()
 		g.Fprintln(color.Error, defaultBuf.String())
@@ -337,44 +334,4 @@ func enumContainsDomain(enum, domain string, h handlers.DataHandler) bool {
 		}
 	}
 	return found
-}
-
-func printBanner() {
-	rightmost := 76
-	version := "Version " + amass.Version
-	desc := "In-depth DNS Enumeration and Network Mapping"
-	author := "Authored By " + amass.Author
-
-	pad := func(num int) {
-		for i := 0; i < num; i++ {
-			fmt.Fprint(color.Error, " ")
-		}
-	}
-	r.Fprintln(color.Error, amass.Banner)
-	pad(rightmost - len(version))
-	y.Fprintln(color.Error, version)
-	pad(rightmost - len(author))
-	y.Fprintln(color.Error, author)
-	pad(rightmost - len(desc))
-	y.Fprintf(color.Error, "%s\n\n\n", desc)
-}
-
-// parseStrings implementation of the flag.Value interface
-func (p *parseStrings) String() string {
-	if p == nil {
-		return ""
-	}
-	return strings.Join(*p, ",")
-}
-
-func (p *parseStrings) Set(s string) error {
-	if s == "" {
-		return fmt.Errorf("String parsing failed")
-	}
-
-	str := strings.Split(s, ",")
-	for _, s := range str {
-		*p = append(*p, strings.TrimSpace(s))
-	}
-	return nil
 }

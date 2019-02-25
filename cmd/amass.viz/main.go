@@ -19,10 +19,6 @@ import (
 	"github.com/fatih/color"
 )
 
-const (
-	DefaultGraphDBDirectory string = "amass_output"
-)
-
 var (
 	// Colors used to ease the reading of program output
 	y      = color.New(color.FgHiYellow)
@@ -50,7 +46,7 @@ func main() {
 	defaultBuf := new(bytes.Buffer)
 	flag.CommandLine.SetOutput(defaultBuf)
 	flag.Usage = func() {
-		printBanner()
+		amass.PrintBanner()
 		g.Fprintf(color.Error,
 			"Usage: %s -i path --maltego o1 --visjs o2 --gexf o3 --d3 o4 --graphistry o5\n\n", path.Base(os.Args[0]))
 		flag.PrintDefaults()
@@ -71,7 +67,7 @@ func main() {
 	var err error
 	rand.Seed(time.Now().UTC().UnixNano())
 	if *input != "" {
-		*dir, err = ioutil.TempDir("", DefaultGraphDBDirectory)
+		*dir, err = ioutil.TempDir("", handlers.DefaultGraphDBDirectory)
 		if err != nil {
 			r.Fprintln(color.Error, "Failed to open the graph database")
 			os.Exit(1)
@@ -80,7 +76,7 @@ func main() {
 	} else {
 		// Check that the default graph database directory exists in the CWD
 		if *dir == "" {
-			if finfo, err := os.Stat(DefaultGraphDBDirectory); os.IsNotExist(err) || !finfo.IsDir() {
+			if finfo, err := os.Stat(handlers.DefaultGraphDBDirectory); os.IsNotExist(err) || !finfo.IsDir() {
 				r.Fprintln(color.Error, "Failed to open the graph database")
 				os.Exit(1)
 			}
@@ -119,7 +115,7 @@ func main() {
 	} else {
 		var latest time.Time
 		for i, enum := range graph.EnumerationList() {
-			e, l := graph.EnumerationDateRange(enum)
+			_, l := graph.EnumerationDateRange(enum)
 			if i == 0 {
 				latest = l
 				uuid = enum
@@ -214,24 +210,4 @@ func writeD3File(path string, nodes []viz.Node, edges []viz.Edge) {
 
 	viz.WriteD3Data(f, nodes, edges)
 	f.Sync()
-}
-
-func printBanner() {
-	rightmost := 76
-	version := "Version " + amass.Version
-	desc := "In-depth DNS Enumeration and Network Mapping"
-	author := "Authored By " + amass.Author
-
-	pad := func(num int) {
-		for i := 0; i < num; i++ {
-			fmt.Fprint(color.Error, " ")
-		}
-	}
-	r.Fprintln(color.Error, amass.Banner)
-	pad(rightmost - len(version))
-	y.Fprintln(color.Error, version)
-	pad(rightmost - len(author))
-	y.Fprintln(color.Error, author)
-	pad(rightmost - len(desc))
-	y.Fprintf(color.Error, "%s\n\n\n", desc)
 }
