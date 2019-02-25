@@ -256,7 +256,9 @@ func (r *resolver) processMessage(msg *dns.Msg) {
 	// Check that the query was successful
 	if msg.Rcode != dns.RcodeSuccess {
 		var again bool
-		if msg.Rcode == dns.RcodeRefused || msg.Rcode == dns.RcodeServerFailure {
+		if msg.Rcode == dns.RcodeRefused ||
+			msg.Rcode == dns.RcodeServerFailure ||
+			msg.Rcode == dns.RcodeNotImplemented {
 			again = true
 		}
 		r.returnRequest(req, &resolveResult{

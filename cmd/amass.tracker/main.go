@@ -168,8 +168,8 @@ func cumulativeOutput(domain string, enums []string, ea, la []time.Time, h handl
 	filter := utils.NewStringFilter()
 
 	var cum []*core.Output
-	for _, enum := range enums[:idx] {
-		for _, out := range getEnumDataInScope(domain, enum, h) {
+	for i := idx - 1; i >= 0; i-- {
+		for _, out := range getEnumDataInScope(domain, enums[i], h) {
 			if !filter.Duplicate(out.Name) {
 				cum = append(cum, out)
 			}
