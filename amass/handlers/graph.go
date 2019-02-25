@@ -23,6 +23,11 @@ import (
 	"github.com/cayleygraph/cayley/quad"
 )
 
+const (
+	// DefaultGraphDBDirectory is the directory name used by default for the graph database.
+	DefaultGraphDBDirectory string = "amass_output"
+)
+
 // Graph is the object for managing a network infrastructure link graph.
 type Graph struct {
 	sync.Mutex
@@ -34,13 +39,13 @@ type Graph struct {
 func NewGraph(path string) *Graph {
 	var err error
 
-	// If not directory was specified, $PWD/.amass/ will be used
+	// If a directory was not specified, $PWD/amass_output/ will be used
 	if path == "" {
 		path, err = os.Getwd()
 		if err != nil {
 			return nil
 		}
-		path = filepath.Join(path, "amass")
+		path = filepath.Join(path, DefaultGraphDBDirectory)
 	}
 	// If the directory does not yet exist, create it
 	if err = os.MkdirAll(path, 0755); err != nil {
@@ -81,6 +86,34 @@ func (g *Graph) Close() {
 	g.store.Close()
 }
 
+// String implements the Amass data handler interface.
+func (g *Graph) String() string {
+	return "Amass Graph"
+}
+
+func (g *Graph) propertyValue(node quad.Value, pname, uuid string) string {
+	if quad.ToString(node) == "" || pname == "" || uuid == "" {
+		return ""
+	}
+
+	p := cayley.StartPath(g.store, node).LabelContext(quad.String(uuid)).Out(quad.String(pname))
+	it, _ := p.BuildIterator().Optimize()
+	it, _ = g.store.OptimizeIterator(it)
+	defer it.Close()
+
+	var result string
+	ctx := context.TODO()
+	for it.Next(ctx) {
+		token := it.Result()
+		value := g.store.NameOf(token)
+		result = quad.NativeOf(value).(string)
+		if result != "" {
+			break
+		}
+	}
+	return result
+}
+
 func (g *Graph) dumpGraph() string {
 	var result string
 
@@ -106,11 +139,6 @@ func (g *Graph) dumpGraph() string {
 		}
 	})
 	return result
-}
-
-// String implements the Amass data handler interface.
-func (g *Graph) String() string {
-	return "Amass Graph"
 }
 
 // Insert implements the Amass DataHandler interface.
@@ -142,107 +170,6 @@ func (g *Graph) Insert(data *DataOptsParams) error {
 		err = g.insertInfrastructure(data)
 	}
 	return err
-}
-
-// MarkAsRead implements the Amass DataHandler interface.
-func (g *Graph) MarkAsRead(data *DataOptsParams) error {
-	g.Lock()
-	defer g.Unlock()
-
-	if t := g.propertyValue(quad.String(data.Name), "type", data.UUID); t != "" {
-		g.store.AddQuad(quad.Make(data.Name, "read", "yes", data.UUID))
-	}
-	return nil
-}
-
-// IsCNAMENode implements the Amass DataHandler interface.
-func (g *Graph) IsCNAMENode(data *DataOptsParams) bool {
-	g.Lock()
-	defer g.Unlock()
-
-	if r := g.propertyValue(quad.String(data.Name), "cname_to", data.UUID); r != "" {
-		return true
-	}
-	return false
-}
-
-// VizData returns the current state of the Graph as viz package Nodes and Edges.
-func (g *Graph) VizData(uuid string) ([]viz.Node, []viz.Edge) {
-	g.Lock()
-	defer g.Unlock()
-
-	var idx int
-	var nodes []viz.Node
-	rnodes := make(map[string]int)
-	p := cayley.StartPath(g.store).Has(quad.String("type")).Unique()
-	p.Iterate(nil).EachValue(nil, func(node quad.Value) {
-		label := quad.ToString(node)
-		if label == "" {
-			return
-		}
-
-		var source string
-		t := g.propertyValue(node, "type", uuid)
-		title := t + ": " + label
-
-		switch t {
-		case "subdomain":
-			source = g.propertyValue(node, "source", uuid)
-		case "domain":
-			source = g.propertyValue(node, "source", uuid)
-		case "ns":
-			source = g.propertyValue(node, "source", uuid)
-		case "mx":
-			source = g.propertyValue(node, "source", uuid)
-		case "as":
-			title = title + ", Desc: " + g.propertyValue(node, "description", uuid)
-		}
-
-		rnodes[label] = idx
-		nodes = append(nodes, viz.Node{
-			ID:     idx,
-			Type:   t,
-			Label:  label,
-			Title:  title,
-			Source: source,
-		})
-		idx++
-	})
-
-	var edges []viz.Edge
-	for _, n := range nodes {
-		// Obtain all the predicates for this node
-		var predicates []quad.Value
-		p = cayley.StartPath(g.store, quad.String(n.Label)).OutPredicates().Unique()
-		p.Iterate(nil).EachValue(nil, func(val quad.Value) {
-			predicates = append(predicates, val)
-		})
-		// Create viz edges for graph edges leaving the node
-		for _, predicate := range predicates {
-			path := cayley.StartPath(g.store, quad.String(n.Label)).Out(predicate)
-			path.Iterate(nil).EachValue(nil, func(val quad.Value) {
-				var to string
-				pstr := quad.ToString(predicate)
-
-				if pstr == "root_of" || pstr == "cname_to" || pstr == "a_to" ||
-					pstr == "aaaa_to" || pstr == "ptr_to" || pstr == "service_for" ||
-					pstr == "srv_to" || pstr == "ns_to" || pstr == "mx_to" ||
-					pstr == "contains" || pstr == "has_prefix" {
-					to = quad.ToString(val)
-				}
-				if to == "" {
-					return
-				}
-
-				edges = append(edges, viz.Edge{
-					From:  n.ID,
-					To:    rnodes[to],
-					Title: pstr,
-				})
-			})
-		}
-	}
-	return nodes, edges
 }
 
 func (g *Graph) insertDomain(data *DataOptsParams) error {
@@ -517,8 +444,94 @@ func (g *Graph) insertInfrastructure(data *DataOptsParams) error {
 	return nil
 }
 
-// GetUnreadOutput returns new findings within the enumeration Graph.
-func (g *Graph) GetUnreadOutput(uuid string) []*core.Output {
+// EnumerationList returns a list of enumeration IDs found in the data.
+func (g *Graph) EnumerationList() []string {
+	g.Lock()
+	defer g.Unlock()
+
+	p := cayley.StartPath(g.store).Has(quad.String("type"), quad.String("domain")).Labels()
+	it, _ := p.BuildIterator().Optimize()
+	it, _ = g.store.OptimizeIterator(it)
+	defer it.Close()
+
+	var ids []string
+	ctx := context.TODO()
+	for it.Next(ctx) {
+		token := it.Result()
+		value := g.store.NameOf(token)
+		label := quad.NativeOf(value).(string)
+
+		if label != "" {
+			ids = utils.UniqueAppend(ids, label)
+		}
+	}
+	return ids
+}
+
+// EnumerationDomains returns the domains that were involved in the provided enumeration.
+func (g *Graph) EnumerationDomains(uuid string) []string {
+	g.Lock()
+	defer g.Unlock()
+
+	p := cayley.StartPath(g.store).LabelContext(
+		quad.String(uuid)).Has(quad.String("type"), quad.String("domain"))
+	it, _ := p.BuildIterator().Optimize()
+	it, _ = g.store.OptimizeIterator(it)
+	defer it.Close()
+
+	var domains []string
+	ctx := context.TODO()
+	for it.Next(ctx) {
+		token := it.Result()
+		value := g.store.NameOf(token)
+		domain := quad.NativeOf(value).(string)
+
+		if domain != "" {
+			domains = utils.UniqueAppend(domains, domain)
+		}
+	}
+	return domains
+}
+
+// EnumerationDateRange returns the date range associated with the provided enumeration UUID.
+func (g *Graph) EnumerationDateRange(uuid string) (time.Time, time.Time) {
+	g.Lock()
+	defer g.Unlock()
+
+	p := cayley.StartPath(g.store).LabelContext(quad.String(uuid)).Out(quad.String("timestamp"))
+	it, _ := p.BuildIterator().Optimize()
+	it, _ = g.store.OptimizeIterator(it)
+	defer it.Close()
+
+	first := true
+	var earliest, latest time.Time
+	ctx := context.TODO()
+	for it.Next(ctx) {
+		token := it.Result()
+		value := g.store.NameOf(token)
+		timestamp := quad.NativeOf(value).(string)
+		tt, err := time.Parse(time.RFC3339, timestamp)
+		if err != nil {
+			continue
+		}
+		if first {
+			earliest = tt
+			latest = tt
+			first = false
+			continue
+		}
+		if tt.Before(earliest) {
+			earliest = tt
+		}
+		if tt.After(latest) {
+			latest = tt
+		}
+	}
+	return earliest, latest
+}
+
+// GetOutput returns new findings within the enumeration Graph.
+func (g *Graph) GetOutput(uuid string, marked bool) []*core.Output {
 	g.Lock()
 	defer g.Unlock()
 
@@ -535,7 +548,7 @@ func (g *Graph) GetUnreadOutput(uuid string) []*core.Output {
 		value := g.store.NameOf(token)
 		domain := quad.NativeOf(value).(string)
 
-		names := g.getSubdomainNames(domain, uuid)
+		names := g.getSubdomainNames(domain, uuid, marked)
 		for _, name := range names {
 			if o := g.buildOutput(name, uuid); o != nil {
 				o.Domain = domain
@@ -546,7 +559,7 @@ func (g *Graph) GetUnreadOutput(uuid string) []*core.Output {
 	return results
 }
 
-func (g *Graph) getSubdomainNames(domain, uuid string) []string {
+func (g *Graph) getSubdomainNames(domain, uuid string, marked bool) []string {
 	names := []string{domain}
 
 	d := quad.String(domain)
@@ -556,11 +569,15 @@ func (g *Graph) getSubdomainNames(domain, uuid string) []string {
 	s := quad.String("subdomain")
 	ns := quad.String("ns")
 	mx := quad.String("mx")
-	// This path identifies the names that have been marked as 'read'
-	read := cayley.StartPath(g.store, d).LabelContext(u).Out(root).Has(
-		t, s, ns, mx).Has(quad.String("read"), quad.String("yes"))
-	// All the DNS name related nodes that have not already been read
-	p := cayley.StartPath(g.store, d).LabelContext(u).Out(root).Has(t, s, ns, mx).Except(read)
+
+	p := cayley.StartPath(g.store, d).LabelContext(u).Out(root).Has(t, s, ns, mx)
+	if !marked {
+		// This path identifies the names that have been marked as 'read'
+		read := cayley.StartPath(g.store, d).LabelContext(u).Out(root).Has(
+			t, s, ns, mx).Has(quad.String("read"), quad.String("yes"))
+		// All the DNS name related nodes that have not already been read
+		p = p.Except(read)
+	}
 	it, _ := p.BuildIterator().Optimize()
 	it, _ = g.store.OptimizeIterator(it)
 	defer it.Close()
@@ -713,25 +730,103 @@ func (g *Graph) buildAddrInfo(addr, uuid string) *core.AddressInfo {
 	return ainfo
 }
 
-func (g *Graph) propertyValue(node quad.Value, pname, uuid string) string {
-	if quad.ToString(node) == "" || pname == "" || uuid == "" {
-		return ""
+// MarkAsRead implements the Amass DataHandler interface.
+func (g *Graph) MarkAsRead(data *DataOptsParams) error {
+	g.Lock()
+	defer g.Unlock()
+
+	if t := g.propertyValue(quad.String(data.Name), "type", data.UUID); t != "" {
+		g.store.AddQuad(quad.Make(data.Name, "read", "yes", data.UUID))
 	}
+	return nil
+}
 
-	p := cayley.StartPath(g.store, node).LabelContext(quad.String(uuid)).Out(quad.String(pname))
-	it, _ := p.BuildIterator().Optimize()
-	it, _ = g.store.OptimizeIterator(it)
-	defer it.Close()
+// IsCNAMENode implements the Amass DataHandler interface.
+func (g *Graph) IsCNAMENode(data *DataOptsParams) bool {
+	g.Lock()
+	defer g.Unlock()
 
-	var result string
-	ctx := context.TODO()
-	for it.Next(ctx) {
-		token := it.Result()
-		value := g.store.NameOf(token)
-		result = quad.NativeOf(value).(string)
-		if result != "" {
-			break
+	if r := g.propertyValue(quad.String(data.Name), "cname_to", data.UUID); r != "" {
+		return true
+	}
+	return false
+}
+
+// VizData returns the current state of the Graph as viz package Nodes and Edges.
+func (g *Graph) VizData(uuid string) ([]viz.Node, []viz.Edge) {
+	g.Lock()
+	defer g.Unlock()
+
+	var idx int
+	var nodes []viz.Node
+	rnodes := make(map[string]int)
+	p := cayley.StartPath(g.store).Has(quad.String("type")).Unique()
+	p.Iterate(nil).EachValue(nil, func(node quad.Value) {
+		label := quad.ToString(node)
+		if label == "" {
+			return
+		}
+
+		var source string
+		t := g.propertyValue(node, "type", uuid)
+		title := t + ": " + label
+
+		switch t {
+		case "subdomain":
+			source = g.propertyValue(node, "source", uuid)
+		case "domain":
+			source = g.propertyValue(node, "source", uuid)
+		case "ns":
+			source = g.propertyValue(node, "source", uuid)
+		case "mx":
+			source = g.propertyValue(node, "source", uuid)
+		case "as":
+			title = title + ", Desc: " + g.propertyValue(node, "description", uuid)
+		}
+
+		rnodes[label] = idx
+		nodes = append(nodes, viz.Node{
+			ID:     idx,
+			Type:   t,
+			Label:  label,
+			Title:  title,
+			Source: source,
+		})
+		idx++
+	})
+
+	var edges []viz.Edge
+	for _, n := range nodes {
+		// Obtain all the predicates for this node
+		var predicates []quad.Value
+		p = cayley.StartPath(g.store, quad.String(n.Label)).OutPredicates().Unique()
+		p.Iterate(nil).EachValue(nil, func(val quad.Value) {
+			predicates = append(predicates, val)
+		})
+		// Create viz edges for graph edges leaving the node
+		for _, predicate := range predicates {
+			path := cayley.StartPath(g.store, quad.String(n.Label)).Out(predicate)
+			path.Iterate(nil).EachValue(nil, func(val quad.Value) {
+				var to string
+				pstr := quad.ToString(predicate)
+
+				if pstr == "root_of" || pstr == "cname_to" || pstr == "a_to" ||
+					pstr == "aaaa_to" || pstr == "ptr_to" || pstr == "service_for" ||
+					pstr == "srv_to" || pstr == "ns_to" || pstr == "mx_to" ||
+					pstr == "contains" || pstr == "has_prefix" {
+					to = quad.ToString(val)
+				}
+				if to == "" {
+					return
+				}
+
+				edges = append(edges, viz.Edge{
+					From:  n.ID,
+					To:    rnodes[to],
+					Title: pstr,
+				})
+			})
 		}
 	}
-	return result
+	return nodes, edges
 }

@@ -151,6 +151,9 @@ func (e *Enumeration) Start() error {
 		}
 	}
 
+	// Use all previously discovered names that are in scope
+	go e.submitKnownNames()
+
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go e.checkForOutput(&wg)
@@ -188,6 +191,33 @@ loop:
 	}
 	wg.Wait()
 	return nil
+}
+
+func (e *Enumeration) submitKnownNames() {
+	for _, enum := range e.Graph.EnumerationList() {
+		var found bool
+
+		for _, domain := range e.Graph.EnumerationDomains(enum) {
+			if e.Config.IsDomainInScope(domain) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			continue
+		}
+
+		for _, o := range e.Graph.GetOutput(enum, true) {
+			if e.Config.IsDomainInScope(o.Name) {
+				e.Bus.Publish(core.NewNameTopic, &core.Request{
+					Name:   o.Name,
+					Domain: o.Domain,
+					Tag:    o.Tag,
+					Source: o.Source,
+				})
+			}
+		}
+	}
 }
 
 // DNSQueriesPerSec returns the number of DNS queries the enumeration has performed per second.
@@ -279,7 +309,7 @@ loop:
 		case <-e.Done:
 			break loop
 		case <-t.C:
-			out := e.Graph.GetUnreadOutput(e.Config.UUID.String())
+			out := e.Graph.GetOutput(e.Config.UUID.String(), false)
 			for _, o := range out {
 				if time.Now().Add(10 * time.Second).After(o.Timestamp) {
 					e.Graph.MarkAsRead(&handlers.DataOptsParams{
@@ -296,7 +326,7 @@ loop:
 		}
 	}
 	// Handle all remaining pieces of output
-	out := e.Graph.GetUnreadOutput(e.Config.UUID.String())
+	out := e.Graph.GetOutput(e.Config.UUID.String(), false)
 	for _, o := range out {
 		if !e.filter.Duplicate(o.Name) {
 			e.Graph.MarkAsRead(&handlers.DataOptsParams{

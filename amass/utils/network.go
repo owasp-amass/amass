@@ -37,17 +37,17 @@ var (
 func init() {
 	jar, _ := cookiejar.New(nil)
 	defaultClient = &http.Client{
-		Timeout: 15 * time.Second,
+		Timeout: 30 * time.Second,
 		Transport: &http.Transport{
 			DialContext: (&net.Dialer{
-				Timeout:   15 * time.Second,
-				KeepAlive: 15 * time.Second,
+				Timeout:   30 * time.Second,
+				KeepAlive: 30 * time.Second,
 				DualStack: true,
 			}).DialContext,
 			MaxIdleConns:          200,
 			IdleConnTimeout:       90 * time.Second,
-			TLSHandshakeTimeout:   10 * time.Second,
-			ExpectContinueTimeout: 5 * time.Second,
+			TLSHandshakeTimeout:   20 * time.Second,
+			ExpectContinueTimeout: 20 * time.Second,
 			TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
 		},
 		Jar: jar,
