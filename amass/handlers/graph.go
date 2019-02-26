@@ -759,17 +759,26 @@ func (g *Graph) VizData(uuid string) ([]viz.Node, []viz.Edge) {
 
 	var idx int
 	var nodes []viz.Node
+	u := quad.String(uuid)
 	rnodes := make(map[string]int)
-	p := cayley.StartPath(g.store).Has(quad.String("type")).Unique()
-	p.Iterate(nil).EachValue(nil, func(node quad.Value) {
-		label := quad.ToString(node)
-		if label == "" {
-			return
+	p := cayley.StartPath(g.store).LabelContext(u).Has(quad.String("type")).Unique()
+	it, _ := p.BuildIterator().Optimize()
+	it, _ = g.store.OptimizeIterator(it)
+	defer it.Close()
+
+	ctx := context.TODO()
+	for it.Next(ctx) {
+		token := it.Result()
+		value := g.store.NameOf(token)
+		name := quad.NativeOf(value).(string)
+		if name == "" {
+			continue
 		}
+		node := quad.String(name)
 
 		var source string
 		t := g.propertyValue(node, "type", uuid)
-		title := t + ": " + label
+		title := t + ": " + name
 
 		switch t {
 		case "subdomain":
@@ -784,40 +793,63 @@ func (g *Graph) VizData(uuid string) ([]viz.Node, []viz.Edge) {
 			title = title + ", Desc: " + g.propertyValue(node, "description", uuid)
 		}
 
-		rnodes[label] = idx
+		rnodes[name] = idx
 		nodes = append(nodes, viz.Node{
 			ID:     idx,
 			Type:   t,
-			Label:  label,
+			Label:  name,
 			Title:  title,
 			Source: source,
 		})
 		idx++
-	})
+	}
 
 	var edges []viz.Edge
 	for _, n := range nodes {
 		// Obtain all the predicates for this node
 		var predicates []quad.Value
-		p = cayley.StartPath(g.store, quad.String(n.Label)).OutPredicates().Unique()
-		p.Iterate(nil).EachValue(nil, func(val quad.Value) {
-			predicates = append(predicates, val)
-		})
+		p = cayley.StartPath(g.store, quad.String(n.Label)).LabelContext(u).OutPredicates().Unique()
+		it, _ := p.BuildIterator().Optimize()
+		it, _ = g.store.OptimizeIterator(it)
+		defer it.Close()
+
+		ctx := context.TODO()
+		for it.Next(ctx) {
+			token := it.Result()
+			value := g.store.NameOf(token)
+			pred := quad.NativeOf(value).(string)
+			if pred == "" {
+				continue
+			}
+
+			predicates = append(predicates, quad.String(pred))
+		}
 		// Create viz edges for graph edges leaving the node
 		for _, predicate := range predicates {
-			path := cayley.StartPath(g.store, quad.String(n.Label)).Out(predicate)
-			path.Iterate(nil).EachValue(nil, func(val quad.Value) {
+			path := cayley.StartPath(g.store, quad.String(n.Label)).LabelContext(u).Out(predicate)
+			it, _ := path.BuildIterator().Optimize()
+			it, _ = g.store.OptimizeIterator(it)
+			defer it.Close()
+
+			ctx := context.TODO()
+			for it.Next(ctx) {
+				token := it.Result()
+				value := g.store.NameOf(token)
+				vstr := quad.NativeOf(value).(string)
+				if vstr == "" {
+					continue
+				}
+
 				var to string
 				pstr := quad.ToString(predicate)
-
 				if pstr == "root_of" || pstr == "cname_to" || pstr == "a_to" ||
 					pstr == "aaaa_to" || pstr == "ptr_to" || pstr == "service_for" ||
 					pstr == "srv_to" || pstr == "ns_to" || pstr == "mx_to" ||
 					pstr == "contains" || pstr == "has_prefix" {
-					to = quad.ToString(val)
+					to = vstr
 				}
 				if to == "" {
-					return
+					continue
 				}
 
 				edges = append(edges, viz.Edge{
@@ -825,7 +857,7 @@ func (g *Graph) VizData(uuid string) ([]viz.Node, []viz.Edge) {
 					To:    rnodes[to],
 					Title: pstr,
 				})
-			})
+			}
 		}
 	}
 	return nodes, edges

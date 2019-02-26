@@ -225,6 +225,11 @@ func main() {
 	if *dir == "" {
 		*dir = handlers.DefaultGraphDBDirectory
 	}
+	// If the directory does not yet exist, create it
+	if err = os.MkdirAll(*dir, 0755); err != nil {
+		r.Fprintf(color.Error, "Failed to create the directory: %v\n", err)
+		os.Exit(1)
+	}
 	logfile := filepath.Join(*dir, "amass.log")
 	if *logpath != "" {
 		logfile = *logpath
@@ -289,7 +294,7 @@ func main() {
 		enc = json.NewEncoder(jsonptr)
 	}
 
-	// Start the enumeration process
+	// Kick off the output management goroutine
 	finished = make(chan struct{})
 	go func() {
 		var total int
@@ -320,7 +325,7 @@ func main() {
 		}
 		close(finished)
 	}()
-
+	// Start the enumeration process
 	go signalHandler(enum)
 	if err := enum.Start(); err != nil {
 		r.Println(err)

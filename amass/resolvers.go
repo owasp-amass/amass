@@ -63,7 +63,7 @@ type resolver struct {
 	XchgQueue      *utils.Queue
 	XchgChan       chan *resolveRequest
 	XchgsLock      sync.Mutex
-	Xchgs          map[uint16][]*resolveRequest
+	Xchgs          map[uint16]*resolveRequest
 	Done           chan struct{}
 	rcodeStats     map[int]int64
 	attempts       int64
@@ -86,7 +86,7 @@ func newResolver(addr string) *resolver {
 		Conn:           conn,
 		XchgQueue:      utils.NewQueue(),
 		XchgChan:       make(chan *resolveRequest, 1000),
-		Xchgs:          make(map[uint16][]*resolveRequest),
+		Xchgs:          make(map[uint16]*resolveRequest),
 		Done:           make(chan struct{}, 2),
 		rcodeStats:     make(map[int]int64),
 		last:           time.Now(),
@@ -105,35 +105,35 @@ func (r *resolver) stop() {
 	r.Conn.Close()
 }
 
-func (r *resolver) queueRequest(id uint16, req *resolveRequest) {
-	r.XchgsLock.Lock()
-	r.Xchgs[id] = append(r.Xchgs[id], req)
-	r.XchgsLock.Unlock()
-}
-
-func (r *resolver) pullRequest(id uint16, name string) *resolveRequest {
+func (r *resolver) getID() uint16 {
 	r.XchgsLock.Lock()
 	defer r.XchgsLock.Unlock()
 
-	var idx int
-	var found bool
-	for i, req := range r.Xchgs[id] {
-		if req.Name == name {
-			idx = i
-			found = true
+	var id uint16
+	for {
+		id = dns.Id()
+		if _, found := r.Xchgs[id]; !found {
+			r.Xchgs[id] = new(resolveRequest)
 			break
 		}
 	}
+	return id
+}
+
+func (r *resolver) queueRequest(id uint16, req *resolveRequest) {
+	r.XchgsLock.Lock()
+	r.Xchgs[id] = req
+	r.XchgsLock.Unlock()
+}
+
+func (r *resolver) pullRequest(id uint16) *resolveRequest {
+	r.XchgsLock.Lock()
+	defer r.XchgsLock.Unlock()
+
+	res, found := r.Xchgs[id]
 	if !found {
 		return nil
 	}
-
-	res := r.Xchgs[id][idx]
-	if len(r.Xchgs[id]) > 1 {
-		r.Xchgs[id] = append(r.Xchgs[id][:idx], r.Xchgs[id][idx+1:]...)
-		return res
-	}
-	// There was only one element in the slice
 	delete(r.Xchgs, id)
 	return res
 }
@@ -152,18 +152,16 @@ func (r *resolver) checkForTimeouts() {
 
 			// Discover requests that have timed out
 			r.XchgsLock.Lock()
-			for id := range r.Xchgs {
-				for _, req := range r.Xchgs[id] {
-					if now.After(req.Timestamp.Add(r.WindowDuration)) {
-						ids = append(ids, id)
-						timeouts = append(timeouts, req)
-					}
+			for id, req := range r.Xchgs {
+				if now.After(req.Timestamp.Add(r.WindowDuration)) {
+					ids = append(ids, id)
+					timeouts = append(timeouts, req)
 				}
 			}
 			r.XchgsLock.Unlock()
 			// Remove the timed out requests from the map
-			for i, id := range ids {
-				r.pullRequest(id, timeouts[i].Name)
+			for _, id := range ids {
+				r.pullRequest(id)
 			}
 			// Complete handling of the timed out requests
 			r.updateTimeouts(len(timeouts))
@@ -225,8 +223,7 @@ func (r *resolver) exchanges() {
 		case read := <-msgs:
 			r.processMessage(read)
 		case req := <-r.XchgChan:
-			msg := queryMessage(req.Name, req.Qtype)
-
+			msg := queryMessage(r.getID(), req.Name, req.Qtype)
 			co.SetWriteDeadline(time.Now().Add(r.WindowDuration))
 			if err := co.WriteMsg(msg); err != nil {
 				req.Result <- &resolveResult{
@@ -243,12 +240,55 @@ func (r *resolver) exchanges() {
 	}
 }
 
-func (r *resolver) processMessage(msg *dns.Msg) {
-	if len(msg.Question) == 0 {
+func (r *resolver) tcpExchange(req *resolveRequest) {
+	msg := queryMessage(r.getID(), req.Name, req.Qtype)
+	ctx, cancel := context.WithTimeout(context.Background(), r.WindowDuration)
+	defer cancel()
+
+	req.Timestamp = time.Now()
+	r.queueRequest(msg.MsgHdr.Id, req)
+
+	d := net.Dialer{}
+	conn, err := d.DialContext(ctx, "tcp", r.Address)
+	if err != nil {
+		r.pullRequest(msg.MsgHdr.Id)
+		req.Result <- &resolveResult{
+			Records: nil,
+			Again:   true,
+			Err:     fmt.Errorf("DNS: Failed to obtain TCP connection to %s: %v", r.Address, err),
+		}
+		return
+	}
+	defer conn.Close()
+
+	co := &dns.Conn{Conn: conn}
+	co.SetWriteDeadline(time.Now().Add(r.WindowDuration))
+	if err := co.WriteMsg(msg); err != nil {
+		r.pullRequest(msg.MsgHdr.Id)
+		req.Result <- &resolveResult{
+			Records: nil,
+			Again:   true,
+			Err:     fmt.Errorf("DNS error: Failed to write query msg: %v", err),
+		}
 		return
 	}
 
-	req := r.pullRequest(msg.MsgHdr.Id, removeLastDot(msg.Question[0].Name))
+	read, err := co.ReadMsg()
+	if read == nil || err != nil {
+		r.pullRequest(msg.MsgHdr.Id)
+		req.Result <- &resolveResult{
+			Records: nil,
+			Again:   true,
+			Err:     fmt.Errorf("DNS error: Failed to read the reply msg: %v", err),
+		}
+		return
+	}
+
+	r.processMessage(read)
+}
+
+func (r *resolver) processMessage(msg *dns.Msg) {
+	req := r.pullRequest(msg.MsgHdr.Id)
 	if req == nil {
 		return
 	}
@@ -264,8 +304,14 @@ func (r *resolver) processMessage(msg *dns.Msg) {
 		r.returnRequest(req, &resolveResult{
 			Records: nil,
 			Again:   again,
-			Err:     fmt.Errorf("DNS query for %s, type %d returned error %d", req.Name, req.Qtype, msg.Rcode),
+			Err: fmt.Errorf("DNS query for %s, type %d returned error %s",
+				req.Name, req.Qtype, dns.RcodeToString[msg.Rcode]),
 		})
+		return
+	}
+
+	if msg.Truncated {
+		go r.tcpExchange(req)
 		return
 	}
 
@@ -278,6 +324,7 @@ func (r *resolver) processMessage(msg *dns.Msg) {
 			Data: strings.TrimSpace(a),
 		})
 	}
+
 	if len(answers) == 0 {
 		r.returnRequest(req, &resolveResult{
 			Records: nil,
@@ -493,7 +540,7 @@ func Reverse(addr string) (string, string, error) {
 	return ptr, name, err
 }
 
-func queryMessage(name string, qtype uint16) *dns.Msg {
+func queryMessage(id uint16, name string, qtype uint16) *dns.Msg {
 	m := &dns.Msg{
 		MsgHdr: dns.MsgHdr{
 			Authoritative:     false,
@@ -501,7 +548,7 @@ func queryMessage(name string, qtype uint16) *dns.Msg {
 			CheckingDisabled:  false,
 			RecursionDesired:  true,
 			Opcode:            dns.OpcodeQuery,
-			Id:                dns.Id(),
+			Id:                id,
 			Rcode:             dns.RcodeSuccess,
 		},
 		Question: make([]dns.Question, 1),
@@ -561,7 +608,7 @@ func ZoneTransfer(sub, domain, server string) ([]*core.Request, error) {
 
 	xfr := &dns.Transfer{
 		Conn:        &dns.Conn{Conn: conn},
-		ReadTimeout: 10 * time.Second,
+		ReadTimeout: 30 * time.Second,
 	}
 
 	m := &dns.Msg{}

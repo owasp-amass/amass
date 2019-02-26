@@ -123,10 +123,10 @@ func main() {
 				uuid = enum
 			}
 		}
-		if uuid == "" {
-			r.Fprintln(color.Error, "No enumeration found within the graph database")
-			os.Exit(1)
-		}
+	}
+	if uuid == "" {
+		r.Fprintln(color.Error, "No enumeration found within the graph database")
+		os.Exit(1)
 	}
 
 	nodes, edges := graph.VizData(uuid)

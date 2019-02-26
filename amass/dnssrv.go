@@ -18,8 +18,8 @@ var (
 	// InitialQueryTypes include the DNS record types that are
 	// initially requested for a discovered name
 	InitialQueryTypes = []string{
-		"TXT",
 		"CNAME",
+		"TXT",
 		"A",
 		"AAAA",
 	}
