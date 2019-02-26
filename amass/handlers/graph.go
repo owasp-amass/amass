@@ -34,7 +34,7 @@ type Graph struct {
 func NewGraph(path string) *Graph {
 	var err error
 
-	// If not directory was specified, $PWD/.amass/ will be used
+	// If not directory was specified, $PWD/amass_output/ will be used
 	if path == "" {
 		path, err = os.Getwd()
 		if err != nil {
