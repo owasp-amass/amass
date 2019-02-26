@@ -179,9 +179,14 @@ func cumulativeOutput(domain string, enums []string, ea, la []time.Time, h handl
 		blue("and"), yellow(ea[idx].Format(timeFormat)), blue(" -> "), yellow(la[idx].Format(timeFormat)))
 	blueLine()
 
+	var updates bool
 	out := getEnumDataInScope(domain, enums[idx], h)
 	for _, d := range diffEnumOutput(domain, cum, out) {
+		updates = true
 		fmt.Fprintln(color.Output, d)
+	}
+	if !updates {
+		g.Println("No differences discovered")
 	}
 }
 
@@ -203,10 +208,15 @@ func completeHistoryOutput(domain string, enums []string, ea, la []time.Time, h 
 			blue("and"), yellow(ea[i].Format(timeFormat)), blue(" -> "), yellow(la[i].Format(timeFormat)))
 		blueLine()
 
+		var updates bool
 		out1 := getEnumDataInScope(domain, prev, h)
 		out2 := getEnumDataInScope(domain, enum, h)
 		for _, d := range diffEnumOutput(domain, out1, out2) {
+			updates = true
 			fmt.Fprintln(color.Output, d)
+		}
+		if !updates {
+			g.Println("No differences discovered")
 		}
 		prev = enum
 	}

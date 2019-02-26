@@ -246,14 +246,12 @@ func (g *Graph) insertA(data *DataOptsParams) error {
 		return err
 	}
 	// Check if the address has already been inserted
-	if val := g.propertyValue(quad.String(data.Address), "type", data.UUID); val != "" {
-		return nil
+	if val := g.propertyValue(quad.String(data.Address), "type", data.UUID); val == "" {
+		t := cayley.NewTransaction()
+		t.AddQuad(quad.Make(data.Address, "type", "address", data.UUID))
+		t.AddQuad(quad.Make(data.Address, "timestamp", data.Timestamp, data.UUID))
+		g.store.ApplyTransaction(t)
 	}
-
-	t := cayley.NewTransaction()
-	t.AddQuad(quad.Make(data.Address, "type", "address", data.UUID))
-	t.AddQuad(quad.Make(data.Address, "timestamp", data.Timestamp, data.UUID))
-	g.store.ApplyTransaction(t)
 	// Create the edge between the DNS name and the address
 	g.store.AddQuad(quad.Make(data.Name, "a_to", data.Address, data.UUID))
 	return nil
@@ -264,14 +262,12 @@ func (g *Graph) insertAAAA(data *DataOptsParams) error {
 		return err
 	}
 	// Check if the address has already been inserted
-	if val := g.propertyValue(quad.String(data.Address), "type", data.UUID); val != "" {
-		return nil
+	if val := g.propertyValue(quad.String(data.Address), "type", data.UUID); val == "" {
+		t := cayley.NewTransaction()
+		t.AddQuad(quad.Make(data.Address, "type", "address", data.UUID))
+		t.AddQuad(quad.Make(data.Address, "timestamp", data.Timestamp, data.UUID))
+		g.store.ApplyTransaction(t)
 	}
-
-	t := cayley.NewTransaction()
-	t.AddQuad(quad.Make(data.Address, "type", "address", data.UUID))
-	t.AddQuad(quad.Make(data.Address, "timestamp", data.Timestamp, data.UUID))
-	g.store.ApplyTransaction(t)
 	// Create the edge between the DNS name and the address
 	g.store.AddQuad(quad.Make(data.Name, "aaaa_to", data.Address, data.UUID))
 	return nil

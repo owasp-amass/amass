@@ -20,16 +20,12 @@ type DataManagerService struct {
 	core.BaseService
 
 	Handlers     []handlers.DataHandler
-	filter       *utils.StringFilter
 	domainFilter *utils.StringFilter
 }
 
 // NewDataManagerService returns he object initialized, but not yet started.
 func NewDataManagerService(config *core.Config, bus *core.EventBus) *DataManagerService {
-	dms := &DataManagerService{
-		filter:       utils.NewStringFilter(),
-		domainFilter: utils.NewStringFilter(),
-	}
+	dms := &DataManagerService{domainFilter: utils.NewStringFilter()}
 
 	dms.BaseService = *core.NewBaseService(dms, "Data Manager", config, bus)
 	return dms
@@ -65,9 +61,6 @@ func (dms *DataManagerService) processRequests() {
 func (dms *DataManagerService) manageData(req *core.Request) {
 	req.Name = strings.ToLower(req.Name)
 	req.Domain = strings.ToLower(req.Domain)
-	if dms.filter.Duplicate(req.Name) {
-		return
-	}
 
 	dms.SetActive()
 	dms.insertDomain(req.Domain)
@@ -163,7 +156,7 @@ func (dms *DataManagerService) insertCNAME(req *core.Request, recidx int) {
 }
 
 func (dms *DataManagerService) insertA(req *core.Request, recidx int) {
-	addr := req.Records[recidx].Data
+	addr := strings.TrimSpace(req.Records[recidx].Data)
 	if addr == "" {
 		return
 	}
@@ -194,7 +187,7 @@ func (dms *DataManagerService) insertA(req *core.Request, recidx int) {
 }
 
 func (dms *DataManagerService) insertAAAA(req *core.Request, recidx int) {
-	addr := req.Records[recidx].Data
+	addr := strings.TrimSpace(req.Records[recidx].Data)
 	if addr == "" {
 		return
 	}
@@ -279,6 +272,15 @@ func (dms *DataManagerService) insertSRV(req *core.Request, recidx int) {
 		if err != nil {
 			dms.Config().Log.Printf("%s failed to insert SRV record: %v", handler, err)
 		}
+	}
+
+	if domain := dms.Config().WhichDomain(target); domain != "" {
+		dms.Bus().Publish(core.NewNameTopic, &core.Request{
+			Name:   target,
+			Domain: domain,
+			Tag:    req.Tag,
+			Source: req.Source,
+		})
 	}
 }
 
