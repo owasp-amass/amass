@@ -254,7 +254,7 @@ func main() {
 	}
 
 	go writeLogsAndMessages(rLog, logfile)
-	if datafile != "" {
+	if !enum.Config.Passive && datafile != "" {
 		fileptr, err := os.OpenFile(datafile, os.O_WRONLY|os.O_CREATE, 0644)
 		if err != nil {
 			r.Fprintf(color.Error, "Failed to open the data operations output file: %v\n", err)

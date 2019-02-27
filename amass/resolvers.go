@@ -130,10 +130,7 @@ func (r *resolver) pullRequest(id uint16) *resolveRequest {
 	r.XchgsLock.Lock()
 	defer r.XchgsLock.Unlock()
 
-	res, found := r.Xchgs[id]
-	if !found {
-		return nil
-	}
+	res := r.Xchgs[id]
 	delete(r.Xchgs, id)
 	return res
 }
@@ -147,31 +144,28 @@ func (r *resolver) checkForTimeouts() {
 			return
 		case <-t.C:
 			now := time.Now()
-			var ids []uint16
-			var timeouts []*resolveRequest
+			var timeouts []uint16
 
 			// Discover requests that have timed out
 			r.XchgsLock.Lock()
 			for id, req := range r.Xchgs {
-				if now.After(req.Timestamp.Add(r.WindowDuration)) {
-					ids = append(ids, id)
-					timeouts = append(timeouts, req)
+				if req.Name != "" && now.After(req.Timestamp.Add(r.WindowDuration)) {
+					timeouts = append(timeouts, id)
 				}
 			}
 			r.XchgsLock.Unlock()
 			// Remove the timed out requests from the map
-			for _, id := range ids {
-				r.pullRequest(id)
+			for _, id := range timeouts {
+				if req := r.pullRequest(id); req != nil {
+					r.returnRequest(req, &resolveResult{
+						Records: nil,
+						Again:   true,
+						Err:     fmt.Errorf("DNS query for %s, type %d timed out", req.Name, req.Qtype),
+					})
+				}
 			}
 			// Complete handling of the timed out requests
 			r.updateTimeouts(len(timeouts))
-			for _, req := range timeouts {
-				req.Result <- &resolveResult{
-					Records: nil,
-					Again:   true,
-					Err:     fmt.Errorf("DNS query for %s, type %d timed out", req.Name, req.Qtype),
-				}
-			}
 		}
 	}
 }
@@ -185,6 +179,10 @@ func (r *resolver) resolve(name string, qtype uint16) ([]core.DNSAnswer, bool, e
 	})
 	result := <-resultChan
 	return result.Records, result.Again, result.Err
+}
+
+func (r *resolver) returnRequest(req *resolveRequest, res *resolveResult) {
+	req.Result <- res
 }
 
 func (r *resolver) fillXchgChan() {
@@ -213,7 +211,7 @@ func (r *resolver) fillXchgChan() {
 // exchanges encapsulates miekg/dns usage
 func (r *resolver) exchanges() {
 	co := &dns.Conn{Conn: r.Conn}
-	msgs := make(chan *dns.Msg, 1000)
+	msgs := make(chan *dns.Msg, 2000)
 
 	go r.readMessages(co, msgs)
 	for {
@@ -221,42 +219,57 @@ func (r *resolver) exchanges() {
 		case <-r.Done:
 			return
 		case read := <-msgs:
-			r.processMessage(read)
+			go r.processMessage(read)
 		case req := <-r.XchgChan:
-			msg := queryMessage(r.getID(), req.Name, req.Qtype)
-			co.SetWriteDeadline(time.Now().Add(r.WindowDuration))
-			if err := co.WriteMsg(msg); err != nil {
-				req.Result <- &resolveResult{
-					Records: nil,
-					Again:   true,
-					Err:     fmt.Errorf("DNS error: Failed to write query msg: %v", err),
-				}
-				continue
+			go r.writeMessage(co, req)
+		}
+	}
+}
+
+func (r *resolver) writeMessage(co *dns.Conn, req *resolveRequest) {
+	msg := queryMessage(r.getID(), req.Name, req.Qtype)
+
+	co.SetWriteDeadline(time.Now().Add(r.WindowDuration))
+	if err := co.WriteMsg(msg); err != nil {
+		r.pullRequest(msg.MsgHdr.Id)
+		r.returnRequest(req, &resolveResult{
+			Records: nil,
+			Again:   true,
+			Err:     fmt.Errorf("DNS error: Failed to write query msg: %v", err),
+		})
+		return
+	}
+
+	req.Timestamp = time.Now()
+	r.queueRequest(msg.MsgHdr.Id, req)
+	r.updatesAttempts()
+}
+
+func (r *resolver) readMessages(co *dns.Conn, msgs chan *dns.Msg) {
+	for {
+		select {
+		case <-r.Done:
+			return
+		default:
+			if read, err := co.ReadMsg(); err == nil && read != nil {
+				msgs <- read
 			}
-			r.updatesAttempts()
-			req.Timestamp = time.Now()
-			r.queueRequest(msg.MsgHdr.Id, req)
 		}
 	}
 }
 
 func (r *resolver) tcpExchange(req *resolveRequest) {
 	msg := queryMessage(r.getID(), req.Name, req.Qtype)
-	ctx, cancel := context.WithTimeout(context.Background(), r.WindowDuration)
-	defer cancel()
+	d := net.Dialer{Timeout: r.WindowDuration}
 
-	req.Timestamp = time.Now()
-	r.queueRequest(msg.MsgHdr.Id, req)
-
-	d := net.Dialer{}
-	conn, err := d.DialContext(ctx, "tcp", r.Address)
+	conn, err := d.Dial("tcp", r.Address)
 	if err != nil {
 		r.pullRequest(msg.MsgHdr.Id)
-		req.Result <- &resolveResult{
+		r.returnRequest(req, &resolveResult{
 			Records: nil,
 			Again:   true,
 			Err:     fmt.Errorf("DNS: Failed to obtain TCP connection to %s: %v", r.Address, err),
-		}
+		})
 		return
 	}
 	defer conn.Close()
@@ -265,22 +278,25 @@ func (r *resolver) tcpExchange(req *resolveRequest) {
 	co.SetWriteDeadline(time.Now().Add(r.WindowDuration))
 	if err := co.WriteMsg(msg); err != nil {
 		r.pullRequest(msg.MsgHdr.Id)
-		req.Result <- &resolveResult{
+		r.returnRequest(req, &resolveResult{
 			Records: nil,
 			Again:   true,
 			Err:     fmt.Errorf("DNS error: Failed to write query msg: %v", err),
-		}
+		})
 		return
 	}
 
+	req.Timestamp = time.Now()
+	r.queueRequest(msg.MsgHdr.Id, req)
+	co.SetReadDeadline(time.Now().Add(r.WindowDuration))
 	read, err := co.ReadMsg()
 	if read == nil || err != nil {
 		r.pullRequest(msg.MsgHdr.Id)
-		req.Result <- &resolveResult{
+		r.returnRequest(req, &resolveResult{
 			Records: nil,
 			Again:   true,
 			Err:     fmt.Errorf("DNS error: Failed to read the reply msg: %v", err),
-		}
+		})
 		return
 	}
 
@@ -297,8 +313,7 @@ func (r *resolver) processMessage(msg *dns.Msg) {
 	if msg.Rcode != dns.RcodeSuccess {
 		var again bool
 		if msg.Rcode == dns.RcodeRefused ||
-			msg.Rcode == dns.RcodeServerFailure ||
-			msg.Rcode == dns.RcodeNotImplemented {
+			msg.Rcode == dns.RcodeServerFailure {
 			again = true
 		}
 		r.returnRequest(req, &resolveResult{
@@ -339,25 +354,6 @@ func (r *resolver) processMessage(msg *dns.Msg) {
 		Again:   false,
 		Err:     nil,
 	})
-}
-
-func (r *resolver) returnRequest(req *resolveRequest, res *resolveResult) {
-	req.Result <- res
-}
-
-func (r *resolver) readMessages(co *dns.Conn, msgs chan *dns.Msg) {
-	for {
-		select {
-		case <-r.Done:
-			return
-		default:
-			rd, err := co.ReadMsg()
-			if rd == nil || err != nil {
-				continue
-			}
-			msgs <- rd
-		}
-	}
 }
 
 func (r *resolver) monitorPerformance() {
@@ -497,11 +493,19 @@ func Resolve(name, qtype string) ([]core.DNSAnswer, error) {
 	}
 
 	var again bool
+	var servfail int
 	var ans []core.DNSAnswer
 	for {
 		ans, again, err = nextResolver().resolve(name, qt)
 		if !again {
 			break
+		}
+		// Do not allow server failure errors to continue forever
+		if strings.Contains(err.Error(), "SERVFAIL") {
+			servfail++
+			if servfail >= 3 {
+				break
+			}
 		}
 	}
 	return ans, err
