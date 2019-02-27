@@ -118,6 +118,11 @@ func main() {
 		}
 	}
 
+	// There needs to be at least two enumerations to proceed
+	if len(enums) < 2 {
+		r.Fprintln(color.Error, "Tracking requires more than one enumeration")
+		os.Exit(1)
+	}
 	// The default is to use all the enumerations available
 	if *last == 0 {
 		*last = len(enums)

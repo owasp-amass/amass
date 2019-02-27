@@ -33,6 +33,13 @@ var (
 	}
 
 	resolvers []*resolver
+
+	retryCodes = []int{
+		dns.RcodeRefused,
+		dns.RcodeNotImplemented,
+	}
+
+	maxRetries = 3
 )
 
 func init() {
@@ -312,8 +319,11 @@ func (r *resolver) processMessage(msg *dns.Msg) {
 	// Check that the query was successful
 	if msg.Rcode != dns.RcodeSuccess {
 		var again bool
-		if msg.Rcode == dns.RcodeRefused {
-			again = true
+		for _, code := range retryCodes {
+			if msg.Rcode == code {
+				again = true
+				break
+			}
 		}
 		r.returnRequest(req, &resolveResult{
 			Records: nil,
@@ -407,6 +417,11 @@ func (r *resolver) calcSuccessRate(prevSuc int64, tSize time.Duration) (successe
 	if successDelta > 0 {
 		rate = tSize / time.Duration(successDelta)
 	}
+	// Cannot get too slow
+	min := 100 * time.Millisecond
+	if rate > min {
+		rate = min
+	}
 
 	r.Lock()
 	r.successRate = rate
@@ -423,9 +438,9 @@ func (r *resolver) Available() bool {
 		avail = true
 	}
 	r.Unlock()
-
+	// There needs to be an opportunity to exceed the success rate
 	if !avail {
-		if random := randomInt(1, 100); random <= 20 {
+		if random := randomInt(1, 100); random <= 10 {
 			avail = true
 		}
 	}
@@ -492,10 +507,17 @@ func Resolve(name, qtype string) ([]core.DNSAnswer, error) {
 	}
 
 	var again bool
+	var attempts int
 	var ans []core.DNSAnswer
+	cutoff := time.Now().Add(30 * time.Second)
 	for {
 		ans, again, err = nextResolver().resolve(name, qt)
 		if !again {
+			break
+		}
+		// Do not allow retries to continue forever
+		attempts++
+		if attempts > maxRetries && time.Now().After(cutoff) {
 			break
 		}
 	}
