@@ -4,7 +4,6 @@
 package sources
 
 import (
-	"encoding/json"
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
@@ -57,45 +56,76 @@ func (u *Umbrella) executeQuery(domain string) {
 		return
 	}
 
-	url := u.restURL(domain)
 	headers := map[string]string{
 		"Authorization": "Bearer " + u.API.Key,
 		"Content-Type":  "application/json",
 	}
+	url := u.patternSearchRestURL(domain)
 	page, err := utils.RequestWebPage(url, nil, headers, "", "")
 	if err != nil {
 		u.Config().Log.Printf("%s: %s: %v", u.String(), url, err)
 		return
 	}
-	// Extract the subdomain names from the REST API results
-	var results struct {
-		Related []struct {
-			Name string
-		} `json:"tb1"`
-		Found bool `json:"found"`
-	}
-	if err := json.Unmarshal([]byte(page), &results); err != nil {
-		return
-	}
-	if !results.Found {
-		return
-	}
 
-	u.SetActive()
 	re := u.Config().DomainRegex(domain)
-	for _, n := range results.Related {
-		if !re.MatchString(n.Name) {
-			continue
-		}
+	for _, sd := range re.FindAllString(page, -1) {
 		u.Bus().Publish(core.NewNameTopic, &core.Request{
-			Name:   n.Name,
+			Name:   cleanName(sd),
 			Domain: domain,
 			Tag:    u.SourceType,
 			Source: u.String(),
 		})
 	}
+
+	url = u.occurrencesRestURL(domain)
+	page, err = utils.RequestWebPage(url, nil, headers, "", "")
+	if err != nil {
+		u.Config().Log.Printf("%s: %s: %v", u.String(), url, err)
+		return
+	}
+
+	u.SetActive()
+	for _, d := range u.Config().Domains() {
+		re := u.Config().DomainRegex(d)
+		for _, sd := range re.FindAllString(page, -1) {
+			u.Bus().Publish(core.NewNameTopic, &core.Request{
+				Name:   cleanName(sd),
+				Domain: d,
+				Tag:    u.SourceType,
+				Source: u.String(),
+			})
+		}
+	}
+
+	url = u.relatedRestURL(domain)
+	page, err = utils.RequestWebPage(url, nil, headers, "", "")
+	if err != nil {
+		u.Config().Log.Printf("%s: %s: %v", u.String(), url, err)
+		return
+	}
+
+	u.SetActive()
+	for _, d := range u.Config().Domains() {
+		re := u.Config().DomainRegex(d)
+		for _, sd := range re.FindAllString(page, -1) {
+			u.Bus().Publish(core.NewNameTopic, &core.Request{
+				Name:   cleanName(sd),
+				Domain: d,
+				Tag:    u.SourceType,
+				Source: u.String(),
+			})
+		}
+	}
 }
 
-func (u *Umbrella) restURL(domain string) string {
+func (u *Umbrella) patternSearchRestURL(domain string) string {
+	return `https://investigate.api.umbrella.com/search/.*[.]` + domain + "?start=-30days&limit=1000"
+}
+
+func (u *Umbrella) occurrencesRestURL(domain string) string {
+	return "https://investigate.api.umbrella.com/recommendations/name/" + domain + ".json"
+}
+
+func (u *Umbrella) relatedRestURL(domain string) string {
 	return "https://investigate.api.umbrella.com/links/name/" + domain + ".json"
 }
