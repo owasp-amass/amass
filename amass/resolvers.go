@@ -312,8 +312,7 @@ func (r *resolver) processMessage(msg *dns.Msg) {
 	// Check that the query was successful
 	if msg.Rcode != dns.RcodeSuccess {
 		var again bool
-		if msg.Rcode == dns.RcodeRefused ||
-			msg.Rcode == dns.RcodeServerFailure {
+		if msg.Rcode == dns.RcodeRefused {
 			again = true
 		}
 		r.returnRequest(req, &resolveResult{
@@ -493,19 +492,11 @@ func Resolve(name, qtype string) ([]core.DNSAnswer, error) {
 	}
 
 	var again bool
-	var servfail int
 	var ans []core.DNSAnswer
 	for {
 		ans, again, err = nextResolver().resolve(name, qt)
 		if !again {
 			break
-		}
-		// Do not allow server failure errors to continue forever
-		if strings.Contains(err.Error(), "SERVFAIL") {
-			servfail++
-			if servfail >= 3 {
-				break
-			}
 		}
 	}
 	return ans, err
