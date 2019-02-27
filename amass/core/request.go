@@ -57,19 +57,19 @@ type Request struct {
 // Output contains all the output data for an enumerated DNS name.
 type Output struct {
 	Timestamp time.Time
-	Name      string
-	Domain    string
-	Addresses []AddressInfo
-	Tag       string
-	Source    string
+	Name      string        `json:"name"`
+	Domain    string        `json:"domain"`
+	Addresses []AddressInfo `json:"addresses"`
+	Tag       string        `json:"tag"`
+	Source    string        `json:"source"`
 }
 
 // AddressInfo stores all network addressing info for the Output type.
 type AddressInfo struct {
-	Address     net.IP
-	Netblock    *net.IPNet
-	ASN         int
-	Description string
+	Address     net.IP     `json:"ip"`
+	Netblock    *net.IPNet `json:"cidr"`
+	ASN         int        `json:"asn"`
+	Description string     `json:"desc"`
 }
 
 type pubReq struct {

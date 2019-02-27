@@ -39,9 +39,9 @@ type Config struct {
 	DataOptsWriter io.Writer
 
 	// The directory that stores the bolt db and other files created
-	Dir string
+	Dir string `ini:"output_directory"`
 
-	// The settings for connecting with Gremlin Server
+	// The settings for connecting with a Gremlin Server
 	GremlinURL  string
 	GremlinUser string
 	GremlinPass string
@@ -264,7 +264,7 @@ func (c *Config) LoadSettings(path string) error {
 	if cfg.Section(ini.DEFAULT_SECTION).HasKey("wordlist_file") {
 		wordlist := cfg.Section(ini.DEFAULT_SECTION).Key("wordlist_file").String()
 
-		list, err := GetWordlistFromFile(wordlist)
+		list, err := GetListFromFile(wordlist)
 		if err != nil {
 			return fmt.Errorf("Unable to load the file in the wordlist_file setting: %s: %v", wordlist, err)
 		}
@@ -342,9 +342,9 @@ func GetResolversFromSettings(path string) ([]string, error) {
 	return resolvers, nil
 }
 
-// GetWordlistFromFile reads a wordlist text or gzip file
+// GetListFromFile reads a wordlist text or gzip file
 // and returns the slice of words
-func GetWordlistFromFile(path string) ([]string, error) {
+func GetListFromFile(path string) ([]string, error) {
 	var reader io.Reader
 
 	file, err := os.Open(path)
