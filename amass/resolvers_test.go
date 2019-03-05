@@ -26,7 +26,7 @@ func TestResolversPublicResolvers(t *testing.T) {
 	}
 	a, err := ZoneTransfer("owasp-amass.com", TestDomain, "ns1.owasp-amass.com")
 	if err != nil {
-		t.Errorf("Error in Command.Output: %v", err)
+		t.Errorf("Error in creating ZoneTransfer: %v", err)
 	}
 	var s []string
 	var check int
