@@ -54,16 +54,28 @@ func (t *Twitter) OnStart() error {
 			t.client = twitter.NewClient(httpClient)
 		}
 	}
-	go t.startRootDomains()
+
+	go t.processRequests()
 	return nil
 }
 
-func (t *Twitter) startRootDomains() {
-	// Look at each domain provided by the config
-	for _, domain := range t.Config().Domains() {
-		t.executeQuery(domain)
-		// Honor the rate limit
-		time.Sleep(t.RateLimit)
+func (t *Twitter) processRequests() {
+	last := time.Now()
+
+	for {
+		select {
+		case <-t.Quit():
+			return
+		case req := <-t.RequestChan():
+			if t.Config().IsDomainInScope(req.Domain) {
+				if time.Now().Sub(last) < t.RateLimit {
+					time.Sleep(t.RateLimit)
+				}
+
+				t.executeQuery(req.Domain)
+				last = time.Now()
+			}
+		}
 	}
 }
 

@@ -73,10 +73,6 @@ func (ds *DNSService) OnStart() error {
 	ds.Bus().Subscribe(core.ReverseSweepTopic, ds.dnsSweep)
 	ds.Bus().Subscribe(core.NewSubdomainTopic, ds.newSubdomain)
 	go ds.processRequests()
-
-	for _, domain := range ds.Config().Domains() {
-		go ds.basicQueries(domain, domain)
-	}
 	return nil
 }
 

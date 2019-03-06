@@ -29,14 +29,20 @@ func NewFindSubdomains(config *core.Config, bus *core.EventBus) *FindSubdomains 
 func (f *FindSubdomains) OnStart() error {
 	f.BaseService.OnStart()
 
-	go f.startRootDomains()
+	go f.processRequests()
 	return nil
 }
 
-func (f *FindSubdomains) startRootDomains() {
-	// Look at each domain provided by the config
-	for _, domain := range f.Config().Domains() {
-		f.executeQuery(domain)
+func (f *FindSubdomains) processRequests() {
+	for {
+		select {
+		case <-f.Quit():
+			return
+		case req := <-f.RequestChan():
+			if f.Config().IsDomainInScope(req.Domain) {
+				f.executeQuery(req.Domain)
+			}
+		}
 	}
 }
 

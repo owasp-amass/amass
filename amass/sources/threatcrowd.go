@@ -29,14 +29,20 @@ func NewThreatCrowd(config *core.Config, bus *core.EventBus) *ThreatCrowd {
 func (t *ThreatCrowd) OnStart() error {
 	t.BaseService.OnStart()
 
-	go t.startRootDomains()
+	go t.processRequests()
 	return nil
 }
 
-func (t *ThreatCrowd) startRootDomains() {
-	// Look at each domain provided by the config
-	for _, domain := range t.Config().Domains() {
-		t.executeQuery(domain)
+func (t *ThreatCrowd) processRequests() {
+	for {
+		select {
+		case <-t.Quit():
+			return
+		case req := <-t.RequestChan():
+			if t.Config().IsDomainInScope(req.Domain) {
+				t.executeQuery(req.Domain)
+			}
+		}
 	}
 }
 

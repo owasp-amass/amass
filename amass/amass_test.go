@@ -1,7 +1,7 @@
 // Copyright 2017 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
-package sources
+package amass
 
 import (
 	"flag"
@@ -20,22 +20,4 @@ func TestMain(m *testing.M) {
 	result := m.Run()
 
 	os.Exit(result)
-}
-
-func TestCleanName(t *testing.T) {
-	tests := []struct {
-		name     string
-		domain   string
-		expected string
-	}{
-		{"Test 1: Domain", " .owasp.org", "owasp.org"},
-		{"Test 2: Subdomain", ".sub.owasp.org", "sub.owasp.org"},
-	}
-
-	for _, tt := range tests {
-		result := cleanName(tt.domain)
-		if result != tt.expected {
-			t.Errorf("Failed %s: got %s expected %s", tt.name, result, tt.expected)
-		}
-	}
 }

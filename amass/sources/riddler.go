@@ -29,14 +29,20 @@ func NewRiddler(config *core.Config, bus *core.EventBus) *Riddler {
 func (r *Riddler) OnStart() error {
 	r.BaseService.OnStart()
 
-	go r.startRootDomains()
+	go r.processRequests()
 	return nil
 }
 
-func (r *Riddler) startRootDomains() {
-	// Look at each domain provided by the config
-	for _, domain := range r.Config().Domains() {
-		r.executeQuery(domain)
+func (r *Riddler) processRequests() {
+	for {
+		select {
+		case <-r.Quit():
+			return
+		case req := <-r.RequestChan():
+			if r.Config().IsDomainInScope(req.Domain) {
+				r.executeQuery(req.Domain)
+			}
+		}
 	}
 }
 

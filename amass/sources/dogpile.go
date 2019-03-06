@@ -37,14 +37,20 @@ func NewDogpile(config *core.Config, bus *core.EventBus) *Dogpile {
 func (d *Dogpile) OnStart() error {
 	d.BaseService.OnStart()
 
-	go d.startRootDomains()
+	go d.processRequests()
 	return nil
 }
 
-func (d *Dogpile) startRootDomains() {
-	// Look at each domain provided by the config
-	for _, domain := range d.Config().Domains() {
-		d.executeQuery(domain)
+func (d *Dogpile) processRequests() {
+	for {
+		select {
+		case <-d.Quit():
+			return
+		case req := <-d.RequestChan():
+			if d.Config().IsDomainInScope(req.Domain) {
+				d.executeQuery(req.Domain)
+			}
+		}
 	}
 }
 
