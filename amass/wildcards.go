@@ -4,20 +4,24 @@
 package amass
 
 import (
+	"errors"
+	"math/rand"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
-	"github.com/google/uuid"
+	"github.com/miekg/dns"
 )
 
 const (
-	numOfWildcardTests = 5
+	numOfWildcardTests = 3
 
 	maxDNSNameLen  = 253
 	maxDNSLabelLen = 63
+	minLabelLen    = 6
 	maxLabelLen    = 24
+	ldhChars       = "abcdefghijklmnopqrstuvwxyz0123456789-"
 )
 
 // Names for the different types of wildcards that can be detected.
@@ -57,18 +61,18 @@ func GetWildcardType(req *core.Request) int {
 
 func performWildcardRequest(req *core.Request) int {
 	base := len(strings.Split(req.Domain, "."))
-	labels := strings.Split(req.Name, ".")
+	labels := strings.Split(strings.ToLower(req.Name), ".")
+	if len(labels) > base {
+		labels = labels[1:]
+	}
 
-	for i := len(labels) - base; i > 0; i-- {
-		sub := strings.Join(labels[i:], ".")
-		w := getWildcard(sub)
+	for i := len(labels) - base; i >= 0; i-- {
+		w := getWildcard(strings.Join(labels[i:], "."))
 
 		if w.WildcardType == WildcardTypeDynamic {
 			return WildcardTypeDynamic
 		} else if w.WildcardType == WildcardTypeStatic {
-			if len(req.Records) == 0 {
-				return WildcardTypeStatic
-			} else if compareAnswers(req.Records, w.Answers) {
+			if len(req.Records) == 0 || compareAnswers(req.Records, w.Answers) {
 				return WildcardTypeStatic
 			}
 		}
@@ -89,25 +93,30 @@ func getWildcard(sub string) *wildcard {
 		wildcards[sub] = entry
 		test = true
 		entry.Lock()
-		defer entry.Unlock()
 	}
 	wildcardLock.Unlock()
 	// Check if the subdomain name is still be tested for a wildcard
 	if !test {
 		entry.RLock()
-		defer entry.RUnlock()
+		entry.RUnlock()
 		return entry
 	}
 	// Query multiple times with unlikely names against this subdomain
 	set := make([][]core.DNSAnswer, numOfWildcardTests)
 	for i := 0; i < numOfWildcardTests; i++ {
-		a := wildcardTest(sub)
-		if a == nil {
+		a, err := wildcardTest(sub)
+		if err != nil {
+			// A test error gives it the most severe wildcard type
+			entry.WildcardType = WildcardTypeDynamic
+			entry.Unlock()
+			return entry
+		} else if a == nil {
 			// There is no DNS wildcard
+			entry.Unlock()
 			return entry
 		}
 		set[i] = a
-		time.Sleep(time.Second)
+		time.Sleep(2 * time.Second)
 	}
 	// Check if we have a static or dynamic DNS wildcard
 	match := true
@@ -123,30 +132,36 @@ func getWildcard(sub string) *wildcard {
 	} else {
 		entry.WildcardType = WildcardTypeDynamic
 	}
+	entry.Unlock()
 	return entry
 }
 
-func wildcardTest(sub string) []core.DNSAnswer {
-	var answers []core.DNSAnswer
+var wildcardQueryTypes = []string{
+	"CNAME",
+	"A",
+	"AAAA",
+}
 
+func wildcardTest(sub string) ([]core.DNSAnswer, error) {
 	name := UnlikelyName(sub)
 	if name == "" {
-		return nil
+		return nil, errors.New("Failed to generate the unlikely name for DNS wildcard testing")
 	}
-	// Check if the name resolves
-	if a, err := Resolve(name, "CNAME"); err == nil {
-		answers = append(answers, a...)
-	}
-	if a, err := Resolve(name, "A"); err == nil {
-		answers = append(answers, a...)
-	}
-	if a, err := Resolve(name, "AAAA"); err == nil {
-		answers = append(answers, a...)
+
+	var answers []core.DNSAnswer
+	for _, t := range wildcardQueryTypes {
+		if a, err := Resolve(name, t); err == nil {
+			if a != nil && len(a) > 0 {
+				answers = append(answers, a...)
+			}
+		} else if (err.(*resolveError)).Rcode == dns.RcodeServerFailure {
+			return nil, errors.New("Failed to get a DNS server response during wildcard testing")
+		}
 	}
 	if len(answers) == 0 {
-		return nil
+		return nil, nil
 	}
-	return answers
+	return answers, nil
 }
 
 func compareAnswers(ans1, ans2 []core.DNSAnswer) bool {
@@ -162,19 +177,31 @@ func compareAnswers(ans1, ans2 []core.DNSAnswer) bool {
 
 // UnlikelyName takes a subdomain name and returns an unlikely DNS name within that subdomain.
 func UnlikelyName(sub string) string {
-	newlabel := uuid.New().String()
+	var newlabel string
+	ldh := []rune(ldhChars)
+	ldhLen := len(ldh)
 
 	// Determine the max label length
 	l := maxDNSNameLen - (len(sub) + 1)
 	if l > maxLabelLen {
 		l = maxLabelLen
-	} else if l < 1 {
+	} else if l < minLabelLen {
 		return ""
 	}
-	if len(newlabel) > l {
-		newlabel = newlabel[:l]
+	// Shuffle our LDH characters
+	rand.Shuffle(ldhLen, func(i, j int) {
+		ldh[i], ldh[j] = ldh[j], ldh[i]
+	})
+
+	l = minLabelLen + rand.Intn((l-minLabelLen)+1)
+	for i := 0; i < l; i++ {
+		sel := rand.Int() % ldhLen
+
+		newlabel = newlabel + string(ldh[sel])
 	}
-	// Remove hyphens from the beginning and end of the label
-	newlabel = strings.Trim(newlabel, "-")
-	return newlabel + "." + sub
+
+	if newlabel == "" {
+		return newlabel
+	}
+	return strings.Trim(newlabel, "-") + "." + sub
 }
