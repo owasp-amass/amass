@@ -699,6 +699,7 @@ func (g *Graph) buildAddrInfo(addr, uuid string) *core.AddressInfo {
 	if cidr == "" {
 		return nil
 	}
+	ainfo.CIDRStr = cidr
 	_, ainfo.Netblock, _ = net.ParseCIDR(cidr)
 
 	p := cayley.StartPath(g.store, quad.String(cidr)).LabelContext(u).In(quad.String("has_prefix"))
