@@ -44,6 +44,22 @@ If your operating environment supports [Snap](https://docs.snapcraft.io/core/ins
 sudo snap install amass
 ```
 
+On Kali, follow these steps to install Snap and Amass + use AppArmor (for autoload):
+
+```bash
+sudo apt install snapd
+sudo systemctl start snapd
+sudo systemctl enable snapd
+sudo systemctl start apparmor
+sudo systemctl enable apparmor
+```
+
+Add the Snap bin directory to your PATH:
+
+```bash
+export PATH=$PATH:/snap/bin
+```
+
 Periodically, execute the following command to update all your snap packages:
 
 ```bash
