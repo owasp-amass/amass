@@ -48,7 +48,7 @@ type DNSService struct {
 // NewDNSService returns he object initialized, but not yet started.
 func NewDNSService(config *core.Config, bus *core.EventBus) *DNSService {
 	ds := &DNSService{
-		max:    utils.NewSimpleSemaphore(5000),
+		max:    utils.NewSimpleSemaphore(50000),
 		filter: utils.NewStringFilter(),
 	}
 

@@ -170,13 +170,17 @@ func (e *Enumeration) Start() error {
 
 	// Use all previously discovered names that are in scope
 	go e.submitKnownNames()
-
+	// Start with the first domain name provided by the configuration
 	var domainIdx int
+	e.releaseDomainName(domainIdx)
+
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go e.checkForOutput(&wg)
 	go e.processOutput(&wg)
-	t := time.NewTicker(3 * time.Second)
+
+	tickSeconds := 3
+	t := time.NewTicker(time.Duration(3) * time.Second)
 	logTick := time.NewTicker(time.Minute)
 	defer logTick.Stop()
 loop:
@@ -187,7 +191,7 @@ loop:
 		case <-e.PauseChan():
 			t.Stop()
 		case <-e.ResumeChan():
-			t = time.NewTicker(3 * time.Second)
+			t = time.NewTicker(time.Duration(3) * time.Second)
 		case <-logTick.C:
 			if !e.Config.Passive {
 				e.Config.Log.Printf("Average DNS queries performed: %d/sec, DNS names remaining: %d",
@@ -210,27 +214,13 @@ loop:
 				e.processMetrics(services)
 				psec := e.DNSQueriesPerSec()
 				// Check if it's too soon to release the next domain name
-				if psec > 0 && ((e.DNSNamesRemaining()*len(InitialQueryTypes))/psec) > 3 {
+				if psec > 0 && ((e.DNSNamesRemaining()*len(InitialQueryTypes))/psec) > tickSeconds {
 					continue
 				}
 			}
-
-			domains := e.Config.Domains()
 			// Check if the next domain should be sent to data sources/brute forcing
-			if (domainIdx + 1) >= len(domains) {
-				continue
-			}
-
 			domainIdx++
-			for _, srv := range append(e.dataSources, e.bruteSrv) {
-				if srv == nil {
-					continue
-				}
-				srv.SendRequest(&core.Request{
-					Name:   domains[domainIdx],
-					Domain: domains[domainIdx],
-				})
-			}
+			e.releaseDomainName(domainIdx)
 		}
 	}
 	t.Stop()
@@ -239,6 +229,25 @@ loop:
 	}
 	wg.Wait()
 	return nil
+}
+
+func (e *Enumeration) releaseDomainName(idx int) {
+	domains := e.Config.Domains()
+
+	if idx >= len(domains) {
+		return
+	}
+
+	for _, srv := range append(e.dataSources, e.bruteSrv) {
+		if srv == nil {
+			continue
+		}
+
+		srv.SendRequest(&core.Request{
+			Name:   domains[idx],
+			Domain: domains[idx],
+		})
+	}
 }
 
 func (e *Enumeration) submitKnownNames() {

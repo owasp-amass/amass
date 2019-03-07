@@ -440,7 +440,7 @@ func (r *resolver) Available() bool {
 	r.Unlock()
 	// There needs to be an opportunity to exceed the success rate
 	if !avail {
-		if random := randomInt(1, 100); random <= 10 {
+		if random := randomInt(1, 100); random <= 5 {
 			avail = true
 		}
 	}
@@ -520,7 +520,7 @@ func Resolve(name, qtype string) ([]core.DNSAnswer, error) {
 		}
 
 		attempts++
-		if attempts > 25 && time.Now().After(start.Add(2*time.Minute)) {
+		if attempts > 50 && time.Now().After(start.Add(2*time.Minute)) {
 			break
 		}
 		// Do not allow server failure errors to continue as long

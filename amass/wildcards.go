@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	numOfWildcardTests = 3
+	numOfWildcardTests = 5
 
 	maxDNSNameLen  = 253
 	maxDNSLabelLen = 63
@@ -116,7 +116,7 @@ func getWildcard(sub string) *wildcard {
 			return entry
 		}
 		set[i] = a
-		time.Sleep(2 * time.Second)
+		time.Sleep(time.Second)
 	}
 	// Check if we have a static or dynamic DNS wildcard
 	match := true
@@ -154,7 +154,10 @@ func wildcardTest(sub string) ([]core.DNSAnswer, error) {
 			if a != nil && len(a) > 0 {
 				answers = append(answers, a...)
 			}
-		} else if (err.(*resolveError)).Rcode == dns.RcodeServerFailure {
+		} else if (err.(*resolveError)).Rcode == 100 ||
+			(err.(*resolveError)).Rcode == dns.RcodeRefused ||
+			(err.(*resolveError)).Rcode == dns.RcodeServerFailure ||
+			(err.(*resolveError)).Rcode == dns.RcodeNotImplemented {
 			return nil, errors.New("Failed to get a DNS server response during wildcard testing")
 		}
 	}
