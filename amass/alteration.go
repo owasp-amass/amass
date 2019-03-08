@@ -12,6 +12,44 @@ import (
 	"github.com/miekg/dns"
 )
 
+var (
+	altWords    []string
+	altAlphabet string
+)
+
+func init() {
+	altWords = []string{
+		"account",
+		"accounts",
+		"app",
+		"auth",
+		"cfg",
+		"dev",
+		"ftp",
+		"imap",
+		"login",
+		"mail",
+		"mon",
+		"prd",
+		"prod",
+		"proxy",
+		"qa",
+		"smtp",
+		"sql",
+		"sso",
+		"stage",
+		"staging",
+		"stg",
+		"test",
+		"tst",
+		"uat",
+		"users",
+		"web",
+		"www",
+	}
+	altAlphabet = "abcdefghijklmnopqrstuvwxyz"
+}
+
 // AlterationService is the Service that handles all DNS name permutation within
 // the architecture. This is achieved by receiving all the RESOLVED events.
 type AlterationService struct {
@@ -59,6 +97,12 @@ func (as *AlterationService) executeAlterations(req *core.Request) {
 	as.SetActive()
 	as.flipNumbersInName(req)
 	as.appendNumbers(req)
+
+	as.addSuffixWord(req)
+	as.addSuffixLetter(req)
+
+	as.addPrefixWord(req)
+	as.addPrefixLetter(req)
 }
 
 func (as *AlterationService) correctRecordTypes(req *core.Request) bool {
@@ -118,12 +162,53 @@ func (as *AlterationService) appendNumbers(req *core.Request) {
 	parts := strings.SplitN(n, ".", 2)
 
 	for i := 0; i < 10; i++ {
-		// Send a LABEL-NUM altered name
-		nhn := parts[0] + "-" + strconv.Itoa(i) + "." + parts[1]
-		as.sendAlteredName(nhn, req.Domain)
-		// Send a LABELNUM altered name
-		nn := parts[0] + strconv.Itoa(i) + "." + parts[1]
-		as.sendAlteredName(nn, req.Domain)
+		as.addSuffix(parts, strconv.Itoa(i), req.Domain)
+	}
+}
+
+func (as *AlterationService) addSuffix(parts []string, suffix, domain string) {
+	nn := parts[0] + suffix + "." + parts[1]
+	as.sendAlteredName(nn, domain)
+
+	nn = parts[0] + "-" + suffix + "." + parts[1]
+	as.sendAlteredName(nn, domain)
+}
+
+func (as *AlterationService) addPrefix(name, prefix, domain string) {
+	nn := prefix + name
+	as.sendAlteredName(nn, domain)
+
+	nn = prefix + "-" + name
+	as.sendAlteredName(nn, domain)
+}
+
+func (as *AlterationService) addSuffixWord(req *core.Request) {
+	n := req.Name
+	parts := strings.SplitN(n, ".", 2)
+
+	for _, word := range altWords {
+		as.addSuffix(parts, word, req.Domain)
+	}
+}
+
+func (as *AlterationService) addSuffixLetter(req *core.Request) {
+	n := req.Name
+	parts := strings.SplitN(n, ".", 2)
+
+	for _, ch := range altAlphabet {
+		as.addSuffix(parts, string(ch), req.Domain)
+	}
+}
+
+func (as *AlterationService) addPrefixWord(req *core.Request) {
+	for _, word := range altWords {
+		as.addPrefix(req.Name, word, req.Domain)
+	}
+}
+
+func (as *AlterationService) addPrefixLetter(req *core.Request) {
+	for _, ch := range altAlphabet {
+		as.addPrefix(req.Name, string(ch), req.Domain)
 	}
 }
 
