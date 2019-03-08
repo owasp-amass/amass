@@ -29,14 +29,20 @@ func NewSiteDossier(config *core.Config, bus *core.EventBus) *SiteDossier {
 func (s *SiteDossier) OnStart() error {
 	s.BaseService.OnStart()
 
-	go s.startRootDomains()
+	go s.processRequests()
 	return nil
 }
 
-func (s *SiteDossier) startRootDomains() {
-	// Look at each domain provided by the config
-	for _, domain := range s.Config().Domains() {
-		s.executeQuery(domain)
+func (s *SiteDossier) processRequests() {
+	for {
+		select {
+		case <-s.Quit():
+			return
+		case req := <-s.RequestChan():
+			if s.Config().IsDomainInScope(req.Domain) {
+				s.executeQuery(req.Domain)
+			}
+		}
 	}
 }
 

@@ -33,16 +33,9 @@ func NewLoCArchive(config *core.Config, bus *core.EventBus) *LoCArchive {
 func (l *LoCArchive) OnStart() error {
 	l.BaseService.OnStart()
 
-	go l.startRootDomains()
+	l.Bus().Subscribe(core.NameResolvedTopic, l.SendRequest)
 	go l.processRequests()
 	return nil
-}
-
-func (l *LoCArchive) startRootDomains() {
-	// Look at each domain provided by the config
-	for _, domain := range l.Config().Domains() {
-		l.executeQuery(domain, domain)
-	}
 }
 
 func (l *LoCArchive) processRequests() {

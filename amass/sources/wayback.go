@@ -34,16 +34,8 @@ func (w *Wayback) OnStart() error {
 	w.BaseService.OnStart()
 
 	w.Bus().Subscribe(core.NameResolvedTopic, w.SendRequest)
-	go w.startRootDomains()
 	go w.processRequests()
 	return nil
-}
-
-func (w *Wayback) startRootDomains() {
-	// Look at each domain provided by the config
-	for _, domain := range w.Config().Domains() {
-		w.executeQuery(domain, domain)
-	}
 }
 
 func (w *Wayback) processRequests() {

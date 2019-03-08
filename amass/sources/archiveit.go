@@ -34,16 +34,8 @@ func (a *ArchiveIt) OnStart() error {
 	a.BaseService.OnStart()
 
 	a.Bus().Subscribe(core.NameResolvedTopic, a.SendRequest)
-	go a.startRootDomains()
 	go a.processRequests()
 	return nil
-}
-
-func (a *ArchiveIt) startRootDomains() {
-	// Look at each domain provided by the config
-	for _, domain := range a.Config().Domains() {
-		a.executeQuery(domain, domain)
-	}
 }
 
 func (a *ArchiveIt) processRequests() {

@@ -36,6 +36,7 @@ var (
 
 	retryCodes = []int{
 		dns.RcodeRefused,
+		dns.RcodeServerFailure,
 		dns.RcodeNotImplemented,
 	}
 
@@ -48,6 +49,15 @@ func init() {
 	}
 }
 
+type resolveError struct {
+	Err   string
+	Rcode int
+}
+
+func (e *resolveError) Error() string {
+	return e.Err
+}
+
 type resolveRequest struct {
 	Timestamp time.Time
 	Name      string
@@ -55,10 +65,25 @@ type resolveRequest struct {
 	Result    chan *resolveResult
 }
 
+func (r *resolver) returnRequest(req *resolveRequest, res *resolveResult) {
+	req.Result <- res
+}
+
 type resolveResult struct {
 	Records []core.DNSAnswer
 	Again   bool
 	Err     error
+}
+
+func makeResolveResult(rec []core.DNSAnswer, again bool, err string, rcode int) *resolveResult {
+	return &resolveResult{
+		Records: rec,
+		Again:   again,
+		Err: &resolveError{
+			Err:   err,
+			Rcode: rcode,
+		},
+	}
 }
 
 type resolver struct {
@@ -164,11 +189,8 @@ func (r *resolver) checkForTimeouts() {
 			// Remove the timed out requests from the map
 			for _, id := range timeouts {
 				if req := r.pullRequest(id); req != nil {
-					r.returnRequest(req, &resolveResult{
-						Records: nil,
-						Again:   true,
-						Err:     fmt.Errorf("DNS query for %s, type %d timed out", req.Name, req.Qtype),
-					})
+					estr := fmt.Sprintf("DNS query for %s, type %d timed out", req.Name, req.Qtype)
+					r.returnRequest(req, makeResolveResult(nil, true, estr, 100))
 				}
 			}
 			// Complete handling of the timed out requests
@@ -186,10 +208,6 @@ func (r *resolver) resolve(name string, qtype uint16) ([]core.DNSAnswer, bool, e
 	})
 	result := <-resultChan
 	return result.Records, result.Again, result.Err
-}
-
-func (r *resolver) returnRequest(req *resolveRequest, res *resolveResult) {
-	req.Result <- res
 }
 
 func (r *resolver) fillXchgChan() {
@@ -239,11 +257,8 @@ func (r *resolver) writeMessage(co *dns.Conn, req *resolveRequest) {
 	co.SetWriteDeadline(time.Now().Add(r.WindowDuration))
 	if err := co.WriteMsg(msg); err != nil {
 		r.pullRequest(msg.MsgHdr.Id)
-		r.returnRequest(req, &resolveResult{
-			Records: nil,
-			Again:   true,
-			Err:     fmt.Errorf("DNS error: Failed to write query msg: %v", err),
-		})
+		estr := fmt.Sprintf("DNS error: Failed to write query msg: %v", err)
+		r.returnRequest(req, makeResolveResult(nil, true, estr, 100))
 		return
 	}
 
@@ -272,11 +287,8 @@ func (r *resolver) tcpExchange(req *resolveRequest) {
 	conn, err := d.Dial("tcp", r.Address)
 	if err != nil {
 		r.pullRequest(msg.MsgHdr.Id)
-		r.returnRequest(req, &resolveResult{
-			Records: nil,
-			Again:   true,
-			Err:     fmt.Errorf("DNS: Failed to obtain TCP connection to %s: %v", r.Address, err),
-		})
+		estr := fmt.Sprintf("DNS: Failed to obtain TCP connection to %s: %v", r.Address, err)
+		r.returnRequest(req, makeResolveResult(nil, true, estr, 100))
 		return
 	}
 	defer conn.Close()
@@ -285,11 +297,8 @@ func (r *resolver) tcpExchange(req *resolveRequest) {
 	co.SetWriteDeadline(time.Now().Add(r.WindowDuration))
 	if err := co.WriteMsg(msg); err != nil {
 		r.pullRequest(msg.MsgHdr.Id)
-		r.returnRequest(req, &resolveResult{
-			Records: nil,
-			Again:   true,
-			Err:     fmt.Errorf("DNS error: Failed to write query msg: %v", err),
-		})
+		estr := fmt.Sprintf("DNS error: Failed to write query msg: %v", err)
+		r.returnRequest(req, makeResolveResult(nil, true, estr, 100))
 		return
 	}
 
@@ -299,11 +308,8 @@ func (r *resolver) tcpExchange(req *resolveRequest) {
 	read, err := co.ReadMsg()
 	if read == nil || err != nil {
 		r.pullRequest(msg.MsgHdr.Id)
-		r.returnRequest(req, &resolveResult{
-			Records: nil,
-			Again:   true,
-			Err:     fmt.Errorf("DNS error: Failed to read the reply msg: %v", err),
-		})
+		estr := fmt.Sprintf("DNS error: Failed to read the reply msg: %v", err)
+		r.returnRequest(req, makeResolveResult(nil, true, estr, 100))
 		return
 	}
 
@@ -325,12 +331,9 @@ func (r *resolver) processMessage(msg *dns.Msg) {
 				break
 			}
 		}
-		r.returnRequest(req, &resolveResult{
-			Records: nil,
-			Again:   again,
-			Err: fmt.Errorf("DNS query for %s, type %d returned error %s",
-				req.Name, req.Qtype, dns.RcodeToString[msg.Rcode]),
-		})
+		estr := fmt.Sprintf("DNS query for %s, type %d returned error %s",
+			req.Name, req.Qtype, dns.RcodeToString[msg.Rcode])
+		r.returnRequest(req, makeResolveResult(nil, again, estr, msg.Rcode))
 		return
 	}
 
@@ -350,11 +353,8 @@ func (r *resolver) processMessage(msg *dns.Msg) {
 	}
 
 	if len(answers) == 0 {
-		r.returnRequest(req, &resolveResult{
-			Records: nil,
-			Again:   false,
-			Err:     fmt.Errorf("DNS query for %s, type %d returned 0 records", req.Name, req.Qtype),
-		})
+		estr := fmt.Sprintf("DNS query for %s, type %d returned 0 records", req.Name, req.Qtype)
+		r.returnRequest(req, makeResolveResult(nil, false, estr, msg.Rcode))
 		return
 	}
 
@@ -440,7 +440,7 @@ func (r *resolver) Available() bool {
 	r.Unlock()
 	// There needs to be an opportunity to exceed the success rate
 	if !avail {
-		if random := randomInt(1, 100); random <= 10 {
+		if random := randomInt(1, 100); random <= 5 {
 			avail = true
 		}
 	}
@@ -503,22 +503,34 @@ func SetCustomResolvers(res []string) {
 func Resolve(name, qtype string) ([]core.DNSAnswer, error) {
 	qt, err := textToTypeNum(qtype)
 	if err != nil {
-		return nil, err
+		return nil, &resolveError{
+			Err:   err.Error(),
+			Rcode: 100,
+		}
 	}
 
 	var again bool
-	var attempts int
+	start := time.Now()
 	var ans []core.DNSAnswer
-	cutoff := time.Now().Add(30 * time.Second)
+	var attempts, servfail int
 	for {
 		ans, again, err = nextResolver().resolve(name, qt)
 		if !again {
 			break
 		}
-		// Do not allow retries to continue forever
+
 		attempts++
-		if attempts > maxRetries && time.Now().After(cutoff) {
+		if attempts > 50 && time.Now().After(start.Add(2*time.Minute)) {
 			break
+		}
+		// Do not allow server failure errors to continue as long
+		if (err.(*resolveError)).Rcode == dns.RcodeServerFailure {
+			servfail++
+			if servfail > 10 && time.Now().After(start.Add(time.Minute)) {
+				break
+			} else if servfail <= 5 {
+				time.Sleep(time.Duration(randomInt(3000, 5000)) * time.Millisecond)
+			}
 		}
 	}
 	return ans, err
@@ -534,7 +546,10 @@ func Reverse(addr string) (string, string, error) {
 	} else if len(ip) == net.IPv6len {
 		ptr = utils.IPv6NibbleFormat(utils.HexString(ip)) + ".ip6.arpa"
 	} else {
-		return ptr, "", fmt.Errorf("Invalid IP address parameter: %s", addr)
+		return ptr, "", &resolveError{
+			Err:   fmt.Sprintf("Invalid IP address parameter: %s", addr),
+			Rcode: 100,
+		}
 	}
 
 	answers, err := Resolve(ptr, "PTR")
@@ -550,9 +565,15 @@ func Reverse(addr string) (string, string, error) {
 	}
 
 	if name == "" {
-		err = fmt.Errorf("PTR record not found for IP address: %s", addr)
+		err = &resolveError{
+			Err:   fmt.Sprintf("PTR record not found for IP address: %s", addr),
+			Rcode: 100,
+		}
 	} else if strings.HasSuffix(name, ".in-addr.arpa") || strings.HasSuffix(name, ".ip6.arpa") {
-		err = fmt.Errorf("Invalid target in PTR record answer: %s", name)
+		err = &resolveError{
+			Err:   fmt.Sprintf("Invalid target in PTR record answer: %s", name),
+			Rcode: 100,
+		}
 	}
 	return ptr, name, err
 }
@@ -768,57 +789,57 @@ func extractRawData(msg *dns.Msg, qtype uint16) []string {
 
 	for _, a := range msg.Answer {
 		if a.Header().Rrtype == qtype {
+			var value string
+
 			switch qtype {
 			case dns.TypeA:
 				if t, ok := a.(*dns.A); ok {
-					data = append(data, utils.CopyString(t.A.String()))
+					value = utils.CopyString(t.A.String())
 				}
 			case dns.TypeAAAA:
 				if t, ok := a.(*dns.AAAA); ok {
-					data = append(data, utils.CopyString(t.AAAA.String()))
+					value = utils.CopyString(t.AAAA.String())
 				}
 			case dns.TypeCNAME:
 				if t, ok := a.(*dns.CNAME); ok {
-					data = append(data, utils.CopyString(t.Target))
+					value = utils.CopyString(t.Target)
 				}
 			case dns.TypePTR:
 				if t, ok := a.(*dns.PTR); ok {
-					data = append(data, utils.CopyString(t.Ptr))
+					value = utils.CopyString(t.Ptr)
 				}
 			case dns.TypeNS:
 				if t, ok := a.(*dns.NS); ok {
-					data = append(data, realName(t.Hdr)+","+removeLastDot(t.Ns))
+					value = realName(t.Hdr) + "," + removeLastDot(t.Ns)
 				}
 			case dns.TypeMX:
 				if t, ok := a.(*dns.MX); ok {
-					data = append(data, utils.CopyString(t.Mx))
+					value = utils.CopyString(t.Mx)
 				}
 			case dns.TypeTXT:
 				if t, ok := a.(*dns.TXT); ok {
-					var all string
-
 					for _, piece := range t.Txt {
-						all += piece + " "
+						value += piece + " "
 					}
-					data = append(data, all)
 				}
 			case dns.TypeSOA:
 				if t, ok := a.(*dns.SOA); ok {
-					data = append(data, t.Ns+" "+t.Mbox)
+					value = t.Ns + " " + t.Mbox
 				}
 			case dns.TypeSPF:
 				if t, ok := a.(*dns.SPF); ok {
-					var all string
-
 					for _, piece := range t.Txt {
-						all += piece + " "
+						value += piece + " "
 					}
-					data = append(data, all)
 				}
 			case dns.TypeSRV:
 				if t, ok := a.(*dns.SRV); ok {
-					data = append(data, utils.CopyString(t.Target))
+					value = utils.CopyString(t.Target)
 				}
+			}
+
+			if value != "" {
+				data = append(data, strings.TrimSpace(value))
 			}
 		}
 	}

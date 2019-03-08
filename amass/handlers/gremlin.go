@@ -785,6 +785,7 @@ func dataToOutput(path []*DataOptsParams) []*core.Output {
 		case "address":
 			addrinfo.Address = net.ParseIP(v.Address)
 		case "netblock":
+			addrinfo.CIDRStr = v.CIDR
 			_, addrinfo.Netblock, _ = net.ParseCIDR(v.CIDR)
 		case "as":
 			addrinfo.ASN = v.ASN

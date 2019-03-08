@@ -37,14 +37,20 @@ func NewAsk(config *core.Config, bus *core.EventBus) *Ask {
 func (a *Ask) OnStart() error {
 	a.BaseService.OnStart()
 
-	go a.startRootDomains()
+	go a.processRequests()
 	return nil
 }
 
-func (a *Ask) startRootDomains() {
-	// Look at each domain provided by the config
-	for _, domain := range a.Config().Domains() {
-		a.executeQuery(domain)
+func (a *Ask) processRequests() {
+	for {
+		select {
+		case <-a.Quit():
+			return
+		case req := <-a.RequestChan():
+			if a.Config().IsDomainInScope(req.Domain) {
+				a.executeQuery(req.Domain)
+			}
+		}
 	}
 }
 

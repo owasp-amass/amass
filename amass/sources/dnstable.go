@@ -29,14 +29,20 @@ func NewDNSTable(config *core.Config, bus *core.EventBus) *DNSTable {
 func (d *DNSTable) OnStart() error {
 	d.BaseService.OnStart()
 
-	go d.startRootDomains()
+	go d.processRequests()
 	return nil
 }
 
-func (d *DNSTable) startRootDomains() {
-	// Look at each domain provided by the config
-	for _, domain := range d.Config().Domains() {
-		d.executeQuery(domain)
+func (d *DNSTable) processRequests() {
+	for {
+		select {
+		case <-d.Quit():
+			return
+		case req := <-d.RequestChan():
+			if d.Config().IsDomainInScope(req.Domain) {
+				d.executeQuery(req.Domain)
+			}
+		}
 	}
 }
 

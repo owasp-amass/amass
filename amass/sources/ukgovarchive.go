@@ -34,16 +34,8 @@ func (u *UKGovArchive) OnStart() error {
 	u.BaseService.OnStart()
 
 	u.Bus().Subscribe(core.NameResolvedTopic, u.SendRequest)
-	go u.startRootDomains()
 	go u.processRequests()
 	return nil
-}
-
-func (u *UKGovArchive) startRootDomains() {
-	// Look at each domain provided by the config
-	for _, domain := range u.Config().Domains() {
-		u.executeQuery(domain, domain)
-	}
 }
 
 func (u *UKGovArchive) processRequests() {

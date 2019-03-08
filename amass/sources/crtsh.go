@@ -29,14 +29,20 @@ func NewCrtsh(config *core.Config, bus *core.EventBus) *Crtsh {
 func (c *Crtsh) OnStart() error {
 	c.BaseService.OnStart()
 
-	go c.startRootDomains()
+	go c.processRequests()
 	return nil
 }
 
-func (c *Crtsh) startRootDomains() {
-	// Look at each domain provided by the config
-	for _, domain := range c.Config().Domains() {
-		c.executeQuery(domain)
+func (c *Crtsh) processRequests() {
+	for {
+		select {
+		case <-c.Quit():
+			return
+		case req := <-c.RequestChan():
+			if c.Config().IsDomainInScope(req.Domain) {
+				c.executeQuery(req.Domain)
+			}
+		}
 	}
 }
 

@@ -36,7 +36,7 @@ type BruteForceService struct {
 // NewBruteForceService returns he object initialized, but not yet started.
 func NewBruteForceService(config *core.Config, bus *core.EventBus) *BruteForceService {
 	bfs := &BruteForceService{
-		max:    utils.NewSimpleSemaphore(5000),
+		max:    utils.NewSimpleSemaphore(50000),
 		filter: utils.NewStringFilter(),
 	}
 
@@ -87,12 +87,15 @@ func (bfs *BruteForceService) processRequests() {
 }
 
 func (bfs *BruteForceService) goodRequest(req *core.Request) bool {
-	var ok bool
 	if !bfs.Config().IsDomainInScope(req.Name) {
-		return ok
+		return false
 	}
 
-	bfs.SetActive()
+	if len(req.Records) == 0 {
+		return true
+	}
+
+	var ok bool
 	for _, r := range req.Records {
 		t := uint16(r.Type)
 
@@ -178,6 +181,9 @@ func (bfs *BruteForceService) bruteForceResolution(word, sub, domain string) {
 		bfs.metrics.QueryTime(time.Now())
 		bfs.SetActive()
 	}
+	if len(answers) == 0 {
+		return
+	}
 
 	req := &core.Request{
 		Name:    name,
@@ -187,8 +193,7 @@ func (bfs *BruteForceService) bruteForceResolution(word, sub, domain string) {
 		Source:  bfs.String(),
 	}
 
-	bfs.SetActive()
-	if len(answers) == 0 || MatchesWildcard(req) {
+	if MatchesWildcard(req) {
 		return
 	}
 	bfs.Bus().Publish(core.NameResolvedTopic, req)

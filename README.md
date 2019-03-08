@@ -22,7 +22,7 @@
 
 The OWASP Amass tool suite obtains subdomain names by scraping data sources, recursive brute forcing, crawling web archives, permuting/altering names and reverse DNS sweeping. Additionally, Amass uses the IP addresses obtained during resolution to discover associated netblocks and ASNs. All the information is then used to build maps of the target networks.
 
-**Information gathering techniques used:**
+**Information Gathering Techniques Used:**
 
 * DNS: Basic enumeration, Brute forcing (upon request), Reverse DNS sweeping, Subdomain name alterations/permutations, Zone transfers (upon request)
 * Scraping: Ask, Baidu, Bing, CommonCrawl, DNSDB, DNSDumpster, DNSTable, Dogpile, Exalead, FindSubdomains, Google, IPv4Info, Netcraft, PTRArchive, Riddler, SiteDossier, ThreatCrowd, VirusTotal, Yahoo
@@ -42,6 +42,22 @@ If your operating environment supports [Snap](https://docs.snapcraft.io/core/ins
 
 ```bash
 sudo snap install amass
+```
+
+On Kali, follow these steps to install Snap and Amass + use AppArmor (for autoload):
+
+```bash
+sudo apt install snapd
+sudo systemctl start snapd
+sudo systemctl enable snapd
+sudo systemctl start apparmor
+sudo systemctl enable apparmor
+```
+
+Add the Snap bin directory to your PATH:
+
+```bash
+export PATH=$PATH:/snap/bin
 ```
 
 Periodically, execute the following command to update all your snap packages:
@@ -121,6 +137,8 @@ This project improves thanks to all the people who contribute:
 [![Follow on Twitter](https://img.shields.io/twitter/follow/rbadguy1.svg?logo=twitter)](https://twitter.com/rbadguy1)
 [![Follow on Twitter](https://img.shields.io/twitter/follow/adam_zinger.svg?logo=twitter)](https://twitter.com/adam_zinger)
 [![Follow on Twitter](https://img.shields.io/twitter/follow/architekton1.svg?logo=twitter)](https://twitter.com/architekton1)
+[![Follow on Twitter](https://img.shields.io/twitter/follow/danjomart.svg?logo=twitter)](https://twitter.com/danjomart)
+[![Follow on Twitter](https://img.shields.io/twitter/follow/_b3nj4m1n__.svg?logo=twitter)](https://twitter.com/_b3nj4m1n__)
 
 ## Mentions
 

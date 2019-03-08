@@ -40,16 +40,28 @@ func (s *Shodan) OnStart() error {
 	if s.API == nil || s.API.Key == "" {
 		s.Config().Log.Printf("%s: API key data was not provided", s.String())
 	}
-	go s.startRootDomains()
+
+	go s.processRequests()
 	return nil
 }
 
-func (s *Shodan) startRootDomains() {
-	// Look at each domain provided by the config
-	for _, domain := range s.Config().Domains() {
-		s.executeQuery(domain)
-		// Honor the rate limit
-		time.Sleep(s.RateLimit)
+func (s *Shodan) processRequests() {
+	last := time.Now()
+
+	for {
+		select {
+		case <-s.Quit():
+			return
+		case req := <-s.RequestChan():
+			if s.Config().IsDomainInScope(req.Domain) {
+				if time.Now().Sub(last) < s.RateLimit {
+					time.Sleep(s.RateLimit)
+				}
+
+				s.executeQuery(req.Domain)
+				last = time.Now()
+			}
+		}
 	}
 }
 

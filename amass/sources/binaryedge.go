@@ -39,16 +39,28 @@ func (be *BinaryEdge) OnStart() error {
 	if be.API == nil || be.API.Key == "" {
 		be.Config().Log.Printf("%s: API key data was not provided", be.String())
 	}
-	go be.startRootDomains()
+
+	go be.processRequests()
 	return nil
 }
 
-func (be *BinaryEdge) startRootDomains() {
-	// Look at each domain provided by the config
-	for _, domain := range be.Config().Domains() {
-		be.executeQuery(domain)
-		// Honor the rate limit
-		time.Sleep(be.RateLimit)
+func (be *BinaryEdge) processRequests() {
+	last := time.Now()
+
+	for {
+		select {
+		case <-be.Quit():
+			return
+		case req := <-be.RequestChan():
+			if be.Config().IsDomainInScope(req.Domain) {
+				if time.Now().Sub(last) < be.RateLimit {
+					time.Sleep(be.RateLimit)
+				}
+
+				be.executeQuery(req.Domain)
+				last = time.Now()
+			}
+		}
 	}
 }
 

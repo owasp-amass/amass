@@ -31,14 +31,20 @@ func NewEntrust(config *core.Config, bus *core.EventBus) *Entrust {
 func (e *Entrust) OnStart() error {
 	e.BaseService.OnStart()
 
-	go e.startRootDomains()
+	go e.processRequests()
 	return nil
 }
 
-func (e *Entrust) startRootDomains() {
-	// Look at each domain provided by the config
-	for _, domain := range e.Config().Domains() {
-		e.executeQuery(domain)
+func (e *Entrust) processRequests() {
+	for {
+		select {
+		case <-e.Quit():
+			return
+		case req := <-e.RequestChan():
+			if e.Config().IsDomainInScope(req.Domain) {
+				e.executeQuery(req.Domain)
+			}
+		}
 	}
 }
 
