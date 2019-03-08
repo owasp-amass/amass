@@ -38,14 +38,20 @@ func NewRobtex(config *core.Config, bus *core.EventBus) *Robtex {
 func (r *Robtex) OnStart() error {
 	r.BaseService.OnStart()
 
-	go r.startRootDomains()
+	go r.processRequests()
 	return nil
 }
 
-func (r *Robtex) startRootDomains() {
-	// Look at each domain provided by the config
-	for _, domain := range r.Config().Domains() {
-		r.executeQuery(domain)
+func (r *Robtex) processRequests() {
+	for {
+		select {
+		case <-r.Quit():
+			return
+		case req := <-r.RequestChan():
+			if r.Config().IsDomainInScope(req.Domain) {
+				r.executeQuery(req.Domain)
+			}
+		}
 	}
 }
 

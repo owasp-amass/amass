@@ -43,16 +43,28 @@ func (d *DNSDB) OnStart() error {
 	if d.API == nil || d.API.Key == "" {
 		d.Config().Log.Printf("%s: API key data was not provided", d.String())
 	}
-	go d.startRootDomains()
+
+	go d.processRequests()
 	return nil
 }
 
-func (d *DNSDB) startRootDomains() {
-	// Look at each domain provided by the config
-	for _, domain := range d.Config().Domains() {
-		d.executeQuery(domain)
-		// Honor the rate limit
-		time.Sleep(d.RateLimit)
+func (d *DNSDB) processRequests() {
+	last := time.Now()
+
+	for {
+		select {
+		case <-d.Quit():
+			return
+		case req := <-d.RequestChan():
+			if d.Config().IsDomainInScope(req.Domain) {
+				if time.Now().Sub(last) < d.RateLimit {
+					time.Sleep(d.RateLimit)
+				}
+
+				d.executeQuery(req.Domain)
+				last = time.Now()
+			}
+		}
 	}
 }
 

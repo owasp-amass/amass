@@ -37,14 +37,20 @@ func NewBing(config *core.Config, bus *core.EventBus) *Bing {
 func (b *Bing) OnStart() error {
 	b.BaseService.OnStart()
 
-	go b.startRootDomains()
+	go b.processRequests()
 	return nil
 }
 
-func (b *Bing) startRootDomains() {
-	// Look at each domain provided by the config
-	for _, domain := range b.Config().Domains() {
-		b.executeQuery(domain)
+func (b *Bing) processRequests() {
+	for {
+		select {
+		case <-b.Quit():
+			return
+		case req := <-b.RequestChan():
+			if b.Config().IsDomainInScope(req.Domain) {
+				b.executeQuery(req.Domain)
+			}
+		}
 	}
 }
 

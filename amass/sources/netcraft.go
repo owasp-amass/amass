@@ -29,14 +29,20 @@ func NewNetcraft(config *core.Config, bus *core.EventBus) *Netcraft {
 func (n *Netcraft) OnStart() error {
 	n.BaseService.OnStart()
 
-	go n.startRootDomains()
+	go n.processRequests()
 	return nil
 }
 
-func (n *Netcraft) startRootDomains() {
-	// Look at each domain provided by the config
-	for _, domain := range n.Config().Domains() {
-		n.executeQuery(domain)
+func (n *Netcraft) processRequests() {
+	for {
+		select {
+		case <-n.Quit():
+			return
+		case req := <-n.RequestChan():
+			if n.Config().IsDomainInScope(req.Domain) {
+				n.executeQuery(req.Domain)
+			}
+		}
 	}
 }
 

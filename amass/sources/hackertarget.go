@@ -29,14 +29,20 @@ func NewHackerTarget(config *core.Config, bus *core.EventBus) *HackerTarget {
 func (h *HackerTarget) OnStart() error {
 	h.BaseService.OnStart()
 
-	go h.startRootDomains()
+	go h.processRequests()
 	return nil
 }
 
-func (h *HackerTarget) startRootDomains() {
-	// Look at each domain provided by the config
-	for _, domain := range h.Config().Domains() {
-		h.executeQuery(domain)
+func (h *HackerTarget) processRequests() {
+	for {
+		select {
+		case <-h.Quit():
+			return
+		case req := <-h.RequestChan():
+			if h.Config().IsDomainInScope(req.Domain) {
+				h.executeQuery(req.Domain)
+			}
+		}
 	}
 }
 

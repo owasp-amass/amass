@@ -29,14 +29,20 @@ func NewExalead(config *core.Config, bus *core.EventBus) *Exalead {
 func (e *Exalead) OnStart() error {
 	e.BaseService.OnStart()
 
-	go e.startRootDomains()
+	go e.processRequests()
 	return nil
 }
 
-func (e *Exalead) startRootDomains() {
-	// Look at each domain provided by the config
-	for _, domain := range e.Config().Domains() {
-		e.executeQuery(domain)
+func (e *Exalead) processRequests() {
+	for {
+		select {
+		case <-e.Quit():
+			return
+		case req := <-e.RequestChan():
+			if e.Config().IsDomainInScope(req.Domain) {
+				e.executeQuery(req.Domain)
+			}
+		}
 	}
 }
 

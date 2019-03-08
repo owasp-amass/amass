@@ -34,16 +34,8 @@ func (o *OpenUKArchive) OnStart() error {
 	o.BaseService.OnStart()
 
 	o.Bus().Subscribe(core.NameResolvedTopic, o.SendRequest)
-	go o.startRootDomains()
 	go o.processRequests()
 	return nil
-}
-
-func (o *OpenUKArchive) startRootDomains() {
-	// Look at each domain provided by the config
-	for _, domain := range o.Config().Domains() {
-		o.executeQuery(domain, domain)
-	}
 }
 
 func (o *OpenUKArchive) processRequests() {

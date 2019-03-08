@@ -48,7 +48,7 @@ type DNSService struct {
 // NewDNSService returns he object initialized, but not yet started.
 func NewDNSService(config *core.Config, bus *core.EventBus) *DNSService {
 	ds := &DNSService{
-		max:    utils.NewSimpleSemaphore(5000),
+		max:    utils.NewSimpleSemaphore(50000),
 		filter: utils.NewStringFilter(),
 	}
 
@@ -73,10 +73,6 @@ func (ds *DNSService) OnStart() error {
 	ds.Bus().Subscribe(core.ReverseSweepTopic, ds.dnsSweep)
 	ds.Bus().Subscribe(core.NewSubdomainTopic, ds.newSubdomain)
 	go ds.processRequests()
-
-	for _, domain := range ds.Config().Domains() {
-		go ds.basicQueries(domain, domain)
-	}
 	return nil
 }
 

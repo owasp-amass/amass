@@ -41,16 +41,28 @@ func (c *CIRCL) OnStart() error {
 	if c.API == nil || c.API.Username == "" || c.API.Password == "" {
 		c.Config().Log.Printf("%s: API key data was not provided", c.String())
 	}
-	go c.startRootDomains()
+
+	go c.processRequests()
 	return nil
 }
 
-func (c *CIRCL) startRootDomains() {
-	// Look at each domain provided by the config
-	for _, domain := range c.Config().Domains() {
-		c.executeQuery(domain)
-		// Honor the rate limit
-		time.Sleep(c.RateLimit)
+func (c *CIRCL) processRequests() {
+	last := time.Now()
+
+	for {
+		select {
+		case <-c.Quit():
+			return
+		case req := <-c.RequestChan():
+			if c.Config().IsDomainInScope(req.Domain) {
+				if time.Now().Sub(last) < c.RateLimit {
+					time.Sleep(c.RateLimit)
+				}
+
+				c.executeQuery(req.Domain)
+				last = time.Now()
+			}
+		}
 	}
 }
 

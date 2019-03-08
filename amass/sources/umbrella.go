@@ -38,16 +38,28 @@ func (u *Umbrella) OnStart() error {
 	if u.API == nil || u.API.Key == "" {
 		u.Config().Log.Printf("%s: API key data was not provided", u.String())
 	}
-	go u.startRootDomains()
+
+	go u.processRequests()
 	return nil
 }
 
-func (u *Umbrella) startRootDomains() {
-	// Look at each domain provided by the config
-	for _, domain := range u.Config().Domains() {
-		u.executeQuery(domain)
-		// Honor the rate limit
-		time.Sleep(u.RateLimit)
+func (u *Umbrella) processRequests() {
+	last := time.Now()
+
+	for {
+		select {
+		case <-u.Quit():
+			return
+		case req := <-u.RequestChan():
+			if u.Config().IsDomainInScope(req.Domain) {
+				if time.Now().Sub(last) < u.RateLimit {
+					time.Sleep(u.RateLimit)
+				}
+
+				u.executeQuery(req.Domain)
+				last = time.Now()
+			}
+		}
 	}
 }
 

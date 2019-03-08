@@ -35,14 +35,20 @@ func NewIPv4Info(config *core.Config, bus *core.EventBus) *IPv4Info {
 func (i *IPv4Info) OnStart() error {
 	i.BaseService.OnStart()
 
-	go i.startRootDomains()
+	go i.processRequests()
 	return nil
 }
 
-func (i *IPv4Info) startRootDomains() {
-	// Look at each domain provided by the config
-	for _, domain := range i.Config().Domains() {
-		i.executeQuery(domain)
+func (i *IPv4Info) processRequests() {
+	for {
+		select {
+		case <-i.Quit():
+			return
+		case req := <-i.RequestChan():
+			if i.Config().IsDomainInScope(req.Domain) {
+				i.executeQuery(req.Domain)
+			}
+		}
 	}
 }
 

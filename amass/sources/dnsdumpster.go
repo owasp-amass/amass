@@ -35,14 +35,20 @@ func NewDNSDumpster(config *core.Config, bus *core.EventBus) *DNSDumpster {
 func (d *DNSDumpster) OnStart() error {
 	d.BaseService.OnStart()
 
-	go d.startRootDomains()
+	go d.processRequests()
 	return nil
 }
 
-func (d *DNSDumpster) startRootDomains() {
-	// Look at each domain provided by the config
-	for _, domain := range d.Config().Domains() {
-		d.executeQuery(domain)
+func (d *DNSDumpster) processRequests() {
+	for {
+		select {
+		case <-d.Quit():
+			return
+		case req := <-d.RequestChan():
+			if d.Config().IsDomainInScope(req.Domain) {
+				d.executeQuery(req.Domain)
+			}
+		}
 	}
 }
 

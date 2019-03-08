@@ -37,14 +37,20 @@ func NewYahoo(config *core.Config, bus *core.EventBus) *Yahoo {
 func (y *Yahoo) OnStart() error {
 	y.BaseService.OnStart()
 
-	go y.startRootDomains()
+	go y.processRequests()
 	return nil
 }
 
-func (y *Yahoo) startRootDomains() {
-	// Look at each domain provided by the config
-	for _, domain := range y.Config().Domains() {
-		y.executeQuery(domain)
+func (y *Yahoo) processRequests() {
+	for {
+		select {
+		case <-y.Quit():
+			return
+		case req := <-y.RequestChan():
+			if y.Config().IsDomainInScope(req.Domain) {
+				y.executeQuery(req.Domain)
+			}
+		}
 	}
 }
 

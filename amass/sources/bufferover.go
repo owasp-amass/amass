@@ -29,14 +29,20 @@ func NewBufferOver(config *core.Config, bus *core.EventBus) *BufferOver {
 func (b *BufferOver) OnStart() error {
 	b.BaseService.OnStart()
 
-	go b.startRootDomains()
+	go b.processRequests()
 	return nil
 }
 
-func (b *BufferOver) startRootDomains() {
-	// Look at each domain provided by the config
-	for _, domain := range b.Config().Domains() {
-		b.executeQuery(domain)
+func (b *BufferOver) processRequests() {
+	for {
+		select {
+		case <-b.Quit():
+			return
+		case req := <-b.RequestChan():
+			if b.Config().IsDomainInScope(req.Domain) {
+				b.executeQuery(req.Domain)
+			}
+		}
 	}
 }
 

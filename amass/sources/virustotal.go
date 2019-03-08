@@ -29,14 +29,20 @@ func NewVirusTotal(config *core.Config, bus *core.EventBus) *VirusTotal {
 func (v *VirusTotal) OnStart() error {
 	v.BaseService.OnStart()
 
-	go v.startRootDomains()
+	go v.processRequests()
 	return nil
 }
 
-func (v *VirusTotal) startRootDomains() {
-	// Look at each domain provided by the config
-	for _, domain := range v.Config().Domains() {
-		v.executeQuery(domain)
+func (v *VirusTotal) processRequests() {
+	for {
+		select {
+		case <-v.Quit():
+			return
+		case req := <-v.RequestChan():
+			if v.Config().IsDomainInScope(req.Domain) {
+				v.executeQuery(req.Domain)
+			}
+		}
 	}
 }
 

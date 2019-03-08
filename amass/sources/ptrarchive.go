@@ -29,14 +29,20 @@ func NewPTRArchive(config *core.Config, bus *core.EventBus) *PTRArchive {
 func (p *PTRArchive) OnStart() error {
 	p.BaseService.OnStart()
 
-	go p.startRootDomains()
+	go p.processRequests()
 	return nil
 }
 
-func (p *PTRArchive) startRootDomains() {
-	// Look at each domain provided by the config
-	for _, domain := range p.Config().Domains() {
-		p.executeQuery(domain)
+func (p *PTRArchive) processRequests() {
+	for {
+		select {
+		case <-p.Quit():
+			return
+		case req := <-p.RequestChan():
+			if p.Config().IsDomainInScope(req.Domain) {
+				p.executeQuery(req.Domain)
+			}
+		}
 	}
 }
 

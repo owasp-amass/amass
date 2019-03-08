@@ -51,14 +51,20 @@ func NewCommonCrawl(config *core.Config, bus *core.EventBus) *CommonCrawl {
 func (c *CommonCrawl) OnStart() error {
 	c.BaseService.OnStart()
 
-	go c.startRootDomains()
+	go c.processRequests()
 	return nil
 }
 
-func (c *CommonCrawl) startRootDomains() {
-	// Look at each domain provided by the config
-	for _, domain := range c.Config().Domains() {
-		c.executeQuery(domain)
+func (c *CommonCrawl) processRequests() {
+	for {
+		select {
+		case <-c.Quit():
+			return
+		case req := <-c.RequestChan():
+			if c.Config().IsDomainInScope(req.Domain) {
+				c.executeQuery(req.Domain)
+			}
+		}
 	}
 }
 

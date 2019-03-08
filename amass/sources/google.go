@@ -37,14 +37,20 @@ func NewGoogle(config *core.Config, bus *core.EventBus) *Google {
 func (g *Google) OnStart() error {
 	g.BaseService.OnStart()
 
-	go g.startRootDomains()
+	go g.processRequests()
 	return nil
 }
 
-func (g *Google) startRootDomains() {
-	// Look at each domain provided by the config
-	for _, domain := range g.Config().Domains() {
-		g.executeQuery(domain)
+func (g *Google) processRequests() {
+	for {
+		select {
+		case <-g.Quit():
+			return
+		case req := <-g.RequestChan():
+			if g.Config().IsDomainInScope(req.Domain) {
+				g.executeQuery(req.Domain)
+			}
+		}
 	}
 }
 

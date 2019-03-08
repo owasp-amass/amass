@@ -39,16 +39,28 @@ func (pt *PassiveTotal) OnStart() error {
 	if pt.API == nil || pt.API.Username == "" || pt.API.Key == "" {
 		pt.Config().Log.Printf("%s: API key data was not provided", pt.String())
 	}
-	go pt.startRootDomains()
+
+	go pt.processRequests()
 	return nil
 }
 
-func (pt *PassiveTotal) startRootDomains() {
-	// Look at each domain provided by the config
-	for _, domain := range pt.Config().Domains() {
-		pt.executeQuery(domain)
-		// Honor the rate limit
-		time.Sleep(pt.RateLimit)
+func (pt *PassiveTotal) processRequests() {
+	last := time.Now()
+
+	for {
+		select {
+		case <-pt.Quit():
+			return
+		case req := <-pt.RequestChan():
+			if pt.Config().IsDomainInScope(req.Domain) {
+				if time.Now().Sub(last) < pt.RateLimit {
+					time.Sleep(pt.RateLimit)
+				}
+
+				pt.executeQuery(req.Domain)
+				last = time.Now()
+			}
+		}
 	}
 }
 
