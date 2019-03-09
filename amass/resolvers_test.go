@@ -3,18 +3,42 @@
 
 package amass
 
-const TestDomain string = "owasp.org"
+import (
+	"testing"
+)
 
-/*
-func TestResolversPublicResolvers(t *testing.T) {
-	for _, server := range PublicResolvers {
-		CustomResolvers = []string{server}
+const TestDomain string = "owasp-amass.com"
 
-		a, err := Resolve(TestDomain, "A")
-		if err != nil || len(a) == 0 {
-			t.Errorf("%s failed to resolve the A record for %s", server, TestDomain)
+func TestZoneTransfer(t *testing.T) {
+	//build+ integration
+	//This is an integrated test. To run this test type "go test -tags=integration" in Amass's gopath
+	tests := []struct {
+		expected string
+	}{
+		{"amass-transfer-test.axfr.owasp-amass.com"},
+		{"exchange2003.axfr.owasp-amass.com"},
+		{"i-should-get-some-sleep.axfr.owasp-amass.com"},
+		{"its-almost-2am-here.axfr.owasp-amass.com"},
+		{"stormstroopers.axfr.owasp-amass.com"},
+		{"top-secret-sub-domain.axfr.owasp-amass.com"},
+		{"vpn.axfr.owasp-amass.com"},
+		{"youll-never-find-this.axfr.owasp-amass.com"},
+	}
+	a, err := ZoneTransfer(TestDomain, TestDomain, "ns1.owasp-amass.com")
+	if err != nil {
+		t.Errorf("Error in creating ZoneTransfer: %v", err)
+	}
+	var s []string
+	var check int
+	for _, out := range a {
+		for _, test := range tests {
+			if test.expected == out.Name {
+				s = append(s, out.Name)
+				check++
+			}
+		}
+		if check < len(tests) {
+			t.Errorf("Did not find all expected sub domains. \n Found %v", s)
 		}
 	}
-	CustomResolvers = []string{}
 }
-*/
