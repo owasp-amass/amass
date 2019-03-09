@@ -139,11 +139,23 @@ func (c *Config) AddDomain(domain string) {
 	c.Lock()
 	defer c.Unlock()
 
+	// Check that the domain string is not empty
 	d := strings.TrimSpace(domain)
 	if d == "" {
 		return
 	}
-
+	// Check that it is a domain with at least two labels
+	labels := strings.Split(d, ".")
+	if len(labels) < 2 {
+		return
+	}
+	// Check that none of the labels are empty
+	for _, label := range labels {
+		if label == "" {
+			return
+		}
+	}
+	// Add the domain string to the list
 	c.domains = utils.UniqueAppend(c.domains, d)
 	if c.regexps == nil {
 		c.regexps = make(map[string]*regexp.Regexp)

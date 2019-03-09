@@ -52,6 +52,8 @@ var (
 	config        = flag.String("config", "", "Path to the INI configuration file. Additional details below")
 	unresolved    = flag.Bool("include-unresolvable", false, "Output DNS names that did not resolve")
 	ips           = flag.Bool("ip", false, "Show the IP addresses for discovered names")
+	ipv4          = flag.Bool("ipv4", false, "Show the IPv4 addresses for discovered names")
+	ipv6          = flag.Bool("ipv6", false, "Show the IPv6 addresses for discovered names")
 	brute         = flag.Bool("brute", false, "Execute brute forcing after searches")
 	active        = flag.Bool("active", false, "Attempt zone transfers and certificate name grabs")
 	norecursive   = flag.Bool("norecursive", false, "Turn off recursive brute forcing")
@@ -212,9 +214,8 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	for _, domain := range domains {
-		enum.Config.AddDomain(domain)
-	}
+	// Attempt to add the provided domains to the configuration
+	enum.Config.AddDomains(domains)
 	if len(enum.Config.Domains()) == 0 {
 		r.Fprintln(color.Error, "No root domain names were provided")
 		os.Exit(1)
@@ -264,6 +265,8 @@ func main() {
 			fileptr.Sync()
 			fileptr.Close()
 		}()
+		fileptr.Truncate(0)
+		fileptr.Seek(0, 0)
 		enum.Config.DataOptsWriter = fileptr
 	}
 
@@ -278,6 +281,8 @@ func main() {
 			outptr.Sync()
 			outptr.Close()
 		}()
+		outptr.Truncate(0)
+		outptr.Seek(0, 0)
 	}
 
 	var enc *json.Encoder
@@ -291,6 +296,8 @@ func main() {
 			jsonptr.Sync()
 			jsonptr.Close()
 		}()
+		jsonptr.Truncate(0)
+		jsonptr.Seek(0, 0)
 		enc = json.NewEncoder(jsonptr)
 	}
 
@@ -302,12 +309,14 @@ func main() {
 		asns := make(map[int]*amass.ASNSummaryData)
 		// Collect all the names returned by the enumeration
 		for out := range enum.Output {
-			if enum.Config.Passive || len(out.Addresses) > 0 {
-				total++
+			out.Addresses = desiredAddrTypes(out.Addresses)
+			if !enum.Config.Passive && len(out.Addresses) <= 0 {
+				continue
 			}
 
+			total++
 			amass.UpdateSummaryData(out, tags, asns)
-			source, name, ips := amass.OutputLineParts(out, *sources, *ips)
+			source, name, ips := amass.OutputLineParts(out, *sources, *ips || *ipv4 || *ipv6)
 			fmt.Fprintf(color.Output, "%s%s %s\n", blue(source), green(name), yellow(ips))
 			// Handle writing the line to a specified output file
 			if outptr != nil {
@@ -332,6 +341,23 @@ func main() {
 		os.Exit(1)
 	}
 	<-finished
+}
+
+func desiredAddrTypes(addrs []core.AddressInfo) []core.AddressInfo {
+	if *ipv4 == false && *ipv6 == false {
+		return addrs
+	}
+
+	var keep []core.AddressInfo
+	for _, addr := range addrs {
+		if utils.IsIPv4(addr.Address) && (*ipv4 == false) {
+			continue
+		} else if utils.IsIPv6(addr.Address) && (*ipv6 == false) {
+			continue
+		}
+		keep = append(keep, addr)
+	}
+	return keep
 }
 
 // If the user interrupts the program, print the summary information
@@ -363,6 +389,8 @@ func writeLogsAndMessages(logs *io.PipeReader, logfile string) {
 				filePtr.Sync()
 				filePtr.Close()
 			}()
+			filePtr.Truncate(0)
+			filePtr.Seek(0, 0)
 		}
 	}
 

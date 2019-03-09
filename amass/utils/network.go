@@ -147,12 +147,22 @@ func NetFirstLast(cidr *net.IPNet) (net.IP, net.IP) {
 	return firstIP, intToIP(lastIPInt, bits)
 }
 
+// IsIPv4 returns true when the provided net.IP address is an IPv4 address.
+func IsIPv4(ip net.IP) bool {
+	return strings.Count(ip.String(), ":") < 2
+}
+
+// IsIPv6 returns true when the provided net.IP address is an IPv6 address.
+func IsIPv6(ip net.IP) bool {
+	return strings.Count(ip.String(), ":") >= 2
+}
+
 func ipToInt(ip net.IP) (*big.Int, int) {
 	val := &big.Int{}
 	val.SetBytes([]byte(ip))
-	if len(ip) == net.IPv4len {
+	if IsIPv4(ip) {
 		return val, 32
-	} else if len(ip) == net.IPv6len {
+	} else if IsIPv6(ip) {
 		return val, 128
 	}
 	return val, 0
