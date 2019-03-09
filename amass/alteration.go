@@ -6,6 +6,7 @@ package amass
 import (
 	"strconv"
 	"strings"
+	"sync"
 	"unicode"
 
 	"github.com/OWASP/Amass/amass/core"
@@ -13,8 +14,13 @@ import (
 )
 
 var (
-	altWords    []string
-	altAlphabet string
+	altWords      []string
+	altAlphabet   string
+	altPrefixLock sync.Mutex
+	altPrefixMap  map[string]int
+
+	altSuffixLock sync.Mutex
+	altSuffixMap  map[string]int
 )
 
 func init() {
@@ -53,6 +59,12 @@ func init() {
 		"www",
 	}
 	altAlphabet = "abcdefghijklmnopqrstuvwxyz"
+	altPrefixMap = make(map[string]int)
+	altSuffixMap = make(map[string]int)
+	for _, word := range altWords {
+		altPrefixMap[word] = 0
+		altSuffixMap[word] = 0
+	}
 }
 
 // AlterationService is the Service that handles all DNS name permutation within
@@ -103,11 +115,14 @@ func (as *AlterationService) executeAlterations(req *core.Request) {
 	as.flipNumbersInName(req)
 	as.appendNumbers(req)
 
+	as.flipWords(req)
+
 	as.addSuffixWord(req)
 	as.addSuffixLetter(req)
 
 	as.addPrefixWord(req)
 	as.addPrefixLetter(req)
+
 }
 
 func (as *AlterationService) correctRecordTypes(req *core.Request) bool {
@@ -121,6 +136,44 @@ func (as *AlterationService) correctRecordTypes(req *core.Request) bool {
 		}
 	}
 	return ok
+}
+
+func (as *AlterationService) flipWords(req *core.Request) {
+	names := strings.SplitN(req.Name, ".", 2)
+	subdomain := names[0]
+	domain := names[1]
+
+	parts := strings.Split(subdomain, "-")
+	if len(parts) < 2 {
+		return
+	}
+
+	altPrefixLock.Lock()
+	pre := parts[0]
+	updateAltMap(altPrefixMap, pre)
+	for k, _ := range altPrefixMap {
+		newName := k + "-" + strings.Join(parts[1:], "-") + "." + domain
+		as.sendAlteredName(newName, req.Domain)
+	}
+	altPrefixLock.Unlock()
+
+	altSuffixLock.Lock()
+	post := parts[len(parts)-1]
+	updateAltMap(altSuffixMap, post)
+	for k, _ := range altSuffixMap {
+		newName := strings.Join(parts[:len(parts)-1], "-") + "-" + k + "." + domain
+		as.sendAlteredName(newName, req.Domain)
+	}
+	altSuffixLock.Unlock()
+}
+
+func updateAltMap(m map[string]int, word string) int {
+	if _, ok := m[word]; ok {
+		m[word] += 1
+	} else {
+		m[word] = 1
+	}
+	return m[word]
 }
 
 // flipNumbersInName flips numbers in a subdomain name.
