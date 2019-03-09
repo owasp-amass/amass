@@ -4,7 +4,6 @@
 package amass
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 	"sync"
@@ -17,9 +16,6 @@ import (
 var (
 	altWords    []string
 	altAlphabet string
-
-	altSuffixes *alterationCache
-	altPrefixes *alterationCache
 )
 
 type alterationCache struct {
@@ -63,15 +59,14 @@ func init() {
 		"www",
 	}
 	altAlphabet = "abcdefghijklmnopqrstuvwxyz"
-
-	altPrefixes = NewAlterationCache(altWords)
-	altSuffixes = NewAlterationCache(altWords)
 }
 
 // AlterationService is the Service that handles all DNS name permutation within
 // the architecture. This is achieved by receiving all the RESOLVED events.
 type AlterationService struct {
 	core.BaseService
+	prefixes *alterationCache
+	suffixes *alterationCache
 }
 
 // NewAlterationService returns he object initialized, but not yet started.
@@ -79,6 +74,8 @@ func NewAlterationService(config *core.Config, bus *core.EventBus) *AlterationSe
 	as := new(AlterationService)
 
 	as.BaseService = *core.NewBaseService(as, "Alterations", config, bus)
+	as.prefixes = NewAlterationCache(altWords)
+	as.suffixes = NewAlterationCache(altWords)
 	return as
 }
 
@@ -150,24 +147,22 @@ func (as *AlterationService) flipWords(req *core.Request) {
 	}
 
 	pre := parts[0]
-	altPrefixes.update(pre)
-	altPrefixes.RLock()
-	for k, _ := range altPrefixes.cache {
+	as.prefixes.update(pre)
+	as.prefixes.RLock()
+	for k, _ := range as.prefixes.cache {
 		newName := k + "-" + strings.Join(parts[1:], "-") + "." + domain
-		fmt.Printf("new prefix: %v\n", newName)
 		as.sendAlteredName(newName, req.Domain)
 	}
-	altPrefixes.RUnlock()
+	as.prefixes.RUnlock()
 
 	post := parts[len(parts)-1]
-	altSuffixes.update(post)
-	altSuffixes.RLock()
-	for k, _ := range altSuffixes.cache {
+	as.suffixes.update(post)
+	as.suffixes.RLock()
+	for k, _ := range as.suffixes.cache {
 		newName := strings.Join(parts[:len(parts)-1], "-") + "-" + k + "." + domain
-		fmt.Printf("new suffix: %v\n", newName)
 		as.sendAlteredName(newName, req.Domain)
 	}
-	altSuffixes.RUnlock()
+	as.suffixes.RUnlock()
 }
 
 func NewAlterationCache(seed []string) *alterationCache {
