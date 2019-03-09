@@ -9,7 +9,7 @@ import (
 
 const TestDomain string = "owasp-amass.com"
 
-func TestResolversPublicResolvers(t *testing.T) {
+func TestZoneTransfer(t *testing.T) {
 	//build+ integration
 	//This is an integrated test. To run this test type "go test -tags=integration" in Amass's gopath
 	tests := []struct {
