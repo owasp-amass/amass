@@ -24,7 +24,7 @@ func TestResolversPublicResolvers(t *testing.T) {
 		{"vpn.axfr.owasp-amass.com"},
 		{"youll-never-find-this.axfr.owasp-amass.com"},
 	}
-	a, err := ZoneTransfer("owasp-amass.com", TestDomain, "ns1.owasp-amass.com")
+	a, err := ZoneTransfer(TestDomain, TestDomain, "ns1.owasp-amass.com")
 	if err != nil {
 		t.Errorf("Error in creating ZoneTransfer: %v", err)
 	}
