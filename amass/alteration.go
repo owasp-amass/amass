@@ -4,6 +4,7 @@
 package amass
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 	"sync"
@@ -14,14 +15,17 @@ import (
 )
 
 var (
-	altWords      []string
-	altAlphabet   string
-	altPrefixLock sync.Mutex
-	altPrefixMap  map[string]int
+	altWords    []string
+	altAlphabet string
 
-	altSuffixLock sync.Mutex
-	altSuffixMap  map[string]int
+	altSuffixes *alterationCache
+	altPrefixes *alterationCache
 )
+
+type alterationCache struct {
+	sync.RWMutex
+	cache map[string]int
+}
 
 func init() {
 	altWords = []string{
@@ -59,12 +63,9 @@ func init() {
 		"www",
 	}
 	altAlphabet = "abcdefghijklmnopqrstuvwxyz"
-	altPrefixMap = make(map[string]int)
-	altSuffixMap = make(map[string]int)
-	for _, word := range altWords {
-		altPrefixMap[word] = 0
-		altSuffixMap[word] = 0
-	}
+
+	altPrefixes = NewAlterationCache(altWords)
+	altSuffixes = NewAlterationCache(altWords)
 }
 
 // AlterationService is the Service that handles all DNS name permutation within
@@ -148,32 +149,51 @@ func (as *AlterationService) flipWords(req *core.Request) {
 		return
 	}
 
-	altPrefixLock.Lock()
 	pre := parts[0]
-	updateAltMap(altPrefixMap, pre)
-	for k, _ := range altPrefixMap {
+	altPrefixes.update(pre)
+	altPrefixes.RLock()
+	for k, _ := range altPrefixes.cache {
 		newName := k + "-" + strings.Join(parts[1:], "-") + "." + domain
+		fmt.Printf("new prefix: %v\n", newName)
 		as.sendAlteredName(newName, req.Domain)
 	}
-	altPrefixLock.Unlock()
+	altPrefixes.RUnlock()
 
-	altSuffixLock.Lock()
 	post := parts[len(parts)-1]
-	updateAltMap(altSuffixMap, post)
-	for k, _ := range altSuffixMap {
+	altSuffixes.update(post)
+	altSuffixes.RLock()
+	for k, _ := range altSuffixes.cache {
 		newName := strings.Join(parts[:len(parts)-1], "-") + "-" + k + "." + domain
+		fmt.Printf("new suffix: %v\n", newName)
 		as.sendAlteredName(newName, req.Domain)
 	}
-	altSuffixLock.Unlock()
+	altSuffixes.RUnlock()
 }
 
-func updateAltMap(m map[string]int, word string) int {
-	if _, ok := m[word]; ok {
-		m[word] += 1
-	} else {
-		m[word] = 1
+func NewAlterationCache(seed []string) *alterationCache {
+	ac := &alterationCache{
+		cache: make(map[string]int),
 	}
-	return m[word]
+
+	ac.Lock()
+	for _, word := range seed {
+		ac.cache[word] = 0
+	}
+	ac.Unlock()
+
+	return ac
+}
+
+func (ac *alterationCache) update(word string) int {
+	ac.Lock()
+	if _, ok := ac.cache[word]; ok {
+		ac.cache[word] += 1
+	} else {
+		ac.cache[word] = 1
+	}
+	count := ac.cache[word]
+	ac.Unlock()
+	return count
 }
 
 // flipNumbersInName flips numbers in a subdomain name.
