@@ -36,18 +36,18 @@ var (
 // Banner is the ASCII art logo used within help output.
 var Banner = `
 
-        .+++:.            :                             .+++.                   
-      +W@@@@@@8        &+W@#               o8W8:      +W@@@@@@#.   oW@@@W#+     
-     &@#+   .o@##.    .@@@o@W.o@@o       :@@#&W8o    .@#:  .:oW+  .@#+++&#&     
-    +@&        &@&     #@8 +@W@&8@+     :@W.   +@8   +@:          .@8           
-    8@          @@     8@o  8@8  WW    .@W      W@+  .@W.          o@#:         
-    WW          &@o    &@:  o@+  o@+   #@.      8@o   +W@#+.        +W@8:       
-    #@          :@W    &@+  &@+   @8  :@o       o@o     oW@@W+        oW@8      
-    o@+          @@&   &@+  &@+   #@  &@.      .W@W       .+#@&         o@W.    
-     WW         +@W@8. &@+  :&    o@+ #@      :@W&@&         &@:  ..     :@o    
-     :@W:      o@# +Wo &@+        :W: +@W&o++o@W. &@&  8@#o+&@W.  #@:    o@+    
-      :W@@WWWW@@8       +              :&W@@@@&    &W  .o#@@W&.   :W@WWW@@&     
-        +o&&&&+.                                                    +oooo.      
+        .+++:.            :                             .+++.
+      +W@@@@@@8        &+W@#               o8W8:      +W@@@@@@#.   oW@@@W#+
+     &@#+   .o@##.    .@@@o@W.o@@o       :@@#&W8o    .@#:  .:oW+  .@#+++&#&
+    +@&        &@&     #@8 +@W@&8@+     :@W.   +@8   +@:          .@8
+    8@          @@     8@o  8@8  WW    .@W      W@+  .@W.          o@#:
+    WW          &@o    &@:  o@+  o@+   #@.      8@o   +W@#+.        +W@8:
+    #@          :@W    &@+  &@+   @8  :@o       o@o     oW@@W+        oW@8
+    o@+          @@&   &@+  &@+   #@  &@.      .W@W       .+#@&         o@W.
+     WW         +@W@8. &@+  :&    o@+ #@      :@W&@&         &@:  ..     :@o
+     :@W:      o@# +Wo &@+        :W: +@W&o++o@W. &@&  8@#o+&@W.  #@:    o@+
+      :W@@WWWW@@8       +              :&W@@@@&    &W  .o#@@W&.   :W@WWW@@&
+        +o&&&&+.                                                    +oooo.
 
 `
 
@@ -93,10 +93,15 @@ type Enumeration struct {
 func NewEnumeration() *Enumeration {
 	e := &Enumeration{
 		Config: &core.Config{
-			UUID:        uuid.New(),
-			Log:         log.New(ioutil.Discard, "", 0),
-			Alterations: true,
-			Recursive:   true,
+			UUID:              uuid.New(),
+			Log:               log.New(ioutil.Discard, "", 0),
+			Alterations:       true,
+			FlipWords:         true,
+			FlipNumbers:       true,
+			AddWords:          true,
+			AddNumbers:        true,
+			WordAlterationMin: 2,
+			Recursive:         true,
 		},
 		Bus:         core.NewEventBus(),
 		Output:      make(chan *core.Output, 100),

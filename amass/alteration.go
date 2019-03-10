@@ -14,8 +14,7 @@ import (
 )
 
 var (
-	altWords    []string
-	altAlphabet string
+	altWords []string
 )
 
 type alterationCache struct {
@@ -103,6 +102,7 @@ func init() {
 		"confluence",
 		"container",
 		"control",
+		"d",
 		"data",
 		"db",
 		"dec",
@@ -114,6 +114,7 @@ func init() {
 		"docker",
 		"docs",
 		"drop",
+		"e",
 		"edge",
 		"elasticbeanstalk",
 		"elb",
@@ -129,6 +130,7 @@ func init() {
 		"euwe",
 		"evelynn",
 		"events",
+		"f",
 		"feb",
 		"firewall",
 		"forms",
@@ -136,6 +138,7 @@ func init() {
 		"frontpage",
 		"ftp",
 		"fw",
+		"g",
 		"games",
 		"germany",
 		"gh",
@@ -143,6 +146,7 @@ func init() {
 		"git",
 		"github",
 		"global",
+		"h",
 		"hkg",
 		"hw",
 		"hwcdn",
@@ -151,13 +155,16 @@ func init() {
 		"imap",
 		"int",
 		"internal",
+		"j",
 		"jenkins",
 		"jinx",
 		"july",
 		"june",
+		"k",
 		"kor",
 		"korea",
 		"kr",
+		"l",
 		"lan",
 		"las",
 		"latin",
@@ -167,12 +174,14 @@ func init() {
 		"lb",
 		"loadbalancer",
 		"login",
+		"m",
 		"machine",
 		"mail",
 		"march",
 		"merch",
 		"mirror",
 		"mon",
+		"n",
 		"na",
 		"nautilus",
 		"net",
@@ -183,12 +192,14 @@ func init() {
 		"node",
 		"northamerica",
 		"nov",
+		"o",
 		"oceania",
 		"oct",
 		"old",
 		"ops",
 		"org",
 		"origin",
+		"p",
 		"page",
 		"pantheon",
 		"pass",
@@ -210,7 +221,9 @@ func init() {
 		"promotion",
 		"proxy",
 		"pub",
+		"q",
 		"qa",
+		"r",
 		"redirector",
 		"region",
 		"repo",
@@ -260,21 +273,25 @@ func init() {
 		"turk",
 		"turkey",
 		"twitch",
+		"u",
 		"uat",
 		"users",
+		"v",
 		"v1",
 		"v2",
 		"vi",
 		"vpn",
+		"w",
 		"w3",
 		"web",
 		"web1",
 		"webapp",
 		"westeurope",
 		"www",
+		"x",
+		"y",
 		"z",
 	}
-	altAlphabet = "abcdefghijklmnopqrstuvwxyz"
 }
 
 // AlterationService is the Service that handles all DNS name permutation within
@@ -326,16 +343,22 @@ func (as *AlterationService) executeAlterations(req *core.Request) {
 	}
 
 	as.SetActive()
-	as.flipNumbersInName(req)
-	as.appendNumbers(req)
 
-	as.flipWords(req)
+	if as.Config().FlipNumbers {
+		as.flipNumbersInName(req)
+	}
+	if as.Config().AddNumbers {
+		as.appendNumbers(req)
+	}
 
-	as.addSuffixWord(req)
-	as.addSuffixLetter(req)
+	if as.Config().FlipWords {
+		as.flipWords(req)
+	}
 
-	as.addPrefixWord(req)
-	as.addPrefixLetter(req)
+	if as.Config().AddWords {
+		as.addSuffixWord(req)
+		as.addPrefixWord(req)
+	}
 
 }
 
@@ -480,24 +503,9 @@ func (as *AlterationService) addSuffixWord(req *core.Request) {
 	}
 }
 
-func (as *AlterationService) addSuffixLetter(req *core.Request) {
-	n := req.Name
-	parts := strings.SplitN(n, ".", 2)
-
-	for _, ch := range altAlphabet {
-		as.addSuffix(parts, string(ch), req.Domain)
-	}
-}
-
 func (as *AlterationService) addPrefixWord(req *core.Request) {
 	for _, word := range altWords {
 		as.addPrefix(req.Name, word, req.Domain)
-	}
-}
-
-func (as *AlterationService) addPrefixLetter(req *core.Request) {
-	for _, ch := range altAlphabet {
-		as.addPrefix(req.Name, string(ch), req.Domain)
 	}
 }
 
