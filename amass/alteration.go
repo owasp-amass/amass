@@ -338,7 +338,9 @@ func (as *AlterationService) processRequests() {
 
 // executeAlterations runs all the DNS name alteration methods as goroutines.
 func (as *AlterationService) executeAlterations(req *core.Request) {
-	if !as.correctRecordTypes(req) || !as.Config().IsDomainInScope(req.Name) {
+	if !as.correctRecordTypes(req) ||
+		!as.Config().IsDomainInScope(req.Name) ||
+		(len(strings.Split(req.Domain, ".")) == len(strings.Split(req.Name, "."))) {
 		return
 	}
 
@@ -389,7 +391,7 @@ func (as *AlterationService) flipWords(req *core.Request) {
 	as.prefixes.update(pre)
 	as.prefixes.RLock()
 	for k, count := range as.prefixes.cache {
-		if count >= as.Config().WordAlterationMin {
+		if count >= as.Config().MinForWordFlip {
 			newName := k + "-" + strings.Join(parts[1:], "-") + "." + domain
 			as.sendAlteredName(newName, req.Domain)
 		}
@@ -400,7 +402,7 @@ func (as *AlterationService) flipWords(req *core.Request) {
 	as.suffixes.update(post)
 	as.suffixes.RLock()
 	for k, count := range as.suffixes.cache {
-		if count >= as.Config().WordAlterationMin {
+		if count >= as.Config().MinForWordFlip {
 			newName := strings.Join(parts[:len(parts)-1], "-") + "-" + k + "." + domain
 			as.sendAlteredName(newName, req.Domain)
 		}
@@ -504,7 +506,7 @@ func (as *AlterationService) addSuffixWord(req *core.Request) {
 
 	as.suffixes.RLock()
 	for word, count := range as.suffixes.cache {
-		if count >= as.Config().WordAlterationMin {
+		if count >= as.Config().MinForWordFlip {
 			as.addSuffix(parts, word, req.Domain)
 		}
 	}
@@ -514,7 +516,7 @@ func (as *AlterationService) addSuffixWord(req *core.Request) {
 func (as *AlterationService) addPrefixWord(req *core.Request) {
 	as.prefixes.RLock()
 	for word, count := range as.prefixes.cache {
-		if count >= as.Config().WordAlterationMin {
+		if count >= as.Config().MinForWordFlip {
 			as.addPrefix(req.Name, word, req.Domain)
 		}
 	}

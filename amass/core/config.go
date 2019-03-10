@@ -62,12 +62,12 @@ type Config struct {
 	MinForRecursive int `ini:"minimum_for_recursive"`
 
 	// Will discovered subdomain name alterations be generated?
-	Alterations       bool
-	FlipWords         bool
-	FlipNumbers       bool
-	AddWords          bool
-	AddNumbers        bool
-	WordAlterationMin int
+	Alterations    bool
+	FlipWords      bool
+	FlipNumbers    bool
+	AddWords       bool
+	AddNumbers     bool
+	MinForWordFlip int
 
 	// Only access the data sources for names and return results?
 	Passive bool
@@ -317,7 +317,7 @@ func (c *Config) LoadSettings(path string) error {
 			c.AddWords = alterations.Key("add_words").MustBool(true)
 			c.FlipNumbers = alterations.Key("flip_numbers").MustBool(true)
 			c.AddNumbers = alterations.Key("add_numbers").MustBool(true)
-			c.WordAlterationMin = alterations.Key("word_alteration_min").MustInt(2)
+			c.MinForWordFlip = alterations.Key("min_for_word_flip").MustInt(2)
 		}
 	}
 	// Load up all API key information from data source sections
@@ -330,12 +330,13 @@ func (c *Config) LoadSettings(path string) error {
 		"disabled_data_sources",
 		"gremlin",
 	}
+outer:
 	for _, section := range cfg.Sections() {
 		name := section.Name()
 		// Skip sections that are not related to data sources
 		for _, doneSection := range nonApiSections {
 			if name == doneSection {
-				continue
+				continue outer
 			}
 		}
 
