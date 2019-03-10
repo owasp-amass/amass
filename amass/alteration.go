@@ -10,11 +10,8 @@ import (
 	"unicode"
 
 	"github.com/OWASP/Amass/amass/core"
+	"github.com/OWASP/Amass/amass/utils"
 	"github.com/miekg/dns"
-)
-
-var (
-	altWords []string
 )
 
 type alterationCache struct {
@@ -22,293 +19,51 @@ type alterationCache struct {
 	cache map[string]int
 }
 
-func init() {
-	altWords = []string{
-		"1",
-		"10",
-		"11",
-		"12",
-		"13",
-		"14",
-		"15",
-		"16",
-		"17",
-		"18",
-		"19",
-		"2",
-		"20",
-		"2009",
-		"2010",
-		"2011",
-		"2012",
-		"2013",
-		"2014",
-		"2015",
-		"2016",
-		"2017",
-		"2018",
-		"2019",
-		"3",
-		"4",
-		"5",
-		"6",
-		"7",
-		"8",
-		"9",
-		"a",
-		"acc",
-		"account",
-		"accounts",
-		"admin",
-		"admin1",
-		"administrator",
-		"akali",
-		"akamai",
-		"alpha",
-		"alt",
-		"america",
-		"analytics",
-		"api",
-		"api-docs",
-		"api1",
-		"apollo",
-		"app",
-		"april",
-		"auth",
-		"aws",
-		"b",
-		"backend",
-		"beta",
-		"billing",
-		"boards",
-		"box",
-		"brand",
-		"brasil",
-		"brazil",
-		"bucket",
-		"bucky",
-		"c",
-		"cdn",
-		"cf",
-		"cfg",
-		"chef",
-		"ci",
-		"client",
-		"cloudfront",
-		"cms",
-		"cms1",
-		"cn",
-		"com",
-		"confluence",
-		"container",
-		"control",
-		"d",
-		"data",
-		"db",
-		"dec",
-		"demo",
-		"dev",
-		"dev1",
-		"developer",
-		"devops",
-		"docker",
-		"docs",
-		"drop",
-		"e",
-		"edge",
-		"elasticbeanstalk",
-		"elb",
-		"email",
-		"eng",
-		"engima",
-		"engine",
-		"engineering",
-		"eu",
-		"europe",
-		"europewest",
-		"euw",
-		"euwe",
-		"evelynn",
-		"events",
-		"f",
-		"feb",
-		"firewall",
-		"forms",
-		"forum",
-		"frontpage",
-		"ftp",
-		"fw",
-		"g",
-		"games",
-		"germany",
-		"gh",
-		"ghcpi",
-		"git",
-		"github",
-		"global",
-		"h",
-		"hkg",
-		"hw",
-		"hwcdn",
-		"i",
-		"ids",
-		"imap",
-		"int",
-		"internal",
-		"j",
-		"jenkins",
-		"jinx",
-		"july",
-		"june",
-		"k",
-		"kor",
-		"korea",
-		"kr",
-		"l",
-		"lan",
-		"las",
-		"latin",
-		"latinamerica",
-		"lax",
-		"lax1",
-		"lb",
-		"loadbalancer",
-		"login",
-		"m",
-		"machine",
-		"mail",
-		"march",
-		"merch",
-		"mirror",
-		"mon",
-		"n",
-		"na",
-		"nautilus",
-		"net",
-		"netherlands",
-		"new",
-		"nginx",
-		"nl",
-		"node",
-		"northamerica",
-		"nov",
-		"o",
-		"oceania",
-		"oct",
-		"old",
-		"ops",
-		"org",
-		"origin",
-		"p",
-		"page",
-		"pantheon",
-		"pass",
-		"pay",
-		"payment",
-		"pc",
-		"php",
-		"pl",
-		"poland",
-		"prd",
-		"preferences",
-		"priv",
-		"private",
-		"prod",
-		"production",
-		"profile",
-		"profiles",
-		"promo",
-		"promotion",
-		"proxy",
-		"pub",
-		"q",
-		"qa",
-		"r",
-		"redirector",
-		"region",
-		"repo",
-		"repository",
-		"reset",
-		"restrict",
-		"restricted",
-		"reviews",
-		"s",
-		"s3",
-		"sandbox",
-		"search",
-		"secure",
-		"security",
-		"sept",
-		"server",
-		"service",
-		"singed",
-		"skins",
-		"smtp",
-		"spring",
-		"sql",
-		"ssl",
-		"sso",
-		"staff",
-		"stage",
-		"stage1",
-		"staging",
-		"static",
-		"stg",
-		"support",
-		"swagger",
-		"system",
-		"t",
-		"team",
-		"test",
-		"test1",
-		"testbed",
-		"testing",
-		"testing1",
-		"tomcat",
-		"tpe",
-		"tr",
-		"trial",
-		"tst",
-		"tur",
-		"turk",
-		"turkey",
-		"twitch",
-		"u",
-		"uat",
-		"users",
-		"v",
-		"v1",
-		"v2",
-		"vi",
-		"vpn",
-		"w",
-		"w3",
-		"web",
-		"web1",
-		"webapp",
-		"westeurope",
-		"www",
-		"x",
-		"y",
-		"z",
+func newAlterationCache(seed []string) *alterationCache {
+	ac := &alterationCache{
+		cache: make(map[string]int),
 	}
+
+	ac.Lock()
+	for _, word := range seed {
+		ac.cache[word] = 0
+	}
+	ac.Unlock()
+
+	return ac
 }
 
-// AlterationService is the Service that handles all DNS name permutation within
-// the architecture. This is achieved by receiving all the RESOLVED events.
+func (ac *alterationCache) update(word string) int {
+	ac.Lock()
+	if _, ok := ac.cache[word]; ok {
+		ac.cache[word]++
+	} else {
+		ac.cache[word] = 1
+	}
+	count := ac.cache[word]
+	ac.Unlock()
+	return count
+}
+
+// AlterationService is the Service that handles all DNS name permutations within
+// the architecture.
 type AlterationService struct {
 	core.BaseService
+
+	filter   *utils.StringFilter
 	prefixes *alterationCache
 	suffixes *alterationCache
 }
 
 // NewAlterationService returns he object initialized, but not yet started.
 func NewAlterationService(config *core.Config, bus *core.EventBus) *AlterationService {
-	as := new(AlterationService)
+	as := &AlterationService{
+		filter:   utils.NewStringFilter(),
+		prefixes: newAlterationCache(altWords),
+		suffixes: newAlterationCache(altWords),
+	}
 
 	as.BaseService = *core.NewBaseService(as, "Alterations", config, bus)
-	as.prefixes = NewAlterationCache(altWords)
-	as.suffixes = NewAlterationCache(altWords)
 	return as
 }
 
@@ -344,24 +99,27 @@ func (as *AlterationService) executeAlterations(req *core.Request) {
 		return
 	}
 
-	as.SetActive()
+	if as.filter.Duplicate(req.Name) {
+		return
+	}
 
+	as.SetActive()
 	if as.Config().FlipNumbers {
 		as.flipNumbersInName(req)
 	}
 	if as.Config().AddNumbers {
 		as.appendNumbers(req)
 	}
-
 	if as.Config().FlipWords {
 		as.flipWords(req)
 	}
-
 	if as.Config().AddWords {
 		as.addSuffixWord(req)
 		as.addPrefixWord(req)
 	}
-
+	if as.Config().EditDistance > 0 {
+		as.fuzzyLabelSearches(req)
+	}
 }
 
 func (as *AlterationService) correctRecordTypes(req *core.Request) bool {
@@ -410,32 +168,6 @@ func (as *AlterationService) flipWords(req *core.Request) {
 	as.suffixes.RUnlock()
 }
 
-func NewAlterationCache(seed []string) *alterationCache {
-	ac := &alterationCache{
-		cache: make(map[string]int),
-	}
-
-	ac.Lock()
-	for _, word := range seed {
-		ac.cache[word] = 0
-	}
-	ac.Unlock()
-
-	return ac
-}
-
-func (ac *alterationCache) update(word string) int {
-	ac.Lock()
-	if _, ok := ac.cache[word]; ok {
-		ac.cache[word] += 1
-	} else {
-		ac.cache[word] = 1
-	}
-	count := ac.cache[word]
-	ac.Unlock()
-	return count
-}
-
 // flipNumbersInName flips numbers in a subdomain name.
 func (as *AlterationService) flipNumbersInName(req *core.Request) {
 	n := req.Name
@@ -476,8 +208,7 @@ func (as *AlterationService) secondNumberFlip(name, domain string, minIndex int)
 
 // appendNumbers appends a number to a subdomain name.
 func (as *AlterationService) appendNumbers(req *core.Request) {
-	n := req.Name
-	parts := strings.SplitN(n, ".", 2)
+	parts := strings.SplitN(req.Name, ".", 2)
 
 	for i := 0; i < 10; i++ {
 		as.addSuffix(parts, strconv.Itoa(i), req.Domain)
@@ -501,8 +232,7 @@ func (as *AlterationService) addPrefix(name, prefix, domain string) {
 }
 
 func (as *AlterationService) addSuffixWord(req *core.Request) {
-	n := req.Name
-	parts := strings.SplitN(n, ".", 2)
+	parts := strings.SplitN(req.Name, ".", 2)
 
 	as.suffixes.RLock()
 	for word, count := range as.suffixes.cache {
@@ -523,8 +253,92 @@ func (as *AlterationService) addPrefixWord(req *core.Request) {
 	as.prefixes.RUnlock()
 }
 
+func (as *AlterationService) fuzzyLabelSearches(req *core.Request) {
+	parts := strings.SplitN(req.Name, ".", 2)
+
+	results := []string{parts[0]}
+	for i := 0; i < as.Config().EditDistance; i++ {
+		var conv []string
+
+		conv = append(conv, as.additions(results)...)
+		conv = append(conv, as.deletions(results)...)
+		conv = append(conv, as.substitutions(results)...)
+		results = append(results, conv...)
+	}
+
+	for _, alt := range results {
+		name := alt + "." + parts[1]
+
+		as.sendAlteredName(name, req.Domain)
+	}
+}
+
+func (as *AlterationService) additions(set []string) []string {
+	ldh := []rune(ldhChars)
+	ldhLen := len(ldh)
+
+	var results []string
+	for _, str := range set {
+		rstr := []rune(str)
+		rlen := len(rstr)
+
+		for i := 0; i <= rlen; i++ {
+			for j := 0; j < ldhLen; j++ {
+				temp := append(rstr, ldh[0])
+
+				copy(temp[i+1:], temp[i:])
+				temp[i] = ldh[j]
+				results = append(results, string(temp))
+			}
+		}
+	}
+	return results
+}
+
+func (as *AlterationService) deletions(set []string) []string {
+	var results []string
+
+	for _, str := range set {
+		rstr := []rune(str)
+		rlen := len(rstr)
+
+		for i := 0; i < rlen; i++ {
+			if del := string(append(rstr[:i], rstr[i+1:]...)); del != "" {
+				results = append(results, del)
+			}
+		}
+	}
+	return results
+}
+
+func (as *AlterationService) substitutions(set []string) []string {
+	ldh := []rune(ldhChars)
+	ldhLen := len(ldh)
+
+	var results []string
+	for _, str := range set {
+		rstr := []rune(str)
+		rlen := len(rstr)
+
+		for i := 0; i < rlen; i++ {
+			temp := rstr
+
+			for j := 0; j < ldhLen; j++ {
+				temp[i] = ldh[j]
+				results = append(results, string(temp))
+			}
+		}
+	}
+	return results
+}
+
 // sendAlteredName checks that the provided name is valid before publishing it as a new name.
 func (as *AlterationService) sendAlteredName(name, domain string) {
+	name = strings.Trim(name, "-")
+	if name == "" {
+		return
+	}
+
 	re := as.Config().DomainRegex(domain)
 	if re == nil || !re.MatchString(name) {
 		return

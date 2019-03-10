@@ -101,6 +101,7 @@ func NewEnumeration() *Enumeration {
 			AddWords:       true,
 			AddNumbers:     true,
 			MinForWordFlip: 2,
+			EditDistance:   1,
 			Recursive:      true,
 		},
 		Bus:         core.NewEventBus(),

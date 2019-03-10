@@ -68,6 +68,7 @@ type Config struct {
 	AddWords       bool
 	AddNumbers     bool
 	MinForWordFlip int
+	EditDistance   int
 
 	// Only access the data sources for names and return results?
 	Passive bool
@@ -329,11 +330,12 @@ func (c *Config) LoadSettings(path string) error {
 			c.AddWords = alterations.Key("add_words").MustBool(true)
 			c.FlipNumbers = alterations.Key("flip_numbers").MustBool(true)
 			c.AddNumbers = alterations.Key("add_numbers").MustBool(true)
-			c.MinForWordFlip = alterations.Key("min_for_word_flip").MustInt(2)
+			c.MinForWordFlip = alterations.Key("minimum_for_word_flip").MustInt(2)
+			c.EditDistance = alterations.Key("edit_distance").MustInt(1)
 		}
 	}
 	// Load up all API key information from data source sections
-	nonApiSections := []string{
+	nonAPISections := []string{
 		"alterations",
 		"default",
 		"domains",
@@ -346,7 +348,7 @@ outer:
 	for _, section := range cfg.Sections() {
 		name := section.Name()
 		// Skip sections that are not related to data sources
-		for _, doneSection := range nonApiSections {
+		for _, doneSection := range nonAPISections {
 			if name == doneSection {
 				continue outer
 			}

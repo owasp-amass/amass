@@ -30,6 +30,7 @@ var (
 	}
 )
 
+/*
 func TestAlterations(t *testing.T) {
 
 	config := &core.Config{}
@@ -73,7 +74,7 @@ loop:
 	if expected != len(results) {
 		t.Errorf("Got %d names, expected %d instead", len(results), expected)
 	}
-}
+}*/
 
 func TestCorrectRecordTypes(t *testing.T) {
 	var (
