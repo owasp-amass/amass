@@ -388,18 +388,22 @@ func (as *AlterationService) flipWords(req *core.Request) {
 	pre := parts[0]
 	as.prefixes.update(pre)
 	as.prefixes.RLock()
-	for k, _ := range as.prefixes.cache {
-		newName := k + "-" + strings.Join(parts[1:], "-") + "." + domain
-		as.sendAlteredName(newName, req.Domain)
+	for k, count := range as.prefixes.cache {
+		if count >= as.Config().WordAlterationMin {
+			newName := k + "-" + strings.Join(parts[1:], "-") + "." + domain
+			as.sendAlteredName(newName, req.Domain)
+		}
 	}
 	as.prefixes.RUnlock()
 
 	post := parts[len(parts)-1]
 	as.suffixes.update(post)
 	as.suffixes.RLock()
-	for k, _ := range as.suffixes.cache {
-		newName := strings.Join(parts[:len(parts)-1], "-") + "-" + k + "." + domain
-		as.sendAlteredName(newName, req.Domain)
+	for k, count := range as.suffixes.cache {
+		if count >= as.Config().WordAlterationMin {
+			newName := strings.Join(parts[:len(parts)-1], "-") + "-" + k + "." + domain
+			as.sendAlteredName(newName, req.Domain)
+		}
 	}
 	as.suffixes.RUnlock()
 }
@@ -498,15 +502,23 @@ func (as *AlterationService) addSuffixWord(req *core.Request) {
 	n := req.Name
 	parts := strings.SplitN(n, ".", 2)
 
-	for _, word := range altWords {
-		as.addSuffix(parts, word, req.Domain)
+	as.suffixes.RLock()
+	for word, count := range as.suffixes.cache {
+		if count >= as.Config().WordAlterationMin {
+			as.addSuffix(parts, word, req.Domain)
+		}
 	}
+	as.suffixes.RUnlock()
 }
 
 func (as *AlterationService) addPrefixWord(req *core.Request) {
-	for _, word := range altWords {
-		as.addPrefix(req.Name, word, req.Domain)
+	as.prefixes.RLock()
+	for word, count := range as.prefixes.cache {
+		if count >= as.Config().WordAlterationMin {
+			as.addPrefix(req.Name, word, req.Domain)
+		}
 	}
+	as.prefixes.RUnlock()
 }
 
 // sendAlteredName checks that the provided name is valid before publishing it as a new name.
