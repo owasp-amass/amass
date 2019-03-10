@@ -540,10 +540,9 @@ func Resolve(name, qtype string) ([]core.DNSAnswer, error) {
 func Reverse(addr string) (string, string, error) {
 	var name, ptr string
 
-	ip := net.ParseIP(addr)
-	if len(ip.To4()) == net.IPv4len {
+	if ip := net.ParseIP(addr); utils.IsIPv4(ip) {
 		ptr = utils.ReverseIP(addr) + ".in-addr.arpa"
-	} else if len(ip) == net.IPv6len {
+	} else if utils.IsIPv6(ip) {
 		ptr = utils.IPv6NibbleFormat(utils.HexString(ip)) + ".ip6.arpa"
 	} else {
 		return ptr, "", &resolveError{

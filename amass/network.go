@@ -270,9 +270,9 @@ func originLookup(addr string) (int, string, error) {
 	var err error
 	var name string
 	var answers []core.DNSAnswer
-	if ip := net.ParseIP(addr); len(ip.To4()) == net.IPv4len {
+	if ip := net.ParseIP(addr); utils.IsIPv4(ip) {
 		name = utils.ReverseIP(addr) + ".origin.asn.cymru.com"
-	} else if len(ip) == net.IPv6len {
+	} else if utils.IsIPv6(ip) {
 		name = utils.IPv6NibbleFormat(utils.HexString(ip)) + ".origin6.asn.cymru.com"
 	} else {
 		return 0, "", fmt.Errorf("originLookup param is insufficient: addr: %s", ip)
