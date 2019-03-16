@@ -163,7 +163,8 @@ func (e *Enumeration) Start() error {
 	services = append(services, namesrv, NewAddressService(e.Config, e.Bus))
 	if !e.Config.Passive {
 		e.bruteSrv = NewBruteForceService(e.Config, e.Bus)
-		services = append(services, NewAlterationService(e.Config, e.Bus), e.bruteSrv)
+		services = append(services, e.bruteSrv,
+			NewMarkovService(e.Config, e.Bus), NewAlterationService(e.Config, e.Bus))
 	}
 
 	// Grab all the data sources
