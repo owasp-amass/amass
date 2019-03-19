@@ -48,6 +48,10 @@ type Service interface {
 	Stop() error
 	OnStop() error
 
+	// Architecture is ready for more names
+	LowNumberOfNames() error
+	OnLowNumberOfNames() error
+
 	SendRequest(req *Request)
 	RequestChan() <-chan *Request
 
@@ -175,9 +179,22 @@ func (bas *BaseService) Stop() error {
 	return err
 }
 
-// OnStop is a placeholder that should be implemented by an Service
+// OnStop is a placeholder that should be implemented by a Service
 // that has code to execute during service stop.
 func (bas *BaseService) OnStop() error {
+	return nil
+}
+
+// LowNumberOfNames calls the OnLowNumberOfNames method implemented for the Service.
+func (bas *BaseService) LowNumberOfNames() error {
+	err := bas.service.OnLowNumberOfNames()
+
+	return err
+}
+
+// OnLowNumberOfNames is a placeholder that should be implemented by a Service
+// that has code to be executed when the enumeration is low in names to resolve.
+func (bas *BaseService) OnLowNumberOfNames() error {
 	return nil
 }
 

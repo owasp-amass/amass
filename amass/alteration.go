@@ -73,22 +73,22 @@ func (as *AlterationService) OnStart() error {
 
 	if as.Config().Alterations {
 		as.Bus().Subscribe(core.NameResolvedTopic, as.SendRequest)
-		go as.processRequests()
 	}
 	return nil
 }
 
-func (as *AlterationService) processRequests() {
-	for {
+// OnLowNumberOfNames implements the Service interface.
+func (as *AlterationService) OnLowNumberOfNames() error {
+loop:
+	for i := 0; i < 10; i++ {
 		select {
-		case <-as.PauseChan():
-			<-as.ResumeChan()
-		case <-as.Quit():
-			return
 		case req := <-as.RequestChan():
 			go as.executeAlterations(req)
+		default:
+			break loop
 		}
 	}
+	return nil
 }
 
 // executeAlterations runs all the DNS name alteration methods as goroutines.

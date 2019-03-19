@@ -20,6 +20,7 @@ type lenDist struct {
 
 type markovModel struct {
 	sync.Mutex
+	NgramSize   int
 	TotalLabels int
 	Ngrams      map[string]map[rune]*lenDist
 }
@@ -28,31 +29,35 @@ type markovModel struct {
 type MarkovService struct {
 	core.BaseService
 
-	ngramSize int
-	numNames  int
-	model     *markovModel
-	subsLock  sync.Mutex
-	subs      map[string]*core.Request
-	inFilter  *utils.StringFilter
-	outFilter *utils.StringFilter
+	updateLock sync.Mutex
+	updated    bool
+	generating bool
+	numNames   int
+	model      *markovModel
+	subsLock   sync.Mutex
+	subs       map[string]*core.Request
+	inFilter   *utils.StringFilter
+	outFilter  *utils.StringFilter
 }
 
 // NewMarkovService returns he object initialized, but not yet started.
 func NewMarkovService(config *core.Config, bus *core.EventBus) *MarkovService {
 	m := &MarkovService{
-		ngramSize: 3,
-		numNames:  10000,
+		numNames:  25000,
 		subs:      make(map[string]*core.Request),
 		inFilter:  utils.NewStringFilter(),
 		outFilter: utils.NewStringFilter(),
-		model:     &markovModel{Ngrams: make(map[string]map[rune]*lenDist)},
+		model: &markovModel{
+			NgramSize: 3,
+			Ngrams:    make(map[string]map[rune]*lenDist),
+		},
 	}
 
 	m.BaseService = *core.NewBaseService(m, "Markov Model", config, bus)
 	return m
 }
 
-// OnStart implements the Service interface
+// OnStart implements the Service interface.
 func (m *MarkovService) OnStart() error {
 	m.BaseService.OnStart()
 
@@ -60,6 +65,24 @@ func (m *MarkovService) OnStart() error {
 		m.Bus().Subscribe(core.NameResolvedTopic, m.SendRequest)
 		go m.processRequests()
 	}
+	return nil
+}
+
+// OnLowNumberOfNames implements the Service interface.
+func (m *MarkovService) OnLowNumberOfNames() error {
+	m.model.Lock()
+	total := m.model.TotalLabels
+	m.model.Unlock()
+
+	if total < 100 || m.isGenerating() || !m.isUpdated() {
+		return nil
+	}
+
+	m.markGenerating(true)
+	m.updateFrequencies()
+	m.generateNames()
+	m.markGenerating(false)
+	m.markUpdated(false)
 	return nil
 }
 
@@ -101,19 +124,21 @@ func (m *MarkovService) trainModel(req *core.Request) {
 		return
 	}
 	label := []rune(parts[0] + ".")
+
+	// The same name should not leave the service
 	m.outFilter.Duplicate(req.Name)
 
 	for i, char := range label {
-		if i-m.ngramSize < 0 {
+		if i-m.model.NgramSize < 0 {
 			var ngram string
 
-			for j := 0; j < abs(i-m.ngramSize); j++ {
+			for j := 0; j < abs(i-m.model.NgramSize); j++ {
 				ngram += "`"
 			}
 			ngram += string(label[0:i])
 			m.updateModel(ngram, char)
 		} else {
-			m.updateModel(string(label[i-m.ngramSize:i]), char)
+			m.updateModel(string(label[i-m.model.NgramSize:i]), char)
 		}
 	}
 
@@ -125,7 +150,10 @@ func (m *MarkovService) trainModel(req *core.Request) {
 		}
 	}
 	m.subsLock.Unlock()
+
+	m.SetActive()
 	m.updateTotal()
+	m.markUpdated(true)
 }
 
 func abs(val int) int {
@@ -146,18 +174,6 @@ func (m *MarkovService) updateModel(ngram string, char rune) {
 		m.model.Ngrams[ngram][char] = new(lenDist)
 	}
 	m.model.Ngrams[ngram][char].Count++
-}
-
-func (m *MarkovService) updateTotal() {
-	m.model.Lock()
-	m.model.TotalLabels++
-	total := m.model.TotalLabels
-	m.model.Unlock()
-
-	if (total % 50) == 0 {
-		m.updateFrequencies()
-		go m.generateNames()
-	}
 }
 
 func (m *MarkovService) updateFrequencies() {
@@ -191,13 +207,13 @@ func (m *MarkovService) generateNames() {
 func (m *MarkovService) generateLabel() string {
 	var result string
 
-	for i := 0; i < m.ngramSize; i++ {
+	for i := 0; i < m.model.NgramSize; i++ {
 		result += "`"
 	}
 
-	max := maxDNSLabelLen + m.ngramSize
+	max := maxDNSLabelLen + m.model.NgramSize
 	for i := 0; i < max; i++ {
-		char := m.generateChar(result[i : i+m.ngramSize])
+		char := m.generateChar(result[i : i+m.model.NgramSize])
 
 		if char == "." {
 			break
@@ -246,10 +262,46 @@ func (m *MarkovService) sendGeneratedName(name, domain string) {
 		return
 	}
 
+	m.SetActive()
 	m.Bus().Publish(core.NewNameTopic, &core.Request{
 		Name:   name,
 		Domain: domain,
 		Tag:    core.ALT,
 		Source: m.String(),
 	})
+}
+
+func (m *MarkovService) updateTotal() {
+	m.model.Lock()
+	defer m.model.Unlock()
+
+	m.model.TotalLabels++
+}
+
+func (m *MarkovService) markUpdated(mark bool) {
+	m.updateLock.Lock()
+	defer m.updateLock.Unlock()
+
+	m.updated = mark
+}
+
+func (m *MarkovService) isUpdated() bool {
+	m.updateLock.Lock()
+	defer m.updateLock.Unlock()
+
+	return m.updated
+}
+
+func (m *MarkovService) markGenerating(mark bool) {
+	m.updateLock.Lock()
+	defer m.updateLock.Unlock()
+
+	m.generating = mark
+}
+
+func (m *MarkovService) isGenerating() bool {
+	m.updateLock.Lock()
+	defer m.updateLock.Unlock()
+
+	return m.generating
 }

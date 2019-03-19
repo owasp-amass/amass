@@ -23,13 +23,9 @@ const (
 )
 
 var (
-	// TLDs is a list of valid top-level domains that is maintained by the IANA.
-	TLDs []string
+	// KnownValidTLDs is a list of valid top-level domains that is maintained by the IANA.
+	KnownValidTLDs []string
 )
-
-func init() {
-	TLDs = getTLDList()
-}
 
 func getTLDList() []string {
 	page, err := RequestWebPage(tldList, nil, nil, "", "")
@@ -46,7 +42,7 @@ func getWordList(reader io.Reader) []string {
 	for scanner.Scan() {
 		// Get the next word in the list
 		w := strings.TrimSpace(scanner.Text())
-		if err := scanner.Err(); err == nil && w != "" {
+		if err := scanner.Err(); err == nil && w != "" && !strings.Contains(w, "-") {
 			words = append(words, w)
 		}
 	}
@@ -112,15 +108,7 @@ func SubdomainRegex(domain string) *regexp.Regexp {
 
 // AnySubdomainRegex returns a Regexp object initialized to match any DNS subdomain name.
 func AnySubdomainRegex() *regexp.Regexp {
-	last := "["
-	for i, tld := range TLDs {
-		if i != 0 {
-			last += "|"
-		}
-		last += tld
-	}
-	last += "]"
-	return regexp.MustCompile(SUBRE + last)
+	return regexp.MustCompile(SUBRE + "[a-zA-Z]{0,61}")
 }
 
 // NewUniqueElements removes elements that have duplicates in the original or new elements.
