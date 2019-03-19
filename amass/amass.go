@@ -163,7 +163,8 @@ func (e *Enumeration) Start() error {
 	services = append(services, namesrv, NewAddressService(e.Config, e.Bus))
 	if !e.Config.Passive {
 		e.bruteSrv = NewBruteForceService(e.Config, e.Bus)
-		services = append(services, NewAlterationService(e.Config, e.Bus), e.bruteSrv)
+		services = append(services, e.bruteSrv,
+			NewMarkovService(e.Config, e.Bus), NewAlterationService(e.Config, e.Bus))
 	}
 
 	// Grab all the data sources
@@ -185,7 +186,6 @@ func (e *Enumeration) Start() error {
 	go e.checkForOutput(&wg)
 	go e.processOutput(&wg)
 
-	tickSeconds := 3
 	t := time.NewTicker(time.Duration(3) * time.Second)
 	logTick := time.NewTicker(time.Minute)
 	defer logTick.Stop()
@@ -213,15 +213,19 @@ loop:
 			}
 			if done {
 				close(e.Done)
-				continue
+				continue loop
 			}
 
 			if !e.Config.Passive {
 				e.processMetrics(services)
 				psec := e.DNSQueriesPerSec()
 				// Check if it's too soon to release the next domain name
-				if psec > 0 && ((e.DNSNamesRemaining()*len(InitialQueryTypes))/psec) > tickSeconds {
-					continue
+				if psec > 0 && ((e.DNSNamesRemaining()*len(InitialQueryTypes))/psec) > 10 {
+					continue loop
+				}
+				// Let the services know that the enumeration is ready for more names
+				for _, srv := range services {
+					go srv.LowNumberOfNames()
 				}
 			}
 			// Check if the next domain should be sent to data sources/brute forcing

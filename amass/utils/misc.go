@@ -4,6 +4,8 @@
 package utils
 
 import (
+	"bufio"
+	"io"
 	"regexp"
 	"strings"
 
@@ -16,7 +18,36 @@ const (
 
 	// SUBRE is a regular expression that will match on all subdomains once the domain is appended.
 	SUBRE = "(([a-zA-Z0-9]{1}|[_a-zA-Z0-9]{1}[_a-zA-Z0-9-]{0,61}[a-zA-Z0-9]{1})[.]{1})+"
+
+	tldList = "https://raw.githubusercontent.com/OWASP/Amass/develop/wordlists/tldlist.txt"
 )
+
+var (
+	// KnownValidTLDs is a list of valid top-level domains that is maintained by the IANA.
+	KnownValidTLDs []string
+)
+
+func getTLDList() []string {
+	page, err := RequestWebPage(tldList, nil, nil, "", "")
+	if err != nil {
+		return nil
+	}
+	return getWordList(strings.NewReader(page))
+}
+
+func getWordList(reader io.Reader) []string {
+	var words []string
+
+	scanner := bufio.NewScanner(reader)
+	for scanner.Scan() {
+		// Get the next word in the list
+		w := strings.TrimSpace(scanner.Text())
+		if err := scanner.Err(); err == nil && w != "" && !strings.Contains(w, "-") {
+			words = append(words, w)
+		}
+	}
+	return words
+}
 
 type filterRequest struct {
 	String string
@@ -77,7 +108,7 @@ func SubdomainRegex(domain string) *regexp.Regexp {
 
 // AnySubdomainRegex returns a Regexp object initialized to match any DNS subdomain name.
 func AnySubdomainRegex() *regexp.Regexp {
-	return regexp.MustCompile(SUBRE + "[a-zA-Z0-9-]{0,61}[.][a-zA-Z]{0,61}")
+	return regexp.MustCompile(SUBRE + "[a-zA-Z]{0,61}")
 }
 
 // NewUniqueElements removes elements that have duplicates in the original or new elements.
