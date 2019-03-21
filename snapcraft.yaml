@@ -11,15 +11,15 @@ apps:
   amass:
     command: bin/amass
     plugs: [home, network, removable-media]
-  
+
   netdomains:
     command: bin/netdomains
     plugs: [home, network, removable-media]
-  
+
   viz:
     command: bin/viz
     plugs: [home, network, removable-media]
-  
+
   db:
     command: bin/db
     plugs: [home, network, removable-media]
@@ -43,7 +43,7 @@ parts:
       echo "\nStarting override-build for amass part:"
       export GOPATH=$(dirname $SNAPCRAFT_PART_INSTALL)/go
       cd $GOPATH/src/github.com/OWASP/Amass
-      go get -u ./...
+      export GO111MODULE=on
       go install ./...
       mkdir $SNAPCRAFT_PART_INSTALL/bin
       mv $GOPATH/bin/amass $SNAPCRAFT_PART_INSTALL/bin/amass
@@ -59,7 +59,7 @@ parts:
       echo "\nStarting override-build for netdomains part:"
       export GOPATH=$(dirname $SNAPCRAFT_PART_INSTALL)/go
       cd $GOPATH/src/github.com/OWASP/Amass
-      go get -u ./...
+      export GO111MODULE=on
       go install ./...
       mkdir $SNAPCRAFT_PART_INSTALL/bin
       mv $GOPATH/bin/amass.netdomains $SNAPCRAFT_PART_INSTALL/bin/netdomains
@@ -75,12 +75,12 @@ parts:
       echo "\nStarting override-build for viz part:"
       export GOPATH=$(dirname $SNAPCRAFT_PART_INSTALL)/go
       cd $GOPATH/src/github.com/OWASP/Amass
-      go get -u ./...
+      export GO111MODULE=on
       go install ./...
       mkdir $SNAPCRAFT_PART_INSTALL/bin
       mv $GOPATH/bin/amass.viz $SNAPCRAFT_PART_INSTALL/bin/viz
       strip --remove-section=.comment --remove-section=.note $SNAPCRAFT_PART_INSTALL/bin/viz
-  
+
   db:
     after: [amass]
     source: https://github.com/OWASP/Amass
@@ -91,7 +91,7 @@ parts:
       echo "\nStarting override-build for db part:"
       export GOPATH=$(dirname $SNAPCRAFT_PART_INSTALL)/go
       cd $GOPATH/src/github.com/OWASP/Amass
-      go get -u ./...
+      export GO111MODULE=on
       go install ./...
       mkdir $SNAPCRAFT_PART_INSTALL/bin
       mv $GOPATH/bin/amass.db $SNAPCRAFT_PART_INSTALL/bin/db
@@ -107,7 +107,7 @@ parts:
       echo "\nStarting override-build for tracker part:"
       export GOPATH=$(dirname $SNAPCRAFT_PART_INSTALL)/go
       cd $GOPATH/src/github.com/OWASP/Amass
-      go get -u ./...
+      export GO111MODULE=on
       go install ./...
       mkdir $SNAPCRAFT_PART_INSTALL/bin
       mv $GOPATH/bin/amass.tracker $SNAPCRAFT_PART_INSTALL/bin/tracker

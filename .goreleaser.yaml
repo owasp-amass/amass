@@ -1,8 +1,5 @@
-before:
-  hooks:
-    - go get -u -d ./...
 builds:
-  - 
+  -
     main: ./cmd/amass/main.go
     binary: amass
     goos:
@@ -14,13 +11,14 @@ builds:
       - 386
     env:
       - CGO_ENABLED=0
+      - GO111MODULE=on
     ignore:
       - goos: darwin
         goarch: 386
       - goos: windows
         goarch: 386
-  
-  - 
+
+  -
     main: ./cmd/amass.netdomains/main.go
     binary: amass.netdomains
     goos:
@@ -32,13 +30,14 @@ builds:
       - 386
     env:
       - CGO_ENABLED=0
+      - GO111MODULE=on
     ignore:
       - goos: darwin
         goarch: 386
       - goos: windows
         goarch: 386
-  
-  - 
+
+  -
     main: ./cmd/amass.viz/main.go
     binary: amass.viz
     goos:
@@ -50,13 +49,14 @@ builds:
       - 386
     env:
       - CGO_ENABLED=0
+      - GO111MODULE=on
     ignore:
       - goos: darwin
         goarch: 386
       - goos: windows
         goarch: 386
 
-  - 
+  -
     main: ./cmd/amass.db/main.go
     binary: amass.db
     goos:
@@ -68,13 +68,14 @@ builds:
       - 386
     env:
       - CGO_ENABLED=0
+      - GO111MODULE=on
     ignore:
       - goos: darwin
         goarch: 386
       - goos: windows
         goarch: 386
 
-  - 
+  -
     main: ./cmd/amass.tracker/main.go
     binary: amass.tracker
     goos:
@@ -86,6 +87,7 @@ builds:
       - 386
     env:
       - CGO_ENABLED=0
+      - GO111MODULE=on
     ignore:
       - goos: darwin
         goarch: 386
@@ -103,7 +105,7 @@ archive:
     - LICENSE
     - README.md
     - wordlists/*
-  
+
 checksum:
   name_template: "amass_checksums.txt"
 
