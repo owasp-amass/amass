@@ -1,5 +1,3 @@
-// +build datasources
-
 package sources
 
 import (
@@ -12,40 +10,46 @@ import (
 )
 
 func TestSiteDossier(t *testing.T) {
-	config := &core.Config{}
-	config.AddDomain("google.com")
-	buf := new(strings.Builder)
-	config.Log = log.New(buf, "", log.Lmicroseconds)
+	if *networkTest {
+		config := &core.Config{}
+		config.AddDomain(domainTest)
+		buf := new(strings.Builder)
+		config.Log = log.New(buf, "", log.Lmicroseconds)
 
-	out := make(chan *core.Request)
-	bus := core.NewEventBus()
-	bus.Subscribe(core.NewNameTopic, func(req *core.Request) {
-		out <- req
-	})
-	defer bus.Stop()
+		out := make(chan *core.Request)
+		bus := core.NewEventBus()
+		bus.Subscribe(core.NewNameTopic, func(req *core.Request) {
+			out <- req
+		})
+		defer bus.Stop()
 
-	srv := NewSiteDossier(config, bus)
-	srv.Start()
-	defer srv.Stop()
+		srv := NewSiteDossier(config, bus)
+		srv.Start()
+		defer srv.Stop()
+		srv.SendRequest(&core.Request{
+			Name:   domainTest,
+			Domain: domainTest,
+		})
 
-	count := 0
-	expected := 10
-	done := time.After(time.Second * 30)
+		count := 0
+		expected := 10
+		done := time.After(time.Second * 30)
 
-loop:
-	for {
-		select {
-		case <-out:
-			count++
-			if count == expected {
-				return
+	loop:
+		for {
+			select {
+			case <-out:
+				count++
+				if count == expected {
+					return
+				}
+			case <-done:
+				break loop
 			}
-		case <-done:
-			break loop
 		}
-	}
 
-	if count < expected {
-		t.Errorf("Found %d names, expected at least %d instead", count, expected)
+		if count < expected {
+			t.Errorf("Found %d names, expected at least %d instead", count, expected)
+		}
 	}
 }

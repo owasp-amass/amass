@@ -10,7 +10,8 @@ import (
 )
 
 var (
-	network = flag.Bool("network", false, "Run tests that require connectivity (take more time)")
+	networkTest = flag.Bool("network", false, "Run tests that require connectivity (take more time)")
+	domainTest  = "owasp.org"
 )
 
 // TestMain will parse the test flags and setup for integration tests.
