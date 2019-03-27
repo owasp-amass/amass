@@ -1,8 +1,6 @@
 package sources
 
 import (
-	"log"
-	"strings"
 	"testing"
 
 	"github.com/OWASP/Amass/amass/core"
@@ -12,39 +10,15 @@ func TestCrtsh(t *testing.T) {
 	if *networkTest == false {
 		return
 	}
-	config := &core.Config{}
-	config.AddDomain(domainTest)
-	buf := new(strings.Builder)
-	config.Log = log.New(buf, "", log.Lmicroseconds)
 
-	out := make(chan *core.Request)
-	bus := core.NewEventBus()
-	bus.Subscribe(core.NewNameTopic, func(req *core.Request) {
-		out <- req
-	})
+	config := setupConfig(domainTest)
+	bus, out := setupEventBus(core.NewNameTopic)
 	defer bus.Stop()
 
-	srv := NewCrtsh(config, bus)
-	srv.Start()
-	defer srv.Stop()
-	srv.SendRequest(&core.Request{
-		Name:   domainTest,
-		Domain: domainTest,
-	})
+	srv := NewArchiveIt(config, bus)
 
-	results := make(map[string]int)
-
-loop:
-	for {
-		select {
-		case req := <-out:
-			results[req.Name]++
-		case <-doneTest:
-			break loop
-		}
-	}
-
-	if expectedTest > len(results) {
-		t.Errorf("Found %d names, expected %d instead", len(results), expectedTest)
+	result := testService(srv, out)
+	if result < expectedTest {
+		t.Errorf("Found %d names, expected at least %d instead", result, expectedTest)
 	}
 }

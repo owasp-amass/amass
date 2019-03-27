@@ -1,8 +1,6 @@
 package sources
 
 import (
-	"log"
-	"strings"
 	"testing"
 
 	"github.com/OWASP/Amass/amass/core"
@@ -10,45 +8,19 @@ import (
 
 func TestCertSpotter(t *testing.T) {
 	if *networkTest == false {
-		return
-	}
-	config := &core.Config{}
-	config.AddDomain(domainTest)
-	buf := new(strings.Builder)
-	config.Log = log.New(buf, "", log.Lmicroseconds)
+		if *networkTest == false {
+			return
+		}
 
-	out := make(chan *core.Request)
-	bus := core.NewEventBus()
-	bus.Subscribe(core.NewNameTopic, func(req *core.Request) {
-		out <- req
-	})
-	defer bus.Stop()
+		config := setupConfig(domainTest)
+		bus, out := setupEventBus(core.NewNameTopic)
+		defer bus.Stop()
 
-	srv := NewCertSpotter(config, bus)
-	srv.Start()
-	defer srv.Stop()
-	srv.SendRequest(&core.Request{
-		Name:   domainTest,
-		Domain: domainTest,
-	})
+		srv := NewCertSpotter(config, bus)
 
-	count := 0
-
-loop:
-	for {
-		select {
-		case <-out:
-			count++
-			if count == expectedTest {
-				return
-			}
-		case <-doneTest:
-			break loop
+		result := testService(srv, out)
+		if result < expectedTest {
+			t.Errorf("Found %d names, expected at least %d instead", result, expectedTest)
 		}
 	}
-
-	if count < expectedTest {
-		t.Errorf("Found %d names, expected at least %d instead", count, expectedTest)
-	}
-
 }

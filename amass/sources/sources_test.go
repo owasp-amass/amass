@@ -5,16 +5,20 @@ package sources
 
 import (
 	"flag"
+	"log"
 	"os"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/OWASP/Amass/amass/core"
 )
 
 var (
 	networkTest  = flag.Bool("network", false, "Run tests that require connectivity (take more time)")
 	domainTest   = "owasp.org"
 	expectedTest = 1
-	doneTest     = time.After(time.Second * 30)
+	timeoutTest  = time.Second * 30
 )
 
 // TestMain will parse the test flags and setup for integration tests.
@@ -42,4 +46,51 @@ func TestCleanName(t *testing.T) {
 			t.Errorf("Failed %s: got %s expected %s", tt.name, result, tt.expected)
 		}
 	}
+}
+
+func setupConfig(domain string) *core.Config {
+	config := &core.Config{}
+	config.AddDomain(domain)
+	buf := new(strings.Builder)
+	config.Log = log.New(buf, "", log.Lmicroseconds)
+
+	return config
+}
+
+func setupEventBus(subscription string) (*core.EventBus, chan *core.Request) {
+	out := make(chan *core.Request)
+	bus := core.NewEventBus()
+	bus.Subscribe(subscription, func(req *core.Request) {
+		out <- req
+	})
+
+	return bus, out
+}
+
+func testService(srv core.Service, out chan *core.Request) int {
+	srv.Start()
+	defer srv.Stop()
+
+	srv.SendRequest(&core.Request{
+		Name:   domainTest,
+		Domain: domainTest,
+	})
+
+	count := 0
+	doneTimer := time.After(timeoutTest)
+
+loop:
+	for {
+		select {
+		case <-out:
+			count++
+			if count == expectedTest {
+				break loop
+			}
+		case <-doneTimer:
+			break loop
+		}
+	}
+
+	return count
 }
