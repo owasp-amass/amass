@@ -1,51 +1,25 @@
-// +build datasources
-
 package sources
 
 import (
-	"log"
-	"strings"
 	"testing"
-	"time"
 
 	"github.com/OWASP/Amass/amass/core"
 )
 
 func TestUKGovArchive(t *testing.T) {
-	config := &core.Config{}
-	config.AddDomain("google.com")
-	buf := new(strings.Builder)
-	config.Log = log.New(buf, "", log.Lmicroseconds)
+	if *networkTest == false {
+		return
+	}
 
-	out := make(chan *core.Request)
-	bus := core.NewEventBus()
-	bus.Subscribe(core.NewNameTopic, func(req *core.Request) {
-		out <- req
-	})
+	config := setupConfig(domainTest)
+	bus, out := setupEventBus(core.NewNameTopic)
 	defer bus.Stop()
 
 	srv := NewUKGovArchive(config, bus)
-	srv.Start()
-	defer srv.Stop()
 
-	count := 0
-	expected := 10
-	done := time.After(time.Second * 30)
-
-loop:
-	for {
-		select {
-		case <-out:
-			count++
-			if count == expected {
-				return
-			}
-		case <-done:
-			break loop
-		}
+	result := testService(srv, out)
+	if result < expectedTest {
+		t.Errorf("Found %d names, expected at least %d instead", result, expectedTest)
 	}
 
-	if count < expected {
-		t.Errorf("Found %d names, expected at least %d instead", count, expected)
-	}
 }
