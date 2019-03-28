@@ -13,7 +13,7 @@ jobs:
       - run:
           name: "Test Amass"
           command: |
-            go get -v -t -d ./...
+            export GO111MODULE=on
             cd amass
             go test -v -race ./...
 
