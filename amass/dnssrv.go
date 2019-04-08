@@ -40,17 +40,13 @@ type DNSService struct {
 	totalLock  sync.RWMutex
 	totalNames int
 
-	max           utils.Semaphore
 	filter        *utils.StringFilter
 	cidrBlacklist []*net.IPNet
 }
 
 // NewDNSService returns he object initialized, but not yet started.
 func NewDNSService(config *core.Config, bus *core.EventBus) *DNSService {
-	ds := &DNSService{
-		max:    utils.NewSimpleSemaphore(50000),
-		filter: utils.NewStringFilter(),
-	}
+	ds := &DNSService{filter: utils.NewStringFilter()}
 
 	for _, n := range badSubnets {
 		if _, ipnet, err := net.ParseCIDR(n); err == nil {
@@ -97,7 +93,7 @@ func (ds *DNSService) processRequests() {
 		case <-ds.Quit():
 			return
 		case req := <-ds.RequestChan():
-			ds.max.Acquire(1)
+			ds.Config().SemMaxDNSQueries.Acquire(1)
 			go ds.performRequest(req)
 		}
 	}
@@ -135,7 +131,7 @@ func (ds *DNSService) decTotalNames() {
 
 func (ds *DNSService) performRequest(req *core.Request) {
 	ds.incTotalNames()
-	defer ds.max.Release(1)
+	defer ds.Config().SemMaxDNSQueries.Release(1)
 	defer ds.decTotalNames()
 
 	if req == nil || req.Name == "" || req.Domain == "" {
@@ -329,15 +325,15 @@ func (ds *DNSService) reverseDNSSweep(addr string, cidr *net.IPNet) {
 		if ds.filter.Duplicate(a) {
 			continue
 		}
-		ds.max.Acquire(1)
+		ds.Config().SemMaxDNSQueries.Acquire(1)
 		ds.reverseDNSQuery(a)
 	}
 }
 
 func (ds *DNSService) reverseDNSQuery(ip string) {
 	ds.incTotalNames()
-	defer ds.max.Release(1)
 	defer ds.decTotalNames()
+	defer ds.Config().SemMaxDNSQueries.Release(1)
 
 	ds.SetActive()
 	ptr, answer, err := Reverse(ip)

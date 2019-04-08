@@ -95,6 +95,7 @@ func NewEnumeration() *Enumeration {
 		Config: &core.Config{
 			UUID:           uuid.New(),
 			Log:            log.New(ioutil.Discard, "", 0),
+			MaxDNSQueries:  1000,
 			Alterations:    true,
 			FlipWords:      true,
 			FlipNumbers:    true,

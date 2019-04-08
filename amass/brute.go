@@ -29,16 +29,12 @@ type BruteForceService struct {
 	totalLock  sync.RWMutex
 	totalNames int
 
-	max    utils.Semaphore
 	filter *utils.StringFilter
 }
 
 // NewBruteForceService returns he object initialized, but not yet started.
 func NewBruteForceService(config *core.Config, bus *core.EventBus) *BruteForceService {
-	bfs := &BruteForceService{
-		max:    utils.NewSimpleSemaphore(50000),
-		filter: utils.NewStringFilter(),
-	}
+	bfs := &BruteForceService{filter: utils.NewStringFilter()}
 
 	bfs.BaseService = *core.NewBaseService(bfs, "Brute Forcing", config, bus)
 	return bfs
@@ -150,7 +146,7 @@ func (bfs *BruteForceService) performBruteForcing(subdomain, domain string) {
 			if idx >= len(bfs.Config().Wordlist) {
 				return
 			}
-			bfs.max.Acquire(1)
+			bfs.Config().SemMaxDNSQueries.Acquire(1)
 			word := strings.ToLower(bfs.Config().Wordlist[idx])
 			go bfs.bruteForceResolution(word, subdomain, domain)
 			idx++
@@ -160,8 +156,8 @@ func (bfs *BruteForceService) performBruteForcing(subdomain, domain string) {
 
 func (bfs *BruteForceService) bruteForceResolution(word, sub, domain string) {
 	defer bfs.SetActive()
-	defer bfs.max.Release(1)
 	defer bfs.decTotalNames()
+	defer bfs.Config().SemMaxDNSQueries.Release(1)
 
 	if word == "" || sub == "" || domain == "" {
 		return
