@@ -17,6 +17,13 @@ import (
 	"github.com/miekg/dns"
 )
 
+// The priority levels for DNS resolution.
+const (
+	PriorityLow int = iota
+	PriorityHigh
+	PriorityCritical
+)
+
 var (
 	// Public & free DNS servers
 	publicResolvers = []string{
@@ -500,13 +507,23 @@ func SetCustomResolvers(res []string) {
 }
 
 // Resolve allows all components to make DNS requests without using the DNSService object.
-func Resolve(name, qtype string) ([]core.DNSAnswer, error) {
+func Resolve(name, qtype string, priority int) ([]core.DNSAnswer, error) {
 	qt, err := textToTypeNum(qtype)
 	if err != nil {
 		return nil, &resolveError{
 			Err:   err.Error(),
 			Rcode: 100,
 		}
+	}
+
+	var maxattempts, maxservfail int
+	switch priority {
+	case PriorityHigh:
+		maxattempts = 50
+		maxservfail = 10
+	case PriorityLow:
+		maxattempts = 25
+		maxservfail = 6
 	}
 
 	var again bool
@@ -517,18 +534,20 @@ func Resolve(name, qtype string) ([]core.DNSAnswer, error) {
 		ans, again, err = nextResolver().resolve(name, qt)
 		if !again {
 			break
+		} else if priority == PriorityCritical {
+			continue
 		}
 
 		attempts++
-		if attempts > 50 && time.Now().After(start.Add(2*time.Minute)) {
+		if attempts > maxattempts && time.Now().After(start.Add(2*time.Minute)) {
 			break
 		}
 		// Do not allow server failure errors to continue as long
 		if (err.(*resolveError)).Rcode == dns.RcodeServerFailure {
 			servfail++
-			if servfail > 10 && time.Now().After(start.Add(time.Minute)) {
+			if servfail > maxservfail && time.Now().After(start.Add(time.Minute)) {
 				break
-			} else if servfail <= 5 {
+			} else if servfail <= (maxservfail / 2) {
 				time.Sleep(time.Duration(randomInt(3000, 5000)) * time.Millisecond)
 			}
 		}
@@ -551,7 +570,7 @@ func Reverse(addr string) (string, string, error) {
 		}
 	}
 
-	answers, err := Resolve(ptr, "PTR")
+	answers, err := Resolve(ptr, "PTR", PriorityLow)
 	if err != nil {
 		return ptr, name, err
 	}
@@ -623,9 +642,9 @@ func setupOptions() *dns.OPT {
 func ZoneTransfer(sub, domain, server string) ([]*core.Request, error) {
 	var results []*core.Request
 
-	a, err := Resolve(server, "A")
+	a, err := Resolve(server, "A", PriorityHigh)
 	if err != nil {
-		a, err = Resolve(server, "AAAA")
+		a, err = Resolve(server, "AAAA", PriorityHigh)
 		if err != nil {
 			return results, fmt.Errorf("DNS server has no A or AAAA record: %s: %v", server, err)
 		}

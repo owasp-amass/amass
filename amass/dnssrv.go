@@ -147,7 +147,7 @@ func (ds *DNSService) performRequest(req *core.Request) {
 	ds.SetActive()
 	var answers []core.DNSAnswer
 	for _, t := range InitialQueryTypes {
-		if a, err := Resolve(req.Name, t); err == nil {
+		if a, err := Resolve(req.Name, t, PriorityLow); err == nil {
 			if ds.goodDNSRecords(a) {
 				answers = append(answers, a...)
 			}
@@ -212,7 +212,7 @@ func (ds *DNSService) basicQueries(subdomain, domain string) {
 	ds.SetActive()
 	var answers []core.DNSAnswer
 	// Obtain the DNS answers for the NS records related to the domain
-	if ans, err := Resolve(subdomain, "NS"); err == nil {
+	if ans, err := Resolve(subdomain, "NS", PriorityHigh); err == nil {
 		for _, a := range ans {
 			pieces := strings.Split(a.Data, ",")
 			a.Data = pieces[len(pieces)-1]
@@ -229,7 +229,7 @@ func (ds *DNSService) basicQueries(subdomain, domain string) {
 
 	ds.SetActive()
 	// Obtain the DNS answers for the MX records related to the domain
-	if ans, err := Resolve(subdomain, "MX"); err == nil {
+	if ans, err := Resolve(subdomain, "MX", PriorityHigh); err == nil {
 		for _, a := range ans {
 			answers = append(answers, a)
 		}
@@ -240,7 +240,7 @@ func (ds *DNSService) basicQueries(subdomain, domain string) {
 
 	ds.SetActive()
 	// Obtain the DNS answers for the SOA records related to the domain
-	if ans, err := Resolve(subdomain, "SOA"); err == nil {
+	if ans, err := Resolve(subdomain, "SOA", PriorityHigh); err == nil {
 		answers = append(answers, ans...)
 	} else {
 		ds.Config().Log.Printf("DNS: SOA record query error: %s: %v", subdomain, err)
@@ -249,7 +249,7 @@ func (ds *DNSService) basicQueries(subdomain, domain string) {
 
 	ds.SetActive()
 	// Obtain the DNS answers for the SPF records related to the domain
-	if ans, err := Resolve(subdomain, "SPF"); err == nil {
+	if ans, err := Resolve(subdomain, "SPF", PriorityHigh); err == nil {
 		answers = append(answers, ans...)
 	} else {
 		ds.Config().Log.Printf("DNS: SPF record query error: %s: %v", subdomain, err)
@@ -291,7 +291,7 @@ func (ds *DNSService) queryServiceNames(subdomain, domain string) {
 			continue
 		}
 		ds.incTotalNames()
-		if a, err := Resolve(srvName, "SRV"); err == nil {
+		if a, err := Resolve(srvName, "SRV", PriorityLow); err == nil {
 			ds.resolvedName(&core.Request{
 				Name:    srvName,
 				Domain:  domain,

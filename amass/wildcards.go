@@ -150,7 +150,7 @@ func wildcardTest(sub string) ([]core.DNSAnswer, error) {
 
 	var answers []core.DNSAnswer
 	for _, t := range wildcardQueryTypes {
-		if a, err := Resolve(name, t); err == nil {
+		if a, err := Resolve(name, t, PriorityCritical); err == nil {
 			if a != nil && len(a) > 0 {
 				answers = append(answers, a...)
 			}
