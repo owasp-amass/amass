@@ -14,14 +14,15 @@ import (
 
 // Request tag types.
 const (
-	ALT     = "alt"
-	ARCHIVE = "archive"
-	API     = "api"
-	AXFR    = "axfr"
-	BRUTE   = "brute"
-	CERT    = "cert"
-	DNS     = "dns"
-	SCRAPE  = "scrape"
+	ALT      = "alt"
+	ARCHIVE  = "archive"
+	API      = "api"
+	AXFR     = "axfr"
+	BRUTE    = "brute"
+	CERT     = "cert"
+	DNS      = "dns"
+	EXTERNAL = "ext"
+	SCRAPE   = "scrape"
 )
 
 // Request Pub/Sub topics used across Amass.

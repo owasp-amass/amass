@@ -68,6 +68,9 @@ type Enumeration struct {
 	// Link graph that collects all the information gathered by the enumeration
 	Graph handlers.DataHandler
 
+	// Names already known prior to the enumeration
+	ProvidedNames []string
+
 	// The channel that will receive the results
 	Output chan *core.Output
 
@@ -178,6 +181,8 @@ func (e *Enumeration) Start() error {
 
 	// Use all previously discovered names that are in scope
 	go e.submitKnownNames()
+	go e.submitProvidedNames()
+
 	// Start with the first domain name provided by the configuration
 	var domainIdx int
 	e.releaseDomainName(domainIdx)
@@ -284,6 +289,19 @@ func (e *Enumeration) submitKnownNames() {
 					Source: o.Source,
 				})
 			}
+		}
+	}
+}
+
+func (e *Enumeration) submitProvidedNames() {
+	for _, name := range e.ProvidedNames {
+		if domain := e.Config.WhichDomain(name); domain != "" {
+			e.Bus.Publish(core.NewNameTopic, &core.Request{
+				Name:   name,
+				Domain: domain,
+				Tag:    core.EXTERNAL,
+				Source: "Input File",
+			})
 		}
 	}
 }

@@ -68,6 +68,7 @@ var (
 	outpath       = flag.String("o", "", "Path to the text output file")
 	jsonpath      = flag.String("json", "", "Path to the JSON output file")
 	datapath      = flag.String("do", "", "Path to data operations output file")
+	namespath     = flag.String("nf", "", "Path to a file providing already known subdomain names")
 	domainspath   = flag.String("df", "", "Path to a file providing root domain names")
 	excludepath   = flag.String("ef", "", "Path to a file providing data sources to exclude")
 	includepath   = flag.String("if", "", "Path to a file providing data sources to include")
@@ -125,7 +126,7 @@ func main() {
 	}
 
 	var err error
-	var words []string
+	var words, names []string
 	// Obtain parameters from provided input files
 	if *wordlist != "" {
 		words, err = core.GetListFromFile(*wordlist)
@@ -156,6 +157,14 @@ func main() {
 			os.Exit(1)
 		}
 		included = utils.UniqueAppend(included, list...)
+	}
+	if *namespath != "" {
+		list, err := core.GetListFromFile(*namespath)
+		if err != nil {
+			r.Fprintf(color.Error, "Failed to parse the subdomain names file: %v\n", err)
+			os.Exit(1)
+		}
+		names = utils.UniqueAppend(names, list...)
 	}
 	if *domainspath != "" {
 		list, err := core.GetListFromFile(*domainspath)
@@ -200,11 +209,14 @@ func main() {
 	if *dir != "" {
 		enum.Config.Dir = *dir
 	}
-	if *maxdns != 0 {
+	if *maxdns > 0 {
 		enum.Config.MaxDNSQueries = *maxdns
 	}
-	if len(words) != 0 {
+	if len(words) > 0 {
 		enum.Config.Wordlist = words
+	}
+	if len(names) > 0 {
+		enum.ProvidedNames = names
 	}
 	if *brute {
 		enum.Config.BruteForcing = true
@@ -215,7 +227,7 @@ func main() {
 	if *norecursive {
 		enum.Config.Recursive = false
 	}
-	if *minrecursive != 0 {
+	if *minrecursive > 0 {
 		enum.Config.MinForRecursive = *minrecursive
 	}
 	if *active {
@@ -227,7 +239,7 @@ func main() {
 	if *passive {
 		enum.Config.Passive = true
 	}
-	if len(blacklist) != 0 {
+	if len(blacklist) > 0 {
 		enum.Config.Blacklist = blacklist
 	}
 
