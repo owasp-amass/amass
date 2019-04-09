@@ -28,6 +28,7 @@ type BruteForceService struct {
 	metrics    *core.MetricsCollector
 	totalLock  sync.RWMutex
 	totalNames int
+	curIdx     int
 
 	filter *utils.StringFilter
 }
@@ -56,8 +57,20 @@ func (bfs *BruteForceService) OnStart() error {
 				bfs.Bus().Subscribe(core.NewSubdomainTopic, bfs.NewSubdomain)
 			}
 		}
-		go bfs.startRootDomains()
 	}
+	return nil
+}
+
+// OnLowNumberOfNames implements the Service interface.
+func (bfs *BruteForceService) OnLowNumberOfNames() error {
+	domains := bfs.Config().Domains()
+	if len(domains) <= bfs.curIdx {
+		return nil
+	}
+
+	domain := domains[bfs.curIdx]
+	go bfs.performBruteForcing(domain, domain)
+	bfs.curIdx++
 	return nil
 }
 
@@ -101,13 +114,6 @@ func (bfs *BruteForceService) goodRequest(req *core.Request) bool {
 		}
 	}
 	return ok
-}
-
-func (bfs *BruteForceService) startRootDomains() {
-	// Look at each domain provided by the config
-	for _, domain := range bfs.Config().Domains() {
-		go bfs.performBruteForcing(domain, domain)
-	}
 }
 
 // NewSubdomain is called by the Name Service when proper subdomains are discovered.
