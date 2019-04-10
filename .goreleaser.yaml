@@ -1,3 +1,6 @@
+before:
+  hooks:
+    - go get -u -d ./...
 builds:
   -
     main: ./cmd/amass/main.go
@@ -11,13 +14,10 @@ builds:
       - 386
     env:
       - CGO_ENABLED=0
-      - GO111MODULE=on
     ignore:
       - goos: darwin
         goarch: 386
       - goos: windows
-        goarch: 386
-      - goos: linux
         goarch: 386
 
   -
@@ -32,13 +32,10 @@ builds:
       - 386
     env:
       - CGO_ENABLED=0
-      - GO111MODULE=on
     ignore:
       - goos: darwin
         goarch: 386
       - goos: windows
-        goarch: 386
-      - goos: linux
         goarch: 386
 
   -
@@ -53,13 +50,10 @@ builds:
       - 386
     env:
       - CGO_ENABLED=0
-      - GO111MODULE=on
     ignore:
       - goos: darwin
         goarch: 386
       - goos: windows
-        goarch: 386
-      - goos: linux
         goarch: 386
 
   -
@@ -74,13 +68,10 @@ builds:
       - 386
     env:
       - CGO_ENABLED=0
-      - GO111MODULE=on
     ignore:
       - goos: darwin
         goarch: 386
       - goos: windows
-        goarch: 386
-      - goos: linux
         goarch: 386
 
   -
@@ -95,13 +86,10 @@ builds:
       - 386
     env:
       - CGO_ENABLED=0
-      - GO111MODULE=on
     ignore:
       - goos: darwin
         goarch: 386
       - goos: windows
-        goarch: 386
-      - goos: linux
         goarch: 386
 
 archive:
