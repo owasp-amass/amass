@@ -46,6 +46,12 @@ type Config struct {
 	GremlinUser string
 	GremlinPass string
 
+	// The maximum number of concurrent DNS queries
+	MaxDNSQueries int `ini:"maximum_dns_queries"`
+
+	// Semaphore to enforce the maximum DNS queries
+	SemMaxDNSQueries utils.Semaphore
+
 	// The ports that will be checked for certificates
 	Ports []int `ini:"port,,allowshadow"`
 
@@ -113,12 +119,16 @@ func (c *Config) CheckSettings() error {
 	if c.Passive && c.Active {
 		return errors.New("Active enumeration cannot be performed without DNS resolution")
 	}
+	if c.MaxDNSQueries <= 0 {
+		return errors.New("MaxDNSQueries must have a value greater than zero")
+	}
 	if len(c.Ports) == 0 {
 		c.Ports = []int{443}
 	}
 	if len(c.Wordlist) == 0 {
 		c.Wordlist, err = getDefaultWordlist()
 	}
+	c.SemMaxDNSQueries = utils.NewSimpleSemaphore(c.MaxDNSQueries)
 	return err
 }
 

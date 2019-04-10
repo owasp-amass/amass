@@ -77,7 +77,7 @@ func SubdomainToDomain(name string) string {
 	for i := 0; i < len(labels)-1; i++ {
 		sub := strings.Join(labels[i:], ".")
 
-		if ns, err := Resolve(sub, "NS"); err == nil {
+		if ns, err := Resolve(sub, "NS", PriorityCritical); err == nil {
 			pieces := strings.Split(ns[0].Data, ",")
 			domainCache[pieces[0]] = struct{}{}
 			domain = pieces[0]
@@ -278,7 +278,7 @@ func originLookup(addr string) (int, string, error) {
 		return 0, "", fmt.Errorf("originLookup param is insufficient: addr: %s", ip)
 	}
 
-	answers, err = Resolve(name, "TXT")
+	answers, err = Resolve(name, "TXT", PriorityCritical)
 	if err != nil {
 		return 0, "", fmt.Errorf("originLookup: DNS TXT record query error: %s: %v", name, err)
 	}
@@ -296,7 +296,7 @@ func asnLookup(asn int) (*ASRecord, error) {
 	var answers []core.DNSAnswer
 	name := "AS" + strconv.Itoa(asn) + ".asn.cymru.com"
 
-	answers, err = Resolve(name, "TXT")
+	answers, err = Resolve(name, "TXT", PriorityCritical)
 	if err != nil {
 		return nil, fmt.Errorf("asnLookup: DNS TXT record query error: %s: %v", name, err)
 	}
@@ -358,7 +358,7 @@ func fetchShadowServerNetblockData(asn int) ([]string, error) {
 }
 
 func nameToAddress(name string) string {
-	answers, err := Resolve(name, "A")
+	answers, err := Resolve(name, "A", PriorityHigh)
 	if err != nil {
 		return ""
 	}

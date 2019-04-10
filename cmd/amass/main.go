@@ -50,6 +50,7 @@ var (
 	vprint        = flag.Bool("version", false, "Print the version number of this Amass binary")
 	dir           = flag.String("dir", "", "Path to the directory containing the output files")
 	config        = flag.String("config", "", "Path to the INI configuration file. Additional details below")
+	maxdns        = flag.Int("max-dns-queries", 0, "Maximum number of concurrent DNS queries")
 	unresolved    = flag.Bool("include-unresolvable", false, "Output DNS names that did not resolve")
 	ips           = flag.Bool("ip", false, "Show the IP addresses for discovered names")
 	ipv4          = flag.Bool("ipv4", false, "Show the IPv4 addresses for discovered names")
@@ -67,6 +68,7 @@ var (
 	outpath       = flag.String("o", "", "Path to the text output file")
 	jsonpath      = flag.String("json", "", "Path to the JSON output file")
 	datapath      = flag.String("do", "", "Path to data operations output file")
+	namespath     = flag.String("nf", "", "Path to a file providing already known subdomain names")
 	domainspath   = flag.String("df", "", "Path to a file providing root domain names")
 	excludepath   = flag.String("ef", "", "Path to a file providing data sources to exclude")
 	includepath   = flag.String("if", "", "Path to a file providing data sources to include")
@@ -124,7 +126,7 @@ func main() {
 	}
 
 	var err error
-	var words []string
+	var words, names []string
 	// Obtain parameters from provided input files
 	if *wordlist != "" {
 		words, err = core.GetListFromFile(*wordlist)
@@ -156,6 +158,14 @@ func main() {
 		}
 		included = utils.UniqueAppend(included, list...)
 	}
+	if *namespath != "" {
+		list, err := core.GetListFromFile(*namespath)
+		if err != nil {
+			r.Fprintf(color.Error, "Failed to parse the subdomain names file: %v\n", err)
+			os.Exit(1)
+		}
+		names = utils.UniqueAppend(names, list...)
+	}
 	if *domainspath != "" {
 		list, err := core.GetListFromFile(*domainspath)
 		if err != nil {
@@ -184,29 +194,10 @@ func main() {
 
 	// Seed the default pseudo-random number generator
 	rand.Seed(time.Now().UTC().UnixNano())
-	// Setup the amass enumeration settings
-	alts := true
-	recursive := true
-	if *noalts {
-		alts = false
-	}
-	if *norecursive {
-		recursive = false
-	}
+
 	rLog, wLog := io.Pipe()
 	enum := amass.NewEnumeration()
 	enum.Config.Log = log.New(wLog, "", log.Lmicroseconds)
-	enum.Config.Dir = *dir
-	enum.Config.Wordlist = words
-	enum.Config.BruteForcing = *brute
-	enum.Config.Recursive = recursive
-	enum.Config.MinForRecursive = *minrecursive
-	enum.Config.Active = *active
-	enum.Config.IncludeUnresolvable = *unresolved
-	enum.Config.Alterations = alts
-	enum.Config.Passive = *passive
-	enum.Config.Blacklist = blacklist
-	enum.Config.DisabledDataSources = compileDisabledSources(enum, included, excluded)
 	// Check if a configuration file was provided, and if so, load the settings
 	if *config != "" {
 		if err := enum.Config.LoadSettings(*config); err != nil {
@@ -214,6 +205,47 @@ func main() {
 			os.Exit(1)
 		}
 	}
+	// Setup the amass enumeration settings
+	if *dir != "" {
+		enum.Config.Dir = *dir
+	}
+	if *maxdns > 0 {
+		enum.Config.MaxDNSQueries = *maxdns
+	}
+	if len(words) > 0 {
+		enum.Config.Wordlist = words
+	}
+	if len(names) > 0 {
+		enum.ProvidedNames = names
+	}
+	if *brute {
+		enum.Config.BruteForcing = true
+	}
+	if *noalts {
+		enum.Config.Alterations = false
+	}
+	if *norecursive {
+		enum.Config.Recursive = false
+	}
+	if *minrecursive > 0 {
+		enum.Config.MinForRecursive = *minrecursive
+	}
+	if *active {
+		enum.Config.Active = true
+	}
+	if *unresolved {
+		enum.Config.IncludeUnresolvable = true
+	}
+	if *passive {
+		enum.Config.Passive = true
+	}
+	if len(blacklist) > 0 {
+		enum.Config.Blacklist = blacklist
+	}
+
+	enum.Config.DisabledDataSources = utils.UniqueAppend(
+		enum.Config.DisabledDataSources, compileDisabledSources(enum, included, excluded)...)
+
 	// Attempt to add the provided domains to the configuration
 	enum.Config.AddDomains(domains)
 	if len(enum.Config.Domains()) == 0 {

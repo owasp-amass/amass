@@ -28,17 +28,14 @@ type BruteForceService struct {
 	metrics    *core.MetricsCollector
 	totalLock  sync.RWMutex
 	totalNames int
+	curIdx     int
 
-	max    utils.Semaphore
 	filter *utils.StringFilter
 }
 
 // NewBruteForceService returns he object initialized, but not yet started.
 func NewBruteForceService(config *core.Config, bus *core.EventBus) *BruteForceService {
-	bfs := &BruteForceService{
-		max:    utils.NewSimpleSemaphore(50000),
-		filter: utils.NewStringFilter(),
-	}
+	bfs := &BruteForceService{filter: utils.NewStringFilter()}
 
 	bfs.BaseService = *core.NewBaseService(bfs, "Brute Forcing", config, bus)
 	return bfs
@@ -60,8 +57,20 @@ func (bfs *BruteForceService) OnStart() error {
 				bfs.Bus().Subscribe(core.NewSubdomainTopic, bfs.NewSubdomain)
 			}
 		}
-		go bfs.startRootDomains()
 	}
+	return nil
+}
+
+// OnLowNumberOfNames implements the Service interface.
+func (bfs *BruteForceService) OnLowNumberOfNames() error {
+	domains := bfs.Config().Domains()
+	if len(domains) <= bfs.curIdx {
+		return nil
+	}
+
+	domain := domains[bfs.curIdx]
+	go bfs.performBruteForcing(domain, domain)
+	bfs.curIdx++
 	return nil
 }
 
@@ -107,13 +116,6 @@ func (bfs *BruteForceService) goodRequest(req *core.Request) bool {
 	return ok
 }
 
-func (bfs *BruteForceService) startRootDomains() {
-	// Look at each domain provided by the config
-	for _, domain := range bfs.Config().Domains() {
-		go bfs.performBruteForcing(domain, domain)
-	}
-}
-
 // NewSubdomain is called by the Name Service when proper subdomains are discovered.
 func (bfs *BruteForceService) NewSubdomain(req *core.Request, times int) {
 	if times == bfs.Config().MinForRecursive {
@@ -150,7 +152,7 @@ func (bfs *BruteForceService) performBruteForcing(subdomain, domain string) {
 			if idx >= len(bfs.Config().Wordlist) {
 				return
 			}
-			bfs.max.Acquire(1)
+			bfs.Config().SemMaxDNSQueries.Acquire(1)
 			word := strings.ToLower(bfs.Config().Wordlist[idx])
 			go bfs.bruteForceResolution(word, subdomain, domain)
 			idx++
@@ -160,8 +162,8 @@ func (bfs *BruteForceService) performBruteForcing(subdomain, domain string) {
 
 func (bfs *BruteForceService) bruteForceResolution(word, sub, domain string) {
 	defer bfs.SetActive()
-	defer bfs.max.Release(1)
 	defer bfs.decTotalNames()
+	defer bfs.Config().SemMaxDNSQueries.Release(1)
 
 	if word == "" || sub == "" || domain == "" {
 		return
@@ -170,7 +172,7 @@ func (bfs *BruteForceService) bruteForceResolution(word, sub, domain string) {
 	name := word + "." + sub
 	var answers []core.DNSAnswer
 	for _, t := range BruteForceQueryTypes {
-		if a, err := Resolve(name, t); err == nil {
+		if a, err := Resolve(name, t, PriorityLow); err == nil {
 			answers = append(answers, a...)
 			// Do not continue if a CNAME was discovered
 			if t == "CNAME" {
