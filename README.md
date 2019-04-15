@@ -44,7 +44,7 @@ If your operating environment supports [Snap](https://docs.snapcraft.io/core/ins
 sudo snap install amass
 ```
 
-On Kali, follow these steps to install Snap and Amass + use AppArmor (for autoload):
+On **Kali**, follow these steps to install Snap and Amass + use AppArmor (for autoload):
 
 ```bash
 sudo apt install snapd
@@ -64,6 +64,13 @@ Periodically, execute the following command to update all your snap packages:
 
 ```bash
 sudo snap refresh
+```
+
+For **Homebrew** on **Mac**, the following two commands will install Amass into your macOS environment:
+
+```bash
+brew tap caffix/amass
+brew install amass
 ```
 
 ### Using Docker
