@@ -20,15 +20,22 @@ import (
 )
 
 var (
-	nameStripRE = regexp.MustCompile("^((20)|(25)|(2f)|(3d)|(40))+")
+	nameStripRE = regexp.MustCompile("^((20)|(25)|(2b)|(2f)|(3d)|(3a)|(40))+")
 )
 
 // Clean up the names scraped from the web.
 func cleanName(name string) string {
-	if i := nameStripRE.FindStringIndex(name); i != nil {
-		name = name[i[1]:]
-	}
 	name = strings.TrimSpace(strings.ToLower(name))
+
+	for {
+		if i := nameStripRE.FindStringIndex(name); i != nil {
+			name = name[i[1]:]
+		} else {
+			break
+		}
+	}
+
+	name = strings.Trim(name, "-")
 	// Remove dots at the beginning of names
 	if len(name) > 1 && name[0] == '.' {
 		name = name[1:]

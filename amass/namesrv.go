@@ -94,7 +94,7 @@ func (ns *NameService) processRequests() {
 func (ns *NameService) performRequest(req *core.Request) {
 	ns.SetActive()
 	if ns.Config().Passive {
-		if !ns.filter.Duplicate(req.Name) {
+		if !ns.filter.Duplicate(req.Name) && ns.sanityRE.MatchString(req.Name) {
 			ns.Bus().Publish(core.OutputTopic, &core.Output{
 				Name:   req.Name,
 				Domain: req.Domain,

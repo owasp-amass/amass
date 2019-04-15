@@ -4,10 +4,13 @@
 package sources
 
 import (
-	"encoding/json"
+	"fmt"
+	"strings"
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
+	"github.com/jmoiron/sqlx"
+	_ "github.com/lib/pq" // Need the postgres driver
 )
 
 // Crtsh is the Service that handles access to the Crtsh data source.
@@ -15,6 +18,7 @@ type Crtsh struct {
 	core.BaseService
 
 	SourceType string
+	db         *sqlx.DB
 }
 
 // NewCrtsh returns he object initialized, but not yet started.
@@ -28,6 +32,12 @@ func NewCrtsh(config *core.Config, bus *core.EventBus) *Crtsh {
 // OnStart implements the Service interface
 func (c *Crtsh) OnStart() error {
 	c.BaseService.OnStart()
+
+	var err error
+	c.db, err = sqlx.Connect("postgres", "host=crt.sh user=guest dbname=certwatch sslmode=disable")
+	if err != nil {
+		return fmt.Errorf("%s: Failed to connect to the database server: %v", c.String(), err)
+	}
 
 	go c.processRequests()
 	return nil
@@ -47,31 +57,34 @@ func (c *Crtsh) processRequests() {
 }
 
 func (c *Crtsh) executeQuery(domain string) {
-	url := c.getURL(domain)
-	page, err := utils.RequestWebPage(url, nil, nil, "", "")
+	var results []struct {
+		Domain string `db:"domain"`
+	}
+
+	pattern := "%." + domain
+	err := c.db.Select(&results,
+		`SELECT DISTINCT ci.NAME_VALUE as domain 
+		FROM certificate_identity ci 
+		WHERE reverse(lower(ci.NAME_VALUE)) LIKE reverse(lower($1)) 
+		ORDER BY ci.NAME_VALUE`, pattern)
 	if err != nil {
-		c.Config().Log.Printf("%s: %s: %v", c.String(), url, err)
+		c.Config().Log.Printf("%s: Query pattern %s: %v", c.String(), pattern, err)
 		return
 	}
 
 	c.SetActive()
 	// Extract the subdomain names from the results
-	var results []struct {
-		Name string `json:"name_value"`
+	var names []string
+	for _, result := range results {
+		names = utils.UniqueAppend(names, strings.ToLower(utils.RemoveAsteriskLabel(result.Domain)))
 	}
-	if err := json.Unmarshal([]byte(page), &results); err != nil {
-		return
-	}
-	for _, line := range results {
+
+	for _, name := range names {
 		c.Bus().Publish(core.NewNameTopic, &core.Request{
-			Name:   line.Name,
+			Name:   name,
 			Domain: domain,
 			Tag:    c.SourceType,
 			Source: c.String(),
 		})
 	}
-}
-
-func (c *Crtsh) getURL(domain string) string {
-	return "https://crt.sh/?q=%25." + domain + "&output=json"
 }

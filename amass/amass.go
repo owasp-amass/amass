@@ -90,6 +90,8 @@ type Enumeration struct {
 	metricsLock       sync.RWMutex
 	dnsQueriesPerSec  int
 	dnsNamesRemaining int
+
+	domainIdx int
 }
 
 // NewEnumeration returns an initialized Enumeration that has not been started yet.
@@ -184,8 +186,7 @@ func (e *Enumeration) Start() error {
 	go e.submitProvidedNames()
 
 	// Start with the first domain name provided by the configuration
-	var domainIdx int
-	e.releaseDomainName(domainIdx)
+	e.releaseDomainName()
 
 	var wg sync.WaitGroup
 	wg.Add(2)
@@ -210,33 +211,7 @@ loop:
 					e.DNSQueriesPerSec(), e.DNSNamesRemaining())
 			}
 		case <-t.C:
-			done := true
-			for _, srv := range services {
-				if srv.IsActive() {
-					done = false
-					break
-				}
-			}
-			if done {
-				close(e.Done)
-				continue loop
-			}
-
-			if !e.Config.Passive {
-				e.processMetrics(services)
-				psec := e.DNSQueriesPerSec()
-				// Check if it's too soon to release the next domain name
-				if psec > 0 && ((e.DNSNamesRemaining()*len(InitialQueryTypes))/psec) > 10 {
-					continue loop
-				}
-				// Let the services know that the enumeration is ready for more names
-				for _, srv := range services {
-					go srv.LowNumberOfNames()
-				}
-			}
-			// Check if the next domain should be sent to data sources/brute forcing
-			domainIdx++
-			e.releaseDomainName(domainIdx)
+			e.periodicChecks(services)
 		}
 	}
 	t.Stop()
@@ -247,10 +222,39 @@ loop:
 	return nil
 }
 
-func (e *Enumeration) releaseDomainName(idx int) {
+func (e *Enumeration) periodicChecks(services []core.Service) {
+	done := true
+	for _, srv := range services {
+		if srv.IsActive() {
+			done = false
+			break
+		}
+	}
+	if done {
+		close(e.Done)
+		return
+	}
+
+	if !e.Config.Passive {
+		e.processMetrics(services)
+		psec := e.DNSQueriesPerSec()
+		// Check if it's too soon to release the next domain name
+		if psec > 0 && ((e.DNSNamesRemaining()*len(InitialQueryTypes))/psec) > 10 {
+			return
+		}
+		// Let the services know that the enumeration is ready for more names
+		for _, srv := range services {
+			go srv.LowNumberOfNames()
+		}
+	}
+	// Check if the next domain should be sent to data sources/brute forcing
+	e.releaseDomainName()
+}
+
+func (e *Enumeration) releaseDomainName() {
 	domains := e.Config.Domains()
 
-	if idx >= len(domains) {
+	if e.domainIdx >= len(domains) {
 		return
 	}
 
@@ -260,10 +264,11 @@ func (e *Enumeration) releaseDomainName(idx int) {
 		}
 
 		srv.SendRequest(&core.Request{
-			Name:   domains[idx],
-			Domain: domains[idx],
+			Name:   domains[e.domainIdx],
+			Domain: domains[e.domainIdx],
 		})
 	}
+	e.domainIdx++
 }
 
 func (e *Enumeration) submitKnownNames() {

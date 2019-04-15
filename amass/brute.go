@@ -63,6 +63,10 @@ func (bfs *BruteForceService) OnStart() error {
 
 // OnLowNumberOfNames implements the Service interface.
 func (bfs *BruteForceService) OnLowNumberOfNames() error {
+	if !bfs.Config().BruteForcing {
+		return nil
+	}
+
 	domains := bfs.Config().Domains()
 	if len(domains) <= bfs.curIdx {
 		return nil

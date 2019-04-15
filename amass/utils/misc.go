@@ -172,3 +172,14 @@ func RemoveAsteriskLabel(s string) string {
 	}
 	return strings.Join(labels[index:], ".")
 }
+
+// ReverseString returns the characters of the argument string in reverse order.
+func ReverseString(s string) string {
+	chrs := []rune(s)
+
+	end := len(chrs) / 2
+	for i, j := 0, len(chrs)-1; i < end; i, j = i+1, j-1 {
+		chrs[i], chrs[j] = chrs[j], chrs[i]
+	}
+	return string(chrs)
+}

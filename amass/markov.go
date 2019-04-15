@@ -7,10 +7,21 @@ import (
 	"math/rand"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
 	"github.com/miekg/dns"
+)
+
+const (
+	markovMinForGen    = 100
+	markovNumGenerated = 50000
+	markovNumForUpdate = 10
+)
+
+var (
+	markovBlacklistedLabels = []string{"www"}
 )
 
 type lenDist struct {
@@ -32,7 +43,7 @@ type MarkovService struct {
 	updateLock sync.Mutex
 	updated    bool
 	generating bool
-	numNames   int
+	ready      bool
 	model      *markovModel
 	subsLock   sync.Mutex
 	subs       map[string]*core.Request
@@ -43,7 +54,6 @@ type MarkovService struct {
 // NewMarkovService returns he object initialized, but not yet started.
 func NewMarkovService(config *core.Config, bus *core.EventBus) *MarkovService {
 	m := &MarkovService{
-		numNames:  25000,
 		subs:      make(map[string]*core.Request),
 		inFilter:  utils.NewStringFilter(),
 		outFilter: utils.NewStringFilter(),
@@ -74,25 +84,33 @@ func (m *MarkovService) OnLowNumberOfNames() error {
 	total := m.model.TotalLabels
 	m.model.Unlock()
 
-	if total < 100 || m.isGenerating() || !m.isUpdated() {
+	if total < markovMinForGen || !m.isReady() || m.isGenerating() || !m.isUpdated() {
 		return nil
 	}
 
 	m.markGenerating(true)
 	m.updateFrequencies()
 	m.generateNames()
+	m.markReady(false)
 	m.markGenerating(false)
 	m.markUpdated(false)
 	return nil
 }
 
 func (m *MarkovService) processRequests() {
+	t := time.NewTicker(time.Minute)
+	defer t.Stop()
+
 	for {
 		select {
 		case <-m.PauseChan():
 			<-m.ResumeChan()
 		case <-m.Quit():
 			return
+		case <-t.C:
+			if !m.isGenerating() {
+				m.markReady(true)
+			}
 		case req := <-m.RequestChan():
 			go m.trainModel(req)
 		}
@@ -123,11 +141,28 @@ func (m *MarkovService) trainModel(req *core.Request) {
 	if len(parts) != 2 {
 		return
 	}
-	label := []rune(parts[0] + ".")
+	// Add the domain/subdomain to the collection
+	m.subsLock.Lock()
+	if _, ok := m.subs[parts[1]]; !ok {
+		m.subs[parts[1]] = &core.Request{
+			Name:   parts[1],
+			Domain: req.Domain,
+		}
+	}
+	m.subsLock.Unlock()
+
+	label := []rune(parts[0])
+	// Do not allow blacklisted labels to pollute the model
+	for _, bl := range markovBlacklistedLabels {
+		if string(label) == bl {
+			return
+		}
+	}
 
 	// The same name should not leave the service
 	m.outFilter.Duplicate(req.Name)
 
+	label = append(label, '.')
 	for i, char := range label {
 		if i-m.model.NgramSize < 0 {
 			var ngram string
@@ -142,18 +177,8 @@ func (m *MarkovService) trainModel(req *core.Request) {
 		}
 	}
 
-	m.subsLock.Lock()
-	if _, ok := m.subs[parts[1]]; !ok {
-		m.subs[parts[1]] = &core.Request{
-			Name:   parts[1],
-			Domain: req.Domain,
-		}
-	}
-	m.subsLock.Unlock()
-
 	m.SetActive()
 	m.updateTotal()
-	m.markUpdated(true)
 }
 
 func abs(val int) int {
@@ -193,7 +218,15 @@ func (m *MarkovService) updateFrequencies() {
 }
 
 func (m *MarkovService) generateNames() {
-	for i := 0; i < m.numNames; i++ {
+	num := markovNumGenerated
+
+	m.subsLock.Lock()
+	if l := len(m.subs); l > 0 {
+		num /= l
+	}
+	m.subsLock.Unlock()
+
+	for i := 0; i < num; i++ {
 		label := m.generateLabel()
 
 		m.subsLock.Lock()
@@ -276,6 +309,9 @@ func (m *MarkovService) updateTotal() {
 	defer m.model.Unlock()
 
 	m.model.TotalLabels++
+	if m.model.TotalLabels%markovNumForUpdate == 0 {
+		go m.markUpdated(true)
+	}
 }
 
 func (m *MarkovService) markUpdated(mark bool) {
@@ -304,4 +340,18 @@ func (m *MarkovService) isGenerating() bool {
 	defer m.updateLock.Unlock()
 
 	return m.generating
+}
+
+func (m *MarkovService) markReady(mark bool) {
+	m.updateLock.Lock()
+	defer m.updateLock.Unlock()
+
+	m.ready = mark
+}
+
+func (m *MarkovService) isReady() bool {
+	m.updateLock.Lock()
+	defer m.updateLock.Unlock()
+
+	return m.ready
 }
