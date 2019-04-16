@@ -116,3 +116,24 @@ changelog:
     exclude:
     - '^doc:'
     - '^test:'
+
+brew:
+  name: amass
+  github:
+    owner: caffix
+    name: homebrew-amass
+  url_template: "http://github.com/OWASP/Amass/releases/download/{{ .Version }}/amass_{{ .Version }}_macos_amd64.zip"
+  download_strategy: GitHubPrivateRepositoryReleaseDownloadStrategy
+  commit_author:
+    name: caffix
+    email: caffix@users.noreply.github.com
+  folder: Formula
+  homepage: "https://www.owasp.org/index.php/OWASP_Amass_Project"
+  description: "In-depth DNS Enumeration and Network Mapping"
+  install: |
+    bin.install "amass"
+    bin.install "amass.netdomains"
+    bin.install "amass.viz"
+    bin.install "amass.db"
+    bin.install "amass.tracker"
+
