@@ -150,6 +150,7 @@ This project improves thanks to all the people who contribute:
 
 ## Mentions
 
+* [Week in OSINT #2019–16: From OSINT for pentesting, to OCR and OWASP](https://medium.com/week-in-osint/week-in-osint-2019-16-8ccfe0da1a70)
 * [Stop Using Python for Subdomain Enumeration](http://sec.alexflor.es/post/subdomain_enum/)
 * [My Personal OSINT Techniques, Part 1 of 2: Key & Layer, Contingency Seeding](https://0x00sec.org/t/my-personal-osint-techniques-part-1-of-2-key-layer-contingency-seeding/)
 * [Subdomain Enumeration Tools – 2019 Update](https://www.yeahhub.com/subdomain-enumeration-tools-2019-update/)
