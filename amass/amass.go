@@ -131,49 +131,24 @@ func (e *Enumeration) Start() error {
 	} else if err := e.Config.CheckSettings(); err != nil {
 		return err
 	}
-	// Select the graph that will store the enumeration findings
-	if e.Config.GremlinURL != "" {
-		gremlin := handlers.NewGremlin(e.Config.GremlinURL,
-			e.Config.GremlinUser, e.Config.GremlinPass, e.Config.Log)
-		e.Graph = gremlin
-		defer gremlin.Close()
-	} else {
-		graph := handlers.NewGraph(e.Config.Dir)
-		if graph == nil {
-			return errors.New("Failed to create the graph")
-		}
-		e.Graph = graph
-		defer graph.Close()
+
+	// Setup the correct graph database handler
+	err := e.setupGraph()
+	if err != nil {
+		return err
 	}
+	defer e.Graph.Close()
 
 	e.Bus.Subscribe(core.OutputTopic, e.sendOutput)
 
+	// Select the data sources desired by the user
 	if len(e.Config.DisabledDataSources) > 0 {
 		e.dataSources = e.Config.ExcludeDisabledDataSources(e.dataSources)
 	}
 
 	// Select the correct services to be used in this enumeration
-	var services []core.Service
-	if !e.Config.Passive {
-		dms := NewDataManagerService(e.Config, e.Bus)
-		dms.AddDataHandler(e.Graph)
-		if e.Config.DataOptsWriter != nil {
-			dms.AddDataHandler(handlers.NewDataOptsHandler(e.Config.DataOptsWriter))
-		}
-		services = append(services, NewDNSService(e.Config, e.Bus),
-			dms, NewActiveCertService(e.Config, e.Bus))
-	}
-
-	namesrv := NewNameService(e.Config, e.Bus)
-	namesrv.RegisterGraph(e.Graph)
-	services = append(services, namesrv, NewAddressService(e.Config, e.Bus))
-	if !e.Config.Passive {
-		e.bruteSrv = NewBruteForceService(e.Config, e.Bus)
-		services = append(services, e.bruteSrv,
-			NewMarkovService(e.Config, e.Bus), NewAlterationService(e.Config, e.Bus))
-	}
-
-	// Grab all the data sources
+	services := e.requiredServices()
+	// Add all the data sources to the list
 	services = append(services, e.dataSources...)
 	for _, srv := range services {
 		if err := srv.Start(); err != nil {
@@ -185,17 +160,17 @@ func (e *Enumeration) Start() error {
 	go e.submitKnownNames()
 	go e.submitProvidedNames()
 
-	// Start with the first domain name provided by the configuration
+	// Start with the first domain name provided in the configuration
 	e.releaseDomainName()
 
+	// The enumeration will not terminate until all output has been processed
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go e.checkForOutput(&wg)
 	go e.processOutput(&wg)
 
-	t := time.NewTicker(time.Duration(3) * time.Second)
+	t := time.NewTicker(time.Second)
 	logTick := time.NewTicker(time.Minute)
-	defer logTick.Stop()
 loop:
 	for {
 		select {
@@ -204,7 +179,7 @@ loop:
 		case <-e.PauseChan():
 			t.Stop()
 		case <-e.ResumeChan():
-			t = time.NewTicker(time.Duration(3) * time.Second)
+			t = time.NewTicker(time.Second)
 		case <-logTick.C:
 			if !e.Config.Passive {
 				e.Config.Log.Printf("Average DNS queries performed: %d/sec, DNS names remaining: %d",
@@ -215,6 +190,9 @@ loop:
 		}
 	}
 	t.Stop()
+	logTick.Stop()
+
+	// Stop all the services and wait for cleanup to finish
 	for _, srv := range services {
 		srv.Stop()
 	}
@@ -247,7 +225,7 @@ func (e *Enumeration) periodicChecks(services []core.Service) {
 			go srv.LowNumberOfNames()
 		}
 	}
-	// Check if the next domain should be sent to data sources/brute forcing
+	// Attempt to send the next domain to data sources/brute forcing
 	e.releaseDomainName()
 }
 
@@ -309,6 +287,49 @@ func (e *Enumeration) submitProvidedNames() {
 			})
 		}
 	}
+}
+
+// Select the correct services to be used in this enumeration.
+func (e *Enumeration) requiredServices() []core.Service {
+	var services []core.Service
+
+	if !e.Config.Passive {
+		dms := NewDataManagerService(e.Config, e.Bus)
+		dms.AddDataHandler(e.Graph)
+		if e.Config.DataOptsWriter != nil {
+			dms.AddDataHandler(handlers.NewDataOptsHandler(e.Config.DataOptsWriter))
+		}
+		services = append(services, NewDNSService(e.Config, e.Bus),
+			dms, NewActiveCertService(e.Config, e.Bus))
+	}
+
+	namesrv := NewNameService(e.Config, e.Bus)
+	namesrv.RegisterGraph(e.Graph)
+	services = append(services, namesrv, NewAddressService(e.Config, e.Bus))
+
+	if !e.Config.Passive {
+		e.bruteSrv = NewBruteForceService(e.Config, e.Bus)
+		services = append(services, e.bruteSrv,
+			NewMarkovService(e.Config, e.Bus), NewAlterationService(e.Config, e.Bus))
+	}
+	return services
+}
+
+// Select the graph that will store the enumeration findings.
+func (e *Enumeration) setupGraph() error {
+	if e.Config.GremlinURL != "" {
+		gremlin := handlers.NewGremlin(e.Config.GremlinURL,
+			e.Config.GremlinUser, e.Config.GremlinPass, e.Config.Log)
+		e.Graph = gremlin
+		return nil
+	}
+
+	graph := handlers.NewGraph(e.Config.Dir)
+	if graph == nil {
+		return errors.New("Failed to create the graph")
+	}
+	e.Graph = graph
+	return nil
 }
 
 // DNSQueriesPerSec returns the number of DNS queries the enumeration has performed per second.
@@ -483,7 +504,7 @@ type ASNSummaryData struct {
 	Netblocks map[string]int
 }
 
-// UpdateSummaryData updates the summary maps using the provided core.Output data
+// UpdateSummaryData updates the summary maps using the provided core.Output data.
 func UpdateSummaryData(output *core.Output, tags map[string]int, asns map[int]*ASNSummaryData) {
 	tags[output.Tag]++
 
