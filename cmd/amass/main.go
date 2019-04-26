@@ -349,10 +349,15 @@ func main() {
 			total++
 			amass.UpdateSummaryData(out, tags, asns)
 			source, name, ips := amass.OutputLineParts(out, *sources, *ips || *ipv4 || *ipv6)
-			fmt.Fprintf(color.Output, "%s%s %s\n", blue(source), green(name), yellow(ips))
+
+			if ips != "" {
+				ips = " " + ips
+			}
+
+			fmt.Fprintf(color.Output, "%s%s%s\n", blue(source), green(name), yellow(ips))
 			// Handle writing the line to a specified output file
 			if outptr != nil {
-				fmt.Fprintf(outptr, "%s%s %s\n", source, name, ips)
+				fmt.Fprintf(outptr, "%s%s%s\n", source, name, ips)
 			}
 			// Handle encoding the result as JSON
 			if jsonptr != nil {
