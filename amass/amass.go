@@ -148,13 +148,22 @@ func (e *Enumeration) Start() error {
 
 	// Select the correct services to be used in this enumeration
 	services := e.requiredServices()
-	// Add all the data sources to the list
-	services = append(services, e.dataSources...)
 	for _, srv := range services {
 		if err := srv.Start(); err != nil {
 			return err
 		}
 	}
+	// Add all the data sources that successfully start to the list
+	var sources []core.Service
+	for _, src := range e.dataSources {
+		if err := src.Start(); err != nil {
+			src.Stop()
+			continue
+		}
+		sources = append(sources, src)
+	}
+	e.dataSources = sources
+	services = append(services, e.dataSources...)
 
 	// Use all previously discovered names that are in scope
 	go e.submitKnownNames()
