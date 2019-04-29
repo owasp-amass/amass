@@ -5,6 +5,7 @@ package sources
 
 import (
 	"fmt"
+	"encoding/json"
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
@@ -19,7 +20,7 @@ type VirusTotal struct {
 
 // NewVirusTotal returns he object initialized, but not yet started.
 func NewVirusTotal(config *core.Config, bus *core.EventBus) *VirusTotal {
-	v := &VirusTotal{SourceType: core.SCRAPE}
+	v := &VirusTotal{SourceType: core.API}
 
 	v.BaseService = *core.NewBaseService(v, "VirusTotal", config, bus)
 	return v
@@ -47,27 +48,43 @@ func (v *VirusTotal) processRequests() {
 }
 
 func (v *VirusTotal) executeQuery(domain string) {
-	re := v.Config().DomainRegex(domain)
 	url := v.getURL(domain)
-	page, err := utils.RequestWebPage(url, nil, nil, "", "")
+	headers := map[string]string{"Content-Type": "application/json"}
+	page, err := utils.RequestWebPage(url, nil, headers, "", "")
 	if err != nil {
 		v.Config().Log.Printf("%s: %s: %v", v.String(), url, err)
 		return
 	}
 
+	// Extract the subdomain names from the results
+	var m struct {
+		Data []struct {
+			ID string `json:"id"`
+			Type string `json:"type"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(page), &m); err != nil {
+		return
+	}
+
 	v.SetActive()
-	for _, sd := range re.FindAllString(page, -1) {
+	re := v.Config().DomainRegex(domain)
+	for _, data := range m.Data {
+		if data.Type != "domain" || !re.MatchString(data.ID) {
+			continue
+		}
+
 		v.Bus().Publish(core.NewNameTopic, &core.Request{
-			Name:   cleanName(sd),
-			Domain: domain,
-			Tag:    v.SourceType,
-			Source: v.String(),
+				Name:   data.ID,
+				Domain: domain,
+				Tag:    v.SourceType,
+				Source: v.String(),
 		})
 	}
 }
 
 func (v *VirusTotal) getURL(domain string) string {
-	format := "https://www.virustotal.com/en/domain/%s/information/"
+	format := "https://www.virustotal.com/ui/domains/%s/subdomains?limit=40"
 
 	return fmt.Sprintf(format, domain)
 }
