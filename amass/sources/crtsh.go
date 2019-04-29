@@ -4,8 +4,8 @@
 package sources
 
 import (
-	"fmt"
 	"strings"
+	"encoding/json"
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
@@ -19,11 +19,15 @@ type Crtsh struct {
 
 	SourceType string
 	db         *sqlx.DB
+	haveConnection bool
 }
 
 // NewCrtsh returns he object initialized, but not yet started.
 func NewCrtsh(config *core.Config, bus *core.EventBus) *Crtsh {
-	c := &Crtsh{SourceType: core.CERT}
+	c := &Crtsh{
+		SourceType: core.CERT,
+		haveConnection: true,
+	}
 
 	c.BaseService = *core.NewBaseService(c, "Crtsh", config, bus)
 	return c
@@ -36,7 +40,8 @@ func (c *Crtsh) OnStart() error {
 	var err error
 	c.db, err = sqlx.Connect("postgres", "host=crt.sh user=guest dbname=certwatch sslmode=disable")
 	if err != nil {
-		return fmt.Errorf("%s: Failed to connect to the database server: %v", c.String(), err)
+		c.Config().Log.Printf("%s: Failed to connect to the database server: %v", c.String(), err)
+		c.haveConnection = false
 	}
 
 	go c.processRequests()
@@ -57,6 +62,12 @@ func (c *Crtsh) processRequests() {
 }
 
 func (c *Crtsh) executeQuery(domain string) {
+	// Fall back to scraping the web page if the database connection failed
+	if !c.haveConnection {
+		c.scrape(domain)
+		return
+	}
+
 	var results []struct {
 		Domain string `db:"domain"`
 	}
@@ -87,4 +98,34 @@ func (c *Crtsh) executeQuery(domain string) {
 			Source: c.String(),
 		})
 	}
+}
+
+func (c *Crtsh) scrape(domain string) {
+	url := c.getURL(domain)
+	page, err := utils.RequestWebPage(url, nil, nil, "", "")
+	if err != nil {
+		c.Config().Log.Printf("%s: %s: %v", c.String(), url, err)
+		return
+	}
+
+	c.SetActive()
+	// Extract the subdomain names from the results
+	var results []struct {
+		Name string `json:"name_value"`
+	}
+	if err := json.Unmarshal([]byte(page), &results); err != nil {
+		return
+	}
+	for _, line := range results {
+		c.Bus().Publish(core.NewNameTopic, &core.Request{
+			Name:   line.Name,
+			Domain: domain,
+			Tag:    c.SourceType,
+			Source: c.String(),
+		})
+	}
+}
+
+func (c *Crtsh) getURL(domain string) string {
+	return "https://crt.sh/?q=%25." + domain + "&output=json"
 }
