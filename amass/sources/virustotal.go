@@ -67,7 +67,7 @@ func (v *VirusTotal) executeQuery(domain string) {
 }
 
 func (v *VirusTotal) getURL(domain string) string {
-	format := "https://www.virustotal.com/en/domain/%s/information/"
+	format := "https://www.virustotal.com/ui/domains/%s/subdomains"
 
 	return fmt.Sprintf(format, domain)
 }
