@@ -219,6 +219,7 @@ func (ds *DNSService) basicQueries(subdomain, domain string) {
 
 			if ds.Config().Active {
 				go ds.attemptZoneXFR(subdomain, domain, a.Data)
+				//go ds.attemptZoneWalk(domain, a.Data)
 			}
 			answers = append(answers, a)
 		}
@@ -273,12 +274,26 @@ func (ds *DNSService) attemptZoneXFR(sub, domain, server string) {
 		return
 	}
 
-	if requests, err := ZoneTransfer(sub, domain, server); err == nil {
-		for _, req := range requests {
-			ds.resolvedName(req)
-		}
-	} else {
-		ds.Config().Log.Printf("DNS: Zone XFR failed: %s: %v", sub, err)
+	requests, err := ZoneTransfer(sub, domain, server)
+	if err != nil {
+		ds.Config().Log.Printf("DNS: Zone XFR failed: %s: %v", server, err)
+		return
+	}
+
+	for _, req := range requests {
+		ds.resolvedName(req)
+	}
+}
+
+func (ds *DNSService) attemptZoneWalk(domain, server string) {
+	requests, err := NsecTraversal(domain, server)
+	if err != nil {
+		ds.Config().Log.Printf("DNS: Zone Walk failed: %s: %v", server, err)
+		return
+	}
+
+	for _, req := range requests {
+		ds.SendRequest(req)
 	}
 }
 
