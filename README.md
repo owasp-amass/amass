@@ -1,10 +1,9 @@
 
 # [![OWASP Logo](https://github.com/OWASP/Amass/blob/master/images/owasp_logo.png) OWASP Amass](https://www.owasp.org/index.php/OWASP_Amass_Project)
 
-[![GitHub Issues](https://img.shields.io/github/issues/OWASP/Amass.svg)](https://github.com/OWASP/Amass/issues)
 [![CircleCI Status](https://circleci.com/gh/OWASP/Amass/tree/master.svg?style=shield)](https://circleci.com/gh/OWASP/Amass/tree/master)
 [![GitHub tag](https://img.shields.io/github/tag/OWASP/Amass.svg)](https://github.com/OWASP/Amass/tags)
-[![Go Version](https://img.shields.io/badge/go-1.12-blue.svg)](https://golang.org/dl/)
+[![Go Version](https://img.shields.io/badge/go-1.11-blue.svg)](https://golang.org/dl/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
 [![Contribute Yes](https://img.shields.io/badge/contribute-yes-brightgreen.svg)](https://github.com/OWASP/Amass/blob/master/CONTRIBUTING.md)
 [![Chat](https://img.shields.io/discord/433729817918308352.svg?logo=discord)](https://discord.gg/rtN8GMd)
@@ -150,6 +149,7 @@ This project improves thanks to all the people who contribute:
 
 ## Mentions
 
+* [My Recon Process — DNS Enumeration](https://medium.com/@noobhax/my-recon-process-dns-enumeration-d0e288f81a8a)
 * [Week in OSINT #2019–16: From OSINT for pentesting, to OCR and OWASP](https://medium.com/week-in-osint/week-in-osint-2019-16-8ccfe0da1a70)
 * [Stop Using Python for Subdomain Enumeration](http://sec.alexflor.es/post/subdomain_enum/)
 * [My Personal OSINT Techniques, Part 1 of 2: Key & Layer, Contingency Seeding](https://0x00sec.org/t/my-personal-osint-techniques-part-1-of-2-key-layer-contingency-seeding/)
