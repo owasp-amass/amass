@@ -642,14 +642,10 @@ func setupOptions() *dns.OPT {
 func ZoneTransfer(sub, domain, server string) ([]*core.Request, error) {
 	var results []*core.Request
 
-	a, err := Resolve(server, "A", PriorityHigh)
-	if err != nil {
-		a, err = Resolve(server, "AAAA", PriorityHigh)
-		if err != nil {
-			return results, fmt.Errorf("DNS server has no A or AAAA record: %s: %v", server, err)
-		}
+	addr, err := nameserverAddr(server)
+	if addr == "" {
+		return results, fmt.Errorf("DNS server has no A or AAAA record: %s: %v", server, err)
 	}
-	addr := a[0].Data
 
 	// Set the maximum time allowed for making the connection
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -686,6 +682,162 @@ func ZoneTransfer(sub, domain, server string) ([]*core.Request, error) {
 		}
 	}
 	return results, nil
+}
+
+// NsecTraversal attempts to retrieve a DNS zone using NSEC-walking.
+func NsecTraversal(domain, server string) ([]*core.Request, error) {
+	var results []*core.Request
+
+	addr, err := nameserverAddr(server)
+	if addr == "" {
+		return results, fmt.Errorf("DNS server has no A or AAAA record: %s: %v", server, err)
+	}
+
+	d := &net.Dialer{}
+	conn, err := d.Dial("udp", addr + ":53")
+	if err != nil {
+		return results, fmt.Errorf("Failed to setup UDP connection with the DNS server: %s: %v", server, err)
+	}
+	defer conn.Close()
+	co := &dns.Conn{Conn: conn}
+
+	re := utils.SubdomainRegex(domain)
+loop:
+	for next := domain; next != ""; {
+		fmt.Println(next)
+		name := next
+		next = ""
+		for _, attempt := range walkAttempts(name, domain) {
+			id := dns.Id()
+			msg := walkMsg(id, attempt, dns.TypeA)
+
+			co.SetWriteDeadline(time.Now().Add(2 * time.Second))
+			if err := co.WriteMsg(msg); err != nil {
+				continue
+			}
+
+			co.SetReadDeadline(time.Now().Add(2 * time.Second))
+			in, err := co.ReadMsg()
+			if err != nil || in == nil || in.MsgHdr.Id != id {
+				continue
+			}
+
+			for _, rr := range in.Answer {
+				if rr.Header().Rrtype != dns.TypeA {
+					continue
+				}
+
+				n := strings.ToLower(removeLastDot(rr.Header().Name))
+				results = append(results, &core.Request{
+					Name: n,
+					Domain: domain,
+					Tag: core.DNS,
+					Source: "NSEC Walk",
+				})
+
+				if _, ok := rr.(*dns.NSEC); ok {
+					next = rr.(*dns.NSEC).NextDomain
+					continue loop
+				}
+			}
+
+			for _, rr := range in.Ns {
+				if rr.Header().Rrtype != dns.TypeNSEC {
+					continue
+				}
+
+				prev := strings.ToLower(removeLastDot(rr.Header().Name))
+				nn := walkHostPart(name, domain)
+				hp := walkHostPart(prev, domain)
+				if !re.MatchString(prev) || hp >= nn {
+					continue
+				}
+
+				results = append(results, &core.Request{
+					Name: prev,
+					Domain: domain,
+					Tag: core.DNS,
+					Source: "NSEC Walk",
+				})
+
+				n := strings.ToLower(removeLastDot(rr.(*dns.NSEC).NextDomain))
+				hn := walkHostPart(n, domain)
+				if n != "" && nn < hn {
+					next = n
+					continue loop
+				}
+			}
+		}
+	}
+	return results, nil
+}
+
+func walkAttempts(name, domain string) []string {
+	name = strings.ToLower(name)
+	domain = strings.ToLower(domain)
+
+	// The original subdomain name and another with a zero label prepended
+	attempts := []string{name, "0." + name}
+	if name == domain {
+		return attempts
+	}
+
+	host := walkHostPart(name, domain)
+	// A hyphen appended to the hostname portion + the domain name
+	attempts = append(attempts, host + "-." + domain)
+
+	rhost := []rune(host)
+	last := string(rhost[len(rhost)-1])
+	// The last character of the hostname portion duplicated/appended
+	return append(attempts, host + last + "." + domain)
+}
+
+func walkHostPart(name, domain string) string {
+	dlen := len(strings.Split(domain, "."))
+	parts := strings.Split(name, ".")
+	
+	return strings.Join(parts[0:len(parts) - dlen], ".")
+}
+
+func walkMsg(id uint16, name string, qtype uint16) *dns.Msg {
+	m := &dns.Msg{
+		MsgHdr: dns.MsgHdr{
+			Authoritative:     false,
+			AuthenticatedData: false,
+			CheckingDisabled:  false,
+			RecursionDesired:  true,
+			Opcode:            dns.OpcodeQuery,
+			Id:                id,
+			Rcode:             dns.RcodeSuccess,
+		},
+		Question: make([]dns.Question, 1),
+	}
+	m.Question[0] = dns.Question{
+		Name:   dns.Fqdn(name),
+		Qtype:  qtype,
+		Qclass: uint16(dns.ClassINET),
+	}
+	opt := &dns.OPT{
+		Hdr: dns.RR_Header{
+			Name:   ".",
+			Rrtype: dns.TypeOPT,
+		},
+	}
+	opt.SetDo()
+	opt.SetUDPSize(dns.DefaultMsgSize)
+	m.Extra = append(m.Extra, opt)
+	return m
+}
+
+func nameserverAddr(server string) (string, error) {
+	a, err := Resolve(server, "A", PriorityHigh)
+	if err != nil {
+		a, err = Resolve(server, "AAAA", PriorityHigh)
+		if err != nil {
+			return "", err
+		}
+	}
+	return a[0].Data, nil
 }
 
 //-------------------------------------------------------------------------------------------------
