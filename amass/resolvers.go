@@ -704,7 +704,6 @@ func NsecTraversal(domain, server string) ([]*core.Request, error) {
 	re := utils.SubdomainRegex(domain)
 loop:
 	for next := domain; next != ""; {
-		fmt.Println(next)
 		name := next
 		next = ""
 		for _, attempt := range walkAttempts(name, domain) {
