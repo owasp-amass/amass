@@ -66,13 +66,14 @@ sudo snap refresh
 ```
 
 On **Pentoo Linux**, follow these steps:
+```bash
 sudo emerge net-analyzer/amass
+```
 
 Periodically, execute the following command to update all packages:
 ```bash
 sudo pentoo-updater
 ```
-
 
 For **Homebrew** on **Mac**, the following two commands will install Amass into your macOS environment:
 
