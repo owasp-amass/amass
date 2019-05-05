@@ -59,8 +59,8 @@ type AlterationService struct {
 func NewAlterationService(config *core.Config, bus *core.EventBus) *AlterationService {
 	as := &AlterationService{
 		filter:   utils.NewStringFilter(),
-		prefixes: newAlterationCache(altWords),
-		suffixes: newAlterationCache(altWords),
+		prefixes: newAlterationCache(config.AltWordlist),
+		suffixes: newAlterationCache(config.AltWordlist),
 	}
 
 	as.BaseService = *core.NewBaseService(as, "Alterations", config, bus)

@@ -22,7 +22,8 @@ import (
 )
 
 const (
-	defaultWordlistURL = "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/namelist.txt"
+	defaultWordlistURL    = "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/namelist.txt"
+	defaultAltWordlistURL = "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/alterations.txt"
 )
 
 // Config passes along Amass enumeration configurations
@@ -75,6 +76,7 @@ type Config struct {
 	AddNumbers     bool
 	MinForWordFlip int
 	EditDistance   int
+	AltWordlist    []string
 
 	// Only access the data sources for names and return results?
 	Passive bool
@@ -126,7 +128,10 @@ func (c *Config) CheckSettings() error {
 		c.Ports = []int{443}
 	}
 	if len(c.Wordlist) == 0 {
-		c.Wordlist, err = getDefaultWordlist()
+		c.Wordlist, err = getWordlistByURL(defaultWordlistURL)
+	}
+	if len(c.AltWordlist) == 0 {
+		c.AltWordlist, err = getWordlistByURL(defaultAltWordlistURL)
 	}
 	c.SemMaxDNSQueries = utils.NewSimpleSemaphore(c.MaxDNSQueries)
 	return err
@@ -342,6 +347,15 @@ func (c *Config) LoadSettings(path string) error {
 			c.AddNumbers = alterations.Key("add_numbers").MustBool(true)
 			c.MinForWordFlip = alterations.Key("minimum_for_word_flip").MustInt(2)
 			c.EditDistance = alterations.Key("edit_distance").MustInt(1)
+			if alterations.HasKey("wordlist_file") {
+				wordlist := alterations.Key("wordlist_file").String()
+
+				list, err := GetListFromFile(wordlist)
+				if err != nil {
+					return fmt.Errorf("Unable to load the file in the wordlist_file setting: %s: %v", wordlist, err)
+				}
+				c.AltWordlist = list
+			}
 		}
 	}
 	// Load up all API key information from data source sections
@@ -431,8 +445,8 @@ func GetListFromFile(path string) ([]string, error) {
 	return getWordList(reader)
 }
 
-func getDefaultWordlist() ([]string, error) {
-	page, err := utils.RequestWebPage(defaultWordlistURL, nil, nil, "", "")
+func getWordlistByURL(url string) ([]string, error) {
+	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
 		return nil, err
 	}
