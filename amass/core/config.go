@@ -115,8 +115,12 @@ type APIKey struct {
 func (c *Config) CheckSettings() error {
 	var err error
 
-	if c.Passive && c.BruteForcing {
-		return errors.New("Brute forcing cannot be performed without DNS resolution")
+	if c.BruteForcing {
+		if c.Passive {
+			return errors.New("Brute forcing cannot be performed without DNS resolution")
+		} else if len(c.Wordlist) == 0 {
+			c.Wordlist, err = getWordlistByURL(defaultWordlistURL)
+		}
 	}
 	if c.Passive && c.Active {
 		return errors.New("Active enumeration cannot be performed without DNS resolution")
@@ -127,11 +131,10 @@ func (c *Config) CheckSettings() error {
 	if len(c.Ports) == 0 {
 		c.Ports = []int{443}
 	}
-	if len(c.Wordlist) == 0 {
-		c.Wordlist, err = getWordlistByURL(defaultWordlistURL)
-	}
-	if len(c.AltWordlist) == 0 {
-		c.AltWordlist, err = getWordlistByURL(defaultAltWordlistURL)
+	if c.Alterations {
+		if len(c.AltWordlist) == 0 {
+			c.AltWordlist, err = getWordlistByURL(defaultAltWordlistURL)
+		}
 	}
 	c.SemMaxDNSQueries = utils.NewSimpleSemaphore(c.MaxDNSQueries)
 	return err
@@ -280,6 +283,54 @@ func (c *Config) GetAPIKey(source string) *APIKey {
 	return nil
 }
 
+func (c *Config) loadBruteForceSettings(cfg *ini.File) error {
+	if bruteforce, err := cfg.GetSection("bruteforce"); err == nil {
+		c.BruteForcing = bruteforce.Key("enabled").MustBool(true)
+
+		if c.BruteForcing {
+			c.Recursive = bruteforce.Key("recursive").MustBool(true)
+			c.MinForRecursive = bruteforce.Key("minimum_for_recursive").MustInt(0)
+			if bruteforce.HasKey("wordlist_file") {
+				for _, wordlist := range bruteforce.Key("wordlist_file").ValueWithShadows() {
+					list, err := GetListFromFile(wordlist)
+					if err != nil {
+						return fmt.Errorf("Unable to load the file in the bruteforce wordlist_file setting: %s: %v", wordlist, err)
+					}
+					c.Wordlist = utils.UniqueAppend(c.Wordlist, list...)
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+func (c *Config) loadAlterationSettings(cfg *ini.File) error {
+	if alterations, err := cfg.GetSection("alterations"); err == nil {
+		c.Alterations = alterations.Key("enabled").MustBool(true)
+
+		if c.Alterations {
+			c.FlipWords = alterations.Key("flip_words").MustBool(true)
+			c.AddWords = alterations.Key("add_words").MustBool(true)
+			c.FlipNumbers = alterations.Key("flip_numbers").MustBool(true)
+			c.AddNumbers = alterations.Key("add_numbers").MustBool(true)
+			c.MinForWordFlip = alterations.Key("minimum_for_word_flip").MustInt(2)
+			c.EditDistance = alterations.Key("edit_distance").MustInt(1)
+			if alterations.HasKey("wordlist_file") {
+				for _, wordlist := range alterations.Key("wordlist_file").ValueWithShadows() {
+					list, err := GetListFromFile(wordlist)
+					if err != nil {
+						return fmt.Errorf("Unable to load the file in the alterations wordlist_file setting: %s: %v", wordlist, err)
+					}
+					c.AltWordlist = utils.UniqueAppend(c.AltWordlist, list...)
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
 // LoadSettings parses settings from an .ini file and assigns them to the Config.
 func (c *Config) LoadSettings(path string) error {
 	cfg, err := ini.LoadSources(ini.LoadOptions{
@@ -292,16 +343,6 @@ func (c *Config) LoadSettings(path string) error {
 	// Get the easy ones out of the way using mapping
 	if err = cfg.MapTo(c); err != nil {
 		return fmt.Errorf("Error mapping configuration settings to internal values: %v", err)
-	}
-	// Attempt to load a wordlist provided via the configuration file
-	if cfg.Section(ini.DEFAULT_SECTION).HasKey("wordlist_file") {
-		wordlist := cfg.Section(ini.DEFAULT_SECTION).Key("wordlist_file").String()
-
-		list, err := GetListFromFile(wordlist)
-		if err != nil {
-			return fmt.Errorf("Unable to load the file in the wordlist_file setting: %s: %v", wordlist, err)
-		}
-		c.Wordlist = list
 	}
 	// Attempt to load a special mode of operation specified by the user
 	if cfg.Section(ini.DEFAULT_SECTION).HasKey("mode") {
@@ -336,31 +377,18 @@ func (c *Config) LoadSettings(path string) error {
 		c.GremlinPass = gremlin.Key("password").String()
 	}
 
-	// Load alteration settings
-	if alterations, err := cfg.GetSection("alterations"); err == nil {
-		c.Alterations = alterations.Key("enabled").MustBool(true)
-
-		if c.Alterations {
-			c.FlipWords = alterations.Key("flip_words").MustBool(true)
-			c.AddWords = alterations.Key("add_words").MustBool(true)
-			c.FlipNumbers = alterations.Key("flip_numbers").MustBool(true)
-			c.AddNumbers = alterations.Key("add_numbers").MustBool(true)
-			c.MinForWordFlip = alterations.Key("minimum_for_word_flip").MustInt(2)
-			c.EditDistance = alterations.Key("edit_distance").MustInt(1)
-			if alterations.HasKey("wordlist_file") {
-				wordlist := alterations.Key("wordlist_file").String()
-
-				list, err := GetListFromFile(wordlist)
-				if err != nil {
-					return fmt.Errorf("Unable to load the file in the wordlist_file setting: %s: %v", wordlist, err)
-				}
-				c.AltWordlist = list
-			}
-		}
+	if err := c.loadAlterationSettings(cfg); err != nil {
+		return err
 	}
+
+	if err := c.loadBruteForceSettings(cfg); err != nil {
+		return err
+	}
+
 	// Load up all API key information from data source sections
 	nonAPISections := []string{
 		"alterations",
+		"bruteforce",
 		"default",
 		"domains",
 		"resolvers",
