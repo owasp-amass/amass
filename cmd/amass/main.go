@@ -63,6 +63,7 @@ var (
 	noalts        = flag.Bool("noalts", false, "Disable generation of altered names")
 	sources       = flag.Bool("src", false, "Print data sources for the discovered names")
 	wordlist      = flag.String("w", "", "Path to a different wordlist file")
+	altwordlist   = flag.String("aw", "", "Path to a different wordlist file for alterations")
 	allpath       = flag.String("oA", "", "Path prefix used for naming all output files")
 	logpath       = flag.String("log", "", "Path to the log file where errors will be written")
 	outpath       = flag.String("o", "", "Path to the text output file")
@@ -126,10 +127,16 @@ func main() {
 	}
 
 	var err error
-	var words, names []string
+	var altwords, words, names []string
 	// Obtain parameters from provided input files
-	if *wordlist != "" {
+	if *brute && *wordlist != "" {
 		words, err = core.GetListFromFile(*wordlist)
+		if err != nil {
+			r.Fprintf(color.Error, "%v\n", err)
+		}
+	}
+	if !*noalts && *altwordlist != "" {
+		altwords, err = core.GetListFromFile(*altwordlist)
 		if err != nil {
 			r.Fprintf(color.Error, "%v\n", err)
 		}
@@ -214,6 +221,9 @@ func main() {
 	}
 	if len(words) > 0 {
 		enum.Config.Wordlist = words
+	}
+	if len(altwords) > 0 {
+		enum.Config.AltWordlist = altwords
 	}
 	if len(names) > 0 {
 		enum.ProvidedNames = names
