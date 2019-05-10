@@ -30,7 +30,6 @@ var (
 		"1.1.1.1:53",     // Cloudflare
 		"8.8.8.8:53",     // Google
 		"64.6.64.6:53",   // Verisign
-		"77.88.8.8:53",   // Yandex.DNS
 		"74.82.42.42:53", // Hurricane Electric
 		"1.0.0.1:53",     // Cloudflare Secondary
 		"8.8.4.4:53",     // Google Secondary
