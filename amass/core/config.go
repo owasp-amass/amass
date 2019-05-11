@@ -476,7 +476,7 @@ func GetListFromFile(path string) ([]string, error) {
 func getWordlistByURL(url string) ([]string, error) {
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Failed to obtain the wordlist at %s: %v", url, err)
 	}
 	return getWordList(strings.NewReader(page))
 }
