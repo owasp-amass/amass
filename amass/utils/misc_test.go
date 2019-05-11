@@ -63,7 +63,6 @@ func TestUniqueAppend(t *testing.T) {
 	}{
 		{"Test 1: Duplicate elements", []string{"sub1.owasp.org", "sub2.owasp.org"}, "sub2.owasp.org", []string{"sub1.owasp.org", "sub2.owasp.org"}},
 		{"Test 2: New element", []string{"sub1.owasp.org", "sub2.owasp.org", "sub3.owasp.org"}, "sub4.owasp.org", []string{"sub1.owasp.org", "sub2.owasp.org", "sub3.owasp.org", "sub4.owasp.org"}},
-
 	}
 	for _, tt := range tests {
 		s := UniqueAppend(tt.orig, tt.event)
