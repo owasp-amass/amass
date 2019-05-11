@@ -53,7 +53,7 @@ var Banner = `
 
 const (
 	// Version is used to display the current version of Amass.
-	Version = "2.9.10"
+	Version = "2.9.11"
 
 	// Author is used to display the founder of the amass package.
 	Author = "Jeff Foley - @jeff_foley"
