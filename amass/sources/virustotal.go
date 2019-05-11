@@ -110,7 +110,7 @@ func (v *VirusTotal) apiQuery(domain string) {
 	}
 
 	for _, res := range m.Resolutions {
-		v.Bus().Publish(core.NewNameTopic, &core.Request{
+		v.Bus().Publish(core.NewAddrTopic, &core.Request{
 			Address: res.IP,
 			Domain:  domain,
 			Tag:     v.SourceType,
