@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
@@ -19,6 +20,7 @@ type VirusTotal struct {
 
 	API        *core.APIKey
 	SourceType string
+	RateLimit  time.Duration
 
 	haveAPIKey bool
 }
@@ -27,6 +29,7 @@ type VirusTotal struct {
 func NewVirusTotal(config *core.Config, bus *core.EventBus) *VirusTotal {
 	v := &VirusTotal{
 		SourceType: core.API,
+		RateLimit:  15 * time.Second,
 		haveAPIKey: true,
 	}
 
@@ -49,17 +52,25 @@ func (v *VirusTotal) OnStart() error {
 }
 
 func (v *VirusTotal) processRequests() {
+	last := time.Now().Truncate(10 * time.Minute)
+
 	for {
 		select {
 		case <-v.Quit():
 			return
 		case req := <-v.RequestChan():
 			if v.Config().IsDomainInScope(req.Domain) {
+				if time.Now().Sub(last) < v.RateLimit {
+					time.Sleep(v.RateLimit)
+				}
+
 				if v.haveAPIKey {
 					v.apiQuery(req.Domain)
 				} else {
 					v.regularQuery(req.Domain)
 				}
+
+				last = time.Now()
 			}
 		}
 	}
