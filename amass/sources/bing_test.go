@@ -15,7 +15,7 @@ func TestBing(t *testing.T) {
 	bus, out := setupEventBus(core.NewNameTopic)
 	defer bus.Stop()
 
-	srv := NewBing																		(config, bus)
+	srv := NewBing(config, bus)
 
 	result := testService(srv, out)
 	if result < expectedTest {

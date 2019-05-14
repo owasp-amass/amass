@@ -123,7 +123,6 @@ brew:
     owner: caffix
     name: homebrew-amass
   url_template: "http://github.com/OWASP/Amass/releases/download/{{ .Version }}/amass_{{ .Version }}_macos_amd64.zip"
-  download_strategy: GitHubPrivateRepositoryReleaseDownloadStrategy
   commit_author:
     name: caffix
     email: caffix@users.noreply.github.com
@@ -136,4 +135,3 @@ brew:
     bin.install "amass.viz"
     bin.install "amass.db"
     bin.install "amass.tracker"
-

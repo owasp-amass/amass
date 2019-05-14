@@ -693,7 +693,7 @@ func NsecTraversal(domain, server string) ([]*core.Request, error) {
 	}
 
 	d := &net.Dialer{}
-	conn, err := d.Dial("udp", addr + ":53")
+	conn, err := d.Dial("udp", addr+":53")
 	if err != nil {
 		return results, fmt.Errorf("Failed to setup UDP connection with the DNS server: %s: %v", server, err)
 	}
@@ -727,9 +727,9 @@ loop:
 
 				n := strings.ToLower(removeLastDot(rr.Header().Name))
 				results = append(results, &core.Request{
-					Name: n,
+					Name:   n,
 					Domain: domain,
-					Tag: core.DNS,
+					Tag:    core.DNS,
 					Source: "NSEC Walk",
 				})
 
@@ -752,9 +752,9 @@ loop:
 				}
 
 				results = append(results, &core.Request{
-					Name: prev,
+					Name:   prev,
 					Domain: domain,
-					Tag: core.DNS,
+					Tag:    core.DNS,
 					Source: "NSEC Walk",
 				})
 
@@ -782,19 +782,19 @@ func walkAttempts(name, domain string) []string {
 
 	host := walkHostPart(name, domain)
 	// A hyphen appended to the hostname portion + the domain name
-	attempts = append(attempts, host + "-." + domain)
+	attempts = append(attempts, host+"-."+domain)
 
 	rhost := []rune(host)
 	last := string(rhost[len(rhost)-1])
 	// The last character of the hostname portion duplicated/appended
-	return append(attempts, host + last + "." + domain)
+	return append(attempts, host+last+"."+domain)
 }
 
 func walkHostPart(name, domain string) string {
 	dlen := len(strings.Split(domain, "."))
 	parts := strings.Split(name, ".")
-	
-	return strings.Join(parts[0:len(parts) - dlen], ".")
+
+	return strings.Join(parts[0:len(parts)-dlen], ".")
 }
 
 func walkMsg(id uint16, name string, qtype uint16) *dns.Msg {

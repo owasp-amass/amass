@@ -4,8 +4,8 @@
 package sources
 
 import (
-	"strings"
 	"encoding/json"
+	"strings"
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
@@ -17,15 +17,15 @@ import (
 type Crtsh struct {
 	core.BaseService
 
-	SourceType string
-	db         *sqlx.DB
+	SourceType     string
+	db             *sqlx.DB
 	haveConnection bool
 }
 
 // NewCrtsh returns he object initialized, but not yet started.
 func NewCrtsh(config *core.Config, bus *core.EventBus) *Crtsh {
 	c := &Crtsh{
-		SourceType: core.CERT,
+		SourceType:     core.CERT,
 		haveConnection: true,
 	}
 

@@ -4,8 +4,11 @@
 package sources
 
 import (
-	"fmt"
 	"encoding/json"
+	"fmt"
+	"net/url"
+	"strings"
+	"time"
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
@@ -15,12 +18,20 @@ import (
 type VirusTotal struct {
 	core.BaseService
 
+	API        *core.APIKey
 	SourceType string
+	RateLimit  time.Duration
+
+	haveAPIKey bool
 }
 
 // NewVirusTotal returns he object initialized, but not yet started.
 func NewVirusTotal(config *core.Config, bus *core.EventBus) *VirusTotal {
-	v := &VirusTotal{SourceType: core.API}
+	v := &VirusTotal{
+		SourceType: core.API,
+		RateLimit:  15 * time.Second,
+		haveAPIKey: true,
+	}
 
 	v.BaseService = *core.NewBaseService(v, "VirusTotal", config, bus)
 	return v
@@ -30,24 +41,103 @@ func NewVirusTotal(config *core.Config, bus *core.EventBus) *VirusTotal {
 func (v *VirusTotal) OnStart() error {
 	v.BaseService.OnStart()
 
+	v.API = v.Config().GetAPIKey(v.String())
+	if v.API == nil || v.API.Key == "" {
+		v.haveAPIKey = false
+		v.Config().Log.Printf("%s: API key data was not provided", v.String())
+	}
+
 	go v.processRequests()
 	return nil
 }
 
 func (v *VirusTotal) processRequests() {
+	last := time.Now().Truncate(10 * time.Minute)
+
 	for {
 		select {
 		case <-v.Quit():
 			return
 		case req := <-v.RequestChan():
 			if v.Config().IsDomainInScope(req.Domain) {
-				v.executeQuery(req.Domain)
+				if time.Now().Sub(last) < v.RateLimit {
+					time.Sleep(v.RateLimit)
+				}
+
+				if v.haveAPIKey {
+					v.apiQuery(req.Domain)
+				} else {
+					v.regularQuery(req.Domain)
+				}
+
+				last = time.Now()
 			}
 		}
 	}
 }
 
-func (v *VirusTotal) executeQuery(domain string) {
+func (v *VirusTotal) apiQuery(domain string) {
+	url := v.apiURL(domain)
+	headers := map[string]string{"Content-Type": "application/json"}
+	page, err := utils.RequestWebPage(url, nil, headers, "", "")
+	if err != nil {
+		v.Config().Log.Printf("%s: %s: %v", v.String(), url, err)
+		return
+	}
+
+	// Extract the subdomain names from the results
+	var m struct {
+		ResponseCode int      `json:"response_code"`
+		Message      string   `json:"verbose_msg"`
+		Subdomains   []string `json:"subdomains"`
+		Resolutions  []struct {
+			IP string `json:"ip_address"`
+		} `json:"resolutions"`
+	}
+	if err := json.Unmarshal([]byte(page), &m); err != nil {
+		return
+	}
+
+	if m.ResponseCode != 1 {
+		v.Config().Log.Printf("%s: %s: Response code %d: %s", v.String(), url, m.ResponseCode, m.Message)
+		return
+	}
+
+	v.SetActive()
+	re := v.Config().DomainRegex(domain)
+	for _, sub := range m.Subdomains {
+		s := strings.ToLower(sub)
+
+		if !re.MatchString(s) {
+			continue
+		}
+
+		v.Bus().Publish(core.NewNameTopic, &core.Request{
+			Name:   s,
+			Domain: domain,
+			Tag:    v.SourceType,
+			Source: v.String(),
+		})
+	}
+
+	for _, res := range m.Resolutions {
+		v.Bus().Publish(core.NewAddrTopic, &core.Request{
+			Address: res.IP,
+			Domain:  domain,
+			Tag:     v.SourceType,
+			Source:  v.String(),
+		})
+	}
+}
+
+func (v *VirusTotal) apiURL(domain string) string {
+	u, _ := url.Parse("https://www.virustotal.com/vtapi/v2/domain/report")
+	u.RawQuery = url.Values{"apikey": {v.API.Key}, "domain": {domain}}.Encode()
+
+	return u.String()
+}
+
+func (v *VirusTotal) regularQuery(domain string) {
 	url := v.getURL(domain)
 	headers := map[string]string{"Content-Type": "application/json"}
 	page, err := utils.RequestWebPage(url, nil, headers, "", "")
@@ -59,7 +149,7 @@ func (v *VirusTotal) executeQuery(domain string) {
 	// Extract the subdomain names from the results
 	var m struct {
 		Data []struct {
-			ID string `json:"id"`
+			ID   string `json:"id"`
 			Type string `json:"type"`
 		} `json:"data"`
 	}
@@ -75,10 +165,10 @@ func (v *VirusTotal) executeQuery(domain string) {
 		}
 
 		v.Bus().Publish(core.NewNameTopic, &core.Request{
-				Name:   data.ID,
-				Domain: domain,
-				Tag:    v.SourceType,
-				Source: v.String(),
+			Name:   data.ID,
+			Domain: domain,
+			Tag:    v.SourceType,
+			Source: v.String(),
 		})
 	}
 }
