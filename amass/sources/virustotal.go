@@ -85,7 +85,7 @@ func (v *VirusTotal) apiQuery(domain string) {
 		return
 	}
 
-	// Extract the subdomain names from the results
+	// Extract the subdomain names and IP addresses from the results
 	var m struct {
 		ResponseCode int      `json:"response_code"`
 		Message      string   `json:"verbose_msg"`

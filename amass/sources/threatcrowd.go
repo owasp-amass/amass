@@ -4,7 +4,9 @@
 package sources
 
 import (
+	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
@@ -19,7 +21,7 @@ type ThreatCrowd struct {
 
 // NewThreatCrowd returns he object initialized, but not yet started.
 func NewThreatCrowd(config *core.Config, bus *core.EventBus) *ThreatCrowd {
-	t := &ThreatCrowd{SourceType: core.SCRAPE}
+	t := &ThreatCrowd{SourceType: core.API}
 
 	t.BaseService = *core.NewBaseService(t, "ThreatCrowd", config, bus)
 	return t
@@ -48,20 +50,53 @@ func (t *ThreatCrowd) processRequests() {
 
 func (t *ThreatCrowd) executeQuery(domain string) {
 	url := t.getURL(domain)
-	page, err := utils.RequestWebPage(url, nil, nil, "", "")
+	headers := map[string]string{"Content-Type": "application/json"}
+	page, err := utils.RequestWebPage(url, nil, headers, "", "")
 	if err != nil {
 		t.Config().Log.Printf("%s: %s: %v", t.String(), url, err)
 		return
 	}
 
+	// Extract the subdomain names and IP addresses from the results
+	var m struct {
+		ResponseCode string   `json:"response_code"`
+		Subdomains   []string `json:"subdomains"`
+		Resolutions  []struct {
+			IP string `json:"ip_address"`
+		} `json:"resolutions"`
+	}
+	if err := json.Unmarshal([]byte(page), &m); err != nil {
+		return
+	}
+
+	if m.ResponseCode != "1" {
+		t.Config().Log.Printf("%s: %s: Response code %s", t.String(), url, m.ResponseCode)
+		return
+	}
+
 	t.SetActive()
 	re := t.Config().DomainRegex(domain)
-	for _, sd := range re.FindAllString(page, -1) {
+	for _, sub := range m.Subdomains {
+		s := strings.ToLower(sub)
+
+		if !re.MatchString(s) {
+			continue
+		}
+
 		t.Bus().Publish(core.NewNameTopic, &core.Request{
-			Name:   cleanName(sd),
+			Name:   s,
 			Domain: domain,
 			Tag:    t.SourceType,
 			Source: t.String(),
+		})
+	}
+
+	for _, res := range m.Resolutions {
+		t.Bus().Publish(core.NewAddrTopic, &core.Request{
+			Address: res.IP,
+			Domain:  domain,
+			Tag:     t.SourceType,
+			Source:  t.String(),
 		})
 	}
 }
