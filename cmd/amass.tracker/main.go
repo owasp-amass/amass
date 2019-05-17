@@ -10,6 +10,7 @@ import (
 	"math/rand"
 	"os"
 	"path"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -19,6 +20,7 @@ import (
 	"github.com/OWASP/Amass/amass/handlers"
 	"github.com/OWASP/Amass/amass/utils"
 	"github.com/fatih/color"
+	homedir "github.com/mitchellh/go-homedir"
 )
 
 const (
@@ -102,13 +104,17 @@ func main() {
 	}
 
 	rand.Seed(time.Now().UTC().UnixNano())
-	// Check that the default graph database directory exists in the CWD
+
 	if *dir == "" {
-		if finfo, err := os.Stat(handlers.DefaultGraphDBDirectory); os.IsNotExist(err) || !finfo.IsDir() {
-			r.Fprintln(color.Error, "Failed to open the graph database")
+		path, err := homedir.Dir()
+		if err != nil {
+			r.Fprintln(color.Error, "Failed to obtain the user home directory")
 			os.Exit(1)
 		}
-	} else if finfo, err := os.Stat(*dir); os.IsNotExist(err) || !finfo.IsDir() {
+		*dir = filepath.Join(path, handlers.DefaultGraphDBDirectory)
+	}
+	// Check that the default graph database directory exists
+	if finfo, err := os.Stat(*dir); os.IsNotExist(err) || !finfo.IsDir() {
 		r.Fprintln(color.Error, "Failed to open the graph database")
 		os.Exit(1)
 	}

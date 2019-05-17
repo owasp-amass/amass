@@ -26,6 +26,7 @@ import (
 	"github.com/OWASP/Amass/amass/handlers"
 	"github.com/OWASP/Amass/amass/utils"
 	"github.com/fatih/color"
+	homedir "github.com/mitchellh/go-homedir"
 )
 
 const (
@@ -266,7 +267,12 @@ func main() {
 	// Prepare output file paths
 	*dir = enum.Config.Dir
 	if *dir == "" {
-		*dir = handlers.DefaultGraphDBDirectory
+		path, err := homedir.Dir()
+		if err != nil {
+			r.Fprintln(color.Error, "Failed to obtain the user home directory")
+			os.Exit(1)
+		}
+		*dir = filepath.Join(path, handlers.DefaultGraphDBDirectory)
 	}
 	// If the directory does not yet exist, create it
 	if err = os.MkdirAll(*dir, 0755); err != nil {
