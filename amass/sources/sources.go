@@ -46,6 +46,7 @@ func cleanName(name string) string {
 // GetAllSources returns a slice of all data source services, initialized and ready.
 func GetAllSources(config *core.Config, bus *core.EventBus) []core.Service {
 	return []core.Service{
+		NewAlienVault(config, bus),
 		NewArchiveIt(config, bus),
 		NewArchiveToday(config, bus),
 		NewArquivo(config, bus),
