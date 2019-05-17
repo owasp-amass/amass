@@ -79,16 +79,14 @@ func (t *ThreatCrowd) executeQuery(domain string) {
 	for _, sub := range m.Subdomains {
 		s := strings.ToLower(sub)
 
-		if !re.MatchString(s) {
-			continue
+		if re.MatchString(s) {
+			t.Bus().Publish(core.NewNameTopic, &core.Request{
+				Name:   s,
+				Domain: domain,
+				Tag:    t.SourceType,
+				Source: t.String(),
+			})
 		}
-
-		t.Bus().Publish(core.NewNameTopic, &core.Request{
-			Name:   s,
-			Domain: domain,
-			Tag:    t.SourceType,
-			Source: t.String(),
-		})
 	}
 
 	for _, res := range m.Resolutions {

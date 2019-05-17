@@ -108,16 +108,14 @@ func (v *VirusTotal) apiQuery(domain string) {
 	for _, sub := range m.Subdomains {
 		s := strings.ToLower(sub)
 
-		if !re.MatchString(s) {
-			continue
+		if re.MatchString(s) {
+			v.Bus().Publish(core.NewNameTopic, &core.Request{
+				Name:   s,
+				Domain: domain,
+				Tag:    v.SourceType,
+				Source: v.String(),
+			})
 		}
-
-		v.Bus().Publish(core.NewNameTopic, &core.Request{
-			Name:   s,
-			Domain: domain,
-			Tag:    v.SourceType,
-			Source: v.String(),
-		})
 	}
 
 	for _, res := range m.Resolutions {
@@ -160,16 +158,14 @@ func (v *VirusTotal) regularQuery(domain string) {
 	v.SetActive()
 	re := v.Config().DomainRegex(domain)
 	for _, data := range m.Data {
-		if data.Type != "domain" || !re.MatchString(data.ID) {
-			continue
+		if data.Type == "domain" && re.MatchString(data.ID) {
+			v.Bus().Publish(core.NewNameTopic, &core.Request{
+				Name:   data.ID,
+				Domain: domain,
+				Tag:    v.SourceType,
+				Source: v.String(),
+			})
 		}
-
-		v.Bus().Publish(core.NewNameTopic, &core.Request{
-			Name:   data.ID,
-			Domain: domain,
-			Tag:    v.SourceType,
-			Source: v.String(),
-		})
 	}
 }
 
