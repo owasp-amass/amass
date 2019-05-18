@@ -21,11 +21,12 @@ import (
 	"github.com/cayleygraph/cayley/graph"
 	_ "github.com/cayleygraph/cayley/graph/kv/bolt" // Used by the cayley package
 	"github.com/cayleygraph/cayley/quad"
+	homedir "github.com/mitchellh/go-homedir"
 )
 
 const (
 	// DefaultGraphDBDirectory is the directory name used by default for the graph database.
-	DefaultGraphDBDirectory string = "amass_output"
+	DefaultGraphDBDirectory string = "amass"
 )
 
 // Graph is the object for managing a network infrastructure link graph.
@@ -39,9 +40,9 @@ type Graph struct {
 func NewGraph(path string) *Graph {
 	var err error
 
-	// If a directory was not specified, $PWD/amass_output/ will be used
+	// If a directory was not specified, $HOME/amass/ will be used
 	if path == "" {
-		path, err = os.Getwd()
+		path, err = homedir.Dir()
 		if err != nil {
 			return nil
 		}
