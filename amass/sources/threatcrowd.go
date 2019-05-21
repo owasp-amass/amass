@@ -17,11 +17,15 @@ type ThreatCrowd struct {
 	core.BaseService
 
 	SourceType string
+	RateLimit  time.Duration
 }
 
 // NewThreatCrowd returns he object initialized, but not yet started.
 func NewThreatCrowd(config *core.Config, bus *core.EventBus) *ThreatCrowd {
-	t := &ThreatCrowd{SourceType: core.API}
+	t := &ThreatCrowd{
+		SourceType: core.API,
+		RateLimit:  10 * time.Second,
+	}
 
 	t.BaseService = *core.NewBaseService(t, "ThreatCrowd", config, bus)
 	return t
@@ -36,19 +40,27 @@ func (t *ThreatCrowd) OnStart() error {
 }
 
 func (t *ThreatCrowd) processRequests() {
+	last := time.Now().Truncate(10 * time.Minute)
+
 	for {
 		select {
 		case <-t.Quit():
 			return
 		case req := <-t.RequestChan():
 			if t.Config().IsDomainInScope(req.Domain) {
+				if delta := time.Now().Sub(last); delta < t.RateLimit {
+					time.Sleep(delta)
+				}
+
 				t.executeQuery(req.Domain)
+				last = time.Now()
 			}
 		}
 	}
 }
 
 func (t *ThreatCrowd) executeQuery(domain string) {
+	t.SetActive()
 	url := t.getURL(domain)
 	headers := map[string]string{"Content-Type": "application/json"}
 	page, err := utils.RequestWebPage(url, nil, headers, "", "")
@@ -74,12 +86,15 @@ func (t *ThreatCrowd) executeQuery(domain string) {
 		return
 	}
 
-	t.SetActive()
 	re := t.Config().DomainRegex(domain)
+	if re == nil {
+		return
+	}
+
 	for _, sub := range m.Subdomains {
 		s := strings.ToLower(sub)
 
-		if re.MatchString(s) {
+		if s != "" && re.MatchString(s) {
 			t.Bus().Publish(core.NewNameTopic, &core.Request{
 				Name:   s,
 				Domain: domain,
