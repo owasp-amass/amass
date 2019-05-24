@@ -30,7 +30,7 @@ import (
 )
 
 const (
-	exampleConfigFileURL = "https://github.com/OWASP/Amass/blob/master/examples/amass_config.ini"
+	exampleConfigFileURL = "https://github.com/OWASP/Amass/blob/master/examples/config.ini"
 )
 
 var (
