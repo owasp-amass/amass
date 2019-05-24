@@ -29,7 +29,7 @@ Add some additional domains to the enumeration:
 amass -d example1.com,example2.com -d example3.com
 ```
 
-You will need a config file to use your API keys with Amass. See the [Example Configuration File](https://github.com/OWASP/Amass/blob/master/examples/amass_config.ini) for more details.
+You will need a config file to use your API keys with Amass. See the [Example Configuration File](https://github.com/OWASP/Amass/blob/master/examples/config.ini) for more details.
 
 Switches available through the amass CLI:
 
