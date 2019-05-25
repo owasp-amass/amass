@@ -31,93 +31,6 @@ The OWASP Amass tool suite obtains subdomain names by scraping data sources, rec
 
 ----
 
-## How to Install
-
-### Prebuilt
-
-A [precompiled version is available](https://github.com/OWASP/Amass/releases) for each release.
-
-If your operating environment supports [Snap](https://docs.snapcraft.io/core/install), you can [click here to install](https://snapcraft.io/amass), or perform the following from the command-line:
-
-```bash
-sudo snap install amass
-```
-
-On **Kali**, follow these steps to install Snap and Amass + use AppArmor (for autoload):
-
-```bash
-sudo apt install snapd
-sudo systemctl start snapd
-sudo systemctl enable snapd
-sudo systemctl start apparmor
-sudo systemctl enable apparmor
-```
-
-Add the Snap bin directory to your PATH:
-
-```bash
-export PATH=$PATH:/snap/bin
-```
-
-Periodically, execute the following command to update all your snap packages:
-
-```bash
-sudo snap refresh
-```
-
-For **Homebrew** on **Mac**, the following two commands will install Amass into your macOS environment:
-
-```bash
-brew tap caffix/amass
-brew install amass
-```
-
-### Using Docker
-
-1. Build the [Docker](https://docs.docker.com/) image:
-
-```bash
-sudo docker build -t amass https://github.com/OWASP/Amass.git
-```
-
-2. Run the Docker image:
-
-```bash
-sudo docker run amass --passive -d example.com
-```
-
-The wordlists maintained in the Amass git repository are available in `/wordlists/` within the docker container. For example, to use `all.txt`:
-
-```bash
-sudo docker run amass -w /wordlists/all.txt -d example.com
-```
-
-### From Source
-
-If you prefer to build your own binary from the latest release of the source code, make sure you have a correctly configured **Go >= 1.10** environment. More information about how to achieve this can be found [on the golang website.](https://golang.org/doc/install) Then, take the following steps:
-
-1. Download OWASP Amass:
-
-```bash
-go get -u github.com/OWASP/Amass/...
-```
-
-2. If you wish to rebuild the binaries from the source code:
-
-```bash
-cd $GOPATH/src/github.com/OWASP/Amass
-
-go install ./...
-```
-
-At this point, the binaries should be in *$GOPATH/bin*.
-
-3. Several wordlists can be found in the following directory:
-
-```bash
-ls $GOPATH/src/github.com/OWASP/Amass/wordlists/
-```
-
 ## Documentation
 
 Go to the [User's Guide](https://github.com/OWASP/Amass/blob/master/doc/user_guide.md) for additional information.
@@ -152,6 +65,7 @@ This project improves thanks to all the people who contribute:
 
 ## Mentions
 
+* [Tool for detailed DNS enumeration and creation of network infrastructure maps](https://www.gurudelainformatica.es/2019/05/herramienta-para-enumeracion-detallada.html)
 * [Top 7 Subdomain Scanner Tools: Find Subdomains in Seconds](https://securitytrails.com/blog/subdomain-scanner-find-subdomains)
 * [Cyber Talent Gap: How to Do More With Less](https://www.digitalshadows.com/blog-and-research/cyber-talent-gap-how-to-do-more-with-less/)
 * [My Recon Process — DNS Enumeration](https://medium.com/@noobhax/my-recon-process-dns-enumeration-d0e288f81a8a)
