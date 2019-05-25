@@ -58,43 +58,108 @@ func (c *Censys) processRequests() {
 				if time.Now().Sub(last) < c.RateLimit {
 					time.Sleep(c.RateLimit)
 				}
-
-				c.executeQuery(req.Domain)
+				last = time.Now()
+				if c.API != nil && c.API.Key != "" && c.API.Secret != "" {
+					c.apiQuery(req.Domain)
+				} else {
+					c.executeQuery(req.Domain)
+				}
 				last = time.Now()
 			}
 		}
 	}
 }
 
+type censysRequest struct {
+	Query  string   `json:"query"`
+	Page   int      `json:"page"`
+	Fields []string `json:"fields"`
+}
+
+func (c *Censys) apiQuery(domain string) {
+	re := c.Config().DomainRegex(domain)
+	if re == nil {
+		return
+	}
+
+	for page := 1; ; page++ {
+		c.SetActive()
+		jsonStr, err := json.Marshal(&censysRequest{
+			Query:  domain,
+			Page:   page,
+			Fields: []string{"parsed.subject_dn"},
+		})
+		if err != nil {
+			break
+		}
+
+		u := c.apiURL()
+		body := bytes.NewBuffer(jsonStr)
+		headers := map[string]string{"Content-Type": "application/json"}
+		resp, err := utils.RequestWebPage(u, body, headers, c.API.Key, c.API.Secret)
+		if err != nil {
+			c.Config().Log.Printf("%s: %s: %v", c.String(), u, err)
+			break
+		}
+		// Extract the subdomain names from the certificate information
+		var m struct {
+			Status   string `json:"status"`
+			Metadata struct {
+				Page  int `json:"page"`
+				Pages int `json:"pages"`
+			} `json:"metadata"`
+			Results []struct {
+				Data string `json:"parsed.subject_dn"`
+			} `json:"results"`
+		}
+		if err := json.Unmarshal([]byte(resp), &m); err != nil || m.Status != "ok" {
+			break
+		}
+
+		if len(m.Results) != 0 {
+			for _, result := range m.Results {
+				for _, name := range re.FindAllString(result.Data, -1) {
+					c.Bus().Publish(core.NewNameTopic, &core.Request{
+						Name:   utils.RemoveAsteriskLabel(name),
+						Domain: domain,
+						Tag:    c.SourceType,
+						Source: c.String(),
+					})
+				}
+			}
+		}
+
+		if m.Metadata.Page >= m.Metadata.Pages {
+			break
+		}
+		time.Sleep(c.RateLimit)
+	}
+}
+
+func (c *Censys) apiURL() string {
+	return "https://www.censys.io/api/v1/search/certificates"
+}
+
 func (c *Censys) executeQuery(domain string) {
 	var err error
 	var url, page string
 
-	if c.API != nil && c.API.Key != "" && c.API.Secret != "" {
-		jsonStr, err := json.Marshal(map[string]string{"query": domain})
-		if err != nil {
-			return
-		}
-
-		url = c.restURL()
-		body := bytes.NewBuffer(jsonStr)
-		headers := map[string]string{"Content-Type": "application/json"}
-		page, err = utils.RequestWebPage(url, body, headers, c.API.Key, c.API.Secret)
-	} else {
-		url = c.webURL(domain)
-
-		page, err = utils.RequestWebPage(url, nil, nil, "", "")
+	re := c.Config().DomainRegex(domain)
+	if re == nil {
+		return
 	}
+
+	c.SetActive()
+	url = c.webURL(domain)
+	page, err = utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
 		c.Config().Log.Printf("%s: %s: %v", c.String(), url, err)
 		return
 	}
 
-	c.SetActive()
-	re := c.Config().DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
 		c.Bus().Publish(core.NewNameTopic, &core.Request{
-			Name:   cleanName(sd),
+			Name:   utils.RemoveAsteriskLabel(cleanName(sd)),
 			Domain: domain,
 			Tag:    c.SourceType,
 			Source: c.String(),
@@ -104,8 +169,4 @@ func (c *Censys) executeQuery(domain string) {
 
 func (c *Censys) webURL(domain string) string {
 	return fmt.Sprintf("https://www.censys.io/domain/%s/table", domain)
-}
-
-func (c *Censys) restURL() string {
-	return "https://www.censys.io/api/v1/search/certificates"
 }

@@ -169,6 +169,9 @@ func linksAndNames(domain string, ctx *fetchbot.Context, res *http.Response, lin
 	}
 
 	re := utils.SubdomainRegex(domain)
+	if re == nil {
+		return fmt.Errorf("crawler error: Failed to obtain regex object for: %s", domain)
+	}
 	doc.Find("a[href]").Each(func(i int, s *goquery.Selection) {
 		val, _ := s.Attr("href")
 		// Resolve address

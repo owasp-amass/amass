@@ -56,6 +56,10 @@ func (b *Bing) processRequests() {
 
 func (b *Bing) executeQuery(domain string) {
 	re := b.Config().DomainRegex(domain)
+	if re == nil {
+		return
+	}
+
 	num := b.limit / b.quantity
 	t := time.NewTicker(time.Second)
 	defer t.Stop()

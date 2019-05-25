@@ -47,6 +47,12 @@ func (f *FindSubdomains) processRequests() {
 }
 
 func (f *FindSubdomains) executeQuery(domain string) {
+	re := f.Config().DomainRegex(domain)
+	if re == nil {
+		return
+	}
+
+	f.SetActive()
 	url := f.getURL(domain)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
@@ -54,8 +60,6 @@ func (f *FindSubdomains) executeQuery(domain string) {
 		return
 	}
 
-	f.SetActive()
-	re := f.Config().DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
 		f.Bus().Publish(core.NewNameTopic, &core.Request{
 			Name:   cleanName(sd),

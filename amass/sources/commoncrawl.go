@@ -70,6 +70,10 @@ func (c *CommonCrawl) processRequests() {
 
 func (c *CommonCrawl) executeQuery(domain string) {
 	re := c.Config().DomainRegex(domain)
+	if re == nil {
+		return
+	}
+
 	t := time.NewTicker(time.Second)
 	defer t.Stop()
 

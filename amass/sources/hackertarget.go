@@ -47,6 +47,12 @@ func (h *HackerTarget) processRequests() {
 }
 
 func (h *HackerTarget) executeQuery(domain string) {
+	re := h.Config().DomainRegex(domain)
+	if re == nil {
+		return
+	}
+
+	h.SetActive()
 	url := h.getURL(domain)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
@@ -54,8 +60,6 @@ func (h *HackerTarget) executeQuery(domain string) {
 		return
 	}
 
-	h.SetActive()
-	re := h.Config().DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
 		h.Bus().Publish(core.NewNameTopic, &core.Request{
 			Name:   cleanName(sd),

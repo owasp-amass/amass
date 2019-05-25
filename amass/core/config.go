@@ -179,12 +179,16 @@ func (c *Config) AddDomain(domain string) {
 			return
 		}
 	}
-	// Add the domain string to the list
-	c.domains = utils.UniqueAppend(c.domains, d)
+	// Check that the regular expression map has been initialized
 	if c.regexps == nil {
 		c.regexps = make(map[string]*regexp.Regexp)
 	}
+	// Create the regular expression for this domain
 	c.regexps[d] = utils.SubdomainRegex(d)
+	if c.regexps[d] != nil {
+		// Add the domain string to the list
+		c.domains = utils.UniqueAppend(c.domains, d)
+	}
 }
 
 // Domains returns the list of domain names currently in the configuration.

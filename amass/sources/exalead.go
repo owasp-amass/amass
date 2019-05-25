@@ -47,6 +47,12 @@ func (e *Exalead) processRequests() {
 }
 
 func (e *Exalead) executeQuery(domain string) {
+	re := e.Config().DomainRegex(domain)
+	if re == nil {
+		return
+	}
+
+	e.SetActive()
 	url := e.getURL(domain)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
@@ -54,11 +60,9 @@ func (e *Exalead) executeQuery(domain string) {
 		return
 	}
 
-	e.SetActive()
-	re := e.Config().DomainRegex(domain)
-	for _, sd := range re.FindAllString(page, -1) {
+	for _, name := range re.FindAllString(page, -1) {
 		e.Bus().Publish(core.NewNameTopic, &core.Request{
-			Name:   cleanName(sd),
+			Name:   cleanName(name),
 			Domain: domain,
 			Tag:    e.SourceType,
 			Source: e.String(),

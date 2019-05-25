@@ -47,6 +47,12 @@ func (s *SiteDossier) processRequests() {
 }
 
 func (s *SiteDossier) executeQuery(domain string) {
+	re := s.Config().DomainRegex(domain)
+	if re == nil {
+		return
+	}
+
+	s.SetActive()
 	url := s.getURL(domain)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
@@ -54,8 +60,6 @@ func (s *SiteDossier) executeQuery(domain string) {
 		return
 	}
 
-	s.SetActive()
-	re := s.Config().DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
 		s.Bus().Publish(core.NewNameTopic, &core.Request{
 			Name:   cleanName(sd),

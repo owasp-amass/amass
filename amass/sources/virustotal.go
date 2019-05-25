@@ -63,13 +63,12 @@ func (v *VirusTotal) processRequests() {
 				if time.Now().Sub(last) < v.RateLimit {
 					time.Sleep(v.RateLimit)
 				}
-
+				last = time.Now()
 				if v.haveAPIKey {
 					v.apiQuery(req.Domain)
 				} else {
 					v.regularQuery(req.Domain)
 				}
-
 				last = time.Now()
 			}
 		}
@@ -77,6 +76,12 @@ func (v *VirusTotal) processRequests() {
 }
 
 func (v *VirusTotal) apiQuery(domain string) {
+	re := v.Config().DomainRegex(domain)
+	if re == nil {
+		return
+	}
+
+	v.SetActive()
 	url := v.apiURL(domain)
 	headers := map[string]string{"Content-Type": "application/json"}
 	page, err := utils.RequestWebPage(url, nil, headers, "", "")
@@ -103,8 +108,6 @@ func (v *VirusTotal) apiQuery(domain string) {
 		return
 	}
 
-	v.SetActive()
-	re := v.Config().DomainRegex(domain)
 	for _, sub := range m.Subdomains {
 		s := strings.ToLower(sub)
 
@@ -136,6 +139,12 @@ func (v *VirusTotal) apiURL(domain string) string {
 }
 
 func (v *VirusTotal) regularQuery(domain string) {
+	re := v.Config().DomainRegex(domain)
+	if re == nil {
+		return
+	}
+
+	v.SetActive()
 	url := v.getURL(domain)
 	headers := map[string]string{"Content-Type": "application/json"}
 	page, err := utils.RequestWebPage(url, nil, headers, "", "")
@@ -155,8 +164,6 @@ func (v *VirusTotal) regularQuery(domain string) {
 		return
 	}
 
-	v.SetActive()
-	re := v.Config().DomainRegex(domain)
 	for _, data := range m.Data {
 		if data.Type == "domain" && re.MatchString(data.ID) {
 			v.Bus().Publish(core.NewNameTopic, &core.Request{

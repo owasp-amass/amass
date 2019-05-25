@@ -57,7 +57,7 @@ func (s *Shodan) processRequests() {
 				if time.Now().Sub(last) < s.RateLimit {
 					time.Sleep(s.RateLimit)
 				}
-
+				last = time.Now()
 				s.executeQuery(req.Domain)
 				last = time.Now()
 			}
@@ -66,10 +66,12 @@ func (s *Shodan) processRequests() {
 }
 
 func (s *Shodan) executeQuery(domain string) {
-	if s.API == nil || s.API.Key == "" {
+	re := s.Config().DomainRegex(domain)
+	if re == nil || s.API == nil || s.API.Key == "" {
 		return
 	}
 
+	s.SetActive()
 	url := s.restURL(domain)
 	headers := map[string]string{"Content-Type": "application/json"}
 	page, err := utils.RequestWebPage(url, nil, headers, "", "")
@@ -87,19 +89,16 @@ func (s *Shodan) executeQuery(domain string) {
 		return
 	}
 
-	s.SetActive()
-	re := s.Config().DomainRegex(domain)
 	for _, match := range m.Matches {
 		for _, host := range match.Hostnames {
-			if !re.MatchString(host) {
-				continue
+			if re.MatchString(host) {
+				s.Bus().Publish(core.NewNameTopic, &core.Request{
+					Name:   host,
+					Domain: domain,
+					Tag:    s.SourceType,
+					Source: s.String(),
+				})
 			}
-			s.Bus().Publish(core.NewNameTopic, &core.Request{
-				Name:   host,
-				Domain: domain,
-				Tag:    s.SourceType,
-				Source: s.String(),
-			})
 		}
 	}
 }

@@ -58,7 +58,7 @@ func (c *CIRCL) processRequests() {
 				if time.Now().Sub(last) < c.RateLimit {
 					time.Sleep(c.RateLimit)
 				}
-
+				last = time.Now()
 				c.executeQuery(req.Domain)
 				last = time.Now()
 			}
@@ -90,8 +90,12 @@ func (c *CIRCL) restURL(domain string) string {
 func (c *CIRCL) passiveDNSJSON(page, domain string) {
 	var unique []string
 
-	c.SetActive()
 	re := c.Config().DomainRegex(domain)
+	if re == nil {
+		return
+	}
+
+	c.SetActive()
 	scanner := bufio.NewScanner(strings.NewReader(page))
 	for scanner.Scan() {
 		// Get the next line of JSON

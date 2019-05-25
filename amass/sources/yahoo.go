@@ -56,6 +56,10 @@ func (y *Yahoo) processRequests() {
 
 func (y *Yahoo) executeQuery(domain string) {
 	re := y.Config().DomainRegex(domain)
+	if re == nil {
+		return
+	}
+
 	num := y.limit / y.quantity
 	t := time.NewTicker(time.Second)
 	defer t.Stop()

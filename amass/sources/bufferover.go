@@ -47,6 +47,12 @@ func (b *BufferOver) processRequests() {
 }
 
 func (b *BufferOver) executeQuery(domain string) {
+	re := b.Config().DomainRegex(domain)
+	if re == nil {
+		return
+	}
+
+	b.SetActive()
 	url := b.getURL(domain)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
@@ -54,8 +60,6 @@ func (b *BufferOver) executeQuery(domain string) {
 		return
 	}
 
-	b.SetActive()
-	re := b.Config().DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
 		b.Bus().Publish(core.NewNameTopic, &core.Request{
 			Name:   cleanName(sd),

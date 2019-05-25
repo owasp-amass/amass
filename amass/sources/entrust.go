@@ -49,6 +49,12 @@ func (e *Entrust) processRequests() {
 }
 
 func (e *Entrust) executeQuery(domain string) {
+	re := e.Config().DomainRegex(domain)
+	if re == nil {
+		return
+	}
+
+	e.SetActive()
 	u := e.getURL(domain)
 	page, err := utils.RequestWebPage(u, nil, nil, "", "")
 	if err != nil {
@@ -57,8 +63,6 @@ func (e *Entrust) executeQuery(domain string) {
 	}
 	content := strings.Replace(page, "u003d", " ", -1)
 
-	e.SetActive()
-	re := e.Config().DomainRegex(domain)
 	for _, sd := range re.FindAllString(content, -1) {
 		e.Bus().Publish(core.NewNameTopic, &core.Request{
 			Name:   cleanName(sd),

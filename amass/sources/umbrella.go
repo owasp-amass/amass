@@ -55,7 +55,7 @@ func (u *Umbrella) processRequests() {
 				if time.Now().Sub(last) < u.RateLimit {
 					time.Sleep(u.RateLimit)
 				}
-
+				last = time.Now()
 				u.executeQuery(req.Domain)
 				last = time.Now()
 			}
@@ -64,7 +64,8 @@ func (u *Umbrella) processRequests() {
 }
 
 func (u *Umbrella) executeQuery(domain string) {
-	if u.API == nil || u.API.Key == "" {
+	re := u.Config().DomainRegex(domain)
+	if re == nil || u.API == nil || u.API.Key == "" {
 		return
 	}
 
@@ -72,6 +73,7 @@ func (u *Umbrella) executeQuery(domain string) {
 		"Authorization": "Bearer " + u.API.Key,
 		"Content-Type":  "application/json",
 	}
+	u.SetActive()
 	url := u.patternSearchRestURL(domain)
 	page, err := utils.RequestWebPage(url, nil, headers, "", "")
 	if err != nil {
@@ -79,10 +81,9 @@ func (u *Umbrella) executeQuery(domain string) {
 		return
 	}
 
-	re := u.Config().DomainRegex(domain)
-	for _, sd := range re.FindAllString(page, -1) {
+	for _, name := range re.FindAllString(page, -1) {
 		u.Bus().Publish(core.NewNameTopic, &core.Request{
-			Name:   cleanName(sd),
+			Name:   cleanName(name),
 			Domain: domain,
 			Tag:    u.SourceType,
 			Source: u.String(),
@@ -96,7 +97,6 @@ func (u *Umbrella) executeQuery(domain string) {
 		return
 	}
 
-	u.SetActive()
 	for _, d := range u.Config().Domains() {
 		re := u.Config().DomainRegex(d)
 		for _, sd := range re.FindAllString(page, -1) {
@@ -109,6 +109,7 @@ func (u *Umbrella) executeQuery(domain string) {
 		}
 	}
 
+	u.SetActive()
 	url = u.relatedRestURL(domain)
 	page, err = utils.RequestWebPage(url, nil, headers, "", "")
 	if err != nil {
@@ -116,7 +117,6 @@ func (u *Umbrella) executeQuery(domain string) {
 		return
 	}
 
-	u.SetActive()
 	for _, d := range u.Config().Domains() {
 		re := u.Config().DomainRegex(d)
 		for _, sd := range re.FindAllString(page, -1) {

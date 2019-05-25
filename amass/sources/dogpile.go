@@ -56,6 +56,10 @@ func (d *Dogpile) processRequests() {
 
 func (d *Dogpile) executeQuery(domain string) {
 	re := d.Config().DomainRegex(domain)
+	if re == nil {
+		return
+	}
+
 	num := d.limit / d.quantity
 	t := time.NewTicker(time.Second)
 	defer t.Stop()

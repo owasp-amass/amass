@@ -56,6 +56,10 @@ func (a *Ask) processRequests() {
 
 func (a *Ask) executeQuery(domain string) {
 	re := a.Config().DomainRegex(domain)
+	if re == nil {
+		return
+	}
+
 	num := a.limit / a.quantity
 	t := time.NewTicker(time.Second)
 	defer t.Stop()

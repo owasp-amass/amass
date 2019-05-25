@@ -71,7 +71,7 @@ func (t *Twitter) processRequests() {
 				if time.Now().Sub(last) < t.RateLimit {
 					time.Sleep(t.RateLimit)
 				}
-
+				last = time.Now()
 				t.executeQuery(req.Domain)
 				last = time.Now()
 			}
@@ -80,7 +80,8 @@ func (t *Twitter) processRequests() {
 }
 
 func (t *Twitter) executeQuery(domain string) {
-	if t.client == nil {
+	re := t.Config().DomainRegex(domain)
+	if t.client == nil || re == nil {
 		return
 	}
 
@@ -88,14 +89,13 @@ func (t *Twitter) executeQuery(domain string) {
 		Query: domain,
 		Count: 100,
 	}
+	t.SetActive()
 	search, _, err := t.client.Search.Tweets(searchParams)
 	if err != nil {
 		t.Config().Log.Printf("%s: %v", t.String(), err)
 		return
 	}
 
-	t.SetActive()
-	re := t.Config().DomainRegex(domain)
 	for _, tweet := range search.Statuses {
 		for _, name := range re.FindAllString(tweet.Text, -1) {
 			t.Bus().Publish(core.NewNameTopic, &core.Request{

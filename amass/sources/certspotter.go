@@ -4,7 +4,9 @@
 package sources
 
 import (
-	"fmt"
+	"encoding/json"
+	"net/url"
+	"time"
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
@@ -15,11 +17,15 @@ type CertSpotter struct {
 	core.BaseService
 
 	SourceType string
+	RateLimit  time.Duration
 }
 
 // NewCertSpotter returns he object initialized, but not yet started.
 func NewCertSpotter(config *core.Config, bus *core.EventBus) *CertSpotter {
-	c := &CertSpotter{SourceType: core.CERT}
+	c := &CertSpotter{
+		SourceType: core.CERT,
+		RateLimit:  2 * time.Second,
+	}
 
 	c.BaseService = *core.NewBaseService(c, "CertSpotter", config, bus)
 	return c
@@ -34,40 +40,68 @@ func (c *CertSpotter) OnStart() error {
 }
 
 func (c *CertSpotter) processRequests() {
+	last := time.Now().Truncate(10 * time.Minute)
+
 	for {
 		select {
 		case <-c.Quit():
 			return
 		case req := <-c.RequestChan():
 			if c.Config().IsDomainInScope(req.Domain) {
+				if time.Now().Sub(last) < c.RateLimit {
+					time.Sleep(c.RateLimit)
+				}
+				last = time.Now()
 				c.executeQuery(req.Domain)
+				last = time.Now()
 			}
 		}
 	}
 }
 
 func (c *CertSpotter) executeQuery(domain string) {
+	re := c.Config().DomainRegex(domain)
+	if re == nil {
+		return
+	}
+
+	c.SetActive()
 	url := c.getURL(domain)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
 		c.Config().Log.Printf("%s: %s: %v", c.String(), url, err)
 		return
 	}
+	// Extract the subdomain names from the certificate information
+	var m []struct {
+		Names []string `json:"dns_names"`
+	}
+	if err := json.Unmarshal([]byte(page), &m); err != nil {
+		return
+	}
 
-	c.SetActive()
-	re := c.Config().DomainRegex(domain)
-	for _, sd := range re.FindAllString(page, -1) {
-		c.Bus().Publish(core.NewNameTopic, &core.Request{
-			Name:   cleanName(sd),
-			Domain: domain,
-			Tag:    c.SourceType,
-			Source: c.String(),
-		})
+	for _, result := range m {
+		for _, name := range result.Names {
+			if re.MatchString(name) {
+				c.Bus().Publish(core.NewNameTopic, &core.Request{
+					Name:   utils.RemoveAsteriskLabel(name),
+					Domain: domain,
+					Tag:    c.SourceType,
+					Source: c.String(),
+				})
+			}
+		}
 	}
 }
 
 func (c *CertSpotter) getURL(domain string) string {
-	format := "https://certspotter.com/api/v0/certs?domain=%s"
+	u, _ := url.Parse("https://api.certspotter.com/v1/issuances")
 
-	return fmt.Sprintf(format, domain)
+	u.RawQuery = url.Values{
+		"domain":             {domain},
+		"include_subdomains": {"true"},
+		"match_wildcards":    {"true"},
+		"expand":             {"dns_names"},
+	}.Encode()
+	return u.String()
 }

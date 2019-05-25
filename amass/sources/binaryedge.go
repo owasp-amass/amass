@@ -69,12 +69,18 @@ func (be *BinaryEdge) executeQuery(domain string) {
 		return
 	}
 
+	re := be.Config().DomainRegex(domain)
+	if re == nil {
+		return
+	}
+
 	url := be.restURL(domain)
 	headers := map[string]string{
 		"X-KEY":        be.API.Key,
 		"Content-Type": "application/json",
 	}
 
+	be.SetActive()
 	page, err := utils.RequestWebPage(url, nil, headers, "", "")
 	if err != nil {
 		be.Config().Log.Printf("%s: %s: %v", be.String(), url, err)
@@ -88,18 +94,15 @@ func (be *BinaryEdge) executeQuery(domain string) {
 		return
 	}
 
-	be.SetActive()
-	re := be.Config().DomainRegex(domain)
 	for _, name := range subs.Subdomains {
-		if !re.MatchString(name) {
-			continue
+		if re.MatchString(name) {
+			be.Bus().Publish(core.NewNameTopic, &core.Request{
+				Name:   name,
+				Domain: domain,
+				Tag:    be.SourceType,
+				Source: be.String(),
+			})
 		}
-		be.Bus().Publish(core.NewNameTopic, &core.Request{
-			Name:   name,
-			Domain: domain,
-			Tag:    be.SourceType,
-			Source: be.String(),
-		})
 	}
 }
 

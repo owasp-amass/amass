@@ -6,6 +6,7 @@ package sources
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
@@ -57,7 +58,7 @@ func (st *SecurityTrails) processRequests() {
 				if time.Now().Sub(last) < st.RateLimit {
 					time.Sleep(st.RateLimit)
 				}
-
+				last = time.Now()
 				st.executeQuery(req.Domain)
 				last = time.Now()
 			}
@@ -66,7 +67,8 @@ func (st *SecurityTrails) processRequests() {
 }
 
 func (st *SecurityTrails) executeQuery(domain string) {
-	if st.API == nil || st.API.Key == "" {
+	re := st.Config().DomainRegex(domain)
+	if re == nil || st.API == nil || st.API.Key == "" {
 		return
 	}
 
@@ -76,6 +78,7 @@ func (st *SecurityTrails) executeQuery(domain string) {
 		"Content-Type": "application/json",
 	}
 
+	st.SetActive()
 	page, err := utils.RequestWebPage(url, nil, headers, "", "")
 	if err != nil {
 		st.Config().Log.Printf("%s: %s: %v", st.String(), url, err)
@@ -89,19 +92,16 @@ func (st *SecurityTrails) executeQuery(domain string) {
 		return
 	}
 
-	st.SetActive()
-	re := st.Config().DomainRegex(domain)
 	for _, s := range subs.Subdomains {
-		name := s + "." + domain
-		if !re.MatchString(name) {
-			continue
+		name := strings.ToLower(s) + "." + domain
+		if re.MatchString(name) {
+			st.Bus().Publish(core.NewNameTopic, &core.Request{
+				Name:   name,
+				Domain: domain,
+				Tag:    st.SourceType,
+				Source: st.String(),
+			})
 		}
-		st.Bus().Publish(core.NewNameTopic, &core.Request{
-			Name:   name,
-			Domain: domain,
-			Tag:    st.SourceType,
-			Source: st.String(),
-		})
 	}
 }
 

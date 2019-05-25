@@ -47,6 +47,12 @@ func (n *Netcraft) processRequests() {
 }
 
 func (n *Netcraft) executeQuery(domain string) {
+	re := n.Config().DomainRegex(domain)
+	if re == nil {
+		return
+	}
+
+	n.SetActive()
 	url := n.getURL(domain)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
@@ -54,8 +60,6 @@ func (n *Netcraft) executeQuery(domain string) {
 		return
 	}
 
-	n.SetActive()
-	re := n.Config().DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
 		n.Bus().Publish(core.NewNameTopic, &core.Request{
 			Name:   cleanName(sd),

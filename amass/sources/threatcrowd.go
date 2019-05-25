@@ -52,7 +52,7 @@ func (t *ThreatCrowd) processRequests() {
 				if delta := time.Now().Sub(last); delta < t.RateLimit {
 					time.Sleep(delta)
 				}
-
+				last = time.Now()
 				t.executeQuery(req.Domain)
 				last = time.Now()
 			}
@@ -61,6 +61,11 @@ func (t *ThreatCrowd) processRequests() {
 }
 
 func (t *ThreatCrowd) executeQuery(domain string) {
+	re := t.Config().DomainRegex(domain)
+	if re == nil {
+		return
+	}
+
 	t.SetActive()
 	url := t.getURL(domain)
 	headers := map[string]string{"Content-Type": "application/json"}
@@ -84,11 +89,6 @@ func (t *ThreatCrowd) executeQuery(domain string) {
 
 	if m.ResponseCode != "1" {
 		t.Config().Log.Printf("%s: %s: Response code %s", t.String(), url, m.ResponseCode)
-		return
-	}
-
-	re := t.Config().DomainRegex(domain)
-	if re == nil {
 		return
 	}
 

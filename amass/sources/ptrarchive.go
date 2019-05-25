@@ -47,6 +47,12 @@ func (p *PTRArchive) processRequests() {
 }
 
 func (p *PTRArchive) executeQuery(domain string) {
+	re := p.Config().DomainRegex(domain)
+	if re == nil {
+		return
+	}
+
+	p.SetActive()
 	url := p.getURL(domain)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
@@ -54,8 +60,6 @@ func (p *PTRArchive) executeQuery(domain string) {
 		return
 	}
 
-	p.SetActive()
-	re := p.Config().DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
 		name := cleanName(sd)
 		if name == "automated_programs_unauthorized."+domain {

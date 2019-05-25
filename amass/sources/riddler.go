@@ -47,6 +47,12 @@ func (r *Riddler) processRequests() {
 }
 
 func (r *Riddler) executeQuery(domain string) {
+	re := r.Config().DomainRegex(domain)
+	if re == nil {
+		return
+	}
+
+	r.SetActive()
 	url := r.getURL(domain)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
@@ -54,11 +60,9 @@ func (r *Riddler) executeQuery(domain string) {
 		return
 	}
 
-	r.SetActive()
-	re := r.Config().DomainRegex(domain)
-	for _, sd := range re.FindAllString(page, -1) {
+	for _, name := range re.FindAllString(page, -1) {
 		r.Bus().Publish(core.NewNameTopic, &core.Request{
-			Name:   cleanName(sd),
+			Name:   cleanName(name),
 			Domain: domain,
 			Tag:    r.SourceType,
 			Source: r.String(),

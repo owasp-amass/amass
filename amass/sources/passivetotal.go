@@ -56,7 +56,7 @@ func (pt *PassiveTotal) processRequests() {
 				if time.Now().Sub(last) < pt.RateLimit {
 					time.Sleep(pt.RateLimit)
 				}
-
+				last = time.Now()
 				pt.executeQuery(req.Domain)
 				last = time.Now()
 			}
@@ -69,6 +69,12 @@ func (pt *PassiveTotal) executeQuery(domain string) {
 		return
 	}
 
+	re := pt.Config().DomainRegex(domain)
+	if re == nil {
+		return
+	}
+
+	pt.SetActive()
 	url := pt.restURL(domain)
 	headers := map[string]string{"Content-Type": "application/json"}
 	page, err := utils.RequestWebPage(url, nil, headers, pt.API.Username, pt.API.Key)
@@ -81,26 +87,20 @@ func (pt *PassiveTotal) executeQuery(domain string) {
 		Success    bool     `json:"success"`
 		Subdomains []string `json:"subdomains"`
 	}
-	if err := json.Unmarshal([]byte(page), &subs); err != nil {
-		return
-	}
-	if !subs.Success {
+	if err := json.Unmarshal([]byte(page), &subs); err != nil || !subs.Success {
 		return
 	}
 
-	pt.SetActive()
-	re := pt.Config().DomainRegex(domain)
 	for _, s := range subs.Subdomains {
 		name := s + "." + domain
-		if !re.MatchString(name) {
-			continue
+		if re.MatchString(name) {
+			pt.Bus().Publish(core.NewNameTopic, &core.Request{
+				Name:   name,
+				Domain: domain,
+				Tag:    pt.SourceType,
+				Source: pt.String(),
+			})
 		}
-		pt.Bus().Publish(core.NewNameTopic, &core.Request{
-			Name:   name,
-			Domain: domain,
-			Tag:    pt.SourceType,
-			Source: pt.String(),
-		})
 	}
 }
 

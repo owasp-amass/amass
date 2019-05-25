@@ -56,6 +56,10 @@ func (g *Google) processRequests() {
 
 func (g *Google) executeQuery(domain string) {
 	re := g.Config().DomainRegex(domain)
+	if re == nil {
+		return
+	}
+
 	num := g.limit / g.quantity
 	t := time.NewTicker(time.Second)
 	defer t.Stop()
@@ -74,9 +78,9 @@ func (g *Google) executeQuery(domain string) {
 				return
 			}
 
-			for _, sd := range re.FindAllString(page, -1) {
+			for _, name := range re.FindAllString(page, -1) {
 				g.Bus().Publish(core.NewNameTopic, &core.Request{
-					Name:   cleanName(sd),
+					Name:   cleanName(name),
 					Domain: domain,
 					Tag:    g.SourceType,
 					Source: g.String(),

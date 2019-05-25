@@ -53,6 +53,12 @@ func (d *DNSDumpster) processRequests() {
 }
 
 func (d *DNSDumpster) executeQuery(domain string) {
+	re := d.Config().DomainRegex(domain)
+	if re == nil {
+		return
+	}
+
+	d.SetActive()
 	u := "https://dnsdumpster.com/"
 	page, err := utils.RequestWebPage(u, nil, nil, "", "")
 	if err != nil {
@@ -73,8 +79,6 @@ func (d *DNSDumpster) executeQuery(domain string) {
 		return
 	}
 
-	d.SetActive()
-	re := d.Config().DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
 		d.Bus().Publish(core.NewNameTopic, &core.Request{
 			Name:   cleanName(sd),

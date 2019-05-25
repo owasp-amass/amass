@@ -53,6 +53,11 @@ func (i *IPv4Info) processRequests() {
 }
 
 func (i *IPv4Info) executeQuery(domain string) {
+	re := i.Config().DomainRegex(domain)
+	if re == nil {
+		return
+	}
+
 	url := i.getURL(domain)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
@@ -87,7 +92,6 @@ func (i *IPv4Info) executeQuery(domain string) {
 		return
 	}
 
-	re := i.Config().DomainRegex(domain)
 	for _, sd := range re.FindAllString(page, -1) {
 		i.Bus().Publish(core.NewNameTopic, &core.Request{
 			Name:   cleanName(sd),

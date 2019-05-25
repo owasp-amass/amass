@@ -97,6 +97,10 @@ func (d *DNSDB) passiveDNSJSON(page, domain string) {
 	var unique []string
 
 	re := d.Config().DomainRegex(domain)
+	if re == nil {
+		return
+	}
+
 	scanner := bufio.NewScanner(strings.NewReader(page))
 	for scanner.Scan() {
 		// Get the next line of JSON
@@ -231,10 +235,11 @@ func (d *DNSDB) followIndicies(page, domain string) []string {
 func (d *DNSDB) pullPageNames(page, domain string) []string {
 	var names []string
 
-	re := d.Config().DomainRegex(domain)
-	for _, sd := range re.FindAllString(page, -1) {
-		if u := utils.NewUniqueElements(names, cleanName(sd)); len(u) > 0 {
-			names = append(names, u...)
+	if re := d.Config().DomainRegex(domain); re != nil {
+		for _, name := range re.FindAllString(page, -1) {
+			if u := utils.NewUniqueElements(names, cleanName(name)); len(u) > 0 {
+				names = append(names, u...)
+			}
 		}
 	}
 	return names

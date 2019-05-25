@@ -64,7 +64,7 @@ func (a *AlienVault) processRequests() {
 				if time.Now().Sub(last) < a.RateLimit {
 					time.Sleep(a.RateLimit)
 				}
-
+				last = time.Now()
 				a.executeQuery(req.Domain)
 				last = time.Now()
 			}
@@ -73,6 +73,11 @@ func (a *AlienVault) processRequests() {
 }
 
 func (a *AlienVault) executeQuery(domain string) {
+	re := a.Config().DomainRegex(domain)
+	if re == nil {
+		return
+	}
+
 	a.SetActive()
 	u := a.getURL(domain) + "passive_dns"
 	headers := map[string]string{"Content-Type": "application/json", "X-OTX-API-KEY": a.API.Key}
@@ -94,7 +99,6 @@ func (a *AlienVault) executeQuery(domain string) {
 
 	var names []string
 	var ips []string
-	re := a.Config().DomainRegex(domain)
 	if len(m.Subdomains) != 0 {
 		for _, sub := range m.Subdomains {
 			n := strings.ToLower(sub.Hostname)

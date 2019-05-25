@@ -58,6 +58,12 @@ func (r *Robtex) processRequests() {
 func (r *Robtex) executeQuery(domain string) {
 	var ips []string
 
+	re := r.Config().DomainRegex(domain)
+	if re == nil {
+		return
+	}
+
+	r.SetActive()
 	url := "https://freeapi.robtex.com/pdns/forward/" + domain
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
@@ -102,11 +108,9 @@ loop:
 		}
 	}
 
-	r.SetActive()
-	re := r.Config().DomainRegex(domain)
-	for _, sd := range re.FindAllString(list, -1) {
+	for _, name := range re.FindAllString(list, -1) {
 		r.Bus().Publish(core.NewNameTopic, &core.Request{
-			Name:   cleanName(sd),
+			Name:   cleanName(name),
 			Domain: domain,
 			Tag:    r.SourceType,
 			Source: r.String(),

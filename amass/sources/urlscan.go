@@ -58,7 +58,7 @@ func (u *URLScan) processRequests() {
 				if time.Now().Sub(last) < u.RateLimit {
 					time.Sleep(u.RateLimit)
 				}
-
+				last = time.Now()
 				u.executeQuery(req.Domain)
 				last = time.Now()
 			}
@@ -67,6 +67,11 @@ func (u *URLScan) processRequests() {
 }
 
 func (u *URLScan) executeQuery(domain string) {
+	re := u.Config().DomainRegex(domain)
+	if re == nil {
+		return
+	}
+
 	u.SetActive()
 	url := u.searchURL(domain)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
@@ -101,17 +106,15 @@ func (u *URLScan) executeQuery(domain string) {
 		subs = utils.UniqueAppend(subs, u.getSubsFromResult(id)...)
 	}
 
-	re := u.Config().DomainRegex(domain)
 	for _, name := range subs {
-		if !re.MatchString(name) {
-			continue
+		if re.MatchString(name) {
+			u.Bus().Publish(core.NewNameTopic, &core.Request{
+				Name:   name,
+				Domain: domain,
+				Tag:    u.SourceType,
+				Source: u.String(),
+			})
 		}
-		u.Bus().Publish(core.NewNameTopic, &core.Request{
-			Name:   name,
-			Domain: domain,
-			Tag:    u.SourceType,
-			Source: u.String(),
-		})
 	}
 }
 
