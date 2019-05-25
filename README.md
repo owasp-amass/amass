@@ -33,6 +33,8 @@ The OWASP Amass tool suite obtains subdomain names by scraping data sources, rec
 
 ## Documentation
 
+Use the [Installation Guide](https://github.com/OWASP/Amass/blob/master/doc/install.md) to get started.
+
 Go to the [User's Guide](https://github.com/OWASP/Amass/blob/master/doc/user_guide.md) for additional information.
 
 ## Community
