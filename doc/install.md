@@ -109,6 +109,12 @@ cd /usr/ports/dns/amass/ && make install clean
 pkg install amass
 ```
 
+## Nix or NixOS
+
+```bash
+nix-env -f '<nixpkgs>' -iA amass
+```
+
 ### Pentoo Linux
 
 ```bash

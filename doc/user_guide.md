@@ -30,22 +30,22 @@ Switches available through the amass CLI without subcommands:
 |------|-------------|---------|
 | -active | Enable active recon methods | amass -active -d example.com net -p 80,443,8080 |
 | -aw | Path to a different wordlist file for alterations | amass -aw PATH -d example.com |
-| -bl  | Blacklist of subdomain names that will not be investigated | amass -bl blah.example.com -d example.com |
+| -bl | Blacklist of subdomain names that will not be investigated | amass -bl blah.example.com -d example.com |
 | -blf | Path to a file providing blacklisted subdomains | amass -blf data/blacklist.txt -d example.com |
 | -brute | Perform brute force subdomain enumeration | amass -brute -d example.com |
 | -config | Path to the INI configuration file | amass -config config.ini |
-| -d   | Domain names separated by commas (can be used multiple times) | amass -d example.com |
-| -df  | Path to a file providing root domain names | amass -df domains.txt |
-| -do  | Path to data operations output file | amass -do data.json -d example.com |
-| -ef  | Path to a file providing data sources to exclude | amass -ef exclude.txt -d example.com |
+| -d | Domain names separated by commas (can be used multiple times) | amass -d example.com |
+| -df | Path to a file providing root domain names | amass -df domains.txt |
+| -do | Path to data operations output file | amass -do data.json -d example.com |
+| -ef | Path to a file providing data sources to exclude | amass -ef exclude.txt -d example.com |
 | -exclude | Data source names separated by commas to be excluded | amass -exclude crtsh -d example.com |
-| -h   | Show the amass usage information | amass -h |
-| -if  | Path to a file providing data sources to include | amass -if include.txt -d example.com |
+| -h | Show the amass usage information | amass -h |
+| -if | Path to a file providing data sources to include | amass -if include.txt -d example.com |
 | -include | Data source names separated by commas to be included | amass -include crtsh -d example.com |
 | -include-unresolvable | Output DNS names that did not resolve | amass -include-unresolvable -d example.com |
-| -ip  | Show the IP addresses for discovered names | amass -ip -d example.com |
-| -ipv4  | Show the IPv4 addresses for discovered names | amass -ipv4 -d example.com |
-| -ipv6  | Show the IPv6 addresses for discovered names | amass -ipv6 -d example.com |
+| -ip | Show the IP addresses for discovered names | amass -ip -d example.com |
+| -ipv4 | Show the IPv4 addresses for discovered names | amass -ipv4 -d example.com |
+| -ipv6 | Show the IPv6 addresses for discovered names | amass -ipv6 -d example.com |
 | -json | Path to the JSON output file | amass -json out.json -d example.com |
 | -list | Print the names of all available data sources | amass -l |
 | -log | Path to the log file where errors will be written | amass -log amass.log -d example.com |
@@ -54,14 +54,14 @@ Switches available through the amass CLI without subcommands:
 | -nf | Path to a file providing already known subdomain names | amass -nf names.txt -d example.com |
 | -noalts | Disable generation of altered names | amass -noalts -d example.com |
 | -norecursive | Turn off recursive brute forcing | amass -brute -norecursive -d example.com |
-| -o   | Path to the text output file | amass -o out.txt -d example.com |
-| -oA  | Path prefix used for naming all output files | amass -oA amass_scan -d example.com |
+| -o | Path to the text output file | amass -o out.txt -d example.com |
+| -oA | Path prefix used for naming all output files | amass -oA amass_scan -d example.com |
 | -passive | A purely passive mode of execution | amass --passive -d example.com |
-| -r   | IP addresses of preferred DNS resolvers (can be used multiple times) | amass -r 8.8.8.8,1.1.1.1 -d example.com |
-| -rf  | Path to a file providing preferred DNS resolvers | amass -rf data/resolvers.txt -d example.com |
+| -r | IP addresses of preferred DNS resolvers (can be used multiple times) | amass -r 8.8.8.8,1.1.1.1 -d example.com |
+| -rf | Path to a file providing preferred DNS resolvers | amass -rf data/resolvers.txt -d example.com |
 | -src | Print data sources for the discovered names | amass -src -d example.com |
 | -version | Print the version number of this Amass binary | amass -version |
-| -w   | Path to a different wordlist file | amass -brute -w wordlist.txt -d example.com |
+| -w | Path to a different wordlist file | amass -brute -w wordlist.txt -d example.com |
 
 ### The 'net' Subcommand
 
@@ -85,7 +85,7 @@ Switches for outputting the DNS and infrastructure findings as a network graph:
 | Flag | Description | Example |
 |------|-------------|---------|
 | -maltego | Output a Maltego Graph Table CSV file | amass viz -maltego |
-| -d3  | Output a D3.js v4 force simulation HTML file | amass viz -d3 |
+| -d3 | Output a D3.js v4 force simulation HTML file | amass viz -d3 |
 | -gexf | Output to Graph Exchange XML Format (GEXF) | amass viz -gephi |
 | -graphistry | Output Graphistry JSON | amass viz -graphistry |
 | -visjs | Output HTML that employs VisJS | amass viz -visjs |
@@ -97,7 +97,7 @@ Switches for interacting with the DNS and infrastructure findings in the graph d
 | Flag | Description | Example |
 |------|-------------|---------|
 | -dir | Path to the directory containing the graph database | amass db -dir PATH |
-| -enums  | Print information for all available enumerations | amass db -enums |
+| -enums | Print information for all available enumerations | amass db -enums |
 
 ### The 'track' Subcommand
 
@@ -106,12 +106,87 @@ Switches for performing Internet exposure monitoring across the enumerations in 
 | Flag | Description | Example |
 |------|-------------|---------|
 | -history | Show the difference between all enumeration pairs | amass track -history |
-| -last  | The number of recent enumerations to include in the tracking | amass track -last |
-| -start  | Exclude all enumerations before a specified date (format: 01/02 15:04:05 2006 MST) | amass track -start DATE |
+| -last | The number of recent enumerations to include in the tracking | amass track -last NUM |
+| -since | Exclude all enumerations before a specified date (format: 01/02 15:04:05 2006 MST) | amass track -since DATE |
 
-## The Configuration File
+## The Enumeration Configuration File
 
 You will need a config file to use your API keys with Amass. See the [Example Configuration File](https://github.com/OWASP/Amass/blob/master/examples/config.ini) for more details.
+
+### Default Section
+
+| Option | Description |
+|--------|-------------|
+| mode | Determines which mode the enumeration is performed in: default, passive or active |
+| port | Specifies a port to be used when actively pulling TLS certificates |
+| output_directory | The directory that stores the graph database and other output files |
+| maximum_dns_queries | The maximum number of concurrent DNS queries that can be performed |
+| include_unresolvable | When set to true, causes DNS names that did not resolve to be printed |
+
+### The domains Section
+
+| Option | Description |
+|--------|-------------|
+| domain | A root DNS domain name to be added to the enumeration scope |
+
+### The resolvers Section
+
+| Option | Description |
+|--------|-------------|
+| resolver | The IP address of a DNS resolver and used globally by the amass package |
+
+### The blacklisted Section
+
+| Option | Description |
+|--------|-------------|
+| subdomain | A DNS subdomain name to be considered out of scope during the enumeration |
+
+### The disabled_data_sources Section
+
+| Option | Description |
+|--------|-------------|
+| data_source | One of the Amass data sources that is **not** to be used during the enumeration |
+
+### The gremlin Section
+
+| Option | Description |
+|--------|-------------|
+| url | URL in the form of "ws://host:port" where Amass will connect to a TinkerPop database |
+| username | User of the TinkerPop database server that can access the Amass graph database |
+| password | Valid password for the user identified by the 'username' option |
+
+### The bruteforce Section
+
+| Option | Description |
+|--------|-------------|
+| enabled | When set to true, brute forcing is performed during the enumeration |
+| recursive | When set to true, brute forcing is performed on discovered subdomain names as well |
+| minimum_for_recursive | Number of discoveries made in a subdomain before performing recursive brute forcing |
+| wordlist_file | Path to a custom wordlist file to be used during the brute forcing |
+
+### The alterations Section
+
+| Option | Description |
+|--------|-------------|
+| enabled | When set to true, permuting resolved DNS names is performed during the enumeration |
+| minimum_for_word_flip | Number of times a word must be seen before using it for future word flips and word additions |
+| edit_distance | Number of times an edit operation will be performed on a name sample during fuzzy label searching |
+| flip_words | When set to true, causes words in DNS names to be exchanged for others in the alteration word list |
+| flip_numbers | When set to true, causes numbers in DNS names to be exchanged for other numbers |
+| add_words | When set to true, causes other words in the alteration word list to be added to resolved DNS names |
+| add_numbers | When set to true, causes numbers to be added and removed from resolved DNS names |
+| wordlist_file | Path to a custom wordlist file that provides additional words to the alteration word list |
+
+### Data Source Sections
+
+Each Amass data source service can have a dedicated configuration file section. This is how data sources can be configured that have authentication requirements.
+
+| Option | Description |
+|--------|-------------|
+| apikey | The API key to be used when accessing the data source |
+| secret | An additional secret to be used with the API key |
+| username | User for the data source account |
+| password | Valid password for the user identified by the 'username' option |
 
 ## Importing OWASP Amass Results into Maltego
 
