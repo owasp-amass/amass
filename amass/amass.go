@@ -573,8 +573,8 @@ func PrintEnumerationSummary(total int, tags map[string]int, asns map[int]*ASNSu
 		datastr := data.Name
 
 		if demo && asn > 0 {
-			asnstr = censorString(asnstr, true)
-			datastr = censorString(datastr, true)
+			asnstr = censorString(asnstr, 0, len(asnstr))
+			datastr = censorString(datastr, 0, len(datastr))
 		}
 
 		fmt.Fprintf(color.Error, "%s%s %s %s\n",
@@ -585,7 +585,7 @@ func PrintEnumerationSummary(total int, tags map[string]int, asns map[int]*ASNSu
 			cidrstr := cidr
 
 			if demo {
-				cidrstr = censorString(cidrstr, true)
+				cidrstr = censorNetBlock(cidrstr)
 			}
 
 			countstr = fmt.Sprintf("\t%-4s", countstr)
@@ -620,17 +620,19 @@ func PrintBanner() {
 	y.Fprintf(color.Error, "%s\n\n\n", desc)
 }
 
-func censorString(input string, full bool) string {
-	var start, end int
+func censorDomain(input string) string {
+	return censorString(input, strings.Index(input, "."), len(input))
+}
 
-	if full {
-		start = 0
-	} else {
-		start = strings.Index(input, ".")
-	}
+func censorIP(input string) string {
+	return censorString(input, 0, strings.LastIndex(input, "."))
+}
 
-	end = len(input)
+func censorNetBlock(input string) string {
+	return censorString(input, 0, strings.Index(input, "/"))
+}
 
+func censorString(input string, start, end int) string {
 	runes := []rune(input)
 	for i := start; i < end; i++ {
 		if runes[i] == '.' ||
@@ -656,7 +658,7 @@ func OutputLineParts(out *core.Output, src, addrs, demo bool) (source, name, ips
 				ips += ","
 			}
 			if demo {
-				ips += censorString(a.Address.String(), false)
+				ips += censorIP(a.Address.String())
 			} else {
 				ips += a.Address.String()
 			}
@@ -667,7 +669,7 @@ func OutputLineParts(out *core.Output, src, addrs, demo bool) (source, name, ips
 	}
 	name = out.Name
 	if demo {
-		name = censorString(name, false)
+		name = censorDomain(name)
 	}
 	return
 }
