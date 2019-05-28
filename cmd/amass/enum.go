@@ -53,7 +53,6 @@ type enumArgs struct {
 		Active       bool
 		BruteForcing bool
 		DemoMode     bool
-		Help         bool
 		IPs          bool
 		IPv4         bool
 		IPv6         bool
@@ -98,7 +97,6 @@ func defineEnumOptionFlags(enumFlags *flag.FlagSet, args *enumArgs) {
 	enumFlags.BoolVar(&args.Options.Active, "active", false, "Attempt zone transfers and certificate name grabs")
 	enumFlags.BoolVar(&args.Options.BruteForcing, "brute", false, "Execute brute forcing after searches")
 	enumFlags.BoolVar(&args.Options.DemoMode, "demo", false, "Censor output to make it suitable for demonstrations")
-	enumFlags.BoolVar(&args.Options.Help, "h", false, "Show the program usage message")
 	enumFlags.BoolVar(&args.Options.IPs, "ip", false, "Show the IP addresses for discovered names")
 	enumFlags.BoolVar(&args.Options.IPv4, "ipv4", false, "Show the IPv4 addresses for discovered names")
 	enumFlags.BoolVar(&args.Options.IPv6, "ipv6", false, "Show the IPv6 addresses for discovered names")
