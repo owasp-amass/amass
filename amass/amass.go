@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"log"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -532,7 +533,7 @@ func UpdateSummaryData(output *core.Output, tags map[string]int, asns map[int]*A
 }
 
 // PrintEnumerationSummary outputs the summary information utilized by the command-line tools.
-func PrintEnumerationSummary(total int, tags map[string]int, asns map[int]*ASNSummaryData) {
+func PrintEnumerationSummary(total int, tags map[string]int, asns map[int]*ASNSummaryData, demo bool) {
 	pad := func(num int, chr string) {
 		for i := 0; i < num; i++ {
 			b.Fprint(color.Error, chr)
@@ -568,12 +569,27 @@ func PrintEnumerationSummary(total int, tags map[string]int, asns map[int]*ASNSu
 	fmt.Fprintln(color.Error)
 	// Print the ASN and netblock information
 	for asn, data := range asns {
+		asnstr := strconv.Itoa(asn)
+		datastr := data.Name
+
+		if demo && asn > 0 {
+			asnstr = censorString(asnstr, true)
+			datastr = censorString(datastr, true)
+		}
+
 		fmt.Fprintf(color.Error, "%s%s %s %s\n",
-			blue("ASN: "), yellow(strconv.Itoa(asn)), green("-"), green(data.Name))
+			blue("ASN: "), yellow(asnstr), green("-"), green(datastr))
 
 		for cidr, ips := range data.Netblocks {
-			countstr := fmt.Sprintf("\t%-4s", strconv.Itoa(ips))
-			cidrstr := fmt.Sprintf("\t%-18s", cidr)
+			countstr := strconv.Itoa(ips)
+			cidrstr := cidr
+
+			if demo {
+				cidrstr = censorString(cidrstr, true)
+			}
+
+			countstr = fmt.Sprintf("\t%-4s", countstr)
+			cidrstr = fmt.Sprintf("\t%-18s", cidrstr)
 
 			fmt.Fprintf(color.Error, "%s%s %s\n",
 				yellow(cidrstr), yellow(countstr), blue("Subdomain Name(s)"))
@@ -604,8 +620,33 @@ func PrintBanner() {
 	y.Fprintf(color.Error, "%s\n\n\n", desc)
 }
 
+func censorString(input string, full bool) string {
+	var start, end int
+
+	if full {
+		start = 0
+	} else {
+		start = strings.Index(input, ".")
+	}
+
+	end = len(input)
+
+	runes := []rune(input)
+	for i := start; i < end; i++ {
+		if runes[i] == '.' ||
+			runes[i] == '/' ||
+			runes[i] == '-' ||
+			runes[i] == ' ' {
+			continue
+		}
+		runes[i] = 'x'
+	}
+
+	return string(runes)
+}
+
 // OutputLineParts returns the parts of a line to be printed for a core.Output.
-func OutputLineParts(out *core.Output, src, addrs bool) (source, name, ips string) {
+func OutputLineParts(out *core.Output, src, addrs, demo bool) (source, name, ips string) {
 	if src {
 		source = fmt.Sprintf("%-18s", "["+out.Source+"] ")
 	}
@@ -614,12 +655,19 @@ func OutputLineParts(out *core.Output, src, addrs bool) (source, name, ips strin
 			if i != 0 {
 				ips += ","
 			}
-			ips += a.Address.String()
+			if demo {
+				ips += censorString(a.Address.String(), false)
+			} else {
+				ips += a.Address.String()
+			}
 		}
 		if ips == "" {
 			ips = "N/A"
 		}
 	}
 	name = out.Name
+	if demo {
+		name = censorString(name, false)
+	}
 	return
 }
