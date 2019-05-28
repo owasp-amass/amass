@@ -1,7 +1,7 @@
 name: amass
 version: '2.9.13'
 summary: In-depth DNS Enumeration and Network Mapping
-description: The OWASP Amass tool suite obtains subdomain names by scraping data sources, recursive brute forcing, crawling web archives, permuting/altering names and reverse DNS sweeping. Additionally, Amass uses the IP addresses obtained during resolution to discover associated netblocks and ASNs. All the information is then used to build maps of the target networks.
+description: The OWASP Amass tool obtains subdomain names by scraping data sources, recursive brute forcing, crawling web archives, permuting/altering names and reverse DNS sweeping. Additionally, Amass uses the IP addresses obtained during resolution to discover associated netblocks and ASNs. All the information is then used to build maps of the target networks.
 icon: images/snapcraft_icon.png
 grade: stable
 confinement: strict
@@ -10,22 +10,6 @@ confinement: strict
 apps:
   amass:
     command: bin/amass
-    plugs: [home, network, removable-media]
-
-  netdomains:
-    command: bin/netdomains
-    plugs: [home, network, removable-media]
-
-  viz:
-    command: bin/viz
-    plugs: [home, network, removable-media]
-
-  db:
-    command: bin/db
-    plugs: [home, network, removable-media]
-
-  tracker:
-    command: bin/tracker
     plugs: [home, network, removable-media]
 
 
@@ -48,67 +32,3 @@ parts:
       mkdir $SNAPCRAFT_PART_INSTALL/bin
       mv $GOPATH/bin/amass $SNAPCRAFT_PART_INSTALL/bin/amass
       strip --remove-section=.comment --remove-section=.note $SNAPCRAFT_PART_INSTALL/bin/amass
-
-  netdomains:
-    after: [amass]
-    source: https://github.com/OWASP/Amass
-    source-type: git
-    plugin: go
-    go-importpath: github.com/OWASP/Amass
-    override-build: |
-      echo "\nStarting override-build for netdomains part:"
-      export GOPATH=$(dirname $SNAPCRAFT_PART_INSTALL)/go
-      cd $GOPATH/src/github.com/OWASP/Amass
-      export GO111MODULE=on
-      go install ./...
-      mkdir $SNAPCRAFT_PART_INSTALL/bin
-      mv $GOPATH/bin/amass.netdomains $SNAPCRAFT_PART_INSTALL/bin/netdomains
-      strip --remove-section=.comment --remove-section=.note $SNAPCRAFT_PART_INSTALL/bin/netdomains
-
-  viz:
-    after: [amass]
-    source: https://github.com/OWASP/Amass
-    source-type: git
-    plugin: go
-    go-importpath: github.com/OWASP/Amass
-    override-build: |
-      echo "\nStarting override-build for viz part:"
-      export GOPATH=$(dirname $SNAPCRAFT_PART_INSTALL)/go
-      cd $GOPATH/src/github.com/OWASP/Amass
-      export GO111MODULE=on
-      go install ./...
-      mkdir $SNAPCRAFT_PART_INSTALL/bin
-      mv $GOPATH/bin/amass.viz $SNAPCRAFT_PART_INSTALL/bin/viz
-      strip --remove-section=.comment --remove-section=.note $SNAPCRAFT_PART_INSTALL/bin/viz
-
-  db:
-    after: [amass]
-    source: https://github.com/OWASP/Amass
-    source-type: git
-    plugin: go
-    go-importpath: github.com/OWASP/Amass
-    override-build: |
-      echo "\nStarting override-build for db part:"
-      export GOPATH=$(dirname $SNAPCRAFT_PART_INSTALL)/go
-      cd $GOPATH/src/github.com/OWASP/Amass
-      export GO111MODULE=on
-      go install ./...
-      mkdir $SNAPCRAFT_PART_INSTALL/bin
-      mv $GOPATH/bin/amass.db $SNAPCRAFT_PART_INSTALL/bin/db
-      strip --remove-section=.comment --remove-section=.note $SNAPCRAFT_PART_INSTALL/bin/db
-
-  tracker:
-    after: [amass]
-    source: https://github.com/OWASP/Amass
-    source-type: git
-    plugin: go
-    go-importpath: github.com/OWASP/Amass
-    override-build: |
-      echo "\nStarting override-build for tracker part:"
-      export GOPATH=$(dirname $SNAPCRAFT_PART_INSTALL)/go
-      cd $GOPATH/src/github.com/OWASP/Amass
-      export GO111MODULE=on
-      go install ./...
-      mkdir $SNAPCRAFT_PART_INSTALL/bin
-      mv $GOPATH/bin/amass.tracker $SNAPCRAFT_PART_INSTALL/bin/tracker
-      strip --remove-section=.comment --remove-section=.note $SNAPCRAFT_PART_INSTALL/bin/tracker

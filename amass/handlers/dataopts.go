@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
+	"github.com/OWASP/Amass/amass/utils/viz"
 )
 
 // DataOptsHandler is the object that implements the DataHandler interface for JSON files.
@@ -64,4 +65,9 @@ func (d *DataOptsHandler) MarkAsRead(data *DataOptsParams) error {
 // IsCNAMENode implements the Amass DataHandler interface.
 func (d *DataOptsHandler) IsCNAMENode(data *DataOptsParams) bool {
 	return false
+}
+
+// VizData returns the current state of the Graph as viz package Nodes and Edges.
+func (d *DataOptsHandler) VizData(uuid string) ([]viz.Node, []viz.Edge) {
+	return []viz.Node{}, []viz.Edge{}
 }

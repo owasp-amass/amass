@@ -10,7 +10,6 @@ import (
 	"math/rand"
 	"net"
 	"os"
-	"path"
 	"strings"
 	"time"
 
@@ -19,60 +18,68 @@ import (
 	"github.com/fatih/color"
 )
 
-var (
-	// Colors used to ease the reading of program output
-	y      = color.New(color.FgHiYellow)
-	g      = color.New(color.FgHiGreen)
-	r      = color.New(color.FgHiRed)
-	b      = color.New(color.FgHiBlue)
-	fgR    = color.New(color.FgRed)
-	fgY    = color.New(color.FgYellow)
-	yellow = color.New(color.FgHiYellow).SprintFunc()
-	green  = color.New(color.FgHiGreen).SprintFunc()
-	blue   = color.New(color.FgHiBlue).SprintFunc()
+const (
+	intelUsageMsg = "intel [--addr IP] [--cidr CIDR] [--asn number] [-p number]"
+)
 
+var (
 	started   = make(chan struct{}, 50)
 	done      = make(chan struct{}, 50)
 	results   = make(chan string, 100)
 	whoisChan = make(chan string, 100)
 )
 
-func main() {
-	var whois bool
-	var org string
-	var addrs utils.ParseIPs
-	var cidrs utils.ParseCIDRs
-	var asns, ports utils.ParseInts
-
-	help := flag.Bool("h", false, "Show the program usage message")
-	flag.StringVar(&org, "org", "", "Search string provided against AS description information")
-	flag.Var(&addrs, "addr", "IPs and ranges (192.168.1.1-254) separated by commas")
-	flag.Var(&cidrs, "cidr", "CIDRs separated by commas (can be used multiple times)")
-	flag.Var(&asns, "asn", "ASNs separated by commas (can be used multiple times)")
-	flag.BoolVar(&whois, "whois", false, "All discovered domains are run through reverse whois")
-	flag.Var(&ports, "p", "Ports separated by commas (default: 443)")
-
-	defaultBuf := new(bytes.Buffer)
-	flag.CommandLine.SetOutput(defaultBuf)
-	flag.Usage = func() {
-		amass.PrintBanner()
-		g.Fprintf(color.Error, "Usage: %s [--addr IP] [--cidr CIDR] [--asn number] [-p number]\n\n", path.Base(os.Args[0]))
-		flag.PrintDefaults()
-		g.Fprintln(color.Error, defaultBuf.String())
+type intelArgs struct {
+	Addresses        utils.ParseIPs
+	ASNs             utils.ParseInts
+	CIDRs            utils.ParseCIDRs
+	OrganizationName string
+	Ports            utils.ParseInts
+	Options          struct {
+		ReverseWhois bool
 	}
-	flag.Parse()
+}
 
-	if *help || len(os.Args) == 1 {
-		flag.Usage()
+func runIntelCommand(clArgs []string) {
+	var args intelArgs
+	var help1, help2 bool
+	intelCommand := flag.NewFlagSet("intel", flag.ExitOnError)
+
+	intelBuf := new(bytes.Buffer)
+	intelCommand.SetOutput(intelBuf)
+
+	intelCommand.BoolVar(&help1, "h", false, "Show the program usage message")
+	intelCommand.BoolVar(&help2, "help", false, "Show the program usage message")
+	intelCommand.Var(&args.Addresses, "addr", "IPs and ranges (192.168.1.1-254) separated by commas")
+	intelCommand.Var(&args.ASNs, "asn", "ASNs separated by commas (can be used multiple times)")
+	intelCommand.Var(&args.CIDRs, "cidr", "CIDRs separated by commas (can be used multiple times)")
+	intelCommand.StringVar(&args.OrganizationName, "org", "", "Search string provided against AS description information")
+	intelCommand.Var(&args.Ports, "p", "Ports separated by commas (default: 443)")
+	intelCommand.BoolVar(&args.Options.ReverseWhois, "whois", false, "All discovered domains are run through reverse whois")
+
+	if len(clArgs) < 1 {
+		commandUsage(intelUsageMsg, intelCommand, intelBuf)
 		return
 	}
-	if len(ports) == 0 {
-		ports = []int{443}
+
+	if err := intelCommand.Parse(clArgs); err != nil {
+		r.Fprintf(color.Error, "%v\n", err)
+		os.Exit(1)
+	}
+	if help1 || help2 {
+		commandUsage(intelUsageMsg, intelCommand, intelBuf)
+		return
+	}
+
+	// Some input validation
+	if len(args.Ports) == 0 {
+		args.Ports = []int{443}
 	}
 
 	rand.Seed(time.Now().UTC().UnixNano())
-	if org != "" {
-		records, err := amass.LookupASNsByName(org)
+
+	if args.OrganizationName != "" {
+		records, err := amass.LookupASNsByName(args.OrganizationName)
 		if err == nil {
 			for _, a := range records {
 				fmt.Printf("%d, %s, %s, %s\n", a.ASN, a.CC, a.Registry, a.Description)
@@ -83,14 +90,14 @@ func main() {
 		return
 	}
 
-	ips := allIPsInScope(addrs, cidrs, asns)
+	ips := allIPsInScope(args.Addresses, args.CIDRs, args.ASNs)
 	if len(ips) == 0 {
 		r.Fprintln(color.Error, "The parameters identified no hosts")
 		os.Exit(1)
 	}
 	// Begin discovering all the domain names
 	go performAllReverseDNS(ips)
-	go pullAllCertificates(ips, ports)
+	go pullAllCertificates(ips, args.Ports)
 	// Print all the unique domain names
 	var count int
 	filter := utils.NewStringFilter()
@@ -106,7 +113,7 @@ loop:
 			}
 		case d := <-results:
 			if !filter.Duplicate(d) {
-				if whois {
+				if args.Options.ReverseWhois {
 					go getWhoisDomains(d)
 				}
 				g.Println(d)

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
+	"github.com/OWASP/Amass/amass/utils/viz"
 	bolt "github.com/johnnadratowski/golang-neo4j-bolt-driver"
 )
 
@@ -513,4 +514,9 @@ func (n *Neo4j) IsCNAMENode(data *DataOptsParams) bool {
 		"RETURN count(t)", params)
 	fmt.Printf("%v\n", result.Metadata())
 	return false
+}
+
+// VizData returns the current state of the Graph as viz package Nodes and Edges.
+func (n *Neo4j) VizData(uuid string) ([]viz.Node, []viz.Edge) {
+	return []viz.Node{}, []viz.Edge{}
 }
