@@ -50,9 +50,15 @@ func main() {
 	flag.CommandLine.SetOutput(defaultBuf)
 	flag.Usage = func() {
 		amass.PrintBanner()
-		g.Fprintf(color.Error, "Usage: %s db|enum|intel|track|viz [options]\n\n", path.Base(os.Args[0]))
+		g.Fprintf(color.Error, "Usage: %s intel|enum|viz|track|db [options]\n\n", path.Base(os.Args[0]))
 		flag.PrintDefaults()
-		r.Fprintln(color.Error, defaultBuf.String())
+		g.Fprintln(color.Error, defaultBuf.String())
+		g.Fprintf(color.Error, "\nSubcommands: \n\n")
+		g.Fprintf(color.Error, "\t%-11s - Discover targets for enumerations\n", "amass intel")
+		g.Fprintf(color.Error, "\t%-11s - Perform enumerations and network mapping\n", "amass enum")
+		g.Fprintf(color.Error, "\t%-11s - Visualize enumeration results\n", "amass viz")
+		g.Fprintf(color.Error, "\t%-11s - Track differences between enumerations\n", "amass track")
+		g.Fprintf(color.Error, "\t%-11s - Manipulate the Amass graph database\n\n", "amass db")
 		g.Fprintf(color.Error, "An example configuration file can be found here: \n%s\n\n", exampleConfigFileURL)
 	}
 

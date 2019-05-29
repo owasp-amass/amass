@@ -38,11 +38,6 @@ type trackArgs struct {
 	}
 }
 
-var (
-	// Command-line switches and provided parameters
-	list = flag.Bool("list", false, "Print information for all available enumerations")
-)
-
 func runTrackCommand(clArgs []string) {
 	var args trackArgs
 	var help1, help2 bool
@@ -117,6 +112,7 @@ func runTrackCommand(clArgs []string) {
 		}
 	}
 
+	// Connect with the graph database containing the enumeration data
 	db := openGraphDatabase(args.Filepaths.Directory, config)
 	if db == nil {
 		r.Fprintln(color.Error, "Failed to connect with the database")
@@ -125,7 +121,7 @@ func runTrackCommand(clArgs []string) {
 	defer db.Close()
 
 	var enums []string
-	// Obtain the enumerations that include the provided domain
+	// Obtain the enumerations that include the provided domain(s)
 	for _, e := range db.EnumerationList() {
 		for _, domain := range args.Domains {
 			if enumContainsDomain(e, domain, db) {
