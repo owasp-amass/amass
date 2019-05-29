@@ -7,16 +7,28 @@
 
 ## Simple Examples For Getting Started
 
-The most basic use of the tool:
+The amass tool and all the subcommands show options using the **'-h'** and **'-help'** flags:
 
 ```bash
-amass -d example.com
+amass -help
+```
+
+Check the version by performing the following:
+
+```bash
+amass -version
+```
+
+The most basic use of the tool for subdomain enumeration:
+
+```bash
+amass enum -d example.com
 ```
 
 Typical parameters for DNS enumeration:
 
 ```bash
-$ amass -src -ip -brute -min-for-recursive 1 -d example.com
+$ amass enum -src -brute -min-for-recursive 1 -d example.com
 [Google] www.example.com
 [VirusTotal] ns.example.com
 ...
@@ -24,57 +36,98 @@ $ amass -src -ip -brute -min-for-recursive 1 -d example.com
 
 ## Command-line Usage Information
 
-Switches available through the amass CLI without subcommands:
+The amass tool has several subcommands shown below for handling your Internet exposure investigation.
+
+| Subcommand | Description |
+|------------|-------------|
+| db | Manage the graph databases storing the enumeration results |
+| enum | Perform DNS enumeration and network mapping of systems exposed to the Internet |
+| intel | Collect open source intelligence for investigation of the target organization |
+| track | Compare results of enumerations against common target organizations |
+| viz | Generate visualizations of enumerations for exploratory analysis |
+
+Each subcommand has its own arguments that shown in the following sections.
+
+### The 'db' Subcommand
+
+Switches for interacting with the DNS and infrastructure findings in the graph database:
 
 | Flag | Description | Example |
 |------|-------------|---------|
-| -active | Enable active recon methods | amass -active -d example.com net -p 80,443,8080 |
-| -aw | Path to a different wordlist file for alterations | amass -aw PATH -d example.com |
-| -bl | Blacklist of subdomain names that will not be investigated | amass -bl blah.example.com -d example.com |
-| -blf | Path to a file providing blacklisted subdomains | amass -blf data/blacklist.txt -d example.com |
-| -brute | Perform brute force subdomain enumeration | amass -brute -d example.com |
-| -config | Path to the INI configuration file | amass -config config.ini |
-| -d | Domain names separated by commas (can be used multiple times) | amass -d example.com |
-| -df | Path to a file providing root domain names | amass -df domains.txt |
-| -do | Path to data operations output file | amass -do data.json -d example.com |
-| -ef | Path to a file providing data sources to exclude | amass -ef exclude.txt -d example.com |
-| -exclude | Data source names separated by commas to be excluded | amass -exclude crtsh -d example.com |
-| -h | Show the amass usage information | amass -h |
-| -if | Path to a file providing data sources to include | amass -if include.txt -d example.com |
-| -include | Data source names separated by commas to be included | amass -include crtsh -d example.com |
-| -include-unresolvable | Output DNS names that did not resolve | amass -include-unresolvable -d example.com |
-| -ip | Show the IP addresses for discovered names | amass -ip -d example.com |
-| -ipv4 | Show the IPv4 addresses for discovered names | amass -ipv4 -d example.com |
-| -ipv6 | Show the IPv6 addresses for discovered names | amass -ipv6 -d example.com |
-| -json | Path to the JSON output file | amass -json out.json -d example.com |
-| -list | Print the names of all available data sources | amass -l |
-| -log | Path to the log file where errors will be written | amass -log amass.log -d example.com |
-| -max-dns-queries | Maximum number of concurrent DNS queries | amass -max-dns-queries 200 -d example.com |
-| -min-for-recursive | Number of labels in a subdomain before recursive brute forcing | amass -brute -min-for-recursive 3 -d example.com |
-| -nf | Path to a file providing already known subdomain names | amass -nf names.txt -d example.com |
-| -noalts | Disable generation of altered names | amass -noalts -d example.com |
-| -norecursive | Turn off recursive brute forcing | amass -brute -norecursive -d example.com |
-| -o | Path to the text output file | amass -o out.txt -d example.com |
-| -oA | Path prefix used for naming all output files | amass -oA amass_scan -d example.com |
-| -passive | A purely passive mode of execution | amass --passive -d example.com |
-| -r | IP addresses of preferred DNS resolvers (can be used multiple times) | amass -r 8.8.8.8,1.1.1.1 -d example.com |
-| -rf | Path to a file providing preferred DNS resolvers | amass -rf data/resolvers.txt -d example.com |
-| -src | Print data sources for the discovered names | amass -src -d example.com |
-| -version | Print the version number of this Amass binary | amass -version |
-| -w | Path to a different wordlist file | amass -brute -w wordlist.txt -d example.com |
+| -config | Path to the INI configuration file | amass db -config config.ini |
+| -d | Domain names separated by commas (can be used multiple times) | amass db -d example.com |
+| -df | Path to a file providing root domain names | amass db -df domains.txt |
+| -dir | Path to the directory containing the graph database | amass db -dir PATH |
+| -i | Path to the Amass data operations JSON input file | amass db -i PATH |
+| -list | Print enumerations in the database and filter on domains specified | amass db -list |
 
-### The 'net' Subcommand
+### The 'enum' Subcommand
 
-**Caution:** If you use the net subcommand, it will attempt to reach out to every IP address within the identified infrastructure and obtain additional domain names from reverse DNS requests and TLS certificates. This is "loud" and can reveal your reconnaissance activities to the organization being investigated, as well as expand the scope of your enumeration.
+This subcommand will perform DNS enumeration and network mapping while populating the selected graph database. The following flags are available for configuration:
 
 | Flag | Description | Example |
 |------|-------------|---------|
-| -org | Search string provided against AS description information | amass net -org Facebook |
-| -asn  | ASNs separated by commas (can be used multiple times) | amass net -asn 13374,14618 |
-| -cidr | CIDRs separated by commas (can be used multiple times) | amass net -cidr 104.154.0.0/15 |
-| -addr | IPs and ranges (192.168.1.1-254) separated by commas | amass net -addr 192.168.2.1-64 |
-| -p | Ports separated by commas (default: 443) | amass net -cidr 104.154.0.0/15 -p 443,8080 |
-| -whois | All discovered domains are run through reverse whois | amass net -whois -asn 13374 |
+| -active | Enable active recon methods | amass enum -active -d example.com net -p 80,443,8080 |
+| -aw | Path to a different wordlist file for alterations | amass enum -aw PATH -d example.com |
+| -bl | Blacklist of subdomain names that will not be investigated | amass enum -bl blah.example.com -d example.com |
+| -blf | Path to a file providing blacklisted subdomains | amass enum -blf data/blacklist.txt -d example.com |
+| -brute | Perform brute force subdomain enumeration | amass enum -brute -d example.com |
+| -config | Path to the INI configuration file | amass enum -config config.ini |
+| -d | Domain names separated by commas (can be used multiple times) | amass enum -d example.com |
+| -df | Path to a file providing root domain names | amass enum -df domains.txt |
+| -do | Path to data operations output file | amass enum -do data.json -d example.com |
+| -ef | Path to a file providing data sources to exclude | amass enum -ef exclude.txt -d example.com |
+| -exclude | Data source names separated by commas to be excluded | amass enum -exclude crtsh -d example.com |
+| -if | Path to a file providing data sources to include | amass enum -if include.txt -d example.com |
+| -include | Data source names separated by commas to be included | amass enum -include crtsh -d example.com |
+| -include-unresolvable | Output DNS names that did not resolve | amass enum -include-unresolvable -d example.com |
+| -ip | Show the IP addresses for discovered names | amass enum -ip -d example.com |
+| -ipv4 | Show the IPv4 addresses for discovered names | amass enum -ipv4 -d example.com |
+| -ipv6 | Show the IPv6 addresses for discovered names | amass enum -ipv6 -d example.com |
+| -json | Path to the JSON output file | amass enum -json out.json -d example.com |
+| -list | Print the names of all available data sources | amass enum -list |
+| -log | Path to the log file where errors will be written | amass enum -log amass.log -d example.com |
+| -max-dns-queries | Maximum number of concurrent DNS queries | amass enum -max-dns-queries 200 -d example.com |
+| -min-for-recursive | Number of labels in a subdomain before recursive brute forcing | amass enum -brute -min-for-recursive 3 -d example.com |
+| -nf | Path to a file providing already known subdomain names | amass enum -nf names.txt -d example.com |
+| -noalts | Disable generation of altered names | amass enum -noalts -d example.com |
+| -norecursive | Turn off recursive brute forcing | amass enum -brute -norecursive -d example.com |
+| -o | Path to the text output file | amass enum -o out.txt -d example.com |
+| -oA | Path prefix used for naming all output files | amass enum -oA amass_scan -d example.com |
+| -passive | A purely passive mode of execution | amass enum --passive -d example.com |
+| -r | IP addresses of preferred DNS resolvers (can be used multiple times) | amass enum -r 8.8.8.8,1.1.1.1 -d example.com |
+| -rf | Path to a file providing preferred DNS resolvers | amass enum -rf data/resolvers.txt -d example.com |
+| -src | Print data sources for the discovered names | amass enum -src -d example.com |
+| -w | Path to a different wordlist file | amass enum -brute -w wordlist.txt -d example.com |
+
+### The 'intel' Subcommand
+
+The intel subcommand can help you discover additional root domain names associated with the organization you are investigating.
+
+**Caution:** If you use the intel subcommand, it will attempt to reach out to every IP address within the identified infrastructure and obtain additional domain names from reverse DNS requests and TLS certificates. This is "loud" and can reveal your reconnaissance activities to the organization being investigated, as well as expand the scope of your enumeration.
+
+| Flag | Description | Example |
+|------|-------------|---------|
+| -addr | IPs and ranges (192.168.1.1-254) separated by commas | amass intel -addr 192.168.2.1-64 |
+| -asn | ASNs separated by commas (can be used multiple times) | amass intel -asn 13374,14618 |
+| -cidr | CIDRs separated by commas (can be used multiple times) | amass intel -cidr 104.154.0.0/15 |
+| -org | Search string provided against AS description information | amass intel -org Facebook |
+| -p | Ports separated by commas (default: 443) | amass intel -cidr 104.154.0.0/15 -p 443,8080 |
+| -whois | All discovered domains are run through reverse whois | amass intel -whois -asn 13374 |
+
+### The 'track' Subcommand
+
+Switches for performing Internet exposure monitoring across the enumerations in the graph database:
+
+| Flag | Description | Example |
+|------|-------------|---------|
+| -config | Path to the INI configuration file | amass track -config config.ini |
+| -d | Domain names separated by commas (can be used multiple times) | amass track -d example.com |
+| -df | Path to a file providing root domain names | amass track -df domains.txt |
+| -dir | Path to the directory containing the graph database | amass track -dir PATH |
+| -history | Show the difference between all enumeration pairs | amass track -history |
+| -last | The number of recent enumerations to include in the tracking | amass track -last NUM |
+| -since | Exclude all enumerations before a specified date (format: 01/02 15:04:05 2006 MST) | amass track -since DATE |
 
 ### The 'viz' Subcommand
 
@@ -84,30 +137,15 @@ Switches for outputting the DNS and infrastructure findings as a network graph:
 
 | Flag | Description | Example |
 |------|-------------|---------|
-| -maltego | Output a Maltego Graph Table CSV file | amass viz -maltego |
-| -d3 | Output a D3.js v4 force simulation HTML file | amass viz -d3 |
-| -gexf | Output to Graph Exchange XML Format (GEXF) | amass viz -gephi |
-| -graphistry | Output Graphistry JSON | amass viz -graphistry |
-| -visjs | Output HTML that employs VisJS | amass viz -visjs |
-
-### The 'db' Subcommand
-
-Switches for interacting with the DNS and infrastructure findings in the graph database:
-
-| Flag | Description | Example |
-|------|-------------|---------|
-| -dir | Path to the directory containing the graph database | amass db -dir PATH |
-| -enums | Print information for all available enumerations | amass db -enums |
-
-### The 'track' Subcommand
-
-Switches for performing Internet exposure monitoring across the enumerations in the graph database:
-
-| Flag | Description | Example |
-|------|-------------|---------|
-| -history | Show the difference between all enumeration pairs | amass track -history |
-| -last | The number of recent enumerations to include in the tracking | amass track -last NUM |
-| -since | Exclude all enumerations before a specified date (format: 01/02 15:04:05 2006 MST) | amass track -since DATE |
+| -config | Path to the INI configuration file | amass viz -config config.ini -d3 -o PATH |
+| -d3 | Output a D3.js v4 force simulation HTML file | amass viz -d3 -o PATH |
+| -dir | Path to the directory containing the graph database | amass viz -d3 -dir PATH -o PATH |
+| -gexf | Output to Graph Exchange XML Format (GEXF) | amass viz -gephi -o PATH |
+| -graphistry | Output Graphistry JSON | amass viz -graphistry -o PATH |
+| -i | Path to the Amass data operations JSON input file | amass viz -d3 -o PATH |
+| -maltego | Output a Maltego Graph Table CSV file | amass viz -maltego -o PATH |
+| -o | Path to the directory to place the generated output file(s) | amass viz -d3 -o PATH |
+| -visjs | Output HTML that employs VisJS | amass viz -visjs -o PATH |
 
 ## The Enumeration Configuration File
 
