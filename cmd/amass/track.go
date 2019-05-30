@@ -9,127 +9,122 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
-	"path"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
-	"github.com/OWASP/Amass/amass"
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/handlers"
 	"github.com/OWASP/Amass/amass/utils"
 	"github.com/fatih/color"
-	homedir "github.com/mitchellh/go-homedir"
 )
 
 const (
-	timeFormat string = "01/02 15:04:05 2006 MST"
+	timeFormat    = "01/02 15:04:05 2006 MST"
+	trackUsageMsg = "track [options] -d domain"
 )
 
-var (
-	// Colors used to ease the reading of program output
-	y      = color.New(color.FgHiYellow)
-	g      = color.New(color.FgHiGreen)
-	r      = color.New(color.FgHiRed)
-	b      = color.New(color.FgHiBlue)
-	fgR    = color.New(color.FgRed)
-	fgY    = color.New(color.FgYellow)
-	yellow = color.New(color.FgHiYellow).SprintFunc()
-	green  = color.New(color.FgHiGreen).SprintFunc()
-	blue   = color.New(color.FgHiBlue).SprintFunc()
-	// Command-line switches and provided parameters
-	help        = flag.Bool("h", false, "Show the program usage message")
-	list        = flag.Bool("list", false, "Print information for all available enumerations")
-	vprint      = flag.Bool("version", false, "Print the version number of this Amass binary")
-	dir         = flag.String("dir", "", "Path to the directory containing the graph database")
-	last        = flag.Int("last", 0, "The number of recent enumerations to include in the tracking")
-	startStr    = flag.String("start", "", "Exclude all enumerations before (format: "+timeFormat+")")
-	history     = flag.Bool("history", false, "Show the difference between all enumeration pairs")
-	domainspath = flag.String("df", "", "Path to a file providing root domain names")
-)
-
-func main() {
-	var domains utils.ParseStrings
-
-	defaultBuf := new(bytes.Buffer)
-	flag.CommandLine.SetOutput(defaultBuf)
-	flag.Usage = func() {
-		amass.PrintBanner()
-		g.Fprintf(color.Error, "Usage: %s [options] -d domain\n\n", path.Base(os.Args[0]))
-		flag.PrintDefaults()
-		g.Fprintln(color.Error, defaultBuf.String())
+type trackArgs struct {
+	Domains utils.ParseStrings
+	Last    int
+	Since   string
+	Options struct {
+		History bool
 	}
-	flag.Var(&domains, "d", "Domain names separated by commas (can be used multiple times)")
-	flag.Parse()
+	Filepaths struct {
+		ConfigFile string
+		Directory  string
+		Domains    string
+	}
+}
 
-	// Some input validation
-	if *help || len(os.Args) == 1 {
-		flag.Usage()
+func runTrackCommand(clArgs []string) {
+	var args trackArgs
+	var help1, help2 bool
+	trackCommand := flag.NewFlagSet("track", flag.ExitOnError)
+
+	trackBuf := new(bytes.Buffer)
+	trackCommand.SetOutput(trackBuf)
+
+	trackCommand.BoolVar(&help1, "h", false, "Show the program usage message")
+	trackCommand.BoolVar(&help2, "help", false, "Show the program usage message")
+	trackCommand.Var(&args.Domains, "d", "Domain names separated by commas (can be used multiple times)")
+	trackCommand.IntVar(&args.Last, "last", 0, "The number of recent enumerations to include in the tracking")
+	trackCommand.StringVar(&args.Since, "since", "", "Exclude all enumerations before (format: "+timeFormat+")")
+	trackCommand.BoolVar(&args.Options.History, "history", false, "Show the difference between all enumeration pairs")
+	trackCommand.StringVar(&args.Filepaths.ConfigFile, "config", "", "Path to the INI configuration file. Additional details below")
+	trackCommand.StringVar(&args.Filepaths.Directory, "dir", "", "Path to the directory containing the graph database")
+	trackCommand.StringVar(&args.Filepaths.Domains, "df", "", "Path to a file providing root domain names")
+
+	if len(clArgs) < 1 {
+		commandUsage(trackUsageMsg, trackCommand, trackBuf)
 		return
 	}
-	if *vprint {
-		fmt.Fprintf(color.Error, "version %s\n", amass.Version)
+
+	if err := trackCommand.Parse(clArgs); err != nil {
+		r.Fprintf(color.Error, "%v\n", err)
 		os.Exit(1)
 	}
-	if *startStr != "" && *last != 0 {
-		r.Fprintln(color.Error, "The start flag cannot be used with the last or all flags")
+	if help1 || help2 {
+		commandUsage(trackUsageMsg, trackCommand, trackBuf)
+		return
+	}
+
+	// Some input validation
+	if args.Since != "" && args.Last != 0 {
+		r.Fprintln(color.Error, "The since flag cannot be used with the last or all flags")
 		os.Exit(1)
 	}
-	if *last == 1 {
+	if args.Last == 1 {
 		r.Fprintln(color.Error, "Tracking requires more than one enumeration")
 		os.Exit(1)
 	}
-	if *domainspath != "" {
-		list, err := core.GetListFromFile(*domainspath)
+	if args.Filepaths.Domains != "" {
+		list, err := core.GetListFromFile(args.Filepaths.Domains)
 		if err != nil {
 			r.Fprintf(color.Error, "Failed to parse the domain names file: %v\n", err)
 			os.Exit(1)
 		}
-		domains = utils.UniqueAppend(domains, list...)
+		args.Domains = utils.UniqueAppend(args.Domains, list...)
 	}
-	if len(domains) == 0 {
+	if len(args.Domains) == 0 {
 		r.Fprintln(color.Error, "No root domain names were provided")
 		os.Exit(1)
 	}
 
 	var err error
 	var start time.Time
-	if *startStr != "" {
-		start, err = time.Parse(timeFormat, *startStr)
+	if args.Since != "" {
+		start, err = time.Parse(timeFormat, args.Since)
 		if err != nil {
-			r.Fprintf(color.Error, "%s is not in the correct format: %s\n", *startStr, timeFormat)
+			r.Fprintf(color.Error, "%s is not in the correct format: %s\n", args.Since, timeFormat)
 			os.Exit(1)
 		}
 	}
 
 	rand.Seed(time.Now().UTC().UnixNano())
 
-	if *dir == "" {
-		path, err := homedir.Dir()
-		if err != nil {
-			r.Fprintln(color.Error, "Failed to obtain the user home directory")
-			os.Exit(1)
+	config := new(core.Config)
+	// Check if a configuration file was provided, and if so, load the settings
+	if acquireConfig(args.Filepaths.Directory, args.Filepaths.ConfigFile, config) {
+		if args.Filepaths.Directory == "" {
+			args.Filepaths.Directory = config.Dir
 		}
-		*dir = filepath.Join(path, handlers.DefaultGraphDBDirectory)
-	}
-	// Check that the default graph database directory exists
-	if finfo, err := os.Stat(*dir); os.IsNotExist(err) || !finfo.IsDir() {
-		r.Fprintln(color.Error, "Failed to open the graph database")
-		os.Exit(1)
 	}
 
-	graph := handlers.NewGraph(*dir)
-	if graph == nil {
-		r.Fprintln(color.Error, "Failed to open the graph database")
+	// Connect with the graph database containing the enumeration data
+	db := openGraphDatabase(args.Filepaths.Directory, config)
+	if db == nil {
+		r.Fprintln(color.Error, "Failed to connect with the database")
 		os.Exit(1)
 	}
+	defer db.Close()
 
 	var enums []string
-	// Obtain the enumerations that include the provided domain
-	for _, e := range graph.EnumerationList() {
-		for _, domain := range domains {
-			if enumContainsDomain(e, domain, graph) {
+	// Obtain the enumerations that include the provided domain(s)
+	for _, e := range db.EnumerationList() {
+		for _, domain := range args.Domains {
+			if enumContainsDomain(e, domain, db) {
 				enums = append(enums, e)
 				break
 			}
@@ -142,14 +137,14 @@ func main() {
 		os.Exit(1)
 	}
 	// The default is to use all the enumerations available
-	if *last == 0 {
-		*last = len(enums)
+	if args.Last == 0 {
+		args.Last = len(enums)
 	}
 
 	var begin int
-	enums, earliest, latest := orderedEnumsAndDateRanges(enums, graph)
+	enums, earliest, latest := orderedEnumsAndDateRanges(enums, db)
 	// Filter out enumerations that begin before the start date/time
-	if *startStr != "" {
+	if args.Since != "" {
 		for _, e := range earliest {
 			if !e.Before(start) {
 				break
@@ -157,30 +152,22 @@ func main() {
 			begin++
 		}
 	} else { // Or the number of enumerations from the end of the timeline
-		if len(enums) < *last {
-			r.Fprintf(color.Error, "%d enumerations are not available\n", *last)
+		if len(enums) < args.Last {
+			r.Fprintf(color.Error, "%d enumerations are not available\n", args.Last)
 			os.Exit(1)
 		}
 
-		begin = len(enums) - *last
+		begin = len(enums) - args.Last
 	}
 	enums = enums[begin:]
 	earliest = earliest[begin:]
 	latest = latest[begin:]
 
-	// Check if the user has requested the list of enumerations
-	if *list {
-		for i := range enums {
-			g.Printf("%d) %s -> %s\n", i+1, earliest[i].Format(timeFormat), latest[i].Format(timeFormat))
-		}
+	if args.Options.History {
+		completeHistoryOutput(args.Domains, enums, earliest, latest, db)
 		return
 	}
-
-	if *history {
-		completeHistoryOutput(domains, enums, earliest, latest, graph)
-		return
-	}
-	cumulativeOutput(domains, enums, earliest, latest, graph)
+	cumulativeOutput(args.Domains, enums, earliest, latest, db)
 }
 
 func cumulativeOutput(domains []string, enums []string, ea, la []time.Time, h handlers.DataHandler) {

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
+	"github.com/OWASP/Amass/amass/utils/viz"
 )
 
 // These strings represent the various Amass data operations.
@@ -80,6 +81,9 @@ type DataHandler interface {
 
 	// Return true if the Name, Domain and UUID match a CNAME in the graph.
 	IsCNAMENode(data *DataOptsParams) bool
+
+	// VizData returns the current state of the Graph as viz package Nodes and Edges.
+	VizData(uuid string) ([]viz.Node, []viz.Edge)
 
 	// Signals the handler to prepare for closing.
 	Close()

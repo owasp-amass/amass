@@ -12,6 +12,7 @@ import (
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
+	"github.com/OWASP/Amass/amass/utils/viz"
 	"github.com/qasaur/gremgo"
 )
 
@@ -914,4 +915,9 @@ func (g *Gremlin) IsCNAMENode(data *DataOptsParams) bool {
 		}
 	}
 	return false
+}
+
+// VizData returns the current state of the Graph as viz package Nodes and Edges.
+func (g *Gremlin) VizData(uuid string) ([]viz.Node, []viz.Edge) {
+	return []viz.Node{}, []viz.Edge{}
 }

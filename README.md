@@ -67,6 +67,8 @@ This project improves thanks to all the people who contribute:
 
 ## Mentions
 
+* [Where You’ll Find Us: An Overview of SecurityTrails Integrations](https://securitytrails.com/blog/integrations-overview)
+* [Web tools, or where to start a pentester?](https://habr.com/en/company/dsec/blog/452836/)
 * [Tool for detailed DNS enumeration and creation of network infrastructure maps](https://www.gurudelainformatica.es/2019/05/herramienta-para-enumeracion-detallada.html)
 * [Top 7 Subdomain Scanner Tools: Find Subdomains in Seconds](https://securitytrails.com/blog/subdomain-scanner-find-subdomains)
 * [Cyber Talent Gap: How to Do More With Less](https://www.digitalshadows.com/blog-and-research/cyber-talent-gap-how-to-do-more-with-less/)
