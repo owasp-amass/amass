@@ -20,6 +20,7 @@ import (
 
 const (
 	exampleConfigFileURL = "https://github.com/OWASP/Amass/blob/master/examples/config.ini"
+	userGuideURL         = "https://github.com/OWASP/Amass/blob/master/doc/user_guide.md"
 )
 
 var (
@@ -40,6 +41,8 @@ func commandUsage(msg string, cmdFlagSet *flag.FlagSet, errBuf *bytes.Buffer) {
 	g.Fprintf(color.Error, "Usage: %s %s\n\n", path.Base(os.Args[0]), msg)
 	cmdFlagSet.PrintDefaults()
 	g.Fprintln(color.Error, errBuf.String())
+
+	g.Fprintf(color.Error, "The user guide can be found here: \n%s\n\n", userGuideURL)
 	g.Fprintf(color.Error, "An example configuration file can be found here: \n%s\n\n", exampleConfigFileURL)
 }
 
@@ -53,12 +56,15 @@ func main() {
 		g.Fprintf(color.Error, "Usage: %s intel|enum|viz|track|db [options]\n\n", path.Base(os.Args[0]))
 		flag.PrintDefaults()
 		g.Fprintln(color.Error, defaultBuf.String())
+
 		g.Fprintf(color.Error, "\nSubcommands: \n\n")
 		g.Fprintf(color.Error, "\t%-11s - Discover targets for enumerations\n", "amass intel")
 		g.Fprintf(color.Error, "\t%-11s - Perform enumerations and network mapping\n", "amass enum")
 		g.Fprintf(color.Error, "\t%-11s - Visualize enumeration results\n", "amass viz")
 		g.Fprintf(color.Error, "\t%-11s - Track differences between enumerations\n", "amass track")
 		g.Fprintf(color.Error, "\t%-11s - Manipulate the Amass graph database\n\n", "amass db")
+
+		g.Fprintf(color.Error, "The user guide can be found here: \n%s\n\n", userGuideURL)
 		g.Fprintf(color.Error, "An example configuration file can be found here: \n%s\n\n", exampleConfigFileURL)
 	}
 

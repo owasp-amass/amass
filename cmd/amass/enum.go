@@ -30,7 +30,7 @@ import (
 )
 
 const (
-	enumUsageMsg = "enum [-config path] [-dir path] [options]"
+	enumUsageMsg = "enum [options] -d domain"
 )
 
 var (

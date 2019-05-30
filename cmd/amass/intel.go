@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	intelUsageMsg = "intel [--addr IP] [--cidr CIDR] [--asn number] [-p number]"
+	intelUsageMsg = "intel [options]"
 )
 
 var (

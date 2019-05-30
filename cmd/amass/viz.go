@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	vizUsageMsg = "viz -o DIR [-config] [-dir] [-i] [options]"
+	vizUsageMsg = "viz -d3|-gexf|-graphistry|-maltego|-visjs [options]"
 )
 
 type vizArgs struct {
@@ -80,12 +80,17 @@ func runVizCommand(clArgs []string) {
 		r.Fprintln(color.Error, "At least one file format must be selected")
 		os.Exit(1)
 	}
-	// There must be an output directory specified
+
 	if args.Filepaths.Output == "" {
-		r.Fprintln(color.Error, "An output directory must be specified for the visualization(s)")
-		os.Exit(1)
-	} else if finfo, err := os.Stat(args.Filepaths.Output); os.IsNotExist(err) || !finfo.IsDir() {
-		r.Fprintln(color.Error, "Failed to open the output directory")
+		dir, err := os.Getwd()
+		if err != nil {
+			r.Fprintln(color.Error, "Failed to identify the output location")
+			os.Exit(1)
+		}
+		args.Filepaths.Output = dir
+	}
+	if finfo, err := os.Stat(args.Filepaths.Output); os.IsNotExist(err) || !finfo.IsDir() {
+		r.Fprintln(color.Error, "The output location does not exist or is not a directory")
 		os.Exit(1)
 	}
 

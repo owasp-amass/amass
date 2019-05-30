@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	dbUsageMsg = "db [-d domain] [-dir PATH] [-config PATH] [-list] [-i optsFile]"
+	dbUsageMsg = "db [options]"
 )
 
 type dbArgs struct {
@@ -48,7 +48,7 @@ func runDBCommand(clArgs []string) {
 	dbCommand.StringVar(&args.Filepaths.ConfigFile, "config", "", "Path to the INI configuration file. Additional details below")
 	dbCommand.StringVar(&args.Filepaths.Directory, "dir", "", "Path to the directory containing the graph database")
 	dbCommand.StringVar(&args.Filepaths.Domains, "df", "", "Path to a file providing root domain names")
-	dbCommand.StringVar(&args.Filepaths.Input, "i", "", "The Amass data operations JSON file")
+	dbCommand.StringVar(&args.Filepaths.Input, "i", "", "Import an Amass data operations JSON file to the graph database")
 
 	if len(clArgs) < 1 {
 		commandUsage(dbUsageMsg, dbCommand, dbBuf)
