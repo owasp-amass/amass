@@ -144,7 +144,7 @@ Performs viewing and manipulation of the graph database. This subcommand only le
 | -d | Domain names separated by commas (can be used multiple times) | amass db -d example.com |
 | -df | Path to a file providing root domain names | amass db -df domains.txt |
 | -dir | Path to the directory containing the graph database | amass db -dir PATH |
-| -i | Path to the Amass data operations JSON input file to be imported | amass db -i PATH |
+| -i | Import an Amass data operations JSON file to the graph database | amass db -i PATH |
 | -list | Print enumerations in the database and filter on domains specified | amass db -list |
 
 ## The Output Directory
