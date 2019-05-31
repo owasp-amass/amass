@@ -203,7 +203,7 @@ func (c *Config) Domains() []string {
 func (c *Config) IsDomainInScope(name string) bool {
 	var discovered bool
 
-	n := strings.TrimSpace(name)
+	n := strings.ToLower(strings.TrimSpace(name))
 	for _, d := range c.Domains() {
 		if n == d || strings.HasSuffix(n, "."+d) {
 			discovered = true

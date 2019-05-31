@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
-	"sort"
 	"strings"
 	"time"
 
@@ -120,16 +119,8 @@ func runTrackCommand(clArgs []string) {
 	}
 	defer db.Close()
 
-	var enums []string
 	// Obtain the enumerations that include the provided domain(s)
-	for _, e := range db.EnumerationList() {
-		for _, domain := range args.Domains {
-			if enumContainsDomain(e, domain, db) {
-				enums = append(enums, e)
-				break
-			}
-		}
-	}
+	enums := enumIDs(args.Domains, db)
 
 	// There needs to be at least two enumerations to proceed
 	if len(enums) < 2 {
@@ -323,38 +314,4 @@ func compareAddresses(addr1, addr2 []core.AddressInfo) bool {
 		}
 	}
 	return true
-}
-
-func orderedEnumsAndDateRanges(enums []string, h handlers.DataHandler) ([]string, []time.Time, []time.Time) {
-	sort.Slice(enums, func(i, j int) bool {
-		var less bool
-
-		e1, l1 := h.EnumerationDateRange(enums[i])
-		e2, l2 := h.EnumerationDateRange(enums[j])
-		if l2.After(l1) || e1.Before(e2) {
-			less = true
-		}
-		return less
-	})
-
-	var earliest, latest []time.Time
-	for _, enum := range enums {
-		e, l := h.EnumerationDateRange(enum)
-
-		earliest = append(earliest, e)
-		latest = append(latest, l)
-	}
-	return enums, earliest, latest
-}
-
-func enumContainsDomain(enum, domain string, h handlers.DataHandler) bool {
-	var found bool
-
-	for _, d := range h.EnumerationDomains(enum) {
-		if d == domain {
-			found = true
-			break
-		}
-	}
-	return found
 }

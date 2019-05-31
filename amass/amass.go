@@ -643,7 +643,6 @@ func censorString(input string, start, end int) string {
 		}
 		runes[i] = 'x'
 	}
-
 	return string(runes)
 }
 
@@ -672,4 +671,22 @@ func OutputLineParts(out *core.Output, src, addrs, demo bool) (source, name, ips
 		name = censorDomain(name)
 	}
 	return
+}
+
+// DesiredAddrTypes removes undesired address types from the AddressInfo slice.
+func DesiredAddrTypes(addrs []core.AddressInfo, ipv4, ipv6 bool) []core.AddressInfo {
+	if !ipv4 && !ipv6 {
+		return addrs
+	}
+
+	var keep []core.AddressInfo
+	for _, addr := range addrs {
+		if utils.IsIPv4(addr.Address) && !ipv4 {
+			continue
+		} else if utils.IsIPv6(addr.Address) && !ipv6 {
+			continue
+		}
+		keep = append(keep, addr)
+	}
+	return keep
 }

@@ -300,7 +300,7 @@ func processEnumOutput(enum *amass.Enumeration, args *enumArgs, pipe *io.PipeRea
 		asns := make(map[int]*amass.ASNSummaryData)
 		// Collect all the names returned by the enumeration
 		for out := range enum.Output {
-			out.Addresses = desiredAddrTypes(out.Addresses, args)
+			out.Addresses = amass.DesiredAddrTypes(out.Addresses, args.Options.IPv4, args.Options.IPv6)
 			if !enum.Config.Passive && len(out.Addresses) <= 0 {
 				continue
 			}
@@ -398,23 +398,6 @@ func writeLogsAndMessages(logs *io.PipeReader, logfile string) {
 			fgY.Fprintln(color.Error, line)
 		}
 	}
-}
-
-func desiredAddrTypes(addrs []core.AddressInfo, args *enumArgs) []core.AddressInfo {
-	if args.Options.IPv4 == false && args.Options.IPv6 == false {
-		return addrs
-	}
-
-	var keep []core.AddressInfo
-	for _, addr := range addrs {
-		if utils.IsIPv4(addr.Address) && (args.Options.IPv4 == false) {
-			continue
-		} else if utils.IsIPv6(addr.Address) && (args.Options.IPv6 == false) {
-			continue
-		}
-		keep = append(keep, addr)
-	}
-	return keep
 }
 
 // Obtain parameters from provided input files
