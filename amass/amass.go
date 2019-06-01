@@ -54,10 +54,10 @@ var Banner = `
 
 const (
 	// Version is used to display the current version of Amass.
-	Version = "3.0.0"
+	Version = "3.0.1"
 
 	// Author is used to display the founder of the amass package.
-	Author = "Jeff Foley - @jeff_foley"
+	Author = "OWASP Amass Project - @owaspamass"
 )
 
 // Enumeration is the object type used to execute a DNS enumeration with Amass.
@@ -604,7 +604,6 @@ func PrintBanner() {
 	rightmost := 76
 	version := "Version " + Version
 	desc := "In-depth DNS Enumeration and Network Mapping"
-	author := "Authored By " + Author
 
 	pad := func(num int) {
 		for i := 0; i < num; i++ {
@@ -614,8 +613,8 @@ func PrintBanner() {
 	r.Fprintln(color.Error, Banner)
 	pad(rightmost - len(version))
 	y.Fprintln(color.Error, version)
-	pad(rightmost - len(author))
-	y.Fprintln(color.Error, author)
+	pad(rightmost - len(Author))
+	y.Fprintln(color.Error, Author)
 	pad(rightmost - len(desc))
 	y.Fprintf(color.Error, "%s\n\n\n", desc)
 }
