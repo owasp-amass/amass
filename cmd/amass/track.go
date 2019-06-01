@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
@@ -74,7 +73,7 @@ func runTrackCommand(clArgs []string) {
 		r.Fprintln(color.Error, "The since flag cannot be used with the last or all flags")
 		os.Exit(1)
 	}
-	if args.Last == 1 {
+	if args.Last > 0 && args.Last < 2 {
 		r.Fprintln(color.Error, "Tracking requires more than one enumeration")
 		os.Exit(1)
 	}
@@ -109,6 +108,9 @@ func runTrackCommand(clArgs []string) {
 		if args.Filepaths.Directory == "" {
 			args.Filepaths.Directory = config.Dir
 		}
+		if len(args.Domains) == 0 {
+			args.Domains = utils.UniqueAppend(args.Domains, config.Domains()...)
+		}
 	}
 
 	// Connect with the graph database containing the enumeration data
@@ -132,27 +134,27 @@ func runTrackCommand(clArgs []string) {
 		args.Last = len(enums)
 	}
 
-	var begin int
+	var end int
 	enums, earliest, latest := orderedEnumsAndDateRanges(enums, db)
 	// Filter out enumerations that begin before the start date/time
 	if args.Since != "" {
-		for _, e := range earliest {
-			if !e.Before(start) {
+		for i := len(enums)-1; i >= 0; i-- {
+			if !earliest[i].Before(start) {
 				break
 			}
-			begin++
+			end++
 		}
 	} else { // Or the number of enumerations from the end of the timeline
-		if len(enums) < args.Last {
+		if args.Last > len(enums) {
 			r.Fprintf(color.Error, "%d enumerations are not available\n", args.Last)
 			os.Exit(1)
 		}
 
-		begin = len(enums) - args.Last
+		end = args.Last
 	}
-	enums = enums[begin:]
-	earliest = earliest[begin:]
-	latest = latest[begin:]
+	enums = enums[:end]
+	earliest = earliest[:end]
+	latest = latest[:end]
 
 	if args.Options.History {
 		completeHistoryOutput(args.Domains, enums, earliest, latest, db)
@@ -161,14 +163,14 @@ func runTrackCommand(clArgs []string) {
 	cumulativeOutput(args.Domains, enums, earliest, latest, db)
 }
 
-func cumulativeOutput(domains []string, enums []string, ea, la []time.Time, h handlers.DataHandler) {
+func cumulativeOutput(domains []string, enums []string, ea, la []time.Time, db handlers.DataHandler) {
 	idx := len(enums) - 1
 	filter := utils.NewStringFilter()
 
 	var cum []*core.Output
 	for i := idx - 1; i >= 0; i-- {
-		for _, out := range getEnumDataInScope(domains, enums[i], h) {
-			if !filter.Duplicate(out.Name) {
+		for _, out := range getUniqueDBOutput(enums[i], domains, db) {
+			if domainNameInScope(out.Name, domains) && !filter.Duplicate(out.Name) {
 				cum = append(cum, out)
 			}
 		}
@@ -181,7 +183,7 @@ func cumulativeOutput(domains []string, enums []string, ea, la []time.Time, h ha
 	blueLine()
 
 	var updates bool
-	out := getEnumDataInScope(domains, enums[idx], h)
+	out := getUniqueDBOutput(enums[idx], domains, db)
 	for _, d := range diffEnumOutput(cum, out) {
 		updates = true
 		fmt.Fprintln(color.Output, d)
@@ -191,7 +193,7 @@ func cumulativeOutput(domains []string, enums []string, ea, la []time.Time, h ha
 	}
 }
 
-func completeHistoryOutput(domains []string, enums []string, ea, la []time.Time, h handlers.DataHandler) {
+func completeHistoryOutput(domains []string, enums []string, ea, la []time.Time, db handlers.DataHandler) {
 	var prev string
 
 	for i, enum := range enums {
@@ -210,8 +212,8 @@ func completeHistoryOutput(domains []string, enums []string, ea, la []time.Time,
 		blueLine()
 
 		var updates bool
-		out1 := getEnumDataInScope(domains, prev, h)
-		out2 := getEnumDataInScope(domains, enum, h)
+		out1 := getUniqueDBOutput(prev, domains, db)
+		out2 := getUniqueDBOutput(enum, domains, db)
 		for _, d := range diffEnumOutput(out1, out2) {
 			updates = true
 			fmt.Fprintln(color.Output, d)
@@ -228,20 +230,6 @@ func blueLine() {
 		b.Fprint(color.Output, "----------")
 	}
 	fmt.Println()
-}
-
-func getEnumDataInScope(domains []string, enum string, h handlers.DataHandler) []*core.Output {
-	var out []*core.Output
-
-	for _, o := range h.GetOutput(enum, true) {
-		for _, domain := range domains {
-			if strings.HasSuffix(o.Name, domain) {
-				out = append(out, o)
-				break
-			}
-		}
-	}
-	return out
 }
 
 func diffEnumOutput(out1, out2 []*core.Output) []string {

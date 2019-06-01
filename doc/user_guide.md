@@ -76,6 +76,7 @@ This subcommand will perform DNS enumeration and network mapping while populatin
 | -brute | Perform brute force subdomain enumeration | amass enum -brute -d example.com |
 | -config | Path to the INI configuration file | amass enum -config config.ini |
 | -d | Domain names separated by commas (can be used multiple times) | amass enum -d example.com |
+| -demo | Censor output to make it suitable for demonstrations | amass enum -demo -d example.com |
 | -df | Path to a file providing root domain names | amass enum -df domains.txt |
 | -do | Path to data operations output file | amass enum -do data.json -d example.com |
 | -ef | Path to a file providing data sources to exclude | amass enum -ef exclude.txt -d example.com |
@@ -111,8 +112,11 @@ Switches for outputting the DNS and infrastructure findings as a network graph:
 | Flag | Description | Example |
 |------|-------------|---------|
 | -config | Path to the INI configuration file | amass viz -config config.ini -d3 -o PATH |
+| -d | Domain names separated by commas (can be used multiple times) | amass viz -d3 -d example.com -o PATH |
 | -d3 | Output a D3.js v4 force simulation HTML file | amass viz -d3 -o PATH |
+| -df | Path to a file providing root domain names | amass viz -d3 -df domains.txt -o PATH |
 | -dir | Path to the directory containing the graph database | amass viz -d3 -dir PATH -o PATH |
+| -enum | Identify an enumeration via an index from the db listing | amass viz -enum 1 -d3 -o PATH |
 | -gexf | Output to Graph Exchange XML Format (GEXF) | amass viz -gephi -o PATH |
 | -graphistry | Output Graphistry JSON | amass viz -graphistry -o PATH |
 | -i | Path to the Amass data operations JSON input file | amass viz -d3 -o PATH |
@@ -142,10 +146,17 @@ Performs viewing and manipulation of the graph database. This subcommand only le
 |------|-------------|---------|
 | -config | Path to the INI configuration file | amass db -config config.ini |
 | -d | Domain names separated by commas (can be used multiple times) | amass db -d example.com |
+| -demo | Censor output to make it suitable for demonstrations | amass db -demo -d example.com |
 | -df | Path to a file providing root domain names | amass db -df domains.txt |
 | -dir | Path to the directory containing the graph database | amass db -dir PATH |
-| -i | Import an Amass data operations JSON file to the graph database | amass db -i PATH |
+| -enum | Identify an enumeration via an index from the listing | amass db -enum 1 -show |
+| -import | Import an Amass data operations JSON file to the graph database | amass db -import PATH |
+| -ip | Show the IP addresses for discovered names | amass db -show -ip -d example.com |
+| -ipv4 | Show the IPv4 addresses for discovered names | amass db -show -ipv4 -d example.com |
+| -ipv6 | Show the IPv6 addresses for discovered names | amass db -show -ipv6 -d example.com |
 | -list | Print enumerations in the database and filter on domains specified | amass db -list |
+| -show | Print the results for the enumeration index + domains provided | amass db -show |
+| -src | Print data sources for the discovered names | amass db -show -src -d example.com |
 
 ## The Output Directory
 

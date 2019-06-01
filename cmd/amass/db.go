@@ -33,14 +33,14 @@ type dbArgs struct {
 		IPv4             bool
 		IPv6             bool
 		ListEnumerations bool
-		Show bool
+		Show             bool
 		Sources          bool
 	}
 	Filepaths struct {
 		ConfigFile string
 		Directory  string
 		Domains    string
-		Input      string
+		Import      string
 	}
 }
 
@@ -60,13 +60,13 @@ func runDBCommand(clArgs []string) {
 	dbCommand.BoolVar(&args.Options.IPs, "ip", false, "Show the IP addresses for discovered names")
 	dbCommand.BoolVar(&args.Options.IPv4, "ipv4", false, "Show the IPv4 addresses for discovered names")
 	dbCommand.BoolVar(&args.Options.IPv6, "ipv6", false, "Show the IPv6 addresses for discovered names")
-	dbCommand.BoolVar(&args.Options.ListEnumerations, "list", false, "Show the enumerations that include identified domains")
+	dbCommand.BoolVar(&args.Options.ListEnumerations, "list", false, "Numbered list of enums filtered on provided domains")
 	dbCommand.BoolVar(&args.Options.Sources, "src", false, "Print data sources for the discovered names")
 	dbCommand.BoolVar(&args.Options.Show, "show", false, "Print the results for the enumeration index + domains provided")
 	dbCommand.StringVar(&args.Filepaths.ConfigFile, "config", "", "Path to the INI configuration file. Additional details below")
 	dbCommand.StringVar(&args.Filepaths.Directory, "dir", "", "Path to the directory containing the graph database")
 	dbCommand.StringVar(&args.Filepaths.Domains, "df", "", "Path to a file providing root domain names")
-	dbCommand.StringVar(&args.Filepaths.Input, "i", "", "Import an Amass data operations JSON file to the graph database")
+	dbCommand.StringVar(&args.Filepaths.Import, "import", "", "Import an Amass data operations JSON file to the graph database")
 
 	if len(clArgs) < 1 {
 		commandUsage(dbUsageMsg, dbCommand, dbBuf)
@@ -82,11 +82,23 @@ func runDBCommand(clArgs []string) {
 		return
 	}
 
+	if args.Filepaths.Domains != "" {
+		list, err := core.GetListFromFile(args.Filepaths.Domains)
+		if err != nil {
+			r.Fprintf(color.Error, "Failed to parse the domain names file: %v\n", err)
+			return
+		}
+		args.Domains = utils.UniqueAppend(args.Domains, list...)
+	}
+
 	config := new(core.Config)
 	// Check if a configuration file was provided, and if so, load the settings
 	if acquireConfig(args.Filepaths.Directory, args.Filepaths.ConfigFile, config) {
 		if args.Filepaths.Directory == "" {
 			args.Filepaths.Directory = config.Dir
+		}
+		if len(args.Domains) == 0 {
+			args.Domains = utils.UniqueAppend(args.Domains, config.Domains()...)
 		}
 	}
 
@@ -97,8 +109,8 @@ func runDBCommand(clArgs []string) {
 	}
 	defer db.Close()
 
-	// Input of data operations from a JSON file to the database
-	if args.Filepaths.Input != "" {
+	// Import of data operations from a JSON file to the database
+	if args.Filepaths.Import != "" {
 		if err := inputDataOperations(&args, db); err != nil {
 			r.Fprintf(color.Error, "Input data operations: %v\n", err)
 			os.Exit(1)
@@ -111,7 +123,7 @@ func runDBCommand(clArgs []string) {
 		return
 	}
 
-	if args.Options.Show && args.Enum > 0 {
+	if args.Options.Show {
 		showEnumeration(&args, db)
 		return
 	}
@@ -146,7 +158,7 @@ func openGraphDatabase(dir string, config *core.Config) handlers.DataHandler {
 }
 
 func inputDataOperations(args *dbArgs, db handlers.DataHandler) error {
-	f, err := os.Open(args.Filepaths.Input)
+	f, err := os.Open(args.Filepaths.Import)
 	if err != nil {
 		return fmt.Errorf("Failed to open the input file: %v", err)
 	}
@@ -189,16 +201,10 @@ func listEnumerations(domains []string, db handlers.DataHandler) {
 }
 
 func showEnumeration(args *dbArgs, db handlers.DataHandler) {
-	id := enumIndexToID(args.Enum, args.Domains, db)
-	if id == "" {
-		r.Fprintln(color.Error, "No enumerations found within the provided scope")
-		return
-	}
-
 	var total int
 	tags := make(map[string]int)
 	asns := make(map[int]*amass.ASNSummaryData)
-	for _, out := range db.GetOutput(id, true) {
+	for _, out := range getEnumOutput(args.Enum, args.Domains, db) {
 		if len(args.Domains) > 0 && !domainNameInScope(out.Name, args.Domains) {
 			continue
 		}
@@ -226,6 +232,54 @@ func showEnumeration(args *dbArgs, db handlers.DataHandler) {
 	}
 }
 
+func getEnumOutput(id int, domains []string, db handlers.DataHandler) []*core.Output {
+	var output []*core.Output
+
+	if id > 0 {
+		enum := enumIndexToID(id, domains, db)
+		if enum == "" {
+			r.Fprintln(color.Error, "No enumerations found within the provided scope")
+			return output
+		}
+		return getUniqueDBOutput(enum, domains, db)
+	}
+
+	enums := enumIDs(domains, db)
+	if len(enums) == 0 {
+		return output
+	}
+
+	enums, _, _ = orderedEnumsAndDateRanges(enums, db)
+	if len(enums) == 0 {
+		return output
+	}
+
+	filter := utils.NewStringFilter()
+	for i := len(enums) - 1; i >= 0; i-- {
+		for _, out := range db.GetOutput(enums[i], true) {
+			if !filter.Duplicate(out.Name) {
+				output = append(output, out)
+			}
+		}
+	}
+	return output
+}
+
+func getUniqueDBOutput(id string, domains []string, db handlers.DataHandler) []*core.Output {
+	var output []*core.Output
+	filter := utils.NewStringFilter()
+
+	for _, out := range db.GetOutput(id, true) {
+		if len(domains) > 0 && !domainNameInScope(out.Name, domains) {
+			continue
+		}
+		if !filter.Duplicate(out.Name) {
+			output = append(output, out)
+		}
+	}
+	return output
+}
+
 func enumIndexToID(e int, domains []string, db handlers.DataHandler) string {
 	enums := enumIDs(domains, db)
 	if len(enums) == 0 {
@@ -237,6 +291,38 @@ func enumIndexToID(e int, domains []string, db handlers.DataHandler) string {
 		return enums[e-1]
 	}
 	return ""
+}
+
+// Get the UUID for the most recent enumeration
+func mostRecentEnumID(domains []string, db handlers.DataHandler) string {
+	var uuid string
+	var latest time.Time
+
+	for i, enum := range db.EnumerationList() {
+		if len(domains) > 0 {
+			var found bool
+			scope := db.EnumerationDomains(enum)
+
+			for _, domain := range domains {
+				if domainNameInScope(domain, scope) {
+					found = true
+					break
+				}
+			}
+			if !found {
+				continue
+			}
+		}
+
+		_, l := db.EnumerationDateRange(enum)
+		if i == 0 {
+			latest = l
+			uuid = enum
+		} else if l.After(latest) {
+			uuid = enum
+		}
+	}
+	return uuid
 }
 
 // Obtain the enumeration IDs that include the provided domain

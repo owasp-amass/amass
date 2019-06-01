@@ -16,6 +16,7 @@ import (
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/handlers"
+	"github.com/OWASP/Amass/amass/utils"
 	"github.com/OWASP/Amass/amass/utils/viz"
 	"github.com/fatih/color"
 )
@@ -25,6 +26,8 @@ const (
 )
 
 type vizArgs struct {
+	Domains utils.ParseStrings
+	Enum    int
 	Options struct {
 		D3         bool
 		GEXF       bool
@@ -35,6 +38,7 @@ type vizArgs struct {
 	Filepaths struct {
 		ConfigFile string
 		Directory  string
+		Domains    string
 		Input      string
 		Output     string
 	}
@@ -50,8 +54,11 @@ func runVizCommand(clArgs []string) {
 
 	vizCommand.BoolVar(&help1, "h", false, "Show the program usage message")
 	vizCommand.BoolVar(&help2, "help", false, "Show the program usage message")
+	vizCommand.Var(&args.Domains, "d", "Domain names separated by commas (can be used multiple times)")
+	vizCommand.IntVar(&args.Enum, "enum", 0, "Identify an enumeration via an index from the listing")
 	vizCommand.StringVar(&args.Filepaths.ConfigFile, "config", "", "Path to the INI configuration file. Additional details below")
 	vizCommand.StringVar(&args.Filepaths.Directory, "dir", "", "Path to the directory containing the graph database")
+	vizCommand.StringVar(&args.Filepaths.Domains, "df", "", "Path to a file providing root domain names")
 	vizCommand.StringVar(&args.Filepaths.Input, "i", "", "The Amass data operations JSON file")
 	vizCommand.StringVar(&args.Filepaths.Output, "o", "", "Path to the directory for output files being generated")
 	vizCommand.BoolVar(&args.Options.D3, "d3", false, "Generate the D3 v4 force simulation HTML file")
@@ -79,6 +86,15 @@ func runVizCommand(clArgs []string) {
 		!args.Options.Graphistry && !args.Options.Maltego && !args.Options.VisJS {
 		r.Fprintln(color.Error, "At least one file format must be selected")
 		os.Exit(1)
+	}
+
+	if args.Filepaths.Domains != "" {
+		list, err := core.GetListFromFile(args.Filepaths.Domains)
+		if err != nil {
+			r.Fprintf(color.Error, "Failed to parse the domain names file: %v\n", err)
+			return
+		}
+		args.Domains = utils.UniqueAppend(args.Domains, list...)
 	}
 
 	if args.Filepaths.Output == "" {
@@ -114,6 +130,9 @@ func runVizCommand(clArgs []string) {
 			if args.Filepaths.Directory == "" {
 				args.Filepaths.Directory = config.Dir
 			}
+			if len(args.Domains) == 0 {
+				args.Domains = utils.UniqueAppend(args.Domains, config.Domains()...)
+			}
 		}
 
 		db = openGraphDatabase(args.Filepaths.Directory, config)
@@ -123,16 +142,11 @@ func runVizCommand(clArgs []string) {
 		}
 		defer db.Close()
 
-		// Get the UUID for the most recent enumeration
-		var latest time.Time
-		for i, enum := range db.EnumerationList() {
-			_, l := db.EnumerationDateRange(enum)
-			if i == 0 {
-				latest = l
-				uuid = enum
-			} else if l.After(latest) {
-				uuid = enum
-			}
+		if args.Enum > 0 {
+			uuid = enumIndexToID(args.Enum, args.Domains, db)
+		} else {
+			// Get the UUID for the most recent enumeration
+			uuid = mostRecentEnumID(args.Domains, db)
 		}
 	}
 	if uuid == "" {
