@@ -3,7 +3,7 @@ before:
     - go get -u -d ./...
 builds:
   -
-    main: ./cmd/amass/*.go
+    main: ./cmd/amass/
     binary: amass
     goos:
       - windows
