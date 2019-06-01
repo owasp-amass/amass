@@ -3,7 +3,7 @@ before:
     - go get -u -d ./...
 builds:
   -
-    main: ./cmd/amass/main.go
+    main: ./cmd/amass/*.go
     binary: amass
     goos:
       - windows
@@ -34,9 +34,6 @@ archive:
 
 checksum:
   name_template: "amass_checksums.txt"
-
-snapshot:
-  name_template: "{{ .Tag }}-next"
 
 changelog:
   sort: asc
