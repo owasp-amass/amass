@@ -38,10 +38,13 @@ func (f *FindSubdomains) processRequests() {
 		select {
 		case <-f.Quit():
 			return
-		case req := <-f.RequestChan():
+		case req := <-f.DNSRequestChan():
 			if f.Config().IsDomainInScope(req.Domain) {
 				f.executeQuery(req.Domain)
 			}
+		case <-f.AddrRequestChan():
+		case <-f.ASNRequestChan():
+		case <-f.WhoisRequestChan():
 		}
 	}
 }
@@ -61,7 +64,7 @@ func (f *FindSubdomains) executeQuery(domain string) {
 	}
 
 	for _, sd := range re.FindAllString(page, -1) {
-		f.Bus().Publish(core.NewNameTopic, &core.Request{
+		f.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
 			Name:   cleanName(sd),
 			Domain: domain,
 			Tag:    f.SourceType,

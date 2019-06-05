@@ -38,10 +38,13 @@ func (n *Netcraft) processRequests() {
 		select {
 		case <-n.Quit():
 			return
-		case req := <-n.RequestChan():
+		case req := <-n.DNSRequestChan():
 			if n.Config().IsDomainInScope(req.Domain) {
 				n.executeQuery(req.Domain)
 			}
+		case <-n.AddrRequestChan():
+		case <-n.ASNRequestChan():
+		case <-n.WhoisRequestChan():
 		}
 	}
 }
@@ -61,7 +64,7 @@ func (n *Netcraft) executeQuery(domain string) {
 	}
 
 	for _, sd := range re.FindAllString(page, -1) {
-		n.Bus().Publish(core.NewNameTopic, &core.Request{
+		n.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
 			Name:   cleanName(sd),
 			Domain: domain,
 			Tag:    n.SourceType,

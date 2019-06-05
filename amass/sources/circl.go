@@ -53,7 +53,7 @@ func (c *CIRCL) processRequests() {
 		select {
 		case <-c.Quit():
 			return
-		case req := <-c.RequestChan():
+		case req := <-c.DNSRequestChan():
 			if c.Config().IsDomainInScope(req.Domain) {
 				if time.Now().Sub(last) < c.RateLimit {
 					time.Sleep(c.RateLimit)
@@ -62,6 +62,9 @@ func (c *CIRCL) processRequests() {
 				c.executeQuery(req.Domain)
 				last = time.Now()
 			}
+		case <-c.AddrRequestChan():
+		case <-c.ASNRequestChan():
+		case <-c.WhoisRequestChan():
 		}
 	}
 }
@@ -117,7 +120,7 @@ func (c *CIRCL) passiveDNSJSON(page, domain string) {
 	}
 
 	for _, name := range unique {
-		c.Bus().Publish(core.NewNameTopic, &core.Request{
+		c.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
 			Name:   name,
 			Domain: domain,
 			Tag:    c.SourceType,

@@ -59,7 +59,7 @@ func (a *AlienVault) processRequests() {
 		select {
 		case <-a.Quit():
 			return
-		case req := <-a.RequestChan():
+		case req := <-a.DNSRequestChan():
 			if a.haveAPIKey && a.Config().IsDomainInScope(req.Domain) {
 				if time.Now().Sub(last) < a.RateLimit {
 					time.Sleep(a.RateLimit)
@@ -68,6 +68,9 @@ func (a *AlienVault) processRequests() {
 				a.executeQuery(req.Domain)
 				last = time.Now()
 			}
+		case <-a.AddrRequestChan():
+		case <-a.ASNRequestChan():
+		case <-a.WhoisRequestChan():
 		}
 	}
 }
@@ -181,7 +184,7 @@ func (a *AlienVault) executeQuery(domain string) {
 	}
 
 	for _, name := range names {
-		a.Bus().Publish(core.NewNameTopic, &core.Request{
+		a.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
 			Name:   name,
 			Domain: domain,
 			Tag:    a.SourceType,
@@ -190,9 +193,8 @@ func (a *AlienVault) executeQuery(domain string) {
 	}
 
 	for _, ip := range ips {
-		a.Bus().Publish(core.NewAddrTopic, &core.Request{
+		a.Bus().Publish(core.NewAddrTopic, &core.AddrRequest{
 			Address: ip,
-			Domain:  domain,
 			Tag:     a.SourceType,
 			Source:  a.String(),
 		})

@@ -49,10 +49,13 @@ func (c *CertDB) processRequests() {
 		select {
 		case <-c.Quit():
 			return
-		case req := <-c.RequestChan():
+		case req := <-c.DNSRequestChan():
 			if c.Config().IsDomainInScope(req.Domain) {
 				c.executeQuery(req.Domain)
 			}
+		case <-c.AddrRequestChan():
+		case <-c.ASNRequestChan():
+		case <-c.WhoisRequestChan():
 		}
 	}
 }
@@ -89,7 +92,7 @@ func (c *CertDB) executeQuery(domain string) {
 				continue
 			}
 
-			c.Bus().Publish(core.NewNameTopic, &core.Request{
+			c.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
 				Name:   cleanName(n),
 				Domain: domain,
 				Tag:    c.SourceType,

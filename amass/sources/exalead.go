@@ -38,10 +38,13 @@ func (e *Exalead) processRequests() {
 		select {
 		case <-e.Quit():
 			return
-		case req := <-e.RequestChan():
+		case req := <-e.DNSRequestChan():
 			if e.Config().IsDomainInScope(req.Domain) {
 				e.executeQuery(req.Domain)
 			}
+		case <-e.AddrRequestChan():
+		case <-e.ASNRequestChan():
+		case <-e.WhoisRequestChan():
 		}
 	}
 }
@@ -61,7 +64,7 @@ func (e *Exalead) executeQuery(domain string) {
 	}
 
 	for _, name := range re.FindAllString(page, -1) {
-		e.Bus().Publish(core.NewNameTopic, &core.Request{
+		e.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
 			Name:   cleanName(name),
 			Domain: domain,
 			Tag:    e.SourceType,

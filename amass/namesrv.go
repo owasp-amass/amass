@@ -61,7 +61,7 @@ func (ns *NameService) RegisterGraph(graph handlers.DataHandler) {
 	ns.graph = graph
 }
 
-func (ns *NameService) newNameEvent(req *core.Request) {
+func (ns *NameService) newNameEvent(req *core.DNSRequest) {
 	if req == nil || req.Name == "" || req.Domain == "" {
 		return
 	}
@@ -75,7 +75,7 @@ func (ns *NameService) newNameEvent(req *core.Request) {
 	} else if tt && ns.trustedNameFilter.Duplicate(req.Name) {
 		return
 	}
-	ns.SendRequest(req)
+	ns.SendDNSRequest(req)
 }
 
 func (ns *NameService) processRequests() {
@@ -85,13 +85,16 @@ func (ns *NameService) processRequests() {
 			<-ns.ResumeChan()
 		case <-ns.Quit():
 			return
-		case req := <-ns.RequestChan():
+		case req := <-ns.DNSRequestChan():
 			ns.performRequest(req)
+		case <-ns.AddrRequestChan():
+		case <-ns.ASNRequestChan():
+		case <-ns.WhoisRequestChan():
 		}
 	}
 }
 
-func (ns *NameService) performRequest(req *core.Request) {
+func (ns *NameService) performRequest(req *core.DNSRequest) {
 	ns.SetActive()
 	if ns.Config().Passive {
 		if !ns.filter.Duplicate(req.Name) && ns.sanityRE.MatchString(req.Name) {
@@ -108,7 +111,7 @@ func (ns *NameService) performRequest(req *core.Request) {
 }
 
 // Resolved is called when a name has been resolved by the DNS Service.
-func (ns *NameService) Resolved(req *core.Request) {
+func (ns *NameService) Resolved(req *core.DNSRequest) {
 	ns.SetActive()
 
 	if ns.Config().IsDomainInScope(req.Name) {
@@ -116,7 +119,7 @@ func (ns *NameService) Resolved(req *core.Request) {
 	}
 }
 
-func (ns *NameService) checkSubdomain(req *core.Request) {
+func (ns *NameService) checkSubdomain(req *core.DNSRequest) {
 	labels := strings.Split(req.Name, ".")
 	num := len(labels)
 	// Is this large enough to consider further?
@@ -143,7 +146,7 @@ func (ns *NameService) checkSubdomain(req *core.Request) {
 		return
 	}
 
-	ns.Bus().Publish(core.NewSubdomainTopic, &core.Request{
+	ns.Bus().Publish(core.NewSubdomainTopic, &core.DNSRequest{
 		Name:   sub,
 		Domain: req.Domain,
 		Tag:    req.Tag,

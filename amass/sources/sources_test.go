@@ -57,21 +57,21 @@ func setupConfig(domain string) *core.Config {
 	return config
 }
 
-func setupEventBus(subscription string) (*core.EventBus, chan *core.Request) {
-	out := make(chan *core.Request)
+func setupEventBus(subscription string) (*core.EventBus, chan *core.DNSRequest) {
+	out := make(chan *core.DNSRequest)
 	bus := core.NewEventBus()
-	bus.Subscribe(subscription, func(req *core.Request) {
+	bus.Subscribe(subscription, func(req *core.DNSRequest) {
 		out <- req
 	})
 
 	return bus, out
 }
 
-func testService(srv core.Service, out chan *core.Request) int {
+func testService(srv core.Service, out chan *core.DNSRequest) int {
 	srv.Start()
 	defer srv.Stop()
 
-	srv.SendRequest(&core.Request{
+	srv.SendDNSRequest(&core.DNSRequest{
 		Name:   domainTest,
 		Domain: domainTest,
 	})

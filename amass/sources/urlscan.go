@@ -53,7 +53,7 @@ func (u *URLScan) processRequests() {
 		select {
 		case <-u.Quit():
 			return
-		case req := <-u.RequestChan():
+		case req := <-u.DNSRequestChan():
 			if u.Config().IsDomainInScope(req.Domain) {
 				if time.Now().Sub(last) < u.RateLimit {
 					time.Sleep(u.RateLimit)
@@ -62,6 +62,9 @@ func (u *URLScan) processRequests() {
 				u.executeQuery(req.Domain)
 				last = time.Now()
 			}
+		case <-u.AddrRequestChan():
+		case <-u.ASNRequestChan():
+		case <-u.WhoisRequestChan():
 		}
 	}
 }
@@ -108,7 +111,7 @@ func (u *URLScan) executeQuery(domain string) {
 
 	for _, name := range subs {
 		if re.MatchString(name) {
-			u.Bus().Publish(core.NewNameTopic, &core.Request{
+			u.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
 				Name:   name,
 				Domain: domain,
 				Tag:    u.SourceType,

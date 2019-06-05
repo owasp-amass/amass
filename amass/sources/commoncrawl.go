@@ -60,10 +60,13 @@ func (c *CommonCrawl) processRequests() {
 		select {
 		case <-c.Quit():
 			return
-		case req := <-c.RequestChan():
+		case req := <-c.DNSRequestChan():
 			if c.Config().IsDomainInScope(req.Domain) {
 				c.executeQuery(req.Domain)
 			}
+		case <-c.AddrRequestChan():
+		case <-c.ASNRequestChan():
+		case <-c.WhoisRequestChan():
 		}
 	}
 }
@@ -92,7 +95,7 @@ func (c *CommonCrawl) executeQuery(domain string) {
 			}
 
 			for _, sd := range re.FindAllString(page, -1) {
-				c.Bus().Publish(core.NewNameTopic, &core.Request{
+				c.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
 					Name:   cleanName(sd),
 					Domain: domain,
 					Tag:    c.SourceType,

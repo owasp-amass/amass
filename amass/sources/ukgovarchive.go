@@ -33,7 +33,7 @@ func NewUKGovArchive(config *core.Config, bus *core.EventBus) *UKGovArchive {
 func (u *UKGovArchive) OnStart() error {
 	u.BaseService.OnStart()
 
-	u.Bus().Subscribe(core.NameResolvedTopic, u.SendRequest)
+	u.Bus().Subscribe(core.NameResolvedTopic, u.SendDNSRequest)
 	go u.processRequests()
 	return nil
 }
@@ -43,10 +43,13 @@ func (u *UKGovArchive) processRequests() {
 		select {
 		case <-u.Quit():
 			return
-		case req := <-u.RequestChan():
+		case req := <-u.DNSRequestChan():
 			if u.Config().IsDomainInScope(req.Name) {
 				u.executeQuery(req.Name, req.Domain)
 			}
+		case <-u.AddrRequestChan():
+		case <-u.ASNRequestChan():
+		case <-u.WhoisRequestChan():
 		}
 	}
 }
@@ -63,7 +66,7 @@ func (u *UKGovArchive) executeQuery(sn, domain string) {
 	}
 
 	for _, name := range names {
-		u.Bus().Publish(core.NewNameTopic, &core.Request{
+		u.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
 			Name:   cleanName(name),
 			Domain: domain,
 			Tag:    u.SourceType,

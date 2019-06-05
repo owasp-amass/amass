@@ -51,7 +51,7 @@ func (pt *PassiveTotal) processRequests() {
 		select {
 		case <-pt.Quit():
 			return
-		case req := <-pt.RequestChan():
+		case req := <-pt.DNSRequestChan():
 			if pt.Config().IsDomainInScope(req.Domain) {
 				if time.Now().Sub(last) < pt.RateLimit {
 					time.Sleep(pt.RateLimit)
@@ -60,6 +60,9 @@ func (pt *PassiveTotal) processRequests() {
 				pt.executeQuery(req.Domain)
 				last = time.Now()
 			}
+		case <-pt.AddrRequestChan():
+		case <-pt.ASNRequestChan():
+		case <-pt.WhoisRequestChan():
 		}
 	}
 }
@@ -94,7 +97,7 @@ func (pt *PassiveTotal) executeQuery(domain string) {
 	for _, s := range subs.Subdomains {
 		name := s + "." + domain
 		if re.MatchString(name) {
-			pt.Bus().Publish(core.NewNameTopic, &core.Request{
+			pt.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
 				Name:   name,
 				Domain: domain,
 				Tag:    pt.SourceType,

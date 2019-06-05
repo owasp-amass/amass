@@ -47,10 +47,13 @@ func (r *Robtex) processRequests() {
 		select {
 		case <-r.Quit():
 			return
-		case req := <-r.RequestChan():
+		case req := <-r.DNSRequestChan():
 			if r.Config().IsDomainInScope(req.Domain) {
 				r.executeQuery(req.Domain)
 			}
+		case <-r.AddrRequestChan():
+		case <-r.ASNRequestChan():
+		case <-r.WhoisRequestChan():
 		}
 	}
 }
@@ -75,9 +78,9 @@ func (r *Robtex) executeQuery(domain string) {
 		if line.Type == "A" {
 			ips = utils.UniqueAppend(ips, line.Data)
 			// Inform the Address Service of this finding
-			r.Bus().Publish(core.NewNameTopic, &core.Request{
-				Domain:  domain,
+			r.Bus().Publish(core.NewAddrTopic, &core.AddrRequest{
 				Address: line.Data,
+				Domain:  domain,
 				Tag:     r.SourceType,
 				Source:  r.String(),
 			})
@@ -109,7 +112,7 @@ loop:
 	}
 
 	for _, name := range re.FindAllString(list, -1) {
-		r.Bus().Publish(core.NewNameTopic, &core.Request{
+		r.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
 			Name:   cleanName(name),
 			Domain: domain,
 			Tag:    r.SourceType,

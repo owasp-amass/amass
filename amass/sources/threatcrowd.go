@@ -47,7 +47,7 @@ func (t *ThreatCrowd) processRequests() {
 		select {
 		case <-t.Quit():
 			return
-		case req := <-t.RequestChan():
+		case req := <-t.DNSRequestChan():
 			if t.Config().IsDomainInScope(req.Domain) {
 				if delta := time.Now().Sub(last); delta < t.RateLimit {
 					time.Sleep(delta)
@@ -56,6 +56,9 @@ func (t *ThreatCrowd) processRequests() {
 				t.executeQuery(req.Domain)
 				last = time.Now()
 			}
+		case <-t.AddrRequestChan():
+		case <-t.ASNRequestChan():
+		case <-t.WhoisRequestChan():
 		}
 	}
 }
@@ -96,7 +99,7 @@ func (t *ThreatCrowd) executeQuery(domain string) {
 		s := strings.ToLower(sub)
 
 		if s != "" && re.MatchString(s) {
-			t.Bus().Publish(core.NewNameTopic, &core.Request{
+			t.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
 				Name:   s,
 				Domain: domain,
 				Tag:    t.SourceType,
@@ -106,7 +109,7 @@ func (t *ThreatCrowd) executeQuery(domain string) {
 	}
 
 	for _, res := range m.Resolutions {
-		t.Bus().Publish(core.NewAddrTopic, &core.Request{
+		t.Bus().Publish(core.NewAddrTopic, &core.AddrRequest{
 			Address: res.IP,
 			Domain:  domain,
 			Tag:     t.SourceType,

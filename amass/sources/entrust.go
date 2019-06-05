@@ -40,10 +40,13 @@ func (e *Entrust) processRequests() {
 		select {
 		case <-e.Quit():
 			return
-		case req := <-e.RequestChan():
+		case req := <-e.DNSRequestChan():
 			if e.Config().IsDomainInScope(req.Domain) {
 				e.executeQuery(req.Domain)
 			}
+		case <-e.AddrRequestChan():
+		case <-e.ASNRequestChan():
+		case <-e.WhoisRequestChan():
 		}
 	}
 }
@@ -64,7 +67,7 @@ func (e *Entrust) executeQuery(domain string) {
 	content := strings.Replace(page, "u003d", " ", -1)
 
 	for _, sd := range re.FindAllString(content, -1) {
-		e.Bus().Publish(core.NewNameTopic, &core.Request{
+		e.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
 			Name:   cleanName(sd),
 			Domain: domain,
 			Tag:    e.SourceType,
@@ -74,7 +77,7 @@ func (e *Entrust) executeQuery(domain string) {
 
 	for _, name := range e.extractReversedSubmatches(page) {
 		if match := re.FindString(name); match != "" {
-			e.Bus().Publish(core.NewNameTopic, &core.Request{
+			e.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
 				Name:   cleanName(match),
 				Domain: domain,
 				Tag:    e.SourceType,

@@ -43,7 +43,7 @@ func (acs *ActiveCertService) OnStart() error {
 	acs.BaseService.OnStart()
 
 	if acs.Config().Active {
-		acs.Bus().Subscribe(core.ActiveCertTopic, acs.SendRequest)
+		acs.Bus().Subscribe(core.ActiveCertTopic, acs.SendAddrRequest)
 		go acs.processRequests()
 	}
 	return nil
@@ -56,14 +56,17 @@ func (acs *ActiveCertService) processRequests() {
 			<-acs.ResumeChan()
 		case <-acs.Quit():
 			return
-		case req := <-acs.RequestChan():
+		case req := <-acs.AddrRequestChan():
 			acs.maxPulls.Acquire(1)
 			go acs.performRequest(req)
+		case <-acs.DNSRequestChan():
+		case <-acs.ASNRequestChan():
+		case <-acs.WhoisRequestChan():
 		}
 	}
 }
 
-func (acs *ActiveCertService) performRequest(req *core.Request) {
+func (acs *ActiveCertService) performRequest(req *core.AddrRequest) {
 	defer acs.maxPulls.Release(1)
 
 	acs.SetActive()
@@ -77,8 +80,8 @@ func (acs *ActiveCertService) performRequest(req *core.Request) {
 }
 
 // PullCertificateNames attempts to pull a cert from one or more ports on an IP.
-func PullCertificateNames(addr string, ports []int) []*core.Request {
-	var requests []*core.Request
+func PullCertificateNames(addr string, ports []int) []*core.DNSRequest {
+	var requests []*core.DNSRequest
 
 	// Check hosts for certificates that contain subdomain names
 	for _, port := range ports {
@@ -149,11 +152,11 @@ func namesFromCert(cert *x509.Certificate) []string {
 	return subdomains
 }
 
-func reqFromNames(subdomains []string) []*core.Request {
-	var requests []*core.Request
+func reqFromNames(subdomains []string) []*core.DNSRequest {
+	var requests []*core.DNSRequest
 
 	for _, name := range subdomains {
-		requests = append(requests, &core.Request{
+		requests = append(requests, &core.DNSRequest{
 			Name:   name,
 			Domain: SubdomainToDomain(name),
 			Tag:    core.CERT,

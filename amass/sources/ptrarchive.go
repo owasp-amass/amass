@@ -38,10 +38,13 @@ func (p *PTRArchive) processRequests() {
 		select {
 		case <-p.Quit():
 			return
-		case req := <-p.RequestChan():
+		case req := <-p.DNSRequestChan():
 			if p.Config().IsDomainInScope(req.Domain) {
 				p.executeQuery(req.Domain)
 			}
+		case <-p.AddrRequestChan():
+		case <-p.ASNRequestChan():
+		case <-p.WhoisRequestChan():
 		}
 	}
 }
@@ -66,7 +69,7 @@ func (p *PTRArchive) executeQuery(domain string) {
 			continue
 		}
 
-		p.Bus().Publish(core.NewNameTopic, &core.Request{
+		p.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
 			Name:   name,
 			Domain: domain,
 			Tag:    p.SourceType,

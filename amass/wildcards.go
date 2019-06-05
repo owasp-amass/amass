@@ -47,7 +47,7 @@ func init() {
 }
 
 // MatchesWildcard returns true if the request provided resolved to a DNS wildcard.
-func MatchesWildcard(req *core.Request) bool {
+func MatchesWildcard(req *core.DNSRequest) bool {
 	if performWildcardRequest(req) == WildcardTypeNone {
 		return false
 	}
@@ -55,11 +55,11 @@ func MatchesWildcard(req *core.Request) bool {
 }
 
 // GetWildcardType returns the DNS wildcard type for the provided subdomain name.
-func GetWildcardType(req *core.Request) int {
+func GetWildcardType(req *core.DNSRequest) int {
 	return performWildcardRequest(req)
 }
 
-func performWildcardRequest(req *core.Request) int {
+func performWildcardRequest(req *core.DNSRequest) int {
 	base := len(strings.Split(req.Domain, "."))
 	labels := strings.Split(strings.ToLower(req.Name), ".")
 	if len(labels) > base {

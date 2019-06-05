@@ -33,7 +33,7 @@ func NewWayback(config *core.Config, bus *core.EventBus) *Wayback {
 func (w *Wayback) OnStart() error {
 	w.BaseService.OnStart()
 
-	w.Bus().Subscribe(core.NameResolvedTopic, w.SendRequest)
+	w.Bus().Subscribe(core.NameResolvedTopic, w.SendDNSRequest)
 	go w.processRequests()
 	return nil
 }
@@ -43,10 +43,13 @@ func (w *Wayback) processRequests() {
 		select {
 		case <-w.Quit():
 			return
-		case req := <-w.RequestChan():
+		case req := <-w.DNSRequestChan():
 			if w.Config().IsDomainInScope(req.Name) {
 				w.executeQuery(req.Name, req.Domain)
 			}
+		case <-w.AddrRequestChan():
+		case <-w.ASNRequestChan():
+		case <-w.WhoisRequestChan():
 		}
 	}
 }
@@ -63,7 +66,7 @@ func (w *Wayback) executeQuery(sn, domain string) {
 	}
 
 	for _, name := range names {
-		w.Bus().Publish(core.NewNameTopic, &core.Request{
+		w.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
 			Name:   cleanName(name),
 			Domain: domain,
 			Tag:    w.SourceType,

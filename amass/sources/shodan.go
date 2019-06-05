@@ -52,7 +52,7 @@ func (s *Shodan) processRequests() {
 		select {
 		case <-s.Quit():
 			return
-		case req := <-s.RequestChan():
+		case req := <-s.DNSRequestChan():
 			if s.Config().IsDomainInScope(req.Domain) {
 				if time.Now().Sub(last) < s.RateLimit {
 					time.Sleep(s.RateLimit)
@@ -61,6 +61,9 @@ func (s *Shodan) processRequests() {
 				s.executeQuery(req.Domain)
 				last = time.Now()
 			}
+		case <-s.AddrRequestChan():
+		case <-s.ASNRequestChan():
+		case <-s.WhoisRequestChan():
 		}
 	}
 }
@@ -92,7 +95,7 @@ func (s *Shodan) executeQuery(domain string) {
 	for _, match := range m.Matches {
 		for _, host := range match.Hostnames {
 			if re.MatchString(host) {
-				s.Bus().Publish(core.NewNameTopic, &core.Request{
+				s.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
 					Name:   host,
 					Domain: domain,
 					Tag:    s.SourceType,

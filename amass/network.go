@@ -20,17 +20,6 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
-// ASRecord stores all autonomous system information needed by Amass
-type ASRecord struct {
-	ASN            int
-	Prefix         string
-	CC             string
-	Registry       string
-	AllocationDate time.Time
-	Description    string
-	Netblocks      []string
-}
-
 var (
 	// The private network address ranges
 	private192 *net.IPNet
@@ -38,7 +27,7 @@ var (
 	private10  *net.IPNet
 	// Cache for the infrastructure data collected from online sources
 	netDataLock  sync.Mutex
-	netDataCache map[int]*ASRecord
+	netDataCache map[int]*core.ASNRequest
 	// Domains discovered by the SubdomainToDomain method call
 	domainLock  sync.Mutex
 	domainCache map[string]struct{}
@@ -48,7 +37,7 @@ func init() {
 	_, private192, _ = net.ParseCIDR("192.168.0.0/16")
 	_, private172, _ = net.ParseCIDR("172.16.0.0/12")
 	_, private10, _ = net.ParseCIDR("10.0.0.0/8")
-	netDataCache = make(map[int]*ASRecord)
+	netDataCache = make(map[int]*core.ASNRequest)
 	domainCache = make(map[string]struct{})
 }
 
@@ -132,8 +121,8 @@ func checkForPrivateAddress(addr string) (int, *net.IPNet, string, error) {
 	return 0, nil, "", errors.New("The address is not private")
 }
 
-// ASNRequest returns the completed ASRecord for the provided ASN.
-func ASNRequest(asn int) (*ASRecord, error) {
+// ASNRequest returns the completed core.ASNRequest for the provided ASN.
+func ASNRequest(asn int) (*core.ASNRequest, error) {
 	netDataLock.Lock()
 	defer netDataLock.Unlock()
 
@@ -228,7 +217,7 @@ func ipSearch(addr string) (int, *net.IPNet, string) {
 	return a, cidr, desc
 }
 
-func fetchOnlineData(addr string, asn int) (*ASRecord, error) {
+func fetchOnlineData(addr string, asn int) (*core.ASNRequest, error) {
 	if addr == "" && asn == 0 {
 		return nil, fmt.Errorf("fetchOnlineData params are insufficient: addr: %s asn: %d", addr, asn)
 	}
@@ -291,7 +280,7 @@ func originLookup(addr string) (int, string, error) {
 	return asn, strings.TrimSpace(fields[1]), nil
 }
 
-func asnLookup(asn int) (*ASRecord, error) {
+func asnLookup(asn int) (*core.ASNRequest, error) {
 	var err error
 	var answers []core.DNSAnswer
 	name := "AS" + strconv.Itoa(asn) + ".asn.cymru.com"
@@ -365,7 +354,7 @@ func nameToAddress(name string) string {
 	return answers[0].Data
 }
 
-func parseASNInfo(line string) *ASRecord {
+func parseASNInfo(line string) *core.ASNRequest {
 	fields := strings.Split(line, " | ")
 	if len(fields) < 5 {
 		return nil
@@ -381,7 +370,7 @@ func parseASNInfo(line string) *ASRecord {
 		t = time.Now()
 	}
 
-	return &ASRecord{
+	return &core.ASNRequest{
 		ASN:            asn,
 		CC:             strings.TrimSpace(fields[1]),
 		Registry:       strings.ToUpper(strings.TrimSpace(fields[2])),
@@ -390,11 +379,11 @@ func parseASNInfo(line string) *ASRecord {
 	}
 }
 
-// LookupASNsByName returns ASRecord objects for autonomous systems with
+// LookupASNsByName returns core.ASNRequest objects for autonomous systems with
 // descriptions that contain the string provided by the parameter.
-func LookupASNsByName(s string) ([]ASRecord, error) {
+func LookupASNsByName(s string) ([]core.ASNRequest, error) {
 	var asns []int
-	var records []ASRecord
+	var records []core.ASNRequest
 
 	s = strings.ToLower(s)
 	url := "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/asnlist.txt"

@@ -38,10 +38,13 @@ func (r *Riddler) processRequests() {
 		select {
 		case <-r.Quit():
 			return
-		case req := <-r.RequestChan():
+		case req := <-r.DNSRequestChan():
 			if r.Config().IsDomainInScope(req.Domain) {
 				r.executeQuery(req.Domain)
 			}
+		case <-r.AddrRequestChan():
+		case <-r.ASNRequestChan():
+		case <-r.WhoisRequestChan():
 		}
 	}
 }
@@ -61,7 +64,7 @@ func (r *Riddler) executeQuery(domain string) {
 	}
 
 	for _, name := range re.FindAllString(page, -1) {
-		r.Bus().Publish(core.NewNameTopic, &core.Request{
+		r.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
 			Name:   cleanName(name),
 			Domain: domain,
 			Tag:    r.SourceType,

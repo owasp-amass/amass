@@ -65,7 +65,7 @@ func (ds *DNSService) OnStart() error {
 	ds.metrics = core.NewMetricsCollector(ds)
 	ds.metrics.NamesRemainingCallback(ds.namesRemaining)
 
-	ds.Bus().Subscribe(core.ResolveNameTopic, ds.SendRequest)
+	ds.Bus().Subscribe(core.ResolveNameTopic, ds.SendDNSRequest)
 	ds.Bus().Subscribe(core.ReverseSweepTopic, ds.dnsSweep)
 	ds.Bus().Subscribe(core.NewSubdomainTopic, ds.newSubdomain)
 	go ds.processRequests()
@@ -78,7 +78,7 @@ func (ds *DNSService) OnStop() error {
 	return nil
 }
 
-func (ds *DNSService) resolvedName(req *core.Request) {
+func (ds *DNSService) resolvedName(req *core.DNSRequest) {
 	if !TrustedTag(req.Tag) && MatchesWildcard(req) {
 		return
 	}
@@ -92,9 +92,12 @@ func (ds *DNSService) processRequests() {
 			<-ds.ResumeChan()
 		case <-ds.Quit():
 			return
-		case req := <-ds.RequestChan():
+		case req := <-ds.DNSRequestChan():
 			ds.Config().SemMaxDNSQueries.Acquire(1)
-			go ds.performRequest(req)
+			go ds.performDNSRequest(req)
+		case <-ds.AddrRequestChan():
+		case <-ds.ASNRequestChan():
+		case <-ds.WhoisRequestChan():
 		}
 	}
 }
@@ -108,7 +111,7 @@ func (ds *DNSService) namesRemaining() int {
 	ds.totalLock.RLock()
 	defer ds.totalLock.RUnlock()
 
-	rlen := ds.RequestLen()
+	rlen := ds.DNSRequestLen()
 	if rlen > 0 {
 		rlen += core.ServiceRequestChanLength
 	}
@@ -129,7 +132,7 @@ func (ds *DNSService) decTotalNames() {
 	ds.totalNames--
 }
 
-func (ds *DNSService) performRequest(req *core.Request) {
+func (ds *DNSService) performDNSRequest(req *core.DNSRequest) {
 	ds.incTotalNames()
 	defer ds.Config().SemMaxDNSQueries.Release(1)
 	defer ds.decTotalNames()
@@ -194,13 +197,13 @@ func (ds *DNSService) goodDNSRecords(records []core.DNSAnswer) bool {
 	return true
 }
 
-func (ds *DNSService) newSubdomain(req *core.Request, times int) {
+func (ds *DNSService) newSubdomain(req *core.DNSRequest, times int) {
 	if req != nil && times == 1 {
 		go ds.processSubdomain(req)
 	}
 }
 
-func (ds *DNSService) processSubdomain(req *core.Request) {
+func (ds *DNSService) processSubdomain(req *core.DNSRequest) {
 	ds.basicQueries(req.Name, req.Domain)
 	ds.queryServiceNames(req.Name, req.Domain)
 }
@@ -259,7 +262,7 @@ func (ds *DNSService) basicQueries(subdomain, domain string) {
 
 	if len(answers) > 0 {
 		ds.SetActive()
-		ds.resolvedName(&core.Request{
+		ds.resolvedName(&core.DNSRequest{
 			Name:    subdomain,
 			Domain:  domain,
 			Records: answers,
@@ -293,7 +296,7 @@ func (ds *DNSService) attemptZoneWalk(domain, server string) {
 	}
 
 	for _, req := range requests {
-		ds.SendRequest(req)
+		ds.SendDNSRequest(req)
 	}
 }
 
@@ -307,7 +310,7 @@ func (ds *DNSService) queryServiceNames(subdomain, domain string) {
 		}
 		ds.incTotalNames()
 		if a, err := Resolve(srvName, "SRV", PriorityLow); err == nil {
-			ds.resolvedName(&core.Request{
+			ds.resolvedName(&core.DNSRequest{
 				Name:    srvName,
 				Domain:  domain,
 				Records: a,
@@ -363,7 +366,7 @@ func (ds *DNSService) reverseDNSQuery(ip string) {
 	}
 
 	ds.SetActive()
-	ds.resolvedName(&core.Request{
+	ds.resolvedName(&core.DNSRequest{
 		Name:   ptr,
 		Domain: domain,
 		Records: []core.DNSAnswer{{

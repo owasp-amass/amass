@@ -46,10 +46,13 @@ func (d *Dogpile) processRequests() {
 		select {
 		case <-d.Quit():
 			return
-		case req := <-d.RequestChan():
+		case req := <-d.DNSRequestChan():
 			if d.Config().IsDomainInScope(req.Domain) {
 				d.executeQuery(req.Domain)
 			}
+		case <-d.AddrRequestChan():
+		case <-d.ASNRequestChan():
+		case <-d.WhoisRequestChan():
 		}
 	}
 }
@@ -79,7 +82,7 @@ func (d *Dogpile) executeQuery(domain string) {
 			}
 
 			for _, sd := range re.FindAllString(page, -1) {
-				d.Bus().Publish(core.NewNameTopic, &core.Request{
+				d.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
 					Name:   cleanName(sd),
 					Domain: domain,
 					Tag:    d.SourceType,
