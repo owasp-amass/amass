@@ -53,7 +53,7 @@ func (c *Censys) processRequests() {
 		select {
 		case <-c.Quit():
 			return
-		case req := <-c.RequestChan():
+		case req := <-c.DNSRequestChan():
 			if c.Config().IsDomainInScope(req.Domain) {
 				if time.Now().Sub(last) < c.RateLimit {
 					time.Sleep(c.RateLimit)
@@ -66,6 +66,9 @@ func (c *Censys) processRequests() {
 				}
 				last = time.Now()
 			}
+		case <-c.AddrRequestChan():
+		case <-c.ASNRequestChan():
+		case <-c.WhoisRequestChan():
 		}
 	}
 }
@@ -119,7 +122,7 @@ func (c *Censys) apiQuery(domain string) {
 		if len(m.Results) != 0 {
 			for _, result := range m.Results {
 				for _, name := range re.FindAllString(result.Data, -1) {
-					c.Bus().Publish(core.NewNameTopic, &core.Request{
+					c.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
 						Name:   utils.RemoveAsteriskLabel(name),
 						Domain: domain,
 						Tag:    c.SourceType,
@@ -158,7 +161,7 @@ func (c *Censys) executeQuery(domain string) {
 	}
 
 	for _, sd := range re.FindAllString(page, -1) {
-		c.Bus().Publish(core.NewNameTopic, &core.Request{
+		c.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
 			Name:   utils.RemoveAsteriskLabel(cleanName(sd)),
 			Domain: domain,
 			Tag:    c.SourceType,

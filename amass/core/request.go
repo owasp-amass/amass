@@ -35,6 +35,8 @@ const (
 	ReverseSweepTopic = "amass:sweep"
 	ActiveCertTopic   = "amass:activecert"
 	OutputTopic       = "amass:output"
+	NewASNTopic       = "amass:asn"
+	NewWhoisTopic     = "amass:whois"
 )
 
 // DNSAnswer is the type used by Amass to represent a DNS record.
@@ -45,14 +47,39 @@ type DNSAnswer struct {
 	Data string `json:"data"`
 }
 
-// Request contains data obtained throughout Service processing.
-type Request struct {
+// DNSRequest handles data needed throughout Service processing of a DNS name.
+type DNSRequest struct {
 	Name    string
 	Domain  string
-	Address string
 	Records []DNSAnswer
 	Tag     string
 	Source  string
+}
+
+// AddrRequest handles data needed throughout Service processing of a network address.
+type AddrRequest struct {
+	Address string
+	Domain  string
+	Tag     string
+	Source  string
+}
+
+// ASNRequest handles all autonomous system information needed by Amass.
+type ASNRequest struct {
+	ASN            int
+	Prefix         string
+	CC             string
+	Registry       string
+	AllocationDate time.Time
+	Description    string
+	Netblocks      []string
+}
+
+// WhoisRequest handles data needed throughout Service processing of reverse whois.
+type WhoisRequest struct {
+	Name    string
+	Company string
+	Email   string
 }
 
 // Output contains all the output data for an enumerated DNS name.

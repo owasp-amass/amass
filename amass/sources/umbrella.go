@@ -50,7 +50,7 @@ func (u *Umbrella) processRequests() {
 		select {
 		case <-u.Quit():
 			return
-		case req := <-u.RequestChan():
+		case req := <-u.DNSRequestChan():
 			if u.Config().IsDomainInScope(req.Domain) {
 				if time.Now().Sub(last) < u.RateLimit {
 					time.Sleep(u.RateLimit)
@@ -59,6 +59,9 @@ func (u *Umbrella) processRequests() {
 				u.executeQuery(req.Domain)
 				last = time.Now()
 			}
+		case <-u.AddrRequestChan():
+		case <-u.ASNRequestChan():
+		case <-u.WhoisRequestChan():
 		}
 	}
 }
@@ -82,7 +85,7 @@ func (u *Umbrella) executeQuery(domain string) {
 	}
 
 	for _, name := range re.FindAllString(page, -1) {
-		u.Bus().Publish(core.NewNameTopic, &core.Request{
+		u.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
 			Name:   cleanName(name),
 			Domain: domain,
 			Tag:    u.SourceType,
@@ -100,7 +103,7 @@ func (u *Umbrella) executeQuery(domain string) {
 	for _, d := range u.Config().Domains() {
 		re := u.Config().DomainRegex(d)
 		for _, sd := range re.FindAllString(page, -1) {
-			u.Bus().Publish(core.NewNameTopic, &core.Request{
+			u.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
 				Name:   cleanName(sd),
 				Domain: d,
 				Tag:    u.SourceType,
@@ -120,7 +123,7 @@ func (u *Umbrella) executeQuery(domain string) {
 	for _, d := range u.Config().Domains() {
 		re := u.Config().DomainRegex(d)
 		for _, sd := range re.FindAllString(page, -1) {
-			u.Bus().Publish(core.NewNameTopic, &core.Request{
+			u.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
 				Name:   cleanName(sd),
 				Domain: d,
 				Tag:    u.SourceType,

@@ -46,7 +46,7 @@ func (c *CertSpotter) processRequests() {
 		select {
 		case <-c.Quit():
 			return
-		case req := <-c.RequestChan():
+		case req := <-c.DNSRequestChan():
 			if c.Config().IsDomainInScope(req.Domain) {
 				if time.Now().Sub(last) < c.RateLimit {
 					time.Sleep(c.RateLimit)
@@ -55,6 +55,9 @@ func (c *CertSpotter) processRequests() {
 				c.executeQuery(req.Domain)
 				last = time.Now()
 			}
+		case <-c.AddrRequestChan():
+		case <-c.ASNRequestChan():
+		case <-c.WhoisRequestChan():
 		}
 	}
 }
@@ -83,7 +86,7 @@ func (c *CertSpotter) executeQuery(domain string) {
 	for _, result := range m {
 		for _, name := range result.Names {
 			if re.MatchString(name) {
-				c.Bus().Publish(core.NewNameTopic, &core.Request{
+				c.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
 					Name:   utils.RemoveAsteriskLabel(name),
 					Domain: domain,
 					Tag:    c.SourceType,

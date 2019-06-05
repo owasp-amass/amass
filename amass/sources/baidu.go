@@ -46,10 +46,13 @@ func (b *Baidu) processRequests() {
 		select {
 		case <-b.Quit():
 			return
-		case req := <-b.RequestChan():
+		case req := <-b.DNSRequestChan():
 			if b.Config().IsDomainInScope(req.Domain) {
 				b.executeQuery(req.Domain)
 			}
+		case <-b.AddrRequestChan():
+		case <-b.ASNRequestChan():
+		case <-b.WhoisRequestChan():
 		}
 	}
 }
@@ -79,7 +82,7 @@ func (b *Baidu) executeQuery(domain string) {
 			}
 
 			for _, sd := range re.FindAllString(page, -1) {
-				b.Bus().Publish(core.NewNameTopic, &core.Request{
+				b.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
 					Name:   cleanName(sd),
 					Domain: domain,
 					Tag:    b.SourceType,

@@ -53,10 +53,13 @@ func (c *Crtsh) processRequests() {
 		select {
 		case <-c.Quit():
 			return
-		case req := <-c.RequestChan():
+		case req := <-c.DNSRequestChan():
 			if c.Config().IsDomainInScope(req.Domain) {
 				c.executeQuery(req.Domain)
 			}
+		case <-c.AddrRequestChan():
+		case <-c.ASNRequestChan():
+		case <-c.WhoisRequestChan():
 		}
 	}
 }
@@ -91,7 +94,7 @@ func (c *Crtsh) executeQuery(domain string) {
 	}
 
 	for _, name := range names {
-		c.Bus().Publish(core.NewNameTopic, &core.Request{
+		c.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
 			Name:   name,
 			Domain: domain,
 			Tag:    c.SourceType,
@@ -117,7 +120,7 @@ func (c *Crtsh) scrape(domain string) {
 		return
 	}
 	for _, line := range results {
-		c.Bus().Publish(core.NewNameTopic, &core.Request{
+		c.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
 			Name:   line.Name,
 			Domain: domain,
 			Tag:    c.SourceType,

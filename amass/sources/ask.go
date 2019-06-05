@@ -46,10 +46,13 @@ func (a *Ask) processRequests() {
 		select {
 		case <-a.Quit():
 			return
-		case req := <-a.RequestChan():
+		case req := <-a.DNSRequestChan():
 			if a.Config().IsDomainInScope(req.Domain) {
 				a.executeQuery(req.Domain)
 			}
+		case <-a.AddrRequestChan():
+		case <-a.ASNRequestChan():
+		case <-a.WhoisRequestChan():
 		}
 	}
 }
@@ -79,7 +82,7 @@ func (a *Ask) executeQuery(domain string) {
 			}
 
 			for _, sd := range re.FindAllString(page, -1) {
-				a.Bus().Publish(core.NewNameTopic, &core.Request{
+				a.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
 					Name:   cleanName(sd),
 					Domain: domain,
 					Tag:    a.SourceType,

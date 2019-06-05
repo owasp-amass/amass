@@ -33,7 +33,7 @@ func NewLoCArchive(config *core.Config, bus *core.EventBus) *LoCArchive {
 func (l *LoCArchive) OnStart() error {
 	l.BaseService.OnStart()
 
-	l.Bus().Subscribe(core.NameResolvedTopic, l.SendRequest)
+	l.Bus().Subscribe(core.NameResolvedTopic, l.SendDNSRequest)
 	go l.processRequests()
 	return nil
 }
@@ -43,10 +43,13 @@ func (l *LoCArchive) processRequests() {
 		select {
 		case <-l.Quit():
 			return
-		case req := <-l.RequestChan():
+		case req := <-l.DNSRequestChan():
 			if l.Config().IsDomainInScope(req.Name) {
 				l.executeQuery(req.Name, req.Domain)
 			}
+		case <-l.AddrRequestChan():
+		case <-l.ASNRequestChan():
+		case <-l.WhoisRequestChan():
 		}
 	}
 }
@@ -66,7 +69,7 @@ func (l *LoCArchive) executeQuery(sn, domain string) {
 	}
 
 	for _, name := range names {
-		l.Bus().Publish(core.NewNameTopic, &core.Request{
+		l.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
 			Name:   cleanName(name),
 			Domain: domain,
 			Tag:    l.SourceType,

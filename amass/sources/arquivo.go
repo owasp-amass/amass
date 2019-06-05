@@ -33,7 +33,7 @@ func NewArquivo(config *core.Config, bus *core.EventBus) *Arquivo {
 func (a *Arquivo) OnStart() error {
 	a.BaseService.OnStart()
 
-	a.Bus().Subscribe(core.NameResolvedTopic, a.SendRequest)
+	a.Bus().Subscribe(core.NameResolvedTopic, a.SendDNSRequest)
 	go a.processRequests()
 	return nil
 }
@@ -43,10 +43,13 @@ func (a *Arquivo) processRequests() {
 		select {
 		case <-a.Quit():
 			return
-		case req := <-a.RequestChan():
+		case req := <-a.DNSRequestChan():
 			if a.Config().IsDomainInScope(req.Name) {
 				a.executeQuery(req.Name, req.Domain)
 			}
+		case <-a.AddrRequestChan():
+		case <-a.ASNRequestChan():
+		case <-a.WhoisRequestChan():
 		}
 	}
 }
@@ -63,7 +66,7 @@ func (a *Arquivo) executeQuery(sn, domain string) {
 	}
 
 	for _, name := range names {
-		a.Bus().Publish(core.NewNameTopic, &core.Request{
+		a.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
 			Name:   cleanName(name),
 			Domain: domain,
 			Tag:    a.SourceType,

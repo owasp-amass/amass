@@ -46,7 +46,7 @@ type MarkovService struct {
 	ready      bool
 	model      *markovModel
 	subsLock   sync.Mutex
-	subs       map[string]*core.Request
+	subs       map[string]*core.DNSRequest
 	inFilter   *utils.StringFilter
 	outFilter  *utils.StringFilter
 }
@@ -54,7 +54,7 @@ type MarkovService struct {
 // NewMarkovService returns he object initialized, but not yet started.
 func NewMarkovService(config *core.Config, bus *core.EventBus) *MarkovService {
 	m := &MarkovService{
-		subs:      make(map[string]*core.Request),
+		subs:      make(map[string]*core.DNSRequest),
 		inFilter:  utils.NewStringFilter(),
 		outFilter: utils.NewStringFilter(),
 		model: &markovModel{
@@ -72,7 +72,7 @@ func (m *MarkovService) OnStart() error {
 	m.BaseService.OnStart()
 
 	if m.Config().Alterations {
-		m.Bus().Subscribe(core.NameResolvedTopic, m.SendRequest)
+		m.Bus().Subscribe(core.NameResolvedTopic, m.SendDNSRequest)
 		go m.processRequests()
 	}
 	return nil
@@ -111,13 +111,16 @@ func (m *MarkovService) processRequests() {
 			if !m.isGenerating() {
 				m.markReady(true)
 			}
-		case req := <-m.RequestChan():
+		case req := <-m.DNSRequestChan():
 			go m.trainModel(req)
+		case <-m.AddrRequestChan():
+		case <-m.ASNRequestChan():
+		case <-m.WhoisRequestChan():
 		}
 	}
 }
 
-func (m *MarkovService) correctRecordTypes(req *core.Request) bool {
+func (m *MarkovService) correctRecordTypes(req *core.DNSRequest) bool {
 	var ok bool
 	for _, r := range req.Records {
 		t := uint16(r.Type)
@@ -130,7 +133,7 @@ func (m *MarkovService) correctRecordTypes(req *core.Request) bool {
 	return ok
 }
 
-func (m *MarkovService) trainModel(req *core.Request) {
+func (m *MarkovService) trainModel(req *core.DNSRequest) {
 	if !m.correctRecordTypes(req) ||
 		m.inFilter.Duplicate(req.Name) ||
 		!m.Config().IsDomainInScope(req.Name) {
@@ -144,7 +147,7 @@ func (m *MarkovService) trainModel(req *core.Request) {
 	// Add the domain/subdomain to the collection
 	m.subsLock.Lock()
 	if _, ok := m.subs[parts[1]]; !ok {
-		m.subs[parts[1]] = &core.Request{
+		m.subs[parts[1]] = &core.DNSRequest{
 			Name:   parts[1],
 			Domain: req.Domain,
 		}
@@ -176,7 +179,6 @@ func (m *MarkovService) trainModel(req *core.Request) {
 			m.updateModel(string(label[i-m.model.NgramSize:i]), char)
 		}
 	}
-
 	m.SetActive()
 	m.updateTotal()
 }
@@ -296,7 +298,7 @@ func (m *MarkovService) sendGeneratedName(name, domain string) {
 	}
 
 	m.SetActive()
-	m.Bus().Publish(core.NewNameTopic, &core.Request{
+	m.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
 		Name:   name,
 		Domain: domain,
 		Tag:    core.ALT,

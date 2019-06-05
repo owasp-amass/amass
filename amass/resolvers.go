@@ -638,8 +638,8 @@ func setupOptions() *dns.OPT {
 
 // ZoneTransfer attempts a DNS zone transfer using the server identified in the parameters.
 // The returned slice contains all the records discovered from the zone transfer.
-func ZoneTransfer(sub, domain, server string) ([]*core.Request, error) {
-	var results []*core.Request
+func ZoneTransfer(sub, domain, server string) ([]*core.DNSRequest, error) {
+	var results []*core.DNSRequest
 
 	addr, err := nameserverAddr(server)
 	if addr == "" {
@@ -684,8 +684,8 @@ func ZoneTransfer(sub, domain, server string) ([]*core.Request, error) {
 }
 
 // NsecTraversal attempts to retrieve a DNS zone using NSEC-walking.
-func NsecTraversal(domain, server string) ([]*core.Request, error) {
-	var results []*core.Request
+func NsecTraversal(domain, server string) ([]*core.DNSRequest, error) {
+	var results []*core.DNSRequest
 
 	addr, err := nameserverAddr(server)
 	if addr == "" {
@@ -726,7 +726,7 @@ loop:
 				}
 
 				n := strings.ToLower(removeLastDot(rr.Header().Name))
-				results = append(results, &core.Request{
+				results = append(results, &core.DNSRequest{
 					Name:   n,
 					Domain: domain,
 					Tag:    core.DNS,
@@ -751,7 +751,7 @@ loop:
 					continue
 				}
 
-				results = append(results, &core.Request{
+				results = append(results, &core.DNSRequest{
 					Name:   prev,
 					Domain: domain,
 					Tag:    core.DNS,
@@ -842,12 +842,12 @@ func nameserverAddr(server string) (string, error) {
 // Support functions
 //-------------------------------------------------------------------------------------------------
 
-func getXfrRequests(en *dns.Envelope, domain string) []*core.Request {
+func getXfrRequests(en *dns.Envelope, domain string) []*core.DNSRequest {
 	if en.Error != nil {
 		return nil
 	}
 
-	reqs := make(map[string]*core.Request)
+	reqs := make(map[string]*core.DNSRequest)
 	for _, a := range en.RR {
 		var record core.DNSAnswer
 
@@ -903,7 +903,7 @@ func getXfrRequests(en *dns.Envelope, domain string) []*core.Request {
 		if r, found := reqs[record.Name]; found {
 			r.Records = append(r.Records, record)
 		} else {
-			reqs[record.Name] = &core.Request{
+			reqs[record.Name] = &core.DNSRequest{
 				Name:    record.Name,
 				Domain:  domain,
 				Records: []core.DNSAnswer{record},
@@ -913,7 +913,7 @@ func getXfrRequests(en *dns.Envelope, domain string) []*core.Request {
 		}
 	}
 
-	var requests []*core.Request
+	var requests []*core.DNSRequest
 	for _, r := range reqs {
 		requests = append(requests, r)
 	}

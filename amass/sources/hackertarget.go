@@ -38,10 +38,13 @@ func (h *HackerTarget) processRequests() {
 		select {
 		case <-h.Quit():
 			return
-		case req := <-h.RequestChan():
+		case req := <-h.DNSRequestChan():
 			if h.Config().IsDomainInScope(req.Domain) {
 				h.executeQuery(req.Domain)
 			}
+		case <-h.AddrRequestChan():
+		case <-h.ASNRequestChan():
+		case <-h.WhoisRequestChan():
 		}
 	}
 }
@@ -61,7 +64,7 @@ func (h *HackerTarget) executeQuery(domain string) {
 	}
 
 	for _, sd := range re.FindAllString(page, -1) {
-		h.Bus().Publish(core.NewNameTopic, &core.Request{
+		h.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
 			Name:   cleanName(sd),
 			Domain: domain,
 			Tag:    h.SourceType,

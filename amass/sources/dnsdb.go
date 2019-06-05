@@ -55,7 +55,7 @@ func (d *DNSDB) processRequests() {
 		select {
 		case <-d.Quit():
 			return
-		case req := <-d.RequestChan():
+		case req := <-d.DNSRequestChan():
 			if d.Config().IsDomainInScope(req.Domain) {
 				if time.Now().Sub(last) < d.RateLimit {
 					time.Sleep(d.RateLimit)
@@ -64,6 +64,9 @@ func (d *DNSDB) processRequests() {
 				d.executeQuery(req.Domain)
 				last = time.Now()
 			}
+		case <-d.AddrRequestChan():
+		case <-d.ASNRequestChan():
+		case <-d.WhoisRequestChan():
 		}
 	}
 }
@@ -122,7 +125,7 @@ func (d *DNSDB) passiveDNSJSON(page, domain string) {
 	}
 
 	for _, name := range unique {
-		d.Bus().Publish(core.NewNameTopic, &core.Request{
+		d.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
 			Name:   name,
 			Domain: domain,
 			Tag:    core.API,
@@ -147,7 +150,7 @@ func (d *DNSDB) scrape(domain string) {
 	}
 	// Share what has been discovered so far
 	for _, name := range names {
-		d.Bus().Publish(core.NewNameTopic, &core.Request{
+		d.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
 			Name:   name,
 			Domain: domain,
 			Tag:    core.SCRAPE,
@@ -175,7 +178,7 @@ loop:
 			}
 
 			for _, result := range d.pullPageNames(another, domain) {
-				d.Bus().Publish(core.NewNameTopic, &core.Request{
+				d.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
 					Name:   result,
 					Domain: domain,
 					Tag:    core.SCRAPE,

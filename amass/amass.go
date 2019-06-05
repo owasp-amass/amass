@@ -251,7 +251,7 @@ func (e *Enumeration) releaseDomainName() {
 			continue
 		}
 
-		srv.SendRequest(&core.Request{
+		srv.SendDNSRequest(&core.DNSRequest{
 			Name:   domains[e.domainIdx],
 			Domain: domains[e.domainIdx],
 		})
@@ -275,7 +275,7 @@ func (e *Enumeration) submitKnownNames() {
 
 		for _, o := range e.Graph.GetOutput(enum, true) {
 			if e.Config.IsDomainInScope(o.Name) {
-				e.Bus.Publish(core.NewNameTopic, &core.Request{
+				e.Bus.Publish(core.NewNameTopic, &core.DNSRequest{
 					Name:   o.Name,
 					Domain: o.Domain,
 					Tag:    o.Tag,
@@ -289,7 +289,7 @@ func (e *Enumeration) submitKnownNames() {
 func (e *Enumeration) submitProvidedNames() {
 	for _, name := range e.ProvidedNames {
 		if domain := e.Config.WhichDomain(name); domain != "" {
-			e.Bus.Publish(core.NewNameTopic, &core.Request{
+			e.Bus.Publish(core.NewNameTopic, &core.DNSRequest{
 				Name:   name,
 				Domain: domain,
 				Tag:    core.EXTERNAL,

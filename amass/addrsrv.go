@@ -28,7 +28,7 @@ func NewAddressService(config *core.Config, bus *core.EventBus) *AddressService 
 func (as *AddressService) OnStart() error {
 	as.BaseService.OnStart()
 
-	as.Bus().Subscribe(core.NewAddrTopic, as.SendRequest)
+	as.Bus().Subscribe(core.NewAddrTopic, as.SendAddrRequest)
 	go as.processRequests()
 	return nil
 }
@@ -40,13 +40,16 @@ func (as *AddressService) processRequests() {
 			<-as.ResumeChan()
 		case <-as.Quit():
 			return
-		case req := <-as.RequestChan():
+		case req := <-as.AddrRequestChan():
 			go as.performRequest(req)
+		case <-as.DNSRequestChan():
+		case <-as.ASNRequestChan():
+		case <-as.WhoisRequestChan():
 		}
 	}
 }
 
-func (as *AddressService) performRequest(req *core.Request) {
+func (as *AddressService) performRequest(req *core.AddrRequest) {
 	if req == nil || req.Address == "" {
 		return
 	}
