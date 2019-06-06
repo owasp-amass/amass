@@ -10,6 +10,7 @@
 
 [![Packaging status](https://repology.org/badge/vertical-allrepos/amass.svg)](https://repology.org/metapackage/amass/versions)
 [![Get it from the Snap Store](https://snapcraft.io/static/images/badges/en/snap-store-white.svg)](https://snapcraft.io/amass)
+[![Follow on Twitter](https://img.shields.io/twitter/follow/owaspamass.svg?logo=twitter)](https://twitter.com/owaspamass)
 
 ----
 
@@ -24,9 +25,9 @@ The OWASP Amass tool suite obtains subdomain names by scraping data sources, rec
 **Information Gathering Techniques Used:**
 
 * **DNS:** Basic enumeration, Brute forcing (upon request), Reverse DNS sweeping, Subdomain name alterations/permutations, Zone transfers (upon request)
-* **Scraping:** Ask, Baidu, Bing, CommonCrawl, DNSDumpster, DNSTable, Dogpile, Exalead, FindSubdomains, Google, IPv4Info, Netcraft, PTRArchive, Riddler, SiteDossier, Yahoo
+* **Scraping:** Ask, Baidu, Bing, CommonCrawl, DNSDumpster, DNSTable, Dogpile, Exalead, FindSubdomains, Google, IPv4Info, Netcraft, PTRArchive, Riddler, SiteDossier, ViewDNS, Yahoo
 * **Certificates:** Active pulls (upon request), Censys, CertDB, CertSpotter, Crtsh, Entrust
-* **APIs:** AlienVault, BinaryEdge, BufferOver, CIRCL, DNSDB, HackerTarget, PassiveTotal, Robtex, SecurityTrails, Shodan, ThreatCrowd, Twitter, Umbrella, URLScan, VirusTotal
+* **APIs:** AlienVault, BinaryEdge, BufferOver, CIRCL, DNSDB, HackerTarget, PassiveTotal, Robtex, SecurityTrails, ShadowServer, Shodan, TeamCymru, ThreatCrowd, Twitter, Umbrella, URLScan, VirusTotal
 * **Web Archives:** ArchiveIt, ArchiveToday, Arquivo, LoCArchive, OpenUKArchive, UKGovArchive, Wayback
 
 ----
@@ -63,10 +64,11 @@ This project improves thanks to all the people who contribute:
 [![Follow on Twitter](https://img.shields.io/twitter/follow/shane_ditton.svg?logo=twitter)](https://twitter.com/shane_ditton)
 [![Follow on Twitter](https://img.shields.io/twitter/follow/dhauenstein.svg?logo=twitter)](https://twitter.com/dhauenstein)
 [![Follow on Twitter](https://img.shields.io/twitter/follow/THB_STX.svg?logo=twitter)](https://twitter.com/THB_STX)
-[![Follow on Twitter](https://img.shields.io/twitter/follow/thedevdungeon.svg?logo=twitter)](https://twitter.com/thedevdungeon)
+[![Email NanoDano](https://img.shields.io/badge/Email-nanodano%40devdungeon.com-blue.svg)](mailto:nanodano@devdungeon.com)
 
 ## Mentions
 
+* [Subdomain Enumeration: 2019 Workflow](https://0xpatrik.com/subdomain-enumeration-2019/)
 * [Where You’ll Find Us: An Overview of SecurityTrails Integrations](https://securitytrails.com/blog/integrations-overview)
 * [Web tools, or where to start a pentester?](https://habr.com/en/company/dsec/blog/452836/)
 * [Tool for detailed DNS enumeration and creation of network infrastructure maps](https://www.gurudelainformatica.es/2019/05/herramienta-para-enumeracion-detallada.html)
