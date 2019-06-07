@@ -125,11 +125,11 @@ func (dms *DataManagerService) insertDomain(domain string) {
 }
 
 func (dms *DataManagerService) insertCNAME(req *core.DNSRequest, recidx int) {
-	target := removeLastDot(req.Records[recidx].Data)
+	target := core.RemoveLastDot(req.Records[recidx].Data)
 	if target == "" {
 		return
 	}
-	domain := strings.ToLower(SubdomainToDomain(target))
+	domain := strings.ToLower(core.SubdomainToDomain(target))
 	if domain == "" {
 		return
 	}
@@ -221,7 +221,7 @@ func (dms *DataManagerService) insertAAAA(req *core.DNSRequest, recidx int) {
 }
 
 func (dms *DataManagerService) insertPTR(req *core.DNSRequest, recidx int) {
-	target := removeLastDot(req.Records[recidx].Data)
+	target := core.RemoveLastDot(req.Records[recidx].Data)
 	if target == "" {
 		return
 	}
@@ -254,8 +254,8 @@ func (dms *DataManagerService) insertPTR(req *core.DNSRequest, recidx int) {
 }
 
 func (dms *DataManagerService) insertSRV(req *core.DNSRequest, recidx int) {
-	service := removeLastDot(req.Records[recidx].Name)
-	target := removeLastDot(req.Records[recidx].Data)
+	service := core.RemoveLastDot(req.Records[recidx].Name)
+	target := core.RemoveLastDot(req.Records[recidx].Data)
 	if target == "" || service == "" {
 		return
 	}
@@ -293,7 +293,7 @@ func (dms *DataManagerService) insertNS(req *core.DNSRequest, recidx int) {
 	if target == "" {
 		return
 	}
-	domain := strings.ToLower(SubdomainToDomain(target))
+	domain := strings.ToLower(core.SubdomainToDomain(target))
 	if domain == "" {
 		return
 	}
@@ -325,11 +325,11 @@ func (dms *DataManagerService) insertNS(req *core.DNSRequest, recidx int) {
 }
 
 func (dms *DataManagerService) insertMX(req *core.DNSRequest, recidx int) {
-	target := removeLastDot(req.Records[recidx].Data)
+	target := core.RemoveLastDot(req.Records[recidx].Data)
 	if target == "" {
 		return
 	}
-	domain := strings.ToLower(SubdomainToDomain(target))
+	domain := strings.ToLower(core.SubdomainToDomain(target))
 	if domain == "" {
 		return
 	}
@@ -404,9 +404,9 @@ func (dms *DataManagerService) findNamesAndAddresses(data, domain string) {
 }
 
 func (dms *DataManagerService) insertInfrastructure(addr string) {
-	asn, cidr, desc, err := IPRequest(addr)
+	asn, cidr, desc, err := IPRequest(addr, dms.Bus())
 	if err != nil {
-		dms.Config().Log.Printf("%v", err)
+		dms.Config().Log.Printf("%s: %v", dms.String(), err)
 		return
 	}
 
@@ -421,15 +421,7 @@ func (dms *DataManagerService) insertInfrastructure(addr string) {
 			Description: desc,
 		})
 		if err != nil {
-			dms.Config().Log.Printf("%s failed to insert infrastructure data: %v", handler, err)
+			dms.Config().Log.Printf("%s: %s failed to insert infrastructure data: %v", dms.String(), handler, err)
 		}
 	}
-}
-
-func removeLastDot(name string) string {
-	sz := len(name)
-	if sz > 0 && name[sz-1] == '.' {
-		return name[:sz-1]
-	}
-	return name
 }

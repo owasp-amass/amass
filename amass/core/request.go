@@ -35,7 +35,10 @@ const (
 	ReverseSweepTopic = "amass:sweep"
 	ActiveCertTopic   = "amass:activecert"
 	OutputTopic       = "amass:output"
+	IPToASNTopic       = "amass:iptoasn"
 	NewASNTopic       = "amass:asn"
+	IPRequestTopic = "amass:iprequest"
+	IPInfoTopic = "amass:ipinfo"
 	NewWhoisTopic     = "amass:whois"
 )
 
@@ -66,6 +69,7 @@ type AddrRequest struct {
 
 // ASNRequest handles all autonomous system information needed by Amass.
 type ASNRequest struct {
+	Address string
 	ASN            int
 	Prefix         string
 	CC             string
@@ -73,13 +77,17 @@ type ASNRequest struct {
 	AllocationDate time.Time
 	Description    string
 	Netblocks      []string
+	Tag     string
+	Source  string
 }
 
 // WhoisRequest handles data needed throughout Service processing of reverse whois.
 type WhoisRequest struct {
-	Name    string
+	Domain    string
 	Company string
 	Email   string
+	Tag     string
+	Source  string
 }
 
 // Output contains all the output data for an enumerated DNS name.
@@ -127,7 +135,7 @@ func NewEventBus() *EventBus {
 	return eb
 }
 
-// Subscribe registers callback to be executed for all requests on the channel labeled name.
+// Subscribe registers callback to be executed for all requests on the channel.
 func (eb *EventBus) Subscribe(topic string, fn interface{}) {
 	if topic == "" || reflect.TypeOf(fn).Kind() != reflect.Func {
 		return
@@ -138,6 +146,26 @@ func (eb *EventBus) Subscribe(topic string, fn interface{}) {
 	eb.Lock()
 	eb.topics[topic] = append(eb.topics[topic], callback)
 	eb.Unlock()
+}
+
+// Unsubscribe deregisters the callback from the channel.
+func (eb *EventBus) Unsubscribe(topic string, fn interface{}) {
+	if topic == "" || reflect.TypeOf(fn).Kind() != reflect.Func {
+		return
+	}
+
+	callback := reflect.ValueOf(fn)
+
+	eb.Lock()
+	defer eb.Unlock()
+
+	var channels []reflect.Value
+	for _, c := range eb.topics[topic] {
+		if c != callback {
+			channels = append(channels, c)
+		}
+	}
+	eb.topics[topic] = channels
 }
 
 // Publish sends req on the channel labeled with name.

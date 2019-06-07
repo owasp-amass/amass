@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass"
+	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
 	"github.com/fatih/color"
 )
@@ -82,7 +83,7 @@ func runIntelCommand(clArgs []string) {
 		records, err := amass.LookupASNsByName(args.OrganizationName)
 		if err == nil {
 			for _, a := range records {
-				fmt.Printf("%d, %s, %s, %s\n", a.ASN, a.CC, a.Registry, a.Description)
+				fmt.Printf("%d, %s\n", a.ASN, a.Description)
 			}
 		} else {
 			fmt.Printf("%v\n", err)
@@ -143,8 +144,8 @@ func performAllReverseDNS(ips []net.IP) {
 		started <- struct{}{}
 
 		go func(ip net.IP) {
-			if _, answer, err := amass.Reverse(ip.String()); err == nil {
-				if d := strings.TrimSpace(amass.SubdomainToDomain(answer)); d != "" {
+			if _, answer, err := core.ReverseDNS(ip.String()); err == nil {
+				if d := strings.TrimSpace(core.SubdomainToDomain(answer)); d != "" {
 					results <- d
 				}
 			}
@@ -184,7 +185,7 @@ func allIPsInScope(addrs utils.ParseIPs, cidrs utils.ParseCIDRs, asns utils.Pars
 	for _, cidr := range cidrs {
 		ips = append(ips, utils.NetHosts(cidr)...)
 	}
-
+/*
 	for _, asn := range asns {
 		record, err := amass.ASNRequest(asn)
 		if err != nil {
@@ -199,6 +200,6 @@ func allIPsInScope(addrs utils.ParseIPs, cidrs utils.ParseCIDRs, asns utils.Pars
 
 			ips = append(ips, utils.NetHosts(ipnet)...)
 		}
-	}
+	}*/
 	return ips
 }

@@ -158,7 +158,7 @@ func reqFromNames(subdomains []string) []*core.DNSRequest {
 	for _, name := range subdomains {
 		requests = append(requests, &core.DNSRequest{
 			Name:   name,
-			Domain: SubdomainToDomain(name),
+			Domain: core.SubdomainToDomain(name),
 			Tag:    core.CERT,
 		})
 	}

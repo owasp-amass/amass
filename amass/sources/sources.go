@@ -23,26 +23,6 @@ var (
 	nameStripRE = regexp.MustCompile("^((20)|(25)|(2b)|(2f)|(3d)|(3a)|(40))+")
 )
 
-// Clean up the names scraped from the web.
-func cleanName(name string) string {
-	name = strings.TrimSpace(strings.ToLower(name))
-
-	for {
-		if i := nameStripRE.FindStringIndex(name); i != nil {
-			name = name[i[1]:]
-		} else {
-			break
-		}
-	}
-
-	name = strings.Trim(name, "-")
-	// Remove dots at the beginning of names
-	if len(name) > 1 && name[0] == '.' {
-		name = name[1:]
-	}
-	return name
-}
-
 // GetAllSources returns a slice of all data source services, initialized and ready.
 func GetAllSources(config *core.Config, bus *core.EventBus) []core.Service {
 	return []core.Service{
@@ -80,16 +60,39 @@ func GetAllSources(config *core.Config, bus *core.EventBus) []core.Service {
 		NewRobtex(config, bus),
 		NewSiteDossier(config, bus),
 		NewSecurityTrails(config, bus),
+		NewShadowServer(config, bus),
 		NewShodan(config, bus),
+		NewTeamCymru(config, bus),
 		NewThreatCrowd(config, bus),
 		NewTwitter(config, bus),
 		NewUKGovArchive(config, bus),
 		NewUmbrella(config, bus),
 		NewURLScan(config, bus),
+		NewViewDNS(config, bus),
 		NewVirusTotal(config, bus),
 		NewWayback(config, bus),
 		NewYahoo(config, bus),
 	}
+}
+
+// Clean up the names scraped from the web.
+func cleanName(name string) string {
+	name = strings.TrimSpace(strings.ToLower(name))
+
+	for {
+		if i := nameStripRE.FindStringIndex(name); i != nil {
+			name = name[i[1]:]
+		} else {
+			break
+		}
+	}
+
+	name = strings.Trim(name, "-")
+	// Remove dots at the beginning of names
+	if len(name) > 1 && name[0] == '.' {
+		name = name[1:]
+	}
+	return name
 }
 
 //-------------------------------------------------------------------------------------------------

@@ -150,14 +150,14 @@ func wildcardTest(sub string) ([]core.DNSAnswer, error) {
 
 	var answers []core.DNSAnswer
 	for _, t := range wildcardQueryTypes {
-		if a, err := Resolve(name, t, PriorityCritical); err == nil {
+		if a, err := core.Resolve(name, t, core.PriorityCritical); err == nil {
 			if a != nil && len(a) > 0 {
 				answers = append(answers, a...)
 			}
-		} else if (err.(*resolveError)).Rcode == 100 ||
-			(err.(*resolveError)).Rcode == dns.RcodeRefused ||
-			(err.(*resolveError)).Rcode == dns.RcodeServerFailure ||
-			(err.(*resolveError)).Rcode == dns.RcodeNotImplemented {
+		} else if (err.(*core.ResolveError)).Rcode == 100 ||
+			(err.(*core.ResolveError)).Rcode == dns.RcodeRefused ||
+			(err.(*core.ResolveError)).Rcode == dns.RcodeServerFailure ||
+			(err.(*core.ResolveError)).Rcode == dns.RcodeNotImplemented {
 			return nil, errors.New("Failed to get a DNS server response during wildcard testing")
 		}
 	}

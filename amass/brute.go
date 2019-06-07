@@ -179,7 +179,7 @@ func (bfs *BruteForceService) bruteForceResolution(word, sub, domain string) {
 	name := word + "." + sub
 	var answers []core.DNSAnswer
 	for _, t := range BruteForceQueryTypes {
-		if a, err := Resolve(name, t, PriorityLow); err == nil {
+		if a, err := core.Resolve(name, t, core.PriorityLow); err == nil {
 			answers = append(answers, a...)
 			// Do not continue if a CNAME was discovered
 			if t == "CNAME" {

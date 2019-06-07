@@ -14,8 +14,8 @@ import (
 )
 
 var (
-	alterationTestRequests = []*core.Request{
-		&core.Request{
+	alterationTestRequests = []*core.DNSRequest{
+		&core.DNSRequest{
 			Name:    "test1.owasp.org",
 			Domain:  "owasp.org",
 			Records: []core.DNSAnswer{core.DNSAnswer{Type: int(dns.TypeA)}},
@@ -40,21 +40,21 @@ func setupConfig(domain string) *core.Config {
 	return config
 }
 
-func setupEventBus(subscription string) (*core.EventBus, chan *core.Request) {
-	out := make(chan *core.Request)
+func setupEventBus(subscription string) (*core.EventBus, chan *core.DNSRequest) {
+	out := make(chan *core.DNSRequest)
 	bus := core.NewEventBus()
-	bus.Subscribe(subscription, func(req *core.Request) {
+	bus.Subscribe(subscription, func(req *core.DNSRequest) {
 		out <- req
 	})
 
 	return bus, out
 }
 
-func testService(srv core.Service, out chan *core.Request) int {
+func testService(srv core.Service, out chan *core.DNSRequest) int {
 	srv.Start()
 	defer srv.Stop()
 
-	srv.SendRequest(alterationTestRequests[0])
+	srv.SendDNSRequest(alterationTestRequests[0])
 
 	count := 0
 	doneTimer := time.After(time.Second * 3)
@@ -92,13 +92,13 @@ func TestAlterations(t *testing.T) {
 
 func TestCorrectRecordTypes(t *testing.T) {
 	var (
-		alterationTestRequests = []*core.Request{
-			&core.Request{
+		alterationTestRequests = []*core.DNSRequest{
+			&core.DNSRequest{
 				Name:    "test1.owasp.org",
 				Domain:  "owasp.org",
 				Records: []core.DNSAnswer{core.DNSAnswer{Type: int(dns.TypeA)}},
 			},
-			&core.Request{
+			&core.DNSRequest{
 				Name:    "test.twitter.com",
 				Domain:  "twitter.com",
 				Records: []core.DNSAnswer{core.DNSAnswer{Type: int(dns.TypeA)}},
