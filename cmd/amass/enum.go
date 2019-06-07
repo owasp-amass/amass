@@ -179,7 +179,7 @@ func runEnumCommand(clArgs []string) {
 	}
 
 	if len(args.Resolvers) > 0 {
-		amass.SetCustomResolvers(args.Resolvers)
+		core.SetCustomResolvers(args.Resolvers)
 	}
 
 	// Seed the default pseudo-random number generator

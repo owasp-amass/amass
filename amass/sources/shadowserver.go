@@ -60,17 +60,24 @@ func (s *ShadowServer) OnStart() error {
 
 func (s *ShadowServer) processRequests() {
 	last := time.Now().Truncate(10 * time.Minute)
-
+loop:
 	for {
 		select {
 		case <-s.Quit():
 			return
 		case req := <-s.ASNRequestChan():
+			if req.Address == "" && req.ASN == 0 {
+				continue loop
+			}
 			if time.Now().Sub(last) < s.RateLimit {
 				time.Sleep(s.RateLimit)
 			}
 			last = time.Now()
-			s.executeQuery(req.Address)
+			if req.Address != "" {
+				s.executeASNAddrQuery(req.Address)
+			} else {
+				s.executeASNQuery(req.ASN)
+			}
 			last = time.Now()
 		case <-s.DNSRequestChan():
 		case <-s.AddrRequestChan():
@@ -79,11 +86,24 @@ func (s *ShadowServer) processRequests() {
 	}
 }
 
-func (s *ShadowServer) executeQuery(addr string) {
-	if addr == "" {
+func (s *ShadowServer) executeASNQuery(asn int) {
+	s.SetActive()
+	blocks := s.netblocks(asn)
+	if len(blocks) == 0 {
 		return
 	}
 
+	time.Sleep(s.RateLimit)
+	req := s.origin(strings.Trim(blocks[0], "/"))
+	if req == nil {
+		return
+	}
+
+	req.Netblocks = utils.UniqueAppend(req.Netblocks, blocks...)
+	s.Bus().Publish(core.NewASNTopic, req)
+}
+
+func (s *ShadowServer) executeASNAddrQuery(addr string) {
 	s.SetActive()
 	req := s.origin(addr)
 	if req == nil {
@@ -123,7 +143,6 @@ func (s *ShadowServer) origin(addr string) *core.ASNRequest {
 		ASN:            asn,
 		Prefix:         strings.TrimSpace(fields[1]),
 		CC:             strings.TrimSpace(fields[3]),
-		AllocationDate: time.Now(),
 		Description:    strings.TrimSpace(fields[2]) + " - " + strings.TrimSpace(fields[4]),
 		Netblocks:      []string{strings.TrimSpace(fields[1])},
 		Tag:            s.SourceType,

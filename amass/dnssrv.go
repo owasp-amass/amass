@@ -150,7 +150,7 @@ func (ds *DNSService) performDNSRequest(req *core.DNSRequest) {
 	ds.SetActive()
 	var answers []core.DNSAnswer
 	for _, t := range InitialQueryTypes {
-		if a, err := Resolve(req.Name, t, PriorityLow); err == nil {
+		if a, err := core.Resolve(req.Name, t, core.PriorityLow); err == nil {
 			if ds.goodDNSRecords(a) {
 				answers = append(answers, a...)
 			}
@@ -215,7 +215,7 @@ func (ds *DNSService) basicQueries(subdomain, domain string) {
 	ds.SetActive()
 	var answers []core.DNSAnswer
 	// Obtain the DNS answers for the NS records related to the domain
-	if ans, err := Resolve(subdomain, "NS", PriorityHigh); err == nil {
+	if ans, err := core.Resolve(subdomain, "NS", core.PriorityHigh); err == nil {
 		for _, a := range ans {
 			pieces := strings.Split(a.Data, ",")
 			a.Data = pieces[len(pieces)-1]
@@ -233,7 +233,7 @@ func (ds *DNSService) basicQueries(subdomain, domain string) {
 
 	ds.SetActive()
 	// Obtain the DNS answers for the MX records related to the domain
-	if ans, err := Resolve(subdomain, "MX", PriorityHigh); err == nil {
+	if ans, err := core.Resolve(subdomain, "MX", core.PriorityHigh); err == nil {
 		for _, a := range ans {
 			answers = append(answers, a)
 		}
@@ -244,7 +244,7 @@ func (ds *DNSService) basicQueries(subdomain, domain string) {
 
 	ds.SetActive()
 	// Obtain the DNS answers for the SOA records related to the domain
-	if ans, err := Resolve(subdomain, "SOA", PriorityHigh); err == nil {
+	if ans, err := core.Resolve(subdomain, "SOA", core.PriorityHigh); err == nil {
 		answers = append(answers, ans...)
 	} else {
 		ds.Config().Log.Printf("DNS: SOA record query error: %s: %v", subdomain, err)
@@ -253,7 +253,7 @@ func (ds *DNSService) basicQueries(subdomain, domain string) {
 
 	ds.SetActive()
 	// Obtain the DNS answers for the SPF records related to the domain
-	if ans, err := Resolve(subdomain, "SPF", PriorityHigh); err == nil {
+	if ans, err := core.Resolve(subdomain, "SPF", core.PriorityHigh); err == nil {
 		answers = append(answers, ans...)
 	} else {
 		ds.Config().Log.Printf("DNS: SPF record query error: %s: %v", subdomain, err)
@@ -277,7 +277,7 @@ func (ds *DNSService) attemptZoneXFR(sub, domain, server string) {
 		return
 	}
 
-	requests, err := ZoneTransfer(sub, domain, server)
+	requests, err := core.ZoneTransfer(sub, domain, server)
 	if err != nil {
 		ds.Config().Log.Printf("DNS: Zone XFR failed: %s: %v", server, err)
 		return
@@ -289,7 +289,7 @@ func (ds *DNSService) attemptZoneXFR(sub, domain, server string) {
 }
 
 func (ds *DNSService) attemptZoneWalk(domain, server string) {
-	requests, err := NsecTraversal(domain, server)
+	requests, err := core.NsecTraversal(domain, server)
 	if err != nil {
 		ds.Config().Log.Printf("DNS: Zone Walk failed: %s: %v", server, err)
 		return
@@ -309,7 +309,7 @@ func (ds *DNSService) queryServiceNames(subdomain, domain string) {
 			continue
 		}
 		ds.incTotalNames()
-		if a, err := Resolve(srvName, "SRV", PriorityLow); err == nil {
+		if a, err := core.Resolve(srvName, "SRV", core.PriorityLow); err == nil {
 			ds.resolvedName(&core.DNSRequest{
 				Name:    srvName,
 				Domain:  domain,
@@ -354,7 +354,7 @@ func (ds *DNSService) reverseDNSQuery(ip string) {
 	defer ds.Config().SemMaxDNSQueries.Release(1)
 
 	ds.SetActive()
-	ptr, answer, err := Reverse(ip)
+	ptr, answer, err := core.ReverseDNS(ip)
 	ds.metrics.QueryTime(time.Now())
 	if err != nil {
 		return
