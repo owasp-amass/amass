@@ -85,6 +85,10 @@ func (h *HackerTarget) getDNSURL(domain string) string {
 }
 
 func (h *HackerTarget) executeASNQuery(addr string) {
+	if addr == "" {
+		return
+	}
+
 	url := h.getASNURL(addr)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {

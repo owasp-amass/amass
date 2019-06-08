@@ -52,15 +52,32 @@ Each subcommand has its own arguments that shown in the following sections.
 
 The intel subcommand can help you discover additional root domain names associated with the organization you are investigating. The data source sections of the configuration file are utilized by this subcommand in order to obtain passive intelligence, such as reverse whois information.
 
-**Caution:** If you use the intel subcommand, it will attempt to reach out to every IP address within the identified infrastructure and obtain additional domain names from reverse DNS requests and TLS certificates. This is "loud" and can reveal your reconnaissance activities to the organization being investigated, as well as expand the scope of your enumeration.
-
 | Flag | Description | Example |
 |------|-------------|---------|
+| -active | Enable active recon methods | amass enum -active -d example.com net -p 80,443,8080 |
 | -addr | IPs and ranges (192.168.1.1-254) separated by commas | amass intel -addr 192.168.2.1-64 |
 | -asn | ASNs separated by commas (can be used multiple times) | amass intel -asn 13374,14618 |
 | -cidr | CIDRs separated by commas (can be used multiple times) | amass intel -cidr 104.154.0.0/15 |
+| -config | Path to the INI configuration file | amass enum -config config.ini |
+| -d | Domain names separated by commas (can be used multiple times) | amass enum -d example.com |
+| -demo | Censor output to make it suitable for demonstrations | amass enum -demo -d example.com |
+| -df | Path to a file providing root domain names | amass enum -df domains.txt |
+| -ef | Path to a file providing data sources to exclude | amass enum -ef exclude.txt -d example.com |
+| -exclude | Data source names separated by commas to be excluded | amass enum -exclude crtsh -d example.com |
+| -if | Path to a file providing data sources to include | amass enum -if include.txt -d example.com |
+| -include | Data source names separated by commas to be included | amass enum -include crtsh -d example.com |
+| -ip | Show the IP addresses for discovered names | amass enum -ip -d example.com |
+| -ipv4 | Show the IPv4 addresses for discovered names | amass enum -ipv4 -d example.com |
+| -ipv6 | Show the IPv6 addresses for discovered names | amass enum -ipv6 -d example.com |
+| -list | Print the names of all available data sources | amass enum -list |
+| -log | Path to the log file where errors will be written | amass enum -log amass.log -d example.com |
+| -max-dns-queries | Maximum number of concurrent DNS queries | amass enum -max-dns-queries 200 -d example.com |
+| -o | Path to the text output file | amass enum -o out.txt -d example.com |
 | -org | Search string provided against AS description information | amass intel -org Facebook |
 | -p | Ports separated by commas (default: 443) | amass intel -cidr 104.154.0.0/15 -p 443,8080 |
+| -r | IP addresses of preferred DNS resolvers (can be used multiple times) | amass enum -r 8.8.8.8,1.1.1.1 -d example.com |
+| -rf | Path to a file providing preferred DNS resolvers | amass enum -rf data/resolvers.txt -d example.com |
+| -src | Print data sources for the discovered names | amass enum -src -d example.com |
 | -whois | All discovered domains are run through reverse whois | amass intel -whois -asn 13374 |
 
 ### The 'enum' Subcommand
@@ -98,6 +115,7 @@ This subcommand will perform DNS enumeration and network mapping while populatin
 | -o | Path to the text output file | amass enum -o out.txt -d example.com |
 | -oA | Path prefix used for naming all output files | amass enum -oA amass_scan -d example.com |
 | -passive | A purely passive mode of execution | amass enum --passive -d example.com |
+| -p | Ports separated by commas (default: 443) | amass intel -cidr 104.154.0.0/15 -p 443,8080 |
 | -r | IP addresses of preferred DNS resolvers (can be used multiple times) | amass enum -r 8.8.8.8,1.1.1.1 -d example.com |
 | -rf | Path to a file providing preferred DNS resolvers | amass enum -rf data/resolvers.txt -d example.com |
 | -src | Print data sources for the discovered names | amass enum -src -d example.com |
@@ -175,10 +193,18 @@ You will need a config file to use your API keys with Amass. See the [Example Co
 | Option | Description |
 |--------|-------------|
 | mode | Determines which mode the enumeration is performed in: default, passive or active |
-| port | Specifies a port to be used when actively pulling TLS certificates |
 | output_directory | The directory that stores the graph database and other output files |
 | maximum_dns_queries | The maximum number of concurrent DNS queries that can be performed |
 | include_unresolvable | When set to true, causes DNS names that did not resolve to be printed |
+
+### The network_settings Section
+
+| Option | Description |
+|--------|-------------|
+| address | IP address or range (e.g. a.b.c.10-245) that is in scope |
+| asn | ASN that is in scope |
+| cidr | CIDR (e.g. 192.168.1.0/24) that is in scope |
+| port | Specifies a port to be used when actively pulling TLS certificates |
 
 ### The domains Section
 

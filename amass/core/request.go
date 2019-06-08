@@ -35,10 +35,10 @@ const (
 	ReverseSweepTopic = "amass:sweep"
 	ActiveCertTopic   = "amass:activecert"
 	OutputTopic       = "amass:output"
-	IPToASNTopic       = "amass:iptoasn"
+	IPToASNTopic      = "amass:iptoasn"
 	NewASNTopic       = "amass:asn"
-	IPRequestTopic = "amass:iprequest"
-	IPInfoTopic = "amass:ipinfo"
+	IPRequestTopic    = "amass:iprequest"
+	IPInfoTopic       = "amass:ipinfo"
 	NewWhoisTopic     = "amass:whois"
 )
 
@@ -69,7 +69,7 @@ type AddrRequest struct {
 
 // ASNRequest handles all autonomous system information needed by Amass.
 type ASNRequest struct {
-	Address string
+	Address        string
 	ASN            int
 	Prefix         string
 	CC             string
@@ -77,13 +77,13 @@ type ASNRequest struct {
 	AllocationDate time.Time
 	Description    string
 	Netblocks      []string
-	Tag     string
-	Source  string
+	Tag            string
+	Source         string
 }
 
 // WhoisRequest handles data needed throughout Service processing of reverse whois.
 type WhoisRequest struct {
-	Domain    string
+	Domain  string
 	Company string
 	Email   string
 	Tag     string

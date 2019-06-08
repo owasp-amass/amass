@@ -35,7 +35,7 @@ type ShadowServer struct {
 func NewShadowServer(config *core.Config, bus *core.EventBus) *ShadowServer {
 	s := &ShadowServer{
 		SourceType: core.API,
-		RateLimit:  2 * time.Second,
+		RateLimit:  time.Second,
 	}
 
 	s.BaseService = *core.NewBaseService(s, "ShadowServer", config, bus)
@@ -140,13 +140,13 @@ func (s *ShadowServer) origin(addr string) *core.ASNRequest {
 	}
 
 	return &core.ASNRequest{
-		ASN:            asn,
-		Prefix:         strings.TrimSpace(fields[1]),
-		CC:             strings.TrimSpace(fields[3]),
-		Description:    strings.TrimSpace(fields[2]) + " - " + strings.TrimSpace(fields[4]),
-		Netblocks:      []string{strings.TrimSpace(fields[1])},
-		Tag:            s.SourceType,
-		Source:         s.String(),
+		ASN:         asn,
+		Prefix:      strings.TrimSpace(fields[1]),
+		CC:          strings.TrimSpace(fields[3]),
+		Description: strings.TrimSpace(fields[2]) + " - " + strings.TrimSpace(fields[4]),
+		Netblocks:   []string{strings.TrimSpace(fields[1])},
+		Tag:         s.SourceType,
+		Source:      s.String(),
 	}
 }
 

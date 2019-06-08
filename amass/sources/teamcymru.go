@@ -25,7 +25,7 @@ type TeamCymru struct {
 func NewTeamCymru(config *core.Config, bus *core.EventBus) *TeamCymru {
 	t := &TeamCymru{
 		SourceType: core.API,
-		RateLimit:  2 * time.Second,
+		RateLimit:  100 * time.Millisecond,
 	}
 
 	t.BaseService = *core.NewBaseService(t, "TeamCymru", config, bus)

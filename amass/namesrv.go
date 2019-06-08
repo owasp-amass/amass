@@ -136,14 +136,16 @@ func (ns *NameService) checkSubdomain(req *core.DNSRequest) {
 	}
 
 	sub := strings.Join(labels[1:], ".")
-	// CNAMEs are not a proper subdomain
-	cname := ns.graph.IsCNAMENode(&handlers.DataOptsParams{
-		UUID:   ns.Config().UUID.String(),
-		Name:   sub,
-		Domain: req.Domain,
-	})
-	if cname {
-		return
+	if ns.graph != nil {
+		// CNAMEs are not a proper subdomain
+		cname := ns.graph.IsCNAMENode(&handlers.DataOptsParams{
+			UUID:   ns.Config().UUID.String(),
+			Name:   sub,
+			Domain: req.Domain,
+		})
+		if cname {
+			return
+		}
 	}
 
 	ns.Bus().Publish(core.NewSubdomainTopic, &core.DNSRequest{
