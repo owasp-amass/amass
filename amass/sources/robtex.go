@@ -6,10 +6,10 @@ package sources
 import (
 	"bufio"
 	"encoding/json"
+	"net"
+	"strconv"
 	"strings"
 	"time"
-	"strconv"
-	"net"
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
@@ -33,7 +33,7 @@ type robtexJSON struct {
 func NewRobtex(config *core.Config, bus *core.EventBus) *Robtex {
 	r := &Robtex{
 		SourceType: core.API,
-		RateLimit: 2 * time.Second,
+		RateLimit:  time.Second,
 	}
 
 	r.BaseService = *core.NewBaseService(r, "Robtex", config, bus)
@@ -44,6 +44,7 @@ func NewRobtex(config *core.Config, bus *core.EventBus) *Robtex {
 func (r *Robtex) OnStart() error {
 	r.BaseService.OnStart()
 
+	r.Bus().Subscribe(core.IPToASNTopic, r.SendASNRequest)
 	go r.processRequests()
 	return nil
 }
@@ -177,8 +178,15 @@ func (r *Robtex) executeASNQuery(asn int) {
 		return
 	}
 
+	_, ipnet, err := net.ParseCIDR(blocks[0])
+	if err != nil {
+		return
+	}
+
 	time.Sleep(r.RateLimit)
-	req := r.origin(strings.Trim(blocks[0], "/"))
+	r.SetActive()
+
+	req := r.origin(ipnet.IP.String())
 	if req == nil {
 		return
 	}
@@ -213,11 +221,11 @@ func (r *Robtex) origin(addr string) *core.ASNRequest {
 	}
 	// Extract the network information
 	var ipinfo struct {
-		Status  string  `json:"status"`
-		ASN int `json:"as"`
-		Prefix string `json:"bgproute"`
-		ASName string `json:"asname"`
-		ASDesc string `json:"asdesc"`
+		Status    string `json:"status"`
+		ASN       int    `json:"as"`
+		Prefix    string `json:"bgproute"`
+		ASName    string `json:"asname"`
+		ASDesc    string `json:"asdesc"`
 		WhoisDesc string `json:"whoisdesc"`
 		ActiveDNS []struct {
 			Name string `json:"o"`
@@ -294,12 +302,12 @@ func (r *Robtex) origin(addr string) *core.ASNRequest {
 	}
 
 	return &core.ASNRequest{
-		ASN:            ipinfo.ASN,
-		Prefix:         ipinfo.Prefix,
-		Description:    desc,
-		Netblocks:      []string{ipinfo.Prefix},
-		Tag:            r.SourceType,
-		Source:         r.String(),
+		ASN:         ipinfo.ASN,
+		Prefix:      ipinfo.Prefix,
+		Description: desc,
+		Netblocks:   []string{ipinfo.Prefix},
+		Tag:         r.SourceType,
+		Source:      r.String(),
 	}
 }
 
@@ -315,7 +323,7 @@ func (r *Robtex) netblocks(asn int) []string {
 	}
 	// Extract the network information
 	var n struct {
-		Status  string  `json:"status"`
+		Status   string `json:"status"`
 		Networks []struct {
 			CIDR string `json:"n"`
 		} `json:"nets"`

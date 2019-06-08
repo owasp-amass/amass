@@ -82,7 +82,48 @@ func (ds *DNSService) resolvedName(req *core.DNSRequest) {
 	if !TrustedTag(req.Tag) && MatchesWildcard(req) {
 		return
 	}
+	// Check if this passes the enumeration network contraints
+	var records []core.DNSAnswer
+	for _, ans := range req.Records {
+		if ans.Type == 1 || ans.Type == 28 {
+			if ip := net.ParseIP(ans.Data); ip == nil || !ds.withinNetworkSettings(ip) {
+				continue
+			}
+		}
+		records = append(records, ans)
+	}
+	if len(records) == 0 {
+		return
+	}
+
+	req.Records = records
 	ds.Bus().Publish(core.NameResolvedTopic, req)
+}
+
+func (ds *DNSService) withinNetworkSettings(ip net.IP) bool {
+	passed := true
+
+	if len(ds.Config().Addresses) > 0 {
+		passed = false
+
+		for _, addr := range ds.Config().Addresses {
+			if addr.String() == ip.String() {
+				passed = true
+				break
+			}
+		}
+	}
+	if len(ds.Config().CIDRs) > 0 {
+		passed = false
+
+		for _, cidr := range ds.Config().CIDRs {
+			if cidr.Contains(ip) {
+				passed = true
+				break
+			}
+		}
+	}
+	return passed
 }
 
 func (ds *DNSService) processRequests() {

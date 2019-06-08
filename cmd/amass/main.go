@@ -14,6 +14,7 @@ import (
 	"github.com/OWASP/Amass/amass"
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/handlers"
+	"github.com/OWASP/Amass/amass/sources"
 	"github.com/fatih/color"
 	homedir "github.com/mitchellh/go-homedir"
 )
@@ -128,4 +129,16 @@ func acquireConfig(dir, file string, config *core.Config) bool {
 		}
 	}
 	return false
+}
+
+// GetAllSourceNames returns the names of all Amass data sources.
+func GetAllSourceNames() []string {
+	bus := core.NewEventBus()
+
+	var names []string
+	for _, src := range sources.GetAllSources(&core.Config{}, bus) {
+		names = append(names, src.String())
+	}
+	bus.Stop()
+	return names
 }

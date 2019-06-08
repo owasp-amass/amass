@@ -385,12 +385,12 @@ func (bas *BaseService) WhoisRequestLen() int {
 	return bas.whoisQueue.Len()
 }
 
-// IsActive returns true if SetActive has been called for the service within the last 10 seconds.
+// IsActive returns true if SetActive has been called for the service within the last 3 seconds.
 func (bas *BaseService) IsActive() bool {
 	bas.activeLock.Lock()
 	defer bas.activeLock.Unlock()
 
-	if time.Now().Sub(bas.active) > 10*time.Second {
+	if time.Now().Sub(bas.active) > 3*time.Second {
 		return false
 	}
 	return true
