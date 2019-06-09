@@ -39,7 +39,8 @@ const (
 	NewASNTopic       = "amass:asn"
 	IPRequestTopic    = "amass:iprequest"
 	IPInfoTopic       = "amass:ipinfo"
-	NewWhoisTopic     = "amass:whois"
+	WhoisRequestTopic = "amass:whoisreq"
+	NewWhoisTopic     = "amass:whoisinfo"
 )
 
 // DNSAnswer is the type used by Amass to represent a DNS record.
@@ -86,6 +87,7 @@ type WhoisRequest struct {
 	Domain  string
 	Company string
 	Email   string
+	NewDomains []string
 	Tag     string
 	Source  string
 }

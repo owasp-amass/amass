@@ -36,6 +36,7 @@ func NewViewDNS(config *core.Config, bus *core.EventBus) *ViewDNS {
 func (v *ViewDNS) OnStart() error {
 	v.BaseService.OnStart()
 
+	v.Bus().Subscribe(core.WhoisRequestTopic, v.SendWhoisRequest)
 	go v.processRequests()
 	return nil
 }
@@ -114,14 +115,19 @@ func (v *ViewDNS) executeWhoisQuery(domain string) {
 	// Get the list of domain names discovered through the reverse DNS service
 	re := regexp.MustCompile("<tr><td>([a-zA-Z0-9]{1}[a-zA-Z0-9-]{0,61}[a-zA-Z0-9]{1}[.]{1}[a-zA-Z0-9-]+)</td><td>")
 	subs := re.FindAllStringSubmatch(table, -1)
+
+	var matches []string
 	for _, match := range subs {
 		sub := match[1]
-		if sub == "" {
-			continue
+		if sub != "" {
+			matches = utils.UniqueAppend(matches, strings.TrimSpace(sub))
 		}
+	}
 
+	if len(matches) > 0 {
 		v.Bus().Publish(core.NewWhoisTopic, &core.WhoisRequest{
-			Domain: strings.TrimSpace(sub),
+			Domain: domain,
+			NewDomains: matches,
 			Tag:    v.SourceType,
 			Source: v.String(),
 		})
