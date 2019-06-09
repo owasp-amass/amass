@@ -51,13 +51,13 @@ func (bfs *BruteForceService) OnStart() error {
 	if bfs.Config().BruteForcing {
 		if bfs.Config().Recursive {
 			if bfs.Config().MinForRecursive == 0 {
-				bfs.Bus().Subscribe(core.NameResolvedTopic, bfs.SendRequest)
-				go bfs.processRequests()
+				bfs.Bus().Subscribe(core.NameResolvedTopic, bfs.SendDNSRequest)
 			} else {
 				bfs.Bus().Subscribe(core.NewSubdomainTopic, bfs.NewSubdomain)
 			}
 		}
 	}
+	go bfs.processRequests()
 	return nil
 }
 
@@ -91,15 +91,18 @@ func (bfs *BruteForceService) processRequests() {
 			<-bfs.ResumeChan()
 		case <-bfs.Quit():
 			return
-		case req := <-bfs.RequestChan():
-			if bfs.goodRequest(req) {
+		case req := <-bfs.DNSRequestChan():
+			if bfs.Config().Recursive && bfs.Config().MinForRecursive == 0 && bfs.goodRequest(req) {
 				go bfs.performBruteForcing(req.Name, req.Domain)
 			}
+		case <-bfs.AddrRequestChan():
+		case <-bfs.ASNRequestChan():
+		case <-bfs.WhoisRequestChan():
 		}
 	}
 }
 
-func (bfs *BruteForceService) goodRequest(req *core.Request) bool {
+func (bfs *BruteForceService) goodRequest(req *core.DNSRequest) bool {
 	if !bfs.Config().IsDomainInScope(req.Name) {
 		return false
 	}
@@ -121,7 +124,7 @@ func (bfs *BruteForceService) goodRequest(req *core.Request) bool {
 }
 
 // NewSubdomain is called by the Name Service when proper subdomains are discovered.
-func (bfs *BruteForceService) NewSubdomain(req *core.Request, times int) {
+func (bfs *BruteForceService) NewSubdomain(req *core.DNSRequest, times int) {
 	if times == bfs.Config().MinForRecursive {
 		go bfs.performBruteForcing(req.Name, req.Domain)
 	}
@@ -130,7 +133,7 @@ func (bfs *BruteForceService) NewSubdomain(req *core.Request, times int) {
 func (bfs *BruteForceService) performBruteForcing(subdomain, domain string) {
 	subdomain = strings.ToLower(subdomain)
 	domain = strings.ToLower(domain)
-	req := &core.Request{
+	req := &core.DNSRequest{
 		Name:   subdomain,
 		Domain: domain,
 	}
@@ -176,7 +179,7 @@ func (bfs *BruteForceService) bruteForceResolution(word, sub, domain string) {
 	name := word + "." + sub
 	var answers []core.DNSAnswer
 	for _, t := range BruteForceQueryTypes {
-		if a, err := Resolve(name, t, PriorityLow); err == nil {
+		if a, err := core.Resolve(name, t, core.PriorityLow); err == nil {
 			answers = append(answers, a...)
 			// Do not continue if a CNAME was discovered
 			if t == "CNAME" {
@@ -191,7 +194,7 @@ func (bfs *BruteForceService) bruteForceResolution(word, sub, domain string) {
 		return
 	}
 
-	req := &core.Request{
+	req := &core.DNSRequest{
 		Name:    name,
 		Domain:  domain,
 		Records: answers,

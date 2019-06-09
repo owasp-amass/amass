@@ -51,7 +51,7 @@ func (be *BinaryEdge) processRequests() {
 		select {
 		case <-be.Quit():
 			return
-		case req := <-be.RequestChan():
+		case req := <-be.DNSRequestChan():
 			if be.Config().IsDomainInScope(req.Domain) {
 				if time.Now().Sub(last) < be.RateLimit {
 					time.Sleep(be.RateLimit)
@@ -60,6 +60,9 @@ func (be *BinaryEdge) processRequests() {
 				be.executeQuery(req.Domain)
 				last = time.Now()
 			}
+		case <-be.AddrRequestChan():
+		case <-be.ASNRequestChan():
+		case <-be.WhoisRequestChan():
 		}
 	}
 }
@@ -96,7 +99,7 @@ func (be *BinaryEdge) executeQuery(domain string) {
 
 	for _, name := range subs.Subdomains {
 		if re.MatchString(name) {
-			be.Bus().Publish(core.NewNameTopic, &core.Request{
+			be.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
 				Name:   name,
 				Domain: domain,
 				Tag:    be.SourceType,

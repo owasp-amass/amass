@@ -38,6 +38,9 @@ var (
 )
 
 type enumArgs struct {
+	Addresses       utils.ParseIPs
+	ASNs            utils.ParseInts
+	CIDRs           utils.ParseCIDRs
 	AltWordList     []string
 	BruteWordList   []string
 	Blacklist       utils.ParseStrings
@@ -83,6 +86,9 @@ type enumArgs struct {
 }
 
 func defineEnumArgumentFlags(enumFlags *flag.FlagSet, args *enumArgs) {
+	enumFlags.Var(&args.Addresses, "addr", "IPs and ranges (192.168.1.1-254) separated by commas")
+	enumFlags.Var(&args.ASNs, "asn", "ASNs separated by commas (can be used multiple times)")
+	enumFlags.Var(&args.CIDRs, "cidr", "CIDRs separated by commas (can be used multiple times)")
 	enumFlags.Var(&args.Blacklist, "bl", "Blacklist of subdomain names that will not be investigated")
 	enumFlags.Var(&args.Domains, "d", "Domain names separated by commas (can be used multiple times)")
 	enumFlags.Var(&args.Excluded, "exclude", "Data source names separated by commas to be excluded")
@@ -178,10 +184,6 @@ func runEnumCommand(clArgs []string) {
 		os.Exit(1)
 	}
 
-	if len(args.Resolvers) > 0 {
-		amass.SetCustomResolvers(args.Resolvers)
-	}
-
 	// Seed the default pseudo-random number generator
 	rand.Seed(time.Now().UTC().UnixNano())
 
@@ -189,16 +191,15 @@ func runEnumCommand(clArgs []string) {
 	enum := amass.NewEnumeration()
 	enum.Config.Log = log.New(wLog, "", log.Lmicroseconds)
 	// Check if a configuration file was provided, and if so, load the settings
-	if args.Filepaths.ConfigFile != "" {
-		if err := enum.Config.LoadSettings(args.Filepaths.ConfigFile); err != nil {
-			r.Fprintf(color.Error, "Configuration file error: %v\n", err)
-			os.Exit(1)
-		}
-	}
+	acquireConfig(args.Filepaths.Directory, args.Filepaths.ConfigFile, enum.Config)
 	// Override configuration file settings with command-line arguments
 	if err := updateEnumConfiguration(enum, &args); err != nil {
-		r.Fprintf(color.Error, "Configuration file error: %v\n", err)
+		r.Fprintf(color.Error, "Configuration error: %v\n", err)
 		os.Exit(1)
+	}
+
+	if len(args.Resolvers) > 0 {
+		core.SetCustomResolvers(args.Resolvers)
 	}
 
 	processEnumOutput(enum, &args, rLog)
@@ -469,6 +470,18 @@ func processEnumInputFiles(args *enumArgs) error {
 
 // Setup the amass enumeration settings
 func updateEnumConfiguration(enum *amass.Enumeration, args *enumArgs) error {
+	if len(args.Addresses) > 0 {
+		enum.Config.Addresses = args.Addresses
+	}
+	if len(args.ASNs) > 0 {
+		enum.Config.ASNs = args.ASNs
+	}
+	if len(args.CIDRs) > 0 {
+		enum.Config.CIDRs = args.CIDRs
+	}
+	if len(args.Ports) > 0 {
+		enum.Config.Ports = args.Ports
+	}
 	if args.Filepaths.Directory != "" {
 		enum.Config.Dir = args.Filepaths.Directory
 	}
@@ -509,7 +522,7 @@ func updateEnumConfiguration(enum *amass.Enumeration, args *enumArgs) error {
 		enum.Config.Blacklist = args.Blacklist
 	}
 
-	disabled := compileDisabledSources(enum, args.Included, args.Excluded)
+	disabled := compileDisabledSources(enum.GetAllSourceNames(), args.Included, args.Excluded)
 	if len(disabled) > 0 {
 		enum.Config.DisabledDataSources = disabled
 	}
@@ -522,10 +535,10 @@ func updateEnumConfiguration(enum *amass.Enumeration, args *enumArgs) error {
 	return nil
 }
 
-func compileDisabledSources(enum *amass.Enumeration, include, exclude []string) []string {
+func compileDisabledSources(srcs []string, include, exclude []string) []string {
 	var inc, disable []string
 
-	master := enum.GetAllSourceNames()
+	master := srcs
 	// Check that the include names are valid
 	if len(include) > 0 {
 		for _, incname := range include {

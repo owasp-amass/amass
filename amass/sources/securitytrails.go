@@ -53,7 +53,7 @@ func (st *SecurityTrails) processRequests() {
 		select {
 		case <-st.Quit():
 			return
-		case req := <-st.RequestChan():
+		case req := <-st.DNSRequestChan():
 			if st.Config().IsDomainInScope(req.Domain) {
 				if time.Now().Sub(last) < st.RateLimit {
 					time.Sleep(st.RateLimit)
@@ -62,6 +62,9 @@ func (st *SecurityTrails) processRequests() {
 				st.executeQuery(req.Domain)
 				last = time.Now()
 			}
+		case <-st.AddrRequestChan():
+		case <-st.ASNRequestChan():
+		case <-st.WhoisRequestChan():
 		}
 	}
 }
@@ -95,7 +98,7 @@ func (st *SecurityTrails) executeQuery(domain string) {
 	for _, s := range subs.Subdomains {
 		name := strings.ToLower(s) + "." + domain
 		if re.MatchString(name) {
-			st.Bus().Publish(core.NewNameTopic, &core.Request{
+			st.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
 				Name:   name,
 				Domain: domain,
 				Tag:    st.SourceType,

@@ -46,10 +46,13 @@ func (y *Yahoo) processRequests() {
 		select {
 		case <-y.Quit():
 			return
-		case req := <-y.RequestChan():
+		case req := <-y.DNSRequestChan():
 			if y.Config().IsDomainInScope(req.Domain) {
 				y.executeQuery(req.Domain)
 			}
+		case <-y.AddrRequestChan():
+		case <-y.ASNRequestChan():
+		case <-y.WhoisRequestChan():
 		}
 	}
 }
@@ -79,7 +82,7 @@ func (y *Yahoo) executeQuery(domain string) {
 			}
 
 			for _, sd := range re.FindAllString(page, -1) {
-				y.Bus().Publish(core.NewNameTopic, &core.Request{
+				y.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
 					Name:   cleanName(sd),
 					Domain: domain,
 					Tag:    y.SourceType,

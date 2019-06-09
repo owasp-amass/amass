@@ -38,10 +38,13 @@ func (s *SiteDossier) processRequests() {
 		select {
 		case <-s.Quit():
 			return
-		case req := <-s.RequestChan():
+		case req := <-s.DNSRequestChan():
 			if s.Config().IsDomainInScope(req.Domain) {
 				s.executeQuery(req.Domain)
 			}
+		case <-s.AddrRequestChan():
+		case <-s.ASNRequestChan():
+		case <-s.WhoisRequestChan():
 		}
 	}
 }
@@ -61,7 +64,7 @@ func (s *SiteDossier) executeQuery(domain string) {
 	}
 
 	for _, sd := range re.FindAllString(page, -1) {
-		s.Bus().Publish(core.NewNameTopic, &core.Request{
+		s.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
 			Name:   cleanName(sd),
 			Domain: domain,
 			Tag:    s.SourceType,

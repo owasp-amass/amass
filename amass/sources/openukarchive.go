@@ -33,7 +33,7 @@ func NewOpenUKArchive(config *core.Config, bus *core.EventBus) *OpenUKArchive {
 func (o *OpenUKArchive) OnStart() error {
 	o.BaseService.OnStart()
 
-	o.Bus().Subscribe(core.NameResolvedTopic, o.SendRequest)
+	o.Bus().Subscribe(core.NameResolvedTopic, o.SendDNSRequest)
 	go o.processRequests()
 	return nil
 }
@@ -43,10 +43,13 @@ func (o *OpenUKArchive) processRequests() {
 		select {
 		case <-o.Quit():
 			return
-		case req := <-o.RequestChan():
+		case req := <-o.DNSRequestChan():
 			if o.Config().IsDomainInScope(req.Name) {
 				o.executeQuery(req.Name, req.Domain)
 			}
+		case <-o.AddrRequestChan():
+		case <-o.ASNRequestChan():
+		case <-o.WhoisRequestChan():
 		}
 	}
 }
@@ -63,7 +66,7 @@ func (o *OpenUKArchive) executeQuery(sn, domain string) {
 	}
 
 	for _, name := range names {
-		o.Bus().Publish(core.NewNameTopic, &core.Request{
+		o.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
 			Name:   cleanName(name),
 			Domain: domain,
 			Tag:    o.SourceType,

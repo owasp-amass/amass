@@ -10,9 +10,11 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -53,8 +55,17 @@ type Config struct {
 	// Semaphore to enforce the maximum DNS queries
 	SemMaxDNSQueries utils.Semaphore
 
+	// The IP addresses specified as in scope
+	Addresses []net.IP
+
+	// CIDR that is in scope
+	CIDRs []*net.IPNet
+
+	// ASNs specified as in scope
+	ASNs []int
+
 	// The ports that will be checked for certificates
-	Ports []int `ini:"port,,allowshadow"`
+	Ports []int
 
 	// The list of words to use when generating names
 	Wordlist []string
@@ -126,7 +137,7 @@ func (c *Config) CheckSettings() error {
 		return errors.New("Active enumeration cannot be performed without DNS resolution")
 	}
 	if c.MaxDNSQueries <= 0 {
-		return errors.New("MaxDNSQueries must have a value greater than zero")
+		c.MaxDNSQueries = 1000
 	}
 	if len(c.Ports) == 0 {
 		c.Ports = []int{443}
@@ -287,6 +298,37 @@ func (c *Config) GetAPIKey(source string) *APIKey {
 	return nil
 }
 
+func (c *Config) loadNetworkSettings(cfg *ini.File) error {
+	if network, err := cfg.GetSection("network_settings"); err == nil {
+		for _, addr := range network.Key("address").ValueWithShadows() {
+			var ips utils.ParseIPs
+
+			if err := ips.Set(addr); err != nil {
+				return err
+			}
+			c.Addresses = append(c.Addresses, ips...)
+		}
+
+		for _, cidr := range network.Key("cidr").ValueWithShadows() {
+			var ipnet *net.IPNet
+
+			if _, ipnet, err = net.ParseCIDR(cidr); err != nil {
+				return err
+			}
+			c.CIDRs = append(c.CIDRs, ipnet)
+		}
+
+		for _, asn := range network.Key("asn").ValueWithShadows() {
+			c.ASNs = uniqueIntAppend(c.ASNs, asn)
+		}
+
+		for _, port := range network.Key("port").ValueWithShadows() {
+			c.Ports = uniqueIntAppend(c.Ports, port)
+		}
+	}
+	return nil
+}
+
 func (c *Config) loadBruteForceSettings(cfg *ini.File) error {
 	if bruteforce, err := cfg.GetSection("bruteforce"); err == nil {
 		c.BruteForcing = bruteforce.Key("enabled").MustBool(true)
@@ -305,7 +347,6 @@ func (c *Config) loadBruteForceSettings(cfg *ini.File) error {
 			}
 		}
 	}
-
 	return nil
 }
 
@@ -331,7 +372,6 @@ func (c *Config) loadAlterationSettings(cfg *ini.File) error {
 			}
 		}
 	}
-
 	return nil
 }
 
@@ -379,6 +419,10 @@ func (c *Config) LoadSettings(path string) error {
 		c.GremlinURL = gremlin.Key("url").String()
 		c.GremlinUser = gremlin.Key("username").String()
 		c.GremlinPass = gremlin.Key("password").String()
+	}
+
+	if err := c.loadNetworkSettings(cfg); err != nil {
+		return err
 	}
 
 	if err := c.loadAlterationSettings(cfg); err != nil {
@@ -497,4 +541,21 @@ func getWordList(reader io.Reader) ([]string, error) {
 		}
 	}
 	return words, nil
+}
+
+func uniqueIntAppend(s []int, e string) []int {
+	if a1, err := strconv.Atoi(e); err == nil {
+		var found bool
+
+		for _, a2 := range s {
+			if a1 == a2 {
+				found = true
+				break
+			}
+		}
+		if !found {
+			s = append(s, a1)
+		}
+	}
+	return s
 }

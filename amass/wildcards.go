@@ -47,7 +47,7 @@ func init() {
 }
 
 // MatchesWildcard returns true if the request provided resolved to a DNS wildcard.
-func MatchesWildcard(req *core.Request) bool {
+func MatchesWildcard(req *core.DNSRequest) bool {
 	if performWildcardRequest(req) == WildcardTypeNone {
 		return false
 	}
@@ -55,11 +55,11 @@ func MatchesWildcard(req *core.Request) bool {
 }
 
 // GetWildcardType returns the DNS wildcard type for the provided subdomain name.
-func GetWildcardType(req *core.Request) int {
+func GetWildcardType(req *core.DNSRequest) int {
 	return performWildcardRequest(req)
 }
 
-func performWildcardRequest(req *core.Request) int {
+func performWildcardRequest(req *core.DNSRequest) int {
 	base := len(strings.Split(req.Domain, "."))
 	labels := strings.Split(strings.ToLower(req.Name), ".")
 	if len(labels) > base {
@@ -150,14 +150,14 @@ func wildcardTest(sub string) ([]core.DNSAnswer, error) {
 
 	var answers []core.DNSAnswer
 	for _, t := range wildcardQueryTypes {
-		if a, err := Resolve(name, t, PriorityCritical); err == nil {
+		if a, err := core.Resolve(name, t, core.PriorityCritical); err == nil {
 			if a != nil && len(a) > 0 {
 				answers = append(answers, a...)
 			}
-		} else if (err.(*resolveError)).Rcode == 100 ||
-			(err.(*resolveError)).Rcode == dns.RcodeRefused ||
-			(err.(*resolveError)).Rcode == dns.RcodeServerFailure ||
-			(err.(*resolveError)).Rcode == dns.RcodeNotImplemented {
+		} else if (err.(*core.ResolveError)).Rcode == 100 ||
+			(err.(*core.ResolveError)).Rcode == dns.RcodeRefused ||
+			(err.(*core.ResolveError)).Rcode == dns.RcodeServerFailure ||
+			(err.(*core.ResolveError)).Rcode == dns.RcodeNotImplemented {
 			return nil, errors.New("Failed to get a DNS server response during wildcard testing")
 		}
 	}

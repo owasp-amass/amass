@@ -66,7 +66,7 @@ func (t *Twitter) processRequests() {
 		select {
 		case <-t.Quit():
 			return
-		case req := <-t.RequestChan():
+		case req := <-t.DNSRequestChan():
 			if t.Config().IsDomainInScope(req.Domain) {
 				if time.Now().Sub(last) < t.RateLimit {
 					time.Sleep(t.RateLimit)
@@ -75,6 +75,9 @@ func (t *Twitter) processRequests() {
 				t.executeQuery(req.Domain)
 				last = time.Now()
 			}
+		case <-t.AddrRequestChan():
+		case <-t.ASNRequestChan():
+		case <-t.WhoisRequestChan():
 		}
 	}
 }
@@ -98,7 +101,7 @@ func (t *Twitter) executeQuery(domain string) {
 
 	for _, tweet := range search.Statuses {
 		for _, name := range re.FindAllString(tweet.Text, -1) {
-			t.Bus().Publish(core.NewNameTopic, &core.Request{
+			t.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
 				Name:   name,
 				Domain: domain,
 				Tag:    t.SourceType,

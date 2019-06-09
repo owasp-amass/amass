@@ -44,10 +44,13 @@ func (i *IPv4Info) processRequests() {
 		select {
 		case <-i.Quit():
 			return
-		case req := <-i.RequestChan():
+		case req := <-i.DNSRequestChan():
 			if i.Config().IsDomainInScope(req.Domain) {
 				i.executeQuery(req.Domain)
 			}
+		case <-i.AddrRequestChan():
+		case <-i.ASNRequestChan():
+		case <-i.WhoisRequestChan():
 		}
 	}
 }
@@ -93,7 +96,7 @@ func (i *IPv4Info) executeQuery(domain string) {
 	}
 
 	for _, sd := range re.FindAllString(page, -1) {
-		i.Bus().Publish(core.NewNameTopic, &core.Request{
+		i.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
 			Name:   cleanName(sd),
 			Domain: domain,
 			Tag:    i.SourceType,

@@ -40,7 +40,7 @@ type dbArgs struct {
 		ConfigFile string
 		Directory  string
 		Domains    string
-		Import      string
+		Import     string
 	}
 }
 

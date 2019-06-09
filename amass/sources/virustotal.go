@@ -58,7 +58,7 @@ func (v *VirusTotal) processRequests() {
 		select {
 		case <-v.Quit():
 			return
-		case req := <-v.RequestChan():
+		case req := <-v.DNSRequestChan():
 			if v.Config().IsDomainInScope(req.Domain) {
 				if time.Now().Sub(last) < v.RateLimit {
 					time.Sleep(v.RateLimit)
@@ -71,6 +71,9 @@ func (v *VirusTotal) processRequests() {
 				}
 				last = time.Now()
 			}
+		case <-v.AddrRequestChan():
+		case <-v.ASNRequestChan():
+		case <-v.WhoisRequestChan():
 		}
 	}
 }
@@ -112,7 +115,7 @@ func (v *VirusTotal) apiQuery(domain string) {
 		s := strings.ToLower(sub)
 
 		if re.MatchString(s) {
-			v.Bus().Publish(core.NewNameTopic, &core.Request{
+			v.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
 				Name:   s,
 				Domain: domain,
 				Tag:    v.SourceType,
@@ -122,7 +125,7 @@ func (v *VirusTotal) apiQuery(domain string) {
 	}
 
 	for _, res := range m.Resolutions {
-		v.Bus().Publish(core.NewAddrTopic, &core.Request{
+		v.Bus().Publish(core.NewAddrTopic, &core.AddrRequest{
 			Address: res.IP,
 			Domain:  domain,
 			Tag:     v.SourceType,
@@ -166,7 +169,7 @@ func (v *VirusTotal) regularQuery(domain string) {
 
 	for _, data := range m.Data {
 		if data.Type == "domain" && re.MatchString(data.ID) {
-			v.Bus().Publish(core.NewNameTopic, &core.Request{
+			v.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
 				Name:   data.ID,
 				Domain: domain,
 				Tag:    v.SourceType,

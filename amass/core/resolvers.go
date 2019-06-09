@@ -1,7 +1,7 @@
 // Copyright 2017 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
-package amass
+package core
 
 import (
 	"context"
@@ -12,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
 	"github.com/miekg/dns"
 )
@@ -47,20 +46,62 @@ var (
 	}
 
 	maxRetries = 3
+
+	// Domains discovered by the SubdomainToDomain method call
+	domainLock  sync.Mutex
+	domainCache map[string]struct{}
 )
 
 func init() {
+	domainCache = make(map[string]struct{})
+
 	for _, addr := range publicResolvers {
 		resolvers = append(resolvers, newResolver(addr))
 	}
 }
 
-type resolveError struct {
+// SubdomainToDomain returns the first subdomain name of the provided
+// parameter that responds to a DNS query for the NS record type.
+func SubdomainToDomain(name string) string {
+	domainLock.Lock()
+	defer domainLock.Unlock()
+
+	var domain string
+	// Obtain all parts of the subdomain name
+	labels := strings.Split(strings.TrimSpace(name), ".")
+	// Check the cache for all parts of the name
+	for i := len(labels); i >= 0; i-- {
+		sub := strings.Join(labels[i:], ".")
+
+		if _, ok := domainCache[sub]; ok {
+			domain = sub
+			break
+		}
+	}
+	if domain != "" {
+		return domain
+	}
+	// Check the DNS for all parts of the name
+	for i := 0; i < len(labels)-1; i++ {
+		sub := strings.Join(labels[i:], ".")
+
+		if ns, err := Resolve(sub, "NS", PriorityHigh); err == nil {
+			pieces := strings.Split(ns[0].Data, ",")
+			domainCache[pieces[0]] = struct{}{}
+			domain = pieces[0]
+			break
+		}
+	}
+	return domain
+}
+
+// ResolveError contains the Rcode returned during the DNS query.
+type ResolveError struct {
 	Err   string
 	Rcode int
 }
 
-func (e *resolveError) Error() string {
+func (e *ResolveError) Error() string {
 	return e.Err
 }
 
@@ -76,16 +117,16 @@ func (r *resolver) returnRequest(req *resolveRequest, res *resolveResult) {
 }
 
 type resolveResult struct {
-	Records []core.DNSAnswer
+	Records []DNSAnswer
 	Again   bool
 	Err     error
 }
 
-func makeResolveResult(rec []core.DNSAnswer, again bool, err string, rcode int) *resolveResult {
+func makeResolveResult(rec []DNSAnswer, again bool, err string, rcode int) *resolveResult {
 	return &resolveResult{
 		Records: rec,
 		Again:   again,
-		Err: &resolveError{
+		Err: &ResolveError{
 			Err:   err,
 			Rcode: rcode,
 		},
@@ -205,7 +246,7 @@ func (r *resolver) checkForTimeouts() {
 	}
 }
 
-func (r *resolver) resolve(name string, qtype uint16) ([]core.DNSAnswer, bool, error) {
+func (r *resolver) resolve(name string, qtype uint16) ([]DNSAnswer, bool, error) {
 	resultChan := make(chan *resolveResult)
 	r.XchgQueue.Append(&resolveRequest{
 		Name:   name,
@@ -348,9 +389,9 @@ func (r *resolver) processMessage(msg *dns.Msg) {
 		return
 	}
 
-	var answers []core.DNSAnswer
+	var answers []DNSAnswer
 	for _, a := range extractRawData(msg, req.Qtype) {
-		answers = append(answers, core.DNSAnswer{
+		answers = append(answers, DNSAnswer{
 			Name: req.Name,
 			Type: int(req.Qtype),
 			TTL:  0,
@@ -506,10 +547,10 @@ func SetCustomResolvers(res []string) {
 }
 
 // Resolve allows all components to make DNS requests without using the DNSService object.
-func Resolve(name, qtype string, priority int) ([]core.DNSAnswer, error) {
+func Resolve(name, qtype string, priority int) ([]DNSAnswer, error) {
 	qt, err := textToTypeNum(qtype)
 	if err != nil {
-		return nil, &resolveError{
+		return nil, &ResolveError{
 			Err:   err.Error(),
 			Rcode: 100,
 		}
@@ -527,7 +568,7 @@ func Resolve(name, qtype string, priority int) ([]core.DNSAnswer, error) {
 
 	var again bool
 	start := time.Now()
-	var ans []core.DNSAnswer
+	var ans []DNSAnswer
 	var attempts, servfail int
 	for {
 		ans, again, err = nextResolver().resolve(name, qt)
@@ -542,7 +583,7 @@ func Resolve(name, qtype string, priority int) ([]core.DNSAnswer, error) {
 			break
 		}
 		// Do not allow server failure errors to continue as long
-		if (err.(*resolveError)).Rcode == dns.RcodeServerFailure {
+		if (err.(*ResolveError)).Rcode == dns.RcodeServerFailure {
 			servfail++
 			if servfail > maxservfail && time.Now().After(start.Add(time.Minute)) {
 				break
@@ -554,8 +595,8 @@ func Resolve(name, qtype string, priority int) ([]core.DNSAnswer, error) {
 	return ans, err
 }
 
-// Reverse is performs reverse DNS queries without using the DNSService object.
-func Reverse(addr string) (string, string, error) {
+// ReverseDNS is performs reverse DNS queries without using the DNSService object.
+func ReverseDNS(addr string) (string, string, error) {
 	var name, ptr string
 
 	if ip := net.ParseIP(addr); utils.IsIPv4(ip) {
@@ -563,7 +604,7 @@ func Reverse(addr string) (string, string, error) {
 	} else if utils.IsIPv6(ip) {
 		ptr = utils.IPv6NibbleFormat(utils.HexString(ip)) + ".ip6.arpa"
 	} else {
-		return ptr, "", &resolveError{
+		return ptr, "", &ResolveError{
 			Err:   fmt.Sprintf("Invalid IP address parameter: %s", addr),
 			Rcode: 100,
 		}
@@ -576,18 +617,18 @@ func Reverse(addr string) (string, string, error) {
 
 	for _, a := range answers {
 		if a.Type == 12 {
-			name = removeLastDot(a.Data)
+			name = RemoveLastDot(a.Data)
 			break
 		}
 	}
 
 	if name == "" {
-		err = &resolveError{
+		err = &ResolveError{
 			Err:   fmt.Sprintf("PTR record not found for IP address: %s", addr),
 			Rcode: 100,
 		}
 	} else if strings.HasSuffix(name, ".in-addr.arpa") || strings.HasSuffix(name, ".ip6.arpa") {
-		err = &resolveError{
+		err = &ResolveError{
 			Err:   fmt.Sprintf("Invalid target in PTR record answer: %s", name),
 			Rcode: 100,
 		}
@@ -638,8 +679,8 @@ func setupOptions() *dns.OPT {
 
 // ZoneTransfer attempts a DNS zone transfer using the server identified in the parameters.
 // The returned slice contains all the records discovered from the zone transfer.
-func ZoneTransfer(sub, domain, server string) ([]*core.Request, error) {
-	var results []*core.Request
+func ZoneTransfer(sub, domain, server string) ([]*DNSRequest, error) {
+	var results []*DNSRequest
 
 	addr, err := nameserverAddr(server)
 	if addr == "" {
@@ -684,8 +725,8 @@ func ZoneTransfer(sub, domain, server string) ([]*core.Request, error) {
 }
 
 // NsecTraversal attempts to retrieve a DNS zone using NSEC-walking.
-func NsecTraversal(domain, server string) ([]*core.Request, error) {
-	var results []*core.Request
+func NsecTraversal(domain, server string) ([]*DNSRequest, error) {
+	var results []*DNSRequest
 
 	addr, err := nameserverAddr(server)
 	if addr == "" {
@@ -725,11 +766,11 @@ loop:
 					continue
 				}
 
-				n := strings.ToLower(removeLastDot(rr.Header().Name))
-				results = append(results, &core.Request{
+				n := strings.ToLower(RemoveLastDot(rr.Header().Name))
+				results = append(results, &DNSRequest{
 					Name:   n,
 					Domain: domain,
-					Tag:    core.DNS,
+					Tag:    DNS,
 					Source: "NSEC Walk",
 				})
 
@@ -744,21 +785,21 @@ loop:
 					continue
 				}
 
-				prev := strings.ToLower(removeLastDot(rr.Header().Name))
+				prev := strings.ToLower(RemoveLastDot(rr.Header().Name))
 				nn := walkHostPart(name, domain)
 				hp := walkHostPart(prev, domain)
 				if !re.MatchString(prev) || hp >= nn {
 					continue
 				}
 
-				results = append(results, &core.Request{
+				results = append(results, &DNSRequest{
 					Name:   prev,
 					Domain: domain,
-					Tag:    core.DNS,
+					Tag:    DNS,
 					Source: "NSEC Walk",
 				})
 
-				n := strings.ToLower(removeLastDot(rr.(*dns.NSEC).NextDomain))
+				n := strings.ToLower(RemoveLastDot(rr.(*dns.NSEC).NextDomain))
 				hn := walkHostPart(n, domain)
 				if n != "" && nn < hn {
 					next = n
@@ -842,60 +883,60 @@ func nameserverAddr(server string) (string, error) {
 // Support functions
 //-------------------------------------------------------------------------------------------------
 
-func getXfrRequests(en *dns.Envelope, domain string) []*core.Request {
+func getXfrRequests(en *dns.Envelope, domain string) []*DNSRequest {
 	if en.Error != nil {
 		return nil
 	}
 
-	reqs := make(map[string]*core.Request)
+	reqs := make(map[string]*DNSRequest)
 	for _, a := range en.RR {
-		var record core.DNSAnswer
+		var record DNSAnswer
 
 		switch v := a.(type) {
 		case *dns.CNAME:
-			record.Name = removeLastDot(v.Hdr.Name)
+			record.Name = RemoveLastDot(v.Hdr.Name)
 			record.Type = int(dns.TypeCNAME)
-			record.Data = removeLastDot(v.Target)
+			record.Data = RemoveLastDot(v.Target)
 		case *dns.A:
-			record.Name = removeLastDot(v.Hdr.Name)
+			record.Name = RemoveLastDot(v.Hdr.Name)
 			record.Type = int(dns.TypeA)
 			record.Data = v.A.String()
 		case *dns.AAAA:
-			record.Name = removeLastDot(v.Hdr.Name)
+			record.Name = RemoveLastDot(v.Hdr.Name)
 			record.Type = int(dns.TypeAAAA)
 			record.Data = v.AAAA.String()
 		case *dns.PTR:
-			record.Name = removeLastDot(v.Hdr.Name)
+			record.Name = RemoveLastDot(v.Hdr.Name)
 			record.Type = int(dns.TypePTR)
-			record.Data = removeLastDot(v.Ptr)
+			record.Data = RemoveLastDot(v.Ptr)
 		case *dns.NS:
 			record.Name = realName(v.Hdr)
 			record.Type = int(dns.TypeNS)
-			record.Data = removeLastDot(v.Ns)
+			record.Data = RemoveLastDot(v.Ns)
 		case *dns.MX:
-			record.Name = removeLastDot(v.Hdr.Name)
+			record.Name = RemoveLastDot(v.Hdr.Name)
 			record.Type = int(dns.TypeMX)
-			record.Data = removeLastDot(v.Mx)
+			record.Data = RemoveLastDot(v.Mx)
 		case *dns.TXT:
-			record.Name = removeLastDot(v.Hdr.Name)
+			record.Name = RemoveLastDot(v.Hdr.Name)
 			record.Type = int(dns.TypeTXT)
 			for _, piece := range v.Txt {
 				record.Data += piece + " "
 			}
 		case *dns.SOA:
-			record.Name = removeLastDot(v.Hdr.Name)
+			record.Name = RemoveLastDot(v.Hdr.Name)
 			record.Type = int(dns.TypeSOA)
 			record.Data = v.Ns + " " + v.Mbox
 		case *dns.SPF:
-			record.Name = removeLastDot(v.Hdr.Name)
+			record.Name = RemoveLastDot(v.Hdr.Name)
 			record.Type = int(dns.TypeSPF)
 			for _, piece := range v.Txt {
 				record.Data += piece + " "
 			}
 		case *dns.SRV:
-			record.Name = removeLastDot(v.Hdr.Name)
+			record.Name = RemoveLastDot(v.Hdr.Name)
 			record.Type = int(dns.TypeSRV)
-			record.Data = removeLastDot(v.Target)
+			record.Data = RemoveLastDot(v.Target)
 		default:
 			continue
 		}
@@ -903,17 +944,17 @@ func getXfrRequests(en *dns.Envelope, domain string) []*core.Request {
 		if r, found := reqs[record.Name]; found {
 			r.Records = append(r.Records, record)
 		} else {
-			reqs[record.Name] = &core.Request{
+			reqs[record.Name] = &DNSRequest{
 				Name:    record.Name,
 				Domain:  domain,
-				Records: []core.DNSAnswer{record},
-				Tag:     core.AXFR,
+				Records: []DNSAnswer{record},
+				Tag:     AXFR,
 				Source:  "DNS Zone XFR",
 			}
 		}
 	}
 
-	var requests []*core.Request
+	var requests []*DNSRequest
 	for _, r := range reqs {
 		requests = append(requests, r)
 	}
@@ -978,7 +1019,7 @@ func extractRawData(msg *dns.Msg, qtype uint16) []string {
 				}
 			case dns.TypeNS:
 				if t, ok := a.(*dns.NS); ok {
-					value = realName(t.Hdr) + "," + removeLastDot(t.Ns)
+					value = realName(t.Hdr) + "," + RemoveLastDot(t.Ns)
 				}
 			case dns.TypeMX:
 				if t, ok := a.(*dns.MX); ok {
@@ -1017,5 +1058,14 @@ func extractRawData(msg *dns.Msg, qtype uint16) []string {
 func realName(hdr dns.RR_Header) string {
 	pieces := strings.Split(hdr.Name, " ")
 
-	return removeLastDot(pieces[len(pieces)-1])
+	return RemoveLastDot(pieces[len(pieces)-1])
+}
+
+// RemoveLastDot removes the '.' at the end of the provided FQDN.
+func RemoveLastDot(name string) string {
+	sz := len(name)
+	if sz > 0 && name[sz-1] == '.' {
+		return name[:sz-1]
+	}
+	return name
 }

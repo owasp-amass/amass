@@ -72,8 +72,9 @@ func (as *AlterationService) OnStart() error {
 	as.BaseService.OnStart()
 
 	if as.Config().Alterations {
-		as.Bus().Subscribe(core.NameResolvedTopic, as.SendRequest)
+		as.Bus().Subscribe(core.NameResolvedTopic, as.SendDNSRequest)
 	}
+	go as.processRequests()
 	return nil
 }
 
@@ -82,7 +83,7 @@ func (as *AlterationService) OnLowNumberOfNames() error {
 loop:
 	for i := 0; i < 10; i++ {
 		select {
-		case req := <-as.RequestChan():
+		case req := <-as.DNSRequestChan():
 			go as.executeAlterations(req)
 		default:
 			break loop
@@ -91,8 +92,22 @@ loop:
 	return nil
 }
 
+func (as *AlterationService) processRequests() {
+	for {
+		select {
+		case <-as.PauseChan():
+			<-as.ResumeChan()
+		case <-as.Quit():
+			return
+		case <-as.AddrRequestChan():
+		case <-as.ASNRequestChan():
+		case <-as.WhoisRequestChan():
+		}
+	}
+}
+
 // executeAlterations runs all the DNS name alteration methods as goroutines.
-func (as *AlterationService) executeAlterations(req *core.Request) {
+func (as *AlterationService) executeAlterations(req *core.DNSRequest) {
 	if !as.correctRecordTypes(req) ||
 		!as.Config().IsDomainInScope(req.Name) ||
 		(len(strings.Split(req.Domain, ".")) == len(strings.Split(req.Name, "."))) {
@@ -122,7 +137,7 @@ func (as *AlterationService) executeAlterations(req *core.Request) {
 	}
 }
 
-func (as *AlterationService) correctRecordTypes(req *core.Request) bool {
+func (as *AlterationService) correctRecordTypes(req *core.DNSRequest) bool {
 	var ok bool
 	for _, r := range req.Records {
 		t := uint16(r.Type)
@@ -135,7 +150,7 @@ func (as *AlterationService) correctRecordTypes(req *core.Request) bool {
 	return ok
 }
 
-func (as *AlterationService) flipWords(req *core.Request) {
+func (as *AlterationService) flipWords(req *core.DNSRequest) {
 	names := strings.SplitN(req.Name, ".", 2)
 	subdomain := names[0]
 	domain := names[1]
@@ -169,7 +184,7 @@ func (as *AlterationService) flipWords(req *core.Request) {
 }
 
 // flipNumbersInName flips numbers in a subdomain name.
-func (as *AlterationService) flipNumbersInName(req *core.Request) {
+func (as *AlterationService) flipNumbersInName(req *core.DNSRequest) {
 	n := req.Name
 	parts := strings.SplitN(n, ".", 2)
 	// Find the first character that is a number
@@ -207,7 +222,7 @@ func (as *AlterationService) secondNumberFlip(name, domain string, minIndex int)
 }
 
 // appendNumbers appends a number to a subdomain name.
-func (as *AlterationService) appendNumbers(req *core.Request) {
+func (as *AlterationService) appendNumbers(req *core.DNSRequest) {
 	parts := strings.SplitN(req.Name, ".", 2)
 
 	for i := 0; i < 10; i++ {
@@ -231,7 +246,7 @@ func (as *AlterationService) addPrefix(name, prefix, domain string) {
 	as.sendAlteredName(nn, domain)
 }
 
-func (as *AlterationService) addSuffixWord(req *core.Request) {
+func (as *AlterationService) addSuffixWord(req *core.DNSRequest) {
 	parts := strings.SplitN(req.Name, ".", 2)
 
 	as.suffixes.RLock()
@@ -243,7 +258,7 @@ func (as *AlterationService) addSuffixWord(req *core.Request) {
 	as.suffixes.RUnlock()
 }
 
-func (as *AlterationService) addPrefixWord(req *core.Request) {
+func (as *AlterationService) addPrefixWord(req *core.DNSRequest) {
 	as.prefixes.RLock()
 	for word, count := range as.prefixes.cache {
 		if count >= as.Config().MinForWordFlip {
@@ -253,7 +268,7 @@ func (as *AlterationService) addPrefixWord(req *core.Request) {
 	as.prefixes.RUnlock()
 }
 
-func (as *AlterationService) fuzzyLabelSearches(req *core.Request) {
+func (as *AlterationService) fuzzyLabelSearches(req *core.DNSRequest) {
 	parts := strings.SplitN(req.Name, ".", 2)
 
 	results := []string{parts[0]}
@@ -344,7 +359,7 @@ func (as *AlterationService) sendAlteredName(name, domain string) {
 		return
 	}
 
-	as.Bus().Publish(core.NewNameTopic, &core.Request{
+	as.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
 		Name:   name,
 		Domain: domain,
 		Tag:    core.ALT,

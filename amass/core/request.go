@@ -35,6 +35,12 @@ const (
 	ReverseSweepTopic = "amass:sweep"
 	ActiveCertTopic   = "amass:activecert"
 	OutputTopic       = "amass:output"
+	IPToASNTopic      = "amass:iptoasn"
+	NewASNTopic       = "amass:asn"
+	IPRequestTopic    = "amass:iprequest"
+	IPInfoTopic       = "amass:ipinfo"
+	WhoisRequestTopic = "amass:whoisreq"
+	NewWhoisTopic     = "amass:whoisinfo"
 )
 
 // DNSAnswer is the type used by Amass to represent a DNS record.
@@ -45,12 +51,43 @@ type DNSAnswer struct {
 	Data string `json:"data"`
 }
 
-// Request contains data obtained throughout Service processing.
-type Request struct {
+// DNSRequest handles data needed throughout Service processing of a DNS name.
+type DNSRequest struct {
 	Name    string
 	Domain  string
-	Address string
 	Records []DNSAnswer
+	Tag     string
+	Source  string
+}
+
+// AddrRequest handles data needed throughout Service processing of a network address.
+type AddrRequest struct {
+	Address string
+	Domain  string
+	Tag     string
+	Source  string
+}
+
+// ASNRequest handles all autonomous system information needed by Amass.
+type ASNRequest struct {
+	Address        string
+	ASN            int
+	Prefix         string
+	CC             string
+	Registry       string
+	AllocationDate time.Time
+	Description    string
+	Netblocks      []string
+	Tag            string
+	Source         string
+}
+
+// WhoisRequest handles data needed throughout Service processing of reverse whois.
+type WhoisRequest struct {
+	Domain  string
+	Company string
+	Email   string
+	NewDomains []string
 	Tag     string
 	Source  string
 }
@@ -100,7 +137,7 @@ func NewEventBus() *EventBus {
 	return eb
 }
 
-// Subscribe registers callback to be executed for all requests on the channel labeled name.
+// Subscribe registers callback to be executed for all requests on the channel.
 func (eb *EventBus) Subscribe(topic string, fn interface{}) {
 	if topic == "" || reflect.TypeOf(fn).Kind() != reflect.Func {
 		return
@@ -111,6 +148,26 @@ func (eb *EventBus) Subscribe(topic string, fn interface{}) {
 	eb.Lock()
 	eb.topics[topic] = append(eb.topics[topic], callback)
 	eb.Unlock()
+}
+
+// Unsubscribe deregisters the callback from the channel.
+func (eb *EventBus) Unsubscribe(topic string, fn interface{}) {
+	if topic == "" || reflect.TypeOf(fn).Kind() != reflect.Func {
+		return
+	}
+
+	callback := reflect.ValueOf(fn)
+
+	eb.Lock()
+	defer eb.Unlock()
+
+	var channels []reflect.Value
+	for _, c := range eb.topics[topic] {
+		if c != callback {
+			channels = append(channels, c)
+		}
+	}
+	eb.topics[topic] = channels
 }
 
 // Publish sends req on the channel labeled with name.

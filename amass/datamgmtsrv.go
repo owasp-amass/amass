@@ -35,7 +35,7 @@ func NewDataManagerService(config *core.Config, bus *core.EventBus) *DataManager
 func (dms *DataManagerService) OnStart() error {
 	dms.BaseService.OnStart()
 
-	dms.Bus().Subscribe(core.NameResolvedTopic, dms.SendRequest)
+	dms.Bus().Subscribe(core.NameResolvedTopic, dms.SendDNSRequest)
 	go dms.processRequests()
 	return nil
 }
@@ -52,13 +52,16 @@ func (dms *DataManagerService) processRequests() {
 			<-dms.ResumeChan()
 		case <-dms.Quit():
 			return
-		case req := <-dms.RequestChan():
+		case req := <-dms.DNSRequestChan():
 			dms.manageData(req)
+		case <-dms.AddrRequestChan():
+		case <-dms.ASNRequestChan():
+		case <-dms.WhoisRequestChan():
 		}
 	}
 }
 
-func (dms *DataManagerService) manageData(req *core.Request) {
+func (dms *DataManagerService) manageData(req *core.DNSRequest) {
 	req.Name = strings.ToLower(req.Name)
 	req.Domain = strings.ToLower(req.Domain)
 
@@ -113,7 +116,7 @@ func (dms *DataManagerService) insertDomain(domain string) {
 			dms.Config().Log.Printf("%s failed to insert domain: %v", handler, err)
 		}
 	}
-	dms.Bus().Publish(core.NewNameTopic, &core.Request{
+	dms.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
 		Name:   domain,
 		Domain: domain,
 		Tag:    core.DNS,
@@ -121,12 +124,12 @@ func (dms *DataManagerService) insertDomain(domain string) {
 	})
 }
 
-func (dms *DataManagerService) insertCNAME(req *core.Request, recidx int) {
-	target := removeLastDot(req.Records[recidx].Data)
+func (dms *DataManagerService) insertCNAME(req *core.DNSRequest, recidx int) {
+	target := core.RemoveLastDot(req.Records[recidx].Data)
 	if target == "" {
 		return
 	}
-	domain := strings.ToLower(SubdomainToDomain(target))
+	domain := strings.ToLower(core.SubdomainToDomain(target))
 	if domain == "" {
 		return
 	}
@@ -147,7 +150,7 @@ func (dms *DataManagerService) insertCNAME(req *core.Request, recidx int) {
 			dms.Config().Log.Printf("%s failed to insert CNAME: %v", handler, err)
 		}
 	}
-	dms.Bus().Publish(core.NewNameTopic, &core.Request{
+	dms.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
 		Name:   target,
 		Domain: domain,
 		Tag:    core.DNS,
@@ -155,7 +158,7 @@ func (dms *DataManagerService) insertCNAME(req *core.Request, recidx int) {
 	})
 }
 
-func (dms *DataManagerService) insertA(req *core.Request, recidx int) {
+func (dms *DataManagerService) insertA(req *core.DNSRequest, recidx int) {
 	addr := strings.TrimSpace(req.Records[recidx].Data)
 	if addr == "" {
 		return
@@ -177,16 +180,16 @@ func (dms *DataManagerService) insertA(req *core.Request, recidx int) {
 	}
 	dms.insertInfrastructure(addr)
 	if dms.Config().IsDomainInScope(req.Name) {
-		dms.Bus().Publish(core.NewAddrTopic, &core.Request{
-			Domain:  req.Domain,
+		dms.Bus().Publish(core.NewAddrTopic, &core.AddrRequest{
 			Address: addr,
+			Domain:  req.Domain,
 			Tag:     req.Tag,
 			Source:  req.Source,
 		})
 	}
 }
 
-func (dms *DataManagerService) insertAAAA(req *core.Request, recidx int) {
+func (dms *DataManagerService) insertAAAA(req *core.DNSRequest, recidx int) {
 	addr := strings.TrimSpace(req.Records[recidx].Data)
 	if addr == "" {
 		return
@@ -208,17 +211,17 @@ func (dms *DataManagerService) insertAAAA(req *core.Request, recidx int) {
 	}
 	dms.insertInfrastructure(addr)
 	if dms.Config().IsDomainInScope(req.Name) {
-		dms.Bus().Publish(core.NewAddrTopic, &core.Request{
-			Domain:  req.Domain,
+		dms.Bus().Publish(core.NewAddrTopic, &core.AddrRequest{
 			Address: addr,
+			Domain:  req.Domain,
 			Tag:     req.Tag,
 			Source:  req.Source,
 		})
 	}
 }
 
-func (dms *DataManagerService) insertPTR(req *core.Request, recidx int) {
-	target := removeLastDot(req.Records[recidx].Data)
+func (dms *DataManagerService) insertPTR(req *core.DNSRequest, recidx int) {
+	target := core.RemoveLastDot(req.Records[recidx].Data)
 	if target == "" {
 		return
 	}
@@ -242,7 +245,7 @@ func (dms *DataManagerService) insertPTR(req *core.Request, recidx int) {
 			dms.Config().Log.Printf("%s failed to insert PTR record: %v", handler, err)
 		}
 	}
-	dms.Bus().Publish(core.NewNameTopic, &core.Request{
+	dms.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
 		Name:   target,
 		Domain: domain,
 		Tag:    core.DNS,
@@ -250,9 +253,9 @@ func (dms *DataManagerService) insertPTR(req *core.Request, recidx int) {
 	})
 }
 
-func (dms *DataManagerService) insertSRV(req *core.Request, recidx int) {
-	service := removeLastDot(req.Records[recidx].Name)
-	target := removeLastDot(req.Records[recidx].Data)
+func (dms *DataManagerService) insertSRV(req *core.DNSRequest, recidx int) {
+	service := core.RemoveLastDot(req.Records[recidx].Name)
+	target := core.RemoveLastDot(req.Records[recidx].Data)
 	if target == "" || service == "" {
 		return
 	}
@@ -275,7 +278,7 @@ func (dms *DataManagerService) insertSRV(req *core.Request, recidx int) {
 	}
 
 	if domain := dms.Config().WhichDomain(target); domain != "" {
-		dms.Bus().Publish(core.NewNameTopic, &core.Request{
+		dms.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
 			Name:   target,
 			Domain: domain,
 			Tag:    req.Tag,
@@ -284,13 +287,13 @@ func (dms *DataManagerService) insertSRV(req *core.Request, recidx int) {
 	}
 }
 
-func (dms *DataManagerService) insertNS(req *core.Request, recidx int) {
+func (dms *DataManagerService) insertNS(req *core.DNSRequest, recidx int) {
 	pieces := strings.Split(req.Records[recidx].Data, ",")
 	target := pieces[len(pieces)-1]
 	if target == "" {
 		return
 	}
-	domain := strings.ToLower(SubdomainToDomain(target))
+	domain := strings.ToLower(core.SubdomainToDomain(target))
 	if domain == "" {
 		return
 	}
@@ -312,7 +315,7 @@ func (dms *DataManagerService) insertNS(req *core.Request, recidx int) {
 		}
 	}
 	if target != domain {
-		dms.Bus().Publish(core.NewNameTopic, &core.Request{
+		dms.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
 			Name:   target,
 			Domain: domain,
 			Tag:    core.DNS,
@@ -321,12 +324,12 @@ func (dms *DataManagerService) insertNS(req *core.Request, recidx int) {
 	}
 }
 
-func (dms *DataManagerService) insertMX(req *core.Request, recidx int) {
-	target := removeLastDot(req.Records[recidx].Data)
+func (dms *DataManagerService) insertMX(req *core.DNSRequest, recidx int) {
+	target := core.RemoveLastDot(req.Records[recidx].Data)
 	if target == "" {
 		return
 	}
-	domain := strings.ToLower(SubdomainToDomain(target))
+	domain := strings.ToLower(core.SubdomainToDomain(target))
 	if domain == "" {
 		return
 	}
@@ -348,7 +351,7 @@ func (dms *DataManagerService) insertMX(req *core.Request, recidx int) {
 		}
 	}
 	if target != domain {
-		dms.Bus().Publish(core.NewNameTopic, &core.Request{
+		dms.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
 			Name:   target,
 			Domain: domain,
 			Tag:    core.DNS,
@@ -357,25 +360,26 @@ func (dms *DataManagerService) insertMX(req *core.Request, recidx int) {
 	}
 }
 
-func (dms *DataManagerService) insertTXT(req *core.Request, recidx int) {
+func (dms *DataManagerService) insertTXT(req *core.DNSRequest, recidx int) {
 	if !dms.Config().IsDomainInScope(req.Name) {
 		return
 	}
-	dms.findNamesAndAddresses(req.Records[recidx].Data)
+	dms.findNamesAndAddresses(req.Records[recidx].Data, req.Domain)
 }
 
-func (dms *DataManagerService) insertSPF(req *core.Request, recidx int) {
+func (dms *DataManagerService) insertSPF(req *core.DNSRequest, recidx int) {
 	if !dms.Config().IsDomainInScope(req.Name) {
 		return
 	}
-	dms.findNamesAndAddresses(req.Records[recidx].Data)
+	dms.findNamesAndAddresses(req.Records[recidx].Data, req.Domain)
 }
 
-func (dms *DataManagerService) findNamesAndAddresses(data string) {
+func (dms *DataManagerService) findNamesAndAddresses(data, domain string) {
 	ipre := regexp.MustCompile(utils.IPv4RE)
 	for _, ip := range ipre.FindAllString(data, -1) {
-		dms.Bus().Publish(core.NewAddrTopic, &core.Request{
+		dms.Bus().Publish(core.NewAddrTopic, &core.AddrRequest{
 			Address: ip,
+			Domain:  domain,
 			Tag:     core.DNS,
 			Source:  "Forward DNS",
 		})
@@ -390,7 +394,7 @@ func (dms *DataManagerService) findNamesAndAddresses(data string) {
 		if domain == "" {
 			continue
 		}
-		dms.Bus().Publish(core.NewNameTopic, &core.Request{
+		dms.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
 			Name:   name,
 			Domain: domain,
 			Tag:    core.DNS,
@@ -400,9 +404,9 @@ func (dms *DataManagerService) findNamesAndAddresses(data string) {
 }
 
 func (dms *DataManagerService) insertInfrastructure(addr string) {
-	asn, cidr, desc, err := IPRequest(addr)
+	asn, cidr, desc, err := IPRequest(addr, dms.Bus())
 	if err != nil {
-		dms.Config().Log.Printf("%v", err)
+		dms.Config().Log.Printf("%s: %v", dms.String(), err)
 		return
 	}
 
@@ -417,15 +421,7 @@ func (dms *DataManagerService) insertInfrastructure(addr string) {
 			Description: desc,
 		})
 		if err != nil {
-			dms.Config().Log.Printf("%s failed to insert infrastructure data: %v", handler, err)
+			dms.Config().Log.Printf("%s: %s failed to insert infrastructure data: %v", dms.String(), handler, err)
 		}
 	}
-}
-
-func removeLastDot(name string) string {
-	sz := len(name)
-	if sz > 0 && name[sz-1] == '.' {
-		return name[:sz-1]
-	}
-	return name
 }

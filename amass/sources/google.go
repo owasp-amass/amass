@@ -46,10 +46,13 @@ func (g *Google) processRequests() {
 		select {
 		case <-g.Quit():
 			return
-		case req := <-g.RequestChan():
+		case req := <-g.DNSRequestChan():
 			if g.Config().IsDomainInScope(req.Domain) {
 				g.executeQuery(req.Domain)
 			}
+		case <-g.AddrRequestChan():
+		case <-g.ASNRequestChan():
+		case <-g.WhoisRequestChan():
 		}
 	}
 }
@@ -79,7 +82,7 @@ func (g *Google) executeQuery(domain string) {
 			}
 
 			for _, name := range re.FindAllString(page, -1) {
-				g.Bus().Publish(core.NewNameTopic, &core.Request{
+				g.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
 					Name:   cleanName(name),
 					Domain: domain,
 					Tag:    g.SourceType,

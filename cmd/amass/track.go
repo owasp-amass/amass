@@ -138,7 +138,7 @@ func runTrackCommand(clArgs []string) {
 	enums, earliest, latest := orderedEnumsAndDateRanges(enums, db)
 	// Filter out enumerations that begin before the start date/time
 	if args.Since != "" {
-		for i := len(enums)-1; i >= 0; i-- {
+		for i := len(enums) - 1; i >= 0; i-- {
 			if !earliest[i].Before(start) {
 				break
 			}
