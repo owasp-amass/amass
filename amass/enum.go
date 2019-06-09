@@ -112,6 +112,7 @@ func (e *Enumeration) Start() error {
 			continue
 		}
 		sources = append(sources, src)
+		defer src.Stop()
 	}
 	e.dataSources = sources
 	// Select the correct services to be used in this enumeration
@@ -120,6 +121,7 @@ func (e *Enumeration) Start() error {
 		if err := srv.Start(); err != nil {
 			return err
 		}
+		defer srv.Stop()
 	}
 	services = append(services, e.dataSources...)
 
@@ -158,11 +160,6 @@ loop:
 	}
 	t.Stop()
 	logTick.Stop()
-
-	// Stop all the services and wait for cleanup to finish
-	for _, srv := range services {
-		srv.Stop()
-	}
 	wg.Wait()
 	return nil
 }

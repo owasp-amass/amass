@@ -181,6 +181,7 @@ func (ic *IntelCollection) asnsToCIDRs() {
 			continue
 		}
 		keep = append(keep, src)
+		defer src.Stop()
 	}
 	srcs = keep
 
@@ -192,11 +193,12 @@ func (ic *IntelCollection) asnsToCIDRs() {
 	}
 
 	t := time.NewTicker(2 * time.Second)
-loop:
+	defer t.Stop()
+	defer ic.sendNetblockCIDRs()
 	for {
 		select {
 		case <-ic.Done:
-			break loop
+			return
 		case <-t.C:
 			done := true
 			for _, src := range srcs {
@@ -206,17 +208,10 @@ loop:
 				}
 			}
 			if done {
-				break loop
+				return
 			}
 		}
 	}
-	t.Stop()
-	// Stop all the data sources and wait for cleanup to finish
-	for _, src := range srcs {
-		src.Stop()
-	}
-	// Process the collected netblocks
-	go ic.sendNetblockCIDRs()
 }
 
 func (ic *IntelCollection) sendNetblockCIDRs() {
@@ -323,6 +318,7 @@ func (ic *IntelCollection) ReverseWhois(domain string) ([]string, error) {
 			continue
 		}
 		keep = append(keep, src)
+		defer src.Stop()
 	}
 	srcs = keep
 
@@ -351,10 +347,6 @@ loop:
 		}
 	}
 	t.Stop()
-	// Stop all the data sources and wait for cleanup to finish
-	for _, src := range srcs {
-		src.Stop()
-	}
 	sort.Strings(domains)
 	return domains, nil
 }
