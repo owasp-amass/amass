@@ -298,9 +298,63 @@ func LookupASNsByName(s string) ([]*core.ASNRequest, error) {
 }
 
 // ReverseWhois returns domain names that are related to the domain provided
-func ReverseWhois(domain string) ([]string, error) {
+func (ic *IntelCollection) ReverseWhois(domain string) ([]string, error) {
 	var domains []string
 
+	collect := func(req *core.WhoisRequest) {
+		for _, d := range req.NewDomains {
+			domains = utils.UniqueAppend(domains, d)
+		}
+	}
+
+	ic.Bus.Subscribe(core.NewWhoisTopic, collect)
+	defer ic.Bus.Unsubscribe(core.NewWhoisTopic, collect)
+
+	srcs := sources.GetAllSources(ic.Config, ic.Bus)
+	// Select the data sources desired by the user
+	if len(ic.Config.DisabledDataSources) > 0 {
+		srcs = ic.Config.ExcludeDisabledDataSources(srcs)
+	}
+	// Keep only the data sources that successfully start
+	var keep []core.Service
+	for _, src := range srcs {
+		if err := src.Start(); err != nil {
+			src.Stop()
+			continue
+		}
+		keep = append(keep, src)
+	}
+	srcs = keep
+
+	// Send the whois request to the data sources
+	for _, src := range srcs {
+		src.SendWhoisRequest(&core.WhoisRequest{Domain: domain})
+	}
+
+	t := time.NewTicker(2 * time.Second)
+loop:
+	for {
+		select {
+		case <-ic.Done:
+			break loop
+		case <-t.C:
+			done := true
+			for _, src := range srcs {
+				if src.IsActive() {
+					done = false
+					break
+				}
+			}
+			if done {
+				break loop
+			}
+		}
+	}
+	t.Stop()
+	// Stop all the data sources and wait for cleanup to finish
+	for _, src := range srcs {
+		src.Stop()
+	}
 	sort.Strings(domains)
 	return domains, nil
 }

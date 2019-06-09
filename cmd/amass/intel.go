@@ -177,16 +177,22 @@ func runIntelCommand(clArgs []string) {
 	}
 
 	if args.Options.ReverseWhois {
+		var all []string
+
 		for _, domain := range args.Domains {
-			domains, err := amass.ReverseWhois(domain)
+			domains, err := intel.ReverseWhois(domain)
 			if err != nil {
 				continue
 			}
 			for _, d := range domains {
 				if name := strings.TrimSpace(d); name != "" {
-					g.Println(name)
+					all = utils.UniqueAppend(all, name)
 				}
 			}
+		}
+
+		for _, d := range all {
+			g.Println(d)
 		}
 		return
 	}
