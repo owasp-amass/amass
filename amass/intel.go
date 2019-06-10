@@ -9,7 +9,6 @@ import (
 	"io/ioutil"
 	"log"
 	"net"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -292,16 +291,22 @@ func LookupASNsByName(s string) ([]*core.ASNRequest, error) {
 	return records, nil
 }
 
-// ReverseWhois returns domain names that are related to the domain provided
-func (ic *IntelCollection) ReverseWhois(domain string) ([]string, error) {
-	var domains []string
+// ReverseWhois returns domain names that are related to the domains provided
+func (ic *IntelCollection) ReverseWhois() error {
+	filter := utils.NewStringFilter()
 
 	collect := func(req *core.WhoisRequest) {
 		for _, d := range req.NewDomains {
-			domains = utils.UniqueAppend(domains, d)
+			if !filter.Duplicate(d) {
+				ic.Output <- &core.Output{
+					Name: d,
+					Domain: d,
+					Tag: req.Tag,
+					Source: req.Source,
+				}
+			}
 		}
 	}
-
 	ic.Bus.Subscribe(core.NewWhoisTopic, collect)
 	defer ic.Bus.Unsubscribe(core.NewWhoisTopic, collect)
 
@@ -322,9 +327,11 @@ func (ic *IntelCollection) ReverseWhois(domain string) ([]string, error) {
 	}
 	srcs = keep
 
-	// Send the whois request to the data sources
-	for _, src := range srcs {
-		src.SendWhoisRequest(&core.WhoisRequest{Domain: domain})
+	// Send the whois requests to the data sources
+	for _, domain := range ic.Config.Domains() {
+		for _, src := range srcs {
+			src.SendWhoisRequest(&core.WhoisRequest{Domain: domain})
+		}
 	}
 
 	t := time.NewTicker(2 * time.Second)
@@ -347,6 +354,6 @@ loop:
 		}
 	}
 	t.Stop()
-	sort.Strings(domains)
-	return domains, nil
+	close(ic.Output)
+	return nil
 }

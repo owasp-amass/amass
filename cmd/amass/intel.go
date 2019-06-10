@@ -14,7 +14,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strings"
 	"syscall"
 	"time"
 
@@ -177,26 +176,15 @@ func runIntelCommand(clArgs []string) {
 	}
 
 	if args.Options.ReverseWhois {
-		var all []string
-
-		for _, domain := range args.Domains {
-			domains, err := intel.ReverseWhois(domain)
-			if err != nil {
-				continue
-			}
-			for _, d := range domains {
-				if name := strings.TrimSpace(d); name != "" {
-					all = utils.UniqueAppend(all, name)
-				}
-			}
-		}
-
-		for _, d := range all {
-			g.Println(d)
-		}
-		return
+		args.Options.IPs = false
+		args.Options.IPv4 = false
+		args.Options.IPv6 = false
+		go intel.ReverseWhois()
+	} else {
+		go intel.HostedDomains()
 	}
 
+	go intelSignalHandler(intel)
 	processIntelOutput(intel, &args, rLog)
 }
 
@@ -244,33 +232,21 @@ func processIntelOutput(intel *amass.IntelCollection, args *intelArgs, pipe *io.
 		outptr.Seek(0, 0)
 	}
 
-	// Kick off the output management goroutine
-	finished = make(chan struct{})
-	go intelSignalHandler(intel)
-	go func() {
-		// Collect all the names returned by the intelligence collection
-		for out := range intel.Output {
-			source, name, ips := amass.OutputLineParts(out, args.Options.Sources,
-				args.Options.IPs || args.Options.IPv4 || args.Options.IPv6, args.Options.DemoMode)
+	// Collect all the names returned by the intelligence collection
+	for out := range intel.Output {
+		source, name, ips := amass.OutputLineParts(out, args.Options.Sources,
+			args.Options.IPs || args.Options.IPv4 || args.Options.IPv6, args.Options.DemoMode)
 
-			if ips != "" {
-				ips = " " + ips
-			}
-
-			fmt.Fprintf(color.Output, "%s%s%s\n", blue(source), green(name), yellow(ips))
-			// Handle writing the line to a specified output file
-			if outptr != nil {
-				fmt.Fprintf(outptr, "%s%s%s\n", source, name, ips)
-			}
+		if ips != "" {
+			ips = " " + ips
 		}
-		close(finished)
-	}()
-	// Start the intel collection process
-	if err := intel.HostedDomains(); err != nil {
-		r.Println(err)
-		os.Exit(1)
+
+		fmt.Fprintf(color.Output, "%s%s%s\n", blue(source), green(name), yellow(ips))
+		// Handle writing the line to a specified output file
+		if outptr != nil {
+			fmt.Fprintf(outptr, "%s%s%s\n", source, name, ips)
+		}
 	}
-	<-finished
 }
 
 // If the user interrupts the program, print the summary information
@@ -278,12 +254,8 @@ func intelSignalHandler(ic *amass.IntelCollection) {
 	quit := make(chan os.Signal, 1)
 
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
-
 	<-quit
-	// Start final output operations
 	close(ic.Done)
-	<-finished
-	os.Exit(1)
 }
 
 func writeIntelLogsAndMessages(logs *io.PipeReader, logfile string) {
@@ -312,7 +284,6 @@ func writeIntelLogsAndMessages(logs *io.PipeReader, logfile string) {
 			fmt.Fprintf(color.Error, "Error reading the Amass logs: %v\n", err)
 			break
 		}
-
 		if filePtr != nil {
 			fmt.Fprintln(filePtr, line)
 		}
