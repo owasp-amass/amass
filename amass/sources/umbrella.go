@@ -26,7 +26,7 @@ type Umbrella struct {
 func NewUmbrella(config *core.Config, bus *core.EventBus) *Umbrella {
 	u := &Umbrella{
 		SourceType: core.API,
-		RateLimit:  time.Second,
+		RateLimit:  500 * time.Millisecond,
 	}
 
 	u.BaseService = *core.NewBaseService(u, "Umbrella", config, bus)
@@ -208,6 +208,8 @@ func (u *Umbrella) queryWhois(domain string) *whoisRecord {
 		return nil
 	}
 
+	u.SetActive()
+	time.Sleep(u.RateLimit)
 	return &whois
 }
 
@@ -246,6 +248,9 @@ func (u *Umbrella) queryReverseWhois(input []string, apiUrl string) []string {
 				more = true
 			}
 		}
+
+		u.SetActive()
+		time.Sleep(u.RateLimit)
 	}
 
 	return domains
@@ -278,8 +283,10 @@ func (u *Umbrella) executeWhoisQuery(domain string) {
 
 func (u *Umbrella) restHeaders() map[string]string {
 	headers := map[string]string{
-		"Authorization": "Bearer " + u.API.Key,
-		"Content-Type":  "application/json",
+		"Content-Type": "application/json",
+	}
+	if u.API != nil && u.API.Key != "" {
+		headers["Authorization"] = "Bearer " + u.API.Key
 	}
 	return headers
 
