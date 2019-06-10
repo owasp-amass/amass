@@ -4,6 +4,9 @@
 package sources
 
 import (
+	"encoding/json"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
@@ -23,7 +26,7 @@ type Umbrella struct {
 func NewUmbrella(config *core.Config, bus *core.EventBus) *Umbrella {
 	u := &Umbrella{
 		SourceType: core.API,
-		RateLimit:  time.Second,
+		RateLimit:  500 * time.Millisecond,
 	}
 
 	u.BaseService = *core.NewBaseService(u, "Umbrella", config, bus)
@@ -61,7 +64,15 @@ func (u *Umbrella) processRequests() {
 			}
 		case <-u.AddrRequestChan():
 		case <-u.ASNRequestChan():
-		case <-u.WhoisRequestChan():
+		case req := <-u.WhoisRequestChan():
+			if u.Config().IsDomainInScope(req.Domain) {
+				if time.Now().Sub(last) < u.RateLimit {
+					time.Sleep(u.RateLimit)
+				}
+				last = time.Now()
+				u.executeWhoisQuery(req.Domain)
+				last = time.Now()
+			}
 		}
 	}
 }
@@ -72,10 +83,8 @@ func (u *Umbrella) executeQuery(domain string) {
 		return
 	}
 
-	headers := map[string]string{
-		"Authorization": "Bearer " + u.API.Key,
-		"Content-Type":  "application/json",
-	}
+	headers := u.restHeaders()
+
 	u.SetActive()
 	url := u.patternSearchRestURL(domain)
 	page, err := utils.RequestWebPage(url, nil, headers, "", "")
@@ -131,6 +140,192 @@ func (u *Umbrella) executeQuery(domain string) {
 			})
 		}
 	}
+}
+
+// Umbrella provides much more than this, but we're only interested in these
+// fields
+type whoisRecord struct {
+	NameServers         []string `json:"nameServers"`
+	AdminContactEmail   string   `json:"administrativeContactEmail"`
+	BillingContactEmail string   `json:"billingContactEmail"`
+	RegistrantEmail     string   `json:"registrantEmail"`
+	TechContactEmail    string   `json:"technicalContactEmail"`
+	ZoneContactEmail    string   `json:"zoneContactEmail"`
+}
+
+// Umbrella provides the same response for email and ns reverse records. Makes
+// the json parsing logic simple since we can use the same structs for both
+type rWhoisDomain struct {
+	Domain  string `json:"domain"`
+	Current bool   `json:"current"`
+}
+
+type rWhoisResponse struct {
+	TotalResults int            `json:"totalResults"`
+	MoreData     bool           `json:"moreDataAvailable"`
+	Limit        int            `json:"limit"`
+	Domains      []rWhoisDomain `json:"domains"`
+}
+
+func (u *Umbrella) collateEmails(record *whoisRecord) []string {
+	var emails []string
+
+	if u.validateScope(record.AdminContactEmail) {
+		emails = utils.UniqueAppend(emails, record.AdminContactEmail)
+	}
+	if u.validateScope(record.BillingContactEmail) {
+		emails = utils.UniqueAppend(emails, record.BillingContactEmail)
+	}
+	if u.validateScope(record.RegistrantEmail) {
+		emails = utils.UniqueAppend(emails, record.RegistrantEmail)
+	}
+	if u.validateScope(record.TechContactEmail) {
+		emails = utils.UniqueAppend(emails, record.TechContactEmail)
+	}
+	if u.validateScope(record.ZoneContactEmail) {
+		emails = utils.UniqueAppend(emails, record.ZoneContactEmail)
+	}
+
+	return emails
+}
+
+func (u *Umbrella) queryWhois(domain string) *whoisRecord {
+	var whois whoisRecord
+
+	headers := u.restHeaders()
+
+	whoisUrl := u.whoisRecordURL(domain)
+	u.SetActive()
+	record, err := utils.RequestWebPage(whoisUrl, nil, headers, "", "")
+	if err != nil {
+		u.Config().Log.Printf("%s: %s: %v", u.String(), whoisUrl, err)
+		return nil
+	}
+
+	err = json.Unmarshal([]byte(record), &whois)
+	if err != nil {
+		u.Config().Log.Printf("%s: %s: %v", u.String(), whoisUrl, err)
+		return nil
+	}
+
+	u.SetActive()
+	time.Sleep(u.RateLimit)
+	return &whois
+}
+
+func (u *Umbrella) queryReverseWhois(apiUrl string) []string {
+	var domains []string
+
+	headers := u.restHeaders()
+
+	var whois map[string]rWhoisResponse
+
+	// Umbrella provides data in 500 piece chunks
+	for count, more := 0, true; more; count = count + 500 {
+		u.SetActive()
+		fullApiUrl := fmt.Sprintf("%s&offset=%d", apiUrl, count)
+		record, err := utils.RequestWebPage(fullApiUrl, nil, headers, "", "")
+		if err != nil {
+			u.Config().Log.Printf("%s: %s: %v", u.String(), apiUrl, err)
+			return domains
+		}
+		err = json.Unmarshal([]byte(record), &whois)
+
+		more = false
+		for _, result := range whois {
+			if result.TotalResults > 0 {
+				for _, domain := range result.Domains {
+					if domain.Current {
+						domains = utils.UniqueAppend(domains, domain.Domain)
+					}
+				}
+			}
+			if result.MoreData && more == false {
+				more = true
+			}
+		}
+
+		u.SetActive()
+		time.Sleep(u.RateLimit)
+	}
+
+	return domains
+}
+
+func (u *Umbrella) validateScope(input string) bool {
+	if input == "" {
+		return false
+	}
+
+	if u.Config().IsDomainInScope(input) {
+		return true
+	} else {
+		return false
+	}
+}
+
+func (u *Umbrella) executeWhoisQuery(domain string) {
+	var domains []string
+
+	whoisRecord := u.queryWhois(domain)
+	if whoisRecord == nil {
+		return
+	}
+
+	emails := u.collateEmails(whoisRecord)
+	if len(emails) > 0 {
+		emailUrl := u.reverseWhoisByEmailURL(emails...)
+		domains = utils.UniqueAppend(domains, u.queryReverseWhois(emailUrl)...)
+	}
+
+	var nameservers []string
+	for _, ns := range whoisRecord.NameServers {
+		if u.validateScope(ns) {
+			nameservers = append(nameservers, ns)
+		}
+	}
+	if len(nameservers) > 0 {
+		nsUrl := u.reverseWhoisByNSURL(nameservers...)
+		domains = utils.UniqueAppend(domains, u.queryReverseWhois(nsUrl)...)
+	}
+
+	if len(domains) > 0 {
+		u.Bus().Publish(core.NewWhoisTopic, &core.WhoisRequest{
+			Domain:     domain,
+			NewDomains: domains,
+			Tag:        u.SourceType,
+			Source:     u.String(),
+		})
+	}
+}
+
+func (u *Umbrella) restHeaders() map[string]string {
+	headers := map[string]string{
+		"Content-Type": "application/json",
+	}
+	if u.API != nil && u.API.Key != "" {
+		headers["Authorization"] = "Bearer " + u.API.Key
+	}
+	return headers
+
+}
+
+func (u *Umbrella) whoisBaseURL() string {
+	return `https://investigate.api.umbrella.com/whois/`
+}
+
+func (u *Umbrella) whoisRecordURL(domain string) string {
+	return u.whoisBaseURL() + domain
+}
+
+func (u *Umbrella) reverseWhoisByNSURL(ns ...string) string {
+	nameservers := strings.Join(ns, ",")
+	return u.whoisBaseURL() + `nameservers?nameServerList=` + nameservers
+}
+
+func (u *Umbrella) reverseWhoisByEmailURL(emails ...string) string {
+	emailQuery := strings.Join(emails, ",")
+	return u.whoisBaseURL() + `emails?emailList=` + emailQuery
 }
 
 func (u *Umbrella) patternSearchRestURL(domain string) string {
