@@ -177,27 +177,30 @@ func runIntelCommand(clArgs []string) {
 	}
 
 	if args.Options.ReverseWhois {
-		var all []string
-
-		for _, domain := range args.Domains {
-			domains, err := intel.ReverseWhois(domain)
-			if err != nil {
-				continue
-			}
-			for _, d := range domains {
-				if name := strings.TrimSpace(d); name != "" {
-					all = utils.UniqueAppend(all, name)
-				}
-			}
-		}
-
-		for _, d := range all {
-			g.Println(d)
-		}
-		return
+		go performReverseWhois(intel, &args)
 	}
 
 	processIntelOutput(intel, &args, rLog)
+}
+
+func performReverseWhois(intel *amass.IntelCollection, args *intelArgs) {
+	var all []string
+
+	for _, domain := range args.Domains {
+		domains, err := intel.ReverseWhois(domain)
+		if err != nil {
+			continue
+		}
+		for _, d := range domains {
+			if name := strings.TrimSpace(d); name != "" {
+				all = utils.UniqueAppend(all, name)
+			}
+		}
+	}
+
+	for _, d := range all {
+		g.Println(d)
+	}
 }
 
 func processIntelOutput(intel *amass.IntelCollection, args *intelArgs, pipe *io.PipeReader) {
