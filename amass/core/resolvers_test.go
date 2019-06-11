@@ -13,7 +13,7 @@ func TestZoneTransfer(t *testing.T) {
 	if *networkTest == false {
 		return
 	}
-	
+
 	tests := []struct {
 		expected string
 	}{

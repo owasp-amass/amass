@@ -299,9 +299,9 @@ func (ic *IntelCollection) ReverseWhois() error {
 		for _, d := range req.NewDomains {
 			if !filter.Duplicate(d) {
 				ic.Output <- &core.Output{
-					Name: d,
+					Name:   d,
 					Domain: d,
-					Tag: req.Tag,
+					Tag:    req.Tag,
 					Source: req.Source,
 				}
 			}

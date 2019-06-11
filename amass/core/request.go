@@ -84,12 +84,12 @@ type ASNRequest struct {
 
 // WhoisRequest handles data needed throughout Service processing of reverse whois.
 type WhoisRequest struct {
-	Domain  string
-	Company string
-	Email   string
+	Domain     string
+	Company    string
+	Email      string
 	NewDomains []string
-	Tag     string
-	Source  string
+	Tag        string
+	Source     string
 }
 
 // Output contains all the output data for an enumerated DNS name.

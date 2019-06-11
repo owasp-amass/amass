@@ -59,7 +59,7 @@ func (u *Umbrella) processRequests() {
 					time.Sleep(u.RateLimit)
 				}
 				last = time.Now()
-				u.executeQuery(req.Domain)
+				u.executeDNSQuery(req.Domain)
 				last = time.Now()
 			}
 		case <-u.AddrRequestChan():
@@ -77,15 +77,14 @@ func (u *Umbrella) processRequests() {
 	}
 }
 
-func (u *Umbrella) executeQuery(domain string) {
+func (u *Umbrella) executeDNSQuery(domain string) {
 	re := u.Config().DomainRegex(domain)
 	if re == nil || u.API == nil || u.API.Key == "" {
 		return
 	}
 
-	headers := u.restHeaders()
-
 	u.SetActive()
+	headers := u.restHeaders()
 	url := u.patternSearchRestURL(domain)
 	page, err := utils.RequestWebPage(url, nil, headers, "", "")
 	if err != nil {
@@ -185,26 +184,24 @@ func (u *Umbrella) collateEmails(record *whoisRecord) []string {
 	if u.validateScope(record.ZoneContactEmail) {
 		emails = utils.UniqueAppend(emails, record.ZoneContactEmail)
 	}
-
 	return emails
 }
 
 func (u *Umbrella) queryWhois(domain string) *whoisRecord {
 	var whois whoisRecord
-
 	headers := u.restHeaders()
+	whoisURL := u.whoisRecordURL(domain)
 
-	whoisUrl := u.whoisRecordURL(domain)
 	u.SetActive()
-	record, err := utils.RequestWebPage(whoisUrl, nil, headers, "", "")
+	record, err := utils.RequestWebPage(whoisURL, nil, headers, "", "")
 	if err != nil {
-		u.Config().Log.Printf("%s: %s: %v", u.String(), whoisUrl, err)
+		u.Config().Log.Printf("%s: %s: %v", u.String(), whoisURL, err)
 		return nil
 	}
 
 	err = json.Unmarshal([]byte(record), &whois)
 	if err != nil {
-		u.Config().Log.Printf("%s: %s: %v", u.String(), whoisUrl, err)
+		u.Config().Log.Printf("%s: %s: %v", u.String(), whoisURL, err)
 		return nil
 	}
 
@@ -213,20 +210,18 @@ func (u *Umbrella) queryWhois(domain string) *whoisRecord {
 	return &whois
 }
 
-func (u *Umbrella) queryReverseWhois(apiUrl string) []string {
+func (u *Umbrella) queryReverseWhois(apiURL string) []string {
 	var domains []string
-
 	headers := u.restHeaders()
-
 	var whois map[string]rWhoisResponse
 
 	// Umbrella provides data in 500 piece chunks
 	for count, more := 0, true; more; count = count + 500 {
 		u.SetActive()
-		fullApiUrl := fmt.Sprintf("%s&offset=%d", apiUrl, count)
-		record, err := utils.RequestWebPage(fullApiUrl, nil, headers, "", "")
+		fullAPIURL := fmt.Sprintf("%s&offset=%d", apiURL, count)
+		record, err := utils.RequestWebPage(fullAPIURL, nil, headers, "", "")
 		if err != nil {
-			u.Config().Log.Printf("%s: %s: %v", u.String(), apiUrl, err)
+			u.Config().Log.Printf("%s: %s: %v", u.String(), apiURL, err)
 			return domains
 		}
 		err = json.Unmarshal([]byte(record), &whois)
@@ -248,34 +243,35 @@ func (u *Umbrella) queryReverseWhois(apiUrl string) []string {
 		u.SetActive()
 		time.Sleep(u.RateLimit)
 	}
-
 	return domains
 }
 
 func (u *Umbrella) validateScope(input string) bool {
-	if input == "" {
-		return false
-	}
-
-	if u.Config().IsDomainInScope(input) {
+	if input != "" && u.Config().IsDomainInScope(input) {
 		return true
-	} else {
-		return false
 	}
+	return false
 }
 
 func (u *Umbrella) executeWhoisQuery(domain string) {
-	var domains []string
+	if u.API == nil || u.API.Key == "" {
+		return
+	}
 
 	whoisRecord := u.queryWhois(domain)
 	if whoisRecord == nil {
 		return
 	}
 
+	var domains []string
 	emails := u.collateEmails(whoisRecord)
 	if len(emails) > 0 {
-		emailUrl := u.reverseWhoisByEmailURL(emails...)
-		domains = utils.UniqueAppend(domains, u.queryReverseWhois(emailUrl)...)
+		emailURL := u.reverseWhoisByEmailURL(emails...)
+		for _, d := range u.queryReverseWhois(emailURL) {
+			if !u.Config().IsDomainInScope(d) {
+				domains = utils.UniqueAppend(domains, d)
+			}
+		}
 	}
 
 	var nameservers []string
@@ -285,8 +281,12 @@ func (u *Umbrella) executeWhoisQuery(domain string) {
 		}
 	}
 	if len(nameservers) > 0 {
-		nsUrl := u.reverseWhoisByNSURL(nameservers...)
-		domains = utils.UniqueAppend(domains, u.queryReverseWhois(nsUrl)...)
+		nsURL := u.reverseWhoisByNSURL(nameservers...)
+		for _, d := range u.queryReverseWhois(nsURL) {
+			if !u.Config().IsDomainInScope(d) {
+				domains = utils.UniqueAppend(domains, d)
+			}
+		}
 	}
 
 	if len(domains) > 0 {
@@ -300,9 +300,8 @@ func (u *Umbrella) executeWhoisQuery(domain string) {
 }
 
 func (u *Umbrella) restHeaders() map[string]string {
-	headers := map[string]string{
-		"Content-Type": "application/json",
-	}
+	headers := map[string]string{"Content-Type": "application/json"}
+
 	if u.API != nil && u.API.Key != "" {
 		headers["Authorization"] = "Bearer " + u.API.Key
 	}
@@ -320,11 +319,13 @@ func (u *Umbrella) whoisRecordURL(domain string) string {
 
 func (u *Umbrella) reverseWhoisByNSURL(ns ...string) string {
 	nameservers := strings.Join(ns, ",")
+
 	return u.whoisBaseURL() + `nameservers?nameServerList=` + nameservers
 }
 
 func (u *Umbrella) reverseWhoisByEmailURL(emails ...string) string {
 	emailQuery := strings.Join(emails, ",")
+
 	return u.whoisBaseURL() + `emails?emailList=` + emailQuery
 }
 

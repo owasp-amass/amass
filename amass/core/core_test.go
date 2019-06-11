@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	networkTest  = flag.Bool("network", false, "Run tests that require connectivity (take more time)")
+	networkTest = flag.Bool("network", false, "Run tests that require connectivity (take more time)")
 )
 
 // TestMain will parse the test flags and setup for integration tests.

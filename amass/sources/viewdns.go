@@ -126,10 +126,10 @@ func (v *ViewDNS) executeWhoisQuery(domain string) {
 
 	if len(matches) > 0 {
 		v.Bus().Publish(core.NewWhoisTopic, &core.WhoisRequest{
-			Domain: domain,
+			Domain:     domain,
 			NewDomains: matches,
-			Tag:    v.SourceType,
-			Source: v.String(),
+			Tag:        v.SourceType,
+			Source:     v.String(),
 		})
 	}
 }
