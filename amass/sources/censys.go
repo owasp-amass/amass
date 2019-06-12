@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+	"strings"
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
@@ -80,17 +81,12 @@ type censysRequest struct {
 }
 
 func (c *Censys) apiQuery(domain string) {
-	re := c.Config().DomainRegex(domain)
-	if re == nil {
-		return
-	}
-
 	for page := 1; ; page++ {
 		c.SetActive()
 		jsonStr, err := json.Marshal(&censysRequest{
-			Query:  domain,
+			Query:  "parsed.names: " + domain,
 			Page:   page,
-			Fields: []string{"parsed.subject_dn"},
+			Fields: []string{"parsed.names"},
 		})
 		if err != nil {
 			break
@@ -112,18 +108,25 @@ func (c *Censys) apiQuery(domain string) {
 				Pages int `json:"pages"`
 			} `json:"metadata"`
 			Results []struct {
-				Data string `json:"parsed.subject_dn"`
+				Names []string `json:"parsed.names"`
 			} `json:"results"`
 		}
 		if err := json.Unmarshal([]byte(resp), &m); err != nil || m.Status != "ok" {
+			c.Config().Log.Printf("%s: %s: %v", c.String(), u, err)
+			break
+		} else if len(m.Results) == 0 {
+			c.Config().Log.Printf("%s: %s: The query returned zero results", c.String(), u)
 			break
 		}
 
-		if len(m.Results) != 0 {
-			for _, result := range m.Results {
-				for _, name := range re.FindAllString(result.Data, -1) {
+		for _, result := range m.Results {
+			for _, name := range result.Names {
+				n := strings.TrimSpace(name)
+				n = utils.RemoveAsteriskLabel(n)
+				
+				if c.Config().IsDomainInScope(n) {
 					c.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
-						Name:   utils.RemoveAsteriskLabel(name),
+						Name:   n,
 						Domain: domain,
 						Tag:    c.SourceType,
 						Source: c.String(),

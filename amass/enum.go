@@ -138,7 +138,7 @@ func (e *Enumeration) Start() error {
 	go e.checkForOutput(&wg)
 	go e.processOutput(&wg)
 
-	t := time.NewTicker(time.Second)
+	t := time.NewTicker(2 * time.Second)
 	logTick := time.NewTicker(time.Minute)
 loop:
 	for {
@@ -247,7 +247,7 @@ func (e *Enumeration) submitProvidedNames() {
 				Name:   name,
 				Domain: domain,
 				Tag:    core.EXTERNAL,
-				Source: "Input File",
+				Source: "User Input",
 			})
 		}
 	}
@@ -373,34 +373,24 @@ func (e *Enumeration) checkForOutput(wg *sync.WaitGroup) {
 	t := time.NewTicker(2 * time.Second)
 	defer t.Stop()
 	defer wg.Done()
-loop:
+
 	for {
 		select {
 		case <-e.Done:
-			break loop
+			// Handle all remaining pieces of output
+			e.queueNewGraphEntries(e.Config.UUID.String(), time.Millisecond)
+			return
 		case <-t.C:
-			out := e.Graph.GetOutput(e.Config.UUID.String(), false)
-			for _, o := range out {
-				if time.Now().Add(3 * time.Second).After(o.Timestamp) {
-					e.Graph.MarkAsRead(&handlers.DataOptsParams{
-						UUID:   e.Config.UUID.String(),
-						Name:   o.Name,
-						Domain: o.Domain,
-					})
-
-					if e.Config.IsDomainInScope(o.Name) {
-						e.outputQueue.Append(o)
-					}
-				}
-			}
+			e.queueNewGraphEntries(e.Config.UUID.String(), 3 * time.Second)
 		}
 	}
-	// Handle all remaining pieces of output
-	out := e.Graph.GetOutput(e.Config.UUID.String(), false)
-	for _, o := range out {
-		if !e.filter.Duplicate(o.Name) {
+}
+
+func (e *Enumeration) queueNewGraphEntries(uuid string, delay time.Duration) {
+	for _, o := range e.Graph.GetOutput(uuid, false) {
+		if time.Now().Add(delay).After(o.Timestamp) {
 			e.Graph.MarkAsRead(&handlers.DataOptsParams{
-				UUID:   e.Config.UUID.String(),
+				UUID:   uuid,
 				Name:   o.Name,
 				Domain: o.Domain,
 			})
