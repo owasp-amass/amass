@@ -37,8 +37,6 @@ const (
 	OutputTopic       = "amass:output"
 	IPToASNTopic      = "amass:iptoasn"
 	NewASNTopic       = "amass:asn"
-	IPRequestTopic    = "amass:iprequest"
-	IPInfoTopic       = "amass:ipinfo"
 	WhoisRequestTopic = "amass:whoisreq"
 	NewWhoisTopic     = "amass:whoisinfo"
 )
