@@ -21,17 +21,18 @@ builds:
       - goos: windows
         goarch: 386
 
-archive:
-  name_template: "amass_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-  replacements:
-    darwin: macos
-    386: i386
-  wrap_in_directory: true
-  format: zip
-  files:
-    - LICENSE
-    - README.md
-    - wordlists/*
+archives:
+  -
+    name_template: "amass_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    replacements:
+      darwin: macos
+      386: i386
+    wrap_in_directory: true
+    format: zip
+    files:
+      - LICENSE
+      - README.md
+      - wordlists/*
 
 checksum:
   name_template: "amass_checksums.txt"
@@ -56,8 +57,6 @@ brews:
     folder: Formula
     homepage: "https://www.owasp.org/index.php/OWASP_Amass_Project"
     description: "In-depth DNS Enumeration and Network Mapping"
-    install: |
-      bin.install "amass"
 
 snapcrafts:
   -
