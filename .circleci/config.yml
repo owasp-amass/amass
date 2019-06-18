@@ -26,10 +26,12 @@ jobs:
       - run:
           name: "Build Amass and Release"
           command: |
-            apt-get update && apt-get install -y snapcraft
-            mkdir .snapcraft
-            echo $SNAPCRAFT_LOGIN_FILE | base64 --decode --ignore-garbage > .snapcraft/snapcraft.cfg
+            sudo apt-get update && apt-get install -y snapcraft
+            mkdir ../.snapcraft
+            echo $SNAPCRAFT_LOGIN_FILE | base64 --decode --ignore-garbage > ../.snapcraft/snapcraft.cfg
             curl -sL https://git.io/goreleaser | bash
+            cd ..
+            snapcraft push ./Amass/dist/*.snap --release edge
 
 workflows:
   version: 2
