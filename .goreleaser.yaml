@@ -1,6 +1,3 @@
-#before:
-#  hooks:
-#    - go get -u -d ./...
 builds:
   -
     main: ./cmd/amass/
@@ -72,9 +69,4 @@ snapcrafts:
 
     apps:
       amass:
-        # If your app requires extra permissions to work outside of its default
-        # confined space, declare them here.
-        # You can read the documentation about the available plugs and the
-        # things they allow:
-        # https://snapcraft.io/docs/reference/interfaces.
         plugs: ["home", "network", "removable-media"]

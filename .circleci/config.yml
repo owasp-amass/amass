@@ -14,7 +14,6 @@ jobs:
           name: "Test Amass"
           command: |
             export GO111MODULE=on
-            cd amass
             go test -v -race ./...
 
   binaries:
@@ -25,26 +24,12 @@ jobs:
     steps:
       - checkout
       - run:
-          name: "Build Amass Binaries"
+          name: "Build Amass and Release"
           command: |
-            curl -sL https://git.io/goreleaser | bash
-      - persist_to_workspace:
-          root: .
-          paths:
-            - "*.snap"    
-
-  pubsnap:
-    docker:
-      - image: snapcore/snapcraft:stable
-    steps:
-      - attach_workspace:
-          at: .
-      - run:
-          name: "Publish to Snap Store"
-          command: |
+            apt-get update && apt-get install -y snapcraft
             mkdir .snapcraft
             echo $SNAPCRAFT_LOGIN_FILE | base64 --decode --ignore-garbage > .snapcraft/snapcraft.cfg
-            snapcraft push *.snap --release edge
+            curl -sL https://git.io/goreleaser | bash
 
 workflows:
   version: 2
@@ -54,12 +39,6 @@ workflows:
       - binaries:
           requires:
             - test
-          filters:
-            branches:
-              only: master
-      - pubsnap:
-          requires:
-            - binaries
           filters:
             branches:
               only: master
