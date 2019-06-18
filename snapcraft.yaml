@@ -1,5 +1,5 @@
 name: amass
-version: '3.0.8'
+version: '3.0.9'
 summary: In-depth DNS Enumeration and Network Mapping
 description: The OWASP Amass Project has developed a tool to help information security professionals perform network mapping of attack surfaces and perform external asset discovery using open source information gathering and active reconnaissance techniques.
 icon: images/snapcraft_icon.png
@@ -27,7 +27,7 @@ parts:
       echo "\nStarting override-build for amass part:"
       export GOPATH=$(dirname $SNAPCRAFT_PART_INSTALL)/go
       cd $GOPATH/src/github.com/OWASP/Amass
-      export GO111MODULE=on
+      go get -u github.com/OWASP/Amass/...
       go install ./...
       mkdir $SNAPCRAFT_PART_INSTALL/bin
       mv $GOPATH/bin/amass $SNAPCRAFT_PART_INSTALL/bin/amass
