@@ -28,22 +28,10 @@ jobs:
           name: "Build Amass Binaries"
           command: |
             curl -sL https://git.io/goreleaser | bash
-
-  buildsnap:
-    docker:
-      - image: snapcore/snapcraft:stable
-
-    working_directory: /go/src/github.com/OWASP/Amass
-    steps:
-      - checkout
-
-      - run:
-          name: "Build Snap Package"
-          command: apt update && snapcraft
       - persist_to_workspace:
           root: .
           paths:
-            - "*.snap"
+            - "*.snap"    
 
   pubsnap:
     docker:
@@ -69,15 +57,9 @@ workflows:
           filters:
             branches:
               only: master
-      - buildsnap:
-          requires:
-            - test
-          filters:
-            branches:
-              only: master
       - pubsnap:
           requires:
-            - buildsnap
+            - binaries
           filters:
             branches:
               only: master

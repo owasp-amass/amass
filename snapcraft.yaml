@@ -1,5 +1,5 @@
 name: amass
-version: '3.0.9'
+version: '3.0.10'
 summary: In-depth DNS Enumeration and Network Mapping
 description: The OWASP Amass Project has developed a tool to help information security professionals perform network mapping of attack surfaces and perform external asset discovery using open source information gathering and active reconnaissance techniques.
 icon: images/snapcraft_icon.png
