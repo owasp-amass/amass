@@ -1,7 +1,7 @@
 name: amass
 version: '3.0.4'
 summary: In-depth DNS Enumeration and Network Mapping
-description: The OWASP Amass tool obtains subdomain names by scraping data sources, recursive brute forcing, crawling web archives, permuting/altering names and reverse DNS sweeping. Additionally, Amass uses the IP addresses obtained during resolution to discover associated netblocks and ASNs. All the information is then used to build maps of the target networks.
+description: The OWASP Amass Project has developed a tool to help information security professionals perform network mapping of attack surfaces and perform external asset discovery using open source information gathering and active reconnaissance techniques.
 icon: images/snapcraft_icon.png
 grade: stable
 confinement: strict

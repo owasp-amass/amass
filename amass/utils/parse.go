@@ -116,7 +116,6 @@ func (p *ParseIPs) parseRange(s string) error {
 	twoIPs := strings.Split(s, "-")
 
 	if twoIPs[0] == s {
-		// This is not an IP range
 		return fmt.Errorf("%s is not a valid IP range", s)
 	}
 	start := net.ParseIP(twoIPs[0])
@@ -129,10 +128,14 @@ func (p *ParseIPs) parseRange(s string) error {
 		}
 	}
 	if start == nil || end == nil {
-		// These should have parsed properly
 		return fmt.Errorf("%s is not a valid IP range", s)
 	}
-	return p.appendIPs(RangeHosts(start, end))
+
+	ips := RangeHosts(start, end)
+	if len(ips) == 0 {
+		return fmt.Errorf("%s is not a valid IP range", s)
+	}
+	return p.appendIPs(ips)
 }
 
 func (p *ParseCIDRs) String() string {
