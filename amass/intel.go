@@ -72,7 +72,7 @@ func (ic *IntelCollection) HostedDomains() error {
 
 	var active bool
 	filter := utils.NewStringFilter()
-	t := time.NewTicker(2 * time.Second)
+	t := time.NewTicker(5 * time.Second)
 loop:
 	for {
 		select {
@@ -191,7 +191,7 @@ func (ic *IntelCollection) asnsToCIDRs() {
 		}
 	}
 
-	t := time.NewTicker(2 * time.Second)
+	t := time.NewTicker(5 * time.Second)
 	defer t.Stop()
 	defer ic.sendNetblockCIDRs()
 	for {
@@ -334,7 +334,7 @@ func (ic *IntelCollection) ReverseWhois() error {
 		}
 	}
 
-	t := time.NewTicker(2 * time.Second)
+	t := time.NewTicker(5 * time.Second)
 loop:
 	for {
 		select {

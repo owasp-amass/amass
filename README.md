@@ -9,6 +9,8 @@
 [![Chat](https://img.shields.io/discord/433729817918308352.svg?logo=discord)](https://discord.gg/rtN8GMd)
 [![Follow on Twitter](https://img.shields.io/twitter/follow/owaspamass.svg?logo=twitter)](https://twitter.com/owaspamass)
 
+[![Rawsec's CyberSecurity Inventory](https://inventory.rawsec.ml/img/badges/Rawsec-inventoried-FF5050_flat.svg)](https://inventory.rawsec.ml/)
+
 [![Packaging status](https://repology.org/badge/vertical-allrepos/amass.svg)](https://repology.org/metapackage/amass/versions)
 [![Get it from the Snap Store](https://snapcraft.io/static/images/badges/en/snap-store-white.svg)](https://snapcraft.io/amass)
 
@@ -20,14 +22,14 @@
 
 ----
 
-The OWASP Amass tool suite obtains subdomain names by scraping data sources, recursive brute forcing, crawling web archives, permuting/altering names and reverse DNS sweeping. Additionally, Amass uses the IP addresses obtained during resolution to discover associated netblocks and ASNs. All the information is then used to build maps of the target networks.
+The OWASP Amass Project has developed a tool to help information security professionals perform network mapping of attack surfaces and perform external asset discovery using open source information gathering and active reconnaissance techniques.
 
 **Information Gathering Techniques Used:**
 
 * **DNS:** Basic enumeration, Brute forcing (upon request), Reverse DNS sweeping, Subdomain name alterations/permutations, Zone transfers (upon request)
-* **Scraping:** Ask, Baidu, Bing, CommonCrawl, DNSDumpster, DNSTable, Dogpile, Exalead, FindSubdomains, Google, IPv4Info, Netcraft, PTRArchive, Riddler, SiteDossier, ViewDNS, Yahoo
+* **Scraping:** Ask, Baidu, Bing, CommonCrawl, DNSDumpster, DNSTable, Dogpile, Exalead, FindSubdomains, Google, HackerOne, IPv4Info, Netcraft, PTRArchive, Riddler, SiteDossier, ViewDNS, Yahoo
 * **Certificates:** Active pulls (upon request), Censys, CertDB, CertSpotter, Crtsh, Entrust
-* **APIs:** AlienVault, BinaryEdge, BufferOver, CIRCL, DNSDB, HackerTarget, PassiveTotal, Robtex, SecurityTrails, ShadowServer, Shodan, TeamCymru, ThreatCrowd, Twitter, Umbrella, URLScan, VirusTotal
+* **APIs:** AlienVault, BinaryEdge, BufferOver, CIRCL, DNSDB, HackerTarget, Mnemonic, NetworksDB, PassiveTotal, RADb, Robtex, SecurityTrails, ShadowServer, Shodan, Sublist3rAPI, TeamCymru, ThreatCrowd, Twitter, Umbrella, URLScan, VirusTotal
 * **Web Archives:** ArchiveIt, ArchiveToday, Arquivo, LoCArchive, OpenUKArchive, UKGovArchive, Wayback
 
 ----

@@ -13,31 +13,55 @@ import (
 	"github.com/OWASP/Amass/amass/utils"
 )
 
+var (
+	// Cache for the infrastructure data collected from online sources
+	netLock  sync.Mutex
+	netCache map[int]*core.ASNRequest
+	// The reserved network address ranges
+	reservedAddrRanges []*net.IPNet
+	reservedCIDRs = []string{
+		"192.168.0.0/16",
+		"172.16.0.0/12",
+		"10.0.0.0/8",
+		"127.0.0.0/8",
+		"224.0.0.0/4",
+		"240.0.0.0/4",
+		"100.64.0.0/10",
+		"198.18.0.0/15",
+		"169.254.0.0/16",
+		"192.88.99.0/24",
+		"192.0.0.0/24",
+		"192.0.2.0/24",
+		"192.94.77.0/24",
+		"192.94.78.0/24",
+		"192.52.193.0/24",
+		"192.12.109.0/24",
+		"192.31.196.0/24",
+		"192.0.0.0/29",
+	}
+)
+
 // AddressService is the Service that handles all newly discovered IP addresses
 // within the architecture. This is achieved by receiving all the NEWADDR events.
 type AddressService struct {
 	core.BaseService
 
 	filter *utils.StringFilter
-	// The private network address ranges
-	private192 *net.IPNet
-	private172 *net.IPNet
-	private10  *net.IPNet
-	// Cache for the infrastructure data collected from online sources
-	netLock  sync.Mutex
-	netCache map[int]*core.ASNRequest
+}
+
+func init() {
+	for _, cidr := range reservedCIDRs {
+		if _, ipnet, err := net.ParseCIDR(cidr); err == nil {
+			reservedAddrRanges = append(reservedAddrRanges, ipnet)
+		}
+	}
+
+	netCache = make(map[int]*core.ASNRequest)
 }
 
 // NewAddressService returns he object initialized, but not yet started.
 func NewAddressService(config *core.Config, bus *core.EventBus) *AddressService {
-	as := &AddressService{
-		filter:   utils.NewStringFilter(),
-		netCache: make(map[int]*core.ASNRequest),
-	}
-
-	_, as.private192, _ = net.ParseCIDR("192.168.0.0/16")
-	_, as.private172, _ = net.ParseCIDR("172.16.0.0/12")
-	_, as.private10, _ = net.ParseCIDR("10.0.0.0/8")
+	as := &AddressService{filter: utils.NewStringFilter()}
 
 	as.BaseService = *core.NewBaseService(as, "Address Service", config, bus)
 	return as
@@ -49,7 +73,6 @@ func (as *AddressService) OnStart() error {
 
 	as.Bus().Subscribe(core.NewAddrTopic, as.SendAddrRequest)
 	as.Bus().Subscribe(core.NewASNTopic, as.SendASNRequest)
-	as.Bus().Subscribe(core.IPRequestTopic, as.performIPRequest)
 
 	// Put in requests for all the ASNs specified in the configuration
 	for _, asn := range as.Config().ASNs {
@@ -89,7 +112,7 @@ func (as *AddressService) performAddrRequest(req *core.AddrRequest) {
 	}
 	as.Bus().Publish(core.ActiveCertTopic, req)
 
-	asn := as.ipSearch(req.Address)
+	asn := ipSearch(req.Address)
 	if asn == nil {
 		return
 	}
@@ -99,34 +122,9 @@ func (as *AddressService) performAddrRequest(req *core.AddrRequest) {
 }
 
 func (as *AddressService) performASNRequest(req *core.ASNRequest) {
-	as.netLock.Lock()
-	defer as.netLock.Unlock()
-
 	as.SetActive()
 	as.updateConfigWithNetblocks(req)
-	if _, found := as.netCache[req.ASN]; !found {
-		as.netCache[req.ASN] = req
-		return
-	}
-
-	c := as.netCache[req.ASN]
-	// This is additional information for an ASN entry
-	if c.Prefix == "" && req.Prefix != "" {
-		c.Prefix = req.Prefix
-	}
-	if c.CC == "" && req.CC != "" {
-		c.CC = req.CC
-	}
-	if c.Registry == "" && req.Registry != "" {
-		c.Registry = req.Registry
-	}
-	if c.AllocationDate.IsZero() && !req.AllocationDate.IsZero() {
-		c.AllocationDate = req.AllocationDate
-	}
-	if c.Description == "" && req.Description != "" {
-		c.Description = req.Description
-	}
-	c.Netblocks = utils.UniqueAppend(c.Netblocks, req.Netblocks...)
+	updateCache(req)
 }
 
 func (as *AddressService) updateConfigWithNetblocks(req *core.ASNRequest) {
@@ -157,58 +155,93 @@ func (as *AddressService) updateConfigWithNetblocks(req *core.ASNRequest) {
 	}
 }
 
-func (as *AddressService) performIPRequest(req *core.ASNRequest) {
-	as.SetActive()
+// IPRequest returns the ASN, CIDR and AS Description that contains the provided IP address.
+func IPRequest(addr string, bus *core.EventBus) (int, *net.IPNet, string, error) {
+	if info := ipSearch(addr); info != nil {
+		if _, ipnet, err := net.ParseCIDR(info.Prefix); err == nil {
+			return info.ASN, ipnet, info.Description, nil
+		}
+	}
 
-	if req.Address != "" {
-		// Does the address fall into a private network range?
-		if asn := as.checkForPrivateAddress(req.Address); asn != nil {
-			as.Bus().Publish(core.IPInfoTopic, asn)
-			return
-		}
-		// Is the data already available in the cache?
-		if asn := as.ipSearch(req.Address); asn != nil {
-			as.Bus().Publish(core.IPInfoTopic, asn)
-			return
-		}
-		// Ask the data sources for the ASN information
-		as.Bus().Publish(core.IPToASNTopic, req)
-		// Wait for the results to hit the cache
-		for i := 0; i < 10; i++ {
-			time.Sleep(time.Second)
-			if asn := as.ipSearch(req.Address); asn != nil {
-				as.Bus().Publish(core.IPInfoTopic, asn)
-				return
-			}
-		}
-	} else if req.ASN > 0 {
-		if asn, found := as.netCache[req.ASN]; found {
-			as.Bus().Publish(core.IPInfoTopic, asn)
-			return
-		}
+	asnchan := make(chan *core.ASNRequest, 10)
+	f := func(req *core.ASNRequest) {
+		asnchan <- req
+	}
 
-		as.Bus().Publish(core.IPToASNTopic, req)
-		// Wait for the results to hit the cache
-		for i := 0; i < 10; i++ {
-			time.Sleep(time.Second)
-			as.netLock.Lock()
-			if asn, found := as.netCache[req.ASN]; found {
-				as.Bus().Publish(core.IPInfoTopic, asn)
-				return
+	bus.Subscribe(core.NewASNTopic, f)
+	bus.Publish(core.IPToASNTopic, &core.ASNRequest{Address: addr})
+
+	ip := net.ParseIP(addr)
+	t := time.NewTimer(15 * time.Second)
+loop:
+	for {
+		select {
+		case <-t.C:
+			break loop
+		case a := <-asnchan:
+			updateCache(a)
+			for _, block := range a.Netblocks {
+				if _, cidr, err := net.ParseCIDR(block); err == nil && cidr.Contains(ip) {
+					break loop
+				}
 			}
 		}
 	}
+	t.Stop()
+	bus.Unsubscribe(core.NewASNTopic, f)
+
+	if info := ipSearch(addr); info != nil {
+		if _, ipnet, err := net.ParseCIDR(info.Prefix); err == nil {
+			return info.ASN, ipnet, info.Description, nil
+		}
+	}
+	return 0, nil, "", errors.New("Failed to obtain the IP information")
 }
 
-func (as *AddressService) ipSearch(addr string) *core.ASNRequest {
-	as.netLock.Lock()
-	defer as.netLock.Unlock()
+func updateCache(req *core.ASNRequest) {
+	netLock.Lock()
+	defer netLock.Unlock()
+
+	if _, found := netCache[req.ASN]; !found {
+		netCache[req.ASN] = req
+		return
+	}
+
+	c := netCache[req.ASN]
+	// This is additional information for an ASN entry
+	if c.Prefix == "" && req.Prefix != "" {
+		c.Prefix = req.Prefix
+	}
+	if c.CC == "" && req.CC != "" {
+		c.CC = req.CC
+	}
+	if c.Registry == "" && req.Registry != "" {
+		c.Registry = req.Registry
+	}
+	if c.AllocationDate.IsZero() && !req.AllocationDate.IsZero() {
+		c.AllocationDate = req.AllocationDate
+	}
+	if c.Description == "" && req.Description != "" {
+		c.Description = req.Description
+	}
+	c.Netblocks = utils.UniqueAppend(c.Netblocks, req.Netblocks...)
+	netCache[req.ASN] = c
+}
+
+func ipSearch(addr string) *core.ASNRequest {
+	// Does the address fall into a reserved address range?
+	if info := checkForReservedAddress(addr); info != nil {
+		return info
+	}
+
+	netLock.Lock()
+	defer netLock.Unlock()
 
 	var a int
 	var cidr *net.IPNet
 	var desc string
 	ip := net.ParseIP(addr)
-	for asn, record := range as.netCache {
+	for asn, record := range netCache {
 		for _, netblock := range record.Netblocks {
 			_, ipnet, err := net.ParseCIDR(netblock)
 			if err != nil {
@@ -237,27 +270,28 @@ func (as *AddressService) ipSearch(addr string) *core.ASNRequest {
 	}
 }
 
-func (as *AddressService) checkForPrivateAddress(addr string) *core.ASNRequest {
-	var n string
+func checkForReservedAddress(addr string) *core.ASNRequest {
 	ip := net.ParseIP(addr)
-	desc := "Private Networks"
-
-	if as.private192.Contains(ip) {
-		n = as.private192.String()
-	} else if as.private172.Contains(ip) {
-		n = as.private172.String()
-	} else if as.private10.Contains(ip) {
-		n = as.private10.String()
-	}
-
-	if n == "" {
+	if ip == nil {
 		return nil
 	}
-	return &core.ASNRequest{
-		Address:     addr,
-		Prefix:      n,
-		Description: desc,
+
+	var cidr string
+	for _, block := range reservedAddrRanges {
+		if block.Contains(ip) {
+			cidr = block.String()
+			break
+		}
 	}
+
+	if cidr != "" {
+		return &core.ASNRequest{
+			Address:     addr,
+			Prefix:      cidr,
+			Description: "Reserved Network Address Blocks",
+		}
+	}
+	return nil
 }
 
 func compareCIDRSizes(first, second *net.IPNet) int {
@@ -271,35 +305,4 @@ func compareCIDRSizes(first, second *net.IPNet) int {
 		result = -1
 	}
 	return result
-}
-
-// IPRequest returns the ASN, CIDR and AS Description that contains the provided IP address.
-func IPRequest(addr string, bus *core.EventBus) (int, *net.IPNet, string, error) {
-	asnchan := make(chan *core.ASNRequest, 1)
-	f := func(req *core.ASNRequest) {
-		if req.Address == addr {
-			asnchan <- req
-		}
-	}
-
-	bus.Subscribe(core.IPInfoTopic, f)
-	defer bus.Unsubscribe(core.IPInfoTopic, f)
-	bus.Publish(core.IPRequestTopic, &core.ASNRequest{Address: addr})
-
-	var a int
-	var cidr *net.IPNet
-	var desc string
-	t := time.NewTimer(5 * time.Second)
-	select {
-	case <-t.C:
-	case asn := <-asnchan:
-		a = asn.ASN
-		_, cidr, _ = net.ParseCIDR(asn.Prefix)
-		desc = asn.Description
-	}
-
-	if cidr == nil {
-		return 0, nil, "", errors.New("Failed to obtain the IP information")
-	}
-	return a, cidr, desc, nil
 }

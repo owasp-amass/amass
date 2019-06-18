@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"strings"
 	"time"
+	"bytes"
 
 	"github.com/caffix/cloudflare-roundtripper/cfrt"
 )
@@ -172,7 +173,7 @@ func intToIP(ipInt *big.Int, bits int) net.IP {
 	ipBytes := ipInt.Bytes()
 	ret := make([]byte, bits/8)
 	// Pack our IP bytes into the end of the return array,
-	// since big.Int.Bytes() removes front zero padding.
+	// since big.Int.Bytes() removes front zero padding
 	for i := 1; i <= len(ipBytes); i++ {
 		ret[len(ret)-i] = ipBytes[len(ipBytes)-i]
 	}
@@ -184,12 +185,27 @@ func intToIP(ipInt *big.Int, bits int) net.IP {
 func RangeHosts(start, end net.IP) []net.IP {
 	var ips []net.IP
 
+	if start == nil || end == nil {
+		return ips
+	}
+
+	start16 := start.To16()
+	end16 := end.To16()
+	if start16 == nil || end16 == nil {
+		return ips
+	}
+
+	// Check that the end address is higher than the start address
+	if bytes.Compare(end16, start16) <= 0 {
+		return ips
+	}
+
 	stop := net.ParseIP(end.String())
 	addrInc(stop)
 	for ip := net.ParseIP(start.String()); !ip.Equal(stop); addrInc(ip) {
-		addr := net.ParseIP(ip.String())
-
-		ips = append(ips, addr)
+		if addr := net.ParseIP(ip.String()); addr != nil {
+			ips = append(ips, addr)
+		}
 	}
 	return ips
 }

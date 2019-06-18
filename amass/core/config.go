@@ -236,6 +236,32 @@ func (c *Config) WhichDomain(name string) string {
 	return ""
 }
 
+// IsAddressInScope returns true if the addr parameter matches provided network scope and when
+// no network scope has been set.
+func (c *Config) IsAddressInScope(addr string) bool {
+	ip := net.ParseIP(addr)
+	if ip == nil {
+		return false
+	}
+
+	if len(c.Addresses) == 0 && len(c.CIDRs) == 0 {
+		return true
+	}
+
+	for _, a := range c.Addresses {
+		if a.String() == ip.String() {
+			return true
+		}
+	}
+
+	for _, cidr := range c.CIDRs {
+		if cidr.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
 // Blacklisted returns true is the name in the parameter ends with a subdomain name in the config blacklist.
 func (c *Config) Blacklisted(name string) bool {
 	var resp bool

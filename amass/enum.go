@@ -381,7 +381,7 @@ func (e *Enumeration) checkForOutput(wg *sync.WaitGroup) {
 			e.queueNewGraphEntries(e.Config.UUID.String(), time.Millisecond)
 			return
 		case <-t.C:
-			e.queueNewGraphEntries(e.Config.UUID.String(), 3 * time.Second)
+			e.queueNewGraphEntries(e.Config.UUID.String(), 3*time.Second)
 		}
 	}
 }

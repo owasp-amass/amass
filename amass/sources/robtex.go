@@ -183,9 +183,8 @@ func (r *Robtex) executeASNQuery(asn int) {
 		return
 	}
 
-	time.Sleep(r.RateLimit)
 	r.SetActive()
-
+	time.Sleep(r.RateLimit)
 	req := r.origin(ipnet.IP.String())
 	if req == nil {
 		return
@@ -202,6 +201,7 @@ func (r *Robtex) executeASNAddrQuery(addr string) {
 		return
 	}
 
+	r.SetActive()
 	time.Sleep(r.RateLimit)
 	req.Netblocks = utils.UniqueAppend(req.Netblocks, r.netblocks(req.ASN)...)
 	r.Bus().Publish(core.NewASNTopic, req)

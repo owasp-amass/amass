@@ -205,6 +205,22 @@ func (bfs *BruteForceService) bruteForceResolution(word, sub, domain string) {
 	if MatchesWildcard(req) {
 		return
 	}
+
+	// Check if this passes the enumeration network contraints
+	var records []core.DNSAnswer
+	for _, ans := range req.Records {
+		if ans.Type == 1 || ans.Type == 28 {
+			if !bfs.Config().IsAddressInScope(ans.Data) {
+				continue
+			}
+		}
+		records = append(records, ans)
+	}
+	if len(records) == 0 {
+		return
+	}
+	req.Records = records
+
 	bfs.Bus().Publish(core.NameResolvedTopic, req)
 }
 

@@ -337,6 +337,7 @@ func (a *AlienVault) getHeaders() map[string]string {
 	}
 	return headers
 }
+
 func (a *AlienVault) getWhoisURL(domain string) string {
 	// https://otx.alienvault.com/otxapi/indicator/domain/whois/google.com
 	return "https://otx.alienvault.com/otxapi/indicator/domain/whois/" + domain

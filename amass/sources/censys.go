@@ -7,8 +7,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"time"
 	"strings"
+	"time"
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
@@ -123,7 +123,7 @@ func (c *Censys) apiQuery(domain string) {
 			for _, name := range result.Names {
 				n := strings.TrimSpace(name)
 				n = utils.RemoveAsteriskLabel(n)
-				
+
 				if c.Config().IsDomainInScope(n) {
 					c.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
 						Name:   n,
