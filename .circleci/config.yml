@@ -5,7 +5,7 @@ version: 2
 jobs:
   test:
     docker:
-      - image: circleci/golang:1.12.6
+      - image: caffix/amass:release
 
     working_directory: /go/src/github.com/OWASP/Amass
     steps:
@@ -18,7 +18,7 @@ jobs:
 
   binaries:
     docker:
-      - image: circleci/golang:1.12.6
+      - image: caffix/amass:release
 
     working_directory: /go/src/github.com/OWASP/Amass
     steps:
@@ -26,7 +26,6 @@ jobs:
       - run:
           name: "Build Amass and Release"
           command: |
-            sudo apt-get update && apt-get install -y snapcraft
             mkdir ../.snapcraft
             echo $SNAPCRAFT_LOGIN_FILE | base64 --decode --ignore-garbage > ../.snapcraft/snapcraft.cfg
             curl -sL https://git.io/goreleaser | bash
