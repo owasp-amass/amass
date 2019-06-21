@@ -30,7 +30,7 @@ jobs:
             echo $SNAPCRAFT_LOGIN_FILE | base64 --decode --ignore-garbage > ../.snapcraft/snapcraft.cfg
             curl -sL https://git.io/goreleaser | bash
             cd ..
-            snapcraft push ./Amass/dist/*.snap --release edge
+            find Amass/dist/ -name *.snap -print | xargs snapcraft push --release edge
 
 workflows:
   version: 2

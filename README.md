@@ -10,6 +10,7 @@
 [![Follow on Twitter](https://img.shields.io/twitter/follow/owaspamass.svg?logo=twitter)](https://twitter.com/owaspamass)
 
 [![Rawsec's CyberSecurity Inventory](https://inventory.rawsec.ml/img/badges/Rawsec-inventoried-FF5050_flat.svg)](https://inventory.rawsec.ml/)
+[![DEFCON 27 Demolabs](https://img.shields.io/badge/DEFCON%2027-Demo%20Labs-red.svg)](https://www.defcon.org/html/defcon-27/dc-27-index.html)
 
 ----
 
