@@ -102,8 +102,8 @@ func (t *Twitter) executeQuery(domain string) {
 	for _, tweet := range search.Statuses {
 
 		// Urls in the tweet body
-		for _, url_entity := range tweet.Entities.Urls {
-			for _, name := range re.FindAllString(url_entity.ExpandedURL, -1) {
+		for _, urlEntity := range tweet.Entities.Urls {
+			for _, name := range re.FindAllString(urlEntity.ExpandedURL, -1) {
 				t.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
 					Name:   name,
 					Domain: domain,
