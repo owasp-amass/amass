@@ -71,13 +71,13 @@ type Config struct {
 	Wordlist []string
 
 	// Will the enumeration including brute forcing techniques
-	BruteForcing bool `ini:"brute_forcing"`
+	BruteForcing bool
 
 	// Will recursive brute forcing be performed?
-	Recursive bool `ini:"recursive_brute_forcing"`
+	Recursive bool
 
 	// Minimum number of subdomain discoveries before performing recursive brute forcing
-	MinForRecursive int `ini:"minimum_for_recursive"`
+	MinForRecursive int
 
 	// Will discovered subdomain name alterations be generated?
 	Alterations    bool
@@ -460,24 +460,21 @@ func (c *Config) LoadSettings(path string) error {
 	}
 
 	// Load up all API key information from data source sections
-	nonAPISections := []string{
-		"alterations",
-		"bruteforce",
-		"default",
-		"domains",
-		"resolvers",
-		"blacklisted",
-		"disabled_data_sources",
-		"gremlin",
+	nonAPISections := map[string]struct{}{
+		"alterations":           struct{}{},
+		"bruteforce":            struct{}{},
+		"default":               struct{}{},
+		"domains":               struct{}{},
+		"resolvers":             struct{}{},
+		"blacklisted":           struct{}{},
+		"disabled_data_sources": struct{}{},
+		"gremlin":               struct{}{},
 	}
-outer:
+
 	for _, section := range cfg.Sections() {
 		name := section.Name()
-		// Skip sections that are not related to data sources
-		for _, doneSection := range nonAPISections {
-			if name == doneSection {
-				continue outer
-			}
+		if _, skip := nonAPISections[name]; skip {
+			continue
 		}
 
 		key := new(APIKey)

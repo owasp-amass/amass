@@ -163,8 +163,15 @@ func runIntelCommand(clArgs []string) {
 	rLog, wLog := io.Pipe()
 	intel := amass.NewIntelCollection()
 	intel.Config.Log = log.New(wLog, "", log.Lmicroseconds)
+
 	// Check if a configuration file was provided, and if so, load the settings
-	acquireConfig(args.Filepaths.Directory, args.Filepaths.ConfigFile, intel.Config)
+	if f, found := acquireConfig(args.Filepaths.Directory, args.Filepaths.ConfigFile, intel.Config); found {
+		// Check if a config file was provided that has DNS resolvers specified
+		if r, err := core.GetResolversFromSettings(f); err == nil && len(args.Resolvers) == 0 {
+			args.Resolvers = r
+		}
+	}
+
 	// Override configuration file settings with command-line arguments
 	if err := updateIntelConfiguration(intel, &args); err != nil {
 		r.Fprintf(color.Error, "Configuration file error: %v\n", err)
@@ -172,10 +179,18 @@ func runIntelCommand(clArgs []string) {
 	}
 
 	if len(args.Resolvers) > 0 {
-		core.SetCustomResolvers(args.Resolvers)
+		if err := core.SetCustomResolvers(args.Resolvers); err != nil {
+			fmt.Fprintf(color.Error, "%v\n", err)
+			os.Exit(1)
+		}
 	}
 
 	if args.Options.ReverseWhois {
+		if len(intel.Config.Domains()) == 0 {
+			r.Fprintln(color.Error, "No root domain names were provided")
+			os.Exit(1)
+		}
+
 		args.Options.IPs = false
 		args.Options.IPv4 = false
 		args.Options.IPv6 = false
@@ -319,12 +334,6 @@ func processIntelInputFiles(args *intelArgs) error {
 			return fmt.Errorf("Failed to parse the resolver file: %v", err)
 		}
 		args.Resolvers = utils.UniqueAppend(args.Resolvers, list...)
-	}
-	// Check if a config file was provided that has DNS resolvers specified
-	if args.Filepaths.ConfigFile != "" {
-		if r, err := core.GetResolversFromSettings(args.Filepaths.ConfigFile); err == nil {
-			args.Resolvers = utils.UniqueAppend(args.Resolvers, r...)
-		}
 	}
 	return nil
 }

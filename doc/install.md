@@ -19,15 +19,15 @@ docker build -t amass https://github.com/OWASP/Amass.git
 2. Run the Docker image:
 
 ```bash
-docker run -v amass-data:/amass/ amass enum --list
+docker run -v ~/amass:/amass/ amass enum --list
 ```
 
-The volume argument allows the Amass graph database to persist between executions.
+The volume argument allows the Amass graph database to persist between executions and output files to be accessed on the host system.
 
 The wordlists maintained in the Amass git repository are available in `/wordlists/` within the docker container. For example, to use `all.txt`:
 
 ```bash
-docker run -v amass-data:/amass/ amass enum -brute -w /wordlists/all.txt -d example.com
+docker run -v ~/amass:/amass/ amass enum -brute -w /wordlists/all.txt -d example.com
 ```
 
 ## From Source
