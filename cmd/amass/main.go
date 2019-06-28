@@ -114,21 +114,21 @@ func outputDirectory(dir string) string {
 	return dir
 }
 
-func acquireConfig(dir, file string, config *core.Config) bool {
+func acquireConfig(dir, file string, config *core.Config) (string, bool) {
 	if file != "" {
 		if err := config.LoadSettings(file); err == nil {
-			return true
+			return file, true
 		}
 	}
 	if dir = outputDirectory(dir); dir != "" {
 		if finfo, err := os.Stat(dir); !os.IsNotExist(err) && finfo.IsDir() {
 			file = filepath.Join(dir, "config.ini")
 			if err := config.LoadSettings(file); err == nil {
-				return true
+				return file, true
 			}
 		}
 	}
-	return false
+	return "", false
 }
 
 // GetAllSourceNames returns the names of all Amass data sources.

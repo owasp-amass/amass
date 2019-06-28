@@ -93,7 +93,7 @@ func runDBCommand(clArgs []string) {
 
 	config := new(core.Config)
 	// Check if a configuration file was provided, and if so, load the settings
-	if acquireConfig(args.Filepaths.Directory, args.Filepaths.ConfigFile, config) {
+	if _, found := acquireConfig(args.Filepaths.Directory, args.Filepaths.ConfigFile, config); found {
 		if args.Filepaths.Directory == "" {
 			args.Filepaths.Directory = config.Dir
 		}
