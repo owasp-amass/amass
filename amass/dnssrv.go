@@ -96,7 +96,7 @@ func (ds *DNSService) resolvedName(req *core.DNSRequest) {
 		return
 	}
 	req.Records = records
-	
+
 	ds.Bus().Publish(core.NameResolvedTopic, req)
 }
 
