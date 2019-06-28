@@ -37,10 +37,10 @@ $ amass enum -src -brute -min-for-recursive 1 -d example.com
 Executing the tool via the Docker image:
 
 ```bash
-docker run -v amass-data:/amass/ caffix/amass:3.0.15 enum --list
+docker run -v ~/amass:/amass/ caffix/amass:latest enum --list
 ```
 
-The volume argument allows the Amass graph database to persist between executions.
+The volume argument allows the Amass graph database to persist between executions and output files to be accessed on the host system.
 
 ## Command-line Usage Information
 

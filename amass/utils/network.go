@@ -4,6 +4,7 @@
 package utils
 
 import (
+	"bytes"
 	"crypto/tls"
 	"errors"
 	"io"
@@ -15,7 +16,6 @@ import (
 	"net/url"
 	"strings"
 	"time"
-	"bytes"
 
 	"github.com/caffix/cloudflare-roundtripper/cfrt"
 )

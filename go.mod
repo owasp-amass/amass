@@ -29,8 +29,8 @@ require (
 	github.com/satori/go.uuid v1.2.0 // indirect
 	github.com/temoto/robotstxt-go v0.0.0-20180810133444-97ee4a9ee6ea // indirect
 	github.com/tylertreat/BoomFilters v0.0.0-20181028192813-611b3dbe80e8 // indirect
-	golang.org/x/crypto v0.0.0-20190617133340-57b3e21c3d56 // indirect
+	golang.org/x/crypto v0.0.0-20190621222207-cc06ce4a13d4 // indirect
 	golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45
-	golang.org/x/sys v0.0.0-20190618155005-516e3c20635f // indirect
+	golang.org/x/sys v0.0.0-20190626221950-04f50cda93cb // indirect
 	gopkg.in/sourcemap.v1 v1.0.5 // indirect
 )
