@@ -77,6 +77,32 @@ func performWildcardRequest(req *core.DNSRequest) int {
 			}
 		}
 	}
+	return checkIPsAcrossLevels(req)
+}
+
+func checkIPsAcrossLevels(req *core.DNSRequest) int {
+	if len(req.Records) == 0 {
+		return WildcardTypeNone
+	}
+
+	base := len(strings.Split(req.Domain, "."))
+	labels := strings.Split(strings.ToLower(req.Name), ".")
+	if len(labels) <= base || (len(labels)-base) < 3 {
+		return WildcardTypeNone
+	}
+
+	w1 := getWildcard(strings.Join(labels[1:], "."))
+	if w1.Answers != nil && compareAnswers(req.Records, w1.Answers) {
+		w2 := getWildcard(strings.Join(labels[2:], "."))
+
+		if w2.Answers != nil && compareAnswers(req.Records, w2.Answers) {
+			w3 := getWildcard(strings.Join(labels[3:], "."))
+
+			if w3.Answers != nil && compareAnswers(req.Records, w3.Answers) {
+				return WildcardTypeStatic
+			}
+		}
+	}
 	return WildcardTypeNone
 }
 
@@ -95,7 +121,7 @@ func getWildcard(sub string) *wildcard {
 		entry.Lock()
 	}
 	wildcardLock.Unlock()
-	// Check if the subdomain name is still be tested for a wildcard
+	// Check if the subdomain name is still to be tested for a wildcard
 	if !test {
 		entry.RLock()
 		entry.RUnlock()
