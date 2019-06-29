@@ -171,7 +171,7 @@ func newResolver(addr string) *resolver {
 		Done:           make(chan struct{}, 2),
 		rcodeStats:     make(map[int]int64),
 		last:           time.Now(),
-		successRate:    50 * time.Millisecond,
+		successRate:    55 * time.Millisecond,
 		score:          100,
 	}
 	go r.fillXchgChan()
@@ -541,7 +541,7 @@ func (r *resolver) calcSuccessRate(prevSuc, prevAtt int64) (successes, attempts 
 	if ratio < 0.25 || curRate > (500*time.Millisecond) {
 		r.reduceScore()
 		r.setSuccessRate(curRate + (25 * time.Millisecond))
-	} else if ratio > 0.75 && (curRate >= (12 * time.Millisecond)) {
+	} else if ratio > 0.75 && (curRate >= (15 * time.Millisecond)) {
 		r.setSuccessRate(curRate - (10 * time.Millisecond))
 	} else {
 		r.setSuccessRate(curRate + (10 * time.Millisecond))

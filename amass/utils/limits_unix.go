@@ -12,7 +12,6 @@ import (
 // GetFileLimit attempts to raise the ulimit to the maximum hard limit and returns that value.
 func GetFileLimit() int {
 	limit := 10000
-	infinity := uint64(syscall.RLIM_INFINITY)
 
 	var lim syscall.Rlimit
 	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &lim); err == nil {
@@ -20,8 +19,10 @@ func GetFileLimit() int {
 		syscall.Setrlimit(syscall.RLIMIT_NOFILE, &lim)
 	}
 
-	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &lim); err == nil && lim.Cur != infinity {
-		limit = int(lim.Cur)
+	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &lim); err == nil {
+		if cur := int(lim.Cur); cur < limit {
+			limit = cur
+		}
 	}
 	return limit
 }
