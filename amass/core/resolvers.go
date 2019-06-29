@@ -171,7 +171,7 @@ func newResolver(addr string) *resolver {
 		Done:           make(chan struct{}, 2),
 		rcodeStats:     make(map[int]int64),
 		last:           time.Now(),
-		successRate:    100 * time.Millisecond,
+		successRate:    50 * time.Millisecond,
 		score:          100,
 	}
 	go r.fillXchgChan()
@@ -446,7 +446,7 @@ func (r *resolver) processMessage(msg *dns.Msg) {
 func (r *resolver) monitorPerformance() {
 	var successes, attempts int64
 
-	t := time.NewTicker(time.Second)
+	t := time.NewTicker(5 * time.Second)
 	defer t.Stop()
 	m := time.NewTicker(time.Minute)
 	defer m.Stop()
@@ -455,15 +455,15 @@ func (r *resolver) monitorPerformance() {
 		case <-r.Done:
 			return
 		case <-t.C:
-			successes, attempts = r.calcSuccessRate(successes, attempts, time.Second)
+			successes, attempts = r.calcSuccessRate(successes, attempts)
 		case <-m.C:
 			successes = 0
 			attempts = 0
 			r.wipeStats()
 			r.wipeAttempts()
 			r.wipeTimeouts()
-			if r.getSuccessRate() > 100 * time.Millisecond {
-				r.setSuccessRate(100 * time.Millisecond)
+			if r.getSuccessRate() > 50*time.Millisecond {
+				r.setSuccessRate(50 * time.Millisecond)
 			}
 		}
 	}
@@ -513,7 +513,7 @@ func (r *resolver) wipeTimeouts() {
 	r.timeouts = 0
 }
 
-func (r *resolver) calcSuccessRate(prevSuc, prevAtt int64, tSize time.Duration) (successes, attempts int64) {
+func (r *resolver) calcSuccessRate(prevSuc, prevAtt int64) (successes, attempts int64) {
 	r.RLock()
 	successes = r.rcodeStats[dns.RcodeSuccess]
 	successes += r.rcodeStats[dns.RcodeFormatError]
@@ -526,24 +526,26 @@ func (r *resolver) calcSuccessRate(prevSuc, prevAtt int64, tSize time.Duration) 
 	r.RUnlock()
 
 	attemptDelta := attempts - prevAtt
-	if attemptDelta <= 0 {
+	if attemptDelta < 10 {
 		return
 	}
 
 	successDelta := successes - prevSuc
 	if successDelta <= 0 {
 		r.reduceScore()
-		r.setSuccessRate(curRate + (10 * time.Millisecond))
+		r.setSuccessRate(curRate + (25 * time.Millisecond))
 		return
 	}
 
 	ratio := float64(successDelta) / float64(attemptDelta)
-	if ratio > 0.75 && (curRate >= (20 * time.Millisecond)) {
+	if ratio < 0.25 || curRate > (500*time.Millisecond) {
+		r.reduceScore()
+		r.setSuccessRate(curRate + (25 * time.Millisecond))
+	} else if ratio > 0.75 && (curRate >= (12 * time.Millisecond)) {
 		r.setSuccessRate(curRate - (10 * time.Millisecond))
-		return
+	} else {
+		r.setSuccessRate(curRate + (10 * time.Millisecond))
 	}
-
-	r.setSuccessRate(curRate + (10 * time.Millisecond))
 	return
 }
 
