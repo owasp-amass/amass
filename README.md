@@ -58,14 +58,14 @@ This project improves thanks to all the people who contribute:
 [![Follow on Twitter](https://img.shields.io/twitter/follow/kalbasit.svg?logo=twitter)](https://twitter.com/kalbasit)
 [![Follow on Twitter](https://img.shields.io/twitter/follow/fork_while_fork.svg?logo=twitter)](https://twitter.com/fork_while_fork)
 [![Follow on Twitter](https://img.shields.io/twitter/follow/rbadguy1.svg?logo=twitter)](https://twitter.com/rbadguy1)
-[![Follow on Twitter](https://img.shields.io/twitter/follow/adam_zinger.svg?logo=twitter)](https://twitter.com/adam_zinger)
 [![Follow on Twitter](https://img.shields.io/twitter/follow/architekton1.svg?logo=twitter)](https://twitter.com/architekton1)
 [![Follow on Twitter](https://img.shields.io/twitter/follow/danjomart.svg?logo=twitter)](https://twitter.com/danjomart)
-[![Follow on Twitter](https://img.shields.io/twitter/follow/_b3nj4m1n__.svg?logo=twitter)](https://twitter.com/_b3nj4m1n__)
 [![Follow on Twitter](https://img.shields.io/twitter/follow/shane_ditton.svg?logo=twitter)](https://twitter.com/shane_ditton)
 [![Follow on Twitter](https://img.shields.io/twitter/follow/dhauenstein.svg?logo=twitter)](https://twitter.com/dhauenstein)
 [![Follow on Twitter](https://img.shields.io/twitter/follow/THB_STX.svg?logo=twitter)](https://twitter.com/THB_STX)
 [![Email NanoDano](https://img.shields.io/badge/NanoDano-nanodano%40devdungeon.com-blue.svg)](mailto:nanodano@devdungeon.com)
+[![Follow on Twitter](https://img.shields.io/twitter/follow/DanielMiessler.svg?logo=twitter)](https://twitter.com/DanielMiessler)
+[![Follow on Twitter](https://img.shields.io/twitter/follow/sec_for_safety.svg?logo=twitter)](https://twitter.com/sec_for_safety)
 
 ## Mentions
 
