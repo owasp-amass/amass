@@ -10,16 +10,23 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"path/filepath"
+	"github.com/OWASP/Amass/amass/handlers"
+	"github.com/OWASP/Amass/cmd/amass/main"
 
 	"github.com/OWASP/Amass/amass/core"
+	homedir "github.com/mitchellh/go-homedir"
 )
 
 var (
 	networkTest  = flag.Bool("network", false, "Run tests that require connectivity (take more time)")
+	configPath = flag.String("config", "", "Path to the INI configuration file. Additional details below")
+	outputDir = flag.String("dir", "", "Path to the directory containing the output files")
 	domainTest   = "owasp.org"
 	expectedTest = 1
 	timeoutTest  = time.Second * 30
 )
+
 
 // TestMain will parse the test flags and setup for integration tests.
 func TestMain(m *testing.M) {
@@ -50,6 +57,9 @@ func TestCleanName(t *testing.T) {
 
 func setupConfig(domain string) *core.Config {
 	config := &core.Config{}
+
+	acquireConfig(*outputDir, *configPath, config)
+
 	config.AddDomain(domain)
 	buf := new(strings.Builder)
 	config.Log = log.New(buf, "", log.Lmicroseconds)
@@ -94,3 +104,31 @@ loop:
 
 	return count
 }
+
+func outputDirectory(dir string) string {
+	if dir == "" {
+		if path, err := homedir.Dir(); err == nil {
+			dir = filepath.Join(path, handlers.DefaultGraphDBDirectory)
+		}
+	}
+	return dir
+}
+
+func acquireConfig(dir, file string, config *core.Config) (string, bool) {
+	if file != "" {
+		if err := config.LoadSettings(file); err == nil {
+			return file, true
+		}
+	}
+	if dir = outputDirectory(dir); dir != "" {
+		if finfo, err := os.Stat(dir); !os.IsNotExist(err) && finfo.IsDir() {
+			file = filepath.Join(dir, "config.ini")
+			if err := config.LoadSettings(file); err == nil {
+				return file, true
+			}
+		}
+	}
+	return "", false
+}
+
+
