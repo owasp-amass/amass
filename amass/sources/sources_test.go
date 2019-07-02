@@ -12,7 +12,6 @@ import (
 	"time"
 	"path/filepath"
 	"github.com/OWASP/Amass/amass/handlers"
-	"github.com/OWASP/Amass/cmd/amass/main"
 
 	"github.com/OWASP/Amass/amass/core"
 	homedir "github.com/mitchellh/go-homedir"
