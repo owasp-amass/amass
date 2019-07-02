@@ -13,6 +13,13 @@ func TestTwitter(t *testing.T) {
 
 	config := setupConfig(domainTest)
 
+	API := new(core.APIKey)
+	API = config.GetAPIKey("twitter")
+
+	if API == nil || API.Key == "" || API.Secret == "" {
+		t.Errorf("API key data was not provided")
+		return 
+	}
 
 	bus, out := setupEventBus(core.NewNameTopic)
 	defer bus.Stop()
