@@ -17,6 +17,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"path/filepath"
+	homedir "github.com/mitchellh/go-homedir"
 
 	"github.com/OWASP/Amass/amass/utils"
 	"github.com/go-ini/ini"
@@ -26,6 +28,7 @@ import (
 const (
 	defaultWordlistURL    = "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/namelist.txt"
 	defaultAltWordlistURL = "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/alterations.txt"
+	DefaultOutputDirectory = "amass"
 )
 
 // Config passes along Amass enumeration configurations
@@ -581,4 +584,30 @@ func uniqueIntAppend(s []int, e string) []int {
 		}
 	}
 	return s
+}
+
+func OutputDirectory(dir string) string {
+	if dir == "" {
+		if path, err := homedir.Dir(); err == nil {
+			dir = filepath.Join(path, DefaultOutputDirectory)
+		}
+	}
+	return dir
+}
+
+func AcquireConfig(dir, file string, config *Config) (string, bool) {
+	if file != "" {
+		if err := config.LoadSettings(file); err == nil {
+			return file, true
+		}
+	}
+	if dir = OutputDirectory(dir); dir != "" {
+		if finfo, err := os.Stat(dir); !os.IsNotExist(err) && finfo.IsDir() {
+			file = filepath.Join(dir, "config.ini")
+			if err := config.LoadSettings(file); err == nil {
+				return file, true
+			}
+		}
+	}
+	return "", false
 }
