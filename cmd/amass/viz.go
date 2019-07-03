@@ -118,7 +118,7 @@ func runVizCommand(clArgs []string) {
 	// Obtain access to the graph database
 	if args.Filepaths.Input != "" {
 		uuid, db, err = inputFileToDB(&args)
-		args.Filepaths.Directory, err = ioutil.TempDir("", handlers.DefaultGraphDBDirectory)
+		args.Filepaths.Directory, err = ioutil.TempDir("", core.DefaultOutputDirectory)
 		if err == nil {
 			defer os.RemoveAll(args.Filepaths.Directory)
 			defer db.Close()
@@ -126,7 +126,7 @@ func runVizCommand(clArgs []string) {
 	} else {
 		config := new(core.Config)
 		// Check if a configuration file was provided, and if so, load the settings
-		if _, found := acquireConfig(args.Filepaths.Directory, args.Filepaths.ConfigFile, config); found {
+		if _, found := core.AcquireConfig(args.Filepaths.Directory, args.Filepaths.ConfigFile, config); found {
 			if args.Filepaths.Directory == "" {
 				args.Filepaths.Directory = config.Dir
 			}
@@ -180,7 +180,7 @@ func runVizCommand(clArgs []string) {
 func inputFileToDB(args *vizArgs) (string, handlers.DataHandler, error) {
 	var err error
 
-	args.Filepaths.Directory, err = ioutil.TempDir("", handlers.DefaultGraphDBDirectory)
+	args.Filepaths.Directory, err = ioutil.TempDir("", core.DefaultOutputDirectory)
 	if err != nil {
 		return "", nil, fmt.Errorf("Failed to open the temporary directory: %v", err)
 	}

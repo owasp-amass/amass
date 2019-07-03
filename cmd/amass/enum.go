@@ -23,7 +23,6 @@ import (
 
 	"github.com/OWASP/Amass/amass"
 	"github.com/OWASP/Amass/amass/core"
-	"github.com/OWASP/Amass/amass/handlers"
 	"github.com/OWASP/Amass/amass/utils"
 	"github.com/fatih/color"
 	homedir "github.com/mitchellh/go-homedir"
@@ -192,7 +191,7 @@ func runEnumCommand(clArgs []string) {
 	enum.Config.Log = log.New(wLog, "", log.Lmicroseconds)
 
 	// Check if a configuration file was provided, and if so, load the settings
-	if f, found := acquireConfig(args.Filepaths.Directory, args.Filepaths.ConfigFile, enum.Config); found {
+	if f, found := core.AcquireConfig(args.Filepaths.Directory, args.Filepaths.ConfigFile, enum.Config); found {
 		// Check if a config file was provided that has DNS resolvers specified
 		if r, err := core.GetResolversFromSettings(f); err == nil && len(args.Resolvers) == 0 {
 			args.Resolvers = r
@@ -226,7 +225,7 @@ func processEnumOutput(enum *amass.Enumeration, args *enumArgs, pipe *io.PipeRea
 			r.Fprintln(color.Error, "Failed to obtain the user home directory")
 			os.Exit(1)
 		}
-		dir = filepath.Join(path, handlers.DefaultGraphDBDirectory)
+		dir = filepath.Join(path, core.DefaultOutputDirectory)
 	}
 	// If the directory does not yet exist, create it
 	if err = os.MkdirAll(dir, 0755); err != nil {
