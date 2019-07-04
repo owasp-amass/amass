@@ -16,13 +16,12 @@ import (
 
 var (
 	networkTest  = flag.Bool("network", false, "Run tests that require connectivity (take more time)")
-	configPath = flag.String("config", "", "Path to the INI configuration file. Additional details below")
-	outputDir = flag.String("dir", "", "Path to the directory containing the output files")
+	configPath   = flag.String("config", "", "Path to the INI configuration file. Additional details below")
+	outputDir    = flag.String("dir", "", "Path to the directory containing the output files")
 	domainTest   = "owasp.org"
 	expectedTest = 1
 	timeoutTest  = time.Second * 30
 )
-
 
 // TestMain will parse the test flags and setup for integration tests.
 func TestMain(m *testing.M) {

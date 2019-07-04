@@ -2,12 +2,12 @@ package sources
 
 import (
 	"testing"
-	
+
 	"github.com/OWASP/Amass/amass/core"
 )
 
 func TestTwitter(t *testing.T) {
-	if *networkTest == false {
+	if *networkTest == false || *configPath == "" {
 		return
 	}
 
@@ -18,7 +18,7 @@ func TestTwitter(t *testing.T) {
 
 	if API == nil || API.Key == "" || API.Secret == "" {
 		t.Errorf("API key data was not provided")
-		return 
+		return
 	}
 
 	bus, out := setupEventBus(core.NewNameTopic)

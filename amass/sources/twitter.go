@@ -113,7 +113,6 @@ func (t *Twitter) executeQuery(domain string) {
 			}
 		}
 
-
 		// Source of the tweet
 		for _, name := range re.FindAllString(tweet.Source, -1) {
 			t.Bus().Publish(core.NewNameTopic, &core.DNSRequest{
