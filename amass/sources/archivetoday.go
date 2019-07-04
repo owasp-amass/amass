@@ -12,6 +12,7 @@ import (
 type ArchiveToday struct {
 	core.BaseService
 
+	domain     string
 	baseURL    string
 	SourceType string
 	filter     *utils.StringFilter
@@ -20,6 +21,7 @@ type ArchiveToday struct {
 // NewArchiveToday returns he object initialized, but not yet started.
 func NewArchiveToday(config *core.Config, bus *core.EventBus) *ArchiveToday {
 	a := &ArchiveToday{
+		domain:     "archive.is",
 		baseURL:    "http://archive.is",
 		SourceType: core.ARCHIVE,
 		filter:     utils.NewStringFilter(),
@@ -59,7 +61,7 @@ func (a *ArchiveToday) executeQuery(sn, domain string) {
 		return
 	}
 
-	names, err := crawl(a, a.baseURL, domain, sn)
+	names, err := crawl(a, a.baseURL, a.domain, sn, domain)
 	if err != nil {
 		a.Config().Log.Printf("%s: %v", a.String(), err)
 		return

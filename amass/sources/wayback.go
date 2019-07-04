@@ -12,6 +12,7 @@ import (
 type Wayback struct {
 	core.BaseService
 
+	domain     string
 	baseURL    string
 	SourceType string
 	filter     *utils.StringFilter
@@ -20,6 +21,7 @@ type Wayback struct {
 // NewWayback returns he object initialized, but not yet started.
 func NewWayback(config *core.Config, bus *core.EventBus) *Wayback {
 	w := &Wayback{
+		domain:     "web.archive.org",
 		baseURL:    "http://web.archive.org/web",
 		SourceType: core.ARCHIVE,
 		filter:     utils.NewStringFilter(),
@@ -59,7 +61,7 @@ func (w *Wayback) executeQuery(sn, domain string) {
 		return
 	}
 
-	names, err := crawl(w, w.baseURL, domain, sn)
+	names, err := crawl(w, w.baseURL, w.domain, sn, domain)
 	if err != nil {
 		w.Config().Log.Printf("%s: %v", w.String(), err)
 		return

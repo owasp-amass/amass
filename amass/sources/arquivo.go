@@ -12,6 +12,7 @@ import (
 type Arquivo struct {
 	core.BaseService
 
+	domain     string
 	baseURL    string
 	SourceType string
 	filter     *utils.StringFilter
@@ -20,6 +21,7 @@ type Arquivo struct {
 // NewArquivo returns he object initialized, but not yet started.
 func NewArquivo(config *core.Config, bus *core.EventBus) *Arquivo {
 	a := &Arquivo{
+		domain:     "arquivo.pt",
 		baseURL:    "http://arquivo.pt/wayback",
 		SourceType: core.ARCHIVE,
 		filter:     utils.NewStringFilter(),
@@ -59,7 +61,7 @@ func (a *Arquivo) executeQuery(sn, domain string) {
 		return
 	}
 
-	names, err := crawl(a, a.baseURL, domain, sn)
+	names, err := crawl(a, a.baseURL, a.domain, sn, domain)
 	if err != nil {
 		a.Config().Log.Printf("%s: %v", a.String(), err)
 		return

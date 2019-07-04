@@ -12,6 +12,7 @@ import (
 type UKGovArchive struct {
 	core.BaseService
 
+	domain     string
 	baseURL    string
 	SourceType string
 	filter     *utils.StringFilter
@@ -20,6 +21,7 @@ type UKGovArchive struct {
 // NewUKGovArchive returns he object initialized, but not yet started.
 func NewUKGovArchive(config *core.Config, bus *core.EventBus) *UKGovArchive {
 	u := &UKGovArchive{
+		domain:     "webarchive.nationalarchives.gov.uk",
 		baseURL:    "http://webarchive.nationalarchives.gov.uk",
 		SourceType: core.ARCHIVE,
 		filter:     utils.NewStringFilter(),
@@ -59,7 +61,7 @@ func (u *UKGovArchive) executeQuery(sn, domain string) {
 		return
 	}
 
-	names, err := crawl(u, u.baseURL, domain, sn)
+	names, err := crawl(u, u.baseURL, u.domain, sn, domain)
 	if err != nil {
 		u.Config().Log.Printf("%s: %v", u.String(), err)
 		return
