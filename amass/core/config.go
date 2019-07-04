@@ -8,17 +8,17 @@ import (
 	"compress/gzip"
 	"errors"
 	"fmt"
+	homedir "github.com/mitchellh/go-homedir"
 	"io"
 	"log"
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
-	"path/filepath"
-	homedir "github.com/mitchellh/go-homedir"
 
 	"github.com/OWASP/Amass/amass/utils"
 	"github.com/go-ini/ini"
@@ -26,8 +26,8 @@ import (
 )
 
 const (
-	defaultWordlistURL    = "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/namelist.txt"
-	defaultAltWordlistURL = "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/alterations.txt"
+	defaultWordlistURL     = "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/namelist.txt"
+	defaultAltWordlistURL  = "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/alterations.txt"
 	DefaultOutputDirectory = "amass"
 )
 
@@ -489,6 +489,37 @@ func (c *Config) LoadSettings(path string) error {
 	return nil
 }
 
+// AcquireConfig populates the Config struct provided by the config argument.
+// The configuration file path and a bool indicating the settings were
+// successfully loaded are returned.
+func AcquireConfig(dir, file string, config *Config) (string, bool) {
+	if file != "" {
+		if err := config.LoadSettings(file); err == nil {
+			return file, true
+		}
+	}
+	if dir = OutputDirectory(dir); dir != "" {
+		if finfo, err := os.Stat(dir); !os.IsNotExist(err) && finfo.IsDir() {
+			file = filepath.Join(dir, "config.ini")
+			if err := config.LoadSettings(file); err == nil {
+				return file, true
+			}
+		}
+	}
+	return "", false
+}
+
+// OutputDirectory returns the file path of the Amass output directory. A suitable
+// path provided will be used as the output directory instead.
+func OutputDirectory(dir string) string {
+	if dir == "" {
+		if path, err := homedir.Dir(); err == nil {
+			dir = filepath.Join(path, DefaultOutputDirectory)
+		}
+	}
+	return dir
+}
+
 // GetResolversFromSettings loads the configuration file and returns all resolvers found.
 func GetResolversFromSettings(path string) ([]string, error) {
 	cfg, err := ini.LoadSources(ini.LoadOptions{
@@ -584,30 +615,4 @@ func uniqueIntAppend(s []int, e string) []int {
 		}
 	}
 	return s
-}
-
-func OutputDirectory(dir string) string {
-	if dir == "" {
-		if path, err := homedir.Dir(); err == nil {
-			dir = filepath.Join(path, DefaultOutputDirectory)
-		}
-	}
-	return dir
-}
-
-func AcquireConfig(dir, file string, config *Config) (string, bool) {
-	if file != "" {
-		if err := config.LoadSettings(file); err == nil {
-			return file, true
-		}
-	}
-	if dir = OutputDirectory(dir); dir != "" {
-		if finfo, err := os.Stat(dir); !os.IsNotExist(err) && finfo.IsDir() {
-			file = filepath.Join(dir, "config.ini")
-			if err := config.LoadSettings(file); err == nil {
-				return file, true
-			}
-		}
-	}
-	return "", false
 }
