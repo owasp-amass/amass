@@ -37,10 +37,18 @@ If you prefer to build your own binary from the latest release of the source cod
 1. Download OWASP Amass:
 
 ```bash
-go get -u github.com/OWASP/Amass/...
+go get github.com/OWASP/Amass
 ```
 
-2. If you wish to rebuild the binaries from the source code:
+Ignore any error messages regarding what was pulled down.
+
+2. Turn on support for Go Modules to ensure the correct dependency versions are used:
+
+```bash
+export GO111MODULE=on
+```
+
+3. Next, build the binaries from the project source code:
 
 ```bash
 cd $GOPATH/src/github.com/OWASP/Amass
@@ -50,7 +58,7 @@ go install ./...
 
 At this point, the binaries should be in *$GOPATH/bin*.
 
-3. Several wordlists can be found in the following directory:
+4. Several wordlists can be found in the following directory:
 
 ```bash
 ls $GOPATH/src/github.com/OWASP/Amass/wordlists/
