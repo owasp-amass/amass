@@ -195,6 +195,10 @@ func (r *resolver) currentScore() int {
 }
 
 func (r *resolver) reduceScore() {
+	if numUsableResolvers() == 1 {
+		return
+	}
+	
 	r.Lock()
 	defer r.Unlock()
 
