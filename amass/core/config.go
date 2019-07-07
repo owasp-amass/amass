@@ -26,12 +26,14 @@ import (
 )
 
 const (
+	// DefaultOutputDirectory is the name of the directory used for output files, such as the graph database.
+	DefaultOutputDirectory = "amass"
+	
 	defaultWordlistURL     = "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/namelist.txt"
 	defaultAltWordlistURL  = "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/alterations.txt"
-	DefaultOutputDirectory = "amass"
 )
 
-// Config passes along Amass enumeration configurations
+// Config passes along Amass configuration settings and options.
 type Config struct {
 	sync.Mutex
 
@@ -476,6 +478,7 @@ func (c *Config) LoadSettings(path string) error {
 
 	for _, section := range cfg.Sections() {
 		name := section.Name()
+
 		if _, skip := nonAPISections[name]; skip {
 			continue
 		}
@@ -500,7 +503,8 @@ func AcquireConfig(dir, file string, config *Config) (string, bool) {
 	}
 	if dir = OutputDirectory(dir); dir != "" {
 		if finfo, err := os.Stat(dir); !os.IsNotExist(err) && finfo.IsDir() {
-			file = filepath.Join(dir, "config.ini")
+			file := filepath.Join(dir, "config.ini")
+
 			if err := config.LoadSettings(file); err == nil {
 				return file, true
 			}
@@ -543,7 +547,7 @@ func GetResolversFromSettings(path string) ([]string, error) {
 }
 
 // GetListFromFile reads a wordlist text or gzip file
-// and returns the slice of words
+// and returns the slice of words.
 func GetListFromFile(path string) ([]string, error) {
 	var reader io.Reader
 
