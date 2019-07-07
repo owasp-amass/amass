@@ -119,7 +119,7 @@ This subcommand will perform DNS enumeration and network mapping while populatin
 | -log | Path to the log file where errors will be written | amass enum -log amass.log -d example.com |
 | -max-dns-queries | Maximum number of concurrent DNS queries | amass enum -max-dns-queries 200 -d example.com |
 | -min-for-recursive | Number of labels in a subdomain before recursive brute forcing | amass enum -brute -min-for-recursive 3 -d example.com |
-| -nf | Path to a file providing already known subdomain names | amass enum -nf names.txt -d example.com |
+| -nf | Path to a file providing already known subdomain names (from other tools/sources) | amass enum -nf names.txt -d example.com |
 | -noalts | Disable generation of altered names | amass enum -noalts -d example.com |
 | -norecursive | Turn off recursive brute forcing | amass enum -brute -norecursive -d example.com |
 | -o | Path to the text output file | amass enum -o out.txt -d example.com |
