@@ -47,7 +47,7 @@ brews:
     github:
       owner: caffix
       name: homebrew-amass
-    url_template: "http://github.com/OWASP/Amass/releases/download/{{ .Version }}/{{ .ArtifactName }}"
+    url_template: "https://github.com/OWASP/Amass/releases/download/{{ .Version }}/{{ .ArtifactName }}"
     commit_author:
       name: caffix
       email: caffix@users.noreply.github.com
