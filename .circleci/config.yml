@@ -29,7 +29,7 @@ jobs:
             # Prepare Snapcraft authentication credentials for publishing
             mkdir -p $HOME/.config/snapcraft
             echo $SNAPCRAFT_LOGIN_FILE | base64 --decode --ignore-garbage > $HOME/.config/snapcraft/snapcraft.cfg
-            # Login to Docker in order to allow images to be published
+            # Login to Docker in order for images to be published
             docker login -u caffix -p $DOCKER_PASS
             # GoReleaser takes care of the rest
             curl -sL https://git.io/goreleaser | bash

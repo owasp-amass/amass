@@ -20,7 +20,7 @@ builds:
 
 archives:
   -
-    name_template: "amass_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    name_template: "amass_{{ .Tag }}_{{ .Os }}_{{ .Arch }}"
     replacements:
       darwin: macos
       386: i386
@@ -41,13 +41,22 @@ changelog:
     - '^doc:'
     - '^test:'
 
+dockers:
+  -
+    dockerfile: Dockerfile
+    image_templates:
+      - "caffix/amass:v{{ .Major }}"
+      - "caffix/amass:v{{ .Major }}.{{ .Minor }}"
+      - "caffix/amass:{{ .Tag }}"
+      - "caffix/amass:latest"
+
 brews:
   -
     name: amass
     github:
       owner: caffix
       name: homebrew-amass
-    url_template: "https://github.com/OWASP/Amass/releases/download/{{ .Version }}/{{ .ArtifactName }}"
+    url_template: "https://github.com/OWASP/Amass/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
     commit_author:
       name: caffix
       email: caffix@users.noreply.github.com
@@ -59,9 +68,9 @@ snapcrafts:
   -
     name: amass
     # Remember you need to `snapcraft login` first.
-    #publish: true
+    publish: true
     summary: In-depth DNS Enumeration and Network Mapping.
-    description: The OWASP Amass Project has developed a tool to help information security professionals perform network mapping of attack surfaces and perform external asset discovery using open source information gathering and active reconnaissance techniques.
+    description: The OWASP Amass Project has developed a tool to help information security professionals perform network mapping of attack surfaces and external asset discovery using open source information gathering and active reconnaissance techniques.
     grade: stable
     confinement: strict
     # Your app's license, based on SPDX license expressions: https://spdx.org/licenses
