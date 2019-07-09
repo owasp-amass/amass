@@ -81,7 +81,7 @@ func main() {
 		return
 	}
 	if version {
-		fmt.Fprintf(color.Error, "version %s\n", amass.Version)
+		fmt.Fprintf(color.Error, "%s\n", amass.Version)
 		return
 	}
 
