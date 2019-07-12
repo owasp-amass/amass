@@ -19,7 +19,7 @@ var (
 	netCache map[int]*core.ASNRequest
 	// The reserved network address ranges
 	reservedAddrRanges []*net.IPNet
-	reservedCIDRs = []string{
+	reservedCIDRs      = []string{
 		"192.168.0.0/16",
 		"172.16.0.0/12",
 		"10.0.0.0/8",

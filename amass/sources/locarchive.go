@@ -12,6 +12,7 @@ import (
 type LoCArchive struct {
 	core.BaseService
 
+	domain     string
 	baseURL    string
 	SourceType string
 	filter     *utils.StringFilter
@@ -20,6 +21,7 @@ type LoCArchive struct {
 // NewLoCArchive returns he object initialized, but not yet started.
 func NewLoCArchive(config *core.Config, bus *core.EventBus) *LoCArchive {
 	l := &LoCArchive{
+		domain:     "webarchive.loc.gov",
 		baseURL:    "http://webarchive.loc.gov/all",
 		SourceType: core.ARCHIVE,
 		filter:     utils.NewStringFilter(),
@@ -62,7 +64,7 @@ func (l *LoCArchive) executeQuery(sn, domain string) {
 		return
 	}
 
-	names, err := crawl(l, l.baseURL, domain, sn)
+	names, err := crawl(l, l.baseURL, l.domain, sn, domain)
 	if err != nil {
 		l.Config().Log.Printf("%s: %v", l.String(), err)
 		return

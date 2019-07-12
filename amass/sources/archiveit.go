@@ -12,6 +12,7 @@ import (
 type ArchiveIt struct {
 	core.BaseService
 
+	domain     string
 	baseURL    string
 	SourceType string
 	filter     *utils.StringFilter
@@ -20,6 +21,7 @@ type ArchiveIt struct {
 // NewArchiveIt returns he object initialized, but not yet started.
 func NewArchiveIt(config *core.Config, bus *core.EventBus) *ArchiveIt {
 	a := &ArchiveIt{
+		domain:     "wayback.archive-it.org",
 		baseURL:    "https://wayback.archive-it.org/all",
 		SourceType: core.ARCHIVE,
 		filter:     utils.NewStringFilter(),
@@ -59,7 +61,7 @@ func (a *ArchiveIt) executeQuery(sn, domain string) {
 		return
 	}
 
-	names, err := crawl(a, a.baseURL, domain, sn)
+	names, err := crawl(a, a.baseURL, a.domain, sn, domain)
 	if err != nil {
 		a.Config().Log.Printf("%s: %v", a.String(), err)
 		return

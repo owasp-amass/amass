@@ -104,7 +104,7 @@ func runTrackCommand(clArgs []string) {
 
 	config := new(core.Config)
 	// Check if a configuration file was provided, and if so, load the settings
-	if acquireConfig(args.Filepaths.Directory, args.Filepaths.ConfigFile, config) {
+	if _, found := core.AcquireConfig(args.Filepaths.Directory, args.Filepaths.ConfigFile, config); found {
 		if args.Filepaths.Directory == "" {
 			args.Filepaths.Directory = config.Dir
 		}
@@ -249,7 +249,7 @@ func diffEnumOutput(out1, out2 []*core.Output) []string {
 		handled[o.Name] = struct{}{}
 
 		if _, found := omap2[o.Name]; !found {
-			diff = append(diff, fmt.Sprintf("%s%s %s", blue("Removed: "),
+			diff = append(diff, fmt.Sprintf("%s%s %s", blue("Found: "),
 				green(o.Name), yellow(lineOfAddresses(o.Addresses))))
 			continue
 		}
@@ -257,8 +257,8 @@ func diffEnumOutput(out1, out2 []*core.Output) []string {
 		o2 := omap2[o.Name]
 		if !compareAddresses(o.Addresses, o2.Addresses) {
 			diff = append(diff, fmt.Sprintf("%s%s\n\t%s\t%s\n\t%s\t%s", blue("Moved: "),
-				green(o.Name), blue(" from "), yellow(lineOfAddresses(o.Addresses)),
-				blue(" to "), yellow(lineOfAddresses(o2.Addresses))))
+				green(o.Name), blue(" from "), yellow(lineOfAddresses(o2.Addresses)),
+				blue(" to "), yellow(lineOfAddresses(o.Addresses))))
 		}
 	}
 
@@ -268,7 +268,7 @@ func diffEnumOutput(out1, out2 []*core.Output) []string {
 		}
 
 		if _, found := omap1[o.Name]; !found {
-			diff = append(diff, fmt.Sprintf("%s%s %s", blue("Found: "),
+			diff = append(diff, fmt.Sprintf("%s%s %s", blue("Removed: "),
 				green(o.Name), yellow(lineOfAddresses(o.Addresses))))
 		}
 	}

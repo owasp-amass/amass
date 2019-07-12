@@ -23,7 +23,6 @@ import (
 
 	"github.com/OWASP/Amass/amass"
 	"github.com/OWASP/Amass/amass/core"
-	"github.com/OWASP/Amass/amass/handlers"
 	"github.com/OWASP/Amass/amass/utils"
 	"github.com/fatih/color"
 	homedir "github.com/mitchellh/go-homedir"
@@ -127,7 +126,7 @@ func defineEnumFilepathFlags(enumFlags *flag.FlagSet, args *enumArgs) {
 	enumFlags.StringVar(&args.Filepaths.IncludedSrcs, "if", "", "Path to a file providing data sources to include")
 	enumFlags.StringVar(&args.Filepaths.JSONOutput, "json", "", "Path to the JSON output file")
 	enumFlags.StringVar(&args.Filepaths.LogFile, "log", "", "Path to the log file where errors will be written")
-	enumFlags.StringVar(&args.Filepaths.Names, "nf", "", "Path to a file providing already known subdomain names")
+	enumFlags.StringVar(&args.Filepaths.Names, "nf", "", "Path to a file providing already known subdomain names (from other tools/sources)")
 	enumFlags.StringVar(&args.Filepaths.Resolvers, "rf", "", "Path to a file providing preferred DNS resolvers")
 	enumFlags.StringVar(&args.Filepaths.TermOut, "o", "", "Path to the text file containing terminal stdout/stderr")
 }
@@ -190,8 +189,15 @@ func runEnumCommand(clArgs []string) {
 	rLog, wLog := io.Pipe()
 	enum := amass.NewEnumeration()
 	enum.Config.Log = log.New(wLog, "", log.Lmicroseconds)
+
 	// Check if a configuration file was provided, and if so, load the settings
-	acquireConfig(args.Filepaths.Directory, args.Filepaths.ConfigFile, enum.Config)
+	if f, found := core.AcquireConfig(args.Filepaths.Directory, args.Filepaths.ConfigFile, enum.Config); found {
+		// Check if a config file was provided that has DNS resolvers specified
+		if r, err := core.GetResolversFromSettings(f); err == nil && len(args.Resolvers) == 0 {
+			args.Resolvers = r
+		}
+	}
+
 	// Override configuration file settings with command-line arguments
 	if err := updateEnumConfiguration(enum, &args); err != nil {
 		r.Fprintf(color.Error, "Configuration error: %v\n", err)
@@ -199,7 +205,10 @@ func runEnumCommand(clArgs []string) {
 	}
 
 	if len(args.Resolvers) > 0 {
-		core.SetCustomResolvers(args.Resolvers)
+		if err := core.SetCustomResolvers(args.Resolvers); err != nil {
+			fmt.Fprintf(color.Error, "%v\n", err)
+			os.Exit(1)
+		}
 	}
 
 	processEnumOutput(enum, &args, rLog)
@@ -216,7 +225,7 @@ func processEnumOutput(enum *amass.Enumeration, args *enumArgs, pipe *io.PipeRea
 			r.Fprintln(color.Error, "Failed to obtain the user home directory")
 			os.Exit(1)
 		}
-		dir = filepath.Join(path, handlers.DefaultGraphDBDirectory)
+		dir = filepath.Join(path, core.DefaultOutputDirectory)
 	}
 	// If the directory does not yet exist, create it
 	if err = os.MkdirAll(dir, 0755); err != nil {
@@ -458,12 +467,6 @@ func processEnumInputFiles(args *enumArgs) error {
 			return fmt.Errorf("Failed to parse the resolver file: %v", err)
 		}
 		args.Resolvers = utils.UniqueAppend(args.Resolvers, list...)
-	}
-	// Check if a config file was provided that has DNS resolvers specified
-	if args.Filepaths.ConfigFile != "" {
-		if r, err := core.GetResolversFromSettings(args.Filepaths.ConfigFile); err == nil {
-			args.Resolvers = utils.UniqueAppend(args.Resolvers, r...)
-		}
 	}
 	return nil
 }

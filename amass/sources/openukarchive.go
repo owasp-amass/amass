@@ -12,6 +12,7 @@ import (
 type OpenUKArchive struct {
 	core.BaseService
 
+	domain     string
 	baseURL    string
 	SourceType string
 	filter     *utils.StringFilter
@@ -20,6 +21,7 @@ type OpenUKArchive struct {
 // NewOpenUKArchive returns he object initialized, but not yet started.
 func NewOpenUKArchive(config *core.Config, bus *core.EventBus) *OpenUKArchive {
 	o := &OpenUKArchive{
+		domain:     "webarchive.org.uk",
 		baseURL:    "http://www.webarchive.org.uk/wayback/archive",
 		SourceType: core.ARCHIVE,
 		filter:     utils.NewStringFilter(),
@@ -59,7 +61,7 @@ func (o *OpenUKArchive) executeQuery(sn, domain string) {
 		return
 	}
 
-	names, err := crawl(o, o.baseURL, domain, sn)
+	names, err := crawl(o, o.baseURL, o.domain, sn, domain)
 	if err != nil {
 		o.Config().Log.Printf("%s: %v", o.String(), err)
 		return

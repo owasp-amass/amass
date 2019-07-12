@@ -24,11 +24,6 @@ import (
 	homedir "github.com/mitchellh/go-homedir"
 )
 
-const (
-	// DefaultGraphDBDirectory is the directory name used by default for the graph database.
-	DefaultGraphDBDirectory string = "amass"
-)
-
 // Graph is the object for managing a network infrastructure link graph.
 type Graph struct {
 	sync.Mutex
@@ -46,7 +41,7 @@ func NewGraph(path string) *Graph {
 		if err != nil {
 			return nil
 		}
-		path = filepath.Join(path, DefaultGraphDBDirectory)
+		path = filepath.Join(path, core.DefaultOutputDirectory)
 	}
 	// If the directory does not yet exist, create it
 	if err = os.MkdirAll(path, 0755); err != nil {
@@ -99,7 +94,6 @@ func (g *Graph) propertyValue(node quad.Value, pname, uuid string) string {
 
 	p := cayley.StartPath(g.store, node).LabelContext(quad.String(uuid)).Out(quad.String(pname))
 	it, _ := p.BuildIterator().Optimize()
-	it, _ = g.store.OptimizeIterator(it)
 	defer it.Close()
 
 	var result string
@@ -448,7 +442,6 @@ func (g *Graph) EnumerationList() []string {
 
 	p := cayley.StartPath(g.store).Has(quad.String("type"), quad.String("domain")).Labels()
 	it, _ := p.BuildIterator().Optimize()
-	it, _ = g.store.OptimizeIterator(it)
 	defer it.Close()
 
 	var ids []string
@@ -473,7 +466,6 @@ func (g *Graph) EnumerationDomains(uuid string) []string {
 	p := cayley.StartPath(g.store).LabelContext(
 		quad.String(uuid)).Has(quad.String("type"), quad.String("domain"))
 	it, _ := p.BuildIterator().Optimize()
-	it, _ = g.store.OptimizeIterator(it)
 	defer it.Close()
 
 	var domains []string
@@ -497,7 +489,6 @@ func (g *Graph) EnumerationDateRange(uuid string) (time.Time, time.Time) {
 
 	p := cayley.StartPath(g.store).LabelContext(quad.String(uuid)).Out(quad.String("timestamp"))
 	it, _ := p.BuildIterator().Optimize()
-	it, _ = g.store.OptimizeIterator(it)
 	defer it.Close()
 
 	first := true
@@ -535,7 +526,6 @@ func (g *Graph) GetOutput(uuid string, marked bool) []*core.Output {
 	p := cayley.StartPath(g.store).LabelContext(
 		quad.String(uuid)).Has(quad.String("type"), quad.String("domain"))
 	it, _ := p.BuildIterator().Optimize()
-	it, _ = g.store.OptimizeIterator(it)
 	defer it.Close()
 
 	ctx := context.TODO()
@@ -576,7 +566,6 @@ func (g *Graph) getSubdomainNames(domain, uuid string, marked bool) []string {
 		p = p.Except(read)
 	}
 	it, _ := p.BuildIterator().Optimize()
-	it, _ = g.store.OptimizeIterator(it)
 	defer it.Close()
 
 	ctx := context.TODO()
@@ -641,7 +630,6 @@ func (g *Graph) buildOutput(sub, uuid string) *core.Output {
 	u := quad.String(uuid)
 	pv4 := cayley.StartPath(g.store, quad.String(target)).LabelContext(u).Out(quad.String("a_to"))
 	itv4, _ := pv4.BuildIterator().Optimize()
-	itv4, _ = g.store.OptimizeIterator(itv4)
 	defer itv4.Close()
 
 	ctx := context.TODO()
@@ -657,7 +645,6 @@ func (g *Graph) buildOutput(sub, uuid string) *core.Output {
 	// Get all the IPv6 addresses
 	pv6 := cayley.StartPath(g.store, quad.String(target)).LabelContext(u).Out(quad.String("aaaa_to"))
 	itv6, _ := pv6.BuildIterator().Optimize()
-	itv6, _ = g.store.OptimizeIterator(itv6)
 	defer itv6.Close()
 
 	ctx = context.TODO()
@@ -683,7 +670,6 @@ func (g *Graph) buildAddrInfo(addr, uuid string) *core.AddressInfo {
 	u := quad.String(uuid)
 	nb := cayley.StartPath(g.store, quad.String(addr)).LabelContext(u).In(quad.String("contains"))
 	itnb, _ := nb.BuildIterator().Optimize()
-	itnb, _ = g.store.OptimizeIterator(itnb)
 	defer itnb.Close()
 
 	var cidr string
@@ -705,7 +691,6 @@ func (g *Graph) buildAddrInfo(addr, uuid string) *core.AddressInfo {
 
 	p := cayley.StartPath(g.store, quad.String(cidr)).LabelContext(u).In(quad.String("has_prefix"))
 	itasn, _ := p.BuildIterator().Optimize()
-	itasn, _ = g.store.OptimizeIterator(itasn)
 	defer itasn.Close()
 
 	var asn string
@@ -761,7 +746,6 @@ func (g *Graph) VizData(uuid string) ([]viz.Node, []viz.Edge) {
 	rnodes := make(map[string]int)
 	p := cayley.StartPath(g.store).LabelContext(u).Has(quad.String("type")).Unique()
 	it, _ := p.BuildIterator().Optimize()
-	it, _ = g.store.OptimizeIterator(it)
 	defer it.Close()
 
 	ctx := context.TODO()
@@ -808,7 +792,6 @@ func (g *Graph) VizData(uuid string) ([]viz.Node, []viz.Edge) {
 		var predicates []quad.Value
 		p = cayley.StartPath(g.store, quad.String(n.Label)).LabelContext(u).OutPredicates().Unique()
 		it, _ := p.BuildIterator().Optimize()
-		it, _ = g.store.OptimizeIterator(it)
 		defer it.Close()
 
 		ctx := context.TODO()
@@ -826,7 +809,6 @@ func (g *Graph) VizData(uuid string) ([]viz.Node, []viz.Edge) {
 		for _, predicate := range predicates {
 			path := cayley.StartPath(g.store, quad.String(n.Label)).LabelContext(u).Out(predicate)
 			it, _ := path.BuildIterator().Optimize()
-			it, _ = g.store.OptimizeIterator(it)
 			defer it.Close()
 
 			ctx := context.TODO()

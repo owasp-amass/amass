@@ -5,22 +5,21 @@ package sources
 
 import (
 	"fmt"
-	"net"
-	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
 	"github.com/OWASP/Amass/amass/utils"
-	"github.com/PuerkitoBio/fetchbot"
 	"github.com/PuerkitoBio/goquery"
+	"github.com/geziyor/geziyor"
+	"github.com/geziyor/geziyor/client"
 )
 
 var (
 	nameStripRE = regexp.MustCompile("^((20)|(25)|(2b)|(2f)|(3d)|(3a)|(40))+")
+	maxCrawlSem = utils.NewSimpleSemaphore(50)
 )
 
 // GetAllSources returns a slice of all data source services, initialized and ready.
@@ -100,115 +99,38 @@ func cleanName(name string) string {
 	return name
 }
 
-//-------------------------------------------------------------------------------------------------
-// Web archive crawler implementation
-//-------------------------------------------------------------------------------------------------
-
-func crawl(service core.Service, base, domain, sub string) ([]string, error) {
+func crawl(service core.Service, baseURL, baseDomain, subdomain, domain string) ([]string, error) {
 	var results []string
-	var filterMutex sync.Mutex
-	filter := make(map[string]struct{})
 
-	year := strconv.Itoa(time.Now().Year())
-	mux := fetchbot.NewMux()
-	links := make(chan string, 50)
-	names := make(chan string, 50)
-	linksFilter := make(map[string]struct{})
+	maxCrawlSem.Acquire(1)
+	defer maxCrawlSem.Release(1)
 
-	mux.HandleErrors(fetchbot.HandlerFunc(func(ctx *fetchbot.Context, res *http.Response, err error) {
-		//service.Config.Log.Printf("Crawler error: %s %s - %v", ctx.Cmd.Method(), ctx.Cmd.URL(), err)
-	}))
-
-	mux.Response().Method("GET").ContentType("text/html").Handler(fetchbot.HandlerFunc(
-		func(ctx *fetchbot.Context, res *http.Response, err error) {
-			filterMutex.Lock()
-			defer filterMutex.Unlock()
-
-			u := res.Request.URL.String()
-			if _, found := filter[u]; found {
-				return
-			}
-			filter[u] = struct{}{}
-
-			linksAndNames(domain, ctx, res, links, names)
-		}))
-
-	f := fetchbot.New(fetchbot.HandlerFunc(func(ctx *fetchbot.Context, res *http.Response, err error) {
-		mux.Handle(ctx, res, err)
-	}))
-	setFetcherConfig(f)
-
-	q := f.Start()
-	u := fmt.Sprintf("%s/%s/%s", base, year, sub)
-	if _, err := q.SendStringGet(u); err != nil {
-		return results, fmt.Errorf("Crawler error: GET %s - %v", u, err)
-	}
-
-	t := time.NewTimer(10 * time.Second)
-loop:
-	for {
-		select {
-		case l := <-links:
-			if _, ok := linksFilter[l]; ok {
-				continue
-			}
-			linksFilter[l] = struct{}{}
-			q.SendStringGet(l)
-		case n := <-names:
-			results = utils.UniqueAppend(results, n)
-		case <-t.C:
-			go func() {
-				q.Cancel()
-			}()
-		case <-q.Done():
-			break loop
-		case <-service.Quit():
-			break loop
-		}
-	}
-	return results, nil
-}
-
-func linksAndNames(domain string, ctx *fetchbot.Context, res *http.Response, links, names chan string) error {
-	// Process the body to find the links
-	doc, err := goquery.NewDocumentFromResponse(res)
-	if err != nil {
-		return fmt.Errorf("crawler error: %s %s - %s", ctx.Cmd.Method(), ctx.Cmd.URL(), err)
-	}
-
-	re := utils.SubdomainRegex(domain)
+	re := service.Config().DomainRegex(domain)
 	if re == nil {
-		return fmt.Errorf("crawler error: Failed to obtain regex object for: %s", domain)
+		return results, fmt.Errorf("crawler error: Failed to obtain regex object for: %s", domain)
 	}
-	doc.Find("a[href]").Each(func(i int, s *goquery.Selection) {
-		val, _ := s.Attr("href")
-		// Resolve address
-		u, err := ctx.Cmd.URL().Parse(val)
-		if err != nil {
-			return
-		}
 
-		if sub := re.FindString(u.String()); sub != "" {
-			names <- sub
-			links <- u.String()
-		}
-	})
-	return nil
-}
-
-func setFetcherConfig(f *fetchbot.Fetcher) {
-	d := net.Dialer{}
-	f.HttpClient = &http.Client{
-		Timeout: 10 * time.Second,
-		Transport: &http.Transport{
-			DialContext:           d.DialContext,
-			MaxIdleConns:          200,
-			IdleConnTimeout:       5 * time.Second,
-			TLSHandshakeTimeout:   5 * time.Second,
-			ExpectContinueTimeout: 5 * time.Second,
+	start := fmt.Sprintf("%s/%s/%s", baseURL, strconv.Itoa(time.Now().Year()), subdomain)
+	geziyor.NewGeziyor(&geziyor.Options{
+		AllowedDomains:              []string{baseDomain},
+		StartURLs:                   []string{start},
+		Timeout:                     30 * time.Second,
+		UserAgent:                   utils.UserAgent,
+		RequestDelay:                time.Second,
+		RequestDelayRandomize:       true,
+		LogDisabled:                 true,
+		ConcurrentRequests:          3,
+		ConcurrentRequestsPerDomain: 3,
+		ParseFunc: func(g *geziyor.Geziyor, r *client.Response) {
+			r.HTMLDoc.Find("a").Each(func(i int, s *goquery.Selection) {
+				if href, ok := s.Attr("href"); ok {
+					if sub := re.FindString(r.JoinURL(href)); sub != "" {
+						results = utils.UniqueAppend(results, cleanName(sub))
+					}
+				}
+			})
 		},
-	}
-	f.CrawlDelay = 1 * time.Second
-	f.DisablePoliteness = true
-	f.UserAgent = utils.UserAgent
+	}).Start()
+
+	return results, nil
 }

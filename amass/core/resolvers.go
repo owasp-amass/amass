@@ -5,6 +5,7 @@ package core
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand"
 	"net"
@@ -47,7 +48,7 @@ var (
 
 	maxRetries = 3
 
-	// Domains discovered by the SubdomainToDomain method call
+	// Domains discovered by the SubdomainToDomain function
 	domainLock  sync.Mutex
 	domainCache map[string]struct{}
 )
@@ -149,6 +150,7 @@ type resolver struct {
 	timeouts       int64
 	last           time.Time
 	successRate    time.Duration
+	score          int
 }
 
 func newResolver(addr string) *resolver {
@@ -169,7 +171,8 @@ func newResolver(addr string) *resolver {
 		Done:           make(chan struct{}, 2),
 		rcodeStats:     make(map[int]int64),
 		last:           time.Now(),
-		successRate:    10 * time.Millisecond,
+		successRate:    55 * time.Millisecond,
+		score:          100,
 	}
 	go r.fillXchgChan()
 	go r.checkForTimeouts()
@@ -182,6 +185,38 @@ func (r *resolver) stop() {
 	close(r.Done)
 	time.Sleep(time.Second)
 	r.Conn.Close()
+}
+
+func (r *resolver) currentScore() int {
+	r.RLock()
+	defer r.RUnlock()
+
+	return r.score
+}
+
+func (r *resolver) reduceScore() {
+	if numUsableResolvers() == 1 {
+		return
+	}
+	
+	r.Lock()
+	defer r.Unlock()
+
+	r.score--
+}
+
+func (r *resolver) getSuccessRate() time.Duration {
+	r.RLock()
+	defer r.RUnlock()
+
+	return r.successRate
+}
+
+func (r *resolver) setSuccessRate(d time.Duration) {
+	r.Lock()
+	defer r.Unlock()
+
+	r.successRate = d
 }
 
 func (r *resolver) getID() uint16 {
@@ -413,16 +448,27 @@ func (r *resolver) processMessage(msg *dns.Msg) {
 }
 
 func (r *resolver) monitorPerformance() {
-	var successes int64
+	var successes, attempts int64
 
-	t := time.NewTicker(time.Second)
+	t := time.NewTicker(5 * time.Second)
 	defer t.Stop()
+	m := time.NewTicker(time.Minute)
+	defer m.Stop()
 	for {
 		select {
 		case <-r.Done:
 			return
 		case <-t.C:
-			successes = r.calcSuccessRate(successes, time.Second)
+			successes, attempts = r.calcSuccessRate(successes, attempts)
+		case <-m.C:
+			successes = 0
+			attempts = 0
+			r.wipeStats()
+			r.wipeAttempts()
+			r.wipeTimeouts()
+			if r.getSuccessRate() > 50*time.Millisecond {
+				r.setSuccessRate(50 * time.Millisecond)
+			}
 		}
 	}
 }
@@ -434,6 +480,15 @@ func (r *resolver) updateStats(rcode int) {
 	r.rcodeStats[rcode] = r.rcodeStats[rcode] + 1
 }
 
+func (r *resolver) wipeStats() {
+	r.Lock()
+	defer r.Unlock()
+
+	for k := range r.rcodeStats {
+		r.rcodeStats[k] = 0
+	}
+}
+
 func (r *resolver) updatesAttempts() {
 	r.Lock()
 	defer r.Unlock()
@@ -441,15 +496,28 @@ func (r *resolver) updatesAttempts() {
 	r.attempts++
 }
 
+func (r *resolver) wipeAttempts() {
+	r.Lock()
+	defer r.Unlock()
+
+	r.attempts = 0
+}
+
 func (r *resolver) updateTimeouts(t int) {
 	r.Lock()
 	defer r.Unlock()
 
 	r.timeouts += int64(t)
-
 }
 
-func (r *resolver) calcSuccessRate(prevSuc int64, tSize time.Duration) (successes int64) {
+func (r *resolver) wipeTimeouts() {
+	r.Lock()
+	defer r.Unlock()
+
+	r.timeouts = 0
+}
+
+func (r *resolver) calcSuccessRate(prevSuc, prevAtt int64) (successes, attempts int64) {
 	r.RLock()
 	successes = r.rcodeStats[dns.RcodeSuccess]
 	successes += r.rcodeStats[dns.RcodeFormatError]
@@ -457,22 +525,31 @@ func (r *resolver) calcSuccessRate(prevSuc int64, tSize time.Duration) (successe
 	successes += r.rcodeStats[dns.RcodeYXDomain]
 	successes += r.rcodeStats[dns.RcodeNotAuth]
 	successes += r.rcodeStats[dns.RcodeNotZone]
+	attempts = r.attempts
+	curRate := r.successRate
 	r.RUnlock()
 
-	rate := tSize
-	successDelta := successes - prevSuc
-	if successDelta > 0 {
-		rate = tSize / time.Duration(successDelta)
-	}
-	// Cannot get too slow
-	min := 100 * time.Millisecond
-	if rate > min {
-		rate = min
+	attemptDelta := attempts - prevAtt
+	if attemptDelta < 10 {
+		return
 	}
 
-	r.Lock()
-	r.successRate = rate
-	r.Unlock()
+	successDelta := successes - prevSuc
+	if successDelta <= 0 {
+		r.reduceScore()
+		r.setSuccessRate(curRate + (25 * time.Millisecond))
+		return
+	}
+
+	ratio := float64(successDelta) / float64(attemptDelta)
+	if ratio < 0.25 || curRate > (500*time.Millisecond) {
+		r.reduceScore()
+		r.setSuccessRate(curRate + (25 * time.Millisecond))
+	} else if ratio > 0.75 && (curRate >= (15 * time.Millisecond)) {
+		r.setSuccessRate(curRate - (10 * time.Millisecond))
+	} else {
+		r.setSuccessRate(curRate + (10 * time.Millisecond))
+	}
 	return
 }
 
@@ -494,6 +571,65 @@ func (r *resolver) Available() bool {
 	return avail
 }
 
+func (r *resolver) SanityCheck() bool {
+	ch := make(chan bool, 10)
+	f := func(name string, flip bool) {
+		var err error
+		again := true
+		var success bool
+
+		for i := 0; i < 2 && again; i++ {
+			_, again, err = r.resolve(name, dns.TypeA)
+			if err == nil {
+				success = true
+				break
+			}
+		}
+
+		if flip {
+			success = !success
+		}
+		ch <- success
+	}
+
+	// Check that valid names can be resolved
+	goodNames := []string{
+		"www.owasp.org",
+		"twitter.com",
+		"github.com",
+		"www.google.com",
+	}
+	for _, name := range goodNames {
+		go f(name, false)
+	}
+
+	// Check that invalid names do not return false positives
+	badNames := []string{
+		"not-a-real-name.owasp.org",
+		"wwww.owasp.org",
+		"www-1.owasp.org",
+		"www1.owasp.org",
+		"wwww.google.com",
+		"www-1.google.com",
+		"www1.google.com",
+		"not-a-real-name.google.com",
+	}
+	for _, name := range badNames {
+		go f(name, true)
+	}
+
+	l := len(goodNames) + len(badNames)
+	for i := 0; i < l; i++ {
+		select {
+		case success := <-ch:
+			if !success {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 func nextResolver() *resolver {
 	var attempts int
 	max := len(resolvers)
@@ -501,7 +637,7 @@ func nextResolver() *resolver {
 		rnd := rand.Int()
 		r := resolvers[rnd%len(resolvers)]
 
-		if r.Available() {
+		if r.currentScore() > 50 && r.Available() {
 			return r
 		}
 
@@ -511,7 +647,7 @@ func nextResolver() *resolver {
 		}
 
 		for _, r := range resolvers {
-			if r.Available() {
+			if r.currentScore() > 50 && r.Available() {
 				return r
 			}
 		}
@@ -524,10 +660,10 @@ func randomInt(min, max int) int {
 	return min + rand.Intn((max-min)+1)
 }
 
-// SetCustomResolvers modifies the set of resolvers used during enumeration.
-func SetCustomResolvers(res []string) {
+// SetCustomResolvers modifies the set of resolvers.
+func SetCustomResolvers(res []string) error {
 	if len(res) <= 0 {
-		return
+		return errors.New("No resolver addresses provided")
 	}
 
 	for _, r := range resolvers {
@@ -535,6 +671,18 @@ func SetCustomResolvers(res []string) {
 	}
 	resolvers = []*resolver{}
 
+	// Do not allow the number of resolvers to exceed the ulimit
+	temp := res
+	res = []string{}
+	max := int(float64(utils.GetFileLimit()) * 0.9)
+	for i, r := range temp {
+		if i > max {
+			break
+		}
+		res = append(res, r)
+	}
+
+	ch := make(chan *resolver, 10)
 	for _, r := range res {
 		addr := r
 
@@ -542,8 +690,50 @@ func SetCustomResolvers(res []string) {
 		if len(parts) == 1 && parts[0] == addr {
 			addr += ":53"
 		}
-		resolvers = append(resolvers, newResolver(addr))
+
+		go func() {
+			if n := newResolver(addr); n != nil {
+				if n.SanityCheck() {
+					ch <- n
+					return
+				}
+				n.stop()
+			}
+			ch <- nil
+		}()
 	}
+
+	l := len(res)
+	for i := 0; i < l; i++ {
+		select {
+		case r := <-ch:
+			if r != nil {
+				resolvers = append(resolvers, r)
+			}
+		}
+	}
+
+	if len(resolvers) == 0 {
+		return errors.New("No resolvers passed the sanity check")
+	}
+	return nil
+}
+
+func numUsableResolvers() int {
+	var num int
+
+	for _, r := range resolvers {
+		if r.currentScore() > 50 {
+			num++
+		}
+	}
+	return num
+}
+
+type resolveVote struct {
+	Err      error
+	Resolver *resolver
+	Answers  []DNSAnswer
 }
 
 // Resolve allows all components to make DNS requests without using the DNSService object.
@@ -566,12 +756,93 @@ func Resolve(name, qtype string, priority int) ([]DNSAnswer, error) {
 		maxservfail = 6
 	}
 
+	num := 1
+	if numUsableResolvers() >= 3 {
+		num = 3
+	}
+
+	ch := make(chan *resolveVote, num)
+	for i := 0; i < num; i++ {
+		go queryResolver(nextResolver(), ch, name, qt, priority, maxattempts, maxservfail)
+	}
+
+	var votes []*resolveVote
+	for i := 0; i < num; i++ {
+		select {
+		case v := <-ch:
+			votes = append(votes, v)
+		}
+	}
+	return performElection(votes, name, int(qt))
+}
+
+func performElection(votes []*resolveVote, name string, qt int) ([]DNSAnswer, error) {
+	if len(votes) == 1 {
+		return votes[0].Answers, votes[0].Err
+	} else if votes[0].Err != nil && votes[1].Err != nil && votes[2].Err != nil {
+		return []DNSAnswer{}, votes[0].Err
+	}
+
+	var ans []DNSAnswer
+	for i := 0; i < 3; i++ {
+		for _, a := range votes[i].Answers {
+			if a.Type != qt {
+				continue
+			}
+
+			var dup bool
+			for _, d := range ans {
+				if d.Data == a.Data {
+					dup = true
+					break
+				}
+			}
+			if dup {
+				continue
+			}
+
+			found := 1
+			var missing *resolver
+			for j, v := range votes {
+				if j == i {
+					continue
+				}
+
+				missing = v.Resolver
+				for _, o := range v.Answers {
+					if o.Type == qt && o.Data == a.Data {
+						found++
+						missing = nil
+						break
+					}
+				}
+			}
+
+			if found == 1 {
+				votes[i].Resolver.reduceScore()
+				continue
+			} else if found == 2 && missing != nil {
+				missing.reduceScore()
+			}
+			ans = append(ans, a)
+		}
+	}
+
+	if len(ans) == 0 {
+		return ans, &ResolveError{Err: fmt.Sprintf("DNS query for %s, type %d returned 0 records", name, qt)}
+	}
+	return ans, nil
+}
+
+func queryResolver(r *resolver, ch chan *resolveVote, name string, qt uint16, priority, maxAttempts, maxFails int) {
+	var err error
 	var again bool
 	start := time.Now()
 	var ans []DNSAnswer
 	var attempts, servfail int
+
 	for {
-		ans, again, err = nextResolver().resolve(name, qt)
+		ans, again, err = r.resolve(name, qt)
 		if !again {
 			break
 		} else if priority == PriorityCritical {
@@ -579,20 +850,25 @@ func Resolve(name, qtype string, priority int) ([]DNSAnswer, error) {
 		}
 
 		attempts++
-		if attempts > maxattempts && time.Now().After(start.Add(2*time.Minute)) {
+		if attempts > maxAttempts && time.Now().After(start.Add(2*time.Minute)) {
 			break
 		}
 		// Do not allow server failure errors to continue as long
 		if (err.(*ResolveError)).Rcode == dns.RcodeServerFailure {
 			servfail++
-			if servfail > maxservfail && time.Now().After(start.Add(time.Minute)) {
+			if servfail > maxFails && time.Now().After(start.Add(time.Minute)) {
 				break
-			} else if servfail <= (maxservfail / 2) {
+			} else if servfail <= (maxFails / 2) {
 				time.Sleep(time.Duration(randomInt(3000, 5000)) * time.Millisecond)
 			}
 		}
 	}
-	return ans, err
+
+	ch <- &resolveVote{
+		Err:      err,
+		Resolver: r,
+		Answers:  ans,
+	}
 }
 
 // ReverseDNS is performs reverse DNS queries without using the DNSService object.

@@ -8,11 +8,13 @@ import (
 	"compress/gzip"
 	"errors"
 	"fmt"
+	homedir "github.com/mitchellh/go-homedir"
 	"io"
 	"log"
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -24,11 +26,14 @@ import (
 )
 
 const (
-	defaultWordlistURL    = "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/namelist.txt"
-	defaultAltWordlistURL = "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/alterations.txt"
+	// DefaultOutputDirectory is the name of the directory used for output files, such as the graph database.
+	DefaultOutputDirectory = "amass"
+	
+	defaultWordlistURL     = "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/namelist.txt"
+	defaultAltWordlistURL  = "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/alterations.txt"
 )
 
-// Config passes along Amass enumeration configurations
+// Config passes along Amass configuration settings and options.
 type Config struct {
 	sync.Mutex
 
@@ -71,13 +76,13 @@ type Config struct {
 	Wordlist []string
 
 	// Will the enumeration including brute forcing techniques
-	BruteForcing bool `ini:"brute_forcing"`
+	BruteForcing bool
 
 	// Will recursive brute forcing be performed?
-	Recursive bool `ini:"recursive_brute_forcing"`
+	Recursive bool
 
 	// Minimum number of subdomain discoveries before performing recursive brute forcing
-	MinForRecursive int `ini:"minimum_for_recursive"`
+	MinForRecursive int
 
 	// Will discovered subdomain name alterations be generated?
 	Alterations    bool
@@ -460,24 +465,22 @@ func (c *Config) LoadSettings(path string) error {
 	}
 
 	// Load up all API key information from data source sections
-	nonAPISections := []string{
-		"alterations",
-		"bruteforce",
-		"default",
-		"domains",
-		"resolvers",
-		"blacklisted",
-		"disabled_data_sources",
-		"gremlin",
+	nonAPISections := map[string]struct{}{
+		"alterations":           struct{}{},
+		"bruteforce":            struct{}{},
+		"default":               struct{}{},
+		"domains":               struct{}{},
+		"resolvers":             struct{}{},
+		"blacklisted":           struct{}{},
+		"disabled_data_sources": struct{}{},
+		"gremlin":               struct{}{},
 	}
-outer:
+
 	for _, section := range cfg.Sections() {
 		name := section.Name()
-		// Skip sections that are not related to data sources
-		for _, doneSection := range nonAPISections {
-			if name == doneSection {
-				continue outer
-			}
+
+		if _, skip := nonAPISections[name]; skip {
+			continue
 		}
 
 		key := new(APIKey)
@@ -487,6 +490,38 @@ outer:
 		}
 	}
 	return nil
+}
+
+// AcquireConfig populates the Config struct provided by the config argument.
+// The configuration file path and a bool indicating the settings were
+// successfully loaded are returned.
+func AcquireConfig(dir, file string, config *Config) (string, bool) {
+	if file != "" {
+		if err := config.LoadSettings(file); err == nil {
+			return file, true
+		}
+	}
+	if dir = OutputDirectory(dir); dir != "" {
+		if finfo, err := os.Stat(dir); !os.IsNotExist(err) && finfo.IsDir() {
+			file := filepath.Join(dir, "config.ini")
+
+			if err := config.LoadSettings(file); err == nil {
+				return file, true
+			}
+		}
+	}
+	return "", false
+}
+
+// OutputDirectory returns the file path of the Amass output directory. A suitable
+// path provided will be used as the output directory instead.
+func OutputDirectory(dir string) string {
+	if dir == "" {
+		if path, err := homedir.Dir(); err == nil {
+			dir = filepath.Join(path, DefaultOutputDirectory)
+		}
+	}
+	return dir
 }
 
 // GetResolversFromSettings loads the configuration file and returns all resolvers found.
@@ -512,7 +547,7 @@ func GetResolversFromSettings(path string) ([]string, error) {
 }
 
 // GetListFromFile reads a wordlist text or gzip file
-// and returns the slice of words
+// and returns the slice of words.
 func GetListFromFile(path string) ([]string, error) {
 	var reader io.Reader
 

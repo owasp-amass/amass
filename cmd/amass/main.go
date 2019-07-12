@@ -9,14 +9,11 @@ import (
 	"fmt"
 	"os"
 	"path"
-	"path/filepath"
 
 	"github.com/OWASP/Amass/amass"
 	"github.com/OWASP/Amass/amass/core"
-	"github.com/OWASP/Amass/amass/handlers"
 	"github.com/OWASP/Amass/amass/sources"
 	"github.com/fatih/color"
-	homedir "github.com/mitchellh/go-homedir"
 )
 
 const (
@@ -84,7 +81,7 @@ func main() {
 		return
 	}
 	if version {
-		fmt.Fprintf(color.Error, "version %s\n", amass.Version)
+		fmt.Fprintf(color.Error, "%s\n", amass.Version)
 		return
 	}
 
@@ -103,32 +100,6 @@ func main() {
 		flag.Usage()
 		os.Exit(1)
 	}
-}
-
-func outputDirectory(dir string) string {
-	if dir == "" {
-		if path, err := homedir.Dir(); err == nil {
-			dir = filepath.Join(path, handlers.DefaultGraphDBDirectory)
-		}
-	}
-	return dir
-}
-
-func acquireConfig(dir, file string, config *core.Config) bool {
-	if file != "" {
-		if err := config.LoadSettings(file); err == nil {
-			return true
-		}
-	}
-	if dir = outputDirectory(dir); dir != "" {
-		if finfo, err := os.Stat(dir); !os.IsNotExist(err) && finfo.IsDir() {
-			file = filepath.Join(dir, "config.ini")
-			if err := config.LoadSettings(file); err == nil {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 // GetAllSourceNames returns the names of all Amass data sources.

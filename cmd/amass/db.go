@@ -93,7 +93,7 @@ func runDBCommand(clArgs []string) {
 
 	config := new(core.Config)
 	// Check if a configuration file was provided, and if so, load the settings
-	if acquireConfig(args.Filepaths.Directory, args.Filepaths.ConfigFile, config) {
+	if _, found := core.AcquireConfig(args.Filepaths.Directory, args.Filepaths.ConfigFile, config); found {
 		if args.Filepaths.Directory == "" {
 			args.Filepaths.Directory = config.Dir
 		}
@@ -145,7 +145,7 @@ func openGraphDatabase(dir string, config *core.Config) handlers.DataHandler {
 			db = g
 		}
 	} else {
-		if d := outputDirectory(dir); d != "" {
+		if d := core.OutputDirectory(dir); d != "" {
 			// Check that the graph database directory exists
 			if finfo, err := os.Stat(d); !os.IsNotExist(err) && finfo.IsDir() {
 				if graph := handlers.NewGraph(d); graph != nil {
