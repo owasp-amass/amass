@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/OWASP/Amass/amass/core"
+	"github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -18,7 +19,7 @@ type BufferOver struct {
 }
 
 // NewBufferOver returns he object initialized, but not yet started.
-func NewBufferOver(config *core.Config, bus *core.EventBus) *BufferOver {
+func NewBufferOver(config *core.Config, bus *eventbus.EventBus) *BufferOver {
 	b := &BufferOver{SourceType: core.API}
 
 	b.BaseService = *core.NewBaseService(b, "BufferOver", config, bus)

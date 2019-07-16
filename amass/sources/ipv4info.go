@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
+	"github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -21,7 +22,7 @@ type IPv4Info struct {
 }
 
 // NewIPv4Info returns he object initialized, but not yet started.
-func NewIPv4Info(config *core.Config, bus *core.EventBus) *IPv4Info {
+func NewIPv4Info(config *core.Config, bus *eventbus.EventBus) *IPv4Info {
 	i := &IPv4Info{
 		baseURL:    "http://ipv4info.com",
 		SourceType: core.SCRAPE,

@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/OWASP/Amass/amass/core"
+	"github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -18,7 +19,7 @@ type FindSubdomains struct {
 }
 
 // NewFindSubdomains returns he object initialized, but not yet started.
-func NewFindSubdomains(config *core.Config, bus *core.EventBus) *FindSubdomains {
+func NewFindSubdomains(config *core.Config, bus *eventbus.EventBus) *FindSubdomains {
 	f := &FindSubdomains{SourceType: core.SCRAPE}
 
 	f.BaseService = *core.NewBaseService(f, "FindSubdomains", config, bus)

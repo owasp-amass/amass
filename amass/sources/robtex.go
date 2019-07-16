@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
+	"github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -30,7 +31,7 @@ type robtexJSON struct {
 }
 
 // NewRobtex returns he object initialized, but not yet started.
-func NewRobtex(config *core.Config, bus *core.EventBus) *Robtex {
+func NewRobtex(config *core.Config, bus *eventbus.EventBus) *Robtex {
 	r := &Robtex{
 		SourceType: core.API,
 		RateLimit:  time.Second,

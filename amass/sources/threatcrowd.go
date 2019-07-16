@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
+	"github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -22,7 +23,7 @@ type ThreatCrowd struct {
 }
 
 // NewThreatCrowd returns he object initialized, but not yet started.
-func NewThreatCrowd(config *core.Config, bus *core.EventBus) *ThreatCrowd {
+func NewThreatCrowd(config *core.Config, bus *eventbus.EventBus) *ThreatCrowd {
 	t := &ThreatCrowd{
 		SourceType: core.API,
 		RateLimit:  10 * time.Second,

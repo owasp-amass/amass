@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
+	"github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -22,7 +23,7 @@ type Google struct {
 }
 
 // NewGoogle returns he object initialized, but not yet started.
-func NewGoogle(config *core.Config, bus *core.EventBus) *Google {
+func NewGoogle(config *core.Config, bus *eventbus.EventBus) *Google {
 	g := &Google{
 		quantity:   10,
 		limit:      100,

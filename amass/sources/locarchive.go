@@ -5,6 +5,7 @@ package sources
 
 import (
 	"github.com/OWASP/Amass/amass/core"
+	"github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -19,7 +20,7 @@ type LoCArchive struct {
 }
 
 // NewLoCArchive returns he object initialized, but not yet started.
-func NewLoCArchive(config *core.Config, bus *core.EventBus) *LoCArchive {
+func NewLoCArchive(config *core.Config, bus *eventbus.EventBus) *LoCArchive {
 	l := &LoCArchive{
 		domain:     "webarchive.loc.gov",
 		baseURL:    "http://webarchive.loc.gov/all",

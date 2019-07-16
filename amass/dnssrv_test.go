@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
+	"github.com/OWASP/Amass/amass/eventbus"
 )
 
 func TestDNSStaticWildcard(t *testing.T) {
@@ -27,7 +28,7 @@ func TestDNSStaticWildcard(t *testing.T) {
 	rLog, wLog := io.Pipe()
 	config.Log = log.New(wLog, "", log.Lmicroseconds)
 
-	bus := core.NewEventBus()
+	bus := eventbus.NewEventBus()
 	defer bus.Stop()
 
 	srv := NewDNSService(config, bus)

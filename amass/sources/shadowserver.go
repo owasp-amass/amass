@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
+	"github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -32,7 +33,7 @@ type ShadowServer struct {
 }
 
 // NewShadowServer returns he object initialized, but not yet started.
-func NewShadowServer(config *core.Config, bus *core.EventBus) *ShadowServer {
+func NewShadowServer(config *core.Config, bus *eventbus.EventBus) *ShadowServer {
 	s := &ShadowServer{
 		SourceType: core.API,
 		RateLimit:  time.Second,

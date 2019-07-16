@@ -5,6 +5,7 @@ package sources
 
 import (
 	"github.com/OWASP/Amass/amass/core"
+	"github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -19,7 +20,7 @@ type OpenUKArchive struct {
 }
 
 // NewOpenUKArchive returns he object initialized, but not yet started.
-func NewOpenUKArchive(config *core.Config, bus *core.EventBus) *OpenUKArchive {
+func NewOpenUKArchive(config *core.Config, bus *eventbus.EventBus) *OpenUKArchive {
 	o := &OpenUKArchive{
 		domain:     "webarchive.org.uk",
 		baseURL:    "http://www.webarchive.org.uk/wayback/archive",

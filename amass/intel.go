@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
+	"github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/sources"
 	"github.com/OWASP/Amass/amass/utils"
 )
@@ -22,7 +23,7 @@ import (
 // IntelCollection is the object type used to execute a open source information gathering with Amass.
 type IntelCollection struct {
 	Config *core.Config
-	Bus    *core.EventBus
+	Bus    *eventbus.EventBus
 
 	// The channel that will receive the results
 	Output chan *core.Output
@@ -43,7 +44,7 @@ type IntelCollection struct {
 func NewIntelCollection() *IntelCollection {
 	return &IntelCollection{
 		Config:     &core.Config{Log: log.New(ioutil.Discard, "", 0)},
-		Bus:        core.NewEventBus(),
+		Bus:        eventbus.NewEventBus(),
 		Output:     make(chan *core.Output, 100),
 		Done:       make(chan struct{}, 2),
 		netCache:   make(map[int]*core.ASNRequest),

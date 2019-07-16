@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
+	"github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -26,7 +27,7 @@ type VirusTotal struct {
 }
 
 // NewVirusTotal returns he object initialized, but not yet started.
-func NewVirusTotal(config *core.Config, bus *core.EventBus) *VirusTotal {
+func NewVirusTotal(config *core.Config, bus *eventbus.EventBus) *VirusTotal {
 	v := &VirusTotal{
 		SourceType: core.API,
 		RateLimit:  15 * time.Second,

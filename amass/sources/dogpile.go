@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
+	"github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -22,7 +23,7 @@ type Dogpile struct {
 }
 
 // NewDogpile returns he object initialized, but not yet started.
-func NewDogpile(config *core.Config, bus *core.EventBus) *Dogpile {
+func NewDogpile(config *core.Config, bus *eventbus.EventBus) *Dogpile {
 	d := &Dogpile{
 		quantity:   15, // Dogpile returns roughly 15 results per page
 		limit:      90,

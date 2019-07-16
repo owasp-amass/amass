@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
+	"github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -21,7 +22,7 @@ type HackerTarget struct {
 }
 
 // NewHackerTarget returns he object initialized, but not yet started.
-func NewHackerTarget(config *core.Config, bus *core.EventBus) *HackerTarget {
+func NewHackerTarget(config *core.Config, bus *eventbus.EventBus) *HackerTarget {
 	h := &HackerTarget{SourceType: core.API}
 
 	h.BaseService = *core.NewBaseService(h, "HackerTarget", config, bus)

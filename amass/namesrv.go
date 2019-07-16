@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
+	"github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/handlers"
 	"github.com/OWASP/Amass/amass/utils"
 )
@@ -33,7 +34,7 @@ type NameService struct {
 
 // NewNameService requires the enumeration configuration and event bus as parameters.
 // The object returned is initialized, but has not yet been started.
-func NewNameService(config *core.Config, bus *core.EventBus) *NameService {
+func NewNameService(config *core.Config, bus *eventbus.EventBus) *NameService {
 	ns := &NameService{
 		filter:            utils.NewStringFilter(),
 		times:             utils.NewQueue(),

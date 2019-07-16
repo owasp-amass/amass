@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/OWASP/Amass/amass/core"
+	"github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -18,7 +19,7 @@ type Riddler struct {
 }
 
 // NewRiddler returns he object initialized, but not yet started.
-func NewRiddler(config *core.Config, bus *core.EventBus) *Riddler {
+func NewRiddler(config *core.Config, bus *eventbus.EventBus) *Riddler {
 	r := &Riddler{SourceType: core.SCRAPE}
 
 	r.BaseService = *core.NewBaseService(r, "Riddler", config, bus)

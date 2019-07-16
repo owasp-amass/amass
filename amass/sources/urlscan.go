@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
+	"github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -23,7 +24,7 @@ type URLScan struct {
 }
 
 // NewURLScan returns he object initialized, but not yet started.
-func NewURLScan(config *core.Config, bus *core.EventBus) *URLScan {
+func NewURLScan(config *core.Config, bus *eventbus.EventBus) *URLScan {
 	u := &URLScan{
 		SourceType: core.API,
 		RateLimit:  2 * time.Second,
