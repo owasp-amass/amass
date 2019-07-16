@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/OWASP/Amass/amass/eventbus"
+	eb "github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -90,7 +90,7 @@ type Service interface {
 	Config() *Config
 
 	// Returns the event bus that handles communication for the enumeration
-	Bus() *eventbus.EventBus
+	Bus() *eb.EventBus
 
 	// Returns current ServiceStats that provide performance metrics
 	Stats() *ServiceStats
@@ -123,11 +123,11 @@ type BaseService struct {
 	config *Config
 
 	// The event bus that handles message passing for the enumeration
-	bus *eventbus.EventBus
+	bus *eb.EventBus
 }
 
 // NewBaseService returns an initialized BaseService object.
-func NewBaseService(srv Service, name string, config *Config, bus *eventbus.EventBus) *BaseService {
+func NewBaseService(srv Service, name string, config *Config, bus *eb.EventBus) *BaseService {
 	return &BaseService{
 		name:          name,
 		active:        time.Now(),
@@ -431,7 +431,7 @@ func (bas *BaseService) Config() *Config {
 }
 
 // Bus returns the EventBus that handles communication for the enumeration.
-func (bas *BaseService) Bus() *eventbus.EventBus {
+func (bas *BaseService) Bus() *eb.EventBus {
 	return bas.bus
 }
 

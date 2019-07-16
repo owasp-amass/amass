@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
-	"github.com/OWASP/Amass/amass/eventbus"
+	eb "github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -24,7 +24,7 @@ type CIRCL struct {
 }
 
 // NewCIRCL returns he object initialized, but not yet started.
-func NewCIRCL(config *core.Config, bus *eventbus.EventBus) *CIRCL {
+func NewCIRCL(config *core.Config, bus *eb.EventBus) *CIRCL {
 	c := &CIRCL{
 		SourceType: core.API,
 		RateLimit:  time.Second,

@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
-	"github.com/OWASP/Amass/amass/eventbus"
+	eb "github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -23,7 +23,7 @@ type Baidu struct {
 }
 
 // NewBaidu returns he object initialized, but not yet started.
-func NewBaidu(config *core.Config, bus *eventbus.EventBus) *Baidu {
+func NewBaidu(config *core.Config, bus *eb.EventBus) *Baidu {
 	b := &Baidu{
 		quantity:   20,
 		limit:      100,

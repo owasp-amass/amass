@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/OWASP/Amass/amass/core"
-	"github.com/OWASP/Amass/amass/eventbus"
+	eb "github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -22,7 +22,7 @@ type Mnemonic struct {
 }
 
 // NewMnemonic returns he object initialized, but not yet started.
-func NewMnemonic(config *core.Config, bus *eventbus.EventBus) *Mnemonic {
+func NewMnemonic(config *core.Config, bus *eb.EventBus) *Mnemonic {
 	m := &Mnemonic{SourceType: core.API}
 
 	m.BaseService = *core.NewBaseService(m, "Mnemonic", config, bus)

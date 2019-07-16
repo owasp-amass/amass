@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
-	"github.com/OWASP/Amass/amass/eventbus"
+	eb "github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/handlers"
 	"github.com/OWASP/Amass/amass/sources"
 	"github.com/OWASP/Amass/amass/utils"
@@ -22,7 +22,7 @@ import (
 type Enumeration struct {
 	Config *core.Config
 
-	Bus *eventbus.EventBus
+	Bus *eb.EventBus
 
 	// Link graph that collects all the information gathered by the enumeration
 	Graph handlers.DataHandler

@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
-	"github.com/OWASP/Amass/amass/eventbus"
+	eb "github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/sources"
 	"github.com/OWASP/Amass/amass/utils"
 )
@@ -23,7 +23,7 @@ import (
 // IntelCollection is the object type used to execute a open source information gathering with Amass.
 type IntelCollection struct {
 	Config *core.Config
-	Bus    *eventbus.EventBus
+	Bus    *eb.EventBus
 
 	// The channel that will receive the results
 	Output chan *core.Output

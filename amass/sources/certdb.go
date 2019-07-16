@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/OWASP/Amass/amass/core"
-	"github.com/OWASP/Amass/amass/eventbus"
+	eb "github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -23,7 +23,7 @@ type CertDB struct {
 }
 
 // NewCertDB returns he object initialized, but not yet started.
-func NewCertDB(config *core.Config, bus *eventbus.EventBus) *CertDB {
+func NewCertDB(config *core.Config, bus *eb.EventBus) *CertDB {
 	c := &CertDB{SourceType: core.API}
 
 	c.BaseService = *core.NewBaseService(c, "CertDB", config, bus)

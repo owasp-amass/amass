@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
-	"github.com/OWASP/Amass/amass/eventbus"
+	eb "github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -22,7 +22,7 @@ type Sublist3rAPI struct {
 }
 
 // NewSublist3rAPI returns he object initialized, but not yet started.
-func NewSublist3rAPI(config *core.Config, bus *eventbus.EventBus) *Sublist3rAPI {
+func NewSublist3rAPI(config *core.Config, bus *eb.EventBus) *Sublist3rAPI {
 	s := &Sublist3rAPI{
 		SourceType: core.API,
 		RateLimit:  time.Second,

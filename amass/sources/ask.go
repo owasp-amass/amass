@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
-	"github.com/OWASP/Amass/amass/eventbus"
+	eb "github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -23,7 +23,7 @@ type Ask struct {
 }
 
 // NewAsk returns he object initialized, but not yet started.
-func NewAsk(config *core.Config, bus *eventbus.EventBus) *Ask {
+func NewAsk(config *core.Config, bus *eb.EventBus) *Ask {
 	a := &Ask{
 		quantity:   10, // ask.com appears to be hardcoded at 10 results per page
 		limit:      100,

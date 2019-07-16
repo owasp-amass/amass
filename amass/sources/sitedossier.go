@@ -7,7 +7,7 @@ import (
 	"fmt"
 
 	"github.com/OWASP/Amass/amass/core"
-	"github.com/OWASP/Amass/amass/eventbus"
+	eb "github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -19,7 +19,7 @@ type SiteDossier struct {
 }
 
 // NewSiteDossier returns he object initialized, but not yet started.
-func NewSiteDossier(config *core.Config, bus *eventbus.EventBus) *SiteDossier {
+func NewSiteDossier(config *core.Config, bus *eb.EventBus) *SiteDossier {
 	s := &SiteDossier{SourceType: core.SCRAPE}
 
 	s.BaseService = *core.NewBaseService(s, "SiteDossier", config, bus)

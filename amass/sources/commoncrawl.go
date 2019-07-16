@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
-	"github.com/OWASP/Amass/amass/eventbus"
+	eb "github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -38,7 +38,7 @@ type CommonCrawl struct {
 }
 
 // NewCommonCrawl returns he object initialized, but not yet started.
-func NewCommonCrawl(config *core.Config, bus *eventbus.EventBus) *CommonCrawl {
+func NewCommonCrawl(config *core.Config, bus *eb.EventBus) *CommonCrawl {
 	c := &CommonCrawl{
 		baseURL:    "http://index.commoncrawl.org/",
 		SourceType: core.SCRAPE,

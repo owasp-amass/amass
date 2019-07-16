@@ -5,7 +5,7 @@ package sources
 
 import (
 	"github.com/OWASP/Amass/amass/core"
-	"github.com/OWASP/Amass/amass/eventbus"
+	eb "github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -20,7 +20,7 @@ type Arquivo struct {
 }
 
 // NewArquivo returns he object initialized, but not yet started.
-func NewArquivo(config *core.Config, bus *eventbus.EventBus) *Arquivo {
+func NewArquivo(config *core.Config, bus *eb.EventBus) *Arquivo {
 	a := &Arquivo{
 		domain:     "arquivo.pt",
 		baseURL:    "http://arquivo.pt/wayback",

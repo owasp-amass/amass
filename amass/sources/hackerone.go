@@ -7,7 +7,7 @@ import (
 	"fmt"
 
 	"github.com/OWASP/Amass/amass/core"
-	"github.com/OWASP/Amass/amass/eventbus"
+	eb "github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -20,7 +20,7 @@ type HackerOne struct {
 }
 
 // NewHackerOne returns he object initialized, but not yet started.
-func NewHackerOne(config *core.Config, bus *eventbus.EventBus) *HackerOne {
+func NewHackerOne(config *core.Config, bus *eb.EventBus) *HackerOne {
 	h := &HackerOne{SourceType: core.API}
 
 	h.BaseService = *core.NewBaseService(h, "HackerOne", config, bus)

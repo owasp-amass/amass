@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
-	"github.com/OWASP/Amass/amass/eventbus"
+	eb "github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -22,7 +22,7 @@ type CertSpotter struct {
 }
 
 // NewCertSpotter returns he object initialized, but not yet started.
-func NewCertSpotter(config *core.Config, bus *eventbus.EventBus) *CertSpotter {
+func NewCertSpotter(config *core.Config, bus *eb.EventBus) *CertSpotter {
 	c := &CertSpotter{
 		SourceType: core.CERT,
 		RateLimit:  2 * time.Second,

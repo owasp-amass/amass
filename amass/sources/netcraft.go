@@ -7,7 +7,7 @@ import (
 	"fmt"
 
 	"github.com/OWASP/Amass/amass/core"
-	"github.com/OWASP/Amass/amass/eventbus"
+	eb "github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -19,7 +19,7 @@ type Netcraft struct {
 }
 
 // NewNetcraft returns he object initialized, but not yet started.
-func NewNetcraft(config *core.Config, bus *eventbus.EventBus) *Netcraft {
+func NewNetcraft(config *core.Config, bus *eb.EventBus) *Netcraft {
 	n := &Netcraft{SourceType: core.SCRAPE}
 
 	n.BaseService = *core.NewBaseService(n, "Netcraft", config, bus)

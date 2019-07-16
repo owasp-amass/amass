@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
-	"github.com/OWASP/Amass/amass/eventbus"
+	eb "github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -42,7 +42,7 @@ type NetworksDB struct {
 }
 
 // NewNetworksDB returns he object initialized, but not yet started.
-func NewNetworksDB(config *core.Config, bus *eventbus.EventBus) *NetworksDB {
+func NewNetworksDB(config *core.Config, bus *eb.EventBus) *NetworksDB {
 	n := &NetworksDB{
 		SourceType: core.API,
 		RateLimit:  time.Second,

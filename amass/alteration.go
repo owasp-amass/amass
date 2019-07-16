@@ -10,7 +10,7 @@ import (
 	"unicode"
 
 	"github.com/OWASP/Amass/amass/core"
-	"github.com/OWASP/Amass/amass/eventbus"
+	eb "github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 	"github.com/miekg/dns"
 )
@@ -57,7 +57,7 @@ type AlterationService struct {
 }
 
 // NewAlterationService returns he object initialized, but not yet started.
-func NewAlterationService(config *core.Config, bus *eventbus.EventBus) *AlterationService {
+func NewAlterationService(config *core.Config, bus *eb.EventBus) *AlterationService {
 	as := &AlterationService{
 		filter:   utils.NewStringFilter(),
 		prefixes: newAlterationCache(config.AltWordlist),

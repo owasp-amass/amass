@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
-	"github.com/OWASP/Amass/amass/eventbus"
+	eb "github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -24,7 +24,7 @@ type Umbrella struct {
 }
 
 // NewUmbrella returns he object initialized, but not yet started.
-func NewUmbrella(config *core.Config, bus *eventbus.EventBus) *Umbrella {
+func NewUmbrella(config *core.Config, bus *eb.EventBus) *Umbrella {
 	u := &Umbrella{
 		SourceType: core.API,
 		RateLimit:  500 * time.Millisecond,

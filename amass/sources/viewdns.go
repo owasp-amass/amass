@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
-	"github.com/OWASP/Amass/amass/eventbus"
+	eb "github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -23,7 +23,7 @@ type ViewDNS struct {
 }
 
 // NewViewDNS returns he object initialized, but not yet started.
-func NewViewDNS(config *core.Config, bus *eventbus.EventBus) *ViewDNS {
+func NewViewDNS(config *core.Config, bus *eb.EventBus) *ViewDNS {
 	v := &ViewDNS{
 		SourceType: core.SCRAPE,
 		RateLimit:  10 * time.Second,

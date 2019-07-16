@@ -7,7 +7,7 @@ import (
 	"fmt"
 
 	"github.com/OWASP/Amass/amass/core"
-	"github.com/OWASP/Amass/amass/eventbus"
+	eb "github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -19,7 +19,7 @@ type Exalead struct {
 }
 
 // NewExalead returns he object initialized, but not yet started.
-func NewExalead(config *core.Config, bus *eventbus.EventBus) *Exalead {
+func NewExalead(config *core.Config, bus *eb.EventBus) *Exalead {
 	e := &Exalead{SourceType: core.SCRAPE}
 
 	e.BaseService = *core.NewBaseService(e, "Exalead", config, bus)

@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
-	"github.com/OWASP/Amass/amass/eventbus"
+	eb "github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -23,7 +23,7 @@ type Bing struct {
 }
 
 // NewBing returns he object initialized, but not yet started.
-func NewBing(config *core.Config, bus *eventbus.EventBus) *Bing {
+func NewBing(config *core.Config, bus *eb.EventBus) *Bing {
 	b := &Bing{
 		quantity:   20,
 		limit:      200,

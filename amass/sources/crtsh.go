@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/OWASP/Amass/amass/core"
-	"github.com/OWASP/Amass/amass/eventbus"
+	eb "github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq" // Need the postgres driver
@@ -24,7 +24,7 @@ type Crtsh struct {
 }
 
 // NewCrtsh returns he object initialized, but not yet started.
-func NewCrtsh(config *core.Config, bus *eventbus.EventBus) *Crtsh {
+func NewCrtsh(config *core.Config, bus *eb.EventBus) *Crtsh {
 	c := &Crtsh{
 		SourceType:     core.CERT,
 		haveConnection: true,

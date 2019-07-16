@@ -7,7 +7,7 @@ import (
 	"fmt"
 
 	"github.com/OWASP/Amass/amass/core"
-	"github.com/OWASP/Amass/amass/eventbus"
+	eb "github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -19,7 +19,7 @@ type DNSTable struct {
 }
 
 // NewDNSTable returns he object initialized, but not yet started.
-func NewDNSTable(config *core.Config, bus *eventbus.EventBus) *DNSTable {
+func NewDNSTable(config *core.Config, bus *eb.EventBus) *DNSTable {
 	d := &DNSTable{SourceType: core.SCRAPE}
 
 	d.BaseService = *core.NewBaseService(d, "DNSTable", config, bus)

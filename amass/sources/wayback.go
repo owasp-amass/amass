@@ -5,7 +5,7 @@ package sources
 
 import (
 	"github.com/OWASP/Amass/amass/core"
-	"github.com/OWASP/Amass/amass/eventbus"
+	eb "github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -20,7 +20,7 @@ type Wayback struct {
 }
 
 // NewWayback returns he object initialized, but not yet started.
-func NewWayback(config *core.Config, bus *eventbus.EventBus) *Wayback {
+func NewWayback(config *core.Config, bus *eb.EventBus) *Wayback {
 	w := &Wayback{
 		domain:     "web.archive.org",
 		baseURL:    "http://web.archive.org/web",

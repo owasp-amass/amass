@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
-	"github.com/OWASP/Amass/amass/eventbus"
+	eb "github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/handlers"
 	"github.com/OWASP/Amass/amass/utils"
 	"github.com/miekg/dns"
@@ -25,7 +25,7 @@ type DataManagerService struct {
 }
 
 // NewDataManagerService returns he object initialized, but not yet started.
-func NewDataManagerService(config *core.Config, bus *eventbus.EventBus) *DataManagerService {
+func NewDataManagerService(config *core.Config, bus *eb.EventBus) *DataManagerService {
 	dms := &DataManagerService{domainFilter: utils.NewStringFilter()}
 
 	dms.BaseService = *core.NewBaseService(dms, "Data Manager", config, bus)
