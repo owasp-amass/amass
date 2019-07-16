@@ -29,7 +29,7 @@ The OWASP Amass Project has developed a tool to help information security profes
 * **DNS:** Basic enumeration, Brute forcing (upon request), Reverse DNS sweeping, Subdomain name alterations/permutations, Zone transfers (upon request)
 * **Scraping:** Ask, Baidu, Bing, CommonCrawl, DNSDumpster, DNSTable, Dogpile, Exalead, FindSubdomains, Google, HackerOne, IPv4Info, Netcraft, PTRArchive, Riddler, SiteDossier, ViewDNS, Yahoo
 * **Certificates:** Active pulls (upon request), Censys, CertDB, CertSpotter, Crtsh, Entrust
-* **APIs:** AlienVault, BinaryEdge, BufferOver, CIRCL, DNSDB, HackerTarget, Mnemonic, NetworksDB, PassiveTotal, RADb, Robtex, SecurityTrails, ShadowServer, Shodan, Sublist3rAPI, TeamCymru, ThreatCrowd, Twitter, Umbrella, URLScan, VirusTotal
+* **APIs:** AlienVault, BinaryEdge, BufferOver, CIRCL, DNSDB, HackerTarget, Mnemonic, NetworksDB, PassiveTotal, RADb, Robtex, SecurityTrails, ShadowServer, Shodan, Spyse, Sublist3rAPI, TeamCymru, ThreatCrowd, Twitter, Umbrella, URLScan, VirusTotal
 * **Web Archives:** ArchiveIt, ArchiveToday, Arquivo, LoCArchive, OpenUKArchive, UKGovArchive, Wayback
 
 ----
