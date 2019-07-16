@@ -65,7 +65,7 @@ func setupConfig(domain string) *core.Config {
 
 func setupEventBus(subscription string) (*eb.EventBus, chan *core.DNSRequest) {
 	out := make(chan *core.DNSRequest)
-	bus := eventbus.NewEventBus()
+	bus := eb.NewEventBus()
 	bus.Subscribe(subscription, func(req *core.DNSRequest) {
 		out <- req
 	})

@@ -44,7 +44,7 @@ type IntelCollection struct {
 func NewIntelCollection() *IntelCollection {
 	return &IntelCollection{
 		Config:     &core.Config{Log: log.New(ioutil.Discard, "", 0)},
-		Bus:        eventbus.NewEventBus(),
+		Bus:        eb.NewEventBus(),
 		Output:     make(chan *core.Output, 100),
 		Done:       make(chan struct{}, 2),
 		netCache:   make(map[int]*core.ASNRequest),

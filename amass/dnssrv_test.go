@@ -28,7 +28,7 @@ func TestDNSStaticWildcard(t *testing.T) {
 	rLog, wLog := io.Pipe()
 	config.Log = log.New(wLog, "", log.Lmicroseconds)
 
-	bus := eventbus.NewEventBus()
+	bus := eb.NewEventBus()
 	defer bus.Stop()
 
 	srv := NewDNSService(config, bus)

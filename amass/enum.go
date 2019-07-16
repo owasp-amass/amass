@@ -68,7 +68,7 @@ func NewEnumeration() *Enumeration {
 			EditDistance:   1,
 			Recursive:      true,
 		},
-		Bus:         eventbus.NewEventBus(),
+		Bus:         eb.NewEventBus(),
 		Output:      make(chan *core.Output, 100),
 		Done:        make(chan struct{}, 2),
 		pause:       make(chan struct{}, 2),
