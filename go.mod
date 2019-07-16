@@ -26,6 +26,7 @@ require (
 	github.com/qasaur/gremgo v0.0.0-20180719101618-fa23ada7c5da
 	github.com/robertkrimen/otto v0.0.0-20180617131154-15f95af6e78d // indirect
 	github.com/satori/go.uuid v1.2.0 // indirect
+	github.com/tealeg/xlsx v1.0.3
 	github.com/tylertreat/BoomFilters v0.0.0-20181028192813-611b3dbe80e8 // indirect
 	golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45
 	gopkg.in/sourcemap.v1 v1.0.5 // indirect
