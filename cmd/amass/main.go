@@ -12,6 +12,7 @@ import (
 
 	"github.com/OWASP/Amass/amass"
 	"github.com/OWASP/Amass/amass/core"
+	"github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/sources"
 	"github.com/fatih/color"
 )
@@ -104,7 +105,7 @@ func main() {
 
 // GetAllSourceNames returns the names of all Amass data sources.
 func GetAllSourceNames() []string {
-	bus := core.NewEventBus()
+	bus := eventbus.NewEventBus()
 
 	var names []string
 	for _, src := range sources.GetAllSources(&core.Config{}, bus) {

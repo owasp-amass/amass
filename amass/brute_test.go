@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
+	eb "github.com/OWASP/Amass/amass/eventbus"
 	"github.com/miekg/dns"
 )
 
@@ -44,7 +45,7 @@ func TestBruteForceRootDomains(t *testing.T) {
 	config.Log = log.New(buf, "", log.Lmicroseconds)
 
 	out := make(chan *core.Request)
-	bus := core.NewEventBus()
+	bus := eb.NewEventBus()
 	bus.Subscribe(core.NameResolvedTopic, func(req *core.Request) {
 		out <- req
 	})
@@ -85,7 +86,7 @@ func TestBruteForceMinForRecursive(t *testing.T) {
 	config.Log = log.New(buf, "", log.Lmicroseconds)
 
 	out := make(chan *core.Request)
-	bus := core.NewEventBus()
+	bus := eb.NewEventBus()
 	bus.Subscribe(core.NameResolvedTopic, func(req *core.Request) {
 		out <- req
 	})

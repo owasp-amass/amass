@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
+	eb "github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -24,7 +25,7 @@ type DNSDumpster struct {
 }
 
 // NewDNSDumpster returns he object initialized, but not yet started.
-func NewDNSDumpster(config *core.Config, bus *core.EventBus) *DNSDumpster {
+func NewDNSDumpster(config *core.Config, bus *eb.EventBus) *DNSDumpster {
 	d := &DNSDumpster{SourceType: core.SCRAPE}
 
 	d.BaseService = *core.NewBaseService(d, "DNSDumpster", config, bus)

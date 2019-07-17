@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
+	eb "github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 	"github.com/PuerkitoBio/goquery"
 	"github.com/geziyor/geziyor"
@@ -23,7 +24,7 @@ var (
 )
 
 // GetAllSources returns a slice of all data source services, initialized and ready.
-func GetAllSources(config *core.Config, bus *core.EventBus) []core.Service {
+func GetAllSources(config *core.Config, bus *eb.EventBus) []core.Service {
 	return []core.Service{
 		NewAlienVault(config, bus),
 		NewArchiveIt(config, bus),

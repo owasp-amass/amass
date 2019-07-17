@@ -5,6 +5,7 @@ package sources
 
 import (
 	"github.com/OWASP/Amass/amass/core"
+	eb "github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -19,7 +20,7 @@ type ArchiveIt struct {
 }
 
 // NewArchiveIt returns he object initialized, but not yet started.
-func NewArchiveIt(config *core.Config, bus *core.EventBus) *ArchiveIt {
+func NewArchiveIt(config *core.Config, bus *eb.EventBus) *ArchiveIt {
 	a := &ArchiveIt{
 		domain:     "wayback.archive-it.org",
 		baseURL:    "https://wayback.archive-it.org/all",

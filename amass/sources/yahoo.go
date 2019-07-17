@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
+	eb "github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -22,7 +23,7 @@ type Yahoo struct {
 }
 
 // NewYahoo returns he object initialized, but not yet started.
-func NewYahoo(config *core.Config, bus *core.EventBus) *Yahoo {
+func NewYahoo(config *core.Config, bus *eb.EventBus) *Yahoo {
 	y := &Yahoo{
 		quantity:   10,
 		limit:      100,

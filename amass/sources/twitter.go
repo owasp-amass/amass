@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
+	eb "github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 	"github.com/dghubble/go-twitter/twitter"
 	"golang.org/x/oauth2"
@@ -26,7 +27,7 @@ type Twitter struct {
 }
 
 // NewTwitter returns he object initialized, but not yet started.
-func NewTwitter(config *core.Config, bus *core.EventBus) *Twitter {
+func NewTwitter(config *core.Config, bus *eb.EventBus) *Twitter {
 	t := &Twitter{
 		SourceType: core.API,
 		RateLimit:  3 * time.Second,

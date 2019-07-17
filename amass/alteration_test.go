@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
+	eb "github.com/OWASP/Amass/amass/eventbus"
 	"github.com/miekg/dns"
 )
 
@@ -40,9 +41,9 @@ func setupConfig(domain string) *core.Config {
 	return config
 }
 
-func setupEventBus(subscription string) (*core.EventBus, chan *core.DNSRequest) {
+func setupEventBus(subscription string) (*eb.EventBus, chan *core.DNSRequest) {
 	out := make(chan *core.DNSRequest)
-	bus := core.NewEventBus()
+	bus := eb.NewEventBus()
 	bus.Subscribe(subscription, func(req *core.DNSRequest) {
 		out <- req
 	})

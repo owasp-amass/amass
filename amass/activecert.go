@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
+	eb "github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -31,7 +32,7 @@ type ActiveCertService struct {
 }
 
 // NewActiveCertService returns he object initialized, but not yet started.
-func NewActiveCertService(config *core.Config, bus *core.EventBus) *ActiveCertService {
+func NewActiveCertService(config *core.Config, bus *eb.EventBus) *ActiveCertService {
 	acs := &ActiveCertService{maxPulls: utils.NewSimpleSemaphore(100)}
 
 	acs.BaseService = *core.NewBaseService(acs, "Active Cert", config, bus)

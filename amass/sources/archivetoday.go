@@ -5,6 +5,7 @@ package sources
 
 import (
 	"github.com/OWASP/Amass/amass/core"
+	eb "github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -19,7 +20,7 @@ type ArchiveToday struct {
 }
 
 // NewArchiveToday returns he object initialized, but not yet started.
-func NewArchiveToday(config *core.Config, bus *core.EventBus) *ArchiveToday {
+func NewArchiveToday(config *core.Config, bus *eb.EventBus) *ArchiveToday {
 	a := &ArchiveToday{
 		domain:     "archive.is",
 		baseURL:    "http://archive.is",

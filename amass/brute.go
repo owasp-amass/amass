@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
+	eb "github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 	"github.com/miekg/dns"
 )
@@ -34,7 +35,7 @@ type BruteForceService struct {
 }
 
 // NewBruteForceService returns he object initialized, but not yet started.
-func NewBruteForceService(config *core.Config, bus *core.EventBus) *BruteForceService {
+func NewBruteForceService(config *core.Config, bus *eb.EventBus) *BruteForceService {
 	bfs := &BruteForceService{filter: utils.NewStringFilter()}
 
 	bfs.BaseService = *core.NewBaseService(bfs, "Brute Forcing", config, bus)

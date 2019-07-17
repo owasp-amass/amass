@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
+	eb "github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 	"github.com/miekg/dns"
 )
@@ -45,7 +46,7 @@ type DNSService struct {
 }
 
 // NewDNSService returns he object initialized, but not yet started.
-func NewDNSService(config *core.Config, bus *core.EventBus) *DNSService {
+func NewDNSService(config *core.Config, bus *eb.EventBus) *DNSService {
 	ds := &DNSService{filter: utils.NewStringFilter()}
 
 	for _, n := range badSubnets {

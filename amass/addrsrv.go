@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
+	eb "github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -60,7 +61,7 @@ func init() {
 }
 
 // NewAddressService returns he object initialized, but not yet started.
-func NewAddressService(config *core.Config, bus *core.EventBus) *AddressService {
+func NewAddressService(config *core.Config, bus *eb.EventBus) *AddressService {
 	as := &AddressService{filter: utils.NewStringFilter()}
 
 	as.BaseService = *core.NewBaseService(as, "Address Service", config, bus)
@@ -156,7 +157,7 @@ func (as *AddressService) updateConfigWithNetblocks(req *core.ASNRequest) {
 }
 
 // IPRequest returns the ASN, CIDR and AS Description that contains the provided IP address.
-func IPRequest(addr string, bus *core.EventBus) (int, *net.IPNet, string, error) {
+func IPRequest(addr string, bus *eb.EventBus) (int, *net.IPNet, string, error) {
 	if info := ipSearch(addr); info != nil {
 		if _, ipnet, err := net.ParseCIDR(info.Prefix); err == nil {
 			return info.ASN, ipnet, info.Description, nil

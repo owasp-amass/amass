@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
+	eb "github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -21,7 +22,7 @@ type BinaryEdge struct {
 }
 
 // NewBinaryEdge returns he object initialized, but not yet started.
-func NewBinaryEdge(config *core.Config, bus *core.EventBus) *BinaryEdge {
+func NewBinaryEdge(config *core.Config, bus *eb.EventBus) *BinaryEdge {
 	be := &BinaryEdge{
 		SourceType: core.API,
 		RateLimit:  2 * time.Second,

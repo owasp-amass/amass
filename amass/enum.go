@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
+	eb "github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/handlers"
 	"github.com/OWASP/Amass/amass/sources"
 	"github.com/OWASP/Amass/amass/utils"
@@ -21,7 +22,7 @@ import (
 type Enumeration struct {
 	Config *core.Config
 
-	Bus *core.EventBus
+	Bus *eb.EventBus
 
 	// Link graph that collects all the information gathered by the enumeration
 	Graph handlers.DataHandler
@@ -67,7 +68,7 @@ func NewEnumeration() *Enumeration {
 			EditDistance:   1,
 			Recursive:      true,
 		},
-		Bus:         core.NewEventBus(),
+		Bus:         eb.NewEventBus(),
 		Output:      make(chan *core.Output, 100),
 		Done:        make(chan struct{}, 2),
 		pause:       make(chan struct{}, 2),

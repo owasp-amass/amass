@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
+	eb "github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -24,7 +25,7 @@ type Censys struct {
 }
 
 // NewCensys returns he object initialized, but not yet started.
-func NewCensys(config *core.Config, bus *core.EventBus) *Censys {
+func NewCensys(config *core.Config, bus *eb.EventBus) *Censys {
 	c := &Censys{
 		SourceType: core.CERT,
 		RateLimit:  3 * time.Second,

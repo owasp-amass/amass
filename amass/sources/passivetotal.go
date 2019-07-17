@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
+	eb "github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -21,7 +22,7 @@ type PassiveTotal struct {
 }
 
 // NewPassiveTotal returns he object initialized, but not yet started.
-func NewPassiveTotal(config *core.Config, bus *core.EventBus) *PassiveTotal {
+func NewPassiveTotal(config *core.Config, bus *eb.EventBus) *PassiveTotal {
 	pt := &PassiveTotal{
 		SourceType: core.API,
 		RateLimit:  5 * time.Second,

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
+	eb "github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -25,7 +26,7 @@ type AlienVault struct {
 }
 
 // NewAlienVault returns he object initialized, but not yet started.
-func NewAlienVault(config *core.Config, bus *core.EventBus) *AlienVault {
+func NewAlienVault(config *core.Config, bus *eb.EventBus) *AlienVault {
 	a := &AlienVault{
 		SourceType: core.API,
 		RateLimit:  100 * time.Millisecond,

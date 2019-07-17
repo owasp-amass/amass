@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
+	eb "github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -38,7 +39,7 @@ type RADb struct {
 }
 
 // NewRADb returns he object initialized, but not yet started.
-func NewRADb(config *core.Config, bus *core.EventBus) *RADb {
+func NewRADb(config *core.Config, bus *eb.EventBus) *RADb {
 	r := &RADb{
 		SourceType: core.API,
 		RateLimit:  time.Second,

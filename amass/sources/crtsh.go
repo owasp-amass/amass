@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/OWASP/Amass/amass/core"
+	eb "github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq" // Need the postgres driver
@@ -23,7 +24,7 @@ type Crtsh struct {
 }
 
 // NewCrtsh returns he object initialized, but not yet started.
-func NewCrtsh(config *core.Config, bus *core.EventBus) *Crtsh {
+func NewCrtsh(config *core.Config, bus *eb.EventBus) *Crtsh {
 	c := &Crtsh{
 		SourceType:     core.CERT,
 		haveConnection: true,
@@ -77,9 +78,9 @@ func (c *Crtsh) executeQuery(domain string) {
 
 	pattern := "%." + domain
 	err := c.db.Select(&results,
-		`SELECT DISTINCT ci.NAME_VALUE as domain 
-		FROM certificate_identity ci 
-		WHERE reverse(lower(ci.NAME_VALUE)) LIKE reverse(lower($1)) 
+		`SELECT DISTINCT ci.NAME_VALUE as domain
+		FROM certificate_identity ci
+		WHERE reverse(lower(ci.NAME_VALUE)) LIKE reverse(lower($1))
 		ORDER BY ci.NAME_VALUE`, pattern)
 	if err != nil {
 		c.Config().Log.Printf("%s: Query pattern %s: %v", c.String(), pattern, err)

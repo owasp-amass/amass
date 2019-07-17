@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/OWASP/Amass/amass/core"
+	eb "github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -18,7 +19,7 @@ type PTRArchive struct {
 }
 
 // NewPTRArchive returns he object initialized, but not yet started.
-func NewPTRArchive(config *core.Config, bus *core.EventBus) *PTRArchive {
+func NewPTRArchive(config *core.Config, bus *eb.EventBus) *PTRArchive {
 	p := &PTRArchive{SourceType: core.SCRAPE}
 
 	p.BaseService = *core.NewBaseService(p, "PTRArchive", config, bus)

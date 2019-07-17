@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
+	eb "github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -23,7 +24,7 @@ type SecurityTrails struct {
 }
 
 // NewSecurityTrails returns he object initialized, but not yet started.
-func NewSecurityTrails(config *core.Config, bus *core.EventBus) *SecurityTrails {
+func NewSecurityTrails(config *core.Config, bus *eb.EventBus) *SecurityTrails {
 	st := &SecurityTrails{
 		SourceType: core.API,
 		RateLimit:  time.Second,

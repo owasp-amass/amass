@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/OWASP/Amass/amass/core"
+	eb "github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -20,7 +21,7 @@ type Entrust struct {
 }
 
 // NewEntrust returns he object initialized, but not yet started.
-func NewEntrust(config *core.Config, bus *core.EventBus) *Entrust {
+func NewEntrust(config *core.Config, bus *eb.EventBus) *Entrust {
 	e := &Entrust{SourceType: core.CERT}
 
 	e.BaseService = *core.NewBaseService(e, "Entrust", config, bus)

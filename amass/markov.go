@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/amass/core"
+	eb "github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 	"github.com/miekg/dns"
 )
@@ -52,7 +53,7 @@ type MarkovService struct {
 }
 
 // NewMarkovService returns he object initialized, but not yet started.
-func NewMarkovService(config *core.Config, bus *core.EventBus) *MarkovService {
+func NewMarkovService(config *core.Config, bus *eb.EventBus) *MarkovService {
 	m := &MarkovService{
 		subs:      make(map[string]*core.DNSRequest),
 		inFilter:  utils.NewStringFilter(),
