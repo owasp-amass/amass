@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"github.com/OWASP/Amass/amass/core"
+	eb "github.com/OWASP/Amass/amass/eventbus"
 	"github.com/OWASP/Amass/amass/utils"
 )
 
@@ -20,7 +21,7 @@ type Spyse struct {
 }
 
 // NewSpyse returns he object initialized, but not yet started.
-func NewSpyse(config *core.Config, bus *core.EventBus) *Spyse {
+func NewSpyse(config *core.Config, bus *eb.EventBus) *Spyse {
 	s := &Spyse{SourceType: core.API}
 
 	s.BaseService = *core.NewBaseService(s, "Spyse", config, bus)

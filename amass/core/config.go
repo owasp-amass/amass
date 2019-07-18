@@ -28,9 +28,9 @@ import (
 const (
 	// DefaultOutputDirectory is the name of the directory used for output files, such as the graph database.
 	DefaultOutputDirectory = "amass"
-	
-	defaultWordlistURL     = "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/namelist.txt"
-	defaultAltWordlistURL  = "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/alterations.txt"
+
+	defaultWordlistURL    = "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/namelist.txt"
+	defaultAltWordlistURL = "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/alterations.txt"
 )
 
 // Config passes along Amass configuration settings and options.
@@ -136,6 +136,9 @@ func (c *Config) CheckSettings() error {
 			return errors.New("Brute forcing cannot be performed without DNS resolution")
 		} else if len(c.Wordlist) == 0 {
 			c.Wordlist, err = getWordlistByURL(defaultWordlistURL)
+			if err != nil {
+				return err
+			}
 		}
 	}
 	if c.Passive && c.Active {
@@ -150,9 +153,23 @@ func (c *Config) CheckSettings() error {
 	if c.Alterations {
 		if len(c.AltWordlist) == 0 {
 			c.AltWordlist, err = getWordlistByURL(defaultAltWordlistURL)
+			if err != nil {
+				return err
+			}
 		}
 	}
 	c.SemMaxDNSQueries = utils.NewSimpleSemaphore(c.MaxDNSQueries)
+
+	c.Wordlist, err = utils.ExpandMaskWordlist(c.Wordlist)
+	if err != nil {
+		return err
+	}
+
+	c.AltWordlist, err = utils.ExpandMaskWordlist(c.AltWordlist)
+	if err != nil {
+		return err
+	}
+
 	return err
 }
 

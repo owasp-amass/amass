@@ -198,7 +198,7 @@ func (r *resolver) reduceScore() {
 	if numUsableResolvers() == 1 {
 		return
 	}
-	
+
 	r.Lock()
 	defer r.Unlock()
 
@@ -763,7 +763,8 @@ func Resolve(name, qtype string, priority int) ([]DNSAnswer, error) {
 
 	ch := make(chan *resolveVote, num)
 	for i := 0; i < num; i++ {
-		go queryResolver(nextResolver(), ch, name, qt, priority, maxattempts, maxservfail)
+		resolver := nextResolver()
+		go queryResolver(resolver, ch, name, qt, priority, maxattempts, maxservfail)
 	}
 
 	var votes []*resolveVote

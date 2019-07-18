@@ -5,6 +5,7 @@ package utils
 
 import (
 	"bufio"
+	"fmt"
 	"io"
 	"regexp"
 	"strings"
@@ -20,6 +21,10 @@ const (
 	SUBRE = "(([a-zA-Z0-9]{1}|[_a-zA-Z0-9]{1}[_a-zA-Z0-9-]{0,61}[a-zA-Z0-9]{1})[.]{1})+"
 
 	tldList = "https://raw.githubusercontent.com/OWASP/Amass/develop/wordlists/tldlist.txt"
+
+	maskLetters = "abcdefghijklmnopqrstuvwxyz"
+	maskDigits  = "0123456789"
+	maskSpecial = "-"
 )
 
 var (
@@ -171,6 +176,63 @@ func RemoveAsteriskLabel(s string) string {
 		return ""
 	}
 	return strings.Join(labels[index:], ".")
+}
+
+func ExpandMask(word string) ([]string, error) {
+	var expanded []string
+	var chars string
+
+	if strings.Count(word, "?") > 3 {
+		return expanded, fmt.Errorf("Exceeded maximum mask size (3): %s", word)
+	}
+
+	parts := strings.SplitN(word, "?", 2)
+	if len(parts) > 1 {
+		if len(parts[1]) > 0 {
+			switch parts[1][0] {
+			case 'a':
+				chars = maskLetters + maskDigits + maskSpecial
+			case 'd':
+				chars = maskDigits
+			case 'u':
+				fallthrough
+			case 'l':
+				chars = maskLetters
+			case 's':
+				chars = maskSpecial
+			default:
+				return expanded, fmt.Errorf("Improper mask used: %s", word)
+			}
+			for _, ch := range chars {
+				newWord := parts[0] + string(ch) + parts[1][1:]
+				nextRound, err := ExpandMask(newWord)
+				if err != nil {
+					return expanded, err
+				}
+				expanded = append(expanded, nextRound...)
+			}
+		}
+	} else {
+		expanded = append(expanded, word)
+	}
+	return expanded, nil
+}
+
+func ExpandMaskWordlist(wordlist []string) ([]string, error) {
+	var newWordlist []string
+	var newWords []string
+	var err error
+
+	for _, word := range wordlist {
+		newWords, err = ExpandMask(word)
+		if err != nil {
+			break
+		}
+
+		newWordlist = append(newWordlist, newWords...)
+	}
+
+	return newWordlist, err
 }
 
 // ReverseString returns the characters of the argument string in reverse order.
