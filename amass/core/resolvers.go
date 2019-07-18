@@ -763,8 +763,7 @@ func Resolve(name, qtype string, priority int) ([]DNSAnswer, error) {
 
 	ch := make(chan *resolveVote, num)
 	for i := 0; i < num; i++ {
-		resolver := nextResolver()
-		go queryResolver(resolver, ch, name, qt, priority, maxattempts, maxservfail)
+		go queryResolver(nextResolver(), ch, name, qt, priority, maxattempts, maxservfail)
 	}
 
 	var votes []*resolveVote
