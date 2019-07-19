@@ -11,9 +11,10 @@ import (
 	"os"
 	"time"
 
-	"github.com/OWASP/Amass/amass/core"
-	"github.com/OWASP/Amass/amass/handlers"
-	"github.com/OWASP/Amass/amass/utils"
+	"github.com/OWASP/Amass/config"
+	"github.com/OWASP/Amass/graph"
+	"github.com/OWASP/Amass/requests"
+	"github.com/OWASP/Amass/utils"
 	"github.com/fatih/color"
 )
 
@@ -78,7 +79,7 @@ func runTrackCommand(clArgs []string) {
 		os.Exit(1)
 	}
 	if args.Filepaths.Domains != "" {
-		list, err := core.GetListFromFile(args.Filepaths.Domains)
+		list, err := config.GetListFromFile(args.Filepaths.Domains)
 		if err != nil {
 			r.Fprintf(color.Error, "Failed to parse the domain names file: %v\n", err)
 			os.Exit(1)
@@ -102,19 +103,22 @@ func runTrackCommand(clArgs []string) {
 
 	rand.Seed(time.Now().UTC().UnixNano())
 
-	config := new(core.Config)
+	cfg := new(config.Config)
 	// Check if a configuration file was provided, and if so, load the settings
-	if _, found := core.AcquireConfig(args.Filepaths.Directory, args.Filepaths.ConfigFile, config); found {
+	if _, err := config.AcquireConfig(args.Filepaths.Directory, args.Filepaths.ConfigFile, cfg); err == nil {
 		if args.Filepaths.Directory == "" {
-			args.Filepaths.Directory = config.Dir
+			args.Filepaths.Directory = cfg.Dir
 		}
 		if len(args.Domains) == 0 {
-			args.Domains = utils.UniqueAppend(args.Domains, config.Domains()...)
+			args.Domains = utils.UniqueAppend(args.Domains, cfg.Domains()...)
 		}
+	} else if args.Filepaths.ConfigFile != "" && err.Error() == "Config file not found" {
+		r.Fprintf(color.Error, "Failed to load the configuration file: %v\n", err)
+		os.Exit(1)
 	}
 
 	// Connect with the graph database containing the enumeration data
-	db := openGraphDatabase(args.Filepaths.Directory, config)
+	db := openGraphDatabase(args.Filepaths.Directory, cfg)
 	if db == nil {
 		r.Fprintln(color.Error, "Failed to connect with the database")
 		os.Exit(1)
@@ -163,11 +167,11 @@ func runTrackCommand(clArgs []string) {
 	cumulativeOutput(args.Domains, enums, earliest, latest, db)
 }
 
-func cumulativeOutput(domains []string, enums []string, ea, la []time.Time, db handlers.DataHandler) {
+func cumulativeOutput(domains []string, enums []string, ea, la []time.Time, db graph.DataHandler) {
 	idx := len(enums) - 1
 	filter := utils.NewStringFilter()
 
-	var cum []*core.Output
+	var cum []*requests.Output
 	for i := idx - 1; i >= 0; i-- {
 		for _, out := range getUniqueDBOutput(enums[i], domains, db) {
 			if domainNameInScope(out.Name, domains) && !filter.Duplicate(out.Name) {
@@ -193,7 +197,7 @@ func cumulativeOutput(domains []string, enums []string, ea, la []time.Time, db h
 	}
 }
 
-func completeHistoryOutput(domains []string, enums []string, ea, la []time.Time, db handlers.DataHandler) {
+func completeHistoryOutput(domains []string, enums []string, ea, la []time.Time, db graph.DataHandler) {
 	var prev string
 
 	for i, enum := range enums {
@@ -232,9 +236,9 @@ func blueLine() {
 	fmt.Println()
 }
 
-func diffEnumOutput(out1, out2 []*core.Output) []string {
-	omap1 := make(map[string]*core.Output)
-	omap2 := make(map[string]*core.Output)
+func diffEnumOutput(out1, out2 []*requests.Output) []string {
+	omap1 := make(map[string]*requests.Output)
+	omap2 := make(map[string]*requests.Output)
 
 	for _, o := range out1 {
 		omap1[o.Name] = o
@@ -275,7 +279,7 @@ func diffEnumOutput(out1, out2 []*core.Output) []string {
 	return diff
 }
 
-func lineOfAddresses(addrs []core.AddressInfo) string {
+func lineOfAddresses(addrs []requests.AddressInfo) string {
 	var line string
 
 	for i, addr := range addrs {
@@ -287,7 +291,7 @@ func lineOfAddresses(addrs []core.AddressInfo) string {
 	return line
 }
 
-func compareAddresses(addr1, addr2 []core.AddressInfo) bool {
+func compareAddresses(addr1, addr2 []requests.AddressInfo) bool {
 	for _, a1 := range addr1 {
 		var found bool
 

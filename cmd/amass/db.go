@@ -13,10 +13,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/OWASP/Amass/amass"
-	"github.com/OWASP/Amass/amass/core"
-	"github.com/OWASP/Amass/amass/handlers"
-	"github.com/OWASP/Amass/amass/utils"
+	"github.com/OWASP/Amass/config"
+	"github.com/OWASP/Amass/graph"
+	"github.com/OWASP/Amass/requests"
+	"github.com/OWASP/Amass/utils"
 	"github.com/fatih/color"
 )
 
@@ -83,7 +83,7 @@ func runDBCommand(clArgs []string) {
 	}
 
 	if args.Filepaths.Domains != "" {
-		list, err := core.GetListFromFile(args.Filepaths.Domains)
+		list, err := config.GetListFromFile(args.Filepaths.Domains)
 		if err != nil {
 			r.Fprintf(color.Error, "Failed to parse the domain names file: %v\n", err)
 			return
@@ -91,18 +91,21 @@ func runDBCommand(clArgs []string) {
 		args.Domains = utils.UniqueAppend(args.Domains, list...)
 	}
 
-	config := new(core.Config)
+	cfg := new(config.Config)
 	// Check if a configuration file was provided, and if so, load the settings
-	if _, found := core.AcquireConfig(args.Filepaths.Directory, args.Filepaths.ConfigFile, config); found {
+	if _, err := config.AcquireConfig(args.Filepaths.Directory, args.Filepaths.ConfigFile, cfg); err == nil {
 		if args.Filepaths.Directory == "" {
-			args.Filepaths.Directory = config.Dir
+			args.Filepaths.Directory = cfg.Dir
 		}
 		if len(args.Domains) == 0 {
-			args.Domains = utils.UniqueAppend(args.Domains, config.Domains()...)
+			args.Domains = utils.UniqueAppend(args.Domains, cfg.Domains()...)
 		}
+	} else if args.Filepaths.ConfigFile != "" && err.Error() == "Config file not found" {
+		r.Fprintf(color.Error, "Failed to load the configuration file: %v\n", err)
+		os.Exit(1)
 	}
 
-	db := openGraphDatabase(args.Filepaths.Directory, config)
+	db := openGraphDatabase(args.Filepaths.Directory, cfg)
 	if db == nil {
 		r.Fprintln(color.Error, "Failed to connect with the database")
 		os.Exit(1)
@@ -131,25 +134,19 @@ func runDBCommand(clArgs []string) {
 	commandUsage(dbUsageMsg, dbCommand, dbBuf)
 }
 
-func openGraphDatabase(dir string, config *core.Config) handlers.DataHandler {
-	var db handlers.DataHandler
+func openGraphDatabase(dir string, cfg *config.Config) graph.DataHandler {
+	var db graph.DataHandler
 	// Attempt to connect to an Amass graph database
-	/*if args.Options.Neo4j {
-		neo, err := handlers.NewNeo4j(args.URL, args.User, args.Password, nil)
-		if err != nil {
-			db = neo
-		}
-	} else */
-	if config.GremlinURL != "" {
-		if g := handlers.NewGremlin(config.GremlinURL, config.GremlinUser, config.GremlinPass, nil); g != nil {
+	if cfg.GremlinURL != "" {
+		if g := graph.NewGremlin(cfg.GremlinURL, cfg.GremlinUser, cfg.GremlinPass, nil); g != nil {
 			db = g
 		}
 	} else {
-		if d := core.OutputDirectory(dir); d != "" {
+		if d := config.OutputDirectory(dir); d != "" {
 			// Check that the graph database directory exists
 			if finfo, err := os.Stat(d); !os.IsNotExist(err) && finfo.IsDir() {
-				if graph := handlers.NewGraph(d); graph != nil {
-					db = graph
+				if g := graph.NewGraph(d); g != nil {
+					db = g
 				}
 			}
 		}
@@ -157,25 +154,25 @@ func openGraphDatabase(dir string, config *core.Config) handlers.DataHandler {
 	return db
 }
 
-func inputDataOperations(args *dbArgs, db handlers.DataHandler) error {
+func inputDataOperations(args *dbArgs, db graph.DataHandler) error {
 	f, err := os.Open(args.Filepaths.Import)
 	if err != nil {
 		return fmt.Errorf("Failed to open the input file: %v", err)
 	}
 
-	opts, err := handlers.ParseDataOpts(f)
+	opts, err := graph.ParseDataOpts(f)
 	if err != nil {
 		return errors.New("Failed to parse the provided data operations")
 	}
 
-	err = handlers.DataOptsDriver(opts, db)
+	err = graph.DataOptsDriver(opts, db)
 	if err != nil {
 		return fmt.Errorf("Failed to populate the database: %v", err)
 	}
 	return nil
 }
 
-func listEnumerations(domains []string, db handlers.DataHandler) {
+func listEnumerations(domains []string, db graph.DataHandler) {
 	enums := enumIDs(domains, db)
 	if len(enums) == 0 {
 		r.Fprintln(color.Error, "No enumerations found within the provided scope")
@@ -200,23 +197,23 @@ func listEnumerations(domains []string, db handlers.DataHandler) {
 	}
 }
 
-func showEnumeration(args *dbArgs, db handlers.DataHandler) {
+func showEnumeration(args *dbArgs, db graph.DataHandler) {
 	var total int
 	tags := make(map[string]int)
-	asns := make(map[int]*amass.ASNSummaryData)
+	asns := make(map[int]*utils.ASNSummaryData)
 	for _, out := range getEnumOutput(args.Enum, args.Domains, db) {
 		if len(args.Domains) > 0 && !domainNameInScope(out.Name, args.Domains) {
 			continue
 		}
 
-		out.Addresses = amass.DesiredAddrTypes(out.Addresses, args.Options.IPv4, args.Options.IPv6)
+		out.Addresses = utils.DesiredAddrTypes(out.Addresses, args.Options.IPv4, args.Options.IPv6)
 		if len(out.Addresses) == 0 {
 			continue
 		}
 
 		total++
-		amass.UpdateSummaryData(out, tags, asns)
-		source, name, ips := amass.OutputLineParts(out, args.Options.Sources,
+		utils.UpdateSummaryData(out, tags, asns)
+		source, name, ips := utils.OutputLineParts(out, args.Options.Sources,
 			args.Options.IPs || args.Options.IPv4 || args.Options.IPv6, args.Options.DemoMode)
 
 		if ips != "" {
@@ -228,12 +225,12 @@ func showEnumeration(args *dbArgs, db handlers.DataHandler) {
 	if total == 0 {
 		r.Println("No names were discovered")
 	} else {
-		amass.PrintEnumerationSummary(total, tags, asns, args.Options.DemoMode)
+		utils.PrintEnumerationSummary(total, tags, asns, args.Options.DemoMode)
 	}
 }
 
-func getEnumOutput(id int, domains []string, db handlers.DataHandler) []*core.Output {
-	var output []*core.Output
+func getEnumOutput(id int, domains []string, db graph.DataHandler) []*requests.Output {
+	var output []*requests.Output
 
 	if id > 0 {
 		enum := enumIndexToID(id, domains, db)
@@ -265,8 +262,8 @@ func getEnumOutput(id int, domains []string, db handlers.DataHandler) []*core.Ou
 	return output
 }
 
-func getUniqueDBOutput(id string, domains []string, db handlers.DataHandler) []*core.Output {
-	var output []*core.Output
+func getUniqueDBOutput(id string, domains []string, db graph.DataHandler) []*requests.Output {
+	var output []*requests.Output
 	filter := utils.NewStringFilter()
 
 	for _, out := range db.GetOutput(id, true) {
@@ -280,7 +277,7 @@ func getUniqueDBOutput(id string, domains []string, db handlers.DataHandler) []*
 	return output
 }
 
-func enumIndexToID(e int, domains []string, db handlers.DataHandler) string {
+func enumIndexToID(e int, domains []string, db graph.DataHandler) string {
 	enums := enumIDs(domains, db)
 	if len(enums) == 0 {
 		return ""
@@ -294,7 +291,7 @@ func enumIndexToID(e int, domains []string, db handlers.DataHandler) string {
 }
 
 // Get the UUID for the most recent enumeration
-func mostRecentEnumID(domains []string, db handlers.DataHandler) string {
+func mostRecentEnumID(domains []string, db graph.DataHandler) string {
 	var uuid string
 	var latest time.Time
 
@@ -326,7 +323,7 @@ func mostRecentEnumID(domains []string, db handlers.DataHandler) string {
 }
 
 // Obtain the enumeration IDs that include the provided domain
-func enumIDs(domains []string, db handlers.DataHandler) []string {
+func enumIDs(domains []string, db graph.DataHandler) []string {
 	var enums []string
 
 	for _, e := range db.EnumerationList() {
@@ -362,7 +359,7 @@ func domainNameInScope(name string, scope []string) bool {
 	return discovered
 }
 
-func orderedEnumsAndDateRanges(enums []string, db handlers.DataHandler) ([]string, []time.Time, []time.Time) {
+func orderedEnumsAndDateRanges(enums []string, db graph.DataHandler) ([]string, []time.Time, []time.Time) {
 	sort.Slice(enums, func(i, j int) bool {
 		var less bool
 

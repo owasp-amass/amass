@@ -5,20 +5,20 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/OWASP/Amass/amass"
+	"github.com/OWASP/Amass/enum"
 )
 
 func main() {
 	// Seed the default pseudo-random number generator
 	rand.Seed(time.Now().UTC().UnixNano())
 
-	enum := amass.NewEnumeration()
+	e := enum.NewEnumeration()
 	go func() {
-		for result := range enum.Output {
+		for result := range e.Output {
 			fmt.Println(result.Name)
 		}
 	}()
 	// Setup the most basic amass configuration
-	enum.Config.AddDomain("example.com")
-	enum.Start()
+	e.Config.AddDomain("example.com")
+	e.Start()
 }

@@ -14,10 +14,10 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/OWASP/Amass/amass/core"
-	"github.com/OWASP/Amass/amass/handlers"
-	"github.com/OWASP/Amass/amass/utils"
-	"github.com/OWASP/Amass/amass/utils/viz"
+	"github.com/OWASP/Amass/config"
+	"github.com/OWASP/Amass/graph"
+	"github.com/OWASP/Amass/utils"
+	"github.com/OWASP/Amass/utils/viz"
 	"github.com/fatih/color"
 )
 
@@ -89,7 +89,7 @@ func runVizCommand(clArgs []string) {
 	}
 
 	if args.Filepaths.Domains != "" {
-		list, err := core.GetListFromFile(args.Filepaths.Domains)
+		list, err := config.GetListFromFile(args.Filepaths.Domains)
 		if err != nil {
 			r.Fprintf(color.Error, "Failed to parse the domain names file: %v\n", err)
 			return
@@ -112,30 +112,33 @@ func runVizCommand(clArgs []string) {
 
 	var err error
 	var uuid string
-	var db handlers.DataHandler
+	var db graph.DataHandler
 	rand.Seed(time.Now().UTC().UnixNano())
 
 	// Obtain access to the graph database
 	if args.Filepaths.Input != "" {
 		uuid, db, err = inputFileToDB(&args)
-		args.Filepaths.Directory, err = ioutil.TempDir("", core.DefaultOutputDirectory)
+		args.Filepaths.Directory, err = ioutil.TempDir("", config.DefaultOutputDirectory)
 		if err == nil {
 			defer os.RemoveAll(args.Filepaths.Directory)
 			defer db.Close()
 		}
 	} else {
-		config := new(core.Config)
+		cfg := new(config.Config)
 		// Check if a configuration file was provided, and if so, load the settings
-		if _, found := core.AcquireConfig(args.Filepaths.Directory, args.Filepaths.ConfigFile, config); found {
+		if _, err := config.AcquireConfig(args.Filepaths.Directory, args.Filepaths.ConfigFile, cfg); err == nil {
 			if args.Filepaths.Directory == "" {
-				args.Filepaths.Directory = config.Dir
+				args.Filepaths.Directory = cfg.Dir
 			}
 			if len(args.Domains) == 0 {
-				args.Domains = utils.UniqueAppend(args.Domains, config.Domains()...)
+				args.Domains = utils.UniqueAppend(args.Domains, cfg.Domains()...)
 			}
+		} else if args.Filepaths.ConfigFile != "" && err.Error() == "Config file not found" {
+			r.Fprintf(color.Error, "Failed to load the configuration file: %v\n", err)
+			os.Exit(1)
 		}
 
-		db = openGraphDatabase(args.Filepaths.Directory, config)
+		db = openGraphDatabase(args.Filepaths.Directory, cfg)
 		if db == nil {
 			r.Fprintln(color.Error, "Failed to connect with the database")
 			os.Exit(1)
@@ -177,10 +180,10 @@ func runVizCommand(clArgs []string) {
 	}
 }
 
-func inputFileToDB(args *vizArgs) (string, handlers.DataHandler, error) {
+func inputFileToDB(args *vizArgs) (string, graph.DataHandler, error) {
 	var err error
 
-	args.Filepaths.Directory, err = ioutil.TempDir("", core.DefaultOutputDirectory)
+	args.Filepaths.Directory, err = ioutil.TempDir("", config.DefaultOutputDirectory)
 	if err != nil {
 		return "", nil, fmt.Errorf("Failed to open the temporary directory: %v", err)
 	}
@@ -190,22 +193,22 @@ func inputFileToDB(args *vizArgs) (string, handlers.DataHandler, error) {
 		return "", nil, fmt.Errorf("Failed to open the input file: %v", err)
 	}
 
-	opts, err := handlers.ParseDataOpts(f)
+	opts, err := graph.ParseDataOpts(f)
 	if err != nil {
 		return "", nil, fmt.Errorf("Failed to parse the provided data operations: %v", err)
 	}
 	uuid := opts[0].UUID
 
-	graph := handlers.NewGraph(args.Filepaths.Directory)
-	if graph == nil {
+	g := graph.NewGraph(args.Filepaths.Directory)
+	if g == nil {
 		return "", nil, errors.New("Failed to create the temporary graph database")
 	}
 
-	err = handlers.DataOptsDriver(opts, graph)
+	err = graph.DataOptsDriver(opts, g)
 	if err != nil {
 		return "", nil, fmt.Errorf("Failed to build the network graph: %v", err)
 	}
-	return uuid, graph, nil
+	return uuid, g, nil
 }
 
 func writeMaltegoFile(path string, nodes []viz.Node, edges []viz.Edge) {
