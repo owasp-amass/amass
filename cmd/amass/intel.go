@@ -17,9 +17,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/OWASP/Amass/amass"
-	"github.com/OWASP/Amass/amass/core"
-	"github.com/OWASP/Amass/amass/utils"
+	"github.com/OWASP/Amass/config"
+	"github.com/OWASP/Amass/intel"
+	"github.com/OWASP/Amass/resolvers"
+	"github.com/OWASP/Amass/utils"
 	"github.com/fatih/color"
 	homedir "github.com/mitchellh/go-homedir"
 )
@@ -143,7 +144,7 @@ func runIntelCommand(clArgs []string) {
 	rand.Seed(time.Now().UTC().UnixNano())
 
 	if args.OrganizationName != "" {
-		records, err := amass.LookupASNsByName(args.OrganizationName)
+		records, err := intel.LookupASNsByName(args.OrganizationName)
 		if err == nil {
 			for _, a := range records {
 				fmt.Printf("%d, %s\n", a.ASN, a.Description)
@@ -160,32 +161,33 @@ func runIntelCommand(clArgs []string) {
 	}
 
 	rLog, wLog := io.Pipe()
-	intel := amass.NewIntelCollection()
-	intel.Config.Log = log.New(wLog, "", log.Lmicroseconds)
+	ic := intel.NewIntelCollection()
+	ic.Config.Log = log.New(wLog, "", log.Lmicroseconds)
 
 	// Check if a configuration file was provided, and if so, load the settings
-	if f, found := core.AcquireConfig(args.Filepaths.Directory, args.Filepaths.ConfigFile, intel.Config); found {
+	if f, err := config.AcquireConfig(args.Filepaths.Directory, args.Filepaths.ConfigFile, ic.Config); err == nil {
 		// Check if a config file was provided that has DNS resolvers specified
-		if r, err := core.GetResolversFromSettings(f); err == nil && len(args.Resolvers) == 0 {
+		if r, err := config.GetResolversFromSettings(f); err == nil && len(args.Resolvers) == 0 {
 			args.Resolvers = r
 		}
+	} else if args.Filepaths.ConfigFile != "" && err.Error() == "Config file not found" {
+		r.Fprintf(color.Error, "Failed to load the configuration file: %v\n", err)
+		os.Exit(1)
 	}
 
 	// Override configuration file settings with command-line arguments
-	if err := updateIntelConfiguration(intel, &args); err != nil {
+	if err := updateIntelConfiguration(ic, &args); err != nil {
 		r.Fprintf(color.Error, "Configuration file error: %v\n", err)
 		os.Exit(1)
 	}
 
 	if len(args.Resolvers) > 0 {
-		if err := core.SetCustomResolvers(args.Resolvers); err != nil {
-			fmt.Fprintf(color.Error, "%v\n", err)
-			os.Exit(1)
-		}
+		ic.Pool.Stop()
+		ic.Pool = resolvers.NewResolverPool(args.Resolvers)
 	}
 
 	if args.Options.ReverseWhois {
-		if len(intel.Config.Domains()) == 0 {
+		if len(ic.Config.Domains()) == 0 {
 			r.Fprintln(color.Error, "No root domain names were provided")
 			os.Exit(1)
 		}
@@ -193,27 +195,27 @@ func runIntelCommand(clArgs []string) {
 		args.Options.IPs = false
 		args.Options.IPv4 = false
 		args.Options.IPv6 = false
-		go intel.ReverseWhois()
+		go ic.ReverseWhois()
 	} else {
-		go intel.HostedDomains()
+		go ic.HostedDomains()
 	}
 
-	go intelSignalHandler(intel)
-	processIntelOutput(intel, &args, rLog)
+	go intelSignalHandler(ic)
+	processIntelOutput(ic, &args, rLog)
 }
 
-func processIntelOutput(intel *amass.IntelCollection, args *intelArgs, pipe *io.PipeReader) {
+func processIntelOutput(ic *intel.IntelCollection, args *intelArgs, pipe *io.PipeReader) {
 	var err error
 
 	// Prepare output file paths
-	dir := intel.Config.Dir
+	dir := ic.Config.Dir
 	if dir == "" {
 		path, err := homedir.Dir()
 		if err != nil {
 			r.Fprintln(color.Error, "Failed to obtain the user home directory")
 			os.Exit(1)
 		}
-		dir = filepath.Join(path, core.DefaultOutputDirectory)
+		dir = filepath.Join(path, config.DefaultOutputDirectory)
 	}
 	// If the directory does not yet exist, create it
 	if err = os.MkdirAll(dir, 0755); err != nil {
@@ -247,8 +249,8 @@ func processIntelOutput(intel *amass.IntelCollection, args *intelArgs, pipe *io.
 	}
 
 	// Collect all the names returned by the intelligence collection
-	for out := range intel.Output {
-		source, name, ips := amass.OutputLineParts(out, args.Options.Sources,
+	for out := range ic.Output {
+		source, name, ips := utils.OutputLineParts(out, args.Options.Sources,
 			args.Options.IPs || args.Options.IPv4 || args.Options.IPv6, args.Options.DemoMode)
 
 		if ips != "" {
@@ -264,7 +266,7 @@ func processIntelOutput(intel *amass.IntelCollection, args *intelArgs, pipe *io.
 }
 
 // If the user interrupts the program, print the summary information
-func intelSignalHandler(ic *amass.IntelCollection) {
+func intelSignalHandler(ic *intel.IntelCollection) {
 	quit := make(chan os.Signal, 1)
 
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
@@ -307,28 +309,28 @@ func writeIntelLogsAndMessages(logs *io.PipeReader, logfile string) {
 // Obtain parameters from provided input files
 func processIntelInputFiles(args *intelArgs) error {
 	if args.Filepaths.ExcludedSrcs != "" {
-		list, err := core.GetListFromFile(args.Filepaths.ExcludedSrcs)
+		list, err := config.GetListFromFile(args.Filepaths.ExcludedSrcs)
 		if err != nil {
 			return fmt.Errorf("Failed to parse the exclude file: %v", err)
 		}
 		args.Excluded = utils.UniqueAppend(args.Excluded, list...)
 	}
 	if args.Filepaths.IncludedSrcs != "" {
-		list, err := core.GetListFromFile(args.Filepaths.IncludedSrcs)
+		list, err := config.GetListFromFile(args.Filepaths.IncludedSrcs)
 		if err != nil {
 			return fmt.Errorf("Failed to parse the include file: %v", err)
 		}
 		args.Included = utils.UniqueAppend(args.Included, list...)
 	}
 	if args.Filepaths.Domains != "" {
-		list, err := core.GetListFromFile(args.Filepaths.Domains)
+		list, err := config.GetListFromFile(args.Filepaths.Domains)
 		if err != nil {
 			return fmt.Errorf("Failed to parse the domain names file: %v", err)
 		}
 		args.Domains = utils.UniqueAppend(args.Domains, list...)
 	}
 	if args.Filepaths.Resolvers != "" {
-		list, err := core.GetListFromFile(args.Filepaths.Resolvers)
+		list, err := config.GetListFromFile(args.Filepaths.Resolvers)
 		if err != nil {
 			return fmt.Errorf("Failed to parse the resolver file: %v", err)
 		}
@@ -338,34 +340,34 @@ func processIntelInputFiles(args *intelArgs) error {
 }
 
 // Setup the amass intelligence collection settings
-func updateIntelConfiguration(intel *amass.IntelCollection, args *intelArgs) error {
+func updateIntelConfiguration(ic *intel.IntelCollection, args *intelArgs) error {
 	if args.Options.Active {
-		intel.Config.Active = true
+		ic.Config.Active = true
 	}
 	if len(args.Addresses) > 0 {
-		intel.Config.Addresses = args.Addresses
+		ic.Config.Addresses = args.Addresses
 	}
 	if len(args.ASNs) > 0 {
-		intel.Config.ASNs = args.ASNs
+		ic.Config.ASNs = args.ASNs
 	}
 	if len(args.CIDRs) > 0 {
-		intel.Config.CIDRs = args.CIDRs
+		ic.Config.CIDRs = args.CIDRs
 	}
 	if len(args.Ports) > 0 {
-		intel.Config.Ports = args.Ports
+		ic.Config.Ports = args.Ports
 	}
 	if args.Filepaths.Directory != "" {
-		intel.Config.Dir = args.Filepaths.Directory
+		ic.Config.Dir = args.Filepaths.Directory
 	}
 	if args.MaxDNSQueries > 0 {
-		intel.Config.MaxDNSQueries = args.MaxDNSQueries
+		ic.Config.MaxDNSQueries = args.MaxDNSQueries
 	}
 
 	disabled := compileDisabledSources(GetAllSourceNames(), args.Included, args.Excluded)
 	if len(disabled) > 0 {
-		intel.Config.DisabledDataSources = disabled
+		ic.Config.DisabledDataSources = disabled
 	}
 	// Attempt to add the provided domains to the configuration
-	intel.Config.AddDomains(args.Domains)
+	ic.Config.AddDomains(args.Domains)
 	return nil
 }

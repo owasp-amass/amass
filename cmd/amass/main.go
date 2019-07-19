@@ -10,10 +10,11 @@ import (
 	"os"
 	"path"
 
-	"github.com/OWASP/Amass/amass"
-	"github.com/OWASP/Amass/amass/core"
-	"github.com/OWASP/Amass/amass/eventbus"
-	"github.com/OWASP/Amass/amass/sources"
+	"github.com/OWASP/Amass/config"
+	"github.com/OWASP/Amass/eventbus"
+	"github.com/OWASP/Amass/resolvers"
+	"github.com/OWASP/Amass/services/sources"
+	"github.com/OWASP/Amass/utils"
 	"github.com/fatih/color"
 )
 
@@ -36,7 +37,7 @@ var (
 )
 
 func commandUsage(msg string, cmdFlagSet *flag.FlagSet, errBuf *bytes.Buffer) {
-	amass.PrintBanner()
+	utils.PrintBanner()
 	g.Fprintf(color.Error, "Usage: %s %s\n\n", path.Base(os.Args[0]), msg)
 	cmdFlagSet.PrintDefaults()
 	g.Fprintln(color.Error, errBuf.String())
@@ -51,7 +52,7 @@ func main() {
 	defaultBuf := new(bytes.Buffer)
 	flag.CommandLine.SetOutput(defaultBuf)
 	flag.Usage = func() {
-		amass.PrintBanner()
+		utils.PrintBanner()
 		g.Fprintf(color.Error, "Usage: %s intel|enum|viz|track|db [options]\n\n", path.Base(os.Args[0]))
 		flag.PrintDefaults()
 		g.Fprintln(color.Error, defaultBuf.String())
@@ -82,7 +83,7 @@ func main() {
 		return
 	}
 	if version {
-		fmt.Fprintf(color.Error, "%s\n", amass.Version)
+		fmt.Fprintf(color.Error, "%s\n", utils.Version)
 		return
 	}
 
@@ -108,7 +109,7 @@ func GetAllSourceNames() []string {
 	bus := eventbus.NewEventBus()
 
 	var names []string
-	for _, src := range sources.GetAllSources(&core.Config{}, bus) {
+	for _, src := range sources.GetAllSources(&config.Config{}, bus, resolvers.NewResolverPool(nil)) {
 		names = append(names, src.String())
 	}
 	bus.Stop()
