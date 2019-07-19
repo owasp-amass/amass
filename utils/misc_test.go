@@ -115,6 +115,7 @@ func TestExpandMask(t *testing.T) {
 		{"Test 10: Multiple Special", "test?s?s", 1},
 		{"Test 11: Mixed Mask", "test?a?l?d", 9620},
 		{"Test 12: Mask too long", "test?a?a?a?a?a", 0},
+		{"Test 13: No Mask", "test", 1},
 	}
 	for _, tt := range tests {
 		s, _ := ExpandMask(tt.event)
@@ -131,7 +132,7 @@ func TestExpandMaskWordlist(t *testing.T) {
 		expected int
 	}{
 
-		{"Test 1: Wordlist", []string{"?a", "?d", "?u", "?l", "?s"}, 100},
+		{"Test 1: Wordlist", []string{"?a", "?d", "?u", "?l", "?s", "none", "none2"}, 102},
 	}
 	for _, tt := range tests {
 		s, _ := ExpandMaskWordlist(tt.event)
