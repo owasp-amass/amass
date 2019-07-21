@@ -6,6 +6,7 @@ package services
 import (
 	"errors"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -113,7 +114,6 @@ func (as *AddressService) performAddrRequest(req *requests.AddrRequest) {
 	if as.filter.Duplicate(req.Address) {
 		return
 	}
-	as.Bus().Publish(requests.ActiveCertTopic, req)
 
 	asn := ipSearch(req.Address)
 	if asn == nil {
@@ -121,6 +121,21 @@ func (as *AddressService) performAddrRequest(req *requests.AddrRequest) {
 	}
 	if _, cidr, _ := net.ParseCIDR(asn.Prefix); cidr != nil {
 		as.Bus().Publish(requests.ReverseSweepTopic, req.Address, cidr)
+	}
+
+	if as.Config().Active {
+		for _, name := range utils.PullCertificateNames(req.Address, as.Config().Ports) {
+			if n := strings.TrimSpace(name); n != "" {
+				if domain := as.Config().WhichDomain(n); domain != "" {
+					as.Bus().Publish(requests.NewNameTopic, &requests.DNSRequest{
+						Name:   n,
+						Domain: domain,
+						Tag:    requests.CERT,
+						Source: "Active Cert",
+					})
+				}
+			}
+		}
 	}
 }
 

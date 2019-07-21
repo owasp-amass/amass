@@ -29,7 +29,6 @@ const (
 	ResolveNameTopic  = "amass:resolve"
 	NameResolvedTopic = "amass:resolved"
 	ReverseSweepTopic = "amass:sweep"
-	ActiveCertTopic   = "amass:activecert"
 	OutputTopic       = "amass:output"
 	IPToASNTopic      = "amass:iptoasn"
 	NewASNTopic       = "amass:asn"
