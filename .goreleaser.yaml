@@ -85,11 +85,4 @@ snapcrafts:
 
     apps:
       amass:
-        plugs: ["home", "network", "removable-media", "personal-files"]
-    
-    plugs:
-      personal-files:
-        read:
-        - $HOME/.amass
-        write:
-        - $HOME/.amass
+        plugs: ["home", "network", "removable-media"]
