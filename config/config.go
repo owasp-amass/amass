@@ -136,6 +136,9 @@ func (c *Config) CheckSettings() error {
 			return errors.New("Brute forcing cannot be performed without DNS resolution")
 		} else if len(c.Wordlist) == 0 {
 			c.Wordlist, err = getWordlistByURL(defaultWordlistURL)
+			if err != nil {
+				return err
+			}
 		}
 	}
 	if c.Passive && c.Active {
@@ -150,9 +153,23 @@ func (c *Config) CheckSettings() error {
 	if c.Alterations {
 		if len(c.AltWordlist) == 0 {
 			c.AltWordlist, err = getWordlistByURL(defaultAltWordlistURL)
+			if err != nil {
+				return err
+			}
 		}
 	}
 	c.SemMaxDNSQueries = utils.NewSimpleSemaphore(c.MaxDNSQueries)
+
+	c.Wordlist, err = utils.ExpandMaskWordlist(c.Wordlist)
+	if err != nil {
+		return err
+	}
+
+	c.AltWordlist, err = utils.ExpandMaskWordlist(c.AltWordlist)
+	if err != nil {
+		return err
+	}
+
 	return err
 }
 
