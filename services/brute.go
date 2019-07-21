@@ -189,6 +189,8 @@ func (bfs *BruteForceService) bruteForceResolution(word, sub, domain string) {
 				bfs.metrics.QueryTime(time.Now())
 				break
 			}
+		} else {
+			bfs.Config().Log.Printf("%s: %v", bfs.String(), err)
 		}
 		bfs.metrics.QueryTime(time.Now())
 		bfs.SetActive()
