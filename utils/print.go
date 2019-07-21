@@ -32,7 +32,7 @@ const Banner = `
 
 const (
 	// Version is used to display the current version of Amass.
-	Version = "3.0.19"
+	Version = "v3.0.19"
 
 	// Author is used to display the Amass Project Team.
 	Author = "OWASP Amass Project - @owaspamass"
