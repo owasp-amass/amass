@@ -19,6 +19,7 @@ import (
 )
 
 const (
+	mainUsageMsg = "intel|enum|viz|track|db [options]"
 	exampleConfigFileURL = "https://github.com/OWASP/Amass/blob/master/examples/config.ini"
 	userGuideURL         = "https://github.com/OWASP/Amass/blob/master/doc/user_guide.md"
 )
@@ -42,44 +43,38 @@ func commandUsage(msg string, cmdFlagSet *flag.FlagSet, errBuf *bytes.Buffer) {
 	cmdFlagSet.PrintDefaults()
 	g.Fprintln(color.Error, errBuf.String())
 
-	g.Fprintf(color.Error, "The user guide can be found here: \n%s\n\n", userGuideURL)
-	g.Fprintf(color.Error, "An example configuration file can be found here: \n%s\n\n", exampleConfigFileURL)
-}
-
-func main() {
-	var version, help1, help2 bool
-
-	defaultBuf := new(bytes.Buffer)
-	flag.CommandLine.SetOutput(defaultBuf)
-	flag.Usage = func() {
-		utils.PrintBanner()
-		g.Fprintf(color.Error, "Usage: %s intel|enum|viz|track|db [options]\n\n", path.Base(os.Args[0]))
-		flag.PrintDefaults()
-		g.Fprintln(color.Error, defaultBuf.String())
-
+	if msg == mainUsageMsg {
 		g.Fprintf(color.Error, "\nSubcommands: \n\n")
 		g.Fprintf(color.Error, "\t%-11s - Discover targets for enumerations\n", "amass intel")
 		g.Fprintf(color.Error, "\t%-11s - Perform enumerations and network mapping\n", "amass enum")
 		g.Fprintf(color.Error, "\t%-11s - Visualize enumeration results\n", "amass viz")
 		g.Fprintf(color.Error, "\t%-11s - Track differences between enumerations\n", "amass track")
 		g.Fprintf(color.Error, "\t%-11s - Manipulate the Amass graph database\n\n", "amass db")
-
-		g.Fprintf(color.Error, "The user guide can be found here: \n%s\n\n", userGuideURL)
-		g.Fprintf(color.Error, "An example configuration file can be found here: \n%s\n\n", exampleConfigFileURL)
 	}
 
-	flag.BoolVar(&help1, "h", false, "Show the program usage message")
-	flag.BoolVar(&help2, "help", false, "Show the program usage message")
-	flag.BoolVar(&version, "version", false, "Print the version number of this Amass binary")
+	g.Fprintf(color.Error, "The user's guide can be found here: \n%s\n\n", userGuideURL)
+	g.Fprintf(color.Error, "An example configuration file can be found here: \n%s\n\n", exampleConfigFileURL)
+}
+
+func main() {
+	var version, help1, help2 bool
+	mainFlagSet := flag.NewFlagSet("main", flag.ExitOnError)
+
+	defaultBuf := new(bytes.Buffer)
+	mainFlagSet.SetOutput(defaultBuf)
+
+	mainFlagSet.BoolVar(&help1, "h", false, "Show the program usage message")
+	mainFlagSet.BoolVar(&help2, "help", false, "Show the program usage message")
+	mainFlagSet.BoolVar(&version, "version", false, "Print the version number of this Amass binary")
 
 	if len(os.Args) < 2 {
-		flag.Usage()
+		commandUsage(mainUsageMsg, mainFlagSet, defaultBuf)
 		return
 	}
 
-	flag.Parse()
+	mainFlagSet.Parse(os.Args[1:])
 	if help1 || help2 {
-		flag.Usage()
+		commandUsage(mainUsageMsg, mainFlagSet, defaultBuf)
 		return
 	}
 	if version {
@@ -99,7 +94,7 @@ func main() {
 	case "viz":
 		runVizCommand(os.Args[2:])
 	default:
-		flag.Usage()
+		commandUsage(mainUsageMsg, mainFlagSet, defaultBuf)
 		os.Exit(1)
 	}
 }

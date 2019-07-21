@@ -100,7 +100,7 @@ func runDBCommand(clArgs []string) {
 		if len(args.Domains) == 0 {
 			args.Domains = utils.UniqueAppend(args.Domains, cfg.Domains()...)
 		}
-	} else if args.Filepaths.ConfigFile != "" && err.Error() == "Config file not found" {
+	} else if args.Filepaths.ConfigFile != "" {
 		r.Fprintf(color.Error, "Failed to load the configuration file: %v\n", err)
 		os.Exit(1)
 	}

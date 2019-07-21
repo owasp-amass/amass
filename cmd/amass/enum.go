@@ -30,7 +30,7 @@ import (
 )
 
 const (
-	enumUsageMsg = "enum [options] -d domain"
+	enumUsageMsg = "enum [options] -d DOMAIN"
 )
 
 var (
@@ -197,7 +197,7 @@ func runEnumCommand(clArgs []string) {
 		if r, err := config.GetResolversFromSettings(f); err == nil && len(args.Resolvers) == 0 {
 			args.Resolvers = r
 		}
-	} else if args.Filepaths.ConfigFile != "" && err.Error() == "Config file not found" {
+	} else if args.Filepaths.ConfigFile != "" {
 		r.Fprintf(color.Error, "Failed to load the configuration file: %v\n", err)
 		os.Exit(1)
 	}
