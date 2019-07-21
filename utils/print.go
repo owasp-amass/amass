@@ -85,7 +85,7 @@ func PrintEnumerationSummary(total int, tags map[string]int, asns map[int]*ASNSu
 
 	fmt.Fprintln(color.Error)
 	// Print the header information
-	title := "OWASP Amass v"
+	title := "OWASP Amass "
 	site := "https://github.com/OWASP/Amass"
 	b.Fprint(color.Error, title+Version)
 	num := 80 - (len(title) + len(Version) + len(site))
@@ -145,7 +145,6 @@ func PrintBanner() {
 	y := color.New(color.FgHiYellow)
 	r := color.New(color.FgHiRed)
 	rightmost := 76
-	version := "Version " + Version
 	desc := "In-depth DNS Enumeration and Network Mapping"
 
 	pad := func(num int) {
@@ -154,8 +153,8 @@ func PrintBanner() {
 		}
 	}
 	r.Fprintln(color.Error, Banner)
-	pad(rightmost - len(version))
-	y.Fprintln(color.Error, version)
+	pad(rightmost - len(Version))
+	y.Fprintln(color.Error, Version)
 	pad(rightmost - len(Author))
 	y.Fprintln(color.Error, Author)
 	pad(rightmost - len(desc))
