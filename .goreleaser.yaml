@@ -48,14 +48,14 @@ changelog:
     - '^doc:'
     - '^test:'
 
-dockers:
-  -
-    dockerfile: Dockerfile
-    image_templates:
-      - "caffix/amass:v{{ .Major }}"
-      - "caffix/amass:v{{ .Major }}.{{ .Minor }}"
-      - "caffix/amass:{{ .Tag }}"
-      - "caffix/amass:latest"
+#dockers:
+#  -
+#    dockerfile: Dockerfile
+#    image_templates:
+#      - "caffix/amass:v{{ .Major }}"
+#      - "caffix/amass:v{{ .Major }}.{{ .Minor }}"
+#      - "caffix/amass:{{ .Tag }}"
+#      - "caffix/amass:latest"
 
 brews:
   -
