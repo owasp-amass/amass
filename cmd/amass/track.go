@@ -40,7 +40,7 @@ type trackArgs struct {
 func runTrackCommand(clArgs []string) {
 	var args trackArgs
 	var help1, help2 bool
-	trackCommand := flag.NewFlagSet("track", flag.ExitOnError)
+	trackCommand := flag.NewFlagSet("track", flag.ContinueOnError)
 
 	trackBuf := new(bytes.Buffer)
 	trackCommand.SetOutput(trackBuf)

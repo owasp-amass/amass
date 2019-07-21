@@ -135,7 +135,7 @@ func defineEnumFilepathFlags(enumFlags *flag.FlagSet, args *enumArgs) {
 func runEnumCommand(clArgs []string) {
 	var args enumArgs
 	var help1, help2 bool
-	enumCommand := flag.NewFlagSet("enum", flag.ExitOnError)
+	enumCommand := flag.NewFlagSet("enum", flag.ContinueOnError)
 
 	enumBuf := new(bytes.Buffer)
 	enumCommand.SetOutput(enumBuf)

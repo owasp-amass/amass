@@ -100,7 +100,7 @@ func defineIntelFilepathFlags(intelFlags *flag.FlagSet, args *intelArgs) {
 func runIntelCommand(clArgs []string) {
 	var args intelArgs
 	var help1, help2 bool
-	intelCommand := flag.NewFlagSet("intel", flag.ExitOnError)
+	intelCommand := flag.NewFlagSet("intel", flag.ContinueOnError)
 
 	intelBuf := new(bytes.Buffer)
 	intelCommand.SetOutput(intelBuf)

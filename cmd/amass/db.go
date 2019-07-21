@@ -47,7 +47,7 @@ type dbArgs struct {
 func runDBCommand(clArgs []string) {
 	var args dbArgs
 	var help1, help2 bool
-	dbCommand := flag.NewFlagSet("db", flag.ExitOnError)
+	dbCommand := flag.NewFlagSet("db", flag.ContinueOnError)
 
 	dbBuf := new(bytes.Buffer)
 	dbCommand.SetOutput(dbBuf)

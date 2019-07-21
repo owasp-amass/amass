@@ -58,7 +58,7 @@ func commandUsage(msg string, cmdFlagSet *flag.FlagSet, errBuf *bytes.Buffer) {
 
 func main() {
 	var version, help1, help2 bool
-	mainFlagSet := flag.NewFlagSet("main", flag.ExitOnError)
+	mainFlagSet := flag.NewFlagSet("amass", flag.ContinueOnError)
 
 	defaultBuf := new(bytes.Buffer)
 	mainFlagSet.SetOutput(defaultBuf)
@@ -72,7 +72,10 @@ func main() {
 		return
 	}
 
-	mainFlagSet.Parse(os.Args[1:])
+	if err := mainFlagSet.Parse(os.Args[1:]); err != nil {
+		r.Fprintf(color.Error, "%v\n", err)
+		os.Exit(1)
+	}
 	if help1 || help2 {
 		commandUsage(mainUsageMsg, mainFlagSet, defaultBuf)
 		return

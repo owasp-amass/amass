@@ -47,7 +47,7 @@ type vizArgs struct {
 func runVizCommand(clArgs []string) {
 	var args vizArgs
 	var help1, help2 bool
-	vizCommand := flag.NewFlagSet("viz", flag.ExitOnError)
+	vizCommand := flag.NewFlagSet("viz", flag.ContinueOnError)
 
 	vizBuf := new(bytes.Buffer)
 	vizCommand.SetOutput(vizBuf)
