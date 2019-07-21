@@ -27,7 +27,7 @@ import (
 
 const (
 	// DefaultOutputDirectory is the name of the directory used for output files, such as the graph database.
-	DefaultOutputDirectory = ".amass"
+	DefaultOutputDirectory = "amass"
 
 	defaultWordlistURL    = "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/namelist.txt"
 	defaultAltWordlistURL = "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/alterations.txt"
