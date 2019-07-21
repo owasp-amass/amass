@@ -23,7 +23,6 @@ import (
 
 	"github.com/OWASP/Amass/config"
 	"github.com/OWASP/Amass/enum"
-	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/utils"
 	"github.com/fatih/color"
 	homedir "github.com/mitchellh/go-homedir"
@@ -38,21 +37,23 @@ var (
 )
 
 type enumArgs struct {
-	Addresses       utils.ParseIPs
-	ASNs            utils.ParseInts
-	CIDRs           utils.ParseCIDRs
-	AltWordList     []string
-	BruteWordList   []string
-	Blacklist       utils.ParseStrings
-	Domains         utils.ParseStrings
-	Excluded        utils.ParseStrings
-	Included        utils.ParseStrings
-	MaxDNSQueries   int
-	MinForRecursive int
-	Names           []string
-	Ports           utils.ParseInts
-	Resolvers       utils.ParseStrings
-	Options         struct {
+	Addresses         utils.ParseIPs
+	ASNs              utils.ParseInts
+	CIDRs             utils.ParseCIDRs
+	AltWordList       []string
+	AltWordListMask   utils.ParseStrings
+	BruteWordList     []string
+	BruteWordListMask utils.ParseStrings
+	Blacklist         utils.ParseStrings
+	Domains           utils.ParseStrings
+	Excluded          utils.ParseStrings
+	Included          utils.ParseStrings
+	MaxDNSQueries     int
+	MinForRecursive   int
+	Names             []string
+	Ports             utils.ParseInts
+	Resolvers         utils.ParseStrings
+	Options           struct {
 		Active       bool
 		BruteForcing bool
 		DemoMode     bool
@@ -68,28 +69,30 @@ type enumArgs struct {
 	}
 	Filepaths struct {
 		AllFilePrefix string
-		AltWordlist   string
+		AltWordlist   utils.ParseStrings
 		Blacklist     string
-		BruteWordlist string
+		BruteWordlist utils.ParseStrings
 		ConfigFile    string
 		DataOpts      string
 		Directory     string
-		Domains       string
+		Domains       utils.ParseStrings
 		ExcludedSrcs  string
 		IncludedSrcs  string
 		JSONOutput    string
 		LogFile       string
-		Names         string
-		Resolvers     string
+		Names         utils.ParseStrings
+		Resolvers     utils.ParseStrings
 		TermOut       string
 	}
 }
 
 func defineEnumArgumentFlags(enumFlags *flag.FlagSet, args *enumArgs) {
 	enumFlags.Var(&args.Addresses, "addr", "IPs and ranges (192.168.1.1-254) separated by commas")
+	enumFlags.Var(&args.AltWordListMask, "awm", "\"hashcat-style\" wordlist masks for name alterations")
 	enumFlags.Var(&args.ASNs, "asn", "ASNs separated by commas (can be used multiple times)")
 	enumFlags.Var(&args.CIDRs, "cidr", "CIDRs separated by commas (can be used multiple times)")
 	enumFlags.Var(&args.Blacklist, "bl", "Blacklist of subdomain names that will not be investigated")
+	enumFlags.Var(&args.BruteWordListMask, "wm", "\"hashcat-style\" wordlist masks for DNS brute forcing")
 	enumFlags.Var(&args.Domains, "d", "Domain names separated by commas (can be used multiple times)")
 	enumFlags.Var(&args.Excluded, "exclude", "Data source names separated by commas to be excluded")
 	enumFlags.Var(&args.Included, "include", "Data source names separated by commas to be included")
@@ -116,19 +119,19 @@ func defineEnumOptionFlags(enumFlags *flag.FlagSet, args *enumArgs) {
 
 func defineEnumFilepathFlags(enumFlags *flag.FlagSet, args *enumArgs) {
 	enumFlags.StringVar(&args.Filepaths.AllFilePrefix, "oA", "", "Path prefix used for naming all output files")
-	enumFlags.StringVar(&args.Filepaths.AltWordlist, "aw", "", "Path to a different wordlist file for alterations")
+	enumFlags.Var(&args.Filepaths.AltWordlist, "aw", "Path to a different wordlist file for alterations")
 	enumFlags.StringVar(&args.Filepaths.Blacklist, "blf", "", "Path to a file providing blacklisted subdomains")
-	enumFlags.StringVar(&args.Filepaths.BruteWordlist, "w", "", "Path to a different wordlist file")
+	enumFlags.Var(&args.Filepaths.BruteWordlist, "w", "Path to a different wordlist file")
 	enumFlags.StringVar(&args.Filepaths.ConfigFile, "config", "", "Path to the INI configuration file. Additional details below")
 	enumFlags.StringVar(&args.Filepaths.DataOpts, "do", "", "Path to data operations JSON output file")
 	enumFlags.StringVar(&args.Filepaths.Directory, "dir", "", "Path to the directory containing the output files")
-	enumFlags.StringVar(&args.Filepaths.Domains, "df", "", "Path to a file providing root domain names")
+	enumFlags.Var(&args.Filepaths.Domains, "df", "Path to a file providing root domain names")
 	enumFlags.StringVar(&args.Filepaths.ExcludedSrcs, "ef", "", "Path to a file providing data sources to exclude")
 	enumFlags.StringVar(&args.Filepaths.IncludedSrcs, "if", "", "Path to a file providing data sources to include")
 	enumFlags.StringVar(&args.Filepaths.JSONOutput, "json", "", "Path to the JSON output file")
 	enumFlags.StringVar(&args.Filepaths.LogFile, "log", "", "Path to the log file where errors will be written")
-	enumFlags.StringVar(&args.Filepaths.Names, "nf", "", "Path to a file providing already known subdomain names (from other tools/sources)")
-	enumFlags.StringVar(&args.Filepaths.Resolvers, "rf", "", "Path to a file providing preferred DNS resolvers")
+	enumFlags.Var(&args.Filepaths.Names, "nf", "Path to a file providing already known subdomain names (from other tools/sources)")
+	enumFlags.Var(&args.Filepaths.Resolvers, "rf", "Path to a file providing preferred DNS resolvers")
 	enumFlags.StringVar(&args.Filepaths.TermOut, "o", "", "Path to the text file containing terminal stdout/stderr")
 }
 
@@ -158,6 +161,13 @@ func runEnumCommand(clArgs []string) {
 	if help1 || help2 {
 		commandUsage(enumUsageMsg, enumCommand, enumBuf)
 		return
+	}
+
+	if len(args.AltWordListMask) > 0 {
+		args.AltWordList = utils.UniqueAppend(args.AltWordList, args.AltWordListMask...)
+	}
+	if len(args.BruteWordListMask) > 0 {
+		args.BruteWordList = utils.UniqueAppend(args.BruteWordList, args.BruteWordListMask...)
 	}
 
 	// Check if the user has requested the data source names
@@ -209,8 +219,10 @@ func runEnumCommand(clArgs []string) {
 	}
 
 	if len(args.Resolvers) > 0 {
-		e.Pool.Stop()
-		e.Pool = resolvers.NewResolverPool(args.Resolvers)
+		if err := e.Pool.SetResolvers(args.Resolvers); err != nil {
+			r.Fprintf(color.Error, "Failed to set custom DNS resolvers: %v\n", err)
+			os.Exit(1)
+		}
 	}
 
 	processEnumOutput(e, &args, rLog)
@@ -414,18 +426,24 @@ func writeLogsAndMessages(logs *io.PipeReader, logfile string) {
 
 // Obtain parameters from provided input files
 func processEnumInputFiles(args *enumArgs) error {
-	var err error
+	if args.Options.BruteForcing && len(args.Filepaths.BruteWordlist) > 0 {
+		for _, f := range args.Filepaths.BruteWordlist {
+			list, err := config.GetListFromFile(f)
+			if err != nil {
+				return fmt.Errorf("Failed to parse the brute force wordlist file: %v", err)
+			}
 
-	if args.Options.BruteForcing && args.Filepaths.BruteWordlist != "" {
-		args.BruteWordList, err = config.GetListFromFile(args.Filepaths.BruteWordlist)
-		if err != nil {
-			return fmt.Errorf("Failed to parse the brute force wordlist file: %v", err)
+			args.BruteWordList = utils.UniqueAppend(args.BruteWordList, list...)
 		}
 	}
-	if !args.Options.NoAlts && args.Filepaths.AltWordlist != "" {
-		args.AltWordList, err = config.GetListFromFile(args.Filepaths.AltWordlist)
-		if err != nil {
-			return fmt.Errorf("Failed to parse the alterations wordlist file: %v", err)
+	if !args.Options.NoAlts && len(args.Filepaths.AltWordlist) > 0 {
+		for _, f := range args.Filepaths.AltWordlist {
+			list, err := config.GetListFromFile(f)
+			if err != nil {
+				return fmt.Errorf("Failed to parse the alterations wordlist file: %v", err)
+			}
+
+			args.AltWordList = utils.UniqueAppend(args.AltWordList, list...)
 		}
 	}
 	if args.Filepaths.Blacklist != "" {
@@ -449,26 +467,35 @@ func processEnumInputFiles(args *enumArgs) error {
 		}
 		args.Included = utils.UniqueAppend(args.Included, list...)
 	}
-	if args.Filepaths.Names != "" {
-		list, err := config.GetListFromFile(args.Filepaths.Names)
-		if err != nil {
-			return fmt.Errorf("Failed to parse the subdomain names file: %v", err)
+	if len(args.Filepaths.Names) > 0 {
+		for _, f := range args.Filepaths.Names {
+			list, err := config.GetListFromFile(f)
+			if err != nil {
+				return fmt.Errorf("Failed to parse the subdomain names file: %v", err)
+			}
+
+			args.Names = utils.UniqueAppend(args.Names, list...)
 		}
-		args.Names = utils.UniqueAppend(args.Names, list...)
 	}
-	if args.Filepaths.Domains != "" {
-		list, err := config.GetListFromFile(args.Filepaths.Domains)
-		if err != nil {
-			return fmt.Errorf("Failed to parse the domain names file: %v", err)
+	if len(args.Filepaths.Domains) > 0 {
+		for _, f := range args.Filepaths.Domains {
+			list, err := config.GetListFromFile(f)
+			if err != nil {
+				return fmt.Errorf("Failed to parse the domain names file: %v", err)
+			}
+
+			args.Domains = utils.UniqueAppend(args.Domains, list...)
 		}
-		args.Domains = utils.UniqueAppend(args.Domains, list...)
 	}
-	if args.Filepaths.Resolvers != "" {
-		list, err := config.GetListFromFile(args.Filepaths.Resolvers)
-		if err != nil {
-			return fmt.Errorf("Failed to parse the resolver file: %v", err)
+	if len(args.Filepaths.Resolvers) > 0 {
+		for _, f := range args.Filepaths.Resolvers {
+			list, err := config.GetListFromFile(f)
+			if err != nil {
+				return fmt.Errorf("Failed to parse the resolver file: %v", err)
+			}
+
+			args.Resolvers = utils.UniqueAppend(args.Resolvers, list...)
 		}
-		args.Resolvers = utils.UniqueAppend(args.Resolvers, list...)
 	}
 	return nil
 }

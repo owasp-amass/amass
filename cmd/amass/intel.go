@@ -19,7 +19,6 @@ import (
 
 	"github.com/OWASP/Amass/config"
 	"github.com/OWASP/Amass/intel"
-	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/utils"
 	"github.com/fatih/color"
 	homedir "github.com/mitchellh/go-homedir"
@@ -53,11 +52,11 @@ type intelArgs struct {
 	Filepaths struct {
 		ConfigFile   string
 		Directory    string
-		Domains      string
+		Domains      utils.ParseStrings
 		ExcludedSrcs string
 		IncludedSrcs string
 		LogFile      string
-		Resolvers    string
+		Resolvers    utils.ParseStrings
 		TermOut      string
 	}
 }
@@ -89,11 +88,11 @@ func defineIntelOptionFlags(intelFlags *flag.FlagSet, args *intelArgs) {
 func defineIntelFilepathFlags(intelFlags *flag.FlagSet, args *intelArgs) {
 	intelFlags.StringVar(&args.Filepaths.ConfigFile, "config", "", "Path to the INI configuration file. Additional details below")
 	intelFlags.StringVar(&args.Filepaths.Directory, "dir", "", "Path to the directory containing the output files")
-	intelFlags.StringVar(&args.Filepaths.Domains, "df", "", "Path to a file providing root domain names")
+	intelFlags.Var(&args.Filepaths.Domains, "df", "Path to a file providing root domain names")
 	intelFlags.StringVar(&args.Filepaths.ExcludedSrcs, "ef", "", "Path to a file providing data sources to exclude")
 	intelFlags.StringVar(&args.Filepaths.IncludedSrcs, "if", "", "Path to a file providing data sources to include")
 	intelFlags.StringVar(&args.Filepaths.LogFile, "log", "", "Path to the log file where errors will be written")
-	intelFlags.StringVar(&args.Filepaths.Resolvers, "rf", "", "Path to a file providing preferred DNS resolvers")
+	intelFlags.Var(&args.Filepaths.Resolvers, "rf", "Path to a file providing preferred DNS resolvers")
 	intelFlags.StringVar(&args.Filepaths.TermOut, "o", "", "Path to the text file containing terminal stdout/stderr")
 }
 
@@ -182,8 +181,10 @@ func runIntelCommand(clArgs []string) {
 	}
 
 	if len(args.Resolvers) > 0 {
-		ic.Pool.Stop()
-		ic.Pool = resolvers.NewResolverPool(args.Resolvers)
+		if err := ic.Pool.SetResolvers(args.Resolvers); err != nil {
+			r.Fprintf(color.Error, "Failed to set custom DNS resolvers: %v\n", err)
+			os.Exit(1)
+		}
 	}
 
 	if args.Options.ReverseWhois {
@@ -322,19 +323,25 @@ func processIntelInputFiles(args *intelArgs) error {
 		}
 		args.Included = utils.UniqueAppend(args.Included, list...)
 	}
-	if args.Filepaths.Domains != "" {
-		list, err := config.GetListFromFile(args.Filepaths.Domains)
-		if err != nil {
-			return fmt.Errorf("Failed to parse the domain names file: %v", err)
+	if len(args.Filepaths.Domains) > 0 {
+		for _, f := range args.Filepaths.Domains {
+			list, err := config.GetListFromFile(f)
+			if err != nil {
+				return fmt.Errorf("Failed to parse the domain names file: %v", err)
+			}
+
+			args.Domains = utils.UniqueAppend(args.Domains, list...)
 		}
-		args.Domains = utils.UniqueAppend(args.Domains, list...)
 	}
-	if args.Filepaths.Resolvers != "" {
-		list, err := config.GetListFromFile(args.Filepaths.Resolvers)
-		if err != nil {
-			return fmt.Errorf("Failed to parse the resolver file: %v", err)
+	if len(args.Filepaths.Resolvers) > 0 {
+		for _, f := range args.Filepaths.Resolvers {
+			list, err := config.GetListFromFile(f)
+			if err != nil {
+				return fmt.Errorf("Failed to parse the resolver file: %v", err)
+			}
+
+			args.Resolvers = utils.UniqueAppend(args.Resolvers, list...)
 		}
-		args.Resolvers = utils.UniqueAppend(args.Resolvers, list...)
 	}
 	return nil
 }

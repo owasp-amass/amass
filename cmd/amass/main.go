@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	mainUsageMsg = "intel|enum|viz|track|db [options]"
+	mainUsageMsg         = "intel|enum|viz|track|db [options]"
 	exampleConfigFileURL = "https://github.com/OWASP/Amass/blob/master/examples/config.ini"
 	userGuideURL         = "https://github.com/OWASP/Amass/blob/master/doc/user_guide.md"
 )
