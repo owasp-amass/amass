@@ -95,12 +95,12 @@ func (c *Crtsh) executeQuery(domain string) {
 
 	c.SetActive()
 	// Extract the subdomain names from the results
-	var names []string
+	names := utils.NewSet()
 	for _, result := range results {
-		names = utils.UniqueAppend(names, strings.ToLower(utils.RemoveAsteriskLabel(result.Domain)))
+		names.Insert(utils.RemoveAsteriskLabel(result.Domain))
 	}
 
-	for _, name := range names {
+	for _, name := range names.ToSlice() {
 		c.Bus().Publish(requests.NewNameTopic, &requests.DNSRequest{
 			Name:   name,
 			Domain: domain,
