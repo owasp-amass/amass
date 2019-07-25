@@ -91,8 +91,6 @@ loop:
 }
 
 func (r *Robtex) executeDNSQuery(domain string) {
-	var ips []string
-
 	re := r.Config().DomainRegex(domain)
 	if re == nil {
 		return
@@ -106,9 +104,10 @@ func (r *Robtex) executeDNSQuery(domain string) {
 		return
 	}
 
+	ips := utils.NewSet()
 	for _, line := range r.parseDNSJSON(page) {
 		if line.Type == "A" {
-			ips = utils.UniqueAppend(ips, line.Data)
+			ips.Insert(line.Data)
 			// Inform the Address Service of this finding
 			r.Bus().Publish(requests.NewAddrTopic, &requests.AddrRequest{
 				Address: line.Data,
@@ -119,11 +118,11 @@ func (r *Robtex) executeDNSQuery(domain string) {
 		}
 	}
 
-	var names []string
+	names := utils.NewSet()
 	t := time.NewTicker(500 * time.Millisecond)
 	defer t.Stop()
 loop:
-	for _, ip := range ips {
+	for _, ip := range ips.ToSlice() {
 		r.SetActive()
 
 		select {
@@ -138,12 +137,12 @@ loop:
 			}
 
 			for _, line := range r.parseDNSJSON(pdns) {
-				names = utils.UniqueAppend(names, line.Name)
+				names.Insert(line.Name)
 			}
 		}
 	}
 
-	for _, name := range names {
+	for _, name := range names.ToSlice() {
 		if r.Config().IsDomainInScope(name) {
 			r.Bus().Publish(requests.NewNameTopic, &requests.DNSRequest{
 				Name:   name,

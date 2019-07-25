@@ -113,18 +113,18 @@ func (a *AlienVault) executeDNSQuery(domain string) {
 		return
 	}
 
-	var ips []string
-	var names []string
+	ips := utils.NewSet()
+	names := utils.NewSet()
 	for _, sub := range m.Subdomains {
 		n := strings.ToLower(sub.Hostname)
 
 		if re.MatchString(n) {
-			names = append(names, n)
-			ips = append(ips, sub.IP)
+			names.Insert(n)
+			ips.Insert(sub.IP)
 		}
 	}
 
-	for _, name := range names {
+	for _, name := range names.ToSlice() {
 		a.Bus().Publish(requests.NewNameTopic, &requests.DNSRequest{
 			Name:   name,
 			Domain: domain,
@@ -133,7 +133,7 @@ func (a *AlienVault) executeDNSQuery(domain string) {
 		})
 	}
 
-	for _, ip := range ips {
+	for _, ip := range ips.ToSlice() {
 		a.Bus().Publish(requests.NewAddrTopic, &requests.AddrRequest{
 			Address: ip,
 			Tag:     a.SourceType,
@@ -180,15 +180,15 @@ func (a *AlienVault) executeURLQuery(domain string) {
 		return
 	}
 
-	var ips []string
-	var names []string
+	ips := utils.NewSet()
+	names := utils.NewSet()
 	for _, u := range urls.URLs {
 		n := strings.ToLower(u.Hostname)
 
 		if re.MatchString(n) {
-			names = utils.UniqueAppend(names, n)
+			names.Insert(n)
 			if u.Result.Worker.IP != "" {
-				ips = utils.UniqueAppend(ips, u.Result.Worker.IP)
+				ips.Insert(u.Result.Worker.IP)
 			}
 		}
 	}
@@ -218,16 +218,16 @@ func (a *AlienVault) executeURLQuery(domain string) {
 				n := strings.ToLower(u.Hostname)
 
 				if re.MatchString(n) {
-					names = utils.UniqueAppend(names, n)
+					names.Insert(n)
 					if u.Result.Worker.IP != "" {
-						ips = utils.UniqueAppend(ips, u.Result.Worker.IP)
+						ips.Insert(u.Result.Worker.IP)
 					}
 				}
 			}
 		}
 	}
 
-	for _, name := range names {
+	for _, name := range names.ToSlice() {
 		a.Bus().Publish(requests.NewNameTopic, &requests.DNSRequest{
 			Name:   name,
 			Domain: domain,
@@ -236,7 +236,7 @@ func (a *AlienVault) executeURLQuery(domain string) {
 		})
 	}
 
-	for _, ip := range ips {
+	for _, ip := range ips.ToSlice() {
 		a.Bus().Publish(requests.NewAddrTopic, &requests.AddrRequest{
 			Address: ip,
 			Tag:     a.SourceType,
