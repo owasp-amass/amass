@@ -4,7 +4,10 @@
 package sources
 
 import (
+	"bufio"
+	"encoding/json"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/OWASP/Amass/config"
@@ -17,18 +20,65 @@ import (
 
 var (
 	commonCrawlIndexes = []string{
-		"CC-MAIN-2019-04",
-		"CC-MAIN-2018-47",
-		"CC-MAIN-2018-39",
-		"CC-MAIN-2018-17",
-		"CC-MAIN-2018-05",
-		"CC-MAIN-2017-43",
-		"CC-MAIN-2017-26",
-		"CC-MAIN-2017-17",
-		"CC-MAIN-2017-04",
-		"CC-MAIN-2016-44",
-		"CC-MAIN-2016-26",
+		"CC-MAIN-2013-20",
+		"CC-MAIN-2013-48",
+		"CC-MAIN-2014-10",
+		"CC-MAIN-2014-15",
+		"CC-MAIN-2014-23",
+		"CC-MAIN-2014-35",
+		"CC-MAIN-2014-41",
+		"CC-MAIN-2014-42",
+		"CC-MAIN-2014-49",
+		"CC-MAIN-2014-52",
+		"CC-MAIN-2015-06",
+		"CC-MAIN-2015-11",
+		"CC-MAIN-2015-14",
+		"CC-MAIN-2015-18",
+		"CC-MAIN-2015-22",
+		"CC-MAIN-2015-27",
+		"CC-MAIN-2015-32",
+		"CC-MAIN-2015-35",
+		"CC-MAIN-2015-40",
+		"CC-MAIN-2015-48",
+		"CC-MAIN-2016-07",
 		"CC-MAIN-2016-18",
+		"CC-MAIN-2016-22",
+		"CC-MAIN-2016-26",
+		"CC-MAIN-2016-30",
+		"CC-MAIN-2016-36",
+		"CC-MAIN-2016-40",
+		"CC-MAIN-2016-44",
+		"CC-MAIN-2016-50",
+		"CC-MAIN-2017-04",
+		"CC-MAIN-2017-09",
+		"CC-MAIN-2017-13",
+		"CC-MAIN-2017-17",
+		"CC-MAIN-2017-22",
+		"CC-MAIN-2017-26",
+		"CC-MAIN-2017-30",
+		"CC-MAIN-2017-34",
+		"CC-MAIN-2017-39",
+		"CC-MAIN-2017-43",
+		"CC-MAIN-2017-47",
+		"CC-MAIN-2017-51",
+		"CC-MAIN-2018-05",
+		"CC-MAIN-2018-09",
+		"CC-MAIN-2018-13",
+		"CC-MAIN-2018-17",
+		"CC-MAIN-2018-22",
+		"CC-MAIN-2018-26",
+		"CC-MAIN-2018-30",
+		"CC-MAIN-2018-34",
+		"CC-MAIN-2018-39",
+		"CC-MAIN-2018-43",
+		"CC-MAIN-2018-47",
+		"CC-MAIN-2018-51",
+		"CC-MAIN-2019-04",
+		"CC-MAIN-2019-09",
+		"CC-MAIN-2019-13",
+		"CC-MAIN-2019-18",
+		"CC-MAIN-2019-22",
+		"CC-MAIN-2019-26",
 	}
 )
 
@@ -44,7 +94,7 @@ type CommonCrawl struct {
 func NewCommonCrawl(cfg *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool) *CommonCrawl {
 	c := &CommonCrawl{
 		baseURL:    "http://index.commoncrawl.org/",
-		SourceType: requests.SCRAPE,
+		SourceType: requests.API,
 	}
 
 	c.BaseService = *services.NewBaseService(c, "CommonCrawl", cfg, bus, pool)
@@ -76,12 +126,13 @@ func (c *CommonCrawl) processRequests() {
 }
 
 func (c *CommonCrawl) executeQuery(domain string) {
+	filter := utils.NewStringFilter()
 	re := c.Config().DomainRegex(domain)
 	if re == nil {
 		return
 	}
 
-	t := time.NewTicker(time.Second)
+	t := time.NewTicker(500 * time.Millisecond)
 	defer t.Stop()
 
 	for _, index := range commonCrawlIndexes {
@@ -91,31 +142,63 @@ func (c *CommonCrawl) executeQuery(domain string) {
 		case <-c.Quit():
 			return
 		case <-t.C:
-			u := c.getURL(index, domain)
+			u := c.getURL(domain, index)
 			page, err := utils.RequestWebPage(u, nil, nil, "", "")
 			if err != nil {
 				c.Config().Log.Printf("%s: %s: %v", c.String(), u, err)
 				continue
 			}
 
-			for _, sd := range re.FindAllString(page, -1) {
-				c.Bus().Publish(requests.NewNameTopic, &requests.DNSRequest{
-					Name:   cleanName(sd),
-					Domain: domain,
-					Tag:    c.SourceType,
-					Source: c.String(),
-				})
+			for _, url := range c.parseJSON(page) {
+				if name := re.FindString(url); name != "" && !filter.Duplicate(name) {
+					c.Bus().Publish(requests.NewNameTopic, &requests.DNSRequest{
+						Name:   name,
+						Domain: domain,
+						Tag:    c.SourceType,
+						Source: c.String(),
+					})
+				}
 			}
 		}
 	}
 }
 
-func (c *CommonCrawl) getURL(index, domain string) string {
+func (c *CommonCrawl) parseJSON(page string) []string {
+	var urls []string
+	filter := utils.NewStringFilter()
+
+	scanner := bufio.NewScanner(strings.NewReader(page))
+	for scanner.Scan() {
+		// Get the next line of JSON
+		line := scanner.Text()
+		if line == "" {
+			continue
+		}
+
+		var m struct {
+			URL string `json:"url"`
+		}
+		err := json.Unmarshal([]byte(line), &m)
+		if err != nil {
+			continue
+		}
+
+		if !filter.Duplicate(m.URL) {
+			urls = append(urls, m.URL)
+		}
+	}
+	return urls
+}
+
+func (c *CommonCrawl) getURL(domain, index string) string {
 	u, _ := url.Parse(c.baseURL + index + "-index")
 
 	u.RawQuery = url.Values{
-		"url":    {"*." + domain},
-		"output": {"json"},
+		"url":      {"*." + domain},
+		"output":   {"json"},
+		"filter":   {"=status:200"},
+		"fl":       {"url,status"},
+		"pageSize": {"2000"},
 	}.Encode()
 	return u.String()
 }
