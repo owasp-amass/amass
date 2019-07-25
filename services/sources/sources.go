@@ -103,7 +103,7 @@ func cleanName(name string) string {
 }
 
 func crawl(service services.Service, baseURL, baseDomain, subdomain, domain string) ([]string, error) {
-	var results []string
+	results := utils.NewSet()
 
 	maxCrawlSem.Acquire(1)
 	defer maxCrawlSem.Release(1)
@@ -128,12 +128,12 @@ func crawl(service services.Service, baseURL, baseDomain, subdomain, domain stri
 			r.HTMLDoc.Find("a").Each(func(i int, s *goquery.Selection) {
 				if href, ok := s.Attr("href"); ok {
 					if sub := re.FindString(r.JoinURL(href)); sub != "" {
-						results = utils.UniqueAppend(results, cleanName(sub))
+						results.Insert(cleanName(sub))
 					}
 				}
 			})
 		},
 	}).Start()
 
-	return results, nil
+	return results.ToSlice(), nil
 }

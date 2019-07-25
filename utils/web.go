@@ -174,18 +174,18 @@ func namesFromCert(cert *x509.Certificate) []string {
 		}
 	}
 
-	var subdomains []string
+	subdomains := NewSet()
 	// Add the subject common name to the list of subdomain names
 	commonName := RemoveAsteriskLabel(cn)
 	if commonName != "" {
-		subdomains = append(subdomains, commonName)
+		subdomains.Insert(commonName)
 	}
 	// Add the cert DNS names to the list of subdomain names
 	for _, name := range cert.DNSNames {
 		n := RemoveAsteriskLabel(name)
 		if n != "" {
-			subdomains = UniqueAppend(subdomains, n)
+			subdomains.Insert(n)
 		}
 	}
-	return subdomains
+	return subdomains.ToSlice()
 }
