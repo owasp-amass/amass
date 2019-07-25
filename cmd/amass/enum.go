@@ -202,7 +202,7 @@ func runEnumCommand(clArgs []string) {
 
 	rLog, wLog := io.Pipe()
 	e.Config.Log = log.New(wLog, "", log.Lmicroseconds)
-	
+
 	// Check if a configuration file was provided, and if so, load the settings
 	if f, err := config.AcquireConfig(args.Filepaths.Directory, args.Filepaths.ConfigFile, e.Config); err == nil {
 		// Check if a config file was provided that has DNS resolvers specified

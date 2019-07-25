@@ -14,15 +14,15 @@ func main() {
 
 	e := enum.NewEnumeration()
 	if e == nil {
-        return
+		return
 	}
-	
+
 	go func() {
 		for result := range e.Output {
 			fmt.Println(result.Name)
 		}
 	}()
-	
+
 	// Setup the most basic amass configuration
 	e.Config.AddDomain("example.com")
 	e.Start()

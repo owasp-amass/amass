@@ -84,7 +84,7 @@ func NewEnumeration() *Enumeration {
 	if e.Pool == nil {
 		return nil
 	}
-	
+
 	e.dataSources = sources.GetAllSources(e.Config, e.Bus, e.Pool)
 	return e
 }
