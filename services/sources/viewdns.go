@@ -122,18 +122,18 @@ func (v *ViewDNS) executeWhoisQuery(domain string) {
 	re := regexp.MustCompile("<tr><td>([a-zA-Z0-9]{1}[a-zA-Z0-9-]{0,61}[a-zA-Z0-9]{1}[.]{1}[a-zA-Z0-9-]+)</td><td>")
 	subs := re.FindAllStringSubmatch(table, -1)
 
-	var matches []string
+	matches := utils.NewSet()
 	for _, match := range subs {
 		sub := match[1]
 		if sub != "" {
-			matches = utils.UniqueAppend(matches, strings.TrimSpace(sub))
+			matches.Insert(strings.TrimSpace(sub))
 		}
 	}
 
-	if len(matches) > 0 {
+	if matches.Len() > 0 {
 		v.Bus().Publish(requests.NewWhoisTopic, &requests.WhoisRequest{
 			Domain:     domain,
-			NewDomains: matches,
+			NewDomains: matches.ToSlice(),
 			Tag:        v.SourceType,
 			Source:     v.String(),
 		})
