@@ -429,24 +429,28 @@ func writeLogsAndMessages(logs *io.PipeReader, logfile string) {
 // Obtain parameters from provided input files
 func processEnumInputFiles(args *enumArgs) error {
 	if args.Options.BruteForcing && len(args.Filepaths.BruteWordlist) > 0 {
+		set := utils.NewSet(args.BruteWordList...)
 		for _, f := range args.Filepaths.BruteWordlist {
 			list, err := config.GetListFromFile(f)
 			if err != nil {
 				return fmt.Errorf("Failed to parse the brute force wordlist file: %v", err)
 			}
 
-			args.BruteWordList = utils.UniqueAppend(args.BruteWordList, list...)
+			set.InsertMany(list...)
 		}
+		args.BruteWordList = set.ToSlice()
 	}
 	if !args.Options.NoAlts && len(args.Filepaths.AltWordlist) > 0 {
+		set := utils.NewSet(args.AltWordList...)
 		for _, f := range args.Filepaths.AltWordlist {
 			list, err := config.GetListFromFile(f)
 			if err != nil {
 				return fmt.Errorf("Failed to parse the alterations wordlist file: %v", err)
 			}
 
-			args.AltWordList = utils.UniqueAppend(args.AltWordList, list...)
+			set.InsertMany(list...)
 		}
+		args.AltWordList = set.ToSlice()
 	}
 	if args.Filepaths.Blacklist != "" {
 		list, err := config.GetListFromFile(args.Filepaths.Blacklist)

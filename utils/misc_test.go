@@ -66,12 +66,8 @@ func TestUniqueAppend(t *testing.T) {
 	}
 	for _, tt := range tests {
 		s := UniqueAppend(tt.orig, tt.event)
-		i := 0
-		for _, x := range s {
-			if x != tt.expected[i] {
-				t.Errorf("Error in %s, got %s, expected %s.", tt.name, x, tt.expected[i])
-			}
-			i++
+		if len(s) != len(tt.expected) {
+			t.Errorf("Error in %s, got len=%d, expected len=%d.", tt.name, len(s), len(tt.expected))
 		}
 	}
 }
