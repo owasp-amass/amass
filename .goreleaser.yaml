@@ -48,6 +48,11 @@ changelog:
     - '^doc:'
     - '^test:'
 
+release:
+  github:
+    owner: OWASP
+    name: Amass
+
 dockers:
   -
     dockerfile: Dockerfile
