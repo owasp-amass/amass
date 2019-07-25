@@ -54,6 +54,12 @@ func (s *Set) ToSlice() []string {
 	return k
 }
 
+func (s *Set) Union(other *Set) {
+	for k := range other.data {
+		s.Insert(k)
+	}
+}
+
 func (s *Set) Len() int {
 	return len(s.data)
 }

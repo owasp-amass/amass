@@ -57,3 +57,13 @@ func TestSetLen(t *testing.T) {
 		t.Errorf("Got %d, expected %d", set.Len(), expected)
 	}
 }
+
+func TestSetMerge(t *testing.T) {
+	expected := 6
+	set1 := NewSet("test1", "test2", "test3", "test6")
+	set2 := NewSet("test1", "test2", "test3", "test4", "test5")
+	set1.Union(set2)
+	if set1.Len() != expected {
+		t.Errorf("Got %d, expected %d", set1.Len(), expected)
+	}
+}

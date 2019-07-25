@@ -110,12 +110,12 @@ func (u *URLScan) executeQuery(domain string) {
 		}
 	}
 
-	var subs []string
+	subs := utils.NewSet()
 	for _, id := range ids {
-		subs = utils.UniqueAppend(subs, u.getSubsFromResult(id)...)
+		subs.Union(u.getSubsFromResult(id))
 	}
 
-	for _, name := range subs {
+	for _, name := range subs.ToSlice() {
 		if re.MatchString(name) {
 			u.Bus().Publish(requests.NewNameTopic, &requests.DNSRequest{
 				Name:   name,
@@ -127,8 +127,8 @@ func (u *URLScan) executeQuery(domain string) {
 	}
 }
 
-func (u *URLScan) getSubsFromResult(id string) []string {
-	var subs []string
+func (u *URLScan) getSubsFromResult(id string) *utils.Set {
+	subs := utils.NewSet()
 
 	url := u.resultURL(id)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
@@ -144,7 +144,7 @@ func (u *URLScan) getSubsFromResult(id string) []string {
 		} `json:"lists"`
 	}
 	if err := json.Unmarshal([]byte(page), &data); err == nil {
-		subs = utils.UniqueAppend(subs, data.Lists.Subdomains...)
+		subs.InsertMany(data.Lists.Subdomains...)
 	}
 	return subs
 }
