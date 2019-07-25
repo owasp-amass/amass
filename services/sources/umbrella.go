@@ -173,24 +173,24 @@ type rWhoisResponse struct {
 }
 
 func (u *Umbrella) collateEmails(record *whoisRecord) []string {
-	var emails []string
+	emails := utils.NewSet()
 
 	if u.validateScope(record.AdminContactEmail) {
-		emails = utils.UniqueAppend(emails, record.AdminContactEmail)
+		emails.InsertMany(record.AdminContactEmail)
 	}
 	if u.validateScope(record.BillingContactEmail) {
-		emails = utils.UniqueAppend(emails, record.BillingContactEmail)
+		emails.InsertMany(record.BillingContactEmail)
 	}
 	if u.validateScope(record.RegistrantEmail) {
-		emails = utils.UniqueAppend(emails, record.RegistrantEmail)
+		emails.InsertMany(record.RegistrantEmail)
 	}
 	if u.validateScope(record.TechContactEmail) {
-		emails = utils.UniqueAppend(emails, record.TechContactEmail)
+		emails.InsertMany(record.TechContactEmail)
 	}
 	if u.validateScope(record.ZoneContactEmail) {
-		emails = utils.UniqueAppend(emails, record.ZoneContactEmail)
+		emails.InsertMany(record.ZoneContactEmail)
 	}
-	return emails
+	return emails.ToSlice()
 }
 
 func (u *Umbrella) queryWhois(domain string) *whoisRecord {
@@ -217,7 +217,7 @@ func (u *Umbrella) queryWhois(domain string) *whoisRecord {
 }
 
 func (u *Umbrella) queryReverseWhois(apiURL string) []string {
-	var domains []string
+	domains := utils.NewSet()
 	headers := u.restHeaders()
 	var whois map[string]rWhoisResponse
 
@@ -227,8 +227,8 @@ func (u *Umbrella) queryReverseWhois(apiURL string) []string {
 		fullAPIURL := fmt.Sprintf("%s&offset=%d", apiURL, count)
 		record, err := utils.RequestWebPage(fullAPIURL, nil, headers, "", "")
 		if err != nil {
-			u.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", u.String(), apiURL, err))
-			return domains
+			u.Config().Log.Printf("%s: %s: %v", u.String(), apiURL, err)
+			return domains.ToSlice()
 		}
 		err = json.Unmarshal([]byte(record), &whois)
 
@@ -237,7 +237,7 @@ func (u *Umbrella) queryReverseWhois(apiURL string) []string {
 			if result.TotalResults > 0 {
 				for _, domain := range result.Domains {
 					if domain.Current {
-						domains = utils.UniqueAppend(domains, domain.Domain)
+						domains.Insert(domain.Domain)
 					}
 				}
 			}
@@ -249,7 +249,7 @@ func (u *Umbrella) queryReverseWhois(apiURL string) []string {
 		u.SetActive()
 		time.Sleep(u.RateLimit)
 	}
-	return domains
+	return domains.ToSlice()
 }
 
 func (u *Umbrella) validateScope(input string) bool {
@@ -269,13 +269,13 @@ func (u *Umbrella) executeWhoisQuery(domain string) {
 		return
 	}
 
-	var domains []string
+	domains := utils.NewSet()
 	emails := u.collateEmails(whoisRecord)
 	if len(emails) > 0 {
 		emailURL := u.reverseWhoisByEmailURL(emails...)
 		for _, d := range u.queryReverseWhois(emailURL) {
 			if !u.Config().IsDomainInScope(d) {
-				domains = utils.UniqueAppend(domains, d)
+				domains.Insert(d)
 			}
 		}
 	}
@@ -290,15 +290,15 @@ func (u *Umbrella) executeWhoisQuery(domain string) {
 		nsURL := u.reverseWhoisByNSURL(nameservers...)
 		for _, d := range u.queryReverseWhois(nsURL) {
 			if !u.Config().IsDomainInScope(d) {
-				domains = utils.UniqueAppend(domains, d)
+				domains.Insert(d)
 			}
 		}
 	}
 
-	if len(domains) > 0 {
+	if domains.Len() > 0 {
 		u.Bus().Publish(requests.NewWhoisTopic, &requests.WhoisRequest{
 			Domain:     domain,
-			NewDomains: domains,
+			NewDomains: domains.ToSlice(),
 			Tag:        u.SourceType,
 			Source:     u.String(),
 		})
