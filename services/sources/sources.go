@@ -49,6 +49,7 @@ func GetAllSources(cfg *config.Config, bus *eb.EventBus, pool *resolvers.Resolve
 		NewEntrust(cfg, bus, pool),
 		NewExalead(cfg, bus, pool),
 		NewGoogle(cfg, bus, pool),
+		NewGoogleCT(cfg, bus, pool),
 		NewHackerOne(cfg, bus, pool),
 		NewHackerTarget(cfg, bus, pool),
 		NewIPv4Info(cfg, bus, pool),
