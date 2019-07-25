@@ -5,7 +5,7 @@ version: 2
 jobs:
   test:
     docker:
-      - image: caffix/amass:release
+      - image: circleci/golang:1.12.7
 
     working_directory: /go/src/github.com/OWASP/Amass
     steps:
@@ -16,32 +16,14 @@ jobs:
             export GO111MODULE=on
             go test -v -race ./...
 
-  binaries:
-    docker:
-      - image: caffix/amass:release
-
-    working_directory: /go/src/github.com/OWASP/Amass
-    steps:
-      - checkout
-      - run:
-          name: "Build Amass and Release"
-          command: |
-            # Prepare Snapcraft authentication credentials for publishing
-            mkdir -p $HOME/.config/snapcraft
-            echo $SNAPCRAFT_LOGIN_FILE | base64 --decode --ignore-garbage > $HOME/.config/snapcraft/snapcraft.cfg
-            # Login to Docker in order for images to be published
-            docker login -u caffix -p $DOCKER_PASS
-            # GoReleaser takes care of the rest
-            curl -sL https://git.io/goreleaser | bash
-
 workflows:
   version: 2
   main:
     jobs:
       - test
-      - binaries:
-          requires:
-            - test
-          filters:
-            branches:
-              only: master
+#      - binaries:
+#          requires:
+#            - test
+#          filters:
+#            branches:
+#              only: master
