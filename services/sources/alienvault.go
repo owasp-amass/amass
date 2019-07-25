@@ -246,14 +246,14 @@ func (a *AlienVault) executeURLQuery(domain string) {
 }
 
 func (a *AlienVault) queryWhoisForEmails(domain string) []string {
-	var emails []string
+	emails := utils.NewSet()
 	u := a.getWhoisURL(domain)
 
 	a.SetActive()
 	page, err := utils.RequestWebPage(u, nil, a.getHeaders(), "", "")
 	if err != nil {
 		a.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", a.String(), u, err))
-		return emails
+		return emails.ToSlice()
 	}
 
 	var m struct {
@@ -266,12 +266,12 @@ func (a *AlienVault) queryWhoisForEmails(domain string) []string {
 	}
 	if err := json.Unmarshal([]byte(page), &m); err != nil {
 		a.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", a.String(), u, err))
-		return emails
+		return emails.ToSlice()
 	} else if m.Count == 0 {
 		a.Bus().Publish(requests.LogTopic,
 			fmt.Sprintf("%s: %s: The query returned zero results", a.String(), u),
 		)
-		return emails
+		return emails.ToSlice()
 	}
 
 	for _, row := range m.Data {
@@ -286,18 +286,18 @@ func (a *AlienVault) queryWhoisForEmails(domain string) []string {
 			// Unfortunately AlienVault doesn't categorize the email addresses so we
 			// have to filter by something we know to avoid adding registrar emails
 			if a.Config().IsDomainInScope(d) {
-				emails = utils.UniqueAppend(emails, email)
+				emails.Insert(email)
 			}
 		}
 	}
-	return emails
+	return emails.ToSlice()
 }
 
 func (a *AlienVault) executeWhoisQuery(domain string) {
 	emails := a.queryWhoisForEmails(domain)
 	time.Sleep(a.RateLimit)
 
-	var newDomains []string
+	newDomains := utils.NewSet()
 	headers := a.getHeaders()
 	for _, email := range emails {
 		a.SetActive()
@@ -318,7 +318,7 @@ func (a *AlienVault) executeWhoisQuery(domain string) {
 		}
 		for _, d := range domains {
 			if !a.Config().IsDomainInScope(d.Domain) {
-				newDomains = utils.UniqueAppend(newDomains, d.Domain)
+				newDomains.Insert(d.Domain)
 			}
 		}
 		time.Sleep(a.RateLimit)
@@ -333,7 +333,7 @@ func (a *AlienVault) executeWhoisQuery(domain string) {
 
 	a.Bus().Publish(requests.NewWhoisTopic, &requests.WhoisRequest{
 		Domain:     domain,
-		NewDomains: newDomains,
+		NewDomains: newDomains.ToSlice(),
 		Tag:        a.SourceType,
 		Source:     a.String(),
 	})
