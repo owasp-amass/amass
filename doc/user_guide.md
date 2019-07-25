@@ -62,32 +62,32 @@ The intel subcommand can help you discover additional root domain names associat
 
 | Flag | Description | Example |
 |------|-------------|---------|
-| -active | Enable active recon methods | amass intel -active -d example.com -p 80,443,8080 |
+| -active | Enable active recon methods | amass intel -active -addr 192.168.2.1-64 -p 80,443,8080 |
 | -addr | IPs and ranges (192.168.1.1-254) separated by commas | amass intel -addr 192.168.2.1-64 |
 | -asn | ASNs separated by commas (can be used multiple times) | amass intel -asn 13374,14618 |
 | -cidr | CIDRs separated by commas (can be used multiple times) | amass intel -cidr 104.154.0.0/15 |
 | -config | Path to the INI configuration file | amass intel -config config.ini |
-| -d | Domain names separated by commas (can be used multiple times) | amass intel -d example.com |
-| -demo | Censor output to make it suitable for demonstrations | amass intel -demo -d example.com |
-| -df | Path to a file providing root domain names | amass intel -df domains.txt |
+| -d | Domain names separated by commas (can be used multiple times) | amass intel -whois -d example.com |
+| -demo | Censor output to make it suitable for demonstrations | amass intel -demo -whois -d example.com |
+| -df | Path to a file providing root domain names | amass intel -whois -df domains.txt |
 | -dir | Path to the directory containing the graph database | amass intel -dir PATH -cidr 104.154.0.0/15 |
-| -ef | Path to a file providing data sources to exclude | amass intel -ef exclude.txt -d example.com |
-| -exclude | Data source names separated by commas to be excluded | amass intel -exclude crtsh -d example.com |
-| -if | Path to a file providing data sources to include | amass intel -if include.txt -d example.com |
-| -include | Data source names separated by commas to be included | amass intel -include crtsh -d example.com |
-| -ip | Show the IP addresses for discovered names | amass intel -ip -d example.com |
-| -ipv4 | Show the IPv4 addresses for discovered names | amass intel -ipv4 -d example.com |
-| -ipv6 | Show the IPv6 addresses for discovered names | amass intel -ipv6 -d example.com |
+| -ef | Path to a file providing data sources to exclude | amass intel -whois -ef exclude.txt -d example.com |
+| -exclude | Data source names separated by commas to be excluded | amass intel -whois -exclude crtsh -d example.com |
+| -if | Path to a file providing data sources to include | amass intel -whois -if include.txt -d example.com |
+| -include | Data source names separated by commas to be included | amass intel -whois -include crtsh -d example.com |
+| -ip | Show the IP addresses for discovered names | amass intel -ip -whois -d example.com |
+| -ipv4 | Show the IPv4 addresses for discovered names | amass intel -ipv4 -whois -d example.com |
+| -ipv6 | Show the IPv6 addresses for discovered names | amass intel -ipv6 -whois -d example.com |
 | -list | Print the names of all available data sources | amass intel -list |
-| -log | Path to the log file where errors will be written | amass intel -log amass.log -d example.com |
-| -max-dns-queries | Maximum number of concurrent DNS queries | amass intel -max-dns-queries 200 -d example.com |
-| -o | Path to the text output file | amass intel -o out.txt -d example.com |
+| -log | Path to the log file where errors will be written | amass intel -log amass.log -whois -d example.com |
+| -max-dns-queries | Maximum number of concurrent DNS queries | amass intel -max-dns-queries 200 -whois -d example.com |
+| -o | Path to the text output file | amass intel -o out.txt -whois -d example.com |
 | -org | Search string provided against AS description information | amass intel -org Facebook |
 | -p | Ports separated by commas (default: 443) | amass intel -cidr 104.154.0.0/15 -p 443,8080 |
-| -r | IP addresses of preferred DNS resolvers (can be used multiple times) | amass intel -r 8.8.8.8,1.1.1.1 -d example.com |
-| -rf | Path to a file providing preferred DNS resolvers | amass intel -rf data/resolvers.txt -d example.com |
-| -src | Print data sources for the discovered names | amass intel -src -d example.com |
-| -whois | All discovered domains are run through reverse whois | amass intel -whois -asn 13374 |
+| -r | IP addresses of preferred DNS resolvers (can be used multiple times) | amass intel -r 8.8.8.8,1.1.1.1 -whois -d example.com |
+| -rf | Path to a file providing preferred DNS resolvers | amass intel -rf data/resolvers.txt -whois -d example.com |
+| -src | Print data sources for the discovered names | amass intel -src -whois -d example.com |
+| -whois | All discovered domains are run through reverse whois | amass intel -asn 13374 |
 
 ### The 'enum' Subcommand
 
@@ -319,23 +319,26 @@ import(
     "math/rand"
     "time"
 
-    "github.com/OWASP/Amass/amass"
+    "github.com/OWASP/Amass/enum"
 )
 
 func main() {
     // Seed the default pseudo-random number generator
     rand.Seed(time.Now().UTC().UnixNano())
 
-    enum := amass.NewEnumeration()
-    // Setup the most basic amass configuration
-    enum.Config.AddDomain("example.com")
+    e := enum.NewEnumeration()
+    if e == nil {
+        return
+    }
 
     go func() {
-        for result := range enum.Output {
+        for result := range e.Output {
             fmt.Println(result.Name)
         }
     }()
 
-    enum.Start()
+    // Setup the most basic amass configuration
+    e.Config.AddDomain("example.com")
+    e.Start()
 }
 ```
