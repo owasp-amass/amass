@@ -65,8 +65,8 @@ func (m *Mnemonic) executeDNSQuery(domain string) {
 		return
 	}
 
-	var ips []string
-	var names []string
+	ips := utils.NewSet()
+	names := utils.NewSet()
 	scanner := bufio.NewScanner(strings.NewReader(page))
 	for scanner.Scan() {
 		// Get the next line of JSON
@@ -85,12 +85,12 @@ func (m *Mnemonic) executeDNSQuery(domain string) {
 		}
 
 		if (j.Type == "a" || j.Type == "aaaa") && m.Config().IsDomainInScope(j.Query) {
-			ips = utils.UniqueAppend(ips, j.Answer)
-			names = utils.UniqueAppend(names, j.Query)
+			ips.Insert(j.Answer)
+			names.Insert(j.Query)
 		}
 	}
 
-	for _, name := range names {
+	for _, name := range names.ToSlice() {
 		m.Bus().Publish(requests.NewNameTopic, &requests.DNSRequest{
 			Name:   name,
 			Domain: domain,
@@ -99,7 +99,7 @@ func (m *Mnemonic) executeDNSQuery(domain string) {
 		})
 	}
 
-	for _, ip := range ips {
+	for _, ip := range ips.ToSlice() {
 		// Inform the Address Service of this finding
 		m.Bus().Publish(requests.NewAddrTopic, &requests.AddrRequest{
 			Address: ip,
