@@ -76,7 +76,9 @@ func NewResolverPool(addrs []string) *ResolverPool {
 		addrs = DefaultPublicResolvers
 	}
 
-	rp.SetResolvers(addrs)
+	if err := rp.SetResolvers(addrs); err != nil {
+		return nil
+	}
 	return rp
 }
 
@@ -91,10 +93,15 @@ func (rp *ResolverPool) Stop() {
 // NextResolver returns a randomly selected Resolver from the pool that has availability.
 func (rp *ResolverPool) NextResolver() *Resolver {
 	var attempts int
-	max := len(rp.Resolvers)
+
 	for {
+		max := len(rp.Resolvers)
+		if max == 0 {
+			break
+		}
+
 		rnd := rand.Int()
-		r := rp.Resolvers[rnd%len(rp.Resolvers)]
+		r := rp.Resolvers[rnd%max]
 
 		if r.currentScore() > 50 && r.Available() {
 			return r
@@ -113,6 +120,7 @@ func (rp *ResolverPool) NextResolver() *Resolver {
 		attempts = 0
 		time.Sleep(time.Duration(randomInt(100, 1000)) * time.Millisecond)
 	}
+	return nil
 }
 
 // SetResolvers modifies the set of resolvers.
@@ -206,13 +214,20 @@ func (rp *ResolverPool) Resolve(name, qtype string, priority int) ([]requests.DN
 		num = 3
 	}
 
+	var queries int
 	ch := make(chan *resolveVote, num)
 	for i := 0; i < num; i++ {
-		go rp.queryResolver(rp.NextResolver(), ch, name, qtype, priority)
+		r := rp.NextResolver()
+		if r == nil {
+			break
+		}
+
+		go rp.queryResolver(r, ch, name, qtype, priority)
+		queries++
 	}
 
 	var votes []*resolveVote
-	for i := 0; i < num; i++ {
+	for i := 0; i < queries; i++ {
 		select {
 		case v := <-ch:
 			votes = append(votes, v)
@@ -265,7 +280,7 @@ func (rp *ResolverPool) ReverseDNS(addr string) (string, string, error) {
 func (rp *ResolverPool) performElection(votes []*resolveVote, name, qtype string) ([]requests.DNSAnswer, error) {
 	if len(votes) == 1 {
 		return votes[0].Answers, votes[0].Err
-	} else if votes[0].Err != nil && votes[1].Err != nil && votes[2].Err != nil {
+	} else if len(votes) < 3 || (votes[0].Err != nil && votes[1].Err != nil && votes[2].Err != nil) {
 		return []requests.DNSAnswer{}, votes[0].Err
 	}
 

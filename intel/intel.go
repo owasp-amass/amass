@@ -46,7 +46,7 @@ type IntelCollection struct {
 
 // NewIntelCollection returns an initialized IntelCollection object that has not been started yet.
 func NewIntelCollection() *IntelCollection {
-	return &IntelCollection{
+	ic := &IntelCollection{
 		Config:     &config.Config{Log: log.New(ioutil.Discard, "", 0)},
 		Bus:        eb.NewEventBus(),
 		Pool:       resolvers.NewResolverPool(nil),
@@ -57,6 +57,10 @@ func NewIntelCollection() *IntelCollection {
 		domainChan: make(chan *requests.Output, 100),
 		activeChan: make(chan struct{}, 100),
 	}
+	if ic.Pool == nil {
+		return nil
+	}
+	return ic
 }
 
 // HostedDomains uses open source intelligence to discover root domain names in the target infrastructure.

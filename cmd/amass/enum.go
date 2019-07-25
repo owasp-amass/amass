@@ -162,22 +162,19 @@ func runEnumCommand(clArgs []string) {
 		commandUsage(enumUsageMsg, enumCommand, enumBuf)
 		return
 	}
+	// Check if the user has requested the data source names
+	if args.Options.ListSources {
+		for _, name := range GetAllSourceNames() {
+			g.Println(name)
+		}
+		return
+	}
 
 	if len(args.AltWordListMask) > 0 {
 		args.AltWordList = utils.UniqueAppend(args.AltWordList, args.AltWordListMask...)
 	}
 	if len(args.BruteWordListMask) > 0 {
 		args.BruteWordList = utils.UniqueAppend(args.BruteWordList, args.BruteWordListMask...)
-	}
-
-	// Check if the user has requested the data source names
-	if args.Options.ListSources {
-		e := enum.NewEnumeration()
-
-		for _, name := range e.GetAllSourceNames() {
-			g.Println(name)
-		}
-		return
 	}
 	// Some input validation
 	if args.Options.Passive && (args.Options.IPs || args.Options.IPv4 || args.Options.IPv6) {
@@ -197,10 +194,15 @@ func runEnumCommand(clArgs []string) {
 	// Seed the default pseudo-random number generator
 	rand.Seed(time.Now().UTC().UnixNano())
 
-	rLog, wLog := io.Pipe()
 	e := enum.NewEnumeration()
-	e.Config.Log = log.New(wLog, "", log.Lmicroseconds)
+	if e == nil {
+		r.Fprintf(color.Error, "%s\n", "No DNS resolvers passed the sanity check")
+		os.Exit(1)
+	}
 
+	rLog, wLog := io.Pipe()
+	e.Config.Log = log.New(wLog, "", log.Lmicroseconds)
+	
 	// Check if a configuration file was provided, and if so, load the settings
 	if f, err := config.AcquireConfig(args.Filepaths.Directory, args.Filepaths.ConfigFile, e.Config); err == nil {
 		// Check if a config file was provided that has DNS resolvers specified

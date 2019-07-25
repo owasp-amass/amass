@@ -159,10 +159,15 @@ func runIntelCommand(clArgs []string) {
 		os.Exit(1)
 	}
 
-	rLog, wLog := io.Pipe()
 	ic := intel.NewIntelCollection()
-	ic.Config.Log = log.New(wLog, "", log.Lmicroseconds)
+	if ic == nil {
+		r.Fprintf(color.Error, "%s\n", "No DNS resolvers passed the sanity check")
+		os.Exit(1)
+	}
 
+	rLog, wLog := io.Pipe()
+	ic.Config.Log = log.New(wLog, "", log.Lmicroseconds)
+	
 	// Check if a configuration file was provided, and if so, load the settings
 	if f, err := config.AcquireConfig(args.Filepaths.Directory, args.Filepaths.ConfigFile, ic.Config); err == nil {
 		// Check if a config file was provided that has DNS resolvers specified

@@ -81,6 +81,10 @@ func NewEnumeration() *Enumeration {
 		filter:      utils.NewStringFilter(),
 		outputQueue: new(utils.Queue),
 	}
+	if e.Pool == nil {
+		return nil
+	}
+	
 	e.dataSources = sources.GetAllSources(e.Config, e.Bus, e.Pool)
 	return e
 }
