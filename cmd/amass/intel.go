@@ -159,7 +159,7 @@ func runIntelCommand(clArgs []string) {
 		os.Exit(1)
 	}
 
-	ic := intel.NewIntelCollection()
+	ic := intel.NewCollection()
 	if ic == nil {
 		r.Fprintf(color.Error, "%s\n", "No DNS resolvers passed the sanity check")
 		os.Exit(1)
@@ -167,7 +167,7 @@ func runIntelCommand(clArgs []string) {
 
 	rLog, wLog := io.Pipe()
 	ic.Config.Log = log.New(wLog, "", log.Lmicroseconds)
-	
+
 	// Check if a configuration file was provided, and if so, load the settings
 	if f, err := config.AcquireConfig(args.Filepaths.Directory, args.Filepaths.ConfigFile, ic.Config); err == nil {
 		// Check if a config file was provided that has DNS resolvers specified
@@ -210,7 +210,7 @@ func runIntelCommand(clArgs []string) {
 	processIntelOutput(ic, &args, rLog)
 }
 
-func processIntelOutput(ic *intel.IntelCollection, args *intelArgs, pipe *io.PipeReader) {
+func processIntelOutput(ic *intel.Collection, args *intelArgs, pipe *io.PipeReader) {
 	var err error
 
 	// Prepare output file paths
@@ -272,7 +272,7 @@ func processIntelOutput(ic *intel.IntelCollection, args *intelArgs, pipe *io.Pip
 }
 
 // If the user interrupts the program, print the summary information
-func intelSignalHandler(ic *intel.IntelCollection) {
+func intelSignalHandler(ic *intel.Collection) {
 	quit := make(chan os.Signal, 1)
 
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
@@ -352,7 +352,7 @@ func processIntelInputFiles(args *intelArgs) error {
 }
 
 // Setup the amass intelligence collection settings
-func updateIntelConfiguration(ic *intel.IntelCollection, args *intelArgs) error {
+func updateIntelConfiguration(ic *intel.Collection, args *intelArgs) error {
 	if args.Options.Active {
 		ic.Config.Active = true
 	}
