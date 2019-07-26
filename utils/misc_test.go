@@ -54,24 +54,6 @@ func TestNewUniqueElements(t *testing.T) {
 	}
 }
 
-func TestUniqueAppend(t *testing.T) {
-	tests := []struct {
-		name     string
-		orig     []string
-		event    string
-		expected []string
-	}{
-		{"Test 1: Duplicate elements", []string{"sub1.owasp.org", "sub2.owasp.org"}, "sub2.owasp.org", []string{"sub1.owasp.org", "sub2.owasp.org"}},
-		{"Test 2: New element", []string{"sub1.owasp.org", "sub2.owasp.org", "sub3.owasp.org"}, "sub4.owasp.org", []string{"sub1.owasp.org", "sub2.owasp.org", "sub3.owasp.org", "sub4.owasp.org"}},
-	}
-	for _, tt := range tests {
-		s := UniqueAppend(tt.orig, tt.event)
-		if len(s) != len(tt.expected) {
-			t.Errorf("Error in %s, got len=%d, expected len=%d.", tt.name, len(s), len(tt.expected))
-		}
-	}
-}
-
 func TestRemoveAsteriskLabel(t *testing.T) {
 	tests := []struct {
 		name     string

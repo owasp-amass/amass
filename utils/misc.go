@@ -121,11 +121,6 @@ func NewUniqueElements(orig []string, add ...string) []string {
 	return n
 }
 
-// UniqueAppend behaves like the Go append, but does not add duplicate elements.
-func UniqueAppend(orig []string, add ...string) []string {
-	return orig
-}
-
 // CopyString return a new string variable with the same value as the parameter.
 func CopyString(src string) string {
 	str := make([]byte, len(src))
