@@ -125,7 +125,7 @@ func (c *CIRCL) passiveDNSJSON(page, domain string) {
 		}
 	}
 
-	for _, name := range unique.ToSlice() {
+	for name := range unique {
 		c.Bus().Publish(requests.NewNameTopic, &requests.DNSRequest{
 			Name:   name,
 			Domain: domain,

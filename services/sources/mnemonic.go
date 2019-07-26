@@ -91,7 +91,7 @@ func (m *Mnemonic) executeDNSQuery(domain string) {
 		}
 	}
 
-	for _, name := range names.ToSlice() {
+	for name := range names {
 		m.Bus().Publish(requests.NewNameTopic, &requests.DNSRequest{
 			Name:   name,
 			Domain: domain,
@@ -100,7 +100,7 @@ func (m *Mnemonic) executeDNSQuery(domain string) {
 		})
 	}
 
-	for _, ip := range ips.ToSlice() {
+	for ip := range ips {
 		// Inform the Address Service of this finding
 		m.Bus().Publish(requests.NewAddrTopic, &requests.AddrRequest{
 			Address: ip,

@@ -162,7 +162,7 @@ func (as *AddressService) updateConfigWithNetblocks(req *requests.ASNRequest) {
 		filter.Duplicate(cidr.String())
 	}
 
-	for _, block := range req.Netblocks.ToSlice() {
+	for block := range req.Netblocks {
 		if filter.Duplicate(block) {
 			continue
 		}
@@ -198,7 +198,7 @@ loop:
 			break loop
 		case a := <-asnchan:
 			updateCache(a)
-			for _, block := range a.Netblocks.ToSlice() {
+			for block := range a.Netblocks {
 				if _, cidr, err := net.ParseCIDR(block); err == nil && cidr.Contains(ip) {
 					break loop
 				}
@@ -260,7 +260,7 @@ func ipSearch(addr string) *requests.ASNRequest {
 	var desc string
 	ip := net.ParseIP(addr)
 	for asn, record := range netCache {
-		for _, netblock := range record.Netblocks.ToSlice() {
+		for netblock := range record.Netblocks {
 			_, ipnet, err := net.ParseCIDR(netblock)
 			if err != nil {
 				continue

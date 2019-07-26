@@ -116,7 +116,7 @@ func (u *URLScan) executeQuery(domain string) {
 		subs.Union(u.getSubsFromResult(id))
 	}
 
-	for _, name := range subs.ToSlice() {
+	for name := range subs {
 		if re.MatchString(name) {
 			u.Bus().Publish(requests.NewNameTopic, &requests.DNSRequest{
 				Name:   name,

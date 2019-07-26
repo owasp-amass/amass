@@ -125,7 +125,7 @@ func (a *AlienVault) executeDNSQuery(domain string) {
 		}
 	}
 
-	for _, name := range names.ToSlice() {
+	for name := range names {
 		a.Bus().Publish(requests.NewNameTopic, &requests.DNSRequest{
 			Name:   name,
 			Domain: domain,
@@ -134,7 +134,7 @@ func (a *AlienVault) executeDNSQuery(domain string) {
 		})
 	}
 
-	for _, ip := range ips.ToSlice() {
+	for ip := range ips {
 		a.Bus().Publish(requests.NewAddrTopic, &requests.AddrRequest{
 			Address: ip,
 			Tag:     a.SourceType,
@@ -228,7 +228,7 @@ func (a *AlienVault) executeURLQuery(domain string) {
 		}
 	}
 
-	for _, name := range names.ToSlice() {
+	for name := range names {
 		a.Bus().Publish(requests.NewNameTopic, &requests.DNSRequest{
 			Name:   name,
 			Domain: domain,
@@ -237,7 +237,7 @@ func (a *AlienVault) executeURLQuery(domain string) {
 		})
 	}
 
-	for _, ip := range ips.ToSlice() {
+	for ip := range ips {
 		a.Bus().Publish(requests.NewAddrTopic, &requests.AddrRequest{
 			Address: ip,
 			Tag:     a.SourceType,

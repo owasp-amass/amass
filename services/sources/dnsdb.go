@@ -129,7 +129,7 @@ func (d *DNSDB) passiveDNSJSON(page, domain string) {
 		}
 	}
 
-	for _, name := range unique.ToSlice() {
+	for name := range unique {
 		d.Bus().Publish(requests.NewNameTopic, &requests.DNSRequest{
 			Name:   name,
 			Domain: domain,
@@ -152,7 +152,7 @@ func (d *DNSDB) scrape(domain string) {
 	names.Union(d.pullPageNames(page, domain))
 
 	// Share what has been discovered so far
-	for _, name := range names.ToSlice() {
+	for name := range names {
 		d.Bus().Publish(requests.NewNameTopic, &requests.DNSRequest{
 			Name:   name,
 			Domain: domain,
@@ -164,7 +164,7 @@ func (d *DNSDB) scrape(domain string) {
 	t := time.NewTicker(d.RateLimit)
 	defer t.Stop()
 loop:
-	for _, name := range names.ToSlice() {
+	for name := range names {
 		select {
 		case <-d.Quit():
 			break loop
@@ -180,7 +180,7 @@ loop:
 				continue
 			}
 
-			for _, result := range d.pullPageNames(another, domain).ToSlice() {
+			for result := range d.pullPageNames(another, domain) {
 				d.Bus().Publish(requests.NewNameTopic, &requests.DNSRequest{
 					Name:   result,
 					Domain: domain,

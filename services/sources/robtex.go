@@ -123,7 +123,7 @@ func (r *Robtex) executeDNSQuery(domain string) {
 	t := time.NewTicker(500 * time.Millisecond)
 	defer t.Stop()
 loop:
-	for _, ip := range ips.ToSlice() {
+	for ip := range ips {
 		r.SetActive()
 
 		select {
@@ -143,7 +143,7 @@ loop:
 		}
 	}
 
-	for _, name := range names.ToSlice() {
+	for name := range names {
 		if r.Config().IsDomainInScope(name) {
 			r.Bus().Publish(requests.NewNameTopic, &requests.DNSRequest{
 				Name:   name,

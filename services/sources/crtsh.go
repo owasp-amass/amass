@@ -101,7 +101,7 @@ func (c *Crtsh) executeQuery(domain string) {
 		names.Insert(utils.RemoveAsteriskLabel(result.Domain))
 	}
 
-	for _, name := range names.ToSlice() {
+	for name := range names {
 		c.Bus().Publish(requests.NewNameTopic, &requests.DNSRequest{
 			Name:   name,
 			Domain: domain,
