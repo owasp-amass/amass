@@ -14,6 +14,7 @@ import (
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
+	"github.com/OWASP/Amass/stringset"
 	"github.com/OWASP/Amass/utils"
 )
 
@@ -122,7 +123,7 @@ func (v *ViewDNS) executeWhoisQuery(domain string) {
 	re := regexp.MustCompile("<tr><td>([a-zA-Z0-9]{1}[a-zA-Z0-9-]{0,61}[a-zA-Z0-9]{1}[.]{1}[a-zA-Z0-9-]+)</td><td>")
 	subs := re.FindAllStringSubmatch(table, -1)
 
-	matches := utils.NewSet()
+	matches := stringset.New()
 	for _, match := range subs {
 		sub := match[1]
 		if sub != "" {
@@ -130,7 +131,7 @@ func (v *ViewDNS) executeWhoisQuery(domain string) {
 		}
 	}
 
-	if matches.Len() > 0 {
+	if len(matches) > 0 {
 		v.Bus().Publish(requests.NewWhoisTopic, &requests.WhoisRequest{
 			Domain:     domain,
 			NewDomains: matches.ToSlice(),

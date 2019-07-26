@@ -16,7 +16,7 @@ import (
 
 	"github.com/OWASP/Amass/config"
 	"github.com/OWASP/Amass/requests"
-	"github.com/OWASP/Amass/utils"
+	"github.com/OWASP/Amass/stringset"
 	"github.com/OWASP/Amass/utils/viz"
 	"github.com/cayleygraph/cayley"
 	"github.com/cayleygraph/cayley/graph"
@@ -445,7 +445,7 @@ func (g *Graph) EnumerationList() []string {
 	it, _ := p.BuildIterator().Optimize()
 	defer it.Close()
 
-	ids := utils.NewSet()
+	ids := stringset.New()
 	ctx := context.TODO()
 	for it.Next(ctx) {
 		token := it.Result()
@@ -469,7 +469,7 @@ func (g *Graph) EnumerationDomains(uuid string) []string {
 	it, _ := p.BuildIterator().Optimize()
 	defer it.Close()
 
-	domains := utils.NewSet()
+	domains := stringset.New()
 	ctx := context.TODO()
 	for it.Next(ctx) {
 		token := it.Result()
@@ -588,7 +588,7 @@ func (g *Graph) getSubdomainNames(domain, uuid string, marked bool) []string {
 }
 
 func (g *Graph) getCNAMEs(sub, uuid string) []string {
-	names := utils.NewSet(sub)
+	names := stringset.New(sub)
 
 	cname := quad.String(sub)
 	for i := 0; i < 10; i++ {

@@ -14,6 +14,7 @@ import (
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
+	"github.com/OWASP/Amass/stringset"
 	"github.com/OWASP/Amass/utils"
 )
 
@@ -65,8 +66,8 @@ func (m *Mnemonic) executeDNSQuery(domain string) {
 		return
 	}
 
-	ips := utils.NewSet()
-	names := utils.NewSet()
+	ips := stringset.New()
+	names := stringset.New()
 	scanner := bufio.NewScanner(strings.NewReader(page))
 	for scanner.Scan() {
 		// Get the next line of JSON

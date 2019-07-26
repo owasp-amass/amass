@@ -16,6 +16,7 @@ import (
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
+	"github.com/OWASP/Amass/stringset"
 	"github.com/OWASP/Amass/utils"
 )
 
@@ -107,7 +108,7 @@ func (d *DNSDB) passiveDNSJSON(page, domain string) {
 		return
 	}
 
-	unique := utils.NewSet()
+	unique := stringset.New()
 	scanner := bufio.NewScanner(strings.NewReader(page))
 	for scanner.Scan() {
 		// Get the next line of JSON
@@ -146,7 +147,7 @@ func (d *DNSDB) scrape(domain string) {
 		return
 	}
 
-	names := utils.NewSet()
+	names := stringset.New()
 	names.Union(d.followIndicies(page, domain))
 	names.Union(d.pullPageNames(page, domain))
 
@@ -208,9 +209,9 @@ func (d *DNSDB) getURL(domain, sub string) string {
 
 var dnsdbIndexRE = regexp.MustCompile(`<a href="[a-zA-Z0-9]">([a-zA-Z0-9])</a>`)
 
-func (d *DNSDB) followIndicies(page, domain string) *utils.Set {
+func (d *DNSDB) followIndicies(page, domain string) stringset.Set {
 	var indicies []string
-	unique := utils.NewSet()
+	unique := stringset.New()
 	idx := dnsdbIndexRE.FindAllStringSubmatch(page, -1)
 	if idx == nil {
 		return unique
@@ -236,8 +237,8 @@ func (d *DNSDB) followIndicies(page, domain string) *utils.Set {
 	return unique
 }
 
-func (d *DNSDB) pullPageNames(page, domain string) *utils.Set {
-	names := utils.NewSet()
+func (d *DNSDB) pullPageNames(page, domain string) stringset.Set {
+	names := stringset.New()
 
 	if re := d.Config().DomainRegex(domain); re != nil {
 		for _, name := range re.FindAllString(page, -1) {

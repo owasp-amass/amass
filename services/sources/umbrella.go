@@ -14,6 +14,7 @@ import (
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
+	"github.com/OWASP/Amass/stringset"
 	"github.com/OWASP/Amass/utils"
 )
 
@@ -173,7 +174,7 @@ type rWhoisResponse struct {
 }
 
 func (u *Umbrella) collateEmails(record *whoisRecord) []string {
-	emails := utils.NewSet()
+	emails := stringset.New()
 
 	if u.validateScope(record.AdminContactEmail) {
 		emails.InsertMany(record.AdminContactEmail)
@@ -217,7 +218,7 @@ func (u *Umbrella) queryWhois(domain string) *whoisRecord {
 }
 
 func (u *Umbrella) queryReverseWhois(apiURL string) []string {
-	domains := utils.NewSet()
+	domains := stringset.New()
 	headers := u.restHeaders()
 	var whois map[string]rWhoisResponse
 
@@ -269,7 +270,7 @@ func (u *Umbrella) executeWhoisQuery(domain string) {
 		return
 	}
 
-	domains := utils.NewSet()
+	domains := stringset.New()
 	emails := u.collateEmails(whoisRecord)
 	if len(emails) > 0 {
 		emailURL := u.reverseWhoisByEmailURL(emails...)
@@ -295,7 +296,7 @@ func (u *Umbrella) executeWhoisQuery(domain string) {
 		}
 	}
 
-	if domains.Len() > 0 {
+	if len(domains) > 0 {
 		u.Bus().Publish(requests.NewWhoisTopic, &requests.WhoisRequest{
 			Domain:     domain,
 			NewDomains: domains.ToSlice(),

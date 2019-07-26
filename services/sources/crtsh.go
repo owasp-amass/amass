@@ -13,6 +13,7 @@ import (
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
+	"github.com/OWASP/Amass/stringset"
 	"github.com/OWASP/Amass/utils"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq" // Need the postgres driver
@@ -95,7 +96,7 @@ func (c *Crtsh) executeQuery(domain string) {
 
 	c.SetActive()
 	// Extract the subdomain names from the results
-	names := utils.NewSet()
+	names := stringset.New()
 	for _, result := range results {
 		names.Insert(utils.RemoveAsteriskLabel(result.Domain))
 	}

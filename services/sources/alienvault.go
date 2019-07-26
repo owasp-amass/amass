@@ -16,6 +16,7 @@ import (
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
+	"github.com/OWASP/Amass/stringset"
 	"github.com/OWASP/Amass/utils"
 )
 
@@ -113,8 +114,8 @@ func (a *AlienVault) executeDNSQuery(domain string) {
 		return
 	}
 
-	ips := utils.NewSet()
-	names := utils.NewSet()
+	ips := stringset.New()
+	names := stringset.New()
 	for _, sub := range m.Subdomains {
 		n := strings.ToLower(sub.Hostname)
 
@@ -180,8 +181,8 @@ func (a *AlienVault) executeURLQuery(domain string) {
 		return
 	}
 
-	ips := utils.NewSet()
-	names := utils.NewSet()
+	ips := stringset.New()
+	names := stringset.New()
 	for _, u := range urls.URLs {
 		n := strings.ToLower(u.Hostname)
 
@@ -246,7 +247,7 @@ func (a *AlienVault) executeURLQuery(domain string) {
 }
 
 func (a *AlienVault) queryWhoisForEmails(domain string) []string {
-	emails := utils.NewSet()
+	emails := stringset.New()
 	u := a.getWhoisURL(domain)
 
 	a.SetActive()
@@ -297,7 +298,7 @@ func (a *AlienVault) executeWhoisQuery(domain string) {
 	emails := a.queryWhoisForEmails(domain)
 	time.Sleep(a.RateLimit)
 
-	newDomains := utils.NewSet()
+	newDomains := stringset.New()
 	headers := a.getHeaders()
 	for _, email := range emails {
 		a.SetActive()

@@ -23,6 +23,7 @@ import (
 
 	"github.com/OWASP/Amass/config"
 	"github.com/OWASP/Amass/enum"
+	"github.com/OWASP/Amass/stringset"
 	"github.com/OWASP/Amass/utils"
 	"github.com/fatih/color"
 	homedir "github.com/mitchellh/go-homedir"
@@ -429,7 +430,7 @@ func writeLogsAndMessages(logs *io.PipeReader, logfile string) {
 // Obtain parameters from provided input files
 func processEnumInputFiles(args *enumArgs) error {
 	if args.Options.BruteForcing && len(args.Filepaths.BruteWordlist) > 0 {
-		set := utils.NewSet(args.BruteWordList...)
+		set := stringset.New(args.BruteWordList...)
 		for _, f := range args.Filepaths.BruteWordlist {
 			list, err := config.GetListFromFile(f)
 			if err != nil {
@@ -441,7 +442,7 @@ func processEnumInputFiles(args *enumArgs) error {
 		args.BruteWordList = set.ToSlice()
 	}
 	if !args.Options.NoAlts && len(args.Filepaths.AltWordlist) > 0 {
-		set := utils.NewSet(args.AltWordList...)
+		set := stringset.New(args.AltWordList...)
 		for _, f := range args.Filepaths.AltWordlist {
 			list, err := config.GetListFromFile(f)
 			if err != nil {

@@ -18,6 +18,7 @@ import (
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
+	"github.com/OWASP/Amass/stringset"
 	"github.com/OWASP/Amass/utils"
 )
 
@@ -219,11 +220,11 @@ func (r *RADb) executeASNQuery(asn int, prefix string) {
 	r.SetActive()
 	time.Sleep(r.RateLimit)
 
-	var blocks []string
+	blocks := stringset.New()
 	if prefix != "" {
-		blocks = []string{prefix}
+		blocks.Insert(prefix)
 	}
-	blocks = utils.UniqueAppend(blocks, r.netblocks(asn)...)
+	blocks.Union(r.netblocks(asn))
 
 	if len(blocks) == 0 {
 		r.Bus().Publish(requests.LogTopic,
@@ -234,7 +235,7 @@ func (r *RADb) executeASNQuery(asn int, prefix string) {
 
 	r.Bus().Publish(requests.NewASNTopic, &requests.ASNRequest{
 		ASN:            asn,
-		Prefix:         blocks[0],
+		Prefix:         prefix,
 		AllocationDate: at,
 		Description:    m.Description,
 		Netblocks:      blocks,
@@ -249,8 +250,8 @@ func (r *RADb) getASNURL(registry, asn string) string {
 	return fmt.Sprintf(format, asn)
 }
 
-func (r *RADb) netblocks(asn int) []string {
-	var netblocks []string
+func (r *RADb) netblocks(asn int) stringset.Set {
+	netblocks := stringset.New()
 
 	r.SetActive()
 	url := r.getNetblocksURL(strconv.Itoa(asn))
@@ -295,7 +296,7 @@ func (r *RADb) netblocks(asn int) []string {
 			if prefix != "" {
 				l := strconv.Itoa(cidr.Length)
 
-				netblocks = utils.UniqueAppend(netblocks, prefix+"/"+l)
+				netblocks.Insert(prefix + "/" + l)
 			}
 		}
 	}

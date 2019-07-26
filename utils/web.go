@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/OWASP/Amass/stringset"
 	"github.com/caffix/cloudflare-roundtripper/cfrt"
 )
 
@@ -174,7 +175,7 @@ func namesFromCert(cert *x509.Certificate) []string {
 		}
 	}
 
-	subdomains := NewSet()
+	subdomains := stringset.New()
 	// Add the subject common name to the list of subdomain names
 	commonName := RemoveAsteriskLabel(cn)
 	if commonName != "" {

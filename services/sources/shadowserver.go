@@ -17,6 +17,7 @@ import (
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
+	"github.com/OWASP/Amass/stringset"
 	"github.com/OWASP/Amass/utils"
 )
 
@@ -98,12 +99,12 @@ func (s *ShadowServer) executeASNQuery(asn int) {
 	}
 
 	time.Sleep(s.RateLimit)
-	req := s.origin(strings.Trim(blocks[0], "/"))
+	req := s.origin(strings.Trim(blocks.ToSlice()[0], "/"))
 	if req == nil {
 		return
 	}
 
-	req.Netblocks = utils.UniqueAppend(req.Netblocks, blocks...)
+	req.Netblocks.Union(blocks)
 	s.Bus().Publish(requests.NewASNTopic, req)
 }
 
@@ -115,7 +116,7 @@ func (s *ShadowServer) executeASNAddrQuery(addr string) {
 	}
 
 	time.Sleep(s.RateLimit)
-	req.Netblocks = utils.UniqueAppend(req.Netblocks, s.netblocks(req.ASN)...)
+	req.Netblocks.Union(s.netblocks(req.ASN))
 	s.Bus().Publish(requests.NewASNTopic, req)
 }
 
@@ -154,14 +155,14 @@ func (s *ShadowServer) origin(addr string) *requests.ASNRequest {
 		Prefix:      strings.TrimSpace(fields[1]),
 		CC:          strings.TrimSpace(fields[3]),
 		Description: strings.TrimSpace(fields[2]) + " - " + strings.TrimSpace(fields[4]),
-		Netblocks:   []string{strings.TrimSpace(fields[1])},
+		Netblocks:   stringset.New(strings.TrimSpace(fields[1])),
 		Tag:         s.SourceType,
 		Source:      s.String(),
 	}
 }
 
-func (s *ShadowServer) netblocks(asn int) []string {
-	var netblocks []string
+func (s *ShadowServer) netblocks(asn int) stringset.Set {
+	netblocks := stringset.New()
 
 	if s.addr == "" {
 		answers, err := s.Pool().Resolve(ShadowServerWhoisURL, "A", resolvers.PriorityHigh)
@@ -200,7 +201,7 @@ func (s *ShadowServer) netblocks(asn int) []string {
 		line := scanner.Text()
 
 		if err := scanner.Err(); err == nil {
-			netblocks = utils.UniqueAppend(netblocks, strings.TrimSpace(line))
+			netblocks.Insert(strings.TrimSpace(line))
 		}
 	}
 

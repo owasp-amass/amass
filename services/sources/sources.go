@@ -14,6 +14,7 @@ import (
 	eb "github.com/OWASP/Amass/eventbus"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
+	"github.com/OWASP/Amass/stringset"
 	"github.com/OWASP/Amass/utils"
 	"github.com/PuerkitoBio/goquery"
 	"github.com/geziyor/geziyor"
@@ -103,7 +104,7 @@ func cleanName(name string) string {
 }
 
 func crawl(service services.Service, baseURL, baseDomain, subdomain, domain string) ([]string, error) {
-	results := utils.NewSet()
+	results := stringset.New()
 
 	maxCrawlSem.Acquire(1)
 	defer maxCrawlSem.Release(1)

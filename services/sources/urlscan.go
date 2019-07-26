@@ -14,6 +14,7 @@ import (
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
+	"github.com/OWASP/Amass/stringset"
 	"github.com/OWASP/Amass/utils"
 )
 
@@ -110,7 +111,7 @@ func (u *URLScan) executeQuery(domain string) {
 		}
 	}
 
-	subs := utils.NewSet()
+	subs := stringset.New()
 	for _, id := range ids {
 		subs.Union(u.getSubsFromResult(id))
 	}
@@ -127,8 +128,8 @@ func (u *URLScan) executeQuery(domain string) {
 	}
 }
 
-func (u *URLScan) getSubsFromResult(id string) *utils.Set {
-	subs := utils.NewSet()
+func (u *URLScan) getSubsFromResult(id string) stringset.Set {
+	subs := stringset.New()
 
 	url := u.resultURL(id)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")

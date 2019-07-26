@@ -15,6 +15,7 @@ import (
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
+	"github.com/OWASP/Amass/stringset"
 	"github.com/OWASP/Amass/utils"
 )
 
@@ -96,7 +97,7 @@ func (c *CIRCL) restURL(domain string) string {
 }
 
 func (c *CIRCL) passiveDNSJSON(page, domain string) {
-	unique := utils.NewSet()
+	unique := stringset.New()
 
 	re := c.Config().DomainRegex(domain)
 	if re == nil {
