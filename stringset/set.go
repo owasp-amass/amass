@@ -1,6 +1,7 @@
 package stringset
 
 import (
+	"fmt"
 	"strings"
 )
 
@@ -60,4 +61,57 @@ func (s Set) Union(other Set) {
 
 func (s Set) Len() int {
 	return len(s)
+}
+
+func (s Set) Subtract(other Set) {
+	for item := range other {
+		if s.Has(item) {
+			s.Remove(item)
+		}
+	}
+}
+
+func (s Set) Intersect(other Set) {
+	intersect := New()
+
+	for item := range other {
+		if s.Has(item) {
+			intersect.Insert(item)
+		}
+	}
+
+	for item := range s {
+		if !intersect.Has(item) {
+			s.Remove(item)
+		}
+	}
+}
+
+func (s *Set) ImmutableInsert(item string) Set {
+	set := New()
+
+	if s != nil {
+		set.Union(*s)
+	}
+
+	set.Insert(item)
+	return set
+}
+
+// Set implements the flag.Value interface.
+func (s *Set) String() string {
+	return strings.Join(s.ToSlice(), ",")
+}
+
+// Set implements the flag.Value interface.
+func (s *Set) Set(input string) error {
+	if input == "" {
+		return fmt.Errorf("String parsing failed")
+	}
+
+	items := strings.Split(input, ",")
+	for _, item := range items {
+		s.Insert(strings.TrimSpace(item))
+	}
+	return nil
 }

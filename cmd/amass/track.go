@@ -14,6 +14,7 @@ import (
 	"github.com/OWASP/Amass/config"
 	"github.com/OWASP/Amass/graph"
 	"github.com/OWASP/Amass/requests"
+	"github.com/OWASP/Amass/stringset"
 	"github.com/OWASP/Amass/utils"
 	"github.com/fatih/color"
 )
@@ -24,7 +25,7 @@ const (
 )
 
 type trackArgs struct {
-	Domains utils.ParseStrings
+	Domains stringset.Set
 	Last    int
 	Since   string
 	Options struct {
@@ -84,7 +85,7 @@ func runTrackCommand(clArgs []string) {
 			r.Fprintf(color.Error, "Failed to parse the domain names file: %v\n", err)
 			os.Exit(1)
 		}
-		args.Domains = utils.UniqueAppend(args.Domains, list...)
+		args.Domains.InsertMany(list...)
 	}
 	if len(args.Domains) == 0 {
 		r.Fprintln(color.Error, "No root domain names were provided")
@@ -110,7 +111,7 @@ func runTrackCommand(clArgs []string) {
 			args.Filepaths.Directory = cfg.Dir
 		}
 		if len(args.Domains) == 0 {
-			args.Domains = utils.UniqueAppend(args.Domains, cfg.Domains()...)
+			args.Domains.InsertMany(cfg.Domains()...)
 		}
 	} else if args.Filepaths.ConfigFile != "" {
 		r.Fprintf(color.Error, "Failed to load the configuration file: %v\n", err)
@@ -126,7 +127,7 @@ func runTrackCommand(clArgs []string) {
 	defer db.Close()
 
 	// Obtain the enumerations that include the provided domain(s)
-	enums := enumIDs(args.Domains, db)
+	enums := enumIDs(args.Domains.ToSlice(), db)
 
 	// There needs to be at least two enumerations to proceed
 	if len(enums) < 2 {
@@ -161,10 +162,10 @@ func runTrackCommand(clArgs []string) {
 	latest = latest[:end]
 
 	if args.Options.History {
-		completeHistoryOutput(args.Domains, enums, earliest, latest, db)
+		completeHistoryOutput(args.Domains.ToSlice(), enums, earliest, latest, db)
 		return
 	}
-	cumulativeOutput(args.Domains, enums, earliest, latest, db)
+	cumulativeOutput(args.Domains.ToSlice(), enums, earliest, latest, db)
 }
 
 func cumulativeOutput(domains []string, enums []string, ea, la []time.Time, db graph.DataHandler) {

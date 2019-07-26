@@ -8,7 +8,14 @@ import (
 	"net"
 	"strconv"
 	"strings"
+
+	"github.com/OWASP/Amass/stringset"
 )
+
+// ParseSet implements the flag.Value interface.
+type ParseSet struct {
+	s *stringset.Set
+}
 
 // ParseStrings implements the flag.Value interface.
 type ParseStrings []string
@@ -21,6 +28,29 @@ type ParseIPs []net.IP
 
 // ParseCIDRs implements the flag.Value interface.
 type ParseCIDRs []*net.IPNet
+
+func (p *ParseSet) String() string {
+	if p == nil {
+		return ""
+	}
+	return strings.Join(p.s.ToSlice(), ",")
+}
+
+// Set implements the flag.Value interface.
+func (p *ParseSet) Set(s string) error {
+	if p.s == nil {
+		*p.s = stringset.New()
+	}
+	if s == "" {
+		return fmt.Errorf("String parsing failed")
+	}
+
+	str := strings.Split(s, ",")
+	for _, s := range str {
+		p.s.Insert(strings.TrimSpace(s))
+	}
+	return nil
+}
 
 func (p *ParseStrings) String() string {
 	if p == nil {

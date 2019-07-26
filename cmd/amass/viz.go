@@ -16,7 +16,7 @@ import (
 
 	"github.com/OWASP/Amass/config"
 	"github.com/OWASP/Amass/graph"
-	"github.com/OWASP/Amass/utils"
+	"github.com/OWASP/Amass/stringset"
 	"github.com/OWASP/Amass/utils/viz"
 	"github.com/fatih/color"
 )
@@ -26,7 +26,7 @@ const (
 )
 
 type vizArgs struct {
-	Domains utils.ParseStrings
+	Domains stringset.Set
 	Enum    int
 	Options struct {
 		D3         bool
@@ -94,7 +94,7 @@ func runVizCommand(clArgs []string) {
 			r.Fprintf(color.Error, "Failed to parse the domain names file: %v\n", err)
 			return
 		}
-		args.Domains = utils.UniqueAppend(args.Domains, list...)
+		args.Domains.InsertMany(list...)
 	}
 
 	if args.Filepaths.Output == "" {
@@ -131,7 +131,7 @@ func runVizCommand(clArgs []string) {
 				args.Filepaths.Directory = cfg.Dir
 			}
 			if len(args.Domains) == 0 {
-				args.Domains = utils.UniqueAppend(args.Domains, cfg.Domains()...)
+				args.Domains.InsertMany(cfg.Domains()...)
 			}
 		} else if args.Filepaths.ConfigFile != "" {
 			r.Fprintf(color.Error, "Failed to load the configuration file: %v\n", err)
@@ -146,10 +146,10 @@ func runVizCommand(clArgs []string) {
 		defer db.Close()
 
 		if args.Enum > 0 {
-			uuid = enumIndexToID(args.Enum, args.Domains, db)
+			uuid = enumIndexToID(args.Enum, args.Domains.ToSlice(), db)
 		} else {
 			// Get the UUID for the most recent enumeration
-			uuid = mostRecentEnumID(args.Domains, db)
+			uuid = mostRecentEnumID(args.Domains.ToSlice(), db)
 		}
 	}
 	if uuid == "" {
