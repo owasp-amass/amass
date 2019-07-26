@@ -16,6 +16,23 @@ import (
 	"github.com/OWASP/Amass/utils"
 )
 
+var (
+	topNames = []string{
+		"www",
+		"online",
+		"webserver",
+		"ns1",
+		"mail",
+		"smtp",
+		"webmail",
+		"prod",
+		"test",
+		"vpn",
+		"ftp",
+		"ssh",
+	}
+)
+
 type timesRequest struct {
 	Subdomain string
 	Times     chan int
@@ -54,6 +71,7 @@ func (ns *NameService) OnStart() error {
 
 	ns.Bus().Subscribe(requests.NewNameTopic, ns.newNameEvent)
 	ns.Bus().Subscribe(requests.NameResolvedTopic, ns.Resolved)
+	ns.Bus().Subscribe(requests.NewSubdomainTopic, ns.probeSubdomain)
 	go ns.processTimesRequests()
 	go ns.processRequests()
 	return nil
@@ -119,6 +137,21 @@ func (ns *NameService) Resolved(req *requests.DNSRequest) {
 
 	if ns.Config().IsDomainInScope(req.Name) {
 		ns.checkSubdomain(req)
+	}
+}
+
+func (ns *NameService) probeSubdomain(req *requests.DNSRequest, times int) {
+	if ns.Config().Passive || times > 1 {
+		return
+	}
+
+	for _, name := range topNames {
+		go ns.newNameEvent(&requests.DNSRequest{
+			Name:   name + "." + req.Name,
+			Domain: req.Domain,
+			Tag:    requests.ALT,
+			Source: ns.String(),
+		})
 	}
 }
 
