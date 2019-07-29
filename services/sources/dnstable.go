@@ -63,7 +63,7 @@ func (d *DNSTable) executeQuery(domain string) {
 	url := d.getURL(domain)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		d.Config().Log.Printf("%s: %s: %v", d.String(), url, err)
+		d.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", d.String(), url, err))
 		return
 	}
 

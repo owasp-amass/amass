@@ -4,6 +4,7 @@
 package sources
 
 import (
+	"fmt"
 	"net/url"
 	"strconv"
 	"time"
@@ -81,7 +82,7 @@ func (d *Dogpile) executeQuery(domain string) {
 			u := d.urlByPageNum(domain, i)
 			page, err := utils.RequestWebPage(u, nil, nil, "", "")
 			if err != nil {
-				d.Config().Log.Printf("%s: %s: %v", d.String(), u, err)
+				d.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", d.String(), u, err))
 				return
 			}
 

@@ -6,6 +6,7 @@ package sources
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 
@@ -43,7 +44,7 @@ func (c *CIRCL) OnStart() error {
 
 	c.API = c.Config().GetAPIKey(c.String())
 	if c.API == nil || c.API.Username == "" || c.API.Password == "" {
-		c.Config().Log.Printf("%s: API key data was not provided", c.String())
+		c.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: API key data was not provided", c.String()))
 	}
 
 	go c.processRequests()
@@ -83,7 +84,7 @@ func (c *CIRCL) executeQuery(domain string) {
 	headers := map[string]string{"Content-Type": "application/json"}
 	page, err := utils.RequestWebPage(url, nil, headers, c.API.Username, c.API.Password)
 	if err != nil {
-		c.Config().Log.Printf("%s: %s: %v", c.String(), url, err)
+		c.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", c.String(), url, err))
 		return
 	}
 

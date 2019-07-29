@@ -4,6 +4,7 @@
 package sources
 
 import (
+	"fmt"
 	"net/url"
 	"strconv"
 	"time"
@@ -26,14 +27,14 @@ type Bing struct {
 }
 
 // NewBing returns he object initialized, but not yet started.
-func NewBing(c *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool) *Bing {
+func NewBing(cfg *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool) *Bing {
 	b := &Bing{
 		quantity:   20,
 		limit:      200,
 		SourceType: requests.SCRAPE,
 	}
 
-	b.BaseService = *services.NewBaseService(b, "Bing", c, bus, pool)
+	b.BaseService = *services.NewBaseService(b, "Bing", cfg, bus, pool)
 	return b
 }
 
@@ -81,7 +82,7 @@ func (b *Bing) executeQuery(domain string) {
 			u := b.urlByPageNum(domain, i)
 			page, err := utils.RequestWebPage(u, nil, nil, "", "")
 			if err != nil {
-				b.Config().Log.Printf("%s: %s: %v", b.String(), u, err)
+				b.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", b.String(), u, err))
 				return
 			}
 

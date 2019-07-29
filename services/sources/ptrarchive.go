@@ -63,7 +63,7 @@ func (p *PTRArchive) executeQuery(domain string) {
 	url := p.getURL(domain)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		p.Config().Log.Printf("%s: %s: %v", p.String(), url, err)
+		p.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", p.String(), url, err))
 		return
 	}
 

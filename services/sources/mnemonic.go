@@ -61,7 +61,7 @@ func (m *Mnemonic) executeDNSQuery(domain string) {
 	url := m.getDNSURL(domain)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		m.Config().Log.Printf("%s: %s: %v", m.String(), url, err)
+		m.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", m.String(), url, err))
 		return
 	}
 

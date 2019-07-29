@@ -127,19 +127,25 @@ func (s *ShadowServer) origin(addr string) *requests.ASNRequest {
 
 	answers, err := s.Pool().Resolve(name, "TXT", resolvers.PriorityHigh)
 	if err != nil {
-		s.Config().Log.Printf("%s: %s: DNS TXT record query error: %v", s.String(), name, err)
+		s.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: %s: DNS TXT record query error: %v", s.String(), name, err),
+		)
 		return nil
 	}
 
 	fields := strings.Split(strings.Trim(answers[0].Data, "\""), " | ")
 	if len(fields) < 5 {
-		s.Config().Log.Printf("%s: %s: Failed to parse the origin response", s.String(), name)
+		s.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: %s: Failed to parse the origin response", s.String(), name),
+		)
 		return nil
 	}
 
 	asn, err := strconv.Atoi(strings.TrimSpace(fields[0]))
 	if err != nil {
-		s.Config().Log.Printf("%s: %s: Failed to parse the origin response: %v", s.String(), name, err)
+		s.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: %s: Failed to parse the origin response: %v", s.String(), name, err),
+		)
 		return nil
 	}
 
@@ -160,13 +166,17 @@ func (s *ShadowServer) netblocks(asn int) []string {
 	if s.addr == "" {
 		answers, err := s.Pool().Resolve(ShadowServerWhoisURL, "A", resolvers.PriorityHigh)
 		if err != nil {
-			s.Config().Log.Printf("%s: %s: %v", s.String(), ShadowServerWhoisURL, err)
+			s.Bus().Publish(requests.LogTopic,
+				fmt.Sprintf("%s: %s: %v", s.String(), ShadowServerWhoisURL, err),
+			)
 			return netblocks
 		}
 
 		ip := answers[0].Data
 		if ip == "" {
-			s.Config().Log.Printf("%s: Failed to resolve %s", s.String(), ShadowServerWhoisURL)
+			s.Bus().Publish(requests.LogTopic,
+				fmt.Sprintf("%s: Failed to resolve %s", s.String(), ShadowServerWhoisURL),
+			)
 			return netblocks
 		}
 		s.addr = ip
@@ -178,7 +188,7 @@ func (s *ShadowServer) netblocks(asn int) []string {
 	d := net.Dialer{}
 	conn, err := d.DialContext(ctx, "tcp", s.addr+":43")
 	if err != nil {
-		s.Config().Log.Printf("%s: %v", s.String(), err)
+		s.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %v", s.String(), err))
 		return netblocks
 	}
 	defer conn.Close()
@@ -195,7 +205,9 @@ func (s *ShadowServer) netblocks(asn int) []string {
 	}
 
 	if len(netblocks) == 0 {
-		s.Config().Log.Printf("%s: Failed to acquire netblocks for ASN %d", s.String(), asn)
+		s.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: Failed to acquire netblocks for ASN %d", s.String(), asn),
+		)
 	}
 	return netblocks
 }

@@ -44,7 +44,7 @@ func (c *Censys) OnStart() error {
 
 	c.API = c.Config().GetAPIKey(c.String())
 	if c.API == nil || c.API.Key == "" || c.API.Secret == "" {
-		c.Config().Log.Printf("%s: API key data was not provided", c.String())
+		c.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: API key data was not provided", c.String()))
 	}
 
 	go c.processRequests()
@@ -101,7 +101,7 @@ func (c *Censys) apiQuery(domain string) {
 		headers := map[string]string{"Content-Type": "application/json"}
 		resp, err := utils.RequestWebPage(u, body, headers, c.API.Key, c.API.Secret)
 		if err != nil {
-			c.Config().Log.Printf("%s: %s: %v", c.String(), u, err)
+			c.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", c.String(), u, err))
 			break
 		}
 		// Extract the subdomain names from the certificate information
@@ -116,10 +116,12 @@ func (c *Censys) apiQuery(domain string) {
 			} `json:"results"`
 		}
 		if err := json.Unmarshal([]byte(resp), &m); err != nil || m.Status != "ok" {
-			c.Config().Log.Printf("%s: %s: %v", c.String(), u, err)
+			c.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", c.String(), u, err))
 			break
 		} else if len(m.Results) == 0 {
-			c.Config().Log.Printf("%s: %s: The query returned zero results", c.String(), u)
+			c.Bus().Publish(requests.LogTopic,
+				fmt.Sprintf("%s: %s: The query returned zero results", c.String(), u),
+			)
 			break
 		}
 
@@ -163,7 +165,7 @@ func (c *Censys) executeQuery(domain string) {
 	url = c.webURL(domain)
 	page, err = utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		c.Config().Log.Printf("%s: %s: %v", c.String(), url, err)
+		c.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", c.String(), url, err))
 		return
 	}
 

@@ -120,7 +120,7 @@ func (r *RADb) executeASNAddrQuery(addr string) {
 	headers := map[string]string{"Content-Type": "application/json"}
 	page, err := utils.RequestWebPage(url, nil, headers, "", "")
 	if err != nil {
-		r.Config().Log.Printf("%s: %s: %v", r.String(), url, err)
+		r.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", r.String(), url, err))
 		return
 	}
 
@@ -134,10 +134,12 @@ func (r *RADb) executeASNAddrQuery(addr string) {
 		} `json:"cidr0_cidrs"`
 	}
 	if err := json.Unmarshal([]byte(page), &m); err != nil {
-		r.Config().Log.Printf("%s: %s: %v", r.String(), url, err)
+		r.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", r.String(), url, err))
 		return
 	} else if m.ClassName != "ip network" || len(m.CIDRs) == 0 {
-		r.Config().Log.Printf("%s: %s: The request returned zero results", r.String(), url)
+		r.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: %s: The request returned zero results", r.String(), url),
+		)
 		return
 	}
 
@@ -176,7 +178,7 @@ func (r *RADb) executeASNQuery(asn int, prefix string) {
 	headers := map[string]string{"Content-Type": "application/json"}
 	page, err := utils.RequestWebPage(url, nil, headers, "", "")
 	if err != nil {
-		r.Config().Log.Printf("%s: %s: %v", r.String(), url, err)
+		r.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", r.String(), url, err))
 		return
 	}
 
@@ -189,10 +191,12 @@ func (r *RADb) executeASNQuery(asn int, prefix string) {
 		}
 	}
 	if err := json.Unmarshal([]byte(page), &m); err != nil {
-		r.Config().Log.Printf("%s: %s: %v", r.String(), url, err)
+		r.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", r.String(), url, err))
 		return
 	} else if m.ClassName != "autnum" {
-		r.Config().Log.Printf("%s: %s: The query returned incorrect results", r.String(), url)
+		r.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: %s: The query returned incorrect results", r.String(), url),
+		)
 		return
 	}
 
@@ -222,7 +226,9 @@ func (r *RADb) executeASNQuery(asn int, prefix string) {
 	blocks = utils.UniqueAppend(blocks, r.netblocks(asn)...)
 
 	if len(blocks) == 0 {
-		r.Config().Log.Printf("%s: %s: The query returned zero netblocks", r.String(), url)
+		r.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: %s: The query returned zero netblocks", r.String(), url),
+		)
 		return
 	}
 
@@ -251,7 +257,7 @@ func (r *RADb) netblocks(asn int) []string {
 	headers := map[string]string{"Content-Type": "application/json"}
 	page, err := utils.RequestWebPage(url, nil, headers, "", "")
 	if err != nil {
-		r.Config().Log.Printf("%s: %s: %v", r.String(), url, err)
+		r.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", r.String(), url, err))
 		return netblocks
 	}
 
@@ -267,7 +273,7 @@ func (r *RADb) netblocks(asn int) []string {
 		} `json:"arin_originas0_networkSearchResults"`
 	}
 	if err := json.Unmarshal([]byte(page), &m); err != nil {
-		r.Config().Log.Printf("%s: %s: %v", r.String(), url, err)
+		r.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", r.String(), url, err))
 		return netblocks
 	}
 
@@ -295,7 +301,9 @@ func (r *RADb) netblocks(asn int) []string {
 	}
 
 	if len(netblocks) == 0 {
-		r.Config().Log.Printf("%s: Failed to acquire netblocks for ASN %d", r.String(), asn)
+		r.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: Failed to acquire netblocks for ASN %d", r.String(), asn),
+		)
 	}
 	return netblocks
 }
@@ -311,13 +319,15 @@ func (r *RADb) ipToASN(cidr string) int {
 	if r.addr == "" {
 		answers, err := r.Pool().Resolve(radbWhoisURL, "A", resolvers.PriorityHigh)
 		if err != nil {
-			r.Config().Log.Printf("%s: %s: %v", r.String(), radbWhoisURL, err)
+			r.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", r.String(), radbWhoisURL, err))
 			return 0
 		}
 
 		ip := answers[0].Data
 		if ip == "" {
-			r.Config().Log.Printf("%s: Failed to resolve %s", r.String(), radbWhoisURL)
+			r.Bus().Publish(requests.LogTopic,
+				fmt.Sprintf("%s: Failed to resolve %s", r.String(), radbWhoisURL),
+			)
 			return 0
 		}
 		r.addr = ip
@@ -329,7 +339,7 @@ func (r *RADb) ipToASN(cidr string) int {
 	d := net.Dialer{}
 	conn, err := d.DialContext(ctx, "tcp", r.addr+":43")
 	if err != nil {
-		r.Config().Log.Printf("%s: %v", r.String(), err)
+		r.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %v", r.String(), err))
 		return 0
 	}
 	defer conn.Close()

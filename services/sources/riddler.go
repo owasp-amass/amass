@@ -63,7 +63,7 @@ func (r *Riddler) executeQuery(domain string) {
 	url := r.getURL(domain)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		r.Config().Log.Printf("%s: %s: %v", r.String(), url, err)
+		r.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", r.String(), url, err))
 		return
 	}
 

@@ -64,7 +64,7 @@ func (h *HackerOne) executeDNSQuery(domain string) {
 	url := h.getDNSURL(domain)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		h.Config().Log.Printf("%s: %s: %v", h.String(), url, err)
+		h.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", h.String(), url, err))
 		return
 	}
 

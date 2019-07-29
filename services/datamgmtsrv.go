@@ -4,6 +4,7 @@
 package services
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 	"time"
@@ -27,10 +28,10 @@ type DataManagerService struct {
 }
 
 // NewDataManagerService returns he object initialized, but not yet started.
-func NewDataManagerService(c *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool) *DataManagerService {
+func NewDataManagerService(cfg *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool) *DataManagerService {
 	dms := &DataManagerService{domainFilter: utils.NewStringFilter()}
 
-	dms.BaseService = *NewBaseService(dms, "Data Manager", c, bus, pool)
+	dms.BaseService = *NewBaseService(dms, "Data Manager", cfg, bus, pool)
 	return dms
 }
 
@@ -116,7 +117,7 @@ func (dms *DataManagerService) insertDomain(domain string) {
 			Source:    "Forward DNS",
 		})
 		if err != nil {
-			dms.Config().Log.Printf("%s failed to insert domain: %v", handler, err)
+			dms.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s failed to insert domain: %v", handler, err))
 		}
 	}
 	dms.Bus().Publish(requests.NewNameTopic, &requests.DNSRequest{
@@ -150,7 +151,7 @@ func (dms *DataManagerService) insertCNAME(req *requests.DNSRequest, recidx int)
 			Source:       req.Source,
 		})
 		if err != nil {
-			dms.Config().Log.Printf("%s failed to insert CNAME: %v", handler, err)
+			dms.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s failed to insert CNAME: %v", handler, err))
 		}
 	}
 	dms.Bus().Publish(requests.NewNameTopic, &requests.DNSRequest{
@@ -178,7 +179,7 @@ func (dms *DataManagerService) insertA(req *requests.DNSRequest, recidx int) {
 			Source:    req.Source,
 		})
 		if err != nil {
-			dms.Config().Log.Printf("%s failed to insert A record: %v", handler, err)
+			dms.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s failed to insert A record: %v", handler, err))
 		}
 	}
 	dms.insertInfrastructure(addr)
@@ -209,7 +210,7 @@ func (dms *DataManagerService) insertAAAA(req *requests.DNSRequest, recidx int) 
 			Source:    req.Source,
 		})
 		if err != nil {
-			dms.Config().Log.Printf("%s failed to insert AAAA record: %v", handler, err)
+			dms.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s failed to insert AAAA record: %v", handler, err))
 		}
 	}
 	dms.insertInfrastructure(addr)
@@ -245,7 +246,7 @@ func (dms *DataManagerService) insertPTR(req *requests.DNSRequest, recidx int) {
 			Source:     req.Source,
 		})
 		if err != nil {
-			dms.Config().Log.Printf("%s failed to insert PTR record: %v", handler, err)
+			dms.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s failed to insert PTR record: %v", handler, err))
 		}
 	}
 	dms.Bus().Publish(requests.NewNameTopic, &requests.DNSRequest{
@@ -276,7 +277,7 @@ func (dms *DataManagerService) insertSRV(req *requests.DNSRequest, recidx int) {
 			Source:     req.Source,
 		})
 		if err != nil {
-			dms.Config().Log.Printf("%s failed to insert SRV record: %v", handler, err)
+			dms.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s failed to insert SRV record: %v", handler, err))
 		}
 	}
 
@@ -314,7 +315,7 @@ func (dms *DataManagerService) insertNS(req *requests.DNSRequest, recidx int) {
 			Source:       req.Source,
 		})
 		if err != nil {
-			dms.Config().Log.Printf("%s failed to insert NS record: %v", handler, err)
+			dms.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s failed to insert NS record: %v", handler, err))
 		}
 	}
 	if target != domain {
@@ -350,7 +351,7 @@ func (dms *DataManagerService) insertMX(req *requests.DNSRequest, recidx int) {
 			Source:       req.Source,
 		})
 		if err != nil {
-			dms.Config().Log.Printf("%s failed to insert MX record: %v", handler, err)
+			dms.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s failed to insert MX record: %v", handler, err))
 		}
 	}
 	if target != domain {
@@ -409,7 +410,7 @@ func (dms *DataManagerService) findNamesAndAddresses(data, domain string) {
 func (dms *DataManagerService) insertInfrastructure(addr string) {
 	asn, cidr, desc, err := IPRequest(addr, dms.Bus())
 	if err != nil {
-		dms.Config().Log.Printf("%s: %v", dms.String(), err)
+		dms.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %v", dms.String(), err))
 		return
 	}
 
@@ -424,7 +425,9 @@ func (dms *DataManagerService) insertInfrastructure(addr string) {
 			Description: desc,
 		})
 		if err != nil {
-			dms.Config().Log.Printf("%s: %s failed to insert infrastructure data: %v", dms.String(), handler, err)
+			dms.Bus().Publish(requests.LogTopic,
+				fmt.Sprintf("%s: %s failed to insert infrastructure data: %v", dms.String(), handler, err),
+			)
 		}
 	}
 }

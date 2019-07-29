@@ -4,6 +4,8 @@
 package sources
 
 import (
+	"fmt"
+
 	"github.com/OWASP/Amass/config"
 	eb "github.com/OWASP/Amass/eventbus"
 	"github.com/OWASP/Amass/requests"
@@ -23,7 +25,7 @@ type Arquivo struct {
 }
 
 // NewArquivo returns he object initialized, but not yet started.
-func NewArquivo(c *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool) *Arquivo {
+func NewArquivo(cfg *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool) *Arquivo {
 	a := &Arquivo{
 		domain:     "arquivo.pt",
 		baseURL:    "http://arquivo.pt/wayback",
@@ -31,7 +33,7 @@ func NewArquivo(c *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool
 		filter:     utils.NewStringFilter(),
 	}
 
-	a.BaseService = *services.NewBaseService(a, "Arquivo", c, bus, pool)
+	a.BaseService = *services.NewBaseService(a, "Arquivo", cfg, bus, pool)
 	return a
 }
 
@@ -67,7 +69,7 @@ func (a *Arquivo) executeQuery(sn, domain string) {
 
 	names, err := crawl(a, a.baseURL, a.domain, sn, domain)
 	if err != nil {
-		a.Config().Log.Printf("%s: %v", a.String(), err)
+		a.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %v", a.String(), err))
 		return
 	}
 

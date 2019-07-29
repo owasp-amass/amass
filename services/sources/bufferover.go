@@ -22,10 +22,10 @@ type BufferOver struct {
 }
 
 // NewBufferOver returns he object initialized, but not yet started.
-func NewBufferOver(c *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool) *BufferOver {
+func NewBufferOver(cfg *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool) *BufferOver {
 	b := &BufferOver{SourceType: requests.API}
 
-	b.BaseService = *services.NewBaseService(b, "BufferOver", c, bus, pool)
+	b.BaseService = *services.NewBaseService(b, "BufferOver", cfg, bus, pool)
 	return b
 }
 
@@ -63,7 +63,7 @@ func (b *BufferOver) executeQuery(domain string) {
 	url := b.getURL(domain)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		b.Config().Log.Printf("%s: %s: %v", b.String(), url, err)
+		b.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", b.String(), url, err))
 		return
 	}
 

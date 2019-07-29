@@ -5,6 +5,7 @@ package sources
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/OWASP/Amass/config"
@@ -19,7 +20,6 @@ import (
 type Sublist3rAPI struct {
 	services.BaseService
 
-	API        *config.APIKey
 	SourceType string
 	RateLimit  time.Duration
 }
@@ -71,17 +71,19 @@ func (s *Sublist3rAPI) executeQuery(domain string) {
 	url := s.restURL(domain)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		s.Config().Log.Printf("%s: %s: %v", s.String(), url, err)
+		s.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", s.String(), url, err))
 		return
 	}
 
 	// Extract the subdomain names from the REST API results
 	var subs []string
 	if err := json.Unmarshal([]byte(page), &subs); err != nil {
-		s.Config().Log.Printf("%s: %s: %v", s.String(), url, err)
+		s.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", s.String(), url, err))
 		return
 	} else if len(subs) == 0 {
-		s.Config().Log.Printf("%s: %s: The request returned zero results", s.String(), url)
+		s.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: %s: The request returned zero results", s.String(), url),
+		)
 		return
 	}
 

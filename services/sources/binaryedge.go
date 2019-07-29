@@ -5,6 +5,7 @@ package sources
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/OWASP/Amass/config"
@@ -25,13 +26,13 @@ type BinaryEdge struct {
 }
 
 // NewBinaryEdge returns he object initialized, but not yet started.
-func NewBinaryEdge(c *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool) *BinaryEdge {
+func NewBinaryEdge(cfg *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool) *BinaryEdge {
 	be := &BinaryEdge{
 		SourceType: requests.API,
 		RateLimit:  2 * time.Second,
 	}
 
-	be.BaseService = *services.NewBaseService(be, "BinaryEdge", c, bus, pool)
+	be.BaseService = *services.NewBaseService(be, "BinaryEdge", cfg, bus, pool)
 	return be
 }
 
@@ -41,7 +42,7 @@ func (be *BinaryEdge) OnStart() error {
 
 	be.API = be.Config().GetAPIKey(be.String())
 	if be.API == nil || be.API.Key == "" {
-		be.Config().Log.Printf("%s: API key data was not provided", be.String())
+		be.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: API key data was not provided", be.String()))
 	}
 
 	go be.processRequests()
@@ -90,7 +91,7 @@ func (be *BinaryEdge) executeQuery(domain string) {
 	be.SetActive()
 	page, err := utils.RequestWebPage(url, nil, headers, "", "")
 	if err != nil {
-		be.Config().Log.Printf("%s: %s: %v", be.String(), url, err)
+		be.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", be.String(), url, err))
 		return
 	}
 	// Extract the subdomain names from the REST API results

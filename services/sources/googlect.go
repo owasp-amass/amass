@@ -4,6 +4,7 @@
 package sources
 
 import (
+	"fmt"
 	"net/url"
 	"regexp"
 	"time"
@@ -81,7 +82,7 @@ func (g *GoogleCT) executeDNSQuery(domain string) {
 		}
 		page, err := utils.RequestWebPage(u, nil, headers, "", "")
 		if err != nil {
-			g.Config().Log.Printf("%s: %s: %v", g.String(), u, err)
+			g.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", g.String(), u, err))
 			break
 		}
 

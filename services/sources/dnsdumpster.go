@@ -4,6 +4,7 @@
 package sources
 
 import (
+	"fmt"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -69,20 +70,20 @@ func (d *DNSDumpster) executeQuery(domain string) {
 	u := "https://dnsdumpster.com/"
 	page, err := utils.RequestWebPage(u, nil, nil, "", "")
 	if err != nil {
-		d.Config().Log.Printf("%s: %s: %v", d.String(), u, err)
+		d.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", d.String(), u, err))
 		return
 	}
 
 	token := d.getCSRFToken(page)
 	if token == "" {
-		d.Config().Log.Printf("%s: %s: Failed to obtain the CSRF token", d.String(), u)
+		d.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: Failed to obtain the CSRF token", d.String(), u))
 		return
 	}
 
 	d.SetActive()
 	page, err = d.postForm(token, domain)
 	if err != nil {
-		d.Config().Log.Printf("%s: %s: %v", d.String(), u, err)
+		d.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", d.String(), u, err))
 		return
 	}
 
@@ -120,7 +121,7 @@ func (d *DNSDumpster) postForm(token, domain string) (string, error) {
 
 	req, err := http.NewRequest("POST", "https://dnsdumpster.com/", strings.NewReader(params.Encode()))
 	if err != nil {
-		d.Config().Log.Printf("%s: Failed to setup the POST request: %v", d.String(), err)
+		d.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: Failed to setup the POST request: %v", d.String(), err))
 		return "", err
 	}
 	// The CSRF token needs to be sent as a cookie
@@ -140,7 +141,7 @@ func (d *DNSDumpster) postForm(token, domain string) (string, error) {
 
 	resp, err := client.Do(req)
 	if err != nil {
-		d.Config().Log.Printf("%s: The POST request failed: %v", d.String(), err)
+		d.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: The POST request failed: %v", d.String(), err))
 		return "", err
 	}
 	// Now, grab the entire page

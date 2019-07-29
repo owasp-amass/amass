@@ -55,7 +55,7 @@ type MarkovService struct {
 }
 
 // NewMarkovService returns he object initialized, but not yet started.
-func NewMarkovService(c *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool) *MarkovService {
+func NewMarkovService(cfg *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool) *MarkovService {
 	m := &MarkovService{
 		subs:      make(map[string]*requests.DNSRequest),
 		inFilter:  utils.NewStringFilter(),
@@ -66,7 +66,7 @@ func NewMarkovService(c *config.Config, bus *eb.EventBus, pool *resolvers.Resolv
 		},
 	}
 
-	m.BaseService = *NewBaseService(m, "Markov Model", c, bus, pool)
+	m.BaseService = *NewBaseService(m, "Markov Model", cfg, bus, pool)
 	return m
 }
 

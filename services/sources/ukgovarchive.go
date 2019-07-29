@@ -4,6 +4,8 @@
 package sources
 
 import (
+	"fmt"
+
 	"github.com/OWASP/Amass/config"
 	eb "github.com/OWASP/Amass/eventbus"
 	"github.com/OWASP/Amass/requests"
@@ -23,7 +25,7 @@ type UKGovArchive struct {
 }
 
 // NewUKGovArchive returns he object initialized, but not yet started.
-func NewUKGovArchive(c *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool) *UKGovArchive {
+func NewUKGovArchive(cfg *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool) *UKGovArchive {
 	u := &UKGovArchive{
 		domain:     "webarchive.nationalarchives.gov.uk",
 		baseURL:    "http://webarchive.nationalarchives.gov.uk",
@@ -31,7 +33,7 @@ func NewUKGovArchive(c *config.Config, bus *eb.EventBus, pool *resolvers.Resolve
 		filter:     utils.NewStringFilter(),
 	}
 
-	u.BaseService = *services.NewBaseService(u, "UKGovArchive", c, bus, pool)
+	u.BaseService = *services.NewBaseService(u, "UKGovArchive", cfg, bus, pool)
 	return u
 }
 
@@ -67,7 +69,7 @@ func (u *UKGovArchive) executeQuery(sn, domain string) {
 
 	names, err := crawl(u, u.baseURL, u.domain, sn, domain)
 	if err != nil {
-		u.Config().Log.Printf("%s: %v", u.String(), err)
+		u.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %v", u.String(), err))
 		return
 	}
 
