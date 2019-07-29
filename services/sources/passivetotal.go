@@ -5,6 +5,7 @@ package sources
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/OWASP/Amass/config"
@@ -41,7 +42,7 @@ func (pt *PassiveTotal) OnStart() error {
 
 	pt.API = pt.Config().GetAPIKey(pt.String())
 	if pt.API == nil || pt.API.Username == "" || pt.API.Key == "" {
-		pt.Config().Log.Printf("%s: API key data was not provided", pt.String())
+		pt.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: API key data was not provided", pt.String()))
 	}
 
 	go pt.processRequests()
@@ -86,7 +87,7 @@ func (pt *PassiveTotal) executeQuery(domain string) {
 	headers := map[string]string{"Content-Type": "application/json"}
 	page, err := utils.RequestWebPage(url, nil, headers, pt.API.Username, pt.API.Key)
 	if err != nil {
-		pt.Config().Log.Printf("%s: %s: %v", pt.String(), url, err)
+		pt.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", pt.String(), url, err))
 		return
 	}
 	// Extract the subdomain names from the REST API results

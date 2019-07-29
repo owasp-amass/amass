@@ -68,7 +68,7 @@ func (h *HackerTarget) executeDNSQuery(domain string) {
 	url := h.getDNSURL(domain)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		h.Config().Log.Printf("%s: %s: %v", h.String(), url, err)
+		h.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", h.String(), url, err))
 		return
 	}
 
@@ -96,19 +96,21 @@ func (h *HackerTarget) executeASNQuery(addr string) {
 	url := h.getASNURL(addr)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		h.Config().Log.Printf("%s: %s: %v", h.String(), url, err)
+		h.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", h.String(), url, err))
 		return
 	}
 
 	fields := strings.Split(page, ",")
 	if len(fields) < 4 {
-		h.Config().Log.Printf("%s: %s: Failed to parse the response", h.String(), url)
+		h.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: Failed to parse the response", h.String(), url))
 		return
 	}
 
 	asn, err := strconv.Atoi(strings.Trim(fields[1], "\""))
 	if err != nil {
-		h.Config().Log.Printf("%s: %s: Failed to parse the origin response: %v", h.String(), url, err)
+		h.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: %s: Failed to parse the origin response: %v", h.String(), url, err),
+		)
 		return
 	}
 

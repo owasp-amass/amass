@@ -34,6 +34,7 @@ const (
 	NewASNTopic       = "amass:asn"
 	WhoisRequestTopic = "amass:whoisreq"
 	NewWhoisTopic     = "amass:whoisinfo"
+	LogTopic          = "amass:log"
 )
 
 // DNSAnswer is the type used by Amass to represent a DNS record.

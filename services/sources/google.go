@@ -4,6 +4,7 @@
 package sources
 
 import (
+	"fmt"
 	"net/url"
 	"strconv"
 	"time"
@@ -81,7 +82,7 @@ func (g *Google) executeQuery(domain string) {
 			u := g.urlByPageNum(domain, i)
 			page, err := utils.RequestWebPage(u, nil, nil, "", "")
 			if err != nil {
-				g.Config().Log.Printf("%s: %s: %v", g.String(), u, err)
+				g.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", g.String(), u, err))
 				return
 			}
 

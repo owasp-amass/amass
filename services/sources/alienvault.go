@@ -29,13 +29,13 @@ type AlienVault struct {
 }
 
 // NewAlienVault returns he object initialized, but not yet started.
-func NewAlienVault(c *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool) *AlienVault {
+func NewAlienVault(cfg *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool) *AlienVault {
 	a := &AlienVault{
 		SourceType: requests.API,
 		RateLimit:  100 * time.Millisecond,
 	}
 
-	a.BaseService = *services.NewBaseService(a, "AlienVault", c, bus, pool)
+	a.BaseService = *services.NewBaseService(a, "AlienVault", cfg, bus, pool)
 	return a
 }
 
@@ -45,7 +45,7 @@ func (a *AlienVault) OnStart() error {
 
 	a.API = a.Config().GetAPIKey(a.String())
 	if a.API == nil || a.API.Key == "" {
-		a.Config().Log.Printf("%s: API key data was not provided", a.String())
+		a.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: API key data was not provided", a.String()))
 	}
 
 	go a.processRequests()
@@ -95,7 +95,7 @@ func (a *AlienVault) executeDNSQuery(domain string) {
 	u := a.getURL(domain) + "passive_dns"
 	page, err := utils.RequestWebPage(u, nil, a.getHeaders(), "", "")
 	if err != nil {
-		a.Config().Log.Printf("%s: %s: %v", a.String(), u, err)
+		a.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", a.String(), u, err))
 		return
 	}
 	// Extract the subdomain names and IP addresses from the passive DNS information
@@ -106,10 +106,10 @@ func (a *AlienVault) executeDNSQuery(domain string) {
 		} `json:"passive_dns"`
 	}
 	if err := json.Unmarshal([]byte(page), &m); err != nil {
-		a.Config().Log.Printf("%s: %s: %v", a.String(), u, err)
+		a.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", a.String(), u, err))
 		return
 	} else if len(m.Subdomains) == 0 {
-		a.Config().Log.Printf("%s: %s: The query returned zero results", a.String(), u)
+		a.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: The query returned zero results", a.String(), u))
 		return
 	}
 
@@ -153,7 +153,7 @@ func (a *AlienVault) executeURLQuery(domain string) {
 	u := a.getURL(domain) + "url_list"
 	page, err := utils.RequestWebPage(u, nil, headers, "", "")
 	if err != nil {
-		a.Config().Log.Printf("%s: %s: %v", a.String(), u, err)
+		a.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", a.String(), u, err))
 		return
 	}
 	// Extract the subdomain names and IP addresses from the URL information
@@ -173,10 +173,10 @@ func (a *AlienVault) executeURLQuery(domain string) {
 		} `json:"url_list"`
 	}
 	if err := json.Unmarshal([]byte(page), &urls); err != nil {
-		a.Config().Log.Printf("%s: %s: %v", a.String(), u, err)
+		a.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", a.String(), u, err))
 		return
 	} else if len(urls.URLs) == 0 {
-		a.Config().Log.Printf("%s: %s: The query returned zero results", a.String(), u)
+		a.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: The query returned zero results", a.String(), u))
 		return
 	}
 
@@ -200,15 +200,17 @@ func (a *AlienVault) executeURLQuery(domain string) {
 			pageURL := u + "?page=" + strconv.Itoa(cur)
 			page, err = utils.RequestWebPage(pageURL, nil, headers, "", "")
 			if err != nil {
-				a.Config().Log.Printf("%s: %s: %v", a.String(), pageURL, err)
+				a.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", a.String(), pageURL, err))
 				break
 			}
 
 			if err := json.Unmarshal([]byte(page), &urls); err != nil {
-				a.Config().Log.Printf("%s: %s: %v", a.String(), pageURL, err)
+				a.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", a.String(), pageURL, err))
 				break
 			} else if len(urls.URLs) == 0 {
-				a.Config().Log.Printf("%s: %s: The query returned zero results", a.String(), pageURL)
+				a.Bus().Publish(requests.LogTopic,
+					fmt.Sprintf("%s: %s: The query returned zero results", a.String(), pageURL),
+				)
 				break
 			}
 
@@ -250,7 +252,7 @@ func (a *AlienVault) queryWhoisForEmails(domain string) []string {
 	a.SetActive()
 	page, err := utils.RequestWebPage(u, nil, a.getHeaders(), "", "")
 	if err != nil {
-		a.Config().Log.Printf("%s: %s: %v", a.String(), u, err)
+		a.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", a.String(), u, err))
 		return emails
 	}
 
@@ -263,10 +265,12 @@ func (a *AlienVault) queryWhoisForEmails(domain string) []string {
 		} `json:"data"`
 	}
 	if err := json.Unmarshal([]byte(page), &m); err != nil {
-		a.Config().Log.Printf("%s: %s: %v", a.String(), u, err)
+		a.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", a.String(), u, err))
 		return emails
 	} else if m.Count == 0 {
-		a.Config().Log.Printf("%s: %s: The query returned zero results", a.String(), u)
+		a.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: %s: The query returned zero results", a.String(), u),
+		)
 		return emails
 	}
 
@@ -300,7 +304,7 @@ func (a *AlienVault) executeWhoisQuery(domain string) {
 		pageURL := a.getReverseWhoisURL(email)
 		page, err := utils.RequestWebPage(pageURL, nil, headers, "", "")
 		if err != nil {
-			a.Config().Log.Printf("%s: %s: %v", a.String(), pageURL, err)
+			a.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", a.String(), pageURL, err))
 			continue
 		}
 
@@ -309,7 +313,7 @@ func (a *AlienVault) executeWhoisQuery(domain string) {
 		}
 		var domains []record
 		if err := json.Unmarshal([]byte(page), &domains); err != nil {
-			a.Config().Log.Printf("%s: %s: %v", a.String(), pageURL, err)
+			a.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", a.String(), pageURL, err))
 			continue
 		}
 		for _, d := range domains {
@@ -321,7 +325,9 @@ func (a *AlienVault) executeWhoisQuery(domain string) {
 	}
 
 	if len(newDomains) == 0 {
-		a.Config().Log.Printf("%s: Reverse whois failed to discover new domain names for %s", a.String(), domain)
+		a.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: Reverse whois failed to discover new domain names for %s", a.String(), domain),
+		)
 		return
 	}
 

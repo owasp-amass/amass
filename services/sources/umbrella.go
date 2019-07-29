@@ -43,7 +43,9 @@ func (u *Umbrella) OnStart() error {
 
 	u.API = u.Config().GetAPIKey(u.String())
 	if u.API == nil || u.API.Key == "" {
-		u.Config().Log.Printf("%s: API key data was not provided", u.String())
+		u.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: API key data was not provided", u.String()),
+		)
 	}
 
 	go u.processRequests()
@@ -92,7 +94,7 @@ func (u *Umbrella) executeDNSQuery(domain string) {
 	url := u.patternSearchRestURL(domain)
 	page, err := utils.RequestWebPage(url, nil, headers, "", "")
 	if err != nil {
-		u.Config().Log.Printf("%s: %s: %v", u.String(), url, err)
+		u.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", u.String(), url, err))
 		return
 	}
 
@@ -108,7 +110,7 @@ func (u *Umbrella) executeDNSQuery(domain string) {
 	url = u.occurrencesRestURL(domain)
 	page, err = utils.RequestWebPage(url, nil, headers, "", "")
 	if err != nil {
-		u.Config().Log.Printf("%s: %s: %v", u.String(), url, err)
+		u.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", u.String(), url, err))
 		return
 	}
 
@@ -128,7 +130,7 @@ func (u *Umbrella) executeDNSQuery(domain string) {
 	url = u.relatedRestURL(domain)
 	page, err = utils.RequestWebPage(url, nil, headers, "", "")
 	if err != nil {
-		u.Config().Log.Printf("%s: %s: %v", u.String(), url, err)
+		u.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", u.String(), url, err))
 		return
 	}
 
@@ -199,13 +201,13 @@ func (u *Umbrella) queryWhois(domain string) *whoisRecord {
 	u.SetActive()
 	record, err := utils.RequestWebPage(whoisURL, nil, headers, "", "")
 	if err != nil {
-		u.Config().Log.Printf("%s: %s: %v", u.String(), whoisURL, err)
+		u.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", u.String(), whoisURL, err))
 		return nil
 	}
 
 	err = json.Unmarshal([]byte(record), &whois)
 	if err != nil {
-		u.Config().Log.Printf("%s: %s: %v", u.String(), whoisURL, err)
+		u.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", u.String(), whoisURL, err))
 		return nil
 	}
 
@@ -225,7 +227,7 @@ func (u *Umbrella) queryReverseWhois(apiURL string) []string {
 		fullAPIURL := fmt.Sprintf("%s&offset=%d", apiURL, count)
 		record, err := utils.RequestWebPage(fullAPIURL, nil, headers, "", "")
 		if err != nil {
-			u.Config().Log.Printf("%s: %s: %v", u.String(), apiURL, err)
+			u.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", u.String(), apiURL, err))
 			return domains
 		}
 		err = json.Unmarshal([]byte(record), &whois)

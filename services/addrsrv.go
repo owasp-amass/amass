@@ -21,6 +21,7 @@ var (
 	// Cache for the infrastructure data collected from online sources
 	netLock  sync.Mutex
 	netCache map[int]*requests.ASNRequest
+
 	// The reserved network address ranges
 	reservedAddrRanges []*net.IPNet
 	reservedCIDRs      = []string{
@@ -45,8 +46,7 @@ var (
 	}
 )
 
-// AddressService is the Service that handles all newly discovered IP addresses
-// within the architecture. This is achieved by receiving all the NEWADDR events.
+// AddressService is the Service that handles all newly discovered IP addresses within the architecture.
 type AddressService struct {
 	BaseService
 
@@ -64,10 +64,10 @@ func init() {
 }
 
 // NewAddressService returns he object initialized, but not yet started.
-func NewAddressService(c *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool) *AddressService {
+func NewAddressService(cfg *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool) *AddressService {
 	as := &AddressService{filter: utils.NewStringFilter()}
 
-	as.BaseService = *NewBaseService(as, "Address Service", c, bus, pool)
+	as.BaseService = *NewBaseService(as, "Address Service", cfg, bus, pool)
 	return as
 }
 

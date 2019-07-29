@@ -4,6 +4,7 @@
 package sources
 
 import (
+	"fmt"
 	"net/url"
 	"regexp"
 	"strings"
@@ -65,7 +66,7 @@ func (e *Entrust) executeQuery(domain string) {
 	u := e.getURL(domain)
 	page, err := utils.RequestWebPage(u, nil, nil, "", "")
 	if err != nil {
-		e.Config().Log.Printf("%s: %s: %v", e.String(), u, err)
+		e.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", e.String(), u, err))
 		return
 	}
 	content := strings.Replace(page, "u003d", " ", -1)

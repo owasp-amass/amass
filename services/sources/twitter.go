@@ -46,7 +46,9 @@ func (t *Twitter) OnStart() error {
 
 	t.API = t.Config().GetAPIKey(t.String())
 	if t.API == nil || t.API.Key == "" || t.API.Secret == "" {
-		t.Config().Log.Printf("%s: API key data was not provided", t.String())
+		t.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: API key data was not provided", t.String()),
+		)
 	}
 	if t.API != nil && t.API.Key != "" && t.API.Secret != "" {
 		if bearer, err := t.getBearerToken(); err == nil {
@@ -99,7 +101,7 @@ func (t *Twitter) executeQuery(domain string) {
 	t.SetActive()
 	search, _, err := t.client.Search.Tweets(searchParams)
 	if err != nil {
-		t.Config().Log.Printf("%s: %v", t.String(), err)
+		t.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %v", t.String(), err))
 		return
 	}
 

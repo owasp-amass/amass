@@ -4,6 +4,7 @@
 package sources
 
 import (
+	"fmt"
 	"net/url"
 	"strconv"
 	"time"
@@ -26,14 +27,14 @@ type Ask struct {
 }
 
 // NewAsk returns he object initialized, but not yet started.
-func NewAsk(c *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool) *Ask {
+func NewAsk(cfg *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool) *Ask {
 	a := &Ask{
 		quantity:   10, // ask.com appears to be hardcoded at 10 results per page
 		limit:      100,
 		SourceType: requests.SCRAPE,
 	}
 
-	a.BaseService = *services.NewBaseService(a, "Ask", c, bus, pool)
+	a.BaseService = *services.NewBaseService(a, "Ask", cfg, bus, pool)
 	return a
 }
 
@@ -81,7 +82,7 @@ func (a *Ask) executeQuery(domain string) {
 			u := a.urlByPageNum(domain, i)
 			page, err := utils.RequestWebPage(u, nil, nil, "", "")
 			if err != nil {
-				a.Config().Log.Printf("%s: %s: %v", a.String(), u, err)
+				a.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", a.String(), u, err))
 				return
 			}
 

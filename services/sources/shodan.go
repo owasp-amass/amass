@@ -42,7 +42,9 @@ func (s *Shodan) OnStart() error {
 
 	s.API = s.Config().GetAPIKey(s.String())
 	if s.API == nil || s.API.Key == "" {
-		s.Config().Log.Printf("%s: API key data was not provided", s.String())
+		s.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: API key data was not provided", s.String()),
+		)
 	}
 
 	go s.processRequests()
@@ -83,7 +85,7 @@ func (s *Shodan) executeQuery(domain string) {
 	headers := map[string]string{"Content-Type": "application/json"}
 	page, err := utils.RequestWebPage(url, nil, headers, "", "")
 	if err != nil {
-		s.Config().Log.Printf("%s: %s: %v", s.String(), url, err)
+		s.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", s.String(), url, err))
 		return
 	}
 	// Extract the subdomain names from the REST API results

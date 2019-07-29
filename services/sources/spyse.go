@@ -37,7 +37,9 @@ func (s *Spyse) OnStart() error {
 
 	s.API = s.Config().GetAPIKey(s.String())
 	if s.API == nil || s.API.Key == "" {
-		s.Config().Log.Printf("%s: API key data was not provided", s.String())
+		s.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: API key data was not provided", s.String()),
+		)
 	}
 
 	go s.processRequests()
@@ -83,7 +85,7 @@ func (s *Spyse) subdomainQueryAPI(domain string, page int) (int, error) {
 	u := s.getAPIURL(domain, page)
 	response, err := utils.RequestWebPage(u, nil, nil, "", "")
 	if err != nil {
-		s.Config().Log.Printf("%s: %s: %v", s.String(), u, err)
+		s.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", s.String(), u, err))
 		return 0, err
 	}
 
@@ -95,7 +97,9 @@ func (s *Spyse) subdomainQueryAPI(domain string, page int) (int, error) {
 	}
 
 	if err := json.Unmarshal([]byte(response), &results); err != nil {
-		s.Config().Log.Printf("%s: Failed to unmarshal JSON: %v", s.String(), err)
+		s.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: Failed to unmarshal JSON: %v", s.String(), err),
+		)
 		return 0, err
 	}
 
@@ -128,7 +132,7 @@ func (s *Spyse) executeSubdomainQuery(domain string) {
 	url := s.getURL(domain)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		s.Config().Log.Printf("%s: %s: %v", s.String(), url, err)
+		s.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", s.String(), url, err))
 		return
 	}
 
@@ -148,7 +152,7 @@ func (s *Spyse) certQueryAPI(domain string) error {
 	u := s.getCertAPIURL(domain)
 	response, err := utils.RequestWebPage(u, nil, nil, "", "")
 	if err != nil {
-		s.Config().Log.Printf("%s: %s: %v", s.String(), u, err)
+		s.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", s.String(), u, err))
 		return err
 	}
 
@@ -159,7 +163,9 @@ func (s *Spyse) certQueryAPI(domain string) error {
 	}
 
 	if err := json.Unmarshal([]byte(response), &results); err != nil {
-		s.Config().Log.Printf("%s: Failed to unmarshal JSON: %v", s.String(), err)
+		s.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: Failed to unmarshal JSON: %v", s.String(), err),
+		)
 		return err
 	}
 

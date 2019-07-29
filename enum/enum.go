@@ -273,12 +273,15 @@ func (e *Enumeration) requiredServices() []services.Service {
 		if e.Config.DataOptsWriter != nil {
 			dms.AddDataHandler(graph.NewDataOptsHandler(e.Config.DataOptsWriter))
 		}
-		srvcs = append(srvcs, services.NewDNSService(e.Config, e.Bus, e.Pool), dms)
+		srvcs = append(srvcs, dms, services.NewDNSService(e.Config, e.Bus, e.Pool))
 	}
 
 	namesrv := services.NewNameService(e.Config, e.Bus, e.Pool)
 	namesrv.RegisterGraph(e.Graph)
-	srvcs = append(srvcs, namesrv, services.NewAddressService(e.Config, e.Bus, e.Pool))
+	srvcs = append(srvcs, namesrv,
+		services.NewLogService(e.Config, e.Bus, e.Pool),
+		services.NewAddressService(e.Config, e.Bus, e.Pool),
+	)
 
 	if !e.Config.Passive {
 		e.bruteSrv = services.NewBruteForceService(e.Config, e.Bus, e.Pool)

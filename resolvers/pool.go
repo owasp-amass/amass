@@ -338,7 +338,7 @@ func (rp *ResolverPool) performElection(votes []*resolveVote, name, qtype string
 	}
 
 	if len(ans) == 0 {
-		return ans, &ResolveError{Err: fmt.Sprintf("DNS query for %s, type %d returned 0 records", name, qt)}
+		return ans, &ResolveError{Err: fmt.Sprintf("Resolver Pool: DNS query for %s type %d returned 0 records", name, qt)}
 	}
 	return ans, nil
 }

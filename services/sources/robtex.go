@@ -6,6 +6,7 @@ package sources
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	"net"
 	"strconv"
 	"strings"
@@ -101,7 +102,7 @@ func (r *Robtex) executeDNSQuery(domain string) {
 	url := "https://freeapi.robtex.com/pdns/forward/" + domain
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		r.Config().Log.Printf("%s: %s: %v", r.String(), url, err)
+		r.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", r.String(), url, err))
 		return
 	}
 
@@ -132,7 +133,7 @@ loop:
 			url = "https://freeapi.robtex.com/pdns/reverse/" + ip
 			pdns, err := utils.RequestWebPage(url, nil, nil, "", "")
 			if err != nil {
-				r.Config().Log.Printf("%s: %s: %v", r.String(), url, err)
+				r.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", r.String(), url, err))
 				continue
 			}
 
@@ -220,7 +221,7 @@ func (r *Robtex) origin(addr string) *requests.ASNRequest {
 	url := "https://freeapi.robtex.com/ipquery/" + addr
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		r.Config().Log.Printf("%s: %s: %v", r.String(), url, err)
+		r.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", r.String(), url, err))
 		return nil
 	}
 	// Extract the network information
@@ -293,7 +294,9 @@ func (r *Robtex) origin(addr string) *requests.ASNRequest {
 	}
 
 	if ipinfo.ASN == 0 {
-		r.Config().Log.Printf("%s: %s: Failed to parse the origin response: %v", r.String(), url, err)
+		r.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: %s: Failed to parse the origin response: %v", r.String(), url, err),
+		)
 		return nil
 	}
 
@@ -322,7 +325,7 @@ func (r *Robtex) netblocks(asn int) []string {
 	url := "https://freeapi.robtex.com/asquery/" + strconv.Itoa(asn)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		r.Config().Log.Printf("%s: %s: %v", r.String(), url, err)
+		r.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", r.String(), url, err))
 		return netblocks
 	}
 	// Extract the network information
@@ -341,7 +344,9 @@ func (r *Robtex) netblocks(asn int) []string {
 	}
 
 	if len(netblocks) == 0 {
-		r.Config().Log.Printf("%s: Failed to acquire netblocks for ASN %d", r.String(), asn)
+		r.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: Failed to acquire netblocks for ASN %d", r.String(), asn),
+		)
 	}
 	return netblocks
 }

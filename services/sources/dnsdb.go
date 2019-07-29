@@ -45,7 +45,7 @@ func (d *DNSDB) OnStart() error {
 
 	d.API = d.Config().GetAPIKey(d.String())
 	if d.API == nil || d.API.Key == "" {
-		d.Config().Log.Printf("%s: API key data was not provided", d.String())
+		d.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: API key data was not provided", d.String()))
 	}
 
 	go d.processRequests()
@@ -86,7 +86,7 @@ func (d *DNSDB) executeQuery(domain string) {
 		url := d.restURL(domain)
 		page, err := utils.RequestWebPage(url, nil, headers, "", "")
 		if err != nil {
-			d.Config().Log.Printf("%s: %s: %v", d.String(), url, err)
+			d.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", d.String(), url, err))
 			return
 		}
 
@@ -142,7 +142,7 @@ func (d *DNSDB) scrape(domain string) {
 	url := d.getURL(domain, domain)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		d.Config().Log.Printf("%s: %s: %v", d.String(), url, err)
+		d.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", d.String(), url, err))
 		return
 	}
 
@@ -177,7 +177,7 @@ loop:
 			url = d.getURL(domain, name)
 			another, err := utils.RequestWebPage(url, nil, nil, "", "")
 			if err != nil {
-				d.Config().Log.Printf("%s: %s: %v", d.String(), url, err)
+				d.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", d.String(), url, err))
 				continue
 			}
 

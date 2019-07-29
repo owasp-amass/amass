@@ -5,6 +5,7 @@ package sources
 
 import (
 	"encoding/json"
+	"fmt"
 	"net"
 	"net/url"
 	"regexp"
@@ -62,7 +63,7 @@ func (n *NetworksDB) OnStart() error {
 
 	n.API = n.Config().GetAPIKey(n.String())
 	if n.API == nil || n.API.Key == "" {
-		n.Config().Log.Printf("%s: API key data was not provided", n.String())
+		n.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: API key data was not provided", n.String()))
 		n.SourceType = requests.SCRAPE
 		n.hasAPIKey = false
 	}
@@ -113,13 +114,15 @@ func (n *NetworksDB) executeASNAddrQuery(addr string) {
 	u := n.getIPURL(addr)
 	page, err := utils.RequestWebPage(u, nil, nil, "", "")
 	if err != nil {
-		n.Config().Log.Printf("%s: %s: %v", n.String(), u, err)
+		n.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", n.String(), u, err))
 		return
 	}
 
 	matches := networksdbOrgLinkRE.FindStringSubmatch(page)
 	if matches == nil || len(matches) < 2 {
-		n.Config().Log.Printf("%s: %s: Failed to extract the organization info href", n.String(), u)
+		n.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: %s: Failed to extract the organization info href", n.String(), u),
+		)
 		return
 	}
 
@@ -128,7 +131,7 @@ func (n *NetworksDB) executeASNAddrQuery(addr string) {
 	u = networksdbBaseURL + matches[1]
 	page, err = utils.RequestWebPage(u, nil, nil, "", "")
 	if err != nil {
-		n.Config().Log.Printf("%s: %s: %v", n.String(), u, err)
+		n.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", n.String(), u, err))
 		return
 	}
 
@@ -141,13 +144,17 @@ func (n *NetworksDB) executeASNAddrQuery(addr string) {
 
 	matches = networksdbASNRE.FindStringSubmatch(page)
 	if matches == nil || len(matches) < 2 {
-		n.Config().Log.Printf("%s: %s: The regular expression failed to extract the ASN", n.String(), u)
+		n.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: %s: The regular expression failed to extract the ASN", n.String(), u),
+		)
 		return
 	}
 
 	asn, err := strconv.Atoi(strings.TrimSpace(matches[1]))
 	if err != nil {
-		n.Config().Log.Printf("%s: %s: Failed to extract a valid ASN", n.String(), u)
+		n.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: %s: Failed to extract a valid ASN", n.String(), u),
+		)
 		return
 	}
 
@@ -165,20 +172,24 @@ func (n *NetworksDB) executeASNQuery(asn int, addr string, netblocks []string) {
 	u := n.getASNURL(asn)
 	page, err := utils.RequestWebPage(u, nil, nil, "", "")
 	if err != nil {
-		n.Config().Log.Printf("%s: %s: %v", n.String(), u, err)
+		n.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", n.String(), u, err))
 		return
 	}
 
 	matches := networksdbASNameRE.FindStringSubmatch(page)
 	if matches == nil || len(matches) < 2 {
-		n.Config().Log.Printf("%s: The regular expression failed to extract the AS name", n.String())
+		n.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: The regular expression failed to extract the AS name", n.String()),
+		)
 		return
 	}
 	name := strings.TrimSpace(matches[1])
 
 	matches = networksdbCCRE.FindStringSubmatch(page)
 	if matches == nil || len(matches) < 2 {
-		n.Config().Log.Printf("%s: The regular expression failed to extract the country code", n.String())
+		n.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: The regular expression failed to extract the country code", n.String()),
+		)
 		return
 	}
 	cc := strings.TrimSpace(matches[1])
@@ -223,14 +234,18 @@ func (n *NetworksDB) getASNURL(asn int) string {
 func (n *NetworksDB) executeAPIASNAddrQuery(addr string) {
 	_, id := n.apiIPQuery(addr)
 	if id == "" {
-		n.Config().Log.Printf("%s: %s: Failed to obtain IP address information", n.String(), addr)
+		n.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: %s: Failed to obtain IP address information", n.String(), addr),
+		)
 		return
 	}
 
 	time.Sleep(n.RateLimit)
 	asns := n.apiOrgInfoQuery(id)
 	if len(asns) == 0 {
-		n.Config().Log.Printf("%s: %s: Failed to obtain ASNs associated with the organization", n.String(), id)
+		n.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: %s: Failed to obtain ASNs associated with the organization", n.String(), id),
+		)
 		return
 	}
 
@@ -242,7 +257,9 @@ loop:
 		time.Sleep(n.RateLimit)
 		cidrs = n.apiNetblocksQuery(a)
 		if len(cidrs) == 0 {
-			n.Config().Log.Printf("%s: %d: Failed to obtain netblocks associated with the ASN", n.String(), a)
+			n.Bus().Publish(requests.LogTopic,
+				fmt.Sprintf("%s: %d: Failed to obtain netblocks associated with the ASN", n.String(), a),
+			)
 		}
 
 		for _, cidr := range cidrs {
@@ -256,7 +273,9 @@ loop:
 	}
 
 	if asn == 0 {
-		n.Config().Log.Printf("%s: %s: Failed to obtain the ASN associated with the IP address", n.String(), addr)
+		n.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: %s: Failed to obtain the ASN associated with the IP address", n.String(), addr),
+		)
 		return
 	}
 	n.executeAPIASNQuery(asn, addr, cidrs)
@@ -266,7 +285,9 @@ func (n *NetworksDB) executeAPIASNQuery(asn int, addr string, netblocks []string
 	if netblocks == nil {
 		netblocks = n.apiNetblocksQuery(asn)
 		if len(netblocks) == 0 {
-			n.Config().Log.Printf("%s: %d: Failed to obtain netblocks associated with the ASN", n.String(), asn)
+			n.Bus().Publish(requests.LogTopic,
+				fmt.Sprintf("%s: %d: Failed to obtain netblocks associated with the ASN", n.String(), asn),
+			)
 			return
 		}
 	}
@@ -288,7 +309,9 @@ func (n *NetworksDB) executeAPIASNQuery(asn int, addr string, netblocks []string
 	time.Sleep(n.RateLimit)
 	req := n.apiASNInfoQuery(asn)
 	if req == nil {
-		n.Config().Log.Printf("%s: %d: Failed to obtain ASN information", n.String(), asn)
+		n.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: %d: Failed to obtain ASN information", n.String(), asn),
+		)
 		return
 	}
 
@@ -307,7 +330,7 @@ func (n *NetworksDB) apiIPQuery(addr string) (string, string) {
 	body := strings.NewReader(params.Encode())
 	page, err := utils.RequestWebPage(u, body, n.getHeaders(), "", "")
 	if err != nil {
-		n.Config().Log.Printf("%s: %s: %v", n.String(), u, err)
+		n.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", n.String(), u, err))
 		return "", ""
 	}
 
@@ -324,13 +347,15 @@ func (n *NetworksDB) apiIPQuery(addr string) (string, string) {
 		} `json:"results"`
 	}
 	if err := json.Unmarshal([]byte(page), &m); err != nil {
-		n.Config().Log.Printf("%s: %s: %v", n.String(), u, err)
+		n.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", n.String(), u, err))
 		return "", ""
 	} else if m.Error != "" {
-		n.Config().Log.Printf("%s: %s: %s", n.String(), u, m.Error)
+		n.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %s", n.String(), u, m.Error))
 		return "", ""
 	} else if m.Total == 0 || len(m.Results) == 0 {
-		n.Config().Log.Printf("%s: %s: The request returned zero results", n.String(), u)
+		n.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: %s: The request returned zero results", n.String(), u),
+		)
 		return "", ""
 	}
 
@@ -348,7 +373,7 @@ func (n *NetworksDB) apiOrgInfoQuery(id string) []int {
 	body := strings.NewReader(params.Encode())
 	page, err := utils.RequestWebPage(u, body, n.getHeaders(), "", "")
 	if err != nil {
-		n.Config().Log.Printf("%s: %s: %v", n.String(), u, err)
+		n.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", n.String(), u, err))
 		return []int{}
 	}
 
@@ -360,13 +385,15 @@ func (n *NetworksDB) apiOrgInfoQuery(id string) []int {
 		} `json:"results"`
 	}
 	if err := json.Unmarshal([]byte(page), &m); err != nil {
-		n.Config().Log.Printf("%s: %s: %v", n.String(), u, err)
+		n.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", n.String(), u, err))
 		return []int{}
 	} else if m.Error != "" {
-		n.Config().Log.Printf("%s: %s: %s", n.String(), u, m.Error)
+		n.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %s", n.String(), u, m.Error))
 		return []int{}
 	} else if m.Total == 0 || len(m.Results[0].ASNs) == 0 {
-		n.Config().Log.Printf("%s: %s: The request returned zero results", n.String(), u)
+		n.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: %s: The request returned zero results", n.String(), u),
+		)
 		return []int{}
 	}
 
@@ -384,7 +411,7 @@ func (n *NetworksDB) apiASNInfoQuery(asn int) *requests.ASNRequest {
 	body := strings.NewReader(params.Encode())
 	page, err := utils.RequestWebPage(u, body, n.getHeaders(), "", "")
 	if err != nil {
-		n.Config().Log.Printf("%s: %s: %v", n.String(), u, err)
+		n.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", n.String(), u, err))
 		return nil
 	}
 
@@ -400,13 +427,15 @@ func (n *NetworksDB) apiASNInfoQuery(asn int) *requests.ASNRequest {
 		} `json:"results"`
 	}
 	if err := json.Unmarshal([]byte(page), &m); err != nil {
-		n.Config().Log.Printf("%s: %s: %v", n.String(), u, err)
+		n.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", n.String(), u, err))
 		return nil
 	} else if m.Error != "" {
-		n.Config().Log.Printf("%s: %s: %s", n.String(), u, m.Error)
+		n.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %s", n.String(), u, m.Error))
 		return nil
 	} else if m.Total == 0 || len(m.Results) == 0 {
-		n.Config().Log.Printf("%s: %s: The request returned zero results", n.String(), u)
+		n.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: %s: The request returned zero results", n.String(), u),
+		)
 		return nil
 	}
 
@@ -432,7 +461,7 @@ func (n *NetworksDB) apiNetblocksQuery(asn int) []string {
 	body := strings.NewReader(params.Encode())
 	page, err := utils.RequestWebPage(u, body, n.getHeaders(), "", "")
 	if err != nil {
-		n.Config().Log.Printf("%s: %s: %v", n.String(), u, err)
+		n.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", n.String(), u, err))
 		return netblocks
 	}
 
@@ -444,13 +473,15 @@ func (n *NetworksDB) apiNetblocksQuery(asn int) []string {
 		} `json:"results"`
 	}
 	if err := json.Unmarshal([]byte(page), &m); err != nil {
-		n.Config().Log.Printf("%s: %s: %v", n.String(), u, err)
+		n.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", n.String(), u, err))
 		return netblocks
 	} else if m.Error != "" {
-		n.Config().Log.Printf("%s: %s: %s", n.String(), u, m.Error)
+		n.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %s", n.String(), u, m.Error))
 		return netblocks
 	} else if m.Total == 0 || len(m.Results) == 0 {
-		n.Config().Log.Printf("%s: %s: The request returned zero results", n.String(), u)
+		n.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: %s: The request returned zero results", n.String(), u),
+		)
 		return netblocks
 	}
 

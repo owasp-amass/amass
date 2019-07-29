@@ -63,7 +63,7 @@ func (e *Exalead) executeQuery(domain string) {
 	url := e.getURL(domain)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		e.Config().Log.Printf("%s: %s: %v", e.String(), url, err)
+		e.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", e.String(), url, err))
 		return
 	}
 

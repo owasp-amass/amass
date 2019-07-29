@@ -4,6 +4,8 @@
 package sources
 
 import (
+	"fmt"
+
 	"github.com/OWASP/Amass/config"
 	eb "github.com/OWASP/Amass/eventbus"
 	"github.com/OWASP/Amass/requests"
@@ -23,7 +25,7 @@ type ArchiveIt struct {
 }
 
 // NewArchiveIt returns he object initialized, but not yet started.
-func NewArchiveIt(c *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool) *ArchiveIt {
+func NewArchiveIt(cfg *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool) *ArchiveIt {
 	a := &ArchiveIt{
 		domain:     "wayback.archive-it.org",
 		baseURL:    "https://wayback.archive-it.org/all",
@@ -31,7 +33,7 @@ func NewArchiveIt(c *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPo
 		filter:     utils.NewStringFilter(),
 	}
 
-	a.BaseService = *services.NewBaseService(a, "ArchiveIt", c, bus, pool)
+	a.BaseService = *services.NewBaseService(a, "ArchiveIt", cfg, bus, pool)
 	return a
 }
 
@@ -67,7 +69,7 @@ func (a *ArchiveIt) executeQuery(sn, domain string) {
 
 	names, err := crawl(a, a.baseURL, a.domain, sn, domain)
 	if err != nil {
-		a.Config().Log.Printf("%s: %v", a.String(), err)
+		a.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %v", a.String(), err))
 		return
 	}
 

@@ -6,6 +6,7 @@ package sources
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"strings"
 	"time"
@@ -18,84 +19,19 @@ import (
 	"github.com/OWASP/Amass/utils"
 )
 
-var (
-	commonCrawlIndexes = []string{
-		"CC-MAIN-2013-20",
-		"CC-MAIN-2013-48",
-		"CC-MAIN-2014-10",
-		"CC-MAIN-2014-15",
-		"CC-MAIN-2014-23",
-		"CC-MAIN-2014-35",
-		"CC-MAIN-2014-41",
-		"CC-MAIN-2014-42",
-		"CC-MAIN-2014-49",
-		"CC-MAIN-2014-52",
-		"CC-MAIN-2015-06",
-		"CC-MAIN-2015-11",
-		"CC-MAIN-2015-14",
-		"CC-MAIN-2015-18",
-		"CC-MAIN-2015-22",
-		"CC-MAIN-2015-27",
-		"CC-MAIN-2015-32",
-		"CC-MAIN-2015-35",
-		"CC-MAIN-2015-40",
-		"CC-MAIN-2015-48",
-		"CC-MAIN-2016-07",
-		"CC-MAIN-2016-18",
-		"CC-MAIN-2016-22",
-		"CC-MAIN-2016-26",
-		"CC-MAIN-2016-30",
-		"CC-MAIN-2016-36",
-		"CC-MAIN-2016-40",
-		"CC-MAIN-2016-44",
-		"CC-MAIN-2016-50",
-		"CC-MAIN-2017-04",
-		"CC-MAIN-2017-09",
-		"CC-MAIN-2017-13",
-		"CC-MAIN-2017-17",
-		"CC-MAIN-2017-22",
-		"CC-MAIN-2017-26",
-		"CC-MAIN-2017-30",
-		"CC-MAIN-2017-34",
-		"CC-MAIN-2017-39",
-		"CC-MAIN-2017-43",
-		"CC-MAIN-2017-47",
-		"CC-MAIN-2017-51",
-		"CC-MAIN-2018-05",
-		"CC-MAIN-2018-09",
-		"CC-MAIN-2018-13",
-		"CC-MAIN-2018-17",
-		"CC-MAIN-2018-22",
-		"CC-MAIN-2018-26",
-		"CC-MAIN-2018-30",
-		"CC-MAIN-2018-34",
-		"CC-MAIN-2018-39",
-		"CC-MAIN-2018-43",
-		"CC-MAIN-2018-47",
-		"CC-MAIN-2018-51",
-		"CC-MAIN-2019-04",
-		"CC-MAIN-2019-09",
-		"CC-MAIN-2019-13",
-		"CC-MAIN-2019-18",
-		"CC-MAIN-2019-22",
-		"CC-MAIN-2019-26",
-	}
-)
+const commonCrawlIndexListURL = "https://index.commoncrawl.org/collinfo.json"
 
 // CommonCrawl is the Service that handles access to the CommonCrawl data source.
 type CommonCrawl struct {
 	services.BaseService
 
-	baseURL    string
 	SourceType string
+	indexURLs  []string
 }
 
 // NewCommonCrawl returns he object initialized, but not yet started.
 func NewCommonCrawl(cfg *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool) *CommonCrawl {
-	c := &CommonCrawl{
-		baseURL:    "http://index.commoncrawl.org/",
-		SourceType: requests.API,
-	}
+	c := &CommonCrawl{SourceType: requests.API}
 
 	c.BaseService = *services.NewBaseService(c, "CommonCrawl", cfg, bus, pool)
 	return c
@@ -104,6 +40,33 @@ func NewCommonCrawl(cfg *config.Config, bus *eb.EventBus, pool *resolvers.Resolv
 // OnStart implements the Service interface
 func (c *CommonCrawl) OnStart() error {
 	c.BaseService.OnStart()
+
+	// Get all of the index API URLs
+	page, err := utils.RequestWebPage(commonCrawlIndexListURL, nil, nil, "", "")
+	if err != nil {
+		c.Bus().Publish(requests.LogTopic, 
+			fmt.Sprintf("%s: Failed to obtain the index list: %v", c.String(), err),
+		)
+		return fmt.Errorf("%s: Failed to obtain the index list: %v", c.String(), err)
+	}
+
+	type index struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+		URL  string `json:"cdx-api"`
+	}
+
+	var indexList []index
+	if err := json.Unmarshal([]byte(page), &indexList); err != nil {
+		c.Bus().Publish(requests.LogTopic, 
+			fmt.Sprintf("%s: Failed to unmarshal the index list: %v", c.String(), err),
+		)
+		return fmt.Errorf("%s: Failed to unmarshal the index list: %v", c.String(), err)
+	}
+
+	for _, i := range indexList {
+		c.indexURLs = append(c.indexURLs, i.URL)
+	}
 
 	go c.processRequests()
 	return nil
@@ -135,7 +98,7 @@ func (c *CommonCrawl) executeQuery(domain string) {
 	t := time.NewTicker(500 * time.Millisecond)
 	defer t.Stop()
 
-	for _, index := range commonCrawlIndexes {
+	for _, index := range c.indexURLs {
 		c.SetActive()
 
 		select {
@@ -145,7 +108,7 @@ func (c *CommonCrawl) executeQuery(domain string) {
 			u := c.getURL(domain, index)
 			page, err := utils.RequestWebPage(u, nil, nil, "", "")
 			if err != nil {
-				c.Config().Log.Printf("%s: %s: %v", c.String(), u, err)
+				c.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", c.String(), u, err))
 				continue
 			}
 
@@ -191,7 +154,7 @@ func (c *CommonCrawl) parseJSON(page string) []string {
 }
 
 func (c *CommonCrawl) getURL(domain, index string) string {
-	u, _ := url.Parse(c.baseURL + index + "-index")
+	u, _ := url.Parse(index)
 
 	u.RawQuery = url.Values{
 		"url":      {"*." + domain},

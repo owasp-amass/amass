@@ -83,7 +83,7 @@ func (v *ViewDNS) executeDNSQuery(domain string) {
 	// The ViewDNS IP History lookup sometimes reveals interesting results
 	page, err := utils.RequestWebPage(u, nil, nil, "", "")
 	if err != nil {
-		v.Config().Log.Printf("%s: %s: %v", v.String(), u, err)
+		v.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", v.String(), u, err))
 		return
 	}
 
@@ -107,13 +107,15 @@ func (v *ViewDNS) executeWhoisQuery(domain string) {
 	u := v.getURL(domain)
 	page, err := utils.RequestWebPage(u, nil, nil, "", "")
 	if err != nil {
-		v.Config().Log.Printf("%s: %s: %v", v.String(), u, err)
+		v.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", v.String(), u, err))
 		return
 	}
 	// Pull the table we need from the page content
 	table := getViewDNSTable(page)
 	if table == "" {
-		v.Config().Log.Printf("%s: %s: Failed to discover the table of results", v.String(), u)
+		v.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: %s: Failed to discover the table of results", v.String(), u),
+		)
 		return
 	}
 	// Get the list of domain names discovered through the reverse DNS service

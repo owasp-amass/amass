@@ -4,6 +4,8 @@
 package sources
 
 import (
+	"fmt"
+
 	"github.com/OWASP/Amass/config"
 	eb "github.com/OWASP/Amass/eventbus"
 	"github.com/OWASP/Amass/requests"
@@ -70,7 +72,7 @@ func (l *LoCArchive) executeQuery(sn, domain string) {
 
 	names, err := crawl(l, l.baseURL, l.domain, sn, domain)
 	if err != nil {
-		l.Config().Log.Printf("%s: %v", l.String(), err)
+		l.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %v", l.String(), err))
 		return
 	}
 

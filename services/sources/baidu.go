@@ -4,6 +4,7 @@
 package sources
 
 import (
+	"fmt"
 	"net/url"
 	"strconv"
 	"time"
@@ -20,20 +21,20 @@ import (
 type Baidu struct {
 	services.BaseService
 
+	SourceType string
 	quantity   int
 	limit      int
-	SourceType string
 }
 
 // NewBaidu returns he object initialized, but not yet started.
-func NewBaidu(c *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool) *Baidu {
+func NewBaidu(cfg *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool) *Baidu {
 	b := &Baidu{
+		SourceType: requests.SCRAPE,
 		quantity:   20,
 		limit:      100,
-		SourceType: requests.SCRAPE,
 	}
 
-	b.BaseService = *services.NewBaseService(b, "Baidu", c, bus, pool)
+	b.BaseService = *services.NewBaseService(b, "Baidu", cfg, bus, pool)
 	return b
 }
 
@@ -81,7 +82,7 @@ func (b *Baidu) executeQuery(domain string) {
 			u := b.urlByPageNum(domain, i)
 			page, err := utils.RequestWebPage(u, nil, nil, "", "")
 			if err != nil {
-				b.Config().Log.Printf("%s: %s: %v", b.String(), u, err)
+				b.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", b.String(), u, err))
 				return
 			}
 

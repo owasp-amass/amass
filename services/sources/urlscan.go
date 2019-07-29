@@ -43,7 +43,9 @@ func (u *URLScan) OnStart() error {
 
 	u.API = u.Config().GetAPIKey(u.String())
 	if u.API == nil || u.API.Key == "" {
-		u.Config().Log.Printf("%s: API key data was not provided", u.String())
+		u.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: API key data was not provided", u.String()),
+		)
 	}
 
 	go u.processRequests()
@@ -83,7 +85,7 @@ func (u *URLScan) executeQuery(domain string) {
 	url := u.searchURL(domain)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		u.Config().Log.Printf("%s: %s: %v", u.String(), url, err)
+		u.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", u.String(), url, err))
 		return
 	}
 	// Extract the subdomain names from the REST API results
@@ -131,7 +133,7 @@ func (u *URLScan) getSubsFromResult(id string) []string {
 	url := u.resultURL(id)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		u.Config().Log.Printf("%s: %s: %v", u.String(), url, err)
+		u.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", u.String(), url, err))
 		return subs
 	}
 	// Extract the subdomain names from the REST API results
@@ -160,7 +162,7 @@ func (u *URLScan) attemptSubmission(domain string) string {
 	body := strings.NewReader(u.submitBody(domain))
 	page, err := utils.RequestWebPage(url, body, headers, "", "")
 	if err != nil {
-		u.Config().Log.Printf("%s: %s: %v", u.String(), url, err)
+		u.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", u.String(), url, err))
 		return ""
 	}
 	// Extract the subdomain names from the REST API results

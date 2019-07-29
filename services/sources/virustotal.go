@@ -30,14 +30,14 @@ type VirusTotal struct {
 }
 
 // NewVirusTotal returns he object initialized, but not yet started.
-func NewVirusTotal(c *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool) *VirusTotal {
+func NewVirusTotal(cfg *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool) *VirusTotal {
 	v := &VirusTotal{
 		SourceType: requests.API,
 		RateLimit:  15 * time.Second,
 		haveAPIKey: true,
 	}
 
-	v.BaseService = *services.NewBaseService(v, "VirusTotal", c, bus, pool)
+	v.BaseService = *services.NewBaseService(v, "VirusTotal", cfg, bus, pool)
 	return v
 }
 
@@ -48,7 +48,9 @@ func (v *VirusTotal) OnStart() error {
 	v.API = v.Config().GetAPIKey(v.String())
 	if v.API == nil || v.API.Key == "" {
 		v.haveAPIKey = false
-		v.Config().Log.Printf("%s: API key data was not provided", v.String())
+		v.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: API key data was not provided", v.String()),
+		)
 	}
 
 	go v.processRequests()
@@ -93,7 +95,7 @@ func (v *VirusTotal) apiQuery(domain string) {
 	headers := map[string]string{"Content-Type": "application/json"}
 	page, err := utils.RequestWebPage(url, nil, headers, "", "")
 	if err != nil {
-		v.Config().Log.Printf("%s: %s: %v", v.String(), url, err)
+		v.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", v.String(), url, err))
 		return
 	}
 
@@ -111,7 +113,9 @@ func (v *VirusTotal) apiQuery(domain string) {
 	}
 
 	if m.ResponseCode != 1 {
-		v.Config().Log.Printf("%s: %s: Response code %d: %s", v.String(), url, m.ResponseCode, m.Message)
+		v.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: %s: Response code %d: %s", v.String(), url, m.ResponseCode, m.Message),
+		)
 		return
 	}
 
@@ -156,7 +160,7 @@ func (v *VirusTotal) regularQuery(domain string) {
 	headers := map[string]string{"Content-Type": "application/json"}
 	page, err := utils.RequestWebPage(url, nil, headers, "", "")
 	if err != nil {
-		v.Config().Log.Printf("%s: %s: %v", v.String(), url, err)
+		v.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", v.String(), url, err))
 		return
 	}
 
