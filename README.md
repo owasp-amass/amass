@@ -68,10 +68,12 @@ This project improves thanks to all the people who contribute:
 [![Follow on Twitter](https://img.shields.io/twitter/follow/sec_for_safety.svg?logo=twitter)](https://twitter.com/sec_for_safety)
 [![Follow on Twitter](https://img.shields.io/twitter/follow/ngkogkos.svg?logo=twitter)](https://github.com/ngkogkos)
 [![Follow on Twitter](https://img.shields.io/twitter/follow/Jhaddix.svg?logo=twitter)](https://twitter.com/Jhaddix)
+[![Follow on Twitter](https://img.shields.io/twitter/follow/Vltraheaven.svg?logo=twitter)](https://twitter.com/Vltraheaven)
 
 ## Mentions
 
 * [amass — Automated Attack Surface Mapping](https://danielmiessler.com/study/amass/)
+* [Aquatone — A Tool for Domain Flyovers](https://github.com/michenriksen/aquatone)
 * [Collaborating with the Crowd – Recapping LevelUp 0X04](https://www.bugcrowd.com/blog/recapping_levelup_0x04/)
 * [Subdomain Enumeration: 2019 Workflow](https://0xpatrik.com/subdomain-enumeration-2019/)
 * [REMOTE CODE EXECUTION ! 😜 Recon Wins](https://medium.com/@vishnu0002/remote-code-execution-recon-wins-e9c1db79f3da)
