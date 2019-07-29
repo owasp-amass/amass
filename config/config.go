@@ -29,8 +29,9 @@ const (
 	// DefaultOutputDirectory is the name of the directory used for output files, such as the graph database.
 	DefaultOutputDirectory = "amass"
 
-	defaultWordlistURL    = "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/namelist.txt"
-	defaultAltWordlistURL = "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/alterations.txt"
+	defaultConcurrentDNSQueries = 2500
+	defaultWordlistURL          = "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/namelist.txt"
+	defaultAltWordlistURL       = "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/alterations.txt"
 )
 
 // Config passes along Amass configuration settings and options.
@@ -145,7 +146,7 @@ func (c *Config) CheckSettings() error {
 		return errors.New("Active enumeration cannot be performed without DNS resolution")
 	}
 	if c.MaxDNSQueries <= 0 {
-		c.MaxDNSQueries = 1000
+		c.MaxDNSQueries = defaultConcurrentDNSQueries
 	}
 	if len(c.Ports) == 0 {
 		c.Ports = []int{443}
