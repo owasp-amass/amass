@@ -8,7 +8,6 @@ import (
 	"compress/gzip"
 	"errors"
 	"fmt"
-	homedir "github.com/mitchellh/go-homedir"
 	"io"
 	"log"
 	"net"
@@ -20,9 +19,11 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/OWASP/Amass/stringset"
 	"github.com/OWASP/Amass/utils"
 	"github.com/go-ini/ini"
 	"github.com/google/uuid"
+	homedir "github.com/mitchellh/go-homedir"
 )
 
 const (
@@ -213,16 +214,20 @@ func (c *Config) AddDomain(domain string) {
 			return
 		}
 	}
+
 	// Check that the regular expression map has been initialized
 	if c.regexps == nil {
 		c.regexps = make(map[string]*regexp.Regexp)
 	}
+
 	// Create the regular expression for this domain
 	c.regexps[d] = utils.SubdomainRegex(d)
 	if c.regexps[d] != nil {
 		// Add the domain string to the list
-		c.domains = utils.UniqueAppend(c.domains, d)
+		c.domains = append(c.domains, d)
 	}
+
+	c.domains = stringset.Deduplicate(c.domains)
 }
 
 // Domains returns the list of domain names currently in the configuration.
@@ -389,9 +394,11 @@ func (c *Config) loadBruteForceSettings(cfg *ini.File) error {
 			if err != nil {
 				return fmt.Errorf("Unable to load the file in the bruteforce wordlist_file setting: %s: %v", wordlist, err)
 			}
-			c.Wordlist = utils.UniqueAppend(c.Wordlist, list...)
+			c.Wordlist = append(c.Wordlist, list...)
 		}
 	}
+
+	c.Wordlist = stringset.Deduplicate(c.Wordlist)
 	return nil
 }
 
@@ -419,9 +426,11 @@ func (c *Config) loadAlterationSettings(cfg *ini.File) error {
 			if err != nil {
 				return fmt.Errorf("Unable to load the file in the alterations wordlist_file setting: %s: %v", wordlist, err)
 			}
-			c.AltWordlist = utils.UniqueAppend(c.AltWordlist, list...)
+			c.AltWordlist = append(c.AltWordlist, list...)
 		}
 	}
+
+	c.AltWordlist = stringset.Deduplicate(c.AltWordlist)
 	return nil
 }
 
@@ -456,13 +465,11 @@ func (c *Config) LoadSettings(path string) error {
 	}
 	// Load up all the blacklisted subdomain names
 	if blacklisted, err := cfg.GetSection("blacklisted"); err == nil {
-		c.Blacklist = utils.UniqueAppend(c.Blacklist,
-			blacklisted.Key("subdomain").ValueWithShadows()...)
+		c.Blacklist = stringset.Deduplicate(blacklisted.Key("subdomain").ValueWithShadows())
 	}
 	// Load up all the disabled data source names
 	if disabled, err := cfg.GetSection("disabled_data_sources"); err == nil {
-		c.DisabledDataSources = utils.UniqueAppend(
-			c.DisabledDataSources, disabled.Key("data_source").ValueWithShadows()...)
+		c.DisabledDataSources = stringset.Deduplicate(disabled.Key("data_source").ValueWithShadows())
 	}
 	// Load up all the Gremlin Server settings
 	if gremlin, err := cfg.GetSection("gremlin"); err == nil {
@@ -603,7 +610,9 @@ func GetListFromFile(path string) ([]string, error) {
 		defer gzReader.Close()
 		reader = gzReader
 	}
-	return getWordList(reader)
+
+	s, err := getWordList(reader)
+	return s, err
 }
 
 func getWordlistByURL(url string) ([]string, error) {
@@ -625,7 +634,7 @@ func getWordList(reader io.Reader) ([]string, error) {
 			words = append(words, w)
 		}
 	}
-	return words, nil
+	return stringset.Deduplicate(words), nil
 }
 
 func uniqueIntAppend(s []int, e string) []int {

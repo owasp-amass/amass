@@ -15,6 +15,7 @@ import (
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
+	"github.com/OWASP/Amass/stringset"
 	"github.com/OWASP/Amass/utils"
 )
 
@@ -138,7 +139,7 @@ func (t *TeamCymru) origin(addr string) *requests.ASNRequest {
 		CC:             strings.TrimSpace(fields[2]),
 		Registry:       strings.TrimSpace(fields[3]),
 		AllocationDate: at,
-		Netblocks:      []string{strings.TrimSpace(fields[1])},
+		Netblocks:      stringset.New(strings.TrimSpace(fields[1])),
 		Tag:            t.SourceType,
 		Source:         t.String(),
 	}

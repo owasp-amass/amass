@@ -14,6 +14,7 @@ import (
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
+	"github.com/OWASP/Amass/stringset"
 	"github.com/OWASP/Amass/utils"
 )
 
@@ -119,7 +120,7 @@ func (h *HackerTarget) executeASNQuery(addr string) {
 		Prefix:         strings.Trim(fields[2], "\""),
 		AllocationDate: time.Now(),
 		Description:    strings.Trim(fields[3], "\""),
-		Netblocks:      []string{strings.Trim(fields[2], "\"")},
+		Netblocks:      stringset.New(strings.Trim(fields[2], "\"")),
 		Tag:            h.SourceType,
 		Source:         h.String(),
 	})

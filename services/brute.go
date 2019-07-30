@@ -145,9 +145,10 @@ func (bfs *BruteForceService) performBruteForcing(subdomain, domain string) {
 		bfs.Pool().GetWildcardType(req) == resolvers.WildcardTypeDynamic {
 		return
 	}
+	wordlist := bfs.Config().Wordlist
 
 	bfs.totalLock.Lock()
-	bfs.totalNames += len(bfs.Config().Wordlist)
+	bfs.totalNames += len(wordlist)
 	bfs.totalLock.Unlock()
 
 	var idx int
@@ -160,11 +161,11 @@ func (bfs *BruteForceService) performBruteForcing(subdomain, domain string) {
 		case <-t.C:
 			bfs.SetActive()
 		default:
-			if idx >= len(bfs.Config().Wordlist) {
+			if idx >= len(wordlist) {
 				return
 			}
 			bfs.Config().SemMaxDNSQueries.Acquire(1)
-			word := strings.ToLower(bfs.Config().Wordlist[idx])
+			word := strings.ToLower(wordlist[idx])
 			go bfs.bruteForceResolution(word, subdomain, domain)
 			idx++
 		}

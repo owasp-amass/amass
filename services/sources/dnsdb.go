@@ -16,6 +16,7 @@ import (
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
+	"github.com/OWASP/Amass/stringset"
 	"github.com/OWASP/Amass/utils"
 )
 
@@ -101,13 +102,13 @@ func (d *DNSDB) restURL(domain string) string {
 }
 
 func (d *DNSDB) passiveDNSJSON(page, domain string) {
-	var unique []string
 
 	re := d.Config().DomainRegex(domain)
 	if re == nil {
 		return
 	}
 
+	unique := stringset.New()
 	scanner := bufio.NewScanner(strings.NewReader(page))
 	for scanner.Scan() {
 		// Get the next line of JSON
@@ -124,11 +125,11 @@ func (d *DNSDB) passiveDNSJSON(page, domain string) {
 			continue
 		}
 		if re.MatchString(j.Name) {
-			unique = utils.UniqueAppend(unique, j.Name)
+			unique.Insert(j.Name)
 		}
 	}
 
-	for _, name := range unique {
+	for name := range unique {
 		d.Bus().Publish(requests.NewNameTopic, &requests.DNSRequest{
 			Name:   name,
 			Domain: domain,
@@ -146,14 +147,12 @@ func (d *DNSDB) scrape(domain string) {
 		return
 	}
 
-	var names []string
-	if f := d.followIndicies(page, domain); len(f) > 0 {
-		names = utils.UniqueAppend(names, f...)
-	} else if n := d.pullPageNames(page, domain); len(n) > 0 {
-		names = utils.UniqueAppend(names, n...)
-	}
+	names := stringset.New()
+	names.Union(d.followIndicies(page, domain))
+	names.Union(d.pullPageNames(page, domain))
+
 	// Share what has been discovered so far
-	for _, name := range names {
+	for name := range names {
 		d.Bus().Publish(requests.NewNameTopic, &requests.DNSRequest{
 			Name:   name,
 			Domain: domain,
@@ -165,7 +164,7 @@ func (d *DNSDB) scrape(domain string) {
 	t := time.NewTicker(d.RateLimit)
 	defer t.Stop()
 loop:
-	for _, name := range names {
+	for name := range names {
 		select {
 		case <-d.Quit():
 			break loop
@@ -181,7 +180,7 @@ loop:
 				continue
 			}
 
-			for _, result := range d.pullPageNames(another, domain) {
+			for result := range d.pullPageNames(another, domain) {
 				d.Bus().Publish(requests.NewNameTopic, &requests.DNSRequest{
 					Name:   result,
 					Domain: domain,
@@ -210,8 +209,9 @@ func (d *DNSDB) getURL(domain, sub string) string {
 
 var dnsdbIndexRE = regexp.MustCompile(`<a href="[a-zA-Z0-9]">([a-zA-Z0-9])</a>`)
 
-func (d *DNSDB) followIndicies(page, domain string) []string {
-	var indicies, unique []string
+func (d *DNSDB) followIndicies(page, domain string) stringset.Set {
+	var indicies []string
+	unique := stringset.New()
 	idx := dnsdbIndexRE.FindAllStringSubmatch(page, -1)
 	if idx == nil {
 		return unique
@@ -231,22 +231,18 @@ func (d *DNSDB) followIndicies(page, domain string) []string {
 			continue
 		}
 
-		if names := d.pullPageNames(ipage, domain); len(names) > 0 {
-			unique = utils.UniqueAppend(unique, names...)
-		}
+		unique.Union(d.pullPageNames(ipage, domain))
 		time.Sleep(d.RateLimit)
 	}
 	return unique
 }
 
-func (d *DNSDB) pullPageNames(page, domain string) []string {
-	var names []string
+func (d *DNSDB) pullPageNames(page, domain string) stringset.Set {
+	names := stringset.New()
 
 	if re := d.Config().DomainRegex(domain); re != nil {
 		for _, name := range re.FindAllString(page, -1) {
-			if u := utils.NewUniqueElements(names, cleanName(name)); len(u) > 0 {
-				names = append(names, u...)
-			}
+			names.Insert(cleanName(name))
 		}
 	}
 	return names

@@ -16,6 +16,7 @@ import (
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
+	"github.com/OWASP/Amass/stringset"
 	"github.com/OWASP/Amass/utils"
 )
 
@@ -113,18 +114,18 @@ func (a *AlienVault) executeDNSQuery(domain string) {
 		return
 	}
 
-	var ips []string
-	var names []string
+	ips := stringset.New()
+	names := stringset.New()
 	for _, sub := range m.Subdomains {
 		n := strings.ToLower(sub.Hostname)
 
 		if re.MatchString(n) {
-			names = append(names, n)
-			ips = append(ips, sub.IP)
+			names.Insert(n)
+			ips.Insert(sub.IP)
 		}
 	}
 
-	for _, name := range names {
+	for name := range names {
 		a.Bus().Publish(requests.NewNameTopic, &requests.DNSRequest{
 			Name:   name,
 			Domain: domain,
@@ -133,7 +134,7 @@ func (a *AlienVault) executeDNSQuery(domain string) {
 		})
 	}
 
-	for _, ip := range ips {
+	for ip := range ips {
 		a.Bus().Publish(requests.NewAddrTopic, &requests.AddrRequest{
 			Address: ip,
 			Tag:     a.SourceType,
@@ -180,15 +181,15 @@ func (a *AlienVault) executeURLQuery(domain string) {
 		return
 	}
 
-	var ips []string
-	var names []string
+	ips := stringset.New()
+	names := stringset.New()
 	for _, u := range urls.URLs {
 		n := strings.ToLower(u.Hostname)
 
 		if re.MatchString(n) {
-			names = utils.UniqueAppend(names, n)
+			names.Insert(n)
 			if u.Result.Worker.IP != "" {
-				ips = utils.UniqueAppend(ips, u.Result.Worker.IP)
+				ips.Insert(u.Result.Worker.IP)
 			}
 		}
 	}
@@ -218,16 +219,16 @@ func (a *AlienVault) executeURLQuery(domain string) {
 				n := strings.ToLower(u.Hostname)
 
 				if re.MatchString(n) {
-					names = utils.UniqueAppend(names, n)
+					names.Insert(n)
 					if u.Result.Worker.IP != "" {
-						ips = utils.UniqueAppend(ips, u.Result.Worker.IP)
+						ips.Insert(u.Result.Worker.IP)
 					}
 				}
 			}
 		}
 	}
 
-	for _, name := range names {
+	for name := range names {
 		a.Bus().Publish(requests.NewNameTopic, &requests.DNSRequest{
 			Name:   name,
 			Domain: domain,
@@ -236,7 +237,7 @@ func (a *AlienVault) executeURLQuery(domain string) {
 		})
 	}
 
-	for _, ip := range ips {
+	for ip := range ips {
 		a.Bus().Publish(requests.NewAddrTopic, &requests.AddrRequest{
 			Address: ip,
 			Tag:     a.SourceType,
@@ -246,14 +247,14 @@ func (a *AlienVault) executeURLQuery(domain string) {
 }
 
 func (a *AlienVault) queryWhoisForEmails(domain string) []string {
-	var emails []string
+	emails := stringset.New()
 	u := a.getWhoisURL(domain)
 
 	a.SetActive()
 	page, err := utils.RequestWebPage(u, nil, a.getHeaders(), "", "")
 	if err != nil {
 		a.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", a.String(), u, err))
-		return emails
+		return emails.Slice()
 	}
 
 	var m struct {
@@ -266,12 +267,12 @@ func (a *AlienVault) queryWhoisForEmails(domain string) []string {
 	}
 	if err := json.Unmarshal([]byte(page), &m); err != nil {
 		a.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", a.String(), u, err))
-		return emails
+		return emails.Slice()
 	} else if m.Count == 0 {
 		a.Bus().Publish(requests.LogTopic,
 			fmt.Sprintf("%s: %s: The query returned zero results", a.String(), u),
 		)
-		return emails
+		return emails.Slice()
 	}
 
 	for _, row := range m.Data {
@@ -286,18 +287,18 @@ func (a *AlienVault) queryWhoisForEmails(domain string) []string {
 			// Unfortunately AlienVault doesn't categorize the email addresses so we
 			// have to filter by something we know to avoid adding registrar emails
 			if a.Config().IsDomainInScope(d) {
-				emails = utils.UniqueAppend(emails, email)
+				emails.Insert(email)
 			}
 		}
 	}
-	return emails
+	return emails.Slice()
 }
 
 func (a *AlienVault) executeWhoisQuery(domain string) {
 	emails := a.queryWhoisForEmails(domain)
 	time.Sleep(a.RateLimit)
 
-	var newDomains []string
+	newDomains := stringset.New()
 	headers := a.getHeaders()
 	for _, email := range emails {
 		a.SetActive()
@@ -318,7 +319,7 @@ func (a *AlienVault) executeWhoisQuery(domain string) {
 		}
 		for _, d := range domains {
 			if !a.Config().IsDomainInScope(d.Domain) {
-				newDomains = utils.UniqueAppend(newDomains, d.Domain)
+				newDomains.Insert(d.Domain)
 			}
 		}
 		time.Sleep(a.RateLimit)
@@ -333,7 +334,7 @@ func (a *AlienVault) executeWhoisQuery(domain string) {
 
 	a.Bus().Publish(requests.NewWhoisTopic, &requests.WhoisRequest{
 		Domain:     domain,
-		NewDomains: newDomains,
+		NewDomains: newDomains.Slice(),
 		Tag:        a.SourceType,
 		Source:     a.String(),
 	})
