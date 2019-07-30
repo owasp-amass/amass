@@ -18,6 +18,7 @@ import (
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
+	"github.com/OWASP/Amass/stringset"
 	"github.com/OWASP/Amass/utils"
 )
 
@@ -100,7 +101,7 @@ loop:
 				if req.Address != "" {
 					n.executeASNAddrQuery(req.Address)
 				} else {
-					n.executeASNQuery(req.ASN, "", []string{})
+					n.executeASNQuery(req.ASN, "", stringset.New())
 				}
 			}
 			last = time.Now()
@@ -135,10 +136,10 @@ func (n *NetworksDB) executeASNAddrQuery(addr string) {
 		return
 	}
 
-	var netblocks []string
+	netblocks := stringset.New()
 	for _, match := range networksdbCIDRRE.FindAllStringSubmatch(page, -1) {
 		if len(match) >= 2 {
-			netblocks = utils.UniqueAppend(netblocks, strings.TrimSpace(match[1]))
+			netblocks.Insert(strings.TrimSpace(match[1]))
 		}
 	}
 
@@ -167,7 +168,7 @@ func (n *NetworksDB) getIPURL(addr string) string {
 	return networksdbBaseURL + "/ip/" + addr
 }
 
-func (n *NetworksDB) executeASNQuery(asn int, addr string, netblocks []string) {
+func (n *NetworksDB) executeASNQuery(asn int, addr string, netblocks stringset.Set) {
 	n.SetActive()
 	u := n.getASNURL(asn)
 	page, err := utils.RequestWebPage(u, nil, nil, "", "")
@@ -196,7 +197,7 @@ func (n *NetworksDB) executeASNQuery(asn int, addr string, netblocks []string) {
 
 	for _, match := range networksdbCIDRRE.FindAllStringSubmatch(page, -1) {
 		if len(match) >= 2 {
-			netblocks = utils.UniqueAppend(netblocks, strings.TrimSpace(match[1]))
+			netblocks.Insert(strings.TrimSpace(match[1]))
 		}
 	}
 
@@ -204,7 +205,7 @@ func (n *NetworksDB) executeASNQuery(asn int, addr string, netblocks []string) {
 	if addr != "" {
 		ip := net.ParseIP(addr)
 
-		for _, cidr := range netblocks {
+		for cidr := range netblocks {
 			if _, ipnet, err := net.ParseCIDR(cidr); err == nil && ipnet.Contains(ip) {
 				prefix = cidr
 				break
@@ -212,7 +213,7 @@ func (n *NetworksDB) executeASNQuery(asn int, addr string, netblocks []string) {
 		}
 	}
 	if prefix == "" && len(netblocks) > 0 {
-		prefix = netblocks[0]
+		prefix = netblocks.ToSlice()[0] // TODO order may matter here :shrug:
 	}
 
 	n.Bus().Publish(requests.NewASNTopic, &requests.ASNRequest{
@@ -250,7 +251,7 @@ func (n *NetworksDB) executeAPIASNAddrQuery(addr string) {
 	}
 
 	var asn int
-	var cidrs []string
+	cidrs := stringset.New()
 	ip := net.ParseIP(addr)
 loop:
 	for _, a := range asns {
@@ -262,7 +263,7 @@ loop:
 			)
 		}
 
-		for _, cidr := range cidrs {
+		for cidr := range cidrs {
 			if _, ipnet, err := net.ParseCIDR(cidr); err == nil {
 				if ipnet.Contains(ip) {
 					asn = a
@@ -281,9 +282,9 @@ loop:
 	n.executeAPIASNQuery(asn, addr, cidrs)
 }
 
-func (n *NetworksDB) executeAPIASNQuery(asn int, addr string, netblocks []string) {
-	if netblocks == nil {
-		netblocks = n.apiNetblocksQuery(asn)
+func (n *NetworksDB) executeAPIASNQuery(asn int, addr string, netblocks stringset.Set) {
+	if len(netblocks) == 0 {
+		netblocks.Union(n.apiNetblocksQuery(asn))
 		if len(netblocks) == 0 {
 			n.Bus().Publish(requests.LogTopic,
 				fmt.Sprintf("%s: %d: Failed to obtain netblocks associated with the ASN", n.String(), asn),
@@ -295,7 +296,7 @@ func (n *NetworksDB) executeAPIASNQuery(asn int, addr string, netblocks []string
 	var prefix string
 	if addr != "" {
 		ip := net.ParseIP(addr)
-		for _, cidr := range netblocks {
+		for cidr := range netblocks {
 			if _, ipnet, err := net.ParseCIDR(cidr); err == nil && ipnet.Contains(ip) {
 				prefix = cidr
 				break
@@ -303,7 +304,7 @@ func (n *NetworksDB) executeAPIASNQuery(asn int, addr string, netblocks []string
 		}
 	}
 	if prefix == "" {
-		prefix = netblocks[0]
+		prefix = netblocks.ToSlice()[0]
 	}
 
 	time.Sleep(n.RateLimit)
@@ -452,8 +453,8 @@ func (n *NetworksDB) getAPIASNInfoURL() string {
 	return networksdbBaseURL + networksdbAPIPATH + "/as/info"
 }
 
-func (n *NetworksDB) apiNetblocksQuery(asn int) []string {
-	var netblocks []string
+func (n *NetworksDB) apiNetblocksQuery(asn int) stringset.Set {
+	netblocks := stringset.New()
 
 	n.SetActive()
 	u := n.getAPINetblocksURL()
@@ -486,7 +487,7 @@ func (n *NetworksDB) apiNetblocksQuery(asn int) []string {
 	}
 
 	for _, block := range m.Results {
-		netblocks = utils.UniqueAppend(netblocks, block.CIDR)
+		netblocks.Insert(block.CIDR)
 	}
 	return netblocks
 }

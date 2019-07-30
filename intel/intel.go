@@ -234,7 +234,7 @@ func (c *Collection) sendNetblockCIDRs() {
 
 	filter := utils.NewStringFilter()
 	for _, record := range c.netCache {
-		for _, netblock := range record.Netblocks {
+		for netblock := range record.Netblocks {
 			_, ipnet, err := net.ParseCIDR(netblock)
 			if err == nil && !filter.Duplicate(ipnet.String()) {
 				c.cidrChan <- ipnet
@@ -269,7 +269,7 @@ func (c *Collection) updateNetCache(req *requests.ASNRequest) {
 	if entry.Description == "" && req.Description != "" {
 		entry.Description = req.Description
 	}
-	entry.Netblocks = utils.UniqueAppend(entry.Netblocks, req.Netblocks...)
+	entry.Netblocks.Union(req.Netblocks)
 	c.netCache[req.ASN] = entry
 }
 
@@ -380,7 +380,7 @@ func ExcludeDisabledDataSources(srvs []services.Service, cfg *config.Config) []s
 	for _, s := range srvs {
 		include := true
 
-		for _, disabled := range cfg.DisabledDataSources {
+		for disabled := range cfg.DisabledDataSources {
 			if strings.EqualFold(disabled, s.String()) {
 				include = false
 				break

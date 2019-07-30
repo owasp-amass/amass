@@ -81,6 +81,7 @@ func NewEnumeration() *Enumeration {
 		filter:      utils.NewStringFilter(),
 		outputQueue: new(utils.Queue),
 	}
+	e.Config.Init()
 	if e.Pool == nil {
 		return nil
 	}
@@ -463,7 +464,7 @@ func ExcludeDisabledDataSources(srvs []services.Service, cfg *config.Config) []s
 	for _, s := range srvs {
 		include := true
 
-		for _, disabled := range cfg.DisabledDataSources {
+		for disabled := range cfg.DisabledDataSources {
 			if strings.EqualFold(disabled, s.String()) {
 				include = false
 				break

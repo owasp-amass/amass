@@ -16,6 +16,7 @@ import (
 	"github.com/OWASP/Amass/config"
 	"github.com/OWASP/Amass/graph"
 	"github.com/OWASP/Amass/requests"
+	"github.com/OWASP/Amass/stringset"
 	"github.com/OWASP/Amass/utils"
 	"github.com/fatih/color"
 )
@@ -25,7 +26,7 @@ const (
 )
 
 type dbArgs struct {
-	Domains utils.ParseStrings
+	Domains stringset.Set
 	Enum    int
 	Options struct {
 		DemoMode         bool
@@ -51,6 +52,8 @@ func runDBCommand(clArgs []string) {
 
 	dbBuf := new(bytes.Buffer)
 	dbCommand.SetOutput(dbBuf)
+
+	args.Domains = stringset.New()
 
 	dbCommand.BoolVar(&help1, "h", false, "Show the program usage message")
 	dbCommand.BoolVar(&help2, "help", false, "Show the program usage message")
@@ -88,17 +91,17 @@ func runDBCommand(clArgs []string) {
 			r.Fprintf(color.Error, "Failed to parse the domain names file: %v\n", err)
 			return
 		}
-		args.Domains = utils.UniqueAppend(args.Domains, list...)
+		args.Domains.InsertMany(list...)
 	}
 
-	cfg := new(config.Config)
+	cfg := config.New()
 	// Check if a configuration file was provided, and if so, load the settings
 	if _, err := config.AcquireConfig(args.Filepaths.Directory, args.Filepaths.ConfigFile, cfg); err == nil {
 		if args.Filepaths.Directory == "" {
 			args.Filepaths.Directory = cfg.Dir
 		}
 		if len(args.Domains) == 0 {
-			args.Domains = utils.UniqueAppend(args.Domains, cfg.Domains()...)
+			args.Domains.InsertMany(cfg.Domains()...)
 		}
 	} else if args.Filepaths.ConfigFile != "" {
 		r.Fprintf(color.Error, "Failed to load the configuration file: %v\n", err)
@@ -122,7 +125,7 @@ func runDBCommand(clArgs []string) {
 	}
 
 	if args.Options.ListEnumerations {
-		listEnumerations(args.Domains, db)
+		listEnumerations(&args, db)
 		return
 	}
 
@@ -172,7 +175,8 @@ func inputDataOperations(args *dbArgs, db graph.DataHandler) error {
 	return nil
 }
 
-func listEnumerations(domains []string, db graph.DataHandler) {
+func listEnumerations(args *dbArgs, db graph.DataHandler) {
+	domains := args.Domains.ToSlice()
 	enums := enumIDs(domains, db)
 	if len(enums) == 0 {
 		r.Fprintln(color.Error, "No enumerations found within the provided scope")
@@ -198,11 +202,12 @@ func listEnumerations(domains []string, db graph.DataHandler) {
 }
 
 func showEnumeration(args *dbArgs, db graph.DataHandler) {
+	domains := args.Domains.ToSlice()
 	var total int
 	tags := make(map[string]int)
 	asns := make(map[int]*utils.ASNSummaryData)
-	for _, out := range getEnumOutput(args.Enum, args.Domains, db) {
-		if len(args.Domains) > 0 && !domainNameInScope(out.Name, args.Domains) {
+	for _, out := range getEnumOutput(args.Enum, domains, db) {
+		if len(domains) > 0 && !domainNameInScope(out.Name, domains) {
 			continue
 		}
 

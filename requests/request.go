@@ -6,6 +6,8 @@ package requests
 import (
 	"net"
 	"time"
+
+	"github.com/OWASP/Amass/stringset"
 )
 
 // Request tag types.
@@ -71,7 +73,7 @@ type ASNRequest struct {
 	Registry       string
 	AllocationDate time.Time
 	Description    string
-	Netblocks      []string
+	Netblocks      stringset.Set
 	Tag            string
 	Source         string
 }

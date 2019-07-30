@@ -28,6 +28,7 @@ var (
 
 func setupConfig(domain string) *config.Config {
 	cfg := &config.Config{}
+	cfg.Init()
 	cfg.Alterations = true
 	cfg.FlipWords = true
 	cfg.AddWords = true
@@ -35,7 +36,7 @@ func setupConfig(domain string) *config.Config {
 	cfg.AddNumbers = true
 	cfg.MinForWordFlip = 0
 	cfg.EditDistance = 1
-	cfg.AltWordlist = []string{"prod", "dev"}
+	cfg.AltWordlist.InsertMany("prod", "dev")
 	cfg.AddDomain(domain)
 	buf := new(strings.Builder)
 	cfg.Log = log.New(buf, "", log.Lmicroseconds)

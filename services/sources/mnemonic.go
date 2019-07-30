@@ -14,6 +14,7 @@ import (
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
+	"github.com/OWASP/Amass/stringset"
 	"github.com/OWASP/Amass/utils"
 )
 
@@ -65,8 +66,8 @@ func (m *Mnemonic) executeDNSQuery(domain string) {
 		return
 	}
 
-	var ips []string
-	var names []string
+	ips := stringset.New()
+	names := stringset.New()
 	scanner := bufio.NewScanner(strings.NewReader(page))
 	for scanner.Scan() {
 		// Get the next line of JSON
@@ -85,12 +86,12 @@ func (m *Mnemonic) executeDNSQuery(domain string) {
 		}
 
 		if (j.Type == "a" || j.Type == "aaaa") && m.Config().IsDomainInScope(j.Query) {
-			ips = utils.UniqueAppend(ips, j.Answer)
-			names = utils.UniqueAppend(names, j.Query)
+			ips.Insert(j.Answer)
+			names.Insert(j.Query)
 		}
 	}
 
-	for _, name := range names {
+	for name := range names {
 		m.Bus().Publish(requests.NewNameTopic, &requests.DNSRequest{
 			Name:   name,
 			Domain: domain,
@@ -99,7 +100,7 @@ func (m *Mnemonic) executeDNSQuery(domain string) {
 		})
 	}
 
-	for _, ip := range ips {
+	for ip := range ips {
 		// Inform the Address Service of this finding
 		m.Bus().Publish(requests.NewAddrTopic, &requests.AddrRequest{
 			Address: ip,
