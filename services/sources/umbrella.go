@@ -228,7 +228,7 @@ func (u *Umbrella) queryReverseWhois(apiURL string) []string {
 		fullAPIURL := fmt.Sprintf("%s&offset=%d", apiURL, count)
 		record, err := utils.RequestWebPage(fullAPIURL, nil, headers, "", "")
 		if err != nil {
-			u.Config().Log.Printf("%s: %s: %v", u.String(), apiURL, err)
+			u.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", u.String(), apiURL, err))
 			return domains.ToSlice()
 		}
 		err = json.Unmarshal([]byte(record), &whois)

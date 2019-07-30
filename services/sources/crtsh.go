@@ -6,7 +6,6 @@ package sources
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/OWASP/Amass/config"
 	eb "github.com/OWASP/Amass/eventbus"

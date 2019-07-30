@@ -582,18 +582,26 @@ func updateEnumConfiguration(e *enum.Enumeration, args *enumArgs) error {
 }
 
 func compileDisabledSources(srcs []string, include, exclude stringset.Set) stringset.Set {
-	// Check that the include names are valid
 	master := stringset.New(srcs...)
-	disable := stringset.New(srcs...)
 
-	// Remove explicitly include sources
-	disable.Subtract(include)
+	// Check that the exclude names are valid
+	excLen := len(exclude)
+	exclude.Intersect(master)
+	if excLen != len(exclude) {
+		r.Fprintf(color.Error, "Invalid excluded data source specification\n")
+	}
 
-	// Add back in explicitly excluded sources
-	disable.Union(exclude)
+	// Check that the include names are valid
+	incLen := len(include)
+	include.Intersect(master)
+	if incLen != len(include) {
+		r.Fprintf(color.Error, "Invalid included data source specification\n")
+	}
 
-	// Make sure we dont have any outside of the master list
-	disable.Intersect(master)
+	if len(include) == 0 {
+		return exclude
+	}
 
-	return disable
+	master.Subtract(include)
+	return master
 }
