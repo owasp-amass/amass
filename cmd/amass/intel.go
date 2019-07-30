@@ -383,7 +383,7 @@ func updateIntelConfiguration(ic *intel.Collection, args *intelArgs) error {
 
 	disabled := compileDisabledSources(GetAllSourceNames(), args.Included, args.Excluded)
 	if len(disabled) > 0 {
-		ic.Config.DisabledDataSources = disabled
+		ic.Config.DisabledDataSources = disabled.ToSlice()
 	}
 	// Attempt to add the provided domains to the configuration
 	ic.Config.AddDomains(args.Domains.ToSlice())

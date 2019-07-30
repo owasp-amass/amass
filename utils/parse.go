@@ -8,8 +8,6 @@ import (
 	"net"
 	"strconv"
 	"strings"
-
-	"github.com/OWASP/Amass/stringset"
 )
 
 // ParseStrings implements the flag.Value interface.

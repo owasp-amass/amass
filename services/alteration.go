@@ -60,11 +60,10 @@ type AlterationService struct {
 
 // NewAlterationService returns he object initialized, but not yet started.
 func NewAlterationService(cfg *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool) *AlterationService {
-	seed := cfg.AltWordlist.ToSlice()
 	as := &AlterationService{
 		filter:   utils.NewStringFilter(),
-		prefixes: newAlterationCache(seed),
-		suffixes: newAlterationCache(seed),
+		prefixes: newAlterationCache(cfg.AltWordlist),
+		suffixes: newAlterationCache(cfg.AltWordlist),
 	}
 
 	as.BaseService = *NewBaseService(as, "Alterations", cfg, bus, pool)

@@ -11,6 +11,10 @@ type (
 	nothing struct{}
 )
 
+func Deduplicate(input []string) []string {
+	return New(input...).ToSlice()
+}
+
 func New(initial ...string) Set {
 	s := Set{}
 

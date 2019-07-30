@@ -75,7 +75,7 @@ type Config struct {
 	Ports []int
 
 	// The list of words to use when generating names
-	Wordlist stringset.Set
+	Wordlist []string
 
 	// Will the enumeration including brute forcing techniques
 	BruteForcing bool
@@ -94,7 +94,7 @@ type Config struct {
 	AddNumbers     bool
 	MinForWordFlip int
 	EditDistance   int
-	AltWordlist    stringset.Set
+	AltWordlist    []string
 
 	// Only access the data sources for names and return results?
 	Passive bool
@@ -106,13 +106,13 @@ type Config struct {
 	IncludeUnresolvable bool `ini:"include_unresolvable"`
 
 	// A blacklist of subdomain names that will not be investigated
-	Blacklist stringset.Set
+	Blacklist []string
 
 	// A list of data sources that should not be utilized
-	DisabledDataSources stringset.Set
+	DisabledDataSources []string
 
 	// The root domain names that the enumeration will target
-	domains stringset.Set
+	domains []string
 
 	// The regular expressions for the root domains added to the enumeration
 	regexps map[string]*regexp.Regexp
@@ -136,11 +136,6 @@ func New() *Config {
 }
 
 func (c *Config) Init() {
-	c.AltWordlist = stringset.New()
-	c.Wordlist = stringset.New()
-	c.domains = stringset.New()
-	c.Blacklist = stringset.New()
-	c.DisabledDataSources = stringset.New()
 	c.regexps = make(map[string]*regexp.Regexp)
 	c.apikeys = make(map[string]*APIKey)
 }
@@ -178,19 +173,15 @@ func (c *Config) CheckSettings() error {
 	}
 	c.SemMaxDNSQueries = utils.NewSimpleSemaphore(c.MaxDNSQueries)
 
-	wordlist := c.Wordlist.ToSlice()
-	wordlist, err = utils.ExpandMaskWordlist(wordlist)
+	c.Wordlist, err = utils.ExpandMaskWordlist(c.Wordlist)
 	if err != nil {
 		return err
 	}
-	c.Wordlist = stringset.New(wordlist...)
 
-	altWordlist := c.AltWordlist.ToSlice()
-	altWordlist, err = utils.ExpandMaskWordlist(altWordlist)
+	c.AltWordlist, err = utils.ExpandMaskWordlist(c.AltWordlist)
 	if err != nil {
 		return err
 	}
-	c.AltWordlist = stringset.New(altWordlist...)
 
 	return err
 }
@@ -238,8 +229,10 @@ func (c *Config) AddDomain(domain string) {
 	c.regexps[d] = utils.SubdomainRegex(d)
 	if c.regexps[d] != nil {
 		// Add the domain string to the list
-		c.domains.Insert(d)
+		c.domains = append(c.domains, d)
 	}
+
+	c.domains = stringset.Deduplicate(c.domains)
 }
 
 // Domains returns the list of domain names currently in the configuration.
@@ -247,7 +240,7 @@ func (c *Config) Domains() []string {
 	c.Lock()
 	defer c.Unlock()
 
-	return c.domains.ToSlice()
+	return c.domains
 }
 
 // IsDomainInScope returns true if the DNS name in the parameter ends with a domain in the config list.
@@ -307,7 +300,7 @@ func (c *Config) Blacklisted(name string) bool {
 	var resp bool
 
 	n := strings.TrimSpace(name)
-	for bl := range c.Blacklist {
+	for _, bl := range c.Blacklist {
 		if match := strings.HasSuffix(n, bl); match {
 			resp = true
 			break
@@ -403,9 +396,11 @@ func (c *Config) loadBruteForceSettings(cfg *ini.File) error {
 			if err != nil {
 				return fmt.Errorf("Unable to load the file in the bruteforce wordlist_file setting: %s: %v", wordlist, err)
 			}
-			c.Wordlist.InsertMany(list...)
+			c.Wordlist = append(c.Wordlist, list...)
 		}
 	}
+
+	c.Wordlist = stringset.Deduplicate(c.Wordlist)
 	return nil
 }
 
@@ -433,9 +428,11 @@ func (c *Config) loadAlterationSettings(cfg *ini.File) error {
 			if err != nil {
 				return fmt.Errorf("Unable to load the file in the alterations wordlist_file setting: %s: %v", wordlist, err)
 			}
-			c.AltWordlist.InsertMany(list...)
+			c.AltWordlist = append(c.AltWordlist, list...)
 		}
 	}
+
+	c.AltWordlist = stringset.Deduplicate(c.AltWordlist)
 	return nil
 }
 
@@ -470,11 +467,11 @@ func (c *Config) LoadSettings(path string) error {
 	}
 	// Load up all the blacklisted subdomain names
 	if blacklisted, err := cfg.GetSection("blacklisted"); err == nil {
-		c.Blacklist.InsertMany(blacklisted.Key("subdomain").ValueWithShadows()...)
+		c.Blacklist = stringset.Deduplicate(blacklisted.Key("subdomain").ValueWithShadows())
 	}
 	// Load up all the disabled data source names
 	if disabled, err := cfg.GetSection("disabled_data_sources"); err == nil {
-		c.DisabledDataSources.InsertMany(disabled.Key("data_source").ValueWithShadows()...)
+		c.DisabledDataSources = stringset.Deduplicate(disabled.Key("data_source").ValueWithShadows())
 	}
 	// Load up all the Gremlin Server settings
 	if gremlin, err := cfg.GetSection("gremlin"); err == nil {
@@ -617,10 +614,10 @@ func GetListFromFile(path string) ([]string, error) {
 	}
 
 	s, err := getWordList(reader)
-	return s.ToSlice(), err
+	return s, err
 }
 
-func getWordlistByURL(url string) (stringset.Set, error) {
+func getWordlistByURL(url string) ([]string, error) {
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
 		return nil, fmt.Errorf("Failed to obtain the wordlist at %s: %v", url, err)
@@ -628,18 +625,18 @@ func getWordlistByURL(url string) (stringset.Set, error) {
 	return getWordList(strings.NewReader(page))
 }
 
-func getWordList(reader io.Reader) (stringset.Set, error) {
-	words := stringset.New()
+func getWordList(reader io.Reader) ([]string, error) {
+	var words []string
 
 	scanner := bufio.NewScanner(reader)
 	for scanner.Scan() {
 		// Get the next word in the list
 		w := strings.TrimSpace(scanner.Text())
 		if err := scanner.Err(); err == nil && w != "" {
-			words.Insert(w)
+			words = append(words, w)
 		}
 	}
-	return words, nil
+	return stringset.Deduplicate(words), nil
 }
 
 func uniqueIntAppend(s []int, e string) []int {

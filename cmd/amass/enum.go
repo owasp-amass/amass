@@ -505,7 +505,7 @@ func processEnumInputFiles(args *enumArgs) error {
 		for _, f := range args.Filepaths.Resolvers {
 			list, err := config.GetListFromFile(f)
 			if err != nil {
-				return fmt.Errorf("Failed to parse the resolver file: %v", err)
+				return fmt.Errorf("Failed to parse the esolver file: %v", err)
 			}
 
 			args.Resolvers.InsertMany(list...)
@@ -535,10 +535,10 @@ func updateEnumConfiguration(e *enum.Enumeration, args *enumArgs) error {
 		e.Config.MaxDNSQueries = args.MaxDNSQueries
 	}
 	if len(args.BruteWordList) > 0 {
-		e.Config.Wordlist = args.BruteWordList
+		e.Config.Wordlist = args.BruteWordList.ToSlice()
 	}
 	if len(args.AltWordList) > 0 {
-		e.Config.AltWordlist = args.AltWordList
+		e.Config.AltWordlist = args.AltWordList.ToSlice()
 	}
 	if len(args.Names) > 0 {
 		e.ProvidedNames = args.Names.ToSlice()
@@ -565,12 +565,12 @@ func updateEnumConfiguration(e *enum.Enumeration, args *enumArgs) error {
 		e.Config.Passive = true
 	}
 	if len(args.Blacklist) > 0 {
-		e.Config.Blacklist = args.Blacklist
+		e.Config.Blacklist = args.Blacklist.ToSlice()
 	}
 
 	disabled := compileDisabledSources(e.GetAllSourceNames(), args.Included, args.Excluded)
 	if len(disabled) > 0 {
-		e.Config.DisabledDataSources = disabled
+		e.Config.DisabledDataSources = disabled.ToSlice()
 	}
 
 	// Attempt to add the provided domains to the configuration

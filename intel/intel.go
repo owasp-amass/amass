@@ -380,7 +380,7 @@ func ExcludeDisabledDataSources(srvs []services.Service, cfg *config.Config) []s
 	for _, s := range srvs {
 		include := true
 
-		for disabled := range cfg.DisabledDataSources {
+		for _, disabled := range cfg.DisabledDataSources {
 			if strings.EqualFold(disabled, s.String()) {
 				include = false
 				break

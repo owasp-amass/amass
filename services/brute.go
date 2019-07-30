@@ -145,7 +145,7 @@ func (bfs *BruteForceService) performBruteForcing(subdomain, domain string) {
 		bfs.Pool().GetWildcardType(req) == resolvers.WildcardTypeDynamic {
 		return
 	}
-	wordlist := bfs.Config().Wordlist.ToSlice()
+	wordlist := bfs.Config().Wordlist
 
 	bfs.totalLock.Lock()
 	bfs.totalNames += len(wordlist)
