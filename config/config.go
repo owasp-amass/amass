@@ -129,17 +129,6 @@ type APIKey struct {
 	Secret   string `ini:"secret"`
 }
 
-func New() *Config {
-	c := new(Config)
-	c.Init()
-	return c
-}
-
-func (c *Config) Init() {
-	c.regexps = make(map[string]*regexp.Regexp)
-	c.apikeys = make(map[string]*APIKey)
-}
-
 // CheckSettings runs some sanity checks on the configuration options selected.
 func (c *Config) CheckSettings() error {
 	var err error

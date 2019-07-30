@@ -28,7 +28,6 @@ var (
 
 func setupConfig(domain string) *config.Config {
 	cfg := &config.Config{}
-	cfg.Init()
 	cfg.Alterations = true
 	cfg.FlipWords = true
 	cfg.AddWords = true

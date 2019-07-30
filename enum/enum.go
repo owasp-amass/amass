@@ -81,7 +81,6 @@ func NewEnumeration() *Enumeration {
 		filter:      utils.NewStringFilter(),
 		outputQueue: new(utils.Queue),
 	}
-	e.Config.Init()
 	if e.Pool == nil {
 		return nil
 	}
