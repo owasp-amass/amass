@@ -225,6 +225,12 @@ func (c *Config) AddDomain(domain string) {
 			return
 		}
 	}
+
+	// Check that the regular expression map has been initialized
+	if c.regexps == nil {
+		c.regexps = make(map[string]*regexp.Regexp)
+	}
+
 	// Create the regular expression for this domain
 	c.regexps[d] = utils.SubdomainRegex(d)
 	if c.regexps[d] != nil {
@@ -319,6 +325,9 @@ func (c *Config) AddAPIKey(source string, ak *APIKey) {
 		return
 	}
 
+	if c.apikeys == nil {
+		c.apikeys = make(map[string]*APIKey)
+	}
 	c.apikeys[strings.ToLower(idx)] = ak
 }
 
