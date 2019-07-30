@@ -111,7 +111,7 @@ func crawl(service services.Service, baseURL, baseDomain, subdomain, domain stri
 
 	re := service.Config().DomainRegex(domain)
 	if re == nil {
-		return results.ToSlice(), fmt.Errorf("crawler error: Failed to obtain regex object for: %s", domain)
+		return results.Slice(), fmt.Errorf("crawler error: Failed to obtain regex object for: %s", domain)
 	}
 
 	start := fmt.Sprintf("%s/%s/%s", baseURL, strconv.Itoa(time.Now().Year()), subdomain)
@@ -136,5 +136,5 @@ func crawl(service services.Service, baseURL, baseDomain, subdomain, domain stri
 		},
 	}).Start()
 
-	return results.ToSlice(), nil
+	return results.Slice(), nil
 }

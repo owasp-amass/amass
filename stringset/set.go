@@ -12,7 +12,7 @@ type (
 )
 
 func Deduplicate(input []string) []string {
-	return New(input...).ToSlice()
+	return New(input...).Slice()
 }
 
 func New(initial ...string) Set {
@@ -44,7 +44,7 @@ func (s Set) Remove(element string) {
 	delete(s, element)
 }
 
-func (s Set) ToSlice() []string {
+func (s Set) Slice() []string {
 	var i uint64
 
 	k := make([]string, len(s))
@@ -93,7 +93,7 @@ func (s Set) Intersect(other Set) {
 
 // Set implements the flag.Value interface.
 func (s *Set) String() string {
-	return strings.Join(s.ToSlice(), ",")
+	return strings.Join(s.Slice(), ",")
 }
 
 // Set implements the flag.Value interface.

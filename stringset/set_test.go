@@ -43,10 +43,10 @@ func TestSetRemove(t *testing.T) {
 	}
 }
 
-func TestSetToSlice(t *testing.T) {
+func TestSetSlice(t *testing.T) {
 	expected := 3
 	set := New("test1", "test2", "test3", "test1", "test2")
-	slice := set.ToSlice()
+	slice := set.Slice()
 	if len(slice) != expected {
 		t.Errorf("Got %d, expected %d", len(set), expected)
 	}

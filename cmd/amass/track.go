@@ -129,7 +129,7 @@ func runTrackCommand(clArgs []string) {
 	defer db.Close()
 
 	// Obtain the enumerations that include the provided domain(s)
-	enums := enumIDs(args.Domains.ToSlice(), db)
+	enums := enumIDs(args.Domains.Slice(), db)
 
 	// There needs to be at least two enumerations to proceed
 	if len(enums) < 2 {
@@ -164,10 +164,10 @@ func runTrackCommand(clArgs []string) {
 	latest = latest[:end]
 
 	if args.Options.History {
-		completeHistoryOutput(args.Domains.ToSlice(), enums, earliest, latest, db)
+		completeHistoryOutput(args.Domains.Slice(), enums, earliest, latest, db)
 		return
 	}
-	cumulativeOutput(args.Domains.ToSlice(), enums, earliest, latest, db)
+	cumulativeOutput(args.Domains.Slice(), enums, earliest, latest, db)
 }
 
 func cumulativeOutput(domains []string, enums []string, ea, la []time.Time, db graph.DataHandler) {

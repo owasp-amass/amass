@@ -192,7 +192,7 @@ func runIntelCommand(clArgs []string) {
 	}
 
 	if len(args.Resolvers) > 0 {
-		if err := ic.Pool.SetResolvers(args.Resolvers.ToSlice()); err != nil {
+		if err := ic.Pool.SetResolvers(args.Resolvers.Slice()); err != nil {
 			r.Fprintf(color.Error, "Failed to set custom DNS resolvers: %v\n", err)
 			os.Exit(1)
 		}
@@ -383,9 +383,9 @@ func updateIntelConfiguration(ic *intel.Collection, args *intelArgs) error {
 
 	disabled := compileDisabledSources(GetAllSourceNames(), args.Included, args.Excluded)
 	if len(disabled) > 0 {
-		ic.Config.DisabledDataSources = disabled.ToSlice()
+		ic.Config.DisabledDataSources = disabled.Slice()
 	}
 	// Attempt to add the provided domains to the configuration
-	ic.Config.AddDomains(args.Domains.ToSlice())
+	ic.Config.AddDomains(args.Domains.Slice())
 	return nil
 }

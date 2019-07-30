@@ -188,5 +188,5 @@ func namesFromCert(cert *x509.Certificate) []string {
 			subdomains.Insert(n)
 		}
 	}
-	return subdomains.ToSlice()
+	return subdomains.Slice()
 }

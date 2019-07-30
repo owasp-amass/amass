@@ -254,7 +254,7 @@ func (a *AlienVault) queryWhoisForEmails(domain string) []string {
 	page, err := utils.RequestWebPage(u, nil, a.getHeaders(), "", "")
 	if err != nil {
 		a.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", a.String(), u, err))
-		return emails.ToSlice()
+		return emails.Slice()
 	}
 
 	var m struct {
@@ -267,12 +267,12 @@ func (a *AlienVault) queryWhoisForEmails(domain string) []string {
 	}
 	if err := json.Unmarshal([]byte(page), &m); err != nil {
 		a.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", a.String(), u, err))
-		return emails.ToSlice()
+		return emails.Slice()
 	} else if m.Count == 0 {
 		a.Bus().Publish(requests.LogTopic,
 			fmt.Sprintf("%s: %s: The query returned zero results", a.String(), u),
 		)
-		return emails.ToSlice()
+		return emails.Slice()
 	}
 
 	for _, row := range m.Data {
@@ -291,7 +291,7 @@ func (a *AlienVault) queryWhoisForEmails(domain string) []string {
 			}
 		}
 	}
-	return emails.ToSlice()
+	return emails.Slice()
 }
 
 func (a *AlienVault) executeWhoisQuery(domain string) {
@@ -334,7 +334,7 @@ func (a *AlienVault) executeWhoisQuery(domain string) {
 
 	a.Bus().Publish(requests.NewWhoisTopic, &requests.WhoisRequest{
 		Domain:     domain,
-		NewDomains: newDomains.ToSlice(),
+		NewDomains: newDomains.Slice(),
 		Tag:        a.SourceType,
 		Source:     a.String(),
 	})

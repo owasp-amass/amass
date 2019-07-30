@@ -213,7 +213,7 @@ func (n *NetworksDB) executeASNQuery(asn int, addr string, netblocks stringset.S
 		}
 	}
 	if prefix == "" && len(netblocks) > 0 {
-		prefix = netblocks.ToSlice()[0] // TODO order may matter here :shrug:
+		prefix = netblocks.Slice()[0] // TODO order may matter here :shrug:
 	}
 
 	n.Bus().Publish(requests.NewASNTopic, &requests.ASNRequest{
@@ -304,7 +304,7 @@ func (n *NetworksDB) executeAPIASNQuery(asn int, addr string, netblocks stringse
 		}
 	}
 	if prefix == "" {
-		prefix = netblocks.ToSlice()[0]
+		prefix = netblocks.Slice()[0]
 	}
 
 	time.Sleep(n.RateLimit)

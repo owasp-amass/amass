@@ -456,7 +456,7 @@ func (g *Graph) EnumerationList() []string {
 			ids.Insert(label)
 		}
 	}
-	return ids.ToSlice()
+	return ids.Slice()
 }
 
 // EnumerationDomains returns the domains that were involved in the provided enumeration.
@@ -480,7 +480,7 @@ func (g *Graph) EnumerationDomains(uuid string) []string {
 			domains.Insert(domain)
 		}
 	}
-	return domains.ToSlice()
+	return domains.Slice()
 }
 
 // EnumerationDateRange returns the date range associated with the provided enumeration UUID.
@@ -600,7 +600,7 @@ func (g *Graph) getCNAMEs(sub, uuid string) []string {
 		cname = quad.String(target)
 		names.Insert(target)
 	}
-	return names.ToSlice()
+	return names.Slice()
 }
 
 func (g *Graph) buildOutput(sub, uuid string) *requests.Output {

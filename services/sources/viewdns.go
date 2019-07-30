@@ -134,7 +134,7 @@ func (v *ViewDNS) executeWhoisQuery(domain string) {
 	if len(matches) > 0 {
 		v.Bus().Publish(requests.NewWhoisTopic, &requests.WhoisRequest{
 			Domain:     domain,
-			NewDomains: matches.ToSlice(),
+			NewDomains: matches.Slice(),
 			Tag:        v.SourceType,
 			Source:     v.String(),
 		})

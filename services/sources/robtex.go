@@ -183,7 +183,7 @@ func (r *Robtex) executeASNQuery(asn int) {
 		return
 	}
 
-	_, ipnet, err := net.ParseCIDR(blocks.ToSlice()[0])
+	_, ipnet, err := net.ParseCIDR(blocks.Slice()[0])
 	if err != nil {
 		return
 	}

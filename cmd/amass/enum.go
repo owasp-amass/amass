@@ -233,7 +233,7 @@ func runEnumCommand(clArgs []string) {
 	}
 
 	if len(args.Resolvers) > 0 {
-		if err := e.Pool.SetResolvers(args.Resolvers.ToSlice()); err != nil {
+		if err := e.Pool.SetResolvers(args.Resolvers.Slice()); err != nil {
 			r.Fprintf(color.Error, "Failed to set custom DNS resolvers: %v\n", err)
 			os.Exit(1)
 		}
@@ -535,13 +535,13 @@ func updateEnumConfiguration(e *enum.Enumeration, args *enumArgs) error {
 		e.Config.MaxDNSQueries = args.MaxDNSQueries
 	}
 	if len(args.BruteWordList) > 0 {
-		e.Config.Wordlist = args.BruteWordList.ToSlice()
+		e.Config.Wordlist = args.BruteWordList.Slice()
 	}
 	if len(args.AltWordList) > 0 {
-		e.Config.AltWordlist = args.AltWordList.ToSlice()
+		e.Config.AltWordlist = args.AltWordList.Slice()
 	}
 	if len(args.Names) > 0 {
-		e.ProvidedNames = args.Names.ToSlice()
+		e.ProvidedNames = args.Names.Slice()
 	}
 	if args.Options.BruteForcing {
 		e.Config.BruteForcing = true
@@ -565,16 +565,16 @@ func updateEnumConfiguration(e *enum.Enumeration, args *enumArgs) error {
 		e.Config.Passive = true
 	}
 	if len(args.Blacklist) > 0 {
-		e.Config.Blacklist = args.Blacklist.ToSlice()
+		e.Config.Blacklist = args.Blacklist.Slice()
 	}
 
 	disabled := compileDisabledSources(e.GetAllSourceNames(), args.Included, args.Excluded)
 	if len(disabled) > 0 {
-		e.Config.DisabledDataSources = disabled.ToSlice()
+		e.Config.DisabledDataSources = disabled.Slice()
 	}
 
 	// Attempt to add the provided domains to the configuration
-	e.Config.AddDomains(args.Domains.ToSlice())
+	e.Config.AddDomains(args.Domains.Slice())
 	if len(e.Config.Domains()) == 0 {
 		return errors.New("No root domain names were provided")
 	}

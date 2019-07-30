@@ -99,7 +99,7 @@ func (s *ShadowServer) executeASNQuery(asn int) {
 	}
 
 	time.Sleep(s.RateLimit)
-	req := s.origin(strings.Trim(blocks.ToSlice()[0], "/"))
+	req := s.origin(strings.Trim(blocks.Slice()[0], "/"))
 	if req == nil {
 		return
 	}

@@ -191,7 +191,7 @@ func (u *Umbrella) collateEmails(record *whoisRecord) []string {
 	if u.validateScope(record.ZoneContactEmail) {
 		emails.InsertMany(record.ZoneContactEmail)
 	}
-	return emails.ToSlice()
+	return emails.Slice()
 }
 
 func (u *Umbrella) queryWhois(domain string) *whoisRecord {
@@ -229,7 +229,7 @@ func (u *Umbrella) queryReverseWhois(apiURL string) []string {
 		record, err := utils.RequestWebPage(fullAPIURL, nil, headers, "", "")
 		if err != nil {
 			u.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", u.String(), apiURL, err))
-			return domains.ToSlice()
+			return domains.Slice()
 		}
 		err = json.Unmarshal([]byte(record), &whois)
 
@@ -250,7 +250,7 @@ func (u *Umbrella) queryReverseWhois(apiURL string) []string {
 		u.SetActive()
 		time.Sleep(u.RateLimit)
 	}
-	return domains.ToSlice()
+	return domains.Slice()
 }
 
 func (u *Umbrella) validateScope(input string) bool {
@@ -299,7 +299,7 @@ func (u *Umbrella) executeWhoisQuery(domain string) {
 	if len(domains) > 0 {
 		u.Bus().Publish(requests.NewWhoisTopic, &requests.WhoisRequest{
 			Domain:     domain,
-			NewDomains: domains.ToSlice(),
+			NewDomains: domains.Slice(),
 			Tag:        u.SourceType,
 			Source:     u.String(),
 		})

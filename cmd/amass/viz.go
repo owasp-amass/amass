@@ -148,10 +148,10 @@ func runVizCommand(clArgs []string) {
 		defer db.Close()
 
 		if args.Enum > 0 {
-			uuid = enumIndexToID(args.Enum, args.Domains.ToSlice(), db)
+			uuid = enumIndexToID(args.Enum, args.Domains.Slice(), db)
 		} else {
 			// Get the UUID for the most recent enumeration
-			uuid = mostRecentEnumID(args.Domains.ToSlice(), db)
+			uuid = mostRecentEnumID(args.Domains.Slice(), db)
 		}
 	}
 	if uuid == "" {

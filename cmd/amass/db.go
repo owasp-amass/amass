@@ -176,7 +176,7 @@ func inputDataOperations(args *dbArgs, db graph.DataHandler) error {
 }
 
 func listEnumerations(args *dbArgs, db graph.DataHandler) {
-	domains := args.Domains.ToSlice()
+	domains := args.Domains.Slice()
 	enums := enumIDs(domains, db)
 	if len(enums) == 0 {
 		r.Fprintln(color.Error, "No enumerations found within the provided scope")
@@ -202,7 +202,7 @@ func listEnumerations(args *dbArgs, db graph.DataHandler) {
 }
 
 func showEnumeration(args *dbArgs, db graph.DataHandler) {
-	domains := args.Domains.ToSlice()
+	domains := args.Domains.Slice()
 	var total int
 	tags := make(map[string]int)
 	asns := make(map[int]*utils.ASNSummaryData)
