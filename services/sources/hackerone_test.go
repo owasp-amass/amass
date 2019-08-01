@@ -15,7 +15,7 @@ func TestHackerone(t *testing.T) {
 	domainTest = "twitter.com"
 
 	cfg := setupConfig(domainTest)
-	
+
 	bus, out := setupEventBus(requests.NewNameTopic)
 	defer bus.Stop()
 

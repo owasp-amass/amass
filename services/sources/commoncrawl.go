@@ -44,7 +44,7 @@ func (c *CommonCrawl) OnStart() error {
 	// Get all of the index API URLs
 	page, err := utils.RequestWebPage(commonCrawlIndexListURL, nil, nil, "", "")
 	if err != nil {
-		c.Bus().Publish(requests.LogTopic, 
+		c.Bus().Publish(requests.LogTopic,
 			fmt.Sprintf("%s: Failed to obtain the index list: %v", c.String(), err),
 		)
 		return fmt.Errorf("%s: Failed to obtain the index list: %v", c.String(), err)
@@ -58,7 +58,7 @@ func (c *CommonCrawl) OnStart() error {
 
 	var indexList []index
 	if err := json.Unmarshal([]byte(page), &indexList); err != nil {
-		c.Bus().Publish(requests.LogTopic, 
+		c.Bus().Publish(requests.LogTopic,
 			fmt.Sprintf("%s: Failed to unmarshal the index list: %v", c.String(), err),
 		)
 		return fmt.Errorf("%s: Failed to unmarshal the index list: %v", c.String(), err)

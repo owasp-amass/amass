@@ -22,7 +22,7 @@ func TestShodan(t *testing.T) {
 		t.Errorf("API key data was not provided")
 		return
 	}
-	
+
 	bus, out := setupEventBus(requests.NewNameTopic)
 	defer bus.Stop()
 
