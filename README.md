@@ -72,6 +72,7 @@ This project improves thanks to all the people who contribute:
 
 ## Mentions
 
+* [8 Free Tools to Be Showcased at Black Hat and DEF CON](https://www.darkreading.com/application-security/8-free-tools-to-be-showcased-at-black-hat-and-def-con/d/d-id/1335356?image_number=5)
 * [amass — Automated Attack Surface Mapping](https://danielmiessler.com/study/amass/)
 * [Aquatone — A Tool for Domain Flyovers](https://github.com/michenriksen/aquatone)
 * [Collaborating with the Crowd – Recapping LevelUp 0X04](https://www.bugcrowd.com/blog/recapping_levelup_0x04/)
