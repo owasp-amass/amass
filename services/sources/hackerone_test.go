@@ -7,17 +7,14 @@ import (
 	"github.com/OWASP/Amass/resolvers"
 )
 
-func TestSpyse(t *testing.T) {
+func TestHackerone(t *testing.T) {
 	if *networkTest == false || *configPath == "" {
 		return
 	}
 
+	domainTest = "twitter.com"
+
 	cfg := setupConfig(domainTest)
-	api := cfg.GetAPIKey("spyse")
-	if api == nil || api.Key == "" || api.Secret == "" {
-		t.Errorf("API key data was not provided")
-		return
-	}
 
 	bus, out := setupEventBus(requests.NewNameTopic)
 	defer bus.Stop()
@@ -25,7 +22,7 @@ func TestSpyse(t *testing.T) {
 	pool := resolvers.NewResolverPool(nil)
 	defer pool.Stop()
 
-	srv := NewSpyse(cfg, bus, pool)
+	srv := NewHackerOne(cfg, bus, pool)
 
 	result := testService(srv, out)
 	if result < expectedTest {

@@ -7,14 +7,14 @@ import (
 	"github.com/OWASP/Amass/resolvers"
 )
 
-func TestSpyse(t *testing.T) {
+func TestShodan(t *testing.T) {
 	if *networkTest == false || *configPath == "" {
 		return
 	}
 
 	cfg := setupConfig(domainTest)
-	api := cfg.GetAPIKey("spyse")
-	if api == nil || api.Key == "" || api.Secret == "" {
+	api := cfg.GetAPIKey("shodan")
+	if api == nil || api.Key == "" {
 		t.Errorf("API key data was not provided")
 		return
 	}
@@ -25,7 +25,7 @@ func TestSpyse(t *testing.T) {
 	pool := resolvers.NewResolverPool(nil)
 	defer pool.Stop()
 
-	srv := NewSpyse(cfg, bus, pool)
+	srv := NewShodan(cfg, bus, pool)
 
 	result := testService(srv, out)
 	if result < expectedTest {

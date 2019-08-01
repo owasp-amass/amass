@@ -63,7 +63,7 @@ func (n *Netcraft) executeQuery(domain string) {
 	url := n.getURL(domain)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		n.Config().Log.Printf("%s: %s, %v", n.String(), url, err)
+		n.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", n.String(), url, err))
 		return
 	}
 

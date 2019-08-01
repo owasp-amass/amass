@@ -14,6 +14,7 @@ import (
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
+	"github.com/OWASP/Amass/stringset"
 	"github.com/OWASP/Amass/utils"
 )
 
@@ -68,7 +69,7 @@ func (h *HackerTarget) executeDNSQuery(domain string) {
 	url := h.getDNSURL(domain)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		h.Config().Log.Printf("%s: %s: %v", h.String(), url, err)
+		h.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", h.String(), url, err))
 		return
 	}
 
@@ -96,19 +97,21 @@ func (h *HackerTarget) executeASNQuery(addr string) {
 	url := h.getASNURL(addr)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		h.Config().Log.Printf("%s: %s: %v", h.String(), url, err)
+		h.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", h.String(), url, err))
 		return
 	}
 
 	fields := strings.Split(page, ",")
 	if len(fields) < 4 {
-		h.Config().Log.Printf("%s: %s: Failed to parse the response", h.String(), url)
+		h.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: Failed to parse the response", h.String(), url))
 		return
 	}
 
 	asn, err := strconv.Atoi(strings.Trim(fields[1], "\""))
 	if err != nil {
-		h.Config().Log.Printf("%s: %s: Failed to parse the origin response: %v", h.String(), url, err)
+		h.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: %s: Failed to parse the origin response: %v", h.String(), url, err),
+		)
 		return
 	}
 
@@ -117,7 +120,7 @@ func (h *HackerTarget) executeASNQuery(addr string) {
 		Prefix:         strings.Trim(fields[2], "\""),
 		AllocationDate: time.Now(),
 		Description:    strings.Trim(fields[3], "\""),
-		Netblocks:      []string{strings.Trim(fields[2], "\"")},
+		Netblocks:      stringset.New(strings.Trim(fields[2], "\"")),
 		Tag:            h.SourceType,
 		Source:         h.String(),
 	})

@@ -62,6 +62,7 @@ func randomInt(min, max int) int {
 type Resolver struct {
 	sync.RWMutex
 	Address        string
+	Port           string
 	WindowDuration time.Duration
 	Dialer         *net.Dialer
 	Conn           net.Conn
@@ -80,19 +81,22 @@ type Resolver struct {
 
 // NewResolver initializes a Resolver that send DNS queries to the IP address in the addr value.
 func NewResolver(addr string) *Resolver {
+	port := "53"
 	parts := strings.Split(addr, ":")
-	if len(parts) == 1 && parts[0] == addr {
-		addr += ":53"
+	if len(parts) == 2 {
+		addr = parts[0]
+		port = parts[1]
 	}
 
 	d := &net.Dialer{}
-	conn, err := d.Dial("udp", addr)
+	conn, err := d.Dial("udp", addr+":"+port)
 	if err != nil {
 		return nil
 	}
 
 	r := &Resolver{
 		Address:        addr,
+		Port:           port,
 		WindowDuration: 2 * time.Second,
 		Dialer:         d,
 		Conn:           conn,
@@ -339,7 +343,8 @@ func (r *Resolver) checkForTimeouts() {
 			// Remove the timed out requests from the map
 			for _, id := range timeouts {
 				if req := r.pullRequest(id); req != nil {
-					estr := fmt.Sprintf("DNS query for %s, type %d timed out", req.Name, req.Qtype)
+					estr := fmt.Sprintf("DNS query on resolver %s, for %s type %d timed out",
+						r.Address, req.Name, req.Qtype)
 					r.returnRequest(req, makeResolveResult(nil, true, estr, 100))
 				}
 			}
@@ -423,10 +428,10 @@ func (r *Resolver) tcpExchange(req *resolveRequest) {
 	msg := queryMessage(r.getID(), req.Name, req.Qtype)
 	d := net.Dialer{Timeout: r.WindowDuration}
 
-	conn, err := d.Dial("tcp", r.Address)
+	conn, err := d.Dial("tcp", r.Address+":"+r.Port)
 	if err != nil {
 		r.pullRequest(msg.MsgHdr.Id)
-		estr := fmt.Sprintf("DNS: Failed to obtain TCP connection to %s: %v", r.Address, err)
+		estr := fmt.Sprintf("DNS: Failed to obtain TCP connection to %s: %v", r.Address+":"+r.Port, err)
 		r.returnRequest(req, makeResolveResult(nil, true, estr, 100))
 		return
 	}
@@ -470,8 +475,8 @@ func (r *Resolver) processMessage(msg *dns.Msg) {
 				break
 			}
 		}
-		estr := fmt.Sprintf("DNS query for %s, type %d returned error %s",
-			req.Name, req.Qtype, dns.RcodeToString[msg.Rcode])
+		estr := fmt.Sprintf("DNS query on resolver %s, for %s type %d returned error %s",
+			r.Address, req.Name, req.Qtype, dns.RcodeToString[msg.Rcode])
 		r.returnRequest(req, makeResolveResult(nil, again, estr, msg.Rcode))
 		return
 	}
@@ -492,7 +497,8 @@ func (r *Resolver) processMessage(msg *dns.Msg) {
 	}
 
 	if len(answers) == 0 {
-		estr := fmt.Sprintf("DNS query for %s, type %d returned 0 records", req.Name, req.Qtype)
+		estr := fmt.Sprintf("DNS query on resolver %s, for %s type %d returned 0 records",
+			r.Address, req.Name, req.Qtype)
 		r.returnRequest(req, makeResolveResult(nil, false, estr, msg.Rcode))
 		return
 	}

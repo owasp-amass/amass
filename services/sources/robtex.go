@@ -6,6 +6,7 @@ package sources
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	"net"
 	"strconv"
 	"strings"
@@ -16,6 +17,7 @@ import (
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
+	"github.com/OWASP/Amass/stringset"
 	"github.com/OWASP/Amass/utils"
 )
 
@@ -90,8 +92,6 @@ loop:
 }
 
 func (r *Robtex) executeDNSQuery(domain string) {
-	var ips []string
-
 	re := r.Config().DomainRegex(domain)
 	if re == nil {
 		return
@@ -101,13 +101,14 @@ func (r *Robtex) executeDNSQuery(domain string) {
 	url := "https://freeapi.robtex.com/pdns/forward/" + domain
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		r.Config().Log.Printf("%s: %s: %v", r.String(), url, err)
+		r.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", r.String(), url, err))
 		return
 	}
 
+	ips := stringset.New()
 	for _, line := range r.parseDNSJSON(page) {
 		if line.Type == "A" {
-			ips = utils.UniqueAppend(ips, line.Data)
+			ips.Insert(line.Data)
 			// Inform the Address Service of this finding
 			r.Bus().Publish(requests.NewAddrTopic, &requests.AddrRequest{
 				Address: line.Data,
@@ -118,11 +119,11 @@ func (r *Robtex) executeDNSQuery(domain string) {
 		}
 	}
 
-	var names []string
+	names := stringset.New()
 	t := time.NewTicker(500 * time.Millisecond)
 	defer t.Stop()
 loop:
-	for _, ip := range ips {
+	for ip := range ips {
 		r.SetActive()
 
 		select {
@@ -132,17 +133,17 @@ loop:
 			url = "https://freeapi.robtex.com/pdns/reverse/" + ip
 			pdns, err := utils.RequestWebPage(url, nil, nil, "", "")
 			if err != nil {
-				r.Config().Log.Printf("%s: %s: %v", r.String(), url, err)
+				r.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", r.String(), url, err))
 				continue
 			}
 
 			for _, line := range r.parseDNSJSON(pdns) {
-				names = utils.UniqueAppend(names, line.Name)
+				names.Insert(line.Name)
 			}
 		}
 	}
 
-	for _, name := range names {
+	for name := range names {
 		if r.Config().IsDomainInScope(name) {
 			r.Bus().Publish(requests.NewNameTopic, &requests.DNSRequest{
 				Name:   name,
@@ -182,7 +183,7 @@ func (r *Robtex) executeASNQuery(asn int) {
 		return
 	}
 
-	_, ipnet, err := net.ParseCIDR(blocks[0])
+	_, ipnet, err := net.ParseCIDR(blocks.Slice()[0])
 	if err != nil {
 		return
 	}
@@ -194,7 +195,7 @@ func (r *Robtex) executeASNQuery(asn int) {
 		return
 	}
 
-	req.Netblocks = utils.UniqueAppend(req.Netblocks, blocks...)
+	req.Netblocks.Union(blocks)
 	r.Bus().Publish(requests.NewASNTopic, req)
 }
 
@@ -207,7 +208,7 @@ func (r *Robtex) executeASNAddrQuery(addr string) {
 
 	r.SetActive()
 	time.Sleep(r.RateLimit)
-	req.Netblocks = utils.UniqueAppend(req.Netblocks, r.netblocks(req.ASN)...)
+	req.Netblocks.Union(r.netblocks(req.ASN))
 	r.Bus().Publish(requests.NewASNTopic, req)
 }
 
@@ -220,7 +221,7 @@ func (r *Robtex) origin(addr string) *requests.ASNRequest {
 	url := "https://freeapi.robtex.com/ipquery/" + addr
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		r.Config().Log.Printf("%s: %s: %v", r.String(), url, err)
+		r.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", r.String(), url, err))
 		return nil
 	}
 	// Extract the network information
@@ -293,7 +294,9 @@ func (r *Robtex) origin(addr string) *requests.ASNRequest {
 	}
 
 	if ipinfo.ASN == 0 {
-		r.Config().Log.Printf("%s: %s: Failed to parse the origin response: %v", r.String(), url, err)
+		r.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: %s: Failed to parse the origin response: %v", r.String(), url, err),
+		)
 		return nil
 	}
 
@@ -309,20 +312,20 @@ func (r *Robtex) origin(addr string) *requests.ASNRequest {
 		ASN:         ipinfo.ASN,
 		Prefix:      ipinfo.Prefix,
 		Description: desc,
-		Netblocks:   []string{ipinfo.Prefix},
+		Netblocks:   stringset.New(ipinfo.Prefix),
 		Tag:         r.SourceType,
 		Source:      r.String(),
 	}
 }
 
-func (r *Robtex) netblocks(asn int) []string {
-	var netblocks []string
+func (r *Robtex) netblocks(asn int) stringset.Set {
+	netblocks := stringset.New()
 
 	r.SetActive()
 	url := "https://freeapi.robtex.com/asquery/" + strconv.Itoa(asn)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		r.Config().Log.Printf("%s: %s: %v", r.String(), url, err)
+		r.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", r.String(), url, err))
 		return netblocks
 	}
 	// Extract the network information
@@ -337,11 +340,13 @@ func (r *Robtex) netblocks(asn int) []string {
 	}
 
 	for _, net := range n.Networks {
-		netblocks = utils.UniqueAppend(netblocks, net.CIDR)
+		netblocks.Insert(net.CIDR)
 	}
 
 	if len(netblocks) == 0 {
-		r.Config().Log.Printf("%s: Failed to acquire netblocks for ASN %d", r.String(), asn)
+		r.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: Failed to acquire netblocks for ASN %d", r.String(), asn),
+		)
 	}
 	return netblocks
 }

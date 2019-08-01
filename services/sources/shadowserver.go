@@ -17,6 +17,7 @@ import (
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
+	"github.com/OWASP/Amass/stringset"
 	"github.com/OWASP/Amass/utils"
 )
 
@@ -98,12 +99,12 @@ func (s *ShadowServer) executeASNQuery(asn int) {
 	}
 
 	time.Sleep(s.RateLimit)
-	req := s.origin(strings.Trim(blocks[0], "/"))
+	req := s.origin(strings.Trim(blocks.Slice()[0], "/"))
 	if req == nil {
 		return
 	}
 
-	req.Netblocks = utils.UniqueAppend(req.Netblocks, blocks...)
+	req.Netblocks.Union(blocks)
 	s.Bus().Publish(requests.NewASNTopic, req)
 }
 
@@ -115,7 +116,7 @@ func (s *ShadowServer) executeASNAddrQuery(addr string) {
 	}
 
 	time.Sleep(s.RateLimit)
-	req.Netblocks = utils.UniqueAppend(req.Netblocks, s.netblocks(req.ASN)...)
+	req.Netblocks.Union(s.netblocks(req.ASN))
 	s.Bus().Publish(requests.NewASNTopic, req)
 }
 
@@ -127,19 +128,25 @@ func (s *ShadowServer) origin(addr string) *requests.ASNRequest {
 
 	answers, err := s.Pool().Resolve(name, "TXT", resolvers.PriorityHigh)
 	if err != nil {
-		s.Config().Log.Printf("%s: %s: DNS TXT record query error: %v", s.String(), name, err)
+		s.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: %s: DNS TXT record query error: %v", s.String(), name, err),
+		)
 		return nil
 	}
 
 	fields := strings.Split(strings.Trim(answers[0].Data, "\""), " | ")
 	if len(fields) < 5 {
-		s.Config().Log.Printf("%s: %s: Failed to parse the origin response", s.String(), name)
+		s.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: %s: Failed to parse the origin response", s.String(), name),
+		)
 		return nil
 	}
 
 	asn, err := strconv.Atoi(strings.TrimSpace(fields[0]))
 	if err != nil {
-		s.Config().Log.Printf("%s: %s: Failed to parse the origin response: %v", s.String(), name, err)
+		s.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: %s: Failed to parse the origin response: %v", s.String(), name, err),
+		)
 		return nil
 	}
 
@@ -148,25 +155,29 @@ func (s *ShadowServer) origin(addr string) *requests.ASNRequest {
 		Prefix:      strings.TrimSpace(fields[1]),
 		CC:          strings.TrimSpace(fields[3]),
 		Description: strings.TrimSpace(fields[2]) + " - " + strings.TrimSpace(fields[4]),
-		Netblocks:   []string{strings.TrimSpace(fields[1])},
+		Netblocks:   stringset.New(strings.TrimSpace(fields[1])),
 		Tag:         s.SourceType,
 		Source:      s.String(),
 	}
 }
 
-func (s *ShadowServer) netblocks(asn int) []string {
-	var netblocks []string
+func (s *ShadowServer) netblocks(asn int) stringset.Set {
+	netblocks := stringset.New()
 
 	if s.addr == "" {
 		answers, err := s.Pool().Resolve(ShadowServerWhoisURL, "A", resolvers.PriorityHigh)
 		if err != nil {
-			s.Config().Log.Printf("%s: %s: %v", s.String(), ShadowServerWhoisURL, err)
+			s.Bus().Publish(requests.LogTopic,
+				fmt.Sprintf("%s: %s: %v", s.String(), ShadowServerWhoisURL, err),
+			)
 			return netblocks
 		}
 
 		ip := answers[0].Data
 		if ip == "" {
-			s.Config().Log.Printf("%s: Failed to resolve %s", s.String(), ShadowServerWhoisURL)
+			s.Bus().Publish(requests.LogTopic,
+				fmt.Sprintf("%s: Failed to resolve %s", s.String(), ShadowServerWhoisURL),
+			)
 			return netblocks
 		}
 		s.addr = ip
@@ -178,7 +189,7 @@ func (s *ShadowServer) netblocks(asn int) []string {
 	d := net.Dialer{}
 	conn, err := d.DialContext(ctx, "tcp", s.addr+":43")
 	if err != nil {
-		s.Config().Log.Printf("%s: %v", s.String(), err)
+		s.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %v", s.String(), err))
 		return netblocks
 	}
 	defer conn.Close()
@@ -190,12 +201,14 @@ func (s *ShadowServer) netblocks(asn int) []string {
 		line := scanner.Text()
 
 		if err := scanner.Err(); err == nil {
-			netblocks = utils.UniqueAppend(netblocks, strings.TrimSpace(line))
+			netblocks.Insert(strings.TrimSpace(line))
 		}
 	}
 
 	if len(netblocks) == 0 {
-		s.Config().Log.Printf("%s: Failed to acquire netblocks for ASN %d", s.String(), asn)
+		s.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: Failed to acquire netblocks for ASN %d", s.String(), asn),
+		)
 	}
 	return netblocks
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
+	"github.com/OWASP/Amass/stringset"
 	"github.com/OWASP/Amass/utils"
 )
 
@@ -43,7 +44,9 @@ func (u *URLScan) OnStart() error {
 
 	u.API = u.Config().GetAPIKey(u.String())
 	if u.API == nil || u.API.Key == "" {
-		u.Config().Log.Printf("%s: API key data was not provided", u.String())
+		u.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: API key data was not provided", u.String()),
+		)
 	}
 
 	go u.processRequests()
@@ -83,7 +86,7 @@ func (u *URLScan) executeQuery(domain string) {
 	url := u.searchURL(domain)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		u.Config().Log.Printf("%s: %s: %v", u.String(), url, err)
+		u.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", u.String(), url, err))
 		return
 	}
 	// Extract the subdomain names from the REST API results
@@ -108,12 +111,12 @@ func (u *URLScan) executeQuery(domain string) {
 		}
 	}
 
-	var subs []string
+	subs := stringset.New()
 	for _, id := range ids {
-		subs = utils.UniqueAppend(subs, u.getSubsFromResult(id)...)
+		subs.Union(u.getSubsFromResult(id))
 	}
 
-	for _, name := range subs {
+	for name := range subs {
 		if re.MatchString(name) {
 			u.Bus().Publish(requests.NewNameTopic, &requests.DNSRequest{
 				Name:   name,
@@ -125,13 +128,13 @@ func (u *URLScan) executeQuery(domain string) {
 	}
 }
 
-func (u *URLScan) getSubsFromResult(id string) []string {
-	var subs []string
+func (u *URLScan) getSubsFromResult(id string) stringset.Set {
+	subs := stringset.New()
 
 	url := u.resultURL(id)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		u.Config().Log.Printf("%s: %s: %v", u.String(), url, err)
+		u.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", u.String(), url, err))
 		return subs
 	}
 	// Extract the subdomain names from the REST API results
@@ -142,7 +145,7 @@ func (u *URLScan) getSubsFromResult(id string) []string {
 		} `json:"lists"`
 	}
 	if err := json.Unmarshal([]byte(page), &data); err == nil {
-		subs = utils.UniqueAppend(subs, data.Lists.Subdomains...)
+		subs.InsertMany(data.Lists.Subdomains...)
 	}
 	return subs
 }
@@ -160,7 +163,7 @@ func (u *URLScan) attemptSubmission(domain string) string {
 	body := strings.NewReader(u.submitBody(domain))
 	page, err := utils.RequestWebPage(url, body, headers, "", "")
 	if err != nil {
-		u.Config().Log.Printf("%s: %s: %v", u.String(), url, err)
+		u.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", u.String(), url, err))
 		return ""
 	}
 	// Extract the subdomain names from the REST API results

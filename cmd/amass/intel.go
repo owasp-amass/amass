@@ -19,6 +19,7 @@ import (
 
 	"github.com/OWASP/Amass/config"
 	"github.com/OWASP/Amass/intel"
+	"github.com/OWASP/Amass/stringset"
 	"github.com/OWASP/Amass/utils"
 	"github.com/fatih/color"
 	homedir "github.com/mitchellh/go-homedir"
@@ -33,12 +34,12 @@ type intelArgs struct {
 	ASNs             utils.ParseInts
 	CIDRs            utils.ParseCIDRs
 	OrganizationName string
-	Domains          utils.ParseStrings
-	Excluded         utils.ParseStrings
-	Included         utils.ParseStrings
+	Domains          stringset.Set
+	Excluded         stringset.Set
+	Included         stringset.Set
 	MaxDNSQueries    int
 	Ports            utils.ParseInts
-	Resolvers        utils.ParseStrings
+	Resolvers        stringset.Set
 	Options          struct {
 		Active       bool
 		DemoMode     bool
@@ -97,7 +98,12 @@ func defineIntelFilepathFlags(intelFlags *flag.FlagSet, args *intelArgs) {
 }
 
 func runIntelCommand(clArgs []string) {
-	var args intelArgs
+	args := intelArgs{
+		Domains:   stringset.New(),
+		Excluded:  stringset.New(),
+		Included:  stringset.New(),
+		Resolvers: stringset.New(),
+	}
 	var help1, help2 bool
 	intelCommand := flag.NewFlagSet("intel", flag.ContinueOnError)
 
@@ -159,7 +165,7 @@ func runIntelCommand(clArgs []string) {
 		os.Exit(1)
 	}
 
-	ic := intel.NewIntelCollection()
+	ic := intel.NewCollection()
 	if ic == nil {
 		r.Fprintf(color.Error, "%s\n", "No DNS resolvers passed the sanity check")
 		os.Exit(1)
@@ -167,12 +173,12 @@ func runIntelCommand(clArgs []string) {
 
 	rLog, wLog := io.Pipe()
 	ic.Config.Log = log.New(wLog, "", log.Lmicroseconds)
-	
+
 	// Check if a configuration file was provided, and if so, load the settings
 	if f, err := config.AcquireConfig(args.Filepaths.Directory, args.Filepaths.ConfigFile, ic.Config); err == nil {
 		// Check if a config file was provided that has DNS resolvers specified
 		if r, err := config.GetResolversFromSettings(f); err == nil && len(args.Resolvers) == 0 {
-			args.Resolvers = r
+			args.Resolvers = stringset.New(r...)
 		}
 	} else if args.Filepaths.ConfigFile != "" {
 		r.Fprintf(color.Error, "Failed to load the configuration file: %v\n", err)
@@ -186,7 +192,7 @@ func runIntelCommand(clArgs []string) {
 	}
 
 	if len(args.Resolvers) > 0 {
-		if err := ic.Pool.SetResolvers(args.Resolvers); err != nil {
+		if err := ic.Pool.SetResolvers(args.Resolvers.Slice()); err != nil {
 			r.Fprintf(color.Error, "Failed to set custom DNS resolvers: %v\n", err)
 			os.Exit(1)
 		}
@@ -210,7 +216,7 @@ func runIntelCommand(clArgs []string) {
 	processIntelOutput(ic, &args, rLog)
 }
 
-func processIntelOutput(ic *intel.IntelCollection, args *intelArgs, pipe *io.PipeReader) {
+func processIntelOutput(ic *intel.Collection, args *intelArgs, pipe *io.PipeReader) {
 	var err error
 
 	// Prepare output file paths
@@ -272,7 +278,7 @@ func processIntelOutput(ic *intel.IntelCollection, args *intelArgs, pipe *io.Pip
 }
 
 // If the user interrupts the program, print the summary information
-func intelSignalHandler(ic *intel.IntelCollection) {
+func intelSignalHandler(ic *intel.Collection) {
 	quit := make(chan os.Signal, 1)
 
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
@@ -319,14 +325,14 @@ func processIntelInputFiles(args *intelArgs) error {
 		if err != nil {
 			return fmt.Errorf("Failed to parse the exclude file: %v", err)
 		}
-		args.Excluded = utils.UniqueAppend(args.Excluded, list...)
+		args.Excluded.InsertMany(list...)
 	}
 	if args.Filepaths.IncludedSrcs != "" {
 		list, err := config.GetListFromFile(args.Filepaths.IncludedSrcs)
 		if err != nil {
 			return fmt.Errorf("Failed to parse the include file: %v", err)
 		}
-		args.Included = utils.UniqueAppend(args.Included, list...)
+		args.Included.InsertMany(list...)
 	}
 	if len(args.Filepaths.Domains) > 0 {
 		for _, f := range args.Filepaths.Domains {
@@ -335,7 +341,7 @@ func processIntelInputFiles(args *intelArgs) error {
 				return fmt.Errorf("Failed to parse the domain names file: %v", err)
 			}
 
-			args.Domains = utils.UniqueAppend(args.Domains, list...)
+			args.Domains.InsertMany(list...)
 		}
 	}
 	if len(args.Filepaths.Resolvers) > 0 {
@@ -345,14 +351,14 @@ func processIntelInputFiles(args *intelArgs) error {
 				return fmt.Errorf("Failed to parse the resolver file: %v", err)
 			}
 
-			args.Resolvers = utils.UniqueAppend(args.Resolvers, list...)
+			args.Resolvers.InsertMany(list...)
 		}
 	}
 	return nil
 }
 
 // Setup the amass intelligence collection settings
-func updateIntelConfiguration(ic *intel.IntelCollection, args *intelArgs) error {
+func updateIntelConfiguration(ic *intel.Collection, args *intelArgs) error {
 	if args.Options.Active {
 		ic.Config.Active = true
 	}
@@ -377,9 +383,9 @@ func updateIntelConfiguration(ic *intel.IntelCollection, args *intelArgs) error 
 
 	disabled := compileDisabledSources(GetAllSourceNames(), args.Included, args.Excluded)
 	if len(disabled) > 0 {
-		ic.Config.DisabledDataSources = disabled
+		ic.Config.DisabledDataSources = disabled.Slice()
 	}
 	// Attempt to add the provided domains to the configuration
-	ic.Config.AddDomains(args.Domains)
+	ic.Config.AddDomains(args.Domains.Slice())
 	return nil
 }

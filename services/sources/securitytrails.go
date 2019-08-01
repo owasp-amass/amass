@@ -43,7 +43,9 @@ func (st *SecurityTrails) OnStart() error {
 
 	st.API = st.Config().GetAPIKey(st.String())
 	if st.API == nil || st.API.Key == "" {
-		st.Config().Log.Printf("%s: API key data was not provided", st.String())
+		st.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: API key data was not provided", st.String()),
+		)
 	}
 
 	go st.processRequests()
@@ -88,7 +90,7 @@ func (st *SecurityTrails) executeQuery(domain string) {
 	st.SetActive()
 	page, err := utils.RequestWebPage(url, nil, headers, "", "")
 	if err != nil {
-		st.Config().Log.Printf("%s: %s: %v", st.String(), url, err)
+		st.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", st.String(), url, err))
 		return
 	}
 	// Extract the subdomain names from the REST API results

@@ -54,52 +54,25 @@ func getWordList(reader io.Reader) []string {
 	return words
 }
 
-type filterRequest struct {
-	String string
-	Result chan bool
-}
-
 // StringFilter implements an object that performs filtering of strings
 // to ensure that only unique items get through the filter.
 type StringFilter struct {
-	filter   *cfilter.CFilter
-	requests chan filterRequest
-	quit     chan struct{}
+	filter *cfilter.CFilter
 }
 
 // NewStringFilter returns an initialized StringFilter.
 func NewStringFilter() *StringFilter {
-	sf := &StringFilter{
-		filter:   cfilter.New(),
-		requests: make(chan filterRequest),
-		quit:     make(chan struct{}),
-	}
-	go sf.processRequests()
-	return sf
+	return &StringFilter{filter: cfilter.New()}
 }
 
 // Duplicate checks if the name provided has been seen before by this filter.
 func (sf *StringFilter) Duplicate(s string) bool {
-	result := make(chan bool)
-
-	sf.requests <- filterRequest{String: s, Result: result}
-	return <-result
-}
-
-func (sf *StringFilter) processRequests() {
-	for {
-		select {
-		case <-sf.quit:
-			return
-		case r := <-sf.requests:
-			if sf.filter.Lookup([]byte(r.String)) {
-				r.Result <- true
-			} else {
-				sf.filter.Insert([]byte(r.String))
-				r.Result <- false
-			}
-		}
+	if sf.filter.Lookup([]byte(s)) {
+		return true
 	}
+
+	sf.filter.Insert([]byte(s))
+	return false
 }
 
 // SubdomainRegex returns a Regexp object initialized to match
@@ -148,11 +121,6 @@ func NewUniqueElements(orig []string, add ...string) []string {
 	return n
 }
 
-// UniqueAppend behaves like the Go append, but does not add duplicate elements.
-func UniqueAppend(orig []string, add ...string) []string {
-	return append(orig, NewUniqueElements(orig, add...)...)
-}
-
 // CopyString return a new string variable with the same value as the parameter.
 func CopyString(src string) string {
 	str := make([]byte, len(src))
@@ -178,6 +146,7 @@ func RemoveAsteriskLabel(s string) string {
 	return strings.Join(labels[index:], ".")
 }
 
+// ExpandMask will return a slice of words that a "hashcat-style" mask matches.
 func ExpandMask(word string) ([]string, error) {
 	var expanded []string
 	var chars string
@@ -218,6 +187,7 @@ func ExpandMask(word string) ([]string, error) {
 	return expanded, nil
 }
 
+// ExpandMaskWordlist performs ExpandMask on a slice of words.
 func ExpandMaskWordlist(wordlist []string) ([]string, error) {
 	var newWordlist []string
 	var newWords []string

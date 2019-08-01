@@ -4,6 +4,7 @@
 package sources
 
 import (
+	"fmt"
 	"net"
 	"strconv"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
+	"github.com/OWASP/Amass/stringset"
 	"github.com/OWASP/Amass/utils"
 )
 
@@ -96,25 +98,33 @@ func (t *TeamCymru) origin(addr string) *requests.ASNRequest {
 	} else if utils.IsIPv6(ip) {
 		name = utils.IPv6NibbleFormat(utils.HexString(ip)) + ".origin6.asn.cymru.com"
 	} else {
-		t.Config().Log.Printf("%s: %s: Failed to parse the IP address", t.String(), addr)
+		t.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: %s: Failed to parse the IP address", t.String(), addr),
+		)
 		return nil
 	}
 
 	answers, err = t.Pool().Resolve(name, "TXT", resolvers.PriorityHigh)
 	if err != nil {
-		t.Config().Log.Printf("%s: %s: DNS TXT record query error: %v", t.String(), name, err)
+		t.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: %s: DNS TXT record query error: %v", t.String(), name, err),
+		)
 		return nil
 	}
 
 	fields := strings.Split(answers[0].Data, " | ")
 	if len(fields) < 5 {
-		t.Config().Log.Printf("%s: %s: Failed to parse the origin response", t.String(), name)
+		t.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: %s: Failed to parse the origin response", t.String(), name),
+		)
 		return nil
 	}
 
 	asn, err := strconv.Atoi(strings.TrimSpace(fields[0]))
 	if err != nil {
-		t.Config().Log.Printf("%s: %s: Failed to parse the origin response: %v", t.String(), name, err)
+		t.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: %s: Failed to parse the origin response: %v", t.String(), name, err),
+		)
 		return nil
 	}
 
@@ -129,7 +139,7 @@ func (t *TeamCymru) origin(addr string) *requests.ASNRequest {
 		CC:             strings.TrimSpace(fields[2]),
 		Registry:       strings.TrimSpace(fields[3]),
 		AllocationDate: at,
-		Netblocks:      []string{strings.TrimSpace(fields[1])},
+		Netblocks:      stringset.New(strings.TrimSpace(fields[1])),
 		Tag:            t.SourceType,
 		Source:         t.String(),
 	}
@@ -142,19 +152,25 @@ func (t *TeamCymru) asnLookup(asn int) *requests.ASNRequest {
 
 	answers, err = t.Pool().Resolve(name, "TXT", resolvers.PriorityHigh)
 	if err != nil {
-		t.Config().Log.Printf("%s: %s: DNS TXT record query error: %v", t.String(), name, err)
+		t.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: %s: DNS TXT record query error: %v", t.String(), name, err),
+		)
 		return nil
 	}
 
 	fields := strings.Split(answers[0].Data, " | ")
 	if len(fields) < 5 {
-		t.Config().Log.Printf("%s: %s: Failed to parse the origin response", t.String(), name)
+		t.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: %s: Failed to parse the origin response", t.String(), name),
+		)
 		return nil
 	}
 
 	pASN, err := strconv.Atoi(strings.TrimSpace(fields[0]))
 	if err != nil || asn != pASN {
-		t.Config().Log.Printf("%s: %s: Failed to parse the origin response: %v", t.String(), name, err)
+		t.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: %s: Failed to parse the origin response: %v", t.String(), name, err),
+		)
 		return nil
 	}
 

@@ -58,7 +58,7 @@ func (q *Queue) Next() (interface{}, bool) {
 	return element.Data, true
 }
 
-// Empty return true if the Queue is empty.
+// Empty returns true if the Queue is empty.
 func (q *Queue) Empty() bool {
 	q.Lock()
 	defer q.Unlock()

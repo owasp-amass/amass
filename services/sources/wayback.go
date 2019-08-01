@@ -4,6 +4,8 @@
 package sources
 
 import (
+	"fmt"
+
 	"github.com/OWASP/Amass/config"
 	eb "github.com/OWASP/Amass/eventbus"
 	"github.com/OWASP/Amass/requests"
@@ -16,22 +18,22 @@ import (
 type Wayback struct {
 	services.BaseService
 
+	SourceType string
 	domain     string
 	baseURL    string
-	SourceType string
 	filter     *utils.StringFilter
 }
 
 // NewWayback returns he object initialized, but not yet started.
-func NewWayback(c *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool) *Wayback {
+func NewWayback(cfg *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool) *Wayback {
 	w := &Wayback{
+		SourceType: requests.ARCHIVE,
 		domain:     "web.archive.org",
 		baseURL:    "http://web.archive.org/web",
-		SourceType: requests.ARCHIVE,
 		filter:     utils.NewStringFilter(),
 	}
 
-	w.BaseService = *services.NewBaseService(w, "Wayback", c, bus, pool)
+	w.BaseService = *services.NewBaseService(w, "Wayback", cfg, bus, pool)
 	return w
 }
 
@@ -67,7 +69,7 @@ func (w *Wayback) executeQuery(sn, domain string) {
 
 	names, err := crawl(w, w.baseURL, w.domain, sn, domain)
 	if err != nil {
-		w.Config().Log.Printf("%s: %v", w.String(), err)
+		w.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %v", w.String(), err))
 		return
 	}
 

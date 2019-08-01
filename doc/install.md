@@ -32,7 +32,15 @@ docker run -v ~/amass:/amass/ amass enum -brute -w /wordlists/all.txt -d example
 
 ## From Source
 
-If you prefer to build your own binary from the latest release of the source code, make sure you have a correctly configured **Go >= 1.10** environment. More information about how to achieve this can be found [on the golang website.](https://golang.org/doc/install) Then, take the following steps:
+If you prefer to build your own binary from the latest release of the source code, make sure you have a correctly configured **Go >= 1.12** environment. More information about how to achieve this can be found [on the golang website.](https://golang.org/doc/install).
+
+If you are not utilizing Go Modules, then you can simply execute the following command:
+
+```bash
+go get -u github.com/OWASP/Amass/...
+```
+
+If you would like to build Amass using Go Modules to ensure the proper dependencies, then perform the following steps:
 
 1. Download OWASP Amass:
 
@@ -48,7 +56,7 @@ Ignore any error messages regarding what was pulled down.
 export GO111MODULE=on
 ```
 
-3. Next, build the binaries from the project source code:
+3. Next, build the binary from the project source code:
 
 ```bash
 cd $GOPATH/src/github.com/OWASP/Amass
@@ -56,9 +64,7 @@ cd $GOPATH/src/github.com/OWASP/Amass
 go install ./...
 ```
 
-At this point, the binaries should be in *$GOPATH/bin*.
-
-4. Several wordlists can be found in the following directory:
+At this point, the binary should be in *$GOPATH/bin*. Several wordlists for performing DNS name alterations and brute forcing can be found in the following directory:
 
 ```bash
 ls $GOPATH/src/github.com/OWASP/Amass/wordlists/
@@ -66,9 +72,9 @@ ls $GOPATH/src/github.com/OWASP/Amass/wordlists/
 
 ## Packages Maintained by the Amass Project
 
-### Homebrew (macOS)
+### Homebrew
 
-For **Homebrew** on **Mac**, the following two commands will install Amass into your macOS environment:
+For **Homebrew**, the following two commands will install Amass into your environment:
 
 ```bash
 brew tap caffix/amass

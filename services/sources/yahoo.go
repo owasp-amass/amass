@@ -4,6 +4,7 @@
 package sources
 
 import (
+	"fmt"
 	"net/url"
 	"strconv"
 	"time"
@@ -26,14 +27,14 @@ type Yahoo struct {
 }
 
 // NewYahoo returns he object initialized, but not yet started.
-func NewYahoo(c *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool) *Yahoo {
+func NewYahoo(cfg *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool) *Yahoo {
 	y := &Yahoo{
 		quantity:   10,
 		limit:      100,
 		SourceType: requests.SCRAPE,
 	}
 
-	y.BaseService = *services.NewBaseService(y, "Yahoo", c, bus, pool)
+	y.BaseService = *services.NewBaseService(y, "Yahoo", cfg, bus, pool)
 	return y
 }
 
@@ -81,7 +82,7 @@ func (y *Yahoo) executeQuery(domain string) {
 			u := y.urlByPageNum(domain, i)
 			page, err := utils.RequestWebPage(u, nil, nil, "", "")
 			if err != nil {
-				y.Config().Log.Printf("%s: %s: %v", y.String(), u, err)
+				y.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", y.String(), u, err))
 				return
 			}
 

@@ -16,6 +16,23 @@ import (
 	"github.com/OWASP/Amass/utils"
 )
 
+var (
+	topNames = []string{
+		"www",
+		"online",
+		"webserver",
+		"ns1",
+		"mail",
+		"smtp",
+		"webmail",
+		"prod",
+		"test",
+		"vpn",
+		"ftp",
+		"ssh",
+	}
+)
+
 type timesRequest struct {
 	Subdomain string
 	Times     chan int
@@ -119,6 +136,17 @@ func (ns *NameService) Resolved(req *requests.DNSRequest) {
 
 	if ns.Config().IsDomainInScope(req.Name) {
 		ns.checkSubdomain(req)
+
+		if ns.Config().BruteForcing && ns.Config().Recursive {
+			for _, name := range topNames {
+				go ns.newNameEvent(&requests.DNSRequest{
+					Name:   name + "." + req.Name,
+					Domain: req.Domain,
+					Tag:    requests.ALT,
+					Source: ns.String(),
+				})
+			}
+		}
 	}
 }
 

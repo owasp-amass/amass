@@ -49,7 +49,7 @@ type DNSService struct {
 }
 
 // NewDNSService returns he object initialized, but not yet started.
-func NewDNSService(c *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool) *DNSService {
+func NewDNSService(cfg *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool) *DNSService {
 	ds := &DNSService{filter: utils.NewStringFilter()}
 
 	for _, n := range badSubnets {
@@ -58,7 +58,7 @@ func NewDNSService(c *config.Config, bus *eb.EventBus, pool *resolvers.ResolverP
 		}
 	}
 
-	ds.BaseService = *NewBaseService(ds, "DNS Service", c, bus, pool)
+	ds.BaseService = *NewBaseService(ds, "DNS Service", cfg, bus, pool)
 	return ds
 }
 
@@ -179,7 +179,7 @@ func (ds *DNSService) performDNSRequest(req *requests.DNSRequest) {
 				break
 			}
 		} else {
-			ds.Config().Log.Printf("DNS: %v", err)
+			ds.Bus().Publish(requests.LogTopic, fmt.Sprintf("DNS: %v", err))
 		}
 		ds.metrics.QueryTime(time.Now())
 		ds.SetActive()
@@ -246,7 +246,7 @@ func (ds *DNSService) basicQueries(subdomain, domain string) {
 			answers = append(answers, a)
 		}
 	} else {
-		ds.Config().Log.Printf("DNS: NS record query error: %s: %v", subdomain, err)
+		ds.Bus().Publish(requests.LogTopic, fmt.Sprintf("DNS: NS record query error: %s: %v", subdomain, err))
 	}
 	ds.metrics.QueryTime(time.Now())
 
@@ -257,7 +257,7 @@ func (ds *DNSService) basicQueries(subdomain, domain string) {
 			answers = append(answers, a)
 		}
 	} else {
-		ds.Config().Log.Printf("DNS: MX record query error: %s: %v", subdomain, err)
+		ds.Bus().Publish(requests.LogTopic, fmt.Sprintf("DNS: MX record query error: %s: %v", subdomain, err))
 	}
 	ds.metrics.QueryTime(time.Now())
 
@@ -266,7 +266,7 @@ func (ds *DNSService) basicQueries(subdomain, domain string) {
 	if ans, err := ds.Pool().Resolve(subdomain, "SOA", resolvers.PriorityHigh); err == nil {
 		answers = append(answers, ans...)
 	} else {
-		ds.Config().Log.Printf("DNS: SOA record query error: %s: %v", subdomain, err)
+		ds.Bus().Publish(requests.LogTopic, fmt.Sprintf("DNS: SOA record query error: %s: %v", subdomain, err))
 	}
 	ds.metrics.QueryTime(time.Now())
 
@@ -275,7 +275,7 @@ func (ds *DNSService) basicQueries(subdomain, domain string) {
 	if ans, err := ds.Pool().Resolve(subdomain, "SPF", resolvers.PriorityHigh); err == nil {
 		answers = append(answers, ans...)
 	} else {
-		ds.Config().Log.Printf("DNS: SPF record query error: %s: %v", subdomain, err)
+		ds.Bus().Publish(requests.LogTopic, fmt.Sprintf("DNS: SPF record query error: %s: %v", subdomain, err))
 	}
 	ds.metrics.QueryTime(time.Now())
 
@@ -298,17 +298,17 @@ func (ds *DNSService) attemptZoneXFR(sub, domain, server string) {
 
 	addr, err := ds.nameserverAddr(server)
 	if addr == "" {
-		ds.Config().Log.Printf("DNS: Zone XFR failed: %v", err)
+		ds.Bus().Publish(requests.LogTopic, fmt.Sprintf("DNS: Zone XFR failed: %v", err))
 		return
 	}
 
-	requests, err := resolvers.ZoneTransfer(sub, domain, addr)
+	reqs, err := resolvers.ZoneTransfer(sub, domain, addr)
 	if err != nil {
-		ds.Config().Log.Printf("DNS: Zone XFR failed: %s: %v", server, err)
+		ds.Bus().Publish(requests.LogTopic, fmt.Sprintf("DNS: Zone XFR failed: %s: %v", server, err))
 		return
 	}
 
-	for _, req := range requests {
+	for _, req := range reqs {
 		ds.resolvedName(req)
 	}
 }
@@ -316,17 +316,17 @@ func (ds *DNSService) attemptZoneXFR(sub, domain, server string) {
 func (ds *DNSService) attemptZoneWalk(domain, server string) {
 	addr, err := ds.nameserverAddr(server)
 	if addr == "" {
-		ds.Config().Log.Printf("DNS: Zone Walk failed: %v", err)
+		ds.Bus().Publish(requests.LogTopic, fmt.Sprintf("DNS: Zone Walk failed: %v", err))
 		return
 	}
 
-	requests, err := resolvers.NsecTraversal(domain, addr)
+	reqs, err := resolvers.NsecTraversal(domain, addr)
 	if err != nil {
-		ds.Config().Log.Printf("DNS: Zone Walk failed: %s: %v", server, err)
+		ds.Bus().Publish(requests.LogTopic, fmt.Sprintf("DNS: Zone Walk failed: %s: %v", server, err))
 		return
 	}
 
-	for _, req := range requests {
+	for _, req := range reqs {
 		ds.SendDNSRequest(req)
 	}
 }

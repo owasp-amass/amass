@@ -16,7 +16,7 @@ import (
 
 	"github.com/OWASP/Amass/config"
 	"github.com/OWASP/Amass/requests"
-	"github.com/OWASP/Amass/utils"
+	"github.com/OWASP/Amass/stringset"
 	"github.com/OWASP/Amass/utils/viz"
 	"github.com/cayleygraph/cayley"
 	"github.com/cayleygraph/cayley/graph"
@@ -445,7 +445,7 @@ func (g *Graph) EnumerationList() []string {
 	it, _ := p.BuildIterator().Optimize()
 	defer it.Close()
 
-	var ids []string
+	ids := stringset.New()
 	ctx := context.TODO()
 	for it.Next(ctx) {
 		token := it.Result()
@@ -453,10 +453,10 @@ func (g *Graph) EnumerationList() []string {
 		label := quad.NativeOf(value).(string)
 
 		if label != "" {
-			ids = utils.UniqueAppend(ids, label)
+			ids.Insert(label)
 		}
 	}
-	return ids
+	return ids.Slice()
 }
 
 // EnumerationDomains returns the domains that were involved in the provided enumeration.
@@ -469,7 +469,7 @@ func (g *Graph) EnumerationDomains(uuid string) []string {
 	it, _ := p.BuildIterator().Optimize()
 	defer it.Close()
 
-	var domains []string
+	domains := stringset.New()
 	ctx := context.TODO()
 	for it.Next(ctx) {
 		token := it.Result()
@@ -477,10 +477,10 @@ func (g *Graph) EnumerationDomains(uuid string) []string {
 		domain := quad.NativeOf(value).(string)
 
 		if domain != "" {
-			domains = utils.UniqueAppend(domains, domain)
+			domains.Insert(domain)
 		}
 	}
-	return domains
+	return domains.Slice()
 }
 
 // EnumerationDateRange returns the date range associated with the provided enumeration UUID.
@@ -588,7 +588,7 @@ func (g *Graph) getSubdomainNames(domain, uuid string, marked bool) []string {
 }
 
 func (g *Graph) getCNAMEs(sub, uuid string) []string {
-	names := []string{sub}
+	names := stringset.New(sub)
 
 	cname := quad.String(sub)
 	for i := 0; i < 10; i++ {
@@ -598,9 +598,9 @@ func (g *Graph) getCNAMEs(sub, uuid string) []string {
 		}
 		// Traverse to the next CNAME
 		cname = quad.String(target)
-		names = utils.UniqueAppend(names, target)
+		names.Insert(target)
 	}
-	return names
+	return names.Slice()
 }
 
 func (g *Graph) buildOutput(sub, uuid string) *requests.Output {

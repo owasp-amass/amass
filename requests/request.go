@@ -6,6 +6,8 @@ package requests
 import (
 	"net"
 	"time"
+
+	"github.com/OWASP/Amass/stringset"
 )
 
 // Request tag types.
@@ -34,6 +36,7 @@ const (
 	NewASNTopic       = "amass:asn"
 	WhoisRequestTopic = "amass:whoisreq"
 	NewWhoisTopic     = "amass:whoisinfo"
+	LogTopic          = "amass:log"
 )
 
 // DNSAnswer is the type used by Amass to represent a DNS record.
@@ -70,7 +73,7 @@ type ASNRequest struct {
 	Registry       string
 	AllocationDate time.Time
 	Description    string
-	Netblocks      []string
+	Netblocks      stringset.Set
 	Tag            string
 	Source         string
 }

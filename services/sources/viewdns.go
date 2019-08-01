@@ -14,6 +14,7 @@ import (
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
+	"github.com/OWASP/Amass/stringset"
 	"github.com/OWASP/Amass/utils"
 )
 
@@ -79,11 +80,11 @@ func (v *ViewDNS) processRequests() {
 func (v *ViewDNS) executeDNSQuery(domain string) {
 	var unique []string
 
-	u := "http://viewdns.info/iphistory/?domain=" + domain
+	u := v.getIPHistoryURL(domain)
 	// The ViewDNS IP History lookup sometimes reveals interesting results
 	page, err := utils.RequestWebPage(u, nil, nil, "", "")
 	if err != nil {
-		v.Config().Log.Printf("%s: %s: %v", v.String(), u, err)
+		v.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", v.String(), u, err))
 		return
 	}
 
@@ -104,44 +105,40 @@ func (v *ViewDNS) executeDNSQuery(domain string) {
 }
 
 func (v *ViewDNS) executeWhoisQuery(domain string) {
-	u := v.getURL(domain)
+	u := v.getReverseWhoisURL(domain)
 	page, err := utils.RequestWebPage(u, nil, nil, "", "")
 	if err != nil {
-		v.Config().Log.Printf("%s: %s: %v", v.String(), u, err)
+		v.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", v.String(), u, err))
 		return
 	}
 	// Pull the table we need from the page content
 	table := getViewDNSTable(page)
 	if table == "" {
-		v.Config().Log.Printf("%s: %s: Failed to discover the table of results", v.String(), u)
+		v.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: %s: Failed to discover the table of results", v.String(), u),
+		)
 		return
 	}
 	// Get the list of domain names discovered through the reverse DNS service
 	re := regexp.MustCompile("<tr><td>([a-zA-Z0-9]{1}[a-zA-Z0-9-]{0,61}[a-zA-Z0-9]{1}[.]{1}[a-zA-Z0-9-]+)</td><td>")
 	subs := re.FindAllStringSubmatch(table, -1)
 
-	var matches []string
+	matches := stringset.New()
 	for _, match := range subs {
 		sub := match[1]
 		if sub != "" {
-			matches = utils.UniqueAppend(matches, strings.TrimSpace(sub))
+			matches.Insert(strings.TrimSpace(sub))
 		}
 	}
 
 	if len(matches) > 0 {
 		v.Bus().Publish(requests.NewWhoisTopic, &requests.WhoisRequest{
 			Domain:     domain,
-			NewDomains: matches,
+			NewDomains: matches.Slice(),
 			Tag:        v.SourceType,
 			Source:     v.String(),
 		})
 	}
-}
-
-func (v *ViewDNS) getURL(domain string) string {
-	format := "http://viewdns.info/reversewhois/?q=%s"
-
-	return fmt.Sprintf(format, domain)
 }
 
 func getViewDNSTable(page string) string {
@@ -165,4 +162,14 @@ func getViewDNSTable(page string) string {
 	i := strings.Index(page[begin:end], "<table")
 	i = strings.Index(page[begin+i+6:end], "<table")
 	return page[begin+i : end]
+}
+
+func (v *ViewDNS) getReverseWhoisURL(domain string) string {
+	format := "https://viewdns.info/reversewhois/?q=%s"
+	return fmt.Sprintf(format, domain)
+}
+
+func (v *ViewDNS) getIPHistoryURL(domain string) string {
+	format := "https://viewdns.info/iphistory/?domain=%s"
+	return fmt.Sprintf(format, domain)
 }

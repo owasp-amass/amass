@@ -16,6 +16,7 @@ import (
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
+	"github.com/OWASP/Amass/stringset"
 	"github.com/OWASP/Amass/utils"
 )
 
@@ -29,13 +30,13 @@ type AlienVault struct {
 }
 
 // NewAlienVault returns he object initialized, but not yet started.
-func NewAlienVault(c *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool) *AlienVault {
+func NewAlienVault(cfg *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool) *AlienVault {
 	a := &AlienVault{
 		SourceType: requests.API,
 		RateLimit:  100 * time.Millisecond,
 	}
 
-	a.BaseService = *services.NewBaseService(a, "AlienVault", c, bus, pool)
+	a.BaseService = *services.NewBaseService(a, "AlienVault", cfg, bus, pool)
 	return a
 }
 
@@ -45,7 +46,7 @@ func (a *AlienVault) OnStart() error {
 
 	a.API = a.Config().GetAPIKey(a.String())
 	if a.API == nil || a.API.Key == "" {
-		a.Config().Log.Printf("%s: API key data was not provided", a.String())
+		a.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: API key data was not provided", a.String()))
 	}
 
 	go a.processRequests()
@@ -95,7 +96,7 @@ func (a *AlienVault) executeDNSQuery(domain string) {
 	u := a.getURL(domain) + "passive_dns"
 	page, err := utils.RequestWebPage(u, nil, a.getHeaders(), "", "")
 	if err != nil {
-		a.Config().Log.Printf("%s: %s: %v", a.String(), u, err)
+		a.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", a.String(), u, err))
 		return
 	}
 	// Extract the subdomain names and IP addresses from the passive DNS information
@@ -106,25 +107,25 @@ func (a *AlienVault) executeDNSQuery(domain string) {
 		} `json:"passive_dns"`
 	}
 	if err := json.Unmarshal([]byte(page), &m); err != nil {
-		a.Config().Log.Printf("%s: %s: %v", a.String(), u, err)
+		a.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", a.String(), u, err))
 		return
 	} else if len(m.Subdomains) == 0 {
-		a.Config().Log.Printf("%s: %s: The query returned zero results", a.String(), u)
+		a.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: The query returned zero results", a.String(), u))
 		return
 	}
 
-	var ips []string
-	var names []string
+	ips := stringset.New()
+	names := stringset.New()
 	for _, sub := range m.Subdomains {
 		n := strings.ToLower(sub.Hostname)
 
 		if re.MatchString(n) {
-			names = append(names, n)
-			ips = append(ips, sub.IP)
+			names.Insert(n)
+			ips.Insert(sub.IP)
 		}
 	}
 
-	for _, name := range names {
+	for name := range names {
 		a.Bus().Publish(requests.NewNameTopic, &requests.DNSRequest{
 			Name:   name,
 			Domain: domain,
@@ -133,7 +134,7 @@ func (a *AlienVault) executeDNSQuery(domain string) {
 		})
 	}
 
-	for _, ip := range ips {
+	for ip := range ips {
 		a.Bus().Publish(requests.NewAddrTopic, &requests.AddrRequest{
 			Address: ip,
 			Tag:     a.SourceType,
@@ -153,7 +154,7 @@ func (a *AlienVault) executeURLQuery(domain string) {
 	u := a.getURL(domain) + "url_list"
 	page, err := utils.RequestWebPage(u, nil, headers, "", "")
 	if err != nil {
-		a.Config().Log.Printf("%s: %s: %v", a.String(), u, err)
+		a.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", a.String(), u, err))
 		return
 	}
 	// Extract the subdomain names and IP addresses from the URL information
@@ -173,22 +174,22 @@ func (a *AlienVault) executeURLQuery(domain string) {
 		} `json:"url_list"`
 	}
 	if err := json.Unmarshal([]byte(page), &urls); err != nil {
-		a.Config().Log.Printf("%s: %s: %v", a.String(), u, err)
+		a.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", a.String(), u, err))
 		return
 	} else if len(urls.URLs) == 0 {
-		a.Config().Log.Printf("%s: %s: The query returned zero results", a.String(), u)
+		a.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: The query returned zero results", a.String(), u))
 		return
 	}
 
-	var ips []string
-	var names []string
+	ips := stringset.New()
+	names := stringset.New()
 	for _, u := range urls.URLs {
 		n := strings.ToLower(u.Hostname)
 
 		if re.MatchString(n) {
-			names = utils.UniqueAppend(names, n)
+			names.Insert(n)
 			if u.Result.Worker.IP != "" {
-				ips = utils.UniqueAppend(ips, u.Result.Worker.IP)
+				ips.Insert(u.Result.Worker.IP)
 			}
 		}
 	}
@@ -200,15 +201,17 @@ func (a *AlienVault) executeURLQuery(domain string) {
 			pageURL := u + "?page=" + strconv.Itoa(cur)
 			page, err = utils.RequestWebPage(pageURL, nil, headers, "", "")
 			if err != nil {
-				a.Config().Log.Printf("%s: %s: %v", a.String(), pageURL, err)
+				a.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", a.String(), pageURL, err))
 				break
 			}
 
 			if err := json.Unmarshal([]byte(page), &urls); err != nil {
-				a.Config().Log.Printf("%s: %s: %v", a.String(), pageURL, err)
+				a.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", a.String(), pageURL, err))
 				break
 			} else if len(urls.URLs) == 0 {
-				a.Config().Log.Printf("%s: %s: The query returned zero results", a.String(), pageURL)
+				a.Bus().Publish(requests.LogTopic,
+					fmt.Sprintf("%s: %s: The query returned zero results", a.String(), pageURL),
+				)
 				break
 			}
 
@@ -216,16 +219,16 @@ func (a *AlienVault) executeURLQuery(domain string) {
 				n := strings.ToLower(u.Hostname)
 
 				if re.MatchString(n) {
-					names = utils.UniqueAppend(names, n)
+					names.Insert(n)
 					if u.Result.Worker.IP != "" {
-						ips = utils.UniqueAppend(ips, u.Result.Worker.IP)
+						ips.Insert(u.Result.Worker.IP)
 					}
 				}
 			}
 		}
 	}
 
-	for _, name := range names {
+	for name := range names {
 		a.Bus().Publish(requests.NewNameTopic, &requests.DNSRequest{
 			Name:   name,
 			Domain: domain,
@@ -234,7 +237,7 @@ func (a *AlienVault) executeURLQuery(domain string) {
 		})
 	}
 
-	for _, ip := range ips {
+	for ip := range ips {
 		a.Bus().Publish(requests.NewAddrTopic, &requests.AddrRequest{
 			Address: ip,
 			Tag:     a.SourceType,
@@ -244,14 +247,14 @@ func (a *AlienVault) executeURLQuery(domain string) {
 }
 
 func (a *AlienVault) queryWhoisForEmails(domain string) []string {
-	var emails []string
+	emails := stringset.New()
 	u := a.getWhoisURL(domain)
 
 	a.SetActive()
 	page, err := utils.RequestWebPage(u, nil, a.getHeaders(), "", "")
 	if err != nil {
-		a.Config().Log.Printf("%s: %s: %v", a.String(), u, err)
-		return emails
+		a.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", a.String(), u, err))
+		return emails.Slice()
 	}
 
 	var m struct {
@@ -263,11 +266,13 @@ func (a *AlienVault) queryWhoisForEmails(domain string) []string {
 		} `json:"data"`
 	}
 	if err := json.Unmarshal([]byte(page), &m); err != nil {
-		a.Config().Log.Printf("%s: %s: %v", a.String(), u, err)
-		return emails
+		a.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", a.String(), u, err))
+		return emails.Slice()
 	} else if m.Count == 0 {
-		a.Config().Log.Printf("%s: %s: The query returned zero results", a.String(), u)
-		return emails
+		a.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: %s: The query returned zero results", a.String(), u),
+		)
+		return emails.Slice()
 	}
 
 	for _, row := range m.Data {
@@ -282,25 +287,25 @@ func (a *AlienVault) queryWhoisForEmails(domain string) []string {
 			// Unfortunately AlienVault doesn't categorize the email addresses so we
 			// have to filter by something we know to avoid adding registrar emails
 			if a.Config().IsDomainInScope(d) {
-				emails = utils.UniqueAppend(emails, email)
+				emails.Insert(email)
 			}
 		}
 	}
-	return emails
+	return emails.Slice()
 }
 
 func (a *AlienVault) executeWhoisQuery(domain string) {
 	emails := a.queryWhoisForEmails(domain)
 	time.Sleep(a.RateLimit)
 
-	var newDomains []string
+	newDomains := stringset.New()
 	headers := a.getHeaders()
 	for _, email := range emails {
 		a.SetActive()
 		pageURL := a.getReverseWhoisURL(email)
 		page, err := utils.RequestWebPage(pageURL, nil, headers, "", "")
 		if err != nil {
-			a.Config().Log.Printf("%s: %s: %v", a.String(), pageURL, err)
+			a.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", a.String(), pageURL, err))
 			continue
 		}
 
@@ -309,25 +314,27 @@ func (a *AlienVault) executeWhoisQuery(domain string) {
 		}
 		var domains []record
 		if err := json.Unmarshal([]byte(page), &domains); err != nil {
-			a.Config().Log.Printf("%s: %s: %v", a.String(), pageURL, err)
+			a.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", a.String(), pageURL, err))
 			continue
 		}
 		for _, d := range domains {
 			if !a.Config().IsDomainInScope(d.Domain) {
-				newDomains = utils.UniqueAppend(newDomains, d.Domain)
+				newDomains.Insert(d.Domain)
 			}
 		}
 		time.Sleep(a.RateLimit)
 	}
 
 	if len(newDomains) == 0 {
-		a.Config().Log.Printf("%s: Reverse whois failed to discover new domain names for %s", a.String(), domain)
+		a.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: Reverse whois failed to discover new domain names for %s", a.String(), domain),
+		)
 		return
 	}
 
 	a.Bus().Publish(requests.NewWhoisTopic, &requests.WhoisRequest{
 		Domain:     domain,
-		NewDomains: newDomains,
+		NewDomains: newDomains.Slice(),
 		Tag:        a.SourceType,
 		Source:     a.String(),
 	})

@@ -23,8 +23,8 @@ import (
 	"github.com/OWASP/Amass/utils"
 )
 
-// IntelCollection is the object type used to execute a open source information gathering with Amass.
-type IntelCollection struct {
+// Collection is the object type used to execute a open source information gathering with Amass.
+type Collection struct {
 	Config *config.Config
 	Bus    *eb.EventBus
 	Pool   *resolvers.ResolverPool
@@ -44,9 +44,9 @@ type IntelCollection struct {
 	activeChan chan struct{}
 }
 
-// NewIntelCollection returns an initialized IntelCollection object that has not been started yet.
-func NewIntelCollection() *IntelCollection {
-	ic := &IntelCollection{
+// NewCollection returns an initialized Collection object that has not been started yet.
+func NewCollection() *Collection {
+	c := &Collection{
 		Config:     &config.Config{Log: log.New(ioutil.Discard, "", 0)},
 		Bus:        eb.NewEventBus(),
 		Pool:       resolvers.NewResolverPool(nil),
@@ -57,28 +57,28 @@ func NewIntelCollection() *IntelCollection {
 		domainChan: make(chan *requests.Output, 100),
 		activeChan: make(chan struct{}, 100),
 	}
-	if ic.Pool == nil {
+	if c.Pool == nil {
 		return nil
 	}
-	return ic
+	return c
 }
 
 // HostedDomains uses open source intelligence to discover root domain names in the target infrastructure.
-func (ic *IntelCollection) HostedDomains() error {
-	if ic.Output == nil {
+func (c *Collection) HostedDomains() error {
+	if c.Output == nil {
 		return errors.New("The intelligence collection did not have an output channel")
-	} else if err := ic.Config.CheckSettings(); err != nil {
+	} else if err := c.Config.CheckSettings(); err != nil {
 		return err
 	}
 
-	go ic.startAddressRanges()
-	go ic.processCIDRs()
+	go c.startAddressRanges()
+	go c.processCIDRs()
 	go func() {
-		for _, cidr := range ic.Config.CIDRs {
-			ic.cidrChan <- cidr
+		for _, cidr := range c.Config.CIDRs {
+			c.cidrChan <- cidr
 		}
 	}()
-	ic.asnsToCIDRs()
+	c.asnsToCIDRs()
 
 	var active bool
 	filter := utils.NewStringFilter()
@@ -86,50 +86,55 @@ func (ic *IntelCollection) HostedDomains() error {
 loop:
 	for {
 		select {
-		case <-ic.Done:
+		case <-c.Done:
 			break loop
 		case <-t.C:
 			if !active {
-				close(ic.Done)
+				close(c.Done)
 			}
 			active = false
-		case <-ic.activeChan:
+		case <-c.activeChan:
 			active = true
-		case d := <-ic.domainChan:
+		case d := <-c.domainChan:
 			active = true
 			if !filter.Duplicate(d.Domain) {
-				ic.Output <- d
+				c.Output <- d
 			}
 		}
 	}
 	t.Stop()
-	close(ic.Output)
+	close(c.Output)
 	return nil
 }
 
-func (ic *IntelCollection) startAddressRanges() {
-	for _, addr := range ic.Config.Addresses {
-		ic.Config.SemMaxDNSQueries.Acquire(1)
-		go ic.investigateAddr(addr.String())
+func (c *Collection) startAddressRanges() {
+	for _, addr := range c.Config.Addresses {
+		c.Config.SemMaxDNSQueries.Acquire(1)
+		go c.investigateAddr(addr.String())
 	}
 }
 
-func (ic *IntelCollection) processCIDRs() {
+func (c *Collection) processCIDRs() {
 	for {
 		select {
-		case <-ic.Done:
+		case <-c.Done:
 			return
-		case cidr := <-ic.cidrChan:
+		case cidr := <-c.cidrChan:
+			// Skip IPv6 netblocks, since they are simply too large
+			if ip := cidr.IP.Mask(cidr.Mask); utils.IsIPv6(ip) {
+				continue
+			}
+
 			for _, addr := range utils.NetHosts(cidr) {
-				ic.Config.SemMaxDNSQueries.Acquire(1)
-				go ic.investigateAddr(addr.String())
+				c.Config.SemMaxDNSQueries.Acquire(1)
+				go c.investigateAddr(addr.String())
 			}
 		}
 	}
 }
 
-func (ic *IntelCollection) investigateAddr(addr string) {
-	defer ic.Config.SemMaxDNSQueries.Release(1)
+func (c *Collection) investigateAddr(addr string) {
+	defer c.Config.SemMaxDNSQueries.Release(1)
 
 	ip := net.ParseIP(addr)
 	if ip == nil {
@@ -137,10 +142,10 @@ func (ic *IntelCollection) investigateAddr(addr string) {
 	}
 
 	addrinfo := requests.AddressInfo{Address: ip}
-	ic.activeChan <- struct{}{}
-	if _, answer, err := ic.Pool.ReverseDNS(addr); err == nil {
-		if d := strings.TrimSpace(ic.Pool.SubdomainToDomain(answer)); d != "" {
-			ic.domainChan <- &requests.Output{
+	c.activeChan <- struct{}{}
+	if _, answer, err := c.Pool.ReverseDNS(addr); err == nil {
+		if d := strings.TrimSpace(c.Pool.SubdomainToDomain(answer)); d != "" {
+			c.domainChan <- &requests.Output{
 				Name:      d,
 				Domain:    d,
 				Addresses: []requests.AddressInfo{addrinfo},
@@ -150,37 +155,37 @@ func (ic *IntelCollection) investigateAddr(addr string) {
 		}
 	}
 
-	ic.activeChan <- struct{}{}
-	if !ic.Config.Active {
+	c.activeChan <- struct{}{}
+	if !c.Config.Active {
 		return
 	}
 
-	for _, name := range utils.PullCertificateNames(addr, ic.Config.Ports) {
+	for _, name := range utils.PullCertificateNames(addr, c.Config.Ports) {
 		if n := strings.TrimSpace(name); n != "" {
-			ic.domainChan <- &requests.Output{
+			c.domainChan <- &requests.Output{
 				Name:      n,
-				Domain:    ic.Pool.SubdomainToDomain(n),
+				Domain:    c.Pool.SubdomainToDomain(n),
 				Addresses: []requests.AddressInfo{addrinfo},
 				Tag:       requests.CERT,
 				Source:    "Active Cert",
 			}
 		}
 	}
-	ic.activeChan <- struct{}{}
+	c.activeChan <- struct{}{}
 }
 
-func (ic *IntelCollection) asnsToCIDRs() {
-	if len(ic.Config.ASNs) == 0 {
+func (c *Collection) asnsToCIDRs() {
+	if len(c.Config.ASNs) == 0 {
 		return
 	}
 
-	ic.Bus.Subscribe(requests.NewASNTopic, ic.updateNetCache)
-	defer ic.Bus.Unsubscribe(requests.NewASNTopic, ic.updateNetCache)
+	c.Bus.Subscribe(requests.NewASNTopic, c.updateNetCache)
+	defer c.Bus.Unsubscribe(requests.NewASNTopic, c.updateNetCache)
 
-	srcs := sources.GetAllSources(ic.Config, ic.Bus, ic.Pool)
+	srcs := sources.GetAllSources(c.Config, c.Bus, c.Pool)
 	// Select the data sources desired by the user
-	if len(ic.Config.DisabledDataSources) > 0 {
-		srcs = ExcludeDisabledDataSources(srcs, ic.Config)
+	if len(c.Config.DisabledDataSources) > 0 {
+		srcs = ExcludeDisabledDataSources(srcs, c.Config)
 	}
 	// Keep only the data sources that successfully start
 	var keep []services.Service
@@ -195,7 +200,7 @@ func (ic *IntelCollection) asnsToCIDRs() {
 	srcs = keep
 
 	// Send the ASN requests to the data sources
-	for _, asn := range ic.Config.ASNs {
+	for _, asn := range c.Config.ASNs {
 		for _, src := range srcs {
 			src.SendASNRequest(&requests.ASNRequest{ASN: asn})
 		}
@@ -203,10 +208,10 @@ func (ic *IntelCollection) asnsToCIDRs() {
 
 	t := time.NewTicker(5 * time.Second)
 	defer t.Stop()
-	defer ic.sendNetblockCIDRs()
+	defer c.sendNetblockCIDRs()
 	for {
 		select {
-		case <-ic.Done:
+		case <-c.Done:
 			return
 		case <-t.C:
 			done := true
@@ -223,49 +228,49 @@ func (ic *IntelCollection) asnsToCIDRs() {
 	}
 }
 
-func (ic *IntelCollection) sendNetblockCIDRs() {
-	ic.netLock.Lock()
-	defer ic.netLock.Unlock()
+func (c *Collection) sendNetblockCIDRs() {
+	c.netLock.Lock()
+	defer c.netLock.Unlock()
 
 	filter := utils.NewStringFilter()
-	for _, record := range ic.netCache {
-		for _, netblock := range record.Netblocks {
+	for _, record := range c.netCache {
+		for netblock := range record.Netblocks {
 			_, ipnet, err := net.ParseCIDR(netblock)
 			if err == nil && !filter.Duplicate(ipnet.String()) {
-				ic.cidrChan <- ipnet
+				c.cidrChan <- ipnet
 			}
 		}
 	}
 }
 
-func (ic *IntelCollection) updateNetCache(req *requests.ASNRequest) {
-	ic.netLock.Lock()
-	defer ic.netLock.Unlock()
+func (c *Collection) updateNetCache(req *requests.ASNRequest) {
+	c.netLock.Lock()
+	defer c.netLock.Unlock()
 
-	if _, found := ic.netCache[req.ASN]; !found {
-		ic.netCache[req.ASN] = req
+	if _, found := c.netCache[req.ASN]; !found {
+		c.netCache[req.ASN] = req
 		return
 	}
 
-	c := ic.netCache[req.ASN]
+	entry := c.netCache[req.ASN]
 	// This is additional information for an ASN entry
-	if c.Prefix == "" && req.Prefix != "" {
-		c.Prefix = req.Prefix
+	if entry.Prefix == "" && req.Prefix != "" {
+		entry.Prefix = req.Prefix
 	}
-	if c.CC == "" && req.CC != "" {
-		c.CC = req.CC
+	if entry.CC == "" && req.CC != "" {
+		entry.CC = req.CC
 	}
-	if c.Registry == "" && req.Registry != "" {
-		c.Registry = req.Registry
+	if entry.Registry == "" && req.Registry != "" {
+		entry.Registry = req.Registry
 	}
-	if c.AllocationDate.IsZero() && !req.AllocationDate.IsZero() {
-		c.AllocationDate = req.AllocationDate
+	if entry.AllocationDate.IsZero() && !req.AllocationDate.IsZero() {
+		entry.AllocationDate = req.AllocationDate
 	}
-	if c.Description == "" && req.Description != "" {
-		c.Description = req.Description
+	if entry.Description == "" && req.Description != "" {
+		entry.Description = req.Description
 	}
-	c.Netblocks = utils.UniqueAppend(c.Netblocks, req.Netblocks...)
-	ic.netCache[req.ASN] = c
+	entry.Netblocks.Union(req.Netblocks)
+	c.netCache[req.ASN] = entry
 }
 
 // LookupASNsByName returns requests.ASNRequest objects for autonomous systems with
@@ -302,13 +307,13 @@ func LookupASNsByName(s string) ([]*requests.ASNRequest, error) {
 }
 
 // ReverseWhois returns domain names that are related to the domains provided
-func (ic *IntelCollection) ReverseWhois() error {
+func (c *Collection) ReverseWhois() error {
 	filter := utils.NewStringFilter()
 
 	collect := func(req *requests.WhoisRequest) {
 		for _, d := range req.NewDomains {
 			if !filter.Duplicate(d) {
-				ic.Output <- &requests.Output{
+				c.Output <- &requests.Output{
 					Name:   d,
 					Domain: d,
 					Tag:    req.Tag,
@@ -317,13 +322,13 @@ func (ic *IntelCollection) ReverseWhois() error {
 			}
 		}
 	}
-	ic.Bus.Subscribe(requests.NewWhoisTopic, collect)
-	defer ic.Bus.Unsubscribe(requests.NewWhoisTopic, collect)
+	c.Bus.Subscribe(requests.NewWhoisTopic, collect)
+	defer c.Bus.Unsubscribe(requests.NewWhoisTopic, collect)
 
-	srcs := sources.GetAllSources(ic.Config, ic.Bus, ic.Pool)
+	srcs := sources.GetAllSources(c.Config, c.Bus, c.Pool)
 	// Select the data sources desired by the user
-	if len(ic.Config.DisabledDataSources) > 0 {
-		srcs = ExcludeDisabledDataSources(srcs, ic.Config)
+	if len(c.Config.DisabledDataSources) > 0 {
+		srcs = ExcludeDisabledDataSources(srcs, c.Config)
 	}
 	// Keep only the data sources that successfully start
 	var keep []services.Service
@@ -338,7 +343,7 @@ func (ic *IntelCollection) ReverseWhois() error {
 	srcs = keep
 
 	// Send the whois requests to the data sources
-	for _, domain := range ic.Config.Domains() {
+	for _, domain := range c.Config.Domains() {
 		for _, src := range srcs {
 			src.SendWhoisRequest(&requests.WhoisRequest{Domain: domain})
 		}
@@ -348,7 +353,7 @@ func (ic *IntelCollection) ReverseWhois() error {
 loop:
 	for {
 		select {
-		case <-ic.Done:
+		case <-c.Done:
 			break loop
 		case <-t.C:
 			done := true
@@ -364,7 +369,7 @@ loop:
 		}
 	}
 	t.Stop()
-	close(ic.Output)
+	close(c.Output)
 	return nil
 }
 

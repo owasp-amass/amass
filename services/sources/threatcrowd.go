@@ -78,7 +78,7 @@ func (t *ThreatCrowd) executeQuery(domain string) {
 	headers := map[string]string{"Content-Type": "application/json"}
 	page, err := utils.RequestWebPage(url, nil, headers, "", "")
 	if err != nil {
-		t.Config().Log.Printf("%s: %s: %v", t.String(), url, err)
+		t.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", t.String(), url, err))
 		return
 	}
 
@@ -95,7 +95,9 @@ func (t *ThreatCrowd) executeQuery(domain string) {
 	}
 
 	if m.ResponseCode != "1" {
-		t.Config().Log.Printf("%s: %s: Response code %s", t.String(), url, m.ResponseCode)
+		t.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: %s: Response code %s", t.String(), url, m.ResponseCode),
+		)
 		return
 	}
 

@@ -5,13 +5,14 @@ package sources
 
 import (
 	"encoding/json"
-	"strings"
+	"fmt"
 
 	"github.com/OWASP/Amass/config"
 	eb "github.com/OWASP/Amass/eventbus"
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
+	"github.com/OWASP/Amass/stringset"
 	"github.com/OWASP/Amass/utils"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq" // Need the postgres driver
@@ -44,7 +45,9 @@ func (c *Crtsh) OnStart() error {
 	var err error
 	c.db, err = sqlx.Connect("postgres", "host=crt.sh user=guest dbname=certwatch sslmode=disable")
 	if err != nil {
-		c.Config().Log.Printf("%s: Failed to connect to the database server: %v", c.String(), err)
+		c.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: Failed to connect to the database server: %v", c.String(), err),
+		)
 		c.haveConnection = false
 	}
 
@@ -86,18 +89,18 @@ func (c *Crtsh) executeQuery(domain string) {
 		WHERE reverse(lower(ci.NAME_VALUE)) LIKE reverse(lower($1))
 		ORDER BY ci.NAME_VALUE`, pattern)
 	if err != nil {
-		c.Config().Log.Printf("%s: Query pattern %s: %v", c.String(), pattern, err)
+		c.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: Query pattern %s: %v", c.String(), pattern, err))
 		return
 	}
 
 	c.SetActive()
 	// Extract the subdomain names from the results
-	var names []string
+	names := stringset.New()
 	for _, result := range results {
-		names = utils.UniqueAppend(names, strings.ToLower(utils.RemoveAsteriskLabel(result.Domain)))
+		names.Insert(utils.RemoveAsteriskLabel(result.Domain))
 	}
 
-	for _, name := range names {
+	for name := range names {
 		c.Bus().Publish(requests.NewNameTopic, &requests.DNSRequest{
 			Name:   name,
 			Domain: domain,
@@ -111,7 +114,7 @@ func (c *Crtsh) scrape(domain string) {
 	url := c.getURL(domain)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		c.Config().Log.Printf("%s: %s: %v", c.String(), url, err)
+		c.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", c.String(), url, err))
 		return
 	}
 

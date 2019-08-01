@@ -63,7 +63,7 @@ func (s *SiteDossier) executeQuery(domain string) {
 	url := s.getURL(domain)
 	page, err := utils.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		s.Config().Log.Printf("%s: %s: %v", s.String(), url, err)
+		s.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", s.String(), url, err))
 		return
 	}
 

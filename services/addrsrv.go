@@ -21,6 +21,7 @@ var (
 	// Cache for the infrastructure data collected from online sources
 	netLock  sync.Mutex
 	netCache map[int]*requests.ASNRequest
+
 	// The reserved network address ranges
 	reservedAddrRanges []*net.IPNet
 	reservedCIDRs      = []string{
@@ -45,8 +46,7 @@ var (
 	}
 )
 
-// AddressService is the Service that handles all newly discovered IP addresses
-// within the architecture. This is achieved by receiving all the NEWADDR events.
+// AddressService is the Service that handles all newly discovered IP addresses within the architecture.
 type AddressService struct {
 	BaseService
 
@@ -64,10 +64,10 @@ func init() {
 }
 
 // NewAddressService returns he object initialized, but not yet started.
-func NewAddressService(c *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool) *AddressService {
+func NewAddressService(cfg *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool) *AddressService {
 	as := &AddressService{filter: utils.NewStringFilter()}
 
-	as.BaseService = *NewBaseService(as, "Address Service", c, bus, pool)
+	as.BaseService = *NewBaseService(as, "Address Service", cfg, bus, pool)
 	return as
 }
 
@@ -162,7 +162,7 @@ func (as *AddressService) updateConfigWithNetblocks(req *requests.ASNRequest) {
 		filter.Duplicate(cidr.String())
 	}
 
-	for _, block := range req.Netblocks {
+	for block := range req.Netblocks {
 		if filter.Duplicate(block) {
 			continue
 		}
@@ -198,7 +198,7 @@ loop:
 			break loop
 		case a := <-asnchan:
 			updateCache(a)
-			for _, block := range a.Netblocks {
+			for block := range a.Netblocks {
 				if _, cidr, err := net.ParseCIDR(block); err == nil && cidr.Contains(ip) {
 					break loop
 				}
@@ -242,7 +242,7 @@ func updateCache(req *requests.ASNRequest) {
 	if c.Description == "" && req.Description != "" {
 		c.Description = req.Description
 	}
-	c.Netblocks = utils.UniqueAppend(c.Netblocks, req.Netblocks...)
+	c.Netblocks.Union(req.Netblocks)
 	netCache[req.ASN] = c
 }
 
@@ -260,7 +260,7 @@ func ipSearch(addr string) *requests.ASNRequest {
 	var desc string
 	ip := net.ParseIP(addr)
 	for asn, record := range netCache {
-		for _, netblock := range record.Netblocks {
+		for netblock := range record.Netblocks {
 			_, ipnet, err := net.ParseCIDR(netblock)
 			if err != nil {
 				continue

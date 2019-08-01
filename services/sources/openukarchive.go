@@ -4,6 +4,8 @@
 package sources
 
 import (
+	"fmt"
+
 	"github.com/OWASP/Amass/config"
 	eb "github.com/OWASP/Amass/eventbus"
 	"github.com/OWASP/Amass/requests"
@@ -67,7 +69,7 @@ func (o *OpenUKArchive) executeQuery(sn, domain string) {
 
 	names, err := crawl(o, o.baseURL, o.domain, sn, domain)
 	if err != nil {
-		o.Config().Log.Printf("%s: %v", o.String(), err)
+		o.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %v", o.String(), err))
 		return
 	}
 

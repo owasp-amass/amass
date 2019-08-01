@@ -4,6 +4,7 @@
 package services
 
 import (
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -37,10 +38,10 @@ type BruteForceService struct {
 }
 
 // NewBruteForceService returns he object initialized, but not yet started.
-func NewBruteForceService(c *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool) *BruteForceService {
+func NewBruteForceService(cfg *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool) *BruteForceService {
 	bfs := &BruteForceService{filter: utils.NewStringFilter()}
 
-	bfs.BaseService = *NewBaseService(bfs, "Brute Forcing", c, bus, pool)
+	bfs.BaseService = *NewBaseService(bfs, "Brute Forcing", cfg, bus, pool)
 	return bfs
 }
 
@@ -144,9 +145,10 @@ func (bfs *BruteForceService) performBruteForcing(subdomain, domain string) {
 		bfs.Pool().GetWildcardType(req) == resolvers.WildcardTypeDynamic {
 		return
 	}
+	wordlist := bfs.Config().Wordlist
 
 	bfs.totalLock.Lock()
-	bfs.totalNames += len(bfs.Config().Wordlist)
+	bfs.totalNames += len(wordlist)
 	bfs.totalLock.Unlock()
 
 	var idx int
@@ -159,11 +161,11 @@ func (bfs *BruteForceService) performBruteForcing(subdomain, domain string) {
 		case <-t.C:
 			bfs.SetActive()
 		default:
-			if idx >= len(bfs.Config().Wordlist) {
+			if idx >= len(wordlist) {
 				return
 			}
 			bfs.Config().SemMaxDNSQueries.Acquire(1)
-			word := strings.ToLower(bfs.Config().Wordlist[idx])
+			word := strings.ToLower(wordlist[idx])
 			go bfs.bruteForceResolution(word, subdomain, domain)
 			idx++
 		}
@@ -190,7 +192,7 @@ func (bfs *BruteForceService) bruteForceResolution(word, sub, domain string) {
 				break
 			}
 		} else {
-			bfs.Config().Log.Printf("%s: %v", bfs.String(), err)
+			bfs.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %v", bfs.String(), err))
 		}
 		bfs.metrics.QueryTime(time.Now())
 		bfs.SetActive()

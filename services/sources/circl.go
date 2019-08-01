@@ -6,6 +6,7 @@ package sources
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
+	"github.com/OWASP/Amass/stringset"
 	"github.com/OWASP/Amass/utils"
 )
 
@@ -43,7 +45,7 @@ func (c *CIRCL) OnStart() error {
 
 	c.API = c.Config().GetAPIKey(c.String())
 	if c.API == nil || c.API.Username == "" || c.API.Password == "" {
-		c.Config().Log.Printf("%s: API key data was not provided", c.String())
+		c.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: API key data was not provided", c.String()))
 	}
 
 	go c.processRequests()
@@ -83,7 +85,7 @@ func (c *CIRCL) executeQuery(domain string) {
 	headers := map[string]string{"Content-Type": "application/json"}
 	page, err := utils.RequestWebPage(url, nil, headers, c.API.Username, c.API.Password)
 	if err != nil {
-		c.Config().Log.Printf("%s: %s: %v", c.String(), url, err)
+		c.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", c.String(), url, err))
 		return
 	}
 
@@ -95,7 +97,7 @@ func (c *CIRCL) restURL(domain string) string {
 }
 
 func (c *CIRCL) passiveDNSJSON(page, domain string) {
-	var unique []string
+	unique := stringset.New()
 
 	re := c.Config().DomainRegex(domain)
 	if re == nil {
@@ -119,11 +121,11 @@ func (c *CIRCL) passiveDNSJSON(page, domain string) {
 			continue
 		}
 		if re.MatchString(j.Name) {
-			unique = utils.UniqueAppend(unique, j.Name)
+			unique.Insert(j.Name)
 		}
 	}
 
-	for _, name := range unique {
+	for name := range unique {
 		c.Bus().Publish(requests.NewNameTopic, &requests.DNSRequest{
 			Name:   name,
 			Domain: domain,

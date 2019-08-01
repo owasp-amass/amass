@@ -4,6 +4,8 @@
 package sources
 
 import (
+	"fmt"
+
 	"github.com/OWASP/Amass/config"
 	eb "github.com/OWASP/Amass/eventbus"
 	"github.com/OWASP/Amass/requests"
@@ -23,7 +25,7 @@ type ArchiveToday struct {
 }
 
 // NewArchiveToday returns he object initialized, but not yet started.
-func NewArchiveToday(c *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool) *ArchiveToday {
+func NewArchiveToday(cfg *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool) *ArchiveToday {
 	a := &ArchiveToday{
 		domain:     "archive.is",
 		baseURL:    "http://archive.is",
@@ -31,7 +33,7 @@ func NewArchiveToday(c *config.Config, bus *eb.EventBus, pool *resolvers.Resolve
 		filter:     utils.NewStringFilter(),
 	}
 
-	a.BaseService = *services.NewBaseService(a, "ArchiveToday", c, bus, pool)
+	a.BaseService = *services.NewBaseService(a, "ArchiveToday", cfg, bus, pool)
 	return a
 }
 
@@ -67,7 +69,7 @@ func (a *ArchiveToday) executeQuery(sn, domain string) {
 
 	names, err := crawl(a, a.baseURL, a.domain, sn, domain)
 	if err != nil {
-		a.Config().Log.Printf("%s: %v", a.String(), err)
+		a.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %v", a.String(), err))
 		return
 	}
 
