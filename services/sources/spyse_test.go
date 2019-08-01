@@ -3,7 +3,6 @@ package sources
 import (
 	"testing"
 
-	"github.com/OWASP/Amass/config"
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 )
@@ -14,11 +13,8 @@ func TestSpyse(t *testing.T) {
 	}
 
 	cfg := setupConfig(domainTest)
-
-	API := new(config.APIKey)
-	API = cfg.GetAPIKey("spyse")
-
-	if API == nil || API.Key == "" || API.Secret == "" {
+	api := cfg.GetAPIKey("spyse")
+	if api == nil || api.Key == "" || api.Secret == "" {
 		t.Errorf("API key data was not provided")
 		return
 	}

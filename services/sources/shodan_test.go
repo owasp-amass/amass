@@ -3,7 +3,6 @@ package sources
 import (
 	"testing"
 
-	"github.com/OWASP/Amass/config"
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 )
@@ -14,11 +13,8 @@ func TestShodan(t *testing.T) {
 	}
 
 	cfg := setupConfig(domainTest)
-
-	API := new(config.APIKey)
-	API = cfg.GetAPIKey("shodan")
-
-	if API == nil || API.Key == "" {
+	api := cfg.GetAPIKey("shodan")
+	if api == nil || api.Key == "" {
 		t.Errorf("API key data was not provided")
 		return
 	}

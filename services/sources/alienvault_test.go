@@ -3,7 +3,6 @@ package sources
 import (
 	"testing"
 
-	"github.com/OWASP/Amass/config"
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 )
@@ -14,11 +13,8 @@ func TestAlienVault(t *testing.T) {
 	}
 
 	cfg := setupConfig(domainTest)
-
-	API := new(config.APIKey)
-	API = cfg.GetAPIKey("alienvault")
-
-	if API == nil || API.Key == "" {
+	api := cfg.GetAPIKey("alienvault")
+	if api == nil || api.Key == "" {
 		t.Errorf("API key data was not provided")
 		return
 	}
