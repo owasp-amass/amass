@@ -19,7 +19,7 @@ sudo snap install amass
 On **Kali**, follow these steps to install Snap and Amass + use AppArmor (for autoload) and Add the Snap bin directory to your PATH:
 
 ```bash
-sudo apt install snapd %% sudo systemctl start snapd && sudo systemctl enable snapd && sudo systemctl start apparmor && sudo systemctl enable apparmor && export PATH=$PATH:/snap/bin && snap install go --classic && sudo snap install amass && amass -version
+sudo apt install snapd && sudo systemctl start snapd && sudo systemctl enable snapd && sudo systemctl start apparmor && sudo systemctl enable apparmor && export PATH=$PATH:/snap/bin && snap install go --classic && sudo snap install amass && amass -version
 ```
 
 Periodically, execute the following command to update all your snap packages:
