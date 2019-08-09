@@ -8,6 +8,26 @@
 
 A [precompiled version is available](https://github.com/OWASP/Amass/releases) with each release.
 
+### Snapcraft
+
+If your operating environment supports [Snap](https://docs.snapcraft.io/core/install), you can [click here to install](https://snapcraft.io/amass), or perform the following from the command-line:
+
+```bash
+sudo snap install amass
+```
+
+On **Kali**, follow these steps to install Snap and Amass + use AppArmor (for autoload) and Add the Snap bin directory to your PATH:
+
+```bash
+sudo apt install snapd %% sudo systemctl start snapd && sudo systemctl enable snapd && sudo systemctl start apparmor && sudo systemctl enable apparmor && export PATH=$PATH:/snap/bin && snap install go --classic && sudo snap install amass && amass -version
+```
+
+Periodically, execute the following command to update all your snap packages:
+
+```bash
+sudo snap refresh
+```
+
 ## Using Docker
 
 1. Build the [Docker](https://docs.docker.com/) image:
@@ -81,25 +101,7 @@ brew tap caffix/amass
 brew install amass
 ```
 
-### Snapcraft
 
-If your operating environment supports [Snap](https://docs.snapcraft.io/core/install), you can [click here to install](https://snapcraft.io/amass), or perform the following from the command-line:
-
-```bash
-sudo snap install amass
-```
-
-On **Kali**, follow these steps to install Snap and Amass + use AppArmor (for autoload) and Add the Snap bin directory to your PATH:
-
-```bash
-sudo apt install snapd %% sudo systemctl start snapd && sudo systemctl enable snapd && sudo systemctl start apparmor && sudo systemctl enable apparmor && export PATH=$PATH:/snap/bin && snap install go --classic && sudo snap install amass && amass -version
-```
-
-Periodically, execute the following command to update all your snap packages:
-
-```bash
-sudo snap refresh
-```
 
 ## Packages Maintained by a Third-party
 
