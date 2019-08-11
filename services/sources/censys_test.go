@@ -7,7 +7,7 @@ import (
 	"github.com/OWASP/Amass/resolvers"
 )
 
-func TestCensys(t *testing.T) {
+func TestCensysAPIRequest(t *testing.T) {
 	if *networkTest == false || *configPath == "" {
 		return
 	}
@@ -31,4 +31,35 @@ func TestCensys(t *testing.T) {
 	if result < expectedTest {
 		t.Errorf("Found %d names, expected at least %d instead", result, expectedTest)
 	}
+}
+
+func TestCensysWebRequest(t *testing.T) {
+	if *networkTest == false {
+		return
+	}
+
+	cfg := setupConfig(domainTest)
+
+	api := cfg.GetAPIKey("censys")
+
+	if api != nil {
+		api.Key = ""
+		api.Secret = ""		
+		cfg.AddAPIKey("censys",api)
+	}
+
+	bus, out := setupEventBus(requests.NewNameTopic)
+	defer bus.Stop()
+
+	pool := resolvers.NewResolverPool(nil)
+	defer pool.Stop()
+
+	srv := NewCensys(cfg, bus, pool)
+
+	result := testService(srv, out)
+	if result < expectedTest {
+		t.Errorf("Found %d names, expected at least %d instead", result, expectedTest)
+	}
+
+	
 }
