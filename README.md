@@ -36,7 +36,7 @@ The OWASP Amass Project has developed a tool to help information security profes
 
 ## Documentation
 
-Use the [Installation Guide](https://github.com/OWASP/Amass/blob/master/doc/install.md) to get started.
+Use the [Installation Guide](https://github.com/4k4xs4pH1r3/Amass/blob/master/doc/install.md) to get started.
 
 Go to the [User's Guide](https://github.com/OWASP/Amass/blob/master/doc/user_guide.md) for additional information.
 
