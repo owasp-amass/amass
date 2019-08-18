@@ -9,8 +9,6 @@ import (
 	"io"
 	"regexp"
 	"strings"
-
-	"github.com/irfansharif/cfilter"
 )
 
 const (
@@ -52,27 +50,6 @@ func getWordList(reader io.Reader) []string {
 		}
 	}
 	return words
-}
-
-// StringFilter implements an object that performs filtering of strings
-// to ensure that only unique items get through the filter.
-type StringFilter struct {
-	filter *cfilter.CFilter
-}
-
-// NewStringFilter returns an initialized StringFilter.
-func NewStringFilter() *StringFilter {
-	return &StringFilter{filter: cfilter.New()}
-}
-
-// Duplicate checks if the name provided has been seen before by this filter.
-func (sf *StringFilter) Duplicate(s string) bool {
-	if sf.filter.Lookup([]byte(s)) {
-		return true
-	}
-
-	sf.filter.Insert([]byte(s))
-	return false
 }
 
 // SubdomainRegex returns a Regexp object initialized to match

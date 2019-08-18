@@ -44,8 +44,8 @@ func TestCensysWebRequest(t *testing.T) {
 
 	if api != nil {
 		api.Key = ""
-		api.Secret = ""		
-		cfg.AddAPIKey("censys",api)
+		api.Secret = ""
+		cfg.AddAPIKey("censys", api)
 	}
 
 	bus, out := setupEventBus(requests.NewNameTopic)
@@ -61,5 +61,4 @@ func TestCensysWebRequest(t *testing.T) {
 		t.Errorf("Found %d names, expected at least %d instead", result, expectedTest)
 	}
 
-	
 }

@@ -20,6 +20,7 @@ import (
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
 	"github.com/OWASP/Amass/services/sources"
+	sf "github.com/OWASP/Amass/stringfilter"
 	"github.com/OWASP/Amass/utils"
 )
 
@@ -81,7 +82,7 @@ func (c *Collection) HostedDomains() error {
 	c.asnsToCIDRs()
 
 	var active bool
-	filter := utils.NewStringFilter()
+	filter := sf.NewStringFilter()
 	t := time.NewTicker(5 * time.Second)
 loop:
 	for {
@@ -232,7 +233,7 @@ func (c *Collection) sendNetblockCIDRs() {
 	c.netLock.Lock()
 	defer c.netLock.Unlock()
 
-	filter := utils.NewStringFilter()
+	filter := sf.NewStringFilter()
 	for _, record := range c.netCache {
 		for netblock := range record.Netblocks {
 			_, ipnet, err := net.ParseCIDR(netblock)
@@ -308,7 +309,7 @@ func LookupASNsByName(s string) ([]*requests.ASNRequest, error) {
 
 // ReverseWhois returns domain names that are related to the domains provided
 func (c *Collection) ReverseWhois() error {
-	filter := utils.NewStringFilter()
+	filter := sf.NewStringFilter()
 
 	collect := func(req *requests.WhoisRequest) {
 		for _, d := range req.NewDomains {

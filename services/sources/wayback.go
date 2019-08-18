@@ -11,7 +11,7 @@ import (
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
-	"github.com/OWASP/Amass/utils"
+	sf "github.com/OWASP/Amass/stringfilter"
 )
 
 // Wayback is the Service that handles access to the Wayback data source.
@@ -21,7 +21,7 @@ type Wayback struct {
 	SourceType string
 	domain     string
 	baseURL    string
-	filter     *utils.StringFilter
+	filter     *sf.StringFilter
 }
 
 // NewWayback returns he object initialized, but not yet started.
@@ -30,7 +30,7 @@ func NewWayback(cfg *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPo
 		SourceType: requests.ARCHIVE,
 		domain:     "web.archive.org",
 		baseURL:    "http://web.archive.org/web",
-		filter:     utils.NewStringFilter(),
+		filter:     sf.NewStringFilter(),
 	}
 
 	w.BaseService = *services.NewBaseService(w, "Wayback", cfg, bus, pool)

@@ -17,6 +17,7 @@ import (
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
 	"github.com/OWASP/Amass/utils"
+	sf "github.com/OWASP/Amass/stringfilter"
 )
 
 const commonCrawlIndexListURL = "https://index.commoncrawl.org/collinfo.json"
@@ -89,7 +90,7 @@ func (c *CommonCrawl) processRequests() {
 }
 
 func (c *CommonCrawl) executeQuery(domain string) {
-	filter := utils.NewStringFilter()
+	filter := sf.NewStringFilter()
 	re := c.Config().DomainRegex(domain)
 	if re == nil {
 		return
@@ -128,7 +129,7 @@ func (c *CommonCrawl) executeQuery(domain string) {
 
 func (c *CommonCrawl) parseJSON(page string) []string {
 	var urls []string
-	filter := utils.NewStringFilter()
+	filter := sf.NewStringFilter()
 
 	scanner := bufio.NewScanner(strings.NewReader(page))
 	for scanner.Scan() {

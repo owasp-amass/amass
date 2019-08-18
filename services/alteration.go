@@ -13,7 +13,7 @@ import (
 	eb "github.com/OWASP/Amass/eventbus"
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
-	"github.com/OWASP/Amass/utils"
+	sf "github.com/OWASP/Amass/stringfilter"
 	"github.com/miekg/dns"
 )
 
@@ -53,7 +53,7 @@ func (ac *alterationCache) update(word string) int {
 type AlterationService struct {
 	BaseService
 
-	filter   *utils.StringFilter
+	filter   *sf.StringFilter
 	prefixes *alterationCache
 	suffixes *alterationCache
 }
@@ -61,7 +61,7 @@ type AlterationService struct {
 // NewAlterationService returns he object initialized, but not yet started.
 func NewAlterationService(cfg *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool) *AlterationService {
 	as := &AlterationService{
-		filter:   utils.NewStringFilter(),
+		filter:   sf.NewStringFilter(),
 		prefixes: newAlterationCache(cfg.AltWordlist),
 		suffixes: newAlterationCache(cfg.AltWordlist),
 	}

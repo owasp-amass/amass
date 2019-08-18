@@ -11,7 +11,7 @@ import (
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
-	"github.com/OWASP/Amass/utils"
+	sf "github.com/OWASP/Amass/stringfilter"
 )
 
 // UKGovArchive is the Service that handles access to the UKGovArchive data source.
@@ -21,7 +21,7 @@ type UKGovArchive struct {
 	domain     string
 	baseURL    string
 	SourceType string
-	filter     *utils.StringFilter
+	filter     *sf.StringFilter
 }
 
 // NewUKGovArchive returns he object initialized, but not yet started.
@@ -30,7 +30,7 @@ func NewUKGovArchive(cfg *config.Config, bus *eb.EventBus, pool *resolvers.Resol
 		domain:     "webarchive.nationalarchives.gov.uk",
 		baseURL:    "http://webarchive.nationalarchives.gov.uk",
 		SourceType: requests.ARCHIVE,
-		filter:     utils.NewStringFilter(),
+		filter:     sf.NewStringFilter(),
 	}
 
 	u.BaseService = *services.NewBaseService(u, "UKGovArchive", cfg, bus, pool)

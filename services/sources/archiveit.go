@@ -11,7 +11,7 @@ import (
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
-	"github.com/OWASP/Amass/utils"
+	sf "github.com/OWASP/Amass/stringfilter"
 )
 
 // ArchiveIt is the Service that handles access to the ArchiveIt data source.
@@ -21,7 +21,7 @@ type ArchiveIt struct {
 	domain     string
 	baseURL    string
 	SourceType string
-	filter     *utils.StringFilter
+	filter     *sf.StringFilter
 }
 
 // NewArchiveIt returns he object initialized, but not yet started.
@@ -30,7 +30,7 @@ func NewArchiveIt(cfg *config.Config, bus *eb.EventBus, pool *resolvers.Resolver
 		domain:     "wayback.archive-it.org",
 		baseURL:    "https://wayback.archive-it.org/all",
 		SourceType: requests.ARCHIVE,
-		filter:     utils.NewStringFilter(),
+		filter:     sf.NewStringFilter(),
 	}
 
 	a.BaseService = *services.NewBaseService(a, "ArchiveIt", cfg, bus, pool)

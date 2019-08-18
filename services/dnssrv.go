@@ -14,6 +14,7 @@ import (
 	eb "github.com/OWASP/Amass/eventbus"
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
+	sf "github.com/OWASP/Amass/stringfilter"
 	"github.com/OWASP/Amass/utils"
 	"github.com/miekg/dns"
 )
@@ -44,13 +45,13 @@ type DNSService struct {
 	totalLock  sync.RWMutex
 	totalNames int
 
-	filter        *utils.StringFilter
+	filter        *sf.StringFilter
 	cidrBlacklist []*net.IPNet
 }
 
 // NewDNSService returns he object initialized, but not yet started.
 func NewDNSService(cfg *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool) *DNSService {
-	ds := &DNSService{filter: utils.NewStringFilter()}
+	ds := &DNSService{filter: sf.NewStringFilter()}
 
 	for _, n := range badSubnets {
 		if _, ipnet, err := net.ParseCIDR(n); err == nil {

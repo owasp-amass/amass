@@ -13,7 +13,7 @@ import (
 	eb "github.com/OWASP/Amass/eventbus"
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
-	"github.com/OWASP/Amass/utils"
+	sf "github.com/OWASP/Amass/stringfilter"
 	"github.com/miekg/dns"
 )
 
@@ -50,16 +50,16 @@ type MarkovService struct {
 	model      *markovModel
 	subsLock   sync.Mutex
 	subs       map[string]*requests.DNSRequest
-	inFilter   *utils.StringFilter
-	outFilter  *utils.StringFilter
+	inFilter   *sf.StringFilter
+	outFilter  *sf.StringFilter
 }
 
 // NewMarkovService returns he object initialized, but not yet started.
 func NewMarkovService(cfg *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool) *MarkovService {
 	m := &MarkovService{
 		subs:      make(map[string]*requests.DNSRequest),
-		inFilter:  utils.NewStringFilter(),
-		outFilter: utils.NewStringFilter(),
+		inFilter:  sf.NewStringFilter(),
+		outFilter: sf.NewStringFilter(),
 		model: &markovModel{
 			NgramSize: 3,
 			Ngrams:    make(map[string]map[rune]*lenDist),

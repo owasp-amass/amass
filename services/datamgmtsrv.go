@@ -14,6 +14,7 @@ import (
 	"github.com/OWASP/Amass/graph"
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
+	sf "github.com/OWASP/Amass/stringfilter"
 	"github.com/OWASP/Amass/utils"
 	"github.com/miekg/dns"
 )
@@ -24,12 +25,12 @@ type DataManagerService struct {
 	BaseService
 
 	Handlers     []graph.DataHandler
-	domainFilter *utils.StringFilter
+	domainFilter *sf.StringFilter
 }
 
 // NewDataManagerService returns he object initialized, but not yet started.
 func NewDataManagerService(cfg *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool) *DataManagerService {
-	dms := &DataManagerService{domainFilter: utils.NewStringFilter()}
+	dms := &DataManagerService{domainFilter: sf.NewStringFilter()}
 
 	dms.BaseService = *NewBaseService(dms, "Data Manager", cfg, bus, pool)
 	return dms

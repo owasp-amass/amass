@@ -18,6 +18,7 @@ import (
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
 	"github.com/OWASP/Amass/services/sources"
+	sf "github.com/OWASP/Amass/stringfilter"
 	"github.com/OWASP/Amass/utils"
 	"github.com/google/uuid"
 )
@@ -47,7 +48,7 @@ type Enumeration struct {
 	pause  chan struct{}
 	resume chan struct{}
 
-	filter      *utils.StringFilter
+	filter      *sf.StringFilter
 	outputQueue *utils.Queue
 
 	metricsLock       sync.RWMutex
@@ -78,7 +79,7 @@ func NewEnumeration() *Enumeration {
 		Done:        make(chan struct{}, 2),
 		pause:       make(chan struct{}, 2),
 		resume:      make(chan struct{}, 2),
-		filter:      utils.NewStringFilter(),
+		filter:      sf.NewStringFilter(),
 		outputQueue: new(utils.Queue),
 	}
 	if e.Pool == nil {
@@ -242,8 +243,8 @@ func (e *Enumeration) submitKnownNames() {
 				e.Bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
 					Name:   o.Name,
 					Domain: o.Domain,
-					Tag:    o.Tag,
-					Source: o.Source,
+					Tag:    requests.EXTERNAL,
+					Source: "Previous Enum",
 				})
 			}
 		}

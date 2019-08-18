@@ -11,7 +11,7 @@ import (
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
-	"github.com/OWASP/Amass/utils"
+	sf "github.com/OWASP/Amass/stringfilter"
 )
 
 // ArchiveToday is the Service that handles access to the ArchiveToday data source.
@@ -21,7 +21,7 @@ type ArchiveToday struct {
 	domain     string
 	baseURL    string
 	SourceType string
-	filter     *utils.StringFilter
+	filter     *sf.StringFilter
 }
 
 // NewArchiveToday returns he object initialized, but not yet started.
@@ -30,7 +30,7 @@ func NewArchiveToday(cfg *config.Config, bus *eb.EventBus, pool *resolvers.Resol
 		domain:     "archive.is",
 		baseURL:    "http://archive.is",
 		SourceType: requests.ARCHIVE,
-		filter:     utils.NewStringFilter(),
+		filter:     sf.NewStringFilter(),
 	}
 
 	a.BaseService = *services.NewBaseService(a, "ArchiveToday", cfg, bus, pool)

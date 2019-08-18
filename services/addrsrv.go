@@ -14,6 +14,7 @@ import (
 	eb "github.com/OWASP/Amass/eventbus"
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
+	sf "github.com/OWASP/Amass/stringfilter"
 	"github.com/OWASP/Amass/utils"
 )
 
@@ -50,7 +51,7 @@ var (
 type AddressService struct {
 	BaseService
 
-	filter *utils.StringFilter
+	filter *sf.StringFilter
 }
 
 func init() {
@@ -65,7 +66,7 @@ func init() {
 
 // NewAddressService returns he object initialized, but not yet started.
 func NewAddressService(cfg *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool) *AddressService {
-	as := &AddressService{filter: utils.NewStringFilter()}
+	as := &AddressService{filter: sf.NewStringFilter()}
 
 	as.BaseService = *NewBaseService(as, "Address Service", cfg, bus, pool)
 	return as
@@ -157,7 +158,7 @@ func (as *AddressService) updateConfigWithNetblocks(req *requests.ASNRequest) {
 		return
 	}
 
-	filter := utils.NewStringFilter()
+	filter := sf.NewStringFilter()
 	for _, cidr := range as.Config().CIDRs {
 		filter.Duplicate(cidr.String())
 	}

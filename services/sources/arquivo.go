@@ -11,7 +11,7 @@ import (
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
-	"github.com/OWASP/Amass/utils"
+	sf "github.com/OWASP/Amass/stringfilter"
 )
 
 // Arquivo is the Service that handles access to the Arquivo data source.
@@ -21,7 +21,7 @@ type Arquivo struct {
 	domain     string
 	baseURL    string
 	SourceType string
-	filter     *utils.StringFilter
+	filter     *sf.StringFilter
 }
 
 // NewArquivo returns he object initialized, but not yet started.
@@ -30,7 +30,7 @@ func NewArquivo(cfg *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPo
 		domain:     "arquivo.pt",
 		baseURL:    "http://arquivo.pt/wayback",
 		SourceType: requests.ARCHIVE,
-		filter:     utils.NewStringFilter(),
+		filter:     sf.NewStringFilter(),
 	}
 
 	a.BaseService = *services.NewBaseService(a, "Arquivo", cfg, bus, pool)

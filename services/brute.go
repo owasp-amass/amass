@@ -13,7 +13,7 @@ import (
 	eb "github.com/OWASP/Amass/eventbus"
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
-	"github.com/OWASP/Amass/utils"
+	sf "github.com/OWASP/Amass/stringfilter"
 	"github.com/miekg/dns"
 )
 
@@ -34,12 +34,12 @@ type BruteForceService struct {
 	totalNames int
 	curIdx     int
 
-	filter *utils.StringFilter
+	filter *sf.StringFilter
 }
 
 // NewBruteForceService returns he object initialized, but not yet started.
 func NewBruteForceService(cfg *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool) *BruteForceService {
-	bfs := &BruteForceService{filter: utils.NewStringFilter()}
+	bfs := &BruteForceService{filter: sf.NewStringFilter()}
 
 	bfs.BaseService = *NewBaseService(bfs, "Brute Forcing", cfg, bus, pool)
 	return bfs

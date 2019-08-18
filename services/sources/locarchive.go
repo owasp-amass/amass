@@ -11,7 +11,7 @@ import (
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
-	"github.com/OWASP/Amass/utils"
+	sf "github.com/OWASP/Amass/stringfilter"
 )
 
 // LoCArchive is the Service that handles access to the LoCArchive data source.
@@ -21,7 +21,7 @@ type LoCArchive struct {
 	domain     string
 	baseURL    string
 	SourceType string
-	filter     *utils.StringFilter
+	filter     *sf.StringFilter
 }
 
 // NewLoCArchive returns he object initialized, but not yet started.
@@ -30,7 +30,7 @@ func NewLoCArchive(cfg *config.Config, bus *eb.EventBus, pool *resolvers.Resolve
 		domain:     "webarchive.loc.gov",
 		baseURL:    "http://webarchive.loc.gov/all",
 		SourceType: requests.ARCHIVE,
-		filter:     utils.NewStringFilter(),
+		filter:     sf.NewStringFilter(),
 	}
 
 	l.BaseService = *services.NewBaseService(l, "LoCArchive", cfg, bus, pool)

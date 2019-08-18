@@ -11,7 +11,7 @@ import (
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
-	"github.com/OWASP/Amass/utils"
+	sf "github.com/OWASP/Amass/stringfilter"
 )
 
 // OpenUKArchive is the Service that handles access to the OpenUKArchive data source.
@@ -21,7 +21,7 @@ type OpenUKArchive struct {
 	domain     string
 	baseURL    string
 	SourceType string
-	filter     *utils.StringFilter
+	filter     *sf.StringFilter
 }
 
 // NewOpenUKArchive returns he object initialized, but not yet started.
@@ -30,7 +30,7 @@ func NewOpenUKArchive(cfg *config.Config, bus *eb.EventBus, pool *resolvers.Reso
 		domain:     "webarchive.org.uk",
 		baseURL:    "http://www.webarchive.org.uk/wayback/archive",
 		SourceType: requests.ARCHIVE,
-		filter:     utils.NewStringFilter(),
+		filter:     sf.NewStringFilter(),
 	}
 
 	o.BaseService = *services.NewBaseService(o, "OpenUKArchive", cfg, bus, pool)
