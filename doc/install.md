@@ -7,7 +7,7 @@
 # Easy Install
 
 ```bash
-sudo apt install amass
+sudo apt install amass -y
 ```
 
 
