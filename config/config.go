@@ -111,6 +111,11 @@ type Config struct {
 	// A list of data sources that should not be utilized
 	DisabledDataSources []string
 
+	// Resolver settings
+	Resolvers         []string
+	LimitResolverRate bool
+	PruneBadResolvers bool
+
 	// The root domain names that the enumeration will target
 	domains []string
 
@@ -478,7 +483,14 @@ func (c *Config) LoadSettings(path string) error {
 		c.GremlinPass = gremlin.Key("password").String()
 	}
 
+	if err := c.loadResolverSettings(cfg); err != nil {
+		return err
+	}
+
 	if err := c.loadNetworkSettings(cfg); err != nil {
+		return err
+	}
+	if err := c.loadAlterationSettings(cfg); err != nil {
 		return err
 	}
 
@@ -522,13 +534,13 @@ func (c *Config) LoadSettings(path string) error {
 // AcquireConfig populates the Config struct provided by the config argument.
 // The configuration file path and a bool indicating the settings were
 // successfully loaded are returned.
-func AcquireConfig(dir, file string, config *Config) (string, error) {
+func AcquireConfig(dir, file string, config *Config) error {
 	var err error
 
 	if file != "" {
 		err = config.LoadSettings(file)
 		if err == nil {
-			return file, nil
+			return nil
 		}
 	}
 	if dir = OutputDirectory(dir); dir != "" {
@@ -537,11 +549,11 @@ func AcquireConfig(dir, file string, config *Config) (string, error) {
 
 			err = config.LoadSettings(file)
 			if err == nil {
-				return file, nil
+				return nil
 			}
 		}
 	}
-	return "", err
+	return err
 }
 
 // OutputDirectory returns the file path of the Amass output directory. A suitable
@@ -555,26 +567,22 @@ func OutputDirectory(dir string) string {
 	return dir
 }
 
-// GetResolversFromSettings loads the configuration file and returns all resolvers found.
-func GetResolversFromSettings(path string) ([]string, error) {
-	cfg, err := ini.LoadSources(ini.LoadOptions{
-		Insensitive:  true,
-		AllowShadows: true,
-	}, path)
-	if err != nil {
-		return nil, fmt.Errorf("Failed to load the configuration file: %v", err)
-	}
+func (c *Config) loadResolverSettings(cfg *ini.File) error {
 	// Check that the resolvers section exists in the config file
 	sec, err := cfg.GetSection("resolvers")
 	if err != nil {
-		return nil, fmt.Errorf("The config file does not contain a resolvers section: %v", err)
+		return fmt.Errorf("The config file does not contain a resolvers section: %v", err)
 	}
 
-	resolvers := sec.Key("resolver").ValueWithShadows()
-	if len(resolvers) == 0 {
-		return nil, errors.New("No resolver keys were found in the resolvers section")
+	c.Resolvers = stringset.Deduplicate(sec.Key("resolver").ValueWithShadows())
+	if len(c.Resolvers) == 0 {
+		return errors.New("No resolver keys were found in the resolvers section")
 	}
-	return resolvers, nil
+
+	c.LimitResolverRate = sec.Key("limit_resolver_rate").MustBool(true)
+	c.PruneBadResolvers = sec.Key("prune_bad_resolvers").MustBool(true)
+
+	return nil
 }
 
 // GetListFromFile reads a wordlist text or gzip file
