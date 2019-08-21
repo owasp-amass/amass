@@ -494,10 +494,6 @@ func (c *Config) LoadSettings(path string) error {
 		return err
 	}
 
-	if err := c.loadAlterationSettings(cfg); err != nil {
-		return err
-	}
-
 	if err := c.loadBruteForceSettings(cfg); err != nil {
 		return err
 	}
