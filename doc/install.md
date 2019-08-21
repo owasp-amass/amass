@@ -4,26 +4,21 @@
 [![Packaging status](https://repology.org/badge/vertical-allrepos/amass.svg)](https://repology.org/metapackage/amass/versions)
 [![Get it from the Snap Store](https://snapcraft.io/static/images/badges/en/snap-store-white.svg)](https://snapcraft.io/amass)
 #
-# Easy Install
+# Easy Install in Kali Linux
 
 ```bash
 sudo apt install amass -y
 ```
 
 
-## Prebuilt Binaries
-
-A [precompiled version is available](https://github.com/OWASP/Amass/releases) with each release.
-
 ### Snapcraft
 
-If your operating environment supports [Snap](https://docs.snapcraft.io/core/install), you can [click here to install](https://snapcraft.io/amass), or perform the following from the command-line:
 
 ```bash
 sudo snap install amass
 ```
 
-On **Kali**, follow these steps to install Snap and Amass + use AppArmor (for autoload) and Add the Snap bin directory to your PATH:
+Follow these steps to install Snap and Amass + use AppArmor (for autoload) and Add the Snap bin directory to your PATH:
 
 ```bash
 sudo apt install snapd && sudo systemctl start snapd && sudo systemctl enable snapd && sudo systemctl start apparmor && sudo systemctl enable apparmor && export PATH=$PATH:/snap/bin && snap install go --classic && sudo snap install amass && amass -version
@@ -56,6 +51,12 @@ The wordlists maintained in the Amass git repository are available in `/wordlist
 ```bash
 docker run -v ~/amass:/amass/ amass enum -brute -w /wordlists/all.txt -d example.com
 ```
+
+## Prebuilt Binaries
+
+A [precompiled version is available](https://github.com/OWASP/Amass/releases) with each release.
+
+
 
 ## From Source
 
