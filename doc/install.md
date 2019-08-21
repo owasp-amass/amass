@@ -3,6 +3,13 @@
 
 [![Packaging status](https://repology.org/badge/vertical-allrepos/amass.svg)](https://repology.org/metapackage/amass/versions)
 [![Get it from the Snap Store](https://snapcraft.io/static/images/badges/en/snap-store-white.svg)](https://snapcraft.io/amass)
+#
+# Easy Install
+
+```bash
+sudo apt install amass
+```
+
 
 ## Prebuilt Binaries
 
