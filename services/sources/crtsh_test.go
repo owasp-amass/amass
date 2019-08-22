@@ -19,7 +19,7 @@ func TestCrtsh(t *testing.T) {
 	pool := resolvers.NewResolverPool(nil)
 	defer pool.Stop()
 
-	srv := NewArchiveIt(cfg, bus, pool)
+	srv := NewCrtsh(cfg, bus, pool)
 
 	result := testService(srv, out)
 	if result < expectedTest {
