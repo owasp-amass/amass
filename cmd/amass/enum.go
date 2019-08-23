@@ -216,10 +216,10 @@ func runEnumCommand(clArgs []string) {
 	e.Config.Log = log.New(wLog, "", log.Lmicroseconds)
 
 	// Check if a configuration file was provided, and if so, load the settings
-	if f, err := config.AcquireConfig(args.Filepaths.Directory, args.Filepaths.ConfigFile, e.Config); err == nil {
+	if err := config.AcquireConfig(args.Filepaths.Directory, args.Filepaths.ConfigFile, e.Config); err == nil {
 		// Check if a config file was provided that has DNS resolvers specified
-		if r, err := config.GetResolversFromSettings(f); err == nil && len(args.Resolvers) == 0 {
-			args.Resolvers = stringset.New(r...)
+		if len(e.Config.Resolvers) > 0 && len(e.Config.Resolvers) == 0 {
+			args.Resolvers = stringset.New(e.Config.Resolvers...)
 		}
 	} else if args.Filepaths.ConfigFile != "" {
 		r.Fprintf(color.Error, "Failed to load the configuration file: %v\n", err)

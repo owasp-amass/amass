@@ -108,7 +108,7 @@ func runTrackCommand(clArgs []string) {
 
 	cfg := new(config.Config)
 	// Check if a configuration file was provided, and if so, load the settings
-	if _, err := config.AcquireConfig(args.Filepaths.Directory, args.Filepaths.ConfigFile, cfg); err == nil {
+	if err := config.AcquireConfig(args.Filepaths.Directory, args.Filepaths.ConfigFile, cfg); err == nil {
 		if args.Filepaths.Directory == "" {
 			args.Filepaths.Directory = cfg.Dir
 		}
