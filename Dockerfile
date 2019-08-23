@@ -6,6 +6,7 @@ WORKDIR /go/src/github.com/OWASP/Amass
 RUN go install ./...
 
 FROM alpine:latest
+RUN apk --no-cache add ca-certificates
 COPY --from=build /go/bin/amass /bin/amass
 COPY --from=build /go/src/github.com/OWASP/Amass/wordlists/ /wordlists/
 ENV HOME /
