@@ -54,6 +54,7 @@ type enumArgs struct {
 	Names             stringset.Set
 	Ports             utils.ParseInts
 	Resolvers         stringset.Set
+	Timeout           int
 	Options           struct {
 		Active       bool
 		BruteForcing bool
@@ -101,6 +102,7 @@ func defineEnumArgumentFlags(enumFlags *flag.FlagSet, args *enumArgs) {
 	enumFlags.IntVar(&args.MinForRecursive, "min-for-recursive", 0, "Number of subdomain discoveries before recursive brute forcing")
 	enumFlags.Var(&args.Ports, "p", "Ports separated by commas (default: 443)")
 	enumFlags.Var(&args.Resolvers, "r", "IP addresses of preferred DNS resolvers (can be used multiple times)")
+	enumFlags.IntVar(&args.Timeout, "timeout", 0, "Number of seconds to let enumeration run before quitting")
 }
 
 func defineEnumOptionFlags(enumFlags *flag.FlagSet, args *enumArgs) {
@@ -566,6 +568,9 @@ func updateEnumConfiguration(e *enum.Enumeration, args *enumArgs) error {
 	}
 	if len(args.Blacklist) > 0 {
 		e.Config.Blacklist = args.Blacklist.Slice()
+	}
+	if args.Timeout > 0 {
+		e.Config.Timeout = args.Timeout
 	}
 
 	disabled := compileDisabledSources(e.GetAllSourceNames(), args.Included, args.Excluded)
