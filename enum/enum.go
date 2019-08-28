@@ -136,21 +136,31 @@ func (e *Enumeration) Start() error {
 	}
 	services = append(services, e.dataSources...)
 
+	// The enumeration will not terminate until all output has been processed
+	var wg sync.WaitGroup
+
 	// Use all previously discovered names that are in scope
-	go e.submitKnownNames()
-	go e.submitProvidedNames()
+	wg.Add(2)
+	go e.submitKnownNames(&wg)
+	go e.submitProvidedNames(&wg)
 
 	// Start with the first domain name provided in the configuration
 	e.releaseDomainName()
 
-	// The enumeration will not terminate until all output has been processed
-	var wg sync.WaitGroup
 	wg.Add(2)
 	go e.checkForOutput(&wg)
 	go e.processOutput(&wg)
 
 	t := time.NewTicker(2 * time.Second)
 	logTick := time.NewTicker(time.Minute)
+
+	if e.Config.Timeout > 0 {
+		time.AfterFunc(time.Duration(e.Config.Timeout)*time.Second, func() {
+			e.Config.Log.Printf("Enumeration exceeded provided timeout")
+			close(e.Done)
+		})
+	}
+
 loop:
 	for {
 		select {
@@ -224,7 +234,8 @@ func (e *Enumeration) releaseDomainName() {
 	e.domainIdx++
 }
 
-func (e *Enumeration) submitKnownNames() {
+func (e *Enumeration) submitKnownNames(wg *sync.WaitGroup) {
+	defer wg.Done()
 	for _, enum := range e.Graph.EnumerationList() {
 		var found bool
 
@@ -251,7 +262,8 @@ func (e *Enumeration) submitKnownNames() {
 	}
 }
 
-func (e *Enumeration) submitProvidedNames() {
+func (e *Enumeration) submitProvidedNames(wg *sync.WaitGroup) {
+	defer wg.Done()
 	for _, name := range e.ProvidedNames {
 		if domain := e.Config.WhichDomain(name); domain != "" {
 			e.Bus.Publish(requests.NewNameTopic, &requests.DNSRequest{

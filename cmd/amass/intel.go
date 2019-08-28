@@ -40,6 +40,7 @@ type intelArgs struct {
 	MaxDNSQueries    int
 	Ports            utils.ParseInts
 	Resolvers        stringset.Set
+	Timeout          int
 	Options          struct {
 		Active       bool
 		DemoMode     bool
@@ -73,6 +74,7 @@ func defineIntelArgumentFlags(intelFlags *flag.FlagSet, args *intelArgs) {
 	intelFlags.IntVar(&args.MaxDNSQueries, "max-dns-queries", 0, "Maximum number of concurrent DNS queries")
 	intelFlags.Var(&args.Ports, "p", "Ports separated by commas (default: 443)")
 	intelFlags.Var(&args.Resolvers, "r", "IP addresses of preferred DNS resolvers (can be used multiple times)")
+	intelFlags.IntVar(&args.Timeout, "timeout", 0, "Number of seconds to let enumeration run before quitting")
 }
 
 func defineIntelOptionFlags(intelFlags *flag.FlagSet, args *intelArgs) {
@@ -175,10 +177,10 @@ func runIntelCommand(clArgs []string) {
 	ic.Config.Log = log.New(wLog, "", log.Lmicroseconds)
 
 	// Check if a configuration file was provided, and if so, load the settings
-	if f, err := config.AcquireConfig(args.Filepaths.Directory, args.Filepaths.ConfigFile, ic.Config); err == nil {
+	if err := config.AcquireConfig(args.Filepaths.Directory, args.Filepaths.ConfigFile, ic.Config); err == nil {
 		// Check if a config file was provided that has DNS resolvers specified
-		if r, err := config.GetResolversFromSettings(f); err == nil && len(args.Resolvers) == 0 {
-			args.Resolvers = stringset.New(r...)
+		if len(ic.Config.Resolvers) > 0 && len(args.Resolvers) == 0 {
+			args.Resolvers = stringset.New(ic.Config.Resolvers...)
 		}
 	} else if args.Filepaths.ConfigFile != "" {
 		r.Fprintf(color.Error, "Failed to load the configuration file: %v\n", err)
@@ -379,6 +381,9 @@ func updateIntelConfiguration(ic *intel.Collection, args *intelArgs) error {
 	}
 	if args.MaxDNSQueries > 0 {
 		ic.Config.MaxDNSQueries = args.MaxDNSQueries
+	}
+	if args.Timeout > 0 {
+		ic.Config.Timeout = args.Timeout
 	}
 
 	disabled := compileDisabledSources(GetAllSourceNames(), args.Included, args.Excluded)

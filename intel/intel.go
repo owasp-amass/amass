@@ -84,6 +84,14 @@ func (c *Collection) HostedDomains() error {
 	var active bool
 	filter := sf.NewStringFilter()
 	t := time.NewTicker(5 * time.Second)
+
+	if c.Config.Timeout > 0 {
+		time.AfterFunc(time.Duration(c.Config.Timeout)*time.Second, func() {
+			c.Config.Log.Printf("Enumeration exceeded provided timeout")
+			close(c.Done)
+		})
+	}
+
 loop:
 	for {
 		select {

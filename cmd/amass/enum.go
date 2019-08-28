@@ -54,6 +54,7 @@ type enumArgs struct {
 	Names             stringset.Set
 	Ports             utils.ParseInts
 	Resolvers         stringset.Set
+	Timeout           int
 	Options           struct {
 		Active       bool
 		BruteForcing bool
@@ -101,6 +102,7 @@ func defineEnumArgumentFlags(enumFlags *flag.FlagSet, args *enumArgs) {
 	enumFlags.IntVar(&args.MinForRecursive, "min-for-recursive", 0, "Number of subdomain discoveries before recursive brute forcing")
 	enumFlags.Var(&args.Ports, "p", "Ports separated by commas (default: 443)")
 	enumFlags.Var(&args.Resolvers, "r", "IP addresses of preferred DNS resolvers (can be used multiple times)")
+	enumFlags.IntVar(&args.Timeout, "timeout", 0, "Number of seconds to let enumeration run before quitting")
 }
 
 func defineEnumOptionFlags(enumFlags *flag.FlagSet, args *enumArgs) {
@@ -216,10 +218,10 @@ func runEnumCommand(clArgs []string) {
 	e.Config.Log = log.New(wLog, "", log.Lmicroseconds)
 
 	// Check if a configuration file was provided, and if so, load the settings
-	if f, err := config.AcquireConfig(args.Filepaths.Directory, args.Filepaths.ConfigFile, e.Config); err == nil {
+	if err := config.AcquireConfig(args.Filepaths.Directory, args.Filepaths.ConfigFile, e.Config); err == nil {
 		// Check if a config file was provided that has DNS resolvers specified
-		if r, err := config.GetResolversFromSettings(f); err == nil && len(args.Resolvers) == 0 {
-			args.Resolvers = stringset.New(r...)
+		if len(e.Config.Resolvers) > 0 && len(e.Config.Resolvers) == 0 {
+			args.Resolvers = stringset.New(e.Config.Resolvers...)
 		}
 	} else if args.Filepaths.ConfigFile != "" {
 		r.Fprintf(color.Error, "Failed to load the configuration file: %v\n", err)
@@ -566,6 +568,9 @@ func updateEnumConfiguration(e *enum.Enumeration, args *enumArgs) error {
 	}
 	if len(args.Blacklist) > 0 {
 		e.Config.Blacklist = args.Blacklist.Slice()
+	}
+	if args.Timeout > 0 {
+		e.Config.Timeout = args.Timeout
 	}
 
 	disabled := compileDisabledSources(e.GetAllSourceNames(), args.Included, args.Excluded)
