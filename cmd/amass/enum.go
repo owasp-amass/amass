@@ -26,6 +26,7 @@ import (
 	"github.com/OWASP/Amass/stringset"
 	"github.com/OWASP/Amass/utils"
 	"github.com/fatih/color"
+	"github.com/OWASP/Amass/resolvers"
 	homedir "github.com/mitchellh/go-homedir"
 )
 
@@ -235,10 +236,13 @@ func runEnumCommand(clArgs []string) {
 	}
 
 	if len(args.Resolvers) > 0 {
-		if err := e.Pool.SetResolvers(args.Resolvers.Slice()); err != nil {
-			r.Fprintf(color.Error, "Failed to set custom DNS resolvers: %v\n", err)
+		var pool *resolvers.ResolverPool
+
+		if pool = resolvers.SetupResolverPool(args.Resolvers.Slice(), true, true); pool == nil {
+			r.Fprintf(color.Error, "Failed to set custom DNS resolvers\n")
 			os.Exit(1)
 		}
+		e.Pool = pool
 	}
 
 	processEnumOutput(e, &args, rLog)

@@ -397,7 +397,7 @@ func (ds *DNSService) reverseDNSQuery(ip string) {
 	defer ds.Config().SemMaxDNSQueries.Release(1)
 
 	ds.SetActive()
-	ptr, answer, err := ds.Pool().ReverseDNS(ip)
+	ptr, answer, err := ds.Pool().Reverse(ip)
 	ds.metrics.QueryTime(time.Now())
 	if err != nil {
 		return

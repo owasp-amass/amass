@@ -4,7 +4,6 @@
 package resolvers
 
 import (
-	"errors"
 	"fmt"
 	"math/rand"
 	"net"
@@ -24,20 +23,7 @@ const (
 	PriorityCritical
 )
 
-// Public & free DNS servers
 var (
-	DefaultPublicResolvers = []string{
-		"1.1.1.1",     // Cloudflare
-		"8.8.8.8",     // Google
-		"64.6.64.6",   // Verisign
-		"74.82.42.42", // Hurricane Electric
-		"1.0.0.1",     // Cloudflare Secondary
-		"8.8.4.4",     // Google Secondary
-		"9.9.9.10",    // Quad9 Secondary
-		"64.6.65.6",   // Verisign Secondary
-		"77.88.8.1",   // Yandex.DNS Secondary
-	}
-
 	retryCodes = []int{
 		dns.RcodeRefused,
 		dns.RcodeServerFailure,
@@ -66,23 +52,71 @@ type ResolverPool struct {
 	active      time.Time
 }
 
-// NewResolverPool initializes a ResolverPool that optionally uses Resolvers at the provided IP addresses.
-func NewResolverPool(addrs []string) *ResolverPool {
-	rp := &ResolverPool{
+// SetupResolverPool initializes a ResolverPool with type of resolvers indicated by the parameters.
+func SetupResolverPool(addrs []string, scoring, ratemon bool) *ResolverPool {
+	if len(addrs) <= 0 {
+		return nil
+	}
+
+	// Do not allow the number of resolvers to exceed the ulimit
+	temp := addrs
+	addrs = []string{}
+	max := int(float64(utils.GetFileLimit())*0.9) / 2
+	for i, r := range temp {
+		if i > max {
+			break
+		}
+		addrs = append(addrs, r)
+	}
+
+	finished := make(chan Resolver, 100)
+	for _, addr := range addrs {
+		go func(ip string, ch chan Resolver) {
+			if n := NewBaseResolver(ip); n != nil {
+				ch <- n
+				return
+			}
+			ch <- nil
+		}(addr, finished)
+	}
+
+	l := len(addrs)
+	var resolvers []Resolver
+loop:
+	for i := 0; i < l; i++ {
+		select {
+		case r := <-finished:
+			if r != nil {
+				if scoring {
+					if r = NewScoredResolver(r); r == nil {
+						continue loop
+					}
+				}
+				if ratemon {
+					if r = NewRateMonitoredResolver(r); r == nil {
+						continue loop
+					}
+				}
+				resolvers = append(resolvers, r)
+			}
+		}
+	}
+
+	if len(resolvers) == 0 {
+		return nil
+	}
+	return NewResolverPool(SanityCheck(resolvers))
+}
+
+// NewResolverPool initializes a ResolverPool that uses the provided Resolvers.
+func NewResolverPool(res []Resolver) *ResolverPool {
+	return &ResolverPool{
+		Resolvers: res,
 		Done:        make(chan struct{}, 2),
 		wildcards:   make(map[string]*wildcard),
 		domainCache: make(map[string]struct{}),
 		active:      time.Now(),
 	}
-
-	if addrs == nil || len(addrs) == 0 {
-		addrs = DefaultPublicResolvers
-	}
-
-	if err := rp.SetResolvers(addrs); err != nil {
-		return nil
-	}
-	return rp
 }
 
 // Stop calls the Stop method for each Resolver object in the pool.
@@ -91,6 +125,26 @@ func (rp *ResolverPool) Stop() {
 		r.Stop()
 	}
 	rp.Resolvers = []Resolver{}
+}
+
+// Available returns true if the Resolver can handle another DNS request.
+func (rp *ResolverPool) Available() bool {
+	return true
+}
+
+// Stats returns performance counters.
+func (rp *ResolverPool) Stats() map[int]int64 {
+	return make(map[int]int64)
+}
+
+// WipeStats clears the performance counters.
+func (rp *ResolverPool) WipeStats() {
+	return
+}
+
+// ReportError implements the Resolver interface.
+func (rp *ResolverPool) ReportError() {
+	return
 }
 
 // NextResolver returns a randomly selected Resolver from the pool that has availability.
@@ -121,58 +175,6 @@ func (rp *ResolverPool) NextResolver() Resolver {
 		}
 		attempts = 0
 		time.Sleep(time.Duration(randomInt(1, 500)) * time.Millisecond)
-	}
-	return nil
-}
-
-// SetResolvers modifies the set of resolvers.
-func (rp *ResolverPool) SetResolvers(addrs []string) error {
-	if len(addrs) <= 0 {
-		return errors.New("No resolver addresses provided")
-	}
-
-	rp.Stop()
-	// Do not allow the number of resolvers to exceed the ulimit
-	temp := addrs
-	addrs = []string{}
-	max := int(float64(utils.GetFileLimit())*0.9) / 2
-	for i, r := range temp {
-		if i > max {
-			break
-		}
-		addrs = append(addrs, r)
-	}
-
-	finished := make(chan Resolver, 100)
-	for _, addr := range addrs {
-		go func(ip string, ch chan Resolver) {
-			if n := NewBaseResolver(ip); n != nil {
-				if s := NewScoredResolver(n); s != nil {
-					if r := NewRateMonitoredResolver(s); r != nil {
-						ch <- r
-						return
-					}
-					s.Stop()
-				}
-				n.Stop()
-			}
-			ch <- nil
-		}(addr, finished)
-	}
-
-	l := len(addrs)
-	rp.Resolvers = []Resolver{}
-	for i := 0; i < l; i++ {
-		select {
-		case r := <-finished:
-			if r != nil {
-				rp.Resolvers = append(rp.Resolvers, r)
-			}
-		}
-	}
-
-	if len(rp.Resolvers) == 0 {
-		return errors.New("No resolvers passed the sanity check")
 	}
 	return nil
 }
@@ -245,8 +247,8 @@ func (rp *ResolverPool) Resolve(name, qtype string, priority int) ([]requests.DN
 	return rp.performElection(votes, name, qtype)
 }
 
-// ReverseDNS is performs reverse DNS queries using available Resolvers in the pool.
-func (rp *ResolverPool) ReverseDNS(addr string) (string, string, error) {
+// Reverse is performs reverse DNS queries using available Resolvers in the pool.
+func (rp *ResolverPool) Reverse(addr string) (string, string, error) {
 	var name, ptr string
 
 	if ip := net.ParseIP(addr); utils.IsIPv4(ip) {

@@ -74,7 +74,7 @@ func NewEnumeration() *Enumeration {
 			Recursive:      true,
 		},
 		Bus:         eb.NewEventBus(),
-		Pool:        resolvers.NewResolverPool(nil),
+		Pool:        resolvers.SetupResolverPool(config.DefaultPublicResolvers, true, true),
 		Output:      make(chan *requests.Output, 100),
 		Done:        make(chan struct{}, 2),
 		pause:       make(chan struct{}, 2),

@@ -35,6 +35,19 @@ const (
 	defaultAltWordlistURL       = "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/alterations.txt"
 )
 
+// DefaultPublicResolvers is the preferred list of high performance DNS servers.
+var DefaultPublicResolvers = []string{
+	"1.1.1.1",     // Cloudflare
+	"8.8.8.8",     // Google
+	"64.6.64.6",   // Verisign
+	"74.82.42.42", // Hurricane Electric
+	"1.0.0.1",     // Cloudflare Secondary
+	"8.8.4.4",     // Google Secondary
+	"9.9.9.10",    // Quad9 Secondary
+	"64.6.65.6",   // Verisign Secondary
+	"77.88.8.1",   // Yandex.DNS Secondary
+}
+
 // Config passes along Amass configuration settings and options.
 type Config struct {
 	sync.Mutex

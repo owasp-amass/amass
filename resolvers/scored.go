@@ -26,15 +26,10 @@ func NewScoredResolver(res Resolver) *ScoredResolver {
 		return nil
 	}
 
-	r := &ScoredResolver{
+	return &ScoredResolver{
 		resolver: res,
 		score:    100,
 	}
-
-	if !r.SanityCheck() {
-		return nil
-	}
-	return r
 }
 
 // Stop causes the Resolver to stop.
@@ -96,65 +91,4 @@ func (r *ScoredResolver) Resolve(name, qtype string) ([]requests.DNSAnswer, bool
 // Reverse implements the Resolver interface.
 func (r *ScoredResolver) Reverse(addr string) (string, string, error) {
 	return r.resolver.Reverse(addr)
-}
-
-// SanityCheck performs some basic checks to see if the Resolver will be usable.
-func (r *ScoredResolver) SanityCheck() bool {
-	f := func(name string, flip bool, ch chan bool) {
-		var err error
-		again := true
-		var success bool
-
-		for i := 0; i < 2 && again; i++ {
-			_, again, err = r.Resolve(name, "A")
-			if err == nil {
-				success = true
-				break
-			}
-		}
-
-		if flip {
-			success = !success
-		}
-		ch <- success
-	}
-
-	results := make(chan bool, 10)
-	// Check that valid names can be resolved
-	goodNames := []string{
-		"www.owasp.org",
-		"twitter.com",
-		"github.com",
-		"www.google.com",
-	}
-	for _, name := range goodNames {
-		go f(name, false, results)
-	}
-
-	// Check that invalid names do not return false positives
-	badNames := []string{
-		"not-a-real-name.owasp.org",
-		"wwww.owasp.org",
-		"www-1.owasp.org",
-		"www1.owasp.org",
-		"wwww.google.com",
-		"www-1.google.com",
-		"www1.google.com",
-		"not-a-real-name.google.com",
-	}
-	for _, name := range badNames {
-		go f(name, true, results)
-	}
-
-	success := true
-	l := len(goodNames) + len(badNames)
-	for i := 0; i < l; i++ {
-		select {
-		case succ := <-results:
-			if !succ {
-				success = false
-			}
-		}
-	}
-	return success
 }

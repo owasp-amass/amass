@@ -50,7 +50,7 @@ func NewCollection() *Collection {
 	c := &Collection{
 		Config:     &config.Config{Log: log.New(ioutil.Discard, "", 0)},
 		Bus:        eb.NewEventBus(),
-		Pool:       resolvers.NewResolverPool(nil),
+		Pool:       resolvers.SetupResolverPool(config.DefaultPublicResolvers, true, true),
 		Output:     make(chan *requests.Output, 100),
 		Done:       make(chan struct{}, 2),
 		netCache:   make(map[int]*requests.ASNRequest),
@@ -152,7 +152,7 @@ func (c *Collection) investigateAddr(addr string) {
 
 	addrinfo := requests.AddressInfo{Address: ip}
 	c.activeChan <- struct{}{}
-	if _, answer, err := c.Pool.ReverseDNS(addr); err == nil {
+	if _, answer, err := c.Pool.Reverse(addr); err == nil {
 		if d := strings.TrimSpace(c.Pool.SubdomainToDomain(answer)); d != "" {
 			c.domainChan <- &requests.Output{
 				Name:      d,
