@@ -116,6 +116,9 @@ type Config struct {
 	LimitResolverRate bool
 	PruneBadResolvers bool
 
+	// Enumeration Timeout
+	Timeout int
+
 	// The root domain names that the enumeration will target
 	domains []string
 

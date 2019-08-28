@@ -40,6 +40,7 @@ type intelArgs struct {
 	MaxDNSQueries    int
 	Ports            utils.ParseInts
 	Resolvers        stringset.Set
+	Timeout          int
 	Options          struct {
 		Active       bool
 		DemoMode     bool
@@ -73,6 +74,7 @@ func defineIntelArgumentFlags(intelFlags *flag.FlagSet, args *intelArgs) {
 	intelFlags.IntVar(&args.MaxDNSQueries, "max-dns-queries", 0, "Maximum number of concurrent DNS queries")
 	intelFlags.Var(&args.Ports, "p", "Ports separated by commas (default: 443)")
 	intelFlags.Var(&args.Resolvers, "r", "IP addresses of preferred DNS resolvers (can be used multiple times)")
+	intelFlags.IntVar(&args.Timeout, "timeout", 0, "Number of seconds to let enumeration run before quitting")
 }
 
 func defineIntelOptionFlags(intelFlags *flag.FlagSet, args *intelArgs) {
@@ -379,6 +381,9 @@ func updateIntelConfiguration(ic *intel.Collection, args *intelArgs) error {
 	}
 	if args.MaxDNSQueries > 0 {
 		ic.Config.MaxDNSQueries = args.MaxDNSQueries
+	}
+	if args.Timeout > 0 {
+		ic.Config.Timeout = args.Timeout
 	}
 
 	disabled := compileDisabledSources(GetAllSourceNames(), args.Included, args.Excluded)
