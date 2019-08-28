@@ -49,19 +49,21 @@ var (
 
 type resolveVote struct {
 	Err      error
-	Resolver *Resolver
+	Resolver Resolver
 	Answers  []requests.DNSAnswer
 }
 
 // ResolverPool manages many DNS resolvers for high-performance use, such as brute forcing attacks.
 type ResolverPool struct {
-	Resolvers    []*Resolver
+	Resolvers    []Resolver
 	Done         chan struct{}
 	wildcardLock sync.Mutex
 	wildcards    map[string]*wildcard
 	// Domains discovered by the SubdomainToDomain function
 	domainLock  sync.Mutex
 	domainCache map[string]struct{}
+	activeLock  sync.Mutex
+	active      time.Time
 }
 
 // NewResolverPool initializes a ResolverPool that optionally uses Resolvers at the provided IP addresses.
@@ -70,6 +72,7 @@ func NewResolverPool(addrs []string) *ResolverPool {
 		Done:        make(chan struct{}, 2),
 		wildcards:   make(map[string]*wildcard),
 		domainCache: make(map[string]struct{}),
+		active:      time.Now(),
 	}
 
 	if addrs == nil || len(addrs) == 0 {
@@ -87,23 +90,22 @@ func (rp *ResolverPool) Stop() {
 	for _, r := range rp.Resolvers {
 		r.Stop()
 	}
-	rp.Resolvers = []*Resolver{}
+	rp.Resolvers = []Resolver{}
 }
 
 // NextResolver returns a randomly selected Resolver from the pool that has availability.
-func (rp *ResolverPool) NextResolver() *Resolver {
+func (rp *ResolverPool) NextResolver() Resolver {
 	var attempts int
+	max := len(rp.Resolvers)
+
+	if max == 0 {
+		return nil
+	}
 
 	for {
-		max := len(rp.Resolvers)
-		if max == 0 {
-			break
-		}
+		r := rp.Resolvers[rand.Int()%max]
 
-		rnd := rand.Int()
-		r := rp.Resolvers[rnd%max]
-
-		if r.currentScore() > 50 && r.Available() {
+		if r.Available() {
 			return r
 		}
 
@@ -113,12 +115,12 @@ func (rp *ResolverPool) NextResolver() *Resolver {
 		}
 
 		for _, r := range rp.Resolvers {
-			if r.currentScore() > 50 && r.Available() {
+			if r.Available() {
 				return r
 			}
 		}
 		attempts = 0
-		time.Sleep(time.Duration(randomInt(100, 1000)) * time.Millisecond)
+		time.Sleep(time.Duration(randomInt(1, 500)) * time.Millisecond)
 	}
 	return nil
 }
@@ -130,11 +132,10 @@ func (rp *ResolverPool) SetResolvers(addrs []string) error {
 	}
 
 	rp.Stop()
-
 	// Do not allow the number of resolvers to exceed the ulimit
 	temp := addrs
 	addrs = []string{}
-	max := int(float64(utils.GetFileLimit()) * 0.9)
+	max := int(float64(utils.GetFileLimit())*0.9) / 2
 	for i, r := range temp {
 		if i > max {
 			break
@@ -142,24 +143,28 @@ func (rp *ResolverPool) SetResolvers(addrs []string) error {
 		addrs = append(addrs, r)
 	}
 
-	ch := make(chan *Resolver, 10)
+	finished := make(chan Resolver, 100)
 	for _, addr := range addrs {
-		go func(ip string) {
-			if n := NewResolver(ip); n != nil {
-				if n.SanityCheck() {
-					ch <- n
-					return
+		go func(ip string, ch chan Resolver) {
+			if n := NewBaseResolver(ip); n != nil {
+				if s := NewScoredResolver(n); s != nil {
+					if r := NewRateMonitoredResolver(s); r != nil {
+						ch <- r
+						return
+					}
+					s.Stop()
 				}
 				n.Stop()
 			}
 			ch <- nil
-		}(addr)
+		}(addr, finished)
 	}
 
 	l := len(addrs)
+	rp.Resolvers = []Resolver{}
 	for i := 0; i < l; i++ {
 		select {
-		case r := <-ch:
+		case r := <-finished:
 			if r != nil {
 				rp.Resolvers = append(rp.Resolvers, r)
 			}
@@ -214,6 +219,8 @@ func (rp *ResolverPool) Resolve(name, qtype string, priority int) ([]requests.DN
 		num = 3
 	}
 
+	rp.SetActive()
+
 	var queries int
 	ch := make(chan *resolveVote, num)
 	for i := 0; i < num; i++ {
@@ -233,6 +240,8 @@ func (rp *ResolverPool) Resolve(name, qtype string, priority int) ([]requests.DN
 			votes = append(votes, v)
 		}
 	}
+
+	rp.SetActive()
 	return rp.performElection(votes, name, qtype)
 }
 
@@ -311,7 +320,7 @@ func (rp *ResolverPool) performElection(votes []*resolveVote, name, qtype string
 			}
 
 			found := 1
-			var missing *Resolver
+			var missing Resolver
 			for j, v := range votes {
 				if j == i {
 					continue
@@ -328,10 +337,10 @@ func (rp *ResolverPool) performElection(votes []*resolveVote, name, qtype string
 			}
 
 			if found == 1 {
-				votes[i].Resolver.reduceScore()
+				votes[i].Resolver.ReportError()
 				continue
 			} else if found == 2 && missing != nil {
-				missing.reduceScore()
+				missing.ReportError()
 			}
 			ans = append(ans, a)
 		}
@@ -343,7 +352,7 @@ func (rp *ResolverPool) performElection(votes []*resolveVote, name, qtype string
 	return ans, nil
 }
 
-func (rp *ResolverPool) queryResolver(r *Resolver, ch chan *resolveVote, name, qtype string, priority int) {
+func (rp *ResolverPool) queryResolver(r Resolver, ch chan *resolveVote, name, qtype string, priority int) {
 	var err error
 	var again bool
 	start := time.Now()
@@ -378,7 +387,7 @@ func (rp *ResolverPool) queryResolver(r *Resolver, ch chan *resolveVote, name, q
 			if servfail > maxFails && time.Now().After(start.Add(time.Minute)) {
 				break
 			} else if servfail <= (maxFails / 2) {
-				time.Sleep(time.Duration(randomInt(3000, 5000)) * time.Millisecond)
+				time.Sleep(time.Duration(randomInt(1000, 2000)) * time.Millisecond)
 			}
 		}
 	}
@@ -394,9 +403,32 @@ func (rp *ResolverPool) numUsableResolvers() int {
 	var num int
 
 	for _, r := range rp.Resolvers {
-		if r.currentScore() > 50 {
+		if r.Available() {
 			num++
 		}
 	}
 	return num
+}
+
+func randomInt(min, max int) int {
+	return min + rand.Intn((max-min)+1)
+}
+
+// IsActive returns true if SetActive has been called for the pool within the last 10 seconds.
+func (rp *ResolverPool) IsActive() bool {
+	rp.activeLock.Lock()
+	defer rp.activeLock.Unlock()
+
+	if time.Now().Sub(rp.active) > 10*time.Second {
+		return false
+	}
+	return true
+}
+
+// SetActive marks the pool as being active at time.Now() for future checks performed by the IsActive method.
+func (rp *ResolverPool) SetActive() {
+	rp.activeLock.Lock()
+	defer rp.activeLock.Unlock()
+
+	rp.active = time.Now()
 }

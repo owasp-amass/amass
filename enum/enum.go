@@ -183,7 +183,7 @@ func (e *Enumeration) periodicChecks(srvcs []services.Service) {
 			break
 		}
 	}
-	if done {
+	if done && !e.Pool.IsActive() {
 		close(e.Done)
 		return
 	}

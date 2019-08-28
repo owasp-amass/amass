@@ -5,7 +5,6 @@ package resolvers
 
 import (
 	"fmt"
-	"math/rand"
 	"net"
 	"strings"
 	"sync"
@@ -14,6 +13,18 @@ import (
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/utils"
 	"github.com/miekg/dns"
+)
+
+// Index values into the Resolver.Stats map
+const (
+	QueryAttempts = 64
+	QueryTimeout  = 65
+	QueryRTT      = 66
+)
+
+const (
+	defaultWindowDuration = 2 * time.Second
+	defaultConnRotation   = 30 * time.Second
 )
 
 // ResolveError contains the Rcode returned during the DNS query.
@@ -33,10 +44,6 @@ type resolveRequest struct {
 	Result    chan *resolveResult
 }
 
-func (r *Resolver) returnRequest(req *resolveRequest, res *resolveResult) {
-	req.Result <- res
-}
-
 type resolveResult struct {
 	Records []requests.DNSAnswer
 	Again   bool
@@ -54,33 +61,51 @@ func makeResolveResult(rec []requests.DNSAnswer, again bool, err string, rcode i
 	}
 }
 
-func randomInt(min, max int) int {
-	return min + rand.Intn((max-min)+1)
+// Resolver is the object type for performing DNS resolutions.
+type Resolver interface {
+	// Resolve performs DNS queries using the Resolver
+	Resolve(name, qtype string) ([]requests.DNSAnswer, bool, error)
+
+	// Reverse is performs reverse DNS queries using the Resolver
+	Reverse(addr string) (string, string, error)
+
+	// Available returns true if the Resolver can handle another DNS request
+	Available() bool
+
+	// Stats returns performance counters
+	Stats() map[int]int64
+	WipeStats()
+
+	// ReportError indicates to the Resolver that it delivered an erroneos response
+	ReportError()
+
+	// Stop the Resolver
+	Stop() error
 }
 
-// Resolver performs DNS queries on a single resolver at high-performance.
-type Resolver struct {
+// BaseResolver performs DNS queries on a single resolver at high-performance.
+type BaseResolver struct {
 	sync.RWMutex
 	Address        string
 	Port           string
 	WindowDuration time.Duration
-	Dialer         *net.Dialer
-	Conn           net.Conn
+	CurrentConn    net.Conn
+	LastConn       net.Conn
 	XchgQueue      *utils.Queue
 	XchgChan       chan *resolveRequest
 	XchgsLock      sync.Mutex
 	Xchgs          map[uint16]*resolveRequest
 	Done           chan struct{}
-	rcodeStats     map[int]int64
+	stats          map[int]int64
 	attempts       int64
 	timeouts       int64
-	last           time.Time
-	successRate    time.Duration
-	score          int
+	avgrtt         int64
+	numrtt         int64
+	stopped        bool
 }
 
-// NewResolver initializes a Resolver that send DNS queries to the IP address in the addr value.
-func NewResolver(addr string) *Resolver {
+// NewBaseResolver initializes a Resolver that send DNS queries to the provided IP address.
+func NewBaseResolver(addr string) *BaseResolver {
 	port := "53"
 	parts := strings.Split(addr, ":")
 	if len(parts) == 2 {
@@ -88,122 +113,128 @@ func NewResolver(addr string) *Resolver {
 		port = parts[1]
 	}
 
-	d := &net.Dialer{}
-	conn, err := d.Dial("udp", addr+":"+port)
-	if err != nil {
-		return nil
-	}
-
-	r := &Resolver{
+	r := &BaseResolver{
 		Address:        addr,
 		Port:           port,
-		WindowDuration: 2 * time.Second,
-		Dialer:         d,
-		Conn:           conn,
+		WindowDuration: defaultWindowDuration,
 		XchgQueue:      new(utils.Queue),
 		XchgChan:       make(chan *resolveRequest, 1000),
 		Xchgs:          make(map[uint16]*resolveRequest),
 		Done:           make(chan struct{}, 2),
-		rcodeStats:     make(map[int]int64),
-		last:           time.Now(),
-		successRate:    55 * time.Millisecond,
-		score:          100,
+		stats:          make(map[int]int64),
 	}
+
+	r.rotateConnections()
 	go r.fillXchgChan()
 	go r.checkForTimeouts()
-	go r.monitorPerformance()
 	go r.exchanges()
 	return r
 }
 
 // Stop causes the Resolver to stop sending DNS queries and closes the network connection.
-func (r *Resolver) Stop() {
+func (r *BaseResolver) Stop() error {
+	if r.stopped {
+		return nil
+	}
+
+	r.stopped = true
 	close(r.Done)
-	time.Sleep(time.Second)
-	r.Conn.Close()
+	if r.CurrentConn != nil {
+		r.CurrentConn.Close()
+	}
+	if r.LastConn != nil {
+		r.LastConn.Close()
+	}
+	return nil
 }
 
-// Available returns true if the Resolver can handle another DNS request.
-func (r *Resolver) Available() bool {
-	var avail bool
-
-	r.Lock()
-	if time.Now().After(r.last.Add(r.successRate)) {
-		r.last = time.Now()
-		avail = true
-	}
-	r.Unlock()
-	// There needs to be an opportunity to exceed the success rate
-	if !avail {
-		if random := randomInt(1, 100); random <= 5 {
-			avail = true
-		}
-	}
-	return avail
-}
-
-// SanityCheck performs some basic checks to see if the Resolver will be usable.
-func (r *Resolver) SanityCheck() bool {
-	ch := make(chan bool, 10)
-	f := func(name string, flip bool) {
-		var err error
-		again := true
-		var success bool
-
-		for i := 0; i < 2 && again; i++ {
-			_, again, err = r.Resolve(name, "A")
-			if err == nil {
-				success = true
-				break
-			}
-		}
-
-		if flip {
-			success = !success
-		}
-		ch <- success
-	}
-
-	// Check that valid names can be resolved
-	goodNames := []string{
-		"www.owasp.org",
-		"twitter.com",
-		"github.com",
-		"www.google.com",
-	}
-	for _, name := range goodNames {
-		go f(name, false)
-	}
-
-	// Check that invalid names do not return false positives
-	badNames := []string{
-		"not-a-real-name.owasp.org",
-		"wwww.owasp.org",
-		"www-1.owasp.org",
-		"www1.owasp.org",
-		"wwww.google.com",
-		"www-1.google.com",
-		"www1.google.com",
-		"not-a-real-name.google.com",
-	}
-	for _, name := range badNames {
-		go f(name, true)
-	}
-
-	l := len(goodNames) + len(badNames)
-	for i := 0; i < l; i++ {
-		select {
-		case success := <-ch:
-			if !success {
-				return false
-			}
-		}
+// Available always returns true.
+func (r *BaseResolver) Available() bool {
+	if r.stopped {
+		return false
 	}
 	return true
 }
 
-// Resolve is performs DNS queries using the Resolver.
-func (r *Resolver) Resolve(name, qtype string) ([]requests.DNSAnswer, bool, error) {
+// Stats returns performance counters.
+func (r *BaseResolver) Stats() map[int]int64 {
+	c := make(map[int]int64)
+
+	r.RLock()
+	defer r.RUnlock()
+
+	for k, v := range r.stats {
+		c[k] = v
+	}
+	return c
+}
+
+// WipeStats clears the performance counters.
+func (r *BaseResolver) WipeStats() {
+	r.Lock()
+	defer r.Unlock()
+
+	r.attempts = 0
+	r.timeouts = 0
+	r.avgrtt = 0
+	r.numrtt = 0
+	for k := range r.stats {
+		r.stats[k] = 0
+	}
+}
+
+// ReportError indicates to the Resolver that it delivered an erroneos response.
+func (r *BaseResolver) ReportError() {
+	return
+}
+
+func (r *BaseResolver) returnRequest(req *resolveRequest, res *resolveResult) {
+	req.Result <- res
+}
+
+func (r *BaseResolver) rotateConnections() {
+	r.Lock()
+	defer r.Unlock()
+
+	if r.LastConn != nil {
+		r.LastConn.Close()
+	}
+	r.LastConn = r.CurrentConn
+
+	var err error
+	for {
+		d := &net.Dialer{}
+
+		r.CurrentConn, err = d.Dial("udp", r.Address+":"+r.Port)
+		if err == nil {
+			break
+		}
+		time.Sleep(time.Duration(randomInt(1, 10)) * time.Millisecond)
+	}
+}
+
+func (r *BaseResolver) currentConnection() *dns.Conn {
+	r.RLock()
+	defer r.RUnlock()
+
+	if r.CurrentConn == nil {
+		return nil
+	}
+	return &dns.Conn{Conn: r.CurrentConn}
+}
+
+func (r *BaseResolver) lastConnection() *dns.Conn {
+	r.RLock()
+	defer r.RUnlock()
+
+	if r.LastConn == nil {
+		return nil
+	}
+	return &dns.Conn{Conn: r.LastConn}
+}
+
+// Resolve performs DNS queries using the Resolver.
+func (r *BaseResolver) Resolve(name, qtype string) ([]requests.DNSAnswer, bool, error) {
 	qt, err := textToTypeNum(qtype)
 	if err != nil {
 		return nil, false, &ResolveError{
@@ -222,8 +253,8 @@ func (r *Resolver) Resolve(name, qtype string) ([]requests.DNSAnswer, bool, erro
 	return result.Records, result.Again, result.Err
 }
 
-// ReverseDNS is performs reverse DNS queries using the Resolver.
-func (r *Resolver) ReverseDNS(addr string) (string, string, error) {
+// Reverse is performs reverse DNS queries using the Resolver.
+func (r *BaseResolver) Reverse(addr string) (string, string, error) {
 	var name, ptr string
 
 	if ip := net.ParseIP(addr); utils.IsIPv4(ip) {
@@ -263,35 +294,7 @@ func (r *Resolver) ReverseDNS(addr string) (string, string, error) {
 	return ptr, name, err
 }
 
-func (r *Resolver) currentScore() int {
-	r.RLock()
-	defer r.RUnlock()
-
-	return r.score
-}
-
-func (r *Resolver) reduceScore() {
-	r.Lock()
-	defer r.Unlock()
-
-	r.score--
-}
-
-func (r *Resolver) getSuccessRate() time.Duration {
-	r.RLock()
-	defer r.RUnlock()
-
-	return r.successRate
-}
-
-func (r *Resolver) setSuccessRate(d time.Duration) {
-	r.Lock()
-	defer r.Unlock()
-
-	r.successRate = d
-}
-
-func (r *Resolver) getID() uint16 {
+func (r *BaseResolver) getID() uint16 {
 	r.XchgsLock.Lock()
 	defer r.XchgsLock.Unlock()
 
@@ -306,13 +309,13 @@ func (r *Resolver) getID() uint16 {
 	return id
 }
 
-func (r *Resolver) queueRequest(id uint16, req *resolveRequest) {
+func (r *BaseResolver) queueRequest(id uint16, req *resolveRequest) {
 	r.XchgsLock.Lock()
 	r.Xchgs[id] = req
 	r.XchgsLock.Unlock()
 }
 
-func (r *Resolver) pullRequest(id uint16) *resolveRequest {
+func (r *BaseResolver) pullRequest(id uint16) *resolveRequest {
 	r.XchgsLock.Lock()
 	defer r.XchgsLock.Unlock()
 
@@ -321,9 +324,10 @@ func (r *Resolver) pullRequest(id uint16) *resolveRequest {
 	return res
 }
 
-func (r *Resolver) checkForTimeouts() {
+func (r *BaseResolver) checkForTimeouts() {
 	t := time.NewTicker(r.WindowDuration)
 	defer t.Stop()
+
 	for {
 		select {
 		case <-r.Done:
@@ -354,7 +358,7 @@ func (r *Resolver) checkForTimeouts() {
 	}
 }
 
-func (r *Resolver) fillXchgChan() {
+func (r *BaseResolver) fillXchgChan() {
 	curIdx := 0
 	maxIdx := 7
 	delays := []int{10, 25, 50, 75, 100, 150, 250, 500}
@@ -378,24 +382,30 @@ func (r *Resolver) fillXchgChan() {
 }
 
 // exchanges encapsulates miekg/dns usage
-func (r *Resolver) exchanges() {
-	co := &dns.Conn{Conn: r.Conn}
+func (r *BaseResolver) exchanges() {
 	msgs := make(chan *dns.Msg, 2000)
 
-	go r.readMessages(co, msgs)
+	go r.readMessages(msgs, false)
+	go r.readMessages(msgs, true)
+
+	t := time.NewTicker(defaultConnRotation)
+	defer t.Stop()
 	for {
 		select {
 		case <-r.Done:
 			return
+		case <-t.C:
+			go r.rotateConnections()
 		case read := <-msgs:
 			go r.processMessage(read)
 		case req := <-r.XchgChan:
-			go r.writeMessage(co, req)
+			go r.writeMessage(req)
 		}
 	}
 }
 
-func (r *Resolver) writeMessage(co *dns.Conn, req *resolveRequest) {
+func (r *BaseResolver) writeMessage(req *resolveRequest) {
+	co := r.currentConnection()
 	msg := queryMessage(r.getID(), req.Name, req.Qtype)
 
 	co.SetWriteDeadline(time.Now().Add(r.WindowDuration))
@@ -408,15 +418,26 @@ func (r *Resolver) writeMessage(co *dns.Conn, req *resolveRequest) {
 
 	req.Timestamp = time.Now()
 	r.queueRequest(msg.MsgHdr.Id, req)
-	r.updatesAttempts()
+	r.updateAttempts()
 }
 
-func (r *Resolver) readMessages(co *dns.Conn, msgs chan *dns.Msg) {
+func (r *BaseResolver) readMessages(msgs chan *dns.Msg, last bool) {
+loop:
 	for {
 		select {
 		case <-r.Done:
 			return
 		default:
+			co := r.currentConnection()
+			if last {
+				co = r.lastConnection()
+			}
+
+			if co == nil {
+				time.Sleep(time.Second)
+				continue loop
+			}
+
 			if read, err := co.ReadMsg(); err == nil && read != nil {
 				msgs <- read
 			}
@@ -424,7 +445,7 @@ func (r *Resolver) readMessages(co *dns.Conn, msgs chan *dns.Msg) {
 	}
 }
 
-func (r *Resolver) tcpExchange(req *resolveRequest) {
+func (r *BaseResolver) tcpExchange(req *resolveRequest) {
 	msg := queryMessage(r.getID(), req.Name, req.Qtype)
 	d := net.Dialer{Timeout: r.WindowDuration}
 
@@ -460,11 +481,13 @@ func (r *Resolver) tcpExchange(req *resolveRequest) {
 	r.processMessage(read)
 }
 
-func (r *Resolver) processMessage(msg *dns.Msg) {
+func (r *BaseResolver) processMessage(msg *dns.Msg) {
 	req := r.pullRequest(msg.MsgHdr.Id)
 	if req == nil {
 		return
 	}
+
+	r.updateRTT(time.Now().Sub(req.Timestamp))
 	r.updateStats(msg.Rcode)
 	// Check that the query was successful
 	if msg.Rcode != dns.RcodeSuccess {
@@ -510,108 +533,34 @@ func (r *Resolver) processMessage(msg *dns.Msg) {
 	})
 }
 
-func (r *Resolver) monitorPerformance() {
-	var successes, attempts int64
-
-	t := time.NewTicker(5 * time.Second)
-	defer t.Stop()
-	m := time.NewTicker(time.Minute)
-	defer m.Stop()
-	for {
-		select {
-		case <-r.Done:
-			return
-		case <-t.C:
-			successes, attempts = r.calcSuccessRate(successes, attempts)
-		case <-m.C:
-			successes = 0
-			attempts = 0
-			r.wipeStats()
-			r.wipeAttempts()
-			r.wipeTimeouts()
-			if r.getSuccessRate() > 50*time.Millisecond {
-				r.setSuccessRate(50 * time.Millisecond)
-			}
-		}
-	}
-}
-
-func (r *Resolver) updateStats(rcode int) {
+func (r *BaseResolver) updateTimeouts(t int) {
 	r.Lock()
 	defer r.Unlock()
 
-	r.rcodeStats[rcode] = r.rcodeStats[rcode] + 1
+	r.stats[QueryTimeout] = r.stats[QueryTimeout] + int64(t)
 }
 
-func (r *Resolver) wipeStats() {
+func (r *BaseResolver) updateAttempts() {
 	r.Lock()
 	defer r.Unlock()
 
-	for k := range r.rcodeStats {
-		r.rcodeStats[k] = 0
-	}
+	r.stats[QueryAttempts] = r.stats[QueryAttempts] + 1
 }
 
-func (r *Resolver) updatesAttempts() {
+func (r *BaseResolver) updateRTT(rtt time.Duration) {
 	r.Lock()
 	defer r.Unlock()
 
-	r.attempts++
+	r.numrtt++
+	avg := r.stats[QueryRTT]
+
+	avg = avg + ((int64(rtt) - avg) / r.numrtt)
+	r.stats[QueryRTT] = avg
 }
 
-func (r *Resolver) wipeAttempts() {
+func (r *BaseResolver) updateStats(rcode int) {
 	r.Lock()
 	defer r.Unlock()
 
-	r.attempts = 0
-}
-
-func (r *Resolver) updateTimeouts(t int) {
-	r.Lock()
-	defer r.Unlock()
-
-	r.timeouts += int64(t)
-}
-
-func (r *Resolver) wipeTimeouts() {
-	r.Lock()
-	defer r.Unlock()
-
-	r.timeouts = 0
-}
-
-func (r *Resolver) calcSuccessRate(prevSuc, prevAtt int64) (successes, attempts int64) {
-	r.RLock()
-	successes = r.rcodeStats[dns.RcodeSuccess]
-	successes += r.rcodeStats[dns.RcodeFormatError]
-	successes += r.rcodeStats[dns.RcodeNameError]
-	successes += r.rcodeStats[dns.RcodeYXDomain]
-	successes += r.rcodeStats[dns.RcodeNotAuth]
-	successes += r.rcodeStats[dns.RcodeNotZone]
-	attempts = r.attempts
-	curRate := r.successRate
-	r.RUnlock()
-
-	attemptDelta := attempts - prevAtt
-	if attemptDelta < 10 {
-		return
-	}
-
-	successDelta := successes - prevSuc
-	if successDelta <= 0 {
-		r.reduceScore()
-		r.setSuccessRate(curRate + (25 * time.Millisecond))
-		return
-	}
-
-	ratio := float64(successDelta) / float64(attemptDelta)
-	if ratio < 0.25 || curRate > (500*time.Millisecond) {
-		r.reduceScore()
-		r.setSuccessRate(curRate + (25 * time.Millisecond))
-	} else if ratio > 0.75 && (curRate >= (15 * time.Millisecond)) {
-		r.setSuccessRate(curRate - (10 * time.Millisecond))
-	} else {
-		r.setSuccessRate(curRate + (10 * time.Millisecond))
-	}
-	return
+	r.stats[rcode] = r.stats[rcode] + 1
 }
