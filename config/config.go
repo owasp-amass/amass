@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -33,6 +34,21 @@ const (
 	defaultConcurrentDNSQueries = 2500
 	defaultWordlistURL          = "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/namelist.txt"
 	defaultAltWordlistURL       = "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/alterations.txt"
+	defaultResolverURL          = "https://public-dns.info/nameservers.txt"
+)
+
+var (
+	defaultPublicResolvers = []string{
+		"1.1.1.1",     // Cloudflare
+		"8.8.8.8",     // Google
+		"64.6.64.6",   // Verisign
+		"74.82.42.42", // Hurricane Electric
+		"1.0.0.1",     // Cloudflare Secondary
+		"8.8.4.4",     // Google Secondary
+		"9.9.9.10",    // Quad9 Secondary
+		"64.6.65.6",   // Verisign Secondary
+		"77.88.8.1",   // Yandex.DNS Secondary
+	}
 )
 
 // Config passes along Amass configuration settings and options.
@@ -137,6 +153,32 @@ type APIKey struct {
 	Secret   string `ini:"secret"`
 }
 
+func NewConfig() *Config {
+	c := &Config{
+		UUID:          uuid.New(),
+		Log:           log.New(ioutil.Discard, "", 0),
+		Ports:         []int{443},
+		MaxDNSQueries: defaultConcurrentDNSQueries,
+
+		// Fallback if public-dns doesn't load or -no-public-dns isnt specified
+		Resolvers: defaultPublicResolvers,
+
+		// The following is enum-only, but intel will just ignore them anyway
+		Alterations:    true,
+		FlipWords:      true,
+		FlipNumbers:    true,
+		AddWords:       true,
+		AddNumbers:     true,
+		MinForWordFlip: 2,
+		EditDistance:   1,
+		Recursive:      true,
+	}
+
+	c.SemMaxDNSQueries = utils.NewSimpleSemaphore(c.MaxDNSQueries)
+
+	return c
+}
+
 // CheckSettings runs some sanity checks on the configuration options selected.
 func (c *Config) CheckSettings() error {
 	var err error
@@ -154,12 +196,6 @@ func (c *Config) CheckSettings() error {
 	if c.Passive && c.Active {
 		return errors.New("Active enumeration cannot be performed without DNS resolution")
 	}
-	if c.MaxDNSQueries <= 0 {
-		c.MaxDNSQueries = defaultConcurrentDNSQueries
-	}
-	if len(c.Ports) == 0 {
-		c.Ports = []int{443}
-	}
 	if c.Alterations {
 		if len(c.AltWordlist) == 0 {
 			c.AltWordlist, err = getWordlistByURL(defaultAltWordlistURL)
@@ -168,7 +204,6 @@ func (c *Config) CheckSettings() error {
 			}
 		}
 	}
-	c.SemMaxDNSQueries = utils.NewSimpleSemaphore(c.MaxDNSQueries)
 
 	c.Wordlist, err = utils.ExpandMaskWordlist(c.Wordlist)
 	if err != nil {
@@ -178,6 +213,11 @@ func (c *Config) CheckSettings() error {
 	c.AltWordlist, err = utils.ExpandMaskWordlist(c.AltWordlist)
 	if err != nil {
 		return err
+	}
+
+	resolvers, err := getWordlistByURL(defaultResolverURL)
+	if err == nil {
+		c.Resolvers = resolvers
 	}
 
 	return err

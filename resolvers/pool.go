@@ -26,18 +26,6 @@ const (
 
 // Public & free DNS servers
 var (
-	DefaultPublicResolvers = []string{
-		"1.1.1.1",     // Cloudflare
-		"8.8.8.8",     // Google
-		"64.6.64.6",   // Verisign
-		"74.82.42.42", // Hurricane Electric
-		"1.0.0.1",     // Cloudflare Secondary
-		"8.8.4.4",     // Google Secondary
-		"9.9.9.10",    // Quad9 Secondary
-		"64.6.65.6",   // Verisign Secondary
-		"77.88.8.1",   // Yandex.DNS Secondary
-	}
-
 	retryCodes = []int{
 		dns.RcodeRefused,
 		dns.RcodeServerFailure,
@@ -70,10 +58,6 @@ func NewResolverPool(addrs []string) *ResolverPool {
 		Done:        make(chan struct{}, 2),
 		wildcards:   make(map[string]*wildcard),
 		domainCache: make(map[string]struct{}),
-	}
-
-	if addrs == nil || len(addrs) == 0 {
-		addrs = DefaultPublicResolvers
 	}
 
 	if err := rp.SetResolvers(addrs); err != nil {

@@ -5,8 +5,7 @@ package enum
 
 import (
 	"errors"
-	"io/ioutil"
-	"log"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -20,7 +19,6 @@ import (
 	"github.com/OWASP/Amass/services/sources"
 	sf "github.com/OWASP/Amass/stringfilter"
 	"github.com/OWASP/Amass/utils"
-	"github.com/google/uuid"
 )
 
 // Enumeration is the object type used to execute a DNS enumeration with Amass.
@@ -61,20 +59,8 @@ type Enumeration struct {
 // NewEnumeration returns an initialized Enumeration that has not been started yet.
 func NewEnumeration() *Enumeration {
 	e := &Enumeration{
-		Config: &config.Config{
-			UUID:           uuid.New(),
-			Log:            log.New(ioutil.Discard, "", 0),
-			Alterations:    true,
-			FlipWords:      true,
-			FlipNumbers:    true,
-			AddWords:       true,
-			AddNumbers:     true,
-			MinForWordFlip: 2,
-			EditDistance:   1,
-			Recursive:      true,
-		},
+		Config:      config.NewConfig(),
 		Bus:         eb.NewEventBus(),
-		Pool:        resolvers.NewResolverPool(nil),
 		Output:      make(chan *requests.Output, 100),
 		Done:        make(chan struct{}, 2),
 		pause:       make(chan struct{}, 2),
@@ -82,6 +68,7 @@ func NewEnumeration() *Enumeration {
 		filter:      sf.NewStringFilter(),
 		outputQueue: new(utils.Queue),
 	}
+	e.Pool = resolvers.NewResolverPool(e.Config.Resolvers)
 	if e.Pool == nil {
 		return nil
 	}
@@ -100,6 +87,7 @@ func (e *Enumeration) Start() error {
 		return err
 	}
 
+	fmt.Printf("%+v\n", e.Config)
 	// Setup the correct graph database handler
 	err := e.setupGraph()
 	if err != nil {

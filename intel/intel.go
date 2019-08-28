@@ -6,8 +6,7 @@ package intel
 import (
 	"bufio"
 	"errors"
-	"io/ioutil"
-	"log"
+	"fmt"
 	"net"
 	"strconv"
 	"strings"
@@ -48,9 +47,8 @@ type Collection struct {
 // NewCollection returns an initialized Collection object that has not been started yet.
 func NewCollection() *Collection {
 	c := &Collection{
-		Config:     &config.Config{Log: log.New(ioutil.Discard, "", 0)},
+		Config:     config.NewConfig(),
 		Bus:        eb.NewEventBus(),
-		Pool:       resolvers.NewResolverPool(nil),
 		Output:     make(chan *requests.Output, 100),
 		Done:       make(chan struct{}, 2),
 		netCache:   make(map[int]*requests.ASNRequest),
@@ -58,9 +56,12 @@ func NewCollection() *Collection {
 		domainChan: make(chan *requests.Output, 100),
 		activeChan: make(chan struct{}, 100),
 	}
+
+	c.Pool = resolvers.NewResolverPool(c.Config.Resolvers)
 	if c.Pool == nil {
 		return nil
 	}
+
 	return c
 }
 
@@ -71,6 +72,7 @@ func (c *Collection) HostedDomains() error {
 	} else if err := c.Config.CheckSettings(); err != nil {
 		return err
 	}
+	fmt.Printf("%+v\n", c.Config)
 
 	go c.startAddressRanges()
 	go c.processCIDRs()
