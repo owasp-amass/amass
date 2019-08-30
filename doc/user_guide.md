@@ -87,7 +87,8 @@ The intel subcommand can help you discover additional root domain names associat
 | -r | IP addresses of preferred DNS resolvers (can be used multiple times) | amass intel -r 8.8.8.8,1.1.1.1 -whois -d example.com |
 | -rf | Path to a file providing preferred DNS resolvers | amass intel -rf data/resolvers.txt -whois -d example.com |
 | -src | Print data sources for the discovered names | amass intel -src -whois -d example.com |
-| -whois | All discovered domains are run through reverse whois | amass intel -asn 13374 |
+| -timeout | Number of minutes to execute the enumeration | amass intel -timeout 30 -d example.com |
+| -whois | All discovered domains are run through reverse whois | amass intel -whois -d example.com |
 
 ### The 'enum' Subcommand
 
@@ -129,6 +130,7 @@ This subcommand will perform DNS enumeration and network mapping while populatin
 | -r | IP addresses of preferred DNS resolvers (can be used multiple times) | amass enum -r 8.8.8.8,1.1.1.1 -d example.com |
 | -rf | Path to a file providing preferred DNS resolvers | amass enum -rf data/resolvers.txt -d example.com |
 | -src | Print data sources for the discovered names | amass enum -src -d example.com |
+| -timeout | Number of minutes to execute the enumeration | amass enum -timeout 30 -d example.com |
 | -w | Path to a different wordlist file | amass enum -brute -w wordlist.txt -d example.com |
 
 ### The 'viz' Subcommand

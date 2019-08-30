@@ -79,13 +79,13 @@ func defineIntelArgumentFlags(intelFlags *flag.FlagSet, args *intelArgs) {
 }
 
 func defineIntelOptionFlags(intelFlags *flag.FlagSet, args *intelArgs) {
-	intelFlags.BoolVar(&args.Options.Active, "active", false, "Attempt zone transfers and certificate name grabs")
+	intelFlags.BoolVar(&args.Options.Active, "active", false, "Enable active recon methods")
 	intelFlags.BoolVar(&args.Options.DemoMode, "demo", false, "Censor output to make it suitable for demonstrations")
 	intelFlags.BoolVar(&args.Options.IPs, "ip", false, "Show the IP addresses for discovered names")
 	intelFlags.BoolVar(&args.Options.IPv4, "ipv4", false, "Show the IPv4 addresses for discovered names")
 	intelFlags.BoolVar(&args.Options.IPv6, "ipv6", false, "Show the IPv6 addresses for discovered names")
 	intelFlags.BoolVar(&args.Options.ListSources, "list", false, "Print the names of all available data sources")
-	intelFlags.BoolVar(&args.Options.ReverseWhois, "whois", false, "All discovered domains are run through reverse whois")
+	intelFlags.BoolVar(&args.Options.ReverseWhois, "whois", false, "All provided domains are run through reverse whois")
 	intelFlags.BoolVar(&args.Options.Sources, "src", false, "Print data sources for the discovered names")
 }
 
