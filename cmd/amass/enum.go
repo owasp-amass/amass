@@ -57,18 +57,21 @@ type enumArgs struct {
 	Resolvers         stringset.Set
 	Timeout           int
 	Options           struct {
-		Active       bool
-		BruteForcing bool
-		DemoMode     bool
-		IPs          bool
-		IPv4         bool
-		IPv6         bool
-		ListSources  bool
-		NoAlts       bool
-		NoRecursive  bool
-		Passive      bool
-		Sources      bool
-		Unresolved   bool
+		Active              bool
+		BruteForcing        bool
+		DemoMode            bool
+		IPs                 bool
+		IPv4                bool
+		IPv6                bool
+		ListSources         bool
+		NoAlts              bool
+		NoRecursive         bool
+		Passive             bool
+		Sources             bool
+		Unresolved          bool
+		MonitorResolverRate bool
+		ScoreResolvers      bool
+		PublicDNS           bool
 	}
 	Filepaths struct {
 		AllFilePrefix string
@@ -180,6 +183,7 @@ func runEnumCommand(clArgs []string) {
 		commandUsage(enumUsageMsg, enumCommand, enumBuf)
 		return
 	}
+
 	// Check if the user has requested the data source names
 	if args.Options.ListSources {
 		for _, name := range GetAllSourceNames() {
@@ -205,7 +209,7 @@ func runEnumCommand(clArgs []string) {
 	}
 	if (len(args.Excluded) > 0 || args.Filepaths.ExcludedSrcs != "") &&
 		(len(args.Included) > 0 || args.Filepaths.IncludedSrcs != "") {
-		commandUsage(intelUsageMsg, intelCommand, intelBuf)
+		commandUsage(enumUsageMsg, enumCommand, enumBuf)
 		os.Exit(1)
 	}
 
@@ -592,12 +596,12 @@ func (e enumArgs) OverrideConfig(conf *config.Config) error {
 		conf.ScoreResolvers = false
 	}
 
-	if len(e.Include) > 0 {
+	if len(e.Included) > 0 {
 		conf.SourceFilter.Include = true
-		conf.SourceFilter.Sources = e.Included
-	} else if len(e.Exclude) > 0 {
+		conf.SourceFilter.Sources = e.Included.Slice()
+	} else if len(e.Excluded) > 0 {
 		conf.SourceFilter.Include = false
-		conf.SourceFilter.Sources = e.Excluded
+		conf.SourceFilter.Sources = e.Excluded.Slice()
 	}
 
 	// Attempt to add the provided domains to the configuration

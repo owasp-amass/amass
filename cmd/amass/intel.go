@@ -43,14 +43,17 @@ type intelArgs struct {
 	Resolvers        stringset.Set
 	Timeout          int
 	Options          struct {
-		Active       bool
-		DemoMode     bool
-		IPs          bool
-		IPv4         bool
-		IPv6         bool
-		ListSources  bool
-		ReverseWhois bool
-		Sources      bool
+		Active              bool
+		DemoMode            bool
+		IPs                 bool
+		IPv4                bool
+		IPv6                bool
+		ListSources         bool
+		ReverseWhois        bool
+		Sources             bool
+		MonitorResolverRate bool
+		ScoreResolvers      bool
+		PublicDNS           bool
 	}
 	Filepaths struct {
 		ConfigFile   string
@@ -399,12 +402,12 @@ func (i intelArgs) OverrideConfig(conf *config.Config) error {
 		conf.Timeout = i.Timeout
 	}
 
-	if len(i.Include) > 0 {
+	if len(i.Included) > 0 {
 		conf.SourceFilter.Include = true
-		conf.SourceFilter.Sources = i.Included
-	} else if len(i.Exclude) > 0 {
+		conf.SourceFilter.Sources = i.Included.Slice()
+	} else if len(i.Excluded) > 0 {
 		conf.SourceFilter.Include = false
-		conf.SourceFilter.Sources = i.Excluded
+		conf.SourceFilter.Sources = i.Excluded.Slice()
 	}
 
 	// Attempt to add the provided domains to the configuration

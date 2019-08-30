@@ -5,8 +5,6 @@ package enum
 
 import (
 	"errors"
-	"fmt"
-	"strings"
 	"sync"
 	"time"
 
@@ -75,7 +73,6 @@ func NewEnumeration() *Enumeration {
 		return nil
 	}
 
-	e.dataSources = sources.GetAllSources(e.Config, e.Bus, e.Pool)
 	return e
 }
 
@@ -88,6 +85,8 @@ func (e *Enumeration) Start() error {
 	} else if err := e.Config.CheckSettings(); err != nil {
 		return err
 	}
+
+	e.dataSources = sources.GetAllSources(e.Config, e.Bus, e.Pool)
 
 	// Setup the correct graph database handler
 	err := e.setupGraph()

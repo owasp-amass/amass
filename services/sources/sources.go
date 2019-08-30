@@ -91,11 +91,10 @@ func GetAllSources(cfg *config.Config, bus *eb.EventBus, pool *resolvers.Resolve
 		}
 	}
 	srvs = srvs[:i]
-
-	return enabled
+	return srvs
 }
 
-func shouldEnable(srvName string, cfg *config.Config) {
+func shouldEnable(srvName string, cfg *config.Config) bool {
 	include := !cfg.SourceFilter.Include
 
 	for _, name := range cfg.SourceFilter.Sources {
