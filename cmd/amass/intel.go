@@ -19,6 +19,7 @@ import (
 
 	"github.com/OWASP/Amass/config"
 	"github.com/OWASP/Amass/intel"
+	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/stringset"
 	"github.com/OWASP/Amass/utils"
 	"github.com/fatih/color"
@@ -74,11 +75,11 @@ func defineIntelArgumentFlags(intelFlags *flag.FlagSet, args *intelArgs) {
 	intelFlags.IntVar(&args.MaxDNSQueries, "max-dns-queries", 0, "Maximum number of concurrent DNS queries")
 	intelFlags.Var(&args.Ports, "p", "Ports separated by commas (default: 443)")
 	intelFlags.Var(&args.Resolvers, "r", "IP addresses of preferred DNS resolvers (can be used multiple times)")
-	intelFlags.IntVar(&args.Timeout, "timeout", 0, "Number of seconds to let enumeration run before quitting")
+	intelFlags.IntVar(&args.Timeout, "timeout", 0, "Number of minutes to let enumeration run before quitting")
 }
 
 func defineIntelOptionFlags(intelFlags *flag.FlagSet, args *intelArgs) {
-	intelFlags.BoolVar(&args.Options.Active, "active", false, "Attempt zone transfers and certificate name grabs")
+	intelFlags.BoolVar(&args.Options.Active, "active", false, "Attempt certificate name grabs")
 	intelFlags.BoolVar(&args.Options.DemoMode, "demo", false, "Censor output to make it suitable for demonstrations")
 	intelFlags.BoolVar(&args.Options.IPs, "ip", false, "Show the IP addresses for discovered names")
 	intelFlags.BoolVar(&args.Options.IPv4, "ipv4", false, "Show the IPv4 addresses for discovered names")
@@ -86,6 +87,9 @@ func defineIntelOptionFlags(intelFlags *flag.FlagSet, args *intelArgs) {
 	intelFlags.BoolVar(&args.Options.ListSources, "list", false, "Print the names of all available data sources")
 	intelFlags.BoolVar(&args.Options.ReverseWhois, "whois", false, "All discovered domains are run through reverse whois")
 	intelFlags.BoolVar(&args.Options.Sources, "src", false, "Print data sources for the discovered names")
+	intelFlags.BoolVar(&args.Options.MonitorResolverRate, "noresolvrate", true, "Disable resolver rate monitoring")
+	intelFlags.BoolVar(&args.Options.ScoreResolvers, "noresolvscore", true, "Disable resolver reliability scoring")
+	intelFlags.BoolVar(&args.Options.PublicDNS, "public-dns", false, "Use public-dns.info resolver list")
 }
 
 func defineIntelFilepathFlags(intelFlags *flag.FlagSet, args *intelArgs) {
@@ -147,6 +151,12 @@ func runIntelCommand(clArgs []string) {
 		os.Exit(1)
 	}
 
+	if (len(args.Excluded) > 0 || args.Filepaths.ExcludedSrcs != "") &&
+		(len(args.Included) > 0 || args.Filepaths.IncludedSrcs != "") {
+		commandUsage(intelUsageMsg, intelCommand, intelBuf)
+		os.Exit(1)
+	}
+
 	// Seed the default pseudo-random number generator
 	rand.Seed(time.Now().UTC().UnixNano())
 
@@ -188,16 +198,19 @@ func runIntelCommand(clArgs []string) {
 	}
 
 	// Override configuration file settings with command-line arguments
-	if err := updateIntelConfiguration(ic, &args); err != nil {
-		r.Fprintf(color.Error, "Configuration file error: %v\n", err)
+	if err := ic.Config.UpdateConfig(args); err != nil {
+		r.Fprintf(color.Error, "Configuration error: %v\n", err)
 		os.Exit(1)
 	}
 
 	if len(args.Resolvers) > 0 {
-		if err := ic.Pool.SetResolvers(args.Resolvers.Slice()); err != nil {
-			r.Fprintf(color.Error, "Failed to set custom DNS resolvers: %v\n", err)
+		var pool *resolvers.ResolverPool
+
+		if pool = resolvers.SetupResolverPool(args.Resolvers.Slice(), true, true); pool == nil {
+			r.Fprintf(color.Error, "Failed to set custom DNS resolvers\n")
 			os.Exit(1)
 		}
+		ic.Pool = pool
 	}
 
 	if args.Options.ReverseWhois {
@@ -360,37 +373,41 @@ func processIntelInputFiles(args *intelArgs) error {
 }
 
 // Setup the amass intelligence collection settings
-func updateIntelConfiguration(ic *intel.Collection, args *intelArgs) error {
-	if args.Options.Active {
-		ic.Config.Active = true
+func (i intelArgs) OverrideConfig(conf *config.Config) error {
+	if i.Options.Active {
+		conf.Active = true
 	}
-	if len(args.Addresses) > 0 {
-		ic.Config.Addresses = args.Addresses
+	if len(i.Addresses) > 0 {
+		conf.Addresses = i.Addresses
 	}
-	if len(args.ASNs) > 0 {
-		ic.Config.ASNs = args.ASNs
+	if len(i.ASNs) > 0 {
+		conf.ASNs = i.ASNs
 	}
-	if len(args.CIDRs) > 0 {
-		ic.Config.CIDRs = args.CIDRs
+	if len(i.CIDRs) > 0 {
+		conf.CIDRs = i.CIDRs
 	}
-	if len(args.Ports) > 0 {
-		ic.Config.Ports = args.Ports
+	if len(i.Ports) > 0 {
+		conf.Ports = i.Ports
 	}
-	if args.Filepaths.Directory != "" {
-		ic.Config.Dir = args.Filepaths.Directory
+	if i.Filepaths.Directory != "" {
+		conf.Dir = i.Filepaths.Directory
 	}
-	if args.MaxDNSQueries > 0 {
-		ic.Config.MaxDNSQueries = args.MaxDNSQueries
+	if i.MaxDNSQueries > 0 {
+		conf.MaxDNSQueries = i.MaxDNSQueries
 	}
-	if args.Timeout > 0 {
-		ic.Config.Timeout = args.Timeout
+	if i.Timeout > 0 {
+		conf.Timeout = i.Timeout
 	}
 
-	disabled := compileDisabledSources(GetAllSourceNames(), args.Included, args.Excluded)
-	if len(disabled) > 0 {
-		ic.Config.DisabledDataSources = disabled.Slice()
+	if len(i.Include) > 0 {
+		conf.SourceFilter.Include = true
+		conf.SourceFilter.Sources = i.Included
+	} else if len(i.Exclude) > 0 {
+		conf.SourceFilter.Include = false
+		conf.SourceFilter.Sources = i.Excluded
 	}
+
 	// Attempt to add the provided domains to the configuration
-	ic.Config.AddDomains(args.Domains.Slice())
+	conf.AddDomains(i.Domains.Slice())
 	return nil
 }

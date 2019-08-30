@@ -34,22 +34,24 @@ const (
 	defaultConcurrentDNSQueries = 2500
 	defaultWordlistURL          = "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/namelist.txt"
 	defaultAltWordlistURL       = "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/alterations.txt"
-	defaultResolverURL          = "https://public-dns.info/nameservers.txt"
+	publicDNSResolverURL        = "https://public-dns.info/nameservers.txt"
 )
 
-var (
-	defaultPublicResolvers = []string{
-		"1.1.1.1",     // Cloudflare
-		"8.8.8.8",     // Google
-		"64.6.64.6",   // Verisign
-		"74.82.42.42", // Hurricane Electric
-		"1.0.0.1",     // Cloudflare Secondary
-		"8.8.4.4",     // Google Secondary
-		"9.9.9.10",    // Quad9 Secondary
-		"64.6.65.6",   // Verisign Secondary
-		"77.88.8.1",   // Yandex.DNS Secondary
-	}
-)
+var defaultPublicResolvers = []string{
+	"1.1.1.1",     // Cloudflare
+	"8.8.8.8",     // Google
+	"64.6.64.6",   // Verisign
+	"74.82.42.42", // Hurricane Electric
+	"1.0.0.1",     // Cloudflare Secondary
+	"8.8.4.4",     // Google Secondary
+	"9.9.9.10",    // Quad9 Secondary
+	"64.6.65.6",   // Verisign Secondary
+	"77.88.8.1",   // Yandex.DNS Secondary
+}
+
+type ConfigOverrider interface {
+	OverrideConfig(*Config) error
+}
 
 // Config passes along Amass configuration settings and options.
 type Config struct {
@@ -77,6 +79,9 @@ type Config struct {
 
 	// Semaphore to enforce the maximum DNS queries
 	SemMaxDNSQueries utils.Semaphore
+
+	// Names provided to seed the enumeration
+	ProvidedNames []string
 
 	// The IP addresses specified as in scope
 	Addresses []net.IP
@@ -125,12 +130,16 @@ type Config struct {
 	Blacklist []string
 
 	// A list of data sources that should not be utilized
-	DisabledDataSources []string
+	SourceFilter struct {
+		Include bool // true = include, false = exclude
+		Sources []string
+	}
 
 	// Resolver settings
-	Resolvers         []string
-	LimitResolverRate bool
-	PruneBadResolvers bool
+	Resolvers           []string
+	MonitorResolverRate bool
+	ScoreResolvers      bool
+	PublicDNS           bool
 
 	// Enumeration Timeout
 	Timeout int
@@ -160,8 +169,10 @@ func NewConfig() *Config {
 		Ports:         []int{443},
 		MaxDNSQueries: defaultConcurrentDNSQueries,
 
-		// Fallback if public-dns doesn't load or -no-public-dns isnt specified
-		Resolvers: defaultPublicResolvers,
+		Resolvers:           defaultPublicResolvers,
+		MonitorResolverRate: true,
+		ScoreResolvers:      true,
+		PublicDNS:           false,
 
 		// The following is enum-only, but intel will just ignore them anyway
 		Alterations:    true,
@@ -215,9 +226,11 @@ func (c *Config) CheckSettings() error {
 		return err
 	}
 
-	resolvers, err := getWordlistByURL(defaultResolverURL)
-	if err == nil {
-		c.Resolvers = resolvers
+	if c.PublicDNS {
+		resolvers, err := getWordlistByURL(publicDNSResolverURL)
+		if err == nil {
+			c.Resolvers = append(c.Resolvers, resolvers...)
+		}
 	}
 
 	return err
@@ -517,7 +530,8 @@ func (c *Config) LoadSettings(path string) error {
 	}
 	// Load up all the disabled data source names
 	if disabled, err := cfg.GetSection("disabled_data_sources"); err == nil {
-		c.DisabledDataSources = stringset.Deduplicate(disabled.Key("data_source").ValueWithShadows())
+		c.SourceFilter.Sources = stringset.Deduplicate(disabled.Key("data_source").ValueWithShadows())
+		c.SourceFilter.Include = false
 	}
 	// Load up all the Gremlin Server settings
 	if gremlin, err := cfg.GetSection("gremlin"); err == nil {
@@ -618,10 +632,15 @@ func (c *Config) loadResolverSettings(cfg *ini.File) error {
 		return errors.New("No resolver keys were found in the resolvers section")
 	}
 
-	c.LimitResolverRate = sec.Key("limit_resolver_rate").MustBool(true)
-	c.PruneBadResolvers = sec.Key("prune_bad_resolvers").MustBool(true)
+	c.MonitorResolverRate = sec.Key("monitor_resolver_rate").MustBool(true)
+	c.ScoreResolvers = sec.Key("score_resolvers").MustBool(true)
+	c.PublicDNS = sec.Key("public_dns_resolvers").MustBool(false)
 
 	return nil
+}
+
+func (c *Config) UpdateConfig(update ConfigOverrider) error {
+	return update.OverrideConfig(c)
 }
 
 // GetListFromFile reads a wordlist text or gzip file

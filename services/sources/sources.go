@@ -28,7 +28,7 @@ var (
 
 // GetAllSources returns a slice of all data source services, initialized and ready.
 func GetAllSources(cfg *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool) []services.Service {
-	return []services.Service{
+	srvs := []services.Service{
 		NewAlienVault(cfg, bus, pool),
 		NewArchiveIt(cfg, bus, pool),
 		NewArchiveToday(cfg, bus, pool),
@@ -81,6 +81,31 @@ func GetAllSources(cfg *config.Config, bus *eb.EventBus, pool *resolvers.Resolve
 		NewWayback(cfg, bus, pool),
 		NewYahoo(cfg, bus, pool),
 	}
+
+	// Filtering in-place - https://github.com/golang/go/wiki/SliceTricks
+	i := 0
+	for _, s := range srvs {
+		if shouldEnable(s.String(), cfg) {
+			srvs[i] = s
+			i++
+		}
+	}
+	srvs = srvs[:i]
+
+	return enabled
+}
+
+func shouldEnable(srvName string, cfg *config.Config) {
+	include := !cfg.SourceFilter.Include
+
+	for _, name := range cfg.SourceFilter.Sources {
+		if strings.EqualFold(srvName, name) {
+			include = cfg.SourceFilter.Include
+			break
+		}
+	}
+
+	return include
 }
 
 // Clean up the names scraped from the web.

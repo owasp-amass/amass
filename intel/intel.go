@@ -57,7 +57,11 @@ func NewCollection() *Collection {
 		activeChan: make(chan struct{}, 100),
 	}
 
-	c.Pool = resolvers.NewResolverPool(c.Config.Resolvers)
+	c.Pool = resolvers.SetupResolverPool(
+		c.Config.Resolvers,
+		c.Config.ScoreResolvers,
+		c.Config.MonitorResolverRate,
+	)
 	if c.Pool == nil {
 		return nil
 	}
@@ -88,7 +92,7 @@ func (c *Collection) HostedDomains() error {
 	t := time.NewTicker(5 * time.Second)
 
 	if c.Config.Timeout > 0 {
-		time.AfterFunc(time.Duration(c.Config.Timeout)*time.Second, func() {
+		time.AfterFunc(time.Duration(c.Config.Timeout)*time.Minute, func() {
 			c.Config.Log.Printf("Enumeration exceeded provided timeout")
 			close(c.Done)
 		})
@@ -154,7 +158,7 @@ func (c *Collection) investigateAddr(addr string) {
 
 	addrinfo := requests.AddressInfo{Address: ip}
 	c.activeChan <- struct{}{}
-	if _, answer, err := c.Pool.ReverseDNS(addr); err == nil {
+	if _, answer, err := c.Pool.Reverse(addr); err == nil {
 		if d := strings.TrimSpace(c.Pool.SubdomainToDomain(answer)); d != "" {
 			c.domainChan <- &requests.Output{
 				Name:      d,
@@ -194,10 +198,7 @@ func (c *Collection) asnsToCIDRs() {
 	defer c.Bus.Unsubscribe(requests.NewASNTopic, c.updateNetCache)
 
 	srcs := sources.GetAllSources(c.Config, c.Bus, c.Pool)
-	// Select the data sources desired by the user
-	if len(c.Config.DisabledDataSources) > 0 {
-		srcs = ExcludeDisabledDataSources(srcs, c.Config)
-	}
+
 	// Keep only the data sources that successfully start
 	var keep []services.Service
 	for _, src := range srcs {
@@ -337,10 +338,7 @@ func (c *Collection) ReverseWhois() error {
 	defer c.Bus.Unsubscribe(requests.NewWhoisTopic, collect)
 
 	srcs := sources.GetAllSources(c.Config, c.Bus, c.Pool)
-	// Select the data sources desired by the user
-	if len(c.Config.DisabledDataSources) > 0 {
-		srcs = ExcludeDisabledDataSources(srcs, c.Config)
-	}
+
 	// Keep only the data sources that successfully start
 	var keep []services.Service
 	for _, src := range srcs {
@@ -382,24 +380,4 @@ loop:
 	t.Stop()
 	close(c.Output)
 	return nil
-}
-
-// ExcludeDisabledDataSources returns a list of data sources excluding DisabledDataSources.
-func ExcludeDisabledDataSources(srvs []services.Service, cfg *config.Config) []services.Service {
-	var enabled []services.Service
-
-	for _, s := range srvs {
-		include := true
-
-		for _, disabled := range cfg.DisabledDataSources {
-			if strings.EqualFold(disabled, s.String()) {
-				include = false
-				break
-			}
-		}
-		if include {
-			enabled = append(enabled, s)
-		}
-	}
-	return enabled
 }
