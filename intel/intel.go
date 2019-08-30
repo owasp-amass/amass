@@ -6,8 +6,6 @@ package intel
 import (
 	"bufio"
 	"errors"
-	"io/ioutil"
-	"log"
 	"net"
 	"strconv"
 	"strings"
@@ -48,9 +46,8 @@ type Collection struct {
 // NewCollection returns an initialized Collection object that has not been started yet.
 func NewCollection() *Collection {
 	c := &Collection{
-		Config:     &config.Config{Log: log.New(ioutil.Discard, "", 0)},
+		Config:     config.NewConfig(),
 		Bus:        eb.NewEventBus(),
-		Pool:       resolvers.SetupResolverPool(config.DefaultPublicResolvers, true, true),
 		Output:     make(chan *requests.Output, 100),
 		Done:       make(chan struct{}, 2),
 		netCache:   make(map[int]*requests.ASNRequest),
@@ -58,9 +55,16 @@ func NewCollection() *Collection {
 		domainChan: make(chan *requests.Output, 100),
 		activeChan: make(chan struct{}, 100),
 	}
+
+	c.Pool = resolvers.SetupResolverPool(
+		c.Config.Resolvers,
+		c.Config.ScoreResolvers,
+		c.Config.MonitorResolverRate,
+	)
 	if c.Pool == nil {
 		return nil
 	}
+
 	return c
 }
 
@@ -86,7 +90,7 @@ func (c *Collection) HostedDomains() error {
 	t := time.NewTicker(5 * time.Second)
 
 	if c.Config.Timeout > 0 {
-		time.AfterFunc(time.Duration(c.Config.Timeout)*time.Second, func() {
+		time.AfterFunc(time.Duration(c.Config.Timeout)*time.Minute, func() {
 			c.Config.Log.Printf("Enumeration exceeded provided timeout")
 			close(c.Done)
 		})
@@ -192,10 +196,7 @@ func (c *Collection) asnsToCIDRs() {
 	defer c.Bus.Unsubscribe(requests.NewASNTopic, c.updateNetCache)
 
 	srcs := sources.GetAllSources(c.Config, c.Bus, c.Pool)
-	// Select the data sources desired by the user
-	if len(c.Config.DisabledDataSources) > 0 {
-		srcs = ExcludeDisabledDataSources(srcs, c.Config)
-	}
+
 	// Keep only the data sources that successfully start
 	var keep []services.Service
 	for _, src := range srcs {
@@ -335,10 +336,7 @@ func (c *Collection) ReverseWhois() error {
 	defer c.Bus.Unsubscribe(requests.NewWhoisTopic, collect)
 
 	srcs := sources.GetAllSources(c.Config, c.Bus, c.Pool)
-	// Select the data sources desired by the user
-	if len(c.Config.DisabledDataSources) > 0 {
-		srcs = ExcludeDisabledDataSources(srcs, c.Config)
-	}
+
 	// Keep only the data sources that successfully start
 	var keep []services.Service
 	for _, src := range srcs {
@@ -380,24 +378,4 @@ loop:
 	t.Stop()
 	close(c.Output)
 	return nil
-}
-
-// ExcludeDisabledDataSources returns a list of data sources excluding DisabledDataSources.
-func ExcludeDisabledDataSources(srvs []services.Service, cfg *config.Config) []services.Service {
-	var enabled []services.Service
-
-	for _, s := range srvs {
-		include := true
-
-		for _, disabled := range cfg.DisabledDataSources {
-			if strings.EqualFold(disabled, s.String()) {
-				include = false
-				break
-			}
-		}
-		if include {
-			enabled = append(enabled, s)
-		}
-	}
-	return enabled
 }
