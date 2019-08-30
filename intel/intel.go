@@ -6,7 +6,6 @@ package intel
 import (
 	"bufio"
 	"errors"
-	"fmt"
 	"net"
 	"strconv"
 	"strings"
@@ -76,7 +75,6 @@ func (c *Collection) HostedDomains() error {
 	} else if err := c.Config.CheckSettings(); err != nil {
 		return err
 	}
-	fmt.Printf("%+v\n", c.Config)
 
 	go c.startAddressRanges()
 	go c.processCIDRs()

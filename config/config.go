@@ -229,7 +229,7 @@ func (c *Config) CheckSettings() error {
 	if c.PublicDNS {
 		resolvers, err := getWordlistByURL(publicDNSResolverURL)
 		if err == nil {
-			c.Resolvers = stringset.DeDuplicate(append(c.Resolvers, resolvers...))
+			c.Resolvers = stringset.Deduplicate(append(c.Resolvers, resolvers...))
 		}
 	}
 
