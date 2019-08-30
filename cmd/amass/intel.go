@@ -402,6 +402,13 @@ func (i intelArgs) OverrideConfig(conf *config.Config) error {
 		conf.Timeout = i.Timeout
 	}
 
+	if !i.Options.MonitorResolverRate {
+		conf.MonitorResolverRate = false
+	}
+	if !i.Options.ScoreResolvers {
+		conf.ScoreResolvers = false
+	}
+
 	if len(i.Included) > 0 {
 		conf.SourceFilter.Include = true
 		conf.SourceFilter.Sources = i.Included.Slice()
