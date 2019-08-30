@@ -111,7 +111,7 @@ loop:
 // NewResolverPool initializes a ResolverPool that uses the provided Resolvers.
 func NewResolverPool(res []Resolver) *ResolverPool {
 	return &ResolverPool{
-		Resolvers: res,
+		Resolvers:   res,
 		Done:        make(chan struct{}, 2),
 		wildcards:   make(map[string]*wildcard),
 		domainCache: make(map[string]struct{}),

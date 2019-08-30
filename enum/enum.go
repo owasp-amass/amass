@@ -5,9 +5,6 @@ package enum
 
 import (
 	"errors"
-	"io/ioutil"
-	"log"
-	"strings"
 	"sync"
 	"time"
 
@@ -20,7 +17,6 @@ import (
 	"github.com/OWASP/Amass/services/sources"
 	sf "github.com/OWASP/Amass/stringfilter"
 	"github.com/OWASP/Amass/utils"
-	"github.com/google/uuid"
 )
 
 // Enumeration is the object type used to execute a DNS enumeration with Amass.
@@ -31,9 +27,6 @@ type Enumeration struct {
 
 	// Link graph that collects all the information gathered by the enumeration
 	Graph graph.DataHandler
-
-	// Names already known prior to the enumeration
-	ProvidedNames []string
 
 	// The channel that will receive the results
 	Output chan *requests.Output
@@ -61,20 +54,8 @@ type Enumeration struct {
 // NewEnumeration returns an initialized Enumeration that has not been started yet.
 func NewEnumeration() *Enumeration {
 	e := &Enumeration{
-		Config: &config.Config{
-			UUID:           uuid.New(),
-			Log:            log.New(ioutil.Discard, "", 0),
-			Alterations:    true,
-			FlipWords:      true,
-			FlipNumbers:    true,
-			AddWords:       true,
-			AddNumbers:     true,
-			MinForWordFlip: 2,
-			EditDistance:   1,
-			Recursive:      true,
-		},
+		Config:      config.NewConfig(),
 		Bus:         eb.NewEventBus(),
-		Pool:        resolvers.SetupResolverPool(config.DefaultPublicResolvers, true, true),
 		Output:      make(chan *requests.Output, 100),
 		Done:        make(chan struct{}, 2),
 		pause:       make(chan struct{}, 2),
@@ -82,11 +63,16 @@ func NewEnumeration() *Enumeration {
 		filter:      sf.NewStringFilter(),
 		outputQueue: new(utils.Queue),
 	}
+
+	e.Pool = resolvers.SetupResolverPool(
+		e.Config.Resolvers,
+		e.Config.ScoreResolvers,
+		e.Config.MonitorResolverRate,
+	)
 	if e.Pool == nil {
 		return nil
 	}
 
-	e.dataSources = sources.GetAllSources(e.Config, e.Bus, e.Pool)
 	return e
 }
 
@@ -100,6 +86,8 @@ func (e *Enumeration) Start() error {
 		return err
 	}
 
+	e.dataSources = sources.GetAllSources(e.Config, e.Bus, e.Pool)
+
 	// Setup the correct graph database handler
 	err := e.setupGraph()
 	if err != nil {
@@ -109,11 +97,6 @@ func (e *Enumeration) Start() error {
 
 	e.Bus.Subscribe(requests.OutputTopic, e.sendOutput)
 	defer e.Bus.Unsubscribe(requests.OutputTopic, e.sendOutput)
-
-	// Select the data sources desired by the user
-	if len(e.Config.DisabledDataSources) > 0 {
-		e.dataSources = ExcludeDisabledDataSources(e.dataSources, e.Config)
-	}
 
 	// Add all the data sources that successfully start to the list
 	var sources []services.Service
@@ -155,7 +138,7 @@ func (e *Enumeration) Start() error {
 	logTick := time.NewTicker(time.Minute)
 
 	if e.Config.Timeout > 0 {
-		time.AfterFunc(time.Duration(e.Config.Timeout)*time.Second, func() {
+		time.AfterFunc(time.Duration(e.Config.Timeout)*time.Minute, func() {
 			e.Config.Log.Printf("Enumeration exceeded provided timeout")
 			close(e.Done)
 		})
@@ -264,7 +247,7 @@ func (e *Enumeration) submitKnownNames(wg *sync.WaitGroup) {
 
 func (e *Enumeration) submitProvidedNames(wg *sync.WaitGroup) {
 	defer wg.Done()
-	for _, name := range e.ProvidedNames {
+	for _, name := range e.Config.ProvidedNames {
 		if domain := e.Config.WhichDomain(name); domain != "" {
 			e.Bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
 				Name:   name,
@@ -467,24 +450,4 @@ func (e *Enumeration) GetAllSourceNames() []string {
 		names = append(names, source.String())
 	}
 	return names
-}
-
-// ExcludeDisabledDataSources returns a list of data sources excluding DisabledDataSources.
-func ExcludeDisabledDataSources(srvs []services.Service, cfg *config.Config) []services.Service {
-	var enabled []services.Service
-
-	for _, s := range srvs {
-		include := true
-
-		for _, disabled := range cfg.DisabledDataSources {
-			if strings.EqualFold(disabled, s.String()) {
-				include = false
-				break
-			}
-		}
-		if include {
-			enabled = append(enabled, s)
-		}
-	}
-	return enabled
 }

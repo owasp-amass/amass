@@ -23,10 +23,10 @@ import (
 
 	"github.com/OWASP/Amass/config"
 	"github.com/OWASP/Amass/enum"
+	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/stringset"
 	"github.com/OWASP/Amass/utils"
 	"github.com/fatih/color"
-	"github.com/OWASP/Amass/resolvers"
 	homedir "github.com/mitchellh/go-homedir"
 )
 
@@ -57,18 +57,21 @@ type enumArgs struct {
 	Resolvers         stringset.Set
 	Timeout           int
 	Options           struct {
-		Active       bool
-		BruteForcing bool
-		DemoMode     bool
-		IPs          bool
-		IPv4         bool
-		IPv6         bool
-		ListSources  bool
-		NoAlts       bool
-		NoRecursive  bool
-		Passive      bool
-		Sources      bool
-		Unresolved   bool
+		Active              bool
+		BruteForcing        bool
+		DemoMode            bool
+		IPs                 bool
+		IPv4                bool
+		IPv6                bool
+		ListSources         bool
+		NoAlts              bool
+		NoRecursive         bool
+		Passive             bool
+		Sources             bool
+		Unresolved          bool
+		MonitorResolverRate bool
+		ScoreResolvers      bool
+		PublicDNS           bool
 	}
 	Filepaths struct {
 		AllFilePrefix string
@@ -103,7 +106,7 @@ func defineEnumArgumentFlags(enumFlags *flag.FlagSet, args *enumArgs) {
 	enumFlags.IntVar(&args.MinForRecursive, "min-for-recursive", 0, "Number of subdomain discoveries before recursive brute forcing")
 	enumFlags.Var(&args.Ports, "p", "Ports separated by commas (default: 443)")
 	enumFlags.Var(&args.Resolvers, "r", "IP addresses of preferred DNS resolvers (can be used multiple times)")
-	enumFlags.IntVar(&args.Timeout, "timeout", 0, "Number of seconds to let enumeration run before quitting")
+	enumFlags.IntVar(&args.Timeout, "timeout", 0, "Number of minutes to let enumeration run before quitting")
 }
 
 func defineEnumOptionFlags(enumFlags *flag.FlagSet, args *enumArgs) {
@@ -119,6 +122,9 @@ func defineEnumOptionFlags(enumFlags *flag.FlagSet, args *enumArgs) {
 	enumFlags.BoolVar(&args.Options.Passive, "passive", false, "Disable DNS resolution of names and dependent features")
 	enumFlags.BoolVar(&args.Options.Sources, "src", false, "Print data sources for the discovered names")
 	enumFlags.BoolVar(&args.Options.Unresolved, "include-unresolvable", false, "Output DNS names that did not resolve")
+	enumFlags.BoolVar(&args.Options.MonitorResolverRate, "noresolvrate", true, "Disable resolver rate monitoring")
+	enumFlags.BoolVar(&args.Options.ScoreResolvers, "noresolvscore", true, "Disable resolver reliability scoring")
+	enumFlags.BoolVar(&args.Options.PublicDNS, "public-dns", false, "Use public-dns.info resolver list")
 }
 
 func defineEnumFilepathFlags(enumFlags *flag.FlagSet, args *enumArgs) {
@@ -177,6 +183,7 @@ func runEnumCommand(clArgs []string) {
 		commandUsage(enumUsageMsg, enumCommand, enumBuf)
 		return
 	}
+
 	// Check if the user has requested the data source names
 	if args.Options.ListSources {
 		for _, name := range GetAllSourceNames() {
@@ -198,6 +205,11 @@ func runEnumCommand(clArgs []string) {
 	}
 	if args.Options.Passive && args.Options.BruteForcing {
 		r.Fprintln(color.Error, "Brute forcing cannot be performed without DNS resolution")
+		os.Exit(1)
+	}
+	if (len(args.Excluded) > 0 || args.Filepaths.ExcludedSrcs != "") &&
+		(len(args.Included) > 0 || args.Filepaths.IncludedSrcs != "") {
+		commandUsage(enumUsageMsg, enumCommand, enumBuf)
 		os.Exit(1)
 	}
 
@@ -230,7 +242,7 @@ func runEnumCommand(clArgs []string) {
 	}
 
 	// Override configuration file settings with command-line arguments
-	if err := updateEnumConfiguration(e, &args); err != nil {
+	if err := e.Config.UpdateConfig(args); err != nil {
 		r.Fprintf(color.Error, "Configuration error: %v\n", err)
 		os.Exit(1)
 	}
@@ -521,96 +533,81 @@ func processEnumInputFiles(args *enumArgs) error {
 }
 
 // Setup the amass enumeration settings
-func updateEnumConfiguration(e *enum.Enumeration, args *enumArgs) error {
-	if len(args.Addresses) > 0 {
-		e.Config.Addresses = args.Addresses
+func (e enumArgs) OverrideConfig(conf *config.Config) error {
+	if len(e.Addresses) > 0 {
+		conf.Addresses = e.Addresses
 	}
-	if len(args.ASNs) > 0 {
-		e.Config.ASNs = args.ASNs
+	if len(e.ASNs) > 0 {
+		conf.ASNs = e.ASNs
 	}
-	if len(args.CIDRs) > 0 {
-		e.Config.CIDRs = args.CIDRs
+	if len(e.CIDRs) > 0 {
+		conf.CIDRs = e.CIDRs
 	}
-	if len(args.Ports) > 0 {
-		e.Config.Ports = args.Ports
+	if len(e.Ports) > 0 {
+		conf.Ports = e.Ports
 	}
-	if args.Filepaths.Directory != "" {
-		e.Config.Dir = args.Filepaths.Directory
+	if e.Filepaths.Directory != "" {
+		conf.Dir = e.Filepaths.Directory
 	}
-	if args.MaxDNSQueries > 0 {
-		e.Config.MaxDNSQueries = args.MaxDNSQueries
+	if e.MaxDNSQueries > 0 {
+		conf.MaxDNSQueries = e.MaxDNSQueries
 	}
-	if len(args.BruteWordList) > 0 {
-		e.Config.Wordlist = args.BruteWordList.Slice()
+	if len(e.Names) > 0 {
+		conf.ProvidedNames = e.Names.Slice()
 	}
-	if len(args.AltWordList) > 0 {
-		e.Config.AltWordlist = args.AltWordList.Slice()
+	if len(e.BruteWordList) > 0 {
+		conf.Wordlist = e.BruteWordList.Slice()
 	}
-	if len(args.Names) > 0 {
-		e.ProvidedNames = args.Names.Slice()
+	if len(e.AltWordList) > 0 {
+		conf.AltWordlist = e.AltWordList.Slice()
 	}
-	if args.Options.BruteForcing {
-		e.Config.BruteForcing = true
+	if e.Options.BruteForcing {
+		conf.BruteForcing = true
 	}
-	if args.Options.NoAlts {
-		e.Config.Alterations = false
+	if e.Options.NoAlts {
+		conf.Alterations = false
 	}
-	if args.Options.NoRecursive {
-		e.Config.Recursive = false
+	if e.Options.NoRecursive {
+		conf.Recursive = false
 	}
-	if args.MinForRecursive > 0 {
-		e.Config.MinForRecursive = args.MinForRecursive
+	if e.MinForRecursive > 0 {
+		conf.MinForRecursive = e.MinForRecursive
 	}
-	if args.Options.Active {
-		e.Config.Active = true
+	if e.Options.Active {
+		conf.Active = true
 	}
-	if args.Options.Unresolved {
-		e.Config.IncludeUnresolvable = true
+	if e.Options.Unresolved {
+		conf.IncludeUnresolvable = true
 	}
-	if args.Options.Passive {
-		e.Config.Passive = true
+	if e.Options.Passive {
+		conf.Passive = true
 	}
-	if len(args.Blacklist) > 0 {
-		e.Config.Blacklist = args.Blacklist.Slice()
+	if len(e.Blacklist) > 0 {
+		conf.Blacklist = e.Blacklist.Slice()
 	}
-	if args.Timeout > 0 {
-		e.Config.Timeout = args.Timeout
+	if e.Timeout > 0 {
+		conf.Timeout = e.Timeout
 	}
 
-	disabled := compileDisabledSources(e.GetAllSourceNames(), args.Included, args.Excluded)
-	if len(disabled) > 0 {
-		e.Config.DisabledDataSources = disabled.Slice()
+	if !e.Options.MonitorResolverRate {
+		conf.MonitorResolverRate = false
+	}
+	if !e.Options.ScoreResolvers {
+		conf.ScoreResolvers = false
+	}
+
+	if len(e.Included) > 0 {
+		conf.SourceFilter.Include = true
+		conf.SourceFilter.Sources = e.Included.Slice()
+	} else if len(e.Excluded) > 0 {
+		conf.SourceFilter.Include = false
+		conf.SourceFilter.Sources = e.Excluded.Slice()
 	}
 
 	// Attempt to add the provided domains to the configuration
-	e.Config.AddDomains(args.Domains.Slice())
-	if len(e.Config.Domains()) == 0 {
+	conf.AddDomains(e.Domains.Slice())
+	if len(conf.Domains()) == 0 {
 		return errors.New("No root domain names were provided")
 	}
 	return nil
-}
-
-func compileDisabledSources(srcs []string, include, exclude stringset.Set) stringset.Set {
-	master := stringset.New(srcs...)
-
-	// Check that the exclude names are valid
-	excLen := len(exclude)
-	exclude.Intersect(master)
-	if excLen != len(exclude) {
-		r.Fprintf(color.Error, "Invalid excluded data source specification\n")
-	}
-
-	// Check that the include names are valid
-	incLen := len(include)
-	include.Intersect(master)
-	if incLen != len(include) {
-		r.Fprintf(color.Error, "Invalid included data source specification\n")
-	}
-
-	if len(include) == 0 {
-		return exclude
-	}
-
-	master.Subtract(include)
-	return master
 }

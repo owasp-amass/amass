@@ -4,22 +4,6 @@
 package config
 
 /*
-func TestExcludeDisabledDataSources(t *testing.T) {
-	e := NewEnumeration()
-	e.Config.DisabledDataSources = []string{"Crtsh"}
-	original := []Service{
-		NewAsk(e),
-		NewCensys(e),
-		NewCrtsh(e),
-		NewGoogle(e),
-	}
-	got := e.Config.ExcludeDisabledDataSources(original)
-	want := append(original[0:2], original[3:]...)
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("mismatched result, got %+v, want %+v", got, want)
-	}
-}
-
 func TestAddDomainsDuplicate(t *testing.T) {
 	domains := []string{"twitter.com", "google.com", "twitter.com"}
 
