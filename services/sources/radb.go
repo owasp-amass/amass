@@ -15,11 +15,11 @@ import (
 
 	"github.com/OWASP/Amass/config"
 	eb "github.com/OWASP/Amass/eventbus"
+	"github.com/OWASP/Amass/net/http"
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
 	"github.com/OWASP/Amass/stringset"
-	"github.com/OWASP/Amass/utils"
 )
 
 const (
@@ -119,7 +119,7 @@ func (r *RADb) executeASNAddrQuery(addr string) {
 	r.SetActive()
 	url := r.getIPURL("arin", addr)
 	headers := map[string]string{"Content-Type": "application/json"}
-	page, err := utils.RequestWebPage(url, nil, headers, "", "")
+	page, err := http.RequestWebPage(url, nil, headers, "", "")
 	if err != nil {
 		r.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", r.String(), url, err))
 		return
@@ -177,7 +177,7 @@ func (r *RADb) executeASNQuery(asn int, prefix string) {
 	r.SetActive()
 	url := r.getASNURL("arin", strconv.Itoa(asn))
 	headers := map[string]string{"Content-Type": "application/json"}
-	page, err := utils.RequestWebPage(url, nil, headers, "", "")
+	page, err := http.RequestWebPage(url, nil, headers, "", "")
 	if err != nil {
 		r.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", r.String(), url, err))
 		return
@@ -256,7 +256,7 @@ func (r *RADb) netblocks(asn int) stringset.Set {
 	r.SetActive()
 	url := r.getNetblocksURL(strconv.Itoa(asn))
 	headers := map[string]string{"Content-Type": "application/json"}
-	page, err := utils.RequestWebPage(url, nil, headers, "", "")
+	page, err := http.RequestWebPage(url, nil, headers, "", "")
 	if err != nil {
 		r.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", r.String(), url, err))
 		return netblocks

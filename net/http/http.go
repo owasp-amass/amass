@@ -1,7 +1,7 @@
 // Copyright 2017 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
-package utils
+package http
 
 import (
 	"context"
@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/OWASP/Amass/net/dns"
 	"github.com/OWASP/Amass/stringset"
 	"github.com/caffix/cloudflare-roundtripper/cfrt"
 )
@@ -177,13 +178,13 @@ func namesFromCert(cert *x509.Certificate) []string {
 
 	subdomains := stringset.New()
 	// Add the subject common name to the list of subdomain names
-	commonName := RemoveAsteriskLabel(cn)
+	commonName := dns.RemoveAsteriskLabel(cn)
 	if commonName != "" {
 		subdomains.Insert(commonName)
 	}
 	// Add the cert DNS names to the list of subdomain names
 	for _, name := range cert.DNSNames {
-		n := RemoveAsteriskLabel(name)
+		n := dns.RemoveAsteriskLabel(name)
 		if n != "" {
 			subdomains.Insert(n)
 		}

@@ -11,11 +11,11 @@ import (
 
 	"github.com/OWASP/Amass/config"
 	eb "github.com/OWASP/Amass/eventbus"
+	"github.com/OWASP/Amass/net/http"
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
 	"github.com/OWASP/Amass/stringset"
-	"github.com/OWASP/Amass/utils"
 )
 
 // HackerTarget is the Service that handles access to the HackerTarget data source.
@@ -67,7 +67,7 @@ func (h *HackerTarget) executeDNSQuery(domain string) {
 
 	h.SetActive()
 	url := h.getDNSURL(domain)
-	page, err := utils.RequestWebPage(url, nil, nil, "", "")
+	page, err := http.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
 		h.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", h.String(), url, err))
 		return
@@ -95,7 +95,7 @@ func (h *HackerTarget) executeASNQuery(addr string) {
 	}
 
 	url := h.getASNURL(addr)
-	page, err := utils.RequestWebPage(url, nil, nil, "", "")
+	page, err := http.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
 		h.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", h.String(), url, err))
 		return

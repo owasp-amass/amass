@@ -8,8 +8,8 @@ import (
 	"net"
 	"strings"
 
+	amassdns "github.com/OWASP/Amass/net/dns"
 	"github.com/OWASP/Amass/requests"
-	"github.com/OWASP/Amass/utils"
 	"github.com/miekg/dns"
 )
 
@@ -183,19 +183,19 @@ func extractRawData(msg *dns.Msg, qtype uint16) []string {
 			switch qtype {
 			case dns.TypeA:
 				if t, ok := a.(*dns.A); ok {
-					value = utils.CopyString(t.A.String())
+					value = amassdns.CopyString(t.A.String())
 				}
 			case dns.TypeAAAA:
 				if t, ok := a.(*dns.AAAA); ok {
-					value = utils.CopyString(t.AAAA.String())
+					value = amassdns.CopyString(t.AAAA.String())
 				}
 			case dns.TypeCNAME:
 				if t, ok := a.(*dns.CNAME); ok {
-					value = utils.CopyString(t.Target)
+					value = amassdns.CopyString(t.Target)
 				}
 			case dns.TypePTR:
 				if t, ok := a.(*dns.PTR); ok {
-					value = utils.CopyString(t.Ptr)
+					value = amassdns.CopyString(t.Ptr)
 				}
 			case dns.TypeNS:
 				if t, ok := a.(*dns.NS); ok {
@@ -203,7 +203,7 @@ func extractRawData(msg *dns.Msg, qtype uint16) []string {
 				}
 			case dns.TypeMX:
 				if t, ok := a.(*dns.MX); ok {
-					value = utils.CopyString(t.Mx)
+					value = amassdns.CopyString(t.Mx)
 				}
 			case dns.TypeTXT:
 				if t, ok := a.(*dns.TXT); ok {
@@ -223,7 +223,7 @@ func extractRawData(msg *dns.Msg, qtype uint16) []string {
 				}
 			case dns.TypeSRV:
 				if t, ok := a.(*dns.SRV); ok {
-					value = utils.CopyString(t.Target)
+					value = amassdns.CopyString(t.Target)
 				}
 			}
 

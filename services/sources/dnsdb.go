@@ -13,11 +13,11 @@ import (
 
 	"github.com/OWASP/Amass/config"
 	eb "github.com/OWASP/Amass/eventbus"
+	"github.com/OWASP/Amass/net/http"
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
 	"github.com/OWASP/Amass/stringset"
-	"github.com/OWASP/Amass/utils"
 )
 
 // DNSDB is the Service that handles access to the DNSDB data source.
@@ -85,7 +85,7 @@ func (d *DNSDB) executeQuery(domain string) {
 		}
 
 		url := d.restURL(domain)
-		page, err := utils.RequestWebPage(url, nil, headers, "", "")
+		page, err := http.RequestWebPage(url, nil, headers, "", "")
 		if err != nil {
 			d.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", d.String(), url, err))
 			return
@@ -141,7 +141,7 @@ func (d *DNSDB) passiveDNSJSON(page, domain string) {
 
 func (d *DNSDB) scrape(domain string) {
 	url := d.getURL(domain, domain)
-	page, err := utils.RequestWebPage(url, nil, nil, "", "")
+	page, err := http.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
 		d.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", d.String(), url, err))
 		return
@@ -174,7 +174,7 @@ loop:
 			}
 
 			url = d.getURL(domain, name)
-			another, err := utils.RequestWebPage(url, nil, nil, "", "")
+			another, err := http.RequestWebPage(url, nil, nil, "", "")
 			if err != nil {
 				d.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", d.String(), url, err))
 				continue
@@ -226,7 +226,7 @@ func (d *DNSDB) followIndicies(page, domain string) stringset.Set {
 
 	for _, idx := range indicies {
 		url := fmt.Sprintf("https://www.dnsdb.org/%s/%s", domain, idx)
-		ipage, err := utils.RequestWebPage(url, nil, nil, "", "")
+		ipage, err := http.RequestWebPage(url, nil, nil, "", "")
 		if err != nil {
 			continue
 		}

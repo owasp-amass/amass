@@ -12,10 +12,10 @@ import (
 
 	"github.com/OWASP/Amass/config"
 	eb "github.com/OWASP/Amass/eventbus"
+	amassnet "github.com/OWASP/Amass/net"
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	sf "github.com/OWASP/Amass/stringfilter"
-	"github.com/OWASP/Amass/utils"
 	"github.com/miekg/dns"
 )
 
@@ -376,9 +376,9 @@ func (ds *DNSService) reverseDNSSweep(addr string, cidr *net.IPNet) {
 
 	// Get information about nearby IP addresses
 	if ds.Config().Active {
-		ips = utils.CIDRSubset(cidr, addr, 500)
+		ips = amassnet.CIDRSubset(cidr, addr, 500)
 	} else {
-		ips = utils.CIDRSubset(cidr, addr, 250)
+		ips = amassnet.CIDRSubset(cidr, addr, 250)
 	}
 
 	for _, ip := range ips {

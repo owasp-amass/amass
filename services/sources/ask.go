@@ -11,10 +11,10 @@ import (
 
 	"github.com/OWASP/Amass/config"
 	eb "github.com/OWASP/Amass/eventbus"
+	"github.com/OWASP/Amass/net/http"
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
-	"github.com/OWASP/Amass/utils"
 )
 
 // Ask is the Service that handles access to the Ask data source.
@@ -80,7 +80,7 @@ func (a *Ask) executeQuery(domain string) {
 			return
 		case <-t.C:
 			u := a.urlByPageNum(domain, i)
-			page, err := utils.RequestWebPage(u, nil, nil, "", "")
+			page, err := http.RequestWebPage(u, nil, nil, "", "")
 			if err != nil {
 				a.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", a.String(), u, err))
 				return

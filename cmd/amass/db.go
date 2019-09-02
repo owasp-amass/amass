@@ -14,11 +14,11 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/config"
+	"github.com/OWASP/Amass/format"
 	"github.com/OWASP/Amass/graph"
 	"github.com/OWASP/Amass/requests"
 	sf "github.com/OWASP/Amass/stringfilter"
 	"github.com/OWASP/Amass/stringset"
-	"github.com/OWASP/Amass/utils"
 	"github.com/fatih/color"
 )
 
@@ -206,20 +206,20 @@ func showEnumeration(args *dbArgs, db graph.DataHandler) {
 	domains := args.Domains.Slice()
 	var total int
 	tags := make(map[string]int)
-	asns := make(map[int]*utils.ASNSummaryData)
+	asns := make(map[int]*format.ASNSummaryData)
 	for _, out := range getEnumOutput(args.Enum, domains, db) {
 		if len(domains) > 0 && !domainNameInScope(out.Name, domains) {
 			continue
 		}
 
-		out.Addresses = utils.DesiredAddrTypes(out.Addresses, args.Options.IPv4, args.Options.IPv6)
+		out.Addresses = format.DesiredAddrTypes(out.Addresses, args.Options.IPv4, args.Options.IPv6)
 		if len(out.Addresses) == 0 {
 			continue
 		}
 
 		total++
-		utils.UpdateSummaryData(out, tags, asns)
-		source, name, ips := utils.OutputLineParts(out, args.Options.Sources,
+		format.UpdateSummaryData(out, tags, asns)
+		source, name, ips := format.OutputLineParts(out, args.Options.Sources,
 			args.Options.IPs || args.Options.IPv4 || args.Options.IPv6, args.Options.DemoMode)
 
 		if ips != "" {
@@ -231,7 +231,7 @@ func showEnumeration(args *dbArgs, db graph.DataHandler) {
 	if total == 0 {
 		r.Println("No names were discovered")
 	} else {
-		utils.PrintEnumerationSummary(total, tags, asns, args.Options.DemoMode)
+		format.PrintEnumerationSummary(total, tags, asns, args.Options.DemoMode)
 	}
 }
 

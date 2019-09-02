@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
+	amassdns "github.com/OWASP/Amass/net/dns"
 	"github.com/OWASP/Amass/requests"
-	"github.com/OWASP/Amass/utils"
 	"github.com/miekg/dns"
 )
 
@@ -69,7 +69,7 @@ func NsecTraversal(domain, server string) ([]*requests.DNSRequest, error) {
 	defer conn.Close()
 	co := &dns.Conn{Conn: conn}
 
-	re := utils.SubdomainRegex(domain)
+	re := amassdns.SubdomainRegex(domain)
 loop:
 	for next := domain; next != ""; {
 		name := next

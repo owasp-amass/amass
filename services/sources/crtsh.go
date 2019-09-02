@@ -9,11 +9,12 @@ import (
 
 	"github.com/OWASP/Amass/config"
 	eb "github.com/OWASP/Amass/eventbus"
+	"github.com/OWASP/Amass/net/dns"
+	"github.com/OWASP/Amass/net/http"
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
 	"github.com/OWASP/Amass/stringset"
-	"github.com/OWASP/Amass/utils"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq" // Need the postgres driver
 )
@@ -97,7 +98,7 @@ func (c *Crtsh) executeQuery(domain string) {
 	// Extract the subdomain names from the results
 	names := stringset.New()
 	for _, result := range results {
-		names.Insert(utils.RemoveAsteriskLabel(result.Domain))
+		names.Insert(dns.RemoveAsteriskLabel(result.Domain))
 	}
 
 	for name := range names {
@@ -112,7 +113,7 @@ func (c *Crtsh) executeQuery(domain string) {
 
 func (c *Crtsh) scrape(domain string) {
 	url := c.getURL(domain)
-	page, err := utils.RequestWebPage(url, nil, nil, "", "")
+	page, err := http.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
 		c.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", c.String(), url, err))
 		return

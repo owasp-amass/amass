@@ -12,9 +12,9 @@ import (
 
 	"github.com/OWASP/Amass/config"
 	"github.com/OWASP/Amass/eventbus"
+	"github.com/OWASP/Amass/format"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services/sources"
-	"github.com/OWASP/Amass/utils"
 	"github.com/fatih/color"
 )
 
@@ -38,7 +38,7 @@ var (
 )
 
 func commandUsage(msg string, cmdFlagSet *flag.FlagSet, errBuf *bytes.Buffer) {
-	utils.PrintBanner()
+	format.PrintBanner()
 	g.Fprintf(color.Error, "Usage: %s %s\n\n", path.Base(os.Args[0]), msg)
 	cmdFlagSet.PrintDefaults()
 	g.Fprintln(color.Error, errBuf.String())
@@ -81,7 +81,7 @@ func main() {
 		return
 	}
 	if version {
-		fmt.Fprintf(color.Error, "%s\n", utils.Version)
+		fmt.Fprintf(color.Error, "%s\n", format.Version)
 		return
 	}
 

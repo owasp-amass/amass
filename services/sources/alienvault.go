@@ -13,11 +13,11 @@ import (
 
 	"github.com/OWASP/Amass/config"
 	eb "github.com/OWASP/Amass/eventbus"
+	"github.com/OWASP/Amass/net/http"
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
 	"github.com/OWASP/Amass/stringset"
-	"github.com/OWASP/Amass/utils"
 )
 
 // AlienVault is the Service that handles access to the AlienVault data source.
@@ -94,7 +94,7 @@ func (a *AlienVault) executeDNSQuery(domain string) {
 
 	a.SetActive()
 	u := a.getURL(domain) + "passive_dns"
-	page, err := utils.RequestWebPage(u, nil, a.getHeaders(), "", "")
+	page, err := http.RequestWebPage(u, nil, a.getHeaders(), "", "")
 	if err != nil {
 		a.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", a.String(), u, err))
 		return
@@ -152,7 +152,7 @@ func (a *AlienVault) executeURLQuery(domain string) {
 	a.SetActive()
 	headers := a.getHeaders()
 	u := a.getURL(domain) + "url_list"
-	page, err := utils.RequestWebPage(u, nil, headers, "", "")
+	page, err := http.RequestWebPage(u, nil, headers, "", "")
 	if err != nil {
 		a.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", a.String(), u, err))
 		return
@@ -199,7 +199,7 @@ func (a *AlienVault) executeURLQuery(domain string) {
 		for cur := urls.PageNum + 1; cur <= pages; cur++ {
 			time.Sleep(a.RateLimit)
 			pageURL := u + "?page=" + strconv.Itoa(cur)
-			page, err = utils.RequestWebPage(pageURL, nil, headers, "", "")
+			page, err = http.RequestWebPage(pageURL, nil, headers, "", "")
 			if err != nil {
 				a.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", a.String(), pageURL, err))
 				break
@@ -251,7 +251,7 @@ func (a *AlienVault) queryWhoisForEmails(domain string) []string {
 	u := a.getWhoisURL(domain)
 
 	a.SetActive()
-	page, err := utils.RequestWebPage(u, nil, a.getHeaders(), "", "")
+	page, err := http.RequestWebPage(u, nil, a.getHeaders(), "", "")
 	if err != nil {
 		a.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", a.String(), u, err))
 		return emails.Slice()
@@ -303,7 +303,7 @@ func (a *AlienVault) executeWhoisQuery(domain string) {
 	for _, email := range emails {
 		a.SetActive()
 		pageURL := a.getReverseWhoisURL(email)
-		page, err := utils.RequestWebPage(pageURL, nil, headers, "", "")
+		page, err := http.RequestWebPage(pageURL, nil, headers, "", "")
 		if err != nil {
 			a.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", a.String(), pageURL, err))
 			continue

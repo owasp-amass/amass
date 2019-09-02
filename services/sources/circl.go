@@ -12,11 +12,11 @@ import (
 
 	"github.com/OWASP/Amass/config"
 	eb "github.com/OWASP/Amass/eventbus"
+	"github.com/OWASP/Amass/net/http"
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
 	"github.com/OWASP/Amass/stringset"
-	"github.com/OWASP/Amass/utils"
 )
 
 // CIRCL is the Service that handles access to the CIRCL data source.
@@ -83,7 +83,7 @@ func (c *CIRCL) executeQuery(domain string) {
 	c.SetActive()
 	url := c.restURL(domain)
 	headers := map[string]string{"Content-Type": "application/json"}
-	page, err := utils.RequestWebPage(url, nil, headers, c.API.Username, c.API.Password)
+	page, err := http.RequestWebPage(url, nil, headers, c.API.Username, c.API.Password)
 	if err != nil {
 		c.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", c.String(), url, err))
 		return

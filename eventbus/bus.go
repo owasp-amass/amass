@@ -5,7 +5,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/OWASP/Amass/utils"
+	"github.com/OWASP/Amass/queue"
+	"github.com/OWASP/Amass/semaphore"
 )
 
 type pubReq struct {
@@ -17,8 +18,8 @@ type pubReq struct {
 type EventBus struct {
 	sync.Mutex
 	topics map[string][]reflect.Value
-	max    utils.Semaphore
-	queue  *utils.Queue
+	max    semaphore.Semaphore
+	queue  *queue.Queue
 	done   chan struct{}
 }
 
@@ -26,8 +27,8 @@ type EventBus struct {
 func NewEventBus() *EventBus {
 	eb := &EventBus{
 		topics: make(map[string][]reflect.Value),
-		max:    utils.NewSimpleSemaphore(1000000),
-		queue:  new(utils.Queue),
+		max:    semaphore.NewSimpleSemaphore(1000000),
+		queue:  new(queue.Queue),
 		done:   make(chan struct{}, 2),
 	}
 	go eb.processRequests()

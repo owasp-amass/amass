@@ -1,13 +1,14 @@
 // Copyright 2017 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
-package utils
+package format
 
 import (
 	"fmt"
 	"strconv"
 	"strings"
 
+	"github.com/OWASP/Amass/net"
 	"github.com/OWASP/Amass/requests"
 	"github.com/fatih/color"
 )
@@ -222,9 +223,9 @@ func DesiredAddrTypes(addrs []requests.AddressInfo, ipv4, ipv6 bool) []requests.
 
 	var keep []requests.AddressInfo
 	for _, addr := range addrs {
-		if IsIPv4(addr.Address) && !ipv4 {
+		if net.IsIPv4(addr.Address) && !ipv4 {
 			continue
-		} else if IsIPv6(addr.Address) && !ipv6 {
+		} else if net.IsIPv6(addr.Address) && !ipv6 {
 			continue
 		}
 		keep = append(keep, addr)

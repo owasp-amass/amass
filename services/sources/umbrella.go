@@ -11,11 +11,11 @@ import (
 
 	"github.com/OWASP/Amass/config"
 	eb "github.com/OWASP/Amass/eventbus"
+	"github.com/OWASP/Amass/net/http"
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
 	"github.com/OWASP/Amass/stringset"
-	"github.com/OWASP/Amass/utils"
 )
 
 // Umbrella is the Service that handles access to the Umbrella data source.
@@ -93,7 +93,7 @@ func (u *Umbrella) executeDNSQuery(domain string) {
 	u.SetActive()
 	headers := u.restHeaders()
 	url := u.patternSearchRestURL(domain)
-	page, err := utils.RequestWebPage(url, nil, headers, "", "")
+	page, err := http.RequestWebPage(url, nil, headers, "", "")
 	if err != nil {
 		u.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", u.String(), url, err))
 		return
@@ -109,7 +109,7 @@ func (u *Umbrella) executeDNSQuery(domain string) {
 	}
 
 	url = u.occurrencesRestURL(domain)
-	page, err = utils.RequestWebPage(url, nil, headers, "", "")
+	page, err = http.RequestWebPage(url, nil, headers, "", "")
 	if err != nil {
 		u.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", u.String(), url, err))
 		return
@@ -129,7 +129,7 @@ func (u *Umbrella) executeDNSQuery(domain string) {
 
 	u.SetActive()
 	url = u.relatedRestURL(domain)
-	page, err = utils.RequestWebPage(url, nil, headers, "", "")
+	page, err = http.RequestWebPage(url, nil, headers, "", "")
 	if err != nil {
 		u.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", u.String(), url, err))
 		return
@@ -200,7 +200,7 @@ func (u *Umbrella) queryWhois(domain string) *whoisRecord {
 	whoisURL := u.whoisRecordURL(domain)
 
 	u.SetActive()
-	record, err := utils.RequestWebPage(whoisURL, nil, headers, "", "")
+	record, err := http.RequestWebPage(whoisURL, nil, headers, "", "")
 	if err != nil {
 		u.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", u.String(), whoisURL, err))
 		return nil
@@ -226,7 +226,7 @@ func (u *Umbrella) queryReverseWhois(apiURL string) []string {
 	for count, more := 0, true; more; count = count + 500 {
 		u.SetActive()
 		fullAPIURL := fmt.Sprintf("%s&offset=%d", apiURL, count)
-		record, err := utils.RequestWebPage(fullAPIURL, nil, headers, "", "")
+		record, err := http.RequestWebPage(fullAPIURL, nil, headers, "", "")
 		if err != nil {
 			u.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", u.String(), apiURL, err))
 			return domains.Slice()

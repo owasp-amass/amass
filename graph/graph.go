@@ -17,7 +17,7 @@ import (
 	"github.com/OWASP/Amass/config"
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/stringset"
-	"github.com/OWASP/Amass/utils/viz"
+	"github.com/OWASP/Amass/viz"
 	"github.com/cayleygraph/cayley"
 	"github.com/cayleygraph/cayley/graph"
 	_ "github.com/cayleygraph/cayley/graph/kv/bolt" // Used by the cayley package

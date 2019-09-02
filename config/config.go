@@ -20,8 +20,12 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/OWASP/Amass/format"
+	"github.com/OWASP/Amass/net/dns"
+	amasshttp "github.com/OWASP/Amass/net/http"
+	"github.com/OWASP/Amass/semaphore"
 	"github.com/OWASP/Amass/stringset"
-	"github.com/OWASP/Amass/utils"
+	"github.com/OWASP/Amass/wordlist"
 	"github.com/go-ini/ini"
 	"github.com/google/uuid"
 	homedir "github.com/mitchellh/go-homedir"
@@ -78,7 +82,7 @@ type Config struct {
 	MaxDNSQueries int `ini:"maximum_dns_queries"`
 
 	// Semaphore to enforce the maximum DNS queries
-	SemMaxDNSQueries utils.Semaphore
+	SemMaxDNSQueries semaphore.Semaphore
 
 	// Names provided to seed the enumeration
 	ProvidedNames []string
@@ -185,7 +189,7 @@ func NewConfig() *Config {
 		Recursive:      true,
 	}
 
-	c.SemMaxDNSQueries = utils.NewSimpleSemaphore(c.MaxDNSQueries)
+	c.SemMaxDNSQueries = semaphore.NewSimpleSemaphore(c.MaxDNSQueries)
 
 	return c
 }
@@ -216,12 +220,12 @@ func (c *Config) CheckSettings() error {
 		}
 	}
 
-	c.Wordlist, err = utils.ExpandMaskWordlist(c.Wordlist)
+	c.Wordlist, err = wordlist.ExpandMaskWordlist(c.Wordlist)
 	if err != nil {
 		return err
 	}
 
-	c.AltWordlist, err = utils.ExpandMaskWordlist(c.AltWordlist)
+	c.AltWordlist, err = wordlist.ExpandMaskWordlist(c.AltWordlist)
 	if err != nil {
 		return err
 	}
@@ -282,7 +286,7 @@ func (c *Config) AddDomain(domain string) {
 	}
 
 	// Create the regular expression for this domain
-	c.regexps[d] = utils.SubdomainRegex(d)
+	c.regexps[d] = dns.SubdomainRegex(d)
 	if c.regexps[d] != nil {
 		// Add the domain string to the list
 		c.domains = append(c.domains, d)
@@ -401,7 +405,7 @@ func (c *Config) loadNetworkSettings(cfg *ini.File) error {
 
 	if network.HasKey("address") {
 		for _, addr := range network.Key("address").ValueWithShadows() {
-			var ips utils.ParseIPs
+			var ips format.ParseIPs
 
 			if err := ips.Set(addr); err != nil {
 				return err
@@ -682,7 +686,7 @@ func GetListFromFile(path string) ([]string, error) {
 }
 
 func getWordlistByURL(url string) ([]string, error) {
-	page, err := utils.RequestWebPage(url, nil, nil, "", "")
+	page, err := amasshttp.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
 		return nil, fmt.Errorf("Failed to obtain the wordlist at %s: %v", url, err)
 	}

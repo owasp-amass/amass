@@ -15,11 +15,11 @@ import (
 
 	"github.com/OWASP/Amass/config"
 	eb "github.com/OWASP/Amass/eventbus"
+	"github.com/OWASP/Amass/net/http"
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
 	"github.com/OWASP/Amass/stringset"
-	"github.com/OWASP/Amass/utils"
 )
 
 const (
@@ -113,7 +113,7 @@ loop:
 func (n *NetworksDB) executeASNAddrQuery(addr string) {
 	n.SetActive()
 	u := n.getIPURL(addr)
-	page, err := utils.RequestWebPage(u, nil, nil, "", "")
+	page, err := http.RequestWebPage(u, nil, nil, "", "")
 	if err != nil {
 		n.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", n.String(), u, err))
 		return
@@ -130,7 +130,7 @@ func (n *NetworksDB) executeASNAddrQuery(addr string) {
 	n.SetActive()
 	time.Sleep(n.RateLimit)
 	u = networksdbBaseURL + matches[1]
-	page, err = utils.RequestWebPage(u, nil, nil, "", "")
+	page, err = http.RequestWebPage(u, nil, nil, "", "")
 	if err != nil {
 		n.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", n.String(), u, err))
 		return
@@ -171,7 +171,7 @@ func (n *NetworksDB) getIPURL(addr string) string {
 func (n *NetworksDB) executeASNQuery(asn int, addr string, netblocks stringset.Set) {
 	n.SetActive()
 	u := n.getASNURL(asn)
-	page, err := utils.RequestWebPage(u, nil, nil, "", "")
+	page, err := http.RequestWebPage(u, nil, nil, "", "")
 	if err != nil {
 		n.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", n.String(), u, err))
 		return
@@ -329,7 +329,7 @@ func (n *NetworksDB) apiIPQuery(addr string) (string, string) {
 	u := n.getAPIIPURL()
 	params := url.Values{"ip": {addr}}
 	body := strings.NewReader(params.Encode())
-	page, err := utils.RequestWebPage(u, body, n.getHeaders(), "", "")
+	page, err := http.RequestWebPage(u, body, n.getHeaders(), "", "")
 	if err != nil {
 		n.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", n.String(), u, err))
 		return "", ""
@@ -372,7 +372,7 @@ func (n *NetworksDB) apiOrgInfoQuery(id string) []int {
 	u := n.getAPIOrgInfoURL()
 	params := url.Values{"id": {id}}
 	body := strings.NewReader(params.Encode())
-	page, err := utils.RequestWebPage(u, body, n.getHeaders(), "", "")
+	page, err := http.RequestWebPage(u, body, n.getHeaders(), "", "")
 	if err != nil {
 		n.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", n.String(), u, err))
 		return []int{}
@@ -410,7 +410,7 @@ func (n *NetworksDB) apiASNInfoQuery(asn int) *requests.ASNRequest {
 	u := n.getAPIASNInfoURL()
 	params := url.Values{"asn": {strconv.Itoa(asn)}}
 	body := strings.NewReader(params.Encode())
-	page, err := utils.RequestWebPage(u, body, n.getHeaders(), "", "")
+	page, err := http.RequestWebPage(u, body, n.getHeaders(), "", "")
 	if err != nil {
 		n.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", n.String(), u, err))
 		return nil
@@ -460,7 +460,7 @@ func (n *NetworksDB) apiNetblocksQuery(asn int) stringset.Set {
 	u := n.getAPINetblocksURL()
 	params := url.Values{"asn": {strconv.Itoa(asn)}}
 	body := strings.NewReader(params.Encode())
-	page, err := utils.RequestWebPage(u, body, n.getHeaders(), "", "")
+	page, err := http.RequestWebPage(u, body, n.getHeaders(), "", "")
 	if err != nil {
 		n.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", n.String(), u, err))
 		return netblocks

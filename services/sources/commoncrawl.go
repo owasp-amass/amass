@@ -13,10 +13,10 @@ import (
 
 	"github.com/OWASP/Amass/config"
 	eb "github.com/OWASP/Amass/eventbus"
+	"github.com/OWASP/Amass/net/http"
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
-	"github.com/OWASP/Amass/utils"
 	sf "github.com/OWASP/Amass/stringfilter"
 )
 
@@ -43,7 +43,7 @@ func (c *CommonCrawl) OnStart() error {
 	c.BaseService.OnStart()
 
 	// Get all of the index API URLs
-	page, err := utils.RequestWebPage(commonCrawlIndexListURL, nil, nil, "", "")
+	page, err := http.RequestWebPage(commonCrawlIndexListURL, nil, nil, "", "")
 	if err != nil {
 		c.Bus().Publish(requests.LogTopic,
 			fmt.Sprintf("%s: Failed to obtain the index list: %v", c.String(), err),
@@ -107,7 +107,7 @@ func (c *CommonCrawl) executeQuery(domain string) {
 			return
 		case <-t.C:
 			u := c.getURL(domain, index)
-			page, err := utils.RequestWebPage(u, nil, nil, "", "")
+			page, err := http.RequestWebPage(u, nil, nil, "", "")
 			if err != nil {
 				c.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", c.String(), u, err))
 				continue

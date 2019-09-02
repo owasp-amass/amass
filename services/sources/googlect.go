@@ -11,10 +11,10 @@ import (
 
 	"github.com/OWASP/Amass/config"
 	eb "github.com/OWASP/Amass/eventbus"
+	"github.com/OWASP/Amass/net/http"
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
-	"github.com/OWASP/Amass/utils"
 )
 
 // GoogleCT is the Service that handles access to the GoogleCT data source.
@@ -80,7 +80,7 @@ func (g *GoogleCT) executeDNSQuery(domain string) {
 			"Connection": "close",
 			"Referer":    "https://transparencyreport.google.com/https/certificates",
 		}
-		page, err := utils.RequestWebPage(u, nil, headers, "", "")
+		page, err := http.RequestWebPage(u, nil, headers, "", "")
 		if err != nil {
 			g.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", g.String(), u, err))
 			break

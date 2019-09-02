@@ -6,7 +6,7 @@ package services
 import (
 	"time"
 
-	"github.com/OWASP/Amass/utils"
+	"github.com/OWASP/Amass/queue"
 )
 
 // MetricsCollector provides Amass services with the ability to track performance.
@@ -21,7 +21,7 @@ type MetricsCollector struct {
 	statsReq chan chan *ServiceStats
 
 	// The queue that holds DNS query event times
-	queries *utils.Queue
+	queries *queue.Queue
 
 	// The channel that signals the metrics collector to halt execution
 	done chan struct{}
@@ -32,7 +32,7 @@ func NewMetricsCollector(srv Service) *MetricsCollector {
 	mc := &MetricsCollector{
 		service:  srv,
 		statsReq: make(chan chan *ServiceStats, 10),
-		queries:  new(utils.Queue),
+		queries:  new(queue.Queue),
 		done:     make(chan struct{}, 2),
 	}
 	go mc.processMetrics()
@@ -90,7 +90,7 @@ func (mc *MetricsCollector) QueryTime(t time.Time) {
 	mc.queries.Append(t)
 }
 
-func (mc *MetricsCollector) eventsPerSec(last time.Time, q *utils.Queue) int {
+func (mc *MetricsCollector) eventsPerSec(last time.Time, q *queue.Queue) int {
 	var num int
 	for {
 		element, ok := q.Next()

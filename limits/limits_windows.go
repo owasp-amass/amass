@@ -3,7 +3,7 @@
 
 // +build windows
 
-package utils
+package limits
 
 // GetFileLimit attempts to raise the ulimit to the maximum hard limit and returns that value.
 func GetFileLimit() int {

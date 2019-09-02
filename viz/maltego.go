@@ -9,7 +9,7 @@ import (
 	"net"
 	"strings"
 
-	"github.com/OWASP/Amass/utils"
+	amassnet "github.com/OWASP/Amass/net"
 )
 
 // WriteMaltegoData converts the Amass graph nodes and edges into a
@@ -152,6 +152,7 @@ func cidrToMaltegoNetblock(cidr string) string {
 	if err != nil {
 		return ""
 	}
-	ip1, ip2 := utils.NetFirstLast(ipnet)
+
+	ip1, ip2 := amassnet.NetFirstLast(ipnet)
 	return ip1.String() + "-" + ip2.String()
 }

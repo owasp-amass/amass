@@ -10,9 +10,10 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/OWASP/Amass/queue"
 	"github.com/OWASP/Amass/requests"
-	"github.com/OWASP/Amass/utils"
-	"github.com/OWASP/Amass/utils/viz"
+	"github.com/OWASP/Amass/semaphore"
+	"github.com/OWASP/Amass/viz"
 	"github.com/qasaur/gremgo"
 )
 
@@ -28,8 +29,8 @@ type Gremlin struct {
 	username string
 	password string
 	pool     *gremgo.Pool
-	requests *utils.Queue
-	avail    utils.Semaphore
+	requests *queue.Queue
+	avail    semaphore.Semaphore
 	done     chan struct{}
 }
 
@@ -45,8 +46,8 @@ func NewGremlin(url, user, pass string, l *log.Logger) *Gremlin {
 			MaxActive:   GremlinMaxConnections,
 			IdleTimeout: 5 * time.Second,
 		},
-		requests: new(utils.Queue),
-		avail:    utils.NewSimpleSemaphore(GremlinMaxConnections),
+		requests: new(queue.Queue),
+		avail:    semaphore.NewSimpleSemaphore(GremlinMaxConnections),
 		done:     make(chan struct{}, 2),
 	}
 	g.pool.Dial = g.getClient

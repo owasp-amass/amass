@@ -12,11 +12,11 @@ import (
 
 	"github.com/OWASP/Amass/config"
 	eb "github.com/OWASP/Amass/eventbus"
+	amassnet "github.com/OWASP/Amass/net"
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
 	"github.com/OWASP/Amass/stringset"
-	"github.com/OWASP/Amass/utils"
 )
 
 // TeamCymru is the Service that handles access to the TeamCymru data source.
@@ -93,10 +93,10 @@ func (t *TeamCymru) origin(addr string) *requests.ASNRequest {
 	var err error
 	var name string
 	var answers []requests.DNSAnswer
-	if ip := net.ParseIP(addr); utils.IsIPv4(ip) {
-		name = utils.ReverseIP(addr) + ".origin.asn.cymru.com"
-	} else if utils.IsIPv6(ip) {
-		name = utils.IPv6NibbleFormat(utils.HexString(ip)) + ".origin6.asn.cymru.com"
+	if ip := net.ParseIP(addr); amassnet.IsIPv4(ip) {
+		name = amassnet.ReverseIP(addr) + ".origin.asn.cymru.com"
+	} else if amassnet.IsIPv6(ip) {
+		name = amassnet.IPv6NibbleFormat(amassnet.HexString(ip)) + ".origin6.asn.cymru.com"
 	} else {
 		t.Bus().Publish(requests.LogTopic,
 			fmt.Sprintf("%s: %s: Failed to parse the IP address", t.String(), addr),

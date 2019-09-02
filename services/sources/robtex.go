@@ -14,11 +14,12 @@ import (
 
 	"github.com/OWASP/Amass/config"
 	eb "github.com/OWASP/Amass/eventbus"
+	amassnet "github.com/OWASP/Amass/net"
+	"github.com/OWASP/Amass/net/http"
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
 	"github.com/OWASP/Amass/stringset"
-	"github.com/OWASP/Amass/utils"
 )
 
 // Robtex is the Service that handles access to the Robtex data source.
@@ -99,7 +100,7 @@ func (r *Robtex) executeDNSQuery(domain string) {
 
 	r.SetActive()
 	url := "https://freeapi.robtex.com/pdns/forward/" + domain
-	page, err := utils.RequestWebPage(url, nil, nil, "", "")
+	page, err := http.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
 		r.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", r.String(), url, err))
 		return
@@ -131,7 +132,7 @@ loop:
 			break loop
 		case <-t.C:
 			url = "https://freeapi.robtex.com/pdns/reverse/" + ip
-			pdns, err := utils.RequestWebPage(url, nil, nil, "", "")
+			pdns, err := http.RequestWebPage(url, nil, nil, "", "")
 			if err != nil {
 				r.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", r.String(), url, err))
 				continue
@@ -213,13 +214,13 @@ func (r *Robtex) executeASNAddrQuery(addr string) {
 }
 
 func (r *Robtex) origin(addr string) *requests.ASNRequest {
-	if ip := net.ParseIP(addr); ip == nil || !utils.IsIPv4(ip) {
+	if ip := net.ParseIP(addr); ip == nil || !amassnet.IsIPv4(ip) {
 		return nil
 	}
 
 	r.SetActive()
 	url := "https://freeapi.robtex.com/ipquery/" + addr
-	page, err := utils.RequestWebPage(url, nil, nil, "", "")
+	page, err := http.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
 		r.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", r.String(), url, err))
 		return nil
@@ -323,7 +324,7 @@ func (r *Robtex) netblocks(asn int) stringset.Set {
 
 	r.SetActive()
 	url := "https://freeapi.robtex.com/asquery/" + strconv.Itoa(asn)
-	page, err := utils.RequestWebPage(url, nil, nil, "", "")
+	page, err := http.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
 		r.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", r.String(), url, err))
 		return netblocks

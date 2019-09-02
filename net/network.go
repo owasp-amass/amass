@@ -1,7 +1,7 @@
 // Copyright 2017 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
-package utils
+package net
 
 import (
 	"bytes"
@@ -9,6 +9,9 @@ import (
 	"net"
 	"strings"
 )
+
+// IPv4RE is a regular expression that will match an IPv4 address.
+const IPv4RE = "((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)[.]){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)"
 
 // NetHosts returns a slice containing all the IP addresses within
 // the CIDR provided by the parameter. This implementation was

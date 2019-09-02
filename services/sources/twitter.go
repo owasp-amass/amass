@@ -11,10 +11,10 @@ import (
 
 	"github.com/OWASP/Amass/config"
 	eb "github.com/OWASP/Amass/eventbus"
+	"github.com/OWASP/Amass/net/http"
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
-	"github.com/OWASP/Amass/utils"
 	"github.com/dghubble/go-twitter/twitter"
 	"golang.org/x/oauth2"
 )
@@ -133,7 +133,7 @@ func (t *Twitter) executeQuery(domain string) {
 
 func (t *Twitter) getBearerToken() (string, error) {
 	headers := map[string]string{"Content-Type": "application/x-www-form-urlencoded;charset=UTF-8"}
-	page, err := utils.RequestWebPage(
+	page, err := http.RequestWebPage(
 		"https://api.twitter.com/oauth2/token",
 		strings.NewReader("grant_type=client_credentials"),
 		headers, t.API.Key, t.API.Secret)

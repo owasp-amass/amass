@@ -10,8 +10,9 @@ import (
 	"sync"
 	"time"
 
+	amassnet "github.com/OWASP/Amass/net"
+	"github.com/OWASP/Amass/queue"
 	"github.com/OWASP/Amass/requests"
-	"github.com/OWASP/Amass/utils"
 	"github.com/miekg/dns"
 )
 
@@ -91,7 +92,7 @@ type BaseResolver struct {
 	WindowDuration time.Duration
 	CurrentConn    net.Conn
 	LastConn       net.Conn
-	XchgQueue      *utils.Queue
+	XchgQueue      *queue.Queue
 	XchgChan       chan *resolveRequest
 	XchgsLock      sync.Mutex
 	Xchgs          map[uint16]*resolveRequest
@@ -117,7 +118,7 @@ func NewBaseResolver(addr string) *BaseResolver {
 		Address:        addr,
 		Port:           port,
 		WindowDuration: defaultWindowDuration,
-		XchgQueue:      new(utils.Queue),
+		XchgQueue:      new(queue.Queue),
 		XchgChan:       make(chan *resolveRequest, 1000),
 		Xchgs:          make(map[uint16]*resolveRequest),
 		Done:           make(chan struct{}, 2),
@@ -257,10 +258,10 @@ func (r *BaseResolver) Resolve(name, qtype string) ([]requests.DNSAnswer, bool, 
 func (r *BaseResolver) Reverse(addr string) (string, string, error) {
 	var name, ptr string
 
-	if ip := net.ParseIP(addr); utils.IsIPv4(ip) {
-		ptr = utils.ReverseIP(addr) + ".in-addr.arpa"
-	} else if utils.IsIPv6(ip) {
-		ptr = utils.IPv6NibbleFormat(utils.HexString(ip)) + ".ip6.arpa"
+	if ip := net.ParseIP(addr); amassnet.IsIPv4(ip) {
+		ptr = amassnet.ReverseIP(addr) + ".in-addr.arpa"
+	} else if amassnet.IsIPv6(ip) {
+		ptr = amassnet.IPv6NibbleFormat(amassnet.HexString(ip)) + ".ip6.arpa"
 	} else {
 		return ptr, "", &ResolveError{
 			Err:   fmt.Sprintf("Invalid IP address parameter: %s", addr),

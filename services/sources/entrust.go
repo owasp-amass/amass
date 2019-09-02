@@ -11,10 +11,11 @@ import (
 
 	"github.com/OWASP/Amass/config"
 	eb "github.com/OWASP/Amass/eventbus"
+	"github.com/OWASP/Amass/net/dns"
+	"github.com/OWASP/Amass/net/http"
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
-	"github.com/OWASP/Amass/utils"
 )
 
 // Entrust is the Service that handles access to the Entrust data source.
@@ -64,7 +65,7 @@ func (e *Entrust) executeQuery(domain string) {
 
 	e.SetActive()
 	u := e.getURL(domain)
-	page, err := utils.RequestWebPage(u, nil, nil, "", "")
+	page, err := http.RequestWebPage(u, nil, nil, "", "")
 	if err != nil {
 		e.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", e.String(), u, err))
 		return
@@ -116,7 +117,7 @@ func (e *Entrust) extractReversedSubmatches(content string) []string {
 	for _, r := range rev {
 		s := e.reverseSubdomain(r)
 
-		results = append(results, utils.RemoveAsteriskLabel(s))
+		results = append(results, dns.RemoveAsteriskLabel(s))
 	}
 	return results
 }

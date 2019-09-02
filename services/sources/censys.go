@@ -12,10 +12,11 @@ import (
 
 	"github.com/OWASP/Amass/config"
 	eb "github.com/OWASP/Amass/eventbus"
+	"github.com/OWASP/Amass/net/dns"
+	"github.com/OWASP/Amass/net/http"
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
-	"github.com/OWASP/Amass/utils"
 )
 
 // Censys is the Service that handles access to the Censys data source.
@@ -99,7 +100,7 @@ func (c *Censys) apiQuery(domain string) {
 		u := c.apiURL()
 		body := bytes.NewBuffer(jsonStr)
 		headers := map[string]string{"Content-Type": "application/json"}
-		resp, err := utils.RequestWebPage(u, body, headers, c.API.Key, c.API.Secret)
+		resp, err := http.RequestWebPage(u, body, headers, c.API.Key, c.API.Secret)
 		if err != nil {
 			c.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", c.String(), u, err))
 			break
@@ -128,7 +129,7 @@ func (c *Censys) apiQuery(domain string) {
 		for _, result := range m.Results {
 			for _, name := range result.Names {
 				n := strings.TrimSpace(name)
-				n = utils.RemoveAsteriskLabel(n)
+				n = dns.RemoveAsteriskLabel(n)
 
 				if c.Config().IsDomainInScope(n) {
 					c.Bus().Publish(requests.NewNameTopic, &requests.DNSRequest{
@@ -163,7 +164,7 @@ func (c *Censys) executeQuery(domain string) {
 
 	c.SetActive()
 	url = c.webURL(domain)
-	page, err = utils.RequestWebPage(url, nil, nil, "", "")
+	page, err = http.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
 		c.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", c.String(), url, err))
 		return
@@ -171,7 +172,7 @@ func (c *Censys) executeQuery(domain string) {
 
 	for _, sd := range re.FindAllString(page, -1) {
 		c.Bus().Publish(requests.NewNameTopic, &requests.DNSRequest{
-			Name:   utils.RemoveAsteriskLabel(cleanName(sd)),
+			Name:   dns.RemoveAsteriskLabel(cleanName(sd)),
 			Domain: domain,
 			Tag:    c.SourceType,
 			Source: c.String(),

@@ -12,10 +12,10 @@ import (
 
 	"github.com/OWASP/Amass/config"
 	eb "github.com/OWASP/Amass/eventbus"
+	"github.com/OWASP/Amass/net/http"
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	sf "github.com/OWASP/Amass/stringfilter"
-	"github.com/OWASP/Amass/utils"
 )
 
 var (
@@ -125,7 +125,7 @@ func (as *AddressService) performAddrRequest(req *requests.AddrRequest) {
 	}
 
 	if as.Config().Active {
-		for _, name := range utils.PullCertificateNames(req.Address, as.Config().Ports) {
+		for _, name := range http.PullCertificateNames(req.Address, as.Config().Ports) {
 			if n := strings.TrimSpace(name); n != "" {
 				if domain := as.Config().WhichDomain(n); domain != "" {
 					as.Bus().Publish(requests.NewNameTopic, &requests.DNSRequest{

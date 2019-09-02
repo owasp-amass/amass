@@ -10,9 +10,9 @@ import (
 
 	"github.com/OWASP/Amass/config"
 	eb "github.com/OWASP/Amass/eventbus"
+	"github.com/OWASP/Amass/queue"
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
-	"github.com/OWASP/Amass/utils"
 )
 
 const (
@@ -110,13 +110,13 @@ type BaseService struct {
 	stopped       bool
 	activeLock    sync.Mutex
 	active        time.Time
-	dnsQueue      *utils.Queue
+	dnsQueue      *queue.Queue
 	dnsRequests   chan *requests.DNSRequest
-	addrQueue     *utils.Queue
+	addrQueue     *queue.Queue
 	addrRequests  chan *requests.AddrRequest
-	asnQueue      *utils.Queue
+	asnQueue      *queue.Queue
 	asnRequests   chan *requests.ASNRequest
-	whoisQueue    *utils.Queue
+	whoisQueue    *queue.Queue
 	whoisRequests chan *requests.WhoisRequest
 	pause         chan struct{}
 	resume        chan struct{}
@@ -140,13 +140,13 @@ func NewBaseService(srv Service, name string, cfg *config.Config, bus *eb.EventB
 	return &BaseService{
 		name:          name,
 		active:        time.Now(),
-		dnsQueue:      new(utils.Queue),
+		dnsQueue:      new(queue.Queue),
 		dnsRequests:   make(chan *requests.DNSRequest, ServiceRequestChanLength),
-		addrQueue:     new(utils.Queue),
+		addrQueue:     new(queue.Queue),
 		addrRequests:  make(chan *requests.AddrRequest, ServiceRequestChanLength),
-		asnQueue:      new(utils.Queue),
+		asnQueue:      new(queue.Queue),
 		asnRequests:   make(chan *requests.ASNRequest, ServiceRequestChanLength),
-		whoisQueue:    new(utils.Queue),
+		whoisQueue:    new(queue.Queue),
 		whoisRequests: make(chan *requests.WhoisRequest, ServiceRequestChanLength),
 		pause:         make(chan struct{}, 10),
 		resume:        make(chan struct{}, 10),

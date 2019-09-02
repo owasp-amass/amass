@@ -24,7 +24,7 @@ docker run -v ~/amass:/amass/ amass enum --list
 
 The volume argument allows the Amass graph database to persist between executions and output files to be accessed on the host system.
 
-The wordlists maintained in the Amass git repository are available in `/wordlists/` within the docker container. For example, to use `all.txt`:
+The wordlists maintained in the Amass git repository are available in `/examples/wordlists/` within the docker container. For example, to use `all.txt`:
 
 ```bash
 docker run -v ~/amass:/amass/ amass enum -brute -w /wordlists/all.txt -d example.com
@@ -67,7 +67,7 @@ go install ./...
 At this point, the binary should be in *$GOPATH/bin*. Several wordlists for performing DNS name alterations and brute forcing can be found in the following directory:
 
 ```bash
-ls $GOPATH/src/github.com/OWASP/Amass/wordlists/
+ls $GOPATH/src/github.com/OWASP/Amass/examples/wordlists/
 ```
 
 ## Packages Maintained by the Amass Project
@@ -87,16 +87,6 @@ If your operating environment supports [Snap](https://docs.snapcraft.io/core/ins
 
 ```bash
 sudo snap install amass
-```
-
-On **Kali**, follow these steps to install Snap and Amass + use AppArmor (for autoload):
-
-```bash
-sudo apt install snapd
-sudo systemctl start snapd
-sudo systemctl enable snapd
-sudo systemctl start apparmor
-sudo systemctl enable apparmor
 ```
 
 Add the Snap bin directory to your PATH:
@@ -126,6 +116,13 @@ Details regarding this package can be found [here](https://github.com/BlackArch/
 ```bash
 cd /usr/ports/dns/amass/ && make install clean
 pkg install amass
+```
+
+### Kali Linux
+
+```bash
+apt-get update
+apt-get install amass
 ```
 
 ## Nix or NixOS

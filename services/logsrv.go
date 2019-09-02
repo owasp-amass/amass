@@ -8,21 +8,21 @@ import (
 
 	"github.com/OWASP/Amass/config"
 	eb "github.com/OWASP/Amass/eventbus"
+	"github.com/OWASP/Amass/queue"
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
-	"github.com/OWASP/Amass/utils"
 )
 
 // LogService is the Service that performs logging for the architecture.
 type LogService struct {
 	BaseService
 
-	queue *utils.Queue
+	queue *queue.Queue
 }
 
 // NewLogService returns he object initialized, but not yet started.
 func NewLogService(cfg *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool) *LogService {
-	l := &LogService{queue: new(utils.Queue)}
+	l := &LogService{queue: new(queue.Queue)}
 
 	l.BaseService = *NewBaseService(l, "Log Service", cfg, bus, pool)
 	return l

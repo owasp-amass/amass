@@ -11,11 +11,11 @@ import (
 
 	"github.com/OWASP/Amass/config"
 	eb "github.com/OWASP/Amass/eventbus"
+	"github.com/OWASP/Amass/net/http"
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
 	"github.com/OWASP/Amass/stringset"
-	"github.com/OWASP/Amass/utils"
 )
 
 // URLScan is the Service that handles access to the URLScan data source.
@@ -84,7 +84,7 @@ func (u *URLScan) executeQuery(domain string) {
 
 	u.SetActive()
 	url := u.searchURL(domain)
-	page, err := utils.RequestWebPage(url, nil, nil, "", "")
+	page, err := http.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
 		u.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", u.String(), url, err))
 		return
@@ -132,7 +132,7 @@ func (u *URLScan) getSubsFromResult(id string) stringset.Set {
 	subs := stringset.New()
 
 	url := u.resultURL(id)
-	page, err := utils.RequestWebPage(url, nil, nil, "", "")
+	page, err := http.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
 		u.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", u.String(), url, err))
 		return subs
@@ -161,7 +161,7 @@ func (u *URLScan) attemptSubmission(domain string) string {
 	}
 	url := "https://urlscan.io/api/v1/scan/"
 	body := strings.NewReader(u.submitBody(domain))
-	page, err := utils.RequestWebPage(url, body, headers, "", "")
+	page, err := http.RequestWebPage(url, body, headers, "", "")
 	if err != nil {
 		u.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", u.String(), url, err))
 		return ""
@@ -180,7 +180,7 @@ func (u *URLScan) attemptSubmission(domain string) string {
 	}
 	// Keep this data source active while waiting for the scan to complete
 	for {
-		_, err = utils.RequestWebPage(result.API, nil, nil, "", "")
+		_, err = http.RequestWebPage(result.API, nil, nil, "", "")
 		if err == nil || err.Error() != "404 Not Found" {
 			break
 		}
@@ -199,5 +199,5 @@ func (u *URLScan) resultURL(id string) string {
 }
 
 func (u *URLScan) submitBody(domain string) string {
-	return fmt.Sprintf("{\"url\": \"%s\", \"public\": \"on\", \"customagent\": \"%s\"}", domain, utils.UserAgent)
+	return fmt.Sprintf("{\"url\": \"%s\", \"public\": \"on\", \"customagent\": \"%s\"}", domain, http.UserAgent)
 }

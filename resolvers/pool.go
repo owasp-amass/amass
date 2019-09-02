@@ -11,8 +11,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/OWASP/Amass/limits"
+	amassnet "github.com/OWASP/Amass/net"
 	"github.com/OWASP/Amass/requests"
-	"github.com/OWASP/Amass/utils"
 	"github.com/miekg/dns"
 )
 
@@ -61,7 +62,7 @@ func SetupResolverPool(addrs []string, scoring, ratemon bool) *ResolverPool {
 	// Do not allow the number of resolvers to exceed the ulimit
 	temp := addrs
 	addrs = []string{}
-	max := int(float64(utils.GetFileLimit())*0.9) / 2
+	max := int(float64(limits.GetFileLimit())*0.9) / 2
 	for i, r := range temp {
 		if i > max {
 			break
@@ -251,10 +252,10 @@ func (rp *ResolverPool) Resolve(name, qtype string, priority int) ([]requests.DN
 func (rp *ResolverPool) Reverse(addr string) (string, string, error) {
 	var name, ptr string
 
-	if ip := net.ParseIP(addr); utils.IsIPv4(ip) {
-		ptr = utils.ReverseIP(addr) + ".in-addr.arpa"
-	} else if utils.IsIPv6(ip) {
-		ptr = utils.IPv6NibbleFormat(utils.HexString(ip)) + ".ip6.arpa"
+	if ip := net.ParseIP(addr); amassnet.IsIPv4(ip) {
+		ptr = amassnet.ReverseIP(addr) + ".in-addr.arpa"
+	} else if amassnet.IsIPv6(ip) {
+		ptr = amassnet.IPv6NibbleFormat(amassnet.HexString(ip)) + ".ip6.arpa"
 	} else {
 		return ptr, "", &ResolveError{
 			Err:   fmt.Sprintf("Invalid IP address parameter: %s", addr),

@@ -12,10 +12,11 @@ import (
 
 	"github.com/OWASP/Amass/config"
 	eb "github.com/OWASP/Amass/eventbus"
+	"github.com/OWASP/Amass/net/http"
 	"github.com/OWASP/Amass/resolvers"
+	"github.com/OWASP/Amass/semaphore"
 	"github.com/OWASP/Amass/services"
 	"github.com/OWASP/Amass/stringset"
-	"github.com/OWASP/Amass/utils"
 	"github.com/PuerkitoBio/goquery"
 	"github.com/geziyor/geziyor"
 	"github.com/geziyor/geziyor/client"
@@ -23,7 +24,7 @@ import (
 
 var (
 	nameStripRE = regexp.MustCompile("^((20)|(25)|(2b)|(2f)|(3d)|(3a)|(40))+")
-	maxCrawlSem = utils.NewSimpleSemaphore(50)
+	maxCrawlSem = semaphore.NewSimpleSemaphore(50)
 )
 
 // GetAllSources returns a slice of all data source services, initialized and ready.
@@ -143,7 +144,7 @@ func crawl(service services.Service, baseURL, baseDomain, subdomain, domain stri
 		AllowedDomains:              []string{baseDomain},
 		StartURLs:                   []string{start},
 		Timeout:                     30 * time.Second,
-		UserAgent:                   utils.UserAgent,
+		UserAgent:                   http.UserAgent,
 		RequestDelay:                time.Second,
 		RequestDelayRandomize:       true,
 		LogDisabled:                 true,

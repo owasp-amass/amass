@@ -36,7 +36,7 @@ archives:
       - LICENSE
       - README.md
       - doc/*
-      - wordlists/*
+      - examples/wordlists/*
 
 checksum:
   name_template: "amass_checksums.txt"
@@ -90,12 +90,13 @@ snapcrafts:
 
     apps:
       amass:
-        plugs: ["home", "network", "removable-media"]
-#        plugs: ["home", "network", "removable-media", "personal-files"]
+        plugs: ["home", "network", "removable-media", "personal-files"]
 
-#    plugs:
-#      personal-files:
-#        read:
-#        - $HOME/.amass
-#        write:
-#        - $HOME/.amass
+    plugs:
+      personal-files:
+        read:
+        - $HOME/.amass
+        - $HOME/.config/amass
+        write:
+        - $HOME/.amass
+        - $HOME/.config/amass

@@ -12,10 +12,11 @@ import (
 	"github.com/OWASP/Amass/config"
 	eb "github.com/OWASP/Amass/eventbus"
 	"github.com/OWASP/Amass/graph"
+	"github.com/OWASP/Amass/net"
+	amassdns "github.com/OWASP/Amass/net/dns"
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	sf "github.com/OWASP/Amass/stringfilter"
-	"github.com/OWASP/Amass/utils"
 	"github.com/miekg/dns"
 )
 
@@ -380,7 +381,7 @@ func (dms *DataManagerService) insertSPF(req *requests.DNSRequest, recidx int) {
 }
 
 func (dms *DataManagerService) findNamesAndAddresses(data, domain string) {
-	ipre := regexp.MustCompile(utils.IPv4RE)
+	ipre := regexp.MustCompile(net.IPv4RE)
 	for _, ip := range ipre.FindAllString(data, -1) {
 		dms.Bus().Publish(requests.NewAddrTopic, &requests.AddrRequest{
 			Address: ip,
@@ -390,7 +391,7 @@ func (dms *DataManagerService) findNamesAndAddresses(data, domain string) {
 		})
 	}
 
-	subre := utils.AnySubdomainRegex()
+	subre := amassdns.AnySubdomainRegex()
 	for _, name := range subre.FindAllString(data, -1) {
 		if !dms.Config().IsDomainInScope(name) {
 			continue

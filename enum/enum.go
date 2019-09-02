@@ -11,12 +11,12 @@ import (
 	"github.com/OWASP/Amass/config"
 	eb "github.com/OWASP/Amass/eventbus"
 	"github.com/OWASP/Amass/graph"
+	"github.com/OWASP/Amass/queue"
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
 	"github.com/OWASP/Amass/services/sources"
 	sf "github.com/OWASP/Amass/stringfilter"
-	"github.com/OWASP/Amass/utils"
 )
 
 // Enumeration is the object type used to execute a DNS enumeration with Amass.
@@ -42,7 +42,7 @@ type Enumeration struct {
 	resume chan struct{}
 
 	filter      *sf.StringFilter
-	outputQueue *utils.Queue
+	outputQueue *queue.Queue
 
 	metricsLock       sync.RWMutex
 	dnsQueriesPerSec  int
@@ -61,7 +61,7 @@ func NewEnumeration() *Enumeration {
 		pause:       make(chan struct{}, 2),
 		resume:      make(chan struct{}, 2),
 		filter:      sf.NewStringFilter(),
-		outputQueue: new(utils.Queue),
+		outputQueue: new(queue.Queue),
 	}
 
 	e.Pool = resolvers.SetupResolverPool(

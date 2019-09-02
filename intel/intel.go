@@ -14,12 +14,13 @@ import (
 
 	"github.com/OWASP/Amass/config"
 	eb "github.com/OWASP/Amass/eventbus"
+	amassnet "github.com/OWASP/Amass/net"
+	"github.com/OWASP/Amass/net/http"
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
 	"github.com/OWASP/Amass/services/sources"
 	sf "github.com/OWASP/Amass/stringfilter"
-	"github.com/OWASP/Amass/utils"
 )
 
 // Collection is the object type used to execute a open source information gathering with Amass.
@@ -134,11 +135,11 @@ func (c *Collection) processCIDRs() {
 			return
 		case cidr := <-c.cidrChan:
 			// Skip IPv6 netblocks, since they are simply too large
-			if ip := cidr.IP.Mask(cidr.Mask); utils.IsIPv6(ip) {
+			if ip := cidr.IP.Mask(cidr.Mask); amassnet.IsIPv6(ip) {
 				continue
 			}
 
-			for _, addr := range utils.NetHosts(cidr) {
+			for _, addr := range amassnet.NetHosts(cidr) {
 				c.Config.SemMaxDNSQueries.Acquire(1)
 				go c.investigateAddr(addr.String())
 			}
@@ -173,7 +174,7 @@ func (c *Collection) investigateAddr(addr string) {
 		return
 	}
 
-	for _, name := range utils.PullCertificateNames(addr, c.Config.Ports) {
+	for _, name := range http.PullCertificateNames(addr, c.Config.Ports) {
 		if n := strings.TrimSpace(name); n != "" {
 			c.domainChan <- &requests.Output{
 				Name:      n,
@@ -290,7 +291,7 @@ func LookupASNsByName(s string) ([]*requests.ASNRequest, error) {
 
 	s = strings.ToLower(s)
 	url := "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/asnlist.txt"
-	page, err := utils.RequestWebPage(url, nil, nil, "", "")
+	page, err := http.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
 		return records, err
 	}

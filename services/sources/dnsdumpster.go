@@ -15,10 +15,10 @@ import (
 
 	"github.com/OWASP/Amass/config"
 	eb "github.com/OWASP/Amass/eventbus"
+	amasshttp "github.com/OWASP/Amass/net/http"
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
-	"github.com/OWASP/Amass/utils"
 )
 
 // DNSDumpster is the Service that handles access to the DNSDumpster data source.
@@ -68,7 +68,7 @@ func (d *DNSDumpster) executeQuery(domain string) {
 
 	d.SetActive()
 	u := "https://dnsdumpster.com/"
-	page, err := utils.RequestWebPage(u, nil, nil, "", "")
+	page, err := amasshttp.RequestWebPage(u, nil, nil, "", "")
 	if err != nil {
 		d.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", d.String(), u, err))
 		return
@@ -132,9 +132,9 @@ func (d *DNSDumpster) postForm(token, domain string) (string, error) {
 	}
 	req.AddCookie(cookie)
 
-	req.Header.Set("User-Agent", utils.UserAgent)
-	req.Header.Set("Accept", utils.Accept)
-	req.Header.Set("Accept-Language", utils.AcceptLang)
+	req.Header.Set("User-Agent", amasshttp.UserAgent)
+	req.Header.Set("Accept", amasshttp.Accept)
+	req.Header.Set("Accept-Language", amasshttp.AcceptLang)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Referer", "https://dnsdumpster.com")
 	req.Header.Set("X-CSRF-Token", token)

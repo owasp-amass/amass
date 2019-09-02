@@ -18,10 +18,10 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/config"
+	"github.com/OWASP/Amass/format"
 	"github.com/OWASP/Amass/intel"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/stringset"
-	"github.com/OWASP/Amass/utils"
 	"github.com/fatih/color"
 	homedir "github.com/mitchellh/go-homedir"
 )
@@ -31,15 +31,15 @@ const (
 )
 
 type intelArgs struct {
-	Addresses        utils.ParseIPs
-	ASNs             utils.ParseInts
-	CIDRs            utils.ParseCIDRs
+	Addresses        format.ParseIPs
+	ASNs             format.ParseInts
+	CIDRs            format.ParseCIDRs
 	OrganizationName string
 	Domains          stringset.Set
 	Excluded         stringset.Set
 	Included         stringset.Set
 	MaxDNSQueries    int
-	Ports            utils.ParseInts
+	Ports            format.ParseInts
 	Resolvers        stringset.Set
 	Timeout          int
 	Options          struct {
@@ -58,11 +58,11 @@ type intelArgs struct {
 	Filepaths struct {
 		ConfigFile   string
 		Directory    string
-		Domains      utils.ParseStrings
+		Domains      format.ParseStrings
 		ExcludedSrcs string
 		IncludedSrcs string
 		LogFile      string
-		Resolvers    utils.ParseStrings
+		Resolvers    format.ParseStrings
 		TermOut      string
 	}
 }
@@ -280,7 +280,7 @@ func processIntelOutput(ic *intel.Collection, args *intelArgs, pipe *io.PipeRead
 
 	// Collect all the names returned by the intelligence collection
 	for out := range ic.Output {
-		source, name, ips := utils.OutputLineParts(out, args.Options.Sources,
+		source, name, ips := format.OutputLineParts(out, args.Options.Sources,
 			args.Options.IPs || args.Options.IPv4 || args.Options.IPv6, args.Options.DemoMode)
 
 		if ips != "" {

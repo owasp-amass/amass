@@ -23,9 +23,9 @@ import (
 
 	"github.com/OWASP/Amass/config"
 	"github.com/OWASP/Amass/enum"
+	"github.com/OWASP/Amass/format"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/stringset"
-	"github.com/OWASP/Amass/utils"
 	"github.com/fatih/color"
 	homedir "github.com/mitchellh/go-homedir"
 )
@@ -39,9 +39,9 @@ var (
 )
 
 type enumArgs struct {
-	Addresses         utils.ParseIPs
-	ASNs              utils.ParseInts
-	CIDRs             utils.ParseCIDRs
+	Addresses         format.ParseIPs
+	ASNs              format.ParseInts
+	CIDRs             format.ParseCIDRs
 	AltWordList       stringset.Set
 	AltWordListMask   stringset.Set
 	BruteWordList     stringset.Set
@@ -53,7 +53,7 @@ type enumArgs struct {
 	MaxDNSQueries     int
 	MinForRecursive   int
 	Names             stringset.Set
-	Ports             utils.ParseInts
+	Ports             format.ParseInts
 	Resolvers         stringset.Set
 	Timeout           int
 	Options           struct {
@@ -75,19 +75,19 @@ type enumArgs struct {
 	}
 	Filepaths struct {
 		AllFilePrefix string
-		AltWordlist   utils.ParseStrings
+		AltWordlist   format.ParseStrings
 		Blacklist     string
-		BruteWordlist utils.ParseStrings
+		BruteWordlist format.ParseStrings
 		ConfigFile    string
 		DataOpts      string
 		Directory     string
-		Domains       utils.ParseStrings
+		Domains       format.ParseStrings
 		ExcludedSrcs  string
 		IncludedSrcs  string
 		JSONOutput    string
 		LogFile       string
-		Names         utils.ParseStrings
-		Resolvers     utils.ParseStrings
+		Names         format.ParseStrings
+		Resolvers     format.ParseStrings
 		TermOut       string
 	}
 }
@@ -353,17 +353,17 @@ func processEnumOutput(e *enum.Enumeration, args *enumArgs, pipe *io.PipeReader)
 	go func() {
 		var total int
 		tags := make(map[string]int)
-		asns := make(map[int]*utils.ASNSummaryData)
+		asns := make(map[int]*format.ASNSummaryData)
 		// Collect all the names returned by the enumeration
 		for out := range e.Output {
-			out.Addresses = utils.DesiredAddrTypes(out.Addresses, args.Options.IPv4, args.Options.IPv6)
+			out.Addresses = format.DesiredAddrTypes(out.Addresses, args.Options.IPv4, args.Options.IPv6)
 			if !e.Config.Passive && len(out.Addresses) <= 0 {
 				continue
 			}
 
 			total++
-			utils.UpdateSummaryData(out, tags, asns)
-			source, name, ips := utils.OutputLineParts(out, args.Options.Sources,
+			format.UpdateSummaryData(out, tags, asns)
+			source, name, ips := format.OutputLineParts(out, args.Options.Sources,
 				args.Options.IPs || args.Options.IPv4 || args.Options.IPv6, args.Options.DemoMode)
 
 			if ips != "" {
@@ -383,7 +383,7 @@ func processEnumOutput(e *enum.Enumeration, args *enumArgs, pipe *io.PipeReader)
 		if total == 0 {
 			r.Println("No names were discovered")
 		} else {
-			utils.PrintEnumerationSummary(total, tags, asns, args.Options.DemoMode)
+			format.PrintEnumerationSummary(total, tags, asns, args.Options.DemoMode)
 		}
 		close(finished)
 	}()

@@ -1,13 +1,15 @@
 // Copyright 2017 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
-package utils
+package format
 
 import (
 	"fmt"
 	"net"
 	"strconv"
 	"strings"
+
+	amassnet "github.com/OWASP/Amass/net"
 )
 
 // ParseStrings implements the flag.Value interface.
@@ -131,7 +133,7 @@ func (p *ParseIPs) parseRange(s string) error {
 		return fmt.Errorf("%s is not a valid IP range", s)
 	}
 
-	ips := RangeHosts(start, end)
+	ips := amassnet.RangeHosts(start, end)
 	if len(ips) == 0 {
 		return fmt.Errorf("%s is not a valid IP range", s)
 	}

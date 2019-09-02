@@ -14,11 +14,11 @@ import (
 
 	"github.com/OWASP/Amass/config"
 	eb "github.com/OWASP/Amass/eventbus"
+	amassnet "github.com/OWASP/Amass/net"
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
 	"github.com/OWASP/Amass/stringset"
-	"github.com/OWASP/Amass/utils"
 )
 
 const (
@@ -121,10 +121,10 @@ func (s *ShadowServer) executeASNAddrQuery(addr string) {
 }
 
 func (s *ShadowServer) origin(addr string) *requests.ASNRequest {
-	if ip := net.ParseIP(addr); ip == nil || !utils.IsIPv4(ip) {
+	if ip := net.ParseIP(addr); ip == nil || !amassnet.IsIPv4(ip) {
 		return nil
 	}
-	name := utils.ReverseIP(addr) + ".origin.asn.shadowserver.org"
+	name := amassnet.ReverseIP(addr) + ".origin.asn.shadowserver.org"
 
 	answers, err := s.Pool().Resolve(name, "TXT", resolvers.PriorityHigh)
 	if err != nil {

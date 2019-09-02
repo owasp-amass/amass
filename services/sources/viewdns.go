@@ -11,11 +11,12 @@ import (
 
 	"github.com/OWASP/Amass/config"
 	eb "github.com/OWASP/Amass/eventbus"
+	"github.com/OWASP/Amass/net"
+	"github.com/OWASP/Amass/net/http"
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
 	"github.com/OWASP/Amass/stringset"
-	"github.com/OWASP/Amass/utils"
 )
 
 // ViewDNS is the Service that handles access to the ViewDNS data source.
@@ -82,16 +83,16 @@ func (v *ViewDNS) executeDNSQuery(domain string) {
 
 	u := v.getIPHistoryURL(domain)
 	// The ViewDNS IP History lookup sometimes reveals interesting results
-	page, err := utils.RequestWebPage(u, nil, nil, "", "")
+	page, err := http.RequestWebPage(u, nil, nil, "", "")
 	if err != nil {
 		v.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", v.String(), u, err))
 		return
 	}
 
 	// Look for IP addresses in the web page returned
-	re := regexp.MustCompile(utils.IPv4RE)
+	re := regexp.MustCompile(net.IPv4RE)
 	for _, sd := range re.FindAllString(page, -1) {
-		addr := utils.NewUniqueElements(unique, sd)
+		addr := NewUniqueElements(unique, sd)
 
 		if len(addr) > 0 {
 			v.Bus().Publish(requests.NewAddrTopic, &requests.AddrRequest{
@@ -106,7 +107,7 @@ func (v *ViewDNS) executeDNSQuery(domain string) {
 
 func (v *ViewDNS) executeWhoisQuery(domain string) {
 	u := v.getReverseWhoisURL(domain)
-	page, err := utils.RequestWebPage(u, nil, nil, "", "")
+	page, err := http.RequestWebPage(u, nil, nil, "", "")
 	if err != nil {
 		v.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", v.String(), u, err))
 		return
@@ -172,4 +173,36 @@ func (v *ViewDNS) getReverseWhoisURL(domain string) string {
 func (v *ViewDNS) getIPHistoryURL(domain string) string {
 	format := "https://viewdns.info/iphistory/?domain=%s"
 	return fmt.Sprintf(format, domain)
+}
+
+// NewUniqueElements removes elements that have duplicates in the original or new elements.
+func NewUniqueElements(orig []string, add ...string) []string {
+	var n []string
+
+	for _, av := range add {
+		found := false
+		s := strings.ToLower(av)
+
+		// Check the original slice for duplicates
+		for _, ov := range orig {
+			if s == strings.ToLower(ov) {
+				found = true
+				break
+			}
+		}
+		// Check that we didn't already add it in
+		if !found {
+			for _, nv := range n {
+				if s == nv {
+					found = true
+					break
+				}
+			}
+		}
+		// If no duplicates were found, add the entry in
+		if !found {
+			n = append(n, s)
+		}
+	}
+	return n
 }

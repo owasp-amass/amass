@@ -17,7 +17,7 @@ import (
 	"github.com/OWASP/Amass/config"
 	"github.com/OWASP/Amass/graph"
 	"github.com/OWASP/Amass/stringset"
-	"github.com/OWASP/Amass/utils/viz"
+	"github.com/OWASP/Amass/viz"
 	"github.com/fatih/color"
 )
 
