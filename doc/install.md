@@ -101,7 +101,7 @@ Periodically, execute the following command to update all your snap packages:
 sudo snap refresh
 ```
 
-## Packages Maintained by a Third-party
+## Packages Maintained by a Third Party
 
 ### Arch Linux
 
@@ -110,6 +110,13 @@ Details regarding this package can be found [here](https://aur.archlinux.org/pac
 ### BlackArch Linux
 
 Details regarding this package can be found [here](https://github.com/BlackArch/blackarch/blob/master/packages/amass/PKGBUILD)
+
+### DragonFly BSD
+
+```bash
+pkg upgrade
+pkg install amass
+```
 
 ### FreeBSD
 
@@ -129,6 +136,13 @@ apt-get install amass
 
 ```bash
 nix-env -f '<nixpkgs>' -iA amass
+```
+
+### Parrot Linux
+
+```bash
+apt-get update
+apt-get install amass
 ```
 
 ### Pentoo Linux
