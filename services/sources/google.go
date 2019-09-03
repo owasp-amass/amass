@@ -53,7 +53,10 @@ func (g *Google) processRequests() {
 			return
 		case req := <-g.DNSRequestChan():
 			if g.Config().IsDomainInScope(req.Domain) {
-				g.executeQuery(req.Domain)
+				for i := 0; i <= 3; i++ {
+					g.executeQuery(req.Domain, i)
+				}
+				
 			}
 		case <-g.AddrRequestChan():
 		case <-g.ASNRequestChan():
@@ -62,7 +65,7 @@ func (g *Google) processRequests() {
 	}
 }
 
-func (g *Google) executeQuery(domain string) {
+func (g *Google) executeQuery(domain string, numwilds int) {
 	re := g.Config().DomainRegex(domain)
 	if re == nil {
 		return
@@ -79,7 +82,7 @@ func (g *Google) executeQuery(domain string) {
 		case <-g.Quit():
 			return
 		case <-t.C:
-			u := g.urlByPageNum(domain, i)
+			u := g.urlByPageNum(domain, i, numwilds)
 			page, err := http.RequestWebPage(u, nil, nil, "", "")
 			if err != nil {
 				g.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", g.String(), u, err))
@@ -98,12 +101,17 @@ func (g *Google) executeQuery(domain string) {
 	}
 }
 
-func (g *Google) urlByPageNum(domain string, page int) string {
+func (g *Google) urlByPageNum(domain string, page, numwilds int) string {
 	start := strconv.Itoa(g.quantity * page)
 	u, _ := url.Parse("https://www.google.com/search")
 
+	var wilds string
+	for i := 0; i < numwilds; i++ {
+		wilds = "*." + wilds
+	}
+
 	u.RawQuery = url.Values{
-		"q":      {"site:" + domain + " -www." + domain},
+		"q":      {"site:" + wilds + domain + " -www.*"},
 		"btnG":   {"Search"},
 		"hl":     {"en"},
 		"biw":    {""},
