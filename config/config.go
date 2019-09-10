@@ -28,13 +28,10 @@ import (
 	"github.com/OWASP/Amass/wordlist"
 	"github.com/go-ini/ini"
 	"github.com/google/uuid"
-	homedir "github.com/mitchellh/go-homedir"
 )
 
 const (
-	// DefaultOutputDirectory is the name of the directory used for output files, such as the graph database.
-	DefaultOutputDirectory = "amass"
-
+	outputDirectoryName = "amass"
 	defaultConcurrentDNSQueries = 2500
 	defaultWordlistURL          = "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/namelist.txt"
 	defaultAltWordlistURL       = "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/alterations.txt"
@@ -53,7 +50,8 @@ var defaultPublicResolvers = []string{
 	"77.88.8.1",   // Yandex.DNS Secondary
 }
 
-type ConfigOverrider interface {
+// Updater allows an object to implement a method that updates a configuration.
+type Updater interface {
 	OverrideConfig(*Config) error
 }
 
@@ -166,6 +164,7 @@ type APIKey struct {
 	Secret   string `ini:"secret"`
 }
 
+// NewConfig returns a default configuration object.
 func NewConfig() *Config {
 	c := &Config{
 		UUID:          uuid.New(),
@@ -190,7 +189,6 @@ func NewConfig() *Config {
 	}
 
 	c.SemMaxDNSQueries = semaphore.NewSimpleSemaphore(c.MaxDNSQueries)
-
 	return c
 }
 
@@ -617,8 +615,8 @@ func AcquireConfig(dir, file string, config *Config) error {
 // path provided will be used as the output directory instead.
 func OutputDirectory(dir string) string {
 	if dir == "" {
-		if path, err := homedir.Dir(); err == nil {
-			dir = filepath.Join(path, DefaultOutputDirectory)
+		if path, err := os.UserConfigDir(); err == nil {
+			dir = filepath.Join(path, outputDirectoryName)
 		}
 	}
 	return dir
@@ -643,12 +641,12 @@ func (c *Config) loadResolverSettings(cfg *ini.File) error {
 	return nil
 }
 
-func (c *Config) UpdateConfig(update ConfigOverrider) error {
+// UpdateConfig allows the provided Updater to update the current configuration.
+func (c *Config) UpdateConfig(update Updater) error {
 	return update.OverrideConfig(c)
 }
 
-// GetListFromFile reads a wordlist text or gzip file
-// and returns the slice of words.
+// GetListFromFile reads a wordlist text or gzip file and returns the slice of words.
 func GetListFromFile(path string) ([]string, error) {
 	var reader io.Reader
 

@@ -3,7 +3,7 @@
 
 [![CircleCI Status](https://circleci.com/gh/OWASP/Amass/tree/master.svg?style=shield)](https://circleci.com/gh/OWASP/Amass/tree/master)
 [![GitHub release](https://img.shields.io/github/release/OWASP/Amass)](https://github.com/OWASP/Amass/releases)
-[![Go Version](https://img.shields.io/badge/go-1.12-blue.svg)](https://golang.org/dl/)
+[![Go Version](https://img.shields.io/badge/go-1.13-blue.svg)](https://golang.org/dl/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
 
 [![Bugcrowd LevelUp 0x04](https://img.shields.io/badge/Bugcrowd-LevelUp%200x04-orange.svg)](https://www.youtube.com/watch?v=C-GabM2db9A)
@@ -69,6 +69,11 @@ This project improves thanks to all the people who contribute:
 
 ## Mentions
 
+[![Rawsec's CyberSecurity Inventory](https://inventory.rawsec.ml/img/badges/Rawsec-inventoried-FF5050_flat.svg)](https://inventory.rawsec.ml/)
+
+* [Red Team Methodology - A Naked Look](https://www.slideshare.net/JasonLang1/red-team-methodology-a-naked-look-169879355)
+* [Asset Enumeration: Expanding a Target's Attack Surface](https://captmeelo.com/bugbounty/2019/09/02/asset-enumeration.html)
+* [Das Sicherheitswerkzeug Kali Linux steht in der Version 2019.3 bereit](https://www.heise.de/security/meldung/Das-Sicherheitswerkzeug-Kali-Linux-steht-in-der-Version-2019-3-bereit-4512459.html)
 * [Commando VM 2.0: Customization, Containers, and Kali, Oh My!](https://www.fireeye.com/blog/threat-research/2019/08/commando-vm-customization-containers-kali.html)
 * [8 Free Tools to Be Showcased at Black Hat and DEF CON](https://www.darkreading.com/application-security/8-free-tools-to-be-showcased-at-black-hat-and-def-con/d/d-id/1335356?image_number=5)
 * [amass — Automated Attack Surface Mapping](https://danielmiessler.com/study/amass/)

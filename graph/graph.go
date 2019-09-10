@@ -22,7 +22,6 @@ import (
 	"github.com/cayleygraph/cayley/graph"
 	_ "github.com/cayleygraph/cayley/graph/kv/bolt" // Used by the cayley package
 	"github.com/cayleygraph/cayley/quad"
-	homedir "github.com/mitchellh/go-homedir"
 )
 
 // Graph is the object for managing a network infrastructure link graph.
@@ -36,14 +35,11 @@ type Graph struct {
 func NewGraph(path string) *Graph {
 	var err error
 
-	// If a directory was not specified, $HOME/amass/ will be used
+	path = config.OutputDirectory(path)
 	if path == "" {
-		path, err = homedir.Dir()
-		if err != nil {
-			return nil
-		}
-		path = filepath.Join(path, config.DefaultOutputDirectory)
+		return nil
 	}
+	
 	// If the directory does not yet exist, create it
 	if err = os.MkdirAll(path, 0755); err != nil {
 		return nil

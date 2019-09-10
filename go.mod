@@ -1,6 +1,6 @@
 module github.com/OWASP/Amass
 
-go 1.12
+go 1.13
 
 require (
 	github.com/PuerkitoBio/goquery v1.5.0
@@ -19,7 +19,6 @@ require (
 	github.com/mattn/go-colorable v0.1.2 // indirect
 	github.com/mattn/go-isatty v0.0.9 // indirect
 	github.com/miekg/dns v1.1.16
-	github.com/mitchellh/go-homedir v1.1.0
 	github.com/qasaur/gremgo v0.0.0-20180719101618-fa23ada7c5da
 	github.com/robertkrimen/otto v0.0.0-20180617131154-15f95af6e78d // indirect
 	github.com/satori/go.uuid v1.2.0 // indirect

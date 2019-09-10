@@ -23,7 +23,6 @@ import (
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/stringset"
 	"github.com/fatih/color"
-	homedir "github.com/mitchellh/go-homedir"
 )
 
 const (
@@ -238,14 +237,10 @@ func processIntelOutput(ic *intel.Collection, args *intelArgs, pipe *io.PipeRead
 	var err error
 
 	// Prepare output file paths
-	dir := ic.Config.Dir
+	dir := config.OutputDirectory(ic.Config.Dir)
 	if dir == "" {
-		path, err := homedir.Dir()
-		if err != nil {
-			r.Fprintln(color.Error, "Failed to obtain the user home directory")
-			os.Exit(1)
-		}
-		dir = filepath.Join(path, config.DefaultOutputDirectory)
+		r.Fprintln(color.Error, "Failed to obtain the output directory")
+		os.Exit(1)
 	}
 	// If the directory does not yet exist, create it
 	if err = os.MkdirAll(dir, 0755); err != nil {

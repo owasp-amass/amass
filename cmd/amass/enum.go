@@ -27,7 +27,6 @@ import (
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/stringset"
 	"github.com/fatih/color"
-	homedir "github.com/mitchellh/go-homedir"
 )
 
 const (
@@ -264,14 +263,10 @@ func processEnumOutput(e *enum.Enumeration, args *enumArgs, pipe *io.PipeReader)
 	var err error
 
 	// Prepare output file paths
-	dir := e.Config.Dir
+	dir := config.OutputDirectory(e.Config.Dir)
 	if dir == "" {
-		path, err := homedir.Dir()
-		if err != nil {
-			r.Fprintln(color.Error, "Failed to obtain the user home directory")
-			os.Exit(1)
-		}
-		dir = filepath.Join(path, config.DefaultOutputDirectory)
+		r.Fprintln(color.Error, "Failed to obtain the output directory")
+		os.Exit(1)
 	}
 	// If the directory does not yet exist, create it
 	if err = os.MkdirAll(dir, 0755); err != nil {

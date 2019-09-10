@@ -120,7 +120,6 @@ func runVizCommand(clArgs []string) {
 	// Obtain access to the graph database
 	if args.Filepaths.Input != "" {
 		uuid, db, err = inputFileToDB(&args)
-		args.Filepaths.Directory, err = ioutil.TempDir("", config.DefaultOutputDirectory)
 		if err == nil {
 			defer os.RemoveAll(args.Filepaths.Directory)
 			defer db.Close()
@@ -185,7 +184,7 @@ func runVizCommand(clArgs []string) {
 func inputFileToDB(args *vizArgs) (string, graph.DataHandler, error) {
 	var err error
 
-	args.Filepaths.Directory, err = ioutil.TempDir("", config.DefaultOutputDirectory)
+	args.Filepaths.Directory, err = ioutil.TempDir("", "amass")
 	if err != nil {
 		return "", nil, fmt.Errorf("Failed to open the temporary directory: %v", err)
 	}
