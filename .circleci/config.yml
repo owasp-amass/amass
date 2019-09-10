@@ -5,7 +5,7 @@ version: 2
 jobs:
   test:
     docker:
-      - image: circleci/golang:1.12.7
+      - image: circleci/golang:1.13.0
 
     working_directory: /go/src/github.com/OWASP/Amass
     steps:
