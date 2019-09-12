@@ -100,5 +100,5 @@ func (s *Sublist3rAPI) executeQuery(domain string) {
 }
 
 func (s *Sublist3rAPI) restURL(domain string) string {
-	return "https://api.sublist3r.com/search.php?domain=" + domain
+	return fmt.Sprintf("https://api.sublist3r.com/search.php?domain=%s", domain)
 }
