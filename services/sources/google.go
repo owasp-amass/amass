@@ -56,7 +56,7 @@ func (g *Google) processRequests() {
 				for i := 0; i <= 3; i++ {
 					g.executeQuery(req.Domain, i)
 				}
-				
+
 			}
 		case <-g.AddrRequestChan():
 		case <-g.ASNRequestChan():
@@ -72,7 +72,7 @@ func (g *Google) executeQuery(domain string, numwilds int) {
 	}
 
 	num := g.limit / g.quantity
-	t := time.NewTicker(time.Second)
+	t := time.NewTicker(3 * time.Second)
 	defer t.Stop()
 
 	for i := 0; i < num; i++ {

@@ -40,7 +40,7 @@ type robtexJSON struct {
 func NewRobtex(cfg *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool) *Robtex {
 	r := &Robtex{
 		SourceType: requests.API,
-		RateLimit:  time.Second,
+		RateLimit:  3 * time.Second,
 	}
 
 	r.BaseService = *services.NewBaseService(r, "Robtex", cfg, bus, pool)

@@ -83,7 +83,7 @@ func (p *PTRArchive) executeQuery(domain string) {
 }
 
 func (p *PTRArchive) getURL(domain string) string {
-	format := "http://ptrarchive.com/tools/search3.htm?label=%s&date=ALL"
+	format := "http://ptrarchive.com/tools/search4.htmlabel=%s&date=ALL"
 
 	return fmt.Sprintf(format, domain)
 }
