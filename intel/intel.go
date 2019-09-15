@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"fmt"
 
 	"github.com/OWASP/Amass/config"
 	eb "github.com/OWASP/Amass/eventbus"
@@ -304,13 +305,12 @@ func LookupASNsByName(s string) ([]*requests.ASNRequest, error) {
 	var records []*requests.ASNRequest
 
 	s = strings.ToLower(s)
-	url := "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/asnlist.txt"
-	page, err := http.RequestWebPage(url, nil, nil, "", "")
+	content, err := config.BoxOfDefaultFiles.FindString("asnlist.txt")
 	if err != nil {
-		return records, err
+		return records, fmt.Errorf("Failed to obtain the embedded ASN information: asnlist.txt: %v", err)
 	}
 
-	scanner := bufio.NewScanner(strings.NewReader(page))
+	scanner := bufio.NewScanner(strings.NewReader(content))
 	for scanner.Scan() {
 		line := scanner.Text()
 

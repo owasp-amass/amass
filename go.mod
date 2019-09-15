@@ -12,6 +12,8 @@ require (
 	github.com/fatih/color v1.7.0
 	github.com/geziyor/geziyor v0.0.0-20190806142141-326405767917
 	github.com/go-ini/ini v1.46.0
+	github.com/gobuffalo/envy v1.7.1 // indirect
+	github.com/gobuffalo/packr v1.30.1
 	github.com/google/uuid v1.1.1
 	github.com/gorilla/websocket v1.4.1 // indirect
 	github.com/jmoiron/sqlx v1.2.0
