@@ -80,7 +80,7 @@ snapcrafts:
   -
     name: amass
     # Remember you need to `snapcraft login` first.
-    publish: true
+    publish: false
     summary: In-depth DNS Enumeration and Network Mapping.
     description: The OWASP Amass Project has developed a tool to help information security professionals perform network mapping of attack surfaces and external asset discovery using open source information gathering and active reconnaissance techniques.
     grade: stable
