@@ -31,7 +31,7 @@ import (
 )
 
 const (
-	outputDirectoryName = "amass"
+	outputDirectoryName         = "amass"
 	defaultConcurrentDNSQueries = 2500
 	defaultWordlistURL          = "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/namelist.txt"
 	defaultAltWordlistURL       = "https://raw.githubusercontent.com/OWASP/Amass/master/wordlists/alterations.txt"
@@ -545,14 +545,12 @@ func (c *Config) LoadSettings(path string) error {
 	if err := c.loadResolverSettings(cfg); err != nil {
 		return err
 	}
-
 	if err := c.loadNetworkSettings(cfg); err != nil {
 		return err
 	}
 	if err := c.loadAlterationSettings(cfg); err != nil {
 		return err
 	}
-
 	if err := c.loadBruteForceSettings(cfg); err != nil {
 		return err
 	}
@@ -623,10 +621,9 @@ func OutputDirectory(dir string) string {
 }
 
 func (c *Config) loadResolverSettings(cfg *ini.File) error {
-	// Check that the resolvers section exists in the config file
 	sec, err := cfg.GetSection("resolvers")
 	if err != nil {
-		return fmt.Errorf("The config file does not contain a resolvers section: %v", err)
+		return nil
 	}
 
 	c.Resolvers = stringset.Deduplicate(sec.Key("resolver").ValueWithShadows())
