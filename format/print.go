@@ -15,7 +15,6 @@ import (
 
 // Banner is the ASCII art logo used within help output.
 const Banner = `
-
         .+++:.            :                             .+++.
       +W@@@@@@8        &+W@#               o8W8:      +W@@@@@@#.   oW@@@W#+
      &@#+   .o@##.    .@@@o@W.o@@o       :@@#&W8o    .@#:  .:oW+  .@#+++&#&
@@ -28,7 +27,6 @@ const Banner = `
      :@W:      o@# +Wo &@+        :W: +@W&o++o@W. &@&  8@#o+&@W.  #@:    o@+
       :W@@WWWW@@8       +              :&W@@@@&    &W  .o#@@W&.   :W@WWW@@&
         +o&&&&+.                                                    +oooo.
-
 `
 
 const (
@@ -37,6 +35,9 @@ const (
 
 	// Author is used to display the Amass Project Team.
 	Author = "OWASP Amass Project - @owaspamass"
+
+	// Description is the slogan for the Amass Project.
+	Description = "In-depth Attack Surface Mapping and Asset Discovery"
 )
 
 var (
@@ -146,7 +147,6 @@ func PrintBanner() {
 	y := color.New(color.FgHiYellow)
 	r := color.New(color.FgHiRed)
 	rightmost := 76
-	desc := "In-depth DNS Enumeration and Network Mapping"
 
 	pad := func(num int) {
 		for i := 0; i < num; i++ {
@@ -158,8 +158,8 @@ func PrintBanner() {
 	y.Fprintln(color.Error, Version)
 	pad(rightmost - len(Author))
 	y.Fprintln(color.Error, Author)
-	pad(rightmost - len(desc))
-	y.Fprintf(color.Error, "%s\n\n\n", desc)
+	pad(rightmost - len(Description))
+	y.Fprintf(color.Error, "%s\n\n\n", Description)
 }
 
 func censorDomain(input string) string {
