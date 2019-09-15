@@ -60,7 +60,7 @@ func NewEnumeration() *Enumeration {
 		Config:      config.NewConfig(),
 		Bus:         eb.NewEventBus(),
 		Output:      make(chan *requests.Output, 100),
-		Done:        make(chan struct{}, 2),
+		done:        make(chan struct{}, 2),
 		pause:       make(chan struct{}, 2),
 		resume:      make(chan struct{}, 2),
 		filter:      sf.NewStringFilter(),
