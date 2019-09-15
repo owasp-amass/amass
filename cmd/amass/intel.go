@@ -296,7 +296,7 @@ func intelSignalHandler(ic *intel.Collection) {
 
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 	<-quit
-	close(ic.Done)
+	ic.Done()
 }
 
 func writeIntelLogsAndMessages(logs *io.PipeReader, logfile string) {

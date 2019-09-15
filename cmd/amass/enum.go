@@ -399,7 +399,7 @@ func signalHandler(e *enum.Enumeration) {
 
 	<-quit
 	// Start final output operations
-	close(e.Done)
+	e.Done()
 	<-finished
 	os.Exit(1)
 }

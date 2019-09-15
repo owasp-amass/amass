@@ -21,6 +21,8 @@ import (
 
 // Enumeration is the object type used to execute a DNS enumeration with Amass.
 type Enumeration struct {
+	sync.Mutex
+
 	Config *config.Config
 	Bus    *eb.EventBus
 	Pool   *resolvers.ResolverPool
@@ -32,7 +34,8 @@ type Enumeration struct {
 	Output chan *requests.Output
 
 	// Broadcast channel that indicates no further writes to the output channel
-	Done chan struct{}
+	done              chan struct{}
+	doneAlreadyClosed bool
 
 	dataSources []services.Service
 	bruteSrv    services.Service
@@ -74,6 +77,17 @@ func NewEnumeration() *Enumeration {
 	}
 
 	return e
+}
+
+// Done safely closes the done broadcast channel.
+func (e *Enumeration) Done() {
+	e.Lock()
+	defer e.Unlock()
+
+	if !e.doneAlreadyClosed {
+		e.doneAlreadyClosed = true
+		close(e.done)
+	}
 }
 
 // Start begins the DNS enumeration process for the Amass Enumeration object.
@@ -140,14 +154,14 @@ func (e *Enumeration) Start() error {
 	if e.Config.Timeout > 0 {
 		time.AfterFunc(time.Duration(e.Config.Timeout)*time.Minute, func() {
 			e.Config.Log.Printf("Enumeration exceeded provided timeout")
-			close(e.Done)
+			e.Done()
 		})
 	}
 
 loop:
 	for {
 		select {
-		case <-e.Done:
+		case <-e.done:
 			break loop
 		case <-e.PauseChan():
 			t.Stop()
@@ -177,7 +191,7 @@ func (e *Enumeration) periodicChecks(srvcs []services.Service) {
 		}
 	}
 	if done && !e.Pool.IsActive() {
-		close(e.Done)
+		e.Done()
 		return
 	}
 
@@ -345,7 +359,7 @@ func (e *Enumeration) processOutput(wg *sync.WaitGroup) {
 loop:
 	for {
 		select {
-		case <-e.Done:
+		case <-e.done:
 			break loop
 		default:
 			element, ok := e.outputQueue.Next()
@@ -385,7 +399,7 @@ func (e *Enumeration) checkForOutput(wg *sync.WaitGroup) {
 
 	for {
 		select {
-		case <-e.Done:
+		case <-e.done:
 			// Handle all remaining pieces of output
 			e.queueNewGraphEntries(e.Config.UUID.String(), time.Millisecond)
 			return
@@ -413,7 +427,7 @@ func (e *Enumeration) queueNewGraphEntries(uuid string, delay time.Duration) {
 
 func (e *Enumeration) sendOutput(o *requests.Output) {
 	select {
-	case <-e.Done:
+	case <-e.done:
 		return
 	default:
 		if e.Config.IsDomainInScope(o.Name) {

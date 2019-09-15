@@ -25,6 +25,8 @@ import (
 
 // Collection is the object type used to execute a open source information gathering with Amass.
 type Collection struct {
+	sync.Mutex
+
 	Config *config.Config
 	Bus    *eb.EventBus
 	Pool   *resolvers.ResolverPool
@@ -33,7 +35,8 @@ type Collection struct {
 	Output chan *requests.Output
 
 	// Broadcast channel that indicates no further writes to the output channel
-	Done chan struct{}
+	done              chan struct{}
+	doneAlreadyClosed bool
 
 	// Cache for the infrastructure data collected from online sources
 	netLock  sync.Mutex
@@ -50,7 +53,7 @@ func NewCollection() *Collection {
 		Config:     config.NewConfig(),
 		Bus:        eb.NewEventBus(),
 		Output:     make(chan *requests.Output, 100),
-		Done:       make(chan struct{}, 2),
+		done:       make(chan struct{}, 2),
 		netCache:   make(map[int]*requests.ASNRequest),
 		cidrChan:   make(chan *net.IPNet, 100),
 		domainChan: make(chan *requests.Output, 100),
@@ -67,6 +70,17 @@ func NewCollection() *Collection {
 	}
 
 	return c
+}
+
+// Done safely closes the done broadcast channel.
+func (c *Collection) Done() {
+	c.Lock()
+	defer c.Unlock()
+
+	if !c.doneAlreadyClosed {
+		c.doneAlreadyClosed = true
+		close(c.done)
+	}
 }
 
 // HostedDomains uses open source intelligence to discover root domain names in the target infrastructure.
@@ -93,18 +107,18 @@ func (c *Collection) HostedDomains() error {
 	if c.Config.Timeout > 0 {
 		time.AfterFunc(time.Duration(c.Config.Timeout)*time.Minute, func() {
 			c.Config.Log.Printf("Enumeration exceeded provided timeout")
-			close(c.Done)
+			c.Done()
 		})
 	}
 
 loop:
 	for {
 		select {
-		case <-c.Done:
+		case <-c.done:
 			break loop
 		case <-t.C:
 			if !active {
-				close(c.Done)
+				c.Done()
 			}
 			active = false
 		case <-c.activeChan:
@@ -131,7 +145,7 @@ func (c *Collection) startAddressRanges() {
 func (c *Collection) processCIDRs() {
 	for {
 		select {
-		case <-c.Done:
+		case <-c.done:
 			return
 		case cidr := <-c.cidrChan:
 			// Skip IPv6 netblocks, since they are simply too large
@@ -222,7 +236,7 @@ func (c *Collection) asnsToCIDRs() {
 	defer c.sendNetblockCIDRs()
 	for {
 		select {
-		case <-c.Done:
+		case <-c.done:
 			return
 		case <-t.C:
 			done := true
@@ -361,7 +375,7 @@ func (c *Collection) ReverseWhois() error {
 loop:
 	for {
 		select {
-		case <-c.Done:
+		case <-c.done:
 			break loop
 		case <-t.C:
 			done := true
