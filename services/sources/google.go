@@ -56,7 +56,7 @@ func (g *Google) processRequests() {
 				for i := 0; i <= 3; i++ {
 					g.executeQuery(req.Domain, i)
 				}
-				
+
 			}
 		case <-g.AddrRequestChan():
 		case <-g.ASNRequestChan():

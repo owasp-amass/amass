@@ -4,11 +4,11 @@
 package sources
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"strconv"
 	"time"
-	"encoding/json"
 
 	"github.com/OWASP/Amass/config"
 	eb "github.com/OWASP/Amass/eventbus"
@@ -109,7 +109,7 @@ func (b *Baidu) executeQuery(domain string) {
 
 	// Extract the related site information
 	var rs struct {
-		Code    int `json:"code"`
+		Code int `json:"code"`
 		Data []struct {
 			Domain string `json:"domain"`
 		} `json:"data"`

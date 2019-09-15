@@ -39,7 +39,7 @@ func NewGraph(path string) *Graph {
 	if path == "" {
 		return nil
 	}
-	
+
 	// If the directory does not yet exist, create it
 	if err = os.MkdirAll(path, 0755); err != nil {
 		return nil

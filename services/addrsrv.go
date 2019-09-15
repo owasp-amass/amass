@@ -110,8 +110,8 @@ func (as *AddressService) performAddrRequest(req *requests.AddrRequest) {
 	if req == nil || req.Address == "" {
 		return
 	}
-	as.SetActive()
 
+	as.SetActive()
 	if as.filter.Duplicate(req.Address) {
 		return
 	}
@@ -125,16 +125,20 @@ func (as *AddressService) performAddrRequest(req *requests.AddrRequest) {
 	}
 
 	if as.Config().Active {
-		for _, name := range http.PullCertificateNames(req.Address, as.Config().Ports) {
-			if n := strings.TrimSpace(name); n != "" {
-				if domain := as.Config().WhichDomain(n); domain != "" {
-					as.Bus().Publish(requests.NewNameTopic, &requests.DNSRequest{
-						Name:   n,
-						Domain: domain,
-						Tag:    requests.CERT,
-						Source: "Active Cert",
-					})
-				}
+		as.namesFromCertificates(req.Address)
+	}
+}
+
+func (as *AddressService) namesFromCertificates(addr string) {
+	for _, name := range http.PullCertificateNames(addr, as.Config().Ports) {
+		if n := strings.TrimSpace(name); n != "" {
+			if domain := as.Config().WhichDomain(n); domain != "" {
+				as.Bus().Publish(requests.NewNameTopic, &requests.DNSRequest{
+					Name:   n,
+					Domain: domain,
+					Tag:    requests.CERT,
+					Source: "Active Cert",
+				})
 			}
 		}
 	}
