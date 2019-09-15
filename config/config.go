@@ -33,8 +33,8 @@ import (
 const (
 	outputDirectoryName         = "amass"
 	defaultConcurrentDNSQueries = 2500
-	defaultWordlistURL          = "https://raw.githubusercontent.com/OWASP/Amass/master/examples/wordlists/namelist.txt"
-	defaultAltWordlistURL       = "https://raw.githubusercontent.com/OWASP/Amass/master/examples/wordlists/alterations.txt"
+	defaultWordlistURL          = "https://github.com/OWASP/Amass/blob/master/examples/wordlists/namelist.txt"
+	defaultAltWordlistURL       = "https://github.com/OWASP/Amass/blob/master/examples/wordlists/alterations.txt"
 	publicDNSResolverURL        = "https://public-dns.info/nameservers.txt"
 )
 
