@@ -15,6 +15,7 @@ import (
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
+	"github.com/OWASP/Amass/stringset"
 )
 
 // SecurityTrails is the Service that handles access to the SecurityTrails data source.
@@ -65,23 +66,31 @@ func (st *SecurityTrails) processRequests() {
 					time.Sleep(st.RateLimit)
 				}
 				last = time.Now()
-				st.executeQuery(req.Domain)
+				st.executeDNSQuery(req.Domain)
+				last = time.Now()
+			}
+		case whois := <-st.WhoisRequestChan():
+			if st.Config().IsDomainInScope(whois.Domain) {
+				if time.Now().Sub(last) < st.RateLimit {
+					time.Sleep(st.RateLimit)
+				}
+				last = time.Now()
+				st.executeWhoisQuery(whois.Domain)
 				last = time.Now()
 			}
 		case <-st.AddrRequestChan():
 		case <-st.ASNRequestChan():
-		case <-st.WhoisRequestChan():
 		}
 	}
 }
 
-func (st *SecurityTrails) executeQuery(domain string) {
+func (st *SecurityTrails) executeDNSQuery(domain string) {
 	re := st.Config().DomainRegex(domain)
 	if re == nil || st.API == nil || st.API.Key == "" {
 		return
 	}
 
-	url := st.restURL(domain)
+	url := st.restDNSURL(domain)
 	headers := map[string]string{
 		"APIKEY":       st.API.Key,
 		"Content-Type": "application/json",
@@ -114,6 +123,54 @@ func (st *SecurityTrails) executeQuery(domain string) {
 	}
 }
 
-func (st *SecurityTrails) restURL(domain string) string {
+func (st *SecurityTrails) executeWhoisQuery(domain string) {
+	if st.API == nil || st.API.Key == "" {
+		return
+	}
+
+	url := st.restWhoisURL(domain)
+	headers := map[string]string{
+		"APIKEY":       st.API.Key,
+		"Content-Type": "application/json",
+	}
+
+	st.SetActive()
+	page, err := http.RequestWebPage(url, nil, headers, "", "")
+	if err != nil {
+		st.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", st.String(), url, err))
+		return
+	}
+	// Extract the whois information from the REST API results
+	var assoc struct {
+		Records []struct {
+			Domain string `json:"hostname"`
+		} `json:"records"`
+	}
+	if err := json.Unmarshal([]byte(page), &assoc); err != nil {
+		return
+	}
+
+	matches := stringset.New()
+	for _, record := range assoc.Records {
+		if name := strings.ToLower(record.Domain); name != "" {
+			matches.Insert(strings.TrimSpace(name))
+		}
+	}
+
+	if len(matches) > 0 {
+		st.Bus().Publish(requests.NewWhoisTopic, &requests.WhoisRequest{
+			Domain:     domain,
+			NewDomains: matches.Slice(),
+			Tag:        st.SourceType,
+			Source:     st.String(),
+		})
+	}
+}
+
+func (st *SecurityTrails) restDNSURL(domain string) string {
 	return fmt.Sprintf("https://api.securitytrails.com/v1/domain/%s/subdomains", domain)
+}
+
+func (st *SecurityTrails) restWhoisURL(domain string) string {
+	return fmt.Sprintf("https://api.securitytrails.com/v1/domain/%s/associated", domain)
 }
