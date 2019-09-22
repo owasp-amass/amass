@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	outputDirectoryName         = "amass"
+	outputDirectoryName = "amass"
 )
 
 // AcquireConfig populates the Config struct provided by the config argument.

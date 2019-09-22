@@ -82,17 +82,17 @@ func (i *IPAPI) executeAddrQuery(addr string) {
 	}
 	// Extract the IP address information from the REST API results
 	var info struct {
-		City string `json:"city"`
-		Region string `json:"region"`
-		RegionCode string `json:"region_code"`
-		Country string `json:"country"`
-		CountryName string `json:"country_name"`
-		PostalCode string `json:"postal"`
-		Latitude float64 `json:"latitude"`
-		Longitude float64 `json:"longitude"`
-		Timezone string `json:"timezone"`
-		ASN string `json:"asn"`
-		Description string `json:"org"`
+		City        string  `json:"city"`
+		Region      string  `json:"region"`
+		RegionCode  string  `json:"region_code"`
+		Country     string  `json:"country"`
+		CountryName string  `json:"country_name"`
+		PostalCode  string  `json:"postal"`
+		Latitude    float64 `json:"latitude"`
+		Longitude   float64 `json:"longitude"`
+		Timezone    string  `json:"timezone"`
+		ASN         string  `json:"asn"`
+		Description string  `json:"org"`
 	}
 	if err := json.Unmarshal([]byte(page), &info); err != nil {
 		return
@@ -100,5 +100,5 @@ func (i *IPAPI) executeAddrQuery(addr string) {
 }
 
 func (i *IPAPI) restAddrURL(addr string) string {
-	return fmt.Sprintf("https://ipapi.co/%d/json", addr)
+	return fmt.Sprintf("https://ipapi.co/%s/json", addr)
 }

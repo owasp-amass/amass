@@ -6,12 +6,12 @@ package intel
 import (
 	"bufio"
 	"errors"
+	"fmt"
 	"net"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
-	"fmt"
 
 	"github.com/OWASP/Amass/config"
 	eb "github.com/OWASP/Amass/eventbus"
