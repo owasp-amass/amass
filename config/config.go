@@ -21,13 +21,13 @@ import (
 	"github.com/OWASP/Amass/stringset"
 	"github.com/OWASP/Amass/wordlist"
 	"github.com/go-ini/ini"
-	"github.com/google/uuid"
 	"github.com/gobuffalo/packr"
+	"github.com/google/uuid"
 )
 
 const (
 	defaultConcurrentDNSQueries = 2500
-	publicDNSResolverBaseURL        = "https://public-dns.info/nameserver/"
+	publicDNSResolverBaseURL    = "https://public-dns.info/nameserver/"
 )
 
 var (
@@ -232,14 +232,14 @@ func (c *Config) CheckSettings() error {
 		}
 
 		url := publicDNSResolverBaseURL + cc + ".txt"
-		if resolvers, err := getWordlistByURL(url); err == nil {
-			c.Resolvers = stringset.Deduplicate(append(c.Resolvers, resolvers...))
+		if resolvers, err := getWordlistByURL(url); err == nil && len(resolvers) >= 50 {
+			c.Resolvers = stringset.Deduplicate(resolvers)
 		} else if cc != "us" {
 			url = publicDNSResolverBaseURL + "us.txt"
 
 			if resolvers, err = getWordlistByURL(url); err == nil {
-				c.Resolvers = stringset.Deduplicate(append(c.Resolvers, resolvers...))
-			} 
+				c.Resolvers = stringset.Deduplicate(resolvers)
+			}
 		}
 	}
 	return err
