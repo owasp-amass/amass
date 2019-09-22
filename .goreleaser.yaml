@@ -13,16 +13,26 @@ builds:
       - windows
       - linux
       - darwin
+      - freebsd
     goarch:
       - amd64
       - 386
+      - arm
+      - arm64
     env:
       - CGO_ENABLED=0
     ignore:
       - goos: darwin
         goarch: 386
+        goarch: arm
+        goarch: arm64
       - goos: windows
         goarch: 386
+        goarch: arm
+        goarch: arm64
+      - goos: freebsd
+        goarch: arm
+        goarch: arm64
 
 archives:
   -
@@ -80,7 +90,7 @@ snapcrafts:
   -
     name: amass
     # Remember you need to `snapcraft login` first.
-    publish: false
+    publish: true
     summary: In-depth Attack Surface Mapping and Asset Discovery.
     description: The OWASP Amass Project has developed a tool to help information security professionals perform network mapping of attack surfaces and external asset discovery using open source information gathering and active reconnaissance techniques.
     grade: stable
