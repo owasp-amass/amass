@@ -61,15 +61,6 @@ func NewCollection() *Collection {
 		activeChan: make(chan struct{}, 100),
 	}
 
-	c.Pool = resolvers.SetupResolverPool(
-		c.Config.Resolvers,
-		c.Config.ScoreResolvers,
-		c.Config.MonitorResolverRate,
-	)
-	if c.Pool == nil {
-		return nil
-	}
-
 	return c
 }
 
@@ -90,6 +81,17 @@ func (c *Collection) HostedDomains() error {
 		return errors.New("The intelligence collection did not have an output channel")
 	} else if err := c.Config.CheckSettings(); err != nil {
 		return err
+	}
+
+	if c.Pool == nil {
+		c.Pool = resolvers.SetupResolverPool(
+			c.Config.Resolvers,
+			c.Config.ScoreResolvers,
+			c.Config.MonitorResolverRate,
+		)
+		if c.Pool == nil {
+			return errors.New("The intelligence collection was unable to build the pool of resolvers")
+		}
 	}
 
 	go c.startAddressRanges()

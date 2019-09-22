@@ -20,7 +20,6 @@ import (
 	"github.com/OWASP/Amass/config"
 	"github.com/OWASP/Amass/format"
 	"github.com/OWASP/Amass/intel"
-	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/stringset"
 	"github.com/fatih/color"
 )
@@ -205,16 +204,6 @@ func runIntelCommand(clArgs []string) {
 		os.Exit(1)
 	}
 
-	if len(args.Resolvers) > 0 {
-		var pool *resolvers.ResolverPool
-
-		if pool = resolvers.SetupResolverPool(args.Resolvers.Slice(), true, true); pool == nil {
-			r.Fprintf(color.Error, "Failed to set custom DNS resolvers\n")
-			os.Exit(1)
-		}
-		ic.Pool = pool
-	}
-
 	if args.Options.ReverseWhois {
 		if len(ic.Config.Domains()) == 0 {
 			r.Fprintln(color.Error, "No root domain names were provided")
@@ -397,6 +386,9 @@ func (i intelArgs) OverrideConfig(conf *config.Config) error {
 		conf.Timeout = i.Timeout
 	}
 
+	if i.Options.PublicDNS {
+		conf.PublicDNS = true
+	}
 	if !i.Options.MonitorResolverRate {
 		conf.MonitorResolverRate = false
 	}

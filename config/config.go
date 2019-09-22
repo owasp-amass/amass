@@ -4,25 +4,19 @@
 package config
 
 import (
-	"bufio"
-	"compress/gzip"
 	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
 	"net"
-	"net/http"
-	"os"
-	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 	"sync"
 
 	"github.com/OWASP/Amass/format"
 	"github.com/OWASP/Amass/net/dns"
-	amasshttp "github.com/OWASP/Amass/net/http"
+	"github.com/OWASP/Amass/net/http"
 	"github.com/OWASP/Amass/semaphore"
 	"github.com/OWASP/Amass/stringset"
 	"github.com/OWASP/Amass/wordlist"
@@ -32,14 +26,13 @@ import (
 )
 
 const (
-	outputDirectoryName         = "amass"
 	defaultConcurrentDNSQueries = 2500
-	publicDNSResolverURL        = "https://public-dns.info/nameservers.txt"
+	publicDNSResolverBaseURL        = "https://public-dns.info/nameserver/"
 )
 
 var (
-	// BoxOfDefaultFiles is the ./examples project directory embedded in the binary.
-	BoxOfDefaultFiles = packr.NewBox("../examples")
+	// BoxOfDefaultFiles is the ./resources project directory embedded into the binary.
+	BoxOfDefaultFiles = packr.NewBox("../resources")
 )
 
 var defaultPublicResolvers = []string{
@@ -204,7 +197,7 @@ func (c *Config) CheckSettings() error {
 		if c.Passive {
 			return errors.New("Brute forcing cannot be performed without DNS resolution")
 		} else if len(c.Wordlist) == 0 {
-			c.Wordlist, err = getWordlistByBox("wordlists/namelist.txt")
+			c.Wordlist, err = getWordlistByBox("namelist.txt")
 			if err != nil {
 				return err
 			}
@@ -215,7 +208,7 @@ func (c *Config) CheckSettings() error {
 	}
 	if c.Alterations {
 		if len(c.AltWordlist) == 0 {
-			c.AltWordlist, err = getWordlistByBox("wordlists/alterations.txt")
+			c.AltWordlist, err = getWordlistByBox("alterations.txt")
 			if err != nil {
 				return err
 			}
@@ -233,12 +226,22 @@ func (c *Config) CheckSettings() error {
 	}
 
 	if c.PublicDNS {
-		resolvers, err := getWordlistByURL(publicDNSResolverURL)
-		if err == nil {
+		cc := "us"
+		if result := http.ClientCountryCode(); result != "" {
+			cc = result
+		}
+
+		url := publicDNSResolverBaseURL + cc + ".txt"
+		if resolvers, err := getWordlistByURL(url); err == nil {
 			c.Resolvers = stringset.Deduplicate(append(c.Resolvers, resolvers...))
+		} else if cc != "us" {
+			url = publicDNSResolverBaseURL + "us.txt"
+
+			if resolvers, err = getWordlistByURL(url); err == nil {
+				c.Resolvers = stringset.Deduplicate(append(c.Resolvers, resolvers...))
+			} 
 		}
 	}
-
 	return err
 }
 
@@ -399,6 +402,93 @@ func (c *Config) GetAPIKey(source string) *APIKey {
 	return nil
 }
 
+// LoadSettings parses settings from an .ini file and assigns them to the Config.
+func (c *Config) LoadSettings(path string) error {
+	cfg, err := ini.LoadSources(ini.LoadOptions{
+		Insensitive:  true,
+		AllowShadows: true,
+	}, path)
+	if err != nil {
+		return fmt.Errorf("Failed to load the configuration file: %v", err)
+	}
+	// Get the easy ones out of the way using mapping
+	if err = cfg.MapTo(c); err != nil {
+		return fmt.Errorf("Error mapping configuration settings to internal values: %v", err)
+	}
+	// Attempt to load a special mode of operation specified by the user
+	if cfg.Section(ini.DEFAULT_SECTION).HasKey("mode") {
+		mode := cfg.Section(ini.DEFAULT_SECTION).Key("mode").String()
+
+		if mode == "passive" {
+			c.Passive = true
+		} else if mode == "active" {
+			c.Active = true
+		}
+	}
+	// Load up all the DNS domain names
+	if domains, err := cfg.GetSection("domains"); err == nil {
+		for _, domain := range domains.Key("domain").ValueWithShadows() {
+			c.AddDomain(domain)
+		}
+	}
+	// Load up all the blacklisted subdomain names
+	if blacklisted, err := cfg.GetSection("blacklisted"); err == nil {
+		c.Blacklist = stringset.Deduplicate(blacklisted.Key("subdomain").ValueWithShadows())
+	}
+	// Load up all the disabled data source names
+	if disabled, err := cfg.GetSection("disabled_data_sources"); err == nil {
+		c.SourceFilter.Sources = stringset.Deduplicate(disabled.Key("data_source").ValueWithShadows())
+		c.SourceFilter.Include = false
+	}
+	// Load up all the Gremlin Server settings
+	if gremlin, err := cfg.GetSection("gremlin"); err == nil {
+		c.GremlinURL = gremlin.Key("url").String()
+		c.GremlinUser = gremlin.Key("username").String()
+		c.GremlinPass = gremlin.Key("password").String()
+	}
+
+	if err := c.loadResolverSettings(cfg); err != nil {
+		return err
+	}
+	if err := c.loadNetworkSettings(cfg); err != nil {
+		return err
+	}
+	if err := c.loadAlterationSettings(cfg); err != nil {
+		return err
+	}
+	if err := c.loadBruteForceSettings(cfg); err != nil {
+		return err
+	}
+
+	// Load up all API key information from data source sections
+	nonAPISections := map[string]struct{}{
+		"network_settings":      struct{}{},
+		"alterations":           struct{}{},
+		"bruteforce":            struct{}{},
+		"default":               struct{}{},
+		"domains":               struct{}{},
+		"resolvers":             struct{}{},
+		"blacklisted":           struct{}{},
+		"disabled_data_sources": struct{}{},
+		"gremlin":               struct{}{},
+	}
+
+	for _, section := range cfg.Sections() {
+		name := section.Name()
+
+		if _, skip := nonAPISections[name]; skip {
+			continue
+		}
+
+		key := new(APIKey)
+		// Parse the API key information and assign to the Config
+		if err := section.MapTo(key); err == nil {
+			c.AddAPIKey(name, key)
+		}
+	}
+	return nil
+}
+
 func (c *Config) loadNetworkSettings(cfg *ini.File) error {
 	network, err := cfg.GetSection("network_settings")
 	if err != nil {
@@ -501,129 +591,6 @@ func (c *Config) loadAlterationSettings(cfg *ini.File) error {
 	return nil
 }
 
-// LoadSettings parses settings from an .ini file and assigns them to the Config.
-func (c *Config) LoadSettings(path string) error {
-	cfg, err := ini.LoadSources(ini.LoadOptions{
-		Insensitive:  true,
-		AllowShadows: true,
-	}, path)
-	if err != nil {
-		return fmt.Errorf("Failed to load the configuration file: %v", err)
-	}
-	// Get the easy ones out of the way using mapping
-	if err = cfg.MapTo(c); err != nil {
-		return fmt.Errorf("Error mapping configuration settings to internal values: %v", err)
-	}
-	// Attempt to load a special mode of operation specified by the user
-	if cfg.Section(ini.DEFAULT_SECTION).HasKey("mode") {
-		mode := cfg.Section(ini.DEFAULT_SECTION).Key("mode").String()
-
-		if mode == "passive" {
-			c.Passive = true
-		} else if mode == "active" {
-			c.Active = true
-		}
-	}
-	// Load up all the DNS domain names
-	if domains, err := cfg.GetSection("domains"); err == nil {
-		for _, domain := range domains.Key("domain").ValueWithShadows() {
-			c.AddDomain(domain)
-		}
-	}
-	// Load up all the blacklisted subdomain names
-	if blacklisted, err := cfg.GetSection("blacklisted"); err == nil {
-		c.Blacklist = stringset.Deduplicate(blacklisted.Key("subdomain").ValueWithShadows())
-	}
-	// Load up all the disabled data source names
-	if disabled, err := cfg.GetSection("disabled_data_sources"); err == nil {
-		c.SourceFilter.Sources = stringset.Deduplicate(disabled.Key("data_source").ValueWithShadows())
-		c.SourceFilter.Include = false
-	}
-	// Load up all the Gremlin Server settings
-	if gremlin, err := cfg.GetSection("gremlin"); err == nil {
-		c.GremlinURL = gremlin.Key("url").String()
-		c.GremlinUser = gremlin.Key("username").String()
-		c.GremlinPass = gremlin.Key("password").String()
-	}
-
-	if err := c.loadResolverSettings(cfg); err != nil {
-		return err
-	}
-	if err := c.loadNetworkSettings(cfg); err != nil {
-		return err
-	}
-	if err := c.loadAlterationSettings(cfg); err != nil {
-		return err
-	}
-	if err := c.loadBruteForceSettings(cfg); err != nil {
-		return err
-	}
-
-	// Load up all API key information from data source sections
-	nonAPISections := map[string]struct{}{
-		"network_settings":      struct{}{},
-		"alterations":           struct{}{},
-		"bruteforce":            struct{}{},
-		"default":               struct{}{},
-		"domains":               struct{}{},
-		"resolvers":             struct{}{},
-		"blacklisted":           struct{}{},
-		"disabled_data_sources": struct{}{},
-		"gremlin":               struct{}{},
-	}
-
-	for _, section := range cfg.Sections() {
-		name := section.Name()
-
-		if _, skip := nonAPISections[name]; skip {
-			continue
-		}
-
-		key := new(APIKey)
-		// Parse the API key information and assign to the Config
-		if err := section.MapTo(key); err == nil {
-			c.AddAPIKey(name, key)
-		}
-	}
-	return nil
-}
-
-// AcquireConfig populates the Config struct provided by the config argument.
-// The configuration file path and a bool indicating the settings were
-// successfully loaded are returned.
-func AcquireConfig(dir, file string, config *Config) error {
-	var err error
-
-	if file != "" {
-		err = config.LoadSettings(file)
-		if err == nil {
-			return nil
-		}
-	}
-	if dir = OutputDirectory(dir); dir != "" {
-		if finfo, err := os.Stat(dir); !os.IsNotExist(err) && finfo.IsDir() {
-			file := filepath.Join(dir, "config.ini")
-
-			err = config.LoadSettings(file)
-			if err == nil {
-				return nil
-			}
-		}
-	}
-	return err
-}
-
-// OutputDirectory returns the file path of the Amass output directory. A suitable
-// path provided will be used as the output directory instead.
-func OutputDirectory(dir string) string {
-	if dir == "" {
-		if path, err := os.UserConfigDir(); err == nil {
-			dir = filepath.Join(path, outputDirectoryName)
-		}
-	}
-	return dir
-}
-
 func (c *Config) loadResolverSettings(cfg *ini.File) error {
 	sec, err := cfg.GetSection("resolvers")
 	if err != nil {
@@ -645,88 +612,4 @@ func (c *Config) loadResolverSettings(cfg *ini.File) error {
 // UpdateConfig allows the provided Updater to update the current configuration.
 func (c *Config) UpdateConfig(update Updater) error {
 	return update.OverrideConfig(c)
-}
-
-// GetListFromFile reads a wordlist text or gzip file and returns the slice of words.
-func GetListFromFile(path string) ([]string, error) {
-	var reader io.Reader
-
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, fmt.Errorf("Error opening the file %s: %v", path, err)
-	}
-	defer file.Close()
-	reader = file
-
-	// We need to determine if this is a gzipped file or a plain text file, so we
-	// first read the first 512 bytes to pass them down to http.DetectContentType
-	// for mime detection. The file is rewinded before passing it along to the
-	// next reader
-	head := make([]byte, 512)
-	if _, err = file.Read(head); err != nil {
-		return nil, fmt.Errorf("Error reading the first 512 bytes from %s: %s", path, err)
-	}
-	if _, err = file.Seek(0, 0); err != nil {
-		return nil, fmt.Errorf("Error rewinding the file %s: %s", path, err)
-	}
-
-	// Read the file as gzip if it's actually compressed
-	if mt := http.DetectContentType(head); mt == "application/gzip" || mt == "application/x-gzip" {
-		gzReader, err := gzip.NewReader(file)
-		if err != nil {
-			return nil, fmt.Errorf("Error gz-reading the file %s: %v", path, err)
-		}
-		defer gzReader.Close()
-		reader = gzReader
-	}
-
-	s, err := getWordList(reader)
-	return s, err
-}
-
-func getWordlistByURL(url string) ([]string, error) {
-	page, err := amasshttp.RequestWebPage(url, nil, nil, "", "")
-	if err != nil {
-		return nil, fmt.Errorf("Failed to obtain the wordlist at %s: %v", url, err)
-	}
-	return getWordList(strings.NewReader(page))
-}
-
-func getWordlistByBox(path string) ([]string, error) {
-	content, err := BoxOfDefaultFiles.FindString(path)
-	if err != nil {
-		return nil, fmt.Errorf("Failed to obtain the embedded wordlist: %s: %v", path, err)
-	}
-	return getWordList(strings.NewReader(content))
-}
-
-func getWordList(reader io.Reader) ([]string, error) {
-	var words []string
-
-	scanner := bufio.NewScanner(reader)
-	for scanner.Scan() {
-		// Get the next word in the list
-		w := strings.TrimSpace(scanner.Text())
-		if err := scanner.Err(); err == nil && w != "" {
-			words = append(words, w)
-		}
-	}
-	return stringset.Deduplicate(words), nil
-}
-
-func uniqueIntAppend(s []int, e string) []int {
-	if a1, err := strconv.Atoi(e); err == nil {
-		var found bool
-
-		for _, a2 := range s {
-			if a1 == a2 {
-				found = true
-				break
-			}
-		}
-		if !found {
-			s = append(s, a1)
-		}
-	}
-	return s
 }

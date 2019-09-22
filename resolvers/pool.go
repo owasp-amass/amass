@@ -62,7 +62,7 @@ func SetupResolverPool(addrs []string, scoring, ratemon bool) *ResolverPool {
 	// Do not allow the number of resolvers to exceed the ulimit
 	temp := addrs
 	addrs = []string{}
-	max := int(float64(limits.GetFileLimit())*0.9) / 2
+	max := int(float64(limits.GetFileLimit())*0.7) / 2
 	for i, r := range temp {
 		if i > max {
 			break
@@ -83,23 +83,28 @@ func SetupResolverPool(addrs []string, scoring, ratemon bool) *ResolverPool {
 
 	l := len(addrs)
 	var resolvers []Resolver
+	t := time.NewTimer(5 * time.Second)
+	defer t.Stop()
 loop:
 	for i := 0; i < l; i++ {
 		select {
+		case <-t.C:
+			break loop
 		case r := <-finished:
-			if r != nil {
-				if scoring {
-					if r = NewScoredResolver(r); r == nil {
-						continue loop
-					}
-				}
-				if ratemon {
-					if r = NewRateMonitoredResolver(r); r == nil {
-						continue loop
-					}
-				}
-				resolvers = append(resolvers, r)
+			if r == nil {
+				continue loop
 			}
+			if scoring {
+				if r = NewScoredResolver(r); r == nil {
+					continue loop
+				}
+			}
+			if ratemon {
+				if r = NewRateMonitoredResolver(r); r == nil {
+					continue loop
+				}
+			}
+			resolvers = append(resolvers, r)
 		}
 	}
 

@@ -56,7 +56,7 @@ type Enumeration struct {
 
 // NewEnumeration returns an initialized Enumeration that has not been started yet.
 func NewEnumeration() *Enumeration {
-	e := &Enumeration{
+	return &Enumeration{
 		Config:      config.NewConfig(),
 		Bus:         eb.NewEventBus(),
 		Output:      make(chan *requests.Output, 100),
@@ -66,17 +66,6 @@ func NewEnumeration() *Enumeration {
 		filter:      sf.NewStringFilter(),
 		outputQueue: new(queue.Queue),
 	}
-
-	e.Pool = resolvers.SetupResolverPool(
-		e.Config.Resolvers,
-		e.Config.ScoreResolvers,
-		e.Config.MonitorResolverRate,
-	)
-	if e.Pool == nil {
-		return nil
-	}
-
-	return e
 }
 
 // Done safely closes the done broadcast channel.
@@ -98,6 +87,17 @@ func (e *Enumeration) Start() error {
 		return errors.New("Data operations cannot be saved without DNS resolution")
 	} else if err := e.Config.CheckSettings(); err != nil {
 		return err
+	}
+
+	if e.Pool == nil {
+		e.Pool = resolvers.SetupResolverPool(
+			e.Config.Resolvers,
+			e.Config.ScoreResolvers,
+			e.Config.MonitorResolverRate,
+		)
+		if e.Pool == nil {
+			return errors.New("The enumeration was unable to build the pool of resolvers")
+		}
 	}
 
 	e.dataSources = sources.GetAllSources(e.Config, e.Bus, e.Pool)

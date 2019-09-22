@@ -25,7 +25,7 @@ const (
 
 const (
 	defaultWindowDuration = 2 * time.Second
-	defaultConnRotation   = 30 * time.Second
+	defaultConnRotation   = time.Minute
 )
 
 // ResolveError contains the Rcode returned during the DNS query.
@@ -119,7 +119,7 @@ func NewBaseResolver(addr string) *BaseResolver {
 		Port:           port,
 		WindowDuration: defaultWindowDuration,
 		XchgQueue:      new(queue.Queue),
-		XchgChan:       make(chan *resolveRequest, 1000),
+		XchgChan:       make(chan *resolveRequest, 2000),
 		Xchgs:          make(map[uint16]*resolveRequest),
 		Done:           make(chan struct{}, 2),
 		stats:          make(map[int]int64),
@@ -439,6 +439,7 @@ loop:
 				continue loop
 			}
 
+			co.SetReadDeadline(time.Now().Add(r.WindowDuration))
 			if read, err := co.ReadMsg(); err == nil && read != nil {
 				msgs <- read
 			}

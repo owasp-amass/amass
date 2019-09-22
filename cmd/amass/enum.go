@@ -24,7 +24,6 @@ import (
 	"github.com/OWASP/Amass/config"
 	"github.com/OWASP/Amass/enum"
 	"github.com/OWASP/Amass/format"
-	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/stringset"
 	"github.com/fatih/color"
 )
@@ -244,16 +243,6 @@ func runEnumCommand(clArgs []string) {
 	if err := e.Config.UpdateConfig(args); err != nil {
 		r.Fprintf(color.Error, "Configuration error: %v\n", err)
 		os.Exit(1)
-	}
-
-	if len(args.Resolvers) > 0 {
-		var pool *resolvers.ResolverPool
-
-		if pool = resolvers.SetupResolverPool(args.Resolvers.Slice(), true, true); pool == nil {
-			r.Fprintf(color.Error, "Failed to set custom DNS resolvers\n")
-			os.Exit(1)
-		}
-		e.Pool = pool
 	}
 
 	processEnumOutput(e, &args, rLog)
@@ -584,6 +573,9 @@ func (e enumArgs) OverrideConfig(conf *config.Config) error {
 		conf.Timeout = e.Timeout
 	}
 
+	if e.Options.PublicDNS {
+		conf.PublicDNS = true
+	}
 	if !e.Options.MonitorResolverRate {
 		conf.MonitorResolverRate = false
 	}

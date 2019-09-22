@@ -4,6 +4,7 @@
 package http
 
 import (
+	"encoding/json"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
@@ -16,6 +17,7 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/OWASP/Amass/net/dns"
@@ -190,4 +192,22 @@ func namesFromCert(cert *x509.Certificate) []string {
 		}
 	}
 	return subdomains.Slice()
+}
+
+// ClientCountryCode returns the country code for the public-facing IP address for the host of the process.
+func ClientCountryCode() string {
+	headers := map[string]string{"Content-Type": "application/json"}
+
+	page, err := RequestWebPage("https://ipapi.co/json", nil, headers, "", "")
+	if err != nil {
+		return ""
+	}
+
+	// Extract the country code from the REST API results
+	var ipinfo struct {
+		CountryCode string `json:"country"`
+	}
+
+	json.Unmarshal([]byte(page), &ipinfo)
+	return strings.ToLower(ipinfo.CountryCode)
 }
