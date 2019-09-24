@@ -113,6 +113,10 @@ This project improves thanks to all the people who contribute:
 * [Project Sonar: An Underrated Source of Internet-wide Data](https://0xpatrik.com/project-sonar-guide/)
 * [Top Five Ways the Red Team breached the External Perimeter](https://medium.com/@adam.toscher/top-five-ways-the-red-team-breached-the-external-perimeter-262f99dc9d17)
 
+## Amass in distributions
+
+[![Packaging status](https://repology.org/badge/vertical-allrepos/amass.svg)](https://repology.org/project/amass/versions)
+
 ## Stargazers over Time
 
  [![Stargazers over Time](https://starcharts.herokuapp.com/OWASP/Amass.svg)](https://starcharts.herokuapp.com/OWASP/Amass)
