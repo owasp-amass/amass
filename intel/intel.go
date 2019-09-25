@@ -335,8 +335,11 @@ func LookupASNsByName(s string) ([]*requests.ASNRequest, error) {
 
 // ReverseWhois returns domain names that are related to the domains provided
 func (c *Collection) ReverseWhois() error {
-	filter := sf.NewStringFilter()
+	if err := c.Config.CheckSettings(); err != nil {
+		return err
+	}
 
+	filter := sf.NewStringFilter()
 	collect := func(req *requests.WhoisRequest) {
 		for _, d := range req.NewDomains {
 			if !filter.Duplicate(d) {
@@ -351,6 +354,17 @@ func (c *Collection) ReverseWhois() error {
 	}
 	c.Bus.Subscribe(requests.NewWhoisTopic, collect)
 	defer c.Bus.Unsubscribe(requests.NewWhoisTopic, collect)
+
+	if c.Pool == nil {
+		c.Pool = resolvers.SetupResolverPool(
+			c.Config.Resolvers,
+			c.Config.ScoreResolvers,
+			c.Config.MonitorResolverRate,
+		)
+		if c.Pool == nil {
+			return errors.New("The intelligence collection was unable to build the pool of resolvers")
+		}
+	}
 
 	srcs := sources.GetAllSources(c.Config, c.Bus, c.Pool)
 
