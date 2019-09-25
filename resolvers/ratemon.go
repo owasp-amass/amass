@@ -148,30 +148,28 @@ func (r *RateMonitoredResolver) monitorPerformance() {
 
 func (r *RateMonitoredResolver) calcRate() {
 	stats := r.Stats()
-
-	attempts := stats[QueryAttempts]
-	if attempts < 10 {
-		return
-	}
-
-	timeouts := stats[QueryTimeout]
 	rate := time.Duration(stats[CurrentRate])
-	if timeouts >= attempts {
-		r.ReportError()
-		r.setRate(rate + defaultRateChange)
-		return
-	}
 
-	// Check if the latency is too high
-	if value, found := stats[QueryRTT]; found {
-		if rtt := time.Duration(value); rtt > scoredResolverMaxRTT {
+	if attempts := stats[QueryAttempts]; attempts >= 10 {
+		timeouts := stats[QueryTimeout]
+
+		if timeouts >= attempts {
 			r.ReportError()
+			r.setRate(rate + defaultRateChange)
+			return
 		}
-	}
 
-	if pct := float64(timeouts) / float64(attempts); pct > defaultMaxFailurePCT {
-		r.setRate(rate + defaultRateChange)
-		return
+		// Check if the latency is too high
+		if value, found := stats[QueryRTT]; found {
+			if rtt := time.Duration(value); rtt > scoredResolverMaxRTT {
+				r.ReportError()
+			}
+		}
+
+		if pct := float64(timeouts) / float64(attempts); pct > defaultMaxFailurePCT {
+			r.setRate(rate + defaultRateChange)
+			return
+		}
 	}
 
 	if rate >= (defaultRateChange + (2 * time.Millisecond)) {

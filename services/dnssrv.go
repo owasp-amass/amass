@@ -16,25 +16,16 @@ import (
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	sf "github.com/OWASP/Amass/stringfilter"
-	"github.com/miekg/dns"
 )
 
-var (
-	// InitialQueryTypes include the DNS record types that are
-	// initially requested for a discovered name
-	InitialQueryTypes = []string{
-		"CNAME",
-		"TXT",
-		"A",
-		"AAAA",
-	}
-
-	badSubnets = []string{
-		"198.105.244.0/24",
-		"198.105.254.0/24",
-		"88.204.137.0/24",
-	}
-)
+// InitialQueryTypes include the DNS record types that are
+// initially requested for a discovered name
+var InitialQueryTypes = []string{
+	"CNAME",
+	"TXT",
+	"A",
+	"AAAA",
+}
 
 // DNSService is the Service that handles all DNS name resolution requests within
 // the architecture.
@@ -44,20 +35,12 @@ type DNSService struct {
 	metrics    *MetricsCollector
 	totalLock  sync.RWMutex
 	totalNames int
-
-	filter        *sf.StringFilter
-	cidrBlacklist []*net.IPNet
+	filter     *sf.StringFilter
 }
 
 // NewDNSService returns he object initialized, but not yet started.
 func NewDNSService(cfg *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool) *DNSService {
 	ds := &DNSService{filter: sf.NewStringFilter()}
-
-	for _, n := range badSubnets {
-		if _, ipnet, err := net.ParseCIDR(n); err == nil {
-			ds.cidrBlacklist = append(ds.cidrBlacklist, ipnet)
-		}
-	}
 
 	ds.BaseService = *NewBaseService(ds, "DNS Service", cfg, bus, pool)
 	return ds
@@ -171,9 +154,8 @@ func (ds *DNSService) performDNSRequest(req *requests.DNSRequest) {
 	var answers []requests.DNSAnswer
 	for _, t := range InitialQueryTypes {
 		if a, err := ds.Pool().Resolve(req.Name, t, resolvers.PriorityLow); err == nil {
-			if ds.goodDNSRecords(a) {
-				answers = append(answers, a...)
-			}
+			answers = append(answers, a...)
+
 			// Do not continue if a CNAME was discovered
 			if t == "CNAME" {
 				ds.metrics.QueryTime(time.Now())
@@ -200,21 +182,6 @@ func (ds *DNSService) performDNSRequest(req *requests.DNSRequest) {
 		return
 	}
 	ds.resolvedName(req)
-}
-
-func (ds *DNSService) goodDNSRecords(records []requests.DNSAnswer) bool {
-	for _, r := range records {
-		if r.Type != int(dns.TypeA) {
-			continue
-		}
-
-		for _, cidr := range ds.cidrBlacklist {
-			if cidr.Contains(net.ParseIP(r.Data)) {
-				return false
-			}
-		}
-	}
-	return true
 }
 
 func (ds *DNSService) newSubdomain(req *requests.DNSRequest, times int) {
