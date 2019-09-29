@@ -4,6 +4,7 @@
 package resolvers
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"strings"
@@ -65,10 +66,10 @@ func makeResolveResult(rec []requests.DNSAnswer, again bool, err string, rcode i
 // Resolver is the object type for performing DNS resolutions.
 type Resolver interface {
 	// Resolve performs DNS queries using the Resolver
-	Resolve(name, qtype string) ([]requests.DNSAnswer, bool, error)
+	Resolve(ctx context.Context, name, qtype string) ([]requests.DNSAnswer, bool, error)
 
 	// Reverse is performs reverse DNS queries using the Resolver
-	Reverse(addr string) (string, string, error)
+	Reverse(ctx context.Context, addr string) (string, string, error)
 
 	// Available returns true if the Resolver can handle another DNS request
 	Available() bool
@@ -235,7 +236,7 @@ func (r *BaseResolver) lastConnection() *dns.Conn {
 }
 
 // Resolve performs DNS queries using the Resolver.
-func (r *BaseResolver) Resolve(name, qtype string) ([]requests.DNSAnswer, bool, error) {
+func (r *BaseResolver) Resolve(ctx context.Context, name, qtype string) ([]requests.DNSAnswer, bool, error) {
 	qt, err := textToTypeNum(qtype)
 	if err != nil {
 		return nil, false, &ResolveError{
@@ -255,7 +256,7 @@ func (r *BaseResolver) Resolve(name, qtype string) ([]requests.DNSAnswer, bool, 
 }
 
 // Reverse is performs reverse DNS queries using the Resolver.
-func (r *BaseResolver) Reverse(addr string) (string, string, error) {
+func (r *BaseResolver) Reverse(ctx context.Context, addr string) (string, string, error) {
 	var name, ptr string
 
 	if ip := net.ParseIP(addr); amassnet.IsIPv4(ip) {
@@ -269,7 +270,7 @@ func (r *BaseResolver) Reverse(addr string) (string, string, error) {
 		}
 	}
 
-	answers, _, err := r.Resolve(ptr, "PTR")
+	answers, _, err := r.Resolve(ctx, ptr, "PTR")
 	if err != nil {
 		return ptr, name, err
 	}
@@ -429,9 +430,11 @@ loop:
 		case <-r.Done:
 			return
 		default:
-			co := r.currentConnection()
+			var co *dns.Conn
 			if last {
 				co = r.lastConnection()
+			} else {
+				co = r.currentConnection()
 			}
 
 			if co == nil {

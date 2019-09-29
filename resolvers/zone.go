@@ -21,7 +21,7 @@ func ZoneTransfer(sub, domain, server string) ([]*requests.DNSRequest, error) {
 	var results []*requests.DNSRequest
 
 	// Set the maximum time allowed for making the connection
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
 	d := net.Dialer{}

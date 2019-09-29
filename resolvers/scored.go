@@ -4,6 +4,7 @@
 package resolvers
 
 import (
+	"context"
 	"sync"
 
 	"github.com/OWASP/Amass/requests"
@@ -84,11 +85,11 @@ func (r *ScoredResolver) ReportError() {
 }
 
 // Resolve implements the Resolver interface.
-func (r *ScoredResolver) Resolve(name, qtype string) ([]requests.DNSAnswer, bool, error) {
-	return r.resolver.Resolve(name, qtype)
+func (r *ScoredResolver) Resolve(ctx context.Context, name, qtype string) ([]requests.DNSAnswer, bool, error) {
+	return r.resolver.Resolve(ctx, name, qtype)
 }
 
 // Reverse implements the Resolver interface.
-func (r *ScoredResolver) Reverse(addr string) (string, string, error) {
-	return r.resolver.Reverse(addr)
+func (r *ScoredResolver) Reverse(ctx context.Context, addr string) (string, string, error) {
+	return r.resolver.Reverse(ctx, addr)
 }

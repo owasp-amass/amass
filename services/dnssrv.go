@@ -4,6 +4,7 @@
 package services
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"strings"
@@ -153,7 +154,7 @@ func (ds *DNSService) performDNSRequest(req *requests.DNSRequest) {
 	ds.SetActive()
 	var answers []requests.DNSAnswer
 	for _, t := range InitialQueryTypes {
-		if a, err := ds.Pool().Resolve(req.Name, t, resolvers.PriorityLow); err == nil {
+		if a, err := ds.Pool().Resolve(context.TODO(), req.Name, t, resolvers.PriorityLow); err == nil {
 			answers = append(answers, a...)
 
 			// Do not continue if a CNAME was discovered
@@ -202,7 +203,7 @@ func (ds *DNSService) basicQueries(subdomain, domain string) {
 	ds.SetActive()
 	var answers []requests.DNSAnswer
 	// Obtain the DNS answers for the NS records related to the domain
-	if ans, err := ds.Pool().Resolve(subdomain, "NS", resolvers.PriorityHigh); err == nil {
+	if ans, err := ds.Pool().Resolve(context.TODO(), subdomain, "NS", resolvers.PriorityHigh); err == nil {
 		for _, a := range ans {
 			pieces := strings.Split(a.Data, ",")
 			a.Data = pieces[len(pieces)-1]
@@ -220,7 +221,7 @@ func (ds *DNSService) basicQueries(subdomain, domain string) {
 
 	ds.SetActive()
 	// Obtain the DNS answers for the MX records related to the domain
-	if ans, err := ds.Pool().Resolve(subdomain, "MX", resolvers.PriorityHigh); err == nil {
+	if ans, err := ds.Pool().Resolve(context.TODO(), subdomain, "MX", resolvers.PriorityHigh); err == nil {
 		for _, a := range ans {
 			answers = append(answers, a)
 		}
@@ -231,7 +232,7 @@ func (ds *DNSService) basicQueries(subdomain, domain string) {
 
 	ds.SetActive()
 	// Obtain the DNS answers for the SOA records related to the domain
-	if ans, err := ds.Pool().Resolve(subdomain, "SOA", resolvers.PriorityHigh); err == nil {
+	if ans, err := ds.Pool().Resolve(context.TODO(), subdomain, "SOA", resolvers.PriorityHigh); err == nil {
 		answers = append(answers, ans...)
 	} else {
 		ds.Bus().Publish(requests.LogTopic, fmt.Sprintf("DNS: SOA record query error: %s: %v", subdomain, err))
@@ -240,7 +241,7 @@ func (ds *DNSService) basicQueries(subdomain, domain string) {
 
 	ds.SetActive()
 	// Obtain the DNS answers for the SPF records related to the domain
-	if ans, err := ds.Pool().Resolve(subdomain, "SPF", resolvers.PriorityHigh); err == nil {
+	if ans, err := ds.Pool().Resolve(context.TODO(), subdomain, "SPF", resolvers.PriorityHigh); err == nil {
 		answers = append(answers, ans...)
 	} else {
 		ds.Bus().Publish(requests.LogTopic, fmt.Sprintf("DNS: SPF record query error: %s: %v", subdomain, err))
@@ -300,9 +301,9 @@ func (ds *DNSService) attemptZoneWalk(domain, server string) {
 }
 
 func (ds *DNSService) nameserverAddr(server string) (string, error) {
-	a, err := ds.Pool().Resolve(server, "A", resolvers.PriorityHigh)
+	a, err := ds.Pool().Resolve(context.TODO(), server, "A", resolvers.PriorityHigh)
 	if err != nil {
-		a, err = ds.Pool().Resolve(server, "AAAA", resolvers.PriorityHigh)
+		a, err = ds.Pool().Resolve(context.TODO(), server, "AAAA", resolvers.PriorityHigh)
 		if err != nil {
 			return "", fmt.Errorf("DNS server has no A or AAAA record: %s: %v", server, err)
 		}
@@ -319,7 +320,7 @@ func (ds *DNSService) queryServiceNames(subdomain, domain string) {
 			continue
 		}
 		ds.incTotalNames()
-		if a, err := ds.Pool().Resolve(srvName, "SRV", resolvers.PriorityLow); err == nil {
+		if a, err := ds.Pool().Resolve(context.TODO(), srvName, "SRV", resolvers.PriorityLow); err == nil {
 			ds.resolvedName(&requests.DNSRequest{
 				Name:    srvName,
 				Domain:  domain,
@@ -364,7 +365,7 @@ func (ds *DNSService) reverseDNSQuery(ip string) {
 	defer ds.Config().SemMaxDNSQueries.Release(1)
 
 	ds.SetActive()
-	ptr, answer, err := ds.Pool().Reverse(ip)
+	ptr, answer, err := ds.Pool().Reverse(context.TODO(), ip)
 	ds.metrics.QueryTime(time.Now())
 	if err != nil {
 		return

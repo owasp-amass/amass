@@ -4,6 +4,7 @@
 package sources
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"strconv"
@@ -104,7 +105,7 @@ func (t *TeamCymru) origin(addr string) *requests.ASNRequest {
 		return nil
 	}
 
-	answers, err = t.Pool().Resolve(name, "TXT", resolvers.PriorityHigh)
+	answers, err = t.Pool().Resolve(context.TODO(), name, "TXT", resolvers.PriorityHigh)
 	if err != nil {
 		t.Bus().Publish(requests.LogTopic,
 			fmt.Sprintf("%s: %s: DNS TXT record query error: %v", t.String(), name, err),
@@ -150,7 +151,7 @@ func (t *TeamCymru) asnLookup(asn int) *requests.ASNRequest {
 	var answers []requests.DNSAnswer
 	name := "AS" + strconv.Itoa(asn) + ".asn.cymru.com"
 
-	answers, err = t.Pool().Resolve(name, "TXT", resolvers.PriorityHigh)
+	answers, err = t.Pool().Resolve(context.TODO(), name, "TXT", resolvers.PriorityHigh)
 	if err != nil {
 		t.Bus().Publish(requests.LogTopic,
 			fmt.Sprintf("%s: %s: DNS TXT record query error: %v", t.String(), name, err),

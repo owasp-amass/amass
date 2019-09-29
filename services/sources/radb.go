@@ -57,7 +57,7 @@ func NewRADb(cfg *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool)
 func (r *RADb) OnStart() error {
 	r.BaseService.OnStart()
 
-	if answers, err := r.Pool().Resolve(radbWhoisURL, "A", resolvers.PriorityHigh); err == nil {
+	if answers, err := r.Pool().Resolve(context.TODO(), radbWhoisURL, "A", resolvers.PriorityHigh); err == nil {
 		ip := answers[0].Data
 		if ip != "" {
 			r.addr = ip
@@ -318,7 +318,7 @@ func (r *RADb) getNetblocksURL(asn string) string {
 func (r *RADb) ipToASN(cidr string) int {
 	r.SetActive()
 	if r.addr == "" {
-		answers, err := r.Pool().Resolve(radbWhoisURL, "A", resolvers.PriorityHigh)
+		answers, err := r.Pool().Resolve(context.TODO(), radbWhoisURL, "A", resolvers.PriorityHigh)
 		if err != nil {
 			r.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", r.String(), radbWhoisURL, err))
 			return 0

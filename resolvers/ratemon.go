@@ -4,6 +4,7 @@
 package resolvers
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -93,15 +94,15 @@ func (r *RateMonitoredResolver) ReportError() {
 }
 
 // Resolve implements the Resolver interface.
-func (r *RateMonitoredResolver) Resolve(name, qtype string) ([]requests.DNSAnswer, bool, error) {
+func (r *RateMonitoredResolver) Resolve(ctx context.Context, name, qtype string) ([]requests.DNSAnswer, bool, error) {
 	r.wait()
-	return r.resolver.Resolve(name, qtype)
+	return r.resolver.Resolve(ctx, name, qtype)
 }
 
 // Reverse implements the Resolver interface.
-func (r *RateMonitoredResolver) Reverse(addr string) (string, string, error) {
+func (r *RateMonitoredResolver) Reverse(ctx context.Context, addr string) (string, string, error) {
 	r.wait()
-	return r.resolver.Reverse(addr)
+	return r.resolver.Reverse(ctx, addr)
 }
 
 // Implementation of the leaky bucket algorithm.

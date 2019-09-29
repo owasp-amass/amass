@@ -4,6 +4,7 @@
 package services
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"sync"
@@ -184,7 +185,7 @@ func (bfs *BruteForceService) bruteForceResolution(word, sub, domain string) {
 	name := word + "." + sub
 	var answers []requests.DNSAnswer
 	for _, t := range BruteForceQueryTypes {
-		if a, err := bfs.Pool().Resolve(name, t, resolvers.PriorityLow); err == nil {
+		if a, err := bfs.Pool().Resolve(context.TODO(), name, t, resolvers.PriorityLow); err == nil {
 			answers = append(answers, a...)
 			// Do not continue if a CNAME was discovered
 			if t == "CNAME" {
