@@ -3,6 +3,8 @@
 
 package resolvers
 
+import "context"
+
 // SanityCheck performs some basic checks to see if the resolvers will be usable.
 func SanityCheck(res []Resolver) []Resolver {
 	results := make(chan Resolver, 50)
@@ -72,7 +74,7 @@ func resolveForSanityCheck(r Resolver, name string, badname bool, ch chan bool) 
 	var success bool
 
 	for i := 0; i < 2 && again; i++ {
-		_, again, err = r.Resolve(name, "A")
+		_, again, err = r.Resolve(context.TODO(), name, "A")
 		if err == nil && !again {
 			success = true
 			break

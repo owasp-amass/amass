@@ -4,6 +4,7 @@
 package resolvers
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"net"
@@ -111,7 +112,11 @@ loop:
 	if len(resolvers) == 0 {
 		return nil
 	}
-	return NewResolverPool(SanityCheck(resolvers))
+
+	if r := SanityCheck(resolvers); len(r) > 0 {
+		return NewResolverPool(r)
+	}
+	return nil
 }
 
 // NewResolverPool initializes a ResolverPool that uses the provided Resolvers.
@@ -210,7 +215,7 @@ func (rp *ResolverPool) SubdomainToDomain(name string) string {
 	for i := 0; i < len(labels)-1; i++ {
 		sub := strings.Join(labels[i:], ".")
 
-		if ns, err := rp.Resolve(sub, "NS", PriorityHigh); err == nil {
+		if ns, err := rp.Resolve(context.TODO(), sub, "NS", PriorityHigh); err == nil {
 			pieces := strings.Split(ns[0].Data, ",")
 			rp.domainCache[pieces[0]] = struct{}{}
 			domain = pieces[0]
@@ -221,7 +226,7 @@ func (rp *ResolverPool) SubdomainToDomain(name string) string {
 }
 
 // Resolve performs a DNS request using available Resolvers in the pool.
-func (rp *ResolverPool) Resolve(name, qtype string, priority int) ([]requests.DNSAnswer, error) {
+func (rp *ResolverPool) Resolve(ctx context.Context, name, qtype string, priority int) ([]requests.DNSAnswer, error) {
 	num := 1
 	if rp.numUsableResolvers() >= 3 {
 		num = 3
@@ -237,7 +242,7 @@ func (rp *ResolverPool) Resolve(name, qtype string, priority int) ([]requests.DN
 			break
 		}
 
-		go rp.queryResolver(r, ch, name, qtype, priority)
+		go rp.queryResolver(ctx, r, ch, name, qtype, priority)
 		queries++
 	}
 
@@ -249,12 +254,18 @@ func (rp *ResolverPool) Resolve(name, qtype string, priority int) ([]requests.DN
 		}
 	}
 
+	if len(votes) == 0 {
+		return []requests.DNSAnswer{}, &ResolveError{
+			Err: fmt.Sprintf("Resolver Pool: DNS query for %s type %s returned 0 results", name, qtype),
+		}
+	}
+
 	rp.SetActive()
 	return rp.performElection(votes, name, qtype)
 }
 
 // Reverse is performs reverse DNS queries using available Resolvers in the pool.
-func (rp *ResolverPool) Reverse(addr string) (string, string, error) {
+func (rp *ResolverPool) Reverse(ctx context.Context, addr string) (string, string, error) {
 	var name, ptr string
 
 	if ip := net.ParseIP(addr); amassnet.IsIPv4(ip) {
@@ -268,7 +279,7 @@ func (rp *ResolverPool) Reverse(addr string) (string, string, error) {
 		}
 	}
 
-	answers, err := rp.Resolve(ptr, "PTR", PriorityLow)
+	answers, err := rp.Resolve(ctx, ptr, "PTR", PriorityLow)
 	if err != nil {
 		return ptr, name, err
 	}
@@ -360,7 +371,7 @@ func (rp *ResolverPool) performElection(votes []*resolveVote, name, qtype string
 	return ans, nil
 }
 
-func (rp *ResolverPool) queryResolver(r Resolver, ch chan *resolveVote, name, qtype string, priority int) {
+func (rp *ResolverPool) queryResolver(ctx context.Context, r Resolver, ch chan *resolveVote, name, qtype string, priority int) {
 	var err error
 	var again bool
 	start := time.Now()
@@ -378,7 +389,7 @@ func (rp *ResolverPool) queryResolver(r Resolver, ch chan *resolveVote, name, qt
 	}
 
 	for {
-		ans, again, err = r.Resolve(name, qtype)
+		ans, again, err = r.Resolve(ctx, name, qtype)
 		if !again {
 			break
 		} else if priority == PriorityCritical {
