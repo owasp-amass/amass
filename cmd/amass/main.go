@@ -14,7 +14,7 @@ import (
 	"github.com/OWASP/Amass/eventbus"
 	"github.com/OWASP/Amass/format"
 	"github.com/OWASP/Amass/resolvers"
-	"github.com/OWASP/Amass/services/sources"
+	"github.com/OWASP/Amass/sources"
 	"github.com/fatih/color"
 )
 

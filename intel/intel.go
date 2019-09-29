@@ -21,7 +21,7 @@ import (
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
-	"github.com/OWASP/Amass/services/sources"
+	"github.com/OWASP/Amass/sources"
 	sf "github.com/OWASP/Amass/stringfilter"
 )
 
