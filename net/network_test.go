@@ -24,12 +24,12 @@ func TestAmassRangeHosts(t *testing.T) {
 	}
 }
 
-func TestAmassNetHosts(t *testing.T) {
+func TestAmassAllHosts(t *testing.T) {
 	_, ipnet, _ := net.ParseCIDR("72.237.4.0/24")
 
-	ips := NetHosts(ipnet)
+	ips := AllHosts(ipnet)
 	if num := len(ips); num != 254 {
-		t.Errorf("%d IP address strings were returned by NetHosts instead of %d\n", num, 254)
+		t.Errorf("%d IP address strings were returned by AllHosts instead of %d\n", num, 254)
 	}
 }
 

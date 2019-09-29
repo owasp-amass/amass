@@ -13,11 +13,11 @@ import (
 // IPv4RE is a regular expression that will match an IPv4 address.
 const IPv4RE = "((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)[.]){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)"
 
-// NetHosts returns a slice containing all the IP addresses within
+// AllHosts returns a slice containing all the IP addresses within
 // the CIDR provided by the parameter. This implementation was
 // obtained/modified from the following:
 // https://gist.github.com/kotakanbe/d3059af990252ba89a82
-func NetHosts(cidr *net.IPNet) []net.IP {
+func AllHosts(cidr *net.IPNet) []net.IP {
 	var ips []net.IP
 
 	for ip := cidr.IP.Mask(cidr.Mask); cidr.Contains(ip); addrInc(ip) {
@@ -25,13 +25,17 @@ func NetHosts(cidr *net.IPNet) []net.IP {
 
 		ips = append(ips, addr)
 	}
-	// Remove network address and broadcast address
-	return ips[1 : len(ips)-1]
+
+	if len(ips) > 2 {
+		// Remove network address and broadcast address
+		ips = ips[1 : len(ips)-1]
+	}
+	return ips
 }
 
-// NetFirstLast return the first and last IP address of
+// FirstLast return the first and last IP address of
 // the provided CIDR/netblock.
-func NetFirstLast(cidr *net.IPNet) (net.IP, net.IP) {
+func FirstLast(cidr *net.IPNet) (net.IP, net.IP) {
 	firstIP := cidr.IP
 	prefixLen, bits := cidr.Mask.Size()
 	if prefixLen == bits {

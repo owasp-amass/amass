@@ -5,6 +5,7 @@ package intel
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"net"
@@ -156,7 +157,7 @@ func (c *Collection) processCIDRs() {
 				continue
 			}
 
-			for _, addr := range amassnet.NetHosts(cidr) {
+			for _, addr := range amassnet.AllHosts(cidr) {
 				c.Config.SemMaxDNSQueries.Acquire(1)
 				go c.investigateAddr(addr.String())
 			}
@@ -174,7 +175,7 @@ func (c *Collection) investigateAddr(addr string) {
 
 	addrinfo := requests.AddressInfo{Address: ip}
 	c.activeChan <- struct{}{}
-	if _, answer, err := c.Pool.Reverse(addr); err == nil {
+	if _, answer, err := c.Pool.Reverse(context.TODO(), addr); err == nil {
 		if d := strings.TrimSpace(c.Pool.SubdomainToDomain(answer)); d != "" {
 			c.domainChan <- &requests.Output{
 				Name:      d,

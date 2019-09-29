@@ -153,6 +153,6 @@ func cidrToMaltegoNetblock(cidr string) string {
 		return ""
 	}
 
-	ip1, ip2 := amassnet.NetFirstLast(ipnet)
+	ip1, ip2 := amassnet.FirstLast(ipnet)
 	return ip1.String() + "-" + ip2.String()
 }
