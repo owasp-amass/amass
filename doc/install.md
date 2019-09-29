@@ -58,7 +58,7 @@ A [precompiled version is available](https://github.com/OWASP/Amass/releases) wi
 
 
 
-## From Source
+## Build
 
 If you prefer to build your own binary from the latest release of the source code, make sure you have a correctly configured **Go >= 1.12** environment. More information about how to achieve this can be found [on the golang website.](https://golang.org/doc/install).
 
@@ -87,7 +87,7 @@ export GO111MODULE=on
 3. Next, build the binary from the project source code:
 
 ```bash
-cd $GOPATH/src/github.com/OWASP/Amass
+cd ~/go/src/github.com/OWASP/Amass
 
 go install ./...
 ```
@@ -95,7 +95,7 @@ go install ./...
 At this point, the binary should be in *$GOPATH/bin*. Several wordlists for performing DNS name alterations and brute forcing can be found in the following directory:
 
 ```bash
-ls $GOPATH/src/github.com/OWASP/Amass/wordlists/
+ls ~/go/src/github.com/OWASP/Amass/wordlist/
 ```
 
 ## Packages Maintained by the Amass Project
