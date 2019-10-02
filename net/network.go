@@ -5,7 +5,6 @@ package net
 
 import (
 	"bytes"
-	"encoding/hex"
 	"math/big"
 	"net"
 	"strings"
@@ -198,9 +197,4 @@ func IPv6NibbleFormat(ip string) string {
 	}
 
 	return strings.Join(reversed, ".")
-}
-
-// HexString returns a string that is the hex representation of the byte slice parameter.
-func HexString(b []byte) string {
-	return hex.EncodeToString(b)
 }
