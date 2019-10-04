@@ -80,6 +80,7 @@ func GetAllSources(cfg *config.Config, bus *eb.EventBus, pool *resolvers.Resolve
 		NewViewDNS(cfg, bus, pool),
 		NewVirusTotal(cfg, bus, pool),
 		NewWayback(cfg, bus, pool),
+		NewWhoisXML(cfg, bus, pool),
 		NewYahoo(cfg, bus, pool),
 	}
 
