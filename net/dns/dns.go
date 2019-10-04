@@ -35,8 +35,12 @@ func CopyString(src string) string {
 
 // RemoveAsteriskLabel returns the provided DNS name with all asterisk labels removed.
 func RemoveAsteriskLabel(s string) string {
-	startIndex := strings.LastIndex(s, "*.") + 2
-	return s[startIndex:]
+	startIndex := strings.LastIndex(s, "*.")
+	if startIndex == -1 {
+		return s
+	}
+
+	return s[startIndex+2:]
 }
 
 // ReverseString returns the characters of the argument string in reverse order.
