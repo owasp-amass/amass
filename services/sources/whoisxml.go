@@ -140,19 +140,15 @@ func (w *WhoisXML) executeWhoisQuery(domain string) {
 			fmt.Sprintf("Failed to decode json in WhoisXML.\nErr:%s", err))
 		return
 	}
-	if len(q.List) > 0 {
-		w.Bus().Publish(requests.LogTopic,
-			fmt.Sprintf("%s: %s: No results for WhoisXML.", w.String(), u),
-		)
-		return
-	}
+	if q.Found > 0 {
 
-	w.Bus().Publish(requests.NewWhoisTopic, &requests.WhoisRequest{
-		Domain:     domain,
-		NewDomains: q.List,
-		Tag:        w.SourceType,
-		Source:     w.String(),
-	})
+		w.Bus().Publish(requests.NewWhoisTopic, &requests.WhoisRequest{
+			Domain:     domain,
+			NewDomains: q.List,
+			Tag:        w.SourceType,
+			Source:     w.String(),
+		})
+	}
 }
 
 func (w *WhoisXML) getReverseWhoisURL(domain string) string {
