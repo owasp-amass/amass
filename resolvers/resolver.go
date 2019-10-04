@@ -5,6 +5,7 @@ package resolvers
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"net"
 	"strings"
@@ -262,7 +263,7 @@ func (r *BaseResolver) Reverse(ctx context.Context, addr string) (string, string
 	if ip := net.ParseIP(addr); amassnet.IsIPv4(ip) {
 		ptr = amassnet.ReverseIP(addr) + ".in-addr.arpa"
 	} else if amassnet.IsIPv6(ip) {
-		ptr = amassnet.IPv6NibbleFormat(amassnet.HexString(ip)) + ".ip6.arpa"
+		ptr = amassnet.IPv6NibbleFormat(hex.EncodeToString(ip)) + ".ip6.arpa"
 	} else {
 		return ptr, "", &ResolveError{
 			Err:   fmt.Sprintf("Invalid IP address parameter: %s", addr),
