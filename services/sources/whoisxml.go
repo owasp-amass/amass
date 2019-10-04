@@ -27,35 +27,35 @@ type WhoisXML struct {
 	RateLimit  time.Duration
 }
 
-//Reverse handles response json
-type Reverse struct {
+//WhoisXMLResponse handles WhoisXML response json
+type WhoisXMLResponse struct {
 	Found int      `json:"domainsCount"`
 	List  []string `json:"domainsList"`
 }
 
-//AdvanceRequest handles POST request Json with specific fields.
-type AdvanceRequest struct {
-	Search      string               `json:"searchType"`
-	Mode        string               `json:"mode"`
-	SearchTerms []AdvanceSearchTerms `json:"advancedSearchTerms"`
-}
-
-//BasicRequest is for using general search terms such as including domains and excluding regions
-type BasicRequest struct {
-	Search      string           `json:"searchType"`
-	Mode        string           `json:"mode"`
-	SearchTerms BasicSearchTerms `json:"basicSearchTerms"`
-}
-
-//AdvanceSearchTerms are variables for the api's query with specific fields in mind
-type AdvanceSearchTerms struct {
+//WhoisXMLAdvanceSearchTerms are variables for the api's query with specific fields in mind
+type WhoisXMLAdvanceSearchTerms struct {
 	Field string `json:"field"`
 	Term  string `json:"term"`
 }
 
-//BasicSearchTerms for searching by domain
-type BasicSearchTerms struct {
+//WhoisXMLAdvanceRequest handles POST request Json with specific fields.
+type WhoisXMLAdvanceRequest struct {
+	Search      string                       `json:"searchType"`
+	Mode        string                       `json:"mode"`
+	SearchTerms []WhoisXMLAdvanceSearchTerms `json:"advancedSearchTerms"`
+}
+
+//WhoisXMLBasicSearchTerms for searching by domain
+type WhoisXMLBasicSearchTerms struct {
 	Include []string `json:"include"`
+}
+
+//WhoisXMLBasicRequest is for using general search terms such as including domains and excluding regions
+type WhoisXMLBasicRequest struct {
+	Search      string                   `json:"searchType"`
+	Mode        string                   `json:"mode"`
+	SearchTerms WhoisXMLBasicSearchTerms `json:"basicSearchTerms"`
 }
 
 // NewWhoisXML returns he object initialized, but not yet started.
@@ -92,15 +92,7 @@ func (w *WhoisXML) processRequests() {
 		select {
 		case <-w.Quit():
 			return
-		case dns := <-w.DNSRequestChan():
-			if w.Config().IsDomainInScope(dns.Domain) {
-				if time.Now().Sub(last) < w.RateLimit {
-					time.Sleep(w.RateLimit)
-				}
-				last = time.Now()
-				//w.executeDNSQuery(dns.Domain)
-				last = time.Now()
-			}
+
 		case whois := <-w.WhoisRequestChan():
 			if w.Config().IsDomainInScope(whois.Domain) {
 				if time.Now().Sub(last) < w.RateLimit {
@@ -126,7 +118,7 @@ func (w *WhoisXML) executeWhoisQuery(domain string) {
 	}
 	headers := map[string]string{"X-Authentication-Token": w.API.Key}
 
-	var r = BasicRequest{
+	var r = WhoisXMLBasicRequest{
 		Search: "historic",
 		Mode:   "purchase",
 	}
@@ -140,13 +132,17 @@ func (w *WhoisXML) executeWhoisQuery(domain string) {
 	}
 
 	// Pull the table we need from the page content
-	var q Reverse
+	var q WhoisXMLResponse
 
 	err = json.NewDecoder(strings.NewReader(page)).Decode(&q)
-
-	if q.List == nil {
+	if err != nil {
 		w.Bus().Publish(requests.LogTopic,
-			fmt.Sprintf("%s: %s: Failed to discover the table of results", w.String(), u),
+			fmt.Sprintf("Failed to decode json in WhoisXML.\nErr:%s", err))
+		return
+	}
+	if len(q.List) > 0 {
+		w.Bus().Publish(requests.LogTopic,
+			fmt.Sprintf("%s: %s: No results for WhoisXML.", w.String(), u),
 		)
 		return
 	}
