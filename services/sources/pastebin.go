@@ -25,7 +25,7 @@ func NewPastebin(cfg *config.Config, bus *eb.EventBus, pool *resolvers.ResolverP
 		RateLimit:  3 * time.Second,
 	}
 
-	p.BaseService = *services.NewBaseService(t, "Pastebin", cfg, bus, pool)
+	p.BaseService = *services.NewBaseService(p, "Pastebin", cfg, bus, pool)
 	return p
 }
 
