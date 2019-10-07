@@ -2,12 +2,14 @@ package sources
 
 import (
 	"time"
+	"fmt"
 
 	"github.com/OWASP/Amass/services"
 	"github.com/OWASP/Amass/config"
 	eb "github.com/OWASP/Amass/eventbus"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/requests"
+	"github.com/davecgh/go-spew/spew"
 )
 
 // Pastebin is the Service that handles access to the CertSpotter data source.
@@ -63,5 +65,13 @@ func (p *Pastebin) processRequests() {
 }
 
 func (p *Pastebin) executeQuery(domain string) {
+	re := p.Config().DomainRegex(domain)
+	spew.Dump(re)
+	spew.Dump(p.webURLDumpIDs(domain))
 
+}
+
+// Returns the Web URL to fetch all dump ids for a given doamin
+func (p *Pastebin) webURLDumpIDs(domain string) string {
+	return fmt.Sprintf("https://psbdmp.ws/api/search/%s", domain)
 }
