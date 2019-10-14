@@ -9,8 +9,11 @@ import (
 	eb "github.com/OWASP/Amass/eventbus"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/requests"
+	"github.com/OWASP/Amass/net/http"
 	"github.com/davecgh/go-spew/spew"
 )
+
+
 
 // Pastebin is the Service that handles access to the CertSpotter data source.
 type Pastebin struct {
@@ -65,9 +68,20 @@ func (p *Pastebin) processRequests() {
 }
 
 func (p *Pastebin) executeQuery(domain string) {
+	var err error
+	var url, page string
+
 	re := p.Config().DomainRegex(domain)
 	spew.Dump(re)
 	spew.Dump(p.webURLDumpIDs(domain))
+
+	url = p.webURLDumpIDs(domain)
+	page, err = http.RequestWebPage(url, nil, nil, "", "")
+	if err != nil {
+		p.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", p.String(), url, err))
+		return
+	}
+	spew.Dump(page)
 
 }
 
