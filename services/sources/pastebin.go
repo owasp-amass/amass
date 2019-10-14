@@ -122,9 +122,7 @@ func (p *Pastebin) extractIDs(domain string, url string) ([]string,error) {
 		return nil, err
 	}
 
-	in := []byte(page)
-
-	err = json.Unmarshal(in, &data)
+	err = json.Unmarshal([]byte(page), &data)
     if err != nil {
         panic(err)
 	}
