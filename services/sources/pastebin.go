@@ -80,7 +80,8 @@ func (p *Pastebin) processRequests() {
 }
 
 func (p *Pastebin) executeQuery(domain string) {
-	var url string
+	var url, page string
+	var err error
 	re := p.Config().DomainRegex(domain)
 
 	spew.Dump(re)
@@ -91,6 +92,23 @@ func (p *Pastebin) executeQuery(domain string) {
 		return
 	}
 	spew.Dump(ids)
+
+	for _, id := range ids {
+		url = p.webURLDumpData(id)
+		page, err = http.RequestWebPage(url, nil, nil, "", "")
+		if err != nil {
+			p.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", p.String(), url, err))
+			return 
+		}
+		for _, name := range re.FindAllString(page, -1) {
+			p.Bus().Publish(requests.NewNameTopic, &requests.DNSRequest{
+				Name:   name,
+				Domain: domain,
+				Tag:    p.SourceType,
+				Source: p.String(),
+			})
+		}
+	}
 }
 
 func (p *Pastebin) extractIDs(domain string, url string) ([]string,error) {
@@ -120,7 +138,12 @@ func (p *Pastebin) extractIDs(domain string, url string) ([]string,error) {
 	return ids, nil
 }
 
+
 // Returns the Web URL to fetch all dump ids for a given doamin
 func (p *Pastebin) webURLDumpIDs(domain string) string {
 	return fmt.Sprintf("https://psbdmp.ws/api/search/%s", domain)
+}
+
+func (p *Pastebin) webURLDumpData(id string) string {
+	return fmt.Sprintf("https://psbdmp.ws/api/dump/get/%s",id)
 }
