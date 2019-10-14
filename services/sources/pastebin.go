@@ -19,6 +19,7 @@ type DataItem struct {
     Time string 	     `json:"time"` 
 }
 
+// Extract the response from the Web response given by pastebin
 type Data struct {
 	Search   	string       `json:"search"`
 	Count   int          `json:"count"`
@@ -107,6 +108,7 @@ func (p *Pastebin) executeQuery(domain string) {
 	}
 }
 
+// Extract the IDs from the pastebin Web response
 func (p *Pastebin) extractIDs(domain string, url string) ([]string,error) {
 	var page string
 	var data Data
@@ -140,6 +142,7 @@ func (p *Pastebin) webURLDumpIDs(domain string) string {
 	return fmt.Sprintf("https://psbdmp.ws/api/search/%s", domain)
 }
 
+// Returns the Web URL to get all dumps for a given doamin
 func (p *Pastebin) webURLDumpData(id string) string {
 	return fmt.Sprintf("https://psbdmp.ws/api/dump/get/%s",id)
 }
