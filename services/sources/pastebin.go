@@ -3,6 +3,7 @@ package sources
 import (
 	"time"
 	"fmt"
+	"encoding/json"
 
 	"github.com/OWASP/Amass/services"
 	"github.com/OWASP/Amass/config"
@@ -13,6 +14,17 @@ import (
 	"github.com/davecgh/go-spew/spew"
 )
 
+type DataItem struct {
+    Id   string          `json:"id"`
+    Tags string          `json:"tags"`
+    Time string 	     `json:"time"` 
+}
+
+type Data struct {
+	Search   	string       `json:"search"`
+	Count   int          `json:"count"`
+	Data   	[]DataItem   `json:"data"`
+}
 
 
 // Pastebin is the Service that handles access to the CertSpotter data source.
@@ -68,21 +80,44 @@ func (p *Pastebin) processRequests() {
 }
 
 func (p *Pastebin) executeQuery(domain string) {
-	var err error
-	var url, page string
-
+	var url string
 	re := p.Config().DomainRegex(domain)
+
 	spew.Dump(re)
-	spew.Dump(p.webURLDumpIDs(domain))
+
+	ids, err := p.extractIDs(domain,url)
+	if err != nil {
+		p.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", p.String(), url, err))
+		return
+	}
+	spew.Dump(ids)
+}
+
+func (p *Pastebin) extractIDs(domain string, url string) ([]string,error) {
+	var page string
+	var data Data
+	var err error
+	var ids []string
 
 	url = p.webURLDumpIDs(domain)
 	page, err = http.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
 		p.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", p.String(), url, err))
-		return
+		return nil, err
 	}
-	spew.Dump(page)
 
+	in := []byte(page)
+
+	err = json.Unmarshal(in, &data)
+    if err != nil {
+        panic(err)
+	}
+	
+	for _, item := range data.Data {
+		ids = append(ids,item.Id)
+	} 
+	
+	return ids, nil
 }
 
 // Returns the Web URL to fetch all dump ids for a given doamin
