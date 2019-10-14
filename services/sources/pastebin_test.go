@@ -5,15 +5,12 @@ import (
 
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
-	"github.com/davecgh/go-spew/spew"
 )
 
 func TestPastebin(t *testing.T) {
 	if *networkTest == false {
 		return
 	}
-
-	spew.Dump("Hello")
 
 	cfg := setupConfig(domainTest)
 

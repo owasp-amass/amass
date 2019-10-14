@@ -11,7 +11,6 @@ import (
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/net/http"
-	"github.com/davecgh/go-spew/spew"
 )
 
 type DataItem struct {
@@ -84,14 +83,11 @@ func (p *Pastebin) executeQuery(domain string) {
 	var err error
 	re := p.Config().DomainRegex(domain)
 
-	spew.Dump(re)
-
 	ids, err := p.extractIDs(domain,url)
 	if err != nil {
 		p.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", p.String(), url, err))
 		return
 	}
-	spew.Dump(ids)
 
 	for _, id := range ids {
 		url = p.webURLDumpData(id)
