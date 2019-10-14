@@ -82,6 +82,7 @@ func GetAllSources(cfg *config.Config, bus *eb.EventBus, pool *resolvers.Resolve
 		NewWayback(cfg, bus, pool),
 		NewWhoisXML(cfg, bus, pool),
 		NewYahoo(cfg, bus, pool),
+		NewPastebin(cfg, bus, pool),
 	}
 
 	// Filtering in-place - https://github.com/golang/go/wiki/SliceTricks
