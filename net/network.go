@@ -220,13 +220,3 @@ func IPv6NibbleFormat(ip string) string {
 
 	return strings.Join(reversed, ".")
 }
-
-// HexString returns a string that is the hex representation of the byte slice parameter.
-func HexString(b []byte) string {
-	hexDigit := "0123456789abcdef"
-	s := make([]byte, len(b)*2)
-	for i, tn := range b {
-		s[i*2], s[i*2+1] = hexDigit[tn>>4], hexDigit[tn&0xf]
-	}
-	return string(s)
-}

@@ -61,6 +61,7 @@ func GetAllSources(sys System) []Service {
 		NewNetworksDB(sys),
 		NewOpenUKArchive(sys),
 		NewPassiveTotal(sys),
+		NewPastebin(sys),
 		NewPTRArchive(sys),
 		NewRADb(sys),
 		NewRiddler(sys),

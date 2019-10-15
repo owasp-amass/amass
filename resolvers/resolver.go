@@ -5,6 +5,7 @@ package resolvers
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"net"
 	"strconv"
@@ -208,7 +209,7 @@ func (r *BaseResolver) Port() int {
 
 // Available always returns true.
 func (r *BaseResolver) Available() (bool, error) {
-	if r.stopped {
+	if r.IsStopped() {
 		msg := fmt.Sprintf("DNS: Resolver %s has been stopped", r.Address())
 
 		return false, &ResolveError{Err: msg}
@@ -312,6 +313,10 @@ func (r *BaseResolver) lastConnection() *dns.Conn {
 
 // Resolve performs DNS queries using the Resolver.
 func (r *BaseResolver) Resolve(ctx context.Context, name, qtype string, priority int) ([]requests.DNSAnswer, bool, error) {
+	if avail, err := r.Available(); !avail {
+		return []requests.DNSAnswer{}, true, err
+	}
+
 	qt, err := textToTypeNum(qtype)
 	if err != nil {
 		return nil, false, &ResolveError{
@@ -343,12 +348,15 @@ func (r *BaseResolver) Resolve(ctx context.Context, name, qtype string, priority
 
 // Reverse is performs reverse DNS queries using the Resolver.
 func (r *BaseResolver) Reverse(ctx context.Context, addr string, priority int) (string, string, error) {
-	var name, ptr string
+	if avail, err := r.Available(); !avail {
+		return "", "", err
+	}
 
+	var name, ptr string
 	if ip := net.ParseIP(addr); amassnet.IsIPv4(ip) {
 		ptr = amassnet.ReverseIP(addr) + ".in-addr.arpa"
 	} else if amassnet.IsIPv6(ip) {
-		ptr = amassnet.IPv6NibbleFormat(amassnet.HexString(ip)) + ".ip6.arpa"
+		ptr = amassnet.IPv6NibbleFormat(hex.EncodeToString(ip)) + ".ip6.arpa"
 	} else {
 		return ptr, "", &ResolveError{
 			Err:   fmt.Sprintf("Invalid IP address parameter: %s", addr),
