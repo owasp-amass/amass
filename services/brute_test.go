@@ -1,20 +1,16 @@
 // Copyright 2017 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
-// +build brute
-
 package services
 
 import (
-	"log"
-	"strings"
+	"context"
 	"testing"
 	"time"
 
 	"github.com/OWASP/Amass/config"
 	eb "github.com/OWASP/Amass/eventbus"
-	"github.com/OWASP/Amass/resolvers"
-	"github.com/miekg/dns"
+	"github.com/OWASP/Amass/requests"
 )
 
 var (
@@ -22,44 +18,68 @@ var (
 	wordlist = []string{"images", "search", "mail"}
 
 	// Resolved bruteTestRequests
-	bruteTestRequests = []*DNSRequest{
-		&Request{
-			Name:    "bing.com",
-			Domain:  "bing.com",
-			Records: []DNSAnswer{DNSAnswer{Type: int(dns.TypeA)}},
+	bruteTestRequests = []*requests.DNSRequest{
+		&requests.DNSRequest{
+			Name:   "www.bing.com",
+			Domain: "bing.com",
 		},
-		&DNSRequest{
-			Name:    "yahoo.com",
-			Domain:  "yahoo.com",
-			Records: []DNSAnswer{DNSAnswer{Type: int(dns.TypeA)}},
+		&requests.DNSRequest{
+			Name:   "www.yahoo.com",
+			Domain: "yahoo.com",
 		},
 	}
 )
 
 func TestBruteForceRootDomains(t *testing.T) {
-	c := &config.Config{}
-	c.Wordlist = wordlist
-	c.AddDomains(domains)
-	c.BruteForcing = true
+	if *networkTest == false {
+		return
+	}
 
-	buf := new(strings.Builder)
-	config.Log = log.New(buf, "", log.Lmicroseconds)
+	cfg := config.NewConfig()
+	cfg.Wordlist = wordlist
+	cfg.AddDomains(domains)
+	cfg.BruteForcing = true
 
-	out := make(chan *DNSRequest)
+	sys, err := NewLocalSystem(cfg)
+	if err != nil {
+		return
+	}
+	defer sys.Shutdown()
+
 	bus := eb.NewEventBus()
-	bus.Subscribe(NameResolvedTopic, func(req *DNSRequest) {
-		out <- req
-	})
 	defer bus.Stop()
 
-	srv := NewBruteForceService(c, bus, resolvers.NewResolverPool(nil))
-	srv.Start()
-	defer srv.Stop()
+	ctx := context.WithValue(context.Background(), requests.ContextConfig, cfg)
+	ctx = context.WithValue(ctx, requests.ContextEventBus, bus)
+
+	out := make(chan *requests.DNSRequest)
+	fn := func(req *requests.DNSRequest) {
+		out <- req
+	}
+	bus.Subscribe(requests.NameResolvedTopic, fn)
+	defer bus.Unsubscribe(requests.NameResolvedTopic, fn)
+
+	var srv Service
+	for _, s := range testSystem.DataSources() {
+		if s.String() == "Brute Forcing" {
+			srv = s
+			break
+		}
+	}
+	if srv == nil {
+		return
+	}
+
+	for _, d := range cfg.Domains() {
+		srv.DNSRequest(ctx, &requests.DNSRequest{
+			Name:   d,
+			Domain: d,
+		})
+	}
 
 	count := 0
-	expected := len(c.Wordlist) * len(domains)
+	expected := len(cfg.Wordlist) * len(domains)
 	done := time.After(time.Second * 10)
-
 loop:
 	for {
 		select {
@@ -76,37 +96,56 @@ loop:
 }
 
 func TestBruteForceMinForRecursive(t *testing.T) {
-	c := &config.Config{}
-	c.AddDomains(domains)
-	c.Wordlist = wordlist
-	c.BruteForcing = true
-	c.Recursive = true
-	c.MinForRecursive = 2
+	if *networkTest == false {
+		return
+	}
 
-	buf := new(strings.Builder)
-	c.Log = log.New(buf, "", log.Lmicroseconds)
+	cfg := config.NewConfig()
+	cfg.Wordlist = wordlist
+	cfg.AddDomains(domains)
+	cfg.BruteForcing = true
+	cfg.Recursive = true
+	cfg.MinForRecursive = 2
 
-	out := make(chan *DNSRequest)
+	sys, err := NewLocalSystem(cfg)
+	if err != nil {
+		return
+	}
+	defer sys.Shutdown()
+
 	bus := eb.NewEventBus()
-	bus.Subscribe(NameResolvedTopic, func(req *DNSRequest) {
-		out <- req
-	})
 	defer bus.Stop()
 
-	srv := NewBruteForceService(c, bus, resolvers.NewResolverPool(nil))
-	srv.Start()
-	defer srv.Stop()
+	ctx := context.WithValue(context.Background(), requests.ContextConfig, cfg)
+	ctx = context.WithValue(ctx, requests.ContextEventBus, bus)
+
+	out := make(chan *requests.DNSRequest)
+	fn := func(req *requests.DNSRequest) {
+		out <- req
+	}
+	bus.Subscribe(requests.NameResolvedTopic, fn)
+	defer bus.Unsubscribe(requests.NameResolvedTopic, fn)
+
+	var srv Service
+	for _, s := range testSystem.DataSources() {
+		if s.String() == "Brute Forcing" {
+			srv = s
+			break
+		}
+	}
+	if srv == nil {
+		return
+	}
 
 	// Should be filtered
-	bus.Publish(NewSubdomainTopic, bruteTestRequests[0], 1)
+	srv.SubdomainDiscovered(ctx, bruteTestRequests[0], 1)
 
 	// Should pass
-	bus.Publish(NewSubdomainTopic, bruteTestRequests[1], 2)
+	srv.SubdomainDiscovered(ctx, bruteTestRequests[1], 2)
 
-	expected := len(c.Wordlist) * (len(bruteTestRequests) - 1 + len(domains))
+	expected := len(cfg.Wordlist)
 	count := 0
 	done := time.After(time.Second * 15)
-
 loop:
 	for {
 		select {

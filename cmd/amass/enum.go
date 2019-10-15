@@ -24,6 +24,7 @@ import (
 	"github.com/OWASP/Amass/config"
 	"github.com/OWASP/Amass/enum"
 	"github.com/OWASP/Amass/format"
+	"github.com/OWASP/Amass/services"
 	"github.com/OWASP/Amass/stringset"
 	"github.com/fatih/color"
 )
@@ -216,23 +217,12 @@ func runEnumCommand(clArgs []string) {
 		os.Exit(1)
 	}
 
-	// Seed the default pseudo-random number generator
-	rand.Seed(time.Now().UTC().UnixNano())
-
-	e := enum.NewEnumeration()
-	if e == nil {
-		r.Fprintf(color.Error, "%s\n", "No DNS resolvers passed the sanity check")
-		os.Exit(1)
-	}
-
-	rLog, wLog := io.Pipe()
-	e.Config.Log = log.New(wLog, "", log.Lmicroseconds)
-
+	cfg := config.NewConfig()
 	// Check if a configuration file was provided, and if so, load the settings
-	if err := config.AcquireConfig(args.Filepaths.Directory, args.Filepaths.ConfigFile, e.Config); err == nil {
+	if err := config.AcquireConfig(args.Filepaths.Directory, args.Filepaths.ConfigFile, cfg); err == nil {
 		// Check if a config file was provided that has DNS resolvers specified
-		if len(e.Config.Resolvers) > 0 && len(e.Config.Resolvers) == 0 {
-			args.Resolvers = stringset.New(e.Config.Resolvers...)
+		if len(cfg.Resolvers) > 0 && len(args.Resolvers) == 0 {
+			args.Resolvers = stringset.New(cfg.Resolvers...)
 		}
 	} else if args.Filepaths.ConfigFile != "" {
 		r.Fprintf(color.Error, "Failed to load the configuration file: %v\n", err)
@@ -240,10 +230,29 @@ func runEnumCommand(clArgs []string) {
 	}
 
 	// Override configuration file settings with command-line arguments
-	if err := e.Config.UpdateConfig(args); err != nil {
+	if err := cfg.UpdateConfig(args); err != nil {
 		r.Fprintf(color.Error, "Configuration error: %v\n", err)
 		os.Exit(1)
 	}
+
+	sys, err := services.NewLocalSystem(cfg)
+	if err != nil {
+		r.Fprintf(color.Error, "%v\n", err)
+		os.Exit(1)
+	}
+
+	// Seed the default pseudo-random number generator
+	rand.Seed(time.Now().UTC().UnixNano())
+
+	e := enum.NewEnumeration(sys)
+	if e == nil {
+		r.Fprintf(color.Error, "%s\n", "No DNS resolvers passed the sanity check")
+		os.Exit(1)
+	}
+
+	e.Config = cfg
+	rLog, wLog := io.Pipe()
+	e.Config.Log = log.New(wLog, "", log.Lmicroseconds)
 
 	processEnumOutput(e, &args, rLog)
 }
@@ -396,6 +405,7 @@ func signalHandler(e *enum.Enumeration) {
 func writeLogsAndMessages(logs *io.PipeReader, logfile string) {
 	wildcard := regexp.MustCompile("DNS wildcard")
 	avg := regexp.MustCompile("Average DNS queries")
+	rScore := regexp.MustCompile("Resolver .* has a low score")
 
 	var filePtr *os.File
 	if logfile != "" {
@@ -436,6 +446,10 @@ func writeLogsAndMessages(logs *io.PipeReader, logfile string) {
 		// Check for the Amass average DNS names messages
 		if avg.FindString(line) != "" {
 			fgY.Fprintln(color.Error, line)
+		}
+		// Check if a DNS resolver was lost due to its score
+		if rScore.FindString(line) != "" {
+			fgR.Fprintln(color.Error, line)
 		}
 	}
 }

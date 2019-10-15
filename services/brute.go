@@ -7,14 +7,12 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/OWASP/Amass/config"
-	eb "github.com/OWASP/Amass/eventbus"
+	"github.com/OWASP/Amass/eventbus"
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
-	sf "github.com/OWASP/Amass/stringfilter"
 	"github.com/miekg/dns"
 )
 
@@ -30,85 +28,24 @@ var BruteForceQueryTypes = []string{
 type BruteForceService struct {
 	BaseService
 
-	metrics    *MetricsCollector
-	totalLock  sync.RWMutex
-	totalNames int
-	curIdx     int
-
-	filter *sf.StringFilter
+	SourceType string
 }
 
 // NewBruteForceService returns he object initialized, but not yet started.
-func NewBruteForceService(cfg *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool) *BruteForceService {
-	bfs := &BruteForceService{filter: sf.NewStringFilter()}
+func NewBruteForceService(sys System) *BruteForceService {
+	bfs := &BruteForceService{SourceType: requests.BRUTE}
 
-	bfs.BaseService = *NewBaseService(bfs, "Brute Forcing", cfg, bus, pool)
+	bfs.BaseService = *NewBaseService(bfs, "Brute Forcing", sys)
 	return bfs
 }
 
-// OnStart implements the Service interface.
-func (bfs *BruteForceService) OnStart() error {
-	bfs.BaseService.OnStart()
-
-	bfs.metrics = NewMetricsCollector(bfs)
-	bfs.metrics.NamesRemainingCallback(bfs.namesRemaining)
-
-	if bfs.Config().BruteForcing {
-		if bfs.Config().Recursive {
-			if bfs.Config().MinForRecursive == 0 {
-				bfs.Bus().Subscribe(requests.NameResolvedTopic, bfs.SendDNSRequest)
-			} else {
-				bfs.Bus().Subscribe(requests.NewSubdomainTopic, bfs.NewSubdomain)
-			}
-		}
-	}
-	go bfs.processRequests()
-	return nil
+// Type implements the Service interface.
+func (bfs *BruteForceService) Type() string {
+	return bfs.SourceType
 }
 
-// OnLowNumberOfNames implements the Service interface.
-func (bfs *BruteForceService) OnLowNumberOfNames() error {
-	if !bfs.Config().BruteForcing {
-		return nil
-	}
-
-	domains := bfs.Config().Domains()
-	if len(domains) <= bfs.curIdx {
-		return nil
-	}
-
-	domain := domains[bfs.curIdx]
-	go bfs.performBruteForcing(domain, domain)
-	bfs.curIdx++
-	return nil
-}
-
-// OnStop implements the Service interface.
-func (bfs *BruteForceService) OnStop() error {
-	bfs.metrics.Stop()
-	return nil
-}
-
-func (bfs *BruteForceService) processRequests() {
-	for {
-		select {
-		case <-bfs.PauseChan():
-			<-bfs.ResumeChan()
-		case <-bfs.Quit():
-			return
-		case req := <-bfs.DNSRequestChan():
-			if bfs.Config().Recursive && bfs.Config().MinForRecursive == 0 && bfs.goodRequest(req) {
-				go bfs.performBruteForcing(req.Name, req.Domain)
-			}
-		case <-bfs.AddrRequestChan():
-		case <-bfs.ASNRequestChan():
-		case <-bfs.WhoisRequestChan():
-		}
-	}
-}
-
-func (bfs *BruteForceService) goodRequest(req *requests.DNSRequest) bool {
-	if !bfs.Config().IsDomainInScope(req.Name) {
+func (bfs *BruteForceService) goodRequest(cfg *config.Config, req *requests.DNSRequest) bool {
+	if !cfg.IsDomainInScope(req.Name) {
 		return false
 	}
 
@@ -128,29 +65,28 @@ func (bfs *BruteForceService) goodRequest(req *requests.DNSRequest) bool {
 	return ok
 }
 
-// NewSubdomain is called by the Name Service when proper subdomains are discovered.
-func (bfs *BruteForceService) NewSubdomain(req *requests.DNSRequest, times int) {
-	if times == bfs.Config().MinForRecursive {
-		go bfs.performBruteForcing(req.Name, req.Domain)
+// OnDNSRequest implements the Service interface.
+func (bfs *BruteForceService) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
+	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
+	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
+	if cfg == nil || bus == nil {
+		return
 	}
-}
 
-func (bfs *BruteForceService) performBruteForcing(subdomain, domain string) {
-	subdomain = strings.ToLower(subdomain)
-	domain = strings.ToLower(domain)
-	req := &requests.DNSRequest{
+	if !bfs.goodRequest(cfg, req) {
+		return
+	}
+
+	subdomain := strings.ToLower(req.Name)
+	domain := strings.ToLower(req.Domain)
+	wr := &requests.DNSRequest{
 		Name:   subdomain,
 		Domain: domain,
 	}
-	if subdomain == "" || domain == "" || bfs.filter.Duplicate(subdomain) ||
-		bfs.Pool().GetWildcardType(req) == resolvers.WildcardTypeDynamic {
+	if subdomain == "" || domain == "" ||
+		bfs.System().Pool().GetWildcardType(wr) == resolvers.WildcardTypeDynamic {
 		return
 	}
-	wordlist := bfs.Config().Wordlist
-
-	bfs.totalLock.Lock()
-	bfs.totalNames += len(wordlist)
-	bfs.totalLock.Unlock()
 
 	var idx int
 	t := time.NewTicker(time.Second)
@@ -160,23 +96,40 @@ func (bfs *BruteForceService) performBruteForcing(subdomain, domain string) {
 		case <-bfs.Quit():
 			return
 		case <-t.C:
-			bfs.SetActive()
+			bus.Publish(requests.SetActiveTopic, bfs.String())
 		default:
-			if idx >= len(wordlist) {
+			if idx >= len(cfg.Wordlist) {
 				return
 			}
-			bfs.Config().SemMaxDNSQueries.Acquire(1)
-			word := strings.ToLower(wordlist[idx])
-			go bfs.bruteForceResolution(word, subdomain, domain)
+			bfs.System().Config().SemMaxDNSQueries.Acquire(1)
+			word := strings.ToLower(cfg.Wordlist[idx])
+			go bfs.bruteForceResolution(ctx, word, subdomain, domain)
 			idx++
 		}
 	}
 }
 
-func (bfs *BruteForceService) bruteForceResolution(word, sub, domain string) {
-	defer bfs.SetActive()
-	defer bfs.decTotalNames()
-	defer bfs.Config().SemMaxDNSQueries.Release(1)
+// OnSubdomainDiscovered implements the Service interface.
+func (bfs *BruteForceService) OnSubdomainDiscovered(ctx context.Context, req *requests.DNSRequest, times int) {
+	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
+	if cfg == nil {
+		return
+	}
+
+	if times == cfg.MinForRecursive {
+		bfs.DNSRequest(ctx, req)
+	}
+}
+
+func (bfs *BruteForceService) bruteForceResolution(ctx context.Context, word, sub, domain string) {
+	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
+	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
+	if cfg == nil || bus == nil {
+		return
+	}
+
+	defer bfs.System().Config().SemMaxDNSQueries.Release(1)
+	defer bus.Publish(requests.SetActiveTopic, bfs.String())
 
 	if word == "" || sub == "" || domain == "" {
 		return
@@ -185,18 +138,16 @@ func (bfs *BruteForceService) bruteForceResolution(word, sub, domain string) {
 	name := word + "." + sub
 	var answers []requests.DNSAnswer
 	for _, t := range BruteForceQueryTypes {
-		if a, err := bfs.Pool().Resolve(context.TODO(), name, t, resolvers.PriorityLow); err == nil {
+		if a, _, err := bfs.System().Pool().Resolve(ctx, name, t, resolvers.PriorityLow); err == nil {
 			answers = append(answers, a...)
 			// Do not continue if a CNAME was discovered
 			if t == "CNAME" {
-				bfs.metrics.QueryTime(time.Now())
 				break
 			}
 		} else {
-			bfs.Bus().Publish(requests.LogTopic, fmt.Sprintf("%s: %v", bfs.String(), err))
+			bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %v", bfs.String(), err))
 		}
-		bfs.metrics.QueryTime(time.Now())
-		bfs.SetActive()
+		bus.Publish(requests.SetActiveTopic, bfs.String())
 	}
 	if len(answers) == 0 {
 		return
@@ -210,43 +161,9 @@ func (bfs *BruteForceService) bruteForceResolution(word, sub, domain string) {
 		Source:  bfs.String(),
 	}
 
-	if bfs.Pool().MatchesWildcard(req) {
+	if bfs.System().Pool().MatchesWildcard(req) {
 		return
 	}
 
-	// Check if this passes the enumeration network contraints
-	var records []requests.DNSAnswer
-	for _, ans := range req.Records {
-		if ans.Type == 1 || ans.Type == 28 {
-			if !bfs.Config().IsAddressInScope(ans.Data) {
-				continue
-			}
-		}
-		records = append(records, ans)
-	}
-	if len(records) == 0 {
-		return
-	}
-	req.Records = records
-
-	bfs.Bus().Publish(requests.NameResolvedTopic, req)
-}
-
-// Stats implements the Service interface.
-func (bfs *BruteForceService) Stats() *ServiceStats {
-	return bfs.metrics.Stats()
-}
-
-func (bfs *BruteForceService) namesRemaining() int {
-	bfs.totalLock.RLock()
-	defer bfs.totalLock.RUnlock()
-
-	return bfs.totalNames
-}
-
-func (bfs *BruteForceService) decTotalNames() {
-	bfs.totalLock.Lock()
-	defer bfs.totalLock.Unlock()
-
-	bfs.totalNames--
+	bus.Publish(requests.NameResolvedTopic, req)
 }

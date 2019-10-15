@@ -13,6 +13,28 @@ import (
 // IPv4RE is a regular expression that will match an IPv4 address.
 const IPv4RE = "((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)[.]){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)"
 
+// ReservedCIDRs includes all the networks that are reserved for special use.
+var ReservedCIDRs = []string{
+	"192.168.0.0/16",
+	"172.16.0.0/12",
+	"10.0.0.0/8",
+	"127.0.0.0/8",
+	"224.0.0.0/4",
+	"240.0.0.0/4",
+	"100.64.0.0/10",
+	"198.18.0.0/15",
+	"169.254.0.0/16",
+	"192.88.99.0/24",
+	"192.0.0.0/24",
+	"192.0.2.0/24",
+	"192.94.77.0/24",
+	"192.94.78.0/24",
+	"192.52.193.0/24",
+	"192.12.109.0/24",
+	"192.31.196.0/24",
+	"192.0.0.0/29",
+}
+
 // AllHosts returns a slice containing all the IP addresses within
 // the CIDR provided by the parameter. This implementation was
 // obtained/modified from the following:

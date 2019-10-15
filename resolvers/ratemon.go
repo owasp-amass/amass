@@ -5,6 +5,7 @@ package resolvers
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -18,8 +19,8 @@ const (
 	defaultMaxSlack      = -2 * time.Second
 	initialRate          = 55 * time.Millisecond
 	defaultRateChange    = 10 * time.Millisecond
-	defaultMaxFailurePCT = 0.50
-	scoredResolverMaxRTT = time.Second
+	defaultMaxFailurePCT = 0.75
+	scoredResolverMaxRTT = 1500 * time.Millisecond
 )
 
 // RateMonitoredResolver performs DNS queries on a single resolver at the rate it can handle.
@@ -30,7 +31,6 @@ type RateMonitoredResolver struct {
 	last        time.Time
 	rate        time.Duration
 	timeToSleep time.Duration
-	stopped     bool
 }
 
 // NewRateMonitoredResolver initializes a Resolver that scores the performance of the DNS server.
@@ -52,26 +52,50 @@ func NewRateMonitoredResolver(res Resolver) *RateMonitoredResolver {
 
 // Stop causes the Resolver to stop.
 func (r *RateMonitoredResolver) Stop() error {
-	if r.stopped {
+	if r.IsStopped() {
 		return nil
 	}
 
-	r.stopped = true
 	close(r.Done)
 	return r.resolver.Stop()
 }
 
+// IsStopped implements the Resolver interface.
+func (r *RateMonitoredResolver) IsStopped() bool {
+	return r.resolver.IsStopped()
+}
+
+// Address implements the Resolver interface.
+func (r *RateMonitoredResolver) Address() string {
+	return r.resolver.Address()
+}
+
+// Port implements the Resolver interface.
+func (r *RateMonitoredResolver) Port() int {
+	return r.resolver.Port()
+}
+
 // Available returns true if the Resolver can handle another DNS request.
-func (r *RateMonitoredResolver) Available() bool {
-	if r.stopped || !r.resolver.Available() {
-		return false
+func (r *RateMonitoredResolver) Available() (bool, error) {
+	if r.IsStopped() {
+		msg := fmt.Sprintf("Resolver %s has been stopped", r.Address())
+
+		return false, &ResolveError{
+			Err: msg,
+			Rcode: NotAvailableRcode,
+		}
 	}
 
-	var avail bool
-	if time.Now().After(r.getLast().Add(r.getRate())) {
-		avail = true
+	if time.Now().After(r.getLast().Add(r.getRate())) == false {
+		msg := fmt.Sprintf("Resolver %s has exceeded the rate limit", r.Address())
+
+		return false, &ResolveError{
+			Err: msg,
+			Rcode: NotAvailableRcode,
+		}
 	}
-	return avail
+
+	return r.resolver.Available()
 }
 
 // Stats returns performance counters.
@@ -93,16 +117,50 @@ func (r *RateMonitoredResolver) ReportError() {
 	r.resolver.ReportError()
 }
 
+// MatchesWildcard returns true if the request provided resolved to a DNS wildcard.
+func (r *RateMonitoredResolver) MatchesWildcard(req *requests.DNSRequest) bool {
+	return r.resolver.MatchesWildcard(req)
+}
+
+// GetWildcardType returns the DNS wildcard type for the provided subdomain name.
+func (r *RateMonitoredResolver) GetWildcardType(req *requests.DNSRequest) int {
+	return r.resolver.GetWildcardType(req)
+}
+
+// SubdomainToDomain returns the first subdomain name of the provided
+// parameter that responds to a DNS query for the NS record type.
+func (r *RateMonitoredResolver) SubdomainToDomain(name string) string {
+	return r.resolver.SubdomainToDomain(name)
+}
+
 // Resolve implements the Resolver interface.
-func (r *RateMonitoredResolver) Resolve(ctx context.Context, name, qtype string) ([]requests.DNSAnswer, bool, error) {
+func (r *RateMonitoredResolver) Resolve(ctx context.Context, name, qtype string, priority int) ([]requests.DNSAnswer, bool, error) {
+	if r.IsStopped() {
+		msg := fmt.Sprintf("Resolver %s has been stopped", r.Address())
+
+		return []requests.DNSAnswer{}, true, &ResolveError{
+			Err: msg,
+			Rcode: NotAvailableRcode,
+		}
+	}
+
 	r.wait()
-	return r.resolver.Resolve(ctx, name, qtype)
+	return r.resolver.Resolve(ctx, name, qtype, priority)
 }
 
 // Reverse implements the Resolver interface.
-func (r *RateMonitoredResolver) Reverse(ctx context.Context, addr string) (string, string, error) {
+func (r *RateMonitoredResolver) Reverse(ctx context.Context, addr string, priority int) (string, string, error) {
+	if r.IsStopped() {
+		msg := fmt.Sprintf("Resolver %s has been stopped", r.Address())
+
+		return "", "", &ResolveError{
+			Err: msg,
+			Rcode: NotAvailableRcode,
+		}
+	}
+
 	r.wait()
-	return r.resolver.Reverse(ctx, addr)
+	return r.resolver.Reverse(ctx, addr, priority)
 }
 
 // Implementation of the leaky bucket algorithm.
@@ -163,7 +221,7 @@ func (r *RateMonitoredResolver) calcRate() {
 		// Check if the latency is too high
 		if value, found := stats[QueryRTT]; found {
 			if rtt := time.Duration(value); rtt > scoredResolverMaxRTT {
-				r.ReportError()
+				//r.ReportError()
 			}
 		}
 
@@ -189,7 +247,9 @@ func (r *RateMonitoredResolver) setLast(t time.Time) {
 	r.Lock()
 	defer r.Unlock()
 
-	r.last = t
+	if t.After(r.last) {
+		r.last = t
+	}
 }
 
 func (r *RateMonitoredResolver) getRate() time.Duration {

@@ -3,7 +3,7 @@
 
 package stringfilter
 
-import "github.com/TheTannerRyan/ring"
+import "github.com/thetannerryan/ring"
 
 // StringFilter implements an object that performs filtering of strings
 // to ensure that only unique items get through the filter.

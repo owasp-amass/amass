@@ -40,7 +40,7 @@ func checkSingleResolver(r Resolver, ch chan Resolver) {
 	}
 
 	// Check that invalid names do not return false positives
-	badNames := []string{
+	/*badNames := []string{
 		"not-a-real-name.owasp.org",
 		"wwww.owasp.org",
 		"www-1.owasp.org",
@@ -52,10 +52,10 @@ func checkSingleResolver(r Resolver, ch chan Resolver) {
 	}
 	for _, name := range badNames {
 		go resolveForSanityCheck(r, name, true, results)
-	}
+	}*/
 
 	answer := r
-	l := len(goodNames) + len(badNames)
+	l := len(goodNames) //+ len(badNames)
 	for i := 0; i < l; i++ {
 		select {
 		case result := <-results:
@@ -74,7 +74,7 @@ func resolveForSanityCheck(r Resolver, name string, badname bool, ch chan bool) 
 	var success bool
 
 	for i := 0; i < 2 && again; i++ {
-		_, again, err = r.Resolve(context.TODO(), name, "A")
+		_, again, err = r.Resolve(context.TODO(), name, "A", PriorityHigh)
 		if err == nil && !again {
 			success = true
 			break

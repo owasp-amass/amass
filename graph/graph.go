@@ -21,7 +21,7 @@ import (
 	"github.com/cayleygraph/cayley"
 	"github.com/cayleygraph/cayley/graph"
 	_ "github.com/cayleygraph/cayley/graph/kv/bolt" // Used by the cayley package
-	"github.com/cayleygraph/cayley/quad"
+	"github.com/cayleygraph/quad"
 )
 
 // Graph is the object for managing a network infrastructure link graph.
@@ -419,7 +419,7 @@ func (g *Graph) insertInfrastructure(data *DataOptsParams) error {
 	g.store.AddQuad(quad.Make(data.CIDR, "contains", data.Address, data.UUID))
 
 	asn := strconv.Itoa(data.ASN)
-	// Check if the netblock has not been inserted
+	// Check if the AS has not been inserted
 	if val := g.propertyValue(quad.String(asn), "type", data.UUID); val == "" {
 		t := cayley.NewTransaction()
 		t.AddQuad(quad.Make(asn, "type", "as", data.UUID))

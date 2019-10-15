@@ -169,7 +169,7 @@ func (rp *ResolverPool) wildcardTest(sub string) ([]requests.DNSAnswer, error) {
 
 	var answers []requests.DNSAnswer
 	for _, t := range wildcardQueryTypes {
-		if a, err := rp.Resolve(context.TODO(), name, t, PriorityCritical); err == nil {
+		if a, _, err := rp.Resolve(context.TODO(), name, t, PriorityCritical); err == nil {
 			if a != nil && len(a) > 0 {
 				answers = append(answers, a...)
 			}

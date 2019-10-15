@@ -20,6 +20,7 @@ import (
 	"github.com/OWASP/Amass/config"
 	"github.com/OWASP/Amass/format"
 	"github.com/OWASP/Amass/intel"
+	"github.com/OWASP/Amass/services"
 	"github.com/OWASP/Amass/stringset"
 	"github.com/fatih/color"
 )
@@ -178,20 +179,12 @@ func runIntelCommand(clArgs []string) {
 		os.Exit(1)
 	}
 
-	ic := intel.NewCollection()
-	if ic == nil {
-		r.Fprintf(color.Error, "%s\n", "No DNS resolvers passed the sanity check")
-		os.Exit(1)
-	}
-
-	rLog, wLog := io.Pipe()
-	ic.Config.Log = log.New(wLog, "", log.Lmicroseconds)
-
+	cfg := config.NewConfig()
 	// Check if a configuration file was provided, and if so, load the settings
-	if err := config.AcquireConfig(args.Filepaths.Directory, args.Filepaths.ConfigFile, ic.Config); err == nil {
+	if err := config.AcquireConfig(args.Filepaths.Directory, args.Filepaths.ConfigFile, cfg); err == nil {
 		// Check if a config file was provided that has DNS resolvers specified
-		if len(ic.Config.Resolvers) > 0 && len(args.Resolvers) == 0 {
-			args.Resolvers = stringset.New(ic.Config.Resolvers...)
+		if len(cfg.Resolvers) > 0 && len(args.Resolvers) == 0 {
+			args.Resolvers = stringset.New(cfg.Resolvers...)
 		}
 	} else if args.Filepaths.ConfigFile != "" {
 		r.Fprintf(color.Error, "Failed to load the configuration file: %v\n", err)
@@ -199,10 +192,25 @@ func runIntelCommand(clArgs []string) {
 	}
 
 	// Override configuration file settings with command-line arguments
-	if err := ic.Config.UpdateConfig(args); err != nil {
+	if err := cfg.UpdateConfig(args); err != nil {
 		r.Fprintf(color.Error, "Configuration error: %v\n", err)
 		os.Exit(1)
 	}
+
+	sys, err := services.NewLocalSystem(cfg)
+	if err != nil {
+		return
+	}
+
+	ic := intel.NewCollection(sys)
+	if ic == nil {
+		r.Fprintf(color.Error, "%s\n", "No DNS resolvers passed the sanity check")
+		os.Exit(1)
+	}
+
+	ic.Config = cfg
+	rLog, wLog := io.Pipe()
+	ic.Config.Log = log.New(wLog, "", log.Lmicroseconds)
 
 	if args.Options.ReverseWhois {
 		if len(ic.Config.Domains()) == 0 {

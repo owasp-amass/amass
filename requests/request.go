@@ -12,6 +12,7 @@ import (
 
 // Request tag types.
 const (
+	NONE     = "none"
 	ALT      = "alt"
 	ARCHIVE  = "archive"
 	API      = "api"
@@ -23,20 +24,34 @@ const (
 	SCRAPE   = "scrape"
 )
 
+// ContextKey is the type used for context value keys.
+type ContextKey int
+
+// The key used when values are obtained during service requests.
+const (
+	ContextConfig   ContextKey = iota
+	ContextEventBus ContextKey = iota
+	ContextAltState ContextKey = iota
+	ContextMarkov   ContextKey = iota
+)
+
 // Request Pub/Sub topics used across Amass.
 const (
-	NewNameTopic      = "amass:newname"
-	NewAddrTopic      = "amass:newaddr"
-	NewSubdomainTopic = "amass:newsub"
-	ResolveNameTopic  = "amass:resolve"
-	NameResolvedTopic = "amass:resolved"
-	ReverseSweepTopic = "amass:sweep"
-	OutputTopic       = "amass:output"
-	IPToASNTopic      = "amass:iptoasn"
-	NewASNTopic       = "amass:asn"
-	WhoisRequestTopic = "amass:whoisreq"
-	NewWhoisTopic     = "amass:whoisinfo"
-	LogTopic          = "amass:log"
+	NameRequestTopic   = "amass:namereq"
+	NewNameTopic       = "amass:newname"
+	AddrRequestTopic   = "amass:addrreq"
+	NewAddrTopic       = "amass:newaddr"
+	SubDiscoveredTopic = "amass:newsub"
+	ResolveNameTopic   = "amass:resolve"
+	NameResolvedTopic  = "amass:resolved"
+	ASNRequestTopic    = "amass:asnreq"
+	NewASNTopic        = "amass:newasn"
+	WhoisRequestTopic  = "amass:whoisreq"
+	NewWhoisTopic      = "amass:whoisinfo"
+	LogTopic           = "amass:log"
+	OutputTopic        = "amass:output"
+	SetActiveTopic     = "amass:setactive"
+	ResolveCompleted   = "amass:resolvecomp"
 )
 
 // DNSAnswer is the type used by Amass to represent a DNS record.

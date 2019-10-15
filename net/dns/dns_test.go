@@ -45,6 +45,9 @@ func TestRemoveAsteriskLabel(t *testing.T) {
 		{"Test 2: Nested subdomain", "*.subdomain.owasp.org", "subdomain.owasp.org"},
 		{"Test 3: Subdomain-dashes", "*.sub-domain.owasp.org", "sub-domain.owasp.org"},
 		{"Test 4: Subdomain-dashes", "*.sub-d.sub-domain.owasp.org", "sub-d.sub-domain.owasp.org"},
+		{"Test 5: Middle Label Asterisk", "sub-d.sub-domain.*.owasp.org", "owasp.org"},
+		{"Test 6: Missing Asterisk Label", "sub-domain.owasp.org", "sub-domain.owasp.org"},
+		{"Test 7: Empty string", "", ""},
 	}
 	for _, tt := range tests {
 		s := RemoveAsteriskLabel(tt.event)

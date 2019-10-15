@@ -21,8 +21,8 @@ import (
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
 	"github.com/OWASP/Amass/services"
-	"github.com/OWASP/Amass/sources"
 	sf "github.com/OWASP/Amass/stringfilter"
+	"github.com/OWASP/Amass/stringset"
 )
 
 // Collection is the object type used to execute a open source information gathering with Amass.
@@ -31,7 +31,12 @@ type Collection struct {
 
 	Config *config.Config
 	Bus    *eb.EventBus
-	Pool   *resolvers.ResolverPool
+	Sys    services.System
+
+	ctx context.Context
+
+	srcsLock sync.Mutex
+	srcs stringset.Set
 
 	// The channel that will receive the results
 	Output chan *requests.Output
@@ -40,26 +45,23 @@ type Collection struct {
 	done              chan struct{}
 	doneAlreadyClosed bool
 
-	// Cache for the infrastructure data collected from online sources
-	netLock  sync.Mutex
-	netCache map[int]*requests.ASNRequest
+	wg sync.WaitGroup
+	filter *sf.StringFilter
 
-	cidrChan   chan *net.IPNet
-	domainChan chan *requests.Output
-	activeChan chan struct{}
+	lastLock sync.Mutex
+	last     time.Time
 }
 
 // NewCollection returns an initialized Collection object that has not been started yet.
-func NewCollection() *Collection {
+func NewCollection(sys services.System) *Collection {
 	c := &Collection{
 		Config:     config.NewConfig(),
 		Bus:        eb.NewEventBus(),
+		Sys:        sys,
+		srcs: stringset.New(),
 		Output:     make(chan *requests.Output, 100),
 		done:       make(chan struct{}, 2),
-		netCache:   make(map[int]*requests.ASNRequest),
-		cidrChan:   make(chan *net.IPNet, 100),
-		domainChan: make(chan *requests.Output, 100),
-		activeChan: make(chan struct{}, 100),
+		last:       time.Now(),
 	}
 
 	return c
@@ -84,88 +86,94 @@ func (c *Collection) HostedDomains() error {
 		return err
 	}
 
-	if c.Pool == nil {
-		c.Pool = resolvers.SetupResolverPool(
-			c.Config.Resolvers,
-			c.Config.ScoreResolvers,
-			c.Config.MonitorResolverRate,
-		)
-		if c.Pool == nil {
-			return errors.New("The intelligence collection was unable to build the pool of resolvers")
-		}
+	// Setup the stringset of included data sources
+	c.srcsLock.Lock()
+	srcs := stringset.New()
+	c.srcs.Intersect(srcs)
+	srcs.InsertMany(c.Config.SourceFilter.Sources...)
+	for _, src := range c.Sys.DataSources() {
+		c.srcs.Insert(src.String())
 	}
+	if srcs.Len() > 0 && c.Config.SourceFilter.Include {
+		c.srcs.Intersect(srcs)
+	} else {
+		c.srcs.Subtract(srcs)
+	}
+	c.srcsLock.Unlock()
 
-	go c.startAddressRanges()
-	go c.processCIDRs()
-	go func() {
-		for _, cidr := range c.Config.CIDRs {
-			c.cidrChan <- cidr
-		}
-	}()
-	c.asnsToCIDRs()
+	// Setup the context used throughout the collection
+	ctx := context.WithValue(context.Background(), requests.ContextConfig, c.Config)
+	c.ctx = context.WithValue(ctx, requests.ContextEventBus, c.Bus)
 
-	var active bool
-	filter := sf.NewStringFilter()
-	t := time.NewTicker(5 * time.Second)
+	c.Bus.Subscribe(requests.SetActiveTopic, c.updateLastActive)
+	defer c.Bus.Unsubscribe(requests.SetActiveTopic, c.updateLastActive)
+	c.Bus.Subscribe(requests.ResolveCompleted, c.resolution)
+	defer c.Bus.Unsubscribe(requests.ResolveCompleted, c.resolution)
 
 	if c.Config.Timeout > 0 {
 		time.AfterFunc(time.Duration(c.Config.Timeout)*time.Minute, func() {
 			c.Config.Log.Printf("Enumeration exceeded provided timeout")
-			c.Done()
+			close(c.Output)
+			return
 		})
 	}
 
-loop:
-	for {
-		select {
-		case <-c.done:
-			break loop
-		case <-t.C:
-			if !active {
-				c.Done()
-			}
-			active = false
-		case <-c.activeChan:
-			active = true
-		case d := <-c.domainChan:
-			active = true
-			if !filter.Duplicate(d.Domain) {
-				c.Output <- d
-			}
+	c.filter = sf.NewStringFilter()
+	// Start the address ranges
+	for _, addr := range c.Config.Addresses {
+		c.Config.SemMaxDNSQueries.Acquire(1)
+		c.wg.Add(1)
+		go c.investigateAddr(addr.String())
+	}
+
+	for _, cidr := range append(c.Config.CIDRs, c.asnsToCIDRs()...) {
+		// Skip IPv6 netblocks, since they are simply too large
+		if ip := cidr.IP.Mask(cidr.Mask); amassnet.IsIPv6(ip) {
+			continue
+		}
+
+		for _, addr := range amassnet.AllHosts(cidr) {
+			c.Config.SemMaxDNSQueries.Acquire(1)
+			c.wg.Add(1)
+			go c.investigateAddr(addr.String())
 		}
 	}
-	t.Stop()
+
+	c.wg.Wait()
+	time.Sleep(5 * time.Second)
 	close(c.Output)
 	return nil
 }
 
-func (c *Collection) startAddressRanges() {
-	for _, addr := range c.Config.Addresses {
-		c.Config.SemMaxDNSQueries.Acquire(1)
-		go c.investigateAddr(addr.String())
-	}
+func (c *Collection) lastActive() time.Time {
+	c.lastLock.Lock()
+	defer c.lastLock.Unlock()
+
+	return c.last
 }
 
-func (c *Collection) processCIDRs() {
-	for {
-		select {
-		case <-c.done:
-			return
-		case cidr := <-c.cidrChan:
-			// Skip IPv6 netblocks, since they are simply too large
-			if ip := cidr.IP.Mask(cidr.Mask); amassnet.IsIPv6(ip) {
-				continue
-			}
+func (c *Collection) updateLastActive(srv string) {
+	go func(t time.Time) {
+		c.lastLock.Lock()
+		defer c.lastLock.Unlock()
 
-			for _, addr := range amassnet.AllHosts(cidr) {
-				c.Config.SemMaxDNSQueries.Acquire(1)
-				go c.investigateAddr(addr.String())
-			}
+		c.last = t
+	}(time.Now())
+}
+
+func (c *Collection) resolution(t time.Time) {
+	go func(t time.Time) {
+		c.lastLock.Lock()
+		defer c.lastLock.Unlock()
+
+		if t.After(c.last) {
+			c.last = t
 		}
-	}
+	}(t)
 }
 
 func (c *Collection) investigateAddr(addr string) {
+	defer c.wg.Done()
 	defer c.Config.SemMaxDNSQueries.Release(1)
 
 	ip := net.ParseIP(addr)
@@ -174,132 +182,114 @@ func (c *Collection) investigateAddr(addr string) {
 	}
 
 	addrinfo := requests.AddressInfo{Address: ip}
-	c.activeChan <- struct{}{}
-	if _, answer, err := c.Pool.Reverse(context.TODO(), addr); err == nil {
-		if d := strings.TrimSpace(c.Pool.SubdomainToDomain(answer)); d != "" {
-			c.domainChan <- &requests.Output{
-				Name:      d,
-				Domain:    d,
-				Addresses: []requests.AddressInfo{addrinfo},
-				Tag:       requests.DNS,
-				Source:    "Reverse DNS",
+	if _, answer, err := c.Sys.Pool().Reverse(c.ctx, addr, resolvers.PriorityLow); err == nil {
+		if d := strings.TrimSpace(c.Sys.Pool().SubdomainToDomain(answer)); d != "" {
+			if !c.filter.Duplicate(d) {
+				c.Output <- &requests.Output{
+					Name:      d,
+					Domain:    d,
+					Addresses: []requests.AddressInfo{addrinfo},
+					Tag:       requests.DNS,
+					Source:    "Reverse DNS",
+				}
 			}
 		}
 	}
 
-	c.activeChan <- struct{}{}
 	if !c.Config.Active {
 		return
 	}
 
 	for _, name := range http.PullCertificateNames(addr, c.Config.Ports) {
 		if n := strings.TrimSpace(name); n != "" {
-			c.domainChan <- &requests.Output{
-				Name:      n,
-				Domain:    c.Pool.SubdomainToDomain(n),
-				Addresses: []requests.AddressInfo{addrinfo},
-				Tag:       requests.CERT,
-				Source:    "Active Cert",
+			d := c.Sys.Pool().SubdomainToDomain(n)
+
+			if !c.filter.Duplicate(d) {
+				c.Output <- &requests.Output{
+					Name:      n,
+					Domain:    d,
+					Addresses: []requests.AddressInfo{addrinfo},
+					Tag:       requests.CERT,
+					Source:    "Active Cert",
+				}
 			}
 		}
 	}
-	c.activeChan <- struct{}{}
 }
 
-func (c *Collection) asnsToCIDRs() {
+func (c *Collection) asnsToCIDRs() []*net.IPNet {
+	var cidrs []*net.IPNet
+
 	if len(c.Config.ASNs) == 0 {
-		return
+		return cidrs
 	}
 
-	c.Bus.Subscribe(requests.NewASNTopic, c.updateNetCache)
-	defer c.Bus.Unsubscribe(requests.NewASNTopic, c.updateNetCache)
+	last := time.Now()
+	var lastLock sync.Mutex
 
-	srcs := sources.GetAllSources(c.Config, c.Bus, c.Pool)
+	var setLock sync.Mutex
+	cidrSet := stringset.New()
+	fn := func(req *requests.ASNRequest) {
+		lastLock.Lock()
+		defer lastLock.Unlock()
 
-	// Keep only the data sources that successfully start
-	var keep []services.Service
-	for _, src := range srcs {
-		if err := src.Start(); err != nil {
-			src.Stop()
-			continue
-		}
-		keep = append(keep, src)
-		defer src.Stop()
+		setLock.Lock()
+		defer setLock.Unlock()
+
+		last = time.Now()
+		cidrSet.Union(req.Netblocks)
 	}
-	srcs = keep
+
+	c.Bus.Subscribe(requests.NewASNTopic, fn)
+	defer c.Bus.Unsubscribe(requests.NewASNTopic, fn)
 
 	// Send the ASN requests to the data sources
-	for _, asn := range c.Config.ASNs {
-		for _, src := range srcs {
-			src.SendASNRequest(&requests.ASNRequest{ASN: asn})
+	c.srcsLock.Lock()
+	for _, src := range c.Sys.DataSources() {
+		if !c.srcs.Has(src.String()) {
+			continue
+		}
+
+		for _, asn := range c.Config.ASNs {
+			src.ASNRequest(c.ctx, &requests.ASNRequest{ASN: asn})
 		}
 	}
+	c.srcsLock.Unlock()
 
-	t := time.NewTicker(5 * time.Second)
+	// Wait for the ASN requests to return responses
+	t := time.NewTicker(2 * time.Second)
 	defer t.Stop()
-	defer c.sendNetblockCIDRs()
+loop:
 	for {
 		select {
 		case <-c.done:
-			return
+			return cidrs
 		case <-t.C:
-			done := true
-			for _, src := range srcs {
-				if src.IsActive() {
-					done = false
-					break
-				}
-			}
-			if done {
-				return
+			lastLock.Lock()
+			l := last
+			lastLock.Unlock()
+
+			if time.Now().Sub(l) > 10*time.Second {
+				break loop
 			}
 		}
 	}
-}
-
-func (c *Collection) sendNetblockCIDRs() {
-	c.netLock.Lock()
-	defer c.netLock.Unlock()
 
 	filter := sf.NewStringFilter()
-	for _, record := range c.netCache {
-		for netblock := range record.Netblocks {
-			_, ipnet, err := net.ParseCIDR(netblock)
-			if err == nil && !filter.Duplicate(ipnet.String()) {
-				c.cidrChan <- ipnet
-			}
+	// Do not return CIDRs that are already in the config
+	for _, cidr := range c.Config.CIDRs {
+		filter.Duplicate(cidr.String())
+	}
+
+	for _, netblock := range cidrSet.Slice() {
+		_, ipnet, err := net.ParseCIDR(netblock)
+
+		if err == nil && !filter.Duplicate(ipnet.String()) {
+			cidrs = append(cidrs, ipnet)
 		}
 	}
-}
 
-func (c *Collection) updateNetCache(req *requests.ASNRequest) {
-	c.netLock.Lock()
-	defer c.netLock.Unlock()
-
-	if _, found := c.netCache[req.ASN]; !found {
-		c.netCache[req.ASN] = req
-		return
-	}
-
-	entry := c.netCache[req.ASN]
-	// This is additional information for an ASN entry
-	if entry.Prefix == "" && req.Prefix != "" {
-		entry.Prefix = req.Prefix
-	}
-	if entry.CC == "" && req.CC != "" {
-		entry.CC = req.CC
-	}
-	if entry.Registry == "" && req.Registry != "" {
-		entry.Registry = req.Registry
-	}
-	if entry.AllocationDate.IsZero() && !req.AllocationDate.IsZero() {
-		entry.AllocationDate = req.AllocationDate
-	}
-	if entry.Description == "" && req.Description != "" {
-		entry.Description = req.Description
-	}
-	entry.Netblocks.Union(req.Netblocks)
-	c.netCache[req.ASN] = entry
+	return cidrs
 }
 
 // LookupASNsByName returns requests.ASNRequest objects for autonomous systems with
@@ -356,58 +346,52 @@ func (c *Collection) ReverseWhois() error {
 	c.Bus.Subscribe(requests.NewWhoisTopic, collect)
 	defer c.Bus.Unsubscribe(requests.NewWhoisTopic, collect)
 
-	if c.Pool == nil {
-		c.Pool = resolvers.SetupResolverPool(
-			c.Config.Resolvers,
-			c.Config.ScoreResolvers,
-			c.Config.MonitorResolverRate,
-		)
-		if c.Pool == nil {
-			return errors.New("The intelligence collection was unable to build the pool of resolvers")
-		}
+	// Setup the stringset of included data sources
+	c.srcsLock.Lock()
+	srcs := stringset.New()
+	c.srcs.Intersect(srcs)
+	srcs.InsertMany(c.Config.SourceFilter.Sources...)
+	for _, src := range c.Sys.DataSources() {
+		c.srcs.Insert(src.String())
 	}
-
-	srcs := sources.GetAllSources(c.Config, c.Bus, c.Pool)
-
-	// Keep only the data sources that successfully start
-	var keep []services.Service
-	for _, src := range srcs {
-		if err := src.Start(); err != nil {
-			src.Stop()
-			continue
-		}
-		keep = append(keep, src)
-		defer src.Stop()
+	if srcs.Len() > 0 && c.Config.SourceFilter.Include {
+		c.srcs.Intersect(srcs)
+	} else {
+		c.srcs.Subtract(srcs)
 	}
-	srcs = keep
+	c.srcsLock.Unlock()
+
+	// Setup the context used throughout the collection
+	ctx := context.WithValue(context.Background(), requests.ContextConfig, c.Config)
+	c.ctx = context.WithValue(ctx, requests.ContextEventBus, c.Bus)
 
 	// Send the whois requests to the data sources
-	for _, domain := range c.Config.Domains() {
-		for _, src := range srcs {
-			src.SendWhoisRequest(&requests.WhoisRequest{Domain: domain})
+	c.srcsLock.Lock()
+	for _, src := range c.Sys.DataSources() {
+		if !c.srcs.Has(src.String()) {
+			continue
+		}
+
+		for _, domain := range c.Config.Domains() {
+			src.WhoisRequest(c.ctx, &requests.WhoisRequest{Domain: domain})
 		}
 	}
+	c.srcsLock.Unlock()
 
-	t := time.NewTicker(5 * time.Second)
+	t := time.NewTicker(2 * time.Second)
+	defer t.Stop()
 loop:
 	for {
 		select {
 		case <-c.done:
 			break loop
 		case <-t.C:
-			done := true
-			for _, src := range srcs {
-				if src.IsActive() {
-					done = false
-					break
-				}
-			}
-			if done {
+			if l := c.lastActive(); time.Now().Sub(l) > 10*time.Second {
 				break loop
 			}
 		}
 	}
-	t.Stop()
+
 	close(c.Output)
 	return nil
 }

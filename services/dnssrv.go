@@ -6,17 +6,12 @@ package services
 import (
 	"context"
 	"fmt"
-	"net"
 	"strings"
-	"sync"
-	"time"
 
 	"github.com/OWASP/Amass/config"
-	eb "github.com/OWASP/Amass/eventbus"
-	amassnet "github.com/OWASP/Amass/net"
+	"github.com/OWASP/Amass/eventbus"
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/resolvers"
-	sf "github.com/OWASP/Amass/stringfilter"
 )
 
 // InitialQueryTypes include the DNS record types that are
@@ -33,147 +28,71 @@ var InitialQueryTypes = []string{
 type DNSService struct {
 	BaseService
 
-	metrics    *MetricsCollector
-	totalLock  sync.RWMutex
-	totalNames int
-	filter     *sf.StringFilter
+	SourceType string
 }
 
 // NewDNSService returns he object initialized, but not yet started.
-func NewDNSService(cfg *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool) *DNSService {
-	ds := &DNSService{filter: sf.NewStringFilter()}
+func NewDNSService(sys System) *DNSService {
+	ds := &DNSService{SourceType: requests.DNS}
 
-	ds.BaseService = *NewBaseService(ds, "DNS Service", cfg, bus, pool)
+	ds.BaseService = *NewBaseService(ds, "DNS Service", sys)
 	return ds
 }
 
-// OnStart implements the Service interface
-func (ds *DNSService) OnStart() error {
-	ds.BaseService.OnStart()
-
-	ds.metrics = NewMetricsCollector(ds)
-	ds.metrics.NamesRemainingCallback(ds.namesRemaining)
-
-	ds.Bus().Subscribe(requests.ResolveNameTopic, ds.SendDNSRequest)
-	ds.Bus().Subscribe(requests.ReverseSweepTopic, ds.dnsSweep)
-	ds.Bus().Subscribe(requests.NewSubdomainTopic, ds.newSubdomain)
-	go ds.processRequests()
-	return nil
+// Type implements the Service interface.
+func (ds *DNSService) Type() string {
+	return ds.SourceType
 }
 
-// OnStop implements the Service interface.
-func (ds *DNSService) OnStop() error {
-	ds.metrics.Stop()
-	return nil
+// OnDNSRequest implements the Service interface.
+func (ds *DNSService) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
+	ds.System().Config().SemMaxDNSQueries.Acquire(1)
+	go ds.processDNSRequest(ctx, req)
 }
 
-func (ds *DNSService) resolvedName(req *requests.DNSRequest) {
-	if !requests.TrustedTag(req.Tag) && ds.Pool().MatchesWildcard(req) {
-		return
-	}
-	// Check if this passes the enumeration network contraints
-	var records []requests.DNSAnswer
-	for _, ans := range req.Records {
-		if ans.Type == 1 || ans.Type == 28 {
-			if !ds.Config().IsAddressInScope(ans.Data) {
-				continue
-			}
-		}
-		records = append(records, ans)
-	}
-	if len(records) == 0 {
-		return
-	}
-	req.Records = records
-
-	ds.Bus().Publish(requests.NameResolvedTopic, req)
-}
-
-func (ds *DNSService) processRequests() {
-	for {
-		select {
-		case <-ds.PauseChan():
-			<-ds.ResumeChan()
-		case <-ds.Quit():
-			return
-		case req := <-ds.DNSRequestChan():
-			ds.Config().SemMaxDNSQueries.Acquire(1)
-			go ds.performDNSRequest(req)
-		case <-ds.AddrRequestChan():
-		case <-ds.ASNRequestChan():
-		case <-ds.WhoisRequestChan():
-		}
-	}
-}
-
-// Stats implements the Service interface
-func (ds *DNSService) Stats() *ServiceStats {
-	return ds.metrics.Stats()
-}
-
-func (ds *DNSService) namesRemaining() int {
-	ds.totalLock.RLock()
-	defer ds.totalLock.RUnlock()
-
-	rlen := ds.DNSRequestLen()
-	if rlen > 0 {
-		rlen += ServiceRequestChanLength
-	}
-	return ds.totalNames + rlen
-}
-
-func (ds *DNSService) incTotalNames() {
-	ds.totalLock.Lock()
-	defer ds.totalLock.Unlock()
-
-	ds.totalNames++
-}
-
-func (ds *DNSService) decTotalNames() {
-	ds.totalLock.Lock()
-	defer ds.totalLock.Unlock()
-
-	ds.totalNames--
-}
-
-func (ds *DNSService) performDNSRequest(req *requests.DNSRequest) {
-	ds.incTotalNames()
-	defer ds.Config().SemMaxDNSQueries.Release(1)
-	defer ds.decTotalNames()
+func (ds *DNSService) processDNSRequest(ctx context.Context, req *requests.DNSRequest) {
+	defer ds.System().Config().SemMaxDNSQueries.Release(1)
 
 	if req == nil || req.Name == "" || req.Domain == "" {
 		return
 	}
 
-	ds.SetActive()
-	if ds.Config().Blacklisted(req.Name) || (!requests.TrustedTag(req.Tag) &&
-		ds.Pool().GetWildcardType(req) == resolvers.WildcardTypeDynamic) {
+	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
+	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
+	if cfg == nil || bus == nil {
 		return
 	}
 
-	ds.SetActive()
+	bus.Publish(requests.SetActiveTopic, ds.String())
+
+	if cfg.Blacklisted(req.Name) || (!requests.TrustedTag(req.Tag) &&
+		ds.System().Pool().GetWildcardType(req) == resolvers.WildcardTypeDynamic) {
+		return
+	}
+
+	bus.Publish(requests.SetActiveTopic, ds.String())
+
 	var answers []requests.DNSAnswer
 	for _, t := range InitialQueryTypes {
-		if a, err := ds.Pool().Resolve(context.TODO(), req.Name, t, resolvers.PriorityLow); err == nil {
+		if a, _, err := ds.System().Pool().Resolve(ctx, req.Name, t, resolvers.PriorityLow); err == nil {
 			answers = append(answers, a...)
 
 			// Do not continue if a CNAME was discovered
 			if t == "CNAME" {
-				ds.metrics.QueryTime(time.Now())
 				break
 			}
 		} else {
-			ds.Bus().Publish(requests.LogTopic, fmt.Sprintf("DNS: %v", err))
+			bus.Publish(requests.LogTopic, fmt.Sprintf("DNS: %v", err))
 		}
-		ds.metrics.QueryTime(time.Now())
-		ds.SetActive()
+
+		bus.Publish(requests.SetActiveTopic, ds.String())
 	}
 
 	req.Records = answers
 	if len(req.Records) == 0 {
 		// Check if this unresolved name should be output by the enumeration
-		if ds.Config().IncludeUnresolvable && ds.Config().IsDomainInScope(req.Name) {
-			ds.Bus().Publish(requests.OutputTopic, &requests.Output{
+		if cfg.IncludeUnresolvable && cfg.IsDomainInScope(req.Name) {
+			bus.Publish(requests.OutputTopic, &requests.Output{
 				Name:   req.Name,
 				Domain: req.Domain,
 				Tag:    req.Tag,
@@ -182,75 +101,94 @@ func (ds *DNSService) performDNSRequest(req *requests.DNSRequest) {
 		}
 		return
 	}
-	ds.resolvedName(req)
+
+	ds.resolvedName(ctx, req)
 }
 
-func (ds *DNSService) newSubdomain(req *requests.DNSRequest, times int) {
+func (ds *DNSService) resolvedName(ctx context.Context, req *requests.DNSRequest) {
+	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
+	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
+	if cfg == nil || bus == nil {
+		return
+	}
+
+	if !requests.TrustedTag(req.Tag) && ds.System().Pool().MatchesWildcard(req) {
+		return
+	}
+
+	bus.Publish(requests.NameResolvedTopic, req)
+}
+
+// OnSubdomainDiscovered implements the Service interface.
+func (ds *DNSService) OnSubdomainDiscovered(ctx context.Context, req *requests.DNSRequest, times int) {
 	if req != nil && times == 1 {
-		go ds.processSubdomain(req)
+		go ds.processSubdomain(ctx, req)
 	}
 }
 
-func (ds *DNSService) processSubdomain(req *requests.DNSRequest) {
-	ds.basicQueries(req.Name, req.Domain)
-	ds.queryServiceNames(req.Name, req.Domain)
+func (ds *DNSService) processSubdomain(ctx context.Context, req *requests.DNSRequest) {
+	ds.basicQueries(ctx, req.Name, req.Domain)
+	ds.queryServiceNames(ctx, req.Name, req.Domain)
 }
 
-func (ds *DNSService) basicQueries(subdomain, domain string) {
-	ds.incTotalNames()
-	defer ds.decTotalNames()
+func (ds *DNSService) basicQueries(ctx context.Context, subdomain, domain string) {
+	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
+	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
+	if cfg == nil || bus == nil {
+		return
+	}
 
-	ds.SetActive()
+	bus.Publish(requests.SetActiveTopic, ds.String())
+
 	var answers []requests.DNSAnswer
 	// Obtain the DNS answers for the NS records related to the domain
-	if ans, err := ds.Pool().Resolve(context.TODO(), subdomain, "NS", resolvers.PriorityHigh); err == nil {
+	if ans, _, err := ds.System().Pool().Resolve(ctx, subdomain, "NS", resolvers.PriorityHigh); err == nil {
 		for _, a := range ans {
 			pieces := strings.Split(a.Data, ",")
 			a.Data = pieces[len(pieces)-1]
 
-			if ds.Config().Active {
-				go ds.attemptZoneXFR(subdomain, domain, a.Data)
+			if cfg.Active {
+				go ds.attemptZoneXFR(ctx, subdomain, domain, a.Data)
 				//go ds.attemptZoneWalk(domain, a.Data)
 			}
 			answers = append(answers, a)
 		}
 	} else {
-		ds.Bus().Publish(requests.LogTopic, fmt.Sprintf("DNS: NS record query error: %s: %v", subdomain, err))
+		bus.Publish(requests.LogTopic, fmt.Sprintf("DNS: NS record query error: %s: %v", subdomain, err))
 	}
-	ds.metrics.QueryTime(time.Now())
 
-	ds.SetActive()
+	bus.Publish(requests.SetActiveTopic, ds.String())
+
 	// Obtain the DNS answers for the MX records related to the domain
-	if ans, err := ds.Pool().Resolve(context.TODO(), subdomain, "MX", resolvers.PriorityHigh); err == nil {
+	if ans, _, err := ds.System().Pool().Resolve(ctx, subdomain, "MX", resolvers.PriorityHigh); err == nil {
 		for _, a := range ans {
 			answers = append(answers, a)
 		}
 	} else {
-		ds.Bus().Publish(requests.LogTopic, fmt.Sprintf("DNS: MX record query error: %s: %v", subdomain, err))
+		bus.Publish(requests.LogTopic, fmt.Sprintf("DNS: MX record query error: %s: %v", subdomain, err))
 	}
-	ds.metrics.QueryTime(time.Now())
 
-	ds.SetActive()
+	bus.Publish(requests.SetActiveTopic, ds.String())
+
 	// Obtain the DNS answers for the SOA records related to the domain
-	if ans, err := ds.Pool().Resolve(context.TODO(), subdomain, "SOA", resolvers.PriorityHigh); err == nil {
+	if ans, _, err := ds.System().Pool().Resolve(ctx, subdomain, "SOA", resolvers.PriorityHigh); err == nil {
 		answers = append(answers, ans...)
 	} else {
-		ds.Bus().Publish(requests.LogTopic, fmt.Sprintf("DNS: SOA record query error: %s: %v", subdomain, err))
+		bus.Publish(requests.LogTopic, fmt.Sprintf("DNS: SOA record query error: %s: %v", subdomain, err))
 	}
-	ds.metrics.QueryTime(time.Now())
 
-	ds.SetActive()
+	bus.Publish(requests.SetActiveTopic, ds.String())
+
 	// Obtain the DNS answers for the SPF records related to the domain
-	if ans, err := ds.Pool().Resolve(context.TODO(), subdomain, "SPF", resolvers.PriorityHigh); err == nil {
+	if ans, _, err := ds.System().Pool().Resolve(ctx, subdomain, "SPF", resolvers.PriorityHigh); err == nil {
 		answers = append(answers, ans...)
 	} else {
-		ds.Bus().Publish(requests.LogTopic, fmt.Sprintf("DNS: SPF record query error: %s: %v", subdomain, err))
+		bus.Publish(requests.LogTopic, fmt.Sprintf("DNS: SPF record query error: %s: %v", subdomain, err))
 	}
-	ds.metrics.QueryTime(time.Now())
 
 	if len(answers) > 0 {
-		ds.SetActive()
-		ds.resolvedName(&requests.DNSRequest{
+		bus.Publish(requests.SetActiveTopic, ds.String())
+		ds.resolvedName(ctx, &requests.DNSRequest{
 			Name:    subdomain,
 			Domain:  domain,
 			Records: answers,
@@ -260,50 +198,58 @@ func (ds *DNSService) basicQueries(subdomain, domain string) {
 	}
 }
 
-func (ds *DNSService) attemptZoneXFR(sub, domain, server string) {
-	if ds.filter.Duplicate(sub + server) {
+func (ds *DNSService) attemptZoneXFR(ctx context.Context, sub, domain, server string) {
+	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
+	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
+	if cfg == nil || bus == nil {
 		return
 	}
 
-	addr, err := ds.nameserverAddr(server)
+	addr, err := ds.nameserverAddr(ctx, server)
 	if addr == "" {
-		ds.Bus().Publish(requests.LogTopic, fmt.Sprintf("DNS: Zone XFR failed: %v", err))
+		bus.Publish(requests.LogTopic, fmt.Sprintf("DNS: Zone XFR failed: %v", err))
 		return
 	}
 
 	reqs, err := resolvers.ZoneTransfer(sub, domain, addr)
 	if err != nil {
-		ds.Bus().Publish(requests.LogTopic, fmt.Sprintf("DNS: Zone XFR failed: %s: %v", server, err))
+		bus.Publish(requests.LogTopic, fmt.Sprintf("DNS: Zone XFR failed: %s: %v", server, err))
 		return
 	}
 
 	for _, req := range reqs {
-		ds.resolvedName(req)
+		ds.resolvedName(ctx, req)
 	}
 }
 
-func (ds *DNSService) attemptZoneWalk(domain, server string) {
-	addr, err := ds.nameserverAddr(server)
+func (ds *DNSService) attemptZoneWalk(ctx context.Context, domain, server string) {
+	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
+	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
+	if cfg == nil || bus == nil {
+		return
+	}
+
+	addr, err := ds.nameserverAddr(ctx, server)
 	if addr == "" {
-		ds.Bus().Publish(requests.LogTopic, fmt.Sprintf("DNS: Zone Walk failed: %v", err))
+		bus.Publish(requests.LogTopic, fmt.Sprintf("DNS: Zone Walk failed: %v", err))
 		return
 	}
 
 	reqs, err := resolvers.NsecTraversal(domain, addr)
 	if err != nil {
-		ds.Bus().Publish(requests.LogTopic, fmt.Sprintf("DNS: Zone Walk failed: %s: %v", server, err))
+		bus.Publish(requests.LogTopic, fmt.Sprintf("DNS: Zone Walk failed: %s: %v", server, err))
 		return
 	}
 
 	for _, req := range reqs {
-		ds.SendDNSRequest(req)
+		ds.DNSRequest(ctx, req)
 	}
 }
 
-func (ds *DNSService) nameserverAddr(server string) (string, error) {
-	a, err := ds.Pool().Resolve(context.TODO(), server, "A", resolvers.PriorityHigh)
+func (ds *DNSService) nameserverAddr(ctx context.Context, server string) (string, error) {
+	a, _, err := ds.System().Pool().Resolve(ctx, server, "A", resolvers.PriorityHigh)
 	if err != nil {
-		a, err = ds.Pool().Resolve(context.TODO(), server, "AAAA", resolvers.PriorityHigh)
+		a, _, err = ds.System().Pool().Resolve(ctx, server, "AAAA", resolvers.PriorityHigh)
 		if err != nil {
 			return "", fmt.Errorf("DNS server has no A or AAAA record: %s: %v", server, err)
 		}
@@ -311,17 +257,19 @@ func (ds *DNSService) nameserverAddr(server string) (string, error) {
 	return a[0].Data, nil
 }
 
-func (ds *DNSService) queryServiceNames(subdomain, domain string) {
-	ds.SetActive()
+func (ds *DNSService) queryServiceNames(ctx context.Context, subdomain, domain string) {
+	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
+	if bus == nil {
+		return
+	}
+
+	bus.Publish(requests.SetActiveTopic, ds.String())
+
 	for _, name := range popularSRVRecords {
 		srvName := name + "." + subdomain
 
-		if ds.filter.Duplicate(srvName) {
-			continue
-		}
-		ds.incTotalNames()
-		if a, err := ds.Pool().Resolve(context.TODO(), srvName, "SRV", resolvers.PriorityLow); err == nil {
-			ds.resolvedName(&requests.DNSRequest{
+		if a, _, err := ds.System().Pool().Resolve(ctx, srvName, "SRV", resolvers.PriorityLow); err == nil {
+			ds.resolvedName(ctx, &requests.DNSRequest{
 				Name:    srvName,
 				Domain:  domain,
 				Records: a,
@@ -329,64 +277,7 @@ func (ds *DNSService) queryServiceNames(subdomain, domain string) {
 				Source:  "Forward DNS",
 			})
 		}
-		ds.metrics.QueryTime(time.Now())
-		ds.SetActive()
-		ds.decTotalNames()
+
+		bus.Publish(requests.SetActiveTopic, ds.String())
 	}
-}
-
-func (ds *DNSService) dnsSweep(addr string, cidr *net.IPNet) {
-	go ds.reverseDNSSweep(addr, cidr)
-}
-
-func (ds *DNSService) reverseDNSSweep(addr string, cidr *net.IPNet) {
-	var ips []net.IP
-
-	// Get information about nearby IP addresses
-	if ds.Config().Active {
-		ips = amassnet.CIDRSubset(cidr, addr, 500)
-	} else {
-		ips = amassnet.CIDRSubset(cidr, addr, 250)
-	}
-
-	for _, ip := range ips {
-		a := ip.String()
-		if ds.filter.Duplicate(a) {
-			continue
-		}
-		ds.Config().SemMaxDNSQueries.Acquire(1)
-		ds.reverseDNSQuery(a)
-	}
-}
-
-func (ds *DNSService) reverseDNSQuery(ip string) {
-	ds.incTotalNames()
-	defer ds.decTotalNames()
-	defer ds.Config().SemMaxDNSQueries.Release(1)
-
-	ds.SetActive()
-	ptr, answer, err := ds.Pool().Reverse(context.TODO(), ip)
-	ds.metrics.QueryTime(time.Now())
-	if err != nil {
-		return
-	}
-	// Check that the name discovered is in scope
-	domain := ds.Config().WhichDomain(answer)
-	if domain == "" {
-		return
-	}
-
-	ds.SetActive()
-	ds.resolvedName(&requests.DNSRequest{
-		Name:   ptr,
-		Domain: domain,
-		Records: []requests.DNSAnswer{{
-			Name: ptr,
-			Type: 12,
-			TTL:  0,
-			Data: answer,
-		}},
-		Tag:    requests.DNS,
-		Source: "Reverse DNS",
-	})
 }

@@ -26,7 +26,7 @@ import (
 )
 
 const (
-	defaultConcurrentDNSQueries = 2500
+	defaultConcurrentDNSQueries = 50000
 	publicDNSResolverBaseURL    = "https://public-dns.info/nameserver/"
 )
 

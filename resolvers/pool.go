@@ -15,14 +15,8 @@ import (
 	"github.com/OWASP/Amass/limits"
 	amassnet "github.com/OWASP/Amass/net"
 	"github.com/OWASP/Amass/requests"
+	"github.com/OWASP/Amass/stringset"
 	"github.com/miekg/dns"
-)
-
-// The priority levels for DNS resolution.
-const (
-	PriorityLow int = iota
-	PriorityHigh
-	PriorityCritical
 )
 
 var (
@@ -35,12 +29,6 @@ var (
 	maxRetries = 3
 )
 
-type resolveVote struct {
-	Err      error
-	Resolver Resolver
-	Answers  []requests.DNSAnswer
-}
-
 // ResolverPool manages many DNS resolvers for high-performance use, such as brute forcing attacks.
 type ResolverPool struct {
 	Resolvers    []Resolver
@@ -50,8 +38,7 @@ type ResolverPool struct {
 	// Domains discovered by the SubdomainToDomain function
 	domainLock  sync.Mutex
 	domainCache map[string]struct{}
-	activeLock  sync.Mutex
-	active      time.Time
+	hasBeenStopped bool
 }
 
 // SetupResolverPool initializes a ResolverPool with type of resolvers indicated by the parameters.
@@ -126,26 +113,56 @@ func NewResolverPool(res []Resolver) *ResolverPool {
 		Done:        make(chan struct{}, 2),
 		wildcards:   make(map[string]*wildcard),
 		domainCache: make(map[string]struct{}),
-		active:      time.Now(),
 	}
 }
 
 // Stop calls the Stop method for each Resolver object in the pool.
-func (rp *ResolverPool) Stop() {
+func (rp *ResolverPool) Stop() error {
+	rp.hasBeenStopped = true
+
 	for _, r := range rp.Resolvers {
 		r.Stop()
 	}
+
 	rp.Resolvers = []Resolver{}
+	return nil
+}
+
+// IsStopped implements the Resolver interface.
+func (rp *ResolverPool) IsStopped() bool {
+	return rp.hasBeenStopped
+}
+
+// Address implements the Resolver interface.
+func (rp *ResolverPool) Address() string {
+	return "N/A"
+}
+
+// Port implements the Resolver interface.
+func (rp *ResolverPool) Port() int {
+	return 0
 }
 
 // Available returns true if the Resolver can handle another DNS request.
-func (rp *ResolverPool) Available() bool {
-	return true
+func (rp *ResolverPool) Available() (bool, error) {
+	return true, nil
 }
 
 // Stats returns performance counters.
 func (rp *ResolverPool) Stats() map[int]int64 {
-	return make(map[int]int64)
+	stats := make(map[int]int64)
+
+	for _, r := range rp.Resolvers {
+		for k, v := range r.Stats() {
+			if cur, found := stats[k]; found {
+				stats[k] = cur + v
+			} else {
+				stats[k] = v
+			}
+		}
+	}
+
+	return stats
 }
 
 // WipeStats clears the performance counters.
@@ -156,38 +173,6 @@ func (rp *ResolverPool) WipeStats() {
 // ReportError implements the Resolver interface.
 func (rp *ResolverPool) ReportError() {
 	return
-}
-
-// NextResolver returns a randomly selected Resolver from the pool that has availability.
-func (rp *ResolverPool) NextResolver() Resolver {
-	var attempts int
-	max := len(rp.Resolvers)
-
-	if max == 0 {
-		return nil
-	}
-
-	for {
-		r := rp.Resolvers[rand.Int()%max]
-
-		if r.Available() {
-			return r
-		}
-
-		attempts++
-		if attempts <= max {
-			continue
-		}
-
-		for _, r := range rp.Resolvers {
-			if r.Available() {
-				return r
-			}
-		}
-		attempts = 0
-		time.Sleep(time.Duration(randomInt(1, 500)) * time.Millisecond)
-	}
-	return nil
 }
 
 // SubdomainToDomain returns the first subdomain name of the provided
@@ -215,7 +200,7 @@ func (rp *ResolverPool) SubdomainToDomain(name string) string {
 	for i := 0; i < len(labels)-1; i++ {
 		sub := strings.Join(labels[i:], ".")
 
-		if ns, err := rp.Resolve(context.TODO(), sub, "NS", PriorityHigh); err == nil {
+		if ns, _, err := rp.Resolve(context.TODO(), sub, "NS", PriorityHigh); err == nil {
 			pieces := strings.Split(ns[0].Data, ",")
 			rp.domainCache[pieces[0]] = struct{}{}
 			domain = pieces[0]
@@ -225,47 +210,102 @@ func (rp *ResolverPool) SubdomainToDomain(name string) string {
 	return domain
 }
 
-// Resolve performs a DNS request using available Resolvers in the pool.
-func (rp *ResolverPool) Resolve(ctx context.Context, name, qtype string, priority int) ([]requests.DNSAnswer, error) {
-	num := 1
-	if rp.numUsableResolvers() >= 3 {
-		num = 3
+// NextResolver returns a randomly selected Resolver from the pool that has availability.
+func (rp *ResolverPool) NextResolver() Resolver {
+	var attempts int
+	max := rp.numUsableResolvers()
+
+	if max == 0 {
+		return nil
 	}
 
-	rp.SetActive()
+	for {
+		r := rp.Resolvers[rand.Int()%max]
 
-	var queries int
-	ch := make(chan *resolveVote, num)
-	for i := 0; i < num; i++ {
+		if stopped := r.IsStopped(); !stopped {
+			return r
+		}
+
+		attempts++
+		if attempts > max {
+			for _, r := range rp.Resolvers {
+				if stopped := r.IsStopped(); !stopped {
+					return r
+				}
+			}
+			return nil
+		}
+	}
+
+	return nil
+}
+
+type resolveVote struct {
+	Err      error
+	Resolver Resolver
+	Answers  []requests.DNSAnswer
+}
+
+// Resolve performs a DNS request using available Resolvers in the pool.
+func (rp *ResolverPool) Resolve(ctx context.Context, name, qtype string, priority int) ([]requests.DNSAnswer, bool, error) {
+	var attempts int
+	switch priority {
+	case PriorityHigh:
+		attempts = 25
+	case PriorityLow:
+		attempts = 10
+	}
+
+	var votes []*resolveVote
+	for count := 1; attempts == 0 || count <= attempts; {
 		r := rp.NextResolver()
 		if r == nil {
 			break
 		}
 
-		go rp.queryResolver(ctx, r, ch, name, qtype, priority)
-		queries++
-	}
-
-	var votes []*resolveVote
-	for i := 0; i < queries; i++ {
-		select {
-		case v := <-ch:
-			votes = append(votes, v)
+		ans, again, err := r.Resolve(ctx, name, qtype, priority)
+		if err == nil {
+			votes = append(votes, &resolveVote{
+				Err: err,
+				Resolver: r,
+				Answers: ans,
+			})
+		} else {
+			if !again {
+				break
+			} else if priority == PriorityCritical || 
+				(err.(*ResolveError)).Rcode == NotAvailableRcode {
+				continue
+			}
 		}
-	}
 
-	if len(votes) == 0 {
-		return []requests.DNSAnswer{}, &ResolveError{
-			Err: fmt.Sprintf("Resolver Pool: DNS query for %s type %s returned 0 results", name, qtype),
+		goal := 1
+		if rp.numUsableResolvers() >= 3 {
+			goal = 3
 		}
+		
+		if len(votes) >= goal {
+			break
+		}
+
+		count++
 	}
 
-	rp.SetActive()
-	return rp.performElection(votes, name, qtype)
+	num := len(votes)
+	if num == 0 {
+		return []requests.DNSAnswer{}, false, &ResolveError{
+			Err: fmt.Sprintf("Resolver: DNS query for %s type %s returned 0 results", name, qtype),
+		}
+	} else if num < 3 {
+		return votes[0].Answers, false, votes[0].Err
+	}
+
+	ans, err := rp.performElection(votes, name, qtype)
+	return ans, false, err
 }
 
 // Reverse is performs reverse DNS queries using available Resolvers in the pool.
-func (rp *ResolverPool) Reverse(ctx context.Context, addr string) (string, string, error) {
+func (rp *ResolverPool) Reverse(ctx context.Context, addr string, priority int) (string, string, error) {
 	var name, ptr string
 
 	if ip := net.ParseIP(addr); amassnet.IsIPv4(ip) {
@@ -279,7 +319,7 @@ func (rp *ResolverPool) Reverse(ctx context.Context, addr string) (string, strin
 		}
 	}
 
-	answers, err := rp.Resolve(ctx, ptr, "PTR", PriorityLow)
+	answers, _, err := rp.Resolve(ctx, ptr, "PTR", priority)
 	if err != nil {
 		return ptr, name, err
 	}
@@ -302,13 +342,12 @@ func (rp *ResolverPool) Reverse(ctx context.Context, addr string) (string, strin
 			Rcode: 100,
 		}
 	}
+
 	return ptr, name, err
 }
 
 func (rp *ResolverPool) performElection(votes []*resolveVote, name, qtype string) ([]requests.DNSAnswer, error) {
-	if len(votes) == 1 {
-		return votes[0].Answers, votes[0].Err
-	} else if len(votes) < 3 || (votes[0].Err != nil && votes[1].Err != nil && votes[2].Err != nil) {
+	if len(votes) < 3 || (votes[0].Err != nil && votes[1].Err != nil && votes[2].Err != nil) {
 		return []requests.DNSAnswer{}, votes[0].Err
 	}
 
@@ -320,109 +359,63 @@ func (rp *ResolverPool) performElection(votes []*resolveVote, name, qtype string
 		}
 	}
 
-	var ans []requests.DNSAnswer
-	for i := 0; i < 3; i++ {
-		for _, a := range votes[i].Answers {
+	// Build the stringsets for each vote
+	var sets []stringset.Set
+	for i, v := range votes {
+		sets = append(sets, stringset.New())
+
+		for _, a := range v.Answers {
 			if a.Type != int(qt) {
 				continue
 			}
 
-			var dup bool
-			for _, d := range ans {
-				if d.Data == a.Data {
-					dup = true
-					break
-				}
-			}
-			if dup {
-				continue
-			}
+			sets[i].Insert(a.Data)
+		}
+	}
 
-			found := 1
-			var missing Resolver
-			for j, v := range votes {
-				if j == i {
-					continue
-				}
+	// Compare the stringsets for consistency
+	var goodVotes []int
+	goodResolvers := make(map[int]bool)
+	for i := 0; i < 3; i++ {
+		temp := stringset.New(sets[i].Slice()...)
 
-				missing = v.Resolver
-				for _, o := range v.Answers {
-					if o.Type == int(qt) && o.Data == a.Data {
-						found++
-						missing = nil
-						break
-					}
-				}
-			}
+		j := i+1
+		if i == 2 {
+			j = 0
+		}
 
-			if found == 1 {
+		temp.Subtract(sets[j])
+		if temp.Len() == 0 {
+			goodResolvers[i] = true
+			goodResolvers[j] = true
+			goodVotes = append(goodVotes, i, j)
+		}
+	}
+
+	if len(goodVotes) == 0 {
+		return []requests.DNSAnswer{}, &ResolveError{
+			Err: fmt.Sprintf("Resolver: DNS query for %s type %d returned 0 records", name, qt),
+		}
+	}
+
+	// Report when there was an inconsistent resolver
+	if len(goodVotes) == 2 {
+		for i := 0; i < 3; i++ {
+			if goodResolvers[i] == false {
 				votes[i].Resolver.ReportError()
-				continue
-			} else if found == 2 && missing != nil {
-				missing.ReportError()
-			}
-			ans = append(ans, a)
-		}
-	}
-
-	if len(ans) == 0 {
-		return ans, &ResolveError{Err: fmt.Sprintf("Resolver Pool: DNS query for %s type %d returned 0 records", name, qt)}
-	}
-	return ans, nil
-}
-
-func (rp *ResolverPool) queryResolver(ctx context.Context, r Resolver, ch chan *resolveVote, name, qtype string, priority int) {
-	var err error
-	var again bool
-	start := time.Now()
-	var ans []requests.DNSAnswer
-	var attempts, servfail int
-
-	var maxAttempts, maxFails int
-	switch priority {
-	case PriorityHigh:
-		maxAttempts = 50
-		maxFails = 10
-	case PriorityLow:
-		maxAttempts = 25
-		maxFails = 6
-	}
-
-	for {
-		ans, again, err = r.Resolve(ctx, name, qtype)
-		if !again {
-			break
-		} else if priority == PriorityCritical {
-			continue
-		}
-
-		attempts++
-		if attempts > maxAttempts && time.Now().After(start.Add(2*time.Minute)) {
-			break
-		}
-		// Do not allow server failure errors to continue as long
-		if (err.(*ResolveError)).Rcode == dns.RcodeServerFailure {
-			servfail++
-			if servfail > maxFails && time.Now().After(start.Add(time.Minute)) {
 				break
-			} else if servfail <= (maxFails / 2) {
-				time.Sleep(time.Duration(randomInt(1000, 2000)) * time.Millisecond)
 			}
 		}
 	}
 
-	ch <- &resolveVote{
-		Err:      err,
-		Resolver: r,
-		Answers:  ans,
-	}
+	return votes[goodVotes[0]].Answers, nil
 }
 
 func (rp *ResolverPool) numUsableResolvers() int {
 	var num int
 
 	for _, r := range rp.Resolvers {
-		if r.Available() {
+		if stopped := r.IsStopped(); !stopped {
 			num++
 		}
 	}
@@ -431,23 +424,4 @@ func (rp *ResolverPool) numUsableResolvers() int {
 
 func randomInt(min, max int) int {
 	return min + rand.Intn((max-min)+1)
-}
-
-// IsActive returns true if SetActive has been called for the pool within the last 10 seconds.
-func (rp *ResolverPool) IsActive() bool {
-	rp.activeLock.Lock()
-	defer rp.activeLock.Unlock()
-
-	if time.Now().Sub(rp.active) > 10*time.Second {
-		return false
-	}
-	return true
-}
-
-// SetActive marks the pool as being active at time.Now() for future checks performed by the IsActive method.
-func (rp *ResolverPool) SetActive() {
-	rp.activeLock.Lock()
-	defer rp.activeLock.Unlock()
-
-	rp.active = time.Now()
 }

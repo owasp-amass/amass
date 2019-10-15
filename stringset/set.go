@@ -19,7 +19,7 @@ func Deduplicate(input []string) []string {
 
 // New returns a Set containing the values provided in the arguments.
 func New(initial ...string) Set {
-	s := Set{}
+	s := make(Set)
 
 	for _, v := range initial {
 		s.Insert(v)
@@ -30,7 +30,7 @@ func New(initial ...string) Set {
 
 // Has returns true if the receiver Set already contains the element string argument.
 func (s Set) Has(element string) bool {
-	_, exists := s[element]
+	_, exists := s[strings.ToLower(element)]
 	return exists
 }
 
@@ -48,7 +48,7 @@ func (s Set) InsertMany(elements ...string) {
 
 // Remove will delete the element string from the receiver Set.
 func (s Set) Remove(element string) {
-	delete(s, element)
+	delete(s, strings.ToLower(element))
 }
 
 // Slice returns a string slice that contains all the elements in the Set.
@@ -86,7 +86,7 @@ func (s Set) Subtract(other Set) {
 	}
 }
 
-// Intersect causes the receiver Set to only contains elements also found in the
+// Intersect causes the receiver Set to only contain elements also found in the
 // other Set argument.
 func (s Set) Intersect(other Set) {
 	intersect := New()

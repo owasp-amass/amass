@@ -11,10 +11,8 @@ import (
 	"path"
 
 	"github.com/OWASP/Amass/config"
-	"github.com/OWASP/Amass/eventbus"
 	"github.com/OWASP/Amass/format"
-	"github.com/OWASP/Amass/resolvers"
-	"github.com/OWASP/Amass/sources"
+	"github.com/OWASP/Amass/services"
 	"github.com/fatih/color"
 )
 
@@ -104,12 +102,17 @@ func main() {
 
 // GetAllSourceNames returns the names of all Amass data sources.
 func GetAllSourceNames() []string {
-	bus := eventbus.NewEventBus()
-
 	var names []string
-	for _, src := range sources.GetAllSources(&config.Config{}, bus, resolvers.NewResolverPool(nil)) {
+
+	sys, err := services.NewLocalSystem(config.NewConfig())
+	if err != nil {
+		return names
+	}
+
+	for _, src := range services.GetAllSources(sys) {
 		names = append(names, src.String())
 	}
-	bus.Stop()
+
+	sys.Shutdown()
 	return names
 }

@@ -4,20 +4,14 @@
 package services
 
 import (
+	"context"
 	"errors"
+	"reflect"
 	"sync"
 	"time"
 
-	"github.com/OWASP/Amass/config"
-	eb "github.com/OWASP/Amass/eventbus"
 	"github.com/OWASP/Amass/queue"
 	"github.com/OWASP/Amass/requests"
-	"github.com/OWASP/Amass/resolvers"
-)
-
-const (
-	// ServiceRequestChanLength is the length of the chan that pulls requests off the queue.
-	ServiceRequestChanLength int = 1000
 )
 
 // Possible values for the AmassService.APIKeyRequired field.
@@ -34,69 +28,54 @@ type ServiceStats struct {
 	AddrsRemaining   int
 }
 
-// Service is the object type for a service running within the Amass enumeration architecture.
+// Service is the object type for a service running within the Amass architecture.
 type Service interface {
 	// Start the service
 	Start() error
 	OnStart() error
 
-	// Pause the service
-	Pause() error
-	OnPause() error
-
-	// Resume the service
-	Resume() error
-	OnResume() error
-
 	// Stop the service
 	Stop() error
 	OnStop() error
 
-	// Architecture is ready for more names
-	LowNumberOfNames() error
-	OnLowNumberOfNames() error
+	// Methods that enforce the rate limit
+	SetRateLimit(min time.Duration)
+	CheckRateLimit()
+
+	// RequestLen returns the current length of the request queue
+	RequestLen() int
 
 	// Methods to support processing of DNSRequests
-	SendDNSRequest(req *requests.DNSRequest)
-	DNSRequestChan() <-chan *requests.DNSRequest
-	DNSRequestLen() int
+	DNSRequest(ctx context.Context, req *requests.DNSRequest)
+	OnDNSRequest(ctx context.Context, req *requests.DNSRequest)
+
+	// Methods to support processing of discovered proper subdomains
+	SubdomainDiscovered(ctx context.Context, req *requests.DNSRequest, times int)
+	OnSubdomainDiscovered(ctx context.Context, req *requests.DNSRequest, times int)
 
 	// Methods to support processing of AddrRequests
-	SendAddrRequest(req *requests.AddrRequest)
-	AddrRequestChan() <-chan *requests.AddrRequest
-	AddrRequestLen() int
+	AddrRequest(ctx context.Context, req *requests.AddrRequest)
+	OnAddrRequest(ctx context.Context, req *requests.AddrRequest)
 
 	// Methods to support processing of ASNRequests
-	SendASNRequest(req *requests.ASNRequest)
-	ASNRequestChan() <-chan *requests.ASNRequest
-	ASNRequestLen() int
+	ASNRequest(ctx context.Context, req *requests.ASNRequest)
+	OnASNRequest(ctx context.Context, req *requests.ASNRequest)
 
 	// Methods to support processing of WhoisRequests
-	SendWhoisRequest(req *requests.WhoisRequest)
-	WhoisRequestChan() <-chan *requests.WhoisRequest
-	WhoisRequestLen() int
-
-	IsActive() bool
-	SetActive()
-
-	// Returns channels that fire during Pause/Resume operations
-	PauseChan() <-chan struct{}
-	ResumeChan() <-chan struct{}
+	WhoisRequest(ctx context.Context, req *requests.WhoisRequest)
+	OnWhoisRequest(ctx context.Context, req *requests.WhoisRequest)
 
 	// Returns a channel that is closed when the service is stopped
 	Quit() <-chan struct{}
 
+	// Type returns the type of the service
+	Type() string
+
 	// String description of the service
 	String() string
 
-	// Returns the configuration for the enumeration this service supports
-	Config() *config.Config
-
-	// Returns the event bus that handles communication
-	Bus() *eb.EventBus
-
-	// Returns the resolver pool that handles DNS requests
-	Pool() *resolvers.ResolverPool
+	// Returns the System that the service is supporting
+	System() System
 
 	// Returns current ServiceStats that provide performance metrics
 	Stats() *ServiceStats
@@ -105,56 +84,42 @@ type Service interface {
 // BaseService provides common mechanisms to all Amass services in the enumeration architecture.
 // It is used to compose a type that completely meets the AmassService interface.
 type BaseService struct {
-	name          string
-	started       bool
-	stopped       bool
-	activeLock    sync.Mutex
-	active        time.Time
-	dnsQueue      *queue.Queue
-	dnsRequests   chan *requests.DNSRequest
-	addrQueue     *queue.Queue
-	addrRequests  chan *requests.AddrRequest
-	asnQueue      *queue.Queue
-	asnRequests   chan *requests.ASNRequest
-	whoisQueue    *queue.Queue
-	whoisRequests chan *requests.WhoisRequest
-	pause         chan struct{}
-	resume        chan struct{}
-	quit          chan struct{}
+	// The unique service name shared throughout the system
+	name string
+
+	// Indicates that the service has already been started
+	started bool
+
+	// Indicates that the service has already been stopped
+	stopped bool
+
+	// The queue for all incoming request types
+	queue *queue.Queue
+
+	// The broadcast channel closed when the service is stopped
+	quit chan struct{}
 
 	// The specific service embedding BaseAmassService
 	service Service
 
-	// The configuration for this service
-	cfg *config.Config
+	// The System that this service supports
+	sys System
 
-	// The event bus that handles message passing
-	bus *eb.EventBus
-
-	// The resolver pool used for DNS requests
-	pool *resolvers.ResolverPool
+	// Rate limit enforcement fields
+	rateLimit time.Duration
+	lastLock  sync.Mutex
+	last      time.Time
 }
 
 // NewBaseService returns an initialized BaseService object.
-func NewBaseService(srv Service, name string, cfg *config.Config, bus *eb.EventBus, pool *resolvers.ResolverPool) *BaseService {
+func NewBaseService(srv Service, name string, sys System) *BaseService {
 	return &BaseService{
-		name:          name,
-		active:        time.Now(),
-		dnsQueue:      new(queue.Queue),
-		dnsRequests:   make(chan *requests.DNSRequest, ServiceRequestChanLength),
-		addrQueue:     new(queue.Queue),
-		addrRequests:  make(chan *requests.AddrRequest, ServiceRequestChanLength),
-		asnQueue:      new(queue.Queue),
-		asnRequests:   make(chan *requests.ASNRequest, ServiceRequestChanLength),
-		whoisQueue:    new(queue.Queue),
-		whoisRequests: make(chan *requests.WhoisRequest, ServiceRequestChanLength),
-		pause:         make(chan struct{}, 10),
-		resume:        make(chan struct{}, 10),
-		quit:          make(chan struct{}),
-		service:       srv,
-		cfg:           cfg,
-		bus:           bus,
-		pool:          pool,
+		name:    name,
+		queue:   new(queue.Queue),
+		quit:    make(chan struct{}),
+		service: srv,
+		sys:     sys,
+		last:    time.Now().Truncate(10 * time.Minute),
 	}
 }
 
@@ -165,11 +130,9 @@ func (bas *BaseService) Start() error {
 	} else if bas.stopped {
 		return errors.New(bas.name + " has been stopped")
 	}
+
 	bas.started = true
-	go bas.processDNSRequests()
-	go bas.processAddrRequests()
-	go bas.processASNRequests()
-	go bas.processWhoisRequests()
+	go bas.processRequests()
 	return bas.service.OnStart()
 }
 
@@ -179,42 +142,12 @@ func (bas *BaseService) OnStart() error {
 	return nil
 }
 
-// Pause implements the Service interface
-func (bas *BaseService) Pause() error {
-	err := bas.service.OnPause()
-
-	go func() {
-		bas.pause <- struct{}{}
-	}()
-	return err
-}
-
-// OnPause implements the Service interface
-func (bas *BaseService) OnPause() error {
-	return nil
-}
-
-// Resume implements the Service interface
-func (bas *BaseService) Resume() error {
-	err := bas.service.OnResume()
-
-	go func() {
-		bas.resume <- struct{}{}
-	}()
-	return err
-}
-
-// OnResume implements the Service interface
-func (bas *BaseService) OnResume() error {
-	return nil
-}
-
 // Stop calls the OnStop method implemented for the Service.
 func (bas *BaseService) Stop() error {
 	if bas.stopped {
 		return errors.New(bas.name + " has already been stopped")
 	}
-	bas.Resume()
+
 	err := bas.service.OnStop()
 	bas.stopped = true
 	close(bas.quit)
@@ -227,202 +160,64 @@ func (bas *BaseService) OnStop() error {
 	return nil
 }
 
-// LowNumberOfNames calls the OnLowNumberOfNames method implemented for the Service.
-func (bas *BaseService) LowNumberOfNames() error {
-	err := bas.service.OnLowNumberOfNames()
-
-	return err
+// Type returns the type of the service.
+func (bas *BaseService) Type() string {
+	return requests.NONE
 }
 
-// OnLowNumberOfNames is a placeholder that should be implemented by a Service
-// that has code to be executed when the enumeration is low in names to resolve.
-func (bas *BaseService) OnLowNumberOfNames() error {
-	return nil
+// RequestLen returns the current length of the request queue.
+func (bas *BaseService) RequestLen() int {
+	return bas.queue.Len()
 }
 
-// SendDNSRequest adds the request provided by the parameter to the service request channel.
-func (bas *BaseService) SendDNSRequest(req *requests.DNSRequest) {
-	bas.dnsQueue.Append(req)
+// DNSRequest adds the request provided by the parameter to the service request channel.
+func (bas *BaseService) DNSRequest(ctx context.Context, req *requests.DNSRequest) {
+	bas.queueRequest(bas.service.OnDNSRequest, ctx, req)
 }
 
-// DNSRequestChan returns the channel that provides new service requests.
-func (bas *BaseService) DNSRequestChan() <-chan *requests.DNSRequest {
-	return bas.dnsRequests
+// OnDNSRequest is called for a request that was queued via DNSRequest.
+func (bas *BaseService) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
+	return
 }
 
-func (bas *BaseService) processDNSRequests() {
-	curIdx := 0
-	maxIdx := 7
-	delays := []int{25, 50, 75, 100, 150, 250, 500, 750}
-
-	for {
-		select {
-		case <-bas.Quit():
-			return
-		default:
-			element, ok := bas.dnsQueue.Next()
-			if !ok {
-				time.Sleep(time.Duration(delays[curIdx]) * time.Millisecond)
-				if curIdx < maxIdx {
-					curIdx++
-				}
-				continue
-			}
-			curIdx = 0
-			bas.dnsRequests <- element.(*requests.DNSRequest)
-		}
-	}
+// SubdomainDiscovered adds the request provided by the parameter to the service request channel.
+func (bas *BaseService) SubdomainDiscovered(ctx context.Context, req *requests.DNSRequest, times int) {
+	bas.queueRequest(bas.service.OnSubdomainDiscovered, ctx, req, times)
 }
 
-// DNSRequestLen returns the current length of the request queue.
-func (bas *BaseService) DNSRequestLen() int {
-	return bas.dnsQueue.Len()
+// OnSubdomainDiscovered is called for a request that was queued via DNSRequest.
+func (bas *BaseService) OnSubdomainDiscovered(ctx context.Context, req *requests.DNSRequest, times int) {
+	return
 }
 
-// SendAddrRequest adds the request provided by the parameter to the service request channel.
-func (bas *BaseService) SendAddrRequest(req *requests.AddrRequest) {
-	bas.addrQueue.Append(req)
+// AddrRequest adds the request provided by the parameter to the service request channel.
+func (bas *BaseService) AddrRequest(ctx context.Context, req *requests.AddrRequest) {
+	bas.queueRequest(bas.service.OnAddrRequest, ctx, req)
 }
 
-// AddrRequestChan returns the channel that provides new service requests.
-func (bas *BaseService) AddrRequestChan() <-chan *requests.AddrRequest {
-	return bas.addrRequests
+// OnAddrRequest is called for a request that was queued via AddrRequest.
+func (bas *BaseService) OnAddrRequest(ctx context.Context, req *requests.AddrRequest) {
+	return
 }
 
-func (bas *BaseService) processAddrRequests() {
-	curIdx := 0
-	maxIdx := 7
-	delays := []int{25, 50, 75, 100, 150, 250, 500, 750}
-
-	for {
-		select {
-		case <-bas.Quit():
-			return
-		default:
-			element, ok := bas.addrQueue.Next()
-			if !ok {
-				time.Sleep(time.Duration(delays[curIdx]) * time.Millisecond)
-				if curIdx < maxIdx {
-					curIdx++
-				}
-				continue
-			}
-			curIdx = 0
-			bas.addrRequests <- element.(*requests.AddrRequest)
-		}
-	}
+// ASNRequest adds the request provided by the parameter to the service request channel.
+func (bas *BaseService) ASNRequest(ctx context.Context, req *requests.ASNRequest) {
+	bas.queueRequest(bas.service.OnASNRequest, ctx, req)
 }
 
-// AddrRequestLen returns the current length of the request queue.
-func (bas *BaseService) AddrRequestLen() int {
-	return bas.addrQueue.Len()
+// OnASNRequest is called for a request that was queued via ASNRequest.
+func (bas *BaseService) OnASNRequest(ctx context.Context, req *requests.ASNRequest) {
+	return
 }
 
-// SendASNRequest adds the request provided by the parameter to the service request channel.
-func (bas *BaseService) SendASNRequest(req *requests.ASNRequest) {
-	bas.asnQueue.Append(req)
+// WhoisRequest adds the request provided by the parameter to the service request channel.
+func (bas *BaseService) WhoisRequest(ctx context.Context, req *requests.WhoisRequest) {
+	bas.queueRequest(bas.service.OnWhoisRequest, ctx, req)
 }
 
-// ASNRequestChan returns the channel that provides new service requests.
-func (bas *BaseService) ASNRequestChan() <-chan *requests.ASNRequest {
-	return bas.asnRequests
-}
-
-func (bas *BaseService) processASNRequests() {
-	curIdx := 0
-	maxIdx := 7
-	delays := []int{25, 50, 75, 100, 150, 250, 500, 750}
-
-	for {
-		select {
-		case <-bas.Quit():
-			return
-		default:
-			element, ok := bas.asnQueue.Next()
-			if !ok {
-				time.Sleep(time.Duration(delays[curIdx]) * time.Millisecond)
-				if curIdx < maxIdx {
-					curIdx++
-				}
-				continue
-			}
-			curIdx = 0
-			bas.asnRequests <- element.(*requests.ASNRequest)
-		}
-	}
-}
-
-// ASNRequestLen returns the current length of the request queue.
-func (bas *BaseService) ASNRequestLen() int {
-	return bas.asnQueue.Len()
-}
-
-// SendWhoisRequest adds the request provided by the parameter to the service request channel.
-func (bas *BaseService) SendWhoisRequest(req *requests.WhoisRequest) {
-	bas.whoisQueue.Append(req)
-}
-
-// WhoisRequestChan returns the channel that provides new service requests.
-func (bas *BaseService) WhoisRequestChan() <-chan *requests.WhoisRequest {
-	return bas.whoisRequests
-}
-
-func (bas *BaseService) processWhoisRequests() {
-	curIdx := 0
-	maxIdx := 7
-	delays := []int{25, 50, 75, 100, 150, 250, 500, 750}
-
-	for {
-		select {
-		case <-bas.Quit():
-			return
-		default:
-			element, ok := bas.whoisQueue.Next()
-			if !ok {
-				time.Sleep(time.Duration(delays[curIdx]) * time.Millisecond)
-				if curIdx < maxIdx {
-					curIdx++
-				}
-				continue
-			}
-			curIdx = 0
-			bas.whoisRequests <- element.(*requests.WhoisRequest)
-		}
-	}
-}
-
-// WhoisRequestLen returns the current length of the request queue.
-func (bas *BaseService) WhoisRequestLen() int {
-	return bas.whoisQueue.Len()
-}
-
-// IsActive returns true if SetActive has been called for the service within the last 10 seconds.
-func (bas *BaseService) IsActive() bool {
-	bas.activeLock.Lock()
-	defer bas.activeLock.Unlock()
-
-	if time.Now().Sub(bas.active) > 10*time.Second {
-		return false
-	}
-	return true
-}
-
-// SetActive marks the service as being active at time.Now() for future checks performed by the IsActive method.
-func (bas *BaseService) SetActive() {
-	bas.activeLock.Lock()
-	defer bas.activeLock.Unlock()
-
-	bas.active = time.Now()
-}
-
-// PauseChan returns the pause channel for the service.
-func (bas *BaseService) PauseChan() <-chan struct{} {
-	return bas.pause
-}
-
-// ResumeChan returns the resume channel for the service.
-func (bas *BaseService) ResumeChan() <-chan struct{} {
-	return bas.resume
+// OnWhoisRequest is called for a request that was queued via WhoisRequest.
+func (bas *BaseService) OnWhoisRequest(ctx context.Context, req *requests.WhoisRequest) {
+	return
 }
 
 // Quit return the quit channel for the service.
@@ -435,22 +230,82 @@ func (bas *BaseService) String() string {
 	return bas.name
 }
 
-// Config returns the Config for the enumeration this service supports.
-func (bas *BaseService) Config() *config.Config {
-	return bas.cfg
+// System returns the System that this service supports.
+func (bas *BaseService) System() System {
+	return bas.sys
 }
 
-// Bus returns the EventBus that handles communication for the service.
-func (bas *BaseService) Bus() *eb.EventBus {
-	return bas.bus
-}
-
-// Pool returns the ResolverPool that handles DNS requests for the service.
-func (bas *BaseService) Pool() *resolvers.ResolverPool {
-	return bas.pool
-}
-
-// Stats returns current ServiceStats that provide performance metrics
+// Stats returns current ServiceStats that provide performance metrics.
 func (bas *BaseService) Stats() *ServiceStats {
 	return new(ServiceStats)
+}
+
+// SetRateLimit sets the minimum wait between checks.
+func (bas *BaseService) SetRateLimit(min time.Duration) {
+	bas.rateLimit = min
+}
+
+// CheckRateLimit blocks until the minimum wait since the last call.
+func (bas *BaseService) CheckRateLimit() {
+	if bas.rateLimit == time.Duration(0) {
+		return
+	}
+
+	bas.lastLock.Lock()
+	defer bas.lastLock.Unlock()
+
+	if delta := time.Now().Sub(bas.last); bas.rateLimit > delta {
+		time.Sleep(delta)
+	}
+	bas.last = time.Now()
+}
+
+type queuedCall struct {
+	Func reflect.Value
+	Args []reflect.Value
+}
+
+func (bas *BaseService) queueRequest(fn interface{}, args ...interface{}) {
+	passedArgs := make([]reflect.Value, 0)
+	for _, arg := range args {
+		passedArgs = append(passedArgs, reflect.ValueOf(arg))
+	}
+
+	bas.queue.Append(&queuedCall{
+		Func: reflect.ValueOf(fn),
+		Args: passedArgs,
+	})
+}
+
+func (bas *BaseService) processRequests() {
+	curIdx := 0
+	maxIdx := 6
+	delays := []int{25, 50, 75, 100, 150, 250, 500}
+loop:
+	for {
+		select {
+		case <-bas.Quit():
+			return
+		default:
+			element, ok := bas.queue.Next()
+			if !ok {
+				time.Sleep(time.Duration(delays[curIdx]) * time.Millisecond)
+				if curIdx < maxIdx {
+					curIdx++
+				}
+				continue loop
+			}
+			curIdx = 0
+			e := element.(*queuedCall)
+			ctx := e.Args[0].Interface().(context.Context)
+
+			select {
+			case <-ctx.Done():
+				continue loop
+			default:
+				// Call the queued function or method
+				e.Func.Call(e.Args)
+			}
+		}
+	}
 }
