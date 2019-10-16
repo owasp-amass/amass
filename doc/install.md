@@ -58,14 +58,14 @@ A [precompiled version is available](https://github.com/OWASP/Amass/releases) wi
 
 
 
-## Build
+## Build with **Go >= 1.13**
 
-If you prefer to build your own binary from the latest release of the source code, make sure you have a correctly configured **Go >= 1.12** environment. More information about how to achieve this can be found [on the golang website.](https://golang.org/doc/install).
+Build your own binary from the latest release of the source code
 
 To build Go Modules, then you can simply execute the following command:
 
 ```bash
-go get -u github.com/OWASP/Amass/...
+cd && go get -u github.com/OWASP/Amass/...
 ```
 Build Amass using Go Modules to ensure the proper dependencies, then perform the following steps:
 
