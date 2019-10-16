@@ -144,3 +144,9 @@ Periodically, execute the following command to update all packages:
 ```bash
 sudo pentoo-updater
 ```
+
+## Usage
+
+```bash
+amass enum --passive -src -w /usr/share/wordlists/dnsmap.txt -d domain.com -o amassbrute.txt
+```
