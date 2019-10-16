@@ -58,7 +58,7 @@ A [precompiled version is available](https://github.com/OWASP/Amass/releases) wi
 
 
 
-## Build with **Go >= 1.13**
+## If you like Build manually with **Go >= 1.13**
 
 Build your own binary from the latest release of the source code
 
