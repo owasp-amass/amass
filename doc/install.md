@@ -62,18 +62,17 @@ A [precompiled version is available](https://github.com/OWASP/Amass/releases) wi
 
 If you prefer to build your own binary from the latest release of the source code, make sure you have a correctly configured **Go >= 1.12** environment. More information about how to achieve this can be found [on the golang website.](https://golang.org/doc/install).
 
-If you are not utilizing Go Modules, then you can simply execute the following command:
+To build Go Modules, then you can simply execute the following command:
 
 ```bash
 go get -u github.com/OWASP/Amass/...
 ```
-
-If you would like to build Amass using Go Modules to ensure the proper dependencies, then perform the following steps:
+Build Amass using Go Modules to ensure the proper dependencies, then perform the following steps:
 
 1. Download OWASP Amass:
 
 ```bash
-go get github.com/OWASP/Amass
+cd && wget https://dl.google.com/go/go1.13.1.linux-amd64.tar.gz && sudo tar -xvf go1.13.1.linux-amd64.tar.gz && sudo mv go /usr/local && export GOROOT=/usr/local/go && export GOPATH=$HOME/Projects/Proj1 && export PATH=$GOPATH/bin:$GOROOT/bin:$PATH && go version && go get github.com/OWASP/Amass
 ```
 
 Ignore any error messages regarding what was pulled down.
@@ -87,7 +86,7 @@ export GO111MODULE=on
 3. Next, build the binary from the project source code:
 
 ```bash
-cd ~/go/src/github.com/OWASP/Amass
+cd /usr/local/go/src/github.com/OWASP/Amass
 
 go install ./...
 ```
