@@ -145,7 +145,10 @@ Periodically, execute the following command to update all packages:
 sudo pentoo-updater
 ```
 
-## Usage
+Go to the User's Guide[https://github.com/OWASP/Amass/blob/master/doc/user_guide.md] for additional information
+
+
+## Example of Usage 
 
 ```bash
 amass enum --passive -src -w /usr/share/wordlists/dnsmap.txt -d domain.com -o amassbrute.txt
