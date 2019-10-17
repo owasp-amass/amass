@@ -82,6 +82,7 @@ This project improves thanks to all the people who contribute:
 * [Collaborating with the Crowd – Recapping LevelUp 0X04](https://www.bugcrowd.com/blog/recapping_levelup_0x04/)
 * [Subdomain Enumeration: 2019 Workflow](https://0xpatrik.com/subdomain-enumeration-2019/)
 * [REMOTE CODE EXECUTION ! 😜 Recon Wins](https://medium.com/@vishnu0002/remote-code-execution-recon-wins-e9c1db79f3da)
+* [Security assessment on staging domains](https://tutorgeeks.blogspot.com/2019/05/security-assessment-on-staging-domains.html)
 * [Where You’ll Find Us: An Overview of SecurityTrails Integrations](https://securitytrails.com/blog/integrations-overview)
 * [Web tools, or where to start a pentester?](https://habr.com/en/company/dsec/blog/452836/)
 * [Tool for detailed DNS enumeration and creation of network infrastructure maps](https://www.gurudelainformatica.es/2019/05/herramienta-para-enumeracion-detallada.html)
@@ -113,7 +114,6 @@ This project improves thanks to all the people who contribute:
 * [Asset Discovery: Doing Reconnaissance the Hard Way](https://0xpatrik.com/asset-discovery/)
 * [Project Sonar: An Underrated Source of Internet-wide Data](https://0xpatrik.com/project-sonar-guide/)
 * [Top Five Ways the Red Team breached the External Perimeter](https://medium.com/@adam.toscher/top-five-ways-the-red-team-breached-the-external-perimeter-262f99dc9d17)
-* [Security assessment on staging domains](https://tutorgeeks.blogspot.com/2019/05/security-assessment-on-staging-domains.html)
 
 ## Stargazers over Time
 
