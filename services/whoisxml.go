@@ -56,7 +56,7 @@ type WhoisXMLBasicRequest struct {
 	SearchTerms WhoisXMLBasicSearchTerms `json:"basicSearchTerms"`
 }
 
-// NewWhoisXML returns he object initialized, but not yet started.
+// NewWhoisXML returns the object initialized, but not yet started.
 func NewWhoisXML(sys System) *WhoisXML {
 	w := &WhoisXML{SourceType: requests.API}
 
@@ -109,9 +109,8 @@ func (w *WhoisXML) OnWhoisRequest(ctx context.Context, req *requests.WhoisReques
 		return
 	}
 
-	// Pull the table we need from the page content
 	var q WhoisXMLResponse
-
+	// Pull the table we need from the page content
 	err = json.NewDecoder(strings.NewReader(page)).Decode(&q)
 	if err != nil {
 		bus.Publish(requests.LogTopic, fmt.Sprintf("Failed to decode json in WhoisXML.\nErr:%s", err))

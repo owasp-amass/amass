@@ -81,6 +81,7 @@ func GetAllSources(sys System) []Service {
 		NewViewDNS(sys),
 		NewVirusTotal(sys),
 		NewWayback(sys),
+		NewWhoisXML(sys),
 		NewYahoo(sys),
 	}
 
