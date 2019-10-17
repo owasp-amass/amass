@@ -19,6 +19,7 @@ import (
 	"github.com/OWASP/Amass/queue"
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/services"
+	alts "github.com/OWASP/Amass/alterations"
 	sf "github.com/OWASP/Amass/stringfilter"
 	"github.com/OWASP/Amass/stringset"
 )
@@ -57,8 +58,8 @@ type Enumeration struct {
 	Bus    *eb.EventBus
 	Sys    services.System
 
-	altState    *services.State
-	markovModel *services.MarkovModel
+	altState    *alts.State
+	markovModel *alts.MarkovModel
 
 	ctx context.Context
 
@@ -164,14 +165,16 @@ func (e *Enumeration) Start() error {
 	}
 	e.srcsLock.Unlock()
 
-	e.markovModel = services.NewMarkovModel()
-	e.altState = services.NewState(e.Config.AltWordlist)
+	// Setup the DNS name alteration objects
+	e.markovModel = alts.NewMarkovModel(3)
+	e.altState = alts.NewState(e.Config.AltWordlist)
+	e.altState.MinForWordFlip = e.Config.MinForWordFlip
+	e.altState.EditDistance = e.Config.EditDistance
+
 	// Setup the context used throughout the enumeration
 	ctx, cancel := context.WithCancel(context.Background())
 	ctx = context.WithValue(ctx, requests.ContextConfig, e.Config)
-	ctx = context.WithValue(ctx, requests.ContextEventBus, e.Bus)
-	ctx = context.WithValue(ctx, requests.ContextAltState, e.altState)
-	e.ctx = context.WithValue(ctx, requests.ContextMarkov, e.markovModel)
+	e.ctx = context.WithValue(ctx, requests.ContextEventBus, e.Bus)
 
 	e.setupEventBus()
 	// The enumeration will not terminate until all output has been processed
@@ -384,6 +387,9 @@ func (e *Enumeration) newResolvedName(req *requests.DNSRequest) {
 	// Write the DNS name information to the graph databases
 	e.dataMgr.DNSRequest(e.ctx, req)
 
+	/*
+	 * Do not go further if the name is not in scope
+	 */
 	if !e.Config.IsDomainInScope(req.Name) {
 		return
 	}
@@ -404,13 +410,13 @@ func (e *Enumeration) newResolvedName(req *requests.DNSRequest) {
 	for _, srv := range e.Sys.CoreServices() {
 		if e.Config.BruteForcing && e.Config.Recursive &&
 			e.Config.MinForRecursive == 0 && srv.String() == "Brute Forcing" {
-			go srv.DNSRequest(e.ctx, req)
+			srv.DNSRequest(e.ctx, req)
 		}
+	}
 
-		// Call DNSRequest for all name alteration services
-		if e.Config.Alterations && srv.Type() == requests.ALT {
-			go srv.DNSRequest(e.ctx, req)
-		}
+	// Update all name alteration objects
+	if e.Config.Alterations {
+		go e.performNameAlterations(req.Name, req.Domain)
 	}
 
 	e.srcsLock.Lock()
@@ -419,8 +425,53 @@ func (e *Enumeration) newResolvedName(req *requests.DNSRequest) {
 	for _, srv := range e.Sys.DataSources() {
 		// Call DNSRequest for all web archive services
 		if srv.Type() == requests.ARCHIVE && e.srcs.Has(srv.String()) {
-			go srv.DNSRequest(e.ctx, req)
+			srv.DNSRequest(e.ctx, req)
 		}
+	}
+}
+
+func (e *Enumeration) performNameAlterations(name, domain string) {
+	if !e.Config.IsDomainInScope(name) ||
+		(len(strings.Split(domain, ".")) == len(strings.Split(name, "."))) {
+		return
+	}
+
+	newNames := stringset.New()
+
+	e.markovModel.Train(name)
+	if e.markovModel.TotalTrainings() >= 50 && 
+		(e.markovModel.TotalTrainings() % 10 == 0) {
+		newNames.InsertMany(e.markovModel.GenerateNames(100)...)
+	}
+
+	if e.Config.FlipNumbers {
+		newNames.InsertMany(e.altState.FlipNumbers(name)...)
+	}
+	if e.Config.AddNumbers {
+		newNames.InsertMany(e.altState.AppendNumbers(name)...)
+	}
+	if e.Config.FlipWords {
+		newNames.InsertMany(e.altState.FlipWords(name)...)
+	}
+	if e.Config.AddWords {
+		newNames.InsertMany(e.altState.AddSuffixWord(name)...)
+		newNames.InsertMany(e.altState.AddPrefixWord(name)...)
+	}
+	if e.Config.EditDistance > 0 {
+		newNames.InsertMany(e.altState.FuzzyLabelSearches(name)...)
+	}
+
+	for _, n := range newNames.Slice() {
+		if !e.Config.IsDomainInScope(n) {
+			continue
+		}
+
+		e.newNameEvent(&requests.DNSRequest{
+			Name: n,
+			Domain: domain,
+			Tag: requests.ALT,
+			Source: "Alterations",
+		})
 	}
 }
 
@@ -463,6 +514,11 @@ func (e *Enumeration) checkSubdomain(req *requests.DNSRequest) {
 	times := e.timesForSubdomain(sub)
 
 	e.Bus.Publish(requests.SubDiscoveredTopic, e.ctx, r, times)
+
+	// Check if the subdomain should be added to the markov model
+	if e.Config.Alterations && times == 1 {
+		e.markovModel.AddSubdomain(sub)
+	}
 
 	e.srcsLock.Lock()
 	defer e.srcsLock.Unlock()

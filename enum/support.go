@@ -83,7 +83,7 @@ func (e *Enumeration) reverseDNSQuery(ip string) {
 		return
 	}
 
-	e.newResolvedName(&requests.DNSRequest{
+	go e.newResolvedName(&requests.DNSRequest{
 		Name:   ptr,
 		Domain: domain,
 		Records: []requests.DNSAnswer{{

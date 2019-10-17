@@ -180,9 +180,7 @@ func (l *LocalSystem) setupGraphDBs() error {
 func (l *LocalSystem) initCoreServices() error {
 	l.coreSrvs = []Service{
 		NewDNSService(l),
-		NewMarkovService(l),
 		NewBruteForceService(l),
-		NewAlterationService(l),
 		NewDataManagerService(l),
 	}
 

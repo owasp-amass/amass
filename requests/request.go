@@ -31,8 +31,6 @@ type ContextKey int
 const (
 	ContextConfig   ContextKey = iota
 	ContextEventBus ContextKey = iota
-	ContextAltState ContextKey = iota
-	ContextMarkov   ContextKey = iota
 )
 
 // Request Pub/Sub topics used across Amass.
