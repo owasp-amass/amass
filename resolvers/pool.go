@@ -430,9 +430,7 @@ func (rp *ResolverPool) performElection(votes []*resolveVote, name, qtype string
 		return votes[goodVotes[0]].Answers, false, nil
 	}
 
-	return ans, false, &ResolveError{
-		Err: fmt.Sprintf("Resolver: Should not have reached this point", name, qt),
-	}
+	return ans, false, &ResolveError{Err: "Resolver: Should not have reached this point"}
 }
 
 func (rp *ResolverPool) numUsableResolvers() int {
