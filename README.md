@@ -113,6 +113,7 @@ This project improves thanks to all the people who contribute:
 * [Asset Discovery: Doing Reconnaissance the Hard Way](https://0xpatrik.com/asset-discovery/)
 * [Project Sonar: An Underrated Source of Internet-wide Data](https://0xpatrik.com/project-sonar-guide/)
 * [Top Five Ways the Red Team breached the External Perimeter](https://medium.com/@adam.toscher/top-five-ways-the-red-team-breached-the-external-perimeter-262f99dc9d17)
+* [Security assessment on staging domains](https://tutorgeeks.blogspot.com/2019/05/security-assessment-on-staging-domains.html)
 
 ## Stargazers over Time
 
