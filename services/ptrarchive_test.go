@@ -35,7 +35,9 @@ func TestPTRArchiveEndpoint(t *testing.T) {
 
 	_, err = http.RequestWebPage(endpoint, nil, nil, "", "")
 
-	if err.Error() == "404 Not Found" {
-		t.Errorf("ptr Web API's name has changed: %s", endpoint)
+	if err != nil {
+		if err.Error() == "404 Not Found" {
+			t.Errorf("ptr Web API's name has changed: %s", endpoint)
+		}
 	}
 }
