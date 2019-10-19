@@ -11,7 +11,7 @@ import (
 
 	"github.com/OWASP/Amass/config"
 	eb "github.com/OWASP/Amass/eventbus"
-	"github.com/OWASP/Amass/graph"
+	"github.com/breakfixrepeat/Amass/graph"
 	"github.com/OWASP/Amass/net"
 	amassdns "github.com/OWASP/Amass/net/dns"
 	"github.com/OWASP/Amass/requests"
