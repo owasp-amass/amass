@@ -50,7 +50,7 @@ func (s *ShadowServer) OnStart() error {
 	s.BaseService.OnStart()
 
 	if answers, _, err := s.System().Pool().Resolve(context.TODO(),
-		ShadowServerWhoisURL, "A", resolvers.PriorityHigh); err == nil {
+		ShadowServerWhoisURL, "A", resolvers.PriorityCritical); err == nil {
 		ip := answers[0].Data
 		if ip != "" {
 			s.addr = ip
@@ -135,7 +135,7 @@ func (s *ShadowServer) origin(ctx context.Context, addr string) *requests.ASNReq
 	}
 	name := amassnet.ReverseIP(addr) + ".origin.asn.shadowserver.org"
 
-	answers, _, err := s.System().Pool().Resolve(ctx, name, "TXT", resolvers.PriorityHigh)
+	answers, _, err := s.System().Pool().Resolve(ctx, name, "TXT", resolvers.PriorityCritical)
 	if err != nil {
 		bus.Publish(requests.LogTopic,
 			fmt.Sprintf("%s: %s: DNS TXT record query error: %v", s.String(), name, err),
@@ -180,7 +180,7 @@ func (s *ShadowServer) netblocks(ctx context.Context, asn int) stringset.Set {
 	}
 
 	if s.addr == "" {
-		answers, _, err := s.System().Pool().Resolve(ctx, ShadowServerWhoisURL, "A", resolvers.PriorityHigh)
+		answers, _, err := s.System().Pool().Resolve(ctx, ShadowServerWhoisURL, "A", resolvers.PriorityCritical)
 		if err != nil {
 			bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", s.String(), ShadowServerWhoisURL, err))
 			return netblocks

@@ -29,8 +29,8 @@ type ContextKey int
 
 // The key used when values are obtained during service requests.
 const (
-	ContextConfig   ContextKey = iota
-	ContextEventBus ContextKey = iota
+	ContextConfig ContextKey = iota
+	ContextEventBus
 )
 
 // Request Pub/Sub topics used across Amass.

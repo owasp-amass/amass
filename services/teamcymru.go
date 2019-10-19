@@ -99,7 +99,7 @@ func (t *TeamCymru) origin(ctx context.Context, addr string) *requests.ASNReques
 		return nil
 	}
 
-	answers, _, err = t.System().Pool().Resolve(ctx, name, "TXT", resolvers.PriorityHigh)
+	answers, _, err = t.System().Pool().Resolve(ctx, name, "TXT", resolvers.PriorityCritical)
 	if err != nil {
 		bus.Publish(requests.LogTopic,
 			fmt.Sprintf("%s: %s: DNS TXT record query error: %v", t.String(), name, err),
@@ -151,7 +151,7 @@ func (t *TeamCymru) asnLookup(ctx context.Context, asn int) *requests.ASNRequest
 	var answers []requests.DNSAnswer
 	name := "AS" + strconv.Itoa(asn) + ".asn.cymru.com"
 
-	answers, _, err = t.System().Pool().Resolve(ctx, name, "TXT", resolvers.PriorityHigh)
+	answers, _, err = t.System().Pool().Resolve(ctx, name, "TXT", resolvers.PriorityCritical)
 	if err != nil {
 		bus.Publish(requests.LogTopic,
 			fmt.Sprintf("%s: %s: DNS TXT record query error: %v", t.String(), name, err),

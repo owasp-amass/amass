@@ -19,7 +19,7 @@ const (
 	defaultMaxSlack      = -2 * time.Second
 	initialRate          = 55 * time.Millisecond
 	defaultRateChange    = 10 * time.Millisecond
-	defaultMaxFailurePCT = 0.75
+	defaultMaxFailurePCT = 0.89
 	scoredResolverMaxRTT = 1500 * time.Millisecond
 )
 
@@ -81,7 +81,7 @@ func (r *RateMonitoredResolver) Available() (bool, error) {
 		msg := fmt.Sprintf("Resolver %s has been stopped", r.Address())
 
 		return false, &ResolveError{
-			Err: msg,
+			Err:   msg,
 			Rcode: NotAvailableRcode,
 		}
 	}
@@ -90,7 +90,7 @@ func (r *RateMonitoredResolver) Available() (bool, error) {
 		msg := fmt.Sprintf("Resolver %s has exceeded the rate limit", r.Address())
 
 		return false, &ResolveError{
-			Err: msg,
+			Err:   msg,
 			Rcode: NotAvailableRcode,
 		}
 	}
@@ -139,7 +139,7 @@ func (r *RateMonitoredResolver) Resolve(ctx context.Context, name, qtype string,
 		msg := fmt.Sprintf("Resolver %s has been stopped", r.Address())
 
 		return []requests.DNSAnswer{}, true, &ResolveError{
-			Err: msg,
+			Err:   msg,
 			Rcode: NotAvailableRcode,
 		}
 	}
@@ -154,7 +154,7 @@ func (r *RateMonitoredResolver) Reverse(ctx context.Context, addr string, priori
 		msg := fmt.Sprintf("Resolver %s has been stopped", r.Address())
 
 		return "", "", &ResolveError{
-			Err: msg,
+			Err:   msg,
 			Rcode: NotAvailableRcode,
 		}
 	}

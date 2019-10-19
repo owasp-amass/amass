@@ -37,8 +37,8 @@ type ResolverPool struct {
 	wildcardLock sync.Mutex
 	wildcards    map[string]*wildcard
 	// Domains discovered by the SubdomainToDomain function
-	domainLock  sync.Mutex
-	domainCache map[string]struct{}
+	domainLock     sync.Mutex
+	domainCache    map[string]struct{}
 	hasBeenStopped bool
 }
 
@@ -235,7 +235,7 @@ func (rp *ResolverPool) NextResolver() Resolver {
 					return r
 				}
 			}
-			return nil
+			break
 		}
 	}
 
@@ -244,6 +244,7 @@ func (rp *ResolverPool) NextResolver() Resolver {
 
 type resolveVote struct {
 	Err      error
+	Again    bool
 	Resolver Resolver
 	Answers  []requests.DNSAnswer
 }
@@ -252,57 +253,74 @@ type resolveVote struct {
 func (rp *ResolverPool) Resolve(ctx context.Context, name, qtype string, priority int) ([]requests.DNSAnswer, bool, error) {
 	var attempts int
 	switch priority {
+	case PriorityCritical:
+		attempts = 250
 	case PriorityHigh:
 		attempts = 25
 	case PriorityLow:
 		attempts = 10
 	}
 
-	var votes []*resolveVote
-	for count := 1; attempts == 0 || count <= attempts; {
-		r := rp.NextResolver()
-		if r == nil {
-			break
-		}
+	// This loop ensures the correct number of attempts of the DNS query
+loop:
+	for count := 1; count <= attempts; count++ {
+		var votes []*resolveVote
 
-		ans, again, err := r.Resolve(ctx, name, qtype, priority)
-		if err == nil {
-			votes = append(votes, &resolveVote{
-				Err: err,
-				Resolver: r,
-				Answers: ans,
-			})
-		} else {
-			if !again {
-				break
-			} else if priority == PriorityCritical || 
-				(err.(*ResolveError)).Rcode == NotAvailableRcode {
+		// Obtain the correct number of votes from the resolvers
+		for i := 0; ; i++ {
+			r := rp.NextResolver()
+			if r == nil {
+				break loop
+			}
+
+			ans, again, err := r.Resolve(ctx, name, qtype, priority)
+			if err != nil && (again || (err.(*ResolveError)).Rcode == NotAvailableRcode) {
 				continue
+			}
+
+			votes = append(votes, &resolveVote{
+				Err:      err,
+				Again:    again,
+				Resolver: r,
+				Answers:  ans,
+			})
+
+			goal := 1
+			if rp.numUsableResolvers() >= 3 {
+				goal = 3
+			}
+
+			if len(votes) >= goal {
+				break
 			}
 		}
 
-		goal := 1
-		if rp.numUsableResolvers() >= 3 {
-			goal = 3
-		}
-		
-		if len(votes) >= goal {
-			break
+		var err error
+		var again bool
+		var ans []requests.DNSAnswer
+
+		// Only perform the election process if even votes were acquired
+		if num := len(votes); num > 0 && num < 3 {
+			ans, again, err = votes[0].Answers, votes[0].Again, votes[0].Err
+		} else {
+			ans, again, err = rp.performElection(votes, name, qtype)
 		}
 
-		count++
+		// Should this query be attempted again?
+		if !again {
+			if len(ans) == 0 {
+				break loop
+			}
+			return ans, again, err
+		}
+
+		// Give the system a chance to breathe before trying again
+		time.Sleep(time.Duration(randomInt(1, 500)) * time.Millisecond)
 	}
 
-	num := len(votes)
-	if num == 0 {
-		return []requests.DNSAnswer{}, false, &ResolveError{
-			Err: fmt.Sprintf("Resolver: DNS query for %s type %s returned 0 results", name, qtype),
-		}
-	} else if num < 3 {
-		return votes[0].Answers, false, votes[0].Err
+	return []requests.DNSAnswer{}, false, &ResolveError{
+		Err: fmt.Sprintf("Resolver: DNS query for %s type %s returned 0 results", name, qtype),
 	}
-
-	return rp.performElection(votes, name, qtype)
 }
 
 // Reverse is performs reverse DNS queries using available Resolvers in the pool.
@@ -376,7 +394,7 @@ func (rp *ResolverPool) performElection(votes []*resolveVote, name, qtype string
 	}
 
 	allZero := true
-	// Check if all votes have zero answers of the correct record type
+	// Check if all votes have zero answers of the desired record type
 	for i := 0; i < 3; i++ {
 		if sets[i].Len() > 0 {
 			allZero = false
@@ -390,44 +408,40 @@ func (rp *ResolverPool) performElection(votes []*resolveVote, name, qtype string
 	}
 
 	// Compare the stringsets for consistency
-	var goodVotes []int
-	goodResolvers := make(map[int]bool)
+	matches := make(map[int]bool)
 	for i := 0; i < 3; i++ {
+		j := (i + 1) % 3
 		temp := stringset.New(sets[i].Slice()...)
-
-		j := i+1
-		if i == 2 {
-			j = 0
-		}
 
 		temp.Subtract(sets[j])
 		if temp.Len() == 0 {
-			goodResolvers[i] = true
-			goodResolvers[j] = true
-			goodVotes = append(goodVotes, i, j)
+			matches[i] = true
+			matches[j] = true
 		}
 	}
 
 	// Determine the return values from the election process
-	switch len(goodResolvers) {
+	switch len(matches) {
 	case 0:
 		// There was no agreement across the three votes
 		return ans, true, &ResolveError{
 			Err: fmt.Sprintf("Resolver: DNS query for %s type %d returned conflicting results", name, qt),
 		}
 	case 2:
-		ans = votes[goodVotes[0]].Answers
+		var good int
+		// Report the resolver that was inconsistent
 		for i := 0; i < 3; i++ {
-			if goodResolvers[i] == false {
-				// Report when there is an inconsistent resolver
+			if matches[i] == true {
+				good = i
+			} else {
 				go votes[i].Resolver.ReportError()
 			}
 		}
 
-		return votes[goodVotes[0]].Answers, false, nil
+		return votes[good].Answers, false, nil
 	case 3:
 		// All three resolvers provided the same answers
-		return votes[goodVotes[0]].Answers, false, nil
+		return votes[0].Answers, false, nil
 	}
 
 	return ans, false, &ResolveError{Err: "Resolver: Should not have reached this point"}

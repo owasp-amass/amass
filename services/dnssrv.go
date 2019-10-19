@@ -142,7 +142,7 @@ func (ds *DNSService) basicQueries(ctx context.Context, subdomain, domain string
 
 	var answers []requests.DNSAnswer
 	// Obtain the DNS answers for the NS records related to the domain
-	if ans, _, err := ds.System().Pool().Resolve(ctx, subdomain, "NS", resolvers.PriorityHigh); err == nil {
+	if ans, _, err := ds.System().Pool().Resolve(ctx, subdomain, "NS", resolvers.PriorityCritical); err == nil {
 		for _, a := range ans {
 			pieces := strings.Split(a.Data, ",")
 			a.Data = pieces[len(pieces)-1]
@@ -160,7 +160,7 @@ func (ds *DNSService) basicQueries(ctx context.Context, subdomain, domain string
 	bus.Publish(requests.SetActiveTopic, ds.String())
 
 	// Obtain the DNS answers for the MX records related to the domain
-	if ans, _, err := ds.System().Pool().Resolve(ctx, subdomain, "MX", resolvers.PriorityHigh); err == nil {
+	if ans, _, err := ds.System().Pool().Resolve(ctx, subdomain, "MX", resolvers.PriorityCritical); err == nil {
 		for _, a := range ans {
 			answers = append(answers, a)
 		}
@@ -268,7 +268,7 @@ func (ds *DNSService) queryServiceNames(ctx context.Context, subdomain, domain s
 	for _, name := range popularSRVRecords {
 		srvName := name + "." + subdomain
 
-		if a, _, err := ds.System().Pool().Resolve(ctx, srvName, "SRV", resolvers.PriorityLow); err == nil {
+		if a, _, err := ds.System().Pool().Resolve(ctx, srvName, "SRV", resolvers.PriorityHigh); err == nil {
 			ds.resolvedName(ctx, &requests.DNSRequest{
 				Name:    srvName,
 				Domain:  domain,

@@ -56,7 +56,7 @@ func (r *RADb) OnStart() error {
 	r.BaseService.OnStart()
 
 	if answers, _, err := r.System().Pool().Resolve(context.TODO(),
-		radbWhoisURL, "A", resolvers.PriorityHigh); err == nil {
+		radbWhoisURL, "A", resolvers.PriorityCritical); err == nil {
 		ip := answers[0].Data
 		if ip != "" {
 			r.addr = ip
@@ -333,7 +333,7 @@ func (r *RADb) ipToASN(ctx context.Context, cidr string) int {
 	bus.Publish(requests.SetActiveTopic, r.String())
 
 	if r.addr == "" {
-		answers, _, err := r.System().Pool().Resolve(ctx, radbWhoisURL, "A", resolvers.PriorityHigh)
+		answers, _, err := r.System().Pool().Resolve(ctx, radbWhoisURL, "A", resolvers.PriorityCritical)
 		if err != nil {
 			bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", r.String(), radbWhoisURL, err))
 			return 0
