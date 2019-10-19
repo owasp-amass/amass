@@ -5,11 +5,11 @@ package services
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
-	"context"
 
 	"github.com/OWASP/Amass/config"
 	"github.com/OWASP/Amass/eventbus"

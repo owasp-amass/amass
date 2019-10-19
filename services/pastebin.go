@@ -1,15 +1,15 @@
 package services
 
 import (
-	"time"
-	"fmt"
-	"encoding/json"
 	"context"
+	"encoding/json"
+	"fmt"
+	"time"
 
 	"github.com/OWASP/Amass/config"
-	"github.com/OWASP/Amass/requests"
-	"github.com/OWASP/Amass/net/http"
 	"github.com/OWASP/Amass/eventbus"
+	"github.com/OWASP/Amass/net/http"
+	"github.com/OWASP/Amass/requests"
 )
 
 // Pastebin is the Service that handles access to the Pastebin data source.
@@ -26,7 +26,6 @@ func NewPastebin(sys System) *Pastebin {
 	p.BaseService = *NewBaseService(p, "Pastebin", sys)
 	return p
 }
-
 
 // OnStart implements the Service interface.
 func (p *Pastebin) OnStart() error {
@@ -60,7 +59,7 @@ func (p *Pastebin) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 		page, err := http.RequestWebPage(url, nil, nil, "", "")
 		if err != nil {
 			bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", p.String(), url, err))
-			return 
+			return
 		}
 
 		for _, name := range re.FindAllString(page, -1) {
@@ -84,24 +83,24 @@ func (p *Pastebin) extractIDs(domain string) ([]string, error) {
 
 	// Extract the response given by pastebin
 	var d struct {
-		Search   	string `json:"search"`
-		Count   int `json:"count"`
-		Items []struct {
+		Search string `json:"search"`
+		Count  int    `json:"count"`
+		Items  []struct {
 			ID   string `json:"id"`
-    		Tags string `json:"tags"`
-    		Time string `json:"time"` 
+			Tags string `json:"tags"`
+			Time string `json:"time"`
 		} `json:"data"`
 	}
 	err = json.Unmarshal([]byte(page), &d)
-    if err != nil {
-        return nil, err
+	if err != nil {
+		return nil, err
 	}
 
 	var ids []string
 	for _, item := range d.Items {
 		ids = append(ids, item.ID)
-	} 
-	
+	}
+
 	return ids, nil
 }
 
@@ -112,5 +111,5 @@ func (p *Pastebin) webURLDumpIDs(domain string) string {
 
 // Returns the Web URL to get all dumps for a given doamin.
 func (p *Pastebin) webURLDumpData(id string) string {
-	return fmt.Sprintf("https://psbdmp.ws/api/dump/get/%s",id)
+	return fmt.Sprintf("https://psbdmp.ws/api/dump/get/%s", id)
 }

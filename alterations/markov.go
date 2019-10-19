@@ -5,9 +5,9 @@ package alterations
 
 import (
 	"math/rand"
+	"regexp"
 	"strings"
 	"sync"
-	"regexp"
 
 	"github.com/OWASP/Amass/stringset"
 )
@@ -31,11 +31,11 @@ type LenDist struct {
 // MarkovModel trains on DNS names and provides data for generating name guesses.
 type MarkovModel struct {
 	sync.Mutex
-	Ngrams      map[string]map[rune]*LenDist
-	ngramSize   int
+	Ngrams         map[string]map[rune]*LenDist
+	ngramSize      int
 	totalTrainings int
-	subdomains  map[string]struct{}
-	re *regexp.Regexp
+	subdomains     map[string]struct{}
+	re             *regexp.Regexp
 }
 
 // NewMarkovModel returns a MarkovModel used for training on and generating DNS names.
@@ -75,7 +75,7 @@ func (m *MarkovModel) Subdomains() []string {
 	return results
 }
 
-// AddSubdomain accepts a FQDN and adds the largest proper subdomain to 
+// AddSubdomain accepts a FQDN and adds the largest proper subdomain to
 // the collection maintained by the model.
 func (m *MarkovModel) AddSubdomain(name string) {
 	m.Lock()
@@ -170,7 +170,7 @@ func (m *MarkovModel) updateFrequencies() {
 }
 
 // GenerateNames returns 'num' guesses for each of the subdomains provided.
-// If no subdomains are provided, all the subdomains previously added to the 
+// If no subdomains are provided, all the subdomains previously added to the
 // model will be used instead.
 func (m *MarkovModel) GenerateNames(num int, subdomains ...string) []string {
 	names := stringset.New()
@@ -220,7 +220,7 @@ func (m *MarkovModel) GenerateLabel() string {
 
 		max := maxDNSLabelLen + m.ngramSize
 		for i := 0; i < max; i++ {
-			char := m.generateChar(label[i:i+m.ngramSize])
+			char := m.generateChar(label[i : i+m.ngramSize])
 
 			if char == "." {
 				break
@@ -238,7 +238,7 @@ func (m *MarkovModel) GenerateLabel() string {
 			return label
 		}
 	}
-	
+
 	return ""
 }
 

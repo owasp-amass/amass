@@ -36,7 +36,7 @@ type Collection struct {
 	ctx context.Context
 
 	srcsLock sync.Mutex
-	srcs stringset.Set
+	srcs     stringset.Set
 
 	// The channel that will receive the results
 	Output chan *requests.Output
@@ -45,7 +45,7 @@ type Collection struct {
 	done              chan struct{}
 	doneAlreadyClosed bool
 
-	wg sync.WaitGroup
+	wg     sync.WaitGroup
 	filter *sf.StringFilter
 
 	lastLock sync.Mutex
@@ -55,13 +55,13 @@ type Collection struct {
 // NewCollection returns an initialized Collection object that has not been started yet.
 func NewCollection(sys services.System) *Collection {
 	c := &Collection{
-		Config:     config.NewConfig(),
-		Bus:        eb.NewEventBus(),
-		Sys:        sys,
-		srcs: stringset.New(),
-		Output:     make(chan *requests.Output, 100),
-		done:       make(chan struct{}, 2),
-		last:       time.Now(),
+		Config: config.NewConfig(),
+		Bus:    eb.NewEventBus(),
+		Sys:    sys,
+		srcs:   stringset.New(),
+		Output: make(chan *requests.Output, 100),
+		done:   make(chan struct{}, 2),
+		last:   time.Now(),
 	}
 
 	return c

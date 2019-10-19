@@ -68,7 +68,7 @@ func (r *ScoredResolver) Available() (bool, error) {
 		msg := fmt.Sprintf("Resolver %s has been stopped", r.Address())
 
 		return false, &ResolveError{
-			Err: msg,
+			Err:   msg,
 			Rcode: NotAvailableRcode,
 		}
 	}
@@ -77,7 +77,7 @@ func (r *ScoredResolver) Available() (bool, error) {
 		msg := fmt.Sprintf("Resolver %s has a low score of %d", r.Address(), r.currentScore())
 
 		return false, &ResolveError{
-			Err: msg,
+			Err:   msg,
 			Rcode: NotAvailableRcode,
 		}
 	}
