@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/config"
-	"github.com/OWASP/Amass/graph"
+	"github.com/breakfixrepeat/Amass/graph"
 	"github.com/OWASP/Amass/requests"
 	sf "github.com/OWASP/Amass/stringfilter"
 	"github.com/OWASP/Amass/stringset"
