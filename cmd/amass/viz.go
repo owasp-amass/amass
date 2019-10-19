@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/config"
-	"github.com/OWASP/Amass/graph"
+	"github.com/breakfixrepeat/Amass/graph"
 	"github.com/OWASP/Amass/stringset"
 	"github.com/OWASP/Amass/viz"
 	"github.com/fatih/color"
