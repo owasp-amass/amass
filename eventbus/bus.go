@@ -27,7 +27,7 @@ type EventBus struct {
 func NewEventBus() *EventBus {
 	eb := &EventBus{
 		topics: make(map[string][]reflect.Value),
-		max:    semaphore.NewSimpleSemaphore(1000000),
+		max:    semaphore.NewSimpleSemaphore(50000),
 		queue:  new(queue.Queue),
 		done:   make(chan struct{}, 2),
 	}
@@ -87,8 +87,8 @@ func (eb *EventBus) Publish(topic string, args ...interface{}) {
 
 func (eb *EventBus) processRequests() {
 	curIdx := 0
-	maxIdx := 7
-	delays := []int{10, 25, 50, 75, 100, 150, 250, 500}
+	maxIdx := 6
+	delays := []int{10, 25, 50, 75, 100, 150, 250}
 
 	for {
 		select {
@@ -123,7 +123,7 @@ func (eb *EventBus) executeCallbacks(callbacks, args []reflect.Value) {
 	defer eb.max.Release(1)
 
 	for _, cb := range callbacks {
-		cb.Call(args)
+		go cb.Call(args)
 	}
 }
 
