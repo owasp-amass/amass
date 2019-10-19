@@ -408,18 +408,27 @@ func (g *Graph) swapNodeType(name, newtype, uuid string) bool {
 }
 
 func (g *Graph) insertInfrastructure(data *DataOptsParams) error {
-	// Check if the netblock has not been inserted
+	// Check if the address has not yet been inserted
+	if val := g.propertyValue(quad.String(data.Address), "type", data.UUID); val == "" {
+		t := cayley.NewTransaction()
+		t.AddQuad(quad.Make(data.Address, "type", "address", data.UUID))
+		t.AddQuad(quad.Make(data.Address, "timestamp", data.Timestamp, data.UUID))
+		g.store.ApplyTransaction(t)
+	}
+
+	// Check if the netblock has not yet been inserted
 	if val := g.propertyValue(quad.String(data.CIDR), "type", data.UUID); val == "" {
 		t := cayley.NewTransaction()
 		t.AddQuad(quad.Make(data.CIDR, "type", "netblock", data.UUID))
 		t.AddQuad(quad.Make(data.CIDR, "timestamp", data.Timestamp, data.UUID))
 		g.store.ApplyTransaction(t)
 	}
+
 	// Create the edge between the CIDR and the address
 	g.store.AddQuad(quad.Make(data.CIDR, "contains", data.Address, data.UUID))
 
 	asn := strconv.Itoa(data.ASN)
-	// Check if the AS has not been inserted
+	// Check if the AS has not yet been inserted
 	if val := g.propertyValue(quad.String(asn), "type", data.UUID); val == "" {
 		t := cayley.NewTransaction()
 		t.AddQuad(quad.Make(asn, "type", "as", data.UUID))
@@ -427,6 +436,7 @@ func (g *Graph) insertInfrastructure(data *DataOptsParams) error {
 		t.AddQuad(quad.Make(asn, "description", data.Description, data.UUID))
 		g.store.ApplyTransaction(t)
 	}
+
 	// Create the edge between the AS and the netblock
 	g.store.AddQuad(quad.Make(asn, "has_prefix", data.CIDR, data.UUID))
 	return nil

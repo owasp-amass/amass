@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	alts "github.com/OWASP/Amass/alterations"
 	"github.com/OWASP/Amass/config"
 	eb "github.com/OWASP/Amass/eventbus"
 	"github.com/OWASP/Amass/graph"
@@ -19,7 +20,6 @@ import (
 	"github.com/OWASP/Amass/queue"
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/services"
-	alts "github.com/OWASP/Amass/alterations"
 	sf "github.com/OWASP/Amass/stringfilter"
 	"github.com/OWASP/Amass/stringset"
 )
@@ -67,7 +67,7 @@ type Enumeration struct {
 	dataMgr services.Service
 
 	srcsLock sync.Mutex
-	srcs stringset.Set
+	srcs     stringset.Set
 
 	// The channel and queue that will receive the results
 	Output      chan *requests.Output
@@ -99,9 +99,9 @@ type Enumeration struct {
 // NewEnumeration returns an initialized Enumeration that has not been started yet.
 func NewEnumeration(sys services.System) *Enumeration {
 	e := &Enumeration{
-		Config:      config.NewConfig(),
-		Bus:         eb.NewEventBus(),
-		Sys:         sys,
+		Config: config.NewConfig(),
+		Bus:    eb.NewEventBus(),
+		Sys:    sys,
 		filters: &Filters{
 			NewNames:      sf.NewStringFilter(),
 			Resolved:      sf.NewStringFilter(),
@@ -110,7 +110,7 @@ func NewEnumeration(sys services.System) *Enumeration {
 			Output:        sf.NewStringFilter(),
 			PassiveOutput: sf.NewStringFilter(),
 		},
-		srcs: stringset.New(),
+		srcs:        stringset.New(),
 		Output:      make(chan *requests.Output, 100),
 		outputQueue: new(queue.Queue),
 		logQueue:    new(queue.Queue),
@@ -260,12 +260,10 @@ func (e *Enumeration) lastActive() time.Time {
 }
 
 func (e *Enumeration) updateLastActive(srv string) {
-	go func(t time.Time) {
-		e.lastLock.Lock()
-		defer e.lastLock.Unlock()
+	e.lastLock.Lock()
+	defer e.lastLock.Unlock()
 
-		e.last = t
-	}(time.Now())
+	e.last = time.Now()
 }
 
 func (e *Enumeration) setupEventBus() {
@@ -394,7 +392,8 @@ func (e *Enumeration) newResolvedName(req *requests.DNSRequest) {
 		return
 	}
 
-	go e.checkSubdomain(req)
+	// Keep track of all domains and proper subdomains discovered
+	e.checkSubdomain(req)
 
 	if e.Config.BruteForcing && e.Config.Recursive {
 		for _, name := range topNames {
@@ -416,7 +415,7 @@ func (e *Enumeration) newResolvedName(req *requests.DNSRequest) {
 
 	// Update all name alteration objects
 	if e.Config.Alterations {
-		go e.performNameAlterations(req.Name, req.Domain)
+		e.performNameAlterations(req.Name, req.Domain)
 	}
 
 	e.srcsLock.Lock()
@@ -439,8 +438,8 @@ func (e *Enumeration) performNameAlterations(name, domain string) {
 	newNames := stringset.New()
 
 	e.markovModel.Train(name)
-	if e.markovModel.TotalTrainings() >= 50 && 
-		(e.markovModel.TotalTrainings() % 10 == 0) {
+	if e.markovModel.TotalTrainings() >= 50 &&
+		(e.markovModel.TotalTrainings()%10 == 0) {
 		newNames.InsertMany(e.markovModel.GenerateNames(100)...)
 	}
 
@@ -467,9 +466,9 @@ func (e *Enumeration) performNameAlterations(name, domain string) {
 		}
 
 		e.newNameEvent(&requests.DNSRequest{
-			Name: n,
+			Name:   n,
 			Domain: domain,
-			Tag: requests.ALT,
+			Tag:    requests.ALT,
 			Source: "Alterations",
 		})
 	}
@@ -557,10 +556,10 @@ func (e *Enumeration) newAddress(req *requests.AddrRequest) {
 	}
 
 	if e.Config.Active {
-		go e.namesFromCertificates(req.Address)
+		e.namesFromCertificates(req.Address)
 	}
 
-	go e.investigateAddress(req)
+	e.investigateAddress(req)
 }
 
 func (e *Enumeration) investigateAddress(req *requests.AddrRequest) {
@@ -575,12 +574,17 @@ func (e *Enumeration) investigateAddress(req *requests.AddrRequest) {
 		}
 		e.srcsLock.Unlock()
 
-		for i := 0; i < 60; i++ {
-			if asn == nil {
-				// TODO: This is not good enough for the long-term
-				time.Sleep(2 * time.Second)
+		// Wait until the ASN has been provided
+		for {
+			select {
+			case <-e.done:
+				return
+			default:
+				asn = e.ipSearch(req.Address)
+				if asn == nil {
+					time.Sleep(2 * time.Second)
+				}
 			}
-			asn = e.ipSearch(req.Address)
 		}
 
 		if asn == nil {
@@ -591,16 +595,15 @@ func (e *Enumeration) investigateAddress(req *requests.AddrRequest) {
 	// Write the ASN information to the graph databases
 	e.dataMgr.ASNRequest(e.ctx, asn)
 
-	if _, cidr, _ := net.ParseCIDR(asn.Prefix); cidr != nil {
-		e.reverseDNSSweep(req.Address, cidr)
+	// Perform the reverse DNS sweep if the IP address is in scope
+	if e.Config.IsDomainInScope(req.Domain) {
+		if _, cidr, _ := net.ParseCIDR(asn.Prefix); cidr != nil {
+			e.reverseDNSSweep(req.Address, cidr)
+		}
 	}
 }
 
 func (e *Enumeration) newASN(req *requests.ASNRequest) {
-	go e.addASN(req)
-}
-
-func (e *Enumeration) addASN(req *requests.ASNRequest) {
 	e.updateLastActive("enum")
 	e.updateConfigWithNetblocks(req)
 	e.updateASNCache(req)

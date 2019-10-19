@@ -207,14 +207,12 @@ func (dms *DataManagerService) insertA(ctx context.Context, req *requests.DNSReq
 		}
 	}
 
-	if cfg.IsDomainInScope(req.Name) {
-		bus.Publish(requests.NewAddrTopic, &requests.AddrRequest{
-			Address: addr,
-			Domain:  req.Domain,
-			Tag:     req.Tag,
-			Source:  req.Source,
-		})
-	}
+	bus.Publish(requests.NewAddrTopic, &requests.AddrRequest{
+		Address: addr,
+		Domain:  req.Domain,
+		Tag:     req.Tag,
+		Source:  req.Source,
+	})
 }
 
 func (dms *DataManagerService) insertAAAA(ctx context.Context, req *requests.DNSRequest, recidx int) {
@@ -245,14 +243,12 @@ func (dms *DataManagerService) insertAAAA(ctx context.Context, req *requests.DNS
 		}
 	}
 
-	if cfg.IsDomainInScope(req.Name) {
-		bus.Publish(requests.NewAddrTopic, &requests.AddrRequest{
-			Address: addr,
-			Domain:  req.Domain,
-			Tag:     req.Tag,
-			Source:  req.Source,
-		})
-	}
+	bus.Publish(requests.NewAddrTopic, &requests.AddrRequest{
+		Address: addr,
+		Domain:  req.Domain,
+		Tag:     req.Tag,
+		Source:  req.Source,
+	})
 }
 
 func (dms *DataManagerService) insertPTR(ctx context.Context, req *requests.DNSRequest, recidx int) {

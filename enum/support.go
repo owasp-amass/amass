@@ -236,15 +236,13 @@ func (e *Enumeration) DNSQueriesPerSec() int64 {
 }
 
 func (e *Enumeration) incQueriesPerSec(t time.Time) {
-	go func(t time.Time) {
-		e.perSecLock.Lock()
-		defer e.perSecLock.Unlock()
+	e.perSecLock.Lock()
+	defer e.perSecLock.Unlock()
 
-		e.perSec++
-		if t.After(e.perSecLast) {
-			e.perSecLast = t
-		}
-	}(t)
+	e.perSec++
+	if t.After(e.perSecLast) {
+		e.perSecLast = t
+	}
 }
 
 func (e *Enumeration) clearPerSec() {
