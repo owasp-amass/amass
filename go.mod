@@ -8,6 +8,7 @@ require (
 	github.com/boltdb/bolt v1.3.1 // indirect
 	github.com/caffix/cloudflare-roundtripper v0.0.0-20181218223503-4c29d231c9cb
 	github.com/cayleygraph/cayley v0.7.5
+	github.com/cayleygraph/quad v1.0.0
 	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
 	github.com/chromedp/cdproto v0.0.0-20190926234355-1b4886c6fad6 // indirect
 	github.com/dghubble/go-twitter v0.0.0-20190719072343-39e5462e111f
