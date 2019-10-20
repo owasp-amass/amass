@@ -171,6 +171,8 @@ func (dms *DataManagerService) insertCNAME(ctx context.Context, req *requests.DN
 			bus.Publish(requests.LogTopic, fmt.Sprintf("%s failed to insert CNAME: %v", g, err))
 		}
 	}
+
+	// Important - Allows chained CNAME records to be resolved until an A/AAAA record
 	bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
 		Name:   target,
 		Domain: domain,
@@ -263,6 +265,7 @@ func (dms *DataManagerService) insertPTR(ctx context.Context, req *requests.DNSR
 		return
 	}
 
+	// Do not go further if the target is not in scope
 	domain := strings.ToLower(cfg.WhichDomain(target))
 	if domain == "" {
 		return

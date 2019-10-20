@@ -406,6 +406,8 @@ func writeLogsAndMessages(logs *io.PipeReader, logfile string) {
 	wildcard := regexp.MustCompile("DNS wildcard")
 	avg := regexp.MustCompile("Average DNS queries")
 	rScore := regexp.MustCompile("Resolver .* has a low score")
+	alterations := regexp.MustCompile("queries for altered names")
+	brute := regexp.MustCompile("queries for brute forcing")
 
 	var filePtr *os.File
 	if logfile != "" {
@@ -450,6 +452,14 @@ func writeLogsAndMessages(logs *io.PipeReader, logfile string) {
 		// Check if a DNS resolver was lost due to its score
 		if rScore.FindString(line) != "" {
 			fgR.Fprintln(color.Error, line)
+		}
+		// Let the user know when brute forcing has started
+		if brute.FindString(line) != "" {
+			fgY.Fprintln(color.Error, line)
+		}
+		// Let the user know when name alterations have started
+		if alterations.FindString(line) != "" {
+			fgY.Fprintln(color.Error, line)
 		}
 	}
 }
