@@ -13,7 +13,7 @@ type StringFilter struct {
 
 // NewStringFilter returns an initialized StringFilter.
 func NewStringFilter() *StringFilter {
-	r, err := ring.Init(1000000, 0.001)
+	r, err := ring.Init(100000000, 0.001)
 	if err != nil {
 		return nil
 	}
