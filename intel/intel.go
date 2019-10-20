@@ -231,13 +231,12 @@ func (c *Collection) asnsToCIDRs() []*net.IPNet {
 	cidrSet := stringset.New()
 	fn := func(req *requests.ASNRequest) {
 		lastLock.Lock()
-		defer lastLock.Unlock()
+		last = time.Now()
+		lastLock.Unlock()
 
 		setLock.Lock()
-		defer setLock.Unlock()
-
-		last = time.Now()
 		cidrSet.Union(req.Netblocks)
+		setLock.Unlock()
 	}
 
 	c.Bus.Subscribe(requests.NewASNTopic, fn)
@@ -269,7 +268,7 @@ loop:
 			l := last
 			lastLock.Unlock()
 
-			if time.Now().Sub(l) > 10*time.Second {
+			if time.Now().Sub(l) > 20*time.Second {
 				break loop
 			}
 		}
