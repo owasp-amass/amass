@@ -594,6 +594,19 @@ func (g *Gremlin) insertInfrastructure(data *DataOptsParams) error {
 	defer conn.Close()
 
 	_, err = conn.Client.Execute(
+		// Does this address already exist in the graph?
+		"g.V().hasLabel('address').has('addr', addr).has('addrtype', addrtype).has('enum', uuid).fold().coalesce(unfold(),"+
+			// Add the new address vertex that the edge should point to
+			"g.addV('address').property('addr', addr).property('addrtype', addrtype).property('enum', uuid)."+
+			"property('type', 'address').property('timestamp', timestamp))",
+		bindings,
+		map[string]string{},
+	)
+	if err != nil {
+		return err
+	}
+
+	_, err = conn.Client.Execute(
 		// Does this netblock already exist in the graph?
 		"g.V().hasLabel('netblock').has('cidr', cidr).has('enum', uuid).fold().coalesce(unfold(),"+
 			// Add the new netblock vertex
