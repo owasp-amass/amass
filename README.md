@@ -72,6 +72,8 @@ This project improves thanks to all the people who contribute:
 [![Rawsec's CyberSecurity Inventory](https://inventory.rawsec.ml/img/badges/Rawsec-inventoried-FF5050_flat.svg)](https://inventory.rawsec.ml/)
 
 * [OWASP Amass OSINT Reconnaissance](https://medium.com/hacker-toolbelt/owasp-amass-osint-reconnaissance-9b57d81fb958)
+* [Top Linux Distros for Ethical Hacking and Penetration Testing](https://securitytrails.com/blog/top-linux-distributions-ethical-hacking-pentesting)
+* [5 Subdomain Takeover #ProTips](https://securitytrails.com/blog/subdomain-takeover-tips)
 * [Red Team Methodology - A Naked Look](https://www.slideshare.net/JasonLang1/red-team-methodology-a-naked-look-169879355)
 * [Asset Enumeration: Expanding a Target's Attack Surface](https://captmeelo.com/bugbounty/2019/09/02/asset-enumeration.html)
 * [Das Sicherheitswerkzeug Kali Linux steht in der Version 2019.3 bereit](https://www.heise.de/security/meldung/Das-Sicherheitswerkzeug-Kali-Linux-steht-in-der-Version-2019-3-bereit-4512459.html)
