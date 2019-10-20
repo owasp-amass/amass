@@ -242,87 +242,6 @@ func (rp *ResolverPool) NextResolver() Resolver {
 	return nil
 }
 
-type resolveVote struct {
-	Err      error
-	Again    bool
-	Resolver Resolver
-	Answers  []requests.DNSAnswer
-}
-
-// Resolve performs a DNS request using available Resolvers in the pool.
-func (rp *ResolverPool) Resolve(ctx context.Context, name, qtype string, priority int) ([]requests.DNSAnswer, bool, error) {
-	var attempts int
-	switch priority {
-	case PriorityCritical:
-		attempts = 250
-	case PriorityHigh:
-		attempts = 25
-	case PriorityLow:
-		attempts = 10
-	}
-
-	// This loop ensures the correct number of attempts of the DNS query
-loop:
-	for count := 1; count <= attempts; count++ {
-		var votes []*resolveVote
-
-		// Obtain the correct number of votes from the resolvers
-		for i := 0; ; i++ {
-			r := rp.NextResolver()
-			if r == nil {
-				break loop
-			}
-
-			ans, again, err := r.Resolve(ctx, name, qtype, priority)
-			if err != nil && (again || (err.(*ResolveError)).Rcode == NotAvailableRcode) {
-				continue
-			}
-
-			votes = append(votes, &resolveVote{
-				Err:      err,
-				Again:    again,
-				Resolver: r,
-				Answers:  ans,
-			})
-
-			goal := 1
-			if rp.numUsableResolvers() >= 3 {
-				goal = 3
-			}
-
-			if len(votes) >= goal {
-				break
-			}
-		}
-
-		var err error
-		var again bool
-		var ans []requests.DNSAnswer
-
-		// Only perform the election process if even votes were acquired
-		if num := len(votes); num > 0 && num < 3 {
-			ans, again, err = votes[0].Answers, votes[0].Again, votes[0].Err
-		} else {
-			ans, again, err = rp.performElection(votes, name, qtype)
-		}
-
-		// Should this query be attempted again?
-		if !again {
-			if len(ans) == 0 {
-				break loop
-			}
-			return ans, again, err
-		}
-
-		// Give the system a chance to breathe before trying again
-		time.Sleep(time.Duration(randomInt(1, 500)) * time.Millisecond)
-	}
-
-	return []requests.DNSAnswer{}, false, &ResolveError{
-		Err: fmt.Sprintf("Resolver: DNS query for %s type %s returned 0 results", name, qtype),
-	}
-}
-
 // Reverse is performs reverse DNS queries using available Resolvers in the pool.
 func (rp *ResolverPool) Reverse(ctx context.Context, addr string, priority int) (string, string, error) {
 	var name, ptr string
@@ -365,9 +284,83 @@ func (rp *ResolverPool) Reverse(ctx context.Context, addr string, priority int) 
 	return ptr, name, err
 }
 
+type resolveVote struct {
+	Err      error
+	Again    bool
+	Resolver Resolver
+	Answers  []requests.DNSAnswer
+}
+
+// Resolve performs a DNS request using available Resolvers in the pool.
+func (rp *ResolverPool) Resolve(ctx context.Context, name, qtype string, priority int) ([]requests.DNSAnswer, bool, error) {
+	var attempts int
+	switch priority {
+	case PriorityCritical:
+		attempts = 250
+	case PriorityHigh:
+		attempts = 10
+	case PriorityLow:
+		attempts = 3
+	}
+
+	// This loop ensures the correct number of attempts of the DNS query
+loop:
+	for count := 1; count <= attempts; count++ {
+		goal := 3
+		var votes []*resolveVote
+
+		// Obtain the correct number of votes from the resolvers
+		for i := 0; len(votes) < goal; i++ {
+			r := rp.NextResolver()
+			if r == nil {
+				break loop
+			}
+
+			ans, again, err := r.Resolve(ctx, name, qtype, priority)
+			if err != nil && (again || (err.(*ResolveError)).Rcode == NotAvailableRcode) {
+				continue
+			}
+
+			votes = append(votes, &resolveVote{
+				Err:      err,
+				Again:    again,
+				Resolver: r,
+				Answers:  ans,
+			})
+
+			// Check that the number of available resolvers has not gone below three
+			if rp.numUsableResolvers() < 3 {
+				goal = 1
+			}
+		}
+
+		ans, again, err := rp.performElection(votes, name, qtype)
+		// Should this query be attempted again?
+		if !again {
+			if len(ans) == 0 {
+				break loop
+			}
+			return ans, again, err
+		}
+
+		// Give the system a chance to breathe before trying again
+		time.Sleep(time.Duration(randomInt(100, 500)) * time.Millisecond)
+	}
+
+	return []requests.DNSAnswer{}, false, &ResolveError{
+		Err: fmt.Sprintf("Resolver: %d attempts for %s type %s returned 0 results", attempts, name, qtype),
+	}
+}
+
 func (rp *ResolverPool) performElection(votes []*resolveVote, name, qtype string) ([]requests.DNSAnswer, bool, error) {
+	if len(votes) == 0 {
+		return []requests.DNSAnswer{}, false, &ResolveError{
+			Err: fmt.Sprintf("Resolver: DNS query for %s type %s returned 0 results", name, qtype),
+		}
+	}
+
 	if len(votes) < 3 || (votes[0].Err != nil && votes[1].Err != nil && votes[2].Err != nil) {
-		return votes[0].Answers, false, votes[0].Err
+		return votes[0].Answers, votes[0].Again, votes[0].Err
 	}
 
 	var ans []requests.DNSAnswer
