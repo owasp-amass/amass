@@ -259,11 +259,9 @@ func (e *Enumeration) DNSNamesRemaining() int64 {
 	var remaining int
 
 	for _, srv := range e.Sys.CoreServices() {
-		switch srv.String() {
-		case "DNS Service":
+		if srv.String() == "DNS Service" {
 			remaining += srv.RequestLen()
-		case "Brute Forcing":
-			remaining += srv.RequestLen() * len(e.Config.Wordlist)
+			break
 		}
 	}
 
