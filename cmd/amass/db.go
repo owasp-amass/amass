@@ -35,6 +35,7 @@ type dbArgs struct {
 		IPv4             bool
 		IPv6             bool
 		ListEnumerations bool
+		ASNTableSummary  bool
 		Show             bool
 		Sources          bool
 	}
@@ -66,6 +67,7 @@ func runDBCommand(clArgs []string) {
 	dbCommand.BoolVar(&args.Options.IPv6, "ipv6", false, "Show the IPv6 addresses for discovered names")
 	dbCommand.BoolVar(&args.Options.ListEnumerations, "list", false, "Numbered list of enums filtered on provided domains")
 	dbCommand.BoolVar(&args.Options.Sources, "src", false, "Print data sources for the discovered names")
+	dbCommand.BoolVar(&args.Options.ASNTableSummary, "summary", false, "Print Just ASN Table Summary")
 	dbCommand.BoolVar(&args.Options.Show, "show", false, "Print the results for the enumeration index + domains provided")
 	dbCommand.StringVar(&args.Filepaths.ConfigFile, "config", "", "Path to the INI configuration file. Additional details below")
 	dbCommand.StringVar(&args.Filepaths.Directory, "dir", "", "Path to the directory containing the graph database")
@@ -225,7 +227,9 @@ func showEnumeration(args *dbArgs, db graph.DataHandler) {
 		if ips != "" {
 			ips = " " + ips
 		}
-
+		if args.Options.ASNTableSummary {
+			continue
+		}
 		fmt.Fprintf(color.Output, "%s%s%s\n", blue(source), green(name), yellow(ips))
 	}
 	if total == 0 {
