@@ -9,13 +9,13 @@ import "context"
 func (rp *ResolverPool) SanityChecks() {
 	for _, r := range rp.Resolvers {
 		go func(res Resolver) {
-			if !goodNamesResolved(r) {
+			if !goodNamesResolved(res) {
 				rp.Log.Printf("SanityChecks: Resolver %s failed to resolve good names", res.Address())
 			}
 		}(r)
 
 		go func(res Resolver) {
-			if !badNamesNotResolved(r) {
+			if !badNamesNotResolved(res) {
 				rp.Log.Printf("SanityChecks: Resolver %s returned false positives for bad names", res.Address())
 			}
 		}(r)
