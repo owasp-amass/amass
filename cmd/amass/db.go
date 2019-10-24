@@ -36,8 +36,8 @@ type dbArgs struct {
 		IPv6             bool
 		ListEnumerations bool
 		ASNTableSummary  bool
-		Names            bool
-		Show             bool
+		DiscoveredNames  bool
+		ShowAll          bool
 		Sources          bool
 	}
 	Filepaths struct {
@@ -69,8 +69,8 @@ func runDBCommand(clArgs []string) {
 	dbCommand.BoolVar(&args.Options.ListEnumerations, "list", false, "Numbered list of enums filtered on provided domains")
 	dbCommand.BoolVar(&args.Options.Sources, "src", false, "Print data sources for the discovered names")
 	dbCommand.BoolVar(&args.Options.ASNTableSummary, "summary", false, "Print Just ASN Table Summary")
-	dbCommand.BoolVar(&args.Options.Names, "names", false, "Print Just Discovered Names")
-	dbCommand.BoolVar(&args.Options.Show, "show", false, "Print the results for the enumeration index + domains provided")
+	dbCommand.BoolVar(&args.Options.DiscoveredNames, "names", false, "Print Just Discovered Names")
+	dbCommand.BoolVar(&args.Options.ShowAll, "show", false, "Print the results for the enumeration index + domains provided")
 	dbCommand.StringVar(&args.Filepaths.ConfigFile, "config", "", "Path to the INI configuration file. Additional details below")
 	dbCommand.StringVar(&args.Filepaths.Directory, "dir", "", "Path to the directory containing the graph database")
 	dbCommand.StringVar(&args.Filepaths.Domains, "df", "", "Path to a file providing root domain names")
@@ -134,7 +134,12 @@ func runDBCommand(clArgs []string) {
 		return
 	}
 
-	if args.Options.Show {
+	if args.Options.ShowAll {
+		args.Options.DiscoveredNames = true
+		args.Options.ASNTableSummary = true
+	}
+
+	if args.Options.DiscoveredNames || args.Options.ASNTableSummary {
 		showEnumeration(&args, db)
 		return
 	}
@@ -229,16 +234,14 @@ func showEnumeration(args *dbArgs, db graph.DataHandler) {
 		if ips != "" {
 			ips = " " + ips
 		}
-		if args.Options.ASNTableSummary {
-			continue
+
+		if args.Options.DiscoveredNames {
+			fmt.Fprintf(color.Output, "%s%s%s\n", blue(source), green(name), yellow(ips))
 		}
-		fmt.Fprintf(color.Output, "%s%s%s\n", blue(source), green(name), yellow(ips))
 	}
 	if total == 0 {
 		r.Println("No names were discovered")
-	} else if args.Options.Names {
-		return
-	} else {
+	} else if args.Options.ASNTableSummary {
 		format.PrintEnumerationSummary(total, tags, asns, args.Options.DemoMode)
 	}
 }
