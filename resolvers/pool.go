@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"math/rand"
 	"net"
@@ -108,13 +109,18 @@ loop:
 }
 
 // NewResolverPool initializes a ResolverPool that uses the provided Resolvers.
-func NewResolverPool(res []Resolver, log *log.Logger) *ResolverPool {
+func NewResolverPool(res []Resolver, logger *log.Logger) *ResolverPool {
 	rp := &ResolverPool{
 		Resolvers:   res,
 		Done:        make(chan struct{}, 2),
-		Log:         log,
+		Log:         logger,
 		wildcards:   make(map[string]*wildcard),
 		domainCache: make(map[string]struct{}),
+	}
+
+	// Assign a null logger when one is not provided
+	if rp.Log == nil {
+		rp.Log = log.New(ioutil.Discard, "", 0)
 	}
 
 	rp.SanityChecks()
