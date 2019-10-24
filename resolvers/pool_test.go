@@ -4,13 +4,14 @@
 package resolvers
 
 import (
+	"context"
 	"testing"
 
 	"github.com/OWASP/Amass/requests"
 )
 
 func TestResolverPoolWildcardDetection(t *testing.T) {
-	pool := SetupResolverPool([]string{"8.8.8.8"}, false, false)
+	pool := SetupResolverPool([]string{"8.8.8.8"}, false, false, nil)
 	if pool == nil {
 		return
 	}
@@ -20,7 +21,7 @@ func TestResolverPoolWildcardDetection(t *testing.T) {
 		Domain: "wildcard.owasp-amass.com",
 	}
 
-	if !pool.MatchesWildcard(req) {
+	if !pool.MatchesWildcard(context.TODO(), req) {
 		t.Errorf("DNS wildcard detection failed to identify the %s wildcard", req.Domain)
 	}
 
@@ -29,7 +30,7 @@ func TestResolverPoolWildcardDetection(t *testing.T) {
 		Domain: "utica.edu",
 	}
 
-	if pool.MatchesWildcard(req) {
+	if pool.MatchesWildcard(context.TODO(), req) {
 		t.Errorf("DNS wildcard detection reported a false positive for %s", req.Domain)
 	}
 }
