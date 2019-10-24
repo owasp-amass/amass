@@ -116,3 +116,17 @@ func GetAllSourceNames() []string {
 	sys.Shutdown()
 	return names
 }
+
+func createOutputDirectory(cfg *config.Config) {
+	// Prepare output file paths
+	dir := config.OutputDirectory(cfg.Dir)
+	if dir == "" {
+		r.Fprintln(color.Error, "Failed to obtain the output directory")
+		os.Exit(1)
+	}
+	// If the directory does not yet exist, create it
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		r.Fprintf(color.Error, "Failed to create the directory: %v\n", err)
+		os.Exit(1)
+	}
+}
