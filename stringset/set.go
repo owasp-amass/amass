@@ -48,7 +48,11 @@ func (s Set) InsertMany(elements ...string) {
 
 // Remove will delete the element string from the receiver Set.
 func (s Set) Remove(element string) {
-	delete(s, strings.ToLower(element))
+	e := strings.ToLower(element)
+
+	if _, ok := s[e]; ok {
+		delete(s, e)
+	}
 }
 
 // Slice returns a string slice that contains all the elements in the Set.
