@@ -134,6 +134,7 @@ func (a *AlienVault) executeDNSQuery(ctx context.Context, req *requests.DNSReque
 	for ip := range ips {
 		bus.Publish(requests.NewAddrTopic, &requests.AddrRequest{
 			Address: ip,
+			Domain:  req.Domain,
 			Tag:     a.SourceType,
 			Source:  a.String(),
 		})
@@ -244,6 +245,7 @@ func (a *AlienVault) executeURLQuery(ctx context.Context, req *requests.DNSReque
 	for ip := range ips {
 		bus.Publish(requests.NewAddrTopic, &requests.AddrRequest{
 			Address: ip,
+			Domain:  req.Domain,
 			Tag:     a.SourceType,
 			Source:  a.String(),
 		})

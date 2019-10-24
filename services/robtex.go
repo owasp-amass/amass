@@ -108,18 +108,24 @@ func (r *Robtex) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 			bus.Publish(requests.NewAddrTopic, &requests.AddrRequest{
 				Address: line.Data,
 				Domain:  req.Domain,
-				Tag:     r.SourceType,
+				Tag:     r.Type(),
 				Source:  r.String(),
+			})
+		} else if line.Type == "NS" || line.Type == "MX" {
+			bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+				Name:   strings.Trim(line.Data, "."),
+				Domain: req.Domain,
+				Tag:    r.Type(),
+				Source: r.String(),
 			})
 		}
 	}
 
-	names := stringset.New()
 loop:
 	for ip := range ips {
 		select {
 		case <-r.Quit():
-			break loop
+			return
 		default:
 			r.CheckRateLimit()
 			bus.Publish(requests.SetActiveTopic, r.String())
@@ -128,23 +134,21 @@ loop:
 			pdns, err := http.RequestWebPage(url, nil, nil, "", "")
 			if err != nil {
 				bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", r.String(), url, err))
-				continue
+				continue loop
 			}
 
 			for _, line := range r.parseDNSJSON(pdns) {
-				names.Insert(line.Name)
-			}
-		}
-	}
+				n := strings.Trim(line.Name, ".")
 
-	for name := range names {
-		if cfg.IsDomainInScope(name) {
-			bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
-				Name:   name,
-				Domain: req.Domain,
-				Tag:    r.SourceType,
-				Source: r.String(),
-			})
+				if d := cfg.WhichDomain(n); d != "" {
+					bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+						Name:   n,
+						Domain: d,
+						Tag:    r.Type(),
+						Source: r.String(),
+					})
+				}
+			}
 		}
 	}
 }
@@ -265,7 +269,7 @@ func (r *Robtex) origin(ctx context.Context, addr string) *requests.ASNRequest {
 			bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
 				Name:   n.Name,
 				Domain: r.System().Pool().SubdomainToDomain(n.Name),
-				Tag:    r.SourceType,
+				Tag:    r.Type(),
 				Source: r.String(),
 			})
 		}
@@ -276,7 +280,7 @@ func (r *Robtex) origin(ctx context.Context, addr string) *requests.ASNRequest {
 			bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
 				Name:   n.Name,
 				Domain: r.System().Pool().SubdomainToDomain(n.Name),
-				Tag:    r.SourceType,
+				Tag:    r.Type(),
 				Source: r.String(),
 			})
 		}
@@ -287,7 +291,7 @@ func (r *Robtex) origin(ctx context.Context, addr string) *requests.ASNRequest {
 			bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
 				Name:   n.Name,
 				Domain: r.System().Pool().SubdomainToDomain(n.Name),
-				Tag:    r.SourceType,
+				Tag:    r.Type(),
 				Source: r.String(),
 			})
 		}
@@ -298,7 +302,7 @@ func (r *Robtex) origin(ctx context.Context, addr string) *requests.ASNRequest {
 			bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
 				Name:   n.Name,
 				Domain: r.System().Pool().SubdomainToDomain(n.Name),
-				Tag:    r.SourceType,
+				Tag:    r.Type(),
 				Source: r.String(),
 			})
 		}
@@ -325,7 +329,7 @@ func (r *Robtex) origin(ctx context.Context, addr string) *requests.ASNRequest {
 		Prefix:      ipinfo.Prefix,
 		Description: desc,
 		Netblocks:   stringset.New(ipinfo.Prefix),
-		Tag:         r.SourceType,
+		Tag:         r.Type(),
 		Source:      r.String(),
 	}
 }

@@ -120,6 +120,7 @@ func (h *HackerTarget) OnASNRequest(ctx context.Context, req *requests.ASNReques
 	}
 
 	bus.Publish(requests.NewASNTopic, &requests.ASNRequest{
+		Address:        req.Address,
 		ASN:            asn,
 		Prefix:         strings.Trim(fields[2], "\""),
 		AllocationDate: time.Now(),
