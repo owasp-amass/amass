@@ -6,39 +6,18 @@ package enum
 import (
 	"context"
 	"errors"
-	"net"
-	"strconv"
-	"strings"
 	"sync"
 	"time"
 
 	alts "github.com/OWASP/Amass/alterations"
 	"github.com/OWASP/Amass/config"
 	eb "github.com/OWASP/Amass/eventbus"
-	"github.com/OWASP/Amass/graph"
-	amassdns "github.com/OWASP/Amass/net/dns"
 	"github.com/OWASP/Amass/queue"
 	"github.com/OWASP/Amass/requests"
 	"github.com/OWASP/Amass/services"
 	sf "github.com/OWASP/Amass/stringfilter"
 	"github.com/OWASP/Amass/stringset"
-	"github.com/miekg/dns"
 )
-
-var topNames = []string{
-	"www",
-	"online",
-	"webserver",
-	"ns1",
-	"mail",
-	"smtp",
-	"webmail",
-	"prod",
-	"test",
-	"vpn",
-	"ftp",
-	"ssh",
-}
 
 // Filters contains the set of string filters required during an enumeration.
 type Filters struct {
@@ -94,6 +73,9 @@ type Enumeration struct {
 	subLock    sync.Mutex
 	subdomains map[string]int
 
+	addrsLock sync.Mutex
+	addrs     stringset.Set
+
 	lastLock sync.Mutex
 	last     time.Time
 
@@ -135,6 +117,15 @@ func NewEnumeration(sys services.System) *Enumeration {
 	if ref := e.refToDataManager(); ref != nil {
 		e.dataMgr = ref
 		return e
+	}
+	return nil
+}
+
+func (e *Enumeration) refToDataManager() services.Service {
+	for _, srv := range e.Sys.CoreServices() {
+		if srv.String() == "Data Manager" {
+			return srv
+		}
 	}
 	return nil
 }
@@ -187,7 +178,10 @@ func (e *Enumeration) Start() error {
 	e.ctx = context.WithValue(ctx, requests.ContextEventBus, e.Bus)
 
 	e.setupEventBus()
+
+	e.addrs = stringset.New()
 	go e.processAddresses()
+
 	// The enumeration will not terminate until all output has been processed
 	var wg sync.WaitGroup
 	wg.Add(4)
@@ -206,6 +200,17 @@ func (e *Enumeration) Start() error {
 
 	// Release all the domain names specified in the configuration
 	e.srcsLock.Lock()
+	// Put in requests for all the ASNs specified in the configuration
+	for _, src := range e.Sys.DataSources() {
+		if !e.srcs.Has(src.String()) {
+			continue
+		}
+
+		for _, asn := range e.Config.ASNs {
+			src.ASNRequest(e.ctx, &requests.ASNRequest{ASN: asn})
+		}
+	}
+
 	for _, src := range e.Sys.DataSources() {
 		if !e.srcs.Has(src.String()) {
 			continue
@@ -217,17 +222,6 @@ func (e *Enumeration) Start() error {
 				Name:   domain,
 				Domain: domain,
 			})
-		}
-	}
-
-	// Put in requests for all the ASNs specified in the configuration
-	for _, src := range e.Sys.DataSources() {
-		if !e.srcs.Has(src.String()) {
-			continue
-		}
-
-		for _, asn := range e.Config.ASNs {
-			src.ASNRequest(e.ctx, &requests.ASNRequest{ASN: asn})
 		}
 	}
 	e.srcsLock.Unlock()
@@ -253,13 +247,13 @@ loop:
 
 				e.Config.Log.Printf("Average DNS queries performed: %d/sec, DNS names queued: %d",
 					e.DNSQueriesPerSec(), remaining)
-				e.clearPerSec()
 
 				// Does the enumeration need more names to process?
-				if !e.Config.Passive && remaining < 1000 {
+				if !e.Config.Passive && remaining < 50 {
 					e.nextPhase(false)
-					time.Sleep(time.Second)
 				}
+
+				e.clearPerSec()
 			}
 		}
 	}
@@ -274,22 +268,68 @@ loop:
 }
 
 func (e *Enumeration) nextPhase(inactive bool) {
+	if !e.Config.Passive && (e.DNSQueriesPerSec() > 2000) || (e.DNSNamesRemaining() > 10) {
+		return
+	}
+
 	if !e.Config.Passive && e.Config.BruteForcing && !e.startedBrute {
 		e.startedBrute = true
 		go e.startBruteForcing()
+		time.Sleep(time.Second)
 		e.Config.Log.Print("Starting DNS queries for brute forcing")
 	} else if !e.Config.Passive && e.Config.Alterations && !e.startedAlts {
 		e.startedAlts = true
 		go e.performAlterations()
+		time.Sleep(time.Second)
 		e.Config.Log.Print("Starting DNS queries for altered names")
 	} else if inactive {
-		// Could be showing as inactive, but DNS queries are not finished
-		if !e.Config.Passive && e.DNSQueriesPerSec() >= 10 {
-			return
-		}
 		// End the enumeration!
 		e.Done()
 	}
+}
+
+// DNSQueriesPerSec returns the number of DNS queries the enumeration has performed per second.
+func (e *Enumeration) DNSQueriesPerSec() int64 {
+	e.perSecLock.Lock()
+	defer e.perSecLock.Unlock()
+
+	if sec := e.perSecLast.Sub(e.perSecFirst).Seconds(); sec > 0 {
+		return e.perSec / int64(sec+1.0)
+	}
+	return 0
+}
+
+func (e *Enumeration) incQueriesPerSec(t time.Time) {
+	e.perSecLock.Lock()
+	defer e.perSecLock.Unlock()
+
+	e.perSec++
+	if t.After(e.perSecLast) {
+		e.perSecLast = t
+	}
+}
+
+func (e *Enumeration) clearPerSec() {
+	e.perSecLock.Lock()
+	defer e.perSecLock.Unlock()
+
+	e.perSec = 0
+	e.perSecFirst = time.Now()
+	e.perSecLast = e.perSecLast
+}
+
+// DNSNamesRemaining returns the number of discovered DNS names yet to be handled by the enumeration.
+func (e *Enumeration) DNSNamesRemaining() int64 {
+	var remaining int
+
+	for _, srv := range e.Sys.CoreServices() {
+		if srv.String() == "DNS Service" {
+			remaining += srv.RequestLen()
+			break
+		}
+	}
+
+	return int64(remaining)
 }
 
 func (e *Enumeration) lastActive() time.Time {
@@ -306,11 +346,6 @@ func (e *Enumeration) updateLastActive(srv string) {
 	e.last = time.Now()
 }
 
-func (e *Enumeration) newASN(req *requests.ASNRequest) {
-	e.updateConfigWithNetblocks(req)
-	e.updateASNCache(req)
-}
-
 func (e *Enumeration) setupEventBus() {
 	e.Bus.Subscribe(requests.OutputTopic, e.sendOutput)
 	e.Bus.Subscribe(requests.LogTopic, e.queueLog)
@@ -323,7 +358,7 @@ func (e *Enumeration) setupEventBus() {
 		e.Bus.Subscribe(requests.NameResolvedTopic, e.newResolvedName)
 
 		e.Bus.Subscribe(requests.NewAddrTopic, e.newAddress)
-		e.Bus.Subscribe(requests.NewASNTopic, e.newASN)
+		e.Bus.Subscribe(requests.NewASNTopic, e.updateASNCache)
 	}
 
 	// Setup all core services to receive the appropriate events
@@ -357,7 +392,7 @@ func (e *Enumeration) cleanEventBus() {
 		e.Bus.Unsubscribe(requests.NameResolvedTopic, e.newResolvedName)
 
 		e.Bus.Unsubscribe(requests.NewAddrTopic, e.newAddress)
-		e.Bus.Unsubscribe(requests.NewASNTopic, e.newASN)
+		e.Bus.Unsubscribe(requests.NewASNTopic, e.updateASNCache)
 	}
 
 	// Setup all core services to receive the appropriate events
@@ -375,462 +410,6 @@ loop:
 			e.Bus.Unsubscribe(requests.SubDiscoveredTopic, srv.SubdomainDiscovered)
 			e.Bus.Unsubscribe(requests.AddrRequestTopic, srv.AddrRequest)
 			e.Bus.Unsubscribe(requests.ASNRequestTopic, srv.ASNRequest)
-		}
-	}
-}
-
-func (e *Enumeration) newNameEvent(req *requests.DNSRequest) {
-	if req == nil || req.Name == "" || req.Domain == "" {
-		return
-	}
-
-	req.Name = strings.ToLower(amassdns.RemoveAsteriskLabel(req.Name))
-	req.Name = strings.Trim(req.Name, ".")
-	req.Domain = strings.ToLower(req.Domain)
-
-	// Filter on the DNS name + the value from TrustedTag
-	if e.filters.NewNames.Duplicate(req.Name +
-		strconv.FormatBool(requests.TrustedTag(req.Tag))) {
-		return
-	}
-
-	if e.Config.Passive {
-		e.updateLastActive("enum")
-		if e.Config.IsDomainInScope(req.Name) {
-			e.Bus.Publish(requests.OutputTopic, &requests.Output{
-				Name:   req.Name,
-				Domain: req.Domain,
-				Tag:    req.Tag,
-				Source: req.Source,
-			})
-		}
-		return
-	}
-
-	e.Bus.Publish(requests.ResolveNameTopic, e.ctx, req)
-}
-
-func (e *Enumeration) newResolvedName(req *requests.DNSRequest) {
-	req.Name = strings.ToLower(amassdns.RemoveAsteriskLabel(req.Name))
-	req.Name = strings.Trim(req.Name, ".")
-	req.Domain = strings.ToLower(req.Domain)
-
-	// Write the DNS name information to the graph databases
-	e.dataMgr.DNSRequest(e.ctx, req)
-
-	/*
-	 * Do not go further if the name is not in scope or been seen before
-	 */
-	if e.filters.Resolved.Duplicate(req.Name) ||
-		!e.Config.IsDomainInScope(req.Name) {
-		return
-	}
-
-	// Keep track of all domains and proper subdomains discovered
-	e.checkSubdomain(req)
-
-	if e.Config.BruteForcing && e.Config.Recursive {
-		for _, name := range topNames {
-			e.newNameEvent(&requests.DNSRequest{
-				Name:   name + "." + req.Name,
-				Domain: req.Domain,
-				Tag:    requests.BRUTE,
-				Source: "Enum Probes",
-			})
-		}
-	}
-
-	// Queue the resolved name for future brute forcing
-	if e.Config.BruteForcing && e.Config.Recursive && (e.Config.MinForRecursive == 0) {
-		// Do not send in the resolved root domain names
-		if len(strings.Split(req.Name, ".")) != len(strings.Split(req.Domain, ".")) {
-			e.bruteQueue.Append(req)
-		}
-	}
-
-	// Queue the name and domain for future name alterations
-	if e.Config.Alterations {
-		e.altQueue.Append(req)
-	}
-
-	e.srcsLock.Lock()
-	defer e.srcsLock.Unlock()
-
-	for _, srv := range e.Sys.DataSources() {
-		// Call DNSRequest for all web archive services
-		if srv.Type() == requests.ARCHIVE && e.srcs.Has(srv.String()) {
-			srv.DNSRequest(e.ctx, req)
-		}
-	}
-}
-
-func (e *Enumeration) checkSubdomain(req *requests.DNSRequest) {
-	labels := strings.Split(req.Name, ".")
-	num := len(labels)
-	// Is this large enough to consider further?
-	if num < 2 {
-		return
-	}
-	// It cannot have fewer labels than the root domain name
-	if num-1 < len(strings.Split(req.Domain, ".")) {
-		return
-	}
-	// Do not further evaluate service subdomains
-	if labels[1] == "_tcp" || labels[1] == "_udp" || labels[1] == "_tls" {
-		return
-	}
-
-	sub := strings.Join(labels[1:], ".")
-
-	for _, g := range e.Sys.GraphDatabases() {
-		// CNAMEs are not a proper subdomain
-		cname := g.IsCNAMENode(&graph.DataOptsParams{
-			UUID:   e.Config.UUID.String(),
-			Name:   sub,
-			Domain: req.Domain,
-		})
-		if cname {
-			return
-		}
-	}
-
-	r := &requests.DNSRequest{
-		Name:   sub,
-		Domain: req.Domain,
-		Tag:    req.Tag,
-		Source: req.Source,
-	}
-	times := e.timesForSubdomain(sub)
-
-	e.Bus.Publish(requests.SubDiscoveredTopic, e.ctx, r, times)
-	// Queue the proper subdomain for future brute forcing
-	if e.Config.BruteForcing && e.Config.Recursive &&
-		e.Config.MinForRecursive > 0 && e.Config.MinForRecursive == times {
-		e.bruteQueue.Append(r)
-	}
-	// Check if the subdomain should be added to the markov model
-	if e.Config.Alterations && times == 1 {
-		e.markovModel.AddSubdomain(sub)
-	}
-
-	e.srcsLock.Lock()
-	defer e.srcsLock.Unlock()
-
-	// Let all the data sources know about the discovered proper subdomain
-	for _, src := range e.Sys.DataSources() {
-		if e.srcs.Has(src.String()) {
-			src.SubdomainDiscovered(e.ctx, r, times)
-		}
-	}
-}
-
-func (e *Enumeration) timesForSubdomain(sub string) int {
-	e.subLock.Lock()
-	defer e.subLock.Unlock()
-
-	times, found := e.subdomains[sub]
-	if found {
-		times++
-	} else {
-		times = 1
-	}
-
-	e.subdomains[sub] = times
-	return times
-}
-
-func (e *Enumeration) newAddress(req *requests.AddrRequest) {
-	if req == nil || req.Address == "" {
-		return
-	}
-
-	if e.filters.NewAddrs.Duplicate(req.Address) {
-		return
-	}
-
-	if e.Config.Active {
-		e.namesFromCertificates(req.Address)
-	}
-
-	// See if the required ASN information is already in the cache
-	asn := e.ipSearch(req.Address)
-	if asn != nil {
-		// Write the ASN information to the graph databases
-		e.dataMgr.ASNRequest(e.ctx, asn)
-
-		// Perform the reverse DNS sweep if the IP address is in scope
-		if e.Config.IsDomainInScope(req.Domain) {
-			if _, cidr, _ := net.ParseCIDR(asn.Prefix); cidr != nil {
-				e.reverseDNSSweep(req.Address, cidr)
-			}
-		}
-		return
-	}
-
-	// Query the data sources for ASN information related to this IP address
-	e.srcsLock.Lock()
-	for _, src := range e.Sys.DataSources() {
-		if e.srcs.Has(src.String()) {
-			src.ASNRequest(e.ctx, &requests.ASNRequest{Address: req.Address})
-		}
-	}
-	e.srcsLock.Unlock()
-
-	// Wait a bit and then send the AddrRequest along for processing
-	time.Sleep(3 * time.Second)
-	e.netQueue.Append(req)
-}
-
-func (e *Enumeration) processAddresses() {
-	curIdx := 0
-	maxIdx := 7
-	delays := []int{10, 25, 50, 75, 100, 150, 250, 500}
-loop:
-	for {
-		select {
-		case <-e.done:
-			return
-		default:
-			element, ok := e.netQueue.Next()
-			if !ok {
-				time.Sleep(time.Duration(delays[curIdx]) * time.Millisecond)
-				if curIdx < maxIdx {
-					curIdx++
-				}
-				continue loop
-			}
-
-			curIdx = 0
-			req := element.(*requests.AddrRequest)
-
-			asn := e.ipSearch(req.Address)
-			if asn == nil {
-				time.Sleep(time.Second)
-				e.netQueue.Append(req)
-				continue loop
-			}
-
-			// Write the ASN information to the graph databases
-			e.dataMgr.ASNRequest(e.ctx, asn)
-
-			// Perform the reverse DNS sweep if the IP address is in scope
-			if e.Config.IsDomainInScope(req.Domain) {
-				if _, cidr, _ := net.ParseCIDR(asn.Prefix); cidr != nil {
-					go e.reverseDNSSweep(req.Address, cidr)
-				}
-			}
-		}
-	}
-}
-
-func (e *Enumeration) submitKnownNames(wg *sync.WaitGroup) {
-	defer wg.Done()
-	for _, g := range e.Sys.GraphDatabases() {
-		for _, enum := range g.EnumerationList() {
-			var found bool
-
-			for _, domain := range g.EnumerationDomains(enum) {
-				if e.Config.IsDomainInScope(domain) {
-					found = true
-					break
-				}
-			}
-			if !found {
-				continue
-			}
-
-			for _, o := range g.GetOutput(enum, true) {
-				if e.Config.IsDomainInScope(o.Name) {
-					e.Bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
-						Name:   o.Name,
-						Domain: o.Domain,
-						Tag:    requests.EXTERNAL,
-						Source: "Previous Enum",
-					})
-				}
-			}
-		}
-	}
-}
-
-func (e *Enumeration) submitProvidedNames(wg *sync.WaitGroup) {
-	defer wg.Done()
-	for _, name := range e.Config.ProvidedNames {
-		if domain := e.Config.WhichDomain(name); domain != "" {
-			e.Bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
-				Name:   name,
-				Domain: domain,
-				Tag:    requests.EXTERNAL,
-				Source: "User Input",
-			})
-		}
-	}
-}
-
-func (e *Enumeration) startBruteForcing() {
-	// Send in the root domain names for brute forcing
-	for _, domain := range e.Config.Domains() {
-		e.bruteSendNewNames(&requests.DNSRequest{
-			Name:   domain,
-			Domain: domain,
-		})
-	}
-
-	curIdx := 0
-	maxIdx := 7
-	delays := []int{10, 25, 50, 75, 100, 150, 250, 500}
-loop:
-	for {
-		select {
-		case <-e.done:
-			return
-		default:
-			element, ok := e.bruteQueue.Next()
-			if !ok {
-				time.Sleep(time.Duration(delays[curIdx]) * time.Millisecond)
-				if curIdx < maxIdx {
-					curIdx++
-				}
-				continue loop
-			}
-
-			curIdx = 0
-			req := element.(*requests.DNSRequest)
-			e.bruteSendNewNames(req)
-		}
-	}
-}
-
-func (e *Enumeration) bruteSendNewNames(req *requests.DNSRequest) {
-	if !e.Config.IsDomainInScope(req.Name) {
-		return
-	}
-
-	if len(req.Records) > 0 {
-		var ok bool
-
-		for _, r := range req.Records {
-			t := uint16(r.Type)
-
-			if t == dns.TypeA || t == dns.TypeAAAA {
-				ok = true
-				break
-			}
-		}
-
-		if !ok {
-			return
-		}
-	}
-
-	subdomain := strings.ToLower(req.Name)
-	domain := strings.ToLower(req.Domain)
-	if subdomain == "" || domain == "" {
-		return
-	}
-
-	for _, g := range e.Sys.GraphDatabases() {
-		// CNAMEs are not a proper subdomain
-		cname := g.IsCNAMENode(&graph.DataOptsParams{
-			UUID:   e.Config.UUID.String(),
-			Name:   subdomain,
-			Domain: domain,
-		})
-		if cname {
-			return
-		}
-	}
-
-	for _, word := range e.Config.Wordlist {
-		if word == "" {
-			continue
-		}
-
-		e.newNameEvent(&requests.DNSRequest{
-			Name:   word + "." + subdomain,
-			Domain: domain,
-			Tag:    requests.BRUTE,
-			Source: "Brute Forcing",
-		})
-	}
-}
-
-func (e *Enumeration) performAlterations() {
-	curIdx := 0
-	maxIdx := 7
-	delays := []int{10, 25, 50, 75, 100, 150, 250, 500}
-loop:
-	for {
-		select {
-		case <-e.done:
-			return
-		default:
-			element, ok := e.altQueue.Next()
-			if !ok {
-				time.Sleep(time.Duration(delays[curIdx]) * time.Millisecond)
-				if curIdx < maxIdx {
-					curIdx++
-				}
-				continue loop
-			}
-
-			curIdx = 0
-			req := element.(*requests.DNSRequest)
-
-			if !e.Config.IsDomainInScope(req.Name) ||
-				(len(strings.Split(req.Domain, ".")) == len(strings.Split(req.Name, "."))) {
-				continue loop
-			}
-
-			for _, g := range e.Sys.GraphDatabases() {
-				// CNAMEs are not a proper subdomain
-				cname := g.IsCNAMENode(&graph.DataOptsParams{
-					UUID:   e.Config.UUID.String(),
-					Name:   req.Name,
-					Domain: req.Domain,
-				})
-				if cname {
-					continue loop
-				}
-			}
-
-			newNames := stringset.New()
-
-			e.markovModel.Train(req.Name)
-			if e.markovModel.TotalTrainings() >= 50 &&
-				(e.markovModel.TotalTrainings()%10 == 0) {
-				newNames.InsertMany(e.markovModel.GenerateNames(100)...)
-			}
-
-			if e.Config.FlipNumbers {
-				newNames.InsertMany(e.altState.FlipNumbers(req.Name)...)
-			}
-			if e.Config.AddNumbers {
-				newNames.InsertMany(e.altState.AppendNumbers(req.Name)...)
-			}
-			if e.Config.FlipWords {
-				newNames.InsertMany(e.altState.FlipWords(req.Name)...)
-			}
-			if e.Config.AddWords {
-				newNames.InsertMany(e.altState.AddSuffixWord(req.Name)...)
-				newNames.InsertMany(e.altState.AddPrefixWord(req.Name)...)
-			}
-			if e.Config.EditDistance > 0 {
-				newNames.InsertMany(e.altState.FuzzyLabelSearches(req.Name)...)
-			}
-
-			for _, name := range newNames.Slice() {
-				if !e.Config.IsDomainInScope(name) {
-					continue
-				}
-
-				e.newNameEvent(&requests.DNSRequest{
-					Name:   name,
-					Domain: req.Domain,
-					Tag:    requests.ALT,
-					Source: "Alterations",
-				})
-			}
 		}
 	}
 }
