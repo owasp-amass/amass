@@ -53,6 +53,7 @@ type intelArgs struct {
 		MonitorResolverRate bool
 		ScoreResolvers      bool
 		PublicDNS           bool
+		Verbose             bool
 	}
 	Filepaths struct {
 		ConfigFile   string
@@ -87,11 +88,12 @@ func defineIntelOptionFlags(intelFlags *flag.FlagSet, args *intelArgs) {
 	intelFlags.BoolVar(&args.Options.IPv4, "ipv4", false, "Show the IPv4 addresses for discovered names")
 	intelFlags.BoolVar(&args.Options.IPv6, "ipv6", false, "Show the IPv6 addresses for discovered names")
 	intelFlags.BoolVar(&args.Options.ListSources, "list", false, "Print the names of all available data sources")
-	intelFlags.BoolVar(&args.Options.ReverseWhois, "whois", false, "All provided domains are run through reverse whois")
-	intelFlags.BoolVar(&args.Options.Sources, "src", false, "Print data sources for the discovered names")
 	intelFlags.BoolVar(&args.Options.MonitorResolverRate, "noresolvrate", true, "Disable resolver rate monitoring")
-	intelFlags.BoolVar(&args.Options.ScoreResolvers, "noresolvscore", true, "Disable resolver reliability scoring")
 	intelFlags.BoolVar(&args.Options.PublicDNS, "public-dns", false, "Use public-dns.info resolver list")
+	intelFlags.BoolVar(&args.Options.ReverseWhois, "whois", false, "All provided domains are run through reverse whois")
+	intelFlags.BoolVar(&args.Options.ScoreResolvers, "noresolvscore", true, "Disable resolver reliability scoring")
+	intelFlags.BoolVar(&args.Options.Sources, "src", false, "Print data sources for the discovered names")
+	intelFlags.BoolVar(&args.Options.Verbose, "v", false, "Output status / debug / troubleshooting info")
 }
 
 func defineIntelFilepathFlags(intelFlags *flag.FlagSet, args *intelArgs) {
@@ -197,6 +199,16 @@ func runIntelCommand(clArgs []string) {
 		os.Exit(1)
 	}
 
+	rLog, wLog := io.Pipe()
+	cfg.Log = log.New(wLog, "", log.Lmicroseconds)
+	logfile := filepath.Join(config.OutputDirectory(cfg.Dir), "amass.log")
+	if args.Filepaths.LogFile != "" {
+		logfile = args.Filepaths.LogFile
+	}
+
+	createOutputDirectory(cfg)
+	go writeLogsAndMessages(rLog, logfile, args.Options.Verbose)
+
 	sys, err := services.NewLocalSystem(cfg)
 	if err != nil {
 		return
@@ -207,10 +219,7 @@ func runIntelCommand(clArgs []string) {
 		r.Fprintf(color.Error, "%s\n", "No DNS resolvers passed the sanity check")
 		os.Exit(1)
 	}
-
 	ic.Config = cfg
-	rLog, wLog := io.Pipe()
-	ic.Config.Log = log.New(wLog, "", log.Lmicroseconds)
 
 	if args.Options.ReverseWhois {
 		if len(ic.Config.Domains()) == 0 {
@@ -227,33 +236,17 @@ func runIntelCommand(clArgs []string) {
 	}
 
 	go intelSignalHandler(ic)
-	processIntelOutput(ic, &args, rLog)
+	processIntelOutput(ic, &args)
 }
 
-func processIntelOutput(ic *intel.Collection, args *intelArgs, pipe *io.PipeReader) {
+func processIntelOutput(ic *intel.Collection, args *intelArgs) {
 	var err error
-
-	// Prepare output file paths
 	dir := config.OutputDirectory(ic.Config.Dir)
-	if dir == "" {
-		r.Fprintln(color.Error, "Failed to obtain the output directory")
-		os.Exit(1)
-	}
-	// If the directory does not yet exist, create it
-	if err = os.MkdirAll(dir, 0755); err != nil {
-		r.Fprintf(color.Error, "Failed to create the directory: %v\n", err)
-		os.Exit(1)
-	}
-	logfile := filepath.Join(dir, "amass.log")
-	if args.Filepaths.LogFile != "" {
-		logfile = args.Filepaths.LogFile
-	}
+
 	txtfile := filepath.Join(dir, "amass.txt")
 	if args.Filepaths.TermOut != "" {
 		txtfile = args.Filepaths.TermOut
 	}
-
-	go writeLogsAndMessages(pipe, logfile)
 
 	var outptr *os.File
 	if txtfile != "" {

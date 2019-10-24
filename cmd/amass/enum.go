@@ -63,14 +63,15 @@ type enumArgs struct {
 		IPv4                bool
 		IPv6                bool
 		ListSources         bool
+		MonitorResolverRate bool
 		NoAlts              bool
 		NoRecursive         bool
 		Passive             bool
+		PublicDNS           bool
+		ScoreResolvers      bool
 		Sources             bool
 		Unresolved          bool
-		MonitorResolverRate bool
-		ScoreResolvers      bool
-		PublicDNS           bool
+		Verbose             bool
 	}
 	Filepaths struct {
 		AllFilePrefix string
@@ -116,14 +117,15 @@ func defineEnumOptionFlags(enumFlags *flag.FlagSet, args *enumArgs) {
 	enumFlags.BoolVar(&args.Options.IPv4, "ipv4", false, "Show the IPv4 addresses for discovered names")
 	enumFlags.BoolVar(&args.Options.IPv6, "ipv6", false, "Show the IPv6 addresses for discovered names")
 	enumFlags.BoolVar(&args.Options.ListSources, "list", false, "Print the names of all available data sources")
+	enumFlags.BoolVar(&args.Options.MonitorResolverRate, "noresolvrate", true, "Disable resolver rate monitoring")
 	enumFlags.BoolVar(&args.Options.NoAlts, "noalts", false, "Disable generation of altered names")
 	enumFlags.BoolVar(&args.Options.NoRecursive, "norecursive", false, "Turn off recursive brute forcing")
 	enumFlags.BoolVar(&args.Options.Passive, "passive", false, "Disable DNS resolution of names and dependent features")
+	enumFlags.BoolVar(&args.Options.PublicDNS, "public-dns", false, "Use public-dns.info resolver list")
+	enumFlags.BoolVar(&args.Options.ScoreResolvers, "noresolvscore", true, "Disable resolver reliability scoring")
 	enumFlags.BoolVar(&args.Options.Sources, "src", false, "Print data sources for the discovered names")
 	enumFlags.BoolVar(&args.Options.Unresolved, "include-unresolvable", false, "Output DNS names that did not resolve")
-	enumFlags.BoolVar(&args.Options.MonitorResolverRate, "noresolvrate", true, "Disable resolver rate monitoring")
-	enumFlags.BoolVar(&args.Options.ScoreResolvers, "noresolvscore", true, "Disable resolver reliability scoring")
-	enumFlags.BoolVar(&args.Options.PublicDNS, "public-dns", false, "Use public-dns.info resolver list")
+	enumFlags.BoolVar(&args.Options.Verbose, "v", false, "Output status / debug / troubleshooting info")
 }
 
 func defineEnumFilepathFlags(enumFlags *flag.FlagSet, args *enumArgs) {
@@ -235,6 +237,16 @@ func runEnumCommand(clArgs []string) {
 		os.Exit(1)
 	}
 
+	rLog, wLog := io.Pipe()
+	cfg.Log = log.New(wLog, "", log.Lmicroseconds)
+	logfile := filepath.Join(config.OutputDirectory(cfg.Dir), "amass.log")
+	if args.Filepaths.LogFile != "" {
+		logfile = args.Filepaths.LogFile
+	}
+
+	createOutputDirectory(cfg)
+	go writeLogsAndMessages(rLog, logfile, args.Options.Verbose)
+
 	sys, err := services.NewLocalSystem(cfg)
 	if err != nil {
 		r.Fprintf(color.Error, "%v\n", err)
@@ -249,32 +261,15 @@ func runEnumCommand(clArgs []string) {
 		r.Fprintf(color.Error, "%s\n", "No DNS resolvers passed the sanity check")
 		os.Exit(1)
 	}
-
 	e.Config = cfg
-	rLog, wLog := io.Pipe()
-	e.Config.Log = log.New(wLog, "", log.Lmicroseconds)
 
-	processEnumOutput(e, &args, rLog)
+	processEnumOutput(e, &args)
 }
 
-func processEnumOutput(e *enum.Enumeration, args *enumArgs, pipe *io.PipeReader) {
+func processEnumOutput(e *enum.Enumeration, args *enumArgs) {
 	var err error
-
-	// Prepare output file paths
 	dir := config.OutputDirectory(e.Config.Dir)
-	if dir == "" {
-		r.Fprintln(color.Error, "Failed to obtain the output directory")
-		os.Exit(1)
-	}
-	// If the directory does not yet exist, create it
-	if err = os.MkdirAll(dir, 0755); err != nil {
-		r.Fprintf(color.Error, "Failed to create the directory: %v\n", err)
-		os.Exit(1)
-	}
-	logfile := filepath.Join(dir, "amass.log")
-	if args.Filepaths.LogFile != "" {
-		logfile = args.Filepaths.LogFile
-	}
+
 	txtfile := filepath.Join(dir, "amass.txt")
 	if args.Filepaths.TermOut != "" {
 		txtfile = args.Filepaths.TermOut
@@ -288,13 +283,11 @@ func processEnumOutput(e *enum.Enumeration, args *enumArgs, pipe *io.PipeReader)
 		datafile = args.Filepaths.DataOpts
 	}
 	if args.Filepaths.AllFilePrefix != "" {
-		logfile = args.Filepaths.AllFilePrefix + ".log"
 		txtfile = args.Filepaths.AllFilePrefix + ".txt"
 		jsonfile = args.Filepaths.AllFilePrefix + ".json"
 		datafile = args.Filepaths.AllFilePrefix + "_data.json"
 	}
 
-	go writeLogsAndMessages(pipe, logfile)
 	if !e.Config.Passive && datafile != "" {
 		fileptr, err := os.OpenFile(datafile, os.O_WRONLY|os.O_CREATE, 0644)
 		if err != nil {
@@ -402,12 +395,13 @@ func signalHandler(e *enum.Enumeration) {
 	os.Exit(1)
 }
 
-func writeLogsAndMessages(logs *io.PipeReader, logfile string) {
+func writeLogsAndMessages(logs *io.PipeReader, logfile string, verbose bool) {
 	wildcard := regexp.MustCompile("DNS wildcard")
 	avg := regexp.MustCompile("Average DNS queries")
 	rScore := regexp.MustCompile("Resolver .* has a low score")
 	alterations := regexp.MustCompile("queries for altered names")
 	brute := regexp.MustCompile("queries for brute forcing")
+	sanity := regexp.MustCompile("SanityChecks")
 
 	var filePtr *os.File
 	if logfile != "" {
@@ -441,10 +435,6 @@ func writeLogsAndMessages(logs *io.PipeReader, logfile string) {
 		// Remove the timestamp
 		parts := strings.Split(line, " ")
 		line = strings.Join(parts[1:], " ")
-		// Check for Amass DNS wildcard messages
-		if wildcard.FindString(line) != "" {
-			fgR.Fprintln(color.Error, line)
-		}
 		// Check for the Amass average DNS names messages
 		if avg.FindString(line) != "" {
 			fgY.Fprintln(color.Error, line)
@@ -460,6 +450,14 @@ func writeLogsAndMessages(logs *io.PipeReader, logfile string) {
 		// Let the user know when name alterations have started
 		if alterations.FindString(line) != "" {
 			fgY.Fprintln(color.Error, line)
+		}
+		// Check if DNS resolvers have failed the sanity checks
+		if verbose && sanity.FindString(line) != "" {
+			fgR.Fprintln(color.Error, line)
+		}
+		// Check for Amass DNS wildcard messages
+		if verbose && wildcard.FindString(line) != "" {
+			fgR.Fprintln(color.Error, line)
 		}
 	}
 }

@@ -41,6 +41,7 @@ func NewLocalSystem(c *config.Config) (*LocalSystem, error) {
 		c.Resolvers,
 		c.ScoreResolvers,
 		c.MonitorResolverRate,
+		c.Log,
 	)
 	if pool == nil {
 		return nil, errors.New("The system was unable to build the pool of resolvers")

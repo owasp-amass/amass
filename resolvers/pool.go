@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"log"
 	"math/rand"
 	"net"
 	"strings"
@@ -32,8 +33,10 @@ var (
 
 // ResolverPool manages many DNS resolvers for high-performance use, such as brute forcing attacks.
 type ResolverPool struct {
-	Resolvers    []Resolver
-	Done         chan struct{}
+	Resolvers []Resolver
+	Done      chan struct{}
+	// Logger for error messages
+	Log          *log.Logger
 	wildcardLock sync.Mutex
 	wildcards    map[string]*wildcard
 	// Domains discovered by the SubdomainToDomain function
@@ -42,8 +45,8 @@ type ResolverPool struct {
 	hasBeenStopped bool
 }
 
-// SetupResolverPool initializes a ResolverPool with type of resolvers indicated by the parameters.
-func SetupResolverPool(addrs []string, scoring, ratemon bool) *ResolverPool {
+// SetupResolverPool initializes a ResolverPool with the type of resolvers indicated by the parameters.
+func SetupResolverPool(addrs []string, scoring, ratemon bool, log *log.Logger) *ResolverPool {
 	if len(addrs) <= 0 {
 		return nil
 	}
@@ -101,20 +104,21 @@ loop:
 		return nil
 	}
 
-	if r := SanityCheck(resolvers); len(r) > 0 {
-		return NewResolverPool(r)
-	}
-	return nil
+	return NewResolverPool(resolvers, log)
 }
 
 // NewResolverPool initializes a ResolverPool that uses the provided Resolvers.
-func NewResolverPool(res []Resolver) *ResolverPool {
-	return &ResolverPool{
+func NewResolverPool(res []Resolver, log *log.Logger) *ResolverPool {
+	rp := &ResolverPool{
 		Resolvers:   res,
 		Done:        make(chan struct{}, 2),
+		Log:         log,
 		wildcards:   make(map[string]*wildcard),
 		domainCache: make(map[string]struct{}),
 	}
+
+	rp.SanityChecks()
+	return rp
 }
 
 // Stop calls the Stop method for each Resolver object in the pool.
@@ -296,11 +300,11 @@ func (rp *ResolverPool) Resolve(ctx context.Context, name, qtype string, priorit
 	var attempts int
 	switch priority {
 	case PriorityCritical:
-		attempts = 250
+		attempts = 1000
 	case PriorityHigh:
-		attempts = 10
+		attempts = 100
 	case PriorityLow:
-		attempts = 3
+		attempts = 10
 	}
 
 	// This loop ensures the correct number of attempts of the DNS query
