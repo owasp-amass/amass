@@ -102,10 +102,10 @@ type Resolver interface {
 	ReportError()
 
 	// MatchesWildcard returns true if the request provided resolved to a DNS wildcard
-	MatchesWildcard(req *requests.DNSRequest) bool
+	MatchesWildcard(ctx context.Context, req *requests.DNSRequest) bool
 
 	// GetWildcardType returns the DNS wildcard type for the provided subdomain name
-	GetWildcardType(req *requests.DNSRequest) int
+	GetWildcardType(ctx context.Context, req *requests.DNSRequest) int
 
 	// SubdomainToDomain returns the first subdomain name of the provided
 	// parameter that responds to a DNS query for the NS record type
@@ -255,12 +255,12 @@ func (r *BaseResolver) ReportError() {
 }
 
 // MatchesWildcard returns true if the request provided resolved to a DNS wildcard.
-func (r *BaseResolver) MatchesWildcard(req *requests.DNSRequest) bool {
+func (r *BaseResolver) MatchesWildcard(ctx context.Context, req *requests.DNSRequest) bool {
 	return false
 }
 
 // GetWildcardType returns the DNS wildcard type for the provided subdomain name.
-func (r *BaseResolver) GetWildcardType(req *requests.DNSRequest) int {
+func (r *BaseResolver) GetWildcardType(ctx context.Context, req *requests.DNSRequest) int {
 	return WildcardTypeNone
 }
 
@@ -469,8 +469,8 @@ func (r *BaseResolver) checkForTimeouts() {
 
 func (r *BaseResolver) fillXchgChan() {
 	curIdx := 0
-	maxIdx := 7
-	delays := []int{10, 25, 50, 75, 100, 150, 250, 500}
+	maxIdx := 6
+	delays := []int{5, 10, 15, 25, 50, 75, 100}
 loop:
 	for {
 		select {

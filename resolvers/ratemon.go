@@ -118,13 +118,13 @@ func (r *RateMonitoredResolver) ReportError() {
 }
 
 // MatchesWildcard returns true if the request provided resolved to a DNS wildcard.
-func (r *RateMonitoredResolver) MatchesWildcard(req *requests.DNSRequest) bool {
-	return r.resolver.MatchesWildcard(req)
+func (r *RateMonitoredResolver) MatchesWildcard(ctx context.Context, req *requests.DNSRequest) bool {
+	return r.resolver.MatchesWildcard(ctx, req)
 }
 
 // GetWildcardType returns the DNS wildcard type for the provided subdomain name.
-func (r *RateMonitoredResolver) GetWildcardType(req *requests.DNSRequest) int {
-	return r.resolver.GetWildcardType(req)
+func (r *RateMonitoredResolver) GetWildcardType(ctx context.Context, req *requests.DNSRequest) int {
+	return r.resolver.GetWildcardType(ctx, req)
 }
 
 // SubdomainToDomain returns the first subdomain name of the provided

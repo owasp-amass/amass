@@ -5,14 +5,12 @@ package resolvers
 
 import (
 	"context"
-	"errors"
 	"math/rand"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/OWASP/Amass/requests"
-	"github.com/miekg/dns"
+	"github.com/OWASP/Amass/stringset"
 )
 
 // Constants related to DNS labels.
@@ -34,43 +32,89 @@ const (
 )
 
 type wildcard struct {
-	sync.RWMutex
 	WildcardType int
 	Answers      []requests.DNSAnswer
+	beingTested  bool
 }
 
 // MatchesWildcard returns true if the request provided resolved to a DNS wildcard.
-func (rp *ResolverPool) MatchesWildcard(req *requests.DNSRequest) bool {
-	if rp.performWildcardRequest(req) == WildcardTypeNone {
+func (rp *ResolverPool) MatchesWildcard(ctx context.Context, req *requests.DNSRequest) bool {
+	if rp.hasWildcard(ctx, req) == WildcardTypeNone {
 		return false
 	}
 	return true
 }
 
 // GetWildcardType returns the DNS wildcard type for the provided subdomain name.
-func (rp *ResolverPool) GetWildcardType(req *requests.DNSRequest) int {
-	return rp.performWildcardRequest(req)
+func (rp *ResolverPool) GetWildcardType(ctx context.Context, req *requests.DNSRequest) int {
+	return rp.hasWildcard(ctx, req)
 }
 
-func (rp *ResolverPool) performWildcardRequest(req *requests.DNSRequest) int {
+func (rp *ResolverPool) hasWildcard(ctx context.Context, req *requests.DNSRequest) int {
+	req.Name = strings.ToLower(strings.Trim(req.Name, "."))
+	req.Domain = strings.ToLower(strings.Trim(req.Domain, "."))
+
 	base := len(strings.Split(req.Domain, "."))
-	labels := strings.Split(strings.ToLower(req.Name), ".")
+	labels := strings.Split(req.Name, ".")
 	if len(labels) > base {
 		labels = labels[1:]
 	}
 
+	// Check for a DNS wildcard at each label starting with the root domain
 	for i := len(labels) - base; i >= 0; i-- {
-		w := rp.getWildcard(strings.Join(labels[i:], "."))
+		w := rp.fetchWildcard(ctx, strings.Join(labels[i:], "."))
 
 		if w.WildcardType == WildcardTypeDynamic {
 			return WildcardTypeDynamic
 		} else if w.WildcardType == WildcardTypeStatic {
-			if len(req.Records) == 0 || compareAnswers(req.Records, w.Answers) {
-				return WildcardTypeStatic
+			if len(req.Records) == 0 {
+				return w.WildcardType
+			}
+
+			set := stringset.New()
+
+			intersectRecordData(set, req.Records)
+			intersectRecordData(set, w.Answers)
+			if set.Len() > 0 {
+				return w.WildcardType
 			}
 		}
 	}
+
 	return rp.checkIPsAcrossLevels(req)
+}
+
+func (rp *ResolverPool) fetchWildcard(ctx context.Context, sub string) *wildcard {
+	curIdx := 0
+	maxIdx := 7
+	delays := []int{10, 25, 50, 75, 100, 150, 250, 500}
+
+	// Check if the wildcard information has been cached
+	if w := rp.getWildcard(sub); w == nil {
+		rp.wildcardTest(ctx, sub)
+	} else if !w.beingTested {
+		return w
+	}
+
+	// Wait for the wildcard detection process to complete
+	for {
+		select {
+		case <-rp.Done:
+			return nil
+		default:
+			// Check if the wildcard information has been cached
+			if w := rp.getWildcard(sub); w != nil && !w.beingTested {
+				return w
+			}
+
+			time.Sleep(time.Duration(delays[curIdx]) * time.Millisecond)
+			if curIdx < maxIdx {
+				curIdx++
+			}
+		}
+	}
+
+	return nil
 }
 
 func (rp *ResolverPool) checkIPsAcrossLevels(req *requests.DNSRequest) int {
@@ -84,75 +128,22 @@ func (rp *ResolverPool) checkIPsAcrossLevels(req *requests.DNSRequest) int {
 		return WildcardTypeNone
 	}
 
-	w1 := rp.getWildcard(strings.Join(labels[1:], "."))
-	if w1.Answers != nil && compareAnswers(req.Records, w1.Answers) {
-		w2 := rp.getWildcard(strings.Join(labels[2:], "."))
-
-		if w2.Answers != nil && compareAnswers(req.Records, w2.Answers) {
-			w3 := rp.getWildcard(strings.Join(labels[3:], "."))
-
-			if w3.Answers != nil && compareAnswers(req.Records, w3.Answers) {
-				return WildcardTypeStatic
-			}
-		}
-	}
-	return WildcardTypeNone
-}
-
-func (rp *ResolverPool) getWildcard(sub string) *wildcard {
-	var test bool
-
-	rp.wildcardLock.Lock()
-	entry, found := rp.wildcards[sub]
-	if !found {
-		entry = &wildcard{
-			WildcardType: WildcardTypeNone,
-			Answers:      nil,
-		}
-		rp.wildcards[sub] = entry
-		test = true
-		entry.Lock()
-	}
-	rp.wildcardLock.Unlock()
-	// Check if the subdomain name is still to be tested for a wildcard
-	if !test {
-		entry.RLock()
-		entry.RUnlock()
-		return entry
-	}
-	// Query multiple times with unlikely names against this subdomain
-	set := make([][]requests.DNSAnswer, numOfWildcardTests)
-	for i := 0; i < numOfWildcardTests; i++ {
-		a, err := rp.wildcardTest(sub)
-		if err != nil {
-			// A test error gives it the most severe wildcard type
-			entry.WildcardType = WildcardTypeDynamic
-			entry.Unlock()
-			return entry
-		} else if a == nil {
-			// There is no DNS wildcard
-			entry.Unlock()
-			return entry
-		}
-		set[i] = a
-		time.Sleep(time.Second)
-	}
-	// Check if we have a static or dynamic DNS wildcard
-	match := true
-	for i := 0; i < numOfWildcardTests-1; i++ {
-		if !compareAnswers(set[i], set[i+1]) {
-			match = false
+	l := len(labels) - base
+	records := stringset.New()
+	for i := 1; i <= l; i++ {
+		w := rp.getWildcard(strings.Join(labels[i:], "."))
+		if w.Answers == nil || len(w.Answers) == 0 {
 			break
 		}
+
+		intersectRecordData(records, w.Answers)
 	}
-	if match {
-		entry.WildcardType = WildcardTypeStatic
-		entry.Answers = set[0]
-	} else {
-		entry.WildcardType = WildcardTypeDynamic
+
+	if records.Len() > 0 {
+		return WildcardTypeStatic
 	}
-	entry.Unlock()
-	return entry
+
+	return WildcardTypeNone
 }
 
 var wildcardQueryTypes = []string{
@@ -161,40 +152,75 @@ var wildcardQueryTypes = []string{
 	"AAAA",
 }
 
-func (rp *ResolverPool) wildcardTest(sub string) ([]requests.DNSAnswer, error) {
-	name := UnlikelyName(sub)
-	if name == "" {
-		return nil, errors.New("Failed to generate the unlikely name for DNS wildcard testing")
+func (rp *ResolverPool) wildcardTest(ctx context.Context, sub string) {
+	// Create the wildcard entry and mark it as being tested
+	wasSet := rp.testAndSetWildcard(sub, &wildcard{
+		WildcardType: WildcardTypeNone,
+		Answers:      []requests.DNSAnswer{},
+		beingTested:  true,
+	})
+	if !wasSet {
+		return
 	}
 
+	var retRecords bool
+	set := stringset.New()
 	var answers []requests.DNSAnswer
-	for _, t := range wildcardQueryTypes {
-		if a, _, err := rp.Resolve(context.TODO(), name, t, PriorityCritical); err == nil {
-			if a != nil && len(a) > 0 {
-				answers = append(answers, a...)
-			}
-		} else if (err.(*ResolveError)).Rcode == 100 ||
-			(err.(*ResolveError)).Rcode == dns.RcodeRefused ||
-			(err.(*ResolveError)).Rcode == dns.RcodeServerFailure ||
-			(err.(*ResolveError)).Rcode == dns.RcodeNotImplemented {
-			return nil, errors.New("Failed to get a DNS server response during wildcard testing")
+	// Query multiple times with unlikely names against this subdomain
+	for i := 0; i < numOfWildcardTests; i++ {
+		// Generate the unlikely label / name
+		name := UnlikelyName(sub)
+		for name == "" {
+			name = UnlikelyName(sub)
 		}
-	}
-	if len(answers) == 0 {
-		return nil, nil
-	}
-	return answers, nil
-}
 
-func compareAnswers(ans1, ans2 []requests.DNSAnswer) bool {
-	for _, a1 := range ans1 {
-		for _, a2 := range ans2 {
-			if strings.EqualFold(a1.Data, a2.Data) {
-				return true
+		var ans []requests.DNSAnswer
+		for _, t := range wildcardQueryTypes {
+			if a, _, err := rp.Resolve(ctx, name, t, PriorityCritical); err == nil {
+				if a != nil && len(a) > 0 {
+					retRecords = true
+					ans = append(ans, a...)
+				}
+			}
+		}
+
+		intersectRecordData(set, ans)
+		answers = append(answers, ans...)
+		time.Sleep(time.Second)
+	}
+
+	var final []requests.DNSAnswer
+	// Create the slice of answers common across all the unlikely name queries
+loop:
+	for set.Len() > 0 {
+		data := strings.Trim(set.Slice()[0], ".")
+
+		for _, a := range answers {
+			if set.Has(data) {
+				set.Remove(data)
+				final = append(final, a)
+				continue loop
 			}
 		}
 	}
-	return false
+
+	// Determine whether the subdomain has a DNS wildcard, and if so, which type is it?
+	wildcardType := WildcardTypeNone
+	if retRecords {
+		wildcardType = WildcardTypeStatic
+
+		if len(final) == 0 {
+			wildcardType = WildcardTypeDynamic
+		}
+		rp.Log.Printf("DNS wildcard detected: %s", "*."+sub)
+	}
+
+	// Enter the final wildcard information
+	rp.setWildcard(sub, &wildcard{
+		WildcardType: wildcardType,
+		Answers:      final,
+		beingTested:  false,
+	})
 }
 
 // UnlikelyName takes a subdomain name and returns an unlikely DNS name within that subdomain.
@@ -226,4 +252,42 @@ func UnlikelyName(sub string) string {
 		return newlabel
 	}
 	return strings.Trim(newlabel, "-") + "." + sub
+}
+
+func (rp *ResolverPool) getWildcard(sub string) *wildcard {
+	rp.wildcardLock.Lock()
+	defer rp.wildcardLock.Unlock()
+
+	if w, found := rp.wildcards[sub]; found {
+		return w
+	}
+	return nil
+}
+
+func (rp *ResolverPool) setWildcard(sub string, w *wildcard) {
+	rp.wildcardLock.Lock()
+	defer rp.wildcardLock.Unlock()
+
+	rp.wildcards[sub] = w
+}
+
+func (rp *ResolverPool) testAndSetWildcard(sub string, w *wildcard) bool {
+	rp.wildcardLock.Lock()
+	defer rp.wildcardLock.Unlock()
+
+	if _, found := rp.wildcards[sub]; !found {
+		rp.wildcards[sub] = w
+		return true
+	}
+	return false
+}
+
+func intersectRecordData(set stringset.Set, ans []requests.DNSAnswer) {
+	records := stringset.New()
+
+	for _, a := range ans {
+		records.Insert(strings.Trim(a.Data, "."))
+	}
+
+	set.Intersect(records)
 }

@@ -66,7 +66,7 @@ func (ds *DNSService) processDNSRequest(ctx context.Context, req *requests.DNSRe
 	bus.Publish(requests.SetActiveTopic, ds.String())
 
 	if cfg.Blacklisted(req.Name) || (!requests.TrustedTag(req.Tag) &&
-		ds.System().Pool().GetWildcardType(req) == resolvers.WildcardTypeDynamic) {
+		ds.System().Pool().GetWildcardType(ctx, req) == resolvers.WildcardTypeDynamic) {
 		return
 	}
 
@@ -112,7 +112,7 @@ func (ds *DNSService) resolvedName(ctx context.Context, req *requests.DNSRequest
 		return
 	}
 
-	if !requests.TrustedTag(req.Tag) && ds.System().Pool().MatchesWildcard(req) {
+	if !requests.TrustedTag(req.Tag) && ds.System().Pool().MatchesWildcard(ctx, req) {
 		return
 	}
 
