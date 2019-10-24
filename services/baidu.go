@@ -84,7 +84,7 @@ func (b *Baidu) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 				bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
 					Name:   cleanName(sd),
 					Domain: req.Domain,
-					Tag:    b.SourceType,
+					Tag:    b.Type(),
 					Source: b.String(),
 				})
 			}
@@ -116,7 +116,7 @@ func (b *Baidu) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 			bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
 				Name:   element.Domain,
 				Domain: d,
-				Tag:    b.SourceType,
+				Tag:    b.Type(),
 				Source: b.String(),
 			})
 		}
