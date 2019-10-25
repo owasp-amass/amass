@@ -8,10 +8,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/OWASP/Amass/config"
-	"github.com/OWASP/Amass/eventbus"
-	"github.com/OWASP/Amass/requests"
-	"github.com/OWASP/Amass/resolvers"
+	"github.com/OWASP/Amass/v3/config"
+	"github.com/OWASP/Amass/v3/eventbus"
+	"github.com/OWASP/Amass/v3/requests"
+	"github.com/OWASP/Amass/v3/resolvers"
 )
 
 // InitialQueryTypes include the DNS record types that are

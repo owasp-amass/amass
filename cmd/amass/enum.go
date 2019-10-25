@@ -21,11 +21,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/OWASP/Amass/config"
-	"github.com/OWASP/Amass/enum"
-	"github.com/OWASP/Amass/format"
-	"github.com/OWASP/Amass/services"
-	"github.com/OWASP/Amass/stringset"
+	"github.com/OWASP/Amass/v3/config"
+	"github.com/OWASP/Amass/v3/enum"
+	"github.com/OWASP/Amass/v3/format"
+	"github.com/OWASP/Amass/v3/services"
+	"github.com/OWASP/Amass/v3/stringset"
 	"github.com/fatih/color"
 )
 

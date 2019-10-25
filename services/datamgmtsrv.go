@@ -10,13 +10,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/OWASP/Amass/config"
-	"github.com/OWASP/Amass/eventbus"
-	"github.com/OWASP/Amass/graph"
-	"github.com/OWASP/Amass/net"
-	amassdns "github.com/OWASP/Amass/net/dns"
-	"github.com/OWASP/Amass/requests"
-	"github.com/OWASP/Amass/resolvers"
+	"github.com/OWASP/Amass/v3/config"
+	"github.com/OWASP/Amass/v3/eventbus"
+	"github.com/OWASP/Amass/v3/graph"
+	"github.com/OWASP/Amass/v3/net"
+	amassdns "github.com/OWASP/Amass/v3/net/dns"
+	"github.com/OWASP/Amass/v3/requests"
+	"github.com/OWASP/Amass/v3/resolvers"
 	"github.com/miekg/dns"
 )
 

@@ -14,10 +14,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/OWASP/Amass/config"
-	"github.com/OWASP/Amass/requests"
-	"github.com/OWASP/Amass/stringset"
-	"github.com/OWASP/Amass/viz"
+	"github.com/OWASP/Amass/v3/config"
+	"github.com/OWASP/Amass/v3/requests"
+	"github.com/OWASP/Amass/v3/stringset"
+	"github.com/OWASP/Amass/v3/viz"
 	"github.com/cayleygraph/cayley"
 	"github.com/cayleygraph/cayley/graph"
 	_ "github.com/cayleygraph/cayley/graph/kv/bolt" // Used by the cayley package

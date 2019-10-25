@@ -9,11 +9,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/OWASP/Amass/eventbus"
-	"github.com/OWASP/Amass/net/dns"
-	"github.com/OWASP/Amass/net/http"
-	"github.com/OWASP/Amass/requests"
-	"github.com/OWASP/Amass/stringset"
+	"github.com/OWASP/Amass/v3/eventbus"
+	"github.com/OWASP/Amass/v3/net/dns"
+	"github.com/OWASP/Amass/v3/net/http"
+	"github.com/OWASP/Amass/v3/requests"
+	"github.com/OWASP/Amass/v3/stringset"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq" // Need the postgres driver
 )

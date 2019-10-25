@@ -9,7 +9,7 @@ import (
 	"net"
 	"strings"
 
-	amassnet "github.com/OWASP/Amass/net"
+	amassnet "github.com/OWASP/Amass/v3/net"
 )
 
 // WriteMaltegoData converts the Amass graph nodes and edges into a

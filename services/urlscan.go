@@ -10,11 +10,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/OWASP/Amass/config"
-	"github.com/OWASP/Amass/eventbus"
-	"github.com/OWASP/Amass/net/http"
-	"github.com/OWASP/Amass/requests"
-	"github.com/OWASP/Amass/stringset"
+	"github.com/OWASP/Amass/v3/config"
+	"github.com/OWASP/Amass/v3/eventbus"
+	"github.com/OWASP/Amass/v3/net/http"
+	"github.com/OWASP/Amass/v3/requests"
+	"github.com/OWASP/Amass/v3/stringset"
 )
 
 // URLScan is the Service that handles access to the URLScan data source.

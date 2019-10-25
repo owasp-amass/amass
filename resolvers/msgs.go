@@ -8,8 +8,8 @@ import (
 	"net"
 	"strings"
 
-	amassdns "github.com/OWASP/Amass/net/dns"
-	"github.com/OWASP/Amass/requests"
+	amassdns "github.com/OWASP/Amass/v3/net/dns"
+	"github.com/OWASP/Amass/v3/requests"
 	"github.com/miekg/dns"
 )
 

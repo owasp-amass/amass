@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/OWASP/Amass/net"
-	"github.com/OWASP/Amass/requests"
+	"github.com/OWASP/Amass/v3/net"
+	"github.com/OWASP/Amass/v3/requests"
 	"github.com/fatih/color"
 )
 

@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/OWASP/Amass/config"
-	"github.com/OWASP/Amass/eventbus"
-	"github.com/OWASP/Amass/requests"
+	"github.com/OWASP/Amass/v3/config"
+	"github.com/OWASP/Amass/v3/eventbus"
+	"github.com/OWASP/Amass/v3/requests"
 )
 
 // ArchiveToday is the Service that handles access to the ArchiveToday data source.

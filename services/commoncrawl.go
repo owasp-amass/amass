@@ -12,11 +12,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/OWASP/Amass/config"
-	"github.com/OWASP/Amass/eventbus"
-	"github.com/OWASP/Amass/net/http"
-	"github.com/OWASP/Amass/requests"
-	sf "github.com/OWASP/Amass/stringfilter"
+	"github.com/OWASP/Amass/v3/config"
+	"github.com/OWASP/Amass/v3/eventbus"
+	"github.com/OWASP/Amass/v3/net/http"
+	"github.com/OWASP/Amass/v3/requests"
+	sf "github.com/OWASP/Amass/v3/stringfilter"
 )
 
 const commonCrawlIndexListURL = "https://index.commoncrawl.org/collinfo.json"

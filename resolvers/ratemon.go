@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/OWASP/Amass/requests"
+	"github.com/OWASP/Amass/v3/requests"
 )
 
 const (

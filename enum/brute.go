@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/OWASP/Amass/graph"
-	"github.com/OWASP/Amass/requests"
-	"github.com/OWASP/Amass/stringset"
+	"github.com/OWASP/Amass/v3/graph"
+	"github.com/OWASP/Amass/v3/requests"
+	"github.com/OWASP/Amass/v3/stringset"
 )
 
 var topNames = []string{

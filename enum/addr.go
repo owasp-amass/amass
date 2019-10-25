@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	amassnet "github.com/OWASP/Amass/net"
-	"github.com/OWASP/Amass/requests"
-	"github.com/OWASP/Amass/stringset"
+	amassnet "github.com/OWASP/Amass/v3/net"
+	"github.com/OWASP/Amass/v3/requests"
+	"github.com/OWASP/Amass/v3/stringset"
 	"github.com/miekg/dns"
 )
 

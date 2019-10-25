@@ -9,7 +9,7 @@ import (
 	"sync"
 	"unicode"
 
-	"github.com/OWASP/Amass/stringset"
+	"github.com/OWASP/Amass/v3/stringset"
 )
 
 const (

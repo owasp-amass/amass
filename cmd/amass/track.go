@@ -11,11 +11,11 @@ import (
 	"os"
 	"time"
 
-	"github.com/OWASP/Amass/config"
-	"github.com/OWASP/Amass/graph"
-	"github.com/OWASP/Amass/requests"
-	sf "github.com/OWASP/Amass/stringfilter"
-	"github.com/OWASP/Amass/stringset"
+	"github.com/OWASP/Amass/v3/config"
+	"github.com/OWASP/Amass/v3/graph"
+	"github.com/OWASP/Amass/v3/requests"
+	sf "github.com/OWASP/Amass/v3/stringfilter"
+	"github.com/OWASP/Amass/v3/stringset"
 	"github.com/fatih/color"
 )
 

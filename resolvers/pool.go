@@ -15,10 +15,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/OWASP/Amass/limits"
-	amassnet "github.com/OWASP/Amass/net"
-	"github.com/OWASP/Amass/requests"
-	"github.com/OWASP/Amass/stringset"
+	"github.com/OWASP/Amass/v3/limits"
+	amassnet "github.com/OWASP/Amass/v3/net"
+	"github.com/OWASP/Amass/v3/requests"
+	"github.com/OWASP/Amass/v3/stringset"
 	"github.com/miekg/dns"
 )
 

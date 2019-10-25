@@ -12,11 +12,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/OWASP/Amass/eventbus"
-	amassnet "github.com/OWASP/Amass/net"
-	"github.com/OWASP/Amass/requests"
-	"github.com/OWASP/Amass/resolvers"
-	"github.com/OWASP/Amass/stringset"
+	"github.com/OWASP/Amass/v3/eventbus"
+	amassnet "github.com/OWASP/Amass/v3/net"
+	"github.com/OWASP/Amass/v3/requests"
+	"github.com/OWASP/Amass/v3/resolvers"
+	"github.com/OWASP/Amass/v3/stringset"
 )
 
 const (

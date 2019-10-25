@@ -10,9 +10,9 @@ import (
 	"os"
 	"path"
 
-	"github.com/OWASP/Amass/config"
-	"github.com/OWASP/Amass/format"
-	"github.com/OWASP/Amass/services"
+	"github.com/OWASP/Amass/v3/config"
+	"github.com/OWASP/Amass/v3/format"
+	"github.com/OWASP/Amass/v3/services"
 	"github.com/fatih/color"
 )
 

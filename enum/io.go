@@ -8,9 +8,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/OWASP/Amass/graph"
-	"github.com/OWASP/Amass/net/http"
-	"github.com/OWASP/Amass/requests"
+	"github.com/OWASP/Amass/v3/graph"
+	"github.com/OWASP/Amass/v3/net/http"
+	"github.com/OWASP/Amass/v3/requests"
 )
 
 func (e *Enumeration) submitKnownNames(wg *sync.WaitGroup) {

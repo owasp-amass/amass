@@ -8,8 +8,8 @@ import (
 	"io"
 	"time"
 
-	"github.com/OWASP/Amass/requests"
-	"github.com/OWASP/Amass/viz"
+	"github.com/OWASP/Amass/v3/requests"
+	"github.com/OWASP/Amass/v3/viz"
 )
 
 // DataOptsHandler is the object that implements the DataHandler interface for JSON files.

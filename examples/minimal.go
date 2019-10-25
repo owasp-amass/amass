@@ -5,9 +5,9 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/OWASP/Amass/config"
-	"github.com/OWASP/Amass/enum"
-	"github.com/OWASP/Amass/services"
+	"github.com/OWASP/Amass/v3/config"
+	"github.com/OWASP/Amass/v3/enum"
+	"github.com/OWASP/Amass/v3/services"
 )
 
 func main() {

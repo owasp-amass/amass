@@ -14,15 +14,15 @@ import (
 	"sync"
 	"time"
 
-	"github.com/OWASP/Amass/config"
-	eb "github.com/OWASP/Amass/eventbus"
-	amassnet "github.com/OWASP/Amass/net"
-	"github.com/OWASP/Amass/net/http"
-	"github.com/OWASP/Amass/requests"
-	"github.com/OWASP/Amass/resolvers"
-	"github.com/OWASP/Amass/services"
-	sf "github.com/OWASP/Amass/stringfilter"
-	"github.com/OWASP/Amass/stringset"
+	"github.com/OWASP/Amass/v3/config"
+	eb "github.com/OWASP/Amass/v3/eventbus"
+	amassnet "github.com/OWASP/Amass/v3/net"
+	"github.com/OWASP/Amass/v3/net/http"
+	"github.com/OWASP/Amass/v3/requests"
+	"github.com/OWASP/Amass/v3/resolvers"
+	"github.com/OWASP/Amass/v3/services"
+	sf "github.com/OWASP/Amass/v3/stringfilter"
+	"github.com/OWASP/Amass/v3/stringset"
 )
 
 // Collection is the object type used to execute a open source information gathering with Amass.
