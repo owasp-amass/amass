@@ -9,7 +9,7 @@ require (
 	github.com/cayleygraph/cayley v0.7.7
 	github.com/cayleygraph/quad v1.1.0
 	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
-	github.com/chromedp/cdproto v0.0.0-20191013005325-ffea6b31d538 // indirect
+	github.com/chromedp/cdproto v0.0.0-20191024222910-0ea8f58c617c // indirect
 	github.com/chromedp/chromedp v0.5.1 // indirect
 	github.com/cznic/mathutil v0.0.0-20181122101859-297441e03548 // indirect
 	github.com/dghubble/go-twitter v0.0.0-20190719072343-39e5462e111f
@@ -19,6 +19,7 @@ require (
 	github.com/geziyor/geziyor v0.0.0-20190913113429-9b8a3837bd4a
 	github.com/go-ini/ini v1.49.0
 	github.com/gobuffalo/packr v1.30.1
+	github.com/gobuffalo/packr/v2 v2.7.1
 	github.com/gogo/protobuf v1.3.1 // indirect
 	github.com/google/go-cmp v0.3.1 // indirect
 	github.com/google/uuid v1.1.1
@@ -40,8 +41,8 @@ require (
 	golang.org/x/crypto v0.0.0-20191011191535-87dc89f01550 // indirect
 	golang.org/x/net v0.0.0-20191021144547-ec77196f6094 // indirect
 	golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45
-	golang.org/x/sys v0.0.0-20191024172528-b4ff53e7a1cb // indirect
-	golang.org/x/tools v0.0.0-20191024172055-b24f3822ec91 // indirect
+	golang.org/x/sys v0.0.0-20191025090151-53bf42e6b339 // indirect
+	golang.org/x/tools v0.0.0-20191025023517-2077df36852e // indirect
 	google.golang.org/appengine v1.6.5 // indirect
 	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 // indirect
 	gopkg.in/ini.v1 v1.49.0 // indirect
