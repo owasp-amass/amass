@@ -21,7 +21,7 @@ import (
 	"github.com/OWASP/Amass/v3/stringset"
 	"github.com/OWASP/Amass/v3/wordlist"
 	"github.com/go-ini/ini"
-	"github.com/gobuffalo/packr"
+	"github.com/gobuffalo/packr/v2"
 	"github.com/google/uuid"
 )
 
@@ -32,7 +32,7 @@ const (
 
 var (
 	// BoxOfDefaultFiles is the ./resources project directory embedded into the binary.
-	BoxOfDefaultFiles = packr.NewBox("../resources")
+	BoxOfDefaultFiles = packr.New("Amass Box", "../resources")
 )
 
 var defaultPublicResolvers = []string{
