@@ -320,14 +320,16 @@ loop:
 		var votes []*resolveVote
 
 		// Obtain the correct number of votes from the resolvers
-		for i := 0; len(votes) < goal; i++ {
+		for len(votes) < goal {
 			r := rp.NextResolver()
 			if r == nil {
-				break loop
+				// Give the system a chance to breathe before trying again
+				time.Sleep(time.Duration(randomInt(100, 500)) * time.Millisecond)
+				continue loop
 			}
 
 			ans, again, err := r.Resolve(ctx, name, qtype, priority)
-			if err != nil && (again || (err.(*ResolveError)).Rcode == NotAvailableRcode) {
+			if err != nil && (err.(*ResolveError)).Rcode == NotAvailableRcode {
 				continue
 			}
 
@@ -348,7 +350,9 @@ loop:
 		// Should this query be attempted again?
 		if !again {
 			if len(ans) == 0 {
-				break loop
+				return []requests.DNSAnswer{}, false, &ResolveError{
+					Err: fmt.Sprintf("Resolver: %s type %s returned 0 results", name, qtype),
+				}
 			}
 			return ans, again, err
 		}
