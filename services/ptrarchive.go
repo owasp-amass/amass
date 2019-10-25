@@ -7,10 +7,14 @@ import (
 	"context"
 	"fmt"
 	"time"
+	outhttp "net/http"
+	"net"
+	"net/url"
+	"strings"
+	"io/ioutil"
 
 	"github.com/OWASP/Amass/config"
 	"github.com/OWASP/Amass/eventbus"
-	"github.com/OWASP/Amass/net/http"
 	"github.com/OWASP/Amass/requests"
 )
 
@@ -58,14 +62,45 @@ func (p *PTRArchive) OnDNSRequest(ctx context.Context, req *requests.DNSRequest)
 	p.CheckRateLimit()
 	bus.Publish(requests.SetActiveTopic, p.String())
 
-	url := p.getURL(req.Domain)
-	page, err := http.RequestWebPage(url, nil, nil, "", "")
-	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", p.String(), url, err))
-		return
+	v := url.Values{}
+	v.Set("name", "Ava")
+
+	dial := net.Dialer{}
+	client := &outhttp.Client{
+		Transport: &outhttp.Transport{
+			DialContext:         dial.DialContext,
+			TLSHandshakeTimeout: 10 * time.Second,
+		},
 	}
 
-	for _, sd := range re.FindAllString(page, -1) {
+	url := p.getURL(req.Domain)
+
+	request, err := outhttp.NewRequest("GET", url, strings.NewReader(v.Encode()))
+
+	cookie := &outhttp.Cookie{
+		Name:   "test",
+		Domain: "ptrarchive.com",
+		Value:  "123432",
+	}
+	request.AddCookie(cookie)
+
+	if err != nil {
+		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: Failed to setup the POST request: %v", p.String(), err))
+	}
+
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	request.Header.Set("Referer", "https://ptrarchive.com")
+
+	resp, err := client.Do(request)
+	if err != nil {
+		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: The POST request failed: %v", p.String(), err))
+	}
+
+	in, err := ioutil.ReadAll(resp.Body)
+	resp.Body.Close()
+	
+
+	for _, sd := range re.FindAllString(string(in), -1) {
 		name := cleanName(sd)
 		if name == "automated_programs_unauthorized."+req.Domain {
 			continue
@@ -81,7 +116,7 @@ func (p *PTRArchive) OnDNSRequest(ctx context.Context, req *requests.DNSRequest)
 }
 
 func (p *PTRArchive) getURL(domain string) string {
-	format := "http://ptrarchive.com/tools/search3.htm?label=%s&date=ALL"
+	format := "http://ptrarchive.com/tools/search4.htm?label=%s&date=ALL"
 
 	return fmt.Sprintf(format, domain)
 }
