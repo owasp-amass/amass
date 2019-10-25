@@ -50,6 +50,7 @@ func GetAllSources(sys System) []Service {
 		NewDogpile(sys),
 		NewEntrust(sys),
 		NewExalead(sys),
+		NewGitHub(sys),
 		NewGoogle(sys),
 		NewGoogleCT(sys),
 		NewHackerOne(sys),

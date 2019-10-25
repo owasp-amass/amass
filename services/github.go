@@ -17,7 +17,6 @@ import (
 	"github.com/OWASP/Amass/v3/net/http"
 	"github.com/OWASP/Amass/v3/requests"
 	sf "github.com/OWASP/Amass/v3/stringfilter"
-	"github.com/OWASP/Amass/v3/stringset"
 )
 
 // GitHub is the Service that handles access to the GitHub data source.
@@ -50,7 +49,7 @@ func (g *GitHub) OnStart() error {
 		g.System().Config().Log.Printf("%s: API key data was not provided", g.String())
 	}
 
-	g.SetRateLimit(6 * time.Second)
+	g.SetRateLimit(7 * time.Second)
 	return nil
 }
 
@@ -68,13 +67,37 @@ func (g *GitHub) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 		return
 	}
 
+	nameFilter := sf.NewStringFilter()
+	// This function publishes new subdomain names discovered at the provided URL
+	fetchNames := func(u string) {
+		bus.Publish(requests.SetActiveTopic, g.String())
+
+		page, err := http.RequestWebPage(u, nil, nil, "", "")
+		if err != nil {
+			bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", g.String(), u, err))
+			return
+		}
+
+		// Extract the subdomain names from the page
+		for _, sd := range re.FindAllString(page, -1) {
+			if name := cleanName(sd); name != "" && !nameFilter.Duplicate(name) {
+				bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+					Name:   name,
+					Domain: req.Domain,
+					Tag:    g.Type(),
+					Source: g.String(),
+				})
+			}
+		}
+	}
+
 	headers := map[string]string{
 		"Authorization": "token " + g.API.Key,
 		"Content-Type":  "application/json",
 	}
+	bus.Publish(requests.SetActiveTopic, g.String())
 
-	var urls []string
-	filter := sf.NewStringFilter()
+	urlFilter := sf.NewStringFilter()
 	// Try no more than ten times for search result pages
 loop:
 	for i := 1; i <= 10; i++ {
@@ -82,12 +105,13 @@ loop:
 		bus.Publish(requests.SetActiveTopic, g.String())
 
 		u := g.restDNSURL(req.Domain, i)
+		// Perform the search using the GitHub API
 		page, err := http.RequestWebPage(u, nil, headers, "", "")
 		if err != nil {
 			bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", g.String(), u, err))
 			break loop
 		}
-		// Extract the items from the REST API results
+		// Extract items from the REST API search results
 		var result struct {
 			Total int `json:"total_count"`
 			Items []struct {
@@ -99,35 +123,12 @@ loop:
 			break loop
 		}
 
+		// Unique URLs discovered will cause the URLs to be searched for subdomain names
 		for _, item := range result.Items {
-			if t := g.modifyURL(item.URL); t != "" && !filter.Duplicate(t) {
-				urls = append(urls, t)
+			if t := g.modifyURL(item.URL); t != "" && !urlFilter.Duplicate(t) {
+				go fetchNames(t)
 			}
 		}
-	}
-
-	findings := stringset.New()
-	// Go through the URLs where the search discovered matches
-	for _, matchURL := range urls {
-		page, err := http.RequestWebPage(matchURL, nil, nil, "", "")
-		if err != nil {
-			bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", g.String(), matchURL, err))
-			continue
-		}
-
-		// Extract the subdomain names from the page
-		for _, sd := range re.FindAllString(page, -1) {
-			findings.Insert(cleanName(sd))
-		}
-	}
-
-	for name := range findings {
-		bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
-			Name:   name,
-			Domain: req.Domain,
-			Tag:    g.Type(),
-			Source: g.String(),
-		})
 	}
 }
 
@@ -139,7 +140,7 @@ func (g *GitHub) restDNSURL(domain string, page int) string {
 		"s":        {"indexed"},
 		"type":     {"Code"},
 		"o":        {"desc"},
-		"q":        {domain},
+		"q":        {"\"" + domain + "\""},
 		"page":     {pn},
 		"per_page": {"100"},
 	}.Encode()
