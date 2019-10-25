@@ -14,8 +14,8 @@ import (
 	"strconv"
 	"strings"
 
-	amasshttp "github.com/OWASP/Amass/net/http"
-	"github.com/OWASP/Amass/stringset"
+	amasshttp "github.com/OWASP/Amass/v3/net/http"
+	"github.com/OWASP/Amass/v3/stringset"
 )
 
 const (

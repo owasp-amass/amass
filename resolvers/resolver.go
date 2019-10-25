@@ -13,10 +13,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/OWASP/Amass/eventbus"
-	amassnet "github.com/OWASP/Amass/net"
-	"github.com/OWASP/Amass/queue"
-	"github.com/OWASP/Amass/requests"
+	"github.com/OWASP/Amass/v3/eventbus"
+	amassnet "github.com/OWASP/Amass/v3/net"
+	"github.com/OWASP/Amass/v3/queue"
+	"github.com/OWASP/Amass/v3/requests"
 	"github.com/miekg/dns"
 )
 

@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/OWASP/Amass/queue"
-	"github.com/OWASP/Amass/requests"
+	"github.com/OWASP/Amass/v3/queue"
+	"github.com/OWASP/Amass/v3/requests"
 )
 
 // Possible values for the AmassService.APIKeyRequired field.

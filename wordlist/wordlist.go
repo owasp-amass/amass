@@ -9,7 +9,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/OWASP/Amass/net/http"
+	"github.com/OWASP/Amass/v3/net/http"
 )
 
 const (

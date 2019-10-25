@@ -5,8 +5,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/OWASP/Amass/queue"
-	"github.com/OWASP/Amass/semaphore"
+	"github.com/OWASP/Amass/v3/queue"
+	"github.com/OWASP/Amass/v3/semaphore"
 )
 
 type pubReq struct {

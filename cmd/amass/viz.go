@@ -14,10 +14,10 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/OWASP/Amass/config"
-	"github.com/OWASP/Amass/graph"
-	"github.com/OWASP/Amass/stringset"
-	"github.com/OWASP/Amass/viz"
+	"github.com/OWASP/Amass/v3/config"
+	"github.com/OWASP/Amass/v3/graph"
+	"github.com/OWASP/Amass/v3/stringset"
+	"github.com/OWASP/Amass/v3/viz"
 	"github.com/fatih/color"
 )
 

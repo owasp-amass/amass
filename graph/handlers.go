@@ -9,8 +9,8 @@ import (
 	"io"
 	"time"
 
-	"github.com/OWASP/Amass/requests"
-	"github.com/OWASP/Amass/viz"
+	"github.com/OWASP/Amass/v3/requests"
+	"github.com/OWASP/Amass/v3/viz"
 )
 
 // These strings represent the various Amass data operations.

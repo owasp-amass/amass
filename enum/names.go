@@ -8,11 +8,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/OWASP/Amass/graph"
-	amassnet "github.com/OWASP/Amass/net"
-	amassdns "github.com/OWASP/Amass/net/dns"
-	"github.com/OWASP/Amass/requests"
-	"github.com/OWASP/Amass/resolvers"
+	"github.com/OWASP/Amass/v3/graph"
+	amassnet "github.com/OWASP/Amass/v3/net"
+	amassdns "github.com/OWASP/Amass/v3/net/dns"
+	"github.com/OWASP/Amass/v3/requests"
+	"github.com/OWASP/Amass/v3/resolvers"
 	"github.com/miekg/dns"
 )
 

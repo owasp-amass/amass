@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/OWASP/Amass/config"
-	"github.com/OWASP/Amass/eventbus"
-	"github.com/OWASP/Amass/net/http"
-	"github.com/OWASP/Amass/requests"
+	"github.com/OWASP/Amass/v3/config"
+	"github.com/OWASP/Amass/v3/eventbus"
+	"github.com/OWASP/Amass/v3/net/http"
+	"github.com/OWASP/Amass/v3/requests"
 	"github.com/dghubble/go-twitter/twitter"
 	"golang.org/x/oauth2"
 )
