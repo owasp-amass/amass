@@ -63,7 +63,6 @@ func (p *PTRArchive) OnDNSRequest(ctx context.Context, req *requests.DNSRequest)
 	bus.Publish(requests.SetActiveTopic, p.String())
 
 	v := url.Values{}
-	v.Set("name", "Ava")
 
 	dial := net.Dialer{}
 	client := &outhttp.Client{
