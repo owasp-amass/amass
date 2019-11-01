@@ -21,7 +21,6 @@ import (
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/resolvers"
 	"github.com/OWASP/Amass/v3/services"
-	sf "github.com/OWASP/Amass/v3/stringfilter"
 	"github.com/OWASP/Amass/v3/stringset"
 )
 
@@ -46,7 +45,9 @@ type Collection struct {
 	doneAlreadyClosed bool
 
 	wg     sync.WaitGroup
-	filter *sf.StringFilter
+
+	filterLock sync.Mutex
+	filter     stringset.Set
 
 	lastLock sync.Mutex
 	last     time.Time
@@ -118,7 +119,7 @@ func (c *Collection) HostedDomains() error {
 		})
 	}
 
-	c.filter = sf.NewStringFilter()
+	c.filter = stringset.New()
 	// Start the address ranges
 	for _, addr := range c.Config.Addresses {
 		c.Config.SemMaxDNSQueries.Acquire(1)
@@ -184,7 +185,9 @@ func (c *Collection) investigateAddr(addr string) {
 	addrinfo := requests.AddressInfo{Address: ip}
 	if _, answer, err := c.Sys.Pool().Reverse(c.ctx, addr, resolvers.PriorityLow); err == nil {
 		if d := strings.TrimSpace(c.Sys.Pool().SubdomainToDomain(answer)); d != "" {
-			if !c.filter.Duplicate(d) {
+			c.filterLock.Lock()
+			if c.filter.Has(d) == false {
+				c.filter.Insert(d)
 				c.Output <- &requests.Output{
 					Name:      d,
 					Domain:    d,
@@ -192,7 +195,11 @@ func (c *Collection) investigateAddr(addr string) {
 					Tag:       requests.DNS,
 					Source:    "Reverse DNS",
 				}
+				c.filterLock.Unlock()
+			} else {
+				c.filterLock.Unlock()
 			}
+			
 		}
 	}
 
@@ -203,8 +210,9 @@ func (c *Collection) investigateAddr(addr string) {
 	for _, name := range http.PullCertificateNames(addr, c.Config.Ports) {
 		if n := strings.TrimSpace(name); n != "" {
 			d := c.Sys.Pool().SubdomainToDomain(n)
-
-			if !c.filter.Duplicate(d) {
+			c.filterLock.Lock()
+			if c.filter.Has(d) == false {
+				c.filter.Insert(d)
 				c.Output <- &requests.Output{
 					Name:      n,
 					Domain:    d,
@@ -212,6 +220,10 @@ func (c *Collection) investigateAddr(addr string) {
 					Tag:       requests.CERT,
 					Source:    "Active Cert",
 				}
+				c.filterLock.Unlock()
+			} else {
+				c.filterLock.Unlock()
+				continue
 			}
 		}
 	}
@@ -274,17 +286,32 @@ loop:
 		}
 	}
 
-	filter := sf.NewStringFilter()
+	filter := stringset.New()
+	var filterLock sync.Mutex
 	// Do not return CIDRs that are already in the config
 	for _, cidr := range c.Config.CIDRs {
-		filter.Duplicate(cidr.String())
+		filterLock.Lock()
+		defer filterLock.Unlock()
+		if filter.Has(cidr.String()) == false {
+			filter.Insert(cidr.String())
+		} else {
+			continue
+		}
+
 	}
 
 	for _, netblock := range cidrSet.Slice() {
 		_, ipnet, err := net.ParseCIDR(netblock)
 
-		if err == nil && !filter.Duplicate(ipnet.String()) {
+
+		filterLock.Lock()
+		if err == nil && filter.Has(ipnet.String()) == false {
+			filter.Insert(ipnet.String())
 			cidrs = append(cidrs, ipnet)
+			filterLock.Unlock()
+		} else {
+			filterLock.Unlock()
+			continue
 		}
 	}
 
@@ -329,16 +356,22 @@ func (c *Collection) ReverseWhois() error {
 		return err
 	}
 
-	filter := sf.NewStringFilter()
+	filter := stringset.New()
+	var filterLock sync.Mutex
 	collect := func(req *requests.WhoisRequest) {
 		for _, d := range req.NewDomains {
-			if !filter.Duplicate(d) {
+			filterLock.Lock()
+			if filter.Has(d) == false {
+				filter.Insert(d)
 				c.Output <- &requests.Output{
 					Name:   d,
 					Domain: d,
 					Tag:    req.Tag,
 					Source: req.Source,
 				}
+				filterLock.Unlock()
+			} else {
+				filterLock.Unlock()
 			}
 		}
 	}

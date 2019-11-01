@@ -76,7 +76,6 @@ func (e *Enumeration) namesFromCertificates(addr string) {
 
 func (e *Enumeration) processOutput(wg *sync.WaitGroup) {
 	defer wg.Done()
-
 	curIdx := 0
 	maxIdx := 7
 	delays := []int{250, 500, 750, 1000, 1250, 1500, 1750, 2000}
@@ -96,9 +95,17 @@ loop:
 			}
 			curIdx = 0
 			output := element.(*requests.Output)
-			if !e.filters.Output.Duplicate(output.Name) {
+
+			e.filters.OutputLock.Lock()
+			if e.filters.Output.Has(output.Name) == false {
+				e.filters.Output.Insert(output.Name)
 				e.Output <- output
+				e.filters.OutputLock.Unlock()
+			} else {
+				e.filters.OutputLock.Unlock()
+				continue
 			}
+			
 		}
 	}
 	time.Sleep(5 * time.Second)
@@ -109,9 +116,17 @@ loop:
 			break
 		}
 		output := element.(*requests.Output)
-		if !e.filters.Output.Duplicate(output.Name) {
+		
+		e.filters.OutputLock.Lock()
+		if e.filters.Output.Has(output.Name) == false {
+			e.filters.Output.Insert(output.Name)
 			e.Output <- output
+			e.filters.OutputLock.Unlock()
+		} else {
+			e.filters.OutputLock.Unlock()
+			continue
 		}
+		
 	}
 	close(e.Output)
 }

@@ -36,8 +36,12 @@ func (e *Enumeration) newAddress(req *requests.AddrRequest) {
 	}
 
 	// Have we already processed this address?
-	if e.filters.NewAddrs.Duplicate(req.Address) {
+	e.filters.NewAddrsLock.Lock()
+	defer e.filters.NewAddrsLock.Unlock()
+	if e.filters.NewAddrs.Has(req.Address) == true {
 		return
+	} else {
+		e.filters.NewAddrs.Insert(req.Address)
 	}
 
 	e.netQueue.Append(req)

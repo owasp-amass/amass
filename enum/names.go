@@ -7,6 +7,7 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	//"fmt"
 
 	"github.com/OWASP/Amass/v3/graph"
 	amassnet "github.com/OWASP/Amass/v3/net"
@@ -26,8 +27,13 @@ func (e *Enumeration) newNameEvent(req *requests.DNSRequest) {
 	req.Domain = strings.ToLower(req.Domain)
 
 	// Filter on the DNS name + the value from TrustedTag
-	if e.filters.NewNames.Duplicate(req.Name +
-		strconv.FormatBool(requests.TrustedTag(req.Tag))) {
+	e.filters.NewNamesLock.Lock()
+	defer e.filters.NewNamesLock.Unlock()
+	if e.filters.NewNames.Has(req.Name +
+		strconv.FormatBool(requests.TrustedTag(req.Tag))) == false {
+		e.filters.NewNames.Insert(req.Name +
+		strconv.FormatBool(requests.TrustedTag(req.Tag)))
+	} else {
 		return
 	}
 
@@ -69,9 +75,16 @@ func (e *Enumeration) newResolvedName(req *requests.DNSRequest) {
 	/*
 	 * Do not go further if the name is not in scope or been seen before
 	 */
-	if e.filters.Resolved.Duplicate(req.Name) ||
-		!e.Config.IsDomainInScope(req.Name) {
+
+	if !e.Config.IsDomainInScope(req.Name) {
 		return
+	}
+	e.filters.ResolvedLock.Lock()
+	defer e.filters.ResolvedLock.Unlock()
+	if e.filters.Resolved.Has(req.Name) == true{
+	    return
+	} else {
+		e.filters.Resolved.Insert(req.Name)
 	}
 
 	// Keep track of all domains and proper subdomains discovered
@@ -204,8 +217,12 @@ func (e *Enumeration) reverseDNSSweep(addr string, cidr *net.IPNet) {
 	for _, ip := range ips {
 		a := ip.String()
 
-		if e.filters.SweepAddrs.Duplicate(a) {
+		e.filters.SweepAddrsLock.Lock()
+		defer e.filters.SweepAddrsLock.Unlock()
+		if e.filters.SweepAddrs.Has(a) == true{
 			continue
+		} else {
+			e.filters.SweepAddrs.Insert(a)
 		}
 
 		e.Sys.Config().SemMaxDNSQueries.Acquire(1)
