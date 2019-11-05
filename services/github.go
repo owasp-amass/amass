@@ -10,13 +10,14 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/eventbus"
 	"github.com/OWASP/Amass/v3/net/http"
 	"github.com/OWASP/Amass/v3/requests"
-	sf "github.com/OWASP/Amass/v3/stringfilter"
+	"github.com/OWASP/Amass/v3/stringset"
 )
 
 // GitHub is the Service that handles access to the GitHub data source.
@@ -67,7 +68,11 @@ func (g *GitHub) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 		return
 	}
 
-	nameFilter := sf.NewStringFilter()
+	//nameFilter := sf.NewStringFilter()
+	nameFilter := stringset.New()
+	var nameFilterLock sync.Mutex
+	dupNameResult := false
+
 	// This function publishes new subdomain names discovered at the provided URL
 	fetchNames := func(u string) {
 		bus.Publish(requests.SetActiveTopic, g.String())
@@ -80,7 +85,18 @@ func (g *GitHub) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 
 		// Extract the subdomain names from the page
 		for _, sd := range re.FindAllString(page, -1) {
-			if name := cleanName(sd); name != "" && !nameFilter.Duplicate(name) {
+			name := cleanName(sd)
+			nameFilterLock.Lock()
+
+			dupNameResult = nameFilter.Has(name)
+			if dupNameResult == false {
+				nameFilter.Insert(name)
+				nameFilterLock.Unlock()
+			} else {
+				nameFilterLock.Unlock()
+			}
+
+			if name != "" && !dupNameResult {
 				bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
 					Name:   name,
 					Domain: req.Domain,
@@ -97,7 +113,9 @@ func (g *GitHub) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 	}
 	bus.Publish(requests.SetActiveTopic, g.String())
 
-	urlFilter := sf.NewStringFilter()
+	urlFilter := stringset.New()
+	var urlFilterLock sync.Mutex
+	dupUrlResult := false
 	// Try no more than ten times for search result pages
 loop:
 	for i := 1; i <= 10; i++ {
@@ -125,7 +143,18 @@ loop:
 
 		// Unique URLs discovered will cause the URLs to be searched for subdomain names
 		for _, item := range result.Items {
-			if t := g.modifyURL(item.URL); t != "" && !urlFilter.Duplicate(t) {
+			t := g.modifyURL(item.URL)
+			urlFilterLock.Lock()
+
+			dupUrlResult = urlFilter.Has(t)
+			if dupUrlResult == false {
+				urlFilter.Insert(t)
+				urlFilterLock.Unlock()
+			} else {
+				urlFilterLock.Unlock()
+			}
+
+			if t != "" && !dupUrlResult {
 				go fetchNames(t)
 			}
 		}

@@ -10,13 +10,14 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/eventbus"
 	"github.com/OWASP/Amass/v3/net/http"
 	"github.com/OWASP/Amass/v3/requests"
-	sf "github.com/OWASP/Amass/v3/stringfilter"
+	"github.com/OWASP/Amass/v3/stringset"
 )
 
 const commonCrawlIndexListURL = "https://index.commoncrawl.org/collinfo.json"
@@ -86,7 +87,8 @@ func (c *CommonCrawl) OnDNSRequest(ctx context.Context, req *requests.DNSRequest
 		return
 	}
 
-	filter := sf.NewStringFilter()
+	filter := stringset.New()
+	var filterLock sync.Mutex
 	for _, index := range c.indexURLs {
 		select {
 		case <-c.Quit():
@@ -101,9 +103,20 @@ func (c *CommonCrawl) OnDNSRequest(ctx context.Context, req *requests.DNSRequest
 				bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", c.String(), u, err))
 				continue
 			}
+			dupResult := false
 
 			for _, url := range c.parseJSON(page) {
-				if name := re.FindString(url); name != "" && !filter.Duplicate(name) {
+				name := re.FindString(url)
+				filterLock.Lock()
+
+				dupResult = filter.Has(name)
+				if dupResult == false {
+					filter.Insert(name)
+					filterLock.Unlock()
+				} else {
+					filterLock.Unlock()
+				}
+				if name != "" && !dupResult {
 					bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
 						Name:   name,
 						Domain: req.Domain,
@@ -118,7 +131,7 @@ func (c *CommonCrawl) OnDNSRequest(ctx context.Context, req *requests.DNSRequest
 
 func (c *CommonCrawl) parseJSON(page string) []string {
 	var urls []string
-	filter := sf.NewStringFilter()
+	filter := stringset.New()
 
 	scanner := bufio.NewScanner(strings.NewReader(page))
 	for scanner.Scan() {
@@ -136,7 +149,9 @@ func (c *CommonCrawl) parseJSON(page string) []string {
 			continue
 		}
 
-		if !filter.Duplicate(m.URL) {
+		//Does not appear that mutex is required here
+		if filter.Has(m.URL) == false {
+			filter.Insert(m.URL)
 			urls = append(urls, m.URL)
 		}
 	}

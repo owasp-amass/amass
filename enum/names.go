@@ -29,10 +29,11 @@ func (e *Enumeration) newNameEvent(req *requests.DNSRequest) {
 	// Filter on the DNS name + the value from TrustedTag
 	e.filters.NewNamesLock.Lock()
 	defer e.filters.NewNamesLock.Unlock()
-	if e.filters.NewNames.Has(req.Name +
+
+	if e.filters.NewNames.Has(req.Name+
 		strconv.FormatBool(requests.TrustedTag(req.Tag))) == false {
 		e.filters.NewNames.Insert(req.Name +
-		strconv.FormatBool(requests.TrustedTag(req.Tag)))
+			strconv.FormatBool(requests.TrustedTag(req.Tag)))
 	} else {
 		return
 	}
@@ -80,11 +81,13 @@ func (e *Enumeration) newResolvedName(req *requests.DNSRequest) {
 		return
 	}
 	e.filters.ResolvedLock.Lock()
-	defer e.filters.ResolvedLock.Unlock()
-	if e.filters.Resolved.Has(req.Name) == true{
-	    return
+
+	if e.filters.Resolved.Has(req.Name) == true {
+		e.filters.ResolvedLock.Unlock()
+		return
 	} else {
 		e.filters.Resolved.Insert(req.Name)
+		e.filters.ResolvedLock.Unlock()
 	}
 
 	// Keep track of all domains and proper subdomains discovered
@@ -218,13 +221,12 @@ func (e *Enumeration) reverseDNSSweep(addr string, cidr *net.IPNet) {
 		a := ip.String()
 
 		e.filters.SweepAddrsLock.Lock()
-		defer e.filters.SweepAddrsLock.Unlock()
-		if e.filters.SweepAddrs.Has(a) == true{
-			continue
-		} else {
+
+		if e.filters.SweepAddrs.Has(a) == false {
 			e.filters.SweepAddrs.Insert(a)
 		}
 
+		e.filters.SweepAddrsLock.Unlock()
 		e.Sys.Config().SemMaxDNSQueries.Acquire(1)
 		go e.reverseDNSQuery(a)
 	}

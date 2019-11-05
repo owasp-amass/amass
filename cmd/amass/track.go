@@ -9,12 +9,12 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/graph"
 	"github.com/OWASP/Amass/v3/requests"
-	sf "github.com/OWASP/Amass/v3/stringfilter"
 	"github.com/OWASP/Amass/v3/stringset"
 	"github.com/fatih/color"
 )
@@ -172,12 +172,24 @@ func runTrackCommand(clArgs []string) {
 
 func cumulativeOutput(domains []string, enums []string, ea, la []time.Time, db graph.DataHandler) {
 	idx := len(enums) - 1
-	filter := sf.NewStringFilter()
+	filter := stringset.New()
+	var filterLock sync.Mutex
+	dupResult := false
 
 	var cum []*requests.Output
 	for i := idx - 1; i >= 0; i-- {
 		for _, out := range getUniqueDBOutput(enums[i], domains, db) {
-			if domainNameInScope(out.Name, domains) && !filter.Duplicate(out.Name) {
+			filterLock.Lock()
+
+			dupResult = filter.Has(out.Name)
+			if dupResult == false {
+				filter.Insert(out.Name)
+				filterLock.Unlock()
+			} else {
+				filterLock.Unlock()
+			}
+
+			if domainNameInScope(out.Name, domains) && !dupResult {
 				cum = append(cum, out)
 			}
 		}

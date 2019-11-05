@@ -11,13 +11,13 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/format"
 	"github.com/OWASP/Amass/v3/graph"
 	"github.com/OWASP/Amass/v3/requests"
-	sf "github.com/OWASP/Amass/v3/stringfilter"
 	"github.com/OWASP/Amass/v3/stringset"
 	"github.com/fatih/color"
 )
@@ -268,11 +268,20 @@ func getEnumOutput(id int, domains []string, db graph.DataHandler) []*requests.O
 		return output
 	}
 
-	filter := sf.NewStringFilter()
+	filter := stringset.New()
+	var filterLock sync.Mutex
+
 	for i := len(enums) - 1; i >= 0; i-- {
 		for _, out := range db.GetOutput(enums[i], true) {
-			if !filter.Duplicate(out.Name) {
+			filterLock.Lock()
+
+			if filter.Has(out.Name) == false {
+				filter.Insert(out.Name)
+				filterLock.Unlock()
 				output = append(output, out)
+			} else {
+				filterLock.Unlock()
+				continue
 			}
 		}
 	}
@@ -281,14 +290,22 @@ func getEnumOutput(id int, domains []string, db graph.DataHandler) []*requests.O
 
 func getUniqueDBOutput(id string, domains []string, db graph.DataHandler) []*requests.Output {
 	var output []*requests.Output
-	filter := sf.NewStringFilter()
+	filter := stringset.New()
+	var filterLock sync.Mutex
 
 	for _, out := range db.GetOutput(id, true) {
 		if len(domains) > 0 && !domainNameInScope(out.Name, domains) {
 			continue
 		}
-		if !filter.Duplicate(out.Name) {
+		filterLock.Lock()
+
+		if filter.Has(out.Name) == false {
+			filter.Insert(out.Name)
+			filterLock.Unlock()
 			output = append(output, out)
+		} else {
+			filterLock.Unlock()
+			continue
 		}
 	}
 	return output

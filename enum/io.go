@@ -95,8 +95,8 @@ loop:
 			}
 			curIdx = 0
 			output := element.(*requests.Output)
-
 			e.filters.OutputLock.Lock()
+
 			if e.filters.Output.Has(output.Name) == false {
 				e.filters.Output.Insert(output.Name)
 				e.Output <- output
@@ -105,7 +105,7 @@ loop:
 				e.filters.OutputLock.Unlock()
 				continue
 			}
-			
+
 		}
 	}
 	time.Sleep(5 * time.Second)
@@ -116,8 +116,8 @@ loop:
 			break
 		}
 		output := element.(*requests.Output)
-		
 		e.filters.OutputLock.Lock()
+
 		if e.filters.Output.Has(output.Name) == false {
 			e.filters.Output.Insert(output.Name)
 			e.Output <- output
@@ -126,7 +126,7 @@ loop:
 			e.filters.OutputLock.Unlock()
 			continue
 		}
-		
+
 	}
 	close(e.Output)
 }

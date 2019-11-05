@@ -43,8 +43,7 @@ type Collection struct {
 	// Broadcast channel that indicates no further writes to the output channel
 	done              chan struct{}
 	doneAlreadyClosed bool
-
-	wg     sync.WaitGroup
+	wg                sync.WaitGroup
 
 	filterLock sync.Mutex
 	filter     stringset.Set
@@ -199,7 +198,6 @@ func (c *Collection) investigateAddr(addr string) {
 			} else {
 				c.filterLock.Unlock()
 			}
-			
 		}
 	}
 
@@ -287,11 +285,9 @@ loop:
 	}
 
 	filter := stringset.New()
-	var filterLock sync.Mutex
+
 	// Do not return CIDRs that are already in the config
 	for _, cidr := range c.Config.CIDRs {
-		filterLock.Lock()
-		defer filterLock.Unlock()
 		if filter.Has(cidr.String()) == false {
 			filter.Insert(cidr.String())
 		} else {
@@ -303,14 +299,10 @@ loop:
 	for _, netblock := range cidrSet.Slice() {
 		_, ipnet, err := net.ParseCIDR(netblock)
 
-
-		filterLock.Lock()
 		if err == nil && filter.Has(ipnet.String()) == false {
 			filter.Insert(ipnet.String())
 			cidrs = append(cidrs, ipnet)
-			filterLock.Unlock()
 		} else {
-			filterLock.Unlock()
 			continue
 		}
 	}
@@ -357,10 +349,9 @@ func (c *Collection) ReverseWhois() error {
 	}
 
 	filter := stringset.New()
-	var filterLock sync.Mutex
+
 	collect := func(req *requests.WhoisRequest) {
 		for _, d := range req.NewDomains {
-			filterLock.Lock()
 			if filter.Has(d) == false {
 				filter.Insert(d)
 				c.Output <- &requests.Output{
@@ -369,9 +360,6 @@ func (c *Collection) ReverseWhois() error {
 					Tag:    req.Tag,
 					Source: req.Source,
 				}
-				filterLock.Unlock()
-			} else {
-				filterLock.Unlock()
 			}
 		}
 	}

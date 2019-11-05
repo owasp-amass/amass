@@ -15,14 +15,13 @@ import (
 	"github.com/OWASP/Amass/v3/queue"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/services"
-	//sf "github.com/OWASP/Amass/v3/stringfilter"
 	"github.com/OWASP/Amass/v3/stringset"
 )
 
 // Filters contains the set of string filters required during an enumeration.
 type Filters struct {
 	NewNamesLock      sync.Mutex
-	NewNames	      stringset.Set
+	NewNames          stringset.Set
 	ResolvedLock      sync.Mutex
 	Resolved          stringset.Set
 	NewAddrsLock      sync.Mutex
@@ -32,7 +31,7 @@ type Filters struct {
 	OutputLock        sync.Mutex
 	Output            stringset.Set
 	PassiveOutputLock sync.Mutex
-	PassiveOutput     stringset.Set 
+	PassiveOutput     stringset.Set
 }
 
 // Enumeration is the object type used to execute a DNS enumeration with Amass.
