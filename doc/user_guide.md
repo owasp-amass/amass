@@ -325,31 +325,40 @@ amass viz -maltego
 If you are using the amass package within your own Go code, be sure to properly seed the default pseudo-random number generator:
 
 ```go
-import(
-    "fmt"
-    "math/rand"
-    "time"
+package main
 
-    "github.com/OWASP/Amass/enum"
+import (
+	"fmt"
+	"math/rand"
+	"time"
+
+	"github.com/OWASP/Amass/v3/config"
+	"github.com/OWASP/Amass/v3/enum"
+	"github.com/OWASP/Amass/v3/services"
 )
 
 func main() {
-    // Seed the default pseudo-random number generator
-    rand.Seed(time.Now().UTC().UnixNano())
+	// Seed the default pseudo-random number generator
+	rand.Seed(time.Now().UTC().UnixNano())
 
-    e := enum.NewEnumeration()
-    if e == nil {
-        return
-    }
+	sys, err := services.NewLocalSystem(config.NewConfig())
+	if err != nil {
+		return
+	}
 
-    go func() {
-        for result := range e.Output {
-            fmt.Println(result.Name)
-        }
-    }()
+	e := enum.NewEnumeration(sys)
+	if e == nil {
+		return
+	}
 
-    // Setup the most basic amass configuration
-    e.Config.AddDomain("example.com")
-    e.Start()
+	go func() {
+		for result := range e.Output {
+			fmt.Println(result.Name)
+		}
+	}()
+
+	// Setup the most basic amass configuration
+	e.Config.AddDomain("example.com")
+	e.Start()
 }
 ```
