@@ -8,12 +8,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/eventbus"
+	"github.com/OWASP/Amass/v3/net/dns"
 	"github.com/OWASP/Amass/v3/net/http"
 	"github.com/OWASP/Amass/v3/requests"
+	"github.com/OWASP/Amass/v3/stringset"
 )
 
 // Spyse is the Service that handles access to the Spyse data source.
@@ -139,7 +143,8 @@ func (s *Spyse) executeSubdomainQuery(ctx context.Context, domain string) {
 		return
 	}
 
-	re := cfg.DomainRegex(domain)
+	domainRE := strings.Replace(domain, ".", "[.]", -1)
+	re := regexp.MustCompile(`title="(` + dns.SUBRE + domainRE + ")")
 	if re == nil {
 		return
 	}
@@ -154,15 +159,23 @@ func (s *Spyse) executeSubdomainQuery(ctx context.Context, domain string) {
 		return
 	}
 
-	count := 0
-	for _, sd := range re.FindAllString(page, -1) {
+	subs := re.FindAllStringSubmatch(page, -1)
+
+	matches := stringset.New()
+	for _, match := range subs {
+		sub := match[1]
+		if sub != "" {
+			matches.Insert(strings.TrimSpace(sub))
+		}
+	}
+
+	for sd := range matches {
 		bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
 			Name:   cleanName(sd),
 			Domain: domain,
 			Tag:    s.SourceType,
 			Source: s.String(),
 		})
-		count++
 	}
 }
 
