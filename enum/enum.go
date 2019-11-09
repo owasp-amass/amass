@@ -184,11 +184,10 @@ func (e *Enumeration) Start() error {
 
 	// The enumeration will not terminate until all output has been processed
 	var wg sync.WaitGroup
-	wg.Add(4)
+	wg.Add(3)
 	// Use all previously discovered names that are in scope
 	go e.submitKnownNames(&wg)
 	go e.submitProvidedNames(&wg)
-	go e.checkForOutput(&wg)
 	go e.processOutput(&wg)
 
 	if e.Config.Timeout > 0 {
@@ -226,39 +225,30 @@ func (e *Enumeration) Start() error {
 	}
 	e.srcsLock.Unlock()
 
-	t := time.NewTicker(2 * time.Second)
-	logTick := time.NewTicker(time.Minute)
+	twoSec := time.NewTicker(2 * time.Second)
+	perMin := time.NewTicker(time.Minute)
 loop:
 	for {
 		select {
 		case <-e.done:
 			break loop
-		case <-t.C:
+		case <-twoSec.C:
 			e.writeLogs()
-
-			// Has the enumeration been inactive long enough to stop the task?
-			if inactive := time.Now().Sub(e.lastActive()); inactive > 5*time.Second {
-				e.nextPhase(true)
-				time.Sleep(time.Second)
-			}
-		case <-logTick.C:
+			e.nextPhase()
+		case <-perMin.C:
 			if !e.Config.Passive {
 				remaining := e.DNSNamesRemaining()
 
 				e.Config.Log.Printf("Average DNS queries performed: %d/sec, DNS names queued: %d",
 					e.DNSQueriesPerSec(), remaining)
 
-				// Does the enumeration need more names to process?
-				if !e.Config.Passive && remaining < 50 {
-					e.nextPhase(false)
-				}
-
 				e.clearPerSec()
 			}
 		}
 	}
-	t.Stop()
-	logTick.Stop()
+
+	twoSec.Stop()
+	perMin.Stop()
 	cancel()
 	e.cleanEventBus()
 	time.Sleep(2 * time.Second)
@@ -267,22 +257,39 @@ loop:
 	return nil
 }
 
-func (e *Enumeration) nextPhase(inactive bool) {
-	if !e.Config.Passive && (e.DNSQueriesPerSec() > 2000) || (e.DNSNamesRemaining() > 10) {
+func (e *Enumeration) nextPhase() {
+	first := !e.startedBrute && !e.startedAlts
+	persec := e.DNSQueriesPerSec()
+	remaining := e.DNSNamesRemaining()
+	// Has the enumeration been inactive long enough to stop the task?
+	inactive := time.Now().Sub(e.lastActive()) > 10*time.Second
+
+	if sec := e.perSecLast.Sub(e.perSecFirst).Seconds(); !inactive && sec < 20 {
 		return
 	}
 
-	if !e.Config.Passive && e.Config.BruteForcing && !e.startedBrute {
+	if first && (persec > 200) || (remaining > 10) {
+		return
+	}
+
+	bruteReady := !e.Config.Passive && e.Config.BruteForcing && !e.startedBrute
+	altsReady := !e.Config.Passive && e.Config.Alterations && !e.startedAlts
+
+	if bruteReady {
 		e.startedBrute = true
 		go e.startBruteForcing()
-		time.Sleep(time.Second)
 		e.Config.Log.Print("Starting DNS queries for brute forcing")
-	} else if !e.Config.Passive && e.Config.Alterations && !e.startedAlts {
+		time.Sleep(30 * time.Second)
+	} else if altsReady {
+		if !first && persec > 2000 {
+			return
+		}
+
 		e.startedAlts = true
 		go e.performAlterations()
-		time.Sleep(time.Second)
 		e.Config.Log.Print("Starting DNS queries for altered names")
-	} else if inactive {
+		time.Sleep(30 * time.Second)
+	} else if inactive && persec < 50 {
 		// End the enumeration!
 		e.Done()
 	}
@@ -315,7 +322,7 @@ func (e *Enumeration) clearPerSec() {
 
 	e.perSec = 0
 	e.perSecFirst = time.Now()
-	e.perSecLast = e.perSecLast
+	e.perSecLast = e.perSecFirst
 }
 
 // DNSNamesRemaining returns the number of discovered DNS names yet to be handled by the enumeration.

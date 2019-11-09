@@ -170,7 +170,7 @@ func runTrackCommand(clArgs []string) {
 	cumulativeOutput(args.Domains.Slice(), enums, earliest, latest, db)
 }
 
-func cumulativeOutput(domains []string, enums []string, ea, la []time.Time, db graph.DataHandler) {
+func cumulativeOutput(domains []string, enums []string, ea, la []time.Time, db *graph.Graph) {
 	idx := len(enums) - 1
 	filter := sf.NewStringFilter()
 
@@ -200,7 +200,7 @@ func cumulativeOutput(domains []string, enums []string, ea, la []time.Time, db g
 	}
 }
 
-func completeHistoryOutput(domains []string, enums []string, ea, la []time.Time, db graph.DataHandler) {
+func completeHistoryOutput(domains []string, enums []string, ea, la []time.Time, db *graph.Graph) {
 	var prev string
 
 	for i, enum := range enums {

@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/OWASP/Amass/v3/graph"
 	amassnet "github.com/OWASP/Amass/v3/net"
 	amassdns "github.com/OWASP/Amass/v3/net/dns"
 	"github.com/OWASP/Amass/v3/requests"
@@ -132,12 +131,7 @@ func (e *Enumeration) checkSubdomain(req *requests.DNSRequest) {
 
 	for _, g := range e.Sys.GraphDatabases() {
 		// CNAMEs are not a proper subdomain
-		cname := g.IsCNAMENode(&graph.DataOptsParams{
-			UUID:   e.Config.UUID.String(),
-			Name:   sub,
-			Domain: req.Domain,
-		})
-		if cname {
+		if g.IsCNAMENode(sub) {
 			return
 		}
 	}
@@ -238,4 +232,20 @@ func (e *Enumeration) reverseDNSQuery(ip string) {
 		Tag:    requests.DNS,
 		Source: "Reverse DNS",
 	})
+}
+
+func (e *Enumeration) hasCNAMERecord(req *requests.DNSRequest) bool {
+	if len(req.Records) == 0 {
+		return false
+	}
+
+	for _, r := range req.Records {
+		t := uint16(r.Type)
+
+		if t == dns.TypeCNAME {
+			return true
+		}
+	}
+
+	return false
 }

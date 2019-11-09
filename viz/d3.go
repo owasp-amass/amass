@@ -289,7 +289,7 @@ func WriteD3Data(output io.Writer, nodes []Node, edges []Edge) {
 		"as":        "blue",
 	}
 
-	graph := &d3Graph{Name: "OWASP Amass Network Mapping"}
+	graph := &d3Graph{Name: "OWASP Amass - Attack Surface Mapping"}
 
 	for idx, node := range nodes {
 		label := node.Title

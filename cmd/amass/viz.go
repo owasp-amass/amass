@@ -5,10 +5,7 @@ package main
 
 import (
 	"bytes"
-	"errors"
 	"flag"
-	"fmt"
-	"io/ioutil"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -112,47 +109,38 @@ func runVizCommand(clArgs []string) {
 		os.Exit(1)
 	}
 
-	var err error
 	var uuid string
-	var db graph.DataHandler
+	var db *graph.Graph
 	rand.Seed(time.Now().UTC().UnixNano())
 
-	// Obtain access to the graph database
-	if args.Filepaths.Input != "" {
-		uuid, db, err = inputFileToDB(&args)
-		if err == nil {
-			defer os.RemoveAll(args.Filepaths.Directory)
-			defer db.Close()
+	cfg := new(config.Config)
+	// Check if a configuration file was provided, and if so, load the settings
+	if err := config.AcquireConfig(args.Filepaths.Directory, args.Filepaths.ConfigFile, cfg); err == nil {
+		if args.Filepaths.Directory == "" {
+			args.Filepaths.Directory = cfg.Dir
 		}
-	} else {
-		cfg := new(config.Config)
-		// Check if a configuration file was provided, and if so, load the settings
-		if err := config.AcquireConfig(args.Filepaths.Directory, args.Filepaths.ConfigFile, cfg); err == nil {
-			if args.Filepaths.Directory == "" {
-				args.Filepaths.Directory = cfg.Dir
-			}
-			if len(args.Domains) == 0 {
-				args.Domains.InsertMany(cfg.Domains()...)
-			}
-		} else if args.Filepaths.ConfigFile != "" {
-			r.Fprintf(color.Error, "Failed to load the configuration file: %v\n", err)
-			os.Exit(1)
+		if len(args.Domains) == 0 {
+			args.Domains.InsertMany(cfg.Domains()...)
 		}
-
-		db = openGraphDatabase(args.Filepaths.Directory, cfg)
-		if db == nil {
-			r.Fprintln(color.Error, "Failed to connect with the database")
-			os.Exit(1)
-		}
-		defer db.Close()
-
-		if args.Enum > 0 {
-			uuid = enumIndexToID(args.Enum, args.Domains.Slice(), db)
-		} else {
-			// Get the UUID for the most recent enumeration
-			uuid = mostRecentEnumID(args.Domains.Slice(), db)
-		}
+	} else if args.Filepaths.ConfigFile != "" {
+		r.Fprintf(color.Error, "Failed to load the configuration file: %v\n", err)
+		os.Exit(1)
 	}
+
+	db = openGraphDatabase(args.Filepaths.Directory, cfg)
+	if db == nil {
+		r.Fprintln(color.Error, "Failed to connect with the database")
+		os.Exit(1)
+	}
+	defer db.Close()
+
+	if args.Enum > 0 {
+		uuid = enumIndexToID(args.Enum, args.Domains.Slice(), db)
+	} else {
+		// Get the UUID for the most recent enumeration
+		uuid = mostRecentEnumID(args.Domains.Slice(), db)
+	}
+
 	if uuid == "" {
 		r.Fprintln(color.Error, "No enumeration found within the graph database")
 		os.Exit(1)
@@ -179,37 +167,6 @@ func runVizCommand(clArgs []string) {
 		dir := filepath.Join(args.Filepaths.Output, "amass_visjs.html")
 		writeVisjsFile(dir, nodes, edges)
 	}
-}
-
-func inputFileToDB(args *vizArgs) (string, graph.DataHandler, error) {
-	var err error
-
-	args.Filepaths.Directory, err = ioutil.TempDir("", "amass")
-	if err != nil {
-		return "", nil, fmt.Errorf("Failed to open the temporary directory: %v", err)
-	}
-
-	f, err := os.Open(args.Filepaths.Input)
-	if err != nil {
-		return "", nil, fmt.Errorf("Failed to open the input file: %v", err)
-	}
-
-	opts, err := graph.ParseDataOpts(f)
-	if err != nil {
-		return "", nil, fmt.Errorf("Failed to parse the provided data operations: %v", err)
-	}
-	uuid := opts[0].UUID
-
-	g := graph.NewGraph(args.Filepaths.Directory)
-	if g == nil {
-		return "", nil, errors.New("Failed to create the temporary graph database")
-	}
-
-	err = graph.DataOptsDriver(opts, g)
-	if err != nil {
-		return "", nil, fmt.Errorf("Failed to build the network graph: %v", err)
-	}
-	return uuid, g, nil
 }
 
 func writeMaltegoFile(path string, nodes []viz.Node, edges []viz.Edge) {

@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/OWASP/Amass/v3/graph"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/stringset"
 )
@@ -66,7 +65,7 @@ func (e *Enumeration) bruteSendNewNames(req *requests.DNSRequest) {
 		return
 	}
 
-	if len(req.Records) > 0 && !e.hasARecords(req) {
+	if len(req.Records) > 0 && (e.hasCNAMERecord(req) || !e.hasARecords(req)) {
 		return
 	}
 
@@ -74,18 +73,6 @@ func (e *Enumeration) bruteSendNewNames(req *requests.DNSRequest) {
 	domain := strings.ToLower(req.Domain)
 	if subdomain == "" || domain == "" {
 		return
-	}
-
-	for _, g := range e.Sys.GraphDatabases() {
-		// CNAMEs are not a proper subdomain
-		cname := g.IsCNAMENode(&graph.DataOptsParams{
-			UUID:   e.Config.UUID.String(),
-			Name:   subdomain,
-			Domain: domain,
-		})
-		if cname {
-			return
-		}
 	}
 
 	for _, word := range e.Config.Wordlist {
@@ -127,18 +114,6 @@ loop:
 			if !e.Config.IsDomainInScope(req.Name) ||
 				(len(strings.Split(req.Domain, ".")) == len(strings.Split(req.Name, "."))) {
 				continue loop
-			}
-
-			for _, g := range e.Sys.GraphDatabases() {
-				// CNAMEs are not a proper subdomain
-				cname := g.IsCNAMENode(&graph.DataOptsParams{
-					UUID:   e.Config.UUID.String(),
-					Name:   req.Name,
-					Domain: req.Domain,
-				})
-				if cname {
-					continue loop
-				}
 			}
 
 			newNames := stringset.New()

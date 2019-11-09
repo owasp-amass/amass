@@ -9,8 +9,8 @@ import (
 	"time"
 
 	amassnet "github.com/OWASP/Amass/v3/net"
+	"github.com/OWASP/Amass/v3/queue"
 	"github.com/OWASP/Amass/v3/requests"
-	"github.com/OWASP/Amass/v3/stringset"
 	"github.com/miekg/dns"
 )
 
@@ -46,13 +46,25 @@ func (e *Enumeration) newAddress(req *requests.AddrRequest) {
 func (e *Enumeration) processAddresses() {
 	curIdx := 0
 	maxIdx := 7
-	addrs := stringset.New()
 	delays := []int{10, 25, 50, 75, 100, 150, 250, 500}
+
+	checkSoon := new(queue.Queue)
+	check := time.NewTicker(30 * time.Second)
+	defer check.Stop()
 loop:
 	for {
 		select {
 		case <-e.done:
 			return
+		case <-check.C:
+			for {
+				element, ok := checkSoon.Next()
+				if !ok {
+					break
+				}
+
+				e.netQueue.Append(element)
+			}
 		default:
 			element, ok := e.netQueue.Next()
 			if !ok {
@@ -71,17 +83,13 @@ loop:
 
 			asn := e.ipSearch(req.Address)
 			if asn == nil {
-				if !addrs.Has(req.Address) {
-					addrs.Insert(req.Address)
-					// Query the data sources for ASN information related to this IP address
-					e.asnRequestAllSources(&requests.ASNRequest{Address: req.Address})
-				}
-
-				e.netQueue.Append(req)
+				// Query the data sources for ASN information related to this IP address
+				e.asnRequestAllSources(&requests.ASNRequest{Address: req.Address})
+				time.Sleep(10 * time.Second)
+				checkSoon.Append(req)
 				continue loop
 			}
 
-			addrs.Remove(req.Address)
 			// Write the ASN information to the graph databases
 			e.dataMgr.ASNRequest(e.ctx, asn)
 
@@ -179,6 +187,8 @@ func (e *Enumeration) ipSearch(addr string) *requests.ASNRequest {
 		ASN:         a,
 		Prefix:      cidr.String(),
 		Description: desc,
+		Tag:         requests.NONE,
+		Source:      "NONE",
 	}
 }
 
@@ -215,6 +225,8 @@ func checkForReservedAddress(addr string) *requests.ASNRequest {
 			Address:     addr,
 			Prefix:      cidr,
 			Description: "Reserved Network Address Blocks",
+			Tag:         requests.NONE,
+			Source:      "NONE",
 		}
 	}
 	return nil

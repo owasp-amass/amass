@@ -5,7 +5,6 @@ package main
 
 import (
 	"bytes"
-	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -16,6 +15,7 @@ import (
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/format"
 	"github.com/OWASP/Amass/v3/graph"
+	"github.com/OWASP/Amass/v3/graph/db"
 	"github.com/OWASP/Amass/v3/requests"
 	sf "github.com/OWASP/Amass/v3/stringfilter"
 	"github.com/OWASP/Amass/v3/stringset"
@@ -44,7 +44,6 @@ type dbArgs struct {
 		ConfigFile string
 		Directory  string
 		Domains    string
-		Import     string
 	}
 }
 
@@ -74,7 +73,6 @@ func runDBCommand(clArgs []string) {
 	dbCommand.StringVar(&args.Filepaths.ConfigFile, "config", "", "Path to the INI configuration file. Additional details below")
 	dbCommand.StringVar(&args.Filepaths.Directory, "dir", "", "Path to the directory containing the graph database")
 	dbCommand.StringVar(&args.Filepaths.Domains, "df", "", "Path to a file providing root domain names")
-	dbCommand.StringVar(&args.Filepaths.Import, "import", "", "Import an Amass data operations JSON file to the graph database")
 
 	if len(clArgs) < 1 {
 		commandUsage(dbUsageMsg, dbCommand, dbBuf)
@@ -120,15 +118,6 @@ func runDBCommand(clArgs []string) {
 	}
 	defer db.Close()
 
-	// Import of data operations from a JSON file to the database
-	if args.Filepaths.Import != "" {
-		if err := inputDataOperations(&args, db); err != nil {
-			r.Fprintf(color.Error, "Input data operations: %v\n", err)
-			os.Exit(1)
-		}
-		return
-	}
-
 	if args.Options.ListEnumerations {
 		listEnumerations(&args, db)
 		return
@@ -147,45 +136,27 @@ func runDBCommand(clArgs []string) {
 	commandUsage(dbUsageMsg, dbCommand, dbBuf)
 }
 
-func openGraphDatabase(dir string, cfg *config.Config) graph.DataHandler {
-	var db graph.DataHandler
+func openGraphDatabase(dir string, cfg *config.Config) *graph.Graph {
+	var gDB *graph.Graph
 	// Attempt to connect to an Amass graph database
-	if cfg.GremlinURL != "" {
+	/*if cfg.GremlinURL != "" {
 		if g := graph.NewGremlin(cfg.GremlinURL, cfg.GremlinUser, cfg.GremlinPass, nil); g != nil {
 			db = g
 		}
-	} else {
-		if d := config.OutputDirectory(dir); d != "" {
-			// Check that the graph database directory exists
-			if finfo, err := os.Stat(d); !os.IsNotExist(err) && finfo.IsDir() {
-				if g := graph.NewGraph(d); g != nil {
-					db = g
-				}
+	} else {*/
+	if d := config.OutputDirectory(dir); d != "" {
+		// Check that the graph database directory exists
+		if finfo, err := os.Stat(d); !os.IsNotExist(err) && finfo.IsDir() {
+			if g := graph.NewGraph(db.NewCayleyGraph(d)); g != nil {
+				gDB = g
 			}
 		}
 	}
-	return db
+	//}
+	return gDB
 }
 
-func inputDataOperations(args *dbArgs, db graph.DataHandler) error {
-	f, err := os.Open(args.Filepaths.Import)
-	if err != nil {
-		return fmt.Errorf("Failed to open the input file: %v", err)
-	}
-
-	opts, err := graph.ParseDataOpts(f)
-	if err != nil {
-		return errors.New("Failed to parse the provided data operations")
-	}
-
-	err = graph.DataOptsDriver(opts, db)
-	if err != nil {
-		return fmt.Errorf("Failed to populate the database: %v", err)
-	}
-	return nil
-}
-
-func listEnumerations(args *dbArgs, db graph.DataHandler) {
+func listEnumerations(args *dbArgs, db *graph.Graph) {
 	domains := args.Domains.Slice()
 	enums := enumIDs(domains, db)
 	if len(enums) == 0 {
@@ -201,7 +172,7 @@ func listEnumerations(args *dbArgs, db graph.DataHandler) {
 		}
 		g.Printf("%d) %s -> %s: ", i+1, earliest[i].Format(timeFormat), latest[i].Format(timeFormat))
 		// Print out the scope for this enumeration
-		for x, domain := range db.EnumerationDomains(enums[i]) {
+		for x, domain := range db.EventDomains(enums[i]) {
 			if x != 0 {
 				g.Print(", ")
 			}
@@ -211,7 +182,7 @@ func listEnumerations(args *dbArgs, db graph.DataHandler) {
 	}
 }
 
-func showEnumeration(args *dbArgs, db graph.DataHandler) {
+func showEnumeration(args *dbArgs, db *graph.Graph) {
 	domains := args.Domains.Slice()
 	var total int
 	tags := make(map[string]int)
@@ -246,7 +217,7 @@ func showEnumeration(args *dbArgs, db graph.DataHandler) {
 	}
 }
 
-func getEnumOutput(id int, domains []string, db graph.DataHandler) []*requests.Output {
+func getEnumOutput(id int, domains []string, db *graph.Graph) []*requests.Output {
 	var output []*requests.Output
 
 	if id > 0 {
@@ -270,7 +241,7 @@ func getEnumOutput(id int, domains []string, db graph.DataHandler) []*requests.O
 
 	filter := sf.NewStringFilter()
 	for i := len(enums) - 1; i >= 0; i-- {
-		for _, out := range db.GetOutput(enums[i], true) {
+		for _, out := range db.GetOutput(enums[i]) {
 			if !filter.Duplicate(out.Name) {
 				output = append(output, out)
 			}
@@ -279,11 +250,11 @@ func getEnumOutput(id int, domains []string, db graph.DataHandler) []*requests.O
 	return output
 }
 
-func getUniqueDBOutput(id string, domains []string, db graph.DataHandler) []*requests.Output {
+func getUniqueDBOutput(id string, domains []string, db *graph.Graph) []*requests.Output {
 	var output []*requests.Output
 	filter := sf.NewStringFilter()
 
-	for _, out := range db.GetOutput(id, true) {
+	for _, out := range db.GetOutput(id) {
 		if len(domains) > 0 && !domainNameInScope(out.Name, domains) {
 			continue
 		}
@@ -294,7 +265,7 @@ func getUniqueDBOutput(id string, domains []string, db graph.DataHandler) []*req
 	return output
 }
 
-func enumIndexToID(e int, domains []string, db graph.DataHandler) string {
+func enumIndexToID(e int, domains []string, db *graph.Graph) string {
 	enums := enumIDs(domains, db)
 	if len(enums) == 0 {
 		return ""
@@ -308,14 +279,14 @@ func enumIndexToID(e int, domains []string, db graph.DataHandler) string {
 }
 
 // Get the UUID for the most recent enumeration
-func mostRecentEnumID(domains []string, db graph.DataHandler) string {
+func mostRecentEnumID(domains []string, db *graph.Graph) string {
 	var uuid string
 	var latest time.Time
 
-	for i, enum := range db.EnumerationList() {
+	for i, enum := range db.EventList() {
 		if len(domains) > 0 {
 			var found bool
-			scope := db.EnumerationDomains(enum)
+			scope := db.EventDomains(enum)
 
 			for _, domain := range domains {
 				if domainNameInScope(domain, scope) {
@@ -328,7 +299,7 @@ func mostRecentEnumID(domains []string, db graph.DataHandler) string {
 			}
 		}
 
-		_, l := db.EnumerationDateRange(enum)
+		_, l := db.EventDateRange(enum)
 		if i == 0 {
 			latest = l
 			uuid = enum
@@ -340,20 +311,20 @@ func mostRecentEnumID(domains []string, db graph.DataHandler) string {
 }
 
 // Obtain the enumeration IDs that include the provided domain
-func enumIDs(domains []string, db graph.DataHandler) []string {
+func enumIDs(domains []string, db *graph.Graph) []string {
 	var enums []string
 
-	for _, e := range db.EnumerationList() {
+	for _, id := range db.EventList() {
 		if len(domains) == 0 {
-			enums = append(enums, e)
+			enums = append(enums, id)
 			continue
 		}
 
-		scope := db.EnumerationDomains(e)
+		scope := db.EventDomains(id)
 
 		for _, domain := range domains {
 			if domainNameInScope(domain, scope) {
-				enums = append(enums, e)
+				enums = append(enums, id)
 				break
 			}
 		}
@@ -376,12 +347,12 @@ func domainNameInScope(name string, scope []string) bool {
 	return discovered
 }
 
-func orderedEnumsAndDateRanges(enums []string, db graph.DataHandler) ([]string, []time.Time, []time.Time) {
+func orderedEnumsAndDateRanges(enums []string, db *graph.Graph) ([]string, []time.Time, []time.Time) {
 	sort.Slice(enums, func(i, j int) bool {
 		var less bool
 
-		e1, l1 := db.EnumerationDateRange(enums[i])
-		e2, l2 := db.EnumerationDateRange(enums[j])
+		e1, l1 := db.EventDateRange(enums[i])
+		e2, l2 := db.EventDateRange(enums[j])
 		if l1.After(l2) || e2.Before(e1) {
 			less = true
 		}
@@ -390,7 +361,7 @@ func orderedEnumsAndDateRanges(enums []string, db graph.DataHandler) ([]string, 
 
 	var earliest, latest []time.Time
 	for _, enum := range enums {
-		e, l := db.EnumerationDateRange(enum)
+		e, l := db.EventDateRange(enum)
 
 		earliest = append(earliest, e)
 		latest = append(latest, l)

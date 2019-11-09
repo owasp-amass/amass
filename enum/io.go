@@ -6,9 +6,7 @@ package enum
 import (
 	"strings"
 	"sync"
-	"time"
 
-	"github.com/OWASP/Amass/v3/graph"
 	"github.com/OWASP/Amass/v3/net/http"
 	"github.com/OWASP/Amass/v3/requests"
 )
@@ -17,10 +15,10 @@ func (e *Enumeration) submitKnownNames(wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	for _, g := range e.Sys.GraphDatabases() {
-		for _, enum := range g.EnumerationList() {
+		for _, enum := range g.EventList() {
 			var found bool
 
-			for _, domain := range g.EnumerationDomains(enum) {
+			for _, domain := range g.EventDomains(enum) {
 				if e.Config.IsDomainInScope(domain) {
 					found = true
 					break
@@ -30,7 +28,7 @@ func (e *Enumeration) submitKnownNames(wg *sync.WaitGroup) {
 				continue
 			}
 
-			for _, o := range g.GetOutput(enum, true) {
+			for _, o := range g.GetOutput(enum) {
 				if e.Config.IsDomainInScope(o.Name) {
 					e.Bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
 						Name:   o.Name,
@@ -77,75 +75,31 @@ func (e *Enumeration) namesFromCertificates(addr string) {
 func (e *Enumeration) processOutput(wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	curIdx := 0
-	maxIdx := 7
-	delays := []int{250, 500, 750, 1000, 1250, 1500, 1750, 2000}
-loop:
-	for {
-		select {
-		case <-e.done:
-			break loop
-		default:
-			element, ok := e.outputQueue.Next()
-			if !ok {
-				if curIdx < maxIdx {
-					curIdx++
-				}
-				time.Sleep(time.Duration(delays[curIdx]) * time.Millisecond)
-				continue loop
-			}
-			curIdx = 0
-			output := element.(*requests.Output)
-			if !e.filters.Output.Duplicate(output.Name) {
-				e.Output <- output
-			}
-		}
-	}
-	time.Sleep(5 * time.Second)
-	// Handle all remaining elements on the queue
+	<-e.done
+
+	e.graphEntries(e.Config.UUID.String())
 	for {
 		element, ok := e.outputQueue.Next()
 		if !ok {
 			break
 		}
+
 		output := element.(*requests.Output)
 		if !e.filters.Output.Duplicate(output.Name) {
 			e.Output <- output
 		}
 	}
+
 	close(e.Output)
 }
 
-func (e *Enumeration) checkForOutput(wg *sync.WaitGroup) {
-	t := time.NewTicker(2 * time.Second)
-	defer t.Stop()
-	defer wg.Done()
-
-	for {
-		select {
-		case <-e.done:
-			// Handle all remaining pieces of output
-			e.queueNewGraphEntries(e.Config.UUID.String(), time.Millisecond)
-			return
-		case <-t.C:
-			e.queueNewGraphEntries(e.Config.UUID.String(), 3*time.Second)
-		}
-	}
-}
-
-func (e *Enumeration) queueNewGraphEntries(uuid string, delay time.Duration) {
+func (e *Enumeration) graphEntries(uuid string) {
 	for _, g := range e.Sys.GraphDatabases() {
-		for _, o := range g.GetOutput(uuid, false) {
-			if time.Now().After(o.Timestamp.Add(delay)) {
-				g.MarkAsRead(&graph.DataOptsParams{
-					UUID:   uuid,
-					Name:   o.Name,
-					Domain: o.Domain,
-				})
+		for _, o := range g.GetOutput(uuid) {
+			e.updateLastActive("Output")
 
-				if e.Config.IsDomainInScope(o.Name) {
-					e.outputQueue.Append(o)
-				}
+			if e.Config.IsDomainInScope(o.Name) {
+				e.outputQueue.Append(o)
 			}
 		}
 	}

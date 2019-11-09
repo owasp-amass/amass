@@ -264,6 +264,8 @@ func runEnumCommand(clArgs []string) {
 	e.Config = cfg
 
 	processEnumOutput(e, &args)
+	//graph := sys.GraphDatabases()[0]
+	//fmt.Println(graph.DumpGraph())
 }
 
 func processEnumOutput(e *enum.Enumeration, args *enumArgs) {

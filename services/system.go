@@ -29,8 +29,8 @@ type System interface {
 	// CoreServices returns the slice of core services managed by the System
 	CoreServices() []Service
 
-	// GraphDatabases return the DataHandler for the graph database used by the System
-	GraphDatabases() []graph.DataHandler
+	// GraphDatabases return the Graphs used by the System
+	GraphDatabases() []*graph.Graph
 
 	// Shutdown will shutdown the System
 	Shutdown() error
