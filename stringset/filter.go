@@ -1,32 +1,33 @@
 // Copyright 2017 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
-package stringfilter
+package stringset
 
-import "github.com/thetannerryan/ring"
+import "sync"
 
 // StringFilter implements an object that performs filtering of strings
 // to ensure that only unique items get through the filter.
 type StringFilter struct {
-	filter *ring.Ring
+	filter Set
+	lock   sync.Mutex
 }
 
 // NewStringFilter returns an initialized StringFilter.
 func NewStringFilter() *StringFilter {
-	r, err := ring.Init(100000000, 0.001)
-	if err != nil {
-		return nil
-	}
+	s := New()
 
-	return &StringFilter{filter: r}
+	return &StringFilter{filter: s}
 }
 
 // Duplicate checks if the name provided has been seen before by this filter.
 func (sf *StringFilter) Duplicate(s string) bool {
-	if sf.filter.Test([]byte(s)) {
+	sf.lock.Lock()
+	defer sf.lock.Unlock()
+
+	if sf.filter.Has(s) {
 		return true
 	}
 
-	sf.filter.Add([]byte(s))
+	sf.filter.Insert(s)
 	return false
 }

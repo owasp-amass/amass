@@ -16,7 +16,7 @@ import (
 	"github.com/OWASP/Amass/v3/eventbus"
 	"github.com/OWASP/Amass/v3/net/http"
 	"github.com/OWASP/Amass/v3/requests"
-	sf "github.com/OWASP/Amass/v3/stringfilter"
+	"github.com/OWASP/Amass/v3/stringset"
 )
 
 const commonCrawlIndexListURL = "https://index.commoncrawl.org/collinfo.json"
@@ -86,7 +86,7 @@ func (c *CommonCrawl) OnDNSRequest(ctx context.Context, req *requests.DNSRequest
 		return
 	}
 
-	filter := sf.NewStringFilter()
+	filter := stringset.NewStringFilter()
 	for _, index := range c.indexURLs {
 		select {
 		case <-c.Quit():
@@ -118,7 +118,7 @@ func (c *CommonCrawl) OnDNSRequest(ctx context.Context, req *requests.DNSRequest
 
 func (c *CommonCrawl) parseJSON(page string) []string {
 	var urls []string
-	filter := sf.NewStringFilter()
+	filter := stringset.NewStringFilter()
 
 	scanner := bufio.NewScanner(strings.NewReader(page))
 	for scanner.Scan() {

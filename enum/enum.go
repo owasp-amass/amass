@@ -15,18 +15,17 @@ import (
 	"github.com/OWASP/Amass/v3/queue"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/services"
-	sf "github.com/OWASP/Amass/v3/stringfilter"
 	"github.com/OWASP/Amass/v3/stringset"
 )
 
 // Filters contains the set of string filters required during an enumeration.
 type Filters struct {
-	NewNames      *sf.StringFilter
-	Resolved      *sf.StringFilter
-	NewAddrs      *sf.StringFilter
-	SweepAddrs    *sf.StringFilter
-	Output        *sf.StringFilter
-	PassiveOutput *sf.StringFilter
+	NewNames      *stringset.StringFilter
+	Resolved      *stringset.StringFilter
+	NewAddrs      *stringset.StringFilter
+	SweepAddrs    *stringset.StringFilter
+	Output        *stringset.StringFilter
+	PassiveOutput *stringset.StringFilter
 }
 
 // Enumeration is the object type used to execute a DNS enumeration with Amass.
@@ -93,12 +92,12 @@ func NewEnumeration(sys services.System) *Enumeration {
 		Sys:      sys,
 		altQueue: new(queue.Queue),
 		filters: &Filters{
-			NewNames:      sf.NewStringFilter(),
-			Resolved:      sf.NewStringFilter(),
-			NewAddrs:      sf.NewStringFilter(),
-			SweepAddrs:    sf.NewStringFilter(),
-			Output:        sf.NewStringFilter(),
-			PassiveOutput: sf.NewStringFilter(),
+			NewNames:      stringset.NewStringFilter(),
+			Resolved:      stringset.NewStringFilter(),
+			NewAddrs:      stringset.NewStringFilter(),
+			SweepAddrs:    stringset.NewStringFilter(),
+			Output:        stringset.NewStringFilter(),
+			PassiveOutput: stringset.NewStringFilter(),
 		},
 		bruteQueue:  new(queue.Queue),
 		srcs:        stringset.New(),
