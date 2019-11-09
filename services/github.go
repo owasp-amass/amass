@@ -16,7 +16,7 @@ import (
 	"github.com/OWASP/Amass/v3/eventbus"
 	"github.com/OWASP/Amass/v3/net/http"
 	"github.com/OWASP/Amass/v3/requests"
-	sf "github.com/OWASP/Amass/v3/stringfilter"
+	"github.com/OWASP/Amass/v3/stringset"
 )
 
 // GitHub is the Service that handles access to the GitHub data source.
@@ -67,7 +67,7 @@ func (g *GitHub) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 		return
 	}
 
-	nameFilter := sf.NewStringFilter()
+	nameFilter := stringset.NewStringFilter()
 	// This function publishes new subdomain names discovered at the provided URL
 	fetchNames := func(u string) {
 		bus.Publish(requests.SetActiveTopic, g.String())
@@ -97,7 +97,7 @@ func (g *GitHub) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 	}
 	bus.Publish(requests.SetActiveTopic, g.String())
 
-	urlFilter := sf.NewStringFilter()
+	urlFilter := stringset.NewStringFilter()
 	// Try no more than ten times for search result pages
 loop:
 	for i := 1; i <= 10; i++ {

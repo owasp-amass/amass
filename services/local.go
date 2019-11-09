@@ -11,7 +11,7 @@ import (
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/graph"
 	"github.com/OWASP/Amass/v3/resolvers"
-	sf "github.com/OWASP/Amass/v3/stringfilter"
+	"github.com/OWASP/Amass/v3/stringset"
 )
 
 // LocalSystem implements a System to be executed within a single process.
@@ -195,7 +195,7 @@ func (l *LocalSystem) initCoreServices() error {
 }
 
 func (l *LocalSystem) periodicChecks() {
-	filter := sf.NewStringFilter()
+	filter := stringset.NewStringFilter()
 	t := time.NewTicker(10 * time.Second)
 	defer t.Stop()
 
@@ -209,7 +209,7 @@ func (l *LocalSystem) periodicChecks() {
 	}
 }
 
-func (l *LocalSystem) checkTheResolvers(filter *sf.StringFilter) {
+func (l *LocalSystem) checkTheResolvers(filter *stringset.StringFilter) {
 	pool := l.Pool().(*resolvers.ResolverPool)
 
 	for _, resolver := range pool.Resolvers {
