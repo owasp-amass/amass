@@ -34,29 +34,23 @@ docker run -v OUTPUT_DIR_PATH:/.config/amass/ amass enum -brute -w /wordlists/al
 
 If you prefer to build your own binary from the latest release of the source code, make sure you have a correctly configured **Go >= 1.13** environment. More information about how to achieve this can be found [on the golang website.](https://golang.org/doc/install).
 
-If you are not utilizing Go Modules, then you can simply execute the following command:
+Simply execute the following commands:
 
-```bash
-go get -u github.com/OWASP/Amass/...
-```
-
-If you would like to build Amass using Go Modules to ensure the proper dependencies, then perform the following steps:
-
-1. Download OWASP Amass:
-
-```bash
-go get github.com/OWASP/Amass
-```
-
-Ignore any error messages regarding what was pulled down.
-
-2. Turn on support for Go Modules to ensure the correct dependency versions are used:
+1. Turn on support for Go Modules to ensure the correct dependency versions are used:
 
 ```bash
 export GO111MODULE=on
 ```
 
-3. Next, build the binary from the project source code:
+2. Download OWASP Amass:
+
+```bash
+go get github.com/OWASP/Amass/v3
+```
+
+At this point, the binary should be in *$GOPATH/bin*.
+
+3. If you'd like to rebuild the binary from the project source code:
 
 ```bash
 cd $GOPATH/src/github.com/OWASP/Amass
@@ -64,7 +58,7 @@ cd $GOPATH/src/github.com/OWASP/Amass
 go install ./...
 ```
 
-At this point, the binary should be in *$GOPATH/bin*. Several wordlists for performing DNS name alterations and brute forcing can be found in the following directory:
+Several wordlists for performing DNS name alterations and brute forcing can be found in the following directory:
 
 ```bash
 ls $GOPATH/src/github.com/OWASP/Amass/examples/wordlists/
