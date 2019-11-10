@@ -28,7 +28,7 @@ amass enum -d example.com
 Typical parameters for DNS enumeration:
 
 ```bash
-$ amass enum -src -brute -min-for-recursive 2 -d example.com
+$ amass enum -v -src -ip -brute -min-for-recursive 2 -d example.com
 [Google] www.example.com
 [VirusTotal] ns.example.com
 ...
@@ -54,7 +54,7 @@ The amass tool has several subcommands shown below for handling your Internet ex
 | track | Compare results of enumerations against common target organizations |
 | db | Manage the graph databases storing the enumeration results |
 
-Each subcommand has its own arguments that shown in the following sections.
+Each subcommand has its own arguments that are shown in the following sections.
 
 ### The 'intel' Subcommand
 
@@ -143,22 +143,23 @@ This subcommand will perform DNS enumeration and network mapping while populatin
 
 Create enlightening network graph visualizations that add structure to the information gathered. This subcommand only leverages the 'output_directory' and remote graph database settings from the configuration file.
 
+The files generated for visualization are created in the current working directory and named amass_TYPE
+
 Switches for outputting the DNS and infrastructure findings as a network graph:
 
 | Flag | Description | Example |
 |------|-------------|---------|
-| -config | Path to the INI configuration file | amass viz -config config.ini -d3 -o PATH |
-| -d | Domain names separated by commas (can be used multiple times) | amass viz -d3 -d example.com -o PATH |
-| -d3 | Output a D3.js v4 force simulation HTML file | amass viz -d3 -o PATH |
-| -df | Path to a file providing root domain names | amass viz -d3 -df domains.txt -o PATH |
-| -dir | Path to the directory containing the graph database | amass viz -d3 -dir PATH -o PATH |
-| -enum | Identify an enumeration via an index from the db listing | amass viz -enum 1 -d3 -o PATH |
-| -gexf | Output to Graph Exchange XML Format (GEXF) | amass viz -gephi -o PATH |
-| -graphistry | Output Graphistry JSON | amass viz -graphistry -o PATH |
-| -i | Path to the Amass data operations JSON input file | amass viz -d3 -o PATH |
-| -maltego | Output a Maltego Graph Table CSV file | amass viz -maltego -o PATH |
-| -o | Path to the directory to place the generated output file(s) | amass viz -d3 -o PATH |
-| -visjs | Output HTML that employs VisJS | amass viz -visjs -o PATH |
+| -config | Path to the INI configuration file | amass viz -config config.ini -d3 |
+| -d | Domain names separated by commas (can be used multiple times) | amass viz -d3 -d example.com |
+| -d3 | Output a D3.js v4 force simulation HTML file | amass viz -d3 -d example.com |
+| -df | Path to a file providing root domain names | amass viz -d3 -df domains.txt |
+| -dir | Path to the directory containing the graph database | amass viz -d3 -dir PATH -d example.com |
+| -enum | Identify an enumeration via an index from the db listing | amass viz -enum 1 -d3 -d example.com |
+| -gexf | Output to Graph Exchange XML Format (GEXF) | amass viz -gephi -d example.com |
+| -graphistry | Output Graphistry JSON | amass viz -graphistry -d example.com |
+| -i | Path to the Amass data operations JSON input file | amass viz -d3 -d example.com |
+| -maltego | Output a Maltego Graph Table CSV file | amass viz -maltego -d example.com |
+| -visjs | Output HTML that employs VisJS | amass viz -visjs -d example.com |
 
 ### The 'track' Subcommand
 
@@ -196,9 +197,9 @@ Performs viewing and manipulation of the graph database. This subcommand only le
 
 ## The Output Directory
 
-Amass has several files that it outputs during an enumeration (e.g. the log file). If you are not using a database server to store the network graph information, then Amass creates one in the output directory. These files are used again during future enumerations, and when leveraging features like tracking and visualization.
+Amass has several files that it outputs during an enumeration (e.g. the log file). If you are not using a database server to store the network graph information, then Amass creates a file based graph database in the output directory. These files are used again during future enumerations, and when leveraging features like tracking and visualization.
 
-By default, the output directory is created in your **HOME** directory and named *amass*. If this is not suitable for your needs, then the subcommands can be instructed to create the output directory in an alternative location using the **'-dir'** flag.
+By default, the output directory is created in the operating system default root directory to use for user-specific configuration data and named *amass*. If this is not suitable for your needs, then the subcommands can be instructed to create the output directory in an alternative location using the **'-dir'** flag.
 
 If you decide to use an Amass configuration file, it will be automatically discovered when put in the output directory and named **config.ini**.
 
