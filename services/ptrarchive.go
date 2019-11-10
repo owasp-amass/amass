@@ -7,14 +7,10 @@ import (
 	"context"
 	"fmt"
 	"time"
-	outhttp "net/http"
-	"net"
-	"net/url"
-	"strings"
-	"io/ioutil"
 
 	"github.com/OWASP/Amass/config"
 	"github.com/OWASP/Amass/eventbus"
+	"github.com/OWASP/Amass/net/http"
 	"github.com/OWASP/Amass/requests"
 )
 
@@ -62,44 +58,15 @@ func (p *PTRArchive) OnDNSRequest(ctx context.Context, req *requests.DNSRequest)
 	p.CheckRateLimit()
 	bus.Publish(requests.SetActiveTopic, p.String())
 
-	v := url.Values{}
-
-	dial := net.Dialer{}
-	client := &outhttp.Client{
-		Transport: &outhttp.Transport{
-			DialContext:         dial.DialContext,
-			TLSHandshakeTimeout: 10 * time.Second,
-		},
-	}
-
 	url := p.getURL(req.Domain)
-
-	request, err := outhttp.NewRequest("GET", url, strings.NewReader(v.Encode()))
-
-	cookie := &outhttp.Cookie{
-		Name:   "test",
-		Domain: "ptrarchive.com",
-		Value:  "123432",
-	}
-	request.AddCookie(cookie)
-
+	fakeCookie := map[string]string{"Cookie":"test=12345"}
+	page, err := http.RequestWebPage(url, nil, fakeCookie, "", "")
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: Failed to setup the POST request: %v", p.String(), err))
+		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", p.String(), url, err))
+		return
 	}
 
-	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	request.Header.Set("Referer", "https://ptrarchive.com")
-
-	resp, err := client.Do(request)
-	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: The POST request failed: %v", p.String(), err))
-	}
-
-	in, err := ioutil.ReadAll(resp.Body)
-	resp.Body.Close()
-	
-
-	for _, sd := range re.FindAllString(string(in), -1) {
+	for _, sd := range re.FindAllString(page, -1) {
 		name := cleanName(sd)
 		if name == "automated_programs_unauthorized."+req.Domain {
 			continue
