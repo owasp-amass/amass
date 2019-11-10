@@ -1,8 +1,9 @@
 // Copyright 2017 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
-package graph
+package db
 
+/*
 import (
 	"encoding/json"
 	"log"
@@ -34,7 +35,7 @@ type Gremlin struct {
 	done     chan struct{}
 }
 
-// NewGremlin returns a client object that implements the Amass DataHandler interface.
+// NewGremlin returns a client object that implements the GraphDatabase interface.
 // The url param typically looks like the following: ws://localhost:8182
 func NewGremlin(url, user, pass string, l *log.Logger) *Gremlin {
 	g := &Gremlin{
@@ -76,7 +77,7 @@ func (g *Gremlin) getClient() (*gremgo.Client, error) {
 	return &grem, err
 }
 
-// Close implements the Amass DataHandler interface.
+// Close implements the GraphDatabase interface.
 func (g *Gremlin) Close() {
 	g.done <- struct{}{}
 }
@@ -85,6 +86,451 @@ func (g *Gremlin) Close() {
 func (g *Gremlin) String() string {
 	return "Gremlin TinkerPop Handler"
 }
+
+// NodeToID implements the GraphDatabase interface.
+func (g *Gremlin) NodeToID(n Node) string {
+	return fmt.Sprintf("%s", n)
+}
+
+// InsertNode implements the GraphDatabase interface.
+func (g *Gremlin) InsertNode(id, ntype string) (Node, error) {
+	if id == "" || ntype == "" {
+		return nil, fmt.Errorf("%s: InsertNode: Empty required arguments", g.String())
+	}
+
+	bindings := map[string]string{
+		"label":      id,
+		"type": ntype,
+	}
+
+	conn, err := g.pool.Get()
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	_, err = conn.Client.Execute(
+		// Does this vertex already exist in the graph?
+		"g.V(label).fold().coalesce(unfold(),"+
+			// Add the new vertex to the graph
+			"g.addV(id).property('type', type)",
+		bindings,
+		map[string]string{},
+	)
+	if err == nil {
+		return id, nil
+	}
+
+	return "", err
+}
+
+// ReadNode implements the GraphDatabase interface.
+func (g *Gremlin) ReadNode(id string) (Node, error) {
+	if id == "" {
+		return nil, fmt.Errorf("%s: ReadNode: Invalid node provided", g.String())
+	}
+
+	// Check that a node with 'id' as a subject already exists
+	bindings := map[string]string{"label":      id}
+
+	conn, err := g.pool.Get()
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	result, err = conn.Client.Execute(
+		// Does this vertex already exist in the graph?
+		"g.V(label).values('type')",
+		bindings,
+		map[string]string{},
+	)
+	if rstr := fmt.Sprint("%s", result); err == nil && rstr != "" {
+		return id, nil
+	}
+
+	return nil, fmt.Errorf("%s: ReadNode: Node %s does not exist", g.String(), id)
+}
+
+// DeleteNode implements the GraphDatabase interface.
+func (g *Gremlin) DeleteNode(node Node) error {
+	id := g.NodeToID(node)
+	if id == "" {
+		return fmt.Errorf("%s: DeleteNode: Invalid node provided", g.String())
+	}
+
+	bindings := map[string]string{"label":      id}
+
+	conn, err := g.pool.Get()
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	_, err = conn.Client.Execute(
+		"g.V(label).drop()",
+		bindings,
+		map[string]string{},
+	)
+
+	return err
+}
+
+// AllNodesOfType implements the GraphDatabase interface.
+func (g *Gremlin) AllNodesOfType(ntype string) ([]Node, error) {
+	if ntype == "" {
+		return nil, fmt.Errorf("%s: AllNodesOfType: Empty type argument", g.String())
+	}
+
+	bindings := map[string]string{"type": ntype}
+
+	conn, err := g.pool.Get()
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+
+	nodes, err = conn.Client.Execute(
+		"g.V().has('type', type)",
+		bindings,
+		map[string]string{},
+	)
+
+	return nodes, err
+}
+
+// InsertProperty implements the GraphDatabase interface.
+func (g *Gremlin) InsertProperty(node Node, predicate, value string) error {
+	g.Lock()
+	defer g.Unlock()
+
+	nstr := g.NodeToID(node)
+	if nstr == "" {
+		return fmt.Errorf("%s: InsertProperty: Invalid node reference argument", g.String())
+	}
+
+	bindings := map[string]string{
+		"label":      nstr,
+		"pred": predicate,
+		"value": value,
+	}
+
+	conn, err := g.pool.Get()
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	_, err = conn.Client.Execute(
+		// Does this vertex already exist in the graph?
+		"g.V(label).property(pred, value)",
+		bindings,
+		map[string]string{},
+	)
+
+	return g.store.AddQuad(quad.Make(nstr, predicate, value, nil))
+}
+
+// ReadProperties implements the GraphDatabase interface.
+func (g *Gremlin) ReadProperties(node Node, predicates ...string) ([]*Property, error) {
+	nstr := g.NodeToID(node)
+	var properties []*Property
+
+	if nstr == "" {
+		return properties, fmt.Errorf("%s: ReadProperties: Invalid node reference argument", g.String())
+	}
+
+	preds := stringset.New(predicates...)
+	for _, pred := range g.nodePredicates(nstr, "out") {
+		if len(predicates) > 0 && !preds.Has(pred) {
+			continue
+		}
+
+		vals := cayley.StartPath(g.store, quad.String(nstr)).Out(quad.String(pred))
+		g.optimizedIterate(vals, func(value quad.Value) {
+			vstr := quad.ToString(value)
+
+			// Check if this is actually a node and not a property
+			p := cayley.StartPath(g.store, quad.String(vstr)).Has(quad.String("type"))
+			if first := g.optimizedFirst(p); first == nil {
+				properties = append(properties, &Property{
+					Predicate: pred,
+					Value:     vstr,
+				})
+			}
+		})
+	}
+
+	if len(properties) == 0 {
+		return properties, fmt.Errorf("%s: ReadProperties: No properties discovered", g.String())
+	}
+
+	return properties, nil
+}
+
+// CountProperties implements the GraphDatabase interface.
+func (g *Gremlin) CountProperties(node Node, predicates ...string) (int, error) {
+	g.RLock()
+	defer g.RUnlock()
+
+	nstr := g.NodeToID(node)
+	if nstr == "" {
+		return 0, fmt.Errorf("%s: CountProperties: Invalid node reference argument", g.String())
+	}
+
+	var preds []quad.Value
+	for _, p := range predicates {
+		preds = append(preds, quad.String(p))
+	}
+
+	edges := cayley.StartPath(g.store, quad.String(nstr)).Out(preds).Has(quad.String("type"))
+	p := cayley.StartPath(g.store, quad.String(nstr)).Out(preds).Except(edges)
+
+	return g.optimizedCount(p), nil
+}
+
+// DeleteProperty implements the GraphDatabase interface.
+func (g *Gremlin) DeleteProperty(node Node, predicate, value string) error {
+	g.Lock()
+	defer g.Unlock()
+
+	nstr := g.NodeToID(node)
+	if nstr == "" {
+		return fmt.Errorf("%s: DeleteProperty: Invalid node reference argument", g.String())
+	}
+
+	// Check if this is actually a node and not a property
+	p := cayley.StartPath(g.store, quad.String(value)).Has(quad.String("type"))
+	if first := g.optimizedFirst(p); first != nil {
+		return fmt.Errorf("%s: DeleteProperty: Attempt to delete an edge as a property", g.String())
+	}
+
+	return g.store.RemoveQuad(quad.Make(nstr, predicate, value, nil))
+}
+
+// InsertEdge implements the GraphDatabase interface.
+func (g *Gremlin) InsertEdge(edge *Edge) error {
+	g.Lock()
+	defer g.Unlock()
+
+	nstr1 := g.NodeToID(edge.From)
+	nstr2 := g.NodeToID(edge.To)
+	if nstr1 == "" || nstr2 == "" {
+		return fmt.Errorf("%s: InsertEdge: Invalid edge argument", g.String())
+	}
+
+	// Check if the from node has already been inserted
+	p := cayley.StartPath(g.store, quad.String(nstr1)).Has(quad.String("type"))
+	if first := g.optimizedFirst(p); first == nil {
+		return fmt.Errorf("%s: InsertEdge: Node %s does not exist", g.String(), nstr1)
+	}
+
+	// Check if the to node has already been inserted
+	p = cayley.StartPath(g.store, quad.String(nstr2)).Has(quad.String("type"))
+	if first := g.optimizedFirst(p); first == nil {
+		return fmt.Errorf("%s: InsertEdge: Node %s does not exist", g.String(), nstr2)
+	}
+
+	return g.store.AddQuad(quad.Make(nstr1, edge.Predicate, nstr2, nil))
+}
+
+// ReadEdges implements the GraphDatabase interface.
+func (g *Gremlin) ReadEdges(node Node, predicates ...string) ([]*Edge, error) {
+	nstr := g.NodeToID(node)
+	if nstr == "" {
+		return nil, fmt.Errorf("%s: ReadEdges: Invalid node reference argument", g.String())
+	}
+
+	var edges []*Edge
+	if e, err := g.ReadInEdges(node, predicates...); err == nil {
+		edges = append(edges, e...)
+	}
+
+	if e, err := g.ReadOutEdges(node, predicates...); err == nil {
+		edges = append(edges, e...)
+	}
+
+	if len(edges) == 0 {
+		return nil, fmt.Errorf("%s: ReadEdges: Failed to discover edges for the node %s", g.String(), nstr)
+	}
+
+	return edges, nil
+}
+
+// ReadInEdges implements the GraphDatabase interface.
+func (g *Gremlin) ReadInEdges(node Node, predicates ...string) ([]*Edge, error) {
+	g.RLock()
+	defer g.RUnlock()
+
+	nstr := g.NodeToID(node)
+	if nstr == "" {
+		return nil, fmt.Errorf("%s: ReadInEdges: Invalid node reference argument", g.String())
+	}
+
+	var edges []*Edge
+	preds := stringset.New(predicates...)
+	for _, pred := range g.nodePredicates(nstr, "in") {
+		if len(predicates) > 0 && !preds.Has(pred) {
+			continue
+		}
+
+		vals := cayley.StartPath(g.store, quad.String(nstr)).In(quad.String(pred))
+		g.optimizedIterate(vals, func(value quad.Value) {
+			vstr := quad.ToString(value)
+
+			// Check if this is actually a node and not a property
+			p := cayley.StartPath(g.store, quad.String(vstr)).Has(quad.String("type"))
+			if first := g.optimizedFirst(p); first != nil {
+				edges = append(edges, &Edge{
+					Predicate: pred,
+					From:      vstr,
+					To:        node,
+				})
+			}
+		})
+	}
+
+	if len(edges) == 0 {
+		return nil, fmt.Errorf("%s: ReadInEdges: Failed to discover edges coming into the node %s", g.String(), nstr)
+	}
+
+	return edges, nil
+}
+
+// CountInEdges implements the GraphDatabase interface.
+func (g *Gremlin) CountInEdges(node Node, predicates ...string) (int, error) {
+	g.RLock()
+	defer g.RUnlock()
+
+	nstr := g.NodeToID(node)
+	if nstr == "" {
+		return 0, fmt.Errorf("%s: CountInEdges: Invalid node reference argument", g.String())
+	}
+
+	var preds []quad.Value
+	for _, p := range predicates {
+		preds = append(preds, quad.String(p))
+	}
+
+	p := cayley.StartPath(g.store, quad.String(nstr)).In(preds).Has(quad.String("type"))
+
+	return g.optimizedCount(p), nil
+}
+
+// ReadOutEdges implements the GraphDatabase interface.
+func (g *Gremlin) ReadOutEdges(node Node, predicates ...string) ([]*Edge, error) {
+	g.RLock()
+	defer g.RUnlock()
+
+	nstr := g.NodeToID(node)
+	if nstr == "" {
+		return nil, fmt.Errorf("%s: ReadOutEdges: Invalid node reference argument", g.String())
+	}
+
+	var edges []*Edge
+	preds := stringset.New(predicates...)
+	for _, pred := range g.nodePredicates(nstr, "out") {
+		if len(predicates) > 0 && !preds.Has(pred) {
+			continue
+		}
+
+		vals := cayley.StartPath(g.store, quad.String(nstr)).Out(quad.String(pred))
+		g.optimizedIterate(vals, func(value quad.Value) {
+			vstr := quad.ToString(value)
+
+			// Check if this is actually a node and not a property
+			p := cayley.StartPath(g.store, quad.String(vstr)).Has(quad.String("type"))
+			if first := g.optimizedFirst(p); first != nil {
+				edges = append(edges, &Edge{
+					Predicate: pred,
+					From:      node,
+					To:        vstr,
+				})
+			}
+		})
+	}
+
+	if len(edges) == 0 {
+		return nil, fmt.Errorf("%s: ReadOutEdges: Failed to discover edges leaving the node %s", g.String(), nstr)
+	}
+
+	return edges, nil
+}
+
+// CountOutEdges implements the GraphDatabase interface.
+func (g *Gremlin) CountOutEdges(node Node, predicates ...string) (int, error) {
+	g.RLock()
+	defer g.RUnlock()
+
+	nstr := g.NodeToID(node)
+	if nstr == "" {
+		return 0, fmt.Errorf("%s: CountOutEdges: Invalid node reference argument", g.String())
+	}
+
+	var preds []quad.Value
+	for _, p := range predicates {
+		preds = append(preds, quad.String(p))
+	}
+
+	p := cayley.StartPath(g.store, quad.String(nstr)).Out(preds).Has(quad.String("type"))
+
+	return g.optimizedCount(p), nil
+}
+
+// DeleteEdge implements the GraphDatabase interface.
+func (g *Gremlin) DeleteEdge(edge *Edge) error {
+	g.Lock()
+	defer g.Unlock()
+
+	from := g.NodeToID(edge.From)
+	to := g.NodeToID(edge.To)
+	if from == "" || to == "" {
+		return fmt.Errorf("%s: DeleteEdge: Invalid edge reference argument", g.String())
+	}
+
+	return g.store.RemoveQuad(quad.Make(from, edge.Predicate, to, nil))
+}
+
+func (g *Gremlin) propertyValues(node quad.Value, pname string) []string {
+	var results []string
+
+	if nstr := quad.ToString(node); nstr != "" || pname != "" {
+		p := cayley.StartPath(g.store, quad.String(nstr)).Out(quad.String(pname))
+
+		g.optimizedIterate(p, func(node quad.Value) {
+			results = append(results, quad.ToString(node))
+		})
+	}
+
+	return results
+}
+
+func (g *Gremlin) nodePredicates(id, direction string) []string {
+	p := cayley.StartPath(g.store, quad.String(id))
+
+	if direction == "in" {
+		p = p.InPredicates()
+	} else if direction == "out" {
+		p = p.OutPredicates()
+	}
+	p = p.Unique()
+
+	var predicates []string
+	g.optimizedIterate(p, func(value quad.Value) {
+		if vstr := quad.ToString(value); vstr != "" {
+			predicates = append(predicates, vstr)
+		}
+	})
+
+	return predicates
+}
+
+// DumpGraph returns a string containing all data currently in the graph.
+func (g *Gremlin) DumpGraph() string {
+	return ""
+}
+
+/*
 
 type gremlinRequest struct {
 	Params *DataOptsParams
@@ -153,36 +599,6 @@ func (g *Gremlin) processInsertRequests() {
 	}
 }
 
-func (g *Gremlin) insertDomain(data *DataOptsParams) error {
-	bindings := map[string]string{
-		"uuid":      data.UUID,
-		"timestamp": data.Timestamp,
-		"domain":    data.Domain,
-		"tag":       data.Tag,
-		"source":    data.Source,
-	}
-
-	conn, err := g.pool.Get()
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-
-	_, err = conn.Client.Execute(
-		// Does this domain vertex already exist in the graph?
-		"g.V().hasLabel('domain').has('name', domain).has('enum', uuid).fold().coalesce(unfold(),"+
-			// Add the new domain vertex to the graph
-			"g.addV('domain').property('name', domain).property('type', 'domain').property('enum', uuid)."+
-			"property('timestamp', timestamp).property('tag', tag).property('source', source))",
-		bindings,
-		map[string]string{},
-	)
-	return err
-}
-
-func (g *Gremlin) insertSubdomain(data *DataOptsParams) error {
-	return g.insertSub("subdomain", data)
-}
 
 func (g *Gremlin) insertSub(label string, data *DataOptsParams) error {
 	bindings := map[string]string{
@@ -931,7 +1347,4 @@ func (g *Gremlin) IsCNAMENode(data *DataOptsParams) bool {
 	return false
 }
 
-// VizData returns the current state of the Graph as viz package Nodes and Edges.
-func (g *Gremlin) VizData(uuid string) ([]viz.Node, []viz.Edge) {
-	return []viz.Node{}, []viz.Edge{}
-}
+*/

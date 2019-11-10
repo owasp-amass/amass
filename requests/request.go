@@ -103,7 +103,6 @@ type WhoisRequest struct {
 
 // Output contains all the output data for an enumerated DNS name.
 type Output struct {
-	Timestamp time.Time
 	Name      string        `json:"name"`
 	Domain    string        `json:"domain"`
 	Addresses []AddressInfo `json:"addresses"`

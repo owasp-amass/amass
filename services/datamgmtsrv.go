@@ -8,15 +8,14 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/eventbus"
-	"github.com/OWASP/Amass/v3/graph"
 	"github.com/OWASP/Amass/v3/net"
 	amassdns "github.com/OWASP/Amass/v3/net/dns"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/resolvers"
+	"github.com/OWASP/Amass/v3/semaphore"
 	"github.com/miekg/dns"
 )
 
@@ -24,11 +23,13 @@ import (
 // within the architecture. This is achieved by watching all the RESOLVED events.
 type DataManagerService struct {
 	BaseService
+
+	maxRequests semaphore.Semaphore
 }
 
 // NewDataManagerService returns he object initialized, but not yet started.
 func NewDataManagerService(sys System) *DataManagerService {
-	dms := new(DataManagerService)
+	dms := &DataManagerService{maxRequests: semaphore.NewSimpleSemaphore(25)}
 
 	dms.BaseService = *NewBaseService(dms, "Data Manager", sys)
 	return dms
@@ -45,30 +46,45 @@ func (dms *DataManagerService) OnDNSRequest(ctx context.Context, req *requests.D
 	}
 	bus.Publish(requests.SetActiveTopic, dms.String())
 
-	dms.insertDomain(ctx, req.Domain)
+	// Check for CNAME records first
 	for i, r := range req.Records {
 		req.Records[i].Name = strings.ToLower(r.Name)
 		req.Records[i].Data = strings.ToLower(r.Data)
 
+		if uint16(r.Type) == dns.TypeCNAME {
+			dms.maxRequests.Acquire(1)
+			go dms.insertCNAME(ctx, req, i)
+			// Do not enter more than the CNAME record
+			return
+		}
+	}
+
+	for i, r := range req.Records {
+		req.Records[i].Name = strings.ToLower(r.Name)
+		req.Records[i].Data = strings.ToLower(r.Data)
+
+		dms.maxRequests.Acquire(1)
+		bus.Publish(requests.SetActiveTopic, dms.String())
+
 		switch uint16(r.Type) {
 		case dns.TypeA:
-			dms.insertA(ctx, req, i)
+			go dms.insertA(ctx, req, i)
 		case dns.TypeAAAA:
-			dms.insertAAAA(ctx, req, i)
-		case dns.TypeCNAME:
-			dms.insertCNAME(ctx, req, i)
+			go dms.insertAAAA(ctx, req, i)
 		case dns.TypePTR:
-			dms.insertPTR(ctx, req, i)
+			go dms.insertPTR(ctx, req, i)
 		case dns.TypeSRV:
-			dms.insertSRV(ctx, req, i)
+			go dms.insertSRV(ctx, req, i)
 		case dns.TypeNS:
-			dms.insertNS(ctx, req, i)
+			go dms.insertNS(ctx, req, i)
 		case dns.TypeMX:
-			dms.insertMX(ctx, req, i)
+			go dms.insertMX(ctx, req, i)
 		case dns.TypeTXT:
-			dms.insertTXT(ctx, req, i)
+			go dms.insertTXT(ctx, req, i)
 		case dns.TypeSPF:
-			dms.insertSPF(ctx, req, i)
+			go dms.insertSPF(ctx, req, i)
+		default:
+			dms.maxRequests.Release(1)
 		}
 	}
 }
@@ -86,58 +102,21 @@ func (dms *DataManagerService) OnASNRequest(ctx context.Context, req *requests.A
 	}
 
 	for _, g := range dms.System().GraphDatabases() {
-		err := g.Insert(&graph.DataOptsParams{
-			UUID:        cfg.UUID.String(),
-			Timestamp:   time.Now().Format(time.RFC3339),
-			Type:        graph.OptInfrastructure,
-			Address:     req.Address,
-			ASN:         req.ASN,
-			CIDR:        req.Prefix,
-			Description: req.Description,
-		})
+		err := g.InsertInfrastructure(req.ASN, req.Description,
+			req.Address, req.Prefix, req.Source, req.Tag, cfg.UUID.String())
 		if err != nil {
 			bus.Publish(requests.LogTopic,
 				fmt.Sprintf("%s: %s failed to insert infrastructure data: %v", dms.String(), g, err),
 			)
 		}
 	}
-}
 
-func (dms *DataManagerService) insertDomain(ctx context.Context, domain string) {
-	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if cfg == nil || bus == nil {
-		return
-	}
-
-	domain = strings.ToLower(domain)
-	if domain == "" {
-		return
-	}
-
-	for _, g := range dms.System().GraphDatabases() {
-		err := g.Insert(&graph.DataOptsParams{
-			UUID:      cfg.UUID.String(),
-			Timestamp: time.Now().Format(time.RFC3339),
-			Type:      graph.OptDomain,
-			Domain:    domain,
-			Tag:       requests.DNS,
-			Source:    "Forward DNS",
-		})
-		if err != nil {
-			bus.Publish(requests.LogTopic, fmt.Sprintf("%s failed to insert domain: %v", g, err))
-		}
-	}
-
-	bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
-		Name:   domain,
-		Domain: domain,
-		Tag:    requests.DNS,
-		Source: "Forward DNS",
-	})
+	bus.Publish(requests.SetActiveTopic, dms.String())
 }
 
 func (dms *DataManagerService) insertCNAME(ctx context.Context, req *requests.DNSRequest, recidx int) {
+	defer dms.maxRequests.Release(1)
+
 	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
 	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
 	if cfg == nil || bus == nil {
@@ -149,25 +128,13 @@ func (dms *DataManagerService) insertCNAME(ctx context.Context, req *requests.DN
 		return
 	}
 
-	domain := strings.ToLower(dms.System().Pool().SubdomainToDomain(target))
+	domain := strings.ToLower(config.RootDomain(target))
 	if domain == "" {
 		return
 	}
 
-	dms.insertDomain(ctx, domain)
 	for _, g := range dms.System().GraphDatabases() {
-		err := g.Insert(&graph.DataOptsParams{
-			UUID:         cfg.UUID.String(),
-			Timestamp:    time.Now().Format(time.RFC3339),
-			Type:         graph.OptCNAME,
-			Name:         req.Name,
-			Domain:       req.Domain,
-			TargetName:   target,
-			TargetDomain: domain,
-			Tag:          req.Tag,
-			Source:       req.Source,
-		})
-		if err != nil {
+		if err := g.InsertCNAME(req.Name, target, req.Source, req.Tag, cfg.UUID.String()); err != nil {
 			bus.Publish(requests.LogTopic, fmt.Sprintf("%s failed to insert CNAME: %v", g, err))
 		}
 	}
@@ -177,11 +144,15 @@ func (dms *DataManagerService) insertCNAME(ctx context.Context, req *requests.DN
 		Name:   target,
 		Domain: domain,
 		Tag:    requests.DNS,
-		Source: "Forward DNS",
+		Source: "DNS",
 	})
+
+	bus.Publish(requests.SetActiveTopic, dms.String())
 }
 
 func (dms *DataManagerService) insertA(ctx context.Context, req *requests.DNSRequest, recidx int) {
+	defer dms.maxRequests.Release(1)
+
 	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
 	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
 	if cfg == nil || bus == nil {
@@ -194,17 +165,7 @@ func (dms *DataManagerService) insertA(ctx context.Context, req *requests.DNSReq
 	}
 
 	for _, g := range dms.System().GraphDatabases() {
-		err := g.Insert(&graph.DataOptsParams{
-			UUID:      cfg.UUID.String(),
-			Timestamp: time.Now().Format(time.RFC3339),
-			Type:      graph.OptA,
-			Name:      req.Name,
-			Domain:    req.Domain,
-			Address:   addr,
-			Tag:       req.Tag,
-			Source:    req.Source,
-		})
-		if err != nil {
+		if err := g.InsertA(req.Name, addr, req.Source, req.Tag, cfg.UUID.String()); err != nil {
 			bus.Publish(requests.LogTopic, fmt.Sprintf("%s failed to insert A record: %v", g, err))
 		}
 	}
@@ -215,9 +176,13 @@ func (dms *DataManagerService) insertA(ctx context.Context, req *requests.DNSReq
 		Tag:     req.Tag,
 		Source:  req.Source,
 	})
+
+	bus.Publish(requests.SetActiveTopic, dms.String())
 }
 
 func (dms *DataManagerService) insertAAAA(ctx context.Context, req *requests.DNSRequest, recidx int) {
+	defer dms.maxRequests.Release(1)
+
 	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
 	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
 	if cfg == nil || bus == nil {
@@ -230,17 +195,7 @@ func (dms *DataManagerService) insertAAAA(ctx context.Context, req *requests.DNS
 	}
 
 	for _, g := range dms.System().GraphDatabases() {
-		err := g.Insert(&graph.DataOptsParams{
-			UUID:      cfg.UUID.String(),
-			Timestamp: time.Now().Format(time.RFC3339),
-			Type:      graph.OptAAAA,
-			Name:      req.Name,
-			Domain:    req.Domain,
-			Address:   addr,
-			Tag:       req.Tag,
-			Source:    req.Source,
-		})
-		if err != nil {
+		if err := g.InsertA(req.Name, addr, req.Source, req.Tag, cfg.UUID.String()); err != nil {
 			bus.Publish(requests.LogTopic, fmt.Sprintf("%s failed to insert AAAA record: %v", g, err))
 		}
 	}
@@ -251,9 +206,13 @@ func (dms *DataManagerService) insertAAAA(ctx context.Context, req *requests.DNS
 		Tag:     req.Tag,
 		Source:  req.Source,
 	})
+
+	bus.Publish(requests.SetActiveTopic, dms.String())
 }
 
 func (dms *DataManagerService) insertPTR(ctx context.Context, req *requests.DNSRequest, recidx int) {
+	defer dms.maxRequests.Release(1)
+
 	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
 	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
 	if cfg == nil || bus == nil {
@@ -271,19 +230,8 @@ func (dms *DataManagerService) insertPTR(ctx context.Context, req *requests.DNSR
 		return
 	}
 
-	dms.insertDomain(ctx, domain)
 	for _, g := range dms.System().GraphDatabases() {
-		err := g.Insert(&graph.DataOptsParams{
-			UUID:       cfg.UUID.String(),
-			Timestamp:  time.Now().Format(time.RFC3339),
-			Type:       graph.OptPTR,
-			Name:       req.Name,
-			Domain:     domain,
-			TargetName: target,
-			Tag:        req.Tag,
-			Source:     req.Source,
-		})
-		if err != nil {
+		if err := g.InsertPTR(req.Name, target, req.Source, req.Tag, cfg.UUID.String()); err != nil {
 			bus.Publish(requests.LogTopic, fmt.Sprintf("%s failed to insert PTR record: %v", g, err))
 		}
 	}
@@ -294,9 +242,13 @@ func (dms *DataManagerService) insertPTR(ctx context.Context, req *requests.DNSR
 		Tag:    requests.DNS,
 		Source: req.Source,
 	})
+
+	bus.Publish(requests.SetActiveTopic, dms.String())
 }
 
 func (dms *DataManagerService) insertSRV(ctx context.Context, req *requests.DNSRequest, recidx int) {
+	defer dms.maxRequests.Release(1)
+
 	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
 	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
 	if cfg == nil || bus == nil {
@@ -310,18 +262,7 @@ func (dms *DataManagerService) insertSRV(ctx context.Context, req *requests.DNSR
 	}
 
 	for _, g := range dms.System().GraphDatabases() {
-		err := g.Insert(&graph.DataOptsParams{
-			UUID:       cfg.UUID.String(),
-			Timestamp:  time.Now().Format(time.RFC3339),
-			Type:       graph.OptSRV,
-			Name:       req.Name,
-			Domain:     req.Domain,
-			Service:    service,
-			TargetName: target,
-			Tag:        req.Tag,
-			Source:     req.Source,
-		})
-		if err != nil {
+		if err := g.InsertSRV(req.Name, service, target, req.Source, req.Tag, cfg.UUID.String()); err != nil {
 			bus.Publish(requests.LogTopic, fmt.Sprintf("%s failed to insert SRV record: %v", g, err))
 		}
 	}
@@ -334,9 +275,13 @@ func (dms *DataManagerService) insertSRV(ctx context.Context, req *requests.DNSR
 			Source: req.Source,
 		})
 	}
+
+	bus.Publish(requests.SetActiveTopic, dms.String())
 }
 
 func (dms *DataManagerService) insertNS(ctx context.Context, req *requests.DNSRequest, recidx int) {
+	defer dms.maxRequests.Release(1)
+
 	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
 	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
 	if cfg == nil || bus == nil {
@@ -349,25 +294,13 @@ func (dms *DataManagerService) insertNS(ctx context.Context, req *requests.DNSRe
 		return
 	}
 
-	domain := strings.ToLower(dms.System().Pool().SubdomainToDomain(target))
+	domain := strings.ToLower(config.RootDomain(target))
 	if domain == "" {
 		return
 	}
 
-	dms.insertDomain(ctx, domain)
 	for _, g := range dms.System().GraphDatabases() {
-		err := g.Insert(&graph.DataOptsParams{
-			UUID:         cfg.UUID.String(),
-			Timestamp:    time.Now().Format(time.RFC3339),
-			Type:         graph.OptNS,
-			Name:         req.Name,
-			Domain:       req.Domain,
-			TargetName:   target,
-			TargetDomain: domain,
-			Tag:          req.Tag,
-			Source:       req.Source,
-		})
-		if err != nil {
+		if err := g.InsertNS(req.Name, target, req.Source, req.Tag, cfg.UUID.String()); err != nil {
 			bus.Publish(requests.LogTopic, fmt.Sprintf("%s failed to insert NS record: %v", g, err))
 		}
 	}
@@ -377,12 +310,16 @@ func (dms *DataManagerService) insertNS(ctx context.Context, req *requests.DNSRe
 			Name:   target,
 			Domain: domain,
 			Tag:    requests.DNS,
-			Source: "Forward DNS",
+			Source: "DNS",
 		})
 	}
+
+	bus.Publish(requests.SetActiveTopic, dms.String())
 }
 
 func (dms *DataManagerService) insertMX(ctx context.Context, req *requests.DNSRequest, recidx int) {
+	defer dms.maxRequests.Release(1)
+
 	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
 	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
 	if cfg == nil || bus == nil {
@@ -394,25 +331,13 @@ func (dms *DataManagerService) insertMX(ctx context.Context, req *requests.DNSRe
 		return
 	}
 
-	domain := strings.ToLower(dms.System().Pool().SubdomainToDomain(target))
+	domain := strings.ToLower(config.RootDomain(target))
 	if domain == "" {
 		return
 	}
 
-	dms.insertDomain(ctx, domain)
 	for _, g := range dms.System().GraphDatabases() {
-		err := g.Insert(&graph.DataOptsParams{
-			UUID:         cfg.UUID.String(),
-			Timestamp:    time.Now().Format(time.RFC3339),
-			Type:         graph.OptMX,
-			Name:         req.Name,
-			Domain:       req.Domain,
-			TargetName:   target,
-			TargetDomain: domain,
-			Tag:          req.Tag,
-			Source:       req.Source,
-		})
-		if err != nil {
+		if err := g.InsertMX(req.Name, target, req.Source, req.Tag, cfg.UUID.String()); err != nil {
 			bus.Publish(requests.LogTopic, fmt.Sprintf("%s failed to insert MX record: %v", g, err))
 		}
 	}
@@ -422,12 +347,16 @@ func (dms *DataManagerService) insertMX(ctx context.Context, req *requests.DNSRe
 			Name:   target,
 			Domain: domain,
 			Tag:    requests.DNS,
-			Source: "Forward DNS",
+			Source: "DNS",
 		})
 	}
+
+	bus.Publish(requests.SetActiveTopic, dms.String())
 }
 
 func (dms *DataManagerService) insertTXT(ctx context.Context, req *requests.DNSRequest, recidx int) {
+	defer dms.maxRequests.Release(1)
+
 	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
 	if cfg == nil {
 		return
@@ -441,6 +370,8 @@ func (dms *DataManagerService) insertTXT(ctx context.Context, req *requests.DNSR
 }
 
 func (dms *DataManagerService) insertSPF(ctx context.Context, req *requests.DNSRequest, recidx int) {
+	defer dms.maxRequests.Release(1)
+
 	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
 	if cfg == nil {
 		return
@@ -466,7 +397,7 @@ func (dms *DataManagerService) findNamesAndAddresses(ctx context.Context, data, 
 			Address: ip,
 			Domain:  domain,
 			Tag:     requests.DNS,
-			Source:  "Forward DNS",
+			Source:  "DNS",
 		})
 	}
 
@@ -485,7 +416,9 @@ func (dms *DataManagerService) findNamesAndAddresses(ctx context.Context, data, 
 			Name:   name,
 			Domain: domain,
 			Tag:    requests.DNS,
-			Source: "Forward DNS",
+			Source: "DNS",
 		})
 	}
+
+	bus.Publish(requests.SetActiveTopic, dms.String())
 }

@@ -193,7 +193,7 @@ func (ds *DNSService) basicQueries(ctx context.Context, subdomain, domain string
 			Domain:  domain,
 			Records: answers,
 			Tag:     requests.DNS,
-			Source:  "Forward DNS",
+			Source:  "DNS",
 		})
 	}
 }
@@ -274,7 +274,7 @@ func (ds *DNSService) queryServiceNames(ctx context.Context, subdomain, domain s
 				Domain:  domain,
 				Records: a,
 				Tag:     requests.DNS,
-				Source:  "Forward DNS",
+				Source:  "DNS",
 			})
 		}
 
