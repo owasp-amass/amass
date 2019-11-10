@@ -65,7 +65,6 @@ var defaultPublicResolvers = []string{
 	"74.82.42.42", // Hurricane Electric
 	"1.0.0.1",     // Cloudflare Secondary
 	"8.8.4.4",     // Google Secondary
-	"9.9.9.10",    // Quad9 Secondary
 	"64.6.65.6",   // Verisign Secondary
 	"77.88.8.1",   // Yandex.DNS Secondary
 }
