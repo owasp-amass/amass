@@ -59,7 +59,8 @@ func (p *PTRArchive) OnDNSRequest(ctx context.Context, req *requests.DNSRequest)
 	bus.Publish(requests.SetActiveTopic, p.String())
 
 	url := p.getURL(req.Domain)
-	page, err := http.RequestWebPage(url, nil, nil, "", "")
+	fakeCookie := map[string]string{"Cookie":"test=12345"}
+	page, err := http.RequestWebPage(url, nil, fakeCookie, "", "")
 	if err != nil {
 		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", p.String(), url, err))
 		return
@@ -81,7 +82,7 @@ func (p *PTRArchive) OnDNSRequest(ctx context.Context, req *requests.DNSRequest)
 }
 
 func (p *PTRArchive) getURL(domain string) string {
-	format := "http://ptrarchive.com/tools/search3.htm?label=%s&date=ALL"
+	format := "http://ptrarchive.com/tools/search4.htm?label=%s&date=ALL"
 
 	return fmt.Sprintf(format, domain)
 }
