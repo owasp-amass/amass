@@ -18,10 +18,8 @@ require (
 	github.com/mattn/go-colorable v0.1.4 // indirect
 	github.com/mattn/go-isatty v0.0.10 // indirect
 	github.com/miekg/dns v1.1.22
-	github.com/qasaur/gremgo v0.0.0-20180719101618-fa23ada7c5da
 	github.com/robertkrimen/otto v0.0.0-20180617131154-15f95af6e78d // indirect
 	github.com/smartystreets/goconvey v0.0.0-20190731233626-505e41936337 // indirect
-	github.com/thetannerryan/ring v1.1.1
 	golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45
 	gopkg.in/ini.v1 v1.49.0 // indirect
 	gopkg.in/sourcemap.v1 v1.0.5 // indirect
