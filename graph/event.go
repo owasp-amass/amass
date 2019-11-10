@@ -13,7 +13,7 @@ import (
 )
 
 // InsertEvent create an event node in the graph that represents a discovery task.
-func (g *Graph) InsertEvent(eventID string) error {
+func (g *Graph) InsertEvent(eventID string) (db.Node, error) {
 	// Check if there is an existing start time for this event.
 	// If not, then create the node and add the start time/date
 	eventNode, err := g.db.ReadNode(eventID)
@@ -21,29 +21,29 @@ func (g *Graph) InsertEvent(eventID string) error {
 		// Create a node to represent the event
 		eventNode, err = g.db.InsertNode(eventID, "event")
 		if err != nil {
-			return err
+			return eventNode, err
 		}
 
 		g.db.InsertProperty(eventNode, "start", time.Now().Format(time.RFC3339))
 		if err != nil {
-			return err
+			return eventNode, err
 		}
-	}
-
-	// Remove an existing 'finish' property
-	if properties, err := g.db.ReadProperties(eventNode, "finish"); err == nil {
-		for _, p := range properties {
-			g.db.DeleteProperty(eventNode, p.Predicate, p.Value)
+	} else {
+		// Remove an existing 'finish' property
+		if properties, err := g.db.ReadProperties(eventNode, "finish"); err == nil {
+			for _, p := range properties {
+				g.db.DeleteProperty(eventNode, p.Predicate, p.Value)
+			}
 		}
 	}
 
 	// Update the finish property with the current time/date
 	g.db.InsertProperty(eventNode, "finish", time.Now().Format(time.RFC3339))
 	if err != nil {
-		return err
+		return eventNode, err
 	}
 
-	return nil
+	return eventNode, nil
 }
 
 // AddNodeToEvent creates an associations between a node in the graph, a data source and a discovery task.
@@ -52,20 +52,12 @@ func (g *Graph) AddNodeToEvent(node db.Node, source, tag, eventID string) error 
 		return errors.New("Graph: AddNodeToEvent: Invalid arguments provided")
 	}
 
-	if err := g.InsertEvent(eventID); err != nil {
-		return err
-	}
-
-	eventNode, err := g.db.ReadNode(eventID)
+	eventNode, err := g.InsertEvent(eventID)
 	if err != nil {
 		return err
 	}
 
-	if err := g.InsertSource(source, tag); err != nil {
-		return err
-	}
-
-	sourceNode, err := g.db.ReadNode(source)
+	sourceNode, err := g.InsertSource(source, tag)
 	if err != nil {
 		return err
 	}

@@ -8,39 +8,27 @@ import (
 )
 
 // InsertAddress creates an IP address in the graph and associates it with a source and event.
-func (g *Graph) InsertAddress(addr, source, tag, eventID string) error {
-	ipNode, err := g.db.ReadNode(addr)
+func (g *Graph) InsertAddress(addr, source, tag, eventID string) (db.Node, error) {
+	node, err := g.InsertNodeIfNotExist(addr, "ipaddr")
 	if err != nil {
-		ipNode, err = g.db.InsertNode(addr, "ipaddr")
-		if err != nil {
-			return err
-		}
+		return node, err
 	}
 
-	if err := g.AddNodeToEvent(ipNode, source, tag, eventID); err != nil {
-		return err
+	if err := g.AddNodeToEvent(node, source, tag, eventID); err != nil {
+		return node, err
 	}
 
-	return nil
+	return node, nil
 }
 
 // InsertA creates FQDN, IP address and A record edge in the graph and associates them with a source and event.
 func (g *Graph) InsertA(fqdn, addr, source, tag, eventID string) error {
-	if err := g.InsertFQDN(fqdn, source, tag, eventID); err != nil {
-		return err
-	}
-
-	fqdnNode, err := g.db.ReadNode(fqdn)
+	fqdnNode, err := g.InsertFQDN(fqdn, source, tag, eventID)
 	if err != nil {
 		return err
 	}
 
-	err = g.InsertAddress(addr, "DNS", "dns", eventID)
-	if err != nil {
-		return err
-	}
-
-	ipNode, err := g.db.ReadNode(addr)
+	ipNode, err := g.InsertAddress(addr, "DNS", "dns", eventID)
 	if err != nil {
 		return err
 	}
@@ -60,21 +48,12 @@ func (g *Graph) InsertA(fqdn, addr, source, tag, eventID string) error {
 
 // InsertAAAA creates FQDN, IP address and AAAA record edge in the graph and associates them with a source and event.
 func (g *Graph) InsertAAAA(fqdn, addr, source, tag, eventID string) error {
-	if err := g.InsertFQDN(fqdn, source, tag, eventID); err != nil {
-		return err
-	}
-
-	fqdnNode, err := g.db.ReadNode(fqdn)
+	fqdnNode, err := g.InsertFQDN(fqdn, source, tag, eventID)
 	if err != nil {
 		return err
 	}
 
-	err = g.InsertAddress(addr, "DNS", "dns", eventID)
-	if err != nil {
-		return err
-	}
-
-	ipNode, err := g.db.ReadNode(addr)
+	ipNode, err := g.InsertAddress(addr, "DNS", "dns", eventID)
 	if err != nil {
 		return err
 	}

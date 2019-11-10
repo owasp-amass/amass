@@ -3,19 +3,20 @@
 
 package graph
 
+import (
+	"github.com/OWASP/Amass/v3/graph/db"
+)
+
 // InsertNetblock adds a netblock/CIDR to the graph.
-func (g *Graph) InsertNetblock(cidr, source, tag, eventID string) error {
-	cidrNode, err := g.db.ReadNode(cidr)
+func (g *Graph) InsertNetblock(cidr, source, tag, eventID string) (db.Node, error) {
+	cidrNode, err := g.InsertNodeIfNotExist(cidr, "netblock")
 	if err != nil {
-		cidrNode, err = g.db.InsertNode(cidr, "netblock")
-		if err != nil {
-			return err
-		}
+		return cidrNode, err
 	}
 
 	if err := g.AddNodeToEvent(cidrNode, source, tag, eventID); err != nil {
-		return err
+		return cidrNode, err
 	}
 
-	return nil
+	return cidrNode, nil
 }

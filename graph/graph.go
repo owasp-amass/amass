@@ -35,6 +35,16 @@ func (g *Graph) String() string {
 	return g.db.String()
 }
 
+// InsertNodeIfNotExist will create a node in the database if it does not already exist.
+func (g *Graph) InsertNodeIfNotExist(id, ntype string) (db.Node, error) {
+	node, err := g.db.ReadNode(id)
+	if err != nil {
+		node, err = g.db.InsertNode(id, ntype)
+	}
+
+	return node, err
+}
+
 // InsertEdge will create an edge in the database if it does not already exist.
 func (g *Graph) InsertEdge(edge *db.Edge) error {
 	// Check if this edge already exists in the graph

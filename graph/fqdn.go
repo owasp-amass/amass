@@ -11,36 +11,27 @@ import (
 )
 
 // InsertFQDN adds a fully qualified domain name to the graph.
-func (g *Graph) InsertFQDN(name, source, tag, eventID string) error {
+func (g *Graph) InsertFQDN(name, source, tag, eventID string) (db.Node, error) {
 	tld := config.TopLevelDomain(name)
 	domain := config.RootDomain(name)
 	if name == "" || tld == "" || domain == "" {
-		return errors.New("InsertFQDN: Failed to obtain valid domain name(s)")
+		return nil, errors.New("InsertFQDN: Failed to obtain valid domain name(s)")
 	}
 
 	// Create the graph nodes that represent the three portions of the DNS name
-	fqdnNode, err := g.db.ReadNode(name)
+	fqdnNode, err := g.InsertNodeIfNotExist(name, "fqdn")
 	if err != nil {
-		fqdnNode, err = g.db.InsertNode(name, "fqdn")
-		if err != nil {
-			return err
-		}
+		return fqdnNode, err
 	}
 
-	domainNode, err := g.db.ReadNode(domain)
+	domainNode, err := g.InsertNodeIfNotExist(domain, "fqdn")
 	if err != nil {
-		domainNode, err = g.db.InsertNode(domain, "fqdn")
-		if err != nil {
-			return err
-		}
+		return fqdnNode, err
 	}
 
-	tldNode, err := g.db.ReadNode(tld)
+	tldNode, err := g.InsertNodeIfNotExist(tld, "fqdn")
 	if err != nil {
-		tldNode, err = g.db.InsertNode(tld, "fqdn")
-		if err != nil {
-			return err
-		}
+		return fqdnNode, err
 	}
 
 	// Link the three nodes together
@@ -50,7 +41,7 @@ func (g *Graph) InsertFQDN(name, source, tag, eventID string) error {
 		To:        domainNode,
 	}
 	if err := g.InsertEdge(domainEdge); err != nil {
-		return err
+		return fqdnNode, err
 	}
 
 	tldEdge := &db.Edge{
@@ -59,25 +50,25 @@ func (g *Graph) InsertFQDN(name, source, tag, eventID string) error {
 		To:        tldNode,
 	}
 	if err := g.InsertEdge(tldEdge); err != nil {
-		return err
+		return fqdnNode, err
 	}
 
 	// Source and event edges for the FQDN
 	if err := g.AddNodeToEvent(fqdnNode, source, tag, eventID); err != nil {
-		return err
+		return fqdnNode, err
 	}
 
 	// Source and event edges for the root domain name
 	if err := g.AddNodeToEvent(domainNode, source, tag, eventID); err != nil {
-		return err
+		return fqdnNode, err
 	}
 
 	// Source and event edges for the top-level domain name
 	if err := g.AddNodeToEvent(tldNode, source, tag, eventID); err != nil {
-		return err
+		return fqdnNode, err
 	}
 
-	return nil
+	return fqdnNode, nil
 }
 
 // InsertCNAME adds the FQDNs and CNAME record between them to the graph.
@@ -87,32 +78,16 @@ func (g *Graph) InsertCNAME(fqdn, target, source, tag, eventID string) error {
 
 // IsCNAMENode returns true if the FQDN has a CNAME edge to another FQDN in the graph.
 func (g *Graph) IsCNAMENode(fqdn string) bool {
-	if fqdnNode, err := g.db.ReadNode(fqdn); err == nil {
-		count, err := g.db.CountOutEdges(fqdnNode, "cname_record")
-
-		if err == nil && count > 0 {
-			return true
-		}
-	}
-
-	return false
+	return g.checkForOutEdge(fqdn, "cname_record")
 }
 
 func (g *Graph) insertAlias(fqdn, target, pred, source, tag, eventID string) error {
-	if err := g.InsertFQDN(fqdn, source, tag, eventID); err != nil {
-		return err
-	}
-
-	if err := g.InsertFQDN(target, source, tag, eventID); err != nil {
-		return err
-	}
-
-	fqdnNode, err := g.db.ReadNode(fqdn)
+	fqdnNode, err := g.InsertFQDN(fqdn, source, tag, eventID)
 	if err != nil {
 		return err
 	}
 
-	targetNode, err := g.db.ReadNode(target)
+	targetNode, err := g.InsertFQDN(target, source, tag, eventID)
 	if err != nil {
 		return err
 	}
@@ -134,15 +109,7 @@ func (g *Graph) InsertPTR(fqdn, target, source, tag, eventID string) error {
 
 // IsPTRNode returns true if the FQDN has a PTR edge to another FQDN in the graph.
 func (g *Graph) IsPTRNode(fqdn string) bool {
-	if fqdnNode, err := g.db.ReadNode(fqdn); err == nil {
-		count, err := g.db.CountOutEdges(fqdnNode, "ptr_record")
-
-		if err == nil && count > 0 {
-			return true
-		}
-	}
-
-	return false
+	return g.checkForOutEdge(fqdn, "ptr_record")
 }
 
 // InsertSRV adds the FQDNs and SRV record between them to the graph.
@@ -189,6 +156,18 @@ func (g *Graph) IsTLDNode(fqdn string) bool {
 func (g *Graph) checkForInEdge(id, predicate string) bool {
 	if node, err := g.db.ReadNode(id); err == nil {
 		count, err := g.db.CountInEdges(node, predicate)
+
+		if err == nil && count > 0 {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (g *Graph) checkForOutEdge(id, predicate string) bool {
+	if node, err := g.db.ReadNode(id); err == nil {
+		count, err := g.db.CountOutEdges(node, predicate)
 
 		if err == nil && count > 0 {
 			return true

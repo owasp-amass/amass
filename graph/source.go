@@ -7,18 +7,15 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/OWASP/Amass/v3/graph/db"
 	"github.com/OWASP/Amass/v3/stringset"
 )
 
 // InsertSource creates a data source node in the graph.
-func (g *Graph) InsertSource(source, tag string) error {
-	node, err := g.db.ReadNode(source)
+func (g *Graph) InsertSource(source, tag string) (db.Node, error) {
+	node, err := g.InsertNodeIfNotExist(source, "source")
 	if err != nil {
-		// Create a node to represent the source
-		node, err = g.db.InsertNode(source, "source")
-		if err != nil {
-			return err
-		}
+		return node, err
 	}
 
 	var insert bool
@@ -36,11 +33,11 @@ func (g *Graph) InsertSource(source, tag string) error {
 
 	if insert {
 		if err := g.db.InsertProperty(node, "tag", tag); err != nil {
-			return err
+			return node, err
 		}
 	}
 
-	return nil
+	return node, nil
 }
 
 // SourceTag returns the tag associated with the identified data source.
@@ -68,11 +65,7 @@ func (g *Graph) NodeSourcesDuringEvent(id, eventID string) ([]string, error) {
 		return nil, errors.New("Graph: NodeSourcesDuringEvent: Invalid IDs provided")
 	}
 
-	if err := g.InsertEvent(eventID); err != nil {
-		return nil, err
-	}
-
-	eventNode, err := g.db.ReadNode(eventID)
+	eventNode, err := g.InsertEvent(eventID)
 	if err != nil {
 		return nil, err
 	}

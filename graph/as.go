@@ -10,13 +10,10 @@ import (
 )
 
 // InsertAS adds/updates an autonomous system in the graph.
-func (g *Graph) InsertAS(asn, desc, source, tag, eventID string) error {
-	asNode, err := g.db.ReadNode(asn)
+func (g *Graph) InsertAS(asn, desc, source, tag, eventID string) (db.Node, error) {
+	asNode, err := g.InsertNodeIfNotExist(asn, "as")
 	if err != nil {
-		asNode, err = g.db.InsertNode(asn, "as")
-		if err != nil {
-			return err
-		}
+		return asNode, err
 	}
 
 	var insert bool
@@ -34,33 +31,25 @@ func (g *Graph) InsertAS(asn, desc, source, tag, eventID string) error {
 
 	if insert {
 		if err := g.db.InsertProperty(asNode, "description", desc); err != nil {
-			return err
+			return asNode, err
 		}
 	}
 
 	if err := g.AddNodeToEvent(asNode, source, tag, eventID); err != nil {
-		return err
+		return asNode, err
 	}
 
-	return nil
+	return asNode, nil
 }
 
 // InsertInfrastructure adds/updates an associated IP address, netblock and autonomous system in the graph.
 func (g *Graph) InsertInfrastructure(asn int, desc, addr, cidr, source, tag, eventID string) error {
-	if err := g.InsertAddress(addr, "DNS", "dns", eventID); err != nil {
-		return err
-	}
-
-	ipNode, err := g.db.ReadNode(addr)
+	ipNode, err := g.InsertAddress(addr, "DNS", "dns", eventID)
 	if err != nil {
 		return err
 	}
 
-	if err := g.InsertNetblock(cidr, source, tag, eventID); err != nil {
-		return err
-	}
-
-	cidrNode, err := g.db.ReadNode(cidr)
+	cidrNode, err := g.InsertNetblock(cidr, source, tag, eventID)
 	if err != nil {
 		return err
 	}
@@ -75,12 +64,7 @@ func (g *Graph) InsertInfrastructure(asn int, desc, addr, cidr, source, tag, eve
 		return err
 	}
 
-	asnstr := strconv.Itoa(asn)
-	if err := g.InsertAS(asnstr, desc, source, tag, eventID); err != nil {
-		return err
-	}
-
-	asNode, err := g.db.ReadNode(asnstr)
+	asNode, err := g.InsertAS(strconv.Itoa(asn), desc, source, tag, eventID)
 	if err != nil {
 		return err
 	}
