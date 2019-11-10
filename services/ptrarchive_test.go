@@ -5,8 +5,8 @@ package services
 
 import (
 	"testing"
-	
-	"github.com/OWASP/Amass/net/http"
+
+	"github.com/OWASP/Amass/v3/net/http"
 )
 
 func TestPTRArchive(t *testing.T) {
@@ -28,7 +28,6 @@ func TestPTRArchiveEndpoint(t *testing.T) {
 	var endpoint string
 	var ptr *PTRArchive
 	var err error
-
 
 	ptr = NewPTRArchive(testSystem)
 	endpoint = ptr.getURL(domainTest)

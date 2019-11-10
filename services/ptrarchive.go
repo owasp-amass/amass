@@ -59,7 +59,7 @@ func (p *PTRArchive) OnDNSRequest(ctx context.Context, req *requests.DNSRequest)
 	bus.Publish(requests.SetActiveTopic, p.String())
 
 	url := p.getURL(req.Domain)
-	fakeCookie := map[string]string{"Cookie":"test=12345"}
+	fakeCookie := map[string]string{"Cookie": "test=12345"}
 	page, err := http.RequestWebPage(url, nil, fakeCookie, "", "")
 	if err != nil {
 		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", p.String(), url, err))
