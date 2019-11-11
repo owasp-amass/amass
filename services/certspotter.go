@@ -61,6 +61,7 @@ func (c *CertSpotter) OnDNSRequest(ctx context.Context, req *requests.DNSRequest
 	}
 
 	bus.Publish(requests.SetActiveTopic, c.String())
+	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", c.String(), req.Domain))
 
 	url := c.getURL(req.Domain)
 	page, err := http.RequestWebPage(url, nil, nil, "", "")

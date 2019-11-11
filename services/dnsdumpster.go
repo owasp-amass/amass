@@ -63,6 +63,7 @@ func (d *DNSDumpster) OnDNSRequest(ctx context.Context, req *requests.DNSRequest
 
 	d.CheckRateLimit()
 	bus.Publish(requests.SetActiveTopic, d.String())
+	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", d.String(), req.Domain))
 
 	u := "https://dnsdumpster.com/"
 	page, err := amasshttp.RequestWebPage(u, nil, nil, "", "")

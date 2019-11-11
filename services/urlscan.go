@@ -66,6 +66,7 @@ func (u *URLScan) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 
 	u.CheckRateLimit()
 	bus.Publish(requests.SetActiveTopic, u.String())
+	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", u.String(), req.Domain))
 
 	url := u.searchURL(req.Domain)
 	page, err := http.RequestWebPage(url, nil, nil, "", "")

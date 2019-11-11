@@ -70,6 +70,7 @@ func (v *VirusTotal) OnDNSRequest(ctx context.Context, req *requests.DNSRequest)
 
 	v.CheckRateLimit()
 	bus.Publish(requests.SetActiveTopic, v.String())
+	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", v.String(), req.Domain))
 
 	if v.haveAPIKey {
 		v.apiQuery(ctx, req.Domain)

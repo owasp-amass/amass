@@ -57,6 +57,7 @@ func (e *Exalead) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 
 	e.CheckRateLimit()
 	bus.Publish(requests.SetActiveTopic, e.String())
+	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", e.String(), req.Domain))
 
 	url := e.getURL(req.Domain)
 	page, err := http.RequestWebPage(url, nil, nil, "", "")

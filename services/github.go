@@ -66,6 +66,7 @@ func (g *GitHub) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 		g.API.Key == "" || req.Name == "" || req.Domain == "" {
 		return
 	}
+	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", g.String(), req.Domain))
 
 	nameFilter := stringset.NewStringFilter()
 	// This function publishes new subdomain names discovered at the provided URL

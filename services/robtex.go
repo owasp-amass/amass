@@ -92,6 +92,7 @@ func (r *Robtex) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 
 	r.CheckRateLimit()
 	bus.Publish(requests.SetActiveTopic, r.String())
+	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", r.String(), req.Domain))
 
 	url := "https://freeapi.robtex.com/pdns/forward/" + req.Domain
 	page, err := http.RequestWebPage(url, nil, nil, "", "")
@@ -104,13 +105,15 @@ func (r *Robtex) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 	for _, line := range r.parseDNSJSON(page) {
 		if line.Type == "A" {
 			ips.Insert(line.Data)
-			// Inform the Address Service of this finding
-			bus.Publish(requests.NewAddrTopic, &requests.AddrRequest{
-				Address: line.Data,
-				Domain:  req.Domain,
-				Tag:     r.Type(),
-				Source:  r.String(),
-			})
+			/*
+				// Inform the Address Service of this finding
+				bus.Publish(requests.NewAddrTopic, &requests.AddrRequest{
+					Address: line.Data,
+					Domain:  req.Domain,
+					Tag:     r.Type(),
+					Source:  r.String(),
+				})
+			*/
 		} else if line.Type == "NS" || line.Type == "MX" {
 			bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
 				Name:   strings.Trim(line.Data, "."),

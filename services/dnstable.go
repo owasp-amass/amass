@@ -57,6 +57,7 @@ func (d *DNSTable) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 
 	d.CheckRateLimit()
 	bus.Publish(requests.SetActiveTopic, d.String())
+	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", d.String(), req.Domain))
 
 	url := d.getURL(req.Domain)
 	page, err := http.RequestWebPage(url, nil, nil, "", "")

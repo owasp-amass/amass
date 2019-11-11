@@ -62,6 +62,7 @@ func (y *Yahoo) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 	if re == nil {
 		return
 	}
+	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", y.String(), req.Domain))
 
 	num := y.limit / y.quantity
 	for i := 0; i < num; i++ {

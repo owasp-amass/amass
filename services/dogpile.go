@@ -62,6 +62,7 @@ func (d *Dogpile) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 	if re == nil {
 		return
 	}
+	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", d.String(), req.Domain))
 
 	num := d.limit / d.quantity
 	for i := 0; i < num; i++ {

@@ -57,13 +57,16 @@ func (s *Spyse) OnStart() error {
 // OnDNSRequest implements the Service interface.
 func (s *Spyse) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
-	if cfg == nil {
+	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
+	if cfg == nil || bus == nil {
 		return
 	}
 
 	if !cfg.IsDomainInScope(req.Domain) {
 		return
 	}
+
+	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", s.String(), req.Domain))
 
 	if s.API == nil || s.API.Key == "" {
 		s.executeSubdomainQuery(ctx, req.Domain)

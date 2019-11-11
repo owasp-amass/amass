@@ -64,6 +64,7 @@ func (m *Mnemonic) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 
 	m.CheckRateLimit()
 	bus.Publish(requests.SetActiveTopic, m.String())
+	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", m.String(), req.Domain))
 
 	url := m.getDNSURL(req.Domain)
 	page, err := http.RequestWebPage(url, nil, nil, "", "")

@@ -57,6 +57,7 @@ func (s *Sublist3rAPI) OnDNSRequest(ctx context.Context, req *requests.DNSReques
 
 	s.CheckRateLimit()
 	bus.Publish(requests.SetActiveTopic, s.String())
+	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", s.String(), req.Domain))
 
 	url := s.restURL(req.Domain)
 	page, err := http.RequestWebPage(url, nil, nil, "", "")

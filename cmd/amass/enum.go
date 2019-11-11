@@ -404,6 +404,7 @@ func writeLogsAndMessages(logs *io.PipeReader, logfile string, verbose bool) {
 	alterations := regexp.MustCompile("queries for altered names")
 	brute := regexp.MustCompile("queries for brute forcing")
 	sanity := regexp.MustCompile("SanityChecks")
+	queries := regexp.MustCompile("Querying")
 
 	var filePtr *os.File
 	if logfile != "" {
@@ -460,6 +461,10 @@ func writeLogsAndMessages(logs *io.PipeReader, logfile string, verbose bool) {
 		// Check for Amass DNS wildcard messages
 		if verbose && wildcard.FindString(line) != "" {
 			fgR.Fprintln(color.Error, line)
+		}
+		// Let the user know when data sources are being queried
+		if queries.FindString(line) != "" {
+			fgY.Fprintln(color.Error, line)
 		}
 	}
 }

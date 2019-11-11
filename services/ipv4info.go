@@ -62,6 +62,7 @@ func (i *IPv4Info) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 
 	i.CheckRateLimit()
 	bus.Publish(requests.SetActiveTopic, i.String())
+	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", i.String(), req.Domain))
 
 	url := i.getURL(req.Domain)
 	page, err := http.RequestWebPage(url, nil, nil, "", "")

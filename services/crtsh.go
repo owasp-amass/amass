@@ -60,7 +60,13 @@ func (c *Crtsh) OnStart() error {
 
 // OnDNSRequest implements the Service interface.
 func (c *Crtsh) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
+	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
+	if bus == nil {
+		return
+	}
+
 	c.CheckRateLimit()
+	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", c.String(), req.Domain))
 
 	// Fall back to scraping the web page if the database connection failed
 	if !c.haveConnection {

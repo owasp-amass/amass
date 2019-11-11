@@ -68,6 +68,7 @@ func (pt *PassiveTotal) OnDNSRequest(ctx context.Context, req *requests.DNSReque
 
 	pt.CheckRateLimit()
 	bus.Publish(requests.SetActiveTopic, pt.String())
+	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", pt.String(), req.Domain))
 
 	url := pt.restURL(req.Domain)
 	headers := map[string]string{"Content-Type": "application/json"}

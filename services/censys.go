@@ -54,7 +54,13 @@ func (c *Censys) OnStart() error {
 
 // OnDNSRequest implements the Service interface.
 func (c *Censys) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
+	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
+	if bus == nil {
+		return
+	}
+
 	c.CheckRateLimit()
+	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", c.String(), req.Domain))
 
 	if c.API != nil && c.API.Key != "" && c.API.Secret != "" {
 		c.apiQuery(ctx, req.Domain)

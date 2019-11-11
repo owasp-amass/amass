@@ -58,6 +58,7 @@ func (h *HackerOne) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) 
 
 	h.CheckRateLimit()
 	bus.Publish(requests.SetActiveTopic, h.String())
+	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", h.String(), req.Domain))
 
 	url := h.getDNSURL(req.Domain)
 	page, err := http.RequestWebPage(url, nil, nil, "", "")

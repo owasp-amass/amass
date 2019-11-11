@@ -67,6 +67,7 @@ func (st *SecurityTrails) OnDNSRequest(ctx context.Context, req *requests.DNSReq
 
 	st.CheckRateLimit()
 	bus.Publish(requests.SetActiveTopic, st.String())
+	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", st.String(), req.Domain))
 
 	url := st.restDNSURL(req.Domain)
 	headers := map[string]string{

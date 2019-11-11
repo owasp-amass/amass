@@ -72,6 +72,7 @@ func (c *CIRCL) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 
 	c.CheckRateLimit()
 	bus.Publish(requests.SetActiveTopic, c.String())
+	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", c.String(), req.Domain))
 
 	url := c.restURL(req.Domain)
 	headers := map[string]string{"Content-Type": "application/json"}

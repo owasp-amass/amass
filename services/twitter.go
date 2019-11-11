@@ -77,6 +77,7 @@ func (t *Twitter) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 
 	t.CheckRateLimit()
 	bus.Publish(requests.SetActiveTopic, t.String())
+	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", t.String(), req.Domain))
 
 	searchParams := &twitter.SearchTweetParams{
 		Query: req.Domain,

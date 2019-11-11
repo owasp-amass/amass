@@ -66,6 +66,7 @@ func (d *DNSDB) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 	}
 
 	d.CheckRateLimit()
+	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", d.String(), req.Domain))
 
 	if d.API != nil && d.API.Key != "" {
 		headers := map[string]string{

@@ -59,6 +59,7 @@ func (t *ThreatCrowd) OnDNSRequest(ctx context.Context, req *requests.DNSRequest
 
 	t.CheckRateLimit()
 	bus.Publish(requests.SetActiveTopic, t.String())
+	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", t.String(), req.Domain))
 
 	url := t.getURL(req.Domain)
 	headers := map[string]string{"Content-Type": "application/json"}

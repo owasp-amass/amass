@@ -64,6 +64,7 @@ func (s *Shodan) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 
 	s.CheckRateLimit()
 	bus.Publish(requests.SetActiveTopic, s.String())
+	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", s.String(), req.Domain))
 
 	url := s.restURL(req.Domain)
 	headers := map[string]string{"Content-Type": "application/json"}

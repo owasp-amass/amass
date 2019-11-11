@@ -69,6 +69,10 @@ func (g *Google) executeQuery(ctx context.Context, domain string, numwilds int) 
 		return
 	}
 
+	if numwilds == 0 {
+		bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", g.String(), domain))
+	}
+
 	num := g.limit / g.quantity
 	for i := 0; i < num; i++ {
 		select {

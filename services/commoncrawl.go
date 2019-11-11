@@ -85,6 +85,7 @@ func (c *CommonCrawl) OnDNSRequest(ctx context.Context, req *requests.DNSRequest
 	if re == nil {
 		return
 	}
+	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", c.String(), req.Domain))
 
 	filter := stringset.NewStringFilter()
 	for _, index := range c.indexURLs {

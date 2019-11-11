@@ -57,6 +57,7 @@ func (s *SiteDossier) OnDNSRequest(ctx context.Context, req *requests.DNSRequest
 
 	s.CheckRateLimit()
 	bus.Publish(requests.SetActiveTopic, s.String())
+	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", s.String(), req.Domain))
 
 	url := s.getURL(req.Domain)
 	page, err := http.RequestWebPage(url, nil, nil, "", "")

@@ -60,8 +60,15 @@ func (a *AlienVault) OnDNSRequest(ctx context.Context, req *requests.DNSRequest)
 		return
 	}
 
+	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
+	if bus == nil {
+		return
+	}
+
 	a.CheckRateLimit()
+	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", a.String(), req.Domain))
 	a.executeDNSQuery(ctx, req)
+
 	a.CheckRateLimit()
 	a.executeURLQuery(ctx, req)
 }

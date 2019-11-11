@@ -57,6 +57,7 @@ func (r *Riddler) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 
 	r.CheckRateLimit()
 	bus.Publish(requests.SetActiveTopic, r.String())
+	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", r.String(), req.Domain))
 
 	url := r.getURL(req.Domain)
 	page, err := http.RequestWebPage(url, nil, nil, "", "")

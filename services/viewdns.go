@@ -60,6 +60,7 @@ func (v *ViewDNS) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 
 	v.CheckRateLimit()
 	bus.Publish(requests.SetActiveTopic, v.String())
+	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", v.String(), req.Domain))
 
 	var unique []string
 	u := v.getIPHistoryURL(req.Domain)

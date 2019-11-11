@@ -62,6 +62,7 @@ func (a *Ask) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 	if re == nil {
 		return
 	}
+	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", a.String(), req.Domain))
 
 	num := a.limit / a.quantity
 	for i := 0; i < num; i++ {

@@ -71,6 +71,7 @@ func (u *Umbrella) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 
 	u.CheckRateLimit()
 	bus.Publish(requests.SetActiveTopic, u.String())
+	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", u.String(), req.Domain))
 
 	headers := u.restHeaders()
 	url := u.restDNSURL(req.Domain)

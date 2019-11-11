@@ -48,6 +48,9 @@ func (p *Pastebin) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 		return
 	}
 
+	p.CheckRateLimit()
+	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", p.String(), req.Domain))
+
 	ids, err := p.extractIDs(req.Domain)
 	if err != nil {
 		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", p.String(), req.Domain, err))

@@ -57,6 +57,7 @@ func (p *PTRArchive) OnDNSRequest(ctx context.Context, req *requests.DNSRequest)
 
 	p.CheckRateLimit()
 	bus.Publish(requests.SetActiveTopic, p.String())
+	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", p.String(), req.Domain))
 
 	url := p.getURL(req.Domain)
 	fakeCookie := map[string]string{"Cookie": "test=12345"}

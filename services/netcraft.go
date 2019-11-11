@@ -57,6 +57,7 @@ func (n *Netcraft) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 
 	n.CheckRateLimit()
 	bus.Publish(requests.SetActiveTopic, n.String())
+	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", n.String(), req.Domain))
 
 	url := n.getURL(req.Domain)
 	page, err := http.RequestWebPage(url, nil, nil, "", "")
