@@ -362,3 +362,12 @@ func main() {
 	e.Start()
 }
 ```
+
+In case you get an error saying "Failed to create the graph", try changing the output directory in the config:
+
+```go
+cfg := config.NewConfig()
+cfg.Dir = "/tmp"
+
+sys, err := services.NewLocalSystem(cfg)
+```
