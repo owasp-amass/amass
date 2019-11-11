@@ -76,12 +76,11 @@ func (g *Graph) NodeSourcesDuringEvent(id, eventID string) ([]string, error) {
 	}
 
 	var sources []string
-	filter := stringset.New()
+	filter := stringset.NewStringFilter()
 
 	for _, edge := range edges {
 		if toID := g.db.NodeToID(edge.To); toID == id {
-			if !filter.Has(edge.Predicate) {
-				filter.Insert(edge.Predicate)
+			if !filter.Duplicate(edge.Predicate) {
 				sources = append(sources, edge.Predicate)
 			}
 		}
