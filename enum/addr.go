@@ -254,10 +254,6 @@ func (e *Enumeration) hasARecords(req *requests.DNSRequest) bool {
 	for _, r := range req.Records {
 		t := uint16(r.Type)
 
-		if t == dns.TypeCNAME {
-			return false
-		}
-
 		if t == dns.TypeA || t == dns.TypeAAAA {
 			found = true
 		}

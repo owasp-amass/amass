@@ -4,11 +4,14 @@
 package enum
 
 import (
+	"net"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/OWASP/Amass/v3/net/http"
 	"github.com/OWASP/Amass/v3/requests"
+	"github.com/miekg/dns"
 )
 
 func (e *Enumeration) submitKnownNames(wg *sync.WaitGroup) {
@@ -74,35 +77,109 @@ func (e *Enumeration) namesFromCertificates(addr string) {
 
 func (e *Enumeration) processOutput(wg *sync.WaitGroup) {
 	defer wg.Done()
+	defer close(e.Output)
 
-	<-e.done
+	curIdx := 0
+	maxIdx := 6
+	delays := []int{25, 50, 75, 100, 150, 250, 500}
 
-	e.graphEntries(e.Config.UUID.String())
+	t := time.NewTicker(2 * time.Second)
+	defer t.Stop()
+loop:
 	for {
-		element, ok := e.outputQueue.Next()
+		select {
+		case <-e.done:
+			return
+		case <-t.C:
+			e.outputResolvedNames()
+		default:
+			element, ok := e.outputQueue.Next()
+			if !ok {
+				time.Sleep(time.Duration(delays[curIdx]) * time.Millisecond)
+				if curIdx < maxIdx {
+					curIdx++
+				}
+				continue loop
+			}
+
+			output := element.(*requests.Output)
+			if !e.filters.Output.Duplicate(output.Name) {
+				e.Output <- output
+			}
+		}
+	}
+}
+
+func (e *Enumeration) outputResolvedNames() {
+	var failed []*requests.DNSRequest
+
+	// Prepare discovered names for output processing
+	for {
+		element, ok := e.resolvedQueue.Next()
 		if !ok {
 			break
 		}
 
-		output := element.(*requests.Output)
-		if !e.filters.Output.Duplicate(output.Name) {
-			e.Output <- output
+		name := element.(*requests.DNSRequest)
+
+		output := e.buildOutput(name)
+		if output == nil {
+			failed = append(failed, name)
+			continue
 		}
+
+		e.outputQueue.Append(output)
 	}
 
-	close(e.Output)
+	// Put failed attempts back on the resolved names queue
+	for _, f := range failed {
+		e.resolvedQueue.Append(f)
+	}
 }
 
-func (e *Enumeration) graphEntries(uuid string) {
-	for _, g := range e.Sys.GraphDatabases() {
-		for _, o := range g.GetOutput(uuid) {
-			e.updateLastActive("Output")
-
-			if e.Config.IsDomainInScope(o.Name) {
-				e.outputQueue.Append(o)
-			}
-		}
+func (e *Enumeration) buildOutput(req *requests.DNSRequest) *requests.Output {
+	output := &requests.Output{
+		Name:   req.Name,
+		Domain: req.Domain,
+		Tag:    req.Tag,
+		Source: req.Source,
 	}
+
+	for _, r := range req.Records {
+		if t := uint16(r.Type); t != dns.TypeA && t != dns.TypeAAAA {
+			continue
+		}
+
+		addrInfo := e.buildAddrInfo(strings.TrimSpace(r.Data))
+		if addrInfo == nil {
+			return nil
+		}
+
+		output.Addresses = append(output.Addresses, *addrInfo)
+	}
+
+	return output
+}
+
+func (e *Enumeration) buildAddrInfo(addr string) *requests.AddressInfo {
+	ainfo := &requests.AddressInfo{Address: net.ParseIP(addr)}
+
+	asn := e.ipSearch(addr)
+	if asn == nil {
+		return nil
+	}
+
+	var err error
+	ainfo.CIDRStr = asn.Prefix
+	_, ainfo.Netblock, err = net.ParseCIDR(asn.Prefix)
+	if err != nil || !ainfo.Netblock.Contains(ainfo.Address) {
+		return nil
+	}
+
+	ainfo.ASN = asn.ASN
+	ainfo.Description = asn.Description
+
+	return ainfo
 }
 
 func (e *Enumeration) sendOutput(o *requests.Output) {

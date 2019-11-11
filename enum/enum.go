@@ -53,6 +53,9 @@ type Enumeration struct {
 	srcsLock sync.Mutex
 	srcs     stringset.Set
 
+	// Resolved DNS names are put on this queue for output processing
+	resolvedQueue *queue.Queue
+
 	// The channel and queue that will receive the results
 	Output      chan *requests.Output
 	outputQueue *queue.Queue
@@ -99,18 +102,19 @@ func NewEnumeration(sys services.System) *Enumeration {
 			Output:        stringset.NewStringFilter(),
 			PassiveOutput: stringset.NewStringFilter(),
 		},
-		bruteQueue:  new(queue.Queue),
-		srcs:        stringset.New(),
-		Output:      make(chan *requests.Output, 100),
-		outputQueue: new(queue.Queue),
-		logQueue:    new(queue.Queue),
-		done:        make(chan struct{}, 2),
-		netCache:    make(map[int]*requests.ASNRequest),
-		netQueue:    new(queue.Queue),
-		subdomains:  make(map[string]int),
-		last:        time.Now(),
-		perSecFirst: time.Now(),
-		perSecLast:  time.Now(),
+		bruteQueue:    new(queue.Queue),
+		srcs:          stringset.New(),
+		resolvedQueue: new(queue.Queue),
+		Output:        make(chan *requests.Output, 100),
+		outputQueue:   new(queue.Queue),
+		logQueue:      new(queue.Queue),
+		done:          make(chan struct{}, 2),
+		netCache:      make(map[int]*requests.ASNRequest),
+		netQueue:      new(queue.Queue),
+		subdomains:    make(map[string]int),
+		last:          time.Now(),
+		perSecFirst:   time.Now(),
+		perSecLast:    time.Now(),
 	}
 
 	if ref := e.refToDataManager(); ref != nil {

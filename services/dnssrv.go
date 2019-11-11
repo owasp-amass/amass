@@ -76,11 +76,6 @@ func (ds *DNSService) processDNSRequest(ctx context.Context, req *requests.DNSRe
 	for _, t := range InitialQueryTypes {
 		if a, _, err := ds.System().Pool().Resolve(ctx, req.Name, t, resolvers.PriorityLow); err == nil {
 			answers = append(answers, a...)
-
-			// Do not continue if a CNAME was discovered
-			if t == "CNAME" {
-				break
-			}
 		} else {
 			bus.Publish(requests.LogTopic, fmt.Sprintf("DNS: %v", err))
 		}

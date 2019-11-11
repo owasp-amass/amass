@@ -55,7 +55,7 @@ func (e *Enumeration) newResolvedName(req *requests.DNSRequest) {
 	e.dataMgr.DNSRequest(e.ctx, req)
 
 	// Add addresses that are relevant to the enumeration
-	if e.hasARecords(req) {
+	if !e.hasCNAMERecord(req) && e.hasARecords(req) {
 		for _, r := range req.Records {
 			t := uint16(r.Type)
 
@@ -71,6 +71,11 @@ func (e *Enumeration) newResolvedName(req *requests.DNSRequest) {
 	if e.filters.Resolved.Duplicate(req.Name) ||
 		!e.Config.IsDomainInScope(req.Name) {
 		return
+	}
+
+	// Put the DNS name + records on the queue for output processing
+	if e.hasARecords(req) {
+		e.resolvedQueue.Append(req)
 	}
 
 	// Keep track of all domains and proper subdomains discovered

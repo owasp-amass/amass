@@ -37,9 +37,6 @@ func NewDataManagerService(sys System) *DataManagerService {
 
 // OnDNSRequest implements the Service interface.
 func (dms *DataManagerService) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
-	req.Name = strings.ToLower(req.Name)
-	req.Domain = strings.ToLower(req.Domain)
-
 	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
 	if bus == nil {
 		return
@@ -48,8 +45,8 @@ func (dms *DataManagerService) OnDNSRequest(ctx context.Context, req *requests.D
 
 	// Check for CNAME records first
 	for i, r := range req.Records {
-		req.Records[i].Name = strings.ToLower(r.Name)
-		req.Records[i].Data = strings.ToLower(r.Data)
+		req.Records[i].Name = strings.Trim(strings.ToLower(r.Name), ".")
+		req.Records[i].Data = strings.Trim(strings.ToLower(r.Data), ".")
 
 		if uint16(r.Type) == dns.TypeCNAME {
 			dms.maxRequests.Acquire(1)
@@ -60,8 +57,8 @@ func (dms *DataManagerService) OnDNSRequest(ctx context.Context, req *requests.D
 	}
 
 	for i, r := range req.Records {
-		req.Records[i].Name = strings.ToLower(r.Name)
-		req.Records[i].Data = strings.ToLower(r.Data)
+		req.Records[i].Name = strings.Trim(strings.ToLower(r.Name), ".")
+		req.Records[i].Data = strings.Trim(strings.ToLower(r.Data), ".")
 
 		dms.maxRequests.Acquire(1)
 		bus.Publish(requests.SetActiveTopic, dms.String())
