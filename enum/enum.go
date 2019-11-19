@@ -148,8 +148,6 @@ func (e *Enumeration) Done() {
 func (e *Enumeration) Start() error {
 	if e.Output == nil {
 		return errors.New("The enumeration did not have an output channel")
-	} else if e.Config.Passive && e.Config.DataOptsWriter != nil {
-		return errors.New("Data operations cannot be saved without DNS resolution")
 	} else if err := e.Config.CheckSettings(); err != nil {
 		return err
 	}

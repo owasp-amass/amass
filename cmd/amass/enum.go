@@ -79,7 +79,6 @@ type enumArgs struct {
 		Blacklist     string
 		BruteWordlist format.ParseStrings
 		ConfigFile    string
-		DataOpts      string
 		Directory     string
 		Domains       format.ParseStrings
 		ExcludedSrcs  string
@@ -134,7 +133,6 @@ func defineEnumFilepathFlags(enumFlags *flag.FlagSet, args *enumArgs) {
 	enumFlags.StringVar(&args.Filepaths.Blacklist, "blf", "", "Path to a file providing blacklisted subdomains")
 	enumFlags.Var(&args.Filepaths.BruteWordlist, "w", "Path to a different wordlist file")
 	enumFlags.StringVar(&args.Filepaths.ConfigFile, "config", "", "Path to the INI configuration file. Additional details below")
-	enumFlags.StringVar(&args.Filepaths.DataOpts, "do", "", "Path to data operations JSON output file")
 	enumFlags.StringVar(&args.Filepaths.Directory, "dir", "", "Path to the directory containing the output files")
 	enumFlags.Var(&args.Filepaths.Domains, "df", "Path to a file providing root domain names")
 	enumFlags.StringVar(&args.Filepaths.ExcludedSrcs, "ef", "", "Path to a file providing data sources to exclude")
@@ -280,29 +278,9 @@ func processEnumOutput(e *enum.Enumeration, args *enumArgs) {
 	if args.Filepaths.JSONOutput != "" {
 		jsonfile = args.Filepaths.JSONOutput
 	}
-	datafile := filepath.Join(dir, "amass_data.json")
-	if args.Filepaths.DataOpts != "" {
-		datafile = args.Filepaths.DataOpts
-	}
 	if args.Filepaths.AllFilePrefix != "" {
 		txtfile = args.Filepaths.AllFilePrefix + ".txt"
 		jsonfile = args.Filepaths.AllFilePrefix + ".json"
-		datafile = args.Filepaths.AllFilePrefix + "_data.json"
-	}
-
-	if !e.Config.Passive && datafile != "" {
-		fileptr, err := os.OpenFile(datafile, os.O_WRONLY|os.O_CREATE, 0644)
-		if err != nil {
-			r.Fprintf(color.Error, "Failed to open the data operations output file: %v\n", err)
-			os.Exit(1)
-		}
-		defer func() {
-			fileptr.Sync()
-			fileptr.Close()
-		}()
-		fileptr.Truncate(0)
-		fileptr.Seek(0, 0)
-		e.Config.DataOptsWriter = fileptr
 	}
 
 	var outptr, jsonptr *os.File
