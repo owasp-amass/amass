@@ -71,6 +71,7 @@ This project improves thanks to all the people who contribute:
 
 [![Rawsec's CyberSecurity Inventory](https://inventory.rawsec.ml/img/badges/Rawsec-inventoried-FF5050_flat.svg)](https://inventory.rawsec.ml/)
 
+* [Find Subdomain Takeover with Amass + SubJack](https://www.hahwul.com/2019/10/find-subdomain-takeover-with-amass-and-subjack.html)
 * [OWASP Amass OSINT Reconnaissance](https://medium.com/hacker-toolbelt/owasp-amass-osint-reconnaissance-9b57d81fb958)
 * [Top Linux Distros for Ethical Hacking and Penetration Testing](https://securitytrails.com/blog/top-linux-distributions-ethical-hacking-pentesting)
 * [5 Subdomain Takeover #ProTips](https://securitytrails.com/blog/subdomain-takeover-tips)
@@ -116,7 +117,3 @@ This project improves thanks to all the people who contribute:
 * [Asset Discovery: Doing Reconnaissance the Hard Way](https://0xpatrik.com/asset-discovery/)
 * [Project Sonar: An Underrated Source of Internet-wide Data](https://0xpatrik.com/project-sonar-guide/)
 * [Top Five Ways the Red Team breached the External Perimeter](https://medium.com/@adam.toscher/top-five-ways-the-red-team-breached-the-external-perimeter-262f99dc9d17)
-
-## Stargazers over Time
-
- [![Stargazers over Time](https://starcharts.herokuapp.com/OWASP/Amass.svg)](https://starcharts.herokuapp.com/OWASP/Amass)
