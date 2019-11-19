@@ -20,6 +20,7 @@ require (
 	github.com/miekg/dns v1.1.22
 	github.com/robertkrimen/otto v0.0.0-20180617131154-15f95af6e78d // indirect
 	github.com/smartystreets/goconvey v0.0.0-20190731233626-505e41936337 // indirect
+	golang.org/x/net v0.0.0-20190923162816-aa69164e4478
 	golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45
 	gopkg.in/ini.v1 v1.49.0 // indirect
 	gopkg.in/sourcemap.v1 v1.0.5 // indirect
