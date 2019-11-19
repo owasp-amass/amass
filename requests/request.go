@@ -14,6 +14,7 @@ import (
 const (
 	NONE     = "none"
 	ALT      = "alt"
+	GUESS    = "guess"
 	ARCHIVE  = "archive"
 	API      = "api"
 	AXFR     = "axfr"

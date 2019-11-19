@@ -86,7 +86,7 @@ func (e *Enumeration) newResolvedName(req *requests.DNSRequest) {
 			e.newNameEvent(&requests.DNSRequest{
 				Name:   name + "." + req.Name,
 				Domain: req.Domain,
-				Tag:    requests.BRUTE,
+				Tag:    requests.GUESS,
 				Source: "Enum Probes",
 			})
 		}

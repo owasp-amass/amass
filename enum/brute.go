@@ -111,48 +111,70 @@ loop:
 			curIdx = 0
 			req := element.(*requests.DNSRequest)
 
-			if !e.Config.IsDomainInScope(req.Name) ||
-				(len(strings.Split(req.Domain, ".")) == len(strings.Split(req.Name, "."))) {
-				continue loop
-			}
-
-			newNames := stringset.New()
-
-			e.markovModel.Train(req.Name)
-			if e.markovModel.TotalTrainings() >= 50 &&
-				(e.markovModel.TotalTrainings()%10 == 0) {
-				newNames.InsertMany(e.markovModel.GenerateNames(100)...)
-			}
-
-			if e.Config.FlipNumbers {
-				newNames.InsertMany(e.altState.FlipNumbers(req.Name)...)
-			}
-			if e.Config.AddNumbers {
-				newNames.InsertMany(e.altState.AppendNumbers(req.Name)...)
-			}
-			if e.Config.FlipWords {
-				newNames.InsertMany(e.altState.FlipWords(req.Name)...)
-			}
-			if e.Config.AddWords {
-				newNames.InsertMany(e.altState.AddSuffixWord(req.Name)...)
-				newNames.InsertMany(e.altState.AddPrefixWord(req.Name)...)
-			}
-			if e.Config.EditDistance > 0 {
-				newNames.InsertMany(e.altState.FuzzyLabelSearches(req.Name)...)
-			}
-
-			for _, name := range newNames.Slice() {
-				if !e.Config.IsDomainInScope(name) {
-					continue
-				}
-
-				e.newNameEvent(&requests.DNSRequest{
-					Name:   name,
-					Domain: req.Domain,
-					Tag:    requests.ALT,
-					Source: "Alterations",
-				})
+			if e.Config.IsDomainInScope(req.Name) &&
+				(len(strings.Split(req.Name, ".")) > len(strings.Split(req.Domain, "."))) {
+				go e.executeAlts(req)
+				go e.useMarkovModel(req)
 			}
 		}
+	}
+}
+
+func (e *Enumeration) executeAlts(req *requests.DNSRequest) {
+	names := stringset.New()
+
+	if e.Config.FlipNumbers {
+		names.InsertMany(e.altState.FlipNumbers(req.Name)...)
+	}
+	if e.Config.AddNumbers {
+		names.InsertMany(e.altState.AppendNumbers(req.Name)...)
+	}
+	if e.Config.FlipWords {
+		names.InsertMany(e.altState.FlipWords(req.Name)...)
+	}
+	if e.Config.AddWords {
+		names.InsertMany(e.altState.AddSuffixWord(req.Name)...)
+		names.InsertMany(e.altState.AddPrefixWord(req.Name)...)
+	}
+	if e.Config.EditDistance > 0 {
+		names.InsertMany(e.altState.FuzzyLabelSearches(req.Name)...)
+	}
+
+	for name := range names {
+		if !e.Config.IsDomainInScope(name) {
+			continue
+		}
+
+		e.newNameEvent(&requests.DNSRequest{
+			Name:   name,
+			Domain: req.Domain,
+			Tag:    requests.ALT,
+			Source: "Alterations",
+		})
+	}
+}
+
+func (e *Enumeration) useMarkovModel(req *requests.DNSRequest) {
+	e.markovModel.Train(req.Name)
+
+	if e.markovModel.TotalTrainings() < 50 || (e.markovModel.TotalTrainings()%10 != 0) {
+		return
+	}
+
+	guesses := stringset.New(e.markovModel.GenerateNames(1000)...)
+
+	for name := range guesses {
+		domain := e.Config.WhichDomain(name)
+
+		if domain == "" {
+			continue
+		}
+
+		e.newNameEvent(&requests.DNSRequest{
+			Name:   name,
+			Domain: domain,
+			Tag:    requests.GUESS,
+			Source: "Markov Model",
+		})
 	}
 }
