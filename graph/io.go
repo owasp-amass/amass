@@ -8,9 +8,9 @@ import (
 	"net"
 	"strconv"
 
-	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/graph/db"
 	"github.com/OWASP/Amass/v3/requests"
+	"golang.org/x/net/publicsuffix"
 )
 
 // GetOutput returns findings within the enumeration Graph.
@@ -65,9 +65,15 @@ func (g *Graph) buildOutput(sub db.Node, uuid string, c chan *requests.Output) {
 	}
 	src := sources[randomIndex(len(sources))]
 
+	domain, err := publicsuffix.EffectiveTLDPlusOne(substr)
+	if err != nil {
+		c <- nil
+		return
+	}
+
 	output := &requests.Output{
 		Name:   substr,
-		Domain: config.RootDomain(substr),
+		Domain: domain,
 		Tag:    g.SourceTag(src),
 		Source: src,
 	}

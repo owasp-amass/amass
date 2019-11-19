@@ -17,6 +17,7 @@ import (
 	"github.com/OWASP/Amass/v3/resolvers"
 	"github.com/OWASP/Amass/v3/semaphore"
 	"github.com/miekg/dns"
+	"golang.org/x/net/publicsuffix"
 )
 
 // DataManagerService is the Service that handles all data collected
@@ -125,7 +126,12 @@ func (dms *DataManagerService) insertCNAME(ctx context.Context, req *requests.DN
 		return
 	}
 
-	domain := strings.ToLower(config.RootDomain(target))
+	domain, err := publicsuffix.EffectiveTLDPlusOne(target)
+	if err != nil {
+		return
+	}
+
+	domain = strings.ToLower(domain)
 	if domain == "" {
 		return
 	}
@@ -291,7 +297,12 @@ func (dms *DataManagerService) insertNS(ctx context.Context, req *requests.DNSRe
 		return
 	}
 
-	domain := strings.ToLower(config.RootDomain(target))
+	domain, err := publicsuffix.EffectiveTLDPlusOne(target)
+	if err != nil {
+		return
+	}
+
+	domain = strings.ToLower(domain)
 	if domain == "" {
 		return
 	}
@@ -328,7 +339,12 @@ func (dms *DataManagerService) insertMX(ctx context.Context, req *requests.DNSRe
 		return
 	}
 
-	domain := strings.ToLower(config.RootDomain(target))
+	domain, err := publicsuffix.EffectiveTLDPlusOne(target)
+	if err != nil {
+		return
+	}
+
+	domain = strings.ToLower(domain)
 	if domain == "" {
 		return
 	}

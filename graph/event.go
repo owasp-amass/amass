@@ -7,9 +7,9 @@ import (
 	"errors"
 	"time"
 
-	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/graph/db"
 	"github.com/OWASP/Amass/v3/stringset"
+	"golang.org/x/net/publicsuffix"
 )
 
 // InsertEvent create an event node in the graph that represents a discovery task.
@@ -132,7 +132,8 @@ func (g *Graph) EventDomains(uuid string) []string {
 			continue
 		}
 
-		if d := config.RootDomain(g.db.NodeToID(edge.To)); d != "" {
+		d, err := publicsuffix.EffectiveTLDPlusOne(g.db.NodeToID(edge.To))
+		if err == nil && d != "" {
 			domains.Insert(d)
 		}
 	}

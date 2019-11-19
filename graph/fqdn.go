@@ -6,14 +6,19 @@ package graph
 import (
 	"errors"
 
-	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/graph/db"
+	"golang.org/x/net/publicsuffix"
 )
 
 // InsertFQDN adds a fully qualified domain name to the graph.
 func (g *Graph) InsertFQDN(name, source, tag, eventID string) (db.Node, error) {
-	tld := config.TopLevelDomain(name)
-	domain := config.RootDomain(name)
+	tld, _ := publicsuffix.PublicSuffix(name)
+
+	domain, err := publicsuffix.EffectiveTLDPlusOne(name)
+	if err != nil {
+		return nil, errors.New("InsertFQDN: Failed to obtain valid domain name(s)")
+	}
+
 	if name == "" || tld == "" || domain == "" {
 		return nil, errors.New("InsertFQDN: Failed to obtain valid domain name(s)")
 	}
