@@ -4,10 +4,8 @@
 package config
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"log"
 	"net"
@@ -22,7 +20,6 @@ import (
 	"github.com/OWASP/Amass/v3/stringset"
 	"github.com/OWASP/Amass/v3/wordlist"
 	"github.com/go-ini/ini"
-	"github.com/gobuffalo/packr/v2"
 	"github.com/google/uuid"
 )
 
@@ -30,33 +27,6 @@ const (
 	defaultConcurrentDNSQueries = 50000
 	publicDNSResolverBaseURL    = "https://public-dns.info/nameserver/"
 )
-
-var (
-	// BoxOfDefaultFiles is the ./resources project directory embedded into the binary.
-	BoxOfDefaultFiles = packr.New("Amass Box", "../resources")
-
-	tldsLock  sync.Mutex
-	setOfTLDs = stringset.New()
-)
-
-func init() {
-	content, err := BoxOfDefaultFiles.FindString("tldlist.txt")
-	if err != nil {
-		return
-	}
-
-	tldsLock.Lock()
-	defer tldsLock.Unlock()
-
-	scanner := bufio.NewScanner(strings.NewReader(content))
-	for scanner.Scan() {
-		// Get the next top-level domain in the list
-		tld := strings.TrimSpace(scanner.Text())
-		if err := scanner.Err(); err == nil && tld != "" {
-			setOfTLDs.Insert(tld)
-		}
-	}
-}
 
 var defaultPublicResolvers = []string{
 	"1.1.1.1",     // Cloudflare
@@ -83,9 +53,6 @@ type Config struct {
 
 	// Logger for error messages
 	Log *log.Logger
-
-	// The writer used to save the data operations performed
-	DataOptsWriter io.Writer
 
 	// The directory that stores the bolt db and other files created
 	Dir string `ini:"output_directory"`
@@ -634,58 +601,4 @@ func (c *Config) loadResolverSettings(cfg *ini.File) error {
 // UpdateConfig allows the provided Updater to update the current configuration.
 func (c *Config) UpdateConfig(update Updater) error {
 	return update.OverrideConfig(c)
-}
-
-// TopLevelDomain returns the top-level domain portion of the fully qualified domain name.
-func TopLevelDomain(fqdn string) string {
-	tldsLock.Lock()
-	defer tldsLock.Unlock()
-
-	if fqdn == "" {
-		return ""
-	}
-
-	parts := strings.Split(fqdn, ".")
-
-	l := len(parts)
-	if l == 1 {
-		label := strings.ToLower(parts[0])
-
-		if !setOfTLDs.Has(label) {
-			return ""
-		}
-		return label
-	}
-
-	top := strings.ToLower(parts[l-1])
-	if !setOfTLDs.Has(top) {
-		return ""
-	}
-
-	second := strings.ToLower(parts[l-2])
-	if !setOfTLDs.Has(second) {
-		return strings.ToLower(parts[l-1])
-	}
-
-	return second + "." + top
-}
-
-// RootDomain returns the root domain portion of the fully qualified domain name.
-func RootDomain(fqdn string) string {
-	tld := TopLevelDomain(fqdn)
-	if tld == "" {
-		return tld
-	}
-
-	tParts := strings.Split(tld, ".")
-	tLen := len(tParts)
-
-	fParts := strings.Split(fqdn, ".")
-	fLen := len(fParts)
-
-	if fLen <= tLen {
-		return ""
-	}
-
-	return fParts[fLen-(tLen+1)] + "." + tld
 }

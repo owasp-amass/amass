@@ -4,12 +4,9 @@
 package intel
 
 import (
-	"bufio"
 	"context"
 	"errors"
-	"fmt"
 	"net"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -288,38 +285,6 @@ loop:
 	}
 
 	return cidrs
-}
-
-// LookupASNsByName returns requests.ASNRequest objects for autonomous systems with
-// descriptions that contain the string provided by the parameter.
-func LookupASNsByName(s string) ([]*requests.ASNRequest, error) {
-	var records []*requests.ASNRequest
-
-	s = strings.ToLower(s)
-	content, err := config.BoxOfDefaultFiles.FindString("asnlist.txt")
-	if err != nil {
-		return records, fmt.Errorf("Failed to obtain the embedded ASN information: asnlist.txt: %v", err)
-	}
-
-	scanner := bufio.NewScanner(strings.NewReader(content))
-	for scanner.Scan() {
-		line := scanner.Text()
-
-		if err := scanner.Err(); err == nil {
-			parts := strings.Split(strings.TrimSpace(line), ",")
-
-			if strings.Contains(strings.ToLower(parts[1]), s) {
-				a, err := strconv.Atoi(parts[0])
-				if err == nil {
-					records = append(records, &requests.ASNRequest{
-						ASN:         a,
-						Description: parts[1],
-					})
-				}
-			}
-		}
-	}
-	return records, nil
 }
 
 // ReverseWhois returns domain names that are related to the domains provided

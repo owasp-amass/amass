@@ -13,14 +13,63 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 
 	amasshttp "github.com/OWASP/Amass/v3/net/http"
+	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/stringset"
+	"github.com/gobuffalo/packr/v2"
 )
 
 const (
 	outputDirectoryName = "amass"
 )
+
+var (
+	// BoxOfDefaultFiles is the ./resources project directory embedded into the binary.
+	BoxOfDefaultFiles *packr.Box
+	boxOnce           sync.Once
+)
+
+// LookupASNsByName returns requests.ASNRequest objects for autonomous systems with
+// descriptions that contain the string provided by the parameter.
+func LookupASNsByName(s string) ([]*requests.ASNRequest, error) {
+	var records []*requests.ASNRequest
+
+	if BoxOfDefaultFiles == nil {
+		boxOnce.Do(openTheBox)
+	}
+
+	content, err := BoxOfDefaultFiles.FindString("asnlist.txt")
+	if err != nil {
+		return records, fmt.Errorf("Failed to obtain the embedded ASN information: asnlist.txt: %v", err)
+	}
+
+	s = strings.ToLower(s)
+	scanner := bufio.NewScanner(strings.NewReader(content))
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		if err := scanner.Err(); err == nil {
+			parts := strings.Split(strings.TrimSpace(line), ",")
+
+			if strings.Contains(strings.ToLower(parts[1]), s) {
+				a, err := strconv.Atoi(parts[0])
+				if err == nil {
+					records = append(records, &requests.ASNRequest{
+						ASN:         a,
+						Description: parts[1],
+					})
+				}
+			}
+		}
+	}
+	return records, nil
+}
+
+func openTheBox() {
+	BoxOfDefaultFiles = packr.New("Amass Box", "../resources")
+}
 
 // AcquireConfig populates the Config struct provided by the config argument.
 // The configuration file path and a bool indicating the settings were
@@ -104,6 +153,10 @@ func getWordlistByURL(url string) ([]string, error) {
 }
 
 func getWordlistByBox(path string) ([]string, error) {
+	if BoxOfDefaultFiles == nil {
+		boxOnce.Do(openTheBox)
+	}
+
 	content, err := BoxOfDefaultFiles.FindString(path)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to obtain the embedded wordlist: %s: %v", path, err)
