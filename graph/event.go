@@ -16,6 +16,11 @@ import (
 func (g *Graph) InsertEvent(eventID string) (db.Node, error) {
 	// Check if there is an existing start time for this event.
 	// If not, then create the node and add the start time/date
+	var finish string
+
+	g.eventFinishLock.Lock()
+	defer g.eventFinishLock.Unlock()
+
 	eventNode, err := g.db.ReadNode(eventID)
 	if err != nil {
 		// Create a node to represent the event
@@ -30,18 +35,23 @@ func (g *Graph) InsertEvent(eventID string) (db.Node, error) {
 		}
 	} else {
 		// Remove an existing 'finish' property
-		if properties, err := g.db.ReadProperties(eventNode, "finish"); err == nil {
-			for _, p := range properties {
-				g.db.DeleteProperty(eventNode, p.Predicate, p.Value)
-			}
+		var ok bool
+		finish, ok = g.eventFinishes[eventID]
+		if !ok {
+			return eventNode, errors.New("Graph: InsertEvent: Event finish cache failure")
 		}
+		g.db.DeleteProperty(eventNode, "finish", finish)
 	}
 
+	finish = time.Now().Format(time.RFC3339)
+
 	// Update the finish property with the current time/date
-	g.db.InsertProperty(eventNode, "finish", time.Now().Format(time.RFC3339))
+	g.db.InsertProperty(eventNode, "finish", finish)
 	if err != nil {
 		return eventNode, err
 	}
+
+	g.eventFinishes[eventID] = finish
 
 	return eventNode, nil
 }

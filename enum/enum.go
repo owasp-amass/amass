@@ -104,6 +104,7 @@ func NewEnumeration(sys services.System) *Enumeration {
 		},
 		bruteQueue:    new(queue.Queue),
 		srcs:          stringset.New(),
+		addrs:         stringset.New(),
 		resolvedQueue: new(queue.Queue),
 		Output:        make(chan *requests.Output, 100),
 		outputQueue:   new(queue.Queue),
@@ -180,7 +181,6 @@ func (e *Enumeration) Start() error {
 
 	e.setupEventBus()
 
-	e.addrs = stringset.New()
 	go e.processAddresses()
 
 	// The enumeration will not terminate until all output has been processed
