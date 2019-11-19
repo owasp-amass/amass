@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	vizUsageMsg = "viz -d3|-gexf|-graphistry|-maltego|-visjs [options]"
+	vizUsageMsg = "viz -d3|-dot||-gexf|-graphistry|-maltego [options]"
 )
 
 type vizArgs struct {
@@ -27,10 +27,10 @@ type vizArgs struct {
 	Enum    int
 	Options struct {
 		D3         bool
+		DOT        bool
 		GEXF       bool
 		Graphistry bool
 		Maltego    bool
-		VisJS      bool
 	}
 	Filepaths struct {
 		ConfigFile string
@@ -61,10 +61,10 @@ func runVizCommand(clArgs []string) {
 	vizCommand.StringVar(&args.Filepaths.Input, "i", "", "The Amass data operations JSON file")
 	vizCommand.StringVar(&args.Filepaths.Output, "o", "", "Path to the directory for output files being generated")
 	vizCommand.BoolVar(&args.Options.D3, "d3", false, "Generate the D3 v4 force simulation HTML file")
+	//vizCommand.BoolVar(&args.Options.DOT, "dot", false, "Generate the DOT output file")
 	vizCommand.BoolVar(&args.Options.GEXF, "gexf", false, "Generate the Gephi Graph Exchange XML Format (GEXF) file")
 	vizCommand.BoolVar(&args.Options.Graphistry, "graphistry", false, "Generate the Graphistry JSON file")
 	vizCommand.BoolVar(&args.Options.Maltego, "maltego", false, "Generate the Maltego csv file")
-	vizCommand.BoolVar(&args.Options.VisJS, "visjs", false, "Generate the Visjs output HTML file")
 
 	if len(clArgs) < 1 {
 		commandUsage(vizUsageMsg, vizCommand, vizBuf)
@@ -81,8 +81,8 @@ func runVizCommand(clArgs []string) {
 	}
 
 	// Make sure at least one graph file format has been identified on the command-line
-	if !args.Options.D3 && !args.Options.GEXF &&
-		!args.Options.Graphistry && !args.Options.Maltego && !args.Options.VisJS {
+	if !args.Options.D3 && !args.Options.DOT &&
+		!args.Options.GEXF && !args.Options.Graphistry && !args.Options.Maltego {
 		r.Fprintln(color.Error, "At least one file format must be selected")
 		os.Exit(1)
 	}
@@ -151,21 +151,21 @@ func runVizCommand(clArgs []string) {
 		dir := filepath.Join(args.Filepaths.Output, "amass_d3.html")
 		writeD3File(dir, nodes, edges)
 	}
+	if args.Options.DOT {
+		dir := filepath.Join(args.Filepaths.Output, "amass.dot")
+		writeDOTData(dir, nodes, edges)
+	}
 	if args.Options.GEXF {
 		dir := filepath.Join(args.Filepaths.Output, "amass.gexf")
 		writeGEXFFile(dir, nodes, edges)
 	}
 	if args.Options.Graphistry {
-		dir := filepath.Join(args.Filepaths.Output, "amass_graphistry.gexf")
+		dir := filepath.Join(args.Filepaths.Output, "amass_graphistry.json")
 		writeGraphistryFile(dir, nodes, edges)
 	}
 	if args.Options.Maltego {
 		dir := filepath.Join(args.Filepaths.Output, "amass_maltego.csv")
 		writeMaltegoFile(dir, nodes, edges)
-	}
-	if args.Options.VisJS {
-		dir := filepath.Join(args.Filepaths.Output, "amass_visjs.html")
-		writeVisjsFile(dir, nodes, edges)
 	}
 }
 
@@ -177,17 +177,6 @@ func writeMaltegoFile(path string, nodes []viz.Node, edges []viz.Edge) {
 	defer f.Close()
 
 	viz.WriteMaltegoData(f, nodes, edges)
-	f.Sync()
-}
-
-func writeVisjsFile(path string, nodes []viz.Node, edges []viz.Edge) {
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE, 0644)
-	if err != nil {
-		return
-	}
-	defer f.Close()
-
-	viz.WriteVisjsData(f, nodes, edges)
 	f.Sync()
 }
 
@@ -221,5 +210,16 @@ func writeD3File(path string, nodes []viz.Node, edges []viz.Edge) {
 	defer f.Close()
 
 	viz.WriteD3Data(f, nodes, edges)
+	f.Sync()
+}
+
+func writeDOTData(path string, nodes []viz.Node, edges []viz.Edge) {
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE, 0644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+
+	viz.WriteDOTData(f, nodes, edges)
 	f.Sync()
 }

@@ -54,7 +54,7 @@ func WriteDOTData(output io.Writer, nodes []Node, edges []Edge) {
 		"as":        "blue",
 	}
 
-	graph := &dotGraph{Name: "OWASP Amass Network Mapping"}
+	graph := &dotGraph{Name: "Amass"}
 
 	for idx, node := range nodes {
 		graph.Nodes = append(graph.Nodes, dotNode{
