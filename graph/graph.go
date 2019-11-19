@@ -4,6 +4,8 @@
 package graph
 
 import (
+	"sync"
+
 	"github.com/OWASP/Amass/v3/graph/db"
 )
 
@@ -11,6 +13,11 @@ import (
 type Graph struct {
 	db            db.GraphDatabase
 	alreadyClosed bool
+
+	// eventFinishes maintains a cache of the latest finish time for each event
+	// This reduces roundtrips to the graph when adding nodes to events.
+	eventFinishes   map[string]string
+	eventFinishLock sync.Mutex
 }
 
 // NewGraph accepts a graph database that stores the Graph created and maintained by the data model.
@@ -19,7 +26,10 @@ func NewGraph(database db.GraphDatabase) *Graph {
 		return nil
 	}
 
-	return &Graph{db: database}
+	return &Graph{
+		db:            database,
+		eventFinishes: make(map[string]string),
+	}
 }
 
 // Close will close the graph database being used by the Graph receiver.
@@ -47,18 +57,5 @@ func (g *Graph) InsertNodeIfNotExist(id, ntype string) (db.Node, error) {
 
 // InsertEdge will create an edge in the database if it does not already exist.
 func (g *Graph) InsertEdge(edge *db.Edge) error {
-	// Check if this edge already exists in the graph
-	edges, err := g.db.ReadOutEdges(edge.From, edge.Predicate)
-	if err == nil && len(edges) > 0 {
-		tstr := g.db.NodeToID(edge.To)
-
-		for _, e := range edges {
-			if g.db.NodeToID(e.To) == tstr {
-				return nil
-			}
-		}
-	}
-
-	// The edge does not yet exist in the graph
 	return g.db.InsertEdge(edge)
 }
