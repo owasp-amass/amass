@@ -55,6 +55,18 @@ func NewCayleyGraph(path string) *CayleyGraph {
 	}
 }
 
+// NewCayleyGraphMemory creates a temporary graph in memory.
+func NewCayleyGraphMemory() *CayleyGraph {
+	store, err := cayley.NewMemoryGraph()
+	if err != nil {
+		return nil
+	}
+	return &CayleyGraph{
+		store: store,
+		path:  "",
+	}
+}
+
 func isNewFile(path string) bool {
 	finfo, err := os.Stat(path)
 	if os.IsNotExist(err) {
