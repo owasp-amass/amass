@@ -65,7 +65,7 @@ func (g *Graph) NodeSourcesDuringEvent(id, eventID string) ([]string, error) {
 		return nil, errors.New("Graph: NodeSourcesDuringEvent: Invalid IDs provided")
 	}
 
-	eventNode, err := g.InsertEvent(eventID)
+	eventNode, err := g.db.ReadNode(eventID)
 	if err != nil {
 		return nil, err
 	}
