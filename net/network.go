@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"math/big"
 	"net"
+	"strconv"
 	"strings"
 )
 
@@ -72,6 +73,39 @@ func FirstLast(cidr *net.IPNet) (net.IP, net.IP) {
 	lastIPInt.Sub(lastIPInt, big.NewInt(1))
 	lastIPInt.Or(lastIPInt, firstIPInt)
 	return firstIP, intToIP(lastIPInt, bits)
+}
+
+// Range2CIDR turns an IP range into a CIDR.
+func Range2CIDR(first, last net.IP) *net.IPNet {
+	startip, m := ipToInt(first)
+	endip, _ := ipToInt(last)
+	newip := big.NewInt(1)
+	mask := big.NewInt(1)
+
+	max := uint(m)
+	var bits uint = 1
+	newip.Set(startip)
+	for bits < max {
+		tmp := new(big.Int)
+		tmp.Rsh(startip, bits)
+		tmp.Lsh(tmp, bits)
+
+		newip.Or(startip, mask)
+		if newip.Cmp(endip) == 1 || tmp.Cmp(startip) != 0 {
+			bits--
+			mask.Rsh(mask, 1)
+			break
+		}
+
+		bits++
+		tmp.Lsh(mask, 1)
+		mask.Add(tmp, big.NewInt(1))
+	}
+
+	cidrstr := first.String() + "/" + strconv.Itoa(int(bits))
+	_, ipnet, _ := net.ParseCIDR(cidrstr)
+
+	return ipnet
 }
 
 // IsIPv4 returns true when the provided net.IP address is an IPv4 address.
