@@ -72,8 +72,6 @@ func openTheBox() {
 }
 
 // AcquireConfig populates the Config struct provided by the config argument.
-// The configuration file path and a bool indicating the settings were
-// successfully loaded are returned.
 func AcquireConfig(dir, file string, config *Config) error {
 	var err error
 
@@ -98,13 +96,16 @@ func AcquireConfig(dir, file string, config *Config) error {
 
 // OutputDirectory returns the file path of the Amass output directory. A suitable
 // path provided will be used as the output directory instead.
-func OutputDirectory(dir string) string {
-	if dir == "" {
-		if path, err := os.UserConfigDir(); err == nil {
-			dir = filepath.Join(path, outputDirectoryName)
-		}
+func OutputDirectory(dir ...string) string {
+	if len(dir) > 0 && dir[0] != "" {
+		return dir[0]
 	}
-	return dir
+
+	if path, err := os.UserConfigDir(); err == nil {
+		return filepath.Join(path, outputDirectoryName)
+	}
+
+	return ""
 }
 
 // GetListFromFile reads a wordlist text or gzip file and returns the slice of words.
