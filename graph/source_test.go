@@ -8,6 +8,7 @@ import (
 
 func TestSource(t *testing.T) {
 	g := NewGraph(db.NewCayleyGraphMemory())
+
 	for _, tt := range graphTest {
 		t.Run("Testing InsertSource...", func(t *testing.T) {
 			got, err := g.InsertSource(tt.Source, tt.Tag)
@@ -27,19 +28,5 @@ func TestSource(t *testing.T) {
 				t.Errorf("Expecting to return tag:%v\nGot:%v", tt.Tag, got)
 			}
 		})
-
-		t.Run("Testing  NodeSourcesDuringEvent...", func(t *testing.T) {
-			g.InsertA(tt.FQDN, tt.Addr, tt.Source, tt.Tag, tt.EventID)
-			g.InsertNodeIfNotExist(tt.ID, "test")
-			got, err := g.NodeSourcesDuringEvent(tt.Source, tt.EventID)
-			if err != nil {
-				t.Errorf("Failed to get source during event.\n%v", err)
-			}
-			if len(got) < 0 {
-				t.Errorf("No sources found during event.\nSlice length:%v", len(got))
-			}
-		})
-
 	}
-
 }

@@ -58,7 +58,7 @@ func (g *Graph) GetOutput(uuid string) []*requests.Output {
 func (g *Graph) buildOutput(sub db.Node, uuid string, c chan *requests.Output) {
 	substr := g.db.NodeToID(sub)
 
-	sources, err := g.NodeSourcesDuringEvent(substr, uuid)
+	sources, err := g.db.NodeSources(sub, uuid)
 	if err != nil {
 		c <- nil
 		return
@@ -78,24 +78,7 @@ func (g *Graph) buildOutput(sub db.Node, uuid string, c chan *requests.Output) {
 		Source: src,
 	}
 
-	// Traverse CNAME and SRV records
-	target := sub
-	for i := 0; i < 10; i++ {
-		var found bool
-
-		edges, err := g.db.ReadOutEdges(target, "cname_record", "srv_record")
-		if err == nil && len(edges) > 0 && g.inEventScope(edges[0].To, uuid) {
-			target = edges[0].To
-			found = true
-		}
-
-		if !found {
-			break
-		}
-	}
-
-	// Get all the IP addresses
-	edges, err := g.db.ReadOutEdges(target, "a_record", "aaaa_record")
+	addrs, err := g.db.NameToIPAddrs(sub)
 	if err != nil {
 		c <- nil
 		return
@@ -103,13 +86,13 @@ func (g *Graph) buildOutput(sub db.Node, uuid string, c chan *requests.Output) {
 
 	var num int
 	addrChan := make(chan *requests.AddressInfo, 100)
-	for _, edge := range edges {
-		if !g.inEventScope(edge.To, uuid) {
+	for _, addr := range addrs {
+		if !g.inEventScope(addr, uuid) {
 			continue
 		}
 
 		num++
-		go g.buildAddrInfo(edge.To, uuid, addrChan)
+		go g.buildAddrInfo(addr, uuid, addrChan)
 	}
 
 	for i := 0; i < num; i++ {

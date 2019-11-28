@@ -125,24 +125,15 @@ func (g *Graph) EventList() []string {
 
 // EventDomains returns the domains that were involved in the event.
 func (g *Graph) EventDomains(uuid string) []string {
-	event, err := g.db.ReadNode(uuid)
-	if err != nil {
-		return nil
-	}
-
-	edges, err := g.db.ReadOutEdges(event)
+	names, err := g.db.AllNodesOfType("fqdn", uuid)
 	if err != nil {
 		return nil
 	}
 
 	domains := stringset.New()
-	for _, edge := range edges {
-		p, err := g.db.ReadProperties(edge.To, "type")
-		if err != nil || len(p) == 0 || p[0].Value != "fqdn" {
-			continue
-		}
+	for _, name := range names {
+		d, err := publicsuffix.EffectiveTLDPlusOne(g.db.NodeToID(name))
 
-		d, err := publicsuffix.EffectiveTLDPlusOne(g.db.NodeToID(edge.To))
 		if err == nil && d != "" {
 			domains.Insert(d)
 		}

@@ -161,17 +161,129 @@ func (g *CayleyGraph) removeAllNodeQuads(id string) error {
 }
 
 // AllNodesOfType implements the GraphDatabase interface.
-func (g *CayleyGraph) AllNodesOfType(ntype string) ([]Node, error) {
+func (g *CayleyGraph) AllNodesOfType(ntype string, events ...string) ([]Node, error) {
 	g.RLock()
 	defer g.RUnlock()
 
 	var nodes []Node
-	p := cayley.StartPath(g.store).Has(quad.String("type"), quad.String(ntype)).Unique()
+	if ntype == "event" && len(events) > 0 {
+		for _, event := range events {
+			nodes = append(nodes, event)
+		}
+
+		return nodes, nil
+	}
+
+	var allevents []Node
+	e := cayley.StartPath(g.store).Has(quad.String("type"), quad.String("event")).Unique()
+	g.optimizedIterate(e, func(value quad.Value) {
+		allevents = append(allevents, quad.ToString(value))
+	})
+
+	if ntype == "event" {
+		return allevents, nil
+	}
+
+	filter := stringset.NewStringFilter()
+	eventset := stringset.New(events...)
+	for _, event := range allevents {
+		estr := g.NodeToID(event)
+
+		if len(events) > 0 && !eventset.Has(estr) {
+			continue
+		}
+
+		p := cayley.StartPath(g.store, quad.String(estr)).Out().Has(quad.String("type"), quad.String(ntype))
+		g.optimizedIterate(p, func(value quad.Value) {
+			nstr := quad.ToString(value)
+
+			if !filter.Duplicate(nstr) {
+				nodes = append(nodes, nstr)
+			}
+		})
+	}
+
+	return nodes, nil
+}
+
+// NameToIPAddrs implements the GraphDatabase interface.
+func (g *CayleyGraph) NameToIPAddrs(node Node) ([]Node, error) {
+	g.RLock()
+	defer g.RUnlock()
+
+	var nodes []Node
+	nstr := g.NodeToID(node)
+	if nstr == "" {
+		return nodes, fmt.Errorf("%s: NameToIPAddrs: Invalid node reference argument", g.String())
+	}
+
+	// Does this name have A/AAAA records?
+	p := cayley.StartPath(g.store, quad.String(nstr)).Out("a_record", "aaaa_record")
+	g.optimizedIterate(p, func(value quad.Value) {
+		nodes = append(nodes, quad.ToString(value))
+	})
+
+	if len(nodes) > 0 {
+		return nodes, nil
+	}
+
+	// Attempt to traverse a SRV record
+	p = cayley.StartPath(g.store,
+		quad.String(nstr)).FollowRecursive(quad.String("srv_record"), 1, nil).Out("a_record", "aaaa_record")
+	g.optimizedIterate(p, func(value quad.Value) {
+		nodes = append(nodes, quad.ToString(value))
+	})
+
+	if len(nodes) > 0 {
+		return nodes, nil
+	}
+
+	// Traverse CNAME records
+	p = cayley.StartPath(g.store,
+		quad.String(nstr)).FollowRecursive(quad.String("cname_record"), 10, nil).Out("a_record", "aaaa_record")
 	g.optimizedIterate(p, func(value quad.Value) {
 		nodes = append(nodes, quad.ToString(value))
 	})
 
 	return nodes, nil
+}
+
+// NodeSources implements the GraphDatabase interface.
+func (g *CayleyGraph) NodeSources(node Node, events ...string) ([]string, error) {
+	g.RLock()
+	defer g.RUnlock()
+
+	nstr := g.NodeToID(node)
+	if nstr == "" {
+		return nil, fmt.Errorf("%s: NodeSources: Invalid node reference argument", g.String())
+	}
+
+	allevents, err := g.AllNodesOfType("event", events...)
+	if err != nil {
+		return nil, fmt.Errorf("%s: NodeSources: Failed to obtain the list of events", g.String())
+	}
+
+	preds := g.nodePredicates(nstr, "in")
+
+	var sources []string
+	filter := stringset.NewStringFilter()
+	for _, event := range allevents {
+		estr := g.NodeToID(event)
+
+		for _, pred := range preds {
+			p := cayley.StartPath(g.store, quad.String(nstr)).In(pred).Is(quad.String(estr))
+
+			if g.optimizedCount(p) != 0 && !filter.Duplicate(pred) {
+				sources = append(sources, pred)
+			}
+		}
+	}
+
+	if len(sources) == 0 {
+		return nil, fmt.Errorf("%s: NodeSources: Failed to discover edges leaving the node %s", g.String(), nstr)
+	}
+
+	return sources, nil
 }
 
 // InsertProperty implements the GraphDatabase interface.
@@ -243,15 +355,26 @@ func (g *CayleyGraph) CountProperties(node Node, predicates ...string) (int, err
 		return 0, fmt.Errorf("%s: CountProperties: Invalid node reference argument", g.String())
 	}
 
-	var preds []quad.Value
-	for _, p := range predicates {
-		preds = append(preds, quad.String(p))
+	var count int
+	preds := stringset.New(predicates...)
+	for _, pred := range g.nodePredicates(nstr, "out") {
+		if len(predicates) > 0 && !preds.Has(pred) {
+			continue
+		}
+
+		vals := cayley.StartPath(g.store, quad.String(nstr)).Out(quad.String(pred))
+		g.optimizedIterate(vals, func(value quad.Value) {
+			vstr := quad.ToString(value)
+
+			// Check if this is actually a node and not a property
+			p := cayley.StartPath(g.store, quad.String(vstr)).Has(quad.String("type"))
+			if first := g.optimizedFirst(p); first == nil {
+				count++
+			}
+		})
 	}
 
-	edges := cayley.StartPath(g.store, quad.String(nstr)).Out(preds).Has(quad.String("type"))
-	p := cayley.StartPath(g.store, quad.String(nstr)).Out(preds).Except(edges)
-
-	return g.optimizedCount(p), nil
+	return count, nil
 }
 
 // DeleteProperty implements the GraphDatabase interface.
@@ -339,19 +462,13 @@ func (g *CayleyGraph) ReadInEdges(node Node, predicates ...string) ([]*Edge, err
 			continue
 		}
 
-		vals := cayley.StartPath(g.store, quad.String(nstr)).In(quad.String(pred))
+		vals := cayley.StartPath(g.store, quad.String(nstr)).In(quad.String(pred)).Has(quad.String("type"))
 		g.optimizedIterate(vals, func(value quad.Value) {
-			vstr := quad.ToString(value)
-
-			// Check if this is actually a node and not a property
-			p := cayley.StartPath(g.store, quad.String(vstr)).Has(quad.String("type"))
-			if first := g.optimizedFirst(p); first != nil {
-				edges = append(edges, &Edge{
-					Predicate: pred,
-					From:      vstr,
-					To:        node,
-				})
-			}
+			edges = append(edges, &Edge{
+				Predicate: pred,
+				From:      quad.ToString(value),
+				To:        node,
+			})
 		})
 	}
 
@@ -399,19 +516,13 @@ func (g *CayleyGraph) ReadOutEdges(node Node, predicates ...string) ([]*Edge, er
 			continue
 		}
 
-		vals := cayley.StartPath(g.store, quad.String(nstr)).Out(quad.String(pred))
+		vals := cayley.StartPath(g.store, quad.String(nstr)).Out(quad.String(pred)).Has(quad.String("type"))
 		g.optimizedIterate(vals, func(value quad.Value) {
-			vstr := quad.ToString(value)
-
-			// Check if this is actually a node and not a property
-			p := cayley.StartPath(g.store, quad.String(vstr)).Has(quad.String("type"))
-			if first := g.optimizedFirst(p); first != nil {
-				edges = append(edges, &Edge{
-					Predicate: pred,
-					From:      node,
-					To:        vstr,
-				})
-			}
+			edges = append(edges, &Edge{
+				Predicate: pred,
+				From:      node,
+				To:        quad.ToString(value),
+			})
 		})
 	}
 

@@ -33,7 +33,11 @@ type GraphDatabase interface {
 	DeleteNode(node Node) error
 
 	// Graph operations for querying for nodes using search criteria
-	AllNodesOfType(ntype string) ([]Node, error)
+	AllNodesOfType(ntype string, events ...string) ([]Node, error)
+	NameToIPAddrs(node Node) ([]Node, error)
+
+	// NodeSources returns the names of data sources that identified node during the events
+	NodeSources(node Node, events ...string) ([]string, error)
 
 	// Graph operations for manipulating property values of a node
 	InsertProperty(node Node, predicate, value string) error
@@ -52,6 +56,6 @@ type GraphDatabase interface {
 	CountOutEdges(node Node, predicates ...string) (int, error)
 	DeleteEdge(edge *Edge) error
 
-	// Signals the handler to prepare for closing.
+	// Signals for the database to close
 	Close()
 }
