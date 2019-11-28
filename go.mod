@@ -18,6 +18,7 @@ require (
 	github.com/mattn/go-colorable v0.1.4 // indirect
 	github.com/mattn/go-isatty v0.0.10 // indirect
 	github.com/miekg/dns v1.1.22
+	github.com/pkg/profile v1.4.0
 	github.com/robertkrimen/otto v0.0.0-20180617131154-15f95af6e78d // indirect
 	github.com/smartystreets/goconvey v0.0.0-20190731233626-505e41936337 // indirect
 	golang.org/x/net v0.0.0-20190923162816-aa69164e4478
