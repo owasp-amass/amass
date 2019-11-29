@@ -217,7 +217,7 @@ Amass automatically tries to discover configuration files in the following locat
 
 These are good places for you to put your configuration file.
 
-Note that these locations are based on the [output path](#the-output-path). If you use the `-dir` flag, the location where Amass will try to discover the configuration file will change. For example, if you pass in `-dir ./my-out-dir`, Amass will try to discover a configuration file in `./my-out-dir/config.ini`.
+Note that these locations are based on the [output directory](#the-output-directory). If you use the `-dir` flag, the location where Amass will try to discover the configuration file will change. For example, if you pass in `-dir ./my-out-dir`, Amass will try to discover a configuration file in `./my-out-dir/config.ini`.
 
 ### Default Section
 
