@@ -207,7 +207,7 @@ If you decide to use an Amass configuration file, it will be automatically disco
 
 You will need a config file to use your API keys with Amass. See the [Example Configuration File](https://github.com/OWASP/Amass/blob/master/examples/config.ini) for more details.
 
-Amass automatically tries to discover configuration files in the following locations:
+Amass automatically tries to discover the configuration file in the following locations:
 
 | Operating System | Path |
 | ---------------- | ---- |
