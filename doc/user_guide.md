@@ -207,6 +207,16 @@ If you decide to use an Amass configuration file, it will be automatically disco
 
 You will need a config file to use your API keys with Amass. See the [Example Configuration File](https://github.com/OWASP/Amass/blob/master/examples/config.ini) for more details.
 
+Amass automatically tries to discover configuration files in the following locations:
+
+| Operating System | Path |
+| ---------------- | ---- |
+| Linux / Unix | `$XDG_CONFIG_HOME/amass/config.ini` or `$HOME/.config/amass/config.ini` |
+| Windows | `%AppData%\amass\config.ini` |
+| OSX | `$HOME/Library/Application Support/amass/config.ini` |
+
+These are good places for you to put your configuration file.
+
 ### Default Section
 
 | Option | Description |
