@@ -91,6 +91,9 @@ func (i *IPToASN) getASInfo(addr string) (*requests.ASNRequest, error) {
 	}
 
 	netblock := amassnet.Range2CIDR(net.ParseIP(m.First), net.ParseIP(m.Last))
+	if netblock == nil {
+		return nil, fmt.Errorf("%s: Failed to obtain the AS netblock information", i.String())
+	}
 
 	return &requests.ASNRequest{
 		ASN:         m.ASN,
