@@ -41,6 +41,7 @@ type Enumeration struct {
 	markovModel *alts.MarkovModel
 	startedAlts bool
 	altQueue    *queue.Queue
+	moreAlts    chan struct{}
 
 	ctx context.Context
 
@@ -49,6 +50,7 @@ type Enumeration struct {
 
 	startedBrute bool
 	bruteQueue   *queue.Queue
+	moreBrute    chan struct{}
 
 	srcsLock sync.Mutex
 	srcs     stringset.Set
@@ -64,8 +66,8 @@ type Enumeration struct {
 	logQueue *queue.Queue
 
 	// Broadcast channel that indicates no further writes to the output channel
-	done              chan struct{}
-	doneAlreadyClosed bool
+	done   chan struct{}
+	closed sync.Once
 
 	// Cache for the infrastructure data collected from online sources
 	netLock  sync.Mutex
@@ -78,8 +80,9 @@ type Enumeration struct {
 	addrsLock sync.Mutex
 	addrs     stringset.Set
 
-	lastLock sync.Mutex
-	last     time.Time
+	lastLock  sync.Mutex
+	last      time.Time
+	lastPhase time.Time
 
 	perSecLock  sync.Mutex
 	perSec      int64
@@ -94,6 +97,7 @@ func NewEnumeration(sys services.System) *Enumeration {
 		Bus:      eb.NewEventBus(),
 		Sys:      sys,
 		altQueue: new(queue.Queue),
+		moreAlts: make(chan struct{}, 2),
 		filters: &Filters{
 			NewNames:      stringset.NewStringFilter(),
 			Resolved:      stringset.NewStringFilter(),
@@ -103,13 +107,14 @@ func NewEnumeration(sys services.System) *Enumeration {
 			PassiveOutput: stringset.NewStringFilter(),
 		},
 		bruteQueue:    new(queue.Queue),
+		moreBrute:     make(chan struct{}, 2),
 		srcs:          stringset.New(),
 		addrs:         stringset.New(),
 		resolvedQueue: new(queue.Queue),
 		Output:        make(chan *requests.Output, 100),
 		outputQueue:   new(queue.Queue),
 		logQueue:      new(queue.Queue),
-		done:          make(chan struct{}, 2),
+		done:          make(chan struct{}),
 		netCache:      make(map[int]*requests.ASNRequest),
 		netQueue:      new(queue.Queue),
 		subdomains:    make(map[string]int),
@@ -136,13 +141,9 @@ func (e *Enumeration) refToDataManager() services.Service {
 
 // Done safely closes the done broadcast channel.
 func (e *Enumeration) Done() {
-	e.Lock()
-	defer e.Unlock()
-
-	if !e.doneAlreadyClosed {
-		e.doneAlreadyClosed = true
+	e.closed.Do(func() {
 		close(e.done)
-	}
+	})
 }
 
 // Start begins the DNS enumeration process for the Amass Enumeration object.
@@ -226,6 +227,7 @@ func (e *Enumeration) Start() error {
 	}
 	e.srcsLock.Unlock()
 
+	e.lastPhase = time.Now()
 	twoSec := time.NewTicker(2 * time.Second)
 	perMin := time.NewTicker(time.Minute)
 loop:
@@ -234,15 +236,12 @@ loop:
 		case <-e.done:
 			break loop
 		case <-twoSec.C:
+			e.releaseAttempts()
 			e.writeLogs()
 			e.nextPhase()
 		case <-perMin.C:
 			if !e.Config.Passive {
-				remaining := e.DNSNamesRemaining()
-
-				e.Config.Log.Printf("Average DNS queries performed: %d/sec, DNS names queued: %d",
-					e.DNSQueriesPerSec(), remaining)
-
+				e.Config.Log.Printf("Average DNS queries performed: %d/sec", e.DNSQueriesPerSec())
 				e.clearPerSec()
 			}
 		}
@@ -258,7 +257,27 @@ loop:
 	return nil
 }
 
+func (e *Enumeration) releaseAttempts() {
+	remaining := e.DNSNamesRemaining()
+
+	if remaining < 25000 {
+		if e.startedBrute {
+			e.moreBruteForcing()
+		}
+
+		if e.startedAlts {
+			e.moreAlterations()
+		}
+	}
+
+	time.Sleep(100 * time.Millisecond)
+}
+
 func (e *Enumeration) nextPhase() {
+	if !time.Now().After(e.lastPhase.Add(30 * time.Second)) {
+		return
+	}
+
 	first := !e.startedBrute && !e.startedAlts
 	persec := e.DNSQueriesPerSec()
 	remaining := e.DNSNamesRemaining()
@@ -279,8 +298,9 @@ func (e *Enumeration) nextPhase() {
 	if bruteReady {
 		e.startedBrute = true
 		go e.startBruteForcing()
+		go e.moreBruteForcing()
 		e.Config.Log.Print("Starting DNS queries for brute forcing")
-		time.Sleep(30 * time.Second)
+		e.lastPhase = time.Now()
 	} else if altsReady {
 		if !first && persec > 2000 {
 			return
@@ -288,8 +308,9 @@ func (e *Enumeration) nextPhase() {
 
 		e.startedAlts = true
 		go e.performAlterations()
+		go e.moreAlterations()
 		e.Config.Log.Print("Starting DNS queries for altered names")
-		time.Sleep(30 * time.Second)
+		e.lastPhase = time.Now()
 	} else if inactive && persec < 50 {
 		// End the enumeration!
 		e.Done()

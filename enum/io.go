@@ -76,8 +76,8 @@ func (e *Enumeration) namesFromCertificates(addr string) {
 }
 
 func (e *Enumeration) processOutput(wg *sync.WaitGroup) {
-	defer wg.Done()
 	defer close(e.Output)
+	defer wg.Done()
 
 	curIdx := 0
 	maxIdx := 6
