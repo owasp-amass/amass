@@ -4,6 +4,7 @@
 package semaphore
 
 import (
+	"sync"
 	"time"
 )
 
@@ -17,6 +18,9 @@ type Semaphore interface {
 
 	// Release causes num resource counts to be released
 	Release(num int)
+
+	// Releases all resources allocated by the semaphore
+	Stop()
 }
 
 // SimpleSemaphore implements a synchronization object
@@ -72,21 +76,29 @@ func (s *SimpleSemaphore) Release(num int) {
 	}
 }
 
+// Stop implements the Semaphore interface.
+func (s *SimpleSemaphore) Stop() {
+	return
+}
+
 // TimedSemaphore implements a synchronization object
 // type capable of being a counting semaphore.
 type TimedSemaphore struct {
-	c   chan struct{}
-	rel chan int
-	del time.Duration
+	c      chan struct{}
+	rel    chan int
+	del    time.Duration
+	done   chan struct{}
+	closed sync.Once
 }
 
 // NewTimedSemaphore returns a TimedSemaphore initialized to max resource counts
 // and delay release frequency.
 func NewTimedSemaphore(max int, delay time.Duration) Semaphore {
 	sem := &TimedSemaphore{
-		c:   make(chan struct{}, max),
-		rel: make(chan int, max),
-		del: delay,
+		c:    make(chan struct{}, max),
+		rel:  make(chan int, max),
+		del:  delay,
+		done: make(chan struct{}),
 	}
 
 	for i := 0; i < max; i++ {
@@ -140,6 +152,8 @@ func (t *TimedSemaphore) processReleases() {
 	var rcount int
 	for {
 		select {
+		case <-t.done:
+			return
 		case <-tick.C:
 			if rcount > 0 {
 				t.c <- struct{}{}
@@ -149,4 +163,11 @@ func (t *TimedSemaphore) processReleases() {
 			rcount += num
 		}
 	}
+}
+
+// Stop implements the Semaphore interface.
+func (t *TimedSemaphore) Stop() {
+	t.closed.Do(func() {
+		close(t.done)
+	})
 }

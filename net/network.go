@@ -36,42 +36,35 @@ var ReservedCIDRs = []string{
 	"192.0.0.0/29",
 }
 
-// AllHosts returns a slice containing all the IP addresses within
-// the CIDR provided by the parameter. This implementation was
-// obtained/modified from the following:
-// https://gist.github.com/kotakanbe/d3059af990252ba89a82
-func AllHosts(cidr *net.IPNet) []net.IP {
-	var ips []net.IP
-
-	for ip := cidr.IP.Mask(cidr.Mask); cidr.Contains(ip); addrInc(ip) {
-		addr := net.ParseIP(ip.String())
-
-		ips = append(ips, addr)
-	}
-
-	if len(ips) > 2 {
-		// Remove network address and broadcast address
-		ips = ips[1 : len(ips)-1]
-	}
-	return ips
+// IsIPv4 returns true when the provided net.IP address is an IPv4 address.
+func IsIPv4(ip net.IP) bool {
+	return strings.Count(ip.String(), ":") < 2
 }
 
-// FirstLast return the first and last IP address of
-// the provided CIDR/netblock.
+// IsIPv6 returns true when the provided net.IP address is an IPv6 address.
+func IsIPv6(ip net.IP) bool {
+	return strings.Count(ip.String(), ":") >= 2
+}
+
+// FirstLast return the first and last IP address of the provided CIDR/netblock.
 func FirstLast(cidr *net.IPNet) (net.IP, net.IP) {
 	firstIP := cidr.IP
 	prefixLen, bits := cidr.Mask.Size()
+
 	if prefixLen == bits {
 		lastIP := make([]byte, len(firstIP))
 		copy(lastIP, firstIP)
 		return firstIP, lastIP
 	}
+
 	firstIPInt, bits := ipToInt(firstIP)
 	hostLen := uint(bits) - uint(prefixLen)
 	lastIPInt := big.NewInt(1)
+
 	lastIPInt.Lsh(lastIPInt, hostLen)
 	lastIPInt.Sub(lastIPInt, big.NewInt(1))
 	lastIPInt.Or(lastIPInt, firstIPInt)
+
 	return firstIP, intToIP(lastIPInt, bits)
 }
 
@@ -81,12 +74,17 @@ func Range2CIDR(first, last net.IP) *net.IPNet {
 	endip, _ := ipToInt(last)
 	newip := big.NewInt(1)
 	mask := big.NewInt(1)
+	one := big.NewInt(1)
+
+	if startip.Cmp(endip) == 1 {
+		return nil
+	}
 
 	max := uint(m)
 	var bits uint = 1
 	newip.Set(startip)
+	tmp := new(big.Int)
 	for bits < max {
-		tmp := new(big.Int)
 		tmp.Rsh(startip, bits)
 		tmp.Lsh(tmp, bits)
 
@@ -99,45 +97,33 @@ func Range2CIDR(first, last net.IP) *net.IPNet {
 
 		bits++
 		tmp.Lsh(mask, 1)
-		mask.Add(tmp, big.NewInt(1))
+		mask.Add(tmp, one)
 	}
 
-	cidrstr := first.String() + "/" + strconv.Itoa(int(bits))
+	cidrstr := first.String() + "/" + strconv.Itoa(int(max-bits))
 	_, ipnet, _ := net.ParseCIDR(cidrstr)
 
 	return ipnet
 }
 
-// IsIPv4 returns true when the provided net.IP address is an IPv4 address.
-func IsIPv4(ip net.IP) bool {
-	return strings.Count(ip.String(), ":") < 2
-}
+// AllHosts returns a slice containing all the IP addresses within
+// the CIDR provided by the parameter. This implementation was
+// obtained/modified from the following:
+// https://gist.github.com/kotakanbe/d3059af990252ba89a82
+func AllHosts(cidr *net.IPNet) []net.IP {
+	var ips []net.IP
 
-// IsIPv6 returns true when the provided net.IP address is an IPv6 address.
-func IsIPv6(ip net.IP) bool {
-	return strings.Count(ip.String(), ":") >= 2
-}
+	for ip := cidr.IP.Mask(cidr.Mask); cidr.Contains(ip); IPInc(ip) {
+		addr := net.ParseIP(ip.String())
 
-func ipToInt(ip net.IP) (*big.Int, int) {
-	val := &big.Int{}
-	val.SetBytes([]byte(ip))
-	if IsIPv4(ip) {
-		return val, 32
-	} else if IsIPv6(ip) {
-		return val, 128
+		ips = append(ips, addr)
 	}
-	return val, 0
-}
 
-func intToIP(ipInt *big.Int, bits int) net.IP {
-	ipBytes := ipInt.Bytes()
-	ret := make([]byte, bits/8)
-	// Pack our IP bytes into the end of the return array,
-	// since big.Int.Bytes() removes front zero padding
-	for i := 1; i <= len(ipBytes); i++ {
-		ret[len(ret)-i] = ipBytes[len(ipBytes)-i]
+	if len(ips) > 2 {
+		// Remove network address and broadcast address
+		ips = ips[1 : len(ips)-1]
 	}
-	return net.IP(ret)
+	return ips
 }
 
 // RangeHosts returns all the IP addresses (inclusive) between
@@ -151,42 +137,23 @@ func RangeHosts(start, end net.IP) []net.IP {
 
 	start16 := start.To16()
 	end16 := end.To16()
-	if start16 == nil || end16 == nil {
-		return ips
-	}
-
 	// Check that the end address is higher than the start address
-	if bytes.Compare(end16, start16) <= 0 {
+	if r := bytes.Compare(end16, start16); r < 0 {
 		return ips
+	} else if r == 0 {
+		return []net.IP{start}
 	}
 
 	stop := net.ParseIP(end.String())
-	addrInc(stop)
-	for ip := net.ParseIP(start.String()); !ip.Equal(stop); addrInc(ip) {
+	IPInc(stop)
+
+	for ip := net.ParseIP(start.String()); !ip.Equal(stop); IPInc(ip) {
 		if addr := net.ParseIP(ip.String()); addr != nil {
 			ips = append(ips, addr)
 		}
 	}
+
 	return ips
-}
-
-func addrInc(ip net.IP) {
-	for j := len(ip) - 1; j >= 0; j-- {
-		ip[j]++
-		if ip[j] > 0 {
-			break
-		}
-	}
-}
-
-func addrDec(ip net.IP) {
-	for j := len(ip) - 1; j >= 0; j-- {
-		if ip[j] > 0 {
-			ip[j]--
-			break
-		}
-		ip[j]--
-	}
 }
 
 // CIDRSubset returns a subset of the IP addresses contained within
@@ -201,20 +168,20 @@ func CIDRSubset(cidr *net.IPNet, addr string, num int) []net.IP {
 	offset := num / 2
 	// Get the first address
 	for i := 0; i < offset; i++ {
-		addrDec(first)
+		IPDec(first)
 		// Check that it is still within the CIDR
 		if !cidr.Contains(first) {
-			addrInc(first)
+			IPInc(first)
 			break
 		}
 	}
 	// Get the last address
 	last := net.ParseIP(addr)
 	for i := 0; i < offset; i++ {
-		addrInc(last)
+		IPInc(last)
 		// Check that it is still within the CIDR
 		if !cidr.Contains(last) {
-			addrDec(last)
+			IPDec(last)
 			break
 		}
 	}
@@ -226,31 +193,49 @@ func CIDRSubset(cidr *net.IPNet, addr string, num int) []net.IP {
 	return RangeHosts(first, last)
 }
 
-// ReverseIP returns an IP address that is the ip parameter with the numbers reversed.
-func ReverseIP(ip string) string {
-	var reversed []string
-
-	parts := strings.Split(ip, ".")
-	li := len(parts) - 1
-
-	for i := li; i >= 0; i-- {
-		reversed = append(reversed, parts[i])
+// IPInc increments the IP address provided.
+func IPInc(ip net.IP) {
+	for j := len(ip) - 1; j >= 0; j-- {
+		ip[j]++
+		if ip[j] > 0 {
+			break
+		}
 	}
-
-	return strings.Join(reversed, ".")
 }
 
-// IPv6NibbleFormat expects an IPv6 address in the ip parameter and
-// returns the address in nibble format.
-func IPv6NibbleFormat(ip string) string {
-	var reversed []string
+// IPDec decrements the IP address provided.
+func IPDec(ip net.IP) {
+	for j := len(ip) - 1; j >= 0; j-- {
+		if ip[j] > 0 {
+			ip[j]--
+			break
+		}
+		ip[j]--
+	}
+}
 
-	parts := strings.Split(ip, "")
-	li := len(parts) - 1
+func ipToInt(ip net.IP) (*big.Int, int) {
+	val := big.NewInt(1)
 
-	for i := li; i >= 0; i-- {
-		reversed = append(reversed, parts[i])
+	val.SetBytes([]byte(ip))
+	if IsIPv4(ip) {
+		return val, 32
+	} else if IsIPv6(ip) {
+		return val, 128
 	}
 
-	return strings.Join(reversed, ".")
+	return val, 0
+}
+
+func intToIP(ipInt *big.Int, bits int) net.IP {
+	ipBytes := ipInt.Bytes()
+	ret := make([]byte, bits/8)
+
+	// Pack our IP bytes into the end of the return array,
+	// since big.Int.Bytes() removes front zero padding
+	for i := 1; i <= len(ipBytes); i++ {
+		ret[len(ret)-i] = ipBytes[len(ipBytes)-i]
+	}
+
+	return net.IP(ret)
 }

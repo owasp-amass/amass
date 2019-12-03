@@ -5,7 +5,6 @@ package resolvers
 
 import (
 	"context"
-	"encoding/hex"
 	"fmt"
 	"net"
 	"strconv"
@@ -15,6 +14,7 @@ import (
 
 	"github.com/OWASP/Amass/v3/eventbus"
 	amassnet "github.com/OWASP/Amass/v3/net"
+	amassdns "github.com/OWASP/Amass/v3/net/dns"
 	"github.com/OWASP/Amass/v3/queue"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/miekg/dns"
@@ -367,9 +367,9 @@ func (r *BaseResolver) Reverse(ctx context.Context, addr string, priority int) (
 
 	var name, ptr string
 	if ip := net.ParseIP(addr); amassnet.IsIPv4(ip) {
-		ptr = amassnet.ReverseIP(addr) + ".in-addr.arpa"
+		ptr = amassdns.ReverseIP(addr) + ".in-addr.arpa"
 	} else if amassnet.IsIPv6(ip) {
-		ptr = amassnet.IPv6NibbleFormat(hex.EncodeToString(ip)) + ".ip6.arpa"
+		ptr = amassdns.IPv6NibbleFormat(ip.String()) + ".ip6.arpa"
 	} else {
 		return ptr, "", &ResolveError{
 			Err:   fmt.Sprintf("Invalid IP address parameter: %s", addr),

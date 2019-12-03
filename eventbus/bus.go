@@ -21,6 +21,7 @@ type EventBus struct {
 	max    semaphore.Semaphore
 	queue  *queue.Queue
 	done   chan struct{}
+	closed sync.Once
 }
 
 // NewEventBus initializes and returns an EventBus object.
@@ -31,58 +32,55 @@ func NewEventBus() *EventBus {
 		queue:  new(queue.Queue),
 		done:   make(chan struct{}, 2),
 	}
+
 	go eb.processRequests()
 	return eb
 }
 
 // Subscribe registers callback to be executed for all requests on the channel.
 func (eb *EventBus) Subscribe(topic string, fn interface{}) {
-	if topic == "" || reflect.TypeOf(fn).Kind() != reflect.Func {
-		return
+	if topic != "" && reflect.TypeOf(fn).Kind() == reflect.Func {
+		callback := reflect.ValueOf(fn)
+
+		eb.Lock()
+		eb.topics[topic] = append(eb.topics[topic], callback)
+		eb.Unlock()
 	}
-
-	callback := reflect.ValueOf(fn)
-
-	eb.Lock()
-	eb.topics[topic] = append(eb.topics[topic], callback)
-	eb.Unlock()
 }
 
 // Unsubscribe deregisters the callback from the channel.
 func (eb *EventBus) Unsubscribe(topic string, fn interface{}) {
-	if topic == "" || reflect.TypeOf(fn).Kind() != reflect.Func {
-		return
-	}
+	if topic != "" && reflect.TypeOf(fn).Kind() == reflect.Func {
+		callback := reflect.ValueOf(fn)
 
-	callback := reflect.ValueOf(fn)
+		eb.Lock()
+		defer eb.Unlock()
 
-	eb.Lock()
-	defer eb.Unlock()
-
-	var channels []reflect.Value
-	for _, c := range eb.topics[topic] {
-		if c != callback {
-			channels = append(channels, c)
+		var channels []reflect.Value
+		for _, c := range eb.topics[topic] {
+			if c != callback {
+				channels = append(channels, c)
+			}
 		}
+
+		eb.topics[topic] = channels
 	}
-	eb.topics[topic] = channels
 }
 
 // Publish sends req on the channel labeled with name.
 func (eb *EventBus) Publish(topic string, args ...interface{}) {
-	if topic == "" {
-		return
-	}
+	if topic != "" {
+		passedArgs := make([]reflect.Value, 0)
 
-	passedArgs := make([]reflect.Value, 0)
-	for _, arg := range args {
-		passedArgs = append(passedArgs, reflect.ValueOf(arg))
-	}
+		for _, arg := range args {
+			passedArgs = append(passedArgs, reflect.ValueOf(arg))
+		}
 
-	eb.queue.Append(&pubReq{
-		Topic: topic,
-		Args:  passedArgs,
-	})
+		eb.queue.Append(&pubReq{
+			Topic: topic,
+			Args:  passedArgs,
+		})
+	}
 }
 
 func (eb *EventBus) processRequests() {
@@ -129,5 +127,7 @@ func (eb *EventBus) executeCallbacks(callbacks, args []reflect.Value) {
 
 // Stop prevents any additional requests from being sent.
 func (eb *EventBus) Stop() {
-	close(eb.done)
+	eb.closed.Do(func() {
+		close(eb.done)
+	})
 }

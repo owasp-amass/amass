@@ -5,7 +5,6 @@ package services
 
 import (
 	"context"
-	"encoding/hex"
 	"fmt"
 	"net"
 	"strconv"
@@ -14,6 +13,7 @@ import (
 
 	"github.com/OWASP/Amass/v3/eventbus"
 	amassnet "github.com/OWASP/Amass/v3/net"
+	amassdns "github.com/OWASP/Amass/v3/net/dns"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/resolvers"
 	"github.com/OWASP/Amass/v3/stringset"
@@ -89,9 +89,9 @@ func (t *TeamCymru) origin(ctx context.Context, addr string) *requests.ASNReques
 	var name string
 	var answers []requests.DNSAnswer
 	if ip := net.ParseIP(addr); amassnet.IsIPv4(ip) {
-		name = amassnet.ReverseIP(addr) + ".origin.asn.cymru.com"
+		name = amassdns.ReverseIP(addr) + ".origin.asn.cymru.com"
 	} else if amassnet.IsIPv6(ip) {
-		name = amassnet.IPv6NibbleFormat(hex.EncodeToString(ip)) + ".origin6.asn.cymru.com"
+		name = amassdns.IPv6NibbleFormat(ip.String()) + ".origin6.asn.cymru.com"
 	} else {
 		bus.Publish(requests.LogTopic,
 			fmt.Sprintf("%s: %s: Failed to parse the IP address", t.String(), addr),

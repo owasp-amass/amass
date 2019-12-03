@@ -71,5 +71,8 @@ func (q *Queue) Empty() bool {
 
 // Len returns the current length of the Queue
 func (q *Queue) Len() int {
+	q.Lock()
+	defer q.Unlock()
+
 	return q.size
 }

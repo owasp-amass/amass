@@ -14,6 +14,7 @@ import (
 
 	"github.com/OWASP/Amass/v3/eventbus"
 	amassnet "github.com/OWASP/Amass/v3/net"
+	amassdns "github.com/OWASP/Amass/v3/net/dns"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/resolvers"
 	"github.com/OWASP/Amass/v3/stringset"
@@ -133,7 +134,7 @@ func (s *ShadowServer) origin(ctx context.Context, addr string) *requests.ASNReq
 	if ip := net.ParseIP(addr); ip == nil || !amassnet.IsIPv4(ip) {
 		return nil
 	}
-	name := amassnet.ReverseIP(addr) + ".origin.asn.shadowserver.org"
+	name := amassdns.ReverseIP(addr) + ".origin.asn.shadowserver.org"
 
 	answers, _, err := s.System().Pool().Resolve(ctx, name, "TXT", resolvers.PriorityCritical)
 	if err != nil {
