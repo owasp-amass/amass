@@ -49,7 +49,9 @@ func (e *Enumeration) startBruteForcing() {
 }
 
 func (e *Enumeration) moreBruteForcing() {
-	e.moreBrute <- struct{}{}
+	if !e.bruteQueue.Empty() {
+		e.moreBrute <- struct{}{}
+	}
 }
 
 func (e *Enumeration) bruteSendNewNames(req *requests.DNSRequest) {
@@ -101,7 +103,9 @@ func (e *Enumeration) performAlterations() {
 }
 
 func (e *Enumeration) moreAlterations() {
-	e.moreAlts <- struct{}{}
+	if !e.altQueue.Empty() {
+		e.moreAlts <- struct{}{}
+	}
 }
 
 func (e *Enumeration) executeAlts(req *requests.DNSRequest) {

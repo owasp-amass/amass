@@ -262,11 +262,15 @@ func (e *Enumeration) releaseAttempts() {
 
 	if remaining < 25000 {
 		if e.startedBrute {
-			e.moreBruteForcing()
+			for i := 0; i < 5; i++ {
+				e.moreBruteForcing()
+			}
 		}
 
 		if e.startedAlts {
-			e.moreAlterations()
+			for i := 0; i < 50; i++ {
+				e.moreAlterations()
+			}
 		}
 	}
 
@@ -298,7 +302,11 @@ func (e *Enumeration) nextPhase() {
 	if bruteReady {
 		e.startedBrute = true
 		go e.startBruteForcing()
-		go e.moreBruteForcing()
+
+		for i := 0; i < 10; i++ {
+			e.moreBruteForcing()
+		}
+
 		e.Config.Log.Print("Starting DNS queries for brute forcing")
 		e.lastPhase = time.Now()
 	} else if altsReady {
@@ -308,7 +316,11 @@ func (e *Enumeration) nextPhase() {
 
 		e.startedAlts = true
 		go e.performAlterations()
-		go e.moreAlterations()
+
+		for i := 0; i < 100; i++ {
+			e.moreAlterations()
+		}
+
 		e.Config.Log.Print("Starting DNS queries for altered names")
 		e.lastPhase = time.Now()
 	} else if inactive && persec < 50 {
