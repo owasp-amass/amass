@@ -3,35 +3,137 @@
 
 package config
 
-/*
-func TestAddDomainsDuplicate(t *testing.T) {
-	domains := []string{"twitter.com", "google.com", "twitter.com"}
+import (
+	"net"
+	"reflect"
+	"sort"
+	"testing"
+)
 
-	e := NewEnumeration()
-	e.Config.AddDomains(domains)
+func TestCHeckSettings(t *testing.T) {
+	c := NewConfig()
 
-	got := e.Config.Domains()
-	want := append(domains[0:2])
+	err := c.CheckSettings()
 
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("mismatched result, got %+v, want %+v", got, want)
+	if err != nil {
+		t.Errorf("Error checking settings.\n%v", err)
+	}
+
+}
+func TestDomainRegex(t *testing.T) {
+	c := NewConfig()
+	got := c.DomainRegex("owasp.org")
+
+	if got != nil {
+		t.Errorf("Error with DomainRegex.\n%v", got)
 	}
 }
 
-func TestIsDomainInScope(t *testing.T) {
-	domain := "google.com"
-	inScope := "mail.google.com"
-	outOfScope := "mail.random.com"
+func TestAddDomains(t *testing.T) {
+	c := NewConfig()
+	example := "owasp.org/test"
+	list := []string{"owasp.org", "google.com", "yahoo.com"}
+	sort.Strings(list)
+	c.AddDomains(list)
+	got := c.Domains()
 
-	e := NewEnumeration()
-	e.Config.AddDomain(domain)
+	sort.Strings(got)
 
-	if !e.Config.IsDomainInScope(inScope) {
-		t.Errorf("expected %s to be in the scope of %s", inScope, domain)
+	if !reflect.DeepEqual(list, got) {
+		t.Errorf("Domains do not match.\nWanted:%v\nGot:%v\n", list, got)
 	}
+	t.Run("Testing AddDomain...", func(t *testing.T) {
 
-	if e.Config.IsDomainInScope(outOfScope) {
-		t.Errorf("expected %s to be out of the scope of %s", outOfScope, domain)
+		c.AddDomain(example)
+		want := true
+		got := false
+		for _, l := range c.domains {
+			if example == l {
+				got = true
+			}
+		}
+		if got != want {
+			t.Errorf("Expected:%v\nGot:%v", want, got)
+		}
+		t.Run("Testing Domains...", func(t *testing.T) {
+			if c.Domains() == nil {
+				t.Errorf("No domains in current configuration.")
+			}
+
+			if len(c.Domains()) <= 0 {
+				t.Errorf("Failed to populate c.domains.\nLength:%v", len(c.Domains()))
+			}
+
+		})
+
+		t.Run("Testing IsDomainInScope...", func(t *testing.T) {
+
+			got := c.IsDomainInScope(example)
+			want := true
+			if got != want {
+				t.Errorf("Domain is considered out of scope.\nExample:%v\nGot:%v,\nWant:%v", example, got, want)
+			}
+		})
+
+		t.Run("Testing WhichDomain...", func(t *testing.T) {
+
+			got := c.WhichDomain(example)
+			if got != example {
+				t.Errorf("Failed to find example.\nExample:%v\nGot:%v", example, got)
+			}
+		})
+	})
+}
+
+func TestIsAddressInScope(t *testing.T) {
+	c := NewConfig()
+	example := "10.10.0.1"
+	c.Addresses = append(c.Addresses, net.ParseIP(example))
+	want := true
+	got := c.IsAddressInScope(example)
+	if got != want {
+		t.Errorf("Failed to find address %v in scope.\nAddress List:%v", example, c.Addresses)
 	}
 }
-*/
+
+func TestBlacklist(t *testing.T) {
+	c := NewConfig()
+	example := "owasp.org"
+	c.Blacklist = append(c.Blacklist, example)
+	got := c.Blacklisted(example)
+	want := true
+
+	if got != want {
+		t.Errorf("Failed to find %v in blacklist.", example)
+	}
+}
+
+func TestAddAPIKey(t *testing.T) {
+	ak := &APIKey{
+		Username: "TestUser",
+		Password: "TestPassword",
+		Key:      "TestKey",
+		Secret:   "TestSecret",
+	}
+	source := "TestSource"
+	c := NewConfig()
+	c.AddAPIKey(source, ak)
+	if c.apikeys == nil {
+		t.Errorf("Failed to add test api key.\nGot%v\nWant:%v", c.apikeys, ak)
+	}
+	t.Run("Testing GetAPIKey...", func(t *testing.T) {
+		got := c.GetAPIKey(source)
+		want := ak
+		if got != want {
+			t.Errorf("Obtained incorrect key for source:%v\nWant:%v\nGot:%v", source, want, got)
+		}
+	})
+}
+
+func TestLoadSettings(t *testing.T) {
+	c := NewConfig()
+	path := "../examples/config.ini"
+	if c.LoadSettings(path) != nil {
+		t.Errorf("Config file failed to load.")
+	}
+}
