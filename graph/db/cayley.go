@@ -161,10 +161,19 @@ func (g *CayleyGraph) removeAllNodeQuads(id string) error {
 }
 
 // AllNodesOfType implements the GraphDatabase interface.
+// To avoid recursive read locking, a private version of this method has been
+// implemented that doesn't hold the lock.
 func (g *CayleyGraph) AllNodesOfType(ntype string, events ...string) ([]Node, error) {
 	g.RLock()
 	defer g.RUnlock()
 
+	return g.allNodesOfType(ntype, events...)
+}
+
+// allNodesOfType() implements the main functionality for AllNodesOfType(), but
+// doesn't acquire the read lock so methods within this package can avoid recursive
+// locking. MAKE SURE TO ACQUIRE A READ LOCK PRIOR TO EXECUTING THIS METHOD
+func (g *CayleyGraph) allNodesOfType(ntype string, events ...string) ([]Node, error) {
 	var nodes []Node
 	if ntype == "event" && len(events) > 0 {
 		for _, event := range events {
