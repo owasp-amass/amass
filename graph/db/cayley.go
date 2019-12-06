@@ -267,7 +267,7 @@ func (g *CayleyGraph) NodeSources(node Node, events ...string) ([]string, error)
 		return nil, fmt.Errorf("%s: NodeSources: Invalid node reference argument", g.String())
 	}
 
-	allevents, err := g.AllNodesOfType("event", events...)
+	allevents, err := g.allNodesOfType("event", events...)
 	if err != nil {
 		return nil, fmt.Errorf("%s: NodeSources: Failed to obtain the list of events", g.String())
 	}
