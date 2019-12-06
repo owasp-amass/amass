@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-func TestCHeckSettings(t *testing.T) {
+func TestCheckSettings(t *testing.T) {
 	c := NewConfig()
 
 	err := c.CheckSettings()
@@ -33,11 +33,11 @@ func TestAddDomains(t *testing.T) {
 	c := NewConfig()
 	example := "owasp.org/test"
 	list := []string{"owasp.org", "google.com", "yahoo.com"}
-	sort.Strings(list)
 	c.AddDomains(list)
 	got := c.Domains()
-
+	sort.Strings(list)
 	sort.Strings(got)
+	c.AddDomains(list)
 
 	if !reflect.DeepEqual(list, got) {
 		t.Errorf("Domains do not match.\nWanted:%v\nGot:%v\n", list, got)
@@ -68,17 +68,14 @@ func TestAddDomains(t *testing.T) {
 
 		t.Run("Testing IsDomainInScope...", func(t *testing.T) {
 
-			got := c.IsDomainInScope(example)
-			want := true
-			if got != want {
+			if !c.IsDomainInScope(example) {
 				t.Errorf("Domain is considered out of scope.\nExample:%v\nGot:%v,\nWant:%v", example, got, want)
 			}
 		})
 
 		t.Run("Testing WhichDomain...", func(t *testing.T) {
 
-			got := c.WhichDomain(example)
-			if got != example {
+			if example != c.WhichDomain(example) {
 				t.Errorf("Failed to find example.\nExample:%v\nGot:%v", example, got)
 			}
 		})
@@ -89,9 +86,7 @@ func TestIsAddressInScope(t *testing.T) {
 	c := NewConfig()
 	example := "10.10.0.1"
 	c.Addresses = append(c.Addresses, net.ParseIP(example))
-	want := true
-	got := c.IsAddressInScope(example)
-	if got != want {
+	if !c.IsAddressInScope(example) {
 		t.Errorf("Failed to find address %v in scope.\nAddress List:%v", example, c.Addresses)
 	}
 }
@@ -124,7 +119,7 @@ func TestAddAPIKey(t *testing.T) {
 	t.Run("Testing GetAPIKey...", func(t *testing.T) {
 		got := c.GetAPIKey(source)
 		want := ak
-		if got != want {
+		if !reflect.DeepEqual(got, want) {
 			t.Errorf("Obtained incorrect key for source:%v\nWant:%v\nGot:%v", source, want, got)
 		}
 	})
