@@ -142,6 +142,26 @@ func (g *Graph) EventDomains(uuid string) []string {
 	return domains.Slice()
 }
 
+func (g *Graph) EventSubdomains(events ...string) []string {
+	nodes, err := g.db.AllNodesOfType("fqdn", events...)
+	if err != nil {
+		return nil
+	}
+
+	var names []string
+	for _, n := range nodes {
+		d := g.db.NodeToID(n)
+		etld, err := publicsuffix.EffectiveTLDPlusOne(d)
+		if err != nil || etld == d {
+			continue
+		}
+
+		names = append(names, g.db.NodeToID(n))
+	}
+
+	return names
+}
+
 // EventDateRange returns the date range associated with the provided event UUID.
 func (g *Graph) EventDateRange(uuid string) (time.Time, time.Time) {
 	var start, finish time.Time

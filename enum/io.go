@@ -11,37 +11,45 @@ import (
 
 	"github.com/OWASP/Amass/v3/net/http"
 	"github.com/OWASP/Amass/v3/requests"
+	"github.com/OWASP/Amass/v3/stringset"
 	"github.com/miekg/dns"
+	"golang.org/x/net/publicsuffix"
 )
 
 func (e *Enumeration) submitKnownNames(wg *sync.WaitGroup) {
 	defer wg.Done()
 
+	var events []string
+
+	fqdns := stringset.New()
 	for _, g := range e.Sys.GraphDatabases() {
 		for _, enum := range g.EventList() {
-			var found bool
-
 			for _, domain := range g.EventDomains(enum) {
 				if e.Config.IsDomainInScope(domain) {
-					found = true
-					break
-				}
-			}
-			if !found {
-				continue
-			}
-
-			for _, o := range g.GetOutput(enum) {
-				if e.Config.IsDomainInScope(o.Name) {
-					e.Bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
-						Name:   o.Name,
-						Domain: o.Domain,
-						Tag:    requests.EXTERNAL,
-						Source: "Previous Enum",
-					})
+					events = append(events, enum)
 				}
 			}
 		}
+
+		for _, d := range g.EventSubdomains(events...) {
+			if e.Config.IsDomainInScope(d) {
+				fqdns.Insert(d)
+			}
+		}
+	}
+
+	for f := range fqdns {
+		etld, err := publicsuffix.EffectiveTLDPlusOne(f)
+		if err != nil {
+			continue
+		}
+
+		e.Bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+			Name:   f,
+			Domain: etld,
+			Tag:    requests.EXTERNAL,
+			Source: "Previous Enum",
+		})
 	}
 }
 

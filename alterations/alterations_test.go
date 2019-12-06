@@ -1,4 +1,5 @@
 package alterations
+
 /*
 import (
 	"testing"
@@ -48,7 +49,7 @@ func TestAlterations(t *testing.T) {
 	t.Run("append number label subtest", func(t *testing.T) {
 		var expected []string
 		for i := 0; i < 10; i++ {
-			expected = append(expected, "fa2ke" + strconv.Itoa(i) + ".owasp.org")
+			expected = append(expected, "fa2ke"+strconv.Itoa(i)+".owasp.org")
 		}
 
 		appendNumbers := altState.AppendNumbers(fake)

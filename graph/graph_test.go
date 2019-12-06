@@ -18,10 +18,24 @@ var graphTest = []struct {
 	CIDR      string
 	Desc      string
 	Service   string
-	UUID      string
 	ID        string
+	Domain    string
 }{
-	{"testaddr", "testsource", "testtag", "www.owasp.org", "testeventid", "testname", 667, "667", "10.0.0.0/8", "a test description", "testservice.com", "ef9f9475-34eb-465e-81eb-77c944822d0f", "TestID"},
+	{
+		"testaddr",
+		"testsource",
+		"testtag",
+		"www.owasp.org",
+		"ef9f9475-34eb-465e-81eb-77c944822d0f",
+		"testname",
+		667,
+		"667",
+		"10.0.0.0/8",
+		"a test description",
+		"testservice.com",
+		"TestID",
+		"owasp.org",
+	},
 }
 
 func TestNewGraph(t *testing.T) {
