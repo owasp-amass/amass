@@ -8,13 +8,9 @@ import (
 	"fmt"
 	"io"
 	"strings"
-
-	"github.com/OWASP/Amass/v3/net/http"
 )
 
 const (
-	tldList = "https://raw.githubusercontent.com/OWASP/Amass/develop/wordlists/tldlist.txt"
-
 	maskLetters = "abcdefghijklmnopqrstuvwxyz"
 	maskDigits  = "0123456789"
 	maskSpecial = "-"
@@ -24,14 +20,6 @@ var (
 	// KnownValidTLDs is a list of valid top-level domains that is maintained by the IANA.
 	KnownValidTLDs []string
 )
-
-func getTLDList() []string {
-	page, err := http.RequestWebPage(tldList, nil, nil, "", "")
-	if err != nil {
-		return nil
-	}
-	return getWordList(strings.NewReader(page))
-}
 
 func getWordList(reader io.Reader) []string {
 	var words []string
