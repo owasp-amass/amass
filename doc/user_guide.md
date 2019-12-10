@@ -317,11 +317,9 @@ The results from each enumeration is stored separately in the graph database, wh
 
 There is nothing preventing multiple users from sharing a single (remote) graph database and leveraging each others findings across enumerations.
 
-In the following section, we will detail the currrent schema of the Graph DB.
+### Cayley Graph Schema
 
-### Cayley Schema
-
-The GraphDB is storing all the domains that were found for a given enumeration. It stores the associated information such as the ip, ns_record, a_record, cname, ip block and associated source for each one of them as well. Each enumeation is identified by a uuid.
+The GraphDB is storing all the domains that were found for a given enumeration. It stores the associated information such as the ip, ns_record, a_record, cname, ip block and associated source for each one of them as well. Each enumeration is identified by a uuid.
 
 Here is an example of graph for an enumeration run on example.com:
 
