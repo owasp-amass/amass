@@ -21,8 +21,9 @@ require (
 	github.com/pkg/profile v1.4.0
 	github.com/robertkrimen/otto v0.0.0-20180617131154-15f95af6e78d // indirect
 	github.com/smartystreets/goconvey v0.0.0-20190731233626-505e41936337 // indirect
-	golang.org/x/net v0.0.0-20190923162816-aa69164e4478
+	golang.org/x/net v0.0.0-20191027093000-83d349e8ac1a
 	golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45
+	golang.org/x/sys v0.0.0-20191026070338-33540a1f6037 // indirect
 	gopkg.in/ini.v1 v1.49.0 // indirect
 	gopkg.in/sourcemap.v1 v1.0.5 // indirect
 )
