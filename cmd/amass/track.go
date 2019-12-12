@@ -179,7 +179,12 @@ func runTrackCommand(clArgs []string) {
 }
 
 func sendNotification(domain []string, username string, password string) {
-	smtp.SendReport(domain[0], username, password)
+	err := smtp.SendReport(domain[0], username, password) 
+	if err != nil {
+		fmt.Fprintf(color.Output, "%s", red("Could not send an email notification"))
+		return
+	} 
+
 	fmt.Fprintf(color.Output, "%s", green("Sent an email notification"))
 }
 
