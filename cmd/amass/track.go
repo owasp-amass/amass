@@ -41,7 +41,7 @@ type trackArgs struct {
 
 
 func runTrackCommand(clArgs []string) {
-	var newReport = smtp.NewReport(stringset.New(), make([]string,0),true) 
+	var newReport = smtp.NewReport(true) 
 	var args trackArgs
 	var help1, help2 bool
 	trackCommand := flag.NewFlagSet("track", flag.ContinueOnError)
@@ -61,6 +61,8 @@ func runTrackCommand(clArgs []string) {
 	trackCommand.StringVar(&args.Filepaths.ConfigFile, "config", "", "Path to the INI configuration file. Additional details below")
 	trackCommand.StringVar(&args.Filepaths.Directory, "dir", "", "Path to the directory containing the graph database")
 	trackCommand.StringVar(&args.Filepaths.Domains, "df", "", "Path to a file providing root domain names")
+
+	newReport.Domains = args.Domains
 
 	if len(clArgs) < 1 {
 		commandUsage(trackUsageMsg, trackCommand, trackBuf)
@@ -209,6 +211,10 @@ func cumulativeOutput(domains []string, enums []string, ea, la []time.Time, db *
 		yellow(ea[0].Format(timeFormat)), blue(" -> "), yellow(la[0].Format(timeFormat)),
 		blue("and"), yellow(ea[idx].Format(timeFormat)), blue(" -> "), yellow(la[idx].Format(timeFormat)))
 	blueLine()
+
+	newReport.FromEnumeration = append(newReport.FromEnumeration,ea[0],la[0])
+	newReport.ToEnumeration = append(newReport.ToEnumeration,ea[idx],la[idx])
+	
 
 	var updates bool
 	out := getUniqueDBOutput(enums[idx], domains, db)
