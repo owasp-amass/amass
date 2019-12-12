@@ -39,7 +39,9 @@ type trackArgs struct {
 	}
 }
 
+
 func runTrackCommand(clArgs []string) {
+	var newReport = smtp.NewReport(stringset.New(), make([]string,0),true) 
 	var args trackArgs
 	var help1, help2 bool
 	trackCommand := flag.NewFlagSet("track", flag.ContinueOnError)
@@ -169,17 +171,17 @@ func runTrackCommand(clArgs []string) {
 		completeHistoryOutput(args.Domains.Slice(), enums, earliest, latest, db)
 		return
 	}
-	cumulativeOutput(args.Domains.Slice(), enums, earliest, latest, db)
+	cumulativeOutput(args.Domains.Slice(), enums, earliest, latest, db, newReport)
 
 	if args.Options.Notify {
 		apikeys := cfg.GetAPIKey("notification_settings")
-		sendNotification(args.Domains.Slice(),apikeys.Username, apikeys.Key)
+		sendNotification(args.Domains.Slice(),apikeys.Username, apikeys.Key, newReport)
 		return
 	}
 }
 
-func sendNotification(domain []string, username string, password string) {
-	err := smtp.SendReport(domain[0], username, password) 
+func sendNotification(domain []string, username string, password string, newReport *smtp.Report) {
+	err := smtp.SendReport(domain[0], username, password, newReport) 
 	if err != nil {
 		fmt.Fprintf(color.Output, "%s", red("Could not send an email notification"))
 		return
@@ -188,7 +190,7 @@ func sendNotification(domain []string, username string, password string) {
 	fmt.Fprintf(color.Output, "%s", green("Sent an email notification"))
 }
 
-func cumulativeOutput(domains []string, enums []string, ea, la []time.Time, db *graph.Graph) {
+func cumulativeOutput(domains []string, enums []string, ea, la []time.Time, db *graph.Graph, newReport *smtp.Report) {
 	idx := len(enums) - 1
 	filter := stringset.NewStringFilter()
 
@@ -197,6 +199,7 @@ func cumulativeOutput(domains []string, enums []string, ea, la []time.Time, db *
 		for _, out := range getUniqueDBOutput(enums[i], domains, db) {
 			if domainNameInScope(out.Name, domains) && !filter.Duplicate(out.Name) {
 				cum = append(cum, out)
+				newReport.Found = append(newReport.Found,out.Name)
 			}
 		}
 	}
@@ -214,6 +217,7 @@ func cumulativeOutput(domains []string, enums []string, ea, la []time.Time, db *
 		fmt.Fprintln(color.Output, d)
 	}
 	if !updates {
+		newReport.New = false
 		g.Println("No differences discovered")
 	}
 }

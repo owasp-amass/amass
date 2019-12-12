@@ -3,28 +3,48 @@ package smtp
 import (
 	"log"
 	"net/smtp"
+	"errors"
+	"github.com/OWASP/Amass/v3/stringset"
 )
 
 const (
 	SmtpServer = "smtp.gmail.com:587"
+	From = "amasstest1234@gmail.com"
+	Subject = "Amass report"
 )
 
-func SendReport(domain string, to string, pass string) {
+type Report struct {
+	Domains stringset.Set
+	Found []string
+	New bool
+}
 
-	from := "test243565@gmail.com"
+func NewReport(domains stringset.Set, found []string, new bool) *Report {
+	r := &Report{Domains: domains, Found: found, New: new}
+	return r
+}
+
+func SendReport(domain string, to string, pass string, newReport *Report) (error) {
+
 	body := "test"
 
-	msg := "From: " + from + "\n" +
+	if !newReport.New {
+		body = "No new domain was found."
+	}
+
+	msg := "From: " + From + "\n" +
 		"To: " + to + "\n" +
-		"Subject: Amass report: New subdomains found for " + domain + "\n\n" +
+		"Subject: " + Subject + "\n\n" +
 		body
 
 	err := smtp.SendMail(SmtpServer,
-		smtp.PlainAuth("", from, pass, "smtp.gmail.com"),
-		from, []string{to}, []byte(msg))
+		smtp.PlainAuth("", From, pass, "smtp.gmail.com"),
+		From, []string{to}, []byte(msg))
 
 	if err != nil {
 		log.Printf("smtp error: %s", err)
-		return
+		return errors.New("Could not send the email")
 	}
+
+	return nil
 }
