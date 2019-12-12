@@ -15,6 +15,7 @@ import (
 	"github.com/OWASP/Amass/v3/graph"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/stringset"
+	"github.com/OWASP/Amass/v3/net/smtp"
 	"github.com/fatih/color"
 )
 
@@ -169,6 +170,17 @@ func runTrackCommand(clArgs []string) {
 		return
 	}
 	cumulativeOutput(args.Domains.Slice(), enums, earliest, latest, db)
+
+	if args.Options.Notify {
+		apikeys := cfg.GetAPIKey("notification_settings")
+		sendNotification(args.Domains.Slice(),apikeys.Username, apikeys.Key)
+		return
+	}
+}
+
+func sendNotification(domain []string, username string, password string) {
+	smtp.SendReport(domain[0], username, password)
+	fmt.Fprintf(color.Output, "%s", green("Sent an email notification"))
 }
 
 func cumulativeOutput(domains []string, enums []string, ea, la []time.Time, db *graph.Graph) {
@@ -238,6 +250,15 @@ func blueLine() {
 		b.Fprint(color.Output, "----------")
 	}
 	fmt.Println()
+}
+
+func Line() string {
+	var line string
+	for i := 0; i < 8; i++ {
+		line = line + "----------"
+	}
+	line = line + "\n"
+	return line
 }
 
 func diffEnumOutput(out1, out2 []*requests.Output) []string {
