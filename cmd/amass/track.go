@@ -267,15 +267,6 @@ func blueLine() {
 	fmt.Println()
 }
 
-func Line() string {
-	var line string
-	for i := 0; i < 8; i++ {
-		line = line + "----------"
-	}
-	line = line + "\n"
-	return line
-}
-
 func diffEnumOutput(out1, out2 []*requests.Output) []string {
 	omap1 := make(map[string]*requests.Output)
 	omap2 := make(map[string]*requests.Output)
