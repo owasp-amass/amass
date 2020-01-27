@@ -189,7 +189,7 @@ func sendNotification(domain []string, username string, password string, newRepo
 		return
 	} 
 
-	fmt.Fprintf(color.Output, "%s", green("Sent an email notification"))
+	fmt.Fprintf(color.Output, "%s", green("Sent an email notification\n"))
 }
 
 func cumulativeOutput(domains []string, enums []string, ea, la []time.Time, db *graph.Graph, newReport *smtp.Report) {
