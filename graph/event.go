@@ -21,7 +21,7 @@ func (g *Graph) InsertEvent(eventID string) (db.Node, error) {
 	g.eventFinishLock.Lock()
 	defer g.eventFinishLock.Unlock()
 
-	eventNode, err := g.db.ReadNode(eventID)
+	eventNode, err := g.db.ReadNode(eventID, "event")
 	if err != nil {
 		// Create a node to represent the event
 		eventNode, err = g.db.InsertNode(eventID, "event")
@@ -33,25 +33,34 @@ func (g *Graph) InsertEvent(eventID string) (db.Node, error) {
 		if err != nil {
 			return eventNode, err
 		}
-	} else {
-		// Remove an existing 'finish' property
-		var ok bool
-		finish, ok = g.eventFinishes[eventID]
-		if !ok {
-			return eventNode, errors.New("Graph: InsertEvent: Event finish cache failure")
-		}
+	}
+
+	var ok bool
+	curTime := time.Now()
+	delta := 5 * time.Second
+	var finishTime time.Time
+
+	finish, ok = g.eventFinishes[eventID]
+	if ok {
+		finishTime, _ = time.Parse(time.RFC3339, finish)
+	}
+
+	// Remove an existing 'finish' property and enter a new one every 5 seconds
+	if ok && (curTime.Sub(finishTime) > delta) {
 		g.db.DeleteProperty(eventNode, "finish", finish)
 	}
 
-	finish = time.Now().Format(time.RFC3339)
+	if !ok || (curTime.Sub(finishTime) > delta) {
+		finish = curTime.Format(time.RFC3339)
 
-	// Update the finish property with the current time/date
-	g.db.InsertProperty(eventNode, "finish", finish)
-	if err != nil {
-		return eventNode, err
+		// Update the finish property with the current time/date
+		g.db.InsertProperty(eventNode, "finish", finish)
+		if err != nil {
+			return eventNode, err
+		}
+
+		g.eventFinishes[eventID] = finish
 	}
-
-	g.eventFinishes[eventID] = finish
 
 	return eventNode, nil
 }
@@ -142,6 +151,7 @@ func (g *Graph) EventDomains(uuid string) []string {
 	return domains.Slice()
 }
 
+// EventSubdomains returns the subdomains discovered during the event(s).
 func (g *Graph) EventSubdomains(events ...string) []string {
 	nodes, err := g.db.AllNodesOfType("fqdn", events...)
 	if err != nil {
@@ -166,7 +176,7 @@ func (g *Graph) EventSubdomains(events ...string) []string {
 func (g *Graph) EventDateRange(uuid string) (time.Time, time.Time) {
 	var start, finish time.Time
 
-	if event, err := g.db.ReadNode(uuid); err == nil {
+	if event, err := g.db.ReadNode(uuid, "event"); err == nil {
 		if properties, err := g.db.ReadProperties(event, "start", "finish"); err == nil {
 			for _, p := range properties {
 				if p.Predicate == "start" {

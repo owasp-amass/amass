@@ -17,7 +17,7 @@ import (
 func (g *Graph) GetOutput(uuid string) []*requests.Output {
 	var results []*requests.Output
 
-	event, err := g.db.ReadNode(uuid)
+	event, err := g.db.ReadNode(uuid, "event")
 	if err != nil {
 		return results
 	}
@@ -38,17 +38,29 @@ func (g *Graph) GetOutput(uuid string) []*requests.Output {
 		names = append(names, edge.To)
 	}
 
-	output := make(chan *requests.Output, 100)
-	for _, name := range names {
+	grs := 25
+	output := make(chan *requests.Output, grs+1)
+	for i, name := range names {
 		go g.buildOutput(name, uuid, output)
-	}
 
-	num := len(names)
-	for i := 0; i < num; i++ {
-		o := <-output
+		if i != 0 && (i%grs == 0) {
+			for i := 0; i < grs; i++ {
+				o := <-output
 
-		if o != nil {
-			results = append(results, o)
+				if o != nil {
+					results = append(results, o)
+				}
+			}
+		}
+
+		if num := i % 25; i+1 == len(names) {
+			for i := 0; i < num; i++ {
+				o := <-output
+
+				if o != nil {
+					results = append(results, o)
+				}
+			}
 		}
 	}
 
@@ -63,7 +75,7 @@ func (g *Graph) buildOutput(sub db.Node, uuid string, c chan *requests.Output) {
 		c <- nil
 		return
 	}
-	src := sources[randomIndex(len(sources))]
+	src := sources[0]
 
 	domain, err := publicsuffix.EffectiveTLDPlusOne(substr)
 	if err != nil {

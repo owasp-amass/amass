@@ -108,12 +108,12 @@ func (g *CayleyGraph) InsertNode(id, ntype string) (Node, error) {
 }
 
 // ReadNode implements the GraphDatabase interface.
-func (g *CayleyGraph) ReadNode(id string) (Node, error) {
+func (g *CayleyGraph) ReadNode(id, ntype string) (Node, error) {
 	g.RLock()
 	defer g.RUnlock()
 
-	if id == "" {
-		return nil, fmt.Errorf("%s: ReadNode: Empty node id provided", g.String())
+	if id == "" || ntype == "" {
+		return nil, fmt.Errorf("%s: ReadNode: Empty required arguments", g.String())
 	}
 
 	// Check that a node with 'id' as a subject already exists
@@ -237,8 +237,8 @@ func (g *CayleyGraph) NameToIPAddrs(node Node) ([]Node, error) {
 	}
 
 	// Attempt to traverse a SRV record
-	p = cayley.StartPath(g.store,
-		quad.String(nstr)).FollowRecursive(quad.String("srv_record"), 1, nil).Out("a_record", "aaaa_record")
+	p = cayley.StartPath(g.store, quad.String(nstr)).FollowRecursive(
+		quad.String("srv_record"), 1, nil).Out("a_record", "aaaa_record")
 	g.optimizedIterate(p, func(value quad.Value) {
 		nodes = append(nodes, quad.ToString(value))
 	})
@@ -248,8 +248,8 @@ func (g *CayleyGraph) NameToIPAddrs(node Node) ([]Node, error) {
 	}
 
 	// Traverse CNAME records
-	p = cayley.StartPath(g.store,
-		quad.String(nstr)).FollowRecursive(quad.String("cname_record"), 10, nil).Out("a_record", "aaaa_record")
+	p = cayley.StartPath(g.store, quad.String(nstr)).FollowRecursive(
+		quad.String("cname_record"), 10, nil).Out("a_record", "aaaa_record")
 	g.optimizedIterate(p, func(value quad.Value) {
 		nodes = append(nodes, quad.ToString(value))
 	})
@@ -272,21 +272,35 @@ func (g *CayleyGraph) NodeSources(node Node, events ...string) ([]string, error)
 		return nil, fmt.Errorf("%s: NodeSources: Failed to obtain the list of events", g.String())
 	}
 
-	preds := g.nodePredicates(nstr, "in")
+	eventset := stringset.New()
+	for _, event := range allevents {
+		if estr := g.NodeToID(event); estr != "" {
+			eventset.Insert(estr)
+		}
+	}
 
 	var sources []string
 	filter := stringset.NewStringFilter()
-	for _, event := range allevents {
-		estr := g.NodeToID(event)
 
-		for _, pred := range preds {
-			p := cayley.StartPath(g.store, quad.String(nstr)).In(pred).Is(quad.String(estr))
+	p := cayley.StartPath(g.store, quad.String(nstr)).InWithTags([]string{"predicate"}).Tag("event")
+	pb := p.Iterate(context.TODO())
 
-			if g.optimizedCount(p) != 0 && !filter.Duplicate(pred) {
-				sources = append(sources, pred)
-			}
+	pb.Paths(false).TagValues(nil, func(tags map[string]quad.Value) {
+		predval, predOK := tags["predicate"]
+		event, eventOK := tags["event"]
+		if !predOK || !eventOK {
+			return
 		}
-	}
+		pred := quad.ToString(predval)
+
+		if pred == "ptr_record" {
+			return
+		}
+
+		if eventset.Has(quad.ToString(event)) && !filter.Duplicate(pred) {
+			sources = append(sources, pred)
+		}
+	})
 
 	if len(sources) == 0 {
 		return nil, fmt.Errorf("%s: NodeSources: Failed to discover edges leaving the node %s", g.String(), nstr)
@@ -611,44 +625,25 @@ func (g *CayleyGraph) nodePredicates(id, direction string) []string {
 }
 
 func (g *CayleyGraph) optimizedIterate(p *cayley.Path, callback func(value quad.Value)) {
-	it, _ := p.BuildIterator().Optimize()
-	defer it.Close()
+	pb := p.Iterate(context.TODO())
 
-	ctx := context.TODO()
-	for it.Next(ctx) {
-		token := it.Result()
-		v := g.store.NameOf(token)
-
-		callback(v)
-	}
+	pb.Paths(false).EachValue(g.store, callback)
 }
 
 func (g *CayleyGraph) optimizedCount(p *cayley.Path) int {
-	var count int
+	pb := p.Iterate(context.TODO())
 
-	it, _ := p.BuildIterator().Optimize()
-	defer it.Close()
+	count, _ := pb.Paths(false).Count()
 
-	ctx := context.TODO()
-	for it.Next(ctx) {
-		count++
-	}
-
-	return count
+	return int(count)
 }
 
 func (g *CayleyGraph) optimizedFirst(p *cayley.Path) quad.Value {
-	it, _ := p.BuildIterator().Optimize()
-	defer it.Close()
+	pb := p.Iterate(context.TODO())
 
-	ctx := context.TODO()
-	for it.Next(ctx) {
-		token := it.Result()
+	val, _ := pb.Paths(false).FirstValue(g.store)
 
-		return g.store.NameOf(token)
-	}
-
-	return nil
+	return val
 }
 
 // DumpGraph returns a string containing all data currently in the graph.

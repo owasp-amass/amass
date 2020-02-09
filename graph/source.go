@@ -42,7 +42,7 @@ func (g *Graph) SourceTag(source string) string {
 		return ""
 	}
 
-	node, err := g.db.ReadNode(source)
+	node, err := g.db.ReadNode(source, "source")
 	if err != nil {
 		return ""
 	}

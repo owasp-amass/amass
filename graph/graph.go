@@ -47,7 +47,7 @@ func (g *Graph) String() string {
 
 // InsertNodeIfNotExist will create a node in the database if it does not already exist.
 func (g *Graph) InsertNodeIfNotExist(id, ntype string) (db.Node, error) {
-	node, err := g.db.ReadNode(id)
+	node, err := g.db.ReadNode(id, ntype)
 	if err != nil {
 		node, err = g.db.InsertNode(id, ntype)
 	}

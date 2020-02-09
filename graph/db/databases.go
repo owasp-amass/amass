@@ -27,9 +27,9 @@ type GraphDatabase interface {
 	fmt.Stringer
 
 	// Graph operations for adding and removing nodes
-	NodeToID(n Node) string
+	NodeToID(node Node) string
 	InsertNode(id, ntype string) (Node, error)
-	ReadNode(name string) (Node, error)
+	ReadNode(id, ntype string) (Node, error)
 	DeleteNode(node Node) error
 
 	// Graph operations for querying for nodes using search criteria

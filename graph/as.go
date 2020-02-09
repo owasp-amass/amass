@@ -84,7 +84,7 @@ func (g *Graph) InsertInfrastructure(asn int, desc, addr, cidr, source, tag, eve
 
 // ReadASDescription the description property of an autonomous system in the graph.
 func (g *Graph) ReadASDescription(asn string) string {
-	if asNode, err := g.db.ReadNode(asn); err == nil {
+	if asNode, err := g.db.ReadNode(asn, "as"); err == nil {
 		if p, err := g.db.ReadProperties(asNode, "description"); err == nil && len(p) > 0 {
 			return p[0].Value
 		}

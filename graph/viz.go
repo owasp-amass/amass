@@ -11,7 +11,7 @@ import (
 
 // VizData returns the current state of the Graph as viz package Nodes and Edges.
 func (g *Graph) VizData(uuid string) ([]viz.Node, []viz.Edge) {
-	event, err := g.db.ReadNode(uuid)
+	event, err := g.db.ReadNode(uuid, "event")
 	if err != nil {
 		return nil, nil
 	}
@@ -52,7 +52,7 @@ func (g *Graph) VizData(uuid string) ([]viz.Node, []viz.Edge) {
 	var edges []viz.Edge
 	// Identify the edges between nodes that should be included in the visualization
 	for _, n := range nodes {
-		node, err := g.db.ReadNode(n.Label)
+		node, err := g.db.ReadNode(n.Label, n.Type)
 		if err != nil {
 			continue
 		}
