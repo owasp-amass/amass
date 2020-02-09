@@ -71,7 +71,7 @@ type enumArgs struct {
 		ScoreResolvers      bool
 		Sources             bool
 		NoWildcard          bool
-		IncludeUnresolved   bool
+		Unresolved          bool
 		Verbose             bool
 	}
 	Filepaths struct {
@@ -125,7 +125,7 @@ func defineEnumOptionFlags(enumFlags *flag.FlagSet, args *enumArgs) {
 	enumFlags.BoolVar(&args.Options.ScoreResolvers, "noresolvscore", true, "Disable resolver reliability scoring")
 	enumFlags.BoolVar(&args.Options.Sources, "src", false, "Print data sources for the discovered names")
 	enumFlags.BoolVar(&args.Options.NoWildcard, "nowildcard", false, "Turn off wildcard detection")
-	enumFlags.BoolVar(&args.Options.IncludeUnresolved, "include-unresolvable", false, "Output DNS names that did not resolve")
+	enumFlags.BoolVar(&args.Options.Unresolved, "include-unresolvable", false, "Output DNS names that did not resolve")
 	enumFlags.BoolVar(&args.Options.Verbose, "v", false, "Output status / debug / troubleshooting info")
 }
 
@@ -572,7 +572,7 @@ func (e enumArgs) OverrideConfig(conf *config.Config) error {
 	if e.Options.NoWildcard {
 		conf.NoWildcard = true
 	}
-	if e.Options.IncludeUnresolved {
+	if e.Options.Unresolved {
 		conf.IncludeUnresolvable = true
 	}
 	if e.Options.Passive {

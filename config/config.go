@@ -115,7 +115,7 @@ type Config struct {
 	NoWildcard bool `ini:"no-wildcard"`
 
 	// Determines if unresolved DNS names will be output by the enumeration
-	IncludeUnresolvable bool `ini:"include-unresolvable"`
+	IncludeUnresolvable bool `ini:"include_unresolvable"`
 
 	// A blacklist of subdomain names that will not be investigated
 	Blacklist []string
