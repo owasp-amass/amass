@@ -63,11 +63,11 @@ type DNSAnswer struct {
 
 // DNSRequest handles data needed throughout Service processing of a DNS name.
 type DNSRequest struct {
-	Name    string
-	Domain  string
-	Records []DNSAnswer
-	Tag     string
-	Source  string
+	Name    string      `json:"name"`
+	Domain  string      `json:"domain"`
+	Records []DNSAnswer `json:"records"`
+	Tag     string      `json:"tag"`
+	Source  string      `json:"source"`
 }
 
 // AddrRequest handles data needed throughout Service processing of a network address.

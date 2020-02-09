@@ -70,6 +70,7 @@ type enumArgs struct {
 		PublicDNS           bool
 		ScoreResolvers      bool
 		Sources             bool
+		NoWildcard          bool
 		Unresolved          bool
 		Verbose             bool
 	}
@@ -123,7 +124,8 @@ func defineEnumOptionFlags(enumFlags *flag.FlagSet, args *enumArgs) {
 	enumFlags.BoolVar(&args.Options.PublicDNS, "public-dns", false, "Use public-dns.info resolver list")
 	enumFlags.BoolVar(&args.Options.ScoreResolvers, "noresolvscore", true, "Disable resolver reliability scoring")
 	enumFlags.BoolVar(&args.Options.Sources, "src", false, "Print data sources for the discovered names")
-	enumFlags.BoolVar(&args.Options.Unresolved, "include-unresolvable", false, "Output DNS names that did not resolve")
+	enumFlags.BoolVar(&args.Options.NoWildcard, "nowildcard", false, "Turn off wildcard detection")
+	enumFlags.BoolVar(&args.Options.Unresolved, "unresolvable", false, "Output DNS names that did not resolve")
 	enumFlags.BoolVar(&args.Options.Verbose, "v", false, "Output status / debug / troubleshooting info")
 }
 
@@ -323,7 +325,7 @@ func processEnumOutput(e *enum.Enumeration, args *enumArgs) {
 		// Collect all the names returned by the enumeration
 		for out := range e.Output {
 			out.Addresses = format.DesiredAddrTypes(out.Addresses, args.Options.IPv4, args.Options.IPv6)
-			if !e.Config.Passive && len(out.Addresses) <= 0 {
+			if !e.Config.Passive && !e.Config.Unresolvable && len(out.Addresses) <= 0 {
 				continue
 			}
 
@@ -567,8 +569,11 @@ func (e enumArgs) OverrideConfig(conf *config.Config) error {
 	if e.Options.Active {
 		conf.Active = true
 	}
+	if e.Options.NoWildcard {
+		conf.NoWildcard = true
+	}
 	if e.Options.Unresolved {
-		conf.IncludeUnresolvable = true
+		conf.Unresolvable = true
 	}
 	if e.Options.Passive {
 		conf.Passive = true

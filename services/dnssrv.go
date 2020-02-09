@@ -65,7 +65,7 @@ func (ds *DNSService) processDNSRequest(ctx context.Context, req *requests.DNSRe
 
 	bus.Publish(requests.SetActiveTopic, ds.String())
 
-	if cfg.Blacklisted(req.Name) || (!requests.TrustedTag(req.Tag) &&
+	if cfg.Blacklisted(req.Name) || (!cfg.NoWildcard && !requests.TrustedTag(req.Tag) &&
 		ds.System().Pool().GetWildcardType(ctx, req) == resolvers.WildcardTypeDynamic) {
 		return
 	}
@@ -86,7 +86,7 @@ func (ds *DNSService) processDNSRequest(ctx context.Context, req *requests.DNSRe
 	req.Records = answers
 	if len(req.Records) == 0 {
 		// Check if this unresolved name should be output by the enumeration
-		if cfg.IncludeUnresolvable && cfg.IsDomainInScope(req.Name) {
+		if cfg.Unresolvable && cfg.IsDomainInScope(req.Name) {
 			bus.Publish(requests.OutputTopic, &requests.Output{
 				Name:   req.Name,
 				Domain: req.Domain,
@@ -107,7 +107,7 @@ func (ds *DNSService) resolvedName(ctx context.Context, req *requests.DNSRequest
 		return
 	}
 
-	if !requests.TrustedTag(req.Tag) && ds.System().Pool().MatchesWildcard(ctx, req) {
+	if !cfg.NoWildcard && !requests.TrustedTag(req.Tag) && ds.System().Pool().MatchesWildcard(ctx, req) {
 		return
 	}
 

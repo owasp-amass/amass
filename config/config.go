@@ -111,8 +111,11 @@ type Config struct {
 	// Determines if zone transfers will be attempted
 	Active bool
 
+	// Determines if wildcard detection should be performed
+	NoWildcard bool `ini:"no-wildcard"`
+
 	// Determines if unresolved DNS names will be output by the enumeration
-	IncludeUnresolvable bool `ini:"include_unresolvable"`
+	Unresolvable bool `ini:"unresolvable"`
 
 	// A blacklist of subdomain names that will not be investigated
 	Blacklist []string

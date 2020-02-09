@@ -74,7 +74,7 @@ func (e *Enumeration) newResolvedName(req *requests.DNSRequest) {
 	}
 
 	// Put the DNS name + records on the queue for output processing
-	if e.hasARecords(req) {
+	if e.hasARecords(req) || e.Config.Unresolvable {
 		e.resolvedQueue.Append(req)
 	}
 
