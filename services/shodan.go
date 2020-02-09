@@ -75,28 +75,26 @@ func (s *Shodan) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 	}
 	// Extract the subdomain names from the REST API results
 	var m struct {
-		Matches []struct {
-			Hostnames []string `json:"hostnames"`
-		} `json:"matches"`
+		Subdomains []string `json:"subdomains"`
 	}
-	if err := json.Unmarshal([]byte(page), &m); err != nil {
+	if err := json.Unmarshal([]byte(page), &m); err != nil || len(m.Subdomains) == 0 {
 		return
 	}
 
-	for _, match := range m.Matches {
-		for _, host := range match.Hostnames {
-			if re.MatchString(host) {
-				bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
-					Name:   host,
-					Domain: req.Domain,
-					Tag:    s.SourceType,
-					Source: s.String(),
-				})
-			}
+	for _, sub := range m.Subdomains {
+		name := sub + "." + req.Domain
+
+		if re.MatchString(name) {
+			bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+				Name:   name,
+				Domain: req.Domain,
+				Tag:    s.SourceType,
+				Source: s.String(),
+			})
 		}
 	}
 }
 
 func (s *Shodan) restURL(domain string) string {
-	return fmt.Sprintf("https://api.shodan.io/shodan/host/search?key=%s&query=hostname:%s", s.API.Key, domain)
+	return fmt.Sprintf("https://api.shodan.io/dns/domain/%s?key=%s", domain, s.API.Key)
 }

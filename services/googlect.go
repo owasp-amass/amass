@@ -72,7 +72,7 @@ func (g *GoogleCT) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 	for {
 		bus.Publish(requests.SetActiveTopic, g.String())
 
-		u := g.getDNSURL(req.Domain, token)
+		u := g.getURL(req.Domain, token)
 		headers := map[string]string{
 			"Connection": "close",
 			"Referer":    "https://transparencyreport.google.com/https/certificates",
@@ -104,7 +104,7 @@ func (g *GoogleCT) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 	}
 }
 
-func (g *GoogleCT) getDNSURL(domain, token string) string {
+func (g *GoogleCT) getURL(domain, token string) string {
 	var dir string
 
 	if token != "" {
