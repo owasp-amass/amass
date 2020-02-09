@@ -86,7 +86,7 @@ func (ds *DNSService) processDNSRequest(ctx context.Context, req *requests.DNSRe
 	req.Records = answers
 	if len(req.Records) == 0 {
 		// Check if this unresolved name should be output by the enumeration
-		if cfg.Unresolvable && cfg.IsDomainInScope(req.Name) {
+		if cfg.IncludeUnresolvable && cfg.IsDomainInScope(req.Name) {
 			bus.Publish(requests.OutputTopic, &requests.Output{
 				Name:   req.Name,
 				Domain: req.Domain,
