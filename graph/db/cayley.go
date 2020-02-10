@@ -25,6 +25,9 @@ type CayleyGraph struct {
 	path  string
 }
 
+var notDataSourceSet = stringset.New("tld", "root", "cname_record", 
+		"ptr_record", "mx_record", "ns_record", "srv_record", "service")
+
 // NewCayleyGraph returns an intialized CayleyGraph object.
 func NewCayleyGraph(path string) *CayleyGraph {
 	var err error
@@ -259,8 +262,8 @@ func (g *CayleyGraph) NameToIPAddrs(node Node) ([]Node, error) {
 
 // NodeSources implements the GraphDatabase interface.
 func (g *CayleyGraph) NodeSources(node Node, events ...string) ([]string, error) {
-	g.RLock()
-	defer g.RUnlock()
+	g.Lock()
+	defer g.Unlock()
 
 	nstr := g.NodeToID(node)
 	if nstr == "" {
@@ -293,7 +296,7 @@ func (g *CayleyGraph) NodeSources(node Node, events ...string) ([]string, error)
 		}
 		pred := quad.ToString(predval)
 
-		if pred == "ptr_record" {
+		if notDataSourceSet.Has(pred) {
 			return
 		}
 
