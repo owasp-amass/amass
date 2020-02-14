@@ -579,7 +579,9 @@ func (e enumArgs) OverrideConfig(conf *config.Config) error {
 	if e.Timeout > 0 {
 		conf.Timeout = e.Timeout
 	}
-
+	if e.Resolvers.Len() > 0 {
+		conf.Resolvers = e.Resolvers.Slice()
+	}
 	if e.Options.PublicDNS {
 		conf.PublicDNS = true
 	}
