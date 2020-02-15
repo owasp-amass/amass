@@ -116,7 +116,7 @@ func RequestWebPage(urlstring string, body io.Reader, hvals map[string]string, u
 
 	in, err := ioutil.ReadAll(resp.Body)
 	resp.Body.Close()
-	return string(in), nil
+	return string(in), err
 }
 
 // PullCertificateNames attempts to pull a cert from one or more ports on an IP.
