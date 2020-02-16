@@ -86,7 +86,6 @@ The intel subcommand can help you discover additional root domain names associat
 | -o | Path to the text output file | amass intel -o out.txt -whois -d example.com |
 | -org | Search string provided against AS description information | amass intel -org Facebook |
 | -p | Ports separated by commas (default: 443) | amass intel -cidr 104.154.0.0/15 -p 443,8080 |
-| -public-dns | Use public-dns.info resolvers |amass intel -cidr 104.154.0.0/15 -public-dns |
 | -r | IP addresses of preferred DNS resolvers (can be used multiple times) | amass intel -r 8.8.8.8,1.1.1.1 -whois -d example.com |
 | -rf | Path to a file providing preferred DNS resolvers | amass intel -rf data/resolvers.txt -whois -d example.com |
 | -src | Print data sources for the discovered names | amass intel -src -whois -d example.com |
@@ -132,7 +131,6 @@ This subcommand will perform DNS enumeration and network mapping while populatin
 | -oA | Path prefix used for naming all output files | amass enum -oA amass_scan -d example.com |
 | -passive | A purely passive mode of execution | amass enum --passive -d example.com |
 | -p | Ports separated by commas (default: 443) | amass enum -d example.com -p 443,8080 |
-| -public-dns | Use public-dns.info resolvers | amass enum -d example.com -public-dns |
 | -r | IP addresses of preferred DNS resolvers (can be used multiple times) | amass enum -r 8.8.8.8,1.1.1.1 -d example.com |
 | -rf | Path to a file providing preferred DNS resolvers | amass enum -rf data/resolvers.txt -d example.com |
 | -src | Print data sources for the discovered names | amass enum -src -d example.com |
@@ -248,7 +246,6 @@ Note that these locations are based on the [output directory](#the-output-direct
 | Option | Description |
 |--------|-------------|
 | resolver | The IP address of a DNS resolver and used globally by the amass package |
-| public_dns_resolvers | Incorporate public-dns.info resolvers into the enumeration |
 | score_resolvers | Toggle resolver reliability scoring |
 | monitor_resolver_rate | Toggle resolver rate monitoring |
 

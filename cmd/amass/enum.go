@@ -67,7 +67,6 @@ type enumArgs struct {
 		NoAlts              bool
 		NoRecursive         bool
 		Passive             bool
-		PublicDNS           bool
 		ScoreResolvers      bool
 		Sources             bool
 		Unresolved          bool
@@ -120,7 +119,6 @@ func defineEnumOptionFlags(enumFlags *flag.FlagSet, args *enumArgs) {
 	enumFlags.BoolVar(&args.Options.NoAlts, "noalts", false, "Disable generation of altered names")
 	enumFlags.BoolVar(&args.Options.NoRecursive, "norecursive", false, "Turn off recursive brute forcing")
 	enumFlags.BoolVar(&args.Options.Passive, "passive", false, "Disable DNS resolution of names and dependent features")
-	enumFlags.BoolVar(&args.Options.PublicDNS, "public-dns", false, "Use public-dns.info resolver list")
 	enumFlags.BoolVar(&args.Options.ScoreResolvers, "noresolvscore", true, "Disable resolver reliability scoring")
 	enumFlags.BoolVar(&args.Options.Sources, "src", false, "Print data sources for the discovered names")
 	enumFlags.BoolVar(&args.Options.Unresolved, "include-unresolvable", false, "Output DNS names that did not resolve")
@@ -581,9 +579,6 @@ func (e enumArgs) OverrideConfig(conf *config.Config) error {
 	}
 	if e.Resolvers.Len() > 0 {
 		conf.Resolvers = e.Resolvers.Slice()
-	}
-	if e.Options.PublicDNS {
-		conf.PublicDNS = true
 	}
 	if !e.Options.MonitorResolverRate {
 		conf.MonitorResolverRate = false

@@ -15,7 +15,6 @@ import (
 
 	"github.com/OWASP/Amass/v3/format"
 	"github.com/OWASP/Amass/v3/net/dns"
-	"github.com/OWASP/Amass/v3/net/http"
 	"github.com/OWASP/Amass/v3/semaphore"
 	"github.com/OWASP/Amass/v3/stringset"
 	"github.com/OWASP/Amass/v3/wordlist"
@@ -23,10 +22,7 @@ import (
 	"github.com/google/uuid"
 )
 
-const (
-	defaultConcurrentDNSQueries = 10000
-	publicDNSResolverBaseURL    = "https://public-dns.info/nameserver/"
-)
+const defaultConcurrentDNSQueries = 10000
 
 var defaultPublicResolvers = []string{
 	"1.1.1.1",     // Cloudflare
@@ -127,7 +123,6 @@ type Config struct {
 	Resolvers           []string
 	MonitorResolverRate bool
 	ScoreResolvers      bool
-	PublicDNS           bool
 
 	// Enumeration Timeout
 	Timeout int
@@ -161,7 +156,6 @@ func NewConfig() *Config {
 		Resolvers:           defaultPublicResolvers,
 		MonitorResolverRate: true,
 		ScoreResolvers:      true,
-		PublicDNS:           false,
 
 		// The following is enum-only, but intel will just ignore them anyway
 		Alterations:    true,
@@ -212,24 +206,6 @@ func (c *Config) CheckSettings() error {
 	c.AltWordlist, err = wordlist.ExpandMaskWordlist(c.AltWordlist)
 	if err != nil {
 		return err
-	}
-
-	if c.PublicDNS {
-		cc := "us"
-		if result := http.ClientCountryCode(); result != "" {
-			cc = result
-		}
-
-		url := publicDNSResolverBaseURL + cc + ".txt"
-		if resolvers, err := getWordlistByURL(url); err == nil && len(resolvers) >= 50 {
-			c.Resolvers = stringset.Deduplicate(resolvers)
-		} else if cc != "us" {
-			url = publicDNSResolverBaseURL + "us.txt"
-
-			if resolvers, err = getWordlistByURL(url); err == nil {
-				c.Resolvers = stringset.Deduplicate(resolvers)
-			}
-		}
 	}
 	return err
 }
@@ -593,8 +569,6 @@ func (c *Config) loadResolverSettings(cfg *ini.File) error {
 
 	c.MonitorResolverRate = sec.Key("monitor_resolver_rate").MustBool(true)
 	c.ScoreResolvers = sec.Key("score_resolvers").MustBool(true)
-	c.PublicDNS = sec.Key("public_dns_resolvers").MustBool(false)
-
 	return nil
 }
 
