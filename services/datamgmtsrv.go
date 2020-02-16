@@ -198,7 +198,7 @@ func (dms *DataManagerService) insertAAAA(ctx context.Context, req *requests.DNS
 	}
 
 	for _, g := range dms.System().GraphDatabases() {
-		if err := g.InsertA(req.Name, addr, req.Source, req.Tag, cfg.UUID.String()); err != nil {
+		if err := g.InsertAAAA(req.Name, addr, req.Source, req.Tag, cfg.UUID.String()); err != nil {
 			bus.Publish(requests.LogTopic, fmt.Sprintf("%s failed to insert AAAA record: %v", g, err))
 		}
 	}
