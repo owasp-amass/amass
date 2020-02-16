@@ -314,12 +314,20 @@ func (rp *ResolverPool) Resolve(ctx context.Context, name, qtype string, priorit
 			continue
 		}
 
+		success := true
 		ans, again, err := r.Resolve(ctx, name, qtype, priority)
 		if again {
-			continue
+			success = false
+		} else if err != nil {
+			if rc := (err.(*ResolveError)).Rcode; rc == NotAvailableRcode || 
+				rc == dns.RcodeServerFailure || rc == dns.RcodeRefused || rc == dns.RcodeNotImplemented {
+				success = false
+			}
 		}
 
-		return ans, again, err
+		if success {
+			return ans, again, err
+		}
 	}
 
 	return []requests.DNSAnswer{}, false, &ResolveError{
