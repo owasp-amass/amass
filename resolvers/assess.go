@@ -3,7 +3,10 @@
 
 package resolvers
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // SanityChecks performs some basic checks to see if the resolvers are reliable.
 func (rp *ResolverPool) SanityChecks() {
@@ -102,6 +105,8 @@ func resolveForSanityCheck(ctx context.Context, r Resolver, name string, badname
 	var success bool
 
 	for i := 0; i < 2 && again; i++ {
+		time.Sleep(time.Duration(i) * time.Second)
+
 		_, again, err = r.Resolve(ctx, name, "A", PriorityCritical)
 		if err == nil && !again {
 			success = true
