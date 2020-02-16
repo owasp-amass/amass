@@ -320,7 +320,7 @@ The GraphDB is storing all the domains that were found for a given enumeration. 
 
 Here is an example of graph for an enumeration run on example.com:
 
-![GraphDB](https://github.com/KJ202/Amass/blob/document_graphdb/images/example_graphDB.png)
+![GraphDB](https://github.com/OWASP/Amass/blob/master/images/example_graphDB.png)
 
 ## Importing OWASP Amass Results into Maltego
 
