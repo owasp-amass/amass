@@ -8,9 +8,9 @@
 
 Whether you are a penetration tester, an auditor, a security researcher or the CISO/IT manager, you may have several valid reasons for mapping out the external attack surface of an organisation. This process is also referred to as reconnaissance or information gathering.
 
-[The OWASP Amass project](https://www.owasp.org/index.php/OWASP_Amass_Project) (Amass) can help with this to a large extent depending on your requirements. In this blog post, I will aim to demonstrate how one can use Amass to discover majority of an organisation's externally exposed assets.
+[The OWASP Amass project](https://www.owasp.org/index.php/OWASP_Amass_Project) (Amass) can help with this to a large extent depending on your requirements. In this blog post, we will aim to demonstrate how one can use Amass to discover majority of an organisation's externally exposed assets.
 
-The focus will be on performing continuous subdomain discovery exercises. I have broken this blog post into different sections to make it easier to get to grips with the various functions of Amass. It should be noted that there may be assets out there that are not mapped to a domain and you will need to employ other techniques to uncover them, such as running network scans over the IP ranges owned by the organisation. Although I will not fully demonstrate how to use all the functions offered by Amass, I am hoping that this blog will cover enough to give you a kick-start in mastering Amass.
+The focus will be on performing continuous subdomain discovery exercises. We have broken this blog post into different sections to make it easier to get to grips with the various functions of Amass. It should be noted that there may be assets out there that are not mapped to a domain and you will need to employ other techniques to uncover them, such as running network scans over the IP ranges owned by the organisation. Although we will not fully demonstrate how to use all the functions offered by Amass, we are hoping that this blog will cover enough to give you a kick-start in mastering Amass.
 
 ## Why OWASP Amass?
 
@@ -18,7 +18,7 @@ A high number of open-source tools and software are available for enumerating su
 
 Amass is backed by OWASP, which should provide prestige and confidence in the results. It is actively maintained and will likely be supported for a long time, meaning any future bugs will be resolved. Additionally, the adoption rate of Amass is high which potentially means better data consistency and integration with other tools. As such, it can constitute a better and more trustworthy tool to use in proof of concepts and engagements, and it may be easier to convince your clients or manager to use it for periodical mapping of the organisation's attack surface.
 
-There are a number of more technical reasons, which I will explain below and demonstrate in more detail later:
+There are a number of more technical reasons, which we will explain below and demonstrate in more detail later:
 
 -   Comes with 5 subcommands, in other words functions:
     -   amass intel -- Discover targets for enumerations
@@ -38,7 +38,7 @@ There are a number of more technical reasons, which I will explain below and dem
     -   Hashcat-style masks for brute-force of subdomains (this can be very useful if you have internal information on naming conventions and so on)
 -   It can be configured using a configuration file which makes it easy to maintain, use or integrate with scripts
 
-Lastly, I will not be going into the details of installing Amass in this blog post, but if you are interested, you can do so in a number of ways. You can compile from source if you have a properly configured Golang environment (Go >= 1.13), or run it using Docker, or install it as a package if one is available for your distribution. Detailed installation instructions are available [here](https://github.com/OWASP/Amass/blob/master/doc/install.md).
+Lastly, we will not be going into the details of installing Amass in this blog post, but if you are interested, you can do so in a number of ways. You can compile from source if you have a properly configured Golang environment (Go >= 1.13), or run it using Docker, or install it as a package if one is available for your distribution. Detailed installation instructions are available [here](https://github.com/OWASP/Amass/blob/master/doc/install.md).
 
 ## Amass Intel
 
@@ -76,7 +76,7 @@ appsecla.org
 [...]
 ```
 
-You can also confirm some of the results above by browsing to data sources manually. In the screenshot below, I have performed a reverse Whois search for "OWASP Foundation" and found similar domains against ViewDNS (which is also part of Amass' data sources):
+You can also confirm some of the results above by browsing to data sources manually. In the screenshot below, we have performed a reverse Whois search for "OWASP Foundation" and found similar domains against ViewDNS (which is also part of Amass' data sources):
 
 <https://viewdns.info/reversewhois/?q=OWASP+Foundation>
 ![OWASP Amass information gathering techniques](../images/tutorial/viewdnsinfo_example.png?raw=true)
@@ -118,7 +118,7 @@ Amass enum can be executed under the context of a passive or an active configura
 -   Your perimeter's security testing process validates DNS information at a later stage and need Amass results quickly.
 -   Due to a security engagement's constraints or requirements, you can only perform passive information gathering.
 
-In the below example, I am passively searching for subdomains on owasp.org while asking Amass to display the data sources where it found each subdomain:
+In the below example, we are passively searching for subdomains on owasp.org while asking Amass to display the data sources where it found each subdomain:
 
 ```bash
 $ amass enum -passive -d owasp.org -src
@@ -138,7 +138,7 @@ It is worth stating at this point that although Amass intel will help gather IP 
 
 ![OWASP Amass enum tutorial for subdomain discovery](../images/tutorial/amass_passive_run_example.png?raw=true)
 
-Using Amass in active configuration mode means that you will have more accurate results and more assets may be discovered as you can enable all DNS enumeration techniques. It should be noted that by "active configuration mode" I am not strictly referring to the "-active" flag which enables zone transfers and port scanning of SSL/TLS services and grabbing their certificates to extract any subdomains from certificate fields (e.g. Common Name).
+Using Amass in active configuration mode means that you will have more accurate results and more assets may be discovered as you can enable all DNS enumeration techniques. It should be noted that by "active configuration mode" we are not strictly referring to the "-active" flag which enables zone transfers and port scanning of SSL/TLS services and grabbing their certificates to extract any subdomains from certificate fields (e.g. Common Name).
 
 The below command (a detailed explanation of which follows below) can be considered active overall as it performs subdomain brute-forcing in multiple ways (wordlist, masks, etc.) along with the "-active" flag being enabled. All findings will be validated by Amass using the default or the specified resolvers:
 
@@ -147,9 +147,9 @@ $ amass enum -active -d owasp.org -brute -w /root/dns_lists/deepmagic.com-top50k
 ```
 ![Performing subdomain discovery exercise with OWASP Amass](../images/tutorial/amass_active_run_example.png?raw=true)
 
-The command I've used above specifies that the Amass graph database along with log files will be stored at "./amass4owasp". I've also asked Amass to display the data sources for each identified subdomain and the IP address(es) it resolves to with the "-src" and "-ip" flags respectively. I have provided Amass with the [deepmagic](https://github.com/danielmiessler/SecLists/tree/master/Discovery/DNS) DNS wordlist with the "-w" argument, and also specified the location of the config.ini file with "-config" and the output with "-o".
+The command we have used above specifies that the Amass graph database along with log files will be stored at "./amass4owasp". We have also asked Amass to display the data sources for each identified subdomain and the IP address(es) it resolves to with the "-src" and "-ip" flags respectively. We have provided Amass with the [deepmagic](https://github.com/danielmiessler/SecLists/tree/master/Discovery/DNS) DNS wordlist with the "-w" argument, and also specified the location of the config.ini file with "-config" and the output with "-o".
 
-While the command above is hopefully straightforward, I would like to provide some further notes:
+While the command above is hopefully straightforward, we would like to provide some further notes:
 
 -   In this instance, Amass would check within the config.ini file for DNS resolvers or use the default ones embedded within the Amass code. You can also specify your own DNS resolvers either with the use of the "-r" and "-rf" flags or within the config.ini file. Using the "-r" flag you can specify the IP addresses of DNS resolvers at the command, while with the "-rf" you can specify a file containing these.
 
@@ -166,7 +166,7 @@ To conclude this section in a more interesting way, let's assume that for some r
 $ amass enum -d owasp.org -norecursive -noalts -wm "zzz-?l?l?l" -dir amass4owasp
 ```
 
-Note that in the configuration above I have explicitly disabled recursive DNS enumerations and alterations, as I was interested in quicker results using the mask only.
+Note that in the configuration above we have explicitly disabled recursive DNS enumerations and alterations, as we were interested in quicker results using the mask only.
 
 Finally, you can always check Amass' log file within the output folder to ensure your configuration is working as expected:
 
@@ -187,7 +187,7 @@ Organisations can also use this feature to ensure that newly deployed services d
 
 ## Amass Viz and Amass DB
 
-I would also like to briefly mention the other 2 Amass subcommands:
+We would also like to briefly mention the other 2 Amass subcommands:
 
 ### Amass db
 
@@ -225,7 +225,7 @@ The discussed techniques could be used in conjunction with periodic information 
 -   Use Amass intel to look for ASN IDs periodically, then use the ASN IDs to perform parent domain discovery, and finally use the identified parent domains with Amass enum running active searches in order to identify new externally exposed subdomains and assets;
 -   Use Amass enum with passive searches to retrieve new subdomains from Amass' data sources in order to create a list of the organisation's assets by providing the initial parent domains. These could be fed into vulnerability scanning tools (which will also perform DNS resolution) or could be added in scope for your organisation's security engagements.
 
-If you are planning on automating Amass discovery exercises, I highly recommend you invest time into configuring the "config.ini" file. For instance, you could have one amass "config.ini" file for quick passive subdomain discovery exercises that occur every few hours if you are searching a large network/organisation, and one for deeper and more specific scanning. In the example below, I provide an example script written in GNU Bash showing how you could automate Amass:
+If you are planning on automating Amass discovery exercises, we highly recommend you invest time into configuring the "config.ini" file. For instance, you could have one amass "config.ini" file for quick passive subdomain discovery exercises that occur every few hours if you are searching a large network/organisation, and one for deeper and more specific scanning. In the example below, we provide an example script written in GNU Bash showing how you could automate Amass:
 
 ```bash
 1. APP_TOKEN="$1"
@@ -246,9 +246,9 @@ If you are planning on automating Amass discovery exercises, I highly recommend 
 
 The script leverages a mobile application that sends push-notifications to my phone using the pushover.net API. This is achieved using the wget tool to make API requests that send a notification to my phone with the new subdomains, as shown in lines 1,2 and 11. You could implement similar functionality using Slack's or Discord's webhooks. The command in line 3 launches a thorough Amass enum discovery. Line 4 uses Amass track to compare the last two enumerations and identify any new subdomains while lines 5 and 9 accumulate all the subdomains identified within the "all_domains.txt" file and compare. This is required because in some cases subdomains may be active and/or inactive at different time periods and comparing only the last two enumerations may not be enough. Lines 6 to 10 ensure that the relevant push notification message is sent to my phone while also saving any new subdomains to the "all_domains.txt" local file for future reference.
 
-Please note that the above script is a quick script I wrote and is only meant to serve as an example. It is by no means perfect and bug-free, and you will have to modify and adjust it based on your requirements and environment.
+Please note that the above script is a quick script we wrote and is only meant to serve as an example. It is by no means perfect and bug-free, and you will have to modify and adjust it based on your requirements and environment.
 
-In closing, OWASP Amass is a tool that is becoming increasingly popular. I highly recommend that you incorporate Amass in your workflow/processes if you have information gathering and subdomain discovery requirements, and stay tuned as more and more features and improvements will be added with every release. Finally, you can always refer to the official [User's Guide](https://github.com/OWASP/Amass/blob/master/doc/user_guide.md) of Amass.
+In closing, OWASP Amass is a tool that is becoming increasingly popular. We highly recommend that you incorporate Amass in your workflow/processes if you have information gathering and subdomain discovery requirements, and stay tuned as more and more features and improvements will be added with every release. Finally, you can always refer to the official [User's Guide](https://github.com/OWASP/Amass/blob/master/doc/user_guide.md) of Amass.
 
 ## Credits
 This tutorial page was built based on [How to Use OWASP Amass: An Extensive Tutorial
