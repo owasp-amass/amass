@@ -14,13 +14,13 @@ import (
 	"github.com/OWASP/Amass/v3/format"
 	"github.com/OWASP/Amass/v3/services"
 	"github.com/fatih/color"
-	//"github.com/pkg/profile"
 )
 
 const (
-	mainUsageMsg         = "intel|enum|viz|track|db [options]"
+	mainUsageMsg         = "intel|enum|viz|track|db|dns [options]"
 	exampleConfigFileURL = "https://github.com/OWASP/Amass/blob/master/examples/config.ini"
 	userGuideURL         = "https://github.com/OWASP/Amass/blob/master/doc/user_guide.md"
+	tutorialURL          = "https://github.com/OWASP/Amass/blob/master/doc/tutorial.md"
 )
 
 var (
@@ -48,18 +48,18 @@ func commandUsage(msg string, cmdFlagSet *flag.FlagSet, errBuf *bytes.Buffer) {
 		g.Fprintf(color.Error, "\t%-11s - Perform enumerations and network mapping\n", "amass enum")
 		g.Fprintf(color.Error, "\t%-11s - Visualize enumeration results\n", "amass viz")
 		g.Fprintf(color.Error, "\t%-11s - Track differences between enumerations\n", "amass track")
-		g.Fprintf(color.Error, "\t%-11s - Manipulate the Amass graph database\n\n", "amass db")
+		g.Fprintf(color.Error, "\t%-11s - Manipulate the Amass graph database\n", "amass db")
+		g.Fprintf(color.Error, "\t%-11s - Resolve DNS names at high performance\n\n", "amass dns")
 	}
 
 	g.Fprintf(color.Error, "The user's guide can be found here: \n%s\n\n", userGuideURL)
 	g.Fprintf(color.Error, "An example configuration file can be found here: \n%s\n\n", exampleConfigFileURL)
+	g.Fprintf(color.Error, "The Amass tutorial can be found here: \n%s\n\n", tutorialURL)
 }
 
 func main() {
 	var version, help1, help2 bool
 	mainFlagSet := flag.NewFlagSet("amass", flag.ContinueOnError)
-
-	//defer profile.Start().Stop()
 
 	defaultBuf := new(bytes.Buffer)
 	mainFlagSet.SetOutput(defaultBuf)
@@ -89,6 +89,8 @@ func main() {
 	switch os.Args[1] {
 	case "db":
 		runDBCommand(os.Args[2:])
+	case "dns":
+		runDNSCommand(os.Args[2:])
 	case "enum":
 		runEnumCommand(os.Args[2:])
 	case "intel":

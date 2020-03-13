@@ -67,7 +67,6 @@ type enumArgs struct {
 		NoAlts              bool
 		NoRecursive         bool
 		Passive             bool
-		ScoreResolvers      bool
 		Sources             bool
 		Unresolved          bool
 		Verbose             bool
@@ -119,7 +118,6 @@ func defineEnumOptionFlags(enumFlags *flag.FlagSet, args *enumArgs) {
 	enumFlags.BoolVar(&args.Options.NoAlts, "noalts", false, "Disable generation of altered names")
 	enumFlags.BoolVar(&args.Options.NoRecursive, "norecursive", false, "Turn off recursive brute forcing")
 	enumFlags.BoolVar(&args.Options.Passive, "passive", false, "Disable DNS resolution of names and dependent features")
-	enumFlags.BoolVar(&args.Options.ScoreResolvers, "noresolvscore", true, "Disable resolver reliability scoring")
 	enumFlags.BoolVar(&args.Options.Sources, "src", false, "Print data sources for the discovered names")
 	enumFlags.BoolVar(&args.Options.Unresolved, "include-unresolvable", false, "Output DNS names that did not resolve")
 	enumFlags.BoolVar(&args.Options.Verbose, "v", false, "Output status / debug / troubleshooting info")
@@ -578,13 +576,10 @@ func (e enumArgs) OverrideConfig(conf *config.Config) error {
 		conf.Timeout = e.Timeout
 	}
 	if e.Resolvers.Len() > 0 {
-		conf.Resolvers = e.Resolvers.Slice()
+		conf.SetResolvers(e.Resolvers.Slice())
 	}
 	if !e.Options.MonitorResolverRate {
 		conf.MonitorResolverRate = false
-	}
-	if !e.Options.ScoreResolvers {
-		conf.ScoreResolvers = false
 	}
 
 	if len(e.Included) > 0 {

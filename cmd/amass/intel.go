@@ -51,7 +51,6 @@ type intelArgs struct {
 		ReverseWhois        bool
 		Sources             bool
 		MonitorResolverRate bool
-		ScoreResolvers      bool
 		Verbose             bool
 	}
 	Filepaths struct {
@@ -89,7 +88,6 @@ func defineIntelOptionFlags(intelFlags *flag.FlagSet, args *intelArgs) {
 	intelFlags.BoolVar(&args.Options.ListSources, "list", false, "Print the names of all available data sources")
 	intelFlags.BoolVar(&args.Options.MonitorResolverRate, "noresolvrate", true, "Disable resolver rate monitoring")
 	intelFlags.BoolVar(&args.Options.ReverseWhois, "whois", false, "All provided domains are run through reverse whois")
-	intelFlags.BoolVar(&args.Options.ScoreResolvers, "noresolvscore", true, "Disable resolver reliability scoring")
 	intelFlags.BoolVar(&args.Options.Sources, "src", false, "Print data sources for the discovered names")
 	intelFlags.BoolVar(&args.Options.Verbose, "v", false, "Output status / debug / troubleshooting info")
 }
@@ -385,13 +383,10 @@ func (i intelArgs) OverrideConfig(conf *config.Config) error {
 		conf.Timeout = i.Timeout
 	}
 	if i.Resolvers.Len() > 0 {
-		conf.Resolvers = i.Resolvers.Slice()
+		conf.SetResolvers(i.Resolvers.Slice())
 	}
 	if !i.Options.MonitorResolverRate {
 		conf.MonitorResolverRate = false
-	}
-	if !i.Options.ScoreResolvers {
-		conf.ScoreResolvers = false
 	}
 
 	if len(i.Included) > 0 {
