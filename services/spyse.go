@@ -66,7 +66,8 @@ func (s *Spyse) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 		return
 	}
 
-	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", s.String(), req.Domain))
+	bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+		fmt.Sprintf("Querying %s for %s subdomains", s.String(), req.Domain))
 
 	if s.API == nil || s.API.Key == "" {
 		s.executeSubdomainQuery(ctx, req.Domain)
@@ -98,12 +99,12 @@ func (s *Spyse) subdomainQueryAPI(ctx context.Context, domain string, page int) 
 	}
 
 	s.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, s.String())
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, s.String())
 
 	u := s.getAPIURL(domain, page)
 	response, err := http.RequestWebPage(u, nil, nil, "", "")
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", s.String(), u, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", s.String(), u, err))
 		return 0, err
 	}
 
@@ -115,7 +116,7 @@ func (s *Spyse) subdomainQueryAPI(ctx context.Context, domain string, page int) 
 	}
 
 	if err := json.Unmarshal([]byte(response), &results); err != nil {
-		bus.Publish(requests.LogTopic,
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: Failed to unmarshal JSON: %v", s.String(), err),
 		)
 		return 0, err
@@ -128,7 +129,7 @@ func (s *Spyse) subdomainQueryAPI(ctx context.Context, domain string, page int) 
 			continue
 		}
 
-		bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+		bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 			Name:   cleanName(n),
 			Domain: record.Domain,
 			Tag:    s.SourceType,
@@ -153,12 +154,12 @@ func (s *Spyse) executeSubdomainQuery(ctx context.Context, domain string) {
 	}
 
 	s.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, s.String())
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, s.String())
 
 	url := s.getURL(domain)
 	page, err := http.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", s.String(), url, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", s.String(), url, err))
 		return
 	}
 
@@ -173,7 +174,7 @@ func (s *Spyse) executeSubdomainQuery(ctx context.Context, domain string) {
 	}
 
 	for sd := range matches {
-		bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+		bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 			Name:   cleanName(sd),
 			Domain: domain,
 			Tag:    s.SourceType,
@@ -190,12 +191,12 @@ func (s *Spyse) certQueryAPI(ctx context.Context, domain string) error {
 	}
 
 	s.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, s.String())
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, s.String())
 
 	u := s.getCertAPIURL(domain)
 	response, err := http.RequestWebPage(u, nil, nil, "", "")
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", s.String(), u, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", s.String(), u, err))
 		return err
 	}
 
@@ -206,7 +207,7 @@ func (s *Spyse) certQueryAPI(ctx context.Context, domain string) error {
 	}
 
 	if err := json.Unmarshal([]byte(response), &results); err != nil {
-		bus.Publish(requests.LogTopic,
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: Failed to unmarshal JSON: %v", s.String(), err),
 		)
 		return err
@@ -222,7 +223,7 @@ func (s *Spyse) certQueryAPI(ctx context.Context, domain string) error {
 				continue
 			}
 
-			bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+			bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 				Name:   cleanName(n),
 				Domain: record.Domain,
 				Tag:    s.SourceType,

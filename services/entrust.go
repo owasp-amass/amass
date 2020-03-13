@@ -60,19 +60,20 @@ func (e *Entrust) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 	}
 
 	e.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, e.String())
-	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", e.String(), req.Domain))
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, e.String())
+	bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+		fmt.Sprintf("Querying %s for %s subdomains", e.String(), req.Domain))
 
 	u := e.getURL(req.Domain)
 	page, err := http.RequestWebPage(u, nil, nil, "", "")
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", e.String(), u, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", e.String(), u, err))
 		return
 	}
 	content := strings.Replace(page, "u003d", " ", -1)
 
 	for _, sd := range re.FindAllString(content, -1) {
-		bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+		bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 			Name:   cleanName(sd),
 			Domain: req.Domain,
 			Tag:    e.SourceType,
@@ -82,7 +83,7 @@ func (e *Entrust) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 
 	for _, name := range e.extractReversedSubmatches(page) {
 		if match := re.FindString(name); match != "" {
-			bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+			bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 				Name:   cleanName(match),
 				Domain: req.Domain,
 				Tag:    e.SourceType,

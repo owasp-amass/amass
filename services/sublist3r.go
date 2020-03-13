@@ -56,23 +56,24 @@ func (s *Sublist3rAPI) OnDNSRequest(ctx context.Context, req *requests.DNSReques
 	}
 
 	s.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, s.String())
-	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", s.String(), req.Domain))
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, s.String())
+	bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+		fmt.Sprintf("Querying %s for %s subdomains", s.String(), req.Domain))
 
 	url := s.restURL(req.Domain)
 	page, err := http.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", s.String(), url, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", s.String(), url, err))
 		return
 	}
 
 	// Extract the subdomain names from the REST API results
 	var subs []string
 	if err := json.Unmarshal([]byte(page), &subs); err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", s.String(), url, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", s.String(), url, err))
 		return
 	} else if len(subs) == 0 {
-		bus.Publish(requests.LogTopic,
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: %s: The request returned zero results", s.String(), url),
 		)
 		return
@@ -80,7 +81,7 @@ func (s *Sublist3rAPI) OnDNSRequest(ctx context.Context, req *requests.DNSReques
 
 	for _, sub := range subs {
 		if cfg.IsDomainInScope(sub) {
-			bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+			bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 				Name:   sub,
 				Domain: req.Domain,
 				Tag:    s.SourceType,

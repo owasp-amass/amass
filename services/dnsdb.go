@@ -69,7 +69,8 @@ func (d *DNSDB) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 	}
 
 	d.CheckRateLimit()
-	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", d.String(), req.Domain))
+	bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+		fmt.Sprintf("Querying %s for %s subdomains", d.String(), req.Domain))
 
 	headers := map[string]string{
 		"X-API-Key":    d.API.Key,
@@ -80,12 +81,12 @@ func (d *DNSDB) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 	url := d.getURL(req.Domain)
 	page, err := http.RequestWebPage(url, nil, headers, "", "")
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", d.String(), url, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", d.String(), url, err))
 		return
 	}
 
 	for _, name := range d.parse(ctx, page, req.Domain) {
-		bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+		bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 			Name:   name,
 			Domain: req.Domain,
 			Tag:    requests.API,

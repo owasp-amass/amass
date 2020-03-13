@@ -67,14 +67,15 @@ func (pt *PassiveTotal) OnDNSRequest(ctx context.Context, req *requests.DNSReque
 	}
 
 	pt.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, pt.String())
-	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", pt.String(), req.Domain))
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, pt.String())
+	bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+		fmt.Sprintf("Querying %s for %s subdomains", pt.String(), req.Domain))
 
 	url := pt.restURL(req.Domain)
 	headers := map[string]string{"Content-Type": "application/json"}
 	page, err := http.RequestWebPage(url, nil, headers, pt.API.Username, pt.API.Key)
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", pt.String(), url, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", pt.String(), url, err))
 		return
 	}
 	// Extract the subdomain names from the REST API results
@@ -89,7 +90,7 @@ func (pt *PassiveTotal) OnDNSRequest(ctx context.Context, req *requests.DNSReque
 	for _, s := range subs.Subdomains {
 		name := s + "." + req.Domain
 		if re.MatchString(name) {
-			bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+			bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 				Name:   name,
 				Domain: req.Domain,
 				Tag:    pt.SourceType,

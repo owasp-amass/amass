@@ -38,11 +38,18 @@ func NewDataManagerService(sys System) *DataManagerService {
 
 // OnDNSRequest implements the Service interface.
 func (dms *DataManagerService) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
+	//dms.maxRequests.Acquire(1)
+	dms.processDNSRequest(ctx, req)
+}
+
+func (dms *DataManagerService) processDNSRequest(ctx context.Context, req *requests.DNSRequest) {
+	//defer dms.maxRequests.Release(1)
+
 	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
 	if bus == nil {
 		return
 	}
-	bus.Publish(requests.SetActiveTopic, dms.String())
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, dms.String())
 
 	// Check for CNAME records first
 	for i, r := range req.Records {
@@ -50,8 +57,7 @@ func (dms *DataManagerService) OnDNSRequest(ctx context.Context, req *requests.D
 		req.Records[i].Data = strings.Trim(strings.ToLower(r.Data), ".")
 
 		if uint16(r.Type) == dns.TypeCNAME {
-			dms.maxRequests.Acquire(1)
-			go dms.insertCNAME(ctx, req, i)
+			dms.insertCNAME(ctx, req, i)
 			// Do not enter more than the CNAME record
 			return
 		}
@@ -61,28 +67,25 @@ func (dms *DataManagerService) OnDNSRequest(ctx context.Context, req *requests.D
 		req.Records[i].Name = strings.Trim(strings.ToLower(r.Name), ".")
 		req.Records[i].Data = strings.Trim(strings.ToLower(r.Data), ".")
 
-		dms.maxRequests.Acquire(1)
-		bus.Publish(requests.SetActiveTopic, dms.String())
+		bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, dms.String())
 
 		switch uint16(r.Type) {
 		case dns.TypeA:
-			go dms.insertA(ctx, req, i)
+			dms.insertA(ctx, req, i)
 		case dns.TypeAAAA:
-			go dms.insertAAAA(ctx, req, i)
+			dms.insertAAAA(ctx, req, i)
 		case dns.TypePTR:
-			go dms.insertPTR(ctx, req, i)
+			dms.insertPTR(ctx, req, i)
 		case dns.TypeSRV:
-			go dms.insertSRV(ctx, req, i)
+			dms.insertSRV(ctx, req, i)
 		case dns.TypeNS:
-			go dms.insertNS(ctx, req, i)
+			dms.insertNS(ctx, req, i)
 		case dns.TypeMX:
-			go dms.insertMX(ctx, req, i)
+			dms.insertMX(ctx, req, i)
 		case dns.TypeTXT:
-			go dms.insertTXT(ctx, req, i)
+			dms.insertTXT(ctx, req, i)
 		case dns.TypeSPF:
-			go dms.insertSPF(ctx, req, i)
-		default:
-			dms.maxRequests.Release(1)
+			dms.insertSPF(ctx, req, i)
 		}
 	}
 }
@@ -103,18 +106,16 @@ func (dms *DataManagerService) OnASNRequest(ctx context.Context, req *requests.A
 		err := g.InsertInfrastructure(req.ASN, req.Description,
 			req.Address, req.Prefix, req.Source, req.Tag, cfg.UUID.String())
 		if err != nil {
-			bus.Publish(requests.LogTopic,
+			bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 				fmt.Sprintf("%s: %s failed to insert infrastructure data: %v", dms.String(), g, err),
 			)
 		}
 	}
 
-	bus.Publish(requests.SetActiveTopic, dms.String())
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, dms.String())
 }
 
 func (dms *DataManagerService) insertCNAME(ctx context.Context, req *requests.DNSRequest, recidx int) {
-	defer dms.maxRequests.Release(1)
-
 	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
 	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
 	if cfg == nil || bus == nil {
@@ -138,24 +139,23 @@ func (dms *DataManagerService) insertCNAME(ctx context.Context, req *requests.DN
 
 	for _, g := range dms.System().GraphDatabases() {
 		if err := g.InsertCNAME(req.Name, target, req.Source, req.Tag, cfg.UUID.String()); err != nil {
-			bus.Publish(requests.LogTopic, fmt.Sprintf("%s failed to insert CNAME: %v", g, err))
+			bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+				fmt.Sprintf("%s failed to insert CNAME: %v", g, err))
 		}
 	}
 
 	// Important - Allows chained CNAME records to be resolved until an A/AAAA record
-	bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+	bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 		Name:   target,
 		Domain: domain,
 		Tag:    requests.DNS,
 		Source: "DNS",
 	})
 
-	bus.Publish(requests.SetActiveTopic, dms.String())
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, dms.String())
 }
 
 func (dms *DataManagerService) insertA(ctx context.Context, req *requests.DNSRequest, recidx int) {
-	defer dms.maxRequests.Release(1)
-
 	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
 	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
 	if cfg == nil || bus == nil {
@@ -169,23 +169,22 @@ func (dms *DataManagerService) insertA(ctx context.Context, req *requests.DNSReq
 
 	for _, g := range dms.System().GraphDatabases() {
 		if err := g.InsertA(req.Name, addr, req.Source, req.Tag, cfg.UUID.String()); err != nil {
-			bus.Publish(requests.LogTopic, fmt.Sprintf("%s failed to insert A record: %v", g, err))
+			bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+				fmt.Sprintf("%s failed to insert A record: %v", g, err))
 		}
 	}
 
-	bus.Publish(requests.NewAddrTopic, &requests.AddrRequest{
+	bus.Publish(requests.NewAddrTopic, eventbus.PriorityHigh, &requests.AddrRequest{
 		Address: addr,
 		Domain:  req.Domain,
 		Tag:     req.Tag,
 		Source:  req.Source,
 	})
 
-	bus.Publish(requests.SetActiveTopic, dms.String())
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, dms.String())
 }
 
 func (dms *DataManagerService) insertAAAA(ctx context.Context, req *requests.DNSRequest, recidx int) {
-	defer dms.maxRequests.Release(1)
-
 	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
 	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
 	if cfg == nil || bus == nil {
@@ -199,23 +198,22 @@ func (dms *DataManagerService) insertAAAA(ctx context.Context, req *requests.DNS
 
 	for _, g := range dms.System().GraphDatabases() {
 		if err := g.InsertAAAA(req.Name, addr, req.Source, req.Tag, cfg.UUID.String()); err != nil {
-			bus.Publish(requests.LogTopic, fmt.Sprintf("%s failed to insert AAAA record: %v", g, err))
+			bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+				fmt.Sprintf("%s failed to insert AAAA record: %v", g, err))
 		}
 	}
 
-	bus.Publish(requests.NewAddrTopic, &requests.AddrRequest{
+	bus.Publish(requests.NewAddrTopic, eventbus.PriorityHigh, &requests.AddrRequest{
 		Address: addr,
 		Domain:  req.Domain,
 		Tag:     req.Tag,
 		Source:  req.Source,
 	})
 
-	bus.Publish(requests.SetActiveTopic, dms.String())
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, dms.String())
 }
 
 func (dms *DataManagerService) insertPTR(ctx context.Context, req *requests.DNSRequest, recidx int) {
-	defer dms.maxRequests.Release(1)
-
 	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
 	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
 	if cfg == nil || bus == nil {
@@ -235,23 +233,22 @@ func (dms *DataManagerService) insertPTR(ctx context.Context, req *requests.DNSR
 
 	for _, g := range dms.System().GraphDatabases() {
 		if err := g.InsertPTR(req.Name, target, req.Source, req.Tag, cfg.UUID.String()); err != nil {
-			bus.Publish(requests.LogTopic, fmt.Sprintf("%s failed to insert PTR record: %v", g, err))
+			bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+				fmt.Sprintf("%s failed to insert PTR record: %v", g, err))
 		}
 	}
 
-	bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+	bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 		Name:   target,
 		Domain: domain,
 		Tag:    requests.DNS,
 		Source: req.Source,
 	})
 
-	bus.Publish(requests.SetActiveTopic, dms.String())
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, dms.String())
 }
 
 func (dms *DataManagerService) insertSRV(ctx context.Context, req *requests.DNSRequest, recidx int) {
-	defer dms.maxRequests.Release(1)
-
 	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
 	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
 	if cfg == nil || bus == nil {
@@ -266,12 +263,13 @@ func (dms *DataManagerService) insertSRV(ctx context.Context, req *requests.DNSR
 
 	for _, g := range dms.System().GraphDatabases() {
 		if err := g.InsertSRV(req.Name, service, target, req.Source, req.Tag, cfg.UUID.String()); err != nil {
-			bus.Publish(requests.LogTopic, fmt.Sprintf("%s failed to insert SRV record: %v", g, err))
+			bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+				fmt.Sprintf("%s failed to insert SRV record: %v", g, err))
 		}
 	}
 
 	if domain := cfg.WhichDomain(target); domain != "" {
-		bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+		bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 			Name:   target,
 			Domain: domain,
 			Tag:    req.Tag,
@@ -279,12 +277,10 @@ func (dms *DataManagerService) insertSRV(ctx context.Context, req *requests.DNSR
 		})
 	}
 
-	bus.Publish(requests.SetActiveTopic, dms.String())
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, dms.String())
 }
 
 func (dms *DataManagerService) insertNS(ctx context.Context, req *requests.DNSRequest, recidx int) {
-	defer dms.maxRequests.Release(1)
-
 	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
 	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
 	if cfg == nil || bus == nil {
@@ -309,12 +305,13 @@ func (dms *DataManagerService) insertNS(ctx context.Context, req *requests.DNSRe
 
 	for _, g := range dms.System().GraphDatabases() {
 		if err := g.InsertNS(req.Name, target, req.Source, req.Tag, cfg.UUID.String()); err != nil {
-			bus.Publish(requests.LogTopic, fmt.Sprintf("%s failed to insert NS record: %v", g, err))
+			bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+				fmt.Sprintf("%s failed to insert NS record: %v", g, err))
 		}
 	}
 
 	if target != domain {
-		bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+		bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 			Name:   target,
 			Domain: domain,
 			Tag:    requests.DNS,
@@ -322,12 +319,10 @@ func (dms *DataManagerService) insertNS(ctx context.Context, req *requests.DNSRe
 		})
 	}
 
-	bus.Publish(requests.SetActiveTopic, dms.String())
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, dms.String())
 }
 
 func (dms *DataManagerService) insertMX(ctx context.Context, req *requests.DNSRequest, recidx int) {
-	defer dms.maxRequests.Release(1)
-
 	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
 	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
 	if cfg == nil || bus == nil {
@@ -351,12 +346,13 @@ func (dms *DataManagerService) insertMX(ctx context.Context, req *requests.DNSRe
 
 	for _, g := range dms.System().GraphDatabases() {
 		if err := g.InsertMX(req.Name, target, req.Source, req.Tag, cfg.UUID.String()); err != nil {
-			bus.Publish(requests.LogTopic, fmt.Sprintf("%s failed to insert MX record: %v", g, err))
+			bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+				fmt.Sprintf("%s failed to insert MX record: %v", g, err))
 		}
 	}
 
 	if target != domain {
-		bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+		bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 			Name:   target,
 			Domain: domain,
 			Tag:    requests.DNS,
@@ -364,12 +360,10 @@ func (dms *DataManagerService) insertMX(ctx context.Context, req *requests.DNSRe
 		})
 	}
 
-	bus.Publish(requests.SetActiveTopic, dms.String())
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, dms.String())
 }
 
 func (dms *DataManagerService) insertTXT(ctx context.Context, req *requests.DNSRequest, recidx int) {
-	defer dms.maxRequests.Release(1)
-
 	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
 	if cfg == nil {
 		return
@@ -383,8 +377,6 @@ func (dms *DataManagerService) insertTXT(ctx context.Context, req *requests.DNSR
 }
 
 func (dms *DataManagerService) insertSPF(ctx context.Context, req *requests.DNSRequest, recidx int) {
-	defer dms.maxRequests.Release(1)
-
 	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
 	if cfg == nil {
 		return
@@ -406,7 +398,7 @@ func (dms *DataManagerService) findNamesAndAddresses(ctx context.Context, data, 
 
 	ipre := regexp.MustCompile(net.IPv4RE)
 	for _, ip := range ipre.FindAllString(data, -1) {
-		bus.Publish(requests.NewAddrTopic, &requests.AddrRequest{
+		bus.Publish(requests.NewAddrTopic, eventbus.PriorityHigh, &requests.AddrRequest{
 			Address: ip,
 			Domain:  domain,
 			Tag:     requests.DNS,
@@ -425,7 +417,7 @@ func (dms *DataManagerService) findNamesAndAddresses(ctx context.Context, data, 
 			continue
 		}
 
-		bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+		bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 			Name:   name,
 			Domain: domain,
 			Tag:    requests.DNS,
@@ -433,5 +425,5 @@ func (dms *DataManagerService) findNamesAndAddresses(ctx context.Context, data, 
 		})
 	}
 
-	bus.Publish(requests.SetActiveTopic, dms.String())
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, dms.String())
 }

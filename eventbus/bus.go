@@ -9,6 +9,13 @@ import (
 	"github.com/OWASP/Amass/v3/semaphore"
 )
 
+// The priority levels for event bus messages.
+const (
+	PriorityLow int = iota
+	PriorityHigh
+	PriorityCritical
+)
+
 type pubReq struct {
 	Topic string
 	Args  []reflect.Value
@@ -19,22 +26,33 @@ type EventBus struct {
 	sync.Mutex
 	topics map[string][]reflect.Value
 	max    semaphore.Semaphore
-	queue  *queue.Queue
+	queues []*queue.Queue
 	done   chan struct{}
 	closed sync.Once
 }
 
 // NewEventBus initializes and returns an EventBus object.
-func NewEventBus() *EventBus {
+func NewEventBus(max int) *EventBus {
 	eb := &EventBus{
 		topics: make(map[string][]reflect.Value),
-		max:    semaphore.NewSimpleSemaphore(50000),
-		queue:  new(queue.Queue),
-		done:   make(chan struct{}, 2),
+		max:    semaphore.NewSimpleSemaphore(max),
+		queues: []*queue.Queue{
+			new(queue.Queue),
+			new(queue.Queue),
+			new(queue.Queue),
+		},
+		done: make(chan struct{}, 2),
 	}
 
 	go eb.processRequests()
 	return eb
+}
+
+// Stop prevents any additional requests from being sent.
+func (eb *EventBus) Stop() {
+	eb.closed.Do(func() {
+		close(eb.done)
+	})
 }
 
 // Subscribe registers callback to be executed for all requests on the channel.
@@ -68,15 +86,15 @@ func (eb *EventBus) Unsubscribe(topic string, fn interface{}) {
 }
 
 // Publish sends req on the channel labeled with name.
-func (eb *EventBus) Publish(topic string, args ...interface{}) {
-	if topic != "" {
+func (eb *EventBus) Publish(topic string, priority int, args ...interface{}) {
+	if topic != "" && priority >= PriorityLow && priority <= PriorityCritical {
 		passedArgs := make([]reflect.Value, 0)
 
 		for _, arg := range args {
 			passedArgs = append(passedArgs, reflect.ValueOf(arg))
 		}
 
-		eb.queue.Append(&pubReq{
+		eb.queues[priority].Append(&pubReq{
 			Topic: topic,
 			Args:  passedArgs,
 		})
@@ -93,8 +111,17 @@ func (eb *EventBus) processRequests() {
 		case <-eb.done:
 			return
 		default:
-			element, ok := eb.queue.Next()
-			if !ok {
+			var found bool
+			var element interface{}
+			// Pull from the critical queue first
+			for p := PriorityCritical; p >= PriorityLow; p-- {
+				element, found = eb.queues[p].Next()
+				if found {
+					break
+				}
+			}
+
+			if !found {
 				if curIdx < maxIdx {
 					curIdx++
 				}
@@ -108,26 +135,20 @@ func (eb *EventBus) processRequests() {
 			eb.Lock()
 			callbacks, found := eb.topics[p.Topic]
 			eb.Unlock()
+			if !found {
+				continue
+			}
 
-			if found {
+			for _, cb := range callbacks {
 				eb.max.Acquire(1)
-				go eb.executeCallbacks(callbacks, p.Args)
+				go eb.execute(cb, p.Args)
 			}
 		}
 	}
 }
 
-func (eb *EventBus) executeCallbacks(callbacks, args []reflect.Value) {
+func (eb *EventBus) execute(callback reflect.Value, args []reflect.Value) {
 	defer eb.max.Release(1)
 
-	for _, cb := range callbacks {
-		go cb.Call(args)
-	}
-}
-
-// Stop prevents any additional requests from being sent.
-func (eb *EventBus) Stop() {
-	eb.closed.Do(func() {
-		close(eb.done)
-	})
+	callback.Call(args)
 }

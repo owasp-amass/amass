@@ -63,13 +63,14 @@ func (m *Mnemonic) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 	}
 
 	m.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, m.String())
-	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", m.String(), req.Domain))
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, m.String())
+	bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+		fmt.Sprintf("Querying %s for %s subdomains", m.String(), req.Domain))
 
 	url := m.getDNSURL(req.Domain)
 	page, err := http.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", m.String(), url, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", m.String(), url, err))
 		return
 	}
 
@@ -99,7 +100,7 @@ func (m *Mnemonic) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 	}
 
 	for name := range names {
-		bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+		bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 			Name:   name,
 			Domain: req.Domain,
 			Tag:    m.SourceType,
@@ -109,7 +110,7 @@ func (m *Mnemonic) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 
 	for ip := range ips {
 		// Inform the Address Service of this finding
-		bus.Publish(requests.NewAddrTopic, &requests.AddrRequest{
+		bus.Publish(requests.NewAddrTopic, eventbus.PriorityHigh, &requests.AddrRequest{
 			Address: ip,
 			Domain:  req.Domain,
 			Tag:     m.SourceType,

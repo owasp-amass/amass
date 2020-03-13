@@ -63,12 +63,12 @@ func (a *ArchiveIt) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) 
 
 	names, err := crawl(ctx, a.baseURL, a.domain, req.Name, req.Domain)
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %v", a.String(), err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %v", a.String(), err))
 		return
 	}
 
 	for _, name := range names {
-		bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+		bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 			Name:   cleanName(name),
 			Domain: req.Domain,
 			Tag:    a.SourceType,

@@ -40,7 +40,6 @@ func NewLocalSystem(c *config.Config) (*LocalSystem, error) {
 
 	pool := resolvers.SetupResolverPool(
 		c.Resolvers,
-		c.ScoreResolvers,
 		c.MonitorResolverRate,
 		c.Log,
 	)

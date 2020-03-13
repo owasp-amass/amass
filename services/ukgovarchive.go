@@ -63,12 +63,12 @@ func (u *UKGovArchive) OnDNSRequest(ctx context.Context, req *requests.DNSReques
 
 	names, err := crawl(ctx, u.baseURL, u.domain, req.Name, req.Domain)
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %v", u.String(), err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %v", u.String(), err))
 		return
 	}
 
 	for _, name := range names {
-		bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+		bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 			Name:   cleanName(name),
 			Domain: req.Domain,
 			Tag:    u.SourceType,

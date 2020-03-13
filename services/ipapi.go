@@ -54,13 +54,13 @@ func (i *IPAPI) OnAddrRequest(ctx context.Context, req *requests.AddrRequest) {
 	}
 
 	i.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, i.String())
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, i.String())
 
 	url := i.restAddrURL(req.Address)
 	headers := map[string]string{"Content-Type": "application/json"}
 	page, err := http.RequestWebPage(url, nil, headers, "", "")
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", i.String(), url, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", i.String(), url, err))
 		return
 	}
 	// Extract the IP address information from the REST API results

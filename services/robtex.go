@@ -67,7 +67,7 @@ func (r *Robtex) OnASNRequest(ctx context.Context, req *requests.ASNRequest) {
 	}
 
 	r.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, r.String())
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, r.String())
 
 	if req.Address != "" {
 		r.executeASNAddrQuery(ctx, req.Address)
@@ -91,13 +91,14 @@ func (r *Robtex) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 	}
 
 	r.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, r.String())
-	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", r.String(), req.Domain))
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, r.String())
+	bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+		fmt.Sprintf("Querying %s for %s subdomains", r.String(), req.Domain))
 
 	url := "https://freeapi.robtex.com/pdns/forward/" + req.Domain
 	page, err := http.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", r.String(), url, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", r.String(), url, err))
 		return
 	}
 
@@ -105,17 +106,8 @@ func (r *Robtex) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 	for _, line := range r.parseDNSJSON(page) {
 		if line.Type == "A" {
 			ips.Insert(line.Data)
-			/*
-				// Inform the Address Service of this finding
-				bus.Publish(requests.NewAddrTopic, &requests.AddrRequest{
-					Address: line.Data,
-					Domain:  req.Domain,
-					Tag:     r.Type(),
-					Source:  r.String(),
-				})
-			*/
 		} else if line.Type == "NS" || line.Type == "MX" {
-			bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+			bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 				Name:   strings.Trim(line.Data, "."),
 				Domain: req.Domain,
 				Tag:    r.Type(),
@@ -131,12 +123,13 @@ loop:
 			return
 		default:
 			r.CheckRateLimit()
-			bus.Publish(requests.SetActiveTopic, r.String())
+			bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, r.String())
 
 			url = "https://freeapi.robtex.com/pdns/reverse/" + ip
 			pdns, err := http.RequestWebPage(url, nil, nil, "", "")
 			if err != nil {
-				bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", r.String(), url, err))
+				bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+					fmt.Sprintf("%s: %s: %v", r.String(), url, err))
 				continue loop
 			}
 
@@ -144,7 +137,7 @@ loop:
 				n := strings.Trim(line.Name, ".")
 
 				if d := cfg.WhichDomain(n); d != "" {
-					bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+					bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 						Name:   n,
 						Domain: d,
 						Tag:    r.Type(),
@@ -195,7 +188,7 @@ func (r *Robtex) executeASNQuery(ctx context.Context, asn int) {
 	}
 
 	r.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, r.String())
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, r.String())
 
 	req := r.origin(ctx, ipnet.IP.String())
 	if req == nil {
@@ -203,7 +196,7 @@ func (r *Robtex) executeASNQuery(ctx context.Context, asn int) {
 	}
 
 	req.Netblocks.Union(blocks)
-	bus.Publish(requests.NewASNTopic, req)
+	bus.Publish(requests.NewASNTopic, eventbus.PriorityHigh, req)
 }
 
 func (r *Robtex) executeASNAddrQuery(ctx context.Context, addr string) {
@@ -219,7 +212,7 @@ func (r *Robtex) executeASNAddrQuery(ctx context.Context, addr string) {
 	}
 
 	req.Netblocks.Union(r.netblocks(ctx, req.ASN))
-	bus.Publish(requests.NewASNTopic, req)
+	bus.Publish(requests.NewASNTopic, eventbus.PriorityHigh, req)
 }
 
 func (r *Robtex) origin(ctx context.Context, addr string) *requests.ASNRequest {
@@ -234,12 +227,12 @@ func (r *Robtex) origin(ctx context.Context, addr string) *requests.ASNRequest {
 	}
 
 	r.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, r.String())
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, r.String())
 
 	url := "https://freeapi.robtex.com/ipquery/" + addr
 	page, err := http.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", r.String(), url, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", r.String(), url, err))
 		return nil
 	}
 	// Extract the network information
@@ -269,7 +262,7 @@ func (r *Robtex) origin(ctx context.Context, addr string) *requests.ASNRequest {
 
 	for _, n := range ipinfo.ActiveDNS {
 		if cfg.IsDomainInScope(n.Name) {
-			bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+			bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 				Name:   n.Name,
 				Domain: r.System().Pool().SubdomainToDomain(n.Name),
 				Tag:    r.Type(),
@@ -280,7 +273,7 @@ func (r *Robtex) origin(ctx context.Context, addr string) *requests.ASNRequest {
 
 	for _, n := range ipinfo.ActiveDNSHistory {
 		if cfg.IsDomainInScope(n.Name) {
-			bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+			bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 				Name:   n.Name,
 				Domain: r.System().Pool().SubdomainToDomain(n.Name),
 				Tag:    r.Type(),
@@ -291,7 +284,7 @@ func (r *Robtex) origin(ctx context.Context, addr string) *requests.ASNRequest {
 
 	for _, n := range ipinfo.PassiveDNS {
 		if cfg.IsDomainInScope(n.Name) {
-			bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+			bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 				Name:   n.Name,
 				Domain: r.System().Pool().SubdomainToDomain(n.Name),
 				Tag:    r.Type(),
@@ -302,7 +295,7 @@ func (r *Robtex) origin(ctx context.Context, addr string) *requests.ASNRequest {
 
 	for _, n := range ipinfo.PassiveDNSHistory {
 		if cfg.IsDomainInScope(n.Name) {
-			bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+			bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 				Name:   n.Name,
 				Domain: r.System().Pool().SubdomainToDomain(n.Name),
 				Tag:    r.Type(),
@@ -312,7 +305,7 @@ func (r *Robtex) origin(ctx context.Context, addr string) *requests.ASNRequest {
 	}
 
 	if ipinfo.ASN == 0 {
-		bus.Publish(requests.LogTopic,
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: %s: Failed to parse the origin response: %v", r.String(), url, err),
 		)
 		return nil
@@ -346,12 +339,12 @@ func (r *Robtex) netblocks(ctx context.Context, asn int) stringset.Set {
 	}
 
 	r.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, r.String())
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, r.String())
 
 	url := "https://freeapi.robtex.com/asquery/" + strconv.Itoa(asn)
 	page, err := http.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", r.String(), url, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", r.String(), url, err))
 		return netblocks
 	}
 	// Extract the network information
@@ -370,7 +363,7 @@ func (r *Robtex) netblocks(ctx context.Context, asn int) stringset.Set {
 	}
 
 	if len(netblocks) == 0 {
-		bus.Publish(requests.LogTopic,
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: Failed to acquire netblocks for ASN %d", r.String(), asn),
 		)
 	}

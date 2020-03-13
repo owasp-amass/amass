@@ -52,7 +52,7 @@ type Collection struct {
 func NewCollection(sys services.System) *Collection {
 	c := &Collection{
 		Config: config.NewConfig(),
-		Bus:    eb.NewEventBus(),
+		Bus:    eb.NewEventBus(1000),
 		Sys:    sys,
 		srcs:   stringset.New(),
 		Output: make(chan *requests.Output, 100),

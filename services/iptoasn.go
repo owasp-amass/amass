@@ -57,16 +57,16 @@ func (i *IPToASN) OnASNRequest(ctx context.Context, req *requests.ASNRequest) {
 	}
 
 	i.CheckRateLimit()
-	//bus.Publish(requests.SetActiveTopic, i.String())
 
 	r, err := i.getASInfo(req.Address)
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", i.String(), req.Address, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+			fmt.Sprintf("%s: %s: %v", i.String(), req.Address, err))
 		return
 	}
 
 	r.Address = req.Address
-	bus.Publish(requests.NewASNTopic, r)
+	bus.Publish(requests.NewASNTopic, eventbus.PriorityHigh, r)
 }
 
 func (i *IPToASN) getASInfo(addr string) (*requests.ASNRequest, error) {

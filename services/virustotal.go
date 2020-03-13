@@ -69,8 +69,9 @@ func (v *VirusTotal) OnDNSRequest(ctx context.Context, req *requests.DNSRequest)
 	}
 
 	v.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, v.String())
-	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", v.String(), req.Domain))
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, v.String())
+	bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+		fmt.Sprintf("Querying %s for %s subdomains", v.String(), req.Domain))
 
 	if v.haveAPIKey {
 		v.apiQuery(ctx, req.Domain)
@@ -96,7 +97,7 @@ func (v *VirusTotal) apiQuery(ctx context.Context, domain string) {
 	headers := map[string]string{"Content-Type": "application/json"}
 	page, err := http.RequestWebPage(url, nil, headers, "", "")
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", v.String(), url, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", v.String(), url, err))
 		return
 	}
 
@@ -114,7 +115,7 @@ func (v *VirusTotal) apiQuery(ctx context.Context, domain string) {
 	}
 
 	if m.ResponseCode != 1 {
-		bus.Publish(requests.LogTopic,
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: %s: Response code %d: %s", v.String(), url, m.ResponseCode, m.Message),
 		)
 		return
@@ -124,7 +125,7 @@ func (v *VirusTotal) apiQuery(ctx context.Context, domain string) {
 		s := strings.ToLower(sub)
 
 		if re.MatchString(s) {
-			bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+			bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 				Name:   s,
 				Domain: domain,
 				Tag:    v.SourceType,
@@ -134,7 +135,7 @@ func (v *VirusTotal) apiQuery(ctx context.Context, domain string) {
 	}
 
 	for _, res := range m.Resolutions {
-		bus.Publish(requests.NewAddrTopic, &requests.AddrRequest{
+		bus.Publish(requests.NewAddrTopic, eventbus.PriorityHigh, &requests.AddrRequest{
 			Address: res.IP,
 			Domain:  domain,
 			Tag:     v.SourceType,
@@ -166,7 +167,7 @@ func (v *VirusTotal) regularQuery(ctx context.Context, domain string) {
 	headers := map[string]string{"Content-Type": "application/json"}
 	page, err := http.RequestWebPage(url, nil, headers, "", "")
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", v.String(), url, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", v.String(), url, err))
 		return
 	}
 
@@ -183,7 +184,7 @@ func (v *VirusTotal) regularQuery(ctx context.Context, domain string) {
 
 	for _, data := range m.Data {
 		if data.Type == "domain" && re.MatchString(data.ID) {
-			bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+			bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 				Name:   data.ID,
 				Domain: domain,
 				Tag:    v.SourceType,

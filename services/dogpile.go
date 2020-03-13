@@ -62,7 +62,8 @@ func (d *Dogpile) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 	if re == nil {
 		return
 	}
-	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", d.String(), req.Domain))
+	bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+		fmt.Sprintf("Querying %s for %s subdomains", d.String(), req.Domain))
 
 	num := d.limit / d.quantity
 	for i := 0; i < num; i++ {
@@ -71,17 +72,17 @@ func (d *Dogpile) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 			return
 		default:
 			d.CheckRateLimit()
-			bus.Publish(requests.SetActiveTopic, d.String())
+			bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, d.String())
 
 			u := d.urlByPageNum(req.Domain, i)
 			page, err := http.RequestWebPage(u, nil, nil, "", "")
 			if err != nil {
-				bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", d.String(), u, err))
+				bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", d.String(), u, err))
 				return
 			}
 
 			for _, sd := range re.FindAllString(page, -1) {
-				bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+				bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 					Name:   cleanName(sd),
 					Domain: req.Domain,
 					Tag:    d.SourceType,

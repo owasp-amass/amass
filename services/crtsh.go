@@ -66,7 +66,8 @@ func (c *Crtsh) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 	}
 
 	c.CheckRateLimit()
-	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", c.String(), req.Domain))
+	bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+		fmt.Sprintf("Querying %s for %s subdomains", c.String(), req.Domain))
 
 	// Fall back to scraping the web page if the database connection failed
 	if !c.haveConnection {
@@ -94,11 +95,12 @@ func (c *Crtsh) executeQuery(ctx context.Context, domain string) {
 		WHERE reverse(lower(ci.NAME_VALUE)) LIKE reverse(lower($1))
 		ORDER BY ci.NAME_VALUE`, pattern)
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: Query pattern %s: %v", c.String(), pattern, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+			fmt.Sprintf("%s: Query pattern %s: %v", c.String(), pattern, err))
 		return
 	}
 
-	bus.Publish(requests.SetActiveTopic, c.String())
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, c.String())
 
 	// Extract the subdomain names from the results
 	names := stringset.New()
@@ -107,7 +109,7 @@ func (c *Crtsh) executeQuery(ctx context.Context, domain string) {
 	}
 
 	for name := range names {
-		bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+		bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 			Name:   name,
 			Domain: domain,
 			Tag:    c.SourceType,
@@ -125,11 +127,11 @@ func (c *Crtsh) scrape(ctx context.Context, domain string) {
 	url := c.getURL(domain)
 	page, err := http.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", c.String(), url, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", c.String(), url, err))
 		return
 	}
 
-	bus.Publish(requests.SetActiveTopic, c.String())
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, c.String())
 
 	// Extract the subdomain names from the results
 	var results []struct {
@@ -139,7 +141,7 @@ func (c *Crtsh) scrape(ctx context.Context, domain string) {
 		return
 	}
 	for _, line := range results {
-		bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+		bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 			Name:   line.Name,
 			Domain: domain,
 			Tag:    c.SourceType,

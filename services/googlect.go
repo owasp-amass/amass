@@ -66,11 +66,12 @@ func (g *GoogleCT) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 	if re == nil {
 		return
 	}
-	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", g.String(), req.Domain))
+	bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+		fmt.Sprintf("Querying %s for %s subdomains", g.String(), req.Domain))
 
 	var token string
 	for {
-		bus.Publish(requests.SetActiveTopic, g.String())
+		bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, g.String())
 
 		u := g.getURL(req.Domain, token)
 		headers := map[string]string{
@@ -79,12 +80,12 @@ func (g *GoogleCT) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 		}
 		page, err := http.RequestWebPage(u, nil, headers, "", "")
 		if err != nil {
-			bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", g.String(), u, err))
+			bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", g.String(), u, err))
 			break
 		}
 
 		for _, name := range re.FindAllString(page, -1) {
-			bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+			bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 				Name:   name,
 				Domain: req.Domain,
 				Tag:    g.SourceType,

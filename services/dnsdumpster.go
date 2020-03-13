@@ -62,33 +62,35 @@ func (d *DNSDumpster) OnDNSRequest(ctx context.Context, req *requests.DNSRequest
 	}
 
 	d.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, d.String())
-	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", d.String(), req.Domain))
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, d.String())
+	bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+		fmt.Sprintf("Querying %s for %s subdomains", d.String(), req.Domain))
 
 	u := "https://dnsdumpster.com/"
 	page, err := amasshttp.RequestWebPage(u, nil, nil, "", "")
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", d.String(), u, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", d.String(), u, err))
 		return
 	}
 
 	token := d.getCSRFToken(page)
 	if token == "" {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: Failed to obtain the CSRF token", d.String(), u))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+			fmt.Sprintf("%s: %s: Failed to obtain the CSRF token", d.String(), u))
 		return
 	}
 
 	d.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, d.String())
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, d.String())
 
 	page, err = d.postForm(ctx, token, req.Domain)
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", d.String(), u, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", d.String(), u, err))
 		return
 	}
 
 	for _, sd := range re.FindAllString(page, -1) {
-		bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+		bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 			Name:   cleanName(sd),
 			Domain: req.Domain,
 			Tag:    d.SourceType,
@@ -126,7 +128,8 @@ func (d *DNSDumpster) postForm(ctx context.Context, token, domain string) (strin
 
 	req, err := http.NewRequest("POST", "https://dnsdumpster.com/", strings.NewReader(params.Encode()))
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: Failed to setup the POST request: %v", d.String(), err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+			fmt.Sprintf("%s: Failed to setup the POST request: %v", d.String(), err))
 		return "", err
 	}
 	// The CSRF token needs to be sent as a cookie
@@ -146,7 +149,8 @@ func (d *DNSDumpster) postForm(ctx context.Context, token, domain string) (strin
 
 	resp, err := client.Do(req)
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: The POST request failed: %v", d.String(), err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+			fmt.Sprintf("%s: The POST request failed: %v", d.String(), err))
 		return "", err
 	}
 	// Now, grab the entire page
