@@ -8,12 +8,17 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/OWASP/Amass/v3/eventbus"
 	amassnet "github.com/OWASP/Amass/v3/net"
 	amassdns "github.com/OWASP/Amass/v3/net/dns"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/resolvers"
 	"github.com/miekg/dns"
 )
+
+func (e *Enumeration) newNECallback(req *requests.DNSRequest) {
+	go e.newNameEvent(req)
+}
 
 func (e *Enumeration) newNameEvent(req *requests.DNSRequest) {
 	if req == nil || req.Name == "" || req.Domain == "" {
@@ -33,7 +38,7 @@ func (e *Enumeration) newNameEvent(req *requests.DNSRequest) {
 	if e.Config.Passive {
 		e.updateLastActive("enum")
 		if e.Config.IsDomainInScope(req.Name) {
-			e.Bus.Publish(requests.OutputTopic, &requests.Output{
+			e.Bus.Publish(requests.OutputTopic, eventbus.PriorityLow, &requests.Output{
 				Name:   req.Name,
 				Domain: req.Domain,
 				Tag:    req.Tag,
@@ -43,7 +48,11 @@ func (e *Enumeration) newNameEvent(req *requests.DNSRequest) {
 		return
 	}
 
-	e.Bus.Publish(requests.ResolveNameTopic, e.ctx, req)
+	e.Bus.Publish(requests.ResolveNameTopic, eventbus.PriorityLow, e.ctx, req)
+}
+
+func (e *Enumeration) newRNCallback(req *requests.DNSRequest) {
+	go e.newResolvedName(req)
 }
 
 func (e *Enumeration) newResolvedName(req *requests.DNSRequest) {
@@ -149,7 +158,7 @@ func (e *Enumeration) checkSubdomain(req *requests.DNSRequest) {
 	}
 	times := e.timesForSubdomain(sub)
 
-	e.Bus.Publish(requests.SubDiscoveredTopic, e.ctx, r, times)
+	e.Bus.Publish(requests.SubDiscoveredTopic, eventbus.PriorityHigh, e.ctx, r, times)
 	// Queue the proper subdomain for future brute forcing
 	if e.Config.BruteForcing && e.Config.Recursive &&
 		e.Config.MinForRecursive > 0 && e.Config.MinForRecursive == times {

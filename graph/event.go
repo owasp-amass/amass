@@ -102,8 +102,8 @@ func (g *Graph) AddNodeToEvent(node db.Node, source, tag, eventID string) error 
 	return nil
 }
 
-func (g *Graph) inEventScope(node db.Node, uuid string) bool {
-	edges, err := g.db.ReadInEdges(node)
+func (g *Graph) inEventScope(node db.Node, uuid string, predicates ...string) bool {
+	edges, err := g.db.ReadInEdges(node, predicates...)
 	if err != nil {
 		return false
 	}

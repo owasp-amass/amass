@@ -29,18 +29,18 @@ const (
 
 // Index values into the Resolver.Stats map.
 const (
-	QueryAttempts  = 64
-	QueryTimeout   = 65
-	QueryRTT       = 66
-	QueryCompleted = 67
+	QueryAttempts    = 64
+	QueryTimeouts    = 65
+	QueryRTT         = 66
+	QueryCompletions = 67
 )
 
 // NotAvailableRcode is our made up rcode to indicate an availability problem.
 const NotAvailableRcode = 256
 
 const (
-	defaultWindowDuration = 2 * time.Second
-	defaultConnRotation   = time.Minute
+	defaultWindowDuration = 500 * time.Millisecond
+	defaultConnRotation   = 30 * time.Second
 )
 
 // ResolveError contains the Rcode returned during the DNS query.
@@ -54,6 +54,7 @@ func (e *ResolveError) Error() string {
 }
 
 type resolveRequest struct {
+	ID        uint16
 	Timestamp time.Time
 	Name      string
 	Qtype     uint16
@@ -124,17 +125,17 @@ type BaseResolver struct {
 	CurrentConn    net.Conn
 	LastConn       net.Conn
 	xchgQueues     []*queue.Queue
-	xchgChan       chan *resolveRequest
-	xchgsLock      sync.Mutex
+	xchgsLock      sync.RWMutex
 	xchgs          map[uint16]*resolveRequest
+	timeoutSlice   []uint16
+	timeoutsLock   sync.Mutex
 	address        string
 	port           string
 	stats          map[int]int64
 	attempts       int64
 	timeouts       int64
-	avgrtt         int64
 	numrtt         int64
-	stopLock       sync.Mutex
+	stopLock       sync.RWMutex
 	stopped        bool
 }
 
@@ -155,17 +156,18 @@ func NewBaseResolver(addr string) *BaseResolver {
 			new(queue.Queue),
 			new(queue.Queue),
 		},
-		xchgChan: make(chan *resolveRequest, 2000),
-		xchgs:    make(map[uint16]*resolveRequest),
-		address:  addr,
-		port:     port,
-		stats:    make(map[int]int64),
+		xchgs:   make(map[uint16]*resolveRequest),
+		address: addr,
+		port:    port,
+		stats:   make(map[int]int64),
 	}
 
 	r.rotateConnections()
-	go r.fillXchgChan()
+	go r.sendQueries()
 	go r.checkForTimeouts()
-	go r.exchanges()
+	go r.readMessages(false)
+	go r.readMessages(true)
+	go r.periodicRotations()
 	return r
 }
 
@@ -176,9 +178,9 @@ func (r *BaseResolver) Stop() error {
 	}
 
 	r.stopLock.Lock()
-	defer r.stopLock.Unlock()
-
 	r.stopped = true
+	r.stopLock.Unlock()
+
 	close(r.Done)
 	if r.CurrentConn != nil {
 		r.CurrentConn.Close()
@@ -191,8 +193,8 @@ func (r *BaseResolver) Stop() error {
 
 // IsStopped implements the Resolver interface.
 func (r *BaseResolver) IsStopped() bool {
-	r.stopLock.Lock()
-	defer r.stopLock.Unlock()
+	r.stopLock.RLock()
+	defer r.stopLock.RUnlock()
 
 	return r.stopped
 }
@@ -242,7 +244,6 @@ func (r *BaseResolver) WipeStats() {
 
 	r.attempts = 0
 	r.timeouts = 0
-	r.avgrtt = 0
 	r.numrtt = 0
 	for k := range r.stats {
 		r.stats[k] = 0
@@ -272,6 +273,20 @@ func (r *BaseResolver) SubdomainToDomain(name string) string {
 
 func (r *BaseResolver) returnRequest(req *resolveRequest, res *resolveResult) {
 	req.Result <- res
+}
+
+func (r *BaseResolver) periodicRotations() {
+	t := time.NewTicker(defaultConnRotation)
+	defer t.Stop()
+
+	for {
+		select {
+		case <-r.Done:
+			return
+		case <-t.C:
+			r.rotateConnections()
+		}
+	}
 }
 
 func (r *BaseResolver) rotateConnections() {
@@ -336,7 +351,7 @@ func (r *BaseResolver) Resolve(ctx context.Context, name, qtype string, priority
 		}
 	}
 
-	resultChan := make(chan *resolveResult)
+	resultChan := make(chan *resolveResult, 2)
 	// Use the correct queue based on the priority
 	r.xchgQueues[priority].Append(&resolveRequest{
 		Name:   name,
@@ -346,14 +361,14 @@ func (r *BaseResolver) Resolve(ctx context.Context, name, qtype string, priority
 	result := <-resultChan
 
 	r.Lock()
-	r.stats[QueryCompleted] = r.stats[QueryCompleted] + 1
+	r.stats[QueryCompletions] = r.stats[QueryCompletions] + 1
 	r.Unlock()
 
 	// Report the completion of the DNS query
 	if b := ctx.Value(requests.ContextEventBus); b != nil {
 		bus := b.(*eventbus.EventBus)
 
-		bus.Publish(requests.ResolveCompleted, time.Now())
+		bus.Publish(requests.ResolveCompleted, eventbus.PriorityCritical, time.Now())
 	}
 
 	return result.Records, result.Again, result.Err
@@ -361,11 +376,8 @@ func (r *BaseResolver) Resolve(ctx context.Context, name, qtype string, priority
 
 // Reverse is performs reverse DNS queries using the Resolver.
 func (r *BaseResolver) Reverse(ctx context.Context, addr string, priority int) (string, string, error) {
-	if avail, err := r.Available(); !avail {
-		return "", "", err
-	}
-
 	var name, ptr string
+
 	if ip := net.ParseIP(addr); amassnet.IsIPv4(ip) {
 		ptr = amassdns.ReverseIP(addr) + ".in-addr.arpa"
 	} else if amassnet.IsIPv6(ip) {
@@ -403,36 +415,6 @@ func (r *BaseResolver) Reverse(ctx context.Context, addr string, priority int) (
 	return ptr, name, err
 }
 
-func (r *BaseResolver) getID() uint16 {
-	r.xchgsLock.Lock()
-	defer r.xchgsLock.Unlock()
-
-	var id uint16
-	for {
-		id = dns.Id()
-		if _, found := r.xchgs[id]; !found {
-			r.xchgs[id] = new(resolveRequest)
-			break
-		}
-	}
-	return id
-}
-
-func (r *BaseResolver) queueRequest(id uint16, req *resolveRequest) {
-	r.xchgsLock.Lock()
-	r.xchgs[id] = req
-	r.xchgsLock.Unlock()
-}
-
-func (r *BaseResolver) pullRequest(id uint16) *resolveRequest {
-	r.xchgsLock.Lock()
-	defer r.xchgsLock.Unlock()
-
-	res := r.xchgs[id]
-	delete(r.xchgs, id)
-	return res
-}
-
 func (r *BaseResolver) checkForTimeouts() {
 	t := time.NewTicker(r.WindowDuration)
 	defer t.Stop()
@@ -442,89 +424,78 @@ func (r *BaseResolver) checkForTimeouts() {
 		case <-r.Done:
 			return
 		case <-t.C:
-			now := time.Now()
-			var timeouts []uint16
+			var count int
+			var removals []uint16
 
-			// Discover requests that have timed out
-			r.xchgsLock.Lock()
-			for id, req := range r.xchgs {
-				if req.Name != "" && now.After(req.Timestamp.Add(r.WindowDuration)) {
-					timeouts = append(timeouts, id)
-				}
-			}
-			r.xchgsLock.Unlock()
-			// Remove the timed out requests from the map
-			for _, id := range timeouts {
-				if req := r.pullRequest(id); req != nil {
+			r.timeoutsLock.Lock()
+			// Discover requests that have timed out and remove them from the map
+			for _, id := range r.timeoutSlice {
+				if req := r.pullRequestAfterTimeout(id, r.WindowDuration); req != nil {
+					count++
+					removals = append(removals, id)
 					estr := fmt.Sprintf("DNS query on resolver %s, for %s type %d timed out",
 						r.address, req.Name, req.Qtype)
 					r.returnRequest(req, makeResolveResult(nil, true, estr, 100))
 				}
 			}
+			r.timeoutsLock.Unlock()
+
+			// Remove elements that timed out from the requests slice
+			for _, id := range removals {
+				r.delTimeoutFromSlice(id)
+			}
 			// Complete handling of the timed out requests
-			r.updateTimeouts(len(timeouts))
+			r.updateTimeouts(count)
 		}
 	}
 }
 
-func (r *BaseResolver) fillXchgChan() {
+func (r *BaseResolver) sendQueries() {
 	curIdx := 0
 	maxIdx := 6
 	delays := []int{5, 10, 15, 25, 50, 75, 100}
-loop:
+
 	for {
 		select {
 		case <-r.Done:
 			return
 		default:
+			var sent bool
 			// Pull from the critical queue first
-			for i := PriorityCritical; i >= PriorityLow; i-- {
-				if element, ok := r.xchgQueues[i].Next(); ok {
+			for count, p := 0, PriorityCritical; p >= PriorityLow && count < 100; p-- {
+				for ; count < 100; count++ {
+					element, found := r.xchgQueues[p].Next()
+					if !found {
+						break
+					}
+
 					curIdx = 0
-					r.xchgChan <- element.(*resolveRequest)
-					continue loop
+					sent = true
+					r.writeMessage(element.(*resolveRequest))
 				}
 			}
 
-			time.Sleep(time.Duration(delays[curIdx]) * time.Millisecond)
-			if curIdx < maxIdx {
-				curIdx++
+			if !sent {
+				time.Sleep(time.Duration(delays[curIdx]) * time.Millisecond)
+				if curIdx < maxIdx {
+					curIdx++
+				}
 			}
-		}
-	}
-}
-
-type message struct {
-	Received time.Time
-	Msg      *dns.Msg
-}
-
-// exchanges encapsulates miekg/dns usage.
-func (r *BaseResolver) exchanges() {
-	msgs := make(chan *message, 2000)
-
-	go r.readMessages(msgs, false)
-	go r.readMessages(msgs, true)
-
-	t := time.NewTicker(defaultConnRotation)
-	defer t.Stop()
-	for {
-		select {
-		case <-r.Done:
-			return
-		case <-t.C:
-			go r.rotateConnections()
-		case read := <-msgs:
-			go r.processMessage(read)
-		case req := <-r.xchgChan:
-			go r.writeMessage(req)
 		}
 	}
 }
 
 func (r *BaseResolver) writeMessage(req *resolveRequest) {
-	co := r.currentConnection()
+	var co *dns.Conn
 	msg := queryMessage(r.getID(), req.Name, req.Qtype)
+
+	for {
+		co = r.currentConnection()
+		if co != nil {
+			break
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
 
 	co.SetWriteDeadline(time.Now().Add(r.WindowDuration))
 	if err := co.WriteMsg(msg); err != nil {
@@ -534,12 +505,11 @@ func (r *BaseResolver) writeMessage(req *resolveRequest) {
 		return
 	}
 
-	req.Timestamp = time.Now()
 	r.queueRequest(msg.MsgHdr.Id, req)
 	r.updateAttempts()
 }
 
-func (r *BaseResolver) readMessages(msgs chan *message, last bool) {
+func (r *BaseResolver) readMessages(last bool) {
 loop:
 	for {
 		select {
@@ -554,23 +524,73 @@ loop:
 			}
 
 			if co == nil {
-				time.Sleep(time.Second)
+				time.Sleep(250 * time.Millisecond)
 				continue loop
 			}
 
 			co.SetReadDeadline(time.Now().Add(r.WindowDuration))
 			if read, err := co.ReadMsg(); err == nil && read != nil {
-				msgs <- &message{
-					Received: time.Now(),
-					Msg:      read,
-				}
+				go r.processMessage(read)
 			}
 		}
 	}
 }
 
-func (r *BaseResolver) tcpExchange(req *resolveRequest) {
-	msg := queryMessage(r.getID(), req.Name, req.Qtype)
+func (r *BaseResolver) processMessage(m *dns.Msg) {
+	req := r.pullRequest(m.MsgHdr.Id)
+	if req == nil {
+		return
+	}
+
+	r.updateRTT(time.Now().Sub(req.Timestamp))
+	r.updateStats(m.Rcode)
+	// Check that the query was successful
+	if m.Rcode != dns.RcodeSuccess {
+		var again bool
+		for _, code := range retryCodes {
+			if m.Rcode == code {
+				again = true
+				break
+			}
+		}
+		estr := fmt.Sprintf("DNS query on resolver %s, for %s type %d returned error %s",
+			r.address, req.Name, req.Qtype, dns.RcodeToString[m.Rcode])
+		r.returnRequest(req, makeResolveResult(nil, again, estr, m.Rcode))
+		return
+	}
+
+	if m.Truncated {
+		r.tcpExchange(m.MsgHdr.Id, req)
+		return
+	}
+
+	var answers []requests.DNSAnswer
+	for _, a := range extractRawData(m, req.Qtype) {
+		answers = append(answers, requests.DNSAnswer{
+			Name: req.Name,
+			Type: int(req.Qtype),
+			TTL:  0,
+			Data: strings.TrimSpace(a),
+		})
+	}
+
+	if len(answers) == 0 {
+		estr := fmt.Sprintf("DNS query on resolver %s, for %s type %d returned 0 records",
+			r.address, req.Name, req.Qtype)
+		r.returnRequest(req, makeResolveResult(nil, false, estr, m.Rcode))
+		return
+	}
+
+	r.returnRequest(req, &resolveResult{
+		Records: answers,
+		Again:   false,
+		Err:     nil,
+	})
+}
+
+func (r *BaseResolver) tcpExchange(id uint16, req *resolveRequest) {
+	r.updateRequestTimeout(id, time.Now().Add(r.WindowDuration))
+	msg := queryMessage(id, req.Name, req.Qtype)
 	d := net.Dialer{Timeout: r.WindowDuration}
 
 	conn, err := d.Dial("tcp", r.address+":"+r.port)
@@ -591,8 +611,6 @@ func (r *BaseResolver) tcpExchange(req *resolveRequest) {
 		return
 	}
 
-	req.Timestamp = time.Now()
-	r.queueRequest(msg.MsgHdr.Id, req)
 	co.SetReadDeadline(time.Now().Add(r.WindowDuration))
 	read, err := co.ReadMsg()
 	if read == nil || err != nil {
@@ -602,69 +620,15 @@ func (r *BaseResolver) tcpExchange(req *resolveRequest) {
 		return
 	}
 
-	r.processMessage(&message{
-		Received: time.Now(),
-		Msg:      read,
-	})
-}
-
-func (r *BaseResolver) processMessage(m *message) {
-	req := r.pullRequest(m.Msg.MsgHdr.Id)
-	if req == nil {
-		return
-	}
-
-	r.updateRTT(m.Received.Sub(req.Timestamp))
-	r.updateStats(m.Msg.Rcode)
-	// Check that the query was successful
-	if m.Msg.Rcode != dns.RcodeSuccess {
-		var again bool
-		for _, code := range retryCodes {
-			if m.Msg.Rcode == code {
-				again = true
-				break
-			}
-		}
-		estr := fmt.Sprintf("DNS query on resolver %s, for %s type %d returned error %s",
-			r.address, req.Name, req.Qtype, dns.RcodeToString[m.Msg.Rcode])
-		r.returnRequest(req, makeResolveResult(nil, again, estr, m.Msg.Rcode))
-		return
-	}
-
-	if m.Msg.Truncated {
-		go r.tcpExchange(req)
-		return
-	}
-
-	var answers []requests.DNSAnswer
-	for _, a := range extractRawData(m.Msg, req.Qtype) {
-		answers = append(answers, requests.DNSAnswer{
-			Name: req.Name,
-			Type: int(req.Qtype),
-			TTL:  0,
-			Data: strings.TrimSpace(a),
-		})
-	}
-
-	if len(answers) == 0 {
-		estr := fmt.Sprintf("DNS query on resolver %s, for %s type %d returned 0 records",
-			r.address, req.Name, req.Qtype)
-		r.returnRequest(req, makeResolveResult(nil, false, estr, m.Msg.Rcode))
-		return
-	}
-
-	r.returnRequest(req, &resolveResult{
-		Records: answers,
-		Again:   false,
-		Err:     nil,
-	})
+	read.Truncated = false
+	r.processMessage(read)
 }
 
 func (r *BaseResolver) updateTimeouts(t int) {
 	r.Lock()
 	defer r.Unlock()
 
-	r.stats[QueryTimeout] = r.stats[QueryTimeout] + int64(t)
+	r.stats[QueryTimeouts] = r.stats[QueryTimeouts] + int64(t)
 }
 
 func (r *BaseResolver) updateAttempts() {
@@ -690,4 +654,85 @@ func (r *BaseResolver) updateStats(rcode int) {
 	defer r.Unlock()
 
 	r.stats[rcode] = r.stats[rcode] + 1
+}
+
+func (r *BaseResolver) getID() uint16 {
+	r.xchgsLock.Lock()
+	defer r.xchgsLock.Unlock()
+
+	var id uint16
+	for {
+		id = dns.Id()
+		if _, found := r.xchgs[id]; !found {
+			r.xchgs[id] = &resolveRequest{Timestamp: time.Now()}
+			break
+		}
+	}
+	return id
+}
+
+func (r *BaseResolver) queueRequest(id uint16, req *resolveRequest) {
+	req.ID = id
+	req.Timestamp = time.Now()
+
+	r.xchgsLock.Lock()
+	r.xchgs[id] = req
+	r.xchgsLock.Unlock()
+
+	r.addTimeoutToSlice(id)
+}
+
+func (r *BaseResolver) pullRequest(id uint16) *resolveRequest {
+	r.delTimeoutFromSlice(id)
+
+	r.xchgsLock.Lock()
+	defer r.xchgsLock.Unlock()
+
+	req := r.xchgs[id]
+	delete(r.xchgs, id)
+
+	return req
+}
+
+func (r *BaseResolver) pullRequestAfterTimeout(id uint16, timeout time.Duration) *resolveRequest {
+	r.xchgsLock.Lock()
+	defer r.xchgsLock.Unlock()
+
+	if req, found := r.xchgs[id]; found && time.Now().After(req.Timestamp.Add(timeout)) {
+		delete(r.xchgs, id)
+		return req
+	}
+
+	return nil
+}
+
+func (r *BaseResolver) updateRequestTimeout(id uint16, timeout time.Time) {
+	r.xchgsLock.Lock()
+	defer r.xchgsLock.Unlock()
+
+	if req, found := r.xchgs[id]; found {
+		req.Timestamp = timeout
+	}
+}
+
+func (r *BaseResolver) addTimeoutToSlice(id uint16) {
+	r.timeoutsLock.Lock()
+	defer r.timeoutsLock.Unlock()
+
+	r.timeoutSlice = append(r.timeoutSlice, id)
+}
+
+func (r *BaseResolver) delTimeoutFromSlice(id uint16) {
+	r.timeoutsLock.Lock()
+	defer r.timeoutsLock.Unlock()
+
+	var n int
+	// Remove the element identified by id
+	for _, i := range r.timeoutSlice {
+		if i != id {
+			r.timeoutSlice[n] = i
+			n++
+		}
+	}
+	r.timeoutSlice = r.timeoutSlice[:n]
 }

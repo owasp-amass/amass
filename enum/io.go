@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/OWASP/Amass/v3/eventbus"
 	"github.com/OWASP/Amass/v3/net/http"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/stringset"
@@ -44,7 +45,7 @@ func (e *Enumeration) submitKnownNames(wg *sync.WaitGroup) {
 			continue
 		}
 
-		e.Bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+		e.Bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 			Name:   f,
 			Domain: etld,
 			Tag:    requests.EXTERNAL,
@@ -58,7 +59,7 @@ func (e *Enumeration) submitProvidedNames(wg *sync.WaitGroup) {
 
 	for _, name := range e.Config.ProvidedNames {
 		if domain := e.Config.WhichDomain(name); domain != "" {
-			e.Bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+			e.Bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 				Name:   name,
 				Domain: domain,
 				Tag:    requests.EXTERNAL,
@@ -72,7 +73,7 @@ func (e *Enumeration) namesFromCertificates(addr string) {
 	for _, name := range http.PullCertificateNames(addr, e.Config.Ports) {
 		if n := strings.TrimSpace(name); n != "" {
 			if domain := e.Config.WhichDomain(n); domain != "" {
-				e.Bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+				e.Bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 					Name:   n,
 					Domain: domain,
 					Tag:    requests.CERT,

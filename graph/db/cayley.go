@@ -25,8 +25,8 @@ type CayleyGraph struct {
 	path  string
 }
 
-var notDataSourceSet = stringset.New("tld", "root", "cname_record", 
-		"ptr_record", "mx_record", "ns_record", "srv_record", "service")
+var notDataSourceSet = stringset.New("tld", "root", "cname_record",
+	"ptr_record", "mx_record", "ns_record", "srv_record", "service")
 
 // NewCayleyGraph returns an intialized CayleyGraph object.
 func NewCayleyGraph(path string) *CayleyGraph {
@@ -234,7 +234,6 @@ func (g *CayleyGraph) NameToIPAddrs(node Node) ([]Node, error) {
 	g.optimizedIterate(p, func(value quad.Value) {
 		nodes = append(nodes, quad.ToString(value))
 	})
-
 	if len(nodes) > 0 {
 		return nodes, nil
 	}
@@ -245,7 +244,6 @@ func (g *CayleyGraph) NameToIPAddrs(node Node) ([]Node, error) {
 	g.optimizedIterate(p, func(value quad.Value) {
 		nodes = append(nodes, quad.ToString(value))
 	})
-
 	if len(nodes) > 0 {
 		return nodes, nil
 	}
@@ -256,8 +254,11 @@ func (g *CayleyGraph) NameToIPAddrs(node Node) ([]Node, error) {
 	g.optimizedIterate(p, func(value quad.Value) {
 		nodes = append(nodes, quad.ToString(value))
 	})
+	if len(nodes) > 0 {
+		return nodes, nil
+	}
 
-	return nodes, nil
+	return nodes, fmt.Errorf("%s: NameToIPAddrs: No addresses were discovered for %s", g.String(), nstr)
 }
 
 // NodeSources implements the GraphDatabase interface.

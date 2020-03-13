@@ -88,13 +88,16 @@ type Enumeration struct {
 	perSec      int64
 	perSecFirst time.Time
 	perSecLast  time.Time
+
+	pro          interface{ Stop() }
+	profileStart sync.Once
 }
 
 // NewEnumeration returns an initialized Enumeration that has not been started yet.
 func NewEnumeration(sys services.System) *Enumeration {
 	e := &Enumeration{
 		Config:   config.NewConfig(),
-		Bus:      eb.NewEventBus(),
+		Bus:      eb.NewEventBus(10000),
 		Sys:      sys,
 		altQueue: new(queue.Queue),
 		moreAlts: make(chan struct{}, 2),
@@ -278,7 +281,7 @@ func (e *Enumeration) releaseAttempts() {
 }
 
 func (e *Enumeration) nextPhase() {
-	if !time.Now().After(e.lastPhase.Add(30 * time.Second)) {
+	if time.Now().Before(e.lastPhase.Add(15 * time.Second)) {
 		return
 	}
 
@@ -286,13 +289,9 @@ func (e *Enumeration) nextPhase() {
 	persec := e.DNSQueriesPerSec()
 	remaining := e.DNSNamesRemaining()
 	// Has the enumeration been inactive long enough to stop the task?
-	inactive := time.Now().Sub(e.lastActive()) > 10*time.Second
+	inactive := time.Now().Sub(e.lastActive()) > 5*time.Second
 
-	if sec := e.perSecLast.Sub(e.perSecFirst).Seconds(); !inactive && sec < 20 {
-		return
-	}
-
-	if first && (persec > 200) || (remaining > 10) {
+	if first && (persec > 5000) || (remaining > 25000) {
 		return
 	}
 
@@ -393,10 +392,10 @@ func (e *Enumeration) setupEventBus() {
 	e.Bus.Subscribe(requests.SetActiveTopic, e.updateLastActive)
 	e.Bus.Subscribe(requests.ResolveCompleted, e.incQueriesPerSec)
 
-	e.Bus.Subscribe(requests.NewNameTopic, e.newNameEvent)
+	e.Bus.Subscribe(requests.NewNameTopic, e.newNECallback)
 
 	if !e.Config.Passive {
-		e.Bus.Subscribe(requests.NameResolvedTopic, e.newResolvedName)
+		e.Bus.Subscribe(requests.NameResolvedTopic, e.newRNCallback)
 
 		e.Bus.Subscribe(requests.NewAddrTopic, e.newAddress)
 		e.Bus.Subscribe(requests.NewASNTopic, e.updateASNCache)
@@ -427,10 +426,10 @@ func (e *Enumeration) cleanEventBus() {
 	e.Bus.Unsubscribe(requests.SetActiveTopic, e.updateLastActive)
 	e.Bus.Unsubscribe(requests.ResolveCompleted, e.incQueriesPerSec)
 
-	e.Bus.Unsubscribe(requests.NewNameTopic, e.newNameEvent)
+	e.Bus.Unsubscribe(requests.NewNameTopic, e.newNECallback)
 
 	if !e.Config.Passive {
-		e.Bus.Unsubscribe(requests.NameResolvedTopic, e.newResolvedName)
+		e.Bus.Unsubscribe(requests.NameResolvedTopic, e.newRNCallback)
 
 		e.Bus.Unsubscribe(requests.NewAddrTopic, e.newAddress)
 		e.Bus.Unsubscribe(requests.NewASNTopic, e.updateASNCache)

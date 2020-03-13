@@ -88,7 +88,7 @@ brews:
       name: caffix
       email: caffix@users.noreply.github.com
     folder: Formula
-    homepage: "https://www.owasp.org/index.php/OWASP_Amass_Project"
+    homepage: "https://owasp.org/www-project-amass/"
     description: "In-depth Attack Surface Mapping and Asset Discovery"
 
 snapcrafts:

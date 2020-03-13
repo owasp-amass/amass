@@ -99,7 +99,7 @@ func (g *Graph) buildOutput(sub db.Node, uuid string, c chan *requests.Output) {
 	var num int
 	addrChan := make(chan *requests.AddressInfo, 100)
 	for _, addr := range addrs {
-		if !g.inEventScope(addr, uuid) {
+		if !g.inEventScope(addr, uuid, "DNS") {
 			continue
 		}
 
@@ -132,7 +132,7 @@ func randomIndex(length int) int {
 }
 
 func (g *Graph) buildAddrInfo(addr db.Node, uuid string, c chan *requests.AddressInfo) {
-	if !g.inEventScope(addr, uuid) {
+	if !g.inEventScope(addr, uuid, "DNS") {
 		c <- nil
 		return
 	}
@@ -149,7 +149,7 @@ func (g *Graph) buildAddrInfo(addr db.Node, uuid string, c chan *requests.Addres
 	var cidr string
 	var cidrNode db.Node
 	for _, edge := range edges {
-		if g.inEventScope(edge.From, uuid) {
+		if g.inEventScope(edge.From, uuid, "NONE") {
 			cidrNode = edge.From
 			cidr = g.db.NodeToID(edge.From)
 			break
@@ -173,7 +173,7 @@ func (g *Graph) buildAddrInfo(addr db.Node, uuid string, c chan *requests.Addres
 	var asn string
 	var asNode db.Node
 	for _, edge := range edges {
-		if g.inEventScope(edge.From, uuid) {
+		if g.inEventScope(edge.From, uuid, "NONE") {
 			asNode = edge.From
 			asn = g.db.NodeToID(edge.From)
 			break
