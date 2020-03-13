@@ -1,4 +1,4 @@
-# How to Use [![OWASP Logo](https://github.com/OWASP/Amass/blob/master/images/owasp_logo.png) OWASP Amass](https://www.owasp.org/index.php/OWASP_Amass_Project) - An Extensive Tutorial
+# How to Use [![OWASP Logo](https://github.com/OWASP/Amass/blob/master/images/owasp_logo.png) OWASP Amass](https://owasp.org/www-project-amass/) - An Extensive Tutorial
 
 ![Network graph](https://github.com/OWASP/Amass/blob/master/images/network_06092018.png "Amass Network Mapping")
 
@@ -8,7 +8,7 @@
 
 Whether you are a penetration tester, an auditor, a security researcher or the CISO/IT manager, you may have several valid reasons for mapping out the external attack surface of an organisation. This process is also referred to as reconnaissance or information gathering.
 
-[The OWASP Amass project](https://www.owasp.org/index.php/OWASP_Amass_Project) (Amass) can help with this to a large extent depending on your requirements. In this blog post, we will aim to demonstrate how one can use Amass to discover majority of an organisation's externally exposed assets.
+[The OWASP Amass project](https://owasp.org/www-project-amass/) (Amass) can help with this to a large extent depending on your requirements. In this blog post, we will aim to demonstrate how one can use Amass to discover majority of an organisation's externally exposed assets.
 
 The focus will be on performing continuous subdomain discovery exercises. We have broken this blog post into different sections to make it easier to get to grips with the various functions of Amass. It should be noted that there may be assets out there that are not mapped to a domain and you will need to employ other techniques to uncover them, such as running network scans over the IP ranges owned by the organisation. Although we will not fully demonstrate how to use all the functions offered by Amass, we are hoping that this blog will cover enough to give you a kick-start in mastering Amass.
 
@@ -38,7 +38,7 @@ There are a number of more technical reasons, which we will explain below and de
     -   Hashcat-style masks for brute-force of subdomains (this can be very useful if you have internal information on naming conventions and so on)
 -   It can be configured using a configuration file which makes it easy to maintain, use or integrate with scripts
 
-Lastly, we will not be going into the details of installing Amass in this blog post, but if you are interested, you can do so in a number of ways. You can compile from source if you have a properly configured Golang environment (Go >= 1.13), or run it using Docker, or install it as a package if one is available for your distribution. Detailed installation instructions are available [here](https://github.com/OWASP/Amass/blob/master/doc/install.md).
+Lastly, we will not be going into the details of installing Amass in this blog post, but if you are interested, you can do so in a number of ways. You can compile from source if you have a properly configured Golang environment (Go >= 1.13), or run it using Docker, or install it as a package if one is available for your distribution. Detailed installation instructions are available [here](./install.md).
 
 ## Amass Intel
 
@@ -59,7 +59,7 @@ Usage: amass intel [options] [-whois -d DOMAIN] [-addr ADDR -asn ASN -cidr CIDR]
 
 It is probably worth noting at this point that another great perk of Amass is that all the subcommands attempt to maintain argument consistency.
 
-This subcommand will use a number of information gathering techniques and data sources by default, such as WHOIS and IPv4Info, in order to obtain intelligence and parent domains owned by the organisation, unless these are explicitly disabled in Amass' configuration file. An example Amass configuration file is available [on the GitHub repository](https://github.com/OWASP/Amass/blob/master/examples/config.ini).
+This subcommand will use a number of information gathering techniques and data sources by default, such as WHOIS and IPv4Info, in order to obtain intelligence and parent domains owned by the organisation, unless these are explicitly disabled in Amass' configuration file. An example Amass configuration file is available [on the GitHub repository](../examples/config.ini).
 
 ```bash
 
@@ -248,7 +248,7 @@ The script leverages a mobile application that sends push-notifications to my ph
 
 Please note that the above script is a quick script we wrote and is only meant to serve as an example. It is by no means perfect and bug-free, and you will have to modify and adjust it based on your requirements and environment.
 
-In closing, OWASP Amass is a tool that is becoming increasingly popular. We highly recommend that you incorporate Amass in your workflow/processes if you have information gathering and subdomain discovery requirements, and stay tuned as more and more features and improvements will be added with every release. Finally, you can always refer to the official [User's Guide](https://github.com/OWASP/Amass/blob/master/doc/user_guide.md) of Amass.
+In closing, OWASP Amass is a tool that is becoming increasingly popular. We highly recommend that you incorporate Amass in your workflow/processes if you have information gathering and subdomain discovery requirements, and stay tuned as more and more features and improvements will be added with every release. Finally, you can always refer to the official [User's Guide](./user_guide.md) of Amass.
 
 ## Credits
 This tutorial page was built based on [How to Use OWASP Amass: An Extensive Tutorial

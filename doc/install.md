@@ -1,5 +1,5 @@
 
-# [![OWASP Logo](https://github.com/OWASP/Amass/blob/master/images/owasp_logo.png) OWASP Amass](https://www.owasp.org/index.php/OWASP_Amass_Project) - Installation Guide
+# [![OWASP Logo](../images/owasp_logo.png) OWASP Amass](https://owasp.org/www-project-amass/) - Installation Guide
 
 [![Packaging status](https://repology.org/badge/vertical-allrepos/amass.svg)](https://repology.org/metapackage/amass/versions)
 [![Get it from the Snap Store](https://snapcraft.io/static/images/badges/en/snap-store-white.svg)](https://snapcraft.io/amass)
@@ -32,17 +32,11 @@ docker run -v OUTPUT_DIR_PATH:/.config/amass/ amass enum -brute -w /wordlists/al
 
 ## From Source
 
-If you prefer to build your own binary from the latest release of the source code, make sure you have a correctly configured **Go >= 1.13** environment. More information about how to achieve this can be found [on the golang website.](https://golang.org/doc/install).
+If you prefer to build your own binary from the latest release of the source code, make sure you have a correctly configured **Go >= 1.14** environment. More information about how to achieve this can be found [on the golang website.](https://golang.org/doc/install).
 
 Simply execute the following commands:
 
-1. Turn on support for Go Modules to ensure the correct dependency versions are used:
-
-```bash
-export GO111MODULE=on
-```
-
-2. Download OWASP Amass:
+1. Download OWASP Amass:
 
 ```bash
 go get -v -u github.com/OWASP/Amass/v3/...
@@ -50,7 +44,7 @@ go get -v -u github.com/OWASP/Amass/v3/...
 
 At this point, the binary should be in *$GOPATH/bin*.
 
-3. If you'd like to rebuild the binary from the project source code:
+2. If you'd like to rebuild the binary from the project source code:
 
 ```bash
 cd $GOPATH/src/github.com/OWASP/Amass
@@ -120,6 +114,8 @@ pkg install amass
 ```
 
 ### Kali Linux
+
+OWASP Amass is installed by default and can be managed like any other Kali package:
 
 ```bash
 apt-get update
