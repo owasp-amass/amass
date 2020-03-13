@@ -255,7 +255,7 @@ func (bas *BaseService) CheckRateLimit() {
 	defer bas.lastLock.Unlock()
 
 	if delta := time.Now().Sub(bas.last); bas.rateLimit > delta {
-		time.Sleep(delta)
+		time.Sleep(bas.rateLimit - delta)
 	}
 	bas.last = time.Now()
 }
