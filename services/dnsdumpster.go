@@ -149,8 +149,13 @@ func (d *DNSDumpster) postForm(ctx context.Context, token, domain string) (strin
 		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: The POST request failed: %v", d.String(), err))
 		return "", err
 	}
+	defer resp.Body.Close()
+
 	// Now, grab the entire page
 	in, err := ioutil.ReadAll(resp.Body)
-	resp.Body.Close()
+	if err != nil {
+		bus.Publish(requests.LogTopic, fmt.Sprintf("Failed to read response body: %v", err))
+		return "", err
+	}
 	return string(in), nil
 }
