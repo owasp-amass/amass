@@ -38,29 +38,16 @@ func (g *Graph) GetOutput(uuid string) []*requests.Output {
 		names = append(names, edge.To)
 	}
 
-	grs := 25
-	output := make(chan *requests.Output, grs+1)
-	for i, name := range names {
+	var count int
+	output := make(chan *requests.Output, 10000)
+	for _, name := range names {
 		go g.buildOutput(name, uuid, output)
+		count++
+	}
 
-		if i != 0 && (i%grs == 0) {
-			for i := 0; i < grs; i++ {
-				o := <-output
-
-				if o != nil {
-					results = append(results, o)
-				}
-			}
-		}
-
-		if num := i % 25; i+1 == len(names) {
-			for i := 0; i < num; i++ {
-				o := <-output
-
-				if o != nil {
-					results = append(results, o)
-				}
-			}
+	for i := 0; i < count; i++ {
+		if o := <-output; o != nil {
+			results = append(results, o)
 		}
 	}
 
@@ -149,7 +136,7 @@ func (g *Graph) buildAddrInfo(addr db.Node, uuid string, c chan *requests.Addres
 	var cidr string
 	var cidrNode db.Node
 	for _, edge := range edges {
-		if g.inEventScope(edge.From, uuid, "NONE") {
+		if g.inEventScope(edge.From, uuid, "RIR") {
 			cidrNode = edge.From
 			cidr = g.db.NodeToID(edge.From)
 			break
@@ -173,7 +160,7 @@ func (g *Graph) buildAddrInfo(addr db.Node, uuid string, c chan *requests.Addres
 	var asn string
 	var asNode db.Node
 	for _, edge := range edges {
-		if g.inEventScope(edge.From, uuid, "NONE") {
+		if g.inEventScope(edge.From, uuid, "RIR") {
 			asNode = edge.From
 			asn = g.db.NodeToID(edge.From)
 			break
