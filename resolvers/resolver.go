@@ -35,6 +35,12 @@ const (
 	QueryCompletions = 67
 )
 
+// ResolverErrRcode is our made up rcode to indicate an interface error.
+const ResolverErrRcode = 100
+
+// TimeoutRcode is our made up rcode to indicate that a query timed out.
+const TimeoutRcode = 101
+
 // NotAvailableRcode is our made up rcode to indicate an availability problem.
 const NotAvailableRcode = 256
 
@@ -42,6 +48,14 @@ const (
 	defaultWindowDuration = 500 * time.Millisecond
 	defaultConnRotation   = 30 * time.Second
 )
+
+// RetryCodes are the rcodes that cause the resolver to suggest trying again.
+var RetryCodes = []int{
+	TimeoutRcode,
+	dns.RcodeRefused,
+	dns.RcodeServerFailure,
+	dns.RcodeNotImplemented,
+}
 
 // ResolveError contains the Rcode returned during the DNS query.
 type ResolveError struct {
@@ -335,7 +349,7 @@ func (r *BaseResolver) Resolve(ctx context.Context, name, qtype string, priority
 	if priority != PriorityCritical && priority != PriorityHigh && priority != PriorityLow {
 		return []requests.DNSAnswer{}, false, &ResolveError{
 			Err:   fmt.Sprintf("Resolver: Invalid priority parameter: %d", priority),
-			Rcode: 100,
+			Rcode: ResolverErrRcode,
 		}
 	}
 
@@ -347,8 +361,16 @@ func (r *BaseResolver) Resolve(ctx context.Context, name, qtype string, priority
 	if err != nil {
 		return nil, false, &ResolveError{
 			Err:   err.Error(),
-			Rcode: 100,
+			Rcode: ResolverErrRcode,
 		}
+	}
+
+	var bus *eventbus.EventBus
+	// Obtain the event bus reference and report the resolver activity
+	if b := ctx.Value(requests.ContextEventBus); b != nil {
+		bus = b.(*eventbus.EventBus)
+
+		bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, "Resolver "+r.Address())
 	}
 
 	resultChan := make(chan *resolveResult, 2)
@@ -365,10 +387,13 @@ func (r *BaseResolver) Resolve(ctx context.Context, name, qtype string, priority
 	r.Unlock()
 
 	// Report the completion of the DNS query
-	if b := ctx.Value(requests.ContextEventBus); b != nil {
-		bus := b.(*eventbus.EventBus)
+	if bus != nil {
+		rcode := dns.RcodeSuccess
+		if result.Err != nil {
+			rcode = (result.Err.(*ResolveError)).Rcode
+		}
 
-		bus.Publish(requests.ResolveCompleted, eventbus.PriorityCritical, time.Now())
+		bus.Publish(requests.ResolveCompleted, eventbus.PriorityCritical, time.Now(), rcode)
 	}
 
 	return result.Records, result.Again, result.Err
@@ -385,7 +410,7 @@ func (r *BaseResolver) Reverse(ctx context.Context, addr string, priority int) (
 	} else {
 		return ptr, "", &ResolveError{
 			Err:   fmt.Sprintf("Invalid IP address parameter: %s", addr),
-			Rcode: 100,
+			Rcode: ResolverErrRcode,
 		}
 	}
 
@@ -404,12 +429,12 @@ func (r *BaseResolver) Reverse(ctx context.Context, addr string, priority int) (
 	if name == "" {
 		err = &ResolveError{
 			Err:   fmt.Sprintf("PTR record not found for IP address: %s", addr),
-			Rcode: 100,
+			Rcode: ResolverErrRcode,
 		}
 	} else if strings.HasSuffix(name, ".in-addr.arpa") || strings.HasSuffix(name, ".ip6.arpa") {
 		err = &ResolveError{
 			Err:   fmt.Sprintf("Invalid target in PTR record answer: %s", name),
-			Rcode: 100,
+			Rcode: ResolverErrRcode,
 		}
 	}
 	return ptr, name, err
@@ -435,7 +460,7 @@ func (r *BaseResolver) checkForTimeouts() {
 					removals = append(removals, id)
 					estr := fmt.Sprintf("DNS query on resolver %s, for %s type %d timed out",
 						r.address, req.Name, req.Qtype)
-					r.returnRequest(req, makeResolveResult(nil, true, estr, 100))
+					r.returnRequest(req, makeResolveResult(nil, true, estr, TimeoutRcode))
 				}
 			}
 			r.timeoutsLock.Unlock()
@@ -501,7 +526,7 @@ func (r *BaseResolver) writeMessage(req *resolveRequest) {
 	if err := co.WriteMsg(msg); err != nil {
 		r.pullRequest(msg.MsgHdr.Id)
 		estr := fmt.Sprintf("DNS error: Failed to write query msg: %v", err)
-		r.returnRequest(req, makeResolveResult(nil, true, estr, 100))
+		r.returnRequest(req, makeResolveResult(nil, true, estr, NotAvailableRcode))
 		return
 	}
 
@@ -547,7 +572,7 @@ func (r *BaseResolver) processMessage(m *dns.Msg) {
 	// Check that the query was successful
 	if m.Rcode != dns.RcodeSuccess {
 		var again bool
-		for _, code := range retryCodes {
+		for _, code := range RetryCodes {
 			if m.Rcode == code {
 				again = true
 				break
@@ -597,7 +622,7 @@ func (r *BaseResolver) tcpExchange(id uint16, req *resolveRequest) {
 	if err != nil {
 		r.pullRequest(msg.MsgHdr.Id)
 		estr := fmt.Sprintf("DNS: Failed to obtain TCP connection to %s:%s: %v", r.address, r.port, err)
-		r.returnRequest(req, makeResolveResult(nil, true, estr, 100))
+		r.returnRequest(req, makeResolveResult(nil, true, estr, NotAvailableRcode))
 		return
 	}
 	defer conn.Close()
@@ -607,7 +632,7 @@ func (r *BaseResolver) tcpExchange(id uint16, req *resolveRequest) {
 	if err := co.WriteMsg(msg); err != nil {
 		r.pullRequest(msg.MsgHdr.Id)
 		estr := fmt.Sprintf("DNS error: Failed to write query msg: %v", err)
-		r.returnRequest(req, makeResolveResult(nil, true, estr, 100))
+		r.returnRequest(req, makeResolveResult(nil, true, estr, NotAvailableRcode))
 		return
 	}
 
@@ -616,7 +641,7 @@ func (r *BaseResolver) tcpExchange(id uint16, req *resolveRequest) {
 	if read == nil || err != nil {
 		r.pullRequest(msg.MsgHdr.Id)
 		estr := fmt.Sprintf("DNS error: Failed to read the reply msg: %v", err)
-		r.returnRequest(req, makeResolveResult(nil, true, estr, 100))
+		r.returnRequest(req, makeResolveResult(nil, true, estr, NotAvailableRcode))
 		return
 	}
 

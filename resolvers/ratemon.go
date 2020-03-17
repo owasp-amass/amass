@@ -208,16 +208,21 @@ func (r *RateMonitoredResolver) calcRate() {
 
 	attempts := stats[QueryAttempts]
 	// There needs to be some data to work with first
-	if attempts < 1000 {
+	if attempts < 50 {
 		return
 	}
 
 	timeouts := stats[QueryTimeouts]
 	// Check if too many attempts are being made
-	if comp := stats[QueryCompletions]; comp > 0 &&
-		comp > timeouts && attempts > (2*(comp-timeouts)) {
-		r.setRate(rate + defaultRateChange)
-		return
+	if comp := stats[QueryCompletions]; comp > 0 && comp > timeouts {
+		succ := comp - timeouts
+		max := succ + (succ / 4)
+
+		if attempts > max {
+			// Slow things down!
+			r.setRate(rate + defaultRateChange)
+			return
+		}
 	}
 	// Speed things up!
 	r.setRate(rate - defaultRateChange)

@@ -157,7 +157,7 @@ func (c *Collection) updateLastActive(srv string) {
 	}(time.Now())
 }
 
-func (c *Collection) resolution(t time.Time) {
+func (c *Collection) resolution(t time.Time, rcode int) {
 	go func(t time.Time) {
 		c.lastLock.Lock()
 		defer c.lastLock.Unlock()

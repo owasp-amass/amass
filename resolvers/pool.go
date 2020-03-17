@@ -21,16 +21,6 @@ import (
 	"github.com/miekg/dns"
 )
 
-var (
-	retryCodes = []int{
-		dns.RcodeRefused,
-		dns.RcodeServerFailure,
-		dns.RcodeNotImplemented,
-	}
-
-	maxRetries = 3
-)
-
 // ResolverPool manages many DNS resolvers for high-performance use, such as brute forcing attacks.
 type ResolverPool struct {
 	Resolvers []Resolver
@@ -256,7 +246,7 @@ func (rp *ResolverPool) Reverse(ctx context.Context, addr string, priority int) 
 	} else {
 		return ptr, "", &ResolveError{
 			Err:   fmt.Sprintf("Invalid IP address parameter: %s", addr),
-			Rcode: 100,
+			Rcode: ResolverErrRcode,
 		}
 	}
 
@@ -275,12 +265,12 @@ func (rp *ResolverPool) Reverse(ctx context.Context, addr string, priority int) 
 	if name == "" {
 		err = &ResolveError{
 			Err:   fmt.Sprintf("PTR record not found for IP address: %s", addr),
-			Rcode: 100,
+			Rcode: ResolverErrRcode,
 		}
 	} else if strings.HasSuffix(name, ".in-addr.arpa") || strings.HasSuffix(name, ".ip6.arpa") {
 		err = &ResolveError{
 			Err:   fmt.Sprintf("Invalid target in PTR record answer: %s", name),
-			Rcode: 100,
+			Rcode: ResolverErrRcode,
 		}
 	}
 

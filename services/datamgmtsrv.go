@@ -30,7 +30,7 @@ type DataManagerService struct {
 
 // NewDataManagerService returns he object initialized, but not yet started.
 func NewDataManagerService(sys System) *DataManagerService {
-	dms := &DataManagerService{maxRequests: semaphore.NewSimpleSemaphore(25)}
+	dms := &DataManagerService{maxRequests: semaphore.NewSimpleSemaphore(100)}
 
 	dms.BaseService = *NewBaseService(dms, "Data Manager", sys)
 	return dms
@@ -38,12 +38,12 @@ func NewDataManagerService(sys System) *DataManagerService {
 
 // OnDNSRequest implements the Service interface.
 func (dms *DataManagerService) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
-	//dms.maxRequests.Acquire(1)
-	dms.processDNSRequest(ctx, req)
+	dms.maxRequests.Acquire(1)
+	go dms.processDNSRequest(ctx, req)
 }
 
 func (dms *DataManagerService) processDNSRequest(ctx context.Context, req *requests.DNSRequest) {
-	//defer dms.maxRequests.Release(1)
+	defer dms.maxRequests.Release(1)
 
 	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
 	if bus == nil {
@@ -64,9 +64,6 @@ func (dms *DataManagerService) processDNSRequest(ctx context.Context, req *reque
 	}
 
 	for i, r := range req.Records {
-		req.Records[i].Name = strings.Trim(strings.ToLower(r.Name), ".")
-		req.Records[i].Data = strings.Trim(strings.ToLower(r.Data), ".")
-
 		bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, dms.String())
 
 		switch uint16(r.Type) {

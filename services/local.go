@@ -12,7 +12,6 @@ import (
 	"github.com/OWASP/Amass/v3/graph"
 	"github.com/OWASP/Amass/v3/graph/db"
 	"github.com/OWASP/Amass/v3/resolvers"
-	"github.com/OWASP/Amass/v3/stringset"
 )
 
 // LocalSystem implements a System to be executed within a single process.
@@ -194,7 +193,6 @@ func (l *LocalSystem) initCoreServices() error {
 }
 
 func (l *LocalSystem) periodicChecks() {
-	filter := stringset.NewStringFilter()
 	t := time.NewTicker(10 * time.Second)
 	defer t.Stop()
 
@@ -203,18 +201,7 @@ func (l *LocalSystem) periodicChecks() {
 		case <-l.done:
 			return
 		case <-t.C:
-			l.checkTheResolvers(filter)
-		}
-	}
-}
-
-func (l *LocalSystem) checkTheResolvers(filter *stringset.StringFilter) {
-	pool := l.Pool().(*resolvers.ResolverPool)
-
-	for _, resolver := range pool.Resolvers {
-		if a, err := resolver.Available(); !a && err != nil {
-			// Do not print the same message more than once
-			if !filter.Duplicate(err.Error()) {
+			if a, err := l.Pool().Available(); !a && err != nil {
 				l.Config().Log.Print(err.Error())
 			}
 		}
