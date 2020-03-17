@@ -12,8 +12,10 @@ import (
 	alts "github.com/OWASP/Amass/v3/alterations"
 	"github.com/OWASP/Amass/v3/config"
 	eb "github.com/OWASP/Amass/v3/eventbus"
+	"github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/queue"
 	"github.com/OWASP/Amass/v3/requests"
+	"github.com/OWASP/Amass/v3/resolvers"
 	"github.com/OWASP/Amass/v3/services"
 	"github.com/OWASP/Amass/v3/stringset"
 )
@@ -70,8 +72,7 @@ type Enumeration struct {
 	closed sync.Once
 
 	// Cache for the infrastructure data collected from online sources
-	netLock  sync.Mutex
-	netCache map[int]*requests.ASNRequest
+	netCache *net.ASNCache
 	netQueue *queue.Queue
 
 	subLock    sync.Mutex
@@ -86,6 +87,7 @@ type Enumeration struct {
 
 	perSecLock  sync.Mutex
 	perSec      int64
+	retries     int64
 	perSecFirst time.Time
 	perSecLast  time.Time
 
@@ -100,7 +102,7 @@ func NewEnumeration(sys services.System) *Enumeration {
 		Bus:      eb.NewEventBus(10000),
 		Sys:      sys,
 		altQueue: new(queue.Queue),
-		moreAlts: make(chan struct{}, 2),
+		moreAlts: make(chan struct{}, 10),
 		filters: &Filters{
 			NewNames:      stringset.NewStringFilter(),
 			Resolved:      stringset.NewStringFilter(),
@@ -110,15 +112,15 @@ func NewEnumeration(sys services.System) *Enumeration {
 			PassiveOutput: stringset.NewStringFilter(),
 		},
 		bruteQueue:    new(queue.Queue),
-		moreBrute:     make(chan struct{}, 2),
+		moreBrute:     make(chan struct{}, 10),
 		srcs:          stringset.New(),
 		addrs:         stringset.New(),
 		resolvedQueue: new(queue.Queue),
-		Output:        make(chan *requests.Output, 100),
+		Output:        make(chan *requests.Output, 1000),
 		outputQueue:   new(queue.Queue),
 		logQueue:      new(queue.Queue),
 		done:          make(chan struct{}),
-		netCache:      make(map[int]*requests.ASNRequest),
+		netCache:      net.NewASNCache(),
 		netQueue:      new(queue.Queue),
 		subdomains:    make(map[string]int),
 		last:          time.Now(),
@@ -188,12 +190,12 @@ func (e *Enumeration) Start() error {
 	go e.processAddresses()
 
 	// The enumeration will not terminate until all output has been processed
-	var wg sync.WaitGroup
-	wg.Add(3)
+	startChan := make(chan struct{}, 2)
+	endChan := make(chan struct{})
 	// Use all previously discovered names that are in scope
-	go e.submitKnownNames(&wg)
-	go e.submitProvidedNames(&wg)
-	go e.processOutput(&wg)
+	go e.submitKnownNames(startChan)
+	go e.submitProvidedNames(startChan)
+	go e.processOutput(endChan)
 
 	if e.Config.Timeout > 0 {
 		time.AfterFunc(time.Duration(e.Config.Timeout)*time.Minute, func() {
@@ -202,34 +204,27 @@ func (e *Enumeration) Start() error {
 		})
 	}
 
-	// Release all the domain names specified in the configuration
 	e.srcsLock.Lock()
-	// Put in requests for all the ASNs specified in the configuration
 	for _, src := range e.Sys.DataSources() {
 		if !e.srcs.Has(src.String()) {
 			continue
 		}
-
-		for _, asn := range e.Config.ASNs {
-			src.ASNRequest(e.ctx, &requests.ASNRequest{ASN: asn})
-		}
-	}
-
-	for _, src := range e.Sys.DataSources() {
-		if !e.srcs.Has(src.String()) {
-			continue
-		}
-
+		// Release all the domain names specified in the configuration
 		for _, domain := range e.Config.Domains() {
-			// Send each root domain name
 			src.DNSRequest(e.ctx, &requests.DNSRequest{
 				Name:   domain,
 				Domain: domain,
 			})
 		}
+		// Put in requests for all the ASNs specified in the configuration
+		for _, asn := range e.Config.ASNs {
+			src.ASNRequest(e.ctx, &requests.ASNRequest{ASN: asn})
+		}
 	}
 	e.srcsLock.Unlock()
 
+	var startDone int
+	firstMin := true
 	e.lastPhase = time.Now()
 	twoSec := time.NewTicker(2 * time.Second)
 	perMin := time.NewTicker(time.Minute)
@@ -238,13 +233,29 @@ loop:
 		select {
 		case <-e.done:
 			break loop
+		case <-startChan:
+			startDone++
+			if startDone == 2 {
+				time.Sleep(10 * time.Second)
+			}
 		case <-twoSec.C:
 			e.releaseAttempts()
-			e.writeLogs()
-			e.nextPhase()
+			if num := e.logQueue.Len() / 10; num > 0 {
+				e.writeLogs(num)
+			}
+			if startDone >= 2 {
+				e.nextPhase(firstMin)
+			}
 		case <-perMin.C:
+			firstMin = false
 			if !e.Config.Passive {
-				e.Config.Log.Printf("Average DNS queries performed: %d/sec", e.DNSQueriesPerSec())
+				var pct float64
+				sec, retries := e.dnsQueriesPerSec()
+				if sec > 0 {
+					pct = (float64(retries) / float64(sec)) * 100
+				}
+
+				e.Config.Log.Printf("Average DNS queries performed: %d/sec, Average retries required: %.2f%%", sec, pct)
 				e.clearPerSec()
 			}
 		}
@@ -254,9 +265,8 @@ loop:
 	perMin.Stop()
 	cancel()
 	e.cleanEventBus()
-	time.Sleep(2 * time.Second)
-	wg.Wait()
-	e.writeLogs()
+	<-endChan
+	e.writeLogs(0)
 	return nil
 }
 
@@ -280,18 +290,17 @@ func (e *Enumeration) releaseAttempts() {
 	time.Sleep(100 * time.Millisecond)
 }
 
-func (e *Enumeration) nextPhase() {
+func (e *Enumeration) nextPhase(first bool) {
 	if time.Now().Before(e.lastPhase.Add(15 * time.Second)) {
 		return
 	}
 
-	first := !e.startedBrute && !e.startedAlts
-	persec := e.DNSQueriesPerSec()
+	persec, _ := e.dnsQueriesPerSec()
 	remaining := e.DNSNamesRemaining()
 	// Has the enumeration been inactive long enough to stop the task?
 	inactive := time.Now().Sub(e.lastActive()) > 5*time.Second
 
-	if first && (persec > 5000) || (remaining > 25000) {
+	if persec > 1000 && remaining > 25000 {
 		return
 	}
 
@@ -309,10 +318,6 @@ func (e *Enumeration) nextPhase() {
 		e.Config.Log.Print("Starting DNS queries for brute forcing")
 		e.lastPhase = time.Now()
 	} else if altsReady {
-		if !first && persec > 2000 {
-			return
-		}
-
 		e.startedAlts = true
 		go e.performAlterations()
 
@@ -322,31 +327,47 @@ func (e *Enumeration) nextPhase() {
 
 		e.Config.Log.Print("Starting DNS queries for altered names")
 		e.lastPhase = time.Now()
-	} else if inactive && persec < 50 {
+	} else if !first && inactive && persec < 50 {
 		// End the enumeration!
 		e.Done()
 	}
 }
 
-// DNSQueriesPerSec returns the number of DNS queries the enumeration has performed per second.
-func (e *Enumeration) DNSQueriesPerSec() int64 {
+func (e *Enumeration) dnsQueriesPerSec() (int64, int64) {
 	e.perSecLock.Lock()
 	defer e.perSecLock.Unlock()
 
-	if sec := e.perSecLast.Sub(e.perSecFirst).Seconds(); sec > 0 {
-		return e.perSec / int64(sec+1.0)
+	if e.perSecLast.After(e.perSecFirst) {
+		if sec := e.perSecLast.Sub(e.perSecFirst).Seconds(); sec > 0 {
+			div := int64(sec + 1.0)
+
+			return e.perSec / div, e.retries / div
+		}
 	}
-	return 0
+
+	return 0, 0
 }
 
-func (e *Enumeration) incQueriesPerSec(t time.Time) {
-	e.perSecLock.Lock()
-	defer e.perSecLock.Unlock()
+func (e *Enumeration) incQueriesPerSec(t time.Time, rcode int) {
+	go func() {
+		e.perSecLock.Lock()
+		defer e.perSecLock.Unlock()
 
-	e.perSec++
-	if t.After(e.perSecLast) {
-		e.perSecLast = t
-	}
+		if t.After(e.perSecFirst) {
+			e.perSec++
+
+			for _, rc := range resolvers.RetryCodes {
+				if rc == rcode {
+					e.retries++
+					break
+				}
+			}
+
+			if t.After(e.perSecLast) {
+				e.perSecLast = t
+			}
+		}
+	}()
 }
 
 func (e *Enumeration) clearPerSec() {
@@ -354,8 +375,8 @@ func (e *Enumeration) clearPerSec() {
 	defer e.perSecLock.Unlock()
 
 	e.perSec = 0
+	e.retries = 0
 	e.perSecFirst = time.Now()
-	e.perSecLast = e.perSecFirst
 }
 
 // DNSNamesRemaining returns the number of discovered DNS names yet to be handled by the enumeration.
@@ -380,10 +401,12 @@ func (e *Enumeration) lastActive() time.Time {
 }
 
 func (e *Enumeration) updateLastActive(srv string) {
-	e.lastLock.Lock()
-	defer e.lastLock.Unlock()
+	go func() {
+		e.lastLock.Lock()
+		defer e.lastLock.Unlock()
 
-	e.last = time.Now()
+		e.last = time.Now()
+	}()
 }
 
 func (e *Enumeration) setupEventBus() {
@@ -398,7 +421,7 @@ func (e *Enumeration) setupEventBus() {
 		e.Bus.Subscribe(requests.NameResolvedTopic, e.newRNCallback)
 
 		e.Bus.Subscribe(requests.NewAddrTopic, e.newAddress)
-		e.Bus.Subscribe(requests.NewASNTopic, e.updateASNCache)
+		e.Bus.Subscribe(requests.NewASNTopic, e.netCache.Update)
 	}
 
 	// Setup all core services to receive the appropriate events
@@ -432,7 +455,7 @@ func (e *Enumeration) cleanEventBus() {
 		e.Bus.Unsubscribe(requests.NameResolvedTopic, e.newRNCallback)
 
 		e.Bus.Unsubscribe(requests.NewAddrTopic, e.newAddress)
-		e.Bus.Unsubscribe(requests.NewASNTopic, e.updateASNCache)
+		e.Bus.Unsubscribe(requests.NewASNTopic, e.netCache.Update)
 	}
 
 	// Setup all core services to receive the appropriate events

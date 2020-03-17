@@ -9,7 +9,9 @@ import (
 	"strconv"
 
 	"github.com/OWASP/Amass/v3/graph/db"
+	amassnet "github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/requests"
+	"github.com/OWASP/Amass/v3/stringset"
 	"golang.org/x/net/publicsuffix"
 )
 
@@ -28,6 +30,7 @@ func (g *Graph) GetOutput(uuid string) []*requests.Output {
 	}
 
 	var names []db.Node
+	filter := stringset.NewStringFilter()
 	for _, edge := range edges {
 		p, err := g.db.ReadProperties(edge.To, "type")
 
@@ -35,13 +38,16 @@ func (g *Graph) GetOutput(uuid string) []*requests.Output {
 			continue
 		}
 
-		names = append(names, edge.To)
+		if !filter.Duplicate(g.db.NodeToID(edge.To)) {
+			names = append(names, edge.To)
+		}
 	}
 
 	var count int
+	cache := amassnet.NewASNCache()
 	output := make(chan *requests.Output, 10000)
 	for _, name := range names {
-		go g.buildOutput(name, uuid, output)
+		go g.buildOutput(name, uuid, cache, output)
 		count++
 	}
 
@@ -54,7 +60,7 @@ func (g *Graph) GetOutput(uuid string) []*requests.Output {
 	return results
 }
 
-func (g *Graph) buildOutput(sub db.Node, uuid string, c chan *requests.Output) {
+func (g *Graph) buildOutput(sub db.Node, uuid string, cache *amassnet.ASNCache, c chan *requests.Output) {
 	substr := g.db.NodeToID(sub)
 
 	sources, err := g.db.NodeSources(sub, uuid)
@@ -91,7 +97,7 @@ func (g *Graph) buildOutput(sub db.Node, uuid string, c chan *requests.Output) {
 		}
 
 		num++
-		go g.buildAddrInfo(addr, uuid, addrChan)
+		go g.buildAddrInfo(addr, uuid, cache, addrChan)
 	}
 
 	for i := 0; i < num; i++ {
@@ -118,13 +124,27 @@ func randomIndex(length int) int {
 	return rand.Intn(length - 1)
 }
 
-func (g *Graph) buildAddrInfo(addr db.Node, uuid string, c chan *requests.AddressInfo) {
+func (g *Graph) buildAddrInfo(addr db.Node, uuid string, cache *amassnet.ASNCache, c chan *requests.AddressInfo) {
 	if !g.inEventScope(addr, uuid, "DNS") {
 		c <- nil
 		return
 	}
 
-	ainfo := &requests.AddressInfo{Address: net.ParseIP(g.db.NodeToID(addr))}
+	address := g.db.NodeToID(addr)
+	ainfo := &requests.AddressInfo{Address: net.ParseIP(address)}
+	// Check the ASNCache before querying the graph database
+	if a := cache.AddrSearch(address); a != nil {
+		var err error
+
+		_, ainfo.Netblock, err = net.ParseCIDR(a.Prefix)
+		if err == nil && ainfo.Netblock.Contains(ainfo.Address) {
+			ainfo.ASN = a.ASN
+			ainfo.Description = a.Description
+			ainfo.CIDRStr = a.Prefix
+			c <- ainfo
+			return
+		}
+	}
 
 	// Get the netblock that contains the IP address
 	edges, err := g.db.ReadInEdges(addr, "contains")
@@ -175,6 +195,13 @@ func (g *Graph) buildAddrInfo(addr db.Node, uuid string, c chan *requests.Addres
 	if p, err := g.db.ReadProperties(asNode, "description"); err == nil && len(p) > 0 {
 		ainfo.Description = p[0].Value
 	}
+
+	cache.Update(&requests.ASNRequest{
+		Address:     ainfo.Address.String(),
+		ASN:         ainfo.ASN,
+		Prefix:      ainfo.CIDRStr,
+		Description: ainfo.Description,
+	})
 
 	c <- ainfo
 }
