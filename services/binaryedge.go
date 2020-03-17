@@ -73,12 +73,13 @@ func (be *BinaryEdge) OnDNSRequest(ctx context.Context, req *requests.DNSRequest
 	}
 
 	be.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, be.String())
-	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", be.String(), req.Domain))
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, be.String())
+	bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+		fmt.Sprintf("Querying %s for %s subdomains", be.String(), req.Domain))
 
 	page, err := http.RequestWebPage(url, nil, headers, "", "")
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", be.String(), url, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", be.String(), url, err))
 		return
 	}
 	// Extract the subdomain names from the REST API results
@@ -91,7 +92,7 @@ func (be *BinaryEdge) OnDNSRequest(ctx context.Context, req *requests.DNSRequest
 
 	for _, name := range subs.Subdomains {
 		if re.MatchString(name) {
-			bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+			bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 				Name:   name,
 				Domain: req.Domain,
 				Tag:    be.SourceType,

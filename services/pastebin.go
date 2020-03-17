@@ -49,11 +49,13 @@ func (p *Pastebin) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 	}
 
 	p.CheckRateLimit()
-	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", p.String(), req.Domain))
+	bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+		fmt.Sprintf("Querying %s for %s subdomains", p.String(), req.Domain))
 
 	ids, err := p.extractIDs(req.Domain)
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", p.String(), req.Domain, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+			fmt.Sprintf("%s: %s: %v", p.String(), req.Domain, err))
 		return
 	}
 
@@ -61,12 +63,12 @@ func (p *Pastebin) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 		url := p.webURLDumpData(id)
 		page, err := http.RequestWebPage(url, nil, nil, "", "")
 		if err != nil {
-			bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", p.String(), url, err))
+			bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", p.String(), url, err))
 			return
 		}
 
 		for _, name := range re.FindAllString(page, -1) {
-			bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+			bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 				Name:   name,
 				Domain: req.Domain,
 				Tag:    p.SourceType,

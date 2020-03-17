@@ -58,14 +58,15 @@ func (t *ThreatCrowd) OnDNSRequest(ctx context.Context, req *requests.DNSRequest
 	}
 
 	t.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, t.String())
-	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", t.String(), req.Domain))
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, t.String())
+	bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+		fmt.Sprintf("Querying %s for %s subdomains", t.String(), req.Domain))
 
 	url := t.getURL(req.Domain)
 	headers := map[string]string{"Content-Type": "application/json"}
 	page, err := http.RequestWebPage(url, nil, headers, "", "")
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", t.String(), url, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", t.String(), url, err))
 		return
 	}
 
@@ -82,7 +83,7 @@ func (t *ThreatCrowd) OnDNSRequest(ctx context.Context, req *requests.DNSRequest
 	}
 
 	if m.ResponseCode != "1" {
-		bus.Publish(requests.LogTopic,
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: %s: Response code %s", t.String(), url, m.ResponseCode),
 		)
 		return
@@ -92,7 +93,7 @@ func (t *ThreatCrowd) OnDNSRequest(ctx context.Context, req *requests.DNSRequest
 		s := strings.ToLower(sub)
 
 		if s != "" && re.MatchString(s) {
-			bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+			bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 				Name:   s,
 				Domain: req.Domain,
 				Tag:    t.SourceType,
@@ -102,7 +103,7 @@ func (t *ThreatCrowd) OnDNSRequest(ctx context.Context, req *requests.DNSRequest
 	}
 
 	for _, res := range m.Resolutions {
-		bus.Publish(requests.NewAddrTopic, &requests.AddrRequest{
+		bus.Publish(requests.NewAddrTopic, eventbus.PriorityHigh, &requests.AddrRequest{
 			Address: res.IP,
 			Domain:  req.Domain,
 			Tag:     t.SourceType,

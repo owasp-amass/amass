@@ -67,12 +67,12 @@ func (o *OpenUKArchive) OnDNSRequest(ctx context.Context, req *requests.DNSReque
 
 	names, err := crawl(ctx, o.baseURL, o.domain, req.Name, req.Domain)
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %v", o.String(), err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %v", o.String(), err))
 		return
 	}
 
 	for _, name := range names {
-		bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+		bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 			Name:   cleanName(name),
 			Domain: req.Domain,
 			Tag:    o.SourceType,

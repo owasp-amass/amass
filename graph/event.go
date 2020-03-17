@@ -102,8 +102,8 @@ func (g *Graph) AddNodeToEvent(node db.Node, source, tag, eventID string) error 
 	return nil
 }
 
-func (g *Graph) inEventScope(node db.Node, uuid string) bool {
-	edges, err := g.db.ReadInEdges(node)
+func (g *Graph) inEventScope(node db.Node, uuid string, predicates ...string) bool {
+	edges, err := g.db.ReadInEdges(node, predicates...)
 	if err != nil {
 		return false
 	}
@@ -130,6 +130,23 @@ func (g *Graph) EventList() []string {
 	}
 
 	return ids.Slice()
+}
+
+// EventFQDNs returns the domains that were involved in the event.
+func (g *Graph) EventFQDNs(uuid string) []string {
+	names, err := g.db.AllNodesOfType("fqdn", uuid)
+	if err != nil {
+		return nil
+	}
+
+	set := stringset.New()
+	for _, name := range names {
+		if n := g.db.NodeToID(name); n != "" {
+			set.Insert(n)
+		}
+	}
+
+	return set.Slice()
 }
 
 // EventDomains returns the domains that were involved in the event.

@@ -21,6 +21,7 @@ const (
 	BRUTE    = "brute"
 	CERT     = "cert"
 	DNS      = "dns"
+	RIR      = "rir"
 	EXTERNAL = "ext"
 	SCRAPE   = "scrape"
 )

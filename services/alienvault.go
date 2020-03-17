@@ -66,7 +66,8 @@ func (a *AlienVault) OnDNSRequest(ctx context.Context, req *requests.DNSRequest)
 	}
 
 	a.CheckRateLimit()
-	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", a.String(), req.Domain))
+	bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+		fmt.Sprintf("Querying %s for %s subdomains", a.String(), req.Domain))
 	a.executeDNSQuery(ctx, req)
 
 	a.CheckRateLimit()
@@ -95,12 +96,12 @@ func (a *AlienVault) executeDNSQuery(ctx context.Context, req *requests.DNSReque
 		return
 	}
 
-	bus.Publish(requests.SetActiveTopic, a.String())
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, a.String())
 
 	u := a.getURL(req.Domain) + "passive_dns"
 	page, err := http.RequestWebPage(u, nil, a.getHeaders(), "", "")
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", a.String(), u, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", a.String(), u, err))
 		return
 	}
 	// Extract the subdomain names and IP addresses from the passive DNS information
@@ -111,10 +112,11 @@ func (a *AlienVault) executeDNSQuery(ctx context.Context, req *requests.DNSReque
 		} `json:"passive_dns"`
 	}
 	if err := json.Unmarshal([]byte(page), &m); err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", a.String(), u, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", a.String(), u, err))
 		return
 	} else if len(m.Subdomains) == 0 {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: The query returned zero results", a.String(), u))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+			fmt.Sprintf("%s: %s: The query returned zero results", a.String(), u))
 		return
 	}
 
@@ -130,7 +132,7 @@ func (a *AlienVault) executeDNSQuery(ctx context.Context, req *requests.DNSReque
 	}
 
 	for name := range names {
-		bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+		bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 			Name:   name,
 			Domain: req.Domain,
 			Tag:    a.SourceType,
@@ -139,7 +141,7 @@ func (a *AlienVault) executeDNSQuery(ctx context.Context, req *requests.DNSReque
 	}
 
 	for ip := range ips {
-		bus.Publish(requests.NewAddrTopic, &requests.AddrRequest{
+		bus.Publish(requests.NewAddrTopic, eventbus.PriorityHigh, &requests.AddrRequest{
 			Address: ip,
 			Domain:  req.Domain,
 			Tag:     a.SourceType,
@@ -160,13 +162,13 @@ func (a *AlienVault) executeURLQuery(ctx context.Context, req *requests.DNSReque
 		return
 	}
 
-	bus.Publish(requests.SetActiveTopic, a.String())
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, a.String())
 
 	headers := a.getHeaders()
 	u := a.getURL(req.Domain) + "url_list"
 	page, err := http.RequestWebPage(u, nil, headers, "", "")
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", a.String(), u, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", a.String(), u, err))
 		return
 	}
 	// Extract the subdomain names and IP addresses from the URL information
@@ -186,10 +188,11 @@ func (a *AlienVault) executeURLQuery(ctx context.Context, req *requests.DNSReque
 		} `json:"url_list"`
 	}
 	if err := json.Unmarshal([]byte(page), &urls); err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", a.String(), u, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", a.String(), u, err))
 		return
 	} else if len(urls.URLs) == 0 {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: The query returned zero results", a.String(), u))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+			fmt.Sprintf("%s: %s: The query returned zero results", a.String(), u))
 		return
 	}
 
@@ -213,15 +216,17 @@ func (a *AlienVault) executeURLQuery(ctx context.Context, req *requests.DNSReque
 			pageURL := u + "?page=" + strconv.Itoa(cur)
 			page, err = http.RequestWebPage(pageURL, nil, headers, "", "")
 			if err != nil {
-				bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", a.String(), pageURL, err))
+				bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+					fmt.Sprintf("%s: %s: %v", a.String(), pageURL, err))
 				break
 			}
 
 			if err := json.Unmarshal([]byte(page), &urls); err != nil {
-				bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", a.String(), pageURL, err))
+				bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+					fmt.Sprintf("%s: %s: %v", a.String(), pageURL, err))
 				break
 			} else if len(urls.URLs) == 0 {
-				bus.Publish(requests.LogTopic,
+				bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 					fmt.Sprintf("%s: %s: The query returned zero results", a.String(), pageURL),
 				)
 				break
@@ -241,7 +246,7 @@ func (a *AlienVault) executeURLQuery(ctx context.Context, req *requests.DNSReque
 	}
 
 	for name := range names {
-		bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+		bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 			Name:   name,
 			Domain: req.Domain,
 			Tag:    a.SourceType,
@@ -250,7 +255,7 @@ func (a *AlienVault) executeURLQuery(ctx context.Context, req *requests.DNSReque
 	}
 
 	for ip := range ips {
-		bus.Publish(requests.NewAddrTopic, &requests.AddrRequest{
+		bus.Publish(requests.NewAddrTopic, eventbus.PriorityHigh, &requests.AddrRequest{
 			Address: ip,
 			Domain:  req.Domain,
 			Tag:     a.SourceType,
@@ -272,12 +277,13 @@ func (a *AlienVault) executeWhoisQuery(ctx context.Context, req *requests.WhoisR
 	newDomains := stringset.New()
 	headers := a.getHeaders()
 	for _, email := range emails {
-		bus.Publish(requests.SetActiveTopic, a.String())
+		bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, a.String())
 
 		pageURL := a.getReverseWhoisURL(email)
 		page, err := http.RequestWebPage(pageURL, nil, headers, "", "")
 		if err != nil {
-			bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", a.String(), pageURL, err))
+			bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+				fmt.Sprintf("%s: %s: %v", a.String(), pageURL, err))
 			continue
 		}
 
@@ -286,7 +292,8 @@ func (a *AlienVault) executeWhoisQuery(ctx context.Context, req *requests.WhoisR
 		}
 		var domains []record
 		if err := json.Unmarshal([]byte(page), &domains); err != nil {
-			bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", a.String(), pageURL, err))
+			bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+				fmt.Sprintf("%s: %s: %v", a.String(), pageURL, err))
 			continue
 		}
 		for _, d := range domains {
@@ -298,13 +305,13 @@ func (a *AlienVault) executeWhoisQuery(ctx context.Context, req *requests.WhoisR
 	}
 
 	if len(newDomains) == 0 {
-		bus.Publish(requests.LogTopic,
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: Reverse whois failed to discover new domain names for %s", a.String(), req.Domain),
 		)
 		return
 	}
 
-	bus.Publish(requests.NewWhoisTopic, &requests.WhoisRequest{
+	bus.Publish(requests.NewWhoisTopic, eventbus.PriorityHigh, &requests.WhoisRequest{
 		Domain:     req.Domain,
 		NewDomains: newDomains.Slice(),
 		Tag:        a.SourceType,
@@ -322,11 +329,11 @@ func (a *AlienVault) queryWhoisForEmails(ctx context.Context, req *requests.Whoi
 		return emails.Slice()
 	}
 
-	bus.Publish(requests.SetActiveTopic, a.String())
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, a.String())
 
 	page, err := http.RequestWebPage(u, nil, a.getHeaders(), "", "")
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", a.String(), u, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", a.String(), u, err))
 		return emails.Slice()
 	}
 
@@ -339,10 +346,11 @@ func (a *AlienVault) queryWhoisForEmails(ctx context.Context, req *requests.Whoi
 		} `json:"data"`
 	}
 	if err := json.Unmarshal([]byte(page), &m); err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", a.String(), u, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", a.String(), u, err))
 		return emails.Slice()
 	} else if m.Count == 0 {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: The query returned zero results", a.String(), u))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+			fmt.Sprintf("%s: %s: The query returned zero results", a.String(), u))
 		return emails.Slice()
 	}
 

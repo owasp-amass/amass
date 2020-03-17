@@ -92,6 +92,11 @@ func (w *WhoisXML) OnWhoisRequest(ctx context.Context, req *requests.WhoisReques
 	if !cfg.IsDomainInScope(req.Domain) {
 		return
 	}
+	bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+		fmt.Sprintf("Querying %s for %s subdomains", w.String(), req.Domain))
+
+	w.CheckRateLimit()
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, w.String())
 
 	u := w.getReverseWhoisURL(req.Domain)
 	headers := map[string]string{"X-Authentication-Token": w.API.Key}
@@ -105,7 +110,7 @@ func (w *WhoisXML) OnWhoisRequest(ctx context.Context, req *requests.WhoisReques
 
 	page, err := http.RequestWebPage(u, bytes.NewReader(jr), headers, "", "")
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %w", w.String(), u, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", w.String(), u, err))
 		return
 	}
 
@@ -113,12 +118,13 @@ func (w *WhoisXML) OnWhoisRequest(ctx context.Context, req *requests.WhoisReques
 	// Pull the table we need from the page content
 	err = json.NewDecoder(strings.NewReader(page)).Decode(&q)
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("Failed to decode json in WhoisXML.\nErr:%s", err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+			fmt.Sprintf("Failed to decode json in WhoisXML.\nErr:%s", err))
 		return
 	}
 
 	if q.Found > 0 {
-		bus.Publish(requests.NewWhoisTopic, &requests.WhoisRequest{
+		bus.Publish(requests.NewWhoisTopic, eventbus.PriorityHigh, &requests.WhoisRequest{
 			Domain:     req.Domain,
 			NewDomains: q.List,
 			Tag:        w.SourceType,

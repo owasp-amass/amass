@@ -61,48 +61,49 @@ func (i *IPv4Info) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 	}
 
 	i.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, i.String())
-	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", i.String(), req.Domain))
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, i.String())
+	bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+		fmt.Sprintf("Querying %s for %s subdomains", i.String(), req.Domain))
 
 	url := i.getURL(req.Domain)
 	page, err := http.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", i.String(), url, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", i.String(), url, err))
 		return
 	}
 
 	i.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, i.String())
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, i.String())
 
 	url = i.ipSubmatch(page, req.Domain)
 	page, err = http.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", i.String(), url, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", i.String(), url, err))
 		return
 	}
 
 	i.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, i.String())
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, i.String())
 
 	url = i.domainSubmatch(page, req.Domain)
 	page, err = http.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", i.String(), url, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", i.String(), url, err))
 		return
 	}
 
 	i.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, i.String())
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, i.String())
 
 	url = i.subdomainSubmatch(page, req.Domain)
 	page, err = http.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", i.String(), url, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", i.String(), url, err))
 		return
 	}
 
 	for _, sd := range re.FindAllString(page, -1) {
-		bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+		bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 			Name:   cleanName(sd),
 			Domain: req.Domain,
 			Tag:    i.SourceType,

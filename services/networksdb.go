@@ -86,7 +86,7 @@ func (n *NetworksDB) OnASNRequest(ctx context.Context, req *requests.ASNRequest)
 	}
 
 	n.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, n.String())
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, n.String())
 
 	if n.hasAPIKey {
 		if req.Address != "" {
@@ -113,25 +113,25 @@ func (n *NetworksDB) executeASNAddrQuery(ctx context.Context, addr string) {
 	u := n.getIPURL(addr)
 	page, err := http.RequestWebPage(u, nil, nil, "", "")
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", n.String(), u, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", n.String(), u, err))
 		return
 	}
 
 	matches := networksdbOrgLinkRE.FindStringSubmatch(page)
 	if matches == nil || len(matches) < 2 {
-		bus.Publish(requests.LogTopic,
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: %s: Failed to extract the organization info href", n.String(), u),
 		)
 		return
 	}
 
 	n.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, n.String())
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, n.String())
 
 	u = networksdbBaseURL + matches[1]
 	page, err = http.RequestWebPage(u, nil, nil, "", "")
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", n.String(), u, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", n.String(), u, err))
 		return
 	}
 
@@ -144,7 +144,7 @@ func (n *NetworksDB) executeASNAddrQuery(ctx context.Context, addr string) {
 
 	matches = networksdbASNRE.FindStringSubmatch(page)
 	if matches == nil || len(matches) < 2 {
-		bus.Publish(requests.LogTopic,
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: %s: The regular expression failed to extract the ASN", n.String(), u),
 		)
 		return
@@ -152,7 +152,7 @@ func (n *NetworksDB) executeASNAddrQuery(ctx context.Context, addr string) {
 
 	asn, err := strconv.Atoi(strings.TrimSpace(matches[1]))
 	if err != nil {
-		bus.Publish(requests.LogTopic,
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: %s: Failed to extract a valid ASN", n.String(), u),
 		)
 		return
@@ -172,18 +172,18 @@ func (n *NetworksDB) executeASNQuery(ctx context.Context, asn int, addr string, 
 	}
 
 	n.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, n.String())
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, n.String())
 
 	u := n.getASNURL(asn)
 	page, err := http.RequestWebPage(u, nil, nil, "", "")
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", n.String(), u, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", n.String(), u, err))
 		return
 	}
 
 	matches := networksdbASNameRE.FindStringSubmatch(page)
 	if matches == nil || len(matches) < 2 {
-		bus.Publish(requests.LogTopic,
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: The regular expression failed to extract the AS name", n.String()),
 		)
 		return
@@ -192,7 +192,7 @@ func (n *NetworksDB) executeASNQuery(ctx context.Context, asn int, addr string, 
 
 	matches = networksdbCCRE.FindStringSubmatch(page)
 	if matches == nil || len(matches) < 2 {
-		bus.Publish(requests.LogTopic,
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: The regular expression failed to extract the country code", n.String()),
 		)
 		return
@@ -220,7 +220,7 @@ func (n *NetworksDB) executeASNQuery(ctx context.Context, asn int, addr string, 
 		prefix = netblocks.Slice()[0] // TODO order may matter here :shrug:
 	}
 
-	bus.Publish(requests.NewASNTopic, &requests.ASNRequest{
+	bus.Publish(requests.NewASNTopic, eventbus.PriorityHigh, &requests.ASNRequest{
 		Address:     addr,
 		ASN:         asn,
 		Prefix:      prefix,
@@ -244,18 +244,18 @@ func (n *NetworksDB) executeAPIASNAddrQuery(ctx context.Context, addr string) {
 
 	_, id := n.apiIPQuery(ctx, addr)
 	if id == "" {
-		bus.Publish(requests.LogTopic,
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: %s: Failed to obtain IP address information", n.String(), addr),
 		)
 		return
 	}
 
 	n.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, n.String())
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, n.String())
 
 	asns := n.apiOrgInfoQuery(ctx, id)
 	if len(asns) == 0 {
-		bus.Publish(requests.LogTopic,
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: %s: Failed to obtain ASNs associated with the organization", n.String(), id),
 		)
 		return
@@ -269,7 +269,7 @@ loop:
 		n.CheckRateLimit()
 		cidrs = n.apiNetblocksQuery(ctx, a)
 		if len(cidrs) == 0 {
-			bus.Publish(requests.LogTopic,
+			bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 				fmt.Sprintf("%s: %d: Failed to obtain netblocks associated with the ASN", n.String(), a),
 			)
 		}
@@ -285,7 +285,7 @@ loop:
 	}
 
 	if asn == 0 {
-		bus.Publish(requests.LogTopic,
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: %s: Failed to obtain the ASN associated with the IP address", n.String(), addr),
 		)
 		return
@@ -302,7 +302,7 @@ func (n *NetworksDB) executeAPIASNQuery(ctx context.Context, asn int, addr strin
 	if len(netblocks) == 0 {
 		netblocks.Union(n.apiNetblocksQuery(ctx, asn))
 		if len(netblocks) == 0 {
-			bus.Publish(requests.LogTopic,
+			bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 				fmt.Sprintf("%s: %d: Failed to obtain netblocks associated with the ASN", n.String(), asn),
 			)
 			return
@@ -324,11 +324,11 @@ func (n *NetworksDB) executeAPIASNQuery(ctx context.Context, asn int, addr strin
 	}
 
 	n.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, n.String())
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, n.String())
 
 	req := n.apiASNInfoQuery(ctx, asn)
 	if req == nil {
-		bus.Publish(requests.LogTopic,
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: %d: Failed to obtain ASN information", n.String(), asn),
 		)
 		return
@@ -339,7 +339,7 @@ func (n *NetworksDB) executeAPIASNQuery(ctx context.Context, asn int, addr strin
 	}
 	req.Prefix = prefix
 	req.Netblocks = netblocks
-	bus.Publish(requests.NewASNTopic, req)
+	bus.Publish(requests.NewASNTopic, eventbus.PriorityHigh, req)
 }
 
 func (n *NetworksDB) apiIPQuery(ctx context.Context, addr string) (string, string) {
@@ -349,14 +349,14 @@ func (n *NetworksDB) apiIPQuery(ctx context.Context, addr string) (string, strin
 	}
 
 	n.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, n.String())
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, n.String())
 
 	u := n.getAPIIPURL()
 	params := url.Values{"ip": {addr}}
 	body := strings.NewReader(params.Encode())
 	page, err := http.RequestWebPage(u, body, n.getHeaders(), "", "")
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", n.String(), u, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", n.String(), u, err))
 		return "", ""
 	}
 
@@ -373,13 +373,13 @@ func (n *NetworksDB) apiIPQuery(ctx context.Context, addr string) (string, strin
 		} `json:"results"`
 	}
 	if err := json.Unmarshal([]byte(page), &m); err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", n.String(), u, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", n.String(), u, err))
 		return "", ""
 	} else if m.Error != "" {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %s", n.String(), u, m.Error))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %s", n.String(), u, m.Error))
 		return "", ""
 	} else if m.Total == 0 || len(m.Results) == 0 {
-		bus.Publish(requests.LogTopic,
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: %s: The request returned zero results", n.String(), u),
 		)
 		return "", ""
@@ -399,14 +399,14 @@ func (n *NetworksDB) apiOrgInfoQuery(ctx context.Context, id string) []int {
 	}
 
 	n.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, n.String())
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, n.String())
 
 	u := n.getAPIOrgInfoURL()
 	params := url.Values{"id": {id}}
 	body := strings.NewReader(params.Encode())
 	page, err := http.RequestWebPage(u, body, n.getHeaders(), "", "")
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", n.String(), u, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", n.String(), u, err))
 		return []int{}
 	}
 
@@ -418,13 +418,13 @@ func (n *NetworksDB) apiOrgInfoQuery(ctx context.Context, id string) []int {
 		} `json:"results"`
 	}
 	if err := json.Unmarshal([]byte(page), &m); err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", n.String(), u, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", n.String(), u, err))
 		return []int{}
 	} else if m.Error != "" {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %s", n.String(), u, m.Error))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %s", n.String(), u, m.Error))
 		return []int{}
 	} else if m.Total == 0 || len(m.Results[0].ASNs) == 0 {
-		bus.Publish(requests.LogTopic,
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: %s: The request returned zero results", n.String(), u),
 		)
 		return []int{}
@@ -444,14 +444,14 @@ func (n *NetworksDB) apiASNInfoQuery(ctx context.Context, asn int) *requests.ASN
 	}
 
 	n.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, n.String())
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, n.String())
 
 	u := n.getAPIASNInfoURL()
 	params := url.Values{"asn": {strconv.Itoa(asn)}}
 	body := strings.NewReader(params.Encode())
 	page, err := http.RequestWebPage(u, body, n.getHeaders(), "", "")
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", n.String(), u, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", n.String(), u, err))
 		return nil
 	}
 
@@ -467,13 +467,13 @@ func (n *NetworksDB) apiASNInfoQuery(ctx context.Context, asn int) *requests.ASN
 		} `json:"results"`
 	}
 	if err := json.Unmarshal([]byte(page), &m); err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", n.String(), u, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", n.String(), u, err))
 		return nil
 	} else if m.Error != "" {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %s", n.String(), u, m.Error))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %s", n.String(), u, m.Error))
 		return nil
 	} else if m.Total == 0 || len(m.Results) == 0 {
-		bus.Publish(requests.LogTopic,
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: %s: The request returned zero results", n.String(), u),
 		)
 		return nil
@@ -501,14 +501,14 @@ func (n *NetworksDB) apiNetblocksQuery(ctx context.Context, asn int) stringset.S
 	}
 
 	n.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, n.String())
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, n.String())
 
 	u := n.getAPINetblocksURL()
 	params := url.Values{"asn": {strconv.Itoa(asn)}}
 	body := strings.NewReader(params.Encode())
 	page, err := http.RequestWebPage(u, body, n.getHeaders(), "", "")
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", n.String(), u, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", n.String(), u, err))
 		return netblocks
 	}
 
@@ -520,13 +520,13 @@ func (n *NetworksDB) apiNetblocksQuery(ctx context.Context, asn int) stringset.S
 		} `json:"results"`
 	}
 	if err := json.Unmarshal([]byte(page), &m); err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", n.String(), u, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", n.String(), u, err))
 		return netblocks
 	} else if m.Error != "" {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %s", n.String(), u, m.Error))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %s", n.String(), u, m.Error))
 		return netblocks
 	} else if m.Total == 0 || len(m.Results) == 0 {
-		bus.Publish(requests.LogTopic,
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: %s: The request returned zero results", n.String(), u),
 		)
 		return netblocks

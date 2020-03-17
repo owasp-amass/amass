@@ -21,16 +21,6 @@ import (
 	"github.com/miekg/dns"
 )
 
-var (
-	retryCodes = []int{
-		dns.RcodeRefused,
-		dns.RcodeServerFailure,
-		dns.RcodeNotImplemented,
-	}
-
-	maxRetries = 3
-)
-
 // ResolverPool manages many DNS resolvers for high-performance use, such as brute forcing attacks.
 type ResolverPool struct {
 	Resolvers []Resolver
@@ -46,7 +36,7 @@ type ResolverPool struct {
 }
 
 // SetupResolverPool initializes a ResolverPool with the type of resolvers indicated by the parameters.
-func SetupResolverPool(addrs []string, scoring, ratemon bool, log *log.Logger) *ResolverPool {
+func SetupResolverPool(addrs []string, ratemon bool, log *log.Logger) *ResolverPool {
 	if len(addrs) <= 0 {
 		return nil
 	}
@@ -86,11 +76,6 @@ loop:
 			if r == nil {
 				continue loop
 			}
-			if scoring {
-				if r = NewScoredResolver(r); r == nil {
-					continue loop
-				}
-			}
 			if ratemon {
 				if r = NewRateMonitoredResolver(r); r == nil {
 					continue loop
@@ -122,7 +107,6 @@ func NewResolverPool(res []Resolver, logger *log.Logger) *ResolverPool {
 		rp.Log = log.New(ioutil.Discard, "", 0)
 	}
 
-	rp.SanityChecks()
 	return rp
 }
 
@@ -232,7 +216,7 @@ func (rp *ResolverPool) NextResolver() Resolver {
 	for {
 		r := rp.Resolvers[rand.Int()%max]
 
-		if stopped := r.IsStopped(); !stopped {
+		if avail, _ := r.Available(); avail {
 			return r
 		}
 
@@ -240,7 +224,7 @@ func (rp *ResolverPool) NextResolver() Resolver {
 		if attempts > max {
 			// Check every resolver sequentially
 			for _, r := range rp.Resolvers {
-				if stopped := r.IsStopped(); !stopped {
+				if avail, _ := r.Available(); avail {
 					return r
 				}
 			}
@@ -262,7 +246,7 @@ func (rp *ResolverPool) Reverse(ctx context.Context, addr string, priority int) 
 	} else {
 		return ptr, "", &ResolveError{
 			Err:   fmt.Sprintf("Invalid IP address parameter: %s", addr),
-			Rcode: 100,
+			Rcode: ResolverErrRcode,
 		}
 	}
 
@@ -281,12 +265,12 @@ func (rp *ResolverPool) Reverse(ctx context.Context, addr string, priority int) 
 	if name == "" {
 		err = &ResolveError{
 			Err:   fmt.Sprintf("PTR record not found for IP address: %s", addr),
-			Rcode: 100,
+			Rcode: ResolverErrRcode,
 		}
 	} else if strings.HasSuffix(name, ".in-addr.arpa") || strings.HasSuffix(name, ".ip6.arpa") {
 		err = &ResolveError{
 			Err:   fmt.Sprintf("Invalid target in PTR record answer: %s", name),
-			Rcode: 100,
+			Rcode: ResolverErrRcode,
 		}
 	}
 
@@ -300,26 +284,30 @@ func (rp *ResolverPool) Resolve(ctx context.Context, name, qtype string, priorit
 	case PriorityCritical:
 		attempts = 1000
 	case PriorityHigh:
-		attempts = 100
+		attempts = 250
 	case PriorityLow:
-		attempts = 25
+		attempts = 50
 	}
 
+	var err error
+	var again bool
+	var ans []requests.DNSAnswer
 	// This loop ensures the correct number of attempts of the DNS query
-	for count := 0; count < attempts; count++ {
+	for count := 0; count < attempts; {
 		r := rp.NextResolver()
 		if r == nil {
 			// Give the system a chance to breathe before trying again
-			time.Sleep(time.Duration(randomInt(1000, 1500)) * time.Millisecond)
+			time.Sleep(time.Duration(randomInt(100, 200)) * time.Millisecond)
 			continue
 		}
 
+		count++
 		success := true
-		ans, again, err := r.Resolve(ctx, name, qtype, priority)
+		ans, again, err = r.Resolve(ctx, name, qtype, priority)
 		if again {
 			success = false
 		} else if err != nil {
-			if rc := (err.(*ResolveError)).Rcode; rc == NotAvailableRcode || 
+			if rc := (err.(*ResolveError)).Rcode; rc == NotAvailableRcode ||
 				rc == dns.RcodeServerFailure || rc == dns.RcodeRefused || rc == dns.RcodeNotImplemented {
 				success = false
 			}
@@ -330,9 +318,7 @@ func (rp *ResolverPool) Resolve(ctx context.Context, name, qtype string, priorit
 		}
 	}
 
-	return []requests.DNSAnswer{}, false, &ResolveError{
-		Err: fmt.Sprintf("Resolver: %d attempts for %s type %s returned 0 results", attempts, name, qtype),
-	}
+	return []requests.DNSAnswer{}, false, &ResolveError{Err: fmt.Sprintf("%v", err)}
 }
 
 func (rp *ResolverPool) numUsableResolvers() int {

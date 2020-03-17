@@ -59,15 +59,16 @@ func (v *ViewDNS) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 	}
 
 	v.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, v.String())
-	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", v.String(), req.Domain))
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, v.String())
+	bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+		fmt.Sprintf("Querying %s for %s subdomains", v.String(), req.Domain))
 
 	var unique []string
 	u := v.getIPHistoryURL(req.Domain)
 	// The ViewDNS IP History lookup sometimes reveals interesting results
 	page, err := http.RequestWebPage(u, nil, nil, "", "")
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", v.String(), u, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", v.String(), u, err))
 		return
 	}
 
@@ -77,7 +78,7 @@ func (v *ViewDNS) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 		addr := NewUniqueElements(unique, sd)
 
 		if len(addr) > 0 {
-			bus.Publish(requests.NewAddrTopic, &requests.AddrRequest{
+			bus.Publish(requests.NewAddrTopic, eventbus.PriorityHigh, &requests.AddrRequest{
 				Address: addr[0],
 				Domain:  req.Domain,
 				Tag:     v.SourceType,
@@ -100,18 +101,18 @@ func (v *ViewDNS) OnWhoisRequest(ctx context.Context, req *requests.WhoisRequest
 	}
 
 	v.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, v.String())
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, v.String())
 
 	u := v.getReverseWhoisURL(req.Domain)
 	page, err := http.RequestWebPage(u, nil, nil, "", "")
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", v.String(), u, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", v.String(), u, err))
 		return
 	}
 	// Pull the table we need from the page content
 	table := getViewDNSTable(page)
 	if table == "" {
-		bus.Publish(requests.LogTopic,
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: %s: Failed to discover the table of results", v.String(), u),
 		)
 		return
@@ -129,7 +130,7 @@ func (v *ViewDNS) OnWhoisRequest(ctx context.Context, req *requests.WhoisRequest
 	}
 
 	if len(matches) > 0 {
-		bus.Publish(requests.NewWhoisTopic, &requests.WhoisRequest{
+		bus.Publish(requests.NewWhoisTopic, eventbus.PriorityHigh, &requests.WhoisRequest{
 			Domain:     req.Domain,
 			NewDomains: matches.Slice(),
 			Tag:        v.SourceType,

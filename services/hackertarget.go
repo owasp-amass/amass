@@ -59,18 +59,19 @@ func (h *HackerTarget) OnDNSRequest(ctx context.Context, req *requests.DNSReques
 	}
 
 	h.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, h.String())
-	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", h.String(), req.Domain))
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, h.String())
+	bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+		fmt.Sprintf("Querying %s for %s subdomains", h.String(), req.Domain))
 
 	url := h.getDNSURL(req.Domain)
 	page, err := http.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", h.String(), url, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", h.String(), url, err))
 		return
 	}
 
 	for _, sd := range re.FindAllString(page, -1) {
-		bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+		bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 			Name:   cleanName(sd),
 			Domain: req.Domain,
 			Tag:    h.SourceType,
@@ -97,30 +98,31 @@ func (h *HackerTarget) OnASNRequest(ctx context.Context, req *requests.ASNReques
 	}
 
 	h.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, h.String())
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, h.String())
 
 	url := h.getASNURL(req.Address)
 	page, err := http.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", h.String(), url, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", h.String(), url, err))
 		return
 	}
 
 	fields := strings.Split(page, ",")
 	if len(fields) < 4 {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: Failed to parse the response", h.String(), url))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+			fmt.Sprintf("%s: %s: Failed to parse the response", h.String(), url))
 		return
 	}
 
 	asn, err := strconv.Atoi(strings.Trim(fields[1], "\""))
 	if err != nil {
-		bus.Publish(requests.LogTopic,
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: %s: Failed to parse the origin response: %v", h.String(), url, err),
 		)
 		return
 	}
 
-	bus.Publish(requests.NewASNTopic, &requests.ASNRequest{
+	bus.Publish(requests.NewASNTopic, eventbus.PriorityHigh, &requests.ASNRequest{
 		Address:        req.Address,
 		ASN:            asn,
 		Prefix:         strings.Trim(fields[2], "\""),

@@ -60,13 +60,14 @@ func (c *CertSpotter) OnDNSRequest(ctx context.Context, req *requests.DNSRequest
 		return
 	}
 
-	bus.Publish(requests.SetActiveTopic, c.String())
-	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", c.String(), req.Domain))
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, c.String())
+	bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+		fmt.Sprintf("Querying %s for %s subdomains", c.String(), req.Domain))
 
 	url := c.getURL(req.Domain)
 	page, err := http.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", c.String(), url, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", c.String(), url, err))
 		return
 	}
 	// Extract the subdomain names from the certificate information
@@ -80,7 +81,7 @@ func (c *CertSpotter) OnDNSRequest(ctx context.Context, req *requests.DNSRequest
 	for _, result := range m {
 		for _, name := range result.Names {
 			if re.MatchString(name) {
-				bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+				bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 					Name:   dns.RemoveAsteriskLabel(name),
 					Domain: req.Domain,
 					Tag:    c.SourceType,

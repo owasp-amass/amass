@@ -70,14 +70,15 @@ func (u *Umbrella) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 	}
 
 	u.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, u.String())
-	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", u.String(), req.Domain))
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, u.String())
+	bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+		fmt.Sprintf("Querying %s for %s subdomains", u.String(), req.Domain))
 
 	headers := u.restHeaders()
 	url := u.restDNSURL(req.Domain)
 	page, err := http.RequestWebPage(url, nil, headers, "", "")
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", u.String(), url, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", u.String(), url, err))
 		return
 	}
 	// Extract the subdomain names from the REST API results
@@ -92,7 +93,7 @@ func (u *Umbrella) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 
 	for _, m := range subs.Matches {
 		if d := cfg.WhichDomain(m.Name); d != "" {
-			bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+			bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 				Name:   m.Name,
 				Domain: d,
 				Tag:    u.SourceType,
@@ -119,13 +120,13 @@ func (u *Umbrella) OnAddrRequest(ctx context.Context, req *requests.AddrRequest)
 	}
 
 	u.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, u.String())
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, u.String())
 
 	headers := u.restHeaders()
 	url := u.restAddrURL(req.Address)
 	page, err := http.RequestWebPage(url, nil, headers, "", "")
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", u.String(), url, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", u.String(), url, err))
 		return
 	}
 	// Extract the subdomain names from the REST API results
@@ -141,7 +142,7 @@ func (u *Umbrella) OnAddrRequest(ctx context.Context, req *requests.AddrRequest)
 	for _, record := range ip.Records {
 		if name := resolvers.RemoveLastDot(record.Data); name != "" {
 			if domain := cfg.WhichDomain(name); domain != "" {
-				bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+				bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 					Name:   name,
 					Domain: req.Domain,
 					Tag:    u.SourceType,
@@ -168,7 +169,7 @@ func (u *Umbrella) OnASNRequest(ctx context.Context, req *requests.ASNRequest) {
 	}
 
 	u.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, u.String())
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, u.String())
 
 	if req.Address != "" {
 		u.executeASNAddrQuery(ctx, req)
@@ -188,7 +189,7 @@ func (u *Umbrella) executeASNAddrQuery(ctx context.Context, req *requests.ASNReq
 	url := u.restAddrToASNURL(req.Address)
 	page, err := http.RequestWebPage(url, nil, headers, "", "")
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", u.String(), url, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", u.String(), url, err))
 		return
 	}
 	// Extract the AS information from the REST API results
@@ -236,11 +237,11 @@ func (u *Umbrella) executeASNAddrQuery(ctx context.Context, req *requests.ASNReq
 		req.Netblocks.Insert(strings.TrimSpace(req.Prefix))
 
 		u.CheckRateLimit()
-		bus.Publish(requests.SetActiveTopic, u.String())
+		bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, u.String())
 
 		u.executeASNQuery(ctx, req)
 	}
-	bus.Publish(requests.NewASNTopic, req)
+	bus.Publish(requests.NewASNTopic, eventbus.PriorityHigh, req)
 }
 
 func (u *Umbrella) executeASNQuery(ctx context.Context, req *requests.ASNRequest) {
@@ -253,7 +254,7 @@ func (u *Umbrella) executeASNQuery(ctx context.Context, req *requests.ASNRequest
 	url := u.restASNToCIDRsURL(req.ASN)
 	page, err := http.RequestWebPage(url, nil, headers, "", "")
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", u.String(), url, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", u.String(), url, err))
 		return
 	}
 	// Extract the netblock information from the REST API results
@@ -287,7 +288,7 @@ func (u *Umbrella) executeASNQuery(ctx context.Context, req *requests.ASNRequest
 			req.CC = netblock[0].Geo.CountryCode
 
 			u.CheckRateLimit()
-			bus.Publish(requests.SetActiveTopic, u.String())
+			bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, u.String())
 
 			u.executeASNAddrQuery(ctx, req)
 			return
@@ -359,17 +360,17 @@ func (u *Umbrella) queryWhois(ctx context.Context, domain string) *whoisRecord {
 	whoisURL := u.whoisRecordURL(domain)
 
 	u.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, u.String())
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, u.String())
 
 	record, err := http.RequestWebPage(whoisURL, nil, headers, "", "")
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", u.String(), whoisURL, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", u.String(), whoisURL, err))
 		return nil
 	}
 
 	err = json.Unmarshal([]byte(record), &whois)
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", u.String(), whoisURL, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", u.String(), whoisURL, err))
 		return nil
 	}
 	return &whois
@@ -388,12 +389,12 @@ func (u *Umbrella) queryReverseWhois(ctx context.Context, apiURL string) []strin
 	// Umbrella provides data in 500 piece chunks
 	for count, more := 0, true; more; count = count + 500 {
 		u.CheckRateLimit()
-		bus.Publish(requests.SetActiveTopic, u.String())
+		bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, u.String())
 
 		fullAPIURL := fmt.Sprintf("%s&offset=%d", apiURL, count)
 		record, err := http.RequestWebPage(fullAPIURL, nil, headers, "", "")
 		if err != nil {
-			bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", u.String(), apiURL, err))
+			bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", u.String(), apiURL, err))
 			return domains.Slice()
 		}
 		err = json.Unmarshal([]byte(record), &whois)
@@ -475,7 +476,7 @@ func (u *Umbrella) OnWhoisRequest(ctx context.Context, req *requests.WhoisReques
 	}
 
 	if len(domains) > 0 {
-		bus.Publish(requests.NewWhoisTopic, &requests.WhoisRequest{
+		bus.Publish(requests.NewWhoisTopic, eventbus.PriorityHigh, &requests.WhoisRequest{
 			Domain:     req.Domain,
 			NewDomains: domains.Slice(),
 			Tag:        u.SourceType,

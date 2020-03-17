@@ -76,8 +76,9 @@ func (t *Twitter) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 	}
 
 	t.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, t.String())
-	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", t.String(), req.Domain))
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, t.String())
+	bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+		fmt.Sprintf("Querying %s for %s subdomains", t.String(), req.Domain))
 
 	searchParams := &twitter.SearchTweetParams{
 		Query: req.Domain,
@@ -85,7 +86,7 @@ func (t *Twitter) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 	}
 	search, _, err := t.client.Search.Tweets(searchParams)
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %v", t.String(), err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %v", t.String(), err))
 		return
 	}
 
@@ -93,7 +94,7 @@ func (t *Twitter) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 		// URLs in the tweet body
 		for _, urlEntity := range tweet.Entities.Urls {
 			for _, name := range re.FindAllString(urlEntity.ExpandedURL, -1) {
-				bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+				bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 					Name:   name,
 					Domain: req.Domain,
 					Tag:    t.SourceType,
@@ -104,7 +105,7 @@ func (t *Twitter) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 
 		// Source of the tweet
 		for _, name := range re.FindAllString(tweet.Source, -1) {
-			bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+			bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 				Name:   name,
 				Domain: req.Domain,
 				Tag:    t.SourceType,

@@ -6,59 +6,47 @@ package enum
 import (
 	"net"
 	"strings"
-	"sync"
 	"time"
 
+	"github.com/OWASP/Amass/v3/eventbus"
 	"github.com/OWASP/Amass/v3/net/http"
 	"github.com/OWASP/Amass/v3/requests"
-	"github.com/OWASP/Amass/v3/stringset"
 	"github.com/miekg/dns"
-	"golang.org/x/net/publicsuffix"
 )
 
-func (e *Enumeration) submitKnownNames(wg *sync.WaitGroup) {
-	defer wg.Done()
-
-	var events []string
-
-	fqdns := stringset.New()
+func (e *Enumeration) submitKnownNames(c chan struct{}) {
 	for _, g := range e.Sys.GraphDatabases() {
-		for _, enum := range g.EventList() {
-			for _, domain := range g.EventDomains(enum) {
+		var events []string
+
+		for _, event := range g.EventList() {
+			for _, domain := range g.EventDomains(event) {
 				if e.Config.IsDomainInScope(domain) {
-					events = append(events, enum)
+					events = append(events, event)
 				}
 			}
 		}
 
-		for _, d := range g.EventSubdomains(events...) {
-			if e.Config.IsDomainInScope(d) {
-				fqdns.Insert(d)
+		for _, event := range events {
+			for _, output := range g.GetOutput(event) {
+				if e.Config.IsDomainInScope(output.Name) {
+					e.Bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
+						Name:   output.Name,
+						Domain: output.Domain,
+						Tag:    output.Tag,
+						Source: output.Source,
+					})
+				}
 			}
 		}
 	}
 
-	for f := range fqdns {
-		etld, err := publicsuffix.EffectiveTLDPlusOne(f)
-		if err != nil {
-			continue
-		}
-
-		e.Bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
-			Name:   f,
-			Domain: etld,
-			Tag:    requests.EXTERNAL,
-			Source: "Previous Enum",
-		})
-	}
+	c <- struct{}{}
 }
 
-func (e *Enumeration) submitProvidedNames(wg *sync.WaitGroup) {
-	defer wg.Done()
-
+func (e *Enumeration) submitProvidedNames(c chan struct{}) {
 	for _, name := range e.Config.ProvidedNames {
 		if domain := e.Config.WhichDomain(name); domain != "" {
-			e.Bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+			e.Bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 				Name:   name,
 				Domain: domain,
 				Tag:    requests.EXTERNAL,
@@ -66,13 +54,15 @@ func (e *Enumeration) submitProvidedNames(wg *sync.WaitGroup) {
 			})
 		}
 	}
+
+	c <- struct{}{}
 }
 
 func (e *Enumeration) namesFromCertificates(addr string) {
 	for _, name := range http.PullCertificateNames(addr, e.Config.Ports) {
 		if n := strings.TrimSpace(name); n != "" {
 			if domain := e.Config.WhichDomain(n); domain != "" {
-				e.Bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+				e.Bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 					Name:   n,
 					Domain: domain,
 					Tag:    requests.CERT,
@@ -83,15 +73,15 @@ func (e *Enumeration) namesFromCertificates(addr string) {
 	}
 }
 
-func (e *Enumeration) processOutput(wg *sync.WaitGroup) {
+func (e *Enumeration) processOutput(c chan struct{}) {
 	defer close(e.Output)
-	defer wg.Done()
+	defer close(c)
 
 	curIdx := 0
 	maxIdx := 6
 	delays := []int{25, 50, 75, 100, 150, 250, 500}
 
-	t := time.NewTicker(2 * time.Second)
+	t := time.NewTicker(time.Second)
 	defer t.Stop()
 loop:
 	for {
@@ -172,7 +162,7 @@ func (e *Enumeration) buildOutput(req *requests.DNSRequest) *requests.Output {
 func (e *Enumeration) buildAddrInfo(addr string) *requests.AddressInfo {
 	ainfo := &requests.AddressInfo{Address: net.ParseIP(addr)}
 
-	asn := e.ipSearch(addr)
+	asn := e.netCache.AddrSearch(addr)
 	if asn == nil {
 		return nil
 	}
@@ -186,7 +176,6 @@ func (e *Enumeration) buildAddrInfo(addr string) *requests.AddressInfo {
 
 	ainfo.ASN = asn.ASN
 	ainfo.Description = asn.Description
-
 	return ainfo
 }
 
@@ -205,8 +194,8 @@ func (e *Enumeration) queueLog(msg string) {
 	e.logQueue.Append(msg)
 }
 
-func (e *Enumeration) writeLogs() {
-	for {
+func (e *Enumeration) writeLogs(num int) {
+	for i := 0; ; i++ {
 		msg, ok := e.logQueue.Next()
 		if !ok {
 			break
@@ -214,6 +203,10 @@ func (e *Enumeration) writeLogs() {
 
 		if e.Config.Log != nil {
 			e.Config.Log.Print(msg.(string))
+		}
+
+		if num != 0 && i >= num {
+			break
 		}
 	}
 }

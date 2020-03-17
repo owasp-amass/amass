@@ -15,10 +15,11 @@ import (
 	"strings"
 	"sync"
 
+	_ "github.com/OWASP/Amass/v3/config/statik"
 	amasshttp "github.com/OWASP/Amass/v3/net/http"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/stringset"
-	"github.com/gobuffalo/packr/v2"
+	"github.com/rakyll/statik/fs"
 )
 
 const (
@@ -26,9 +27,9 @@ const (
 )
 
 var (
-	// BoxOfDefaultFiles is the ./resources project directory embedded into the binary.
-	BoxOfDefaultFiles *packr.Box
-	boxOnce           sync.Once
+	// StatikFS is the ./resources project directory embedded into the binary.
+	StatikFS http.FileSystem
+	fsOnce   sync.Once
 )
 
 // LookupASNsByName returns requests.ASNRequest objects for autonomous systems with
@@ -36,17 +37,15 @@ var (
 func LookupASNsByName(s string) ([]*requests.ASNRequest, error) {
 	var records []*requests.ASNRequest
 
-	if BoxOfDefaultFiles == nil {
-		boxOnce.Do(openTheBox)
-	}
+	fsOnce.Do(openTheFS)
 
-	content, err := BoxOfDefaultFiles.FindString("asnlist.txt")
+	content, err := StatikFS.Open("/asnlist.txt")
 	if err != nil {
 		return records, fmt.Errorf("Failed to obtain the embedded ASN information: asnlist.txt: %v", err)
 	}
 
 	s = strings.ToLower(s)
-	scanner := bufio.NewScanner(strings.NewReader(content))
+	scanner := bufio.NewScanner(content)
 	for scanner.Scan() {
 		line := scanner.Text()
 
@@ -67,8 +66,8 @@ func LookupASNsByName(s string) ([]*requests.ASNRequest, error) {
 	return records, nil
 }
 
-func openTheBox() {
-	BoxOfDefaultFiles = packr.New("Amass Box", "../resources")
+func openTheFS() {
+	StatikFS, _ = fs.New()
 }
 
 // AcquireConfig populates the Config struct provided by the config argument.
@@ -153,16 +152,14 @@ func getWordlistByURL(url string) ([]string, error) {
 	return getWordList(strings.NewReader(page))
 }
 
-func getWordlistByBox(path string) ([]string, error) {
-	if BoxOfDefaultFiles == nil {
-		boxOnce.Do(openTheBox)
-	}
+func getWordlistByFS(path string) ([]string, error) {
+	fsOnce.Do(openTheFS)
 
-	content, err := BoxOfDefaultFiles.FindString(path)
+	content, err := StatikFS.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to obtain the embedded wordlist: %s: %v", path, err)
 	}
-	return getWordList(strings.NewReader(content))
+	return getWordList(content)
 }
 
 func getWordList(reader io.Reader) ([]string, error) {

@@ -59,7 +59,7 @@ func (t *TeamCymru) OnASNRequest(ctx context.Context, req *requests.ASNRequest) 
 	}
 
 	t.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, t.String())
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, t.String())
 
 	r := t.origin(ctx, req.Address)
 	if r == nil {
@@ -67,7 +67,7 @@ func (t *TeamCymru) OnASNRequest(ctx context.Context, req *requests.ASNRequest) 
 	}
 
 	t.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, t.String())
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, t.String())
 
 	asn := t.asnLookup(ctx, r.ASN)
 	if asn == nil {
@@ -76,7 +76,7 @@ func (t *TeamCymru) OnASNRequest(ctx context.Context, req *requests.ASNRequest) 
 
 	r.AllocationDate = asn.AllocationDate
 	r.Description = asn.Description
-	bus.Publish(requests.NewASNTopic, r)
+	bus.Publish(requests.NewASNTopic, eventbus.PriorityHigh, r)
 }
 
 func (t *TeamCymru) origin(ctx context.Context, addr string) *requests.ASNRequest {
@@ -93,7 +93,7 @@ func (t *TeamCymru) origin(ctx context.Context, addr string) *requests.ASNReques
 	} else if amassnet.IsIPv6(ip) {
 		name = amassdns.IPv6NibbleFormat(ip.String()) + ".origin6.asn.cymru.com"
 	} else {
-		bus.Publish(requests.LogTopic,
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: %s: Failed to parse the IP address", t.String(), addr),
 		)
 		return nil
@@ -101,7 +101,7 @@ func (t *TeamCymru) origin(ctx context.Context, addr string) *requests.ASNReques
 
 	answers, _, err = t.System().Pool().Resolve(ctx, name, "TXT", resolvers.PriorityCritical)
 	if err != nil {
-		bus.Publish(requests.LogTopic,
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: %s: DNS TXT record query error: %v", t.String(), name, err),
 		)
 		return nil
@@ -109,7 +109,7 @@ func (t *TeamCymru) origin(ctx context.Context, addr string) *requests.ASNReques
 
 	fields := strings.Split(answers[0].Data, " | ")
 	if len(fields) < 5 {
-		bus.Publish(requests.LogTopic,
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: %s: Failed to parse the origin response", t.String(), name),
 		)
 		return nil
@@ -117,7 +117,7 @@ func (t *TeamCymru) origin(ctx context.Context, addr string) *requests.ASNReques
 
 	asn, err := strconv.Atoi(strings.TrimSpace(fields[0]))
 	if err != nil {
-		bus.Publish(requests.LogTopic,
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: %s: Failed to parse the origin response: %v", t.String(), name, err),
 		)
 		return nil
@@ -153,7 +153,7 @@ func (t *TeamCymru) asnLookup(ctx context.Context, asn int) *requests.ASNRequest
 
 	answers, _, err = t.System().Pool().Resolve(ctx, name, "TXT", resolvers.PriorityCritical)
 	if err != nil {
-		bus.Publish(requests.LogTopic,
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: %s: DNS TXT record query error: %v", t.String(), name, err),
 		)
 		return nil
@@ -161,7 +161,7 @@ func (t *TeamCymru) asnLookup(ctx context.Context, asn int) *requests.ASNRequest
 
 	fields := strings.Split(answers[0].Data, " | ")
 	if len(fields) < 5 {
-		bus.Publish(requests.LogTopic,
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: %s: Failed to parse the origin response", t.String(), name),
 		)
 		return nil
@@ -169,7 +169,7 @@ func (t *TeamCymru) asnLookup(ctx context.Context, asn int) *requests.ASNRequest
 
 	pASN, err := strconv.Atoi(strings.TrimSpace(fields[0]))
 	if err != nil || asn != pASN {
-		bus.Publish(requests.LogTopic,
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: %s: Failed to parse the origin response: %v", t.String(), name, err),
 		)
 		return nil

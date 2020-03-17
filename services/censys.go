@@ -60,7 +60,8 @@ func (c *Censys) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 	}
 
 	c.CheckRateLimit()
-	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", c.String(), req.Domain))
+	bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+		fmt.Sprintf("Querying %s for %s subdomains", c.String(), req.Domain))
 
 	if c.API != nil && c.API.Key != "" && c.API.Secret != "" {
 		c.apiQuery(ctx, req.Domain)
@@ -84,7 +85,7 @@ func (c *Censys) apiQuery(ctx context.Context, domain string) {
 	}
 
 	for page := 1; ; page++ {
-		bus.Publish(requests.SetActiveTopic, c.String())
+		bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, c.String())
 
 		jsonStr, err := json.Marshal(&censysRequest{
 			Query:  "parsed.names: " + domain,
@@ -100,7 +101,7 @@ func (c *Censys) apiQuery(ctx context.Context, domain string) {
 		headers := map[string]string{"Content-Type": "application/json"}
 		resp, err := http.RequestWebPage(u, body, headers, c.API.Key, c.API.Secret)
 		if err != nil {
-			bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", c.String(), u, err))
+			bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", c.String(), u, err))
 			break
 		}
 		// Extract the subdomain names from the certificate information
@@ -115,10 +116,10 @@ func (c *Censys) apiQuery(ctx context.Context, domain string) {
 			} `json:"results"`
 		}
 		if err := json.Unmarshal([]byte(resp), &m); err != nil || m.Status != "ok" {
-			bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", c.String(), u, err))
+			bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", c.String(), u, err))
 			break
 		} else if len(m.Results) == 0 {
-			bus.Publish(requests.LogTopic,
+			bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 				fmt.Sprintf("%s: %s: The query returned zero results", c.String(), u),
 			)
 			break
@@ -130,7 +131,7 @@ func (c *Censys) apiQuery(ctx context.Context, domain string) {
 				n = dns.RemoveAsteriskLabel(n)
 
 				if cfg.IsDomainInScope(n) {
-					bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+					bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 						Name:   n,
 						Domain: domain,
 						Tag:    c.SourceType,
@@ -166,17 +167,17 @@ func (c *Censys) executeQuery(ctx context.Context, domain string) {
 		return
 	}
 
-	bus.Publish(requests.SetActiveTopic, c.String())
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, c.String())
 
 	url = c.webURL(domain)
 	page, err = http.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", c.String(), url, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", c.String(), url, err))
 		return
 	}
 
 	for _, sd := range re.FindAllString(page, -1) {
-		bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+		bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 			Name:   dns.RemoveAsteriskLabel(cleanName(sd)),
 			Domain: domain,
 			Tag:    c.SourceType,

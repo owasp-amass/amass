@@ -66,8 +66,9 @@ func (st *SecurityTrails) OnDNSRequest(ctx context.Context, req *requests.DNSReq
 	}
 
 	st.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, st.String())
-	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", st.String(), req.Domain))
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, st.String())
+	bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+		fmt.Sprintf("Querying %s for %s subdomains", st.String(), req.Domain))
 
 	url := st.restDNSURL(req.Domain)
 	headers := map[string]string{
@@ -77,7 +78,7 @@ func (st *SecurityTrails) OnDNSRequest(ctx context.Context, req *requests.DNSReq
 
 	page, err := http.RequestWebPage(url, nil, headers, "", "")
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", st.String(), url, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", st.String(), url, err))
 		return
 	}
 	// Extract the subdomain names from the REST API results
@@ -91,7 +92,7 @@ func (st *SecurityTrails) OnDNSRequest(ctx context.Context, req *requests.DNSReq
 	for _, s := range subs.Subdomains {
 		name := strings.ToLower(s) + "." + req.Domain
 		if re.MatchString(name) {
-			bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+			bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 				Name:   name,
 				Domain: req.Domain,
 				Tag:    st.SourceType,
@@ -118,7 +119,7 @@ func (st *SecurityTrails) OnWhoisRequest(ctx context.Context, req *requests.Whoi
 	}
 
 	st.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, st.String())
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, st.String())
 
 	url := st.restWhoisURL(req.Domain)
 	headers := map[string]string{
@@ -128,7 +129,7 @@ func (st *SecurityTrails) OnWhoisRequest(ctx context.Context, req *requests.Whoi
 
 	page, err := http.RequestWebPage(url, nil, headers, "", "")
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", st.String(), url, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", st.String(), url, err))
 		return
 	}
 	// Extract the whois information from the REST API results
@@ -149,7 +150,7 @@ func (st *SecurityTrails) OnWhoisRequest(ctx context.Context, req *requests.Whoi
 	}
 
 	if len(matches) > 0 {
-		bus.Publish(requests.NewWhoisTopic, &requests.WhoisRequest{
+		bus.Publish(requests.NewWhoisTopic, eventbus.PriorityHigh, &requests.WhoisRequest{
 			Domain:     req.Domain,
 			NewDomains: matches.Slice(),
 			Tag:        st.SourceType,

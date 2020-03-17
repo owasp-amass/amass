@@ -119,10 +119,12 @@ type Config struct {
 		Sources []string
 	}
 
+	// Type of DNS records to query for
+	RecordTypes []string
+
 	// Resolver settings
 	Resolvers           []string
 	MonitorResolverRate bool
-	ScoreResolvers      bool
 
 	// Enumeration Timeout
 	Timeout int
@@ -153,9 +155,10 @@ func NewConfig() *Config {
 		Ports:         []int{443},
 		MaxDNSQueries: defaultConcurrentDNSQueries,
 
+		MinForRecursive: 1,
+
 		Resolvers:           defaultPublicResolvers,
 		MonitorResolverRate: true,
-		ScoreResolvers:      true,
 
 		// The following is enum-only, but intel will just ignore them anyway
 		Alterations:    true,
@@ -180,7 +183,7 @@ func (c *Config) CheckSettings() error {
 		if c.Passive {
 			return errors.New("Brute forcing cannot be performed without DNS resolution")
 		} else if len(c.Wordlist) == 0 {
-			c.Wordlist, err = getWordlistByBox("namelist.txt")
+			c.Wordlist, err = getWordlistByFS("/namelist.txt")
 			if err != nil {
 				return err
 			}
@@ -191,7 +194,7 @@ func (c *Config) CheckSettings() error {
 	}
 	if c.Alterations {
 		if len(c.AltWordlist) == 0 {
-			c.AltWordlist, err = getWordlistByBox("alterations.txt")
+			c.AltWordlist, err = getWordlistByFS("/alterations.txt")
 			if err != nil {
 				return err
 			}
@@ -337,6 +340,50 @@ func (c *Config) Blacklisted(name string) bool {
 		}
 	}
 	return resp
+}
+
+// SetResolvers assigns the resolver names provided in the parameter to the list in the configuration.
+func (c *Config) SetResolvers(resolvers []string) {
+	c.Resolvers = []string{}
+
+	for _, r := range resolvers {
+		c.AddResolver(r)
+	}
+}
+
+// AddResolvers appends the resolver names provided in the parameter to the list in the configuration.
+func (c *Config) AddResolvers(resolvers []string) {
+	for _, r := range resolvers {
+		c.AddResolver(r)
+	}
+}
+
+// AddResolver appends the resolver name provided in the parameter to the list in the configuration.
+func (c *Config) AddResolver(resolver string) {
+	c.Lock()
+	defer c.Unlock()
+
+	// Check that the domain string is not empty
+	r := strings.TrimSpace(resolver)
+	if r == "" {
+		return
+	}
+
+	c.Resolvers = stringset.Deduplicate(append(c.Resolvers, resolver))
+	c.calcDNSQueriesSemMax()
+}
+
+func (c *Config) calcDNSQueriesSemMax() {
+	max := (len(c.Resolvers) * 1000) / 2
+
+	if max < 2000 {
+		max = 2000
+	} else if max > 100000 {
+		max = 100000
+	}
+
+	c.SemMaxDNSQueries.Stop()
+	c.SemMaxDNSQueries = semaphore.NewSimpleSemaphore(max)
 }
 
 // AddAPIKey adds the data source and API key association provided to the configuration.
@@ -568,7 +615,6 @@ func (c *Config) loadResolverSettings(cfg *ini.File) error {
 	}
 
 	c.MonitorResolverRate = sec.Key("monitor_resolver_rate").MustBool(true)
-	c.ScoreResolvers = sec.Key("score_resolvers").MustBool(true)
 	return nil
 }
 

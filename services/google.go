@@ -70,7 +70,8 @@ func (g *Google) executeQuery(ctx context.Context, domain string, numwilds int) 
 	}
 
 	if numwilds == 0 {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", g.String(), domain))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+			fmt.Sprintf("Querying %s for %s subdomains", g.String(), domain))
 	}
 
 	num := g.limit / g.quantity
@@ -80,17 +81,17 @@ func (g *Google) executeQuery(ctx context.Context, domain string, numwilds int) 
 			return
 		default:
 			g.CheckRateLimit()
-			bus.Publish(requests.SetActiveTopic, g.String())
+			bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, g.String())
 
 			u := g.urlByPageNum(domain, i, numwilds)
 			page, err := http.RequestWebPage(u, nil, nil, "", "")
 			if err != nil {
-				bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", g.String(), u, err))
+				bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", g.String(), u, err))
 				return
 			}
 
 			for _, name := range re.FindAllString(page, -1) {
-				bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+				bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 					Name:   cleanName(name),
 					Domain: domain,
 					Tag:    g.SourceType,

@@ -20,13 +20,13 @@ import (
 
 // CayleyGraph is the object for managing a network infrastructure link graph.
 type CayleyGraph struct {
-	sync.RWMutex
+	sync.Mutex
 	store *cayley.Handle
 	path  string
 }
 
-var notDataSourceSet = stringset.New("tld", "root", "cname_record", 
-		"ptr_record", "mx_record", "ns_record", "srv_record", "service")
+var notDataSourceSet = stringset.New("tld", "root", "cname_record",
+	"ptr_record", "mx_record", "ns_record", "srv_record", "service")
 
 // NewCayleyGraph returns an intialized CayleyGraph object.
 func NewCayleyGraph(path string) *CayleyGraph {
@@ -112,8 +112,8 @@ func (g *CayleyGraph) InsertNode(id, ntype string) (Node, error) {
 
 // ReadNode implements the GraphDatabase interface.
 func (g *CayleyGraph) ReadNode(id, ntype string) (Node, error) {
-	g.RLock()
-	defer g.RUnlock()
+	g.Lock()
+	defer g.Unlock()
 
 	if id == "" || ntype == "" {
 		return nil, fmt.Errorf("%s: ReadNode: Empty required arguments", g.String())
@@ -167,8 +167,8 @@ func (g *CayleyGraph) removeAllNodeQuads(id string) error {
 // To avoid recursive read locking, a private version of this method has been
 // implemented that doesn't hold the lock.
 func (g *CayleyGraph) AllNodesOfType(ntype string, events ...string) ([]Node, error) {
-	g.RLock()
-	defer g.RUnlock()
+	g.Lock()
+	defer g.Unlock()
 
 	return g.allNodesOfType(ntype, events...)
 }
@@ -220,8 +220,8 @@ func (g *CayleyGraph) allNodesOfType(ntype string, events ...string) ([]Node, er
 
 // NameToIPAddrs implements the GraphDatabase interface.
 func (g *CayleyGraph) NameToIPAddrs(node Node) ([]Node, error) {
-	g.RLock()
-	defer g.RUnlock()
+	g.Lock()
+	defer g.Unlock()
 
 	var nodes []Node
 	nstr := g.NodeToID(node)
@@ -234,7 +234,6 @@ func (g *CayleyGraph) NameToIPAddrs(node Node) ([]Node, error) {
 	g.optimizedIterate(p, func(value quad.Value) {
 		nodes = append(nodes, quad.ToString(value))
 	})
-
 	if len(nodes) > 0 {
 		return nodes, nil
 	}
@@ -245,7 +244,6 @@ func (g *CayleyGraph) NameToIPAddrs(node Node) ([]Node, error) {
 	g.optimizedIterate(p, func(value quad.Value) {
 		nodes = append(nodes, quad.ToString(value))
 	})
-
 	if len(nodes) > 0 {
 		return nodes, nil
 	}
@@ -256,8 +254,11 @@ func (g *CayleyGraph) NameToIPAddrs(node Node) ([]Node, error) {
 	g.optimizedIterate(p, func(value quad.Value) {
 		nodes = append(nodes, quad.ToString(value))
 	})
+	if len(nodes) > 0 {
+		return nodes, nil
+	}
 
-	return nodes, nil
+	return nodes, fmt.Errorf("%s: NameToIPAddrs: No addresses were discovered for %s", g.String(), nstr)
 }
 
 // NodeSources implements the GraphDatabase interface.
@@ -333,8 +334,8 @@ func (g *CayleyGraph) InsertProperty(node Node, predicate, value string) error {
 
 // ReadProperties implements the GraphDatabase interface.
 func (g *CayleyGraph) ReadProperties(node Node, predicates ...string) ([]*Property, error) {
-	g.RLock()
-	defer g.RUnlock()
+	g.Lock()
+	defer g.Unlock()
 
 	nstr := g.NodeToID(node)
 	var properties []*Property
@@ -373,8 +374,8 @@ func (g *CayleyGraph) ReadProperties(node Node, predicates ...string) ([]*Proper
 
 // CountProperties implements the GraphDatabase interface.
 func (g *CayleyGraph) CountProperties(node Node, predicates ...string) (int, error) {
-	g.RLock()
-	defer g.RUnlock()
+	g.Lock()
+	defer g.Unlock()
 
 	nstr := g.NodeToID(node)
 	if nstr == "" {
@@ -473,8 +474,8 @@ func (g *CayleyGraph) ReadEdges(node Node, predicates ...string) ([]*Edge, error
 
 // ReadInEdges implements the GraphDatabase interface.
 func (g *CayleyGraph) ReadInEdges(node Node, predicates ...string) ([]*Edge, error) {
-	g.RLock()
-	defer g.RUnlock()
+	g.Lock()
+	defer g.Unlock()
 
 	nstr := g.NodeToID(node)
 	if nstr == "" {
@@ -507,8 +508,8 @@ func (g *CayleyGraph) ReadInEdges(node Node, predicates ...string) ([]*Edge, err
 
 // CountInEdges implements the GraphDatabase interface.
 func (g *CayleyGraph) CountInEdges(node Node, predicates ...string) (int, error) {
-	g.RLock()
-	defer g.RUnlock()
+	g.Lock()
+	defer g.Unlock()
 
 	nstr := g.NodeToID(node)
 	if nstr == "" {
@@ -527,8 +528,8 @@ func (g *CayleyGraph) CountInEdges(node Node, predicates ...string) (int, error)
 
 // ReadOutEdges implements the GraphDatabase interface.
 func (g *CayleyGraph) ReadOutEdges(node Node, predicates ...string) ([]*Edge, error) {
-	g.RLock()
-	defer g.RUnlock()
+	g.Lock()
+	defer g.Unlock()
 
 	nstr := g.NodeToID(node)
 	if nstr == "" {
@@ -561,8 +562,8 @@ func (g *CayleyGraph) ReadOutEdges(node Node, predicates ...string) ([]*Edge, er
 
 // CountOutEdges implements the GraphDatabase interface.
 func (g *CayleyGraph) CountOutEdges(node Node, predicates ...string) (int, error) {
-	g.RLock()
-	defer g.RUnlock()
+	g.Lock()
+	defer g.Unlock()
 
 	nstr := g.NodeToID(node)
 	if nstr == "" {
@@ -651,8 +652,8 @@ func (g *CayleyGraph) optimizedFirst(p *cayley.Path) quad.Value {
 
 // DumpGraph returns a string containing all data currently in the graph.
 func (g *CayleyGraph) DumpGraph() string {
-	g.RLock()
-	defer g.RUnlock()
+	g.Lock()
+	defer g.Unlock()
 
 	var result string
 	p := cayley.StartPath(g.store).Has(quad.String("type")).Unique()

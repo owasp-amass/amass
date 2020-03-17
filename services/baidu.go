@@ -63,7 +63,8 @@ func (b *Baidu) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 	if re == nil {
 		return
 	}
-	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", b.String(), req.Domain))
+	bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+		fmt.Sprintf("Querying %s for %s subdomains", b.String(), req.Domain))
 
 	num := b.limit / b.quantity
 	for i := 0; i < num; i++ {
@@ -72,17 +73,17 @@ func (b *Baidu) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 			return
 		default:
 			b.CheckRateLimit()
-			bus.Publish(requests.SetActiveTopic, b.String())
+			bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, b.String())
 
 			u := b.urlByPageNum(req.Domain, i)
 			page, err := http.RequestWebPage(u, nil, nil, "", "")
 			if err != nil {
-				bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", b.String(), u, err))
+				bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", b.String(), u, err))
 				return
 			}
 
 			for _, sd := range re.FindAllString(page, -1) {
-				bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+				bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 					Name:   cleanName(sd),
 					Domain: req.Domain,
 					Tag:    b.Type(),
@@ -97,7 +98,7 @@ func (b *Baidu) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 	u := b.urlForRelatedSites(req.Domain)
 	page, err := http.RequestWebPage(u, nil, nil, "", "")
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", b.String(), u, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", b.String(), u, err))
 		return
 	}
 
@@ -114,7 +115,7 @@ func (b *Baidu) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 
 	for _, element := range rs.Data {
 		if d := cfg.WhichDomain(element.Domain); d != "" {
-			bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+			bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 				Name:   element.Domain,
 				Domain: d,
 				Tag:    b.Type(),

@@ -56,14 +56,15 @@ func (p *PTRArchive) OnDNSRequest(ctx context.Context, req *requests.DNSRequest)
 	}
 
 	p.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, p.String())
-	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", p.String(), req.Domain))
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, p.String())
+	bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+		fmt.Sprintf("Querying %s for %s subdomains", p.String(), req.Domain))
 
 	url := p.getURL(req.Domain)
 	fakeCookie := map[string]string{"Cookie": "test=12345"}
 	page, err := http.RequestWebPage(url, nil, fakeCookie, "", "")
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", p.String(), url, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", p.String(), url, err))
 		return
 	}
 
@@ -73,7 +74,7 @@ func (p *PTRArchive) OnDNSRequest(ctx context.Context, req *requests.DNSRequest)
 			continue
 		}
 
-		bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+		bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 			Name:   name,
 			Domain: req.Domain,
 			Tag:    p.SourceType,

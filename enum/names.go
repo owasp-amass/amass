@@ -8,12 +8,32 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/OWASP/Amass/v3/eventbus"
 	amassnet "github.com/OWASP/Amass/v3/net"
 	amassdns "github.com/OWASP/Amass/v3/net/dns"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/resolvers"
 	"github.com/miekg/dns"
 )
+
+var probeNames = []string{
+	"www",
+	"online",
+	"webserver",
+	"ns1",
+	"mail",
+	"smtp",
+	"webmail",
+	"prod",
+	"test",
+	"vpn",
+	"ftp",
+	"ssh",
+}
+
+func (e *Enumeration) newNECallback(req *requests.DNSRequest) {
+	go e.newNameEvent(req)
+}
 
 func (e *Enumeration) newNameEvent(req *requests.DNSRequest) {
 	if req == nil || req.Name == "" || req.Domain == "" {
@@ -33,7 +53,7 @@ func (e *Enumeration) newNameEvent(req *requests.DNSRequest) {
 	if e.Config.Passive {
 		e.updateLastActive("enum")
 		if e.Config.IsDomainInScope(req.Name) {
-			e.Bus.Publish(requests.OutputTopic, &requests.Output{
+			e.Bus.Publish(requests.OutputTopic, eventbus.PriorityLow, &requests.Output{
 				Name:   req.Name,
 				Domain: req.Domain,
 				Tag:    req.Tag,
@@ -43,7 +63,11 @@ func (e *Enumeration) newNameEvent(req *requests.DNSRequest) {
 		return
 	}
 
-	e.Bus.Publish(requests.ResolveNameTopic, e.ctx, req)
+	e.Bus.Publish(requests.ResolveNameTopic, eventbus.PriorityLow, e.ctx, req)
+}
+
+func (e *Enumeration) newRNCallback(req *requests.DNSRequest) {
+	go e.newResolvedName(req)
 }
 
 func (e *Enumeration) newResolvedName(req *requests.DNSRequest) {
@@ -53,7 +77,6 @@ func (e *Enumeration) newResolvedName(req *requests.DNSRequest) {
 
 	// Write the DNS name information to the graph databases
 	e.dataMgr.DNSRequest(e.ctx, req)
-
 	// Add addresses that are relevant to the enumeration
 	if !e.hasCNAMERecord(req) && e.hasARecords(req) {
 		for _, r := range req.Records {
@@ -64,34 +87,29 @@ func (e *Enumeration) newResolvedName(req *requests.DNSRequest) {
 			}
 		}
 	}
-
 	/*
 	 * Do not go further if the name is not in scope or been seen before
 	 */
-	if e.filters.Resolved.Duplicate(req.Name) ||
-		!e.Config.IsDomainInScope(req.Name) {
+	if e.filters.Resolved.Duplicate(req.Name) || !e.Config.IsDomainInScope(req.Name) {
 		return
 	}
-
 	// Put the DNS name + records on the queue for output processing
 	if e.hasARecords(req) {
 		e.resolvedQueue.Append(req)
 	}
-
 	// Keep track of all domains and proper subdomains discovered
 	e.checkSubdomain(req)
-
-	if e.Config.BruteForcing && e.Config.Recursive {
-		for _, name := range topNames {
+	// Send out some probe requests to help cause recursive brute forcing
+	if e.Config.BruteForcing && e.Config.Recursive && e.Config.MinForRecursive > 0 {
+		for _, probe := range probeNames {
 			e.newNameEvent(&requests.DNSRequest{
-				Name:   name + "." + req.Name,
+				Name:   probe + "." + req.Name,
 				Domain: req.Domain,
 				Tag:    requests.GUESS,
 				Source: "Enum Probes",
 			})
 		}
 	}
-
 	// Queue the resolved name for future brute forcing
 	if e.Config.BruteForcing && e.Config.Recursive && (e.Config.MinForRecursive == 0) {
 		// Do not send in the resolved root domain names
@@ -99,7 +117,6 @@ func (e *Enumeration) newResolvedName(req *requests.DNSRequest) {
 			e.bruteQueue.Append(req)
 		}
 	}
-
 	// Queue the name and domain for future name alterations
 	if e.Config.Alterations {
 		e.altQueue.Append(req)
@@ -107,9 +124,8 @@ func (e *Enumeration) newResolvedName(req *requests.DNSRequest) {
 
 	e.srcsLock.Lock()
 	defer e.srcsLock.Unlock()
-
+	// Call DNSRequest for all web archive services
 	for _, srv := range e.Sys.DataSources() {
-		// Call DNSRequest for all web archive services
 		if srv.Type() == requests.ARCHIVE && e.srcs.Has(srv.String()) {
 			srv.DNSRequest(e.ctx, req)
 		}
@@ -133,7 +149,6 @@ func (e *Enumeration) checkSubdomain(req *requests.DNSRequest) {
 	}
 
 	sub := strings.Join(labels[1:], ".")
-
 	for _, g := range e.Sys.GraphDatabases() {
 		// CNAMEs are not a proper subdomain
 		if g.IsCNAMENode(sub) {
@@ -149,7 +164,7 @@ func (e *Enumeration) checkSubdomain(req *requests.DNSRequest) {
 	}
 	times := e.timesForSubdomain(sub)
 
-	e.Bus.Publish(requests.SubDiscoveredTopic, e.ctx, r, times)
+	e.Bus.Publish(requests.SubDiscoveredTopic, eventbus.PriorityHigh, e.ctx, r, times)
 	// Queue the proper subdomain for future brute forcing
 	if e.Config.BruteForcing && e.Config.Recursive &&
 		e.Config.MinForRecursive > 0 && e.Config.MinForRecursive == times {
@@ -162,7 +177,6 @@ func (e *Enumeration) checkSubdomain(req *requests.DNSRequest) {
 
 	e.srcsLock.Lock()
 	defer e.srcsLock.Unlock()
-
 	// Let all the data sources know about the discovered proper subdomain
 	for _, src := range e.Sys.DataSources() {
 		if e.srcs.Has(src.String()) {
@@ -188,7 +202,7 @@ func (e *Enumeration) timesForSubdomain(sub string) int {
 
 func (e *Enumeration) reverseDNSSweep(addr string, cidr *net.IPNet) {
 	// Does the address fall into a reserved address range?
-	if info := checkForReservedAddress(addr); info != nil {
+	if yes, _ := amassnet.IsReservedAddress(addr); yes {
 		return
 	}
 

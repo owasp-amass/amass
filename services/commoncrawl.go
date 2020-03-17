@@ -65,8 +65,11 @@ func (c *CommonCrawl) OnStart() error {
 		return fmt.Errorf("%s: Failed to unmarshal the index list: %v", c.String(), err)
 	}
 
-	for _, i := range indexList {
-		c.indexURLs = append(c.indexURLs, i.URL)
+	for i, u := range indexList {
+		if i >= 5 {
+			break
+		}
+		c.indexURLs = append(c.indexURLs, u.URL)
 	}
 
 	c.SetRateLimit(500 * time.Millisecond)
@@ -85,7 +88,8 @@ func (c *CommonCrawl) OnDNSRequest(ctx context.Context, req *requests.DNSRequest
 	if re == nil {
 		return
 	}
-	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", c.String(), req.Domain))
+	bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+		fmt.Sprintf("Querying %s for %s subdomains", c.String(), req.Domain))
 
 	filter := stringset.NewStringFilter()
 	for _, index := range c.indexURLs {
@@ -94,18 +98,18 @@ func (c *CommonCrawl) OnDNSRequest(ctx context.Context, req *requests.DNSRequest
 			return
 		default:
 			c.CheckRateLimit()
-			bus.Publish(requests.SetActiveTopic, c.String())
+			bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, c.String())
 
 			u := c.getURL(req.Domain, index)
 			page, err := http.RequestWebPage(u, nil, nil, "", "")
 			if err != nil {
-				bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", c.String(), u, err))
+				bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", c.String(), u, err))
 				continue
 			}
 
 			for _, url := range c.parseJSON(page) {
 				if name := re.FindString(url); name != "" && !filter.Duplicate(name) {
-					bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+					bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 						Name:   name,
 						Domain: req.Domain,
 						Tag:    c.SourceType,

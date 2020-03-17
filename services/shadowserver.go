@@ -74,7 +74,7 @@ func (s *ShadowServer) OnASNRequest(ctx context.Context, req *requests.ASNReques
 	}
 
 	s.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, s.String())
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, s.String())
 
 	if req.Address != "" {
 		s.executeASNAddrQuery(ctx, req.Address)
@@ -96,7 +96,7 @@ func (s *ShadowServer) executeASNQuery(ctx context.Context, asn int) {
 	}
 
 	s.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, s.String())
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, s.String())
 
 	req := s.origin(ctx, strings.Trim(blocks.Slice()[0], "/"))
 	if req == nil {
@@ -104,7 +104,7 @@ func (s *ShadowServer) executeASNQuery(ctx context.Context, asn int) {
 	}
 
 	req.Netblocks.Union(blocks)
-	bus.Publish(requests.NewASNTopic, req)
+	bus.Publish(requests.NewASNTopic, eventbus.PriorityHigh, req)
 }
 
 func (s *ShadowServer) executeASNAddrQuery(ctx context.Context, addr string) {
@@ -119,10 +119,10 @@ func (s *ShadowServer) executeASNAddrQuery(ctx context.Context, addr string) {
 	}
 
 	s.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, s.String())
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, s.String())
 
 	req.Netblocks.Union(s.netblocks(ctx, req.ASN))
-	bus.Publish(requests.NewASNTopic, req)
+	bus.Publish(requests.NewASNTopic, eventbus.PriorityHigh, req)
 }
 
 func (s *ShadowServer) origin(ctx context.Context, addr string) *requests.ASNRequest {
@@ -138,7 +138,7 @@ func (s *ShadowServer) origin(ctx context.Context, addr string) *requests.ASNReq
 
 	answers, _, err := s.System().Pool().Resolve(ctx, name, "TXT", resolvers.PriorityCritical)
 	if err != nil {
-		bus.Publish(requests.LogTopic,
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: %s: DNS TXT record query error: %v", s.String(), name, err),
 		)
 		return nil
@@ -146,7 +146,7 @@ func (s *ShadowServer) origin(ctx context.Context, addr string) *requests.ASNReq
 
 	fields := strings.Split(strings.Trim(answers[0].Data, "\""), " | ")
 	if len(fields) < 5 {
-		bus.Publish(requests.LogTopic,
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: %s: Failed to parse the origin response", s.String(), name),
 		)
 		return nil
@@ -154,7 +154,7 @@ func (s *ShadowServer) origin(ctx context.Context, addr string) *requests.ASNReq
 
 	asn, err := strconv.Atoi(strings.TrimSpace(fields[0]))
 	if err != nil {
-		bus.Publish(requests.LogTopic,
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: %s: Failed to parse the origin response: %v", s.String(), name, err),
 		)
 		return nil
@@ -183,13 +183,14 @@ func (s *ShadowServer) netblocks(ctx context.Context, asn int) stringset.Set {
 	if s.addr == "" {
 		answers, _, err := s.System().Pool().Resolve(ctx, ShadowServerWhoisURL, "A", resolvers.PriorityCritical)
 		if err != nil {
-			bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", s.String(), ShadowServerWhoisURL, err))
+			bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+				fmt.Sprintf("%s: %s: %v", s.String(), ShadowServerWhoisURL, err))
 			return netblocks
 		}
 
 		ip := answers[0].Data
 		if ip == "" {
-			bus.Publish(requests.LogTopic,
+			bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 				fmt.Sprintf("%s: Failed to resolve %s", s.String(), ShadowServerWhoisURL),
 			)
 			return netblocks
@@ -203,7 +204,7 @@ func (s *ShadowServer) netblocks(ctx context.Context, asn int) stringset.Set {
 	d := net.Dialer{}
 	conn, err := d.DialContext(ctx, "tcp", s.addr+":43")
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %v", s.String(), err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %v", s.String(), err))
 		return netblocks
 	}
 	defer conn.Close()
@@ -220,7 +221,8 @@ func (s *ShadowServer) netblocks(ctx context.Context, asn int) stringset.Set {
 	}
 
 	if len(netblocks) == 0 {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: Failed to acquire netblocks for ASN %d", s.String(), asn))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+			fmt.Sprintf("%s: Failed to acquire netblocks for ASN %d", s.String(), asn))
 	}
 	return netblocks
 }

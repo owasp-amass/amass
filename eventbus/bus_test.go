@@ -14,7 +14,7 @@ func TestEventBus(t *testing.T) {
 	var success, survived bool
 	var suclock, surlock sync.Mutex
 
-	bus := NewEventBus()
+	bus := NewEventBus(1000)
 
 	fn1 := func(v bool) {
 		suclock.Lock()
@@ -32,7 +32,7 @@ func TestEventBus(t *testing.T) {
 	bus.Subscribe(topic, fn2)
 	defer bus.Unsubscribe(topic, fn2)
 
-	bus.Publish(topic, true)
+	bus.Publish(topic, PriorityLow, true)
 	time.Sleep(time.Second)
 
 	suclock.Lock()
@@ -42,11 +42,11 @@ func TestEventBus(t *testing.T) {
 		t.Errorf("The callback was not executed for the subscribed topic")
 	}
 
-	bus.Publish(topic, false)
+	bus.Publish(topic, PriorityLow, false)
 	time.Sleep(time.Second)
 	bus.Unsubscribe(topic, fn1)
 
-	bus.Publish(topic, true)
+	bus.Publish(topic, PriorityLow, true)
 	time.Sleep(time.Second)
 
 	suclock.Lock()

@@ -9,7 +9,9 @@ import (
 	"strconv"
 
 	"github.com/OWASP/Amass/v3/graph/db"
+	amassnet "github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/requests"
+	"github.com/OWASP/Amass/v3/stringset"
 	"golang.org/x/net/publicsuffix"
 )
 
@@ -28,6 +30,7 @@ func (g *Graph) GetOutput(uuid string) []*requests.Output {
 	}
 
 	var names []db.Node
+	filter := stringset.NewStringFilter()
 	for _, edge := range edges {
 		p, err := g.db.ReadProperties(edge.To, "type")
 
@@ -35,39 +38,29 @@ func (g *Graph) GetOutput(uuid string) []*requests.Output {
 			continue
 		}
 
-		names = append(names, edge.To)
+		if !filter.Duplicate(g.db.NodeToID(edge.To)) {
+			names = append(names, edge.To)
+		}
 	}
 
-	grs := 25
-	output := make(chan *requests.Output, grs+1)
-	for i, name := range names {
-		go g.buildOutput(name, uuid, output)
+	var count int
+	cache := amassnet.NewASNCache()
+	output := make(chan *requests.Output, 10000)
+	for _, name := range names {
+		go g.buildOutput(name, uuid, cache, output)
+		count++
+	}
 
-		if i != 0 && (i%grs == 0) {
-			for i := 0; i < grs; i++ {
-				o := <-output
-
-				if o != nil {
-					results = append(results, o)
-				}
-			}
-		}
-
-		if num := i % 25; i+1 == len(names) {
-			for i := 0; i < num; i++ {
-				o := <-output
-
-				if o != nil {
-					results = append(results, o)
-				}
-			}
+	for i := 0; i < count; i++ {
+		if o := <-output; o != nil {
+			results = append(results, o)
 		}
 	}
 
 	return results
 }
 
-func (g *Graph) buildOutput(sub db.Node, uuid string, c chan *requests.Output) {
+func (g *Graph) buildOutput(sub db.Node, uuid string, cache *amassnet.ASNCache, c chan *requests.Output) {
 	substr := g.db.NodeToID(sub)
 
 	sources, err := g.db.NodeSources(sub, uuid)
@@ -99,12 +92,12 @@ func (g *Graph) buildOutput(sub db.Node, uuid string, c chan *requests.Output) {
 	var num int
 	addrChan := make(chan *requests.AddressInfo, 100)
 	for _, addr := range addrs {
-		if !g.inEventScope(addr, uuid) {
+		if !g.inEventScope(addr, uuid, "DNS") {
 			continue
 		}
 
 		num++
-		go g.buildAddrInfo(addr, uuid, addrChan)
+		go g.buildAddrInfo(addr, uuid, cache, addrChan)
 	}
 
 	for i := 0; i < num; i++ {
@@ -131,13 +124,27 @@ func randomIndex(length int) int {
 	return rand.Intn(length - 1)
 }
 
-func (g *Graph) buildAddrInfo(addr db.Node, uuid string, c chan *requests.AddressInfo) {
-	if !g.inEventScope(addr, uuid) {
+func (g *Graph) buildAddrInfo(addr db.Node, uuid string, cache *amassnet.ASNCache, c chan *requests.AddressInfo) {
+	if !g.inEventScope(addr, uuid, "DNS") {
 		c <- nil
 		return
 	}
 
-	ainfo := &requests.AddressInfo{Address: net.ParseIP(g.db.NodeToID(addr))}
+	address := g.db.NodeToID(addr)
+	ainfo := &requests.AddressInfo{Address: net.ParseIP(address)}
+	// Check the ASNCache before querying the graph database
+	if a := cache.AddrSearch(address); a != nil {
+		var err error
+
+		_, ainfo.Netblock, err = net.ParseCIDR(a.Prefix)
+		if err == nil && ainfo.Netblock.Contains(ainfo.Address) {
+			ainfo.ASN = a.ASN
+			ainfo.Description = a.Description
+			ainfo.CIDRStr = a.Prefix
+			c <- ainfo
+			return
+		}
+	}
 
 	// Get the netblock that contains the IP address
 	edges, err := g.db.ReadInEdges(addr, "contains")
@@ -149,7 +156,7 @@ func (g *Graph) buildAddrInfo(addr db.Node, uuid string, c chan *requests.Addres
 	var cidr string
 	var cidrNode db.Node
 	for _, edge := range edges {
-		if g.inEventScope(edge.From, uuid) {
+		if g.inEventScope(edge.From, uuid, "RIR") {
 			cidrNode = edge.From
 			cidr = g.db.NodeToID(edge.From)
 			break
@@ -173,7 +180,7 @@ func (g *Graph) buildAddrInfo(addr db.Node, uuid string, c chan *requests.Addres
 	var asn string
 	var asNode db.Node
 	for _, edge := range edges {
-		if g.inEventScope(edge.From, uuid) {
+		if g.inEventScope(edge.From, uuid, "RIR") {
 			asNode = edge.From
 			asn = g.db.NodeToID(edge.From)
 			break
@@ -188,6 +195,13 @@ func (g *Graph) buildAddrInfo(addr db.Node, uuid string, c chan *requests.Addres
 	if p, err := g.db.ReadProperties(asNode, "description"); err == nil && len(p) > 0 {
 		ainfo.Description = p[0].Value
 	}
+
+	cache.Update(&requests.ASNRequest{
+		Address:     ainfo.Address.String(),
+		ASN:         ainfo.ASN,
+		Prefix:      ainfo.CIDRStr,
+		Description: ainfo.Description,
+	})
 
 	c <- ainfo
 }

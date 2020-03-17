@@ -56,18 +56,19 @@ func (b *BufferOver) OnDNSRequest(ctx context.Context, req *requests.DNSRequest)
 	}
 
 	b.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, b.String())
-	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", b.String(), req.Domain))
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, b.String())
+	bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+		fmt.Sprintf("Querying %s for %s subdomains", b.String(), req.Domain))
 
 	url := b.getURL(req.Domain)
 	page, err := http.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", b.String(), url, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", b.String(), url, err))
 		return
 	}
 
 	for _, sd := range re.FindAllString(page, -1) {
-		bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+		bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 			Name:   cleanName(sd),
 			Domain: req.Domain,
 			Tag:    b.SourceType,

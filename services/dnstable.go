@@ -56,18 +56,19 @@ func (d *DNSTable) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 	}
 
 	d.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, d.String())
-	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", d.String(), req.Domain))
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, d.String())
+	bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+		fmt.Sprintf("Querying %s for %s subdomains", d.String(), req.Domain))
 
 	url := d.getURL(req.Domain)
 	page, err := http.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", d.String(), url, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", d.String(), url, err))
 		return
 	}
 
 	for _, sd := range re.FindAllString(page, -1) {
-		bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+		bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 			Name:   cleanName(sd),
 			Domain: req.Domain,
 			Tag:    d.SourceType,

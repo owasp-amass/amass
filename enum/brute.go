@@ -10,21 +10,6 @@ import (
 	"github.com/OWASP/Amass/v3/stringset"
 )
 
-var topNames = []string{
-	"www",
-	"online",
-	"webserver",
-	"ns1",
-	"mail",
-	"smtp",
-	"webmail",
-	"prod",
-	"test",
-	"vpn",
-	"ftp",
-	"ssh",
-}
-
 func (e *Enumeration) startBruteForcing() {
 	// Send in the root domain names for brute forcing
 	for _, domain := range e.Config.Domains() {

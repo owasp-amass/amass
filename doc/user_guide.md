@@ -1,7 +1,7 @@
 
-# [![OWASP Logo](https://github.com/OWASP/Amass/blob/master/images/owasp_logo.png) OWASP Amass](https://www.owasp.org/index.php/OWASP_Amass_Project) - Users' Guide
+# [![OWASP Logo](../images/owasp_logo.png) OWASP Amass](https://owasp.org/www-project-amass/) - Users' Guide
 
-![Network graph](https://github.com/OWASP/Amass/blob/master/images/network_06092018.png "Amass Network Mapping")
+![Network graph](../images/network_06092018.png "Amass Network Mapping")
 
 ----
 
@@ -121,7 +121,7 @@ This subcommand will perform DNS enumeration and network mapping while populatin
 | -list | Print the names of all available data sources | amass enum -list |
 | -log | Path to the log file where errors will be written | amass enum -log amass.log -d example.com |
 | -max-dns-queries | Maximum number of concurrent DNS queries | amass enum -max-dns-queries 200 -d example.com |
-| -min-for-recursive | Number of labels in a subdomain before recursive brute forcing | amass enum -brute -min-for-recursive 3 -d example.com |
+| -min-for-recursive | Subdomain labels seen before recursive brute forcing (Default: 1) | amass enum -brute -min-for-recursive 3 -d example.com |
 | -nf | Path to a file providing already known subdomain names (from other tools/sources) | amass enum -nf names.txt -d example.com |
 | -noalts | Disable generation of altered names | amass enum -noalts -d example.com |
 | -norecursive | Turn off recursive brute forcing | amass enum -brute -norecursive -d example.com |
@@ -203,7 +203,7 @@ If you decide to use an Amass configuration file, it will be automatically disco
 
 ## The Configuration File
 
-You will need a config file to use your API keys with Amass. See the [Example Configuration File](https://github.com/OWASP/Amass/blob/master/examples/config.ini) for more details.
+You will need a config file to use your API keys with Amass. See the [Example Configuration File](../examples/config.ini) for more details.
 
 Amass automatically tries to discover the configuration file in the following locations:
 
@@ -320,7 +320,7 @@ The GraphDB is storing all the domains that were found for a given enumeration. 
 
 Here is an example of graph for an enumeration run on example.com:
 
-![GraphDB](https://github.com/OWASP/Amass/blob/master/images/example_graphDB.png)
+![GraphDB](../images/example_graphDB.png)
 
 ## Importing OWASP Amass Results into Maltego
 
@@ -332,11 +332,11 @@ amass viz -maltego
 
 2. Import the CSV file with the correct Connectivity Table settings:
 
-![Connectivity table](https://github.com/OWASP/Amass/blob/master/images/maltego_graph_import_wizard.png "Connectivity Table Settings")
+![Connectivity table](../images/maltego_graph_import_wizard.png "Connectivity Table Settings")
 
 3. All the Amass findings will be brought into your Maltego Graph:
 
-![Maltego results](https://github.com/OWASP/Amass/blob/master/images/maltego_results.png "Maltego Results")
+![Maltego results](../images/maltego_results.png "Maltego Results")
 
 ## Integrating OWASP Amass into Your Work
 

@@ -67,7 +67,6 @@ type enumArgs struct {
 		NoAlts              bool
 		NoRecursive         bool
 		Passive             bool
-		ScoreResolvers      bool
 		Sources             bool
 		Unresolved          bool
 		Verbose             bool
@@ -101,7 +100,7 @@ func defineEnumArgumentFlags(enumFlags *flag.FlagSet, args *enumArgs) {
 	enumFlags.Var(&args.Excluded, "exclude", "Data source names separated by commas to be excluded")
 	enumFlags.Var(&args.Included, "include", "Data source names separated by commas to be included")
 	enumFlags.IntVar(&args.MaxDNSQueries, "max-dns-queries", 0, "Maximum number of concurrent DNS queries")
-	enumFlags.IntVar(&args.MinForRecursive, "min-for-recursive", 0, "Number of subdomain discoveries before recursive brute forcing")
+	enumFlags.IntVar(&args.MinForRecursive, "min-for-recursive", 1, "Subdomain labels seen before recursive brute forcing")
 	enumFlags.Var(&args.Ports, "p", "Ports separated by commas (default: 443)")
 	enumFlags.Var(&args.Resolvers, "r", "IP addresses of preferred DNS resolvers (can be used multiple times)")
 	enumFlags.IntVar(&args.Timeout, "timeout", 0, "Number of minutes to let enumeration run before quitting")
@@ -119,7 +118,6 @@ func defineEnumOptionFlags(enumFlags *flag.FlagSet, args *enumArgs) {
 	enumFlags.BoolVar(&args.Options.NoAlts, "noalts", false, "Disable generation of altered names")
 	enumFlags.BoolVar(&args.Options.NoRecursive, "norecursive", false, "Turn off recursive brute forcing")
 	enumFlags.BoolVar(&args.Options.Passive, "passive", false, "Disable DNS resolution of names and dependent features")
-	enumFlags.BoolVar(&args.Options.ScoreResolvers, "noresolvscore", true, "Disable resolver reliability scoring")
 	enumFlags.BoolVar(&args.Options.Sources, "src", false, "Print data sources for the discovered names")
 	enumFlags.BoolVar(&args.Options.Unresolved, "include-unresolvable", false, "Output DNS names that did not resolve")
 	enumFlags.BoolVar(&args.Options.Verbose, "v", false, "Output status / debug / troubleshooting info")
@@ -559,7 +557,7 @@ func (e enumArgs) OverrideConfig(conf *config.Config) error {
 	if e.Options.NoRecursive {
 		conf.Recursive = false
 	}
-	if e.MinForRecursive > 0 {
+	if e.MinForRecursive != 1 {
 		conf.MinForRecursive = e.MinForRecursive
 	}
 	if e.Options.Active {
@@ -578,13 +576,10 @@ func (e enumArgs) OverrideConfig(conf *config.Config) error {
 		conf.Timeout = e.Timeout
 	}
 	if e.Resolvers.Len() > 0 {
-		conf.Resolvers = e.Resolvers.Slice()
+		conf.SetResolvers(e.Resolvers.Slice())
 	}
 	if !e.Options.MonitorResolverRate {
 		conf.MonitorResolverRate = false
-	}
-	if !e.Options.ScoreResolvers {
-		conf.ScoreResolvers = false
 	}
 
 	if len(e.Included) > 0 {

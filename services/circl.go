@@ -71,18 +71,19 @@ func (c *CIRCL) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 	}
 
 	c.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, c.String())
-	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", c.String(), req.Domain))
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, c.String())
+	bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+		fmt.Sprintf("Querying %s for %s subdomains", c.String(), req.Domain))
 
 	url := c.restURL(req.Domain)
 	headers := map[string]string{"Content-Type": "application/json"}
 	page, err := http.RequestWebPage(url, nil, headers, c.API.Username, c.API.Password)
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", c.String(), url, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", c.String(), url, err))
 		return
 	}
 
-	bus.Publish(requests.SetActiveTopic, c.String())
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, c.String())
 	scanner := bufio.NewScanner(strings.NewReader(page))
 	for scanner.Scan() {
 		// Get the next line of JSON
@@ -104,7 +105,7 @@ func (c *CIRCL) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 	}
 
 	for name := range unique {
-		bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+		bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 			Name:   name,
 			Domain: req.Domain,
 			Tag:    c.SourceType,

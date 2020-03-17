@@ -66,23 +66,24 @@ func (g *GitHub) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 		g.API.Key == "" || req.Name == "" || req.Domain == "" {
 		return
 	}
-	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", g.String(), req.Domain))
+	bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+		fmt.Sprintf("Querying %s for %s subdomains", g.String(), req.Domain))
 
 	nameFilter := stringset.NewStringFilter()
 	// This function publishes new subdomain names discovered at the provided URL
 	fetchNames := func(u string) {
-		bus.Publish(requests.SetActiveTopic, g.String())
+		bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, g.String())
 
 		page, err := http.RequestWebPage(u, nil, nil, "", "")
 		if err != nil {
-			bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", g.String(), u, err))
+			bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", g.String(), u, err))
 			return
 		}
 
 		// Extract the subdomain names from the page
 		for _, sd := range re.FindAllString(page, -1) {
 			if name := cleanName(sd); name != "" && !nameFilter.Duplicate(name) {
-				bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+				bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 					Name:   name,
 					Domain: req.Domain,
 					Tag:    g.Type(),
@@ -96,20 +97,20 @@ func (g *GitHub) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 		"Authorization": "token " + g.API.Key,
 		"Content-Type":  "application/json",
 	}
-	bus.Publish(requests.SetActiveTopic, g.String())
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, g.String())
 
 	urlFilter := stringset.NewStringFilter()
 	// Try no more than ten times for search result pages
 loop:
 	for i := 1; i <= 10; i++ {
 		g.CheckRateLimit()
-		bus.Publish(requests.SetActiveTopic, g.String())
+		bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, g.String())
 
 		u := g.restDNSURL(req.Domain, i)
 		// Perform the search using the GitHub API
 		page, err := http.RequestWebPage(u, nil, headers, "", "")
 		if err != nil {
-			bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", g.String(), u, err))
+			bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", g.String(), u, err))
 			break loop
 		}
 		// Extract items from the REST API search results

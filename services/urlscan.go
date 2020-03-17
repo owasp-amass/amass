@@ -65,13 +65,14 @@ func (u *URLScan) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 	}
 
 	u.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, u.String())
-	bus.Publish(requests.LogTopic, fmt.Sprintf("Querying %s for %s subdomains", u.String(), req.Domain))
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, u.String())
+	bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+		fmt.Sprintf("Querying %s for %s subdomains", u.String(), req.Domain))
 
 	url := u.searchURL(req.Domain)
 	page, err := http.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", u.String(), url, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", u.String(), url, err))
 		return
 	}
 	// Extract the subdomain names from the REST API results
@@ -103,7 +104,7 @@ func (u *URLScan) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 
 	for name := range subs {
 		if re.MatchString(name) {
-			bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+			bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 				Name:   name,
 				Domain: req.Domain,
 				Tag:    u.SourceType,
@@ -122,12 +123,12 @@ func (u *URLScan) getSubsFromResult(ctx context.Context, id string) stringset.Se
 	}
 
 	u.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, u.String())
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, u.String())
 
 	url := u.resultURL(id)
 	page, err := http.RequestWebPage(url, nil, nil, "", "")
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", u.String(), url, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", u.String(), url, err))
 		return subs
 	}
 	// Extract the subdomain names from the REST API results
@@ -154,7 +155,7 @@ func (u *URLScan) attemptSubmission(ctx context.Context, domain string) string {
 	}
 
 	u.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, u.String())
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, u.String())
 
 	headers := map[string]string{
 		"API-Key":      u.API.Key,
@@ -164,7 +165,7 @@ func (u *URLScan) attemptSubmission(ctx context.Context, domain string) string {
 	body := strings.NewReader(u.submitBody(domain))
 	page, err := http.RequestWebPage(url, body, headers, "", "")
 	if err != nil {
-		bus.Publish(requests.LogTopic, fmt.Sprintf("%s: %s: %v", u.String(), url, err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", u.String(), url, err))
 		return ""
 	}
 
@@ -189,7 +190,7 @@ func (u *URLScan) attemptSubmission(ctx context.Context, domain string) string {
 		}
 
 		u.CheckRateLimit()
-		bus.Publish(requests.SetActiveTopic, u.String())
+		bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, u.String())
 	}
 	return result.ID
 }
