@@ -119,6 +119,9 @@ type Config struct {
 		Sources []string
 	}
 
+	// Type of DNS records to query for
+	RecordTypes []string
+
 	// Resolver settings
 	Resolvers           []string
 	MonitorResolverRate bool
@@ -151,6 +154,8 @@ func NewConfig() *Config {
 		Log:           log.New(ioutil.Discard, "", 0),
 		Ports:         []int{443},
 		MaxDNSQueries: defaultConcurrentDNSQueries,
+
+		MinForRecursive: 1,
 
 		Resolvers:           defaultPublicResolvers,
 		MonitorResolverRate: true,
