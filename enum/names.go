@@ -93,10 +93,6 @@ func (e *Enumeration) newResolvedName(req *requests.DNSRequest) {
 	if e.filters.Resolved.Duplicate(req.Name) || !e.Config.IsDomainInScope(req.Name) {
 		return
 	}
-	// Put the DNS name + records on the queue for output processing
-	if e.hasARecords(req) {
-		e.resolvedQueue.Append(req)
-	}
 	// Keep track of all domains and proper subdomains discovered
 	e.checkSubdomain(req)
 	// Send out some probe requests to help cause recursive brute forcing

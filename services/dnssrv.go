@@ -12,6 +12,7 @@ import (
 	"github.com/OWASP/Amass/v3/eventbus"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/resolvers"
+	"github.com/miekg/dns"
 )
 
 // InitialQueryTypes include the DNS record types that are
@@ -101,11 +102,24 @@ func (ds *DNSService) queryInitialTypes(ctx context.Context, req *requests.DNSRe
 		if a, _, err := ds.System().Pool().Resolve(ctx, req.Name, t, resolvers.PriorityLow); err == nil {
 			answers = append(answers, a...)
 		} else {
-			bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("DNS: %v", err))
+			ds.handleResolverError(ctx, err)
 		}
 	}
 
 	return answers
+}
+
+func (ds *DNSService) handleResolverError(ctx context.Context, err error) {
+	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
+	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
+	if cfg == nil || bus == nil {
+		return
+	}
+	rcode := (err.(*resolvers.ResolveError)).Rcode
+	if cfg.Verbose || rcode == resolvers.NotAvailableRcode || rcode == dns.RcodeRefused ||
+		rcode == dns.RcodeServerFailure || rcode == dns.RcodeNotImplemented {
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("DNS: %v", err))
+	}
 }
 
 func (ds *DNSService) resolvedName(ctx context.Context, req *requests.DNSRequest) {
@@ -167,8 +181,7 @@ func (ds *DNSService) basicQueries(ctx context.Context, req *requests.DNSRequest
 			answers = append(answers, a)
 		}
 	} else {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
-			fmt.Sprintf("DNS: NS record query error: %s: %v", req.Name, err))
+		ds.handleResolverError(ctx, err)
 	}
 
 	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, ds.String())
@@ -178,8 +191,7 @@ func (ds *DNSService) basicQueries(ctx context.Context, req *requests.DNSRequest
 			answers = append(answers, a)
 		}
 	} else {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
-			fmt.Sprintf("DNS: MX record query error: %s: %v", req.Name, err))
+		ds.handleResolverError(ctx, err)
 	}
 
 	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, ds.String())
@@ -187,8 +199,7 @@ func (ds *DNSService) basicQueries(ctx context.Context, req *requests.DNSRequest
 	if ans, _, err := ds.System().Pool().Resolve(ctx, req.Name, "SOA", resolvers.PriorityHigh); err == nil {
 		answers = append(answers, ans...)
 	} else {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
-			fmt.Sprintf("DNS: SOA record query error: %s: %v", req.Name, err))
+		ds.handleResolverError(ctx, err)
 	}
 
 	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, ds.String())
@@ -196,8 +207,7 @@ func (ds *DNSService) basicQueries(ctx context.Context, req *requests.DNSRequest
 	if ans, _, err := ds.System().Pool().Resolve(ctx, req.Name, "SPF", resolvers.PriorityHigh); err == nil {
 		answers = append(answers, ans...)
 	} else {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
-			fmt.Sprintf("DNS: SPF record query error: %s: %v", req.Name, err))
+		ds.handleResolverError(ctx, err)
 	}
 
 	if len(answers) > 0 {
@@ -292,6 +302,8 @@ func (ds *DNSService) queryServiceNames(ctx context.Context, req *requests.DNSRe
 				Tag:     requests.DNS,
 				Source:  "DNS",
 			})
+		} else {
+			ds.handleResolverError(ctx, err)
 		}
 
 		bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, ds.String())

@@ -57,9 +57,6 @@ type Enumeration struct {
 	srcsLock sync.Mutex
 	srcs     stringset.Set
 
-	// Resolved DNS names are put on this queue for output processing
-	resolvedQueue *queue.Queue
-
 	// The channel and queue that will receive the results
 	Output      chan *requests.Output
 	outputQueue *queue.Queue
@@ -111,21 +108,20 @@ func NewEnumeration(sys services.System) *Enumeration {
 			Output:        stringset.NewStringFilter(),
 			PassiveOutput: stringset.NewStringFilter(),
 		},
-		bruteQueue:    new(queue.Queue),
-		moreBrute:     make(chan struct{}, 10),
-		srcs:          stringset.New(),
-		addrs:         stringset.New(),
-		resolvedQueue: new(queue.Queue),
-		Output:        make(chan *requests.Output, 1000),
-		outputQueue:   new(queue.Queue),
-		logQueue:      new(queue.Queue),
-		done:          make(chan struct{}),
-		netCache:      net.NewASNCache(),
-		netQueue:      new(queue.Queue),
-		subdomains:    make(map[string]int),
-		last:          time.Now(),
-		perSecFirst:   time.Now(),
-		perSecLast:    time.Now(),
+		bruteQueue:  new(queue.Queue),
+		moreBrute:   make(chan struct{}, 10),
+		srcs:        stringset.New(),
+		addrs:       stringset.New(),
+		Output:      make(chan *requests.Output, 1000),
+		outputQueue: new(queue.Queue),
+		logQueue:    new(queue.Queue),
+		done:        make(chan struct{}),
+		netCache:    net.NewASNCache(),
+		netQueue:    new(queue.Queue),
+		subdomains:  make(map[string]int),
+		last:        time.Now(),
+		perSecFirst: time.Now(),
+		perSecLast:  time.Now(),
 	}
 
 	if ref := e.refToDataManager(); ref != nil {
@@ -240,9 +236,7 @@ loop:
 			}
 		case <-twoSec.C:
 			e.releaseAttempts()
-			if num := e.logQueue.Len() / 10; num > 0 {
-				e.writeLogs(num)
-			}
+			e.writeLogs(false)
 			if startDone >= 2 {
 				e.nextPhase(firstMin)
 			}
@@ -266,7 +260,7 @@ loop:
 	cancel()
 	e.cleanEventBus()
 	<-endChan
-	e.writeLogs(0)
+	e.writeLogs(true)
 	return nil
 }
 
@@ -298,7 +292,7 @@ func (e *Enumeration) nextPhase(first bool) {
 	persec, _ := e.dnsQueriesPerSec()
 	remaining := e.DNSNamesRemaining()
 	// Has the enumeration been inactive long enough to stop the task?
-	inactive := time.Now().Sub(e.lastActive()) > 5*time.Second
+	inactive := time.Now().Sub(e.lastActive()) > 20*time.Second
 
 	if persec > 1000 && remaining > 25000 {
 		return

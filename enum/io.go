@@ -4,14 +4,13 @@
 package enum
 
 import (
-	"net"
 	"strings"
 	"time"
 
 	"github.com/OWASP/Amass/v3/eventbus"
 	"github.com/OWASP/Amass/v3/net/http"
 	"github.com/OWASP/Amass/v3/requests"
-	"github.com/miekg/dns"
+	"github.com/OWASP/Amass/v3/stringset"
 )
 
 func (e *Enumeration) submitKnownNames(c chan struct{}) {
@@ -27,7 +26,7 @@ func (e *Enumeration) submitKnownNames(c chan struct{}) {
 		}
 
 		for _, event := range events {
-			for _, output := range g.GetOutput(event) {
+			for _, output := range g.EventOutput(event, nil, nil) {
 				if e.Config.IsDomainInScope(output.Name) {
 					e.Bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 						Name:   output.Name,
@@ -81,18 +80,20 @@ func (e *Enumeration) processOutput(c chan struct{}) {
 	maxIdx := 6
 	delays := []int{25, 50, 75, 100, 150, 250, 500}
 
-	t := time.NewTicker(time.Second)
-	defer t.Stop()
+	// This filter ensures that we only get new names
+	filter := stringset.NewStringFilter()
+
+	t := time.NewTimer(30 * time.Second)
 loop:
 	for {
 		select {
 		case <-e.done:
-			return
+			break loop
 		case <-t.C:
-			e.outputResolvedNames()
+			next := e.obtainOutput(filter)
+			t.Reset(next)
 		default:
-			element, ok := e.outputQueue.Next()
-			if !ok {
+			if !e.emptyOutputQueue() {
 				time.Sleep(time.Duration(delays[curIdx]) * time.Millisecond)
 				if curIdx < maxIdx {
 					curIdx++
@@ -100,83 +101,49 @@ loop:
 				continue loop
 			}
 
-			output := element.(*requests.Output)
-			if !e.filters.Output.Duplicate(output.Name) {
-				e.Output <- output
-			}
+			curIdx = 0
 		}
 	}
+
+	e.obtainOutput(filter)
+	e.emptyOutputQueue()
 }
 
-func (e *Enumeration) outputResolvedNames() {
-	var failed []*requests.DNSRequest
+func (e *Enumeration) obtainOutput(filter *stringset.StringFilter) time.Duration {
+	started := time.Now()
 
-	// Prepare discovered names for output processing
+	for _, g := range e.Sys.GraphDatabases() {
+		output := g.EventOutput(e.Config.UUID.String(), filter, e.netCache)
+
+		for _, o := range output {
+			e.outputQueue.Append(o)
+		}
+	}
+
+	next := time.Now().Sub(started) * 4
+	if next < time.Second {
+		next = time.Second
+	}
+	return next
+}
+
+func (e *Enumeration) emptyOutputQueue() bool {
+	var sent bool
+
 	for {
-		element, ok := e.resolvedQueue.Next()
+		element, ok := e.outputQueue.Next()
 		if !ok {
 			break
 		}
 
-		name := element.(*requests.DNSRequest)
-
-		output := e.buildOutput(name)
-		if output == nil {
-			failed = append(failed, name)
-			continue
+		sent = true
+		o := element.(*requests.Output)
+		if e.Config.IsDomainInScope(o.Name) && !e.filters.Output.Duplicate(o.Name) {
+			e.Output <- o
 		}
-
-		e.outputQueue.Append(output)
 	}
 
-	// Put failed attempts back on the resolved names queue
-	for _, f := range failed {
-		e.resolvedQueue.Append(f)
-	}
-}
-
-func (e *Enumeration) buildOutput(req *requests.DNSRequest) *requests.Output {
-	output := &requests.Output{
-		Name:   req.Name,
-		Domain: req.Domain,
-		Tag:    req.Tag,
-		Source: req.Source,
-	}
-
-	for _, r := range req.Records {
-		if t := uint16(r.Type); t != dns.TypeA && t != dns.TypeAAAA {
-			continue
-		}
-
-		addrInfo := e.buildAddrInfo(strings.TrimSpace(r.Data))
-		if addrInfo == nil {
-			return nil
-		}
-
-		output.Addresses = append(output.Addresses, *addrInfo)
-	}
-
-	return output
-}
-
-func (e *Enumeration) buildAddrInfo(addr string) *requests.AddressInfo {
-	ainfo := &requests.AddressInfo{Address: net.ParseIP(addr)}
-
-	asn := e.netCache.AddrSearch(addr)
-	if asn == nil {
-		return nil
-	}
-
-	var err error
-	ainfo.CIDRStr = asn.Prefix
-	_, ainfo.Netblock, err = net.ParseCIDR(asn.Prefix)
-	if err != nil || !ainfo.Netblock.Contains(ainfo.Address) {
-		return nil
-	}
-
-	ainfo.ASN = asn.ASN
-	ainfo.Description = asn.Description
-	return ainfo
+	return sent
 }
 
 func (e *Enumeration) sendOutput(o *requests.Output) {
@@ -184,9 +151,7 @@ func (e *Enumeration) sendOutput(o *requests.Output) {
 	case <-e.done:
 		return
 	default:
-		if e.Config.IsDomainInScope(o.Name) {
-			e.outputQueue.Append(o)
-		}
+		e.outputQueue.Append(o)
 	}
 }
 
@@ -194,7 +159,12 @@ func (e *Enumeration) queueLog(msg string) {
 	e.logQueue.Append(msg)
 }
 
-func (e *Enumeration) writeLogs(num int) {
+func (e *Enumeration) writeLogs(all bool) {
+	num := e.logQueue.Len() / 10
+	if num <= 1000 {
+		num = 1000
+	}
+
 	for i := 0; ; i++ {
 		msg, ok := e.logQueue.Next()
 		if !ok {
@@ -205,7 +175,7 @@ func (e *Enumeration) writeLogs(num int) {
 			e.Config.Log.Print(msg.(string))
 		}
 
-		if num != 0 && i >= num {
+		if !all && i >= num {
 			break
 		}
 	}

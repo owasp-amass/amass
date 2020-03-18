@@ -129,6 +129,9 @@ type Config struct {
 	// Enumeration Timeout
 	Timeout int
 
+	// Option for verbose logging and output
+	Verbose bool
+
 	// The root domain names that the enumeration will target
 	domains []string
 

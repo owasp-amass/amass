@@ -15,8 +15,12 @@ import (
 	"golang.org/x/net/publicsuffix"
 )
 
-// GetOutput returns findings within the enumeration Graph.
-func (g *Graph) GetOutput(uuid string) []*requests.Output {
+// EventOutput returns findings within the receiver Graph for the event identified by the uuid string
+// parameter and not already in the filter StringFilter argument. The cache ASNCache argument provides
+// ASN / netblock information already discovered so the routine can avoid unnecessary queries to the
+// graph database. The filter and cache objects are updated by EventOutput.
+func (g *Graph) EventOutput(uuid string,
+	filter *stringset.StringFilter, cache *amassnet.ASNCache) []*requests.Output {
 	var results []*requests.Output
 
 	event, err := g.db.ReadNode(uuid, "event")
@@ -29,8 +33,12 @@ func (g *Graph) GetOutput(uuid string) []*requests.Output {
 		return results
 	}
 
+	// Make sure a filter has been created
+	if filter == nil {
+		filter = stringset.NewStringFilter()
+	}
+
 	var names []db.Node
-	filter := stringset.NewStringFilter()
 	for _, edge := range edges {
 		p, err := g.db.ReadProperties(edge.To, "type")
 
@@ -38,13 +46,17 @@ func (g *Graph) GetOutput(uuid string) []*requests.Output {
 			continue
 		}
 
-		if !filter.Duplicate(g.db.NodeToID(edge.To)) {
+		if !filter.Has(g.db.NodeToID(edge.To)) {
 			names = append(names, edge.To)
 		}
 	}
 
+	// Make sure a cache has been created for performance purposes
+	if cache == nil {
+		cache = amassnet.NewASNCache()
+	}
+
 	var count int
-	cache := amassnet.NewASNCache()
 	output := make(chan *requests.Output, 10000)
 	for _, name := range names {
 		go g.buildOutput(name, uuid, cache, output)
@@ -53,7 +65,9 @@ func (g *Graph) GetOutput(uuid string) []*requests.Output {
 
 	for i := 0; i < count; i++ {
 		if o := <-output; o != nil {
-			results = append(results, o)
+			if !filter.Duplicate(o.Name) {
+				results = append(results, o)
+			}
 		}
 	}
 

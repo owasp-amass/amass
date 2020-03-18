@@ -216,7 +216,7 @@ func (r *RateMonitoredResolver) calcRate() {
 	// Check if too many attempts are being made
 	if comp := stats[QueryCompletions]; comp > 0 && comp > timeouts {
 		succ := comp - timeouts
-		max := succ + (succ / 4)
+		max := succ + (succ / 10)
 
 		if attempts > max {
 			// Slow things down!

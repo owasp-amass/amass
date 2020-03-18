@@ -382,6 +382,9 @@ func (i intelArgs) OverrideConfig(conf *config.Config) error {
 	if i.Timeout > 0 {
 		conf.Timeout = i.Timeout
 	}
+	if i.Options.Verbose == true {
+		conf.Verbose = true
+	}
 	if i.Resolvers.Len() > 0 {
 		conf.SetResolvers(i.Resolvers.Slice())
 	}

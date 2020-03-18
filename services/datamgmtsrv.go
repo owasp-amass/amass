@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/eventbus"
@@ -30,7 +31,7 @@ type DataManagerService struct {
 
 // NewDataManagerService returns he object initialized, but not yet started.
 func NewDataManagerService(sys System) *DataManagerService {
-	dms := &DataManagerService{maxRequests: semaphore.NewSimpleSemaphore(100)}
+	dms := &DataManagerService{maxRequests: semaphore.NewSimpleSemaphore(1)}
 
 	dms.BaseService = *NewBaseService(dms, "Data Manager", sys)
 	return dms
@@ -38,8 +39,38 @@ func NewDataManagerService(sys System) *DataManagerService {
 
 // OnDNSRequest implements the Service interface.
 func (dms *DataManagerService) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
-	dms.maxRequests.Acquire(1)
-	go dms.processDNSRequest(ctx, req)
+	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
+	if bus == nil {
+		return
+	}
+
+	curIdx := 0
+	maxIdx := 6
+	delays := []int{25, 50, 75, 100, 150, 250, 500}
+
+	t := time.NewTicker(time.Second)
+	defer t.Stop()
+loop:
+	for {
+		select {
+		case <-dms.Quit():
+			return
+		case <-t.C:
+			bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, dms.String())
+		default:
+			if !dms.maxRequests.TryAcquire(1) {
+				time.Sleep(time.Duration(delays[curIdx]) * time.Millisecond)
+				if curIdx < maxIdx {
+					curIdx++
+				}
+				continue loop
+			}
+
+			curIdx = 0
+			go dms.processDNSRequest(ctx, req)
+			return
+		}
+	}
 }
 
 func (dms *DataManagerService) processDNSRequest(ctx context.Context, req *requests.DNSRequest) {

@@ -8,8 +8,8 @@ import "sync"
 // StringFilter implements an object that performs filtering of strings
 // to ensure that only unique items get through the filter.
 type StringFilter struct {
+	sync.Mutex
 	filter Set
-	lock   sync.Mutex
 }
 
 // NewStringFilter returns an initialized StringFilter.
@@ -21,8 +21,8 @@ func NewStringFilter() *StringFilter {
 
 // Duplicate checks if the name provided has been seen before by this filter.
 func (sf *StringFilter) Duplicate(s string) bool {
-	sf.lock.Lock()
-	defer sf.lock.Unlock()
+	sf.Lock()
+	defer sf.Unlock()
 
 	if sf.filter.Has(s) {
 		return true
@@ -30,4 +30,12 @@ func (sf *StringFilter) Duplicate(s string) bool {
 
 	sf.filter.Insert(s)
 	return false
+}
+
+// Has returns true if the receiver StringFilter already contains the string argument.
+func (sf *StringFilter) Has(s string) bool {
+	sf.Lock()
+	defer sf.Unlock()
+
+	return sf.filter.Has(s)
 }

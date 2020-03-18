@@ -240,10 +240,8 @@ func getEnumOutput(id int, domains []string, db *graph.Graph) []*requests.Output
 
 	filter := stringset.NewStringFilter()
 	for i := len(enums) - 1; i >= 0; i-- {
-		for _, out := range db.GetOutput(enums[i]) {
-			if !filter.Duplicate(out.Name) {
-				output = append(output, out)
-			}
+		for _, out := range db.EventOutput(enums[i], filter, nil) {
+			output = append(output, out)
 		}
 	}
 	return output
@@ -253,13 +251,12 @@ func getUniqueDBOutput(id string, domains []string, db *graph.Graph) []*requests
 	var output []*requests.Output
 	filter := stringset.NewStringFilter()
 
-	for _, out := range db.GetOutput(id) {
+	for _, out := range db.EventOutput(id, filter, nil) {
 		if len(domains) > 0 && !domainNameInScope(out.Name, domains) {
 			continue
 		}
-		if !filter.Duplicate(out.Name) {
-			output = append(output, out)
-		}
+
+		output = append(output, out)
 	}
 	return output
 }
