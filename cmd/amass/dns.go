@@ -251,6 +251,7 @@ func processDNSAnswers(cfg *config.Config,
 	defer t.Stop()
 
 	l := len(cfg.ProvidedNames)
+loop:
 	for i := 0; i < l; {
 		select {
 		case <-done:
@@ -270,34 +271,22 @@ func processDNSAnswers(cfg *config.Config,
 			active = true
 			first = false
 
-			if req != nil && len(req.Records) != 0 {
-				tss := stringset.New()
-				for _, rec := range req.Records {
-					tss.Insert(typeToName(uint16(rec.Type)))
+			if req == nil || len(req.Records) == 0 {
+				continue loop
+			}
+
+			// Print all the DNS records
+			for _, rec := range req.Records {
+				name := fmt.Sprintf("%-36s", req.Name)
+				tstr := fmt.Sprintf("%-4s", typeToName(uint16(rec.Type)))
+
+				if t := uint16(rec.Type); t == dns.TypeNS || t == dns.TypeSOA {
+					pieces := strings.Split(rec.Data, ",")
+					rec.Data = pieces[len(pieces)-1]
 				}
+				rec.Data = resolvers.RemoveLastDot(rec.Data)
 
-				var ts string
-				for j, str := range tss.Slice() {
-					if j != 0 {
-						ts += ", "
-					}
-					ts += strings.ToUpper(str)
-				}
-				tstr := fmt.Sprintf("%-24s", "["+ts+"] ")
-
-				var data string
-				for j, rec := range req.Records {
-					if j != 0 {
-						data += ", "
-					}
-
-					if uint16(rec.Type) == dns.TypeNS {
-						rec.Data = strings.Split(rec.Data, ",")[1]
-					}
-					data += resolvers.RemoveLastDot(rec.Data)
-				}
-
-				fmt.Fprintf(color.Output, "%s%s %s\n", blue(tstr), green(req.Name), yellow(data))
+				fmt.Fprintf(color.Output, "%s %s\t%s\n", green(name), blue(tstr), yellow(rec.Data))
 			}
 		}
 	}
