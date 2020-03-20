@@ -63,7 +63,7 @@ func (r *RADb) OnStart() error {
 		}
 	}
 
-	r.SetRateLimit(2 * time.Second)
+	r.SetRateLimit(3 * time.Second)
 	return nil
 }
 
@@ -333,7 +333,7 @@ func (r *RADb) ipToASN(ctx context.Context, cidr string) int {
 	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, r.String())
 
 	if r.addr == "" {
-		answers, _, err := r.System().Pool().Resolve(ctx, radbWhoisURL, "A", resolvers.PriorityCritical)
+		answers, _, err := r.System().Pool().Resolve(ctx, radbWhoisURL, "A", resolvers.PriorityHigh)
 		if err != nil {
 			bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 				fmt.Sprintf("%s: %s: %v", r.String(), radbWhoisURL, err))

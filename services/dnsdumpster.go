@@ -100,7 +100,7 @@ func (d *DNSDumpster) OnDNSRequest(ctx context.Context, req *requests.DNSRequest
 }
 
 func (d *DNSDumpster) getCSRFToken(page string) string {
-	re := regexp.MustCompile("<input type='hidden' name='csrfmiddlewaretoken' value='([a-zA-Z0-9]*)' />")
+	re := regexp.MustCompile(`<input type="hidden" name="csrfmiddlewaretoken" value="([a-zA-Z0-9]*)">`)
 
 	if subs := re.FindStringSubmatch(page); len(subs) == 2 {
 		return strings.TrimSpace(subs[1])
