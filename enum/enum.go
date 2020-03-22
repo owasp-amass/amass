@@ -9,9 +9,8 @@ import (
 	"sync"
 	"time"
 
-	alts "github.com/OWASP/Amass/v3/alterations"
 	"github.com/OWASP/Amass/v3/config"
-	eb "github.com/OWASP/Amass/v3/eventbus"
+	"github.com/OWASP/Amass/v3/eventbus"
 	"github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/queue"
 	"github.com/OWASP/Amass/v3/requests"
@@ -20,46 +19,25 @@ import (
 	"github.com/OWASP/Amass/v3/stringset"
 )
 
-// Filters contains the set of string filters required during an enumeration.
-type Filters struct {
-	NewNames      *stringset.StringFilter
-	Resolved      *stringset.StringFilter
-	NewAddrs      *stringset.StringFilter
-	SweepAddrs    *stringset.StringFilter
-	Output        *stringset.StringFilter
-	PassiveOutput *stringset.StringFilter
-}
-
 // Enumeration is the object type used to execute a DNS enumeration with Amass.
 type Enumeration struct {
-	sync.Mutex
-
 	// Information sent in the context
 	Config *config.Config
-	Bus    *eb.EventBus
+	Bus    *eventbus.EventBus
 	Sys    services.System
-
-	altState    *alts.State
-	markovModel *alts.MarkovModel
-	startedAlts bool
-	altQueue    *queue.Queue
-	moreAlts    chan struct{}
 
 	ctx context.Context
 
-	filters *Filters
-	dataMgr services.Service
-
-	startedBrute bool
-	bruteQueue   *queue.Queue
-	moreBrute    chan struct{}
+	coreSrvs []services.Service
+	dataMgr  services.Service
 
 	srcsLock sync.Mutex
 	srcs     stringset.Set
 
 	// The channel and queue that will receive the results
-	Output      chan *requests.Output
-	outputQueue *queue.Queue
+	Output       chan *requests.Output
+	outputQueue  *queue.Queue
+	outputFilter *stringset.StringFilter
 
 	// Queue for the log messages
 	logQueue *queue.Queue
@@ -70,58 +48,42 @@ type Enumeration struct {
 
 	// Cache for the infrastructure data collected from online sources
 	netCache *net.ASNCache
-	netQueue *queue.Queue
 
-	subLock    sync.Mutex
-	subdomains map[string]int
+	nameMgr   *NameManager
+	subMgr    *SubdomainManager
+	bruteMgr  *BruteManager
+	altMgr    *AlterationsManager
+	guessMgr  *GuessManager
+	domainMgr *DomainManager
 
-	addrsLock sync.Mutex
-	addrs     stringset.Set
-
-	lastLock  sync.Mutex
-	last      time.Time
-	lastPhase time.Time
+	lastLock sync.Mutex
+	last     time.Time
 
 	perSecLock  sync.Mutex
 	perSec      int64
 	retries     int64
+	numSeqZeros int64
 	perSecFirst time.Time
 	perSecLast  time.Time
-
-	pro          interface{ Stop() }
-	profileStart sync.Once
 }
 
 // NewEnumeration returns an initialized Enumeration that has not been started yet.
 func NewEnumeration(sys services.System) *Enumeration {
 	e := &Enumeration{
-		Config:   config.NewConfig(),
-		Bus:      eb.NewEventBus(10000),
-		Sys:      sys,
-		altQueue: new(queue.Queue),
-		moreAlts: make(chan struct{}, 10),
-		filters: &Filters{
-			NewNames:      stringset.NewStringFilter(),
-			Resolved:      stringset.NewStringFilter(),
-			NewAddrs:      stringset.NewStringFilter(),
-			SweepAddrs:    stringset.NewStringFilter(),
-			Output:        stringset.NewStringFilter(),
-			PassiveOutput: stringset.NewStringFilter(),
-		},
-		bruteQueue:  new(queue.Queue),
-		moreBrute:   make(chan struct{}, 10),
-		srcs:        stringset.New(),
-		addrs:       stringset.New(),
-		Output:      make(chan *requests.Output, 1000),
-		outputQueue: new(queue.Queue),
-		logQueue:    new(queue.Queue),
-		done:        make(chan struct{}),
-		netCache:    net.NewASNCache(),
-		netQueue:    new(queue.Queue),
-		subdomains:  make(map[string]int),
-		last:        time.Now(),
-		perSecFirst: time.Now(),
-		perSecLast:  time.Now(),
+		Config:       config.NewConfig(),
+		Bus:          eventbus.NewEventBus(10000),
+		Sys:          sys,
+		coreSrvs:     sys.CoreServices(),
+		srcs:         stringset.New(),
+		Output:       make(chan *requests.Output, 1000),
+		outputQueue:  new(queue.Queue),
+		outputFilter: stringset.NewStringFilter(),
+		logQueue:     new(queue.Queue),
+		done:         make(chan struct{}),
+		netCache:     net.NewASNCache(),
+		last:         time.Now(),
+		perSecFirst:  time.Now(),
+		perSecLast:   time.Now(),
 	}
 
 	if ref := e.refToDataManager(); ref != nil {
@@ -170,28 +132,10 @@ func (e *Enumeration) Start() error {
 	}
 	e.srcsLock.Unlock()
 
-	// Setup the DNS name alteration objects
-	e.markovModel = alts.NewMarkovModel(3)
-	e.altState = alts.NewState(e.Config.AltWordlist)
-	e.altState.MinForWordFlip = e.Config.MinForWordFlip
-	e.altState.EditDistance = e.Config.EditDistance
-
 	// Setup the context used throughout the enumeration
 	ctx, cancel := context.WithCancel(context.Background())
 	ctx = context.WithValue(ctx, requests.ContextConfig, e.Config)
 	e.ctx = context.WithValue(ctx, requests.ContextEventBus, e.Bus)
-
-	e.setupEventBus()
-
-	go e.processAddresses()
-
-	// The enumeration will not terminate until all output has been processed
-	startChan := make(chan struct{}, 2)
-	endChan := make(chan struct{})
-	// Use all previously discovered names that are in scope
-	go e.submitKnownNames(startChan)
-	go e.submitProvidedNames(startChan)
-	go e.processOutput(endChan)
 
 	if e.Config.Timeout > 0 {
 		time.AfterFunc(time.Duration(e.Config.Timeout)*time.Minute, func() {
@@ -205,13 +149,7 @@ func (e *Enumeration) Start() error {
 		if !e.srcs.Has(src.String()) {
 			continue
 		}
-		// Release all the domain names specified in the configuration
-		for _, domain := range e.Config.Domains() {
-			src.DNSRequest(e.ctx, &requests.DNSRequest{
-				Name:   domain,
-				Domain: domain,
-			})
-		}
+
 		// Put in requests for all the ASNs specified in the configuration
 		for _, asn := range e.Config.ASNs {
 			src.ASNRequest(e.ctx, &requests.ASNRequest{ASN: asn})
@@ -219,29 +157,136 @@ func (e *Enumeration) Start() error {
 	}
 	e.srcsLock.Unlock()
 
-	var startDone int
-	firstMin := true
-	e.lastPhase = time.Now()
-	twoSec := time.NewTicker(2 * time.Second)
+	var managers []FQDNManager
+	// Setup the various FQDNManager objects for the enumeration
+	e.nameMgr = NewNameManager(e)
+	defer e.nameMgr.Stop()
+	managers = append(managers, e.nameMgr)
+	e.Bus.Subscribe(requests.NewNameTopic, e.nameMgr.InputName)
+	defer e.Bus.Unsubscribe(requests.NewNameTopic, e.nameMgr.InputName)
+	// Use all previously discovered names that are in scope
+	go e.submitKnownNames()
+	go e.submitProvidedNames()
+
+	var addrMgr *AddressManager
+	if !e.Config.Passive {
+		addrMgr = NewAddressManager(e)
+		defer addrMgr.Stop()
+		managers = append(managers, addrMgr)
+		e.Bus.Subscribe(requests.NameResolvedTopic, addrMgr.InputName)
+		defer e.Bus.Unsubscribe(requests.NameResolvedTopic, addrMgr.InputName)
+		e.Bus.Subscribe(requests.NewAddrTopic, addrMgr.InputAddress)
+		defer e.Bus.Unsubscribe(requests.NewAddrTopic, addrMgr.InputAddress)
+		e.Bus.Subscribe(requests.NewASNTopic, e.netCache.Update)
+		defer e.Bus.Unsubscribe(requests.NewASNTopic, e.netCache.Update)
+	}
+
+	if !e.Config.Passive {
+		e.subMgr = NewSubdomainManager(e)
+		defer e.subMgr.Stop()
+		managers = append(managers, e.subMgr)
+		e.Bus.Subscribe(requests.NameResolvedTopic, e.subMgr.InputName)
+		defer e.Bus.Unsubscribe(requests.NameResolvedTopic, e.subMgr.InputName)
+	}
+
+	if !e.Config.Passive && e.Config.BruteForcing {
+		e.bruteMgr = NewBruteManager(e)
+		defer e.bruteMgr.Stop()
+		managers = append(managers, e.bruteMgr)
+	}
+
+	if !e.Config.Passive && e.Config.Alterations {
+		e.altMgr = NewAlterationsManager(e)
+		defer e.altMgr.Stop()
+		managers = append(managers, e.altMgr)
+		e.Bus.Subscribe(requests.NameResolvedTopic, e.altMgr.InputName)
+		defer e.Bus.Unsubscribe(requests.NameResolvedTopic, e.altMgr.InputName)
+	}
+
+	e.domainMgr = NewDomainManager(e)
+	defer e.domainMgr.Stop()
+	for _, domain := range e.Config.Domains() {
+		e.domainMgr.InputName(&requests.DNSRequest{
+			Name:   domain,
+			Domain: domain,
+			Tag:    requests.DNS,
+			Source: "DNS",
+		})
+	}
+	managers = append(managers, e.domainMgr)
+
+	if !e.Config.Passive && e.Config.Alterations {
+		e.guessMgr = NewGuessManager(e)
+		defer e.guessMgr.Stop()
+		managers = append(managers, e.guessMgr)
+		e.Bus.Subscribe(requests.NameResolvedTopic, e.guessMgr.InputName)
+		defer e.Bus.Unsubscribe(requests.NameResolvedTopic, e.guessMgr.InputName)
+	}
+
+	e.Bus.Subscribe(requests.OutputTopic, e.sendOutput)
+	defer e.Bus.Unsubscribe(requests.OutputTopic, e.sendOutput)
+	e.Bus.Subscribe(requests.LogTopic, e.queueLog)
+	defer e.Bus.Unsubscribe(requests.LogTopic, e.queueLog)
+	e.Bus.Subscribe(requests.SetActiveTopic, e.updateLastActive)
+	defer e.Bus.Unsubscribe(requests.SetActiveTopic, e.updateLastActive)
+	e.Bus.Subscribe(requests.ResolveCompleted, e.incQueriesPerSec)
+	defer e.Bus.Unsubscribe(requests.ResolveCompleted, e.incQueriesPerSec)
+
+	// Setup all core services to receive the appropriate events
+register:
+	for _, srv := range e.Sys.CoreServices() {
+		switch srv.String() {
+		case "Data Manager":
+			// All requests to the data manager will be sent directly
+			continue register
+		case "DNS Service":
+			e.Bus.Subscribe(requests.ResolveNameTopic, srv.DNSRequest)
+			defer e.Bus.Unsubscribe(requests.ResolveNameTopic, srv.DNSRequest)
+			e.Bus.Subscribe(requests.SubDiscoveredTopic, srv.SubdomainDiscovered)
+			defer e.Bus.Unsubscribe(requests.SubDiscoveredTopic, srv.SubdomainDiscovered)
+		default:
+			e.Bus.Subscribe(requests.NameRequestTopic, srv.DNSRequest)
+			defer e.Bus.Unsubscribe(requests.NameRequestTopic, srv.DNSRequest)
+			e.Bus.Subscribe(requests.SubDiscoveredTopic, srv.SubdomainDiscovered)
+			defer e.Bus.Unsubscribe(requests.SubDiscoveredTopic, srv.SubdomainDiscovered)
+			e.Bus.Subscribe(requests.AddrRequestTopic, srv.AddrRequest)
+			defer e.Bus.Unsubscribe(requests.AddrRequestTopic, srv.AddrRequest)
+			e.Bus.Subscribe(requests.ASNRequestTopic, srv.ASNRequest)
+			defer e.Bus.Unsubscribe(requests.ASNRequestTopic, srv.ASNRequest)
+		}
+	}
+
+	endChan := make(chan struct{})
+	go e.processOutput(endChan)
+
+	t := time.NewTimer(5 * time.Second)
 	perMin := time.NewTicker(time.Minute)
+	defer perMin.Stop()
 loop:
 	for {
 		select {
 		case <-e.done:
 			break loop
-		case <-startChan:
-			startDone++
-			if startDone == 2 {
-				time.Sleep(10 * time.Second)
+		case <-t.C:
+			num := e.useManagers(managers, 5)
+			// Has the enumeration been inactive long enough to stop the task?
+			inactive := time.Now().Sub(e.lastActive()) > 15*time.Second
+
+			if num == 0 {
+				if inactive {
+					// End the enumeration!
+					e.Done()
+					continue loop
+				}
+
+				e.incNumSeqZeros()
+			} else {
+				e.clearNumSeqZeros()
 			}
-		case <-twoSec.C:
-			e.releaseAttempts()
+
 			e.writeLogs(false)
-			if startDone >= 2 {
-				e.nextPhase(firstMin)
-			}
+			t.Reset(5 * time.Second)
 		case <-perMin.C:
-			firstMin = false
 			if !e.Config.Passive {
 				var pct float64
 				sec, retries := e.dnsQueriesPerSec()
@@ -255,76 +300,89 @@ loop:
 		}
 	}
 
-	twoSec.Stop()
-	perMin.Stop()
 	cancel()
-	e.cleanEventBus()
 	<-endChan
 	e.writeLogs(true)
 	return nil
 }
 
-func (e *Enumeration) releaseAttempts() {
-	remaining := e.DNSNamesRemaining()
+func (e *Enumeration) requiredNumberOfNames(numsec int) int {
+	required := numsec
+	max := (len(e.Config.Resolvers) * 500) * numsec
 
-	if remaining < 25000 {
-		if e.startedBrute {
-			for i := 0; i < 5; i++ {
-				e.moreBruteForcing()
-			}
+	// Calculate the number of names to obtain from the managers
+	persec, retries := e.dnsQueriesPerSec()
+	if persec > retries {
+		sucrate := int(persec) - int(retries)
+
+		// Add 10% more to the success rate to incourage more attempts
+		sucrate += sucrate / 10
+
+		// Calc the number of queries that can be performed across the time window
+		total := sucrate * numsec
+
+		// Calculate the approximate number of DNS queries already in the works
+		remaining := int(e.DNSNamesRemaining())
+		if remaining > 0 {
+			remaining += e.Config.MaxDNSQueries
+		} else {
+			// If the queue is empty, then encourage additional activity
+			total = max / 2
 		}
 
-		if e.startedAlts {
-			for i := 0; i < 50; i++ {
-				e.moreAlterations()
+		// If our total over the time window is larger than the remaining number of
+		// DNS queries, then set the required number to our total minus the number remaining
+		if remaining < total {
+			required = total - remaining
+
+			if required > max {
+				required = max
 			}
 		}
 	}
 
-	time.Sleep(100 * time.Millisecond)
+	return required
 }
 
-func (e *Enumeration) nextPhase(first bool) {
-	if time.Now().Before(e.lastPhase.Add(15 * time.Second)) {
-		return
+func (e *Enumeration) useManagers(mgrs []FQDNManager, numsec int) int {
+	required := 100000
+
+	if !e.Config.Passive {
+		required = e.requiredNumberOfNames(numsec)
 	}
 
-	persec, _ := e.dnsQueriesPerSec()
-	remaining := e.DNSNamesRemaining()
-	// Has the enumeration been inactive long enough to stop the task?
-	inactive := time.Now().Sub(e.lastActive()) > 20*time.Second
+	var count int
+	// Loop through the managers until we acquire the necessary number of names for processing
+	for _, mgr := range mgrs {
+		remaining := required - count
 
-	if persec > 1000 && remaining > 25000 {
-		return
-	}
+		reqs := mgr.OutputNames(remaining)
+		count += len(reqs)
 
-	bruteReady := !e.Config.Passive && e.Config.BruteForcing && !e.startedBrute
-	altsReady := !e.Config.Passive && e.Config.Alterations && !e.startedAlts
+		// Send the FQDNs acquired from the manager
+		for _, req := range reqs {
+			if e.Config.Passive {
+				e.updateLastActive("enum")
+				if e.Config.IsDomainInScope(req.Name) {
+					e.Bus.Publish(requests.OutputTopic, eventbus.PriorityLow, &requests.Output{
+						Name:   req.Name,
+						Domain: req.Domain,
+						Tag:    req.Tag,
+						Source: req.Source,
+					})
+				}
+				continue
+			}
 
-	if bruteReady {
-		e.startedBrute = true
-		go e.startBruteForcing()
-
-		for i := 0; i < 10; i++ {
-			e.moreBruteForcing()
+			e.Bus.Publish(requests.ResolveNameTopic, eventbus.PriorityLow, e.ctx, req)
 		}
 
-		e.Config.Log.Print("Starting DNS queries for brute forcing")
-		e.lastPhase = time.Now()
-	} else if altsReady {
-		e.startedAlts = true
-		go e.performAlterations()
-
-		for i := 0; i < 100; i++ {
-			e.moreAlterations()
+		if count >= required {
+			break
 		}
-
-		e.Config.Log.Print("Starting DNS queries for altered names")
-		e.lastPhase = time.Now()
-	} else if !first && inactive && persec < 50 {
-		// End the enumeration!
-		e.Done()
 	}
+
+	return count
 }
 
 func (e *Enumeration) dnsQueriesPerSec() (int64, int64) {
@@ -377,7 +435,7 @@ func (e *Enumeration) clearPerSec() {
 func (e *Enumeration) DNSNamesRemaining() int64 {
 	var remaining int
 
-	for _, srv := range e.Sys.CoreServices() {
+	for _, srv := range e.coreSrvs {
 		if srv.String() == "DNS Service" {
 			remaining += srv.RequestLen()
 			break
@@ -395,78 +453,39 @@ func (e *Enumeration) lastActive() time.Time {
 }
 
 func (e *Enumeration) updateLastActive(srv string) {
-	go func() {
-		e.lastLock.Lock()
-		defer e.lastLock.Unlock()
+	e.lastLock.Lock()
+	defer e.lastLock.Unlock()
 
-		e.last = time.Now()
-	}()
-}
+	// Only update active for core services once we run out of new FQDNs
+	if e.numSeqZeros >= 2 {
+		var found bool
 
-func (e *Enumeration) setupEventBus() {
-	e.Bus.Subscribe(requests.OutputTopic, e.sendOutput)
-	e.Bus.Subscribe(requests.LogTopic, e.queueLog)
-	e.Bus.Subscribe(requests.SetActiveTopic, e.updateLastActive)
-	e.Bus.Subscribe(requests.ResolveCompleted, e.incQueriesPerSec)
+		for _, s := range e.coreSrvs {
+			if srv == s.String() {
+				found = true
+				break
+			}
+		}
 
-	e.Bus.Subscribe(requests.NewNameTopic, e.newNECallback)
-
-	if !e.Config.Passive {
-		e.Bus.Subscribe(requests.NameResolvedTopic, e.newRNCallback)
-
-		e.Bus.Subscribe(requests.NewAddrTopic, e.newAddress)
-		e.Bus.Subscribe(requests.NewASNTopic, e.netCache.Update)
-	}
-
-	// Setup all core services to receive the appropriate events
-loop:
-	for _, srv := range e.Sys.CoreServices() {
-		switch srv.String() {
-		case "Data Manager":
-			// All requests to the data manager will be sent directly
-			continue loop
-		case "DNS Service":
-			e.Bus.Subscribe(requests.ResolveNameTopic, srv.DNSRequest)
-			e.Bus.Subscribe(requests.SubDiscoveredTopic, srv.SubdomainDiscovered)
-		default:
-			e.Bus.Subscribe(requests.NameRequestTopic, srv.DNSRequest)
-			e.Bus.Subscribe(requests.SubDiscoveredTopic, srv.SubdomainDiscovered)
-			e.Bus.Subscribe(requests.AddrRequestTopic, srv.AddrRequest)
-			e.Bus.Subscribe(requests.ASNRequestTopic, srv.ASNRequest)
+		if !found {
+			return
 		}
 	}
+
+	// Update the last time activity was seen
+	e.last = time.Now()
 }
 
-func (e *Enumeration) cleanEventBus() {
-	e.Bus.Unsubscribe(requests.OutputTopic, e.sendOutput)
-	e.Bus.Unsubscribe(requests.LogTopic, e.queueLog)
-	e.Bus.Unsubscribe(requests.SetActiveTopic, e.updateLastActive)
-	e.Bus.Unsubscribe(requests.ResolveCompleted, e.incQueriesPerSec)
+func (e *Enumeration) incNumSeqZeros() {
+	e.lastLock.Lock()
+	defer e.lastLock.Unlock()
 
-	e.Bus.Unsubscribe(requests.NewNameTopic, e.newNECallback)
+	e.numSeqZeros++
+}
 
-	if !e.Config.Passive {
-		e.Bus.Unsubscribe(requests.NameResolvedTopic, e.newRNCallback)
+func (e *Enumeration) clearNumSeqZeros() {
+	e.lastLock.Lock()
+	defer e.lastLock.Unlock()
 
-		e.Bus.Unsubscribe(requests.NewAddrTopic, e.newAddress)
-		e.Bus.Unsubscribe(requests.NewASNTopic, e.netCache.Update)
-	}
-
-	// Setup all core services to receive the appropriate events
-loop:
-	for _, srv := range e.Sys.CoreServices() {
-		switch srv.String() {
-		case "Data Manager":
-			// All requests to the data manager will be sent directly
-			continue loop
-		case "DNS Service":
-			e.Bus.Unsubscribe(requests.ResolveNameTopic, srv.DNSRequest)
-			e.Bus.Unsubscribe(requests.SubDiscoveredTopic, srv.SubdomainDiscovered)
-		default:
-			e.Bus.Unsubscribe(requests.NameRequestTopic, srv.DNSRequest)
-			e.Bus.Unsubscribe(requests.SubDiscoveredTopic, srv.SubdomainDiscovered)
-			e.Bus.Unsubscribe(requests.AddrRequestTopic, srv.AddrRequest)
-			e.Bus.Unsubscribe(requests.ASNRequestTopic, srv.ASNRequest)
-		}
-	}
+	e.numSeqZeros = 0
 }
