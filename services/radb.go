@@ -63,7 +63,7 @@ func (r *RADb) OnStart() error {
 		}
 	}
 
-	r.SetRateLimit(3 * time.Second)
+	r.SetRateLimit(2 * time.Second)
 	return nil
 }
 

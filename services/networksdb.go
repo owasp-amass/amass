@@ -16,11 +16,11 @@ import (
 
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/eventbus"
+	amassnet "github.com/OWASP/Amass/v3/net"
+	"github.com/OWASP/Amass/v3/net/dns"
 	"github.com/OWASP/Amass/v3/net/http"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/stringset"
-	"github.com/OWASP/Amass/v3/net/dns"
-	amassnet "github.com/OWASP/Amass/v3/net"
 )
 
 const (
@@ -29,16 +29,16 @@ const (
 )
 
 var (
-	networksdbASNLinkRE = regexp.MustCompile(`Announcing ASN:<\/b> <a class="link_sm" href="(.*)"`)
-	networksdbOrgLinkRE = regexp.MustCompile(`ISP\/Organisation:<\/b> <a class="link_sm" href="(.*)"`)
-	networksdbIPLinkRE = regexp.MustCompile(`<a class="link_sm" href="(\/ip\/[.:a-zA-Z0-9]+)">`)
-	networksdbASNRE     = regexp.MustCompile(`AS Number:<\/b> ([0-9]*)<br>`)
-	networksdbCIDRRE    = regexp.MustCompile(`CIDR:<\/b>(.*)<br>`)
+	networksdbASNLinkRE    = regexp.MustCompile(`Announcing ASN:<\/b> <a class="link_sm" href="(.*)"`)
+	networksdbOrgLinkRE    = regexp.MustCompile(`ISP\/Organisation:<\/b> <a class="link_sm" href="(.*)"`)
+	networksdbIPLinkRE     = regexp.MustCompile(`<a class="link_sm" href="(\/ip\/[.:a-zA-Z0-9]+)">`)
+	networksdbASNRE        = regexp.MustCompile(`AS Number:<\/b> ([0-9]*)<br>`)
+	networksdbCIDRRE       = regexp.MustCompile(`CIDR:<\/b>(.*)<br>`)
 	networksdbIPPageCIDRRE = regexp.MustCompile(`<b>Network:.* href=".*".*href=".*">(.*)<\/a>`)
-	networksdbASNameRE  = regexp.MustCompile(`AS Name:<\/b>(.*)<br>`)
-	networksdbCCRE      = regexp.MustCompile(`Location:<\/b>.*href="/country/(.*)">`)
-	networksdbDomainsRE = regexp.MustCompile(`Domains in network`)
-	networksdbTableRE = regexp.MustCompile(`<table class`)
+	networksdbASNameRE     = regexp.MustCompile(`AS Name:<\/b>(.*)<br>`)
+	networksdbCCRE         = regexp.MustCompile(`Location:<\/b>.*href="/country/(.*)">`)
+	networksdbDomainsRE    = regexp.MustCompile(`Domains in network`)
+	networksdbTableRE      = regexp.MustCompile(`<table class`)
 )
 
 // NetworksDB is the Service that handles access to the NetworksDB.io data source.

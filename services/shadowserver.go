@@ -58,7 +58,7 @@ func (s *ShadowServer) OnStart() error {
 		}
 	}
 
-	s.SetRateLimit(3 * time.Second)
+	s.SetRateLimit(time.Second)
 	return nil
 }
 

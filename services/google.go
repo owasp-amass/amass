@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"net/url"
 	"strconv"
-	"time"
 	"strings"
+	"time"
 
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/eventbus"
