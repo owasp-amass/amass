@@ -58,7 +58,7 @@ func (s *ShadowServer) OnStart() error {
 		}
 	}
 
-	s.SetRateLimit(3 * time.Second)
+	s.SetRateLimit(time.Second)
 	return nil
 }
 
@@ -136,7 +136,7 @@ func (s *ShadowServer) origin(ctx context.Context, addr string) *requests.ASNReq
 	}
 	name := amassdns.ReverseIP(addr) + ".origin.asn.shadowserver.org"
 
-	answers, _, err := s.System().Pool().Resolve(ctx, name, "TXT", resolvers.PriorityCritical)
+	answers, _, err := s.System().Pool().Resolve(ctx, name, "TXT", resolvers.PriorityHigh)
 	if err != nil {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: %s: DNS TXT record query error: %v", s.String(), name, err),
@@ -145,7 +145,7 @@ func (s *ShadowServer) origin(ctx context.Context, addr string) *requests.ASNReq
 	}
 
 	fields := strings.Split(strings.Trim(answers[0].Data, "\""), " | ")
-	if len(fields) < 5 {
+	if len(fields) < 4 {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: %s: Failed to parse the origin response", s.String(), name),
 		)
@@ -160,12 +160,17 @@ func (s *ShadowServer) origin(ctx context.Context, addr string) *requests.ASNReq
 		return nil
 	}
 
+	desc := strings.TrimSpace(fields[2])
+	if len(fields) == 5 && fields[4] != "" {
+		desc += " - " + strings.TrimSpace(fields[4])
+	}
+
 	return &requests.ASNRequest{
 		Address:     addr,
 		ASN:         asn,
 		Prefix:      strings.TrimSpace(fields[1]),
 		CC:          strings.TrimSpace(fields[3]),
-		Description: strings.TrimSpace(fields[2]) + " - " + strings.TrimSpace(fields[4]),
+		Description: desc,
 		Netblocks:   stringset.New(strings.TrimSpace(fields[1])),
 		Tag:         s.SourceType,
 		Source:      s.String(),

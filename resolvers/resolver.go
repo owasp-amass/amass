@@ -526,7 +526,7 @@ func (r *BaseResolver) writeMessage(req *resolveRequest) {
 	if err := co.WriteMsg(msg); err != nil {
 		r.pullRequest(msg.MsgHdr.Id)
 		estr := fmt.Sprintf("DNS error: Failed to write query msg: %v", err)
-		r.returnRequest(req, makeResolveResult(nil, true, estr, NotAvailableRcode))
+		r.returnRequest(req, makeResolveResult(nil, true, estr, TimeoutRcode))
 		return
 	}
 
@@ -589,7 +589,12 @@ func (r *BaseResolver) processMessage(m *dns.Msg) {
 		return
 	}
 
+	r.finishProcessing(m, req)
+}
+
+func (r *BaseResolver) finishProcessing(m *dns.Msg, req *resolveRequest) {
 	var answers []requests.DNSAnswer
+
 	for _, a := range extractRawData(m, req.Qtype) {
 		answers = append(answers, requests.DNSAnswer{
 			Name: req.Name,
@@ -614,11 +619,13 @@ func (r *BaseResolver) processMessage(m *dns.Msg) {
 }
 
 func (r *BaseResolver) tcpExchange(id uint16, req *resolveRequest) {
-	r.updateRequestTimeout(id, time.Now().Add(r.WindowDuration))
+	var d net.Dialer
 	msg := queryMessage(id, req.Name, req.Qtype)
-	d := net.Dialer{Timeout: r.WindowDuration}
 
-	conn, err := d.Dial("tcp", r.address+":"+r.port)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	conn, err := d.DialContext(ctx, "tcp", r.address+":"+r.port)
 	if err != nil {
 		r.pullRequest(msg.MsgHdr.Id)
 		estr := fmt.Sprintf("DNS: Failed to obtain TCP connection to %s:%s: %v", r.address, r.port, err)
@@ -628,25 +635,24 @@ func (r *BaseResolver) tcpExchange(id uint16, req *resolveRequest) {
 	defer conn.Close()
 
 	co := &dns.Conn{Conn: conn}
-	co.SetWriteDeadline(time.Now().Add(r.WindowDuration))
+	co.SetWriteDeadline(time.Now().Add(10 * time.Second))
 	if err := co.WriteMsg(msg); err != nil {
 		r.pullRequest(msg.MsgHdr.Id)
 		estr := fmt.Sprintf("DNS error: Failed to write query msg: %v", err)
-		r.returnRequest(req, makeResolveResult(nil, true, estr, NotAvailableRcode))
+		r.returnRequest(req, makeResolveResult(nil, true, estr, TimeoutRcode))
 		return
 	}
 
-	co.SetReadDeadline(time.Now().Add(r.WindowDuration))
+	co.SetReadDeadline(time.Now().Add(10 * time.Second))
 	read, err := co.ReadMsg()
 	if read == nil || err != nil {
 		r.pullRequest(msg.MsgHdr.Id)
 		estr := fmt.Sprintf("DNS error: Failed to read the reply msg: %v", err)
-		r.returnRequest(req, makeResolveResult(nil, true, estr, NotAvailableRcode))
+		r.returnRequest(req, makeResolveResult(nil, true, estr, TimeoutRcode))
 		return
 	}
 
-	read.Truncated = false
-	r.processMessage(read)
+	r.finishProcessing(read, req)
 }
 
 func (r *BaseResolver) updateTimeouts(t int) {

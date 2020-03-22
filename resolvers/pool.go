@@ -307,7 +307,7 @@ func (rp *ResolverPool) Resolve(ctx context.Context, name, qtype string, priorit
 		if again {
 			success = false
 		} else if err != nil {
-			if rc := (err.(*ResolveError)).Rcode; rc == NotAvailableRcode ||
+			if rc := (err.(*ResolveError)).Rcode; rc == TimeoutRcode ||
 				rc == dns.RcodeServerFailure || rc == dns.RcodeRefused || rc == dns.RcodeNotImplemented {
 				success = false
 			}
@@ -318,7 +318,7 @@ func (rp *ResolverPool) Resolve(ctx context.Context, name, qtype string, priorit
 		}
 	}
 
-	return []requests.DNSAnswer{}, false, &ResolveError{Err: fmt.Sprintf("%v", err)}
+	return []requests.DNSAnswer{}, false, err
 }
 
 func (rp *ResolverPool) numUsableResolvers() int {

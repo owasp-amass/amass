@@ -13,7 +13,7 @@ import (
 	"github.com/OWASP/Amass/v3/stringset"
 )
 
-func (e *Enumeration) submitKnownNames(c chan struct{}) {
+func (e *Enumeration) submitKnownNames() {
 	for _, g := range e.Sys.GraphDatabases() {
 		var events []string
 
@@ -38,11 +38,9 @@ func (e *Enumeration) submitKnownNames(c chan struct{}) {
 			}
 		}
 	}
-
-	c <- struct{}{}
 }
 
-func (e *Enumeration) submitProvidedNames(c chan struct{}) {
+func (e *Enumeration) submitProvidedNames() {
 	for _, name := range e.Config.ProvidedNames {
 		if domain := e.Config.WhichDomain(name); domain != "" {
 			e.Bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
@@ -53,8 +51,6 @@ func (e *Enumeration) submitProvidedNames(c chan struct{}) {
 			})
 		}
 	}
-
-	c <- struct{}{}
 }
 
 func (e *Enumeration) namesFromCertificates(addr string) {
@@ -83,7 +79,7 @@ func (e *Enumeration) processOutput(c chan struct{}) {
 	// This filter ensures that we only get new names
 	filter := stringset.NewStringFilter()
 
-	t := time.NewTimer(30 * time.Second)
+	t := time.NewTimer(10 * time.Second)
 loop:
 	for {
 		select {
@@ -138,7 +134,7 @@ func (e *Enumeration) emptyOutputQueue() bool {
 
 		sent = true
 		o := element.(*requests.Output)
-		if e.Config.IsDomainInScope(o.Name) && !e.filters.Output.Duplicate(o.Name) {
+		if e.Config.IsDomainInScope(o.Name) && !e.outputFilter.Duplicate(o.Name) {
 			e.Output <- o
 		}
 	}

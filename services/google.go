@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/OWASP/Amass/v3/config"
@@ -46,7 +47,7 @@ func (g *Google) Type() string {
 func (g *Google) OnStart() error {
 	g.BaseService.OnStart()
 
-	g.SetRateLimit(3 * time.Second)
+	g.SetRateLimit(5 * time.Second)
 	return nil
 }
 
@@ -74,8 +75,10 @@ func (g *Google) executeQuery(ctx context.Context, domain string, numwilds int) 
 			fmt.Sprintf("Querying %s for %s subdomains", g.String(), domain))
 	}
 
+	var errcount int
 	num := g.limit / g.quantity
-	for i := 0; i < num; i++ {
+loop:
+	for i := 0; i < num; {
 		select {
 		case <-g.Quit():
 			return
@@ -86,10 +89,18 @@ func (g *Google) executeQuery(ctx context.Context, domain string, numwilds int) 
 			u := g.urlByPageNum(domain, i, numwilds)
 			page, err := http.RequestWebPage(u, nil, nil, "", "")
 			if err != nil {
+				if strings.HasPrefix(fmt.Sprintf("%v", err), "429") {
+					errcount++
+					if errcount < 10 {
+						continue loop
+					}
+				}
+
 				bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", g.String(), u, err))
 				return
 			}
 
+			i++
 			for _, name := range re.FindAllString(page, -1) {
 				bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 					Name:   cleanName(name),

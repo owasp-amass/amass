@@ -5,8 +5,10 @@ package requests
 
 import (
 	"net"
+	"strings"
 	"time"
 
+	"github.com/OWASP/Amass/v3/net/dns"
 	"github.com/OWASP/Amass/v3/stringset"
 )
 
@@ -128,4 +130,16 @@ func TrustedTag(tag string) bool {
 		return true
 	}
 	return false
+}
+
+// SanitizeDNSRequest cleans the Name and Domain elements of the receiver.
+func SanitizeDNSRequest(req *DNSRequest) {
+	req.Name = strings.ToLower(req.Name)
+	req.Name = strings.TrimSpace(req.Name)
+	req.Name = dns.RemoveAsteriskLabel(req.Name)
+	req.Name = strings.Trim(req.Name, ".")
+
+	req.Domain = strings.ToLower(req.Domain)
+	req.Domain = strings.TrimSpace(req.Domain)
+	req.Domain = strings.Trim(req.Domain, ".")
 }

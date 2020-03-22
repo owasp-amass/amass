@@ -91,6 +91,7 @@ func (ds *DNSService) processDNSRequest(ctx context.Context, req *requests.DNSRe
 
 func (ds *DNSService) queryInitialTypes(ctx context.Context, req *requests.DNSRequest) []requests.DNSAnswer {
 	var answers []requests.DNSAnswer
+
 	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
 	if bus == nil {
 		return answers
@@ -115,9 +116,11 @@ func (ds *DNSService) handleResolverError(ctx context.Context, err error) {
 	if cfg == nil || bus == nil {
 		return
 	}
+
 	rcode := (err.(*resolvers.ResolveError)).Rcode
-	if cfg.Verbose || rcode == resolvers.NotAvailableRcode || rcode == dns.RcodeRefused ||
-		rcode == dns.RcodeServerFailure || rcode == dns.RcodeNotImplemented {
+	if cfg.Verbose || rcode == resolvers.NotAvailableRcode ||
+		rcode == resolvers.TimeoutRcode || rcode == resolvers.ResolverErrRcode ||
+		rcode == dns.RcodeRefused || rcode == dns.RcodeServerFailure || rcode == dns.RcodeNotImplemented {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("DNS: %v", err))
 	}
 }
@@ -154,11 +157,11 @@ func (ds *DNSService) processSubdomain(ctx context.Context, req *requests.DNSReq
 		return
 	}
 
-	ds.basicQueries(ctx, req)
+	ds.subdomainQueries(ctx, req)
 	ds.queryServiceNames(ctx, req)
 }
 
-func (ds *DNSService) basicQueries(ctx context.Context, req *requests.DNSRequest) {
+func (ds *DNSService) subdomainQueries(ctx context.Context, req *requests.DNSRequest) {
 	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
 	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
 	if cfg == nil || bus == nil {
@@ -187,9 +190,7 @@ func (ds *DNSService) basicQueries(ctx context.Context, req *requests.DNSRequest
 	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, ds.String())
 	// Obtain the DNS answers for the MX records related to the domain
 	if ans, _, err := ds.System().Pool().Resolve(ctx, req.Name, "MX", resolvers.PriorityHigh); err == nil {
-		for _, a := range ans {
-			answers = append(answers, a)
-		}
+		answers = append(answers, ans...)
 	} else {
 		ds.handleResolverError(ctx, err)
 	}
@@ -197,7 +198,12 @@ func (ds *DNSService) basicQueries(ctx context.Context, req *requests.DNSRequest
 	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, ds.String())
 	// Obtain the DNS answers for the SOA records related to the domain
 	if ans, _, err := ds.System().Pool().Resolve(ctx, req.Name, "SOA", resolvers.PriorityHigh); err == nil {
-		answers = append(answers, ans...)
+		for _, a := range ans {
+			pieces := strings.Split(a.Data, ",")
+			a.Data = pieces[len(pieces)-1]
+
+			answers = append(answers, a)
+		}
 	} else {
 		ds.handleResolverError(ctx, err)
 	}
@@ -212,6 +218,7 @@ func (ds *DNSService) basicQueries(ctx context.Context, req *requests.DNSRequest
 
 	if len(answers) > 0 {
 		bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, ds.String())
+
 		ds.resolvedName(ctx, &requests.DNSRequest{
 			Name:    req.Name,
 			Domain:  req.Domain,
@@ -289,10 +296,10 @@ func (ds *DNSService) queryServiceNames(ctx context.Context, req *requests.DNSRe
 		return
 	}
 
-	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, ds.String())
-
 	for _, name := range popularSRVRecords {
 		srvName := name + "." + req.Name
+
+		bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, ds.String())
 
 		if a, _, err := ds.System().Pool().Resolve(ctx, srvName, "SRV", resolvers.PriorityHigh); err == nil {
 			ds.resolvedName(ctx, &requests.DNSRequest{
@@ -305,7 +312,5 @@ func (ds *DNSService) queryServiceNames(ctx context.Context, req *requests.DNSRe
 		} else {
 			ds.handleResolverError(ctx, err)
 		}
-
-		bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, ds.String())
 	}
 }

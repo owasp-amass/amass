@@ -16,6 +16,8 @@ import (
 
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/eventbus"
+	amassnet "github.com/OWASP/Amass/v3/net"
+	"github.com/OWASP/Amass/v3/net/dns"
 	"github.com/OWASP/Amass/v3/net/http"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/stringset"
@@ -27,11 +29,16 @@ const (
 )
 
 var (
-	networksdbOrgLinkRE = regexp.MustCompile(`ISP\/Organisation:<\/b> <a class="link_sm" href="(.*)"`)
-	networksdbASNRE     = regexp.MustCompile(`Assigned AS:</b>.*href="/autonomous-system/AS.*">AS(.*)<\/a>`)
-	networksdbCIDRRE    = regexp.MustCompile(`CIDR:<\/b>(.*)<br>`)
-	networksdbASNameRE  = regexp.MustCompile(`AS Name:<\/b>(.*)<br>`)
-	networksdbCCRE      = regexp.MustCompile(`Location:<\/b>.*href="/country/(.*)">`)
+	networksdbASNLinkRE    = regexp.MustCompile(`Announcing ASN:<\/b> <a class="link_sm" href="(.*)"`)
+	networksdbOrgLinkRE    = regexp.MustCompile(`ISP\/Organisation:<\/b> <a class="link_sm" href="(.*)"`)
+	networksdbIPLinkRE     = regexp.MustCompile(`<a class="link_sm" href="(\/ip\/[.:a-zA-Z0-9]+)">`)
+	networksdbASNRE        = regexp.MustCompile(`AS Number:<\/b> ([0-9]*)<br>`)
+	networksdbCIDRRE       = regexp.MustCompile(`CIDR:<\/b>(.*)<br>`)
+	networksdbIPPageCIDRRE = regexp.MustCompile(`<b>Network:.* href=".*".*href=".*">(.*)<\/a>`)
+	networksdbASNameRE     = regexp.MustCompile(`AS Name:<\/b>(.*)<br>`)
+	networksdbCCRE         = regexp.MustCompile(`Location:<\/b>.*href="/country/(.*)">`)
+	networksdbDomainsRE    = regexp.MustCompile(`Domains in network`)
+	networksdbTableRE      = regexp.MustCompile(`<table class`)
 )
 
 // NetworksDB is the Service that handles access to the NetworksDB.io data source.
@@ -117,10 +124,10 @@ func (n *NetworksDB) executeASNAddrQuery(ctx context.Context, addr string) {
 		return
 	}
 
-	matches := networksdbOrgLinkRE.FindStringSubmatch(page)
+	matches := networksdbASNLinkRE.FindStringSubmatch(page)
 	if matches == nil || len(matches) < 2 {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
-			fmt.Sprintf("%s: %s: Failed to extract the organization info href", n.String(), u),
+			fmt.Sprintf("%s: %s: Failed to extract the autonomous system href", n.String(), u),
 		)
 		return
 	}
@@ -551,4 +558,110 @@ func (n *NetworksDB) getHeaders() map[string]string {
 		"X-Api-Key":    n.API.Key,
 		"Content-Type": "application/x-www-form-urlencoded",
 	}
+}
+
+// OnWhoisRequest implements the Service interface.
+func (n *NetworksDB) OnWhoisRequest(ctx context.Context, req *requests.WhoisRequest) {
+	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
+	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
+	if cfg == nil || bus == nil {
+		return
+	}
+
+	if !cfg.IsDomainInScope(req.Domain) {
+		return
+	}
+
+	n.CheckRateLimit()
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, n.String())
+
+	u := n.getDomainToIPURL(req.Domain)
+	page, err := http.RequestWebPage(u, nil, nil, "", "")
+	if err != nil {
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", n.String(), u, err))
+		return
+	}
+
+	matches := networksdbIPLinkRE.FindAllStringSubmatch(page, -1)
+	if matches == nil {
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+			fmt.Sprintf("%s: %s: Failed to extract the IP page href", n.String(), u),
+		)
+		return
+	}
+
+	newdomains := stringset.New()
+	re := dns.AnySubdomainRegex()
+	for _, match := range matches {
+		if len(match) < 2 {
+			continue
+		}
+
+		n.CheckRateLimit()
+		bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, n.String())
+
+		u = networksdbBaseURL + match[1]
+		page, err = http.RequestWebPage(u, nil, nil, "", "")
+		if err != nil {
+			bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", n.String(), u, err))
+			continue
+		}
+
+		cidrMatch := networksdbIPPageCIDRRE.FindStringSubmatch(page)
+		if cidrMatch == nil || len(cidrMatch) < 2 {
+			bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+				fmt.Sprintf("%s: %s: Failed to extract the CIDR", n.String(), u),
+			)
+			continue
+		}
+
+		_, cidr, err := net.ParseCIDR(cidrMatch[1])
+		if err != nil {
+			continue
+		}
+
+		n.CheckRateLimit()
+		bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, n.String())
+
+		first, last := amassnet.FirstLast(cidr)
+		u := n.getDomainsInNetworkURL(first.String(), last.String())
+
+		page, err = http.RequestWebPage(u, nil, nil, "", "")
+		if err != nil {
+			bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", n.String(), u, err))
+			continue
+		}
+
+		domainsPos := networksdbDomainsRE.FindStringIndex(page)
+		tablePos := networksdbTableRE.FindStringIndex(page)
+		if domainsPos == nil || tablePos == nil || len(domainsPos) < 2 || len(tablePos) < 2 {
+			bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+				fmt.Sprintf("%s: %s: Failed to extract the domain section of the page", n.String(), u),
+			)
+			continue
+		}
+
+		start := domainsPos[1]
+		end := tablePos[1]
+		for _, d := range re.FindAllString(page[start:end], -1) {
+			newdomains.Insert(strings.TrimSpace(d))
+		}
+	}
+
+	if len(newdomains.Slice()) > 0 {
+		bus.Publish(requests.NewWhoisTopic, eventbus.PriorityHigh, &requests.WhoisRequest{
+			Domain:     req.Domain,
+			NewDomains: newdomains.Slice(),
+			Tag:        n.SourceType,
+			Source:     n.String(),
+		})
+	}
+}
+
+func (n *NetworksDB) getDomainToIPURL(domain string) string {
+	return networksdbBaseURL + "/domain-to-ips/" + domain
+}
+
+func (n *NetworksDB) getDomainsInNetworkURL(first, last string) string {
+	return networksdbBaseURL + "/domains-in-network/" + first + "/" + last
 }
