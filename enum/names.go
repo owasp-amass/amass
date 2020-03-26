@@ -4,14 +4,13 @@
 package enum
 
 import (
-	"strconv"
 	"strings"
 	"sync"
 
 	"github.com/OWASP/Amass/v3/eventbus"
 	"github.com/OWASP/Amass/v3/queue"
 	"github.com/OWASP/Amass/v3/requests"
-	"github.com/OWASP/Amass/v3/stringset"
+	"github.com/OWASP/Amass/v3/stringfilter"
 )
 
 var probeNames = []string{
@@ -44,7 +43,7 @@ type FQDNManager interface {
 type DomainManager struct {
 	enum   *Enumeration
 	queue  *queue.Queue
-	filter *stringset.StringFilter
+	filter stringfilter.Filter
 }
 
 // NewDomainManager returns an initialized DomainManager.
@@ -52,7 +51,7 @@ func NewDomainManager(e *Enumeration) *DomainManager {
 	return &DomainManager{
 		enum:   e,
 		queue:  new(queue.Queue),
-		filter: stringset.NewStringFilter(),
+		filter: stringfilter.NewStringFilter(),
 	}
 }
 
@@ -95,6 +94,8 @@ func (r *DomainManager) OutputNames(num int) []*requests.DNSRequest {
 		src.DNSRequest(r.enum.ctx, &requests.DNSRequest{
 			Name:   req.Domain,
 			Domain: req.Domain,
+			Tag:    requests.DNS,
+			Source: "DNS",
 		})
 	}
 	r.enum.srcsLock.Unlock()
@@ -105,7 +106,7 @@ func (r *DomainManager) OutputNames(num int) []*requests.DNSRequest {
 // Stop implements the FQDNManager interface.
 func (r *DomainManager) Stop() error {
 	r.queue = new(queue.Queue)
-	r.filter = stringset.NewStringFilter()
+	r.filter = stringfilter.NewStringFilter()
 	return nil
 }
 
@@ -114,7 +115,6 @@ type SubdomainManager struct {
 	sync.Mutex
 	enum       *Enumeration
 	queue      *queue.Queue
-	filter     *stringset.StringFilter
 	subdomains map[string]int
 }
 
@@ -123,7 +123,6 @@ func NewSubdomainManager(e *Enumeration) *SubdomainManager {
 	return &SubdomainManager{
 		enum:       e,
 		queue:      new(queue.Queue),
-		filter:     stringset.NewStringFilter(),
 		subdomains: make(map[string]int),
 	}
 }
@@ -140,7 +139,7 @@ func (r *SubdomainManager) InputName(req *requests.DNSRequest) {
 	// Send every resolved name and associated DNS records to the data manager
 	r.enum.dataMgr.DNSRequest(r.enum.ctx, req)
 
-	if !r.enum.Config.IsDomainInScope(req.Name) || r.filter.Duplicate(req.Name) {
+	if !r.enum.Config.IsDomainInScope(req.Name) {
 		return
 	}
 
@@ -201,7 +200,6 @@ func (r *SubdomainManager) OutputNames(num int) []*requests.DNSRequest {
 // Stop implements the FQDNManager interface.
 func (r *SubdomainManager) Stop() error {
 	r.queue = new(queue.Queue)
-	r.filter = stringset.NewStringFilter()
 	return nil
 }
 
@@ -275,17 +273,15 @@ func (r *SubdomainManager) timesForSubdomain(sub string) int {
 
 // NameManager handles the filtering and release of newly discovered FQDNs in the enumeration.
 type NameManager struct {
-	enum   *Enumeration
-	queue  *queue.Queue
-	filter *stringset.StringFilter
+	enum  *Enumeration
+	queue *queue.Queue
 }
 
 // NewNameManager returns an initialized NameManager.
 func NewNameManager(e *Enumeration) *NameManager {
 	return &NameManager{
-		enum:   e,
-		queue:  new(queue.Queue),
-		filter: stringset.NewStringFilter(),
+		enum:  e,
+		queue: new(queue.Queue),
 	}
 }
 
@@ -297,18 +293,6 @@ func (r *NameManager) InputName(req *requests.DNSRequest) {
 
 	// Clean up the newly discovered name and domain
 	requests.SanitizeDNSRequest(req)
-
-	// Do not submit names from untrusted sources, after
-	// already receiving the name from a trusted source
-	if !requests.TrustedTag(req.Tag) && r.filter.Has(req.Name+strconv.FormatBool(true)) {
-		return
-	}
-
-	// At most, a FQDN will be accepted from an untrusted source first,
-	// and then reconsidered from a trusted data source
-	if r.filter.Duplicate(req.Name + strconv.FormatBool(requests.TrustedTag(req.Tag))) {
-		return
-	}
 
 	r.queue.Append(req)
 }
@@ -337,6 +321,5 @@ func (r *NameManager) OutputNames(num int) []*requests.DNSRequest {
 // Stop implements the FQDNManager interface.
 func (r *NameManager) Stop() error {
 	r.queue = new(queue.Queue)
-	r.filter = stringset.NewStringFilter()
 	return nil
 }

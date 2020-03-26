@@ -13,7 +13,7 @@ import (
 	"github.com/OWASP/Amass/v3/queue"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/resolvers"
-	"github.com/OWASP/Amass/v3/stringset"
+	"github.com/OWASP/Amass/v3/stringfilter"
 	"github.com/miekg/dns"
 )
 
@@ -22,9 +22,9 @@ type AddressManager struct {
 	enum        *Enumeration
 	revQueue    *queue.Queue
 	resQueue    *queue.Queue
-	revFilter   *stringset.StringFilter
-	resFilter   *stringset.StringFilter
-	sweepFilter *stringset.StringFilter
+	revFilter   stringfilter.Filter
+	resFilter   stringfilter.Filter
+	sweepFilter stringfilter.Filter
 	asnLookup   chan *requests.AddrRequest
 }
 
@@ -34,9 +34,9 @@ func NewAddressManager(e *Enumeration) *AddressManager {
 		enum:        e,
 		revQueue:    new(queue.Queue),
 		resQueue:    new(queue.Queue),
-		revFilter:   stringset.NewStringFilter(),
-		resFilter:   stringset.NewStringFilter(),
-		sweepFilter: stringset.NewStringFilter(),
+		revFilter:   stringfilter.NewStringFilter(),
+		resFilter:   stringfilter.NewStringFilter(),
+		sweepFilter: stringfilter.NewBloomFilter(1 << 16),
 		asnLookup:   make(chan *requests.AddrRequest),
 	}
 
@@ -59,19 +59,27 @@ func (r *AddressManager) InputName(req *requests.DNSRequest) {
 			t := uint16(rec.Type)
 
 			addr := strings.TrimSpace(rec.Data)
-			if (t == dns.TypeA || t == dns.TypeAAAA) && !r.resFilter.Duplicate(addr) {
-				addreq := &requests.AddrRequest{
-					Address: addr,
-					Domain:  req.Domain,
-				}
-
-				go func(req *requests.AddrRequest) {
-					r.asnLookup <- req
-					r.resQueue.Append(req)
-				}(addreq)
+			if t == dns.TypeA || t == dns.TypeAAAA {
+				go r.addResolvedAddr(addr, req.Domain)
 			}
 		}
 	}
+}
+
+func (r *AddressManager) addResolvedAddr(addr, domain string) {
+	if r.resFilter.Duplicate(addr) {
+		return
+	}
+
+	addreq := &requests.AddrRequest{
+		Address: addr,
+		Domain:  domain,
+	}
+
+	go func() {
+		r.asnLookup <- addreq
+		r.resQueue.Append(addreq)
+	}()
 }
 
 // OutputNames implements the FQDNManager interface.
@@ -122,9 +130,9 @@ func (r *AddressManager) InputAddress(req *requests.AddrRequest) {
 func (r *AddressManager) Stop() error {
 	r.revQueue = new(queue.Queue)
 	r.resQueue = new(queue.Queue)
-	r.revFilter = stringset.NewStringFilter()
-	r.resFilter = stringset.NewStringFilter()
-	r.sweepFilter = stringset.NewStringFilter()
+	r.revFilter = stringfilter.NewStringFilter()
+	r.resFilter = stringfilter.NewStringFilter()
+	r.sweepFilter = stringfilter.NewBloomFilter(1 << 16)
 	return nil
 }
 

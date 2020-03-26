@@ -14,6 +14,7 @@ import (
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/graph"
 	"github.com/OWASP/Amass/v3/requests"
+	"github.com/OWASP/Amass/v3/stringfilter"
 	"github.com/OWASP/Amass/v3/stringset"
 	"github.com/fatih/color"
 )
@@ -171,7 +172,7 @@ func runTrackCommand(clArgs []string) {
 
 func cumulativeOutput(domains []string, enums []string, ea, la []time.Time, db *graph.Graph) {
 	idx := len(enums) - 1
-	filter := stringset.NewStringFilter()
+	filter := stringfilter.NewStringFilter()
 
 	var cum []*requests.Output
 	for i := idx - 1; i >= 0; i-- {

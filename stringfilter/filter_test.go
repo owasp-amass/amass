@@ -1,4 +1,4 @@
-package stringset
+package stringfilter
 
 import (
 	"testing"

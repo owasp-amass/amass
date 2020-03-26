@@ -10,7 +10,7 @@ import (
 	"github.com/OWASP/Amass/v3/eventbus"
 	"github.com/OWASP/Amass/v3/net/http"
 	"github.com/OWASP/Amass/v3/requests"
-	"github.com/OWASP/Amass/v3/stringset"
+	"github.com/OWASP/Amass/v3/stringfilter"
 )
 
 func (e *Enumeration) submitKnownNames() {
@@ -77,7 +77,7 @@ func (e *Enumeration) processOutput(c chan struct{}) {
 	delays := []int{25, 50, 75, 100, 150, 250, 500}
 
 	// This filter ensures that we only get new names
-	filter := stringset.NewStringFilter()
+	known := stringfilter.NewStringFilter()
 
 	t := time.NewTimer(10 * time.Second)
 loop:
@@ -86,7 +86,7 @@ loop:
 		case <-e.done:
 			break loop
 		case <-t.C:
-			next := e.obtainOutput(filter)
+			next := e.obtainOutput(known)
 			t.Reset(next)
 		default:
 			if !e.emptyOutputQueue() {
@@ -101,11 +101,12 @@ loop:
 		}
 	}
 
-	e.obtainOutput(filter)
+	e.obtainOutput(known)
 	e.emptyOutputQueue()
+	time.Sleep(time.Second)
 }
 
-func (e *Enumeration) obtainOutput(filter *stringset.StringFilter) time.Duration {
+func (e *Enumeration) obtainOutput(filter stringfilter.Filter) time.Duration {
 	started := time.Now()
 
 	for _, g := range e.Sys.GraphDatabases() {
@@ -116,9 +117,9 @@ func (e *Enumeration) obtainOutput(filter *stringset.StringFilter) time.Duration
 		}
 	}
 
-	next := time.Now().Sub(started) * 4
-	if next < time.Second {
-		next = time.Second
+	next := time.Now().Sub(started) * 5
+	if next < 3*time.Second {
+		next = 3 * time.Second
 	}
 	return next
 }
@@ -173,6 +174,20 @@ func (e *Enumeration) writeLogs(all bool) {
 
 		if !all && i >= num {
 			break
+		}
+	}
+}
+
+func (e *Enumeration) periodicLogging() {
+	t := time.NewTimer(5 * time.Second)
+
+	for {
+		select {
+		case <-e.done:
+			return
+		case <-t.C:
+			e.writeLogs(false)
+			t.Reset(5 * time.Second)
 		}
 	}
 }

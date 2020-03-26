@@ -17,6 +17,7 @@ import (
 	"github.com/OWASP/Amass/v3/graph"
 	"github.com/OWASP/Amass/v3/graph/db"
 	"github.com/OWASP/Amass/v3/requests"
+	"github.com/OWASP/Amass/v3/stringfilter"
 	"github.com/OWASP/Amass/v3/stringset"
 	"github.com/fatih/color"
 )
@@ -238,7 +239,7 @@ func getEnumOutput(id int, domains []string, db *graph.Graph) []*requests.Output
 		return output
 	}
 
-	filter := stringset.NewStringFilter()
+	filter := stringfilter.NewStringFilter()
 	for i := len(enums) - 1; i >= 0; i-- {
 		for _, out := range db.EventOutput(enums[i], filter, nil) {
 			output = append(output, out)
@@ -249,7 +250,7 @@ func getEnumOutput(id int, domains []string, db *graph.Graph) []*requests.Output
 
 func getUniqueDBOutput(id string, domains []string, db *graph.Graph) []*requests.Output {
 	var output []*requests.Output
-	filter := stringset.NewStringFilter()
+	filter := stringfilter.NewStringFilter()
 
 	for _, out := range db.EventOutput(id, filter, nil) {
 		if len(domains) > 0 && !domainNameInScope(out.Name, domains) {

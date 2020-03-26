@@ -11,7 +11,7 @@ import (
 	"github.com/OWASP/Amass/v3/graph/db"
 	amassnet "github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/requests"
-	"github.com/OWASP/Amass/v3/stringset"
+	"github.com/OWASP/Amass/v3/stringfilter"
 	"golang.org/x/net/publicsuffix"
 )
 
@@ -19,8 +19,7 @@ import (
 // parameter and not already in the filter StringFilter argument. The cache ASNCache argument provides
 // ASN / netblock information already discovered so the routine can avoid unnecessary queries to the
 // graph database. The filter and cache objects are updated by EventOutput.
-func (g *Graph) EventOutput(uuid string,
-	filter *stringset.StringFilter, cache *amassnet.ASNCache) []*requests.Output {
+func (g *Graph) EventOutput(uuid string, filter stringfilter.Filter, cache *amassnet.ASNCache) []*requests.Output {
 	var results []*requests.Output
 
 	event, err := g.db.ReadNode(uuid, "event")
@@ -35,7 +34,7 @@ func (g *Graph) EventOutput(uuid string,
 
 	// Make sure a filter has been created
 	if filter == nil {
-		filter = stringset.NewStringFilter()
+		filter = stringfilter.NewStringFilter()
 	}
 
 	var names []db.Node

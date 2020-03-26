@@ -196,7 +196,7 @@ func (g *CayleyGraph) allNodesOfType(ntype string, events ...string) ([]Node, er
 		return allevents, nil
 	}
 
-	filter := stringset.NewStringFilter()
+	filter := stringset.New()
 	eventset := stringset.New(events...)
 	for _, event := range allevents {
 		estr := g.NodeToID(event)
@@ -209,7 +209,8 @@ func (g *CayleyGraph) allNodesOfType(ntype string, events ...string) ([]Node, er
 		g.optimizedIterate(p, func(value quad.Value) {
 			nstr := quad.ToString(value)
 
-			if !filter.Duplicate(nstr) {
+			if !filter.Has(nstr) {
+				filter.Insert(nstr)
 				nodes = append(nodes, nstr)
 			}
 		})
@@ -284,7 +285,7 @@ func (g *CayleyGraph) NodeSources(node Node, events ...string) ([]string, error)
 	}
 
 	var sources []string
-	filter := stringset.NewStringFilter()
+	filter := stringset.New()
 
 	p := cayley.StartPath(g.store, quad.String(nstr)).InWithTags([]string{"predicate"}).Tag("event")
 	pb := p.Iterate(context.TODO())
@@ -301,7 +302,8 @@ func (g *CayleyGraph) NodeSources(node Node, events ...string) ([]string, error)
 			return
 		}
 
-		if eventset.Has(quad.ToString(event)) && !filter.Duplicate(pred) {
+		if eventset.Has(quad.ToString(event)) && !filter.Has(pred) {
+			filter.Insert(pred)
 			sources = append(sources, pred)
 		}
 	})

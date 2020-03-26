@@ -18,6 +18,7 @@ import (
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/resolvers"
 	"github.com/OWASP/Amass/v3/services"
+	"github.com/OWASP/Amass/v3/stringfilter"
 	"github.com/OWASP/Amass/v3/stringset"
 )
 
@@ -42,7 +43,7 @@ type Collection struct {
 	doneAlreadyClosed bool
 
 	wg     sync.WaitGroup
-	filter *stringset.StringFilter
+	filter stringfilter.Filter
 
 	lastLock sync.Mutex
 	last     time.Time
@@ -114,7 +115,7 @@ func (c *Collection) HostedDomains() error {
 		})
 	}
 
-	c.filter = stringset.NewStringFilter()
+	c.filter = stringfilter.NewStringFilter()
 	// Start the address ranges
 	for _, addr := range c.Config.Addresses {
 		c.Config.SemMaxDNSQueries.Acquire(1)
@@ -270,7 +271,7 @@ loop:
 		}
 	}
 
-	filter := stringset.NewStringFilter()
+	filter := stringfilter.NewStringFilter()
 	// Do not return CIDRs that are already in the config
 	for _, cidr := range c.Config.CIDRs {
 		filter.Duplicate(cidr.String())
@@ -293,7 +294,7 @@ func (c *Collection) ReverseWhois() error {
 		return err
 	}
 
-	filter := stringset.NewStringFilter()
+	filter := stringfilter.NewStringFilter()
 	collect := func(req *requests.WhoisRequest) {
 		for _, d := range req.NewDomains {
 			if !filter.Duplicate(d) {
