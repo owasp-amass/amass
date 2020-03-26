@@ -7,12 +7,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/OWASP/Amass/v3/config"
+	"github.com/OWASP/Amass/v3/net/dns"
 	"github.com/OWASP/Amass/v3/net/http"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/semaphore"
@@ -23,7 +23,7 @@ import (
 )
 
 var (
-	nameStripRE = regexp.MustCompile("^((20)|(25)|(2b)|(2f)|(3d)|(3a)|(40))+")
+	subRE       = dns.AnySubdomainRegex()
 	maxCrawlSem = semaphore.NewSimpleSemaphore(50)
 )
 
@@ -87,7 +87,7 @@ func GetAllSources(sys System) []Service {
 		NewYahoo(sys),
 	}
 
-	// Filtering in-place - https://github.com/golang/go/wiki/SliceTricks
+	// Filtering in-place: https://github.com/golang/go/wiki/SliceTricks
 	i := 0
 	for _, s := range srvs {
 		if shouldEnable(s.String(), sys.Config()) {
@@ -114,22 +114,14 @@ func shouldEnable(srvName string, cfg *config.Config) bool {
 
 // Clean up the names scraped from the web.
 func cleanName(name string) string {
-	name = strings.TrimSpace(strings.ToLower(name))
+	var err error
 
-	for {
-		if i := nameStripRE.FindStringIndex(name); i != nil {
-			name = name[i[1]:]
-		} else {
-			break
-		}
+	name, err = strconv.Unquote("\"" + strings.TrimSpace(name) + "\"")
+	if err == nil {
+		name = subRE.FindString(name)
 	}
 
-	name = strings.Trim(name, "-")
-	// Remove dots at the beginning of names
-	if len(name) > 1 && name[0] == '.' {
-		name = name[1:]
-	}
-	return name
+	return strings.ToLower(name)
 }
 
 func crawl(ctx context.Context, baseURL, baseDomain, subdomain, domain string) ([]string, error) {
@@ -163,7 +155,9 @@ func crawl(ctx context.Context, baseURL, baseDomain, subdomain, domain string) (
 			r.HTMLDoc.Find("a").Each(func(i int, s *goquery.Selection) {
 				if href, ok := s.Attr("href"); ok {
 					if sub := re.FindString(r.JoinURL(href)); sub != "" {
-						results.Insert(cleanName(sub))
+						if cn := cleanName(sub); cn != "" {
+							results.Insert(cn)
+						}
 					}
 				}
 			})
