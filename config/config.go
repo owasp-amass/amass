@@ -22,7 +22,7 @@ import (
 	"github.com/google/uuid"
 )
 
-const defaultConcurrentDNSQueries = 10000
+const defaultConcurrentDNSQueries = 4000
 
 var defaultPublicResolvers = []string{
 	"1.1.1.1",     // Cloudflare
@@ -377,10 +377,10 @@ func (c *Config) AddResolver(resolver string) {
 }
 
 func (c *Config) calcDNSQueriesSemMax() {
-	max := (len(c.Resolvers) * 1000) / 2
+	max := (len(c.Resolvers) * 500) / 2
 
-	if max < 2000 {
-		max = 2000
+	if max < 500 {
+		max = 500
 	} else if max > 100000 {
 		max = 100000
 	}
