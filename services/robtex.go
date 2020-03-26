@@ -51,7 +51,7 @@ func (r *Robtex) Type() string {
 func (r *Robtex) OnStart() error {
 	r.BaseService.OnStart()
 
-	r.SetRateLimit(5 * time.Second)
+	r.SetRateLimit(6 * time.Second)
 	return nil
 }
 
