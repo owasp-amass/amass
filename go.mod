@@ -3,6 +3,7 @@ module github.com/OWASP/Amass/v3
 go 1.14
 
 require (
+	github.com/AndreasBriese/bbloom v0.0.0-20190825152654-46b345b51c96
 	github.com/PuerkitoBio/goquery v1.5.1
 	github.com/cayleygraph/cayley v0.7.7
 	github.com/cayleygraph/quad v1.2.1
