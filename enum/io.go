@@ -77,7 +77,7 @@ func (e *Enumeration) processOutput(c chan struct{}) {
 	delays := []int{25, 50, 75, 100, 150, 250, 500}
 
 	// This filter ensures that we only get new names
-	known := stringfilter.NewStringFilter()
+	known := stringfilter.NewBloomFilter(filterMaxSize)
 
 	t := time.NewTimer(10 * time.Second)
 loop:

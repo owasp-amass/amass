@@ -21,6 +21,8 @@ import (
 	"github.com/OWASP/Amass/v3/stringset"
 )
 
+var filterMaxSize int64 = 1 << 25
+
 // Enumeration is the object type used to execute a DNS enumeration with Amass.
 type Enumeration struct {
 	// Information sent in the context
@@ -41,7 +43,6 @@ type Enumeration struct {
 	outputQueue    *queue.Queue
 	outputFilter   stringfilter.Filter
 	resFilter      stringfilter.Filter
-	resFilterMax   int64
 	resFilterCount int64
 
 	// Queue for the log messages
@@ -54,12 +55,15 @@ type Enumeration struct {
 	// Cache for the infrastructure data collected from online sources
 	netCache *net.ASNCache
 
-	nameMgr   *NameManager
-	subMgr    *SubdomainManager
-	bruteMgr  *BruteManager
-	altMgr    *AlterationsManager
-	guessMgr  *GuessManager
-	domainMgr *DomainManager
+	managers       []FQDNManager
+	resolvedMgrs   []FQDNManager
+	resolvedFilter stringfilter.Filter
+	nameMgr        *NameManager
+	subMgr         *SubdomainManager
+	bruteMgr       *BruteManager
+	altMgr         *AlterationsManager
+	guessMgr       *GuessManager
+	domainMgr      *DomainManager
 
 	lastLock sync.Mutex
 	last     time.Time
@@ -75,22 +79,22 @@ type Enumeration struct {
 // NewEnumeration returns an initialized Enumeration that has not been started yet.
 func NewEnumeration(sys services.System) *Enumeration {
 	e := &Enumeration{
-		Config:       config.NewConfig(),
-		Bus:          eventbus.NewEventBus(10000),
-		Sys:          sys,
-		coreSrvs:     sys.CoreServices(),
-		srcs:         stringset.New(),
-		Output:       make(chan *requests.Output, 1000),
-		outputQueue:  new(queue.Queue),
-		outputFilter: stringfilter.NewStringFilter(),
-		resFilter:    stringfilter.NewBloomFilter(1 << 20),
-		resFilterMax: 1 << 20,
-		logQueue:     new(queue.Queue),
-		done:         make(chan struct{}),
-		netCache:     net.NewASNCache(),
-		last:         time.Now(),
-		perSecFirst:  time.Now(),
-		perSecLast:   time.Now(),
+		Config:         config.NewConfig(),
+		Bus:            eventbus.NewEventBus(10000),
+		Sys:            sys,
+		coreSrvs:       sys.CoreServices(),
+		srcs:           stringset.New(),
+		Output:         make(chan *requests.Output, 1000),
+		outputQueue:    new(queue.Queue),
+		outputFilter:   stringfilter.NewBloomFilter(filterMaxSize),
+		resFilter:      stringfilter.NewBloomFilter(filterMaxSize),
+		logQueue:       new(queue.Queue),
+		done:           make(chan struct{}),
+		netCache:       net.NewASNCache(),
+		resolvedFilter: stringfilter.NewBloomFilter(filterMaxSize),
+		last:           time.Now(),
+		perSecFirst:    time.Now(),
+		perSecLast:     time.Now(),
 	}
 
 	if ref := e.refToDataManager(); ref != nil {
@@ -173,8 +177,6 @@ func (e *Enumeration) Start() error {
 	 * managers have been entered into the sequence is important to how the
 	 * engine selects which names to process next during the enumeration
 	 */
-	var managers []FQDNManager
-	var resolvedMgrs []FQDNManager
 
 	/*
 	 * Setup the NameManager for receiving newly discovered names from the
@@ -183,7 +185,7 @@ func (e *Enumeration) Start() error {
 	 */
 	e.nameMgr = NewNameManager(e)
 	defer e.nameMgr.Stop()
-	managers = append(managers, e.nameMgr)
+	e.managers = append(e.managers, e.nameMgr)
 	e.Bus.Subscribe(requests.NewNameTopic, e.nameMgr.InputName)
 	defer e.Bus.Unsubscribe(requests.NewNameTopic, e.nameMgr.InputName)
 
@@ -205,8 +207,8 @@ func (e *Enumeration) Start() error {
 	if !e.Config.Passive {
 		addrMgr = NewAddressManager(e)
 		defer addrMgr.Stop()
-		managers = append(managers, addrMgr)
-		resolvedMgrs = append(resolvedMgrs, addrMgr)
+		e.managers = append(e.managers, addrMgr)
+		e.resolvedMgrs = append(e.resolvedMgrs, addrMgr)
 		e.Bus.Subscribe(requests.NewAddrTopic, addrMgr.InputAddress)
 		defer e.Bus.Unsubscribe(requests.NewAddrTopic, addrMgr.InputAddress)
 		e.Bus.Subscribe(requests.NewASNTopic, e.netCache.Update)
@@ -222,8 +224,8 @@ func (e *Enumeration) Start() error {
 	if !e.Config.Passive {
 		e.subMgr = NewSubdomainManager(e)
 		defer e.subMgr.Stop()
-		managers = append(managers, e.subMgr)
-		resolvedMgrs = append(resolvedMgrs, e.subMgr)
+		e.managers = append(e.managers, e.subMgr)
+		e.resolvedMgrs = append(e.resolvedMgrs, e.subMgr)
 	}
 
 	/*
@@ -234,7 +236,7 @@ func (e *Enumeration) Start() error {
 	if !e.Config.Passive && e.Config.BruteForcing {
 		e.bruteMgr = NewBruteManager(e)
 		defer e.bruteMgr.Stop()
-		managers = append(managers, e.bruteMgr)
+		e.managers = append(e.managers, e.bruteMgr)
 	}
 
 	/*
@@ -245,8 +247,8 @@ func (e *Enumeration) Start() error {
 	if !e.Config.Passive && e.Config.Alterations {
 		e.altMgr = NewAlterationsManager(e)
 		defer e.altMgr.Stop()
-		managers = append(managers, e.altMgr)
-		resolvedMgrs = append(resolvedMgrs, e.altMgr)
+		e.managers = append(e.managers, e.altMgr)
+		e.resolvedMgrs = append(e.resolvedMgrs, e.altMgr)
 	}
 
 	/*
@@ -264,7 +266,7 @@ func (e *Enumeration) Start() error {
 			Source: "DNS",
 		})
 	}
-	managers = append(managers, e.domainMgr)
+	e.managers = append(e.managers, e.domainMgr)
 
 	/*
 	 * When not running in passive mode, the generation of permuted names is
@@ -275,23 +277,13 @@ func (e *Enumeration) Start() error {
 	if !e.Config.Passive && e.Config.Alterations {
 		e.guessMgr = NewGuessManager(e)
 		defer e.guessMgr.Stop()
-		managers = append(managers, e.guessMgr)
-		resolvedMgrs = append(resolvedMgrs, e.guessMgr)
+		e.managers = append(e.managers, e.guessMgr)
+		e.resolvedMgrs = append(e.resolvedMgrs, e.guessMgr)
 	}
 
 	// Setup the event handler for newly resolved DNS names
-	filter := stringfilter.NewStringFilter()
-	resolved := func(req *requests.DNSRequest) {
-		if filter.Duplicate(req.Name) {
-			return
-		}
-
-		for _, mgr := range resolvedMgrs {
-			go mgr.InputName(req)
-		}
-	}
-	e.Bus.Subscribe(requests.NameResolvedTopic, resolved)
-	defer e.Bus.Unsubscribe(requests.NameResolvedTopic, resolved)
+	e.Bus.Subscribe(requests.NameResolvedTopic, e.resolvedDispatcher)
+	defer e.Bus.Unsubscribe(requests.NameResolvedTopic, e.resolvedDispatcher)
 
 	/*
 	 * These events are important to the engine in order to receive output, logs,
@@ -342,7 +334,8 @@ register:
 	endChan := make(chan struct{})
 	go e.processOutput(endChan)
 
-	t := time.NewTimer(5 * time.Second)
+	secDelay := 5
+	t := time.NewTimer(time.Duration(secDelay) * time.Second)
 	perMin := time.NewTicker(time.Minute)
 	defer perMin.Stop()
 loop:
@@ -351,7 +344,7 @@ loop:
 		case <-e.done:
 			break loop
 		case <-t.C:
-			num := e.useManagers(managers, 5)
+			num := e.useManagers(secDelay)
 			// Has the enumeration been inactive long enough to stop the task?
 			inactive := time.Now().Sub(e.lastActive()) > 15*time.Second
 
@@ -367,7 +360,7 @@ loop:
 				e.clearNumSeqZeros()
 			}
 
-			t.Reset(5 * time.Second)
+			t.Reset(time.Duration(secDelay) * time.Second)
 		case <-perMin.C:
 			if !e.Config.Passive {
 				var pct float64
@@ -388,12 +381,22 @@ loop:
 	return nil
 }
 
+func (e *Enumeration) resolvedDispatcher(req *requests.DNSRequest) {
+	if e.resolvedFilter.Duplicate(req.Name) {
+		return
+	}
+
+	for _, mgr := range e.resolvedMgrs {
+		go mgr.InputName(req)
+	}
+}
+
 func (e *Enumeration) requiredNumberOfNames(numsec int) int {
 	var required int
 	max := e.Config.MaxDNSQueries * numsec
 
 	// Acquire the number of DNS queries already in the queue
-	remaining := int(e.DNSNamesRemaining())
+	remaining := e.dnsNamesRemaining()
 	if remaining > 0 {
 		required = max - remaining
 	} else {
@@ -409,7 +412,7 @@ func (e *Enumeration) requiredNumberOfNames(numsec int) int {
 	return required
 }
 
-func (e *Enumeration) useManagers(mgrs []FQDNManager, numsec int) int {
+func (e *Enumeration) useManagers(numsec int) int {
 	required := 100000
 
 	if !e.Config.Passive {
@@ -418,7 +421,7 @@ func (e *Enumeration) useManagers(mgrs []FQDNManager, numsec int) int {
 
 	var count int
 	// Loop through the managers until we acquire the necessary number of names for processing
-	for _, mgr := range mgrs {
+	for _, mgr := range e.managers {
 		remaining := required - count
 
 		var reqs []*requests.DNSRequest
@@ -437,9 +440,9 @@ func (e *Enumeration) useManagers(mgrs []FQDNManager, numsec int) int {
 
 			// Check if it's time to reset our bloom filter due to number of elements seen
 			e.resFilterCount++
-			if e.resFilterCount >= e.resFilterMax {
+			if e.resFilterCount >= filterMaxSize {
 				e.resFilterCount = 0
-				e.resFilter = stringfilter.NewBloomFilter(e.resFilterMax)
+				e.resFilter = stringfilter.NewBloomFilter(filterMaxSize)
 			}
 
 			count++
@@ -470,6 +473,19 @@ func (e *Enumeration) useManagers(mgrs []FQDNManager, numsec int) int {
 	}
 
 	return count
+}
+
+func (e *Enumeration) dnsNamesRemaining() int {
+	var remaining int
+
+	for _, srv := range e.coreSrvs {
+		if srv.String() == "DNS Service" {
+			remaining += srv.RequestLen()
+			break
+		}
+	}
+
+	return remaining
 }
 
 func (e *Enumeration) dnsQueriesPerSec() (int64, int64) {
@@ -516,20 +532,6 @@ func (e *Enumeration) clearPerSec() {
 	e.perSec = 0
 	e.retries = 0
 	e.perSecFirst = time.Now()
-}
-
-// DNSNamesRemaining returns the number of discovered DNS names yet to be handled by the enumeration.
-func (e *Enumeration) DNSNamesRemaining() int64 {
-	var remaining int
-
-	for _, srv := range e.coreSrvs {
-		if srv.String() == "DNS Service" {
-			remaining += srv.RequestLen()
-			break
-		}
-	}
-
-	return int64(remaining)
 }
 
 func (e *Enumeration) lastActive() time.Time {
