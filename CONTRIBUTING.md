@@ -25,7 +25,7 @@ Now `origin` refers to the foo fork and `upstream` refers to the OWASP version.
 So foo can `git push -u origin master` to update his/her fork, and make pull requests to OWASP from there.
 Of course, replace `foo` with your git handle.
 
-To pull in updates from the origin repo, run
+To pull in updates from the original repo, run
 
     * `git fetch upstream`
     * `git rebase upstream/master` (or whatever branch you want)
