@@ -36,7 +36,13 @@ If you prefer to build your own binary from the latest release of the source cod
 
 Simply execute the following commands:
 
-1. Download OWASP Amass:
+1. Add the Go Module environment variable:
+
+```bash
+export GO111MODULE=on
+```
+
+2. Download OWASP Amass:
 
 ```bash
 go get -v -u github.com/OWASP/Amass/v3/...
@@ -44,7 +50,7 @@ go get -v -u github.com/OWASP/Amass/v3/...
 
 At this point, the binary should be in *$GOPATH/bin*.
 
-2. If you'd like to rebuild the binary from the project source code:
+3. If you'd like to rebuild the binary from the project source code:
 
 ```bash
 cd $GOPATH/src/github.com/OWASP/Amass
