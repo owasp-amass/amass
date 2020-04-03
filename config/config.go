@@ -477,15 +477,15 @@ func (c *Config) LoadSettings(path string) error {
 
 	// Load up all API key information from data source sections
 	nonAPISections := map[string]struct{}{
-		"network_settings":      struct{}{},
-		"alterations":           struct{}{},
-		"bruteforce":            struct{}{},
-		"default":               struct{}{},
-		"domains":               struct{}{},
-		"resolvers":             struct{}{},
-		"blacklisted":           struct{}{},
-		"disabled_data_sources": struct{}{},
-		"gremlin":               struct{}{},
+		"network_settings":      {},
+		"alterations":           {},
+		"bruteforce":            {},
+		"default":               {},
+		"domains":               {},
+		"resolvers":             {},
+		"blacklisted":           {},
+		"disabled_data_sources": {},
+		"gremlin":               {},
 	}
 
 	for _, section := range cfg.Sections() {
