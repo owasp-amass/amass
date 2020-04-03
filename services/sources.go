@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -25,6 +26,7 @@ import (
 var (
 	subRE       = dns.AnySubdomainRegex()
 	maxCrawlSem = semaphore.NewSimpleSemaphore(50)
+	nameStripRE = regexp.MustCompile(`^u[0-9a-f]{4}|20|22|25|2b|2f|3d|3a|40`)
 )
 
 // GetAllSources returns a slice of all data source services, initialized and ready.
@@ -121,7 +123,18 @@ func cleanName(name string) string {
 		name = subRE.FindString(name)
 	}
 
-	return strings.ToLower(name)
+	name = strings.ToLower(name)
+	for {
+		name = strings.Trim(name, "-.")
+
+		if i := nameStripRE.FindStringIndex(name); i != nil {
+			name = name[i[1]:]
+		} else {
+			break
+		}
+	}
+
+	return name
 }
 
 func crawl(ctx context.Context, baseURL, baseDomain, subdomain, domain string) ([]string, error) {
