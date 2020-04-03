@@ -5,7 +5,7 @@
 [![GoDoc](https://img.shields.io/static/v1?label=godoc&message=reference&color=blue)](https://pkg.go.dev/github.com/OWASP/Amass/v3?tab=overview)
 [![Go Report](https://goreportcard.com/badge/github.com/OWASP/Amass)](https://goreportcard.com/report/github.com/OWASP/Amass)
 [![CodeFactor](https://www.codefactor.io/repository/github/OWASP/Amass/badge)](https://www.codefactor.io/repository/github/OWASP/Amass)
-[![Code Climate]()](https://codeclimate.com/github/OWASP/Amass/maintainability)
+[![Maintainability](https://api.codeclimate.com/v1/badges/41c139f7cf5c23df1e58/maintainability)](https://codeclimate.com/github/OWASP/Amass/maintainability)
 [![Codecov](https://codecov.io/gh/OWASP/Amass/branch/master/graph/badge.svg)](https://codecov.io/gh/OWASP/Amass)
 [![Docker Images](https://img.shields.io/docker/pulls/caffix/amass.svg)](https://hub.docker.com/r/caffix/amass)
 
@@ -29,7 +29,7 @@ The OWASP Amass Project has developed a tool to help information security profes
 
 ### Prebuilt Packages
 
-[![GitHub release](https://img.shields.io/github/downloads/OWASP/Amass/total.svg)](https://github.com/OWASP/Amass/releases/latest)
+[![GitHub release](https://img.shields.io/github/downloads/OWASP/Amass/latest/total.svg)](https://github.com/OWASP/Amass/releases/latest)
 
 1. Simply unzip the [package](https://github.com/OWASP/Amass/releases/latest)
 2. Put the precompiled binary into your path
@@ -66,9 +66,9 @@ docker run -v OUTPUT_DIR_PATH:/.config/amass/ caffix/amass enum -brute -w /wordl
 
 ### From Sources
 
-[![Go Version](https://img.shields.io/badge/go-1.14-blue.svg)](https://golang.org/dl/)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/OWASP/Amass)](https://golang.org/dl/)
 
-1. Install [Go >= 1.14](https://golang.org/doc/install) and setup your Go workspace
+1. Install [Go](https://golang.org/doc/install) and setup your Go workspace
 2. Add the Go Module environment variable by running `export GO111MODULE=on`
 3. Download OWASP Amass by running `go get -v -u github.com/OWASP/Amass/v3/...`
 4. At this point, the binary should be in `$GOPATH/bin`
@@ -88,8 +88,8 @@ contribute to our codebase, and join our [Discord Server](https://discord.gg/rtN
 
 The OWASP Amass core project team are:
 
-* [Jeff Foley](https://github.com/bkimminich) aka `caffix`
-  ([Project Leader](https://www.owasp.org/index.php/User:Caffix)
+* [Jeff Foley](https://github.com/caffix) aka `caffix`
+  ([Project Leader](https://www.owasp.org/index.php/User:Caffix))
   [![Follow on Twitter](https://img.shields.io/twitter/follow/jeff_foley.svg?logo=twitter)](https://twitter.com/jeff_foley)
 * [Anthony Rhodes](https://github.com/fork-while-fork) aka `fork-while-fork`
   [![Follow on Twitter](https://img.shields.io/twitter/follow/fork_while_fork.svg?logo=twitter)](https://twitter.com/fork_while_fork)
@@ -98,7 +98,7 @@ For a list of all contributors to the OWASP Amass please visit our [HALL_OF_FAME
 
 ## References [![Rawsec's CyberSecurity Inventory](https://inventory.rawsec.ml/img/badges/Rawsec-inventoried-FF5050_flat.svg)](https://inventory.rawsec.ml/tools.html#title-tools-osint) [![Bugcrowd LevelUp 0x04](https://img.shields.io/badge/Bugcrowd-LevelUp%200x04-orange.svg)](https://www.youtube.com/watch?v=C-GabM2db9A) [![DEF CON 27 Demo Labs](https://img.shields.io/badge/DEF%20CON%2027-Demo%20Labs-purple.svg)](https://www.defcon.org/html/defcon-27/dc-27-demolabs.html) [![DEF CON 27 Recon Village](https://img.shields.io/badge/DEF%20CON%2027-Recon%20Village-red.svg)](https://reconvillage.org/)
 
-Did you write a blog post, magazine article or do a podcast about or mentioning OWASP Juice Shop? Or maybe you held or joined a conference talk or meetup session, a hacking workshop or public training where this project was mentioned?
+Did you write a blog post, magazine article or do a podcast about or mentioning OWASP Amass? Or maybe you held or joined a conference talk or meetup session, a hacking workshop or public training where this project was mentioned?
 
 Add it to our ever-growing list of [REFERENCES.md](REFERENCES.md) by forking and opening a Pull Request!
 
@@ -118,7 +118,7 @@ Add it to our ever-growing list of [REFERENCES.md](REFERENCES.md) by forking and
 * [Capt. Meelo | Asset Enumeration: Expanding a Target's Attack Surface](https://captmeelo.com/bugbounty/2019/09/02/asset-enumeration.html)
 * [Noobhax | My Recon Process — DNS Enumeration](https://medium.com/@noobhax/my-recon-process-dns-enumeration-d0e288f81a8a)
 
-## Licensing [![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](https://www.apache.org/licenses/LICENSE-2.0)
+## Licensing [![License](https://img.shields.io/github/license/OWASP/Amass)](https://www.apache.org/licenses/LICENSE-2.0)
 
 This program is free software: you can redistribute it and/or modify it under the terms of the [Apache license](LICENSE). OWASP Amass and any
 contributions are Copyright © by Jeff Foley 2017-2020.
