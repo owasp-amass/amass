@@ -27,7 +27,7 @@ jobs:
             go get -u github.com/OWASP/Amass/v3/...
             go test -coverprofile=$TEST_RESULTS/coverage.txt -covermode=atomic ./...
       - codecov/upload:
-        file: $TEST_RESULTS/coverage.txt
+          file: $TEST_RESULTS/*.txt
 
 workflows:
   version: 2.1
