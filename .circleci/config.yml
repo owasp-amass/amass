@@ -13,21 +13,20 @@ jobs:
 
     environment:
       GO111MODULE: "on"
-      TEST_RESULTS: /tmp/test_results
+      PROJECT_DIR: /go/src/github.com/OWASP/Amass
 
-    working_directory: /go/src/github.com/OWASP/Amass
+    working_directory: $PROJECT_DIR
 
     steps:
       - checkout
-      - run: mkdir -p $TEST_RESULTS # create the test results directory
       - run:
           name: "Amass Unit Tests and Coverage Reports"
           command: |
-            cd /go/src/github.com/OWASP/Amass
+            cd $PROJECT_DIR
             go get -u github.com/OWASP/Amass/v3/...
-            go test -coverprofile=$TEST_RESULTS/coverage.txt -covermode=atomic ./...
+            go test -coverprofile=coverage.txt -covermode=atomic ./...
       - codecov/upload:
-          file: $TEST_RESULTS/*.txt
+          file: $PROJECT_DIR/coverage.txt
 
 workflows:
   version: 2.1
