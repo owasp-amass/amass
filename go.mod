@@ -14,7 +14,6 @@ require (
 	github.com/geziyor/geziyor v0.0.0-20191212210344-cfb16fe1ee0e
 	github.com/go-ini/ini v1.55.0
 	github.com/go-kit/kit v0.10.0 // indirect
-	github.com/gobuffalo/envy v1.9.0 // indirect
 	github.com/gobuffalo/packr/v2 v2.8.0 // indirect
 	github.com/gobwas/ws v1.0.3 // indirect
 	github.com/gogo/protobuf v1.3.1 // indirect
@@ -31,7 +30,6 @@ require (
 	github.com/prometheus/procfs v0.0.11 // indirect
 	github.com/rakyll/statik v0.1.7
 	github.com/sirupsen/logrus v1.5.0 // indirect
-	github.com/smartystreets/goconvey v1.6.4 // indirect
 	golang.org/x/crypto v0.0.0-20200323165209-0ec3e9974c59 // indirect
 	golang.org/x/net v0.0.0-20200324143707-d3edc9973b7e
 	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d
