@@ -11,14 +11,22 @@ jobs:
     docker:
       - image: circleci/golang:1.14
 
+    environment:
+      GO111MODULE: on
+      TEST_RESULTS: /tmp/test_results
+
     working_directory: /go/src/github.com/OWASP/Amass
+
     steps:
+      - checkout
       - run:
-          name: "Test Amass"
+          name: "Amass Unit Tests and Coverage Reports"
+          environment:
+            GO111MODULE: on
           command: |
-            export GO111MODULE=on
+            cd /go/src/github.com/OWASP/Amass
             go get -u github.com/OWASP/Amass/v3/...
-            go test -race -coverprofile=coverage.txt -covermode=atomic ./...
+            go test -race -coverprofile=$TEST_RESULTS/coverage.txt -covermode=atomic ./...
 
 workflows:
   version: 2.1
