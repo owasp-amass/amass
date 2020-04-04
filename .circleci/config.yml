@@ -19,6 +19,7 @@ jobs:
 
     steps:
       - checkout
+      - run: mkdir -p $TEST_RESULTS # create the test results directory
       - run:
           name: "Amass Unit Tests and Coverage Reports"
           environment:
