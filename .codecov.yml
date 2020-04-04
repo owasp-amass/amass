@@ -1,2 +1,5 @@
+codecov:
+  disable_default_path_fixes: yes
+
 fixes:
   - "github.com/OWASP/Amass/v3/::github.com/OWASP/Amass/"
