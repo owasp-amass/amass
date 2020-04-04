@@ -22,7 +22,7 @@ jobs:
       - run:
           name: "Amass Unit Tests and Coverage Reports"
           environment:
-            GO111MODULE: on
+            GO111MODULE: "on"
           command: |
             cd /go/src/github.com/OWASP/Amass
             go get -u github.com/OWASP/Amass/v3/...
