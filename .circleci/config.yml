@@ -26,6 +26,7 @@ jobs:
             go get -u github.com/OWASP/Amass/v3/...
             go test -coverprofile=coverage.txt -covermode=atomic ./...
       - codecov/upload:
+          conf: $PROJECT_DIR/.codecov.yml
           file: $PROJECT_DIR/coverage.txt
 
 workflows:
