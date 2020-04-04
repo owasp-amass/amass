@@ -12,7 +12,7 @@ jobs:
       - image: circleci/golang:1.14
 
     environment:
-      GO111MODULE: on
+      GO111MODULE: "on"
       TEST_RESULTS: /tmp/test_results
 
     working_directory: /go/src/github.com/OWASP/Amass
