@@ -254,31 +254,6 @@ func (ds *DNSService) attemptZoneXFR(ctx context.Context, sub, domain, server st
 	}
 }
 
-func (ds *DNSService) attemptZoneWalk(ctx context.Context, domain, server string) {
-	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if cfg == nil || bus == nil {
-		return
-	}
-
-	addr, err := ds.nameserverAddr(ctx, server)
-	if addr == "" {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("DNS: Zone Walk failed: %v", err))
-		return
-	}
-
-	reqs, err := resolvers.NsecTraversal(domain, addr)
-	if err != nil {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
-			fmt.Sprintf("DNS: Zone Walk failed: %s: %v", server, err))
-		return
-	}
-
-	for _, req := range reqs {
-		ds.DNSRequest(ctx, req)
-	}
-}
-
 func (ds *DNSService) nameserverAddr(ctx context.Context, server string) (string, error) {
 	a, _, err := ds.System().Pool().Resolve(ctx, server, "A", resolvers.PriorityHigh)
 	if err != nil {
