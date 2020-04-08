@@ -25,11 +25,6 @@ const (
 	radbWhoisURL = "whois.radb.net"
 )
 
-var (
-	// radbRegistries are all the registries that have RADb servers
-	radbRegistries = []string{"arin", "ripencc", "apnic", "lacnic", "afrinic"}
-)
-
 // RADb is the Service that handles access to the RADb data source.
 type RADb struct {
 	BaseService
