@@ -34,15 +34,19 @@ Did you write a blog post, magazine article or do a podcast about or mentioning 
   * [5 Subdomain Takeover #ProTips](https://securitytrails.com/blog/subdomain-takeover-tips)
   * [Where You’ll Find Us: An Overview of SecurityTrails Integrations](https://securitytrails.com/blog/integrations-overview)
   * [Top 7 Subdomain Scanner Tools: Find Subdomains in Seconds](https://securitytrails.com/blog/subdomain-scanner-find-subdomains)
+* Blog post on [xploitprotocol's Blog](https://medium.com/@xploitprotocol):
+  * [How to approach a target|bug bounty tips](https://medium.com/@xploitprotocol/how-to-approach-a-target-bug-bounty-tips-f371c7ec7985)
 * Blog post on [TrustedSec's Blog](https://www.trustedsec.com/blog):
   * [Upgrade Your Workflow, Part 1: Building OSINT Checklists](https://www.trustedsec.com/blog/upgrade-your-workflow-part-1-building-osint-checklists/)
   by [Hans Lakhan](https://www.trustedsec.com/team/hans-lakhan/)
 * Forum post on [SANS Internet Storm Center InfoSec Forums](https://isc.sans.edu/forums/):
   * [Offensive Tools Are For Blue Teams Too](https://isc.sans.edu/forums/diary/Offensive+Tools+Are+For+Blue+Teams+Too/25842/)
   by [Xavier Mertens](https://twitter.com/xme)
-* Blog post on [Dionach's Blog](https://www.dionach.com/blog/):
+* Tutorial on [Dionach's Blog](https://www.dionach.com/blog/):
   * [How to Use OWASP Amass: An Extensive Tutorial](https://www.dionach.com/blog/how-to-use-owasp-amass-an-extensive-tutorial/)
   by Nick Gkogkos
+* Blog post on [Aditya Soni's Blog](https://medium.com/@hetroublemakr):
+  * [Bug Bounty with Bash](https://medium.com/cyberverse/bug-bounty-with-bash-438596ff72f5)
 * Blog post on [Anshuman Pattnaik's Blog](https://medium.com/@hackbotone):
   * [10 Recon Tools For Bug Bounty](https://medium.com/@hackbotone/10-recon-tools-for-bug-bounty-bafa8a5961bd)
 * Blog post on [Hahwul's Blog](https://www.hahwul.com):
@@ -62,6 +66,8 @@ Did you write a blog post, magazine article or do a podcast about or mentioning 
   by [Ericka Checkowski](https://www.darkreading.com/author-bio.asp?author_id=962)
 * Tutorial on [Daniel Miessler's Tutorials](https://danielmiessler.com/study/):
   * [amass — Automated Attack Surface Mapping](https://danielmiessler.com/study/amass/)
+* Blog post on [Agent_Maximus' Blog](https://medium.com/@agent_maximus):
+  * [Passive intelligence gathering techniques: uncover domains, subdomains & IP addresses](https://medium.com/@agent_maximus/passive-intelligence-gathering-techniques-uncover-domains-subdomains-ip-addresses-a40f51ee0eb0)
 * Blog posts on [Patrik Hudak's Blog](https://0xpatrik.com):
   * [Subdomain Enumeration: 2019 Workflow](https://0xpatrik.com/subdomain-enumeration-2019/)
   * [Subdomain Takeover: Finding Candidates](https://0xpatrik.com/subdomain-takeover-candidates/)

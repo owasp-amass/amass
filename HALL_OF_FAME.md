@@ -2,7 +2,7 @@
 
 ## Core Team
 
-- [Jeff Foley](https://github.com/bkimminich) aka `caffix`
+- [Jeff Foley](https://github.com/caffix) aka `caffix`
   ([Project Leader](https://www.owasp.org/index.php/User:Caffix))
   [![Follow on Twitter](https://img.shields.io/twitter/follow/jeff_foley.svg?logo=twitter)](https://twitter.com/jeff_foley)
 - [Anthony Rhodes](https://github.com/fork-while-fork) aka `fork-while-fork`
