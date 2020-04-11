@@ -306,6 +306,10 @@ func (n *NetworksDB) executeAPIASNQuery(ctx context.Context, asn int, addr strin
 		return
 	}
 
+	if netblocks == nil {
+		netblocks = stringset.New()
+	}
+
 	if len(netblocks) == 0 {
 		netblocks.Union(n.apiNetblocksQuery(ctx, asn))
 		if len(netblocks) == 0 {
