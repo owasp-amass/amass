@@ -28,6 +28,8 @@ Did you write a blog post, magazine article or do a podcast about or mentioning 
 
 ### Blogs & Articles
 
+* Blog post on [Gökhan Güzelkokar's Blog](https://medium.com/@gguzelkokar.mdbf15):
+  * [Bug bounty resources & advices](https://medium.com/@gguzelkokar.mdbf15/bug-bounty-resources-advices-2cc9cfb69f6)
 * Blog post on [SecurityTrail's Blog](https://securitytrails.com/blog/):
   * [OWASP Amass: A Solid Information Gathering Tool](https://securitytrails.com/blog/owasp-amass)
   * [Top Linux Distros for Ethical Hacking and Penetration Testing](https://securitytrails.com/blog/top-linux-distributions-ethical-hacking-pentesting)
