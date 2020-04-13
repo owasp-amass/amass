@@ -15,7 +15,7 @@ import (
 	"strings"
 	"sync"
 
-	_ "github.com/OWASP/Amass/v3/config/statik"
+	_ "github.com/OWASP/Amass/v3/config/statik" // The content being embedded into the binary
 	amasshttp "github.com/OWASP/Amass/v3/net/http"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/stringset"

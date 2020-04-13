@@ -113,7 +113,7 @@ type Resolver interface {
 	Stats() map[int]int64
 	WipeStats()
 
-	// ReportError indicates to the Resolver that it delivered an erroneos response
+	// ReportError indicates to the Resolver that it delivered an erroneous response
 	ReportError()
 
 	// MatchesWildcard returns true if the request provided resolved to a DNS wildcard
@@ -264,7 +264,7 @@ func (r *BaseResolver) WipeStats() {
 	}
 }
 
-// ReportError indicates to the Resolver that it delivered an erroneos response.
+// ReportError indicates to the Resolver that it delivered an erroneous response.
 func (r *BaseResolver) ReportError() {
 	return
 }

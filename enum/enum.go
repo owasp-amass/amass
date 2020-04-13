@@ -345,8 +345,12 @@ loop:
 			break loop
 		case <-t.C:
 			num := e.useManagers(secDelay)
+
+			var inactive bool
 			// Has the enumeration been inactive long enough to stop the task?
-			inactive := time.Now().Sub(e.lastActive()) > 15*time.Second
+			if e.dataMgr.RequestLen() == 0 {
+				inactive = time.Now().Sub(e.lastActive()) > 15*time.Second
+			}
 
 			if num == 0 {
 				if inactive {

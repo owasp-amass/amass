@@ -21,12 +21,20 @@ func (g *Graph) VizData(uuid string) ([]viz.Node, []viz.Edge) {
 		return nil, nil
 	}
 
+	nodeIdx := make(map[string]int)
+	nodes := g.vizNodes(uuid, discovered, nodeIdx)
+	edges := g.vizEdges(nodes, nodeIdx)
+
+	return nodes, edges
+}
+
+// Identify unique nodes that should be included in the visualization
+func (g *Graph) vizNodes(uuid string, edges []*db.Edge, nodeToIdx map[string]int) []viz.Node {
 	var idx int
 	var nodes []viz.Node
 	ids := stringset.New()
-	rnodes := make(map[string]int)
-	// Identify unique nodes that should be included in the visualization
-	for _, d := range discovered {
+
+	for _, d := range edges {
 		if id := g.db.NodeToID(d.To); id != "" && !ids.Has(id) {
 			ids.Insert(id)
 
@@ -42,15 +50,20 @@ func (g *Graph) VizData(uuid string) ([]viz.Node, []viz.Edge) {
 			if n := g.buildVizNode(d.To, properties[0].Value, uuid); n != nil {
 				n.ID = idx
 				// Keep track of which indices nodes were assigned to
-				rnodes[id] = idx
+				nodeToIdx[id] = idx
 				idx++
 				nodes = append(nodes, *n)
 			}
 		}
 	}
 
+	return nodes
+}
+
+// Identify the edges between nodes that should be included in the visualization
+func (g *Graph) vizEdges(nodes []viz.Node, nodeToIdx map[string]int) []viz.Edge {
 	var edges []viz.Edge
-	// Identify the edges between nodes that should be included in the visualization
+
 	for _, n := range nodes {
 		node, err := g.db.ReadNode(n.Label, n.Type)
 		if err != nil {
@@ -65,7 +78,7 @@ func (g *Graph) VizData(uuid string) ([]viz.Node, []viz.Edge) {
 		}
 
 		for _, edge := range e {
-			if toID, found := rnodes[g.db.NodeToID(edge.To)]; found {
+			if toID, found := nodeToIdx[g.db.NodeToID(edge.To)]; found {
 				edges = append(edges, viz.Edge{
 					From:  n.ID,
 					To:    toID,
@@ -75,7 +88,7 @@ func (g *Graph) VizData(uuid string) ([]viz.Node, []viz.Edge) {
 		}
 	}
 
-	return nodes, edges
+	return edges
 }
 
 func (g *Graph) buildVizNode(node db.Node, ntype, uuid string) *viz.Node {
@@ -99,7 +112,23 @@ func (g *Graph) buildVizNode(node db.Node, ntype, uuid string) *viz.Node {
 	}
 	src := sources[randomIndex(len(sources))]
 
-	// Update the type names for visualization
+	ntype = g.convertNodeType(id, ntype, edges)
+
+	title := ntype + ": " + id
+	if ntype == "as" {
+		title = title + ", Desc: " + g.ReadASDescription(id)
+	}
+
+	return &viz.Node{
+		Type:   ntype,
+		Label:  id,
+		Title:  title,
+		Source: src,
+	}
+}
+
+// Update the type names for visualization
+func (g *Graph) convertNodeType(id, ntype string, edges []*db.Edge) string {
 	if ntype == "fqdn" {
 		var pred string
 		// Look for edge predicates of interest
@@ -130,15 +159,5 @@ func (g *Graph) buildVizNode(node db.Node, ntype, uuid string) *viz.Node {
 		ntype = "address"
 	}
 
-	title := ntype + ": " + id
-	if ntype == "as" {
-		title = title + ", Desc: " + g.ReadASDescription(id)
-	}
-
-	return &viz.Node{
-		Type:   ntype,
-		Label:  id,
-		Title:  title,
-		Source: src,
-	}
+	return ntype
 }

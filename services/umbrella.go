@@ -397,7 +397,12 @@ func (u *Umbrella) queryReverseWhois(ctx context.Context, apiURL string) []strin
 			bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", u.String(), apiURL, err))
 			return domains.Slice()
 		}
+
 		err = json.Unmarshal([]byte(record), &whois)
+		if err != nil {
+			bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", u.String(), apiURL, err))
+			return domains.Slice()
+		}
 
 		more = false
 		for _, result := range whois {

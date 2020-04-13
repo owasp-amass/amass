@@ -112,7 +112,7 @@ func (r *RateMonitoredResolver) WipeStats() {
 	r.setRate(initialRate)
 }
 
-// ReportError indicates to the Resolver that it delivered an erroneos response.
+// ReportError indicates to the Resolver that it delivered an erroneous response.
 func (r *RateMonitoredResolver) ReportError() {
 	r.resolver.ReportError()
 }

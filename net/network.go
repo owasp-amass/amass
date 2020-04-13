@@ -60,6 +60,7 @@ func IsIPv6(ip net.IP) bool {
 	return strings.Count(ip.String(), ":") >= 2
 }
 
+// IsReservedAddress checks if the addr parameter is within one of the address ranges in the ReservedCIDRs slice.
 func IsReservedAddress(addr string) (bool, string) {
 	ip := net.ParseIP(addr)
 	if ip == nil {

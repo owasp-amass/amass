@@ -52,7 +52,7 @@ func TestEventBus(t *testing.T) {
 	suclock.Lock()
 	s = success
 	suclock.Unlock()
-	if success {
+	if s {
 		t.Errorf("The callback was executed for the unsubscribed topic")
 	}
 
