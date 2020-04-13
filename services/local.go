@@ -6,7 +6,6 @@ package services
 import (
 	"errors"
 	"sync"
-	"time"
 
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/graph"
@@ -190,20 +189,4 @@ func (l *LocalSystem) initCoreServices() error {
 	}
 
 	return nil
-}
-
-func (l *LocalSystem) periodicChecks() {
-	t := time.NewTicker(10 * time.Second)
-	defer t.Stop()
-
-	for {
-		select {
-		case <-l.done:
-			return
-		case <-t.C:
-			if a, err := l.Pool().Available(); !a && err != nil {
-				l.Config().Log.Print(err.Error())
-			}
-		}
-	}
 }
