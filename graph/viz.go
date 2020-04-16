@@ -1,10 +1,10 @@
-// Copyright 2017 Jeff Foley. All rights reserved.
+// Copyright 2017-2020 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 package graph
 
 import (
-	"github.com/OWASP/Amass/v3/graph/db"
+	"github.com/OWASP/Amass/v3/graphdb"
 	"github.com/OWASP/Amass/v3/stringset"
 	"github.com/OWASP/Amass/v3/viz"
 )
@@ -29,7 +29,7 @@ func (g *Graph) VizData(uuid string) ([]viz.Node, []viz.Edge) {
 }
 
 // Identify unique nodes that should be included in the visualization
-func (g *Graph) vizNodes(uuid string, edges []*db.Edge, nodeToIdx map[string]int) []viz.Node {
+func (g *Graph) vizNodes(uuid string, edges []*graphdb.Edge, nodeToIdx map[string]int) []viz.Node {
 	var idx int
 	var nodes []viz.Node
 	ids := stringset.New()
@@ -91,7 +91,7 @@ func (g *Graph) vizEdges(nodes []viz.Node, nodeToIdx map[string]int) []viz.Edge 
 	return edges
 }
 
-func (g *Graph) buildVizNode(node db.Node, ntype, uuid string) *viz.Node {
+func (g *Graph) buildVizNode(node graphdb.Node, ntype, uuid string) *viz.Node {
 	id := g.db.NodeToID(node)
 
 	edges, err := g.db.ReadInEdges(node)
@@ -128,7 +128,7 @@ func (g *Graph) buildVizNode(node db.Node, ntype, uuid string) *viz.Node {
 }
 
 // Update the type names for visualization
-func (g *Graph) convertNodeType(id, ntype string, edges []*db.Edge) string {
+func (g *Graph) convertNodeType(id, ntype string, edges []*graphdb.Edge) string {
 	if ntype == "fqdn" {
 		var pred string
 		// Look for edge predicates of interest

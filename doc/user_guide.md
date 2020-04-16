@@ -351,33 +351,34 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/v3/config"
+	"github.com/OWASP/Amass/v3/datasrcs"
 	"github.com/OWASP/Amass/v3/enum"
-	"github.com/OWASP/Amass/v3/services"
+	"github.com/OWASP/Amass/v3/systems"
 )
 
 func main() {
 	// Seed the default pseudo-random number generator
 	rand.Seed(time.Now().UTC().UnixNano())
 
-	sys, err := services.NewLocalSystem(config.NewConfig())
+	sys, err := systems.NewLocalSystem(config.NewConfig())
 	if err != nil {
 		return
 	}
+	sys.SetDataSources(datasrcs.GetAllSources(sys))
 
 	e := enum.NewEnumeration(sys)
 	if e == nil {
 		return
 	}
-
-	go func() {
-		for result := range e.Output {
-			fmt.Println(result.Name)
-		}
-	}()
+	defer e.Close()
 
 	// Setup the most basic amass configuration
 	e.Config.AddDomain("example.com")
 	e.Start()
+
+	for _, o := range e.ExtractOutput(nil) {
+		fmt.Println(o.Name)
+	}
 }
 ```
 

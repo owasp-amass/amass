@@ -1,4 +1,4 @@
-// Copyright 2017 Jeff Foley. All rights reserved.
+// Copyright 2017-2020 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 package config
@@ -106,9 +106,6 @@ type Config struct {
 
 	// Determines if zone transfers will be attempted
 	Active bool
-
-	// Determines if unresolved DNS names will be output by the enumeration
-	IncludeUnresolvable bool `ini:"include_unresolvable"`
 
 	// A blacklist of subdomain names that will not be investigated
 	Blacklist []string

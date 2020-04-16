@@ -6,12 +6,12 @@ package graph
 import (
 	"errors"
 
-	"github.com/OWASP/Amass/v3/graph/db"
+	"github.com/OWASP/Amass/v3/graphdb"
 	"golang.org/x/net/publicsuffix"
 )
 
 // InsertFQDN adds a fully qualified domain name to the graph.
-func (g *Graph) InsertFQDN(name, source, tag, eventID string) (db.Node, error) {
+func (g *Graph) InsertFQDN(name, source, tag, eventID string) (graphdb.Node, error) {
 	tld, _ := publicsuffix.PublicSuffix(name)
 
 	domain, err := publicsuffix.EffectiveTLDPlusOne(name)
@@ -40,7 +40,7 @@ func (g *Graph) InsertFQDN(name, source, tag, eventID string) (db.Node, error) {
 	}
 
 	// Link the three nodes together
-	domainEdge := &db.Edge{
+	domainEdge := &graphdb.Edge{
 		Predicate: "root",
 		From:      fqdnNode,
 		To:        domainNode,
@@ -49,7 +49,7 @@ func (g *Graph) InsertFQDN(name, source, tag, eventID string) (db.Node, error) {
 		return fqdnNode, err
 	}
 
-	tldEdge := &db.Edge{
+	tldEdge := &graphdb.Edge{
 		Predicate: "tld",
 		From:      domainNode,
 		To:        tldNode,
@@ -98,7 +98,7 @@ func (g *Graph) insertAlias(fqdn, target, pred, source, tag, eventID string) err
 	}
 
 	// Create the edge between the alias and the target subdomain name
-	aliasEdge := &db.Edge{
+	aliasEdge := &graphdb.Edge{
 		Predicate: pred,
 		From:      fqdnNode,
 		To:        targetNode,

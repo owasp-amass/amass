@@ -18,8 +18,8 @@ import (
 	"github.com/OWASP/Amass/v3/format"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/resolvers"
-	"github.com/OWASP/Amass/v3/services"
 	"github.com/OWASP/Amass/v3/stringset"
+	"github.com/OWASP/Amass/v3/systems"
 	"github.com/fatih/color"
 	"github.com/miekg/dns"
 )
@@ -42,7 +42,6 @@ type dnsArgs struct {
 		IPv4                bool
 		IPv6                bool
 		MonitorResolverRate bool
-		Unresolved          bool
 		Verbose             bool
 	}
 	Filepaths struct {
@@ -74,7 +73,6 @@ func defineDNSOptionFlags(dnsFlags *flag.FlagSet, args *dnsArgs) {
 	dnsFlags.BoolVar(&args.Options.IPv4, "ipv4", false, "Show the IPv4 addresses for discovered names")
 	dnsFlags.BoolVar(&args.Options.IPv6, "ipv6", false, "Show the IPv6 addresses for discovered names")
 	dnsFlags.BoolVar(&args.Options.MonitorResolverRate, "noresolvrate", true, "Disable resolver rate monitoring")
-	dnsFlags.BoolVar(&args.Options.Unresolved, "include-unresolvable", false, "Output DNS names that did not resolve")
 	dnsFlags.BoolVar(&args.Options.Verbose, "v", false, "Output status / debug / troubleshooting info")
 }
 
@@ -153,7 +151,7 @@ func runDNSCommand(clArgs []string) {
 	// Seed the default pseudo-random number generator
 	rand.Seed(time.Now().UTC().UnixNano())
 
-	sys, err := services.NewLocalSystem(cfg)
+	sys, err := systems.NewLocalSystem(cfg)
 	if err != nil {
 		r.Fprintf(color.Error, "%v\n", err)
 		os.Exit(1)
@@ -162,7 +160,7 @@ func runDNSCommand(clArgs []string) {
 	performResolutions(cfg, sys)
 }
 
-func performResolutions(cfg *config.Config, sys services.System) {
+func performResolutions(cfg *config.Config, sys systems.System) {
 	done := make(chan struct{})
 	active := make(chan struct{}, 1000000)
 	bus := eventbus.NewEventBus(10000)
@@ -202,7 +200,7 @@ func performResolutions(cfg *config.Config, sys services.System) {
 }
 
 func processDNSRequest(ctx context.Context, req *requests.DNSRequest,
-	cfg *config.Config, sys services.System, c chan *requests.DNSRequest) {
+	cfg *config.Config, sys systems.System, c chan *requests.DNSRequest) {
 	defer cfg.SemMaxDNSQueries.Release(1)
 
 	if req == nil || req.Name == "" {
@@ -344,9 +342,6 @@ func (d dnsArgs) OverrideConfig(conf *config.Config) error {
 	}
 	if len(d.Names) > 0 {
 		conf.ProvidedNames = d.Names.Slice()
-	}
-	if d.Options.Unresolved {
-		conf.IncludeUnresolvable = true
 	}
 	if len(d.Blacklist) > 0 {
 		conf.Blacklist = d.Blacklist.Slice()

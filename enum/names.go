@@ -1,4 +1,4 @@
-// Copyright 2017 Jeff Foley. All rights reserved.
+// Copyright 2017-2020 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 package enum
@@ -220,11 +220,9 @@ func (r *SubdomainManager) checkSubdomain(req *requests.DNSRequest) {
 	}
 
 	sub := strings.TrimSpace(strings.Join(labels[1:], "."))
-	for _, g := range r.enum.Sys.GraphDatabases() {
-		// CNAMEs are not a proper subdomain
-		if g.IsCNAMENode(sub) {
-			return
-		}
+	// CNAMEs are not a proper subdomain
+	if r.enum.Graph.IsCNAMENode(sub) {
+		return
 	}
 
 	subreq := &requests.DNSRequest{

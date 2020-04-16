@@ -15,7 +15,7 @@ import (
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/format"
 	"github.com/OWASP/Amass/v3/graph"
-	"github.com/OWASP/Amass/v3/graph/db"
+	"github.com/OWASP/Amass/v3/graphdb"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/stringfilter"
 	"github.com/OWASP/Amass/v3/stringset"
@@ -147,7 +147,7 @@ func openGraphDatabase(dir string, cfg *config.Config) *graph.Graph {
 	if d := config.OutputDirectory(dir); d != "" {
 		// Check that the graph database directory exists
 		if finfo, err := os.Stat(d); !os.IsNotExist(err) && finfo.IsDir() {
-			if g := graph.NewGraph(db.NewCayleyGraph(d)); g != nil {
+			if g := graph.NewGraph(graphdb.NewCayleyGraph(d)); g != nil {
 				gDB = g
 			}
 		}

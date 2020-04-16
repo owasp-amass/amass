@@ -6,12 +6,12 @@ package graph
 import (
 	"sync"
 
-	"github.com/OWASP/Amass/v3/graph/db"
+	"github.com/OWASP/Amass/v3/graphdb"
 )
 
 // Graph implements the Amass network infrastructure data model.
 type Graph struct {
-	db            db.GraphDatabase
+	db            graphdb.GraphDatabase
 	alreadyClosed bool
 
 	// eventFinishes maintains a cache of the latest finish time for each event
@@ -21,7 +21,7 @@ type Graph struct {
 }
 
 // NewGraph accepts a graph database that stores the Graph created and maintained by the data model.
-func NewGraph(database db.GraphDatabase) *Graph {
+func NewGraph(database graphdb.GraphDatabase) *Graph {
 	if database == nil {
 		return nil
 	}
@@ -46,7 +46,7 @@ func (g *Graph) String() string {
 }
 
 // InsertNodeIfNotExist will create a node in the database if it does not already exist.
-func (g *Graph) InsertNodeIfNotExist(id, ntype string) (db.Node, error) {
+func (g *Graph) InsertNodeIfNotExist(id, ntype string) (graphdb.Node, error) {
 	node, err := g.db.ReadNode(id, ntype)
 	if err != nil {
 		node, err = g.db.InsertNode(id, ntype)
@@ -56,6 +56,6 @@ func (g *Graph) InsertNodeIfNotExist(id, ntype string) (db.Node, error) {
 }
 
 // InsertEdge will create an edge in the database if it does not already exist.
-func (g *Graph) InsertEdge(edge *db.Edge) error {
+func (g *Graph) InsertEdge(edge *graphdb.Edge) error {
 	return g.db.InsertEdge(edge)
 }

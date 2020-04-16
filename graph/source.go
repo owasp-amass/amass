@@ -4,11 +4,11 @@
 package graph
 
 import (
-	"github.com/OWASP/Amass/v3/graph/db"
+	"github.com/OWASP/Amass/v3/graphdb"
 )
 
 // InsertSource creates a data source node in the graph.
-func (g *Graph) InsertSource(source, tag string) (db.Node, error) {
+func (g *Graph) InsertSource(source, tag string) (graphdb.Node, error) {
 	node, err := g.InsertNodeIfNotExist(source, "source")
 	if err != nil {
 		return node, err

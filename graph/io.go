@@ -1,4 +1,4 @@
-// Copyright 2017 Jeff Foley. All rights reserved.
+// Copyright 2017-2020 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 package graph
@@ -8,7 +8,7 @@ import (
 	"net"
 	"strconv"
 
-	"github.com/OWASP/Amass/v3/graph/db"
+	"github.com/OWASP/Amass/v3/graphdb"
 	amassnet "github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/stringfilter"
@@ -37,7 +37,7 @@ func (g *Graph) EventOutput(uuid string, filter stringfilter.Filter, cache *amas
 		filter = stringfilter.NewStringFilter()
 	}
 
-	var names []db.Node
+	var names []graphdb.Node
 	for _, edge := range edges {
 		p, err := g.db.ReadProperties(edge.To, "type")
 
@@ -73,7 +73,7 @@ func (g *Graph) EventOutput(uuid string, filter stringfilter.Filter, cache *amas
 	return results
 }
 
-func (g *Graph) buildOutput(sub db.Node, uuid string, cache *amassnet.ASNCache, c chan *requests.Output) {
+func (g *Graph) buildOutput(sub graphdb.Node, uuid string, cache *amassnet.ASNCache, c chan *requests.Output) {
 	substr := g.db.NodeToID(sub)
 
 	sources, err := g.db.NodeSources(sub, uuid)
@@ -105,7 +105,7 @@ func (g *Graph) buildOutput(sub db.Node, uuid string, cache *amassnet.ASNCache, 
 	var num int
 	addrChan := make(chan *requests.AddressInfo, 100)
 	for _, addr := range addrs {
-		if !g.inEventScope(addr, uuid, "DNS") {
+		if !g.InEventScope(addr, uuid, "DNS") {
 			continue
 		}
 
@@ -137,8 +137,8 @@ func randomIndex(length int) int {
 	return rand.Intn(length - 1)
 }
 
-func (g *Graph) buildAddrInfo(addr db.Node, uuid string, cache *amassnet.ASNCache, c chan *requests.AddressInfo) {
-	if !g.inEventScope(addr, uuid, "DNS") {
+func (g *Graph) buildAddrInfo(addr graphdb.Node, uuid string, cache *amassnet.ASNCache, c chan *requests.AddressInfo) {
+	if !g.InEventScope(addr, uuid, "DNS") {
 		c <- nil
 		return
 	}
@@ -167,9 +167,9 @@ func (g *Graph) buildAddrInfo(addr db.Node, uuid string, cache *amassnet.ASNCach
 	}
 
 	var cidr string
-	var cidrNode db.Node
+	var cidrNode graphdb.Node
 	for _, edge := range edges {
-		if g.inEventScope(edge.From, uuid, "RIR") {
+		if g.InEventScope(edge.From, uuid, "RIR") {
 			cidrNode = edge.From
 			cidr = g.db.NodeToID(edge.From)
 			break
@@ -191,9 +191,9 @@ func (g *Graph) buildAddrInfo(addr db.Node, uuid string, cache *amassnet.ASNCach
 	}
 
 	var asn string
-	var asNode db.Node
+	var asNode graphdb.Node
 	for _, edge := range edges {
-		if g.inEventScope(edge.From, uuid, "RIR") {
+		if g.InEventScope(edge.From, uuid, "RIR") {
 			asNode = edge.From
 			asn = g.db.NodeToID(edge.From)
 			break
@@ -221,7 +221,7 @@ func (g *Graph) buildAddrInfo(addr db.Node, uuid string, cache *amassnet.ASNCach
 
 // DumpGraph returns all the data being stored in the graph database.
 func (g *Graph) DumpGraph() string {
-	temp := g.db.(*db.CayleyGraph)
+	temp := g.db.(*graphdb.CayleyGraph)
 
 	return temp.DumpGraph()
 }

@@ -4,12 +4,12 @@
 package graph
 
 import (
-	"github.com/OWASP/Amass/v3/graph/db"
+	"github.com/OWASP/Amass/v3/graphdb"
 	"github.com/OWASP/Amass/v3/requests"
 )
 
 // InsertAddress creates an IP address in the graph and associates it with a source and event.
-func (g *Graph) InsertAddress(addr, source, tag, eventID string) (db.Node, error) {
+func (g *Graph) InsertAddress(addr, source, tag, eventID string) (graphdb.Node, error) {
 	node, err := g.InsertNodeIfNotExist(addr, "ipaddr")
 	if err != nil {
 		return node, err
@@ -34,7 +34,7 @@ func (g *Graph) InsertA(fqdn, addr, source, tag, eventID string) error {
 		return err
 	}
 
-	ipEdge := &db.Edge{
+	ipEdge := &graphdb.Edge{
 		Predicate: "a_record",
 		From:      fqdnNode,
 		To:        ipNode,
@@ -59,7 +59,7 @@ func (g *Graph) InsertAAAA(fqdn, addr, source, tag, eventID string) error {
 		return err
 	}
 
-	ipEdge := &db.Edge{
+	ipEdge := &graphdb.Edge{
 		Predicate: "aaaa_record",
 		From:      fqdnNode,
 		To:        ipNode,

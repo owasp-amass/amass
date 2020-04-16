@@ -6,11 +6,11 @@ package graph
 import (
 	"strconv"
 
-	"github.com/OWASP/Amass/v3/graph/db"
+	"github.com/OWASP/Amass/v3/graphdb"
 )
 
 // InsertAS adds/updates an autonomous system in the graph.
-func (g *Graph) InsertAS(asn, desc, source, tag, eventID string) (db.Node, error) {
+func (g *Graph) InsertAS(asn, desc, source, tag, eventID string) (graphdb.Node, error) {
 	asNode, err := g.InsertNodeIfNotExist(asn, "as")
 	if err != nil {
 		return asNode, err
@@ -55,7 +55,7 @@ func (g *Graph) InsertInfrastructure(asn int, desc, addr, cidr, source, tag, eve
 	}
 
 	// Create the edge between the CIDR and the address
-	containsEdge := &db.Edge{
+	containsEdge := &graphdb.Edge{
 		Predicate: "contains",
 		From:      cidrNode,
 		To:        ipNode,
@@ -70,7 +70,7 @@ func (g *Graph) InsertInfrastructure(asn int, desc, addr, cidr, source, tag, eve
 	}
 
 	// Create the edge between the AS and the netblock
-	prefixEdge := &db.Edge{
+	prefixEdge := &graphdb.Edge{
 		Predicate: "prefix",
 		From:      asNode,
 		To:        cidrNode,
