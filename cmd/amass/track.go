@@ -16,6 +16,7 @@ import (
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/stringfilter"
 	"github.com/OWASP/Amass/v3/stringset"
+	"github.com/OWASP/Amass/v3/net/smtp"
 	"github.com/fatih/color"
 )
 
@@ -30,6 +31,7 @@ type trackArgs struct {
 	Since   string
 	Options struct {
 		History bool
+		Notify bool
 	}
 	Filepaths struct {
 		ConfigFile string
@@ -38,7 +40,9 @@ type trackArgs struct {
 	}
 }
 
+
 func runTrackCommand(clArgs []string) {
+	var newReport = smtp.NewReport(true) 
 	var args trackArgs
 	var help1, help2 bool
 	trackCommand := flag.NewFlagSet("track", flag.ContinueOnError)
@@ -54,9 +58,12 @@ func runTrackCommand(clArgs []string) {
 	trackCommand.IntVar(&args.Last, "last", 0, "The number of recent enumerations to include in the tracking")
 	trackCommand.StringVar(&args.Since, "since", "", "Exclude all enumerations before (format: "+timeFormat+")")
 	trackCommand.BoolVar(&args.Options.History, "history", false, "Show the difference between all enumeration pairs")
+	trackCommand.BoolVar(&args.Options.Notify, "notify", false, "Receive a report showing the difference between the two enumerations")
 	trackCommand.StringVar(&args.Filepaths.ConfigFile, "config", "", "Path to the INI configuration file. Additional details below")
 	trackCommand.StringVar(&args.Filepaths.Directory, "dir", "", "Path to the directory containing the graph database")
 	trackCommand.StringVar(&args.Filepaths.Domains, "df", "", "Path to a file providing root domain names")
+
+	newReport.Domains = args.Domains
 
 	if len(clArgs) < 1 {
 		commandUsage(trackUsageMsg, trackCommand, trackBuf)
@@ -167,10 +174,26 @@ func runTrackCommand(clArgs []string) {
 		completeHistoryOutput(args.Domains.Slice(), enums, earliest, latest, db)
 		return
 	}
-	cumulativeOutput(args.Domains.Slice(), enums, earliest, latest, db)
+	cumulativeOutput(args.Domains.Slice(), enums, earliest, latest, db, newReport)
+
+	if args.Options.Notify {
+		apikeys := cfg.GetAPIKey("notification_settings")
+		sendNotification(args.Domains.Slice(),apikeys.Username, apikeys.Key, newReport)
+		return
+	}
 }
 
-func cumulativeOutput(domains []string, enums []string, ea, la []time.Time, db *graph.Graph) {
+func sendNotification(domain []string, username string, password string, newReport *smtp.Report) {
+	err := smtp.SendReport(domain[0], username, password, newReport) 
+	if err != nil {
+		fmt.Fprintf(color.Output, "%s", red("Could not send an email notification"))
+		return
+	} 
+
+	fmt.Fprintf(color.Output, "%s", green("Sent an email notification\n"))
+}
+
+func cumulativeOutput(domains []string, enums []string, ea, la []time.Time, db *graph.Graph, newReport *smtp.Report) {
 	idx := len(enums) - 1
 	filter := stringfilter.NewStringFilter()
 
@@ -179,6 +202,7 @@ func cumulativeOutput(domains []string, enums []string, ea, la []time.Time, db *
 		for _, out := range getUniqueDBOutput(enums[i], domains, db) {
 			if domainNameInScope(out.Name, domains) && !filter.Duplicate(out.Name) {
 				cum = append(cum, out)
+				newReport.Found = append(newReport.Found,out.Name)
 			}
 		}
 	}
@@ -189,6 +213,10 @@ func cumulativeOutput(domains []string, enums []string, ea, la []time.Time, db *
 		blue("and"), yellow(ea[idx].Format(timeFormat)), blue(" -> "), yellow(la[idx].Format(timeFormat)))
 	blueLine()
 
+	newReport.FromEnumeration = append(newReport.FromEnumeration,ea[0],la[0])
+	newReport.ToEnumeration = append(newReport.ToEnumeration,ea[idx],la[idx])
+	
+
 	var updates bool
 	out := getUniqueDBOutput(enums[idx], domains, db)
 	for _, d := range diffEnumOutput(cum, out) {
@@ -196,6 +224,7 @@ func cumulativeOutput(domains []string, enums []string, ea, la []time.Time, db *
 		fmt.Fprintln(color.Output, d)
 	}
 	if !updates {
+		newReport.New = false
 		g.Println("No differences discovered")
 	}
 }
