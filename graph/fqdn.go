@@ -67,6 +67,10 @@ func (g *Graph) InsertFQDN(name, source, tag, eventID string) (graphdb.Node, err
 	if err := g.AddNodeToEvent(domainNode, source, tag, eventID); err != nil {
 		return fqdnNode, err
 	}
+	// Add the domain edge for easy access to the DNS domains in the event
+	if err := g.addDomainEdge(domainNode, eventID); err != nil {
+		return fqdnNode, err
+	}
 
 	// Source and event edges for the top-level domain name
 	if err := g.AddNodeToEvent(tldNode, source, tag, eventID); err != nil {
@@ -74,6 +78,19 @@ func (g *Graph) InsertFQDN(name, source, tag, eventID string) (graphdb.Node, err
 	}
 
 	return fqdnNode, nil
+}
+
+func (g *Graph) addDomainEdge(node graphdb.Node, eventID string) error {
+	event, err := g.db.ReadNode(eventID, "event")
+	if err != nil {
+		return err
+	}
+
+	return g.InsertEdge(&graphdb.Edge{
+		Predicate: "domain",
+		From:      event,
+		To:        node,
+	})
 }
 
 // InsertCNAME adds the FQDNs and CNAME record between them to the graph.

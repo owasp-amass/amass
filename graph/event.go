@@ -95,11 +95,8 @@ func (g *Graph) AddNodeToEvent(node graphdb.Node, source, tag, eventID string) e
 		From:      eventNode,
 		To:        node,
 	}
-	if err := g.InsertEdge(eventEdge); err != nil {
-		return err
-	}
 
-	return nil
+	return g.InsertEdge(eventEdge)
 }
 
 // InEventScope checks if the Node parameter is within scope of the Event identified by the uuid parameter.
@@ -120,7 +117,7 @@ func (g *Graph) InEventScope(node graphdb.Node, uuid string, predicates ...strin
 
 // EventList returns a list of event UUIDs found in the graph.
 func (g *Graph) EventList() []string {
-	nodes, err := g.db.AllNodesOfType("event")
+	nodes, err := g.AllNodesOfType("event")
 	if err != nil {
 		return nil
 	}
@@ -135,7 +132,7 @@ func (g *Graph) EventList() []string {
 
 // EventFQDNs returns the domains that were involved in the event.
 func (g *Graph) EventFQDNs(uuid string) []string {
-	names, err := g.db.AllNodesOfType("fqdn", uuid)
+	names, err := g.AllNodesOfType("fqdn", uuid)
 	if err != nil {
 		return nil
 	}
@@ -152,16 +149,19 @@ func (g *Graph) EventFQDNs(uuid string) []string {
 
 // EventDomains returns the domains that were involved in the event.
 func (g *Graph) EventDomains(uuid string) []string {
-	names, err := g.db.AllNodesOfType("fqdn", uuid)
+	event, err := g.db.ReadNode(uuid, "event")
+	if err != nil {
+		return nil
+	}
+
+	edges, err := g.db.ReadOutEdges(event, "domain")
 	if err != nil {
 		return nil
 	}
 
 	domains := stringset.New()
-	for _, name := range names {
-		d, err := publicsuffix.EffectiveTLDPlusOne(g.db.NodeToID(name))
-
-		if err == nil && d != "" {
+	for _, edge := range edges {
+		if d := g.db.NodeToID(edge.To); d != "" {
 			domains.Insert(d)
 		}
 	}
@@ -171,7 +171,7 @@ func (g *Graph) EventDomains(uuid string) []string {
 
 // EventSubdomains returns the subdomains discovered during the event(s).
 func (g *Graph) EventSubdomains(events ...string) []string {
-	nodes, err := g.db.AllNodesOfType("fqdn", events...)
+	nodes, err := g.AllNodesOfType("fqdn", events...)
 	if err != nil {
 		return nil
 	}
