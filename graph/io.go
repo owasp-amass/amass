@@ -11,6 +11,7 @@ import (
 	"github.com/OWASP/Amass/v3/graphdb"
 	amassnet "github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/requests"
+	"github.com/OWASP/Amass/v3/semaphore"
 	"github.com/OWASP/Amass/v3/stringfilter"
 	"golang.org/x/net/publicsuffix"
 )
@@ -22,9 +23,14 @@ import (
 func (g *Graph) EventOutput(uuid string, filter stringfilter.Filter, cache *amassnet.ASNCache) []*requests.Output {
 	var results []*requests.Output
 
-	names := g.getEventNameNodes(uuid, filter)
+	names := g.getEventNameNodes(uuid)
 	if len(names) == 0 {
 		return results
+	}
+
+	// Make sure a filter has been created
+	if filter == nil {
+		filter = stringfilter.NewStringFilter()
 	}
 
 	// Make sure a cache has been created for performance purposes
@@ -33,9 +39,11 @@ func (g *Graph) EventOutput(uuid string, filter stringfilter.Filter, cache *amas
 	}
 
 	var count int
+	sem := semaphore.NewSimpleSemaphore(10)
 	output := make(chan *requests.Output, 10000)
 	for _, name := range names {
-		go g.buildOutput(name, uuid, cache, output)
+		sem.Acquire(1)
+		go g.buildOutput(name, uuid, cache, output, sem)
 		count++
 	}
 
@@ -53,9 +61,14 @@ func (g *Graph) EventOutput(uuid string, filter stringfilter.Filter, cache *amas
 func (g *Graph) EventNames(uuid string, filter stringfilter.Filter) []*requests.Output {
 	var results []*requests.Output
 
-	names := g.getEventNameNodes(uuid, filter)
+	names := g.getEventNameNodes(uuid)
 	if len(names) == 0 {
 		return results
+	}
+
+	// Make sure a filter has been created
+	if filter == nil {
+		filter = stringfilter.NewStringFilter()
 	}
 
 	for _, name := range names {
@@ -67,7 +80,7 @@ func (g *Graph) EventNames(uuid string, filter stringfilter.Filter) []*requests.
 	return results
 }
 
-func (g *Graph) getEventNameNodes(uuid string, filter stringfilter.Filter) []graphdb.Node {
+func (g *Graph) getEventNameNodes(uuid string) []graphdb.Node {
 	var names []graphdb.Node
 
 	event, err := g.db.ReadNode(uuid, "event")
@@ -80,11 +93,6 @@ func (g *Graph) getEventNameNodes(uuid string, filter stringfilter.Filter) []gra
 		return names
 	}
 
-	// Make sure a filter has been created
-	if filter == nil {
-		filter = stringfilter.NewStringFilter()
-	}
-
 	for _, edge := range edges {
 		p, err := g.db.ReadProperties(edge.To, "type")
 
@@ -92,16 +100,21 @@ func (g *Graph) getEventNameNodes(uuid string, filter stringfilter.Filter) []gra
 			continue
 		}
 
-		if !filter.Has(g.db.NodeToID(edge.To)) {
-			names = append(names, edge.To)
-		}
+		names = append(names, edge.To)
 	}
 
 	return names
 }
 
-func (g *Graph) buildOutput(sub graphdb.Node, uuid string, cache *amassnet.ASNCache, c chan *requests.Output) {
+func (g *Graph) buildOutput(sub graphdb.Node, uuid string,
+	cache *amassnet.ASNCache, c chan *requests.Output, sem semaphore.Semaphore) {
+	defer sem.Release(1)
+
 	output := g.buildNameInfo(sub, uuid)
+	if output == nil {
+		c <- nil
+		return
+	}
 
 	addrs, err := g.NameToAddrs(sub)
 	if err != nil {

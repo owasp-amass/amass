@@ -35,7 +35,7 @@ func (e *Enumeration) submitKnownNames() {
 		}
 
 		for _, event := range events {
-			for _, output := range g.EventOutput(event, nil, nil) {
+			for _, output := range g.EventNames(event, nil) {
 				if e.Config.IsDomainInScope(output.Name) {
 					e.Bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 						Name:   output.Name,
