@@ -128,55 +128,73 @@ func runTrackCommand(clArgs []string) {
 	}
 	defer db.Close()
 
-	// Obtain the enumerations that include the provided domain(s)
-	enums := enumIDs(args.Domains.Slice(), db)
+	// Get all the UUIDs for events that have information in scope
+	uuids := eventUUIDs(args.Domains.Slice(), db)
+	if len(uuids) == 0 {
+		r.Fprintln(color.Error, "Failed to find the domains of interest in the database")
+		os.Exit(1)
+	}
 
-	// There needs to be at least two enumerations to proceed
-	if len(enums) < 2 {
+	var earliest, latest []time.Time
+	// Put the events in chronological order
+	uuids, earliest, latest = orderedEvents(uuids, db)
+	if len(uuids) == 0 {
+		r.Fprintln(color.Error, "Failed to sort the events")
+		os.Exit(1)
+	}
+
+	// There needs to be at least two events to proceed
+	if len(uuids) < 2 {
 		r.Fprintln(color.Error, "Tracking requires more than one enumeration")
 		os.Exit(1)
 	}
 	// The default is to use all the enumerations available
 	if args.Last == 0 {
-		args.Last = len(enums)
+		args.Last = len(uuids)
 	}
 
 	var end int
-	enums, earliest, latest := orderedEnumsAndDateRanges(enums, db)
 	// Filter out enumerations that begin before the start date/time
 	if args.Since != "" {
-		for i := len(enums) - 1; i >= 0; i-- {
+		for i := len(uuids) - 1; i >= 0; i-- {
 			if !earliest[i].Before(start) {
 				break
 			}
 			end++
 		}
 	} else { // Or the number of enumerations from the end of the timeline
-		if args.Last > len(enums) {
+		if args.Last > len(uuids) {
 			r.Fprintf(color.Error, "%d enumerations are not available\n", args.Last)
 			os.Exit(1)
 		}
 
 		end = args.Last
 	}
-	enums = enums[:end]
+	uuids = uuids[:end]
 	earliest = earliest[:end]
 	latest = latest[:end]
 
+	// Create the in-memory graph database
+	memDB, err := memGraphForEvents(uuids, db)
+	if err != nil {
+		r.Fprintln(color.Error, err.Error())
+		os.Exit(1)
+	}
+
 	if args.Options.History {
-		completeHistoryOutput(args.Domains.Slice(), enums, earliest, latest, db)
+		completeHistoryOutput(uuids, args.Domains.Slice(), earliest, latest, memDB)
 		return
 	}
-	cumulativeOutput(args.Domains.Slice(), enums, earliest, latest, db)
+	cumulativeOutput(uuids, args.Domains.Slice(), earliest, latest, memDB)
 }
 
-func cumulativeOutput(domains []string, enums []string, ea, la []time.Time, db *graph.Graph) {
-	idx := len(enums) - 1
+func cumulativeOutput(uuids, domains []string, ea, la []time.Time, db *graph.Graph) {
+	idx := len(uuids) - 1
 	filter := stringfilter.NewStringFilter()
 
 	var cum []*requests.Output
 	for i := idx - 1; i >= 0; i-- {
-		for _, out := range getUniqueDBOutput(enums[i], domains, db) {
+		for _, out := range getEventOutput([]string{uuids[i]}, db) {
 			if domainNameInScope(out.Name, domains) && !filter.Duplicate(out.Name) {
 				cum = append(cum, out)
 			}
@@ -190,7 +208,7 @@ func cumulativeOutput(domains []string, enums []string, ea, la []time.Time, db *
 	blueLine()
 
 	var updates bool
-	out := getUniqueDBOutput(enums[idx], domains, db)
+	out := getScopedOutput([]string{uuids[idx]}, domains, db)
 	for _, d := range diffEnumOutput(cum, out) {
 		updates = true
 		fmt.Fprintln(color.Output, d)
@@ -200,12 +218,26 @@ func cumulativeOutput(domains []string, enums []string, ea, la []time.Time, db *
 	}
 }
 
-func completeHistoryOutput(domains []string, enums []string, ea, la []time.Time, db *graph.Graph) {
+func getScopedOutput(uuids, domains []string, db *graph.Graph) []*requests.Output {
+	var output []*requests.Output
+
+	for _, out := range getEventOutput(uuids, db) {
+		if len(domains) > 0 && !domainNameInScope(out.Name, domains) {
+			continue
+		}
+
+		output = append(output, out)
+	}
+
+	return output
+}
+
+func completeHistoryOutput(uuids, domains []string, ea, la []time.Time, db *graph.Graph) {
 	var prev string
 
-	for i, enum := range enums {
+	for i, uuid := range uuids {
 		if prev == "" {
-			prev = enum
+			prev = uuid
 			continue
 		}
 		if i != 1 {
@@ -219,8 +251,8 @@ func completeHistoryOutput(domains []string, enums []string, ea, la []time.Time,
 		blueLine()
 
 		var updates bool
-		out1 := getUniqueDBOutput(prev, domains, db)
-		out2 := getUniqueDBOutput(enum, domains, db)
+		out1 := getScopedOutput([]string{prev}, domains, db)
+		out2 := getScopedOutput([]string{uuid}, domains, db)
 		for _, d := range diffEnumOutput(out1, out2) {
 			updates = true
 			fmt.Fprintln(color.Output, d)
@@ -228,7 +260,7 @@ func completeHistoryOutput(domains []string, enums []string, ea, la []time.Time,
 		if !updates {
 			g.Println("No differences discovered")
 		}
-		prev = enum
+		prev = uuid
 	}
 }
 
