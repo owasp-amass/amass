@@ -124,6 +124,7 @@ This subcommand will perform DNS enumeration and network mapping while populatin
 | -min-for-recursive | Subdomain labels seen before recursive brute forcing (Default: 1) | amass enum -brute -min-for-recursive 3 -d example.com |
 | -nf | Path to a file providing already known subdomain names (from other tools/sources) | amass enum -nf names.txt -d example.com |
 | -noalts | Disable generation of altered names | amass enum -noalts -d example.com |
+| -nolocaldb | Disable saving data into a local database | amass enum -nolocaldb -d example.com |
 | -norecursive | Turn off recursive brute forcing | amass enum -brute -norecursive -d example.com |
 | -noresolvrate | Disable resolver rate monitoring | amass enum -d example.com -noresolvrate |
 | -noresolvscore | Disable resolver reliability scoring | amass enum -d example.com -noresolvscore |
@@ -360,22 +361,23 @@ func main() {
 	// Seed the default pseudo-random number generator
 	rand.Seed(time.Now().UTC().UnixNano())
 
-	sys, err := systems.NewLocalSystem(config.NewConfig())
+	// Setup the most basic amass configuration
+	cfg := config.NewConfig()
+	cfg.AddDomain("example.com")
+
+	sys, err := systems.NewLocalSystem(cfg)
 	if err != nil {
 		return
 	}
 	sys.SetDataSources(datasrcs.GetAllSources(sys))
 
-	e := enum.NewEnumeration(sys)
+	e := enum.NewEnumeration(cfg, sys)
 	if e == nil {
 		return
 	}
 	defer e.Close()
 
-	// Setup the most basic amass configuration
-	e.Config.AddDomain("example.com")
 	e.Start()
-
 	for _, o := range e.ExtractOutput(nil) {
 		fmt.Println(o.Name)
 	}

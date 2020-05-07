@@ -67,6 +67,7 @@ type enumArgs struct {
 		ListSources         bool
 		MonitorResolverRate bool
 		NoAlts              bool
+		NoLocalDatabase     bool
 		NoRecursive         bool
 		Passive             bool
 		Sources             bool
@@ -117,6 +118,7 @@ func defineEnumOptionFlags(enumFlags *flag.FlagSet, args *enumArgs) {
 	enumFlags.BoolVar(&args.Options.ListSources, "list", false, "Print the names of all available data sources")
 	enumFlags.BoolVar(&args.Options.MonitorResolverRate, "noresolvrate", true, "Disable resolver rate monitoring")
 	enumFlags.BoolVar(&args.Options.NoAlts, "noalts", false, "Disable generation of altered names")
+	enumFlags.BoolVar(&args.Options.NoLocalDatabase, "nolocaldb", false, "Disable saving data into a local database")
 	enumFlags.BoolVar(&args.Options.NoRecursive, "norecursive", false, "Turn off recursive brute forcing")
 	enumFlags.BoolVar(&args.Options.Passive, "passive", false, "Disable DNS resolution of names and dependent features")
 	enumFlags.BoolVar(&args.Options.Sources, "src", false, "Print data sources for the discovered names")
@@ -149,7 +151,6 @@ func runEnumCommand(clArgs []string) {
 	if cfg == nil {
 		return
 	}
-
 	createOutputDirectory(cfg)
 
 	rLog, wLog := io.Pipe()
@@ -172,13 +173,12 @@ func runEnumCommand(clArgs []string) {
 	sys.SetDataSources(datasrcs.GetAllSources(sys))
 
 	// Setup the new enumeration
-	e := enum.NewEnumeration(sys)
+	e := enum.NewEnumeration(cfg, sys)
 	if e == nil {
 		r.Fprintf(color.Error, "%s\n", "Failed to setup the enumeration")
 		os.Exit(1)
 	}
 	defer e.Close()
-	e.Config = cfg
 
 	var wg sync.WaitGroup
 	var outChans []chan *requests.Output
@@ -197,11 +197,13 @@ func runEnumCommand(clArgs []string) {
 	go saveTextOutput(e, args, txtOutChan, &wg)
 	outChans = append(outChans, txtOutChan)
 
-	wg.Add(1)
-	// This goroutine will handle saving the output to the JSON file
-	jsonOutChan := make(chan *requests.Output, 1000)
-	go saveJSONOutput(e, args, jsonOutChan, &wg)
-	outChans = append(outChans, jsonOutChan)
+	if !args.Options.Passive {
+		wg.Add(1)
+		// This goroutine will handle saving the output to the JSON file
+		jsonOutChan := make(chan *requests.Output, 1000)
+		go saveJSONOutput(e, args, jsonOutChan, &wg)
+		outChans = append(outChans, jsonOutChan)
+	}
 
 	wg.Add(1)
 	go processOutput(e, outChans, done, &wg)
@@ -223,8 +225,12 @@ func runEnumCommand(clArgs []string) {
 		// Copy the graph of findings into the system graph databases
 		for _, g := range e.Sys.GraphDatabases() {
 			fmt.Fprintf(color.Error, "%s%s%s\n",
-				yellow("The discoveries are now being migrated into the "), yellow(g.String()), yellow(" database"))
-			e.Graph.Migrate(e.Config.UUID.String(), g)
+				yellow("Discoveries are being migrated into the "), yellow(g.String()), yellow(" database"))
+
+			if err := e.Graph.MigrateEvent(e.Config.UUID.String(), g); err != nil {
+				fmt.Fprintf(color.Error, "%s%s%s%s\n",
+					red("The database migration to "), red(g.String()), red(" failed: "), red(err.Error()))
+			}
 		}
 	}
 }
@@ -337,7 +343,10 @@ func printOutput(e *enum.Enumeration, args *enumArgs, output chan *requests.Outp
 		}
 
 		total++
-		format.UpdateSummaryData(out, tags, asns)
+		if !args.Options.Passive {
+			format.UpdateSummaryData(out, tags, asns)
+		}
+
 		source, name, ips := format.OutputLineParts(out, args.Options.Sources,
 			args.Options.IPs || args.Options.IPv4 || args.Options.IPv6, args.Options.DemoMode)
 		if ips != "" {
@@ -349,7 +358,7 @@ func printOutput(e *enum.Enumeration, args *enumArgs, output chan *requests.Outp
 
 	if total == 0 {
 		r.Println("No names were discovered")
-	} else {
+	} else if !args.Options.Passive {
 		format.PrintEnumerationSummary(total, tags, asns, args.Options.DemoMode)
 	}
 }
@@ -461,6 +470,10 @@ loop:
 		case <-done:
 			break loop
 		case <-t.C:
+			if e.Config.Passive {
+				continue loop
+			}
+
 			started := time.Now()
 			extract()
 			next := time.Now().Sub(started) * 5
@@ -674,6 +687,9 @@ func (e enumArgs) OverrideConfig(conf *config.Config) error {
 	}
 	if e.Options.NoAlts {
 		conf.Alterations = false
+	}
+	if e.Options.NoLocalDatabase || e.Options.Passive {
+		conf.LocalDatabase = false
 	}
 	if e.Options.NoRecursive {
 		conf.Recursive = false
