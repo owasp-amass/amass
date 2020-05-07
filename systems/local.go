@@ -5,6 +5,7 @@ package systems
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/OWASP/Amass/v3/config"
@@ -141,21 +142,36 @@ func (l *LocalSystem) GetAllSourceNames() []string {
 
 // Select the graph that will store the System findings.
 func (l *LocalSystem) setupGraphDBs() error {
-	if l.Config().GremlinURL != "" {
-		/*gremlin := graph.NewGremlin(l.Config().GremlinURL,
-			l.Config().GremlinUser, l.Config().GremlinPass, l.Config().Log)
-		l.graphs = append(l.graphs, gremlin)*/
+	c := l.Config()
+
+	if c.GremlinURL != "" {
+		gremlin := graphdb.NewGremlin(c.GremlinURL, c.GremlinUser, c.GremlinPass)
+		if gremlin == nil {
+			return fmt.Errorf("System: Failed to create the %s graph", gremlin.String())
+		}
+
+		g := graph.NewGraph(gremlin)
+		if g == nil {
+			return fmt.Errorf("System: Failed to create the %s graph", g.String())
+		}
+
+		l.graphs = append(l.graphs, g)
 	}
 
-	g := graph.NewGraph(graphdb.NewCayleyGraph(l.Config().Dir))
-	if g == nil {
-		return errors.New("Failed to create the graph")
+	dir := config.OutputDirectory(c.Dir)
+	if c.LocalDatabase && dir != "" {
+		cayley := graphdb.NewCayleyGraph(dir)
+		if cayley == nil {
+			return fmt.Errorf("System: Failed to create the %s graph", cayley.String())
+		}
+
+		g := graph.NewGraph(cayley)
+		if g == nil {
+			return fmt.Errorf("System: Failed to create the %s graph", g.String())
+		}
+
+		l.graphs = append(l.graphs, g)
 	}
-	l.graphs = append(l.graphs, g)
-	/*
-		if l.Config().DataOptsWriter != nil {
-			l.graphs = append(l.graphs,
-				graph.NewDataOptsHandler(l.Config().DataOptsWriter))
-		}*/
+
 	return nil
 }

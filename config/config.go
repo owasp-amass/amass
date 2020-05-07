@@ -53,6 +53,9 @@ type Config struct {
 	// The directory that stores the bolt db and other files created
 	Dir string `ini:"output_directory"`
 
+	// Use a local graph database
+	LocalDatabase bool
+
 	// The settings for connecting with a Gremlin Server
 	GremlinURL  string
 	GremlinUser string
@@ -150,16 +153,14 @@ type APIKey struct {
 // NewConfig returns a default configuration object.
 func NewConfig() *Config {
 	c := &Config{
-		UUID:          uuid.New(),
-		Log:           log.New(ioutil.Discard, "", 0),
-		Ports:         []int{443},
-		MaxDNSQueries: defaultConcurrentDNSQueries,
-
-		MinForRecursive: 1,
-
+		UUID:                uuid.New(),
+		Log:                 log.New(ioutil.Discard, "", 0),
+		Ports:               []int{443},
+		MaxDNSQueries:       defaultConcurrentDNSQueries,
+		MinForRecursive:     1,
 		Resolvers:           defaultPublicResolvers,
 		MonitorResolverRate: true,
-
+		LocalDatabase:       true,
 		// The following is enum-only, but intel will just ignore them anyway
 		Alterations:    true,
 		FlipWords:      true,
