@@ -20,7 +20,7 @@ The OWASP Amass Project performs network mapping of attack surfaces and external
 **Information Gathering Techniques Used:**
 
 * **DNS:** Basic enumeration, Brute forcing (optional), Reverse DNS sweeping, Subdomain name alterations/permutations, Zone transfers (optional)
-* **Scraping:** Ask, Baidu, Bing, DNSDumpster, DNSTable, Dogpile, Exalead, Google, HackerOne, IPv4Info, Netcraft, PTRArchive, Riddler, SiteDossier, ViewDNS, Yahoo
+* **Scraping:** Ask, Baidu, Bing, DNSDumpster, DNSTable, Dogpile, Exalead, Google, HackerOne, IPv4Info, Netcraft, Riddler, SiteDossier, ViewDNS, Yahoo
 * **Certificates:** Active pulls (optional), Censys, CertSpotter, Crtsh, Entrust, GoogleCT
 * **APIs:** AlienVault, BinaryEdge, BufferOver, CIRCL, CommonCrawl, DNSDB, GitHub, HackerTarget, IPToASN, Mnemonic, NetworksDB, PassiveTotal, Pastebin, RADb, Robtex, SecurityTrails, ShadowServer, Shodan, Spyse (CertDB & FindSubdomains), Sublist3rAPI, TeamCymru, ThreatCrowd, Twitter, Umbrella, URLScan, VirusTotal, WhoisXML
 * **Web Archives:** ArchiveIt, ArchiveToday, Arquivo, LoCArchive, OpenUKArchive, UKGovArchive, Wayback
@@ -68,7 +68,7 @@ docker run -v OUTPUT_DIR_PATH:/.config/amass/ caffix/amass enum -brute -w /wordl
 
 1. Install [Go](https://golang.org/doc/install) and setup your Go workspace
 2. Add the Go Module environment variable by running `export GO111MODULE=on`
-3. Download OWASP Amass by running `go get -v -u github.com/OWASP/Amass/v3/...`
+3. Download OWASP Amass by running `go get -v github.com/OWASP/Amass/v3/...`
 4. At this point, the binary should be in `$GOPATH/bin`
 
 ## Documentation [![GoDoc](https://img.shields.io/static/v1?label=godoc&message=reference&color=blue)](https://pkg.go.dev/github.com/OWASP/Amass/v3?tab=overview)
