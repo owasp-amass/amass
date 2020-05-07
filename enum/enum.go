@@ -79,11 +79,11 @@ type Enumeration struct {
 }
 
 // NewEnumeration returns an initialized Enumeration that has not been started yet.
-func NewEnumeration(sys systems.System) *Enumeration {
+func NewEnumeration(cfg *config.Config, sys systems.System) *Enumeration {
 	e := &Enumeration{
-		Config:         config.NewConfig(),
-		Bus:            eventbus.NewEventBus(10000),
+		Config:         cfg,
 		Sys:            sys,
+		Bus:            eventbus.NewEventBus(100000),
 		Graph:          graph.NewGraph(graphdb.NewCayleyGraphMemory()),
 		srcs:           stringset.New(),
 		resFilter:      stringfilter.NewBloomFilter(filterMaxSize),
@@ -92,8 +92,13 @@ func NewEnumeration(sys systems.System) *Enumeration {
 		netCache:       net.NewASNCache(),
 		resolvedFilter: stringfilter.NewBloomFilter(filterMaxSize),
 		last:           time.Now(),
+		dataMgrEmpty:   true,
 		perSecFirst:    time.Now(),
 		perSecLast:     time.Now(),
+	}
+
+	if cfg.Passive {
+		return e
 	}
 
 	e.dataMgr = NewDataManagerService(sys, e.Graph)
@@ -109,6 +114,7 @@ func NewEnumeration(sys systems.System) *Enumeration {
 	return e
 }
 
+// Close cleans up resources instantiated by the Enumeration.
 func (e *Enumeration) Close() {
 	e.closedOnce.Do(func() {
 		e.Graph.Close()
@@ -297,10 +303,12 @@ func (e *Enumeration) Start() error {
 	defer e.Bus.Unsubscribe(requests.ResolveCompleted, e.incQueriesPerSec)
 
 	// Setup the DNS Service to receive the appropriate events
-	e.Bus.Subscribe(requests.ResolveNameTopic, e.dnsMgr.DNSRequest)
-	defer e.Bus.Unsubscribe(requests.ResolveNameTopic, e.dnsMgr.DNSRequest)
-	e.Bus.Subscribe(requests.SubDiscoveredTopic, e.dnsMgr.SubdomainDiscovered)
-	defer e.Bus.Unsubscribe(requests.SubDiscoveredTopic, e.dnsMgr.SubdomainDiscovered)
+	if !e.Config.Passive {
+		e.Bus.Subscribe(requests.ResolveNameTopic, e.dnsMgr.DNSRequest)
+		defer e.Bus.Unsubscribe(requests.ResolveNameTopic, e.dnsMgr.DNSRequest)
+		e.Bus.Subscribe(requests.SubDiscoveredTopic, e.dnsMgr.SubdomainDiscovered)
+		defer e.Bus.Unsubscribe(requests.SubDiscoveredTopic, e.dnsMgr.SubdomainDiscovered)
+	}
 
 	// If a timeout was provided in the configuration, it will go off that
 	// many minutes from this point in the enumeration process
@@ -361,9 +369,13 @@ loop:
 	}
 
 	cancel()
-	e.dnsMgr.Stop()
-	e.dataMgr.Stop()
+	if !e.Config.Passive {
+		e.dnsMgr.Stop()
+		e.dataMgr.Stop()
+	}
 	e.writeLogs(true)
+	// Attempt to fix IP address nodes without edges to netblocks
+	e.Graph.HealAddressNodes(e.netCache, e.Config.UUID.String())
 	return nil
 }
 
@@ -386,9 +398,12 @@ func (e *Enumeration) resolvedDispatcher(req *requests.DNSRequest) {
 }
 
 func (e *Enumeration) requiredNumberOfNames(numsec int) int {
-	var required int
-	max := e.Config.MaxDNSQueries * numsec
+	required := 10000
+	if e.Config.Passive {
+		return required
+	}
 
+	max := e.Config.MaxDNSQueries * numsec
 	// Acquire the number of DNS queries already in the queue
 	remaining := e.dnsNamesRemaining()
 	if remaining > 0 {
@@ -407,11 +422,7 @@ func (e *Enumeration) requiredNumberOfNames(numsec int) int {
 }
 
 func (e *Enumeration) useManagers(numsec int) int {
-	required := 100000
-
-	if !e.Config.Passive {
-		required = e.requiredNumberOfNames(numsec)
-	}
+	required := e.requiredNumberOfNames(numsec)
 
 	var count int
 	// Loop through the managers until we acquire the necessary number of names for processing
