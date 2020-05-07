@@ -1,4 +1,4 @@
-# [![OWASP Logo](./images/owasp_logo.png) OWASP Amass](https://owasp.org/www-project-amass/)
+# [![OWASP Logo](../../images/owasp_logo.png) OWASP Amass](https://owasp.org/www-project-amass/)
 
 This example uses Docker Compose (with support for version 3 schemas) to setup an environment with JanusGraph, Scylla/Cassandra and Elasticsearch.
 
