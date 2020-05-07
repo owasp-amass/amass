@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/v3/config"
-	"github.com/OWASP/Amass/v3/graph"
 	"github.com/OWASP/Amass/v3/stringset"
 	"github.com/OWASP/Amass/v3/viz"
 	"github.com/fatih/color"
@@ -96,28 +95,13 @@ func runVizCommand(clArgs []string) {
 		args.Domains.InsertMany(list...)
 	}
 
-	if args.Filepaths.Output == "" {
-		dir, err := os.Getwd()
-		if err != nil {
-			r.Fprintln(color.Error, "Failed to identify the output location")
-			os.Exit(1)
-		}
-		args.Filepaths.Output = dir
-	}
-	if finfo, err := os.Stat(args.Filepaths.Output); os.IsNotExist(err) || !finfo.IsDir() {
-		r.Fprintln(color.Error, "The output location does not exist or is not a directory")
-		os.Exit(1)
-	}
-
-	var uuid string
-	var db *graph.Graph
 	rand.Seed(time.Now().UTC().UnixNano())
 
 	cfg := new(config.Config)
 	// Check if a configuration file was provided, and if so, load the settings
 	if err := config.AcquireConfig(args.Filepaths.Directory, args.Filepaths.ConfigFile, cfg); err == nil {
 		if args.Filepaths.Directory == "" {
-			args.Filepaths.Directory = cfg.Dir
+			args.Filepaths.Directory = config.OutputDirectory(cfg.Dir)
 		}
 		if len(args.Domains) == 0 {
 			args.Domains.InsertMany(cfg.Domains()...)
@@ -127,45 +111,74 @@ func runVizCommand(clArgs []string) {
 		os.Exit(1)
 	}
 
-	db = openGraphDatabase(args.Filepaths.Directory, cfg)
+	db := openGraphDatabase(args.Filepaths.Directory, cfg)
 	if db == nil {
 		r.Fprintln(color.Error, "Failed to connect with the database")
 		os.Exit(1)
 	}
 	defer db.Close()
 
-	if args.Enum > 0 {
-		uuid = enumIndexToID(args.Enum, args.Domains.Slice(), db)
-	} else {
-		// Get the UUID for the most recent enumeration
-		uuid = mostRecentEnumID(args.Domains.Slice(), db)
-	}
-
-	if uuid == "" {
-		r.Fprintln(color.Error, "No enumeration found within the graph database")
+	// Get all the UUIDs for events that have information in scope
+	uuids := eventUUIDs(args.Domains.Slice(), db)
+	if len(uuids) == 0 {
+		r.Fprintln(color.Error, "Failed to find the domains of interest in the database")
 		os.Exit(1)
 	}
 
-	nodes, edges := db.VizData(uuid)
+	// Put the events in chronological order
+	uuids, _, _ = orderedEvents(uuids, db)
+	if len(uuids) == 0 {
+		r.Fprintln(color.Error, "Failed to sort the events")
+		os.Exit(1)
+	}
+
+	selected := len(uuids) - 1
+	// Select the enumeration that the user specified
+	if args.Enum > 0 && len(uuids) > args.Enum {
+		selected = args.Enum
+	}
+	uuids = []string{uuids[selected]}
+
+	// Create the in-memory graph database
+	memDB, err := memGraphForEvents(uuids, db)
+	if err != nil {
+		r.Fprintln(color.Error, err.Error())
+		os.Exit(1)
+	}
+
+	// Obtain the visualization nodes & edges from the graph
+	nodes, edges := memDB.VizData(uuids[0])
+
+	// Get the directory to save the files into
+	dir := args.Filepaths.Directory
+	if args.Filepaths.Output != "" {
+		if finfo, err := os.Stat(args.Filepaths.Output); os.IsNotExist(err) || !finfo.IsDir() {
+			r.Fprintln(color.Error, "The output location does not exist or is not a directory")
+			os.Exit(1)
+		}
+
+		dir = args.Filepaths.Output
+	}
+
 	if args.Options.D3 {
-		dir := filepath.Join(args.Filepaths.Output, "amass_d3.html")
-		writeD3File(dir, nodes, edges)
+		path := filepath.Join(dir, "amass_d3.html")
+		writeD3File(path, nodes, edges)
 	}
 	if args.Options.DOT {
-		dir := filepath.Join(args.Filepaths.Output, "amass.dot")
-		writeDOTData(dir, nodes, edges)
+		path := filepath.Join(dir, "amass.dot")
+		writeDOTData(path, nodes, edges)
 	}
 	if args.Options.GEXF {
-		dir := filepath.Join(args.Filepaths.Output, "amass.gexf")
-		writeGEXFFile(dir, nodes, edges)
+		path := filepath.Join(dir, "amass.gexf")
+		writeGEXFFile(path, nodes, edges)
 	}
 	if args.Options.Graphistry {
-		dir := filepath.Join(args.Filepaths.Output, "amass_graphistry.json")
-		writeGraphistryFile(dir, nodes, edges)
+		path := filepath.Join(dir, "amass_graphistry.json")
+		writeGraphistryFile(path, nodes, edges)
 	}
 	if args.Options.Maltego {
-		dir := filepath.Join(args.Filepaths.Output, "amass_maltego.csv")
-		writeMaltegoFile(dir, nodes, edges)
+		path := filepath.Join(dir, "amass_maltego.csv")
+		writeMaltegoFile(path, nodes, edges)
 	}
 }
 
