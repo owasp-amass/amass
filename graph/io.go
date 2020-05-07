@@ -22,32 +22,9 @@ import (
 func (g *Graph) EventOutput(uuid string, filter stringfilter.Filter, cache *amassnet.ASNCache) []*requests.Output {
 	var results []*requests.Output
 
-	event, err := g.db.ReadNode(uuid, "event")
-	if err != nil {
+	names := g.getEventNameNodes(uuid, filter)
+	if len(names) == 0 {
 		return results
-	}
-
-	edges, err := g.db.ReadOutEdges(event)
-	if err != nil {
-		return results
-	}
-
-	// Make sure a filter has been created
-	if filter == nil {
-		filter = stringfilter.NewStringFilter()
-	}
-
-	var names []graphdb.Node
-	for _, edge := range edges {
-		p, err := g.db.ReadProperties(edge.To, "type")
-
-		if err != nil || len(p) == 0 || p[0].Value != "fqdn" {
-			continue
-		}
-
-		if !filter.Has(g.db.NodeToID(edge.To)) {
-			names = append(names, edge.To)
-		}
 	}
 
 	// Make sure a cache has been created for performance purposes
@@ -63,40 +40,70 @@ func (g *Graph) EventOutput(uuid string, filter stringfilter.Filter, cache *amas
 	}
 
 	for i := 0; i < count; i++ {
-		if o := <-output; o != nil {
-			if !filter.Duplicate(o.Name) {
-				results = append(results, o)
-			}
+		if o := <-output; o != nil && !filter.Duplicate(o.Name) {
+			results = append(results, o)
 		}
 	}
 
 	return results
 }
 
+// EventNames returns findings within the receiver Graph for the event identified by the uuid string
+// parameter and not already in the filter StringFilter argument. The filter is updated by EventNames.
+func (g *Graph) EventNames(uuid string, filter stringfilter.Filter) []*requests.Output {
+	var results []*requests.Output
+
+	names := g.getEventNameNodes(uuid, filter)
+	if len(names) == 0 {
+		return results
+	}
+
+	for _, name := range names {
+		if o := g.buildNameInfo(name, uuid); o != nil && !filter.Duplicate(o.Name) {
+			results = append(results, o)
+		}
+	}
+
+	return results
+}
+
+func (g *Graph) getEventNameNodes(uuid string, filter stringfilter.Filter) []graphdb.Node {
+	var names []graphdb.Node
+
+	event, err := g.db.ReadNode(uuid, "event")
+	if err != nil {
+		return names
+	}
+
+	edges, err := g.db.ReadOutEdges(event)
+	if err != nil {
+		return names
+	}
+
+	// Make sure a filter has been created
+	if filter == nil {
+		filter = stringfilter.NewStringFilter()
+	}
+
+	for _, edge := range edges {
+		p, err := g.db.ReadProperties(edge.To, "type")
+
+		if err != nil || len(p) == 0 || p[0].Value != "fqdn" {
+			continue
+		}
+
+		if !filter.Has(g.db.NodeToID(edge.To)) {
+			names = append(names, edge.To)
+		}
+	}
+
+	return names
+}
+
 func (g *Graph) buildOutput(sub graphdb.Node, uuid string, cache *amassnet.ASNCache, c chan *requests.Output) {
-	substr := g.db.NodeToID(sub)
+	output := g.buildNameInfo(sub, uuid)
 
-	sources, err := g.db.NodeSources(sub, uuid)
-	if err != nil {
-		c <- nil
-		return
-	}
-	src := sources[0]
-
-	domain, err := publicsuffix.EffectiveTLDPlusOne(substr)
-	if err != nil {
-		c <- nil
-		return
-	}
-
-	output := &requests.Output{
-		Name:   substr,
-		Domain: domain,
-		Tag:    g.SourceTag(src),
-		Source: src,
-	}
-
-	addrs, err := g.db.NameToIPAddrs(sub)
+	addrs, err := g.NameToAddrs(sub)
 	if err != nil {
 		c <- nil
 		return
@@ -135,6 +142,28 @@ func randomIndex(length int) int {
 	}
 
 	return rand.Intn(length - 1)
+}
+
+func (g *Graph) buildNameInfo(sub graphdb.Node, uuid string) *requests.Output {
+	substr := g.db.NodeToID(sub)
+
+	sources, err := g.NodeSources(sub, uuid)
+	if err != nil {
+		return nil
+	}
+	src := sources[0]
+
+	domain, err := publicsuffix.EffectiveTLDPlusOne(substr)
+	if err != nil {
+		return nil
+	}
+
+	return &requests.Output{
+		Name:   substr,
+		Domain: domain,
+		Tag:    g.SourceTag(src),
+		Source: src,
+	}
 }
 
 func (g *Graph) buildAddrInfo(addr graphdb.Node, uuid string, cache *amassnet.ASNCache, c chan *requests.AddressInfo) {
@@ -205,9 +234,7 @@ func (g *Graph) buildAddrInfo(addr graphdb.Node, uuid string, cache *amassnet.AS
 	}
 
 	ainfo.ASN, _ = strconv.Atoi(asn)
-	if p, err := g.db.ReadProperties(asNode, "description"); err == nil && len(p) > 0 {
-		ainfo.Description = p[0].Value
-	}
+	ainfo.Description = g.nodeDescription(asNode)
 
 	cache.Update(&requests.ASNRequest{
 		Address:     ainfo.Address.String(),
@@ -217,11 +244,4 @@ func (g *Graph) buildAddrInfo(addr graphdb.Node, uuid string, cache *amassnet.AS
 	})
 
 	c <- ainfo
-}
-
-// DumpGraph returns all the data being stored in the graph database.
-func (g *Graph) DumpGraph() string {
-	temp := g.db.(*graphdb.CayleyGraph)
-
-	return temp.DumpGraph()
 }

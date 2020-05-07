@@ -15,6 +15,10 @@ import (
 
 // ExtractOutput is a convenience method for obtaining new discoveries made by the enumeration process.
 func (e *Enumeration) ExtractOutput(filter stringfilter.Filter) []*requests.Output {
+	if e.Config.Passive {
+		return e.Graph.EventNames(e.Config.UUID.String(), filter)
+	}
+
 	return e.Graph.EventOutput(e.Config.UUID.String(), filter, e.netCache)
 }
 
