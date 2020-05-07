@@ -90,7 +90,7 @@ func testDNSRequest(srvName string) int {
 	bus.Subscribe(requests.NewNameTopic, fn)
 	defer bus.Unsubscribe(requests.NewNameTopic, fn)
 
-	var srv Service
+	var srv requests.Service
 	for _, s := range testSystem.DataSources() {
 		if s.String() == srvName {
 			srv = s
