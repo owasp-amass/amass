@@ -6,14 +6,15 @@ Did you write a blog post, magazine article or do a podcast about or mentioning 
 
 ### Pod- & Webcasts
 
+* [Nahamsec's Streams](https://www.twitch.tv/nahamsec):
+  * [04/26/2020 - Mayonaise Talks About His Recon Workflow, How to Learn Different Topics, and How to Bug Bounty!](https://www.youtube.com/watch?v=SGLdv_4Iy44)
+  * [09/08/2019 - Live Bug Bounty Recon Session on Yahoo (censys, altdns, amass) w/ @infosec_au](https://www.youtube.com/watch?v=m-eZfbgdl9I)
+  * [09/01/2019 - Live Bug Bounty Recon Session on Yahoo (Amass, crts.sh, dirsearch) w/ @TheDawgyg](https://www.youtube.com/watch?v=u4dUnJ1U0T4)
 * [Jason Haddix's Recon Streams](https://www.youtube.com/channel/UCk0f0svao7AKeK3RfiWxXEA/featured):
   * Stream #2:
     [ASNs, Xmind, Amass Intel, SSLscrape, ASNLookup ++](https://www.youtube.com/watch?v=5N7k0g7arYE)
   * Stream #4:
     [ASNLookup, Github Dorks, Amass, ffuf, Dirsearch, Turbo Intruder](https://www.youtube.com/watch?v=00xVyT0k-_E)
-* [Nahamsec's Streams](https://www.twitch.tv/nahamsec):
-  * [09/08/2019 - Live Bug Bounty Recon Session on Yahoo (censys, altdns, amass) w/ @infosec_au](https://www.youtube.com/watch?v=m-eZfbgdl9I)
-  * [09/01/2019 - Live Bug Bounty Recon Session on Yahoo (Amass, crts.sh, dirsearch) w/ @TheDawgyg](https://www.youtube.com/watch?v=u4dUnJ1U0T4)
 * [Ghostlulz's YouTube Channel](https://www.youtube.com/channel/UCqjjGl7VrAW_yLZK3DoMZXw):
   * [Bug Bounty Tips: Amass Recon Tool](https://www.youtube.com/watch?v=QRkKzYH4efI)
 * [ToolWar's YouTube Channel](https://www.youtube.com/channel/UCCByzSfyNwrvJ5TX6cyJPlA):
@@ -28,6 +29,8 @@ Did you write a blog post, magazine article or do a podcast about or mentioning 
 
 ### Blogs & Articles
 
+* Blog post on [ncpd's Blog](https://medium.com/@_ncpd):
+  * [Subdomain enumeration made easy](https://medium.com/@_ncpd/subdomain-enumeration-made-easy-ba843037ab76)
 * Blog post on [Gökhan Güzelkokar's Blog](https://medium.com/@gguzelkokar.mdbf15):
   * [Bug bounty resources & advices](https://medium.com/@gguzelkokar.mdbf15/bug-bounty-resources-advices-2cc9cfb69f6)
 * Blog post on [SecurityTrail's Blog](https://securitytrails.com/blog/):
