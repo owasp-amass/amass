@@ -7,6 +7,13 @@ import (
 	"fmt"
 )
 
+// Constant values that represent the direction of edges during graph queries.
+const (
+	IN int = iota
+	OUT
+	BOTH
+)
+
 // Node represents a node in the graph.
 type Node interface{}
 
@@ -26,24 +33,18 @@ type Edge struct {
 type GraphDatabase interface {
 	fmt.Stringer
 
-	// Graph operations for adding and removing nodes
 	NodeToID(node Node) string
+	// Provides all nodes in the graph of the identified types
+	AllNodesOfType(ntypes ...string) ([]Node, error)
+
+	// Graph operations for adding and removing nodes
 	InsertNode(id, ntype string) (Node, error)
 	ReadNode(id, ntype string) (Node, error)
 	DeleteNode(node Node) error
 
-	// Graph operations for querying for nodes using search criteria
-	AllNodesOfType(ntype string, events ...string) ([]Node, error)
-	NameToIPAddrs(node Node) ([]Node, error)
-
-	// NodeSources returns the names of data sources that identified node during the events
-	NodeSources(node Node, events ...string) ([]string, error)
-
-	// Graph operations for manipulating property values of a node
+	// Graph operations for manipulating properties of a node
 	InsertProperty(node Node, predicate, value string) error
-	// Returns a slice of predicate names and slice of the associated values
 	ReadProperties(node Node, predicates ...string) ([]*Property, error)
-	// Returns the number of values for the node that match the optional predicate names
 	CountProperties(node Node, predicates ...string) (int, error)
 	DeleteProperty(node Node, predicate, value string) error
 
@@ -56,6 +57,6 @@ type GraphDatabase interface {
 	CountOutEdges(node Node, predicates ...string) (int, error)
 	DeleteEdge(edge *Edge) error
 
-	// Signals for the database to close
+	// Signals the database to close
 	Close()
 }

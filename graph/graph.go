@@ -4,6 +4,7 @@
 package graph
 
 import (
+	"errors"
 	"sync"
 
 	"github.com/OWASP/Amass/v3/graphdb"
@@ -58,4 +59,45 @@ func (g *Graph) InsertNodeIfNotExist(id, ntype string) (graphdb.Node, error) {
 // InsertEdge will create an edge in the database if it does not already exist.
 func (g *Graph) InsertEdge(edge *graphdb.Edge) error {
 	return g.db.InsertEdge(edge)
+}
+
+// AllNodesOfType provides all nodes in the graph of the identified
+// type within the optionally identified events.
+func (g *Graph) AllNodesOfType(ntype string, events ...string) ([]graphdb.Node, error) {
+	var results []graphdb.Node
+
+	nodes, err := g.db.AllNodesOfType(ntype)
+	if err != nil {
+		return results, errors.New("Graph: AllNodesOfType: Failed to obtain nodes")
+	}
+
+	if len(events) == 0 {
+		return nodes, nil
+	}
+
+	for _, node := range nodes {
+		for _, event := range events {
+			var found bool
+
+			// The event type is a special case
+			if ntype == "event" {
+				if g.db.NodeToID(node) == event {
+					found = true
+				}
+			} else if g.InEventScope(node, event) {
+				found = true
+			}
+
+			if found {
+				results = append(results, node)
+				break
+			}
+		}
+	}
+
+	if len(results) == 0 {
+		return results, errors.New("Graph: AllNodesOfType: No nodes found")
+	}
+
+	return results, nil
 }

@@ -25,9 +25,6 @@ type CayleyGraph struct {
 	path  string
 }
 
-var notDataSourceSet = stringset.New("tld", "root", "cname_record",
-	"ptr_record", "mx_record", "ns_record", "srv_record", "service")
-
 // NewCayleyGraph returns an intialized CayleyGraph object.
 func NewCayleyGraph(path string) *CayleyGraph {
 	var err error
@@ -99,6 +96,48 @@ func (g *CayleyGraph) NodeToID(n Node) string {
 	return fmt.Sprintf("%s", n)
 }
 
+// AllNodesOfType implements the GraphDatabase interface.
+func (g *CayleyGraph) AllNodesOfType(ntypes ...string) ([]Node, error) {
+	g.Lock()
+	defer g.Unlock()
+
+	var nodes []Node
+	// Check if the request is for all nodes in the graph
+	if len(ntypes) == 0 {
+		p := cayley.StartPath(g.store)
+
+		g.optimizedIterate(p, func(value quad.Value) {
+			nodes = append(nodes, quad.ToString(value))
+		})
+
+		if len(nodes) == 0 {
+			return nodes, fmt.Errorf("%s: AllNodesOfType: No nodes found", g.String())
+		}
+
+		return nodes, nil
+	}
+
+	filter := stringset.New()
+	for _, ntype := range ntypes {
+		p := cayley.StartPath(g.store).Has(quad.String("type"), quad.String(ntype))
+
+		g.optimizedIterate(p, func(value quad.Value) {
+			nstr := quad.ToString(value)
+
+			if !filter.Has(nstr) {
+				filter.Insert(nstr)
+				nodes = append(nodes, nstr)
+			}
+		})
+	}
+
+	if len(nodes) == 0 {
+		return nodes, fmt.Errorf("%s: AllNodesOfType: No nodes found", g.String())
+	}
+
+	return nodes, nil
+}
+
 // InsertNode implements the GraphDatabase interface.
 func (g *CayleyGraph) InsertNode(id, ntype string) (Node, error) {
 	g.Lock()
@@ -162,158 +201,6 @@ func (g *CayleyGraph) removeAllNodeQuads(id string) error {
 
 	// Attempt to perform the deletion transaction
 	return g.store.ApplyTransaction(t)
-}
-
-// AllNodesOfType implements the GraphDatabase interface.
-// To avoid recursive read locking, a private version of this method has been
-// implemented that doesn't hold the lock.
-func (g *CayleyGraph) AllNodesOfType(ntype string, events ...string) ([]Node, error) {
-	g.Lock()
-	defer g.Unlock()
-
-	return g.allNodesOfType(ntype, events...)
-}
-
-// allNodesOfType() implements the main functionality for AllNodesOfType(), but
-// doesn't acquire the read lock so methods within this package can avoid recursive
-// locking. MAKE SURE TO ACQUIRE A READ LOCK PRIOR TO EXECUTING THIS METHOD
-func (g *CayleyGraph) allNodesOfType(ntype string, events ...string) ([]Node, error) {
-	var nodes []Node
-	if ntype == "event" && len(events) > 0 {
-		for _, event := range events {
-			nodes = append(nodes, event)
-		}
-
-		return nodes, nil
-	}
-
-	var allevents []Node
-	e := cayley.StartPath(g.store).Has(quad.String("type"), quad.String("event")).Unique()
-	g.optimizedIterate(e, func(value quad.Value) {
-		allevents = append(allevents, quad.ToString(value))
-	})
-
-	if ntype == "event" {
-		return allevents, nil
-	}
-
-	filter := stringset.New()
-	eventset := stringset.New(events...)
-	for _, event := range allevents {
-		estr := g.NodeToID(event)
-
-		if len(events) > 0 && !eventset.Has(estr) {
-			continue
-		}
-
-		p := cayley.StartPath(g.store, quad.String(estr)).Out().Has(quad.String("type"), quad.String(ntype))
-		g.optimizedIterate(p, func(value quad.Value) {
-			nstr := quad.ToString(value)
-
-			if !filter.Has(nstr) {
-				filter.Insert(nstr)
-				nodes = append(nodes, nstr)
-			}
-		})
-	}
-
-	return nodes, nil
-}
-
-// NameToIPAddrs implements the GraphDatabase interface.
-func (g *CayleyGraph) NameToIPAddrs(node Node) ([]Node, error) {
-	g.Lock()
-	defer g.Unlock()
-
-	var nodes []Node
-	nstr := g.NodeToID(node)
-	if nstr == "" {
-		return nodes, fmt.Errorf("%s: NameToIPAddrs: Invalid node reference argument", g.String())
-	}
-
-	// Does this name have A/AAAA records?
-	p := cayley.StartPath(g.store, quad.String(nstr)).Out("a_record", "aaaa_record")
-	g.optimizedIterate(p, func(value quad.Value) {
-		nodes = append(nodes, quad.ToString(value))
-	})
-	if len(nodes) > 0 {
-		return nodes, nil
-	}
-
-	// Attempt to traverse a SRV record
-	p = cayley.StartPath(g.store, quad.String(nstr)).FollowRecursive(
-		quad.String("srv_record"), 1, nil).Out("a_record", "aaaa_record")
-	g.optimizedIterate(p, func(value quad.Value) {
-		nodes = append(nodes, quad.ToString(value))
-	})
-	if len(nodes) > 0 {
-		return nodes, nil
-	}
-
-	// Traverse CNAME records
-	p = cayley.StartPath(g.store, quad.String(nstr)).FollowRecursive(
-		quad.String("cname_record"), 10, nil).Out("a_record", "aaaa_record")
-	g.optimizedIterate(p, func(value quad.Value) {
-		nodes = append(nodes, quad.ToString(value))
-	})
-	if len(nodes) > 0 {
-		return nodes, nil
-	}
-
-	return nodes, fmt.Errorf("%s: NameToIPAddrs: No addresses were discovered for %s", g.String(), nstr)
-}
-
-// NodeSources implements the GraphDatabase interface.
-func (g *CayleyGraph) NodeSources(node Node, events ...string) ([]string, error) {
-	g.Lock()
-	defer g.Unlock()
-
-	nstr := g.NodeToID(node)
-	if nstr == "" {
-		return nil, fmt.Errorf("%s: NodeSources: Invalid node reference argument", g.String())
-	}
-
-	allevents, err := g.allNodesOfType("event", events...)
-	if err != nil {
-		return nil, fmt.Errorf("%s: NodeSources: Failed to obtain the list of events", g.String())
-	}
-
-	eventset := stringset.New()
-	for _, event := range allevents {
-		if estr := g.NodeToID(event); estr != "" {
-			eventset.Insert(estr)
-		}
-	}
-
-	var sources []string
-	filter := stringset.New()
-
-	p := cayley.StartPath(g.store, quad.String(nstr)).InWithTags([]string{"predicate"}).Tag("event")
-	pb := p.Iterate(context.TODO())
-
-	pb.Paths(false).TagValues(nil, func(tags map[string]quad.Value) {
-		predval, predOK := tags["predicate"]
-		event, eventOK := tags["event"]
-		if !predOK || !eventOK {
-			return
-		}
-		pred := quad.ToString(predval)
-
-		if notDataSourceSet.Has(pred) {
-			return
-		}
-
-		if eventset.Has(quad.ToString(event)) && !filter.Has(pred) {
-			filter.Insert(pred)
-			sources = append(sources, pred)
-		}
-	})
-
-	if len(sources) == 0 {
-		return nil, fmt.Errorf("%s: NodeSources: Failed to discover edges leaving the node %s", g.String(), nstr)
-	}
-
-	return sources, nil
 }
 
 // InsertProperty implements the GraphDatabase interface.
