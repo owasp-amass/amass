@@ -1,4 +1,4 @@
-FROM golang:1.13-alpine3.10 as build
+FROM golang:1.14.2-alpine3.11 as build
 RUN apk --no-cache add git
 RUN go get github.com/OWASP/Amass; exit 0
 ENV GO111MODULE on
