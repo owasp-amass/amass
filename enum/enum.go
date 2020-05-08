@@ -537,7 +537,7 @@ func (e *Enumeration) updateLastActive(srv string) {
 	defer e.lastLock.Unlock()
 
 	// Only update active for core services once we run out of new FQDNs
-	if e.numSeqZeros >= 2 {
+	if e.numSeqZeros >= 2 && !e.Config.Passive {
 		var found bool
 
 		for _, s := range []requests.Service{e.dnsMgr, e.dataMgr} {
