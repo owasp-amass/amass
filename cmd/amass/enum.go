@@ -219,7 +219,7 @@ func runEnumCommand(clArgs []string) {
 	wg.Wait()
 
 	// If necessary, handle graph database migration
-	if !interrupted && len(e.Sys.GraphDatabases()) > 0 {
+	if !interrupted && !cfg.Passive && len(e.Sys.GraphDatabases()) > 0 {
 		fmt.Fprintf(color.Error, "\n%s\n", green("The enumeration has finished"))
 
 		// Copy the graph of findings into the system graph databases
