@@ -112,12 +112,16 @@ func (r *Robtex) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 		if line.Type == "A" {
 			ips.Insert(line.Data)
 		} else if line.Type == "NS" || line.Type == "MX" {
-			bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
-				Name:   strings.Trim(line.Data, "."),
-				Domain: req.Domain,
-				Tag:    r.Type(),
-				Source: r.String(),
-			})
+			name := strings.Trim(line.Data, ".")
+
+			if cfg.IsDomainInScope(name) {
+				bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
+					Name:   name,
+					Domain: req.Domain,
+					Tag:    r.Type(),
+					Source: r.String(),
+				})
+			}
 		}
 	}
 
@@ -139,12 +143,12 @@ loop:
 			}
 
 			for _, line := range r.parseDNSJSON(pdns) {
-				n := strings.Trim(line.Name, ".")
+				name := strings.Trim(line.Name, ".")
 
-				if d := cfg.WhichDomain(n); d != "" {
+				if domain := cfg.WhichDomain(name); domain != "" {
 					bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
-						Name:   n,
-						Domain: d,
+						Name:   name,
+						Domain: domain,
 						Tag:    r.Type(),
 						Source: r.String(),
 					})
