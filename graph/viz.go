@@ -40,7 +40,7 @@ func (g *Graph) vizNodes(uuid string, edges []*graphdb.Edge) ([]viz.Node, map[st
 
 			properties, err := g.db.ReadProperties(d.To, "type")
 			// We do not print the source or event nodes in the graph visualizations
-			if err != nil || len(properties) == 0 || 
+			if err != nil || len(properties) == 0 ||
 				properties[0].Value == "source" || properties[0].Value == "event" {
 				continue
 			}
