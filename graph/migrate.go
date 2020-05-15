@@ -6,16 +6,19 @@ package graph
 import (
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/OWASP/Amass/v3/graphdb"
 	"github.com/OWASP/Amass/v3/queue"
 	"github.com/OWASP/Amass/v3/semaphore"
 )
 
+const maxConcurrentDBRequests int = 3
+
 // MigrateEvent copies the nodes and edges related to the Event identified by the uuid from the receiver Graph into another.
 func (g *Graph) MigrateEvent(uuid string, to *Graph) error {
 	q := new(queue.Queue)
-	sem := semaphore.NewSimpleSemaphore(10)
+	sem := semaphore.NewSimpleSemaphore(maxConcurrentDBRequests)
 
 	idToNode, err := newNodeMap(uuid, g, to)
 	if err != nil {
@@ -51,25 +54,33 @@ func (g *Graph) MigrateEvent(uuid string, to *Graph) error {
 			continue
 		}
 
-		var wg sync.WaitGroup
+		elen := len(edges)
+		ch := make(chan error, elen)
 		for _, edge := range edges {
 			sem.Acquire(1)
-			wg.Add(1)
-			go g.migrateEdge(tocur, edge, to, q, idToNode, sem, &wg)
+			go g.migrateEdge(tocur, edge, to, q, idToNode, sem, ch)
 		}
-		wg.Wait()
+		// Wait for all error values from edge migrations
+		for i := 0; i < elen; i++ {
+			if err := <-ch; err != nil {
+				return err
+			}
+		}
 	}
 
 	return nil
 }
 
 func (g *Graph) migrateEdge(cur graphdb.Node, edge *graphdb.Edge, to *Graph,
-	q *queue.Queue, ids *nodeMap, sem semaphore.Semaphore, wg *sync.WaitGroup) {
-	defer wg.Done()
+	q *queue.Queue, ids *nodeMap, sem semaphore.Semaphore, ch chan error) {
 	defer sem.Release(1)
 
 	node, found, err := ids.getNode(g.db.NodeToID(edge.To), edge.To)
 	if err != nil {
+		if err.Error() == "out of scope" {
+			err = nil
+		}
+		ch <- err
 		return
 	}
 
@@ -77,11 +88,18 @@ func (g *Graph) migrateEdge(cur graphdb.Node, edge *graphdb.Edge, to *Graph,
 		q.Append(edge.To)
 	}
 
-	to.InsertEdge(&graphdb.Edge{
-		Predicate: edge.Predicate,
-		From:      cur,
-		To:        node,
-	})
+	for i := 0; i < 3; i++ {
+		err = to.InsertEdge(&graphdb.Edge{
+			Predicate: edge.Predicate,
+			From:      cur,
+			To:        node,
+		})
+		if err == nil {
+			break
+		}
+		time.Sleep(time.Second)
+	}
+	ch <- err
 }
 
 func (g *Graph) migrateNode(node graphdb.Node, to *Graph) (graphdb.Node, error) {
@@ -200,13 +218,17 @@ func (n *nodeMap) getNode(id string, fromNode graphdb.Node) (graphdb.Node, bool,
 	}
 
 	if !n.from.InEventScope(fromNode, n.uuid) {
-		return nil, false, fmt.Errorf("Graph: Migrate: This node (%s) is out of scope", id)
+		return nil, false, fmt.Errorf("out of scope")
 	}
 
 	var err error
-	node, err = n.from.migrateNode(fromNode, n.to)
-	if err == nil {
-		n.nodes[id] = node
+	for i := 0; i < 3; i++ {
+		node, err = n.from.migrateNode(fromNode, n.to)
+		if err == nil {
+			n.nodes[id] = node
+			break
+		}
+		time.Sleep(time.Second)
 	}
 
 	return node, false, err

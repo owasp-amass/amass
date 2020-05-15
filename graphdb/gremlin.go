@@ -41,12 +41,12 @@ func NewGremlin(url, user, pass string) *Gremlin {
 func (g *Gremlin) getClient() (*grammes.Client, error) {
 	if g.username != "" && g.password != "" {
 		return grammes.DialWithWebSocket(g.URL,
-			grammes.WithMaxConcurrentMessages(16),
+			grammes.WithMaxConcurrentMessages(4),
 			grammes.WithAuthUserPass(g.username, g.password))
 	}
 
 	return grammes.DialWithWebSocket(g.URL,
-		grammes.WithMaxConcurrentMessages(16))
+		grammes.WithMaxConcurrentMessages(4))
 }
 
 func (g *Gremlin) client() *grammes.Client {
