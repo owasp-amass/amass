@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"math/rand"
 	"os"
 	"time"
@@ -30,6 +31,8 @@ type trackArgs struct {
 	Since   string
 	Options struct {
 		History bool
+		NoColor bool
+		Silent  bool
 	}
 	Filepaths struct {
 		ConfigFile string
@@ -54,6 +57,8 @@ func runTrackCommand(clArgs []string) {
 	trackCommand.IntVar(&args.Last, "last", 0, "The number of recent enumerations to include in the tracking")
 	trackCommand.StringVar(&args.Since, "since", "", "Exclude all enumerations before (format: "+timeFormat+")")
 	trackCommand.BoolVar(&args.Options.History, "history", false, "Show the difference between all enumeration pairs")
+	trackCommand.BoolVar(&args.Options.NoColor, "nocolor", false, "Disable colorized output")
+	trackCommand.BoolVar(&args.Options.Silent, "silent", false, "Disable all output during execution")
 	trackCommand.StringVar(&args.Filepaths.ConfigFile, "config", "", "Path to the INI configuration file. Additional details below")
 	trackCommand.StringVar(&args.Filepaths.Directory, "dir", "", "Path to the directory containing the graph database")
 	trackCommand.StringVar(&args.Filepaths.Domains, "df", "", "Path to a file providing root domain names")
@@ -70,6 +75,14 @@ func runTrackCommand(clArgs []string) {
 	if help1 || help2 {
 		commandUsage(trackUsageMsg, trackCommand, trackBuf)
 		return
+	}
+
+	if args.Options.NoColor {
+		color.NoColor = true
+	}
+	if args.Options.Silent {
+		color.Output = ioutil.Discard
+		color.Error = ioutil.Discard
 	}
 
 	// Some input validation

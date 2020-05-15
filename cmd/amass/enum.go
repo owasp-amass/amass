@@ -11,6 +11,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"math/rand"
 	"os"
@@ -67,9 +68,11 @@ type enumArgs struct {
 		ListSources         bool
 		MonitorResolverRate bool
 		NoAlts              bool
+		NoColor             bool
 		NoLocalDatabase     bool
 		NoRecursive         bool
 		Passive             bool
+		Silent              bool
 		Sources             bool
 		Verbose             bool
 	}
@@ -118,9 +121,11 @@ func defineEnumOptionFlags(enumFlags *flag.FlagSet, args *enumArgs) {
 	enumFlags.BoolVar(&args.Options.ListSources, "list", false, "Print the names of all available data sources")
 	enumFlags.BoolVar(&args.Options.MonitorResolverRate, "noresolvrate", true, "Disable resolver rate monitoring")
 	enumFlags.BoolVar(&args.Options.NoAlts, "noalts", false, "Disable generation of altered names")
+	enumFlags.BoolVar(&args.Options.NoColor, "nocolor", false, "Disable colorized output")
 	enumFlags.BoolVar(&args.Options.NoLocalDatabase, "nolocaldb", false, "Disable saving data into a local database")
 	enumFlags.BoolVar(&args.Options.NoRecursive, "norecursive", false, "Turn off recursive brute forcing")
 	enumFlags.BoolVar(&args.Options.Passive, "passive", false, "Disable DNS resolution of names and dependent features")
+	enumFlags.BoolVar(&args.Options.Silent, "silent", false, "Disable all output during execution")
 	enumFlags.BoolVar(&args.Options.Sources, "src", false, "Print data sources for the discovered names")
 	enumFlags.BoolVar(&args.Options.Verbose, "v", false, "Output status / debug / troubleshooting info")
 }
@@ -280,6 +285,14 @@ func argsAndConfig(clArgs []string) (*config.Config, *enumArgs) {
 			g.Println(name)
 		}
 		return nil, &args
+	}
+
+	if args.Options.NoColor {
+		color.NoColor = true
+	}
+	if args.Options.Silent {
+		color.Output = ioutil.Discard
+		color.Error = ioutil.Discard
 	}
 
 	if len(args.AltWordListMask) > 0 {

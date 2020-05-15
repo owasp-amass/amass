@@ -6,6 +6,7 @@ package main
 import (
 	"bytes"
 	"flag"
+	"io/ioutil"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -30,6 +31,8 @@ type vizArgs struct {
 		GEXF       bool
 		Graphistry bool
 		Maltego    bool
+		NoColor    bool
+		Silent     bool
 	}
 	Filepaths struct {
 		ConfigFile string
@@ -64,6 +67,8 @@ func runVizCommand(clArgs []string) {
 	vizCommand.BoolVar(&args.Options.GEXF, "gexf", false, "Generate the Gephi Graph Exchange XML Format (GEXF) file")
 	vizCommand.BoolVar(&args.Options.Graphistry, "graphistry", false, "Generate the Graphistry JSON file")
 	vizCommand.BoolVar(&args.Options.Maltego, "maltego", false, "Generate the Maltego csv file")
+	vizCommand.BoolVar(&args.Options.NoColor, "nocolor", false, "Disable colorized output")
+	vizCommand.BoolVar(&args.Options.Silent, "silent", false, "Disable all output during execution")
 
 	if len(clArgs) < 1 {
 		commandUsage(vizUsageMsg, vizCommand, vizBuf)
@@ -77,6 +82,14 @@ func runVizCommand(clArgs []string) {
 	if help1 || help2 {
 		commandUsage(vizUsageMsg, vizCommand, vizBuf)
 		return
+	}
+
+	if args.Options.NoColor {
+		color.NoColor = true
+	}
+	if args.Options.Silent {
+		color.Output = ioutil.Discard
+		color.Error = ioutil.Discard
 	}
 
 	// Make sure at least one graph file format has been identified on the command-line

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"sort"
 	"strings"
@@ -38,7 +39,9 @@ type dbArgs struct {
 		ListEnumerations bool
 		ASNTableSummary  bool
 		DiscoveredNames  bool
+		NoColor          bool
 		ShowAll          bool
+		Silent           bool
 		Sources          bool
 	}
 	Filepaths struct {
@@ -70,7 +73,9 @@ func runDBCommand(clArgs []string) {
 	dbCommand.BoolVar(&args.Options.Sources, "src", false, "Print data sources for the discovered names")
 	dbCommand.BoolVar(&args.Options.ASNTableSummary, "summary", false, "Print Just ASN Table Summary")
 	dbCommand.BoolVar(&args.Options.DiscoveredNames, "names", false, "Print Just Discovered Names")
+	dbCommand.BoolVar(&args.Options.NoColor, "nocolor", false, "Disable colorized output")
 	dbCommand.BoolVar(&args.Options.ShowAll, "show", false, "Print the results for the enumeration index + domains provided")
+	dbCommand.BoolVar(&args.Options.Silent, "silent", false, "Disable all output during execution")
 	dbCommand.StringVar(&args.Filepaths.ConfigFile, "config", "", "Path to the INI configuration file. Additional details below")
 	dbCommand.StringVar(&args.Filepaths.Directory, "dir", "", "Path to the directory containing the graph database")
 	dbCommand.StringVar(&args.Filepaths.Domains, "df", "", "Path to a file providing root domain names")
@@ -87,6 +92,14 @@ func runDBCommand(clArgs []string) {
 	if help1 || help2 {
 		commandUsage(dbUsageMsg, dbCommand, dbBuf)
 		return
+	}
+
+	if args.Options.NoColor {
+		color.NoColor = true
+	}
+	if args.Options.Silent {
+		color.Output = ioutil.Discard
+		color.Error = ioutil.Discard
 	}
 
 	if args.Filepaths.Domains != "" {
