@@ -10,6 +10,8 @@ Did you write a blog post, magazine article or do a podcast about or mentioning 
   * [04/26/2020 - Mayonaise Talks About His Recon Workflow, How to Learn Different Topics, and How to Bug Bounty!](https://www.youtube.com/watch?v=SGLdv_4Iy44)
   * [09/08/2019 - Live Bug Bounty Recon Session on Yahoo (censys, altdns, amass) w/ @infosec_au](https://www.youtube.com/watch?v=m-eZfbgdl9I)
   * [09/01/2019 - Live Bug Bounty Recon Session on Yahoo (Amass, crts.sh, dirsearch) w/ @TheDawgyg](https://www.youtube.com/watch?v=u4dUnJ1U0T4)
+* [The Hackers Arsenal](https://www.youtube.com/channel/UC0z2vxoKkT4_VV5DHCEETgA):
+  * [04/24/2020 - AMASS: Automated SubDomain Enumeration and Reconnaissance (Full walk-though)](https://www.youtube.com/watch?v=8PaVBe0cbIU)
 * [Jason Haddix's Recon Streams](https://www.youtube.com/channel/UCk0f0svao7AKeK3RfiWxXEA/featured):
   * Stream #2:
     [ASNs, Xmind, Amass Intel, SSLscrape, ASNLookup ++](https://www.youtube.com/watch?v=5N7k0g7arYE)
@@ -29,16 +31,17 @@ Did you write a blog post, magazine article or do a podcast about or mentioning 
 
 ### Blogs & Articles
 
-* Blog post on [ncpd's Blog](https://medium.com/@_ncpd):
-  * [Subdomain enumeration made easy](https://medium.com/@_ncpd/subdomain-enumeration-made-easy-ba843037ab76)
-* Blog post on [Gökhan Güzelkokar's Blog](https://medium.com/@gguzelkokar.mdbf15):
-  * [Bug bounty resources & advices](https://medium.com/@gguzelkokar.mdbf15/bug-bounty-resources-advices-2cc9cfb69f6)
 * Blog post on [SecurityTrail's Blog](https://securitytrails.com/blog/):
+  * [What is OWASP? Top 10 Web Application Security Risks](https://securitytrails.com/blog/owasp-top-10)
   * [OWASP Amass: A Solid Information Gathering Tool](https://securitytrails.com/blog/owasp-amass)
   * [Top Linux Distros for Ethical Hacking and Penetration Testing](https://securitytrails.com/blog/top-linux-distributions-ethical-hacking-pentesting)
   * [5 Subdomain Takeover #ProTips](https://securitytrails.com/blog/subdomain-takeover-tips)
   * [Where You’ll Find Us: An Overview of SecurityTrails Integrations](https://securitytrails.com/blog/integrations-overview)
   * [Top 7 Subdomain Scanner Tools: Find Subdomains in Seconds](https://securitytrails.com/blog/subdomain-scanner-find-subdomains)
+* Blog post on [ncpd's Blog](https://medium.com/@_ncpd):
+  * [Subdomain enumeration made easy](https://medium.com/@_ncpd/subdomain-enumeration-made-easy-ba843037ab76)
+* Blog post on [Gökhan Güzelkokar's Blog](https://medium.com/@gguzelkokar.mdbf15):
+  * [Bug bounty resources & advices](https://medium.com/@gguzelkokar.mdbf15/bug-bounty-resources-advices-2cc9cfb69f6)
 * Blog post on [xploitprotocol's Blog](https://medium.com/@xploitprotocol):
   * [How to approach a target|bug bounty tips](https://medium.com/@xploitprotocol/how-to-approach-a-target-bug-bounty-tips-f371c7ec7985)
 * Blog post on [TrustedSec's Blog](https://www.trustedsec.com/blog):
