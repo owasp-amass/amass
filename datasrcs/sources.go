@@ -68,6 +68,7 @@ func GetAllSources(sys systems.System) []requests.Service {
 		NewPassiveTotal(sys),
 		NewPastebin(sys),
 		NewRADb(sys),
+		NewRapidDNS(sys),
 		NewRiddler(sys),
 		NewRobtex(sys),
 		NewSiteDossier(sys),
