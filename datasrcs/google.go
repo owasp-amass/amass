@@ -32,7 +32,7 @@ func NewGoogle(sys systems.System) *Google {
 	g := &Google{
 		SourceType: requests.SCRAPE,
 		quantity:   10,
-		limit:      100,
+		limit:      50,
 	}
 
 	g.BaseService = *requests.NewBaseService(g, "Google")
@@ -54,7 +54,7 @@ func (g *Google) OnStart() error {
 
 // OnDNSRequest implements the Service interface.
 func (g *Google) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
-	for i := 0; i <= 3; i++ {
+	for i := 1; i < 3; i++ {
 		g.executeQuery(ctx, req.Domain, i)
 	}
 }
@@ -92,7 +92,8 @@ loop:
 			if err != nil {
 				if strings.HasPrefix(fmt.Sprintf("%v", err), "429") {
 					errcount++
-					if errcount < 10 {
+					if errcount < num {
+						g.CheckRateLimit()
 						continue loop
 					}
 				}

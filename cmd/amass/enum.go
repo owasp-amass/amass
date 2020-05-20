@@ -483,10 +483,6 @@ loop:
 		case <-done:
 			break loop
 		case <-t.C:
-			if e.Config.Passive {
-				continue loop
-			}
-
 			started := time.Now()
 			extract()
 			next := time.Now().Sub(started) * 5
