@@ -58,6 +58,7 @@ func setupOptions() *dns.OPT {
 		Hdr: dns.RR_Header{
 			Name:   ".",
 			Rrtype: dns.TypeOPT,
+			Class:  dns.DefaultMsgSize,
 		},
 		Option: []dns.EDNS0{e},
 	}
