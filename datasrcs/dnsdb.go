@@ -101,7 +101,7 @@ func (d *DNSDB) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 }
 
 func (d *DNSDB) getURL(domain string) string {
-	return fmt.Sprintf("https://api.dnsdb.info/lookup/rrset/name/*.%s", domain)
+	return fmt.Sprintf("https://api.dnsdb.info/lookup/rrset/name/*.%s?limit=10000000", domain)
 }
 
 func (d *DNSDB) parse(ctx context.Context, page, domain string) []string {
