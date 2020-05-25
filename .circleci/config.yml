@@ -10,7 +10,7 @@ jobs:
 
     environment:
       GO111MODULE: "on"
-      PROJECT_DIR: /go/src/github.com/OWASP/Amass/
+      PROJECT_DIR: /go/src/github.com/OWASP/Amass
 
     working_directory: $PROJECT_DIR
 
@@ -31,7 +31,7 @@ jobs:
             cd $PROJECT_DIR
             /go/cc-test-reporter before-build
             go test -coverprofile=c.out -covermode=atomic ./...
-            /go/cc-test-reporter after-build -r $CODE_CLIMATE_TOKEN -t gocov -p $PROJECT_DIR --exit-code $?
+            /go/cc-test-reporter after-build -r $CODE_CLIMATE_TOKEN -t gocov -p $PROJECT_DIR/v3/ --exit-code $?
 
       - codecov/upload:
           conf: $PROJECT_DIR/.codecov.yml
