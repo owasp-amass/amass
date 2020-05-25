@@ -18,10 +18,10 @@ jobs:
       - checkout
 
       - run:
-        name: Setup Code Climate test-reporter
-        command: |
-          curl -L https://codeclimate.com/downloads/test-reporter/test-reporter-latest-linux-amd64 > /go/cc-test-reporter
-          chmod +x /go/cc-test-reporter
+          name: Setup Code Climate test-reporter
+          command: |
+            curl -L https://codeclimate.com/downloads/test-reporter/test-reporter-latest-linux-amd64 > /go/cc-test-reporter
+            chmod +x /go/cc-test-reporter
 
       - run:
           name: "Amass Unit Tests and Coverage Reports"
