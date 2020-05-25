@@ -54,7 +54,6 @@ func GetAllSources(sys systems.System) []requests.Service {
 		NewEntrust(sys),
 		NewExalead(sys),
 		NewGitHub(sys),
-		//NewGoogle(sys),
 		NewGoogleCT(sys),
 		NewHackerOne(sys),
 		NewHackerTarget(sys),
