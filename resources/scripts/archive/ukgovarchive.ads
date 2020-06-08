@@ -1,17 +1,21 @@
 -- Copyright 2017 Jeff Foley. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
-name = "DNSTable"
-type = "scrape"
+name = "UKGovArchive"
+type = "archive"
 
 function start()
     setratelimit(1)
 end
 
 function vertical(ctx, domain)
-    scrape(ctx, buildurl(domain))
+    crawl(ctx, buildurl(domain))
+end
+
+function resolved(ctx, name)
+    crawl(ctx, buildurl(name))
 end
 
 function buildurl(domain)
-    return "https://dnstable.com/domain/" .. domain
+    return "http://webarchive.nationalarchives.gov.uk/" .. year() .. "/" .. domain
 end

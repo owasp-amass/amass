@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -80,10 +81,16 @@ func (s *Script) newLuaState(cfg *config.Config) *lua.LState {
 
 	L.PreloadModule("json", luajson.Loader)
 	L.SetGlobal("log", L.NewFunction(s.log))
+	L.SetGlobal("year", L.NewFunction(s.year))
 	L.SetGlobal("find", L.NewFunction(s.find))
+	L.SetGlobal("submatch", L.NewFunction(s.submatch))
 	L.SetGlobal("active", L.NewFunction(s.active))
 	L.SetGlobal("newname", L.NewFunction(s.newName))
+	L.SetGlobal("newaddr", L.NewFunction(s.newAddr))
+	L.SetGlobal("inscope", L.NewFunction(s.inScope))
 	L.SetGlobal("request", L.NewFunction(s.request))
+	L.SetGlobal("scrape", L.NewFunction(s.scrape))
+	L.SetGlobal("crawl", L.NewFunction(s.crawl))
 	L.SetGlobal("setratelimit", L.NewFunction(s.setRateLimit))
 	L.SetGlobal("checkratelimit", L.NewFunction(s.checkRateLimit))
 	L.SetGlobal("subdomainre", lua.LString(dns.AnySubdomainRegexString()))
@@ -353,6 +360,40 @@ func (s *Script) newName(L *lua.LState) int {
 	return 0
 }
 
+// Wrapper so that scripts can send discovered IP addresses to Amass.
+func (s *Script) newAddr(L *lua.LState) int {
+	c := L.CheckUserData(1).Value.(*contextWrapper)
+	cfg := c.Ctx.Value(requests.ContextConfig).(*config.Config)
+	bus := c.Ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
+	if cfg == nil || bus == nil {
+		return 0
+	}
+
+	lv := L.Get(2)
+	a, ok := lv.(lua.LString)
+	if !ok {
+		return 0
+	}
+	addr := string(a)
+
+	lv = L.Get(3)
+	sub, ok := lv.(lua.LString)
+	if !ok {
+		return 0
+	}
+	name := string(sub)
+
+	if domain := cfg.WhichDomain(name); domain != "" {
+		bus.Publish(requests.NewAddrTopic, eventbus.PriorityHigh, &requests.AddrRequest{
+			Address: addr,
+			Domain:  domain,
+			Tag:     s.SourceType,
+			Source:  s.String(),
+		})
+	}
+	return 0
+}
+
 // Wrapper that exposes a simple regular expression matching function.
 func (s *Script) find(L *lua.LState) int {
 	lv := L.Get(1)
@@ -385,6 +426,44 @@ func (s *Script) find(L *lua.LState) int {
 	return 1
 }
 
+// Wrapper that exposes a regular expression matching function that supports submatches.
+func (s *Script) submatch(L *lua.LState) int {
+	lv := L.Get(1)
+
+	str, ok := lv.(lua.LString)
+	if !ok {
+		L.Push(lua.LNil)
+		return 1
+	}
+
+	lv = L.Get(2)
+	pattern, ok := lv.(lua.LString)
+	if !ok {
+		L.Push(lua.LNil)
+		return 1
+	}
+
+	re, err := regexp.Compile(string(pattern))
+	if err != nil {
+		L.Push(lua.LNil)
+		return 1
+	}
+
+	matches := re.FindStringSubmatch(string(str))
+	if matches == nil {
+		L.Push(lua.LNil)
+		return 1
+	}
+
+	tb := L.NewTable()
+	for _, match := range matches {
+		tb.Append(lua.LString(match))
+	}
+
+	L.Push(tb)
+	return 1
+}
+
 // Converts Go Content to Lua UserData.
 func (s *Script) contextToUserData(ctx context.Context) *lua.LUserData {
 	L := s.luaState
@@ -394,6 +473,25 @@ func (s *Script) contextToUserData(ctx context.Context) *lua.LUserData {
 	L.SetMetatable(ud, L.GetTypeMetatable("context"))
 
 	return ud
+}
+
+// Wrapper so that scripts can check if a subdomain name is in scope.
+func (s *Script) inScope(L *lua.LState) int {
+	c := L.CheckUserData(1).Value.(*contextWrapper)
+	cfg := c.Ctx.Value(requests.ContextConfig).(*config.Config)
+	if cfg == nil {
+		L.Push(lua.LFalse)
+		return 1
+	}
+
+	lv := L.Get(2)
+	if sub, ok := lv.(lua.LString); ok && cfg.IsDomainInScope(string(sub)) {
+		L.Push(lua.LTrue)
+		return 1
+	}
+
+	L.Push(lua.LFalse)
+	return 1
 }
 
 // Wrapper that allows scripts to make HTTP client requests.
@@ -437,6 +535,79 @@ func (s *Script) request(L *lua.LState) int {
 	return 2
 }
 
+// Wrapper so that scripts can scrape the contents of a GET request for subdomain names in scope.
+func (s *Script) scrape(L *lua.LState) int {
+	c := L.CheckUserData(1).Value.(*contextWrapper)
+	cfg := c.Ctx.Value(requests.ContextConfig).(*config.Config)
+	bus := c.Ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
+	if cfg == nil || bus == nil {
+		return 0
+	}
+
+	lv := L.Get(2)
+	u, ok := lv.(lua.LString)
+	if !ok {
+		return 0
+	}
+
+	page, err := http.RequestWebPage(string(u), nil, nil, "", "")
+	if err != nil {
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", s.String(), u, err))
+		return 0
+	}
+
+	re := dns.AnySubdomainRegex()
+	for _, n := range re.FindAllString(page, -1) {
+		name := cleanName(n)
+
+		if domain := cfg.WhichDomain(name); domain != "" {
+			bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
+				Name:   name,
+				Domain: domain,
+				Tag:    s.SourceType,
+				Source: s.String(),
+			})
+		}
+	}
+
+	return 0
+}
+
+// Wrapper so that scripts can crawl for subdomain names in scope.
+func (s *Script) crawl(L *lua.LState) int {
+	c := L.CheckUserData(1).Value.(*contextWrapper)
+	cfg := c.Ctx.Value(requests.ContextConfig).(*config.Config)
+	bus := c.Ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
+	if cfg == nil || bus == nil {
+		return 0
+	}
+
+	lv := L.Get(2)
+	u, ok := lv.(lua.LString)
+	if !ok {
+		return 0
+	}
+
+	names, err := crawl(c.Ctx, string(u))
+	if err != nil {
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", s.String(), u, err))
+		return 0
+	}
+
+	for _, name := range names {
+		if domain := cfg.WhichDomain(name); domain != "" {
+			bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
+				Name:   name,
+				Domain: domain,
+				Tag:    s.SourceType,
+				Source: s.String(),
+			})
+		}
+	}
+
+	return 0
+}
+
 func getStringField(L *lua.LState, t lua.LValue, key string) (string, bool) {
 	lv := L.GetField(t, key)
 	if s, ok := lv.(lua.LString); ok {
@@ -451,4 +622,10 @@ func getNumberField(L *lua.LState, t lua.LValue, key string) (float64, bool) {
 		return float64(n), true
 	}
 	return 0, false
+}
+
+// Wrapper so that archive scripts can obtain the current year as a string.
+func (s *Script) year(L *lua.LState) int {
+	L.Push(lua.LString(strconv.Itoa(time.Now().Year())))
+	return 1
 }

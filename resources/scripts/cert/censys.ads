@@ -1,3 +1,6 @@
+-- Copyright 2017 Jeff Foley. All rights reserved.
+-- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+
 local json = require("json")
 
 name = "Censys"
@@ -33,7 +36,7 @@ function apiquery(ctx, domain)
             method="POST",
             data=body,
             url=apiurl(),
-            headers={['Content-Type']= "application/json"},
+            headers={['Content-Type']="application/json"},
             id=api["key"],
             pass=api["secret"]
         })

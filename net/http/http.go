@@ -110,7 +110,7 @@ func RequestWebPage(urlstring string, body io.Reader, hvals map[string]string, u
 	resp, err := defaultClient.Do(req)
 	if err != nil {
 		return "", err
-	} else if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+	} else if resp.StatusCode < 200 || resp.StatusCode >= 400 {
 		return "", errors.New(resp.Status)
 	}
 

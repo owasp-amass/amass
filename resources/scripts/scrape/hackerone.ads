@@ -1,7 +1,7 @@
 -- Copyright 2017 Jeff Foley. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
-name = "DNSTable"
+name = "HackerOne"
 type = "scrape"
 
 function start()
@@ -13,5 +13,5 @@ function vertical(ctx, domain)
 end
 
 function buildurl(domain)
-    return "https://dnstable.com/domain/" .. domain
+    return "http://h1.nobbd.de/search.php?q=" .. domain
 end

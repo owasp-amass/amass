@@ -6,12 +6,11 @@ package datasrcs
 import (
 	"context"
 	"errors"
-	"fmt"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
-	"sort"
 
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/net/dns"
@@ -20,14 +19,14 @@ import (
 	"github.com/OWASP/Amass/v3/semaphore"
 	"github.com/OWASP/Amass/v3/stringset"
 	"github.com/OWASP/Amass/v3/systems"
-	"github.com/PuerkitoBio/goquery"
 	"github.com/geziyor/geziyor"
 	"github.com/geziyor/geziyor/client"
+	"github.com/PuerkitoBio/goquery"
 )
 
 var (
 	subRE       = dns.AnySubdomainRegex()
-	maxCrawlSem = semaphore.NewSimpleSemaphore(50)
+	maxCrawlSem = semaphore.NewSimpleSemaphore(5)
 	nameStripRE = regexp.MustCompile(`^u[0-9a-f]{4}|20|22|25|2b|2f|3d|3a|40`)
 )
 
@@ -35,14 +34,9 @@ var (
 func GetAllSources(sys systems.System) []requests.Service {
 	srvs := []requests.Service{
 		NewAlienVault(sys),
-		NewArchiveIt(sys),
-		NewArchiveToday(sys),
-		NewArquivo(sys),
 		NewAsk(sys),
 		NewBaidu(sys),
-		NewBinaryEdge(sys),
 		NewBing(sys),
-		NewBufferOver(sys),
 		NewCertSpotter(sys),
 		NewCIRCL(sys),
 		NewCommonCrawl(sys),
@@ -51,39 +45,25 @@ func GetAllSources(sys systems.System) []requests.Service {
 		NewDNSDumpster(sys),
 		NewDogpile(sys),
 		NewEntrust(sys),
-		NewExalead(sys),
 		NewGitHub(sys),
-		NewGoogleCT(sys),
-		NewHackerOne(sys),
 		NewHackerTarget(sys),
 		NewIPToASN(sys),
-		NewIPv4Info(sys),
-		NewLoCArchive(sys),
-		NewMnemonic(sys),
-		NewNetcraft(sys),
 		NewNetworksDB(sys),
-		NewOpenUKArchive(sys),
 		NewPassiveTotal(sys),
 		NewPastebin(sys),
 		NewRADb(sys),
-		NewRapidDNS(sys),
-		NewRiddler(sys),
 		NewRobtex(sys),
-		NewSiteDossier(sys),
 		NewSecurityTrails(sys),
 		NewShadowServer(sys),
 		NewShodan(sys),
 		NewSpyse(sys),
-		NewSublist3rAPI(sys),
 		NewTeamCymru(sys),
 		NewThreatCrowd(sys),
 		NewTwitter(sys),
-		NewUKGovArchive(sys),
 		NewUmbrella(sys),
 		NewURLScan(sys),
 		NewViewDNS(sys),
 		NewVirusTotal(sys),
-		NewWayback(sys),
 		NewWhoisXML(sys),
 		NewYahoo(sys),
 	}
@@ -148,7 +128,7 @@ func cleanName(name string) string {
 	return name
 }
 
-func crawl(ctx context.Context, baseURL, baseDomain, subdomain, domain string) ([]string, error) {
+func crawl(ctx context.Context, url string) ([]string, error) {
 	results := stringset.New()
 
 	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
@@ -159,29 +139,35 @@ func crawl(ctx context.Context, baseURL, baseDomain, subdomain, domain string) (
 	maxCrawlSem.Acquire(1)
 	defer maxCrawlSem.Release(1)
 
-	re := cfg.DomainRegex(domain)
-	if re == nil {
-		return results.Slice(), fmt.Errorf("crawler error: Failed to obtain regex object for: %s", domain)
+	scope := cfg.Domains()
+	target := re.FindString(url)
+	if target != "" {
+		scope = append(scope, target)
 	}
 
-	start := fmt.Sprintf("%s/%s/%s", baseURL, strconv.Itoa(time.Now().Year()), subdomain)
+	var count int
 	geziyor.NewGeziyor(&geziyor.Options{
-		AllowedDomains:              []string{baseDomain},
-		StartURLs:                   []string{start},
-		Timeout:                     30 * time.Second,
-		RobotsTxtDisabled:           true,
-		UserAgent:                   http.UserAgent,
-		RequestDelayRandomize:       true,
-		LogDisabled:                 true,
-		ConcurrentRequests:          3,
-		ConcurrentRequestsPerDomain: 3,
+		AllowedDomains:     scope,
+		StartURLs:          []string{url},
+		Timeout:            10 * time.Second,
+		RobotsTxtDisabled:  true,
+		UserAgent:          http.UserAgent,
+		LogDisabled:        true,
+		ConcurrentRequests: 5,
 		ParseFunc: func(g *geziyor.Geziyor, r *client.Response) {
+			for _, n := range subRE.FindAllString(string(r.Body), -1) {
+				name := cleanName(n)
+
+				if domain := cfg.WhichDomain(name); domain != "" {
+					results.Insert(name)
+				}
+			}
+
 			r.HTMLDoc.Find("a").Each(func(i int, s *goquery.Selection) {
 				if href, ok := s.Attr("href"); ok {
-					if sub := re.FindString(r.JoinURL(href)); sub != "" {
-						if cn := cleanName(sub); cn != "" {
-							results.Insert(cn)
-						}
+					if count < 5 {
+						g.Get(r.JoinURL(href), g.Opt.ParseFunc)
+						count++
 					}
 				}
 			})

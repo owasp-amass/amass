@@ -1,8 +1,8 @@
 -- Copyright 2017 Jeff Foley. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
-name = "DNSTable"
-type = "scrape"
+name = "BufferOver"
+type = "api"
 
 function start()
     setratelimit(1)
@@ -13,5 +13,5 @@ function vertical(ctx, domain)
 end
 
 function buildurl(domain)
-    return "https://dnstable.com/domain/" .. domain
+    return "https://dns.bufferover.run/dns?q=." .. domain
 end
