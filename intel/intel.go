@@ -310,6 +310,9 @@ func (c *Collection) ReverseWhois() error {
 	c.Bus.Subscribe(requests.NewWhoisTopic, collect)
 	defer c.Bus.Unsubscribe(requests.NewWhoisTopic, collect)
 
+	c.Bus.Subscribe(requests.SetActiveTopic, c.updateLastActive)
+	defer c.Bus.Unsubscribe(requests.SetActiveTopic, c.updateLastActive)
+
 	// Setup the stringset of included data sources
 	c.srcsLock.Lock()
 	srcs := stringset.New()

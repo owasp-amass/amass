@@ -48,6 +48,10 @@ type Service interface {
 	DNSRequest(ctx context.Context, req *DNSRequest)
 	OnDNSRequest(ctx context.Context, req *DNSRequest)
 
+	// Methods to support processing of resolved FQDNs
+	Resolved(ctx context.Context, req *DNSRequest)
+	OnResolved(ctx context.Context, req *DNSRequest)
+
 	// Methods to support processing of discovered proper subdomains
 	SubdomainDiscovered(ctx context.Context, req *DNSRequest, times int)
 	OnSubdomainDiscovered(ctx context.Context, req *DNSRequest, times int)
@@ -169,6 +173,16 @@ func (bas *BaseService) DNSRequest(ctx context.Context, req *DNSRequest) {
 
 // OnDNSRequest is called for a request that was queued via DNSRequest.
 func (bas *BaseService) OnDNSRequest(ctx context.Context, req *DNSRequest) {
+	return
+}
+
+// Resolved adds the request provided by the parameter to the service request channel.
+func (bas *BaseService) Resolved(ctx context.Context, req *DNSRequest) {
+	bas.queueRequest(bas.service.OnResolved, ctx, req)
+}
+
+// OnResolved is called for a request that was queued via Resolved.
+func (bas *BaseService) OnResolved(ctx context.Context, req *DNSRequest) {
 	return
 }
 

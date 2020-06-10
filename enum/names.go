@@ -174,10 +174,10 @@ func (r *SubdomainManager) InputName(req *requests.DNSRequest) {
 
 	r.enum.srcsLock.Lock()
 	defer r.enum.srcsLock.Unlock()
-	// Alert all data sources to the newly discovered subdomain name
+	// Alert all data sources to the newly discovered resolved FQDN
 	for _, srv := range r.enum.Sys.DataSources() {
 		if r.enum.srcs.Has(srv.String()) {
-			srv.SubdomainDiscovered(r.enum.ctx, req, 1)
+			srv.Resolved(r.enum.ctx, req)
 		}
 	}
 }
