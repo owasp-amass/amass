@@ -9,6 +9,8 @@ import (
 	"io/ioutil"
 	"log"
 	"net"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -622,4 +624,39 @@ func (c *Config) loadResolverSettings(cfg *ini.File) error {
 // UpdateConfig allows the provided Updater to update the current configuration.
 func (c *Config) UpdateConfig(update Updater) error {
 	return update.OverrideConfig(c)
+}
+
+// AcquireScripts returns all the default and user provided scripts for data sources.
+func (c *Config) AcquireScripts() ([]string, error) {
+	scripts := getDefaultScripts()
+
+	dir := OutputDirectory(c.Dir)
+	if dir == "" {
+		return scripts, nil
+	}
+
+	finfo, err := os.Stat(dir)
+	if os.IsNotExist(err) || !finfo.IsDir() {
+		return scripts, errors.New("The output directory does not exist or is not a directory")
+	}
+
+	filepath.Walk(filepath.Join(dir, "scripts"), func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		// Is this file not a script?
+		if info.IsDir() || filepath.Ext(info.Name()) != ".ads" {
+			return nil
+		}
+		// Get the script content
+		data, err := ioutil.ReadFile(path)
+		if err != nil {
+			return err
+		}
+
+		scripts = append(scripts, string(data))
+		return nil
+	})
+
+	return scripts, nil
 }

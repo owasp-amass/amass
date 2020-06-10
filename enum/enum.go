@@ -344,7 +344,7 @@ loop:
 				if inactive {
 					// End the enumeration!
 					e.Done()
-					continue loop
+					break loop
 				}
 
 				e.incNumSeqZeros()
@@ -404,15 +404,7 @@ func (e *Enumeration) requiredNumberOfNames(numsec int) int {
 	}
 
 	max := e.Config.MaxDNSQueries * numsec
-	// Acquire the number of DNS queries already in the queue
-	remaining := e.dnsNamesRemaining()
-	if remaining > 0 {
-		required = max - remaining
-	} else {
-		// If the queue is empty, then encourage additional activity
-		required = max
-	}
-
+	required = max - e.dnsNamesRemaining()
 	// Ensure a minimum value of one
 	if required <= 0 {
 		required = 1

@@ -166,12 +166,18 @@ func (r *SubdomainManager) InputName(req *requests.DNSRequest) {
 		}
 	}
 
+	labels := strings.Split(req.Name, ".")
+	// Do not further evaluate service subdomains
+	if labels[1] == "_tcp" || labels[1] == "_udp" || labels[1] == "_tls" {
+		return
+	}
+
 	r.enum.srcsLock.Lock()
 	defer r.enum.srcsLock.Unlock()
-	// Call DNSRequest for all web archive services
+	// Alert all data sources to the newly discovered resolved FQDN
 	for _, srv := range r.enum.Sys.DataSources() {
-		if srv.Type() == requests.ARCHIVE && r.enum.srcs.Has(srv.String()) {
-			srv.DNSRequest(r.enum.ctx, req)
+		if r.enum.srcs.Has(srv.String()) {
+			srv.Resolved(r.enum.ctx, req)
 		}
 	}
 }
@@ -242,15 +248,6 @@ func (r *SubdomainManager) checkSubdomain(req *requests.DNSRequest) {
 	// Check if the subdomain should be added to the markov model
 	if r.enum.Config.Alterations && r.enum.guessMgr != nil && times == 1 {
 		r.enum.guessMgr.AddSubdomain(sub)
-	}
-
-	r.enum.srcsLock.Lock()
-	defer r.enum.srcsLock.Unlock()
-	// Let all the data sources know about the discovered proper subdomain
-	for _, src := range r.enum.Sys.DataSources() {
-		if r.enum.srcs.Has(src.String()) {
-			src.SubdomainDiscovered(r.enum.ctx, subreq, times)
-		}
 	}
 }
 

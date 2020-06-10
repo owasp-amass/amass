@@ -192,3 +192,28 @@ func uniqueIntAppend(s []int, e string) []int {
 	}
 	return s
 }
+
+func getDefaultScripts() []string {
+	fsOnce.Do(openTheFS)
+
+	var scripts []string
+	fs.Walk(StatikFS, "/scripts", func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		// Is this file not a script?
+		if info.IsDir() || filepath.Ext(info.Name()) != ".ads" {
+			return nil
+		}
+		// Get the script content
+		data, err := fs.ReadFile(StatikFS, path)
+		if err != nil {
+			return err
+		}
+
+		scripts = append(scripts, string(data))
+		return nil
+	})
+
+	return scripts
+}

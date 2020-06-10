@@ -6,6 +6,8 @@ Did you write a blog post, magazine article or do a podcast about or mentioning 
 
 ### Pod- & Webcasts
 
+* [Josh Amishav-Zlatin's Channel](https://www.youtube.com/channel/UCajDbRGYBtgITfEbNUbWdsw):
+  * [Domain and Network Recon using Amass - Mapping the Attack Surface](https://www.youtube.com/watch?v=bsUeTyFoEtU)
 * [Nahamsec's Streams](https://www.twitch.tv/nahamsec):
   * [04/26/2020 - Mayonaise Talks About His Recon Workflow, How to Learn Different Topics, and How to Bug Bounty!](https://www.youtube.com/watch?v=SGLdv_4Iy44)
   * [09/08/2019 - Live Bug Bounty Recon Session on Yahoo (censys, altdns, amass) w/ @infosec_au](https://www.youtube.com/watch?v=m-eZfbgdl9I)
@@ -32,12 +34,19 @@ Did you write a blog post, magazine article or do a podcast about or mentioning 
 ### Blogs & Articles
 
 * Blog post on [SecurityTrail's Blog](https://securitytrails.com/blog/):
+  * [What is DNS Intelligence?](https://securitytrails.com/blog/dns-intelligence)
   * [What is OWASP? Top 10 Web Application Security Risks](https://securitytrails.com/blog/owasp-top-10)
   * [OWASP Amass: A Solid Information Gathering Tool](https://securitytrails.com/blog/owasp-amass)
   * [Top Linux Distros for Ethical Hacking and Penetration Testing](https://securitytrails.com/blog/top-linux-distributions-ethical-hacking-pentesting)
   * [5 Subdomain Takeover #ProTips](https://securitytrails.com/blog/subdomain-takeover-tips)
   * [Where You’ll Find Us: An Overview of SecurityTrails Integrations](https://securitytrails.com/blog/integrations-overview)
   * [Top 7 Subdomain Scanner Tools: Find Subdomains in Seconds](https://securitytrails.com/blog/subdomain-scanner-find-subdomains)
+* Blog post on [HackerOne's Blog](https://www.hackerone.com/blog):
+  * [100 Hacking Tools and Resources](https://www.hackerone.com/blog/100-hacking-tools-and-resources)
+* Blog post on [Synk's Blog](https://snyk.io/blog/):
+  * [Mitigating clickJacking—the DevSecOps way!](https://snyk.io/blog/mitigating-clickjacking-the-devsecops-way/)
+* Blog post on [Syed Abuthahir's Blog](https://medium.com/@syedabuthahir):
+  * [How was I able to download customer data dump](https://medium.com/@syedabuthahir/how-was-i-able-to-download-customer-data-dump-9cd645146a3c)
 * Blog post on [ncpd's Blog](https://medium.com/@_ncpd):
   * [Subdomain enumeration made easy](https://medium.com/@_ncpd/subdomain-enumeration-made-easy-ba843037ab76)
 * Blog post on [Gökhan Güzelkokar's Blog](https://medium.com/@gguzelkokar.mdbf15):
@@ -59,6 +68,8 @@ Did you write a blog post, magazine article or do a podcast about or mentioning 
   * [10 Recon Tools For Bug Bounty](https://medium.com/@hackbotone/10-recon-tools-for-bug-bounty-bafa8a5961bd)
 * Blog post on [Hahwul's Blog](https://www.hahwul.com):
   * [Find Subdomain Takeover with Amass + SubJack](https://www.hahwul.com/2019/10/find-subdomain-takeover-with-amass-and-subjack.html)
+* Blog post on [Felipe Caon's Blog](https://medium.com/@caon):
+  * [Recon done right](https://medium.com/@caon/recon-done-right-2210f5e426cb)
 * Article on [Hacker Toolbelt](https://medium.com/hacker-toolbelt):
   * [OWASP Amass OSINT Reconnaissance](https://medium.com/hacker-toolbelt/owasp-amass-osint-reconnaissance-9b57d81fb958)
   by [Miguel Sampaio da Veiga](https://medium.com/@sampaio.veiga)

@@ -1,4 +1,3 @@
-
 # [![OWASP Logo](../images/owasp_logo.png) OWASP Amass](https://owasp.org/www-project-amass/) - Users' Guide
 
 ![Network graph](../images/network_06092018.png "Amass Network Mapping")

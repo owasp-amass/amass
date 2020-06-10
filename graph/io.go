@@ -42,6 +42,10 @@ func (g *Graph) EventOutput(uuid string, filter stringfilter.Filter, cache *amas
 	sem := semaphore.NewSimpleSemaphore(10)
 	output := make(chan *requests.Output, 10000)
 	for _, name := range names {
+		if n := g.db.NodeToID(name); n == "" || filter.Has(n) {
+			continue
+		}
+
 		sem.Acquire(1)
 		go g.buildOutput(name, uuid, cache, output, sem)
 		count++
