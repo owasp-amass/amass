@@ -17,8 +17,8 @@ import (
 	amassnet "github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/net/http"
 	"github.com/OWASP/Amass/v3/requests"
-	lua "github.com/yuin/gopher-lua"
 	"github.com/OWASP/Amass/v3/stringset"
+	lua "github.com/yuin/gopher-lua"
 )
 
 type contextWrapper struct {

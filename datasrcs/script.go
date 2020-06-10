@@ -32,7 +32,7 @@ type Script struct {
 	address    lua.LValue
 	asn        lua.LValue
 	resolved   lua.LValue
-	subdomain   lua.LValue
+	subdomain  lua.LValue
 }
 
 // NewScript returns he object initialized, but not yet started.
