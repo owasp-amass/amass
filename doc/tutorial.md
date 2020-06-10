@@ -1,4 +1,4 @@
-# How to Use [![OWASP Logo](https://github.com/OWASP/Amass/blob/master/images/owasp_logo.png) OWASP Amass](https://owasp.org/www-project-amass/) - An Extensive Tutorial
+# [![OWASP Logo](https://github.com/OWASP/Amass/blob/master/images/owasp_logo.png) OWASP Amass](https://owasp.org/www-project-amass/) - An Extensive Tutorial
 
 ![Network graph](https://github.com/OWASP/Amass/blob/master/images/network_06092018.png "Amass Network Mapping")
 
