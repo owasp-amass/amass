@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"sort"
 
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/net/dns"
@@ -42,14 +43,12 @@ func GetAllSources(sys systems.System) []requests.Service {
 		NewBinaryEdge(sys),
 		NewBing(sys),
 		NewBufferOver(sys),
-		NewCensys(sys),
 		NewCertSpotter(sys),
 		NewCIRCL(sys),
 		NewCommonCrawl(sys),
 		NewCrtsh(sys),
 		NewDNSDB(sys),
 		NewDNSDumpster(sys),
-		NewDNSTable(sys),
 		NewDogpile(sys),
 		NewEntrust(sys),
 		NewExalead(sys),
@@ -89,6 +88,14 @@ func GetAllSources(sys systems.System) []requests.Service {
 		NewYahoo(sys),
 	}
 
+	if scripts, err := sys.Config().AcquireScripts(); err == nil {
+		for _, script := range scripts {
+			if s := NewScript(script, sys); s != nil {
+				srvs = append(srvs, s)
+			}
+		}
+	}
+
 	// Filtering in-place: https://github.com/golang/go/wiki/SliceTricks
 	i := 0
 	for _, s := range srvs {
@@ -98,6 +105,10 @@ func GetAllSources(sys systems.System) []requests.Service {
 		}
 	}
 	srvs = srvs[:i]
+
+	sort.Slice(srvs, func(i, j int) bool {
+		return srvs[i].String() < srvs[j].String()
+	})
 	return srvs
 }
 

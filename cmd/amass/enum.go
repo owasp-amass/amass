@@ -488,6 +488,8 @@ loop:
 			next := time.Now().Sub(started) * 5
 			if next < 3*time.Second {
 				next = 3 * time.Second
+			} else if next > 10*time.Second {
+				next = 10 * time.Second
 			}
 			t.Reset(next)
 		}
@@ -511,7 +513,7 @@ func signalHandler(e *enum.Enumeration) {
 	// Signal the enumeration to finish
 	e.Done()
 	// Wait for output operations to complete
-	time.Sleep(5 * time.Second)
+	time.Sleep(20 * time.Second)
 	os.Exit(1)
 }
 

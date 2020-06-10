@@ -6,6 +6,8 @@ Did you write a blog post, magazine article or do a podcast about or mentioning 
 
 ### Pod- & Webcasts
 
+* [Josh Amishav-Zlatin's Channel](https://www.youtube.com/channel/UCajDbRGYBtgITfEbNUbWdsw):
+  * [Domain and Network Recon using Amass - Mapping the Attack Surface](https://www.youtube.com/watch?v=bsUeTyFoEtU)
 * [Nahamsec's Streams](https://www.twitch.tv/nahamsec):
   * [04/26/2020 - Mayonaise Talks About His Recon Workflow, How to Learn Different Topics, and How to Bug Bounty!](https://www.youtube.com/watch?v=SGLdv_4Iy44)
   * [09/08/2019 - Live Bug Bounty Recon Session on Yahoo (censys, altdns, amass) w/ @infosec_au](https://www.youtube.com/watch?v=m-eZfbgdl9I)
@@ -31,6 +33,12 @@ Did you write a blog post, magazine article or do a podcast about or mentioning 
 
 ### Blogs & Articles
 
+* Blog post on [HackerOne's Blog](https://www.hackerone.com/blog):
+  * [100 Hacking Tools and Resources](https://www.hackerone.com/blog/100-hacking-tools-and-resources)
+* Blog post on [Synk's Blog](https://snyk.io/blog/):
+  * [Mitigating clickJacking—the DevSecOps way!](https://snyk.io/blog/mitigating-clickjacking-the-devsecops-way/)
+* Blog post on [Syed Abuthahir's Blog](https://medium.com/@syedabuthahir):
+  * [How was I able to download customer data dump](https://medium.com/@syedabuthahir/how-was-i-able-to-download-customer-data-dump-9cd645146a3c)
 * Blog post on [SecurityTrail's Blog](https://securitytrails.com/blog/):
   * [What is OWASP? Top 10 Web Application Security Risks](https://securitytrails.com/blog/owasp-top-10)
   * [OWASP Amass: A Solid Information Gathering Tool](https://securitytrails.com/blog/owasp-amass)
