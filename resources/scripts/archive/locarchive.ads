@@ -17,5 +17,5 @@ function resolved(ctx, name)
 end
 
 function buildurl(domain)
-    return "http://webarchive.loc.gov/all/" .. year() .. "/" .. domain
+    return "http://webarchive.loc.gov/all/" .. os.date("%Y") .. "/" .. domain
 end

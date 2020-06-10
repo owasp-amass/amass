@@ -19,9 +19,9 @@ import (
 	"github.com/OWASP/Amass/v3/semaphore"
 	"github.com/OWASP/Amass/v3/stringset"
 	"github.com/OWASP/Amass/v3/systems"
+	"github.com/PuerkitoBio/goquery"
 	"github.com/geziyor/geziyor"
 	"github.com/geziyor/geziyor/client"
-	"github.com/PuerkitoBio/goquery"
 )
 
 var (
@@ -34,38 +34,27 @@ var (
 func GetAllSources(sys systems.System) []requests.Service {
 	srvs := []requests.Service{
 		NewAlienVault(sys),
-		NewAsk(sys),
-		NewBaidu(sys),
-		NewBing(sys),
-		NewCertSpotter(sys),
-		NewCIRCL(sys),
 		NewCommonCrawl(sys),
 		NewCrtsh(sys),
 		NewDNSDB(sys),
 		NewDNSDumpster(sys),
-		NewDogpile(sys),
 		NewEntrust(sys),
 		NewGitHub(sys),
-		NewHackerTarget(sys),
 		NewIPToASN(sys),
 		NewNetworksDB(sys),
 		NewPassiveTotal(sys),
 		NewPastebin(sys),
 		NewRADb(sys),
 		NewRobtex(sys),
-		NewSecurityTrails(sys),
 		NewShadowServer(sys),
-		NewShodan(sys),
 		NewSpyse(sys),
 		NewTeamCymru(sys),
-		NewThreatCrowd(sys),
 		NewTwitter(sys),
 		NewUmbrella(sys),
 		NewURLScan(sys),
 		NewViewDNS(sys),
 		NewVirusTotal(sys),
 		NewWhoisXML(sys),
-		NewYahoo(sys),
 	}
 
 	if scripts, err := sys.Config().AcquireScripts(); err == nil {
@@ -140,7 +129,7 @@ func crawl(ctx context.Context, url string) ([]string, error) {
 	defer maxCrawlSem.Release(1)
 
 	scope := cfg.Domains()
-	target := re.FindString(url)
+	target := subRE.FindString(url)
 	if target != "" {
 		scope = append(scope, target)
 	}

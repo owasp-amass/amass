@@ -17,5 +17,5 @@ function resolved(ctx, name)
 end
 
 function buildurl(domain)
-    return "http://webarchive.nationalarchives.gov.uk/" .. year() .. "/" .. domain
+    return "http://webarchive.nationalarchives.gov.uk/" .. os.date("%Y") .. "/" .. domain
 end

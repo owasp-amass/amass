@@ -17,5 +17,5 @@ function resolved(ctx, name)
 end
 
 function buildurl(domain)
-    return "https://wayback.archive-it.org/all/" .. year() .. "/" .. domain
+    return "https://wayback.archive-it.org/all/" .. os.date("%Y") .. "/" .. domain
 end

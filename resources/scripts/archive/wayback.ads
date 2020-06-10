@@ -17,5 +17,5 @@ function resolved(ctx, name)
 end
 
 function buildurl(domain)
-    return "http://web.archive.org/web/" .. year() .. "/" .. domain
+    return "http://web.archive.org/web/" .. os.date("%Y") .. "/" .. domain
 end

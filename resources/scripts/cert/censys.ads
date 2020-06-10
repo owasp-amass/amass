@@ -28,7 +28,7 @@ function apiquery(ctx, domain)
             page=p,
             fields={"parsed.names"},
         })
-        if (err ~= nil and err ~= '') then
+        if (err ~= nil and err ~= "") then
             return
         end
 
@@ -38,9 +38,9 @@ function apiquery(ctx, domain)
             url=apiurl(),
             headers={['Content-Type']="application/json"},
             id=api["key"],
-            pass=api["secret"]
+            pass=api["secret"],
         })
-        if (err ~= nil and err ~= '') then
+        if (err ~= nil and err ~= "") then
             return
         end
 

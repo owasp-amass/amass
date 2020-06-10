@@ -1,6 +1,8 @@
 -- Copyright 2017 Jeff Foley. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
+local url = require("url")
+
 name = "GoogleCT"
 type = "cert"
 
@@ -17,7 +19,7 @@ function vertical(ctx, domain)
 
     while(true) do
         local page, err = request({
-            url=buildurl(domain, token),
+            ['url']=buildurl(domain, token),
             headers=hdrs,
         })
         if (err ~= nil and err ~= "") then
@@ -37,21 +39,21 @@ function vertical(ctx, domain)
 end
 
 function buildurl(domain, token)
-    local url = "https://www.google.com/transparencyreport/api/v3/httpsreport/ct/certsearch"
-
+    local base = "https://www.google.com/transparencyreport/api/v3/httpsreport/ct/certsearch"
     if token ~= "" then
-        url = url .. "/page"
+        base = base .. "/page"
     end
 
-    url = url .. "?domain=" .. domain
-    url = url .. "&include_expired=true"
-    url = url .. "&include_subdomains=true"
-
+    local params = {
+        ['domain']=domain,
+        ['include_expired']="true",
+        ['include_subdomains']="true",
+    }
     if token ~= "" then
-        url = url .. "&p=" .. token
+        params['p'] = token
     end
 
-    return url
+    return base .. "?" .. url.build_query_string(params)
 end
 
 function sendnames(ctx, content)
