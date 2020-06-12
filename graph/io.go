@@ -40,7 +40,7 @@ func (g *Graph) EventOutput(uuid string, filter stringfilter.Filter, cache *amas
 
 	var count int
 	sem := semaphore.NewSimpleSemaphore(10)
-	output := make(chan *requests.Output, 10000)
+	output := make(chan *requests.Output, len(names))
 	for _, name := range names {
 		if n := g.db.NodeToID(name); n == "" || filter.Has(n) {
 			continue
