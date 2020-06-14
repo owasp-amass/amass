@@ -251,8 +251,6 @@ func (s *Script) OnResolved(ctx context.Context, req *requests.DNSRequest) {
 	}
 
 	s.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, s.String())
-
 	L.CallByParam(lua.P{
 		Fn:      s.resolved,
 		NRet:    0,
@@ -275,8 +273,6 @@ func (s *Script) OnSubdomainDiscovered(ctx context.Context, req *requests.DNSReq
 	}
 
 	s.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, s.String())
-
 	L.CallByParam(lua.P{
 		Fn:      s.subdomain,
 		NRet:    0,
