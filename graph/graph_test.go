@@ -3,7 +3,7 @@ package graph
 import (
 	"testing"
 
-	"github.com/OWASP/Amass/v3/graph/db"
+	"github.com/OWASP/Amass/v3/graphdb"
 )
 
 var graphTest = []struct {
@@ -39,7 +39,8 @@ var graphTest = []struct {
 }
 
 func TestNewGraph(t *testing.T) {
-	got := NewGraph(db.NewCayleyGraphMemory())
+	db := graphdb.NewCayleyGraphMemory()
+	got := NewGraph(db)
 	t.Run("Testing NewGraph...", func(t *testing.T) {
 		if got == nil {
 			t.Errorf("Database is nil")
@@ -47,8 +48,8 @@ func TestNewGraph(t *testing.T) {
 	})
 
 	t.Run("Testing db.String...", func(t *testing.T) {
-		get := got.db.String()
-		expected := "Cayley Graph"
+		get := got.String()
+		expected := db.String()
 
 		if get != expected {
 			t.Errorf("Error running String().\ngot %v\nwanted:%v", get, expected)
@@ -69,7 +70,7 @@ func TestNewGraph(t *testing.T) {
 		}
 
 		t.Run("Testing InsertEdge...", func(t *testing.T) {
-			testEdge := &db.Edge{
+			testEdge := &graphdb.Edge{
 				Predicate: "testing",
 				From:      nodeOne,
 				To:        nodeTwo,
@@ -85,5 +86,4 @@ func TestNewGraph(t *testing.T) {
 
 	})
 	got.Close()
-
 }

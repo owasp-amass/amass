@@ -11,6 +11,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"math/rand"
 	"os"
@@ -18,14 +19,18 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
 	"github.com/OWASP/Amass/v3/config"
+	"github.com/OWASP/Amass/v3/datasrcs"
 	"github.com/OWASP/Amass/v3/enum"
 	"github.com/OWASP/Amass/v3/format"
-	"github.com/OWASP/Amass/v3/services"
+	"github.com/OWASP/Amass/v3/requests"
+	"github.com/OWASP/Amass/v3/stringfilter"
 	"github.com/OWASP/Amass/v3/stringset"
+	"github.com/OWASP/Amass/v3/systems"
 	"github.com/fatih/color"
 )
 
@@ -33,9 +38,7 @@ const (
 	enumUsageMsg = "enum [options] -d DOMAIN"
 )
 
-var (
-	finished chan struct{}
-)
+var interrupted bool
 
 type enumArgs struct {
 	Addresses         format.ParseIPs
@@ -65,12 +68,12 @@ type enumArgs struct {
 		ListSources         bool
 		MonitorResolverRate bool
 		NoAlts              bool
+		NoColor             bool
+		NoLocalDatabase     bool
 		NoRecursive         bool
 		Passive             bool
-		PublicDNS           bool
-		ScoreResolvers      bool
+		Silent              bool
 		Sources             bool
-		Unresolved          bool
 		Verbose             bool
 	}
 	Filepaths struct {
@@ -102,7 +105,7 @@ func defineEnumArgumentFlags(enumFlags *flag.FlagSet, args *enumArgs) {
 	enumFlags.Var(&args.Excluded, "exclude", "Data source names separated by commas to be excluded")
 	enumFlags.Var(&args.Included, "include", "Data source names separated by commas to be included")
 	enumFlags.IntVar(&args.MaxDNSQueries, "max-dns-queries", 0, "Maximum number of concurrent DNS queries")
-	enumFlags.IntVar(&args.MinForRecursive, "min-for-recursive", 0, "Number of subdomain discoveries before recursive brute forcing")
+	enumFlags.IntVar(&args.MinForRecursive, "min-for-recursive", 1, "Subdomain labels seen before recursive brute forcing")
 	enumFlags.Var(&args.Ports, "p", "Ports separated by commas (default: 443)")
 	enumFlags.Var(&args.Resolvers, "r", "IP addresses of preferred DNS resolvers (can be used multiple times)")
 	enumFlags.IntVar(&args.Timeout, "timeout", 0, "Number of minutes to let enumeration run before quitting")
@@ -118,12 +121,12 @@ func defineEnumOptionFlags(enumFlags *flag.FlagSet, args *enumArgs) {
 	enumFlags.BoolVar(&args.Options.ListSources, "list", false, "Print the names of all available data sources")
 	enumFlags.BoolVar(&args.Options.MonitorResolverRate, "noresolvrate", true, "Disable resolver rate monitoring")
 	enumFlags.BoolVar(&args.Options.NoAlts, "noalts", false, "Disable generation of altered names")
+	enumFlags.BoolVar(&args.Options.NoColor, "nocolor", false, "Disable colorized output")
+	enumFlags.BoolVar(&args.Options.NoLocalDatabase, "nolocaldb", false, "Disable saving data into a local database")
 	enumFlags.BoolVar(&args.Options.NoRecursive, "norecursive", false, "Turn off recursive brute forcing")
 	enumFlags.BoolVar(&args.Options.Passive, "passive", false, "Disable DNS resolution of names and dependent features")
-	enumFlags.BoolVar(&args.Options.PublicDNS, "public-dns", false, "Use public-dns.info resolver list")
-	enumFlags.BoolVar(&args.Options.ScoreResolvers, "noresolvscore", true, "Disable resolver reliability scoring")
+	enumFlags.BoolVar(&args.Options.Silent, "silent", false, "Disable all output during execution")
 	enumFlags.BoolVar(&args.Options.Sources, "src", false, "Print data sources for the discovered names")
-	enumFlags.BoolVar(&args.Options.Unresolved, "include-unresolvable", false, "Output DNS names that did not resolve")
 	enumFlags.BoolVar(&args.Options.Verbose, "v", false, "Output status / debug / troubleshooting info")
 }
 
@@ -145,6 +148,99 @@ func defineEnumFilepathFlags(enumFlags *flag.FlagSet, args *enumArgs) {
 }
 
 func runEnumCommand(clArgs []string) {
+	// Seed the default pseudo-random number generator
+	rand.Seed(time.Now().UTC().UnixNano())
+
+	// Extract the correct config from the user provided arguments and/or configuration file
+	cfg, args := argsAndConfig(clArgs)
+	if cfg == nil {
+		return
+	}
+	createOutputDirectory(cfg)
+
+	rLog, wLog := io.Pipe()
+	// Setup logging so that messages can be written to the file and used by the program
+	cfg.Log = log.New(wLog, "", log.Lmicroseconds)
+	logfile := filepath.Join(config.OutputDirectory(cfg.Dir), "amass.log")
+	if args.Filepaths.LogFile != "" {
+		logfile = args.Filepaths.LogFile
+	}
+
+	// Start handling the log messages
+	go writeLogsAndMessages(rLog, logfile, args.Options.Verbose)
+
+	// Create the System that will provide architecture to this enumeration
+	sys, err := systems.NewLocalSystem(cfg)
+	if err != nil {
+		r.Fprintf(color.Error, "%v\n", err)
+		os.Exit(1)
+	}
+	sys.SetDataSources(datasrcs.GetAllSources(sys))
+
+	// Setup the new enumeration
+	e := enum.NewEnumeration(cfg, sys)
+	if e == nil {
+		r.Fprintf(color.Error, "%s\n", "Failed to setup the enumeration")
+		os.Exit(1)
+	}
+	defer e.Close()
+
+	var wg sync.WaitGroup
+	var outChans []chan *requests.Output
+	// This channel sends the signal for goroutines to terminate
+	done := make(chan struct{})
+
+	wg.Add(1)
+	// This goroutine will handle printing the output
+	printOutChan := make(chan *requests.Output, 1000)
+	go printOutput(e, args, printOutChan, &wg)
+	outChans = append(outChans, printOutChan)
+
+	wg.Add(1)
+	// This goroutine will handle saving the output to the text file
+	txtOutChan := make(chan *requests.Output, 1000)
+	go saveTextOutput(e, args, txtOutChan, &wg)
+	outChans = append(outChans, txtOutChan)
+
+	if !args.Options.Passive {
+		wg.Add(1)
+		// This goroutine will handle saving the output to the JSON file
+		jsonOutChan := make(chan *requests.Output, 1000)
+		go saveJSONOutput(e, args, jsonOutChan, &wg)
+		outChans = append(outChans, jsonOutChan)
+	}
+
+	wg.Add(1)
+	go processOutput(e, outChans, done, &wg)
+
+	go signalHandler(e)
+	// Start the enumeration process
+	if err := e.Start(); err != nil {
+		r.Println(err)
+		os.Exit(1)
+	}
+	// Let all the goroutines know that the enumeration has finished
+	close(done)
+	wg.Wait()
+
+	// If necessary, handle graph database migration
+	if !interrupted && !cfg.Passive && len(e.Sys.GraphDatabases()) > 0 {
+		fmt.Fprintf(color.Error, "\n%s\n", green("The enumeration has finished"))
+
+		// Copy the graph of findings into the system graph databases
+		for _, g := range e.Sys.GraphDatabases() {
+			fmt.Fprintf(color.Error, "%s%s%s\n",
+				yellow("Discoveries are being migrated into the "), yellow(g.String()), yellow(" database"))
+
+			if err := e.Graph.MigrateEvent(e.Config.UUID.String(), g); err != nil {
+				fmt.Fprintf(color.Error, "%s%s%s%s\n",
+					red("The database migration to "), red(g.String()), red(" failed: "), red(err.Error()))
+			}
+		}
+	}
+}
+
+func argsAndConfig(clArgs []string) (*config.Config, *enumArgs) {
 	args := enumArgs{
 		AltWordList:       stringset.New(),
 		AltWordListMask:   stringset.New(),
@@ -171,7 +267,7 @@ func runEnumCommand(clArgs []string) {
 
 	if len(clArgs) < 1 {
 		commandUsage(enumUsageMsg, enumCommand, enumBuf)
-		return
+		return nil, &args
 	}
 
 	if err := enumCommand.Parse(clArgs); err != nil {
@@ -180,7 +276,7 @@ func runEnumCommand(clArgs []string) {
 	}
 	if help1 || help2 {
 		commandUsage(enumUsageMsg, enumCommand, enumBuf)
-		return
+		return nil, &args
 	}
 
 	// Check if the user has requested the data source names
@@ -188,7 +284,15 @@ func runEnumCommand(clArgs []string) {
 		for _, name := range GetAllSourceNames() {
 			g.Println(name)
 		}
-		return
+		return nil, &args
+	}
+
+	if args.Options.NoColor {
+		color.NoColor = true
+	}
+	if args.Options.Silent {
+		color.Output = ioutil.Discard
+		color.Error = ioutil.Discard
 	}
 
 	if len(args.AltWordListMask) > 0 {
@@ -235,131 +339,168 @@ func runEnumCommand(clArgs []string) {
 		os.Exit(1)
 	}
 
-	rLog, wLog := io.Pipe()
-	cfg.Log = log.New(wLog, "", log.Lmicroseconds)
-	logfile := filepath.Join(config.OutputDirectory(cfg.Dir), "amass.log")
-	if args.Filepaths.LogFile != "" {
-		logfile = args.Filepaths.LogFile
-	}
-
-	createOutputDirectory(cfg)
-	go writeLogsAndMessages(rLog, logfile, args.Options.Verbose)
-
-	sys, err := services.NewLocalSystem(cfg)
-	if err != nil {
-		r.Fprintf(color.Error, "%v\n", err)
-		os.Exit(1)
-	}
-
-	// Seed the default pseudo-random number generator
-	rand.Seed(time.Now().UTC().UnixNano())
-
-	e := enum.NewEnumeration(sys)
-	if e == nil {
-		r.Fprintf(color.Error, "%s\n", "No DNS resolvers passed the sanity check")
-		os.Exit(1)
-	}
-	e.Config = cfg
-
-	processEnumOutput(e, &args)
-	//graph := sys.GraphDatabases()[0]
-	//fmt.Println(graph.DumpGraph())
+	return cfg, &args
 }
 
-func processEnumOutput(e *enum.Enumeration, args *enumArgs) {
-	var err error
-	dir := config.OutputDirectory(e.Config.Dir)
+func printOutput(e *enum.Enumeration, args *enumArgs, output chan *requests.Output, wg *sync.WaitGroup) {
+	defer wg.Done()
 
+	var total int
+	tags := make(map[string]int)
+	asns := make(map[int]*format.ASNSummaryData)
+	// Print all the output returned by the enumeration
+	for out := range output {
+		out.Addresses = format.DesiredAddrTypes(out.Addresses, args.Options.IPv4, args.Options.IPv6)
+		if !e.Config.Passive && len(out.Addresses) <= 0 {
+			continue
+		}
+
+		total++
+		if !args.Options.Passive {
+			format.UpdateSummaryData(out, tags, asns)
+		}
+
+		source, name, ips := format.OutputLineParts(out, args.Options.Sources,
+			args.Options.IPs || args.Options.IPv4 || args.Options.IPv6, args.Options.DemoMode)
+		if ips != "" {
+			ips = " " + ips
+		}
+
+		fmt.Fprintf(color.Output, "%s%s%s\n", blue(source), green(name), yellow(ips))
+	}
+
+	if total == 0 {
+		r.Println("No names were discovered")
+	} else if !args.Options.Passive {
+		format.PrintEnumerationSummary(total, tags, asns, args.Options.DemoMode)
+	}
+}
+
+func saveTextOutput(e *enum.Enumeration, args *enumArgs, output chan *requests.Output, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	dir := config.OutputDirectory(e.Config.Dir)
 	txtfile := filepath.Join(dir, "amass.txt")
 	if args.Filepaths.TermOut != "" {
 		txtfile = args.Filepaths.TermOut
 	}
+	if args.Filepaths.AllFilePrefix != "" {
+		txtfile = args.Filepaths.AllFilePrefix + ".txt"
+	}
+	if txtfile == "" {
+		return
+	}
+
+	outptr, err := os.OpenFile(txtfile, os.O_WRONLY|os.O_CREATE, 0644)
+	if err != nil {
+		r.Fprintf(color.Error, "Failed to open the text output file: %v\n", err)
+		os.Exit(1)
+	}
+	defer func() {
+		outptr.Sync()
+		outptr.Close()
+	}()
+
+	outptr.Truncate(0)
+	outptr.Seek(0, 0)
+	// Save all the output returned by the enumeration
+	for out := range output {
+		out.Addresses = format.DesiredAddrTypes(out.Addresses, args.Options.IPv4, args.Options.IPv6)
+		if !e.Config.Passive && len(out.Addresses) <= 0 {
+			continue
+		}
+
+		source, name, ips := format.OutputLineParts(out, args.Options.Sources,
+			args.Options.IPs || args.Options.IPv4 || args.Options.IPv6, args.Options.DemoMode)
+		if ips != "" {
+			ips = " " + ips
+		}
+
+		// Write the line to the output file
+		fmt.Fprintf(outptr, "%s%s%s\n", source, name, ips)
+	}
+}
+
+func saveJSONOutput(e *enum.Enumeration, args *enumArgs, output chan *requests.Output, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	dir := config.OutputDirectory(e.Config.Dir)
 	jsonfile := filepath.Join(dir, "amass.json")
 	if args.Filepaths.JSONOutput != "" {
 		jsonfile = args.Filepaths.JSONOutput
 	}
 	if args.Filepaths.AllFilePrefix != "" {
-		txtfile = args.Filepaths.AllFilePrefix + ".txt"
 		jsonfile = args.Filepaths.AllFilePrefix + ".json"
 	}
 
-	var outptr, jsonptr *os.File
-	if txtfile != "" {
-		outptr, err = os.OpenFile(txtfile, os.O_WRONLY|os.O_CREATE, 0644)
-		if err != nil {
-			r.Fprintf(color.Error, "Failed to open the text output file: %v\n", err)
-			os.Exit(1)
-		}
-		defer func() {
-			outptr.Sync()
-			outptr.Close()
-		}()
-		outptr.Truncate(0)
-		outptr.Seek(0, 0)
+	if jsonfile == "" {
+		return
 	}
 
-	var enc *json.Encoder
-	if jsonfile != "" {
-		jsonptr, err = os.OpenFile(jsonfile, os.O_WRONLY|os.O_CREATE, 0644)
-		if err != nil {
-			r.Fprintf(color.Error, "Failed to open the JSON output file: %v\n", err)
-			os.Exit(1)
-		}
-		defer func() {
-			jsonptr.Sync()
-			jsonptr.Close()
-		}()
-		jsonptr.Truncate(0)
-		jsonptr.Seek(0, 0)
-		enc = json.NewEncoder(jsonptr)
+	jsonptr, err := os.OpenFile(jsonfile, os.O_WRONLY|os.O_CREATE, 0644)
+	if err != nil {
+		r.Fprintf(color.Error, "Failed to open the JSON output file: %v\n", err)
+		os.Exit(1)
 	}
+	defer func() {
+		jsonptr.Sync()
+		jsonptr.Close()
+	}()
 
-	// Kick off the output management goroutine
-	finished = make(chan struct{})
-	go func() {
-		var total int
-		tags := make(map[string]int)
-		asns := make(map[int]*format.ASNSummaryData)
-		// Collect all the names returned by the enumeration
-		for out := range e.Output {
-			out.Addresses = format.DesiredAddrTypes(out.Addresses, args.Options.IPv4, args.Options.IPv6)
-			if !e.Config.Passive && len(out.Addresses) <= 0 {
+	jsonptr.Truncate(0)
+	jsonptr.Seek(0, 0)
+
+	enc := json.NewEncoder(jsonptr)
+	// Save all the output returned by the enumeration
+	for out := range output {
+		// Handle encoding the result as JSON
+		enc.Encode(out)
+	}
+}
+
+func processOutput(e *enum.Enumeration, outputs []chan *requests.Output, done chan struct{}, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	// This filter ensures that we only get new names
+	known := stringfilter.NewBloomFilter(1 << 24)
+	// The function that obtains output from the enum and puts it on the channel
+	extract := func() {
+		for _, o := range e.ExtractOutput(known) {
+			if !e.Config.IsDomainInScope(o.Name) {
 				continue
 			}
 
-			total++
-			format.UpdateSummaryData(out, tags, asns)
-			source, name, ips := format.OutputLineParts(out, args.Options.Sources,
-				args.Options.IPs || args.Options.IPv4 || args.Options.IPv6, args.Options.DemoMode)
-
-			if ips != "" {
-				ips = " " + ips
-			}
-
-			fmt.Fprintf(color.Output, "%s%s%s\n", blue(source), green(name), yellow(ips))
-			// Handle writing the line to a specified output file
-			if outptr != nil {
-				fmt.Fprintf(outptr, "%s%s%s\n", source, name, ips)
-			}
-			// Handle encoding the result as JSON
-			if jsonptr != nil {
-				enc.Encode(out)
+			for _, ch := range outputs {
+				ch <- o
 			}
 		}
-		if total == 0 {
-			r.Println("No names were discovered")
-		} else {
-			format.PrintEnumerationSummary(total, tags, asns, args.Options.DemoMode)
-		}
-		close(finished)
-	}()
-	// Start the enumeration process
-	go signalHandler(e)
-	if err := e.Start(); err != nil {
-		r.Println(err)
-		os.Exit(1)
 	}
-	<-finished
+
+	t := time.NewTimer(15 * time.Second)
+loop:
+	for {
+		select {
+		case <-done:
+			break loop
+		case <-t.C:
+			started := time.Now()
+			extract()
+			next := time.Now().Sub(started) * 5
+			if next < 3*time.Second {
+				next = 3 * time.Second
+			} else if next > 10*time.Second {
+				next = 10 * time.Second
+			}
+			t.Reset(next)
+		}
+	}
+
+	// Check one last time
+	extract()
+	// Signal all the other goroutines to terminate
+	for _, ch := range outputs {
+		close(ch)
+	}
 }
 
 // If the user interrupts the program, print the summary information
@@ -367,11 +508,12 @@ func signalHandler(e *enum.Enumeration) {
 	quit := make(chan os.Signal, 1)
 
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
-
 	<-quit
-	// Start final output operations
+	interrupted = true
+	// Signal the enumeration to finish
 	e.Done()
-	<-finished
+	// Wait for output operations to complete
+	time.Sleep(20 * time.Second)
 	os.Exit(1)
 }
 
@@ -404,7 +546,6 @@ func writeLogsAndMessages(logs *io.PipeReader, logfile string, verbose bool) {
 	scanner := bufio.NewScanner(logs)
 	for scanner.Scan() {
 		line := scanner.Text()
-
 		if err := scanner.Err(); err != nil {
 			fmt.Fprintf(color.Error, "Error reading the Amass logs: %v\n", err)
 			break
@@ -558,17 +699,17 @@ func (e enumArgs) OverrideConfig(conf *config.Config) error {
 	if e.Options.NoAlts {
 		conf.Alterations = false
 	}
+	if e.Options.NoLocalDatabase || e.Options.Passive {
+		conf.LocalDatabase = false
+	}
 	if e.Options.NoRecursive {
 		conf.Recursive = false
 	}
-	if e.MinForRecursive > 0 {
+	if e.MinForRecursive != 1 {
 		conf.MinForRecursive = e.MinForRecursive
 	}
 	if e.Options.Active {
 		conf.Active = true
-	}
-	if e.Options.Unresolved {
-		conf.IncludeUnresolvable = true
 	}
 	if e.Options.Passive {
 		conf.Passive = true
@@ -579,15 +720,14 @@ func (e enumArgs) OverrideConfig(conf *config.Config) error {
 	if e.Timeout > 0 {
 		conf.Timeout = e.Timeout
 	}
-
-	if e.Options.PublicDNS {
-		conf.PublicDNS = true
+	if e.Options.Verbose == true {
+		conf.Verbose = true
+	}
+	if e.Resolvers.Len() > 0 {
+		conf.SetResolvers(e.Resolvers.Slice())
 	}
 	if !e.Options.MonitorResolverRate {
 		conf.MonitorResolverRate = false
-	}
-	if !e.Options.ScoreResolvers {
-		conf.ScoreResolvers = false
 	}
 
 	if len(e.Included) > 0 {

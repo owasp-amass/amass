@@ -1,29 +1,50 @@
-# Golang CircleCI 2.0 configuration file
-#
-# Check https://circleci.com/docs/2.0/language-go/ for more details
-version: 2
+version: 2.1
+
+orbs:
+  codecov: codecov/codecov@1.0.5
+
 jobs:
   test:
     docker:
-      - image: circleci/golang:1.13.0
+      - image: circleci/golang:1.14
 
-    working_directory: /go/src/github.com/OWASP/Amass
+    environment:
+      GO111MODULE: "on"
+      PROJECT_DIR: /go/src/github.com/OWASP/Amass
+
+    working_directory: $PROJECT_DIR
+
     steps:
       - checkout
+
       - run:
-          name: "Test Amass"
+          name: Setup Code Climate test-reporter
           command: |
-            export GO111MODULE=on
-            go test -v -race ./...
+            curl -L https://codeclimate.com/downloads/test-reporter/test-reporter-latest-linux-amd64 > /go/cc-test-reporter
+            chmod +x /go/cc-test-reporter
+
+      - run:
+          name: "Amass Unit Tests and Coverage Reports"
+          command: |
+            cd /go
+            go get github.com/OWASP/Amass/v3/...
+            cd $PROJECT_DIR
+            /go/cc-test-reporter before-build
+            go test -coverprofile=c.out -covermode=atomic ./...
+            export PREFIX=$(basename $(go list -m))
+            /go/cc-test-reporter after-build -r $CODE_CLIMATE_TOKEN -t gocov -p $PREFIX --exit-code $?
+
+      - codecov/upload:
+          conf: $PROJECT_DIR/.codecov.yml
+          file: $PROJECT_DIR/c.out
+
+      - run:
+          name: Remove Code Climate test-reporter
+          command: |
+            rm /go/cc-test-reporter
 
 workflows:
-  version: 2
+  version: 2.1
   main:
     jobs:
       - test
-#      - binaries:
-#          requires:
-#            - test
-#          filters:
-#            branches:
-#              only: master

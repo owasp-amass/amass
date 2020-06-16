@@ -1,7 +1,6 @@
+# [![OWASP Logo](../images/owasp_logo.png) OWASP Amass](https://owasp.org/www-project-amass/) - Users' Guide
 
-# [![OWASP Logo](https://github.com/OWASP/Amass/blob/master/images/owasp_logo.png) OWASP Amass](https://www.owasp.org/index.php/OWASP_Amass_Project) - Users' Guide
-
-![Network graph](https://github.com/OWASP/Amass/blob/master/images/network_06092018.png "Amass Network Mapping")
+![Network graph](../images/network_06092018.png "Amass Network Mapping")
 
 ----
 
@@ -86,7 +85,6 @@ The intel subcommand can help you discover additional root domain names associat
 | -o | Path to the text output file | amass intel -o out.txt -whois -d example.com |
 | -org | Search string provided against AS description information | amass intel -org Facebook |
 | -p | Ports separated by commas (default: 443) | amass intel -cidr 104.154.0.0/15 -p 443,8080 |
-| -public-dns | Use public-dns.info resolvers |amass intel -cidr 104.154.0.0/15 -public-dns |
 | -r | IP addresses of preferred DNS resolvers (can be used multiple times) | amass intel -r 8.8.8.8,1.1.1.1 -whois -d example.com |
 | -rf | Path to a file providing preferred DNS resolvers | amass intel -rf data/resolvers.txt -whois -d example.com |
 | -src | Print data sources for the discovered names | amass intel -src -whois -d example.com |
@@ -114,7 +112,6 @@ This subcommand will perform DNS enumeration and network mapping while populatin
 | -exclude | Data source names separated by commas to be excluded | amass enum -exclude crtsh -d example.com |
 | -if | Path to a file providing data sources to include | amass enum -if include.txt -d example.com |
 | -include | Data source names separated by commas to be included | amass enum -include crtsh -d example.com |
-| -include-unresolvable | Output DNS names that did not resolve | amass enum -include-unresolvable -d example.com |
 | -ip | Show the IP addresses for discovered names | amass enum -ip -d example.com |
 | -ipv4 | Show the IPv4 addresses for discovered names | amass enum -ipv4 -d example.com |
 | -ipv6 | Show the IPv6 addresses for discovered names | amass enum -ipv6 -d example.com |
@@ -122,9 +119,10 @@ This subcommand will perform DNS enumeration and network mapping while populatin
 | -list | Print the names of all available data sources | amass enum -list |
 | -log | Path to the log file where errors will be written | amass enum -log amass.log -d example.com |
 | -max-dns-queries | Maximum number of concurrent DNS queries | amass enum -max-dns-queries 200 -d example.com |
-| -min-for-recursive | Number of labels in a subdomain before recursive brute forcing | amass enum -brute -min-for-recursive 3 -d example.com |
+| -min-for-recursive | Subdomain labels seen before recursive brute forcing (Default: 1) | amass enum -brute -min-for-recursive 3 -d example.com |
 | -nf | Path to a file providing already known subdomain names (from other tools/sources) | amass enum -nf names.txt -d example.com |
 | -noalts | Disable generation of altered names | amass enum -noalts -d example.com |
+| -nolocaldb | Disable saving data into a local database | amass enum -nolocaldb -d example.com |
 | -norecursive | Turn off recursive brute forcing | amass enum -brute -norecursive -d example.com |
 | -noresolvrate | Disable resolver rate monitoring | amass enum -d example.com -noresolvrate |
 | -noresolvscore | Disable resolver reliability scoring | amass enum -d example.com -noresolvscore |
@@ -132,7 +130,6 @@ This subcommand will perform DNS enumeration and network mapping while populatin
 | -oA | Path prefix used for naming all output files | amass enum -oA amass_scan -d example.com |
 | -passive | A purely passive mode of execution | amass enum --passive -d example.com |
 | -p | Ports separated by commas (default: 443) | amass enum -d example.com -p 443,8080 |
-| -public-dns | Use public-dns.info resolvers | amass enum -d example.com -public-dns |
 | -r | IP addresses of preferred DNS resolvers (can be used multiple times) | amass enum -r 8.8.8.8,1.1.1.1 -d example.com |
 | -rf | Path to a file providing preferred DNS resolvers | amass enum -rf data/resolvers.txt -d example.com |
 | -src | Print data sources for the discovered names | amass enum -src -d example.com |
@@ -205,7 +202,7 @@ If you decide to use an Amass configuration file, it will be automatically disco
 
 ## The Configuration File
 
-You will need a config file to use your API keys with Amass. See the [Example Configuration File](https://github.com/OWASP/Amass/blob/master/examples/config.ini) for more details.
+You will need a config file to use your API keys with Amass. See the [Example Configuration File](../examples/config.ini) for more details.
 
 Amass automatically tries to discover the configuration file in the following locations:
 
@@ -248,7 +245,6 @@ Note that these locations are based on the [output directory](#the-output-direct
 | Option | Description |
 |--------|-------------|
 | resolver | The IP address of a DNS resolver and used globally by the amass package |
-| public_dns_resolvers | Incorporate public-dns.info resolvers into the enumeration |
 | score_resolvers | Toggle resolver reliability scoring |
 | monitor_resolver_rate | Toggle resolver rate monitoring |
 
@@ -317,6 +313,14 @@ The results from each enumeration is stored separately in the graph database, wh
 
 There is nothing preventing multiple users from sharing a single (remote) graph database and leveraging each others findings across enumerations.
 
+### Cayley Graph Schema
+
+The GraphDB is storing all the domains that were found for a given enumeration. It stores the associated information such as the ip, ns_record, a_record, cname, ip block and associated source for each one of them as well. Each enumeration is identified by a uuid.
+
+Here is an example of graph for an enumeration run on example.com:
+
+![GraphDB](../images/example_graphDB.png)
+
 ## Importing OWASP Amass Results into Maltego
 
 1. Convert the Amass data into a Maltego graph table CSV file:
@@ -327,11 +331,11 @@ amass viz -maltego
 
 2. Import the CSV file with the correct Connectivity Table settings:
 
-![Connectivity table](https://github.com/OWASP/Amass/blob/master/images/maltego_graph_import_wizard.png "Connectivity Table Settings")
+![Connectivity table](../images/maltego_graph_import_wizard.png "Connectivity Table Settings")
 
 3. All the Amass findings will be brought into your Maltego Graph:
 
-![Maltego results](https://github.com/OWASP/Amass/blob/master/images/maltego_results.png "Maltego Results")
+![Maltego results](../images/maltego_results.png "Maltego Results")
 
 ## Integrating OWASP Amass into Your Work
 
@@ -346,33 +350,35 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/v3/config"
+	"github.com/OWASP/Amass/v3/datasrcs"
 	"github.com/OWASP/Amass/v3/enum"
-	"github.com/OWASP/Amass/v3/services"
+	"github.com/OWASP/Amass/v3/systems"
 )
 
 func main() {
 	// Seed the default pseudo-random number generator
 	rand.Seed(time.Now().UTC().UnixNano())
 
-	sys, err := services.NewLocalSystem(config.NewConfig())
+	// Setup the most basic amass configuration
+	cfg := config.NewConfig()
+	cfg.AddDomain("example.com")
+
+	sys, err := systems.NewLocalSystem(cfg)
 	if err != nil {
 		return
 	}
+	sys.SetDataSources(datasrcs.GetAllSources(sys))
 
-	e := enum.NewEnumeration(sys)
+	e := enum.NewEnumeration(cfg, sys)
 	if e == nil {
 		return
 	}
+	defer e.Close()
 
-	go func() {
-		for result := range e.Output {
-			fmt.Println(result.Name)
-		}
-	}()
-
-	// Setup the most basic amass configuration
-	e.Config.AddDomain("example.com")
 	e.Start()
+	for _, o := range e.ExtractOutput(nil) {
+		fmt.Println(o.Name)
+	}
 }
 ```
 

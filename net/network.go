@@ -14,6 +14,9 @@ import (
 // IPv4RE is a regular expression that will match an IPv4 address.
 const IPv4RE = "((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)[.]){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)"
 
+// ReservedCIDRDescription is the description used for reserved address ranges.
+const ReservedCIDRDescription = "Reserved Network Address Blocks"
+
 // ReservedCIDRs includes all the networks that are reserved for special use.
 var ReservedCIDRs = []string{
 	"192.168.0.0/16",
@@ -36,6 +39,17 @@ var ReservedCIDRs = []string{
 	"192.0.0.0/29",
 }
 
+// The reserved network address ranges
+var reservedAddrRanges []*net.IPNet
+
+func init() {
+	for _, cidr := range ReservedCIDRs {
+		if _, ipnet, err := net.ParseCIDR(cidr); err == nil {
+			reservedAddrRanges = append(reservedAddrRanges, ipnet)
+		}
+	}
+}
+
 // IsIPv4 returns true when the provided net.IP address is an IPv4 address.
 func IsIPv4(ip net.IP) bool {
 	return strings.Count(ip.String(), ":") < 2
@@ -44,6 +58,27 @@ func IsIPv4(ip net.IP) bool {
 // IsIPv6 returns true when the provided net.IP address is an IPv6 address.
 func IsIPv6(ip net.IP) bool {
 	return strings.Count(ip.String(), ":") >= 2
+}
+
+// IsReservedAddress checks if the addr parameter is within one of the address ranges in the ReservedCIDRs slice.
+func IsReservedAddress(addr string) (bool, string) {
+	ip := net.ParseIP(addr)
+	if ip == nil {
+		return false, ""
+	}
+
+	var cidr string
+	for _, block := range reservedAddrRanges {
+		if block.Contains(ip) {
+			cidr = block.String()
+			break
+		}
+	}
+
+	if cidr != "" {
+		return true, cidr
+	}
+	return false, ""
 }
 
 // FirstLast return the first and last IP address of the provided CIDR/netblock.

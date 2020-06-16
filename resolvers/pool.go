@@ -18,18 +18,7 @@ import (
 	amassnet "github.com/OWASP/Amass/v3/net"
 	amassdns "github.com/OWASP/Amass/v3/net/dns"
 	"github.com/OWASP/Amass/v3/requests"
-	"github.com/OWASP/Amass/v3/stringset"
 	"github.com/miekg/dns"
-)
-
-var (
-	retryCodes = []int{
-		dns.RcodeRefused,
-		dns.RcodeServerFailure,
-		dns.RcodeNotImplemented,
-	}
-
-	maxRetries = 3
 )
 
 // ResolverPool manages many DNS resolvers for high-performance use, such as brute forcing attacks.
@@ -47,7 +36,7 @@ type ResolverPool struct {
 }
 
 // SetupResolverPool initializes a ResolverPool with the type of resolvers indicated by the parameters.
-func SetupResolverPool(addrs []string, scoring, ratemon bool, log *log.Logger) *ResolverPool {
+func SetupResolverPool(addrs []string, ratemon bool, log *log.Logger) *ResolverPool {
 	if len(addrs) <= 0 {
 		return nil
 	}
@@ -87,11 +76,6 @@ loop:
 			if r == nil {
 				continue loop
 			}
-			if scoring {
-				if r = NewScoredResolver(r); r == nil {
-					continue loop
-				}
-			}
 			if ratemon {
 				if r = NewRateMonitoredResolver(r); r == nil {
 					continue loop
@@ -123,7 +107,6 @@ func NewResolverPool(res []Resolver, logger *log.Logger) *ResolverPool {
 		rp.Log = log.New(ioutil.Discard, "", 0)
 	}
 
-	rp.SanityChecks()
 	return rp
 }
 
@@ -233,7 +216,7 @@ func (rp *ResolverPool) NextResolver() Resolver {
 	for {
 		r := rp.Resolvers[rand.Int()%max]
 
-		if stopped := r.IsStopped(); !stopped {
+		if avail, _ := r.Available(); avail {
 			return r
 		}
 
@@ -241,7 +224,7 @@ func (rp *ResolverPool) NextResolver() Resolver {
 		if attempts > max {
 			// Check every resolver sequentially
 			for _, r := range rp.Resolvers {
-				if stopped := r.IsStopped(); !stopped {
+				if avail, _ := r.Available(); avail {
 					return r
 				}
 			}
@@ -263,7 +246,7 @@ func (rp *ResolverPool) Reverse(ctx context.Context, addr string, priority int) 
 	} else {
 		return ptr, "", &ResolveError{
 			Err:   fmt.Sprintf("Invalid IP address parameter: %s", addr),
-			Rcode: 100,
+			Rcode: ResolverErrRcode,
 		}
 	}
 
@@ -282,23 +265,16 @@ func (rp *ResolverPool) Reverse(ctx context.Context, addr string, priority int) 
 	if name == "" {
 		err = &ResolveError{
 			Err:   fmt.Sprintf("PTR record not found for IP address: %s", addr),
-			Rcode: 100,
+			Rcode: ResolverErrRcode,
 		}
 	} else if strings.HasSuffix(name, ".in-addr.arpa") || strings.HasSuffix(name, ".ip6.arpa") {
 		err = &ResolveError{
 			Err:   fmt.Sprintf("Invalid target in PTR record answer: %s", name),
-			Rcode: 100,
+			Rcode: ResolverErrRcode,
 		}
 	}
 
 	return ptr, name, err
-}
-
-type resolveVote struct {
-	Err      error
-	Again    bool
-	Resolver Resolver
-	Answers  []requests.DNSAnswer
 }
 
 // Resolve performs a DNS request using available Resolvers in the pool.
@@ -308,150 +284,41 @@ func (rp *ResolverPool) Resolve(ctx context.Context, name, qtype string, priorit
 	case PriorityCritical:
 		attempts = 1000
 	case PriorityHigh:
-		attempts = 100
+		attempts = 250
 	case PriorityLow:
-		attempts = 10
+		attempts = 50
 	}
 
+	var err error
+	var again bool
+	var ans []requests.DNSAnswer
 	// This loop ensures the correct number of attempts of the DNS query
-loop:
-	for count := 1; count <= attempts; count++ {
-		goal := 3
-		var votes []*resolveVote
+	for count := 0; count < attempts; {
+		r := rp.NextResolver()
+		if r == nil {
+			// Give the system a chance to breathe before trying again
+			time.Sleep(time.Duration(randomInt(100, 200)) * time.Millisecond)
+			continue
+		}
 
-		// Obtain the correct number of votes from the resolvers
-		for len(votes) < goal {
-			r := rp.NextResolver()
-			if r == nil {
-				// Give the system a chance to breathe before trying again
-				time.Sleep(time.Duration(randomInt(100, 500)) * time.Millisecond)
-				continue loop
-			}
-
-			ans, again, err := r.Resolve(ctx, name, qtype, priority)
-			if err != nil && (err.(*ResolveError)).Rcode == NotAvailableRcode {
-				continue
-			}
-
-			votes = append(votes, &resolveVote{
-				Err:      err,
-				Again:    again,
-				Resolver: r,
-				Answers:  ans,
-			})
-
-			// Check that the number of available resolvers has not gone below three
-			if rp.numUsableResolvers() < 3 {
-				goal = 1
+		count++
+		success := true
+		ans, again, err = r.Resolve(ctx, name, qtype, priority)
+		if again {
+			success = false
+		} else if err != nil {
+			if rc := (err.(*ResolveError)).Rcode; rc == TimeoutRcode ||
+				rc == dns.RcodeServerFailure || rc == dns.RcodeRefused || rc == dns.RcodeNotImplemented {
+				success = false
 			}
 		}
 
-		ans, again, err := rp.performElection(votes, name, qtype)
-		// Should this query be attempted again?
-		if !again {
-			if len(ans) == 0 {
-				return []requests.DNSAnswer{}, false, &ResolveError{
-					Err: fmt.Sprintf("Resolver: %s type %s returned 0 results", name, qtype),
-				}
-			}
+		if success {
 			return ans, again, err
 		}
-
-		// Give the system a chance to breathe before trying again
-		time.Sleep(time.Duration(randomInt(100, 500)) * time.Millisecond)
 	}
 
-	return []requests.DNSAnswer{}, false, &ResolveError{
-		Err: fmt.Sprintf("Resolver: %d attempts for %s type %s returned 0 results", attempts, name, qtype),
-	}
-}
-
-func (rp *ResolverPool) performElection(votes []*resolveVote, name, qtype string) ([]requests.DNSAnswer, bool, error) {
-	if len(votes) == 0 {
-		return []requests.DNSAnswer{}, false, &ResolveError{
-			Err: fmt.Sprintf("Resolver: DNS query for %s type %s returned 0 results", name, qtype),
-		}
-	}
-
-	if len(votes) < 3 || (votes[0].Err != nil && votes[1].Err != nil && votes[2].Err != nil) {
-		return votes[0].Answers, votes[0].Again, votes[0].Err
-	}
-
-	var ans []requests.DNSAnswer
-	qt, err := textToTypeNum(qtype)
-	if err != nil {
-		return ans, false, &ResolveError{
-			Err:   err.Error(),
-			Rcode: 100,
-		}
-	}
-
-	// Build the stringsets for each vote
-	var sets []stringset.Set
-	for i, v := range votes {
-		sets = append(sets, stringset.New())
-
-		for _, a := range v.Answers {
-			if a.Type != int(qt) {
-				continue
-			}
-
-			sets[i].Insert(a.Data)
-		}
-	}
-
-	allZero := true
-	// Check if all votes have zero answers of the desired record type
-	for i := 0; i < 3; i++ {
-		if sets[i].Len() > 0 {
-			allZero = false
-			break
-		}
-	}
-	if allZero {
-		return ans, false, &ResolveError{
-			Err: fmt.Sprintf("Resolver: DNS query for %s type %d returned 0 records", name, qt),
-		}
-	}
-
-	// Compare the stringsets for consistency
-	matches := make(map[int]bool)
-	for i := 0; i < 3; i++ {
-		j := (i + 1) % 3
-		temp := stringset.New(sets[i].Slice()...)
-
-		temp.Subtract(sets[j])
-		if temp.Len() == 0 {
-			matches[i] = true
-			matches[j] = true
-		}
-	}
-
-	// Determine the return values from the election process
-	switch len(matches) {
-	case 0:
-		// There was no agreement across the three votes
-		return ans, true, &ResolveError{
-			Err: fmt.Sprintf("Resolver: DNS query for %s type %d returned conflicting results", name, qt),
-		}
-	case 2:
-		var good int
-		// Report the resolver that was inconsistent
-		for i := 0; i < 3; i++ {
-			if matches[i] == true {
-				good = i
-			} else {
-				go votes[i].Resolver.ReportError()
-			}
-		}
-
-		return votes[good].Answers, false, nil
-	case 3:
-		// All three resolvers provided the same answers
-		return votes[0].Answers, false, nil
-	}
-
-	return ans, false, &ResolveError{Err: "Resolver: Should not have reached this point"}
+	return []requests.DNSAnswer{}, false, err
 }
 
 func (rp *ResolverPool) numUsableResolvers() int {

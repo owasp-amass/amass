@@ -4,11 +4,17 @@
 package graph
 
 import (
-	"github.com/OWASP/Amass/v3/graph/db"
+	"fmt"
+
+	"github.com/OWASP/Amass/v3/graphdb"
+	"github.com/OWASP/Amass/v3/stringset"
 )
 
+var notDataSourceSet = stringset.New("tld", "root", "domain",
+	"cname_record", "ptr_record", "mx_record", "ns_record", "srv_record", "service")
+
 // InsertSource creates a data source node in the graph.
-func (g *Graph) InsertSource(source, tag string) (db.Node, error) {
+func (g *Graph) InsertSource(source, tag string) (graphdb.Node, error) {
 	node, err := g.InsertNodeIfNotExist(source, "source")
 	if err != nil {
 		return node, err
@@ -42,7 +48,7 @@ func (g *Graph) SourceTag(source string) string {
 		return ""
 	}
 
-	node, err := g.db.ReadNode(source)
+	node, err := g.db.ReadNode(source, "source")
 	if err != nil {
 		return ""
 	}
@@ -52,4 +58,48 @@ func (g *Graph) SourceTag(source string) string {
 	}
 
 	return ""
+}
+
+// NodeSources returns the names of data sources that identified the Node parameter during the events.
+func (g *Graph) NodeSources(node graphdb.Node, events ...string) ([]string, error) {
+	nstr := g.db.NodeToID(node)
+	if nstr == "" {
+		return nil, fmt.Errorf("%s: NodeSources: Invalid node reference argument", g.String())
+	}
+
+	allevents, err := g.AllNodesOfType("event", events...)
+	if err != nil {
+		return nil, fmt.Errorf("%s: NodeSources: Failed to obtain the list of events", g.String())
+	}
+
+	eventset := stringset.New()
+	for _, event := range allevents {
+		if estr := g.db.NodeToID(event); estr != "" {
+			eventset.Insert(estr)
+		}
+	}
+
+	edges, err := g.db.ReadInEdges(node)
+	if err != nil {
+		return nil, fmt.Errorf("%s: NodeSources: Failed to obtain the list of in-edges: %v", g.String(), err)
+	}
+
+	var sources []string
+	filter := stringset.New()
+	for _, edge := range edges {
+		if notDataSourceSet.Has(edge.Predicate) {
+			continue
+		}
+
+		if name := g.db.NodeToID(edge.From); eventset.Has(name) && !filter.Has(edge.Predicate) {
+			filter.Insert(edge.Predicate)
+			sources = append(sources, edge.Predicate)
+		}
+	}
+
+	if len(sources) == 0 {
+		return nil, fmt.Errorf("%s: NodeSources: Failed to discover edges leaving the Node %s", g.String(), nstr)
+	}
+
+	return sources, nil
 }

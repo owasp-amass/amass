@@ -1,6 +1,24 @@
-// Copyright 2017 Jeff Foley. All rights reserved.
+// Copyright © by Jeff Foley 2017-2020. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
 
+// In-depth Attack Surface Mapping and Asset Discovery
+//  +----------------------------------------------------------------------------+
+//  | * * * ░░░░░░░░░░░░░░░░░░░░  OWASP Amass  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ |
+//  +----------------------------------------------------------------------------+
+//  |      .+++:.            :                             .+++.                 |
+//  |    +W@@@@@@8        &+W@#               o8W8:      +W@@@@@@#.   oW@@@W#+   |
+//  |   &@#+   .o@##.    .@@@o@W.o@@o       :@@#&W8o    .@#:  .:oW+  .@#+++&#&   |
+//  |  +@&        &@&     #@8 +@W@&8@+     :@W.   +@8   +@:          .@8         |
+//  |  8@          @@     8@o  8@8  WW    .@W      W@+  .@W.          o@#:       |
+//  |  WW          &@o    &@:  o@+  o@+   #@.      8@o   +W@#+.        +W@8:     |
+//  |  #@          :@W    &@+  &@+   @8  :@o       o@o     oW@@W+        oW@8    |
+//  |  o@+          @@&   &@+  &@+   #@  &@.      .W@W       .+#@&         o@W.  |
+//  |   WW         +@W@8. &@+  :&    o@+ #@      :@W&@&         &@:  ..     :@o  |
+//  |   :@W:      o@# +Wo &@+        :W: +@W&o++o@W. &@&  8@#o+&@W.  #@:    o@+  |
+//  |    :W@@WWWW@@8       +              :&W@@@@&    &W  .o#@@W&.   :W@WWW@@&   |
+//  |      +o&&&&+.                                                    +oooo.    |
+//  +----------------------------------------------------------------------------+
 package main
 
 import (
@@ -11,16 +29,17 @@ import (
 	"path"
 
 	"github.com/OWASP/Amass/v3/config"
+	"github.com/OWASP/Amass/v3/datasrcs"
 	"github.com/OWASP/Amass/v3/format"
-	"github.com/OWASP/Amass/v3/services"
+	"github.com/OWASP/Amass/v3/systems"
 	"github.com/fatih/color"
-	//"github.com/pkg/profile"
 )
 
 const (
-	mainUsageMsg         = "intel|enum|viz|track|db [options]"
+	mainUsageMsg         = "intel|enum|viz|track|db|dns [options]"
 	exampleConfigFileURL = "https://github.com/OWASP/Amass/blob/master/examples/config.ini"
 	userGuideURL         = "https://github.com/OWASP/Amass/blob/master/doc/user_guide.md"
+	tutorialURL          = "https://github.com/OWASP/Amass/blob/master/doc/tutorial.md"
 )
 
 var (
@@ -34,6 +53,7 @@ var (
 	yellow = color.New(color.FgHiYellow).SprintFunc()
 	green  = color.New(color.FgHiGreen).SprintFunc()
 	blue   = color.New(color.FgHiBlue).SprintFunc()
+	red    = color.New(color.FgHiRed).SprintFunc()
 )
 
 func commandUsage(msg string, cmdFlagSet *flag.FlagSet, errBuf *bytes.Buffer) {
@@ -48,18 +68,18 @@ func commandUsage(msg string, cmdFlagSet *flag.FlagSet, errBuf *bytes.Buffer) {
 		g.Fprintf(color.Error, "\t%-11s - Perform enumerations and network mapping\n", "amass enum")
 		g.Fprintf(color.Error, "\t%-11s - Visualize enumeration results\n", "amass viz")
 		g.Fprintf(color.Error, "\t%-11s - Track differences between enumerations\n", "amass track")
-		g.Fprintf(color.Error, "\t%-11s - Manipulate the Amass graph database\n\n", "amass db")
+		g.Fprintf(color.Error, "\t%-11s - Manipulate the Amass graph database\n", "amass db")
+		g.Fprintf(color.Error, "\t%-11s - Resolve DNS names at high performance\n\n", "amass dns")
 	}
 
 	g.Fprintf(color.Error, "The user's guide can be found here: \n%s\n\n", userGuideURL)
 	g.Fprintf(color.Error, "An example configuration file can be found here: \n%s\n\n", exampleConfigFileURL)
+	g.Fprintf(color.Error, "The Amass tutorial can be found here: \n%s\n\n", tutorialURL)
 }
 
 func main() {
 	var version, help1, help2 bool
 	mainFlagSet := flag.NewFlagSet("amass", flag.ContinueOnError)
-
-	//defer profile.Start().Stop()
 
 	defaultBuf := new(bytes.Buffer)
 	mainFlagSet.SetOutput(defaultBuf)
@@ -89,6 +109,8 @@ func main() {
 	switch os.Args[1] {
 	case "db":
 		runDBCommand(os.Args[2:])
+	case "dns":
+		runDNSCommand(os.Args[2:])
 	case "enum":
 		runEnumCommand(os.Args[2:])
 	case "intel":
@@ -107,12 +129,13 @@ func main() {
 func GetAllSourceNames() []string {
 	var names []string
 
-	sys, err := services.NewLocalSystem(config.NewConfig())
+	sys, err := systems.NewLocalSystem(config.NewConfig())
 	if err != nil {
 		return names
 	}
+	sys.SetDataSources(datasrcs.GetAllSources(sys))
 
-	for _, src := range services.GetAllSources(sys) {
+	for _, src := range sys.DataSources() {
 		names = append(names, src.String())
 	}
 

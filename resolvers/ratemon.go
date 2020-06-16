@@ -16,21 +16,21 @@ const (
 	// CurrentRate is an index value into the RateLimitedResolver.Stats map
 	CurrentRate = 256
 
-	defaultMaxSlack      = -2 * time.Second
-	initialRate          = 55 * time.Millisecond
-	defaultRateChange    = 10 * time.Millisecond
-	defaultMaxFailurePCT = 0.89
-	scoredResolverMaxRTT = 1500 * time.Millisecond
+	defaultMaxSlack    = -2 * time.Second
+	initialRate        = 10 * time.Millisecond
+	defaultRateChange  = 1 * time.Millisecond
+	defaultSlowestRate = 25 * time.Millisecond
+	defaultFastestRate = time.Millisecond
 )
 
 // RateMonitoredResolver performs DNS queries on a single resolver at the rate it can handle.
 type RateMonitoredResolver struct {
 	sync.RWMutex
-	Done        chan struct{}
-	resolver    Resolver
-	last        time.Time
-	rate        time.Duration
-	timeToSleep time.Duration
+	Done     chan struct{}
+	resolver Resolver
+	last     time.Time
+	rate     time.Duration
+	counter  time.Duration
 }
 
 // NewRateMonitoredResolver initializes a Resolver that scores the performance of the DNS server.
@@ -86,7 +86,7 @@ func (r *RateMonitoredResolver) Available() (bool, error) {
 		}
 	}
 
-	if time.Now().After(r.getLast().Add(r.getRate())) == false {
+	if !r.leakyBucket() {
 		msg := fmt.Sprintf("Resolver %s has exceeded the rate limit", r.Address())
 
 		return false, &ResolveError{
@@ -112,7 +112,7 @@ func (r *RateMonitoredResolver) WipeStats() {
 	r.setRate(initialRate)
 }
 
-// ReportError indicates to the Resolver that it delivered an erroneos response.
+// ReportError indicates to the Resolver that it delivered an erroneous response.
 func (r *RateMonitoredResolver) ReportError() {
 	r.resolver.ReportError()
 }
@@ -144,7 +144,6 @@ func (r *RateMonitoredResolver) Resolve(ctx context.Context, name, qtype string,
 		}
 	}
 
-	r.wait()
 	return r.resolver.Resolve(ctx, name, qtype, priority)
 }
 
@@ -159,34 +158,32 @@ func (r *RateMonitoredResolver) Reverse(ctx context.Context, addr string, priori
 		}
 	}
 
-	r.wait()
 	return r.resolver.Reverse(ctx, addr, priority)
 }
 
 // Implementation of the leaky bucket algorithm.
-func (r *RateMonitoredResolver) wait() {
+func (r *RateMonitoredResolver) leakyBucket() bool {
+	r.Lock()
+	defer r.Unlock()
+
 	now := time.Now()
-	last := r.getLast()
+	aux := r.counter - now.Sub(r.last)
 
-	tts := r.getTimeToSleep()
-	tts += r.getRate() - now.Sub(last)
-	if tts < defaultMaxSlack {
-		tts = defaultMaxSlack
+	if aux > r.rate {
+		return false
 	}
 
-	if tts > 0 {
-		time.Sleep(tts)
-		r.setLast(now.Add(tts))
-		r.setTimeToSleep(time.Duration(0))
-		return
+	if aux < 0 {
+		aux = 0
 	}
 
-	r.setLast(now)
-	r.setTimeToSleep(tts)
+	r.counter = aux + r.rate
+	r.last = now
+	return true
 }
 
 func (r *RateMonitoredResolver) monitorPerformance() {
-	t := time.NewTicker(3 * time.Second)
+	t := time.NewTicker(time.Second)
 	defer t.Stop()
 	m := time.NewTicker(time.Minute)
 	defer m.Stop()
@@ -209,31 +206,26 @@ func (r *RateMonitoredResolver) calcRate() {
 	stats := r.Stats()
 	rate := time.Duration(stats[CurrentRate])
 
-	if attempts := stats[QueryAttempts]; attempts >= 10 {
-		timeouts := stats[QueryTimeout]
+	attempts := stats[QueryAttempts]
+	// There needs to be some data to work with first
+	if attempts < 50 {
+		return
+	}
 
-		if timeouts >= attempts {
-			r.ReportError()
-			r.setRate(rate + defaultRateChange)
-			return
-		}
+	timeouts := stats[QueryTimeouts]
+	// Check if too many attempts are being made
+	if comp := stats[QueryCompletions]; comp > 0 && comp > timeouts {
+		succ := comp - timeouts
+		max := succ + (succ / 10)
 
-		// Check if the latency is too high
-		if value, found := stats[QueryRTT]; found {
-			if rtt := time.Duration(value); rtt > scoredResolverMaxRTT {
-				//r.ReportError()
-			}
-		}
-
-		if pct := float64(timeouts) / float64(attempts); pct > defaultMaxFailurePCT {
+		if attempts > max {
+			// Slow things down!
 			r.setRate(rate + defaultRateChange)
 			return
 		}
 	}
-
-	if rate >= (defaultRateChange + (2 * time.Millisecond)) {
-		r.setRate(rate - defaultRateChange)
-	}
+	// Speed things up!
+	r.setRate(rate - defaultRateChange)
 }
 
 func (r *RateMonitoredResolver) getLast() time.Time {
@@ -263,19 +255,7 @@ func (r *RateMonitoredResolver) setRate(d time.Duration) {
 	r.Lock()
 	defer r.Unlock()
 
-	r.rate = d
-}
-
-func (r *RateMonitoredResolver) getTimeToSleep() time.Duration {
-	r.RLock()
-	defer r.RUnlock()
-
-	return r.timeToSleep
-}
-
-func (r *RateMonitoredResolver) setTimeToSleep(d time.Duration) {
-	r.Lock()
-	defer r.Unlock()
-
-	r.timeToSleep = d
+	if d >= defaultFastestRate && d <= defaultSlowestRate {
+		r.rate = d
+	}
 }

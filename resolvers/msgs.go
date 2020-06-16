@@ -58,6 +58,7 @@ func setupOptions() *dns.OPT {
 		Hdr: dns.RR_Header{
 			Name:   ".",
 			Rrtype: dns.TypeOPT,
+			Class:  dns.DefaultMsgSize,
 		},
 		Option: []dns.EDNS0{e},
 	}
@@ -207,19 +208,15 @@ func extractRawData(msg *dns.Msg, qtype uint16) []string {
 				}
 			case dns.TypeTXT:
 				if t, ok := a.(*dns.TXT); ok {
-					for _, piece := range t.Txt {
-						value += piece + " "
-					}
+					value = strings.Join(t.Txt, " ")
 				}
 			case dns.TypeSOA:
 				if t, ok := a.(*dns.SOA); ok {
-					value = t.Ns + " " + t.Mbox
+					value = t.Ns + "," + t.Mbox
 				}
 			case dns.TypeSPF:
 				if t, ok := a.(*dns.SPF); ok {
-					for _, piece := range t.Txt {
-						value += piece + " "
-					}
+					value = strings.Join(t.Txt, " ")
 				}
 			case dns.TypeSRV:
 				if t, ok := a.(*dns.SRV); ok {
@@ -232,6 +229,7 @@ func extractRawData(msg *dns.Msg, qtype uint16) []string {
 			}
 		}
 	}
+
 	return data
 }
 

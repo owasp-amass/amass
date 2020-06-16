@@ -18,10 +18,11 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/v3/config"
+	"github.com/OWASP/Amass/v3/datasrcs"
 	"github.com/OWASP/Amass/v3/format"
 	"github.com/OWASP/Amass/v3/intel"
-	"github.com/OWASP/Amass/v3/services"
 	"github.com/OWASP/Amass/v3/stringset"
+	"github.com/OWASP/Amass/v3/systems"
 	"github.com/fatih/color"
 )
 
@@ -51,8 +52,6 @@ type intelArgs struct {
 		ReverseWhois        bool
 		Sources             bool
 		MonitorResolverRate bool
-		ScoreResolvers      bool
-		PublicDNS           bool
 		Verbose             bool
 	}
 	Filepaths struct {
@@ -89,9 +88,7 @@ func defineIntelOptionFlags(intelFlags *flag.FlagSet, args *intelArgs) {
 	intelFlags.BoolVar(&args.Options.IPv6, "ipv6", false, "Show the IPv6 addresses for discovered names")
 	intelFlags.BoolVar(&args.Options.ListSources, "list", false, "Print the names of all available data sources")
 	intelFlags.BoolVar(&args.Options.MonitorResolverRate, "noresolvrate", true, "Disable resolver rate monitoring")
-	intelFlags.BoolVar(&args.Options.PublicDNS, "public-dns", false, "Use public-dns.info resolver list")
 	intelFlags.BoolVar(&args.Options.ReverseWhois, "whois", false, "All provided domains are run through reverse whois")
-	intelFlags.BoolVar(&args.Options.ScoreResolvers, "noresolvscore", true, "Disable resolver reliability scoring")
 	intelFlags.BoolVar(&args.Options.Sources, "src", false, "Print data sources for the discovered names")
 	intelFlags.BoolVar(&args.Options.Verbose, "v", false, "Output status / debug / troubleshooting info")
 }
@@ -209,10 +206,11 @@ func runIntelCommand(clArgs []string) {
 	createOutputDirectory(cfg)
 	go writeLogsAndMessages(rLog, logfile, args.Options.Verbose)
 
-	sys, err := services.NewLocalSystem(cfg)
+	sys, err := systems.NewLocalSystem(cfg)
 	if err != nil {
 		return
 	}
+	sys.SetDataSources(datasrcs.GetAllSources(sys))
 
 	ic := intel.NewCollection(sys)
 	if ic == nil {
@@ -386,15 +384,14 @@ func (i intelArgs) OverrideConfig(conf *config.Config) error {
 	if i.Timeout > 0 {
 		conf.Timeout = i.Timeout
 	}
-
-	if i.Options.PublicDNS {
-		conf.PublicDNS = true
+	if i.Options.Verbose == true {
+		conf.Verbose = true
+	}
+	if i.Resolvers.Len() > 0 {
+		conf.SetResolvers(i.Resolvers.Slice())
 	}
 	if !i.Options.MonitorResolverRate {
 		conf.MonitorResolverRate = false
-	}
-	if !i.Options.ScoreResolvers {
-		conf.ScoreResolvers = false
 	}
 
 	if len(i.Included) > 0 {

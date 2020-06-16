@@ -5,11 +5,11 @@ import (
 	"net"
 	"testing"
 
-	"github.com/OWASP/Amass/v3/graph/db"
+	"github.com/OWASP/Amass/v3/graphdb"
 )
 
 func TestNetblock(t *testing.T) {
-	g := NewGraph(db.NewCayleyGraphMemory())
+	g := NewGraph(graphdb.NewCayleyGraphMemory())
 	for _, tt := range graphTest {
 		t.Run("Testing InsertNetblock...", func(t *testing.T) {
 			got, err := g.InsertNetblock(tt.CIDR, tt.Source, tt.Tag, tt.EventID)

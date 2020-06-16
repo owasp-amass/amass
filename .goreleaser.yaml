@@ -1,3 +1,5 @@
+project_name: amass
+
 env:
   - GO111MODULE=on
 
@@ -36,12 +38,10 @@ builds:
         goarch: arm64
       - goos: freebsd
         goarch: arm
-      - goos: freebsd
-        goarch: arm64
 
 archives:
   -
-    name_template: "amass_{{ .Tag }}_{{ .Os }}_{{ .Arch }}"
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
     replacements:
       darwin: macos
       386: i386
@@ -51,17 +51,17 @@ archives:
       - LICENSE
       - README.md
       - doc/*
-      - examples/wordlists/*
+      - examples/**/*
 
 checksum:
-  name_template: "amass_checksums.txt"
+  name_template: "{{ .ProjectName }}_checksums.txt"
 
 changelog:
-  sort: asc
+  sort: desc
   filters:
     exclude:
-    - '^doc:'
-    - '^test:'
+    - '^MERGE'
+    - "{{ .Tag }}"
 
 release:
   github:
@@ -88,8 +88,10 @@ brews:
       name: caffix
       email: caffix@users.noreply.github.com
     folder: Formula
-    homepage: "https://www.owasp.org/index.php/OWASP_Amass_Project"
+    homepage: "https://owasp.org/www-project-amass/"
     description: "In-depth Attack Surface Mapping and Asset Discovery"
+    test: |
+      system "#{bin}/program --version"
 
 snapcrafts:
   -

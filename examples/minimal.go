@@ -6,31 +6,33 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/v3/config"
+	"github.com/OWASP/Amass/v3/datasrcs"
 	"github.com/OWASP/Amass/v3/enum"
-	"github.com/OWASP/Amass/v3/services"
+	"github.com/OWASP/Amass/v3/systems"
 )
 
 func main() {
 	// Seed the default pseudo-random number generator
 	rand.Seed(time.Now().UTC().UnixNano())
 
-	sys, err := services.NewLocalSystem(config.NewConfig())
+	// Setup the most basic amass configuration
+	cfg := config.NewConfig()
+	cfg.AddDomain("example.com")
+
+	sys, err := systems.NewLocalSystem(cfg)
 	if err != nil {
 		return
 	}
+	sys.SetDataSources(datasrcs.GetAllSources(sys))
 
-	e := enum.NewEnumeration(sys)
+	e := enum.NewEnumeration(cfg, sys)
 	if e == nil {
 		return
 	}
+	defer e.Close()
 
-	go func() {
-		for result := range e.Output {
-			fmt.Println(result.Name)
-		}
-	}()
-
-	// Setup the most basic amass configuration
-	e.Config.AddDomain("example.com")
 	e.Start()
+	for _, o := range e.ExtractOutput(nil) {
+		fmt.Println(o.Name)
+	}
 }

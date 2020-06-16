@@ -16,15 +16,24 @@ const SUBRE = "(([a-zA-Z0-9]{1}|[_a-zA-Z0-9]{1}[_a-zA-Z0-9-]{0,61}[a-zA-Z0-9]{1}
 // SubdomainRegex returns a Regexp object initialized to match
 // subdomain names that end with the domain provided by the parameter.
 func SubdomainRegex(domain string) *regexp.Regexp {
-	// Change all the periods into literal periods for the regex
-	d := strings.Replace(domain, ".", "[.]", -1)
+	return regexp.MustCompile(SubdomainRegexString(domain))
+}
 
-	return regexp.MustCompile(SUBRE + d)
+// SubdomainRegexString returns a regular expression string that matchs
+// subdomain names ending with the domain provided by the parameter.
+func SubdomainRegexString(domain string) string {
+	// Change all the periods into literal periods for the regex
+	return SUBRE + strings.Replace(domain, ".", "[.]", -1)
 }
 
 // AnySubdomainRegex returns a Regexp object initialized to match any DNS subdomain name.
 func AnySubdomainRegex() *regexp.Regexp {
-	return regexp.MustCompile(SUBRE + "[a-zA-Z]{2,61}")
+	return regexp.MustCompile(AnySubdomainRegexString())
+}
+
+// AnySubdomainRegexString returns a regular expression string to match any DNS subdomain name.
+func AnySubdomainRegexString() string {
+	return SUBRE + "[a-zA-Z]{2,61}"
 }
 
 // CopyString return a new string variable with the same value as the parameter.

@@ -4,61 +4,55 @@
 package enum
 
 import (
-	"net"
 	"strings"
-	"sync"
 	"time"
 
+	"github.com/OWASP/Amass/v3/eventbus"
 	"github.com/OWASP/Amass/v3/net/http"
 	"github.com/OWASP/Amass/v3/requests"
-	"github.com/OWASP/Amass/v3/stringset"
-	"github.com/miekg/dns"
-	"golang.org/x/net/publicsuffix"
+	"github.com/OWASP/Amass/v3/stringfilter"
 )
 
-func (e *Enumeration) submitKnownNames(wg *sync.WaitGroup) {
-	defer wg.Done()
+// ExtractOutput is a convenience method for obtaining new discoveries made by the enumeration process.
+func (e *Enumeration) ExtractOutput(filter stringfilter.Filter) []*requests.Output {
+	if e.Config.Passive {
+		return e.Graph.EventNames(e.Config.UUID.String(), filter)
+	}
 
-	var events []string
+	return e.Graph.EventOutput(e.Config.UUID.String(), filter, e.netCache)
+}
 
-	fqdns := stringset.New()
+func (e *Enumeration) submitKnownNames() {
 	for _, g := range e.Sys.GraphDatabases() {
-		for _, enum := range g.EventList() {
-			for _, domain := range g.EventDomains(enum) {
+		var events []string
+
+		for _, event := range g.EventList() {
+			for _, domain := range g.EventDomains(event) {
 				if e.Config.IsDomainInScope(domain) {
-					events = append(events, enum)
+					events = append(events, event)
 				}
 			}
 		}
 
-		for _, d := range g.EventSubdomains(events...) {
-			if e.Config.IsDomainInScope(d) {
-				fqdns.Insert(d)
+		for _, event := range events {
+			for _, output := range g.EventNames(event, nil) {
+				if e.Config.IsDomainInScope(output.Name) {
+					e.Bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
+						Name:   output.Name,
+						Domain: output.Domain,
+						Tag:    output.Tag,
+						Source: output.Source,
+					})
+				}
 			}
 		}
 	}
-
-	for f := range fqdns {
-		etld, err := publicsuffix.EffectiveTLDPlusOne(f)
-		if err != nil {
-			continue
-		}
-
-		e.Bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
-			Name:   f,
-			Domain: etld,
-			Tag:    requests.EXTERNAL,
-			Source: "Previous Enum",
-		})
-	}
 }
 
-func (e *Enumeration) submitProvidedNames(wg *sync.WaitGroup) {
-	defer wg.Done()
-
+func (e *Enumeration) submitProvidedNames() {
 	for _, name := range e.Config.ProvidedNames {
 		if domain := e.Config.WhichDomain(name); domain != "" {
-			e.Bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+			e.Bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 				Name:   name,
 				Domain: domain,
 				Tag:    requests.EXTERNAL,
@@ -72,7 +66,7 @@ func (e *Enumeration) namesFromCertificates(addr string) {
 	for _, name := range http.PullCertificateNames(addr, e.Config.Ports) {
 		if n := strings.TrimSpace(name); n != "" {
 			if domain := e.Config.WhichDomain(n); domain != "" {
-				e.Bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+				e.Bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
 					Name:   n,
 					Domain: domain,
 					Tag:    requests.CERT,
@@ -83,130 +77,17 @@ func (e *Enumeration) namesFromCertificates(addr string) {
 	}
 }
 
-func (e *Enumeration) processOutput(wg *sync.WaitGroup) {
-	defer close(e.Output)
-	defer wg.Done()
-
-	curIdx := 0
-	maxIdx := 6
-	delays := []int{25, 50, 75, 100, 150, 250, 500}
-
-	t := time.NewTicker(2 * time.Second)
-	defer t.Stop()
-loop:
-	for {
-		select {
-		case <-e.done:
-			return
-		case <-t.C:
-			e.outputResolvedNames()
-		default:
-			element, ok := e.outputQueue.Next()
-			if !ok {
-				time.Sleep(time.Duration(delays[curIdx]) * time.Millisecond)
-				if curIdx < maxIdx {
-					curIdx++
-				}
-				continue loop
-			}
-
-			output := element.(*requests.Output)
-			if !e.filters.Output.Duplicate(output.Name) {
-				e.Output <- output
-			}
-		}
-	}
-}
-
-func (e *Enumeration) outputResolvedNames() {
-	var failed []*requests.DNSRequest
-
-	// Prepare discovered names for output processing
-	for {
-		element, ok := e.resolvedQueue.Next()
-		if !ok {
-			break
-		}
-
-		name := element.(*requests.DNSRequest)
-
-		output := e.buildOutput(name)
-		if output == nil {
-			failed = append(failed, name)
-			continue
-		}
-
-		e.outputQueue.Append(output)
-	}
-
-	// Put failed attempts back on the resolved names queue
-	for _, f := range failed {
-		e.resolvedQueue.Append(f)
-	}
-}
-
-func (e *Enumeration) buildOutput(req *requests.DNSRequest) *requests.Output {
-	output := &requests.Output{
-		Name:   req.Name,
-		Domain: req.Domain,
-		Tag:    req.Tag,
-		Source: req.Source,
-	}
-
-	for _, r := range req.Records {
-		if t := uint16(r.Type); t != dns.TypeA && t != dns.TypeAAAA {
-			continue
-		}
-
-		addrInfo := e.buildAddrInfo(strings.TrimSpace(r.Data))
-		if addrInfo == nil {
-			return nil
-		}
-
-		output.Addresses = append(output.Addresses, *addrInfo)
-	}
-
-	return output
-}
-
-func (e *Enumeration) buildAddrInfo(addr string) *requests.AddressInfo {
-	ainfo := &requests.AddressInfo{Address: net.ParseIP(addr)}
-
-	asn := e.ipSearch(addr)
-	if asn == nil {
-		return nil
-	}
-
-	var err error
-	ainfo.CIDRStr = asn.Prefix
-	_, ainfo.Netblock, err = net.ParseCIDR(asn.Prefix)
-	if err != nil || !ainfo.Netblock.Contains(ainfo.Address) {
-		return nil
-	}
-
-	ainfo.ASN = asn.ASN
-	ainfo.Description = asn.Description
-
-	return ainfo
-}
-
-func (e *Enumeration) sendOutput(o *requests.Output) {
-	select {
-	case <-e.done:
-		return
-	default:
-		if e.Config.IsDomainInScope(o.Name) {
-			e.outputQueue.Append(o)
-		}
-	}
-}
-
 func (e *Enumeration) queueLog(msg string) {
 	e.logQueue.Append(msg)
 }
 
-func (e *Enumeration) writeLogs() {
-	for {
+func (e *Enumeration) writeLogs(all bool) {
+	num := e.logQueue.Len() / 10
+	if num <= 1000 {
+		num = 1000
+	}
+
+	for i := 0; ; i++ {
 		msg, ok := e.logQueue.Next()
 		if !ok {
 			break
@@ -214,6 +95,24 @@ func (e *Enumeration) writeLogs() {
 
 		if e.Config.Log != nil {
 			e.Config.Log.Print(msg.(string))
+		}
+
+		if !all && i >= num {
+			break
+		}
+	}
+}
+
+func (e *Enumeration) periodicLogging() {
+	t := time.NewTimer(5 * time.Second)
+
+	for {
+		select {
+		case <-e.done:
+			return
+		case <-t.C:
+			e.writeLogs(false)
+			t.Reset(5 * time.Second)
 		}
 	}
 }
