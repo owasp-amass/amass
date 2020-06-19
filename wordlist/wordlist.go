@@ -16,11 +16,6 @@ const (
 	maskSpecial = "-"
 )
 
-var (
-	// KnownValidTLDs is a list of valid top-level domains that is maintained by the IANA.
-	KnownValidTLDs []string
-)
-
 func getWordList(reader io.Reader) []string {
 	var words []string
 
