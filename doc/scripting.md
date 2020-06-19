@@ -10,7 +10,7 @@ The Amass Scripting Engine allows users to provide their own data source impleme
 
 This document will show the format of an Amass data source script, the callback functions that are triggered during enumerations, and the custom functions made available in the environment. These callbacks and custom functions allows scripts to receive requests from Amass and return discoveries to be shared with the architecture. Users can leverage the [Lua Programming Language](https://www.lua.org/pil/#2ed) and the [Lua Standard Library](https://www.lua.org/manual/5.1/manual.html) documentation to take full advantage of the Amass Scripting Engine.
 
-The default Amass data source scripts can be found in [resources/scripts](./resources/scripts), and are separated by the various scripts types. In order to execute your own script, put the `.ads` file under a directory named `scripts` that exists in the Amass output directory. Amass will find the script in that directory and use it during each enumeration.
+The default Amass data source scripts can be found in [resources/scripts](../resources/scripts), and are separated by the various scripts types. In order to execute your own script, put the `.ads` file under a directory named `scripts` that exists in the Amass output directory. Amass will find the script in that directory and use it during each enumeration.
 
 The Amass Scripting Engine also makes two Lua modules available to users: [gluaurl](https://github.com/cjoudrey/gluaurl) for URL parsing/building and [gopher-json](https://github.com/layeh/gopher-json) for simple JSON encoding/decoding. These modules are made available by default and can be used by scripts via `require("url")` and `require("json")`, respectively.
 

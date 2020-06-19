@@ -87,7 +87,7 @@ See the [Amass Scripting Engine Manual](./doc/scripting.md) for greater control 
 
 If you need help with installation and/or usage of the tool, please join our [Discord server](https://discord.gg/rtN8GMd) where community members can best try to help you.
 
-:stop_sign: **Please avoid opening GitHub issues for support requests or questions!**
+:stop_sign:   **Please avoid opening GitHub issues for support requests or questions!**
 
 ## Contributing [![Contribute Yes](https://img.shields.io/badge/contribute-yes-brightgreen.svg)](./CONTRIBUTING.md) [![Chat on Discord](https://img.shields.io/discord/433729817918308352.svg?logo=discord)](https://discord.gg/rtN8GMd)
 
