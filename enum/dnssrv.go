@@ -76,6 +76,12 @@ func (ds *DNSService) processDNSRequest(ctx context.Context, req *requests.DNSRe
 		return
 	}
 
+	// Is this a root domain name?
+	if req.Name == req.Domain {
+		ds.subdomainQueries(ctx, req)
+		ds.queryServiceNames(ctx, req)
+	}
+
 	req.Records = ds.queryInitialTypes(ctx, req)
 
 	if len(req.Records) > 0 {
