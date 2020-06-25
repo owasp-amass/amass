@@ -4,7 +4,7 @@
 name = "Alterations"
 type = "alt"
 
-ldh_chars = "abcdefghijklmnopqrstuvwxyz0123456789-"
+ldh_chars = "_abcdefghijklmnopqrstuvwxyz0123456789-"
 
 function resolved(ctx, name, domain, records)
     local nparts = split(name, ".")

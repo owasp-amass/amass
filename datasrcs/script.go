@@ -23,6 +23,7 @@ type Script struct {
 	requests.BaseService
 
 	SourceType string
+	sys        systems.System
 	luaState   *lua.LState
 	// Script callback functions
 	start      lua.LValue
@@ -37,7 +38,7 @@ type Script struct {
 
 // NewScript returns he object initialized, but not yet started.
 func NewScript(script string, sys systems.System) *Script {
-	s := new(Script)
+	s := &Script{sys: sys}
 	L := s.newLuaState(sys.Config())
 	s.luaState = L
 
@@ -82,6 +83,9 @@ func (s *Script) newLuaState(cfg *config.Config) *lua.LState {
 
 	L.PreloadModule("url", luaurl.Loader)
 	L.PreloadModule("json", luajson.Loader)
+	L.SetGlobal("config", L.NewFunction(s.config))
+	L.SetGlobal("brute_wordlist", L.NewFunction(s.bruteWordlist))
+	L.SetGlobal("alt_wordlist", L.NewFunction(s.altWordlist))
 	L.SetGlobal("log", L.NewFunction(s.log))
 	L.SetGlobal("find", L.NewFunction(s.find))
 	L.SetGlobal("submatch", L.NewFunction(s.submatch))
@@ -185,11 +189,15 @@ func (s *Script) OnStart() error {
 		return nil
 	}
 
-	L.CallByParam(lua.P{
+	err := L.CallByParam(lua.P{
 		Fn:      s.start,
 		NRet:    0,
 		Protect: true,
 	})
+
+	if err != nil {
+		s.sys.Config().Log.Print(fmt.Sprintf("%s: start callback: %v", s.String(), err))
+	}
 	return nil
 }
 
@@ -202,11 +210,15 @@ func (s *Script) OnStop() error {
 		return nil
 	}
 
-	L.CallByParam(lua.P{
+	err := L.CallByParam(lua.P{
 		Fn:      s.stop,
 		NRet:    0,
 		Protect: true,
 	})
+
+	if err != nil {
+		s.sys.Config().Log.Print(fmt.Sprintf("%s: stop callback: %v", s.String(), err))
+	}
 	return nil
 }
 
@@ -229,18 +241,23 @@ func (s *Script) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 	bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 		fmt.Sprintf("Querying %s for %s subdomains", s.String(), req.Domain))
 
-	L.CallByParam(lua.P{
+	err := L.CallByParam(lua.P{
 		Fn:      s.vertical,
 		NRet:    0,
 		Protect: true,
 	}, s.contextToUserData(ctx), lua.LString(req.Domain))
+
+	if err != nil {
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+			fmt.Sprintf("%s: vertical callback: %v", s.String(), err))
+	}
 }
 
 // OnResolved implements the Service interface.
 func (s *Script) OnResolved(ctx context.Context, req *requests.DNSRequest) {
 	L := s.luaState
 
-	if s.resolved.Type() == lua.LTNil || req == nil || req.Name == "" {
+	if s.resolved.Type() == lua.LTNil || req == nil || req.Name == "" || len(req.Records) == 0 {
 		return
 	}
 
@@ -250,12 +267,27 @@ func (s *Script) OnResolved(ctx context.Context, req *requests.DNSRequest) {
 		return
 	}
 
+	records := L.NewTable()
+	for _, rec := range req.Records {
+		tb := L.NewTable()
+
+		tb.RawSetString("rrname", lua.LString(rec.Name))
+		tb.RawSetString("rrtype", lua.LNumber(rec.Type))
+		tb.RawSetString("rrdata", lua.LString(rec.Data))
+		records.Append(tb)
+	}
+
 	s.CheckRateLimit()
-	L.CallByParam(lua.P{
+	err := L.CallByParam(lua.P{
 		Fn:      s.resolved,
 		NRet:    0,
 		Protect: true,
-	}, s.contextToUserData(ctx), lua.LString(req.Name))
+	}, s.contextToUserData(ctx), lua.LString(req.Name), lua.LString(req.Domain), records)
+
+	if err != nil {
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+			fmt.Sprintf("%s: resolved callback: %v", s.String(), err))
+	}
 }
 
 // OnSubdomainDiscovered implements the Service interface.
@@ -273,11 +305,16 @@ func (s *Script) OnSubdomainDiscovered(ctx context.Context, req *requests.DNSReq
 	}
 
 	s.CheckRateLimit()
-	L.CallByParam(lua.P{
+	err := L.CallByParam(lua.P{
 		Fn:      s.subdomain,
 		NRet:    0,
 		Protect: true,
-	}, s.contextToUserData(ctx), lua.LString(req.Name), lua.LNumber(times))
+	}, s.contextToUserData(ctx), lua.LString(req.Name), lua.LString(req.Domain), lua.LNumber(times))
+
+	if err != nil {
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+			fmt.Sprintf("%s: subdomain callback: %v", s.String(), err))
+	}
 }
 
 // OnAddrRequest implements the Service interface.
@@ -297,11 +334,16 @@ func (s *Script) OnAddrRequest(ctx context.Context, req *requests.AddrRequest) {
 	s.CheckRateLimit()
 	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, s.String())
 
-	L.CallByParam(lua.P{
+	err := L.CallByParam(lua.P{
 		Fn:      s.address,
 		NRet:    0,
 		Protect: true,
 	}, s.contextToUserData(ctx), lua.LString(req.Address))
+
+	if err != nil {
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+			fmt.Sprintf("%s: address callback: %v", s.String(), err))
+	}
 }
 
 // OnASNRequest implements the Service interface.
@@ -321,11 +363,16 @@ func (s *Script) OnASNRequest(ctx context.Context, req *requests.ASNRequest) {
 	s.CheckRateLimit()
 	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, s.String())
 
-	L.CallByParam(lua.P{
+	err := L.CallByParam(lua.P{
 		Fn:      s.asn,
 		NRet:    0,
 		Protect: true,
 	}, s.contextToUserData(ctx), lua.LString(req.Address))
+
+	if err != nil {
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+			fmt.Sprintf("%s: asn callback: %v", s.String(), err))
+	}
 }
 
 // OnWhoisRequest implements the Service interface.
@@ -345,9 +392,14 @@ func (s *Script) OnWhoisRequest(ctx context.Context, req *requests.WhoisRequest)
 	s.CheckRateLimit()
 	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, s.String())
 
-	L.CallByParam(lua.P{
+	err := L.CallByParam(lua.P{
 		Fn:      s.horizontal,
 		NRet:    0,
 		Protect: true,
 	}, s.contextToUserData(ctx), lua.LString(req.Domain))
+
+	if err != nil {
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+			fmt.Sprintf("%s: horizontal callback: %v", s.String(), err))
+	}
 }

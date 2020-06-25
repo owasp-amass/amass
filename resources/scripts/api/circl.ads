@@ -14,8 +14,8 @@ function vertical(ctx, domain)
     apirequest(ctx, domain)
 end
 
-function resolved(ctx, domain)
-    apirequest(ctx, domain)
+function resolved(ctx, name, domain, records)
+    apirequest(ctx, name)
 end
 
 function apirequest(ctx, domain)

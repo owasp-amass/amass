@@ -12,7 +12,7 @@ function vertical(ctx, domain)
     crawl(ctx, buildurl(domain))
 end
 
-function resolved(ctx, name)
+function resolved(ctx, name, domain, records)
     crawl(ctx, buildurl(name))
 end
 

@@ -25,6 +25,138 @@ type contextWrapper struct {
 	Ctx context.Context
 }
 
+// Wrapper so that scripts can obtain the configuration for the current enumeration.
+func (s *Script) config(L *lua.LState) int {
+	c := L.CheckUserData(1).Value.(*contextWrapper)
+	cfg := c.Ctx.Value(requests.ContextConfig).(*config.Config)
+	if cfg == nil {
+		L.Push(lua.LNil)
+		return 1
+	}
+
+	r := L.NewTable()
+	if cfg.Active {
+		r.RawSetString("mode", lua.LString("active"))
+	} else if cfg.Passive {
+		r.RawSetString("mode", lua.LString("passive"))
+	} else {
+		r.RawSetString("mode", lua.LString("normal"))
+	}
+
+	r.RawSetString("event_id", lua.LString(cfg.UUID.String()))
+	r.RawSetString("max_dns_queries", lua.LNumber(cfg.MaxDNSQueries))
+
+	scope := L.NewTable()
+	tb := L.NewTable()
+	for _, domain := range cfg.Domains() {
+		tb.Append(lua.LString(domain))
+	}
+	scope.RawSetString("domains", tb)
+
+	tb = L.NewTable()
+	for _, sub := range cfg.Blacklist {
+		tb.Append(lua.LString(sub))
+	}
+	scope.RawSetString("blacklist", tb)
+
+	tb = L.NewTable()
+	for _, rt := range cfg.RecordTypes {
+		tb.Append(lua.LString(rt))
+	}
+	r.RawSetString("dns_record_types", tb)
+
+	tb = L.NewTable()
+	for _, resolver := range cfg.Resolvers {
+		tb.Append(lua.LString(resolver))
+	}
+	r.RawSetString("resolvers", tb)
+
+	tb = L.NewTable()
+	for _, name := range cfg.ProvidedNames {
+		tb.Append(lua.LString(name))
+	}
+	r.RawSetString("provided_names", tb)
+
+	tb = L.NewTable()
+	for _, addr := range cfg.Addresses {
+		tb.Append(lua.LString(addr.String()))
+	}
+	scope.RawSetString("addresses", tb)
+
+	tb = L.NewTable()
+	for _, cidr := range cfg.CIDRs {
+		tb.Append(lua.LString(cidr.String()))
+	}
+	scope.RawSetString("cidrs", tb)
+
+	tb = L.NewTable()
+	for _, asn := range cfg.ASNs {
+		tb.Append(lua.LNumber(asn))
+	}
+	scope.RawSetString("asns", tb)
+
+	tb = L.NewTable()
+	for _, port := range cfg.Ports {
+		tb.Append(lua.LNumber(port))
+	}
+	scope.RawSetString("ports", tb)
+	r.RawSetString("scope", scope)
+
+	tb = L.NewTable()
+	tb.RawSetString("active", lua.LBool(cfg.BruteForcing))
+	tb.RawSetString("recursive", lua.LBool(cfg.Recursive))
+	tb.RawSetString("min_for_recursive", lua.LNumber(cfg.MinForRecursive))
+	r.RawSetString("brute_forcing", tb)
+
+	tb = L.NewTable()
+	tb.RawSetString("active", lua.LBool(cfg.Alterations))
+	tb.RawSetString("flip_words", lua.LBool(cfg.FlipWords))
+	tb.RawSetString("flip_numbers", lua.LBool(cfg.FlipNumbers))
+	tb.RawSetString("add_words", lua.LBool(cfg.AddWords))
+	tb.RawSetString("add_numbers", lua.LBool(cfg.AddNumbers))
+	tb.RawSetString("edit_distance", lua.LNumber(cfg.EditDistance))
+	r.RawSetString("alterations", tb)
+
+	L.Push(r)
+	return 1
+}
+
+// Wrapper so that scripts can obtain the brute force wordlist for the current enumeration.
+func (s *Script) bruteWordlist(L *lua.LState) int {
+	c := L.CheckUserData(1).Value.(*contextWrapper)
+	cfg := c.Ctx.Value(requests.ContextConfig).(*config.Config)
+	if cfg == nil {
+		L.Push(lua.LNil)
+		return 1
+	}
+
+	tb := L.NewTable()
+	for _, word := range cfg.Wordlist {
+		tb.Append(lua.LString(word))
+	}
+
+	L.Push(tb)
+	return 1
+}
+
+// Wrapper so that scripts can obtain the alteration wordlist for the current enumeration.
+func (s *Script) altWordlist(L *lua.LState) int {
+	c := L.CheckUserData(1).Value.(*contextWrapper)
+	cfg := c.Ctx.Value(requests.ContextConfig).(*config.Config)
+	if cfg == nil {
+		L.Push(lua.LNil)
+		return 1
+	}
+
+	tb := L.NewTable()
+	for _, word := range cfg.AltWordlist {
+		tb.Append(lua.LString(word))
+	}
+
+	L.Push(tb)
+	return 1
+}
+
 // Wrapper so scripts can set the data source rate limit.
 func (s *Script) setRateLimit(L *lua.LState) int {
 	lv := L.Get(1)

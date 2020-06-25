@@ -120,7 +120,7 @@ The `ctx` parameter is a reference to the context of the caller, which is necess
 Amass executes the `resolved` callback function after successfully resolving the provided `name` via DNS query. The callback is executed for each DNS name validated this way.
 
 ```lua
-function resolved(ctx, name)
+function resolved(ctx, name, records)
     crawl(ctx, "https://" .. name))
 end
 ```
@@ -129,6 +129,16 @@ end
 |:-----------|:----------|
 | ctx        | UserData  |
 | name       | string    |
+| domain     | string    |
+| records    | table     |
+
+The `records` parameter is a table of tables that each contain the following fields:
+
+| Field Name | Data Type |
+|:-----------|:----------|
+| rrname     | string    |
+| rrtype     | number    |
+| rrdata     | string    |
 
 ### `subdomain` Callback
 
@@ -146,6 +156,7 @@ end
 |:-----------|:----------|
 | ctx        | UserData  |
 | name       | string    |
+| domain     | string    |
 | times      | number    |
 
 ### `address` Callback
@@ -186,6 +197,104 @@ end
 |:-----------|:----------|
 | ctx        | UserData  |
 | addr       | string    |
+
+### `config` Function
+
+A script can obtain the configuration of the current enumeration process by calling the `config` function.
+
+```lua
+function vertical(ctx, domain)
+    local cfg = config(ctx)
+
+    print(cfg.mode)
+end
+```
+
+| Field Name | Data Type |
+|:-----------|:----------|
+| ctx        | UserData  |
+
+The `config` function returns a rather large table containing values explained in the [User Guide](./user_guide.md) and shown below.
+
+| Field Name       | Data Type |
+|:-----------------|:----------|
+| mode             | string    |
+| event_id         | string    |
+| max_dns_queries  | number    |
+| dns_record_types | table     |
+| resolvers        | table     |
+| provided_names   | table     |
+| scope            | table     |
+| brute_forcing    | table     |
+| alterations      | table     |
+
+Most of the tables are simply arrays of strings, but the `scope`, `brute_forcing` and `alterations` tables deserve additional explanation.
+
+The `scope` table has the following fields:
+
+| Field Name | Data Type |
+|:-----------|:----------|
+| domains    | table     |
+| blacklist  | table     |
+| addresses  | table     |
+| cidrs      | table     |
+| asns       | table     |
+| ports      | table     |
+
+The `brute_forcing` table has the following fields:
+
+| Field Name        | Data Type |
+|:------------------|:----------|
+| active            | bool      |
+| recursive         | bool      |
+| min_for_recursive | number    |
+
+The `alterations` table has the following fields:
+
+| Field Name    | Data Type |
+|:--------------|:----------|
+| active        | bool      |
+| flip_words    | bool      |
+| flip_numbers  | bool      |
+| add_words     | bool      |
+| add_numbers   | bool      |
+| edit_distance | number    |
+
+### `brute_wordlist` Function
+
+A script can obtain the wordlist used for brute forcing by the current enumeration process via the `brute_wordlist` function. The return value is an array of strings.
+
+```lua
+function vertical(ctx, domain)
+    local wordlist = brute_wordlist(ctx)
+
+    for i, word in pairs(wordlist) do
+        print(word)
+    end
+end
+```
+
+| Field Name | Data Type |
+|:-----------|:----------|
+| ctx        | UserData  |
+
+### `alt_wordlist` Function
+
+A script can obtain the wordlist used for name alterations by the current enumeration process via the `alt_wordlist` function. The return value is an array of strings.
+
+```lua
+function vertical(ctx, domain)
+    local wordlist = alt_wordlist(ctx)
+
+    for i, word in pairs(wordlist) do
+        print(word)
+    end
+end
+```
+
+| Field Name | Data Type |
+|:-----------|:----------|
+| ctx        | UserData  |
 
 ### `log` Function
 
