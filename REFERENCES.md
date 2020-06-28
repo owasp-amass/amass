@@ -7,7 +7,10 @@ Did you write a blog post, magazine article or do a podcast about or mentioning 
 ### Pod- & Webcasts
 
 * [Josh Amishav-Zlatin's Channel](https://www.youtube.com/channel/UCajDbRGYBtgITfEbNUbWdsw):
+  * [Advanced Passive Recon with the Amass Scripting Engine](https://www.youtube.com/watch?v=twVZLZxTAX4)
   * [Domain and Network Recon using Amass - Mapping the Attack Surface](https://www.youtube.com/watch?v=bsUeTyFoEtU)
+* [Musab Khan's Channel](https://www.youtube.com/channel/UCX3LuFyGjuVTyfpte63L6KQ):
+  * [OWASP Amass - In-depth Asset Discovery tool](https://www.youtube.com/watch?v=wxhW1fTjLNw)
 * [Nahamsec's Streams](https://www.twitch.tv/nahamsec):
   * [04/26/2020 - Mayonaise Talks About His Recon Workflow, How to Learn Different Topics, and How to Bug Bounty!](https://www.youtube.com/watch?v=SGLdv_4Iy44)
   * [09/08/2019 - Live Bug Bounty Recon Session on Yahoo (censys, altdns, amass) w/ @infosec_au](https://www.youtube.com/watch?v=m-eZfbgdl9I)
@@ -155,7 +158,15 @@ Did you write a blog post, magazine article or do a podcast about or mentioning 
 
 ### 2020
 
-_t.b.a._
+* [How to Use Amass Efficiently](https://www.youtube.com/watch?v=H1wdBgY1rtg)
+  by Jeff Foley,
+  NahamCom 2020,
+  14.06.2020
+* [The Bug Hunter's Methodology v4.0 - Recon Edition](https://www.youtube.com/watch?v=p4JgIu1mceI)
+  by Jason Haddix,
+  NahamCom 2020,
+  14.06.2020
+  ([Slides](https://drive.google.com/file/d/1aG_qqRvNW-s5_8vvPk5rJiMSMeNL2uY9/view))
 
 ### 2019
 
@@ -206,7 +217,7 @@ _t.b.a._
   by Jeff Foley,
   [OWASP London Chapter](https://owasp.org/www-chapter-london/),
   29.09.2018
-* [The Bug Hunters Methodology v3](https://www.youtube.com/watch?v=Qw1nNPiH_Go)
+* [The Bug Hunter's Methodology v3](https://www.youtube.com/watch?v=Qw1nNPiH_Go)
   by Jason Haddix,
   Bugcrowd LevelUp 0x02,
   28.05.2018
