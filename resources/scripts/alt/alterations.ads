@@ -105,12 +105,12 @@ end
 function numseq(num)
     local s = {}
 
-    local start = num - 250
+    local start = num - 50
     if start < 1 then
         start = 1
     end
 
-    local max = num + 250
+    local max = num + 50
     for i=start,max do
         set_insert(s, tostring(i))
     end
