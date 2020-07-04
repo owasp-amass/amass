@@ -48,8 +48,9 @@ func (g *Graph) NameToAddrs(node graphdb.Node) ([]graphdb.Node, error) {
 
 	// Traverse CNAME and A/AAAA records
 	nodes, err := g.CNAMEToAddrs(node)
+
 	if len(nodes) > 0 {
-		return nodes, nil
+		return nodes, err
 	}
 
 	return nodes, fmt.Errorf("%s: NameToIPAddrs: No addresses were discovered for %s", g.String(), nstr)
