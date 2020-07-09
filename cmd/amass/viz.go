@@ -63,7 +63,7 @@ func runVizCommand(clArgs []string) {
 	vizCommand.StringVar(&args.Filepaths.Input, "i", "", "The Amass data operations JSON file")
 	vizCommand.StringVar(&args.Filepaths.Output, "o", "", "Path to the directory for output files being generated")
 	vizCommand.BoolVar(&args.Options.D3, "d3", false, "Generate the D3 v4 force simulation HTML file")
-	//vizCommand.BoolVar(&args.Options.DOT, "dot", false, "Generate the DOT output file")
+	vizCommand.BoolVar(&args.Options.DOT, "dot", false, "Generate the DOT output file")
 	vizCommand.BoolVar(&args.Options.GEXF, "gexf", false, "Generate the Gephi Graph Exchange XML Format (GEXF) file")
 	vizCommand.BoolVar(&args.Options.Graphistry, "graphistry", false, "Generate the Graphistry JSON file")
 	vizCommand.BoolVar(&args.Options.Maltego, "maltego", false, "Generate the Maltego csv file")
@@ -202,6 +202,8 @@ func writeMaltegoFile(path string, nodes []viz.Node, edges []viz.Edge) {
 	}
 	defer f.Close()
 
+	f.Truncate(0)
+	f.Seek(0, 0)
 	viz.WriteMaltegoData(f, nodes, edges)
 	f.Sync()
 }
@@ -213,6 +215,8 @@ func writeGraphistryFile(path string, nodes []viz.Node, edges []viz.Edge) {
 	}
 	defer f.Close()
 
+	f.Truncate(0)
+	f.Seek(0, 0)
 	viz.WriteGraphistryData(f, nodes, edges)
 	f.Sync()
 }
@@ -224,6 +228,8 @@ func writeGEXFFile(path string, nodes []viz.Node, edges []viz.Edge) {
 	}
 	defer f.Close()
 
+	f.Truncate(0)
+	f.Seek(0, 0)
 	viz.WriteGEXFData(f, nodes, edges)
 	f.Sync()
 }
@@ -235,6 +241,8 @@ func writeD3File(path string, nodes []viz.Node, edges []viz.Edge) {
 	}
 	defer f.Close()
 
+	f.Truncate(0)
+	f.Seek(0, 0)
 	viz.WriteD3Data(f, nodes, edges)
 	f.Sync()
 }
@@ -246,6 +254,8 @@ func writeDOTData(path string, nodes []viz.Node, edges []viz.Edge) {
 	}
 	defer f.Close()
 
+	f.Truncate(0)
+	f.Seek(0, 0)
 	viz.WriteDOTData(f, nodes, edges)
 	f.Sync()
 }
