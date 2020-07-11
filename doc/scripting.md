@@ -120,7 +120,7 @@ The `ctx` parameter is a reference to the context of the caller, which is necess
 Amass executes the `resolved` callback function after successfully resolving the provided `name` via DNS query. The callback is executed for each DNS name validated this way.
 
 ```lua
-function resolved(ctx, name, records)
+function resolved(ctx, name, domain, records)
     crawl(ctx, "https://" .. name))
 end
 ```
@@ -145,7 +145,7 @@ The `records` parameter is a table of tables that each contain the following fie
 Amass executes the `subdomain` callback function after successfully resolving the provided `name` via DNS query and checking that it is a proper subdomain name. A proper subdomain name must have more labels than the root domain name and be resolved with a hostname label. For example, if `example.com` is the root domain name, and the FQDN `www.depta.example.com` is successfully resolved, then the proper subdomain name `depta.example.com` will be provied to the `subdomain` callback function. The `times` parameter shares how many hostnames have been discovered within this proper subdomain name.
 
 ```lua
-function subdomain(ctx, name, times)
+function subdomain(ctx, name, domain, times)
     if times == 1 then
         crawl(ctx, "https://" .. name))
     end
@@ -166,7 +166,7 @@ Amass executes the `address` callback function when attempting to discover addit
 ```lua
 function address(ctx, addr)
     -- Send back a related subdomain name
-    newname(ctx, domain)
+    newname(ctx, name)
     -- Send back a related IP address
     newaddr(ctx, ipaddr, domain)
 end

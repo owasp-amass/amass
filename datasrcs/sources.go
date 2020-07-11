@@ -47,7 +47,6 @@ func GetAllSources(sys systems.System) []requests.Service {
 		NewRADb(sys),
 		NewRobtex(sys),
 		NewShadowServer(sys),
-		NewSpyse(sys),
 		NewTeamCymru(sys),
 		NewTwitter(sys),
 		NewUmbrella(sys),

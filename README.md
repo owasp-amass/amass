@@ -23,8 +23,8 @@ The OWASP Amass Project performs network mapping of attack surfaces and external
 |:-------------|:-------------|
 | DNS          | Brute forcing, Reverse DNS sweeping, FQDN alterations/permutations, FQDN Similarity-based Guessing, Zone transfers |
 | Scraping     | Ask, Baidu, Bing, BuiltWith, DNSDumpster, DNSTable, HackerOne, RapidDNS, Riddler, SiteDossier, ViewDNS, Yahoo |
-| Certificates | Active pulls (optional), Censys, CertSpotter, Crtsh, Entrust, GoogleCT |
-| APIs         | AlienVault, BinaryEdge, BufferOver, CIRCL, CommonCrawl, DNSDB, GitHub, HackerTarget, IPToASN, Mnemonic, NetworksDB, PassiveTotal, Pastebin, RADb, Robtex, SecurityTrails, ShadowServer, Shodan, Spyse (CertDB & FindSubdomains), Sublist3rAPI, TeamCymru, ThreatCrowd, Twitter, Umbrella, URLScan, VirusTotal, WhoisXML |
+| Certificates | Active pulls (optional), Censys, CertSpotter, Crtsh, Entrust, FacebookCT, GoogleCT |
+| APIs         | AlienVault, BinaryEdge, BufferOver, C99, CIRCL, CommonCrawl, DNSDB, GitHub, HackerTarget, IPToASN, Mnemonic, NetworksDB, PassiveTotal, Pastebin, RADb, Robtex, SecurityTrails, ShadowServer, Shodan, Spyse, Sublist3rAPI, TeamCymru, ThreatCrowd, ThreatMiner, Twitter, Umbrella, URLScan, VirusTotal, WhoisXML, ZETAlytics |
 | Web Archives | ArchiveIt, LoCArchive, UKGovArchive, Wayback |
 
 ----
