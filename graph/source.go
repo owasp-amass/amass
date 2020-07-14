@@ -5,6 +5,7 @@ package graph
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/OWASP/Amass/v3/graphdb"
 	"github.com/OWASP/Amass/v3/stringset"
@@ -102,4 +103,95 @@ func (g *Graph) NodeSources(node graphdb.Node, events ...string) ([]string, erro
 	}
 
 	return sources, nil
+}
+
+// GetSourceData returns the most recent response from the source/tag for the query within the time to live.
+func (g *Graph) GetSourceData(source, query string, ttl int) (string, error) {
+	node, err := g.db.ReadNode(source, "source")
+	if err != nil {
+		return "", err
+	}
+
+	edges, err := g.db.ReadOutEdges(node, query)
+	if err != nil {
+		return "", err
+	}
+
+	var data string
+	for _, edge := range edges {
+		p, err := g.db.ReadProperties(edge.To, "timestamp")
+		if err != nil || len(p) == 0 {
+			continue
+		}
+
+		d := time.Duration(ttl) * time.Minute
+		ts, err := time.Parse(time.RFC3339, p[0].Value)
+		if err != nil || ts.Add(d).Before(time.Now()) {
+			continue
+		}
+
+		p, err = g.db.ReadProperties(edge.To, "response")
+		if err != nil || len(p) == 0 {
+			continue
+		}
+
+		data = p[0].Value
+		break
+	}
+
+	if data == "" {
+		return "", fmt.Errorf("%s: GetSourceData: Failed to obtain a cached response from %s for query %s", g.String(), source, query)
+	}
+
+	return data, nil
+}
+
+// CacheSourceData inserts an updated response from the source/tag for the query.
+func (g *Graph) CacheSourceData(source, tag, query, resp string) error {
+	snode, err := g.InsertSource(source, tag)
+	if err != nil {
+		return err
+	}
+
+	// Remove previously cached responses for the same query
+	g.deleteCachedData(source, query)
+
+	ts := time.Now().Format(time.RFC3339)
+	rnode, err := g.InsertNodeIfNotExist(source+"-response-"+ts, "response")
+	if err != nil {
+		return err
+	}
+
+	if err := g.db.InsertProperty(rnode, "timestamp", ts); err != nil {
+		return err
+	}
+
+	if err := g.db.InsertProperty(rnode, "response", resp); err != nil {
+		return err
+	}
+
+	return g.InsertEdge(&graphdb.Edge{
+		Predicate: query,
+		From:      snode,
+		To:        rnode,
+	})
+}
+
+func (g *Graph) deleteCachedData(source, query string) error {
+	node, err := g.db.ReadNode(source, "source")
+	if err != nil {
+		return err
+	}
+
+	edges, err := g.db.ReadOutEdges(node, query)
+	if err != nil {
+		return err
+	}
+
+	for _, edge := range edges {
+		g.db.DeleteNode(edge.To)
+		g.db.DeleteEdge(edge)
+	}
+
+	return nil
 }

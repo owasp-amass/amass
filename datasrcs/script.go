@@ -101,6 +101,8 @@ func (s *Script) newLuaState(cfg *config.Config) *lua.LState {
 	L.SetGlobal("outputdir", L.NewFunction(s.outputdir))
 	L.SetGlobal("setratelimit", L.NewFunction(s.setRateLimit))
 	L.SetGlobal("checkratelimit", L.NewFunction(s.checkRateLimit))
+	L.SetGlobal("obtain_response", L.NewFunction(s.obtainResponse))
+	L.SetGlobal("cache_response", L.NewFunction(s.cacheResponse))
 	L.SetGlobal("subdomainre", lua.LString(dns.AnySubdomainRegexString()))
 	return L
 }
@@ -124,6 +126,9 @@ func (s *Script) registerAPIKey(L *lua.LState, cfg *config.Config) {
 	}
 	if api.Secret != "" {
 		tb.RawSetString("secret", lua.LString(api.Secret))
+	}
+	if api.TTL != 0 {
+		tb.RawSetString("ttl", lua.LNumber(api.TTL))
 	}
 
 	L.SetGlobal("api", tb)

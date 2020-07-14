@@ -608,3 +608,59 @@ func getNumberField(L *lua.LState, t lua.LValue, key string) (float64, bool) {
 	}
 	return 0, false
 }
+
+// Wrapper so that scripts can obtain cached data source responses.
+func (s *Script) obtainResponse(L *lua.LState) int {
+	lv := L.Get(1)
+	u, ok := lv.(lua.LString)
+	if !ok {
+		L.Push(lua.LNil)
+		return 1
+	}
+	url := string(u)
+
+	lv = L.Get(2)
+	t, ok := lv.(lua.LNumber)
+	if !ok {
+		L.Push(lua.LNil)
+		return 1
+	}
+
+	ttl := int(t)
+	if ttl <= 0 {
+		L.Push(lua.LNil)
+		return 1
+	}
+
+	for _, db := range s.sys.GraphDatabases() {
+		if resp, err := db.GetSourceData(s.String(), url, ttl); err == nil {
+			// Allow the data source to accept another request immediately on cache hits
+			s.ClearLast()
+			L.Push(lua.LString(resp))
+			return 1
+		}
+	}
+
+	L.Push(lua.LNil)
+	return 1
+}
+
+// Wrapper so that scripts can cache data source responses.
+func (s *Script) cacheResponse(L *lua.LState) int {
+	lv := L.Get(1)
+	u, ok := lv.(lua.LString)
+	if !ok {
+		return 0
+	}
+
+	lv = L.Get(2)
+	resp, ok := lv.(lua.LString)
+	if !ok {
+		return 0
+	}
+
+	for _, db := range s.sys.GraphDatabases() {
+		db.CacheSourceData(s.String(), s.SourceType, string(u), string(resp))
+	}
+	return 0
+}

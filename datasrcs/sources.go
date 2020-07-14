@@ -38,11 +38,8 @@ func GetAllSources(sys systems.System) []requests.Service {
 		NewCrtsh(sys),
 		NewDNSDB(sys),
 		NewDNSDumpster(sys),
-		NewEntrust(sys),
-		NewGitHub(sys),
 		NewIPToASN(sys),
 		NewNetworksDB(sys),
-		NewPassiveTotal(sys),
 		NewPastebin(sys),
 		NewRADb(sys),
 		NewRobtex(sys),
@@ -52,7 +49,6 @@ func GetAllSources(sys systems.System) []requests.Service {
 		NewUmbrella(sys),
 		NewURLScan(sys),
 		NewViewDNS(sys),
-		NewVirusTotal(sys),
 		NewWhoisXML(sys),
 	}
 

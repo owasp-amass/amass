@@ -150,6 +150,7 @@ type APIKey struct {
 	Password string `ini:"password"`
 	Key      string `ini:"apikey"`
 	Secret   string `ini:"secret"`
+	TTL      int    `ini:"ttl"`
 }
 
 // NewConfig returns a default configuration object.

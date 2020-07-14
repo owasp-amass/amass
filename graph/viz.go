@@ -27,7 +27,7 @@ func (g *Graph) VizData(uuid string) ([]viz.Node, []viz.Edge) {
 	return nodes, edges
 }
 
-// Identify unique nodes that should be included in the visualization
+// Identify unique nodes that should be included in the visualization.
 func (g *Graph) vizNodes(uuid string, edges []*graphdb.Edge) ([]viz.Node, map[string]int) {
 	var idx int
 	var nodes []viz.Node
@@ -39,9 +39,11 @@ func (g *Graph) vizNodes(uuid string, edges []*graphdb.Edge) ([]viz.Node, map[st
 			ids.Insert(id)
 
 			properties, err := g.db.ReadProperties(d.To, "type")
-			// We do not print the source or event nodes in the graph visualizations
+			// We do not print the source, event or response nodes in the graph visualizations
 			if err != nil || len(properties) == 0 ||
-				properties[0].Value == "source" || properties[0].Value == "event" {
+				properties[0].Value == "source" ||
+				properties[0].Value == "event" ||
+				properties[0].Value == "response" {
 				continue
 			}
 
@@ -63,7 +65,7 @@ func (g *Graph) vizNodes(uuid string, edges []*graphdb.Edge) ([]viz.Node, map[st
 	return nodes, nodeToIdx
 }
 
-// Identify the edges between nodes that should be included in the visualization
+// Identify the edges between nodes that should be included in the visualization.
 func (g *Graph) vizEdges(nodes []viz.Node, nodeToIdx map[string]int) []viz.Edge {
 	var edges []viz.Edge
 
@@ -131,7 +133,7 @@ func (g *Graph) buildVizNode(node graphdb.Node, ntype, uuid string) *viz.Node {
 	}
 }
 
-// Update the type names for visualization
+// Update the type names for visualization.
 func (g *Graph) convertNodeType(id, ntype string, edges []*graphdb.Edge) string {
 	if ntype == "fqdn" {
 		var pred string

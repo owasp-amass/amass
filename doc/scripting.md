@@ -58,6 +58,7 @@ If the `name` field for a script has a matching entry in the Amass configuration
 | password   | string    |
 | key        | string    |
 | secret     | string    |
+| ttl        | number    |
 
 ### `start` Callback
 

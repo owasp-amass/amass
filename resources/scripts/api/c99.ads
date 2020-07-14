@@ -15,20 +15,35 @@ function vertical(ctx, domain)
         return
     end
 
-    local page, err = request({
-        url=buildurl(domain),
-        headers={['Content-Type']="application/json"},
-    })
-    if (err ~= nil and err ~= "") then
+    local resp
+    local vurl = buildurl(domain)
+    -- Check if the response data is in the graph database
+    if (api.ttl ~= nil and api.ttl > 0) then
+        resp = obtain_response(vurl, api.ttl)
+    end
+
+    if (resp == nil or resp == "") then
+        local err
+
+        resp, err = request({
+            url=vurl,
+            headers={['Content-Type']="application/json"},
+        })
+        if (err ~= nil and err ~= "") then
+            return
+        end
+
+        if (api.ttl ~= nil and api.ttl > 0) then
+            cache_response(vurl, resp)
+        end
+    end
+
+    local d = json.decode(resp)
+    if (d == nil or d.success ~= true or #(d.subdomains) == 0) then
         return
     end
 
-    local resp = json.decode(page)
-    if (resp == nil or resp.success ~= true or #(resp.subdomains) == 0) then
-        return
-    end
-
-    for i, s in pairs(resp.subdomains) do
+    for i, s in pairs(d.subdomains) do
         sendnames(ctx, s.subdomain)
     end
 end

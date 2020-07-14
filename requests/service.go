@@ -37,10 +37,6 @@ type Service interface {
 	Stop() error
 	OnStop() error
 
-	// Methods that enforce the rate limit
-	SetRateLimit(min time.Duration)
-	CheckRateLimit()
-
 	// RequestLen returns the current length of the request queue
 	RequestLen() int
 
@@ -259,6 +255,11 @@ func (bas *BaseService) CheckRateLimit() {
 		time.Sleep(bas.rateLimit - delta)
 	}
 	bas.last = time.Now()
+}
+
+// ClearLast resets the last value so the service can be utilized immediately.
+func (bas *BaseService) ClearLast() {
+	bas.last.Truncate(time.Hour)
 }
 
 type queuedCall struct {

@@ -22,30 +22,48 @@ function apiquery(ctx, domain)
         ['Content-Type']="application/json",
     }
 
-    while(true) do
-        local page, err = request({
-            url=apiurl(domain),
-            headers=hdrs,
-        })
-        if (err ~= nil and err ~= '') then
+    for i=1,500 do
+        local resp
+        local vurl = apiurl(domain, i)
+        -- Check if the response data is in the graph database
+        if (api.ttl ~= nil and api.ttl > 0) then
+            resp = obtain_response(vurl, api.ttl)
+        end
+
+        if (resp == nil or resp == "") then
+            local err
+    
+            resp, err = request({
+                url=vurl,
+                headers=hdrs,
+            })
+            if (err ~= nil and err ~= "") then
+                return
+            end
+    
+            if (api.ttl ~= nil and api.ttl > 0) then
+                cache_response(vurl, resp)
+            end
+        end
+    
+        local d = json.decode(resp)
+        if (d == nil or #(d.events) == 0) then
             return
         end
     
-        local resp = json.decode(page)
-        if (resp == nil or #(resp.events) == 0) then
-            return
-        end
-    
-        for i, v in pairs(resp.events) do
+        for i, v in pairs(d.events) do
             newname(ctx, v)
         end
 
-        if (resp.page > 500 or resp.page > (resp.total / resp.pagesize)) then
+        if (d.page > 500 or d.page > (d.total / d.pagesize)) then
             return
         end
+
+        active(ctx)
+        checkratelimit()
     end
 end
 
-function apiurl(domain)
-    return "https://api.binaryedge.io/v2/query/domains/subdomain/" .. domain
+function apiurl(domain, pagenum)
+    return "https://api.binaryedge.io/v2/query/domains/subdomain/" .. domain .. "?page=" .. pagenum
 end

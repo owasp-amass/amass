@@ -15,18 +15,33 @@ function vertical(ctx, domain)
         return
     end
 
-    local page, err = request({
-        url=verturl(domain),
-        headers={
-            APIKEY=api.key,
-            ['Content-Type']="application/json",
-        },
-    })
-    if (err ~= nil and err ~= "") then
-        return
+    local resp
+    local vurl = verturl(domain)
+    -- Check if the response data is in the graph database
+    if (api.ttl ~= nil and api.ttl > 0) then
+        resp = obtain_response(vurl, api.ttl)
     end
 
-    local j = json.decode(page)
+    if (resp == nil or resp == "") then
+        local err
+
+        resp, err = request({
+            url=vurl,
+            headers={
+                APIKEY=api.key,
+                ['Content-Type']="application/json",
+            },
+        })
+        if (err ~= nil and err ~= "") then
+            return
+        end
+
+        if (api.ttl ~= nil and api.ttl > 0) then
+            cache_response(vurl, resp)
+        end
+    end
+
+    local j = json.decode(resp)
     if (j == nil or #(j.subdomains) == 0) then
         return
     end
@@ -56,18 +71,33 @@ function horizontal(ctx, domain)
         return
     end
 
-    local page, err = request({
-        url=horizonurl(domain),
-        headers={
-            APIKEY=api.key,
-            ['Content-Type']="application/json",
-        },
-    })
-    if (err ~= nil and err ~= "") then
-        return
+    local resp
+    local hurl = horizonurl(domain)
+    -- Check if the response data is in the graph database
+    if (api.ttl ~= nil and api.ttl > 0) then
+        resp = obtain_response(hurl, api.ttl)
     end
 
-    local j = json.decode(page)
+    if (resp == nil or resp == "") then
+        local err
+
+        resp, err = request({
+            url=hurl,
+            headers={
+                APIKEY=api.key,
+                ['Content-Type']="application/json",
+            },
+        })
+        if (err ~= nil and err ~= "") then
+            return
+        end
+
+        if (api.ttl ~= nil and api.ttl > 0) then
+            cache_response(hurl, resp)
+        end
+    end
+
+    local j = json.decode(resp)
     if (j == nil or #(j.records) == 0) then
         return
     end

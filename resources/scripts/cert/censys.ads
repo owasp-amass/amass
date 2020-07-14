@@ -11,8 +11,9 @@ function start()
 end
 
 function vertical(ctx, domain)
-    if api == nil then
-        webscrape(ctx, domain)
+    if (api == nil or api.key == nil or 
+        api.key == "" or api.secret == nil or api.secret == "") then
+        scrape(ctx, {url=scrapeurl(domain)})
         return
     end
 
@@ -23,39 +24,52 @@ function apiquery(ctx, domain)
     local p = 1
 
     while(true) do
-        local body, err = json.encode({
-            query="parsed.names: " .. domain, 
-            page=p,
-            fields={"parsed.names"},
-        })
-        if (err ~= nil and err ~= "") then
+        local resp
+        local reqstr = domain .. "page: " .. p
+        -- Check if the response data is in the graph database
+        if (api.ttl ~= nil and api.ttl > 0) then
+            resp = obtain_response(reqstr, api.ttl)
+        end
+
+        if (resp == nil or resp == "") then
+            local body, err = json.encode({
+                query="parsed.names: " .. domain, 
+                page=p,
+                fields={"parsed.names"},
+            })
+            if (err ~= nil and err ~= "") then
+                return
+            end
+    
+            resp, err = request({
+                method="POST",
+                data=body,
+                url=apiurl(),
+                headers={['Content-Type']="application/json"},
+                id=api["key"],
+                pass=api["secret"],
+            })
+            if (err ~= nil and err ~= "") then
+                return
+            end
+
+            if (api.ttl ~= nil and api.ttl > 0) then
+                cache_response(reqstr, resp)
+            end
+        end
+
+        local d = json.decode(resp)
+        if (d == nil or d.status ~= "ok" or #(d.results) == 0) then
             return
         end
 
-        local page, err = request({
-            method="POST",
-            data=body,
-            url=apiurl(),
-            headers={['Content-Type']="application/json"},
-            id=api["key"],
-            pass=api["secret"],
-        })
-        if (err ~= nil and err ~= "") then
-            return
-        end
-
-        local resp = json.decode(page)
-        if (resp == nil or resp.status ~= "ok" or #(resp.results) == 0) then
-            return
-        end
-
-        for i, r in pairs(resp.results) do
+        for i, r in pairs(d.results) do
             for j, v in pairs(r["parsed.names"]) do
                 sendnames(ctx, v)
             end
         end
 
-        if resp["metadata"].page >= resp["metadata"].pages then
+        if d["metadata"].page >= d["metadata"].pages then
             return
         end
 
@@ -67,17 +81,6 @@ end
 
 function apiurl()
     return "https://www.censys.io/api/v1/search/certificates"
-end
-
-function webscrape(ctx, domain)
-    local page, err = request({
-        url=scrapeurl(domain),
-    })
-    if (err ~= nil and err ~= '') then
-        return
-    end
-
-    sendnames(ctx, page)
 end
 
 function scrapeurl(domain)
