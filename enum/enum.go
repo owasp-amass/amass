@@ -290,6 +290,10 @@ loop:
 		case <-e.done:
 			break loop
 		case <-t.C:
+			if e.Sys.HighMemoryConsumption() {
+				continue loop
+			}
+
 			num := e.useManagers(secDelay)
 
 			var inactive bool

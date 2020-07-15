@@ -6,7 +6,9 @@ package systems
 import (
 	"errors"
 	"fmt"
+	"runtime"
 	"sync"
+	"time"
 
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/graph"
@@ -14,6 +16,10 @@ import (
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/resolvers"
 )
+
+type memRequest struct {
+	Result chan bool
+}
 
 // LocalSystem implements a System to be executed within a single process.
 type LocalSystem struct {
@@ -29,6 +35,7 @@ type LocalSystem struct {
 	// Broadcast channel that indicates no further writes to the output channel
 	done              chan struct{}
 	doneAlreadyClosed bool
+	memReq            chan *memRequest
 }
 
 // NewLocalSystem returns an initialized LocalSystem object.
@@ -47,9 +54,10 @@ func NewLocalSystem(c *config.Config) (*LocalSystem, error) {
 	}
 
 	sys := &LocalSystem{
-		cfg:  c,
-		pool: pool,
-		done: make(chan struct{}, 2),
+		cfg:    c,
+		pool:   pool,
+		done:   make(chan struct{}, 2),
+		memReq: make(chan *memRequest, 2),
 	}
 
 	// Setup the correct graph database handler
@@ -58,6 +66,7 @@ func NewLocalSystem(c *config.Config) (*LocalSystem, error) {
 		return nil, err
 	}
 
+	go sys.memConsumptionMonitor()
 	return sys, nil
 }
 
@@ -174,4 +183,65 @@ func (l *LocalSystem) setupGraphDBs() error {
 	}
 
 	return nil
+}
+
+// HighMemoryConsumption implements the System interface.
+func (l *LocalSystem) HighMemoryConsumption() bool {
+	if l.doneAlreadyClosed {
+		return false
+	}
+
+	result := make(chan bool, 2)
+
+	l.memReq <- &memRequest{Result: result}
+	return <-result
+}
+
+func (l *LocalSystem) memConsumptionMonitor() {
+	var count int
+	var highConsumption bool
+	var prevAlloc, curNormal uint64
+
+	interval := 10 * time.Second
+	maxCount := int((2 * time.Minute) / interval)
+	curNormal = 1073741824 // one gigabyte
+
+	t := time.NewTicker(interval)
+	defer t.Stop()
+loop:
+	for {
+		select {
+		case <-l.done:
+			break loop
+		case req := <-l.memReq:
+			req.Result <- highConsumption
+		case <-t.C:
+			var stats runtime.MemStats
+
+			highConsumption = false
+			runtime.ReadMemStats(&stats)
+			if count >= maxCount && stats.Alloc > prevAlloc {
+				curNormal += curNormal / 4
+				count = 0
+			}
+			if stats.Alloc > curNormal {
+				highConsumption = true
+				count++
+			} else {
+				count = 0
+			}
+			prevAlloc = stats.Alloc
+		}
+	}
+
+	// Empty the request channel
+	for {
+		select {
+		case req := <-l.memReq:
+			req.Result <- false
+		default:
+			close(l.memReq)
+			return
+		}
+	}
 }

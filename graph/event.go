@@ -65,7 +65,7 @@ func (g *Graph) InsertEvent(eventID string) (graphdb.Node, error) {
 	return eventNode, nil
 }
 
-// AddNodeToEvent creates an associations between a node in the graph, a data source and a discovery task.
+// AddNodeToEvent creates associations between a node in the graph, a data source and a discovery task.
 func (g *Graph) AddNodeToEvent(node graphdb.Node, source, tag, eventID string) error {
 	if source == "" || tag == "" || eventID == "" {
 		return errors.New("Graph: AddNodeToEvent: Invalid arguments provided")

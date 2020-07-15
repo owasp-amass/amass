@@ -33,6 +33,9 @@ type System interface {
 	// GraphDatabases return the Graphs used by the System
 	GraphDatabases() []*graph.Graph
 
+	// HighMemoryConsumption returns true if the system needs to reduce memory consumption
+	HighMemoryConsumption() bool
+
 	// Shutdown will shutdown the System
 	Shutdown() error
 }

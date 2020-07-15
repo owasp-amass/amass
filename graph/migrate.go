@@ -5,65 +5,68 @@ package graph
 
 import (
 	"fmt"
-	"sync"
-	"time"
 
 	"github.com/OWASP/Amass/v3/graphdb"
-	"github.com/OWASP/Amass/v3/queue"
-	"github.com/OWASP/Amass/v3/semaphore"
 )
-
-const maxConcurrentDBRequests int = 3
 
 // MigrateEvent copies the nodes and edges related to the Event identified by the uuid from the receiver Graph into another.
 func (g *Graph) MigrateEvent(uuid string, to *Graph) error {
-	q := new(queue.Queue)
-	sem := semaphore.NewSimpleSemaphore(maxConcurrentDBRequests)
-
-	idToNode, err := newNodeMap(uuid, g, to)
-	if err != nil {
-		return fmt.Errorf("Graph: Migrate: Failed to setup the node map: %v", err)
-	}
+	fnodes := make(map[string]graphdb.Node)
+	tnodes := make(map[string]graphdb.Node)
 
 	event, err := g.db.ReadNode(uuid, "event")
 	if err != nil {
 		return fmt.Errorf("Graph: Migrate: Failed to read the event node for %s: %v", uuid, err)
 	}
 
-	if _, _, err := idToNode.getNode(uuid, event); err != nil {
-		return fmt.Errorf("Graph: Migrate: %v", err)
+	edges, err := g.db.ReadOutEdges(event)
+	if err != nil {
+		return fmt.Errorf("Graph: Migrate: Failed to read the edges from event node %s: %v", uuid, err)
 	}
 
-	q.Append(event)
-	for {
-		element, ok := q.Next()
-		if !ok {
-			break
-		}
-		cur := element.(graphdb.Node)
+	// Copy the event node into the graph
+	node, err := g.migrateNode(uuid, event, to)
+	if err != nil {
+		return fmt.Errorf("Graph: Migrate: Failed to copy node %s: %v", uuid, err)
+	}
+	fnodes[uuid] = event
+	tnodes[uuid] = node
 
-		curID := g.db.NodeToID(cur)
-		// Get the same node that is in the graph receiving the copies
-		tocur, found, err := idToNode.getNode(curID, cur)
-		if err != nil || !found {
-			return fmt.Errorf("Graph: Migrate: Failed to read the node %s", curID)
+	// Copy all remaining nodes into the graph
+	for _, edge := range edges {
+		id := g.db.NodeToID(edge.To)
+
+		// Check if this node has already been migrated
+		if _, found := fnodes[id]; found {
+			continue
 		}
 
-		edges, err := g.db.ReadOutEdges(cur)
+		node, err = g.migrateNode(id, edge.To, to)
+		if err != nil {
+			return fmt.Errorf("Graph: Migrate: Failed to copy node %s: %v", id, err)
+		}
+
+		fnodes[id] = edge.To
+		tnodes[id] = node
+	}
+
+	// Create all the edges between the copied nodes
+	for id, node := range fnodes {
+		ins, err := g.db.ReadInEdges(node)
 		if err != nil {
 			continue
 		}
 
-		elen := len(edges)
-		ch := make(chan error, elen)
-		for _, edge := range edges {
-			sem.Acquire(1)
-			go g.migrateEdge(tocur, edge, to, q, idToNode, sem, ch)
-		}
-		// Wait for all error values from edge migrations
-		for i := 0; i < elen; i++ {
-			if err := <-ch; err != nil {
-				return err
+		for _, edge := range ins {
+			fid := g.db.NodeToID(edge.From)
+
+			err = to.InsertEdge(&graphdb.Edge{
+				Predicate: edge.Predicate,
+				From:      tnodes[fid],
+				To:        tnodes[id],
+			})
+			if err != nil {
+				return fmt.Errorf("Graph: Migrate: Failed to create the edge from node %s to node %s: %v", fid, id, err)
 			}
 		}
 	}
@@ -71,43 +74,7 @@ func (g *Graph) MigrateEvent(uuid string, to *Graph) error {
 	return nil
 }
 
-func (g *Graph) migrateEdge(cur graphdb.Node, edge *graphdb.Edge, to *Graph,
-	q *queue.Queue, ids *nodeMap, sem semaphore.Semaphore, ch chan error) {
-	defer sem.Release(1)
-
-	node, found, err := ids.getNode(g.db.NodeToID(edge.To), edge.To)
-	if err != nil {
-		if err.Error() == "out of scope" {
-			err = nil
-		}
-		ch <- err
-		return
-	}
-
-	if !found {
-		q.Append(edge.To)
-	}
-
-	for i := 0; i < 3; i++ {
-		err = to.InsertEdge(&graphdb.Edge{
-			Predicate: edge.Predicate,
-			From:      cur,
-			To:        node,
-		})
-		if err == nil {
-			break
-		}
-		time.Sleep(time.Second)
-	}
-	ch <- err
-}
-
-func (g *Graph) migrateNode(node graphdb.Node, to *Graph) (graphdb.Node, error) {
-	id := g.db.NodeToID(node)
-	if id == "" {
-		return nil, fmt.Errorf("migrateNode: Invalid %s node provided", g.String())
-	}
-
+func (g *Graph) migrateNode(id string, node graphdb.Node, to *Graph) (graphdb.Node, error) {
 	// Obtain the properties of the Node being migrated
 	properties, err := g.db.ReadProperties(node)
 	if err != nil || len(properties) == 0 {
@@ -122,14 +89,12 @@ func (g *Graph) migrateNode(node graphdb.Node, to *Graph) (graphdb.Node, error) 
 
 	// Check if this node already exists in the 'to' graph
 	tonode, err := to.db.ReadNode(id, ntype)
-	if err == nil {
-		return tonode, nil
-	}
-
-	// Create the Node in the Graph
-	tonode, err = to.db.InsertNode(id, ntype)
 	if err != nil {
-		return nil, fmt.Errorf("migrateNode: Failed to insert the %s node %s: %v", g.String(), id, err)
+		// Create the Node in the Graph
+		tonode, err = to.db.InsertNode(id, ntype)
+		if err != nil {
+			return nil, fmt.Errorf("migrateNode: Failed to insert the %s node %s: %v", g.String(), id, err)
+		}
 	}
 
 	// Copy all the properties into the Node being migrated
@@ -138,17 +103,6 @@ func (g *Graph) migrateNode(node graphdb.Node, to *Graph) (graphdb.Node, error) 
 	}
 
 	return tonode, nil
-}
-
-func (g *Graph) nodeToType(node graphdb.Node) string {
-	// Obtain the properties of the Node being migrated
-	properties, err := g.db.ReadProperties(node)
-	if err != nil || len(properties) == 0 {
-		return ""
-	}
-
-	// Obtain the type of the Node being migrated
-	return getTypeFromProperties(properties)
 }
 
 func (g *Graph) migrateProperties(node graphdb.Node, properties []*graphdb.Property, to *Graph) error {
@@ -176,60 +130,4 @@ func getTypeFromProperties(properties []*graphdb.Property) string {
 	}
 
 	return ntype
-}
-
-type nodeMap struct {
-	sync.Mutex
-	uuid     string
-	from, to *Graph
-	nodes    map[string]graphdb.Node
-}
-
-func newNodeMap(uuid string, from, to *Graph) (*nodeMap, error) {
-	// Setup the Event associated with the UUID to start the migration
-	event, err := from.db.ReadNode(uuid, "event")
-	if err != nil {
-		return nil, err
-	}
-
-	m := &nodeMap{
-		uuid:  uuid,
-		from:  from,
-		to:    to,
-		nodes: make(map[string]graphdb.Node),
-	}
-
-	node, err := from.migrateNode(event, to)
-	if err != nil {
-		return nil, err
-	}
-	m.nodes[uuid] = node
-
-	return m, nil
-}
-
-func (n *nodeMap) getNode(id string, fromNode graphdb.Node) (graphdb.Node, bool, error) {
-	n.Lock()
-	defer n.Unlock()
-
-	node, found := n.nodes[id]
-	if found {
-		return node, found, nil
-	}
-
-	if !n.from.InEventScope(fromNode, n.uuid) {
-		return nil, false, fmt.Errorf("out of scope")
-	}
-
-	var err error
-	for i := 0; i < 3; i++ {
-		node, err = n.from.migrateNode(fromNode, n.to)
-		if err == nil {
-			n.nodes[id] = node
-			break
-		}
-		time.Sleep(time.Second)
-	}
-
-	return node, false, err
 }
