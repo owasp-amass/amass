@@ -534,14 +534,27 @@ func (s *Script) scrape(L *lua.LState) int {
 	id, _ := getStringField(L, opt, "id")
 	pass, _ := getStringField(L, opt, "pass")
 
-	page, err := http.RequestWebPage(url, nil, headers, id, pass)
-	if err != nil {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", s.String(), url, err))
-		L.Push(lua.LFalse)
-		return 1
+	var resp string
+	// Check for cached responses first
+	api := s.sys.Config().GetAPIKey(s.String())
+	if api != nil && api.TTL > 0 {
+		if r, err := s.getCachedResponse(url, api.TTL); err == nil {
+			resp = r
+		}
 	}
 
-	for _, n := range subRE.FindAllString(page, -1) {
+	if resp == "" {
+		resp, err := http.RequestWebPage(url, nil, headers, id, pass)
+		if err != nil {
+			bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", s.String(), url, err))
+			L.Push(lua.LFalse)
+			return 1
+		}
+
+		s.setCachedResponse(url, resp)
+	}
+
+	for _, n := range subRE.FindAllString(resp, -1) {
 		name := cleanName(n)
 
 		if domain := cfg.WhichDomain(name); domain != "" {
@@ -632,13 +645,9 @@ func (s *Script) obtainResponse(L *lua.LState) int {
 		return 1
 	}
 
-	for _, db := range s.sys.GraphDatabases() {
-		if resp, err := db.GetSourceData(s.String(), url, ttl); err == nil {
-			// Allow the data source to accept another request immediately on cache hits
-			s.ClearLast()
-			L.Push(lua.LString(resp))
-			return 1
-		}
+	if resp, err := s.getCachedResponse(url, ttl); err == nil {
+		L.Push(lua.LString(resp))
+		return 1
 	}
 
 	L.Push(lua.LNil)
@@ -659,8 +668,6 @@ func (s *Script) cacheResponse(L *lua.LState) int {
 		return 0
 	}
 
-	for _, db := range s.sys.GraphDatabases() {
-		db.CacheSourceData(s.String(), s.SourceType, string(u), string(resp))
-	}
+	s.setCachedResponse(string(u), string(resp))
 	return 0
 }

@@ -11,27 +11,7 @@ function start()
 end
 
 function vertical(ctx, domain)
-    local resp
-    local vurl = buildurl(domain)
-    -- Check if the response data is in the graph database
-    if (api ~= nil and api.ttl ~= nil and api.ttl > 0) then
-        resp = obtain_response(vurl, api.ttl)
-    end
-
-    if (resp == nil or resp == "") then
-        local err
-
-        resp, err = request({url=vurl})
-        if (err ~= nil and err ~= "") then
-            return
-        end
-
-        if (api ~= nil and api.ttl ~= nil and api.ttl > 0) then
-            cache_response(vurl, resp)
-        end
-    end
-
-    sendnames(ctx, resp)
+    scrape(ctx, {url=buildurl(domain)})
 end
 
 function buildurl(domain)
@@ -74,15 +54,4 @@ end
 
 function asnurl(addr)
     return "https://api.hackertarget.com/aslookup/?q=" .. addr
-end
-
-function sendnames(ctx, content)
-    local names = find(content, subdomainre)
-    if names == nil then
-        return
-    end
-
-    for i, v in pairs(names) do
-        newname(ctx, v)
-    end
 end

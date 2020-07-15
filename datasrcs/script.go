@@ -408,3 +408,23 @@ func (s *Script) OnWhoisRequest(ctx context.Context, req *requests.WhoisRequest)
 			fmt.Sprintf("%s: horizontal callback: %v", s.String(), err))
 	}
 }
+
+func (s *Script) getCachedResponse(url string, ttl int) (string, error) {
+	for _, db := range s.sys.GraphDatabases() {
+		if resp, err := db.GetSourceData(s.String(), url, ttl); err == nil {
+			// Allow the data source to accept another request immediately on cache hits
+			s.ClearLast()
+			return resp, err
+		}
+	}
+
+	return "", fmt.Errorf("Failed to obtain a cached response for %s", url)
+}
+
+func (s *Script) setCachedResponse(url, resp string) error {
+	for _, db := range s.sys.GraphDatabases() {
+		db.CacheSourceData(s.String(), s.SourceType, url, resp)
+	}
+
+	return nil
+}
