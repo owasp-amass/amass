@@ -78,6 +78,7 @@ func NewEnumeration(cfg *config.Config, sys systems.System) *Enumeration {
 		enumStateChannels: &enumStateChans{
 			GetLastActive: make(chan chan time.Time, 10),
 			UpdateLast:    make(chan string, 10),
+			GetSeqZeros:   make(chan chan int64, 10),
 			IncSeqZeros:   make(chan struct{}, 10),
 			ClearSeqZeros: make(chan struct{}, 10),
 			GetPerSec:     make(chan chan *getPerSec, 10),
@@ -85,6 +86,7 @@ func NewEnumeration(cfg *config.Config, sys systems.System) *Enumeration {
 			ClearPerSec:   make(chan struct{}, 10),
 		},
 	}
+	go e.manageEnumState(e.enumStateChannels)
 
 	if cfg.Passive {
 		return e
@@ -100,7 +102,6 @@ func NewEnumeration(cfg *config.Config, sys systems.System) *Enumeration {
 		return nil
 	}
 
-	go e.manageEnumState(e.enumStateChannels)
 	return e
 }
 
@@ -458,6 +459,8 @@ func (e *Enumeration) useManagers(numsec int) int {
 				break
 			}
 		}
+
+		count += sent
 	}
 
 	return count

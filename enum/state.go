@@ -13,6 +13,7 @@ import (
 type enumStateChans struct {
 	GetLastActive chan chan time.Time
 	UpdateLast    chan string
+	GetSeqZeros   chan chan int64
 	IncSeqZeros   chan struct{}
 	ClearSeqZeros chan struct{}
 	GetPerSec     chan chan *getPerSec
@@ -31,9 +32,9 @@ type incPerSec struct {
 }
 
 func (e *Enumeration) manageEnumState(chs *enumStateChans) {
-	var numSeqZeros int64
 	var perSec int64
 	var retries int64
+	var numSeqZeros int64 = 1
 	last := time.Now()
 	perSecFirst := time.Now()
 	perSecLast := time.Now()
@@ -60,6 +61,8 @@ loop:
 			}
 			// Update the last time activity was seen
 			last = time.Now()
+		case seq := <-chs.GetSeqZeros:
+			seq <- numSeqZeros
 		case <-chs.IncSeqZeros:
 			numSeqZeros++
 		case <-chs.ClearSeqZeros:
@@ -110,6 +113,13 @@ func (e *Enumeration) lastActive() time.Time {
 
 func (e *Enumeration) updateLastActive(srv string) {
 	e.enumStateChannels.UpdateLast <- srv
+}
+
+func (e *Enumeration) getNumSeqZeros() int64 {
+	ch := make(chan int64, 2)
+
+	e.enumStateChannels.GetSeqZeros <- ch
+	return <-ch
 }
 
 func (e *Enumeration) incNumSeqZeros() {

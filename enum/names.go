@@ -88,6 +88,11 @@ func (r *DomainManager) NameQueueLen() int {
 
 // OutputRequests implements the FQDNManager interface.
 func (r *DomainManager) OutputRequests(num int) int {
+	// Be sure work from the previous domain name is complete
+	if r.enum.getNumSeqZeros() == 0 {
+		return 0
+	}
+
 	element, ok := r.queue.Next()
 	if !ok {
 		return 0
