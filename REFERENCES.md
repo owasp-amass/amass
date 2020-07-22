@@ -6,6 +6,8 @@ Did you write a blog post, magazine article or do a podcast about or mentioning 
 
 ### Pod- & Webcasts
 
+* [Hacking Simplified](https://www.youtube.com/channel/UCARsgS1stRbRgh99E63Q3ng):
+  * [Amass Setup and Tutorial](https://www.youtube.com/watch?v=Pv4fGBZWyqY)
 * [Josh Amishav-Zlatin's Channel](https://www.youtube.com/channel/UCajDbRGYBtgITfEbNUbWdsw):
   * [Advanced Passive Recon with the Amass Scripting Engine](https://www.youtube.com/watch?v=twVZLZxTAX4)
   * [Domain and Network Recon using Amass - Mapping the Attack Surface](https://www.youtube.com/watch?v=bsUeTyFoEtU)
@@ -36,6 +38,8 @@ Did you write a blog post, magazine article or do a podcast about or mentioning 
 
 ### Blogs & Articles
 
+* Blog post on [WW Tech Blog](https://medium.com/ww-tech-blog):
+  * [Reducing Our Attack Surface with AppSec Platform](https://medium.com/ww-tech-blog/reducing-our-attack-surface-with-appsec-platform-4b6717a16709)
 * Blog post on [SecurityTrail's Blog](https://securitytrails.com/blog/):
   * [What is DNS Intelligence?](https://securitytrails.com/blog/dns-intelligence)
   * [What is OWASP? Top 10 Web Application Security Risks](https://securitytrails.com/blog/owasp-top-10)
@@ -149,6 +153,10 @@ Did you write a blog post, magazine article or do a podcast about or mentioning 
 
 ## Summits & Open Source Events
 
+* [OWASP Amass Boot Camp](https://www.youtube.com/watch?v=OOurkCPf2-I&list=PLruly0ngXhPGvyl-gOp4d_TvIiedloX1l)
+  by Jeff Foley,
+  Cyber June'Gle Virtual Summit,
+  28.06.2020
 * Lightning Talk at [OWASP Sendai Day 2020](https://owaspsendai.connpass.com/event/162247/)
   by Akitsugu Ito,
   on [OWASP Amass](https://speakerdeck.com/springmoon6/lt-owasp-amass),
