@@ -13,6 +13,7 @@ import (
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/stringset"
 	"github.com/cayleygraph/cayley"
+	"github.com/cayleygraph/cayley/clog"
 	"github.com/cayleygraph/cayley/graph"
 	_ "github.com/cayleygraph/cayley/graph/kv/bolt" // Used by the cayley package
 	"github.com/cayleygraph/quad"
@@ -26,7 +27,7 @@ type CayleyGraph struct {
 }
 
 // NewCayleyGraph returns an intialized CayleyGraph object.
-func NewCayleyGraph(path string) *CayleyGraph {
+func NewCayleyGraph(path string, nosync bool) *CayleyGraph {
 	var err error
 
 	path = config.OutputDirectory(path)
@@ -45,7 +46,13 @@ func NewCayleyGraph(path string) *CayleyGraph {
 		}
 	}
 
-	store, err := cayley.NewGraph("bolt", path, nil)
+	clog.SetLogger(nil)
+	opt := graph.Options{"nosync": true}
+	if !nosync {
+		opt = nil
+	}
+
+	store, err := cayley.NewGraph("bolt", path, opt)
 	if err != nil {
 		return nil
 	}
@@ -93,7 +100,13 @@ func (g *CayleyGraph) String() string {
 
 // NodeToID implements the GraphDatabase interface.
 func (g *CayleyGraph) NodeToID(n Node) string {
-	return fmt.Sprintf("%s", n)
+	var result string
+
+	if n != nil {
+		result = fmt.Sprintf("%s", n)
+	}
+
+	return result
 }
 
 // AllNodesOfType implements the GraphDatabase interface.
@@ -213,12 +226,6 @@ func (g *CayleyGraph) InsertProperty(node Node, predicate, value string) error {
 		return fmt.Errorf("%s: InsertProperty: Invalid node reference argument", g.String())
 	}
 
-	// Check if the node has already been inserted
-	p := cayley.StartPath(g.store, quad.String(nstr)).Has(quad.String("type"))
-	if first := g.optimizedFirst(p); first == nil {
-		return fmt.Errorf("%s: InsertProperty: Node %s does not exist", g.String(), nstr)
-	}
-
 	return g.store.AddQuad(quad.Make(nstr, predicate, value, nil))
 }
 
@@ -319,21 +326,13 @@ func (g *CayleyGraph) InsertEdge(edge *Edge) error {
 	defer g.Unlock()
 
 	nstr1 := g.NodeToID(edge.From)
+	if nstr1 == "" {
+		return fmt.Errorf("%s: InsertEdge: Invalid from node", g.String())
+	}
+
 	nstr2 := g.NodeToID(edge.To)
-	if nstr1 == "" || nstr2 == "" {
-		return fmt.Errorf("%s: InsertEdge: Invalid edge argument", g.String())
-	}
-
-	// Check if the from node has already been inserted
-	p := cayley.StartPath(g.store, quad.String(nstr1)).Has(quad.String("type"))
-	if first := g.optimizedFirst(p); first == nil {
-		return fmt.Errorf("%s: InsertEdge: Node %s does not exist", g.String(), nstr1)
-	}
-
-	// Check if the to node has already been inserted
-	p = cayley.StartPath(g.store, quad.String(nstr2)).Has(quad.String("type"))
-	if first := g.optimizedFirst(p); first == nil {
-		return fmt.Errorf("%s: InsertEdge: Node %s does not exist", g.String(), nstr2)
+	if nstr2 == "" {
+		return fmt.Errorf("%s: InsertEdge: Invalid to node", g.String())
 	}
 
 	return g.store.AddQuad(quad.Make(nstr1, edge.Predicate, nstr2, nil))

@@ -34,7 +34,7 @@ type System interface {
 	GraphDatabases() []*graph.Graph
 
 	// HighMemoryConsumption returns true if the system needs to reduce memory consumption
-	HighMemoryConsumption() bool
+	HighMemoryConsumption(stalled bool) bool
 
 	// Shutdown will shutdown the System
 	Shutdown() error

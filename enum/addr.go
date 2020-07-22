@@ -253,13 +253,8 @@ func (r *AddressManager) reverseDNSSweep(addr string, cidr *net.IPNet) {
 }
 
 func (e *Enumeration) asnRequestAllSources(req *requests.ASNRequest) {
-	e.srcsLock.Lock()
-	defer e.srcsLock.Unlock()
-
-	for _, src := range e.Sys.DataSources() {
-		if e.srcs.Has(src.String()) {
-			src.ASNRequest(e.ctx, req)
-		}
+	for _, src := range e.srcs {
+		src.ASNRequest(e.ctx, req)
 	}
 }
 

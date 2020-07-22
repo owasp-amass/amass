@@ -5,7 +5,6 @@ package enum
 
 import (
 	"strings"
-	"sync"
 
 	"github.com/OWASP/Amass/v3/eventbus"
 	"github.com/OWASP/Amass/v3/queue"
@@ -93,18 +92,10 @@ func (r *DomainManager) OutputRequests(num int) int {
 	if !ok {
 		return 0
 	}
-
 	req := element.(*requests.DNSRequest)
 
-	r.enum.srcsLock.Lock()
-	defer r.enum.srcsLock.Unlock()
-
 	// Release the new domain name to all the data sources
-	for _, src := range r.enum.Sys.DataSources() {
-		if !r.enum.srcs.Has(src.String()) {
-			continue
-		}
-
+	for _, src := range r.enum.srcs {
 		src.DNSRequest(r.enum.ctx, &requests.DNSRequest{
 			Name:   req.Domain,
 			Domain: req.Domain,
@@ -130,23 +121,27 @@ func (r *DomainManager) Stop() error {
 
 // SubdomainManager handles newly discovered proper subdomain names in the enumeration.
 type SubdomainManager struct {
-	sync.Mutex
-	enum       *Enumeration
-	queue      *queue.Queue
-	rqueue     *queue.Queue
-	subqueue   *queue.Queue
-	subdomains map[string]int
+	enum      *Enumeration
+	queue     *queue.Queue
+	rqueue    *queue.Queue
+	subqueue  *queue.Queue
+	timesChan chan *timesReq
+	done      chan struct{}
 }
 
 // NewSubdomainManager returns an initialized SubdomainManager.
 func NewSubdomainManager(e *Enumeration) *SubdomainManager {
-	return &SubdomainManager{
-		enum:       e,
-		queue:      new(queue.Queue),
-		rqueue:     new(queue.Queue),
-		subqueue:   new(queue.Queue),
-		subdomains: make(map[string]int),
+	r := &SubdomainManager{
+		enum:      e,
+		queue:     new(queue.Queue),
+		rqueue:    new(queue.Queue),
+		subqueue:  new(queue.Queue),
+		timesChan: make(chan *timesReq, 10),
+		done:      make(chan struct{}, 2),
 	}
+
+	go r.timesManager()
+	return r
 }
 
 // InputName implements the FQDNManager interface.
@@ -209,38 +204,24 @@ type subQueueElement struct {
 
 // OutputRequests implements the FQDNManager interface.
 func (r *SubdomainManager) OutputRequests(num int) int {
-	var srvs []requests.Service
+	toBeSent := num
+	if srcslen := len(r.enum.srcs); srcslen > 0 {
+		toBeSent = toBeSent / srcslen
 
-	r.enum.srcsLock.Lock()
-	for _, srv := range r.enum.Sys.DataSources() {
-		if r.enum.srcs.Has(srv.String()) {
-			srvs = append(srvs, srv)
+		if toBeSent <= 0 {
+			return num
 		}
 	}
-	r.enum.srcsLock.Unlock()
 
-	var sublen int
-	rlen := num
-	qlen := r.rqueue.Len()
-	if qlen < num {
-		rlen = qlen
-		sublen = num - qlen
+	var rlen int
+	sublen := toBeSent
+	qlen := r.subqueue.Len()
+	if qlen < toBeSent {
+		sublen = qlen
+		rlen = toBeSent - qlen
 	}
 
 	var count int
-	for i := 0; i < rlen; i++ {
-		element, ok := r.rqueue.Next()
-		if !ok {
-			break
-		}
-
-		count++
-		req := element.(*requests.DNSRequest)
-		for _, srv := range srvs {
-			srv.Resolved(r.enum.ctx, req)
-		}
-	}
-
 	for i := 0; i < sublen; i++ {
 		element, ok := r.subqueue.Next()
 		if !ok {
@@ -249,8 +230,21 @@ func (r *SubdomainManager) OutputRequests(num int) int {
 
 		count++
 		s := element.(*subQueueElement)
-		for _, srv := range srvs {
-			srv.SubdomainDiscovered(r.enum.ctx, s.Req, s.Times)
+		for _, src := range r.enum.srcs {
+			src.SubdomainDiscovered(r.enum.ctx, s.Req, s.Times)
+		}
+	}
+
+	for i := 0; i < rlen; i++ {
+		element, ok := r.rqueue.Next()
+		if !ok {
+			break
+		}
+
+		count++
+		req := element.(*requests.DNSRequest)
+		for _, src := range r.enum.srcs {
+			src.Resolved(r.enum.ctx, req)
 		}
 	}
 
@@ -264,6 +258,7 @@ func (r *SubdomainManager) RequestQueueLen() int {
 
 // Stop implements the FQDNManager interface.
 func (r *SubdomainManager) Stop() error {
+	close(r.done)
 	r.queue = new(queue.Queue)
 	r.rqueue = new(queue.Queue)
 	r.subqueue = new(queue.Queue)
@@ -306,18 +301,40 @@ func (r *SubdomainManager) checkSubdomain(req *requests.DNSRequest) {
 }
 
 func (r *SubdomainManager) timesForSubdomain(sub string) int {
-	r.Lock()
-	defer r.Unlock()
+	ch := make(chan int, 2)
 
-	times, found := r.subdomains[sub]
-	if found {
-		times++
-	} else {
-		times = 1
+	r.timesChan <- &timesReq{
+		Sub: sub,
+		Ch:  ch,
 	}
 
-	r.subdomains[sub] = times
-	return times
+	return <-ch
+}
+
+type timesReq struct {
+	Sub string
+	Ch  chan int
+}
+
+func (r *SubdomainManager) timesManager() {
+	subdomains := make(map[string]int)
+
+	for {
+		select {
+		case <-r.done:
+			return
+		case req := <-r.timesChan:
+			times, found := subdomains[req.Sub]
+			if found {
+				times++
+			} else {
+				times = 1
+			}
+
+			subdomains[req.Sub] = times
+			req.Ch <- times
+		}
+	}
 }
 
 // NameManager handles the filtering and release of newly discovered FQDNs in the enumeration.
@@ -339,10 +356,8 @@ func (r *NameManager) InputName(req *requests.DNSRequest) {
 	if req == nil || req.Name == "" || req.Domain == "" {
 		return
 	}
-
 	// Clean up the newly discovered name and domain
 	requests.SanitizeDNSRequest(req)
-
 	r.queue.Append(req)
 }
 

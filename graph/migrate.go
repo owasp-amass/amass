@@ -29,6 +29,7 @@ func (g *Graph) MigrateEvent(uuid string, to *Graph) error {
 	if err != nil {
 		return fmt.Errorf("Graph: Migrate: Failed to copy node %s: %v", uuid, err)
 	}
+
 	fnodes[uuid] = event
 	tnodes[uuid] = node
 
@@ -59,6 +60,11 @@ func (g *Graph) MigrateEvent(uuid string, to *Graph) error {
 
 		for _, edge := range ins {
 			fid := g.db.NodeToID(edge.From)
+
+			// Nodes from other events, and edges to those nodes, are not to be included
+			if _, found := tnodes[fid]; !found {
+				continue
+			}
 
 			err = to.InsertEdge(&graphdb.Edge{
 				Predicate: edge.Predicate,

@@ -74,17 +74,12 @@ func ExpandMask(word string) ([]string, error) {
 // ExpandMaskWordlist performs ExpandMask on a slice of words.
 func ExpandMaskWordlist(wordlist []string) ([]string, error) {
 	var newWordlist []string
-	var newWords []string
-	var err error
 
 	for _, word := range wordlist {
-		newWords, err = ExpandMask(word)
-		if err != nil {
-			break
+		if words, err := ExpandMask(word); err == nil {
+			newWordlist = append(newWordlist, words...)
 		}
-
-		newWordlist = append(newWordlist, newWords...)
 	}
 
-	return newWordlist, err
+	return newWordlist, nil
 }

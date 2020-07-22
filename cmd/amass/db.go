@@ -191,7 +191,7 @@ func openGraphDatabase(dir string, cfg *config.Config) *graph.Graph {
 	// Check that the graph database directory exists
 	if d := config.OutputDirectory(dir); d != "" {
 		if finfo, err := os.Stat(d); !os.IsNotExist(err) && finfo.IsDir() {
-			if g := graph.NewGraph(graphdb.NewCayleyGraph(d)); g != nil {
+			if g := graph.NewGraph(graphdb.NewCayleyGraph(d, false)); g != nil {
 				return g
 			}
 		}

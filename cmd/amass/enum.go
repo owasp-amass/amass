@@ -175,6 +175,7 @@ func runEnumCommand(clArgs []string) {
 		r.Fprintf(color.Error, "%v\n", err)
 		os.Exit(1)
 	}
+	defer sys.Shutdown()
 	sys.SetDataSources(datasrcs.GetAllSources(sys))
 
 	// Setup the new enumeration
@@ -224,7 +225,7 @@ func runEnumCommand(clArgs []string) {
 	wg.Wait()
 
 	// If necessary, handle graph database migration
-	if !interrupted && !cfg.Passive && len(e.Sys.GraphDatabases()) > 0 {
+	if !cfg.Passive && len(e.Sys.GraphDatabases()) > 0 {
 		fmt.Fprintf(color.Error, "\n%s\n", green("The enumeration has finished"))
 
 		// Copy the graph of findings into the system graph databases
@@ -295,10 +296,10 @@ func argsAndConfig(clArgs []string) (*config.Config, *enumArgs) {
 		color.Error = ioutil.Discard
 	}
 
-	if len(args.AltWordListMask) > 0 {
+	if args.AltWordListMask.Len() > 0 {
 		args.AltWordList.Union(args.AltWordListMask)
 	}
-	if len(args.BruteWordListMask) > 0 {
+	if args.BruteWordListMask.Len() > 0 {
 		args.BruteWordList.Union(args.BruteWordListMask)
 	}
 	// Some input validation
@@ -684,13 +685,13 @@ func (e enumArgs) OverrideConfig(conf *config.Config) error {
 	if e.MaxDNSQueries > 0 {
 		conf.MaxDNSQueries = e.MaxDNSQueries
 	}
-	if len(e.Names) > 0 {
+	if e.Names.Len() > 0 {
 		conf.ProvidedNames = e.Names.Slice()
 	}
-	if len(e.BruteWordList) > 0 {
+	if e.BruteWordList.Len() > 0 {
 		conf.Wordlist = e.BruteWordList.Slice()
 	}
-	if len(e.AltWordList) > 0 {
+	if e.AltWordList.Len() > 0 {
 		conf.AltWordlist = e.AltWordList.Slice()
 	}
 	if e.Options.BruteForcing {
@@ -714,7 +715,7 @@ func (e enumArgs) OverrideConfig(conf *config.Config) error {
 	if e.Options.Passive {
 		conf.Passive = true
 	}
-	if len(e.Blacklist) > 0 {
+	if e.Blacklist.Len() > 0 {
 		conf.Blacklist = e.Blacklist.Slice()
 	}
 	if e.Timeout > 0 {
