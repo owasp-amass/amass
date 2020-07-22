@@ -80,7 +80,7 @@ dockers:
 brews:
   -
     name: amass
-    github:
+    tap:
       owner: caffix
       name: homebrew-amass
     url_template: "https://github.com/OWASP/Amass/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
@@ -91,7 +91,9 @@ brews:
     homepage: "https://owasp.org/www-project-amass/"
     description: "In-depth Attack Surface Mapping and Asset Discovery"
     test: |
-      system "#{bin}/program --version"
+      system "#{bin}/amass --version"
+    install: |
+      bin.install "amass"
 
 snapcrafts:
   -
