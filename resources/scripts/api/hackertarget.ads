@@ -22,7 +22,7 @@ function asn(ctx, addr)
     local resp
     local aurl = asnurl(addr)
     -- Check if the response data is in the graph database
-    if (api.ttl ~= nil and api.ttl > 0) then
+    if (api and api.ttl ~= nil and api.ttl > 0) then
         resp = obtain_response(aurl, api.ttl)
     end
 
@@ -34,7 +34,7 @@ function asn(ctx, addr)
             return
         end
 
-        if (api.ttl ~= nil and api.ttl > 0) then
+        if (api and api.ttl ~= nil and api.ttl > 0) then
             cache_response(aurl, resp)
         end
     end

@@ -220,10 +220,13 @@ func (s *Script) OnStop() error {
 		NRet:    0,
 		Protect: true,
 	})
-
 	if err != nil {
-		s.sys.Config().Log.Print(fmt.Sprintf("%s: stop callback: %v", s.String(), err))
+		estr := fmt.Sprintf("%s: stop callback: %v", s.String(), err)
+
+		s.sys.Config().Log.Print(estr)
+		return errors.New(estr)
 	}
+
 	return nil
 }
 

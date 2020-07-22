@@ -22,7 +22,7 @@ function vertical(ctx, domain)
         vurl = apiurl(domain)
     end
     -- Check if the response data is in the graph database
-    if (api.ttl ~= nil and api.ttl > 0) then
+    if (api and api.ttl ~= nil and api.ttl > 0) then
         resp = obtain_response(vurl, api.ttl)
     end
 
@@ -37,7 +37,7 @@ function vertical(ctx, domain)
             return
         end
 
-        if (api.ttl ~= nil and api.ttl > 0) then
+        if (api and api.ttl ~= nil and api.ttl > 0) then
             cache_response(vurl, resp)
         end
     end
