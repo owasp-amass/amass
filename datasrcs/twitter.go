@@ -57,7 +57,7 @@ func (t *Twitter) OnStart() error {
 			config := &oauth2.Config{}
 			token := &oauth2.Token{AccessToken: bearer}
 			// OAuth2 http.Client will automatically authorize Requests
-			httpClient := config.Client(oauth2.NoContext, token)
+			httpClient := config.Client(context.Background(), token)
 			// Twitter client
 			t.client = twitter.NewClient(httpClient)
 		}
