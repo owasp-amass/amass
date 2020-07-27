@@ -69,6 +69,8 @@ Did you write a blog post, magazine article or do a podcast about or mentioning 
 * Tutorial on [Dionach's Blog](https://www.dionach.com/blog/):
   * [How to Use OWASP Amass: An Extensive Tutorial](https://www.dionach.com/blog/how-to-use-owasp-amass-an-extensive-tutorial/)
   by Nick Gkogkos
+* Blog post on [epi052's Blog](https://epi052.gitlab.io/notes-to-self/blog/):
+  * [How to Build an Automated Recon Pipeline with Python and Luigi - Part IV (Subdomain Enumeration)](https://epi052.gitlab.io/notes-to-self/blog/2019-09-17-how-to-build-an-automated-recon-pipeline-with-python-and-luigi-part-four/)
 * Blog post on [Aditya Soni's Blog](https://medium.com/@hetroublemakr):
   * [Bug Bounty with Bash](https://medium.com/cyberverse/bug-bounty-with-bash-438596ff72f5)
 * Blog post on [Anshuman Pattnaik's Blog](https://medium.com/@hackbotone):
