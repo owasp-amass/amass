@@ -359,13 +359,12 @@ func (e *Enumeration) resolvedDispatcher(req *requests.DNSRequest) {
 }
 
 func (e *Enumeration) requiredNumberOfNames(numsec int) int {
-	required := 10000
 	if e.Config.Passive {
-		return required
+		return 100000
 	}
 
 	max := e.Config.MaxDNSQueries * numsec
-	required = max - e.dnsNamesRemaining()
+	required := max - e.dnsNamesRemaining()
 	// Ensure a minimum value of one
 	if required < 0 {
 		required = 0
