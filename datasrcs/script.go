@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/eventbus"
@@ -34,16 +35,26 @@ type Script struct {
 	asn        lua.LValue
 	resolved   lua.LValue
 	subdomain  lua.LValue
+	// Regexp to match any subdomain name
+	subre *regexp.Regexp
 }
 
 // NewScript returns he object initialized, but not yet started.
 func NewScript(script string, sys systems.System) *Script {
-	s := &Script{sys: sys}
+	re, err := regexp.Compile(dns.AnySubdomainRegexString())
+	if err != nil {
+		return nil
+	}
+
+	s := &Script{
+		sys:   sys,
+		subre: re,
+	}
 	L := s.newLuaState(sys.Config())
 	s.luaState = L
 
 	// Load the script
-	err := L.DoString(script)
+	err = L.DoString(script)
 	if err != nil {
 		msg := fmt.Sprintf("Script: Failed to load script: %v", err)
 

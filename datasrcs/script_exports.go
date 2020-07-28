@@ -225,17 +225,24 @@ func (s *Script) newName(L *lua.LState) int {
 	}
 
 	lv := L.Get(2)
-	if n, ok := lv.(lua.LString); ok {
-		name := string(n)
+	n, ok := lv.(lua.LString)
+	if !ok {
+		return 0
+	}
 
-		if domain := cfg.WhichDomain(name); domain != "" {
-			bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
-				Name:   cleanName(name),
-				Domain: domain,
-				Tag:    s.SourceType,
-				Source: s.String(),
-			})
-		}
+	name := s.subre.FindString(string(n))
+	if name == "" {
+		return 0
+	}
+	cleaned := cleanName(name)
+
+	if domain := cfg.WhichDomain(cleaned); domain != "" {
+		bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
+			Name:   cleaned,
+			Domain: domain,
+			Tag:    s.SourceType,
+			Source: s.String(),
+		})
 	}
 	return 0
 }
