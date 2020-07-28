@@ -100,7 +100,7 @@ func (rp *ResolverPool) hasWildcard(ctx context.Context, req *requests.DNSReques
 			}
 
 			set := stringset.New()
-			intersectRecordData(set, req.Records)
+			insertRecordData(set, req.Records)
 			intersectRecordData(set, w.Answers)
 			if set.Len() > 0 {
 				return w.WildcardType
@@ -222,23 +222,24 @@ func (rp *ResolverPool) wildcardTest(ctx context.Context, sub string) {
 			}
 		}
 
-		intersectRecordData(set, ans)
+		if i == 0 {
+			insertRecordData(set, ans)
+		} else {
+			intersectRecordData(set, ans)
+		}
 		answers = append(answers, ans...)
 		time.Sleep(time.Second)
 	}
 
+	already := stringset.New()
 	var final []requests.DNSAnswer
 	// Create the slice of answers common across all the unlikely name queries
-loop:
-	for set.Len() > 0 {
-		data := strings.Trim(set.Slice()[0], ".")
+	for _, a := range answers {
+		a.Data = strings.Trim(a.Data, ".")
 
-		for _, a := range answers {
-			if set.Has(data) {
-				set.Remove(data)
-				final = append(final, a)
-				continue loop
-			}
+		if set.Has(a.Data) && !already.Has(a.Data) {
+			final = append(final, a)
+			already.Insert(a.Data)
 		}
 	}
 
@@ -250,7 +251,7 @@ loop:
 		if len(final) == 0 {
 			wildcardType = WildcardTypeDynamic
 		}
-		rp.Log.Printf("DNS wildcard detected: %s", "*."+sub)
+		rp.Log.Printf("DNS wildcard detected: %s: type: %d", "*."+sub, wildcardType)
 	}
 
 	rp.wildcardChannels.TestResult <- &testResult{
@@ -302,4 +303,14 @@ func intersectRecordData(set stringset.Set, ans []requests.DNSAnswer) {
 	}
 
 	set.Intersect(records)
+}
+
+func insertRecordData(set stringset.Set, ans []requests.DNSAnswer) {
+	records := stringset.New()
+
+	for _, a := range ans {
+		records.Insert(strings.Trim(a.Data, "."))
+	}
+
+	set.Union(records)
 }
