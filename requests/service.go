@@ -144,9 +144,8 @@ func (bas *BaseService) Stop() error {
 	}
 	bas.stopped = true
 
-	err := bas.service.OnStop()
 	close(bas.quit)
-	return err
+	return nil
 }
 
 // OnStop is a placeholder that should be implemented by a Service
@@ -310,6 +309,7 @@ loop:
 	for {
 		select {
 		case <-bas.Quit():
+			bas.service.OnStop()
 			return
 		default:
 			element, ok := bas.queue.Next()
