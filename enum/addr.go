@@ -180,14 +180,16 @@ func (r *AddressManager) addToCachePlusDatabase(req *requests.AddrRequest) {
 	// Get the ASN / netblock information associated with this IP address
 	asn := r.enum.netCache.AddrSearch(req.Address)
 	if asn == nil {
+		wait := 3 * time.Second
+
 		// Query the data sources for ASN information related to this IP address
 		r.enum.asnRequestAllSources(&requests.ASNRequest{Address: req.Address})
-
-		time.Sleep(3 * time.Second)
+		r.enum.Bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, "AddressManager")
+		time.Sleep(wait)
 		asn = r.enum.netCache.AddrSearch(req.Address)
-
 		for i := 0; asn == nil && i < 10; i++ {
-			time.Sleep(time.Second)
+			r.enum.Bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, "AddressManager")
+			time.Sleep(wait)
 			asn = r.enum.netCache.AddrSearch(req.Address)
 		}
 	}
@@ -208,7 +210,8 @@ func (r *AddressManager) processAddress(req *requests.AddrRequest, resolved bool
 	asn := r.enum.netCache.AddrSearch(req.Address)
 	if asn == nil {
 		for i := 0; asn == nil && i < 10; i++ {
-			time.Sleep(time.Second)
+			r.enum.Bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, "AddressManager")
+			time.Sleep(3 * time.Second)
 			asn = r.enum.netCache.AddrSearch(req.Address)
 		}
 
@@ -253,7 +256,9 @@ func (r *AddressManager) reverseDNSSweep(addr string, cidr *net.IPNet) {
 }
 
 func (e *Enumeration) asnRequestAllSources(req *requests.ASNRequest) {
-	for _, src := range e.srcs {
+	// All data sources will be employed, since this is required,
+	// no matter what the user selects
+	for _, src := range e.Sys.DataSources() {
 		src.ASNRequest(e.ctx, req)
 	}
 }
