@@ -156,3 +156,30 @@ func createOutputDirectory(cfg *config.Config) {
 		os.Exit(1)
 	}
 }
+
+func generateCategoryMap(sys systems.System) map[string][]string {
+	catToSources := make(map[string][]string)
+
+	for _, src := range sys.DataSources() {
+		t := src.Type()
+
+		catToSources[t] = append(catToSources[t], src.String())
+	}
+
+	return catToSources
+}
+
+func expandCategoryNames(names []string, categories map[string][]string) []string {
+	var newnames []string
+
+	for _, name := range names {
+		if _, found := categories[name]; found {
+			newnames = append(newnames, categories[name]...)
+			continue
+		}
+
+		newnames = append(newnames, name)
+	}
+
+	return newnames
+}

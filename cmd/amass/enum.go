@@ -177,6 +177,8 @@ func runEnumCommand(clArgs []string) {
 	}
 	defer sys.Shutdown()
 	sys.SetDataSources(datasrcs.GetAllSources(sys))
+	// Expand data source category names into the associated source names
+	cfg.SourceFilter.Sources = expandCategoryNames(cfg.SourceFilter.Sources, generateCategoryMap(sys))
 
 	// Setup the new enumeration
 	e := enum.NewEnumeration(cfg, sys)
@@ -737,6 +739,15 @@ func (e enumArgs) OverrideConfig(conf *config.Config) error {
 	} else if len(e.Excluded) > 0 {
 		conf.SourceFilter.Include = false
 		conf.SourceFilter.Sources = e.Excluded.Slice()
+	}
+	// Check if brute forcing and name alterations should be added into the source filter
+	if len(conf.SourceFilter.Sources) > 0 {
+		if conf.Alterations {
+			conf.SourceFilter.Sources = append(conf.SourceFilter.Sources, requests.ALT)
+		}
+		if conf.BruteForcing {
+			conf.SourceFilter.Sources = append(conf.SourceFilter.Sources, requests.BRUTE)
+		}
 	}
 
 	// Attempt to add the provided domains to the configuration
