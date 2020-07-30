@@ -125,6 +125,7 @@ func (r *AddressManager) OutputRequests(num int) int {
 		return 0
 	}
 
+	var count int
 	for i := 0; i < num; i++ {
 		resolved := true
 
@@ -140,9 +141,10 @@ func (r *AddressManager) OutputRequests(num int) int {
 
 		req := element.(*requests.AddrRequest)
 		go r.processAddress(req, resolved)
+		count++
 	}
 
-	return 0
+	return count
 }
 
 // RequestQueueLen implements the FQDNManager interface.
