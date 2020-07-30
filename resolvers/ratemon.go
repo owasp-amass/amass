@@ -75,6 +75,11 @@ func (r *RateMonitoredResolver) Port() int {
 	return r.resolver.Port()
 }
 
+// String implements the Stringer interface.
+func (r *RateMonitoredResolver) String() string {
+	return r.resolver.String()
+}
+
 // Available returns true if the Resolver can handle another DNS request.
 func (r *RateMonitoredResolver) Available() (bool, error) {
 	if r.IsStopped() {

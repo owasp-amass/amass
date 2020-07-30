@@ -82,6 +82,8 @@ func makeResolveResult(rec []requests.DNSAnswer, again bool, err string, rcode i
 
 // Resolver is the object type for performing DNS resolutions.
 type Resolver interface {
+	fmt.Stringer
+
 	// Address returns the IP address where the resolver is located
 	Address() string
 
@@ -125,6 +127,7 @@ type BaseResolver struct {
 	WindowDuration   time.Duration
 	xchgQueues       []*queue.Queue
 	stateChannels    *resolverStateChans
+	wildcardChannels *wildcardChans
 	rotationChannels *rotationChans
 	xchgsChannels    *xchgsChans
 	address          string
@@ -148,7 +151,12 @@ func NewBaseResolver(addr string) *BaseResolver {
 			new(queue.Queue),
 			new(queue.Queue),
 		},
-		stateChannels:    initStateManagement(),
+		stateChannels: initStateManagement(),
+		wildcardChannels: &wildcardChans{
+			WildcardReq:     make(chan *wildcardReq, 10),
+			IPsAcrossLevels: make(chan *ipsAcrossLevels, 10),
+			TestResult:      make(chan *testResult, 10),
+		},
 		rotationChannels: initRotationChans(),
 		xchgsChannels:    initXchgsManagement(),
 		address:          addr,
@@ -157,6 +165,7 @@ func NewBaseResolver(addr string) *BaseResolver {
 
 	go r.periodicRotations(r.rotationChannels)
 	r.rotateConnections()
+	go r.manageWildcards(r.wildcardChannels)
 	go r.sendQueries()
 	go r.checkForTimeouts()
 	go r.readMessages(false)
@@ -178,10 +187,15 @@ func (r *BaseResolver) Port() int {
 	return 0
 }
 
+// String implements the Stringer interface.
+func (r *BaseResolver) String() string {
+	return r.Address() + ":" + strconv.Itoa(r.Port())
+}
+
 // Available always returns true.
 func (r *BaseResolver) Available() (bool, error) {
 	if r.IsStopped() {
-		msg := fmt.Sprintf("DNS: Resolver %s has been stopped", r.Address())
+		msg := fmt.Sprintf("DNS: Resolver %s has been stopped", r.String())
 
 		return false, &ResolveError{Err: msg}
 	}
@@ -192,16 +206,6 @@ func (r *BaseResolver) Available() (bool, error) {
 // ReportError indicates to the Resolver that it delivered an erroneous response.
 func (r *BaseResolver) ReportError() {
 	return
-}
-
-// MatchesWildcard returns true if the request provided resolved to a DNS wildcard.
-func (r *BaseResolver) MatchesWildcard(ctx context.Context, req *requests.DNSRequest) bool {
-	return false
-}
-
-// GetWildcardType returns the DNS wildcard type for the provided subdomain name.
-func (r *BaseResolver) GetWildcardType(ctx context.Context, req *requests.DNSRequest) int {
-	return WildcardTypeNone
 }
 
 // SubdomainToDomain returns the first subdomain name of the provided
@@ -240,7 +244,7 @@ func (r *BaseResolver) Resolve(ctx context.Context, name, qtype string, priority
 	if b := ctx.Value(requests.ContextEventBus); b != nil {
 		bus = b.(*eventbus.EventBus)
 
-		bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, "Resolver "+r.Address())
+		bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, "Resolver "+r.String())
 	}
 
 	resultChan := make(chan *resolveResult, 2)

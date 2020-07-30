@@ -25,10 +25,9 @@ type ResolverPool struct {
 	Resolvers []Resolver
 	Done      chan struct{}
 	// Logger for error messages
-	Log              *log.Logger
-	wildcardChannels *wildcardChans
-	domainCacheChan  chan *domainReq
-	hasBeenStopped   bool
+	Log             *log.Logger
+	domainCacheChan chan *domainReq
+	hasBeenStopped  bool
 }
 
 // SetupResolverPool initializes a ResolverPool with the type of resolvers indicated by the parameters.
@@ -91,14 +90,9 @@ loop:
 // NewResolverPool initializes a ResolverPool that uses the provided Resolvers.
 func NewResolverPool(res []Resolver, logger *log.Logger) *ResolverPool {
 	rp := &ResolverPool{
-		Resolvers: res,
-		Done:      make(chan struct{}, 2),
-		Log:       logger,
-		wildcardChannels: &wildcardChans{
-			WildcardReq:     make(chan *wildcardReq, 10),
-			IPsAcrossLevels: make(chan *ipsAcrossLevels, 10),
-			TestResult:      make(chan *testResult, 10),
-		},
+		Resolvers:       res,
+		Done:            make(chan struct{}, 2),
+		Log:             logger,
 		domainCacheChan: make(chan *domainReq, 10),
 	}
 
@@ -107,7 +101,6 @@ func NewResolverPool(res []Resolver, logger *log.Logger) *ResolverPool {
 		rp.Log = log.New(ioutil.Discard, "", 0)
 	}
 
-	go rp.manageWildcards(rp.wildcardChannels)
 	go rp.manageDomainCache(rp.domainCacheChan)
 	return rp
 }
@@ -141,6 +134,11 @@ func (rp *ResolverPool) Address() string {
 // Port implements the Resolver interface.
 func (rp *ResolverPool) Port() int {
 	return 0
+}
+
+// String implements the Stringer interface.
+func (rp *ResolverPool) String() string {
+	return "ResolverPool"
 }
 
 // Available returns true if the Resolver can handle another DNS request.
@@ -349,6 +347,75 @@ func (rp *ResolverPool) Resolve(ctx context.Context, name, qtype string, priorit
 	}
 
 	return []requests.DNSAnswer{}, false, err
+}
+
+// MatchesWildcard returns true if the request provided resolved to a DNS wildcard.
+func (rp *ResolverPool) MatchesWildcard(ctx context.Context, req *requests.DNSRequest) bool {
+	var matched bool
+
+	for _, resolver := range rp.Resolvers {
+		if resolver.MatchesWildcard(ctx, req) {
+			matched = true
+			break
+		}
+	}
+
+	return matched
+}
+
+// GetWildcardType returns the DNS wildcard type for the provided subdomain name.
+func (rp *ResolverPool) GetWildcardType(ctx context.Context, req *requests.DNSRequest) int {
+	var static, dynamic bool
+	num := len(rp.Resolvers)
+	ch := make(chan int, num)
+	done := make(chan struct{}, 2)
+
+	// Allowing the wildcard requests to be performed concurrently
+	for _, resolver := range rp.Resolvers {
+		go func(r Resolver) {
+			select {
+			case <-done:
+				ch <- WildcardTypeNone
+			case wtype := <-wrapWildcardRequest(ctx, r, req):
+				ch <- wtype
+			}
+		}(resolver)
+	}
+
+	t := time.NewTimer(10 * time.Second)
+	defer t.Stop()
+	for i := 0; i < num; {
+		select {
+		case <-t.C:
+			close(done)
+		case wtype := <-ch:
+			i++
+
+			switch wtype {
+			case WildcardTypeStatic:
+				static = true
+			case WildcardTypeDynamic:
+				dynamic = true
+			}
+		}
+	}
+
+	if dynamic {
+		return WildcardTypeDynamic
+	} else if static {
+		return WildcardTypeStatic
+	}
+	return WildcardTypeNone
+}
+
+func wrapWildcardRequest(ctx context.Context, resolver Resolver, req *requests.DNSRequest) chan int {
+	ch := make(chan int, 2)
+
+	go func() {
+		ch <- resolver.GetWildcardType(ctx, req)
+	}()
+
+	return ch
 }
 
 func (rp *ResolverPool) numUsableResolvers() int {
