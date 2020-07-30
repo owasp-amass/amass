@@ -735,19 +735,17 @@ func (e enumArgs) OverrideConfig(conf *config.Config) error {
 
 	if len(e.Included) > 0 {
 		conf.SourceFilter.Include = true
+		// Check if brute forcing and alterations should be added
+		if conf.Alterations {
+			e.Included.Insert(requests.ALT)
+		}
+		if conf.BruteForcing {
+			e.Included.Insert(requests.BRUTE)
+		}
 		conf.SourceFilter.Sources = e.Included.Slice()
 	} else if len(e.Excluded) > 0 {
 		conf.SourceFilter.Include = false
 		conf.SourceFilter.Sources = e.Excluded.Slice()
-	}
-	// Check if brute forcing and name alterations should be added into the source filter
-	if len(conf.SourceFilter.Sources) > 0 {
-		if conf.Alterations {
-			conf.SourceFilter.Sources = append(conf.SourceFilter.Sources, requests.ALT)
-		}
-		if conf.BruteForcing {
-			conf.SourceFilter.Sources = append(conf.SourceFilter.Sources, requests.BRUTE)
-		}
 	}
 
 	// Attempt to add the provided domains to the configuration
