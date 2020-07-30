@@ -8,6 +8,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"sort"
@@ -48,6 +49,7 @@ type dbArgs struct {
 		ConfigFile string
 		Directory  string
 		Domains    string
+		TermOut    string
 	}
 }
 
@@ -79,6 +81,7 @@ func runDBCommand(clArgs []string) {
 	dbCommand.StringVar(&args.Filepaths.ConfigFile, "config", "", "Path to the INI configuration file. Additional details below")
 	dbCommand.StringVar(&args.Filepaths.Directory, "dir", "", "Path to the directory containing the graph database")
 	dbCommand.StringVar(&args.Filepaths.Domains, "df", "", "Path to a file providing root domain names")
+	dbCommand.StringVar(&args.Filepaths.TermOut, "o", "", "Path to the text file containing terminal stdout/stderr")
 
 	if len(clArgs) < 1 {
 		commandUsage(dbUsageMsg, dbCommand, dbBuf)
@@ -299,7 +302,23 @@ func migrateAllEvents(uuids []string, from, to *graph.Graph) error {
 
 func showEventData(args *dbArgs, uuids []string, db *graph.Graph) {
 	var total int
+	var err error
+	var outfile *os.File
 	domains := args.Domains.Slice()
+
+	if args.Filepaths.TermOut != "" {
+		outfile, err = os.OpenFile(args.Filepaths.TermOut, os.O_WRONLY|os.O_CREATE, 0644)
+		if err != nil {
+			r.Fprintf(color.Error, "Failed to open the text output file: %v\n", err)
+			os.Exit(1)
+		}
+		defer func() {
+			outfile.Sync()
+			outfile.Close()
+		}()
+		outfile.Truncate(0)
+		outfile.Seek(0, 0)
+	}
 
 	tags := make(map[string]int)
 	asns := make(map[int]*format.ASNSummaryData)
@@ -323,14 +342,31 @@ func showEventData(args *dbArgs, uuids []string, db *graph.Graph) {
 		}
 
 		if args.Options.DiscoveredNames {
-			fmt.Fprintf(color.Output, "%s%s%s\n", blue(source), green(name), yellow(ips))
+			if outfile != nil {
+				fmt.Fprintf(outfile, "%s%s%s\n", source, name, ips)
+			} else {
+				fmt.Fprintf(color.Output, "%s%s%s\n", blue(source), green(name), yellow(ips))
+			}
 		}
 	}
 
 	if total == 0 {
 		r.Println("No names were discovered")
 	} else if args.Options.ASNTableSummary {
-		format.PrintEnumerationSummary(total, tags, asns, args.Options.DemoMode)
+		var out io.Writer
+		status := color.NoColor
+
+		if outfile != nil {
+			out = outfile
+			color.NoColor = true
+		} else if args.Options.ShowAll {
+			out = color.Error
+		} else {
+			out = color.Output
+		}
+
+		format.FprintEnumerationSummary(out, total, tags, asns, args.Options.DemoMode)
+		color.NoColor = status
 	}
 }
 
