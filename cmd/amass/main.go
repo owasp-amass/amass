@@ -125,8 +125,8 @@ func main() {
 	}
 }
 
-// GetAllSourceNames returns the names of all Amass data sources.
-func GetAllSourceNames() []string {
+// GetAllSourceInfo returns the names of all Amass data sources.
+func GetAllSourceInfo() []string {
 	var names []string
 
 	sys, err := systems.NewLocalSystem(config.NewConfig())
@@ -136,7 +136,7 @@ func GetAllSourceNames() []string {
 	sys.SetDataSources(datasrcs.GetAllSources(sys))
 
 	for _, src := range sys.DataSources() {
-		names = append(names, src.String())
+		names = append(names, fmt.Sprintf("%-20s\t%s", src.String(), src.Type()))
 	}
 
 	sys.Shutdown()

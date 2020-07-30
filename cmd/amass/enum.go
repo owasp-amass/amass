@@ -284,8 +284,8 @@ func argsAndConfig(clArgs []string) (*config.Config, *enumArgs) {
 
 	// Check if the user has requested the data source names
 	if args.Options.ListSources {
-		for _, name := range GetAllSourceNames() {
-			g.Println(name)
+		for _, info := range GetAllSourceInfo() {
+			g.Println(info)
 		}
 		return nil, &args
 	}
