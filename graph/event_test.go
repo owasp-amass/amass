@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/OWASP/Amass/v3/graph/db"
+	"github.com/OWASP/Amass/v3/graphdb"
 )
 
 func checkTestResult(want, got []string) bool {
@@ -27,7 +27,7 @@ func checkTestResult(want, got []string) bool {
 
 func TestEvent(t *testing.T) {
 	need := time.Now()
-	g := NewGraph(db.NewCayleyGraphMemory())
+	g := NewGraph(graphdb.NewCayleyGraphMemory())
 
 	for _, tt := range graphTest {
 		t.Run("Testing InsertEvent...", func(t *testing.T) {

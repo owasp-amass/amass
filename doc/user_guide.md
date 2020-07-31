@@ -1,4 +1,3 @@
-
 # [![OWASP Logo](../images/owasp_logo.png) OWASP Amass](https://owasp.org/www-project-amass/) - Users' Guide
 
 ![Network graph](../images/network_06092018.png "Amass Network Mapping")
@@ -113,7 +112,6 @@ This subcommand will perform DNS enumeration and network mapping while populatin
 | -exclude | Data source names separated by commas to be excluded | amass enum -exclude crtsh -d example.com |
 | -if | Path to a file providing data sources to include | amass enum -if include.txt -d example.com |
 | -include | Data source names separated by commas to be included | amass enum -include crtsh -d example.com |
-| -include-unresolvable | Output DNS names that did not resolve | amass enum -include-unresolvable -d example.com |
 | -ip | Show the IP addresses for discovered names | amass enum -ip -d example.com |
 | -ipv4 | Show the IPv4 addresses for discovered names | amass enum -ipv4 -d example.com |
 | -ipv6 | Show the IPv6 addresses for discovered names | amass enum -ipv6 -d example.com |
@@ -124,6 +122,7 @@ This subcommand will perform DNS enumeration and network mapping while populatin
 | -min-for-recursive | Subdomain labels seen before recursive brute forcing (Default: 1) | amass enum -brute -min-for-recursive 3 -d example.com |
 | -nf | Path to a file providing already known subdomain names (from other tools/sources) | amass enum -nf names.txt -d example.com |
 | -noalts | Disable generation of altered names | amass enum -noalts -d example.com |
+| -nolocaldb | Disable saving data into a local database | amass enum -nolocaldb -d example.com |
 | -norecursive | Turn off recursive brute forcing | amass enum -brute -norecursive -d example.com |
 | -noresolvrate | Disable resolver rate monitoring | amass enum -d example.com -noresolvrate |
 | -noresolvscore | Disable resolver reliability scoring | amass enum -d example.com -noresolvscore |
@@ -351,33 +350,35 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/v3/config"
+	"github.com/OWASP/Amass/v3/datasrcs"
 	"github.com/OWASP/Amass/v3/enum"
-	"github.com/OWASP/Amass/v3/services"
+	"github.com/OWASP/Amass/v3/systems"
 )
 
 func main() {
 	// Seed the default pseudo-random number generator
 	rand.Seed(time.Now().UTC().UnixNano())
 
-	sys, err := services.NewLocalSystem(config.NewConfig())
+	// Setup the most basic amass configuration
+	cfg := config.NewConfig()
+	cfg.AddDomain("example.com")
+
+	sys, err := systems.NewLocalSystem(cfg)
 	if err != nil {
 		return
 	}
+	sys.SetDataSources(datasrcs.GetAllSources(sys))
 
-	e := enum.NewEnumeration(sys)
+	e := enum.NewEnumeration(cfg, sys)
 	if e == nil {
 		return
 	}
+	defer e.Close()
 
-	go func() {
-		for result := range e.Output {
-			fmt.Println(result.Name)
-		}
-	}()
-
-	// Setup the most basic amass configuration
-	e.Config.AddDomain("example.com")
 	e.Start()
+	for _, o := range e.ExtractOutput(nil) {
+		fmt.Println(o.Name)
+	}
 }
 ```
 

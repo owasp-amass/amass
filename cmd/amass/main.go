@@ -29,8 +29,9 @@ import (
 	"path"
 
 	"github.com/OWASP/Amass/v3/config"
+	"github.com/OWASP/Amass/v3/datasrcs"
 	"github.com/OWASP/Amass/v3/format"
-	"github.com/OWASP/Amass/v3/services"
+	"github.com/OWASP/Amass/v3/systems"
 	"github.com/fatih/color"
 )
 
@@ -52,6 +53,7 @@ var (
 	yellow = color.New(color.FgHiYellow).SprintFunc()
 	green  = color.New(color.FgHiGreen).SprintFunc()
 	blue   = color.New(color.FgHiBlue).SprintFunc()
+	red    = color.New(color.FgHiRed).SprintFunc()
 )
 
 func commandUsage(msg string, cmdFlagSet *flag.FlagSet, errBuf *bytes.Buffer) {
@@ -127,12 +129,13 @@ func main() {
 func GetAllSourceNames() []string {
 	var names []string
 
-	sys, err := services.NewLocalSystem(config.NewConfig())
+	sys, err := systems.NewLocalSystem(config.NewConfig())
 	if err != nil {
 		return names
 	}
+	sys.SetDataSources(datasrcs.GetAllSources(sys))
 
-	for _, src := range services.GetAllSources(sys) {
+	for _, src := range sys.DataSources() {
 		names = append(names, src.String())
 	}
 

@@ -6,14 +6,24 @@ Did you write a blog post, magazine article or do a podcast about or mentioning 
 
 ### Pod- & Webcasts
 
+* [Hacking Simplified](https://www.youtube.com/channel/UCARsgS1stRbRgh99E63Q3ng):
+  * [Amass Setup and Tutorial](https://www.youtube.com/watch?v=Pv4fGBZWyqY)
+* [Josh Amishav-Zlatin's Channel](https://www.youtube.com/channel/UCajDbRGYBtgITfEbNUbWdsw):
+  * [Advanced Passive Recon with the Amass Scripting Engine](https://www.youtube.com/watch?v=twVZLZxTAX4)
+  * [Domain and Network Recon using Amass - Mapping the Attack Surface](https://www.youtube.com/watch?v=bsUeTyFoEtU)
+* [Musab Khan's Channel](https://www.youtube.com/channel/UCX3LuFyGjuVTyfpte63L6KQ):
+  * [OWASP Amass - In-depth Asset Discovery tool](https://www.youtube.com/watch?v=wxhW1fTjLNw)
+* [Nahamsec's Streams](https://www.twitch.tv/nahamsec):
+  * [04/26/2020 - Mayonaise Talks About His Recon Workflow, How to Learn Different Topics, and How to Bug Bounty!](https://www.youtube.com/watch?v=SGLdv_4Iy44)
+  * [09/08/2019 - Live Bug Bounty Recon Session on Yahoo (censys, altdns, amass) w/ @infosec_au](https://www.youtube.com/watch?v=m-eZfbgdl9I)
+  * [09/01/2019 - Live Bug Bounty Recon Session on Yahoo (Amass, crts.sh, dirsearch) w/ @TheDawgyg](https://www.youtube.com/watch?v=u4dUnJ1U0T4)
+* [The Hackers Arsenal](https://www.youtube.com/channel/UC0z2vxoKkT4_VV5DHCEETgA):
+  * [04/24/2020 - AMASS: Automated SubDomain Enumeration and Reconnaissance (Full walk-though)](https://www.youtube.com/watch?v=8PaVBe0cbIU)
 * [Jason Haddix's Recon Streams](https://www.youtube.com/channel/UCk0f0svao7AKeK3RfiWxXEA/featured):
   * Stream #2:
     [ASNs, Xmind, Amass Intel, SSLscrape, ASNLookup ++](https://www.youtube.com/watch?v=5N7k0g7arYE)
   * Stream #4:
     [ASNLookup, Github Dorks, Amass, ffuf, Dirsearch, Turbo Intruder](https://www.youtube.com/watch?v=00xVyT0k-_E)
-* [Nahamsec's Streams](https://www.twitch.tv/nahamsec):
-  * [09/08/2019 - Live Bug Bounty Recon Session on Yahoo (censys, altdns, amass) w/ @infosec_au](https://www.youtube.com/watch?v=m-eZfbgdl9I)
-  * [09/01/2019 - Live Bug Bounty Recon Session on Yahoo (Amass, crts.sh, dirsearch) w/ @TheDawgyg](https://www.youtube.com/watch?v=u4dUnJ1U0T4)
 * [Ghostlulz's YouTube Channel](https://www.youtube.com/channel/UCqjjGl7VrAW_yLZK3DoMZXw):
   * [Bug Bounty Tips: Amass Recon Tool](https://www.youtube.com/watch?v=QRkKzYH4efI)
 * [ToolWar's YouTube Channel](https://www.youtube.com/channel/UCCByzSfyNwrvJ5TX6cyJPlA):
@@ -28,14 +38,26 @@ Did you write a blog post, magazine article or do a podcast about or mentioning 
 
 ### Blogs & Articles
 
-* Blog post on [Gökhan Güzelkokar's Blog](https://medium.com/@gguzelkokar.mdbf15):
-  * [Bug bounty resources & advices](https://medium.com/@gguzelkokar.mdbf15/bug-bounty-resources-advices-2cc9cfb69f6)
+* Blog post on [WW Tech Blog](https://medium.com/ww-tech-blog):
+  * [Reducing Our Attack Surface with AppSec Platform](https://medium.com/ww-tech-blog/reducing-our-attack-surface-with-appsec-platform-4b6717a16709)
 * Blog post on [SecurityTrail's Blog](https://securitytrails.com/blog/):
+  * [What is DNS Intelligence?](https://securitytrails.com/blog/dns-intelligence)
+  * [What is OWASP? Top 10 Web Application Security Risks](https://securitytrails.com/blog/owasp-top-10)
   * [OWASP Amass: A Solid Information Gathering Tool](https://securitytrails.com/blog/owasp-amass)
   * [Top Linux Distros for Ethical Hacking and Penetration Testing](https://securitytrails.com/blog/top-linux-distributions-ethical-hacking-pentesting)
   * [5 Subdomain Takeover #ProTips](https://securitytrails.com/blog/subdomain-takeover-tips)
   * [Where You’ll Find Us: An Overview of SecurityTrails Integrations](https://securitytrails.com/blog/integrations-overview)
   * [Top 7 Subdomain Scanner Tools: Find Subdomains in Seconds](https://securitytrails.com/blog/subdomain-scanner-find-subdomains)
+* Blog post on [HackerOne's Blog](https://www.hackerone.com/blog):
+  * [100 Hacking Tools and Resources](https://www.hackerone.com/blog/100-hacking-tools-and-resources)
+* Blog post on [Synk's Blog](https://snyk.io/blog/):
+  * [Mitigating clickJacking—the DevSecOps way!](https://snyk.io/blog/mitigating-clickjacking-the-devsecops-way/)
+* Blog post on [Syed Abuthahir's Blog](https://medium.com/@syedabuthahir):
+  * [How was I able to download customer data dump](https://medium.com/@syedabuthahir/how-was-i-able-to-download-customer-data-dump-9cd645146a3c)
+* Blog post on [ncpd's Blog](https://medium.com/@_ncpd):
+  * [Subdomain enumeration made easy](https://medium.com/@_ncpd/subdomain-enumeration-made-easy-ba843037ab76)
+* Blog post on [Gökhan Güzelkokar's Blog](https://medium.com/@gguzelkokar.mdbf15):
+  * [Bug bounty resources & advices](https://medium.com/@gguzelkokar.mdbf15/bug-bounty-resources-advices-2cc9cfb69f6)
 * Blog post on [xploitprotocol's Blog](https://medium.com/@xploitprotocol):
   * [How to approach a target|bug bounty tips](https://medium.com/@xploitprotocol/how-to-approach-a-target-bug-bounty-tips-f371c7ec7985)
 * Blog post on [TrustedSec's Blog](https://www.trustedsec.com/blog):
@@ -47,12 +69,16 @@ Did you write a blog post, magazine article or do a podcast about or mentioning 
 * Tutorial on [Dionach's Blog](https://www.dionach.com/blog/):
   * [How to Use OWASP Amass: An Extensive Tutorial](https://www.dionach.com/blog/how-to-use-owasp-amass-an-extensive-tutorial/)
   by Nick Gkogkos
+* Blog post on [epi052's Blog](https://epi052.gitlab.io/notes-to-self/blog/):
+  * [How to Build an Automated Recon Pipeline with Python and Luigi - Part IV (Subdomain Enumeration)](https://epi052.gitlab.io/notes-to-self/blog/2019-09-17-how-to-build-an-automated-recon-pipeline-with-python-and-luigi-part-four/)
 * Blog post on [Aditya Soni's Blog](https://medium.com/@hetroublemakr):
   * [Bug Bounty with Bash](https://medium.com/cyberverse/bug-bounty-with-bash-438596ff72f5)
 * Blog post on [Anshuman Pattnaik's Blog](https://medium.com/@hackbotone):
   * [10 Recon Tools For Bug Bounty](https://medium.com/@hackbotone/10-recon-tools-for-bug-bounty-bafa8a5961bd)
 * Blog post on [Hahwul's Blog](https://www.hahwul.com):
   * [Find Subdomain Takeover with Amass + SubJack](https://www.hahwul.com/2019/10/find-subdomain-takeover-with-amass-and-subjack.html)
+* Blog post on [Felipe Caon's Blog](https://medium.com/@caon):
+  * [Recon done right](https://medium.com/@caon/recon-done-right-2210f5e426cb)
 * Article on [Hacker Toolbelt](https://medium.com/hacker-toolbelt):
   * [OWASP Amass OSINT Reconnaissance](https://medium.com/hacker-toolbelt/owasp-amass-osint-reconnaissance-9b57d81fb958)
   by [Miguel Sampaio da Veiga](https://medium.com/@sampaio.veiga)
@@ -129,6 +155,10 @@ Did you write a blog post, magazine article or do a podcast about or mentioning 
 
 ## Summits & Open Source Events
 
+* [OWASP Amass Boot Camp](https://www.youtube.com/watch?v=OOurkCPf2-I&list=PLruly0ngXhPGvyl-gOp4d_TvIiedloX1l)
+  by Jeff Foley,
+  Cyber June'Gle Virtual Summit,
+  28.06.2020
 * Lightning Talk at [OWASP Sendai Day 2020](https://owaspsendai.connpass.com/event/162247/)
   by Akitsugu Ito,
   on [OWASP Amass](https://speakerdeck.com/springmoon6/lt-owasp-amass),
@@ -138,7 +168,15 @@ Did you write a blog post, magazine article or do a podcast about or mentioning 
 
 ### 2020
 
-_t.b.a._
+* [How to Use Amass Efficiently](https://www.youtube.com/watch?v=H1wdBgY1rtg)
+  by Jeff Foley,
+  NahamCom 2020,
+  14.06.2020
+* [The Bug Hunter's Methodology v4.0 - Recon Edition](https://www.youtube.com/watch?v=p4JgIu1mceI)
+  by Jason Haddix,
+  NahamCom 2020,
+  14.06.2020
+  ([Slides](https://drive.google.com/file/d/1aG_qqRvNW-s5_8vvPk5rJiMSMeNL2uY9/view))
 
 ### 2019
 
@@ -189,7 +227,7 @@ _t.b.a._
   by Jeff Foley,
   [OWASP London Chapter](https://owasp.org/www-chapter-london/),
   29.09.2018
-* [The Bug Hunters Methodology v3](https://www.youtube.com/watch?v=Qw1nNPiH_Go)
+* [The Bug Hunter's Methodology v3](https://www.youtube.com/watch?v=Qw1nNPiH_Go)
   by Jason Haddix,
   Bugcrowd LevelUp 0x02,
   28.05.2018

@@ -12,9 +12,10 @@ type Edge struct {
 
 // Node represents an Amass graph node throughout the viz package.
 type Node struct {
-	ID     int
-	Type   string
-	Label  string
-	Title  string
-	Source string
+	ID         int
+	Type       string
+	Label      string
+	Title      string
+	Source     string
+	ActualType string
 }

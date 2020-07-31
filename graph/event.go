@@ -7,13 +7,13 @@ import (
 	"errors"
 	"time"
 
-	"github.com/OWASP/Amass/v3/graph/db"
+	"github.com/OWASP/Amass/v3/graphdb"
 	"github.com/OWASP/Amass/v3/stringset"
 	"golang.org/x/net/publicsuffix"
 )
 
 // InsertEvent create an event node in the graph that represents a discovery task.
-func (g *Graph) InsertEvent(eventID string) (db.Node, error) {
+func (g *Graph) InsertEvent(eventID string) (graphdb.Node, error) {
 	// Check if there is an existing start time for this event.
 	// If not, then create the node and add the start time/date
 	var finish string
@@ -65,8 +65,8 @@ func (g *Graph) InsertEvent(eventID string) (db.Node, error) {
 	return eventNode, nil
 }
 
-// AddNodeToEvent creates an associations between a node in the graph, a data source and a discovery task.
-func (g *Graph) AddNodeToEvent(node db.Node, source, tag, eventID string) error {
+// AddNodeToEvent creates associations between a node in the graph, a data source and a discovery task.
+func (g *Graph) AddNodeToEvent(node graphdb.Node, source, tag, eventID string) error {
 	if source == "" || tag == "" || eventID == "" {
 		return errors.New("Graph: AddNodeToEvent: Invalid arguments provided")
 	}
@@ -81,7 +81,7 @@ func (g *Graph) AddNodeToEvent(node db.Node, source, tag, eventID string) error 
 		return err
 	}
 
-	sourceEdge := &db.Edge{
+	sourceEdge := &graphdb.Edge{
 		Predicate: "used",
 		From:      eventNode,
 		To:        sourceNode,
@@ -90,19 +90,17 @@ func (g *Graph) AddNodeToEvent(node db.Node, source, tag, eventID string) error 
 		return err
 	}
 
-	eventEdge := &db.Edge{
+	eventEdge := &graphdb.Edge{
 		Predicate: source,
 		From:      eventNode,
 		To:        node,
 	}
-	if err := g.InsertEdge(eventEdge); err != nil {
-		return err
-	}
 
-	return nil
+	return g.InsertEdge(eventEdge)
 }
 
-func (g *Graph) inEventScope(node db.Node, uuid string, predicates ...string) bool {
+// InEventScope checks if the Node parameter is within scope of the Event identified by the uuid parameter.
+func (g *Graph) InEventScope(node graphdb.Node, uuid string, predicates ...string) bool {
 	edges, err := g.db.ReadInEdges(node, predicates...)
 	if err != nil {
 		return false
@@ -119,7 +117,7 @@ func (g *Graph) inEventScope(node db.Node, uuid string, predicates ...string) bo
 
 // EventList returns a list of event UUIDs found in the graph.
 func (g *Graph) EventList() []string {
-	nodes, err := g.db.AllNodesOfType("event")
+	nodes, err := g.AllNodesOfType("event")
 	if err != nil {
 		return nil
 	}
@@ -134,7 +132,7 @@ func (g *Graph) EventList() []string {
 
 // EventFQDNs returns the domains that were involved in the event.
 func (g *Graph) EventFQDNs(uuid string) []string {
-	names, err := g.db.AllNodesOfType("fqdn", uuid)
+	names, err := g.AllNodesOfType("fqdn", uuid)
 	if err != nil {
 		return nil
 	}
@@ -151,16 +149,19 @@ func (g *Graph) EventFQDNs(uuid string) []string {
 
 // EventDomains returns the domains that were involved in the event.
 func (g *Graph) EventDomains(uuid string) []string {
-	names, err := g.db.AllNodesOfType("fqdn", uuid)
+	event, err := g.db.ReadNode(uuid, "event")
+	if err != nil {
+		return nil
+	}
+
+	edges, err := g.db.ReadOutEdges(event, "domain")
 	if err != nil {
 		return nil
 	}
 
 	domains := stringset.New()
-	for _, name := range names {
-		d, err := publicsuffix.EffectiveTLDPlusOne(g.db.NodeToID(name))
-
-		if err == nil && d != "" {
+	for _, edge := range edges {
+		if d := g.db.NodeToID(edge.To); d != "" {
 			domains.Insert(d)
 		}
 	}
@@ -170,7 +171,7 @@ func (g *Graph) EventDomains(uuid string) []string {
 
 // EventSubdomains returns the subdomains discovered during the event(s).
 func (g *Graph) EventSubdomains(events ...string) []string {
-	nodes, err := g.db.AllNodesOfType("fqdn", events...)
+	nodes, err := g.AllNodesOfType("fqdn", events...)
 	if err != nil {
 		return nil
 	}

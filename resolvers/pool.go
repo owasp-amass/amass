@@ -11,7 +11,6 @@ import (
 	"math/rand"
 	"net"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/OWASP/Amass/v3/limits"
@@ -26,13 +25,10 @@ type ResolverPool struct {
 	Resolvers []Resolver
 	Done      chan struct{}
 	// Logger for error messages
-	Log          *log.Logger
-	wildcardLock sync.Mutex
-	wildcards    map[string]*wildcard
-	// Domains discovered by the SubdomainToDomain function
-	domainLock     sync.Mutex
-	domainCache    map[string]struct{}
-	hasBeenStopped bool
+	Log              *log.Logger
+	wildcardChannels *wildcardChans
+	domainCacheChan  chan *domainReq
+	hasBeenStopped   bool
 }
 
 // SetupResolverPool initializes a ResolverPool with the type of resolvers indicated by the parameters.
@@ -95,11 +91,15 @@ loop:
 // NewResolverPool initializes a ResolverPool that uses the provided Resolvers.
 func NewResolverPool(res []Resolver, logger *log.Logger) *ResolverPool {
 	rp := &ResolverPool{
-		Resolvers:   res,
-		Done:        make(chan struct{}, 2),
-		Log:         logger,
-		wildcards:   make(map[string]*wildcard),
-		domainCache: make(map[string]struct{}),
+		Resolvers: res,
+		Done:      make(chan struct{}, 2),
+		Log:       logger,
+		wildcardChannels: &wildcardChans{
+			WildcardReq:     make(chan *wildcardReq, 10),
+			IPsAcrossLevels: make(chan *ipsAcrossLevels, 10),
+			TestResult:      make(chan *testResult, 10),
+		},
+		domainCacheChan: make(chan *domainReq, 10),
 	}
 
 	// Assign a null logger when one is not provided
@@ -107,12 +107,18 @@ func NewResolverPool(res []Resolver, logger *log.Logger) *ResolverPool {
 		rp.Log = log.New(ioutil.Discard, "", 0)
 	}
 
+	go rp.manageWildcards(rp.wildcardChannels)
+	go rp.manageDomainCache(rp.domainCacheChan)
 	return rp
 }
 
 // Stop calls the Stop method for each Resolver object in the pool.
 func (rp *ResolverPool) Stop() error {
+	if rp.hasBeenStopped {
+		return nil
+	}
 	rp.hasBeenStopped = true
+	close(rp.Done)
 
 	for _, r := range rp.Resolvers {
 		r.Stop()
@@ -172,36 +178,60 @@ func (rp *ResolverPool) ReportError() {
 // SubdomainToDomain returns the first subdomain name of the provided
 // parameter that responds to a DNS query for the NS record type.
 func (rp *ResolverPool) SubdomainToDomain(name string) string {
-	rp.domainLock.Lock()
-	defer rp.domainLock.Unlock()
+	ch := make(chan string, 2)
 
-	var domain string
-	// Obtain all parts of the subdomain name
-	labels := strings.Split(strings.TrimSpace(name), ".")
-	// Check the cache for all parts of the name
-	for i := len(labels); i >= 0; i-- {
-		sub := strings.Join(labels[i:], ".")
+	rp.domainCacheChan <- &domainReq{
+		Name: name,
+		Ch:   ch,
+	}
 
-		if _, ok := rp.domainCache[sub]; ok {
-			domain = sub
-			break
+	return <-ch
+}
+
+type domainReq struct {
+	Name string
+	Ch   chan string
+}
+
+func (rp *ResolverPool) manageDomainCache(ch chan *domainReq) {
+	cache := make(map[string]struct{})
+loop:
+	for {
+		select {
+		case <-rp.Done:
+			return
+		case req := <-ch:
+			var domain string
+			// Obtain all parts of the subdomain name
+			labels := strings.Split(strings.TrimSpace(req.Name), ".")
+			// Check the cache for all parts of the name
+			for i := len(labels); i >= 0; i-- {
+				sub := strings.Join(labels[i:], ".")
+
+				if _, ok := cache[sub]; ok {
+					domain = sub
+					break
+				}
+			}
+			if domain != "" {
+				req.Ch <- domain
+				continue loop
+			}
+			// Check the DNS for all parts of the name
+			for i := 0; i < len(labels)-1; i++ {
+				sub := strings.Join(labels[i:], ".")
+
+				if ns, _, err := rp.Resolve(context.TODO(), sub, "NS", PriorityHigh); err == nil {
+					pieces := strings.Split(ns[0].Data, ",")
+					cache[pieces[0]] = struct{}{}
+					domain = pieces[0]
+					break
+				}
+			}
+
+			req.Ch <- domain
 		}
 	}
-	if domain != "" {
-		return domain
-	}
-	// Check the DNS for all parts of the name
-	for i := 0; i < len(labels)-1; i++ {
-		sub := strings.Join(labels[i:], ".")
-
-		if ns, _, err := rp.Resolve(context.TODO(), sub, "NS", PriorityHigh); err == nil {
-			pieces := strings.Split(ns[0].Data, ",")
-			rp.domainCache[pieces[0]] = struct{}{}
-			domain = pieces[0]
-			break
-		}
-	}
-	return domain
 }
 
 // NextResolver returns a randomly selected Resolver from the pool that has availability.

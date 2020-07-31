@@ -6,12 +6,12 @@ package graph
 import (
 	"errors"
 
-	"github.com/OWASP/Amass/v3/graph/db"
+	"github.com/OWASP/Amass/v3/graphdb"
 	"golang.org/x/net/publicsuffix"
 )
 
 // InsertFQDN adds a fully qualified domain name to the graph.
-func (g *Graph) InsertFQDN(name, source, tag, eventID string) (db.Node, error) {
+func (g *Graph) InsertFQDN(name, source, tag, eventID string) (graphdb.Node, error) {
 	tld, _ := publicsuffix.PublicSuffix(name)
 
 	domain, err := publicsuffix.EffectiveTLDPlusOne(name)
@@ -40,7 +40,7 @@ func (g *Graph) InsertFQDN(name, source, tag, eventID string) (db.Node, error) {
 	}
 
 	// Link the three nodes together
-	domainEdge := &db.Edge{
+	domainEdge := &graphdb.Edge{
 		Predicate: "root",
 		From:      fqdnNode,
 		To:        domainNode,
@@ -49,7 +49,7 @@ func (g *Graph) InsertFQDN(name, source, tag, eventID string) (db.Node, error) {
 		return fqdnNode, err
 	}
 
-	tldEdge := &db.Edge{
+	tldEdge := &graphdb.Edge{
 		Predicate: "tld",
 		From:      domainNode,
 		To:        tldNode,
@@ -67,6 +67,10 @@ func (g *Graph) InsertFQDN(name, source, tag, eventID string) (db.Node, error) {
 	if err := g.AddNodeToEvent(domainNode, source, tag, eventID); err != nil {
 		return fqdnNode, err
 	}
+	// Add the domain edge for easy access to the DNS domains in the event
+	if err := g.addDomainEdge(domainNode, eventID); err != nil {
+		return fqdnNode, err
+	}
 
 	// Source and event edges for the top-level domain name
 	if err := g.AddNodeToEvent(tldNode, source, tag, eventID); err != nil {
@@ -74,6 +78,19 @@ func (g *Graph) InsertFQDN(name, source, tag, eventID string) (db.Node, error) {
 	}
 
 	return fqdnNode, nil
+}
+
+func (g *Graph) addDomainEdge(node graphdb.Node, eventID string) error {
+	event, err := g.db.ReadNode(eventID, "event")
+	if err != nil {
+		return err
+	}
+
+	return g.InsertEdge(&graphdb.Edge{
+		Predicate: "domain",
+		From:      event,
+		To:        node,
+	})
 }
 
 // InsertCNAME adds the FQDNs and CNAME record between them to the graph.
@@ -98,7 +115,7 @@ func (g *Graph) insertAlias(fqdn, target, pred, source, tag, eventID string) err
 	}
 
 	// Create the edge between the alias and the target subdomain name
-	aliasEdge := &db.Edge{
+	aliasEdge := &graphdb.Edge{
 		Predicate: pred,
 		From:      fqdnNode,
 		To:        targetNode,

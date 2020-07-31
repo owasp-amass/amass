@@ -21,21 +21,33 @@ type pubReq struct {
 	Args  []reflect.Value
 }
 
+type subReq struct {
+	Topic string
+	Fn    interface{}
+}
+
+type eventbusChans struct {
+	Subscribe   chan *subReq
+	Unsubscribe chan *subReq
+}
+
 // EventBus handles sending and receiving events across Amass.
 type EventBus struct {
-	sync.Mutex
-	topics map[string][]reflect.Value
-	max    semaphore.Semaphore
-	queues []*queue.Queue
-	done   chan struct{}
-	closed sync.Once
+	channels *eventbusChans
+	max      semaphore.Semaphore
+	queues   []*queue.Queue
+	done     chan struct{}
+	closed   sync.Once
 }
 
 // NewEventBus initializes and returns an EventBus object.
 func NewEventBus(max int) *EventBus {
 	eb := &EventBus{
-		topics: make(map[string][]reflect.Value),
-		max:    semaphore.NewSimpleSemaphore(max),
+		channels: &eventbusChans{
+			Subscribe:   make(chan *subReq, 10),
+			Unsubscribe: make(chan *subReq, 10),
+		},
+		max: semaphore.NewSimpleSemaphore(max),
 		queues: []*queue.Queue{
 			new(queue.Queue),
 			new(queue.Queue),
@@ -44,7 +56,7 @@ func NewEventBus(max int) *EventBus {
 		done: make(chan struct{}, 2),
 	}
 
-	go eb.processRequests()
+	go eb.processRequests(eb.channels)
 	return eb
 }
 
@@ -57,31 +69,17 @@ func (eb *EventBus) Stop() {
 
 // Subscribe registers callback to be executed for all requests on the channel.
 func (eb *EventBus) Subscribe(topic string, fn interface{}) {
-	if topic != "" && reflect.TypeOf(fn).Kind() == reflect.Func {
-		callback := reflect.ValueOf(fn)
-
-		eb.Lock()
-		eb.topics[topic] = append(eb.topics[topic], callback)
-		eb.Unlock()
+	eb.channels.Subscribe <- &subReq{
+		Topic: topic,
+		Fn:    fn,
 	}
 }
 
 // Unsubscribe deregisters the callback from the channel.
 func (eb *EventBus) Unsubscribe(topic string, fn interface{}) {
-	if topic != "" && reflect.TypeOf(fn).Kind() == reflect.Func {
-		callback := reflect.ValueOf(fn)
-
-		eb.Lock()
-		defer eb.Unlock()
-
-		var channels []reflect.Value
-		for _, c := range eb.topics[topic] {
-			if c != callback {
-				channels = append(channels, c)
-			}
-		}
-
-		eb.topics[topic] = channels
+	eb.channels.Unsubscribe <- &subReq{
+		Topic: topic,
+		Fn:    fn,
 	}
 }
 
@@ -101,15 +99,35 @@ func (eb *EventBus) Publish(topic string, priority int, args ...interface{}) {
 	}
 }
 
-func (eb *EventBus) processRequests() {
+func (eb *EventBus) processRequests(chs *eventbusChans) {
+	topics := make(map[string][]reflect.Value)
 	curIdx := 0
 	maxIdx := 6
 	delays := []int{10, 25, 50, 75, 100, 150, 250}
-
+loop:
 	for {
 		select {
 		case <-eb.done:
 			return
+		case sub := <-chs.Subscribe:
+			if sub.Topic != "" && reflect.TypeOf(sub.Fn).Kind() == reflect.Func {
+				callback := reflect.ValueOf(sub.Fn)
+
+				topics[sub.Topic] = append(topics[sub.Topic], callback)
+			}
+		case unsub := <-chs.Unsubscribe:
+			if unsub.Topic != "" && reflect.TypeOf(unsub.Fn).Kind() == reflect.Func {
+				callback := reflect.ValueOf(unsub.Fn)
+
+				var channels []reflect.Value
+				for _, c := range topics[unsub.Topic] {
+					if c != callback {
+						channels = append(channels, c)
+					}
+				}
+
+				topics[unsub.Topic] = channels
+			}
 		default:
 			var found bool
 			var element interface{}
@@ -126,17 +144,14 @@ func (eb *EventBus) processRequests() {
 					curIdx++
 				}
 				time.Sleep(time.Duration(delays[curIdx]) * time.Millisecond)
-				continue
+				continue loop
 			}
 
 			curIdx = 0
 			p := element.(*pubReq)
-
-			eb.Lock()
-			callbacks, found := eb.topics[p.Topic]
-			eb.Unlock()
+			callbacks, found := topics[p.Topic]
 			if !found {
-				continue
+				continue loop
 			}
 
 			for _, cb := range callbacks {

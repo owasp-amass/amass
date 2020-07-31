@@ -18,10 +18,11 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/v3/config"
+	"github.com/OWASP/Amass/v3/datasrcs"
 	"github.com/OWASP/Amass/v3/format"
 	"github.com/OWASP/Amass/v3/intel"
-	"github.com/OWASP/Amass/v3/services"
 	"github.com/OWASP/Amass/v3/stringset"
+	"github.com/OWASP/Amass/v3/systems"
 	"github.com/fatih/color"
 )
 
@@ -205,10 +206,11 @@ func runIntelCommand(clArgs []string) {
 	createOutputDirectory(cfg)
 	go writeLogsAndMessages(rLog, logfile, args.Options.Verbose)
 
-	sys, err := services.NewLocalSystem(cfg)
+	sys, err := systems.NewLocalSystem(cfg)
 	if err != nil {
 		return
 	}
+	sys.SetDataSources(datasrcs.GetAllSources(sys))
 
 	ic := intel.NewCollection(sys)
 	if ic == nil {

@@ -9,7 +9,6 @@ import (
 	"net"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/OWASP/Amass/v3/eventbus"
@@ -27,14 +26,6 @@ const (
 	PriorityCritical
 )
 
-// Index values into the Resolver.Stats map.
-const (
-	QueryAttempts    = 64
-	QueryTimeouts    = 65
-	QueryRTT         = 66
-	QueryCompletions = 67
-)
-
 // ResolverErrRcode is our made up rcode to indicate an interface error.
 const ResolverErrRcode = 100
 
@@ -44,10 +35,7 @@ const TimeoutRcode = 101
 // NotAvailableRcode is our made up rcode to indicate an availability problem.
 const NotAvailableRcode = 256
 
-const (
-	defaultWindowDuration = 500 * time.Millisecond
-	defaultConnRotation   = 30 * time.Second
-)
+const defaultWindowDuration = 500 * time.Millisecond
 
 // RetryCodes are the rcodes that cause the resolver to suggest trying again.
 var RetryCodes = []int{
@@ -133,24 +121,14 @@ type Resolver interface {
 
 // BaseResolver performs DNS queries on a single resolver at high-performance.
 type BaseResolver struct {
-	sync.RWMutex
-	Done           chan struct{}
-	WindowDuration time.Duration
-	CurrentConn    net.Conn
-	LastConn       net.Conn
-	xchgQueues     []*queue.Queue
-	xchgsLock      sync.RWMutex
-	xchgs          map[uint16]*resolveRequest
-	timeoutSlice   []uint16
-	timeoutsLock   sync.Mutex
-	address        string
-	port           string
-	stats          map[int]int64
-	attempts       int64
-	timeouts       int64
-	numrtt         int64
-	stopLock       sync.RWMutex
-	stopped        bool
+	Done             chan struct{}
+	WindowDuration   time.Duration
+	xchgQueues       []*queue.Queue
+	stateChannels    *resolverStateChans
+	rotationChannels *rotationChans
+	xchgsChannels    *xchgsChans
+	address          string
+	port             string
 }
 
 // NewBaseResolver initializes a Resolver that send DNS queries to the provided IP address.
@@ -170,47 +148,20 @@ func NewBaseResolver(addr string) *BaseResolver {
 			new(queue.Queue),
 			new(queue.Queue),
 		},
-		xchgs:   make(map[uint16]*resolveRequest),
-		address: addr,
-		port:    port,
-		stats:   make(map[int]int64),
+		stateChannels:    initStateManagement(),
+		rotationChannels: initRotationChans(),
+		xchgsChannels:    initXchgsManagement(),
+		address:          addr,
+		port:             port,
 	}
 
+	go r.periodicRotations(r.rotationChannels)
 	r.rotateConnections()
 	go r.sendQueries()
 	go r.checkForTimeouts()
 	go r.readMessages(false)
 	go r.readMessages(true)
-	go r.periodicRotations()
 	return r
-}
-
-// Stop causes the Resolver to stop sending DNS queries and closes the network connection.
-func (r *BaseResolver) Stop() error {
-	if r.IsStopped() {
-		return nil
-	}
-
-	r.stopLock.Lock()
-	r.stopped = true
-	r.stopLock.Unlock()
-
-	close(r.Done)
-	if r.CurrentConn != nil {
-		r.CurrentConn.Close()
-	}
-	if r.LastConn != nil {
-		r.LastConn.Close()
-	}
-	return nil
-}
-
-// IsStopped implements the Resolver interface.
-func (r *BaseResolver) IsStopped() bool {
-	r.stopLock.RLock()
-	defer r.stopLock.RUnlock()
-
-	return r.stopped
 }
 
 // Address implements the Resolver interface.
@@ -238,32 +189,6 @@ func (r *BaseResolver) Available() (bool, error) {
 	return true, nil
 }
 
-// Stats returns performance counters.
-func (r *BaseResolver) Stats() map[int]int64 {
-	c := make(map[int]int64)
-
-	r.RLock()
-	defer r.RUnlock()
-
-	for k, v := range r.stats {
-		c[k] = v
-	}
-	return c
-}
-
-// WipeStats clears the performance counters.
-func (r *BaseResolver) WipeStats() {
-	r.Lock()
-	defer r.Unlock()
-
-	r.attempts = 0
-	r.timeouts = 0
-	r.numrtt = 0
-	for k := range r.stats {
-		r.stats[k] = 0
-	}
-}
-
 // ReportError indicates to the Resolver that it delivered an erroneous response.
 func (r *BaseResolver) ReportError() {
 	return
@@ -287,61 +212,6 @@ func (r *BaseResolver) SubdomainToDomain(name string) string {
 
 func (r *BaseResolver) returnRequest(req *resolveRequest, res *resolveResult) {
 	req.Result <- res
-}
-
-func (r *BaseResolver) periodicRotations() {
-	t := time.NewTicker(defaultConnRotation)
-	defer t.Stop()
-
-	for {
-		select {
-		case <-r.Done:
-			return
-		case <-t.C:
-			r.rotateConnections()
-		}
-	}
-}
-
-func (r *BaseResolver) rotateConnections() {
-	r.Lock()
-	defer r.Unlock()
-
-	if r.LastConn != nil {
-		r.LastConn.Close()
-	}
-	r.LastConn = r.CurrentConn
-
-	var err error
-	for {
-		d := &net.Dialer{}
-
-		r.CurrentConn, err = d.Dial("udp", r.address+":"+r.port)
-		if err == nil {
-			break
-		}
-		time.Sleep(time.Duration(randomInt(1, 10)) * time.Millisecond)
-	}
-}
-
-func (r *BaseResolver) currentConnection() *dns.Conn {
-	r.RLock()
-	defer r.RUnlock()
-
-	if r.CurrentConn == nil {
-		return nil
-	}
-	return &dns.Conn{Conn: r.CurrentConn}
-}
-
-func (r *BaseResolver) lastConnection() *dns.Conn {
-	r.RLock()
-	defer r.RUnlock()
-
-	if r.LastConn == nil {
-		return nil
-	}
-	return &dns.Conn{Conn: r.LastConn}
 }
 
 // Resolve performs DNS queries using the Resolver.
@@ -382,10 +252,7 @@ func (r *BaseResolver) Resolve(ctx context.Context, name, qtype string, priority
 	})
 	result := <-resultChan
 
-	r.Lock()
-	r.stats[QueryCompletions] = r.stats[QueryCompletions] + 1
-	r.Unlock()
-
+	r.updateStat(QueryCompletions, 1)
 	// Report the completion of the DNS query
 	if bus != nil {
 		rcode := dns.RcodeSuccess
@@ -452,9 +319,8 @@ func (r *BaseResolver) checkForTimeouts() {
 			var count int
 			var removals []uint16
 
-			r.timeoutsLock.Lock()
 			// Discover requests that have timed out and remove them from the map
-			for _, id := range r.timeoutSlice {
+			for _, id := range r.allTimeoutIDs() {
 				if req := r.pullRequestAfterTimeout(id, r.WindowDuration); req != nil {
 					count++
 					removals = append(removals, id)
@@ -462,12 +328,6 @@ func (r *BaseResolver) checkForTimeouts() {
 						r.address, req.Name, req.Qtype)
 					r.returnRequest(req, makeResolveResult(nil, true, estr, TimeoutRcode))
 				}
-			}
-			r.timeoutsLock.Unlock()
-
-			// Remove elements that timed out from the requests slice
-			for _, id := range removals {
-				r.delTimeoutFromSlice(id)
 			}
 			// Complete handling of the timed out requests
 			r.updateTimeouts(count)
@@ -568,7 +428,7 @@ func (r *BaseResolver) processMessage(m *dns.Msg) {
 	}
 
 	r.updateRTT(time.Now().Sub(req.Timestamp))
-	r.updateStats(m.Rcode)
+	r.updateStat(m.Rcode, 1)
 	// Check that the query was successful
 	if m.Rcode != dns.RcodeSuccess {
 		var again bool
@@ -653,117 +513,4 @@ func (r *BaseResolver) tcpExchange(id uint16, req *resolveRequest) {
 	}
 
 	r.finishProcessing(read, req)
-}
-
-func (r *BaseResolver) updateTimeouts(t int) {
-	r.Lock()
-	defer r.Unlock()
-
-	r.stats[QueryTimeouts] = r.stats[QueryTimeouts] + int64(t)
-}
-
-func (r *BaseResolver) updateAttempts() {
-	r.Lock()
-	defer r.Unlock()
-
-	r.stats[QueryAttempts] = r.stats[QueryAttempts] + 1
-}
-
-func (r *BaseResolver) updateRTT(rtt time.Duration) {
-	r.Lock()
-	defer r.Unlock()
-
-	r.numrtt++
-	avg := r.stats[QueryRTT]
-
-	avg = avg + ((int64(rtt) - avg) / r.numrtt)
-	r.stats[QueryRTT] = avg
-}
-
-func (r *BaseResolver) updateStats(rcode int) {
-	r.Lock()
-	defer r.Unlock()
-
-	r.stats[rcode] = r.stats[rcode] + 1
-}
-
-func (r *BaseResolver) getID() uint16 {
-	r.xchgsLock.Lock()
-	defer r.xchgsLock.Unlock()
-
-	var id uint16
-	for {
-		id = dns.Id()
-		if _, found := r.xchgs[id]; !found {
-			r.xchgs[id] = &resolveRequest{Timestamp: time.Now()}
-			break
-		}
-	}
-	return id
-}
-
-func (r *BaseResolver) queueRequest(id uint16, req *resolveRequest) {
-	req.ID = id
-	req.Timestamp = time.Now()
-
-	r.xchgsLock.Lock()
-	r.xchgs[id] = req
-	r.xchgsLock.Unlock()
-
-	r.addTimeoutToSlice(id)
-}
-
-func (r *BaseResolver) pullRequest(id uint16) *resolveRequest {
-	r.delTimeoutFromSlice(id)
-
-	r.xchgsLock.Lock()
-	defer r.xchgsLock.Unlock()
-
-	req := r.xchgs[id]
-	delete(r.xchgs, id)
-
-	return req
-}
-
-func (r *BaseResolver) pullRequestAfterTimeout(id uint16, timeout time.Duration) *resolveRequest {
-	r.xchgsLock.Lock()
-	defer r.xchgsLock.Unlock()
-
-	if req, found := r.xchgs[id]; found && time.Now().After(req.Timestamp.Add(timeout)) {
-		delete(r.xchgs, id)
-		return req
-	}
-
-	return nil
-}
-
-func (r *BaseResolver) updateRequestTimeout(id uint16, timeout time.Time) {
-	r.xchgsLock.Lock()
-	defer r.xchgsLock.Unlock()
-
-	if req, found := r.xchgs[id]; found {
-		req.Timestamp = timeout
-	}
-}
-
-func (r *BaseResolver) addTimeoutToSlice(id uint16) {
-	r.timeoutsLock.Lock()
-	defer r.timeoutsLock.Unlock()
-
-	r.timeoutSlice = append(r.timeoutSlice, id)
-}
-
-func (r *BaseResolver) delTimeoutFromSlice(id uint16) {
-	r.timeoutsLock.Lock()
-	defer r.timeoutsLock.Unlock()
-
-	var n int
-	// Remove the element identified by id
-	for _, i := range r.timeoutSlice {
-		if i != id {
-			r.timeoutSlice[n] = i
-			n++
-		}
-	}
-	r.timeoutSlice = r.timeoutSlice[:n]
 }

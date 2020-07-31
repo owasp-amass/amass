@@ -1,0 +1,71 @@
+version: '3'
+
+# As of JanusGraph 0.3.0, up to Cassandra 3.11 and Elasticsearch 6.x
+# are supported.
+#
+# Here's the compatibility matrix:
+#   https://docs.janusgraph.org/latest/version-compat.html
+#
+# Here's the compatibility data for ScyllaDB:
+#   http://docs.scylladb.com/using-scylla/cassandra-compatibility/
+
+services:
+  janus:
+    image: janusgraph:0.4.0-hadoop2
+    build:
+      dockerfile: Dockerfile.janus
+      args:
+        VERSION: "0.4.0"
+        HADOOP: hadoop2
+        CYPHER_GREMLIN_VERSION: "1.0.0"
+      context: ./
+    ports:
+      - "8182:8182"
+      - "8184:8184"
+    depends_on:
+      - db
+      - index
+
+  db:
+    image: scylladb/scylla:3.1.2
+    ports:
+     # http://docs.scylladb.com/kb/posix/
+     # REST API
+     - "10000:10000"
+     # CQL ports (native_transport_port)
+     - "9042:9042"
+     # Thrift (rpc_port)
+     - "9160:9160"
+     # Internode
+     - "7000:7000"
+     - "7001:7001"
+     # JMX
+     - "7199:7199"
+     # Prometheus monitoring
+     - "9180:9180"
+     - "9100:9100"
+    healthcheck:
+      test: ["CMD-SHELL", "[ $$(nodetool statusgossip) = running ]"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    volumes:
+     - ./data/scylla/data:/var/lib/scylla
+
+  index:
+    image: docker.elastic.co/elasticsearch/elasticsearch:6.6.0
+    ports:
+     - "9200:9200"
+     - "9300:9300"
+    environment:
+      - discovery.type=single-node
+      - http.host=0.0.0.0
+      - transport.host=127.0.0.1
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9200"]
+      interval: 1s
+      timeout: 30s
+      retries: 30
+    user: "1000"
+    volumes:
+     - ./data/elasticsearch/data:/usr/share/elasticsearch/data

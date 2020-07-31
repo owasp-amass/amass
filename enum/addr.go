@@ -17,6 +17,11 @@ import (
 	"github.com/miekg/dns"
 )
 
+type asnChanMsg struct {
+	Req      *requests.AddrRequest
+	Resolved bool
+}
+
 // AddressManager handles the investigation of addresses associated with newly resolved FQDNs.
 type AddressManager struct {
 	enum        *Enumeration
@@ -25,7 +30,7 @@ type AddressManager struct {
 	revFilter   stringfilter.Filter
 	resFilter   stringfilter.Filter
 	sweepFilter stringfilter.Filter
-	asnLookup   chan *requests.AddrRequest
+	asnLookup   chan *asnChanMsg
 }
 
 // NewAddressManager returns an initialized AddressManager.
@@ -37,7 +42,7 @@ func NewAddressManager(e *Enumeration) *AddressManager {
 		revFilter:   stringfilter.NewStringFilter(),
 		resFilter:   stringfilter.NewStringFilter(),
 		sweepFilter: stringfilter.NewBloomFilter(1 << 16),
-		asnLookup:   make(chan *requests.AddrRequest),
+		asnLookup:   make(chan *asnChanMsg, 10000),
 	}
 
 	go am.lookupASNInfo()
@@ -77,35 +82,16 @@ func (r *AddressManager) addResolvedAddr(addr, domain string) {
 	}
 
 	go func() {
-		r.asnLookup <- addreq
-		r.resQueue.Append(addreq)
+		r.asnLookup <- &asnChanMsg{
+			Req:      addreq,
+			Resolved: true,
+		}
 	}()
 }
 
 // OutputNames implements the FQDNManager interface.
 func (r *AddressManager) OutputNames(num int) []*requests.DNSRequest {
-	for i := 0; ; i++ {
-		if num >= 0 && i >= num {
-			break
-		}
-
-		resolved := true
-		element, ok := r.resQueue.Next()
-		if !ok {
-			resolved = false
-			element, ok = r.revQueue.Next()
-
-			if !ok {
-				break
-			}
-		}
-
-		req := element.(*requests.AddrRequest)
-		go r.processAddress(req, resolved)
-	}
-
 	return []*requests.DNSRequest{}
-
 }
 
 // InputAddress is unique to the AddressManager and uses the AddrRequest argument
@@ -121,9 +107,47 @@ func (r *AddressManager) InputAddress(req *requests.AddrRequest) {
 	}
 
 	go func() {
-		r.asnLookup <- req
-		r.revQueue.Append(req)
+		r.asnLookup <- &asnChanMsg{
+			Req:      req,
+			Resolved: false,
+		}
 	}()
+}
+
+// NameQueueLen implements the FQDNManager interface.
+func (r *AddressManager) NameQueueLen() int {
+	return 0
+}
+
+// OutputRequests implements the FQDNManager interface.
+func (r *AddressManager) OutputRequests(num int) int {
+	if num <= 0 {
+		return 0
+	}
+
+	for i := 0; i < num; i++ {
+		resolved := true
+
+		element, ok := r.resQueue.Next()
+		if !ok {
+			resolved = false
+			element, ok = r.revQueue.Next()
+
+			if !ok {
+				break
+			}
+		}
+
+		req := element.(*requests.AddrRequest)
+		go r.processAddress(req, resolved)
+	}
+
+	return 0
+}
+
+// RequestQueueLen implements the FQDNManager interface.
+func (r *AddressManager) RequestQueueLen() int {
+	return r.resQueue.Len() + r.revQueue.Len()
 }
 
 // Stop implements the FQDNManager interface.
@@ -141,8 +165,13 @@ func (r *AddressManager) lookupASNInfo() {
 		select {
 		case <-r.enum.done:
 			return
-		case req := <-r.asnLookup:
-			r.addToCachePlusDatabase(req)
+		case msg := <-r.asnLookup:
+			r.addToCachePlusDatabase(msg.Req)
+			if msg.Resolved {
+				r.resQueue.Append(msg.Req)
+			} else {
+				r.revQueue.Append(msg.Req)
+			}
 		}
 	}
 }
@@ -224,31 +253,9 @@ func (r *AddressManager) reverseDNSSweep(addr string, cidr *net.IPNet) {
 }
 
 func (e *Enumeration) asnRequestAllSources(req *requests.ASNRequest) {
-	e.srcsLock.Lock()
-	defer e.srcsLock.Unlock()
-
-	for _, src := range e.Sys.DataSources() {
-		if e.srcs.Has(src.String()) {
-			src.ASNRequest(e.ctx, req)
-		}
+	for _, src := range e.srcs {
+		src.ASNRequest(e.ctx, req)
 	}
-}
-
-func (e *Enumeration) hasARecords(req *requests.DNSRequest) bool {
-	if len(req.Records) == 0 {
-		return false
-	}
-
-	var found bool
-	for _, r := range req.Records {
-		t := uint16(r.Type)
-
-		if t == dns.TypeA || t == dns.TypeAAAA {
-			found = true
-		}
-	}
-
-	return found
 }
 
 func (e *Enumeration) reverseDNSQuery(ip string) {
@@ -293,4 +300,21 @@ func (e *Enumeration) hasCNAMERecord(req *requests.DNSRequest) bool {
 	}
 
 	return false
+}
+
+func (e *Enumeration) hasARecords(req *requests.DNSRequest) bool {
+	if len(req.Records) == 0 {
+		return false
+	}
+
+	var found bool
+	for _, r := range req.Records {
+		t := uint16(r.Type)
+
+		if t == dns.TypeA || t == dns.TypeAAAA {
+			found = true
+		}
+	}
+
+	return found
 }

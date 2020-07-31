@@ -17,9 +17,9 @@ import (
 	"github.com/OWASP/Amass/v3/net/http"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/resolvers"
-	"github.com/OWASP/Amass/v3/services"
 	"github.com/OWASP/Amass/v3/stringfilter"
 	"github.com/OWASP/Amass/v3/stringset"
+	"github.com/OWASP/Amass/v3/systems"
 )
 
 // Collection is the object type used to execute a open source information gathering with Amass.
@@ -28,7 +28,7 @@ type Collection struct {
 
 	Config *config.Config
 	Bus    *eb.EventBus
-	Sys    services.System
+	Sys    systems.System
 
 	ctx context.Context
 
@@ -50,7 +50,7 @@ type Collection struct {
 }
 
 // NewCollection returns an initialized Collection object that has not been started yet.
-func NewCollection(sys services.System) *Collection {
+func NewCollection(sys systems.System) *Collection {
 	c := &Collection{
 		Config: config.NewConfig(),
 		Bus:    eb.NewEventBus(1000),
@@ -309,6 +309,9 @@ func (c *Collection) ReverseWhois() error {
 	}
 	c.Bus.Subscribe(requests.NewWhoisTopic, collect)
 	defer c.Bus.Unsubscribe(requests.NewWhoisTopic, collect)
+
+	c.Bus.Subscribe(requests.SetActiveTopic, c.updateLastActive)
+	defer c.Bus.Unsubscribe(requests.SetActiveTopic, c.updateLastActive)
 
 	// Setup the stringset of included data sources
 	c.srcsLock.Lock()
