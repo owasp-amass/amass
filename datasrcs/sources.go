@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/OWASP/Amass/v3/config"
@@ -18,6 +19,7 @@ import (
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/semaphore"
 	"github.com/OWASP/Amass/v3/stringset"
+
 	"github.com/OWASP/Amass/v3/systems"
 	"github.com/PuerkitoBio/goquery"
 	"github.com/geziyor/geziyor"
@@ -114,6 +116,7 @@ func cleanName(name string) string {
 
 func crawl(ctx context.Context, url string) ([]string, error) {
 	results := stringset.New()
+	var mutex = &sync.Mutex{}
 
 	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
 	if cfg == nil {
@@ -143,7 +146,9 @@ func crawl(ctx context.Context, url string) ([]string, error) {
 				name := cleanName(n)
 
 				if domain := cfg.WhichDomain(name); domain != "" {
+					mutex.Lock()
 					results.Insert(name)
+					mutex.Unlock()
 				}
 			}
 
