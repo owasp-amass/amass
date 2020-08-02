@@ -6,9 +6,9 @@ import (
 	"sync"
 )
 
+// SafeSet implements set operations for string values safe for concurrent use
+// Implemented as an option for fixing Amass issue #445
 type SafeSet struct {
-	// SafeSet implements set operations for string values safe for concurrent use
-	// Implemented as an option for fixing Amass issue #445
 	m map[string]bool
 	sync.RWMutex
 }
