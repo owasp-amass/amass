@@ -89,7 +89,8 @@ type BaseService struct {
 	stopped bool
 
 	// The queue for all incoming request types
-	queue *queue.Queue
+	queue           *queue.Queue
+	queueSignalChan chan struct{}
 
 	// The broadcast channel closed when the service is stopped
 	quit chan struct{}
@@ -105,13 +106,14 @@ type BaseService struct {
 // NewBaseService returns an initialized BaseService object.
 func NewBaseService(srv Service, name string) *BaseService {
 	bas := &BaseService{
-		name:          name,
-		queue:         new(queue.Queue),
-		quit:          make(chan struct{}),
-		setRateChan:   make(chan time.Duration, 10),
-		checkRateChan: make(chan chan struct{}, 10),
-		clearRateChan: make(chan struct{}, 10),
-		service:       srv,
+		name:            name,
+		queue:           new(queue.Queue),
+		queueSignalChan: make(chan struct{}, 1000),
+		quit:            make(chan struct{}),
+		setRateChan:     make(chan time.Duration, 10),
+		checkRateChan:   make(chan chan struct{}, 10),
+		clearRateChan:   make(chan struct{}, 10),
+		service:         srv,
 	}
 
 	go bas.manageRateLimit()
@@ -167,6 +169,7 @@ func (bas *BaseService) RequestLen() int {
 // DNSRequest adds the request provided by the parameter to the service request channel.
 func (bas *BaseService) DNSRequest(ctx context.Context, req *DNSRequest) {
 	bas.queueRequest(bas.service.OnDNSRequest, ctx, req)
+	go bas.queueSignal()
 }
 
 // OnDNSRequest is called for a request that was queued via DNSRequest.
@@ -177,6 +180,7 @@ func (bas *BaseService) OnDNSRequest(ctx context.Context, req *DNSRequest) {
 // Resolved adds the request provided by the parameter to the service request channel.
 func (bas *BaseService) Resolved(ctx context.Context, req *DNSRequest) {
 	bas.queueRequest(bas.service.OnResolved, ctx, req)
+	go bas.queueSignal()
 }
 
 // OnResolved is called for a request that was queued via Resolved.
@@ -187,6 +191,7 @@ func (bas *BaseService) OnResolved(ctx context.Context, req *DNSRequest) {
 // SubdomainDiscovered adds the request provided by the parameter to the service request channel.
 func (bas *BaseService) SubdomainDiscovered(ctx context.Context, req *DNSRequest, times int) {
 	bas.queueRequest(bas.service.OnSubdomainDiscovered, ctx, req, times)
+	go bas.queueSignal()
 }
 
 // OnSubdomainDiscovered is called for a request that was queued via DNSRequest.
@@ -197,6 +202,7 @@ func (bas *BaseService) OnSubdomainDiscovered(ctx context.Context, req *DNSReque
 // AddrRequest adds the request provided by the parameter to the service request channel.
 func (bas *BaseService) AddrRequest(ctx context.Context, req *AddrRequest) {
 	bas.queueRequest(bas.service.OnAddrRequest, ctx, req)
+	go bas.queueSignal()
 }
 
 // OnAddrRequest is called for a request that was queued via AddrRequest.
@@ -207,6 +213,7 @@ func (bas *BaseService) OnAddrRequest(ctx context.Context, req *AddrRequest) {
 // ASNRequest adds the request provided by the parameter to the service request channel.
 func (bas *BaseService) ASNRequest(ctx context.Context, req *ASNRequest) {
 	bas.queueRequest(bas.service.OnASNRequest, ctx, req)
+	go bas.queueSignal()
 }
 
 // OnASNRequest is called for a request that was queued via ASNRequest.
@@ -217,6 +224,7 @@ func (bas *BaseService) OnASNRequest(ctx context.Context, req *ASNRequest) {
 // WhoisRequest adds the request provided by the parameter to the service request channel.
 func (bas *BaseService) WhoisRequest(ctx context.Context, req *WhoisRequest) {
 	bas.queueRequest(bas.service.OnWhoisRequest, ctx, req)
+	go bas.queueSignal()
 }
 
 // OnWhoisRequest is called for a request that was queued via WhoisRequest.
@@ -301,35 +309,30 @@ func (bas *BaseService) queueRequest(fn interface{}, args ...interface{}) {
 	})
 }
 
+func (bas *BaseService) queueSignal() {
+	bas.queueSignalChan <- struct{}{}
+}
+
 func (bas *BaseService) processRequests() {
-	curIdx := 0
-	maxIdx := 6
-	delays := []int{25, 50, 75, 100, 150, 250, 500}
 loop:
 	for {
 		select {
 		case <-bas.Quit():
 			bas.service.OnStop()
 			return
-		default:
+		case <-bas.queueSignalChan:
 			element, ok := bas.queue.Next()
-			if !ok {
-				time.Sleep(time.Duration(delays[curIdx]) * time.Millisecond)
-				if curIdx < maxIdx {
-					curIdx++
-				}
-				continue loop
-			}
-			curIdx = 0
-			e := element.(*queuedCall)
-			ctx := e.Args[0].Interface().(context.Context)
+			if ok {
+				e := element.(*queuedCall)
+				ctx := e.Args[0].Interface().(context.Context)
 
-			select {
-			case <-ctx.Done():
-				continue loop
-			default:
-				// Call the queued function or method
-				e.Func.Call(e.Args)
+				select {
+				case <-ctx.Done():
+					continue loop
+				default:
+					// Call the queued function or method
+					e.Func.Call(e.Args)
+				}
 			}
 		}
 	}
