@@ -349,6 +349,40 @@ func (rp *ResolverPool) Resolve(ctx context.Context, name, qtype string, priorit
 	return []requests.DNSAnswer{}, false, err
 }
 
+// NsecTraversal performs NSEC-walking using available Resolvers in the pool.
+func (rp *ResolverPool) NsecTraversal(ctx context.Context, domain string, priority int) ([]string, bool, error) {
+	var attempts int
+	switch priority {
+	case PriorityCritical:
+		attempts = 1000
+	case PriorityHigh:
+		attempts = 250
+	case PriorityLow:
+		attempts = 50
+	}
+
+	var err error
+	var again bool
+	var ans []string
+	// This loop ensures the correct number of attempts of the DNS query
+	for count := 0; count < attempts; {
+		r := rp.NextResolver()
+		if r == nil {
+			// Give the system a chance to breathe before trying again
+			time.Sleep(time.Duration(randomInt(100, 200)) * time.Millisecond)
+			continue
+		}
+
+		count++
+		ans, again, err = r.NsecTraversal(ctx, domain, priority)
+		if !again {
+			return ans, again, err
+		}
+	}
+
+	return []string{}, false, err
+}
+
 // MatchesWildcard returns true if the request provided resolved to a DNS wildcard.
 func (rp *ResolverPool) MatchesWildcard(ctx context.Context, req *requests.DNSRequest) bool {
 	var matched bool

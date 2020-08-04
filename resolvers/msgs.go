@@ -174,8 +174,13 @@ func textToTypeNum(text string) (uint16, error) {
 	return qtype, nil
 }
 
-func extractRawData(msg *dns.Msg, qtype uint16) []string {
-	var data []string
+type extractedData struct {
+	Name  string
+	Value string
+}
+
+func extractRawData(msg *dns.Msg, qtype uint16) []*extractedData {
+	var data []*extractedData
 
 	for _, a := range msg.Answer {
 		if a.Header().Rrtype == qtype {
@@ -225,7 +230,10 @@ func extractRawData(msg *dns.Msg, qtype uint16) []string {
 			}
 
 			if value != "" {
-				data = append(data, strings.TrimSpace(value))
+				data = append(data, &extractedData{
+					Name:  strings.ToLower(RemoveLastDot(a.Header().Name)),
+					Value: strings.TrimSpace(value),
+				})
 			}
 		}
 	}
