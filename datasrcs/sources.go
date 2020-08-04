@@ -63,14 +63,14 @@ func GetAllSources(sys systems.System) []requests.Service {
 	}
 
 	// Filtering in-place: https://github.com/golang/go/wiki/SliceTricks
-	i := 0
+	/*i := 0
 	for _, s := range srvs {
 		if shouldEnable(s.String(), sys.Config()) {
 			srvs[i] = s
 			i++
 		}
 	}
-	srvs = srvs[:i]
+	srvs = srvs[:i]*/
 
 	sort.Slice(srvs, func(i, j int) bool {
 		return srvs[i].String() < srvs[j].String()

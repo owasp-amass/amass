@@ -125,8 +125,8 @@ func main() {
 	}
 }
 
-// GetAllSourceNames returns the names of all Amass data sources.
-func GetAllSourceNames() []string {
+// GetAllSourceInfo returns the names of all Amass data sources.
+func GetAllSourceInfo() []string {
 	var names []string
 
 	sys, err := systems.NewLocalSystem(config.NewConfig())
@@ -136,7 +136,7 @@ func GetAllSourceNames() []string {
 	sys.SetDataSources(datasrcs.GetAllSources(sys))
 
 	for _, src := range sys.DataSources() {
-		names = append(names, src.String())
+		names = append(names, fmt.Sprintf("%-20s\t%s", src.String(), src.Type()))
 	}
 
 	sys.Shutdown()
@@ -155,4 +155,31 @@ func createOutputDirectory(cfg *config.Config) {
 		r.Fprintf(color.Error, "Failed to create the directory: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+func generateCategoryMap(sys systems.System) map[string][]string {
+	catToSources := make(map[string][]string)
+
+	for _, src := range sys.DataSources() {
+		t := src.Type()
+
+		catToSources[t] = append(catToSources[t], src.String())
+	}
+
+	return catToSources
+}
+
+func expandCategoryNames(names []string, categories map[string][]string) []string {
+	var newnames []string
+
+	for _, name := range names {
+		if _, found := categories[name]; found {
+			newnames = append(newnames, categories[name]...)
+			continue
+		}
+
+		newnames = append(newnames, name)
+	}
+
+	return newnames
 }

@@ -378,7 +378,7 @@ func (c *Config) AddResolver(resolver string) {
 }
 
 func (c *Config) calcDNSQueriesSemMax() {
-	max := (len(c.Resolvers) * 500) / 2
+	max := len(c.Resolvers) * 1000
 
 	if max < 500 {
 		max = 500

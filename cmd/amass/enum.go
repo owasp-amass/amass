@@ -177,6 +177,8 @@ func runEnumCommand(clArgs []string) {
 	}
 	defer sys.Shutdown()
 	sys.SetDataSources(datasrcs.GetAllSources(sys))
+	// Expand data source category names into the associated source names
+	cfg.SourceFilter.Sources = expandCategoryNames(cfg.SourceFilter.Sources, generateCategoryMap(sys))
 
 	// Setup the new enumeration
 	e := enum.NewEnumeration(cfg, sys)
@@ -282,8 +284,8 @@ func argsAndConfig(clArgs []string) (*config.Config, *enumArgs) {
 
 	// Check if the user has requested the data source names
 	if args.Options.ListSources {
-		for _, name := range GetAllSourceNames() {
-			g.Println(name)
+		for _, info := range GetAllSourceInfo() {
+			g.Println(info)
 		}
 		return nil, &args
 	}
@@ -733,6 +735,13 @@ func (e enumArgs) OverrideConfig(conf *config.Config) error {
 
 	if len(e.Included) > 0 {
 		conf.SourceFilter.Include = true
+		// Check if brute forcing and alterations should be added
+		if conf.Alterations {
+			e.Included.Insert(requests.ALT)
+		}
+		if conf.BruteForcing {
+			e.Included.Insert(requests.BRUTE)
+		}
 		conf.SourceFilter.Sources = e.Included.Slice()
 	} else if len(e.Excluded) > 0 {
 		conf.SourceFilter.Include = false
