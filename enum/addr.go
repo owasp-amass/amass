@@ -144,7 +144,7 @@ func (r *AddressManager) OutputRequests(num int) int {
 		count++
 	}
 
-	return count
+	return 0
 }
 
 // RequestQueueLen implements the FQDNManager interface.
