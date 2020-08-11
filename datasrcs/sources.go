@@ -6,6 +6,7 @@ package datasrcs
 import (
 	"context"
 	"errors"
+	"fmt"
 	"regexp"
 	"sort"
 	"strconv"
@@ -14,20 +15,21 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/v3/config"
+	"github.com/OWASP/Amass/v3/eventbus"
 	"github.com/OWASP/Amass/v3/net/dns"
 	"github.com/OWASP/Amass/v3/net/http"
 	"github.com/OWASP/Amass/v3/requests"
-	"github.com/OWASP/Amass/v3/semaphore"
 	"github.com/OWASP/Amass/v3/stringset"
 	"github.com/OWASP/Amass/v3/systems"
 	"github.com/PuerkitoBio/goquery"
 	"github.com/geziyor/geziyor"
 	"github.com/geziyor/geziyor/client"
+	"golang.org/x/sync/semaphore"
 )
 
 var (
 	subRE       = dns.AnySubdomainRegex()
-	maxCrawlSem = semaphore.NewSimpleSemaphore(5)
+	maxCrawlSem = semaphore.NewWeighted(20)
 	nameStripRE = regexp.MustCompile(`^u[0-9a-f]{4}|20|22|25|2b|2f|3d|3a|40`)
 )
 
@@ -61,15 +63,16 @@ func GetAllSources(sys systems.System) []requests.Service {
 		}
 	}
 
+	// Check that the data sources have acceptable configurations for operation
 	// Filtering in-place: https://github.com/golang/go/wiki/SliceTricks
-	/*i := 0
+	i := 0
 	for _, s := range srvs {
-		if shouldEnable(s.String(), sys.Config()) {
+		if s.CheckConfig() == nil {
 			srvs[i] = s
 			i++
 		}
 	}
-	srvs = srvs[:i]*/
+	srvs = srvs[:i]
 
 	sort.Slice(srvs, func(i, j int) bool {
 		return srvs[i].String() < srvs[j].String()
@@ -113,6 +116,23 @@ func cleanName(name string) string {
 	return name
 }
 
+func genNewNameEvent(ctx context.Context, sys systems.System, srv requests.Service, name string) {
+	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
+	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
+	if cfg == nil || bus == nil {
+		return
+	}
+
+	if domain := cfg.WhichDomain(name); domain != "" {
+		bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
+			Name:   name,
+			Domain: domain,
+			Tag:    srv.Type(),
+			Source: srv.String(),
+		})
+	}
+}
+
 func crawl(ctx context.Context, url string) ([]string, error) {
 	results := stringset.New()
 
@@ -121,7 +141,10 @@ func crawl(ctx context.Context, url string) ([]string, error) {
 		return results.Slice(), errors.New("crawler error: Failed to obtain the config from Context")
 	}
 
-	maxCrawlSem.Acquire(1)
+	err := maxCrawlSem.Acquire(ctx, 1)
+	if err != nil {
+		return results.Slice(), fmt.Errorf("crawler error: %v", err)
+	}
 	defer maxCrawlSem.Release(1)
 
 	scope := cfg.Domains()

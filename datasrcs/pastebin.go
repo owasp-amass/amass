@@ -21,11 +21,15 @@ type Pastebin struct {
 	requests.BaseService
 
 	SourceType string
+	sys        systems.System
 }
 
 // NewPastebin returns he object initialized, but not yet started.
 func NewPastebin(sys systems.System) *Pastebin {
-	p := &Pastebin{SourceType: requests.API}
+	p := &Pastebin{
+		SourceType: requests.API,
+		sys:        sys,
+	}
 
 	p.BaseService = *requests.NewBaseService(p, "Pastebin")
 	return p
@@ -72,12 +76,7 @@ func (p *Pastebin) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 		}
 
 		for _, name := range re.FindAllString(page, -1) {
-			bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
-				Name:   name,
-				Domain: req.Domain,
-				Tag:    p.SourceType,
-				Source: p.String(),
-			})
+			genNewNameEvent(ctx, p.sys, p, name)
 		}
 	}
 }

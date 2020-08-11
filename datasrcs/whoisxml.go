@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -79,6 +80,19 @@ func (w *WhoisXML) OnStart() error {
 	}
 
 	w.SetRateLimit(10 * time.Second)
+	return nil
+}
+
+// CheckConfig implements the Service interface.
+func (w *WhoisXML) CheckConfig() error {
+	api := w.sys.Config().GetAPIKey(w.String())
+
+	if api == nil || api.Key == "" {
+		estr := fmt.Sprintf("%s: check callback failed for the configuration", w.String())
+		w.sys.Config().Log.Print(estr)
+		return errors.New(estr)
+	}
+
 	return nil
 }
 

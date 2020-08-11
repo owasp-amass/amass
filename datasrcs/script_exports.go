@@ -231,19 +231,11 @@ func (s *Script) newName(L *lua.LState) int {
 	}
 
 	name := s.subre.FindString(string(n))
-	if name == "" {
+	if name == "" || s.filter.Duplicate(name) {
 		return 0
 	}
-	cleaned := cleanName(name)
 
-	if domain := cfg.WhichDomain(cleaned); domain != "" {
-		bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
-			Name:   cleaned,
-			Domain: domain,
-			Tag:    s.SourceType,
-			Source: s.String(),
-		})
-	}
+	genNewNameEvent(c.Ctx, s.sys, s, cleanName(name))
 	return 0
 }
 
@@ -561,16 +553,11 @@ func (s *Script) scrape(L *lua.LState) int {
 		s.setCachedResponse(url, resp)
 	}
 
-	for _, n := range subRE.FindAllString(resp, -1) {
-		name := cleanName(n)
+	for _, name := range subRE.FindAllString(resp, -1) {
+		n := cleanName(name)
 
-		if domain := cfg.WhichDomain(name); domain != "" {
-			bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
-				Name:   name,
-				Domain: domain,
-				Tag:    s.SourceType,
-				Source: s.String(),
-			})
+		if !s.filter.Duplicate(n) {
+			genNewNameEvent(c.Ctx, s.sys, s, n)
 		}
 	}
 
@@ -600,13 +587,10 @@ func (s *Script) crawl(L *lua.LState) int {
 	}
 
 	for _, name := range names {
-		if domain := cfg.WhichDomain(name); domain != "" {
-			bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
-				Name:   name,
-				Domain: domain,
-				Tag:    s.SourceType,
-				Source: s.String(),
-			})
+		n := cleanName(name)
+
+		if !s.filter.Duplicate(n) {
+			genNewNameEvent(c.Ctx, s.sys, s, n)
 		}
 	}
 

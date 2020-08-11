@@ -138,12 +138,7 @@ func (a *AlienVault) executeDNSQuery(ctx context.Context, req *requests.DNSReque
 	}
 
 	for name := range names {
-		bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
-			Name:   name,
-			Domain: req.Domain,
-			Tag:    a.SourceType,
-			Source: a.String(),
-		})
+		genNewNameEvent(ctx, a.sys, a, name)
 	}
 
 	for ip := range ips {
@@ -236,12 +231,7 @@ func (a *AlienVault) executeURLQuery(ctx context.Context, req *requests.DNSReque
 	}
 
 	for name := range names {
-		bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
-			Name:   name,
-			Domain: req.Domain,
-			Tag:    a.SourceType,
-			Source: a.String(),
-		})
+		genNewNameEvent(ctx, a.sys, a, name)
 	}
 
 	for ip := range ips {

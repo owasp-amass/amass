@@ -6,6 +6,7 @@ package datasrcs
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"strings"
@@ -58,6 +59,19 @@ func (u *Umbrella) OnStart() error {
 	return nil
 }
 
+// CheckConfig implements the Service interface.
+func (u *Umbrella) CheckConfig() error {
+	api := u.sys.Config().GetAPIKey(u.String())
+
+	if api == nil || api.Key == "" {
+		estr := fmt.Sprintf("%s: check callback failed for the configuration", u.String())
+		u.sys.Config().Log.Print(estr)
+		return errors.New(estr)
+	}
+
+	return nil
+}
+
 // OnDNSRequest implements the Service interface.
 func (u *Umbrella) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
@@ -97,14 +111,7 @@ func (u *Umbrella) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 	}
 
 	for _, m := range subs.Matches {
-		if d := cfg.WhichDomain(m.Name); d != "" {
-			bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
-				Name:   m.Name,
-				Domain: d,
-				Tag:    u.SourceType,
-				Source: u.String(),
-			})
-		}
+		genNewNameEvent(ctx, u.sys, u, m.Name)
 	}
 }
 
@@ -146,14 +153,7 @@ func (u *Umbrella) OnAddrRequest(ctx context.Context, req *requests.AddrRequest)
 
 	for _, record := range ip.Records {
 		if name := resolvers.RemoveLastDot(record.Data); name != "" {
-			if domain := cfg.WhichDomain(name); domain != "" {
-				bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
-					Name:   name,
-					Domain: req.Domain,
-					Tag:    u.SourceType,
-					Source: u.String(),
-				})
-			}
+			genNewNameEvent(ctx, u.sys, u, name)
 		}
 	}
 }
