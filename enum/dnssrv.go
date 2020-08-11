@@ -178,8 +178,10 @@ func (ds *DNSService) subdomainQueries(ctx context.Context, req *requests.DNSReq
 			a.Data = pieces[len(pieces)-1]
 
 			if cfg.Active {
+				go ds.attemptZoneWalk(ctx, req.Name, a.Data)
 				go ds.attemptZoneXFR(ctx, req.Name, req.Domain, a.Data)
-				//go ds.attemptZoneWalk(domain, a.Data)
+			} else {
+				go ds.attemptZoneXFR(ctx, req.Name, req.Domain, "")
 			}
 			answers = append(answers, a)
 		}
@@ -261,21 +263,33 @@ func (ds *DNSService) attemptZoneWalk(ctx context.Context, domain, server string
 		return
 	}
 
-	addr, err := ds.nameserverAddr(ctx, server)
-	if addr == "" {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("DNS: Zone Walk failed: %v", err))
-		return
+	var r resolvers.Resolver
+	if server != "" {
+		r = resolvers.NewBaseResolver(server)
+		if r == nil {
+			return
+		}
+		defer r.Stop()
+	} else {
+		r = ds.sys.Pool()
 	}
 
-	reqs, err := resolvers.NsecTraversal(domain, addr)
+	names, _, err := r.NsecTraversal(ctx, domain, resolvers.PriorityHigh)
 	if err != nil {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
-			fmt.Sprintf("DNS: Zone Walk failed: %s: %v", server, err))
+			fmt.Sprintf("DNS: Zone Walk failed: %s: %v", domain, err))
 		return
 	}
 
-	for _, req := range reqs {
-		ds.DNSRequest(ctx, req)
+	for _, name := range names {
+		if domain := cfg.WhichDomain(name); domain != "" {
+			bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
+				Name:   name,
+				Domain: domain,
+				Tag:    requests.DNS,
+				Source: "NSEC Walk",
+			})
+		}
 	}
 }
 

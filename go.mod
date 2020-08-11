@@ -26,19 +26,20 @@ require (
 	github.com/golang/protobuf v1.4.2 // indirect
 	github.com/google/uuid v1.1.1
 	github.com/gorilla/websocket v1.4.2 // indirect
+	github.com/hnw/go-dnssec-walker v0.0.0-20160328105508-535c8bd68679 // indirect
 	github.com/jcmturner/gokrb5/v8 v8.4.0 // indirect
 	github.com/jmoiron/sqlx v1.2.0
 	github.com/karrick/godirwalk v1.15.6 // indirect
 	github.com/lib/pq v1.8.0
 	github.com/mailru/easyjson v0.7.2 // indirect
 	github.com/mattn/go-colorable v0.1.7 // indirect
-	github.com/miekg/dns v1.1.30
+	github.com/miekg/dns v1.1.31
 	github.com/northwesternmutual/grammes v1.1.2
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/prometheus/client_golang v1.7.1 // indirect
-	github.com/prometheus/common v0.10.0 // indirect
+	github.com/prometheus/common v0.11.1 // indirect
 	github.com/rakyll/statik v0.1.7
-	github.com/rogpeppe/go-internal v1.6.0 // indirect
+	github.com/rogpeppe/go-internal v1.6.1 // indirect
 	github.com/sirupsen/logrus v1.6.0 // indirect
 	github.com/spf13/cobra v1.0.0 // indirect
 	github.com/tomnomnom/httprobe v0.1.2 // indirect
@@ -50,9 +51,9 @@ require (
 	golang.org/x/lint v0.0.0-20200302205851-738671d3881b // indirect
 	golang.org/x/net v0.0.0-20200707034311-ab3426394381
 	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d
-	golang.org/x/sys v0.0.0-20200728102440-3e129f6d46b1 // indirect
+	golang.org/x/sys v0.0.0-20200803210538-64077c9b5642 // indirect
 	golang.org/x/text v0.3.3 // indirect
-	golang.org/x/tools v0.0.0-20200729194436-6467de6f59a7 // indirect
+	golang.org/x/tools v0.0.0-20200804011535-6c149bb5ef0d // indirect
 	golang.org/x/tools/gopls v0.4.0 // indirect
 	google.golang.org/appengine v1.6.6 // indirect
 	google.golang.org/protobuf v1.25.0 // indirect

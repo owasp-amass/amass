@@ -3,7 +3,6 @@ package eventbus
 import (
 	"reflect"
 	"sync"
-	"time"
 
 	"github.com/OWASP/Amass/v3/queue"
 	"github.com/OWASP/Amass/v3/semaphore"
@@ -36,6 +35,7 @@ type EventBus struct {
 	channels *eventbusChans
 	max      semaphore.Semaphore
 	queues   []*queue.Queue
+	signal   chan struct{}
 	done     chan struct{}
 	closed   sync.Once
 }
@@ -53,7 +53,8 @@ func NewEventBus(max int) *EventBus {
 			new(queue.Queue),
 			new(queue.Queue),
 		},
-		done: make(chan struct{}, 2),
+		signal: make(chan struct{}, max),
+		done:   make(chan struct{}, 2),
 	}
 
 	go eb.processRequests(eb.channels)
@@ -96,15 +97,17 @@ func (eb *EventBus) Publish(topic string, priority int, args ...interface{}) {
 			Topic: topic,
 			Args:  passedArgs,
 		})
+		go eb.queueSignal()
 	}
+}
+
+func (eb *EventBus) queueSignal() {
+	eb.signal <- struct{}{}
 }
 
 func (eb *EventBus) processRequests(chs *eventbusChans) {
 	topics := make(map[string][]reflect.Value)
-	curIdx := 0
-	maxIdx := 6
-	delays := []int{10, 25, 50, 75, 100, 150, 250}
-loop:
+
 	for {
 		select {
 		case <-eb.done:
@@ -128,35 +131,22 @@ loop:
 
 				topics[unsub.Topic] = channels
 			}
-		default:
-			var found bool
-			var element interface{}
+		case <-eb.signal:
 			// Pull from the critical queue first
-			for p := PriorityCritical; p >= PriorityLow; p-- {
-				element, found = eb.queues[p].Next()
-				if found {
-					break
+			for priority := PriorityCritical; priority >= PriorityLow; priority-- {
+				if e, found := eb.queues[priority].Next(); found {
+					p := e.(*pubReq)
+
+					callbacks, ok := topics[p.Topic]
+					if !ok {
+						continue
+					}
+
+					for _, cb := range callbacks {
+						eb.max.Acquire(1)
+						go eb.execute(cb, p.Args)
+					}
 				}
-			}
-
-			if !found {
-				if curIdx < maxIdx {
-					curIdx++
-				}
-				time.Sleep(time.Duration(delays[curIdx]) * time.Millisecond)
-				continue loop
-			}
-
-			curIdx = 0
-			p := element.(*pubReq)
-			callbacks, found := topics[p.Topic]
-			if !found {
-				continue loop
-			}
-
-			for _, cb := range callbacks {
-				eb.max.Acquire(1)
-				go eb.execute(cb, p.Args)
 			}
 		}
 	}

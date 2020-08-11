@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/OWASP/Amass/v3/config"
@@ -131,6 +132,7 @@ func crawl(ctx context.Context, url string) ([]string, error) {
 	}
 
 	var count int
+	var m sync.Mutex
 	geziyor.NewGeziyor(&geziyor.Options{
 		AllowedDomains:     scope,
 		StartURLs:          []string{url},
@@ -144,7 +146,9 @@ func crawl(ctx context.Context, url string) ([]string, error) {
 				name := cleanName(n)
 
 				if domain := cfg.WhichDomain(name); domain != "" {
+					m.Lock()
 					results.Insert(name)
+					m.Unlock()
 				}
 			}
 

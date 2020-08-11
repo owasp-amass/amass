@@ -296,7 +296,11 @@ func (r *SubdomainManager) checkSubdomain(req *requests.DNSRequest) {
 	}
 	times := r.timesForSubdomain(sub)
 
-	r.enum.Bus.Publish(requests.SubDiscoveredTopic, eventbus.PriorityHigh, r.enum.ctx, subreq, times)
+	if sub != req.Domain {
+		r.enum.Bus.Publish(requests.SubDiscoveredTopic,
+			eventbus.PriorityHigh, r.enum.ctx, subreq, times)
+	}
+
 	r.subqueue.Append(&subQueueElement{
 		Req:   subreq,
 		Times: times,
