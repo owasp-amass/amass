@@ -4,6 +4,7 @@
 package enum
 
 import (
+	"context"
 	"net"
 	"strings"
 	"time"
@@ -30,19 +31,19 @@ type AddressManager struct {
 	revFilter   stringfilter.Filter
 	resFilter   stringfilter.Filter
 	sweepFilter stringfilter.Filter
-	asnLookup   chan *asnChanMsg
+	asnReqQueue *queue.Queue
 }
 
 // NewAddressManager returns an initialized AddressManager.
 func NewAddressManager(e *Enumeration) *AddressManager {
 	am := &AddressManager{
 		enum:        e,
-		revQueue:    new(queue.Queue),
-		resQueue:    new(queue.Queue),
+		revQueue:    queue.NewQueue(),
+		resQueue:    queue.NewQueue(),
 		revFilter:   stringfilter.NewStringFilter(),
 		resFilter:   stringfilter.NewStringFilter(),
 		sweepFilter: stringfilter.NewBloomFilter(1 << 16),
-		asnLookup:   make(chan *asnChanMsg, 10000),
+		asnReqQueue: queue.NewQueue(),
 	}
 
 	go am.lookupASNInfo()
@@ -65,7 +66,7 @@ func (r *AddressManager) InputName(req *requests.DNSRequest) {
 
 			addr := strings.TrimSpace(rec.Data)
 			if t == dns.TypeA || t == dns.TypeAAAA {
-				go r.addResolvedAddr(addr, req.Domain)
+				r.addResolvedAddr(addr, req.Domain)
 			}
 		}
 	}
@@ -76,17 +77,13 @@ func (r *AddressManager) addResolvedAddr(addr, domain string) {
 		return
 	}
 
-	addreq := &requests.AddrRequest{
-		Address: addr,
-		Domain:  domain,
-	}
-
-	go func() {
-		r.asnLookup <- &asnChanMsg{
-			Req:      addreq,
-			Resolved: true,
-		}
-	}()
+	r.asnReqQueue.Append(&asnChanMsg{
+		Req: &requests.AddrRequest{
+			Address: addr,
+			Domain:  domain,
+		},
+		Resolved: true,
+	})
 }
 
 // OutputNames implements the FQDNManager interface.
@@ -106,12 +103,10 @@ func (r *AddressManager) InputAddress(req *requests.AddrRequest) {
 		return
 	}
 
-	go func() {
-		r.asnLookup <- &asnChanMsg{
-			Req:      req,
-			Resolved: false,
-		}
-	}()
+	r.asnReqQueue.Append(&asnChanMsg{
+		Req:      req,
+		Resolved: false,
+	})
 }
 
 // NameQueueLen implements the FQDNManager interface.
@@ -126,7 +121,7 @@ func (r *AddressManager) OutputRequests(num int) int {
 	}
 
 	var count int
-	for i := 0; i < num; i++ {
+	for count < num {
 		resolved := true
 
 		element, ok := r.resQueue.Next()
@@ -144,7 +139,7 @@ func (r *AddressManager) OutputRequests(num int) int {
 		count++
 	}
 
-	return 0
+	return count
 }
 
 // RequestQueueLen implements the FQDNManager interface.
@@ -154,8 +149,8 @@ func (r *AddressManager) RequestQueueLen() int {
 
 // Stop implements the FQDNManager interface.
 func (r *AddressManager) Stop() error {
-	r.revQueue = new(queue.Queue)
-	r.resQueue = new(queue.Queue)
+	r.revQueue = queue.NewQueue()
+	r.resQueue = queue.NewQueue()
 	r.revFilter = stringfilter.NewStringFilter()
 	r.resFilter = stringfilter.NewStringFilter()
 	r.sweepFilter = stringfilter.NewBloomFilter(1 << 16)
@@ -167,12 +162,20 @@ func (r *AddressManager) lookupASNInfo() {
 		select {
 		case <-r.enum.done:
 			return
-		case msg := <-r.asnLookup:
-			r.addToCachePlusDatabase(msg.Req)
-			if msg.Resolved {
-				r.resQueue.Append(msg.Req)
-			} else {
-				r.revQueue.Append(msg.Req)
+		case <-r.asnReqQueue.Signal:
+			e, found := r.asnReqQueue.Next()
+
+			for found {
+				msg := e.(*asnChanMsg)
+
+				r.addToCachePlusDatabase(msg.Req)
+				if msg.Resolved {
+					r.resQueue.Append(msg.Req)
+				} else {
+					r.revQueue.Append(msg.Req)
+				}
+
+				e, found = r.asnReqQueue.Next()
 			}
 		}
 	}
@@ -223,11 +226,11 @@ func (r *AddressManager) processAddress(req *requests.AddrRequest, resolved bool
 	}
 
 	if _, cidr, _ := net.ParseCIDR(asn.Prefix); cidr != nil {
-		go r.reverseDNSSweep(req.Address, cidr)
+		r.reverseDNSSweep(req.Address, cidr)
 	}
 
 	if r.enum.Config.Active && resolved {
-		go r.enum.namesFromCertificates(req.Address)
+		r.enum.namesFromCertificates(req.Address)
 	}
 }
 
@@ -252,21 +255,25 @@ func (r *AddressManager) reverseDNSSweep(addr string, cidr *net.IPNet) {
 			continue
 		}
 
-		r.enum.Sys.Config().SemMaxDNSQueries.Acquire(1)
+		r.enum.Sys.PerformDNSQuery(context.TODO())
 		go r.enum.reverseDNSQuery(a)
 	}
 }
 
 func (e *Enumeration) asnRequestAllSources(req *requests.ASNRequest) {
+	// If data sources cannot assist in the next 2 minutes, the
+	// request will be cancelled
+	ctx, _ := context.WithTimeout(e.ctx, 30*time.Second)
+
 	// All data sources will be employed, since this is required,
 	// no matter what the user selects
 	for _, src := range e.Sys.DataSources() {
-		src.ASNRequest(e.ctx, req)
+		src.ASNRequest(ctx, req)
 	}
 }
 
 func (e *Enumeration) reverseDNSQuery(ip string) {
-	defer e.Sys.Config().SemMaxDNSQueries.Release(1)
+	defer e.Sys.FinishedDNSQuery()
 
 	ptr, answer, err := e.Sys.Pool().Reverse(e.ctx, ip, resolvers.PriorityLow)
 	if err != nil {
@@ -278,19 +285,18 @@ func (e *Enumeration) reverseDNSQuery(ip string) {
 		return
 	}
 
-	e.Bus.Publish(requests.NameResolvedTopic, eventbus.PriorityLow,
-		&requests.DNSRequest{
-			Name:   ptr,
-			Domain: domain,
-			Records: []requests.DNSAnswer{{
-				Name: ptr,
-				Type: 12,
-				TTL:  0,
-				Data: answer,
-			}},
-			Tag:    requests.DNS,
-			Source: "Reverse DNS",
-		})
+	e.Bus.Publish(requests.NameResolvedTopic, eventbus.PriorityLow, &requests.DNSRequest{
+		Name:   ptr,
+		Domain: domain,
+		Records: []requests.DNSAnswer{{
+			Name: ptr,
+			Type: 12,
+			TTL:  0,
+			Data: answer,
+		}},
+		Tag:    requests.DNS,
+		Source: "Reverse DNS",
+	})
 }
 
 func (e *Enumeration) hasCNAMERecord(req *requests.DNSRequest) bool {

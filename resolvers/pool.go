@@ -16,8 +16,10 @@ import (
 	"github.com/OWASP/Amass/v3/limits"
 	amassnet "github.com/OWASP/Amass/v3/net"
 	amassdns "github.com/OWASP/Amass/v3/net/dns"
+	"github.com/OWASP/Amass/v3/queue"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/miekg/dns"
+	"golang.org/x/sync/semaphore"
 )
 
 // ResolverPool manages many DNS resolvers for high-performance use, such as brute forcing attacks.
@@ -28,10 +30,12 @@ type ResolverPool struct {
 	Log             *log.Logger
 	domainCacheChan chan *domainReq
 	hasBeenStopped  bool
+	wildcardQueue   *queue.Queue
+	semMaxWildcard  *semaphore.Weighted
 }
 
 // SetupResolverPool initializes a ResolverPool with the type of resolvers indicated by the parameters.
-func SetupResolverPool(addrs []string, ratemon bool, log *log.Logger) *ResolverPool {
+func SetupResolverPool(addrs []string, maxQueries int, ratemon bool, log *log.Logger) *ResolverPool {
 	if len(addrs) <= 0 {
 		return nil
 	}
@@ -84,16 +88,18 @@ loop:
 		return nil
 	}
 
-	return NewResolverPool(resolvers, log)
+	return NewResolverPool(resolvers, maxQueries, log)
 }
 
 // NewResolverPool initializes a ResolverPool that uses the provided Resolvers.
-func NewResolverPool(res []Resolver, logger *log.Logger) *ResolverPool {
+func NewResolverPool(res []Resolver, maxQueries int, logger *log.Logger) *ResolverPool {
 	rp := &ResolverPool{
 		Resolvers:       res,
 		Done:            make(chan struct{}, 2),
 		Log:             logger,
 		domainCacheChan: make(chan *domainReq, 10),
+		wildcardQueue:   queue.NewQueue(),
+		semMaxWildcard:  semaphore.NewWeighted(int64(100000 / len(res))),
 	}
 
 	// Assign a null logger when one is not provided
@@ -101,6 +107,7 @@ func NewResolverPool(res []Resolver, logger *log.Logger) *ResolverPool {
 		rp.Log = log.New(ioutil.Discard, "", 0)
 	}
 
+	go rp.processWildcardRequests()
 	go rp.manageDomainCache(rp.domainCacheChan)
 	return rp
 }
@@ -385,13 +392,17 @@ func (rp *ResolverPool) NsecTraversal(ctx context.Context, domain string, priori
 
 // MatchesWildcard returns true if the request provided resolved to a DNS wildcard.
 func (rp *ResolverPool) MatchesWildcard(ctx context.Context, req *requests.DNSRequest) bool {
-	var matched bool
+	ch := make(chan int, 2)
 
-	for _, resolver := range rp.Resolvers {
-		if resolver.MatchesWildcard(ctx, req) {
-			matched = true
-			break
-		}
+	rp.wildcardQueue.Append(&wildcardQueueMsg{
+		Ctx: ctx,
+		Req: req,
+		Ch:  ch,
+	})
+
+	var matched bool
+	if wtype := <-ch; wtype != WildcardTypeNone {
+		matched = true
 	}
 
 	return matched
@@ -399,55 +410,93 @@ func (rp *ResolverPool) MatchesWildcard(ctx context.Context, req *requests.DNSRe
 
 // GetWildcardType returns the DNS wildcard type for the provided subdomain name.
 func (rp *ResolverPool) GetWildcardType(ctx context.Context, req *requests.DNSRequest) int {
-	var static, dynamic bool
-	num := len(rp.Resolvers)
-	ch := make(chan int, num)
-	done := make(chan struct{}, 2)
+	ch := make(chan int, 2)
 
-	// Allowing the wildcard requests to be performed concurrently
-	for _, resolver := range rp.Resolvers {
-		go func(r Resolver) {
-			select {
-			case <-done:
-				ch <- WildcardTypeNone
-			case wtype := <-wrapWildcardRequest(ctx, r, req):
-				ch <- wtype
-			}
-		}(resolver)
-	}
+	rp.wildcardQueue.Append(&wildcardQueueMsg{
+		Ctx: ctx,
+		Req: req,
+		Ch:  ch,
+	})
 
-	t := time.NewTimer(10 * time.Second)
-	defer t.Stop()
-	for i := 0; i < num; {
+	return <-ch
+}
+
+type wildcardQueueMsg struct {
+	Ctx context.Context
+	Req *requests.DNSRequest
+	Ch  chan int
+}
+
+func (rp *ResolverPool) processWildcardRequests() {
+	for {
 		select {
-		case <-t.C:
-			close(done)
-		case wtype := <-ch:
-			i++
+		case <-rp.Done:
+			return
+		case <-rp.wildcardQueue.Signal:
+			e, found := rp.wildcardQueue.Next()
 
-			switch wtype {
-			case WildcardTypeStatic:
-				static = true
-			case WildcardTypeDynamic:
-				dynamic = true
+			for found {
+				msg := e.(*wildcardQueueMsg)
+
+				if rp.semMaxWildcard.Acquire(msg.Ctx, 1) == nil {
+					go rp.allResolversWildcardRequest(msg)
+				}
+
+				e, found = rp.wildcardQueue.Next()
 			}
 		}
 	}
+}
 
-	if dynamic {
-		return WildcardTypeDynamic
-	} else if static {
-		return WildcardTypeStatic
+func (rp *ResolverPool) allResolversWildcardRequest(msg *wildcardQueueMsg) {
+	defer rp.semMaxWildcard.Release(1)
+
+	ch := make(chan int)
+	query := func(r Resolver) {
+		ch <- <-wrapWildcardRequest(msg.Ctx, r, msg.Req)
 	}
-	return WildcardTypeNone
+
+	var num int
+	// Allowing the wildcard requests to be performed concurrently on the first attempt
+	for _, resolver := range rp.Resolvers {
+		if stopped := resolver.IsStopped(); stopped {
+			continue
+		}
+
+		go query(resolver)
+		num++
+	}
+
+	var static, dynamic bool
+	for i := 0; i < num; i++ {
+		wtype := <-ch
+
+		switch wtype {
+		case WildcardTypeStatic:
+			static = true
+		case WildcardTypeDynamic:
+			dynamic = true
+		}
+	}
+
+	ret := WildcardTypeNone
+	if dynamic {
+		ret = WildcardTypeDynamic
+	} else if static {
+		ret = WildcardTypeStatic
+	}
+
+	msg.Ch <- ret
 }
 
 func wrapWildcardRequest(ctx context.Context, resolver Resolver, req *requests.DNSRequest) chan int {
 	ch := make(chan int, 2)
 
-	go func() {
+	if stopped := resolver.IsStopped(); stopped {
+		ch <- WildcardTypeNone
+	} else {
 		ch <- resolver.GetWildcardType(ctx, req)
-	}()
+	}
 
 	return ch
 }

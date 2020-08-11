@@ -183,9 +183,7 @@ func (r *BaseResolver) walkMsgRequest(ctx context.Context, name string, qt uint1
 			bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, "Resolver "+r.String())
 		}
 
-		msg := walkMsg(r.getID(), name, qt)
-		result = r.queueQuery(msg, name, qt, priority)
-
+		result = r.queueQuery(walkMsg(r.getID(), name, qt), name, qt, priority)
 		// Report the completion of the DNS query
 		if bus != nil {
 			rcode := dns.RcodeSuccess

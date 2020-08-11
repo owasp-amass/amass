@@ -11,7 +11,7 @@ import (
 )
 
 func TestResolverPoolWildcardDetection(t *testing.T) {
-	pool := SetupResolverPool([]string{"8.8.8.8"}, false, nil)
+	pool := SetupResolverPool([]string{"8.8.8.8"}, 100, false, nil)
 	if pool == nil {
 		return
 	}

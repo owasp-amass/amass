@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"math/rand"
 	"strings"
-	"time"
 
 	"github.com/OWASP/Amass/v3/eventbus"
+	"github.com/OWASP/Amass/v3/queue"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/stringset"
 )
@@ -24,7 +24,7 @@ const (
 	LDHChars       = "abcdefghijklmnopqrstuvwxyz0123456789-"
 )
 
-const numOfWildcardTests = 5
+const numOfWildcardTests = 3
 
 // Names for the different types of wildcards that can be detected.
 const (
@@ -46,7 +46,7 @@ type wildcard struct {
 }
 
 type wildcardChans struct {
-	WildcardReq     chan *wildcardReq
+	WildcardReq     *queue.Queue
 	IPsAcrossLevels chan *ipsAcrossLevels
 	TestResult      chan *testResult
 }
@@ -116,11 +116,11 @@ func (r *BaseResolver) hasWildcard(ctx context.Context, req *requests.DNSRequest
 func (r *BaseResolver) fetchWildcardType(ctx context.Context, sub string) *wildcard {
 	ch := make(chan *wildcard, 2)
 
-	r.wildcardChannels.WildcardReq <- &wildcardReq{
+	r.wildcardChannels.WildcardReq.Append(&wildcardReq{
 		Ctx: ctx,
 		Sub: sub,
 		Ch:  ch,
-	}
+	})
 
 	return <-ch
 }
@@ -143,8 +143,13 @@ func (r *BaseResolver) manageWildcards(chs *wildcardChans) {
 		select {
 		case <-r.Done:
 			return
-		case req := <-chs.WildcardReq:
-			r.wildcardRequest(wildcards, req)
+		case <-chs.WildcardReq.Signal:
+			if e, found := chs.WildcardReq.Next(); found {
+				req := e.(*wildcardReq)
+
+				r.wildcardRequest(wildcards, req)
+				chs.WildcardReq.SendSignal()
+			}
 		case test := <-chs.TestResult:
 			wildcards[test.Sub] = test.Result
 		case ips := <-chs.IPsAcrossLevels:
@@ -160,7 +165,7 @@ func (r *BaseResolver) wildcardRequest(wildcards map[string]*wildcard, req *wild
 		return
 	} else if found && w.beingTested {
 		// Wait for the test to complete
-		go r.resendWildcardReq(req)
+		r.wildcardChannels.WildcardReq.Append(req)
 		return
 	}
 
@@ -171,14 +176,7 @@ func (r *BaseResolver) wildcardRequest(wildcards map[string]*wildcard, req *wild
 		beingTested:  true,
 	}
 	go r.wildcardTest(req.Ctx, req.Sub)
-	go r.resendWildcardReq(req)
-}
-
-func (r *BaseResolver) resendWildcardReq(req *wildcardReq) {
-	n := numOfWildcardTests / 2
-
-	time.Sleep(time.Duration(n) * time.Second)
-	r.wildcardChannels.WildcardReq <- req
+	r.wildcardChannels.WildcardReq.Append(req)
 }
 
 func (r *BaseResolver) testIPsAcrossLevels(wildcards map[string]*wildcard, req *ipsAcrossLevels) {

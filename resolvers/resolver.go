@@ -129,11 +129,11 @@ type Resolver interface {
 type BaseResolver struct {
 	Done             chan struct{}
 	xchgQueues       []*queue.Queue
-	queueSignalChan  chan struct{}
 	stateChannels    *resolverStateChans
 	wildcardChannels *wildcardChans
 	rotationChannels *rotationChans
 	xchgsChannels    *xchgsChans
+	readMsgs         *queue.Queue
 	address          string
 	port             string
 }
@@ -150,19 +150,19 @@ func NewBaseResolver(addr string) *BaseResolver {
 	r := &BaseResolver{
 		Done: make(chan struct{}, 2),
 		xchgQueues: []*queue.Queue{
-			new(queue.Queue),
-			new(queue.Queue),
-			new(queue.Queue),
+			queue.NewQueue(),
+			queue.NewQueue(),
+			queue.NewQueue(),
 		},
-		queueSignalChan: make(chan struct{}, 1000),
-		stateChannels:   initStateManagement(),
+		stateChannels: initStateManagement(),
 		wildcardChannels: &wildcardChans{
-			WildcardReq:     make(chan *wildcardReq, 10),
+			WildcardReq:     queue.NewQueue(),
 			IPsAcrossLevels: make(chan *ipsAcrossLevels, 10),
 			TestResult:      make(chan *testResult, 10),
 		},
 		rotationChannels: initRotationChans(),
 		xchgsChannels:    initXchgsManagement(),
+		readMsgs:         queue.NewQueue(),
 		address:          addr,
 		port:             port,
 	}
@@ -174,6 +174,7 @@ func NewBaseResolver(addr string) *BaseResolver {
 	go r.checkForTimeouts()
 	go r.readMessages(false)
 	go r.readMessages(true)
+	go r.processReadMessages()
 	return r
 }
 
@@ -244,16 +245,11 @@ func (r *BaseResolver) Resolve(ctx context.Context, name, qtype string, priority
 	}
 
 	var bus *eventbus.EventBus
-	// Obtain the event bus reference and report the resolver activity
 	if b := ctx.Value(requests.ContextEventBus); b != nil {
 		bus = b.(*eventbus.EventBus)
-
-		bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, "Resolver "+r.String())
 	}
 
-	msg := queryMessage(r.getID(), name, qt)
-	result := r.queueQuery(msg, name, qt, priority)
-
+	result := r.queueQuery(queryMessage(r.getID(), name, qt), name, qt, priority)
 	// Report the completion of the DNS query
 	if bus != nil {
 		rcode := dns.RcodeSuccess
@@ -346,7 +342,6 @@ func (r *BaseResolver) queueQuery(msg *dns.Msg, name string, qt uint16, priority
 		Msg:    msg,
 		Result: resultChan,
 	})
-	r.queueSignalChan <- struct{}{}
 
 	result := <-resultChan
 	r.updateStat(QueryCompletions, 1)
@@ -354,20 +349,20 @@ func (r *BaseResolver) queueQuery(msg *dns.Msg, name string, qt uint16, priority
 }
 
 func (r *BaseResolver) sendQueries() {
+	each := func(element interface{}) {
+		r.writeMessage(element.(*resolveRequest))
+	}
+
 	for {
 		select {
 		case <-r.Done:
 			return
-		case <-r.queueSignalChan:
-			// Pull from the critical queue first
-			for p := PriorityCritical; p >= PriorityLow; p-- {
-				e, found := r.xchgQueues[p].Next()
-
-				for found {
-					r.writeMessage(e.(*resolveRequest))
-					e, found = r.xchgQueues[p].Next()
-				}
-			}
+		case <-r.xchgQueues[PriorityLow].Signal:
+			r.xchgQueues[PriorityLow].Process(each)
+		case <-r.xchgQueues[PriorityHigh].Signal:
+			r.xchgQueues[PriorityHigh].Process(each)
+		case <-r.xchgQueues[PriorityCritical].Signal:
+			r.xchgQueues[PriorityCritical].Process(each)
 		}
 	}
 }
@@ -375,6 +370,7 @@ func (r *BaseResolver) sendQueries() {
 func (r *BaseResolver) writeMessage(req *resolveRequest) {
 	co := r.currentConnection()
 
+	r.queueRequest(req.Msg.MsgHdr.Id, req)
 	co.SetWriteDeadline(time.Now().Add(10 * time.Second))
 	if err := co.WriteMsg(req.Msg); err != nil {
 		r.pullRequest(req.Msg.MsgHdr.Id)
@@ -382,8 +378,6 @@ func (r *BaseResolver) writeMessage(req *resolveRequest) {
 		r.returnRequest(req, makeResolveResult(nil, nil, true, estr, TimeoutRcode))
 		return
 	}
-
-	r.queueRequest(req.Msg.MsgHdr.Id, req)
 	r.updateAttempts()
 }
 
@@ -403,9 +397,24 @@ func (r *BaseResolver) readMessages(last bool) {
 			if co != nil {
 				co.SetReadDeadline(time.Now().Add(2 * time.Second))
 				if read, err := co.ReadMsg(); err == nil && read != nil {
-					go r.processMessage(read)
+					r.readMsgs.Append(read)
 				}
 			}
+		}
+	}
+}
+
+func (r *BaseResolver) processReadMessages() {
+	each := func(element interface{}) {
+		r.processMessage(element.(*dns.Msg))
+	}
+
+	for {
+		select {
+		case <-r.Done:
+			return
+		case <-r.readMsgs.Signal:
+			r.readMsgs.Process(each)
 		}
 	}
 }
@@ -434,7 +443,7 @@ func (r *BaseResolver) processMessage(m *dns.Msg) {
 	}
 
 	if m.Truncated {
-		r.tcpExchange(m.MsgHdr.Id, req)
+		go r.tcpExchange(m.MsgHdr.Id, req)
 		return
 	}
 
