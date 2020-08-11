@@ -4,6 +4,7 @@
 package graph
 
 import (
+	"context"
 	"math/rand"
 	"net"
 	"strconv"
@@ -11,9 +12,9 @@ import (
 	"github.com/OWASP/Amass/v3/graphdb"
 	amassnet "github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/requests"
-	"github.com/OWASP/Amass/v3/semaphore"
 	"github.com/OWASP/Amass/v3/stringfilter"
 	"golang.org/x/net/publicsuffix"
+	"golang.org/x/sync/semaphore"
 )
 
 // EventOutput returns findings within the receiver Graph for the event identified by the uuid string
@@ -39,14 +40,14 @@ func (g *Graph) EventOutput(uuid string, filter stringfilter.Filter, cache *amas
 	}
 
 	var count int
-	sem := semaphore.NewSimpleSemaphore(10)
+	sem := semaphore.NewWeighted(10)
 	output := make(chan *requests.Output, len(names))
 	for _, name := range names {
 		if n := g.db.NodeToID(name); n == "" || filter.Has(n) {
 			continue
 		}
 
-		sem.Acquire(1)
+		sem.Acquire(context.TODO(), 1)
 		go g.buildOutput(name, uuid, cache, output, sem)
 		count++
 	}
@@ -111,7 +112,7 @@ func (g *Graph) getEventNameNodes(uuid string) []graphdb.Node {
 }
 
 func (g *Graph) buildOutput(sub graphdb.Node, uuid string,
-	cache *amassnet.ASNCache, c chan *requests.Output, sem semaphore.Semaphore) {
+	cache *amassnet.ASNCache, c chan *requests.Output, sem *semaphore.Weighted) {
 	defer sem.Release(1)
 
 	output := g.buildNameInfo(sub, uuid)
