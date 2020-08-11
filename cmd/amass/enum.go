@@ -195,20 +195,20 @@ func runEnumCommand(clArgs []string) {
 
 	wg.Add(1)
 	// This goroutine will handle printing the output
-	printOutChan := make(chan *requests.Output, 1000)
+	printOutChan := make(chan *requests.Output, 10)
 	go printOutput(e, args, printOutChan, &wg)
 	outChans = append(outChans, printOutChan)
 
 	wg.Add(1)
 	// This goroutine will handle saving the output to the text file
-	txtOutChan := make(chan *requests.Output, 1000)
+	txtOutChan := make(chan *requests.Output, 10)
 	go saveTextOutput(e, args, txtOutChan, &wg)
 	outChans = append(outChans, txtOutChan)
 
 	if !args.Options.Passive {
 		wg.Add(1)
 		// This goroutine will handle saving the output to the JSON file
-		jsonOutChan := make(chan *requests.Output, 1000)
+		jsonOutChan := make(chan *requests.Output, 10)
 		go saveJSONOutput(e, args, jsonOutChan, &wg)
 		outChans = append(outChans, jsonOutChan)
 	}
@@ -465,7 +465,7 @@ func processOutput(e *enum.Enumeration, outputs []chan *requests.Output, done ch
 	defer wg.Done()
 
 	// This filter ensures that we only get new names
-	known := stringfilter.NewBloomFilter(1 << 24)
+	known := stringfilter.NewBloomFilter(1 << 22)
 	// The function that obtains output from the enum and puts it on the channel
 	extract := func() {
 		for _, o := range e.ExtractOutput(known) {
