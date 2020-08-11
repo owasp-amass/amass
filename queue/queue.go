@@ -15,8 +15,14 @@ type queueNode struct {
 // Queue implements a FIFO data structure.
 type Queue struct {
 	sync.Mutex
+	Signal     chan struct{}
 	size       int
 	head, tail *queueNode
+}
+
+// NewQueue return an initialized Queue.
+func NewQueue() *Queue {
+	return &Queue{Signal: make(chan struct{}, 2)}
 }
 
 // Append adds the data to the end of the Queue.
@@ -24,8 +30,6 @@ func (q *Queue) Append(data interface{}) {
 	element := new(queueNode)
 
 	q.Lock()
-	defer q.Unlock()
-
 	q.size++
 	if q.head == nil {
 		q.head = element
@@ -37,6 +41,19 @@ func (q *Queue) Append(data interface{}) {
 	}
 	q.tail = element
 	element.Data = data
+	q.Unlock()
+	q.SendSignal()
+}
+
+// SendSignal puts an element on the queue signal channel.
+func (q *Queue) SendSignal() {
+	// Empty the channel
+	select {
+	case <-q.Signal:
+	default:
+	}
+
+	q.Signal <- struct{}{}
 }
 
 // Next returns the data at the front of the Queue.
@@ -56,6 +73,16 @@ func (q *Queue) Next() (interface{}, bool) {
 	}
 	element.Next = nil
 	return element.Data, true
+}
+
+// Process will execute the callback parameter for each element on the Queue.
+func (q *Queue) Process(callback func(interface{})) {
+	element, ok := q.Next()
+
+	for ok {
+		callback(element)
+		element, ok = q.Next()
+	}
 }
 
 // Empty returns true if the Queue is empty.

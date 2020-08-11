@@ -14,6 +14,7 @@ import (
 	"github.com/OWASP/Amass/v3/graph"
 	"github.com/OWASP/Amass/v3/net"
 	amassdns "github.com/OWASP/Amass/v3/net/dns"
+	"github.com/OWASP/Amass/v3/queue"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/resolvers"
 	"github.com/OWASP/Amass/v3/systems"
@@ -28,6 +29,8 @@ type DataManagerService struct {
 
 	sys   systems.System
 	graph *graph.Graph
+	queue *queue.Queue
+	done  chan struct{}
 }
 
 // NewDataManagerService returns he object initialized, but not yet started.
@@ -35,9 +38,12 @@ func NewDataManagerService(sys systems.System, g *graph.Graph) *DataManagerServi
 	dms := &DataManagerService{
 		sys:   sys,
 		graph: g,
+		queue: queue.NewQueue(),
+		done:  make(chan struct{}, 2),
 	}
-
 	dms.BaseService = *requests.NewBaseService(dms, "Data Manager")
+
+	go dms.sendNewNames()
 	return dms
 }
 
@@ -86,6 +92,51 @@ func (dms *DataManagerService) OnDNSRequest(ctx context.Context, req *requests.D
 			dms.insertSPF(ctx, req, i)
 		}
 	}
+}
+
+type newNameReq struct {
+	Ctx    context.Context
+	Name   string
+	Domain string
+}
+
+func (dms *DataManagerService) genNewNameEvent(ctx context.Context, name, domain string) {
+	dms.queue.Append(&newNameReq{
+		Ctx:    ctx,
+		Name:   name,
+		Domain: domain,
+	})
+}
+
+func (dms *DataManagerService) sendNewNames() {
+	each := func(element interface{}) {
+		msg := element.(*newNameReq)
+
+		dms.processNewName(msg.Ctx, msg.Name, msg.Domain)
+	}
+
+	for {
+		select {
+		case <-dms.done:
+			return
+		case <-dms.queue.Signal:
+			dms.queue.Process(each)
+		}
+	}
+}
+
+func (dms *DataManagerService) processNewName(ctx context.Context, name, domain string) {
+	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
+	if bus == nil {
+		return
+	}
+
+	bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
+		Name:   name,
+		Domain: domain,
+		Tag:    requests.DNS,
+		Source: "DNS",
+	})
 }
 
 // OnASNRequest implements the Service interface.
@@ -140,12 +191,7 @@ func (dms *DataManagerService) insertCNAME(ctx context.Context, req *requests.DN
 	}
 
 	// Important - Allows chained CNAME records to be resolved until an A/AAAA record
-	bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
-		Name:   target,
-		Domain: domain,
-		Tag:    requests.DNS,
-		Source: "DNS",
-	})
+	dms.genNewNameEvent(ctx, target, domain)
 }
 
 func (dms *DataManagerService) insertA(ctx context.Context, req *requests.DNSRequest, recidx int) {
@@ -224,12 +270,7 @@ func (dms *DataManagerService) insertPTR(ctx context.Context, req *requests.DNSR
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s failed to insert PTR record: %v", dms.graph, err))
 	}
 
-	bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
-		Name:   target,
-		Domain: domain,
-		Tag:    requests.DNS,
-		Source: req.Source,
-	})
+	dms.genNewNameEvent(ctx, target, domain)
 }
 
 func (dms *DataManagerService) insertSRV(ctx context.Context, req *requests.DNSRequest, recidx int) {
@@ -252,12 +293,7 @@ func (dms *DataManagerService) insertSRV(ctx context.Context, req *requests.DNSR
 	}
 
 	if domain := cfg.WhichDomain(target); domain != "" {
-		bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
-			Name:   target,
-			Domain: domain,
-			Tag:    req.Tag,
-			Source: req.Source,
-		})
+		dms.genNewNameEvent(ctx, target, domain)
 	}
 }
 
@@ -291,12 +327,7 @@ func (dms *DataManagerService) insertNS(ctx context.Context, req *requests.DNSRe
 	}
 
 	if target != domain {
-		bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
-			Name:   target,
-			Domain: domain,
-			Tag:    requests.DNS,
-			Source: "DNS",
-		})
+		dms.genNewNameEvent(ctx, target, domain)
 	}
 }
 
@@ -329,12 +360,7 @@ func (dms *DataManagerService) insertMX(ctx context.Context, req *requests.DNSRe
 	}
 
 	if target != domain {
-		bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
-			Name:   target,
-			Domain: domain,
-			Tag:    requests.DNS,
-			Source: "DNS",
-		})
+		dms.genNewNameEvent(ctx, target, domain)
 	}
 }
 
@@ -403,11 +429,6 @@ func (dms *DataManagerService) findNamesAndAddresses(ctx context.Context, data, 
 			continue
 		}
 
-		bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
-			Name:   name,
-			Domain: domain,
-			Tag:    requests.DNS,
-			Source: "DNS",
-		})
+		dms.genNewNameEvent(ctx, name, domain)
 	}
 }
