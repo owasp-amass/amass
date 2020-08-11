@@ -13,6 +13,7 @@ require (
 	github.com/chromedp/cdproto v0.0.0-20200709115526-d1f6fc58448b // indirect
 	github.com/chromedp/chromedp v0.5.3 // indirect
 	github.com/cjoudrey/gluaurl v0.0.0-20161028222611-31cbb9bef199
+	github.com/cloudflare/cloudflare-go v0.13.0
 	github.com/dghubble/go-twitter v0.0.0-20200725221434-4bc8ad7ad1b4
 	github.com/fatih/color v1.9.0
 	github.com/geziyor/geziyor v0.0.0-20191212210344-cfb16fe1ee0e

@@ -34,6 +34,7 @@ var (
 func GetAllSources(sys systems.System) []requests.Service {
 	srvs := []requests.Service{
 		NewAlienVault(sys),
+		NewCloudflare(sys),
 		NewCommonCrawl(sys),
 		NewCrtsh(sys),
 		NewDNSDB(sys),
