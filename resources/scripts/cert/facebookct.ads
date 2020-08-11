@@ -10,8 +10,17 @@ function start()
     setratelimit(20)
 end
 
+function check()
+    if (api ~= nil and api.key ~= nil and 
+        api.secret ~= nil and api.key ~= "" and api.secret ~= "") then
+        return true
+    end
+    return false
+end
+
 function vertical(ctx, domain)
-    if (api == nil or api.key == "" or api.secret == "") then
+    if (api == nil or api.key == nil or 
+        api.secret == nil or api.key == "" or api.secret == "") then
         return
     end
 

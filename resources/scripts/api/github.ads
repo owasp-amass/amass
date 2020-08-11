@@ -10,6 +10,13 @@ function start()
     setratelimit(7)
 end
 
+function check()
+    if (api ~= nil and api.key ~= nil and api.key ~= "") then
+        return true
+    end
+    return false
+end
+
 function vertical(ctx, domain)
     if (api == nil or api.key == nil or api.key == "") then
         return

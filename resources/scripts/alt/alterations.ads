@@ -23,44 +23,51 @@ function resolved(ctx, name, domain, records)
 end
 
 function makenames(ctx, cfg, name)
-    local s = {}
     local words = alt_wordlist(ctx)
 
     if cfg['flip_words'] then
-        set_insert_many(s, flip_words(name, words))
+        for i, n in pairs(flip_words(name, words)) do
+            sendnames(ctx, n)
+        end
     end
     if cfg['flip_numbers'] then
-        set_insert_many(s, flip_numbers(name))
+        for i, n in pairs(flip_numbers(name)) do
+            sendnames(ctx, n)
+        end
     end
     if cfg['add_numbers'] then
-        set_insert_many(s, append_numbers(name))
+        for i, n in pairs(append_numbers(name)) do
+            sendnames(ctx, n)
+        end
     end
     if cfg['add_words'] then
-        set_insert_many(s, add_prefix_word(name, words))
-        set_insert_many(s, add_suffix_word(name, words))
+        for i, n in pairs(add_prefix_word(name, words)) do
+            sendnames(ctx, n)
+        end
+        for i, n in pairs(add_suffix_word(name, words)) do
+            sendnames(ctx, n)
+        end
     end
 
     local distance = cfg['edit_distance']
     if distance > 0 then
-        set_insert_many(s, fuzzy_label_searches(name, distance))
-    end
-
-    for i, n in pairs(set_elements(s)) do
-        sendnames(ctx, n)
+        for i, n in pairs(fuzzy_label_searches(name, distance)) do
+            sendnames(ctx, n)
+        end
     end
 end
 
 function flip_words(name, words)
+    local s = {}
     local parts = split(name, ".")
     local hostname = parts[1]
     local base = partial_join(parts, ".", 2, #parts)
 
     parts = split(hostname, "-")
     if #parts < 2 then
-        return nil
+        return s
     end
 
-    local s = {}
     local post = partial_join(parts, "-", 2, #parts)
     for i, word in pairs(words) do
         set_insert(s, word .. "-" .. post .. "." .. base)
