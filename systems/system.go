@@ -35,6 +35,9 @@ type System interface {
 	// GraphDatabases return the Graphs used by the System
 	GraphDatabases() []*graph.Graph
 
+	// GetMemoryUsage() returns the number bytes allocated to heap objects on this system
+	GetMemoryUsage() uint64
+
 	// PerformDNSQuery blocks if the maximum number of queries is already taking place
 	PerformDNSQuery(ctx context.Context) error
 	FinishedDNSQuery()

@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime"
 
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/graph"
@@ -174,6 +175,14 @@ func (l *LocalSystem) setupGraphDBs() error {
 	}
 
 	return nil
+}
+
+// GetMemoryUsage returns the number bytes allocated to heap objects on this system.
+func (l *LocalSystem) GetMemoryUsage() uint64 {
+	var m runtime.MemStats
+
+	runtime.ReadMemStats(&m)
+	return m.Alloc
 }
 
 // PerformDNSQuery blocks if the maximum number of queries is already taking place.
