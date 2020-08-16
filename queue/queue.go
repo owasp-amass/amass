@@ -4,20 +4,60 @@
 package queue
 
 import (
+	"container/heap"
 	"sync"
 )
 
-type queueNode struct {
-	Next *queueNode
-	Data interface{}
+// The priority levels for the priority Queue.
+const (
+	PriorityLow int = iota
+	PriorityNormal
+	PriorityHigh
+	PriorityCritical
+)
+
+type queueElement struct {
+	Data     interface{}
+	priority int
+	index    int
+}
+
+type priorityQueue []*queueElement
+
+func (pq priorityQueue) Len() int { return len(pq) }
+
+func (pq priorityQueue) Less(i, j int) bool {
+	return pq[i].priority > pq[j].priority
+}
+
+func (pq priorityQueue) Swap(i, j int) {
+	pq[i], pq[j] = pq[j], pq[i]
+	pq[i].index = i
+	pq[j].index = j
+}
+
+func (pq *priorityQueue) Push(x interface{}) {
+	n := len(*pq)
+	element := x.(*queueElement)
+	element.index = n
+	*pq = append(*pq, element)
+}
+
+func (pq *priorityQueue) Pop() interface{} {
+	old := *pq
+	n := len(old)
+	element := old[n-1]
+	old[n-1] = nil     // avoid memory leak
+	element.index = -1 // for safety
+	*pq = old[:n-1]
+	return element
 }
 
 // Queue implements a FIFO data structure.
 type Queue struct {
 	sync.Mutex
-	Signal     chan struct{}
-	size       int
-	head, tail *queueNode
+	Signal chan struct{}
+	queue  priorityQueue
 }
 
 // NewQueue return an initialized Queue.
@@ -25,22 +65,23 @@ func NewQueue() *Queue {
 	return &Queue{Signal: make(chan struct{}, 2)}
 }
 
-// Append adds the data to the end of the Queue.
+// Append adds the data to the Queue at priority level PriorityNormal.
 func (q *Queue) Append(data interface{}) {
-	element := new(queueNode)
+	q.append(data, PriorityNormal)
+}
 
-	q.Lock()
-	q.size++
-	if q.head == nil {
-		q.head = element
-	}
+// AppendPriority adds the data to the Queue with respect to priority.
+func (q *Queue) AppendPriority(data interface{}, priority int) {
+	q.append(data, priority)
+}
 
-	end := q.tail
-	if end != nil {
-		end.Next = element
-	}
-	q.tail = element
+func (q *Queue) append(data interface{}, priority int) {
+	element := new(queueElement)
+
 	element.Data = data
+	element.priority = priority
+	q.Lock()
+	heap.Push(&q.queue, element)
 	q.Unlock()
 	q.SendSignal()
 }
@@ -61,18 +102,15 @@ func (q *Queue) Next() (interface{}, bool) {
 	q.Lock()
 	defer q.Unlock()
 
-	if q.head == nil {
-		return nil, false
+	var ok bool
+	var data interface{}
+	if q.queue.Len() > 0 {
+		element := heap.Pop(&q.queue).(*queueElement)
+		ok = true
+		data = element.Data
 	}
 
-	q.size--
-	element := q.head
-	q.head = element.Next
-	if q.tail == element {
-		q.tail = nil
-	}
-	element.Next = nil
-	return element.Data, true
+	return data, ok
 }
 
 // Process will execute the callback parameter for each element on the Queue.
@@ -87,13 +125,7 @@ func (q *Queue) Process(callback func(interface{})) {
 
 // Empty returns true if the Queue is empty.
 func (q *Queue) Empty() bool {
-	q.Lock()
-	defer q.Unlock()
-
-	if q.head == nil {
-		return true
-	}
-	return false
+	return q.Len() == 0
 }
 
 // Len returns the current length of the Queue
@@ -101,5 +133,5 @@ func (q *Queue) Len() int {
 	q.Lock()
 	defer q.Unlock()
 
-	return q.size
+	return q.queue.Len()
 }

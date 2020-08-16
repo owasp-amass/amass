@@ -128,7 +128,7 @@ type Resolver interface {
 // BaseResolver performs DNS queries on a single resolver at high-performance.
 type BaseResolver struct {
 	Done             chan struct{}
-	xchgQueues       []*queue.Queue
+	xchgQueue        *queue.Queue
 	stateChannels    *resolverStateChans
 	wildcardChannels *wildcardChans
 	rotationChannels *rotationChans
@@ -148,12 +148,8 @@ func NewBaseResolver(addr string) *BaseResolver {
 	}
 
 	r := &BaseResolver{
-		Done: make(chan struct{}, 2),
-		xchgQueues: []*queue.Queue{
-			queue.NewQueue(),
-			queue.NewQueue(),
-			queue.NewQueue(),
-		},
+		Done:          make(chan struct{}, 2),
+		xchgQueue:     queue.NewQueue(),
 		stateChannels: initStateManagement(),
 		wildcardChannels: &wildcardChans{
 			WildcardReq:     queue.NewQueue(),
@@ -332,16 +328,26 @@ func (r *BaseResolver) checkForTimeouts() {
 	}
 }
 
-func (r *BaseResolver) queueQuery(msg *dns.Msg, name string, qt uint16, priority int) *resolveResult {
+func (r *BaseResolver) queueQuery(msg *dns.Msg, name string, qt uint16, p int) *resolveResult {
 	resultChan := make(chan *resolveResult, 2)
 
+	priority := queue.PriorityNormal
+	switch p {
+	case PriorityCritical:
+		priority = queue.PriorityCritical
+	case PriorityHigh:
+		priority = queue.PriorityHigh
+	case PriorityLow:
+		priority = queue.PriorityLow
+	}
+
 	// Use the correct queue based on the priority
-	r.xchgQueues[priority].Append(&resolveRequest{
+	r.xchgQueue.AppendPriority(&resolveRequest{
 		Name:   name,
 		Qtype:  qt,
 		Msg:    msg,
 		Result: resultChan,
-	})
+	}, priority)
 
 	result := <-resultChan
 	r.updateStat(QueryCompletions, 1)
@@ -357,12 +363,8 @@ func (r *BaseResolver) sendQueries() {
 		select {
 		case <-r.Done:
 			return
-		case <-r.xchgQueues[PriorityLow].Signal:
-			r.xchgQueues[PriorityLow].Process(each)
-		case <-r.xchgQueues[PriorityHigh].Signal:
-			r.xchgQueues[PriorityHigh].Process(each)
-		case <-r.xchgQueues[PriorityCritical].Signal:
-			r.xchgQueues[PriorityCritical].Process(each)
+		case <-r.xchgQueue.Signal:
+			r.xchgQueue.Process(each)
 		}
 	}
 }

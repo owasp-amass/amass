@@ -22,10 +22,11 @@ func TestAppend(t *testing.T) {
 
 func TestNext(t *testing.T) {
 	queue := NewQueue()
-	values := []string{"test1", "test2", "test3"}
+	values := []string{"test1", "test2", "test3", "test4"}
+	priorities := []int{90, 75, 30, 5}
 
-	for _, v := range values {
-		queue.Append(v)
+	for i, v := range values {
+		queue.AppendPriority(v, priorities[i])
 	}
 
 	for _, v := range values {

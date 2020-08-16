@@ -32,7 +32,7 @@ type eventbusChans struct {
 // EventBus handles sending and receiving events across Amass.
 type EventBus struct {
 	channels *eventbusChans
-	queues   []*queue.Queue
+	queue    *queue.Queue
 	done     chan struct{}
 	closed   sync.Once
 }
@@ -44,12 +44,8 @@ func NewEventBus() *EventBus {
 			Subscribe:   make(chan *subReq, 10),
 			Unsubscribe: make(chan *subReq, 10),
 		},
-		queues: []*queue.Queue{
-			queue.NewQueue(),
-			queue.NewQueue(),
-			queue.NewQueue(),
-		},
-		done: make(chan struct{}, 2),
+		queue: queue.NewQueue(),
+		done:  make(chan struct{}, 2),
 	}
 
 	go eb.processRequests(eb.channels)
@@ -80,19 +76,31 @@ func (eb *EventBus) Unsubscribe(topic string, fn interface{}) {
 }
 
 // Publish sends req on the channel labeled with name.
-func (eb *EventBus) Publish(topic string, priority int, args ...interface{}) {
-	if topic != "" && priority >= PriorityLow && priority <= PriorityCritical {
-		passedArgs := make([]reflect.Value, 0)
-
-		for _, arg := range args {
-			passedArgs = append(passedArgs, reflect.ValueOf(arg))
-		}
-
-		eb.queues[priority].Append(&pubReq{
-			Topic: topic,
-			Args:  passedArgs,
-		})
+func (eb *EventBus) Publish(topic string, p int, args ...interface{}) {
+	if topic == "" || p < PriorityLow || p > PriorityCritical {
+		return
 	}
+
+	priority := queue.PriorityNormal
+	switch p {
+	case PriorityCritical:
+		priority = queue.PriorityCritical
+	case PriorityHigh:
+		priority = queue.PriorityHigh
+	case PriorityLow:
+		priority = queue.PriorityLow
+	}
+
+	passedArgs := make([]reflect.Value, 0)
+
+	for _, arg := range args {
+		passedArgs = append(passedArgs, reflect.ValueOf(arg))
+	}
+
+	eb.queue.AppendPriority(&pubReq{
+		Topic: topic,
+		Args:  passedArgs,
+	}, priority)
 }
 
 type topicEntry struct {
@@ -155,12 +163,8 @@ loop:
 				topics[unsub.Topic].Callbacks = channels
 				topics[unsub.Topic].Unlock()
 			}
-		case <-eb.queues[PriorityLow].Signal:
-			eb.queues[PriorityLow].Process(each)
-		case <-eb.queues[PriorityHigh].Signal:
-			eb.queues[PriorityHigh].Process(each)
-		case <-eb.queues[PriorityCritical].Signal:
-			eb.queues[PriorityCritical].Process(each)
+		case <-eb.queue.Signal:
+			eb.queue.Process(each)
 		}
 	}
 }
