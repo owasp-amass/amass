@@ -17,8 +17,8 @@ func TestResolverPoolWildcardDetection(t *testing.T) {
 	}
 
 	req := &requests.DNSRequest{
-		Name:   "random.wildcard.owasp-amass.com",
-		Domain: "wildcard.owasp-amass.com",
+		Name:   "blahblah.ezproxy.utica.edu",
+		Domain: "utica.edu",
 	}
 
 	if !pool.MatchesWildcard(context.TODO(), req) {

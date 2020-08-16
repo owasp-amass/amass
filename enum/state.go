@@ -14,9 +14,6 @@ import (
 type enumStateChans struct {
 	GetLastActive chan chan time.Time
 	UpdateLast    *queue.Queue
-	GetSeqZeros   chan chan int64
-	IncSeqZeros   chan struct{}
-	ClearSeqZeros chan struct{}
 	GetPerSec     chan chan *getPerSec
 	IncPerSec     *queue.Queue
 	ClearPerSec   chan struct{}
@@ -85,12 +82,6 @@ func (e *Enumeration) manageEnumState(chs *enumStateChans) {
 			get <- last
 		case <-chs.UpdateLast.Signal:
 			chs.UpdateLast.Process(updateLastCallback)
-		case seq := <-chs.GetSeqZeros:
-			seq <- numSeqZeros
-		case <-chs.IncSeqZeros:
-			numSeqZeros++
-		case <-chs.ClearSeqZeros:
-			numSeqZeros = 0
 		case gsec := <-chs.GetPerSec:
 			var psec, ret int64
 			if perSecLast.After(perSecFirst) {
@@ -124,21 +115,6 @@ func (e *Enumeration) lastActive() time.Time {
 
 func (e *Enumeration) updateLastActive(srv string) {
 	e.enumStateChannels.UpdateLast.Append(srv)
-}
-
-func (e *Enumeration) getNumSeqZeros() int64 {
-	ch := make(chan int64, 2)
-
-	e.enumStateChannels.GetSeqZeros <- ch
-	return <-ch
-}
-
-func (e *Enumeration) incNumSeqZeros() {
-	e.enumStateChannels.IncSeqZeros <- struct{}{}
-}
-
-func (e *Enumeration) clearNumSeqZeros() {
-	e.enumStateChannels.ClearSeqZeros <- struct{}{}
 }
 
 func (e *Enumeration) dnsQueriesPerSec() (int64, int64) {

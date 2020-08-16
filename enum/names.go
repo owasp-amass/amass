@@ -90,7 +90,7 @@ func (r *DomainManager) NameQueueLen() int {
 
 // OutputRequests implements the FQDNManager interface.
 func (r *DomainManager) OutputRequests(num int) int {
-	if r.enum.dataMgr != nil && r.enum.dataMgr.RequestLen() != 0 {
+	if r.enum.dnsMgr != nil && r.enum.dnsMgr.RequestLen() != 0 {
 		return 0
 	}
 
@@ -224,7 +224,7 @@ func (r *SubdomainManager) OutputRequests(num int) int {
 		toBeSent = toBeSent / srcslen
 
 		if toBeSent <= 0 {
-			return num
+			return 0
 		}
 	}
 
@@ -377,16 +377,13 @@ func (r *NameManager) InputName(req *requests.DNSRequest) {
 	if req == nil || req.Name == "" || req.Domain == "" {
 		return
 	}
-
 	// Clean up the newly discovered name and domain
 	requests.SanitizeDNSRequest(req)
-
-	nReq := r.enum.checkResFilter(req)
-	if nReq == nil {
+	// Check that this name has not already been processed
+	if r.enum.checkResFilter(req) == nil {
 		return
 	}
-
-	r.queue.Append(nReq)
+	r.queue.Append(req)
 }
 
 // OutputNames implements the FQDNManager interface.
