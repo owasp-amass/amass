@@ -72,8 +72,6 @@ func (r *Robtex) OnASNRequest(ctx context.Context, req *requests.ASNRequest) {
 	}
 
 	r.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, r.String())
-
 	if req.Address != "" {
 		r.executeASNAddrQuery(ctx, req.Address)
 		return

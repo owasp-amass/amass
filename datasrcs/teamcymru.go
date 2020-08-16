@@ -64,16 +64,12 @@ func (t *TeamCymru) OnASNRequest(ctx context.Context, req *requests.ASNRequest) 
 	}
 
 	t.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, t.String())
-
 	r := t.origin(ctx, req.Address)
 	if r == nil {
 		return
 	}
 
 	t.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, t.String())
-
 	asn := t.asnLookup(ctx, r.ASN)
 	if asn == nil {
 		return
