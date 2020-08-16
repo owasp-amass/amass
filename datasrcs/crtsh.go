@@ -112,12 +112,7 @@ func (c *Crtsh) executeQuery(ctx context.Context, domain string) {
 	}
 
 	for name := range names {
-		bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
-			Name:   name,
-			Domain: domain,
-			Tag:    c.SourceType,
-			Source: c.String(),
-		})
+		genNewNameEvent(ctx, c.sys, c, name)
 	}
 }
 
@@ -144,12 +139,7 @@ func (c *Crtsh) scrape(ctx context.Context, domain string) {
 		return
 	}
 	for _, line := range results {
-		bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
-			Name:   line.Name,
-			Domain: domain,
-			Tag:    c.SourceType,
-			Source: c.String(),
-		})
+		genNewNameEvent(ctx, c.sys, c, line.Name)
 	}
 }
 

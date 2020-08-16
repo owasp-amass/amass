@@ -9,6 +9,7 @@ import (
 	"github.com/OWASP/Amass/v3/graphdb"
 	"github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/requests"
+	"github.com/OWASP/Amass/v3/stringset"
 )
 
 // InsertAS adds/updates an autonomous system in the graph.
@@ -98,7 +99,8 @@ func (g *Graph) nodeDescription(node graphdb.Node) string {
 	return ""
 }
 
-func (g *Graph) asnCacheFill(cache *net.ASNCache) error {
+// ASNCacheFill populates an ASNCache object with the AS data in the receiver object.
+func (g *Graph) ASNCacheFill(cache *net.ASNCache) error {
 	nodes, err := g.AllNodesOfType("as")
 	if err != nil {
 		return err
@@ -115,12 +117,17 @@ func (g *Graph) asnCacheFill(cache *net.ASNCache) error {
 		}
 
 		for _, edge := range edges {
+			netblock := stringset.New()
 			cidr := g.db.NodeToID(edge.To)
 
+			netblock.Insert(cidr)
 			cache.Update(&requests.ASNRequest{
 				ASN:         asn,
 				Prefix:      cidr,
+				Netblocks:   netblock,
 				Description: desc,
+				Tag:         requests.RIR,
+				Source:      g.String(),
 			})
 		}
 	}

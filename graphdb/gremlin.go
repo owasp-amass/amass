@@ -41,20 +41,22 @@ func NewGremlin(url, user, pass string) *Gremlin {
 func (g *Gremlin) getClient() (*grammes.Client, error) {
 	if g.username != "" && g.password != "" {
 		return grammes.DialWithWebSocket(g.URL,
-			grammes.WithMaxConcurrentMessages(4),
+			grammes.WithMaxConcurrentMessages(10),
 			grammes.WithAuthUserPass(g.username, g.password))
 	}
 
 	return grammes.DialWithWebSocket(g.URL,
-		grammes.WithMaxConcurrentMessages(4))
+		grammes.WithMaxConcurrentMessages(10))
 }
 
 func (g *Gremlin) client() *grammes.Client {
 	g.Lock()
 	defer g.Unlock()
 
+	var err error
 	if g.clientConn == nil || g.clientConn.IsBroken() {
-		g.clientConn, _ = g.getClient()
+		g.clientConn, err = g.getClient()
+		fmt.Printf("%v\n", err)
 	}
 
 	return g.clientConn
@@ -62,7 +64,11 @@ func (g *Gremlin) client() *grammes.Client {
 
 // Close implements the GraphDatabase interface.
 func (g *Gremlin) Close() {
-	return
+	if g.clientConn == nil {
+		return
+	}
+
+	g.clientConn.Close()
 }
 
 // String returns a description for the Gremlin client object.

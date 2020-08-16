@@ -52,12 +52,13 @@ func (ds *DNSService) Type() string {
 
 // OnDNSRequest implements the Service interface.
 func (ds *DNSService) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
-	ds.sys.Config().SemMaxDNSQueries.Acquire(1)
-	go ds.processDNSRequest(ctx, req)
+	if ds.sys.PerformDNSQuery(ctx) == nil {
+		go ds.processDNSRequest(ctx, req)
+	}
 }
 
 func (ds *DNSService) processDNSRequest(ctx context.Context, req *requests.DNSRequest) {
-	defer ds.sys.Config().SemMaxDNSQueries.Release(1)
+	defer ds.sys.FinishedDNSQuery()
 
 	if req == nil || req.Name == "" || req.Domain == "" {
 		return
@@ -69,12 +70,11 @@ func (ds *DNSService) processDNSRequest(ctx context.Context, req *requests.DNSRe
 		return
 	}
 
-	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, ds.String())
-
-	if cfg.Blacklisted(req.Name) || (!requests.TrustedTag(req.Tag) &&
-		ds.sys.Pool().GetWildcardType(ctx, req) == resolvers.WildcardTypeDynamic) {
+	if cfg.Blacklisted(req.Name) {
 		return
 	}
+
+	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, ds.String())
 
 	// Is this a root domain name?
 	if req.Name == req.Domain {
@@ -83,7 +83,6 @@ func (ds *DNSService) processDNSRequest(ctx context.Context, req *requests.DNSRe
 	}
 
 	req.Records = ds.queryInitialTypes(ctx, req)
-
 	if len(req.Records) > 0 {
 		ds.resolvedName(ctx, req)
 	}
@@ -152,8 +151,7 @@ func (ds *DNSService) processSubdomain(ctx context.Context, req *requests.DNSReq
 		return
 	}
 
-	if cfg.Blacklisted(req.Name) || (!requests.TrustedTag(req.Tag) &&
-		ds.sys.Pool().GetWildcardType(ctx, req) == resolvers.WildcardTypeDynamic) {
+	if cfg.Blacklisted(req.Name) {
 		return
 	}
 
@@ -169,7 +167,6 @@ func (ds *DNSService) subdomainQueries(ctx context.Context, req *requests.DNSReq
 	}
 
 	answers := ds.queryInitialTypes(ctx, req)
-
 	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, ds.String())
 	// Obtain the DNS answers for the NS records related to the domain
 	if ans, _, err := ds.sys.Pool().Resolve(ctx, req.Name, "NS", resolvers.PriorityHigh); err == nil {
@@ -181,7 +178,7 @@ func (ds *DNSService) subdomainQueries(ctx context.Context, req *requests.DNSReq
 				go ds.attemptZoneWalk(ctx, req.Name, a.Data)
 				go ds.attemptZoneXFR(ctx, req.Name, req.Domain, a.Data)
 			} else {
-				go ds.attemptZoneXFR(ctx, req.Name, req.Domain, "")
+				go ds.attemptZoneWalk(ctx, req.Name, "")
 			}
 			answers = append(answers, a)
 		}

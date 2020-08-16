@@ -195,20 +195,20 @@ func runEnumCommand(clArgs []string) {
 
 	wg.Add(1)
 	// This goroutine will handle printing the output
-	printOutChan := make(chan *requests.Output, 1000)
+	printOutChan := make(chan *requests.Output, 10)
 	go printOutput(e, args, printOutChan, &wg)
 	outChans = append(outChans, printOutChan)
 
 	wg.Add(1)
 	// This goroutine will handle saving the output to the text file
-	txtOutChan := make(chan *requests.Output, 1000)
+	txtOutChan := make(chan *requests.Output, 10)
 	go saveTextOutput(e, args, txtOutChan, &wg)
 	outChans = append(outChans, txtOutChan)
 
 	if !args.Options.Passive {
 		wg.Add(1)
 		// This goroutine will handle saving the output to the JSON file
-		jsonOutChan := make(chan *requests.Output, 1000)
+		jsonOutChan := make(chan *requests.Output, 10)
 		go saveJSONOutput(e, args, jsonOutChan, &wg)
 		outChans = append(outChans, jsonOutChan)
 	}
@@ -465,10 +465,10 @@ func processOutput(e *enum.Enumeration, outputs []chan *requests.Output, done ch
 	defer wg.Done()
 
 	// This filter ensures that we only get new names
-	known := stringfilter.NewBloomFilter(1 << 24)
+	known := stringfilter.NewBloomFilter(1 << 22)
 	// The function that obtains output from the enum and puts it on the channel
-	extract := func() {
-		for _, o := range e.ExtractOutput(known) {
+	extract := func(asinfo bool) {
+		for _, o := range e.ExtractOutput(known, asinfo) {
 			if !e.Config.IsDomainInScope(o.Name) {
 				continue
 			}
@@ -479,6 +479,7 @@ func processOutput(e *enum.Enumeration, outputs []chan *requests.Output, done ch
 		}
 	}
 
+	var count int
 	t := time.NewTimer(15 * time.Second)
 loop:
 	for {
@@ -486,8 +487,15 @@ loop:
 		case <-done:
 			break loop
 		case <-t.C:
+			count++
+			asinfo := true
+			if count%5 == 0 {
+				asinfo = false
+				count = 0
+			}
+
 			started := time.Now()
-			extract()
+			extract(asinfo)
 			next := time.Now().Sub(started) * 5
 			if next < 3*time.Second {
 				next = 3 * time.Second
@@ -499,7 +507,7 @@ loop:
 	}
 
 	// Check one last time
-	extract()
+	extract(false)
 	// Signal all the other goroutines to terminate
 	for _, ch := range outputs {
 		close(ch)

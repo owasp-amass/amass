@@ -150,6 +150,10 @@ Did you write a blog post, magazine article or do a podcast about or mentioning 
 
 ## Lectures and Trainings
 
+* [OWASP Amass Boot Camp Training](https://www.youtube.com/c/RedTeamVillage/featured)
+  by Jeff Foley,
+  [DEF CON 28 Red Team Village](https://redteamvillage.io/),
+  07.08.2020
 * [OWASP Portland Training Day](https://wiki.owasp.org/index.php/OWASP_Portland_2019_Training_Day):
   * [OWASP Amass: Discovering Your Exposure on the Internet](https://wiki.owasp.org/index.php/OWASP_Portland_2019_Training_Day)
 * [Blackhat Trainings](https://www.blackhat.com/trainings/):

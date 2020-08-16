@@ -11,26 +11,39 @@ function start()
 end
 
 function vertical(ctx, domain)
+    local resp
     local hdrs = {['Content-Type']="application/json"}
 
-    local page, err = request({
-        url=buildurl(domain),
-        headers=hdrs,
-    })
-    if (err ~= nil and err ~= '') then
+    -- Check if the response data is in the graph database
+    if (api ~= nil and api.ttl ~= nil and api.ttl > 0) then
+        resp = obtain_response(domain, api.ttl)
+    end
+
+    if (resp == nil or resp == "") then
+        local err
+        resp, err = request({
+            url=buildurl(domain),
+            headers=hdrs,
+        })
+        if (err ~= nil and err ~= "") then
+            return
+        end
+
+        if (api ~= nil and api.ttl ~= nil and api.ttl > 0) then
+            cache_response(domain, resp)
+        end
+    end
+
+    local d = json.decode(resp)
+    if (d == nil or d.response_code ~= "1" or #(d.subdomains) == 0) then
         return
     end
 
-    local resp = json.decode(page)
-    if (resp == nil or resp.response_code ~= "1" or #(resp.subdomains) == 0) then
-        return
-    end
-
-    for i, sub in pairs(resp.subdomains) do
+    for i, sub in pairs(d.subdomains) do
         sendnames(ctx, sub)
     end
 
-    for i, tb in pairs(resp.resolutions) do
+    for i, tb in pairs(d.resolutions) do
         newaddr(ctx, tb.ip_address, domain)
     end
 end

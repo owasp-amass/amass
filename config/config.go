@@ -17,7 +17,6 @@ import (
 
 	"github.com/OWASP/Amass/v3/format"
 	"github.com/OWASP/Amass/v3/net/dns"
-	"github.com/OWASP/Amass/v3/semaphore"
 	"github.com/OWASP/Amass/v3/stringset"
 	"github.com/OWASP/Amass/v3/wordlist"
 	"github.com/go-ini/ini"
@@ -65,9 +64,6 @@ type Config struct {
 
 	// The maximum number of concurrent DNS queries
 	MaxDNSQueries int `ini:"maximum_dns_queries"`
-
-	// Semaphore to enforce the maximum DNS queries
-	SemMaxDNSQueries semaphore.Semaphore
 
 	// Names provided to seed the enumeration
 	ProvidedNames []string
@@ -175,7 +171,6 @@ func NewConfig() *Config {
 		Recursive:      true,
 	}
 
-	c.SemMaxDNSQueries = semaphore.NewSimpleSemaphore(c.MaxDNSQueries)
 	return c
 }
 
@@ -374,11 +369,11 @@ func (c *Config) AddResolver(resolver string) {
 	}
 
 	c.Resolvers = stringset.Deduplicate(append(c.Resolvers, resolver))
-	c.calcDNSQueriesSemMax()
+	c.calcDNSQueriesMax()
 }
 
-func (c *Config) calcDNSQueriesSemMax() {
-	max := len(c.Resolvers) * 1000
+func (c *Config) calcDNSQueriesMax() {
+	max := len(c.Resolvers) * 500
 
 	if max < 500 {
 		max = 500
@@ -386,8 +381,7 @@ func (c *Config) calcDNSQueriesSemMax() {
 		max = 100000
 	}
 
-	c.SemMaxDNSQueries.Stop()
-	c.SemMaxDNSQueries = semaphore.NewSimpleSemaphore(max)
+	c.MaxDNSQueries = max
 }
 
 // AddAPIKey adds the data source and API key association provided to the configuration.
