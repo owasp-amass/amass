@@ -4,10 +4,8 @@
 package enum
 
 import (
-	"context"
 	"net"
 	"strings"
-	"time"
 
 	"github.com/OWASP/Amass/v3/eventbus"
 	amassnet "github.com/OWASP/Amass/v3/net"
@@ -18,7 +16,7 @@ import (
 	"github.com/miekg/dns"
 )
 
-type asnChanMsg struct {
+type addrMsg struct {
 	Req      *requests.AddrRequest
 	Resolved bool
 }
@@ -26,28 +24,19 @@ type asnChanMsg struct {
 // AddressManager handles the investigation of addresses associated with newly resolved FQDNs.
 type AddressManager struct {
 	enum        *Enumeration
-	revQueue    *queue.Queue
-	resQueue    *queue.Queue
-	revFilter   stringfilter.Filter
-	resFilter   stringfilter.Filter
+	queue       *queue.Queue
+	filter      stringfilter.Filter
 	sweepFilter stringfilter.Filter
-	asnReqQueue *queue.Queue
 }
 
 // NewAddressManager returns an initialized AddressManager.
 func NewAddressManager(e *Enumeration) *AddressManager {
-	am := &AddressManager{
+	return &AddressManager{
 		enum:        e,
-		revQueue:    queue.NewQueue(),
-		resQueue:    queue.NewQueue(),
-		revFilter:   stringfilter.NewStringFilter(),
-		resFilter:   stringfilter.NewStringFilter(),
+		queue:       queue.NewQueue(),
+		filter:      stringfilter.NewBloomFilter(1 << 16),
 		sweepFilter: stringfilter.NewBloomFilter(1 << 16),
-		asnReqQueue: queue.NewQueue(),
 	}
-
-	go am.lookupASNInfo()
-	return am
 }
 
 // InputName implements the FQDNManager interface.
@@ -58,7 +47,6 @@ func (r *AddressManager) InputName(req *requests.DNSRequest) {
 
 	// Clean up the newly discovered name and domain
 	requests.SanitizeDNSRequest(req)
-
 	// Add addresses that are relevant to the enumeration
 	if !r.enum.hasCNAMERecord(req) && r.enum.hasARecords(req) {
 		for _, rec := range req.Records {
@@ -73,17 +61,21 @@ func (r *AddressManager) InputName(req *requests.DNSRequest) {
 }
 
 func (r *AddressManager) addResolvedAddr(addr, domain string) {
-	if r.resFilter.Duplicate(addr) {
+	if r.filter.Duplicate(addr) {
 		return
 	}
 
-	r.asnReqQueue.Append(&asnChanMsg{
-		Req: &requests.AddrRequest{
-			Address: addr,
-			Domain:  domain,
-		},
-		Resolved: true,
-	})
+	// Perform additional investigation of this address if
+	// the associated domain is in scope
+	if domain != "" && r.enum.Config.IsDomainInScope(domain) {
+		r.queue.Append(&addrMsg{
+			Req: &requests.AddrRequest{
+				Address: addr,
+				Domain:  domain,
+			},
+			Resolved: true,
+		})
+	}
 }
 
 // OutputNames implements the FQDNManager interface.
@@ -99,14 +91,18 @@ func (r *AddressManager) InputAddress(req *requests.AddrRequest) {
 	}
 
 	// Have we already processed this address?
-	if r.revFilter.Duplicate(req.Address) {
+	if r.filter.Duplicate(req.Address) {
 		return
 	}
 
-	r.asnReqQueue.Append(&asnChanMsg{
-		Req:      req,
-		Resolved: false,
-	})
+	// Perform additional investigation of this address if
+	// the associated domain is in scope
+	if req.Domain != "" && r.enum.Config.IsDomainInScope(req.Domain) {
+		r.queue.Append(&addrMsg{
+			Req:      req,
+			Resolved: false,
+		})
+	}
 }
 
 // NameQueueLen implements the FQDNManager interface.
@@ -121,22 +117,17 @@ func (r *AddressManager) OutputRequests(num int) int {
 	}
 
 	var count int
-	for count < num {
-		resolved := true
+	element, ok := r.queue.Next()
+	for ok {
+		msg := element.(*addrMsg)
+		go r.processAddress(msg.Req, msg.Resolved)
 
-		element, ok := r.resQueue.Next()
-		if !ok {
-			resolved = false
-			element, ok = r.revQueue.Next()
-
-			if !ok {
-				break
-			}
+		count++
+		if count >= num {
+			break
 		}
 
-		req := element.(*requests.AddrRequest)
-		go r.processAddress(req, resolved)
-		count++
+		element, ok = r.queue.Next()
 	}
 
 	return count
@@ -144,103 +135,34 @@ func (r *AddressManager) OutputRequests(num int) int {
 
 // RequestQueueLen implements the FQDNManager interface.
 func (r *AddressManager) RequestQueueLen() int {
-	return r.resQueue.Len() + r.revQueue.Len()
+	return r.queue.Len()
 }
 
 // Stop implements the FQDNManager interface.
 func (r *AddressManager) Stop() error {
-	r.revQueue = queue.NewQueue()
-	r.resQueue = queue.NewQueue()
-	r.revFilter = stringfilter.NewStringFilter()
-	r.resFilter = stringfilter.NewStringFilter()
+	r.queue = queue.NewQueue()
+	r.filter = stringfilter.NewBloomFilter(1 << 16)
 	r.sweepFilter = stringfilter.NewBloomFilter(1 << 16)
 	return nil
 }
 
-func (r *AddressManager) lookupASNInfo() {
-	for {
-		select {
-		case <-r.enum.done:
-			return
-		case <-r.asnReqQueue.Signal:
-			e, found := r.asnReqQueue.Next()
-
-			for found {
-				msg := e.(*asnChanMsg)
-
-				r.addToCachePlusDatabase(msg.Req)
-				if msg.Resolved {
-					r.resQueue.Append(msg.Req)
-				} else {
-					r.revQueue.Append(msg.Req)
-				}
-
-				e, found = r.asnReqQueue.Next()
-			}
-		}
-	}
-}
-
-func (r *AddressManager) addToCachePlusDatabase(req *requests.AddrRequest) {
-	// Get the ASN / netblock information associated with this IP address
-	asn := r.enum.netCache.AddrSearch(req.Address)
-	if asn == nil {
-		wait := 3 * time.Second
-
-		// Query the data sources for ASN information related to this IP address
-		r.enum.asnRequestAllSources(&requests.ASNRequest{Address: req.Address})
-		r.enum.Bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, "AddressManager")
-		time.Sleep(wait)
-		asn = r.enum.netCache.AddrSearch(req.Address)
-		for i := 0; asn == nil && i < 10; i++ {
-			r.enum.Bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, "AddressManager")
-			time.Sleep(wait)
-			asn = r.enum.netCache.AddrSearch(req.Address)
-		}
-	}
-
-	if asn != nil {
-		// Write the ASN information to the graph databases
-		r.enum.dataMgr.ASNRequest(r.enum.ctx, asn)
-	}
-}
-
 func (r *AddressManager) processAddress(req *requests.AddrRequest, resolved bool) {
-	// Perform the reverse DNS sweep if the IP address is in scope
-	if !r.enum.Config.IsDomainInScope(req.Domain) {
-		return
-	}
-
-	// Get the ASN / netblock information associated with this IP address
-	asn := r.enum.netCache.AddrSearch(req.Address)
-	if asn == nil {
-		for i := 0; asn == nil && i < 10; i++ {
-			r.enum.Bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, "AddressManager")
-			time.Sleep(3 * time.Second)
-			asn = r.enum.netCache.AddrSearch(req.Address)
-		}
-
-		if asn == nil {
-			return
-		}
-	}
-
-	if _, cidr, _ := net.ParseCIDR(asn.Prefix); cidr != nil {
-		r.reverseDNSSweep(req.Address, cidr)
-	}
+	r.enum.asMgr.AddrRequest(r.enum.ctx, req)
+	r.reverseDNSSweep(req.Address)
 
 	if r.enum.Config.Active && resolved {
 		r.enum.namesFromCertificates(req.Address)
 	}
 }
 
-func (r *AddressManager) reverseDNSSweep(addr string, cidr *net.IPNet) {
+func (r *AddressManager) reverseDNSSweep(addr string) {
 	// Does the address fall into a reserved address range?
 	if yes, _ := amassnet.IsReservedAddress(addr); yes {
 		return
 	}
 
 	var ips []net.IP
+	cidr := r.enum.getAddrCIDR(addr)
 	// Get information about nearby IP addresses
 	if r.enum.Config.Active {
 		ips = amassnet.CIDRSubset(cidr, addr, 500)
@@ -255,26 +177,35 @@ func (r *AddressManager) reverseDNSSweep(addr string, cidr *net.IPNet) {
 			continue
 		}
 
-		r.enum.Sys.PerformDNSQuery(context.TODO())
-		go r.enum.reverseDNSQuery(a)
+		r.enum.Sys.PerformDNSQuery(r.enum.ctx)
+		r.enum.reverseDNSQuery(a)
+		r.enum.Sys.FinishedDNSQuery()
 	}
 }
 
-func (e *Enumeration) asnRequestAllSources(req *requests.ASNRequest) {
-	// If data sources cannot assist in the next 2 minutes, the
-	// request will be cancelled
-	ctx, _ := context.WithTimeout(e.ctx, 30*time.Second)
+func (e *Enumeration) getAddrCIDR(addr string) *net.IPNet {
+	if r := e.asMgr.Cache.AddrSearch(addr); r != nil {
+		if _, cidr, err := net.ParseCIDR(r.Prefix); err == nil {
+			return cidr
+		}
+	}
 
-	// All data sources will be employed, since this is required,
-	// no matter what the user selects
-	for _, src := range e.Sys.DataSources() {
-		src.ASNRequest(ctx, req)
+	var mask net.IPMask
+	ip := net.ParseIP(addr)
+	if amassnet.IsIPv6(ip) {
+		mask = net.CIDRMask(64, 128)
+	} else {
+		mask = net.CIDRMask(18, 32)
+	}
+	ip = ip.Mask(mask)
+
+	return &net.IPNet{
+		IP:   ip,
+		Mask: mask,
 	}
 }
 
 func (e *Enumeration) reverseDNSQuery(ip string) {
-	defer e.Sys.FinishedDNSQuery()
-
 	ptr, answer, err := e.Sys.Pool().Reverse(e.ctx, ip, resolvers.PriorityLow)
 	if err != nil {
 		return

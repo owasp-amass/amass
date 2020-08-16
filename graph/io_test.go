@@ -17,7 +17,7 @@ func TestIO(t *testing.T) {
 
 		t.Run("Testing GetOutput...", func(t *testing.T) {
 
-			got := g.EventOutput(tt.EventID, nil, nil)
+			got := g.EventOutput(tt.EventID, nil, false, nil)
 			if got != nil {
 				t.Errorf("Failed to get output.\nOutput:%v", got)
 			}

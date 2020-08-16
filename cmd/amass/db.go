@@ -5,6 +5,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -16,12 +17,15 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/v3/config"
+	"github.com/OWASP/Amass/v3/datasrcs"
+	"github.com/OWASP/Amass/v3/eventbus"
 	"github.com/OWASP/Amass/v3/format"
 	"github.com/OWASP/Amass/v3/graph"
 	"github.com/OWASP/Amass/v3/graphdb"
+	"github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/requests"
-	"github.com/OWASP/Amass/v3/stringfilter"
 	"github.com/OWASP/Amass/v3/stringset"
+	"github.com/OWASP/Amass/v3/systems"
 	"github.com/fatih/color"
 )
 
@@ -167,6 +171,10 @@ func runDBCommand(clArgs []string) {
 	// Select the enumeration that the user specified
 	if args.Enum > 0 && len(uuids) > args.Enum {
 		uuids = []string{uuids[args.Enum]}
+	}
+
+	if args.Options.ASNTableSummary {
+		healASInfo(uuids, db)
 	}
 
 	// Create the in-memory graph database
@@ -370,12 +378,54 @@ func showEventData(args *dbArgs, uuids []string, db *graph.Graph) {
 	}
 }
 
+func healASInfo(uuids []string, db *graph.Graph) {
+	cache := net.NewASNCache()
+	db.ASNCacheFill(cache)
+
+	cfg := config.NewConfig()
+	cfg.LocalDatabase = false
+	sys, err := systems.NewLocalSystem(cfg)
+	if err != nil {
+		return
+	}
+	sys.SetDataSources(datasrcs.GetAllSources(sys))
+	defer sys.Shutdown()
+
+	bus := eventbus.NewEventBus()
+	bus.Subscribe(requests.NewASNTopic, cache.Update)
+	defer bus.Unsubscribe(requests.NewASNTopic, cache.Update)
+	ctx := context.WithValue(context.Background(), requests.ContextConfig, cfg)
+	ctx = context.WithValue(ctx, requests.ContextEventBus, bus)
+
+	for _, uuid := range uuids {
+		for _, out := range db.EventOutput(uuid, nil, false, cache) {
+			for _, a := range out.Addresses {
+				if r := cache.AddrSearch(a.Address.String()); r != nil {
+					db.InsertInfrastructure(r.ASN, r.Description, r.Address, r.Prefix, r.Source, r.Tag, uuid)
+					continue
+				}
+
+				for _, src := range sys.DataSources() {
+					src.ASNRequest(ctx, &requests.ASNRequest{Address: a.Address.String()})
+				}
+
+				for cache.AddrSearch(a.Address.String()) == nil {
+					time.Sleep(time.Second)
+				}
+
+				if r := cache.AddrSearch(a.Address.String()); r != nil {
+					db.InsertInfrastructure(r.ASN, r.Description, r.Address, r.Prefix, r.Source, r.Tag, uuid)
+				}
+			}
+		}
+	}
+}
+
 func getEventOutput(uuids []string, db *graph.Graph) []*requests.Output {
 	var output []*requests.Output
-	filter := stringfilter.NewStringFilter()
 
 	for i := len(uuids) - 1; i >= 0; i-- {
-		for _, out := range db.EventOutput(uuids[i], filter, nil) {
+		for _, out := range db.EventOutput(uuids[i], nil, true, nil) {
 			output = append(output, out)
 		}
 	}

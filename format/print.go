@@ -65,6 +65,10 @@ func UpdateSummaryData(output *requests.Output, tags map[string]int, asns map[in
 	tags[output.Tag]++
 
 	for _, addr := range output.Addresses {
+		if addr.Netblock == nil {
+			continue
+		}
+
 		data, found := asns[addr.ASN]
 		if !found {
 			asns[addr.ASN] = &ASNSummaryData{

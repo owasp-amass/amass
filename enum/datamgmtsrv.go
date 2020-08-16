@@ -139,29 +139,6 @@ func (dms *DataManagerService) processNewName(ctx context.Context, name, domain 
 	})
 }
 
-// OnASNRequest implements the Service interface.
-func (dms *DataManagerService) OnASNRequest(ctx context.Context, req *requests.ASNRequest) {
-	if req.Address == "" || req.Prefix == "" || req.Description == "" {
-		return
-	}
-
-	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if cfg == nil || bus == nil {
-		return
-	}
-
-	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, dms.String())
-
-	err := dms.graph.InsertInfrastructure(req.ASN, req.Description,
-		req.Address, req.Prefix, req.Source, req.Tag, cfg.UUID.String())
-	if err != nil {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
-			fmt.Sprintf("%s: %s failed to insert infrastructure data: %v", dms.String(), dms.graph, err),
-		)
-	}
-}
-
 func (dms *DataManagerService) insertCNAME(ctx context.Context, req *requests.DNSRequest, recidx int) {
 	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
 	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)

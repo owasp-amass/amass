@@ -32,7 +32,7 @@ func main() {
 	defer e.Close()
 
 	e.Start()
-	for _, o := range e.ExtractOutput(nil) {
+	for _, o := range e.ExtractOutput(nil, false) {
 		fmt.Println(o.Name)
 	}
 }
