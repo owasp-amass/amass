@@ -15,7 +15,6 @@ import (
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/graph"
 	"github.com/OWASP/Amass/v3/requests"
-	"github.com/OWASP/Amass/v3/stringfilter"
 	"github.com/OWASP/Amass/v3/stringset"
 	"github.com/fatih/color"
 )
@@ -203,16 +202,7 @@ func runTrackCommand(clArgs []string) {
 
 func cumulativeOutput(uuids, domains []string, ea, la []time.Time, db *graph.Graph) {
 	idx := len(uuids) - 1
-	filter := stringfilter.NewStringFilter()
-
-	var cum []*requests.Output
-	for i := idx - 1; i >= 0; i-- {
-		for _, out := range getEventOutput([]string{uuids[i]}, db) {
-			if domainNameInScope(out.Name, domains) && !filter.Duplicate(out.Name) {
-				cum = append(cum, out)
-			}
-		}
-	}
+	cum := getScopedOutput(uuids[:idx], domains, db)
 
 	blueLine()
 	fmt.Fprintf(color.Output, "%s\t%s%s%s\n%s\t%s%s%s\n", blue("Between"),
@@ -297,16 +287,16 @@ func diffEnumOutput(out1, out2 []*requests.Output) []string {
 
 	handled := make(map[string]struct{})
 	var diff []string
-	for _, o := range out1 {
+	for _, o := range out2 {
 		handled[o.Name] = struct{}{}
 
-		if _, found := omap2[o.Name]; !found {
+		if _, found := omap1[o.Name]; !found {
 			diff = append(diff, fmt.Sprintf("%s%s %s", blue("Found: "),
 				green(o.Name), yellow(lineOfAddresses(o.Addresses))))
 			continue
 		}
 
-		o2 := omap2[o.Name]
+		o2 := omap1[o.Name]
 		if !compareAddresses(o.Addresses, o2.Addresses) {
 			diff = append(diff, fmt.Sprintf("%s%s\n\t%s\t%s\n\t%s\t%s", blue("Moved: "),
 				green(o.Name), blue(" from "), yellow(lineOfAddresses(o2.Addresses)),
@@ -314,16 +304,17 @@ func diffEnumOutput(out1, out2 []*requests.Output) []string {
 		}
 	}
 
-	for _, o := range out2 {
+	for _, o := range out1 {
 		if _, found := handled[o.Name]; found {
 			continue
 		}
 
-		if _, found := omap1[o.Name]; !found {
+		if _, found := omap2[o.Name]; !found {
 			diff = append(diff, fmt.Sprintf("%s%s %s", blue("Removed: "),
 				green(o.Name), yellow(lineOfAddresses(o.Addresses))))
 		}
 	}
+
 	return diff
 }
 

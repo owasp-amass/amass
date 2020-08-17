@@ -5,27 +5,16 @@ package main
 
 import (
 	"bytes"
-	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
-	"sort"
-	"strings"
-	"time"
 
 	"github.com/OWASP/Amass/v3/config"
-	"github.com/OWASP/Amass/v3/datasrcs"
-	"github.com/OWASP/Amass/v3/eventbus"
 	"github.com/OWASP/Amass/v3/format"
 	"github.com/OWASP/Amass/v3/graph"
-	"github.com/OWASP/Amass/v3/graphdb"
-	"github.com/OWASP/Amass/v3/net"
-	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/stringset"
-	"github.com/OWASP/Amass/v3/systems"
 	"github.com/fatih/color"
 )
 
@@ -187,30 +176,6 @@ func runDBCommand(clArgs []string) {
 	showEventData(&args, uuids, memDB)
 }
 
-func openGraphDatabase(dir string, cfg *config.Config) *graph.Graph {
-	// Attempt to connect to a Gremlin Amass graph database
-	if cfg.GremlinURL != "" {
-		gremlin := graphdb.NewGremlin(cfg.GremlinURL, cfg.GremlinUser, cfg.GremlinPass)
-
-		if gremlin != nil {
-			if g := graph.NewGraph(gremlin); g != nil {
-				return g
-			}
-		}
-	}
-
-	// Check that the graph database directory exists
-	if d := config.OutputDirectory(dir); d != "" {
-		if finfo, err := os.Stat(d); !os.IsNotExist(err) && finfo.IsDir() {
-			if g := graph.NewGraph(graphdb.NewCayleyGraph(d, false)); g != nil {
-				return g
-			}
-		}
-	}
-
-	return nil
-}
-
 func listEvents(args *dbArgs, db *graph.Graph) {
 	domains := args.Domains.Slice()
 	events := eventUUIDs(domains, db)
@@ -237,75 +202,6 @@ func listEvents(args *dbArgs, db *graph.Graph) {
 		}
 		g.Println()
 	}
-}
-
-func memGraphForEvents(uuids []string, from *graph.Graph) (*graph.Graph, error) {
-	db := graph.NewGraph(graphdb.NewCayleyGraphMemory())
-	if db == nil {
-		return nil, errors.New("Failed to create the in-memory graph database")
-	}
-
-	// Migrate the event data into the in-memory graph database
-	if err := migrateAllEvents(uuids, from, db); err != nil {
-		return nil, fmt.Errorf("Failed to move the data into the in-memory graph database: %v", err)
-	}
-
-	return db, nil
-}
-
-func orderedEvents(events []string, db *graph.Graph) ([]string, []time.Time, []time.Time) {
-	sort.Slice(events, func(i, j int) bool {
-		var less bool
-
-		e1, l1 := db.EventDateRange(events[i])
-		e2, l2 := db.EventDateRange(events[j])
-		if l1.After(l2) || e2.Before(e1) {
-			less = true
-		}
-		return less
-	})
-
-	var earliest, latest []time.Time
-	for _, event := range events {
-		e, l := db.EventDateRange(event)
-
-		earliest = append(earliest, e)
-		latest = append(latest, l)
-	}
-
-	return events, earliest, latest
-}
-
-// Obtain the enumeration IDs that include the provided domain
-func eventUUIDs(domains []string, db *graph.Graph) []string {
-	var uuids []string
-
-	for _, id := range db.EventList() {
-		if len(domains) == 0 {
-			uuids = append(uuids, id)
-			continue
-		}
-
-		surface := db.EventDomains(id)
-		for _, domain := range domains {
-			if domainNameInScope(domain, surface) {
-				uuids = append(uuids, id)
-				break
-			}
-		}
-	}
-
-	return uuids
-}
-
-func migrateAllEvents(uuids []string, from, to *graph.Graph) error {
-	for _, uuid := range uuids {
-		if err := from.MigrateEvent(uuid, to); err != nil {
-			return err
-		}
-	}
-
-	return nil
 }
 
 func showEventData(args *dbArgs, uuids []string, db *graph.Graph) {
@@ -376,73 +272,4 @@ func showEventData(args *dbArgs, uuids []string, db *graph.Graph) {
 		format.FprintEnumerationSummary(out, total, tags, asns, args.Options.DemoMode)
 		color.NoColor = status
 	}
-}
-
-func healASInfo(uuids []string, db *graph.Graph) {
-	cache := net.NewASNCache()
-	db.ASNCacheFill(cache)
-
-	cfg := config.NewConfig()
-	cfg.LocalDatabase = false
-	sys, err := systems.NewLocalSystem(cfg)
-	if err != nil {
-		return
-	}
-	sys.SetDataSources(datasrcs.GetAllSources(sys))
-	defer sys.Shutdown()
-
-	bus := eventbus.NewEventBus()
-	bus.Subscribe(requests.NewASNTopic, cache.Update)
-	defer bus.Unsubscribe(requests.NewASNTopic, cache.Update)
-	ctx := context.WithValue(context.Background(), requests.ContextConfig, cfg)
-	ctx = context.WithValue(ctx, requests.ContextEventBus, bus)
-
-	for _, uuid := range uuids {
-		for _, out := range db.EventOutput(uuid, nil, false, cache) {
-			for _, a := range out.Addresses {
-				if r := cache.AddrSearch(a.Address.String()); r != nil {
-					db.InsertInfrastructure(r.ASN, r.Description, r.Address, r.Prefix, r.Source, r.Tag, uuid)
-					continue
-				}
-
-				for _, src := range sys.DataSources() {
-					src.ASNRequest(ctx, &requests.ASNRequest{Address: a.Address.String()})
-				}
-
-				for cache.AddrSearch(a.Address.String()) == nil {
-					time.Sleep(time.Second)
-				}
-
-				if r := cache.AddrSearch(a.Address.String()); r != nil {
-					db.InsertInfrastructure(r.ASN, r.Description, r.Address, r.Prefix, r.Source, r.Tag, uuid)
-				}
-			}
-		}
-	}
-}
-
-func getEventOutput(uuids []string, db *graph.Graph) []*requests.Output {
-	var output []*requests.Output
-
-	for i := len(uuids) - 1; i >= 0; i-- {
-		for _, out := range db.EventOutput(uuids[i], nil, true, nil) {
-			output = append(output, out)
-		}
-	}
-	return output
-}
-
-func domainNameInScope(name string, scope []string) bool {
-	var discovered bool
-
-	n := strings.ToLower(strings.TrimSpace(name))
-	for _, d := range scope {
-		d = strings.ToLower(d)
-
-		if n == d || strings.HasSuffix(n, "."+d) {
-			discovered = true
-			break
-		}
-	}
-	return discovered
 }
