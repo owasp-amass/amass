@@ -314,7 +314,7 @@ func (r *BaseResolver) checkForTimeouts() {
 
 			// Discover requests that have timed out and remove them from the map
 			for _, id := range r.allTimeoutIDs() {
-				if req := r.pullRequestAfterTimeout(id, 5*time.Second); req != nil {
+				if req := r.pullRequestAfterTimeout(id, 2*time.Second); req != nil {
 					count++
 					removals = append(removals, id)
 					estr := fmt.Sprintf("DNS query on resolver %s, for %s type %d timed out",

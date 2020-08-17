@@ -430,7 +430,6 @@ func (r *BaseResolver) currentConnection() *dns.Conn {
 		}
 		return <-ch
 	}
-	return nil
 }
 
 func (r *BaseResolver) lastConnection() *dns.Conn {
@@ -444,5 +443,4 @@ func (r *BaseResolver) lastConnection() *dns.Conn {
 		}
 		return <-ch
 	}
-	return nil
 }
