@@ -1,4 +1,9 @@
+
 # [![OWASP Logo](./images/owasp_logo.png) OWASP Amass](https://owasp.org/www-project-amass/)
+
+<p align="center">
+  <img src="https://github.com/jhaddix/Amass-1/blob/master/doc/amass.gif">
+</p>
 
 [![OWASP Flagship](https://img.shields.io/badge/owasp-flagship%20project-48A646.svg)](https://owasp.org/projects/#sec-flagships)
 [![GitHub Release](https://img.shields.io/github/release/OWASP/Amass)](https://github.com/OWASP/Amass/releases)
