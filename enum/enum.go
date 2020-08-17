@@ -335,8 +335,10 @@ loop:
 		e.dataMgr.Stop()
 	}
 	e.writeLogs(true)
-	// Attempt to fix IP address nodes without edges to netblocks
-	e.Graph.HealAddressNodes(e.asMgr.Cache, e.Config.UUID.String())
+	if !e.Config.Passive {
+		// Attempt to fix IP address nodes without edges to netblocks
+		e.Graph.HealAddressNodes(e.asMgr.Cache, e.Config.UUID.String())
+	}
 	return nil
 }
 
