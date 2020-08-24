@@ -15,7 +15,6 @@ const (
 	// CurrentRate is an index value into the RateLimitedResolver.Stats map
 	CurrentRate = 256
 
-	defaultMaxSlack    = -2 * time.Second
 	initialRate        = 10 * time.Millisecond
 	defaultRateChange  = 1 * time.Millisecond
 	defaultSlowestRate = 25 * time.Millisecond

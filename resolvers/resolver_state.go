@@ -152,16 +152,6 @@ func (r *BaseResolver) updateStat(rcode int, value int64) {
 	}
 }
 
-func (r *BaseResolver) getStat(stat int) int64 {
-	ch := make(chan int64, 2)
-
-	r.stateChannels.GetStat <- &getResolverStat{
-		Stat: stat,
-		Ch:   ch,
-	}
-	return <-ch
-}
-
 // Stats returns performance counters.
 func (r *BaseResolver) Stats() map[int]int64 {
 	ch := make(chan map[int]int64, 2)
@@ -335,15 +325,6 @@ func (r *BaseResolver) pullRequestAfterTimeout(id uint16, timeout time.Duration)
 		r.delTimeout(id)
 	}
 	return req
-}
-
-func (r *BaseResolver) updateRequestTimeout(id uint16, timeout time.Time) {
-	r.delTimeout(id)
-	r.xchgsChannels.UpdateTimeout <- &updateTimeoutMsg{
-		ID:      id,
-		Timeout: timeout,
-	}
-	r.addTimeout(id)
 }
 
 type rotationChans struct {

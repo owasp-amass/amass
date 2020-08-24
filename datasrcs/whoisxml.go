@@ -153,5 +153,5 @@ func (w *WhoisXML) OnWhoisRequest(ctx context.Context, req *requests.WhoisReques
 }
 
 func (w *WhoisXML) getReverseWhoisURL(domain string) string {
-	return fmt.Sprint("https://reverse-whois-api.whoisxmlapi.com/api/v2")
+	return "https://reverse-whois-api.whoisxmlapi.com/api/v2"
 }

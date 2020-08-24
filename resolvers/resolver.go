@@ -205,9 +205,7 @@ func (r *BaseResolver) Available() (bool, error) {
 }
 
 // ReportError indicates to the Resolver that it delivered an erroneous response.
-func (r *BaseResolver) ReportError() {
-	return
-}
+func (r *BaseResolver) ReportError() {}
 
 // SubdomainToDomain returns the first subdomain name of the provided
 // parameter that responds to a DNS query for the NS record type.
