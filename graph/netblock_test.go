@@ -24,7 +24,7 @@ func TestNetblock(t *testing.T) {
 			if err != nil {
 				t.Errorf("Error parsing node's cidr info from netblock.\n%v\n", got)
 			}
-			if bytes.Compare(get, want) != 0 {
+			if !bytes.Equal(get, want) {
 				t.Errorf("Expected:%v\nGot:%v\n", want, get)
 			}
 		})

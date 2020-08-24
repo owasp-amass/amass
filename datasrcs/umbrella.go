@@ -418,7 +418,7 @@ func (u *Umbrella) queryReverseWhois(ctx context.Context, apiURL string) []strin
 					}
 				}
 			}
-			if result.MoreData && more == false {
+			if result.MoreData && !more {
 				more = true
 			}
 		}
