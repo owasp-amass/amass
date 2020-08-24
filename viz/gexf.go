@@ -16,14 +16,10 @@ const (
 	xmlNSVIZ string = "http://www.gephi.org/gexf/viz"
 
 	classNode string = "node"
-	classEdge string = "edge"
 
-	modeStatic  string = "static"
-	modeDynamic string = "dynamic"
+	modeStatic string = "static"
 
-	edgeTypeDirected   string = "directed"
-	edgeTypeUndirected string = "undirected"
-	edgeTypeMutual     string = "mutual"
+	edgeTypeDirected string = "directed"
 )
 
 type gexfAttrValue struct {

@@ -69,10 +69,7 @@ type testResult struct {
 
 // MatchesWildcard returns true if the request provided resolved to a DNS wildcard.
 func (r *BaseResolver) MatchesWildcard(ctx context.Context, req *requests.DNSRequest) bool {
-	if r.hasWildcard(ctx, req) == WildcardTypeNone {
-		return false
-	}
-	return true
+	return r.hasWildcard(ctx, req) != WildcardTypeNone
 }
 
 // GetWildcardType returns the DNS wildcard type for the provided subdomain name.
@@ -235,7 +232,7 @@ func (r *BaseResolver) wildcardTest(ctx context.Context, sub string) {
 		var ans []requests.DNSAnswer
 		for _, t := range wildcardQueryTypes {
 			if a, _, err := r.Resolve(ctx, name, t, PriorityCritical); err == nil {
-				if a != nil && len(a) > 0 {
+				if len(a) > 0 {
 					retRecords = true
 					ans = append(ans, a...)
 				}

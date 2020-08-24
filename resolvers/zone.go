@@ -52,9 +52,7 @@ func ZoneTransfer(sub, domain, server string) ([]*requests.DNSRequest, error) {
 			continue
 		}
 
-		for _, r := range reqs {
-			results = append(results, r)
-		}
+		results = append(results, reqs...)
 	}
 	return results, nil
 }
@@ -268,27 +266,6 @@ func removeDomainPortion(name, domain string) string {
 	}
 
 	return strings.Join(np[:plen-dlen], ".")
-}
-
-func afterDomain(name, domain string) string {
-	if name == domain {
-		return ""
-	}
-
-	dp := strings.Split(domain, ".")
-	dp = dp[:len(dp)-1]
-	dlen := len(dp)
-
-	np := strings.Split(name, ".")
-	np = np[:len(np)-1]
-	plen := len(np)
-
-	if plen <= dlen {
-		return ""
-	}
-
-	i := (plen - dlen) - 1
-	return np[i]
 }
 
 func walkMsg(id uint16, name string, qtype uint16) *dns.Msg {

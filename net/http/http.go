@@ -101,10 +101,9 @@ func RequestWebPage(urlstring string, body io.Reader, hvals map[string]string, u
 	req.Header.Set("User-Agent", UserAgent)
 	req.Header.Set("Accept", Accept)
 	req.Header.Set("Accept-Language", AcceptLang)
-	if hvals != nil {
-		for k, v := range hvals {
-			req.Header.Set(k, v)
-		}
+
+	for k, v := range hvals {
+		req.Header.Set(k, v)
 	}
 
 	resp, err := defaultClient.Do(req)

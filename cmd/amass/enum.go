@@ -37,8 +37,6 @@ const (
 	enumUsageMsg = "enum [options] -d DOMAIN"
 )
 
-var interrupted bool
-
 type enumArgs struct {
 	Addresses         format.ParseIPs
 	ASNs              format.ParseInts
@@ -501,7 +499,7 @@ loop:
 
 			started := time.Now()
 			extract(asinfo)
-			next := time.Now().Sub(started) * 5
+			next := time.Since(started) * 5
 			if next < 3*time.Second {
 				next = 3 * time.Second
 			} else if next > 10*time.Second {
@@ -525,7 +523,6 @@ func signalHandler(e *enum.Enumeration) {
 
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 	<-quit
-	interrupted = true
 	// Signal the enumeration to finish
 	e.Done()
 	// Wait for output operations to complete
@@ -736,7 +733,7 @@ func (e enumArgs) OverrideConfig(conf *config.Config) error {
 	if e.Timeout > 0 {
 		conf.Timeout = e.Timeout
 	}
-	if e.Options.Verbose == true {
+	if e.Options.Verbose {
 		conf.Verbose = true
 	}
 	if e.Resolvers.Len() > 0 {

@@ -171,14 +171,10 @@ func (rp *ResolverPool) Stats() map[int]int64 {
 }
 
 // WipeStats clears the performance counters.
-func (rp *ResolverPool) WipeStats() {
-	return
-}
+func (rp *ResolverPool) WipeStats() {}
 
 // ReportError implements the Resolver interface.
-func (rp *ResolverPool) ReportError() {
-	return
-}
+func (rp *ResolverPool) ReportError() {}
 
 // SubdomainToDomain returns the first subdomain name of the provided
 // parameter that responds to a DNS query for the NS record type.
