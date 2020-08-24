@@ -297,9 +297,7 @@ func getEventOutput(uuids []string, db *graph.Graph) []*requests.Output {
 	filter := stringfilter.NewStringFilter()
 
 	for i := len(uuids) - 1; i >= 0; i-- {
-		for _, out := range db.EventOutput(uuids[i], filter, true, cache) {
-			output = append(output, out)
-		}
+		output = append(output, db.EventOutput(uuids[i], filter, true, cache)...)
 	}
 
 	return output
