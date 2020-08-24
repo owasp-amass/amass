@@ -733,7 +733,7 @@ func (e enumArgs) OverrideConfig(conf *config.Config) error {
 	if e.Timeout > 0 {
 		conf.Timeout = e.Timeout
 	}
-	if e.Options.Verbose == true {
+	if e.Options.Verbose {
 		conf.Verbose = true
 	}
 	if e.Resolvers.Len() > 0 {

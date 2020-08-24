@@ -350,7 +350,7 @@ func (d dnsArgs) OverrideConfig(conf *config.Config) error {
 	if d.Timeout > 0 {
 		conf.Timeout = d.Timeout
 	}
-	if d.Options.Verbose == true {
+	if d.Options.Verbose {
 		conf.Verbose = true
 	}
 	if d.RecordTypes.Len() > 0 {

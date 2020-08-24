@@ -52,9 +52,7 @@ func ZoneTransfer(sub, domain, server string) ([]*requests.DNSRequest, error) {
 			continue
 		}
 
-		for _, r := range reqs {
-			results = append(results, r)
-		}
+		results = append(results, reqs...)
 	}
 	return results, nil
 }
