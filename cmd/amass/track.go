@@ -119,6 +119,7 @@ func runTrackCommand(clArgs []string) {
 	rand.Seed(time.Now().UTC().UnixNano())
 
 	cfg := new(config.Config)
+	cfg.LocalDatabase = true
 	// Check if a configuration file was provided, and if so, load the settings
 	if err := config.AcquireConfig(args.Filepaths.Directory, args.Filepaths.ConfigFile, cfg); err == nil {
 		if args.Filepaths.Directory == "" {
@@ -140,8 +141,15 @@ func runTrackCommand(clArgs []string) {
 	}
 	defer db.Close()
 
+	// Create the in-memory graph database
+	memDB, err := memGraphForScope(args.Domains.Slice(), db)
+	if err != nil {
+		r.Fprintln(color.Error, err.Error())
+		os.Exit(1)
+	}
+
 	// Get all the UUIDs for events that have information in scope
-	uuids := eventUUIDs(args.Domains.Slice(), db)
+	uuids := eventUUIDs(args.Domains.Slice(), memDB)
 	if len(uuids) == 0 {
 		r.Fprintln(color.Error, "Failed to find the domains of interest in the database")
 		os.Exit(1)
@@ -149,7 +157,7 @@ func runTrackCommand(clArgs []string) {
 
 	var earliest, latest []time.Time
 	// Put the events in chronological order
-	uuids, earliest, latest = orderedEvents(uuids, db)
+	uuids, earliest, latest = orderedEvents(uuids, memDB)
 	if len(uuids) == 0 {
 		r.Fprintln(color.Error, "Failed to sort the events")
 		os.Exit(1)
@@ -185,13 +193,6 @@ func runTrackCommand(clArgs []string) {
 	uuids = uuids[:end]
 	earliest = earliest[:end]
 	latest = latest[:end]
-
-	// Create the in-memory graph database
-	memDB, err := memGraphForEvents(uuids, db)
-	if err != nil {
-		r.Fprintln(color.Error, err.Error())
-		os.Exit(1)
-	}
 
 	if args.Options.History {
 		completeHistoryOutput(uuids, args.Domains.Slice(), earliest, latest, memDB)

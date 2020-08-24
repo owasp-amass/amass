@@ -7,13 +7,14 @@ import (
 	"errors"
 	"time"
 
-	"github.com/OWASP/Amass/v3/graphdb"
 	"github.com/OWASP/Amass/v3/stringset"
+	"github.com/cayleygraph/cayley"
+	"github.com/cayleygraph/quad"
 	"golang.org/x/net/publicsuffix"
 )
 
 // InsertEvent create an event node in the graph that represents a discovery task.
-func (g *Graph) InsertEvent(eventID string) (graphdb.Node, error) {
+func (g *Graph) InsertEvent(eventID string) (Node, error) {
 	// Check if there is an existing start time for this event.
 	// If not, then create the node and add the start time/date
 	var finish string
@@ -66,7 +67,7 @@ func (g *Graph) InsertEvent(eventID string) (graphdb.Node, error) {
 }
 
 // AddNodeToEvent creates associations between a node in the graph, a data source and a discovery task.
-func (g *Graph) AddNodeToEvent(node graphdb.Node, source, tag, eventID string) error {
+func (g *Graph) AddNodeToEvent(node Node, source, tag, eventID string) error {
 	if source == "" || tag == "" || eventID == "" {
 		return errors.New("Graph: AddNodeToEvent: Invalid arguments provided")
 	}
@@ -81,7 +82,7 @@ func (g *Graph) AddNodeToEvent(node graphdb.Node, source, tag, eventID string) e
 		return err
 	}
 
-	sourceEdge := &graphdb.Edge{
+	sourceEdge := &Edge{
 		Predicate: "used",
 		From:      eventNode,
 		To:        sourceNode,
@@ -90,7 +91,7 @@ func (g *Graph) AddNodeToEvent(node graphdb.Node, source, tag, eventID string) e
 		return err
 	}
 
-	eventEdge := &graphdb.Edge{
+	eventEdge := &Edge{
 		Predicate: source,
 		From:      eventNode,
 		To:        node,
@@ -100,7 +101,7 @@ func (g *Graph) AddNodeToEvent(node graphdb.Node, source, tag, eventID string) e
 }
 
 // InEventScope checks if the Node parameter is within scope of the Event identified by the uuid parameter.
-func (g *Graph) InEventScope(node graphdb.Node, uuid string, predicates ...string) bool {
+func (g *Graph) InEventScope(node Node, uuid string, predicates ...string) bool {
 	edges, err := g.db.ReadInEdges(node, predicates...)
 	if err != nil {
 		return false
@@ -113,6 +114,28 @@ func (g *Graph) InEventScope(node graphdb.Node, uuid string, predicates ...strin
 	}
 
 	return false
+}
+
+// EventsInScope returns the events that include all of the domain arguments.
+func (g *Graph) EventsInScope(d ...string) []string {
+	g.db.Lock()
+	defer g.db.Unlock()
+
+	var events []string
+	var domains []quad.Value
+
+	for _, domain := range d {
+		domains = append(domains, quad.IRI(domain))
+	}
+
+	p := cayley.StartPath(g.db.store).Has(quad.IRI("type"), quad.String("event")).Tag("event")
+	p = p.Out(quad.IRI("domain")).Is(domains...).Back("event").Unique()
+
+	g.db.optimizedIterate(p, func(value quad.Value) {
+		events = append(events, valToStr(value))
+	})
+
+	return events
 }
 
 // EventList returns a list of event UUIDs found in the graph.

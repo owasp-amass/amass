@@ -2,8 +2,6 @@ package graph
 
 import (
 	"testing"
-
-	"github.com/OWASP/Amass/v3/graphdb"
 )
 
 var graphTest = []struct {
@@ -39,7 +37,7 @@ var graphTest = []struct {
 }
 
 func TestNewGraph(t *testing.T) {
-	db := graphdb.NewCayleyGraphMemory()
+	db := NewCayleyGraphMemory()
 	got := NewGraph(db)
 	t.Run("Testing NewGraph...", func(t *testing.T) {
 		if got == nil {
@@ -70,7 +68,7 @@ func TestNewGraph(t *testing.T) {
 		}
 
 		t.Run("Testing InsertEdge...", func(t *testing.T) {
-			testEdge := &graphdb.Edge{
+			testEdge := &Edge{
 				Predicate: "testing",
 				From:      nodeOne,
 				To:        nodeTwo,

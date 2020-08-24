@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/OWASP/Amass/v3/graphdb"
 	"github.com/OWASP/Amass/v3/stringset"
 )
 
@@ -15,7 +14,7 @@ var notDataSourceSet = stringset.New("tld", "root", "domain",
 	"cname_record", "ptr_record", "mx_record", "ns_record", "srv_record", "service")
 
 // InsertSource creates a data source node in the graph.
-func (g *Graph) InsertSource(source, tag string) (graphdb.Node, error) {
+func (g *Graph) InsertSource(source, tag string) (Node, error) {
 	node, err := g.InsertNodeIfNotExist(source, "source")
 	if err != nil {
 		return node, err
@@ -62,7 +61,7 @@ func (g *Graph) SourceTag(source string) string {
 }
 
 // NodeSources returns the names of data sources that identified the Node parameter during the events.
-func (g *Graph) NodeSources(node graphdb.Node, events ...string) ([]string, error) {
+func (g *Graph) NodeSources(node Node, events ...string) ([]string, error) {
 	nstr := g.db.NodeToID(node)
 	if nstr == "" {
 		return nil, fmt.Errorf("%s: NodeSources: Invalid node reference argument", g.String())
@@ -170,7 +169,7 @@ func (g *Graph) CacheSourceData(source, tag, query, resp string) error {
 		return err
 	}
 
-	return g.InsertEdge(&graphdb.Edge{
+	return g.InsertEdge(&Edge{
 		Predicate: query,
 		From:      snode,
 		To:        rnode,

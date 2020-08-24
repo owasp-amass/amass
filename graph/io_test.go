@@ -2,12 +2,10 @@ package graph
 
 import (
 	"testing"
-
-	"github.com/OWASP/Amass/v3/graphdb"
 )
 
 func TestIO(t *testing.T) {
-	g := NewGraph(graphdb.NewCayleyGraphMemory())
+	g := NewGraph(NewCayleyGraphMemory())
 
 	for _, tt := range graphTest {
 		_, err := g.InsertFQDN(tt.FQDN, tt.Source, tt.Tag, tt.EventID)

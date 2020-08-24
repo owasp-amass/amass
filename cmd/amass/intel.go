@@ -137,21 +137,6 @@ func runIntelCommand(clArgs []string) {
 		return
 	}
 
-	// Check if the user has requested the data source names
-	if args.Options.ListSources {
-		for _, info := range GetAllSourceInfo() {
-			g.Println(info)
-		}
-		return
-	}
-
-	// Some input validation
-	if !args.Options.ReverseWhois && args.OrganizationName == "" &&
-		len(args.Addresses) == 0 && len(args.CIDRs) == 0 && len(args.ASNs) == 0 {
-		commandUsage(intelUsageMsg, intelCommand, intelBuf)
-		os.Exit(1)
-	}
-
 	if (len(args.Excluded) > 0 || args.Filepaths.ExcludedSrcs != "") &&
 		(len(args.Included) > 0 || args.Filepaths.IncludedSrcs != "") {
 		commandUsage(intelUsageMsg, intelCommand, intelBuf)
@@ -193,6 +178,21 @@ func runIntelCommand(clArgs []string) {
 	// Override configuration file settings with command-line arguments
 	if err := cfg.UpdateConfig(args); err != nil {
 		r.Fprintf(color.Error, "Configuration error: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Check if the user has requested the data source names
+	if args.Options.ListSources {
+		for _, info := range GetAllSourceInfo(cfg) {
+			g.Println(info)
+		}
+		return
+	}
+
+	// Some input validation
+	if !args.Options.ReverseWhois && args.OrganizationName == "" &&
+		len(args.Addresses) == 0 && len(args.CIDRs) == 0 && len(args.ASNs) == 0 {
+		commandUsage(intelUsageMsg, intelCommand, intelBuf)
 		os.Exit(1)
 	}
 

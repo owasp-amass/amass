@@ -2,12 +2,10 @@ package graph
 
 import (
 	"testing"
-
-	"github.com/OWASP/Amass/v3/graphdb"
 )
 
 func TestAS(t *testing.T) {
-	g := NewGraph(graphdb.NewCayleyGraphMemory())
+	g := NewGraph(NewCayleyGraphMemory())
 
 	for _, tt := range graphTest {
 		t.Run("Testing InsertAS...", func(t *testing.T) {

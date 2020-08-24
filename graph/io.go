@@ -9,7 +9,6 @@ import (
 	"net"
 	"strconv"
 
-	"github.com/OWASP/Amass/v3/graphdb"
 	amassnet "github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/stringfilter"
@@ -85,8 +84,8 @@ func (g *Graph) EventNames(uuid string, filter stringfilter.Filter) []*requests.
 	return results
 }
 
-func (g *Graph) getEventNameNodes(uuid string) []graphdb.Node {
-	var names []graphdb.Node
+func (g *Graph) getEventNameNodes(uuid string) []Node {
+	var names []Node
 
 	event, err := g.db.ReadNode(uuid, "event")
 	if err != nil {
@@ -111,7 +110,7 @@ func (g *Graph) getEventNameNodes(uuid string) []graphdb.Node {
 	return names
 }
 
-func (g *Graph) buildOutput(sub graphdb.Node, uuid string, asninfo bool,
+func (g *Graph) buildOutput(sub Node, uuid string, asninfo bool,
 	cache *amassnet.ASNCache, c chan *requests.Output, sem *semaphore.Weighted) {
 	defer sem.Release(1)
 
@@ -162,7 +161,7 @@ func randomIndex(length int) int {
 	return rand.Intn(length - 1)
 }
 
-func (g *Graph) buildNameInfo(sub graphdb.Node, uuid string) *requests.Output {
+func (g *Graph) buildNameInfo(sub Node, uuid string) *requests.Output {
 	substr := g.db.NodeToID(sub)
 
 	sources, err := g.NodeSources(sub, uuid)
@@ -184,7 +183,7 @@ func (g *Graph) buildNameInfo(sub graphdb.Node, uuid string) *requests.Output {
 	}
 }
 
-func (g *Graph) buildAddrInfo(addr graphdb.Node, uuid string, asninfo bool, cache *amassnet.ASNCache, c chan *requests.AddressInfo) {
+func (g *Graph) buildAddrInfo(addr Node, uuid string, asninfo bool, cache *amassnet.ASNCache, c chan *requests.AddressInfo) {
 	if !g.InEventScope(addr, uuid, "DNS") {
 		c <- nil
 		return
@@ -220,7 +219,7 @@ func (g *Graph) buildAddrInfo(addr graphdb.Node, uuid string, asninfo bool, cach
 	}
 
 	var cidr string
-	var cidrNode graphdb.Node
+	var cidrNode Node
 	for _, edge := range edges {
 		if g.InEventScope(edge.From, uuid, "RIR") {
 			cidrNode = edge.From
@@ -244,7 +243,7 @@ func (g *Graph) buildAddrInfo(addr graphdb.Node, uuid string, asninfo bool, cach
 	}
 
 	var asn string
-	var asNode graphdb.Node
+	var asNode Node
 	for _, edge := range edges {
 		if g.InEventScope(edge.From, uuid, "RIR") {
 			asNode = edge.From

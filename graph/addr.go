@@ -6,14 +6,13 @@ package graph
 import (
 	"fmt"
 
-	"github.com/OWASP/Amass/v3/graphdb"
 	"github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/stringfilter"
 )
 
 // InsertAddress creates an IP address in the graph and associates it with a source and event.
-func (g *Graph) InsertAddress(addr, source, tag, eventID string) (graphdb.Node, error) {
+func (g *Graph) InsertAddress(addr, source, tag, eventID string) (Node, error) {
 	node, err := g.InsertNodeIfNotExist(addr, "ipaddr")
 	if err != nil {
 		return node, err
@@ -27,7 +26,7 @@ func (g *Graph) InsertAddress(addr, source, tag, eventID string) (graphdb.Node, 
 }
 
 // NameToAddrs obtains each ipaddr Node that the parameter Node has resolved to.
-func (g *Graph) NameToAddrs(node graphdb.Node) ([]graphdb.Node, error) {
+func (g *Graph) NameToAddrs(node Node) ([]Node, error) {
 	nstr := g.db.NodeToID(node)
 	if nstr == "" {
 		return nil, fmt.Errorf("%s: NameToIPAddrs: Invalid node reference argument", g.String())
@@ -57,9 +56,9 @@ func (g *Graph) NameToAddrs(node graphdb.Node) ([]graphdb.Node, error) {
 }
 
 // CNAMEToAddrs traverses CNAME records, starting with the parameter Node, and obtains the network addresses they eventually resolve to.
-func (g *Graph) CNAMEToAddrs(node graphdb.Node) ([]graphdb.Node, error) {
+func (g *Graph) CNAMEToAddrs(node Node) ([]Node, error) {
 	cur := node
-	var nodes []graphdb.Node
+	var nodes []Node
 	filter := stringfilter.NewStringFilter()
 
 	// Do not recursively follow the CNAMEs for more than 10 records
@@ -103,7 +102,7 @@ func (g *Graph) InsertA(fqdn, addr, source, tag, eventID string) error {
 		return err
 	}
 
-	ipEdge := &graphdb.Edge{
+	ipEdge := &Edge{
 		Predicate: "a_record",
 		From:      fqdnNode,
 		To:        ipNode,
@@ -128,7 +127,7 @@ func (g *Graph) InsertAAAA(fqdn, addr, source, tag, eventID string) error {
 		return err
 	}
 
-	ipEdge := &graphdb.Edge{
+	ipEdge := &Edge{
 		Predicate: "aaaa_record",
 		From:      fqdnNode,
 		To:        ipNode,
@@ -145,7 +144,7 @@ func (g *Graph) InsertAAAA(fqdn, addr, source, tag, eventID string) error {
 // appropriate 'netblock' nodes using data provided by the ASNCache parameter.
 func (g *Graph) HealAddressNodes(cache *net.ASNCache, uuid string) error {
 	var err error
-	cidrToNode := make(map[string]graphdb.Node)
+	cidrToNode := make(map[string]Node)
 
 	if cache == nil {
 		cache = net.NewASNCache()
@@ -183,7 +182,7 @@ func (g *Graph) HealAddressNodes(cache *net.ASNCache, uuid string) error {
 			cidrToNode[as.Prefix] = cidr
 		}
 
-		g.InsertEdge(&graphdb.Edge{
+		g.InsertEdge(&Edge{
 			Predicate: "contains",
 			From:      cidr,
 			To:        node,

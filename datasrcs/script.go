@@ -259,7 +259,7 @@ func (s *Script) CheckConfig() error {
 		Protect: true,
 	})
 	if err != nil {
-		estr := fmt.Sprintf("%s: stop callback: %v", s.String(), err)
+		estr := fmt.Sprintf("%s: check callback: %v", s.String(), err)
 
 		s.sys.Config().Log.Print(estr)
 		return errors.New(estr)

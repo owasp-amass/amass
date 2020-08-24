@@ -4,7 +4,6 @@
 package graph
 
 import (
-	"github.com/OWASP/Amass/v3/graphdb"
 	"github.com/OWASP/Amass/v3/stringset"
 	"github.com/OWASP/Amass/v3/viz"
 )
@@ -28,7 +27,7 @@ func (g *Graph) VizData(uuid string) ([]viz.Node, []viz.Edge) {
 }
 
 // Identify unique nodes that should be included in the visualization.
-func (g *Graph) vizNodes(uuid string, edges []*graphdb.Edge) ([]viz.Node, map[string]int) {
+func (g *Graph) vizNodes(uuid string, edges []*Edge) ([]viz.Node, map[string]int) {
 	var idx int
 	var nodes []viz.Node
 	ids := stringset.New()
@@ -96,7 +95,7 @@ func (g *Graph) vizEdges(nodes []viz.Node, nodeToIdx map[string]int) []viz.Edge 
 	return edges
 }
 
-func (g *Graph) buildVizNode(node graphdb.Node, ntype, uuid string) *viz.Node {
+func (g *Graph) buildVizNode(node Node, ntype, uuid string) *viz.Node {
 	id := g.db.NodeToID(node)
 
 	edges, err := g.db.ReadInEdges(node)
@@ -134,7 +133,7 @@ func (g *Graph) buildVizNode(node graphdb.Node, ntype, uuid string) *viz.Node {
 }
 
 // Update the type names for visualization.
-func (g *Graph) convertNodeType(id, ntype string, edges []*graphdb.Edge) string {
+func (g *Graph) convertNodeType(id, ntype string, edges []*Edge) string {
 	if ntype == "fqdn" {
 		var pred string
 

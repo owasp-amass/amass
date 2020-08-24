@@ -111,6 +111,7 @@ func runVizCommand(clArgs []string) {
 	rand.Seed(time.Now().UTC().UnixNano())
 
 	cfg := new(config.Config)
+	cfg.LocalDatabase = true
 	// Check if a configuration file was provided, and if so, load the settings
 	if err := config.AcquireConfig(args.Filepaths.Directory, args.Filepaths.ConfigFile, cfg); err == nil {
 		if args.Filepaths.Directory == "" {
@@ -131,15 +132,22 @@ func runVizCommand(clArgs []string) {
 	}
 	defer db.Close()
 
+	// Create the in-memory graph database
+	memDB, err := memGraphForScope(args.Domains.Slice(), db)
+	if err != nil {
+		r.Fprintln(color.Error, err.Error())
+		os.Exit(1)
+	}
+
 	// Get all the UUIDs for events that have information in scope
-	uuids := eventUUIDs(args.Domains.Slice(), db)
+	uuids := eventUUIDs(args.Domains.Slice(), memDB)
 	if len(uuids) == 0 {
 		r.Fprintln(color.Error, "Failed to find the domains of interest in the database")
 		os.Exit(1)
 	}
 
 	// Put the events in chronological order
-	uuids, _, _ = orderedEvents(uuids, db)
+	uuids, _, _ = orderedEvents(uuids, memDB)
 	if len(uuids) == 0 {
 		r.Fprintln(color.Error, "Failed to sort the events")
 		os.Exit(1)
@@ -152,12 +160,11 @@ func runVizCommand(clArgs []string) {
 	}
 	uuids = []string{uuids[selected]}
 
-	healASInfo(uuids, db)
-	// Create the in-memory graph database
-	memDB, err := memGraphForEvents(uuids, db)
-	if err != nil {
-		r.Fprintln(color.Error, err.Error())
-		os.Exit(1)
+	// Need to check if all the network infrastructure information is available
+	fgY.Fprintln(color.Error, "Could take a moment while acquiring AS network information")
+	// Migrate the changes back to the persistent db
+	if healASInfo(uuids, memDB) {
+		memDB.MigrateEvents(db, uuids...)
 	}
 
 	// Obtain the visualization nodes & edges from the graph

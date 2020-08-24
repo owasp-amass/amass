@@ -13,7 +13,6 @@ import (
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/eventbus"
 	"github.com/OWASP/Amass/v3/graph"
-	"github.com/OWASP/Amass/v3/graphdb"
 	"github.com/OWASP/Amass/v3/queue"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/stringfilter"
@@ -68,7 +67,7 @@ func NewEnumeration(cfg *config.Config, sys systems.System) *Enumeration {
 		Config:         cfg,
 		Sys:            sys,
 		Bus:            eventbus.NewEventBus(),
-		Graph:          graph.NewGraph(graphdb.NewCayleyGraphMemory()),
+		Graph:          graph.NewGraph(graph.NewCayleyGraphMemory()),
 		srcs:           selectedDataSources(cfg, sys),
 		resFilter:      stringfilter.NewBloomFilter(filterMaxSize),
 		logQueue:       queue.NewQueue(),

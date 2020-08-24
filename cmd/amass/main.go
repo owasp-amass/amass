@@ -4,7 +4,7 @@
 
 // In-depth Attack Surface Mapping and Asset Discovery
 //  +----------------------------------------------------------------------------+
-//  | * * * ░░░░░░░░░░░░░░░░░░░░  OWASP Amass  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ |
+//  | ░░░░░░░░░░░░░░░░░░░░░░░░░░  OWASP Amass  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ |
 //  +----------------------------------------------------------------------------+
 //  |      .+++:.            :                             .+++.                 |
 //  |    +W@@@@@@8        &+W@#               o8W8:      +W@@@@@@#.   oW@@@W#+   |
@@ -38,7 +38,6 @@ import (
 	"github.com/OWASP/Amass/v3/eventbus"
 	"github.com/OWASP/Amass/v3/format"
 	"github.com/OWASP/Amass/v3/graph"
-	"github.com/OWASP/Amass/v3/graphdb"
 	"github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/stringfilter"
@@ -137,10 +136,14 @@ func main() {
 }
 
 // GetAllSourceInfo returns the names of all Amass data sources.
-func GetAllSourceInfo() []string {
+func GetAllSourceInfo(cfg *config.Config) []string {
 	var names []string
 
-	sys, err := systems.NewLocalSystem(config.NewConfig())
+	if cfg == nil {
+		cfg = config.NewConfig()
+	}
+
+	sys, err := systems.NewLocalSystem(cfg)
 	if err != nil {
 		return names
 	}
@@ -196,23 +199,34 @@ func expandCategoryNames(names []string, categories map[string][]string) []strin
 }
 
 func openGraphDatabase(dir string, cfg *config.Config) *graph.Graph {
-	// Attempt to connect to a Gremlin Amass graph database
-	if cfg.GremlinURL != "" {
-		gremlin := graphdb.NewGremlin(cfg.GremlinURL, cfg.GremlinUser, cfg.GremlinPass)
-
-		if gremlin != nil {
-			if g := graph.NewGraph(gremlin); g != nil {
-				return g
-			}
+	for _, db := range cfg.GraphDBs {
+		if !db.Primary {
+			continue
 		}
+
+		cayley := graph.NewCayleyGraph(db.System, db.URL, db.Options)
+		if cayley == nil {
+			return nil
+		}
+
+		g := graph.NewGraph(cayley)
+		if g == nil {
+			return nil
+		}
+
+		return g
 	}
 
-	// Check that the graph database directory exists
-	if d := config.OutputDirectory(dir); d != "" {
-		if finfo, err := os.Stat(d); !os.IsNotExist(err) && finfo.IsDir() {
-			if g := graph.NewGraph(graphdb.NewCayleyGraph(d, false)); g != nil {
-				return g
-			}
+	if db := cfg.LocalDatabaseSettings(cfg.GraphDBs); db != nil {
+		db.Options = ""
+
+		cayley := graph.NewCayleyGraph(db.System, config.OutputDirectory(dir), db.Options)
+		if cayley == nil {
+			return nil
+		}
+
+		if g := graph.NewGraph(cayley); g != nil {
+			return g
 		}
 	}
 
@@ -268,28 +282,18 @@ func eventUUIDs(domains []string, db *graph.Graph) []string {
 	return uuids
 }
 
-func memGraphForEvents(uuids []string, from *graph.Graph) (*graph.Graph, error) {
-	db := graph.NewGraph(graphdb.NewCayleyGraphMemory())
+func memGraphForScope(domains []string, from *graph.Graph) (*graph.Graph, error) {
+	db := graph.NewGraph(graph.NewCayleyGraphMemory())
 	if db == nil {
 		return nil, errors.New("Failed to create the in-memory graph database")
 	}
 
 	// Migrate the event data into the in-memory graph database
-	if err := migrateAllEvents(uuids, from, db); err != nil {
+	if err := from.MigrateEventsInScope(db, domains); err != nil {
 		return nil, fmt.Errorf("Failed to move the data into the in-memory graph database: %v", err)
 	}
 
 	return db, nil
-}
-
-func migrateAllEvents(uuids []string, from, to *graph.Graph) error {
-	for _, uuid := range uuids {
-		if err := from.MigrateEvent(uuid, to); err != nil {
-			return err
-		}
-	}
-
-	return nil
 }
 
 func getEventOutput(uuids []string, db *graph.Graph) []*requests.Output {
@@ -322,7 +326,7 @@ func domainNameInScope(name string, scope []string) bool {
 	return discovered
 }
 
-func healASInfo(uuids []string, db *graph.Graph) {
+func healASInfo(uuids []string, db *graph.Graph) bool {
 	cache := net.NewASNCache()
 	db.ASNCacheFill(cache)
 
@@ -330,7 +334,7 @@ func healASInfo(uuids []string, db *graph.Graph) {
 	cfg.LocalDatabase = false
 	sys, err := systems.NewLocalSystem(cfg)
 	if err != nil {
-		return
+		return false
 	}
 	sys.SetDataSources(datasrcs.GetAllSources(sys))
 	defer sys.Shutdown()
@@ -341,6 +345,7 @@ func healASInfo(uuids []string, db *graph.Graph) {
 	ctx := context.WithValue(context.Background(), requests.ContextConfig, cfg)
 	ctx = context.WithValue(ctx, requests.ContextEventBus, bus)
 
+	var updated bool
 	for _, uuid := range uuids {
 		for _, out := range db.EventOutput(uuid, nil, false, cache) {
 			for _, a := range out.Addresses {
@@ -360,7 +365,11 @@ func healASInfo(uuids []string, db *graph.Graph) {
 				if r := cache.AddrSearch(a.Address.String()); r != nil {
 					db.InsertInfrastructure(r.ASN, r.Description, r.Address, r.Prefix, r.Source, r.Tag, uuid)
 				}
+
+				updated = true
 			}
 		}
 	}
+
+	return updated
 }

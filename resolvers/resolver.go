@@ -482,12 +482,17 @@ func (r *BaseResolver) finishProcessing(m *dns.Msg, req *resolveRequest) {
 func (r *BaseResolver) tcpExchange(id uint16, req *resolveRequest) {
 	var d net.Dialer
 
+	if len(req.Msg.Question) == 0 {
+		return
+	}
+	msg := queryMessage(r.getID(), req.Msg.Question[0].Name, req.Msg.Question[0].Qtype)
+
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 
+	req.Msg = msg
 	conn, err := d.DialContext(ctx, "tcp", r.address+":"+r.port)
 	if err != nil {
-		r.pullRequest(req.Msg.MsgHdr.Id)
 		estr := fmt.Sprintf("DNS: Failed to obtain TCP connection to %s:%s: %v", r.address, r.port, err)
 		r.returnRequest(req, makeResolveResult(nil, nil, true, estr, NotAvailableRcode))
 		return
@@ -496,8 +501,7 @@ func (r *BaseResolver) tcpExchange(id uint16, req *resolveRequest) {
 
 	co := &dns.Conn{Conn: conn}
 	co.SetWriteDeadline(time.Now().Add(time.Minute))
-	if err := co.WriteMsg(req.Msg); err != nil {
-		r.pullRequest(req.Msg.MsgHdr.Id)
+	if err := co.WriteMsg(msg); err != nil {
 		estr := fmt.Sprintf("DNS error: Failed to write query msg: %v", err)
 		r.returnRequest(req, makeResolveResult(nil, nil, true, estr, TimeoutRcode))
 		return
@@ -506,7 +510,6 @@ func (r *BaseResolver) tcpExchange(id uint16, req *resolveRequest) {
 	co.SetReadDeadline(time.Now().Add(time.Minute))
 	read, err := co.ReadMsg()
 	if read == nil || err != nil {
-		r.pullRequest(req.Msg.MsgHdr.Id)
 		estr := fmt.Sprintf("DNS error: Failed to read the reply msg: %v", err)
 		r.returnRequest(req, makeResolveResult(read, nil, true, estr, TimeoutRcode))
 		return

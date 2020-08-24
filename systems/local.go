@@ -7,11 +7,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"runtime"
 
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/graph"
-	"github.com/OWASP/Amass/v3/graphdb"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/resolvers"
 	"golang.org/x/sync/semaphore"
@@ -52,6 +52,12 @@ func NewLocalSystem(c *config.Config) (*LocalSystem, error) {
 		addSource:        make(chan requests.Service, 10),
 		allSources:       make(chan chan []requests.Service, 10),
 		semMaxDNSQueries: semaphore.NewWeighted(int64(c.MaxDNSQueries)),
+	}
+
+	// Make sure that the output directory is setup for this local system
+	if err := sys.setupOutputDirectory(); err != nil {
+		sys.Shutdown()
+		return nil, err
 	}
 
 	// Setup the correct graph database handler
@@ -141,29 +147,35 @@ func (l *LocalSystem) GetAllSourceNames() []string {
 	return names
 }
 
-// Select the graph that will store the System findings.
-func (l *LocalSystem) setupGraphDBs() error {
-	c := l.Config()
-
-	if c.GremlinURL != "" {
-		gremlin := graphdb.NewGremlin(c.GremlinURL, c.GremlinUser, c.GremlinPass)
-		if gremlin == nil {
-			return fmt.Errorf("System: Failed to create the %s graph", gremlin.String())
-		}
-
-		g := graph.NewGraph(gremlin)
-		if g == nil {
-			return fmt.Errorf("System: Failed to create the %s graph", g.String())
-		}
-
-		l.graphs = append(l.graphs, g)
+func (l *LocalSystem) setupOutputDirectory() error {
+	path := config.OutputDirectory(l.cfg.Dir)
+	if path == "" {
+		return nil
 	}
 
-	dir := config.OutputDirectory(c.Dir)
-	if c.LocalDatabase && dir != "" {
-		cayley := graphdb.NewCayleyGraph(dir, true)
+	var err error
+	// If the directory does not yet exist, create it
+	if err = os.MkdirAll(path, 0755); err != nil {
+		return nil
+	}
+
+	return nil
+}
+
+// Select the graph that will store the System findings.
+func (l *LocalSystem) setupGraphDBs() error {
+	cfg := l.Config()
+
+	var dbs []*config.Database
+	if db := cfg.LocalDatabaseSettings(cfg.GraphDBs); db != nil {
+		dbs = append(dbs, db)
+	}
+	dbs = append(dbs, cfg.GraphDBs...)
+
+	for _, db := range dbs {
+		cayley := graph.NewCayleyGraph(db.System, db.URL, db.Options)
 		if cayley == nil {
-			return fmt.Errorf("System: Failed to create the %s graph", cayley.String())
+			return fmt.Errorf("System: Failed to create the %s graph", db.System)
 		}
 
 		g := graph.NewGraph(cayley)

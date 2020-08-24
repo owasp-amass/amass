@@ -6,12 +6,11 @@ package graph
 import (
 	"errors"
 
-	"github.com/OWASP/Amass/v3/graphdb"
 	"golang.org/x/net/publicsuffix"
 )
 
 // InsertFQDN adds a fully qualified domain name to the graph.
-func (g *Graph) InsertFQDN(name, source, tag, eventID string) (graphdb.Node, error) {
+func (g *Graph) InsertFQDN(name, source, tag, eventID string) (Node, error) {
 	tld, _ := publicsuffix.PublicSuffix(name)
 
 	domain, err := publicsuffix.EffectiveTLDPlusOne(name)
@@ -40,7 +39,7 @@ func (g *Graph) InsertFQDN(name, source, tag, eventID string) (graphdb.Node, err
 	}
 
 	// Link the three nodes together
-	domainEdge := &graphdb.Edge{
+	domainEdge := &Edge{
 		Predicate: "root",
 		From:      fqdnNode,
 		To:        domainNode,
@@ -49,7 +48,7 @@ func (g *Graph) InsertFQDN(name, source, tag, eventID string) (graphdb.Node, err
 		return fqdnNode, err
 	}
 
-	tldEdge := &graphdb.Edge{
+	tldEdge := &Edge{
 		Predicate: "tld",
 		From:      domainNode,
 		To:        tldNode,
@@ -80,13 +79,13 @@ func (g *Graph) InsertFQDN(name, source, tag, eventID string) (graphdb.Node, err
 	return fqdnNode, nil
 }
 
-func (g *Graph) addDomainEdge(node graphdb.Node, eventID string) error {
+func (g *Graph) addDomainEdge(node Node, eventID string) error {
 	event, err := g.db.ReadNode(eventID, "event")
 	if err != nil {
 		return err
 	}
 
-	return g.InsertEdge(&graphdb.Edge{
+	return g.InsertEdge(&Edge{
 		Predicate: "domain",
 		From:      event,
 		To:        node,
@@ -115,7 +114,7 @@ func (g *Graph) insertAlias(fqdn, target, pred, source, tag, eventID string) err
 	}
 
 	// Create the edge between the alias and the target subdomain name
-	aliasEdge := &graphdb.Edge{
+	aliasEdge := &Edge{
 		Predicate: pred,
 		From:      fqdnNode,
 		To:        targetNode,

@@ -7,7 +7,6 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -226,6 +225,7 @@ func runEnumCommand(clArgs []string) {
 	close(done)
 	wg.Wait()
 
+	//e.Graph.DumpGraph()
 	// If necessary, handle graph database migration
 	if !cfg.Passive && len(e.Sys.GraphDatabases()) > 0 {
 		fmt.Fprintf(color.Error, "\n%s\n", green("The enumeration has finished"))
@@ -235,7 +235,7 @@ func runEnumCommand(clArgs []string) {
 			fmt.Fprintf(color.Error, "%s%s%s\n",
 				yellow("Discoveries are being migrated into the "), yellow(g.String()), yellow(" database"))
 
-			if err := e.Graph.MigrateEvent(e.Config.UUID.String(), g); err != nil {
+			if err := e.Graph.MigrateEvents(g, e.Config.UUID.String()); err != nil {
 				fmt.Fprintf(color.Error, "%s%s%s%s\n",
 					red("The database migration to "), red(g.String()), red(" failed: "), red(err.Error()))
 			}
@@ -279,14 +279,6 @@ func argsAndConfig(clArgs []string) (*config.Config, *enumArgs) {
 	}
 	if help1 || help2 {
 		commandUsage(enumUsageMsg, enumCommand, enumBuf)
-		return nil, &args
-	}
-
-	// Check if the user has requested the data source names
-	if args.Options.ListSources {
-		for _, info := range GetAllSourceInfo() {
-			g.Println(info)
-		}
 		return nil, &args
 	}
 
@@ -339,6 +331,19 @@ func argsAndConfig(clArgs []string) (*config.Config, *enumArgs) {
 	// Override configuration file settings with command-line arguments
 	if err := cfg.UpdateConfig(args); err != nil {
 		r.Fprintf(color.Error, "Configuration error: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Check if the user has requested the data source names
+	if args.Options.ListSources {
+		for _, info := range GetAllSourceInfo(cfg) {
+			g.Println(info)
+		}
+		return nil, &args
+	}
+
+	if len(cfg.Domains()) == 0 {
+		r.Fprintln(color.Error, "Configuration error: No root domain names were provided")
 		os.Exit(1)
 	}
 
@@ -755,11 +760,7 @@ func (e enumArgs) OverrideConfig(conf *config.Config) error {
 		conf.SourceFilter.Include = false
 		conf.SourceFilter.Sources = e.Excluded.Slice()
 	}
-
 	// Attempt to add the provided domains to the configuration
 	conf.AddDomains(e.Domains.Slice())
-	if len(conf.Domains()) == 0 {
-		return errors.New("No root domain names were provided")
-	}
 	return nil
 }

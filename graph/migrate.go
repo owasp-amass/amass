@@ -4,136 +4,73 @@
 package graph
 
 import (
-	"fmt"
+	"context"
+	"errors"
 
-	"github.com/OWASP/Amass/v3/graphdb"
+	"github.com/cayleygraph/cayley"
+	"github.com/cayleygraph/cayley/graph"
+	"github.com/cayleygraph/cayley/writer"
+	"github.com/cayleygraph/quad"
 )
 
-// MigrateEvent copies the nodes and edges related to the Event identified by the uuid from the receiver Graph into another.
-func (g *Graph) MigrateEvent(uuid string, to *Graph) error {
-	fnodes := make(map[string]graphdb.Node)
-	tnodes := make(map[string]graphdb.Node)
+// MigrateEvents copies the nodes and edges related to the Events identified by the uuids from the receiver Graph into another.
+func (g *Graph) MigrateEvents(to *Graph, uuids ...string) error {
+	g.db.Lock()
+	defer g.db.Unlock()
 
-	event, err := g.db.ReadNode(uuid, "event")
-	if err != nil {
-		return fmt.Errorf("Graph: Migrate: Failed to read the event node for %s: %v", uuid, err)
+	var events []quad.Value
+	for _, event := range uuids {
+		events = append(events, quad.IRI(event))
 	}
 
-	edges, err := g.db.ReadOutEdges(event)
-	if err != nil {
-		return fmt.Errorf("Graph: Migrate: Failed to read the edges from event node %s: %v", uuid, err)
+	var quads []quad.Quad
+	var vals []quad.Value
+	// Build quads for the events in scope
+	p := cayley.StartPath(g.db.store, events...).Has(quad.IRI("type"), quad.String("event"))
+	p = p.Tag("subject").OutWithTags([]string{"predicate"}).Tag("object")
+	p.Iterate(context.TODO()).TagValues(nil, func(m map[string]quad.Value) {
+		vals = append(vals, m["object"])
+		quads = append(quads, quad.Make(m["subject"], m["predicate"], m["object"], nil))
+	})
+	// Build quads for all nodes associated with the events in scope
+	p = cayley.StartPath(g.db.store, vals...).Has(quad.IRI("type")).Unique()
+	p = p.Tag("subject").OutWithTags([]string{"predicate"}).Tag("object")
+	p.Iterate(context.TODO()).TagValues(nil, func(m map[string]quad.Value) {
+		quads = append(quads, quad.Make(m["subject"], m["predicate"], m["object"], nil))
+	})
+
+	opts := make(graph.Options)
+	opts["ignore_missing"] = true
+	opts["ignore_duplicate"] = true
+
+	w, err := writer.NewSingleReplication(to.db.store, opts)
+	if len(quads) > 0 {
+		err = w.AddQuadSet(quads)
 	}
 
-	// Copy the event node into the graph
-	node, err := g.migrateNode(uuid, event, to)
-	if err != nil {
-		return fmt.Errorf("Graph: Migrate: Failed to copy node %s: %v", uuid, err)
-	}
-
-	fnodes[uuid] = event
-	tnodes[uuid] = node
-
-	// Copy all remaining nodes into the graph
-	for _, edge := range edges {
-		id := g.db.NodeToID(edge.To)
-
-		// Check if this node has already been migrated
-		if _, found := fnodes[id]; found {
-			continue
-		}
-
-		node, err = g.migrateNode(id, edge.To, to)
-		if err != nil {
-			return fmt.Errorf("Graph: Migrate: Failed to copy node %s: %v", id, err)
-		}
-
-		fnodes[id] = edge.To
-		tnodes[id] = node
-	}
-
-	// Create all the edges between the copied nodes
-	for id, node := range fnodes {
-		ins, err := g.db.ReadInEdges(node)
-		if err != nil {
-			continue
-		}
-
-		for _, edge := range ins {
-			fid := g.db.NodeToID(edge.From)
-
-			// Nodes from other events, and edges to those nodes, are not to be included
-			if _, found := tnodes[fid]; !found {
-				continue
-			}
-
-			err = to.InsertEdge(&graphdb.Edge{
-				Predicate: edge.Predicate,
-				From:      tnodes[fid],
-				To:        tnodes[id],
-			})
-			if err != nil {
-				return fmt.Errorf("Graph: Migrate: Failed to create the edge from node %s to node %s: %v", fid, id, err)
-			}
-		}
-	}
-
-	return nil
+	return err
 }
 
-func (g *Graph) migrateNode(id string, node graphdb.Node, to *Graph) (graphdb.Node, error) {
-	// Obtain the properties of the Node being migrated
-	properties, err := g.db.ReadProperties(node)
-	if err != nil || len(properties) == 0 {
-		return nil, fmt.Errorf("migrateNode: Properties for the %s node %s could not be obtained: %v", g.String(), id, err)
+// MigrateEventsInScope copies the nodes and edges related to the Events identified by the uuids from the receiver Graph into another.
+func (g *Graph) MigrateEventsInScope(to *Graph, d []string) error {
+	if len(d) == 0 {
+		return errors.New("MigrateEventsInScope: No domain names provided")
 	}
 
-	// Obtain the type of the Node being migrated
-	ntype := getTypeFromProperties(properties)
-	if ntype == "" {
-		return nil, fmt.Errorf("migrateNode: Unable to obtain the type for the %s node %s: %v", g.String(), id, err)
+	var domains []quad.Value
+	for _, domain := range d {
+		domains = append(domains, quad.IRI(domain))
 	}
 
-	// Check if this node already exists in the 'to' graph
-	tonode, err := to.db.ReadNode(id, ntype)
-	if err != nil {
-		// Create the Node in the Graph
-		tonode, err = to.db.InsertNode(id, ntype)
-		if err != nil {
-			return nil, fmt.Errorf("migrateNode: Failed to insert the %s node %s: %v", g.String(), id, err)
-		}
-	}
+	g.db.Lock()
+	var uuids []string
+	// Obtain the events that are in scope according to the domain name arguments
+	p := cayley.StartPath(g.db.store).Has(quad.IRI("type"), quad.String("event")).Tag("event")
+	p = p.Out(quad.IRI("domain")).Is(domains...).Back("event").Unique().Tag("uuid")
+	p.Iterate(context.TODO()).TagValues(nil, func(m map[string]quad.Value) {
+		uuids = append(uuids, valToStr(m["uuid"]))
+	})
+	g.db.Unlock()
 
-	// Copy all the properties into the Node being migrated
-	if err := g.migrateProperties(tonode, properties, to); err != nil {
-		return nil, fmt.Errorf("migrateNode: Failed to migrate properties for the %s node %s: %v", g.String(), id, err)
-	}
-
-	return tonode, nil
-}
-
-func (g *Graph) migrateProperties(node graphdb.Node, properties []*graphdb.Property, to *Graph) error {
-	for _, p := range properties {
-		if p.Predicate == "type" {
-			continue
-		}
-
-		if err := to.db.InsertProperty(node, p.Predicate, p.Value); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func getTypeFromProperties(properties []*graphdb.Property) string {
-	var ntype string
-
-	for _, p := range properties {
-		if p.Predicate == "type" {
-			ntype = p.Value
-			break
-		}
-	}
-
-	return ntype
+	return g.MigrateEvents(to, uuids...)
 }
