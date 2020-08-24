@@ -111,7 +111,6 @@ func (c *Collection) HostedDomains() error {
 		time.AfterFunc(time.Duration(c.Config.Timeout)*time.Minute, func() {
 			c.Config.Log.Printf("Enumeration exceeded provided timeout")
 			close(c.Output)
-			return
 		})
 	}
 
