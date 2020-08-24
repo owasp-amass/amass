@@ -38,8 +38,6 @@ const (
 	enumUsageMsg = "enum [options] -d DOMAIN"
 )
 
-var interrupted bool
-
 type enumArgs struct {
 	Addresses         format.ParseIPs
 	ASNs              format.ParseInts
@@ -520,7 +518,6 @@ func signalHandler(e *enum.Enumeration) {
 
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 	<-quit
-	interrupted = true
 	// Signal the enumeration to finish
 	e.Done()
 	// Wait for output operations to complete

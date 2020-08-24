@@ -483,20 +483,6 @@ func (g *CayleyGraph) DeleteEdge(edge *Edge) error {
 	return g.store.RemoveQuad(quad.Make(from, edge.Predicate, to, nil))
 }
 
-func (g *CayleyGraph) propertyValues(node quad.Value, pname string) []string {
-	var results []string
-
-	if nstr := quad.ToString(node); nstr != "" || pname != "" {
-		p := cayley.StartPath(g.store, quad.String(nstr)).Out(quad.String(pname))
-
-		g.optimizedIterate(p, func(node quad.Value) {
-			results = append(results, quad.ToString(node))
-		})
-	}
-
-	return results
-}
-
 func (g *CayleyGraph) nodePredicates(id, direction string) []string {
 	p := cayley.StartPath(g.store, quad.String(id))
 

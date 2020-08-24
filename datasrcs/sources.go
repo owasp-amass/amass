@@ -81,19 +81,6 @@ func GetAllSources(sys systems.System) []requests.Service {
 	return srvs
 }
 
-func shouldEnable(srvName string, cfg *config.Config) bool {
-	include := !cfg.SourceFilter.Include
-
-	for _, name := range cfg.SourceFilter.Sources {
-		if strings.EqualFold(srvName, name) {
-			include = cfg.SourceFilter.Include
-			break
-		}
-	}
-
-	return include
-}
-
 // Clean up the names scraped from the web.
 func cleanName(name string) string {
 	var err error

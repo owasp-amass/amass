@@ -176,9 +176,7 @@ func (bas *BaseService) DNSRequest(ctx context.Context, req *DNSRequest) {
 }
 
 // OnDNSRequest is called for a request that was queued via DNSRequest.
-func (bas *BaseService) OnDNSRequest(ctx context.Context, req *DNSRequest) {
-	return
-}
+func (bas *BaseService) OnDNSRequest(ctx context.Context, req *DNSRequest) {}
 
 // Resolved adds the request provided by the parameter to the service request channel.
 func (bas *BaseService) Resolved(ctx context.Context, req *DNSRequest) {
@@ -186,9 +184,7 @@ func (bas *BaseService) Resolved(ctx context.Context, req *DNSRequest) {
 }
 
 // OnResolved is called for a request that was queued via Resolved.
-func (bas *BaseService) OnResolved(ctx context.Context, req *DNSRequest) {
-	return
-}
+func (bas *BaseService) OnResolved(ctx context.Context, req *DNSRequest) {}
 
 // SubdomainDiscovered adds the request provided by the parameter to the service request channel.
 func (bas *BaseService) SubdomainDiscovered(ctx context.Context, req *DNSRequest, times int) {
@@ -196,9 +192,7 @@ func (bas *BaseService) SubdomainDiscovered(ctx context.Context, req *DNSRequest
 }
 
 // OnSubdomainDiscovered is called for a request that was queued via DNSRequest.
-func (bas *BaseService) OnSubdomainDiscovered(ctx context.Context, req *DNSRequest, times int) {
-	return
-}
+func (bas *BaseService) OnSubdomainDiscovered(ctx context.Context, req *DNSRequest, times int) {}
 
 // AddrRequest adds the request provided by the parameter to the service request channel.
 func (bas *BaseService) AddrRequest(ctx context.Context, req *AddrRequest) {
@@ -206,9 +200,7 @@ func (bas *BaseService) AddrRequest(ctx context.Context, req *AddrRequest) {
 }
 
 // OnAddrRequest is called for a request that was queued via AddrRequest.
-func (bas *BaseService) OnAddrRequest(ctx context.Context, req *AddrRequest) {
-	return
-}
+func (bas *BaseService) OnAddrRequest(ctx context.Context, req *AddrRequest) {}
 
 // ASNRequest adds the request provided by the parameter to the service request channel.
 func (bas *BaseService) ASNRequest(ctx context.Context, req *ASNRequest) {
@@ -216,9 +208,7 @@ func (bas *BaseService) ASNRequest(ctx context.Context, req *ASNRequest) {
 }
 
 // OnASNRequest is called for a request that was queued via ASNRequest.
-func (bas *BaseService) OnASNRequest(ctx context.Context, req *ASNRequest) {
-	return
-}
+func (bas *BaseService) OnASNRequest(ctx context.Context, req *ASNRequest) {}
 
 // WhoisRequest adds the request provided by the parameter to the service request channel.
 func (bas *BaseService) WhoisRequest(ctx context.Context, req *WhoisRequest) {
@@ -226,9 +216,7 @@ func (bas *BaseService) WhoisRequest(ctx context.Context, req *WhoisRequest) {
 }
 
 // OnWhoisRequest is called for a request that was queued via WhoisRequest.
-func (bas *BaseService) OnWhoisRequest(ctx context.Context, req *WhoisRequest) {
-	return
-}
+func (bas *BaseService) OnWhoisRequest(ctx context.Context, req *WhoisRequest) {}
 
 // Quit return the quit channel for the service.
 func (bas *BaseService) Quit() <-chan struct{} {

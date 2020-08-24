@@ -12,21 +12,6 @@ import (
 	"github.com/OWASP/Amass/v3/stringfilter"
 )
 
-var probeNames = []string{
-	"www",
-	"online",
-	"webserver",
-	"ns1",
-	"mail",
-	"smtp",
-	"webmail",
-	"prod",
-	"test",
-	"vpn",
-	"ftp",
-	"ssh",
-}
-
 // FQDNManager is the object type for taking in, generating and providing new DNS FQDNs.
 type FQDNManager interface {
 	// InputName shares a newly discovered FQDN with the NameManager

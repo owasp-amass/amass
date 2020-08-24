@@ -16,7 +16,6 @@ import (
 	"sync"
 
 	_ "github.com/OWASP/Amass/v3/config/statik" // The content being embedded into the binary
-	amasshttp "github.com/OWASP/Amass/v3/net/http"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/stringset"
 	"github.com/rakyll/statik/fs"
@@ -142,14 +141,6 @@ func GetListFromFile(path string) ([]string, error) {
 
 	s, err := getWordList(reader)
 	return s, err
-}
-
-func getWordlistByURL(url string) ([]string, error) {
-	page, err := amasshttp.RequestWebPage(url, nil, nil, "", "")
-	if err != nil {
-		return nil, fmt.Errorf("Failed to obtain the wordlist at %s: %v", url, err)
-	}
-	return getWordList(strings.NewReader(page))
 }
 
 func getWordlistByFS(path string) ([]string, error) {
