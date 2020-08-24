@@ -425,7 +425,7 @@ func (r *BaseResolver) processMessage(m *dns.Msg) {
 		return
 	}
 
-	r.updateRTT(time.Now().Sub(req.Timestamp))
+	r.updateRTT(time.Since(req.Timestamp))
 	r.updateStat(m.Rcode, 1)
 	// Check that the query was successful
 	if m.Rcode != dns.RcodeSuccess {

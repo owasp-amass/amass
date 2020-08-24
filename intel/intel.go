@@ -266,7 +266,7 @@ loop:
 			l := last
 			lastLock.Unlock()
 
-			if time.Now().Sub(l) > 20*time.Second {
+			if time.Since(l) > 20*time.Second {
 				break loop
 			}
 		}
@@ -354,7 +354,7 @@ loop:
 		case <-c.done:
 			break loop
 		case <-t.C:
-			if l := c.lastActive(); time.Now().Sub(l) > 10*time.Second {
+			if l := c.lastActive(); time.Since(l) > 10*time.Second {
 				break loop
 			}
 		}
