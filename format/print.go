@@ -43,12 +43,8 @@ const (
 
 var (
 	// Colors used to ease the reading of program output
-	y      = color.New(color.FgHiYellow)
 	g      = color.New(color.FgHiGreen)
-	r      = color.New(color.FgHiRed)
 	b      = color.New(color.FgHiBlue)
-	fgR    = color.New(color.FgRed)
-	fgY    = color.New(color.FgYellow)
 	yellow = color.New(color.FgHiYellow).SprintFunc()
 	green  = color.New(color.FgHiGreen).SprintFunc()
 	blue   = color.New(color.FgHiBlue).SprintFunc()
