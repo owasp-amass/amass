@@ -299,7 +299,7 @@ loop:
 			var inactive bool
 			// Has the enumeration been inactive long enough to stop the task?
 			if e.isDataManagerQueueEmpty() {
-				inactive = time.Now().Sub(e.lastActive()) > 10*time.Second
+				inactive = time.Since(e.lastActive()) > 10*time.Second
 			}
 
 			if completed == 0 && inactive {

@@ -494,7 +494,7 @@ loop:
 
 			started := time.Now()
 			extract(asinfo)
-			next := time.Now().Sub(started) * 5
+			next := time.Since(started) * 5
 			if next < 3*time.Second {
 				next = 3 * time.Second
 			} else if next > 10*time.Second {

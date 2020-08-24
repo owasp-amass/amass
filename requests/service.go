@@ -267,7 +267,7 @@ loop:
 				continue loop
 			}
 
-			if delta := time.Now().Sub(last); rateLimit > delta {
+			if delta := time.Since(last); rateLimit > delta {
 				time.Sleep(rateLimit - delta)
 			}
 			last = time.Now()
