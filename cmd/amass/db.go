@@ -5,21 +5,15 @@ package main
 
 import (
 	"bytes"
-	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
-	"sort"
-	"strings"
-	"time"
 
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/format"
 	"github.com/OWASP/Amass/v3/graph"
-	"github.com/OWASP/Amass/v3/graphdb"
-	"github.com/OWASP/Amass/v3/requests"
-	"github.com/OWASP/Amass/v3/stringfilter"
 	"github.com/OWASP/Amass/v3/stringset"
 	"github.com/fatih/color"
 )
@@ -48,6 +42,7 @@ type dbArgs struct {
 		ConfigFile string
 		Directory  string
 		Domains    string
+		TermOut    string
 	}
 }
 
@@ -79,6 +74,7 @@ func runDBCommand(clArgs []string) {
 	dbCommand.StringVar(&args.Filepaths.ConfigFile, "config", "", "Path to the INI configuration file. Additional details below")
 	dbCommand.StringVar(&args.Filepaths.Directory, "dir", "", "Path to the directory containing the graph database")
 	dbCommand.StringVar(&args.Filepaths.Domains, "df", "", "Path to a file providing root domain names")
+	dbCommand.StringVar(&args.Filepaths.TermOut, "o", "", "Path to the text file containing terminal stdout/stderr")
 
 	if len(clArgs) < 1 {
 		commandUsage(dbUsageMsg, dbCommand, dbBuf)
@@ -166,6 +162,10 @@ func runDBCommand(clArgs []string) {
 		uuids = []string{uuids[args.Enum]}
 	}
 
+	if args.Options.ASNTableSummary {
+		healASInfo(uuids, db)
+	}
+
 	// Create the in-memory graph database
 	memDB, err := memGraphForEvents(uuids, db)
 	if err != nil {
@@ -174,30 +174,6 @@ func runDBCommand(clArgs []string) {
 	}
 
 	showEventData(&args, uuids, memDB)
-}
-
-func openGraphDatabase(dir string, cfg *config.Config) *graph.Graph {
-	// Attempt to connect to a Gremlin Amass graph database
-	if cfg.GremlinURL != "" {
-		gremlin := graphdb.NewGremlin(cfg.GremlinURL, cfg.GremlinUser, cfg.GremlinPass)
-
-		if gremlin != nil {
-			if g := graph.NewGraph(gremlin); g != nil {
-				return g
-			}
-		}
-	}
-
-	// Check that the graph database directory exists
-	if d := config.OutputDirectory(dir); d != "" {
-		if finfo, err := os.Stat(d); !os.IsNotExist(err) && finfo.IsDir() {
-			if g := graph.NewGraph(graphdb.NewCayleyGraph(d, false)); g != nil {
-				return g
-			}
-		}
-	}
-
-	return nil
 }
 
 func listEvents(args *dbArgs, db *graph.Graph) {
@@ -228,78 +204,25 @@ func listEvents(args *dbArgs, db *graph.Graph) {
 	}
 }
 
-func memGraphForEvents(uuids []string, from *graph.Graph) (*graph.Graph, error) {
-	db := graph.NewGraph(graphdb.NewCayleyGraphMemory())
-	if db == nil {
-		return nil, errors.New("Failed to create the in-memory graph database")
-	}
-
-	// Migrate the event data into the in-memory graph database
-	if err := migrateAllEvents(uuids, from, db); err != nil {
-		return nil, fmt.Errorf("Failed to move the data into the in-memory graph database: %v", err)
-	}
-
-	return db, nil
-}
-
-func orderedEvents(events []string, db *graph.Graph) ([]string, []time.Time, []time.Time) {
-	sort.Slice(events, func(i, j int) bool {
-		var less bool
-
-		e1, l1 := db.EventDateRange(events[i])
-		e2, l2 := db.EventDateRange(events[j])
-		if l1.After(l2) || e2.Before(e1) {
-			less = true
-		}
-		return less
-	})
-
-	var earliest, latest []time.Time
-	for _, event := range events {
-		e, l := db.EventDateRange(event)
-
-		earliest = append(earliest, e)
-		latest = append(latest, l)
-	}
-
-	return events, earliest, latest
-}
-
-// Obtain the enumeration IDs that include the provided domain
-func eventUUIDs(domains []string, db *graph.Graph) []string {
-	var uuids []string
-
-	for _, id := range db.EventList() {
-		if len(domains) == 0 {
-			uuids = append(uuids, id)
-			continue
-		}
-
-		surface := db.EventDomains(id)
-		for _, domain := range domains {
-			if domainNameInScope(domain, surface) {
-				uuids = append(uuids, id)
-				break
-			}
-		}
-	}
-
-	return uuids
-}
-
-func migrateAllEvents(uuids []string, from, to *graph.Graph) error {
-	for _, uuid := range uuids {
-		if err := from.MigrateEvent(uuid, to); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
 func showEventData(args *dbArgs, uuids []string, db *graph.Graph) {
 	var total int
+	var err error
+	var outfile *os.File
 	domains := args.Domains.Slice()
+
+	if args.Filepaths.TermOut != "" {
+		outfile, err = os.OpenFile(args.Filepaths.TermOut, os.O_WRONLY|os.O_CREATE, 0644)
+		if err != nil {
+			r.Fprintf(color.Error, "Failed to open the text output file: %v\n", err)
+			os.Exit(1)
+		}
+		defer func() {
+			outfile.Sync()
+			outfile.Close()
+		}()
+		outfile.Truncate(0)
+		outfile.Seek(0, 0)
+	}
 
 	tags := make(map[string]int)
 	asns := make(map[int]*format.ASNSummaryData)
@@ -323,40 +246,30 @@ func showEventData(args *dbArgs, uuids []string, db *graph.Graph) {
 		}
 
 		if args.Options.DiscoveredNames {
-			fmt.Fprintf(color.Output, "%s%s%s\n", blue(source), green(name), yellow(ips))
+			if outfile != nil {
+				fmt.Fprintf(outfile, "%s%s%s\n", source, name, ips)
+			} else {
+				fmt.Fprintf(color.Output, "%s%s%s\n", blue(source), green(name), yellow(ips))
+			}
 		}
 	}
 
 	if total == 0 {
 		r.Println("No names were discovered")
 	} else if args.Options.ASNTableSummary {
-		format.PrintEnumerationSummary(total, tags, asns, args.Options.DemoMode)
-	}
-}
+		var out io.Writer
+		status := color.NoColor
 
-func getEventOutput(uuids []string, db *graph.Graph) []*requests.Output {
-	var output []*requests.Output
-	filter := stringfilter.NewStringFilter()
-
-	for i := len(uuids) - 1; i >= 0; i-- {
-		for _, out := range db.EventOutput(uuids[i], filter, nil) {
-			output = append(output, out)
+		if outfile != nil {
+			out = outfile
+			color.NoColor = true
+		} else if args.Options.ShowAll {
+			out = color.Error
+		} else {
+			out = color.Output
 		}
+
+		format.FprintEnumerationSummary(out, total, tags, asns, args.Options.DemoMode)
+		color.NoColor = status
 	}
-	return output
-}
-
-func domainNameInScope(name string, scope []string) bool {
-	var discovered bool
-
-	n := strings.ToLower(strings.TrimSpace(name))
-	for _, d := range scope {
-		d = strings.ToLower(d)
-
-		if n == d || strings.HasSuffix(n, "."+d) {
-			discovered = true
-			break
-		}
-	}
-	return discovered
 }

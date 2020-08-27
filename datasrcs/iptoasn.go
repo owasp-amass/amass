@@ -58,7 +58,6 @@ func (i *IPToASN) OnASNRequest(ctx context.Context, req *requests.ASNRequest) {
 	}
 
 	i.CheckRateLimit()
-
 	r, err := i.getASInfo(req.Address)
 	if err != nil {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,

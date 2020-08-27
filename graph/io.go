@@ -4,6 +4,7 @@
 package graph
 
 import (
+	"context"
 	"math/rand"
 	"net"
 	"strconv"
@@ -11,16 +12,16 @@ import (
 	"github.com/OWASP/Amass/v3/graphdb"
 	amassnet "github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/requests"
-	"github.com/OWASP/Amass/v3/semaphore"
 	"github.com/OWASP/Amass/v3/stringfilter"
 	"golang.org/x/net/publicsuffix"
+	"golang.org/x/sync/semaphore"
 )
 
 // EventOutput returns findings within the receiver Graph for the event identified by the uuid string
 // parameter and not already in the filter StringFilter argument. The cache ASNCache argument provides
 // ASN / netblock information already discovered so the routine can avoid unnecessary queries to the
 // graph database. The filter and cache objects are updated by EventOutput.
-func (g *Graph) EventOutput(uuid string, filter stringfilter.Filter, cache *amassnet.ASNCache) []*requests.Output {
+func (g *Graph) EventOutput(uuid string, filter stringfilter.Filter, asninfo bool, cache *amassnet.ASNCache) []*requests.Output {
 	var results []*requests.Output
 
 	names := g.getEventNameNodes(uuid)
@@ -34,20 +35,20 @@ func (g *Graph) EventOutput(uuid string, filter stringfilter.Filter, cache *amas
 	}
 
 	// Make sure a cache has been created for performance purposes
-	if cache == nil {
+	if asninfo && cache == nil {
 		cache = amassnet.NewASNCache()
 	}
 
 	var count int
-	sem := semaphore.NewSimpleSemaphore(10)
+	sem := semaphore.NewWeighted(10)
 	output := make(chan *requests.Output, len(names))
 	for _, name := range names {
 		if n := g.db.NodeToID(name); n == "" || filter.Has(n) {
 			continue
 		}
 
-		sem.Acquire(1)
-		go g.buildOutput(name, uuid, cache, output, sem)
+		sem.Acquire(context.TODO(), 1)
+		go g.buildOutput(name, uuid, asninfo, cache, output, sem)
 		count++
 	}
 
@@ -110,8 +111,8 @@ func (g *Graph) getEventNameNodes(uuid string) []graphdb.Node {
 	return names
 }
 
-func (g *Graph) buildOutput(sub graphdb.Node, uuid string,
-	cache *amassnet.ASNCache, c chan *requests.Output, sem semaphore.Semaphore) {
+func (g *Graph) buildOutput(sub graphdb.Node, uuid string, asninfo bool,
+	cache *amassnet.ASNCache, c chan *requests.Output, sem *semaphore.Weighted) {
 	defer sem.Release(1)
 
 	output := g.buildNameInfo(sub, uuid)
@@ -134,7 +135,7 @@ func (g *Graph) buildOutput(sub graphdb.Node, uuid string,
 		}
 
 		num++
-		go g.buildAddrInfo(addr, uuid, cache, addrChan)
+		go g.buildAddrInfo(addr, uuid, asninfo, cache, addrChan)
 	}
 
 	for i := 0; i < num; i++ {
@@ -183,7 +184,7 @@ func (g *Graph) buildNameInfo(sub graphdb.Node, uuid string) *requests.Output {
 	}
 }
 
-func (g *Graph) buildAddrInfo(addr graphdb.Node, uuid string, cache *amassnet.ASNCache, c chan *requests.AddressInfo) {
+func (g *Graph) buildAddrInfo(addr graphdb.Node, uuid string, asninfo bool, cache *amassnet.ASNCache, c chan *requests.AddressInfo) {
 	if !g.InEventScope(addr, uuid, "DNS") {
 		c <- nil
 		return
@@ -191,6 +192,12 @@ func (g *Graph) buildAddrInfo(addr graphdb.Node, uuid string, cache *amassnet.AS
 
 	address := g.db.NodeToID(addr)
 	ainfo := &requests.AddressInfo{Address: net.ParseIP(address)}
+	// Check if this request is just for the address
+	if !asninfo {
+		c <- ainfo
+		return
+	}
+
 	// Check the ASNCache before querying the graph database
 	if a := cache.AddrSearch(address); a != nil {
 		var err error

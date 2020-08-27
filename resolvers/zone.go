@@ -7,9 +7,11 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"regexp"
 	"strings"
 	"time"
 
+	"github.com/OWASP/Amass/v3/eventbus"
 	amassdns "github.com/OWASP/Amass/v3/net/dns"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/miekg/dns"
@@ -58,124 +60,244 @@ func ZoneTransfer(sub, domain, server string) ([]*requests.DNSRequest, error) {
 }
 
 // NsecTraversal attempts to retrieve a DNS zone using NSEC-walking.
-func NsecTraversal(domain, server string) ([]*requests.DNSRequest, error) {
-	var results []*requests.DNSRequest
-
-	d := &net.Dialer{}
-	conn, err := d.Dial("udp", server+":53")
-	if err != nil {
-		return results, fmt.Errorf("Failed to setup UDP connection with the DNS server: %s: %v", server, err)
+func (r *BaseResolver) NsecTraversal(ctx context.Context, domain string, priority int) ([]string, bool, error) {
+	if priority != PriorityCritical && priority != PriorityHigh && priority != PriorityLow {
+		return []string{}, false, &ResolveError{
+			Err:   fmt.Sprintf("Resolver: Invalid priority parameter: %d", priority),
+			Rcode: ResolverErrRcode,
+		}
 	}
-	defer conn.Close()
-	co := &dns.Conn{Conn: conn}
 
-	re := amassdns.SubdomainRegex(domain)
-loop:
-	for next := domain; next != ""; {
-		name := next
-		next = ""
-		for _, attempt := range walkAttempts(name, domain) {
-			id := dns.Id()
-			msg := walkMsg(id, attempt, dns.TypeA)
+	if avail, err := r.Available(); !avail {
+		return []string{}, true, err
+	}
 
-			co.SetWriteDeadline(time.Now().Add(2 * time.Second))
-			if err := co.WriteMsg(msg); err != nil {
+	var err error
+	var results []string
+	for next := "0"; next != ""; {
+		query := next
+
+		for _, qtype := range []uint16{dns.TypeNSEC, dns.TypeA} {
+			var found string
+
+			found, next, err = r.searchGap(ctx, query, domain+".", qtype, priority)
+			if err != nil {
 				continue
 			}
 
-			co.SetReadDeadline(time.Now().Add(2 * time.Second))
-			in, err := co.ReadMsg()
-			if err != nil || in == nil || in.MsgHdr.Id != id {
-				continue
+			if found != "" {
+				results = append(results, found+"."+domain)
 			}
 
-			for _, rr := range in.Answer {
-				if rr.Header().Rrtype != dns.TypeA {
-					continue
-				}
-
-				n := strings.ToLower(RemoveLastDot(rr.Header().Name))
-				results = append(results, &requests.DNSRequest{
-					Name:   n,
-					Domain: domain,
-					Tag:    requests.DNS,
-					Source: "NSEC Walk",
-				})
-
-				if _, ok := rr.(*dns.NSEC); ok {
-					next = rr.(*dns.NSEC).NextDomain
-					continue loop
-				}
-			}
-
-			for _, rr := range in.Ns {
-				if rr.Header().Rrtype != dns.TypeNSEC {
-					continue
-				}
-
-				prev := strings.ToLower(RemoveLastDot(rr.Header().Name))
-				nn := walkHostPart(name, domain)
-				hp := walkHostPart(prev, domain)
-				if !re.MatchString(prev) || hp >= nn {
-					continue
-				}
-
-				results = append(results, &requests.DNSRequest{
-					Name:   prev,
-					Domain: domain,
-					Tag:    requests.DNS,
-					Source: "NSEC Walk",
-				})
-
-				n := strings.ToLower(RemoveLastDot(rr.(*dns.NSEC).NextDomain))
-				hn := walkHostPart(n, domain)
-				if n != "" && nn < hn {
-					next = n
-					continue loop
-				}
+			if next == "" {
+				break
 			}
 		}
 	}
-	return results, nil
+
+	return results, false, nil
 }
 
-func walkAttempts(name, domain string) []string {
-	name = strings.ToLower(name)
-	domain = strings.ToLower(domain)
+func (r *BaseResolver) searchGap(ctx context.Context, name, domain string, qtype uint16, priority int) (string, string, error) {
+	re := amassdns.SubdomainRegex(domain)
 
-	// The original subdomain name and another with a zero label prepended
-	attempts := []string{name, "0." + name}
-	if name == domain {
-		return attempts
+	for _, attempt := range walkAttempts(name, domain, qtype) {
+		result := r.walkMsgRequest(ctx, attempt+"."+domain, qtype, priority)
+		if result.Msg == nil {
+			continue
+		}
+
+		for _, rr := range result.Msg.Answer {
+			if prev, next := checkRecord(rr, attempt, name, domain, re); prev != "" || next != "" {
+				return prev, next, nil
+			}
+		}
+		for _, rr := range result.Msg.Ns {
+			if prev, next := checkRecord(rr, attempt, name, domain, re); prev != "" || next != "" {
+				return prev, next, nil
+			}
+		}
 	}
 
-	host := walkHostPart(name, domain)
-	// A hyphen appended to the hostname portion + the domain name
-	attempts = append(attempts, host+"-."+domain)
-
-	rhost := []rune(host)
-	last := string(rhost[len(rhost)-1])
-	// The last character of the hostname portion duplicated/appended
-	return append(attempts, host+last+"."+domain)
+	return "", "", fmt.Errorf("NsecTraversal: Resolver %s: NSEC record not found", r.String())
 }
 
-func walkHostPart(name, domain string) string {
-	dlen := len(strings.Split(domain, "."))
-	parts := strings.Split(name, ".")
+func checkRecord(rr dns.RR, attempt, name, domain string, re *regexp.Regexp) (string, string) {
+	n := domain
+	if name != "0" {
+		n = name + "." + domain
+	}
 
-	return strings.Join(parts[0:len(parts)-dlen], ".")
+	rName := strings.ToLower(strings.TrimSpace(rr.Header().Name))
+	if rr.Header().Rrtype != dns.TypeNSEC || rName != n {
+		return "", ""
+	}
+
+	return parseNsecRecord(rr, attempt, domain, re)
+}
+
+func parseNsecRecord(rr dns.RR, attempt, domain string, re *regexp.Regexp) (string, string) {
+	prev := strings.ToLower(strings.TrimSpace(rr.Header().Name))
+	next := strings.ToLower(strings.TrimSpace(rr.(*dns.NSEC).NextDomain))
+	if (prev != domain && !re.MatchString(prev)) || !re.MatchString(next) {
+		return "", ""
+	}
+
+	prev = removeDomainPortion(prev, domain)
+	next = removeDomainPortion(next, domain)
+	if firstIsLess(prev, attempt) && (firstIsLess(attempt, next) || next == "") {
+		return prev, next
+	}
+
+	return "", ""
+}
+
+func firstIsLess(prev, next string) bool {
+	prevParts := strings.Split(prev, ".")
+	nextParts := strings.Split(next, ".")
+	plen := len(prevParts)
+	nlen := len(nextParts)
+
+	for p, n := plen-1, nlen-1; p >= 0 && n >= 0; {
+		if prevParts[p] <= nextParts[n] {
+			return true
+		}
+		p--
+		n--
+	}
+
+	return false
+}
+
+func (r *BaseResolver) walkMsgRequest(ctx context.Context, name string, qt uint16, priority int) *resolveResult {
+	var bus *eventbus.EventBus
+
+	// Obtain the event bus reference and report the resolver activity
+	if b := ctx.Value(requests.ContextEventBus); b != nil {
+		bus = b.(*eventbus.EventBus)
+	}
+
+	var result *resolveResult
+	for i := 0; i < 100; i++ {
+		if bus != nil {
+			bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, "Resolver "+r.String())
+		}
+
+		result = r.queueQuery(walkMsg(r.getID(), name, qt), name, qt, priority)
+		// Report the completion of the DNS query
+		if bus != nil {
+			rcode := dns.RcodeSuccess
+			if result.Err != nil {
+				rcode = (result.Err.(*ResolveError)).Rcode
+			}
+
+			bus.Publish(requests.ResolveCompleted, eventbus.PriorityCritical, time.Now(), rcode)
+		}
+		if result.Msg != nil {
+			break
+		}
+	}
+
+	return result
+}
+
+func walkAttempts(name, domain string, qtype uint16) []string {
+	nn := checkLength(strings.ToLower(name), strings.ToLower(domain))
+	if qtype == dns.TypeNSEC {
+		return []string{nn}
+	}
+
+	// The last character of the hostname portion duplicated/appended
+	parts := strings.Split(nn, ".")
+	plen := len(parts)
+	rhost := []rune(parts[plen-1])
+	last := string(rhost[len(rhost)-1])
+	parts[plen-1] = parts[plen-1] + last
+
+	return []string{"0." + nn, strings.Join(parts, "."), nn + "0", nn + "-"}
+}
+
+func checkLength(name, domain string) string {
+	parts := strings.Split(name, ".")
+	nlen := len(name + "." + domain)
+
+	if nlen > MaxDNSNameLen && len(parts) >= 2 {
+		parts = parts[1:]
+	}
+
+	var newparts []string
+	// Check each label for size
+	for _, label := range parts {
+		newlabel := label
+		llen := len(label)
+
+		if llen > MaxDNSLabelLen {
+			lrunes := []rune(label)
+			last := lrunes[len(lrunes)-1]
+
+			if last == '-' {
+				newlabel = string(lrunes[:MaxDNSLabelLen]) + "0"
+			} else if last == '9' {
+				newlabel = string(lrunes[:MaxDNSLabelLen]) + "a"
+			} else {
+				newlabel = string(lrunes[:MaxDNSLabelLen]) + "z"
+			}
+		}
+
+		newparts = append(newparts, newlabel)
+	}
+
+	return strings.Join(newparts, ".")
+}
+
+func removeDomainPortion(name, domain string) string {
+	if name == domain {
+		return ""
+	}
+
+	dp := strings.Split(domain, ".")
+	dp = dp[:len(dp)-1]
+	dlen := len(dp)
+
+	np := strings.Split(name, ".")
+	np = np[:len(np)-1]
+	plen := len(np)
+
+	if plen <= dlen {
+		return ""
+	}
+
+	return strings.Join(np[:plen-dlen], ".")
+}
+
+func afterDomain(name, domain string) string {
+	if name == domain {
+		return ""
+	}
+
+	dp := strings.Split(domain, ".")
+	dp = dp[:len(dp)-1]
+	dlen := len(dp)
+
+	np := strings.Split(name, ".")
+	np = np[:len(np)-1]
+	plen := len(np)
+
+	if plen <= dlen {
+		return ""
+	}
+
+	i := (plen - dlen) - 1
+	return np[i]
 }
 
 func walkMsg(id uint16, name string, qtype uint16) *dns.Msg {
 	m := &dns.Msg{
 		MsgHdr: dns.MsgHdr{
-			Authoritative:     false,
-			AuthenticatedData: false,
-			CheckingDisabled:  false,
-			RecursionDesired:  true,
-			Opcode:            dns.OpcodeQuery,
-			Id:                id,
-			Rcode:             dns.RcodeSuccess,
+			RecursionDesired: true,
+			Id:               id,
+			Opcode:           dns.OpcodeQuery,
+			Rcode:            dns.RcodeSuccess,
 		},
 		Question: make([]dns.Question, 1),
 	}
@@ -184,14 +306,6 @@ func walkMsg(id uint16, name string, qtype uint16) *dns.Msg {
 		Qtype:  qtype,
 		Qclass: uint16(dns.ClassINET),
 	}
-	opt := &dns.OPT{
-		Hdr: dns.RR_Header{
-			Name:   ".",
-			Rrtype: dns.TypeOPT,
-		},
-	}
-	opt.SetDo()
-	opt.SetUDPSize(dns.DefaultMsgSize)
-	m.Extra = append(m.Extra, opt)
+	m.SetEdns0(dns.DefaultMsgSize, true)
 	return m
 }

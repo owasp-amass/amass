@@ -177,6 +177,8 @@ func runEnumCommand(clArgs []string) {
 	}
 	defer sys.Shutdown()
 	sys.SetDataSources(datasrcs.GetAllSources(sys))
+	// Expand data source category names into the associated source names
+	cfg.SourceFilter.Sources = expandCategoryNames(cfg.SourceFilter.Sources, generateCategoryMap(sys))
 
 	// Setup the new enumeration
 	e := enum.NewEnumeration(cfg, sys)
@@ -193,20 +195,20 @@ func runEnumCommand(clArgs []string) {
 
 	wg.Add(1)
 	// This goroutine will handle printing the output
-	printOutChan := make(chan *requests.Output, 1000)
+	printOutChan := make(chan *requests.Output, 10)
 	go printOutput(e, args, printOutChan, &wg)
 	outChans = append(outChans, printOutChan)
 
 	wg.Add(1)
 	// This goroutine will handle saving the output to the text file
-	txtOutChan := make(chan *requests.Output, 1000)
+	txtOutChan := make(chan *requests.Output, 10)
 	go saveTextOutput(e, args, txtOutChan, &wg)
 	outChans = append(outChans, txtOutChan)
 
 	if !args.Options.Passive {
 		wg.Add(1)
 		// This goroutine will handle saving the output to the JSON file
-		jsonOutChan := make(chan *requests.Output, 1000)
+		jsonOutChan := make(chan *requests.Output, 10)
 		go saveJSONOutput(e, args, jsonOutChan, &wg)
 		outChans = append(outChans, jsonOutChan)
 	}
@@ -282,8 +284,8 @@ func argsAndConfig(clArgs []string) (*config.Config, *enumArgs) {
 
 	// Check if the user has requested the data source names
 	if args.Options.ListSources {
-		for _, name := range GetAllSourceNames() {
-			g.Println(name)
+		for _, info := range GetAllSourceInfo() {
+			g.Println(info)
 		}
 		return nil, &args
 	}
@@ -463,10 +465,10 @@ func processOutput(e *enum.Enumeration, outputs []chan *requests.Output, done ch
 	defer wg.Done()
 
 	// This filter ensures that we only get new names
-	known := stringfilter.NewBloomFilter(1 << 24)
+	known := stringfilter.NewBloomFilter(1 << 22)
 	// The function that obtains output from the enum and puts it on the channel
-	extract := func() {
-		for _, o := range e.ExtractOutput(known) {
+	extract := func(asinfo bool) {
+		for _, o := range e.ExtractOutput(known, asinfo) {
 			if !e.Config.IsDomainInScope(o.Name) {
 				continue
 			}
@@ -477,6 +479,7 @@ func processOutput(e *enum.Enumeration, outputs []chan *requests.Output, done ch
 		}
 	}
 
+	var count int
 	t := time.NewTimer(15 * time.Second)
 loop:
 	for {
@@ -484,8 +487,15 @@ loop:
 		case <-done:
 			break loop
 		case <-t.C:
+			count++
+			asinfo := true
+			if count%5 == 0 {
+				asinfo = false
+				count = 0
+			}
+
 			started := time.Now()
-			extract()
+			extract(asinfo)
 			next := time.Now().Sub(started) * 5
 			if next < 3*time.Second {
 				next = 3 * time.Second
@@ -497,7 +507,7 @@ loop:
 	}
 
 	// Check one last time
-	extract()
+	extract(false)
 	// Signal all the other goroutines to terminate
 	for _, ch := range outputs {
 		close(ch)
@@ -733,6 +743,13 @@ func (e enumArgs) OverrideConfig(conf *config.Config) error {
 
 	if len(e.Included) > 0 {
 		conf.SourceFilter.Include = true
+		// Check if brute forcing and alterations should be added
+		if conf.Alterations {
+			e.Included.Insert(requests.ALT)
+		}
+		if conf.BruteForcing {
+			e.Included.Insert(requests.BRUTE)
+		}
 		conf.SourceFilter.Sources = e.Included.Slice()
 	} else if len(e.Excluded) > 0 {
 		conf.SourceFilter.Include = false

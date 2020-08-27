@@ -150,7 +150,7 @@ func (g *Graph) HealAddressNodes(cache *net.ASNCache, uuid string) error {
 	if cache == nil {
 		cache = net.NewASNCache()
 
-		if err = g.asnCacheFill(cache); err != nil {
+		if err = g.ASNCacheFill(cache); err != nil {
 			return err
 		}
 	}

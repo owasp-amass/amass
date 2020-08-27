@@ -80,7 +80,7 @@ func setupConfig(domain string) *config.Config {
 func testDNSRequest(srvName string) int {
 	out := make(chan *requests.DNSRequest)
 
-	bus := eb.NewEventBus(1000)
+	bus := eb.NewEventBus()
 	defer bus.Stop()
 
 	fn := func(req *requests.DNSRequest) {

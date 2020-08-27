@@ -4,6 +4,8 @@
 package systems
 
 import (
+	"context"
+
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/graph"
 	"github.com/OWASP/Amass/v3/requests"
@@ -33,8 +35,12 @@ type System interface {
 	// GraphDatabases return the Graphs used by the System
 	GraphDatabases() []*graph.Graph
 
-	// HighMemoryConsumption returns true if the system needs to reduce memory consumption
-	HighMemoryConsumption(stalled bool) bool
+	// GetMemoryUsage() returns the number bytes allocated to heap objects on this system
+	GetMemoryUsage() uint64
+
+	// PerformDNSQuery blocks if the maximum number of queries is already taking place
+	PerformDNSQuery(ctx context.Context) error
+	FinishedDNSQuery()
 
 	// Shutdown will shutdown the System
 	Shutdown() error

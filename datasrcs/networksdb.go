@@ -96,8 +96,6 @@ func (n *NetworksDB) OnASNRequest(ctx context.Context, req *requests.ASNRequest)
 	}
 
 	n.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, n.String())
-
 	if n.hasAPIKey {
 		if req.Address != "" {
 			n.executeAPIASNAddrQuery(ctx, req.Address)

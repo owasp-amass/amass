@@ -109,12 +109,7 @@ func (u *URLScan) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 
 	for name := range subs {
 		if re.MatchString(name) {
-			bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
-				Name:   name,
-				Domain: req.Domain,
-				Tag:    u.SourceType,
-				Source: u.String(),
-			})
+			genNewNameEvent(ctx, u.sys, u, name)
 		}
 	}
 }

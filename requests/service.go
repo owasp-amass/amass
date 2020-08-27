@@ -36,6 +36,9 @@ type Service interface {
 	Stop() error
 	OnStop() error
 
+	// CheckConfig checks if the service configuration allows for operation
+	CheckConfig() error
+
 	// RequestLen returns the current length of the request queue
 	RequestLen() int
 
@@ -104,18 +107,15 @@ type BaseService struct {
 
 // NewBaseService returns an initialized BaseService object.
 func NewBaseService(srv Service, name string) *BaseService {
-	bas := &BaseService{
+	return &BaseService{
 		name:          name,
-		queue:         new(queue.Queue),
+		queue:         queue.NewQueue(),
 		quit:          make(chan struct{}),
 		setRateChan:   make(chan time.Duration, 10),
 		checkRateChan: make(chan chan struct{}, 10),
 		clearRateChan: make(chan struct{}, 10),
 		service:       srv,
 	}
-
-	go bas.manageRateLimit()
-	return bas
 }
 
 // Start calls the OnStart method implemented for the Service.
@@ -127,6 +127,7 @@ func (bas *BaseService) Start() error {
 	}
 
 	bas.started = true
+	go bas.manageRateLimit()
 	go bas.processRequests()
 	return bas.service.OnStart()
 }
@@ -144,14 +145,18 @@ func (bas *BaseService) Stop() error {
 	}
 	bas.stopped = true
 
-	err := bas.service.OnStop()
 	close(bas.quit)
-	return err
+	return nil
 }
 
 // OnStop is a placeholder that should be implemented by a Service
 // that has code to execute during service stop.
 func (bas *BaseService) OnStop() error {
+	return nil
+}
+
+// CheckConfig checks if the service configuration allows for operation.
+func (bas *BaseService) CheckConfig() error {
 	return nil
 }
 
@@ -303,34 +308,25 @@ func (bas *BaseService) queueRequest(fn interface{}, args ...interface{}) {
 }
 
 func (bas *BaseService) processRequests() {
-	curIdx := 0
-	maxIdx := 6
-	delays := []int{25, 50, 75, 100, 150, 250, 500}
-loop:
+	each := func(element interface{}) {
+		e := element.(*queuedCall)
+		ctx := e.Args[0].Interface().(context.Context)
+
+		select {
+		case <-ctx.Done():
+		default:
+			// Call the queued function or method
+			e.Func.Call(e.Args)
+		}
+	}
+
 	for {
 		select {
 		case <-bas.Quit():
+			bas.service.OnStop()
 			return
-		default:
-			element, ok := bas.queue.Next()
-			if !ok {
-				time.Sleep(time.Duration(delays[curIdx]) * time.Millisecond)
-				if curIdx < maxIdx {
-					curIdx++
-				}
-				continue loop
-			}
-			curIdx = 0
-			e := element.(*queuedCall)
-			ctx := e.Args[0].Interface().(context.Context)
-
-			select {
-			case <-ctx.Done():
-				continue loop
-			default:
-				// Call the queued function or method
-				e.Func.Call(e.Args)
-			}
+		case <-bas.queue.Signal:
+			bas.queue.Process(each)
 		}
 	}
 }

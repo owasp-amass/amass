@@ -4,22 +4,18 @@
 package systems
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"runtime"
-	"time"
 
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/graph"
 	"github.com/OWASP/Amass/v3/graphdb"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/resolvers"
+	"golang.org/x/sync/semaphore"
 )
-
-type memRequest struct {
-	Stalled bool
-	Result  chan bool
-}
 
 // LocalSystem implements a System to be executed within a single process.
 type LocalSystem struct {
@@ -27,11 +23,13 @@ type LocalSystem struct {
 	pool   resolvers.Resolver
 	graphs []*graph.Graph
 
+	// Semaphore to enforce the maximum DNS queries
+	semMaxDNSQueries *semaphore.Weighted
+
 	// Broadcast channel that indicates no further writes to the output channel
 	done              chan struct{}
 	doneAlreadyClosed bool
 
-	memReq     chan *memRequest
 	addSource  chan requests.Service
 	allSources chan chan []requests.Service
 }
@@ -42,22 +40,18 @@ func NewLocalSystem(c *config.Config) (*LocalSystem, error) {
 		return nil, err
 	}
 
-	pool := resolvers.SetupResolverPool(
-		c.Resolvers,
-		c.MonitorResolverRate,
-		c.Log,
-	)
+	pool := resolvers.SetupResolverPool(c.Resolvers, c.MaxDNSQueries, c.MonitorResolverRate, c.Log)
 	if pool == nil {
 		return nil, errors.New("The system was unable to build the pool of resolvers")
 	}
 
 	sys := &LocalSystem{
-		cfg:        c,
-		pool:       pool,
-		done:       make(chan struct{}, 2),
-		memReq:     make(chan *memRequest, 2),
-		addSource:  make(chan requests.Service, 10),
-		allSources: make(chan chan []requests.Service, 10),
+		cfg:              c,
+		pool:             pool,
+		done:             make(chan struct{}, 2),
+		addSource:        make(chan requests.Service, 10),
+		allSources:       make(chan chan []requests.Service, 10),
+		semMaxDNSQueries: semaphore.NewWeighted(int64(c.MaxDNSQueries)),
 	}
 
 	// Setup the correct graph database handler
@@ -66,7 +60,6 @@ func NewLocalSystem(c *config.Config) (*LocalSystem, error) {
 		return nil, err
 	}
 
-	go sys.memConsumptionMonitor()
 	go sys.manageDataSources()
 	return sys, nil
 }
@@ -184,49 +177,22 @@ func (l *LocalSystem) setupGraphDBs() error {
 	return nil
 }
 
-// HighMemoryConsumption implements the System interface.
-func (l *LocalSystem) HighMemoryConsumption(stalled bool) bool {
-	if l.doneAlreadyClosed {
-		return false
-	}
+// GetMemoryUsage returns the number bytes allocated to heap objects on this system.
+func (l *LocalSystem) GetMemoryUsage() uint64 {
+	var m runtime.MemStats
 
-	result := make(chan bool, 2)
-
-	l.memReq <- &memRequest{
-		Stalled: stalled,
-		Result:  result,
-	}
-	return <-result
+	runtime.ReadMemStats(&m)
+	return m.Alloc
 }
 
-func (l *LocalSystem) memConsumptionMonitor() {
-	var curNormal uint64
-	var highConsumption bool
+// PerformDNSQuery blocks if the maximum number of queries is already taking place.
+func (l *LocalSystem) PerformDNSQuery(ctx context.Context) error {
+	return l.semMaxDNSQueries.Acquire(ctx, 1)
+}
 
-	curNormal = 1073741824 // one gigabyte
-	t := time.NewTicker(10 * time.Second)
-	defer t.Stop()
-
-	for {
-		select {
-		case <-l.done:
-			return
-		case <-t.C:
-			var stats runtime.MemStats
-
-			highConsumption = false
-			runtime.ReadMemStats(&stats)
-			if stats.Alloc > curNormal {
-				highConsumption = true
-			}
-		case req := <-l.memReq:
-			if req.Stalled {
-				curNormal += curNormal / 2
-			}
-
-			req.Result <- highConsumption
-		}
-	}
+// FinishedDNSQuery allows a new DNS query to be started when at the maximum.
+func (l *LocalSystem) FinishedDNSQuery() {
+	l.semMaxDNSQueries.Release(1)
 }
 
 func (l *LocalSystem) manageDataSources() {

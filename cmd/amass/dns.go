@@ -163,7 +163,7 @@ func runDNSCommand(clArgs []string) {
 func performResolutions(cfg *config.Config, sys systems.System) {
 	done := make(chan struct{})
 	active := make(chan struct{}, 1000000)
-	bus := eventbus.NewEventBus(10000)
+	bus := eventbus.NewEventBus()
 	answers := make(chan *requests.DNSRequest, 100000)
 
 	// Setup the context used throughout the resolutions
@@ -190,8 +190,9 @@ func performResolutions(cfg *config.Config, sys systems.System) {
 				cancel()
 				return
 			default:
-				cfg.SemMaxDNSQueries.Acquire(1)
-				go processDNSRequest(ctx, &requests.DNSRequest{Name: name}, cfg, sys, answers)
+				if sys.PerformDNSQuery(ctx) == nil {
+					go processDNSRequest(ctx, &requests.DNSRequest{Name: name}, cfg, sys, answers)
+				}
 			}
 		}
 	}()
@@ -201,7 +202,7 @@ func performResolutions(cfg *config.Config, sys systems.System) {
 
 func processDNSRequest(ctx context.Context, req *requests.DNSRequest,
 	cfg *config.Config, sys systems.System, c chan *requests.DNSRequest) {
-	defer cfg.SemMaxDNSQueries.Release(1)
+	defer sys.FinishedDNSQuery()
 
 	if req == nil || req.Name == "" {
 		c <- nil

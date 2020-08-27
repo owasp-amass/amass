@@ -10,6 +10,14 @@ function start()
     setratelimit(2)
 end
 
+function check()
+    if (api ~= nil and api.username ~= nil and 
+        api.password ~= nil and api.username ~= "" and api.password ~= "") then
+        return true
+    end
+    return false
+end
+
 function vertical(ctx, domain)
     apirequest(ctx, domain)
 end

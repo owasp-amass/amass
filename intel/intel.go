@@ -53,7 +53,7 @@ type Collection struct {
 func NewCollection(sys systems.System) *Collection {
 	c := &Collection{
 		Config: config.NewConfig(),
-		Bus:    eb.NewEventBus(1000),
+		Bus:    eb.NewEventBus(),
 		Sys:    sys,
 		srcs:   stringset.New(),
 		Output: make(chan *requests.Output, 100),
@@ -118,9 +118,10 @@ func (c *Collection) HostedDomains() error {
 	c.filter = stringfilter.NewStringFilter()
 	// Start the address ranges
 	for _, addr := range c.Config.Addresses {
-		c.Config.SemMaxDNSQueries.Acquire(1)
-		c.wg.Add(1)
-		go c.investigateAddr(addr.String())
+		if c.Sys.PerformDNSQuery(ctx) == nil {
+			c.wg.Add(1)
+			go c.investigateAddr(addr.String())
+		}
 	}
 
 	for _, cidr := range append(c.Config.CIDRs, c.asnsToCIDRs()...) {
@@ -130,9 +131,10 @@ func (c *Collection) HostedDomains() error {
 		}
 
 		for _, addr := range amassnet.AllHosts(cidr) {
-			c.Config.SemMaxDNSQueries.Acquire(1)
-			c.wg.Add(1)
-			go c.investigateAddr(addr.String())
+			if c.Sys.PerformDNSQuery(ctx) == nil {
+				c.wg.Add(1)
+				go c.investigateAddr(addr.String())
+			}
 		}
 	}
 
@@ -171,7 +173,7 @@ func (c *Collection) resolution(t time.Time, rcode int) {
 
 func (c *Collection) investigateAddr(addr string) {
 	defer c.wg.Done()
-	defer c.Config.SemMaxDNSQueries.Release(1)
+	defer c.Sys.FinishedDNSQuery()
 
 	ip := net.ParseIP(addr)
 	if ip == nil {

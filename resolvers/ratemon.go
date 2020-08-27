@@ -75,6 +75,11 @@ func (r *RateMonitoredResolver) Port() int {
 	return r.resolver.Port()
 }
 
+// String implements the Stringer interface.
+func (r *RateMonitoredResolver) String() string {
+	return r.resolver.String()
+}
+
 // Available returns true if the Resolver can handle another DNS request.
 func (r *RateMonitoredResolver) Available() (bool, error) {
 	if r.IsStopped() {
@@ -136,7 +141,7 @@ func (r *RateMonitoredResolver) SubdomainToDomain(name string) string {
 // Resolve implements the Resolver interface.
 func (r *RateMonitoredResolver) Resolve(ctx context.Context, name, qtype string, priority int) ([]requests.DNSAnswer, bool, error) {
 	if r.IsStopped() {
-		msg := fmt.Sprintf("Resolver %s has been stopped", r.Address())
+		msg := fmt.Sprintf("Resolver %s has been stopped", r.String())
 
 		return []requests.DNSAnswer{}, true, &ResolveError{
 			Err:   msg,
@@ -150,7 +155,7 @@ func (r *RateMonitoredResolver) Resolve(ctx context.Context, name, qtype string,
 // Reverse implements the Resolver interface.
 func (r *RateMonitoredResolver) Reverse(ctx context.Context, addr string, priority int) (string, string, error) {
 	if r.IsStopped() {
-		msg := fmt.Sprintf("Resolver %s has been stopped", r.Address())
+		msg := fmt.Sprintf("Resolver %s has been stopped", r.String())
 
 		return "", "", &ResolveError{
 			Err:   msg,
@@ -159,6 +164,20 @@ func (r *RateMonitoredResolver) Reverse(ctx context.Context, addr string, priori
 	}
 
 	return r.resolver.Reverse(ctx, addr, priority)
+}
+
+// NsecTraversal implements the Resolver interface.
+func (r *RateMonitoredResolver) NsecTraversal(ctx context.Context, domain string, priority int) ([]string, bool, error) {
+	if r.IsStopped() {
+		msg := fmt.Sprintf("Resolver %s has been stopped", r.String())
+
+		return []string{}, true, &ResolveError{
+			Err:   msg,
+			Rcode: NotAvailableRcode,
+		}
+	}
+
+	return r.resolver.NsecTraversal(ctx, domain, priority)
 }
 
 type rateChans struct {

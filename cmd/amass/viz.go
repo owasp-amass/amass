@@ -152,6 +152,7 @@ func runVizCommand(clArgs []string) {
 	}
 	uuids = []string{uuids[selected]}
 
+	healASInfo(uuids, db)
 	// Create the in-memory graph database
 	memDB, err := memGraphForEvents(uuids, db)
 	if err != nil {

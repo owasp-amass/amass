@@ -10,8 +10,15 @@ function start()
     setratelimit(10)
 end
 
+function check()
+    if (api ~= nil and api.key ~= nil and api.key ~= "") then
+        return true
+    end
+    return false
+end
+
 function vertical(ctx, domain)
-    if (api ~= nil and api.key ~= '') then
+    if check() then
         apiquery(ctx, domain)
     end
 end

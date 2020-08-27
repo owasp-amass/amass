@@ -5,6 +5,7 @@ package format
 
 import (
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 
@@ -31,7 +32,7 @@ const Banner = `
 
 const (
 	// Version is used to display the current version of Amass.
-	Version = "v3.8.2"
+	Version = "v3.9.1"
 
 	// Author is used to display the Amass Project Team.
 	Author = "OWASP Amass Project - @owaspamass"
@@ -64,6 +65,10 @@ func UpdateSummaryData(output *requests.Output, tags map[string]int, asns map[in
 	tags[output.Tag]++
 
 	for _, addr := range output.Addresses {
+		if addr.Netblock == nil {
+			continue
+		}
+
 		data, found := asns[addr.ASN]
 		if !found {
 			asns[addr.ASN] = &ASNSummaryData{
@@ -79,39 +84,44 @@ func UpdateSummaryData(output *requests.Output, tags map[string]int, asns map[in
 
 // PrintEnumerationSummary outputs the summary information utilized by the command-line tools.
 func PrintEnumerationSummary(total int, tags map[string]int, asns map[int]*ASNSummaryData, demo bool) {
+	FprintEnumerationSummary(color.Error, total, tags, asns, demo)
+}
+
+// FprintEnumerationSummary outputs the summary information utilized by the command-line tools.
+func FprintEnumerationSummary(out io.Writer, total int, tags map[string]int, asns map[int]*ASNSummaryData, demo bool) {
 	pad := func(num int, chr string) {
 		for i := 0; i < num; i++ {
-			b.Fprint(color.Error, chr)
+			b.Fprint(out, chr)
 		}
 	}
 
-	fmt.Fprintln(color.Error)
+	fmt.Fprintln(out)
 	// Print the header information
 	title := "OWASP Amass "
 	site := "https://github.com/OWASP/Amass"
-	b.Fprint(color.Error, title+Version)
+	b.Fprint(out, title+Version)
 	num := 80 - (len(title) + len(Version) + len(site))
 	pad(num, " ")
-	b.Fprintf(color.Error, "%s\n", site)
+	b.Fprintf(out, "%s\n", site)
 	pad(8, "----------")
-	fmt.Fprintf(color.Error, "\n%s%s", yellow(strconv.Itoa(total)), green(" names discovered - "))
+	fmt.Fprintf(out, "\n%s%s", yellow(strconv.Itoa(total)), green(" names discovered - "))
 	// Print the stats using tag information
 	num, length := 1, len(tags)
 	for k, v := range tags {
-		fmt.Fprintf(color.Error, "%s: %s", green(k), yellow(strconv.Itoa(v)))
+		fmt.Fprintf(out, "%s: %s", green(k), yellow(strconv.Itoa(v)))
 		if num < length {
-			g.Fprint(color.Error, ", ")
+			g.Fprint(out, ", ")
 		}
 		num++
 	}
-	fmt.Fprintln(color.Error)
+	fmt.Fprintln(out)
 
 	if len(asns) == 0 {
 		return
 	}
 	// Another line gets printed
 	pad(8, "----------")
-	fmt.Fprintln(color.Error)
+	fmt.Fprintln(out)
 	// Print the ASN and netblock information
 	for asn, data := range asns {
 		asnstr := strconv.Itoa(asn)
@@ -121,9 +131,7 @@ func PrintEnumerationSummary(total int, tags map[string]int, asns map[int]*ASNSu
 			asnstr = censorString(asnstr, 0, len(asnstr))
 			datastr = censorString(datastr, 0, len(datastr))
 		}
-
-		fmt.Fprintf(color.Error, "%s%s %s %s\n",
-			blue("ASN: "), yellow(asnstr), green("-"), green(datastr))
+		fmt.Fprintf(out, "%s%s %s %s\n", blue("ASN: "), yellow(asnstr), green("-"), green(datastr))
 
 		for cidr, ips := range data.Netblocks {
 			countstr := strconv.Itoa(ips)
@@ -135,31 +143,34 @@ func PrintEnumerationSummary(total int, tags map[string]int, asns map[int]*ASNSu
 
 			countstr = fmt.Sprintf("\t%-4s", countstr)
 			cidrstr = fmt.Sprintf("\t%-18s", cidrstr)
-
-			fmt.Fprintf(color.Error, "%s%s %s\n",
-				yellow(cidrstr), yellow(countstr), blue("Subdomain Name(s)"))
+			fmt.Fprintf(out, "%s%s %s\n", yellow(cidrstr), yellow(countstr), blue("Subdomain Name(s)"))
 		}
 	}
 }
 
 // PrintBanner outputs the Amass banner the same for all tools.
 func PrintBanner() {
+	FprintBanner(color.Error)
+}
+
+// FprintBanner outputs the Amass banner the same for all tools.
+func FprintBanner(out io.Writer) {
 	y := color.New(color.FgHiYellow)
 	r := color.New(color.FgHiRed)
 	rightmost := 76
 
 	pad := func(num int) {
 		for i := 0; i < num; i++ {
-			fmt.Fprint(color.Error, " ")
+			fmt.Fprint(out, " ")
 		}
 	}
-	r.Fprintln(color.Error, Banner)
+	r.Fprintln(out, Banner)
 	pad(rightmost - len(Version))
-	y.Fprintln(color.Error, Version)
+	y.Fprintln(out, Version)
 	pad(rightmost - len(Author))
-	y.Fprintln(color.Error, Author)
+	y.Fprintln(out, Author)
 	pad(rightmost - len(Description))
-	y.Fprintf(color.Error, "%s\n\n\n", Description)
+	y.Fprintf(out, "%s\n\n\n", Description)
 }
 
 func censorDomain(input string) string {
