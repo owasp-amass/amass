@@ -303,7 +303,6 @@ func (c *Config) WhichDomain(name string) string {
 				return d
 			}
 		}
-
 	}
 	return ""
 }
