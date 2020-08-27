@@ -7,7 +7,6 @@ import (
 	"context"
 	"errors"
 	"reflect"
-	"sync"
 	"time"
 
 	"github.com/OWASP/Amass/v3/queue"
@@ -37,9 +36,8 @@ type Service interface {
 	Stop() error
 	OnStop() error
 
-	// Methods that enforce the rate limit
-	SetRateLimit(min time.Duration)
-	CheckRateLimit()
+	// CheckConfig checks if the service configuration allows for operation
+	CheckConfig() error
 
 	// RequestLen returns the current length of the request queue
 	RequestLen() int
@@ -47,6 +45,10 @@ type Service interface {
 	// Methods to support processing of DNSRequests
 	DNSRequest(ctx context.Context, req *DNSRequest)
 	OnDNSRequest(ctx context.Context, req *DNSRequest)
+
+	// Methods to support processing of resolved FQDNs
+	Resolved(ctx context.Context, req *DNSRequest)
+	OnResolved(ctx context.Context, req *DNSRequest)
 
 	// Methods to support processing of discovered proper subdomains
 	SubdomainDiscovered(ctx context.Context, req *DNSRequest, times int)
@@ -95,23 +97,24 @@ type BaseService struct {
 	// The broadcast channel closed when the service is stopped
 	quit chan struct{}
 
+	setRateChan   chan time.Duration
+	checkRateChan chan chan struct{}
+	clearRateChan chan struct{}
+
 	// The specific service embedding BaseAmassService
 	service Service
-
-	// Rate limit enforcement fields
-	rateLimit time.Duration
-	lastLock  sync.Mutex
-	last      time.Time
 }
 
 // NewBaseService returns an initialized BaseService object.
 func NewBaseService(srv Service, name string) *BaseService {
 	return &BaseService{
-		name:    name,
-		queue:   new(queue.Queue),
-		quit:    make(chan struct{}),
-		service: srv,
-		last:    time.Now().Truncate(10 * time.Minute),
+		name:          name,
+		queue:         queue.NewQueue(),
+		quit:          make(chan struct{}),
+		setRateChan:   make(chan time.Duration, 10),
+		checkRateChan: make(chan chan struct{}, 10),
+		clearRateChan: make(chan struct{}, 10),
+		service:       srv,
 	}
 }
 
@@ -124,6 +127,7 @@ func (bas *BaseService) Start() error {
 	}
 
 	bas.started = true
+	go bas.manageRateLimit()
 	go bas.processRequests()
 	return bas.service.OnStart()
 }
@@ -139,16 +143,20 @@ func (bas *BaseService) Stop() error {
 	if bas.stopped {
 		return errors.New(bas.name + " has already been stopped")
 	}
-
-	err := bas.service.OnStop()
 	bas.stopped = true
+
 	close(bas.quit)
-	return err
+	return nil
 }
 
 // OnStop is a placeholder that should be implemented by a Service
 // that has code to execute during service stop.
 func (bas *BaseService) OnStop() error {
+	return nil
+}
+
+// CheckConfig checks if the service configuration allows for operation.
+func (bas *BaseService) CheckConfig() error {
 	return nil
 }
 
@@ -168,9 +176,15 @@ func (bas *BaseService) DNSRequest(ctx context.Context, req *DNSRequest) {
 }
 
 // OnDNSRequest is called for a request that was queued via DNSRequest.
-func (bas *BaseService) OnDNSRequest(ctx context.Context, req *DNSRequest) {
-	return
+func (bas *BaseService) OnDNSRequest(ctx context.Context, req *DNSRequest) {}
+
+// Resolved adds the request provided by the parameter to the service request channel.
+func (bas *BaseService) Resolved(ctx context.Context, req *DNSRequest) {
+	bas.queueRequest(bas.service.OnResolved, ctx, req)
 }
+
+// OnResolved is called for a request that was queued via Resolved.
+func (bas *BaseService) OnResolved(ctx context.Context, req *DNSRequest) {}
 
 // SubdomainDiscovered adds the request provided by the parameter to the service request channel.
 func (bas *BaseService) SubdomainDiscovered(ctx context.Context, req *DNSRequest, times int) {
@@ -178,9 +192,7 @@ func (bas *BaseService) SubdomainDiscovered(ctx context.Context, req *DNSRequest
 }
 
 // OnSubdomainDiscovered is called for a request that was queued via DNSRequest.
-func (bas *BaseService) OnSubdomainDiscovered(ctx context.Context, req *DNSRequest, times int) {
-	return
-}
+func (bas *BaseService) OnSubdomainDiscovered(ctx context.Context, req *DNSRequest, times int) {}
 
 // AddrRequest adds the request provided by the parameter to the service request channel.
 func (bas *BaseService) AddrRequest(ctx context.Context, req *AddrRequest) {
@@ -188,9 +200,7 @@ func (bas *BaseService) AddrRequest(ctx context.Context, req *AddrRequest) {
 }
 
 // OnAddrRequest is called for a request that was queued via AddrRequest.
-func (bas *BaseService) OnAddrRequest(ctx context.Context, req *AddrRequest) {
-	return
-}
+func (bas *BaseService) OnAddrRequest(ctx context.Context, req *AddrRequest) {}
 
 // ASNRequest adds the request provided by the parameter to the service request channel.
 func (bas *BaseService) ASNRequest(ctx context.Context, req *ASNRequest) {
@@ -198,9 +208,7 @@ func (bas *BaseService) ASNRequest(ctx context.Context, req *ASNRequest) {
 }
 
 // OnASNRequest is called for a request that was queued via ASNRequest.
-func (bas *BaseService) OnASNRequest(ctx context.Context, req *ASNRequest) {
-	return
-}
+func (bas *BaseService) OnASNRequest(ctx context.Context, req *ASNRequest) {}
 
 // WhoisRequest adds the request provided by the parameter to the service request channel.
 func (bas *BaseService) WhoisRequest(ctx context.Context, req *WhoisRequest) {
@@ -208,9 +216,7 @@ func (bas *BaseService) WhoisRequest(ctx context.Context, req *WhoisRequest) {
 }
 
 // OnWhoisRequest is called for a request that was queued via WhoisRequest.
-func (bas *BaseService) OnWhoisRequest(ctx context.Context, req *WhoisRequest) {
-	return
-}
+func (bas *BaseService) OnWhoisRequest(ctx context.Context, req *WhoisRequest) {}
 
 // Quit return the quit channel for the service.
 func (bas *BaseService) Quit() <-chan struct{} {
@@ -229,22 +235,47 @@ func (bas *BaseService) Stats() *ServiceStats {
 
 // SetRateLimit sets the minimum wait between checks.
 func (bas *BaseService) SetRateLimit(min time.Duration) {
-	bas.rateLimit = min
+	bas.setRateChan <- min
 }
 
 // CheckRateLimit blocks until the minimum wait since the last call.
 func (bas *BaseService) CheckRateLimit() {
-	if bas.rateLimit == time.Duration(0) {
-		return
-	}
+	ch := make(chan struct{}, 2)
 
-	bas.lastLock.Lock()
-	defer bas.lastLock.Unlock()
+	bas.checkRateChan <- ch
+	<-ch
+}
 
-	if delta := time.Now().Sub(bas.last); bas.rateLimit > delta {
-		time.Sleep(bas.rateLimit - delta)
+// ClearLast resets the last value so the service can be utilized immediately.
+func (bas *BaseService) ClearLast() {
+	bas.clearRateChan <- struct{}{}
+}
+
+func (bas *BaseService) manageRateLimit() {
+	var rateLimit time.Duration
+	last := time.Now().Truncate(10 * time.Minute)
+loop:
+	for {
+		select {
+		case <-bas.quit:
+			return
+		case d := <-bas.setRateChan:
+			rateLimit = d
+		case ch := <-bas.checkRateChan:
+			if rateLimit == time.Duration(0) {
+				ch <- struct{}{}
+				continue loop
+			}
+
+			if delta := time.Since(last); rateLimit > delta {
+				time.Sleep(rateLimit - delta)
+			}
+			last = time.Now()
+			ch <- struct{}{}
+		case <-bas.clearRateChan:
+			last.Truncate(time.Hour)
+		}
 	}
-	bas.last = time.Now()
 }
 
 type queuedCall struct {
@@ -265,34 +296,25 @@ func (bas *BaseService) queueRequest(fn interface{}, args ...interface{}) {
 }
 
 func (bas *BaseService) processRequests() {
-	curIdx := 0
-	maxIdx := 6
-	delays := []int{25, 50, 75, 100, 150, 250, 500}
-loop:
+	each := func(element interface{}) {
+		e := element.(*queuedCall)
+		ctx := e.Args[0].Interface().(context.Context)
+
+		select {
+		case <-ctx.Done():
+		default:
+			// Call the queued function or method
+			e.Func.Call(e.Args)
+		}
+	}
+
 	for {
 		select {
 		case <-bas.Quit():
+			bas.service.OnStop()
 			return
-		default:
-			element, ok := bas.queue.Next()
-			if !ok {
-				time.Sleep(time.Duration(delays[curIdx]) * time.Millisecond)
-				if curIdx < maxIdx {
-					curIdx++
-				}
-				continue loop
-			}
-			curIdx = 0
-			e := element.(*queuedCall)
-			ctx := e.Args[0].Interface().(context.Context)
-
-			select {
-			case <-ctx.Done():
-				continue loop
-			default:
-				// Call the queued function or method
-				e.Func.Call(e.Args)
-			}
+		case <-bas.queue.Signal:
+			bas.queue.Process(each)
 		}
 	}
 }

@@ -11,14 +11,14 @@ import (
 )
 
 func TestResolverPoolWildcardDetection(t *testing.T) {
-	pool := SetupResolverPool([]string{"8.8.8.8"}, false, nil)
+	pool := SetupResolverPool([]string{"8.8.8.8"}, 100, false, nil)
 	if pool == nil {
 		return
 	}
 
 	req := &requests.DNSRequest{
-		Name:   "random.wildcard.owasp-amass.com",
-		Domain: "wildcard.owasp-amass.com",
+		Name:   "blahblah.ezproxy.utica.edu",
+		Domain: "utica.edu",
 	}
 
 	if !pool.MatchesWildcard(context.TODO(), req) {

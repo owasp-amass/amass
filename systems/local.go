@@ -4,30 +4,34 @@
 package systems
 
 import (
+	"context"
 	"errors"
-	"sync"
+	"fmt"
+	"os"
+	"runtime"
 
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/graph"
-	"github.com/OWASP/Amass/v3/graphdb"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/resolvers"
+	"golang.org/x/sync/semaphore"
 )
 
 // LocalSystem implements a System to be executed within a single process.
 type LocalSystem struct {
-	sync.Mutex
-
 	cfg    *config.Config
 	pool   resolvers.Resolver
 	graphs []*graph.Graph
 
-	// The various services running within the system
-	dataSources []requests.Service
+	// Semaphore to enforce the maximum DNS queries
+	semMaxDNSQueries *semaphore.Weighted
 
 	// Broadcast channel that indicates no further writes to the output channel
 	done              chan struct{}
 	doneAlreadyClosed bool
+
+	addSource  chan requests.Service
+	allSources chan chan []requests.Service
 }
 
 // NewLocalSystem returns an initialized LocalSystem object.
@@ -36,19 +40,24 @@ func NewLocalSystem(c *config.Config) (*LocalSystem, error) {
 		return nil, err
 	}
 
-	pool := resolvers.SetupResolverPool(
-		c.Resolvers,
-		c.MonitorResolverRate,
-		c.Log,
-	)
+	pool := resolvers.SetupResolverPool(c.Resolvers, c.MaxDNSQueries, c.MonitorResolverRate, c.Log)
 	if pool == nil {
 		return nil, errors.New("The system was unable to build the pool of resolvers")
 	}
 
 	sys := &LocalSystem{
-		cfg:  c,
-		pool: pool,
-		done: make(chan struct{}, 2),
+		cfg:              c,
+		pool:             pool,
+		done:             make(chan struct{}, 2),
+		addSource:        make(chan requests.Service, 10),
+		allSources:       make(chan chan []requests.Service, 10),
+		semMaxDNSQueries: semaphore.NewWeighted(int64(c.MaxDNSQueries)),
+	}
+
+	// Make sure that the output directory is setup for this local system
+	if err := sys.setupOutputDirectory(); err != nil {
+		sys.Shutdown()
+		return nil, err
 	}
 
 	// Setup the correct graph database handler
@@ -57,6 +66,7 @@ func NewLocalSystem(c *config.Config) (*LocalSystem, error) {
 		return nil, err
 	}
 
+	go sys.manageDataSources()
 	return sys, nil
 }
 
@@ -71,11 +81,8 @@ func (l *LocalSystem) Pool() resolvers.Resolver {
 }
 
 // AddSource implements the System interface.
-func (l *LocalSystem) AddSource(srv requests.Service) error {
-	l.Lock()
-	defer l.Unlock()
-
-	l.dataSources = append(l.dataSources, srv)
+func (l *LocalSystem) AddSource(src requests.Service) error {
+	l.addSource <- src
 	return nil
 }
 
@@ -91,10 +98,10 @@ func (l *LocalSystem) AddAndStart(srv requests.Service) error {
 
 // DataSources implements the System interface.
 func (l *LocalSystem) DataSources() []requests.Service {
-	l.Lock()
-	defer l.Unlock()
+	ch := make(chan []requests.Service, 2)
 
-	return l.dataSources
+	l.allSources <- ch
+	return <-ch
 }
 
 // SetDataSources assigns the data sources that will be used by the system.
@@ -112,20 +119,21 @@ func (l *LocalSystem) GraphDatabases() []*graph.Graph {
 
 // Shutdown implements the System interface.
 func (l *LocalSystem) Shutdown() error {
-	if !l.doneAlreadyClosed {
-		l.doneAlreadyClosed = true
-		close(l.done)
+	if l.doneAlreadyClosed {
+		return nil
 	}
+	l.doneAlreadyClosed = true
 
 	for _, src := range l.DataSources() {
 		src.Stop()
 	}
+	close(l.done)
 
 	for _, g := range l.GraphDatabases() {
 		g.Close()
 	}
 
-	l.pool.Stop()
+	go l.pool.Stop()
 	return nil
 }
 
@@ -139,23 +147,77 @@ func (l *LocalSystem) GetAllSourceNames() []string {
 	return names
 }
 
-// Select the graph that will store the System findings.
-func (l *LocalSystem) setupGraphDBs() error {
-	if l.Config().GremlinURL != "" {
-		/*gremlin := graph.NewGremlin(l.Config().GremlinURL,
-			l.Config().GremlinUser, l.Config().GremlinPass, l.Config().Log)
-		l.graphs = append(l.graphs, gremlin)*/
+func (l *LocalSystem) setupOutputDirectory() error {
+	path := config.OutputDirectory(l.cfg.Dir)
+	if path == "" {
+		return nil
 	}
 
-	g := graph.NewGraph(graphdb.NewCayleyGraph(l.Config().Dir))
-	if g == nil {
-		return errors.New("Failed to create the graph")
+	var err error
+	// If the directory does not yet exist, create it
+	if err = os.MkdirAll(path, 0755); err != nil {
+		return nil
 	}
-	l.graphs = append(l.graphs, g)
-	/*
-		if l.Config().DataOptsWriter != nil {
-			l.graphs = append(l.graphs,
-				graph.NewDataOptsHandler(l.Config().DataOptsWriter))
-		}*/
+
 	return nil
+}
+
+// Select the graph that will store the System findings.
+func (l *LocalSystem) setupGraphDBs() error {
+	cfg := l.Config()
+
+	var dbs []*config.Database
+	if db := cfg.LocalDatabaseSettings(cfg.GraphDBs); db != nil {
+		dbs = append(dbs, db)
+	}
+	dbs = append(dbs, cfg.GraphDBs...)
+
+	for _, db := range dbs {
+		cayley := graph.NewCayleyGraph(db.System, db.URL, db.Options)
+		if cayley == nil {
+			return fmt.Errorf("System: Failed to create the %s graph", db.System)
+		}
+
+		g := graph.NewGraph(cayley)
+		if g == nil {
+			return fmt.Errorf("System: Failed to create the %s graph", g.String())
+		}
+
+		l.graphs = append(l.graphs, g)
+	}
+
+	return nil
+}
+
+// GetMemoryUsage returns the number bytes allocated to heap objects on this system.
+func (l *LocalSystem) GetMemoryUsage() uint64 {
+	var m runtime.MemStats
+
+	runtime.ReadMemStats(&m)
+	return m.Alloc
+}
+
+// PerformDNSQuery blocks if the maximum number of queries is already taking place.
+func (l *LocalSystem) PerformDNSQuery(ctx context.Context) error {
+	return l.semMaxDNSQueries.Acquire(ctx, 1)
+}
+
+// FinishedDNSQuery allows a new DNS query to be started when at the maximum.
+func (l *LocalSystem) FinishedDNSQuery() {
+	l.semMaxDNSQueries.Release(1)
+}
+
+func (l *LocalSystem) manageDataSources() {
+	var dataSources []requests.Service
+
+	for {
+		select {
+		case <-l.done:
+			return
+		case add := <-l.addSource:
+			dataSources = append(dataSources, add)
+		case all := <-l.allSources:
+			all <- dataSources
+		}
+	}
 }

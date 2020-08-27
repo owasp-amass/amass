@@ -114,12 +114,7 @@ func (c *CommonCrawl) OnDNSRequest(ctx context.Context, req *requests.DNSRequest
 
 			for _, url := range c.parseJSON(page) {
 				if name := re.FindString(url); name != "" && !filter.Duplicate(name) {
-					bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
-						Name:   name,
-						Domain: req.Domain,
-						Tag:    c.SourceType,
-						Source: c.String(),
-					})
+					genNewNameEvent(ctx, c.sys, c, name)
 				}
 			}
 		}

@@ -10,7 +10,9 @@ import (
 )
 
 const dotTemplate = `
-digraph {{ .Name }} {
+digraph "{{ .Name }}" {
+	size = "7.5,10"; ranksep="2.5 equally"; ratio=auto;
+
 {{ range .Nodes }}
         node [label="{{ .Label }}",color="{{ .Color }}",type="{{ .Type }}",source="{{ .Source }}"]; n{{ .ID }};
 {{ end }}
@@ -54,7 +56,7 @@ func WriteDOTData(output io.Writer, nodes []Node, edges []Edge) {
 		"as":        "blue",
 	}
 
-	graph := &dotGraph{Name: "Amass"}
+	graph := &dotGraph{Name: "OWASP Amass Network Mapping"}
 
 	for idx, node := range nodes {
 		graph.Nodes = append(graph.Nodes, dotNode{
@@ -70,7 +72,7 @@ func WriteDOTData(output io.Writer, nodes []Node, edges []Edge) {
 		graph.Edges = append(graph.Edges, dotEdge{
 			Source:      strconv.Itoa(edge.From + 1),
 			Destination: strconv.Itoa(edge.To + 1),
-			Label:       edge.Label,
+			Label:       edge.Title,
 		})
 	}
 

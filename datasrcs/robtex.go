@@ -72,8 +72,6 @@ func (r *Robtex) OnASNRequest(ctx context.Context, req *requests.ASNRequest) {
 	}
 
 	r.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, r.String())
-
 	if req.Address != "" {
 		r.executeASNAddrQuery(ctx, req.Address)
 		return
@@ -112,12 +110,11 @@ func (r *Robtex) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 		if line.Type == "A" {
 			ips.Insert(line.Data)
 		} else if line.Type == "NS" || line.Type == "MX" {
-			bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
-				Name:   strings.Trim(line.Data, "."),
-				Domain: req.Domain,
-				Tag:    r.Type(),
-				Source: r.String(),
-			})
+			name := strings.Trim(line.Data, ".")
+
+			if cfg.IsDomainInScope(name) {
+				genNewNameEvent(ctx, r.sys, r, name)
+			}
 		}
 	}
 
@@ -139,16 +136,9 @@ loop:
 			}
 
 			for _, line := range r.parseDNSJSON(pdns) {
-				n := strings.Trim(line.Name, ".")
+				name := strings.Trim(line.Name, ".")
 
-				if d := cfg.WhichDomain(n); d != "" {
-					bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
-						Name:   n,
-						Domain: d,
-						Tag:    r.Type(),
-						Source: r.String(),
-					})
-				}
+				genNewNameEvent(ctx, r.sys, r, name)
 			}
 		}
 	}
@@ -266,47 +256,19 @@ func (r *Robtex) origin(ctx context.Context, addr string) *requests.ASNRequest {
 	}
 
 	for _, n := range ipinfo.ActiveDNS {
-		if cfg.IsDomainInScope(n.Name) {
-			bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
-				Name:   n.Name,
-				Domain: r.sys.Pool().SubdomainToDomain(n.Name),
-				Tag:    r.Type(),
-				Source: r.String(),
-			})
-		}
+		genNewNameEvent(ctx, r.sys, r, n.Name)
 	}
 
 	for _, n := range ipinfo.ActiveDNSHistory {
-		if cfg.IsDomainInScope(n.Name) {
-			bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
-				Name:   n.Name,
-				Domain: r.sys.Pool().SubdomainToDomain(n.Name),
-				Tag:    r.Type(),
-				Source: r.String(),
-			})
-		}
+		genNewNameEvent(ctx, r.sys, r, n.Name)
 	}
 
 	for _, n := range ipinfo.PassiveDNS {
-		if cfg.IsDomainInScope(n.Name) {
-			bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
-				Name:   n.Name,
-				Domain: r.sys.Pool().SubdomainToDomain(n.Name),
-				Tag:    r.Type(),
-				Source: r.String(),
-			})
-		}
+		genNewNameEvent(ctx, r.sys, r, n.Name)
 	}
 
 	for _, n := range ipinfo.PassiveDNSHistory {
-		if cfg.IsDomainInScope(n.Name) {
-			bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
-				Name:   n.Name,
-				Domain: r.sys.Pool().SubdomainToDomain(n.Name),
-				Tag:    r.Type(),
-				Source: r.String(),
-			})
-		}
+		genNewNameEvent(ctx, r.sys, r, n.Name)
 	}
 
 	if ipinfo.ASN == 0 {

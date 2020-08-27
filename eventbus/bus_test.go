@@ -14,7 +14,7 @@ func TestEventBus(t *testing.T) {
 	var success, survived bool
 	var suclock, surlock sync.Mutex
 
-	bus := NewEventBus(1000)
+	bus := NewEventBus()
 
 	fn1 := func(v bool) {
 		suclock.Lock()
@@ -31,9 +31,10 @@ func TestEventBus(t *testing.T) {
 	bus.Subscribe(topic, fn1)
 	bus.Subscribe(topic, fn2)
 	defer bus.Unsubscribe(topic, fn2)
+	time.Sleep(time.Second)
 
 	bus.Publish(topic, PriorityLow, true)
-	time.Sleep(time.Second)
+	time.Sleep(2 * time.Second)
 
 	suclock.Lock()
 	s := success

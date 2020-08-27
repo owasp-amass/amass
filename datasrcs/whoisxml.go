@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -82,6 +83,19 @@ func (w *WhoisXML) OnStart() error {
 	return nil
 }
 
+// CheckConfig implements the Service interface.
+func (w *WhoisXML) CheckConfig() error {
+	api := w.sys.Config().GetAPIKey(w.String())
+
+	if api == nil || api.Key == "" {
+		estr := fmt.Sprintf("%s: check callback failed for the configuration", w.String())
+		w.sys.Config().Log.Print(estr)
+		return errors.New(estr)
+	}
+
+	return nil
+}
+
 // OnWhoisRequest implements the Service interface.
 func (w *WhoisXML) OnWhoisRequest(ctx context.Context, req *requests.WhoisRequest) {
 	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
@@ -139,5 +153,5 @@ func (w *WhoisXML) OnWhoisRequest(ctx context.Context, req *requests.WhoisReques
 }
 
 func (w *WhoisXML) getReverseWhoisURL(domain string) string {
-	return fmt.Sprint("https://reverse-whois-api.whoisxmlapi.com/api/v2")
+	return "https://reverse-whois-api.whoisxmlapi.com/api/v2"
 }

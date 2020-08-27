@@ -3,10 +3,8 @@ package eventbus
 import (
 	"reflect"
 	"sync"
-	"time"
 
 	"github.com/OWASP/Amass/v3/queue"
-	"github.com/OWASP/Amass/v3/semaphore"
 )
 
 // The priority levels for event bus messages.
@@ -21,30 +19,36 @@ type pubReq struct {
 	Args  []reflect.Value
 }
 
+type subReq struct {
+	Topic string
+	Fn    interface{}
+}
+
+type eventbusChans struct {
+	Subscribe   chan *subReq
+	Unsubscribe chan *subReq
+}
+
 // EventBus handles sending and receiving events across Amass.
 type EventBus struct {
-	sync.Mutex
-	topics map[string][]reflect.Value
-	max    semaphore.Semaphore
-	queues []*queue.Queue
-	done   chan struct{}
-	closed sync.Once
+	channels *eventbusChans
+	queue    *queue.Queue
+	done     chan struct{}
+	closed   sync.Once
 }
 
 // NewEventBus initializes and returns an EventBus object.
-func NewEventBus(max int) *EventBus {
+func NewEventBus() *EventBus {
 	eb := &EventBus{
-		topics: make(map[string][]reflect.Value),
-		max:    semaphore.NewSimpleSemaphore(max),
-		queues: []*queue.Queue{
-			new(queue.Queue),
-			new(queue.Queue),
-			new(queue.Queue),
+		channels: &eventbusChans{
+			Subscribe:   make(chan *subReq, 10),
+			Unsubscribe: make(chan *subReq, 10),
 		},
-		done: make(chan struct{}, 2),
+		queue: queue.NewQueue(),
+		done:  make(chan struct{}, 2),
 	}
 
-	go eb.processRequests()
+	go eb.processRequests(eb.channels)
 	return eb
 }
 
@@ -57,98 +61,132 @@ func (eb *EventBus) Stop() {
 
 // Subscribe registers callback to be executed for all requests on the channel.
 func (eb *EventBus) Subscribe(topic string, fn interface{}) {
-	if topic != "" && reflect.TypeOf(fn).Kind() == reflect.Func {
-		callback := reflect.ValueOf(fn)
-
-		eb.Lock()
-		eb.topics[topic] = append(eb.topics[topic], callback)
-		eb.Unlock()
+	eb.channels.Subscribe <- &subReq{
+		Topic: topic,
+		Fn:    fn,
 	}
 }
 
 // Unsubscribe deregisters the callback from the channel.
 func (eb *EventBus) Unsubscribe(topic string, fn interface{}) {
-	if topic != "" && reflect.TypeOf(fn).Kind() == reflect.Func {
-		callback := reflect.ValueOf(fn)
-
-		eb.Lock()
-		defer eb.Unlock()
-
-		var channels []reflect.Value
-		for _, c := range eb.topics[topic] {
-			if c != callback {
-				channels = append(channels, c)
-			}
-		}
-
-		eb.topics[topic] = channels
+	eb.channels.Unsubscribe <- &subReq{
+		Topic: topic,
+		Fn:    fn,
 	}
 }
 
 // Publish sends req on the channel labeled with name.
-func (eb *EventBus) Publish(topic string, priority int, args ...interface{}) {
-	if topic != "" && priority >= PriorityLow && priority <= PriorityCritical {
-		passedArgs := make([]reflect.Value, 0)
-
-		for _, arg := range args {
-			passedArgs = append(passedArgs, reflect.ValueOf(arg))
-		}
-
-		eb.queues[priority].Append(&pubReq{
-			Topic: topic,
-			Args:  passedArgs,
-		})
+func (eb *EventBus) Publish(topic string, p int, args ...interface{}) {
+	if topic == "" || p < PriorityLow || p > PriorityCritical {
+		return
 	}
+
+	priority := queue.PriorityNormal
+	switch p {
+	case PriorityCritical:
+		priority = queue.PriorityCritical
+	case PriorityHigh:
+		priority = queue.PriorityHigh
+	case PriorityLow:
+		priority = queue.PriorityLow
+	}
+
+	passedArgs := make([]reflect.Value, 0)
+
+	for _, arg := range args {
+		passedArgs = append(passedArgs, reflect.ValueOf(arg))
+	}
+
+	eb.queue.AppendPriority(&pubReq{
+		Topic: topic,
+		Args:  passedArgs,
+	}, priority)
 }
 
-func (eb *EventBus) processRequests() {
-	curIdx := 0
-	maxIdx := 6
-	delays := []int{10, 25, 50, 75, 100, 150, 250}
+type topicEntry struct {
+	sync.Mutex
+	Topic     string
+	Callbacks []reflect.Value
+	Queue     *queue.Queue
+	Done      chan struct{}
+}
 
+func (eb *EventBus) processRequests(chs *eventbusChans) {
+	topics := make(map[string]*topicEntry)
+	each := func(element interface{}) {
+		p := element.(*pubReq)
+
+		if _, ok := topics[p.Topic]; ok {
+			topics[p.Topic].Queue.Append(p)
+		}
+	}
+loop:
 	for {
 		select {
 		case <-eb.done:
+			for _, topic := range topics {
+				close(topic.Done)
+			}
 			return
-		default:
-			var found bool
-			var element interface{}
-			// Pull from the critical queue first
-			for p := PriorityCritical; p >= PriorityLow; p-- {
-				element, found = eb.queues[p].Next()
-				if found {
-					break
+		case sub := <-chs.Subscribe:
+			if sub.Topic != "" && reflect.TypeOf(sub.Fn).Kind() == reflect.Func {
+				if _, found := topics[sub.Topic]; !found {
+					topics[sub.Topic] = &topicEntry{
+						Topic: sub.Topic,
+						Queue: queue.NewQueue(),
+						Done:  make(chan struct{}, 2),
+					}
+
+					go eb.processTopicEvents(topics[sub.Topic])
 				}
-			}
 
-			if !found {
-				if curIdx < maxIdx {
-					curIdx++
+				callback := reflect.ValueOf(sub.Fn)
+				topics[sub.Topic].Lock()
+				topics[sub.Topic].Callbacks = append(topics[sub.Topic].Callbacks, callback)
+				topics[sub.Topic].Unlock()
+			}
+		case unsub := <-chs.Unsubscribe:
+			if unsub.Topic != "" && reflect.TypeOf(unsub.Fn).Kind() == reflect.Func {
+				callback := reflect.ValueOf(unsub.Fn)
+
+				if _, found := topics[unsub.Topic]; !found {
+					continue loop
 				}
-				time.Sleep(time.Duration(delays[curIdx]) * time.Millisecond)
-				continue
-			}
 
-			curIdx = 0
-			p := element.(*pubReq)
-
-			eb.Lock()
-			callbacks, found := eb.topics[p.Topic]
-			eb.Unlock()
-			if !found {
-				continue
+				topics[unsub.Topic].Lock()
+				var channels []reflect.Value
+				for _, c := range topics[unsub.Topic].Callbacks {
+					if c != callback {
+						channels = append(channels, c)
+					}
+				}
+				topics[unsub.Topic].Callbacks = channels
+				topics[unsub.Topic].Unlock()
 			}
-
-			for _, cb := range callbacks {
-				eb.max.Acquire(1)
-				go eb.execute(cb, p.Args)
-			}
+		case <-eb.queue.Signal:
+			eb.queue.Process(each)
 		}
 	}
 }
 
-func (eb *EventBus) execute(callback reflect.Value, args []reflect.Value) {
-	defer eb.max.Release(1)
+func (eb *EventBus) processTopicEvents(topic *topicEntry) {
+	for {
+		select {
+		case <-topic.Done:
+			return
+		case <-topic.Queue.Signal:
+			topic.Lock()
+			callbacks := topic.Callbacks
+			topic.Unlock()
+			each := func(element interface{}) {
+				p := element.(*pubReq)
 
-	callback.Call(args)
+				for _, cb := range callbacks {
+					cb.Call(p.Args)
+				}
+			}
+
+			topic.Queue.Process(each)
+		}
+	}
 }

@@ -26,7 +26,7 @@ import (
 
 const (
 	// UserAgent is the default user agent used by Amass during HTTP requests.
-	UserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/72.0.3626.119 Safari/537.36"
+	UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.97 Safari/537.36"
 
 	// Accept is the default HTTP Accept header value used by Amass.
 	Accept = "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
@@ -101,16 +101,15 @@ func RequestWebPage(urlstring string, body io.Reader, hvals map[string]string, u
 	req.Header.Set("User-Agent", UserAgent)
 	req.Header.Set("Accept", Accept)
 	req.Header.Set("Accept-Language", AcceptLang)
-	if hvals != nil {
-		for k, v := range hvals {
-			req.Header.Set(k, v)
-		}
+
+	for k, v := range hvals {
+		req.Header.Set(k, v)
 	}
 
 	resp, err := defaultClient.Do(req)
 	if err != nil {
 		return "", err
-	} else if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+	} else if resp.StatusCode < 200 || resp.StatusCode >= 400 {
 		return "", errors.New(resp.Status)
 	}
 

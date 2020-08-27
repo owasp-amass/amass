@@ -5,6 +5,7 @@ package enum
 
 import (
 	"context"
+	"math/rand"
 	"strconv"
 	"sync"
 	"time"
@@ -12,17 +13,14 @@ import (
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/eventbus"
 	"github.com/OWASP/Amass/v3/graph"
-	"github.com/OWASP/Amass/v3/graphdb"
-	"github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/queue"
 	"github.com/OWASP/Amass/v3/requests"
-	"github.com/OWASP/Amass/v3/resolvers"
 	"github.com/OWASP/Amass/v3/stringfilter"
 	"github.com/OWASP/Amass/v3/stringset"
 	"github.com/OWASP/Amass/v3/systems"
 )
 
-var filterMaxSize int64 = 1 << 24
+var filterMaxSize int64 = 1 << 23
 
 // Enumeration is the object type used to execute a DNS enumeration with Amass.
 type Enumeration struct {
@@ -33,19 +31,16 @@ type Enumeration struct {
 	Graph      *graph.Graph
 	closedOnce sync.Once
 
-	ctx context.Context
-
-	dnsMgr       requests.Service
-	dataMgr      requests.Service
-	dataMgrEmpty bool
-	dataMgrLock  sync.Mutex
-
-	srcsLock sync.Mutex
-	srcs     stringset.Set
+	ctx     context.Context
+	dnsMgr  requests.Service
+	dataMgr requests.Service
+	asMgr   *ASService
+	srcs    []requests.Service
 
 	// The filter for new outgoing DNS queries
 	resFilter      stringfilter.Filter
 	resFilterCount int64
+	resFilterLock  sync.Mutex
 
 	// Queue for the log messages
 	logQueue *queue.Queue
@@ -54,46 +49,42 @@ type Enumeration struct {
 	done     chan struct{}
 	doneOnce sync.Once
 
-	// Cache for the infrastructure data collected from online sources
-	netCache *net.ASNCache
-
 	managers       []FQDNManager
 	resolvedMgrs   []FQDNManager
 	resolvedFilter stringfilter.Filter
+	addrMgr        *AddressManager
 	nameMgr        *NameManager
 	subMgr         *SubdomainManager
-	bruteMgr       *BruteManager
-	altMgr         *AlterationsManager
-	guessMgr       *GuessManager
 	domainMgr      *DomainManager
 
-	lastLock sync.Mutex
-	last     time.Time
-
-	perSecLock  sync.Mutex
-	perSec      int64
-	retries     int64
-	numSeqZeros int64
-	perSecFirst time.Time
-	perSecLast  time.Time
+	enumStateChannels *enumStateChans
+	memUsage          uint64
 }
 
 // NewEnumeration returns an initialized Enumeration that has not been started yet.
-func NewEnumeration(sys systems.System) *Enumeration {
+func NewEnumeration(cfg *config.Config, sys systems.System) *Enumeration {
 	e := &Enumeration{
-		Config:         config.NewConfig(),
-		Bus:            eventbus.NewEventBus(10000),
+		Config:         cfg,
 		Sys:            sys,
-		Graph:          graph.NewGraph(graphdb.NewCayleyGraphMemory()),
-		srcs:           stringset.New(),
+		Bus:            eventbus.NewEventBus(),
+		Graph:          graph.NewGraph(graph.NewCayleyGraphMemory()),
+		srcs:           selectedDataSources(cfg, sys),
 		resFilter:      stringfilter.NewBloomFilter(filterMaxSize),
-		logQueue:       new(queue.Queue),
+		logQueue:       queue.NewQueue(),
 		done:           make(chan struct{}),
-		netCache:       net.NewASNCache(),
 		resolvedFilter: stringfilter.NewBloomFilter(filterMaxSize),
-		last:           time.Now(),
-		perSecFirst:    time.Now(),
-		perSecLast:     time.Now(),
+		enumStateChannels: &enumStateChans{
+			GetLastActive: make(chan chan time.Time, 10),
+			UpdateLast:    queue.NewQueue(),
+			GetPerSec:     make(chan chan *getPerSec, 10),
+			IncPerSec:     queue.NewQueue(),
+			ClearPerSec:   make(chan struct{}, 10),
+		},
+	}
+	go e.manageEnumState(e.enumStateChannels)
+
+	if cfg.Passive {
+		return e
 	}
 
 	e.dataMgr = NewDataManagerService(sys, e.Graph)
@@ -106,9 +97,15 @@ func NewEnumeration(sys systems.System) *Enumeration {
 		return nil
 	}
 
+	e.asMgr = NewASService(sys.DataSources(), e.Graph, e.Config.UUID.String())
+	if err := e.asMgr.Start(); err != nil {
+		return nil
+	}
+
 	return e
 }
 
+// Close cleans up resources instantiated by the Enumeration.
 func (e *Enumeration) Close() {
 	e.closedOnce.Do(func() {
 		e.Graph.Close()
@@ -122,27 +119,40 @@ func (e *Enumeration) Done() {
 	})
 }
 
+// Using the config and system provided, this function returns the data sources used in the enumeration
+func selectedDataSources(cfg *config.Config, sys systems.System) []requests.Service {
+	specified := stringset.New()
+	specified.InsertMany(cfg.SourceFilter.Sources...)
+
+	available := stringset.New()
+	for _, src := range sys.DataSources() {
+		available.Insert(src.String())
+	}
+
+	if specified.Len() > 0 && cfg.SourceFilter.Include {
+		available.Intersect(specified)
+	} else {
+		available.Subtract(specified)
+	}
+
+	var results []requests.Service
+	for _, src := range sys.DataSources() {
+		if available.Has(src.String()) {
+			results = append(results, src)
+		}
+	}
+
+	rand.Shuffle(len(results), func(i, j int) {
+		results[i], results[j] = results[j], results[i]
+	})
+	return results
+}
+
 // Start begins the vertical domain correlation process for the Enumeration object.
 func (e *Enumeration) Start() error {
 	if err := e.Config.CheckSettings(); err != nil {
 		return err
 	}
-
-	// Using the configuration provided, this section determines
-	// which data sources will be used in the enumeration
-	e.srcsLock.Lock()
-	srcs := stringset.New()
-	e.srcs.Intersect(srcs)
-	srcs.InsertMany(e.Config.SourceFilter.Sources...)
-	for _, src := range e.Sys.DataSources() {
-		e.srcs.Insert(src.String())
-	}
-	if srcs.Len() > 0 && e.Config.SourceFilter.Include {
-		e.srcs.Intersect(srcs)
-	} else {
-		e.srcs.Subtract(srcs)
-	}
-	e.srcsLock.Unlock()
 
 	/*
 	 * This context, used throughout the enumeration, will provide the
@@ -158,25 +168,36 @@ func (e *Enumeration) Start() error {
 
 	// If requests were made for specific ASNs, then those requests are
 	// send to included data sources at this point
-	e.srcsLock.Lock()
-	for _, src := range e.Sys.DataSources() {
-		if !e.srcs.Has(src.String()) {
-			continue
-		}
-
+	for _, src := range e.srcs {
 		for _, asn := range e.Config.ASNs {
 			src.ASNRequest(e.ctx, &requests.ASNRequest{ASN: asn})
 		}
 	}
-	e.srcsLock.Unlock()
 
 	/*
-	 * A sequence of name managers is setup starting here. This sequence of
-	 * managers will be used throughout the enumeration to control the
-	 * release and handle the discovery of new names. The order that the
+	 * A sequence of enum managers is setup starting here. These managers
+	 * will be used throughout the enumeration to control the release of
+	 * information and handle the discovery of new names. The order that the
 	 * managers have been entered into the sequence is important to how the
-	 * engine selects which names to process next during the enumeration
+	 * engine selects what information to process next during the enumeration
 	 */
+
+	/*
+	 * When not running in passive mode, the enumeration will require an
+	 * AddressManager to receive successfully resolved FQDNs and process
+	 * the IP addresses for caching of infrastructure data, setting up
+	 * reverse DNS queries, and other engagements when in active mode
+	 */
+	if !e.Config.Passive {
+		e.addrMgr = NewAddressManager(e)
+		defer e.addrMgr.Stop()
+		e.managers = append(e.managers, e.addrMgr)
+		e.resolvedMgrs = append(e.resolvedMgrs, e.addrMgr)
+		e.Bus.Subscribe(requests.NewAddrTopic, e.addrMgr.InputAddress)
+		defer e.Bus.Unsubscribe(requests.NewAddrTopic, e.addrMgr.InputAddress)
+		e.Bus.Subscribe(requests.NewASNTopic, e.asMgr.Cache.Update)
+		defer e.Bus.Unsubscribe(requests.NewASNTopic, e.asMgr.Cache.Update)
+	}
 
 	/*
 	 * Setup the NameManager for receiving newly discovered names from the
@@ -188,32 +209,6 @@ func (e *Enumeration) Start() error {
 	e.managers = append(e.managers, e.nameMgr)
 	e.Bus.Subscribe(requests.NewNameTopic, e.nameMgr.InputName)
 	defer e.Bus.Unsubscribe(requests.NewNameTopic, e.nameMgr.InputName)
-
-	/*
-	 * Now that the NameManager has been setup, names provided by the user
-	 * and names acquired from the graph database can be brought into the
-	 * enumeration
-	 */
-	go e.submitKnownNames()
-	go e.submitProvidedNames()
-
-	/*
-	 * When not running in passive mode, the enumeration will require an
-	 * AddressManager to receive successfully resolved FQDNs and process
-	 * the IP addresses for caching of infrastructure data, setting up
-	 * reverse DNS queries, and other engagements when in active mode
-	 */
-	var addrMgr *AddressManager
-	if !e.Config.Passive {
-		addrMgr = NewAddressManager(e)
-		defer addrMgr.Stop()
-		e.managers = append(e.managers, addrMgr)
-		e.resolvedMgrs = append(e.resolvedMgrs, addrMgr)
-		e.Bus.Subscribe(requests.NewAddrTopic, addrMgr.InputAddress)
-		defer e.Bus.Unsubscribe(requests.NewAddrTopic, addrMgr.InputAddress)
-		e.Bus.Subscribe(requests.NewASNTopic, e.netCache.Update)
-		defer e.Bus.Unsubscribe(requests.NewASNTopic, e.netCache.Update)
-	}
 
 	/*
 	 * When not running in passive mode, the enumeration will need to keep
@@ -229,27 +224,12 @@ func (e *Enumeration) Start() error {
 	}
 
 	/*
-	 * If the user has requested brute forcing and we are not in passive mode,
-	 * then the enumeration will need a BruteManager to handle the use of
-	 * wordlists to generate new names for DNS resolution
+	 * Now that the name managers has been setup, names provided by the user
+	 * and names acquired from the graph database can be brought into the
+	 * enumeration
 	 */
-	if !e.Config.Passive && e.Config.BruteForcing {
-		e.bruteMgr = NewBruteManager(e)
-		defer e.bruteMgr.Stop()
-		e.managers = append(e.managers, e.bruteMgr)
-	}
-
-	/*
-	 * When not running in passive mode, the generation of permuted names is
-	 * on by default, and requires an AlterationsManager in order to manage
-	 * newly discovered names that can now be altered
-	 */
-	if !e.Config.Passive && e.Config.Alterations {
-		e.altMgr = NewAlterationsManager(e)
-		defer e.altMgr.Stop()
-		e.managers = append(e.managers, e.altMgr)
-		e.resolvedMgrs = append(e.resolvedMgrs, e.altMgr)
-	}
+	go e.submitKnownNames()
+	go e.submitProvidedNames()
 
 	/*
 	 * Setup the DomainManager for releasing root domain names that are in
@@ -268,19 +248,6 @@ func (e *Enumeration) Start() error {
 	}
 	e.managers = append(e.managers, e.domainMgr)
 
-	/*
-	 * When not running in passive mode, the generation of permuted names is
-	 * on by default, and requires a GuessManager in order to manage newly
-	 * discovered names that will train the machine learning system and to
-	 * release the similar names generated by the algorithm
-	 */
-	if !e.Config.Passive && e.Config.Alterations {
-		e.guessMgr = NewGuessManager(e)
-		defer e.guessMgr.Stop()
-		e.managers = append(e.managers, e.guessMgr)
-		e.resolvedMgrs = append(e.resolvedMgrs, e.guessMgr)
-	}
-
 	// Setup the event handler for newly resolved DNS names
 	e.Bus.Subscribe(requests.NameResolvedTopic, e.resolvedDispatcher)
 	defer e.Bus.Unsubscribe(requests.NameResolvedTopic, e.resolvedDispatcher)
@@ -297,10 +264,12 @@ func (e *Enumeration) Start() error {
 	defer e.Bus.Unsubscribe(requests.ResolveCompleted, e.incQueriesPerSec)
 
 	// Setup the DNS Service to receive the appropriate events
-	e.Bus.Subscribe(requests.ResolveNameTopic, e.dnsMgr.DNSRequest)
-	defer e.Bus.Unsubscribe(requests.ResolveNameTopic, e.dnsMgr.DNSRequest)
-	e.Bus.Subscribe(requests.SubDiscoveredTopic, e.dnsMgr.SubdomainDiscovered)
-	defer e.Bus.Unsubscribe(requests.SubDiscoveredTopic, e.dnsMgr.SubdomainDiscovered)
+	if !e.Config.Passive {
+		e.Bus.Subscribe(requests.ResolveNameTopic, e.dnsMgr.DNSRequest)
+		defer e.Bus.Unsubscribe(requests.ResolveNameTopic, e.dnsMgr.DNSRequest)
+		e.Bus.Subscribe(requests.SubDiscoveredTopic, e.dnsMgr.SubdomainDiscovered)
+		defer e.Bus.Unsubscribe(requests.SubDiscoveredTopic, e.dnsMgr.SubdomainDiscovered)
+	}
 
 	// If a timeout was provided in the configuration, it will go off that
 	// many minutes from this point in the enumeration process
@@ -311,8 +280,11 @@ func (e *Enumeration) Start() error {
 		})
 	}
 
-	secDelay := 5
-	t := time.NewTimer(time.Duration(secDelay) * time.Second)
+	// Get the ball rolling before the timer fires
+	completed := e.useManagers()
+	more := time.NewTicker(250 * time.Millisecond)
+	defer more.Stop()
+	t := time.NewTimer(20 * time.Second)
 	perMin := time.NewTicker(time.Minute)
 	defer perMin.Stop()
 loop:
@@ -320,59 +292,63 @@ loop:
 		select {
 		case <-e.done:
 			break loop
+		case <-more.C:
+			completed += e.useManagers()
 		case <-t.C:
-			num := e.useManagers(secDelay)
-
 			var inactive bool
-			e.dataMgrLock.Lock()
-			empty := e.dataMgrEmpty
-			e.dataMgrLock.Unlock()
 			// Has the enumeration been inactive long enough to stop the task?
-			if empty {
-				inactive = time.Now().Sub(e.lastActive()) > 15*time.Second
+			if e.isDataManagerQueueEmpty() {
+				inactive = time.Since(e.lastActive()) > 10*time.Second
 			}
 
-			if num == 0 {
-				if inactive {
-					// End the enumeration!
-					e.Done()
-					continue loop
-				}
-
-				e.incNumSeqZeros()
-			} else {
-				e.clearNumSeqZeros()
+			if completed == 0 && inactive {
+				// End the enumeration!
+				e.Done()
+				break loop
 			}
 
-			t.Reset(time.Duration(secDelay) * time.Second)
+			completed = 0
+			//e.memUsage = e.Sys.GetMemoryUsage()
+			t.Reset(5 * time.Second)
 		case <-perMin.C:
 			if !e.Config.Passive {
 				var pct float64
 				sec, retries := e.dnsQueriesPerSec()
 				if sec > 0 {
 					pct = (float64(retries) / float64(sec)) * 100
+					if e.isDataManagerQueueEmpty() && (sec < 10 || pct > 90.0) {
+						e.Done()
+						break loop
+					}
 				}
 
 				e.Config.Log.Printf("Average DNS queries performed: %d/sec, Average retries required: %.2f%%", sec, pct)
 				e.clearPerSec()
-				go e.isDataManagerQueueEmpty()
 			}
 		}
 	}
 
 	cancel()
-	e.dnsMgr.Stop()
-	e.dataMgr.Stop()
+	if !e.Config.Passive {
+		e.dnsMgr.Stop()
+		e.dataMgr.Stop()
+	}
 	e.writeLogs(true)
+	if !e.Config.Passive {
+		// Attempt to fix IP address nodes without edges to netblocks
+		e.Graph.HealAddressNodes(e.asMgr.Cache, e.Config.UUID.String())
+	}
 	return nil
 }
 
-func (e *Enumeration) isDataManagerQueueEmpty() {
-	empty := e.dataMgr.RequestLen() == 0
+func (e *Enumeration) isDataManagerQueueEmpty() bool {
+	var l int
 
-	e.dataMgrLock.Lock()
-	e.dataMgrEmpty = empty
-	e.dataMgrLock.Unlock()
+	if e.dataMgr != nil {
+		l = e.dataMgr.RequestLen()
+	}
+
+	return l == 0
 }
 
 func (e *Enumeration) resolvedDispatcher(req *requests.DNSRequest) {
@@ -381,67 +357,70 @@ func (e *Enumeration) resolvedDispatcher(req *requests.DNSRequest) {
 	}
 
 	for _, mgr := range e.resolvedMgrs {
-		go mgr.InputName(req)
+		mgr.InputName(req)
 	}
 }
 
-func (e *Enumeration) requiredNumberOfNames(numsec int) int {
-	var required int
-	max := e.Config.MaxDNSQueries * numsec
-
-	// Acquire the number of DNS queries already in the queue
-	remaining := e.dnsNamesRemaining()
-	if remaining > 0 {
-		required = max - remaining
-	} else {
-		// If the queue is empty, then encourage additional activity
-		required = max
+func (e *Enumeration) requiredNumberOfNames() int {
+	if e.Config.Passive {
+		return 100000
 	}
 
+	max := e.Config.MaxDNSQueries
+	required := max - e.dnsNamesRemaining()
 	// Ensure a minimum value of one
-	if required <= 0 {
-		required = 1
+	if required < 0 {
+		required = 0
 	}
 
 	return required
 }
 
-func (e *Enumeration) useManagers(numsec int) int {
-	required := 100000
+func (e *Enumeration) dnsNamesRemaining() int {
+	var l int
 
-	if !e.Config.Passive {
-		required = e.requiredNumberOfNames(numsec)
+	if e.dnsMgr != nil {
+		l = e.dnsMgr.RequestLen()
+	}
+
+	return l
+}
+
+func (e *Enumeration) useManagers() int {
+	required := e.requiredNumberOfNames()
+	if required == 0 {
+		return 1
+	}
+
+	var pending int
+	// Attempt to handle address requests first
+	if e.addrMgr != nil {
+		sent := e.addrMgr.OutputRequests(required)
+
+		if sent >= required {
+			return sent
+		}
+
+		required -= sent
+		pending = e.addrMgr.RequestQueueLen()
 	}
 
 	var count int
 	// Loop through the managers until we acquire the necessary number of names for processing
 	for _, mgr := range e.managers {
 		remaining := required - count
+		if remaining <= 0 {
+			break
+		}
 
 		var reqs []*requests.DNSRequest
 		for _, req := range mgr.OutputNames(remaining) {
-			// Do not submit names from untrusted sources, after
-			// already receiving the name from a trusted source
-			if !requests.TrustedTag(req.Tag) && e.resFilter.Has(req.Name+strconv.FormatBool(true)) {
-				continue
-			}
-
-			// At most, a FQDN will be accepted from an untrusted source first,
-			// and then reconsidered from a trusted data source
-			if e.resFilter.Duplicate(req.Name + strconv.FormatBool(requests.TrustedTag(req.Tag))) {
-				continue
-			}
-
-			// Check if it's time to reset our bloom filter due to number of elements seen
-			e.resFilterCount++
-			if e.resFilterCount >= filterMaxSize {
-				e.resFilterCount = 0
-				e.resFilter = stringfilter.NewBloomFilter(filterMaxSize)
-			}
-
 			count++
 			reqs = append(reqs, req)
 		}
+
+		// How many names are remaining in the manager
+		pending += mgr.NameQueueLen()
 
 		// Send the FQDNs acquired from the manager
 		for _, req := range reqs {
@@ -461,100 +440,46 @@ func (e *Enumeration) useManagers(numsec int) int {
 		}
 	}
 
-	return count
-}
+	// Check if new requests need to be sent to data sources
+	if pending < required && e.memUsage < 1500000000 {
+		var sent int
+		needed := required - pending
 
-func (e *Enumeration) dnsNamesRemaining() int {
-	return e.dnsMgr.RequestLen()
-}
-
-func (e *Enumeration) dnsQueriesPerSec() (int64, int64) {
-	e.perSecLock.Lock()
-	defer e.perSecLock.Unlock()
-
-	if e.perSecLast.After(e.perSecFirst) {
-		if sec := e.perSecLast.Sub(e.perSecFirst).Seconds(); sec > 0 {
-			div := int64(sec + 1.0)
-
-			return e.perSec / div, e.retries / div
-		}
-	}
-
-	return 0, 0
-}
-
-func (e *Enumeration) incQueriesPerSec(t time.Time, rcode int) {
-	go func() {
-		e.perSecLock.Lock()
-		defer e.perSecLock.Unlock()
-
-		if t.After(e.perSecFirst) {
-			e.perSec++
-
-			for _, rc := range resolvers.RetryCodes {
-				if rc == rcode {
-					e.retries++
-					break
-				}
-			}
-
-			if t.After(e.perSecLast) {
-				e.perSecLast = t
-			}
-		}
-	}()
-}
-
-func (e *Enumeration) clearPerSec() {
-	e.perSecLock.Lock()
-	defer e.perSecLock.Unlock()
-
-	e.perSec = 0
-	e.retries = 0
-	e.perSecFirst = time.Now()
-}
-
-func (e *Enumeration) lastActive() time.Time {
-	e.lastLock.Lock()
-	defer e.lastLock.Unlock()
-
-	return e.last
-}
-
-func (e *Enumeration) updateLastActive(srv string) {
-	e.lastLock.Lock()
-	defer e.lastLock.Unlock()
-
-	// Only update active for core services once we run out of new FQDNs
-	if e.numSeqZeros >= 2 {
-		var found bool
-
-		for _, s := range []requests.Service{e.dnsMgr, e.dataMgr} {
-			if srv == s.String() {
-				found = true
+		for _, mgr := range e.managers {
+			sent += mgr.OutputRequests(needed - sent)
+			if sent >= needed {
 				break
 			}
 		}
 
-		if !found {
-			return
-		}
+		count += sent
 	}
 
-	// Update the last time activity was seen
-	e.last = time.Now()
+	return count
 }
 
-func (e *Enumeration) incNumSeqZeros() {
-	e.lastLock.Lock()
-	defer e.lastLock.Unlock()
+func (e *Enumeration) checkResFilter(req *requests.DNSRequest) *requests.DNSRequest {
+	e.resFilterLock.Lock()
+	defer e.resFilterLock.Unlock()
 
-	e.numSeqZeros++
-}
+	// Check if it's time to reset our bloom filter due to number of elements seen
+	if e.resFilterCount >= filterMaxSize {
+		e.resFilterCount = 0
+		e.resFilter = stringfilter.NewBloomFilter(filterMaxSize)
+	}
 
-func (e *Enumeration) clearNumSeqZeros() {
-	e.lastLock.Lock()
-	defer e.lastLock.Unlock()
+	// Do not submit names from untrusted sources, after already receiving the name
+	// from a trusted source
+	if !requests.TrustedTag(req.Tag) && e.resFilter.Has(req.Name+strconv.FormatBool(true)) {
+		return nil
+	}
 
-	e.numSeqZeros = 0
+	// At most, a FQDN will be accepted from an untrusted source first, and then
+	// reconsidered from a trusted data source
+	if e.resFilter.Duplicate(req.Name + strconv.FormatBool(requests.TrustedTag(req.Tag))) {
+		return nil
+	}
+
+	e.resFilterCount++
+	return req
 }

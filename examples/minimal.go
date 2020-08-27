@@ -15,23 +15,24 @@ func main() {
 	// Seed the default pseudo-random number generator
 	rand.Seed(time.Now().UTC().UnixNano())
 
-	sys, err := systems.NewLocalSystem(config.NewConfig())
+	// Setup the most basic amass configuration
+	cfg := config.NewConfig()
+	cfg.AddDomain("example.com")
+
+	sys, err := systems.NewLocalSystem(cfg)
 	if err != nil {
 		return
 	}
 	sys.SetDataSources(datasrcs.GetAllSources(sys))
 
-	e := enum.NewEnumeration(sys)
+	e := enum.NewEnumeration(cfg, sys)
 	if e == nil {
 		return
 	}
 	defer e.Close()
 
-	// Setup the most basic amass configuration
-	e.Config.AddDomain("example.com")
 	e.Start()
-
-	for _, o := range e.ExtractOutput(nil) {
+	for _, o := range e.ExtractOutput(nil, false) {
 		fmt.Println(o.Name)
 	}
 }

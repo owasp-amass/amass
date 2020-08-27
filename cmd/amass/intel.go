@@ -4,7 +4,6 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"flag"
 	"fmt"
@@ -137,21 +136,6 @@ func runIntelCommand(clArgs []string) {
 		return
 	}
 
-	// Check if the user has requested the data source names
-	if args.Options.ListSources {
-		for _, name := range GetAllSourceNames() {
-			g.Println(name)
-		}
-		return
-	}
-
-	// Some input validation
-	if !args.Options.ReverseWhois && args.OrganizationName == "" &&
-		len(args.Addresses) == 0 && len(args.CIDRs) == 0 && len(args.ASNs) == 0 {
-		commandUsage(intelUsageMsg, intelCommand, intelBuf)
-		os.Exit(1)
-	}
-
 	if (len(args.Excluded) > 0 || args.Filepaths.ExcludedSrcs != "") &&
 		(len(args.Included) > 0 || args.Filepaths.IncludedSrcs != "") {
 		commandUsage(intelUsageMsg, intelCommand, intelBuf)
@@ -193,6 +177,21 @@ func runIntelCommand(clArgs []string) {
 	// Override configuration file settings with command-line arguments
 	if err := cfg.UpdateConfig(args); err != nil {
 		r.Fprintf(color.Error, "Configuration error: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Check if the user has requested the data source names
+	if args.Options.ListSources {
+		for _, info := range GetAllSourceInfo(cfg) {
+			g.Println(info)
+		}
+		return
+	}
+
+	// Some input validation
+	if !args.Options.ReverseWhois && args.OrganizationName == "" &&
+		len(args.Addresses) == 0 && len(args.CIDRs) == 0 && len(args.ASNs) == 0 {
+		commandUsage(intelUsageMsg, intelCommand, intelBuf)
 		os.Exit(1)
 	}
 
@@ -287,38 +286,6 @@ func intelSignalHandler(ic *intel.Collection) {
 	ic.Done()
 }
 
-func writeIntelLogsAndMessages(logs *io.PipeReader, logfile string) {
-	var filePtr *os.File
-	if logfile != "" {
-		var err error
-
-		filePtr, err = os.OpenFile(logfile, os.O_WRONLY|os.O_CREATE, 0644)
-		if err != nil {
-			r.Fprintf(color.Error, "Failed to open the log file: %v\n", err)
-		} else {
-			defer func() {
-				filePtr.Sync()
-				filePtr.Close()
-			}()
-			filePtr.Truncate(0)
-			filePtr.Seek(0, 0)
-		}
-	}
-
-	scanner := bufio.NewScanner(logs)
-	for scanner.Scan() {
-		line := scanner.Text()
-
-		if err := scanner.Err(); err != nil {
-			fmt.Fprintf(color.Error, "Error reading the Amass logs: %v\n", err)
-			break
-		}
-		if filePtr != nil {
-			fmt.Fprintln(filePtr, line)
-		}
-	}
-}
-
 // Obtain parameters from provided input files
 func processIntelInputFiles(args *intelArgs) error {
 	if args.Filepaths.ExcludedSrcs != "" {
@@ -384,7 +351,7 @@ func (i intelArgs) OverrideConfig(conf *config.Config) error {
 	if i.Timeout > 0 {
 		conf.Timeout = i.Timeout
 	}
-	if i.Options.Verbose == true {
+	if i.Options.Verbose {
 		conf.Verbose = true
 	}
 	if i.Resolvers.Len() > 0 {

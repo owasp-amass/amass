@@ -6,7 +6,6 @@ package resolvers
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/OWASP/Amass/v3/requests"
@@ -16,7 +15,6 @@ const (
 	// CurrentRate is an index value into the RateLimitedResolver.Stats map
 	CurrentRate = 256
 
-	defaultMaxSlack    = -2 * time.Second
 	initialRate        = 10 * time.Millisecond
 	defaultRateChange  = 1 * time.Millisecond
 	defaultSlowestRate = 25 * time.Millisecond
@@ -25,12 +23,9 @@ const (
 
 // RateMonitoredResolver performs DNS queries on a single resolver at the rate it can handle.
 type RateMonitoredResolver struct {
-	sync.RWMutex
-	Done     chan struct{}
-	resolver Resolver
-	last     time.Time
-	rate     time.Duration
-	counter  time.Duration
+	Done         chan struct{}
+	resolver     Resolver
+	rateChannels *rateChans
 }
 
 // NewRateMonitoredResolver initializes a Resolver that scores the performance of the DNS server.
@@ -42,11 +37,15 @@ func NewRateMonitoredResolver(res Resolver) *RateMonitoredResolver {
 	r := &RateMonitoredResolver{
 		Done:     make(chan struct{}, 2),
 		resolver: res,
-		last:     time.Now(),
-		rate:     initialRate,
+		rateChannels: &rateChans{
+			GetRate:     make(chan chan time.Duration, 10),
+			SetRate:     make(chan time.Duration, 10),
+			LeakyBucket: make(chan chan bool, 10),
+			ResetTimer:  make(chan struct{}, 10),
+		},
 	}
 
-	go r.monitorPerformance()
+	go r.manageRateState()
 	return r
 }
 
@@ -73,6 +72,11 @@ func (r *RateMonitoredResolver) Address() string {
 // Port implements the Resolver interface.
 func (r *RateMonitoredResolver) Port() int {
 	return r.resolver.Port()
+}
+
+// String implements the Stringer interface.
+func (r *RateMonitoredResolver) String() string {
+	return r.resolver.String()
 }
 
 // Available returns true if the Resolver can handle another DNS request.
@@ -136,7 +140,7 @@ func (r *RateMonitoredResolver) SubdomainToDomain(name string) string {
 // Resolve implements the Resolver interface.
 func (r *RateMonitoredResolver) Resolve(ctx context.Context, name, qtype string, priority int) ([]requests.DNSAnswer, bool, error) {
 	if r.IsStopped() {
-		msg := fmt.Sprintf("Resolver %s has been stopped", r.Address())
+		msg := fmt.Sprintf("Resolver %s has been stopped", r.String())
 
 		return []requests.DNSAnswer{}, true, &ResolveError{
 			Err:   msg,
@@ -150,7 +154,7 @@ func (r *RateMonitoredResolver) Resolve(ctx context.Context, name, qtype string,
 // Reverse implements the Resolver interface.
 func (r *RateMonitoredResolver) Reverse(ctx context.Context, addr string, priority int) (string, string, error) {
 	if r.IsStopped() {
-		msg := fmt.Sprintf("Resolver %s has been stopped", r.Address())
+		msg := fmt.Sprintf("Resolver %s has been stopped", r.String())
 
 		return "", "", &ResolveError{
 			Err:   msg,
@@ -161,51 +165,76 @@ func (r *RateMonitoredResolver) Reverse(ctx context.Context, addr string, priori
 	return r.resolver.Reverse(ctx, addr, priority)
 }
 
-// Implementation of the leaky bucket algorithm.
-func (r *RateMonitoredResolver) leakyBucket() bool {
-	r.Lock()
-	defer r.Unlock()
+// NsecTraversal implements the Resolver interface.
+func (r *RateMonitoredResolver) NsecTraversal(ctx context.Context, domain string, priority int) ([]string, bool, error) {
+	if r.IsStopped() {
+		msg := fmt.Sprintf("Resolver %s has been stopped", r.String())
 
-	now := time.Now()
-	aux := r.counter - now.Sub(r.last)
-
-	if aux > r.rate {
-		return false
+		return []string{}, true, &ResolveError{
+			Err:   msg,
+			Rcode: NotAvailableRcode,
+		}
 	}
 
-	if aux < 0 {
-		aux = 0
-	}
-
-	r.counter = aux + r.rate
-	r.last = now
-	return true
+	return r.resolver.NsecTraversal(ctx, domain, priority)
 }
 
-func (r *RateMonitoredResolver) monitorPerformance() {
-	t := time.NewTicker(time.Second)
+type rateChans struct {
+	GetRate     chan chan time.Duration
+	SetRate     chan time.Duration
+	LeakyBucket chan chan bool
+	ResetTimer  chan struct{}
+}
+
+func (r *RateMonitoredResolver) manageRateState() {
+	var counter time.Duration
+	last := time.Now()
+	rate := initialRate
+	t := time.NewTimer(time.Second)
 	defer t.Stop()
 	m := time.NewTicker(time.Minute)
 	defer m.Stop()
-
+loop:
 	for {
 		select {
 		case <-r.Done:
 			return
 		case <-t.C:
-			r.calcRate()
+			go r.calcRate()
+		case <-r.rateChannels.ResetTimer:
+			t.Reset(time.Second)
 		case <-m.C:
-			rate := r.getRate()
-			r.WipeStats()
-			r.setRate(rate)
+			go r.resolver.WipeStats()
+		case get := <-r.rateChannels.GetRate:
+			get <- rate
+		case r := <-r.rateChannels.SetRate:
+			if r >= defaultFastestRate && r <= defaultSlowestRate {
+				rate = r
+			}
+		case ch := <-r.rateChannels.LeakyBucket:
+			now := time.Now()
+			aux := counter - now.Sub(last)
+
+			if aux > rate {
+				ch <- false
+				continue loop
+			}
+
+			if aux < 0 {
+				aux = 0
+			}
+			counter = aux + rate
+			last = now
+			ch <- true
 		}
 	}
 }
 
 func (r *RateMonitoredResolver) calcRate() {
+	defer r.resetTimer()
+
 	stats := r.Stats()
 	rate := time.Duration(stats[CurrentRate])
-
 	attempts := stats[QueryAttempts]
 	// There needs to be some data to work with first
 	if attempts < 50 {
@@ -228,34 +257,25 @@ func (r *RateMonitoredResolver) calcRate() {
 	r.setRate(rate - defaultRateChange)
 }
 
-func (r *RateMonitoredResolver) getLast() time.Time {
-	r.RLock()
-	defer r.RUnlock()
-
-	return r.last
-}
-
-func (r *RateMonitoredResolver) setLast(t time.Time) {
-	r.Lock()
-	defer r.Unlock()
-
-	if t.After(r.last) {
-		r.last = t
-	}
-}
-
 func (r *RateMonitoredResolver) getRate() time.Duration {
-	r.RLock()
-	defer r.RUnlock()
+	ch := make(chan time.Duration, 2)
 
-	return r.rate
+	r.rateChannels.GetRate <- ch
+	return <-ch
 }
 
 func (r *RateMonitoredResolver) setRate(d time.Duration) {
-	r.Lock()
-	defer r.Unlock()
+	r.rateChannels.SetRate <- d
+}
 
-	if d >= defaultFastestRate && d <= defaultSlowestRate {
-		r.rate = d
-	}
+// Implementation of the leaky bucket algorithm.
+func (r *RateMonitoredResolver) leakyBucket() bool {
+	ch := make(chan bool, 2)
+
+	r.rateChannels.LeakyBucket <- ch
+	return <-ch
+}
+
+func (r *RateMonitoredResolver) resetTimer() {
+	r.rateChannels.ResetTimer <- struct{}{}
 }

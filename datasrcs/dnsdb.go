@@ -7,6 +7,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -31,7 +32,7 @@ type DNSDB struct {
 // NewDNSDB returns he object initialized, but not yet started.
 func NewDNSDB(sys systems.System) *DNSDB {
 	d := &DNSDB{
-		SourceType: requests.SCRAPE,
+		SourceType: requests.API,
 		sys:        sys,
 	}
 
@@ -54,6 +55,19 @@ func (d *DNSDB) OnStart() error {
 	}
 
 	d.SetRateLimit(2 * time.Minute)
+	return nil
+}
+
+// CheckConfig implements the Service interface.
+func (d *DNSDB) CheckConfig() error {
+	api := d.sys.Config().GetAPIKey(d.String())
+
+	if api == nil || api.Key == "" {
+		estr := fmt.Sprintf("%s: check callback failed for the configuration", d.String())
+		d.sys.Config().Log.Print(estr)
+		return errors.New(estr)
+	}
+
 	return nil
 }
 
@@ -91,17 +105,12 @@ func (d *DNSDB) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 	}
 
 	for _, name := range d.parse(ctx, page, req.Domain) {
-		bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
-			Name:   name,
-			Domain: req.Domain,
-			Tag:    requests.API,
-			Source: d.String(),
-		})
+		genNewNameEvent(ctx, d.sys, d, name)
 	}
 }
 
 func (d *DNSDB) getURL(domain string) string {
-	return fmt.Sprintf("https://api.dnsdb.info/lookup/rrset/name/*.%s", domain)
+	return fmt.Sprintf("https://api.dnsdb.info/lookup/rrset/name/*.%s?limit=10000000", domain)
 }
 
 func (d *DNSDB) parse(ctx context.Context, page, domain string) []string {

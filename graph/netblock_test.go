@@ -4,12 +4,10 @@ import (
 	"bytes"
 	"net"
 	"testing"
-
-	"github.com/OWASP/Amass/v3/graphdb"
 )
 
 func TestNetblock(t *testing.T) {
-	g := NewGraph(graphdb.NewCayleyGraphMemory())
+	g := NewGraph(NewCayleyGraphMemory())
 	for _, tt := range graphTest {
 		t.Run("Testing InsertNetblock...", func(t *testing.T) {
 			got, err := g.InsertNetblock(tt.CIDR, tt.Source, tt.Tag, tt.EventID)
@@ -24,7 +22,7 @@ func TestNetblock(t *testing.T) {
 			if err != nil {
 				t.Errorf("Error parsing node's cidr info from netblock.\n%v\n", got)
 			}
-			if bytes.Compare(get, want) != 0 {
+			if !bytes.Equal(get, want) {
 				t.Errorf("Expected:%v\nGot:%v\n", want, get)
 			}
 		})

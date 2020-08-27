@@ -1,4 +1,4 @@
-# How to Use [![OWASP Logo](https://github.com/OWASP/Amass/blob/master/images/owasp_logo.png) OWASP Amass](https://owasp.org/www-project-amass/) - An Extensive Tutorial
+# [![OWASP Logo](https://github.com/OWASP/Amass/blob/master/images/owasp_logo.png) OWASP Amass](https://owasp.org/www-project-amass/) - An Extensive Tutorial
 
 ![Network graph](https://github.com/OWASP/Amass/blob/master/images/network_06092018.png "Amass Network Mapping")
 
@@ -85,7 +85,7 @@ When performing searches with amass intel you can always run it with more config
 
 It is worth noting at this point that some configuration flags will not work along with others and in this case Amass will simply ignore them.
 
-Amass' findings will not always be accurate, this is due to several reasons, for example the data sources used by Amass may not be consistent or up to data. Amass attempts to further validate the information using DNS queries, and more validation techniques will be implemented in the future. Although Amass does a good job, users should still perform further verification checks on results that do not appear to be related to the target. This can be performed using a variety of methods such as:
+Amass' findings will not always be accurate, this is due to several reasons, for example the data sources used by Amass may not be consistent or up to date. Amass attempts to further validate the information using DNS queries, and more validation techniques will be implemented in the future. Although Amass does a good job, users should still perform further verification checks on results that do not appear to be related to the target. This can be performed using a variety of methods such as:
 
 -   Use utilities to resolve the domains (e.g. dig, nslookup)
 -   Perform WHOIS lookups to confirm organisational details

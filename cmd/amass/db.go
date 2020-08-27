@@ -7,17 +7,13 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"os"
-	"sort"
-	"strings"
-	"time"
 
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/format"
 	"github.com/OWASP/Amass/v3/graph"
-	"github.com/OWASP/Amass/v3/graphdb"
-	"github.com/OWASP/Amass/v3/requests"
-	"github.com/OWASP/Amass/v3/stringfilter"
 	"github.com/OWASP/Amass/v3/stringset"
 	"github.com/fatih/color"
 )
@@ -37,13 +33,16 @@ type dbArgs struct {
 		ListEnumerations bool
 		ASNTableSummary  bool
 		DiscoveredNames  bool
+		NoColor          bool
 		ShowAll          bool
+		Silent           bool
 		Sources          bool
 	}
 	Filepaths struct {
 		ConfigFile string
 		Directory  string
 		Domains    string
+		TermOut    string
 	}
 }
 
@@ -69,10 +68,13 @@ func runDBCommand(clArgs []string) {
 	dbCommand.BoolVar(&args.Options.Sources, "src", false, "Print data sources for the discovered names")
 	dbCommand.BoolVar(&args.Options.ASNTableSummary, "summary", false, "Print Just ASN Table Summary")
 	dbCommand.BoolVar(&args.Options.DiscoveredNames, "names", false, "Print Just Discovered Names")
+	dbCommand.BoolVar(&args.Options.NoColor, "nocolor", false, "Disable colorized output")
 	dbCommand.BoolVar(&args.Options.ShowAll, "show", false, "Print the results for the enumeration index + domains provided")
+	dbCommand.BoolVar(&args.Options.Silent, "silent", false, "Disable all output during execution")
 	dbCommand.StringVar(&args.Filepaths.ConfigFile, "config", "", "Path to the INI configuration file. Additional details below")
 	dbCommand.StringVar(&args.Filepaths.Directory, "dir", "", "Path to the directory containing the graph database")
 	dbCommand.StringVar(&args.Filepaths.Domains, "df", "", "Path to a file providing root domain names")
+	dbCommand.StringVar(&args.Filepaths.TermOut, "o", "", "Path to the text file containing terminal stdout/stderr")
 
 	if len(clArgs) < 1 {
 		commandUsage(dbUsageMsg, dbCommand, dbBuf)
@@ -88,6 +90,14 @@ func runDBCommand(clArgs []string) {
 		return
 	}
 
+	if args.Options.NoColor {
+		color.NoColor = true
+	}
+	if args.Options.Silent {
+		color.Output = ioutil.Discard
+		color.Error = ioutil.Discard
+	}
+
 	if args.Filepaths.Domains != "" {
 		list, err := config.GetListFromFile(args.Filepaths.Domains)
 		if err != nil {
@@ -98,6 +108,7 @@ func runDBCommand(clArgs []string) {
 	}
 
 	cfg := new(config.Config)
+	cfg.LocalDatabase = true
 	// Check if a configuration file was provided, and if so, load the settings
 	if err := config.AcquireConfig(args.Filepaths.Directory, args.Filepaths.ConfigFile, cfg); err == nil {
 		if args.Filepaths.Directory == "" {
@@ -119,7 +130,7 @@ func runDBCommand(clArgs []string) {
 	defer db.Close()
 
 	if args.Options.ListEnumerations {
-		listEnumerations(&args, db)
+		listEvents(&args, db)
 		return
 	}
 
@@ -128,51 +139,67 @@ func runDBCommand(clArgs []string) {
 		args.Options.ASNTableSummary = true
 	}
 
-	if args.Options.DiscoveredNames || args.Options.ASNTableSummary {
-		showEnumeration(&args, db)
+	if !args.Options.DiscoveredNames && !args.Options.ASNTableSummary {
+		commandUsage(dbUsageMsg, dbCommand, dbBuf)
 		return
 	}
 
-	commandUsage(dbUsageMsg, dbCommand, dbBuf)
-}
+	// Create the in-memory graph database for events that have information in scope
+	memDB, err := memGraphForScope(args.Domains.Slice(), db)
+	if err != nil {
+		r.Fprintln(color.Error, err.Error())
+		os.Exit(1)
+	}
 
-func openGraphDatabase(dir string, cfg *config.Config) *graph.Graph {
-	var gDB *graph.Graph
-	// Attempt to connect to an Amass graph database
-	/*if cfg.GremlinURL != "" {
-		if g := graph.NewGremlin(cfg.GremlinURL, cfg.GremlinUser, cfg.GremlinPass, nil); g != nil {
-			db = g
-		}
-	} else {*/
-	if d := config.OutputDirectory(dir); d != "" {
-		// Check that the graph database directory exists
-		if finfo, err := os.Stat(d); !os.IsNotExist(err) && finfo.IsDir() {
-			if g := graph.NewGraph(graphdb.NewCayleyGraph(d)); g != nil {
-				gDB = g
-			}
+	// Get all the UUIDs for events that have information in scope
+	uuids := memDB.EventList()
+	if len(uuids) == 0 {
+		r.Fprintln(color.Error, "Failed to find the domains of interest in the database")
+		os.Exit(1)
+	}
+
+	// Put the events in chronological order
+	uuids, _, _ = orderedEvents(uuids, memDB)
+	if len(uuids) == 0 {
+		r.Fprintln(color.Error, "Failed to sort the events")
+		os.Exit(1)
+	}
+
+	// Select the enumeration that the user specified
+	if args.Enum > 0 && len(uuids) > args.Enum {
+		uuids = []string{uuids[args.Enum]}
+	}
+
+	if args.Options.ASNTableSummary {
+		fgY.Fprintln(color.Error, "Could take a moment while acquiring AS network information")
+		// Migrate the changes back to the persistent db
+		if healASInfo(uuids, memDB) {
+			memDB.MigrateEvents(db, uuids...)
 		}
 	}
-	//}
-	return gDB
+
+	showEventData(&args, uuids, memDB)
 }
 
-func listEnumerations(args *dbArgs, db *graph.Graph) {
+func listEvents(args *dbArgs, db *graph.Graph) {
 	domains := args.Domains.Slice()
-	enums := enumIDs(domains, db)
-	if len(enums) == 0 {
+	events := eventUUIDs(domains, db)
+
+	if len(events) == 0 {
 		r.Fprintln(color.Error, "No enumerations found within the provided scope")
 		return
 	}
 
-	enums, earliest, latest := orderedEnumsAndDateRanges(enums, db)
+	events, earliest, latest := orderedEvents(events, db)
 	// Check if the user has requested the list of enumerations
-	for i := range enums {
+	for i := range events {
 		if i != 0 {
 			g.Println()
 		}
+
 		g.Printf("%d) %s -> %s: ", i+1, earliest[i].Format(timeFormat), latest[i].Format(timeFormat))
 		// Print out the scope for this enumeration
-		for x, domain := range db.EventDomains(enums[i]) {
+		for x, domain := range db.EventDomains(events[i]) {
 			if x != 0 {
 				g.Print(", ")
 			}
@@ -182,12 +209,29 @@ func listEnumerations(args *dbArgs, db *graph.Graph) {
 	}
 }
 
-func showEnumeration(args *dbArgs, db *graph.Graph) {
-	domains := args.Domains.Slice()
+func showEventData(args *dbArgs, uuids []string, db *graph.Graph) {
 	var total int
+	var err error
+	var outfile *os.File
+	domains := args.Domains.Slice()
+
+	if args.Filepaths.TermOut != "" {
+		outfile, err = os.OpenFile(args.Filepaths.TermOut, os.O_WRONLY|os.O_CREATE, 0644)
+		if err != nil {
+			r.Fprintf(color.Error, "Failed to open the text output file: %v\n", err)
+			os.Exit(1)
+		}
+		defer func() {
+			outfile.Sync()
+			outfile.Close()
+		}()
+		outfile.Truncate(0)
+		outfile.Seek(0, 0)
+	}
+
 	tags := make(map[string]int)
 	asns := make(map[int]*format.ASNSummaryData)
-	for _, out := range getEnumOutput(args.Enum, domains, db) {
+	for _, out := range getEventOutput(uuids, db) {
 		if len(domains) > 0 && !domainNameInScope(out.Name, domains) {
 			continue
 		}
@@ -207,161 +251,30 @@ func showEnumeration(args *dbArgs, db *graph.Graph) {
 		}
 
 		if args.Options.DiscoveredNames {
-			fmt.Fprintf(color.Output, "%s%s%s\n", blue(source), green(name), yellow(ips))
+			if outfile != nil {
+				fmt.Fprintf(outfile, "%s%s%s\n", source, name, ips)
+			} else {
+				fmt.Fprintf(color.Output, "%s%s%s\n", blue(source), green(name), yellow(ips))
+			}
 		}
 	}
+
 	if total == 0 {
 		r.Println("No names were discovered")
 	} else if args.Options.ASNTableSummary {
-		format.PrintEnumerationSummary(total, tags, asns, args.Options.DemoMode)
-	}
-}
+		var out io.Writer
+		status := color.NoColor
 
-func getEnumOutput(id int, domains []string, db *graph.Graph) []*requests.Output {
-	var output []*requests.Output
-
-	if id > 0 {
-		enum := enumIndexToID(id, domains, db)
-		if enum == "" {
-			r.Fprintln(color.Error, "No enumerations found within the provided scope")
-			return output
-		}
-		return getUniqueDBOutput(enum, domains, db)
-	}
-
-	enums := enumIDs(domains, db)
-	if len(enums) == 0 {
-		return output
-	}
-
-	enums, _, _ = orderedEnumsAndDateRanges(enums, db)
-	if len(enums) == 0 {
-		return output
-	}
-
-	filter := stringfilter.NewStringFilter()
-	for i := len(enums) - 1; i >= 0; i-- {
-		for _, out := range db.EventOutput(enums[i], filter, nil) {
-			output = append(output, out)
-		}
-	}
-	return output
-}
-
-func getUniqueDBOutput(id string, domains []string, db *graph.Graph) []*requests.Output {
-	var output []*requests.Output
-	filter := stringfilter.NewStringFilter()
-
-	for _, out := range db.EventOutput(id, filter, nil) {
-		if len(domains) > 0 && !domainNameInScope(out.Name, domains) {
-			continue
+		if outfile != nil {
+			out = outfile
+			color.NoColor = true
+		} else if args.Options.ShowAll {
+			out = color.Error
+		} else {
+			out = color.Output
 		}
 
-		output = append(output, out)
+		format.FprintEnumerationSummary(out, total, tags, asns, args.Options.DemoMode)
+		color.NoColor = status
 	}
-	return output
-}
-
-func enumIndexToID(e int, domains []string, db *graph.Graph) string {
-	enums := enumIDs(domains, db)
-	if len(enums) == 0 {
-		return ""
-	}
-
-	enums, _, _ = orderedEnumsAndDateRanges(enums, db)
-	if len(enums) >= e {
-		return enums[e-1]
-	}
-	return ""
-}
-
-// Get the UUID for the most recent enumeration
-func mostRecentEnumID(domains []string, db *graph.Graph) string {
-	var uuid string
-	var latest time.Time
-
-	for i, enum := range db.EventList() {
-		if len(domains) > 0 {
-			var found bool
-			scope := db.EventDomains(enum)
-
-			for _, domain := range domains {
-				if domainNameInScope(domain, scope) {
-					found = true
-					break
-				}
-			}
-			if !found {
-				continue
-			}
-		}
-
-		_, l := db.EventDateRange(enum)
-		if i == 0 {
-			latest = l
-			uuid = enum
-		} else if l.After(latest) {
-			uuid = enum
-		}
-	}
-	return uuid
-}
-
-// Obtain the enumeration IDs that include the provided domain
-func enumIDs(domains []string, db *graph.Graph) []string {
-	var enums []string
-
-	for _, id := range db.EventList() {
-		if len(domains) == 0 {
-			enums = append(enums, id)
-			continue
-		}
-
-		scope := db.EventDomains(id)
-
-		for _, domain := range domains {
-			if domainNameInScope(domain, scope) {
-				enums = append(enums, id)
-				break
-			}
-		}
-	}
-	return enums
-}
-
-func domainNameInScope(name string, scope []string) bool {
-	var discovered bool
-
-	n := strings.ToLower(strings.TrimSpace(name))
-	for _, d := range scope {
-		d = strings.ToLower(d)
-
-		if n == d || strings.HasSuffix(n, "."+d) {
-			discovered = true
-			break
-		}
-	}
-	return discovered
-}
-
-func orderedEnumsAndDateRanges(enums []string, db *graph.Graph) ([]string, []time.Time, []time.Time) {
-	sort.Slice(enums, func(i, j int) bool {
-		var less bool
-
-		e1, l1 := db.EventDateRange(enums[i])
-		e2, l2 := db.EventDateRange(enums[j])
-		if l1.After(l2) || e2.Before(e1) {
-			less = true
-		}
-		return less
-	})
-
-	var earliest, latest []time.Time
-	for _, enum := range enums {
-		e, l := db.EventDateRange(enum)
-
-		earliest = append(earliest, e)
-		latest = append(latest, l)
-	}
-	return enums, earliest, latest
 }

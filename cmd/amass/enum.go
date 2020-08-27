@@ -7,10 +7,10 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"math/rand"
 	"os"
@@ -36,8 +36,6 @@ import (
 const (
 	enumUsageMsg = "enum [options] -d DOMAIN"
 )
-
-var interrupted bool
 
 type enumArgs struct {
 	Addresses         format.ParseIPs
@@ -67,8 +65,11 @@ type enumArgs struct {
 		ListSources         bool
 		MonitorResolverRate bool
 		NoAlts              bool
+		NoColor             bool
+		NoLocalDatabase     bool
 		NoRecursive         bool
 		Passive             bool
+		Silent              bool
 		Sources             bool
 		Verbose             bool
 	}
@@ -117,8 +118,11 @@ func defineEnumOptionFlags(enumFlags *flag.FlagSet, args *enumArgs) {
 	enumFlags.BoolVar(&args.Options.ListSources, "list", false, "Print the names of all available data sources")
 	enumFlags.BoolVar(&args.Options.MonitorResolverRate, "noresolvrate", true, "Disable resolver rate monitoring")
 	enumFlags.BoolVar(&args.Options.NoAlts, "noalts", false, "Disable generation of altered names")
+	enumFlags.BoolVar(&args.Options.NoColor, "nocolor", false, "Disable colorized output")
+	enumFlags.BoolVar(&args.Options.NoLocalDatabase, "nolocaldb", false, "Disable saving data into a local database")
 	enumFlags.BoolVar(&args.Options.NoRecursive, "norecursive", false, "Turn off recursive brute forcing")
 	enumFlags.BoolVar(&args.Options.Passive, "passive", false, "Disable DNS resolution of names and dependent features")
+	enumFlags.BoolVar(&args.Options.Silent, "silent", false, "Disable all output during execution")
 	enumFlags.BoolVar(&args.Options.Sources, "src", false, "Print data sources for the discovered names")
 	enumFlags.BoolVar(&args.Options.Verbose, "v", false, "Output status / debug / troubleshooting info")
 }
@@ -149,7 +153,6 @@ func runEnumCommand(clArgs []string) {
 	if cfg == nil {
 		return
 	}
-
 	createOutputDirectory(cfg)
 
 	rLog, wLog := io.Pipe()
@@ -169,16 +172,18 @@ func runEnumCommand(clArgs []string) {
 		r.Fprintf(color.Error, "%v\n", err)
 		os.Exit(1)
 	}
+	defer sys.Shutdown()
 	sys.SetDataSources(datasrcs.GetAllSources(sys))
+	// Expand data source category names into the associated source names
+	cfg.SourceFilter.Sources = expandCategoryNames(cfg.SourceFilter.Sources, generateCategoryMap(sys))
 
 	// Setup the new enumeration
-	e := enum.NewEnumeration(sys)
+	e := enum.NewEnumeration(cfg, sys)
 	if e == nil {
 		r.Fprintf(color.Error, "%s\n", "Failed to setup the enumeration")
 		os.Exit(1)
 	}
 	defer e.Close()
-	e.Config = cfg
 
 	var wg sync.WaitGroup
 	var outChans []chan *requests.Output
@@ -187,21 +192,23 @@ func runEnumCommand(clArgs []string) {
 
 	wg.Add(1)
 	// This goroutine will handle printing the output
-	printOutChan := make(chan *requests.Output, 1000)
+	printOutChan := make(chan *requests.Output, 10)
 	go printOutput(e, args, printOutChan, &wg)
 	outChans = append(outChans, printOutChan)
 
 	wg.Add(1)
 	// This goroutine will handle saving the output to the text file
-	txtOutChan := make(chan *requests.Output, 1000)
+	txtOutChan := make(chan *requests.Output, 10)
 	go saveTextOutput(e, args, txtOutChan, &wg)
 	outChans = append(outChans, txtOutChan)
 
-	wg.Add(1)
-	// This goroutine will handle saving the output to the JSON file
-	jsonOutChan := make(chan *requests.Output, 1000)
-	go saveJSONOutput(e, args, jsonOutChan, &wg)
-	outChans = append(outChans, jsonOutChan)
+	if !args.Options.Passive {
+		wg.Add(1)
+		// This goroutine will handle saving the output to the JSON file
+		jsonOutChan := make(chan *requests.Output, 10)
+		go saveJSONOutput(e, args, jsonOutChan, &wg)
+		outChans = append(outChans, jsonOutChan)
+	}
 
 	wg.Add(1)
 	go processOutput(e, outChans, done, &wg)
@@ -216,15 +223,20 @@ func runEnumCommand(clArgs []string) {
 	close(done)
 	wg.Wait()
 
+	//e.Graph.DumpGraph()
 	// If necessary, handle graph database migration
-	if !interrupted && len(e.Sys.GraphDatabases()) > 0 {
+	if !cfg.Passive && len(e.Sys.GraphDatabases()) > 0 {
 		fmt.Fprintf(color.Error, "\n%s\n", green("The enumeration has finished"))
 
 		// Copy the graph of findings into the system graph databases
 		for _, g := range e.Sys.GraphDatabases() {
 			fmt.Fprintf(color.Error, "%s%s%s\n",
-				yellow("The discoveries are now being migrated into the "), yellow(g.String()), yellow(" database"))
-			e.Graph.Migrate(e.Config.UUID.String(), g)
+				yellow("Discoveries are being migrated into the "), yellow(g.String()), yellow(" database"))
+
+			if err := e.Graph.MigrateEvents(g, e.Config.UUID.String()); err != nil {
+				fmt.Fprintf(color.Error, "%s%s%s%s\n",
+					red("The database migration to "), red(g.String()), red(" failed: "), red(err.Error()))
+			}
 		}
 	}
 }
@@ -268,18 +280,18 @@ func argsAndConfig(clArgs []string) (*config.Config, *enumArgs) {
 		return nil, &args
 	}
 
-	// Check if the user has requested the data source names
-	if args.Options.ListSources {
-		for _, name := range GetAllSourceNames() {
-			g.Println(name)
-		}
-		return nil, &args
+	if args.Options.NoColor {
+		color.NoColor = true
+	}
+	if args.Options.Silent {
+		color.Output = ioutil.Discard
+		color.Error = ioutil.Discard
 	}
 
-	if len(args.AltWordListMask) > 0 {
+	if args.AltWordListMask.Len() > 0 {
 		args.AltWordList.Union(args.AltWordListMask)
 	}
-	if len(args.BruteWordListMask) > 0 {
+	if args.BruteWordListMask.Len() > 0 {
 		args.BruteWordList.Union(args.BruteWordListMask)
 	}
 	// Some input validation
@@ -320,6 +332,19 @@ func argsAndConfig(clArgs []string) (*config.Config, *enumArgs) {
 		os.Exit(1)
 	}
 
+	// Check if the user has requested the data source names
+	if args.Options.ListSources {
+		for _, info := range GetAllSourceInfo(cfg) {
+			g.Println(info)
+		}
+		return nil, &args
+	}
+
+	if len(cfg.Domains()) == 0 {
+		r.Fprintln(color.Error, "Configuration error: No root domain names were provided")
+		os.Exit(1)
+	}
+
 	return cfg, &args
 }
 
@@ -337,7 +362,10 @@ func printOutput(e *enum.Enumeration, args *enumArgs, output chan *requests.Outp
 		}
 
 		total++
-		format.UpdateSummaryData(out, tags, asns)
+		if !args.Options.Passive {
+			format.UpdateSummaryData(out, tags, asns)
+		}
+
 		source, name, ips := format.OutputLineParts(out, args.Options.Sources,
 			args.Options.IPs || args.Options.IPv4 || args.Options.IPv6, args.Options.DemoMode)
 		if ips != "" {
@@ -349,7 +377,7 @@ func printOutput(e *enum.Enumeration, args *enumArgs, output chan *requests.Outp
 
 	if total == 0 {
 		r.Println("No names were discovered")
-	} else {
+	} else if !args.Options.Passive {
 		format.PrintEnumerationSummary(total, tags, asns, args.Options.DemoMode)
 	}
 }
@@ -440,10 +468,10 @@ func processOutput(e *enum.Enumeration, outputs []chan *requests.Output, done ch
 	defer wg.Done()
 
 	// This filter ensures that we only get new names
-	known := stringfilter.NewBloomFilter(1 << 24)
+	known := stringfilter.NewBloomFilter(1 << 22)
 	// The function that obtains output from the enum and puts it on the channel
-	extract := func() {
-		for _, o := range e.ExtractOutput(known) {
+	extract := func(asinfo bool) {
+		for _, o := range e.ExtractOutput(known, asinfo) {
 			if !e.Config.IsDomainInScope(o.Name) {
 				continue
 			}
@@ -454,6 +482,7 @@ func processOutput(e *enum.Enumeration, outputs []chan *requests.Output, done ch
 		}
 	}
 
+	var count int
 	t := time.NewTimer(15 * time.Second)
 loop:
 	for {
@@ -461,18 +490,27 @@ loop:
 		case <-done:
 			break loop
 		case <-t.C:
+			count++
+			asinfo := true
+			if count%5 == 0 {
+				asinfo = false
+				count = 0
+			}
+
 			started := time.Now()
-			extract()
-			next := time.Now().Sub(started) * 5
+			extract(asinfo)
+			next := time.Since(started) * 5
 			if next < 3*time.Second {
 				next = 3 * time.Second
+			} else if next > 10*time.Second {
+				next = 10 * time.Second
 			}
 			t.Reset(next)
 		}
 	}
 
 	// Check one last time
-	extract()
+	extract(false)
 	// Signal all the other goroutines to terminate
 	for _, ch := range outputs {
 		close(ch)
@@ -485,11 +523,10 @@ func signalHandler(e *enum.Enumeration) {
 
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 	<-quit
-	interrupted = true
 	// Signal the enumeration to finish
 	e.Done()
 	// Wait for output operations to complete
-	time.Sleep(5 * time.Second)
+	time.Sleep(20 * time.Second)
 	os.Exit(1)
 }
 
@@ -660,13 +697,13 @@ func (e enumArgs) OverrideConfig(conf *config.Config) error {
 	if e.MaxDNSQueries > 0 {
 		conf.MaxDNSQueries = e.MaxDNSQueries
 	}
-	if len(e.Names) > 0 {
+	if e.Names.Len() > 0 {
 		conf.ProvidedNames = e.Names.Slice()
 	}
-	if len(e.BruteWordList) > 0 {
+	if e.BruteWordList.Len() > 0 {
 		conf.Wordlist = e.BruteWordList.Slice()
 	}
-	if len(e.AltWordList) > 0 {
+	if e.AltWordList.Len() > 0 {
 		conf.AltWordlist = e.AltWordList.Slice()
 	}
 	if e.Options.BruteForcing {
@@ -674,6 +711,9 @@ func (e enumArgs) OverrideConfig(conf *config.Config) error {
 	}
 	if e.Options.NoAlts {
 		conf.Alterations = false
+	}
+	if e.Options.NoLocalDatabase || e.Options.Passive {
+		conf.LocalDatabase = false
 	}
 	if e.Options.NoRecursive {
 		conf.Recursive = false
@@ -687,13 +727,13 @@ func (e enumArgs) OverrideConfig(conf *config.Config) error {
 	if e.Options.Passive {
 		conf.Passive = true
 	}
-	if len(e.Blacklist) > 0 {
+	if e.Blacklist.Len() > 0 {
 		conf.Blacklist = e.Blacklist.Slice()
 	}
 	if e.Timeout > 0 {
 		conf.Timeout = e.Timeout
 	}
-	if e.Options.Verbose == true {
+	if e.Options.Verbose {
 		conf.Verbose = true
 	}
 	if e.Resolvers.Len() > 0 {
@@ -705,16 +745,19 @@ func (e enumArgs) OverrideConfig(conf *config.Config) error {
 
 	if len(e.Included) > 0 {
 		conf.SourceFilter.Include = true
+		// Check if brute forcing and alterations should be added
+		if conf.Alterations {
+			e.Included.Insert(requests.ALT)
+		}
+		if conf.BruteForcing {
+			e.Included.Insert(requests.BRUTE)
+		}
 		conf.SourceFilter.Sources = e.Included.Slice()
 	} else if len(e.Excluded) > 0 {
 		conf.SourceFilter.Include = false
 		conf.SourceFilter.Sources = e.Excluded.Slice()
 	}
-
 	// Attempt to add the provided domains to the configuration
 	conf.AddDomains(e.Domains.Slice())
-	if len(conf.Domains()) == 0 {
-		return errors.New("No root domain names were provided")
-	}
 	return nil
 }

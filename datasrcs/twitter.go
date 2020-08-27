@@ -6,6 +6,7 @@ package datasrcs
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -57,13 +58,26 @@ func (t *Twitter) OnStart() error {
 			config := &oauth2.Config{}
 			token := &oauth2.Token{AccessToken: bearer}
 			// OAuth2 http.Client will automatically authorize Requests
-			httpClient := config.Client(oauth2.NoContext, token)
+			httpClient := config.Client(context.Background(), token)
 			// Twitter client
 			t.client = twitter.NewClient(httpClient)
 		}
 	}
 
 	t.SetRateLimit(3 * time.Second)
+	return nil
+}
+
+// CheckConfig implements the Service interface.
+func (t *Twitter) CheckConfig() error {
+	api := t.sys.Config().GetAPIKey(t.String())
+
+	if api == nil || api.Key == "" || api.Secret == "" {
+		estr := fmt.Sprintf("%s: check callback failed for the configuration", t.String())
+		t.sys.Config().Log.Print(estr)
+		return errors.New(estr)
+	}
+
 	return nil
 }
 
@@ -99,23 +113,13 @@ func (t *Twitter) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 		// URLs in the tweet body
 		for _, urlEntity := range tweet.Entities.Urls {
 			for _, name := range re.FindAllString(urlEntity.ExpandedURL, -1) {
-				bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
-					Name:   name,
-					Domain: req.Domain,
-					Tag:    t.SourceType,
-					Source: t.String(),
-				})
+				genNewNameEvent(ctx, t.sys, t, name)
 			}
 		}
 
 		// Source of the tweet
 		for _, name := range re.FindAllString(tweet.Source, -1) {
-			bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
-				Name:   name,
-				Domain: req.Domain,
-				Tag:    t.SourceType,
-				Source: t.String(),
-			})
+			genNewNameEvent(ctx, t.sys, t, name)
 		}
 	}
 }

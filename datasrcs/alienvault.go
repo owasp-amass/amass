@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -137,12 +138,7 @@ func (a *AlienVault) executeDNSQuery(ctx context.Context, req *requests.DNSReque
 	}
 
 	for name := range names {
-		bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
-			Name:   name,
-			Domain: req.Domain,
-			Tag:    a.SourceType,
-			Source: a.String(),
-		})
+		genNewNameEvent(ctx, a.sys, a, name)
 	}
 
 	for ip := range ips {
@@ -153,6 +149,16 @@ func (a *AlienVault) executeDNSQuery(ctx context.Context, req *requests.DNSReque
 			Source:  a.String(),
 		})
 	}
+}
+
+type avURL struct {
+	Domain   string `json:"domain"`
+	Hostname string `json:"hostname"`
+	Result   struct {
+		Worker struct {
+			IP string `json:"ip"`
+		} `json:"urlworker"`
+	} `json:"result"`
 }
 
 func (a *AlienVault) executeURLQuery(ctx context.Context, req *requests.DNSRequest) {
@@ -177,25 +183,17 @@ func (a *AlienVault) executeURLQuery(ctx context.Context, req *requests.DNSReque
 		return
 	}
 	// Extract the subdomain names and IP addresses from the URL information
-	var urls struct {
-		PageNum  int  `json:"page_num"`
-		HasNext  bool `json:"has_next"`
-		Limit    int  `json:"limit"`
-		FullSize int  `json:"full_size"`
-		URLs     []struct {
-			Domain   string `json:"domain"`
-			Hostname string `json:"hostname"`
-			Result   struct {
-				Worker struct {
-					IP string `json:"ip"`
-				} `json:"urlworker"`
-			} `json:"result"`
-		} `json:"url_list"`
+	var m struct {
+		PageNum  int     `json:"page_num"`
+		HasNext  bool    `json:"has_next"`
+		Limit    int     `json:"limit"`
+		FullSize int     `json:"full_size"`
+		URLs     []avURL `json:"url_list"`
 	}
-	if err := json.Unmarshal([]byte(page), &urls); err != nil {
+	if err := json.Unmarshal([]byte(page), &m); err != nil {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", a.String(), u, err))
 		return
-	} else if len(urls.URLs) == 0 {
+	} else if len(m.URLs) == 0 {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: %s: The query returned zero results", a.String(), u))
 		return
@@ -203,20 +201,11 @@ func (a *AlienVault) executeURLQuery(ctx context.Context, req *requests.DNSReque
 
 	ips := stringset.New()
 	names := stringset.New()
-	for _, u := range urls.URLs {
-		n := strings.ToLower(u.Hostname)
-
-		if re.MatchString(n) {
-			names.Insert(n)
-			if u.Result.Worker.IP != "" {
-				ips.Insert(u.Result.Worker.IP)
-			}
-		}
-	}
+	extractNamesIPs(m.URLs, names, ips, re)
 	// If there are additional pages of URLs, obtain that info as well
-	if urls.HasNext {
-		pages := int(math.Ceil(float64(urls.FullSize) / float64(urls.Limit)))
-		for cur := urls.PageNum + 1; cur <= pages; cur++ {
+	if m.HasNext {
+		pages := int(math.Ceil(float64(m.FullSize) / float64(m.Limit)))
+		for cur := m.PageNum + 1; cur <= pages; cur++ {
 			a.CheckRateLimit()
 			pageURL := u + "?page=" + strconv.Itoa(cur)
 			page, err = http.RequestWebPage(pageURL, nil, headers, "", "")
@@ -226,37 +215,23 @@ func (a *AlienVault) executeURLQuery(ctx context.Context, req *requests.DNSReque
 				break
 			}
 
-			if err := json.Unmarshal([]byte(page), &urls); err != nil {
+			if err := json.Unmarshal([]byte(page), &m); err != nil {
 				bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 					fmt.Sprintf("%s: %s: %v", a.String(), pageURL, err))
 				break
-			} else if len(urls.URLs) == 0 {
+			} else if len(m.URLs) == 0 {
 				bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 					fmt.Sprintf("%s: %s: The query returned zero results", a.String(), pageURL),
 				)
 				break
 			}
 
-			for _, u := range urls.URLs {
-				n := strings.ToLower(u.Hostname)
-
-				if re.MatchString(n) {
-					names.Insert(n)
-					if u.Result.Worker.IP != "" {
-						ips.Insert(u.Result.Worker.IP)
-					}
-				}
-			}
+			extractNamesIPs(m.URLs, names, ips, re)
 		}
 	}
 
 	for name := range names {
-		bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
-			Name:   name,
-			Domain: req.Domain,
-			Tag:    a.SourceType,
-			Source: a.String(),
-		})
+		genNewNameEvent(ctx, a.sys, a, name)
 	}
 
 	for ip := range ips {
@@ -266,6 +241,19 @@ func (a *AlienVault) executeURLQuery(ctx context.Context, req *requests.DNSReque
 			Tag:     a.SourceType,
 			Source:  a.String(),
 		})
+	}
+}
+
+func extractNamesIPs(urls []avURL, names stringset.Set, ips stringset.Set, re *regexp.Regexp) {
+	for _, u := range urls {
+		n := strings.ToLower(u.Hostname)
+
+		if re.MatchString(n) {
+			names.Insert(n)
+			if u.Result.Worker.IP != "" {
+				ips.Insert(u.Result.Worker.IP)
+			}
+		}
 	}
 }
 

@@ -8,7 +8,7 @@ import (
 )
 
 func TestAppend(t *testing.T) {
-	queue := new(Queue)
+	queue := NewQueue()
 
 	queue.Append("testing")
 	if queue.Empty() || queue.Len() == 0 {
@@ -21,11 +21,12 @@ func TestAppend(t *testing.T) {
 }
 
 func TestNext(t *testing.T) {
-	queue := new(Queue)
-	values := []string{"test1", "test2", "test3"}
+	queue := NewQueue()
+	values := []string{"test1", "test2", "test3", "test4"}
+	priorities := []int{90, 75, 30, 5}
 
-	for _, v := range values {
-		queue.Append(v)
+	for i, v := range values {
+		queue.AppendPriority(v, priorities[i])
 	}
 
 	for _, v := range values {
@@ -40,7 +41,7 @@ func TestNext(t *testing.T) {
 }
 
 func TestEmpty(t *testing.T) {
-	queue := new(Queue)
+	queue := NewQueue()
 
 	if !queue.Empty() {
 		t.Errorf("A new Queue did not claim to be empty")
@@ -53,7 +54,7 @@ func TestEmpty(t *testing.T) {
 }
 
 func TestLen(t *testing.T) {
-	queue := new(Queue)
+	queue := NewQueue()
 
 	if l := queue.Len(); l != 0 {
 		t.Errorf("A new Queue returned a length of %d instead of zero", l)

@@ -1,4 +1,9 @@
+
 # [![OWASP Logo](./images/owasp_logo.png) OWASP Amass](https://owasp.org/www-project-amass/)
+
+<p align="center">
+  <img src="https://github.com/OWASP/Amass/images/amass_video.gif">
+</p>
 
 [![OWASP Flagship](https://img.shields.io/badge/owasp-flagship%20project-48A646.svg)](https://owasp.org/projects/#sec-flagships)
 [![GitHub Release](https://img.shields.io/github/release/OWASP/Amass)](https://github.com/OWASP/Amass/releases)
@@ -19,11 +24,13 @@ The OWASP Amass Project performs network mapping of attack surfaces and external
 
 **Information Gathering Techniques Used:**
 
-* **DNS:** Basic enumeration, Brute forcing (optional), Reverse DNS sweeping, Subdomain name alterations/permutations, Zone transfers (optional)
-* **Scraping:** Ask, Baidu, Bing, DNSDumpster, DNSTable, Dogpile, Exalead, Google, HackerOne, IPv4Info, Netcraft, PTRArchive, Riddler, SiteDossier, ViewDNS, Yahoo
-* **Certificates:** Active pulls (optional), Censys, CertSpotter, Crtsh, Entrust, GoogleCT
-* **APIs:** AlienVault, BinaryEdge, BufferOver, CIRCL, CommonCrawl, DNSDB, GitHub, HackerTarget, IPToASN, Mnemonic, NetworksDB, PassiveTotal, Pastebin, RADb, Robtex, SecurityTrails, ShadowServer, Shodan, Spyse (CertDB & FindSubdomains), Sublist3rAPI, TeamCymru, ThreatCrowd, Twitter, Umbrella, URLScan, VirusTotal, WhoisXML
-* **Web Archives:** ArchiveIt, ArchiveToday, Arquivo, LoCArchive, OpenUKArchive, UKGovArchive, Wayback
+| Technique    | Data Sources |
+|:-------------|:-------------|
+| DNS          | Brute forcing, Reverse DNS sweeping, FQDN alterations/permutations, FQDN Similarity-based Guessing, Zone transfers |
+| Scraping     | Ask, Baidu, Bing, BuiltWith, DNSDumpster, DNSTable, HackerOne, RapidDNS, Riddler, SiteDossier, ViewDNS, Yahoo |
+| Certificates | Active pulls (optional), Censys, CertSpotter, Crtsh, FacebookCT, GoogleCT |
+| APIs         | AlienVault, BinaryEdge, BufferOver, C99, CIRCL, Cloudflare, CommonCrawl, DNSDB, GitHub, HackerTarget, IPToASN, Mnemonic, NetworksDB, PassiveTotal, Pastebin, RADb, Robtex, SecurityTrails, ShadowServer, Shodan, Spyse, Sublist3rAPI, TeamCymru, ThreatCrowd, ThreatMiner, Twitter, Umbrella, URLScan, VirusTotal, WhoisXML, ZETAlytics |
+| Web Archives | ArchiveIt, LoCArchive, UKGovArchive, Wayback |
 
 ----
 
@@ -68,7 +75,7 @@ docker run -v OUTPUT_DIR_PATH:/.config/amass/ caffix/amass enum -brute -w /wordl
 
 1. Install [Go](https://golang.org/doc/install) and setup your Go workspace
 2. Add the Go Module environment variable by running `export GO111MODULE=on`
-3. Download OWASP Amass by running `go get -v -u github.com/OWASP/Amass/v3/...`
+3. Download OWASP Amass by running `go get -v github.com/OWASP/Amass/v3/...`
 4. At this point, the binary should be in `$GOPATH/bin`
 
 ## Documentation [![GoDoc](https://img.shields.io/static/v1?label=godoc&message=reference&color=blue)](https://pkg.go.dev/github.com/OWASP/Amass/v3?tab=overview)
@@ -79,11 +86,13 @@ Go to the [User's Guide](./doc/user_guide.md) for additional information.
 
 See the [Tutorial](./doc/tutorial.md) for example usage.
 
+See the [Amass Scripting Engine Manual](./doc/scripting.md) for greater control over your enumeration process.
+
 ## Troubleshooting [![Chat on Discord](https://img.shields.io/discord/433729817918308352.svg?logo=discord)](https://discord.gg/rtN8GMd)
 
 If you need help with installation and/or usage of the tool, please join our [Discord server](https://discord.gg/rtN8GMd) where community members can best try to help you.
 
-:stop_sign: **Please avoid opening GitHub issues for support requests or questions!**
+:stop_sign:   **Please avoid opening GitHub issues for support requests or questions!**
 
 ## Contributing [![Contribute Yes](https://img.shields.io/badge/contribute-yes-brightgreen.svg)](./CONTRIBUTING.md) [![Chat on Discord](https://img.shields.io/discord/433729817918308352.svg?logo=discord)](https://discord.gg/rtN8GMd)
 
@@ -100,7 +109,7 @@ The OWASP Amass core project team are:
 
 For a list of all contributors to the OWASP Amass Project please visit our [HALL_OF_FAME.md](HALL_OF_FAME.md).
 
-## References [![Rawsec's CyberSecurity Inventory](https://inventory.rawsec.ml/img/badges/Rawsec-inventoried-FF5050_flat.svg)](https://inventory.rawsec.ml/tools.html#title-tools-osint) [![Bugcrowd LevelUp 0x04](https://img.shields.io/badge/Bugcrowd-LevelUp%200x04-orange.svg)](https://www.youtube.com/watch?v=C-GabM2db9A) [![DEF CON 27 Demo Labs](https://img.shields.io/badge/DEF%20CON%2027-Demo%20Labs-purple.svg)](https://www.defcon.org/html/defcon-27/dc-27-demolabs.html) [![DEF CON 27 Recon Village](https://img.shields.io/badge/DEF%20CON%2027-Recon%20Village-red.svg)](https://reconvillage.org/)
+## References [![Bugcrowd LevelUp 0x04](https://img.shields.io/badge/Bugcrowd-LevelUp%200x04-orange.svg)](https://www.youtube.com/watch?v=C-GabM2db9A) [![DEF CON 27 Demo Labs](https://img.shields.io/badge/DEF%20CON%2027-Demo%20Labs-purple.svg)](https://www.defcon.org/html/defcon-27/dc-27-demolabs.html) [![DEF CON 27 Recon Village](https://img.shields.io/badge/DEF%20CON%2027-Recon%20Village-lightgrey.svg)](https://reconvillage.org/) [![DEF CON 28 Red Team Village](https://img.shields.io/badge/DEF%20CON%2028-Red%20Team%20Village-red.svg)](https://www.youtube.com/c/RedTeamVillage/featured)
 
 Did you write a blog post, magazine article or do a podcast about or mentioning OWASP Amass? Or maybe you held or joined a conference talk or meetup session, a hacking workshop or public training where this project was mentioned?
 
