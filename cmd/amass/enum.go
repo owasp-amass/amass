@@ -76,20 +76,21 @@ type enumArgs struct {
 		Verbose             bool
 	}
 	Filepaths struct {
-		AllFilePrefix string
-		AltWordlist   format.ParseStrings
-		Blacklist     string
-		BruteWordlist format.ParseStrings
-		ConfigFile    string
-		Directory     string
-		Domains       format.ParseStrings
-		ExcludedSrcs  string
-		IncludedSrcs  string
-		JSONOutput    string
-		LogFile       string
-		Names         format.ParseStrings
-		Resolvers     format.ParseStrings
-		TermOut       string
+		AllFilePrefix    string
+		AltWordlist      format.ParseStrings
+		Blacklist        string
+		BruteWordlist    format.ParseStrings
+		ConfigFile       string
+		Directory        string
+		Domains          format.ParseStrings
+		ExcludedSrcs     string
+		IncludedSrcs     string
+		JSONOutput       string
+		LogFile          string
+		Names            format.ParseStrings
+		Resolvers        format.ParseStrings
+		ScriptsDirectory string
+		TermOut          string
 	}
 }
 
@@ -103,7 +104,7 @@ func defineEnumArgumentFlags(enumFlags *flag.FlagSet, args *enumArgs) {
 	enumFlags.Var(&args.Domains, "d", "Domain names separated by commas (can be used multiple times)")
 	enumFlags.Var(&args.Excluded, "exclude", "Data source names separated by commas to be excluded")
 	enumFlags.Var(&args.Included, "include", "Data source names separated by commas to be included")
-	enumFlags.StringVar(&args.Interface, "i", "", "Provide the network interface to send the traffic through")
+	enumFlags.StringVar(&args.Interface, "iface", "", "Provide the network interface to send traffic through")
 	enumFlags.IntVar(&args.MaxDNSQueries, "max-dns-queries", 0, "Maximum number of concurrent DNS queries")
 	enumFlags.IntVar(&args.MinForRecursive, "min-for-recursive", 1, "Subdomain labels seen before recursive brute forcing")
 	enumFlags.Var(&args.Ports, "p", "Ports separated by commas (default: 443)")
@@ -144,6 +145,7 @@ func defineEnumFilepathFlags(enumFlags *flag.FlagSet, args *enumArgs) {
 	enumFlags.StringVar(&args.Filepaths.LogFile, "log", "", "Path to the log file where errors will be written")
 	enumFlags.Var(&args.Filepaths.Names, "nf", "Path to a file providing already known subdomain names (from other tools/sources)")
 	enumFlags.Var(&args.Filepaths.Resolvers, "rf", "Path to a file providing preferred DNS resolvers")
+	enumFlags.StringVar(&args.Filepaths.ScriptsDirectory, "scripts", "", "Path to a directory containing ADS scripts")
 	enumFlags.StringVar(&args.Filepaths.TermOut, "o", "", "Path to the text file containing terminal stdout/stderr")
 }
 
@@ -707,6 +709,9 @@ func (e enumArgs) OverrideConfig(conf *config.Config) error {
 	}
 	if e.Filepaths.Directory != "" {
 		conf.Dir = e.Filepaths.Directory
+	}
+	if e.Filepaths.ScriptsDirectory != "" {
+		conf.ScriptsDirectory = e.Filepaths.ScriptsDirectory
 	}
 	if e.MaxDNSQueries > 0 {
 		conf.MaxDNSQueries = e.MaxDNSQueries
