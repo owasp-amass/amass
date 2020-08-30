@@ -59,6 +59,7 @@ type Enumeration struct {
 
 	enumStateChannels *enumStateChans
 	memUsage          uint64
+	altSourcesQueue   *queue.Queue
 }
 
 // NewEnumeration returns an initialized Enumeration that has not been started yet.
@@ -80,8 +81,10 @@ func NewEnumeration(cfg *config.Config, sys systems.System) *Enumeration {
 			IncPerSec:     queue.NewQueue(),
 			ClearPerSec:   make(chan struct{}, 10),
 		},
+		altSourcesQueue: queue.NewQueue(),
 	}
 	go e.manageEnumState(e.enumStateChannels)
+	go e.processDupNames()
 
 	if cfg.Passive {
 		return e
@@ -471,15 +474,63 @@ func (e *Enumeration) checkResFilter(req *requests.DNSRequest) *requests.DNSRequ
 	// Do not submit names from untrusted sources, after already receiving the name
 	// from a trusted source
 	if !requests.TrustedTag(req.Tag) && e.resFilter.Has(req.Name+strconv.FormatBool(true)) {
+		e.altSourcesQueue.Append(req)
 		return nil
 	}
 
 	// At most, a FQDN will be accepted from an untrusted source first, and then
 	// reconsidered from a trusted data source
 	if e.resFilter.Duplicate(req.Name + strconv.FormatBool(requests.TrustedTag(req.Tag))) {
+		e.altSourcesQueue.Append(req)
 		return nil
 	}
 
 	e.resFilterCount++
 	return req
+}
+
+// This goroutine ensures that duplicate names from other sources are shown in the Graph.
+func (e *Enumeration) processDupNames() {
+	type altsource struct {
+		Name      string
+		Source    string
+		Tag       string
+		Timestamp time.Time
+	}
+	var pending []*altsource
+	each := func(element interface{}) {
+		req := element.(*requests.DNSRequest)
+
+		pending = append(pending, &altsource{
+			Name:      req.Name,
+			Source:    req.Source,
+			Tag:       req.Tag,
+			Timestamp: time.Now(),
+		})
+	}
+	t := time.NewTicker(5 * time.Second)
+	defer t.Stop()
+loop:
+	for {
+		select {
+		case <-e.done:
+			break loop
+		case <-e.altSourcesQueue.Signal:
+			e.altSourcesQueue.Process(each)
+		case <-t.C:
+			var count int
+			n := time.Now()
+			for _, a := range pending {
+				if a.Timestamp.Add(time.Minute).After(n) {
+					break
+				}
+				if _, err := e.Graph.ReadNode(a.Name, "fqdn"); err == nil {
+					e.Graph.InsertFQDN(a.Name, a.Source, a.Tag, e.Config.UUID.String())
+				}
+				count++
+			}
+			pending = pending[count:]
+		}
+	}
+	e.altSourcesQueue.Process(each)
 }
