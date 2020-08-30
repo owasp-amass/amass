@@ -188,7 +188,7 @@ func (c *Collection) investigateAddr(addr string) {
 					Domain:    d,
 					Addresses: []requests.AddressInfo{addrinfo},
 					Tag:       requests.DNS,
-					Source:    "Reverse DNS",
+					Sources:   []string{"Reverse DNS"},
 				}
 			}
 		}
@@ -208,7 +208,7 @@ func (c *Collection) investigateAddr(addr string) {
 					Domain:    d,
 					Addresses: []requests.AddressInfo{addrinfo},
 					Tag:       requests.CERT,
-					Source:    "Active Cert",
+					Sources:   []string{"Active Cert"},
 				}
 			}
 		}
@@ -300,10 +300,10 @@ func (c *Collection) ReverseWhois() error {
 		for _, d := range req.NewDomains {
 			if !filter.Duplicate(d) {
 				c.Output <- &requests.Output{
-					Name:   d,
-					Domain: d,
-					Tag:    req.Tag,
-					Source: req.Source,
+					Name:    d,
+					Domain:  d,
+					Tag:     req.Tag,
+					Sources: []string{req.Source},
 				}
 			}
 		}
