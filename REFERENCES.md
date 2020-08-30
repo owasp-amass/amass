@@ -38,6 +38,8 @@ Did you write a blog post, magazine article or do a podcast about or mentioning 
 
 ### Blogs & Articles
 
+* Blog post on [Luke Stephens' (@hakluke)](https://medium.com/@hakluke):
+  * [Hakluke’s Guide to Amass — How to Use Amass More Effectively for Bug Bounties](https://medium.com/@hakluke/haklukes-guide-to-amass-how-to-use-amass-more-effectively-for-bug-bounties-7c37570b83f7)
 * Blog post on [WW Tech Blog](https://medium.com/ww-tech-blog):
   * [Reducing Our Attack Surface with AppSec Platform](https://medium.com/ww-tech-blog/reducing-our-attack-surface-with-appsec-platform-4b6717a16709)
 * Blog post on [SecurityTrail's Blog](https://securitytrails.com/blog/):
