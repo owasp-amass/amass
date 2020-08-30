@@ -152,7 +152,7 @@ func runDBCommand(clArgs []string) {
 		return
 	}
 
-	if args.Options.ShowAll {
+	if args.Options.ShowAll || args.Filepaths.JSONOutput != "" {
 		args.Options.DiscoveredNames = true
 		args.Options.ASNTableSummary = true
 	}
