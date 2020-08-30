@@ -209,7 +209,7 @@ func runIntelCommand(clArgs []string) {
 	if err != nil {
 		return
 	}
-	sys.SetDataSources(datasrcs.GetAllSources(sys))
+	sys.SetDataSources(datasrcs.GetAllSources(sys, true))
 
 	ic := intel.NewCollection(sys)
 	if ic == nil {
