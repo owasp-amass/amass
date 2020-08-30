@@ -35,6 +35,11 @@ func NewPastebin(sys systems.System) *Pastebin {
 	return p
 }
 
+// Type implements the Service interface.
+func (p *Pastebin) Type() string {
+	return p.SourceType
+}
+
 // OnStart implements the Service interface.
 func (p *Pastebin) OnStart() error {
 	p.BaseService.OnStart()
