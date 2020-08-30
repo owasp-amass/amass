@@ -103,28 +103,6 @@ func TestBlacklist(t *testing.T) {
 	}
 }
 
-func TestAddAPIKey(t *testing.T) {
-	ak := &APIKey{
-		Username: "TestUser",
-		Password: "TestPassword",
-		Key:      "TestKey",
-		Secret:   "TestSecret",
-	}
-	source := "TestSource"
-	c := NewConfig()
-	c.AddAPIKey(source, ak)
-	if c.apikeys == nil {
-		t.Errorf("Failed to add test api key.\nGot%v\nWant:%v", c.apikeys, ak)
-	}
-	t.Run("Testing GetAPIKey...", func(t *testing.T) {
-		got := c.GetAPIKey(source)
-		want := ak
-		if !reflect.DeepEqual(got, want) {
-			t.Errorf("Obtained incorrect key for source:%v\nWant:%v\nGot:%v", source, want, got)
-		}
-	})
-}
-
 func TestLoadSettings(t *testing.T) {
 	c := NewConfig()
 	path := "../examples/config.ini"

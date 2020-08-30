@@ -24,9 +24,9 @@ import (
 type Twitter struct {
 	requests.BaseService
 
-	API        *config.APIKey
 	SourceType string
 	sys        systems.System
+	creds      *config.Credentials
 	client     *twitter.Client
 }
 
@@ -50,8 +50,8 @@ func (t *Twitter) Type() string {
 func (t *Twitter) OnStart() error {
 	t.BaseService.OnStart()
 
-	t.API = t.sys.Config().GetAPIKey(t.String())
-	if t.API == nil || t.API.Key == "" || t.API.Secret == "" {
+	t.creds = t.sys.Config().GetDataSourceConfig(t.String()).GetCredentials()
+	if t.creds == nil || t.creds.Key == "" || t.creds.Secret == "" {
 		t.sys.Config().Log.Printf("%s: API key data was not provided", t.String())
 	} else {
 		if bearer, err := t.getBearerToken(); err == nil {
@@ -70,9 +70,9 @@ func (t *Twitter) OnStart() error {
 
 // CheckConfig implements the Service interface.
 func (t *Twitter) CheckConfig() error {
-	api := t.sys.Config().GetAPIKey(t.String())
+	creds := t.sys.Config().GetDataSourceConfig(t.String()).GetCredentials()
 
-	if api == nil || api.Key == "" || api.Secret == "" {
+	if creds == nil || creds.Key == "" || creds.Secret == "" {
 		estr := fmt.Sprintf("%s: check callback failed for the configuration", t.String())
 		t.sys.Config().Log.Print(estr)
 		return errors.New(estr)
@@ -129,7 +129,7 @@ func (t *Twitter) getBearerToken() (string, error) {
 	page, err := http.RequestWebPage(
 		"https://api.twitter.com/oauth2/token",
 		strings.NewReader("grant_type=client_credentials"),
-		headers, t.API.Key, t.API.Secret)
+		headers, t.creds.Key, t.creds.Secret)
 	if err != nil {
 		return "", fmt.Errorf("token request failed: %+v", err)
 	}

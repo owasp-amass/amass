@@ -11,24 +11,36 @@ function start()
 end
 
 function check()
-    if (api ~= nil and api.key ~= nil and 
-        api.username ~= nil and api.key ~= "" and api.username ~= "") then
+    local c
+    local cfg = datasrc_config()
+    if cfg ~= nil then
+        c = cfg.credentials
+    end
+
+    if (c ~= nil and c.key ~= nil and 
+        c.username ~= nil and c.key ~= "" and c.username ~= "") then
         return true
     end
     return false
 end
 
 function vertical(ctx, domain)
-    if (api == nil or api.key == nil or api.key == "" or 
-        api.username == nil or api.username == "") then
+    local c
+    local cfg = datasrc_config()
+    if cfg ~= nil then
+        c = cfg.credentials
+    end
+
+    if (c == nil or c.key == nil or c.key == "" or 
+        c.username == nil or c.username == "") then
         return
     end
 
     local resp
     local vurl = buildurl(domain)
     -- Check if the response data is in the graph database
-    if (api.ttl ~= nil and api.ttl > 0) then
-        resp = obtain_response(vurl, api.ttl)
+    if (cfg.ttl ~= nil and cfg.ttl > 0) then
+        resp = obtain_response(domain, cfg.ttl)
     end
 
     if (resp == nil or resp == "") then
@@ -37,14 +49,14 @@ function vertical(ctx, domain)
         resp, err = request({
             url=vurl,
             headers={['Content-Type']="application/json"},
-            id=api.username,
-            pass=api.key,
+            id=c.username,
+            pass=c.key,
         })
         if (err ~= nil and err ~= "") then
             return
         end
 
-        if (api.ttl ~= nil and api.ttl > 0) then
+        if (cfg.ttl ~= nil and cfg.ttl > 0) then
             cache_response(vurl, resp)
         end
     end

@@ -11,16 +11,21 @@ function start()
 end
 
 function vertical(ctx, domain)
-    local resp
-    local hdrs = {['Content-Type']="application/json"}
+    local c
+    local cfg = datasrc_config()
+    if cfg ~= nil then
+        c = cfg.credentials
+    end
 
+    local resp
     -- Check if the response data is in the graph database
-    if (api ~= nil and api.ttl ~= nil and api.ttl > 0) then
-        resp = obtain_response(domain, api.ttl)
+    if (cfg ~= nil and cfg.ttl ~= nil and cfg.ttl > 0) then
+        resp = obtain_response(domain, cfg.ttl)
     end
 
     if (resp == nil or resp == "") then
         local err
+        local hdrs = {['Content-Type']="application/json"}
         resp, err = request({
             url=buildurl(domain),
             headers=hdrs,
@@ -29,7 +34,7 @@ function vertical(ctx, domain)
             return
         end
 
-        if (api ~= nil and api.ttl ~= nil and api.ttl > 0) then
+        if (cfg ~= nil and cfg.ttl ~= nil and cfg.ttl > 0) then
             cache_response(domain, resp)
         end
     end

@@ -25,9 +25,9 @@ import (
 type Umbrella struct {
 	requests.BaseService
 
-	API        *config.APIKey
 	SourceType string
 	sys        systems.System
+	creds      *config.Credentials
 }
 
 // NewUmbrella returns he object initialized, but not yet started.
@@ -50,8 +50,8 @@ func (u *Umbrella) Type() string {
 func (u *Umbrella) OnStart() error {
 	u.BaseService.OnStart()
 
-	u.API = u.sys.Config().GetAPIKey(u.String())
-	if u.API == nil || u.API.Key == "" {
+	u.creds = u.sys.Config().GetDataSourceConfig(u.String()).GetCredentials()
+	if u.creds == nil || u.creds.Key == "" {
 		u.sys.Config().Log.Printf("%s: API key data was not provided", u.String())
 	}
 
@@ -61,9 +61,9 @@ func (u *Umbrella) OnStart() error {
 
 // CheckConfig implements the Service interface.
 func (u *Umbrella) CheckConfig() error {
-	api := u.sys.Config().GetAPIKey(u.String())
+	creds := u.sys.Config().GetDataSourceConfig(u.String()).GetCredentials()
 
-	if api == nil || api.Key == "" {
+	if creds == nil || creds.Key == "" {
 		estr := fmt.Sprintf("%s: check callback failed for the configuration", u.String())
 		u.sys.Config().Log.Print(estr)
 		return errors.New(estr)
@@ -80,7 +80,7 @@ func (u *Umbrella) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 		return
 	}
 
-	if u.API == nil || u.API.Key == "" {
+	if u.creds == nil || u.creds.Key == "" {
 		return
 	}
 
@@ -123,7 +123,7 @@ func (u *Umbrella) OnAddrRequest(ctx context.Context, req *requests.AddrRequest)
 		return
 	}
 
-	if u.API == nil || u.API.Key == "" {
+	if u.creds == nil || u.creds.Key == "" {
 		return
 	}
 
@@ -165,7 +165,7 @@ func (u *Umbrella) OnASNRequest(ctx context.Context, req *requests.ASNRequest) {
 		return
 	}
 
-	if u.API == nil || u.API.Key == "" {
+	if u.creds == nil || u.creds.Key == "" {
 		return
 	}
 
@@ -446,7 +446,7 @@ func (u *Umbrella) OnWhoisRequest(ctx context.Context, req *requests.WhoisReques
 		return
 	}
 
-	if u.API == nil || u.API.Key == "" {
+	if u.creds == nil || u.creds.Key == "" {
 		return
 	}
 
@@ -498,8 +498,8 @@ func (u *Umbrella) OnWhoisRequest(ctx context.Context, req *requests.WhoisReques
 func (u *Umbrella) restHeaders() map[string]string {
 	headers := map[string]string{"Content-Type": "application/json"}
 
-	if u.API != nil && u.API.Key != "" {
-		headers["Authorization"] = "Bearer " + u.API.Key
+	if u.creds == nil || u.creds.Key == "" {
+		headers["Authorization"] = "Bearer " + u.creds.Key
 	}
 	return headers
 

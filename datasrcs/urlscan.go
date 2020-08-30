@@ -22,9 +22,9 @@ import (
 type URLScan struct {
 	requests.BaseService
 
-	API        *config.APIKey
 	SourceType string
 	sys        systems.System
+	creds      *config.Credentials
 }
 
 // NewURLScan returns he object initialized, but not yet started.
@@ -47,8 +47,8 @@ func (u *URLScan) Type() string {
 func (u *URLScan) OnStart() error {
 	u.BaseService.OnStart()
 
-	u.API = u.sys.Config().GetAPIKey(u.String())
-	if u.API == nil || u.API.Key == "" {
+	u.creds = u.sys.Config().GetDataSourceConfig(u.String()).GetCredentials()
+	if u.creds == nil || u.creds.Key == "" {
 		u.sys.Config().Log.Printf("%s: API key data was not provided", u.String())
 	}
 
@@ -150,7 +150,7 @@ func (u *URLScan) attemptSubmission(ctx context.Context, domain string) string {
 		return ""
 	}
 
-	if u.API == nil || u.API.Key == "" {
+	if u.creds == nil || u.creds.Key == "" {
 		return ""
 	}
 
@@ -158,7 +158,7 @@ func (u *URLScan) attemptSubmission(ctx context.Context, domain string) string {
 	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, u.String())
 
 	headers := map[string]string{
-		"API-Key":      u.API.Key,
+		"API-Key":      u.creds.Key,
 		"Content-Type": "application/json",
 	}
 	url := "https://urlscan.io/api/v1/scan/"

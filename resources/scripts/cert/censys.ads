@@ -11,24 +11,30 @@ function start()
 end
 
 function vertical(ctx, domain)
-    if (api == nil or api.key == nil or 
-        api.key == "" or api.secret == nil or api.secret == "") then
+    local c
+    local cfg = datasrc_config()
+    if cfg ~= nil then
+        c = cfg.credentials
+    end
+
+    if (c == nil or c.key == nil or 
+        c.key == "" or c.secret == nil or c.secret == "") then
         scrape(ctx, {url=scrapeurl(domain)})
         return
     end
 
-    apiquery(ctx, domain)
+    apiquery(ctx, cfg, domain)
 end
 
-function apiquery(ctx, domain)
+function apiquery(ctx, cfg, domain)
     local p = 1
 
     while(true) do
         local resp
         local reqstr = domain .. "page: " .. p
         -- Check if the response data is in the graph database
-        if (api.ttl ~= nil and api.ttl > 0) then
-            resp = obtain_response(reqstr, api.ttl)
+        if (cfg.ttl ~= nil and cfg.ttl > 0) then
+            resp = obtain_response(reqstr, cfg.ttl)
         end
 
         if (resp == nil or resp == "") then
@@ -46,14 +52,14 @@ function apiquery(ctx, domain)
                 data=body,
                 url=apiurl(),
                 headers={['Content-Type']="application/json"},
-                id=api["key"],
-                pass=api["secret"],
+                id=cfg["credentials"].key,
+                pass=cfg["credentials"].secret,
             })
             if (err ~= nil and err ~= "") then
                 return
             end
 
-            if (api.ttl ~= nil and api.ttl > 0) then
+            if (cfg.ttl ~= nil and cfg.ttl > 0) then
                 cache_response(reqstr, resp)
             end
         end

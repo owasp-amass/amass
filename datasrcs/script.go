@@ -84,8 +84,6 @@ func NewScript(script string, sys systems.System) *Script {
 	}
 	s.BaseService = *requests.NewBaseService(s, name)
 
-	// Acquire API authentication info and make it global in the script
-	s.registerAPIKey(L, sys.Config())
 	// Save references to the callbacks defined within the script
 	s.getScriptCallbacks()
 	return s
@@ -98,6 +96,7 @@ func (s *Script) newLuaState(cfg *config.Config) *lua.LState {
 	L.PreloadModule("url", luaurl.Loader)
 	L.PreloadModule("json", luajson.Loader)
 	L.SetGlobal("config", L.NewFunction(s.config))
+	L.SetGlobal("datasrc_config", L.NewFunction(s.dataSourceConfig))
 	L.SetGlobal("brute_wordlist", L.NewFunction(s.bruteWordlist))
 	L.SetGlobal("alt_wordlist", L.NewFunction(s.altWordlist))
 	L.SetGlobal("log", L.NewFunction(s.log))
@@ -119,33 +118,6 @@ func (s *Script) newLuaState(cfg *config.Config) *lua.LState {
 	L.SetGlobal("cache_response", L.NewFunction(s.cacheResponse))
 	L.SetGlobal("subdomainre", lua.LString(dns.AnySubdomainRegexString()))
 	return L
-}
-
-// Fetch provided API authentication information and provide to the script as a global table.
-func (s *Script) registerAPIKey(L *lua.LState, cfg *config.Config) {
-	api := cfg.GetAPIKey(s.String())
-	if api == nil {
-		return
-	}
-
-	tb := L.NewTable()
-	if api.Username != "" {
-		tb.RawSetString("username", lua.LString(api.Username))
-	}
-	if api.Password != "" {
-		tb.RawSetString("password", lua.LString(api.Password))
-	}
-	if api.Key != "" {
-		tb.RawSetString("key", lua.LString(api.Key))
-	}
-	if api.Secret != "" {
-		tb.RawSetString("secret", lua.LString(api.Secret))
-	}
-	if api.TTL != 0 {
-		tb.RawSetString("ttl", lua.LNumber(api.TTL))
-	}
-
-	L.SetGlobal("api", tb)
 }
 
 // Save references to the script functions that serve as callbacks for Amass events.

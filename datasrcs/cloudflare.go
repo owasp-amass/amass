@@ -19,9 +19,9 @@ import (
 type Cloudflare struct {
 	requests.BaseService
 
-	API        *config.APIKey
 	SourceType string
 	sys        systems.System
+	creds      *config.Credentials
 }
 
 // NewCloudflare returns he object initialized, but not yet started.
@@ -44,8 +44,8 @@ func (u *Cloudflare) Type() string {
 func (u *Cloudflare) OnStart() error {
 	u.BaseService.OnStart()
 
-	u.API = u.sys.Config().GetAPIKey(u.String())
-	if u.API == nil || u.API.Key == "" {
+	u.creds = u.sys.Config().GetDataSourceConfig(u.String()).GetCredentials()
+	if u.creds == nil || u.creds.Key == "" {
 		u.sys.Config().Log.Printf("%s: API key data was not provided", u.String())
 	}
 
@@ -61,7 +61,7 @@ func (u *Cloudflare) OnDNSRequest(ctx context.Context, req *requests.DNSRequest)
 		return
 	}
 
-	if u.API == nil || u.API.Key == "" {
+	if u.creds == nil || u.creds.Key == "" {
 		return
 	}
 
@@ -74,7 +74,7 @@ func (u *Cloudflare) OnDNSRequest(ctx context.Context, req *requests.DNSRequest)
 	bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 		fmt.Sprintf("Querying %s for %s subdomains", u.String(), req.Domain))
 
-	api, err := cloudflare.NewWithAPIToken(u.API.Key)
+	api, err := cloudflare.NewWithAPIToken(u.creds.Key)
 	if err != nil {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %v", u.String(), err))
 	}

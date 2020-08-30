@@ -34,7 +34,7 @@ var (
 )
 
 // GetAllSources returns a slice of all data source services, initialized and ready.
-func GetAllSources(sys systems.System) []requests.Service {
+func GetAllSources(sys systems.System, check bool) []requests.Service {
 	srvs := []requests.Service{
 		NewAlienVault(sys),
 		NewCloudflare(sys),
@@ -64,16 +64,18 @@ func GetAllSources(sys systems.System) []requests.Service {
 		}
 	}
 
-	// Check that the data sources have acceptable configurations for operation
-	// Filtering in-place: https://github.com/golang/go/wiki/SliceTricks
-	i := 0
-	for _, s := range srvs {
-		if s.CheckConfig() == nil {
-			srvs[i] = s
-			i++
+	if check {
+		// Check that the data sources have acceptable configurations for operation
+		// Filtering in-place: https://github.com/golang/go/wiki/SliceTricks
+		i := 0
+		for _, s := range srvs {
+			if s.CheckConfig() == nil {
+				srvs[i] = s
+				i++
+			}
 		}
+		srvs = srvs[:i]
 	}
-	srvs = srvs[:i]
 
 	sort.Slice(srvs, func(i, j int) bool {
 		return srvs[i].String() < srvs[j].String()
