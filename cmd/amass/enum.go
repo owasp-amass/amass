@@ -13,6 +13,7 @@ import (
 	"io/ioutil"
 	"log"
 	"math/rand"
+	"net"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -49,6 +50,7 @@ type enumArgs struct {
 	Domains           stringset.Set
 	Excluded          stringset.Set
 	Included          stringset.Set
+	Interface         string
 	MaxDNSQueries     int
 	MinForRecursive   int
 	Names             stringset.Set
@@ -101,6 +103,7 @@ func defineEnumArgumentFlags(enumFlags *flag.FlagSet, args *enumArgs) {
 	enumFlags.Var(&args.Domains, "d", "Domain names separated by commas (can be used multiple times)")
 	enumFlags.Var(&args.Excluded, "exclude", "Data source names separated by commas to be excluded")
 	enumFlags.Var(&args.Included, "include", "Data source names separated by commas to be included")
+	enumFlags.StringVar(&args.Interface, "i", "", "Provide the network interface to send the traffic through")
 	enumFlags.IntVar(&args.MaxDNSQueries, "max-dns-queries", 0, "Maximum number of concurrent DNS queries")
 	enumFlags.IntVar(&args.MinForRecursive, "min-for-recursive", 1, "Subdomain labels seen before recursive brute forcing")
 	enumFlags.Var(&args.Ports, "p", "Ports separated by commas (default: 443)")
@@ -173,7 +176,7 @@ func runEnumCommand(clArgs []string) {
 		os.Exit(1)
 	}
 	defer sys.Shutdown()
-	sys.SetDataSources(datasrcs.GetAllSources(sys))
+	sys.SetDataSources(datasrcs.GetAllSources(sys, true))
 	// Expand data source category names into the associated source names
 	cfg.SourceFilter.Sources = expandCategoryNames(cfg.SourceFilter.Sources, generateCategoryMap(sys))
 
@@ -280,6 +283,17 @@ func argsAndConfig(clArgs []string) (*config.Config, *enumArgs) {
 		return nil, &args
 	}
 
+	if args.Interface != "" {
+		iface, err := net.InterfaceByName(args.Interface)
+		if err != nil || iface == nil {
+			fmt.Fprint(color.Output, format.InterfaceInfo())
+			os.Exit(1)
+		}
+		if err := assignNetInterface(iface); err != nil {
+			r.Fprintf(color.Error, "%v\n", err)
+			os.Exit(1)
+		}
+	}
 	if args.Options.NoColor {
 		color.NoColor = true
 	}
@@ -334,8 +348,8 @@ func argsAndConfig(clArgs []string) (*config.Config, *enumArgs) {
 
 	// Check if the user has requested the data source names
 	if args.Options.ListSources {
-		for _, info := range GetAllSourceInfo(cfg) {
-			g.Println(info)
+		for _, line := range GetAllSourceInfo(cfg) {
+			fmt.Fprintln(color.Output, line)
 		}
 		return nil, &args
 	}

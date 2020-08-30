@@ -5,10 +5,12 @@ package net
 
 import (
 	"bytes"
+	"context"
 	"math/big"
 	"net"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // IPv4RE is a regular expression that will match an IPv4 address.
@@ -16,6 +18,9 @@ const IPv4RE = "((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)[.]){3}(25[0-5]|2[0-4][0-
 
 // ReservedCIDRDescription is the description used for reserved address ranges.
 const ReservedCIDRDescription = "Reserved Network Address Blocks"
+
+// LocalAddr is the global option for specifying the network interface.
+var LocalAddr net.Addr
 
 // ReservedCIDRs includes all the networks that are reserved for special use.
 var ReservedCIDRs = []string{
@@ -48,6 +53,26 @@ func init() {
 			reservedAddrRanges = append(reservedAddrRanges, ipnet)
 		}
 	}
+}
+
+// DialContext performs the dial using global variables (e.g. LocalAddr).
+func DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
+	d := &net.Dialer{DualStack: true}
+
+	if LocalAddr != nil && strings.HasPrefix(network, "tcp") {
+		d.Timeout = 30 * time.Second
+		d.LocalAddr = &net.TCPAddr{
+			IP:   net.ParseIP(LocalAddr.String()),
+			Port: 0,
+		}
+	} else if LocalAddr != nil && strings.HasPrefix(network, "udp") {
+		d.LocalAddr = &net.UDPAddr{
+			IP:   net.ParseIP(LocalAddr.String()),
+			Port: 0,
+		}
+	}
+
+	return d.DialContext(ctx, network, addr)
 }
 
 // IsIPv4 returns true when the provided net.IP address is an IPv4 address.

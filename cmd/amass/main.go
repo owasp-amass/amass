@@ -27,6 +27,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"net"
 	"os"
 	"path"
 	"sort"
@@ -38,7 +39,7 @@ import (
 	"github.com/OWASP/Amass/v3/eventbus"
 	"github.com/OWASP/Amass/v3/format"
 	"github.com/OWASP/Amass/v3/graph"
-	"github.com/OWASP/Amass/v3/net"
+	amassnet "github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/stringfilter"
 	"github.com/OWASP/Amass/v3/systems"
@@ -134,7 +135,7 @@ func main() {
 	}
 }
 
-// GetAllSourceInfo returns the names of all Amass data sources.
+// GetAllSourceInfo returns the output for the 'list' flag.
 func GetAllSourceInfo(cfg *config.Config) []string {
 	var names []string
 
@@ -146,10 +147,21 @@ func GetAllSourceInfo(cfg *config.Config) []string {
 	if err != nil {
 		return names
 	}
-	sys.SetDataSources(datasrcs.GetAllSources(sys))
+	sys.SetDataSources(datasrcs.GetAllSources(sys, false))
+
+	names = append(names, fmt.Sprintf("%-35s%-35s%s", blue("Data Source"), blue("| Type"), blue("| Available")))
+	var line string
+	for i := 0; i < 8; i++ {
+		line += blue("----------")
+	}
+	names = append(names, line)
 
 	for _, src := range sys.DataSources() {
-		names = append(names, fmt.Sprintf("%-20s\t%s", src.String(), src.Type()))
+		var avail string
+		if src.CheckConfig() == nil {
+			avail = "*"
+		}
+		names = append(names, fmt.Sprintf("%-35s  %-35s  %s", green(src.String()), yellow(src.Type()), yellow(avail)))
 	}
 
 	sys.Shutdown()
@@ -238,9 +250,10 @@ func orderedEvents(events []string, db *graph.Graph) ([]string, []time.Time, []t
 
 		e1, l1 := db.EventDateRange(events[i])
 		e2, l2 := db.EventDateRange(events[j])
-		if l1.After(l2) || e2.Before(e1) {
+		if l2.After(l1) || e1.Before(e2) {
 			less = true
 		}
+
 		return less
 	})
 
@@ -287,8 +300,14 @@ func memGraphForScope(domains []string, from *graph.Graph) (*graph.Graph, error)
 		return nil, errors.New("Failed to create the in-memory graph database")
 	}
 
+	var err error
 	// Migrate the event data into the in-memory graph database
-	if err := from.MigrateEventsInScope(db, domains); err != nil {
+	if len(domains) == 0 {
+		err = from.MigrateEvents(db)
+	} else {
+		err = from.MigrateEventsInScope(db, domains)
+	}
+	if err != nil {
 		return nil, fmt.Errorf("Failed to move the data into the in-memory graph database: %v", err)
 	}
 
@@ -297,7 +316,7 @@ func memGraphForScope(domains []string, from *graph.Graph) (*graph.Graph, error)
 
 func getEventOutput(uuids []string, db *graph.Graph) []*requests.Output {
 	var output []*requests.Output
-	cache := net.NewASNCache()
+	cache := amassnet.NewASNCache()
 	filter := stringfilter.NewStringFilter()
 
 	for i := len(uuids) - 1; i >= 0; i-- {
@@ -324,7 +343,7 @@ func domainNameInScope(name string, scope []string) bool {
 }
 
 func healASInfo(uuids []string, db *graph.Graph) bool {
-	cache := net.NewASNCache()
+	cache := amassnet.NewASNCache()
 	db.ASNCacheFill(cache)
 
 	cfg := config.NewConfig()
@@ -333,7 +352,7 @@ func healASInfo(uuids []string, db *graph.Graph) bool {
 	if err != nil {
 		return false
 	}
-	sys.SetDataSources(datasrcs.GetAllSources(sys))
+	sys.SetDataSources(datasrcs.GetAllSources(sys, true))
 	defer sys.Shutdown()
 
 	bus := eventbus.NewEventBus()
@@ -369,4 +388,31 @@ func healASInfo(uuids []string, db *graph.Graph) bool {
 	}
 
 	return updated
+}
+
+func assignNetInterface(iface *net.Interface) error {
+	addrs, err := iface.Addrs()
+	if err != nil {
+		return fmt.Errorf("Network interface '%s' has no assigned addresses", iface.Name)
+	}
+
+	var best net.Addr
+	for _, addr := range addrs {
+		if a, ok := addr.(*net.IPNet); ok {
+			if best == nil {
+				best = a
+			}
+			if amassnet.IsIPv4(a.IP) {
+				best = a
+				break
+			}
+		}
+	}
+
+	if best == nil {
+		return fmt.Errorf("Network interface '%s' does not have assigned IP addresses", iface.Name)
+	}
+
+	amassnet.LocalAddr = best
+	return nil
 }

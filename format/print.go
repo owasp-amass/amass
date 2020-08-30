@@ -6,10 +6,11 @@ package format
 import (
 	"fmt"
 	"io"
+	"net"
 	"strconv"
 	"strings"
 
-	"github.com/OWASP/Amass/v3/net"
+	amassnet "github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/fatih/color"
 )
@@ -198,7 +199,7 @@ func censorString(input string, start, end int) string {
 // OutputLineParts returns the parts of a line to be printed for a requests.Output.
 func OutputLineParts(out *requests.Output, src, addrs, demo bool) (source, name, ips string) {
 	if src {
-		source = fmt.Sprintf("%-18s", "["+out.Source+"] ")
+		source = fmt.Sprintf("%-18s", "["+out.Sources[0]+"] ")
 	}
 	if addrs {
 		for i, a := range out.Addresses {
@@ -230,12 +231,40 @@ func DesiredAddrTypes(addrs []requests.AddressInfo, ipv4, ipv6 bool) []requests.
 
 	var keep []requests.AddressInfo
 	for _, addr := range addrs {
-		if net.IsIPv4(addr.Address) && !ipv4 {
+		if amassnet.IsIPv4(addr.Address) && !ipv4 {
 			continue
-		} else if net.IsIPv6(addr.Address) && !ipv6 {
+		} else if amassnet.IsIPv6(addr.Address) && !ipv6 {
 			continue
 		}
 		keep = append(keep, addr)
 	}
 	return keep
+}
+
+// InterfaceInfo returns network interface information specific to the current host.
+func InterfaceInfo() string {
+	var output string
+
+	if ifaces, err := net.Interfaces(); err == nil {
+		for _, i := range ifaces {
+			addrs, err := i.Addrs()
+			if err != nil {
+				continue
+			}
+			output += fmt.Sprintf("%s%s%s\n", blue(i.Name+": "), green("flags="), yellow("<"+strings.ToUpper(i.Flags.String()+">")))
+			if i.HardwareAddr.String() != "" {
+				output += fmt.Sprintf("\t%s%s\n", green("ether: "), yellow(i.HardwareAddr.String()))
+			}
+			for _, addr := range addrs {
+				inet := "inet"
+				if a, ok := addr.(*net.IPNet); ok && amassnet.IsIPv6(a.IP) {
+					inet += "6"
+				}
+				inet += ": "
+				output += fmt.Sprintf("\t%s%s\n", green(inet), yellow(addr.String()))
+			}
+		}
+	}
+
+	return output
 }

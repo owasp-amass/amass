@@ -205,8 +205,7 @@ func (s *ShadowServer) netblocks(ctx context.Context, asn int) stringset.Set {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	d := net.Dialer{}
-	conn, err := d.DialContext(ctx, "tcp", s.addr+":43")
+	conn, err := amassnet.DialContext(ctx, "tcp", s.addr+":43")
 	if err != nil {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %v", s.String(), err))
 		return netblocks

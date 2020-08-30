@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
-	"net"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -114,13 +113,6 @@ func (d *DNSDumpster) postForm(ctx context.Context, token, domain string) (strin
 		return "", fmt.Errorf("%s failed to obtain the EventBus from Context", d.String())
 	}
 
-	dial := net.Dialer{}
-	client := &http.Client{
-		Transport: &http.Transport{
-			DialContext:         dial.DialContext,
-			TLSHandshakeTimeout: 10 * time.Second,
-		},
-	}
 	params := url.Values{
 		"csrfmiddlewaretoken": {token},
 		"targetip":            {domain},
@@ -147,7 +139,7 @@ func (d *DNSDumpster) postForm(ctx context.Context, token, domain string) (strin
 	req.Header.Set("Referer", "https://dnsdumpster.com")
 	req.Header.Set("X-CSRF-Token", token)
 
-	resp, err := client.Do(req)
+	resp, err := amasshttp.DefaultClient.Do(req)
 	if err != nil {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: The POST request failed: %v", d.String(), err))

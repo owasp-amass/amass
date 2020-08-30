@@ -4,9 +4,11 @@
 package resolvers
 
 import (
+	"context"
 	"net"
 	"time"
 
+	amassnet "github.com/OWASP/Amass/v3/net"
 	"github.com/miekg/dns"
 )
 
@@ -384,9 +386,7 @@ func (r *BaseResolver) periodicRotations(chs *rotationChans) {
 
 			var err error
 			for {
-				d := &net.Dialer{}
-
-				current, err = d.Dial("udp", r.address+":"+r.port)
+				current, err = amassnet.DialContext(context.TODO(), "udp", r.address+":"+r.port)
 				if err == nil {
 					break
 				}

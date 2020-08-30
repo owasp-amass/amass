@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -20,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	amassnet "github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/net/dns"
 	"github.com/OWASP/Amass/v3/stringset"
 )
@@ -38,20 +38,15 @@ const (
 	defaultHandshakeDeadline = 5 * time.Second
 )
 
-var (
-	defaultClient *http.Client
-)
+// DefaultClient is the same HTTP client used by the package methods.
+var DefaultClient *http.Client
 
 func init() {
 	jar, _ := cookiejar.New(nil)
-	defaultClient = &http.Client{
+	DefaultClient = &http.Client{
 		Timeout: 30 * time.Second,
 		Transport: &http.Transport{
-			DialContext: (&net.Dialer{
-				Timeout:   30 * time.Second,
-				KeepAlive: 30 * time.Second,
-				DualStack: true,
-			}).DialContext,
+			DialContext:           amassnet.DialContext,
 			MaxIdleConns:          200,
 			IdleConnTimeout:       90 * time.Second,
 			TLSHandshakeTimeout:   20 * time.Second,
@@ -68,14 +63,14 @@ func init() {
 func CopyCookies(src string, dest string) {
 	srcURL, _ := url.Parse(src)
 	destURL, _ := url.Parse(dest)
-	defaultClient.Jar.SetCookies(destURL, defaultClient.Jar.Cookies(srcURL))
+	DefaultClient.Jar.SetCookies(destURL, DefaultClient.Jar.Cookies(srcURL))
 }
 
 // CheckCookie checks if a cookie exists in the cookie jar for a given host
 func CheckCookie(urlString string, cookieName string) bool {
 	cookieURL, _ := url.Parse(urlString)
 	found := false
-	for _, cookie := range defaultClient.Jar.Cookies(cookieURL) {
+	for _, cookie := range DefaultClient.Jar.Cookies(cookieURL) {
 		if cookie.Name == cookieName {
 			found = true
 			break
@@ -106,7 +101,7 @@ func RequestWebPage(urlstring string, body io.Reader, hvals map[string]string, u
 		req.Header.Set(k, v)
 	}
 
-	resp, err := defaultClient.Do(req)
+	resp, err := DefaultClient.Do(req)
 	if err != nil {
 		return "", err
 	} else if resp.StatusCode < 200 || resp.StatusCode >= 400 {
@@ -129,8 +124,7 @@ func PullCertificateNames(addr string, ports []int) []string {
 		ctx, cancel := context.WithTimeout(context.Background(), defaultTLSConnectTimeout)
 		defer cancel()
 		// Obtain the connection
-		d := net.Dialer{}
-		conn, err := d.DialContext(ctx, "tcp", addr+":"+strconv.Itoa(port))
+		conn, err := amassnet.DialContext(ctx, "tcp", addr+":"+strconv.Itoa(port))
 		if err != nil {
 			continue
 		}
