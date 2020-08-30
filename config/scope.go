@@ -96,8 +96,14 @@ func (c *Config) WhichDomain(name string) string {
 	n := strings.TrimSpace(name)
 
 	for _, d := range c.Domains() {
-		if n == d || strings.HasSuffix(n, "."+d) {
-			return d
+		if strings.HasSuffix(n, d) {
+			// fork made me do it :>
+			nlen := len(n)
+			dlen := len(d)
+			// Check for exact match first to guard against out of bound index
+			if nlen == dlen || n[nlen-dlen-1] == '.' {
+				return d
+			}
 		}
 	}
 	return ""
