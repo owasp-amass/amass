@@ -2,7 +2,7 @@
 # [![OWASP Logo](./images/owasp_logo.png) OWASP Amass](https://owasp.org/www-project-amass/)
 
 <p align="center">
-  <img src="https://github.com/OWASP/Amass/images/amass_video.gif">
+  <img src="https://github.com/OWASP/Amass/blob/master/images/amass_video.gif">
 </p>
 
 [![OWASP Flagship](https://img.shields.io/badge/owasp-flagship%20project-48A646.svg)](https://owasp.org/projects/#sec-flagships)
