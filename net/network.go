@@ -59,16 +59,20 @@ func init() {
 func DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	d := &net.Dialer{DualStack: true}
 
-	if LocalAddr != nil && strings.HasPrefix(network, "tcp") {
-		d.Timeout = 30 * time.Second
-		d.LocalAddr = &net.TCPAddr{
-			IP:   net.ParseIP(LocalAddr.String()),
-			Port: 0,
-		}
-	} else if LocalAddr != nil && strings.HasPrefix(network, "udp") {
-		d.LocalAddr = &net.UDPAddr{
-			IP:   net.ParseIP(LocalAddr.String()),
-			Port: 0,
+	if LocalAddr != nil {
+		addr, _, err := net.ParseCIDR(LocalAddr.String())
+
+		if err == nil && strings.HasPrefix(network, "tcp") {
+			d.Timeout = 30 * time.Second
+			d.LocalAddr = &net.TCPAddr{
+				IP:   addr,
+				Port: 0,
+			}
+		} else if err == nil && strings.HasPrefix(network, "udp") {
+			d.LocalAddr = &net.UDPAddr{
+				IP:   addr,
+				Port: 0,
+			}
 		}
 	}
 
