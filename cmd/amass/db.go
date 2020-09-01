@@ -272,8 +272,7 @@ func showEventData(args *dbArgs, uuids []string, db *graph.Graph) {
 	}
 	if args.Filepaths.JSONOutput != "" {
 		writeJSON(args, uuids, discovered, db)
-	}
-	if args.Options.ASNTableSummary {
+	} else if args.Options.ASNTableSummary {
 		var out io.Writer
 		status := color.NoColor
 
@@ -298,9 +297,9 @@ type jsonEvent struct {
 }
 
 type jsonDomain struct {
-	Domain string `json:"domain"`
-	Total  int    `json:"total"`
-	Names  []*requests.Output
+	Domain string             `json:"domain"`
+	Total  int                `json:"total"`
+	Names  []*requests.Output `json:"names"`
 }
 
 type jsonOutput struct {
