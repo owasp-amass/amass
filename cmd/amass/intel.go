@@ -146,10 +146,10 @@ func runIntelCommand(clArgs []string) {
 	rand.Seed(time.Now().UTC().UnixNano())
 
 	if args.OrganizationName != "" {
-		records, err := config.LookupASNsByName(args.OrganizationName)
+		asns, descs, err := config.LookupASNsByName(args.OrganizationName)
 		if err == nil {
-			for _, a := range records {
-				fmt.Printf("%d, %s\n", a.ASN, a.Description)
+			for i, a := range asns {
+				fmt.Printf("%d, %s\n", a, descs[i])
 			}
 		} else {
 			fmt.Printf("%v\n", err)
