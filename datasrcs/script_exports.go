@@ -271,7 +271,7 @@ func (s *Script) newName(L *lua.LState) int {
 		return 0
 	}
 
-	genNewNameEvent(c.Ctx, s.sys, s, cleanName(name))
+	genNewNameEvent(c.Ctx, s.sys, s, http.CleanName(name))
 	return 0
 }
 
@@ -590,7 +590,7 @@ func (s *Script) scrape(L *lua.LState) int {
 	}
 
 	for _, name := range subRE.FindAllString(resp, -1) {
-		n := cleanName(name)
+		n := http.CleanName(name)
 
 		if !s.filter.Duplicate(n) {
 			genNewNameEvent(c.Ctx, s.sys, s, n)
@@ -616,14 +616,14 @@ func (s *Script) crawl(L *lua.LState) int {
 		return 0
 	}
 
-	names, err := crawl(c.Ctx, string(u))
+	names, err := http.Crawl(string(u), cfg.Domains())
 	if err != nil {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", s.String(), u, err))
 		return 0
 	}
 
 	for _, name := range names {
-		n := cleanName(name)
+		n := http.CleanName(name)
 
 		if !s.filter.Duplicate(n) {
 			genNewNameEvent(c.Ctx, s.sys, s, n)

@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/eventbus"
 	amasshttp "github.com/OWASP/Amass/v3/net/http"
 	"github.com/OWASP/Amass/v3/requests"
@@ -54,9 +53,8 @@ func (d *DNSDumpster) OnStart() error {
 
 // OnDNSRequest implements the Service interface.
 func (d *DNSDumpster) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
-	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if cfg == nil || bus == nil {
+	cfg, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 
@@ -94,7 +92,7 @@ func (d *DNSDumpster) OnDNSRequest(ctx context.Context, req *requests.DNSRequest
 	}
 
 	for _, sd := range re.FindAllString(page, -1) {
-		genNewNameEvent(ctx, d.sys, d, cleanName(sd))
+		genNewNameEvent(ctx, d.sys, d, amasshttp.CleanName(sd))
 	}
 }
 
@@ -108,8 +106,8 @@ func (d *DNSDumpster) getCSRFToken(page string) string {
 }
 
 func (d *DNSDumpster) postForm(ctx context.Context, token, domain string) (string, error) {
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if bus == nil {
+	_, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return "", fmt.Errorf("%s failed to obtain the EventBus from Context", d.String())
 	}
 
