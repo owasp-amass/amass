@@ -63,11 +63,18 @@ function vertical(ctx, domain)
     end
 
     for i, set in pairs(data) do
-        for j, name in pairs(set["rawDomains"]) do
-            sendnames(ctx, name)
+        local domains = set["rawDomains"]
+        if domains ~= nil and #domains > 0 then
+            for j, name in pairs(domains) do
+                sendnames(ctx, name)
+            end
         end
-        for j, addr in pairs(set["rawIp"]) do
-            newaddr(ctx, domain, addr)
+
+        local addrs = set["rawIp"]
+        if addrs ~= nil and #addrs > 0 then
+            for j, addr in pairs(addrs) do
+                newaddr(ctx, domain, addr)
+            end
         end
     end
 end

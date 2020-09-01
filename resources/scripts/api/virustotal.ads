@@ -22,15 +22,13 @@ function vertical(ctx, domain)
     end
 
     local resp
-    local respstr = domain
     local vurl = buildurl(domain)
     if haskey then
-        vurl = apiurl(domain, c.api)
-        respstr = domain .. api
+        vurl = apiurl(domain, c.key)
     end
     -- Check if the response data is in the graph database
     if (cfg and cfg.ttl ~= nil and cfg.ttl > 0) then
-        resp = obtain_response(respstr, cfg.ttl)
+        resp = obtain_response(domain, cfg.ttl)
     end
 
     if (resp == nil or resp == "") then
@@ -45,7 +43,7 @@ function vertical(ctx, domain)
         end
 
         if (cfg and cfg.ttl ~= nil and cfg.ttl > 0) then
-            cache_response(respstr, resp)
+            cache_response(domain, resp)
         end
     end
 
