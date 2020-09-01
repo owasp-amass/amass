@@ -207,13 +207,11 @@ func runEnumCommand(clArgs []string) {
 	go saveTextOutput(e, args, txtOutChan, &wg)
 	outChans = append(outChans, txtOutChan)
 
-	if !args.Options.Passive {
-		wg.Add(1)
-		// This goroutine will handle saving the output to the JSON file
-		jsonOutChan := make(chan *requests.Output, 10)
-		go saveJSONOutput(e, args, jsonOutChan, &wg)
-		outChans = append(outChans, jsonOutChan)
-	}
+	wg.Add(1)
+	// This goroutine will handle saving the output to the JSON file
+	jsonOutChan := make(chan *requests.Output, 10)
+	go saveJSONOutput(e, args, jsonOutChan, &wg)
+	outChans = append(outChans, jsonOutChan)
 
 	wg.Add(1)
 	go processOutput(e, outChans, done, &wg)
