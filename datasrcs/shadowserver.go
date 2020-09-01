@@ -69,11 +69,6 @@ func (s *ShadowServer) OnStart() error {
 
 // OnASNRequest implements the Service interface.
 func (s *ShadowServer) OnASNRequest(ctx context.Context, req *requests.ASNRequest) {
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if bus == nil {
-		return
-	}
-
 	if req.Address == "" && req.ASN == 0 {
 		return
 	}
@@ -88,8 +83,8 @@ func (s *ShadowServer) OnASNRequest(ctx context.Context, req *requests.ASNReques
 }
 
 func (s *ShadowServer) executeASNQuery(ctx context.Context, asn int) {
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if bus == nil {
+	_, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 
@@ -109,8 +104,8 @@ func (s *ShadowServer) executeASNQuery(ctx context.Context, asn int) {
 }
 
 func (s *ShadowServer) executeASNAddrQuery(ctx context.Context, addr string) {
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if bus == nil {
+	_, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 
@@ -125,8 +120,8 @@ func (s *ShadowServer) executeASNAddrQuery(ctx context.Context, addr string) {
 }
 
 func (s *ShadowServer) origin(ctx context.Context, addr string) *requests.ASNRequest {
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if bus == nil {
+	_, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return nil
 	}
 
@@ -179,8 +174,8 @@ func (s *ShadowServer) origin(ctx context.Context, addr string) *requests.ASNReq
 func (s *ShadowServer) netblocks(ctx context.Context, asn int) stringset.Set {
 	netblocks := stringset.New()
 
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if bus == nil {
+	_, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return netblocks
 	}
 

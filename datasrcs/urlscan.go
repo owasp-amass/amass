@@ -58,9 +58,8 @@ func (u *URLScan) OnStart() error {
 
 // OnDNSRequest implements the Service interface.
 func (u *URLScan) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
-	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if cfg == nil || bus == nil {
+	cfg, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 
@@ -117,8 +116,8 @@ func (u *URLScan) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 func (u *URLScan) getSubsFromResult(ctx context.Context, id string) stringset.Set {
 	subs := stringset.New()
 
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if bus == nil {
+	_, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return subs
 	}
 
@@ -145,8 +144,8 @@ func (u *URLScan) getSubsFromResult(ctx context.Context, id string) stringset.Se
 }
 
 func (u *URLScan) attemptSubmission(ctx context.Context, domain string) string {
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if bus == nil {
+	_, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return ""
 	}
 

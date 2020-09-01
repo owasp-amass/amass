@@ -168,8 +168,6 @@ func firstIsLess(prev, next string) bool {
 
 func (r *BaseResolver) walkMsgRequest(ctx context.Context, name string, qt uint16, priority int) *resolveResult {
 	var bus *eventbus.EventBus
-
-	// Obtain the event bus reference and report the resolver activity
 	if b := ctx.Value(requests.ContextEventBus); b != nil {
 		bus = b.(*eventbus.EventBus)
 	}

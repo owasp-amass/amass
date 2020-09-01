@@ -87,11 +87,6 @@ func (r *RADb) registryRADbURL(registry string) string {
 
 // OnASNRequest implements the Service interface.
 func (r *RADb) OnASNRequest(ctx context.Context, req *requests.ASNRequest) {
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if bus == nil {
-		return
-	}
-
 	if req.Address == "" && req.ASN == 0 {
 		return
 	}
@@ -106,8 +101,8 @@ func (r *RADb) OnASNRequest(ctx context.Context, req *requests.ASNRequest) {
 }
 
 func (r *RADb) executeASNAddrQuery(ctx context.Context, addr string) {
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if bus == nil {
+	_, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 
@@ -163,8 +158,8 @@ func (r *RADb) getIPURL(registry, addr string) string {
 }
 
 func (r *RADb) executeASNQuery(ctx context.Context, asn int, addr, prefix string) {
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if bus == nil {
+	_, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 
@@ -249,8 +244,8 @@ func (r *RADb) getASNURL(registry, asn string) string {
 func (r *RADb) netblocks(ctx context.Context, asn int) stringset.Set {
 	netblocks := stringset.New()
 
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if bus == nil {
+	_, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return netblocks
 	}
 
@@ -317,8 +312,8 @@ func (r *RADb) getNetblocksURL(asn string) string {
 }
 
 func (r *RADb) ipToASN(ctx context.Context, cidr string) int {
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if bus == nil {
+	_, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return 0
 	}
 

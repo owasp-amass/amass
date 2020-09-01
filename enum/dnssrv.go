@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/OWASP/Amass/v3/config"
+	"github.com/OWASP/Amass/v3/datasrcs"
 	"github.com/OWASP/Amass/v3/eventbus"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/resolvers"
@@ -64,9 +64,8 @@ func (ds *DNSService) processDNSRequest(ctx context.Context, req *requests.DNSRe
 		return
 	}
 
-	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if cfg == nil || bus == nil {
+	cfg, bus, err := datasrcs.ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 
@@ -91,8 +90,8 @@ func (ds *DNSService) processDNSRequest(ctx context.Context, req *requests.DNSRe
 func (ds *DNSService) queryInitialTypes(ctx context.Context, req *requests.DNSRequest) []requests.DNSAnswer {
 	var answers []requests.DNSAnswer
 
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if bus == nil {
+	_, bus, err := datasrcs.ContextConfigBus(ctx)
+	if err != nil {
 		return answers
 	}
 
@@ -109,25 +108,23 @@ func (ds *DNSService) queryInitialTypes(ctx context.Context, req *requests.DNSRe
 	return answers
 }
 
-func (ds *DNSService) handleResolverError(ctx context.Context, err error) {
-	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if cfg == nil || bus == nil {
+func (ds *DNSService) handleResolverError(ctx context.Context, e error) {
+	cfg, bus, err := datasrcs.ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 
-	rcode := (err.(*resolvers.ResolveError)).Rcode
+	rcode := (e.(*resolvers.ResolveError)).Rcode
 	if cfg.Verbose || rcode == resolvers.NotAvailableRcode ||
 		rcode == resolvers.TimeoutRcode || rcode == resolvers.ResolverErrRcode ||
 		rcode == dns.RcodeRefused || rcode == dns.RcodeServerFailure || rcode == dns.RcodeNotImplemented {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("DNS: %v", err))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("DNS: %v", e))
 	}
 }
 
 func (ds *DNSService) resolvedName(ctx context.Context, req *requests.DNSRequest) {
-	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if cfg == nil || bus == nil {
+	_, bus, err := datasrcs.ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 
@@ -146,8 +143,8 @@ func (ds *DNSService) OnSubdomainDiscovered(ctx context.Context, req *requests.D
 }
 
 func (ds *DNSService) processSubdomain(ctx context.Context, req *requests.DNSRequest) {
-	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
-	if cfg == nil {
+	cfg, _, err := datasrcs.ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 
@@ -160,9 +157,8 @@ func (ds *DNSService) processSubdomain(ctx context.Context, req *requests.DNSReq
 }
 
 func (ds *DNSService) subdomainQueries(ctx context.Context, req *requests.DNSRequest) {
-	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if cfg == nil || bus == nil {
+	cfg, bus, err := datasrcs.ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 
@@ -229,9 +225,8 @@ func (ds *DNSService) subdomainQueries(ctx context.Context, req *requests.DNSReq
 }
 
 func (ds *DNSService) attemptZoneXFR(ctx context.Context, sub, domain, server string) {
-	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if cfg == nil || bus == nil {
+	_, bus, err := datasrcs.ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 
@@ -254,9 +249,8 @@ func (ds *DNSService) attemptZoneXFR(ctx context.Context, sub, domain, server st
 }
 
 func (ds *DNSService) attemptZoneWalk(ctx context.Context, domain, server string) {
-	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if cfg == nil || bus == nil {
+	cfg, bus, err := datasrcs.ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 
@@ -302,8 +296,8 @@ func (ds *DNSService) nameserverAddr(ctx context.Context, server string) (string
 }
 
 func (ds *DNSService) queryServiceNames(ctx context.Context, req *requests.DNSRequest) {
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if bus == nil {
+	_, bus, err := datasrcs.ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 

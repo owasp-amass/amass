@@ -73,9 +73,8 @@ func (d *DNSDB) CheckConfig() error {
 
 // OnDNSRequest implements the Service interface.
 func (d *DNSDB) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
-	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if cfg == nil || bus == nil {
+	cfg, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 
@@ -114,8 +113,8 @@ func (d *DNSDB) getURL(domain string) string {
 }
 
 func (d *DNSDB) parse(ctx context.Context, page, domain string) []string {
-	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
-	if cfg == nil {
+	cfg, _, err := ContextConfigBus(ctx)
+	if err != nil {
 		return []string{}
 	}
 

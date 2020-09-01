@@ -98,9 +98,8 @@ func (w *WhoisXML) CheckConfig() error {
 
 // OnWhoisRequest implements the Service interface.
 func (w *WhoisXML) OnWhoisRequest(ctx context.Context, req *requests.WhoisRequest) {
-	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if cfg == nil || bus == nil {
+	cfg, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 

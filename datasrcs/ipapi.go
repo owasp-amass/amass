@@ -45,8 +45,8 @@ func (i *IPAPI) OnStart() error {
 
 // OnAddrRequest implements the Service interface.
 func (i *IPAPI) OnAddrRequest(ctx context.Context, req *requests.AddrRequest) {
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if bus == nil {
+	_, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 

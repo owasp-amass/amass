@@ -48,8 +48,8 @@ func (i *IPToASN) OnStart() error {
 
 // OnASNRequest implements the Service interface.
 func (i *IPToASN) OnASNRequest(ctx context.Context, req *requests.ASNRequest) {
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if bus == nil {
+	_, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 

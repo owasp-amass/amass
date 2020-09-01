@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/eventbus"
 	"github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/net/http"
@@ -49,9 +48,8 @@ func (v *ViewDNS) OnStart() error {
 
 // OnDNSRequest implements the Service interface.
 func (v *ViewDNS) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
-	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if cfg == nil || bus == nil {
+	cfg, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 
@@ -91,9 +89,8 @@ func (v *ViewDNS) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 
 // OnWhoisRequest implements the Service interface.
 func (v *ViewDNS) OnWhoisRequest(ctx context.Context, req *requests.WhoisRequest) {
-	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if cfg == nil || bus == nil {
+	cfg, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 

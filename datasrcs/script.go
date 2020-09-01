@@ -258,9 +258,8 @@ func (s *Script) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 		return
 	}
 
-	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if cfg == nil || bus == nil {
+	_, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 
@@ -271,7 +270,7 @@ func (s *Script) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 	// Create a new filter specific to this request
 	s.filter = stringfilter.NewStringFilter()
 
-	err := L.CallByParam(lua.P{
+	err = L.CallByParam(lua.P{
 		Fn:      s.vertical,
 		NRet:    0,
 		Protect: true,
@@ -293,9 +292,8 @@ func (s *Script) OnResolved(ctx context.Context, req *requests.DNSRequest) {
 		return
 	}
 
-	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if cfg == nil || bus == nil {
+	_, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 
@@ -313,7 +311,7 @@ func (s *Script) OnResolved(ctx context.Context, req *requests.DNSRequest) {
 	// Create a new filter specific to this request
 	s.filter = stringfilter.NewStringFilter()
 
-	err := L.CallByParam(lua.P{
+	err = L.CallByParam(lua.P{
 		Fn:      s.resolved,
 		NRet:    0,
 		Protect: true,
@@ -335,9 +333,8 @@ func (s *Script) OnSubdomainDiscovered(ctx context.Context, req *requests.DNSReq
 		return
 	}
 
-	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if cfg == nil || bus == nil {
+	_, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 
@@ -345,7 +342,7 @@ func (s *Script) OnSubdomainDiscovered(ctx context.Context, req *requests.DNSReq
 	// Create a new filter specific to this request
 	s.filter = stringfilter.NewStringFilter()
 
-	err := L.CallByParam(lua.P{
+	err = L.CallByParam(lua.P{
 		Fn:      s.subdomain,
 		NRet:    0,
 		Protect: true,
@@ -367,9 +364,8 @@ func (s *Script) OnAddrRequest(ctx context.Context, req *requests.AddrRequest) {
 		return
 	}
 
-	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if cfg == nil || bus == nil {
+	_, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 
@@ -378,7 +374,7 @@ func (s *Script) OnAddrRequest(ctx context.Context, req *requests.AddrRequest) {
 	// Create a new filter specific to this request
 	s.filter = stringfilter.NewStringFilter()
 
-	err := L.CallByParam(lua.P{
+	err = L.CallByParam(lua.P{
 		Fn:      s.address,
 		NRet:    0,
 		Protect: true,
@@ -400,16 +396,15 @@ func (s *Script) OnASNRequest(ctx context.Context, req *requests.ASNRequest) {
 		return
 	}
 
-	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if cfg == nil || bus == nil {
+	_, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 
 	s.CheckRateLimit()
 	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, s.String())
 
-	err := L.CallByParam(lua.P{
+	err = L.CallByParam(lua.P{
 		Fn:      s.asn,
 		NRet:    0,
 		Protect: true,
@@ -429,16 +424,15 @@ func (s *Script) OnWhoisRequest(ctx context.Context, req *requests.WhoisRequest)
 		return
 	}
 
-	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if cfg == nil || bus == nil {
+	_, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 
 	s.CheckRateLimit()
 	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, s.String())
 
-	err := L.CallByParam(lua.P{
+	err = L.CallByParam(lua.P{
 		Fn:      s.horizontal,
 		NRet:    0,
 		Protect: true,
