@@ -41,7 +41,7 @@ func (e *Enumeration) submitKnownNames() {
 						Name:   output.Name,
 						Domain: output.Domain,
 						Tag:    output.Tag,
-						Source: output.Source,
+						Source: output.Sources[0],
 					})
 				}
 			}

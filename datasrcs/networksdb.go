@@ -45,9 +45,9 @@ var (
 type NetworksDB struct {
 	requests.BaseService
 
-	API        *config.APIKey
 	SourceType string
 	sys        systems.System
+	creds      *config.Credentials
 	hasAPIKey  bool
 }
 
@@ -72,8 +72,8 @@ func (n *NetworksDB) Type() string {
 func (n *NetworksDB) OnStart() error {
 	n.BaseService.OnStart()
 
-	n.API = n.sys.Config().GetAPIKey(n.String())
-	if n.API == nil || n.API.Key == "" {
+	n.creds = n.sys.Config().GetDataSourceConfig(n.String()).GetCredentials()
+	if n.creds == nil || n.creds.Key == "" {
 		n.sys.Config().Log.Printf("%s: API key data was not provided", n.String())
 		n.SourceType = requests.SCRAPE
 		n.hasAPIKey = false
@@ -86,11 +86,6 @@ func (n *NetworksDB) OnStart() error {
 // OnASNRequest implements the Service interface.
 func (n *NetworksDB) OnASNRequest(ctx context.Context, req *requests.ASNRequest) {
 	if req.Address == "" && req.ASN == 0 {
-		return
-	}
-
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if bus == nil {
 		return
 	}
 
@@ -112,8 +107,8 @@ func (n *NetworksDB) OnASNRequest(ctx context.Context, req *requests.ASNRequest)
 }
 
 func (n *NetworksDB) executeASNAddrQuery(ctx context.Context, addr string) {
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if bus == nil {
+	_, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 
@@ -173,8 +168,8 @@ func (n *NetworksDB) getIPURL(addr string) string {
 }
 
 func (n *NetworksDB) executeASNQuery(ctx context.Context, asn int, addr string, netblocks stringset.Set) {
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if bus == nil {
+	_, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 
@@ -244,8 +239,8 @@ func (n *NetworksDB) getASNURL(asn int) string {
 }
 
 func (n *NetworksDB) executeAPIASNAddrQuery(ctx context.Context, addr string) {
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if bus == nil {
+	_, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 
@@ -301,8 +296,8 @@ loop:
 }
 
 func (n *NetworksDB) executeAPIASNQuery(ctx context.Context, asn int, addr string, netblocks stringset.Set) {
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if bus == nil {
+	_, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 
@@ -354,8 +349,8 @@ func (n *NetworksDB) executeAPIASNQuery(ctx context.Context, asn int, addr strin
 }
 
 func (n *NetworksDB) apiIPQuery(ctx context.Context, addr string) (string, string) {
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if bus == nil {
+	_, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return "", ""
 	}
 
@@ -404,8 +399,8 @@ func (n *NetworksDB) getAPIIPURL() string {
 }
 
 func (n *NetworksDB) apiOrgInfoQuery(ctx context.Context, id string) []int {
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if bus == nil {
+	_, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return []int{}
 	}
 
@@ -449,8 +444,8 @@ func (n *NetworksDB) getAPIOrgInfoURL() string {
 }
 
 func (n *NetworksDB) apiASNInfoQuery(ctx context.Context, asn int) *requests.ASNRequest {
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if bus == nil {
+	_, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return nil
 	}
 
@@ -506,8 +501,8 @@ func (n *NetworksDB) getAPIASNInfoURL() string {
 func (n *NetworksDB) apiNetblocksQuery(ctx context.Context, asn int) stringset.Set {
 	netblocks := stringset.New()
 
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if bus == nil {
+	_, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return netblocks
 	}
 
@@ -559,16 +554,15 @@ func (n *NetworksDB) getHeaders() map[string]string {
 	}
 
 	return map[string]string{
-		"X-Api-Key":    n.API.Key,
+		"X-Api-Key":    n.creds.Key,
 		"Content-Type": "application/x-www-form-urlencoded",
 	}
 }
 
 // OnWhoisRequest implements the Service interface.
 func (n *NetworksDB) OnWhoisRequest(ctx context.Context, req *requests.WhoisRequest) {
-	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if cfg == nil || bus == nil {
+	cfg, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 

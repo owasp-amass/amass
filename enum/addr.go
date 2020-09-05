@@ -206,6 +206,8 @@ func (e *Enumeration) getAddrCIDR(addr string) *net.IPNet {
 }
 
 func (e *Enumeration) reverseDNSQuery(ip string) {
+	e.Bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, "Reverse DNS")
+
 	ptr, answer, err := e.Sys.Pool().Reverse(e.ctx, ip, resolvers.PriorityLow)
 	if err != nil {
 		return

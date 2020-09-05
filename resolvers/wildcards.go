@@ -268,11 +268,14 @@ func (r *BaseResolver) wildcardTest(ctx context.Context, sub string) {
 			wildcardType = WildcardTypeDynamic
 		}
 
+		var bus *eventbus.EventBus
 		if b := ctx.Value(requests.ContextEventBus); b != nil {
-			if bus := b.(*eventbus.EventBus); bus != nil {
-				bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
-					fmt.Sprintf("DNS wildcard detected: Resolver %s: %s: type: %d", r.String(), "*."+sub, wildcardType))
-			}
+			bus = b.(*eventbus.EventBus)
+		}
+
+		if bus != nil {
+			bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+				fmt.Sprintf("DNS wildcard detected: Resolver %s: %s: type: %d", r.String(), "*."+sub, wildcardType))
 		}
 	}
 

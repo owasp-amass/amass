@@ -478,8 +478,6 @@ func (r *BaseResolver) finishProcessing(m *dns.Msg, req *resolveRequest) {
 }
 
 func (r *BaseResolver) tcpExchange(id uint16, req *resolveRequest) {
-	var d net.Dialer
-
 	if len(req.Msg.Question) == 0 {
 		return
 	}
@@ -489,7 +487,7 @@ func (r *BaseResolver) tcpExchange(id uint16, req *resolveRequest) {
 	defer cancel()
 
 	req.Msg = msg
-	conn, err := d.DialContext(ctx, "tcp", r.address+":"+r.port)
+	conn, err := amassnet.DialContext(ctx, "tcp", r.address+":"+r.port)
 	if err != nil {
 		estr := fmt.Sprintf("DNS: Failed to obtain TCP connection to %s:%s: %v", r.address, r.port, err)
 		r.returnRequest(req, makeResolveResult(nil, nil, true, estr, NotAvailableRcode))

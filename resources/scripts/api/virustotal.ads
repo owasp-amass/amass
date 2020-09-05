@@ -11,19 +11,24 @@ function start()
 end
 
 function vertical(ctx, domain)
+    local c
+    local cfg = datasrc_config()
+    if cfg ~= nil then
+        c = cfg.credentials
+    end
     local haskey = true
-    if (api == nil or api.key == nil or api.key == "") then
+    if (c == nil or c.key == nil or c.key == "") then
         haskey = false
     end
 
     local resp
     local vurl = buildurl(domain)
     if haskey then
-        vurl = apiurl(domain)
+        vurl = apiurl(domain, c.key)
     end
     -- Check if the response data is in the graph database
-    if (api and api.ttl ~= nil and api.ttl > 0) then
-        resp = obtain_response(vurl, api.ttl)
+    if (cfg and cfg.ttl ~= nil and cfg.ttl > 0) then
+        resp = obtain_response(domain, cfg.ttl)
     end
 
     if (resp == nil or resp == "") then
@@ -37,8 +42,8 @@ function vertical(ctx, domain)
             return
         end
 
-        if (api and api.ttl ~= nil and api.ttl > 0) then
-            cache_response(vurl, resp)
+        if (cfg and cfg.ttl ~= nil and cfg.ttl > 0) then
+            cache_response(domain, resp)
         end
     end
 
@@ -65,8 +70,8 @@ function buildurl(domain)
     return "https://www.virustotal.com/ui/domains/" .. domain .. "/subdomains?limit=40"
 end
 
-function apiurl(domain)
-    return "https://www.virustotal.com/vtapi/v2/domain/report?apikey=" .. api.key .. "&domain=" .. domain
+function apiurl(domain, key)
+    return "https://www.virustotal.com/vtapi/v2/domain/report?apikey=" .. key .. "&domain=" .. domain
 end
 
 function sendnames(ctx, content)

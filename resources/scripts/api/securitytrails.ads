@@ -11,22 +11,34 @@ function start()
 end
 
 function check()
-    if (api ~= nil and api.key ~= nil and api.key ~= "") then
+    local c
+    local cfg = datasrc_config()
+    if cfg ~= nil then
+        c = cfg.credentials
+    end
+
+    if (c ~= nil and c.key ~= nil and c.key ~= "") then
         return true
     end
     return false
 end
 
 function vertical(ctx, domain)
-    if (api == nil or api.key == nil or api.key == "") then
+    local c
+    local cfg = datasrc_config()
+    if cfg ~= nil then
+        c = cfg.credentials
+    end
+
+    if (c == nil or c.key == nil or c.key == "") then
         return
     end
 
     local resp
     local vurl = verturl(domain)
     -- Check if the response data is in the graph database
-    if (api.ttl ~= nil and api.ttl > 0) then
-        resp = obtain_response(vurl, api.ttl)
+    if (cfg.ttl ~= nil and cfg.ttl > 0) then
+        resp = obtain_response(vurl, cfg.ttl)
     end
 
     if (resp == nil or resp == "") then
@@ -35,7 +47,7 @@ function vertical(ctx, domain)
         resp, err = request({
             url=vurl,
             headers={
-                APIKEY=api.key,
+                APIKEY=c.key,
                 ['Content-Type']="application/json",
             },
         })
@@ -43,7 +55,7 @@ function vertical(ctx, domain)
             return
         end
 
-        if (api.ttl ~= nil and api.ttl > 0) then
+        if (cfg.ttl ~= nil and cfg.ttl > 0) then
             cache_response(vurl, resp)
         end
     end
@@ -74,15 +86,21 @@ function sendnames(ctx, content)
 end
 
 function horizontal(ctx, domain)
-    if (api == nil or api.key == "") then
+    local c
+    local cfg = datasrc_config()
+    if cfg ~= nil then
+        c = cfg.credentials
+    end
+
+    if (c == nil or c.key == "") then
         return
     end
 
     local resp
     local hurl = horizonurl(domain)
     -- Check if the response data is in the graph database
-    if (api.ttl ~= nil and api.ttl > 0) then
-        resp = obtain_response(hurl, api.ttl)
+    if (cfg.ttl ~= nil and cfg.ttl > 0) then
+        resp = obtain_response(hurl, cfg.ttl)
     end
 
     if (resp == nil or resp == "") then
@@ -91,7 +109,7 @@ function horizontal(ctx, domain)
         resp, err = request({
             url=hurl,
             headers={
-                APIKEY=api.key,
+                APIKEY=c.key,
                 ['Content-Type']="application/json",
             },
         })
@@ -99,7 +117,7 @@ function horizontal(ctx, domain)
             return
         end
 
-        if (api.ttl ~= nil and api.ttl > 0) then
+        if (cfg.ttl ~= nil and cfg.ttl > 0) then
             cache_response(hurl, resp)
         end
     end

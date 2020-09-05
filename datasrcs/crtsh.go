@@ -63,8 +63,8 @@ func (c *Crtsh) OnStart() error {
 
 // OnDNSRequest implements the Service interface.
 func (c *Crtsh) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if bus == nil {
+	_, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 
@@ -82,8 +82,8 @@ func (c *Crtsh) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 }
 
 func (c *Crtsh) executeQuery(ctx context.Context, domain string) {
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if bus == nil {
+	_, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 
@@ -92,7 +92,7 @@ func (c *Crtsh) executeQuery(ctx context.Context, domain string) {
 	}
 
 	pattern := "%." + domain
-	err := c.db.Select(&results,
+	err = c.db.Select(&results,
 		`SELECT DISTINCT ci.NAME_VALUE as domain
 		FROM certificate_identity ci
 		WHERE reverse(lower(ci.NAME_VALUE)) LIKE reverse(lower($1))
@@ -117,8 +117,8 @@ func (c *Crtsh) executeQuery(ctx context.Context, domain string) {
 }
 
 func (c *Crtsh) scrape(ctx context.Context, domain string) {
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if bus == nil {
+	_, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 

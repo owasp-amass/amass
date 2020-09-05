@@ -23,9 +23,9 @@ import (
 type WhoisXML struct {
 	requests.BaseService
 
-	API        *config.APIKey
 	SourceType string
 	sys        systems.System
+	creds      *config.Credentials
 }
 
 // WhoisXMLResponse handles WhoisXML response json.
@@ -74,8 +74,8 @@ func NewWhoisXML(sys systems.System) *WhoisXML {
 func (w *WhoisXML) OnStart() error {
 	w.BaseService.OnStart()
 
-	w.API = w.sys.Config().GetAPIKey(w.String())
-	if w.API == nil || w.API.Key == "" {
+	w.creds = w.sys.Config().GetDataSourceConfig(w.String()).GetCredentials()
+	if w.creds == nil || w.creds.Key == "" {
 		w.sys.Config().Log.Printf("%s: API key data was not provided", w.String())
 	}
 
@@ -85,9 +85,9 @@ func (w *WhoisXML) OnStart() error {
 
 // CheckConfig implements the Service interface.
 func (w *WhoisXML) CheckConfig() error {
-	api := w.sys.Config().GetAPIKey(w.String())
+	creds := w.sys.Config().GetDataSourceConfig(w.String()).GetCredentials()
 
-	if api == nil || api.Key == "" {
+	if creds == nil || creds.Key == "" {
 		estr := fmt.Sprintf("%s: check callback failed for the configuration", w.String())
 		w.sys.Config().Log.Print(estr)
 		return errors.New(estr)
@@ -98,13 +98,12 @@ func (w *WhoisXML) CheckConfig() error {
 
 // OnWhoisRequest implements the Service interface.
 func (w *WhoisXML) OnWhoisRequest(ctx context.Context, req *requests.WhoisRequest) {
-	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if cfg == nil || bus == nil {
+	cfg, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 
-	if w.API == nil || w.API.Key == "" {
+	if w.creds == nil || w.creds.Key == "" {
 		return
 	}
 
@@ -118,7 +117,7 @@ func (w *WhoisXML) OnWhoisRequest(ctx context.Context, req *requests.WhoisReques
 	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, w.String())
 
 	u := w.getReverseWhoisURL(req.Domain)
-	headers := map[string]string{"X-Authentication-Token": w.API.Key}
+	headers := map[string]string{"X-Authentication-Token": w.creds.Key}
 
 	var r = WhoisXMLBasicRequest{
 		Search: "historic",

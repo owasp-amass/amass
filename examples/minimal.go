@@ -23,7 +23,7 @@ func main() {
 	if err != nil {
 		return
 	}
-	sys.SetDataSources(datasrcs.GetAllSources(sys))
+	sys.SetDataSources(datasrcs.GetAllSources(sys, true))
 
 	e := enum.NewEnumeration(cfg, sys)
 	if e == nil {

@@ -19,11 +19,14 @@ function buildurl(domain)
 end
 
 function asn(ctx, addr)
+    local c
+    local cfg = datasrc_config()
+
     local resp
     local aurl = asnurl(addr)
     -- Check if the response data is in the graph database
-    if (api and api.ttl ~= nil and api.ttl > 0) then
-        resp = obtain_response(aurl, api.ttl)
+    if (cfg and cfg.ttl ~= nil and cfg.ttl > 0) then
+        resp = obtain_response(aurl, cfg.ttl)
     end
 
     if (resp == nil or resp == "") then
@@ -34,7 +37,7 @@ function asn(ctx, addr)
             return
         end
 
-        if (api and api.ttl ~= nil and api.ttl > 0) then
+        if (cfg and cfg.ttl ~= nil and cfg.ttl > 0) then
             cache_response(aurl, resp)
         end
     end

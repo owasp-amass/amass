@@ -6,12 +6,12 @@ package resolvers
 import (
 	"context"
 	"fmt"
-	"net"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/OWASP/Amass/v3/eventbus"
+	amassnet "github.com/OWASP/Amass/v3/net"
 	amassdns "github.com/OWASP/Amass/v3/net/dns"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/miekg/dns"
@@ -26,8 +26,7 @@ func ZoneTransfer(sub, domain, server string) ([]*requests.DNSRequest, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
-	d := net.Dialer{}
-	conn, err := d.DialContext(ctx, "tcp", server+":53")
+	conn, err := amassnet.DialContext(ctx, "tcp", server+":53")
 	if err != nil {
 		return results, fmt.Errorf("Zone xfr error: Failed to obtain TCP connection to %s: %v", server+":53", err)
 	}
@@ -169,8 +168,6 @@ func firstIsLess(prev, next string) bool {
 
 func (r *BaseResolver) walkMsgRequest(ctx context.Context, name string, qt uint16, priority int) *resolveResult {
 	var bus *eventbus.EventBus
-
-	// Obtain the event bus reference and report the resolver activity
 	if b := ctx.Value(requests.ContextEventBus); b != nil {
 		bus = b.(*eventbus.EventBus)
 	}

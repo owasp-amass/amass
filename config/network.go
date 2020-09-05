@@ -8,20 +8,19 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-
-	"github.com/OWASP/Amass/v3/requests"
 )
 
 // LookupASNsByName returns requests.ASNRequest objects for autonomous systems with
 // descriptions that contain the string provided by the parameter.
-func LookupASNsByName(s string) ([]*requests.ASNRequest, error) {
-	var records []*requests.ASNRequest
+func LookupASNsByName(s string) ([]int, []string, error) {
+	var asns []int
+	var descs []string
 
 	fsOnce.Do(openTheFS)
 
 	content, err := StatikFS.Open("/asnlist.txt")
 	if err != nil {
-		return records, fmt.Errorf("Failed to obtain the embedded ASN information: asnlist.txt: %v", err)
+		return asns, descs, fmt.Errorf("Failed to obtain the embedded ASN information: asnlist.txt: %v", err)
 	}
 
 	s = strings.ToLower(s)
@@ -35,13 +34,12 @@ func LookupASNsByName(s string) ([]*requests.ASNRequest, error) {
 			if strings.Contains(strings.ToLower(parts[1]), s) {
 				a, err := strconv.Atoi(parts[0])
 				if err == nil {
-					records = append(records, &requests.ASNRequest{
-						ASN:         a,
-						Description: parts[1],
-					})
+					asns = append(asns, a)
+					descs = append(descs, parts[1])
 				}
 			}
 		}
 	}
-	return records, nil
+
+	return asns, descs, nil
 }

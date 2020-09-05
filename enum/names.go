@@ -5,6 +5,7 @@ package enum
 
 import (
 	"strings"
+	"time"
 
 	"github.com/OWASP/Amass/v3/eventbus"
 	"github.com/OWASP/Amass/v3/queue"
@@ -39,6 +40,7 @@ type DomainManager struct {
 	curDomain string
 	srcIndex  int
 	filter    stringfilter.Filter
+	last      time.Time
 }
 
 // NewDomainManager returns an initialized DomainManager.
@@ -47,6 +49,7 @@ func NewDomainManager(e *Enumeration) *DomainManager {
 		enum:   e,
 		queue:  queue.NewQueue(),
 		filter: stringfilter.NewStringFilter(),
+		last:   time.Now(),
 	}
 }
 
@@ -75,7 +78,9 @@ func (r *DomainManager) NameQueueLen() int {
 
 // OutputRequests implements the FQDNManager interface.
 func (r *DomainManager) OutputRequests(num int) int {
-	if r.enum.dnsMgr != nil && r.enum.dnsMgr.RequestLen() != 0 {
+	// Check that we are not releasing the domain names too quickly
+	if r.enum.dnsMgr != nil && r.enum.dnsMgr.RequestLen() != 0 &&
+		r.last.Add(5*time.Second).After(time.Now()) {
 		return 0
 	}
 
@@ -84,6 +89,7 @@ func (r *DomainManager) OutputRequests(num int) int {
 		return 0
 	}
 
+	r.last = time.Now()
 	// Release the current domain name to the next data source
 	r.enum.srcs[index].DNSRequest(r.enum.ctx, &requests.DNSRequest{
 		Name:   domain,

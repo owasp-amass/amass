@@ -22,9 +22,9 @@ import (
 type URLScan struct {
 	requests.BaseService
 
-	API        *config.APIKey
 	SourceType string
 	sys        systems.System
+	creds      *config.Credentials
 }
 
 // NewURLScan returns he object initialized, but not yet started.
@@ -47,8 +47,8 @@ func (u *URLScan) Type() string {
 func (u *URLScan) OnStart() error {
 	u.BaseService.OnStart()
 
-	u.API = u.sys.Config().GetAPIKey(u.String())
-	if u.API == nil || u.API.Key == "" {
+	u.creds = u.sys.Config().GetDataSourceConfig(u.String()).GetCredentials()
+	if u.creds == nil || u.creds.Key == "" {
 		u.sys.Config().Log.Printf("%s: API key data was not provided", u.String())
 	}
 
@@ -58,9 +58,8 @@ func (u *URLScan) OnStart() error {
 
 // OnDNSRequest implements the Service interface.
 func (u *URLScan) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
-	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if cfg == nil || bus == nil {
+	cfg, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 
@@ -117,8 +116,8 @@ func (u *URLScan) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 func (u *URLScan) getSubsFromResult(ctx context.Context, id string) stringset.Set {
 	subs := stringset.New()
 
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if bus == nil {
+	_, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return subs
 	}
 
@@ -145,12 +144,12 @@ func (u *URLScan) getSubsFromResult(ctx context.Context, id string) stringset.Se
 }
 
 func (u *URLScan) attemptSubmission(ctx context.Context, domain string) string {
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if bus == nil {
+	_, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return ""
 	}
 
-	if u.API == nil || u.API.Key == "" {
+	if u.creds == nil || u.creds.Key == "" {
 		return ""
 	}
 
@@ -158,7 +157,7 @@ func (u *URLScan) attemptSubmission(ctx context.Context, domain string) string {
 	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, u.String())
 
 	headers := map[string]string{
-		"API-Key":      u.API.Key,
+		"API-Key":      u.creds.Key,
 		"Content-Type": "application/json",
 	}
 	url := "https://urlscan.io/api/v1/scan/"

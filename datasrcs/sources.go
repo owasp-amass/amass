@@ -6,35 +6,19 @@ package datasrcs
 import (
 	"context"
 	"errors"
-	"fmt"
-	"regexp"
 	"sort"
-	"strconv"
-	"strings"
-	"sync"
-	"time"
 
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/eventbus"
 	"github.com/OWASP/Amass/v3/net/dns"
-	"github.com/OWASP/Amass/v3/net/http"
 	"github.com/OWASP/Amass/v3/requests"
-	"github.com/OWASP/Amass/v3/stringset"
 	"github.com/OWASP/Amass/v3/systems"
-	"github.com/PuerkitoBio/goquery"
-	"github.com/geziyor/geziyor"
-	"github.com/geziyor/geziyor/client"
-	"golang.org/x/sync/semaphore"
 )
 
-var (
-	subRE       = dns.AnySubdomainRegex()
-	maxCrawlSem = semaphore.NewWeighted(20)
-	nameStripRE = regexp.MustCompile(`^u[0-9a-f]{4}|20|22|25|2b|2f|3d|3a|40`)
-)
+var subRE = dns.AnySubdomainRegex()
 
 // GetAllSources returns a slice of all data source services, initialized and ready.
-func GetAllSources(sys systems.System) []requests.Service {
+func GetAllSources(sys systems.System, check bool) []requests.Service {
 	srvs := []requests.Service{
 		NewAlienVault(sys),
 		NewCloudflare(sys),
@@ -64,16 +48,18 @@ func GetAllSources(sys systems.System) []requests.Service {
 		}
 	}
 
-	// Check that the data sources have acceptable configurations for operation
-	// Filtering in-place: https://github.com/golang/go/wiki/SliceTricks
-	i := 0
-	for _, s := range srvs {
-		if s.CheckConfig() == nil {
-			srvs[i] = s
-			i++
+	if check {
+		// Check that the data sources have acceptable configurations for operation
+		// Filtering in-place: https://github.com/golang/go/wiki/SliceTricks
+		i := 0
+		for _, s := range srvs {
+			if s.CheckConfig() == nil {
+				srvs[i] = s
+				i++
+			}
 		}
+		srvs = srvs[:i]
 	}
-	srvs = srvs[:i]
 
 	sort.Slice(srvs, func(i, j int) bool {
 		return srvs[i].String() < srvs[j].String()
@@ -81,33 +67,9 @@ func GetAllSources(sys systems.System) []requests.Service {
 	return srvs
 }
 
-// Clean up the names scraped from the web.
-func cleanName(name string) string {
-	var err error
-
-	name, err = strconv.Unquote("\"" + strings.TrimSpace(name) + "\"")
-	if err == nil {
-		name = subRE.FindString(name)
-	}
-
-	name = strings.ToLower(name)
-	for {
-		name = strings.Trim(name, "-.")
-
-		if i := nameStripRE.FindStringIndex(name); i != nil {
-			name = name[i[1]:]
-		} else {
-			break
-		}
-	}
-
-	return name
-}
-
 func genNewNameEvent(ctx context.Context, sys systems.System, srv requests.Service, name string) {
-	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if cfg == nil || bus == nil {
+	cfg, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 
@@ -121,57 +83,29 @@ func genNewNameEvent(ctx context.Context, sys systems.System, srv requests.Servi
 	}
 }
 
-func crawl(ctx context.Context, url string) ([]string, error) {
-	results := stringset.New()
+// ContextConfigBus extracts the Config and EventBus references from the Context argument.
+func ContextConfigBus(ctx context.Context) (*config.Config, *eventbus.EventBus, error) {
+	var ok bool
+	var cfg *config.Config
 
-	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
-	if cfg == nil {
-		return results.Slice(), errors.New("crawler error: Failed to obtain the config from Context")
+	if c := ctx.Value(requests.ContextConfig); c != nil {
+		cfg, ok = c.(*config.Config)
+		if !ok {
+			return nil, nil, errors.New("Failed to extract the configuration from the context")
+		}
+	} else {
+		return nil, nil, errors.New("Failed to extract the configuration from the context")
 	}
 
-	err := maxCrawlSem.Acquire(ctx, 1)
-	if err != nil {
-		return results.Slice(), fmt.Errorf("crawler error: %v", err)
-	}
-	defer maxCrawlSem.Release(1)
-
-	scope := cfg.Domains()
-	target := subRE.FindString(url)
-	if target != "" {
-		scope = append(scope, target)
+	var bus *eventbus.EventBus
+	if b := ctx.Value(requests.ContextEventBus); b != nil {
+		bus, ok = b.(*eventbus.EventBus)
+		if !ok {
+			return nil, nil, errors.New("Failed to extract the event bus from the context")
+		}
+	} else {
+		return nil, nil, errors.New("Failed to extract the event bus from the context")
 	}
 
-	var count int
-	var m sync.Mutex
-	geziyor.NewGeziyor(&geziyor.Options{
-		AllowedDomains:     scope,
-		StartURLs:          []string{url},
-		Timeout:            10 * time.Second,
-		RobotsTxtDisabled:  true,
-		UserAgent:          http.UserAgent,
-		LogDisabled:        true,
-		ConcurrentRequests: 5,
-		ParseFunc: func(g *geziyor.Geziyor, r *client.Response) {
-			for _, n := range subRE.FindAllString(string(r.Body), -1) {
-				name := cleanName(n)
-
-				if domain := cfg.WhichDomain(name); domain != "" {
-					m.Lock()
-					results.Insert(name)
-					m.Unlock()
-				}
-			}
-
-			r.HTMLDoc.Find("a").Each(func(i int, s *goquery.Selection) {
-				if href, ok := s.Attr("href"); ok {
-					if count < 5 {
-						g.Get(r.JoinURL(href), g.Opt.ParseFunc)
-						count++
-					}
-				}
-			})
-		},
-	}).Start()
-
-	return results.Slice(), nil
+	return cfg, bus, nil
 }

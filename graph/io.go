@@ -5,7 +5,6 @@ package graph
 
 import (
 	"context"
-	"math/rand"
 	"net"
 	"strconv"
 
@@ -153,14 +152,6 @@ func (g *Graph) buildOutput(sub Node, uuid string, asninfo bool,
 	c <- output
 }
 
-func randomIndex(length int) int {
-	if length == 1 {
-		return 0
-	}
-
-	return rand.Intn(length - 1)
-}
-
 func (g *Graph) buildNameInfo(sub Node, uuid string) *requests.Output {
 	substr := g.db.NodeToID(sub)
 
@@ -168,7 +159,6 @@ func (g *Graph) buildNameInfo(sub Node, uuid string) *requests.Output {
 	if err != nil {
 		return nil
 	}
-	src := sources[0]
 
 	domain, err := publicsuffix.EffectiveTLDPlusOne(substr)
 	if err != nil {
@@ -176,10 +166,10 @@ func (g *Graph) buildNameInfo(sub Node, uuid string) *requests.Output {
 	}
 
 	return &requests.Output{
-		Name:   substr,
-		Domain: domain,
-		Tag:    g.SourceTag(src),
-		Source: src,
+		Name:    substr,
+		Domain:  domain,
+		Tag:     g.SourceTag(sources[0]),
+		Sources: sources,
 	}
 }
 

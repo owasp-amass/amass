@@ -4,45 +4,73 @@
 package config
 
 import (
+	"fmt"
+	"math/rand"
 	"strings"
 
 	"github.com/OWASP/Amass/v3/stringset"
 	"github.com/go-ini/ini"
 )
 
-// APIKey contains values required for authenticating with web APIs.
-type APIKey struct {
+// DataSourceConfig contains the configurations specific to a data source.
+type DataSourceConfig struct {
+	Name  string
+	TTL   int `ini:"ttl"`
+	creds map[string]*Credentials
+}
+
+// Credentials contains values required for authenticating with web APIs.
+type Credentials struct {
+	Name     string
 	Username string `ini:"username"`
 	Password string `ini:"password"`
 	Key      string `ini:"apikey"`
 	Secret   string `ini:"secret"`
-	TTL      int    `ini:"ttl"`
 }
 
-// AddAPIKey adds the data source and API key association provided to the configuration.
-func (c *Config) AddAPIKey(source string, ak *APIKey) {
+// GetDataSourceConfig returns the DataSourceConfig associated with the data source name argument.
+func (c *Config) GetDataSourceConfig(source string) *DataSourceConfig {
 	c.Lock()
 	defer c.Unlock()
 
-	idx := strings.TrimSpace(source)
-	if idx == "" {
-		return
+	key := strings.ToLower(strings.TrimSpace(source))
+	if key == "" {
+		return nil
 	}
 
-	if c.apikeys == nil {
-		c.apikeys = make(map[string]*APIKey)
+	if c.datasrcConfigs == nil {
+		c.datasrcConfigs = make(map[string]*DataSourceConfig)
 	}
-	c.apikeys[strings.ToLower(idx)] = ak
+
+	if _, found := c.datasrcConfigs[key]; !found {
+		c.datasrcConfigs[key] = &DataSourceConfig{Name: key}
+	}
+
+	return c.datasrcConfigs[key]
 }
 
-// GetAPIKey returns the API key associated with the provided data source name.
-func (c *Config) GetAPIKey(source string) *APIKey {
-	c.Lock()
-	defer c.Unlock()
+// AddCredentials adds the Credentials provided to the configuration.
+func (dsc *DataSourceConfig) AddCredentials(cred *Credentials) error {
+	if cred == nil || cred.Name == "" {
+		return fmt.Errorf("AddCredentials: The Credentials argument is invalid")
+	}
 
-	idx := strings.TrimSpace(source)
-	if apikey, found := c.apikeys[strings.ToLower(idx)]; found {
-		return apikey
+	if dsc.creds == nil {
+		dsc.creds = make(map[string]*Credentials)
+	}
+
+	dsc.creds[cred.Name] = cred
+	return nil
+}
+
+// GetCredentials returns randomly selected Credentials associated with the receiver configuration.
+func (dsc *DataSourceConfig) GetCredentials() *Credentials {
+	if num := len(dsc.creds); num > 0 {
+		var creds []*Credentials
+		for _, c := range dsc.creds {
+			creds = append(creds, c)
+		}
+		return creds[rand.Intn(num)]
 	}
 	return nil
 }
@@ -50,7 +78,7 @@ func (c *Config) GetAPIKey(source string) *APIKey {
 func (c *Config) loadDataSourceSettings(cfg *ini.File) error {
 	sec, err := cfg.GetSection("data_sources")
 	if err != nil {
-		return nil
+		return err
 	}
 
 	if sec.HasKey("minimum_ttl") {
@@ -62,21 +90,26 @@ func (c *Config) loadDataSourceSettings(cfg *ini.File) error {
 	for _, child := range sec.ChildSections() {
 		name := strings.Split(child.Name(), ".")[1]
 
-		if name == "disabled_data_sources" {
+		if name == "disabled" {
 			// Load up all the disabled data source names
 			c.SourceFilter.Sources = stringset.Deduplicate(child.Key("data_source").ValueWithShadows())
 			c.SourceFilter.Include = false
 			continue
 		}
 
-		key := new(APIKey)
+		dsc := c.GetDataSourceConfig(name)
 		// Parse the Database information and assign to the Config
-		if err := child.MapTo(key); err == nil {
-			if c.MinimumTTL > key.TTL {
-				key.TTL = c.MinimumTTL
-			}
+		child.MapTo(dsc)
+		if c.MinimumTTL > dsc.TTL {
+			dsc.TTL = c.MinimumTTL
+		}
+		// Check for data source credentials
+		for _, cr := range child.ChildSections() {
+			setName := strings.Split(cr.Name(), ".")[2]
 
-			c.AddAPIKey(name, key)
+			creds := &Credentials{Name: setName}
+			cr.MapTo(creds)
+			dsc.AddCredentials(creds)
 		}
 	}
 

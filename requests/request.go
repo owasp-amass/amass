@@ -111,7 +111,7 @@ type Output struct {
 	Domain    string        `json:"domain"`
 	Addresses []AddressInfo `json:"addresses"`
 	Tag       string        `json:"tag"`
-	Source    string        `json:"source"`
+	Sources   []string      `json:"sources"`
 }
 
 // AddressInfo stores all network addressing info for the Output type.

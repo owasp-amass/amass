@@ -84,8 +84,6 @@ func NewScript(script string, sys systems.System) *Script {
 	}
 	s.BaseService = *requests.NewBaseService(s, name)
 
-	// Acquire API authentication info and make it global in the script
-	s.registerAPIKey(L, sys.Config())
 	// Save references to the callbacks defined within the script
 	s.getScriptCallbacks()
 	return s
@@ -98,6 +96,7 @@ func (s *Script) newLuaState(cfg *config.Config) *lua.LState {
 	L.PreloadModule("url", luaurl.Loader)
 	L.PreloadModule("json", luajson.Loader)
 	L.SetGlobal("config", L.NewFunction(s.config))
+	L.SetGlobal("datasrc_config", L.NewFunction(s.dataSourceConfig))
 	L.SetGlobal("brute_wordlist", L.NewFunction(s.bruteWordlist))
 	L.SetGlobal("alt_wordlist", L.NewFunction(s.altWordlist))
 	L.SetGlobal("log", L.NewFunction(s.log))
@@ -119,33 +118,6 @@ func (s *Script) newLuaState(cfg *config.Config) *lua.LState {
 	L.SetGlobal("cache_response", L.NewFunction(s.cacheResponse))
 	L.SetGlobal("subdomainre", lua.LString(dns.AnySubdomainRegexString()))
 	return L
-}
-
-// Fetch provided API authentication information and provide to the script as a global table.
-func (s *Script) registerAPIKey(L *lua.LState, cfg *config.Config) {
-	api := cfg.GetAPIKey(s.String())
-	if api == nil {
-		return
-	}
-
-	tb := L.NewTable()
-	if api.Username != "" {
-		tb.RawSetString("username", lua.LString(api.Username))
-	}
-	if api.Password != "" {
-		tb.RawSetString("password", lua.LString(api.Password))
-	}
-	if api.Key != "" {
-		tb.RawSetString("key", lua.LString(api.Key))
-	}
-	if api.Secret != "" {
-		tb.RawSetString("secret", lua.LString(api.Secret))
-	}
-	if api.TTL != 0 {
-		tb.RawSetString("ttl", lua.LNumber(api.TTL))
-	}
-
-	L.SetGlobal("api", tb)
 }
 
 // Save references to the script functions that serve as callbacks for Amass events.
@@ -286,9 +258,8 @@ func (s *Script) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 		return
 	}
 
-	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if cfg == nil || bus == nil {
+	_, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 
@@ -299,7 +270,7 @@ func (s *Script) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 	// Create a new filter specific to this request
 	s.filter = stringfilter.NewStringFilter()
 
-	err := L.CallByParam(lua.P{
+	err = L.CallByParam(lua.P{
 		Fn:      s.vertical,
 		NRet:    0,
 		Protect: true,
@@ -321,9 +292,8 @@ func (s *Script) OnResolved(ctx context.Context, req *requests.DNSRequest) {
 		return
 	}
 
-	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if cfg == nil || bus == nil {
+	_, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 
@@ -341,7 +311,7 @@ func (s *Script) OnResolved(ctx context.Context, req *requests.DNSRequest) {
 	// Create a new filter specific to this request
 	s.filter = stringfilter.NewStringFilter()
 
-	err := L.CallByParam(lua.P{
+	err = L.CallByParam(lua.P{
 		Fn:      s.resolved,
 		NRet:    0,
 		Protect: true,
@@ -363,9 +333,8 @@ func (s *Script) OnSubdomainDiscovered(ctx context.Context, req *requests.DNSReq
 		return
 	}
 
-	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if cfg == nil || bus == nil {
+	_, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 
@@ -373,7 +342,7 @@ func (s *Script) OnSubdomainDiscovered(ctx context.Context, req *requests.DNSReq
 	// Create a new filter specific to this request
 	s.filter = stringfilter.NewStringFilter()
 
-	err := L.CallByParam(lua.P{
+	err = L.CallByParam(lua.P{
 		Fn:      s.subdomain,
 		NRet:    0,
 		Protect: true,
@@ -395,9 +364,8 @@ func (s *Script) OnAddrRequest(ctx context.Context, req *requests.AddrRequest) {
 		return
 	}
 
-	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if cfg == nil || bus == nil {
+	_, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 
@@ -406,7 +374,7 @@ func (s *Script) OnAddrRequest(ctx context.Context, req *requests.AddrRequest) {
 	// Create a new filter specific to this request
 	s.filter = stringfilter.NewStringFilter()
 
-	err := L.CallByParam(lua.P{
+	err = L.CallByParam(lua.P{
 		Fn:      s.address,
 		NRet:    0,
 		Protect: true,
@@ -428,16 +396,15 @@ func (s *Script) OnASNRequest(ctx context.Context, req *requests.ASNRequest) {
 		return
 	}
 
-	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if cfg == nil || bus == nil {
+	_, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 
 	s.CheckRateLimit()
 	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, s.String())
 
-	err := L.CallByParam(lua.P{
+	err = L.CallByParam(lua.P{
 		Fn:      s.asn,
 		NRet:    0,
 		Protect: true,
@@ -457,16 +424,15 @@ func (s *Script) OnWhoisRequest(ctx context.Context, req *requests.WhoisRequest)
 		return
 	}
 
-	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if cfg == nil || bus == nil {
+	_, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 
 	s.CheckRateLimit()
 	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, s.String())
 
-	err := L.CallByParam(lua.P{
+	err = L.CallByParam(lua.P{
 		Fn:      s.horizontal,
 		NRet:    0,
 		Protect: true,

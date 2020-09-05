@@ -25,9 +25,9 @@ import (
 type Umbrella struct {
 	requests.BaseService
 
-	API        *config.APIKey
 	SourceType string
 	sys        systems.System
+	creds      *config.Credentials
 }
 
 // NewUmbrella returns he object initialized, but not yet started.
@@ -50,8 +50,8 @@ func (u *Umbrella) Type() string {
 func (u *Umbrella) OnStart() error {
 	u.BaseService.OnStart()
 
-	u.API = u.sys.Config().GetAPIKey(u.String())
-	if u.API == nil || u.API.Key == "" {
+	u.creds = u.sys.Config().GetDataSourceConfig(u.String()).GetCredentials()
+	if u.creds == nil || u.creds.Key == "" {
 		u.sys.Config().Log.Printf("%s: API key data was not provided", u.String())
 	}
 
@@ -61,9 +61,9 @@ func (u *Umbrella) OnStart() error {
 
 // CheckConfig implements the Service interface.
 func (u *Umbrella) CheckConfig() error {
-	api := u.sys.Config().GetAPIKey(u.String())
+	creds := u.sys.Config().GetDataSourceConfig(u.String()).GetCredentials()
 
-	if api == nil || api.Key == "" {
+	if creds == nil || creds.Key == "" {
 		estr := fmt.Sprintf("%s: check callback failed for the configuration", u.String())
 		u.sys.Config().Log.Print(estr)
 		return errors.New(estr)
@@ -74,13 +74,12 @@ func (u *Umbrella) CheckConfig() error {
 
 // OnDNSRequest implements the Service interface.
 func (u *Umbrella) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
-	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if cfg == nil || bus == nil {
+	cfg, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 
-	if u.API == nil || u.API.Key == "" {
+	if u.creds == nil || u.creds.Key == "" {
 		return
 	}
 
@@ -117,13 +116,12 @@ func (u *Umbrella) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 
 // OnAddrRequest implements the Service interface.
 func (u *Umbrella) OnAddrRequest(ctx context.Context, req *requests.AddrRequest) {
-	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if cfg == nil || bus == nil {
+	_, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 
-	if u.API == nil || u.API.Key == "" {
+	if u.creds == nil || u.creds.Key == "" {
 		return
 	}
 
@@ -160,12 +158,12 @@ func (u *Umbrella) OnAddrRequest(ctx context.Context, req *requests.AddrRequest)
 
 // OnASNRequest implements the Service interface.
 func (u *Umbrella) OnASNRequest(ctx context.Context, req *requests.ASNRequest) {
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if bus == nil {
+	_, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 
-	if u.API == nil || u.API.Key == "" {
+	if u.creds == nil || u.creds.Key == "" {
 		return
 	}
 
@@ -185,8 +183,8 @@ func (u *Umbrella) OnASNRequest(ctx context.Context, req *requests.ASNRequest) {
 }
 
 func (u *Umbrella) executeASNAddrQuery(ctx context.Context, req *requests.ASNRequest) {
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if bus == nil {
+	_, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 
@@ -250,8 +248,8 @@ func (u *Umbrella) executeASNAddrQuery(ctx context.Context, req *requests.ASNReq
 }
 
 func (u *Umbrella) executeASNQuery(ctx context.Context, req *requests.ASNRequest) {
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if bus == nil {
+	_, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 
@@ -355,8 +353,8 @@ func (u *Umbrella) collateEmails(ctx context.Context, record *whoisRecord) []str
 }
 
 func (u *Umbrella) queryWhois(ctx context.Context, domain string) *whoisRecord {
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if bus == nil {
+	_, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return nil
 	}
 
@@ -386,8 +384,8 @@ func (u *Umbrella) queryReverseWhois(ctx context.Context, apiURL string) []strin
 	headers := u.restHeaders()
 	var whois map[string]rWhoisResponse
 
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if bus == nil {
+	_, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return domains.Slice()
 	}
 
@@ -427,8 +425,8 @@ func (u *Umbrella) queryReverseWhois(ctx context.Context, apiURL string) []strin
 }
 
 func (u *Umbrella) validateScope(ctx context.Context, input string) bool {
-	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
-	if cfg == nil {
+	cfg, _, err := ContextConfigBus(ctx)
+	if err != nil {
 		return false
 	}
 
@@ -440,13 +438,12 @@ func (u *Umbrella) validateScope(ctx context.Context, input string) bool {
 
 // OnWhoisRequest implements the Service interface.
 func (u *Umbrella) OnWhoisRequest(ctx context.Context, req *requests.WhoisRequest) {
-	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if cfg == nil || bus == nil {
+	cfg, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 
-	if u.API == nil || u.API.Key == "" {
+	if u.creds == nil || u.creds.Key == "" {
 		return
 	}
 
@@ -498,8 +495,8 @@ func (u *Umbrella) OnWhoisRequest(ctx context.Context, req *requests.WhoisReques
 func (u *Umbrella) restHeaders() map[string]string {
 	headers := map[string]string{"Content-Type": "application/json"}
 
-	if u.API != nil && u.API.Key != "" {
-		headers["Authorization"] = "Bearer " + u.API.Key
+	if u.creds == nil || u.creds.Key == "" {
+		headers["Authorization"] = "Bearer " + u.creds.Key
 	}
 	return headers
 

@@ -95,25 +95,25 @@ brews:
     install: |
       bin.install "amass"
 
-#snapcrafts:
-#  -
-#    name: amass
-#    # Remember you need to `snapcraft login` first.
-#    publish: true
-#    summary: In-depth Attack Surface Mapping and Asset Discovery.
-#    description: The OWASP Amass Project has developed a tool to help information security professionals perform network mapping of attack surfaces and external asset discovery using open source information gathering and active reconnaissance techniques.
-#    grade: stable
-#    confinement: strict
-#    # Your app's license, based on SPDX license expressions: https://spdx.org/licenses
-#    license: Apache-2.0	
-#
-#    apps:
-#      amass:
-#        plugs: ["home", "network", "removable-media", "dot-amass"]
-#
-#    plugs:
-#      dot-amass:
-#        interface: personal-files
-#        write:
-#        - $HOME/.amass
-#        - $HOME/.config/amass
+snapcrafts:
+  -
+    name: amass
+    # Remember you need to `snapcraft login` first.
+    publish: true
+    summary: In-depth Attack Surface Mapping and Asset Discovery.
+    description: The OWASP Amass Project has developed a tool to help information security professionals perform network mapping of attack surfaces and external asset discovery using open source information gathering and active reconnaissance techniques.
+    grade: stable
+    confinement: strict
+    # Your app's license, based on SPDX license expressions: https://spdx.org/licenses
+    license: Apache-2.0	
+
+    apps:
+      amass:
+        plugs: ["home", "network", "removable-media", "dot-amass"]
+
+    plugs:
+      dot-amass:
+        interface: personal-files
+        write:
+        - $HOME/.amass
+        - $HOME/.config/amass

@@ -25,9 +25,9 @@ import (
 type AlienVault struct {
 	requests.BaseService
 
-	API        *config.APIKey
 	SourceType string
 	sys        systems.System
+	creds      *config.Credentials
 }
 
 // NewAlienVault returns he object initialized, but not yet started.
@@ -50,13 +50,12 @@ func (a *AlienVault) Type() string {
 func (a *AlienVault) OnStart() error {
 	a.BaseService.OnStart()
 
-	a.API = a.sys.Config().GetAPIKey(a.String())
-
-	if a.API == nil || a.API.Key == "" {
+	a.creds = a.sys.Config().GetDataSourceConfig(a.String()).GetCredentials()
+	if a.creds == nil {
 		a.sys.Config().Log.Printf("%s: API key data was not provided", a.String())
 	}
 
-	a.SetRateLimit(100 * time.Millisecond)
+	a.SetRateLimit(time.Second)
 	return nil
 }
 
@@ -66,8 +65,8 @@ func (a *AlienVault) OnDNSRequest(ctx context.Context, req *requests.DNSRequest)
 		return
 	}
 
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if bus == nil {
+	_, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 
@@ -91,9 +90,8 @@ func (a *AlienVault) OnWhoisRequest(ctx context.Context, req *requests.WhoisRequ
 }
 
 func (a *AlienVault) executeDNSQuery(ctx context.Context, req *requests.DNSRequest) {
-	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if cfg == nil || bus == nil {
+	cfg, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 
@@ -162,9 +160,8 @@ type avURL struct {
 }
 
 func (a *AlienVault) executeURLQuery(ctx context.Context, req *requests.DNSRequest) {
-	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if cfg == nil || bus == nil {
+	cfg, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 
@@ -258,9 +255,8 @@ func extractNamesIPs(urls []avURL, names stringset.Set, ips stringset.Set, re *r
 }
 
 func (a *AlienVault) executeWhoisQuery(ctx context.Context, req *requests.WhoisRequest) {
-	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if cfg == nil || bus == nil {
+	cfg, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 
@@ -316,9 +312,8 @@ func (a *AlienVault) queryWhoisForEmails(ctx context.Context, req *requests.Whoi
 	emails := stringset.New()
 	u := a.getWhoisURL(req.Domain)
 
-	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if cfg == nil || bus == nil {
+	cfg, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return emails.Slice()
 	}
 
@@ -369,8 +364,8 @@ func (a *AlienVault) queryWhoisForEmails(ctx context.Context, req *requests.Whoi
 func (a *AlienVault) getHeaders() map[string]string {
 	headers := map[string]string{"Content-Type": "application/json"}
 
-	if a.API != nil && a.API.Key != "" {
-		headers["X-OTX-API-KEY"] = a.API.Key
+	if a.creds != nil && a.creds.Key != "" {
+		headers["X-OTX-API-KEY"] = a.creds.Key
 	}
 	return headers
 }

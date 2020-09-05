@@ -1,4 +1,4 @@
-// Copyright 2017 Jeff Foley. All rights reserved.
+// Copyright 2017-2020 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 package graph
@@ -57,6 +57,11 @@ func (g *Graph) InsertNodeIfNotExist(id, ntype string) (Node, error) {
 // InsertEdge will create an edge in the database if it does not already exist.
 func (g *Graph) InsertEdge(edge *Edge) error {
 	return g.db.InsertEdge(edge)
+}
+
+// ReadNode returns the node matching the id and type arguments.
+func (g *Graph) ReadNode(id, ntype string) (Node, error) {
+	return g.db.ReadNode(id, ntype)
 }
 
 // AllNodesOfType provides all nodes in the graph of the identified

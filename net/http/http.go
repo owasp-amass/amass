@@ -12,16 +12,22 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
+	amassnet "github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/net/dns"
 	"github.com/OWASP/Amass/v3/stringset"
+	"github.com/PuerkitoBio/goquery"
+	"github.com/geziyor/geziyor"
+	"github.com/geziyor/geziyor/client"
+	"golang.org/x/sync/semaphore"
 )
 
 const (
@@ -39,23 +45,26 @@ const (
 )
 
 var (
-	defaultClient *http.Client
+	subRE       = dns.AnySubdomainRegex()
+	maxCrawlSem = semaphore.NewWeighted(20)
+	nameStripRE = regexp.MustCompile(`^u[0-9a-f]{4}|20|22|25|2b|2f|3d|3a|40`)
 )
+
+// DefaultClient is the same HTTP client used by the package methods.
+var DefaultClient *http.Client
 
 func init() {
 	jar, _ := cookiejar.New(nil)
-	defaultClient = &http.Client{
-		Timeout: 30 * time.Second,
+	DefaultClient = &http.Client{
+		Timeout: time.Second * 180, // Google's timeout
 		Transport: &http.Transport{
-			DialContext: (&net.Dialer{
-				Timeout:   30 * time.Second,
-				KeepAlive: 30 * time.Second,
-				DualStack: true,
-			}).DialContext,
+			Proxy:                 http.ProxyFromEnvironment,
+			DialContext:           amassnet.DialContext,
 			MaxIdleConns:          200,
+			MaxConnsPerHost:       50,
 			IdleConnTimeout:       90 * time.Second,
-			TLSHandshakeTimeout:   20 * time.Second,
-			ExpectContinueTimeout: 20 * time.Second,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ExpectContinueTimeout: 10 * time.Second,
 			TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
 		},
 		Jar: jar,
@@ -68,14 +77,14 @@ func init() {
 func CopyCookies(src string, dest string) {
 	srcURL, _ := url.Parse(src)
 	destURL, _ := url.Parse(dest)
-	defaultClient.Jar.SetCookies(destURL, defaultClient.Jar.Cookies(srcURL))
+	DefaultClient.Jar.SetCookies(destURL, DefaultClient.Jar.Cookies(srcURL))
 }
 
 // CheckCookie checks if a cookie exists in the cookie jar for a given host
 func CheckCookie(urlString string, cookieName string) bool {
 	cookieURL, _ := url.Parse(urlString)
 	found := false
-	for _, cookie := range defaultClient.Jar.Cookies(cookieURL) {
+	for _, cookie := range DefaultClient.Jar.Cookies(cookieURL) {
 		if cookie.Name == cookieName {
 			found = true
 			break
@@ -106,7 +115,7 @@ func RequestWebPage(urlstring string, body io.Reader, hvals map[string]string, u
 		req.Header.Set(k, v)
 	}
 
-	resp, err := defaultClient.Do(req)
+	resp, err := DefaultClient.Do(req)
 	if err != nil {
 		return "", err
 	} else if resp.StatusCode < 200 || resp.StatusCode >= 400 {
@@ -116,6 +125,81 @@ func RequestWebPage(urlstring string, body io.Reader, hvals map[string]string, u
 	in, err := ioutil.ReadAll(resp.Body)
 	resp.Body.Close()
 	return string(in), err
+}
+
+// Crawl will spider the web page at the URL argument looking for DNS names within the scope argument.
+func Crawl(url string, scope []string) ([]string, error) {
+	results := stringset.New()
+
+	err := maxCrawlSem.Acquire(context.TODO(), 1)
+	if err != nil {
+		return results.Slice(), fmt.Errorf("crawler error: %v", err)
+	}
+	defer maxCrawlSem.Release(1)
+
+	target := subRE.FindString(url)
+	if target != "" {
+		scope = append(scope, target)
+	}
+
+	var count int
+	var m sync.Mutex
+	g := geziyor.NewGeziyor(&geziyor.Options{
+		AllowedDomains:     scope,
+		StartURLs:          []string{url},
+		Timeout:            10 * time.Second,
+		RobotsTxtDisabled:  true,
+		UserAgent:          UserAgent,
+		LogDisabled:        true,
+		ConcurrentRequests: 5,
+		ParseFunc: func(g *geziyor.Geziyor, r *client.Response) {
+			for _, n := range subRE.FindAllString(string(r.Body), -1) {
+				name := CleanName(n)
+
+				if domain := whichDomain(name, scope); domain != "" {
+					m.Lock()
+					results.Insert(name)
+					m.Unlock()
+				}
+			}
+
+			r.HTMLDoc.Find("a").Each(func(i int, s *goquery.Selection) {
+				if href, ok := s.Attr("href"); ok {
+					if count < 5 {
+						g.Get(r.JoinURL(href), g.Opt.ParseFunc)
+						count++
+					}
+				}
+			})
+		},
+	})
+	options := &client.Options{
+		MaxBodySize:    100 * 1024 * 1024, // 100MB
+		RetryTimes:     2,
+		RetryHTTPCodes: []int{500, 502, 503, 504, 522, 524, 408},
+	}
+	g.Client = client.NewClient(options)
+	g.Client.Client = http.DefaultClient
+	g.Start()
+
+	return results.Slice(), nil
+}
+
+func whichDomain(name string, scope []string) string {
+	n := strings.TrimSpace(name)
+
+	for _, d := range scope {
+		if strings.HasSuffix(n, d) {
+			// fork made me do it :>
+			nlen := len(n)
+			dlen := len(d)
+			// Check for exact match first to guard against out of bound index
+			if nlen == dlen || n[nlen-dlen-1] == '.' {
+				return d
+			}
+		}
+	}
+	return ""
 }
 
 // PullCertificateNames attempts to pull a cert from one or more ports on an IP.
@@ -129,8 +213,7 @@ func PullCertificateNames(addr string, ports []int) []string {
 		ctx, cancel := context.WithTimeout(context.Background(), defaultTLSConnectTimeout)
 		defer cancel()
 		// Obtain the connection
-		d := net.Dialer{}
-		conn, err := d.DialContext(ctx, "tcp", addr+":"+strconv.Itoa(port))
+		conn, err := amassnet.DialContext(ctx, "tcp", addr+":"+strconv.Itoa(port))
 		if err != nil {
 			continue
 		}
@@ -207,4 +290,27 @@ func ClientCountryCode() string {
 
 	json.Unmarshal([]byte(page), &ipinfo)
 	return strings.ToLower(ipinfo.CountryCode)
+}
+
+// CleanName will clean up the names scraped from the web.
+func CleanName(name string) string {
+	var err error
+
+	name, err = strconv.Unquote("\"" + strings.TrimSpace(name) + "\"")
+	if err == nil {
+		name = subRE.FindString(name)
+	}
+
+	name = strings.ToLower(name)
+	for {
+		name = strings.Trim(name, "-.")
+
+		if i := nameStripRE.FindStringIndex(name); i != nil {
+			name = name[i[1]:]
+		} else {
+			break
+		}
+	}
+
+	return name
 }

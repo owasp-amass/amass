@@ -4,6 +4,8 @@
 package graph
 
 import (
+	"math/rand"
+
 	"github.com/OWASP/Amass/v3/stringset"
 	"github.com/OWASP/Amass/v3/viz"
 )
@@ -166,4 +168,12 @@ func (g *Graph) convertNodeType(id, ntype string, edges []*Edge) string {
 	}
 
 	return ntype
+}
+
+func randomIndex(length int) int {
+	if length == 1 {
+		return 0
+	}
+
+	return rand.Intn(length - 1)
 }

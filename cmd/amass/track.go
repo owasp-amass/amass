@@ -173,14 +173,14 @@ func runTrackCommand(clArgs []string) {
 		args.Last = len(uuids)
 	}
 
-	var end int
+	var begin int
 	// Filter out enumerations that begin before the start date/time
 	if args.Since != "" {
 		for i := len(uuids) - 1; i >= 0; i-- {
-			if !earliest[i].Before(start) {
+			if earliest[i].Before(start) {
 				break
 			}
-			end++
+			begin++
 		}
 	} else { // Or the number of enumerations from the end of the timeline
 		if args.Last > len(uuids) {
@@ -188,11 +188,12 @@ func runTrackCommand(clArgs []string) {
 			os.Exit(1)
 		}
 
-		end = args.Last
+		begin = args.Last
 	}
-	uuids = uuids[:end]
-	earliest = earliest[:end]
-	latest = latest[:end]
+	begin = len(uuids) - begin
+	uuids = uuids[begin:]
+	earliest = earliest[begin:]
+	latest = latest[begin:]
 
 	if args.Options.History {
 		completeHistoryOutput(uuids, args.Domains.Slice(), earliest, latest, memDB)
@@ -275,44 +276,37 @@ func blueLine() {
 	fmt.Println()
 }
 
-func diffEnumOutput(out1, out2 []*requests.Output) []string {
-	omap1 := make(map[string]*requests.Output)
-	omap2 := make(map[string]*requests.Output)
+func diffEnumOutput(older, newer []*requests.Output) []string {
+	oldmap := make(map[string]*requests.Output)
+	newmap := make(map[string]*requests.Output)
 
-	for _, o := range out1 {
-		omap1[o.Name] = o
+	for _, o := range older {
+		oldmap[o.Name] = o
 	}
-	for _, o := range out2 {
-		omap2[o.Name] = o
+	for _, o := range newer {
+		newmap[o.Name] = o
 	}
 
-	handled := make(map[string]struct{})
 	var diff []string
-	for _, o := range out2 {
-		handled[o.Name] = struct{}{}
-
-		if _, found := omap1[o.Name]; !found {
+	for name, o := range newmap {
+		o2, found := oldmap[name]
+		if !found {
 			diff = append(diff, fmt.Sprintf("%s%s %s", blue("Found: "),
-				green(o.Name), yellow(lineOfAddresses(o.Addresses))))
+				green(name), yellow(lineOfAddresses(o.Addresses))))
 			continue
 		}
 
-		o2 := omap1[o.Name]
 		if !compareAddresses(o.Addresses, o2.Addresses) {
 			diff = append(diff, fmt.Sprintf("%s%s\n\t%s\t%s\n\t%s\t%s", blue("Moved: "),
-				green(o.Name), blue(" from "), yellow(lineOfAddresses(o2.Addresses)),
+				green(name), blue(" from "), yellow(lineOfAddresses(o2.Addresses)),
 				blue(" to "), yellow(lineOfAddresses(o.Addresses))))
 		}
 	}
 
-	for _, o := range out1 {
-		if _, found := handled[o.Name]; found {
-			continue
-		}
-
-		if _, found := omap2[o.Name]; !found {
+	for name, o := range oldmap {
+		if _, found := newmap[name]; !found {
 			diff = append(diff, fmt.Sprintf("%s%s %s", blue("Removed: "),
-				green(o.Name), yellow(lineOfAddresses(o.Addresses))))
+				green(name), yellow(lineOfAddresses(o.Addresses))))
 		}
 	}
 

@@ -147,8 +147,8 @@ type Config struct {
 	// The regular expressions for the root domains added to the enumeration
 	regexps map[string]*regexp.Regexp
 
-	// The API keys used by various data sources
-	apikeys map[string]*APIKey
+	// The data source configurations
+	datasrcConfigs map[string]*DataSourceConfig
 }
 
 // NewConfig returns a default configuration object.

@@ -24,9 +24,9 @@ import (
 type DNSDB struct {
 	requests.BaseService
 
-	API        *config.APIKey
 	SourceType string
 	sys        systems.System
+	creds      *config.Credentials
 }
 
 // NewDNSDB returns he object initialized, but not yet started.
@@ -49,8 +49,8 @@ func (d *DNSDB) Type() string {
 func (d *DNSDB) OnStart() error {
 	d.BaseService.OnStart()
 
-	d.API = d.sys.Config().GetAPIKey(d.String())
-	if d.API == nil || d.API.Key == "" {
+	d.creds = d.sys.Config().GetDataSourceConfig(d.String()).GetCredentials()
+	if d.creds == nil || d.creds.Key == "" {
 		d.sys.Config().Log.Printf("%s: API key data was not provided", d.String())
 	}
 
@@ -60,9 +60,9 @@ func (d *DNSDB) OnStart() error {
 
 // CheckConfig implements the Service interface.
 func (d *DNSDB) CheckConfig() error {
-	api := d.sys.Config().GetAPIKey(d.String())
+	creds := d.sys.Config().GetDataSourceConfig(d.String()).GetCredentials()
 
-	if api == nil || api.Key == "" {
+	if creds == nil || creds.Key == "" {
 		estr := fmt.Sprintf("%s: check callback failed for the configuration", d.String())
 		d.sys.Config().Log.Print(estr)
 		return errors.New(estr)
@@ -73,9 +73,8 @@ func (d *DNSDB) CheckConfig() error {
 
 // OnDNSRequest implements the Service interface.
 func (d *DNSDB) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
-	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if cfg == nil || bus == nil {
+	cfg, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 
@@ -83,7 +82,7 @@ func (d *DNSDB) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 		return
 	}
 
-	if d.API == nil || d.API.Key == "" {
+	if d.creds == nil || d.creds.Key == "" {
 		return
 	}
 
@@ -92,7 +91,7 @@ func (d *DNSDB) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 		fmt.Sprintf("Querying %s for %s subdomains", d.String(), req.Domain))
 
 	headers := map[string]string{
-		"X-API-Key":    d.API.Key,
+		"X-API-Key":    d.creds.Key,
 		"Accept":       "application/json",
 		"Content-Type": "application/json",
 	}
@@ -114,8 +113,8 @@ func (d *DNSDB) getURL(domain string) string {
 }
 
 func (d *DNSDB) parse(ctx context.Context, page, domain string) []string {
-	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
-	if cfg == nil {
+	cfg, _, err := ContextConfigBus(ctx)
+	if err != nil {
 		return []string{}
 	}
 

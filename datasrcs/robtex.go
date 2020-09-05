@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/eventbus"
 	amassnet "github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/net/http"
@@ -62,11 +61,6 @@ func (r *Robtex) OnStart() error {
 
 // OnASNRequest implements the Service interface.
 func (r *Robtex) OnASNRequest(ctx context.Context, req *requests.ASNRequest) {
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if bus == nil {
-		return
-	}
-
 	if req.Address == "" && req.ASN == 0 {
 		return
 	}
@@ -82,9 +76,8 @@ func (r *Robtex) OnASNRequest(ctx context.Context, req *requests.ASNRequest) {
 
 // OnDNSRequest implements the Service interface.
 func (r *Robtex) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
-	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if cfg == nil || bus == nil {
+	cfg, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 
@@ -166,9 +159,8 @@ func (r *Robtex) parseDNSJSON(page string) []robtexJSON {
 }
 
 func (r *Robtex) executeASNQuery(ctx context.Context, asn int) {
-	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if cfg == nil || bus == nil {
+	_, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 
@@ -195,9 +187,8 @@ func (r *Robtex) executeASNQuery(ctx context.Context, asn int) {
 }
 
 func (r *Robtex) executeASNAddrQuery(ctx context.Context, addr string) {
-	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if cfg == nil || bus == nil {
+	_, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return
 	}
 
@@ -211,9 +202,8 @@ func (r *Robtex) executeASNAddrQuery(ctx context.Context, addr string) {
 }
 
 func (r *Robtex) origin(ctx context.Context, addr string) *requests.ASNRequest {
-	cfg := ctx.Value(requests.ContextConfig).(*config.Config)
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if cfg == nil || bus == nil {
+	_, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return nil
 	}
 
@@ -300,8 +290,8 @@ func (r *Robtex) origin(ctx context.Context, addr string) *requests.ASNRequest {
 func (r *Robtex) netblocks(ctx context.Context, asn int) stringset.Set {
 	netblocks := stringset.New()
 
-	bus := ctx.Value(requests.ContextEventBus).(*eventbus.EventBus)
-	if bus == nil {
+	_, bus, err := ContextConfigBus(ctx)
+	if err != nil {
 		return netblocks
 	}
 

@@ -13,6 +13,7 @@ import (
 	"io/ioutil"
 	"log"
 	"math/rand"
+	"net"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -49,6 +50,7 @@ type enumArgs struct {
 	Domains           stringset.Set
 	Excluded          stringset.Set
 	Included          stringset.Set
+	Interface         string
 	MaxDNSQueries     int
 	MinForRecursive   int
 	Names             stringset.Set
@@ -74,20 +76,21 @@ type enumArgs struct {
 		Verbose             bool
 	}
 	Filepaths struct {
-		AllFilePrefix string
-		AltWordlist   format.ParseStrings
-		Blacklist     string
-		BruteWordlist format.ParseStrings
-		ConfigFile    string
-		Directory     string
-		Domains       format.ParseStrings
-		ExcludedSrcs  string
-		IncludedSrcs  string
-		JSONOutput    string
-		LogFile       string
-		Names         format.ParseStrings
-		Resolvers     format.ParseStrings
-		TermOut       string
+		AllFilePrefix    string
+		AltWordlist      format.ParseStrings
+		Blacklist        string
+		BruteWordlist    format.ParseStrings
+		ConfigFile       string
+		Directory        string
+		Domains          format.ParseStrings
+		ExcludedSrcs     string
+		IncludedSrcs     string
+		JSONOutput       string
+		LogFile          string
+		Names            format.ParseStrings
+		Resolvers        format.ParseStrings
+		ScriptsDirectory string
+		TermOut          string
 	}
 }
 
@@ -101,6 +104,7 @@ func defineEnumArgumentFlags(enumFlags *flag.FlagSet, args *enumArgs) {
 	enumFlags.Var(&args.Domains, "d", "Domain names separated by commas (can be used multiple times)")
 	enumFlags.Var(&args.Excluded, "exclude", "Data source names separated by commas to be excluded")
 	enumFlags.Var(&args.Included, "include", "Data source names separated by commas to be included")
+	enumFlags.StringVar(&args.Interface, "iface", "", "Provide the network interface to send traffic through")
 	enumFlags.IntVar(&args.MaxDNSQueries, "max-dns-queries", 0, "Maximum number of concurrent DNS queries")
 	enumFlags.IntVar(&args.MinForRecursive, "min-for-recursive", 1, "Subdomain labels seen before recursive brute forcing")
 	enumFlags.Var(&args.Ports, "p", "Ports separated by commas (default: 443)")
@@ -141,6 +145,7 @@ func defineEnumFilepathFlags(enumFlags *flag.FlagSet, args *enumArgs) {
 	enumFlags.StringVar(&args.Filepaths.LogFile, "log", "", "Path to the log file where errors will be written")
 	enumFlags.Var(&args.Filepaths.Names, "nf", "Path to a file providing already known subdomain names (from other tools/sources)")
 	enumFlags.Var(&args.Filepaths.Resolvers, "rf", "Path to a file providing preferred DNS resolvers")
+	enumFlags.StringVar(&args.Filepaths.ScriptsDirectory, "scripts", "", "Path to a directory containing ADS scripts")
 	enumFlags.StringVar(&args.Filepaths.TermOut, "o", "", "Path to the text file containing terminal stdout/stderr")
 }
 
@@ -173,7 +178,7 @@ func runEnumCommand(clArgs []string) {
 		os.Exit(1)
 	}
 	defer sys.Shutdown()
-	sys.SetDataSources(datasrcs.GetAllSources(sys))
+	sys.SetDataSources(datasrcs.GetAllSources(sys, true))
 	// Expand data source category names into the associated source names
 	cfg.SourceFilter.Sources = expandCategoryNames(cfg.SourceFilter.Sources, generateCategoryMap(sys))
 
@@ -202,13 +207,11 @@ func runEnumCommand(clArgs []string) {
 	go saveTextOutput(e, args, txtOutChan, &wg)
 	outChans = append(outChans, txtOutChan)
 
-	if !args.Options.Passive {
-		wg.Add(1)
-		// This goroutine will handle saving the output to the JSON file
-		jsonOutChan := make(chan *requests.Output, 10)
-		go saveJSONOutput(e, args, jsonOutChan, &wg)
-		outChans = append(outChans, jsonOutChan)
-	}
+	wg.Add(1)
+	// This goroutine will handle saving the output to the JSON file
+	jsonOutChan := make(chan *requests.Output, 10)
+	go saveJSONOutput(e, args, jsonOutChan, &wg)
+	outChans = append(outChans, jsonOutChan)
 
 	wg.Add(1)
 	go processOutput(e, outChans, done, &wg)
@@ -280,6 +283,17 @@ func argsAndConfig(clArgs []string) (*config.Config, *enumArgs) {
 		return nil, &args
 	}
 
+	if args.Interface != "" {
+		iface, err := net.InterfaceByName(args.Interface)
+		if err != nil || iface == nil {
+			fmt.Fprint(color.Output, format.InterfaceInfo())
+			os.Exit(1)
+		}
+		if err := assignNetInterface(iface); err != nil {
+			r.Fprintf(color.Error, "%v\n", err)
+			os.Exit(1)
+		}
+	}
 	if args.Options.NoColor {
 		color.NoColor = true
 	}
@@ -334,8 +348,8 @@ func argsAndConfig(clArgs []string) (*config.Config, *enumArgs) {
 
 	// Check if the user has requested the data source names
 	if args.Options.ListSources {
-		for _, info := range GetAllSourceInfo(cfg) {
-			g.Println(info)
+		for _, line := range GetAllSourceInfo(cfg) {
+			fmt.Fprintln(color.Output, line)
 		}
 		return nil, &args
 	}
@@ -693,6 +707,9 @@ func (e enumArgs) OverrideConfig(conf *config.Config) error {
 	}
 	if e.Filepaths.Directory != "" {
 		conf.Dir = e.Filepaths.Directory
+	}
+	if e.Filepaths.ScriptsDirectory != "" {
+		conf.ScriptsDirectory = e.Filepaths.ScriptsDirectory
 	}
 	if e.MaxDNSQueries > 0 {
 		conf.MaxDNSQueries = e.MaxDNSQueries
