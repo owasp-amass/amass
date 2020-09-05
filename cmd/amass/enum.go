@@ -34,9 +34,7 @@ import (
 	"github.com/fatih/color"
 )
 
-const (
-	enumUsageMsg = "enum [options] -d DOMAIN"
-)
+const enumUsageMsg = "enum [options] -d DOMAIN"
 
 type enumArgs struct {
 	Addresses         format.ParseIPs
@@ -535,7 +533,7 @@ func signalHandler(e *enum.Enumeration) {
 	// Signal the enumeration to finish
 	e.Done()
 	// Wait for output operations to complete
-	time.Sleep(20 * time.Second)
+	time.Sleep(2 * time.Minute)
 	os.Exit(1)
 }
 

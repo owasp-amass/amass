@@ -285,8 +285,7 @@ func (e *Enumeration) Start() error {
 
 	// Get the ball rolling before the timer fires
 	completed := e.useManagers()
-	more := time.NewTicker(250 * time.Millisecond)
-	defer more.Stop()
+	more := time.NewTimer(5 * time.Second)
 	t := time.NewTimer(20 * time.Second)
 	perMin := time.NewTicker(time.Minute)
 	defer perMin.Stop()
@@ -297,6 +296,7 @@ loop:
 			break loop
 		case <-more.C:
 			completed += e.useManagers()
+			more.Reset(500 * time.Millisecond)
 		case <-t.C:
 			var inactive bool
 			// Has the enumeration been inactive long enough to stop the task?
