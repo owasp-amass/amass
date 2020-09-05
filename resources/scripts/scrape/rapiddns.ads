@@ -5,7 +5,7 @@ name = "RapidDNS"
 type = "scrape"
 
 function start()
-    setratelimit(1)
+    setratelimit(5)
 end
 
 function vertical(ctx, domain)
