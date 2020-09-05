@@ -176,7 +176,9 @@ func runDBCommand(clArgs []string) {
 		uuids = []string{uuids[idx]}
 	}
 
+	var asninfo bool
 	if args.Options.ASNTableSummary {
+		asninfo = true
 		fgY.Fprintln(color.Error, "Could take a moment while acquiring AS network information")
 		// Migrate the changes back to the persistent db
 		if healASInfo(uuids, memDB) {
@@ -184,7 +186,7 @@ func runDBCommand(clArgs []string) {
 		}
 	}
 
-	showEventData(&args, uuids, memDB)
+	showEventData(&args, uuids, asninfo, memDB)
 }
 
 func listEvents(uuids []string, db *graph.Graph) {
@@ -208,7 +210,7 @@ func listEvents(uuids []string, db *graph.Graph) {
 	}
 }
 
-func showEventData(args *dbArgs, uuids []string, db *graph.Graph) {
+func showEventData(args *dbArgs, uuids []string, asninfo bool, db *graph.Graph) {
 	var total int
 	var err error
 	var outfile *os.File
@@ -231,7 +233,7 @@ func showEventData(args *dbArgs, uuids []string, db *graph.Graph) {
 
 	tags := make(map[string]int)
 	asns := make(map[int]*format.ASNSummaryData)
-	for _, out := range getEventOutput(uuids, db) {
+	for _, out := range getEventOutput(uuids, asninfo, db) {
 		if len(domains) > 0 && !domainNameInScope(out.Name, domains) {
 			continue
 		}
