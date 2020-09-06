@@ -34,9 +34,7 @@ import (
 	"github.com/fatih/color"
 )
 
-const (
-	enumUsageMsg = "enum [options] -d DOMAIN"
-)
+const enumUsageMsg = "enum [options] -d DOMAIN"
 
 type enumArgs struct {
 	Addresses         format.ParseIPs
@@ -301,28 +299,18 @@ func argsAndConfig(clArgs []string) (*config.Config, *enumArgs) {
 		color.Output = ioutil.Discard
 		color.Error = ioutil.Discard
 	}
-
 	if args.AltWordListMask.Len() > 0 {
 		args.AltWordList.Union(args.AltWordListMask)
 	}
 	if args.BruteWordListMask.Len() > 0 {
 		args.BruteWordList.Union(args.BruteWordListMask)
 	}
-	// Some input validation
-	if args.Options.Passive && (args.Options.IPs || args.Options.IPv4 || args.Options.IPv6) {
-		r.Fprintln(color.Error, "IP addresses cannot be provided without DNS resolution")
-		os.Exit(1)
-	}
-	if args.Options.Passive && args.Options.BruteForcing {
-		r.Fprintln(color.Error, "Brute forcing cannot be performed without DNS resolution")
-		os.Exit(1)
-	}
 	if (len(args.Excluded) > 0 || args.Filepaths.ExcludedSrcs != "") &&
 		(len(args.Included) > 0 || args.Filepaths.IncludedSrcs != "") {
+		r.Fprintln(color.Error, "Cannot provide both include and exclude arguments")
 		commandUsage(enumUsageMsg, enumCommand, enumBuf)
 		os.Exit(1)
 	}
-
 	if err := processEnumInputFiles(&args); err != nil {
 		fmt.Fprintf(color.Error, "%v\n", err)
 		os.Exit(1)
@@ -354,6 +342,11 @@ func argsAndConfig(clArgs []string) (*config.Config, *enumArgs) {
 		return nil, &args
 	}
 
+	// Some input validation
+	if cfg.Passive && (args.Options.IPs || args.Options.IPv4 || args.Options.IPv6) {
+		r.Fprintln(color.Error, "IP addresses cannot be provided without DNS resolution")
+		os.Exit(1)
+	}
 	if len(cfg.Domains()) == 0 {
 		r.Fprintln(color.Error, "Configuration error: No root domain names were provided")
 		os.Exit(1)
@@ -540,7 +533,7 @@ func signalHandler(e *enum.Enumeration) {
 	// Signal the enumeration to finish
 	e.Done()
 	// Wait for output operations to complete
-	time.Sleep(20 * time.Second)
+	time.Sleep(2 * time.Minute)
 	os.Exit(1)
 }
 

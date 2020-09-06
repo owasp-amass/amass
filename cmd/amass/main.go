@@ -278,15 +278,16 @@ func eventUUIDs(domains []string, db *graph.Graph) []string {
 			continue
 		}
 
-		var count int
+		var found bool
 		surface := db.EventDomains(id)
 		for _, domain := range surface {
 			if domainNameInScope(domain, domains) {
-				count++
+				found = true
+				break
 			}
 		}
 
-		if count == len(domains) {
+		if found {
 			uuids = append(uuids, id)
 		}
 	}
@@ -314,13 +315,13 @@ func memGraphForScope(domains []string, from *graph.Graph) (*graph.Graph, error)
 	return db, nil
 }
 
-func getEventOutput(uuids []string, db *graph.Graph) []*requests.Output {
+func getEventOutput(uuids []string, asninfo bool, db *graph.Graph) []*requests.Output {
 	var output []*requests.Output
 	cache := amassnet.NewASNCache()
 	filter := stringfilter.NewStringFilter()
 
 	for i := len(uuids) - 1; i >= 0; i-- {
-		output = append(output, db.EventOutput(uuids[i], filter, true, cache)...)
+		output = append(output, db.EventOutput(uuids[i], filter, asninfo, cache)...)
 	}
 
 	return output

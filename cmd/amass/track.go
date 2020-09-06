@@ -163,11 +163,6 @@ func runTrackCommand(clArgs []string) {
 		os.Exit(1)
 	}
 
-	// There needs to be at least two events to proceed
-	if len(uuids) < 2 {
-		r.Fprintln(color.Error, "Tracking requires more than one enumeration")
-		os.Exit(1)
-	}
 	// The default is to use all the enumerations available
 	if args.Last == 0 {
 		args.Last = len(uuids)
@@ -195,11 +190,28 @@ func runTrackCommand(clArgs []string) {
 	earliest = earliest[begin:]
 	latest = latest[begin:]
 
-	if args.Options.History {
+	if len(uuids) == 1 {
+		printOneEvent(uuids, args.Domains.Slice(), earliest[0], latest[0], memDB)
+		return
+	} else if args.Options.History {
 		completeHistoryOutput(uuids, args.Domains.Slice(), earliest, latest, memDB)
 		return
 	}
 	cumulativeOutput(uuids, args.Domains.Slice(), earliest, latest, memDB)
+}
+
+func printOneEvent(uuid, domains []string, earliest, latest time.Time, db *graph.Graph) {
+	one := getScopedOutput(uuid, domains, db)
+
+	blueLine()
+	fmt.Fprintf(color.Output, "%s\t%s%s%s\n%s\t%s%s%s\n", blue("Between"),
+		yellow(earliest.Format(timeFormat)), blue(" -> "), yellow(latest.Format(timeFormat)),
+		blue("and"), yellow(earliest.Format(timeFormat)), blue(" -> "), yellow(latest.Format(timeFormat)))
+	blueLine()
+
+	for _, d := range diffEnumOutput([]*requests.Output{}, one) {
+		fmt.Fprintln(color.Output, d)
+	}
 }
 
 func cumulativeOutput(uuids, domains []string, ea, la []time.Time, db *graph.Graph) {
@@ -226,7 +238,7 @@ func cumulativeOutput(uuids, domains []string, ea, la []time.Time, db *graph.Gra
 func getScopedOutput(uuids, domains []string, db *graph.Graph) []*requests.Output {
 	var output []*requests.Output
 
-	for _, out := range getEventOutput(uuids, db) {
+	for _, out := range getEventOutput(uuids, false, db) {
 		if len(domains) > 0 && !domainNameInScope(out.Name, domains) {
 			continue
 		}
