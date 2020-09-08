@@ -152,7 +152,7 @@ func (c *CommonCrawl) getURL(domain, index string) string {
 	u.RawQuery = url.Values{
 		"url":      {"*." + domain},
 		"output":   {"json"},
-		"filter":   {"=status:200"},
+		"filter":   {"status:200"},
 		"fl":       {"url,status"},
 		"pageSize": {"2000"},
 	}.Encode()
