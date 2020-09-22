@@ -5,6 +5,7 @@ package resolvers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -35,7 +36,7 @@ type ResolverPool struct {
 }
 
 // SetupResolverPool initializes a ResolverPool with the type of resolvers indicated by the parameters.
-func SetupResolverPool(addrs []string, maxQueries int, ratemon bool, log *log.Logger) *ResolverPool {
+func SetupResolverPool(addrs []string, maxQueries int, log *log.Logger) *ResolverPool {
 	if len(addrs) <= 0 {
 		return nil
 	}
@@ -72,22 +73,15 @@ loop:
 		case <-t.C:
 			break loop
 		case r := <-finished:
-			if r == nil {
-				continue loop
+			if r != nil {
+				resolvers = append(resolvers, r)
 			}
-			if ratemon {
-				if r = NewRateMonitoredResolver(r); r == nil {
-					continue loop
-				}
-			}
-			resolvers = append(resolvers, r)
 		}
 	}
 
 	if len(resolvers) == 0 {
 		return nil
 	}
-
 	return NewResolverPool(resolvers, maxQueries, log)
 }
 
@@ -99,7 +93,7 @@ func NewResolverPool(res []Resolver, maxQueries int, logger *log.Logger) *Resolv
 		Log:             logger,
 		domainCacheChan: make(chan *domainReq, 10),
 		wildcardQueue:   queue.NewQueue(),
-		semMaxWildcard:  semaphore.NewWeighted(int64(100000 / len(res))),
+		semMaxWildcard:  semaphore.NewWeighted(int64(maxQueries / len(res))),
 	}
 
 	// Assign a null logger when one is not provided
@@ -222,7 +216,7 @@ loop:
 			for i := 0; i < len(labels)-1; i++ {
 				sub := strings.Join(labels[i:], ".")
 
-				if ns, _, err := rp.Resolve(context.TODO(), sub, "NS", PriorityHigh); err == nil {
+				if ns, err := rp.Resolve(context.TODO(), sub, "NS", PriorityHigh, RetryPolicy); err == nil {
 					pieces := strings.Split(ns[0].Data, ",")
 					cache[pieces[0]] = struct{}{}
 					domain = pieces[0]
@@ -246,7 +240,6 @@ func (rp *ResolverPool) NextResolver() Resolver {
 
 	for {
 		r := rp.Resolvers[rand.Int()%max]
-
 		if avail, _ := r.Available(); avail {
 			return r
 		}
@@ -267,7 +260,7 @@ func (rp *ResolverPool) NextResolver() Resolver {
 }
 
 // Reverse is performs reverse DNS queries using available Resolvers in the pool.
-func (rp *ResolverPool) Reverse(ctx context.Context, addr string, priority int) (string, string, error) {
+func (rp *ResolverPool) Reverse(ctx context.Context, addr string, priority int, retry Retry) (string, string, error) {
 	var name, ptr string
 
 	if ip := net.ParseIP(addr); amassnet.IsIPv4(ip) {
@@ -281,7 +274,7 @@ func (rp *ResolverPool) Reverse(ctx context.Context, addr string, priority int) 
 		}
 	}
 
-	answers, _, err := rp.Resolve(ctx, ptr, "PTR", priority)
+	answers, err := rp.Resolve(ctx, ptr, "PTR", priority, retry)
 	if err != nil {
 		return ptr, name, err
 	}
@@ -309,22 +302,18 @@ func (rp *ResolverPool) Reverse(ctx context.Context, addr string, priority int) 
 }
 
 // Resolve performs a DNS request using available Resolvers in the pool.
-func (rp *ResolverPool) Resolve(ctx context.Context, name, qtype string, priority int) ([]requests.DNSAnswer, bool, error) {
-	var attempts int
-	switch priority {
-	case PriorityCritical:
-		attempts = 1000
-	case PriorityHigh:
-		attempts = 250
-	case PriorityLow:
-		attempts = 50
-	}
-
+func (rp *ResolverPool) Resolve(ctx context.Context, name, qtype string, priority int, retry Retry) ([]requests.DNSAnswer, error) {
+	again := true
+	var times int
 	var err error
-	var again bool
 	var ans []requests.DNSAnswer
-	// This loop ensures the correct number of attempts of the DNS query
-	for count := 0; count < attempts; {
+
+	for again {
+		err = checkContext(ctx)
+		if err != nil {
+			break
+		}
+
 		r := rp.NextResolver()
 		if r == nil {
 			// Give the system a chance to breathe before trying again
@@ -332,28 +321,28 @@ func (rp *ResolverPool) Resolve(ctx context.Context, name, qtype string, priorit
 			continue
 		}
 
-		count++
-		success := true
-		ans, again, err = r.Resolve(ctx, name, qtype, priority)
-		if again {
-			success = false
-		} else if err != nil {
-			if rc := (err.(*ResolveError)).Rcode; rc == TimeoutRcode ||
-				rc == dns.RcodeServerFailure || rc == dns.RcodeRefused || rc == dns.RcodeNotImplemented {
-				success = false
-			}
-		}
+		times++
+		var m *dns.Msg
+		ans, err = r.Resolve(ctx, name, qtype, priority, func(times int, priority int, msg *dns.Msg) bool {
+			m = msg
+			return false
+		})
 
-		if success {
-			return ans, again, err
+		if err == nil || retry == nil {
+			break
 		}
+		again = retry(times, priority, m)
 	}
 
-	return []requests.DNSAnswer{}, false, err
+	return ans, err
 }
 
 // NsecTraversal performs NSEC-walking using available Resolvers in the pool.
 func (rp *ResolverPool) NsecTraversal(ctx context.Context, domain string, priority int) ([]string, bool, error) {
+	if stopped := rp.IsStopped(); stopped {
+		return nil, false, errors.New("The resolver has been stopped")
+	}
+
 	var attempts int
 	switch priority {
 	case PriorityCritical:
@@ -388,20 +377,7 @@ func (rp *ResolverPool) NsecTraversal(ctx context.Context, domain string, priori
 
 // MatchesWildcard returns true if the request provided resolved to a DNS wildcard.
 func (rp *ResolverPool) MatchesWildcard(ctx context.Context, req *requests.DNSRequest) bool {
-	ch := make(chan int, 2)
-
-	rp.wildcardQueue.Append(&wildcardQueueMsg{
-		Ctx: ctx,
-		Req: req,
-		Ch:  ch,
-	})
-
-	var matched bool
-	if wtype := <-ch; wtype != WildcardTypeNone {
-		matched = true
-	}
-
-	return matched
+	return rp.GetWildcardType(ctx, req) != WildcardTypeNone
 }
 
 // GetWildcardType returns the DNS wildcard type for the provided subdomain name.
@@ -429,17 +405,16 @@ func (rp *ResolverPool) processWildcardRequests() {
 		case <-rp.Done:
 			return
 		case <-rp.wildcardQueue.Signal:
-			e, found := rp.wildcardQueue.Next()
-
-			for found {
-				msg := e.(*wildcardQueueMsg)
+			rp.wildcardQueue.Process(func(e interface{}) {
+				msg, ok := e.(*wildcardQueueMsg)
+				if !ok {
+					return
+				}
 
 				if rp.semMaxWildcard.Acquire(msg.Ctx, 1) == nil {
 					go rp.allResolversWildcardRequest(msg)
 				}
-
-				e, found = rp.wildcardQueue.Next()
-			}
+			})
 		}
 	}
 }
@@ -447,9 +422,9 @@ func (rp *ResolverPool) processWildcardRequests() {
 func (rp *ResolverPool) allResolversWildcardRequest(msg *wildcardQueueMsg) {
 	defer rp.semMaxWildcard.Release(1)
 
-	ch := make(chan int)
+	ch := make(chan int, 10)
 	query := func(r Resolver) {
-		ch <- <-wrapWildcardRequest(msg.Ctx, r, msg.Req)
+		ch <- r.GetWildcardType(msg.Ctx, msg.Req)
 	}
 
 	var num int
@@ -483,18 +458,6 @@ func (rp *ResolverPool) allResolversWildcardRequest(msg *wildcardQueueMsg) {
 	}
 
 	msg.Ch <- ret
-}
-
-func wrapWildcardRequest(ctx context.Context, resolver Resolver, req *requests.DNSRequest) chan int {
-	ch := make(chan int, 2)
-
-	if stopped := resolver.IsStopped(); stopped {
-		ch <- WildcardTypeNone
-	} else {
-		ch <- resolver.GetWildcardType(ctx, req)
-	}
-
-	return ch
 }
 
 func (rp *ResolverPool) numUsableResolvers() int {

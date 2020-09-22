@@ -103,7 +103,7 @@ func defineEnumArgumentFlags(enumFlags *flag.FlagSet, args *enumArgs) {
 	enumFlags.Var(&args.Excluded, "exclude", "Data source names separated by commas to be excluded")
 	enumFlags.Var(&args.Included, "include", "Data source names separated by commas to be included")
 	enumFlags.StringVar(&args.Interface, "iface", "", "Provide the network interface to send traffic through")
-	enumFlags.IntVar(&args.MaxDNSQueries, "max-dns-queries", 0, "Maximum number of concurrent DNS queries")
+	enumFlags.IntVar(&args.MaxDNSQueries, "max-dns-queries", 0, "Maximum number of DNS queries per second")
 	enumFlags.IntVar(&args.MinForRecursive, "min-for-recursive", 1, "Subdomain labels seen before recursive brute forcing")
 	enumFlags.Var(&args.Ports, "p", "Ports separated by commas (default: 443)")
 	enumFlags.Var(&args.Resolvers, "r", "IP addresses of preferred DNS resolvers (can be used multiple times)")
@@ -533,7 +533,7 @@ func signalHandler(e *enum.Enumeration) {
 	// Signal the enumeration to finish
 	e.Done()
 	// Wait for output operations to complete
-	time.Sleep(2 * time.Minute)
+	time.Sleep(30 * time.Second)
 	os.Exit(1)
 }
 
@@ -704,9 +704,6 @@ func (e enumArgs) OverrideConfig(conf *config.Config) error {
 	if e.Filepaths.ScriptsDirectory != "" {
 		conf.ScriptsDirectory = e.Filepaths.ScriptsDirectory
 	}
-	if e.MaxDNSQueries > 0 {
-		conf.MaxDNSQueries = e.MaxDNSQueries
-	}
 	if e.Names.Len() > 0 {
 		conf.ProvidedNames = e.Names.Slice()
 	}
@@ -747,7 +744,10 @@ func (e enumArgs) OverrideConfig(conf *config.Config) error {
 		conf.Verbose = true
 	}
 	if e.Resolvers.Len() > 0 {
-		conf.SetResolvers(e.Resolvers.Slice())
+		conf.SetResolvers(e.Resolvers.Slice()...)
+	}
+	if e.MaxDNSQueries > 0 {
+		conf.MaxDNSQueries = e.MaxDNSQueries
 	}
 	if !e.Options.MonitorResolverRate {
 		conf.MonitorResolverRate = false
@@ -768,6 +768,6 @@ func (e enumArgs) OverrideConfig(conf *config.Config) error {
 		conf.SourceFilter.Sources = e.Excluded.Slice()
 	}
 	// Attempt to add the provided domains to the configuration
-	conf.AddDomains(e.Domains.Slice())
+	conf.AddDomains(e.Domains.Slice()...)
 	return nil
 }

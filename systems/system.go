@@ -4,10 +4,9 @@
 package systems
 
 import (
-	"context"
-
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/graph"
+	"github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/resolvers"
 )
@@ -19,6 +18,9 @@ type System interface {
 
 	// Returns the resolver pool that handles DNS requests
 	Pool() resolvers.Resolver
+
+	// Returns the cache populated by the system
+	Cache() *net.ASNCache
 
 	// AddSource appends the provided data source to the slice of sources managed by the System
 	AddSource(srv requests.Service) error
@@ -39,8 +41,7 @@ type System interface {
 	GetMemoryUsage() uint64
 
 	// PerformDNSQuery blocks if the maximum number of queries is already taking place
-	PerformDNSQuery(ctx context.Context) error
-	FinishedDNSQuery()
+	PerformDNSQuery() error
 
 	// Shutdown will shutdown the System
 	Shutdown() error

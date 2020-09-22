@@ -29,19 +29,8 @@ const (
 // ResolverErrRcode is our made up rcode to indicate an interface error.
 const ResolverErrRcode = 100
 
-// TimeoutRcode is our made up rcode to indicate that a query timed out.
-const TimeoutRcode = 101
-
 // NotAvailableRcode is our made up rcode to indicate an availability problem.
 const NotAvailableRcode = 256
-
-// RetryCodes are the rcodes that cause the resolver to suggest trying again.
-var RetryCodes = []int{
-	TimeoutRcode,
-	dns.RcodeRefused,
-	dns.RcodeServerFailure,
-	dns.RcodeNotImplemented,
-}
 
 // ResolveError contains the Rcode returned during the DNS query.
 type ResolveError struct {
@@ -81,6 +70,18 @@ func makeResolveResult(msg *dns.Msg, rec []requests.DNSAnswer, again bool, err s
 	}
 }
 
+func checkContext(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return &ResolveError{
+			Err:   "The request context was cancelled",
+			Rcode: ResolverErrRcode,
+		}
+	default:
+	}
+	return nil
+}
+
 // Resolver is the object type for performing DNS resolutions.
 type Resolver interface {
 	fmt.Stringer
@@ -92,10 +93,10 @@ type Resolver interface {
 	Port() int
 
 	// Resolve performs DNS queries using the Resolver
-	Resolve(ctx context.Context, name, qtype string, priority int) ([]requests.DNSAnswer, bool, error)
+	Resolve(ctx context.Context, name, qtype string, priority int, retry Retry) ([]requests.DNSAnswer, error)
 
 	// Reverse is performs reverse DNS queries using the Resolver
-	Reverse(ctx context.Context, addr string, priority int) (string, string, error)
+	Reverse(ctx context.Context, addr string, priority int, retry Retry) (string, string, error)
 
 	// NsecTraversal attempts to retrieve a DNS zone using NSEC-walking
 	NsecTraversal(ctx context.Context, domain string, priority int) ([]string, bool, error)
@@ -218,21 +219,24 @@ func (r *BaseResolver) returnRequest(req *resolveRequest, res *resolveResult) {
 }
 
 // Resolve performs a DNS query using the Resolver.
-func (r *BaseResolver) Resolve(ctx context.Context, name, qtype string, priority int) ([]requests.DNSAnswer, bool, error) {
+func (r *BaseResolver) Resolve(ctx context.Context, name, qtype string, priority int, retry Retry) ([]requests.DNSAnswer, error) {
 	if priority != PriorityCritical && priority != PriorityHigh && priority != PriorityLow {
-		return []requests.DNSAnswer{}, false, &ResolveError{
+		return []requests.DNSAnswer{}, &ResolveError{
 			Err:   fmt.Sprintf("Resolver: Invalid priority parameter: %d", priority),
 			Rcode: ResolverErrRcode,
 		}
 	}
 
 	if avail, err := r.Available(); !avail {
-		return []requests.DNSAnswer{}, true, err
+		return []requests.DNSAnswer{}, &ResolveError{
+			Err:   err.Error(),
+			Rcode: ResolverErrRcode,
+		}
 	}
 
 	qt, err := textToTypeNum(qtype)
 	if err != nil {
-		return nil, false, &ResolveError{
+		return nil, &ResolveError{
 			Err:   err.Error(),
 			Rcode: ResolverErrRcode,
 		}
@@ -243,22 +247,48 @@ func (r *BaseResolver) Resolve(ctx context.Context, name, qtype string, priority
 		bus = b.(*eventbus.EventBus)
 	}
 
-	result := r.queueQuery(queryMessage(r.getID(), name, qt), name, qt, priority)
-	// Report the completion of the DNS query
-	if bus != nil {
-		rcode := dns.RcodeSuccess
-		if result.Err != nil {
-			rcode = (result.Err.(*ResolveError)).Rcode
+	again := true
+	var times int
+	var ans []requests.DNSAnswer
+	for again {
+		err = checkContext(ctx)
+		if err != nil {
+			break
 		}
 
-		bus.Publish(requests.ResolveCompleted, eventbus.PriorityCritical, time.Now(), rcode)
+		times++
+		msg := queryMessage(r.getID(), name, qt)
+		result := r.queueQuery(msg, name, qt, priority)
+		err = result.Err
+		ans = result.Records
+		// Report the completion of the DNS query
+		if bus != nil {
+			rcode := dns.RcodeSuccess
+			if err != nil {
+				rcode = (err.(*ResolveError)).Rcode
+			}
+
+			bus.Publish(requests.ResolveCompleted, eventbus.PriorityCritical, time.Now(), rcode)
+		}
+
+		if err == nil || retry == nil {
+			break
+		}
+
+		resp := result.Msg
+		rcode := (result.Err.(*ResolveError)).Rcode
+		if resp == nil {
+			resp = msg
+			resp.Rcode = rcode
+		}
+		again = retry(times, priority, resp)
 	}
 
-	return result.Records, result.Again, result.Err
+	return ans, err
 }
 
 // Reverse is performs reverse DNS queries using the Resolver.
-func (r *BaseResolver) Reverse(ctx context.Context, addr string, priority int) (string, string, error) {
+func (r *BaseResolver) Reverse(ctx context.Context, addr string, priority int, retry Retry) (string, string, error) {
 	var name, ptr string
 
 	if ip := net.ParseIP(addr); amassnet.IsIPv4(ip) {
@@ -272,7 +302,7 @@ func (r *BaseResolver) Reverse(ctx context.Context, addr string, priority int) (
 		}
 	}
 
-	answers, _, err := r.Resolve(ctx, ptr, "PTR", priority)
+	answers, err := r.Resolve(ctx, ptr, "PTR", priority, retry)
 	if err != nil {
 		return ptr, name, err
 	}
@@ -301,20 +331,17 @@ func (r *BaseResolver) Reverse(ctx context.Context, addr string, priority int) (
 func (r *BaseResolver) checkForTimeouts() {
 	t := time.NewTicker(time.Second)
 	defer t.Stop()
-
+loop:
 	for {
 		select {
 		case <-r.Done:
-			return
+			break loop
 		case <-t.C:
 			var count int
-			var removals []uint16
-
 			// Discover requests that have timed out and remove them from the map
 			for _, id := range r.allTimeoutIDs() {
 				if req := r.pullRequestAfterTimeout(id, 2*time.Second); req != nil {
 					count++
-					removals = append(removals, id)
 					estr := fmt.Sprintf("DNS query on resolver %s, for %s type %d timed out",
 						r.address, req.Name, req.Qtype)
 					r.returnRequest(req, makeResolveResult(nil, nil, true, estr, TimeoutRcode))
@@ -322,6 +349,13 @@ func (r *BaseResolver) checkForTimeouts() {
 			}
 			// Complete handling of the timed out requests
 			r.updateTimeouts(count)
+		}
+	}
+
+	for _, id := range r.allTimeoutIDs() {
+		if req := r.pullRequest(id); req != nil {
+			estr := fmt.Sprintf("DNS resolver %s has stopped", r.address)
+			r.returnRequest(req, makeResolveResult(nil, nil, false, estr, ResolverErrRcode))
 		}
 	}
 }

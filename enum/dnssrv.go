@@ -52,14 +52,16 @@ func (ds *DNSService) Type() string {
 
 // OnDNSRequest implements the Service interface.
 func (ds *DNSService) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
-	if ds.sys.PerformDNSQuery(ctx) == nil {
-		go ds.processDNSRequest(ctx, req)
+	num := len(InitialQueryTypes)
+
+	for i := 0; i < num; i++ {
+		ds.sys.PerformDNSQuery()
 	}
+
+	go ds.processDNSRequest(ctx, req)
 }
 
 func (ds *DNSService) processDNSRequest(ctx context.Context, req *requests.DNSRequest) {
-	defer ds.sys.FinishedDNSQuery()
-
 	if req == nil || req.Name == "" || req.Domain == "" {
 		return
 	}
@@ -98,7 +100,15 @@ func (ds *DNSService) queryInitialTypes(ctx context.Context, req *requests.DNSRe
 	for _, t := range InitialQueryTypes {
 		bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, ds.String())
 
-		if a, _, err := ds.sys.Pool().Resolve(ctx, req.Name, t, resolvers.PriorityLow); err == nil {
+		if a, err := ds.sys.Pool().Resolve(ctx, req.Name, t, resolvers.PriorityLow, func(times int, priority int, msg *dns.Msg) bool {
+			var retry bool
+
+			if resolvers.PoolRetryPolicy(times, priority, msg) {
+				ds.sys.PerformDNSQuery()
+				retry = true
+			}
+			return retry
+		}); err == nil {
 			answers = append(answers, a...)
 		} else {
 			ds.handleResolverError(ctx, err)
@@ -114,8 +124,12 @@ func (ds *DNSService) handleResolverError(ctx context.Context, e error) {
 		return
 	}
 
-	rcode := (e.(*resolvers.ResolveError)).Rcode
-	if cfg.Verbose || rcode == resolvers.NotAvailableRcode ||
+	rerr, ok := e.(*resolvers.ResolveError)
+	if !ok {
+		return
+	}
+
+	if rcode := rerr.Rcode; cfg.Verbose || rcode == resolvers.NotAvailableRcode ||
 		rcode == resolvers.TimeoutRcode || rcode == resolvers.ResolverErrRcode ||
 		rcode == dns.RcodeRefused || rcode == dns.RcodeServerFailure || rcode == dns.RcodeNotImplemented {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("DNS: %v", e))
@@ -165,7 +179,7 @@ func (ds *DNSService) subdomainQueries(ctx context.Context, req *requests.DNSReq
 	answers := ds.queryInitialTypes(ctx, req)
 	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, ds.String())
 	// Obtain the DNS answers for the NS records related to the domain
-	if ans, _, err := ds.sys.Pool().Resolve(ctx, req.Name, "NS", resolvers.PriorityHigh); err == nil {
+	if ans, err := ds.sys.Pool().Resolve(ctx, req.Name, "NS", resolvers.PriorityHigh, resolvers.PoolRetryPolicy); err == nil {
 		for _, a := range ans {
 			pieces := strings.Split(a.Data, ",")
 			a.Data = pieces[len(pieces)-1]
@@ -184,7 +198,7 @@ func (ds *DNSService) subdomainQueries(ctx context.Context, req *requests.DNSReq
 
 	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, ds.String())
 	// Obtain the DNS answers for the MX records related to the domain
-	if ans, _, err := ds.sys.Pool().Resolve(ctx, req.Name, "MX", resolvers.PriorityHigh); err == nil {
+	if ans, err := ds.sys.Pool().Resolve(ctx, req.Name, "MX", resolvers.PriorityHigh, resolvers.PoolRetryPolicy); err == nil {
 		answers = append(answers, ans...)
 	} else {
 		ds.handleResolverError(ctx, err)
@@ -192,7 +206,7 @@ func (ds *DNSService) subdomainQueries(ctx context.Context, req *requests.DNSReq
 
 	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, ds.String())
 	// Obtain the DNS answers for the SOA records related to the domain
-	if ans, _, err := ds.sys.Pool().Resolve(ctx, req.Name, "SOA", resolvers.PriorityHigh); err == nil {
+	if ans, err := ds.sys.Pool().Resolve(ctx, req.Name, "SOA", resolvers.PriorityHigh, resolvers.PoolRetryPolicy); err == nil {
 		for _, a := range ans {
 			pieces := strings.Split(a.Data, ",")
 			a.Data = pieces[len(pieces)-1]
@@ -205,7 +219,7 @@ func (ds *DNSService) subdomainQueries(ctx context.Context, req *requests.DNSReq
 
 	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, ds.String())
 	// Obtain the DNS answers for the SPF records related to the domain
-	if ans, _, err := ds.sys.Pool().Resolve(ctx, req.Name, "SPF", resolvers.PriorityHigh); err == nil {
+	if ans, err := ds.sys.Pool().Resolve(ctx, req.Name, "SPF", resolvers.PriorityHigh, resolvers.PoolRetryPolicy); err == nil {
 		answers = append(answers, ans...)
 	} else {
 		ds.handleResolverError(ctx, err)
@@ -285,9 +299,9 @@ func (ds *DNSService) attemptZoneWalk(ctx context.Context, domain, server string
 }
 
 func (ds *DNSService) nameserverAddr(ctx context.Context, server string) (string, error) {
-	a, _, err := ds.sys.Pool().Resolve(ctx, server, "A", resolvers.PriorityHigh)
+	a, err := ds.sys.Pool().Resolve(ctx, server, "A", resolvers.PriorityHigh, resolvers.RetryPolicy)
 	if err != nil {
-		a, _, err = ds.sys.Pool().Resolve(ctx, server, "AAAA", resolvers.PriorityHigh)
+		a, err = ds.sys.Pool().Resolve(ctx, server, "AAAA", resolvers.PriorityHigh, resolvers.RetryPolicy)
 		if err != nil {
 			return "", fmt.Errorf("DNS server has no A or AAAA record: %s: %v", server, err)
 		}
@@ -306,7 +320,7 @@ func (ds *DNSService) queryServiceNames(ctx context.Context, req *requests.DNSRe
 
 		bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, ds.String())
 
-		if a, _, err := ds.sys.Pool().Resolve(ctx, srvName, "SRV", resolvers.PriorityHigh); err == nil {
+		if a, err := ds.sys.Pool().Resolve(ctx, srvName, "SRV", resolvers.PriorityHigh, resolvers.PoolRetryPolicy); err == nil {
 			ds.resolvedName(ctx, &requests.DNSRequest{
 				Name:    srvName,
 				Domain:  req.Domain,
