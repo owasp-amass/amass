@@ -26,7 +26,7 @@ func (c *Config) DomainRegex(domain string) *regexp.Regexp {
 }
 
 // AddDomains appends the domain names provided in the parameter to the list in the configuration.
-func (c *Config) AddDomains(domains []string) {
+func (c *Config) AddDomains(domains ...string) {
 	for _, d := range domains {
 		c.AddDomain(d)
 	}
@@ -81,32 +81,36 @@ func (c *Config) Domains() []string {
 func (c *Config) IsDomainInScope(name string) bool {
 	var discovered bool
 
-	n := strings.ToLower(strings.TrimSpace(name))
-	for _, d := range c.Domains() {
-		if n == d || strings.HasSuffix(n, "."+d) {
-			discovered = true
-			break
-		}
+	if domain := c.WhichDomain(name); domain != "" {
+		discovered = true
 	}
+
 	return discovered
 }
 
 // WhichDomain returns the domain in the config list that the DNS name in the parameter ends with.
 func (c *Config) WhichDomain(name string) string {
-	n := strings.TrimSpace(name)
+	n := strings.ToLower(strings.TrimSpace(name))
 
 	for _, d := range c.Domains() {
-		if strings.HasSuffix(n, d) {
-			// fork made me do it :>
-			nlen := len(n)
-			dlen := len(d)
-			// Check for exact match first to guard against out of bound index
-			if nlen == dlen || n[nlen-dlen-1] == '.' {
-				return d
-			}
+		if hasPathSuffix(n, d) {
+			return d
 		}
 	}
 	return ""
+}
+
+func hasPathSuffix(path, suffix string) bool {
+	if strings.HasSuffix(path, suffix) {
+		plen := len(path)
+		slen := len(suffix)
+
+		// Check for exact match first to guard against out of bound index
+		if plen == slen || path[plen-slen-1] == '.' {
+			return true
+		}
+	}
+	return false
 }
 
 // IsAddressInScope returns true if the addr parameter matches provided network scope and when
@@ -137,16 +141,15 @@ func (c *Config) IsAddressInScope(addr string) bool {
 
 // Blacklisted returns true is the name in the parameter ends with a subdomain name in the config blacklist.
 func (c *Config) Blacklisted(name string) bool {
-	var resp bool
+	n := strings.ToLower(strings.TrimSpace(name))
 
-	n := strings.TrimSpace(name)
 	for _, bl := range c.Blacklist {
-		if match := strings.HasSuffix(n, bl); match {
-			resp = true
-			break
+		if hasPathSuffix(n, bl) {
+			return true
 		}
 	}
-	return resp
+
+	return false
 }
 
 func (c *Config) loadScopeSettings(cfg *ini.File) error {
