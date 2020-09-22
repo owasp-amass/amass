@@ -4,8 +4,12 @@
 package graph
 
 import (
+	"context"
 	"errors"
 	"sync"
+
+	"github.com/cayleygraph/cayley"
+	"github.com/cayleygraph/quad"
 )
 
 // Graph implements the Amass network infrastructure data model.
@@ -67,42 +71,41 @@ func (g *Graph) ReadNode(id, ntype string) (Node, error) {
 // AllNodesOfType provides all nodes in the graph of the identified
 // type within the optionally identified events.
 func (g *Graph) AllNodesOfType(ntype string, events ...string) ([]Node, error) {
-	var results []Node
+	var nodes []Node
 
-	nodes, err := g.db.AllNodesOfType(ntype)
-	if err != nil {
-		return results, errors.New("Graph: AllNodesOfType: Failed to obtain nodes")
-	}
-
-	if len(events) == 0 {
-		return nodes, nil
-	}
-
-	for _, node := range nodes {
-		for _, event := range events {
-			var found bool
-
-			// The event type is a special case
-			if ntype == "event" {
-				if g.db.NodeToID(node) == event {
-					found = true
-				}
-			} else if g.InEventScope(node, event) {
-				found = true
-			}
-
-			if found {
-				results = append(results, node)
-				break
-			}
+	for _, id := range g.nodeIDsOfType(ntype, events...) {
+		if node, err := g.db.ReadNode(id, ntype); err == nil {
+			nodes = append(nodes, node)
 		}
 	}
 
-	if len(results) == 0 {
-		return results, errors.New("Graph: AllNodesOfType: No nodes found")
+	if len(nodes) == 0 {
+		return nil, errors.New("Graph: AllNodesOfType: No nodes found")
+	}
+	return nodes, nil
+}
+
+func (g *Graph) nodeIDsOfType(ntype string, events ...string) []string {
+	g.db.Lock()
+	defer g.db.Unlock()
+
+	var eventVals []quad.Value
+	for _, event := range events {
+		eventVals = append(eventVals, quad.IRI(event))
 	}
 
-	return results, nil
+	p := cayley.StartPath(g.db.store, eventVals...)
+	if ntype != "event" {
+		p = p.Out()
+	}
+
+	var ids []string
+	p = p.Has(quad.IRI("type"), quad.String(ntype)).Unique()
+	p.Iterate(context.Background()).EachValue(nil, func(value quad.Value) {
+		ids = append(ids, valToStr(value))
+	})
+
+	return ids
 }
 
 // DumpGraph prints all data currently in the graph.

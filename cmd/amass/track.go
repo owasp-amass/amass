@@ -14,6 +14,7 @@ import (
 
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/graph"
+	amassnet "github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/stringset"
 	"github.com/fatih/color"
@@ -118,8 +119,7 @@ func runTrackCommand(clArgs []string) {
 
 	rand.Seed(time.Now().UTC().UnixNano())
 
-	cfg := new(config.Config)
-	cfg.LocalDatabase = true
+	cfg := config.NewConfig()
 	// Check if a configuration file was provided, and if so, load the settings
 	if err := config.AcquireConfig(args.Filepaths.Directory, args.Filepaths.ConfigFile, cfg); err == nil {
 		if args.Filepaths.Directory == "" {
@@ -190,18 +190,19 @@ func runTrackCommand(clArgs []string) {
 	earliest = earliest[begin:]
 	latest = latest[begin:]
 
+	cache := cacheWithData()
 	if len(uuids) == 1 {
-		printOneEvent(uuids, args.Domains.Slice(), earliest[0], latest[0], memDB)
+		printOneEvent(uuids, args.Domains.Slice(), earliest[0], latest[0], memDB, cache)
 		return
 	} else if args.Options.History {
-		completeHistoryOutput(uuids, args.Domains.Slice(), earliest, latest, memDB)
+		completeHistoryOutput(uuids, args.Domains.Slice(), earliest, latest, memDB, cache)
 		return
 	}
-	cumulativeOutput(uuids, args.Domains.Slice(), earliest, latest, memDB)
+	cumulativeOutput(uuids, args.Domains.Slice(), earliest, latest, memDB, cache)
 }
 
-func printOneEvent(uuid, domains []string, earliest, latest time.Time, db *graph.Graph) {
-	one := getScopedOutput(uuid, domains, db)
+func printOneEvent(uuid, domains []string, earliest, latest time.Time, db *graph.Graph, cache *amassnet.ASNCache) {
+	one := getScopedOutput(uuid, domains, db, cache)
 
 	blueLine()
 	fmt.Fprintf(color.Output, "%s\t%s%s%s\n%s\t%s%s%s\n", blue("Between"),
@@ -214,9 +215,9 @@ func printOneEvent(uuid, domains []string, earliest, latest time.Time, db *graph
 	}
 }
 
-func cumulativeOutput(uuids, domains []string, ea, la []time.Time, db *graph.Graph) {
+func cumulativeOutput(uuids, domains []string, ea, la []time.Time, db *graph.Graph, cache *amassnet.ASNCache) {
 	idx := len(uuids) - 1
-	cum := getScopedOutput(uuids[:idx], domains, db)
+	cum := getScopedOutput(uuids[:idx], domains, db, cache)
 
 	blueLine()
 	fmt.Fprintf(color.Output, "%s\t%s%s%s\n%s\t%s%s%s\n", blue("Between"),
@@ -225,7 +226,7 @@ func cumulativeOutput(uuids, domains []string, ea, la []time.Time, db *graph.Gra
 	blueLine()
 
 	var updates bool
-	out := getScopedOutput([]string{uuids[idx]}, domains, db)
+	out := getScopedOutput([]string{uuids[idx]}, domains, db, cache)
 	for _, d := range diffEnumOutput(cum, out) {
 		updates = true
 		fmt.Fprintln(color.Output, d)
@@ -235,10 +236,10 @@ func cumulativeOutput(uuids, domains []string, ea, la []time.Time, db *graph.Gra
 	}
 }
 
-func getScopedOutput(uuids, domains []string, db *graph.Graph) []*requests.Output {
+func getScopedOutput(uuids, domains []string, db *graph.Graph, cache *amassnet.ASNCache) []*requests.Output {
 	var output []*requests.Output
 
-	for _, out := range getEventOutput(uuids, false, db) {
+	for _, out := range getEventOutput(uuids, false, db, cache) {
 		if len(domains) > 0 && !domainNameInScope(out.Name, domains) {
 			continue
 		}
@@ -249,7 +250,7 @@ func getScopedOutput(uuids, domains []string, db *graph.Graph) []*requests.Outpu
 	return output
 }
 
-func completeHistoryOutput(uuids, domains []string, ea, la []time.Time, db *graph.Graph) {
+func completeHistoryOutput(uuids, domains []string, ea, la []time.Time, db *graph.Graph, cache *amassnet.ASNCache) {
 	var prev string
 
 	for i, uuid := range uuids {
@@ -268,8 +269,8 @@ func completeHistoryOutput(uuids, domains []string, ea, la []time.Time, db *grap
 		blueLine()
 
 		var updates bool
-		out1 := getScopedOutput([]string{prev}, domains, db)
-		out2 := getScopedOutput([]string{uuid}, domains, db)
+		out1 := getScopedOutput([]string{prev}, domains, db, cache)
+		out2 := getScopedOutput([]string{uuid}, domains, db, cache)
 		for _, d := range diffEnumOutput(out1, out2) {
 			updates = true
 			fmt.Fprintln(color.Output, d)

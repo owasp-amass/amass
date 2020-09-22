@@ -45,7 +45,7 @@ func (g *CayleyGraph) AllNodesOfType(ntypes ...string) ([]Node, error) {
 
 	var nodes []Node
 	filter = stringset.New()
-	g.optimizedIterate(p, func(value quad.Value) {
+	p.Iterate(context.Background()).EachValue(nil, func(value quad.Value) {
 		nstr := valToStr(value)
 
 		if !filter.Has(nstr) {
@@ -68,7 +68,7 @@ func (g *CayleyGraph) AllOutNodes(node Node) ([]Node, error) {
 	var nodes []Node
 	filter := stringset.New()
 	p := cayley.StartPath(g.store, quad.IRI(g.NodeToID(node))).Out().Has(quad.IRI("type"))
-	g.optimizedIterate(p, func(value quad.Value) {
+	p.Iterate(context.Background()).EachValue(nil, func(value quad.Value) {
 		nstr := valToStr(value)
 
 		if !filter.Has(nstr) {
@@ -181,7 +181,7 @@ func (g *CayleyGraph) nodeExists(id, ntype string) bool {
 	}
 
 	var found bool
-	if first := g.optimizedFirst(p); first != nil {
+	if first, err := p.Iterate(context.Background()).FirstValue(nil); err == nil && first != nil {
 		found = true
 	}
 

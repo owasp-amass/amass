@@ -15,6 +15,7 @@ import (
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/format"
 	"github.com/OWASP/Amass/v3/graph"
+	"github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/stringset"
 	"github.com/fatih/color"
@@ -56,7 +57,6 @@ func runDBCommand(clArgs []string) {
 
 	dbBuf := new(bytes.Buffer)
 	dbCommand.SetOutput(dbBuf)
-
 	args.Domains = stringset.New()
 
 	dbCommand.BoolVar(&help1, "h", false, "Show the program usage message")
@@ -84,7 +84,6 @@ func runDBCommand(clArgs []string) {
 		commandUsage(dbUsageMsg, dbCommand, dbBuf)
 		return
 	}
-
 	if err := dbCommand.Parse(clArgs); err != nil {
 		r.Fprintf(color.Error, "%v\n", err)
 		os.Exit(1)
@@ -93,7 +92,6 @@ func runDBCommand(clArgs []string) {
 		commandUsage(dbUsageMsg, dbCommand, dbBuf)
 		return
 	}
-
 	if args.Options.NoColor {
 		color.NoColor = true
 	}
@@ -101,7 +99,6 @@ func runDBCommand(clArgs []string) {
 		color.Output = ioutil.Discard
 		color.Error = ioutil.Discard
 	}
-
 	if args.Filepaths.Domains != "" {
 		list, err := config.GetListFromFile(args.Filepaths.Domains)
 		if err != nil {
@@ -111,8 +108,7 @@ func runDBCommand(clArgs []string) {
 		args.Domains.InsertMany(list...)
 	}
 
-	cfg := new(config.Config)
-	cfg.LocalDatabase = true
+	cfg := config.NewConfig()
 	// Check if a configuration file was provided, and if so, load the settings
 	if err := config.AcquireConfig(args.Filepaths.Directory, args.Filepaths.ConfigFile, cfg); err == nil {
 		if args.Filepaths.Directory == "" {
@@ -139,36 +135,30 @@ func runDBCommand(clArgs []string) {
 		r.Fprintln(color.Error, err.Error())
 		os.Exit(1)
 	}
-
 	// Get all the UUIDs for events that have information in scope
 	uuids := memDB.EventList()
 	if len(uuids) == 0 {
 		r.Fprintln(color.Error, "Failed to find the domains of interest in the database")
 		os.Exit(1)
 	}
-
 	if args.Options.ListEnumerations {
 		listEvents(uuids, memDB)
 		return
 	}
-
 	if args.Options.ShowAll || args.Filepaths.JSONOutput != "" {
 		args.Options.DiscoveredNames = true
 		args.Options.ASNTableSummary = true
 	}
-
 	if !args.Options.DiscoveredNames && !args.Options.ASNTableSummary {
 		commandUsage(dbUsageMsg, dbCommand, dbBuf)
 		return
 	}
-
 	// Put the events in chronological order
 	uuids, _, _ = orderedEvents(uuids, memDB)
 	if len(uuids) == 0 {
 		r.Fprintln(color.Error, "Failed to sort the events")
 		os.Exit(1)
 	}
-
 	// Select the enumeration that the user specified
 	if args.Enum > 0 && len(uuids) >= args.Enum {
 		idx := len(uuids) - args.Enum
@@ -179,11 +169,6 @@ func runDBCommand(clArgs []string) {
 	var asninfo bool
 	if args.Options.ASNTableSummary {
 		asninfo = true
-		fgY.Fprintln(color.Error, "Could take a moment while acquiring AS network information")
-		// Migrate the changes back to the persistent db
-		if healASInfo(uuids, memDB) {
-			memDB.MigrateEvents(db, uuids...)
-		}
 	}
 
 	showEventData(&args, uuids, asninfo, memDB)
@@ -231,9 +216,16 @@ func showEventData(args *dbArgs, uuids []string, asninfo bool, db *graph.Graph) 
 		outfile.Seek(0, 0)
 	}
 
+	var cache *net.ASNCache
+	if asninfo {
+		//cache = cacheWithData()
+		cache = net.NewASNCache()
+		db.ASNCacheFill(cache)
+	}
+
 	tags := make(map[string]int)
 	asns := make(map[int]*format.ASNSummaryData)
-	for _, out := range getEventOutput(uuids, asninfo, db) {
+	for _, out := range getEventOutput(uuids, asninfo, db, cache) {
 		if len(domains) > 0 && !domainNameInScope(out.Name, domains) {
 			continue
 		}
