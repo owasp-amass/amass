@@ -218,7 +218,6 @@ func showEventData(args *dbArgs, uuids []string, asninfo bool, db *graph.Graph) 
 
 	var cache *net.ASNCache
 	if asninfo {
-		//cache = cacheWithData()
 		cache = net.NewASNCache()
 		db.ASNCacheFill(cache)
 	}

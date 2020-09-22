@@ -55,6 +55,11 @@ func NewLocalSystem(c *config.Config) (*LocalSystem, error) {
 		rlimit:     ratelimit.New(c.MaxDNSQueries),
 	}
 
+	// Load the ASN information into the cache
+	if err := sys.loadCacheData(); err != nil {
+		sys.Shutdown()
+		return nil, err
+	}
 	// Make sure that the output directory is setup for this local system
 	if err := sys.setupOutputDirectory(); err != nil {
 		sys.Shutdown()
@@ -66,7 +71,6 @@ func NewLocalSystem(c *config.Config) (*LocalSystem, error) {
 		return nil, err
 	}
 
-	go sys.loadCacheData()
 	go sys.manageDataSources()
 	return sys, nil
 }
