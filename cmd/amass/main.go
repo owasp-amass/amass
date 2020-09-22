@@ -4,7 +4,7 @@
 
 // In-depth Attack Surface Mapping and Asset Discovery
 //  +----------------------------------------------------------------------------+
-//  | ░░░░░░░░░░░░░░░░░░░░░░░░░░  OWASP Amass  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ |
+//  | ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  OWASP Amass  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ |
 //  +----------------------------------------------------------------------------+
 //  |      .+++:.            :                             .+++.                 |
 //  |    +W@@@@@@8        &+W@#               o8W8:      +W@@@@@@#.   oW@@@W#+   |
@@ -102,7 +102,6 @@ func main() {
 		commandUsage(mainUsageMsg, mainFlagSet, defaultBuf)
 		return
 	}
-
 	if err := mainFlagSet.Parse(os.Args[1:]); err != nil {
 		r.Fprintf(color.Error, "%v\n", err)
 		os.Exit(1)
@@ -315,9 +314,8 @@ func memGraphForScope(domains []string, from *graph.Graph) (*graph.Graph, error)
 	return db, nil
 }
 
-func getEventOutput(uuids []string, asninfo bool, db *graph.Graph) []*requests.Output {
+func getEventOutput(uuids []string, asninfo bool, db *graph.Graph, cache *amassnet.ASNCache) []*requests.Output {
 	var output []*requests.Output
-	cache := amassnet.NewASNCache()
 	filter := stringfilter.NewStringFilter()
 
 	for i := len(uuids) - 1; i >= 0; i-- {
@@ -344,17 +342,20 @@ func domainNameInScope(name string, scope []string) bool {
 }
 
 func healASInfo(uuids []string, db *graph.Graph) bool {
-	cache := amassnet.NewASNCache()
-	db.ASNCacheFill(cache)
-
 	cfg := config.NewConfig()
 	cfg.LocalDatabase = false
+
 	sys, err := systems.NewLocalSystem(cfg)
 	if err != nil {
 		return false
 	}
 	sys.SetDataSources(datasrcs.GetAllSources(sys, true))
 	defer sys.Shutdown()
+
+	cache := sys.Cache()
+	for _, g := range sys.GraphDatabases() {
+		g.ASNCacheFill(cache)
+	}
 
 	bus := eventbus.NewEventBus()
 	bus.Subscribe(requests.NewASNTopic, cache.Update)
@@ -375,7 +376,10 @@ func healASInfo(uuids []string, db *graph.Graph) bool {
 					src.ASNRequest(ctx, &requests.ASNRequest{Address: a.Address.String()})
 				}
 
-				for cache.AddrSearch(a.Address.String()) == nil {
+				for i := 0; i < 30; i++ {
+					if cache.AddrSearch(a.Address.String()) != nil {
+						break
+					}
 					time.Sleep(time.Second)
 				}
 
@@ -416,4 +420,24 @@ func assignNetInterface(iface *net.Interface) error {
 
 	amassnet.LocalAddr = best
 	return nil
+}
+
+func cacheWithData() *amassnet.ASNCache {
+	ranges, err := config.GetIP2ASNData()
+	if err != nil {
+		return nil
+	}
+
+	cache := amassnet.NewASNCache()
+	for _, r := range ranges {
+		cache.Update(&requests.ASNRequest{
+			Address:     r.FirstIP.String(),
+			ASN:         r.ASN,
+			CC:          r.CC,
+			Prefix:      amassnet.Range2CIDR(r.FirstIP, r.LastIP).String(),
+			Description: r.Description,
+		})
+	}
+
+	return cache
 }
