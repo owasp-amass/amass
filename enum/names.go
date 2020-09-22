@@ -159,10 +159,8 @@ func (r *SubdomainManager) InputName(req *requests.DNSRequest) {
 	if req == nil || req.Name == "" || req.Domain == "" {
 		return
 	}
-
 	// Clean up the newly discovered name and domain
 	requests.SanitizeDNSRequest(req)
-
 	// Send every resolved name and associated DNS records to the data manager
 	r.enum.dataMgr.DNSRequest(r.enum.ctx, req)
 
@@ -298,8 +296,7 @@ func (r *SubdomainManager) checkSubdomain(req *requests.DNSRequest) {
 	times := r.timesForSubdomain(sub)
 
 	if sub != req.Domain {
-		r.enum.Bus.Publish(requests.SubDiscoveredTopic,
-			eventbus.PriorityHigh, r.enum.ctx, subreq, times)
+		r.enum.Bus.Publish(requests.SubDiscoveredTopic, eventbus.PriorityHigh, r.enum.ctx, subreq, times)
 	}
 
 	r.subqueue.Append(&subQueueElement{
@@ -368,6 +365,7 @@ func (r *NameManager) InputName(req *requests.DNSRequest) {
 	if req == nil || req.Name == "" || req.Domain == "" {
 		return
 	}
+
 	// Clean up the newly discovered name and domain
 	requests.SanitizeDNSRequest(req)
 	// Check that this name has not already been processed
