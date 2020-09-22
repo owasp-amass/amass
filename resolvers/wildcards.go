@@ -8,11 +8,13 @@ import (
 	"fmt"
 	"math/rand"
 	"strings"
+	"time"
 
 	"github.com/OWASP/Amass/v3/eventbus"
 	"github.com/OWASP/Amass/v3/queue"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/stringset"
+	"github.com/miekg/dns"
 )
 
 // Constants related to DNS labels.
@@ -162,7 +164,7 @@ func (r *BaseResolver) wildcardRequest(wildcards map[string]*wildcard, req *wild
 		return
 	} else if found && w.beingTested {
 		// Wait for the test to complete
-		r.wildcardChannels.WildcardReq.Append(req)
+		go r.delayAppend(req)
 		return
 	}
 
@@ -173,6 +175,11 @@ func (r *BaseResolver) wildcardRequest(wildcards map[string]*wildcard, req *wild
 		beingTested:  true,
 	}
 	go r.wildcardTest(req.Ctx, req.Sub)
+	go r.delayAppend(req)
+}
+
+func (r *BaseResolver) delayAppend(req *wildcardReq) {
+	time.Sleep(time.Second)
 	r.wildcardChannels.WildcardReq.Append(req)
 }
 
@@ -231,7 +238,9 @@ func (r *BaseResolver) wildcardTest(ctx context.Context, sub string) {
 
 		var ans []requests.DNSAnswer
 		for _, t := range wildcardQueryTypes {
-			if a, _, err := r.Resolve(ctx, name, t, PriorityCritical); err == nil {
+			if a, err := r.Resolve(ctx, name, t, PriorityCritical, func(times int, priority int, msg *dns.Msg) bool {
+				return times < 3
+			}); err == nil {
 				if len(a) > 0 {
 					retRecords = true
 					ans = append(ans, a...)
