@@ -146,7 +146,8 @@ func GetAllSourceInfo(cfg *config.Config) []string {
 	if err != nil {
 		return names
 	}
-	sys.SetDataSources(datasrcs.GetAllSources(sys, false))
+	srcs := datasrcs.SelectedDataSources(cfg, datasrcs.GetAllSources(sys, false))
+	sys.SetDataSources(srcs)
 
 	names = append(names, fmt.Sprintf("%-35s%-35s%s", blue("Data Source"), blue("| Type"), blue("| Available")))
 	var line string

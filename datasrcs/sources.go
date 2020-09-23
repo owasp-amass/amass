@@ -12,6 +12,7 @@ import (
 	"github.com/OWASP/Amass/v3/eventbus"
 	"github.com/OWASP/Amass/v3/net/dns"
 	"github.com/OWASP/Amass/v3/requests"
+	"github.com/OWASP/Amass/v3/stringset"
 	"github.com/OWASP/Amass/v3/systems"
 )
 
@@ -65,6 +66,39 @@ func GetAllSources(sys systems.System, check bool) []requests.Service {
 		return srvs[i].String() < srvs[j].String()
 	})
 	return srvs
+}
+
+type sortedSources []requests.Service
+
+func (s sortedSources) Len() int           { return len(s) }
+func (s sortedSources) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+func (s sortedSources) Less(i, j int) bool { return s[i].String() < s[j].String() }
+
+// SelectedDataSources uses the config and available data sources to return the selected data sources.
+func SelectedDataSources(cfg *config.Config, avail []requests.Service) []requests.Service {
+	specified := stringset.New()
+	specified.InsertMany(cfg.SourceFilter.Sources...)
+
+	available := stringset.New()
+	for _, src := range avail {
+		available.Insert(src.String())
+	}
+
+	if specified.Len() > 0 && cfg.SourceFilter.Include {
+		available.Intersect(specified)
+	} else {
+		available.Subtract(specified)
+	}
+
+	var results sortedSources
+	for _, src := range avail {
+		if available.Has(src.String()) {
+			results = append(results, src)
+		}
+	}
+
+	sort.Sort(results)
+	return results
 }
 
 func genNewNameEvent(ctx context.Context, sys systems.System, srv requests.Service, name string) {
