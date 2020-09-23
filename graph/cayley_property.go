@@ -33,7 +33,7 @@ func (g *CayleyGraph) InsertProperty(node Node, predicate, value string) error {
 	if !g.isBolt || !g.noSync {
 		// Check if the property has already been inserted
 		p := cayley.StartPath(g.store, quad.IRI(nstr)).Has(quad.IRI(predicate), quad.String(value))
-		if first := g.optimizedFirst(p); first != nil {
+		if first, err := p.Iterate(context.Background()).FirstValue(nil); err == nil && first != nil {
 			return nil
 		}
 	}
@@ -112,7 +112,7 @@ func (g *CayleyGraph) CountProperties(node Node, predicates ...string) (int, err
 	}
 
 	var count int
-	g.optimizedIterate(p, func(value quad.Value) {
+	p.Iterate(context.Background()).EachValue(nil, func(value quad.Value) {
 		if !isIRI(value) {
 			count++
 		}
@@ -133,7 +133,7 @@ func (g *CayleyGraph) DeleteProperty(node Node, predicate, value string) error {
 	if !g.isBolt || !g.noSync {
 		// Check if the property exists on the node
 		p := cayley.StartPath(g.store, quad.IRI(nstr)).Has(quad.IRI(predicate), quad.String(value))
-		if first := g.optimizedFirst(p); first == nil {
+		if first, err := p.Iterate(context.Background()).FirstValue(nil); err != nil || first == nil {
 			return fmt.Errorf("%s: DeleteProperty: The property does not exist on node: %s", g.String(), nstr)
 		}
 	}

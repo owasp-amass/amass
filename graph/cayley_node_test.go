@@ -130,7 +130,7 @@ func TestInsertNode(t *testing.T) {
 
 	// Check if the node was properly entered into the graph database
 	p := cayley.StartPath(g.store, quad.IRI(name)).Has(quad.IRI("type"), quad.String(name))
-	if first := g.optimizedFirst(p); valToStr(first) != "test" {
+	if first, err := p.Iterate(context.Background()).FirstValue(nil); err != nil || valToStr(first) != "test" {
 		t.Errorf("InsertNode failed to enter the node: expected %s and got %s", name, valToStr(first))
 	}
 }
@@ -195,7 +195,7 @@ func TestDeleteNode(t *testing.T) {
 
 	// Check that no quads with 'Bob' as a subject exist
 	p := cayley.StartPath(g.store, vBob).Out()
-	if count := g.optimizedCount(p); count != 0 {
+	if count, err := p.Iterate(context.Background()).Count(); err == nil && count != 0 {
 		t.Errorf("DeleteNode did not remove all the quads with 'Bob' as the subject")
 	}
 }

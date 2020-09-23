@@ -28,14 +28,14 @@ func (g *Graph) MigrateEvents(to *Graph, uuids ...string) error {
 	// Build quads for the events in scope
 	p := cayley.StartPath(g.db.store, events...).Has(quad.IRI("type"), quad.String("event"))
 	p = p.Tag("subject").OutWithTags([]string{"predicate"}).Tag("object")
-	p.Iterate(context.TODO()).TagValues(nil, func(m map[string]quad.Value) {
+	p.Iterate(context.Background()).TagValues(nil, func(m map[string]quad.Value) {
 		vals = append(vals, m["object"])
 		quads = append(quads, quad.Make(m["subject"], m["predicate"], m["object"], nil))
 	})
 	// Build quads for all nodes associated with the events in scope
 	p = cayley.StartPath(g.db.store, vals...).Has(quad.IRI("type")).Unique()
 	p = p.Tag("subject").OutWithTags([]string{"predicate"}).Tag("object")
-	p.Iterate(context.TODO()).TagValues(nil, func(m map[string]quad.Value) {
+	p.Iterate(context.Background()).TagValues(nil, func(m map[string]quad.Value) {
 		quads = append(quads, quad.Make(m["subject"], m["predicate"], m["object"], nil))
 	})
 
@@ -67,7 +67,7 @@ func (g *Graph) MigrateEventsInScope(to *Graph, d []string) error {
 	// Obtain the events that are in scope according to the domain name arguments
 	p := cayley.StartPath(g.db.store).Has(quad.IRI("type"), quad.String("event")).Tag("event")
 	p = p.Out(quad.IRI("domain")).And(cayley.StartPath(g.db.store, domains...)).Back("event").Unique().Tag("uuid")
-	p.Iterate(context.TODO()).TagValues(nil, func(m map[string]quad.Value) {
+	p.Iterate(context.Background()).TagValues(nil, func(m map[string]quad.Value) {
 		uuids = append(uuids, valToStr(m["uuid"]))
 	})
 	g.db.Unlock()

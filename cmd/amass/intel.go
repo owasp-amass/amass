@@ -345,9 +345,6 @@ func (i intelArgs) OverrideConfig(conf *config.Config) error {
 	if i.Filepaths.Directory != "" {
 		conf.Dir = i.Filepaths.Directory
 	}
-	if i.MaxDNSQueries > 0 {
-		conf.MaxDNSQueries = i.MaxDNSQueries
-	}
 	if i.Timeout > 0 {
 		conf.Timeout = i.Timeout
 	}
@@ -355,7 +352,10 @@ func (i intelArgs) OverrideConfig(conf *config.Config) error {
 		conf.Verbose = true
 	}
 	if i.Resolvers.Len() > 0 {
-		conf.SetResolvers(i.Resolvers.Slice())
+		conf.SetResolvers(i.Resolvers.Slice()...)
+	}
+	if i.MaxDNSQueries > 0 {
+		conf.MaxDNSQueries = i.MaxDNSQueries
 	}
 	if !i.Options.MonitorResolverRate {
 		conf.MonitorResolverRate = false
@@ -370,6 +370,6 @@ func (i intelArgs) OverrideConfig(conf *config.Config) error {
 	}
 
 	// Attempt to add the provided domains to the configuration
-	conf.AddDomains(i.Domains.Slice())
+	conf.AddDomains(i.Domains.Slice()...)
 	return nil
 }

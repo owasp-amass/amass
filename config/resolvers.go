@@ -11,8 +11,6 @@ import (
 	"github.com/go-ini/ini"
 )
 
-const defaultConcurrentDNSQueries = 4000
-
 var defaultPublicResolvers = []string{
 	"1.1.1.1",     // Cloudflare
 	"8.8.8.8",     // Google
@@ -25,7 +23,7 @@ var defaultPublicResolvers = []string{
 }
 
 // SetResolvers assigns the resolver names provided in the parameter to the list in the configuration.
-func (c *Config) SetResolvers(resolvers []string) {
+func (c *Config) SetResolvers(resolvers ...string) {
 	c.Resolvers = []string{}
 
 	for _, r := range resolvers {
@@ -34,7 +32,7 @@ func (c *Config) SetResolvers(resolvers []string) {
 }
 
 // AddResolvers appends the resolver names provided in the parameter to the list in the configuration.
-func (c *Config) AddResolvers(resolvers []string) {
+func (c *Config) AddResolvers(resolvers ...string) {
 	for _, r := range resolvers {
 		c.AddResolver(r)
 	}
@@ -71,10 +69,10 @@ func (c *Config) loadResolverSettings(cfg *ini.File) error {
 }
 
 func (c *Config) calcDNSQueriesMax() {
-	max := len(c.Resolvers) * 500
+	max := len(c.Resolvers) * 250
 
-	if max < 500 {
-		max = 500
+	if max < 250 {
+		max = 250
 	} else if max > 100000 {
 		max = 100000
 	}

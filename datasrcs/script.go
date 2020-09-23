@@ -13,7 +13,6 @@ import (
 	"github.com/OWASP/Amass/v3/eventbus"
 	"github.com/OWASP/Amass/v3/net/dns"
 	"github.com/OWASP/Amass/v3/requests"
-	"github.com/OWASP/Amass/v3/stringfilter"
 	"github.com/OWASP/Amass/v3/systems"
 	luaurl "github.com/cjoudrey/gluaurl"
 	lua "github.com/yuin/gopher-lua"
@@ -38,8 +37,7 @@ type Script struct {
 	resolved   lua.LValue
 	subdomain  lua.LValue
 	// Regexp to match any subdomain name
-	subre  *regexp.Regexp
-	filter *stringfilter.StringFilter
+	subre *regexp.Regexp
 }
 
 // NewScript returns he object initialized, but not yet started.
@@ -267,8 +265,6 @@ func (s *Script) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, s.String())
 	bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 		fmt.Sprintf("Querying %s for %s subdomains", s.String(), req.Domain))
-	// Create a new filter specific to this request
-	s.filter = stringfilter.NewStringFilter()
 
 	err = L.CallByParam(lua.P{
 		Fn:      s.vertical,
@@ -280,8 +276,6 @@ func (s *Script) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: vertical callback: %v", s.String(), err))
 	}
-
-	s.filter = nil
 }
 
 // OnResolved implements the Service interface.
@@ -308,8 +302,6 @@ func (s *Script) OnResolved(ctx context.Context, req *requests.DNSRequest) {
 	}
 
 	s.CheckRateLimit()
-	// Create a new filter specific to this request
-	s.filter = stringfilter.NewStringFilter()
 
 	err = L.CallByParam(lua.P{
 		Fn:      s.resolved,
@@ -321,8 +313,6 @@ func (s *Script) OnResolved(ctx context.Context, req *requests.DNSRequest) {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: resolved callback: %v", s.String(), err))
 	}
-
-	s.filter = nil
 }
 
 // OnSubdomainDiscovered implements the Service interface.
@@ -339,8 +329,6 @@ func (s *Script) OnSubdomainDiscovered(ctx context.Context, req *requests.DNSReq
 	}
 
 	s.CheckRateLimit()
-	// Create a new filter specific to this request
-	s.filter = stringfilter.NewStringFilter()
 
 	err = L.CallByParam(lua.P{
 		Fn:      s.subdomain,
@@ -352,8 +340,6 @@ func (s *Script) OnSubdomainDiscovered(ctx context.Context, req *requests.DNSReq
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: subdomain callback: %v", s.String(), err))
 	}
-
-	s.filter = nil
 }
 
 // OnAddrRequest implements the Service interface.
@@ -371,8 +357,6 @@ func (s *Script) OnAddrRequest(ctx context.Context, req *requests.AddrRequest) {
 
 	s.CheckRateLimit()
 	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, s.String())
-	// Create a new filter specific to this request
-	s.filter = stringfilter.NewStringFilter()
 
 	err = L.CallByParam(lua.P{
 		Fn:      s.address,
@@ -384,8 +368,6 @@ func (s *Script) OnAddrRequest(ctx context.Context, req *requests.AddrRequest) {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: address callback: %v", s.String(), err))
 	}
-
-	s.filter = nil
 }
 
 // OnASNRequest implements the Service interface.

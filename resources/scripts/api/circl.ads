@@ -31,15 +31,16 @@ function vertical(ctx, domain)
         c = cfg.credentials
     end
 
-    if (c == nil or c.username == "" or c.password == "") then
+    if (c == nil or c.username == nil or 
+        c.username == "" or c.password == nil or c.password == "") then
         return
     end
 
     local page, err = request({
         url=buildurl(domain),
         headers={['Content-Type']="application/json"},
-        id=api['username'],
-        pass=api['password'],
+        id=c['username'],
+        pass=c['password'],
     })
     if (err ~= nil and err ~= "") then
         return

@@ -157,7 +157,6 @@ func NewConfig() *Config {
 		UUID:                uuid.New(),
 		Log:                 log.New(ioutil.Discard, "", 0),
 		Ports:               []int{443},
-		MaxDNSQueries:       defaultConcurrentDNSQueries,
 		MinForRecursive:     1,
 		Resolvers:           defaultPublicResolvers,
 		MonitorResolverRate: true,
@@ -173,6 +172,7 @@ func NewConfig() *Config {
 		Recursive:      true,
 	}
 
+	c.calcDNSQueriesMax()
 	return c
 }
 
@@ -270,6 +270,7 @@ func AcquireConfig(dir, file string, config *Config) error {
 			return nil
 		}
 	}
+	// Attempt to obtain the configuration file from the output directory
 	if dir = OutputDirectory(dir); dir != "" {
 		if finfo, err := os.Stat(dir); !os.IsNotExist(err) && finfo.IsDir() {
 			file := filepath.Join(dir, "config.ini")

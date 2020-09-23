@@ -33,11 +33,11 @@ func TestAddDomains(t *testing.T) {
 	c := NewConfig()
 	example := "owasp.org/test"
 	list := []string{"owasp.org", "google.com", "yahoo.com"}
-	c.AddDomains(list)
+	c.AddDomains(list...)
 	got := c.Domains()
 	sort.Strings(list)
 	sort.Strings(got)
-	c.AddDomains(list)
+	c.AddDomains(list...)
 
 	if !reflect.DeepEqual(list, got) {
 		t.Errorf("Domains do not match.\nWanted:%v\nGot:%v\n", list, got)

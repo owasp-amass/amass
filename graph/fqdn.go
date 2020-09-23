@@ -23,7 +23,12 @@ func (g *Graph) InsertFQDN(name, source, tag, eventID string) (Node, error) {
 	}
 
 	// Create the graph nodes that represent the three portions of the DNS name
-	fqdnNode, err := g.InsertNodeIfNotExist(name, "fqdn")
+	fqdnNode, err := g.db.ReadNode(name, "fqdn")
+	if err == nil {
+		return fqdnNode, err
+	}
+
+	fqdnNode, err = g.db.InsertNode(name, "fqdn")
 	if err != nil {
 		return fqdnNode, err
 	}

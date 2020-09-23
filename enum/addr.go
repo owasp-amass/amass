@@ -83,8 +83,8 @@ func (r *AddressManager) OutputNames(num int) []*requests.DNSRequest {
 	return []*requests.DNSRequest{}
 }
 
-// InputAddress is unique to the AddressManager and uses the AddrRequest argument
-// for reverse DNS queries in order to discover additional names in scope.
+// InputAddress uses the AddrRequest argument for reverse
+// DNS queries in order to discover additional names in scope.
 func (r *AddressManager) InputAddress(req *requests.AddrRequest) {
 	if req == nil || req.Address == "" {
 		return
@@ -147,7 +147,6 @@ func (r *AddressManager) Stop() error {
 }
 
 func (r *AddressManager) processAddress(req *requests.AddrRequest, resolved bool) {
-	r.enum.asMgr.AddrRequest(r.enum.ctx, req)
 	r.reverseDNSSweep(req.Address)
 
 	if r.enum.Config.Active && resolved {
@@ -177,14 +176,13 @@ func (r *AddressManager) reverseDNSSweep(addr string) {
 			continue
 		}
 
-		r.enum.Sys.PerformDNSQuery(r.enum.ctx)
+		r.enum.Sys.PerformDNSQuery()
 		r.enum.reverseDNSQuery(a)
-		r.enum.Sys.FinishedDNSQuery()
 	}
 }
 
 func (e *Enumeration) getAddrCIDR(addr string) *net.IPNet {
-	if r := e.asMgr.Cache.AddrSearch(addr); r != nil {
+	if r := e.Sys.Cache().AddrSearch(addr); r != nil {
 		if _, cidr, err := net.ParseCIDR(r.Prefix); err == nil {
 			return cidr
 		}
@@ -208,7 +206,15 @@ func (e *Enumeration) getAddrCIDR(addr string) *net.IPNet {
 func (e *Enumeration) reverseDNSQuery(ip string) {
 	e.Bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, "Reverse DNS")
 
-	ptr, answer, err := e.Sys.Pool().Reverse(e.ctx, ip, resolvers.PriorityLow)
+	ptr, answer, err := e.Sys.Pool().Reverse(e.ctx, ip, resolvers.PriorityLow, func(times int, priority int, msg *dns.Msg) bool {
+		var retry bool
+
+		if resolvers.PoolRetryPolicy(times, priority, msg) {
+			e.Sys.PerformDNSQuery()
+			retry = true
+		}
+		return retry
+	})
 	if err != nil {
 		return
 	}
