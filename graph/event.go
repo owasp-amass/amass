@@ -4,6 +4,7 @@
 package graph
 
 import (
+	"context"
 	"errors"
 	"time"
 
@@ -121,17 +122,15 @@ func (g *Graph) EventsInScope(d ...string) []string {
 	g.db.Lock()
 	defer g.db.Unlock()
 
-	var events []string
 	var domains []quad.Value
-
 	for _, domain := range d {
 		domains = append(domains, quad.IRI(domain))
 	}
 
+	var events []string
 	p := cayley.StartPath(g.db.store).Has(quad.IRI("type"), quad.String("event")).Tag("event")
 	p = p.Out(quad.IRI("domain")).Is(domains...).Back("event").Unique()
-
-	g.db.optimizedIterate(p, func(value quad.Value) {
+	p.Iterate(context.Background()).EachValue(nil, func(value quad.Value) {
 		events = append(events, valToStr(value))
 	})
 
@@ -155,19 +154,21 @@ func (g *Graph) EventList() []string {
 
 // EventFQDNs returns the domains that were involved in the event.
 func (g *Graph) EventFQDNs(uuid string) []string {
-	names, err := g.AllNodesOfType("fqdn", uuid)
-	if err != nil {
-		return nil
-	}
+	g.db.Lock()
+	defer g.db.Unlock()
 
-	set := stringset.New()
-	for _, name := range names {
-		if n := g.db.NodeToID(name); n != "" {
-			set.Insert(n)
-		}
-	}
+	event := quad.IRI(uuid)
+	ntype := quad.IRI("type")
+	fqdn := quad.String("fqdn")
 
-	return set.Slice()
+	names := stringset.New()
+	p := cayley.StartPath(g.db.store).Has(ntype, fqdn).Tag("name")
+	p = p.Out(quad.IRI("root")).In(quad.IRI("domain")).Is(event).Back("name")
+	p.Iterate(context.Background()).EachValue(nil, func(value quad.Value) {
+		names.Insert(valToStr(value))
+	})
+
+	return names.Slice()
 }
 
 // EventDomains returns the domains that were involved in the event.

@@ -190,7 +190,7 @@ func performResolutions(cfg *config.Config, sys systems.System) {
 				cancel()
 				return
 			default:
-				if sys.PerformDNSQuery(ctx) == nil {
+				if sys.PerformDNSQuery() == nil {
 					go processDNSRequest(ctx, &requests.DNSRequest{Name: name}, cfg, sys, answers)
 				}
 			}
@@ -202,7 +202,6 @@ func performResolutions(cfg *config.Config, sys systems.System) {
 
 func processDNSRequest(ctx context.Context, req *requests.DNSRequest,
 	cfg *config.Config, sys systems.System, c chan *requests.DNSRequest) {
-	defer sys.FinishedDNSQuery()
 
 	if req == nil || req.Name == "" {
 		c <- nil
@@ -222,7 +221,7 @@ func processDNSRequest(ctx context.Context, req *requests.DNSRequest,
 
 	var answers []requests.DNSAnswer
 	for _, t := range cfg.RecordTypes {
-		a, _, err := sys.Pool().Resolve(ctx, req.Name, t, resolvers.PriorityLow)
+		a, err := sys.Pool().Resolve(ctx, req.Name, t, resolvers.PriorityLow, resolvers.RetryPolicy)
 		if err == nil {
 			answers = append(answers, a...)
 		}
@@ -338,9 +337,6 @@ func (d dnsArgs) OverrideConfig(conf *config.Config) error {
 	if d.Filepaths.Directory != "" {
 		conf.Dir = d.Filepaths.Directory
 	}
-	if d.MaxDNSQueries > 0 {
-		conf.MaxDNSQueries = d.MaxDNSQueries
-	}
 	if len(d.Names) > 0 {
 		conf.ProvidedNames = d.Names.Slice()
 	}
@@ -370,14 +366,17 @@ func (d dnsArgs) OverrideConfig(conf *config.Config) error {
 		conf.RecordTypes = []string{"A"}
 	}
 	if d.Resolvers.Len() > 0 {
-		conf.SetResolvers(d.Resolvers.Slice())
+		conf.SetResolvers(d.Resolvers.Slice()...)
+	}
+	if d.MaxDNSQueries > 0 {
+		conf.MaxDNSQueries = d.MaxDNSQueries
 	}
 	if !d.Options.MonitorResolverRate {
 		conf.MonitorResolverRate = false
 	}
 
 	// Attempt to add the provided domains to the configuration
-	conf.AddDomains(d.Domains.Slice())
+	conf.AddDomains(d.Domains.Slice()...)
 	return nil
 }
 

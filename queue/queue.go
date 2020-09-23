@@ -88,13 +88,9 @@ func (q *Queue) append(data interface{}, priority int) {
 
 // SendSignal puts an element on the queue signal channel.
 func (q *Queue) SendSignal() {
-	// Empty the channel
-	select {
-	case <-q.Signal:
-	default:
+	if len(q.Signal) == 0 {
+		q.Signal <- struct{}{}
 	}
-
-	q.Signal <- struct{}{}
 }
 
 // Next returns the data at the front of the Queue.
@@ -108,6 +104,9 @@ func (q *Queue) Next() (interface{}, bool) {
 		element := heap.Pop(&q.queue).(*queueElement)
 		ok = true
 		data = element.Data
+	}
+	if q.queue.Len() == 0 && len(q.Signal) > 0 {
+		<-q.Signal
 	}
 
 	return data, ok

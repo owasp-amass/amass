@@ -5,6 +5,8 @@ package queue
 
 import (
 	"testing"
+
+	"github.com/OWASP/Amass/v3/stringset"
 )
 
 func TestAppend(t *testing.T) {
@@ -17,6 +19,32 @@ func TestAppend(t *testing.T) {
 
 	if e, _ := queue.Next(); e != "testing" {
 		t.Errorf("The element was appended as %s instead of 'testing'", e.(string))
+	}
+}
+
+func TestSendSignal(t *testing.T) {
+	queue := NewQueue()
+
+	queue.SendSignal()
+	select {
+	case <-queue.Signal:
+	default:
+		t.Errorf("Explicitly calling SendSignal did not populate the channel")
+	}
+
+	queue.Append("element")
+	select {
+	case <-queue.Signal:
+	default:
+		t.Errorf("Use of the Append method did not populate the channel")
+	}
+
+	queue.SendSignal()
+	queue.Next()
+	select {
+	case <-queue.Signal:
+		t.Errorf("Using the Next method on the last element did not empty the channel")
+	default:
 	}
 }
 
@@ -37,6 +65,31 @@ func TestNext(t *testing.T) {
 
 	if _, b := queue.Next(); b != false {
 		t.Errorf("An empty Queue claimed to return another element")
+	}
+}
+
+func TestProcess(t *testing.T) {
+	queue := NewQueue()
+	set := stringset.New("element1", "element2")
+
+	for e := range set {
+		queue.Append(e)
+	}
+
+	ret := stringset.New()
+	queue.Process(func(e interface{}) {
+		if s, ok := e.(string); ok {
+			ret.Insert(s)
+		}
+	})
+
+	set.Subtract(ret)
+	if set.Len() > 0 {
+		t.Errorf("Not all elements of the queue were provided")
+	}
+
+	if queue.Len() > 0 {
+		t.Errorf("The queue was not empty after executing the Process method")
 	}
 }
 

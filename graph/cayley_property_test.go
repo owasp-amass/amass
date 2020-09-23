@@ -4,6 +4,7 @@
 package graph
 
 import (
+	"context"
 	"testing"
 
 	"github.com/OWASP/Amass/v3/stringset"
@@ -36,7 +37,7 @@ func TestInsertProperty(t *testing.T) {
 	}
 
 	p := cayley.StartPath(g.store, vBob).Has(quad.IRI("likes"), quad.String("coffee"))
-	if first := g.optimizedFirst(p); first == nil {
+	if first, err := p.Iterate(context.Background()).FirstValue(nil); err != nil || first == nil {
 		t.Errorf("InsertProperty failed to enter the property for the node")
 	}
 
@@ -177,7 +178,7 @@ func TestDeleteProperty(t *testing.T) {
 	}
 
 	p := cayley.StartPath(g.store, vBob).Has(quad.IRI("likes"), quad.String("coffee"))
-	if first := g.optimizedFirst(p); first != nil {
+	if first, err := p.Iterate(context.Background()).FirstValue(nil); err == nil && first != nil {
 		t.Errorf("DeleteProperty failed to delete the property from the node")
 	}
 

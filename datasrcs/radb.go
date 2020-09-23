@@ -55,8 +55,8 @@ func (r *RADb) Type() string {
 func (r *RADb) OnStart() error {
 	r.BaseService.OnStart()
 
-	if answers, _, err := r.sys.Pool().Resolve(context.TODO(),
-		radbWhoisURL, "A", resolvers.PriorityCritical); err == nil {
+	if answers, err := r.sys.Pool().Resolve(context.TODO(),
+		radbWhoisURL, "A", resolvers.PriorityCritical, resolvers.RetryPolicy); err == nil {
 		ip := answers[0].Data
 		if ip != "" {
 			r.addr = ip
@@ -319,7 +319,8 @@ func (r *RADb) ipToASN(ctx context.Context, cidr string) int {
 
 	r.CheckRateLimit()
 	if r.addr == "" {
-		answers, _, err := r.sys.Pool().Resolve(ctx, radbWhoisURL, "A", resolvers.PriorityHigh)
+		answers, err := r.sys.Pool().Resolve(ctx, radbWhoisURL,
+			"A", resolvers.PriorityHigh, resolvers.RetryPolicy)
 		if err != nil {
 			bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 				fmt.Sprintf("%s: %s: %v", r.String(), radbWhoisURL, err))

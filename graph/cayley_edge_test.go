@@ -4,6 +4,7 @@
 package graph
 
 import (
+	"context"
 	"testing"
 
 	"github.com/cayleygraph/cayley"
@@ -71,7 +72,7 @@ func TestInsertEdge(t *testing.T) {
 
 	// Check if the edge was successfully inserted
 	p := cayley.StartPath(g.store, vBob).Out(quad.IRI("knows")).Is(vAlice)
-	if first := g.optimizedFirst(p); first == nil {
+	if first, err := p.Iterate(context.Background()).FirstValue(nil); err != nil || first == nil {
 		t.Errorf("InsertEdge failed to insert the quad for the edge")
 	}
 
@@ -270,7 +271,7 @@ func TestDeleteEdge(t *testing.T) {
 
 	// Check if the edge was actually removed
 	p := cayley.StartPath(g.store, vBob).Out(quad.IRI("knows")).Is(vAlice)
-	if first := g.optimizedFirst(p); first != nil {
+	if first, err := p.Iterate(context.Background()).FirstValue(nil); err == nil && first != nil {
 		t.Errorf("DeleteEdge failed to remove the edge")
 	}
 }

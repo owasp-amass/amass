@@ -49,9 +49,11 @@ function vertical(ctx, domain)
             headers={['Content-Type']="application/json"},
         })
         if (err ~= nil and err ~= "") then
+            log(ctx, err .. ": " .. resp)
             return
         end
 
+        active(ctx)
         if (cfg.ttl ~= nil and cfg.ttl > 0) then
             cache_response(domain, resp)
         end
@@ -71,10 +73,8 @@ function vertical(ctx, domain)
         end
 
         local addrs = set["rawIp"]
-        if addrs ~= nil and #addrs > 0 then
-            for j, addr in pairs(addrs) do
-                newaddr(ctx, domain, addr)
-            end
+        if addr ~= nil then
+            newaddr(ctx, domain, addr)
         end
     end
 end

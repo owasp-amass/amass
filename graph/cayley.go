@@ -141,26 +141,6 @@ func (g *CayleyGraph) DumpGraph() string {
 	return out
 }
 
-func (g *CayleyGraph) optimizedIterate(p *cayley.Path, callback func(value quad.Value)) {
-	pb := p.Iterate(context.TODO())
-
-	pb.Paths(false).EachValue(g.store, callback)
-}
-
-func (g *CayleyGraph) optimizedCount(p *cayley.Path) int {
-	pb := p.Iterate(context.TODO())
-
-	count, _ := pb.Paths(false).Count()
-	return int(count)
-}
-
-func (g *CayleyGraph) optimizedFirst(p *cayley.Path) quad.Value {
-	pb := p.Iterate(context.TODO())
-
-	val, _ := pb.Paths(false).FirstValue(g.store)
-	return val
-}
-
 func isIRI(val quad.Value) bool {
 	_, ok := val.Native().(quad.IRI)
 

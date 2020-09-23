@@ -4,7 +4,9 @@
 name = "Brute Forcing"
 type = "brute"
 
-probes = {"www", "online", "webserver", "ns", "ns1", "mail", "smtp", "webmail", "prod", "test", "vpn", "ftp", "ssh"}
+probes = {"www", "online", "webserver", "ns", "ns1", "mail", "smtp", "webmail", "shop", "dev",
+            "prod", "test", "vpn", "ftp", "ssh", "secure", "whm", "admin", "webdisk", "mobile",
+            "remote", "server", "cpanel", "cloud", "autodiscover", "api", "m", "blog"}
 
 function vertical(ctx, domain)
     local cfg = config(ctx)
@@ -57,18 +59,7 @@ function makenames(ctx, base)
     local wordlist = brute_wordlist(ctx)
 
     for i, word in pairs(wordlist) do
-        sendnames(ctx, word .. "." .. base)
-    end
-end
-
-function sendnames(ctx, content)
-    local names = find(content, subdomainre)
-    if names == nil then
-        return
-    end
-
-    for i, v in pairs(names) do
-        newname(ctx, v)
+        newname(ctx, word .. "." .. base)
     end
 end
 

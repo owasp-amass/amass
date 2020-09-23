@@ -190,8 +190,8 @@ func (dms *DataManagerService) insertA(ctx context.Context, req *requests.DNSReq
 	bus.Publish(requests.NewAddrTopic, eventbus.PriorityHigh, &requests.AddrRequest{
 		Address: addr,
 		Domain:  req.Domain,
-		Tag:     req.Tag,
-		Source:  req.Source,
+		Tag:     requests.DNS,
+		Source:  "DNS",
 	})
 }
 
@@ -215,8 +215,8 @@ func (dms *DataManagerService) insertAAAA(ctx context.Context, req *requests.DNS
 	bus.Publish(requests.NewAddrTopic, eventbus.PriorityHigh, &requests.AddrRequest{
 		Address: addr,
 		Domain:  req.Domain,
-		Tag:     req.Tag,
-		Source:  req.Source,
+		Tag:     requests.DNS,
+		Source:  "DNS",
 	})
 }
 
@@ -243,6 +243,7 @@ func (dms *DataManagerService) insertPTR(ctx context.Context, req *requests.DNSR
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s failed to insert PTR record: %v", dms.graph, err))
 	}
 
+	// Important - Allows the target DNS name to be resolved in the foward direction
 	dms.genNewNameEvent(ctx, target, domain)
 }
 

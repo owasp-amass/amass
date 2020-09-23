@@ -246,7 +246,7 @@ func (s *Script) log(L *lua.LState) int {
 
 	lv := L.Get(2)
 	if msg, ok := lv.(lua.LString); ok {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, string(msg))
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, s.String()+": "+string(msg))
 	}
 	return 0
 }
@@ -265,7 +265,7 @@ func (s *Script) newName(L *lua.LState) int {
 	}
 
 	name := s.subre.FindString(string(n))
-	if name == "" || s.filter.Duplicate(name) {
+	if name == "" {
 		return 0
 	}
 
@@ -526,7 +526,7 @@ func (s *Script) request(L *lua.LState) int {
 
 	page, err := http.RequestWebPage(url, body, headers, id, pass)
 	if err != nil {
-		L.Push(lua.LNil)
+		L.Push(lua.LString(page))
 		L.Push(lua.LString(err.Error()))
 		return 2
 	}
@@ -586,11 +586,7 @@ func (s *Script) scrape(L *lua.LState) int {
 	}
 
 	for _, name := range subRE.FindAllString(resp, -1) {
-		n := http.CleanName(name)
-
-		if !s.filter.Duplicate(n) {
-			genNewNameEvent(c.Ctx, s.sys, s, n)
-		}
+		genNewNameEvent(c.Ctx, s.sys, s, http.CleanName(name))
 	}
 
 	L.Push(lua.LTrue)
@@ -618,11 +614,7 @@ func (s *Script) crawl(L *lua.LState) int {
 	}
 
 	for _, name := range names {
-		n := http.CleanName(name)
-
-		if !s.filter.Duplicate(n) {
-			genNewNameEvent(c.Ctx, s.sys, s, n)
-		}
+		genNewNameEvent(c.Ctx, s.sys, s, http.CleanName(name))
 	}
 
 	return 0

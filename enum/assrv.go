@@ -8,27 +8,25 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/v3/graph"
-	"github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/requests"
+	"github.com/OWASP/Amass/v3/systems"
 )
 
 // ASService is the Service that handles all AS information collection for the architecture.
 type ASService struct {
 	requests.BaseService
-	Cache      *net.ASNCache
 	Graph      *graph.Graph
 	SourceType string
-	srcs       []requests.Service
+	sys        systems.System
 	uuid       string
 }
 
 // NewASService returns he object initialized, but not yet started.
-func NewASService(srcs []requests.Service, graph *graph.Graph, uuid string) *ASService {
+func NewASService(sys systems.System, graph *graph.Graph, uuid string) *ASService {
 	as := &ASService{
-		Cache:      net.NewASNCache(),
 		Graph:      graph,
 		SourceType: requests.RIR,
-		srcs:       srcs,
+		sys:        sys,
 		uuid:       uuid,
 	}
 
@@ -43,20 +41,28 @@ func (as *ASService) Type() string {
 
 // OnAddrRequest implements the Service interface.
 func (as *ASService) OnAddrRequest(ctx context.Context, req *requests.AddrRequest) {
-	if r := as.Cache.AddrSearch(req.Address); r != nil {
-		go as.Graph.InsertInfrastructure(r.ASN, r.Description, r.Address, r.Prefix, r.Source, r.Tag, as.uuid)
+	if r := as.sys.Cache().AddrSearch(req.Address); r != nil {
+		as.Graph.InsertInfrastructure(r.ASN, r.Description, r.Address, r.Prefix, r.Source, r.Tag, as.uuid)
 		return
 	}
 
-	for _, src := range as.srcs {
+	for _, src := range as.sys.DataSources() {
 		src.ASNRequest(ctx, &requests.ASNRequest{Address: req.Address})
 	}
 
-	for as.Cache.AddrSearch(req.Address) == nil {
+	for i := 0; i < 30; i++ {
+		if as.sys.Cache().AddrSearch(req.Address) != nil {
+			break
+		}
 		time.Sleep(time.Second)
 	}
 
-	if r := as.Cache.AddrSearch(req.Address); r != nil && as.Graph != nil && as.uuid != "" {
+	if r := as.sys.Cache().AddrSearch(req.Address); r != nil && as.Graph != nil && as.uuid != "" {
 		go as.Graph.InsertInfrastructure(r.ASN, r.Description, r.Address, r.Prefix, r.Source, r.Tag, as.uuid)
 	}
+}
+
+// InputAddress uses the AddrRequest argument to lookup infrastructure information.
+func (as *ASService) InputAddress(req *requests.AddrRequest) {
+	as.AddrRequest(context.TODO(), req)
 }
