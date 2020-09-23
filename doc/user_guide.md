@@ -188,9 +188,15 @@ Performs viewing and manipulation of the graph database. This subcommand only le
 | -ip | Show the IP addresses for discovered names | amass db -show -ip -d example.com |
 | -ipv4 | Show the IPv4 addresses for discovered names | amass db -show -ipv4 -d example.com |
 | -ipv6 | Show the IPv6 addresses for discovered names | amass db -show -ipv6 -d example.com |
+| -json | Path to the JSON output file | amass db -names -silent -json out.json -d example.com |
 | -list | Print enumerations in the database and filter on domains specified | amass db -list |
+| -names | Print just discovered names | amass db -names -d example.com |
+| -nocolor | Disable colorized output | amass db -names -nocolor -d example.com |
+| -o | Path to the text output file | amass db -names -o out.txt -d example.com |
 | -show | Print the results for the enumeration index + domains provided | amass db -show |
+| -silent | Disable all output during execution | amass db -names -silent -json out.json -d example.com |
 | -src | Print data sources for the discovered names | amass db -show -src -d example.com |
+| -summary | Print just ASN table summary | amass db -summary -d example.com |
 
 ## The Output Directory
 
