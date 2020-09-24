@@ -29,7 +29,8 @@ require (
 	github.com/mailru/easyjson v0.7.6 // indirect
 	github.com/mattn/go-colorable v0.1.7 // indirect
 	github.com/miekg/dns v1.1.31
-	github.com/prometheus/common v0.13.0 // indirect
+	github.com/prometheus/common v0.14.0 // indirect
+	github.com/prometheus/procfs v0.2.0 // indirect
 	github.com/rakyll/statik v0.1.7
 	github.com/rogpeppe/go-internal v1.6.2 // indirect
 	github.com/smartystreets/assertions v1.1.1 // indirect
@@ -39,11 +40,11 @@ require (
 	github.com/yuin/gopher-lua v0.0.0-20200816102855-ee81675732da
 	go.uber.org/ratelimit v0.1.0
 	golang.org/x/crypto v0.0.0-20200820211705-5c72a883971a // indirect
-	golang.org/x/net v0.0.0-20200904194848-62affa334b73
+	golang.org/x/net v0.0.0-20200923182212-328152dc79b1
 	golang.org/x/oauth2 v0.0.0-20200902213428-5d25da1a8d43
 	golang.org/x/sync v0.0.0-20200625203802-6e8e738ad208
-	golang.org/x/sys v0.0.0-20200918174421-af09f7315aff // indirect
-	golang.org/x/tools v0.0.0-20200921210052-fa0125251cc4 // indirect
+	golang.org/x/sys v0.0.0-20200923182605-d9f96fdee20d // indirect
+	golang.org/x/tools v0.0.0-20200923182640-463111b69878 // indirect
 	gopkg.in/ini.v1 v1.61.0 // indirect
 	layeh.com/gopher-json v0.0.0-20190114024228-97fed8db8427
 )
