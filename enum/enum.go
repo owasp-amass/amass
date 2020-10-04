@@ -264,11 +264,13 @@ func (e *Enumeration) Start() error {
 	}
 	// If a timeout was provided in the configuration, it will go off that
 	// many minutes from this point in the enumeration process
+	var timeout *time.Timer
 	if e.Config.Timeout > 0 {
-		time.AfterFunc(time.Duration(e.Config.Timeout)*time.Minute, func() {
+		timeout = time.AfterFunc(time.Duration(e.Config.Timeout)*time.Minute, func() {
 			e.Config.Log.Printf("Enumeration exceeded provided timeout")
 			e.Done()
 		})
+		defer timeout.Stop()
 	}
 	// Get the ball rolling before the timer fires
 	completed := e.useManagers()
