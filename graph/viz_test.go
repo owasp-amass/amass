@@ -24,7 +24,7 @@ func TestViz(t *testing.T) {
 			if err != nil {
 				t.Errorf("Error inserting A record.\n%v", err)
 			}
-			gotNode, gotEdge := g.VizData(tc.eventID)
+			gotNode, gotEdge := g.VizData([]string{tc.eventID})
 			if gotNode == nil {
 				t.Errorf("Failed to obtain node.\n%v", gotNode)
 			}

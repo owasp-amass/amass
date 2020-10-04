@@ -153,12 +153,10 @@ func runVizCommand(clArgs []string) {
 		os.Exit(1)
 	}
 
-	selected := len(uuids) - 1
 	// Select the enumeration that the user specified
 	if args.Enum > 0 && len(uuids) > args.Enum {
-		selected = args.Enum
+		uuids = []string{uuids[args.Enum]}
 	}
-	uuids = []string{uuids[selected]}
 
 	// Need to check if all the network infrastructure information is available
 	fgY.Fprintln(color.Error, "Could take a moment while acquiring AS network information")
@@ -168,7 +166,7 @@ func runVizCommand(clArgs []string) {
 	}
 
 	// Obtain the visualization nodes & edges from the graph
-	nodes, edges := memDB.VizData(uuids[0])
+	nodes, edges := memDB.VizData(uuids)
 
 	// Get the directory to save the files into
 	dir := args.Filepaths.Directory
@@ -183,87 +181,47 @@ func runVizCommand(clArgs []string) {
 
 	if args.Options.D3 {
 		path := filepath.Join(dir, "amass_d3.html")
-		writeD3File(path, nodes, edges)
+		writeGraphOutputFile("d3", path, nodes, edges)
 	}
 	if args.Options.DOT {
 		path := filepath.Join(dir, "amass.dot")
-		writeDOTData(path, nodes, edges)
+		writeGraphOutputFile("dot", path, nodes, edges)
 	}
 	if args.Options.GEXF {
 		path := filepath.Join(dir, "amass.gexf")
-		writeGEXFFile(path, nodes, edges)
+		writeGraphOutputFile("gexf", path, nodes, edges)
 	}
 	if args.Options.Graphistry {
 		path := filepath.Join(dir, "amass_graphistry.json")
-		writeGraphistryFile(path, nodes, edges)
+		writeGraphOutputFile("graphistry", path, nodes, edges)
 	}
 	if args.Options.Maltego {
 		path := filepath.Join(dir, "amass_maltego.csv")
-		writeMaltegoFile(path, nodes, edges)
+		writeGraphOutputFile("maltego", path, nodes, edges)
 	}
 }
 
-func writeMaltegoFile(path string, nodes []viz.Node, edges []viz.Edge) {
+func writeGraphOutputFile(t string, path string, nodes []viz.Node, edges []viz.Edge) {
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE, 0644)
 	if err != nil {
 		return
 	}
 	defer f.Close()
-
 	f.Truncate(0)
 	f.Seek(0, 0)
-	viz.WriteMaltegoData(f, nodes, edges)
-	f.Sync()
-}
 
-func writeGraphistryFile(path string, nodes []viz.Node, edges []viz.Edge) {
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE, 0644)
-	if err != nil {
-		return
+	switch t {
+	case "d3":
+		viz.WriteD3Data(f, nodes, edges)
+	case "dot":
+		viz.WriteDOTData(f, nodes, edges)
+	case "gexf":
+		viz.WriteGEXFData(f, nodes, edges)
+	case "graphistry":
+		viz.WriteGraphistryData(f, nodes, edges)
+	case "maltego":
+		viz.WriteMaltegoData(f, nodes, edges)
 	}
-	defer f.Close()
 
-	f.Truncate(0)
-	f.Seek(0, 0)
-	viz.WriteGraphistryData(f, nodes, edges)
-	f.Sync()
-}
-
-func writeGEXFFile(path string, nodes []viz.Node, edges []viz.Edge) {
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE, 0644)
-	if err != nil {
-		return
-	}
-	defer f.Close()
-
-	f.Truncate(0)
-	f.Seek(0, 0)
-	viz.WriteGEXFData(f, nodes, edges)
-	f.Sync()
-}
-
-func writeD3File(path string, nodes []viz.Node, edges []viz.Edge) {
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE, 0644)
-	if err != nil {
-		return
-	}
-	defer f.Close()
-
-	f.Truncate(0)
-	f.Seek(0, 0)
-	viz.WriteD3Data(f, nodes, edges)
-	f.Sync()
-}
-
-func writeDOTData(path string, nodes []viz.Node, edges []viz.Edge) {
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE, 0644)
-	if err != nil {
-		return
-	}
-	defer f.Close()
-
-	f.Truncate(0)
-	f.Seek(0, 0)
-	viz.WriteDOTData(f, nodes, edges)
 	f.Sync()
 }
