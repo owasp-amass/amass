@@ -711,7 +711,7 @@ func (e enumArgs) OverrideConfig(conf *config.Config) error {
 	if e.Options.NoAlts {
 		conf.Alterations = false
 	}
-	if e.Options.NoLocalDatabase || e.Options.Passive {
+	if e.Options.NoLocalDatabase {
 		conf.LocalDatabase = false
 	}
 	if e.Options.NoRecursive {
