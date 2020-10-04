@@ -32,6 +32,8 @@ const ResolverErrRcode = 100
 // NotAvailableRcode is our made up rcode to indicate an availability problem.
 const NotAvailableRcode = 256
 
+const timeoutDuration = 500 * time.Millisecond
+
 // ResolveError contains the Rcode returned during the DNS query.
 type ResolveError struct {
 	Err   string
@@ -340,7 +342,7 @@ loop:
 			var count int
 			// Discover requests that have timed out and remove them from the map
 			for _, id := range r.allTimeoutIDs() {
-				if req := r.pullRequestAfterTimeout(id, 2*time.Second); req != nil {
+				if req := r.pullRequestAfterTimeout(id, timeoutDuration); req != nil {
 					count++
 					estr := fmt.Sprintf("DNS query on resolver %s, for %s type %d timed out",
 						r.address, req.Name, req.Qtype)
