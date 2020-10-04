@@ -79,8 +79,7 @@ func (r *DomainManager) NameQueueLen() int {
 // OutputRequests implements the FQDNManager interface.
 func (r *DomainManager) OutputRequests(num int) int {
 	// Check that we are not releasing the domain names too quickly
-	if r.enum.dnsMgr != nil && r.enum.dnsMgr.RequestLen() != 0 &&
-		r.last.Add(5*time.Second).After(time.Now()) {
+	if r.enum.dnsMgr != nil && r.last.Add(5*time.Second).After(time.Now()) {
 		return 0
 	}
 
