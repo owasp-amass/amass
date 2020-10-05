@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -266,8 +267,17 @@ func AcquireConfig(dir, file string, cfg *Config) error {
 	} else if f, set := os.LookupEnv("AMASS_CONFIG"); set {
 		path = f
 	} else if d := OutputDirectory(dir); d != "" {
-		if finfo, err := os.Stat(d); !os.IsNotExist(err) && finfo.IsDir() {
-			path = filepath.Join(d, "config.ini")
+		var path_candidate = filepath.Join(d, "config.ini")
+		if _, err := os.Stat(path_candidate); err == nil {
+			path = path_candidate
+		}
+	}
+
+	// On Unix systems, fallback on system config directory
+	if path == "" && runtime.GOOS != "windows" {
+		var path_candidate = "/etc/amass/config.ini"
+		if _, err := os.Stat(path_candidate); err == nil {
+			path = path_candidate
 		}
 	}
 

@@ -212,7 +212,7 @@ Amass automatically tries to discover the configuration file (named `config.ini`
 
 | Operating System | Path |
 | ---------------- | ---- |
-| Linux / Unix | `$XDG_CONFIG_HOME/amass/config.ini` or `$HOME/.config/amass/config.ini` |
+| Linux / Unix | `$XDG_CONFIG_HOME/amass/config.ini` or `$HOME/.config/amass/config.ini` or `/etc/amass/config.ini` |
 | Windows | `%AppData%\amass\config.ini` |
 | OSX | `$HOME/Library/Application Support/amass/config.ini` |
 
