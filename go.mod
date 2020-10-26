@@ -35,7 +35,7 @@ require (
 	github.com/lib/pq v1.2.0
 	github.com/mattn/go-colorable v0.1.2 // indirect
 	github.com/mattn/go-sqlite3 v1.11.0 // indirect
-	github.com/miekg/dns v1.1.34
+	github.com/miekg/dns v1.1.35
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f // indirect
 	github.com/onsi/ginkgo v1.8.0 // indirect
