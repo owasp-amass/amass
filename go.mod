@@ -48,3 +48,5 @@ require (
 	gopkg.in/ini.v1 v1.61.0 // indirect
 	layeh.com/gopher-json v0.0.0-20190114024228-97fed8db8427
 )
+
+replace github.com/knq/sysutil v1.0.0 => github.com/chromedp/sysutil v1.0.0
