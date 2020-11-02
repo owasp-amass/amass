@@ -14,7 +14,7 @@ require (
 	github.com/chromedp/cdproto v0.0.0-20190721111337-61a0348ea0b1 // indirect
 	github.com/chromedp/chromedp v0.3.1 // indirect
 	github.com/dghubble/go-twitter v0.0.0-20190719072343-39e5462e111f
-	github.com/fatih/color v1.7.0
+	github.com/fatih/color v1.10.0
 	github.com/fpfeng/httpcache v0.0.0-20181220163524-ab6bbcc7c729 // indirect
 	github.com/geziyor/geziyor v0.0.0-20190721090841-762854e5113a
 	github.com/go-ini/ini v1.44.0
@@ -33,7 +33,6 @@ require (
 	github.com/kisielk/errcheck v1.2.0 // indirect
 	github.com/konsorten/go-windows-terminal-sequences v1.0.2 // indirect
 	github.com/lib/pq v1.2.0
-	github.com/mattn/go-colorable v0.1.2 // indirect
 	github.com/mattn/go-sqlite3 v1.11.0 // indirect
 	github.com/miekg/dns v1.1.35
 	github.com/mitchellh/go-homedir v1.1.0
