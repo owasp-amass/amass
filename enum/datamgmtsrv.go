@@ -243,7 +243,7 @@ func (dms *DataManagerService) insertPTR(ctx context.Context, req *requests.DNSR
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s failed to insert PTR record: %v", dms.graph, err))
 	}
 
-	// Important - Allows the target DNS name to be resolved in the foward direction
+	// Important - Allows the target DNS name to be resolved in the forward direction
 	dms.genNewNameEvent(ctx, target, domain)
 }
 
