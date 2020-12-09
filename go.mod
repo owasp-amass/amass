@@ -9,7 +9,7 @@ require (
 	github.com/alecthomas/units v0.0.0-20190717042225-c3de453c63f4 // indirect
 	github.com/boltdb/bolt v1.3.1 // indirect
 	github.com/caffix/cloudflare-roundtripper v0.0.0-20181218223503-4c29d231c9cb
-	github.com/cayleygraph/cayley v0.7.5
+	github.com/cayleygraph/cayley v0.7.7
 	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
 	github.com/chromedp/cdproto v0.0.0-20190721111337-61a0348ea0b1 // indirect
 	github.com/chromedp/chromedp v0.3.1 // indirect
@@ -21,7 +21,6 @@ require (
 	github.com/go-kit/kit v0.9.0 // indirect
 	github.com/go-sql-driver/mysql v1.4.1 // indirect
 	github.com/gobwas/ws v1.0.2 // indirect
-	github.com/gogo/protobuf v1.2.1 // indirect
 	github.com/golang/snappy v0.0.1 // indirect
 	github.com/google/pprof v0.0.0-20190723021845-34ac40c74b70 // indirect
 	github.com/google/uuid v1.1.1
