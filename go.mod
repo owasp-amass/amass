@@ -23,7 +23,7 @@ require (
 	github.com/gobwas/ws v1.0.2 // indirect
 	github.com/golang/snappy v0.0.1 // indirect
 	github.com/google/pprof v0.0.0-20190723021845-34ac40c74b70 // indirect
-	github.com/google/uuid v1.1.1
+	github.com/google/uuid v1.1.2
 	github.com/gorilla/websocket v1.4.0 // indirect
 	github.com/irfansharif/cfilter v0.1.1
 	github.com/jmoiron/sqlx v1.2.0
