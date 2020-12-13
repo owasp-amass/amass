@@ -17,7 +17,7 @@ require (
 	github.com/fatih/color v1.10.0
 	github.com/fpfeng/httpcache v0.0.0-20181220163524-ab6bbcc7c729 // indirect
 	github.com/geziyor/geziyor v0.0.0-20190721090841-762854e5113a
-	github.com/go-ini/ini v1.44.0
+	github.com/go-ini/ini v1.62.0
 	github.com/go-kit/kit v0.9.0 // indirect
 	github.com/go-sql-driver/mysql v1.4.1 // indirect
 	github.com/gobwas/ws v1.0.2 // indirect
