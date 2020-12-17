@@ -124,8 +124,8 @@ pkg install amass
 OWASP Amass is installed by default and can be managed like any other Kali package:
 
 ```bash
-apt-get update
-apt-get install amass
+sudo apt-get update
+sudo apt-get install amass
 ```
 
 ## Nix or NixOS
@@ -137,8 +137,8 @@ nix-env -f '<nixpkgs>' -iA amass
 ### Parrot Linux
 
 ```bash
-apt-get update
-apt-get install amass
+sudo apt-get update
+sudo apt-get install amass
 ```
 
 ### Pentoo Linux
