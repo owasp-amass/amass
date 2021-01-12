@@ -5,16 +5,20 @@ package enum
 
 import (
 	"context"
+	"fmt"
+	"net"
 	"time"
 
 	"github.com/OWASP/Amass/v3/graph"
+	amassnet "github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/systems"
+	"github.com/caffix/service"
 )
 
 // ASService is the Service that handles all AS information collection for the architecture.
 type ASService struct {
-	requests.BaseService
+	service.BaseService
 	Graph      *graph.Graph
 	SourceType string
 	sys        systems.System
@@ -30,27 +34,33 @@ func NewASService(sys systems.System, graph *graph.Graph, uuid string) *ASServic
 		uuid:       uuid,
 	}
 
-	as.BaseService = *requests.NewBaseService(as, "AS Service")
+	as.BaseService = *service.NewBaseService(as, "AS Service")
 	return as
 }
 
-// Type implements the Service interface.
-func (as *ASService) Type() string {
-	return as.SourceType
+// OnRequest implements the Service interface.
+func (as *ASService) OnRequest(ctx context.Context, args service.Args) {
+	if req, ok := args.(*requests.AddrRequest); ok {
+		as.addrRequest(ctx, req)
+	}
 }
 
-// OnAddrRequest implements the Service interface.
-func (as *ASService) OnAddrRequest(ctx context.Context, req *requests.AddrRequest) {
+// InputAddress uses the provided AddrRequest argument to generate service requests.
+func (as *ASService) InputAddress(req *requests.AddrRequest) {
+	as.Request(context.TODO(), req)
+}
+
+func (as *ASService) addrRequest(ctx context.Context, req *requests.AddrRequest) {
 	if r := as.sys.Cache().AddrSearch(req.Address); r != nil {
 		as.Graph.InsertInfrastructure(r.ASN, r.Description, r.Address, r.Prefix, r.Source, r.Tag, as.uuid)
 		return
 	}
 
 	for _, src := range as.sys.DataSources() {
-		src.ASNRequest(ctx, &requests.ASNRequest{Address: req.Address})
+		src.Request(ctx, &requests.ASNRequest{Address: req.Address})
 	}
 
-	for i := 0; i < 30; i++ {
+	for i := 0; i < 10; i++ {
 		if as.sys.Cache().AddrSearch(req.Address) != nil {
 			break
 		}
@@ -58,11 +68,25 @@ func (as *ASService) OnAddrRequest(ctx context.Context, req *requests.AddrReques
 	}
 
 	if r := as.sys.Cache().AddrSearch(req.Address); r != nil && as.Graph != nil && as.uuid != "" {
-		go as.Graph.InsertInfrastructure(r.ASN, r.Description, r.Address, r.Prefix, r.Source, r.Tag, as.uuid)
+		as.Graph.InsertInfrastructure(r.ASN, r.Description, r.Address, r.Prefix, r.Source, r.Tag, as.uuid)
+	} else {
+		as.Graph.InsertInfrastructure(0, "Unknown",
+			req.Address, fakePrefix(req.Address), "RIR", requests.RIR, as.uuid)
 	}
+
+	as.Graph.HealAddressNodes(as.sys.Cache(), as.uuid)
 }
 
-// InputAddress uses the AddrRequest argument to lookup infrastructure information.
-func (as *ASService) InputAddress(req *requests.AddrRequest) {
-	as.AddrRequest(context.TODO(), req)
+func fakePrefix(addr string) string {
+	bits := 24
+	total := 32
+	ip := net.ParseIP(addr)
+
+	if amassnet.IsIPv6(ip) {
+		bits = 48
+		total = 128
+	}
+
+	mask := net.CIDRMask(bits, total)
+	return fmt.Sprintf("%s/%d", ip.Mask(mask).String(), bits)
 }

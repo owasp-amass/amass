@@ -7,6 +7,9 @@ import (
 	"github.com/miekg/dns"
 )
 
+// ResolverErrRcode is our made up rcode to indicate an interface error.
+const ResolverErrRcode = 100
+
 // TimeoutRcode is our made up rcode to indicate that a query timed out.
 const TimeoutRcode = 101
 
@@ -14,11 +17,15 @@ const TimeoutRcode = 101
 type Retry func(times int, priority int, msg *dns.Msg) bool
 
 // RetryCodes are the rcodes that cause the resolver to suggest trying again.
-var RetryCodes = []int{TimeoutRcode}
+var RetryCodes = []int{
+	TimeoutRcode,
+	ResolverErrRcode,
+}
 
 // PoolRetryCodes are the rcodes that cause the pool to suggest trying again.
 var PoolRetryCodes = []int{
 	TimeoutRcode,
+	ResolverErrRcode,
 	dns.RcodeRefused,
 	dns.RcodeServerFailure,
 	dns.RcodeNotImplemented,
@@ -26,18 +33,8 @@ var PoolRetryCodes = []int{
 
 // RetryPolicy is the default policy used throughout Amass
 // to determine if a DNS query should be performed again.
-func RetryPolicy(times int, priority int, msg *dns.Msg) bool {
-	var attempts int
-	switch priority {
-	case PriorityCritical:
-		attempts = 1000
-	case PriorityHigh:
-		attempts = 250
-	case PriorityLow:
-		attempts = 50
-	}
-
-	if times > attempts {
+func RetryPolicy(times, priority int, msg *dns.Msg) bool {
+	if attemptsExceeded(times, priority) {
 		return false
 	}
 	if msg == nil {
@@ -54,18 +51,8 @@ func RetryPolicy(times int, priority int, msg *dns.Msg) bool {
 
 // PoolRetryPolicy is the default policy used by the resolver pool
 // to determine if a DNS query should be performed again.
-func PoolRetryPolicy(times int, priority int, msg *dns.Msg) bool {
-	var attempts int
-	switch priority {
-	case PriorityCritical:
-		attempts = 1000
-	case PriorityHigh:
-		attempts = 250
-	case PriorityLow:
-		attempts = 50
-	}
-
-	if times > attempts {
+func PoolRetryPolicy(times, priority int, msg *dns.Msg) bool {
+	if attemptsExceeded(times, priority) {
 		return false
 	}
 	if msg == nil {
@@ -78,4 +65,21 @@ func PoolRetryPolicy(times int, priority int, msg *dns.Msg) bool {
 		}
 	}
 	return false
+}
+
+func attemptsExceeded(times, priority int) bool {
+	var attempts int
+
+	switch priority {
+	case PriorityCritical:
+		attempts = 500
+	case PriorityHigh:
+		attempts = 250
+	case PriorityNormal:
+		attempts = 100
+	case PriorityLow:
+		attempts = 50
+	}
+
+	return times > attempts
 }

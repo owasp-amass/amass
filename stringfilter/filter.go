@@ -7,7 +7,7 @@ import (
 	"sync"
 
 	"github.com/AndreasBriese/bbloom"
-	"github.com/OWASP/Amass/v3/stringset"
+	"github.com/caffix/stringset"
 )
 
 // Filter is the object type for performing string filtering.

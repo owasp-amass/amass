@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/OWASP/Amass/v3/stringset"
+	"github.com/caffix/stringset"
 )
 
 var notDataSourceSet = stringset.New("tld", "root", "domain",

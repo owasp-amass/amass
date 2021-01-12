@@ -6,7 +6,7 @@ package config
 import (
 	"fmt"
 
-	"github.com/OWASP/Amass/v3/stringset"
+	"github.com/caffix/stringset"
 	"github.com/go-ini/ini"
 )
 

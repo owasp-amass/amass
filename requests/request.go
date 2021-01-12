@@ -8,8 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/OWASP/Amass/v3/net/dns"
-	"github.com/OWASP/Amass/v3/stringset"
+	amassdns "github.com/OWASP/Amass/v3/net/dns"
+	"github.com/caffix/pipeline"
+	"github.com/caffix/stringset"
+	"github.com/miekg/dns"
 )
 
 // Request tag types.
@@ -39,21 +41,15 @@ const (
 
 // Request Pub/Sub topics used across Amass.
 const (
-	NameRequestTopic   = "amass:namereq"
 	NewNameTopic       = "amass:newname"
-	AddrRequestTopic   = "amass:addrreq"
 	NewAddrTopic       = "amass:newaddr"
 	SubDiscoveredTopic = "amass:newsub"
-	ResolveNameTopic   = "amass:resolve"
-	NameResolvedTopic  = "amass:resolved"
 	ASNRequestTopic    = "amass:asnreq"
 	NewASNTopic        = "amass:newasn"
 	WhoisRequestTopic  = "amass:whoisreq"
 	NewWhoisTopic      = "amass:whoisinfo"
 	LogTopic           = "amass:log"
 	OutputTopic        = "amass:output"
-	SetActiveTopic     = "amass:setactive"
-	ResolveCompleted   = "amass:resolvecomp"
 )
 
 // DNSAnswer is the type used by Amass to represent a DNS record.
@@ -73,12 +69,166 @@ type DNSRequest struct {
 	Source  string
 }
 
+// Clone implements pipeline Data.
+func (d *DNSRequest) Clone() pipeline.Data {
+	return &DNSRequest{
+		Name:    d.Name,
+		Domain:  d.Domain,
+		Records: append([]DNSAnswer(nil), d.Records...),
+		Tag:     d.Tag,
+		Source:  d.Source,
+	}
+}
+
+// MarkAsProcessed implements pipeline Data.
+func (d *DNSRequest) MarkAsProcessed() {}
+
+// Valid performs input validation of the receiver.
+func (d *DNSRequest) Valid() bool {
+	if _, ok := dns.IsDomainName(d.Name); !ok {
+		return false
+	}
+	if _, ok := dns.IsDomainName(d.Domain); !ok {
+		return false
+	}
+	if !dns.IsSubDomain(d.Domain, d.Name) {
+		return false
+	}
+	return true
+}
+
+// ResolvedRequest allows services to identify DNS names that have been resolved.
+
+type ResolvedRequest struct {
+	Name    string
+	Domain  string
+	Records []DNSAnswer
+	Tag     string
+	Source  string
+}
+
+// Clone implements pipeline Data.
+func (r *ResolvedRequest) Clone() pipeline.Data {
+	return &ResolvedRequest{
+		Name:    r.Name,
+		Domain:  r.Domain,
+		Records: append([]DNSAnswer(nil), r.Records...),
+		Tag:     r.Tag,
+		Source:  r.Source,
+	}
+}
+
+// MarkAsProcessed implements pipeline Data.
+func (r *ResolvedRequest) MarkAsProcessed() {}
+
+// Valid performs input validation of the receiver.
+func (r *ResolvedRequest) Valid() bool {
+	if _, ok := dns.IsDomainName(r.Name); !ok {
+		return false
+	}
+	if _, ok := dns.IsDomainName(r.Domain); !ok {
+		return false
+	}
+	if !dns.IsSubDomain(r.Domain, r.Name) {
+		return false
+	}
+	return true
+}
+
+// SubdomainRequest handles subdomain data processed by enumeration.
+type SubdomainRequest struct {
+	Name    string
+	Domain  string
+	Records []DNSAnswer
+	Tag     string
+	Source  string
+	Times   int
+}
+
+// Clone implements pipeline Data.
+func (s *SubdomainRequest) Clone() pipeline.Data {
+	return &SubdomainRequest{
+		Name:    s.Name,
+		Domain:  s.Domain,
+		Records: append([]DNSAnswer(nil), s.Records...),
+		Tag:     s.Tag,
+		Source:  s.Source,
+	}
+}
+
+// MarkAsProcessed implements pipeline Data.
+func (s *SubdomainRequest) MarkAsProcessed() {}
+
+// Valid performs input validation of the receiver.
+func (s *SubdomainRequest) Valid() bool {
+	if _, ok := dns.IsDomainName(s.Name); !ok {
+		return false
+	}
+	if _, ok := dns.IsDomainName(s.Domain); !ok {
+		return false
+	}
+	if !dns.IsSubDomain(s.Domain, s.Name) {
+		return false
+	}
+	if s.Times == 0 {
+		return false
+	}
+	return true
+}
+
+// ZoneXFRRequest handles zone transfer requests.
+type ZoneXFRRequest struct {
+	Name   string
+	Domain string
+	Server string
+	Tag    string
+	Source string
+}
+
+// Clone implements pipeline Data.
+func (z *ZoneXFRRequest) Clone() pipeline.Data {
+	return &ZoneXFRRequest{
+		Name:   z.Name,
+		Domain: z.Domain,
+		Server: z.Server,
+		Tag:    z.Tag,
+		Source: z.Source,
+	}
+}
+
+// MarkAsProcessed implements pipeline Data.
+func (z *ZoneXFRRequest) MarkAsProcessed() {}
+
 // AddrRequest handles data needed throughout Service processing of a network address.
 type AddrRequest struct {
 	Address string
 	Domain  string
 	Tag     string
 	Source  string
+}
+
+// Clone implements pipeline Data.
+func (a *AddrRequest) Clone() pipeline.Data {
+	return &AddrRequest{
+		Address: a.Address,
+		Domain:  a.Domain,
+		Tag:     a.Tag,
+		Source:  a.Source,
+	}
+}
+
+// MarkAsProcessed implements pipeline Data.
+func (a *AddrRequest) MarkAsProcessed() {}
+
+// Valid performs input validation of the receiver.
+func (a *AddrRequest) Valid() bool {
+	if ip := net.ParseIP(a.Address); ip == nil {
+		return false
+	}
+	if _, ok := dns.IsDomainName(a.Domain); !ok {
+		return false
+	}
+	return true
 }
 
 // ASNRequest handles all autonomous system information needed by Amass.
@@ -93,6 +243,41 @@ type ASNRequest struct {
 	Netblocks      stringset.Set
 	Tag            string
 	Source         string
+}
+
+// Clone implements pipeline Data.
+func (a *ASNRequest) Clone() pipeline.Data {
+	return &ASNRequest{
+		Address:        a.Address,
+		ASN:            a.ASN,
+		Prefix:         a.Prefix,
+		CC:             a.CC,
+		Registry:       a.Registry,
+		AllocationDate: a.AllocationDate,
+		Description:    a.Description,
+		Netblocks:      stringset.New(a.Netblocks.Slice()...),
+		Tag:            a.Tag,
+		Source:         a.Source,
+	}
+}
+
+// MarkAsProcessed implements pipeline Data.
+func (a *ASNRequest) MarkAsProcessed() {}
+
+// Valid performs input validation of the receiver.
+func (a *ASNRequest) Valid() bool {
+	if ip := net.ParseIP(a.Address); ip == nil {
+		return false
+	}
+	if _, _, err := net.ParseCIDR(a.Prefix); err != nil {
+		return false
+	}
+	for _, netblock := range a.Netblocks.Slice() {
+		if _, _, err := net.ParseCIDR(netblock); err != nil {
+			return false
+		}
+	}
+	return true
 }
 
 // WhoisRequest handles data needed throughout Service processing of reverse whois.
@@ -136,7 +321,7 @@ func TrustedTag(tag string) bool {
 func SanitizeDNSRequest(req *DNSRequest) {
 	req.Name = strings.ToLower(req.Name)
 	req.Name = strings.TrimSpace(req.Name)
-	req.Name = dns.RemoveAsteriskLabel(req.Name)
+	req.Name = amassdns.RemoveAsteriskLabel(req.Name)
 	req.Name = strings.Trim(req.Name, ".")
 
 	req.Domain = strings.ToLower(req.Domain)

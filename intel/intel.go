@@ -12,15 +12,14 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/v3/config"
-	eb "github.com/OWASP/Amass/v3/eventbus"
 	amassnet "github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/net/http"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/resolvers"
 	"github.com/OWASP/Amass/v3/stringfilter"
-	"github.com/OWASP/Amass/v3/stringset"
 	"github.com/OWASP/Amass/v3/systems"
-	"github.com/miekg/dns"
+	eb "github.com/caffix/eventbus"
+	"github.com/caffix/stringset"
 )
 
 // Collection is the object type used to execute a open source information gathering with Amass.
@@ -77,7 +76,7 @@ func (c *Collection) Done() {
 }
 
 // HostedDomains uses open source intelligence to discover root domain names in the target infrastructure.
-func (c *Collection) HostedDomains() error {
+func (c *Collection) HostedDomains(ctx context.Context) error {
 	if c.Output == nil {
 		return errors.New("The intelligence collection did not have an output channel")
 	} else if err := c.Config.CheckSettings(); err != nil {
@@ -100,28 +99,23 @@ func (c *Collection) HostedDomains() error {
 	c.srcsLock.Unlock()
 
 	// Setup the context used throughout the collection
-	ctx := context.WithValue(context.Background(), requests.ContextConfig, c.Config)
-	c.ctx = context.WithValue(ctx, requests.ContextEventBus, c.Bus)
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithCancel(ctx)
+	ctx = context.WithValue(ctx, requests.ContextConfig, c.Config)
+	ctx = context.WithValue(ctx, requests.ContextEventBus, c.Bus)
+	c.ctx = ctx
+	defer cancel()
 
-	c.Bus.Subscribe(requests.SetActiveTopic, c.updateLastActive)
-	defer c.Bus.Unsubscribe(requests.SetActiveTopic, c.updateLastActive)
-	c.Bus.Subscribe(requests.ResolveCompleted, c.resolution)
-	defer c.Bus.Unsubscribe(requests.ResolveCompleted, c.resolution)
-
-	if c.Config.Timeout > 0 {
-		time.AfterFunc(time.Duration(c.Config.Timeout)*time.Minute, func() {
-			c.Config.Log.Printf("Enumeration exceeded provided timeout")
-			close(c.Output)
-		})
-	}
+	go func() {
+		<-ctx.Done()
+		close(c.Output)
+	}()
 
 	c.filter = stringfilter.NewStringFilter()
 	// Start the address ranges
 	for _, addr := range c.Config.Addresses {
-		if c.Sys.PerformDNSQuery() == nil {
-			c.wg.Add(1)
-			go c.investigateAddr(addr.String())
-		}
+		c.wg.Add(1)
+		go c.investigateAddr(addr.String())
 	}
 
 	for _, cidr := range append(c.Config.CIDRs, c.asnsToCIDRs()...) {
@@ -131,16 +125,13 @@ func (c *Collection) HostedDomains() error {
 		}
 
 		for _, addr := range amassnet.AllHosts(cidr) {
-			if c.Sys.PerformDNSQuery() == nil {
-				c.wg.Add(1)
-				go c.investigateAddr(addr.String())
-			}
+			c.wg.Add(1)
+			go c.investigateAddr(addr.String())
 		}
 	}
 
 	c.wg.Wait()
 	time.Sleep(5 * time.Second)
-	close(c.Output)
 	return nil
 }
 
@@ -179,18 +170,15 @@ func (c *Collection) investigateAddr(addr string) {
 		return
 	}
 
+	msg := resolvers.ReverseMsg(addr)
 	addrinfo := requests.AddressInfo{Address: ip}
-	if _, answer, err := c.Sys.Pool().Reverse(c.ctx, addr, resolvers.PriorityLow, func(times int, priority int, msg *dns.Msg) bool {
-		var retry bool
+	if resp, err := c.Sys.Pool().Query(c.ctx, msg, resolvers.PriorityLow, resolvers.RetryPolicy); err == nil {
+		ans := resolvers.ExtractAnswers(resp)
 
-		if resolvers.RetryPolicy(times, priority, msg) {
-			c.Sys.PerformDNSQuery()
-			retry = true
-		}
-		return retry
-	}); err == nil {
-		if d := strings.TrimSpace(c.Sys.Pool().SubdomainToDomain(answer)); d != "" {
-			if !c.filter.Duplicate(d) {
+		if len(ans) > 0 {
+			d := strings.TrimSpace(resolvers.FirstProperSubdomain(c.ctx, c.Sys.Pool(), ans[0].Data, resolvers.PriorityLow))
+
+			if d != "" && !c.filter.Duplicate(d) {
 				c.Output <- &requests.Output{
 					Name:      d,
 					Domain:    d,
@@ -208,7 +196,7 @@ func (c *Collection) investigateAddr(addr string) {
 
 	for _, name := range http.PullCertificateNames(addr, c.Config.Ports) {
 		if n := strings.TrimSpace(name); n != "" {
-			d := c.Sys.Pool().SubdomainToDomain(n)
+			d := resolvers.FirstProperSubdomain(c.ctx, c.Sys.Pool(), n, resolvers.PriorityLow)
 
 			if !c.filter.Duplicate(d) {
 				c.Output <- &requests.Output{
@@ -256,7 +244,7 @@ func (c *Collection) asnsToCIDRs() []*net.IPNet {
 		}
 
 		for _, asn := range c.Config.ASNs {
-			src.ASNRequest(c.ctx, &requests.ASNRequest{ASN: asn})
+			src.Request(c.ctx, &requests.ASNRequest{ASN: asn})
 		}
 	}
 	c.srcsLock.Unlock()
@@ -305,6 +293,7 @@ func (c *Collection) ReverseWhois() error {
 
 	filter := stringfilter.NewStringFilter()
 	collect := func(req *requests.WhoisRequest) {
+		c.updateLastActive("intel")
 		for _, d := range req.NewDomains {
 			if !filter.Duplicate(d) {
 				c.Output <- &requests.Output{
@@ -318,9 +307,6 @@ func (c *Collection) ReverseWhois() error {
 	}
 	c.Bus.Subscribe(requests.NewWhoisTopic, collect)
 	defer c.Bus.Unsubscribe(requests.NewWhoisTopic, collect)
-
-	c.Bus.Subscribe(requests.SetActiveTopic, c.updateLastActive)
-	defer c.Bus.Unsubscribe(requests.SetActiveTopic, c.updateLastActive)
 
 	// Setup the stringset of included data sources
 	c.srcsLock.Lock()
@@ -349,7 +335,7 @@ func (c *Collection) ReverseWhois() error {
 		}
 
 		for _, domain := range c.Config.Domains() {
-			src.WhoisRequest(c.ctx, &requests.WhoisRequest{Domain: domain})
+			src.Request(c.ctx, &requests.WhoisRequest{Domain: domain})
 		}
 	}
 	c.srcsLock.Unlock()

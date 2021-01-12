@@ -36,13 +36,13 @@ import (
 
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/datasrcs"
-	"github.com/OWASP/Amass/v3/eventbus"
 	"github.com/OWASP/Amass/v3/format"
 	"github.com/OWASP/Amass/v3/graph"
 	amassnet "github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/stringfilter"
 	"github.com/OWASP/Amass/v3/systems"
+	"github.com/caffix/eventbus"
 	"github.com/fatih/color"
 )
 
@@ -146,7 +146,7 @@ func GetAllSourceInfo(cfg *config.Config) []string {
 	if err != nil {
 		return names
 	}
-	srcs := datasrcs.SelectedDataSources(cfg, datasrcs.GetAllSources(sys, false))
+	srcs := datasrcs.SelectedDataSources(cfg, datasrcs.GetAllSources(sys))
 	sys.SetDataSources(srcs)
 
 	names = append(names, fmt.Sprintf("%-35s%-35s%s", blue("Data Source"), blue("| Type"), blue("| Available")))
@@ -156,12 +156,19 @@ func GetAllSourceInfo(cfg *config.Config) []string {
 	}
 	names = append(names, line)
 
-	for _, src := range sys.DataSources() {
+	available := sys.DataSources()
+	for _, src := range srcs {
 		var avail string
-		if src.CheckConfig() == nil {
-			avail = "*"
+
+		for _, a := range available {
+			if src.String() == a.String() {
+				avail = "*"
+				break
+			}
 		}
-		names = append(names, fmt.Sprintf("%-35s  %-35s  %s", green(src.String()), yellow(src.Type()), yellow(avail)))
+
+		names = append(names, fmt.Sprintf("%-35s  %-35s  %s",
+			green(src.String()), yellow(src.Description()), yellow(avail)))
 	}
 
 	sys.Shutdown()
@@ -186,7 +193,7 @@ func generateCategoryMap(sys systems.System) map[string][]string {
 	catToSources := make(map[string][]string)
 
 	for _, src := range sys.DataSources() {
-		t := src.Type()
+		t := src.Description()
 
 		catToSources[t] = append(catToSources[t], src.String())
 	}
@@ -350,7 +357,7 @@ func healASInfo(uuids []string, db *graph.Graph) bool {
 	if err != nil {
 		return false
 	}
-	sys.SetDataSources(datasrcs.GetAllSources(sys, true))
+	sys.SetDataSources(datasrcs.GetAllSources(sys))
 	defer sys.Shutdown()
 
 	cache := sys.Cache()
@@ -374,7 +381,7 @@ func healASInfo(uuids []string, db *graph.Graph) bool {
 				}
 
 				for _, src := range sys.DataSources() {
-					src.ASNRequest(ctx, &requests.ASNRequest{Address: a.Address.String()})
+					src.Request(ctx, &requests.ASNRequest{Address: a.Address.String()})
 				}
 
 				for i := 0; i < 30; i++ {

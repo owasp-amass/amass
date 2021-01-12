@@ -6,18 +6,18 @@ package datasrcs
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/OWASP/Amass/v3/config"
-	"github.com/OWASP/Amass/v3/eventbus"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/systems"
+	"github.com/caffix/eventbus"
+	"github.com/caffix/service"
 	"github.com/cloudflare/cloudflare-go"
 )
 
 // Cloudflare is the Service that handles access to the Cloudflare data source.
 type Cloudflare struct {
-	requests.BaseService
+	service.BaseService
 
 	SourceType string
 	sys        systems.System
@@ -31,30 +31,35 @@ func NewCloudflare(sys systems.System) *Cloudflare {
 		sys:        sys,
 	}
 
-	c.BaseService = *requests.NewBaseService(c, "Cloudflare")
+	c.BaseService = *service.NewBaseService(c, "Cloudflare")
 	return c
 }
 
-// Type implements the Service interface.
-func (c *Cloudflare) Type() string {
+// Description implements the Service interface.
+func (c *Cloudflare) Description() string {
 	return c.SourceType
 }
 
 // OnStart implements the Service interface.
 func (c *Cloudflare) OnStart() error {
-	c.BaseService.OnStart()
-
 	c.creds = c.sys.Config().GetDataSourceConfig(c.String()).GetCredentials()
+
 	if c.creds == nil || c.creds.Key == "" {
 		c.sys.Config().Log.Printf("%s: API key data was not provided", c.String())
 	}
 
-	c.SetRateLimit(500 * time.Millisecond)
+	c.SetRateLimit(2)
 	return nil
 }
 
-// OnDNSRequest implements the Service interface.
-func (c *Cloudflare) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
+// OnRequest implements the Service interface.
+func (c *Cloudflare) OnRequest(ctx context.Context, args service.Args) {
+	if req, ok := args.(*requests.DNSRequest); ok {
+		c.dnsRequest(ctx, req)
+	}
+}
+
+func (c *Cloudflare) dnsRequest(ctx context.Context, req *requests.DNSRequest) {
 	cfg, bus, err := ContextConfigBus(ctx)
 	if err != nil {
 		return
@@ -68,8 +73,6 @@ func (c *Cloudflare) OnDNSRequest(ctx context.Context, req *requests.DNSRequest)
 		return
 	}
 
-	c.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, c.String())
 	bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 		fmt.Sprintf("Querying %s for %s subdomains", c.String(), req.Domain))
 

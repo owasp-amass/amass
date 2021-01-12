@@ -8,13 +8,16 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"sort"
+	"time"
 
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/graph"
+	"github.com/OWASP/Amass/v3/limits"
 	amassnet "github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/resolvers"
-	"go.uber.org/ratelimit"
+	"github.com/caffix/service"
 )
 
 // LocalSystem implements a System to be executed within a single process.
@@ -23,15 +26,13 @@ type LocalSystem struct {
 	pool   resolvers.Resolver
 	graphs []*graph.Graph
 	cache  *amassnet.ASNCache
-	// Semaphore to enforce the maximum DNS queries
-	rlimit ratelimit.Limiter
 
 	// Broadcast channel that indicates no further writes to the output channel
 	done              chan struct{}
 	doneAlreadyClosed bool
 
-	addSource  chan requests.Service
-	allSources chan chan []requests.Service
+	addSource  chan service.Service
+	allSources chan chan []service.Service
 }
 
 // NewLocalSystem returns an initialized LocalSystem object.
@@ -40,7 +41,23 @@ func NewLocalSystem(c *config.Config) (*LocalSystem, error) {
 		return nil, err
 	}
 
-	pool := resolvers.SetupResolverPool(c.Resolvers, c.MaxDNSQueries, c.Log)
+	max := int(float64(limits.GetFileLimit()) * 0.7)
+	num := len(c.Resolvers)
+	if num > max {
+		num = max
+	}
+
+	if c.MaxDNSQueries > 5000 {
+		c.MaxDNSQueries = 5000
+	}
+
+	var trusted []resolvers.Resolver
+	for _, addr := range config.DefaultBaselineResolvers {
+		trusted = append(trusted, resolvers.NewBaseResolver(addr, 20, c.Log))
+	}
+
+	baseline := resolvers.NewRoundRobin(trusted, c.Log)
+	pool := resolvers.SetupResolverPool(c.Resolvers, baseline, max, c.MaxDNSQueries, c.Log)
 	if pool == nil {
 		return nil, errors.New("The system was unable to build the pool of resolvers")
 	}
@@ -50,9 +67,8 @@ func NewLocalSystem(c *config.Config) (*LocalSystem, error) {
 		pool:       pool,
 		cache:      amassnet.NewASNCache(),
 		done:       make(chan struct{}, 2),
-		addSource:  make(chan requests.Service, 10),
-		allSources: make(chan chan []requests.Service, 10),
-		rlimit:     ratelimit.New(c.MaxDNSQueries),
+		addSource:  make(chan service.Service),
+		allSources: make(chan chan []service.Service, 10),
 	}
 
 	// Load the ASN information into the cache
@@ -91,13 +107,13 @@ func (l *LocalSystem) Cache() *amassnet.ASNCache {
 }
 
 // AddSource implements the System interface.
-func (l *LocalSystem) AddSource(src requests.Service) error {
+func (l *LocalSystem) AddSource(src service.Service) error {
 	l.addSource <- src
 	return nil
 }
 
 // AddAndStart implements the System interface.
-func (l *LocalSystem) AddAndStart(srv requests.Service) error {
+func (l *LocalSystem) AddAndStart(srv service.Service) error {
 	err := srv.Start()
 
 	if err == nil {
@@ -107,18 +123,32 @@ func (l *LocalSystem) AddAndStart(srv requests.Service) error {
 }
 
 // DataSources implements the System interface.
-func (l *LocalSystem) DataSources() []requests.Service {
-	ch := make(chan []requests.Service, 2)
+func (l *LocalSystem) DataSources() []service.Service {
+	ch := make(chan []service.Service, 2)
 
 	l.allSources <- ch
 	return <-ch
 }
 
 // SetDataSources assigns the data sources that will be used by the system.
-func (l *LocalSystem) SetDataSources(sources []requests.Service) {
+func (l *LocalSystem) SetDataSources(sources []service.Service) {
+	f := func(src service.Service, ch chan error) { ch <- l.AddAndStart(src) }
+
+	ch := make(chan error, len(sources))
 	// Add all the data sources that successfully start to the list
 	for _, src := range sources {
-		l.AddAndStart(src)
+		go f(src, ch)
+	}
+
+	t := time.NewTimer(5 * time.Second)
+	defer t.Stop()
+loop:
+	for i := 0; i < len(sources); i++ {
+		select {
+		case <-t.C:
+			break loop
+		case <-ch:
+		}
 	}
 }
 
@@ -194,7 +224,7 @@ func (l *LocalSystem) setupGraphDBs() error {
 		}
 
 		// Load the ASN Cache with all prior knowledge of IP address ranges and ASNs
-		go g.ASNCacheFill(l.Cache())
+		g.ASNCacheFill(l.Cache())
 
 		l.graphs = append(l.graphs, g)
 	}
@@ -210,14 +240,8 @@ func (l *LocalSystem) GetMemoryUsage() uint64 {
 	return m.Alloc
 }
 
-// PerformDNSQuery blocks if the maximum number of queries is already taking place.
-func (l *LocalSystem) PerformDNSQuery() error {
-	l.rlimit.Take()
-	return nil
-}
-
 func (l *LocalSystem) manageDataSources() {
-	var dataSources []requests.Service
+	var dataSources []service.Service
 
 	for {
 		select {
@@ -225,6 +249,9 @@ func (l *LocalSystem) manageDataSources() {
 			return
 		case add := <-l.addSource:
 			dataSources = append(dataSources, add)
+			sort.Slice(dataSources, func(i, j int) bool {
+				return dataSources[i].String() < dataSources[j].String()
+			})
 		case all := <-l.allSources:
 			all <- dataSources
 		}

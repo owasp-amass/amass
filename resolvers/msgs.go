@@ -1,17 +1,20 @@
-// Copyright 2017 Jeff Foley. All rights reserved.
+// Copyright 2021 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 package resolvers
 
 import (
-	"fmt"
+	"math/rand"
 	"net"
 	"strings"
 
-	amassdns "github.com/OWASP/Amass/v3/net/dns"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/miekg/dns"
 )
+
+func randomInt(min, max int) int {
+	return min + rand.Intn((max-min)+1)
+}
 
 // RemoveLastDot removes the '.' at the end of the provided FQDN.
 func RemoveLastDot(name string) string {
@@ -22,30 +25,34 @@ func RemoveLastDot(name string) string {
 	return name
 }
 
-func queryMessage(id uint16, name string, qtype uint16) *dns.Msg {
-	m := &dns.Msg{
-		MsgHdr: dns.MsgHdr{
-			Authoritative:     false,
-			AuthenticatedData: false,
-			CheckingDisabled:  false,
-			RecursionDesired:  true,
-			Opcode:            dns.OpcodeQuery,
-			Id:                id,
-			Rcode:             dns.RcodeSuccess,
-		},
-		Question: make([]dns.Question, 1),
-	}
-	m.Question[0] = dns.Question{
-		Name:   dns.Fqdn(name),
-		Qtype:  qtype,
-		Qclass: uint16(dns.ClassINET),
-	}
-	m.Extra = append(m.Extra, setupOptions())
+// QueryMsg generates a message used for a forward DNS query.
+func QueryMsg(name string, qtype uint16) *dns.Msg {
+	m := new(dns.Msg)
+
+	m.SetQuestion(dns.Fqdn(name), qtype)
+	m.Extra = append(m.Extra, SetupOptions())
 	return m
 }
 
-// setupOptions - Returns the EDNS0_SUBNET option for hiding our location
-func setupOptions() *dns.OPT {
+// ReverseMsg generates a message used for a reverse DNS query.
+func ReverseMsg(addr string) *dns.Msg {
+	if r, err := dns.ReverseAddr(addr); err == nil {
+		return QueryMsg(r, dns.TypePTR)
+	}
+	return nil
+}
+
+// WalkMsg generates a message used for a NSEC walk query.
+func WalkMsg(name string, qtype uint16) *dns.Msg {
+	m := new(dns.Msg)
+
+	m.SetQuestion(dns.Fqdn(name), qtype)
+	m.SetEdns0(dns.DefaultMsgSize, true)
+	return m
+}
+
+// SetupOptions returns the EDNS0_SUBNET option for hiding our location.
+func SetupOptions() *dns.OPT {
 	e := &dns.EDNS0_SUBNET{
 		Code:          dns.EDNS0SUBNET,
 		Family:        1,
@@ -62,6 +69,118 @@ func setupOptions() *dns.OPT {
 		},
 		Option: []dns.EDNS0{e},
 	}
+}
+
+// ExtractedAnswer contains information from the DNS response Answer section.
+type ExtractedAnswer struct {
+	Name string
+	Type uint16
+	Data string
+}
+
+// AnswersByType returns only the answers from the DNS Answer section matching the provided type.
+func AnswersByType(answers []*ExtractedAnswer, qtype uint16) []*ExtractedAnswer {
+	var subset []*ExtractedAnswer
+
+	for _, a := range answers {
+		if a.Type == qtype {
+			subset = append(subset, a)
+		}
+	}
+
+	return subset
+}
+
+// ExtractAnswers returns information from the DNS Answer section of the provided Msg in ExtractedAnswer type.
+func ExtractAnswers(msg *dns.Msg) []*ExtractedAnswer {
+	var data []*ExtractedAnswer
+
+	for _, a := range msg.Answer {
+		var value string
+
+		switch a.Header().Rrtype {
+		case dns.TypeA:
+			if t, ok := a.(*dns.A); ok {
+				if ip := net.ParseIP(t.A.String()); ip != nil {
+					value = ip.String()
+				}
+			}
+		case dns.TypeAAAA:
+			if t, ok := a.(*dns.AAAA); ok {
+				if ip := net.ParseIP(t.AAAA.String()); ip != nil {
+					value = ip.String()
+				}
+			}
+		case dns.TypeCNAME:
+			if t, ok := a.(*dns.CNAME); ok {
+				name := RemoveLastDot(t.Target)
+
+				if _, ok := dns.IsDomainName(name); ok {
+					value = name
+				}
+			}
+		case dns.TypePTR:
+			if t, ok := a.(*dns.PTR); ok {
+				name := RemoveLastDot(t.Ptr)
+
+				if _, ok := dns.IsDomainName(name); ok {
+					value = name
+				}
+			}
+		case dns.TypeNS:
+			if t, ok := a.(*dns.NS); ok {
+				name := RemoveLastDot(t.Ns)
+
+				if _, ok := dns.IsDomainName(name); ok {
+					value = name
+				}
+			}
+		case dns.TypeMX:
+			if t, ok := a.(*dns.MX); ok {
+				name := RemoveLastDot(t.Mx)
+
+				if _, ok := dns.IsDomainName(name); ok {
+					value = name
+				}
+			}
+		case dns.TypeTXT:
+			if t, ok := a.(*dns.TXT); ok {
+				value = strings.Join(t.Txt, " ")
+			}
+		case dns.TypeSOA:
+			if t, ok := a.(*dns.SOA); ok {
+				value = t.Ns + "," + t.Mbox
+			}
+		case dns.TypeSPF:
+			if t, ok := a.(*dns.SPF); ok {
+				value = strings.Join(t.Txt, " ")
+			}
+		case dns.TypeSRV:
+			if t, ok := a.(*dns.SRV); ok {
+				name := RemoveLastDot(t.Target)
+
+				if _, ok := dns.IsDomainName(name); ok {
+					value = name
+				}
+			}
+		}
+
+		if value != "" {
+			data = append(data, &ExtractedAnswer{
+				Name: strings.ToLower(RemoveLastDot(a.Header().Name)),
+				Type: a.Header().Rrtype,
+				Data: strings.TrimSpace(value),
+			})
+		}
+	}
+
+	return data
+}
+
+func realName(hdr dns.RR_Header) string {
+	pieces := strings.Split(hdr.Name, " ")
+
+	return RemoveLastDot(pieces[len(pieces)-1])
 }
 
 func getXfrRequests(en *dns.Envelope, domain string) []*requests.DNSRequest {
@@ -140,109 +259,4 @@ func getXfrRequests(en *dns.Envelope, domain string) []*requests.DNSRequest {
 		requests = append(requests, r)
 	}
 	return requests
-}
-
-func textToTypeNum(text string) (uint16, error) {
-	var qtype uint16
-
-	switch text {
-	case "CNAME":
-		qtype = dns.TypeCNAME
-	case "A":
-		qtype = dns.TypeA
-	case "AAAA":
-		qtype = dns.TypeAAAA
-	case "PTR":
-		qtype = dns.TypePTR
-	case "NS":
-		qtype = dns.TypeNS
-	case "MX":
-		qtype = dns.TypeMX
-	case "TXT":
-		qtype = dns.TypeTXT
-	case "SOA":
-		qtype = dns.TypeSOA
-	case "SPF":
-		qtype = dns.TypeSPF
-	case "SRV":
-		qtype = dns.TypeSRV
-	}
-
-	if qtype == 0 {
-		return qtype, fmt.Errorf("DNS message type '%s' not supported", text)
-	}
-	return qtype, nil
-}
-
-type extractedData struct {
-	Name  string
-	Value string
-}
-
-func extractRawData(msg *dns.Msg, qtype uint16) []*extractedData {
-	var data []*extractedData
-
-	for _, a := range msg.Answer {
-		if a.Header().Rrtype == qtype {
-			var value string
-
-			switch qtype {
-			case dns.TypeA:
-				if t, ok := a.(*dns.A); ok {
-					value = amassdns.CopyString(t.A.String())
-				}
-			case dns.TypeAAAA:
-				if t, ok := a.(*dns.AAAA); ok {
-					value = amassdns.CopyString(t.AAAA.String())
-				}
-			case dns.TypeCNAME:
-				if t, ok := a.(*dns.CNAME); ok {
-					value = amassdns.CopyString(t.Target)
-				}
-			case dns.TypePTR:
-				if t, ok := a.(*dns.PTR); ok {
-					value = amassdns.CopyString(t.Ptr)
-				}
-			case dns.TypeNS:
-				if t, ok := a.(*dns.NS); ok {
-					value = realName(t.Hdr) + "," + RemoveLastDot(t.Ns)
-				}
-			case dns.TypeMX:
-				if t, ok := a.(*dns.MX); ok {
-					value = amassdns.CopyString(t.Mx)
-				}
-			case dns.TypeTXT:
-				if t, ok := a.(*dns.TXT); ok {
-					value = strings.Join(t.Txt, " ")
-				}
-			case dns.TypeSOA:
-				if t, ok := a.(*dns.SOA); ok {
-					value = t.Ns + "," + t.Mbox
-				}
-			case dns.TypeSPF:
-				if t, ok := a.(*dns.SPF); ok {
-					value = strings.Join(t.Txt, " ")
-				}
-			case dns.TypeSRV:
-				if t, ok := a.(*dns.SRV); ok {
-					value = amassdns.CopyString(t.Target)
-				}
-			}
-
-			if value != "" {
-				data = append(data, &extractedData{
-					Name:  strings.ToLower(RemoveLastDot(a.Header().Name)),
-					Value: strings.TrimSpace(value),
-				})
-			}
-		}
-	}
-
-	return data
-}
-
-func realName(hdr dns.RR_Header) string {
-	pieces := strings.Split(hdr.Name, " ")
-
-	return RemoveLastDot(pieces[len(pieces)-1])
 }

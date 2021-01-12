@@ -8,19 +8,19 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
-	"time"
 
-	"github.com/OWASP/Amass/v3/eventbus"
 	amassnet "github.com/OWASP/Amass/v3/net"
 	amasshttp "github.com/OWASP/Amass/v3/net/http"
 	"github.com/OWASP/Amass/v3/requests"
-	"github.com/OWASP/Amass/v3/stringset"
 	"github.com/OWASP/Amass/v3/systems"
+	"github.com/caffix/eventbus"
+	"github.com/caffix/service"
+	"github.com/caffix/stringset"
 )
 
 // IPToASN is the Service that handles access to the IPToASN data source.
 type IPToASN struct {
-	requests.BaseService
+	service.BaseService
 
 	SourceType string
 }
@@ -29,25 +29,29 @@ type IPToASN struct {
 func NewIPToASN(sys systems.System) *IPToASN {
 	i := &IPToASN{SourceType: requests.API}
 
-	i.BaseService = *requests.NewBaseService(i, "IPToASN")
+	i.BaseService = *service.NewBaseService(i, "IPToASN")
 	return i
 }
 
-// Type implements the Service interface.
-func (i *IPToASN) Type() string {
+// Description implements the Service interface.
+func (i *IPToASN) Description() string {
 	return i.SourceType
 }
 
 // OnStart implements the Service interface.
 func (i *IPToASN) OnStart() error {
-	i.BaseService.OnStart()
-
-	i.SetRateLimit(2 * time.Second)
+	i.SetRateLimit(1)
 	return nil
 }
 
-// OnASNRequest implements the Service interface.
-func (i *IPToASN) OnASNRequest(ctx context.Context, req *requests.ASNRequest) {
+// OnRequest implements the Service interface.
+func (i *IPToASN) OnRequest(ctx context.Context, args service.Args) {
+	if req, ok := args.(*requests.ASNRequest); ok {
+		i.asnRequest(ctx, req)
+	}
+}
+
+func (i *IPToASN) asnRequest(ctx context.Context, req *requests.ASNRequest) {
 	_, bus, err := ContextConfigBus(ctx)
 	if err != nil {
 		return

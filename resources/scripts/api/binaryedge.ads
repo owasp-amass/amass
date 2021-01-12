@@ -78,7 +78,6 @@ function apiquery(ctx, domain)
             return
         end
 
-        active(ctx)
         checkratelimit()
     end
 end

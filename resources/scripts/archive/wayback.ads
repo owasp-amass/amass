@@ -9,13 +9,49 @@ function start()
 end
 
 function vertical(ctx, domain)
-    crawl(ctx, buildurl(domain))
-end
+    local resp
+    local vurl = buildurl(domain)
+    local cfg = datasrc_config()
 
-function resolved(ctx, name, domain, records)
-    crawl(ctx, buildurl(name))
+    -- Check if the response data is in the graph database
+    if (cfg.ttl ~= nil and cfg.ttl > 0) then
+        resp = obtain_response(vurl, cfg.ttl)
+    end
+
+    if (resp == nil or resp == "") then
+        local err
+
+        resp, err = request({
+            url=vurl,
+            headers={['Content-Type']="application/json"},
+        })
+        if (err ~= nil and err ~= "") then
+            return
+        end
+    
+        if (cfg.ttl ~= nil and cfg.ttl > 0) then
+            cache_response(vurl, resp)
+        end
+    end
+    
+    sendnames(ctx, resp)
 end
 
 function buildurl(domain)
-    return "http://web.archive.org/web/" .. os.date("%Y") .. "/" .. domain
+    return "http://web.archive.org/cdx/search/cdx?url=*." .. domain .. "&output=json&collapse=urlkey"
+end
+
+function sendnames(ctx, content)
+    local names = find(content, subdomainre)
+    if names == nil then
+        return
+    end
+
+    local found = {}
+    for i, v in pairs(names) do
+        if found[v] == nil then
+            newname(ctx, v)
+            found[v] = true
+        end
+    end
 end

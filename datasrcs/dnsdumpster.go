@@ -11,17 +11,17 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
-	"time"
 
-	"github.com/OWASP/Amass/v3/eventbus"
 	amasshttp "github.com/OWASP/Amass/v3/net/http"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/systems"
+	"github.com/caffix/eventbus"
+	"github.com/caffix/service"
 )
 
 // DNSDumpster is the Service that handles access to the DNSDumpster data source.
 type DNSDumpster struct {
-	requests.BaseService
+	service.BaseService
 
 	SourceType string
 	sys        systems.System
@@ -34,25 +34,29 @@ func NewDNSDumpster(sys systems.System) *DNSDumpster {
 		sys:        sys,
 	}
 
-	d.BaseService = *requests.NewBaseService(d, "DNSDumpster")
+	d.BaseService = *service.NewBaseService(d, "DNSDumpster")
 	return d
 }
 
-// Type implements the Service interface.
-func (d *DNSDumpster) Type() string {
+// Description implements the Service interface.
+func (d *DNSDumpster) Description() string {
 	return d.SourceType
 }
 
 // OnStart implements the Service interface.
 func (d *DNSDumpster) OnStart() error {
-	d.BaseService.OnStart()
-
-	d.SetRateLimit(time.Second)
+	d.SetRateLimit(1)
 	return nil
 }
 
-// OnDNSRequest implements the Service interface.
-func (d *DNSDumpster) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
+// OnRequest implements the Service interface.
+func (d *DNSDumpster) OnRequest(ctx context.Context, args service.Args) {
+	if req, ok := args.(*requests.DNSRequest); ok {
+		d.dnsRequest(ctx, req)
+	}
+}
+
+func (d *DNSDumpster) dnsRequest(ctx context.Context, req *requests.DNSRequest) {
 	cfg, bus, err := ContextConfigBus(ctx)
 	if err != nil {
 		return
@@ -63,8 +67,6 @@ func (d *DNSDumpster) OnDNSRequest(ctx context.Context, req *requests.DNSRequest
 		return
 	}
 
-	d.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, d.String())
 	bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 		fmt.Sprintf("Querying %s for %s subdomains", d.String(), req.Domain))
 
@@ -83,8 +85,6 @@ func (d *DNSDumpster) OnDNSRequest(ctx context.Context, req *requests.DNSRequest
 	}
 
 	d.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, d.String())
-
 	page, err = d.postForm(ctx, token, req.Domain)
 	if err != nil {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", d.String(), u, err))

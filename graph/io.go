@@ -10,6 +10,7 @@ import (
 	amassnet "github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/stringfilter"
+	"github.com/caffix/stringset"
 	"github.com/cayleygraph/cayley"
 	"github.com/cayleygraph/quad"
 	"golang.org/x/net/publicsuffix"
@@ -120,8 +121,8 @@ func (g *Graph) buildNameInfo(uuid string, names []string) []*requests.Output {
 	}
 
 	g.db.Lock()
-	nodes := cayley.StartPath(g.db.store, nameVals...)
-	p := cayley.StartPath(g.db.store, quad.IRI(uuid)).OutWithTags([]string{"predicate"}).And(nodes).Tag("name")
+	p := cayley.StartPath(g.db.store, nameVals...).Has(quad.IRI("type"), quad.String("fqdn"))
+	p = p.Tag("name").InWithTags([]string{"predicate"}).Is(quad.IRI(uuid))
 	p.Iterate(context.Background()).TagValues(nil, func(m map[string]quad.Value) {
 		name := valToStr(m["name"])
 		pred := valToStr(m["predicate"])
@@ -129,37 +130,53 @@ func (g *Graph) buildNameInfo(uuid string, names []string) []*requests.Output {
 		if notDataSourceSet.Has(pred) {
 			return
 		}
-
 		if _, found := results[name]; !found {
-			domain, err := publicsuffix.EffectiveTLDPlusOne(name)
-			if err != nil {
-				return
-			}
-
-			results[name] = &requests.Output{
-				Name:   name,
-				Domain: domain,
-			}
+			results[name] = &requests.Output{Name: name}
 		}
 
-		results[name].Sources = append(results[name].Sources, pred)
+		n := append(results[name].Sources, pred)
+		if s := stringset.Deduplicate(n); len(results[name].Sources) < len(s) {
+			results[name].Sources = n
+		}
 	})
 	g.db.Unlock()
 
 	var final []*requests.Output
 	sourceTags := make(map[string]string)
 	for _, o := range results {
-		source := o.Sources[0]
-
-		tag, found := sourceTags[source]
-		if !found {
-			tag = g.SourceTag(source)
-
-			sourceTags[source] = tag
+		domain, err := publicsuffix.EffectiveTLDPlusOne(o.Name)
+		if err != nil {
+			continue
 		}
-		o.Tag = tag
+		o.Domain = domain
+
+		if len(o.Sources) == 0 {
+			continue
+		}
+		o.Tag = g.selectTag(o.Sources, sourceTags)
 
 		final = append(final, o)
 	}
 	return final
+}
+
+func (g *Graph) selectTag(sources []string, sourceTags map[string]string) string {
+	var source, tag string
+
+	for _, src := range sources {
+		var found bool
+
+		source = src
+		tag, found = sourceTags[source]
+		if !found {
+			tag = g.SourceTag(source)
+			sourceTags[source] = tag
+		}
+
+		if requests.TrustedTag(tag) {
+			break
+		}
+	}
+
+	return tag
 }

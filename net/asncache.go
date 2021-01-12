@@ -8,7 +8,7 @@ import (
 	"sync"
 
 	"github.com/OWASP/Amass/v3/requests"
-	"github.com/OWASP/Amass/v3/stringset"
+	"github.com/caffix/stringset"
 	"github.com/yl2chen/cidranger"
 )
 
@@ -76,6 +76,11 @@ func (c *ASNCache) Update(req *requests.ASNRequest) {
 // AddrSearch returns the cached ASN / netblock info that the addr parameter belongs in,
 // or nil when not found in the cache.
 func (c *ASNCache) AddrSearch(addr string) *requests.ASNRequest {
+	ip := net.ParseIP(addr)
+	if ip == nil {
+		return nil
+	}
+
 	// Does the address fall into a reserved address ranges?
 	if yes, cidr := IsReservedAddress(addr); yes {
 		return &requests.ASNRequest{
@@ -86,11 +91,6 @@ func (c *ASNCache) AddrSearch(addr string) *requests.ASNRequest {
 			Tag:         requests.RIR,
 			Source:      "RIR",
 		}
-	}
-
-	ip := net.ParseIP(addr)
-	if ip == nil {
-		return nil
 	}
 
 	entry := c.searchRangerData(ip)
