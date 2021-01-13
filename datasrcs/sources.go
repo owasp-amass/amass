@@ -24,7 +24,6 @@ func GetAllSources(sys systems.System) []service.Service {
 		NewCrtsh(sys),
 		NewDNSDB(sys),
 		NewDNSDumpster(sys),
-		NewIPToASN(sys),
 		NewNetworksDB(sys),
 		NewPastebin(sys),
 		NewRADb(sys),
