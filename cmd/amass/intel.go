@@ -212,7 +212,7 @@ func runIntelCommand(clArgs []string) {
 	}
 	sys.SetDataSources(datasrcs.GetAllSources(sys))
 
-	ic := intel.NewCollection(sys)
+	ic := intel.NewCollection(cfg, sys)
 	if ic == nil {
 		r.Fprintf(color.Error, "%s\n", "No DNS resolvers passed the sanity check")
 		os.Exit(1)
@@ -282,17 +282,17 @@ func processIntelOutput(ic *intel.Collection, args *intelArgs) {
 
 	// Collect all the names returned by the intelligence collection
 	for out := range ic.Output {
-		source, name, ips := format.OutputLineParts(out, args.Options.Sources,
+		source, _, ips := format.OutputLineParts(out, args.Options.Sources,
 			args.Options.IPs || args.Options.IPv4 || args.Options.IPv6, args.Options.DemoMode)
 
 		if ips != "" {
 			ips = " " + ips
 		}
 
-		fmt.Fprintf(color.Output, "%s%s%s\n", blue(source), green(name), yellow(ips))
+		fmt.Fprintf(color.Output, "%s%s%s\n", blue(source), green(out.Domain), yellow(ips))
 		// Handle writing the line to a specified output file
 		if outptr != nil {
-			fmt.Fprintf(outptr, "%s%s%s\n", source, name, ips)
+			fmt.Fprintf(outptr, "%s%s%s\n", source, out.Domain, ips)
 		}
 	}
 }
