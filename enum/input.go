@@ -17,7 +17,7 @@ const (
 	maxWaitForData = 30 * time.Second
 )
 
-// enumSource handles the filtering and release of newly Data in the enumeration.
+// enumSource handles the filtering and release of new Data in the enumeration.
 type enumSource struct {
 	enum     *Enumeration
 	queue    queue.Queue

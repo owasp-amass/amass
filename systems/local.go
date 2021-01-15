@@ -22,17 +22,14 @@ import (
 
 // LocalSystem implements a System to be executed within a single process.
 type LocalSystem struct {
-	cfg    *config.Config
-	pool   resolvers.Resolver
-	graphs []*graph.Graph
-	cache  *amassnet.ASNCache
-
-	// Broadcast channel that indicates no further writes to the output channel
+	cfg               *config.Config
+	pool              resolvers.Resolver
+	graphs            []*graph.Graph
+	cache             *amassnet.ASNCache
 	done              chan struct{}
 	doneAlreadyClosed bool
-
-	addSource  chan service.Service
-	allSources chan chan []service.Service
+	addSource         chan service.Service
+	allSources        chan chan []service.Service
 }
 
 // NewLocalSystem returns an initialized LocalSystem object.
@@ -53,7 +50,7 @@ func NewLocalSystem(c *config.Config) (*LocalSystem, error) {
 
 	var trusted []resolvers.Resolver
 	for _, addr := range config.DefaultBaselineResolvers {
-		trusted = append(trusted, resolvers.NewBaseResolver(addr, 20, c.Log))
+		trusted = append(trusted, resolvers.NewBaseResolver(addr, 10, c.Log))
 	}
 
 	baseline := resolvers.NewRoundRobin(trusted, c.Log)
@@ -265,11 +262,19 @@ func (l *LocalSystem) loadCacheData() error {
 	}
 
 	for _, r := range ranges {
+		cidr := amassnet.Range2CIDR(r.FirstIP, r.LastIP)
+		if cidr == nil {
+			continue
+		}
+		if ones, _ := cidr.Mask.Size(); ones == 0 {
+			continue
+		}
+
 		l.cache.Update(&requests.ASNRequest{
 			Address:     r.FirstIP.String(),
 			ASN:         r.ASN,
 			CC:          r.CC,
-			Prefix:      amassnet.Range2CIDR(r.FirstIP, r.LastIP).String(),
+			Prefix:      cidr.String(),
 			Description: r.Description,
 		})
 	}

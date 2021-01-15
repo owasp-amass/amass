@@ -5,8 +5,8 @@ package enum
 
 import (
 	"context"
-	"fmt"
 	"net"
+	"strconv"
 
 	amassnet "github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/requests"
@@ -17,6 +17,7 @@ import (
 const (
 	defaultSweepSize = 100
 	activeSweepSize  = 200
+	filterSize       = 20
 )
 
 // addrTask handles the investigation of addresses associated with newly resolved FQDNs.
@@ -29,15 +30,15 @@ type addrTask struct {
 func newAddressTask(e *Enumeration) *addrTask {
 	return &addrTask{
 		enum:        e,
-		filter:      stringfilter.NewBloomFilter(1 << 16),
-		sweepFilter: stringfilter.NewBloomFilter(1 << 16),
+		filter:      stringfilter.NewBloomFilter(1 << filterSize),
+		sweepFilter: stringfilter.NewBloomFilter(1 << filterSize),
 	}
 }
 
 // Stop releases allocated resources by the AddressTask.
 func (r *addrTask) Stop() error {
-	r.filter = stringfilter.NewBloomFilter(1 << 16)
-	r.sweepFilter = stringfilter.NewBloomFilter(1 << 16)
+	r.filter = stringfilter.NewBloomFilter(1 << filterSize)
+	r.sweepFilter = stringfilter.NewBloomFilter(1 << filterSize)
 	return nil
 }
 
@@ -48,20 +49,17 @@ func (r *addrTask) Process(ctx context.Context, data pipeline.Data, tp pipeline.
 		return data, nil
 	}
 	if req == nil || !req.Valid() {
-		fmt.Printf("%s was dropped with '%s' domain from source %s", req.Address, req.Domain, req.Source)
 		return nil, nil
 	}
 	// Does the address fall into a reserved address range?
 	if yes, _ := amassnet.IsReservedAddress(req.Address); yes {
 		return nil, nil
 	}
-	// Have we already processed this address?
-	if r.filter.Duplicate(req.Address) {
+	// Do not submit addresses after already processing them as in-scope
+	if r.filter.Has(req.Address + strconv.FormatBool(true)) {
 		return nil, nil
 	}
-	// Perform additional investigation of this address if
-	// the associated domain is in scope
-	if !r.enum.Config.IsDomainInScope(req.Domain) {
+	if r.filter.Duplicate(req.Address + strconv.FormatBool(req.InScope)) {
 		return nil, nil
 	}
 	// Generate the additional addresses to sweep across

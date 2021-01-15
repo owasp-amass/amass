@@ -164,8 +164,7 @@ func (r *subdomainTask) Process(ctx context.Context, data pipeline.Data, tp pipe
 	if !ok {
 		return data, nil
 	}
-
-	if !r.enum.Config.IsDomainInScope(req.Name) {
+	if req == nil || !r.enum.Config.IsDomainInScope(req.Name) {
 		return nil, nil
 	}
 

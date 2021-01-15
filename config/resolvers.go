@@ -17,19 +17,26 @@ import (
 )
 
 // DefaultQueriesPerResolver is the number of queries sent to each DNS resolver per second.
-const DefaultQueriesPerResolver = 2
+const DefaultQueriesPerResolver = 4
 const minResolverReliability = 0.95
 
 // DefaultBaselineResolvers is a list of trusted public DNS resolvers.
 var DefaultBaselineResolvers = []string{
-	"8.8.8.8",     // Google
-	"1.1.1.1",     // Cloudflare
-	"64.6.64.6",   // Verisign
-	"74.82.42.42", // Hurricane Electric
-	"1.0.0.1",     // Cloudflare Secondary
-	"8.8.4.4",     // Google Secondary
-	"64.6.65.6",   // Verisign Secondary
-	"77.88.8.1",   // Yandex.DNS Secondary
+	"8.8.8.8",        // Google
+	"1.1.1.1",        // Cloudflare
+	"9.9.9.9",        // Quad9
+	"208.67.222.222", // Cisco OpenDNS
+	"209.244.0.3",    // Level3
+	"64.6.64.6",      // Verisign
+	"84.200.69.80",   // DNS.WATCH
+	"8.26.56.26",     // Comodo Secure DNS
+	"23.94.60.240",   // OpenNIC
+	"208.76.50.50",   // SmartViper
+	"216.146.35.35",  // Dyn
+	"198.101.242.72", // Alternate DNS
+	"109.69.8.51",    // puntCAT
+	"74.82.42.42",    // Hurricane Electric
+	"77.88.8.8",      // Yandex.DNS
 }
 
 // PublicResolvers includes the addresses of public resolvers obtained dynamically.

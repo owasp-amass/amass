@@ -5,10 +5,10 @@ package enum
 
 import (
 	"context"
-	"math/rand"
 	"sync"
 
 	"github.com/OWASP/Amass/v3/config"
+	"github.com/OWASP/Amass/v3/datasrcs"
 	"github.com/OWASP/Amass/v3/graph"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/resolvers"
@@ -18,7 +18,6 @@ import (
 	"github.com/caffix/pipeline"
 	"github.com/caffix/queue"
 	"github.com/caffix/service"
-	"github.com/caffix/stringset"
 )
 
 var filterMaxSize int64 = 1 << 23
@@ -39,7 +38,6 @@ type Enumeration struct {
 	nameSrc        *enumSource
 	subTask        *subdomainTask
 	dnsTask        *dNSTask
-	asSrv          *ASService
 }
 
 // NewEnumeration returns an initialized Enumeration that has not been started yet.
@@ -49,7 +47,7 @@ func NewEnumeration(cfg *config.Config, sys systems.System) *Enumeration {
 		Sys:            sys,
 		Bus:            eventbus.NewEventBus(),
 		Graph:          graph.NewGraph(graph.NewCayleyGraphMemory()),
-		srcs:           selectedDataSources(cfg, sys),
+		srcs:           datasrcs.SelectedDataSources(cfg, sys.DataSources()),
 		logQueue:       queue.NewQueue(),
 		done:           make(chan struct{}),
 		resolvedFilter: stringfilter.NewBloomFilter(filterMaxSize),
@@ -61,7 +59,6 @@ func NewEnumeration(cfg *config.Config, sys systems.System) *Enumeration {
 
 	e.dnsTask = newDNSTask(e)
 	e.subTask = newSubdomainTask(e)
-	e.asSrv = NewASService(sys, e.Graph, e.Config.UUID.String())
 	return e
 }
 
@@ -76,35 +73,6 @@ func (e *Enumeration) stop() {
 	e.doneOnce.Do(func() {
 		close(e.done)
 	})
-}
-
-// Using the config and system provided, this function returns the data sources used in the enumeration
-func selectedDataSources(cfg *config.Config, sys systems.System) []service.Service {
-	specified := stringset.New()
-	specified.InsertMany(cfg.SourceFilter.Sources...)
-
-	available := stringset.New()
-	for _, src := range sys.DataSources() {
-		available.Insert(src.String())
-	}
-
-	if specified.Len() > 0 && cfg.SourceFilter.Include {
-		available.Intersect(specified)
-	} else {
-		available.Subtract(specified)
-	}
-
-	var results []service.Service
-	for _, src := range sys.DataSources() {
-		if available.Has(src.String()) {
-			results = append(results, src)
-		}
-	}
-
-	rand.Shuffle(len(results), func(i, j int) {
-		results[i], results[j] = results[j], results[i]
-	})
-	return results
 }
 
 // Start begins the vertical domain correlation process.
@@ -152,8 +120,6 @@ func (e *Enumeration) Start(ctx context.Context) error {
 	if !e.Config.Passive {
 		e.Bus.Subscribe(requests.NewAddrTopic, source.InputAddress)
 		defer e.Bus.Unsubscribe(requests.NewAddrTopic, source.InputAddress)
-		e.Bus.Subscribe(requests.NewAddrTopic, e.asSrv.InputAddress)
-		defer e.Bus.Unsubscribe(requests.NewAddrTopic, e.asSrv.InputAddress)
 		e.Bus.Subscribe(requests.NewASNTopic, e.Sys.Cache().Update)
 		defer e.Bus.Unsubscribe(requests.NewASNTopic, e.Sys.Cache().Update)
 	}

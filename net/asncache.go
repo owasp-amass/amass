@@ -142,6 +142,9 @@ func (c *ASNCache) rawData2Ranger(ip net.IP) {
 			if err != nil {
 				continue
 			}
+			if ones, _ := ipnet.Mask.Size(); ones == 0 {
+				continue
+			}
 
 			if ipnet.Contains(ip) {
 				// Select the smallest CIDR

@@ -14,7 +14,7 @@ import (
 )
 
 // QueryTimeout is the duration until a Resolver query expires.
-var QueryTimeout = 2 * time.Second
+var QueryTimeout = 5 * time.Second
 
 // ResolveError contains the Rcode returned during the DNS query.
 type ResolveError struct {
@@ -163,4 +163,51 @@ func (r *xchgManager) delete(keys []string) []*resolveRequest {
 	}
 
 	return removed
+}
+
+const (
+	minNumInAverage   int     = 25
+	maxNumInAverage   int     = 50
+	failurePercentage float64 = 0.9
+)
+
+type slidingWindowTimeouts struct {
+	sync.Mutex
+	avgs map[string][]bool
+}
+
+func newSlidingWindowTimeouts() *slidingWindowTimeouts {
+	return &slidingWindowTimeouts{avgs: make(map[string][]bool)}
+}
+
+func (s *slidingWindowTimeouts) updateTimeouts(key string, timeout bool) bool {
+	s.Lock()
+	defer s.Unlock()
+
+	if _, found := s.avgs[key]; !found {
+		s.avgs[key] = []bool{}
+	}
+
+	s.avgs[key] = append(s.avgs[key], timeout)
+
+	l := len(s.avgs[key])
+	if l < minNumInAverage {
+		return false
+	}
+
+	if l > maxNumInAverage {
+		s.avgs[key] = s.avgs[key][l-maxNumInAverage:]
+	}
+
+	var count float64
+	for _, v := range s.avgs[key] {
+		if v {
+			count++
+		}
+	}
+
+	if count/float64(l) >= failurePercentage {
+		return true
+	}
+	return false
 }

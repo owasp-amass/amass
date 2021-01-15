@@ -7,11 +7,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/OWASP/Amass/v3/datasrcs"
-	"github.com/OWASP/Amass/v3/net"
+	amassnet "github.com/OWASP/Amass/v3/net"
 	amassdns "github.com/OWASP/Amass/v3/net/dns"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/resolvers"
@@ -39,14 +41,23 @@ func (dm *dataManager) Process(ctx context.Context, data pipeline.Data, tp pipel
 	default:
 	}
 
-	if req, ok := data.(*requests.DNSRequest); ok && req != nil {
-		dm.DNSRequest(ctx, req, tp)
+	switch v := data.(type) {
+	case *requests.DNSRequest:
+		if v == nil {
+			return nil, nil
+		}
+		return data, dm.dnsRequest(ctx, v, tp)
+	case *requests.AddrRequest:
+		if v == nil {
+			return nil, nil
+		}
+		return data, dm.addrRequest(ctx, v, tp)
 	}
+
 	return data, nil
 }
 
-// DNSRequest inserts data from DNSRequest instances into the graph database.
-func (dm *dataManager) DNSRequest(ctx context.Context, req *requests.DNSRequest, tp pipeline.TaskParams) error {
+func (dm *dataManager) dnsRequest(ctx context.Context, req *requests.DNSRequest, tp pipeline.TaskParams) error {
 	// Check for CNAME records first
 	for i, r := range req.Records {
 		req.Records[i].Name = strings.Trim(strings.ToLower(r.Name), ".")
@@ -143,11 +154,12 @@ func (dm *dataManager) insertA(ctx context.Context, req *requests.DNSRequest, re
 		return errors.New(msg)
 	}
 
-	go pipeline.SendData(ctx, "new", &requests.DNSRequest{
-		Name:   addr,
-		Domain: req.Domain,
-		Tag:    requests.DNS,
-		Source: "DNS",
+	go pipeline.SendData(ctx, "new", &requests.AddrRequest{
+		Address: addr,
+		InScope: true,
+		Domain:  req.Domain,
+		Tag:     requests.DNS,
+		Source:  "DNS",
 	}, tp)
 	return nil
 }
@@ -170,11 +182,12 @@ func (dm *dataManager) insertAAAA(ctx context.Context, req *requests.DNSRequest,
 		return errors.New(msg)
 	}
 
-	go pipeline.SendData(ctx, "new", &requests.DNSRequest{
-		Name:   addr,
-		Domain: req.Domain,
-		Tag:    requests.DNS,
-		Source: "DNS",
+	go pipeline.SendData(ctx, "new", &requests.AddrRequest{
+		Address: addr,
+		InScope: true,
+		Domain:  req.Domain,
+		Tag:     requests.DNS,
+		Source:  "DNS",
 	}, tp)
 	return nil
 }
@@ -364,7 +377,7 @@ func (dm *dataManager) insertSPF(ctx context.Context, req *requests.DNSRequest, 
 }
 
 func (dm *dataManager) findNamesAndAddresses(ctx context.Context, data, domain string, tp pipeline.TaskParams) {
-	ipre := regexp.MustCompile(net.IPv4RE)
+	ipre := regexp.MustCompile(amassnet.IPv4RE)
 	for _, ip := range ipre.FindAllString(data, -1) {
 		go pipeline.SendData(ctx, "new", &requests.AddrRequest{
 			Address: ip,
@@ -388,4 +401,64 @@ func (dm *dataManager) findNamesAndAddresses(ctx context.Context, data, domain s
 			Source: "DNS",
 		}, tp)
 	}
+}
+
+func (dm *dataManager) addrRequest(ctx context.Context, req *requests.AddrRequest, tp pipeline.TaskParams) error {
+	select {
+	case <-ctx.Done():
+		return nil
+	default:
+	}
+
+	graph := dm.enum.Graph
+	uuid := dm.enum.Config.UUID.String()
+	if req == nil || !req.InScope || graph == nil || uuid == "" {
+		return nil
+	}
+
+	if r := dm.enum.Sys.Cache().AddrSearch(req.Address); r != nil {
+		graph.InsertInfrastructure(r.ASN, r.Description, r.Address, r.Prefix, r.Source, r.Tag, uuid)
+		return nil
+	}
+
+	for _, src := range dm.enum.srcs {
+		src.Request(ctx, &requests.ASNRequest{Address: req.Address})
+	}
+
+	var found bool
+	t := time.NewTicker(time.Second)
+	defer t.Stop()
+loop:
+	for i := 0; i < 10; i++ {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-t.C:
+			if r := dm.enum.Sys.Cache().AddrSearch(req.Address); r != nil {
+				graph.InsertInfrastructure(r.ASN, r.Description, r.Address, r.Prefix, r.Source, r.Tag, uuid)
+				found = true
+				break loop
+			}
+		}
+	}
+
+	if !found {
+		graph.InsertInfrastructure(0, "Unknown", req.Address, fakePrefix(req.Address), "RIR", requests.RIR, uuid)
+	}
+	graph.HealAddressNodes(dm.enum.Sys.Cache(), uuid)
+	return nil
+}
+
+func fakePrefix(addr string) string {
+	bits := 24
+	total := 32
+	ip := net.ParseIP(addr)
+
+	if amassnet.IsIPv6(ip) {
+		bits = 48
+		total = 128
+	}
+
+	mask := net.CIDRMask(bits, total)
+	return fmt.Sprintf("%s/%d", ip.Mask(mask).String(), bits)
 }

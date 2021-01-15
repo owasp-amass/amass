@@ -22,8 +22,8 @@ type resolverPool struct {
 	baseline       Resolver
 	resolvers      []Resolver
 	curIdx         int
-	timeoutLock    sync.Mutex
-	timeoutAvgs    map[string]*avgInfo
+	avgs           *slidingWindowTimeouts
+	waits          map[string]time.Time
 	hasBeenStopped bool
 }
 
@@ -83,11 +83,12 @@ func SetupResolverPool(addrs []string, baseline Resolver, max, perSec int, log *
 // NewResolverPool initializes a ResolverPool that uses the provided Resolvers.
 func NewResolverPool(baseline Resolver, resolvers []Resolver, logger *log.Logger) Resolver {
 	rp := &resolverPool{
-		baseline:    baseline,
-		resolvers:   resolvers,
-		timeoutAvgs: make(map[string]*avgInfo, len(resolvers)),
-		done:        make(chan struct{}, 2),
-		log:         logger,
+		baseline:  baseline,
+		resolvers: resolvers,
+		avgs:      newSlidingWindowTimeouts(),
+		waits:     make(map[string]time.Time),
+		done:      make(chan struct{}, 2),
+		log:       logger,
 	}
 
 	// Assign a null logger when one is not provided
@@ -125,48 +126,41 @@ func (rp *resolverPool) String() string {
 	return "ResolverPool"
 }
 
-func (rp *resolverPool) updateTimeouts(key string, timeout bool) bool {
-	rp.timeoutLock.Lock()
-	defer rp.timeoutLock.Unlock()
-
-	if _, found := rp.timeoutAvgs[key]; !found {
-		rp.timeoutAvgs[key] = new(avgInfo)
-	}
-
-	data := rp.timeoutAvgs[key]
-	if timeout {
-		data.Timeouts++
-	}
-	data.Num++
-
-	var stop bool
-	if data.Num > 10 && data.Timeouts/data.Num > 0.95 {
-		stop = true
-	}
-
-	return stop
-}
-
 func (rp *resolverPool) nextResolver() Resolver {
 	if rp.numUsableResolvers() == 0 {
 		return nil
 	}
 
+	var count int
 	var r Resolver
 	for {
 		rp.Lock()
 		idx := rp.curIdx
 		rp.curIdx++
 		rp.curIdx = rp.curIdx % len(rp.resolvers)
+		r = rp.resolvers[idx]
+		t, found := rp.waits[r.String()]
 		rp.Unlock()
 
-		r = rp.resolvers[idx]
-		if !r.Stopped() {
+		if (!found || t.IsZero() || time.Now().After(t)) && !r.Stopped() {
 			break
+		}
+
+		count++
+		count = count % len(rp.resolvers)
+		if count == 0 {
+			time.Sleep(5 * time.Second)
 		}
 	}
 
 	return r
+}
+
+func (rp *resolverPool) updateWait(key string, d time.Duration) {
+	rp.Lock()
+	defer rp.Unlock()
+
+	rp.waits[key] = time.Now().Add(d)
 }
 
 // Query implements the Stringer interface.
@@ -194,27 +188,36 @@ func (rp *resolverPool) Query(ctx context.Context, msg *dns.Msg, priority int, r
 			}
 		}
 
-		times++
 		resp, err = r.Query(ctx, msg, priority, nil)
-		if resp != nil && (resp.Rcode == dns.RcodeRefused || resp.Rcode == dns.RcodeServerFailure) {
-			r.Stop()
-		}
 
 		var timeout bool
 		if err != nil {
-			if e, ok := err.(*ResolveError); ok && e.Rcode == TimeoutRcode {
+			if e, ok := err.(*ResolveError); ok && (e.Rcode == TimeoutRcode ||
+				e.Rcode == dns.RcodeServerFailure || e.Rcode == dns.RcodeRefused) {
 				timeout = true
 			}
 		}
-		// Stop the resolver if queries have timed out too many times
-		if rp.updateTimeouts(r.String(), timeout) {
-			r.Stop()
+
+		k := r.String()
+		// Pause using the resolver if queries have timed out too much
+		if rp.avgs.updateTimeouts(k, timeout) && timeout {
+			rp.updateWait(k, 30*time.Second)
 		}
 
-		if err == nil || retry == nil {
+		if err == nil {
 			break
 		}
-		again = retry(times, priority, resp)
+
+		if err != nil {
+			if e, ok := err.(*ResolveError); ok && (e.Rcode == TimeoutRcode || e.Rcode == ResolverErrRcode) {
+				continue
+			}
+		}
+
+		if retry != nil {
+			times++
+			again = retry(times, priority, resp)
+		}
 	}
 
 	if err == nil && len(resp.Answer) > 0 {

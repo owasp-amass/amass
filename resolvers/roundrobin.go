@@ -9,14 +9,10 @@ import (
 	"io/ioutil"
 	"log"
 	"sync"
+	"time"
 
 	"github.com/miekg/dns"
 )
-
-type avgInfo struct {
-	Timeouts float64
-	Num      float64
-}
 
 type roundRobin struct {
 	sync.Mutex
@@ -26,19 +22,20 @@ type roundRobin struct {
 	baseline       Resolver
 	resolvers      []Resolver
 	curIdx         int
-	timeoutLock    sync.Mutex
-	timeoutAvgs    map[string]*avgInfo
+	avgs           *slidingWindowTimeouts
+	waits          map[string]time.Time
 	hasBeenStopped bool
 }
 
 // NewRoundRobin initializes a round robin resolver pool that uses the provided Resolvers.
 func NewRoundRobin(resolvers []Resolver, logger *log.Logger) Resolver {
 	rr := &roundRobin{
-		baseline:    resolvers[0],
-		resolvers:   resolvers,
-		timeoutAvgs: make(map[string]*avgInfo, len(resolvers)),
-		done:        make(chan struct{}, 2),
-		log:         logger,
+		baseline:  resolvers[0],
+		resolvers: resolvers,
+		done:      make(chan struct{}, 2),
+		log:       logger,
+		avgs:      newSlidingWindowTimeouts(),
+		waits:     make(map[string]time.Time),
 	}
 
 	// Assign a null logger when one is not provided
@@ -75,48 +72,41 @@ func (rr *roundRobin) String() string {
 	return "RoundRobin"
 }
 
-func (rr *roundRobin) updateTimeouts(key string, timeout bool) bool {
-	rr.timeoutLock.Lock()
-	defer rr.timeoutLock.Unlock()
-
-	if _, found := rr.timeoutAvgs[key]; !found {
-		rr.timeoutAvgs[key] = new(avgInfo)
-	}
-
-	data := rr.timeoutAvgs[key]
-	if timeout {
-		data.Timeouts++
-	}
-	data.Num++
-
-	var stop bool
-	if data.Num > 10 && data.Timeouts/data.Num > 0.95 {
-		stop = true
-	}
-
-	return stop
-}
-
 func (rr *roundRobin) nextResolver() Resolver {
 	if rr.numUsableResolvers() == 0 {
 		return nil
 	}
 
+	var count int
 	var r Resolver
 	for {
 		rr.Lock()
 		idx := rr.curIdx
 		rr.curIdx++
 		rr.curIdx = rr.curIdx % len(rr.resolvers)
+		r = rr.resolvers[idx]
+		t, found := rr.waits[r.String()]
 		rr.Unlock()
 
-		r = rr.resolvers[idx]
-		if !r.Stopped() {
+		if (!found || t.IsZero() || time.Now().After(t)) && !r.Stopped() {
 			break
+		}
+
+		count++
+		count = count % len(rr.resolvers)
+		if count == 0 {
+			time.Sleep(5 * time.Second)
 		}
 	}
 
 	return r
+}
+
+func (rr *roundRobin) updateWait(key string, d time.Duration) {
+	rr.Lock()
+	defer rr.Unlock()
+
+	rr.waits[key] = time.Now().Add(d)
 }
 
 // Query implements the Resolver interface.
@@ -131,6 +121,7 @@ func (rr *roundRobin) Query(ctx context.Context, msg *dns.Msg, priority int, ret
 	again := true
 	var times int
 	var err error
+	var r Resolver
 	var resp *dns.Msg
 	for again {
 		err = checkContext(ctx)
@@ -138,7 +129,7 @@ func (rr *roundRobin) Query(ctx context.Context, msg *dns.Msg, priority int, ret
 			break
 		}
 
-		r := rr.nextResolver()
+		r = rr.nextResolver()
 		if r == nil {
 			return nil, &ResolveError{
 				Err:   fmt.Sprintf("All resolvers have been stopped"),
@@ -146,27 +137,36 @@ func (rr *roundRobin) Query(ctx context.Context, msg *dns.Msg, priority int, ret
 			}
 		}
 
-		times++
 		resp, err = r.Query(ctx, msg, priority, nil)
-		if resp != nil && (resp.Rcode == dns.RcodeRefused || resp.Rcode == dns.RcodeServerFailure) {
-			r.Stop()
-		}
 
 		var timeout bool
 		if err != nil {
-			if e, ok := err.(*ResolveError); ok && e.Rcode == TimeoutRcode {
+			if e, ok := err.(*ResolveError); ok && (e.Rcode == TimeoutRcode ||
+				e.Rcode == dns.RcodeServerFailure || e.Rcode == dns.RcodeRefused) {
 				timeout = true
 			}
 		}
-		// Stop the resolver if queries have timed out too many times
-		if rr.updateTimeouts(r.String(), timeout) {
-			r.Stop()
+
+		k := r.String()
+		// Pause using the resolver if queries have timed out too much
+		if rr.avgs.updateTimeouts(k, timeout) && timeout {
+			rr.updateWait(k, 30*time.Second)
 		}
 
-		if err == nil || retry == nil {
+		if err == nil {
 			break
 		}
-		again = retry(times, priority, resp)
+
+		if err != nil {
+			if e, ok := err.(*ResolveError); ok && (e.Rcode == TimeoutRcode || e.Rcode == ResolverErrRcode) {
+				continue
+			}
+		}
+
+		if retry != nil {
+			times++
+			again = retry(times, priority, resp)
+		}
 	}
 
 	return resp, err

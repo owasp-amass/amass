@@ -202,6 +202,7 @@ func (z *ZoneXFRRequest) MarkAsProcessed() {}
 // AddrRequest handles data needed throughout Service processing of a network address.
 type AddrRequest struct {
 	Address string
+	InScope bool
 	Domain  string
 	Tag     string
 	Source  string
@@ -211,6 +212,7 @@ type AddrRequest struct {
 func (a *AddrRequest) Clone() pipeline.Data {
 	return &AddrRequest{
 		Address: a.Address,
+		InScope: a.InScope,
 		Domain:  a.Domain,
 		Tag:     a.Tag,
 		Source:  a.Source,
@@ -298,6 +300,20 @@ type Output struct {
 	Tag       string        `json:"tag"`
 	Sources   []string      `json:"sources"`
 }
+
+// Clone implements pipeline Data.
+func (o *Output) Clone() pipeline.Data {
+	return &Output{
+		Name:      o.Name,
+		Domain:    o.Domain,
+		Addresses: append([]AddressInfo(nil), o.Addresses...),
+		Tag:       o.Tag,
+		Sources:   append([]string(nil), o.Sources...),
+	}
+}
+
+// MarkAsProcessed implements pipeline Data.
+func (o *Output) MarkAsProcessed() {}
 
 // AddressInfo stores all network addressing info for the Output type.
 type AddressInfo struct {
