@@ -23,11 +23,15 @@ require (
 	github.com/lib/pq v1.9.0
 	github.com/miekg/dns v1.1.35
 	github.com/rakyll/statik v0.1.7
+	github.com/smartystreets/goconvey v1.6.4 // indirect
 	github.com/yl2chen/cidranger v1.0.2
 	github.com/yuin/gopher-lua v0.0.0-20200816102855-ee81675732da
 	go.uber.org/ratelimit v0.1.0
 	golang.org/x/net v0.0.0-20201224014010-6772e930b67b
 	golang.org/x/oauth2 v0.0.0-20201208152858-08078c50e5b5
 	golang.org/x/sync v0.0.0-20201207232520-09787c993a3a
+	gopkg.in/ini.v1 v1.62.0 // indirect
 	layeh.com/gopher-json v0.0.0-20201124131017-552bb3c4c3bf
 )
+
+replace github.com/knq/sysutil v1.0.0 => github.com/chromedp/sysutil v1.0.0
