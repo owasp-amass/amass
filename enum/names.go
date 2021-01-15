@@ -81,6 +81,8 @@ func (f *fqdnFilter) checkFilter(req *requests.DNSRequest) *requests.DNSRequest 
 
 // This goroutine ensures that duplicate names from other sources are shown in the Graph.
 func (f *fqdnFilter) processDupNames() {
+	uuid := f.enum.Config.UUID.String()
+
 	type altsource struct {
 		Name      string
 		Source    string
@@ -110,11 +112,11 @@ loop:
 		case now := <-t.C:
 			var count int
 			for _, a := range pending {
-				if now.Before(a.Timestamp.Add(time.Minute)) {
+				if now.Before(a.Timestamp.Add(10 * time.Minute)) {
 					break
 				}
 				if _, err := f.enum.Graph.ReadNode(a.Name, "fqdn"); err == nil {
-					f.enum.Graph.InsertFQDN(a.Name, a.Source, a.Tag, f.enum.Config.UUID.String())
+					f.enum.Graph.InsertFQDN(a.Name, a.Source, a.Tag, uuid)
 				}
 				count++
 			}
@@ -125,7 +127,7 @@ loop:
 	f.queue.Process(each)
 	for _, a := range pending {
 		if _, err := f.enum.Graph.ReadNode(a.Name, "fqdn"); err == nil {
-			f.enum.Graph.InsertFQDN(a.Name, a.Source, a.Tag, f.enum.Config.UUID.String())
+			f.enum.Graph.InsertFQDN(a.Name, a.Source, a.Tag, uuid)
 		}
 	}
 }

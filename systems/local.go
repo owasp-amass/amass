@@ -44,13 +44,9 @@ func NewLocalSystem(c *config.Config) (*LocalSystem, error) {
 		num = max
 	}
 
-	if c.MaxDNSQueries > 5000 {
-		c.MaxDNSQueries = 5000
-	}
-
 	var trusted []resolvers.Resolver
 	for _, addr := range config.DefaultBaselineResolvers {
-		trusted = append(trusted, resolvers.NewBaseResolver(addr, 10, c.Log))
+		trusted = append(trusted, resolvers.NewBaseResolver(addr, 6, c.Log))
 	}
 
 	baseline := resolvers.NewRoundRobin(trusted, c.Log)

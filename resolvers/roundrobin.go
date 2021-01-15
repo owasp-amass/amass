@@ -5,7 +5,6 @@ package resolvers
 
 import (
 	"context"
-	"fmt"
 	"io/ioutil"
 	"log"
 	"sync"
@@ -72,14 +71,15 @@ func (rr *roundRobin) String() string {
 	return "RoundRobin"
 }
 
-func (rr *roundRobin) nextResolver() Resolver {
-	if rr.numUsableResolvers() == 0 {
-		return nil
-	}
-
+func (rr *roundRobin) nextResolver(ctx context.Context) Resolver {
 	var count int
 	var r Resolver
+
 	for {
+		if checkContext(ctx) != nil {
+			break
+		}
+
 		rr.Lock()
 		idx := rr.curIdx
 		rr.curIdx++
@@ -111,30 +111,21 @@ func (rr *roundRobin) updateWait(key string, d time.Duration) {
 
 // Query implements the Resolver interface.
 func (rr *roundRobin) Query(ctx context.Context, msg *dns.Msg, priority int, retry Retry) (*dns.Msg, error) {
-	if rr.numUsableResolvers() == 0 {
-		return nil, &ResolveError{
-			Err:   fmt.Sprintf("All resolvers have been stopped"),
-			Rcode: ResolverErrRcode,
-		}
-	}
-
 	again := true
 	var times int
 	var err error
 	var r Resolver
 	var resp *dns.Msg
+
 	for again {
 		err = checkContext(ctx)
 		if err != nil {
 			break
 		}
 
-		r = rr.nextResolver()
+		r = rr.nextResolver(ctx)
 		if r == nil {
-			return nil, &ResolveError{
-				Err:   fmt.Sprintf("All resolvers have been stopped"),
-				Rcode: ResolverErrRcode,
-			}
+			break
 		}
 
 		resp, err = r.Query(ctx, msg, priority, nil)
@@ -175,16 +166,4 @@ func (rr *roundRobin) Query(ctx context.Context, msg *dns.Msg, priority int, ret
 // WildcardType implements the Resolver interface.
 func (rr *roundRobin) WildcardType(ctx context.Context, msg *dns.Msg, domain string) int {
 	return rr.baseline.WildcardType(ctx, msg, domain)
-}
-
-func (rr *roundRobin) numUsableResolvers() int {
-	var num int
-
-	for _, r := range rr.resolvers {
-		if !r.Stopped() {
-			num++
-		}
-	}
-
-	return num
 }

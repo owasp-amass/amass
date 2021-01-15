@@ -46,12 +46,12 @@ func (dm *dataManager) Process(ctx context.Context, data pipeline.Data, tp pipel
 		if v == nil {
 			return nil, nil
 		}
-		return data, dm.dnsRequest(ctx, v, tp)
+		dm.dnsRequest(ctx, v, tp)
 	case *requests.AddrRequest:
 		if v == nil {
 			return nil, nil
 		}
-		return data, dm.addrRequest(ctx, v, tp)
+		dm.addrRequest(ctx, v, tp)
 	}
 
 	return data, nil

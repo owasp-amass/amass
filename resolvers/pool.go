@@ -5,7 +5,6 @@ package resolvers
 
 import (
 	"context"
-	"fmt"
 	"io/ioutil"
 	"log"
 	"sync"
@@ -126,14 +125,15 @@ func (rp *resolverPool) String() string {
 	return "ResolverPool"
 }
 
-func (rp *resolverPool) nextResolver() Resolver {
-	if rp.numUsableResolvers() == 0 {
-		return nil
-	}
-
+func (rp *resolverPool) nextResolver(ctx context.Context) Resolver {
 	var count int
 	var r Resolver
+
 	for {
+		if checkContext(ctx) != nil {
+			break
+		}
+
 		rp.Lock()
 		idx := rp.curIdx
 		rp.curIdx++
@@ -163,6 +163,23 @@ func (rp *resolverPool) updateWait(key string, d time.Duration) {
 	rp.waits[key] = time.Now().Add(d)
 }
 
+func (rp *resolverPool) numUsableResolvers() int {
+	rp.Lock()
+	defer rp.Unlock()
+
+	var num int
+	now := time.Now()
+	for _, r := range rp.resolvers {
+		t, found := rp.waits[r.String()]
+
+		if (!found || t.IsZero() || now.After(t)) && !r.Stopped() {
+			num++
+		}
+	}
+
+	return num
+}
+
 // Query implements the Stringer interface.
 func (rp *resolverPool) Query(ctx context.Context, msg *dns.Msg, priority int, retry Retry) (*dns.Msg, error) {
 	if rp.numUsableResolvers() == 0 {
@@ -180,12 +197,9 @@ func (rp *resolverPool) Query(ctx context.Context, msg *dns.Msg, priority int, r
 			break
 		}
 
-		r = rp.nextResolver()
+		r = rp.nextResolver(ctx)
 		if r == nil {
-			return nil, &ResolveError{
-				Err:   fmt.Sprintf("All resolvers have been stopped"),
-				Rcode: ResolverErrRcode,
-			}
+			break
 		}
 
 		resp, err = r.Query(ctx, msg, priority, nil)
@@ -234,16 +248,4 @@ func (rp *resolverPool) Query(ctx context.Context, msg *dns.Msg, priority int, r
 // WildcardType implements the Stringer interface.
 func (rp *resolverPool) WildcardType(ctx context.Context, msg *dns.Msg, domain string) int {
 	return rp.baseline.WildcardType(ctx, msg, domain)
-}
-
-func (rp *resolverPool) numUsableResolvers() int {
-	var num int
-
-	for _, r := range rp.resolvers {
-		if !r.Stopped() {
-			num++
-		}
-	}
-
-	return num
 }
