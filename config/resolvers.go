@@ -17,7 +17,7 @@ import (
 )
 
 // DefaultQueriesPerResolver is the number of queries sent to each DNS resolver per second.
-const DefaultQueriesPerResolver = 2
+const DefaultQueriesPerResolver = 10
 const minResolverReliability = 0.95
 
 // DefaultBaselineResolvers is a list of trusted public DNS resolvers.
@@ -104,15 +104,7 @@ func (c *Config) loadResolverSettings(cfg *ini.File) error {
 }
 
 func (c *Config) calcDNSQueriesMax() {
-	max := len(c.Resolvers) * DefaultQueriesPerResolver
-
-	if max < DefaultQueriesPerResolver {
-		max = DefaultQueriesPerResolver
-	} else if max > 100000 {
-		max = 100000
-	}
-
-	c.MaxDNSQueries = max
+	c.MaxDNSQueries = len(c.Resolvers) * 100
 }
 
 func getPublicDNSResolvers() ([]string, error) {

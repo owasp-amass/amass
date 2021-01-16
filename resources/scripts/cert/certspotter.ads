@@ -12,6 +12,11 @@ function start()
 end
 
 function vertical(ctx, domain)
+    new(ctx, domain)
+    old(ctx, domain)
+end
+
+function new(ctx, domain)
     local page, err = request({['url']=buildurl(domain)})
     if (err ~= nil and err ~= "") then
         return
@@ -38,6 +43,28 @@ function buildurl(domain)
     }
 
     return "https://api.certspotter.com/v1/issuances?" .. url.build_query_string(params)
+end
+
+function old(ctx, domain)
+    local page, err = request({['url']=buildoldurl(domain)})
+    if (err ~= nil and err ~= "") then
+        return
+    end
+
+    local resp = json.decode(page)
+    if (resp == nil or #resp == 0) then
+        return
+    end
+
+    for i, r in pairs(resp) do
+        for i, name in pairs(r['dns_names']) do
+            sendnames(ctx, name)
+        end
+    end
+end
+
+function buildoldurl(domain)
+    return "https://certspotter.com/api/v0/certs?domain=" .. domain
 end
 
 function sendnames(ctx, content)

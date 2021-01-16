@@ -4,8 +4,10 @@
 package systems
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"runtime"
 	"sort"
@@ -18,6 +20,7 @@ import (
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/resolvers"
 	"github.com/caffix/service"
+	"github.com/miekg/dns"
 )
 
 // LocalSystem implements a System to be executed within a single process.
@@ -39,18 +42,20 @@ func NewLocalSystem(c *config.Config) (*LocalSystem, error) {
 	}
 
 	max := int(float64(limits.GetFileLimit()) * 0.7)
-	num := len(c.Resolvers)
+	num := len(config.PublicResolvers)
 	if num > max {
 		num = max
 	}
 
+	rate := c.MaxDNSQueries / len(c.Resolvers)
 	var trusted []resolvers.Resolver
-	for _, addr := range config.DefaultBaselineResolvers {
-		trusted = append(trusted, resolvers.NewBaseResolver(addr, 6, c.Log))
+	for _, addr := range c.Resolvers {
+		trusted = append(trusted, resolvers.NewBaseResolver(addr, rate, c.Log))
 	}
 
-	baseline := resolvers.NewRoundRobin(trusted, c.Log)
-	pool := resolvers.SetupResolverPool(c.Resolvers, baseline, max, c.MaxDNSQueries, c.Log)
+	baseline := resolvers.NewResolverPool(trusted, time.Minute, nil, c.Log)
+	r := setupResolvers(config.PublicResolvers, max, config.DefaultQueriesPerResolver, c.Log)
+	pool := resolvers.NewResolverPool(r, 5*time.Second, baseline, c.Log)
 	if pool == nil {
 		return nil, errors.New("The system was unable to build the pool of resolvers")
 	}
@@ -276,4 +281,50 @@ func (l *LocalSystem) loadCacheData() error {
 	}
 
 	return nil
+}
+
+func setupResolvers(addrs []string, max, rate int, log *log.Logger) []resolvers.Resolver {
+	if len(addrs) <= 0 {
+		return nil
+	}
+
+	finished := make(chan resolvers.Resolver, 10)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	for _, addr := range addrs {
+		go func(ip string, ch chan resolvers.Resolver) {
+			if n := resolvers.NewBaseResolver(ip, rate, log); n != nil {
+				msg := resolvers.QueryMsg("www.owasp.org", dns.TypeA)
+
+				if resp, err := n.Query(ctx, msg, resolvers.PriorityCritical,
+					func(times int, priority int, msg *dns.Msg) bool {
+						return msg.Rcode == resolvers.TimeoutRcode && times < 3
+					}); err == nil && resp != nil && len(resp.Answer) > 0 {
+					ch <- n
+					return
+				}
+			}
+			ch <- nil
+		}(addr, finished)
+	}
+
+	l := len(addrs)
+	var count int
+	var resolvers []resolvers.Resolver
+	for i := 0; i < l; i++ {
+		if r := <-finished; r != nil {
+			if count < max {
+				resolvers = append(resolvers, r)
+				count++
+				continue
+			}
+			r.Stop()
+		}
+	}
+
+	if len(resolvers) == 0 {
+		return nil
+	}
+	return resolvers
 }
