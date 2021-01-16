@@ -23,69 +23,22 @@ type resolverPool struct {
 	curIdx         int
 	avgs           *slidingWindowTimeouts
 	waits          map[string]time.Time
+	delay          time.Duration
 	hasBeenStopped bool
 }
 
-// SetupResolverPool initializes a ResolverPool with the type of resolvers indicated by the parameters.
-func SetupResolverPool(addrs []string, baseline Resolver, max, perSec int, log *log.Logger) Resolver {
-	if len(addrs) <= 0 || baseline == nil {
-		return nil
-	}
-
-	finished := make(chan Resolver, 10)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	num := len(addrs)
-	if num > max {
-		num = max
-	}
-
-	rate := perSec / num
-	for _, addr := range addrs {
-		go func(ip string, ch chan Resolver) {
-			if n := NewBaseResolver(ip, rate, log); n != nil {
-				msg := QueryMsg("www.owasp.org", dns.TypeA)
-
-				if resp, err := n.Query(ctx, msg, PriorityCritical,
-					func(times int, priority int, msg *dns.Msg) bool {
-						return msg.Rcode == TimeoutRcode && times < 3
-					}); err == nil && resp != nil && len(resp.Answer) > 0 {
-					ch <- n
-					return
-				}
-			}
-			ch <- nil
-		}(addr, finished)
-	}
-
-	l := len(addrs)
-	var count int
-	var resolvers []Resolver
-	for i := 0; i < l; i++ {
-		if r := <-finished; r != nil {
-			if count < max {
-				resolvers = append(resolvers, r)
-				count++
-				continue
-			}
-			r.Stop()
-		}
-	}
-
+// NewResolverPool initializes a ResolverPool that uses the provided Resolvers.
+func NewResolverPool(resolvers []Resolver, delay time.Duration, baseline Resolver, logger *log.Logger) Resolver {
 	if len(resolvers) == 0 {
 		return nil
 	}
-	return NewResolverPool(baseline, resolvers, log)
-}
 
-// NewResolverPool initializes a ResolverPool that uses the provided Resolvers.
-func NewResolverPool(baseline Resolver, resolvers []Resolver, logger *log.Logger) Resolver {
 	rp := &resolverPool{
 		baseline:  baseline,
 		resolvers: resolvers,
 		avgs:      newSlidingWindowTimeouts(),
 		waits:     make(map[string]time.Time),
+		delay:     delay,
 		done:      make(chan struct{}, 2),
 		log:       logger,
 	}
@@ -109,7 +62,10 @@ func (rp *resolverPool) Stop() error {
 	for _, r := range rp.resolvers {
 		r.Stop()
 	}
-	rp.baseline.Stop()
+
+	if rp.baseline != nil {
+		rp.baseline.Stop()
+	}
 
 	rp.resolvers = []Resolver{}
 	return nil
@@ -182,7 +138,7 @@ func (rp *resolverPool) numUsableResolvers() int {
 
 // Query implements the Stringer interface.
 func (rp *resolverPool) Query(ctx context.Context, msg *dns.Msg, priority int, retry Retry) (*dns.Msg, error) {
-	if rp.numUsableResolvers() == 0 {
+	if rp.baseline != nil && rp.numUsableResolvers() == 0 {
 		return rp.baseline.Query(ctx, msg, priority, retry)
 	}
 
@@ -205,6 +161,7 @@ func (rp *resolverPool) Query(ctx context.Context, msg *dns.Msg, priority int, r
 		resp, err = r.Query(ctx, msg, priority, nil)
 
 		var timeout bool
+		// Check if the response is considered a resolver failure to be tracked
 		if err != nil {
 			if e, ok := err.(*ResolveError); ok && (e.Rcode == TimeoutRcode ||
 				e.Rcode == dns.RcodeServerFailure || e.Rcode == dns.RcodeRefused) {
@@ -213,15 +170,15 @@ func (rp *resolverPool) Query(ctx context.Context, msg *dns.Msg, priority int, r
 		}
 
 		k := r.String()
-		// Pause using the resolver if queries have timed out too much
+		// Pause use of the resolver if queries have failed too often
 		if rp.avgs.updateTimeouts(k, timeout) && timeout {
-			rp.updateWait(k, 30*time.Second)
+			rp.updateWait(k, rp.delay)
 		}
 
 		if err == nil {
 			break
 		}
-
+		// Timeouts and resolver errors can cause retries without executing the callback
 		if err != nil {
 			if e, ok := err.(*ResolveError); ok && (e.Rcode == TimeoutRcode || e.Rcode == ResolverErrRcode) {
 				continue
@@ -234,7 +191,7 @@ func (rp *resolverPool) Query(ctx context.Context, msg *dns.Msg, priority int, r
 		}
 	}
 
-	if err == nil && len(resp.Answer) > 0 {
+	if rp.baseline != nil && err == nil && len(resp.Answer) > 0 {
 		// Validate findings from an untrusted resolver
 		resp, err = rp.baseline.Query(ctx, msg, priority, retry)
 		// False positives result in stopping the untrusted resolver
@@ -242,10 +199,14 @@ func (rp *resolverPool) Query(ctx context.Context, msg *dns.Msg, priority int, r
 			r.Stop()
 		}
 	}
+
 	return resp, err
 }
 
 // WildcardType implements the Stringer interface.
 func (rp *resolverPool) WildcardType(ctx context.Context, msg *dns.Msg, domain string) int {
-	return rp.baseline.WildcardType(ctx, msg, domain)
+	if rp.baseline != nil {
+		return rp.baseline.WildcardType(ctx, msg, domain)
+	}
+	return rp.resolvers[0].WildcardType(ctx, msg, domain)
 }

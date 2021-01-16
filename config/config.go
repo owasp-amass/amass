@@ -155,7 +155,7 @@ func NewConfig() *Config {
 		Log:                 log.New(ioutil.Discard, "", 0),
 		Ports:               []int{443},
 		MinForRecursive:     1,
-		Resolvers:           PublicResolvers,
+		Resolvers:           DefaultBaselineResolvers,
 		MonitorResolverRate: true,
 		LocalDatabase:       true,
 		// The following is enum-only, but intel will just ignore them anyway

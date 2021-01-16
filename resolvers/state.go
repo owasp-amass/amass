@@ -168,7 +168,7 @@ func (r *xchgManager) delete(keys []string) []*resolveRequest {
 const (
 	minNumInAverage   int     = 25
 	maxNumInAverage   int     = 50
-	failurePercentage float64 = 0.9
+	failurePercentage float64 = 0.75
 )
 
 type slidingWindowTimeouts struct {
