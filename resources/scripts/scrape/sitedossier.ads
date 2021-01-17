@@ -9,13 +9,16 @@ function start()
 end
 
 function vertical(ctx, domain)
-    for i=1,10000,100 do
-        local ok = scrape(ctx, {url=buildurl(domain, i)})
+    local p = 1
+
+    while (true)
+        local ok = scrape(ctx, {url=buildurl(domain, p)})
         if not ok then
             break
         end
 
         checkratelimit()
+        p = p + 100
     end
 end
 
