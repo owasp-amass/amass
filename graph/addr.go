@@ -9,7 +9,7 @@ import (
 
 	"github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/requests"
-	"github.com/OWASP/Amass/v3/stringset"
+	"github.com/caffix/stringset"
 	"github.com/cayleygraph/cayley"
 	"github.com/cayleygraph/quad"
 )

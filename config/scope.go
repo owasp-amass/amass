@@ -10,7 +10,7 @@ import (
 
 	"github.com/OWASP/Amass/v3/format"
 	"github.com/OWASP/Amass/v3/net/dns"
-	"github.com/OWASP/Amass/v3/stringset"
+	"github.com/caffix/stringset"
 	"github.com/go-ini/ini"
 )
 

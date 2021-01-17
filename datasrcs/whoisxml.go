@@ -10,18 +10,18 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/OWASP/Amass/v3/config"
-	"github.com/OWASP/Amass/v3/eventbus"
 	"github.com/OWASP/Amass/v3/net/http"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/systems"
+	"github.com/caffix/eventbus"
+	"github.com/caffix/service"
 )
 
 // WhoisXML is the Service that handles access to the WhoisXML data source.
 type WhoisXML struct {
-	requests.BaseService
+	service.BaseService
 
 	SourceType string
 	sys        systems.System
@@ -66,25 +66,29 @@ func NewWhoisXML(sys systems.System) *WhoisXML {
 		sys:        sys,
 	}
 
-	w.BaseService = *requests.NewBaseService(w, "WhoisXML")
+	w.BaseService = *service.NewBaseService(w, "WhoisXML")
 	return w
+}
+
+// Description implements the Service interface.
+func (w *WhoisXML) Description() string {
+	return w.SourceType
 }
 
 // OnStart implements the Service interface.
 func (w *WhoisXML) OnStart() error {
-	w.BaseService.OnStart()
-
 	w.creds = w.sys.Config().GetDataSourceConfig(w.String()).GetCredentials()
+
 	if w.creds == nil || w.creds.Key == "" {
 		w.sys.Config().Log.Printf("%s: API key data was not provided", w.String())
 	}
 
-	w.SetRateLimit(10 * time.Second)
-	return nil
+	w.SetRateLimit(1)
+	return w.checkConfig()
 }
 
 // CheckConfig implements the Service interface.
-func (w *WhoisXML) CheckConfig() error {
+func (w *WhoisXML) checkConfig() error {
 	creds := w.sys.Config().GetDataSourceConfig(w.String()).GetCredentials()
 
 	if creds == nil || creds.Key == "" {
@@ -96,26 +100,29 @@ func (w *WhoisXML) CheckConfig() error {
 	return nil
 }
 
-// OnWhoisRequest implements the Service interface.
-func (w *WhoisXML) OnWhoisRequest(ctx context.Context, req *requests.WhoisRequest) {
+// OnRequest implements the Service interface.
+func (w *WhoisXML) OnRequest(ctx context.Context, args service.Args) {
+	if req, ok := args.(*requests.WhoisRequest); ok {
+		w.whoisRequest(ctx, req)
+	}
+}
+
+func (w *WhoisXML) whoisRequest(ctx context.Context, req *requests.WhoisRequest) {
 	cfg, bus, err := ContextConfigBus(ctx)
 	if err != nil {
 		return
 	}
-
 	if w.creds == nil || w.creds.Key == "" {
 		return
 	}
-
 	if !cfg.IsDomainInScope(req.Domain) {
 		return
 	}
+
 	bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 		fmt.Sprintf("Querying %s for %s subdomains", w.String(), req.Domain))
 
-	w.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, w.String())
-
+	numRateLimitChecks(w, 9)
 	u := w.getReverseWhoisURL(req.Domain)
 	headers := map[string]string{"X-Authentication-Token": w.creds.Key}
 

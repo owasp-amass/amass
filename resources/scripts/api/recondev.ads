@@ -53,7 +53,6 @@ function vertical(ctx, domain)
             return
         end
 
-        active(ctx)
         if (cfg.ttl ~= nil and cfg.ttl > 0) then
             cache_response(domain, resp)
         end
@@ -89,7 +88,11 @@ function sendnames(ctx, content)
         return
     end
 
+    local found = {}
     for i, v in pairs(names) do
-        newname(ctx, v)
+        if found[v] == nil then
+            newname(ctx, v)
+            found[v] = true
+        end
     end
 end

@@ -12,13 +12,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/OWASP/Amass/v3/eventbus"
 	amassnet "github.com/OWASP/Amass/v3/net"
 	amassdns "github.com/OWASP/Amass/v3/net/dns"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/resolvers"
-	"github.com/OWASP/Amass/v3/stringset"
 	"github.com/OWASP/Amass/v3/systems"
+	"github.com/caffix/eventbus"
+	"github.com/caffix/service"
+	"github.com/caffix/stringset"
+	"github.com/miekg/dns"
 )
 
 const (
@@ -28,7 +30,7 @@ const (
 
 // ShadowServer is the Service that handles access to the ShadowServer data source.
 type ShadowServer struct {
-	requests.BaseService
+	service.BaseService
 
 	SourceType string
 	sys        systems.System
@@ -42,38 +44,44 @@ func NewShadowServer(sys systems.System) *ShadowServer {
 		sys:        sys,
 	}
 
-	s.BaseService = *requests.NewBaseService(s, "ShadowServer")
+	s.BaseService = *service.NewBaseService(s, "ShadowServer")
 	return s
 }
 
-// Type implements the Service interface.
-func (s *ShadowServer) Type() string {
+// Description implements the Service interface.
+func (s *ShadowServer) Description() string {
 	return s.SourceType
 }
 
 // OnStart implements the Service interface.
 func (s *ShadowServer) OnStart() error {
-	s.BaseService.OnStart()
-
-	if answers, err := s.sys.Pool().Resolve(context.TODO(),
-		ShadowServerWhoisURL, "A", resolvers.PriorityCritical, resolvers.RetryPolicy); err == nil {
-		ip := answers[0].Data
-		if ip != "" {
-			s.addr = ip
+	msg := resolvers.QueryMsg(ShadowServerWhoisURL, dns.TypeA)
+	if resp, err := s.sys.Pool().Query(context.TODO(),
+		msg, resolvers.PriorityCritical, resolvers.RetryPolicy); err == nil {
+		if ans := resolvers.ExtractAnswers(resp); len(ans) > 0 {
+			ip := ans[0].Data
+			if ip != "" {
+				s.addr = ip
+			}
 		}
 	}
 
-	s.SetRateLimit(time.Second)
+	s.SetRateLimit(1)
 	return nil
 }
 
-// OnASNRequest implements the Service interface.
-func (s *ShadowServer) OnASNRequest(ctx context.Context, req *requests.ASNRequest) {
+// OnRequest implements the Service interface.
+func (s *ShadowServer) OnRequest(ctx context.Context, args service.Args) {
+	if req, ok := args.(*requests.ASNRequest); ok {
+		s.asnRequest(ctx, req)
+	}
+}
+
+func (s *ShadowServer) asnRequest(ctx context.Context, req *requests.ASNRequest) {
 	if req.Address == "" && req.ASN == 0 {
 		return
 	}
 
-	s.CheckRateLimit()
 	if req.Address != "" {
 		s.executeASNAddrQuery(ctx, req.Address)
 		return
@@ -130,7 +138,8 @@ func (s *ShadowServer) origin(ctx context.Context, addr string) *requests.ASNReq
 	}
 	name := amassdns.ReverseIP(addr) + ".origin.asn.shadowserver.org"
 
-	answers, err := s.sys.Pool().Resolve(ctx, name, "TXT", resolvers.PriorityHigh, resolvers.RetryPolicy)
+	msg := resolvers.QueryMsg(name, dns.TypeTXT)
+	resp, err := s.sys.Pool().Query(ctx, msg, resolvers.PriorityHigh, resolvers.RetryPolicy)
 	if err != nil {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: %s: DNS TXT record query error: %v", s.String(), name, err),
@@ -138,7 +147,8 @@ func (s *ShadowServer) origin(ctx context.Context, addr string) *requests.ASNReq
 		return nil
 	}
 
-	fields := strings.Split(strings.Trim(answers[0].Data, "\""), " | ")
+	ans := resolvers.ExtractAnswers(resp)
+	fields := strings.Split(strings.Trim(ans[0].Data, "\""), " | ")
 	if len(fields) < 4 {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: %s: Failed to parse the origin response", s.String(), name),
@@ -180,15 +190,20 @@ func (s *ShadowServer) netblocks(ctx context.Context, asn int) stringset.Set {
 	}
 
 	if s.addr == "" {
-		answers, err := s.sys.Pool().Resolve(ctx, ShadowServerWhoisURL,
-			"A", resolvers.PriorityCritical, resolvers.RetryPolicy)
+		msg := resolvers.QueryMsg(ShadowServerWhoisURL, dns.TypeA)
+		resp, err := s.sys.Pool().Query(ctx, msg, resolvers.PriorityCritical, resolvers.RetryPolicy)
 		if err != nil {
 			bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 				fmt.Sprintf("%s: %s: %v", s.String(), ShadowServerWhoisURL, err))
 			return netblocks
 		}
 
-		ip := answers[0].Data
+		ans := resolvers.ExtractAnswers(resp)
+		if len(ans) == 0 {
+			return netblocks
+		}
+
+		ip := ans[0].Data
 		if ip == "" {
 			bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 				fmt.Sprintf("%s: Failed to resolve %s", s.String(), ShadowServerWhoisURL),

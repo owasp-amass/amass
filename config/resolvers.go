@@ -4,31 +4,66 @@
 package config
 
 import (
+	"encoding/csv"
 	"errors"
+	"fmt"
+	"io"
+	"strconv"
 	"strings"
 
-	"github.com/OWASP/Amass/v3/stringset"
+	amasshttp "github.com/OWASP/Amass/v3/net/http"
+	"github.com/caffix/stringset"
 	"github.com/go-ini/ini"
 )
 
-var defaultPublicResolvers = []string{
-	"1.1.1.1",     // Cloudflare
-	"8.8.8.8",     // Google
-	"64.6.64.6",   // Verisign
-	"74.82.42.42", // Hurricane Electric
-	"1.0.0.1",     // Cloudflare Secondary
-	"8.8.4.4",     // Google Secondary
-	"64.6.65.6",   // Verisign Secondary
-	"77.88.8.1",   // Yandex.DNS Secondary
+// DefaultQueriesPerResolver is the number of queries sent to each DNS resolver per second.
+const DefaultQueriesPerResolver = 10
+const minResolverReliability = 0.95
+
+// DefaultBaselineResolvers is a list of trusted public DNS resolvers.
+var DefaultBaselineResolvers = []string{
+	"8.8.8.8",        // Google
+	"1.1.1.1",        // Cloudflare
+	"9.9.9.9",        // Quad9
+	"208.67.222.222", // Cisco OpenDNS
+	"209.244.0.3",    // Level3
+	"64.6.64.6",      // Verisign
+	"84.200.69.80",   // DNS.WATCH
+	"8.26.56.26",     // Comodo Secure DNS
+	"23.94.60.240",   // OpenNIC
+	"208.76.50.50",   // SmartViper
+	"216.146.35.35",  // Dyn
+	"198.101.242.72", // Alternate DNS
+	"109.69.8.51",    // puntCAT
+	"74.82.42.42",    // Hurricane Electric
+	"77.88.8.8",      // Yandex.DNS
+}
+
+// PublicResolvers includes the addresses of public resolvers obtained dynamically.
+var PublicResolvers []string
+
+func init() {
+	addrs, err := getPublicDNSResolvers()
+	if err != nil {
+		return
+	}
+loop:
+	for _, addr := range addrs {
+		for _, baseline := range append(DefaultBaselineResolvers) {
+			if addr == baseline {
+				continue loop
+			}
+		}
+
+		PublicResolvers = append(PublicResolvers, addr)
+	}
 }
 
 // SetResolvers assigns the resolver names provided in the parameter to the list in the configuration.
 func (c *Config) SetResolvers(resolvers ...string) {
 	c.Resolvers = []string{}
 
-	for _, r := range resolvers {
-		c.AddResolver(r)
-	}
+	c.AddResolvers(resolvers...)
 }
 
 // AddResolvers appends the resolver names provided in the parameter to the list in the configuration.
@@ -69,13 +104,42 @@ func (c *Config) loadResolverSettings(cfg *ini.File) error {
 }
 
 func (c *Config) calcDNSQueriesMax() {
-	max := len(c.Resolvers) * 250
+	c.MaxDNSQueries = len(c.Resolvers) * 100
+}
 
-	if max < 250 {
-		max = 250
-	} else if max > 100000 {
-		max = 100000
+func getPublicDNSResolvers() ([]string, error) {
+	url := "https://public-dns.info/nameservers-all.csv"
+	page, err := amasshttp.RequestWebPage(url, nil, nil, "", "")
+	if err != nil {
+		return nil, fmt.Errorf("Failed to obtain the Public DNS csv file at %s: %v", url, err)
 	}
 
-	c.MaxDNSQueries = max
+	var resolvers []string
+	var ipIdx, reliabilityIdx int
+	r := csv.NewReader(strings.NewReader(page))
+	for i := 0; ; i++ {
+		record, err := r.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			continue
+		}
+		if i == 0 {
+			for idx, val := range record {
+				if val == "ip_address" {
+					ipIdx = idx
+				} else if val == "reliability" {
+					reliabilityIdx = idx
+				}
+			}
+			continue
+		}
+
+		if rel, err := strconv.ParseFloat(record[reliabilityIdx], 64); err == nil && rel >= minResolverReliability {
+			resolvers = append(resolvers, record[ipIdx])
+		}
+	}
+
+	return resolvers, nil
 }

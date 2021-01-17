@@ -18,7 +18,6 @@ function vertical(ctx, domain)
         end
 
         checkratelimit()
-        active(ctx)
     end
 end
 

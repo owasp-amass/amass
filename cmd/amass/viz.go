@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/v3/config"
-	"github.com/OWASP/Amass/v3/stringset"
 	"github.com/OWASP/Amass/v3/viz"
+	"github.com/caffix/stringset"
 	"github.com/fatih/color"
 )
 

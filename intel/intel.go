@@ -12,57 +12,44 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/v3/config"
-	eb "github.com/OWASP/Amass/v3/eventbus"
+	"github.com/OWASP/Amass/v3/datasrcs"
 	amassnet "github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/net/http"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/resolvers"
 	"github.com/OWASP/Amass/v3/stringfilter"
-	"github.com/OWASP/Amass/v3/stringset"
 	"github.com/OWASP/Amass/v3/systems"
-	"github.com/miekg/dns"
+	eb "github.com/caffix/eventbus"
+	"github.com/caffix/pipeline"
+	"github.com/caffix/service"
+	"github.com/caffix/stringset"
 )
 
 // Collection is the object type used to execute a open source information gathering with Amass.
 type Collection struct {
 	sync.Mutex
-
-	Config *config.Config
-	Bus    *eb.EventBus
-	Sys    systems.System
-
-	ctx context.Context
-
-	srcsLock sync.Mutex
-	srcs     stringset.Set
-
-	// The channel that will receive the results
-	Output chan *requests.Output
-
-	// Broadcast channel that indicates no further writes to the output channel
+	Config            *config.Config
+	Bus               *eb.EventBus
+	Sys               systems.System
+	ctx               context.Context
+	srcs              []service.Service
+	Output            chan *requests.Output
 	done              chan struct{}
 	doneAlreadyClosed bool
-
-	wg     sync.WaitGroup
-	filter stringfilter.Filter
-
-	lastLock sync.Mutex
-	last     time.Time
+	filter            stringfilter.Filter
 }
 
 // NewCollection returns an initialized Collection object that has not been started yet.
-func NewCollection(sys systems.System) *Collection {
-	c := &Collection{
-		Config: config.NewConfig(),
+func NewCollection(cfg *config.Config, sys systems.System) *Collection {
+	return &Collection{
+		Config: cfg,
 		Bus:    eb.NewEventBus(),
 		Sys:    sys,
-		srcs:   stringset.New(),
+		srcs:   datasrcs.SelectedDataSources(cfg, sys.DataSources()),
 		Output: make(chan *requests.Output, 100),
 		done:   make(chan struct{}, 2),
-		last:   time.Now(),
+		filter: stringfilter.NewStringFilter(),
 	}
-
-	return c
 }
 
 // Done safely closes the done broadcast channel.
@@ -77,150 +64,168 @@ func (c *Collection) Done() {
 }
 
 // HostedDomains uses open source intelligence to discover root domain names in the target infrastructure.
-func (c *Collection) HostedDomains() error {
+func (c *Collection) HostedDomains(ctx context.Context) error {
 	if c.Output == nil {
 		return errors.New("The intelligence collection did not have an output channel")
 	} else if err := c.Config.CheckSettings(); err != nil {
 		return err
 	}
 
-	// Setup the stringset of included data sources
-	c.srcsLock.Lock()
-	srcs := stringset.New()
-	c.srcs.Intersect(srcs)
-	srcs.InsertMany(c.Config.SourceFilter.Sources...)
-	for _, src := range c.Sys.DataSources() {
-		c.srcs.Insert(src.String())
-	}
-	if srcs.Len() > 0 && c.Config.SourceFilter.Include {
-		c.srcs.Intersect(srcs)
-	} else {
-		c.srcs.Subtract(srcs)
-	}
-	c.srcsLock.Unlock()
-
 	// Setup the context used throughout the collection
-	ctx := context.WithValue(context.Background(), requests.ContextConfig, c.Config)
-	c.ctx = context.WithValue(ctx, requests.ContextEventBus, c.Bus)
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithCancel(ctx)
+	ctx = context.WithValue(ctx, requests.ContextConfig, c.Config)
+	ctx = context.WithValue(ctx, requests.ContextEventBus, c.Bus)
+	c.ctx = ctx
+	defer cancel()
 
-	c.Bus.Subscribe(requests.SetActiveTopic, c.updateLastActive)
-	defer c.Bus.Unsubscribe(requests.SetActiveTopic, c.updateLastActive)
-	c.Bus.Subscribe(requests.ResolveCompleted, c.resolution)
-	defer c.Bus.Unsubscribe(requests.ResolveCompleted, c.resolution)
+	go func() {
+		<-ctx.Done()
+		close(c.Output)
+	}()
 
-	if c.Config.Timeout > 0 {
-		time.AfterFunc(time.Duration(c.Config.Timeout)*time.Minute, func() {
-			c.Config.Log.Printf("Enumeration exceeded provided timeout")
-			close(c.Output)
-		})
+	source := newIntelSource(c)
+	sink := c.makeOutputSink()
+
+	var stages []pipeline.Stage
+	stages = append(stages, pipeline.FixedPool("", c.makeReverseDNSTaskFunc(), 50))
+	if c.Config.Active {
+		stages = append(stages, pipeline.FixedPool("", c.makeCertPullTaskFunc(), 50))
 	}
+	stages = append(stages, pipeline.FIFO("filter", c.makeFilterTaskFunc()))
 
-	c.filter = stringfilter.NewStringFilter()
 	// Start the address ranges
-	for _, addr := range c.Config.Addresses {
-		if c.Sys.PerformDNSQuery() == nil {
-			c.wg.Add(1)
-			go c.investigateAddr(addr.String())
+	go func() {
+		for _, addr := range c.Config.Addresses {
+			source.InputAddress(&requests.AddrRequest{Address: addr.String()})
 		}
-	}
+	}()
 
-	for _, cidr := range append(c.Config.CIDRs, c.asnsToCIDRs()...) {
-		// Skip IPv6 netblocks, since they are simply too large
-		if ip := cidr.IP.Mask(cidr.Mask); amassnet.IsIPv6(ip) {
-			continue
-		}
+	go func() {
+		for _, cidr := range append(c.Config.CIDRs, c.asnsToCIDRs()...) {
+			// Skip IPv6 netblocks, since they are simply too large
+			if ip := cidr.IP.Mask(cidr.Mask); amassnet.IsIPv6(ip) {
+				continue
+			}
 
-		for _, addr := range amassnet.AllHosts(cidr) {
-			if c.Sys.PerformDNSQuery() == nil {
-				c.wg.Add(1)
-				go c.investigateAddr(addr.String())
+			for _, addr := range amassnet.AllHosts(cidr) {
+				source.InputAddress(&requests.AddrRequest{Address: addr.String()})
 			}
 		}
-	}
+	}()
 
-	c.wg.Wait()
-	time.Sleep(5 * time.Second)
-	close(c.Output)
-	return nil
+	return pipeline.NewPipeline(stages...).Execute(ctx, source, sink)
 }
 
-func (c *Collection) lastActive() time.Time {
-	c.lastLock.Lock()
-	defer c.lastLock.Unlock()
-
-	return c.last
-}
-
-func (c *Collection) updateLastActive(srv string) {
-	go func(t time.Time) {
-		c.lastLock.Lock()
-		defer c.lastLock.Unlock()
-
-		c.last = t
-	}(time.Now())
-}
-
-func (c *Collection) resolution(t time.Time, rcode int) {
-	go func(t time.Time) {
-		c.lastLock.Lock()
-		defer c.lastLock.Unlock()
-
-		if t.After(c.last) {
-			c.last = t
+func (c *Collection) makeOutputSink() pipeline.SinkFunc {
+	return pipeline.SinkFunc(func(ctx context.Context, data pipeline.Data) error {
+		if out, ok := data.(*requests.Output); ok && out != nil {
+			c.Output <- out
 		}
-	}(t)
+		return nil
+	})
 }
 
-func (c *Collection) investigateAddr(addr string) {
-	defer c.wg.Done()
-
-	ip := net.ParseIP(addr)
-	if ip == nil {
-		return
-	}
-
-	addrinfo := requests.AddressInfo{Address: ip}
-	if _, answer, err := c.Sys.Pool().Reverse(c.ctx, addr, resolvers.PriorityLow, func(times int, priority int, msg *dns.Msg) bool {
-		var retry bool
-
-		if resolvers.RetryPolicy(times, priority, msg) {
-			c.Sys.PerformDNSQuery()
-			retry = true
+func (c *Collection) makeReverseDNSTaskFunc() pipeline.TaskFunc {
+	return pipeline.TaskFunc(func(ctx context.Context, data pipeline.Data, tp pipeline.TaskParams) (pipeline.Data, error) {
+		select {
+		case <-ctx.Done():
+			return nil, nil
+		default:
 		}
-		return retry
-	}); err == nil {
-		if d := strings.TrimSpace(c.Sys.Pool().SubdomainToDomain(answer)); d != "" {
-			if !c.filter.Duplicate(d) {
-				c.Output <- &requests.Output{
-					Name:      d,
-					Domain:    d,
-					Addresses: []requests.AddressInfo{addrinfo},
-					Tag:       requests.DNS,
-					Sources:   []string{"Reverse DNS"},
+
+		req, ok := data.(*requests.AddrRequest)
+		if !ok {
+			return data, nil
+		}
+		if req == nil {
+			return nil, nil
+		}
+
+		ip := net.ParseIP(req.Address)
+		if ip == nil {
+			return nil, nil
+		}
+
+		msg := resolvers.ReverseMsg(req.Address)
+		addrinfo := requests.AddressInfo{Address: ip}
+		if resp, err := c.Sys.Pool().Query(c.ctx, msg, resolvers.PriorityLow, resolvers.PoolRetryPolicy); err == nil {
+			ans := resolvers.ExtractAnswers(resp)
+
+			if len(ans) > 0 {
+				d := strings.TrimSpace(resolvers.FirstProperSubdomain(c.ctx, c.Sys.Pool(), ans[0].Data, resolvers.PriorityLow))
+
+				if d != "" {
+					go pipeline.SendData(ctx, "filter", &requests.Output{
+						Name:      d,
+						Domain:    d,
+						Addresses: []requests.AddressInfo{addrinfo},
+						Tag:       requests.DNS,
+						Sources:   []string{"Reverse DNS"},
+					}, tp)
 				}
 			}
 		}
-	}
 
-	if !c.Config.Active {
-		return
-	}
+		return data, nil
+	})
+}
 
-	for _, name := range http.PullCertificateNames(addr, c.Config.Ports) {
-		if n := strings.TrimSpace(name); n != "" {
-			d := c.Sys.Pool().SubdomainToDomain(n)
+func (c *Collection) makeCertPullTaskFunc() pipeline.TaskFunc {
+	return pipeline.TaskFunc(func(ctx context.Context, data pipeline.Data, tp pipeline.TaskParams) (pipeline.Data, error) {
+		select {
+		case <-ctx.Done():
+			return nil, nil
+		default:
+		}
 
-			if !c.filter.Duplicate(d) {
-				c.Output <- &requests.Output{
-					Name:      n,
-					Domain:    d,
-					Addresses: []requests.AddressInfo{addrinfo},
-					Tag:       requests.CERT,
-					Sources:   []string{"Active Cert"},
+		req, ok := data.(*requests.AddrRequest)
+		if !ok {
+			return data, nil
+		}
+		if req == nil {
+			return nil, nil
+		}
+
+		ip := net.ParseIP(req.Address)
+		if ip == nil {
+			return nil, nil
+		}
+
+		addrinfo := requests.AddressInfo{Address: ip}
+		for _, name := range http.PullCertificateNames(req.Address, c.Config.Ports) {
+			if n := strings.TrimSpace(name); n != "" {
+				d := resolvers.FirstProperSubdomain(c.ctx, c.Sys.Pool(), n, resolvers.PriorityLow)
+
+				if d != "" {
+					go pipeline.SendData(ctx, "filter", &requests.Output{
+						Name:      n,
+						Domain:    d,
+						Addresses: []requests.AddressInfo{addrinfo},
+						Tag:       requests.CERT,
+						Sources:   []string{"Active Cert"},
+					}, tp)
 				}
 			}
 		}
-	}
+
+		return data, nil
+	})
+}
+
+func (c *Collection) makeFilterTaskFunc() pipeline.TaskFunc {
+	return pipeline.TaskFunc(func(ctx context.Context, data pipeline.Data, tp pipeline.TaskParams) (pipeline.Data, error) {
+		select {
+		case <-ctx.Done():
+			return nil, nil
+		default:
+		}
+
+		if req, ok := data.(*requests.Output); ok && req != nil && !c.filter.Duplicate(req.Domain) {
+			return data, nil
+		}
+		return nil, nil
+	})
 }
 
 func (c *Collection) asnsToCIDRs() []*net.IPNet {
@@ -249,17 +254,11 @@ func (c *Collection) asnsToCIDRs() []*net.IPNet {
 	defer c.Bus.Unsubscribe(requests.NewASNTopic, fn)
 
 	// Send the ASN requests to the data sources
-	c.srcsLock.Lock()
-	for _, src := range c.Sys.DataSources() {
-		if !c.srcs.Has(src.String()) {
-			continue
-		}
-
+	for _, src := range c.srcs {
 		for _, asn := range c.Config.ASNs {
-			src.ASNRequest(c.ctx, &requests.ASNRequest{ASN: asn})
+			src.Request(c.ctx, &requests.ASNRequest{ASN: asn})
 		}
 	}
-	c.srcsLock.Unlock()
 
 	// Wait for the ASN requests to return responses
 	t := time.NewTicker(2 * time.Second)
@@ -303,8 +302,11 @@ func (c *Collection) ReverseWhois() error {
 		return err
 	}
 
+	ch := make(chan time.Time, 10)
 	filter := stringfilter.NewStringFilter()
 	collect := func(req *requests.WhoisRequest) {
+		ch <- time.Now()
+
 		for _, d := range req.NewDomains {
 			if !filter.Duplicate(d) {
 				c.Output <- &requests.Output{
@@ -319,41 +321,18 @@ func (c *Collection) ReverseWhois() error {
 	c.Bus.Subscribe(requests.NewWhoisTopic, collect)
 	defer c.Bus.Unsubscribe(requests.NewWhoisTopic, collect)
 
-	c.Bus.Subscribe(requests.SetActiveTopic, c.updateLastActive)
-	defer c.Bus.Unsubscribe(requests.SetActiveTopic, c.updateLastActive)
-
-	// Setup the stringset of included data sources
-	c.srcsLock.Lock()
-	srcs := stringset.New()
-	c.srcs.Intersect(srcs)
-	srcs.InsertMany(c.Config.SourceFilter.Sources...)
-	for _, src := range c.Sys.DataSources() {
-		c.srcs.Insert(src.String())
-	}
-	if srcs.Len() > 0 && c.Config.SourceFilter.Include {
-		c.srcs.Intersect(srcs)
-	} else {
-		c.srcs.Subtract(srcs)
-	}
-	c.srcsLock.Unlock()
-
 	// Setup the context used throughout the collection
 	ctx := context.WithValue(context.Background(), requests.ContextConfig, c.Config)
 	c.ctx = context.WithValue(ctx, requests.ContextEventBus, c.Bus)
 
 	// Send the whois requests to the data sources
-	c.srcsLock.Lock()
-	for _, src := range c.Sys.DataSources() {
-		if !c.srcs.Has(src.String()) {
-			continue
-		}
-
+	for _, src := range c.srcs {
 		for _, domain := range c.Config.Domains() {
-			src.WhoisRequest(c.ctx, &requests.WhoisRequest{Domain: domain})
+			src.Request(c.ctx, &requests.WhoisRequest{Domain: domain})
 		}
 	}
-	c.srcsLock.Unlock()
 
+	last := time.Now()
 	t := time.NewTicker(2 * time.Second)
 	defer t.Stop()
 loop:
@@ -361,8 +340,12 @@ loop:
 		select {
 		case <-c.done:
 			break loop
-		case <-t.C:
-			if l := c.lastActive(); time.Since(l) > 10*time.Second {
+		case l := <-ch:
+			if l.After(last) {
+				last = l
+			}
+		case now := <-t.C:
+			if now.Sub(last) > 10*time.Second {
 				break loop
 			}
 		}

@@ -108,8 +108,11 @@ func (g *Graph) ASNCacheFill(cache *amassnet.ASNCache) error {
 	for _, as := range nodes {
 		id := g.db.NodeToID(as)
 		asn, _ := strconv.Atoi(id)
-		desc := g.nodeDescription(as)
+		if asn <= 0 {
+			continue
+		}
 
+		desc := g.nodeDescription(as)
 		if g.alreadyClosed {
 			return nil
 		}

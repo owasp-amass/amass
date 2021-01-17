@@ -11,18 +11,20 @@ import (
 	"strings"
 	"time"
 
-	"github.com/OWASP/Amass/v3/eventbus"
 	amassnet "github.com/OWASP/Amass/v3/net"
 	amassdns "github.com/OWASP/Amass/v3/net/dns"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/resolvers"
-	"github.com/OWASP/Amass/v3/stringset"
 	"github.com/OWASP/Amass/v3/systems"
+	"github.com/caffix/eventbus"
+	"github.com/caffix/service"
+	"github.com/caffix/stringset"
+	"github.com/miekg/dns"
 )
 
 // TeamCymru is the Service that handles access to the TeamCymru data source.
 type TeamCymru struct {
-	requests.BaseService
+	service.BaseService
 
 	SourceType string
 	sys        systems.System
@@ -35,25 +37,29 @@ func NewTeamCymru(sys systems.System) *TeamCymru {
 		sys:        sys,
 	}
 
-	t.BaseService = *requests.NewBaseService(t, "TeamCymru")
+	t.BaseService = *service.NewBaseService(t, "TeamCymru")
 	return t
 }
 
-// Type implements the Service interface.
-func (t *TeamCymru) Type() string {
+// Description implements the Service interface.
+func (t *TeamCymru) Description() string {
 	return t.SourceType
 }
 
 // OnStart implements the Service interface.
 func (t *TeamCymru) OnStart() error {
-	t.BaseService.OnStart()
-
-	t.SetRateLimit(time.Second)
+	t.SetRateLimit(1)
 	return nil
 }
 
-// OnASNRequest implements the Service interface.
-func (t *TeamCymru) OnASNRequest(ctx context.Context, req *requests.ASNRequest) {
+// OnRequest implements the Service interface.
+func (t *TeamCymru) OnRequest(ctx context.Context, args service.Args) {
+	if req, ok := args.(*requests.ASNRequest); ok {
+		t.asnRequest(ctx, req)
+	}
+}
+
+func (t *TeamCymru) asnRequest(ctx context.Context, req *requests.ASNRequest) {
 	_, bus, err := ContextConfigBus(ctx)
 	if err != nil {
 		return
@@ -87,7 +93,6 @@ func (t *TeamCymru) origin(ctx context.Context, addr string) *requests.ASNReques
 	}
 
 	var name string
-	var answers []requests.DNSAnswer
 	if ip := net.ParseIP(addr); amassnet.IsIPv4(ip) {
 		name = amassdns.ReverseIP(addr) + ".origin.asn.cymru.com"
 	} else if amassnet.IsIPv6(ip) {
@@ -99,7 +104,8 @@ func (t *TeamCymru) origin(ctx context.Context, addr string) *requests.ASNReques
 		return nil
 	}
 
-	answers, err = t.sys.Pool().Resolve(ctx, name, "TXT", resolvers.PriorityCritical, resolvers.RetryPolicy)
+	msg := resolvers.QueryMsg(name, dns.TypeTXT)
+	resp, err := t.sys.Pool().Query(ctx, msg, resolvers.PriorityCritical, resolvers.RetryPolicy)
 	if err != nil {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: %s: DNS TXT record query error: %v", t.String(), name, err),
@@ -107,7 +113,8 @@ func (t *TeamCymru) origin(ctx context.Context, addr string) *requests.ASNReques
 		return nil
 	}
 
-	fields := strings.Split(answers[0].Data, " | ")
+	ans := resolvers.ExtractAnswers(resp)
+	fields := strings.Split(ans[0].Data, " | ")
 	if len(fields) < 5 {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: %s: Failed to parse the origin response", t.String(), name),
@@ -147,10 +154,10 @@ func (t *TeamCymru) asnLookup(ctx context.Context, asn int) *requests.ASNRequest
 		return nil
 	}
 
-	var answers []requests.DNSAnswer
 	name := "AS" + strconv.Itoa(asn) + ".asn.cymru.com"
+	msg := resolvers.QueryMsg(name, dns.TypeTXT)
 
-	answers, err = t.sys.Pool().Resolve(ctx, name, "TXT", resolvers.PriorityCritical, resolvers.RetryPolicy)
+	resp, err := t.sys.Pool().Query(ctx, msg, resolvers.PriorityCritical, resolvers.RetryPolicy)
 	if err != nil {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: %s: DNS TXT record query error: %v", t.String(), name, err),
@@ -158,7 +165,8 @@ func (t *TeamCymru) asnLookup(ctx context.Context, asn int) *requests.ASNRequest
 		return nil
 	}
 
-	fields := strings.Split(answers[0].Data, " | ")
+	ans := resolvers.ExtractAnswers(resp)
+	fields := strings.Split(ans[0].Data, " | ")
 	if len(fields) < 5 {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: %s: Failed to parse the origin response", t.String(), name),

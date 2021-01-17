@@ -10,16 +10,18 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/OWASP/Amass/v3/config"
-	"github.com/OWASP/Amass/v3/eventbus"
 	"github.com/OWASP/Amass/v3/format"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/resolvers"
-	"github.com/OWASP/Amass/v3/stringset"
 	"github.com/OWASP/Amass/v3/systems"
+	"github.com/caffix/eventbus"
+	"github.com/caffix/stringset"
 	"github.com/fatih/color"
 	"github.com/miekg/dns"
 )
@@ -90,7 +92,7 @@ func defineDNSFilepathFlags(dnsFlags *flag.FlagSet, args *dnsArgs) {
 }
 
 func runDNSCommand(clArgs []string) {
-	args := dnsArgs{
+	args := &dnsArgs{
 		Blacklist:   stringset.New(),
 		Domains:     stringset.New(),
 		Names:       stringset.New(),
@@ -105,9 +107,9 @@ func runDNSCommand(clArgs []string) {
 
 	dnsCommand.BoolVar(&help1, "h", false, "Show the program usage message")
 	dnsCommand.BoolVar(&help2, "help", false, "Show the program usage message")
-	defineDNSArgumentFlags(dnsCommand, &args)
-	defineDNSOptionFlags(dnsCommand, &args)
-	defineDNSFilepathFlags(dnsCommand, &args)
+	defineDNSArgumentFlags(dnsCommand, args)
+	defineDNSOptionFlags(dnsCommand, args)
+	defineDNSFilepathFlags(dnsCommand, args)
 
 	if len(clArgs) < 1 {
 		commandUsage(dnsUsageMsg, dnsCommand, dnsBuf)
@@ -123,7 +125,7 @@ func runDNSCommand(clArgs []string) {
 		return
 	}
 
-	if err := processDNSInputFiles(&args); err != nil {
+	if err := processDNSInputFiles(args); err != nil {
 		fmt.Fprintf(color.Error, "%v\n", err)
 		os.Exit(1)
 	}
@@ -157,44 +159,43 @@ func runDNSCommand(clArgs []string) {
 		os.Exit(1)
 	}
 
-	performResolutions(cfg, sys)
+	performResolutions(cfg, args, sys)
 }
 
-func performResolutions(cfg *config.Config, sys systems.System) {
+func performResolutions(cfg *config.Config, args *dnsArgs, sys systems.System) {
 	done := make(chan struct{})
 	active := make(chan struct{}, 1000000)
 	bus := eventbus.NewEventBus()
 	answers := make(chan *requests.DNSRequest, 100000)
 
 	// Setup the context used throughout the resolutions
-	ctx, cancel := context.WithCancel(context.Background())
+	var ctx context.Context
+	var cancel context.CancelFunc
+	if args.Timeout == 0 {
+		ctx, cancel = context.WithCancel(context.Background())
+	} else {
+		ctx, cancel = context.WithTimeout(context.Background(), time.Duration(args.Timeout)*time.Minute)
+	}
+	defer cancel()
 	ctx = context.WithValue(ctx, requests.ContextEventBus, bus)
 
-	if cfg.Timeout > 0 {
-		time.AfterFunc(time.Duration(cfg.Timeout)*time.Minute, func() {
-			close(done)
-		})
-	}
-
-	activeFunc := func(s string) { active <- struct{}{} }
-	resolvFunc := func(t time.Time, rcode int) { active <- struct{}{} }
-	bus.Subscribe(requests.SetActiveTopic, activeFunc)
-	defer bus.Unsubscribe(requests.SetActiveTopic, activeFunc)
-	bus.Subscribe(requests.ResolveCompleted, resolvFunc)
-	defer bus.Unsubscribe(requests.ResolveCompleted, resolvFunc)
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 
 	go func() {
+	loop:
 		for _, name := range cfg.ProvidedNames {
 			select {
 			case <-done:
-				cancel()
-				return
+				break loop
+			case <-quit:
+				break loop
 			default:
-				if sys.PerformDNSQuery() == nil {
-					go processDNSRequest(ctx, &requests.DNSRequest{Name: name}, cfg, sys, answers)
-				}
+				go processDNSRequest(ctx, &requests.DNSRequest{Name: name}, cfg, sys, answers)
 			}
 		}
+		cancel()
+		close(done)
 	}()
 
 	processDNSAnswers(cfg, active, answers, done)
@@ -208,31 +209,52 @@ func processDNSRequest(ctx context.Context, req *requests.DNSRequest,
 		return
 	}
 
-	req.Domain = sys.Pool().SubdomainToDomain(req.Name)
+	req.Domain = resolvers.FirstProperSubdomain(ctx, sys.Pool(), req.Name, resolvers.PriorityHigh)
 	if req.Domain == "" {
 		c <- nil
 		return
 	}
 
-	if cfg.Blacklisted(req.Name) || sys.Pool().GetWildcardType(ctx, req) == resolvers.WildcardTypeDynamic {
+	msg := resolvers.QueryMsg(req.Name, dns.TypeNone)
+	if cfg.Blacklisted(req.Name) || sys.Pool().WildcardType(ctx, msg, req.Domain) == resolvers.WildcardTypeDynamic {
 		c <- nil
 		return
 	}
 
 	var answers []requests.DNSAnswer
 	for _, t := range cfg.RecordTypes {
-		a, err := sys.Pool().Resolve(ctx, req.Name, t, resolvers.PriorityLow, resolvers.RetryPolicy)
+		qtype := nameToType(t)
+		msg := resolvers.QueryMsg(req.Name, qtype)
+		resp, err := sys.Pool().Query(ctx, msg, resolvers.PriorityLow, resolvers.RetryPolicy)
 		if err == nil {
-			answers = append(answers, a...)
-		}
+			ans := resolvers.ExtractAnswers(resp)
+			if len(ans) == 0 {
+				continue
+			}
 
-		if t == "CNAME" && len(answers) > 0 {
+			rr := resolvers.AnswersByType(ans, qtype)
+			if len(rr) == 0 {
+				continue
+			}
+
+			for _, a := range rr {
+				answers = append(answers, requests.DNSAnswer{
+					Name: a.Name,
+					Type: int(a.Type),
+					Data: a.Data,
+				})
+			}
+		}
+		if t == "CNAME" && len(resp.Answer) > 0 {
 			break
+		}
+		if sys.Pool().WildcardType(ctx, msg, req.Domain) != resolvers.WildcardTypeNone {
+			return
 		}
 	}
 	req.Records = answers
 
-	if len(req.Records) == 0 || sys.Pool().MatchesWildcard(ctx, req) {
+	if len(req.Records) == 0 {
 		c <- nil
 		return
 	}
@@ -343,9 +365,6 @@ func (d dnsArgs) OverrideConfig(conf *config.Config) error {
 	if len(d.Blacklist) > 0 {
 		conf.Blacklist = d.Blacklist.Slice()
 	}
-	if d.Timeout > 0 {
-		conf.Timeout = d.Timeout
-	}
 	if d.Options.Verbose {
 		conf.Verbose = true
 	}
@@ -407,4 +426,30 @@ func typeToName(qtype uint16) string {
 	}
 
 	return name
+}
+
+func nameToType(t string) uint16 {
+	switch t {
+	case "CNAME":
+		return dns.TypeCNAME
+	case "A":
+		return dns.TypeA
+	case "AAAA":
+		return dns.TypeAAAA
+	case "PTR":
+		return dns.TypePTR
+	case "NS":
+		return dns.TypeNS
+	case "MX":
+		return dns.TypeMX
+	case "TXT":
+		return dns.TypeTXT
+	case "SOA":
+		return dns.TypeSOA
+	case "SPF":
+		return dns.TypeSPF
+	case "SRV":
+		return dns.TypeSRV
+	}
+	return dns.TypeNone
 }

@@ -19,7 +19,6 @@ end
 function doscrape(ctx, domain)
     for i=1,10 do
         checkratelimit()
-        active(ctx)
 
         local ok = scrape(ctx, {['url']=buildurl(domain, i)})
         if not ok then
