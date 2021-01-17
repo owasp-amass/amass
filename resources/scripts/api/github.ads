@@ -7,7 +7,7 @@ name = "GitHub"
 type = "api"
 
 function start()
-    setratelimit(7)
+    setratelimit(1)
 end
 
 function check()
