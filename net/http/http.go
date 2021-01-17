@@ -57,15 +57,15 @@ var DefaultClient *http.Client
 func init() {
 	jar, _ := cookiejar.New(nil)
 	DefaultClient = &http.Client{
-		Timeout: time.Second * 180, // Google's timeout
+		Timeout: time.Second * 10,
 		Transport: &http.Transport{
 			Proxy:                 http.ProxyFromEnvironment,
 			DialContext:           amassnet.DialContext,
 			MaxIdleConns:          200,
 			MaxConnsPerHost:       50,
 			IdleConnTimeout:       90 * time.Second,
-			TLSHandshakeTimeout:   20 * time.Second,
-			ExpectContinueTimeout: 20 * time.Second,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ExpectContinueTimeout: 10 * time.Second,
 			TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
 		},
 		Jar: jar,
