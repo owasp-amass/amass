@@ -155,23 +155,6 @@ loop:
 			}
 
 			req.Records = append(req.Records, convertAnswers(rr)...)
-
-			if t == dns.TypeCNAME {
-				ptr := resolvers.RemoveLastDot(rr[0].Data)
-
-				// Check that the name discovered is in scope
-				if dt.enum.Config.WhichDomain(ptr) == "" {
-					continue
-				}
-
-				go pipeline.SendData(ctx, "filter", &requests.DNSRequest{
-					Name:    ptr,
-					Domain:  req.Domain,
-					Records: convertAnswers(rr),
-					Tag:     requests.DNS,
-					Source:  "CNAME",
-				}
-			}
 		} else {
 			if err != nil && err.Error() == "All resolvers have been stopped" {
 				return nil, err
@@ -328,16 +311,17 @@ func (dt *dNSTask) reverseDNSQuery(ctx context.Context, addr string, tp pipeline
 		return
 	}
 
-	ptr := strings.ToLower(resolvers.RemoveLastDot(rr[0].Name))
-	if _, ok := dns.IsDomainName(ptr); !ok {
+	answer := strings.ToLower(resolvers.RemoveLastDot(rr[0].Data))
+	if _, ok := dns.IsDomainName(answer); !ok {
 		return
 	}
 
 	// Check that the name discovered is in scope
-	if dt.enum.Config.WhichDomain(ptr) == "" {
+	if dt.enum.Config.WhichDomain(answer) == "" {
 		return
 	}
 
+	ptr := resolvers.RemoveLastDot(rr[0].Name)
 	domain, err := publicsuffix.EffectiveTLDPlusOne(ptr)
 	if err != nil {
 		return
