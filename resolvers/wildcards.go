@@ -23,7 +23,7 @@ const (
 	LDHChars       = "abcdefghijklmnopqrstuvwxyz0123456789-"
 )
 
-const numOfWildcardTests = 3
+const numOfWildcardTests = 2
 
 // Names for the different types of wildcards that can be detected.
 const (
@@ -250,6 +250,7 @@ func (r *baseResolver) wildcardTest(ctx context.Context, sub string) {
 			}); err == nil && len(resp.Answer) > 0 {
 				retRecords = true
 				ans = append(ans, ExtractAnswers(resp)...)
+				break
 			}
 		}
 
@@ -258,19 +259,14 @@ func (r *baseResolver) wildcardTest(ctx context.Context, sub string) {
 		} else {
 			intersectRecordData(set, ans)
 		}
+
 		answers = append(answers, ans...)
 	}
 
-	already := stringset.New()
 	var final []*ExtractedAnswer
 	// Create the slice of answers common across all the unlikely name queries
 	for _, a := range answers {
-		a.Data = strings.Trim(a.Data, ".")
-
-		if set.Has(a.Data) && !already.Has(a.Data) {
-			final = append(final, a)
-			already.Insert(a.Data)
-		}
+		final = append(final, a)
 	}
 
 	// Determine whether the subdomain has a DNS wildcard, and if so, which type is it?
@@ -282,7 +278,7 @@ func (r *baseResolver) wildcardTest(ctx context.Context, sub string) {
 			wildcardType = WildcardTypeDynamic
 		}
 
-		r.log.Printf("DNS wildcard detected: Resolver %s: %s: type: %d", r.String(), "*."+sub, wildcardType)
+		r.log.Printf("DNS wildcard detected: Resolver %s: *.%s: type: %d", r.String(), sub, wildcardType)
 	}
 
 	r.wildcardChannels.TestResult <- &testResult{
