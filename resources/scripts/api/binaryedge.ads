@@ -7,7 +7,7 @@ name = "BinaryEdge"
 type = "api"
 
 function start()
-    setratelimit(2)
+    setratelimit(1)
 end
 
 function check()
