@@ -9,7 +9,7 @@ type = "api"
 local urls = {}
 
 function start()
-    setratelimit(2)
+    setratelimit(1)
 end
 
 function vertical(ctx, domain)
