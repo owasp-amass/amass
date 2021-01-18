@@ -23,8 +23,6 @@ const (
 	LDHChars       = "abcdefghijklmnopqrstuvwxyz0123456789-"
 )
 
-const numOfWildcardTests = 3
-
 // Names for the different types of wildcards that can be detected.
 const (
 	WildcardTypeNone = iota
@@ -229,8 +227,8 @@ func (r *baseResolver) wildcardTest(ctx context.Context, sub string) {
 	set := stringset.New()
 	var answers []*ExtractedAnswer
 
-	// Query multiple times with unlikely names against this subdomain
-	for i := 0; i < numOfWildcardTests; i++ {
+	// Query 2 times with unlikely names against this subdomain
+	for i := 0; i < 2; i++ {
 		var name string
 
 		// Generate the unlikely label / name
@@ -249,7 +247,8 @@ func (r *baseResolver) wildcardTest(ctx context.Context, sub string) {
 				return msg.Rcode == TimeoutRcode && times < 10
 			}); err == nil && len(resp.Answer) > 0 {
 				retRecords = true
-				ans = append(ans, ExtractAnswers(resp)...)
+				ans = ExtractAnswers(resp)
+				break
 			}
 		}
 
@@ -258,6 +257,7 @@ func (r *baseResolver) wildcardTest(ctx context.Context, sub string) {
 		} else {
 			intersectRecordData(set, ans)
 		}
+
 		answers = append(answers, ans...)
 	}
 
@@ -282,7 +282,7 @@ func (r *baseResolver) wildcardTest(ctx context.Context, sub string) {
 			wildcardType = WildcardTypeDynamic
 		}
 
-		r.log.Printf("DNS wildcard detected: Resolver %s: %s: type: %d", r.String(), "*."+sub, wildcardType)
+		r.log.Printf("DNS wildcard detected: Resolver %s: *.%s: type: %d", r.String(), sub, wildcardType)
 	}
 
 	r.wildcardChannels.TestResult <- &testResult{
