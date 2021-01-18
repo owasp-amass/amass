@@ -13,11 +13,12 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/v3/config"
-	"github.com/OWASP/Amass/v3/eventbus"
 	amassnet "github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/net/http"
 	"github.com/OWASP/Amass/v3/requests"
-	"github.com/OWASP/Amass/v3/stringset"
+	"github.com/OWASP/Amass/v3/stringfilter"
+	"github.com/caffix/eventbus"
+	"github.com/caffix/stringset"
 	lua "github.com/yuin/gopher-lua"
 )
 
@@ -200,7 +201,7 @@ func (s *Script) setRateLimit(L *lua.LState) int {
 	if num, ok := lv.(lua.LNumber); ok {
 		sec := int(num)
 
-		s.SetRateLimit(time.Duration(sec) * time.Second)
+		s.seconds = sec
 	}
 
 	return 0
@@ -208,17 +209,12 @@ func (s *Script) setRateLimit(L *lua.LState) int {
 
 // Wrapper so scripts can block until past the data source rate limit.
 func (s *Script) checkRateLimit(L *lua.LState) int {
-	s.CheckRateLimit()
+	numRateLimitChecks(s, s.seconds)
 	return 0
 }
 
 // Wrapper so scripts can signal Amass of script activity.
 func (s *Script) active(L *lua.LState) int {
-	c := L.CheckUserData(1).Value.(*contextWrapper)
-	_, bus, err := ContextConfigBus(c.Ctx)
-	if err == nil {
-		bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, s.String())
-	}
 	return 0
 }
 
@@ -269,6 +265,7 @@ func (s *Script) newName(L *lua.LState) int {
 		return 0
 	}
 
+	s.rlimit.Take()
 	genNewNameEvent(c.Ctx, s.sys, s, http.CleanName(name))
 	return 0
 }
@@ -472,7 +469,6 @@ func (s *Script) contextToUserData(ctx context.Context) *lua.LUserData {
 
 	ud.Value = &contextWrapper{Ctx: ctx}
 	L.SetMetatable(ud, L.GetTypeMetatable("context"))
-
 	return ud
 }
 
@@ -585,8 +581,11 @@ func (s *Script) scrape(L *lua.LState) int {
 		}
 	}
 
-	for _, name := range subRE.FindAllString(resp, -1) {
-		genNewNameEvent(c.Ctx, s.sys, s, http.CleanName(name))
+	filter := stringfilter.NewStringFilter()
+	for _, name := range s.subre.FindAllString(resp, -1) {
+		if !filter.Duplicate(name) {
+			genNewNameEvent(c.Ctx, s.sys, s, http.CleanName(name))
+		}
 	}
 
 	L.Push(lua.LTrue)

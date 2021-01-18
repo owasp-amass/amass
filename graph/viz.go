@@ -6,8 +6,8 @@ package graph
 import (
 	"math/rand"
 
-	"github.com/OWASP/Amass/v3/stringset"
 	"github.com/OWASP/Amass/v3/viz"
+	"github.com/caffix/stringset"
 )
 
 // VizData returns the current state of the Graph as viz package Nodes and Edges.

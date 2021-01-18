@@ -143,7 +143,7 @@ The `records` parameter is a table of tables that each contain the following fie
 
 ### `subdomain` Callback
 
-Amass executes the `subdomain` callback function after successfully resolving the provided `name` via DNS query and checking that it is a proper subdomain name. A proper subdomain name must have more labels than the root domain name and be resolved with a hostname label. For example, if `example.com` is the root domain name, and the FQDN `www.depta.example.com` is successfully resolved, then the proper subdomain name `depta.example.com` will be provied to the `subdomain` callback function. The `times` parameter shares how many hostnames have been discovered within this proper subdomain name.
+Amass executes the `subdomain` callback function after successfully resolving the provided `name` via DNS query and checking that it is a proper subdomain name. A proper subdomain name must have more labels than the root domain name and be resolved with a hostname label. For example, if `example.com` is the root domain name, and the FQDN `www.depta.example.com` is successfully resolved, then the proper subdomain name `depta.example.com` will be provided to the `subdomain` callback function. The `times` parameter shares how many hostnames have been discovered within this proper subdomain name.
 
 ```lua
 function subdomain(ctx, name, domain, times)

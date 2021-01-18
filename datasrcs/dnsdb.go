@@ -10,19 +10,19 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/OWASP/Amass/v3/config"
-	"github.com/OWASP/Amass/v3/eventbus"
 	"github.com/OWASP/Amass/v3/net/http"
 	"github.com/OWASP/Amass/v3/requests"
-	"github.com/OWASP/Amass/v3/stringset"
 	"github.com/OWASP/Amass/v3/systems"
+	"github.com/caffix/eventbus"
+	"github.com/caffix/service"
+	"github.com/caffix/stringset"
 )
 
 // DNSDB is the Service that handles access to the DNSDB data source.
 type DNSDB struct {
-	requests.BaseService
+	service.BaseService
 
 	SourceType string
 	sys        systems.System
@@ -36,30 +36,28 @@ func NewDNSDB(sys systems.System) *DNSDB {
 		sys:        sys,
 	}
 
-	d.BaseService = *requests.NewBaseService(d, "DNSDB")
+	d.BaseService = *service.NewBaseService(d, "DNSDB")
 	return d
 }
 
-// Type implements the Service interface.
-func (d *DNSDB) Type() string {
+// Description implements the Service interface.
+func (d *DNSDB) Description() string {
 	return d.SourceType
 }
 
 // OnStart implements the Service interface.
 func (d *DNSDB) OnStart() error {
-	d.BaseService.OnStart()
-
 	d.creds = d.sys.Config().GetDataSourceConfig(d.String()).GetCredentials()
+
 	if d.creds == nil || d.creds.Key == "" {
 		d.sys.Config().Log.Printf("%s: API key data was not provided", d.String())
 	}
 
-	d.SetRateLimit(2 * time.Minute)
-	return nil
+	d.SetRateLimit(1)
+	return d.checkConfig()
 }
 
-// CheckConfig implements the Service interface.
-func (d *DNSDB) CheckConfig() error {
+func (d *DNSDB) checkConfig() error {
 	creds := d.sys.Config().GetDataSourceConfig(d.String()).GetCredentials()
 
 	if creds == nil || creds.Key == "" {
@@ -71,8 +69,14 @@ func (d *DNSDB) CheckConfig() error {
 	return nil
 }
 
-// OnDNSRequest implements the Service interface.
-func (d *DNSDB) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
+// OnRequest implements the Service interface.
+func (d *DNSDB) OnRequest(ctx context.Context, args service.Args) {
+	if req, ok := args.(*requests.DNSRequest); ok {
+		d.dnsRequest(ctx, req)
+	}
+}
+
+func (d *DNSDB) dnsRequest(ctx context.Context, req *requests.DNSRequest) {
 	cfg, bus, err := ContextConfigBus(ctx)
 	if err != nil {
 		return
@@ -86,7 +90,7 @@ func (d *DNSDB) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 		return
 	}
 
-	d.CheckRateLimit()
+	numRateLimitChecks(d, 120)
 	bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 		fmt.Sprintf("Querying %s for %s subdomains", d.String(), req.Domain))
 

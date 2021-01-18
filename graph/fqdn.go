@@ -4,7 +4,7 @@
 package graph
 
 import (
-	"errors"
+	"fmt"
 
 	"golang.org/x/net/publicsuffix"
 )
@@ -15,11 +15,11 @@ func (g *Graph) InsertFQDN(name, source, tag, eventID string) (Node, error) {
 
 	domain, err := publicsuffix.EffectiveTLDPlusOne(name)
 	if err != nil {
-		return nil, errors.New("InsertFQDN: Failed to obtain valid domain name(s)")
+		return nil, fmt.Errorf("InsertFQDN: Failed to obtain a valid domain name for %s", name)
 	}
 
 	if name == "" || tld == "" || domain == "" {
-		return nil, errors.New("InsertFQDN: Failed to obtain valid domain name(s)")
+		return nil, fmt.Errorf("InsertFQDN: Failed to obtain a valid domain name for %s", name)
 	}
 
 	// Create the graph nodes that represent the three portions of the DNS name

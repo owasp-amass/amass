@@ -13,17 +13,18 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/v3/config"
-	"github.com/OWASP/Amass/v3/eventbus"
 	"github.com/OWASP/Amass/v3/net/http"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/resolvers"
-	"github.com/OWASP/Amass/v3/stringset"
 	"github.com/OWASP/Amass/v3/systems"
+	"github.com/caffix/eventbus"
+	"github.com/caffix/service"
+	"github.com/caffix/stringset"
 )
 
 // Umbrella is the Service that handles access to the Umbrella data source.
 type Umbrella struct {
-	requests.BaseService
+	service.BaseService
 
 	SourceType string
 	sys        systems.System
@@ -37,30 +38,29 @@ func NewUmbrella(sys systems.System) *Umbrella {
 		sys:        sys,
 	}
 
-	u.BaseService = *requests.NewBaseService(u, "Umbrella")
+	u.BaseService = *service.NewBaseService(u, "Umbrella")
 	return u
 }
 
-// Type implements the Service interface.
-func (u *Umbrella) Type() string {
+// Description implements the Service interface.
+func (u *Umbrella) Description() string {
 	return u.SourceType
 }
 
 // OnStart implements the Service interface.
 func (u *Umbrella) OnStart() error {
-	u.BaseService.OnStart()
-
 	u.creds = u.sys.Config().GetDataSourceConfig(u.String()).GetCredentials()
+
 	if u.creds == nil || u.creds.Key == "" {
 		u.sys.Config().Log.Printf("%s: API key data was not provided", u.String())
 	}
 
-	u.SetRateLimit(500 * time.Millisecond)
-	return nil
+	u.SetRateLimit(2)
+	return u.checkConfig()
 }
 
 // CheckConfig implements the Service interface.
-func (u *Umbrella) CheckConfig() error {
+func (u *Umbrella) checkConfig() error {
 	creds := u.sys.Config().GetDataSourceConfig(u.String()).GetCredentials()
 
 	if creds == nil || creds.Key == "" {
@@ -72,23 +72,30 @@ func (u *Umbrella) CheckConfig() error {
 	return nil
 }
 
-// OnDNSRequest implements the Service interface.
-func (u *Umbrella) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
+// OnRequest implements the Service interface.
+func (u *Umbrella) OnRequest(ctx context.Context, args service.Args) {
+	switch req := args.(type) {
+	case *requests.DNSRequest:
+		u.dnsRequest(ctx, req)
+	case *requests.AddrRequest:
+		u.addrRequest(ctx, req)
+	case *requests.WhoisRequest:
+		u.whoisRequest(ctx, req)
+	}
+}
+
+func (u *Umbrella) dnsRequest(ctx context.Context, req *requests.DNSRequest) {
 	cfg, bus, err := ContextConfigBus(ctx)
 	if err != nil {
 		return
 	}
-
 	if u.creds == nil || u.creds.Key == "" {
 		return
 	}
-
 	if !cfg.IsDomainInScope(req.Domain) {
 		return
 	}
 
-	u.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, u.String())
 	bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 		fmt.Sprintf("Querying %s for %s subdomains", u.String(), req.Domain))
 
@@ -114,23 +121,17 @@ func (u *Umbrella) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 	}
 }
 
-// OnAddrRequest implements the Service interface.
-func (u *Umbrella) OnAddrRequest(ctx context.Context, req *requests.AddrRequest) {
+func (u *Umbrella) addrRequest(ctx context.Context, req *requests.AddrRequest) {
 	_, bus, err := ContextConfigBus(ctx)
 	if err != nil {
 		return
 	}
-
 	if u.creds == nil || u.creds.Key == "" {
 		return
 	}
-
 	if req.Address == "" {
 		return
 	}
-
-	u.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, u.String())
 
 	headers := u.restHeaders()
 	url := u.restAddrURL(req.Address)
@@ -156,29 +157,18 @@ func (u *Umbrella) OnAddrRequest(ctx context.Context, req *requests.AddrRequest)
 	}
 }
 
-// OnASNRequest implements the Service interface.
-func (u *Umbrella) OnASNRequest(ctx context.Context, req *requests.ASNRequest) {
-	_, bus, err := ContextConfigBus(ctx)
-	if err != nil {
-		return
-	}
-
+func (u *Umbrella) asnRequest(ctx context.Context, req *requests.ASNRequest) {
 	if u.creds == nil || u.creds.Key == "" {
 		return
 	}
-
 	if req.Address == "" && req.ASN == 0 {
 		return
 	}
-
-	u.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, u.String())
 
 	if req.Address != "" {
 		u.executeASNAddrQuery(ctx, req)
 		return
 	}
-
 	u.executeASNQuery(ctx, req)
 }
 
@@ -240,8 +230,6 @@ func (u *Umbrella) executeASNAddrQuery(ctx context.Context, req *requests.ASNReq
 		req.Netblocks.Insert(strings.TrimSpace(req.Prefix))
 
 		u.CheckRateLimit()
-		bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, u.String())
-
 		u.executeASNQuery(ctx, req)
 	}
 	bus.Publish(requests.NewASNTopic, eventbus.PriorityHigh, req)
@@ -291,8 +279,6 @@ func (u *Umbrella) executeASNQuery(ctx context.Context, req *requests.ASNRequest
 			req.CC = netblock[0].Geo.CountryCode
 
 			u.CheckRateLimit()
-			bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, u.String())
-
 			u.executeASNAddrQuery(ctx, req)
 			return
 		}
@@ -363,8 +349,6 @@ func (u *Umbrella) queryWhois(ctx context.Context, domain string) *whoisRecord {
 	whoisURL := u.whoisRecordURL(domain)
 
 	u.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, u.String())
-
 	record, err := http.RequestWebPage(whoisURL, nil, headers, "", "")
 	if err != nil {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", u.String(), whoisURL, err))
@@ -392,8 +376,6 @@ func (u *Umbrella) queryReverseWhois(ctx context.Context, apiURL string) []strin
 	// Umbrella provides data in 500 piece chunks
 	for count, more := 0, true; more; count = count + 500 {
 		u.CheckRateLimit()
-		bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, u.String())
-
 		fullAPIURL := fmt.Sprintf("%s&offset=%d", apiURL, count)
 		record, err := http.RequestWebPage(fullAPIURL, nil, headers, "", "")
 		if err != nil {
@@ -429,24 +411,20 @@ func (u *Umbrella) validateScope(ctx context.Context, input string) bool {
 	if err != nil {
 		return false
 	}
-
 	if input != "" && cfg.IsDomainInScope(input) {
 		return true
 	}
 	return false
 }
 
-// OnWhoisRequest implements the Service interface.
-func (u *Umbrella) OnWhoisRequest(ctx context.Context, req *requests.WhoisRequest) {
+func (u *Umbrella) whoisRequest(ctx context.Context, req *requests.WhoisRequest) {
 	cfg, bus, err := ContextConfigBus(ctx)
 	if err != nil {
 		return
 	}
-
 	if u.creds == nil || u.creds.Key == "" {
 		return
 	}
-
 	if !cfg.IsDomainInScope(req.Domain) {
 		return
 	}

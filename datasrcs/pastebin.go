@@ -7,17 +7,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"time"
 
-	"github.com/OWASP/Amass/v3/eventbus"
 	"github.com/OWASP/Amass/v3/net/http"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/systems"
+	"github.com/caffix/eventbus"
+	"github.com/caffix/service"
 )
 
 // Pastebin is the Service that handles access to the Pastebin data source.
 type Pastebin struct {
-	requests.BaseService
+	service.BaseService
 
 	SourceType string
 	sys        systems.System
@@ -30,25 +30,29 @@ func NewPastebin(sys systems.System) *Pastebin {
 		sys:        sys,
 	}
 
-	p.BaseService = *requests.NewBaseService(p, "Pastebin")
+	p.BaseService = *service.NewBaseService(p, "Pastebin")
 	return p
 }
 
-// Type implements the Service interface.
-func (p *Pastebin) Type() string {
+// Description implements the Service interface.
+func (p *Pastebin) Description() string {
 	return p.SourceType
 }
 
 // OnStart implements the Service interface.
 func (p *Pastebin) OnStart() error {
-	p.BaseService.OnStart()
-
-	p.SetRateLimit(3 * time.Second)
+	p.SetRateLimit(1)
 	return nil
 }
 
-// OnDNSRequest implements the Service interface.
-func (p *Pastebin) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
+// OnRequest implements the Service interface.
+func (p *Pastebin) OnRequest(ctx context.Context, args service.Args) {
+	if req, ok := args.(*requests.DNSRequest); ok {
+		p.dnsRequest(ctx, req)
+	}
+}
+
+func (p *Pastebin) dnsRequest(ctx context.Context, req *requests.DNSRequest) {
 	cfg, bus, err := ContextConfigBus(ctx)
 	if err != nil {
 		return
@@ -59,7 +63,7 @@ func (p *Pastebin) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 		return
 	}
 
-	p.CheckRateLimit()
+	numRateLimitChecks(p, 2)
 	bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 		fmt.Sprintf("Querying %s for %s subdomains", p.String(), req.Domain))
 

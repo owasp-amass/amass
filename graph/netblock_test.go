@@ -1,7 +1,6 @@
 package graph
 
 import (
-	"bytes"
 	"net"
 	"testing"
 )
@@ -22,7 +21,7 @@ func TestNetblock(t *testing.T) {
 			if err != nil {
 				t.Errorf("Error parsing node's cidr info from netblock.\n%v\n", got)
 			}
-			if !bytes.Equal(get, want) {
+			if !net.IP.Equal(get, want) {
 				t.Errorf("Expected:%v\nGot:%v\n", want, get)
 			}
 		})

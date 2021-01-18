@@ -38,6 +38,8 @@ Did you write a blog post, magazine article or do a podcast about or mentioning 
 
 ### Blogs & Articles
 
+* Article on [ThreadFix](threadfix.it):
+  * [Applied ThreadFix: Seeding Your Application Portfolio with OWASP Amass](https://threadfix.it/resources/applied-threadfix-seeding-your-application-portfolio-with-owasp-amass/)
 * Blog post on [Luke Stephens' (@hakluke)](https://medium.com/@hakluke):
   * [Hakluke’s Guide to Amass — How to Use Amass More Effectively for Bug Bounties](https://medium.com/@hakluke/haklukes-guide-to-amass-how-to-use-amass-more-effectively-for-bug-bounties-7c37570b83f7)
 * Blog post on [WW Tech Blog](https://medium.com/ww-tech-blog):

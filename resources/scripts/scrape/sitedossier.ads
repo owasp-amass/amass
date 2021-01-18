@@ -9,9 +9,19 @@ function start()
 end
 
 function vertical(ctx, domain)
-    scrape(ctx, {url=buildurl(domain)})
+    local p = 1
+
+    while (true)
+        local ok = scrape(ctx, {url=buildurl(domain, p)})
+        if not ok then
+            break
+        end
+
+        checkratelimit()
+        p = p + 100
+    end
 end
 
-function buildurl(domain)
-    return "http://www.sitedossier.com/parentdomain/" .. domain
+function buildurl(domain, pagenum)
+    return "http://www.sitedossier.com/parentdomain/" .. domain .. "/" .. pagenum
 end

@@ -8,19 +8,19 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
-	"time"
 
-	"github.com/OWASP/Amass/v3/eventbus"
 	"github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/net/http"
 	"github.com/OWASP/Amass/v3/requests"
-	"github.com/OWASP/Amass/v3/stringset"
 	"github.com/OWASP/Amass/v3/systems"
+	"github.com/caffix/eventbus"
+	"github.com/caffix/service"
+	"github.com/caffix/stringset"
 )
 
 // ViewDNS is the Service that handles access to the ViewDNS data source.
 type ViewDNS struct {
-	requests.BaseService
+	service.BaseService
 
 	SourceType string
 }
@@ -29,25 +29,29 @@ type ViewDNS struct {
 func NewViewDNS(sys systems.System) *ViewDNS {
 	v := &ViewDNS{SourceType: requests.SCRAPE}
 
-	v.BaseService = *requests.NewBaseService(v, "ViewDNS")
+	v.BaseService = *service.NewBaseService(v, "ViewDNS")
 	return v
 }
 
-// Type implements the Service interface.
-func (v *ViewDNS) Type() string {
+// Description implements the Service interface.
+func (v *ViewDNS) Description() string {
 	return v.SourceType
 }
 
 // OnStart implements the Service interface.
 func (v *ViewDNS) OnStart() error {
-	v.BaseService.OnStart()
-
-	v.SetRateLimit(10 * time.Second)
+	v.SetRateLimit(1)
 	return nil
 }
 
-// OnDNSRequest implements the Service interface.
-func (v *ViewDNS) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
+// OnRequest implements the Service interface.
+func (v *ViewDNS) OnRequest(ctx context.Context, args service.Args) {
+	if req, ok := args.(*requests.DNSRequest); ok {
+		v.dnsRequest(ctx, req)
+	}
+}
+
+func (v *ViewDNS) dnsRequest(ctx context.Context, req *requests.DNSRequest) {
 	cfg, bus, err := ContextConfigBus(ctx)
 	if err != nil {
 		return
@@ -57,8 +61,7 @@ func (v *ViewDNS) OnDNSRequest(ctx context.Context, req *requests.DNSRequest) {
 		return
 	}
 
-	v.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, v.String())
+	numRateLimitChecks(v, 9)
 	bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 		fmt.Sprintf("Querying %s for %s subdomains", v.String(), req.Domain))
 
@@ -98,9 +101,7 @@ func (v *ViewDNS) OnWhoisRequest(ctx context.Context, req *requests.WhoisRequest
 		return
 	}
 
-	v.CheckRateLimit()
-	bus.Publish(requests.SetActiveTopic, eventbus.PriorityCritical, v.String())
-
+	numRateLimitChecks(v, 9)
 	u := v.getReverseWhoisURL(req.Domain)
 	page, err := http.RequestWebPage(u, nil, nil, "", "")
 	if err != nil {

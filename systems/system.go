@@ -7,8 +7,8 @@ import (
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/graph"
 	"github.com/OWASP/Amass/v3/net"
-	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/resolvers"
+	"github.com/caffix/service"
 )
 
 // System is the object type for managing services that perform various reconnaissance activities.
@@ -23,25 +23,22 @@ type System interface {
 	Cache() *net.ASNCache
 
 	// AddSource appends the provided data source to the slice of sources managed by the System
-	AddSource(srv requests.Service) error
+	AddSource(srv service.Service) error
 
 	// AddAndStart starts the provided data source and then appends it to the slice of sources
-	AddAndStart(srv requests.Service) error
+	AddAndStart(srv service.Service) error
 
 	// DataSources returns the slice of data sources managed by the System
-	DataSources() []requests.Service
+	DataSources() []service.Service
 
 	// SetDataSources assigns the data sources that will be used by System
-	SetDataSources(sources []requests.Service)
+	SetDataSources(sources []service.Service)
 
 	// GraphDatabases return the Graphs used by the System
 	GraphDatabases() []*graph.Graph
 
 	// GetMemoryUsage() returns the number bytes allocated to heap objects on this system
 	GetMemoryUsage() uint64
-
-	// PerformDNSQuery blocks if the maximum number of queries is already taking place
-	PerformDNSQuery() error
 
 	// Shutdown will shutdown the System
 	Shutdown() error

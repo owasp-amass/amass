@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"time"
@@ -23,7 +24,7 @@ func main() {
 	if err != nil {
 		return
 	}
-	sys.SetDataSources(datasrcs.GetAllSources(sys, true))
+	sys.SetDataSources(datasrcs.GetAllSources(sys))
 
 	e := enum.NewEnumeration(cfg, sys)
 	if e == nil {
@@ -31,7 +32,7 @@ func main() {
 	}
 	defer e.Close()
 
-	e.Start()
+	e.Start(context.TODO())
 	for _, o := range e.ExtractOutput(nil, false) {
 		fmt.Println(o.Name)
 	}

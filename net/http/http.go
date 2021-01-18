@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -23,8 +24,8 @@ import (
 
 	amassnet "github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/net/dns"
-	"github.com/OWASP/Amass/v3/stringset"
 	"github.com/PuerkitoBio/goquery"
+	"github.com/caffix/stringset"
 	"github.com/geziyor/geziyor"
 	"github.com/geziyor/geziyor/client"
 	"golang.org/x/sync/semaphore"
@@ -32,7 +33,7 @@ import (
 
 const (
 	// UserAgent is the default user agent used by Amass during HTTP requests.
-	UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.97 Safari/537.36"
+	UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.49 Safari/537.36"
 
 	// Accept is the default HTTP Accept header value used by Amass.
 	Accept = "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
@@ -210,18 +211,17 @@ func PullCertificateNames(addr string, ports []int) []string {
 
 	// Check hosts for certificates that contain subdomain names
 	for _, port := range ports {
-		cfg := &tls.Config{InsecureSkipVerify: true}
 		// Set the maximum time allowed for making the connection
 		ctx, cancel := context.WithTimeout(context.Background(), defaultTLSConnectTimeout)
 		defer cancel()
 		// Obtain the connection
-		conn, err := amassnet.DialContext(ctx, "tcp", addr+":"+strconv.Itoa(port))
+		conn, err := amassnet.DialContext(ctx, "tcp", net.JoinHostPort(addr, strconv.Itoa(port)))
 		if err != nil {
 			continue
 		}
 		defer conn.Close()
 
-		c := tls.Client(conn, cfg)
+		c := tls.Client(conn, &tls.Config{InsecureSkipVerify: true})
 		// Attempt to acquire the certificate chain
 		errChan := make(chan error, 2)
 		// This goroutine will break us out of the handshake
@@ -244,6 +244,7 @@ func PullCertificateNames(addr string, ports []int) []string {
 		// Create the new requests from names found within the cert
 		names = append(names, namesFromCert(cert)...)
 	}
+
 	return names
 }
 

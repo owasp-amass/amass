@@ -8,7 +8,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/OWASP/Amass/v3/stringset"
+	"github.com/caffix/stringset"
 	"github.com/cayleygraph/cayley"
 	"github.com/cayleygraph/quad"
 	"golang.org/x/net/publicsuffix"
@@ -158,12 +158,14 @@ func (g *Graph) EventFQDNs(uuid string) []string {
 	defer g.db.Unlock()
 
 	event := quad.IRI(uuid)
+	root := quad.IRI("root")
+	domain := quad.IRI("domain")
 	ntype := quad.IRI("type")
 	fqdn := quad.String("fqdn")
 
 	names := stringset.New()
-	p := cayley.StartPath(g.db.store).Has(ntype, fqdn).Tag("name")
-	p = p.Out(quad.IRI("root")).In(quad.IRI("domain")).Is(event).Back("name")
+	p := cayley.StartPath(g.db.store).Has(ntype, fqdn)
+	p = p.Tag("name").Out(root).In(domain).Is(event).Back("name")
 	p.Iterate(context.Background()).EachValue(nil, func(value quad.Value) {
 		names.Insert(valToStr(value))
 	})

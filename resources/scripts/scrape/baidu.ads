@@ -12,14 +12,8 @@ function start()
 end
 
 function vertical(ctx, domain)
-    apirequest(ctx, domain)
-    doscrape(ctx, domain)
-end
-
-function doscrape(ctx, domain)
     for i=1,10 do
         checkratelimit()
-        active(ctx)
 
         local ok = scrape(ctx, {['url']=buildurl(domain, i)})
         if not ok then
@@ -37,24 +31,4 @@ function buildurl(domain, pagenum)
     }
 
     return "https://www.baidu.com/s?" .. url.build_query_string(params)
-end
-
-function apirequest(ctx, domain)
-    local page, err = request({['url']=apiurl(domain)})
-    if (err ~= nil and err ~= "") then
-        return
-    end
-
-    local resp = json.decode(page)
-    if (resp == nil or resp.code ~= 0 or #resp['data'] == 0) then
-        return
-    end
-
-    for i, tb in pairs(resp.data) do
-        newname(ctx, tb.domain)
-    end
-end
-
-function apiurl(domain)
-    return "https://ce.baidu.com/index/getRelatedSites?site_address=" .. domain
 end

@@ -22,8 +22,8 @@ import (
 
 	_ "github.com/OWASP/Amass/v3/config/statik" // The content being embedded into the binary
 	amasshttp "github.com/OWASP/Amass/v3/net/http"
-	"github.com/OWASP/Amass/v3/stringset"
 	"github.com/OWASP/Amass/v3/wordlist"
+	"github.com/caffix/stringset"
 	"github.com/go-ini/ini"
 	"github.com/google/uuid"
 	"github.com/rakyll/statik/fs"
@@ -135,9 +135,6 @@ type Config struct {
 	Resolvers           []string
 	MonitorResolverRate bool
 
-	// Enumeration Timeout
-	Timeout int
-
 	// Option for verbose logging and output
 	Verbose bool
 
@@ -158,7 +155,7 @@ func NewConfig() *Config {
 		Log:                 log.New(ioutil.Discard, "", 0),
 		Ports:               []int{443},
 		MinForRecursive:     1,
-		Resolvers:           defaultPublicResolvers,
+		Resolvers:           DefaultBaselineResolvers,
 		MonitorResolverRate: true,
 		LocalDatabase:       true,
 		// The following is enum-only, but intel will just ignore them anyway

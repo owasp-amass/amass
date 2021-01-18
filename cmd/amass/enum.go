@@ -6,6 +6,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -29,8 +30,8 @@ import (
 	"github.com/OWASP/Amass/v3/format"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/stringfilter"
-	"github.com/OWASP/Amass/v3/stringset"
 	"github.com/OWASP/Amass/v3/systems"
+	"github.com/caffix/stringset"
 	"github.com/fatih/color"
 )
 
@@ -104,7 +105,7 @@ func defineEnumArgumentFlags(enumFlags *flag.FlagSet, args *enumArgs) {
 	enumFlags.Var(&args.Included, "include", "Data source names separated by commas to be included")
 	enumFlags.StringVar(&args.Interface, "iface", "", "Provide the network interface to send traffic through")
 	enumFlags.IntVar(&args.MaxDNSQueries, "max-dns-queries", 0, "Maximum number of DNS queries per second")
-	enumFlags.IntVar(&args.MinForRecursive, "min-for-recursive", 1, "Subdomain labels seen before recursive brute forcing")
+	enumFlags.IntVar(&args.MinForRecursive, "min-for-recursive", 1, "Subdomain labels seen before recursive brute forcing (Default: 1)")
 	enumFlags.Var(&args.Ports, "p", "Ports separated by commas (default: 443)")
 	enumFlags.Var(&args.Resolvers, "r", "IP addresses of preferred DNS resolvers (can be used multiple times)")
 	enumFlags.IntVar(&args.Timeout, "timeout", 0, "Number of minutes to let enumeration run before quitting")
@@ -176,7 +177,7 @@ func runEnumCommand(clArgs []string) {
 		os.Exit(1)
 	}
 	defer sys.Shutdown()
-	sys.SetDataSources(datasrcs.GetAllSources(sys, true))
+	sys.SetDataSources(datasrcs.GetAllSources(sys))
 	// Expand data source category names into the associated source names
 	cfg.SourceFilter.Sources = expandCategoryNames(cfg.SourceFilter.Sources, generateCategoryMap(sys))
 
@@ -214,9 +215,30 @@ func runEnumCommand(clArgs []string) {
 	wg.Add(1)
 	go processOutput(e, outChans, done, &wg)
 
-	go signalHandler(e)
+	var ctx context.Context
+	var cancel context.CancelFunc
+	if args.Timeout == 0 {
+		ctx, cancel = context.WithCancel(context.Background())
+	} else {
+		ctx, cancel = context.WithTimeout(context.Background(), time.Duration(args.Timeout)*time.Minute)
+	}
+	defer cancel()
+
+	// Monitor for cancellation by the user
+	go func() {
+		quit := make(chan os.Signal, 1)
+		signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+
+		select {
+		case <-quit:
+			cancel()
+		case <-done:
+		case <-ctx.Done():
+		}
+	}()
+
 	// Start the enumeration process
-	if err := e.Start(); err != nil {
+	if err := e.Start(ctx); err != nil {
 		r.Println(err)
 		os.Exit(1)
 	}
@@ -271,7 +293,6 @@ func argsAndConfig(clArgs []string) (*config.Config, *enumArgs) {
 		commandUsage(enumUsageMsg, enumCommand, enumBuf)
 		return nil, &args
 	}
-
 	if err := enumCommand.Parse(clArgs); err != nil {
 		r.Fprintf(color.Error, "%v\n", err)
 		os.Exit(1)
@@ -327,7 +348,6 @@ func argsAndConfig(clArgs []string) (*config.Config, *enumArgs) {
 		r.Fprintf(color.Error, "Failed to load the configuration file: %v\n", err)
 		os.Exit(1)
 	}
-
 	// Override configuration file settings with command-line arguments
 	if err := cfg.UpdateConfig(args); err != nil {
 		r.Fprintf(color.Error, "Configuration error: %v\n", err)
@@ -345,6 +365,9 @@ func argsAndConfig(clArgs []string) (*config.Config, *enumArgs) {
 	// Some input validation
 	if cfg.Passive && (args.Options.IPs || args.Options.IPv4 || args.Options.IPv6) {
 		r.Fprintln(color.Error, "IP addresses cannot be provided without DNS resolution")
+		os.Exit(1)
+	} else if cfg.Passive && cfg.Ports {
+		r.Fprintln(color.Error, "Ports cannot be scanned in the passive mode")
 		os.Exit(1)
 	}
 	if len(cfg.Domains()) == 0 {
@@ -445,7 +468,6 @@ func saveJSONOutput(e *enum.Enumeration, args *enumArgs, output chan *requests.O
 	if args.Filepaths.AllFilePrefix != "" {
 		jsonfile = args.Filepaths.AllFilePrefix + ".json"
 	}
-
 	if jsonfile == "" {
 		return
 	}
@@ -516,26 +538,10 @@ loop:
 	}
 }
 
-// If the user interrupts the program, print the summary information
-func signalHandler(e *enum.Enumeration) {
-	quit := make(chan os.Signal, 1)
-
-	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
-	<-quit
-	// Signal the enumeration to finish
-	e.Done()
-	// Wait for output operations to complete
-	time.Sleep(30 * time.Second)
-	os.Exit(1)
-}
-
 func writeLogsAndMessages(logs *io.PipeReader, logfile string, verbose bool) {
 	wildcard := regexp.MustCompile("DNS wildcard")
 	avg := regexp.MustCompile("Average DNS queries")
 	rScore := regexp.MustCompile("Resolver .* has a low score")
-	alterations := regexp.MustCompile("queries for altered names")
-	brute := regexp.MustCompile("queries for brute forcing")
-	sanity := regexp.MustCompile("SanityChecks")
 	queries := regexp.MustCompile("Querying")
 
 	var filePtr *os.File
@@ -577,24 +583,12 @@ func writeLogsAndMessages(logs *io.PipeReader, logfile string, verbose bool) {
 		if rScore.FindString(line) != "" {
 			fgR.Fprintln(color.Error, line)
 		}
-		// Let the user know when brute forcing has started
-		if brute.FindString(line) != "" {
-			fgY.Fprintln(color.Error, line)
-		}
-		// Let the user know when name alterations have started
-		if alterations.FindString(line) != "" {
-			fgY.Fprintln(color.Error, line)
-		}
-		// Check if DNS resolvers have failed the sanity checks
-		if verbose && sanity.FindString(line) != "" {
-			fgR.Fprintln(color.Error, line)
-		}
 		// Check for Amass DNS wildcard messages
 		if verbose && wildcard.FindString(line) != "" {
 			fgR.Fprintln(color.Error, line)
 		}
 		// Let the user know when data sources are being queried
-		if queries.FindString(line) != "" {
+		if verbose && queries.FindString(line) != "" {
 			fgY.Fprintln(color.Error, line)
 		}
 	}
@@ -729,9 +723,6 @@ func (e enumArgs) OverrideConfig(conf *config.Config) error {
 	if e.Blacklist.Len() > 0 {
 		conf.Blacklist = e.Blacklist.Slice()
 	}
-	if e.Timeout > 0 {
-		conf.Timeout = e.Timeout
-	}
 	if e.Options.Verbose {
 		conf.Verbose = true
 	}
@@ -755,8 +746,15 @@ func (e enumArgs) OverrideConfig(conf *config.Config) error {
 			e.Included.Insert(requests.BRUTE)
 		}
 		conf.SourceFilter.Sources = e.Included.Slice()
-	} else if len(e.Excluded) > 0 {
+	} else if len(e.Excluded) > 0 || conf.Alterations || conf.BruteForcing {
 		conf.SourceFilter.Include = false
+		// Check if brute forcing and alterations should be added
+		if conf.Alterations {
+			e.Included.Insert(requests.ALT)
+		}
+		if conf.BruteForcing {
+			e.Included.Insert(requests.BRUTE)
+		}
 		conf.SourceFilter.Sources = e.Excluded.Slice()
 	}
 	// Attempt to add the provided domains to the configuration

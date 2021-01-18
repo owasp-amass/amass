@@ -87,14 +87,15 @@ func GetIP2ASNData() ([]*IP2ASN, error) {
 			continue
 		}
 
-		asn, _ := strconv.Atoi(record[2])
-		ranges = append(ranges, &IP2ASN{
-			FirstIP:     net.ParseIP(record[0]),
-			LastIP:      net.ParseIP(record[1]),
-			ASN:         asn,
-			CC:          record[3],
-			Description: record[4],
-		})
+		if asn, err := strconv.Atoi(record[2]); err == nil {
+			ranges = append(ranges, &IP2ASN{
+				FirstIP:     net.ParseIP(record[0]),
+				LastIP:      net.ParseIP(record[1]),
+				ASN:         asn,
+				CC:          record[3],
+				Description: record[4],
+			})
+		}
 	}
 
 	return ranges, nil

@@ -7,7 +7,7 @@ name = "BinaryEdge"
 type = "api"
 
 function start()
-    setratelimit(2)
+    setratelimit(1)
 end
 
 function check()
@@ -78,7 +78,6 @@ function apiquery(ctx, domain)
             return
         end
 
-        active(ctx)
         checkratelimit()
     end
 end
