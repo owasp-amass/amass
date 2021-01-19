@@ -173,7 +173,7 @@ func Crawl(url string, scope []string) ([]string, error) {
 						count++
 					}
 				}
-			}
+			})
 
 			r.HTMLDoc.Find("script").Each(func(i int, s *goquery.Selection) {
 				if src, ok := s.Attr("src"); ok {
