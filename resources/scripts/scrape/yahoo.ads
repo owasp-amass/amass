@@ -11,7 +11,7 @@ function start()
 end
 
 function vertical(ctx, domain)
-    for i=0,10 do
+    for i=1,201,10 do
         local ok = scrape(ctx, {['url']=buildurl(domain, i)})
         if not ok then
             break
@@ -22,11 +22,10 @@ function vertical(ctx, domain)
 end
 
 function buildurl(domain, pagenum)
-    local next = tostring((pagenum * 10) + 1)
     local query = "site:" .. domain .. " -domain:www." .. domain
     local params = {
         p=query,
-		b=next,
+        b=pagenum,
         pz="10",
         bct="0",
         xargs="0",
