@@ -581,14 +581,20 @@ func (s *Script) scrape(L *lua.LState) int {
 		}
 	}
 
+	found = false
 	filter := stringfilter.NewStringFilter()
 	for _, name := range s.subre.FindAllString(resp, -1) {
+		found = true
 		if !filter.Duplicate(name) {
 			genNewNameEvent(c.Ctx, s.sys, s, http.CleanName(name))
 		}
 	}
 
-	L.Push(lua.LTrue)
+	if found {
+		L.Push(lua.LTrue)
+	} else {
+		L.Push(lua.LFalse)
+	}
 	return 1
 }
 
