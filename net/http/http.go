@@ -57,15 +57,15 @@ var DefaultClient *http.Client
 func init() {
 	jar, _ := cookiejar.New(nil)
 	DefaultClient = &http.Client{
-		Timeout: time.Second * 180, // Google's timeout
+		Timeout: time.Second * 15,
 		Transport: &http.Transport{
 			Proxy:                 http.ProxyFromEnvironment,
 			DialContext:           amassnet.DialContext,
 			MaxIdleConns:          200,
 			MaxConnsPerHost:       50,
 			IdleConnTimeout:       90 * time.Second,
-			TLSHandshakeTimeout:   20 * time.Second,
-			ExpectContinueTimeout: 20 * time.Second,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ExpectContinueTimeout: 10 * time.Second,
 			TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
 		},
 		Jar: jar,
@@ -174,12 +174,21 @@ func Crawl(url string, scope []string) ([]string, error) {
 					}
 				}
 			})
+
+			r.HTMLDoc.Find("script").Each(func(i int, s *goquery.Selection) {
+				if src, ok := s.Attr("src"); ok {
+					if count < 10 {
+						g.Get(r.JoinURL(src), g.Opt.ParseFunc)
+						count++
+					}
+				}
+			})
 		},
 	})
 	options := &client.Options{
 		MaxBodySize:    100 * 1024 * 1024, // 100MB
 		RetryTimes:     2,
-		RetryHTTPCodes: []int{500, 502, 503, 504, 522, 524, 408},
+		RetryHTTPCodes: []int{502, 503, 504, 522, 524, 408},
 	}
 	g.Client = client.NewClient(options)
 	g.Client.Client = http.DefaultClient
