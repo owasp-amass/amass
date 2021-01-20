@@ -7,7 +7,7 @@ name = "Censys"
 type = "cert"
 
 function start()
-    setratelimit(1)
+    setratelimit(3)
 end
 
 function vertical(ctx, domain)
