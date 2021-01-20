@@ -11,7 +11,7 @@ end
 function vertical(ctx, domain)
     local p = 1
 
-    while (true)
+    while(true) do
         local ok = scrape(ctx, {url=buildurl(domain, p)})
         if not ok then
             break
