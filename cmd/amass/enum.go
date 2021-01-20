@@ -366,7 +366,7 @@ func argsAndConfig(clArgs []string) (*config.Config, *enumArgs) {
 	if cfg.Passive && (args.Options.IPs || args.Options.IPv4 || args.Options.IPv6) {
 		r.Fprintln(color.Error, "IP addresses cannot be provided without DNS resolution")
 		os.Exit(1)
-	} else if cfg.Passive && cfg.Ports {
+	} else if cfg.Passive && len(args.Ports) > 0 {
 		r.Fprintln(color.Error, "Ports cannot be scanned in the passive mode")
 		os.Exit(1)
 	}
