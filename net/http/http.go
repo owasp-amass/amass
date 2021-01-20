@@ -49,6 +49,7 @@ var (
 	subRE       = dns.AnySubdomainRegex()
 	maxCrawlSem = semaphore.NewWeighted(20)
 	nameStripRE = regexp.MustCompile(`^u[0-9a-f]{4}|20|22|25|2b|2f|3d|3a|40`)
+	foundURLs   = []string{}
 )
 
 // DefaultClient is the same HTTP client used by the package methods.
@@ -133,6 +134,7 @@ func RequestWebPage(urlstring string, body io.Reader, hvals map[string]string, u
 // Crawl will spider the web page at the URL argument looking for DNS names within the scope argument.
 func Crawl(url string, scope []string) ([]string, error) {
 	results := stringset.New()
+	var newscope []string
 
 	err := maxCrawlSem.Acquire(context.TODO(), 1)
 	if err != nil {
@@ -142,13 +144,13 @@ func Crawl(url string, scope []string) ([]string, error) {
 
 	target := subRE.FindString(url)
 	if target != "" {
-		scope = append(scope, target)
+		newscope = append(scope, target)
 	}
 
 	var count int
 	var m sync.Mutex
 	g := geziyor.NewGeziyor(&geziyor.Options{
-		AllowedDomains:     scope,
+		AllowedDomains:     newscope,
 		StartURLs:          []string{url},
 		Timeout:            10 * time.Second,
 		RobotsTxtDisabled:  true,
@@ -159,7 +161,7 @@ func Crawl(url string, scope []string) ([]string, error) {
 			for _, n := range subRE.FindAllString(string(r.Body), -1) {
 				name := CleanName(n)
 
-				if domain := whichDomain(name, scope); domain != "" {
+				if domain := whichDomain(name, newscope); domain != "" {
 					m.Lock()
 					results.Insert(name)
 					m.Unlock()
@@ -169,17 +171,23 @@ func Crawl(url string, scope []string) ([]string, error) {
 			r.HTMLDoc.Find("a").Each(func(i int, s *goquery.Selection) {
 				if href, ok := s.Attr("href"); ok {
 					if count < 5 {
-						g.Get(r.JoinURL(href), g.Opt.ParseFunc)
-						count++
+						if CheckValid(r.JoinURL(href), scope) {
+							foundURLs = append(foundURLs, r.JoinURL(href))
+							g.Get(r.JoinURL(href), g.Opt.ParseFunc)
+							count++
+						}
 					}
 				}
 			})
 
 			r.HTMLDoc.Find("script").Each(func(i int, s *goquery.Selection) {
 				if src, ok := s.Attr("src"); ok {
-					if count < 10 {
-						g.Get(r.JoinURL(src), g.Opt.ParseFunc)
-						count++
+					if count < 15 {
+						if CheckValid(r.JoinURL(src), scope) {
+							foundURLs = append(foundURLs, r.JoinURL(src))
+							g.Get(r.JoinURL(src), g.Opt.ParseFunc)
+							count++
+						}
 					}
 				}
 			})
@@ -325,4 +333,46 @@ func CleanName(name string) string {
 	}
 
 	return name
+}
+
+// Check if the URL is a valid URL to crawl
+func CheckValid(url string, scope []string) bool {
+	if !strings.HasPrefix(url, "http") {
+		return false
+	}
+
+	for _, found := range foundURLs {
+		if url == found {
+			return false
+		}
+	}
+
+	if strings.HasSuffix(url, ".js") {
+		url = strings.TrimLeft(url, "http://")
+		url = strings.TrimLeft(url, "https://")
+		name := strings.Split(url, "/")[0]
+		inScope := false
+		for _, domain := range scope {
+			if strings.HasSuffix(name, domain) {
+				inScope = true
+				break
+			}
+		}
+		if !inScope {
+			return false
+		}
+	} else {
+		related := false
+		for _, domain := range scope {
+			if strings.Contains(url, domain) {
+				related = true
+				break
+			}
+		}
+		if !related {
+			return false
+		}
+	}
+
+	return true
 }
