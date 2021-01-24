@@ -45,6 +45,10 @@ export GO111MODULE=on
 2. Download OWASP Amass:
 
 ```bash
+go get -v github.com/OWASP/Amass/cmd/amass
+```
+Or:
+```bash
 go get -v github.com/OWASP/Amass/v3/...
 ```
 

@@ -20,7 +20,6 @@ import (
 // InitialQueryTypes include the DNS record types that are queried for a discovered name.
 var InitialQueryTypes = []uint16{
 	dns.TypeCNAME,
-	dns.TypeTXT,
 	dns.TypeA,
 	dns.TypeAAAA,
 }
