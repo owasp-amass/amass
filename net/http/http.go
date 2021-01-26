@@ -133,6 +133,8 @@ func RequestWebPage(urlstring string, body io.Reader, hvals map[string]string, u
 // Crawl will spider the web page at the URL argument looking for DNS names within the scope argument.
 func Crawl(url string, scope []string) ([]string, error) {
 	results := stringset.New()
+	var newscope []string
+	var foundURLs []string
 
 	err := maxCrawlSem.Acquire(context.TODO(), 1)
 	if err != nil {
@@ -142,13 +144,13 @@ func Crawl(url string, scope []string) ([]string, error) {
 
 	target := subRE.FindString(url)
 	if target != "" {
-		scope = append(scope, target)
+		newscope = append(scope, target)
 	}
 
 	var count int
 	var m sync.Mutex
 	g := geziyor.NewGeziyor(&geziyor.Options{
-		AllowedDomains:     scope,
+		AllowedDomains:     newscope,
 		StartURLs:          []string{url},
 		Timeout:            10 * time.Second,
 		RobotsTxtDisabled:  true,
@@ -168,8 +170,9 @@ func Crawl(url string, scope []string) ([]string, error) {
 
 			r.HTMLDoc.Find("a").Each(func(i int, s *goquery.Selection) {
 				if href, ok := s.Attr("href"); ok {
-					if count < 5 {
+					if count < 7 && ValidURL(r.JoinURL(href), foundURLs) {
 						g.Get(r.JoinURL(href), g.Opt.ParseFunc)
+						foundURLs = append(foundURLs, url)
 						count++
 					}
 				}
@@ -177,8 +180,9 @@ func Crawl(url string, scope []string) ([]string, error) {
 
 			r.HTMLDoc.Find("script").Each(func(i int, s *goquery.Selection) {
 				if src, ok := s.Attr("src"); ok {
-					if count < 10 {
+					if count < 15 && ValidURL(r.JoinURL(src), foundURLs) {
 						g.Get(r.JoinURL(src), g.Opt.ParseFunc)
+						foundURLs = append(foundURLs, url)
 						count++
 					}
 				}
@@ -188,7 +192,7 @@ func Crawl(url string, scope []string) ([]string, error) {
 	options := &client.Options{
 		MaxBodySize:    100 * 1024 * 1024, // 100MB
 		RetryTimes:     2,
-		RetryHTTPCodes: []int{502, 503, 504, 522, 524, 408},
+		RetryHTTPCodes: []int{408, 502, 503, 504, 522, 524},
 	}
 	g.Client = client.NewClient(options)
 	g.Client.Client = http.DefaultClient
@@ -198,7 +202,7 @@ func Crawl(url string, scope []string) ([]string, error) {
 }
 
 func whichDomain(name string, scope []string) string {
-	n := strings.TrimSpace(name)
+	n := strings.TrimLeft(name, ".")
 
 	for _, d := range scope {
 		if strings.HasSuffix(n, d) {
@@ -325,4 +329,19 @@ func CleanName(name string) string {
 	}
 
 	return name
+}
+
+// ValidURL will check if the URL is valid to grab subdomains from the content
+func ValidURL(url string, foundURLs []string) bool {
+	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
+		return false
+	}
+
+	for _, found := range foundURLs {
+		if url == found {
+			return false
+		}
+	}
+
+	return true
 }
