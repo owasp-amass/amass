@@ -42,20 +42,13 @@ func NewLocalSystem(c *config.Config) (*LocalSystem, error) {
 	}
 
 	max := int(float64(limits.GetFileLimit()) * 0.7)
-	num := len(config.PublicResolvers)
-	if num > max {
-		num = max
-	}
 
-	rate := c.MaxDNSQueries / len(c.Resolvers)
-	var trusted []resolvers.Resolver
-	for _, addr := range c.Resolvers {
-		trusted = append(trusted, resolvers.NewBaseResolver(addr, rate, c.Log))
+	var pool resolvers.Resolver
+	if len(c.Resolvers) == 0 {
+		pool = publicResolverSetup(c, max)
+	} else {
+		pool = customResolverSetup(c, max)
 	}
-
-	baseline := resolvers.NewResolverPool(trusted, time.Minute, nil, c.Log)
-	r := setupResolvers(config.PublicResolvers, max, config.DefaultQueriesPerResolver, c.Log)
-	pool := resolvers.NewResolverPool(r, 5*time.Second, baseline, c.Log)
 	if pool == nil {
 		return nil, errors.New("The system was unable to build the pool of resolvers")
 	}
@@ -281,6 +274,54 @@ func (l *LocalSystem) loadCacheData() error {
 	}
 
 	return nil
+}
+
+func customResolverSetup(cfg *config.Config, max int) resolvers.Resolver {
+	num := len(cfg.Resolvers)
+	if num > max {
+		num = max
+	}
+
+	if cfg.MaxDNSQueries == 0 {
+		cfg.MaxDNSQueries = num * config.DefaultQueriesPerBaselineResolver
+	} else if cfg.MaxDNSQueries < num {
+		cfg.MaxDNSQueries = num
+	}
+
+	rate := cfg.MaxDNSQueries / num
+	var trusted []resolvers.Resolver
+	for _, addr := range cfg.Resolvers {
+		if r := resolvers.NewBaseResolver(addr, rate, cfg.Log); r != nil {
+			trusted = append(trusted, r)
+		}
+	}
+
+	return resolvers.NewResolverPool(trusted, 2*time.Second, nil, cfg.Log)
+}
+
+func publicResolverSetup(cfg *config.Config, max int) resolvers.Resolver {
+	num := len(config.PublicResolvers)
+	if num > max {
+		num = max
+	}
+
+	if cfg.MaxDNSQueries == 0 {
+		cfg.MaxDNSQueries = num * config.DefaultQueriesPerPublicResolver
+	} else if cfg.MaxDNSQueries < num {
+		cfg.MaxDNSQueries = num
+	}
+
+	var trusted []resolvers.Resolver
+	for _, addr := range config.DefaultBaselineResolvers {
+		if r := resolvers.NewBaseResolver(addr, config.DefaultQueriesPerBaselineResolver, cfg.Log); r != nil {
+			trusted = append(trusted, r)
+		}
+	}
+
+	baseline := resolvers.NewResolverPool(trusted, 2*time.Second, nil, cfg.Log)
+	r := setupResolvers(config.PublicResolvers, max, config.DefaultQueriesPerPublicResolver, cfg.Log)
+
+	return resolvers.NewResolverPool(r, 5*time.Second, baseline, cfg.Log)
 }
 
 func setupResolvers(addrs []string, max, rate int, log *log.Logger) []resolvers.Resolver {
