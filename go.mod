@@ -18,6 +18,7 @@ require (
 	github.com/fatih/color v1.10.0
 	github.com/geziyor/geziyor v0.0.0-20191212210344-cfb16fe1ee0e
 	github.com/go-ini/ini v1.62.0
+	github.com/google/martian/v3 v3.0.0
 	github.com/google/uuid v1.1.3
 	github.com/jmoiron/sqlx v1.2.0
 	github.com/lib/pq v1.9.0
