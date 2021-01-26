@@ -134,7 +134,7 @@ func defineEnumFilepathFlags(enumFlags *flag.FlagSet, args *enumArgs) {
 	enumFlags.StringVar(&args.Filepaths.AllFilePrefix, "oA", "", "Path prefix used for naming all output files")
 	enumFlags.Var(&args.Filepaths.AltWordlist, "aw", "Path to a different wordlist file for alterations")
 	enumFlags.StringVar(&args.Filepaths.Blacklist, "blf", "", "Path to a file providing blacklisted subdomains")
-	enumFlags.Var(&args.Filepaths.BruteWordlist, "w", "Path to a different wordlist file")
+	enumFlags.Var(&args.Filepaths.BruteWordlist, "w", "Path to a different wordlist file for brute forcing")
 	enumFlags.StringVar(&args.Filepaths.ConfigFile, "config", "", "Path to the INI configuration file. Additional details below")
 	enumFlags.StringVar(&args.Filepaths.Directory, "dir", "", "Path to the directory containing the output files")
 	enumFlags.Var(&args.Filepaths.Domains, "df", "Path to a file providing root domain names")
