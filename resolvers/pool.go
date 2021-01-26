@@ -175,20 +175,12 @@ func (rp *resolverPool) Query(ctx context.Context, msg *dns.Msg, priority int, r
 			rp.updateWait(k, rp.delay)
 		}
 
-		if err == nil {
+		if err == nil || retry == nil {
 			break
 		}
-		// Timeouts and resolver errors can cause retries without executing the callback
-		if err != nil {
-			if e, ok := err.(*ResolveError); ok && (e.Rcode == TimeoutRcode || e.Rcode == ResolverErrRcode) {
-				continue
-			}
-		}
 
-		if retry != nil {
-			times++
-			again = retry(times, priority, resp)
-		}
+		times++
+		again = retry(times, priority, resp)
 	}
 
 	if rp.baseline != nil && err == nil && len(resp.Answer) > 0 {

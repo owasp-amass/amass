@@ -222,7 +222,7 @@ func (r *baseResolver) writeMessage(req *resolveRequest) {
 }
 
 func (r *baseResolver) timeouts() {
-	t := time.NewTicker(2 * time.Second)
+	t := time.NewTicker(500 * time.Millisecond)
 	defer t.Stop()
 loop:
 	for {

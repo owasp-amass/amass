@@ -71,12 +71,12 @@ type testResult struct {
 
 // WildcardType returns the DNS wildcard type for the provided subdomain name.
 func (r *baseResolver) WildcardType(ctx context.Context, msg *dns.Msg, domain string) int {
-	return r.hasWildcard(ctx, msg, domain)
+	return r.wildcard(ctx, msg, domain)
 }
 
-func (r *baseResolver) hasWildcard(ctx context.Context, msg *dns.Msg, domain string) int {
-	name := strings.ToLower(strings.Trim(msg.Question[0].Name, "."))
-	domain = strings.ToLower(strings.Trim(domain, "."))
+func (r *baseResolver) wildcard(ctx context.Context, msg *dns.Msg, domain string) int {
+	name := strings.ToLower(RemoveLastDot(msg.Question[0].Name))
+	domain = strings.ToLower(RemoveLastDot(domain))
 
 	base := len(strings.Split(domain, "."))
 	labels := strings.Split(name, ".")
@@ -141,9 +141,9 @@ func (r *baseResolver) manageWildcards(chs *wildcardChans) {
 		case <-r.done:
 			return
 		case <-chs.WildcardReq.Signal():
-			chs.WildcardReq.Process(func(element interface{}) {
+			if element, ok := chs.WildcardReq.Next(); ok {
 				r.wildcardRequest(wildcards, element.(*wildcardReq))
-			})
+			}
 		case test := <-chs.TestResult:
 			wildcards[test.Sub] = test.Result
 		case ips := <-chs.IPsAcrossLevels:
@@ -154,9 +154,9 @@ func (r *baseResolver) manageWildcards(chs *wildcardChans) {
 
 func (r *baseResolver) wildcardRequest(wildcards map[string]*wildcard, req *wildcardReq) {
 	// Check if this test should timeout
-	if req.Start.Add(time.Minute).Before(time.Now()) {
+	if time.Now().After(req.Start.Add(30 * time.Second)) {
 		wildcards[req.Sub] = &wildcard{
-			WildcardType: WildcardTypeNone,
+			WildcardType: WildcardTypeDynamic,
 			Answers:      []*ExtractedAnswer{},
 			beingTested:  false,
 		}
@@ -245,9 +245,7 @@ func (r *baseResolver) wildcardTest(ctx context.Context, sub string) {
 		for _, t := range wildcardQueryTypes {
 			msg := QueryMsg(name, t)
 
-			if resp, err := r.Query(ctx, msg, PriorityCritical, func(times int, priority int, msg *dns.Msg) bool {
-				return msg.Rcode == TimeoutRcode && times < 10
-			}); err == nil && len(resp.Answer) > 0 {
+			if resp, err := r.Query(ctx, msg, PriorityCritical, RetryPolicy); err == nil && len(resp.Answer) > 0 {
 				retRecords = true
 				ans = append(ans, ExtractAnswers(resp)...)
 			}

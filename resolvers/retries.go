@@ -34,32 +34,25 @@ var PoolRetryCodes = []int{
 // RetryPolicy is the default policy used throughout Amass
 // to determine if a DNS query should be performed again.
 func RetryPolicy(times, priority int, msg *dns.Msg) bool {
-	if attemptsExceeded(times, priority) {
-		return false
-	}
-	if msg == nil {
-		return false
-	}
-
-	for _, code := range RetryCodes {
-		if msg.Rcode == code {
-			return true
-		}
-	}
-	return false
+	return checkPolicy(times, priority, msg, RetryCodes)
 }
 
 // PoolRetryPolicy is the default policy used by the resolver pool
 // to determine if a DNS query should be performed again.
 func PoolRetryPolicy(times, priority int, msg *dns.Msg) bool {
+	return checkPolicy(times, priority, msg, PoolRetryCodes)
+}
+
+func checkPolicy(times, priority int, msg *dns.Msg, codes []int) bool {
 	if attemptsExceeded(times, priority) {
 		return false
 	}
+
 	if msg == nil {
 		return false
 	}
 
-	for _, code := range PoolRetryCodes {
+	for _, code := range codes {
 		if msg.Rcode == code {
 			return true
 		}

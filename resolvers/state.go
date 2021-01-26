@@ -166,47 +166,59 @@ func (r *xchgManager) delete(keys []string) []*resolveRequest {
 }
 
 const (
-	minNumInAverage   int     = 25
-	maxNumInAverage   int     = 50
-	failurePercentage float64 = 0.75
+	minNumInAverage   int           = 10
+	maxNumInAverage   int           = 20
+	failurePercentage float64       = 0.8
+	expireDuration    time.Duration = 30 * time.Second
 )
 
+type slidingWindowEntry struct {
+	Timeout   bool
+	Timestamp time.Time
+}
 type slidingWindowTimeouts struct {
 	sync.Mutex
-	avgs map[string][]bool
+	avgs map[string][]*slidingWindowEntry
 }
 
 func newSlidingWindowTimeouts() *slidingWindowTimeouts {
-	return &slidingWindowTimeouts{avgs: make(map[string][]bool)}
+	return &slidingWindowTimeouts{avgs: make(map[string][]*slidingWindowEntry)}
 }
 
 func (s *slidingWindowTimeouts) updateTimeouts(key string, timeout bool) bool {
 	s.Lock()
 	defer s.Unlock()
 
-	if _, found := s.avgs[key]; !found {
-		s.avgs[key] = []bool{}
-	}
-
-	s.avgs[key] = append(s.avgs[key], timeout)
+	now := time.Now()
+	s.avgs[key] = append(s.avgs[key], &slidingWindowEntry{
+		Timeout:   timeout,
+		Timestamp: now,
+	})
 
 	l := len(s.avgs[key])
-	if l < minNumInAverage {
-		return false
-	}
-
 	if l > maxNumInAverage {
 		s.avgs[key] = s.avgs[key][l-maxNumInAverage:]
 	}
 
-	var count float64
+	var expired int
+	var timeouts float64
 	for _, v := range s.avgs[key] {
-		if v {
-			count++
+		if now.After(v.Timestamp.Add(expireDuration)) {
+			expired++
+			continue
+		}
+		if v.Timeout {
+			timeouts++
 		}
 	}
+	s.avgs[key] = s.avgs[key][expired:]
 
-	if count/float64(l) >= failurePercentage {
+	l = len(s.avgs[key])
+	if l < minNumInAverage {
+		return false
+	}
+
+	if timeouts/float64(l) >= failurePercentage {
 		return true
 	}
 	return false
