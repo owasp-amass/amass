@@ -6,6 +6,7 @@ package enum
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/OWASP/Amass/v3/datasrcs"
@@ -14,17 +15,42 @@ import (
 	"github.com/OWASP/Amass/v3/resolvers"
 	"github.com/caffix/eventbus"
 	"github.com/caffix/pipeline"
+	"github.com/caffix/queue"
 	"github.com/miekg/dns"
 )
 
 // activeTask is the task that handles all requests related to active enumeration within the pipeline.
 type activeTask struct {
-	enum *Enumeration
+	enum      *Enumeration
+	queue     queue.Queue
+	tokenPool chan struct{}
+}
+
+type taskArgs struct {
+	Ctx    context.Context
+	Data   pipeline.Data
+	Params pipeline.TaskParams
 }
 
 // newActiveTask returns a activeTask specific to the provided Enumeration.
-func newActiveTask(e *Enumeration) *activeTask {
-	return &activeTask{enum: e}
+func newActiveTask(e *Enumeration, max int) *activeTask {
+	if max <= 0 {
+		return nil
+	}
+
+	tokenPool := make(chan struct{}, max)
+	for i := 0; i < max; i++ {
+		tokenPool <- struct{}{}
+	}
+
+	a := &activeTask{
+		enum:      e,
+		queue:     queue.NewQueue(),
+		tokenPool: tokenPool,
+	}
+
+	go a.processQueue()
+	return a
 }
 
 // Process implements the pipeline Task interface.
@@ -35,18 +61,67 @@ func (a *activeTask) Process(ctx context.Context, data pipeline.Data, tp pipelin
 	default:
 	}
 
-	switch v := data.(type) {
+	var ok bool
+	switch data.(type) {
+	case *requests.DNSRequest:
+		ok = true
 	case *requests.AddrRequest:
-		go a.certEnumeration(ctx, v, tp)
+		ok = true
 	case *requests.ZoneXFRRequest:
-		go a.zoneTransfer(ctx, v, tp)
-		go a.zoneWalk(ctx, v, tp)
+		ok = true
+	}
+
+	if ok {
+		a.queue.Append(&taskArgs{
+			Ctx:    ctx,
+			Data:   data.Clone(),
+			Params: tp,
+		})
 	}
 
 	return data, nil
 }
 
-func (a *activeTask) certEnumeration(ctx context.Context, req *requests.AddrRequest, tp pipeline.TaskParams) {
+func (a *activeTask) processQueue() {
+	for {
+		select {
+		case <-a.enum.done:
+			return
+		case <-a.queue.Signal():
+			a.processTask()
+		}
+	}
+}
+
+func (a *activeTask) processTask() {
+	select {
+	case <-a.enum.done:
+		return
+	case <-a.tokenPool:
+		element, ok := a.queue.Next()
+		if !ok {
+			a.tokenPool <- struct{}{}
+			return
+		}
+
+		args := element.(*taskArgs)
+		switch v := args.Data.(type) {
+		case *requests.DNSRequest:
+			go a.crawlName(args.Ctx, v, args.Params)
+		case *requests.AddrRequest:
+			if v.InScope {
+				go a.certEnumeration(args.Ctx, v, args.Params)
+			}
+		case *requests.ZoneXFRRequest:
+			go a.zoneTransfer(args.Ctx, v, args.Params)
+			go a.zoneWalk(args.Ctx, v, args.Params)
+		}
+	}
+}
+
+func (a *activeTask) crawlName(ctx context.Context, req *requests.DNSRequest, tp pipeline.TaskParams) {
+	defer func() { a.tokenPool <- struct{}{} }()
+
 	if req == nil || !req.Valid() {
 		return
 	}
@@ -55,7 +130,48 @@ func (a *activeTask) certEnumeration(ctx context.Context, req *requests.AddrRequ
 	tp.NewData() <- req
 	defer func() { tp.ProcessedData() <- req }()
 
-	for _, name := range http.PullCertificateNames(req.Address, a.enum.Config.Ports) {
+	cfg := a.enum.Config
+	for _, port := range cfg.Ports {
+		u := "https://" + req.Name
+		if port != 443 {
+			u = u + ":" + strconv.Itoa(port)
+		}
+
+		names, err := http.Crawl(ctx, u, cfg.Domains(), 50, a.enum.crawlFilter)
+		if err != nil {
+			if cfg.Verbose {
+				cfg.Log.Printf("Active Crawl: %v", err)
+			}
+			continue
+		}
+
+		for _, name := range names {
+			if n := strings.TrimSpace(name); n != "" {
+				if domain := cfg.WhichDomain(n); domain != "" {
+					go pipeline.SendData(ctx, "new", &requests.DNSRequest{
+						Name:   n,
+						Domain: domain,
+						Tag:    requests.CRAWL,
+						Source: "Active Crawl",
+					}, tp)
+				}
+			}
+		}
+	}
+}
+
+func (a *activeTask) certEnumeration(ctx context.Context, req *requests.AddrRequest, tp pipeline.TaskParams) {
+	defer func() { a.tokenPool <- struct{}{} }()
+
+	if req == nil || !req.Valid() {
+		return
+	}
+
+	// Hold the pipeline during slow activities
+	tp.NewData() <- req
+	defer func() { tp.ProcessedData() <- req }()
+
+	for _, name := range http.PullCertificateNames(ctx, req.Address, a.enum.Config.Ports) {
 		if n := strings.TrimSpace(name); n != "" {
 			if domain := a.enum.Config.WhichDomain(n); domain != "" {
 				go pipeline.SendData(ctx, "new", &requests.DNSRequest{
@@ -98,6 +214,8 @@ func (a *activeTask) zoneTransfer(ctx context.Context, req *requests.ZoneXFRRequ
 }
 
 func (a *activeTask) zoneWalk(ctx context.Context, req *requests.ZoneXFRRequest, tp pipeline.TaskParams) {
+	defer func() { a.tokenPool <- struct{}{} }()
+
 	cfg, bus, err := datasrcs.ContextConfigBus(ctx)
 	if err != nil {
 		return

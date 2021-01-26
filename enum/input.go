@@ -68,7 +68,7 @@ func (r *enumSource) InputAddress(req *requests.AddrRequest) {
 	default:
 	}
 
-	if req != nil {
+	if req != nil && req.Address != "" {
 		r.queue.Append(req)
 	}
 }
@@ -126,8 +126,8 @@ func (r *enumSource) checkForData() {
 		case <-r.done:
 			return
 		case <-t.C:
-			if r.queue.Len() < required {
-				r.enum.subTask.OutputRequests(required - r.queue.Len())
+			if avail := r.queue.Len(); avail < required {
+				r.enum.subTask.OutputRequests(required - avail)
 			}
 		}
 	}

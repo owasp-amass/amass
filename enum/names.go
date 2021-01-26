@@ -44,6 +44,14 @@ func (f *fqdnFilter) Process(ctx context.Context, data pipeline.Data, tp pipelin
 
 	// Clean up the newly discovered name and domain
 	requests.SanitizeDNSRequest(req)
+	// Do not further evaluate service subdomains
+	for _, label := range strings.Split(req.Name, ".") {
+		l := strings.ToLower(label)
+
+		if l == "_tcp" || l == "_udp" || l == "_tls" {
+			return nil, nil
+		}
+	}
 	// Check that this name has not already been processed
 	return f.checkFilter(req), nil
 }
@@ -170,10 +178,11 @@ func (r *subdomainTask) Process(ctx context.Context, data pipeline.Data, tp pipe
 		return nil, nil
 	}
 
-	labels := strings.Split(req.Name, ".")
 	// Do not further evaluate service subdomains
-	for _, label := range labels {
-		if label == "_tcp" || label == "_udp" || label == "_tls" {
+	for _, label := range strings.Split(req.Name, ".") {
+		l := strings.ToLower(label)
+
+		if l == "_tcp" || l == "_udp" || l == "_tls" {
 			return nil, nil
 		}
 	}
@@ -208,11 +217,12 @@ func (r *subdomainTask) checkForSubdomains(ctx context.Context, req *requests.DN
 	}
 
 	subreq := &requests.SubdomainRequest{
-		Name:   sub,
-		Domain: req.Domain,
-		Tag:    req.Tag,
-		Source: req.Source,
-		Times:  r.timesForSubdomain(sub),
+		Name:    sub,
+		Domain:  req.Domain,
+		Records: append([]requests.DNSAnswer(nil), req.Records...),
+		Tag:     req.Tag,
+		Source:  req.Source,
+		Times:   r.timesForSubdomain(sub),
 	}
 
 	r.queue.Append(subreq)

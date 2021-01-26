@@ -35,6 +35,7 @@ type Enumeration struct {
 	done           chan struct{}
 	doneOnce       sync.Once
 	resolvedFilter stringfilter.Filter
+	crawlFilter    stringfilter.Filter
 	nameSrc        *enumSource
 	subTask        *subdomainTask
 	dnsTask        *dNSTask
@@ -51,6 +52,7 @@ func NewEnumeration(cfg *config.Config, sys systems.System) *Enumeration {
 		logQueue:       queue.NewQueue(),
 		done:           make(chan struct{}),
 		resolvedFilter: stringfilter.NewBloomFilter(filterMaxSize),
+		crawlFilter:    stringfilter.NewStringFilter(),
 	}
 
 	if cfg.Passive {
@@ -94,9 +96,9 @@ func (e *Enumeration) Start(ctx context.Context) error {
 		// Task that performs initial filtering for new FQDNs and IP addresses
 		stages = append(stages, pipeline.FixedPool("new",
 			e.makeNewDataTaskFunc(newFQDNFilter(e), newAddressTask(e)), 50))
-		stages = append(stages, pipeline.FIFO("", e.dnsTask.makeBlacklistTaskFunc()))
+		stages = append(stages, pipeline.FixedPool("", e.dnsTask.makeBlacklistTaskFunc(), 50))
 		// Task that performs DNS queries for root domain names
-		stages = append(stages, pipeline.FixedPool("root", e.dnsTask.makeRootTaskFunc(), 100))
+		stages = append(stages, pipeline.DynamicPool("root", e.dnsTask.makeRootTaskFunc(), max))
 		// Add the dynamic pool of DNS resolution tasks
 		stages = append(stages, pipeline.DynamicPool("dns", e.dnsTask, max))
 	}
@@ -105,10 +107,10 @@ func (e *Enumeration) Start(ctx context.Context) error {
 
 	if !e.Config.Passive {
 		stages = append(stages, pipeline.FIFO("store", newDataManager(e)))
-		stages = append(stages, pipeline.FixedPool("", e.subTask, 10))
+		stages = append(stages, pipeline.FIFO("", e.subTask))
 	}
 	if e.Config.Active {
-		stages = append(stages, pipeline.FixedPool("active", newActiveTask(e), 10))
+		stages = append(stages, pipeline.FIFO("active", newActiveTask(e, 50)))
 	}
 
 	/*
@@ -215,11 +217,17 @@ func (e *Enumeration) makeNewDataTaskFunc(fqdn *fqdnFilter, addrs *addrTask) pip
 		default:
 		}
 
-		switch data.(type) {
+		switch v := data.(type) {
 		case *requests.DNSRequest:
-			return fqdn.Process(ctx, data, tp)
+			if v != nil && v.Valid() {
+				return fqdn.Process(ctx, data, tp)
+			}
+			return nil, nil
 		case *requests.AddrRequest:
-			return addrs.Process(ctx, data, tp)
+			if v != nil && v.Valid() {
+				return addrs.Process(ctx, data, tp)
+			}
+			return nil, nil
 		}
 		return data, nil
 	})
@@ -233,9 +241,23 @@ func (e *Enumeration) makeFilterTaskFunc() pipeline.TaskFunc {
 		default:
 		}
 
-		if d, ok := data.(*requests.DNSRequest); ok && (d == nil || !d.Valid() || e.resolvedFilter.Duplicate(d.Name)) {
-			return nil, nil
+		var name string
+		switch v := data.(type) {
+		case *requests.DNSRequest:
+			if v != nil && v.Valid() {
+				name = v.Name
+			}
+		case *requests.AddrRequest:
+			if v != nil && v.Valid() {
+				name = v.Address
+			}
+		default:
+			return data, nil
 		}
-		return data, nil
+
+		if name != "" && !e.resolvedFilter.Duplicate(name) {
+			return data, nil
+		}
+		return nil, nil
 	})
 }
