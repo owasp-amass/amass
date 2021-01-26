@@ -24,11 +24,11 @@ import (
 
 	amassnet "github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/net/dns"
+	"github.com/OWASP/Amass/v3/stringfilter"
 	"github.com/PuerkitoBio/goquery"
 	"github.com/caffix/stringset"
 	"github.com/geziyor/geziyor"
 	"github.com/geziyor/geziyor/client"
-	"golang.org/x/sync/semaphore"
 )
 
 const (
@@ -46,18 +46,25 @@ const (
 )
 
 var (
-	subRE       = dns.AnySubdomainRegex()
-	maxCrawlSem = semaphore.NewWeighted(20)
-	nameStripRE = regexp.MustCompile(`^u[0-9a-f]{4}|20|22|25|2b|2f|3d|3a|40`)
+	subRE          = dns.AnySubdomainRegex()
+	crawlRE        = regexp.MustCompile(`\.\w{3,4}($|\?)`)
+	crawlFileTypes = []string{".html", ".htm", "xhtml", ".js", ".php"}
+	nameStripRE    = regexp.MustCompile(`^u[0-9a-f]{4}|20|22|25|2b|2f|3d|3a|40`)
 )
 
 // DefaultClient is the same HTTP client used by the package methods.
 var DefaultClient *http.Client
 
+// BasicAuth contains the data used for HTTP basic authentication.
+type BasicAuth struct {
+	Username string
+	Password string
+}
+
 func init() {
 	jar, _ := cookiejar.New(nil)
 	DefaultClient = &http.Client{
-		Timeout: time.Second * 15,
+		Timeout: 3 * time.Minute,
 		Transport: &http.Transport{
 			Proxy:                 http.ProxyFromEnvironment,
 			DialContext:           amassnet.DialContext,
@@ -94,19 +101,18 @@ func CheckCookie(urlString string, cookieName string) bool {
 	return found
 }
 
-// RequestWebPage returns a string containing the entire response for
-// the urlstring parameter when successful.
-func RequestWebPage(urlstring string, body io.Reader, hvals map[string]string, uid, secret string) (string, error) {
+// RequestWebPage returns a string containing the entire response for the provided URL when successful.
+func RequestWebPage(ctx context.Context, u string, body io.Reader, hvals map[string]string, auth *BasicAuth) (string, error) {
 	method := "GET"
 	if body != nil {
 		method = "POST"
 	}
-	req, err := http.NewRequest(method, urlstring, body)
+	req, err := http.NewRequestWithContext(ctx, method, u, body)
 	if err != nil {
 		return "", err
 	}
-	if uid != "" && secret != "" {
-		req.SetBasicAuth(uid, secret)
+	if auth != nil && auth.Username != "" && auth.Password != "" {
+		req.SetBasicAuth(auth.Username, auth.Password)
 	}
 	req.Header.Set("User-Agent", UserAgent)
 	req.Header.Set("Accept", Accept)
@@ -131,56 +137,102 @@ func RequestWebPage(urlstring string, body io.Reader, hvals map[string]string, u
 }
 
 // Crawl will spider the web page at the URL argument looking for DNS names within the scope argument.
-func Crawl(url string, scope []string) ([]string, error) {
-	results := stringset.New()
+func Crawl(ctx context.Context, u string, scope []string, max int, filter stringfilter.Filter) ([]string, error) {
+	newScope := append([]string{}, scope...)
 
-	err := maxCrawlSem.Acquire(context.TODO(), 1)
-	if err != nil {
-		return results.Slice(), fmt.Errorf("crawler error: %v", err)
-	}
-	defer maxCrawlSem.Release(1)
-
-	target := subRE.FindString(url)
+	target := subRE.FindString(u)
 	if target != "" {
-		scope = append(scope, target)
+		var found bool
+		for _, domain := range newScope {
+			if target == domain {
+				found = true
+				break
+			}
+		}
+		if !found {
+			newScope = append(newScope, target)
+		}
+	}
+
+	if filter == nil {
+		filter = stringfilter.NewStringFilter()
 	}
 
 	var count int
 	var m sync.Mutex
+	results := stringset.New()
 	g := geziyor.NewGeziyor(&geziyor.Options{
-		AllowedDomains:     scope,
-		StartURLs:          []string{url},
-		Timeout:            10 * time.Second,
-		RobotsTxtDisabled:  true,
-		UserAgent:          UserAgent,
-		LogDisabled:        true,
-		ConcurrentRequests: 5,
+		AllowedDomains:        newScope,
+		StartURLs:             []string{u},
+		Timeout:               5 * time.Minute,
+		RobotsTxtDisabled:     true,
+		UserAgent:             UserAgent,
+		LogDisabled:           true,
+		ConcurrentRequests:    5,
+		RequestDelay:          750 * time.Millisecond,
+		RequestDelayRandomize: true,
 		ParseFunc: func(g *geziyor.Geziyor, r *client.Response) {
 			for _, n := range subRE.FindAllString(string(r.Body), -1) {
-				name := CleanName(n)
-
-				if domain := whichDomain(name, scope); domain != "" {
+				if name := CleanName(n); whichDomain(name, scope) != "" {
 					m.Lock()
 					results.Insert(name)
 					m.Unlock()
 				}
 			}
 
+			processURL := func(u string) {
+				if p, err := url.Parse(u); err == nil && whichDomain(p.Hostname(), newScope) != "" {
+					// Attempt to save the name in our results
+					if name := p.Hostname(); whichDomain(name, scope) != "" {
+						m.Lock()
+						results.Insert(name)
+						m.Unlock()
+					}
+					// Check that the URL has an appropriate scheme for scraping
+					if !p.IsAbs() || (p.Scheme != "http" && p.Scheme != "https") {
+						return
+					}
+					// If the URL path has a file extension, check that it's of interest
+					if ext := crawlRE.FindString(p.Path); ext != "" {
+						ext = strings.ToLower(ext)
+
+						var found bool
+						for _, t := range crawlFileTypes {
+							if ext == t {
+								found = true
+								break
+							}
+						}
+						if !found {
+							return
+						}
+					}
+					// Remove fragments and check if we've seen this URL before
+					p.Fragment = ""
+					p.RawFragment = ""
+					if filter.Duplicate(p.String()) {
+						return
+					}
+					// Be sure the crawl has not exceeded the maximum links to be followed
+					m.Lock()
+					count++
+					current := count
+					m.Unlock()
+					if max <= 0 || current < max {
+						g.Get(p.String(), g.Opt.ParseFunc)
+					}
+				}
+			}
+
 			r.HTMLDoc.Find("a").Each(func(i int, s *goquery.Selection) {
 				if href, ok := s.Attr("href"); ok {
-					if count < 5 {
-						g.Get(r.JoinURL(href), g.Opt.ParseFunc)
-						count++
-					}
+					processURL(r.JoinURL(href))
 				}
 			})
 
 			r.HTMLDoc.Find("script").Each(func(i int, s *goquery.Selection) {
 				if src, ok := s.Attr("src"); ok {
-					if count < 10 {
-						g.Get(r.JoinURL(src), g.Opt.ParseFunc)
-						count++
-					}
+					processURL(r.JoinURL(src))
 				}
 			})
 		},
@@ -188,13 +240,28 @@ func Crawl(url string, scope []string) ([]string, error) {
 	options := &client.Options{
 		MaxBodySize:    100 * 1024 * 1024, // 100MB
 		RetryTimes:     2,
-		RetryHTTPCodes: []int{502, 503, 504, 522, 524, 408},
+		RetryHTTPCodes: []int{408, 500, 502, 503, 504, 522, 524},
 	}
 	g.Client = client.NewClient(options)
 	g.Client.Client = http.DefaultClient
-	g.Start()
 
-	return results.Slice(), nil
+	done := make(chan struct{}, 2)
+	go func() {
+		g.Start()
+		done <- struct{}{}
+	}()
+
+	var err error
+	select {
+	case <-ctx.Done():
+		err = fmt.Errorf("The context expired during the crawl of %s", u)
+	case <-done:
+		if len(results.Slice()) == 0 {
+			err = fmt.Errorf("No DNS names were discovered during the crawl of %s", u)
+		}
+	}
+
+	return results.Slice(), err
 }
 
 func whichDomain(name string, scope []string) string {
@@ -215,16 +282,16 @@ func whichDomain(name string, scope []string) string {
 }
 
 // PullCertificateNames attempts to pull a cert from one or more ports on an IP.
-func PullCertificateNames(addr string, ports []int) []string {
+func PullCertificateNames(ctx context.Context, addr string, ports []int) []string {
 	var names []string
 
 	// Check hosts for certificates that contain subdomain names
 	for _, port := range ports {
 		// Set the maximum time allowed for making the connection
-		ctx, cancel := context.WithTimeout(context.Background(), defaultTLSConnectTimeout)
+		tCtx, cancel := context.WithTimeout(ctx, defaultTLSConnectTimeout)
 		defer cancel()
 		// Obtain the connection
-		conn, err := amassnet.DialContext(ctx, "tcp", net.JoinHostPort(addr, strconv.Itoa(port)))
+		conn, err := amassnet.DialContext(tCtx, "tcp", net.JoinHostPort(addr, strconv.Itoa(port)))
 		if err != nil {
 			continue
 		}
@@ -287,10 +354,10 @@ func namesFromCert(cert *x509.Certificate) []string {
 }
 
 // ClientCountryCode returns the country code for the public-facing IP address for the host of the process.
-func ClientCountryCode() string {
+func ClientCountryCode(ctx context.Context) string {
 	headers := map[string]string{"Content-Type": "application/json"}
 
-	page, err := RequestWebPage("https://ipapi.co/json", nil, headers, "", "")
+	page, err := RequestWebPage(ctx, "https://ipapi.co/json", nil, headers, nil)
 	if err != nil {
 		return ""
 	}

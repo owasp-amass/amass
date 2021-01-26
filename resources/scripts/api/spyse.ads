@@ -44,7 +44,7 @@ function vertical(ctx, domain)
     if (resp == nil or resp == "") then
         local err
 
-        resp, err = request({
+        resp, err = request(ctx, {
             url=vurl,
             headers={['Authorization']="Bearer " .. c.key},
         })

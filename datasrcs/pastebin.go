@@ -67,7 +67,7 @@ func (p *Pastebin) dnsRequest(ctx context.Context, req *requests.DNSRequest) {
 	bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 		fmt.Sprintf("Querying %s for %s subdomains", p.String(), req.Domain))
 
-	ids, err := p.extractIDs(req.Domain)
+	ids, err := p.extractIDs(ctx, req.Domain)
 	if err != nil {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: %s: %v", p.String(), req.Domain, err))
@@ -76,7 +76,7 @@ func (p *Pastebin) dnsRequest(ctx context.Context, req *requests.DNSRequest) {
 
 	for _, id := range ids {
 		url := p.webURLDumpData(id)
-		page, err := http.RequestWebPage(url, nil, nil, "", "")
+		page, err := http.RequestWebPage(ctx, url, nil, nil, nil)
 		if err != nil {
 			bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", p.String(), url, err))
 			return
@@ -89,9 +89,9 @@ func (p *Pastebin) dnsRequest(ctx context.Context, req *requests.DNSRequest) {
 }
 
 // Extract the IDs from the pastebin Web response.
-func (p *Pastebin) extractIDs(domain string) ([]string, error) {
+func (p *Pastebin) extractIDs(ctx context.Context, domain string) ([]string, error) {
 	url := p.webURLDumpIDs(domain)
-	page, err := http.RequestWebPage(url, nil, nil, "", "")
+	page, err := http.RequestWebPage(ctx, url, nil, nil, nil)
 	if err != nil {
 		return nil, err
 	}

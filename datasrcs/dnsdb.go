@@ -101,7 +101,7 @@ func (d *DNSDB) dnsRequest(ctx context.Context, req *requests.DNSRequest) {
 	}
 
 	url := d.getURL(req.Domain)
-	page, err := http.RequestWebPage(url, nil, headers, "", "")
+	page, err := http.RequestWebPage(ctx, url, nil, headers, nil)
 	if err != nil {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", d.String(), url, err))
 		return

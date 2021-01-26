@@ -114,6 +114,13 @@ func (t *TeamCymru) origin(ctx context.Context, addr string) *requests.ASNReques
 	}
 
 	ans := resolvers.ExtractAnswers(resp)
+	if len(ans) == 0 {
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+			fmt.Sprintf("%s: %s: DNS TXT record query returned zero answers", t.String(), name),
+		)
+		return nil
+	}
+
 	fields := strings.Split(ans[0].Data, " | ")
 	if len(fields) < 5 {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
@@ -166,6 +173,13 @@ func (t *TeamCymru) asnLookup(ctx context.Context, asn int) *requests.ASNRequest
 	}
 
 	ans := resolvers.ExtractAnswers(resp)
+	if len(ans) == 0 {
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+			fmt.Sprintf("%s: %s: DNS TXT record query returned zero answers", t.String(), name),
+		)
+		return nil
+	}
+
 	fields := strings.Split(ans[0].Data, " | ")
 	if len(fields) < 5 {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,

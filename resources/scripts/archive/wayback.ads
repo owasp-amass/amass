@@ -5,7 +5,7 @@ name = "Wayback"
 type = "archive"
 
 function start()
-    setratelimit(1)
+    setratelimit(5)
 end
 
 function vertical(ctx, domain)
@@ -21,7 +21,7 @@ function vertical(ctx, domain)
     if (resp == nil or resp == "") then
         local err
 
-        resp, err = request({
+        resp, err = request(ctx, {
             url=vurl,
             headers={['Content-Type']="application/json"},
         })

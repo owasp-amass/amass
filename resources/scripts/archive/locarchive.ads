@@ -9,11 +9,11 @@ function start()
 end
 
 function vertical(ctx, domain)
-    crawl(ctx, buildurl(domain))
+    crawl(ctx, buildurl(domain), 5)
 end
 
 function resolved(ctx, name, domain, records)
-    crawl(ctx, buildurl(name))
+    crawl(ctx, buildurl(name), 5)
 end
 
 function buildurl(domain)

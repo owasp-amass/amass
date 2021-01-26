@@ -107,7 +107,7 @@ func (a *AlienVault) executeDNSQuery(ctx context.Context, req *requests.DNSReque
 	}
 
 	u := a.getURL(req.Domain) + "passive_dns"
-	page, err := http.RequestWebPage(u, nil, a.getHeaders(), "", "")
+	page, err := http.RequestWebPage(ctx, u, nil, a.getHeaders(), nil)
 	if err != nil {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", a.String(), u, err))
 		return
@@ -178,7 +178,7 @@ func (a *AlienVault) executeURLQuery(ctx context.Context, req *requests.DNSReque
 
 	headers := a.getHeaders()
 	u := a.getURL(req.Domain) + "url_list"
-	page, err := http.RequestWebPage(u, nil, headers, "", "")
+	page, err := http.RequestWebPage(ctx, u, nil, headers, nil)
 	if err != nil {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", a.String(), u, err))
 		return
@@ -209,7 +209,7 @@ func (a *AlienVault) executeURLQuery(ctx context.Context, req *requests.DNSReque
 		for cur := m.PageNum + 1; cur <= pages; cur++ {
 			a.CheckRateLimit()
 			pageURL := u + "?page=" + strconv.Itoa(cur)
-			page, err = http.RequestWebPage(pageURL, nil, headers, "", "")
+			page, err = http.RequestWebPage(ctx, pageURL, nil, headers, nil)
 			if err != nil {
 				bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 					fmt.Sprintf("%s: %s: %v", a.String(), pageURL, err))
@@ -271,7 +271,7 @@ func (a *AlienVault) executeWhoisQuery(ctx context.Context, req *requests.WhoisR
 	headers := a.getHeaders()
 	for _, email := range emails {
 		pageURL := a.getReverseWhoisURL(email)
-		page, err := http.RequestWebPage(pageURL, nil, headers, "", "")
+		page, err := http.RequestWebPage(ctx, pageURL, nil, headers, nil)
 		if err != nil {
 			bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 				fmt.Sprintf("%s: %s: %v", a.String(), pageURL, err))
@@ -319,7 +319,7 @@ func (a *AlienVault) queryWhoisForEmails(ctx context.Context, req *requests.Whoi
 		return emails.Slice()
 	}
 
-	page, err := http.RequestWebPage(u, nil, a.getHeaders(), "", "")
+	page, err := http.RequestWebPage(ctx, u, nil, a.getHeaders(), nil)
 	if err != nil {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", a.String(), u, err))
 		return emails.Slice()

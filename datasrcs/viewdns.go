@@ -68,7 +68,7 @@ func (v *ViewDNS) dnsRequest(ctx context.Context, req *requests.DNSRequest) {
 	var unique []string
 	u := v.getIPHistoryURL(req.Domain)
 	// The ViewDNS IP History lookup sometimes reveals interesting results
-	page, err := http.RequestWebPage(u, nil, nil, "", "")
+	page, err := http.RequestWebPage(ctx, u, nil, nil, nil)
 	if err != nil {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", v.String(), u, err))
 		return
@@ -103,7 +103,7 @@ func (v *ViewDNS) OnWhoisRequest(ctx context.Context, req *requests.WhoisRequest
 
 	numRateLimitChecks(v, 9)
 	u := v.getReverseWhoisURL(req.Domain)
-	page, err := http.RequestWebPage(u, nil, nil, "", "")
+	page, err := http.RequestWebPage(ctx, u, nil, nil, nil)
 	if err != nil {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", v.String(), u, err))
 		return

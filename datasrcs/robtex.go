@@ -97,7 +97,7 @@ func (r *Robtex) dnsRequest(ctx context.Context, req *requests.DNSRequest) {
 		fmt.Sprintf("Querying %s for %s subdomains", r.String(), req.Domain))
 
 	url := "https://freeapi.robtex.com/pdns/forward/" + req.Domain
-	page, err := http.RequestWebPage(url, nil, nil, "", "")
+	page, err := http.RequestWebPage(ctx, url, nil, nil, nil)
 	if err != nil {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", r.String(), url, err))
 		return
@@ -124,7 +124,7 @@ loop:
 		default:
 			numRateLimitChecks(r, 6)
 			url = "https://freeapi.robtex.com/pdns/reverse/" + ip
-			pdns, err := http.RequestWebPage(url, nil, nil, "", "")
+			pdns, err := http.RequestWebPage(ctx, url, nil, nil, nil)
 			if err != nil {
 				bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 					fmt.Sprintf("%s: %s: %v", r.String(), url, err))
@@ -214,7 +214,7 @@ func (r *Robtex) origin(ctx context.Context, addr string) *requests.ASNRequest {
 
 	numRateLimitChecks(r, 6)
 	url := "https://freeapi.robtex.com/ipquery/" + addr
-	page, err := http.RequestWebPage(url, nil, nil, "", "")
+	page, err := http.RequestWebPage(ctx, url, nil, nil, nil)
 	if err != nil {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", r.String(), url, err))
 		return nil
@@ -296,7 +296,7 @@ func (r *Robtex) netblocks(ctx context.Context, asn int) stringset.Set {
 
 	numRateLimitChecks(r, 6)
 	url := "https://freeapi.robtex.com/asquery/" + strconv.Itoa(asn)
-	page, err := http.RequestWebPage(url, nil, nil, "", "")
+	page, err := http.RequestWebPage(ctx, url, nil, nil, nil)
 	if err != nil {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", r.String(), url, err))
 		return netblocks

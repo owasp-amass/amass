@@ -11,7 +11,7 @@ function start()
 end
 
 function vertical(ctx, domain)
-    local page, err = request({url=apiurl(domain)})
+    local page, err = request(ctx, {url=apiurl(domain)})
     if (err ~= nil and err ~= '') then
         return
     end

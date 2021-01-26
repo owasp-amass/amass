@@ -24,12 +24,6 @@ function check()
 end
 
 function vertical(ctx, domain)
-    if check() then
-        apiquery(ctx, domain)
-    end
-end
-
-function apiquery(ctx, domain)
     local c
     local cfg = datasrc_config()
     if cfg ~= nil then
@@ -46,7 +40,7 @@ function apiquery(ctx, domain)
     if (resp == nil or resp == "") then
         local err
 
-        resp, err = request({
+        resp, err = request(ctx, {
             url=vurl,
             headers={['Authorization']=c["key"]},
         })

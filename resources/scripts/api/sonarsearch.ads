@@ -23,7 +23,7 @@ function vertical(ctx, domain)
         end
 
         if (resp == nil or resp == "") then
-            resp, err = request({url=vurl})
+            resp, err = request(ctx, {url=vurl})
             if (err ~= nil and err ~= "") then
                 return
             end

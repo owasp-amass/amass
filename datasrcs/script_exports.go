@@ -213,11 +213,6 @@ func (s *Script) checkRateLimit(L *lua.LState) int {
 	return 0
 }
 
-// Wrapper so scripts can signal Amass of script activity.
-func (s *Script) active(L *lua.LState) int {
-	return 0
-}
-
 // Wrapper so that scripts can request the path to the Amass output directory.
 func (s *Script) outputdir(L *lua.LState) int {
 	var dir string
@@ -265,7 +260,6 @@ func (s *Script) newName(L *lua.LState) int {
 		return 0
 	}
 
-	s.rlimit.Take()
 	genNewNameEvent(c.Ctx, s.sys, s, http.CleanName(name))
 	return 0
 }
@@ -493,7 +487,15 @@ func (s *Script) inScope(L *lua.LState) int {
 
 // Wrapper that allows scripts to make HTTP client requests.
 func (s *Script) request(L *lua.LState) int {
-	opt := L.CheckTable(1)
+	c := L.CheckUserData(1).Value.(*contextWrapper)
+	cfg, bus, err := ContextConfigBus(c.Ctx)
+	if err != nil {
+		L.Push(lua.LNil)
+		L.Push(lua.LString("No config and event bus values in context"))
+		return 2
+	}
+
+	opt := L.CheckTable(2)
 
 	var body io.Reader
 	if method, ok := getStringField(L, opt, "method"); ok && (method == "POST" || method == "post") {
@@ -520,8 +522,15 @@ func (s *Script) request(L *lua.LState) int {
 	id, _ := getStringField(L, opt, "id")
 	pass, _ := getStringField(L, opt, "pass")
 
-	page, err := http.RequestWebPage(url, body, headers, id, pass)
+	page, err := http.RequestWebPage(c.Ctx, url, body, headers,
+		&http.BasicAuth{
+			Username: id,
+			Password: pass,
+		})
 	if err != nil {
+		if cfg.Verbose {
+			bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", s.String(), url, err))
+		}
 		L.Push(lua.LString(page))
 		L.Push(lua.LString(err.Error()))
 		return 2
@@ -535,7 +544,7 @@ func (s *Script) request(L *lua.LState) int {
 // Wrapper so that scripts can scrape the contents of a GET request for subdomain names in scope.
 func (s *Script) scrape(L *lua.LState) int {
 	c := L.CheckUserData(1).Value.(*contextWrapper)
-	_, bus, err := ContextConfigBus(c.Ctx)
+	cfg, bus, err := ContextConfigBus(c.Ctx)
 	if err != nil {
 		L.Push(lua.LFalse)
 		return 1
@@ -569,9 +578,15 @@ func (s *Script) scrape(L *lua.LState) int {
 	}
 
 	if resp == "" {
-		resp, err = http.RequestWebPage(url, nil, headers, id, pass)
+		resp, err = http.RequestWebPage(c.Ctx, url, nil, headers,
+			&http.BasicAuth{
+				Username: id,
+				Password: pass,
+			})
 		if err != nil {
-			bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", s.String(), url, err))
+			if cfg.Verbose {
+				bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", s.String(), url, err))
+			}
 			L.Push(lua.LFalse)
 			return 1
 		}
@@ -612,9 +627,17 @@ func (s *Script) crawl(L *lua.LState) int {
 		return 0
 	}
 
-	names, err := http.Crawl(string(u), cfg.Domains())
+	lv = L.Get(3)
+	max, ok := lv.(lua.LNumber)
+	if !ok {
+		return 0
+	}
+
+	names, err := http.Crawl(c.Ctx, string(u), cfg.Domains(), int(max), nil)
 	if err != nil {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", s.String(), u, err))
+		if cfg.Verbose {
+			bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", s.String(), u, err))
+		}
 		return 0
 	}
 

@@ -36,7 +36,7 @@ function vertical(ctx, domain)
         return
     end
 
-    local token = bearer_token(c.username, c.password)
+    local token = bearer_token(ctx, c.username, c.password)
     if token == "" then
         return
     end
@@ -51,7 +51,7 @@ function vertical(ctx, domain)
     if (resp == nil or resp == "") then
         local err
 
-        resp, err = request({
+        resp, err = request(ctx, {
             url=vurl,
             headers={
                 ['Content-Type']="application/json",
@@ -86,7 +86,7 @@ function buildurl(domain)
     return "https://api.zoomeye.org/host/search?query=hostname:*." .. domain
 end
 
-function bearer_token(username, password)
+function bearer_token(ctx, username, password)
     local body, err = json.encode({
         username=username, 
         password=password,
@@ -95,7 +95,7 @@ function bearer_token(username, password)
         return ""
     end
 
-    resp, err = request({
+    resp, err = request(ctx, {
         method="POST",
         data=body,
         url="https://api.zoomeye.org/user/login",

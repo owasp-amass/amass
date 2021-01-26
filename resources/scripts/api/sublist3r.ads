@@ -11,7 +11,7 @@ function start()
 end
 
 function vertical(ctx, domain)
-    local page, err = request({url=buildurl(domain)})
+    local page, err = request(ctx, {url=buildurl(domain)})
     if (err ~= nil and err ~= "") then
         return
     end

@@ -6,6 +6,7 @@ package config
 import (
 	"bufio"
 	"compress/gzip"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -155,7 +156,6 @@ func NewConfig() *Config {
 		Log:                 log.New(ioutil.Discard, "", 0),
 		Ports:               []int{443},
 		MinForRecursive:     1,
-		Resolvers:           DefaultBaselineResolvers,
 		MonitorResolverRate: true,
 		LocalDatabase:       true,
 		// The following is enum-only, but intel will just ignore them anyway
@@ -332,8 +332,8 @@ func GetListFromFile(path string) ([]string, error) {
 	return s, err
 }
 
-func getWordlistByURL(url string) ([]string, error) {
-	page, err := amasshttp.RequestWebPage(url, nil, nil, "", "")
+func getWordlistByURL(ctx context.Context, url string) ([]string, error) {
+	page, err := amasshttp.RequestWebPage(ctx, url, nil, nil, nil)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to obtain the wordlist at %s: %v", url, err)
 	}

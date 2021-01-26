@@ -11,7 +11,7 @@ function start()
 end
 
 function vertical(ctx, domain)
-    local page, err = request({
+    local page, err = request(ctx, {
         url=buildurl(domain),
         headers={['Content-Type']="application/json"},
     })

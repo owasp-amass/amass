@@ -126,7 +126,7 @@ func (c *Crtsh) scrape(ctx context.Context, domain string) {
 	}
 
 	url := c.getURL(domain)
-	page, err := http.RequestWebPage(url, nil, nil, "", "")
+	page, err := http.RequestWebPage(ctx, url, nil, nil, nil)
 	if err != nil {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", c.String(), url, err))
 		return

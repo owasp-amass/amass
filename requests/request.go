@@ -24,6 +24,7 @@ const (
 	AXFR     = "axfr"
 	BRUTE    = "brute"
 	CERT     = "cert"
+	CRAWL    = "crawl"
 	DNS      = "dns"
 	RIR      = "rir"
 	EXTERNAL = "ext"
@@ -327,7 +328,7 @@ type AddressInfo struct {
 // TrustedTag returns true when the tag parameter is of a type that should be trusted even
 // facing DNS wildcards.
 func TrustedTag(tag string) bool {
-	if tag == DNS || tag == CERT || tag == ARCHIVE || tag == AXFR {
+	if tag == ARCHIVE || tag == AXFR || tag == CERT || tag == CRAWL || tag == DNS {
 		return true
 	}
 	return false

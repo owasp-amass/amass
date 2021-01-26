@@ -17,7 +17,6 @@ import (
 	"github.com/caffix/service"
 	luaurl "github.com/cjoudrey/gluaurl"
 	lua "github.com/yuin/gopher-lua"
-	"go.uber.org/ratelimit"
 	luajson "layeh.com/gopher-json"
 )
 
@@ -40,8 +39,8 @@ type Script struct {
 	subdomain  lua.LValue
 	// Regexp to match any subdomain name
 	subre   *regexp.Regexp
-	rlimit  ratelimit.Limiter
 	seconds int
+	cancel  context.CancelFunc
 }
 
 // NewScript returns he object initialized, but not yet started.
@@ -51,13 +50,17 @@ func NewScript(script string, sys systems.System) *Script {
 		return nil
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+
 	s := &Script{
 		sys:    sys,
 		subre:  re,
-		rlimit: ratelimit.New(sys.Config().MaxDNSQueries),
+		cancel: cancel,
 	}
+
 	L := s.newLuaState(sys.Config())
 	s.luaState = L
+	L.SetContext(ctx)
 
 	// Load the script
 	err = L.DoString(script)
@@ -105,7 +108,6 @@ func (s *Script) newLuaState(cfg *config.Config) *lua.LState {
 	L.SetGlobal("log", L.NewFunction(s.log))
 	L.SetGlobal("find", L.NewFunction(s.find))
 	L.SetGlobal("submatch", L.NewFunction(s.submatch))
-	L.SetGlobal("active", L.NewFunction(s.active))
 	L.SetGlobal("newname", L.NewFunction(s.newName))
 	L.SetGlobal("newaddr", L.NewFunction(s.newAddr))
 	L.SetGlobal("newasn", L.NewFunction(s.newASN))
@@ -198,7 +200,10 @@ func (s *Script) OnStart() error {
 
 // OnStop implements the Service interface.
 func (s *Script) OnStop() error {
-	defer s.luaState.Close()
+	defer func() {
+		s.cancel()
+		s.luaState.Close()
+	}()
 
 	L := s.luaState
 	if s.stop.Type() == lua.LTNil {

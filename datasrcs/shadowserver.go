@@ -148,6 +148,13 @@ func (s *ShadowServer) origin(ctx context.Context, addr string) *requests.ASNReq
 	}
 
 	ans := resolvers.ExtractAnswers(resp)
+	if len(ans) == 0 {
+		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
+			fmt.Sprintf("%s: %s: DNS TXT record query returned zero answers", s.String(), name),
+		)
+		return nil
+	}
+
 	fields := strings.Split(strings.Trim(ans[0].Data, "\""), " | ")
 	if len(fields) < 4 {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,

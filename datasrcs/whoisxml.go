@@ -133,7 +133,7 @@ func (w *WhoisXML) whoisRequest(ctx context.Context, req *requests.WhoisRequest)
 	r.SearchTerms.Include = append(r.SearchTerms.Include, req.Domain)
 	jr, _ := json.Marshal(r)
 
-	page, err := http.RequestWebPage(u, bytes.NewReader(jr), headers, "", "")
+	page, err := http.RequestWebPage(ctx, u, bytes.NewReader(jr), headers, nil)
 	if err != nil {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", w.String(), u, err))
 		return

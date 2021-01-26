@@ -17,7 +17,7 @@ function vertical(ctx, domain)
 end
 
 function new(ctx, domain)
-    local page, err = request({['url']=buildurl(domain)})
+    local page, err = request(ctx, {['url']=buildurl(domain)})
     if (err ~= nil and err ~= "") then
         return
     end
@@ -46,7 +46,7 @@ function buildurl(domain)
 end
 
 function old(ctx, domain)
-    local page, err = request({['url']=buildoldurl(domain)})
+    local page, err = request(ctx, {['url']=buildoldurl(domain)})
     if (err ~= nil and err ~= "") then
         return
     end

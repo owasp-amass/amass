@@ -46,7 +46,7 @@ function vertical(ctx, domain)
     if (resp == nil or resp == "") then
         local err
 
-        resp, err = request({
+        resp, err = request(ctx, {
             url=vurl,
             headers={['Content-Type']="application/json"},
             id=c.username,

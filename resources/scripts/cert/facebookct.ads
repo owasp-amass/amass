@@ -46,7 +46,7 @@ function vertical(ctx, domain)
     if (resp == nil or resp == "") then
         local err
 
-        resp, err = request({
+        resp, err = request(ctx, {
             url=authurl(c.key, c.secret),
             headers={['Content-Type']="application/json"},
         })
@@ -59,7 +59,7 @@ function vertical(ctx, domain)
             return
         end
     
-        resp, err = request({
+        resp, err = request(ctx, {
             url=queryurl(domain, dec.access_token),
             headers={['Content-Type']="application/json"},
         })

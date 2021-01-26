@@ -47,7 +47,7 @@ function apiquery(ctx, cfg, domain)
                 return
             end
     
-            resp, err = request({
+            resp, err = request(ctx, {
                 method="POST",
                 data=body,
                 url=apiurl(),

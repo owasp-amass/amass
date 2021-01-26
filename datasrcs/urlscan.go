@@ -79,7 +79,7 @@ func (u *URLScan) dnsRequest(ctx context.Context, req *requests.DNSRequest) {
 		fmt.Sprintf("Querying %s for %s subdomains", u.String(), req.Domain))
 
 	url := u.searchURL(req.Domain)
-	page, err := http.RequestWebPage(url, nil, nil, "", "")
+	page, err := http.RequestWebPage(ctx, url, nil, nil, nil)
 	if err != nil {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", u.String(), url, err))
 		return
@@ -133,7 +133,7 @@ func (u *URLScan) getSubsFromResult(ctx context.Context, id string) (stringset.S
 
 	numRateLimitChecks(u, 2)
 	url := u.resultURL(id)
-	page, err := http.RequestWebPage(url, nil, nil, "", "")
+	page, err := http.RequestWebPage(ctx, url, nil, nil, nil)
 	if err != nil {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", u.String(), url, err))
 		return subs, errors.New("HTTP request failed")
@@ -169,7 +169,7 @@ func (u *URLScan) attemptSubmission(ctx context.Context, domain string) string {
 	}
 	url := "https://urlscan.io/api/v1/scan/"
 	body := strings.NewReader(u.submitBody(domain))
-	page, err := http.RequestWebPage(url, body, headers, "", "")
+	page, err := http.RequestWebPage(ctx, url, body, headers, nil)
 	if err != nil {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", u.String(), url, err))
 		return ""
@@ -190,7 +190,7 @@ func (u *URLScan) attemptSubmission(ctx context.Context, domain string) string {
 
 	// Keep this data source active while waiting for the scan to complete
 	for {
-		_, err = http.RequestWebPage(result.API, nil, nil, "", "")
+		_, err = http.RequestWebPage(ctx, result.API, nil, nil, nil)
 		if err == nil || err.Error() != "404 Not Found" {
 			break
 		}

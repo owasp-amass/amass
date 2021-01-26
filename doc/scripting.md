@@ -312,21 +312,6 @@ end
 | ctx        | UserData  |
 | msg        | string    |
 
-### `active` Function
-
-A script can signal the enumeration process of its activity by executing the `active` function. This extends the duration of the enumeration process.
-
-```lua
-function make_request(ctx, fqdn)
-    active(ctx)
-    -- Access the data source to make additional discoveries
-end
-```
-
-| Field Name | Data Type |
-|:-----------|:----------|
-| ctx        | UserData  |
-
 ### `outputdir` Function
 
 A script can request the filepath to the Amass output directory by executing the `outputdir` function. The returned path can be relative.
@@ -450,7 +435,7 @@ The `request` function performs HTTP(s) client requests for Amass data source sc
 ```lua
 function vertical(ctx, domain)
     local url = "https://" .. domain
-    local page, err = request({
+    local page, err = request(ctx, {
         method="POST",
         data=body,
         ['url']=url,
@@ -465,6 +450,13 @@ function vertical(ctx, domain)
     -- Utilize the body provided in the response
 end
 ```
+
+| Field Name | Data Type |
+|:-----------|:----------|
+| ctx        | UserData  |
+| params     | table     |
+
+The `params` table has the following fields:
 
 | Field Name | Data Type |
 |:-----------|:----------|
@@ -500,13 +492,13 @@ end
 
 ### `crawl` Function
 
-The `crawl` function performs HTTP(s) web crawling/spidering for Amass data source scripts. The body of the responses are automatically checked for subdomain names that are in scope of the enumeration process.
+The `crawl` function performs HTTP(s) web crawling/spidering for Amass data source scripts. The body of the responses are automatically checked for subdomain names that are in scope of the enumeration process. The crawler will not follow more than `max` links unless the provided value is `0`.
 
 ```lua
 function vertical(ctx, domain)
     local url = "https://" .. domain
 
-    crawl(ctx, url)
+    crawl(ctx, url, 50)
 end
 ```
 
@@ -514,6 +506,7 @@ end
 |:-----------|:----------|
 | ctx        | UserData  |
 | url        | string    |
+| max        | number    |
 
 ### `newname` Function
 

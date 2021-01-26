@@ -60,7 +60,7 @@ func (i *IPAPI) addrRequest(ctx context.Context, req *requests.AddrRequest) {
 
 	url := i.restAddrURL(req.Address)
 	headers := map[string]string{"Content-Type": "application/json"}
-	page, err := http.RequestWebPage(url, nil, headers, "", "")
+	page, err := http.RequestWebPage(ctx, url, nil, headers, nil)
 	if err != nil {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", i.String(), url, err))
 		return

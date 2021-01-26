@@ -193,7 +193,7 @@ func (c *Collection) makeCertPullTaskFunc() pipeline.TaskFunc {
 		}
 
 		addrinfo := requests.AddressInfo{Address: ip}
-		for _, name := range http.PullCertificateNames(req.Address, c.Config.Ports) {
+		for _, name := range http.PullCertificateNames(ctx, req.Address, c.Config.Ports) {
 			if n := strings.TrimSpace(name); n != "" {
 				d := resolvers.FirstProperSubdomain(c.ctx, c.Sys.Pool(), n, resolvers.PriorityLow)
 

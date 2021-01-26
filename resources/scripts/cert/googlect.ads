@@ -18,7 +18,7 @@ function vertical(ctx, domain)
     }
 
     while(true) do
-        local page, err = request({
+        local page, err = request(ctx, {
             ['url']=buildurl(domain, token),
             headers=hdrs,
         })

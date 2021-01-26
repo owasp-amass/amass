@@ -71,7 +71,7 @@ func (d *DNSDumpster) dnsRequest(ctx context.Context, req *requests.DNSRequest) 
 		fmt.Sprintf("Querying %s for %s subdomains", d.String(), req.Domain))
 
 	u := "https://dnsdumpster.com/"
-	page, err := amasshttp.RequestWebPage(u, nil, nil, "", "")
+	page, err := amasshttp.RequestWebPage(ctx, u, nil, nil, nil)
 	if err != nil {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", d.String(), u, err))
 		return
@@ -116,7 +116,7 @@ func (d *DNSDumpster) postForm(ctx context.Context, token, domain string) (strin
 		"targetip":            {domain},
 	}
 
-	req, err := http.NewRequest("POST", "https://dnsdumpster.com/", strings.NewReader(params.Encode()))
+	req, err := http.NewRequestWithContext(ctx, "POST", "https://dnsdumpster.com/", strings.NewReader(params.Encode()))
 	if err != nil {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: Failed to setup the POST request: %v", d.String(), err))

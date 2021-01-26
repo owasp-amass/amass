@@ -44,7 +44,7 @@ function vertical(ctx, domain)
     if (resp == nil or resp == "") then
         local err
 
-        resp, err = request({
+        resp, err = request(ctx, {
             url=vurl,
             headers={
                 APIKEY=c.key,
@@ -110,7 +110,7 @@ function horizontal(ctx, domain)
     if (resp == nil or resp == "") then
         local err
 
-        resp, err = request({
+        resp, err = request(ctx, {
             url=hurl,
             headers={
                 APIKEY=c.key,

@@ -4,6 +4,7 @@
 package config
 
 import (
+	"context"
 	"encoding/csv"
 	"errors"
 	"fmt"
@@ -16,8 +17,12 @@ import (
 	"github.com/go-ini/ini"
 )
 
-// DefaultQueriesPerResolver is the number of queries sent to each DNS resolver per second.
-const DefaultQueriesPerResolver = 10
+// DefaultQueriesPerPublicResolver is the number of queries sent to each public DNS resolver per second.
+const DefaultQueriesPerPublicResolver = 10
+
+// DefaultQueriesPerBaselineResolver is the number of queries sent to each trusted DNS resolver per second.
+const DefaultQueriesPerBaselineResolver = 100
+
 const minResolverReliability = 0.95
 
 // DefaultBaselineResolvers is a list of trusted public DNS resolvers.
@@ -104,12 +109,12 @@ func (c *Config) loadResolverSettings(cfg *ini.File) error {
 }
 
 func (c *Config) calcDNSQueriesMax() {
-	c.MaxDNSQueries = len(c.Resolvers) * 100
+	c.MaxDNSQueries = len(c.Resolvers) * DefaultQueriesPerBaselineResolver
 }
 
 func getPublicDNSResolvers() ([]string, error) {
 	url := "https://public-dns.info/nameservers-all.csv"
-	page, err := amasshttp.RequestWebPage(url, nil, nil, "", "")
+	page, err := amasshttp.RequestWebPage(context.Background(), url, nil, nil, nil)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to obtain the Public DNS csv file at %s: %v", url, err)
 	}
