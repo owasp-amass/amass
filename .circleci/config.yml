@@ -34,7 +34,7 @@ jobs:
             /go/cc-test-reporter after-build -r $CODE_CLIMATE_TOKEN -t gocov -p $PREFIX --exit-code $?
 
       - codecov/upload:
-          conf: $PROJECT_DIR/.codecov.yml
+#          conf: $PROJECT_DIR/.codecov.yml
           file: $PROJECT_DIR/c.out
 
       - run:
