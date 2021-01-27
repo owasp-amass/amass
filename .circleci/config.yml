@@ -9,6 +9,7 @@ jobs:
       - image: circleci/golang:1.15
 
     environment:
+      GO111MODULE: "on"
       PROJECT_DIR: /go/src/github.com/OWASP/Amass
 
     working_directory: $PROJECT_DIR
