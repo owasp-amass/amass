@@ -28,6 +28,8 @@ jobs:
             cd /go
             go get github.com/OWASP/Amass/v3/...
             cd $PROJECT_DIR
+            git checkout develop
+            git pull origin develop
             /go/cc-test-reporter before-build
             go test -coverprofile=c.out -covermode=atomic ./...
             export PREFIX=$(basename $(go list -m))
