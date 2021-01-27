@@ -1,8 +1,5 @@
 project_name: amass
 
-env:
-  - GO111MODULE=on
-
 before:
   hooks:
   - go mod download
