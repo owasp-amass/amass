@@ -141,9 +141,18 @@ loop:
 		default:
 		}
 
+		var nxdomain bool
 		msg := resolvers.QueryMsg(req.Name, t)
-		if resp, err := dt.enum.Sys.Pool().Query(ctx, msg, resolvers.PriorityLow,
-			resolvers.PoolRetryPolicy); err == nil && resp != nil && len(resp.Answer) > 0 {
+		resp, err := dt.enum.Sys.Pool().Query(ctx, msg, resolvers.PriorityLow, func(times, priority int, m *dns.Msg) bool {
+			// Try one more time if we receive NXDOMAIN
+			if m.Rcode == dns.RcodeNameError && !nxdomain {
+				nxdomain = true
+				return true
+			}
+			return resolvers.PoolRetryPolicy(times, priority, m)
+		})
+
+		if err == nil && resp != nil && len(resp.Answer) > 0 {
 			if !requests.TrustedTag(req.Tag) &&
 				dt.enum.Sys.Pool().WildcardType(ctx, resp, req.Domain) != resolvers.WildcardTypeNone {
 				break
@@ -304,7 +313,15 @@ func (dt *dNSTask) reverseDNSQuery(ctx context.Context, addr string, tp pipeline
 		return false
 	}
 
-	resp, err := dt.enum.Sys.Pool().Query(ctx, msg, resolvers.PriorityLow, resolvers.PoolRetryPolicy)
+	var nxdomain bool
+	resp, err := dt.enum.Sys.Pool().Query(ctx, msg, resolvers.PriorityLow, func(times, priority int, m *dns.Msg) bool {
+		// Try one more time if we receive NXDOMAIN
+		if m.Rcode == dns.RcodeNameError && !nxdomain {
+			nxdomain = true
+			return true
+		}
+		return resolvers.PoolRetryPolicy(times, priority, m)
+	})
 	if err != nil {
 		return false
 	}
