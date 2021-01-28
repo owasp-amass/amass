@@ -29,16 +29,18 @@ jobs:
             cd /go
             go get github.com/OWASP/Amass/v3/...
             cd $PROJECT_DIR
-            git checkout develop
-            git pull origin develop
+            git checkout $CIRCLE_BRANCH
+            git pull origin $CIRCLE_BRANCH
             /go/cc-test-reporter before-build
             go test -coverprofile=c.out -covermode=atomic ./...
             export PREFIX=$(basename $(go list -m))
             /go/cc-test-reporter after-build -r $CODE_CLIMATE_TOKEN -t gocov -p $PREFIX --exit-code $?
+            go tool cover -html=c.out -o coverage.html
+            mv coverage.html /tmp/artifacts
+            mv c.out /tmp/artifacts
 
       - codecov/upload:
-#          conf: $PROJECT_DIR/.codecov.yml
-          file: $PROJECT_DIR/c.out
+          file: /tmp/artifacts/c.out
 
       - run:
           name: Remove Code Climate test-reporter
