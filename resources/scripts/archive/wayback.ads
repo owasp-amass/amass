@@ -34,7 +34,7 @@ function vertical(ctx, domain)
         end
     end
     
-    sendnames(ctx, decode(resp))
+    sendnames(ctx, resp)
 end
 
 function buildurl(domain)
