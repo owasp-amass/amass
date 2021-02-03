@@ -14,7 +14,6 @@ import (
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/datasrcs"
 	amassnet "github.com/OWASP/Amass/v3/net"
-	"github.com/OWASP/Amass/v3/net/http"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/resolvers"
 	"github.com/OWASP/Amass/v3/stringfilter"
@@ -23,6 +22,7 @@ import (
 	"github.com/caffix/pipeline"
 	"github.com/caffix/service"
 	"github.com/caffix/stringset"
+	"github.com/miekg/dns"
 )
 
 // Collection is the object type used to execute a open source information gathering with Amass.
@@ -88,31 +88,29 @@ func (c *Collection) HostedDomains(ctx context.Context) error {
 	sink := c.makeOutputSink()
 
 	var stages []pipeline.Stage
-	stages = append(stages, pipeline.FixedPool("", c.makeReverseDNSTaskFunc(), 50))
+	max := c.Config.MaxDNSQueries * int(resolvers.QueryTimeout.Seconds())
+	stages = append(stages, pipeline.DynamicPool("", c.makeDNSTaskFunc(), max))
 	if c.Config.Active {
-		stages = append(stages, pipeline.FixedPool("", c.makeCertPullTaskFunc(), 50))
+		stages = append(stages, pipeline.FIFO("", newActiveTask(c, 100)))
 	}
 	stages = append(stages, pipeline.FIFO("filter", c.makeFilterTaskFunc()))
 
-	// Start the address ranges
-	go func() {
-		for _, addr := range c.Config.Addresses {
-			source.InputAddress(&requests.AddrRequest{Address: addr.String()})
+	for _, addr := range c.Config.Addresses {
+		source.InputAddress(&requests.AddrRequest{Address: addr.String()})
+	}
+
+	for _, cidr := range append(c.Config.CIDRs, c.asnsToCIDRs()...) {
+		// Skip IPv6 netblocks, since they are simply too large
+		if ip := cidr.IP.Mask(cidr.Mask); amassnet.IsIPv6(ip) {
+			continue
 		}
-	}()
 
-	go func() {
-		for _, cidr := range append(c.Config.CIDRs, c.asnsToCIDRs()...) {
-			// Skip IPv6 netblocks, since they are simply too large
-			if ip := cidr.IP.Mask(cidr.Mask); amassnet.IsIPv6(ip) {
-				continue
-			}
-
+		go func() {
 			for _, addr := range amassnet.AllHosts(cidr) {
 				source.InputAddress(&requests.AddrRequest{Address: addr.String()})
 			}
-		}
-	}()
+		}()
+	}
 
 	return pipeline.NewPipeline(stages...).Execute(ctx, source, sink)
 }
@@ -126,7 +124,7 @@ func (c *Collection) makeOutputSink() pipeline.SinkFunc {
 	})
 }
 
-func (c *Collection) makeReverseDNSTaskFunc() pipeline.TaskFunc {
+func (c *Collection) makeDNSTaskFunc() pipeline.TaskFunc {
 	return pipeline.TaskFunc(func(ctx context.Context, data pipeline.Data, tp pipeline.TaskParams) (pipeline.Data, error) {
 		select {
 		case <-ctx.Done():
@@ -148,12 +146,25 @@ func (c *Collection) makeReverseDNSTaskFunc() pipeline.TaskFunc {
 		}
 
 		msg := resolvers.ReverseMsg(req.Address)
+		if msg == nil {
+			return nil, nil
+		}
+
+		var nxdomain bool
 		addrinfo := requests.AddressInfo{Address: ip}
-		if resp, err := c.Sys.Pool().Query(c.ctx, msg, resolvers.PriorityLow, resolvers.PoolRetryPolicy); err == nil {
+		resp, err := c.Sys.Pool().Query(ctx, msg, resolvers.PriorityLow, func(times, priority int, m *dns.Msg) bool {
+			// Try one more time if we receive NXDOMAIN
+			if m.Rcode == dns.RcodeNameError && !nxdomain {
+				nxdomain = true
+				return true
+			}
+			return resolvers.PoolRetryPolicy(times, priority, m)
+		})
+		if err == nil {
 			ans := resolvers.ExtractAnswers(resp)
 
 			if len(ans) > 0 {
-				d := strings.TrimSpace(resolvers.FirstProperSubdomain(c.ctx, c.Sys.Pool(), ans[0].Data, resolvers.PriorityLow))
+				d := strings.TrimSpace(resolvers.FirstProperSubdomain(c.ctx, c.Sys.Pool(), ans[0].Data, resolvers.PriorityHigh))
 
 				if d != "" {
 					go pipeline.SendData(ctx, "filter", &requests.Output{
@@ -162,48 +173,6 @@ func (c *Collection) makeReverseDNSTaskFunc() pipeline.TaskFunc {
 						Addresses: []requests.AddressInfo{addrinfo},
 						Tag:       requests.DNS,
 						Sources:   []string{"Reverse DNS"},
-					}, tp)
-				}
-			}
-		}
-
-		return data, nil
-	})
-}
-
-func (c *Collection) makeCertPullTaskFunc() pipeline.TaskFunc {
-	return pipeline.TaskFunc(func(ctx context.Context, data pipeline.Data, tp pipeline.TaskParams) (pipeline.Data, error) {
-		select {
-		case <-ctx.Done():
-			return nil, nil
-		default:
-		}
-
-		req, ok := data.(*requests.AddrRequest)
-		if !ok {
-			return data, nil
-		}
-		if req == nil {
-			return nil, nil
-		}
-
-		ip := net.ParseIP(req.Address)
-		if ip == nil {
-			return nil, nil
-		}
-
-		addrinfo := requests.AddressInfo{Address: ip}
-		for _, name := range http.PullCertificateNames(ctx, req.Address, c.Config.Ports) {
-			if n := strings.TrimSpace(name); n != "" {
-				d := resolvers.FirstProperSubdomain(c.ctx, c.Sys.Pool(), n, resolvers.PriorityLow)
-
-				if d != "" {
-					go pipeline.SendData(ctx, "filter", &requests.Output{
-						Name:      n,
-						Domain:    d,
-						Addresses: []requests.AddressInfo{addrinfo},
-						Tag:       requests.CERT,
-						Sources:   []string{"Active Cert"},
 					}, tp)
 				}
 			}
@@ -235,16 +204,9 @@ func (c *Collection) asnsToCIDRs() []*net.IPNet {
 		return cidrs
 	}
 
-	last := time.Now()
-	var lastLock sync.Mutex
-
 	var setLock sync.Mutex
 	cidrSet := stringset.New()
 	fn := func(req *requests.ASNRequest) {
-		lastLock.Lock()
-		last = time.Now()
-		lastLock.Unlock()
-
 		setLock.Lock()
 		cidrSet.Union(req.Netblocks)
 		setLock.Unlock()
@@ -261,7 +223,7 @@ func (c *Collection) asnsToCIDRs() []*net.IPNet {
 	}
 
 	// Wait for the ASN requests to return responses
-	t := time.NewTicker(2 * time.Second)
+	t := time.NewTimer(5 * time.Second)
 	defer t.Stop()
 loop:
 	for {
@@ -269,13 +231,13 @@ loop:
 		case <-c.done:
 			return cidrs
 		case <-t.C:
-			lastLock.Lock()
-			l := last
-			lastLock.Unlock()
+			break loop
+		}
+	}
 
-			if time.Since(l) > 20*time.Second {
-				break loop
-			}
+	for _, asn := range c.Config.ASNs {
+		if req := c.Sys.Cache().ASNSearch(asn); req != nil {
+			fn(req)
 		}
 	}
 

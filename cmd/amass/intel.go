@@ -217,7 +217,6 @@ func runIntelCommand(clArgs []string) {
 		r.Fprintf(color.Error, "%s\n", "No DNS resolvers passed the sanity check")
 		os.Exit(1)
 	}
-	ic.Config = cfg
 
 	if args.Options.ReverseWhois {
 		if len(ic.Config.Domains()) == 0 {

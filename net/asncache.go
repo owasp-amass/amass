@@ -73,6 +73,12 @@ func (c *ASNCache) Update(req *requests.ASNRequest) {
 	}
 }
 
+// ASNSearch return the cached ASN / netblock info associated with the provided asn parameter,
+// or nil when not found in the cache.
+func (c *ASNCache) ASNSearch(asn int) *requests.ASNRequest {
+	return c.cache[asn]
+}
+
 // AddrSearch returns the cached ASN / netblock info that the addr parameter belongs in,
 // or nil when not found in the cache.
 func (c *ASNCache) AddrSearch(addr string) *requests.ASNRequest {

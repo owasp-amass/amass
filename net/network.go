@@ -10,7 +10,6 @@ import (
 	"net"
 	"strconv"
 	"strings"
-	"time"
 )
 
 // IPv4RE is a regular expression that will match an IPv4 address.
@@ -59,19 +58,28 @@ func init() {
 func DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	d := &net.Dialer{DualStack: true}
 
+	_, p, err := net.SplitHostPort(addr)
+	if err != nil {
+		return nil, err
+	}
+
+	port, err := strconv.Atoi(p)
+	if err != nil {
+		return nil, err
+	}
+
 	if LocalAddr != nil {
 		addr, _, err := net.ParseCIDR(LocalAddr.String())
 
 		if err == nil && strings.HasPrefix(network, "tcp") {
-			d.Timeout = 30 * time.Second
 			d.LocalAddr = &net.TCPAddr{
 				IP:   addr,
-				Port: 0,
+				Port: port,
 			}
 		} else if err == nil && strings.HasPrefix(network, "udp") {
 			d.LocalAddr = &net.UDPAddr{
 				IP:   addr,
-				Port: 0,
+				Port: port,
 			}
 		}
 	}

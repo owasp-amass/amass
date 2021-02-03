@@ -33,8 +33,7 @@ func FirstProperSubdomain(ctx context.Context, r Resolver, name string, priority
 				continue
 			}
 
-			pieces := strings.Split(d[0].Data, ",")
-			domain = pieces[0]
+			domain = sub
 			break
 		}
 	}

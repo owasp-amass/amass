@@ -34,7 +34,7 @@ func LookupASNsByName(s string) ([]int, []string, error) {
 		line := scanner.Text()
 
 		if err := scanner.Err(); err == nil {
-			parts := strings.Split(strings.TrimSpace(line), ",")
+			parts := strings.Fields(strings.TrimSpace(line))
 
 			if strings.Contains(strings.ToLower(parts[1]), s) {
 				a, err := strconv.Atoi(parts[0])
