@@ -8,7 +8,7 @@ require (
 	github.com/caffix/eventbus v0.0.0-20201229201025-4c5f3ce94295
 	github.com/caffix/pipeline v0.0.0-20210106193115-41730a0744af
 	github.com/caffix/queue v0.0.0-20210106184330-1d2e72b64fa0
-	github.com/caffix/service v0.0.0-20210101222658-354b1fdf7f24
+	github.com/caffix/service v0.0.0-20210202222504-bfa33e78ab27
 	github.com/caffix/stringset v0.0.0-20201218054545-37e95a70826c
 	github.com/cayleygraph/cayley v0.7.7
 	github.com/cayleygraph/quad v1.2.4

@@ -26,7 +26,7 @@ The OWASP Amass Project performs network mapping of attack surfaces and external
 | Technique    | Data Sources |
 |:-------------|:-------------|
 | DNS          | Brute forcing, Reverse DNS sweeping, NSEC zone walking, Zone transfers, FQDN alterations/permutations, FQDN Similarity-based Guessing |
-| Scraping     | Ask, Baidu, Bing, BuiltWith, DNSDumpster, HackerOne, RapidDNS, Riddler, SiteDossier, ViewDNS, Yahoo |
+| Scraping     | Ask, Baidu, Bing, BuiltWith, DNSDumpster, HackerOne, IPv4Info, RapidDNS, Riddler, SiteDossier, ViewDNS, Yahoo |
 | Certificates | Active pulls (optional), Censys, CertSpotter, Crtsh, FacebookCT, GoogleCT |
 | APIs         | AlienVault, Anubis, BinaryEdge, BufferOver, C99, CIRCL, Cloudflare, CommonCrawl, DNSDB, GitHub, HackerTarget, Mnemonic, NetworksDB, PassiveTotal, Pastebin, RADb, ReconDev, Robtex, SecurityTrails, ShadowServer, Shodan, SonarSearch, Spyse, Sublist3rAPI, TeamCymru, ThreatBook, ThreatCrowd, ThreatMiner, Twitter, Umbrella, URLScan, VirusTotal, WhoisXML, ZETAlytics, ZoomEye |
 | Web Archives | ArchiveIt, LoCArchive, UKGovArchive, Wayback |
@@ -97,13 +97,6 @@ If you need help with installation and/or usage of the tool, please join our [Di
 We are always happy to get new contributors on board! Please check [CONTRIBUTING.md](CONTRIBUTING.md) to learn how to
 contribute to our codebase, and join our [Discord Server](https://discord.gg/rtN8GMd) to discuss current project goals.
 
-The OWASP Amass core project team are:
-
-* [Jeff Foley](https://github.com/caffix) aka `caffix`
-  [![Follow on Twitter](https://img.shields.io/twitter/follow/jeff_foley.svg?logo=twitter)](https://twitter.com/jeff_foley)
-* [Anthony Rhodes](https://github.com/fork-while-fork) aka `fork-while-fork`
-  [![Follow on Twitter](https://img.shields.io/twitter/follow/fork_while_fork.svg?logo=twitter)](https://twitter.com/fork_while_fork)
-
 For a list of all contributors to the OWASP Amass Project please visit our [HALL_OF_FAME.md](HALL_OF_FAME.md).
 
 ## References [![Bugcrowd LevelUp 0x04](https://img.shields.io/badge/bugcrowd-levelup%200x04-orange.svg)](https://www.youtube.com/watch?v=C-GabM2db9A) [![DEF CON 27 Demo Labs](https://img.shields.io/badge/defcon%2027-demo%20labs-purple.svg)](https://www.defcon.org/html/defcon-27/dc-27-demolabs.html) [![DEF CON 27 Recon Village](https://img.shields.io/badge/defcon%2027-recon%20village-lightgrey.svg)](https://reconvillage.org/) [![DEF CON 28 Red Team Village](https://img.shields.io/badge/defcon%2028-red%20team%20village-red.svg)](https://www.youtube.com/c/RedTeamVillage/featured) [![Bugcrowd LevelUp 0x07](https://img.shields.io/badge/bugcrowd-levelup%200x07-orange.svg)](https://www.twitch.tv/videos/723418873) [![Grayhat 2020](https://img.shields.io/badge/grayhat%202020-Bootcamp-lightgrey.svg)](https://www.youtube.com/watch?v=J33JmuQ79tE) [![BeNeLux 2020](https://img.shields.io/badge/owasp%202020-BeNeLux%20Days-blue.svg)](https://www.youtube.com/watch?v=fDlKQXRaGl0)
@@ -131,7 +124,6 @@ Add it to our ever-growing list of [REFERENCES.md](REFERENCES.md) by forking and
 
 ## Licensing [![License](https://img.shields.io/github/license/OWASP/Amass)](https://www.apache.org/licenses/LICENSE-2.0)
 
-This program is free software: you can redistribute it and/or modify it under the terms of the [Apache license](LICENSE). OWASP Amass and any
-contributions are Copyright © by Jeff Foley 2017-2020.
+This program is free software: you can redistribute it and/or modify it under the terms of the [Apache license](LICENSE). OWASP Amass and any contributions are Copyright © by Jeff Foley 2017-2021.
 
 ![Network graph](./images/network_06092018.png "Amass Network Mapping")

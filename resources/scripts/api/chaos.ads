@@ -31,7 +31,6 @@ function vertical(ctx, domain)
     end
 
     local resp
-    local vurl = apiurl(domain)
     -- Check if the response data is in the graph database
     if (cfg.ttl ~= nil and cfg.ttl > 0) then
         resp = obtain_response(domain, cfg.ttl)
@@ -41,7 +40,7 @@ function vertical(ctx, domain)
         local err
 
         resp, err = request(ctx, {
-            url=vurl,
+            ['url']=apiurl(domain),
             headers={['Authorization']=c["key"]},
         })
         if (err ~= nil and err ~= "") then
