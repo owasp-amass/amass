@@ -41,8 +41,8 @@ const (
 	// AcceptLang is the default HTTP Accept-Language header value used by Amass.
 	AcceptLang = "en-US,en;q=0.8"
 
-	defaultTLSConnectTimeout = 3 * time.Second
-	defaultHandshakeDeadline = 5 * time.Second
+	httpTimeout      = 3 * time.Minute
+	handshakeTimeout = 5 * time.Second
 )
 
 var (
@@ -64,14 +64,14 @@ type BasicAuth struct {
 func init() {
 	jar, _ := cookiejar.New(nil)
 	DefaultClient = &http.Client{
-		Timeout: 3 * time.Minute,
+		Timeout: httpTimeout,
 		Transport: &http.Transport{
 			Proxy:                 http.ProxyFromEnvironment,
 			DialContext:           amassnet.DialContext,
 			MaxIdleConns:          200,
 			MaxConnsPerHost:       50,
 			IdleConnTimeout:       90 * time.Second,
-			TLSHandshakeTimeout:   10 * time.Second,
+			TLSHandshakeTimeout:   handshakeTimeout,
 			ExpectContinueTimeout: 10 * time.Second,
 			TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
 		},
@@ -288,7 +288,7 @@ func PullCertificateNames(ctx context.Context, addr string, ports []int) []strin
 	// Check hosts for certificates that contain subdomain names
 	for _, port := range ports {
 		// Set the maximum time allowed for making the connection
-		tCtx, cancel := context.WithTimeout(ctx, defaultTLSConnectTimeout)
+		tCtx, cancel := context.WithTimeout(ctx, handshakeTimeout)
 		defer cancel()
 		// Obtain the connection
 		conn, err := amassnet.DialContext(tCtx, "tcp", net.JoinHostPort(addr, strconv.Itoa(port)))
@@ -300,18 +300,20 @@ func PullCertificateNames(ctx context.Context, addr string, ports []int) []strin
 		c := tls.Client(conn, &tls.Config{InsecureSkipVerify: true})
 		// Attempt to acquire the certificate chain
 		errChan := make(chan error, 2)
-		// This goroutine will break us out of the handshake
-		time.AfterFunc(defaultHandshakeDeadline, func() {
-			errChan <- errors.New("Handshake timeout")
-		})
-		// Be sure we do not wait too long in this attempt
-		c.SetDeadline(time.Now().Add(defaultHandshakeDeadline))
-		// The handshake is performed in the goroutine
 		go func() {
 			errChan <- c.Handshake()
 		}()
-		// The error channel returns handshake or timeout error
-		if err = <-errChan; err != nil {
+
+		t := time.NewTimer(handshakeTimeout)
+		select {
+		case <-t.C:
+			err = errors.New("Handshake timeout")
+		case e := <-errChan:
+			err = e
+		}
+		t.Stop()
+
+		if err != nil {
 			continue
 		}
 		// Get the correct certificate in the chain
