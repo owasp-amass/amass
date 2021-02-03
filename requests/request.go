@@ -228,8 +228,10 @@ func (a *AddrRequest) Valid() bool {
 	if ip := net.ParseIP(a.Address); ip == nil {
 		return false
 	}
-	if _, ok := dns.IsDomainName(a.Domain); !ok {
-		return false
+	if a.Domain != "" {
+		if _, ok := dns.IsDomainName(a.Domain); !ok {
+			return false
+		}
 	}
 	return true
 }
