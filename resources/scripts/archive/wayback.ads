@@ -34,11 +34,11 @@ function vertical(ctx, domain)
         end
     end
     
-    sendnames(ctx, resp)
+    sendnames(ctx, decode(resp))
 end
 
 function buildurl(domain)
-    return "http://web.archive.org/cdx/search/cdx?url=*." .. domain .. "&output=json&collapse=urlkey"
+    return "http://web.archive.org/cdx/search/cdx?matchType=domain&fl=original&output=json&collapse=urlkey&url=" .. domain
 end
 
 function sendnames(ctx, content)
