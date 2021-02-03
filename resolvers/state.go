@@ -14,7 +14,7 @@ import (
 )
 
 // QueryTimeout is the duration until a Resolver query expires.
-var QueryTimeout = 5 * time.Second
+var QueryTimeout = 2 * time.Second
 
 // ResolveError contains the Rcode returned during the DNS query.
 type ResolveError struct {
