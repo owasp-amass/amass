@@ -167,6 +167,7 @@ func NewConfig() *Config {
 		MinForWordFlip: 2,
 		EditDistance:   1,
 		Recursive:      true,
+		MinimumTTL:     1440,
 	}
 
 	c.calcDNSQueriesMax()
