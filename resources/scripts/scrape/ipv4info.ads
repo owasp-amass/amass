@@ -5,7 +5,7 @@ name = "IPv4Info"
 type = "scrape"
 
 function start()
-    setratelimit(2)
+    setratelimit(1)
 end
 
 function vertical(ctx, domain)
@@ -29,6 +29,7 @@ function vertical(ctx, domain)
 
         local err
         local u = "http://ipv4info.com/subdomains/" .. token .. "/" .. domain .. ".html"
+        checkratelimit()
         resp, err = request(ctx, {['url']=u})
         if (err ~= nil and err ~= "") then
             return
@@ -40,6 +41,36 @@ function vertical(ctx, domain)
     end
 
     sendnames(ctx, resp)
+    -- Attempt to scrape additional pages of subdomain names
+    local pagenum = 1
+    while(true) do
+        local last = resp
+        resp = ""
+
+        local page = "page" .. tostring(pagenum)
+        local key = domain .. page
+        if (cfg.ttl ~= nil and cfg.ttl > 0) then
+            resp = obtain_response(key, cfg.ttl)
+        end
+    
+        if (resp == nil or resp == "") then
+            checkratelimit()
+            resp = nextpage(ctx, domain, last, page)
+            if (resp == nil or resp == "") then
+                break
+            end
+
+            if (cfg.ttl ~= nil and cfg.ttl > 0) then
+                cache_response(key, resp)
+            end
+        end
+
+        if (resp ~= nil and resp ~= "") then
+            sendnames(ctx, resp)
+        end
+
+        pagenum = pagenum + 1
+    end
 end
 
 function getpath(ctx, domain)
@@ -50,7 +81,7 @@ function getpath(ctx, domain)
     end
 
     local match = find(page, "/ip-address/(.*)/" .. domain)
-    if match == nil then
+    if (match == nil or #match == 0) then
         return ""
     end
 
@@ -70,6 +101,21 @@ function gettoken(ctx, domain, path)
     end
 
     return match[2]
+end
+
+function nextpage(ctx, domain, resp, page)
+    local match = find(resp, "/subdomains/(.*)/" .. page .. "/" .. domain .. ".html")
+    if (match == nil or #match == 0) then
+        return ""
+    end
+
+    local u = "http://ipv4info.com" .. match[1]
+    local page, err = request(ctx, {['url']=u})
+    if (err ~= nil and err ~= "") then
+        return ""
+    end
+
+    return page
 end
 
 function sendnames(ctx, content)
