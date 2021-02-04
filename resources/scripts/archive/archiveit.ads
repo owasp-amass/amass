@@ -9,13 +9,29 @@ function start()
 end
 
 function vertical(ctx, domain)
-    crawl(ctx, buildurl(domain), 5)
+    local p = 1
+    local resp, err = request(buildurl(domain, p))
+    if (err ~= nil and err ~= "") then
+        return
+    end
+
+    local match = find(resp, "No metadata results")
+    if (match ~= nil or #match ~= 0) then
+        return
+    end
+
+    while(true) do
+        local u = buildurl(domain, p)
+        local ok = scrape(ctx, {url=u})
+        if not ok then
+            break
+        end
+
+        checkratelimit()
+        p = p + 1
+    end
 end
 
-function resolved(ctx, name, domain, records)
-    crawl(ctx, buildurl(name), 5)
-end
-
-function buildurl(domain)
-    return "https://wayback.archive-it.org/all/" .. os.date("%Y") .. "/" .. domain
+function buildurl(domain, page)
+    return "https://archive-it.org/explore?show=Sites&q=" .. domain .. "&page=" .. page
 end
