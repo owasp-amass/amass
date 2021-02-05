@@ -75,7 +75,7 @@ func defineIntelArgumentFlags(intelFlags *flag.FlagSet, args *intelArgs) {
 	intelFlags.Var(&args.Excluded, "exclude", "Data source names separated by commas to be excluded")
 	intelFlags.Var(&args.Included, "include", "Data source names separated by commas to be included")
 	intelFlags.IntVar(&args.MaxDNSQueries, "max-dns-queries", 0, "Maximum number of concurrent DNS queries")
-	intelFlags.Var(&args.Ports, "p", "Ports separated by commas (default: 443)")
+	intelFlags.Var(&args.Ports, "p", "Ports separated by commas (default: 443, 80)")
 	intelFlags.Var(&args.Resolvers, "r", "IP addresses of preferred DNS resolvers (can be used multiple times)")
 	intelFlags.IntVar(&args.Timeout, "timeout", 0, "Number of minutes to let enumeration run before quitting")
 }

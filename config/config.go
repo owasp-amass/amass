@@ -154,7 +154,7 @@ func NewConfig() *Config {
 	c := &Config{
 		UUID:                uuid.New(),
 		Log:                 log.New(ioutil.Discard, "", 0),
-		Ports:               []int{443},
+		Ports:               []int{443, 80},
 		MinForRecursive:     1,
 		MonitorResolverRate: true,
 		LocalDatabase:       true,

@@ -131,11 +131,15 @@ func (a *activeTask) crawlName(ctx context.Context, req *requests.DNSRequest, tp
 	defer func() { tp.ProcessedData() <- req }()
 
 	cfg := a.enum.Config
+	var protocol string
 	for _, port := range cfg.Ports {
-		u := "https://" + req.Name
-		if port != 443 {
-			u = u + ":" + strconv.Itoa(port)
+		if strings.HasSuffix(strconv.Itoa(port), "443") {
+			protocol = "https://"
+		} else {
+			// Sending HTTP request to HTTPS port will redirect you to the correct protocol sometimes
+			protocol = "http://"
 		}
+		u := protocol + req.Domain + ":" + port
 
 		names, err := http.Crawl(ctx, u, cfg.Domains(), 50, a.enum.crawlFilter)
 		if err != nil {
