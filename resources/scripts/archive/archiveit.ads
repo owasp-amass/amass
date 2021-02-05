@@ -5,17 +5,13 @@ name = "ArchiveIt"
 type = "archive"
 
 function start()
-    setratelimit(1)
+    setratelimit(5)
 end
 
 function vertical(ctx, domain)
-    crawl(ctx, buildurl(domain), 5)
-end
-
-function resolved(ctx, name, domain, records)
-    crawl(ctx, buildurl(name), 5)
+    scrape(ctx, {['url']=buildurl(domain)})
 end
 
 function buildurl(domain)
-    return "https://wayback.archive-it.org/all/" .. os.date("%Y") .. "/" .. domain
+    return "https://wayback.archive-it.org/all/timemap/cdx?matchType=domain&fl=original&collapse=urlkey&url=" .. domain
 end
