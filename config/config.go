@@ -49,6 +49,12 @@ type Updater interface {
 	OverrideConfig(*Config) error
 }
 
+type Logger interface {
+	Printf(format string, v ...interface{})
+	Print(v ...interface{})
+	Println(v ...interface{})
+}
+
 // Config passes along Amass configuration settings and options.
 type Config struct {
 	sync.Mutex
@@ -57,7 +63,7 @@ type Config struct {
 	UUID uuid.UUID
 
 	// Logger for error messages
-	Log *log.Logger
+	Log Logger
 
 	// The directory that stores the bolt db and other files created
 	Dir string `ini:"output_directory"`
