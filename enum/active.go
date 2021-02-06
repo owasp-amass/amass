@@ -139,7 +139,7 @@ func (a *activeTask) crawlName(ctx context.Context, req *requests.DNSRequest, tp
 			// Sending HTTP request to HTTPS port will redirect you to the correct protocol sometimes
 			protocol = "http://"
 		}
-		u := protocol + req.Domain + ":" + port
+		u := protocol + req.Name + ":" + port
 
 		names, err := http.Crawl(ctx, u, cfg.Domains(), 50, a.enum.crawlFilter)
 		if err != nil {
