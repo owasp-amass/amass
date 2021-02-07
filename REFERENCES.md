@@ -165,6 +165,10 @@ Did you write a blog post, magazine article or do a podcast about or mentioning 
 
 ## Summits & Open Source Events
 
+* [OWASP Amass Boot Camp](https://www.youtube.com/watch?v=J33JmuQ79tE&t=4s)
+  by Jeff Foley,
+  GrayHat 2020,
+  30.10.2020
 * [OWASP Amass Boot Camp](https://www.youtube.com/watch?v=OOurkCPf2-I&list=PLruly0ngXhPGvyl-gOp4d_TvIiedloX1l)
   by Jeff Foley,
   Cyber June'Gle Virtual Summit,
@@ -178,6 +182,10 @@ Did you write a blog post, magazine article or do a podcast about or mentioning 
 
 ### 2020
 
+* [Organizational Asset Discovery & Recon with OWASP Amass](https://vimeo.com/481985359)
+  by Nick Gkogkos,
+  BSides København 2020,
+  19.09.2020
 * [How to Use Amass Efficiently](https://www.youtube.com/watch?v=H1wdBgY1rtg)
   by Jeff Foley,
   NahamCom 2020,
