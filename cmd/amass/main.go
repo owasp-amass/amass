@@ -43,6 +43,7 @@ import (
 	"github.com/OWASP/Amass/v3/stringfilter"
 	"github.com/OWASP/Amass/v3/systems"
 	"github.com/caffix/eventbus"
+	"github.com/caffix/service"
 	"github.com/fatih/color"
 )
 
@@ -136,18 +137,25 @@ func main() {
 
 // GetAllSourceInfo returns the output for the 'list' flag.
 func GetAllSourceInfo(cfg *config.Config) []string {
-	var names []string
-
 	if cfg == nil {
 		cfg = config.NewConfig()
 	}
 
 	sys, err := systems.NewLocalSystem(cfg)
 	if err != nil {
-		return names
+		return []string{}
 	}
+	defer sys.Shutdown()
+
 	srcs := datasrcs.SelectedDataSources(cfg, datasrcs.GetAllSources(sys))
 	sys.SetDataSources(srcs)
+
+	return DataSourceInfo(srcs, sys)
+}
+
+// DataSourceInfo acquires the information for data sources used by the provided System.
+func DataSourceInfo(all []service.Service, sys systems.System) []string {
+	var names []string
 
 	names = append(names, fmt.Sprintf("%-35s%-35s%s", blue("Data Source"), blue("| Type"), blue("| Available")))
 	var line string
@@ -157,7 +165,7 @@ func GetAllSourceInfo(cfg *config.Config) []string {
 	names = append(names, line)
 
 	available := sys.DataSources()
-	for _, src := range srcs {
+	for _, src := range all {
 		var avail string
 
 		for _, a := range available {
@@ -171,7 +179,6 @@ func GetAllSourceInfo(cfg *config.Config) []string {
 			green(src.String()), yellow(src.Description()), yellow(avail)))
 	}
 
-	sys.Shutdown()
 	return names
 }
 

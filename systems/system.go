@@ -1,13 +1,18 @@
-// Copyright 2017 Jeff Foley. All rights reserved.
+// Copyright 2017-2021 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 package systems
 
 import (
+	"context"
+	"time"
+
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/graph"
 	"github.com/OWASP/Amass/v3/net"
+	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/resolvers"
+	eb "github.com/caffix/eventbus"
 	"github.com/caffix/service"
 )
 
@@ -42,4 +47,30 @@ type System interface {
 
 	// Shutdown will shutdown the System
 	Shutdown() error
+}
+
+// PopulateCache updates the provided System cache with ASN information from the System data sources.
+func PopulateCache(ctx context.Context, asn int, sys System) {
+	bus := eb.NewEventBus()
+	defer bus.Stop()
+
+	cache := sys.Cache()
+	bus.Subscribe(requests.NewASNTopic, cache.Update)
+	defer bus.Unsubscribe(requests.NewASNTopic, cache.Update)
+
+	ctx = context.WithValue(ctx, requests.ContextConfig, sys.Config())
+	ctx = context.WithValue(ctx, requests.ContextEventBus, bus)
+
+	// Send the ASN requests to the data sources
+	for _, src := range sys.DataSources() {
+		src.Request(ctx, &requests.ASNRequest{ASN: asn})
+	}
+
+	// Wait for the ASN requests to return responses
+	t := time.NewTimer(10 * time.Second)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+	case <-t.C:
+	}
 }

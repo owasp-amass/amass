@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -86,7 +87,7 @@ func defineIntelOptionFlags(intelFlags *flag.FlagSet, args *intelArgs) {
 	intelFlags.BoolVar(&args.Options.IPs, "ip", false, "Show the IP addresses for discovered names")
 	intelFlags.BoolVar(&args.Options.IPv4, "ipv4", false, "Show the IPv4 addresses for discovered names")
 	intelFlags.BoolVar(&args.Options.IPv6, "ipv6", false, "Show the IPv6 addresses for discovered names")
-	intelFlags.BoolVar(&args.Options.ListSources, "list", false, "Print the names of all available data sources")
+	intelFlags.BoolVar(&args.Options.ListSources, "list", false, "Print additional information")
 	intelFlags.BoolVar(&args.Options.MonitorResolverRate, "noresolvrate", true, "Disable resolver rate monitoring")
 	intelFlags.BoolVar(&args.Options.ReverseWhois, "whois", false, "All provided domains are run through reverse whois")
 	intelFlags.BoolVar(&args.Options.Sources, "src", false, "Print data sources for the discovered names")
@@ -127,7 +128,6 @@ func runIntelCommand(clArgs []string) {
 		commandUsage(intelUsageMsg, intelCommand, intelBuf)
 		return
 	}
-
 	if err := intelCommand.Parse(clArgs); err != nil {
 		r.Fprintf(color.Error, "%v\n", err)
 		os.Exit(1)
@@ -136,7 +136,6 @@ func runIntelCommand(clArgs []string) {
 		commandUsage(intelUsageMsg, intelCommand, intelBuf)
 		return
 	}
-
 	if (len(args.Excluded) > 0 || args.Filepaths.ExcludedSrcs != "") &&
 		(len(args.Included) > 0 || args.Filepaths.IncludedSrcs != "") {
 		commandUsage(intelUsageMsg, intelCommand, intelBuf)
@@ -145,19 +144,6 @@ func runIntelCommand(clArgs []string) {
 
 	// Seed the default pseudo-random number generator
 	rand.Seed(time.Now().UTC().UnixNano())
-
-	if args.OrganizationName != "" {
-		asns, descs, err := config.LookupASNsByName(args.OrganizationName)
-		if err == nil {
-			for i, a := range asns {
-				fmt.Printf("%d, %s\n", a, descs[i])
-			}
-		} else {
-			fmt.Printf("%v\n", err)
-		}
-		return
-	}
-
 	if err := processIntelInputFiles(&args); err != nil {
 		fmt.Fprintf(color.Error, "%v\n", err)
 		os.Exit(1)
@@ -181,19 +167,19 @@ func runIntelCommand(clArgs []string) {
 		os.Exit(1)
 	}
 
-	// Check if the user has requested the data source names
-	if args.Options.ListSources {
+	// Some input validation
+	if !args.Options.ReverseWhois && args.OrganizationName == "" && !args.Options.ListSources &&
+		len(args.Addresses) == 0 && len(args.CIDRs) == 0 && len(args.ASNs) == 0 {
+		commandUsage(intelUsageMsg, intelCommand, intelBuf)
+		os.Exit(1)
+	}
+
+	// Check if the user requested data source information
+	if args.Options.ListSources && len(args.ASNs) == 0 {
 		for _, info := range GetAllSourceInfo(cfg) {
 			g.Println(info)
 		}
 		return
-	}
-
-	// Some input validation
-	if !args.Options.ReverseWhois && args.OrganizationName == "" &&
-		len(args.Addresses) == 0 && len(args.CIDRs) == 0 && len(args.ASNs) == 0 {
-		commandUsage(intelUsageMsg, intelCommand, intelBuf)
-		os.Exit(1)
 	}
 
 	rLog, wLog := io.Pipe()
@@ -211,6 +197,22 @@ func runIntelCommand(clArgs []string) {
 		return
 	}
 	sys.SetDataSources(datasrcs.GetAllSources(sys))
+
+	if args.OrganizationName != "" {
+		asns, _, err := config.LookupASNsByName(args.OrganizationName)
+		if err != nil {
+			fmt.Printf("%v\n", err)
+		}
+		if len(asns) > 0 {
+			printNetblocks(asns, cfg, sys)
+		}
+		return
+	}
+	// Check if the user requested additional ASN & netblock information
+	if args.Options.ListSources && len(args.ASNs) > 0 {
+		printNetblocks(args.ASNs, cfg, sys)
+		return
+	}
 
 	ic := intel.NewCollection(cfg, sys)
 	if ic == nil {
@@ -253,6 +255,22 @@ func runIntelCommand(clArgs []string) {
 	}
 
 	processIntelOutput(ic, &args)
+}
+
+func printNetblocks(asns []int, cfg *config.Config, sys systems.System) {
+	for _, asn := range asns {
+		systems.PopulateCache(context.Background(), asn, sys)
+
+		d := sys.Cache().ASNSearch(asn)
+		if d == nil {
+			continue
+		}
+
+		fmt.Printf("%s%s %s %s\n", blue("ASN: "), yellow(strconv.Itoa(asn)), green("-"), green(d.Description))
+		for _, cidr := range d.Netblocks.Slice() {
+			fmt.Printf("%s\n", yellow(fmt.Sprintf("\t%s", cidr)))
+		}
+	}
 }
 
 func processIntelOutput(ic *intel.Collection, args *intelArgs) {

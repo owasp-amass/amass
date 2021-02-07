@@ -84,9 +84,6 @@ func (c *Collection) HostedDomains(ctx context.Context) error {
 		close(c.Output)
 	}()
 
-	source := newIntelSource(c)
-	sink := c.makeOutputSink()
-
 	var stages []pipeline.Stage
 	max := c.Config.MaxDNSQueries * int(resolvers.QueryTimeout.Seconds())
 	stages = append(stages, pipeline.DynamicPool("", c.makeDNSTaskFunc(), max))
@@ -95,24 +92,25 @@ func (c *Collection) HostedDomains(ctx context.Context) error {
 	}
 	stages = append(stages, pipeline.FIFO("filter", c.makeFilterTaskFunc()))
 
+	// Send IP addresses to the input source to scan for domain names
+	source := newIntelSource(c)
 	for _, addr := range c.Config.Addresses {
 		source.InputAddress(&requests.AddrRequest{Address: addr.String()})
 	}
-
 	for _, cidr := range append(c.Config.CIDRs, c.asnsToCIDRs()...) {
 		// Skip IPv6 netblocks, since they are simply too large
 		if ip := cidr.IP.Mask(cidr.Mask); amassnet.IsIPv6(ip) {
 			continue
 		}
 
-		go func() {
-			for _, addr := range amassnet.AllHosts(cidr) {
+		go func(n *net.IPNet) {
+			for _, addr := range amassnet.AllHosts(n) {
 				source.InputAddress(&requests.AddrRequest{Address: addr.String()})
 			}
-		}()
+		}(cidr)
 	}
 
-	return pipeline.NewPipeline(stages...).Execute(ctx, source, sink)
+	return pipeline.NewPipeline(stages...).Execute(ctx, source, c.makeOutputSink())
 }
 
 func (c *Collection) makeOutputSink() pipeline.SinkFunc {
@@ -204,41 +202,19 @@ func (c *Collection) asnsToCIDRs() []*net.IPNet {
 		return cidrs
 	}
 
-	var setLock sync.Mutex
 	cidrSet := stringset.New()
-	fn := func(req *requests.ASNRequest) {
-		setLock.Lock()
-		cidrSet.Union(req.Netblocks)
-		setLock.Unlock()
-	}
-
-	c.Bus.Subscribe(requests.NewASNTopic, fn)
-	defer c.Bus.Unsubscribe(requests.NewASNTopic, fn)
-
-	// Send the ASN requests to the data sources
-	for _, src := range c.srcs {
-		for _, asn := range c.Config.ASNs {
-			src.Request(c.ctx, &requests.ASNRequest{ASN: asn})
-		}
-	}
-
-	// Wait for the ASN requests to return responses
-	t := time.NewTimer(5 * time.Second)
-	defer t.Stop()
-loop:
-	for {
-		select {
-		case <-c.done:
-			return cidrs
-		case <-t.C:
-			break loop
-		}
-	}
-
 	for _, asn := range c.Config.ASNs {
-		if req := c.Sys.Cache().ASNSearch(asn); req != nil {
-			fn(req)
+		req := c.Sys.Cache().ASNSearch(asn)
+
+		if req == nil {
+			systems.PopulateCache(c.ctx, asn, c.Sys)
+			req = c.Sys.Cache().ASNSearch(asn)
+			if req == nil {
+				continue
+			}
 		}
+
+		cidrSet.Union(req.Netblocks)
 	}
 
 	filter := stringfilter.NewStringFilter()

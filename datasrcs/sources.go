@@ -32,7 +32,6 @@ func GetAllSources(sys systems.System) []service.Service {
 		NewTwitter(sys),
 		NewUmbrella(sys),
 		NewURLScan(sys),
-		NewViewDNS(sys),
 		NewWhoisXML(sys),
 	}
 
