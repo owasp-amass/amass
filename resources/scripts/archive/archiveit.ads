@@ -9,9 +9,15 @@ function start()
 end
 
 function vertical(ctx, domain)
-    scrape(ctx, {['url']=buildurl(domain)})
+    scrape(ctx, {['url']=firsturl(domain)})
+    checkratelimit()
+    scrape(ctx, {['url']=secondurl(domain)})
 end
 
-function buildurl(domain)
+function firsturl(domain)
     return "https://wayback.archive-it.org/all/timemap/cdx?matchType=domain&fl=original&collapse=urlkey&url=" .. domain
+end
+
+function secondurl(domain)
+    return "https://archive-it.org/explore?show=Sites&q=" .. domain
 end
