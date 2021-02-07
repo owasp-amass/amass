@@ -313,40 +313,49 @@ func (s *Script) newASN(L *lua.LState) int {
 	}
 
 	params := L.CheckTable(2)
-
-	asn, found := getNumberField(L, params, "asn")
-	if !found {
-		return 0
-	}
-
 	addr, found := getStringField(L, params, "addr")
 	if !found {
 		return 0
 	}
-	if ip := net.ParseIP(addr); ip == nil {
+	ip := net.ParseIP(addr)
+	if ip == nil {
 		return 0
 	}
-	if reserved, _ := amassnet.IsReservedAddress(addr); reserved {
-		return 0
-	}
-
-	desc, found := getStringField(L, params, "desc")
+	asn, found := getNumberField(L, params, "asn")
 	if !found {
 		return 0
 	}
-
 	prefix, found := getStringField(L, params, "prefix")
 	if !found {
 		return 0
 	}
+	if reserved, _ := amassnet.IsReservedAddress(ip.String()); reserved {
+		return 0
+	}
+	desc, found := getStringField(L, params, "desc")
+	if !found {
+		return 0
+	}
+	cc, _ := getStringField(L, params, "cc")
+	registry, _ := getStringField(L, params, "registry")
+
+	netblocks := stringset.New(prefix)
+	lv := L.GetField(params, "netblocks")
+	if tbl, ok := lv.(*lua.LTable); ok {
+		tbl.ForEach(func(_, v lua.LValue) {
+			netblocks.Insert(v.String())
+		})
+	}
 
 	bus.Publish(requests.NewASNTopic, eventbus.PriorityHigh, &requests.ASNRequest{
-		Address:        addr,
+		Address:        ip.String(),
 		ASN:            int(asn),
 		Prefix:         prefix,
+		CC:             cc,
+		Registry:       registry,
 		AllocationDate: time.Now(),
 		Description:    desc,
-		Netblocks:      stringset.New(prefix),
+		Netblocks:      netblocks,
 		Tag:            s.SourceType,
 		Source:         s.String(),
 	})

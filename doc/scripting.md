@@ -35,6 +35,7 @@ The `type` field provides the category of the data source implemented by the scr
 | "dns"       | DNS Queries |
 | "axfr"      | DNS Zone Transfers |
 | "scrape"    | Web Scraping |
+| "crawl"     | Web Crawling |
 | "api"       | Various APIs |
 | "cert"      | TLS Certificates |
 | "archive"   | Web Archives |
@@ -180,11 +181,11 @@ end
 
 ### `asn` Callback
 
-Amass executes the `asn` callback function when attempting to obtain autonomous system (AS) information from a provide IP address and IP that is within scope. The function is provided an IP address that is within scope and the script sends back the information for the associated AS using the `newasn` (more about this below) function.
+Amass executes the `asn` callback function when attempting to obtain autonomous system (AS) information from the provided IP address and/or AS number. The function is provided an IP address and/or AS number that is within scope and the script sends back the information for the associated AS using the `newasn` (more about this below) function.
 
 ```lua
-function asn(ctx, addr)
-    -- Send back a related AS information
+function asn(ctx, addr, asn)
+    -- Send back the related AS information
     newasn(ctx, {
         ['addr']=addr,
         ['asn']=tonumber(asn),
@@ -198,6 +199,7 @@ end
 |:-----------|:----------|
 | ctx        | UserData  |
 | addr       | string    |
+| asn        | number    |
 
 ### `config` Function
 
@@ -563,16 +565,17 @@ end
 
 ### `newasn` Function
 
-The `newasn` function allows Amass data source scripts to submit discovered autonomous system information related to the provided `addr` parameter. The function accepts a table of return values that is defined below.
+The `newasn` function allows Amass data source scripts to submit discovered autonomous system information related to the provided `addr` or `asn` parameters. The function accepts a table of return values that is defined below.
 
 ```lua
-function asn(ctx, addr)
-    -- Send back a related AS information
+function asn(ctx, addr, asn)
+    -- Send back the related AS information
     newasn(ctx, {
         ['addr']=addr,
         ['asn']=tonumber(asn),
-        ['desc']=desc,
         prefix=cidr,
+        ['desc']=desc,
+        ['netblocks']={cidr},
     })
 end
 ```
@@ -581,5 +584,8 @@ end
 |:-----------|:----------|
 | addr       | string    |
 | asn        | number    |
-| desc       | string    |
 | prefix     | string    |
+| cc         | string    |
+| registry   | string    |
+| desc       | string    |
+| netblocks  | table     |

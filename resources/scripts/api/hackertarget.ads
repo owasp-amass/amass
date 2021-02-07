@@ -18,12 +18,14 @@ function buildurl(domain)
     return "http://api.hackertarget.com/hostsearch/?q=" .. domain
 end
 
-function asn(ctx, addr)
-    local c
-    local cfg = datasrc_config()
+function asn(ctx, addr, asn)
+    if addr == "" then
+        return
+    end
 
     local resp
     local aurl = asnurl(addr)
+    local cfg = datasrc_config()
     -- Check if the response data is in the graph database
     if (cfg and cfg.ttl ~= nil and cfg.ttl > 0) then
         resp = obtain_response(aurl, cfg.ttl)

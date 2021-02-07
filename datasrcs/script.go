@@ -391,7 +391,7 @@ func (s *Script) addrRequest(ctx context.Context, req *requests.AddrRequest) {
 func (s *Script) asnRequest(ctx context.Context, req *requests.ASNRequest) {
 	L := s.luaState
 
-	if s.asn.Type() == lua.LTNil || req == nil || req.Address == "" {
+	if s.asn.Type() == lua.LTNil || req == nil || (req.Address == "" && req.ASN == 0) {
 		return
 	}
 
@@ -405,7 +405,7 @@ func (s *Script) asnRequest(ctx context.Context, req *requests.ASNRequest) {
 		Fn:      s.asn,
 		NRet:    0,
 		Protect: true,
-	}, s.contextToUserData(ctx), lua.LString(req.Address))
+	}, s.contextToUserData(ctx), lua.LString(req.Address), lua.LNumber(req.ASN))
 
 	if err != nil {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
