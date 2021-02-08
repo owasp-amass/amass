@@ -41,7 +41,7 @@ const (
 	// AcceptLang is the default HTTP Accept-Language header value used by Amass.
 	AcceptLang = "en-US,en;q=0.8"
 
-	httpTimeout      = 3 * time.Minute
+	httpTimeout      = 30 * time.Second
 	handshakeTimeout = 5 * time.Second
 )
 
