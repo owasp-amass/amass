@@ -10,9 +10,9 @@ import (
 
 	"github.com/OWASP/Amass/v3/net/http"
 	"github.com/OWASP/Amass/v3/requests"
-	"github.com/OWASP/Amass/v3/resolvers"
 	"github.com/caffix/pipeline"
 	"github.com/caffix/queue"
+	"golang.org/x/net/publicsuffix"
 )
 
 // activeTask is the task that handles all requests related to active methods within the pipeline.
@@ -124,12 +124,15 @@ func (a *activeTask) certEnumeration(ctx context.Context, req *requests.AddrRequ
 	addrinfo := requests.AddressInfo{Address: ip}
 	for _, name := range http.PullCertificateNames(ctx, req.Address, c.Config.Ports) {
 		if n := strings.TrimSpace(name); n != "" {
-			d := resolvers.FirstProperSubdomain(c.ctx, c.Sys.Pool(), n, resolvers.PriorityHigh)
+			domain, err := publicsuffix.EffectiveTLDPlusOne(n)
+			if err != nil {
+				continue
+			}
 
-			if d != "" {
+			if domain != "" {
 				go pipeline.SendData(ctx, "filter", &requests.Output{
-					Name:      d,
-					Domain:    d,
+					Name:      domain,
+					Domain:    domain,
 					Addresses: []requests.AddressInfo{addrinfo},
 					Tag:       requests.CERT,
 					Sources:   []string{"Active Cert"},
