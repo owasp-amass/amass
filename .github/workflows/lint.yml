@@ -1,0 +1,26 @@
+name: lint
+
+on:
+  push:
+    branches: master
+    tags:
+      - 'v*.*.*'
+  pull_request:
+
+jobs:
+  golangci:
+    strategy:
+      matrix:
+        os: [ "ubuntu-latest", "macos-latest", "windows-latest" ]
+        go-version: [ "1.15" ]
+    name: lint
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v2
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v2
+        with:
+          version: v1.36
+          working-directory: ./...
+          args: --timeout=5m
+          only-new-issues: true
