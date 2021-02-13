@@ -14,6 +14,16 @@ jobs:
         name: checkout
         uses: actions/checkout@v2
       -
+        name: docker meta
+        id: docker_meta
+        uses: crazy-max/ghaction-docker-meta@v1
+        with:
+          images: caffix/amass
+          tag-semver: |
+            v{{major}}
+            v{{major}}.{{minor}}
+            v{{major}}.{{minor}}.{{patch}}
+      -
         name: set up QEMU
         uses: docker/setup-qemu-action@v1
       -
@@ -26,16 +36,6 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       -
-        name: set env
-        run: echo ::set-env name=RELEASE_VERSION::$(echo ${GITHUB_REF:10})
-      -
-        name: login to GitHub Container Registry
-        uses: docker/login-action@v1 
-        with:
-          registry: ghcr.io
-          username: caffix
-          password: ${{ secrets.CR_PAT }}
-      -
         name: build and push
         uses: docker/build-push-action@v2
         with:
@@ -43,8 +43,5 @@ jobs:
           file: ./Dockerfile
           platforms: linux/386,linux/amd64,linux/arm/v6,linux/arm/v7,linux/arm64,linux/ppc64le,linux/s390x
           push: true
-          tags: |
-            caffix/amass:latest
-            caffix/amass:$RELEASE_VERSION
-            ghcr.io/caffix/amass:latest
-            ghcr.io/caffix/amass:$RELEASE_VERSION
+          tags: ${{ steps.docker_meta.outputs.tags }}
+          labels: ${{ steps.docker_meta.outputs.labels }}

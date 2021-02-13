@@ -6,3 +6,12 @@ fixes:
 
 ignore:
   - encode_optype.go
+  - ./examples/**/*
+  - ./resources/**/*
+  - ./wordlist/**/*
+  - ./doc/**/*
+
+coverage:
+  range: 20..60
+  round: down
+  precision: 2
