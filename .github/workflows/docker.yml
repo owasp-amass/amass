@@ -11,32 +11,32 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       -
-        name: Checkout
+        name: checkout
         uses: actions/checkout@v2
       -
-        name: Set up QEMU
+        name: set up QEMU
         uses: docker/setup-qemu-action@v1
       -
-        name: Set up Docker Buildx
+        name: set up Docker Buildx
         uses: docker/setup-buildx-action@v1
       -
-        name: Login to DockerHub
+        name: login to DockerHub
         uses: docker/login-action@v1 
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       -
-        name: Set env
+        name: set env
         run: echo ::set-env name=RELEASE_VERSION::$(echo ${GITHUB_REF:10})
       -
-        name: Login to GitHub Container Registry
+        name: login to GitHub Container Registry
         uses: docker/login-action@v1 
         with:
           registry: ghcr.io
-          username: ${{ github.repository_owner }}
+          username: caffix
           password: ${{ secrets.CR_PAT }}
       -
-        name: Build and push
+        name: build and push
         uses: docker/build-push-action@v2
         with:
           context: .
