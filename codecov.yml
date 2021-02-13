@@ -3,3 +3,6 @@ codecov:
 
 fixes:
   - "github.com/OWASP/Amass/v3/::github.com/OWASP/Amass/"
+
+ignore:
+  - encode_optype.go
