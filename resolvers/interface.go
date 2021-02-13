@@ -23,7 +23,7 @@ type Resolver interface {
 	fmt.Stringer
 
 	// Stop will stop the Resolver.
-	Stop() error
+	Stop()
 
 	// Stopped returns true if the Resolver is already stopped.
 	Stopped() bool

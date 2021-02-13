@@ -164,7 +164,7 @@ func (c *ASNCache) rawData2Ranger(ip net.IP) {
 	}
 
 	if cidr != nil {
-		c.ranger.Insert(&cacheRangerEntry{
+		_ = c.ranger.Insert(&cacheRangerEntry{
 			IPNet: *cidr,
 			Data:  data,
 		})

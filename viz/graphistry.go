@@ -40,7 +40,7 @@ type graphistryREST struct {
 }
 
 // WriteGraphistryData generates a JSON file to display the Amass graph using Graphistry.
-func WriteGraphistryData(output io.Writer, nodes []Node, edges []Edge) {
+func WriteGraphistryData(output io.Writer, nodes []Node, edges []Edge) error {
 	colors := map[string]int{
 		"subdomain": 3,
 		"domain":    5,
@@ -83,5 +83,5 @@ func WriteGraphistryData(output io.Writer, nodes []Node, edges []Edge) {
 
 	enc := json.NewEncoder(output)
 	enc.SetIndent("", "  ")
-	enc.Encode(restJSON)
+	return enc.Encode(restJSON)
 }

@@ -55,7 +55,11 @@ func NewBaseResolver(addr string, perSec int, logger *log.Logger) Resolver {
 		logger.Printf("Failed to establish a UDP connection to %s : %v", addr, err)
 		return nil
 	}
-	conn.SetReadDeadline(time.Time{})
+
+	if err := conn.SetReadDeadline(time.Time{}); err != nil {
+		logger.Printf("Failed to clear the read deadline for the UDP connection to %s : %v", addr, err)
+		return nil
+	}
 
 	r := &baseResolver{
 		done:      make(chan struct{}, 2),
@@ -83,7 +87,7 @@ func NewBaseResolver(addr string, perSec int, logger *log.Logger) Resolver {
 }
 
 // Stop implements the Resolver interface.
-func (r *baseResolver) Stop() error {
+func (r *baseResolver) Stop() {
 	r.Lock()
 	defer r.Unlock()
 
@@ -92,7 +96,6 @@ func (r *baseResolver) Stop() error {
 	}
 
 	r.stopped = true
-	return nil
 }
 
 // Stopped implements the Resolver interface.
@@ -207,7 +210,13 @@ func (r *baseResolver) sendQueries() {
 }
 
 func (r *baseResolver) writeMessage(req *resolveRequest) {
-	r.conn.SetWriteDeadline(time.Now().Add(2 * time.Second))
+	if err := r.conn.SetWriteDeadline(time.Now().Add(2 * time.Second)); err != nil {
+		estr := fmt.Sprintf("DNS error: Failed to set the write deadline: %v", err)
+
+		r.xchgs.remove(req.ID, req.Name)
+		r.returnRequest(req, makeResolveResult(nil, true, estr, TimeoutRcode))
+		return
+	}
 
 	if err := r.conn.WriteMsg(req.Msg); err != nil {
 		estr := fmt.Sprintf("DNS error: Failed to write the query msg: %v", err)

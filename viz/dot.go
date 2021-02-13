@@ -44,7 +44,7 @@ type dotGraph struct {
 }
 
 // WriteDOTData generates a DOT file to display the Amass graph.
-func WriteDOTData(output io.Writer, nodes []Node, edges []Edge) {
+func WriteDOTData(output io.Writer, nodes []Node, edges []Edge) error {
 	colors := map[string]string{
 		"subdomain": "green",
 		"domain":    "red",
@@ -77,5 +77,5 @@ func WriteDOTData(output io.Writer, nodes []Node, edges []Edge) {
 	}
 
 	t := template.Must(template.New("graph").Parse(dotTemplate))
-	t.Execute(output, graph)
+	return t.Execute(output, graph)
 }

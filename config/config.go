@@ -6,7 +6,6 @@ package config
 import (
 	"bufio"
 	"compress/gzip"
-	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -22,7 +21,6 @@ import (
 	"sync"
 
 	_ "github.com/OWASP/Amass/v3/config/statik" // The content being embedded into the binary
-	amasshttp "github.com/OWASP/Amass/v3/net/http"
 	"github.com/OWASP/Amass/v3/wordlist"
 	"github.com/caffix/stringset"
 	"github.com/go-ini/ini"
@@ -331,14 +329,6 @@ func GetListFromFile(path string) ([]string, error) {
 
 	s, err := getWordList(reader)
 	return s, err
-}
-
-func getWordlistByURL(ctx context.Context, url string) ([]string, error) {
-	page, err := amasshttp.RequestWebPage(ctx, url, nil, nil, nil)
-	if err != nil {
-		return nil, fmt.Errorf("Failed to obtain the wordlist at %s: %v", url, err)
-	}
-	return getWordList(strings.NewReader(page))
 }
 
 func getWordlistByFS(path string) ([]string, error) {

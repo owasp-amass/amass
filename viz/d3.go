@@ -277,7 +277,7 @@ type d3Graph struct {
 }
 
 // WriteD3Data generates a HTML file that displays the Amass graph using D3.
-func WriteD3Data(output io.Writer, nodes []Node, edges []Edge) {
+func WriteD3Data(output io.Writer, nodes []Node, edges []Edge) error {
 	colors := map[string]string{
 		"subdomain": "green",
 		"domain":    "red",
@@ -321,5 +321,5 @@ func WriteD3Data(output io.Writer, nodes []Node, edges []Edge) {
 	}
 
 	t := template.Must(template.New("graph").Parse(d3Template))
-	t.Execute(output, graph)
+	return t.Execute(output, graph)
 }

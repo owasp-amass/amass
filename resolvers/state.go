@@ -94,17 +94,16 @@ func (r *xchgManager) add(req *resolveRequest) error {
 	return nil
 }
 
-func (r *xchgManager) updateTimestamp(id uint16, name string) error {
+func (r *xchgManager) updateTimestamp(id uint16, name string) {
 	r.Lock()
 	defer r.Unlock()
 
 	key := xchgKey(id, name)
 	if _, found := r.xchgs[key]; !found {
-		return fmt.Errorf("A message for key %s was not found", key)
+		return
 	}
 
 	r.xchgs[key].Timestamp = time.Now()
-	return nil
 }
 
 func (r *xchgManager) remove(id uint16, name string) *resolveRequest {

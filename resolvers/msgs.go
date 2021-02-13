@@ -4,17 +4,12 @@
 package resolvers
 
 import (
-	"math/rand"
 	"net"
 	"strings"
 
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/miekg/dns"
 )
-
-func randomInt(min, max int) int {
-	return min + rand.Intn((max-min)+1)
-}
 
 // RemoveLastDot removes the '.' at the end of the provided FQDN.
 func RemoveLastDot(name string) string {

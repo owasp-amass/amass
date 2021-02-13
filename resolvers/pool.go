@@ -52,9 +52,9 @@ func NewResolverPool(resolvers []Resolver, delay time.Duration, baseline Resolve
 }
 
 // Stop implements the Resolver interface.
-func (rp *resolverPool) Stop() error {
+func (rp *resolverPool) Stop() {
 	if rp.hasBeenStopped {
-		return nil
+		return
 	}
 	rp.hasBeenStopped = true
 	close(rp.done)
@@ -68,7 +68,7 @@ func (rp *resolverPool) Stop() error {
 	}
 
 	rp.resolvers = []Resolver{}
-	return nil
+	return
 }
 
 // Stopped implements the Resolver interface.
