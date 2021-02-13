@@ -1,0 +1,43 @@
+name: amass
+version: git
+summary: In-depth Attack Surface Mapping and Asset Discovery.
+description: The OWASP Amass Project has developed a tool to help information security professionals perform network mapping of attack surfaces and external asset discovery using open source information gathering and active reconnaissance techniques.
+icon: images/snapcraft_icon.png
+
+license: Apache-2.0	
+
+base: core20
+grade: stable
+confinement: strict
+
+apps:
+  amass:
+    command: bin/amass
+    plugs:
+      - home
+      - network
+      - removable-media
+      - dot-amass
+
+plugs:
+  dot-amass:
+    interface: personal-files
+    write:
+      - $HOME/.amass
+      - $HOME/.config/amass
+
+parts:
+  go:
+    source-tag: go1.15
+  amass:
+    after: [go]
+    plugin: go
+    go-channel: latest/stable
+    source: ignored
+    source-type: git
+    override-pull: |
+      go get -d github.com/OWASP/Amass
+    override-build: |
+      go get github.com/OWASP/Amass
+    stage:
+      - bin/amass
