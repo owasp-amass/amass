@@ -21,6 +21,5 @@ jobs:
         uses: golangci/golangci-lint-action@v2
         with:
           version: v1.36
-          working-directory: ./...
           args: --timeout=5m
           only-new-issues: true
