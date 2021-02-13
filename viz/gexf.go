@@ -105,7 +105,9 @@ var (
 func WriteGEXFData(output io.Writer, nodes []Node, edges []Edge) error {
 	bufwr := bufio.NewWriter(output)
 
-	bufwr.WriteString("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
+	if _, err := bufwr.WriteString("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"); err != nil {
+		return err
+	}
 	bufwr.Flush()
 
 	doc := &gexf{

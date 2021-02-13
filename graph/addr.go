@@ -81,10 +81,14 @@ func (g *Graph) NamesToAddrs(uuid string, names ...string) ([]*NameAddrPair, err
 	} else {
 		nodes = eventNode.Out().Has(ntype, fqdn).Unique().Tag("name")
 	}
+
 	// Obtain the addresses that are associated with the event and adjacent names
 	adj := nodes.Out(arec, aaaarec).Has(ntype, address).Tag("address").In(dns).And(eventNode).Back("name")
-	adj.Iterate(context.Background()).TagValues(nil, f)
-	// Get the all the nodes for services names and CNAMES
+	if err := adj.Iterate(context.Background()).TagValues(nil, f); err != nil {
+		return nil, fmt.Errorf("%s: NamesToAddrs: Failed to iterate over tag values: %v", g.String(), err)
+	}
+
+	// Get all the nodes for services names and CNAMES
 	p := nodes
 	for i := 1; i <= 10; i++ {
 		if i == 1 {
@@ -93,7 +97,9 @@ func (g *Graph) NamesToAddrs(uuid string, names ...string) ([]*NameAddrPair, err
 			p = p.Out(cname)
 		}
 		addrs := p.Out(arec, aaaarec).Has(ntype, address).Tag("address").In(dns).And(eventNode).Back("name")
-		addrs.Iterate(context.Background()).TagValues(nil, f)
+		if err := addrs.Iterate(context.Background()).TagValues(nil, f); err != nil {
+			break
+		}
 	}
 
 	if len(nameAddrMap) == 0 {
@@ -204,11 +210,13 @@ func (g *Graph) HealAddressNodes(cache *net.ASNCache, uuid string) error {
 			cidrToNode[as.Prefix] = cidr
 		}
 
-		g.InsertEdge(&Edge{
+		if err := g.InsertEdge(&Edge{
 			Predicate: "contains",
 			From:      cidr,
 			To:        node,
-		})
+		}); err != nil {
+			return err
+		}
 	}
 
 	return nil

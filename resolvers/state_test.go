@@ -17,12 +17,14 @@ func TestXchgAddRemove(t *testing.T) {
 	xchg := newXchgManager()
 	msg := QueryMsg(name, dns.TypeA)
 
-	xchg.add(&resolveRequest{
+	if err := xchg.add(&resolveRequest{
 		ID:    msg.Id,
 		Name:  name,
 		Qtype: dns.TypeA,
 		Msg:   msg,
-	})
+	}); err != nil {
+		t.Errorf("Failed to add the request")
+	}
 
 	req := xchg.remove(msg.Id, msg.Question[0].Name)
 	if req == nil || req.Msg == nil || name != strings.ToLower(RemoveLastDot(req.Msg.Question[0].Name)) {
@@ -46,7 +48,9 @@ func TestXchgUpdateTimestamp(t *testing.T) {
 		t.Errorf("Expected the new request to have a zero value timestamp")
 	}
 
-	xchg.add(req)
+	if err := xchg.add(req); err != nil {
+		t.Errorf("Failed to add the request")
+	}
 	xchg.updateTimestamp(msg.Id, name)
 
 	req = xchg.remove(msg.Id, msg.Question[0].Name)
@@ -62,25 +66,29 @@ func TestXchgRemoveExpired(t *testing.T) {
 	QueryTimeout = time.Second
 	for _, name := range names {
 		msg := QueryMsg(name, dns.TypeA)
-		xchg.add(&resolveRequest{
+		if err := xchg.add(&resolveRequest{
 			ID:        msg.Id,
 			Name:      name,
 			Qtype:     dns.TypeA,
 			Msg:       msg,
 			Timestamp: time.Now(),
-		})
+		}); err != nil {
+			t.Errorf("Failed to add the request")
+		}
 	}
 
 	// Add one request that should not be removed with the others
 	name := "vpn.owasp.org"
 	msg := QueryMsg(name, dns.TypeA)
-	xchg.add(&resolveRequest{
+	if err := xchg.add(&resolveRequest{
 		ID:        msg.Id,
 		Name:      name,
 		Qtype:     dns.TypeA,
 		Msg:       msg,
 		Timestamp: time.Now().Add(3 * time.Second),
-	})
+	}); err != nil {
+		t.Errorf("Failed to add the request")
+	}
 
 	if len(xchg.removeExpired()) > 0 {
 		t.Errorf("The removeExpired method returned requests too early")

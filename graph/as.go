@@ -23,8 +23,9 @@ func (g *Graph) InsertAS(asn, desc, source, tag, eventID string) (Node, error) {
 	if err == nil && len(p) > 0 {
 		if p[0].Value != desc {
 			// Update the 'desc' property
-			g.db.DeleteProperty(asNode, p[0].Predicate, p[0].Value)
-			insert = true
+			if err := g.db.DeleteProperty(asNode, p[0].Predicate, p[0].Value); err == nil {
+				insert = true
+			}
 		}
 	} else {
 		// The description was not found
