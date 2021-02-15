@@ -84,7 +84,7 @@ The intel subcommand can help you discover additional root domain names associat
 | -noresolvscore | Disable resolver reliability scoring | amass intel -cidr 104.154.0.0/15 -noresolvscore |
 | -o | Path to the text output file | amass intel -o out.txt -whois -d example.com |
 | -org | Search string provided against AS description information | amass intel -org Facebook |
-| -p | Ports separated by commas (default: 443, 80) | amass intel -cidr 104.154.0.0/15 -p 443,8080 |
+| -p | Ports separated by commas (default: 80, 443) | amass intel -cidr 104.154.0.0/15 -p 443,8080 |
 | -r | IP addresses of preferred DNS resolvers (can be used multiple times) | amass intel -r 8.8.8.8,1.1.1.1 -whois -d example.com |
 | -rf | Path to a file providing preferred DNS resolvers | amass intel -rf data/resolvers.txt -whois -d example.com |
 | -src | Print data sources for the discovered names | amass intel -src -whois -d example.com |

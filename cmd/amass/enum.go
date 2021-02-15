@@ -106,7 +106,7 @@ func defineEnumArgumentFlags(enumFlags *flag.FlagSet, args *enumArgs) {
 	enumFlags.StringVar(&args.Interface, "iface", "", "Provide the network interface to send traffic through")
 	enumFlags.IntVar(&args.MaxDNSQueries, "max-dns-queries", 0, "Maximum number of DNS queries per second")
 	enumFlags.IntVar(&args.MinForRecursive, "min-for-recursive", 1, "Subdomain labels seen before recursive brute forcing (Default: 1)")
-	enumFlags.Var(&args.Ports, "p", "Ports separated by commas (default: 443, 80)")
+	enumFlags.Var(&args.Ports, "p", "Ports separated by commas (default: 80, 443)")
 	enumFlags.Var(&args.Resolvers, "r", "IP addresses of preferred DNS resolvers (can be used multiple times)")
 	enumFlags.IntVar(&args.Timeout, "timeout", 0, "Number of minutes to let enumeration run before quitting")
 }
