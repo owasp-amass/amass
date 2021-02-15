@@ -5,19 +5,43 @@ name = "ArchiveIt"
 type = "archive"
 
 function start()
-    setratelimit(5)
+    setratelimit(1)
 end
 
 function vertical(ctx, domain)
     scrape(ctx, {['url']=firsturl(domain)})
-    checkratelimit()
-    scrape(ctx, {['url']=secondurl(domain)})
+
+    local found = check(domain)
+    if not found then
+        return
+    end
+
+    local p = 1
+    while(true) do
+        local ok = scrape(ctx, {['url']=secondurl(domain, p)})
+        if not ok then
+            break
+        end
+
+        checkratelimit()
+        p = p + 1
+   end
 end
 
 function firsturl(domain)
     return "https://wayback.archive-it.org/all/timemap/cdx?matchType=domain&fl=original&collapse=urlkey&url=" .. domain
 end
 
-function secondurl(domain)
-    return "https://archive-it.org/explore?show=Sites&q=" .. domain
+function secondurl(domain, pagenum)
+    return "https://archive-it.org/explore?show=Sites&q=" .. domain .. "&page=" .. pagenum
+end
+
+function check(domain)
+    local resp = request("https://archive-it.org/explore?show=Sites&q=" .. domain)
+    local match = find(resp, "No metadata results")
+    if (match == nil or #match == 0) then
+        return true
+    end
+
+    return false
 end
