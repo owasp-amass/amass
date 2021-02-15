@@ -608,6 +608,17 @@ func (s *Script) scrape(L *lua.LState) int {
 	found = false
 	filter := stringfilter.NewStringFilter()
 	for _, name := range s.subre.FindAllString(resp, -1) {
+		inDomains := false
+		for _, domain := range cfg.Domains() {
+			if name == domain {
+				inDomains = true
+				break
+			}
+		}
+		if inDomains {
+			continue
+		}
+
 		found = true
 		if !filter.Duplicate(name) {
 			genNewNameEvent(c.Ctx, s.sys, s, http.CleanName(name))
