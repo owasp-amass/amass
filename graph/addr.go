@@ -199,7 +199,9 @@ func (g *Graph) HealAddressNodes(cache *net.ASNCache, uuid string) error {
 		if !found {
 			cidr, err = g.db.ReadNode(as.Prefix, "netblock")
 			if err != nil {
-				g.InsertInfrastructure(as.ASN, as.Description, addr, as.Prefix, as.Source, as.Tag, uuid)
+				if err := g.InsertInfrastructure(as.ASN, as.Description, addr, as.Prefix, as.Source, as.Tag, uuid); err != nil {
+					continue
+				}
 
 				cidr, err = g.db.ReadNode(as.Prefix, "netblock")
 				if err != nil {

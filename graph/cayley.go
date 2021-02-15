@@ -84,10 +84,7 @@ func NewCayleyGraph(system, path string, options string) *CayleyGraph {
 		return nil
 	}
 
-	if err := graph.InitQuadStore(system, path, opts); err != nil {
-		return nil
-	}
-
+	_ = graph.InitQuadStore(system, path, opts)
 	store, err := cayley.NewGraph(system, path, opts)
 	if err != nil {
 		return nil
