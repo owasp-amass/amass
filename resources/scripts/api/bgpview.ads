@@ -11,40 +11,57 @@ function start()
 end
 
 function asn(ctx, addr, asn)
+    local cfg = datasrc_config()
+    if (cfg == nil) then
+        return
+    end
+
+    local prefix
     if (asn == 0) then
         if (addr == "") then
             return
         end
 
-        local ip, cidr = getcidr(addr)
+        local ip, prefix = getcidr(ctx, addr, cfg.ttl)
         if (ip == "") then
             return
         end
 
-        asn = getasn(ip, cidr)
+        asn = getasn(ctx, ip, prefix, cfg.ttl)
         if (asn == 0) then
             return
         end
     end
 
-    local a = asinfo(asn)
+    local a = asinfo(ctx, asn, cfg.ttl)
     if (a == nil) then
         return
+    end
+
+    local cidrs = netblocks(ctx, asn, cfg.ttl)
+    if (#cidrs == 0) then
+        return
+    end
+
+    if (prefix == "") then
+        prefix = cidrs[1]
+        parts = split(prefix, "/")
+        addr = parts[1]
     end
 
     newasn(ctx, {
         ['addr']=addr,
         ['asn']=asn,
-        ['prefix']=a.prefix,
+        ['prefix']=prefix,
         ['cc']=a.cc,
         ['registry']=a.registry,
         ['desc']=a.desc,
-        ['netblocks']=netblocks(asn),
+        ['netblocks']=cidrs,
     })
 end
 
-function getcidr(addr)
-    local resp = cacherequest("https://api.bgpview.io/ip/" .. addr)
+function getcidr(ctx, addr, ttl)
+    local resp = cacherequest(ctx, "https://api.bgpview.io/ip/" .. addr, ttl)
     if (resp == "") then
         return "", 0
     end
@@ -59,8 +76,9 @@ function getcidr(addr)
     return ip, cidr
 end
 
-function getasn(ip, cidr)
-    local resp = cacherequest("https://api.bgpview.io/prefix/" .. ip .. "/" .. tostring(cidr))
+function getasn(ctx, ip, cidr, ttl)
+    local u = "https://api.bgpview.io/prefix/" .. ip .. "/" .. tostring(cidr)
+    local resp = cacherequest(ctx, u, ttl)
     if resp == "" then
         return 0
     end
@@ -78,8 +96,8 @@ function getasn(ip, cidr)
     return j.data.asns[last].asn
 end
 
-function asinfo(asn)
-    resp = cacherequest("https://api.bgpview.io/asn/" .. tostring(asn))
+function asinfo(ctx, asn, ttl)
+    resp = cacherequest(ctx, "https://api.bgpview.io/asn/" .. tostring(asn), ttl)
     if (resp == "") then
         return nil
     end
@@ -94,17 +112,25 @@ function asinfo(asn)
         registry = j.data.rir_allocation.rir_name
     end
 
+    local name = ""
+    if j.data.name ~= nil {
+        name = name .. j.data.name
+    }
+    if j.data.description_full ~= nil {
+        name = name .. " - " .. j.data.description_full
+    }
+
     return {
         ['asn']=asn,
-        prefix=ip .. "/" .. tostring(cidr),
-        desc=j.data.name .. " - " .. j.data.description_full,
+        desc=name,
         cc=j.data.country_code,
         ['registry']=registry,
     }
 end
 
-function netblocks(asn)
-    local resp = cacherequest("https://api.bgpview.io/asn/" .. tostring(asn) .. "/prefixes")
+function netblocks(ctx, asn, ttl)
+    local u = "https://api.bgpview.io/asn/" .. tostring(asn) .. "/prefixes"
+    local resp = cacherequest(ctx, u, ttl)
     if (resp == "") then
         return nil
     end
@@ -124,12 +150,11 @@ function netblocks(asn)
     return netblocks
 end
 
-function cacherequest(url)
+function cacherequest(ctx, url, ttl)
     local resp
-    local cfg = datasrc_config()
     -- Check if the response data is in the graph database
-    if (cfg and cfg.ttl ~= nil and cfg.ttl > 0) then
-        resp = obtain_response(url, cfg.ttl)
+    if (ttl ~= nil and ttl > 0) then
+        resp = obtain_response(url, ttl)
     end
 
     if (resp == nil or resp == "") then
@@ -144,10 +169,26 @@ function cacherequest(url)
             return ""
         end
 
-        if (cfg and cfg.ttl ~= nil and cfg.ttl > 0) then
+        if (ttl ~= nil and ttl > 0) then
             cache_response(url, resp)
         end
     end
 
     return resp
+end
+
+function split(str, delim)
+    local result = {}
+    local pattern = "[^%" .. delim .. "]+"
+
+    local matches = find(str, pattern)
+    if (matches == nil or #matches == 0) then
+        return result
+    end
+
+    for i, match in pairs(matches) do
+        table.insert(result, match)
+    end
+
+    return result
 end

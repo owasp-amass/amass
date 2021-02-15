@@ -5,9 +5,9 @@ name = "ArchiveToday"
 type = "archive"
 
 function start()
-    setratelimit(5)
+    setratelimit(2)
 end
 
 function vertical(ctx, domain)
-    scrape(ctx, "http://archive.is/*." .. domain)
+    scrape(ctx, {url="http://archive.is/*." .. domain})
 end
