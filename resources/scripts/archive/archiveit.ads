@@ -37,7 +37,12 @@ function secondurl(domain, pagenum)
 end
 
 function check(domain)
-    local resp = request("https://archive-it.org/explore?show=Sites&q=" .. domain)
+    local u = "https://archive-it.org/explore?show=Sites&q=" .. domain
+    local resp, err = request({['url']=u})
+    if (err ~= nil and err ~= "") then
+        return
+    end
+
     local match = find(resp, "No metadata results")
     if (match == nil or #match == 0) then
         return true
