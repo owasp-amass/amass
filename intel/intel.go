@@ -23,6 +23,7 @@ import (
 	"github.com/caffix/service"
 	"github.com/caffix/stringset"
 	"github.com/miekg/dns"
+	"golang.org/x/net/publicsuffix"
 )
 
 // Collection is the object type used to execute a open source information gathering with Amass.
@@ -245,8 +246,8 @@ func (c *Collection) ReverseWhois() error {
 	collect := func(req *requests.WhoisRequest) {
 		ch <- time.Now()
 
-		for _, d := range req.NewDomains {
-			if !filter.Duplicate(d) {
+		for _, name := range req.NewDomains {
+			if d, err := publicsuffix.EffectiveTLDPlusOne(name); err == nil && !filter.Duplicate(d) {
 				c.Output <- &requests.Output{
 					Name:    d,
 					Domain:  d,

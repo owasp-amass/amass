@@ -11,24 +11,24 @@ function start()
 end
 
 function asn(ctx, addr, asn)
-    if asn == 0 then
-        if addr == "" then
+    if (asn == 0) then
+        if (addr == "") then
             return
         end
 
         local ip, cidr = getcidr(addr)
-        if ip == "" then
+        if (ip == "") then
             return
         end
 
         asn = getasn(ip, cidr)
-        if asn == 0 then
+        if (asn == 0) then
             return
         end
     end
 
     local a = asinfo(asn)
-    if a == nil then
+    if (a == nil) then
         return
     end
 
@@ -45,7 +45,7 @@ end
 
 function getcidr(addr)
     local resp = cacherequest("https://api.bgpview.io/ip/" .. addr)
-    if resp == "" then
+    if (resp == "") then
         return "", 0
     end
 
@@ -71,7 +71,7 @@ function getasn(ip, cidr)
     end
 
     local last = #(j.data.asns)
-    if last == 0 then
+    if (last == 0) then
         return 0
     end
 
@@ -80,7 +80,7 @@ end
 
 function asinfo(asn)
     resp = cacherequest("https://api.bgpview.io/asn/" .. tostring(asn))
-    if resp == "" then
+    if (resp == "") then
         return nil
     end
 
@@ -90,7 +90,7 @@ function asinfo(asn)
     end
 
     local registry = ""
-    if #(j.data.rir_allocation) > 0 then
+    if (#(j.data.rir_allocation) > 0) then
         registry = j.data.rir_allocation.rir_name
     end
 
@@ -105,7 +105,7 @@ end
 
 function netblocks(asn)
     local resp = cacherequest("https://api.bgpview.io/asn/" .. tostring(asn) .. "/prefixes")
-    if resp == "" then
+    if (resp == "") then
         return nil
     end
 
