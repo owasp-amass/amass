@@ -70,7 +70,7 @@ func (g *CayleyGraph) ReadProperties(node Node, predicates ...string) ([]*Proper
 	}
 	p = p.Tag("object")
 
-	p.Iterate(context.TODO()).TagValues(nil, func(m map[string]quad.Value) {
+	err := p.Iterate(context.Background()).TagValues(nil, func(m map[string]quad.Value) {
 		// Check if this is actually a node and not a property
 		if !isIRI(m["object"]) {
 			properties = append(properties, &Property{
@@ -79,10 +79,9 @@ func (g *CayleyGraph) ReadProperties(node Node, predicates ...string) ([]*Proper
 			})
 		}
 	})
-
 	// Given the Amass data model, valid nodes should always have at least
 	// one property, and for that reason, it doesn't need to be checked here
-	return properties, nil
+	return properties, err
 }
 
 // CountProperties implements the GraphDatabase interface.
@@ -112,12 +111,12 @@ func (g *CayleyGraph) CountProperties(node Node, predicates ...string) (int, err
 	}
 
 	var count int
-	p.Iterate(context.Background()).EachValue(nil, func(value quad.Value) {
+	err := p.Iterate(context.Background()).EachValue(nil, func(value quad.Value) {
 		if !isIRI(value) {
 			count++
 		}
 	})
-	return count, nil
+	return count, err
 }
 
 // DeleteProperty implements the GraphDatabase interface.

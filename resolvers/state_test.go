@@ -112,12 +112,14 @@ func TestXchgRemoveAll(t *testing.T) {
 	QueryTimeout = time.Second
 	for _, name := range names {
 		msg := QueryMsg(name, dns.TypeA)
-		xchg.add(&resolveRequest{
+		if err := xchg.add(&resolveRequest{
 			ID:    msg.Id,
 			Name:  name,
 			Qtype: dns.TypeA,
 			Msg:   msg,
-		})
+		}); err != nil {
+			t.Errorf("Failed to add the request")
+		}
 	}
 
 	set := stringset.New(names...)

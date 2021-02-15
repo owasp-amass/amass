@@ -116,7 +116,7 @@ func (g *CayleyGraph) ReadInEdges(node Node, predicates ...string) ([]*Edge, err
 	p = p.Has(quad.IRI("type")).Tag("object")
 
 	var edges []*Edge
-	p.Iterate(context.TODO()).TagValues(nil, func(m map[string]quad.Value) {
+	err := p.Iterate(context.TODO()).TagValues(nil, func(m map[string]quad.Value) {
 		edges = append(edges, &Edge{
 			Predicate: valToStr(m["predicate"]),
 			From:      valToStr(m["object"]),
@@ -124,10 +124,10 @@ func (g *CayleyGraph) ReadInEdges(node Node, predicates ...string) ([]*Edge, err
 		})
 	})
 
-	if len(edges) == 0 {
+	if err == nil && len(edges) == 0 {
 		return nil, fmt.Errorf("%s: ReadInEdges: Failed to discover edges coming into the node %s", g.String(), nstr)
 	}
-	return edges, nil
+	return edges, err
 }
 
 // CountInEdges implements the GraphDatabase interface.
@@ -180,7 +180,7 @@ func (g *CayleyGraph) ReadOutEdges(node Node, predicates ...string) ([]*Edge, er
 	p = p.Has(quad.IRI("type")).Tag("object")
 
 	var edges []*Edge
-	p.Iterate(context.TODO()).TagValues(nil, func(m map[string]quad.Value) {
+	err := p.Iterate(context.TODO()).TagValues(nil, func(m map[string]quad.Value) {
 		edges = append(edges, &Edge{
 			Predicate: valToStr(m["predicate"]),
 			From:      node,
@@ -188,10 +188,10 @@ func (g *CayleyGraph) ReadOutEdges(node Node, predicates ...string) ([]*Edge, er
 		})
 	})
 
-	if len(edges) == 0 {
+	if err == nil && len(edges) == 0 {
 		return nil, fmt.Errorf("%s: ReadOutEdges: Failed to discover edges leaving the node %s", g.String(), nstr)
 	}
-	return edges, nil
+	return edges, err
 }
 
 // CountOutEdges implements the GraphDatabase interface.

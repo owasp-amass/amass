@@ -45,7 +45,7 @@ func (g *CayleyGraph) AllNodesOfType(ntypes ...string) ([]Node, error) {
 
 	var nodes []Node
 	filter = stringset.New()
-	p.Iterate(context.Background()).EachValue(nil, func(value quad.Value) {
+	err := p.Iterate(context.Background()).EachValue(nil, func(value quad.Value) {
 		nstr := valToStr(value)
 
 		if !filter.Has(nstr) {
@@ -54,10 +54,10 @@ func (g *CayleyGraph) AllNodesOfType(ntypes ...string) ([]Node, error) {
 		}
 	})
 
-	if len(nodes) == 0 {
+	if err == nil && len(nodes) == 0 {
 		return nodes, fmt.Errorf("%s: AllNodesOfType: No nodes found", g.String())
 	}
-	return nodes, nil
+	return nodes, err
 }
 
 // AllOutNodes returns all the nodes that the parameter node has out edges to.
@@ -68,7 +68,7 @@ func (g *CayleyGraph) AllOutNodes(node Node) ([]Node, error) {
 	var nodes []Node
 	filter := stringset.New()
 	p := cayley.StartPath(g.store, quad.IRI(g.NodeToID(node))).Out().Has(quad.IRI("type"))
-	p.Iterate(context.Background()).EachValue(nil, func(value quad.Value) {
+	err := p.Iterate(context.Background()).EachValue(nil, func(value quad.Value) {
 		nstr := valToStr(value)
 
 		if !filter.Has(nstr) {
@@ -77,11 +77,10 @@ func (g *CayleyGraph) AllOutNodes(node Node) ([]Node, error) {
 		}
 	})
 
-	if len(nodes) == 0 {
+	if err == nil && len(nodes) == 0 {
 		return nodes, fmt.Errorf("%s: AllOutNodes: No nodes found that %s has out edges to", g.String(), node)
 	}
-
-	return nodes, nil
+	return nodes, err
 }
 
 // InsertNode implements the GraphDatabase interface.
@@ -125,21 +124,23 @@ func (g *CayleyGraph) DeleteNode(node Node) error {
 
 	id := g.NodeToID(node)
 	if id == "" {
-		return fmt.Errorf("%s: removeAllNodeQuads: Empty node id provided", g.String())
+		return fmt.Errorf("%s: DeleteNode: Empty node id provided", g.String())
 	}
 
 	// Check that a node with 'id' as a subject already exists
 	if !g.nodeExists(id, "") {
-		return fmt.Errorf("%s: removeAllNodeQuads: Node %s does not exist", g.String(), id)
+		return fmt.Errorf("%s: DeleteNode: Node %s does not exist", g.String(), id)
 	}
 
 	// Build the transaction that will perform the deletion
 	t := cayley.NewTransaction()
 	p := cayley.StartPath(g.store, quad.IRI(id)).Tag("subject").BothWithTags([]string{"predicate"}).Tag("object")
-	p.Iterate(context.TODO()).TagValues(nil, func(m map[string]quad.Value) {
+	err := p.Iterate(context.TODO()).TagValues(nil, func(m map[string]quad.Value) {
 		t.RemoveQuad(quad.Make(m["subject"], m["predicate"], m["object"], nil))
 	})
-
+	if err != nil {
+		return fmt.Errorf("%s: DeleteNode: Failed to iterate over %s tags: %v", g.String(), id, err)
+	}
 	// Attempt to perform the deletion transaction
 	return g.store.ApplyTransaction(t)
 }
@@ -156,16 +157,19 @@ func (g *CayleyGraph) WriteNodeQuads(cg *CayleyGraph, nodes []Node) error {
 
 	var quads []quad.Quad
 	p := cayley.StartPath(cg.store, nodeValues...).Tag("subject").OutWithTags([]string{"predicate"}).Tag("object")
-	p.Iterate(context.TODO()).TagValues(nil, func(m map[string]quad.Value) {
+	err := p.Iterate(context.TODO()).TagValues(nil, func(m map[string]quad.Value) {
 		quads = append(quads, quad.Make(m["subject"], m["predicate"], m["object"], nil))
 	})
+	if err != nil {
+		return fmt.Errorf("%s: WriteNodeQuads: Failed to iterate over node tags: %v", g.String(), err)
+	}
 
 	opts := make(graph.Options)
 	opts["ignore_missing"] = true
 	opts["ignore_duplicate"] = true
 
 	w, err := writer.NewSingleReplication(g.store, opts)
-	if len(quads) > 0 {
+	if err == nil && len(quads) > 0 {
 		err = w.AddQuadSet(quads)
 	}
 	return err
