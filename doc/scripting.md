@@ -123,7 +123,7 @@ Amass executes the `resolved` callback function after successfully resolving the
 
 ```lua
 function resolved(ctx, name, domain, records)
-    crawl(ctx, "https://" .. name))
+    crawl(ctx, "https://" .. name)
 end
 ```
 
@@ -149,7 +149,7 @@ Amass executes the `subdomain` callback function after successfully resolving th
 ```lua
 function subdomain(ctx, name, domain, times)
     if times == 1 then
-        crawl(ctx, "https://" .. name))
+        crawl(ctx, "https://" .. name)
     end
 end
 ```
@@ -337,7 +337,7 @@ A script can check if a FQDN is in scope of the enumeration process by executing
 ```lua
 function get_names(ctx, sub)
     if inscope(ctx, sub) then
-        crawl(ctx, "https://" .. sub))
+        crawl(ctx, "https://" .. sub)
     end
 end
 ```
@@ -370,7 +370,7 @@ function vertical(ctx, domain)
     -- Obtain several subdomain names
     for i, n in pairs(subs) do
         checkratelimit()
-        crawl(ctx, "https://" .. n))
+        crawl(ctx, "https://" .. n)
     end
 end
 ```
@@ -471,7 +471,7 @@ The `params` table has the following fields:
 
 ### `scrape` Function
 
-The `scrape` function performs HTTP(s) client requests for Amass data source scripts. The function returns a boolean value indicating the success of the client request. The body of the response is automatically checked for subdomain names that are in scope of the enumeration process. The function accepts an options table that can include the fields shown below.
+The `scrape` function performs HTTP(s) client requests for Amass data source scripts. The body of the response is automatically checked for subdomain names that are in scope of the enumeration process. The function returns a boolean value indicating the success of the client request, and it also returns `false` if no subdomain was found in the body. The function accepts an options table that can include the fields shown below.
 
 ```lua
 function vertical(ctx, domain)
