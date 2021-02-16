@@ -123,7 +123,7 @@ Amass executes the `resolved` callback function after successfully resolving the
 
 ```lua
 function resolved(ctx, name, domain, records)
-    crawl(ctx, "https://" .. name)
+    crawl(ctx, "https://" .. name, 0)
 end
 ```
 
@@ -149,7 +149,7 @@ Amass executes the `subdomain` callback function after successfully resolving th
 ```lua
 function subdomain(ctx, name, domain, times)
     if times == 1 then
-        crawl(ctx, "https://" .. name)
+        crawl(ctx, "https://" .. name, 0)
     end
 end
 ```
@@ -337,7 +337,7 @@ A script can check if a FQDN is in scope of the enumeration process by executing
 ```lua
 function get_names(ctx, sub)
     if inscope(ctx, sub) then
-        crawl(ctx, "https://" .. sub)
+        crawl(ctx, "https://" .. sub, 0)
     end
 end
 ```
@@ -370,7 +370,7 @@ function vertical(ctx, domain)
     -- Obtain several subdomain names
     for i, n in pairs(subs) do
         checkratelimit()
-        crawl(ctx, "https://" .. n)
+        crawl(ctx, "https://" .. n, 0)
     end
 end
 ```
