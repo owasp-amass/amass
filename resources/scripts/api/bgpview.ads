@@ -113,12 +113,12 @@ function asinfo(ctx, asn, ttl)
     end
 
     local name = ""
-    if j.data.name ~= nil {
+    if (j.data.name ~= nil) then
         name = name .. j.data.name
-    }
-    if j.data.description_full ~= nil {
+    end
+    if (j.data.description_full ~= nil) then
         name = name .. " - " .. j.data.description_full
-    }
+    end
 
     return {
         ['asn']=asn,

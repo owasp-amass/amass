@@ -1,4 +1,4 @@
--- Copyright 2017 Jeff Foley. All rights reserved.
+-- Copyright 2017-2021 Jeff Foley. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 local url = require("url")
@@ -13,11 +13,12 @@ end
 
 function vertical(ctx, domain)
     getnames(ctx, newapiurl(domain))
+    checkratelimit()
     getnames(ctx, oldapiurl(domain))
 end
 
-function getnames(ctx, url)
-    local page, err = request(ctx, {['url']=url})
+function getnames(ctx, vurl)
+    local page, err = request(ctx, {['url']=vurl})
     if (err ~= nil and err ~= "") then
         return
     end
