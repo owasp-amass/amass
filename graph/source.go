@@ -154,7 +154,9 @@ func (g *Graph) CacheSourceData(source, tag, query, resp string) error {
 	}
 
 	// Remove previously cached responses for the same query
-	g.deleteCachedData(source, query)
+	if err := g.deleteCachedData(source, query); err != nil {
+		return err
+	}
 
 	ts := time.Now().Format(time.RFC3339)
 	rnode, err := g.InsertNodeIfNotExist(source+"-response-"+ts, "response")

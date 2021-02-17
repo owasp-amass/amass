@@ -99,7 +99,10 @@ func (c *Config) loadDataSourceSettings(cfg *ini.File) error {
 
 		dsc := c.GetDataSourceConfig(name)
 		// Parse the Database information and assign to the Config
-		child.MapTo(dsc)
+		if err := child.MapTo(dsc); err != nil {
+			continue
+		}
+
 		if c.MinimumTTL > dsc.TTL {
 			dsc.TTL = c.MinimumTTL
 		}
@@ -108,8 +111,9 @@ func (c *Config) loadDataSourceSettings(cfg *ini.File) error {
 			setName := strings.Split(cr.Name(), ".")[2]
 
 			creds := &Credentials{Name: setName}
-			cr.MapTo(creds)
-			dsc.AddCredentials(creds)
+			if err := cr.MapTo(creds); err != nil {
+				dsc.AddCredentials(creds)
+			}
 		}
 	}
 
