@@ -27,17 +27,14 @@ plugs:
       - $HOME/.config/amass
 
 parts:
-  go:
-    source-tag: go1.15
   amass:
-    after: [go]
     plugin: go
     go-channel: latest/stable
     source: ignored
     source-type: git
     override-pull: |
-      go get -d github.com/OWASP/Amass/v3/
+      go get -d github.com/OWASP/Amass/cmd/amass
     override-build: |
-      go get github.com/OWASP/Amass/v3/...
+      go get github.com/OWASP/Amass/cmd/amass
     stage:
       - bin/amass

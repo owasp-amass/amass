@@ -76,7 +76,7 @@ func defineIntelArgumentFlags(intelFlags *flag.FlagSet, args *intelArgs) {
 	intelFlags.Var(&args.Excluded, "exclude", "Data source names separated by commas to be excluded")
 	intelFlags.Var(&args.Included, "include", "Data source names separated by commas to be included")
 	intelFlags.IntVar(&args.MaxDNSQueries, "max-dns-queries", 0, "Maximum number of concurrent DNS queries")
-	intelFlags.Var(&args.Ports, "p", "Ports separated by commas (default: 443)")
+	intelFlags.Var(&args.Ports, "p", "Ports separated by commas (default: 80, 443)")
 	intelFlags.Var(&args.Resolvers, "r", "IP addresses of preferred DNS resolvers (can be used multiple times)")
 	intelFlags.IntVar(&args.Timeout, "timeout", 0, "Number of minutes to let enumeration run before quitting")
 }
@@ -171,6 +171,10 @@ func runIntelCommand(clArgs []string) {
 	if !args.Options.ReverseWhois && args.OrganizationName == "" && !args.Options.ListSources &&
 		len(args.Addresses) == 0 && len(args.CIDRs) == 0 && len(args.ASNs) == 0 {
 		commandUsage(intelUsageMsg, intelCommand, intelBuf)
+		os.Exit(1)
+	}
+	if !cfg.Active && len(args.Ports) > 0 {
+		r.Fprintln(color.Error, "Ports can only be scanned in the active mode")
 		os.Exit(1)
 	}
 
