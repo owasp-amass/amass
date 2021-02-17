@@ -1,4 +1,4 @@
--- Copyright 2017 Jeff Foley. All rights reserved.
+-- Copyright 2017-2021 Jeff Foley. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 local url = require("url")
@@ -12,12 +12,13 @@ function start()
 end
 
 function vertical(ctx, domain)
-    new(ctx, domain)
-    old(ctx, domain)
+    getnames(ctx, newapiurl(domain))
+    checkratelimit()
+    getnames(ctx, oldapiurl(domain))
 end
 
-function new(ctx, domain)
-    local page, err = request(ctx, {['url']=buildurl(domain)})
+function getnames(ctx, vurl)
+    local page, err = request(ctx, {['url']=vurl})
     if (err ~= nil and err ~= "") then
         return
     end
@@ -34,7 +35,7 @@ function new(ctx, domain)
     end
 end
 
-function buildurl(domain)
+function newapiurl(domain)
     local params = {
         ['domain']=domain,
         ['include_subdomains']="true",
@@ -45,25 +46,7 @@ function buildurl(domain)
     return "https://api.certspotter.com/v1/issuances?" .. url.build_query_string(params)
 end
 
-function old(ctx, domain)
-    local page, err = request(ctx, {['url']=buildoldurl(domain)})
-    if (err ~= nil and err ~= "") then
-        return
-    end
-
-    local resp = json.decode(page)
-    if (resp == nil or #resp == 0) then
-        return
-    end
-
-    for i, r in pairs(resp) do
-        for i, name in pairs(r['dns_names']) do
-            sendnames(ctx, name)
-        end
-    end
-end
-
-function buildoldurl(domain)
+function oldapiurl(domain)
     return "https://certspotter.com/api/v0/certs?domain=" .. domain
 end
 

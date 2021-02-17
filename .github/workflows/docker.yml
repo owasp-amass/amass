@@ -1,8 +1,9 @@
 name: docker
 
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - 'v*.*.*'
 
 jobs:
   multi-registries:

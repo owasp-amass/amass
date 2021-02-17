@@ -101,7 +101,7 @@ func (g *Graph) nodeIDsOfType(ntype string, events ...string) []string {
 
 	var ids []string
 	p = p.Has(quad.IRI("type"), quad.String(ntype)).Unique()
-	p.Iterate(context.Background()).EachValue(nil, func(value quad.Value) {
+	_ = p.Iterate(context.Background()).EachValue(nil, func(value quad.Value) {
 		ids = append(ids, valToStr(value))
 	})
 
