@@ -17,7 +17,7 @@ type resolverPool struct {
 	sync.Mutex
 	done chan struct{}
 	// Logger for error messages
-	log            *log.Logger
+	log            Logger
 	baseline       Resolver
 	resolvers      []Resolver
 	curIdx         int
@@ -28,7 +28,7 @@ type resolverPool struct {
 }
 
 // NewResolverPool initializes a ResolverPool that uses the provided Resolvers.
-func NewResolverPool(resolvers []Resolver, delay time.Duration, baseline Resolver, logger *log.Logger) Resolver {
+func NewResolverPool(resolvers []Resolver, delay time.Duration, baseline Resolver, logger Logger) Resolver {
 	if len(resolvers) == 0 {
 		return nil
 	}

@@ -28,13 +28,13 @@ type baseResolver struct {
 	readMsgs         queue.Queue
 	wildcardChannels *wildcardChans
 	address          string
-	log              *log.Logger
+	log              Logger
 	perSec           int
 	conn             *dns.Conn
 }
 
 // NewBaseResolver initializes a Resolver that send DNS queries to the provided IP address.
-func NewBaseResolver(addr string, perSec int, logger *log.Logger) Resolver {
+func NewBaseResolver(addr string, perSec int, logger Logger) Resolver {
 	if _, _, err := net.SplitHostPort(addr); err != nil {
 		// Add the default port number to the IP address
 		addr = net.JoinHostPort(addr, "53")

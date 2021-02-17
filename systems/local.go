@@ -7,7 +7,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"runtime"
 	"sort"
@@ -22,6 +21,12 @@ import (
 	"github.com/caffix/service"
 	"github.com/miekg/dns"
 )
+
+type Logger interface {
+	Printf(format string, v ...interface{})
+	Print(v ...interface{})
+	Println(v ...interface{})
+}
 
 // LocalSystem implements a System to be executed within a single process.
 type LocalSystem struct {
@@ -324,7 +329,7 @@ func publicResolverSetup(cfg *config.Config, max int) resolvers.Resolver {
 	return resolvers.NewResolverPool(r, 5*time.Second, baseline, cfg.Log)
 }
 
-func setupResolvers(addrs []string, max, rate int, log *log.Logger) []resolvers.Resolver {
+func setupResolvers(addrs []string, max, rate int, log Logger) []resolvers.Resolver {
 	if len(addrs) <= 0 {
 		return nil
 	}
