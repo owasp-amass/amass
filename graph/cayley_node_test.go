@@ -31,7 +31,9 @@ func TestAllNodesOfType(t *testing.T) {
 	}
 
 	// setup the data in the graph
-	g.store.AddQuad(quad.Make(quad.IRI("test"), quad.IRI("type"), quad.String("test"), nil))
+	if err := g.store.AddQuad(quad.Make(quad.IRI("test"), quad.IRI("type"), quad.String("test"), nil)); err != nil {
+		t.Errorf("Failed to add the quad: %v", err)
+	}
 
 	if nodes, err := g.AllNodesOfType(); err != nil {
 		t.Errorf("AllNodesOfType returned an error for a non-empty graph and no constraints")
@@ -68,12 +70,24 @@ func TestAllOutNodes(t *testing.T) {
 	}
 
 	// setup the initial data in the graph
-	g.store.AddQuad(quad.Make(vBob, knows, vAlice, nil))
-	g.store.AddQuad(quad.Make(vBob, vType, "Person", nil))
-	g.store.AddQuad(quad.Make(vAlice, knows, vCharles, nil))
-	g.store.AddQuad(quad.Make(vAlice, vType, "Person", nil))
-	g.store.AddQuad(quad.Make(vCharles, knows, vAlice, nil))
-	g.store.AddQuad(quad.Make(vCharles, vType, "Person", nil))
+	if err := g.store.AddQuad(quad.Make(vBob, knows, vAlice, nil)); err != nil {
+		t.Errorf("Failed to add the bob know alice quad: %v", err)
+	}
+	if err := g.store.AddQuad(quad.Make(vBob, vType, "Person", nil)); err != nil {
+		t.Errorf("Failed to add the bob quad: %v", err)
+	}
+	if err := g.store.AddQuad(quad.Make(vAlice, knows, vCharles, nil)); err != nil {
+		t.Errorf("Failed to add the alice knows charles quad: %v", err)
+	}
+	if err := g.store.AddQuad(quad.Make(vAlice, vType, "Person", nil)); err != nil {
+		t.Errorf("Failed to add the alice quad: %v", err)
+	}
+	if err := g.store.AddQuad(quad.Make(vCharles, knows, vAlice, nil)); err != nil {
+		t.Errorf("Failed to add the charles knows alice quad: %v", err)
+	}
+	if err := g.store.AddQuad(quad.Make(vCharles, vType, "Person", nil)); err != nil {
+		t.Errorf("Failed to add the charles quad: %v", err)
+	}
 
 	if nodes, err := g.AllOutNodes("Bob"); err != nil {
 		t.Errorf("AllOutNodes returned an error when out nodes existed from the node")
@@ -83,7 +97,9 @@ func TestAllOutNodes(t *testing.T) {
 		t.Errorf("AllOutNodes returned a slice with the wrong node")
 	}
 
-	g.store.AddQuad(quad.Make(vBob, knows, vCharles, nil))
+	if err := g.store.AddQuad(quad.Make(vBob, knows, vCharles, nil)); err != nil {
+		t.Errorf("Failed to add the bob knows charles quad: %v", err)
+	}
 
 	nodes, err := g.AllOutNodes("Bob")
 	if err != nil {
@@ -154,7 +170,9 @@ func TestReadNode(t *testing.T) {
 	}
 
 	// setup the initial data in the graph
-	g.store.AddQuad(quad.Make(vBob, vType, bType, nil))
+	if err := g.store.AddQuad(quad.Make(vBob, vType, bType, nil)); err != nil {
+		t.Errorf("Failed to add the bob quad: %v", err)
+	}
 
 	if node, err := g.ReadNode(bob, bType); err != nil {
 		t.Errorf("ReadNode returned an error when given valid arguments")
@@ -180,19 +198,29 @@ func TestDeleteNode(t *testing.T) {
 	if err := g.DeleteNode("Bob"); err == nil {
 		t.Errorf("DeleteNode returned no error when the argument node did not exist")
 	}
-
 	// setup the initial data in the graph
-	g.store.AddQuad(quad.Make(vBob, knows, vAlice, nil))
-	g.store.AddQuad(quad.Make(vBob, vType, "Person", nil))
-	g.store.AddQuad(quad.Make(vBob, knows, vCharles, nil))
-	g.store.AddQuad(quad.Make(vCharles, vType, "Person", nil))
-	g.store.AddQuad(quad.Make(vBob, likes, "Go", nil))
-	g.store.AddQuad(quad.Make(vBob, likes, "Automation", nil))
+	if err := g.store.AddQuad(quad.Make(vBob, knows, vAlice, nil)); err != nil {
+		t.Errorf("Failed to add the bob knows alice quad: %v", err)
+	}
+	if err := g.store.AddQuad(quad.Make(vBob, vType, "Person", nil)); err != nil {
+		t.Errorf("Failed to add the bob quad: %v", err)
+	}
+	if err := g.store.AddQuad(quad.Make(vBob, knows, vCharles, nil)); err != nil {
+		t.Errorf("Failed to add the bob knows charles quad: %v", err)
+	}
+	if err := g.store.AddQuad(quad.Make(vCharles, vType, "Person", nil)); err != nil {
+		t.Errorf("Failed to add the charles quad: %v", err)
+	}
+	if err := g.store.AddQuad(quad.Make(vBob, likes, "Go", nil)); err != nil {
+		t.Errorf("Failed to add the bob likes Go quad: %v", err)
+	}
+	if err := g.store.AddQuad(quad.Make(vBob, likes, "Automation", nil)); err != nil {
+		t.Errorf("Failed to add the bob likes Automation quad: %v", err)
+	}
 
 	if err := g.DeleteNode("Bob"); err != nil {
 		t.Errorf("DeleteNode returned an error when provide a valid argument for an existing node")
 	}
-
 	// Check that no quads with 'Bob' as a subject exist
 	p := cayley.StartPath(g.store, vBob).Out()
 	if count, err := p.Iterate(context.Background()).Count(); err == nil && count != 0 {
@@ -211,17 +239,29 @@ func TestWriteNodeQuads(t *testing.T) {
 	vType := quad.IRI("type")
 	// setup the initial data in the graph
 	expected := stringset.New()
-	g.store.AddQuad(quad.Make(vBob, knows, vAlice, nil))
+	if err := g.store.AddQuad(quad.Make(vBob, knows, vAlice, nil)); err != nil {
+		t.Errorf("Failed to add the bob knows alice quad: %v", err)
+	}
 	expected.Insert("BobknowsAlice")
-	g.store.AddQuad(quad.Make(vBob, vType, "Person", nil))
+	if err := g.store.AddQuad(quad.Make(vBob, vType, "Person", nil)); err != nil {
+		t.Errorf("Failed to add the bob quad: %v", err)
+	}
 	expected.Insert("BobtypePerson")
-	g.store.AddQuad(quad.Make(vAlice, knows, vCharles, nil))
+	if err := g.store.AddQuad(quad.Make(vAlice, knows, vCharles, nil)); err != nil {
+		t.Errorf("Failed to add the alice knows charles quad: %v", err)
+	}
 	expected.Insert("AliceknowsCharles")
-	g.store.AddQuad(quad.Make(vAlice, vType, "Person", nil))
+	if err := g.store.AddQuad(quad.Make(vAlice, vType, "Person", nil)); err != nil {
+		t.Errorf("Failed to add the alice quad: %v", err)
+	}
 	expected.Insert("AlicetypePerson")
-	g.store.AddQuad(quad.Make(vCharles, knows, vAlice, nil))
+	if err := g.store.AddQuad(quad.Make(vCharles, knows, vAlice, nil)); err != nil {
+		t.Errorf("Failed to add the charles knows alice quad: %v", err)
+	}
 	expected.Insert("CharlesknowsAlice")
-	g.store.AddQuad(quad.Make(vCharles, vType, "Person", nil))
+	if err := g.store.AddQuad(quad.Make(vCharles, vType, "Person", nil)); err != nil {
+		t.Errorf("Failed to add the charles quad: %v", err)
+	}
 	expected.Insert("CharlestypePerson")
 
 	dup := NewCayleyGraphMemory()
@@ -232,12 +272,15 @@ func TestWriteNodeQuads(t *testing.T) {
 
 	got := stringset.New()
 	p := cayley.StartPath(dup.store).Tag("subject").OutWithTags([]string{"predicate"}).Tag("object")
-	p.Iterate(context.TODO()).TagValues(nil, func(m map[string]quad.Value) {
+	err := p.Iterate(context.TODO()).TagValues(nil, func(m map[string]quad.Value) {
 		sub := valToStr(m["subject"])
 		pred := valToStr(m["predicate"])
 		obj := valToStr(m["object"])
 		got.Insert(sub + pred + obj)
 	})
+	if err != nil {
+		t.Errorf("Failed to iterate over the tags: %v", err)
+	}
 
 	expected.Subtract(got)
 	if expected.Len() != 0 {
