@@ -1,9 +1,6 @@
 FROM golang:alpine as build
 RUN apk --no-cache add git
-RUN go get github.com/OWASP/Amass; exit 0
-ENV GO111MODULE on
-WORKDIR /go/src/github.com/OWASP/Amass
-RUN go install ./...
+RUN go get github.com/OWASP/Amass/cmd/amass
 
 FROM alpine:latest
 RUN apk --no-cache add ca-certificates
