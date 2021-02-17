@@ -16,16 +16,14 @@ function vertical(ctx, domain)
         return
     end
 
-    local p = 1
-    while(true) do
-        local ok = scrape(ctx, {['url']=secondurl(domain, p)})
+    for i=1,50,1 do
+        local ok = scrape(ctx, {['url']=secondurl(domain, i)})
         if not ok then
             break
         end
 
         checkratelimit()
-        p = p + 1
-   end
+    end
 end
 
 function firsturl(domain)
