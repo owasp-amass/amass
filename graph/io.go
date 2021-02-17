@@ -123,7 +123,7 @@ func (g *Graph) buildNameInfo(uuid string, names []string) []*requests.Output {
 	g.db.Lock()
 	p := cayley.StartPath(g.db.store, nameVals...).Has(quad.IRI("type"), quad.String("fqdn"))
 	p = p.Tag("name").InWithTags([]string{"predicate"}).Is(quad.IRI(uuid))
-	p.Iterate(context.Background()).TagValues(nil, func(m map[string]quad.Value) {
+	err := p.Iterate(context.Background()).TagValues(nil, func(m map[string]quad.Value) {
 		name := valToStr(m["name"])
 		pred := valToStr(m["predicate"])
 
@@ -142,6 +142,10 @@ func (g *Graph) buildNameInfo(uuid string, names []string) []*requests.Output {
 	g.db.Unlock()
 
 	var final []*requests.Output
+	if err != nil {
+		return final
+	}
+
 	sourceTags := make(map[string]string)
 	for _, o := range results {
 		domain, err := publicsuffix.EffectiveTLDPlusOne(o.Name)

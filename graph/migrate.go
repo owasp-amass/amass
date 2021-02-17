@@ -6,6 +6,7 @@ package graph
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/cayleygraph/cayley"
 	"github.com/cayleygraph/cayley/graph"
@@ -28,26 +29,31 @@ func (g *Graph) MigrateEvents(to *Graph, uuids ...string) error {
 	// Build quads for the events in scope
 	p := cayley.StartPath(g.db.store, events...).Has(quad.IRI("type"), quad.String("event"))
 	p = p.Tag("subject").OutWithTags([]string{"predicate"}).Tag("object")
-	p.Iterate(context.Background()).TagValues(nil, func(m map[string]quad.Value) {
+	err := p.Iterate(context.Background()).TagValues(nil, func(m map[string]quad.Value) {
 		vals = append(vals, m["object"])
 		quads = append(quads, quad.Make(m["subject"], m["predicate"], m["object"], nil))
 	})
+	if err != nil {
+		return fmt.Errorf("MigrateEvents: Failed to iterate over the events: %v", err)
+	}
 	// Build quads for all nodes associated with the events in scope
 	p = cayley.StartPath(g.db.store, vals...).Has(quad.IRI("type")).Unique()
 	p = p.Tag("subject").OutWithTags([]string{"predicate"}).Tag("object")
-	p.Iterate(context.Background()).TagValues(nil, func(m map[string]quad.Value) {
+	err = p.Iterate(context.Background()).TagValues(nil, func(m map[string]quad.Value) {
 		quads = append(quads, quad.Make(m["subject"], m["predicate"], m["object"], nil))
 	})
+	if err != nil {
+		return fmt.Errorf("MigrateEvents: Failed to iterate over the event nodes: %v", err)
+	}
 
 	opts := make(graph.Options)
 	opts["ignore_missing"] = true
 	opts["ignore_duplicate"] = true
 
 	w, err := writer.NewSingleReplication(to.db.store, opts)
-	if len(quads) > 0 {
+	if err == nil && len(quads) > 0 {
 		err = w.AddQuadSet(quads)
 	}
-
 	return err
 }
 
@@ -67,10 +73,13 @@ func (g *Graph) MigrateEventsInScope(to *Graph, d []string) error {
 	// Obtain the events that are in scope according to the domain name arguments
 	p := cayley.StartPath(g.db.store).Has(quad.IRI("type"), quad.String("event")).Tag("event")
 	p = p.Out(quad.IRI("domain")).And(cayley.StartPath(g.db.store, domains...)).Back("event").Unique().Tag("uuid")
-	p.Iterate(context.Background()).TagValues(nil, func(m map[string]quad.Value) {
+	err := p.Iterate(context.Background()).TagValues(nil, func(m map[string]quad.Value) {
 		uuids = append(uuids, valToStr(m["uuid"]))
 	})
 	g.db.Unlock()
 
+	if err != nil {
+		return err
+	}
 	return g.MigrateEvents(to, uuids...)
 }
