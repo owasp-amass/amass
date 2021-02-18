@@ -29,7 +29,9 @@ func TestDumpGraph(t *testing.T) {
 	vBob := quad.IRI("Bob")
 	vType := quad.IRI("type")
 	// setup the initial data in the graph
-	g.store.AddQuad(quad.Make(vBob, vType, "Person", nil))
+	if err := g.store.AddQuad(quad.Make(vBob, vType, "Person", nil)); err != nil {
+		t.Errorf("Failed to add the bob quad")
+	}
 
 	if dump := g.DumpGraph(); dump == "" {
 		t.Errorf("DumpGraph returned an empty string for a non-empty graph")

@@ -64,17 +64,17 @@ func NewLocalSystem(c *config.Config) (*LocalSystem, error) {
 
 	// Load the ASN information into the cache
 	if err := sys.loadCacheData(); err != nil {
-		sys.Shutdown()
+		_ = sys.Shutdown()
 		return nil, err
 	}
 	// Make sure that the output directory is setup for this local system
 	if err := sys.setupOutputDirectory(); err != nil {
-		sys.Shutdown()
+		_ = sys.Shutdown()
 		return nil, err
 	}
 	// Setup the correct graph database handler
 	if err := sys.setupGraphDBs(); err != nil {
-		sys.Shutdown()
+		_ = sys.Shutdown()
 		return nil, err
 	}
 
@@ -156,7 +156,7 @@ func (l *LocalSystem) Shutdown() error {
 	l.doneAlreadyClosed = true
 
 	for _, src := range l.DataSources() {
-		src.Stop()
+		_ = src.Stop()
 	}
 	close(l.done)
 
@@ -164,7 +164,7 @@ func (l *LocalSystem) Shutdown() error {
 		g.Close()
 	}
 
-	//go l.pool.Stop()
+	l.pool.Stop()
 	return nil
 }
 
@@ -215,7 +215,7 @@ func (l *LocalSystem) setupGraphDBs() error {
 		}
 
 		// Load the ASN Cache with all prior knowledge of IP address ranges and ASNs
-		g.ASNCacheFill(l.Cache())
+		_ = g.ASNCacheFill(l.Cache())
 
 		l.graphs = append(l.graphs, g)
 	}

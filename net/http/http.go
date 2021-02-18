@@ -369,7 +369,9 @@ func ClientCountryCode(ctx context.Context) string {
 		CountryCode string `json:"country"`
 	}
 
-	json.Unmarshal([]byte(page), &ipinfo)
+	if err := json.Unmarshal([]byte(page), &ipinfo); err != nil {
+		return ""
+	}
 	return strings.ToLower(ipinfo.CountryCode)
 }
 

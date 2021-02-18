@@ -5,6 +5,7 @@ package datasrcs
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -26,10 +27,48 @@ type contextWrapper struct {
 	Ctx context.Context
 }
 
+// Converts Go Context to Lua UserData.
+func (s *Script) contextToUserData(ctx context.Context) *lua.LUserData {
+	L := s.luaState
+	ud := L.NewUserData()
+
+	ud.Value = &contextWrapper{Ctx: ctx}
+	L.SetMetatable(ud, L.GetTypeMetatable("context"))
+	return ud
+}
+
+func extractContext(udata *lua.LUserData) (context.Context, error) {
+	if udata == nil {
+		return nil, errors.New("Lua user data was nil")
+	}
+
+	val := udata.Value
+	if val == nil {
+		return nil, errors.New("The user data value was nil")
+	}
+
+	wrapper, ok := val.(*contextWrapper)
+	if !ok {
+		return nil, errors.New("The user data was not a script context wrapper")
+	}
+
+	ctx := wrapper.Ctx
+	if err := checkContextExpired(ctx); err != nil {
+		return nil, err
+	}
+
+	return ctx, nil
+}
+
 // Wrapper so that scripts can obtain the configuration for the current enumeration.
 func (s *Script) config(L *lua.LState) int {
-	c := L.CheckUserData(1).Value.(*contextWrapper)
-	cfg, _, err := ContextConfigBus(c.Ctx)
+	ctx, err := extractContext(L.CheckUserData(1))
+	if err != nil {
+		L.Push(lua.LNil)
+		return 1
+	}
+
+	cfg, _, err := ContextConfigBus(ctx)
 	if err != nil {
 		L.Push(lua.LNil)
 		return 1
@@ -160,8 +199,13 @@ func (s *Script) dataSourceConfig(L *lua.LState) int {
 
 // Wrapper so that scripts can obtain the brute force wordlist for the current enumeration.
 func (s *Script) bruteWordlist(L *lua.LState) int {
-	c := L.CheckUserData(1).Value.(*contextWrapper)
-	cfg, _, err := ContextConfigBus(c.Ctx)
+	ctx, err := extractContext(L.CheckUserData(1))
+	if err != nil {
+		L.Push(lua.LNil)
+		return 1
+	}
+
+	cfg, _, err := ContextConfigBus(ctx)
 	if err != nil {
 		L.Push(lua.LNil)
 		return 1
@@ -178,8 +222,13 @@ func (s *Script) bruteWordlist(L *lua.LState) int {
 
 // Wrapper so that scripts can obtain the alteration wordlist for the current enumeration.
 func (s *Script) altWordlist(L *lua.LState) int {
-	c := L.CheckUserData(1).Value.(*contextWrapper)
-	cfg, _, err := ContextConfigBus(c.Ctx)
+	ctx, err := extractContext(L.CheckUserData(1))
+	if err != nil {
+		L.Push(lua.LNil)
+		return 1
+	}
+
+	cfg, _, err := ContextConfigBus(ctx)
 	if err != nil {
 		L.Push(lua.LNil)
 		return 1
@@ -197,13 +246,15 @@ func (s *Script) altWordlist(L *lua.LState) int {
 // Wrapper so scripts can set the data source rate limit.
 func (s *Script) setRateLimit(L *lua.LState) int {
 	lv := L.Get(1)
+	if lv == nil {
+		return 0
+	}
 
 	if num, ok := lv.(lua.LNumber); ok {
 		sec := int(num)
 
 		s.seconds = sec
 	}
-
 	return 0
 }
 
@@ -217,8 +268,13 @@ func (s *Script) checkRateLimit(L *lua.LState) int {
 func (s *Script) outputdir(L *lua.LState) int {
 	var dir string
 
-	c := L.CheckUserData(1).Value.(*contextWrapper)
-	cfg, _, err := ContextConfigBus(c.Ctx)
+	ctx, err := extractContext(L.CheckUserData(1))
+	if err != nil {
+		L.Push(lua.LNil)
+		return 1
+	}
+
+	cfg, _, err := ContextConfigBus(ctx)
 	if err == nil {
 		dir = config.OutputDirectory(cfg.Dir)
 	}
@@ -229,13 +285,21 @@ func (s *Script) outputdir(L *lua.LState) int {
 
 // Wrapper so that scripts can write messages to the Amass log.
 func (s *Script) log(L *lua.LState) int {
-	c := L.CheckUserData(1).Value.(*contextWrapper)
-	_, bus, err := ContextConfigBus(c.Ctx)
+	ctx, err := extractContext(L.CheckUserData(1))
+	if err != nil {
+		return 0
+	}
+
+	_, bus, err := ContextConfigBus(ctx)
 	if err != nil {
 		return 0
 	}
 
 	lv := L.Get(2)
+	if lv == nil {
+		return 0
+	}
+
 	if msg, ok := lv.(lua.LString); ok {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, s.String()+": "+string(msg))
 	}
@@ -244,12 +308,16 @@ func (s *Script) log(L *lua.LState) int {
 
 // Wrapper so that scripts can send discovered FQDNs to Amass.
 func (s *Script) newName(L *lua.LState) int {
-	c := L.CheckUserData(1).Value.(*contextWrapper)
-	if c == nil {
+	ctx, err := extractContext(L.CheckUserData(1))
+	if err != nil {
 		return 0
 	}
 
 	lv := L.Get(2)
+	if lv == nil {
+		return 0
+	}
+
 	n, ok := lv.(lua.LString)
 	if !ok {
 		return 0
@@ -260,19 +328,27 @@ func (s *Script) newName(L *lua.LState) int {
 		return 0
 	}
 
-	genNewNameEvent(c.Ctx, s.sys, s, http.CleanName(name))
+	genNewNameEvent(ctx, s.sys, s, http.CleanName(name))
 	return 0
 }
 
 // Wrapper so that scripts can send discovered IP addresses to Amass.
 func (s *Script) newAddr(L *lua.LState) int {
-	c := L.CheckUserData(1).Value.(*contextWrapper)
-	cfg, bus, err := ContextConfigBus(c.Ctx)
+	ctx, err := extractContext(L.CheckUserData(1))
+	if err != nil {
+		return 0
+	}
+
+	cfg, bus, err := ContextConfigBus(ctx)
 	if err != nil {
 		return 0
 	}
 
 	lv := L.Get(2)
+	if lv == nil {
+		return 0
+	}
+
 	a, ok := lv.(lua.LString)
 	if !ok {
 		return 0
@@ -287,6 +363,10 @@ func (s *Script) newAddr(L *lua.LState) int {
 	}
 
 	lv = L.Get(3)
+	if lv == nil {
+		return 0
+	}
+
 	sub, ok := lv.(lua.LString)
 	if !ok {
 		return 0
@@ -306,13 +386,21 @@ func (s *Script) newAddr(L *lua.LState) int {
 
 // Wrapper so that scripts can send discovered ASNs to Amass.
 func (s *Script) newASN(L *lua.LState) int {
-	c := L.CheckUserData(1).Value.(*contextWrapper)
-	_, bus, err := ContextConfigBus(c.Ctx)
+	ctx, err := extractContext(L.CheckUserData(1))
+	if err != nil {
+		return 0
+	}
+
+	_, bus, err := ContextConfigBus(ctx)
 	if err != nil {
 		return 0
 	}
 
 	params := L.CheckTable(2)
+	if params == nil {
+		return 0
+	}
+
 	addr, found := getStringField(L, params, "addr")
 	if !found {
 		return 0
@@ -364,13 +452,21 @@ func (s *Script) newASN(L *lua.LState) int {
 
 // Wrapper so that scripts can send discovered associated domains to Amass.
 func (s *Script) associated(L *lua.LState) int {
-	c := L.CheckUserData(1).Value.(*contextWrapper)
-	_, bus, err := ContextConfigBus(c.Ctx)
+	ctx, err := extractContext(L.CheckUserData(1))
+	if err != nil {
+		return 0
+	}
+
+	_, bus, err := ContextConfigBus(ctx)
 	if err != nil {
 		return 0
 	}
 
 	lv := L.Get(2)
+	if lv == nil {
+		return 0
+	}
+
 	d, ok := lv.(lua.LString)
 	if !ok {
 		return 0
@@ -378,6 +474,10 @@ func (s *Script) associated(L *lua.LState) int {
 	domain := string(d)
 
 	lv = L.Get(3)
+	if lv == nil {
+		return 0
+	}
+
 	a, ok := lv.(lua.LString)
 	if !ok {
 		return 0
@@ -398,6 +498,10 @@ func (s *Script) associated(L *lua.LState) int {
 // Wrapper that exposes a simple regular expression matching function.
 func (s *Script) find(L *lua.LState) int {
 	lv := L.Get(1)
+	if lv == nil {
+		L.Push(lua.LNil)
+		return 1
+	}
 
 	str, ok := lv.(lua.LString)
 	if !ok {
@@ -406,6 +510,11 @@ func (s *Script) find(L *lua.LState) int {
 	}
 
 	lv = L.Get(2)
+	if lv == nil {
+		L.Push(lua.LNil)
+		return 1
+	}
+
 	pattern, ok := lv.(lua.LString)
 	if !ok {
 		L.Push(lua.LNil)
@@ -430,6 +539,10 @@ func (s *Script) find(L *lua.LState) int {
 // Wrapper that exposes a regular expression matching function that supports submatches.
 func (s *Script) submatch(L *lua.LState) int {
 	lv := L.Get(1)
+	if lv == nil {
+		L.Push(lua.LNil)
+		return 1
+	}
 
 	str, ok := lv.(lua.LString)
 	if !ok {
@@ -438,6 +551,11 @@ func (s *Script) submatch(L *lua.LState) int {
 	}
 
 	lv = L.Get(2)
+	if lv == nil {
+		L.Push(lua.LNil)
+		return 1
+	}
+
 	pattern, ok := lv.(lua.LString)
 	if !ok {
 		L.Push(lua.LNil)
@@ -465,20 +583,15 @@ func (s *Script) submatch(L *lua.LState) int {
 	return 1
 }
 
-// Converts Go Content to Lua UserData.
-func (s *Script) contextToUserData(ctx context.Context) *lua.LUserData {
-	L := s.luaState
-	ud := L.NewUserData()
-
-	ud.Value = &contextWrapper{Ctx: ctx}
-	L.SetMetatable(ud, L.GetTypeMetatable("context"))
-	return ud
-}
-
 // Wrapper so that scripts can check if a subdomain name is in scope.
 func (s *Script) inScope(L *lua.LState) int {
-	c := L.CheckUserData(1).Value.(*contextWrapper)
-	cfg, _, err := ContextConfigBus(c.Ctx)
+	ctx, err := extractContext(L.CheckUserData(1))
+	if err != nil {
+		L.Push(lua.LFalse)
+		return 1
+	}
+
+	cfg, _, err := ContextConfigBus(ctx)
 	if err != nil {
 		L.Push(lua.LFalse)
 		return 1
@@ -496,8 +609,14 @@ func (s *Script) inScope(L *lua.LState) int {
 
 // Wrapper that allows scripts to make HTTP client requests.
 func (s *Script) request(L *lua.LState) int {
-	c := L.CheckUserData(1).Value.(*contextWrapper)
-	cfg, bus, err := ContextConfigBus(c.Ctx)
+	ctx, err := extractContext(L.CheckUserData(1))
+	if err != nil {
+		L.Push(lua.LNil)
+		L.Push(lua.LString("The user data parameter was not provided"))
+		return 2
+	}
+
+	cfg, bus, err := ContextConfigBus(ctx)
 	if err != nil {
 		L.Push(lua.LNil)
 		L.Push(lua.LString("No config and event bus values in context"))
@@ -505,6 +624,11 @@ func (s *Script) request(L *lua.LState) int {
 	}
 
 	opt := L.CheckTable(2)
+	if opt == nil {
+		L.Push(lua.LNil)
+		L.Push(lua.LString("No table parameter was provided"))
+		return 2
+	}
 
 	var body io.Reader
 	if method, ok := getStringField(L, opt, "method"); ok && (method == "POST" || method == "post") {
@@ -531,7 +655,7 @@ func (s *Script) request(L *lua.LState) int {
 	id, _ := getStringField(L, opt, "id")
 	pass, _ := getStringField(L, opt, "pass")
 
-	page, err := http.RequestWebPage(c.Ctx, url, body, headers,
+	page, err := http.RequestWebPage(ctx, url, body, headers,
 		&http.BasicAuth{
 			Username: id,
 			Password: pass,
@@ -552,14 +676,24 @@ func (s *Script) request(L *lua.LState) int {
 
 // Wrapper so that scripts can scrape the contents of a GET request for subdomain names in scope.
 func (s *Script) scrape(L *lua.LState) int {
-	c := L.CheckUserData(1).Value.(*contextWrapper)
-	cfg, bus, err := ContextConfigBus(c.Ctx)
+	ctx, err := extractContext(L.CheckUserData(1))
+	if err != nil {
+		L.Push(lua.LFalse)
+		return 1
+	}
+
+	cfg, bus, err := ContextConfigBus(ctx)
 	if err != nil {
 		L.Push(lua.LFalse)
 		return 1
 	}
 
 	opt := L.CheckTable(2)
+	if opt == nil {
+		L.Push(lua.LFalse)
+		return 1
+	}
+
 	url, found := getStringField(L, opt, "url")
 	if !found {
 		L.Push(lua.LFalse)
@@ -587,7 +721,7 @@ func (s *Script) scrape(L *lua.LState) int {
 	}
 
 	if resp == "" {
-		resp, err = http.RequestWebPage(c.Ctx, url, nil, headers,
+		resp, err = http.RequestWebPage(ctx, url, nil, headers,
 			&http.BasicAuth{
 				Username: id,
 				Password: pass,
@@ -601,7 +735,7 @@ func (s *Script) scrape(L *lua.LState) int {
 		}
 
 		if dsc != nil && dsc.TTL > 0 {
-			s.setCachedResponse(url, resp)
+			_ = s.setCachedResponse(url, resp)
 		}
 	}
 
@@ -614,7 +748,7 @@ func (s *Script) scrape(L *lua.LState) int {
 
 		found = true
 		if !filter.Duplicate(name) {
-			genNewNameEvent(c.Ctx, s.sys, s, http.CleanName(name))
+			genNewNameEvent(ctx, s.sys, s, http.CleanName(name))
 		}
 	}
 
@@ -628,25 +762,37 @@ func (s *Script) scrape(L *lua.LState) int {
 
 // Wrapper so that scripts can crawl for subdomain names in scope.
 func (s *Script) crawl(L *lua.LState) int {
-	c := L.CheckUserData(1).Value.(*contextWrapper)
-	cfg, bus, err := ContextConfigBus(c.Ctx)
+	ctx, err := extractContext(L.CheckUserData(1))
+	if err != nil {
+		return 0
+	}
+
+	cfg, bus, err := ContextConfigBus(ctx)
 	if err != nil {
 		return 0
 	}
 
 	lv := L.Get(2)
+	if lv == nil {
+		return 0
+	}
+
 	u, ok := lv.(lua.LString)
 	if !ok {
 		return 0
 	}
 
 	lv = L.Get(3)
+	if lv == nil {
+		return 0
+	}
+
 	max, ok := lv.(lua.LNumber)
 	if !ok {
 		return 0
 	}
 
-	names, err := http.Crawl(c.Ctx, string(u), cfg.Domains(), int(max), nil)
+	names, err := http.Crawl(ctx, string(u), cfg.Domains(), int(max), nil)
 	if err != nil {
 		if cfg.Verbose {
 			bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", s.String(), u, err))
@@ -655,24 +801,26 @@ func (s *Script) crawl(L *lua.LState) int {
 	}
 
 	for _, name := range names {
-		genNewNameEvent(c.Ctx, s.sys, s, http.CleanName(name))
+		genNewNameEvent(ctx, s.sys, s, http.CleanName(name))
 	}
 
 	return 0
 }
 
 func getStringField(L *lua.LState, t lua.LValue, key string) (string, bool) {
-	lv := L.GetField(t, key)
-	if s, ok := lv.(lua.LString); ok {
-		return string(s), true
+	if lv := L.GetField(t, key); lv != nil {
+		if s, ok := lv.(lua.LString); ok {
+			return string(s), true
+		}
 	}
 	return "", false
 }
 
 func getNumberField(L *lua.LState, t lua.LValue, key string) (float64, bool) {
-	lv := L.GetField(t, key)
-	if n, ok := lv.(lua.LNumber); ok {
-		return float64(n), true
+	if lv := L.GetField(t, key); lv != nil {
+		if n, ok := lv.(lua.LNumber); ok {
+			return float64(n), true
+		}
 	}
 	return 0, false
 }
@@ -680,6 +828,11 @@ func getNumberField(L *lua.LState, t lua.LValue, key string) (float64, bool) {
 // Wrapper so that scripts can obtain cached data source responses.
 func (s *Script) obtainResponse(L *lua.LState) int {
 	lv := L.Get(1)
+	if lv == nil {
+		L.Push(lua.LNil)
+		return 1
+	}
+
 	u, ok := lv.(lua.LString)
 	if !ok {
 		L.Push(lua.LNil)
@@ -688,6 +841,11 @@ func (s *Script) obtainResponse(L *lua.LState) int {
 	url := string(u)
 
 	lv = L.Get(2)
+	if lv == nil {
+		L.Push(lua.LNil)
+		return 1
+	}
+
 	t, ok := lv.(lua.LNumber)
 	if !ok {
 		L.Push(lua.LNil)
@@ -712,17 +870,25 @@ func (s *Script) obtainResponse(L *lua.LState) int {
 // Wrapper so that scripts can cache data source responses.
 func (s *Script) cacheResponse(L *lua.LState) int {
 	lv := L.Get(1)
+	if lv == nil {
+		return 0
+	}
+
 	u, ok := lv.(lua.LString)
 	if !ok {
 		return 0
 	}
 
 	lv = L.Get(2)
+	if lv == nil {
+		return 0
+	}
+
 	resp, ok := lv.(lua.LString)
 	if !ok {
 		return 0
 	}
 
-	s.setCachedResponse(string(u), string(resp))
+	_ = s.setCachedResponse(string(u), string(resp))
 	return 0
 }
