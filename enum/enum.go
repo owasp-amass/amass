@@ -159,7 +159,7 @@ func (e *Enumeration) Start(ctx context.Context) error {
 
 	if !e.Config.Passive {
 		// Attempt to fix IP address nodes without edges to netblocks
-		defer e.Graph.HealAddressNodes(e.Sys.Cache(), e.Config.UUID.String())
+		defer func() { _ = e.Graph.HealAddressNodes(e.Sys.Cache(), e.Config.UUID.String()) }()
 	}
 
 	// Release the root domain names to the input source and each data source

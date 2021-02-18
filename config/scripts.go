@@ -31,8 +31,9 @@ func (c *Config) AcquireScripts() ([]string, error) {
 		paths = append(paths, c.ScriptsDirectory)
 	}
 
+	err = nil
 	for _, path := range paths {
-		filepath.Walk(path, func(path string, info os.FileInfo, err error) error {
+		err = filepath.Walk(path, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				return err
 			}
@@ -49,16 +50,19 @@ func (c *Config) AcquireScripts() ([]string, error) {
 			scripts = append(scripts, string(data))
 			return nil
 		})
+		if err != nil {
+			break
+		}
 	}
 
-	return scripts, nil
+	return scripts, err
 }
 
 func getDefaultScripts() []string {
 	fsOnce.Do(openTheFS)
 
 	var scripts []string
-	fs.Walk(StatikFS, "/scripts", func(path string, info os.FileInfo, err error) error {
+	_ = fs.Walk(StatikFS, "/scripts", func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}

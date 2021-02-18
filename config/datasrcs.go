@@ -112,7 +112,10 @@ func (c *Config) loadDataSourceSettings(cfg *ini.File) error {
 
 			creds := &Credentials{Name: setName}
 			if err := cr.MapTo(creds); err != nil {
-				dsc.AddCredentials(creds)
+				return err
+			}
+			if err := dsc.AddCredentials(creds); err != nil {
+				return err
 			}
 		}
 	}

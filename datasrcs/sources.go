@@ -126,3 +126,13 @@ func numRateLimitChecks(srv service.Service, num int) {
 		srv.CheckRateLimit()
 	}
 }
+
+func checkContextExpired(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return errors.New("Context expired")
+	default:
+	}
+
+	return nil
+}

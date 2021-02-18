@@ -46,7 +46,9 @@ func TestGetCredentials(t *testing.T) {
 		t.Errorf("GetCredentials returned non-nil value when the receiver had no credentials")
 	}
 
-	dsc.AddCredentials(&Credentials{Name: "account1"})
+	if err := dsc.AddCredentials(&Credentials{Name: "account1"}); err != nil {
+		t.Errorf("AddCredentials returned an error: %v", err)
+	}
 	if creds := dsc.GetCredentials(); creds == nil || creds.Name != "account1" {
 		t.Errorf("GetCredentials returned an error when provided a valid argument")
 	}
@@ -101,11 +103,10 @@ func TestLoadDataSourceSettings(t *testing.T) {
 	}
 
 	dsc := c.GetDataSourceConfig("AlienVault")
-	if dsc != nil {
-		if creds := dsc.GetCredentials(); creds == nil || creds.Key != "fake" {
-			t.Errorf("Failed to load data source credentials")
-		}
-	} else {
+	if dsc == nil {
 		t.Errorf("Failed to load data source settings")
+	}
+	if creds := dsc.GetCredentials(); creds == nil || creds.Key != "fake" {
+		t.Errorf("Failed to load data source credentials")
 	}
 }
