@@ -209,17 +209,19 @@ func showEventData(args *dbArgs, uuids []string, asninfo bool, db *graph.Graph) 
 			os.Exit(1)
 		}
 		defer func() {
-			outfile.Sync()
-			outfile.Close()
+			_ = outfile.Sync()
+			_ = outfile.Close()
 		}()
-		outfile.Truncate(0)
-		outfile.Seek(0, 0)
+		_ = outfile.Truncate(0)
+		_, _ = outfile.Seek(0, 0)
 	}
 
 	var cache *net.ASNCache
 	if asninfo {
 		cache = net.NewASNCache()
-		db.ASNCacheFill(cache)
+		if err := db.ASNCacheFill(cache); err != nil {
+			return
+		}
 	}
 
 	tags := make(map[string]int)
@@ -340,9 +342,9 @@ func writeJSON(args *dbArgs, uuids []string, assets []*requests.Output, db *grap
 		return
 	}
 	// Remove previously stored data and encode the JSON
-	jsonptr.Truncate(0)
-	jsonptr.Seek(0, 0)
-	json.NewEncoder(jsonptr).Encode(output)
-	jsonptr.Sync()
-	jsonptr.Close()
+	_ = jsonptr.Truncate(0)
+	_, _ = jsonptr.Seek(0, 0)
+	_ = json.NewEncoder(jsonptr).Encode(output)
+	_ = jsonptr.Sync()
+	_ = jsonptr.Close()
 }

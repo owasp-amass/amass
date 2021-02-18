@@ -46,12 +46,12 @@ func (dm *dataManager) Process(ctx context.Context, data pipeline.Data, tp pipel
 		if v == nil {
 			return nil, nil
 		}
-		dm.dnsRequest(ctx, v, tp)
+		return data, dm.dnsRequest(ctx, v, tp)
 	case *requests.AddrRequest:
 		if v == nil {
 			return nil, nil
 		}
-		dm.addrRequest(ctx, v, tp)
+		return data, dm.addrRequest(ctx, v, tp)
 	}
 
 	return data, nil
@@ -417,14 +417,14 @@ func (dm *dataManager) addrRequest(ctx context.Context, req *requests.AddrReques
 	}
 
 	if r := dm.enum.Sys.Cache().AddrSearch(req.Address); r != nil {
-		graph.InsertInfrastructure(r.ASN, r.Description, r.Address, r.Prefix, r.Source, r.Tag, uuid)
-		return nil
+		return graph.InsertInfrastructure(r.ASN, r.Description, r.Address, r.Prefix, r.Source, r.Tag, uuid)
 	}
 
 	for _, src := range dm.enum.srcs {
 		src.Request(ctx, &requests.ASNRequest{Address: req.Address})
 	}
 
+	var err error
 	var found bool
 	t := time.NewTicker(time.Second)
 	defer t.Stop()
@@ -435,7 +435,7 @@ loop:
 			return nil
 		case <-t.C:
 			if r := dm.enum.Sys.Cache().AddrSearch(req.Address); r != nil {
-				graph.InsertInfrastructure(r.ASN, r.Description, r.Address, r.Prefix, r.Source, r.Tag, uuid)
+				err = graph.InsertInfrastructure(r.ASN, r.Description, r.Address, r.Prefix, r.Source, r.Tag, uuid)
 				found = true
 				break loop
 			}
@@ -443,10 +443,12 @@ loop:
 	}
 
 	if !found {
-		graph.InsertInfrastructure(0, "Unknown", req.Address, fakePrefix(req.Address), "RIR", requests.RIR, uuid)
+		err = graph.InsertInfrastructure(0, "Unknown", req.Address, fakePrefix(req.Address), "RIR", requests.RIR, uuid)
 	}
-	graph.HealAddressNodes(dm.enum.Sys.Cache(), uuid)
-	return nil
+	if err != nil {
+		return err
+	}
+	return graph.HealAddressNodes(dm.enum.Sys.Cache(), uuid)
 }
 
 func fakePrefix(addr string) string {
