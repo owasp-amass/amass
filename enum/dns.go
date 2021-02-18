@@ -275,7 +275,7 @@ func (dt *dNSTask) queryServiceNames(ctx context.Context, req *requests.DNSReque
 		srvName := name + "." + req.Name
 
 		msg := resolvers.QueryMsg(srvName, dns.TypeSRV)
-		if resp, err := dt.enum.Sys.Pool().Query(ctx, msg, resolvers.PriorityHigh,
+		if resp, err := dt.enum.Sys.Pool().Query(ctx, msg, resolvers.PriorityLow,
 			resolvers.PoolRetryPolicy); err == nil && len(resp.Answer) > 0 {
 			ans := resolvers.ExtractAnswers(resp)
 			if len(ans) == 0 {
