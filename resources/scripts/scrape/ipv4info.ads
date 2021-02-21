@@ -17,12 +17,7 @@ function vertical(ctx, domain)
     end
 
     if (resp == nil or resp == "") then
-        local path = getpath(ctx, domain)
-        if path == "" then
-            return
-        end
-
-        local token = gettoken(ctx, domain, path)
+        local token = gettoken(ctx, domain)
         if token == "" then
             return
         end
@@ -73,23 +68,8 @@ function vertical(ctx, domain)
     end
 end
 
-function getpath(ctx, domain)
-    local u = "http://ipv4info.com/search/" .. domain
-    local page, err = request(ctx, {['url']=u})
-    if (err ~= nil and err ~= "") then
-        return ""
-    end
-
-    local match = find(page, "/ip-address/(.*)/" .. domain)
-    if (match == nil or #match == 0) then
-        return ""
-    end
-
-    return match[1]
-end
-
-function gettoken(ctx, domain, path)
-    local u = "http://ipv4info.com" .. path
+function gettoken(ctx, domain)
+    local u = "http://ipv4info.com/search/NF/" .. domain
     local page, err = request(ctx, {['url']=u})
     if (err ~= nil and err ~= "") then
         return ""
