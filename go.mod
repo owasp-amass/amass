@@ -6,7 +6,7 @@ require (
 	github.com/AndreasBriese/bbloom v0.0.0-20190825152654-46b345b51c96
 	github.com/PuerkitoBio/goquery v1.6.0
 	github.com/caffix/eventbus v0.0.0-20201229201025-4c5f3ce94295
-	github.com/caffix/pipeline v0.0.0-20210106193115-41730a0744af
+	github.com/caffix/pipeline v0.0.0-20210301171240-503915daec5b
 	github.com/caffix/queue v0.0.0-20210301043549-e3b360b69730
 	github.com/caffix/service v0.0.0-20210202222504-bfa33e78ab27
 	github.com/caffix/stringset v0.0.0-20201218054545-37e95a70826c
