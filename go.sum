@@ -69,8 +69,8 @@ github.com/caffix/eventbus v0.0.0-20201229201025-4c5f3ce94295/go.mod h1:pmScADET
 github.com/caffix/pipeline v0.0.0-20210106193115-41730a0744af h1:BZJalXjEq2bRLaIsrpJlV1we6jz2MgmcmaHT974JQho=
 github.com/caffix/pipeline v0.0.0-20210106193115-41730a0744af/go.mod h1:fBJ9UJa52DVNkeHvNxwTWkO6hegHM5hhNh+4JAz2lcA=
 github.com/caffix/queue v0.0.0-20201229193127-fbd8f53cfd6a/go.mod h1:EGrMYDMC3oIYDWaLGKWMypHkg/vEBDqxbz2guAlY0Wk=
-github.com/caffix/queue v0.0.0-20210106184330-1d2e72b64fa0 h1:jgzHQm4J9oVKhFCG6PJhNPa3MMrMv7tp6hhWmN5qJvc=
-github.com/caffix/queue v0.0.0-20210106184330-1d2e72b64fa0/go.mod h1:EGrMYDMC3oIYDWaLGKWMypHkg/vEBDqxbz2guAlY0Wk=
+github.com/caffix/queue v0.0.0-20210301043549-e3b360b69730 h1:9scnPUlS5CesLD16QQ0Q0+BGvgLiE4ziwsm4XvmZKG8=
+github.com/caffix/queue v0.0.0-20210301043549-e3b360b69730/go.mod h1:EGrMYDMC3oIYDWaLGKWMypHkg/vEBDqxbz2guAlY0Wk=
 github.com/caffix/service v0.0.0-20210202222504-bfa33e78ab27 h1:lbiJHSzLjr0GipVQCQ6xSwKdxj3USq9NYeHi6i11ziw=
 github.com/caffix/service v0.0.0-20210202222504-bfa33e78ab27/go.mod h1:ehXAmYJ8NKx95VYxP6VN3mngWwxWCkEiN+OoVGq0Ux0=
 github.com/caffix/stringset v0.0.0-20201218015502-4f60634ff035/go.mod h1:28GU9FTlJHzfjrFJ5Ep7vmXNkSSM3JF0miNt7ZM9V5w=
