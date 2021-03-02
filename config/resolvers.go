@@ -12,18 +12,18 @@ import (
 	"strconv"
 	"strings"
 
-	amasshttp "github.com/OWASP/Amass/v3/net/http"
+	"github.com/OWASP/Amass/v3/net/http"
 	"github.com/caffix/stringset"
 	"github.com/go-ini/ini"
 )
 
 // DefaultQueriesPerPublicResolver is the number of queries sent to each public DNS resolver per second.
-const DefaultQueriesPerPublicResolver = 10
+const DefaultQueriesPerPublicResolver = 15
 
 // DefaultQueriesPerBaselineResolver is the number of queries sent to each trusted DNS resolver per second.
-const DefaultQueriesPerBaselineResolver = 100
+const DefaultQueriesPerBaselineResolver = 50
 
-const minResolverReliability = 0.95
+const minResolverReliability = 0.85
 
 // DefaultBaselineResolvers is a list of trusted public DNS resolvers.
 var DefaultBaselineResolvers = []string{
@@ -35,10 +35,6 @@ var DefaultBaselineResolvers = []string{
 	"64.6.64.6",      // Verisign
 	"84.200.69.80",   // DNS.WATCH
 	"8.26.56.26",     // Comodo Secure DNS
-	"23.94.60.240",   // OpenNIC
-	"208.76.50.50",   // SmartViper
-	"216.146.35.35",  // Dyn
-	"198.101.242.72", // Alternate DNS
 	"109.69.8.51",    // puntCAT
 	"74.82.42.42",    // Hurricane Electric
 	"77.88.8.8",      // Yandex.DNS
@@ -114,7 +110,7 @@ func (c *Config) calcDNSQueriesMax() {
 
 func getPublicDNSResolvers() ([]string, error) {
 	url := "https://public-dns.info/nameservers-all.csv"
-	page, err := amasshttp.RequestWebPage(context.Background(), url, nil, nil, nil)
+	page, err := http.RequestWebPage(context.Background(), url, nil, nil, nil)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to obtain the Public DNS csv file at %s: %v", url, err)
 	}

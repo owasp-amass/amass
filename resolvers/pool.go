@@ -1,4 +1,4 @@
-// Copyright 2017 Jeff Foley. All rights reserved.
+// Copyright 2017-2021 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 package resolvers
@@ -19,7 +19,10 @@ type resolverPool struct {
 	// Logger for error messages
 	log            *log.Logger
 	baseline       Resolver
-	resolvers      []Resolver
+	partitions     [][]Resolver
+	sfcount        int
+	curPart        int
+	last           time.Time
 	curIdx         int
 	avgs           *slidingWindowTimeouts
 	waits          map[string]time.Time
@@ -28,19 +31,35 @@ type resolverPool struct {
 }
 
 // NewResolverPool initializes a ResolverPool that uses the provided Resolvers.
-func NewResolverPool(resolvers []Resolver, delay time.Duration, baseline Resolver, logger *log.Logger) Resolver {
-	if len(resolvers) == 0 {
+func NewResolverPool(resolvers []Resolver, delay time.Duration, baseline Resolver, partnum int, logger *log.Logger) Resolver {
+	if l := len(resolvers); l == 0 || l > len(resolvers) {
 		return nil
+	}
+	if partnum <= 0 {
+		partnum = 1
 	}
 
 	rp := &resolverPool{
-		baseline:  baseline,
-		resolvers: resolvers,
-		avgs:      newSlidingWindowTimeouts(),
-		waits:     make(map[string]time.Time),
-		delay:     delay,
-		done:      make(chan struct{}, 2),
-		log:       logger,
+		baseline:   baseline,
+		partitions: make([][]Resolver, partnum),
+		last:       time.Now(),
+		avgs:       newSlidingWindowTimeouts(),
+		waits:      make(map[string]time.Time),
+		delay:      delay,
+		done:       make(chan struct{}, 2),
+		log:        logger,
+	}
+
+	num := len(resolvers) / partnum
+	for i := 0; i < partnum; i++ {
+		start := i * num
+		end := (start + num) - 1
+
+		if i == partnum-1 {
+			rp.partitions[i] = resolvers[start:]
+		} else {
+			rp.partitions[i] = resolvers[start:end]
+		}
 	}
 
 	// Assign a null logger when one is not provided
@@ -59,15 +78,17 @@ func (rp *resolverPool) Stop() {
 	rp.hasBeenStopped = true
 	close(rp.done)
 
-	for _, r := range rp.resolvers {
-		r.Stop()
+	for _, partition := range rp.partitions {
+		for _, r := range partition {
+			r.Stop()
+		}
 	}
 
 	if rp.baseline != nil {
 		rp.baseline.Stop()
 	}
 
-	rp.resolvers = []Resolver{}
+	rp.partitions = [][]Resolver{}
 	return
 }
 
@@ -91,10 +112,15 @@ func (rp *resolverPool) nextResolver(ctx context.Context) Resolver {
 		}
 
 		rp.Lock()
+		if rp.sfcount > 5 {
+			rp.nextPartition()
+		}
+
+		part := rp.curPart
 		idx := rp.curIdx
 		rp.curIdx++
-		rp.curIdx = rp.curIdx % len(rp.resolvers)
-		r = rp.resolvers[idx]
+		rp.curIdx = rp.curIdx % len(rp.partitions[part])
+		r = rp.partitions[part][idx]
 		t, found := rp.waits[r.String()]
 		rp.Unlock()
 
@@ -103,13 +129,36 @@ func (rp *resolverPool) nextResolver(ctx context.Context) Resolver {
 		}
 
 		count++
-		count = count % len(rp.resolvers)
-		if count == 0 {
-			time.Sleep(5 * time.Second)
+		count = count % len(rp.partitions[part])
+		if count == 0 || count > 5 {
+			rp.Lock()
+			rp.nextPartition()
+			rp.Unlock()
 		}
 	}
 
 	return r
+}
+
+func (rp *resolverPool) nextPartition() {
+	if time.Now().Before(rp.last.Add(30 * time.Second)) {
+		return
+	}
+
+	rp.curPart++
+	rp.curPart = rp.curPart % len(rp.partitions)
+	rp.last = time.Now()
+	rp.curIdx = 0
+}
+
+func (rp *resolverPool) incServfailCount() {
+	rp.Lock()
+	defer rp.Unlock()
+
+	if time.Now().Before(rp.last.Add(30 * time.Second)) {
+		return
+	}
+	rp.sfcount++
 }
 
 func (rp *resolverPool) updateWait(key string, d time.Duration) {
@@ -125,14 +174,15 @@ func (rp *resolverPool) numUsableResolvers() int {
 
 	var num int
 	now := time.Now()
-	for _, r := range rp.resolvers {
-		t, found := rp.waits[r.String()]
+	for _, partition := range rp.partitions {
+		for _, r := range partition {
+			t, found := rp.waits[r.String()]
 
-		if (!found || t.IsZero() || now.After(t)) && !r.Stopped() {
-			num++
+			if (!found || t.IsZero() || now.After(t)) && !r.Stopped() {
+				num++
+			}
 		}
 	}
-
 	return num
 }
 
@@ -142,12 +192,10 @@ func (rp *resolverPool) Query(ctx context.Context, msg *dns.Msg, priority int, r
 		return rp.baseline.Query(ctx, msg, priority, retry)
 	}
 
-	again := true
-	var times int
 	var err error
 	var r Resolver
 	var resp *dns.Msg
-	for again {
+	for times := 1; !attemptsExceeded(times, priority); times++ {
 		err = checkContext(ctx)
 		if err != nil {
 			break
@@ -163,8 +211,7 @@ func (rp *resolverPool) Query(ctx context.Context, msg *dns.Msg, priority int, r
 		var timeout bool
 		// Check if the response is considered a resolver failure to be tracked
 		if err != nil {
-			if e, ok := err.(*ResolveError); ok && (e.Rcode == TimeoutRcode ||
-				e.Rcode == dns.RcodeServerFailure || e.Rcode == dns.RcodeRefused) {
+			if e, ok := err.(*ResolveError); ok && e.Rcode == TimeoutRcode {
 				timeout = true
 			}
 		}
@@ -179,15 +226,15 @@ func (rp *resolverPool) Query(ctx context.Context, msg *dns.Msg, priority int, r
 			break
 		}
 		// Timeouts and resolver errors can cause retries without executing the callback
-		if err != nil {
-			if e, ok := err.(*ResolveError); ok && (e.Rcode == TimeoutRcode || e.Rcode == ResolverErrRcode) {
-				continue
-			}
+		if e, ok := err.(*ResolveError); ok && (e.Rcode == TimeoutRcode || e.Rcode == ResolverErrRcode) {
+			continue
+		} else if ok && e.Rcode == dns.RcodeServerFailure {
+			rp.incServfailCount()
+			continue
 		}
 
-		if retry != nil {
-			times++
-			again = retry(times, priority, resp)
+		if retry == nil || !retry(times, priority, resp) {
+			break
 		}
 	}
 
@@ -208,5 +255,5 @@ func (rp *resolverPool) WildcardType(ctx context.Context, msg *dns.Msg, domain s
 	if rp.baseline != nil {
 		return rp.baseline.WildcardType(ctx, msg, domain)
 	}
-	return rp.resolvers[0].WildcardType(ctx, msg, domain)
+	return rp.partitions[0][0].WildcardType(ctx, msg, domain)
 }

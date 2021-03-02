@@ -4,10 +4,10 @@
 package systems
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"runtime"
 	"sort"
@@ -20,7 +20,6 @@ import (
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/resolvers"
 	"github.com/caffix/service"
-	"github.com/miekg/dns"
 )
 
 // LocalSystem implements a System to be executed within a single process.
@@ -296,7 +295,7 @@ func customResolverSetup(cfg *config.Config, max int) resolvers.Resolver {
 		}
 	}
 
-	return resolvers.NewResolverPool(trusted, 2*time.Second, nil, cfg.Log)
+	return resolvers.NewResolverPool(trusted, 2*time.Second, nil, 1, cfg.Log)
 }
 
 func publicResolverSetup(cfg *config.Config, max int) resolvers.Resolver {
@@ -318,10 +317,10 @@ func publicResolverSetup(cfg *config.Config, max int) resolvers.Resolver {
 		}
 	}
 
-	baseline := resolvers.NewResolverPool(trusted, 2*time.Second, nil, cfg.Log)
+	baseline := resolvers.NewResolverPool(trusted, time.Second, nil, 1, cfg.Log)
 	r := setupResolvers(config.PublicResolvers, max, config.DefaultQueriesPerPublicResolver, cfg.Log)
 
-	return resolvers.NewResolverPool(r, 5*time.Second, baseline, cfg.Log)
+	return resolvers.NewResolverPool(r, 2*time.Second, baseline, 2, cfg.Log)
 }
 
 func setupResolvers(addrs []string, max, rate int, log *log.Logger) []resolvers.Resolver {
@@ -330,20 +329,15 @@ func setupResolvers(addrs []string, max, rate int, log *log.Logger) []resolvers.
 	}
 
 	finished := make(chan resolvers.Resolver, 10)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
 	for _, addr := range addrs {
+		if _, _, err := net.SplitHostPort(addr); err != nil {
+			// Add the default port number to the IP address
+			addr = net.JoinHostPort(addr, "53")
+		}
 		go func(ip string, ch chan resolvers.Resolver) {
-			if n := resolvers.NewBaseResolver(ip, rate, log); n != nil {
-				msg := resolvers.QueryMsg("www.owasp.org", dns.TypeA)
-
-				if resp, err := n.Query(ctx, msg, resolvers.PriorityCritical,
-					func(times int, priority int, msg *dns.Msg) bool {
-						return msg.Rcode == resolvers.TimeoutRcode && times < 3
-					}); err == nil && resp != nil && len(resp.Answer) > 0 {
+			if err := resolvers.ClientSubnetCheck(ip); err == nil {
+				if n := resolvers.NewBaseResolver(ip, rate, log); n != nil {
 					ch <- n
-					return
 				}
 			}
 			ch <- nil
