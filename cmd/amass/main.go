@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2020. All rights reserved.
+// Copyright © by Jeff Foley 2017-2021. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -145,7 +145,7 @@ func GetAllSourceInfo(cfg *config.Config) []string {
 	if err != nil {
 		return []string{}
 	}
-	defer sys.Shutdown()
+	defer func() { _ = sys.Shutdown() }()
 
 	srcs := datasrcs.SelectedDataSources(cfg, datasrcs.GetAllSources(sys))
 	sys.SetDataSources(srcs)
@@ -365,11 +365,11 @@ func healASInfo(uuids []string, db *graph.Graph) bool {
 		return false
 	}
 	sys.SetDataSources(datasrcs.GetAllSources(sys))
-	defer sys.Shutdown()
+	defer func() { _ = sys.Shutdown() }()
 
 	cache := sys.Cache()
 	for _, g := range sys.GraphDatabases() {
-		g.ASNCacheFill(cache)
+		_ = g.ASNCacheFill(cache)
 	}
 
 	bus := eventbus.NewEventBus()
@@ -383,7 +383,7 @@ func healASInfo(uuids []string, db *graph.Graph) bool {
 		for _, out := range db.EventOutput(uuid, nil, false, cache) {
 			for _, a := range out.Addresses {
 				if r := cache.AddrSearch(a.Address.String()); r != nil {
-					db.InsertInfrastructure(r.ASN, r.Description, r.Address, r.Prefix, r.Source, r.Tag, uuid)
+					_ = db.InsertInfrastructure(r.ASN, r.Description, r.Address, r.Prefix, r.Source, r.Tag, uuid)
 					continue
 				}
 
@@ -399,7 +399,7 @@ func healASInfo(uuids []string, db *graph.Graph) bool {
 				}
 
 				if r := cache.AddrSearch(a.Address.String()); r != nil {
-					db.InsertInfrastructure(r.ASN, r.Description, r.Address, r.Prefix, r.Source, r.Tag, uuid)
+					_ = db.InsertInfrastructure(r.ASN, r.Description, r.Address, r.Prefix, r.Source, r.Tag, uuid)
 				}
 
 				updated = true

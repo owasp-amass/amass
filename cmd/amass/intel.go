@@ -1,4 +1,4 @@
-// Copyright 2017 Jeff Foley. All rights reserved.
+// Copyright 2017-2021 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 package main
@@ -233,7 +233,7 @@ func runIntelCommand(clArgs []string) {
 		args.Options.IPs = false
 		args.Options.IPv4 = false
 		args.Options.IPv6 = false
-		go ic.ReverseWhois()
+		go func() { _ = ic.ReverseWhois() }()
 	} else {
 		var ctx context.Context
 		var cancel context.CancelFunc
@@ -255,7 +255,7 @@ func runIntelCommand(clArgs []string) {
 			}
 		}()
 
-		go ic.HostedDomains(ctx)
+		go func() { _ = ic.HostedDomains(ctx) }()
 	}
 
 	processIntelOutput(ic, &args)
@@ -294,11 +294,11 @@ func processIntelOutput(ic *intel.Collection, args *intelArgs) {
 			os.Exit(1)
 		}
 		defer func() {
-			outptr.Sync()
-			outptr.Close()
+			_ = outptr.Sync()
+			_ = outptr.Close()
 		}()
-		outptr.Truncate(0)
-		outptr.Seek(0, 0)
+		_ = outptr.Truncate(0)
+		_, _ = outptr.Seek(0, 0)
 	}
 
 	// Collect all the names returned by the intelligence collection
