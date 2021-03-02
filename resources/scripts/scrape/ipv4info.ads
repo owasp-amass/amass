@@ -9,35 +9,20 @@ function start()
 end
 
 function vertical(ctx, domain)
-    local resp
-    local cfg = datasrc_config()
-    -- Check if the response data is in the graph database
-    if (cfg.ttl ~= nil and cfg.ttl > 0) then
-        resp = obtain_response(domain, cfg.ttl)
+    local path = getpath(ctx, domain)
+    if path == "" then
+        return
     end
 
-    if (resp == nil or resp == "") then
-        local path = getpath(ctx, domain)
-        if path == "" then
-            return
-        end
+    local token = gettoken(ctx, domain, path)
+    if token == "" then
+        return
+    end
 
-        local token = gettoken(ctx, domain, path)
-        if token == "" then
-            return
-        end
-
-        local err
-        local u = "http://ipv4info.com/subdomains/" .. token .. "/" .. domain .. ".html"
-        checkratelimit()
-        resp, err = request(ctx, {['url']=u})
-        if (err ~= nil and err ~= "") then
-            return
-        end
-
-        if (cfg.ttl ~= nil and cfg.ttl > 0) then
-            cache_response(domain, resp)
-        end
+    local u = "http://ipv4info.com/subdomains/" .. token .. "/" .. domain .. ".html"
+    local resp, err = request(ctx, {['url']=u})
+    if (err ~= nil and err ~= "") then
+        return
     end
 
     sendnames(ctx, resp)
@@ -49,26 +34,13 @@ function vertical(ctx, domain)
 
         local page = "page" .. tostring(pagenum)
         local key = domain .. page
-        if (cfg.ttl ~= nil and cfg.ttl > 0) then
-            resp = obtain_response(key, cfg.ttl)
-        end
-    
+       
+        resp = nextpage(ctx, domain, last, page)
         if (resp == nil or resp == "") then
-            checkratelimit()
-            resp = nextpage(ctx, domain, last, page)
-            if (resp == nil or resp == "") then
-                break
-            end
-
-            if (cfg.ttl ~= nil and cfg.ttl > 0) then
-                cache_response(key, resp)
-            end
+            break
         end
 
-        if (resp ~= nil and resp ~= "") then
-            sendnames(ctx, resp)
-        end
-
+        sendnames(ctx, resp)
         pagenum = pagenum + 1
     end
 end

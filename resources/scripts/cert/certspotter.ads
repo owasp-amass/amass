@@ -8,16 +8,11 @@ name = "CertSpotter"
 type = "cert"
 
 function start()
-    setratelimit(2)
+    setratelimit(1)
 end
 
 function vertical(ctx, domain)
-    getnames(ctx, newapiurl(domain))
-    checkratelimit()
-    getnames(ctx, oldapiurl(domain))
-end
-
-function getnames(ctx, vurl)
+    local vurl = newapiurl(domain)
     local page, err = request(ctx, {['url']=vurl})
     if (err ~= nil and err ~= "") then
         return
@@ -44,10 +39,6 @@ function newapiurl(domain)
     }
 
     return "https://api.certspotter.com/v1/issuances?" .. url.build_query_string(params)
-end
-
-function oldapiurl(domain)
-    return "https://certspotter.com/api/v0/certs?domain=" .. domain
 end
 
 function sendnames(ctx, content)

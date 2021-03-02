@@ -117,7 +117,10 @@ function asinfo(ctx, asn, ttl)
         name = name .. j.data.name
     end
     if (j.data.description_full ~= nil) then
-        name = name .. " - " .. j.data.description_full
+        name = name .. " -"
+        for _, desc in pairs(j.data.description_full) do
+            name = name .. " " .. desc
+        end
     end
 
     return {
@@ -151,27 +154,12 @@ function netblocks(ctx, asn, ttl)
 end
 
 function cacherequest(ctx, url, ttl)
-    local resp
-    -- Check if the response data is in the graph database
-    if (ttl ~= nil and ttl > 0) then
-        resp = obtain_response(url, ttl)
-    end
-
-    if (resp == nil or resp == "") then
-        local err
-
-        checkratelimit()
-        resp, err = request(ctx, {
-            ['url']=url,
-            headers={['Content-Type']="application/json"},
-        })
-        if (err ~= nil and err ~= "") then
-            return ""
-        end
-
-        if (ttl ~= nil and ttl > 0) then
-            cache_response(url, resp)
-        end
+    local resp, err = request(ctx, {
+        ['url']=url,
+        headers={['Content-Type']="application/json"},
+    })
+    if (err ~= nil and err ~= "") then
+        return ""
     end
 
     return resp

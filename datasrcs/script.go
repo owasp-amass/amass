@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"time"
 
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/net/dns"
@@ -206,6 +207,10 @@ func (s *Script) OnStop() error {
 	L := s.luaState
 	if s.stop.Type() == lua.LTNil {
 		return nil
+	}
+
+	for L.Status(L) == "running" {
+		time.Sleep(250 * time.Millisecond)
 	}
 
 	err := L.CallByParam(lua.P{

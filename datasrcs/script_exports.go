@@ -616,13 +616,6 @@ func (s *Script) request(L *lua.LState) int {
 		return 2
 	}
 
-	cfg, bus, err := ContextConfigBus(ctx)
-	if err != nil {
-		L.Push(lua.LNil)
-		L.Push(lua.LString("No config and event bus values in context"))
-		return 2
-	}
-
 	opt := L.CheckTable(2)
 	if opt == nil {
 		L.Push(lua.LNil)
@@ -655,15 +648,11 @@ func (s *Script) request(L *lua.LState) int {
 	id, _ := getStringField(L, opt, "id")
 	pass, _ := getStringField(L, opt, "pass")
 
-	page, err := http.RequestWebPage(ctx, url, body, headers,
-		&http.BasicAuth{
-			Username: id,
-			Password: pass,
-		})
+	page, err := s.req(ctx, url, body, headers, &http.BasicAuth{
+		Username: id,
+		Password: pass,
+	})
 	if err != nil {
-		if cfg.Verbose {
-			bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", s.String(), url, err))
-		}
 		L.Push(lua.LString(page))
 		L.Push(lua.LString(err.Error()))
 		return 2
@@ -682,7 +671,7 @@ func (s *Script) scrape(L *lua.LState) int {
 		return 1
 	}
 
-	cfg, bus, err := ContextConfigBus(ctx)
+	cfg, _, err := ContextConfigBus(ctx)
 	if err != nil {
 		L.Push(lua.LFalse)
 		return 1
@@ -711,32 +700,13 @@ func (s *Script) scrape(L *lua.LState) int {
 	id, _ := getStringField(L, opt, "id")
 	pass, _ := getStringField(L, opt, "pass")
 
-	var resp string
-	// Check for cached responses first
-	dsc := s.sys.Config().GetDataSourceConfig(s.String())
-	if dsc != nil && dsc.TTL > 0 {
-		if r, err := s.getCachedResponse(url, dsc.TTL); err == nil {
-			resp = r
-		}
-	}
-
-	if resp == "" {
-		resp, err = http.RequestWebPage(ctx, url, nil, headers,
-			&http.BasicAuth{
-				Username: id,
-				Password: pass,
-			})
-		if err != nil {
-			if cfg.Verbose {
-				bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", s.String(), url, err))
-			}
-			L.Push(lua.LFalse)
-			return 1
-		}
-
-		if dsc != nil && dsc.TTL > 0 {
-			_ = s.setCachedResponse(url, resp)
-		}
+	resp, err := s.req(ctx, url, nil, headers, &http.BasicAuth{
+		Username: id,
+		Password: pass,
+	})
+	if err != nil {
+		L.Push(lua.LFalse)
+		return 1
 	}
 
 	found = false
@@ -758,6 +728,33 @@ func (s *Script) scrape(L *lua.LState) int {
 		L.Push(lua.LFalse)
 	}
 	return 1
+}
+
+func (s *Script) req(ctx context.Context, url string, body io.Reader, headers map[string]string, auth *http.BasicAuth) (string, error) {
+	cfg, bus, err := ContextConfigBus(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	// Check for cached responses first
+	dsc := s.sys.Config().GetDataSourceConfig(s.String())
+	if dsc != nil && dsc.TTL > 0 {
+		if r, err := s.getCachedResponse(url, dsc.TTL); err == nil {
+			return r, err
+		}
+	}
+
+	numRateLimitChecks(s, s.seconds)
+	resp, err := http.RequestWebPage(ctx, url, nil, headers, auth)
+	if err != nil {
+		if cfg.Verbose {
+			bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", s.String(), url, err))
+		}
+	} else if dsc != nil && dsc.TTL > 0 {
+		_ = s.setCachedResponse(url, resp)
+	}
+
+	return resp, err
 }
 
 // Wrapper so that scripts can crawl for subdomain names in scope.
