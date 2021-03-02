@@ -198,7 +198,7 @@ func (dt *dNSTask) handleResolverError(ctx context.Context, e error) {
 	}
 
 	if rcode := rerr.Rcode; !cfg.Verbose && (rcode == resolvers.TimeoutRcode ||
-		rcode == resolvers.ResolverErrRcode || rcode == dns.RcodeNameError) {
+		rcode == resolvers.ResolverErrRcode || rcode == dns.RcodeNameError || rcode == dns.RcodeServerFailure) {
 		return
 	}
 

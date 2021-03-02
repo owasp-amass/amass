@@ -1,4 +1,4 @@
-// Copyright 2017-2020 Jeff Foley. All rights reserved.
+// Copyright 2017-2021 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 package config
@@ -31,9 +31,8 @@ func (c *Config) AcquireScripts() ([]string, error) {
 		paths = append(paths, c.ScriptsDirectory)
 	}
 
-	err = nil
 	for _, path := range paths {
-		err = filepath.Walk(path, func(path string, info os.FileInfo, err error) error {
+		_ = filepath.Walk(path, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				return err
 			}
@@ -50,12 +49,9 @@ func (c *Config) AcquireScripts() ([]string, error) {
 			scripts = append(scripts, string(data))
 			return nil
 		})
-		if err != nil {
-			break
-		}
 	}
 
-	return scripts, err
+	return scripts, nil
 }
 
 func getDefaultScripts() []string {
