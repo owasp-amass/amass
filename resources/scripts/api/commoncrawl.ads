@@ -13,23 +13,16 @@ function start()
 end
 
 function vertical(ctx, domain)
-    -- Check that the index URLs have been obtained
+    urls = indexurls(ctx)
     if (urls == nil or #urls == 0) then
-        urls = indexurls(ctx)
-        if (urls == nil or #urls == 0) then
-            return
-        end
-
-        checkratelimit()
+        return
     end
 
-    for i, url in pairs(urls) do
+    for _, url in pairs(urls) do
         scrape(ctx, {
             ['url']=buildurl(url, domain),
             headers={['Content-Type']="application/json"},
         })
-
-        checkratelimit()
     end
 end
 
@@ -38,29 +31,12 @@ function buildurl(url, domain)
 end
 
 function indexurls(ctx)
-    local resp
-    local cfg = datasrc_config()
-    local iurl = "https://index.commoncrawl.org/collinfo.json"
-    -- Check if the response data is in the graph database
-    if (cfg.ttl ~= nil and cfg.ttl > 0) then
-        resp = obtain_response(iurl, cfg.ttl)
-    end
-
-    if (resp == nil or resp == "") then
-        local err
-
-        resp, err = request(ctx, {
-            url=iurl,
-            headers={['Content-Type']="application/json"},
-        })
-        if (err ~= nil and err ~= "") then
-            log(ctx, err .. ": " .. resp)
-            return nil
-        end
-
-        if (cfg.ttl ~= nil and cfg.ttl > 0) then
-            cache_response(iurl, resp)
-        end
+    local resp, err = request(ctx, {
+        url="https://index.commoncrawl.org/collinfo.json",
+        headers={['Content-Type']="application/json"},
+    })
+    if (err ~= nil and err ~= "") then
+        return nil
     end
 
     local data = json.decode(resp)
@@ -69,7 +45,7 @@ function indexurls(ctx)
     end
 
     local urls = {}
-    for i, u in pairs(data) do
+    for _, u in pairs(data) do
         local url = u["cdx-api"]
         if (url ~= nil and url ~= "") then
             table.insert(urls, url)

@@ -24,9 +24,10 @@ func (g *Graph) InsertSource(source, tag string) (Node, error) {
 	if p, err := g.db.ReadProperties(node, "tag"); err == nil && len(p) > 0 {
 		if p[0].Value != tag {
 			// Remove an existing 'tag' property
-			g.db.DeleteProperty(node, p[0].Predicate, p[0].Value)
-			// Update the 'tag' property
-			insert = true
+			if err := g.db.DeleteProperty(node, p[0].Predicate, p[0].Value); err == nil {
+				// Update the 'tag' property
+				insert = true
+			}
 		}
 	} else {
 		// The tag was not found
@@ -153,7 +154,9 @@ func (g *Graph) CacheSourceData(source, tag, query, resp string) error {
 	}
 
 	// Remove previously cached responses for the same query
-	g.deleteCachedData(source, query)
+	if err := g.deleteCachedData(source, query); err != nil {
+		return err
+	}
 
 	ts := time.Now().Format(time.RFC3339)
 	rnode, err := g.InsertNodeIfNotExist(source+"-response-"+ts, "response")
@@ -188,8 +191,12 @@ func (g *Graph) deleteCachedData(source, query string) error {
 	}
 
 	for _, edge := range edges {
-		g.db.DeleteNode(edge.To)
-		g.db.DeleteEdge(edge)
+		if err := g.db.DeleteNode(edge.To); err != nil {
+			return err
+		}
+		if err := g.db.DeleteEdge(edge); err != nil {
+			return err
+		}
 	}
 
 	return nil

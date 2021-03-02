@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"time"
 
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/net/dns"
@@ -63,8 +64,7 @@ func NewScript(script string, sys systems.System) *Script {
 	L.SetContext(ctx)
 
 	// Load the script
-	err = L.DoString(script)
-	if err != nil {
+	if err := L.DoString(script); err != nil {
 		msg := fmt.Sprintf("Script: Failed to load script: %v", err)
 
 		sys.Config().Log.Print(msg)
@@ -189,7 +189,6 @@ func (s *Script) OnStart() error {
 		NRet:    0,
 		Protect: true,
 	})
-
 	if err != nil {
 		s.sys.Config().Log.Print(fmt.Sprintf("%s: start callback: %v", s.String(), err))
 	}
@@ -208,6 +207,10 @@ func (s *Script) OnStop() error {
 	L := s.luaState
 	if s.stop.Type() == lua.LTNil {
 		return nil
+	}
+
+	for L.Status(L) == "running" {
+		time.Sleep(250 * time.Millisecond)
 	}
 
 	err := L.CallByParam(lua.P{
@@ -282,6 +285,10 @@ func (s *Script) dnsRequest(ctx context.Context, req *requests.DNSRequest) {
 		return
 	}
 
+	if err := checkContextExpired(ctx); err != nil {
+		return
+	}
+
 	_, bus, err := ContextConfigBus(ctx)
 	if err != nil {
 		return
@@ -307,6 +314,10 @@ func (s *Script) resolvedRequest(ctx context.Context, req *requests.ResolvedRequ
 	L := s.luaState
 
 	if s.resolved.Type() == lua.LTNil || req == nil || req.Name == "" || len(req.Records) == 0 {
+		return
+	}
+
+	if err := checkContextExpired(ctx); err != nil {
 		return
 	}
 
@@ -345,6 +356,10 @@ func (s *Script) subdomainRequest(ctx context.Context, req *requests.SubdomainRe
 		return
 	}
 
+	if err := checkContextExpired(ctx); err != nil {
+		return
+	}
+
 	_, bus, err := ContextConfigBus(ctx)
 	if err != nil {
 		return
@@ -367,6 +382,10 @@ func (s *Script) addrRequest(ctx context.Context, req *requests.AddrRequest) {
 	L := s.luaState
 
 	if s.address.Type() == lua.LTNil || req == nil || req.Address == "" {
+		return
+	}
+
+	if err := checkContextExpired(ctx); err != nil {
 		return
 	}
 
@@ -395,6 +414,10 @@ func (s *Script) asnRequest(ctx context.Context, req *requests.ASNRequest) {
 		return
 	}
 
+	if err := checkContextExpired(ctx); err != nil {
+		return
+	}
+
 	_, bus, err := ContextConfigBus(ctx)
 	if err != nil {
 		return
@@ -417,6 +440,10 @@ func (s *Script) whoisRequest(ctx context.Context, req *requests.WhoisRequest) {
 	L := s.luaState
 
 	if s.horizontal.Type() == lua.LTNil {
+		return
+	}
+
+	if err := checkContextExpired(ctx); err != nil {
 		return
 	}
 
@@ -449,7 +476,9 @@ func (s *Script) getCachedResponse(url string, ttl int) (string, error) {
 
 func (s *Script) setCachedResponse(url, resp string) error {
 	for _, db := range s.sys.GraphDatabases() {
-		db.CacheSourceData(s.String(), s.SourceType, url, resp)
+		if err := db.CacheSourceData(s.String(), s.SourceType, url, resp); err != nil {
+			return err
+		}
 	}
 	return nil
 }

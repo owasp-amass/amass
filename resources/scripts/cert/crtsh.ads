@@ -11,27 +11,12 @@ function start()
 end
 
 function vertical(ctx, domain)
-    local resp
-    local cfg = datasrc_config()
-    -- Check if the response data is in the graph database
-    if (cfg.ttl ~= nil and cfg.ttl > 0) then
-        resp = obtain_response(domain, cfg.ttl)
-    end
-
-    if (resp == nil or resp == "") then
-        local err
-
-        resp, err = request(ctx, {
-            ['url']=buildurl(domain),
-            headers={['Content-Type']="application/json"},
-        })
-        if (err ~= nil and err ~= "") then
-            return
-        end
-
-        if (cfg.ttl ~= nil and cfg.ttl > 0) then
-            cache_response(domain, resp)
-        end
+    local resp, err = request(ctx, {
+        ['url']=buildurl(domain),
+        headers={['Content-Type']="application/json"},
+    })
+    if (err ~= nil and err ~= "") then
+        return
     end
 
     dec = json.decode(resp)

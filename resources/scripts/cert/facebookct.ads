@@ -1,4 +1,4 @@
--- Copyright 2017 Jeff Foley. All rights reserved.
+-- Copyright 2017-2021 Jeff Foley. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 local json = require("json")
@@ -7,7 +7,7 @@ name = "FacebookCT"
 type = "cert"
 
 function start()
-    setratelimit(20)
+    setratelimit(10)
 end
 
 function check()
@@ -36,40 +36,25 @@ function vertical(ctx, domain)
         return
     end
 
-    local dec
-    local resp
-    -- Check if the response data is in the graph database
-    if (cfg.ttl ~= nil and cfg.ttl > 0) then
-        resp = obtain_response(domain, cfg.ttl)
+    local resp, err = request(ctx, {
+        url=authurl(c.key, c.secret),
+        headers={['Content-Type']="application/json"},
+    })
+    if (err ~= nil and err ~= "") then
+        return
     end
-
-    if (resp == nil or resp == "") then
-        local err
-
-        resp, err = request(ctx, {
-            url=authurl(c.key, c.secret),
-            headers={['Content-Type']="application/json"},
-        })
-        if (err ~= nil and err ~= "") then
-            return
-        end
     
-        dec = json.decode(resp)
-        if (dec == nil or dec.access_token == nil or dec.access_token == "") then
-            return
-        end
+    local dec = json.decode(resp)
+    if (dec == nil or dec.access_token == nil or dec.access_token == "") then
+        return
+    end
     
-        resp, err = request(ctx, {
-            url=queryurl(domain, dec.access_token),
-            headers={['Content-Type']="application/json"},
-        })
-        if (err ~= nil and err ~= "") then
-            return
-        end
-
-        if (cfg.ttl ~= nil and cfg.ttl > 0) then
-            cache_response(domain, resp)
-        end
+    resp, err = request(ctx, {
+        url=queryurl(domain, dec.access_token),
+        headers={['Content-Type']="application/json"},
+    })
+    if (err ~= nil and err ~= "") then
+        return
     end
 
     dec = json.decode(resp)

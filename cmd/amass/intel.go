@@ -1,4 +1,4 @@
-// Copyright 2017 Jeff Foley. All rights reserved.
+// Copyright 2017-2021 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 package main
@@ -76,7 +76,7 @@ func defineIntelArgumentFlags(intelFlags *flag.FlagSet, args *intelArgs) {
 	intelFlags.Var(&args.Excluded, "exclude", "Data source names separated by commas to be excluded")
 	intelFlags.Var(&args.Included, "include", "Data source names separated by commas to be included")
 	intelFlags.IntVar(&args.MaxDNSQueries, "max-dns-queries", 0, "Maximum number of concurrent DNS queries")
-	intelFlags.Var(&args.Ports, "p", "Ports separated by commas (default: 443)")
+	intelFlags.Var(&args.Ports, "p", "Ports separated by commas (default: 80, 443)")
 	intelFlags.Var(&args.Resolvers, "r", "IP addresses of preferred DNS resolvers (can be used multiple times)")
 	intelFlags.IntVar(&args.Timeout, "timeout", 0, "Number of minutes to let enumeration run before quitting")
 }
@@ -173,6 +173,10 @@ func runIntelCommand(clArgs []string) {
 		commandUsage(intelUsageMsg, intelCommand, intelBuf)
 		os.Exit(1)
 	}
+	if !cfg.Active && len(args.Ports) > 0 {
+		r.Fprintln(color.Error, "Ports can only be scanned in the active mode")
+		os.Exit(1)
+	}
 
 	// Check if the user requested data source information
 	if args.Options.ListSources && len(args.ASNs) == 0 {
@@ -229,7 +233,7 @@ func runIntelCommand(clArgs []string) {
 		args.Options.IPs = false
 		args.Options.IPv4 = false
 		args.Options.IPv6 = false
-		go ic.ReverseWhois()
+		go func() { _ = ic.ReverseWhois() }()
 	} else {
 		var ctx context.Context
 		var cancel context.CancelFunc
@@ -251,7 +255,7 @@ func runIntelCommand(clArgs []string) {
 			}
 		}()
 
-		go ic.HostedDomains(ctx)
+		go func() { _ = ic.HostedDomains(ctx) }()
 	}
 
 	processIntelOutput(ic, &args)
@@ -290,11 +294,11 @@ func processIntelOutput(ic *intel.Collection, args *intelArgs) {
 			os.Exit(1)
 		}
 		defer func() {
-			outptr.Sync()
-			outptr.Close()
+			_ = outptr.Sync()
+			_ = outptr.Close()
 		}()
-		outptr.Truncate(0)
-		outptr.Seek(0, 0)
+		_ = outptr.Truncate(0)
+		_, _ = outptr.Seek(0, 0)
 	}
 
 	// Collect all the names returned by the intelligence collection

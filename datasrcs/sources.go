@@ -26,7 +26,6 @@ func GetAllSources(sys systems.System) []service.Service {
 		NewNetworksDB(sys),
 		NewPastebin(sys),
 		NewRADb(sys),
-		NewRobtex(sys),
 		NewShadowServer(sys),
 		NewTeamCymru(sys),
 		NewTwitter(sys),
@@ -125,4 +124,14 @@ func numRateLimitChecks(srv service.Service, num int) {
 	for i := 0; i < num; i++ {
 		srv.CheckRateLimit()
 	}
+}
+
+func checkContextExpired(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return errors.New("Context expired")
+	default:
+	}
+
+	return nil
 }

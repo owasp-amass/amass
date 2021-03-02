@@ -1,4 +1,4 @@
--- Copyright 2017 Jeff Foley. All rights reserved.
+-- Copyright 2017-2021 Jeff Foley. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 local json = require("json")
@@ -23,25 +23,10 @@ function asn(ctx, addr, asn)
         return
     end
 
-    local resp
     local aurl = asnurl(addr)
-    local cfg = datasrc_config()
-    -- Check if the response data is in the graph database
-    if (cfg and cfg.ttl ~= nil and cfg.ttl > 0) then
-        resp = obtain_response(aurl, cfg.ttl)
-    end
-
-    if (resp == nil or resp == "") then
-        local err
-
-        resp, err = request(ctx, {url=aurl})
-        if (err ~= nil and err ~= "") then
-            return
-        end
-
-        if (cfg and cfg.ttl ~= nil and cfg.ttl > 0) then
-            cache_response(aurl, resp)
-        end
+    local resp, err = request(ctx, {url=aurl})
+    if (err ~= nil and err ~= "") then
+        return
     end
 
     local j = json.decode("{\"results\": [" .. resp .. "]}")

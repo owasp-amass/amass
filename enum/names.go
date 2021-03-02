@@ -124,7 +124,7 @@ loop:
 					break
 				}
 				if _, err := f.enum.Graph.ReadNode(a.Name, "fqdn"); err == nil {
-					f.enum.Graph.InsertFQDN(a.Name, a.Source, a.Tag, uuid)
+					_, _ = f.enum.Graph.InsertFQDN(a.Name, a.Source, a.Tag, uuid)
 				}
 				count++
 			}
@@ -135,7 +135,7 @@ loop:
 	f.queue.Process(each)
 	for _, a := range pending {
 		if _, err := f.enum.Graph.ReadNode(a.Name, "fqdn"); err == nil {
-			f.enum.Graph.InsertFQDN(a.Name, a.Source, a.Tag, uuid)
+			_, _ = f.enum.Graph.InsertFQDN(a.Name, a.Source, a.Tag, uuid)
 		}
 	}
 }

@@ -1,4 +1,4 @@
--- Copyright 2017 Jeff Foley. All rights reserved.
+-- Copyright 2017-2021 Jeff Foley. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 local json = require("json")
@@ -7,7 +7,7 @@ name = "VirusTotal"
 type = "api"
 
 function start()
-    setratelimit(15)
+    setratelimit(10)
 end
 
 function vertical(ctx, domain)
@@ -16,35 +16,23 @@ function vertical(ctx, domain)
     if cfg ~= nil then
         c = cfg.credentials
     end
+
     local haskey = true
     if (c == nil or c.key == nil or c.key == "") then
         haskey = false
     end
 
-    local resp
     local vurl = buildurl(domain)
     if haskey then
         vurl = apiurl(domain, c.key)
     end
-    -- Check if the response data is in the graph database
-    if (cfg and cfg.ttl ~= nil and cfg.ttl > 0) then
-        resp = obtain_response(domain, cfg.ttl)
-    end
 
-    if (resp == nil or resp == "") then
-        local err
-
-        resp, err = request(ctx, {
-            url=vurl,
-            headers={['Content-Type']="application/json"},
-        })
-        if (err ~= nil and err ~= "") then
-            return
-        end
-
-        if (cfg and cfg.ttl ~= nil and cfg.ttl > 0) then
-            cache_response(domain, resp)
-        end
+    local resp, err = request(ctx, {
+        url=vurl,
+        headers={['Content-Type']="application/json"},
+    })
+    if (err ~= nil and err ~= "") then
+        return
     end
 
     local d = json.decode(resp)

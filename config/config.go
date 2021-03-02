@@ -152,7 +152,7 @@ func NewConfig() *Config {
 	c := &Config{
 		UUID:                uuid.New(),
 		Log:                 log.New(ioutil.Discard, "", 0),
-		Ports:               []int{443},
+		Ports:               []int{80, 443},
 		MinForRecursive:     1,
 		MonitorResolverRate: true,
 		LocalDatabase:       true,
@@ -229,8 +229,8 @@ func (c *Config) LoadSettings(path string) error {
 		return fmt.Errorf("Error mapping configuration settings to internal values: %v", err)
 	}
 	// Attempt to load a special mode of operation specified by the user
-	if cfg.Section(ini.DEFAULT_SECTION).HasKey("mode") {
-		mode := cfg.Section(ini.DEFAULT_SECTION).Key("mode").String()
+	if cfg.Section(ini.DefaultSection).HasKey("mode") {
+		mode := cfg.Section(ini.DefaultSection).Key("mode").String()
 
 		if mode == "passive" {
 			c.Passive = true

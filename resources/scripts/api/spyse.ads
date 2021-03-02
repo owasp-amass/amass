@@ -166,13 +166,13 @@ function asn(ctx, addr, asn)
             return
         end
 
-        asn, prefix = getasn(addr)
+        asn, prefix = getasn(ctx, addr, c.key, cfg.ttl)
         if (asn == 0) then
             return
         end
     end
 
-    local a = asinfo(asn)
+    local a = asinfo(ctx, asn, c.key, cfg.ttl)
     if (a == nil or #(a.netblocks) == 0) then
         return
     end
@@ -247,30 +247,15 @@ function asinfo(ctx, asn, key, ttl)
 end
 
 function getpage(ctx, url, key, ttl)
-    local resp
-    -- Check if the response data is in the graph database
-    if (ttl ~= nil and ttl > 0) then
-        resp = obtain_response(url, ttl)
-    end
-
-    if (resp == nil or resp == "") then
-        local err
-
-        checkratelimit()
-        resp, err = request(ctx, {
-            ['url']=url,
-            headers={
-                ['Authorization']="Bearer " .. key,
-                ['Content-Type']="application/json",
-            },
-        })
-        if (err ~= nil and err ~= "") then
-            return ""
-        end
-
-        if (ttl ~= nil and ttl > 0) then
-            cache_response(url, resp)
-        end
+    local resp, err = request(ctx, {
+        ['url']=url,
+        headers={
+            ['Authorization']="Bearer " .. key,
+            ['Content-Type']="application/json",
+        },
+    })
+    if (err ~= nil and err ~= "") then
+        return ""
     end
 
     return resp

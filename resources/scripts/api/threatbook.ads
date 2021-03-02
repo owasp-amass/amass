@@ -34,27 +34,12 @@ function vertical(ctx, domain)
         return
     end
 
-    local resp
-    local vurl = verturl(domain, key)
-    -- Check if the response data is in the graph database
-    if (cfg.ttl ~= nil and cfg.ttl > 0) then
-        resp = obtain_response(cacheurl(domain), cfg.ttl)
-    end
-
-    if (resp == nil or resp == "") then
-        local err
-
-        resp, err = request(ctx, {
-            url=vurl,
-            headers={['Content-Type']="application/json"},
-        })
-        if (err ~= nil and err ~= "") then
-            return
-        end
-
-        if (cfg.ttl ~= nil and cfg.ttl > 0) then
-            cache_response(cacheurl(domain), resp)
-        end
+    local resp, err = request(ctx, {
+        url=verturl(domain, key),
+        headers={['Content-Type']="application/json"},
+    })
+    if (err ~= nil and err ~= "") then
+        return
     end
 
     local d = json.decode(resp)

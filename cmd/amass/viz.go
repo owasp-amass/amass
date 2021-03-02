@@ -1,4 +1,4 @@
-// Copyright 2017 Jeff Foley. All rights reserved.
+// Copyright 2017-2021 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 package main
@@ -162,7 +162,7 @@ func runVizCommand(clArgs []string) {
 	fgY.Fprintln(color.Error, "Could take a moment while acquiring AS network information")
 	// Migrate the changes back to the persistent db
 	if healASInfo(uuids, memDB) {
-		memDB.MigrateEvents(db, uuids...)
+		_ = memDB.MigrateEvents(db, uuids...)
 	}
 
 	// Obtain the visualization nodes & edges from the graph
@@ -212,12 +212,12 @@ func writeGraphOutputFile(t string, path string, nodes []viz.Node, edges []viz.E
 		return err
 	}
 	defer func() {
-		f.Sync()
-		f.Close()
+		_ = f.Sync()
+		_ = f.Close()
 	}()
 
-	f.Truncate(0)
-	f.Seek(0, 0)
+	_ = f.Truncate(0)
+	_, _ = f.Seek(0, 0)
 
 	switch t {
 	case "d3":

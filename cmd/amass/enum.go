@@ -106,7 +106,7 @@ func defineEnumArgumentFlags(enumFlags *flag.FlagSet, args *enumArgs) {
 	enumFlags.StringVar(&args.Interface, "iface", "", "Provide the network interface to send traffic through")
 	enumFlags.IntVar(&args.MaxDNSQueries, "max-dns-queries", 0, "Maximum number of DNS queries per second")
 	enumFlags.IntVar(&args.MinForRecursive, "min-for-recursive", 1, "Subdomain labels seen before recursive brute forcing (Default: 1)")
-	enumFlags.Var(&args.Ports, "p", "Ports separated by commas (default: 443)")
+	enumFlags.Var(&args.Ports, "p", "Ports separated by commas (default: 80, 443)")
 	enumFlags.Var(&args.Resolvers, "r", "IP addresses of preferred DNS resolvers (can be used multiple times)")
 	enumFlags.IntVar(&args.Timeout, "timeout", 0, "Number of minutes to let enumeration run before quitting")
 }
@@ -176,7 +176,7 @@ func runEnumCommand(clArgs []string) {
 		r.Fprintf(color.Error, "%v\n", err)
 		os.Exit(1)
 	}
-	defer sys.Shutdown()
+	defer func() { _ = sys.Shutdown() }()
 	sys.SetDataSources(datasrcs.GetAllSources(sys))
 	// Expand data source category names into the associated source names
 	cfg.SourceFilter.Sources = expandCategoryNames(cfg.SourceFilter.Sources, generateCategoryMap(sys))
@@ -353,7 +353,6 @@ func argsAndConfig(clArgs []string) (*config.Config, *enumArgs) {
 		r.Fprintf(color.Error, "Configuration error: %v\n", err)
 		os.Exit(1)
 	}
-
 	// Check if the user has requested the data source names
 	if args.Options.ListSources {
 		for _, line := range GetAllSourceInfo(cfg) {
@@ -361,20 +360,19 @@ func argsAndConfig(clArgs []string) (*config.Config, *enumArgs) {
 		}
 		return nil, &args
 	}
-
 	// Some input validation
 	if cfg.Passive && (args.Options.IPs || args.Options.IPv4 || args.Options.IPv6) {
 		r.Fprintln(color.Error, "IP addresses cannot be provided without DNS resolution")
 		os.Exit(1)
-	} else if cfg.Passive && len(args.Ports) > 0 {
-		r.Fprintln(color.Error, "Ports cannot be scanned in the passive mode")
+	}
+	if !cfg.Active && len(args.Ports) > 0 {
+		r.Fprintln(color.Error, "Ports can only be scanned in the active mode")
 		os.Exit(1)
 	}
 	if len(cfg.Domains()) == 0 {
 		r.Fprintln(color.Error, "Configuration error: No root domain names were provided")
 		os.Exit(1)
 	}
-
 	return cfg, &args
 }
 
@@ -433,12 +431,12 @@ func saveTextOutput(e *enum.Enumeration, args *enumArgs, output chan *requests.O
 		os.Exit(1)
 	}
 	defer func() {
-		outptr.Sync()
-		outptr.Close()
+		_ = outptr.Sync()
+		_ = outptr.Close()
 	}()
 
-	outptr.Truncate(0)
-	outptr.Seek(0, 0)
+	_ = outptr.Truncate(0)
+	_, _ = outptr.Seek(0, 0)
 	// Save all the output returned by the enumeration
 	for out := range output {
 		out.Addresses = format.DesiredAddrTypes(out.Addresses, args.Options.IPv4, args.Options.IPv6)
@@ -451,7 +449,6 @@ func saveTextOutput(e *enum.Enumeration, args *enumArgs, output chan *requests.O
 		if ips != "" {
 			ips = " " + ips
 		}
-
 		// Write the line to the output file
 		fmt.Fprintf(outptr, "%s%s%s\n", source, name, ips)
 	}
@@ -478,18 +475,18 @@ func saveJSONOutput(e *enum.Enumeration, args *enumArgs, output chan *requests.O
 		os.Exit(1)
 	}
 	defer func() {
-		jsonptr.Sync()
-		jsonptr.Close()
+		_ = jsonptr.Sync()
+		_ = jsonptr.Close()
 	}()
 
-	jsonptr.Truncate(0)
-	jsonptr.Seek(0, 0)
+	_ = jsonptr.Truncate(0)
+	_, _ = jsonptr.Seek(0, 0)
 
 	enc := json.NewEncoder(jsonptr)
 	// Save all the output returned by the enumeration
 	for out := range output {
 		// Handle encoding the result as JSON
-		enc.Encode(out)
+		_ = enc.Encode(out)
 	}
 }
 
@@ -553,11 +550,11 @@ func writeLogsAndMessages(logs *io.PipeReader, logfile string, verbose bool) {
 			r.Fprintf(color.Error, "Failed to open the log file: %v\n", err)
 		} else {
 			defer func() {
-				filePtr.Sync()
-				filePtr.Close()
+				_ = filePtr.Sync()
+				_ = filePtr.Close()
 			}()
-			filePtr.Truncate(0)
-			filePtr.Seek(0, 0)
+			_ = filePtr.Truncate(0)
+			_, _ = filePtr.Seek(0, 0)
 		}
 	}
 
@@ -602,7 +599,6 @@ func processEnumInputFiles(args *enumArgs) error {
 			if err != nil {
 				return fmt.Errorf("Failed to parse the brute force wordlist file: %v", err)
 			}
-
 			args.BruteWordList.InsertMany(list...)
 		}
 	}
@@ -612,7 +608,6 @@ func processEnumInputFiles(args *enumArgs) error {
 			if err != nil {
 				return fmt.Errorf("Failed to parse the alterations wordlist file: %v", err)
 			}
-
 			args.AltWordList.InsertMany(list...)
 		}
 	}
@@ -643,7 +638,6 @@ func processEnumInputFiles(args *enumArgs) error {
 			if err != nil {
 				return fmt.Errorf("Failed to parse the subdomain names file: %v", err)
 			}
-
 			args.Names.InsertMany(list...)
 		}
 	}
@@ -653,7 +647,6 @@ func processEnumInputFiles(args *enumArgs) error {
 			if err != nil {
 				return fmt.Errorf("Failed to parse the domain names file: %v", err)
 			}
-
 			args.Domains.InsertMany(list...)
 		}
 	}
@@ -663,7 +656,6 @@ func processEnumInputFiles(args *enumArgs) error {
 			if err != nil {
 				return fmt.Errorf("Failed to parse the esolver file: %v", err)
 			}
-
 			args.Resolvers.InsertMany(list...)
 		}
 	}

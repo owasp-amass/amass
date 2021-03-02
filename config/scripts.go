@@ -1,4 +1,4 @@
-// Copyright 2017-2020 Jeff Foley. All rights reserved.
+// Copyright 2017-2021 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 package config
@@ -32,7 +32,7 @@ func (c *Config) AcquireScripts() ([]string, error) {
 	}
 
 	for _, path := range paths {
-		filepath.Walk(path, func(path string, info os.FileInfo, err error) error {
+		_ = filepath.Walk(path, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				return err
 			}
@@ -58,7 +58,7 @@ func getDefaultScripts() []string {
 	fsOnce.Do(openTheFS)
 
 	var scripts []string
-	fs.Walk(StatikFS, "/scripts", func(path string, info os.FileInfo, err error) error {
+	_ = fs.Walk(StatikFS, "/scripts", func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}

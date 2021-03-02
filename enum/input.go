@@ -16,8 +16,8 @@ import (
 )
 
 const (
-	minWaitForData = 30 * time.Second
-	maxWaitForData = 60 * time.Second
+	minWaitForData = 15 * time.Second
+	maxWaitForData = 30 * time.Second
 )
 
 // enumSource handles the filtering and release of new Data in the enumeration.

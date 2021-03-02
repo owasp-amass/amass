@@ -12,25 +12,10 @@ end
 
 function vertical(ctx, domain)
     local p = 0
-    local cfg = datasrc_config()
-
     while(true) do
-        local resp
-        local vurl = buildurl(domain, p)
-        -- Check if the response data is in the graph database
-        if (cfg.ttl ~= nil and cfg.ttl > 0) then
-            resp = obtain_response(vurl, cfg.ttl)
-        end
-
-        if (resp == nil or resp == "") then
-            resp, err = request(ctx, {url=vurl})
-            if (err ~= nil and err ~= "") then
-                return
-            end
-
-            if (cfg.ttl ~= nil and cfg.ttl > 0) then
-                cache_response(vurl, resp)
-            end
+        local resp, err = request(ctx, {url=buildurl(domain, p)})
+        if (err ~= nil and err ~= "") then
+            return
         end
 
         local d = json.decode(resp)
@@ -39,7 +24,6 @@ function vertical(ctx, domain)
         end
 
         sendnames(ctx, resp)
-        checkratelimit()
         p = p + 1
     end
 end

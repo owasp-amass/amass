@@ -1,4 +1,4 @@
--- Copyright 2017 Jeff Foley. All rights reserved.
+-- Copyright 2017-2021 Jeff Foley. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 local json = require("json")
@@ -35,30 +35,16 @@ function vertical(ctx, domain)
     end
 
     for i=1,100 do
-        local resp
         local vurl = buildurl(domain, i)
-        -- Check if the response data is in the graph database
-        if (cfg.ttl ~= nil and cfg.ttl > 0) then
-            resp = obtain_response(vurl, cfg.ttl)
-        end
-
-        if (resp == nil or resp == "") then
-            local err
-
-            resp, err = request(ctx, {
-                url=vurl,
-                headers={
-                    ['Authorization']="token " .. c.key,
-                    ['Content-Type']="application/json",
-                },
-            })
-            if (err ~= nil and err ~= "") then
-                return
-            end
-
-            if (cfg.ttl ~= nil and cfg.ttl > 0) then
-                cache_response(vurl, resp)
-            end
+        local resp, err = request(ctx, {
+            url=vurl,
+            headers={
+                ['Authorization']="token " .. c.key,
+                ['Content-Type']="application/json",
+            },
+        })
+        if (err ~= nil and err ~= "") then
+            return
         end
 
         local d = json.decode(resp)
@@ -69,8 +55,6 @@ function vertical(ctx, domain)
         for i, item in pairs(d.items) do
             search_item(ctx, item)
         end
-
-        checkratelimit()
     end
 end
 
