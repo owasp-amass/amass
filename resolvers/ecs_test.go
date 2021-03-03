@@ -15,8 +15,7 @@ func TestClientSubnetCheck(t *testing.T) {
 		"209.244.0.3:53", // Level3
 	}
 	bad := []string{
-		"198.101.242.72:53", // Alternate DNS
-		"208.76.50.50:53",   // SmartViper
+		"208.76.50.50:53", // SmartViper
 	}
 
 	for _, r := range good {
