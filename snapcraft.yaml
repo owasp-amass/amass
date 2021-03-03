@@ -33,8 +33,8 @@ parts:
     source: ignored
     source-type: git
     override-pull: |
-      go get -d github.com/OWASP/Amass/cmd/amass
+      go get -d github.com/OWASP/Amass/v3/...
     override-build: |
-      go get github.com/OWASP/Amass/cmd/amass
+      go install github.com/OWASP/Amass/...
     stage:
       - bin/amass
