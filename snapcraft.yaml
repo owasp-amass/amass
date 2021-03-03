@@ -35,6 +35,7 @@ parts:
     override-pull: |
       go get -d github.com/OWASP/Amass/v3/...
     override-build: |
-      go install github.com/OWASP/Amass/...
+      cd $GOPATH/src/github.com/OWASP/Amass
+      go install ./...
     stage:
-      - bin/amass
+      - $GOPATH/bin/amass
