@@ -79,6 +79,8 @@ func (u *Umbrella) OnRequest(ctx context.Context, args service.Args) {
 		u.dnsRequest(ctx, req)
 	case *requests.AddrRequest:
 		u.addrRequest(ctx, req)
+	case *requests.ASNRequest:
+		u.asnRequest(ctx, req)
 	case *requests.WhoisRequest:
 		u.whoisRequest(ctx, req)
 	}
