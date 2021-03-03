@@ -89,7 +89,6 @@ func (rp *resolverPool) Stop() {
 	}
 
 	rp.partitions = [][]Resolver{}
-	return
 }
 
 // Stopped implements the Resolver interface.

@@ -50,7 +50,7 @@ func init() {
 	}
 loop:
 	for _, addr := range addrs {
-		for _, baseline := range append(DefaultBaselineResolvers) {
+		for _, baseline := range DefaultBaselineResolvers {
 			if addr == baseline {
 				continue loop
 			}
