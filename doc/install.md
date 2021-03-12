@@ -8,6 +8,14 @@
 
 A [precompiled version is available](https://github.com/OWASP/Amass/releases) with each release.
 
+Using this installation option on macOS is could result in an 'unidentified developer' warning. This can be resolved by following the steps below:
+
+1. Close the error message popup
+2. In macOS, go to "System Preferences" > "Security & Privacy"
+3. At the bottom of the dialog, there is a message saying that "amass' was blocked. Next to it click "Open anyway"
+4. The initial error message could pop up again, but this time with the option to click "Open" to run amass
+5. This only needs to be done once, amass will now run every time
+
 ## Using Docker
 
 1. Build the [Docker](https://docs.docker.com/) image:
