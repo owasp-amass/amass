@@ -32,10 +32,7 @@ parts:
     go-channel: latest/stable
     source: ignored
     source-type: git
-    override-pull: |
-      go get -d github.com/OWASP/Amass/v3/...
     override-build: |
-      cd $GOPATH/src/github.com/OWASP/Amass
-      go install ./...
+      GO111MODULE=on go get github.com/OWASP/Amass/v3/...
     stage:
       - $GOPATH/bin/amass

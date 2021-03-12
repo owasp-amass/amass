@@ -10,10 +10,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       -
-        name: checkout
+        name: Checkout
         uses: actions/checkout@v2
       -
-        name: docker meta
+        name: Docker meta
         id: docker_meta
         uses: crazy-max/ghaction-docker-meta@v1
         with:
@@ -23,26 +23,38 @@ jobs:
             v{{major}}.{{minor}}
             v{{major}}.{{minor}}.{{patch}}
       -
-        name: set up QEMU
+        name: Set up QEMU
         uses: docker/setup-qemu-action@v1
         with:
           platforms: linux/amd64,linux/arm/v6,linux/arm/v7,linux/arm64,linux/s390x
       -
-        name: set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
+        name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@master
       -
-        name: login to DockerHub
+        name: Cache Docker layers
+        uses: actions/cache@v2
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+          ${{ runner.os }}-buildx-
+      -
+        name: Login to DockerHub
         uses: docker/login-action@v1 
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       -
-        name: build and push
+        name: Build and push
         uses: docker/build-push-action@v2
         with:
-          context: .
+          context: ./
           file: ./Dockerfile
+          builder: ${{ steps.buildx.outputs.name }}
           platforms: linux/amd64,linux/arm/v6,linux/arm/v7,linux/arm64,linux/s390x
           push: true
           tags: ${{ steps.docker_meta.outputs.tags }}
           labels: ${{ steps.docker_meta.outputs.labels }}
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache
