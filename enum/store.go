@@ -1,4 +1,4 @@
-// Copyright 2017-2020 Jeff Foley. All rights reserved.
+// Copyright 2017-2021 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 package enum
@@ -23,7 +23,7 @@ import (
 	"golang.org/x/net/publicsuffix"
 )
 
-// DataManager is the OutputSink that handles all data processed by the pipeline.
+// dataManager is the stage that stores all data processed by the pipeline.
 type dataManager struct {
 	enum *Enumeration
 }
@@ -41,17 +41,26 @@ func (dm *dataManager) Process(ctx context.Context, data pipeline.Data, tp pipel
 	default:
 	}
 
+	_, bus, err := datasrcs.ContextConfigBus(ctx)
+	if err != nil {
+		return data, nil
+	}
+
 	switch v := data.(type) {
 	case *requests.DNSRequest:
 		if v == nil {
 			return nil, nil
 		}
-		return data, dm.dnsRequest(ctx, v, tp)
+		if err := dm.dnsRequest(ctx, v, tp); err != nil {
+			bus.Publish(requests.LogTopic, eventbus.PriorityHigh, err.Error())
+		}
 	case *requests.AddrRequest:
 		if v == nil {
 			return nil, nil
 		}
-		return data, dm.addrRequest(ctx, v, tp)
+		if err := dm.addrRequest(ctx, v, tp); err != nil {
+			bus.Publish(requests.LogTopic, eventbus.PriorityHigh, err.Error())
+		}
 	}
 
 	return data, nil
@@ -99,7 +108,7 @@ func (dm *dataManager) dnsRequest(ctx context.Context, req *requests.DNSRequest,
 }
 
 func (dm *dataManager) insertCNAME(ctx context.Context, req *requests.DNSRequest, recidx int, tp pipeline.TaskParams) error {
-	cfg, bus, err := datasrcs.ContextConfigBus(ctx)
+	cfg, _, err := datasrcs.ContextConfigBus(ctx)
 	if err != nil {
 		return errors.New("The context did not contain the expected values")
 	}
@@ -120,10 +129,7 @@ func (dm *dataManager) insertCNAME(ctx context.Context, req *requests.DNSRequest
 	}
 
 	if err := dm.enum.Graph.InsertCNAME(req.Name, target, req.Source, req.Tag, cfg.UUID.String()); err != nil {
-		msg := fmt.Sprintf("%s failed to insert CNAME: %v", dm.enum.Graph, err)
-
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, msg)
-		return errors.New(msg)
+		return fmt.Errorf("%s failed to insert CNAME: %v", dm.enum.Graph, err)
 	}
 
 	// Important - Allows chained CNAME records to be resolved until an A/AAAA record
@@ -137,7 +143,7 @@ func (dm *dataManager) insertCNAME(ctx context.Context, req *requests.DNSRequest
 }
 
 func (dm *dataManager) insertA(ctx context.Context, req *requests.DNSRequest, recidx int, tp pipeline.TaskParams) error {
-	cfg, bus, err := datasrcs.ContextConfigBus(ctx)
+	cfg, _, err := datasrcs.ContextConfigBus(ctx)
 	if err != nil {
 		return errors.New("The context did not contain the expected values")
 	}
@@ -148,10 +154,7 @@ func (dm *dataManager) insertA(ctx context.Context, req *requests.DNSRequest, re
 	}
 
 	if err := dm.enum.Graph.InsertA(req.Name, addr, req.Source, req.Tag, cfg.UUID.String()); err != nil {
-		msg := fmt.Sprintf("%s failed to insert A record: %v", dm.enum.Graph, err)
-
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, msg)
-		return errors.New(msg)
+		return fmt.Errorf("%s failed to insert A record: %v", dm.enum.Graph, err)
 	}
 
 	go pipeline.SendData(ctx, "new", &requests.AddrRequest{
@@ -165,7 +168,7 @@ func (dm *dataManager) insertA(ctx context.Context, req *requests.DNSRequest, re
 }
 
 func (dm *dataManager) insertAAAA(ctx context.Context, req *requests.DNSRequest, recidx int, tp pipeline.TaskParams) error {
-	cfg, bus, err := datasrcs.ContextConfigBus(ctx)
+	cfg, _, err := datasrcs.ContextConfigBus(ctx)
 	if err != nil {
 		return errors.New("The context did not contain the expected values")
 	}
@@ -176,10 +179,7 @@ func (dm *dataManager) insertAAAA(ctx context.Context, req *requests.DNSRequest,
 	}
 
 	if err := dm.enum.Graph.InsertAAAA(req.Name, addr, req.Source, req.Tag, cfg.UUID.String()); err != nil {
-		msg := fmt.Sprintf("%s failed to insert AAAA record: %v", dm.enum.Graph, err)
-
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, msg)
-		return errors.New(msg)
+		return fmt.Errorf("%s failed to insert AAAA record: %v", dm.enum.Graph, err)
 	}
 
 	go pipeline.SendData(ctx, "new", &requests.AddrRequest{
@@ -193,7 +193,7 @@ func (dm *dataManager) insertAAAA(ctx context.Context, req *requests.DNSRequest,
 }
 
 func (dm *dataManager) insertPTR(ctx context.Context, req *requests.DNSRequest, recidx int, tp pipeline.TaskParams) error {
-	cfg, bus, err := datasrcs.ContextConfigBus(ctx)
+	cfg, _, err := datasrcs.ContextConfigBus(ctx)
 	if err != nil {
 		return errors.New("The context did not contain the expected values")
 	}
@@ -210,10 +210,7 @@ func (dm *dataManager) insertPTR(ctx context.Context, req *requests.DNSRequest, 
 	}
 
 	if err := dm.enum.Graph.InsertPTR(req.Name, target, req.Source, req.Tag, cfg.UUID.String()); err != nil {
-		msg := fmt.Sprintf("%s failed to insert PTR record: %v", dm.enum.Graph, err)
-
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, msg)
-		return errors.New(msg)
+		return fmt.Errorf("%s failed to insert PTR record: %v", dm.enum.Graph, err)
 	}
 
 	// Important - Allows the target DNS name to be resolved in the forward direction
@@ -227,7 +224,7 @@ func (dm *dataManager) insertPTR(ctx context.Context, req *requests.DNSRequest, 
 }
 
 func (dm *dataManager) insertSRV(ctx context.Context, req *requests.DNSRequest, recidx int, tp pipeline.TaskParams) error {
-	cfg, bus, err := datasrcs.ContextConfigBus(ctx)
+	cfg, _, err := datasrcs.ContextConfigBus(ctx)
 	if err != nil {
 		return errors.New("The context did not contain the expected values")
 	}
@@ -239,10 +236,7 @@ func (dm *dataManager) insertSRV(ctx context.Context, req *requests.DNSRequest, 
 	}
 
 	if err := dm.enum.Graph.InsertSRV(req.Name, service, target, req.Source, req.Tag, cfg.UUID.String()); err != nil {
-		msg := fmt.Sprintf("%s failed to insert SRV record: %v", dm.enum.Graph, err)
-
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, msg)
-		return errors.New(msg)
+		return fmt.Errorf("%s failed to insert SRV record: %v", dm.enum.Graph, err)
 	}
 
 	if domain := cfg.WhichDomain(target); domain != "" {
@@ -257,7 +251,7 @@ func (dm *dataManager) insertSRV(ctx context.Context, req *requests.DNSRequest, 
 }
 
 func (dm *dataManager) insertNS(ctx context.Context, req *requests.DNSRequest, recidx int, tp pipeline.TaskParams) error {
-	cfg, bus, err := datasrcs.ContextConfigBus(ctx)
+	cfg, _, err := datasrcs.ContextConfigBus(ctx)
 	if err != nil {
 		return errors.New("The context did not contain the expected values")
 	}
@@ -278,10 +272,7 @@ func (dm *dataManager) insertNS(ctx context.Context, req *requests.DNSRequest, r
 	}
 
 	if err := dm.enum.Graph.InsertNS(req.Name, target, req.Source, req.Tag, cfg.UUID.String()); err != nil {
-		msg := fmt.Sprintf("%s failed to insert NS record: %v", dm.enum.Graph, err)
-
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, msg)
-		return errors.New(msg)
+		return fmt.Errorf("%s failed to insert NS record: %v", dm.enum.Graph, err)
 	}
 
 	if target != domain {
@@ -296,7 +287,7 @@ func (dm *dataManager) insertNS(ctx context.Context, req *requests.DNSRequest, r
 }
 
 func (dm *dataManager) insertMX(ctx context.Context, req *requests.DNSRequest, recidx int, tp pipeline.TaskParams) error {
-	cfg, bus, err := datasrcs.ContextConfigBus(ctx)
+	cfg, _, err := datasrcs.ContextConfigBus(ctx)
 	if err != nil {
 		return errors.New("The context did not contain the expected values")
 	}
@@ -317,10 +308,7 @@ func (dm *dataManager) insertMX(ctx context.Context, req *requests.DNSRequest, r
 	}
 
 	if err := dm.enum.Graph.InsertMX(req.Name, target, req.Source, req.Tag, cfg.UUID.String()); err != nil {
-		msg := fmt.Sprintf("%s failed to insert MX record: %v", dm.enum.Graph, err)
-
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, msg)
-		return errors.New(msg)
+		return fmt.Errorf("%s failed to insert MX record: %v", dm.enum.Graph, err)
 	}
 
 	if target != domain {
