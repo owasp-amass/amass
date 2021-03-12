@@ -67,6 +67,7 @@ func NewEnumeration(cfg *config.Config, sys systems.System) *Enumeration {
 // Close cleans up resources instantiated by the Enumeration.
 func (e *Enumeration) Close() {
 	e.closedOnce.Do(func() {
+		e.Bus.Stop()
 		e.Graph.Close()
 	})
 }

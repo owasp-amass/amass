@@ -164,6 +164,7 @@ func (l *LocalSystem) Shutdown() error {
 	}
 
 	l.pool.Stop()
+	l.cache = nil
 	return nil
 }
 
