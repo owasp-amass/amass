@@ -32,7 +32,7 @@ type resolverPool struct {
 
 // NewResolverPool initializes a ResolverPool that uses the provided Resolvers.
 func NewResolverPool(resolvers []Resolver, delay time.Duration, baseline Resolver, partnum int, logger *log.Logger) Resolver {
-	if l := len(resolvers); l == 0 || l > len(resolvers) {
+	if l := len(resolvers); l == 0 {
 		return nil
 	}
 	if partnum <= 0 {
