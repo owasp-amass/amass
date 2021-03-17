@@ -1,4 +1,4 @@
-// Copyright 2017 Jeff Foley. All rights reserved.
+// Copyright 2017-2021 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 package graph
@@ -7,7 +7,6 @@ import (
 	"net"
 	"strconv"
 
-	amassnet "github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/requests"
 )
 
@@ -100,7 +99,7 @@ func (g *Graph) nodeDescription(node Node) string {
 }
 
 // ASNCacheFill populates an ASNCache object with the AS data in the receiver object.
-func (g *Graph) ASNCacheFill(cache *amassnet.ASNCache) error {
+func (g *Graph) ASNCacheFill(cache *requests.ASNCache) error {
 	nodes, err := g.AllNodesOfType("as")
 	if err != nil {
 		return err

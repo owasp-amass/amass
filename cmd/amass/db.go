@@ -1,4 +1,4 @@
-// Copyright 2017 Jeff Foley. All rights reserved.
+// Copyright 2017-2021 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 package main
@@ -15,7 +15,6 @@ import (
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/format"
 	"github.com/OWASP/Amass/v3/graph"
-	"github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/caffix/stringset"
 	"github.com/fatih/color"
@@ -216,9 +215,9 @@ func showEventData(args *dbArgs, uuids []string, asninfo bool, db *graph.Graph) 
 		_, _ = outfile.Seek(0, 0)
 	}
 
-	var cache *net.ASNCache
+	var cache *requests.ASNCache
 	if asninfo {
-		cache = net.NewASNCache()
+		cache = requests.NewASNCache()
 		if err := db.ASNCacheFill(cache); err != nil {
 			return
 		}

@@ -7,7 +7,6 @@ import (
 	"net"
 	"strings"
 
-	"github.com/OWASP/Amass/v3/requests"
 	"github.com/miekg/dns"
 )
 
@@ -95,69 +94,25 @@ func ExtractAnswers(msg *dns.Msg) []*ExtractedAnswer {
 
 		switch a.Header().Rrtype {
 		case dns.TypeA:
-			if t, ok := a.(*dns.A); ok {
-				if ip := net.ParseIP(t.A.String()); ip != nil {
-					value = ip.String()
-				}
-			}
+			value = parseAType(a)
 		case dns.TypeAAAA:
-			if t, ok := a.(*dns.AAAA); ok {
-				if ip := net.ParseIP(t.AAAA.String()); ip != nil {
-					value = ip.String()
-				}
-			}
+			value = parseAAAAType(a)
 		case dns.TypeCNAME:
-			if t, ok := a.(*dns.CNAME); ok {
-				name := RemoveLastDot(t.Target)
-
-				if _, ok := dns.IsDomainName(name); ok {
-					value = name
-				}
-			}
+			value = parseCNAMEType(a)
 		case dns.TypePTR:
-			if t, ok := a.(*dns.PTR); ok {
-				name := RemoveLastDot(t.Ptr)
-
-				if _, ok := dns.IsDomainName(name); ok {
-					value = name
-				}
-			}
+			value = parsePTRType(a)
 		case dns.TypeNS:
-			if t, ok := a.(*dns.NS); ok {
-				name := RemoveLastDot(t.Ns)
-
-				if _, ok := dns.IsDomainName(name); ok {
-					value = name
-				}
-			}
+			value = parseNSType(a)
 		case dns.TypeMX:
-			if t, ok := a.(*dns.MX); ok {
-				name := RemoveLastDot(t.Mx)
-
-				if _, ok := dns.IsDomainName(name); ok {
-					value = name
-				}
-			}
+			value = parseMXType(a)
 		case dns.TypeTXT:
-			if t, ok := a.(*dns.TXT); ok {
-				value = strings.Join(t.Txt, " ")
-			}
+			value = parseTXTType(a)
 		case dns.TypeSOA:
-			if t, ok := a.(*dns.SOA); ok {
-				value = t.Ns + "," + t.Mbox
-			}
+			value = parseSOAType(a)
 		case dns.TypeSPF:
-			if t, ok := a.(*dns.SPF); ok {
-				value = strings.Join(t.Txt, " ")
-			}
+			value = parseSPFType(a)
 		case dns.TypeSRV:
-			if t, ok := a.(*dns.SRV); ok {
-				name := RemoveLastDot(t.Target)
-
-				if _, ok := dns.IsDomainName(name); ok {
-					value = name
-				}
-			}
+			value = parseSRVType(a)
 		}
 
 		if value != "" {
@@ -172,86 +127,126 @@ func ExtractAnswers(msg *dns.Msg) []*ExtractedAnswer {
 	return data
 }
 
-func realName(hdr dns.RR_Header) string {
-	pieces := strings.Split(hdr.Name, " ")
+func parseAType(rr dns.RR) string {
+	var value string
 
-	return RemoveLastDot(pieces[len(pieces)-1])
+	if t, ok := rr.(*dns.A); ok {
+		if ip := net.ParseIP(t.A.String()); ip != nil {
+			value = ip.String()
+		}
+	}
+
+	return value
 }
 
-func getXfrRequests(en *dns.Envelope, domain string) []*requests.DNSRequest {
-	if en.Error != nil {
-		return nil
-	}
+func parseAAAAType(rr dns.RR) string {
+	var value string
 
-	reqs := make(map[string]*requests.DNSRequest)
-	for _, a := range en.RR {
-		var record requests.DNSAnswer
-
-		switch v := a.(type) {
-		case *dns.CNAME:
-			record.Name = RemoveLastDot(v.Hdr.Name)
-			record.Type = int(dns.TypeCNAME)
-			record.Data = RemoveLastDot(v.Target)
-		case *dns.A:
-			record.Name = RemoveLastDot(v.Hdr.Name)
-			record.Type = int(dns.TypeA)
-			record.Data = v.A.String()
-		case *dns.AAAA:
-			record.Name = RemoveLastDot(v.Hdr.Name)
-			record.Type = int(dns.TypeAAAA)
-			record.Data = v.AAAA.String()
-		case *dns.PTR:
-			record.Name = RemoveLastDot(v.Hdr.Name)
-			record.Type = int(dns.TypePTR)
-			record.Data = RemoveLastDot(v.Ptr)
-		case *dns.NS:
-			record.Name = realName(v.Hdr)
-			record.Type = int(dns.TypeNS)
-			record.Data = RemoveLastDot(v.Ns)
-		case *dns.MX:
-			record.Name = RemoveLastDot(v.Hdr.Name)
-			record.Type = int(dns.TypeMX)
-			record.Data = RemoveLastDot(v.Mx)
-		case *dns.TXT:
-			record.Name = RemoveLastDot(v.Hdr.Name)
-			record.Type = int(dns.TypeTXT)
-			for _, piece := range v.Txt {
-				record.Data += piece + " "
-			}
-		case *dns.SOA:
-			record.Name = RemoveLastDot(v.Hdr.Name)
-			record.Type = int(dns.TypeSOA)
-			record.Data = v.Ns + " " + v.Mbox
-		case *dns.SPF:
-			record.Name = RemoveLastDot(v.Hdr.Name)
-			record.Type = int(dns.TypeSPF)
-			for _, piece := range v.Txt {
-				record.Data += piece + " "
-			}
-		case *dns.SRV:
-			record.Name = RemoveLastDot(v.Hdr.Name)
-			record.Type = int(dns.TypeSRV)
-			record.Data = RemoveLastDot(v.Target)
-		default:
-			continue
-		}
-
-		if r, found := reqs[record.Name]; found {
-			r.Records = append(r.Records, record)
-		} else {
-			reqs[record.Name] = &requests.DNSRequest{
-				Name:    record.Name,
-				Domain:  domain,
-				Records: []requests.DNSAnswer{record},
-				Tag:     requests.AXFR,
-				Source:  "DNS Zone XFR",
-			}
+	if t, ok := rr.(*dns.AAAA); ok {
+		if ip := net.ParseIP(t.AAAA.String()); ip != nil {
+			value = ip.String()
 		}
 	}
 
-	var requests []*requests.DNSRequest
-	for _, r := range reqs {
-		requests = append(requests, r)
+	return value
+}
+
+func parseCNAMEType(rr dns.RR) string {
+	var value string
+
+	if t, ok := rr.(*dns.CNAME); ok {
+		name := RemoveLastDot(t.Target)
+
+		if _, ok := dns.IsDomainName(name); ok {
+			value = name
+		}
 	}
-	return requests
+
+	return value
+}
+
+func parsePTRType(rr dns.RR) string {
+	var value string
+
+	if t, ok := rr.(*dns.PTR); ok {
+		name := RemoveLastDot(t.Ptr)
+
+		if _, ok := dns.IsDomainName(name); ok {
+			value = name
+		}
+	}
+
+	return value
+}
+
+func parseNSType(rr dns.RR) string {
+	var value string
+
+	if t, ok := rr.(*dns.NS); ok {
+		name := RemoveLastDot(t.Ns)
+
+		if _, ok := dns.IsDomainName(name); ok {
+			value = name
+		}
+	}
+
+	return value
+}
+
+func parseMXType(rr dns.RR) string {
+	var value string
+
+	if t, ok := rr.(*dns.MX); ok {
+		name := RemoveLastDot(t.Mx)
+
+		if _, ok := dns.IsDomainName(name); ok {
+			value = name
+		}
+	}
+
+	return value
+}
+
+func parseTXTType(rr dns.RR) string {
+	var value string
+
+	if t, ok := rr.(*dns.TXT); ok {
+		value = strings.Join(t.Txt, " ")
+	}
+
+	return value
+}
+
+func parseSOAType(rr dns.RR) string {
+	var value string
+
+	if t, ok := rr.(*dns.SOA); ok {
+		value = t.Ns + "," + t.Mbox
+	}
+
+	return value
+}
+
+func parseSPFType(rr dns.RR) string {
+	var value string
+
+	if t, ok := rr.(*dns.SPF); ok {
+		value = strings.Join(t.Txt, " ")
+	}
+
+	return value
+}
+
+func parseSRVType(rr dns.RR) string {
+	var value string
+
+	if t, ok := rr.(*dns.SRV); ok {
+		name := RemoveLastDot(t.Target)
+
+		if _, ok := dns.IsDomainName(name); ok {
+			value = name
+		}
+	}
+
+	return value
 }

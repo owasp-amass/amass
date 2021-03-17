@@ -4,11 +4,13 @@
 package config
 
 import (
+	"fmt"
 	"net"
 	"regexp"
+	"strconv"
 	"strings"
 
-	"github.com/OWASP/Amass/v3/format"
+	amassnet "github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/net/dns"
 	"github.com/caffix/stringset"
 	"github.com/go-ini/ini"
@@ -160,7 +162,7 @@ func (c *Config) loadScopeSettings(cfg *ini.File) error {
 
 	if scope.HasKey("address") {
 		for _, addr := range scope.Key("address").ValueWithShadows() {
-			var ips format.ParseIPs
+			var ips parseIPs
 
 			if err := ips.Set(addr); err != nil {
 				return err
@@ -205,4 +207,73 @@ func (c *Config) loadScopeSettings(cfg *ini.File) error {
 	}
 
 	return nil
+}
+
+type parseIPs []net.IP
+
+func (p *parseIPs) String() string {
+	if p == nil {
+		return ""
+	}
+
+	var ipaddrs []string
+	for _, ipaddr := range *p {
+		ipaddrs = append(ipaddrs, ipaddr.String())
+	}
+	return strings.Join(ipaddrs, ",")
+}
+
+// Set implements the flag.Value interface.
+func (p *parseIPs) Set(s string) error {
+	if s == "" {
+		return fmt.Errorf("IP address parsing failed")
+	}
+
+	ips := strings.Split(s, ",")
+	for _, ip := range ips {
+		// Is this an IP range?
+		err := p.parseRange(ip)
+		if err == nil {
+			continue
+		}
+		addr := net.ParseIP(ip)
+		if addr == nil {
+			return fmt.Errorf("%s is not a valid IP address or range", ip)
+		}
+		*p = append(*p, addr)
+	}
+	return nil
+}
+
+func (p *parseIPs) appendIPs(addrs []net.IP) error {
+	for _, addr := range addrs {
+		*p = append(*p, addr)
+	}
+	return nil
+}
+
+func (p *parseIPs) parseRange(s string) error {
+	twoIPs := strings.Split(s, "-")
+
+	if twoIPs[0] == s {
+		return fmt.Errorf("%s is not a valid IP range", s)
+	}
+	start := net.ParseIP(twoIPs[0])
+	end := net.ParseIP(twoIPs[1])
+	if end == nil {
+		num, err := strconv.Atoi(twoIPs[1])
+		if err == nil {
+			end = net.ParseIP(twoIPs[0])
+			end[len(end)-1] = byte(num)
+		}
+	}
+	if start == nil || end == nil {
+		return fmt.Errorf("%s is not a valid IP range", s)
+	}
+
+	ips := amassnet.RangeHosts(start, end)
+	if len(ips) == 0 {
+		return fmt.Errorf("%s is not a valid IP range", s)
+	}
+	return p.appendIPs(ips)
 }

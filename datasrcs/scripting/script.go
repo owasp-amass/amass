@@ -1,7 +1,7 @@
-// Copyright 2017 Jeff Foley. All rights reserved.
+// Copyright 2017-2021 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
-package datasrcs
+package scripting
 
 import (
 	"context"
@@ -289,7 +289,7 @@ func (s *Script) dnsRequest(ctx context.Context, req *requests.DNSRequest) {
 		return
 	}
 
-	_, bus, err := ContextConfigBus(ctx)
+	_, bus, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return
 	}
@@ -321,7 +321,7 @@ func (s *Script) resolvedRequest(ctx context.Context, req *requests.ResolvedRequ
 		return
 	}
 
-	_, bus, err := ContextConfigBus(ctx)
+	_, bus, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return
 	}
@@ -360,7 +360,7 @@ func (s *Script) subdomainRequest(ctx context.Context, req *requests.SubdomainRe
 		return
 	}
 
-	_, bus, err := ContextConfigBus(ctx)
+	_, bus, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return
 	}
@@ -389,7 +389,7 @@ func (s *Script) addrRequest(ctx context.Context, req *requests.AddrRequest) {
 		return
 	}
 
-	_, bus, err := ContextConfigBus(ctx)
+	_, bus, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return
 	}
@@ -418,7 +418,7 @@ func (s *Script) asnRequest(ctx context.Context, req *requests.ASNRequest) {
 		return
 	}
 
-	_, bus, err := ContextConfigBus(ctx)
+	_, bus, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return
 	}
@@ -447,7 +447,7 @@ func (s *Script) whoisRequest(ctx context.Context, req *requests.WhoisRequest) {
 		return
 	}
 
-	_, bus, err := ContextConfigBus(ctx)
+	_, bus, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return
 	}
@@ -463,22 +463,4 @@ func (s *Script) whoisRequest(ctx context.Context, req *requests.WhoisRequest) {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: horizontal callback: %v", s.String(), err))
 	}
-}
-
-func (s *Script) getCachedResponse(url string, ttl int) (string, error) {
-	for _, db := range s.sys.GraphDatabases() {
-		if resp, err := db.GetSourceData(s.String(), url, ttl); err == nil {
-			return resp, err
-		}
-	}
-	return "", fmt.Errorf("Failed to obtain a cached response for %s", url)
-}
-
-func (s *Script) setCachedResponse(url, resp string) error {
-	for _, db := range s.sys.GraphDatabases() {
-		if err := db.CacheSourceData(s.String(), s.SourceType, url, resp); err != nil {
-			return err
-		}
-	}
-	return nil
 }

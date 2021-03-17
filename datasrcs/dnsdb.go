@@ -1,4 +1,4 @@
-// Copyright 2017 Jeff Foley. All rights reserved.
+// Copyright 2017-2021 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 package datasrcs
@@ -77,7 +77,7 @@ func (d *DNSDB) OnRequest(ctx context.Context, args service.Args) {
 }
 
 func (d *DNSDB) dnsRequest(ctx context.Context, req *requests.DNSRequest) {
-	cfg, bus, err := ContextConfigBus(ctx)
+	cfg, bus, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return
 	}
@@ -117,7 +117,7 @@ func (d *DNSDB) getURL(domain string) string {
 }
 
 func (d *DNSDB) parse(ctx context.Context, page, domain string) []string {
-	cfg, _, err := ContextConfigBus(ctx)
+	cfg, _, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return []string{}
 	}

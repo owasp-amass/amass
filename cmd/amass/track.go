@@ -1,4 +1,4 @@
-// Copyright 2017 Jeff Foley. All rights reserved.
+// Copyright 2017-2021 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 package main
@@ -14,7 +14,6 @@ import (
 
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/graph"
-	amassnet "github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/caffix/stringset"
 	"github.com/fatih/color"
@@ -201,7 +200,7 @@ func runTrackCommand(clArgs []string) {
 	cumulativeOutput(uuids, args.Domains.Slice(), earliest, latest, memDB, cache)
 }
 
-func printOneEvent(uuid, domains []string, earliest, latest time.Time, db *graph.Graph, cache *amassnet.ASNCache) {
+func printOneEvent(uuid, domains []string, earliest, latest time.Time, db *graph.Graph, cache *requests.ASNCache) {
 	one := getScopedOutput(uuid, domains, db, cache)
 
 	blueLine()
@@ -215,7 +214,7 @@ func printOneEvent(uuid, domains []string, earliest, latest time.Time, db *graph
 	}
 }
 
-func cumulativeOutput(uuids, domains []string, ea, la []time.Time, db *graph.Graph, cache *amassnet.ASNCache) {
+func cumulativeOutput(uuids, domains []string, ea, la []time.Time, db *graph.Graph, cache *requests.ASNCache) {
 	idx := len(uuids) - 1
 	cum := getScopedOutput(uuids[:idx], domains, db, cache)
 
@@ -236,7 +235,7 @@ func cumulativeOutput(uuids, domains []string, ea, la []time.Time, db *graph.Gra
 	}
 }
 
-func getScopedOutput(uuids, domains []string, db *graph.Graph, cache *amassnet.ASNCache) []*requests.Output {
+func getScopedOutput(uuids, domains []string, db *graph.Graph, cache *requests.ASNCache) []*requests.Output {
 	var output []*requests.Output
 
 	for _, out := range getEventOutput(uuids, false, db, cache) {
@@ -250,7 +249,7 @@ func getScopedOutput(uuids, domains []string, db *graph.Graph, cache *amassnet.A
 	return output
 }
 
-func completeHistoryOutput(uuids, domains []string, ea, la []time.Time, db *graph.Graph, cache *amassnet.ASNCache) {
+func completeHistoryOutput(uuids, domains []string, ea, la []time.Time, db *graph.Graph, cache *requests.ASNCache) {
 	var prev string
 
 	for i, uuid := range uuids {

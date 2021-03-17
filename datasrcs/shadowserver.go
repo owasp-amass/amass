@@ -1,4 +1,4 @@
-// Copyright 2017 Jeff Foley. All rights reserved.
+// Copyright 2017-2021 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 package datasrcs
@@ -91,7 +91,7 @@ func (s *ShadowServer) asnRequest(ctx context.Context, req *requests.ASNRequest)
 }
 
 func (s *ShadowServer) executeASNQuery(ctx context.Context, asn int) {
-	_, bus, err := ContextConfigBus(ctx)
+	_, bus, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return
 	}
@@ -112,7 +112,7 @@ func (s *ShadowServer) executeASNQuery(ctx context.Context, asn int) {
 }
 
 func (s *ShadowServer) executeASNAddrQuery(ctx context.Context, addr string) {
-	_, bus, err := ContextConfigBus(ctx)
+	_, bus, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return
 	}
@@ -128,7 +128,7 @@ func (s *ShadowServer) executeASNAddrQuery(ctx context.Context, addr string) {
 }
 
 func (s *ShadowServer) origin(ctx context.Context, addr string) *requests.ASNRequest {
-	_, bus, err := ContextConfigBus(ctx)
+	_, bus, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return nil
 	}
@@ -191,7 +191,7 @@ func (s *ShadowServer) origin(ctx context.Context, addr string) *requests.ASNReq
 func (s *ShadowServer) netblocks(ctx context.Context, asn int) stringset.Set {
 	netblocks := stringset.New()
 
-	_, bus, err := ContextConfigBus(ctx)
+	_, bus, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return netblocks
 	}

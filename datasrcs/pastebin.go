@@ -1,4 +1,4 @@
-// Copyright 2017-2020 Jeff Foley. All rights reserved.
+// Copyright 2017-2021 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 package datasrcs
@@ -53,7 +53,7 @@ func (p *Pastebin) OnRequest(ctx context.Context, args service.Args) {
 }
 
 func (p *Pastebin) dnsRequest(ctx context.Context, req *requests.DNSRequest) {
-	cfg, bus, err := ContextConfigBus(ctx)
+	cfg, bus, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return
 	}

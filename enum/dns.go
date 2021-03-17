@@ -1,4 +1,4 @@
-// Copyright 2017-2020 Jeff Foley. All rights reserved.
+// Copyright 2017-2021 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 package enum
@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/OWASP/Amass/v3/datasrcs"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/resolvers"
 	"github.com/caffix/eventbus"
@@ -187,7 +186,7 @@ loop:
 }
 
 func (dt *dNSTask) handleResolverError(ctx context.Context, e error) {
-	cfg, bus, err := datasrcs.ContextConfigBus(ctx)
+	cfg, bus, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return
 	}

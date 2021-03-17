@@ -1,4 +1,4 @@
-// Copyright 2017 Jeff Foley. All rights reserved.
+// Copyright 2017-2021 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 package datasrcs
@@ -87,7 +87,7 @@ func (u *Umbrella) OnRequest(ctx context.Context, args service.Args) {
 }
 
 func (u *Umbrella) dnsRequest(ctx context.Context, req *requests.DNSRequest) {
-	cfg, bus, err := ContextConfigBus(ctx)
+	cfg, bus, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return
 	}
@@ -124,7 +124,7 @@ func (u *Umbrella) dnsRequest(ctx context.Context, req *requests.DNSRequest) {
 }
 
 func (u *Umbrella) addrRequest(ctx context.Context, req *requests.AddrRequest) {
-	_, bus, err := ContextConfigBus(ctx)
+	_, bus, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return
 	}
@@ -175,7 +175,7 @@ func (u *Umbrella) asnRequest(ctx context.Context, req *requests.ASNRequest) {
 }
 
 func (u *Umbrella) executeASNAddrQuery(ctx context.Context, req *requests.ASNRequest) {
-	_, bus, err := ContextConfigBus(ctx)
+	_, bus, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return
 	}
@@ -238,7 +238,7 @@ func (u *Umbrella) executeASNAddrQuery(ctx context.Context, req *requests.ASNReq
 }
 
 func (u *Umbrella) executeASNQuery(ctx context.Context, req *requests.ASNRequest) {
-	_, bus, err := ContextConfigBus(ctx)
+	_, bus, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return
 	}
@@ -341,7 +341,7 @@ func (u *Umbrella) collateEmails(ctx context.Context, record *whoisRecord) []str
 }
 
 func (u *Umbrella) queryWhois(ctx context.Context, domain string) *whoisRecord {
-	_, bus, err := ContextConfigBus(ctx)
+	_, bus, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return nil
 	}
@@ -370,7 +370,7 @@ func (u *Umbrella) queryReverseWhois(ctx context.Context, apiURL string) []strin
 	headers := u.restHeaders()
 	var whois map[string]rWhoisResponse
 
-	_, bus, err := ContextConfigBus(ctx)
+	_, bus, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return domains.Slice()
 	}
@@ -409,7 +409,7 @@ func (u *Umbrella) queryReverseWhois(ctx context.Context, apiURL string) []strin
 }
 
 func (u *Umbrella) validateScope(ctx context.Context, input string) bool {
-	cfg, _, err := ContextConfigBus(ctx)
+	cfg, _, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return false
 	}
@@ -420,7 +420,7 @@ func (u *Umbrella) validateScope(ctx context.Context, input string) bool {
 }
 
 func (u *Umbrella) whoisRequest(ctx context.Context, req *requests.WhoisRequest) {
-	cfg, bus, err := ContextConfigBus(ctx)
+	cfg, bus, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return
 	}

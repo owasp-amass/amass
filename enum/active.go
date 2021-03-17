@@ -9,7 +9,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/OWASP/Amass/v3/datasrcs"
 	"github.com/OWASP/Amass/v3/net/http"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/resolvers"
@@ -188,7 +187,7 @@ func (a *activeTask) certEnumeration(ctx context.Context, req *requests.AddrRequ
 }
 
 func (a *activeTask) zoneTransfer(ctx context.Context, req *requests.ZoneXFRRequest, tp pipeline.TaskParams) {
-	_, bus, err := datasrcs.ContextConfigBus(ctx)
+	_, bus, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return
 	}
@@ -203,7 +202,7 @@ func (a *activeTask) zoneTransfer(ctx context.Context, req *requests.ZoneXFRRequ
 		return
 	}
 
-	reqs, err := resolvers.ZoneTransfer(req.Name, req.Domain, addr)
+	reqs, err := ZoneTransfer(req.Name, req.Domain, addr)
 	if err != nil {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("DNS: Zone XFR failed: %s: %v", req.Server, err))
@@ -218,7 +217,7 @@ func (a *activeTask) zoneTransfer(ctx context.Context, req *requests.ZoneXFRRequ
 func (a *activeTask) zoneWalk(ctx context.Context, req *requests.ZoneXFRRequest, tp pipeline.TaskParams) {
 	defer func() { a.tokenPool <- struct{}{} }()
 
-	cfg, bus, err := datasrcs.ContextConfigBus(ctx)
+	cfg, bus, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return
 	}

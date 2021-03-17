@@ -1,4 +1,4 @@
-// Copyright 2017 Jeff Foley. All rights reserved.
+// Copyright 2017-2021 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 package systems
@@ -27,7 +27,7 @@ type LocalSystem struct {
 	cfg               *config.Config
 	pool              resolvers.Resolver
 	graphs            []*graph.Graph
-	cache             *amassnet.ASNCache
+	cache             *requests.ASNCache
 	done              chan struct{}
 	doneAlreadyClosed bool
 	addSource         chan service.Service
@@ -55,7 +55,7 @@ func NewLocalSystem(c *config.Config) (*LocalSystem, error) {
 	sys := &LocalSystem{
 		cfg:        c,
 		pool:       pool,
-		cache:      amassnet.NewASNCache(),
+		cache:      requests.NewASNCache(),
 		done:       make(chan struct{}, 2),
 		addSource:  make(chan service.Service),
 		allSources: make(chan chan []service.Service, 10),
@@ -92,7 +92,7 @@ func (l *LocalSystem) Pool() resolvers.Resolver {
 }
 
 // Cache implements the System interface.
-func (l *LocalSystem) Cache() *amassnet.ASNCache {
+func (l *LocalSystem) Cache() *requests.ASNCache {
 	return l.cache
 }
 

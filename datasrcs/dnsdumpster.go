@@ -1,4 +1,4 @@
-// Copyright 2017 Jeff Foley. All rights reserved.
+// Copyright 2017-2021 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 package datasrcs
@@ -57,7 +57,7 @@ func (d *DNSDumpster) OnRequest(ctx context.Context, args service.Args) {
 }
 
 func (d *DNSDumpster) dnsRequest(ctx context.Context, req *requests.DNSRequest) {
-	cfg, bus, err := ContextConfigBus(ctx)
+	cfg, bus, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return
 	}
@@ -106,7 +106,7 @@ func (d *DNSDumpster) getCSRFToken(page string) string {
 }
 
 func (d *DNSDumpster) postForm(ctx context.Context, token, domain string) (string, error) {
-	_, bus, err := ContextConfigBus(ctx)
+	_, bus, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return "", fmt.Errorf("%s failed to obtain the EventBus from Context", d.String())
 	}

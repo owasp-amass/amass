@@ -1,4 +1,4 @@
-// Copyright 2017 Jeff Foley. All rights reserved.
+// Copyright 2017-2021 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 package datasrcs
@@ -60,7 +60,7 @@ func (t *TeamCymru) OnRequest(ctx context.Context, args service.Args) {
 }
 
 func (t *TeamCymru) asnRequest(ctx context.Context, req *requests.ASNRequest) {
-	_, bus, err := ContextConfigBus(ctx)
+	_, bus, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return
 	}
@@ -87,7 +87,7 @@ func (t *TeamCymru) asnRequest(ctx context.Context, req *requests.ASNRequest) {
 }
 
 func (t *TeamCymru) origin(ctx context.Context, addr string) *requests.ASNRequest {
-	_, bus, err := ContextConfigBus(ctx)
+	_, bus, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return nil
 	}
@@ -156,7 +156,7 @@ func (t *TeamCymru) origin(ctx context.Context, addr string) *requests.ASNReques
 }
 
 func (t *TeamCymru) asnLookup(ctx context.Context, asn int) *requests.ASNRequest {
-	_, bus, err := ContextConfigBus(ctx)
+	_, bus, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return nil
 	}

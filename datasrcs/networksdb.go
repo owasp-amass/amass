@@ -1,4 +1,4 @@
-// Copyright 2017 Jeff Foley. All rights reserved.
+// Copyright 2017-2021 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 package datasrcs
@@ -115,7 +115,7 @@ func (n *NetworksDB) asnRequest(ctx context.Context, req *requests.ASNRequest) {
 }
 
 func (n *NetworksDB) executeASNAddrQuery(ctx context.Context, addr string) {
-	_, bus, err := ContextConfigBus(ctx)
+	_, bus, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return
 	}
@@ -174,7 +174,7 @@ func (n *NetworksDB) getIPURL(addr string) string {
 }
 
 func (n *NetworksDB) executeASNQuery(ctx context.Context, asn int, addr string, netblocks stringset.Set) {
-	_, bus, err := ContextConfigBus(ctx)
+	_, bus, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return
 	}
@@ -243,7 +243,7 @@ func (n *NetworksDB) getASNURL(asn int) string {
 }
 
 func (n *NetworksDB) executeAPIASNAddrQuery(ctx context.Context, addr string) {
-	_, bus, err := ContextConfigBus(ctx)
+	_, bus, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return
 	}
@@ -298,7 +298,7 @@ loop:
 }
 
 func (n *NetworksDB) executeAPIASNQuery(ctx context.Context, asn int, addr string, netblocks stringset.Set) {
-	_, bus, err := ContextConfigBus(ctx)
+	_, bus, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return
 	}
@@ -348,7 +348,7 @@ func (n *NetworksDB) executeAPIASNQuery(ctx context.Context, asn int, addr strin
 }
 
 func (n *NetworksDB) apiIPQuery(ctx context.Context, addr string) (string, string) {
-	_, bus, err := ContextConfigBus(ctx)
+	_, bus, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return "", ""
 	}
@@ -396,7 +396,7 @@ func (n *NetworksDB) getAPIIPURL() string {
 }
 
 func (n *NetworksDB) apiOrgInfoQuery(ctx context.Context, id string) []int {
-	_, bus, err := ContextConfigBus(ctx)
+	_, bus, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return []int{}
 	}
@@ -439,7 +439,7 @@ func (n *NetworksDB) getAPIOrgInfoURL() string {
 }
 
 func (n *NetworksDB) apiASNInfoQuery(ctx context.Context, asn int) *requests.ASNRequest {
-	_, bus, err := ContextConfigBus(ctx)
+	_, bus, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return nil
 	}
@@ -494,7 +494,7 @@ func (n *NetworksDB) getAPIASNInfoURL() string {
 func (n *NetworksDB) apiNetblocksQuery(ctx context.Context, asn int) stringset.Set {
 	netblocks := stringset.New()
 
-	_, bus, err := ContextConfigBus(ctx)
+	_, bus, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return netblocks
 	}
@@ -551,7 +551,7 @@ func (n *NetworksDB) getHeaders() map[string]string {
 }
 
 func (n *NetworksDB) whoisRequest(ctx context.Context, req *requests.WhoisRequest) {
-	cfg, bus, err := ContextConfigBus(ctx)
+	cfg, bus, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return
 	}

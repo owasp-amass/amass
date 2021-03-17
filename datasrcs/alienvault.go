@@ -1,4 +1,4 @@
-// Copyright 2017 Jeff Foley. All rights reserved.
+// Copyright 2017-2021 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 package datasrcs
@@ -74,7 +74,7 @@ func (a *AlienVault) dnsRequest(ctx context.Context, req *requests.DNSRequest) {
 		return
 	}
 
-	_, bus, err := ContextConfigBus(ctx)
+	_, bus, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return
 	}
@@ -96,7 +96,7 @@ func (a *AlienVault) whoisRequest(ctx context.Context, req *requests.WhoisReques
 }
 
 func (a *AlienVault) executeDNSQuery(ctx context.Context, req *requests.DNSRequest) {
-	cfg, bus, err := ContextConfigBus(ctx)
+	cfg, bus, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return
 	}
@@ -166,7 +166,7 @@ type avURL struct {
 }
 
 func (a *AlienVault) executeURLQuery(ctx context.Context, req *requests.DNSRequest) {
-	cfg, bus, err := ContextConfigBus(ctx)
+	cfg, bus, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return
 	}
@@ -259,7 +259,7 @@ func extractNamesIPs(urls []avURL, names stringset.Set, ips stringset.Set, re *r
 }
 
 func (a *AlienVault) executeWhoisQuery(ctx context.Context, req *requests.WhoisRequest) {
-	cfg, bus, err := ContextConfigBus(ctx)
+	cfg, bus, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return
 	}
@@ -314,7 +314,7 @@ func (a *AlienVault) queryWhoisForEmails(ctx context.Context, req *requests.Whoi
 	emails := stringset.New()
 	u := a.getWhoisURL(req.Domain)
 
-	cfg, bus, err := ContextConfigBus(ctx)
+	cfg, bus, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return emails.Slice()
 	}

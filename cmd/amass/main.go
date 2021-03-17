@@ -329,7 +329,7 @@ func memGraphForScope(domains []string, from *graph.Graph) (*graph.Graph, error)
 	return db, nil
 }
 
-func getEventOutput(uuids []string, asninfo bool, db *graph.Graph, cache *amassnet.ASNCache) []*requests.Output {
+func getEventOutput(uuids []string, asninfo bool, db *graph.Graph, cache *requests.ASNCache) []*requests.Output {
 	var output []*requests.Output
 	filter := stringfilter.NewStringFilter()
 
@@ -437,13 +437,13 @@ func assignNetInterface(iface *net.Interface) error {
 	return nil
 }
 
-func cacheWithData() *amassnet.ASNCache {
+func cacheWithData() *requests.ASNCache {
 	ranges, err := config.GetIP2ASNData()
 	if err != nil {
 		return nil
 	}
 
-	cache := amassnet.NewASNCache()
+	cache := requests.NewASNCache()
 	for _, r := range ranges {
 		cache.Update(&requests.ASNRequest{
 			Address:     r.FirstIP.String(),

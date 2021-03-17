@@ -86,11 +86,8 @@ func (e *Enumeration) Start(ctx context.Context) error {
 
 	max := e.Config.MaxDNSQueries * int(resolvers.QueryTimeout.Seconds())
 	// The pipeline input source will receive all the names
-	source := newEnumSource(e, max)
-	e.nameSrc = source
-	e.Bus.Subscribe(requests.NewNameTopic, source.InputName)
-	defer e.Bus.Unsubscribe(requests.NewNameTopic, source.InputName)
-	sink := e.makeOutputSink()
+	e.nameSrc = newEnumSource(e, max)
+	e.startupAndCleanup(ctx)
 
 	var stages []pipeline.Stage
 	if !e.Config.Passive {
@@ -115,34 +112,57 @@ func (e *Enumeration) Start(ctx context.Context) error {
 	}
 
 	/*
-	 * These events are important to the engine in order to receive data,
-	 * logs, and notices about discoveries made during the enumeration
-	 */
-	e.Bus.Subscribe(requests.LogTopic, e.queueLog)
-	defer e.Bus.Unsubscribe(requests.LogTopic, e.queueLog)
-	if !e.Config.Passive {
-		e.Bus.Subscribe(requests.NewAddrTopic, source.InputAddress)
-		defer e.Bus.Unsubscribe(requests.NewAddrTopic, source.InputAddress)
-		e.Bus.Subscribe(requests.NewASNTopic, e.Sys.Cache().Update)
-		defer e.Bus.Unsubscribe(requests.NewASNTopic, e.Sys.Cache().Update)
-	}
-
-	/*
 	 * Now that the pipeline input source has been setup, names provided
 	 * by the user and names acquired from the graph database can be brought
 	 * into the enumeration
 	 */
 	e.submitKnownNames()
 	e.submitProvidedNames()
+	e.submitDomainNames()
+	e.submitASNs()
 
+	return pipeline.NewPipeline(stages...).Execute(e.ctx, e.nameSrc, e.makeOutputSink())
+}
+
+func (e *Enumeration) startupAndCleanup(ctx context.Context) {
 	/*
-	 * This context, used throughout the enumeration, will provide the
-	 * ability to cancel operations and to pass the configuration and
-	 * event bus to all the components. If a timeout was provided in
-	 * the configuration, it will go off that many minutes from this
-	 * point in the enumeration process and terminate the pipeline
+	 * These events are important to the engine in order to receive data,
+	 * logs, and notices about discoveries made during the enumeration
 	 */
+	e.Bus.Subscribe(requests.NewNameTopic, e.nameSrc.InputName)
+	e.Bus.Subscribe(requests.LogTopic, e.queueLog)
+	if !e.Config.Passive {
+		e.Bus.Subscribe(requests.NewAddrTopic, e.nameSrc.InputAddress)
+		e.Bus.Subscribe(requests.NewASNTopic, e.Sys.Cache().Update)
+	}
+
+	e.setupContext(ctx)
+	go e.periodicLogging()
+
+	go func() {
+		<-e.done
+		defer e.Bus.Unsubscribe(requests.NewNameTopic, e.nameSrc.InputName)
+		defer e.Bus.Unsubscribe(requests.LogTopic, e.queueLog)
+
+		if !e.Config.Passive {
+			defer e.Bus.Unsubscribe(requests.NewAddrTopic, e.nameSrc.InputAddress)
+			defer e.Bus.Unsubscribe(requests.NewASNTopic, e.Sys.Cache().Update)
+			// Attempt to fix IP address nodes without edges to netblocks
+			defer func() { _ = e.Graph.HealAddressNodes(e.Sys.Cache(), e.Config.UUID.String()) }()
+		}
+
+		defer e.stop()
+		defer e.writeLogs(true)
+	}()
+}
+
+// This context, used throughout the enumeration, will provide the ability to cancel operations
+// and to pass the configuration and event bus to all the components. If a timeout was provided
+// in the configuration, it will go off that many minutes from this point in the enumeration
+// process and terminate the pipeline.
+func (e *Enumeration) setupContext(ctx context.Context) context.Context {
 	var cancel context.CancelFunc
+
 	ctx, cancel = context.WithCancel(ctx)
 	ctx = context.WithValue(ctx, requests.ContextConfig, e.Config)
 	ctx = context.WithValue(ctx, requests.ContextEventBus, e.Bus)
@@ -153,17 +173,12 @@ func (e *Enumeration) Start(ctx context.Context) error {
 		<-e.done
 		cancel()
 	}()
-	defer e.stop()
 
-	go e.periodicLogging()
-	defer e.writeLogs(true)
+	return ctx
+}
 
-	if !e.Config.Passive {
-		// Attempt to fix IP address nodes without edges to netblocks
-		defer func() { _ = e.Graph.HealAddressNodes(e.Sys.Cache(), e.Config.UUID.String()) }()
-	}
-
-	// Release the root domain names to the input source and each data source
+// Release the root domain names to the input source and each data source.
+func (e *Enumeration) submitDomainNames() {
 	for _, domain := range e.Config.Domains() {
 		req := &requests.DNSRequest{
 			Name:   domain,
@@ -172,23 +187,23 @@ func (e *Enumeration) Start(ctx context.Context) error {
 			Source: "DNS",
 		}
 
-		source.InputName(req)
+		e.nameSrc.InputName(req)
 		for _, src := range e.srcs {
-			src.Request(ctx, req.Clone().(*requests.DNSRequest))
+			src.Request(e.ctx, req.Clone().(*requests.DNSRequest))
 		}
 	}
+}
 
-	// If requests were made for specific ASNs, then those requests are
-	// sent to included data sources at this point
+// If requests were made for specific ASNs, then those requests are
+// sent to included data sources at this point.
+func (e *Enumeration) submitASNs() {
 	for _, asn := range e.Config.ASNs {
 		req := &requests.ASNRequest{ASN: asn}
 
 		for _, src := range e.srcs {
-			src.Request(ctx, req.Clone().(*requests.ASNRequest))
+			src.Request(e.ctx, req.Clone().(*requests.ASNRequest))
 		}
 	}
-
-	return pipeline.NewPipeline(stages...).Execute(ctx, source, sink)
 }
 
 func (e *Enumeration) makeOutputSink() pipeline.SinkFunc {

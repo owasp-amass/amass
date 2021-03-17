@@ -1,14 +1,14 @@
-// Copyright 2017 Jeff Foley. All rights reserved.
+// Copyright 2017-2021 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 package datasrcs
 
 import (
 	"context"
-	"errors"
 	"sort"
 
 	"github.com/OWASP/Amass/v3/config"
+	"github.com/OWASP/Amass/v3/datasrcs/scripting"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/systems"
 	"github.com/caffix/eventbus"
@@ -36,7 +36,7 @@ func GetAllSources(sys systems.System) []service.Service {
 
 	if scripts, err := sys.Config().AcquireScripts(); err == nil {
 		for _, script := range scripts {
-			if s := NewScript(script, sys); s != nil {
+			if s := scripting.NewScript(script, sys); s != nil {
 				srvs = append(srvs, s)
 			}
 		}
@@ -77,35 +77,8 @@ func SelectedDataSources(cfg *config.Config, avail []service.Service) []service.
 	return results
 }
 
-// ContextConfigBus extracts the Config and EventBus references from the Context argument.
-func ContextConfigBus(ctx context.Context) (*config.Config, *eventbus.EventBus, error) {
-	var ok bool
-	var cfg *config.Config
-
-	if c := ctx.Value(requests.ContextConfig); c != nil {
-		cfg, ok = c.(*config.Config)
-		if !ok {
-			return nil, nil, errors.New("Failed to extract the configuration from the context")
-		}
-	} else {
-		return nil, nil, errors.New("Failed to extract the configuration from the context")
-	}
-
-	var bus *eventbus.EventBus
-	if b := ctx.Value(requests.ContextEventBus); b != nil {
-		bus, ok = b.(*eventbus.EventBus)
-		if !ok {
-			return nil, nil, errors.New("Failed to extract the event bus from the context")
-		}
-	} else {
-		return nil, nil, errors.New("Failed to extract the event bus from the context")
-	}
-
-	return cfg, bus, nil
-}
-
 func genNewNameEvent(ctx context.Context, sys systems.System, srv service.Service, name string) {
-	cfg, bus, err := ContextConfigBus(ctx)
+	cfg, bus, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return
 	}
@@ -124,14 +97,4 @@ func numRateLimitChecks(srv service.Service, num int) {
 	for i := 0; i < num; i++ {
 		srv.CheckRateLimit()
 	}
-}
-
-func checkContextExpired(ctx context.Context) error {
-	select {
-	case <-ctx.Done():
-		return errors.New("Context expired")
-	default:
-	}
-
-	return nil
 }

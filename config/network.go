@@ -1,4 +1,4 @@
-// Copyright 2017-2020 Jeff Foley. All rights reserved.
+// Copyright 2017-2021 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 package config
@@ -14,8 +14,8 @@ import (
 	"strings"
 )
 
-// LookupASNsByName returns requests.ASNRequest objects for autonomous systems with
-// descriptions that contain the string provided by the parameter.
+// LookupASNsByName returns ASNs and descriptions for autonomous systems
+// that have descriptions containing the string provided.
 func LookupASNsByName(s string) ([]int, []string, error) {
 	var asns []int
 	var descs []string

@@ -12,7 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/OWASP/Amass/v3/datasrcs"
 	amassnet "github.com/OWASP/Amass/v3/net"
 	amassdns "github.com/OWASP/Amass/v3/net/dns"
 	"github.com/OWASP/Amass/v3/requests"
@@ -41,7 +40,7 @@ func (dm *dataManager) Process(ctx context.Context, data pipeline.Data, tp pipel
 	default:
 	}
 
-	_, bus, err := datasrcs.ContextConfigBus(ctx)
+	_, bus, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return data, nil
 	}
@@ -108,7 +107,7 @@ func (dm *dataManager) dnsRequest(ctx context.Context, req *requests.DNSRequest,
 }
 
 func (dm *dataManager) insertCNAME(ctx context.Context, req *requests.DNSRequest, recidx int, tp pipeline.TaskParams) error {
-	cfg, _, err := datasrcs.ContextConfigBus(ctx)
+	cfg, _, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return errors.New("The context did not contain the expected values")
 	}
@@ -143,7 +142,7 @@ func (dm *dataManager) insertCNAME(ctx context.Context, req *requests.DNSRequest
 }
 
 func (dm *dataManager) insertA(ctx context.Context, req *requests.DNSRequest, recidx int, tp pipeline.TaskParams) error {
-	cfg, _, err := datasrcs.ContextConfigBus(ctx)
+	cfg, _, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return errors.New("The context did not contain the expected values")
 	}
@@ -168,7 +167,7 @@ func (dm *dataManager) insertA(ctx context.Context, req *requests.DNSRequest, re
 }
 
 func (dm *dataManager) insertAAAA(ctx context.Context, req *requests.DNSRequest, recidx int, tp pipeline.TaskParams) error {
-	cfg, _, err := datasrcs.ContextConfigBus(ctx)
+	cfg, _, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return errors.New("The context did not contain the expected values")
 	}
@@ -193,7 +192,7 @@ func (dm *dataManager) insertAAAA(ctx context.Context, req *requests.DNSRequest,
 }
 
 func (dm *dataManager) insertPTR(ctx context.Context, req *requests.DNSRequest, recidx int, tp pipeline.TaskParams) error {
-	cfg, _, err := datasrcs.ContextConfigBus(ctx)
+	cfg, _, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return errors.New("The context did not contain the expected values")
 	}
@@ -224,7 +223,7 @@ func (dm *dataManager) insertPTR(ctx context.Context, req *requests.DNSRequest, 
 }
 
 func (dm *dataManager) insertSRV(ctx context.Context, req *requests.DNSRequest, recidx int, tp pipeline.TaskParams) error {
-	cfg, _, err := datasrcs.ContextConfigBus(ctx)
+	cfg, _, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return errors.New("The context did not contain the expected values")
 	}
@@ -251,7 +250,7 @@ func (dm *dataManager) insertSRV(ctx context.Context, req *requests.DNSRequest, 
 }
 
 func (dm *dataManager) insertNS(ctx context.Context, req *requests.DNSRequest, recidx int, tp pipeline.TaskParams) error {
-	cfg, _, err := datasrcs.ContextConfigBus(ctx)
+	cfg, _, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return errors.New("The context did not contain the expected values")
 	}
@@ -287,7 +286,7 @@ func (dm *dataManager) insertNS(ctx context.Context, req *requests.DNSRequest, r
 }
 
 func (dm *dataManager) insertMX(ctx context.Context, req *requests.DNSRequest, recidx int, tp pipeline.TaskParams) error {
-	cfg, _, err := datasrcs.ContextConfigBus(ctx)
+	cfg, _, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return errors.New("The context did not contain the expected values")
 	}
@@ -323,7 +322,7 @@ func (dm *dataManager) insertMX(ctx context.Context, req *requests.DNSRequest, r
 }
 
 func (dm *dataManager) insertTXT(ctx context.Context, req *requests.DNSRequest, recidx int, tp pipeline.TaskParams) error {
-	cfg, _, err := datasrcs.ContextConfigBus(ctx)
+	cfg, _, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return errors.New("The context did not contain the expected values")
 	}
@@ -337,7 +336,7 @@ func (dm *dataManager) insertTXT(ctx context.Context, req *requests.DNSRequest, 
 }
 
 func (dm *dataManager) insertSOA(ctx context.Context, req *requests.DNSRequest, recidx int, tp pipeline.TaskParams) error {
-	cfg, _, err := datasrcs.ContextConfigBus(ctx)
+	cfg, _, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return errors.New("The context did not contain the expected values")
 	}
@@ -351,7 +350,7 @@ func (dm *dataManager) insertSOA(ctx context.Context, req *requests.DNSRequest, 
 }
 
 func (dm *dataManager) insertSPF(ctx context.Context, req *requests.DNSRequest, recidx int, tp pipeline.TaskParams) error {
-	cfg, _, err := datasrcs.ContextConfigBus(ctx)
+	cfg, _, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return errors.New("The context did not contain the expected values")
 	}

@@ -1,4 +1,4 @@
-// Copyright 2017 Jeff Foley. All rights reserved.
+// Copyright 2017-2021 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 package graph
@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/caffix/stringset"
 	"github.com/cayleygraph/cayley"
@@ -34,6 +33,17 @@ type NameAddrPair struct {
 	Addr string
 }
 
+var (
+	dns     quad.IRI    = quad.IRI("DNS")
+	ntype   quad.IRI    = quad.IRI("type")
+	cname   quad.IRI    = quad.IRI("cname_record")
+	srvrec  quad.IRI    = quad.IRI("srv_record")
+	arec    quad.IRI    = quad.IRI("a_record")
+	aaaarec quad.IRI    = quad.IRI("aaaa_record")
+	fqdn    quad.String = quad.String("fqdn")
+	address quad.String = quad.String("ipaddr")
+)
+
 // NamesToAddrs returns a NameAddrPair for each name / address combination discovered in the graph.
 func (g *Graph) NamesToAddrs(uuid string, names ...string) ([]*NameAddrPair, error) {
 	g.db.Lock()
@@ -49,65 +59,69 @@ func (g *Graph) NamesToAddrs(uuid string, names ...string) ([]*NameAddrPair, err
 		filter = stringset.New(names...)
 	}
 
-	nameAddrMap := make(map[string]stringset.Set, len(names))
-	f := func(m map[string]quad.Value) {
-		name := valToStr(m["name"])
-		addr := valToStr(m["address"])
-
-		if filter != nil && !filter.Has(name) {
-			return
-		}
-		if _, found := nameAddrMap[name]; !found {
-			nameAddrMap[name] = stringset.New()
-		}
-
-		nameAddrMap[name].Insert(addr)
-	}
-
-	event := quad.IRI(uuid)
-	dns := quad.IRI("DNS")
-	ntype := quad.IRI("type")
-	cname := quad.IRI("cname_record")
-	srvrec := quad.IRI("srv_record")
-	arec := quad.IRI("a_record")
-	aaaarec := quad.IRI("aaaa_record")
-	fqdn := quad.String("fqdn")
-	address := quad.String("ipaddr")
-
-	eventNode := cayley.StartPath(g.db.store, event)
 	var nodes *cayley.Path
+	event := quad.IRI(uuid)
+	eventNode := cayley.StartPath(g.db.store, event)
+	nameAddrMap := make(map[string]stringset.Set, len(names))
+
 	if len(names) > 0 {
 		nodes = cayley.StartPath(g.db.store, nameVals...).Tag("name")
 	} else {
 		nodes = eventNode.Out().Has(ntype, fqdn).Unique().Tag("name")
 	}
 
+	f := addrsCallback(filter, nameAddrMap)
 	// Obtain the addresses that are associated with the event and adjacent names
 	adj := nodes.Out(arec, aaaarec).Has(ntype, address).Tag("address").In(dns).And(eventNode).Back("name")
 	if err := adj.Iterate(context.Background()).TagValues(nil, f); err != nil {
 		return nil, fmt.Errorf("%s: NamesToAddrs: Failed to iterate over tag values: %v", g.String(), err)
 	}
-
 	// Get all the nodes for services names and CNAMES
+	getSRVsAndCNAMEs(eventNode, nodes, f)
+
+	if len(nameAddrMap) == 0 {
+		return nil, fmt.Errorf("%s: NamesToAddrs: No addresses were discovered", g.String())
+	}
+
+	return generatePairsFromAddrMap(nameAddrMap), nil
+}
+
+func addrsCallback(filter stringset.Set, addrMap map[string]stringset.Set) func(m map[string]quad.Value) {
+	return func(m map[string]quad.Value) {
+		name := valToStr(m["name"])
+		addr := valToStr(m["address"])
+
+		if filter != nil && !filter.Has(name) {
+			return
+		}
+		if _, found := addrMap[name]; !found {
+			addrMap[name] = stringset.New()
+		}
+
+		addrMap[name].Insert(addr)
+	}
+}
+
+func getSRVsAndCNAMEs(event, nodes *cayley.Path, f func(m map[string]quad.Value)) {
 	p := nodes
+
 	for i := 1; i <= 10; i++ {
 		if i == 1 {
 			p = p.Out(srvrec, cname)
 		} else {
 			p = p.Out(cname)
 		}
-		addrs := p.Out(arec, aaaarec).Has(ntype, address).Tag("address").In(dns).And(eventNode).Back("name")
+		addrs := p.Out(arec, aaaarec).Has(ntype, address).Tag("address").In(dns).And(event).Back("name")
 		if err := addrs.Iterate(context.Background()).TagValues(nil, f); err != nil {
 			break
 		}
 	}
+}
 
-	if len(nameAddrMap) == 0 {
-		return nil, fmt.Errorf("%s: NamesToAddrs: No addresses were discovered", g.String())
-	}
+func generatePairsFromAddrMap(addrMap map[string]stringset.Set) []*NameAddrPair {
+	pairs := make([]*NameAddrPair, 0, len(addrMap)*2)
 
-	pairs := make([]*NameAddrPair, 0, len(nameAddrMap)*2)
-	for name, set := range nameAddrMap {
+	for name, set := range addrMap {
 		for addr := range set {
 			pairs = append(pairs, &NameAddrPair{
 				Name: name,
@@ -115,7 +129,8 @@ func (g *Graph) NamesToAddrs(uuid string, names ...string) ([]*NameAddrPair, err
 			})
 		}
 	}
-	return pairs, nil
+
+	return pairs
 }
 
 // InsertA creates FQDN, IP address and A record edge in the graph and associates them with a source and event.
@@ -170,12 +185,12 @@ func (g *Graph) InsertAAAA(fqdn, addr, source, tag, eventID string) error {
 
 // HealAddressNodes looks for 'ipaddr' nodes in the graph and creates missing edges to the
 // appropriate 'netblock' nodes using data provided by the ASNCache parameter.
-func (g *Graph) HealAddressNodes(cache *net.ASNCache, uuid string) error {
+func (g *Graph) HealAddressNodes(cache *requests.ASNCache, uuid string) error {
 	var err error
 	cidrToNode := make(map[string]Node)
 
 	if cache == nil {
-		cache = net.NewASNCache()
+		cache = requests.NewASNCache()
 
 		if err = g.ASNCacheFill(cache); err != nil {
 			return err

@@ -9,7 +9,6 @@ import (
 
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/graph"
-	"github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/resolvers"
 	eb "github.com/caffix/eventbus"
@@ -25,7 +24,7 @@ type System interface {
 	Pool() resolvers.Resolver
 
 	// Returns the cache populated by the system
-	Cache() *net.ASNCache
+	Cache() *requests.ASNCache
 
 	// AddSource appends the provided data source to the slice of sources managed by the System
 	AddSource(srv service.Service) error

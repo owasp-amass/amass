@@ -1,4 +1,4 @@
-// Copyright 2017-2020 Jeff Foley. All rights reserved.
+// Copyright 2017-2021 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 package graph
@@ -7,7 +7,6 @@ import (
 	"context"
 	"net"
 
-	amassnet "github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/stringfilter"
 	"github.com/caffix/stringset"
@@ -16,9 +15,11 @@ import (
 	"golang.org/x/net/publicsuffix"
 )
 
+type outLookup map[string]*requests.Output
+
 // EventOutput returns findings within the receiver Graph for the event identified by the uuid string
 // parameter and not already in the filter StringFilter argument. The filter is updated by EventOutput.
-func (g *Graph) EventOutput(uuid string, filter stringfilter.Filter, asninfo bool, cache *amassnet.ASNCache) []*requests.Output {
+func (g *Graph) EventOutput(uuid string, filter stringfilter.Filter, asninfo bool, cache *requests.ASNCache) []*requests.Output {
 	// Make sure a filter has been created
 	if filter == nil {
 		filter = stringfilter.NewStringFilter()
@@ -31,7 +32,7 @@ func (g *Graph) EventOutput(uuid string, filter stringfilter.Filter, asninfo boo
 		}
 	}
 
-	lookup := make(map[string]*requests.Output, len(names))
+	lookup := make(outLookup, len(names))
 	for _, o := range g.buildNameInfo(uuid, names) {
 		lookup[o.Name] = o
 	}
@@ -50,15 +51,26 @@ func (g *Graph) EventOutput(uuid string, filter stringfilter.Filter, asninfo boo
 		}
 	}
 
-	output := make([]*requests.Output, 0, len(lookup))
 	if !asninfo || cache == nil {
-		for _, o := range lookup {
-			if !filter.Duplicate(o.Name) {
-				output = append(output, o)
-			}
-		}
-		return output
+		return removeDuplicates(lookup, filter)
 	}
+	return addInfrastructureInfo(lookup, filter, cache)
+}
+
+func removeDuplicates(lookup outLookup, filter stringfilter.Filter) []*requests.Output {
+	output := make([]*requests.Output, 0, len(lookup))
+
+	for _, o := range lookup {
+		if !filter.Duplicate(o.Name) {
+			output = append(output, o)
+		}
+	}
+
+	return output
+}
+
+func addInfrastructureInfo(lookup outLookup, filter stringfilter.Filter, cache *requests.ASNCache) []*requests.Output {
+	output := make([]*requests.Output, 0, len(lookup))
 
 	for _, o := range lookup {
 		var newaddrs []requests.AddressInfo
