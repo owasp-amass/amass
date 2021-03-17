@@ -1,4 +1,4 @@
-// Copyright 2017-2020 Jeff Foley. All rights reserved.
+// Copyright 2017-2021 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 package config
@@ -256,28 +256,21 @@ func (c *Config) LoadSettings(path string) error {
 	return nil
 }
 
-// AcquireConfig populates the Config struct provided by the config argument.
-func AcquireConfig(dir, file string, config *Config) error {
-	var err error
+// AcquireConfig populates the Config struct provided by the Config argument.
+func AcquireConfig(dir, file string, cfg *Config) error {
+	var path string
 
 	if file != "" {
-		err = config.LoadSettings(file)
-		if err == nil {
-			return nil
+		path = file
+	} else if f, set := os.LookupEnv("AMASS_CONFIG"); set {
+		path = f
+	} else if d := OutputDirectory(dir); d != "" {
+		if finfo, err := os.Stat(d); !os.IsNotExist(err) && finfo.IsDir() {
+			path = filepath.Join(d, "config.ini")
 		}
 	}
-	// Attempt to obtain the configuration file from the output directory
-	if dir = OutputDirectory(dir); dir != "" {
-		if finfo, err := os.Stat(dir); !os.IsNotExist(err) && finfo.IsDir() {
-			file := filepath.Join(dir, "config.ini")
 
-			err = config.LoadSettings(file)
-			if err == nil {
-				return nil
-			}
-		}
-	}
-	return err
+	return cfg.LoadSettings(path)
 }
 
 // OutputDirectory returns the file path of the Amass output directory. A suitable
