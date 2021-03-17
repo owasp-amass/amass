@@ -18,8 +18,6 @@ builds:
       - 386
       - arm
       - arm64
-    env:
-      - CGO_ENABLED=0
     ignore:
       - goos: darwin
         goarch: 386
