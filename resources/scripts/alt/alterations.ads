@@ -27,32 +27,50 @@ function makenames(ctx, cfg, name)
 
     if cfg['flip_words'] then
         for i, n in pairs(flip_words(name, words)) do
-            sendnames(ctx, n)
+            local expired = sendnames(ctx, n)
+            if expired then
+                return
+            end
         end
     end
     if cfg['flip_numbers'] then
         for i, n in pairs(flip_numbers(name)) do
-            sendnames(ctx, n)
+            local expired = sendnames(ctx, n)
+            if expired then
+                return
+            end
         end
     end
     if cfg['add_numbers'] then
         for i, n in pairs(append_numbers(name)) do
-            sendnames(ctx, n)
+            local expired = sendnames(ctx, n)
+            if expired then
+                return
+            end
         end
     end
     if cfg['add_words'] then
         for i, n in pairs(add_prefix_word(name, words)) do
-            sendnames(ctx, n)
+            local expired = sendnames(ctx, n)
+            if expired then
+                return
+            end
         end
         for i, n in pairs(add_suffix_word(name, words)) do
-            sendnames(ctx, n)
+            local expired = sendnames(ctx, n)
+            if expired then
+                return
+            end
         end
     end
 
     local distance = cfg['edit_distance']
     if distance > 0 then
         for i, n in pairs(fuzzy_label_searches(name, distance)) do
-            sendnames(ctx, n)
+            local expired = sendnames(ctx, n)
+            if expired then
+                return
+            end
         end
     end
 end
@@ -334,14 +352,19 @@ end
 function sendnames(ctx, content)
     local names = find(content, subdomainre)
     if names == nil then
-        return
+        return false
     end
 
     local found = {}
     for i, v in pairs(names) do
         if found[v] == nil then
-            newname(ctx, v)
+            local expired = newname(ctx, v)
+            if expired then
+                return expired
+            end
             found[v] = true
         end
     end
+
+    return false
 end

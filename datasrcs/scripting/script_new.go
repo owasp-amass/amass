@@ -38,26 +38,36 @@ func genNewNameEvent(ctx context.Context, sys systems.System, srv service.Servic
 func (s *Script) newName(L *lua.LState) int {
 	ctx, err := extractContext(L.CheckUserData(1))
 	if err != nil {
-		return 0
+		L.Push(lua.LTrue)
+		return 1
+	}
+
+	if err = checkContextExpired(ctx); err != nil {
+		L.Push(lua.LTrue)
+		return 1
 	}
 
 	lv := L.Get(2)
 	if lv == nil {
-		return 0
+		L.Push(lua.LFalse)
+		return 1
 	}
 
 	n, ok := lv.(lua.LString)
 	if !ok {
-		return 0
+		L.Push(lua.LFalse)
+		return 1
 	}
 
 	name := s.subre.FindString(string(n))
 	if name == "" {
-		return 0
+		L.Push(lua.LFalse)
+		return 1
 	}
 
 	genNewNameEvent(ctx, s.sys, s, http.CleanName(name))
-	return 0
+	L.Push(lua.LFalse)
+	return 1
 }
 
 // Wrapper so that scripts can send discovered IP addresses to Amass.
