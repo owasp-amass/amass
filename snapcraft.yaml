@@ -7,6 +7,7 @@ icon: images/snapcraft_icon.png
 license: Apache-2.0	
 
 base: core20
+type: app
 grade: stable
 confinement: strict
 
@@ -28,11 +29,11 @@ plugs:
 
 parts:
   amass:
-    plugin: go
-    go-channel: latest/stable
-    source: ignored
+    plugin: nil
+    build-snaps: [go]
+    source: .
     source-type: git
     override-build: |
+      export GOBIN=$SNAPCRAFT_PART_INSTALL/bin
       GO111MODULE=on go get github.com/OWASP/Amass/v3/...
-    stage:
-      - $GOPATH/bin/amass
+      cp $GOBIN/amass $SNAPCRAFT_PRIME/bin/amass
