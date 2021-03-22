@@ -1,4 +1,4 @@
--- Copyright 2017 Jeff Foley. All rights reserved.
+-- Copyright 2017-2021 Jeff Foley. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 name = "Brute Forcing"
@@ -7,6 +7,10 @@ type = "brute"
 probes = {"www", "online", "webserver", "ns", "ns1", "mail", "smtp", "webmail", "shop", "dev",
             "prod", "test", "vpn", "ftp", "ssh", "secure", "whm", "admin", "webdisk", "mobile",
             "remote", "server", "cpanel", "cloud", "autodiscover", "api", "m", "blog"}
+
+function start()
+    setratelimit(1)
+end
 
 function vertical(ctx, domain)
     local cfg = config(ctx)
@@ -59,7 +63,14 @@ function makenames(ctx, base)
     local wordlist = brute_wordlist(ctx)
 
     for i, word in pairs(wordlist) do
-        newname(ctx, word .. "." .. base)
+        local expired = newname(ctx, word .. "." .. base)
+        if expired then
+            return
+        end
+
+        if i % 1000 == 0 then
+            checkratelimit()
+        end
     end
 end
 
@@ -68,7 +79,7 @@ function has_cname(records)
         return false
     end
 
-    for i, rec in pairs(records) do
+    for _, rec in pairs(records) do
         if rec.rrtype == 5 then
             return true
         end
@@ -82,7 +93,7 @@ function has_addr(records)
         return false
     end
 
-    for i, rec in pairs(records) do
+    for _, rec in pairs(records) do
         if (rec.rrtype == 1 or rec.rrtype == 28) then
             return true
         end
@@ -100,7 +111,7 @@ function split(str, delim)
         return result
     end
 
-    for i, match in pairs(matches) do
+    for _, match in pairs(matches) do
         table.insert(result, match)
     end
 

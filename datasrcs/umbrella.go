@@ -74,6 +74,8 @@ func (u *Umbrella) checkConfig() error {
 
 // OnRequest implements the Service interface.
 func (u *Umbrella) OnRequest(ctx context.Context, args service.Args) {
+	check := true
+
 	switch req := args.(type) {
 	case *requests.DNSRequest:
 		u.dnsRequest(ctx, req)
@@ -83,6 +85,12 @@ func (u *Umbrella) OnRequest(ctx context.Context, args service.Args) {
 		u.asnRequest(ctx, req)
 	case *requests.WhoisRequest:
 		u.whoisRequest(ctx, req)
+	default:
+		check = false
+	}
+
+	if check {
+		u.CheckRateLimit()
 	}
 }
 

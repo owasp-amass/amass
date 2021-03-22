@@ -61,11 +61,19 @@ func (a *AlienVault) OnStart() error {
 
 // OnRequest implements the Service interface.
 func (a *AlienVault) OnRequest(ctx context.Context, args service.Args) {
+	check := true
+
 	switch req := args.(type) {
 	case *requests.DNSRequest:
 		a.dnsRequest(ctx, req)
 	case *requests.WhoisRequest:
 		a.whoisRequest(ctx, req)
+	default:
+		check = false
+	}
+
+	if check {
+		a.CheckRateLimit()
 	}
 }
 

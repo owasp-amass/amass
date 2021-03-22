@@ -84,6 +84,7 @@ func (t *Twitter) checkConfig() error {
 func (t *Twitter) OnRequest(ctx context.Context, args service.Args) {
 	if req, ok := args.(*requests.DNSRequest); ok {
 		t.dnsRequest(ctx, req)
+		t.CheckRateLimit()
 	}
 }
 

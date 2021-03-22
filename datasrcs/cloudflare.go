@@ -56,6 +56,7 @@ func (c *Cloudflare) OnStart() error {
 func (c *Cloudflare) OnRequest(ctx context.Context, args service.Args) {
 	if req, ok := args.(*requests.DNSRequest); ok {
 		c.dnsRequest(ctx, req)
+		c.CheckRateLimit()
 	}
 }
 

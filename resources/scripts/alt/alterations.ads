@@ -6,6 +6,10 @@ type = "alt"
 
 ldh_chars = "_abcdefghijklmnopqrstuvwxyz0123456789-"
 
+function start()
+    setratelimit(1)
+end
+
 function resolved(ctx, name, domain, records)
     local nparts = split(name, ".")
     local dparts = split(domain, ".")

@@ -49,6 +49,7 @@ func (p *Pastebin) OnStart() error {
 func (p *Pastebin) OnRequest(ctx context.Context, args service.Args) {
 	if req, ok := args.(*requests.DNSRequest); ok {
 		p.dnsRequest(ctx, req)
+		p.CheckRateLimit()
 	}
 }
 

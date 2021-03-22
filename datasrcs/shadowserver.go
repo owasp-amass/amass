@@ -74,6 +74,7 @@ func (s *ShadowServer) OnStart() error {
 func (s *ShadowServer) OnRequest(ctx context.Context, args service.Args) {
 	if req, ok := args.(*requests.ASNRequest); ok {
 		s.asnRequest(ctx, req)
+		s.CheckRateLimit()
 	}
 }
 

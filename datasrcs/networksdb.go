@@ -84,11 +84,19 @@ func (n *NetworksDB) OnStart() error {
 
 // OnRequest implements the Service interface.
 func (n *NetworksDB) OnRequest(ctx context.Context, args service.Args) {
+	check := true
+
 	switch req := args.(type) {
 	case *requests.ASNRequest:
 		n.asnRequest(ctx, req)
 	case *requests.WhoisRequest:
 		n.whoisRequest(ctx, req)
+	default:
+		check = false
+	}
+
+	if check {
+		n.CheckRateLimit()
 	}
 }
 

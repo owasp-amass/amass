@@ -262,28 +262,48 @@ func (s *Script) checkConfig() error {
 
 // OnRequest implements the Service interface.
 func (s *Script) OnRequest(ctx context.Context, args service.Args) {
+	var check bool
+
 	switch req := args.(type) {
 	case *requests.DNSRequest:
-		s.dnsRequest(ctx, req)
+		if s.vertical.Type() != lua.LTNil && req != nil && req.Domain != "" {
+			s.dnsRequest(ctx, req)
+			check = true
+		}
 	case *requests.ResolvedRequest:
-		s.resolvedRequest(ctx, req)
+		if s.resolved.Type() != lua.LTNil && req != nil && req.Name != "" && len(req.Records) > 0 {
+			s.resolvedRequest(ctx, req)
+			check = true
+		}
 	case *requests.SubdomainRequest:
-		s.subdomainRequest(ctx, req)
+		if s.subdomain.Type() != lua.LTNil && req != nil && req.Name != "" {
+			s.subdomainRequest(ctx, req)
+			check = true
+		}
 	case *requests.AddrRequest:
-		s.addrRequest(ctx, req)
+		if s.address.Type() != lua.LTNil && req != nil && req.Address != "" {
+			s.addrRequest(ctx, req)
+			check = true
+		}
 	case *requests.ASNRequest:
-		s.asnRequest(ctx, req)
+		if s.asn.Type() != lua.LTNil && req != nil && (req.Address != "" || req.ASN != 0) {
+			s.asnRequest(ctx, req)
+			check = true
+		}
 	case *requests.WhoisRequest:
-		s.whoisRequest(ctx, req)
+		if s.horizontal.Type() != lua.LTNil {
+			s.whoisRequest(ctx, req)
+			check = true
+		}
+	}
+
+	if check {
+		numRateLimitChecks(s, s.seconds)
 	}
 }
 
 func (s *Script) dnsRequest(ctx context.Context, req *requests.DNSRequest) {
 	L := s.luaState
-
-	if s.vertical.Type() == lua.LTNil || req == nil || req.Domain == "" {
-		return
-	}
 
 	if err := checkContextExpired(ctx); err != nil {
 		return
@@ -294,7 +314,6 @@ func (s *Script) dnsRequest(ctx context.Context, req *requests.DNSRequest) {
 		return
 	}
 
-	numRateLimitChecks(s, s.seconds)
 	bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 		fmt.Sprintf("Querying %s for %s subdomains", s.String(), req.Domain))
 
@@ -312,10 +331,6 @@ func (s *Script) dnsRequest(ctx context.Context, req *requests.DNSRequest) {
 
 func (s *Script) resolvedRequest(ctx context.Context, req *requests.ResolvedRequest) {
 	L := s.luaState
-
-	if s.resolved.Type() == lua.LTNil || req == nil || req.Name == "" || len(req.Records) == 0 {
-		return
-	}
 
 	if err := checkContextExpired(ctx); err != nil {
 		return
@@ -336,7 +351,6 @@ func (s *Script) resolvedRequest(ctx context.Context, req *requests.ResolvedRequ
 		records.Append(tb)
 	}
 
-	numRateLimitChecks(s, s.seconds)
 	err = L.CallByParam(lua.P{
 		Fn:      s.resolved,
 		NRet:    0,
@@ -352,10 +366,6 @@ func (s *Script) resolvedRequest(ctx context.Context, req *requests.ResolvedRequ
 func (s *Script) subdomainRequest(ctx context.Context, req *requests.SubdomainRequest) {
 	L := s.luaState
 
-	if s.subdomain.Type() == lua.LTNil || req == nil || req.Name == "" {
-		return
-	}
-
 	if err := checkContextExpired(ctx); err != nil {
 		return
 	}
@@ -365,7 +375,6 @@ func (s *Script) subdomainRequest(ctx context.Context, req *requests.SubdomainRe
 		return
 	}
 
-	numRateLimitChecks(s, s.seconds)
 	err = L.CallByParam(lua.P{
 		Fn:      s.subdomain,
 		NRet:    0,
@@ -381,10 +390,6 @@ func (s *Script) subdomainRequest(ctx context.Context, req *requests.SubdomainRe
 func (s *Script) addrRequest(ctx context.Context, req *requests.AddrRequest) {
 	L := s.luaState
 
-	if s.address.Type() == lua.LTNil || req == nil || req.Address == "" {
-		return
-	}
-
 	if err := checkContextExpired(ctx); err != nil {
 		return
 	}
@@ -394,7 +399,6 @@ func (s *Script) addrRequest(ctx context.Context, req *requests.AddrRequest) {
 		return
 	}
 
-	numRateLimitChecks(s, s.seconds)
 	err = L.CallByParam(lua.P{
 		Fn:      s.address,
 		NRet:    0,
@@ -410,10 +414,6 @@ func (s *Script) addrRequest(ctx context.Context, req *requests.AddrRequest) {
 func (s *Script) asnRequest(ctx context.Context, req *requests.ASNRequest) {
 	L := s.luaState
 
-	if s.asn.Type() == lua.LTNil || req == nil || (req.Address == "" && req.ASN == 0) {
-		return
-	}
-
 	if err := checkContextExpired(ctx); err != nil {
 		return
 	}
@@ -423,7 +423,6 @@ func (s *Script) asnRequest(ctx context.Context, req *requests.ASNRequest) {
 		return
 	}
 
-	numRateLimitChecks(s, s.seconds)
 	err = L.CallByParam(lua.P{
 		Fn:      s.asn,
 		NRet:    0,
@@ -439,10 +438,6 @@ func (s *Script) asnRequest(ctx context.Context, req *requests.ASNRequest) {
 func (s *Script) whoisRequest(ctx context.Context, req *requests.WhoisRequest) {
 	L := s.luaState
 
-	if s.horizontal.Type() == lua.LTNil {
-		return
-	}
-
 	if err := checkContextExpired(ctx); err != nil {
 		return
 	}
@@ -452,7 +447,6 @@ func (s *Script) whoisRequest(ctx context.Context, req *requests.WhoisRequest) {
 		return
 	}
 
-	numRateLimitChecks(s, s.seconds)
 	err = L.CallByParam(lua.P{
 		Fn:      s.horizontal,
 		NRet:    0,

@@ -8,8 +8,8 @@ require (
 	github.com/caffix/eventbus v0.0.0-20210301213705-9ab42753d12d
 	github.com/caffix/pipeline v0.0.0-20210301171240-503915daec5b
 	github.com/caffix/queue v0.0.0-20210301212750-6e488abe1004
-	github.com/caffix/service v0.0.0-20210202222504-bfa33e78ab27
-	github.com/caffix/stringset v0.0.0-20201218054545-37e95a70826c
+	github.com/caffix/service v0.0.0-20210321183606-3819810293b0
+	github.com/caffix/stringset v0.0.0-20210320213318-a00bc23f59bc
 	github.com/cayleygraph/cayley v0.7.7
 	github.com/cayleygraph/quad v1.2.4
 	github.com/cjoudrey/gluaurl v0.0.0-20161028222611-31cbb9bef199
@@ -29,7 +29,7 @@ require (
 	github.com/stretchr/testify v1.7.0 // indirect
 	github.com/yl2chen/cidranger v1.0.2
 	github.com/yuin/gopher-lua v0.0.0-20200816102855-ee81675732da
-	go.uber.org/ratelimit v0.1.0
+	go.uber.org/ratelimit v0.2.0
 	golang.org/x/net v0.0.0-20201224014010-6772e930b67b
 	golang.org/x/oauth2 v0.0.0-20201208152858-08078c50e5b5
 	golang.org/x/sync v0.0.0-20201207232520-09787c993a3a // indirect

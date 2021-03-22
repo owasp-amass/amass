@@ -53,6 +53,7 @@ func (d *DNSDumpster) OnStart() error {
 func (d *DNSDumpster) OnRequest(ctx context.Context, args service.Args) {
 	if req, ok := args.(*requests.DNSRequest); ok {
 		d.dnsRequest(ctx, req)
+		d.CheckRateLimit()
 	}
 }
 

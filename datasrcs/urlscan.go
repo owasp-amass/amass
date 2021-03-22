@@ -60,6 +60,7 @@ func (u *URLScan) OnStart() error {
 func (u *URLScan) OnRequest(ctx context.Context, args service.Args) {
 	if req, ok := args.(*requests.DNSRequest); ok {
 		u.dnsRequest(ctx, req)
+		u.CheckRateLimit()
 	}
 }
 

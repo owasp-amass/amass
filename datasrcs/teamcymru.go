@@ -56,6 +56,7 @@ func (t *TeamCymru) OnStart() error {
 func (t *TeamCymru) OnRequest(ctx context.Context, args service.Args) {
 	if req, ok := args.(*requests.ASNRequest); ok {
 		t.asnRequest(ctx, req)
+		t.CheckRateLimit()
 	}
 }
 

@@ -104,6 +104,7 @@ func (w *WhoisXML) checkConfig() error {
 func (w *WhoisXML) OnRequest(ctx context.Context, args service.Args) {
 	if req, ok := args.(*requests.WhoisRequest); ok {
 		w.whoisRequest(ctx, req)
+		w.CheckRateLimit()
 	}
 }
 

@@ -92,6 +92,7 @@ func (r *RADb) registryRADbURL(registry string) string {
 func (r *RADb) OnRequest(ctx context.Context, args service.Args) {
 	if req, ok := args.(*requests.ASNRequest); ok {
 		r.asnRequest(ctx, req)
+		r.CheckRateLimit()
 	}
 }
 

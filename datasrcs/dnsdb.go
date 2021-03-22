@@ -73,6 +73,7 @@ func (d *DNSDB) checkConfig() error {
 func (d *DNSDB) OnRequest(ctx context.Context, args service.Args) {
 	if req, ok := args.(*requests.DNSRequest); ok {
 		d.dnsRequest(ctx, req)
+		d.CheckRateLimit()
 	}
 }
 
