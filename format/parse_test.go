@@ -164,13 +164,12 @@ func TestParseIPs(t *testing.T) {
 		}, {
 			label: "range end overflows byte",
 			input: "0.0.0.0-256",
-			ok:    true,
-			want:  "0.0.0.0",
 		}, {
 			label: "invalid range end",
 			input: "0.0.0.0-1-sdfgkjhsdfg",
-			ok:    true,
-			want:  "0.0.0.0,0.0.0.1",
+		}, {
+			label: "invalid range start",
+			input: "foo-3",
 		}, {
 			label: "range and IP",
 			input: "127.0.0.1-3,255.0.0.0",
@@ -188,6 +187,9 @@ func TestParseIPs(t *testing.T) {
 		}, {
 			label: "trailing whitespace",
 			input: "127.0.0.1-3,255.0.0.0 ",
+		}, {
+			label: "leading whitespace",
+			input: " 127.0.0.1-3,255.0.0.0",
 		},
 	}
 	for _, c := range cases {
@@ -206,34 +208,6 @@ func TestParseIPs(t *testing.T) {
 					t.Errorf("got %q; want %q", got, c.want)
 				}
 			}
-		}
-		t.Run(c.label, f)
-	}
-}
-
-func TestParseIPsSetPanic(t *testing.T) {
-	cases := []struct {
-		label string
-		input string
-	}{
-		{
-			label: "invalid range start",
-			input: "foo-3",
-		}, {
-
-			label: "leading whitespace",
-			input: " 127.0.0.1-3,255.0.0.0",
-		},
-	}
-	for _, c := range cases {
-		f := func(t *testing.T) {
-			defer func() {
-				if r := recover(); r == nil {
-					t.Error("expected panic")
-				}
-			}()
-			var ips ParseIPs
-			ips.Set(c.input)
 		}
 		t.Run(c.label, f)
 	}
