@@ -5,6 +5,7 @@ package format
 
 import (
 	"fmt"
+	"math"
 	"net"
 	"strconv"
 	"strings"
@@ -48,12 +49,14 @@ func (p *ParseInts) String() string {
 	if p == nil {
 		return ""
 	}
-
-	var nums []string
-	for _, n := range *p {
-		nums = append(nums, strconv.Itoa(n))
+	var builder strings.Builder
+	for i, n := range *p {
+		if i > 0 {
+			builder.WriteRune(',')
+		}
+		builder.WriteString(strconv.Itoa(n))
 	}
-	return strings.Join(nums, ",")
+	return builder.String()
 }
 
 // Set implements the flag.Value interface.
@@ -77,12 +80,14 @@ func (p *ParseIPs) String() string {
 	if p == nil {
 		return ""
 	}
-
-	var ipaddrs []string
-	for _, ipaddr := range *p {
-		ipaddrs = append(ipaddrs, ipaddr.String())
+	var builder strings.Builder
+	for i, ipaddr := range *p {
+		if i > 0 {
+			builder.WriteRune(',')
+		}
+		builder.WriteString(ipaddr.String())
 	}
-	return strings.Join(ipaddrs, ",")
+	return builder.String()
 }
 
 // Set implements the flag.Value interface.
@@ -91,53 +96,47 @@ func (p *ParseIPs) Set(s string) error {
 		return fmt.Errorf("IP address parsing failed")
 	}
 
-	ips := strings.Split(s, ",")
-	for _, ip := range ips {
-		// Is this an IP range?
-		err := p.parseRange(ip)
-		if err == nil {
+	for _, v := range strings.Split(s, ",") {
+		if start, end, ok := parseRange(v); ok {
+			ips := amassnet.RangeHosts(start, end)
+			if len(ips) == 0 {
+				return fmt.Errorf("%s is not a valid IP address or range", v)
+			}
+			for _, ip := range ips {
+				*p = append(*p, ip)
+			}
 			continue
+		} else if ip := net.ParseIP(v); ip != nil {
+			*p = append(*p, ip)
+			continue
+		} else {
+			return fmt.Errorf("%s is not a valid IP address or range", v)
 		}
-		addr := net.ParseIP(ip)
-		if addr == nil {
-			return fmt.Errorf("%s is not a valid IP address or range", ip)
-		}
-		*p = append(*p, addr)
 	}
 	return nil
 }
 
-func (p *ParseIPs) appendIPs(addrs []net.IP) error {
-	for _, addr := range addrs {
-		*p = append(*p, addr)
-	}
-	return nil
-}
-
-func (p *ParseIPs) parseRange(s string) error {
+func parseRange(s string) (start net.IP, end net.IP, ok bool) {
 	twoIPs := strings.Split(s, "-")
-
-	if twoIPs[0] == s {
-		return fmt.Errorf("%s is not a valid IP range", s)
+	if len(twoIPs) != 2 {
+		return
 	}
-	start := net.ParseIP(twoIPs[0])
-	end := net.ParseIP(twoIPs[1])
+	start = net.ParseIP(twoIPs[0])
+	if start == nil {
+		return
+	}
+	end = net.ParseIP(twoIPs[1])
 	if end == nil {
 		num, err := strconv.Atoi(twoIPs[1])
-		if err == nil {
-			end = net.ParseIP(twoIPs[0])
-			end[len(end)-1] = byte(num)
+		if err != nil || math.MaxUint8 < num {
+			return
 		}
+		end = make(net.IP, len(start))
+		copy(end, start)
+		end[len(end)-1] = byte(num)
 	}
-	if start == nil || end == nil {
-		return fmt.Errorf("%s is not a valid IP range", s)
-	}
-
-	ips := amassnet.RangeHosts(start, end)
-	if len(ips) == 0 {
-		return fmt.Errorf("%s is not a valid IP range", s)
-	}
-	return p.appendIPs(ips)
+	ok = true
+	return
 }
 
 func (p *ParseCIDRs) String() string {
@@ -145,11 +144,14 @@ func (p *ParseCIDRs) String() string {
 		return ""
 	}
 
-	var cidrs []string
-	for _, ipnet := range *p {
-		cidrs = append(cidrs, ipnet.String())
+	var builder strings.Builder
+	for i, ipnet := range *p {
+		if i > 0 {
+			builder.WriteRune(',')
+		}
+		builder.WriteString(ipnet.String())
 	}
-	return strings.Join(cidrs, ",")
+	return builder.String()
 }
 
 // Set implements the flag.Value interface.
