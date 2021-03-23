@@ -49,12 +49,14 @@ func (p *ParseInts) String() string {
 	if p == nil {
 		return ""
 	}
-
-	var nums []string
-	for _, n := range *p {
-		nums = append(nums, strconv.Itoa(n))
+	var builder strings.Builder
+	for i, n := range *p {
+		if i > 0 {
+			builder.WriteRune(',')
+		}
+		builder.WriteString(strconv.Itoa(n))
 	}
-	return strings.Join(nums, ",")
+	return builder.String()
 }
 
 // Set implements the flag.Value interface.
@@ -78,12 +80,14 @@ func (p *ParseIPs) String() string {
 	if p == nil {
 		return ""
 	}
-
-	var ipaddrs []string
-	for _, ipaddr := range *p {
-		ipaddrs = append(ipaddrs, ipaddr.String())
+	var builder strings.Builder
+	for i, ipaddr := range *p {
+		if i > 0 {
+			builder.WriteRune(',')
+		}
+		builder.WriteString(ipaddr.String())
 	}
-	return strings.Join(ipaddrs, ",")
+	return builder.String()
 }
 
 // Set implements the flag.Value interface.
@@ -140,11 +144,14 @@ func (p *ParseCIDRs) String() string {
 		return ""
 	}
 
-	var cidrs []string
-	for _, ipnet := range *p {
-		cidrs = append(cidrs, ipnet.String())
+	var builder strings.Builder
+	for i, ipnet := range *p {
+		if i > 0 {
+			builder.WriteRune(',')
+		}
+		builder.WriteString(ipnet.String())
 	}
-	return strings.Join(cidrs, ",")
+	return builder.String()
 }
 
 // Set implements the flag.Value interface.
