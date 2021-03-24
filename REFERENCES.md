@@ -1,11 +1,15 @@
-# References [![Rawsec's CyberSecurity Inventory](https://inventory.rawsec.ml/img/badges/Rawsec-inventoried-FF5050_flat.svg)](https://inventory.rawsec.ml/tools.html#title-tools-osint) [![Bugcrowd LevelUp 0x04](https://img.shields.io/badge/Bugcrowd-LevelUp%200x04-orange.svg)](https://www.youtube.com/watch?v=C-GabM2db9A) [![DEF CON 27 Demo Labs](https://img.shields.io/badge/DEF%20CON%2027-Demo%20Labs-purple.svg)](https://www.defcon.org/html/defcon-27/dc-27-demolabs.html) [![DEF CON 27 Recon Village](https://img.shields.io/badge/DEF%20CON%2027-Recon%20Village-red.svg)](https://reconvillage.org/)
+# References [![Rawsec's CyberSecurity Inventory](https://inventory.rawsec.ml/img/badges/Rawsec-inventoried-FF5050_flat.svg)](https://inventory.rawsec.ml/tools.html#title-tools-osint) [![Bugcrowd LevelUp 0x04](https://img.shields.io/badge/bugcrowd-levelup%200x04-orange.svg)](https://www.youtube.com/watch?v=C-GabM2db9A) [![DEF CON 27 Demo Labs](https://img.shields.io/badge/defcon%2027-demo%20labs-purple.svg)](https://www.defcon.org/html/defcon-27/dc-27-demolabs.html) [![DEF CON 27 Recon Village](https://img.shields.io/badge/defcon%2027-recon%20village-lightgrey.svg)](https://reconvillage.org/) [![DEF CON 28 Red Team Village](https://img.shields.io/badge/defcon%2028-red%20team%20village-red.svg)](https://www.youtube.com/c/RedTeamVillage/featured) [![Bugcrowd LevelUp 0x07](https://img.shields.io/badge/bugcrowd-levelup%200x07-orange.svg)](https://www.twitch.tv/videos/723418873) [![Grayhat 2020](https://img.shields.io/badge/grayhat%202020-bootcamp-lightgrey.svg)](https://www.youtube.com/watch?v=J33JmuQ79tE) [![BeNeLux 2020](https://img.shields.io/badge/owasp%202020-benelux%20days-blue.svg)](https://www.youtube.com/watch?v=fDlKQXRaGl0) [![BSides København 2020](https://img.shields.io/badge/bsides%202020-københavn-red.svg)](https://vimeo.com/481985359) [![ESW 2021](https://img.shields.io/badge/security%20weekly-esw%20219-blue.svg)](https://www.youtube.com/watch?v=fDlKQXRaGl0)
 
 Did you write a blog post, magazine article or do a podcast about or mentioning OWASP Amass? Add it to this file and open a PR! The same goes for conference or meetup talks, workshops or trainings you did where this project was mentioned or used!
 
 ## Web Links
 
 ### Pod- & Webcasts
-
+* [Paul's Security Weekly](https://securityweekly.com/):
+  * Enterprise Security Weekly #219:
+    [Attack Surface Management, Monitoring, & Mapping - Jeff Foley](https://www.youtube.com/watch?v=z4GT3xH-zo4)
+  * Episode 564:
+    [Technical Segment - Bug Bounty Hunting](https://securityweekly.com/shows/keith-hoodlet-bug-bounty-hunting-pauls-security-weekly-564/)
 * [Hacking Simplified](https://www.youtube.com/channel/UCARsgS1stRbRgh99E63Q3ng):
   * [Amass Setup and Tutorial](https://www.youtube.com/watch?v=Pv4fGBZWyqY)
 * [Josh Amishav-Zlatin's Channel](https://www.youtube.com/channel/UCajDbRGYBtgITfEbNUbWdsw):
@@ -32,9 +36,6 @@ Did you write a blog post, magazine article or do a podcast about or mentioning 
   * [OWASP Amass: Discovering Your Exposure on the Internet](https://www.csiac.org/podcast/owasp-amass-discovering-your-exposure-on-the-internet/)
 * [Hackdoor India's YouTube Channel](https://www.youtube.com/channel/UCKxHWvYXIfHRN_C2nUoGEjA):
   * [Amass Installation and Usage - Bug Bounty](https://www.youtube.com/watch?v=MNHJldgk3hQ)
-* [Paul's Security Weekly](https://securityjourney.com/application-security-podcast):
-  * Episode 564:
-    [Technical Segment - Bug Bounty Hunting](https://securityweekly.com/shows/keith-hoodlet-bug-bounty-hunting-pauls-security-weekly-564/)
 
 ### Blogs & Articles
 
