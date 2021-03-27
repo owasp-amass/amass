@@ -15,9 +15,9 @@ import (
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/net/http"
 	"github.com/OWASP/Amass/v3/requests"
-	"github.com/OWASP/Amass/v3/resolvers"
 	"github.com/OWASP/Amass/v3/systems"
 	"github.com/caffix/eventbus"
+	"github.com/caffix/resolvers"
 	"github.com/caffix/service"
 	"github.com/caffix/stringset"
 )

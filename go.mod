@@ -8,6 +8,7 @@ require (
 	github.com/caffix/eventbus v0.0.0-20210301213705-9ab42753d12d
 	github.com/caffix/pipeline v0.0.0-20210301171240-503915daec5b
 	github.com/caffix/queue v0.0.0-20210301212750-6e488abe1004
+	github.com/caffix/resolvers v0.0.0-20210327024347-a83f323e2b6c
 	github.com/caffix/service v0.0.0-20210321183606-3819810293b0
 	github.com/caffix/stringset v0.0.0-20210320213318-a00bc23f59bc
 	github.com/cayleygraph/cayley v0.7.7
@@ -21,18 +22,16 @@ require (
 	github.com/google/go-cmp v0.5.4 // indirect
 	github.com/google/uuid v1.1.3
 	github.com/lib/pq v1.9.0 // indirect
-	github.com/miekg/dns v1.1.35
+	github.com/miekg/dns v1.1.41
 	github.com/rakyll/statik v0.1.7
 	github.com/rogpeppe/go-internal v1.6.2 // indirect
 	github.com/sirupsen/logrus v1.7.0 // indirect
 	github.com/spf13/cobra v1.1.3 // indirect
-	github.com/stretchr/testify v1.7.0 // indirect
 	github.com/yl2chen/cidranger v1.0.2
 	github.com/yuin/gopher-lua v0.0.0-20200816102855-ee81675732da
-	go.uber.org/ratelimit v0.2.0
-	golang.org/x/net v0.0.0-20201224014010-6772e930b67b
+	golang.org/x/net v0.0.0-20210326220855-61e056675ecf
 	golang.org/x/oauth2 v0.0.0-20201208152858-08078c50e5b5
-	golang.org/x/sync v0.0.0-20201207232520-09787c993a3a // indirect
+	golang.org/x/sys v0.0.0-20210326220804-49726bf1d181 // indirect
 	golang.org/x/text v0.3.4 // indirect
 	golang.org/x/tools v0.1.0 // indirect
 	gopkg.in/ini.v1 v1.62.0 // indirect

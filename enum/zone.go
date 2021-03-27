@@ -11,7 +11,7 @@ import (
 
 	amassnet "github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/requests"
-	"github.com/OWASP/Amass/v3/resolvers"
+	"github.com/caffix/resolvers"
 	"github.com/miekg/dns"
 )
 

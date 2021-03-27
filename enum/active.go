@@ -11,10 +11,10 @@ import (
 
 	"github.com/OWASP/Amass/v3/net/http"
 	"github.com/OWASP/Amass/v3/requests"
-	"github.com/OWASP/Amass/v3/resolvers"
 	"github.com/caffix/eventbus"
 	"github.com/caffix/pipeline"
 	"github.com/caffix/queue"
+	"github.com/caffix/resolvers"
 	"github.com/miekg/dns"
 )
 
@@ -232,7 +232,7 @@ func (a *activeTask) zoneWalk(ctx context.Context, req *requests.ZoneXFRRequest,
 		return
 	}
 
-	r := resolvers.NewBaseResolver(addr, 10, a.enum.Config.Log)
+	r := resolvers.NewBaseResolver(addr, 50, a.enum.Config.Log)
 	if r == nil {
 		return
 	}
@@ -245,7 +245,9 @@ func (a *activeTask) zoneWalk(ctx context.Context, req *requests.ZoneXFRRequest,
 		return
 	}
 
-	for _, name := range names {
+	for _, nsec := range names {
+		name := resolvers.RemoveLastDot(nsec.NextDomain)
+
 		if domain := cfg.WhichDomain(name); domain != "" {
 			go pipeline.SendData(ctx, "new", &requests.DNSRequest{
 				Name:   name,
@@ -277,8 +279,7 @@ func (a *activeTask) nameserverAddr(ctx context.Context, server string) (string,
 		return "", fmt.Errorf("DNS server %s has no A or AAAA records", server)
 	}
 
-	ans := resolvers.ExtractAnswers(resp)
-	rr := resolvers.AnswersByType(ans, qtype)
+	rr := resolvers.AnswersByType(resolvers.ExtractAnswers(resp), qtype)
 	if len(rr) == 0 {
 		return "", fmt.Errorf("DNS server %s has no A or AAAA records", server)
 	}

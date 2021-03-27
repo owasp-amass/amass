@@ -11,6 +11,7 @@ import (
 	"os"
 	"runtime"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/OWASP/Amass/v3/config"
@@ -18,7 +19,7 @@ import (
 	"github.com/OWASP/Amass/v3/limits"
 	amassnet "github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/requests"
-	"github.com/OWASP/Amass/v3/resolvers"
+	"github.com/caffix/resolvers"
 	"github.com/caffix/service"
 )
 
@@ -154,9 +155,17 @@ func (l *LocalSystem) Shutdown() error {
 	}
 	l.doneAlreadyClosed = true
 
+	var wg sync.WaitGroup
 	for _, src := range l.DataSources() {
-		_ = src.Stop()
+		wg.Add(1)
+
+		go func(s service.Service, w *sync.WaitGroup) {
+			defer w.Done()
+			_ = s.Stop()
+		}(src, &wg)
 	}
+
+	wg.Wait()
 	close(l.done)
 
 	for _, g := range l.GraphDatabases() {

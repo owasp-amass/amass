@@ -1,4 +1,4 @@
-// Copyright 2017 Jeff Foley. All rights reserved.
+// Copyright 2017-2021 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 package enum
@@ -11,12 +11,12 @@ import (
 	"github.com/OWASP/Amass/v3/datasrcs"
 	"github.com/OWASP/Amass/v3/graph"
 	"github.com/OWASP/Amass/v3/requests"
-	"github.com/OWASP/Amass/v3/resolvers"
 	"github.com/OWASP/Amass/v3/stringfilter"
 	"github.com/OWASP/Amass/v3/systems"
 	"github.com/caffix/eventbus"
 	"github.com/caffix/pipeline"
 	"github.com/caffix/queue"
+	"github.com/caffix/resolvers"
 	"github.com/caffix/service"
 )
 
@@ -217,11 +217,12 @@ func (e *Enumeration) makeOutputSink() pipeline.SinkFunc {
 			return nil
 		}
 
-		var err error
 		if e.Config.IsDomainInScope(req.Name) {
-			_, err = e.Graph.InsertFQDN(req.Name, req.Source, req.Tag, e.Config.UUID.String())
+			if _, err := e.Graph.InsertFQDN(req.Name, req.Source, req.Tag, e.Config.UUID.String()); err != nil {
+				e.Bus.Publish(requests.LogTopic, eventbus.PriorityHigh, err.Error())
+			}
 		}
-		return err
+		return nil
 	})
 }
 

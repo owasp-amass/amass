@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/OWASP/Amass/v3/resolvers"
+	"github.com/caffix/resolvers"
 	"github.com/miekg/dns"
 )
 

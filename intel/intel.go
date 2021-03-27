@@ -1,4 +1,4 @@
-// Copyright 2017 Jeff Foley. All rights reserved.
+// Copyright 2017-2021 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 package intel
@@ -15,11 +15,11 @@ import (
 	"github.com/OWASP/Amass/v3/datasrcs"
 	amassnet "github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/requests"
-	"github.com/OWASP/Amass/v3/resolvers"
 	"github.com/OWASP/Amass/v3/stringfilter"
 	"github.com/OWASP/Amass/v3/systems"
 	eb "github.com/caffix/eventbus"
 	"github.com/caffix/pipeline"
+	"github.com/caffix/resolvers"
 	"github.com/caffix/service"
 	"github.com/caffix/stringset"
 	"github.com/miekg/dns"

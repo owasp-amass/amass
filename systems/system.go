@@ -10,8 +10,8 @@ import (
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/graph"
 	"github.com/OWASP/Amass/v3/requests"
-	"github.com/OWASP/Amass/v3/resolvers"
 	eb "github.com/caffix/eventbus"
+	"github.com/caffix/resolvers"
 	"github.com/caffix/service"
 )
 

@@ -1,4 +1,4 @@
-// Copyright 2017 Jeff Foley. All rights reserved.
+// Copyright 2017-2021 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 package main
@@ -18,9 +18,9 @@ import (
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/format"
 	"github.com/OWASP/Amass/v3/requests"
-	"github.com/OWASP/Amass/v3/resolvers"
 	"github.com/OWASP/Amass/v3/systems"
 	"github.com/caffix/eventbus"
+	"github.com/caffix/resolvers"
 	"github.com/caffix/stringset"
 	"github.com/fatih/color"
 	"github.com/miekg/dns"

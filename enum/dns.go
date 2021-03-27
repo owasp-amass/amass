@@ -9,9 +9,9 @@ import (
 	"strings"
 
 	"github.com/OWASP/Amass/v3/requests"
-	"github.com/OWASP/Amass/v3/resolvers"
 	"github.com/caffix/eventbus"
 	"github.com/caffix/pipeline"
+	"github.com/caffix/resolvers"
 	"github.com/miekg/dns"
 	"golang.org/x/net/publicsuffix"
 )
