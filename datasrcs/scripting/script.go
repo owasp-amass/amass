@@ -201,31 +201,26 @@ func (s *Script) OnStart() error {
 func (s *Script) OnStop() error {
 	defer func() {
 		s.cancel()
+		time.Sleep(2 * time.Second)
 		s.luaState.Close()
 	}()
 
+	var err error
 	L := s.luaState
-	if s.stop.Type() == lua.LTNil {
-		return nil
+	if s.stop.Type() != lua.LTNil {
+		err = L.CallByParam(lua.P{
+			Fn:      s.stop,
+			NRet:    0,
+			Protect: true,
+		})
+		if err != nil {
+			err = fmt.Errorf("%s: stop callback: %v", s.String(), err)
+
+			s.sys.Config().Log.Print(err.Error())
+		}
 	}
 
-	for L.Status(L) == "running" {
-		time.Sleep(250 * time.Millisecond)
-	}
-
-	err := L.CallByParam(lua.P{
-		Fn:      s.stop,
-		NRet:    0,
-		Protect: true,
-	})
-	if err != nil {
-		estr := fmt.Sprintf("%s: stop callback: %v", s.String(), err)
-
-		s.sys.Config().Log.Print(estr)
-		return errors.New(estr)
-	}
-
-	return nil
+	return err
 }
 
 func (s *Script) checkConfig() error {
