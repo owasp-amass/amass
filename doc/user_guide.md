@@ -107,7 +107,6 @@ This subcommand will perform DNS enumeration and network mapping while populatin
 | -demo | Censor output to make it suitable for demonstrations | amass enum -demo -d example.com |
 | -df | Path to a file providing root domain names | amass enum -df domains.txt |
 | -dir | Path to the directory containing the graph database | amass enum -dir PATH -d example.com |
-| -do | Path to data operations output file | amass enum -do data.json -d example.com |
 | -ef | Path to a file providing data sources to exclude | amass enum -ef exclude.txt -d example.com |
 | -exclude | Data source names separated by commas to be excluded | amass enum -exclude crtsh -d example.com |
 | -if | Path to a file providing data sources to include | amass enum -if include.txt -d example.com |
