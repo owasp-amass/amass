@@ -17,7 +17,7 @@ import (
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/systems"
 	"github.com/caffix/eventbus"
-	"github.com/caffix/resolvers"
+	"github.com/caffix/resolve"
 	"github.com/caffix/service"
 	"github.com/caffix/stringset"
 )
@@ -161,7 +161,7 @@ func (u *Umbrella) addrRequest(ctx context.Context, req *requests.AddrRequest) {
 	}
 
 	for _, record := range ip.Records {
-		if name := resolvers.RemoveLastDot(record.Data); name != "" {
+		if name := resolve.RemoveLastDot(record.Data); name != "" {
 			genNewNameEvent(ctx, u.sys, u, name)
 		}
 	}

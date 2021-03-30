@@ -27,9 +27,9 @@ import (
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/datasrcs"
 	"github.com/OWASP/Amass/v3/enum"
+	"github.com/OWASP/Amass/v3/filter"
 	"github.com/OWASP/Amass/v3/format"
 	"github.com/OWASP/Amass/v3/requests"
-	"github.com/OWASP/Amass/v3/stringfilter"
 	"github.com/OWASP/Amass/v3/systems"
 	"github.com/caffix/stringset"
 	"github.com/fatih/color"
@@ -494,7 +494,7 @@ func processOutput(e *enum.Enumeration, outputs []chan *requests.Output, done ch
 	defer wg.Done()
 
 	// This filter ensures that we only get new names
-	known := stringfilter.NewBloomFilter(1 << 22)
+	known := filter.NewBloomFilter(1 << 22)
 	// The function that obtains output from the enum and puts it on the channel
 	extract := func() {
 		for _, o := range e.ExtractOutput(known, true) {

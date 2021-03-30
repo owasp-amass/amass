@@ -1,4 +1,4 @@
-// Copyright 2017 Jeff Foley. All rights reserved.
+// Copyright 2017-2021 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 package enum
@@ -6,12 +6,12 @@ package enum
 import (
 	"time"
 
+	"github.com/OWASP/Amass/v3/filter"
 	"github.com/OWASP/Amass/v3/requests"
-	"github.com/OWASP/Amass/v3/stringfilter"
 )
 
 // ExtractOutput is a convenience method for obtaining new discoveries made by the enumeration process.
-func (e *Enumeration) ExtractOutput(filter stringfilter.Filter, asinfo bool) []*requests.Output {
+func (e *Enumeration) ExtractOutput(filter filter.Filter, asinfo bool) []*requests.Output {
 	if e.Config.Passive {
 		return e.Graph.EventNames(e.Config.UUID.String(), filter)
 	}
@@ -20,7 +20,7 @@ func (e *Enumeration) ExtractOutput(filter stringfilter.Filter, asinfo bool) []*
 }
 
 func (e *Enumeration) submitKnownNames() {
-	filter := stringfilter.NewStringFilter()
+	filter := filter.NewStringFilter()
 
 	for _, g := range e.Sys.GraphDatabases() {
 		var events []string

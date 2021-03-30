@@ -36,11 +36,11 @@ import (
 
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/datasrcs"
+	"github.com/OWASP/Amass/v3/filter"
 	"github.com/OWASP/Amass/v3/format"
 	"github.com/OWASP/Amass/v3/graph"
 	amassnet "github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/requests"
-	"github.com/OWASP/Amass/v3/stringfilter"
 	"github.com/OWASP/Amass/v3/systems"
 	"github.com/caffix/eventbus"
 	"github.com/caffix/service"
@@ -331,7 +331,7 @@ func memGraphForScope(domains []string, from *graph.Graph) (*graph.Graph, error)
 
 func getEventOutput(uuids []string, asninfo bool, db *graph.Graph, cache *requests.ASNCache) []*requests.Output {
 	var output []*requests.Output
-	filter := stringfilter.NewStringFilter()
+	filter := filter.NewStringFilter()
 
 	for i := len(uuids) - 1; i >= 0; i-- {
 		output = append(output, db.EventOutput(uuids[i], filter, asninfo, cache)...)

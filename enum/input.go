@@ -1,4 +1,4 @@
-// Copyright 2017-2020 Jeff Foley. All rights reserved.
+// Copyright 2017-2021 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 package enum
@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/OWASP/Amass/v3/filter"
 	"github.com/OWASP/Amass/v3/requests"
-	"github.com/OWASP/Amass/v3/stringfilter"
 	"github.com/caffix/pipeline"
 	"github.com/caffix/queue"
 )
@@ -25,7 +25,7 @@ type enumSource struct {
 	sync.Mutex
 	enum     *Enumeration
 	queue    queue.Queue
-	filter   stringfilter.Filter
+	filter   filter.Filter
 	count    int64
 	done     chan struct{}
 	maxSlots int
@@ -37,7 +37,7 @@ func newEnumSource(e *Enumeration, slots int) *enumSource {
 	r := &enumSource{
 		enum:     e,
 		queue:    queue.NewQueue(),
-		filter:   stringfilter.NewBloomFilter(filterMaxSize),
+		filter:   filter.NewBloomFilter(filterMaxSize),
 		done:     make(chan struct{}),
 		maxSlots: slots,
 		timeout:  minWaitForData,
@@ -87,7 +87,7 @@ func (r *enumSource) accept(s string, tag string) bool {
 	// Check if it's time to reset our bloom filter due to number of elements seen
 	if r.count >= filterMaxSize {
 		r.count = 0
-		r.filter = stringfilter.NewBloomFilter(filterMaxSize)
+		r.filter = filter.NewBloomFilter(filterMaxSize)
 	}
 
 	trusted := requests.TrustedTag(tag)

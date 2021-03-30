@@ -1,4 +1,4 @@
-// Copyright 2017 Jeff Foley. All rights reserved.
+// Copyright 2017-2021 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 package http
@@ -22,9 +22,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/OWASP/Amass/v3/filter"
 	amassnet "github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/net/dns"
-	"github.com/OWASP/Amass/v3/stringfilter"
 	"github.com/PuerkitoBio/goquery"
 	"github.com/caffix/stringset"
 	"github.com/geziyor/geziyor"
@@ -137,7 +137,7 @@ func RequestWebPage(ctx context.Context, u string, body io.Reader, hvals map[str
 }
 
 // Crawl will spider the web page at the URL argument looking for DNS names within the scope argument.
-func Crawl(ctx context.Context, u string, scope []string, max int, filter stringfilter.Filter) ([]string, error) {
+func Crawl(ctx context.Context, u string, scope []string, max int, f filter.Filter) ([]string, error) {
 	newScope := append([]string{}, scope...)
 
 	target := subRE.FindString(u)
@@ -154,8 +154,8 @@ func Crawl(ctx context.Context, u string, scope []string, max int, filter string
 		}
 	}
 
-	if filter == nil {
-		filter = stringfilter.NewStringFilter()
+	if f == nil {
+		f = filter.NewStringFilter()
 	}
 
 	var count int
@@ -210,7 +210,7 @@ func Crawl(ctx context.Context, u string, scope []string, max int, filter string
 					// Remove fragments and check if we've seen this URL before
 					p.Fragment = ""
 					p.RawFragment = ""
-					if filter.Duplicate(p.String()) {
+					if f.Duplicate(p.String()) {
 						return
 					}
 					// Be sure the crawl has not exceeded the maximum links to be followed

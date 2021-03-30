@@ -16,7 +16,7 @@ import (
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/systems"
 	"github.com/caffix/eventbus"
-	"github.com/caffix/resolvers"
+	"github.com/caffix/resolve"
 	"github.com/caffix/service"
 	"github.com/caffix/stringset"
 	"github.com/miekg/dns"
@@ -105,8 +105,8 @@ func (t *TeamCymru) origin(ctx context.Context, addr string) *requests.ASNReques
 		return nil
 	}
 
-	msg := resolvers.QueryMsg(name, dns.TypeTXT)
-	resp, err := t.sys.Pool().Query(ctx, msg, resolvers.PriorityCritical, resolvers.RetryPolicy)
+	msg := resolve.QueryMsg(name, dns.TypeTXT)
+	resp, err := t.sys.Pool().Query(ctx, msg, resolve.PriorityCritical, resolve.RetryPolicy)
 	if err != nil {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: %s: DNS TXT record query error: %v", t.String(), name, err),
@@ -114,7 +114,7 @@ func (t *TeamCymru) origin(ctx context.Context, addr string) *requests.ASNReques
 		return nil
 	}
 
-	ans := resolvers.ExtractAnswers(resp)
+	ans := resolve.ExtractAnswers(resp)
 	if len(ans) == 0 {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: %s: DNS TXT record query returned zero answers", t.String(), name),
@@ -163,9 +163,9 @@ func (t *TeamCymru) asnLookup(ctx context.Context, asn int) *requests.ASNRequest
 	}
 
 	name := "AS" + strconv.Itoa(asn) + ".asn.cymru.com"
-	msg := resolvers.QueryMsg(name, dns.TypeTXT)
+	msg := resolve.QueryMsg(name, dns.TypeTXT)
 
-	resp, err := t.sys.Pool().Query(ctx, msg, resolvers.PriorityCritical, resolvers.RetryPolicy)
+	resp, err := t.sys.Pool().Query(ctx, msg, resolve.PriorityCritical, resolve.RetryPolicy)
 	if err != nil {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: %s: DNS TXT record query error: %v", t.String(), name, err),
@@ -173,7 +173,7 @@ func (t *TeamCymru) asnLookup(ctx context.Context, asn int) *requests.ASNRequest
 		return nil
 	}
 
-	ans := resolvers.ExtractAnswers(resp)
+	ans := resolve.ExtractAnswers(resp)
 	if len(ans) == 0 {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: %s: DNS TXT record query returned zero answers", t.String(), name),

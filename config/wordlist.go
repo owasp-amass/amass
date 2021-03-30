@@ -1,12 +1,10 @@
-// Copyright 2017 Jeff Foley. All rights reserved.
+// Copyright 2017-2021 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
-package wordlist
+package config
 
 import (
-	"bufio"
 	"fmt"
-	"io"
 	"strings"
 )
 
@@ -15,20 +13,6 @@ const (
 	maskDigits  = "0123456789"
 	maskSpecial = "-"
 )
-
-func getWordList(reader io.Reader) []string {
-	var words []string
-
-	scanner := bufio.NewScanner(reader)
-	for scanner.Scan() {
-		// Get the next word in the list
-		w := strings.TrimSpace(scanner.Text())
-		if err := scanner.Err(); err == nil && w != "" && !strings.Contains(w, "-") {
-			words = append(words, w)
-		}
-	}
-	return words
-}
 
 // ExpandMask will return a slice of words that a "hashcat-style" mask matches.
 func ExpandMask(word string) ([]string, error) {

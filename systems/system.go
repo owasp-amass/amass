@@ -11,7 +11,7 @@ import (
 	"github.com/OWASP/Amass/v3/graph"
 	"github.com/OWASP/Amass/v3/requests"
 	eb "github.com/caffix/eventbus"
-	"github.com/caffix/resolvers"
+	"github.com/caffix/resolve"
 	"github.com/caffix/service"
 )
 
@@ -21,7 +21,7 @@ type System interface {
 	Config() *config.Config
 
 	// Returns the resolver pool that handles DNS requests
-	Pool() resolvers.Resolver
+	Pool() resolve.Resolver
 
 	// Returns the cache populated by the system
 	Cache() *requests.ASNCache

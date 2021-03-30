@@ -17,7 +17,7 @@ import (
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/caffix/eventbus"
 	"github.com/caffix/pipeline"
-	"github.com/caffix/resolvers"
+	"github.com/caffix/resolve"
 	"github.com/miekg/dns"
 	"golang.org/x/net/publicsuffix"
 )
@@ -112,7 +112,7 @@ func (dm *dataManager) insertCNAME(ctx context.Context, req *requests.DNSRequest
 		return errors.New("The context did not contain the expected values")
 	}
 
-	target := resolvers.RemoveLastDot(req.Records[recidx].Data)
+	target := resolve.RemoveLastDot(req.Records[recidx].Data)
 	if target == "" {
 		return errors.New("Failed to extract a FQDN from the DNS answer data")
 	}
@@ -197,7 +197,7 @@ func (dm *dataManager) insertPTR(ctx context.Context, req *requests.DNSRequest, 
 		return errors.New("The context did not contain the expected values")
 	}
 
-	target := resolvers.RemoveLastDot(req.Records[recidx].Data)
+	target := resolve.RemoveLastDot(req.Records[recidx].Data)
 	if target == "" {
 		return errors.New("Failed to extract a FQDN from the DNS answer data")
 	}
@@ -228,8 +228,8 @@ func (dm *dataManager) insertSRV(ctx context.Context, req *requests.DNSRequest, 
 		return errors.New("The context did not contain the expected values")
 	}
 
-	service := resolvers.RemoveLastDot(req.Records[recidx].Name)
-	target := resolvers.RemoveLastDot(req.Records[recidx].Data)
+	service := resolve.RemoveLastDot(req.Records[recidx].Name)
+	target := resolve.RemoveLastDot(req.Records[recidx].Data)
 	if target == "" || service == "" {
 		return errors.New("Failed to extract service info from the DNS answer data")
 	}
@@ -291,7 +291,7 @@ func (dm *dataManager) insertMX(ctx context.Context, req *requests.DNSRequest, r
 		return errors.New("The context did not contain the expected values")
 	}
 
-	target := resolvers.RemoveLastDot(req.Records[recidx].Data)
+	target := resolve.RemoveLastDot(req.Records[recidx].Data)
 	if target == "" {
 		return errors.New("Failed to extract a FQDN from the DNS answer data")
 	}

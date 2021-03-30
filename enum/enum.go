@@ -9,14 +9,14 @@ import (
 
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/datasrcs"
+	"github.com/OWASP/Amass/v3/filter"
 	"github.com/OWASP/Amass/v3/graph"
 	"github.com/OWASP/Amass/v3/requests"
-	"github.com/OWASP/Amass/v3/stringfilter"
 	"github.com/OWASP/Amass/v3/systems"
 	"github.com/caffix/eventbus"
 	"github.com/caffix/pipeline"
 	"github.com/caffix/queue"
-	"github.com/caffix/resolvers"
+	"github.com/caffix/resolve"
 	"github.com/caffix/service"
 )
 
@@ -34,8 +34,8 @@ type Enumeration struct {
 	srcs           []service.Service
 	done           chan struct{}
 	doneOnce       sync.Once
-	resolvedFilter stringfilter.Filter
-	crawlFilter    stringfilter.Filter
+	resolvedFilter filter.Filter
+	crawlFilter    filter.Filter
 	nameSrc        *enumSource
 	subTask        *subdomainTask
 	dnsTask        *dNSTask
@@ -51,8 +51,8 @@ func NewEnumeration(cfg *config.Config, sys systems.System) *Enumeration {
 		srcs:           datasrcs.SelectedDataSources(cfg, sys.DataSources()),
 		logQueue:       queue.NewQueue(),
 		done:           make(chan struct{}),
-		resolvedFilter: stringfilter.NewBloomFilter(filterMaxSize),
-		crawlFilter:    stringfilter.NewStringFilter(),
+		resolvedFilter: filter.NewBloomFilter(filterMaxSize),
+		crawlFilter:    filter.NewStringFilter(),
 	}
 
 	if cfg.Passive {
@@ -84,7 +84,7 @@ func (e *Enumeration) Start(ctx context.Context) error {
 		return err
 	}
 
-	max := e.Config.MaxDNSQueries * int(resolvers.QueryTimeout.Seconds())
+	max := e.Config.MaxDNSQueries * int(resolve.QueryTimeout.Seconds())
 	// The pipeline input source will receive all the names
 	e.nameSrc = newEnumSource(e, max)
 	e.startupAndCleanup(ctx)

@@ -1,12 +1,9 @@
-// Copyright 2017 Jeff Foley. All rights reserved.
+// Copyright 2017-2021 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
-package wordlist
+package config
 
 import (
-	"reflect"
-	"sort"
-	"strings"
 	"testing"
 )
 
@@ -58,17 +55,4 @@ func TestExpandMaskWordlist(t *testing.T) {
 			t.Errorf("Error Event %s: was expecting %d, got %d", tt.name, tt.expected, len(s))
 		}
 	}
-}
-
-func TestWordList(t *testing.T) {
-	want := []string{"TestReader"}
-	r := strings.NewReader(want[0])
-	got := getWordList(r)
-
-	sort.Strings(want)
-	sort.Strings(got)
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("Expected %v, got %v", want, got)
-	}
-
 }

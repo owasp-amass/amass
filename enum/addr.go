@@ -1,4 +1,4 @@
-// Copyright 2017 Jeff Foley. All rights reserved.
+// Copyright 2017-2021 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 package enum
@@ -8,9 +8,9 @@ import (
 	"net"
 	"strconv"
 
+	"github.com/OWASP/Amass/v3/filter"
 	amassnet "github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/requests"
-	"github.com/OWASP/Amass/v3/stringfilter"
 	"github.com/caffix/pipeline"
 )
 
@@ -23,22 +23,22 @@ const (
 // addrTask handles the investigation of addresses associated with newly resolved FQDNs.
 type addrTask struct {
 	enum        *Enumeration
-	filter      stringfilter.Filter
-	sweepFilter stringfilter.Filter
+	filter      filter.Filter
+	sweepFilter filter.Filter
 }
 
 func newAddressTask(e *Enumeration) *addrTask {
 	return &addrTask{
 		enum:        e,
-		filter:      stringfilter.NewBloomFilter(1 << filterSize),
-		sweepFilter: stringfilter.NewBloomFilter(1 << filterSize),
+		filter:      filter.NewBloomFilter(1 << filterSize),
+		sweepFilter: filter.NewBloomFilter(1 << filterSize),
 	}
 }
 
 // Stop releases allocated resources by the AddressTask.
 func (r *addrTask) Stop() error {
-	r.filter = stringfilter.NewBloomFilter(1 << filterSize)
-	r.sweepFilter = stringfilter.NewBloomFilter(1 << filterSize)
+	r.filter = filter.NewBloomFilter(1 << filterSize)
+	r.sweepFilter = filter.NewBloomFilter(1 << filterSize)
 	return nil
 }
 

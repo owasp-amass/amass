@@ -7,8 +7,8 @@ import (
 	"context"
 	"net"
 
+	"github.com/OWASP/Amass/v3/filter"
 	"github.com/OWASP/Amass/v3/requests"
-	"github.com/OWASP/Amass/v3/stringfilter"
 	"github.com/caffix/stringset"
 	"github.com/cayleygraph/cayley"
 	"github.com/cayleygraph/quad"
@@ -19,15 +19,15 @@ type outLookup map[string]*requests.Output
 
 // EventOutput returns findings within the receiver Graph for the event identified by the uuid string
 // parameter and not already in the filter StringFilter argument. The filter is updated by EventOutput.
-func (g *Graph) EventOutput(uuid string, filter stringfilter.Filter, asninfo bool, cache *requests.ASNCache) []*requests.Output {
+func (g *Graph) EventOutput(uuid string, f filter.Filter, asninfo bool, cache *requests.ASNCache) []*requests.Output {
 	// Make sure a filter has been created
-	if filter == nil {
-		filter = stringfilter.NewStringFilter()
+	if f == nil {
+		f = filter.NewStringFilter()
 	}
 
 	var names []string
 	for _, name := range g.EventFQDNs(uuid) {
-		if !filter.Has(name) {
+		if !f.Has(name) {
 			names = append(names, name)
 		}
 	}
@@ -52,12 +52,12 @@ func (g *Graph) EventOutput(uuid string, filter stringfilter.Filter, asninfo boo
 	}
 
 	if !asninfo || cache == nil {
-		return removeDuplicates(lookup, filter)
+		return removeDuplicates(lookup, f)
 	}
-	return addInfrastructureInfo(lookup, filter, cache)
+	return addInfrastructureInfo(lookup, f, cache)
 }
 
-func removeDuplicates(lookup outLookup, filter stringfilter.Filter) []*requests.Output {
+func removeDuplicates(lookup outLookup, filter filter.Filter) []*requests.Output {
 	output := make([]*requests.Output, 0, len(lookup))
 
 	for _, o := range lookup {
@@ -69,7 +69,7 @@ func removeDuplicates(lookup outLookup, filter stringfilter.Filter) []*requests.
 	return output
 }
 
-func addInfrastructureInfo(lookup outLookup, filter stringfilter.Filter, cache *requests.ASNCache) []*requests.Output {
+func addInfrastructureInfo(lookup outLookup, filter filter.Filter, cache *requests.ASNCache) []*requests.Output {
 	output := make([]*requests.Output, 0, len(lookup))
 
 	for _, o := range lookup {
@@ -102,22 +102,22 @@ func addInfrastructureInfo(lookup outLookup, filter stringfilter.Filter, cache *
 
 // EventNames returns findings within the receiver Graph for the event identified by the uuid string
 // parameter and not already in the filter StringFilter argument. The filter is updated by EventNames.
-func (g *Graph) EventNames(uuid string, filter stringfilter.Filter) []*requests.Output {
+func (g *Graph) EventNames(uuid string, f filter.Filter) []*requests.Output {
 	// Make sure a filter has been created
-	if filter == nil {
-		filter = stringfilter.NewStringFilter()
+	if f == nil {
+		f = filter.NewStringFilter()
 	}
 
 	var names []string
 	for _, name := range g.EventFQDNs(uuid) {
-		if !filter.Has(name) {
+		if !f.Has(name) {
 			names = append(names, name)
 		}
 	}
 
 	var results []*requests.Output
 	for _, o := range g.buildNameInfo(uuid, names) {
-		if !filter.Duplicate(o.Name) {
+		if !f.Duplicate(o.Name) {
 			results = append(results, o)
 		}
 	}

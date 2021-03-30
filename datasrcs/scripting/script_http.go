@@ -9,9 +9,9 @@ import (
 	"io"
 	"strings"
 
+	"github.com/OWASP/Amass/v3/filter"
 	"github.com/OWASP/Amass/v3/net/http"
 	"github.com/OWASP/Amass/v3/requests"
-	"github.com/OWASP/Amass/v3/stringfilter"
 	"github.com/caffix/eventbus"
 	lua "github.com/yuin/gopher-lua"
 )
@@ -119,7 +119,7 @@ func (s *Script) scrape(L *lua.LState) int {
 	}
 
 	found = false
-	filter := stringfilter.NewStringFilter()
+	filter := filter.NewStringFilter()
 	for _, name := range s.subre.FindAllString(resp, -1) {
 		if d := cfg.WhichDomain(name); d == "" || d == name {
 			continue

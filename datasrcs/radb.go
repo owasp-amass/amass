@@ -17,7 +17,7 @@ import (
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/systems"
 	"github.com/caffix/eventbus"
-	"github.com/caffix/resolvers"
+	"github.com/caffix/resolve"
 	"github.com/caffix/service"
 	"github.com/caffix/stringset"
 	"github.com/miekg/dns"
@@ -55,10 +55,10 @@ func (r *RADb) Description() string {
 
 // OnStart implements the Service interface.
 func (r *RADb) OnStart() error {
-	msg := resolvers.QueryMsg(radbWhoisURL, dns.TypeA)
+	msg := resolve.QueryMsg(radbWhoisURL, dns.TypeA)
 	if resp, err := r.sys.Pool().Query(context.TODO(),
-		msg, resolvers.PriorityCritical, resolvers.RetryPolicy); err == nil {
-		if ans := resolvers.ExtractAnswers(resp); len(ans) > 0 {
+		msg, resolve.PriorityCritical, resolve.RetryPolicy); err == nil {
+		if ans := resolve.ExtractAnswers(resp); len(ans) > 0 {
 			ip := ans[0].Data
 			if ip != "" {
 				r.addr = ip
@@ -329,15 +329,15 @@ func (r *RADb) ipToASN(ctx context.Context, cidr string) int {
 
 	numRateLimitChecks(r, 2)
 	if r.addr == "" {
-		msg := resolvers.QueryMsg(radbWhoisURL, dns.TypeA)
-		resp, err := r.sys.Pool().Query(ctx, msg, resolvers.PriorityHigh, resolvers.RetryPolicy)
+		msg := resolve.QueryMsg(radbWhoisURL, dns.TypeA)
+		resp, err := r.sys.Pool().Query(ctx, msg, resolve.PriorityHigh, resolve.RetryPolicy)
 		if err != nil {
 			bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 				fmt.Sprintf("%s: %s: %v", r.String(), radbWhoisURL, err))
 			return 0
 		}
 
-		ans := resolvers.ExtractAnswers(resp)
+		ans := resolve.ExtractAnswers(resp)
 		if len(ans) == 0 {
 			return 0
 		}

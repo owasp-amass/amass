@@ -14,7 +14,7 @@ import (
 	"github.com/caffix/eventbus"
 	"github.com/caffix/pipeline"
 	"github.com/caffix/queue"
-	"github.com/caffix/resolvers"
+	"github.com/caffix/resolve"
 	"github.com/miekg/dns"
 )
 
@@ -232,13 +232,13 @@ func (a *activeTask) zoneWalk(ctx context.Context, req *requests.ZoneXFRRequest,
 		return
 	}
 
-	r := resolvers.NewBaseResolver(addr, 50, a.enum.Config.Log)
+	r := resolve.NewBaseResolver(addr, 50, a.enum.Config.Log)
 	if r == nil {
 		return
 	}
 	defer r.Stop()
 
-	names, _, err := resolvers.NsecTraversal(ctx, r, req.Name, resolvers.PriorityHigh)
+	names, _, err := resolve.NsecTraversal(ctx, r, req.Name, resolve.PriorityHigh)
 	if err != nil {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("DNS: Zone Walk failed: %s: %v", req.Name, err))
@@ -246,7 +246,7 @@ func (a *activeTask) zoneWalk(ctx context.Context, req *requests.ZoneXFRRequest,
 	}
 
 	for _, nsec := range names {
-		name := resolvers.RemoveLastDot(nsec.NextDomain)
+		name := resolve.RemoveLastDot(nsec.NextDomain)
 
 		if domain := cfg.WhichDomain(name); domain != "" {
 			go pipeline.SendData(ctx, "new", &requests.DNSRequest{
@@ -266,9 +266,9 @@ func (a *activeTask) nameserverAddr(ctx context.Context, server string) (string,
 	var resp *dns.Msg
 
 	for _, t := range []uint16{dns.TypeA, dns.TypeAAAA} {
-		msg := resolvers.QueryMsg(server, t)
+		msg := resolve.QueryMsg(server, t)
 
-		resp, err = a.enum.Sys.Pool().Query(ctx, msg, resolvers.PriorityHigh, resolvers.RetryPolicy)
+		resp, err = a.enum.Sys.Pool().Query(ctx, msg, resolve.PriorityHigh, resolve.RetryPolicy)
 		if err == nil && resp != nil && len(resp.Answer) > 0 {
 			qtype = t
 			found = true
@@ -279,7 +279,7 @@ func (a *activeTask) nameserverAddr(ctx context.Context, server string) (string,
 		return "", fmt.Errorf("DNS server %s has no A or AAAA records", server)
 	}
 
-	rr := resolvers.AnswersByType(resolvers.ExtractAnswers(resp), qtype)
+	rr := resolve.AnswersByType(resolve.ExtractAnswers(resp), qtype)
 	if len(rr) == 0 {
 		return "", fmt.Errorf("DNS server %s has no A or AAAA records", server)
 	}

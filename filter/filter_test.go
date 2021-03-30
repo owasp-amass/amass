@@ -1,4 +1,4 @@
-package stringfilter
+package filter
 
 import (
 	"testing"

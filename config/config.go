@@ -21,7 +21,6 @@ import (
 	"sync"
 
 	_ "github.com/OWASP/Amass/v3/config/statik" // The content being embedded into the binary
-	"github.com/OWASP/Amass/v3/wordlist"
 	"github.com/caffix/stringset"
 	"github.com/go-ini/ini"
 	"github.com/google/uuid"
@@ -203,12 +202,12 @@ func (c *Config) CheckSettings() error {
 		}
 	}
 
-	c.Wordlist, err = wordlist.ExpandMaskWordlist(c.Wordlist)
+	c.Wordlist, err = ExpandMaskWordlist(c.Wordlist)
 	if err != nil {
 		return err
 	}
 
-	c.AltWordlist, err = wordlist.ExpandMaskWordlist(c.AltWordlist)
+	c.AltWordlist, err = ExpandMaskWordlist(c.AltWordlist)
 	if err != nil {
 		return err
 	}

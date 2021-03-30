@@ -20,7 +20,7 @@ import (
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/systems"
 	"github.com/caffix/eventbus"
-	"github.com/caffix/resolvers"
+	"github.com/caffix/resolve"
 	"github.com/caffix/stringset"
 	"github.com/fatih/color"
 	"github.com/miekg/dns"
@@ -209,14 +209,14 @@ func processDNSRequest(ctx context.Context, req *requests.DNSRequest,
 		return
 	}
 
-	req.Domain = resolvers.FirstProperSubdomain(ctx, sys.Pool(), req.Name, resolvers.PriorityHigh)
+	req.Domain = resolve.FirstProperSubdomain(ctx, sys.Pool(), req.Name, resolve.PriorityHigh)
 	if req.Domain == "" {
 		c <- nil
 		return
 	}
 
-	msg := resolvers.QueryMsg(req.Name, dns.TypeNone)
-	if cfg.Blacklisted(req.Name) || sys.Pool().WildcardType(ctx, msg, req.Domain) == resolvers.WildcardTypeDynamic {
+	msg := resolve.QueryMsg(req.Name, dns.TypeNone)
+	if cfg.Blacklisted(req.Name) || sys.Pool().WildcardType(ctx, msg, req.Domain) == resolve.WildcardTypeDynamic {
 		c <- nil
 		return
 	}
@@ -224,15 +224,15 @@ func processDNSRequest(ctx context.Context, req *requests.DNSRequest,
 	var answers []requests.DNSAnswer
 	for _, t := range cfg.RecordTypes {
 		qtype := nameToType(t)
-		msg := resolvers.QueryMsg(req.Name, qtype)
-		resp, err := sys.Pool().Query(ctx, msg, resolvers.PriorityLow, resolvers.RetryPolicy)
+		msg := resolve.QueryMsg(req.Name, qtype)
+		resp, err := sys.Pool().Query(ctx, msg, resolve.PriorityLow, resolve.RetryPolicy)
 		if err == nil {
-			ans := resolvers.ExtractAnswers(resp)
+			ans := resolve.ExtractAnswers(resp)
 			if len(ans) == 0 {
 				continue
 			}
 
-			rr := resolvers.AnswersByType(ans, qtype)
+			rr := resolve.AnswersByType(ans, qtype)
 			if len(rr) == 0 {
 				continue
 			}
@@ -248,7 +248,7 @@ func processDNSRequest(ctx context.Context, req *requests.DNSRequest,
 		if t == "CNAME" && len(resp.Answer) > 0 {
 			break
 		}
-		if sys.Pool().WildcardType(ctx, msg, req.Domain) != resolvers.WildcardTypeNone {
+		if sys.Pool().WildcardType(ctx, msg, req.Domain) != resolve.WildcardTypeNone {
 			return
 		}
 	}
@@ -304,7 +304,7 @@ loop:
 					pieces := strings.Split(rec.Data, ",")
 					rec.Data = pieces[len(pieces)-1]
 				}
-				rec.Data = resolvers.RemoveLastDot(rec.Data)
+				rec.Data = resolve.RemoveLastDot(rec.Data)
 
 				fmt.Fprintf(color.Output, "%s %s\t%s\n", green(name), blue(tstr), yellow(rec.Data))
 			}

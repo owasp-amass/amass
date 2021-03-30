@@ -17,7 +17,7 @@ import (
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/systems"
 	"github.com/caffix/eventbus"
-	"github.com/caffix/resolvers"
+	"github.com/caffix/resolve"
 	"github.com/caffix/service"
 	"github.com/caffix/stringset"
 	"github.com/miekg/dns"
@@ -55,10 +55,10 @@ func (s *ShadowServer) Description() string {
 
 // OnStart implements the Service interface.
 func (s *ShadowServer) OnStart() error {
-	msg := resolvers.QueryMsg(ShadowServerWhoisURL, dns.TypeA)
+	msg := resolve.QueryMsg(ShadowServerWhoisURL, dns.TypeA)
 	if resp, err := s.sys.Pool().Query(context.TODO(),
-		msg, resolvers.PriorityCritical, resolvers.RetryPolicy); err == nil {
-		if ans := resolvers.ExtractAnswers(resp); len(ans) > 0 {
+		msg, resolve.PriorityCritical, resolve.RetryPolicy); err == nil {
+		if ans := resolve.ExtractAnswers(resp); len(ans) > 0 {
 			ip := ans[0].Data
 			if ip != "" {
 				s.addr = ip
@@ -139,8 +139,8 @@ func (s *ShadowServer) origin(ctx context.Context, addr string) *requests.ASNReq
 	}
 	name := amassdns.ReverseIP(addr) + ".origin.asn.shadowserver.org"
 
-	msg := resolvers.QueryMsg(name, dns.TypeTXT)
-	resp, err := s.sys.Pool().Query(ctx, msg, resolvers.PriorityHigh, resolvers.RetryPolicy)
+	msg := resolve.QueryMsg(name, dns.TypeTXT)
+	resp, err := s.sys.Pool().Query(ctx, msg, resolve.PriorityHigh, resolve.RetryPolicy)
 	if err != nil {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: %s: DNS TXT record query error: %v", s.String(), name, err),
@@ -148,7 +148,7 @@ func (s *ShadowServer) origin(ctx context.Context, addr string) *requests.ASNReq
 		return nil
 	}
 
-	ans := resolvers.ExtractAnswers(resp)
+	ans := resolve.ExtractAnswers(resp)
 	if len(ans) == 0 {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: %s: DNS TXT record query returned zero answers", s.String(), name),
@@ -198,15 +198,15 @@ func (s *ShadowServer) netblocks(ctx context.Context, asn int) stringset.Set {
 	}
 
 	if s.addr == "" {
-		msg := resolvers.QueryMsg(ShadowServerWhoisURL, dns.TypeA)
-		resp, err := s.sys.Pool().Query(ctx, msg, resolvers.PriorityCritical, resolvers.RetryPolicy)
+		msg := resolve.QueryMsg(ShadowServerWhoisURL, dns.TypeA)
+		resp, err := s.sys.Pool().Query(ctx, msg, resolve.PriorityCritical, resolve.RetryPolicy)
 		if err != nil {
 			bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 				fmt.Sprintf("%s: %s: %v", s.String(), ShadowServerWhoisURL, err))
 			return netblocks
 		}
 
-		ans := resolvers.ExtractAnswers(resp)
+		ans := resolve.ExtractAnswers(resp)
 		if len(ans) == 0 {
 			return netblocks
 		}

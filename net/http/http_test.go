@@ -9,28 +9,28 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/caffix/resolvers"
+	"github.com/caffix/resolve"
 	"github.com/miekg/dns"
 )
 
 func TestPullCertificateNames(t *testing.T) {
-	r := resolvers.NewBaseResolver("8.8.8.8", 10, nil)
+	r := resolve.NewBaseResolver("8.8.8.8", 10, nil)
 	if r == nil {
 		t.Errorf("Failed to setup the DNS resolver")
 	}
 
-	msg := resolvers.QueryMsg("www.utica.edu", dns.TypeA)
-	resp, err := r.Query(context.Background(), msg, resolvers.PriorityCritical, resolvers.RetryPolicy)
+	msg := resolve.QueryMsg("www.utica.edu", dns.TypeA)
+	resp, err := r.Query(context.Background(), msg, resolve.PriorityCritical, resolve.RetryPolicy)
 	if err != nil && resp == nil && len(resp.Answer) > 0 {
 		t.Errorf("Failed to obtain the IP address")
 	}
 
-	ans := resolvers.ExtractAnswers(resp)
+	ans := resolve.ExtractAnswers(resp)
 	if len(ans) == 0 {
 		t.Errorf("Failed to obtain answers to the DNS query")
 	}
 
-	rr := resolvers.AnswersByType(ans, dns.TypeA)
+	rr := resolve.AnswersByType(ans, dns.TypeA)
 	if len(rr) == 0 {
 		t.Errorf("Failed to obtain the answers of the correct type")
 	}

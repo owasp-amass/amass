@@ -1,4 +1,4 @@
-// Copyright 2017-2020 Jeff Foley. All rights reserved.
+// Copyright 2017-2021 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 package enum
@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/OWASP/Amass/v3/filter"
 	"github.com/OWASP/Amass/v3/requests"
-	"github.com/OWASP/Amass/v3/stringfilter"
 	"github.com/caffix/pipeline"
 	"github.com/caffix/queue"
 )
@@ -19,7 +19,7 @@ import (
 // The filter for new outgoing DNS queries
 type fqdnFilter struct {
 	sync.Mutex
-	filter stringfilter.Filter
+	filter filter.Filter
 	count  int64
 	enum   *Enumeration
 	queue  queue.Queue
@@ -27,7 +27,7 @@ type fqdnFilter struct {
 
 func newFQDNFilter(e *Enumeration) *fqdnFilter {
 	f := &fqdnFilter{
-		filter: stringfilter.NewBloomFilter(filterMaxSize),
+		filter: filter.NewBloomFilter(filterMaxSize),
 		enum:   e,
 		queue:  queue.NewQueue(),
 	}
@@ -66,7 +66,7 @@ func (f *fqdnFilter) checkFilter(req *requests.DNSRequest) *requests.DNSRequest 
 	// Check if it's time to reset our bloom filter due to number of elements seen
 	if f.count >= filterMaxSize {
 		f.count = 0
-		f.filter = stringfilter.NewBloomFilter(filterMaxSize)
+		f.filter = filter.NewBloomFilter(filterMaxSize)
 	}
 
 	trusted := requests.TrustedTag(req.Tag)

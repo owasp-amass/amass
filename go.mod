@@ -8,7 +8,7 @@ require (
 	github.com/caffix/eventbus v0.0.0-20210301213705-9ab42753d12d
 	github.com/caffix/pipeline v0.0.0-20210301171240-503915daec5b
 	github.com/caffix/queue v0.0.0-20210301212750-6e488abe1004
-	github.com/caffix/resolvers v0.0.0-20210327024347-a83f323e2b6c
+	github.com/caffix/resolve v0.0.0-20210330041733-60a5dffca01a
 	github.com/caffix/service v0.0.0-20210321183606-3819810293b0
 	github.com/caffix/stringset v0.0.0-20210320213318-a00bc23f59bc
 	github.com/cayleygraph/cayley v0.7.7
@@ -29,7 +29,7 @@ require (
 	github.com/spf13/cobra v1.1.3 // indirect
 	github.com/yl2chen/cidranger v1.0.2
 	github.com/yuin/gopher-lua v0.0.0-20200816102855-ee81675732da
-	golang.org/x/net v0.0.0-20210326220855-61e056675ecf
+	golang.org/x/net v0.0.0-20210329181859-df645c7b52b1
 	golang.org/x/oauth2 v0.0.0-20201208152858-08078c50e5b5
 	golang.org/x/sys v0.0.0-20210326220804-49726bf1d181 // indirect
 	golang.org/x/text v0.3.4 // indirect

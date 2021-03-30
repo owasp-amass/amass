@@ -1,4 +1,4 @@
-// Copyright 2017-2020 Jeff Foley. All rights reserved.
+// Copyright 2017-2021 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 package intel
@@ -7,8 +7,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/OWASP/Amass/v3/filter"
 	"github.com/OWASP/Amass/v3/requests"
-	"github.com/OWASP/Amass/v3/stringfilter"
 	"github.com/caffix/pipeline"
 	"github.com/caffix/queue"
 )
@@ -18,7 +18,7 @@ const minWaitForData = 10 * time.Second
 // intelSource handles the filtering and release of new Data in the enumeration.
 type intelSource struct {
 	collection *Collection
-	filter     *stringfilter.StringFilter
+	filter     *filter.StringFilter
 	queue      queue.Queue
 	done       chan struct{}
 	timeout    time.Duration
@@ -28,7 +28,7 @@ type intelSource struct {
 func newIntelSource(c *Collection) *intelSource {
 	return &intelSource{
 		collection: c,
-		filter:     stringfilter.NewStringFilter(),
+		filter:     filter.NewStringFilter(),
 		queue:      queue.NewQueue(),
 		done:       make(chan struct{}),
 		timeout:    minWaitForData,
