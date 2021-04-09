@@ -10,10 +10,10 @@ import (
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/datasrcs"
 	"github.com/OWASP/Amass/v3/filter"
-	"github.com/OWASP/Amass/v3/graph"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/systems"
 	"github.com/caffix/eventbus"
+	"github.com/caffix/netmap"
 	"github.com/caffix/pipeline"
 	"github.com/caffix/queue"
 	"github.com/caffix/resolve"
@@ -27,7 +27,7 @@ type Enumeration struct {
 	Config         *config.Config
 	Bus            *eventbus.EventBus
 	Sys            systems.System
-	Graph          *graph.Graph
+	Graph          *netmap.Graph
 	closedOnce     sync.Once
 	logQueue       queue.Queue
 	ctx            context.Context
@@ -47,7 +47,7 @@ func NewEnumeration(cfg *config.Config, sys systems.System) *Enumeration {
 		Config:         cfg,
 		Sys:            sys,
 		Bus:            eventbus.NewEventBus(),
-		Graph:          graph.NewGraph(graph.NewCayleyGraphMemory()),
+		Graph:          netmap.NewGraph(netmap.NewCayleyGraphMemory()),
 		srcs:           datasrcs.SelectedDataSources(cfg, sys.DataSources()),
 		logQueue:       queue.NewQueue(),
 		done:           make(chan struct{}),
@@ -148,7 +148,7 @@ func (e *Enumeration) startupAndCleanup(ctx context.Context) {
 			defer e.Bus.Unsubscribe(requests.NewAddrTopic, e.nameSrc.InputAddress)
 			defer e.Bus.Unsubscribe(requests.NewASNTopic, e.Sys.Cache().Update)
 			// Attempt to fix IP address nodes without edges to netblocks
-			defer func() { _ = e.Graph.HealAddressNodes(e.Sys.Cache(), e.Config.UUID.String()) }()
+			defer func() { _ = HealAddressNodes(e.Graph, e.Sys.Cache(), e.Config.UUID.String()) }()
 		}
 
 		defer e.stop()
@@ -218,7 +218,7 @@ func (e *Enumeration) makeOutputSink() pipeline.SinkFunc {
 		}
 
 		if e.Config.IsDomainInScope(req.Name) {
-			if _, err := e.Graph.InsertFQDN(req.Name, req.Source, req.Tag, e.Config.UUID.String()); err != nil {
+			if _, err := e.Graph.UpsertFQDN(req.Name, req.Source, e.Config.UUID.String()); err != nil {
 				e.Bus.Publish(requests.LogTopic, eventbus.PriorityHigh, err.Error())
 			}
 		}

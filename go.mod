@@ -6,12 +6,12 @@ require (
 	github.com/AndreasBriese/bbloom v0.0.0-20190825152654-46b345b51c96
 	github.com/PuerkitoBio/goquery v1.6.0
 	github.com/caffix/eventbus v0.0.0-20210301213705-9ab42753d12d
+	github.com/caffix/netmap v0.0.0-20210407042802-5d7b85fde85f
 	github.com/caffix/pipeline v0.0.0-20210301171240-503915daec5b
 	github.com/caffix/queue v0.0.0-20210301212750-6e488abe1004
-	github.com/caffix/resolve v0.0.0-20210330041733-60a5dffca01a
+	github.com/caffix/resolve v0.0.0-20210409001910-aa18dc6b2233
 	github.com/caffix/service v0.0.0-20210321183606-3819810293b0
 	github.com/caffix/stringset v0.0.0-20210320213318-a00bc23f59bc
-	github.com/cayleygraph/cayley v0.7.7
 	github.com/cayleygraph/quad v1.2.4
 	github.com/cjoudrey/gluaurl v0.0.0-20161028222611-31cbb9bef199
 	github.com/cloudflare/cloudflare-go v0.13.6
@@ -19,21 +19,14 @@ require (
 	github.com/fatih/color v1.10.0
 	github.com/geziyor/geziyor v0.0.0-20191212210344-cfb16fe1ee0e
 	github.com/go-ini/ini v1.62.0
-	github.com/google/go-cmp v0.5.4 // indirect
 	github.com/google/uuid v1.1.3
-	github.com/lib/pq v1.9.0 // indirect
 	github.com/miekg/dns v1.1.41
 	github.com/rakyll/statik v0.1.7
-	github.com/rogpeppe/go-internal v1.6.2 // indirect
-	github.com/sirupsen/logrus v1.7.0 // indirect
-	github.com/spf13/cobra v1.1.3 // indirect
 	github.com/yl2chen/cidranger v1.0.2
 	github.com/yuin/gopher-lua v0.0.0-20200816102855-ee81675732da
-	golang.org/x/net v0.0.0-20210329181859-df645c7b52b1
+	golang.org/x/net v0.0.0-20210405180319-a5a99cb37ef4
 	golang.org/x/oauth2 v0.0.0-20201208152858-08078c50e5b5
-	golang.org/x/sys v0.0.0-20210326220804-49726bf1d181 // indirect
-	golang.org/x/text v0.3.4 // indirect
-	golang.org/x/tools v0.1.0 // indirect
+	golang.org/x/term v0.0.0-20210406210042-72f3dc4e9b72 // indirect
 	gopkg.in/ini.v1 v1.62.0 // indirect
 	layeh.com/gopher-json v0.0.0-20201124131017-552bb3c4c3bf
 )

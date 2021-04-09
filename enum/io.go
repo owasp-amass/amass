@@ -8,47 +8,98 @@ import (
 
 	"github.com/OWASP/Amass/v3/filter"
 	"github.com/OWASP/Amass/v3/requests"
+	"github.com/caffix/netmap"
 )
 
-// ExtractOutput is a convenience method for obtaining new discoveries made by the enumeration process.
-func (e *Enumeration) ExtractOutput(filter filter.Filter, asinfo bool) []*requests.Output {
-	if e.Config.Passive {
-		return e.Graph.EventNames(e.Config.UUID.String(), filter)
+// HealAddressNodes looks for 'ipaddr' nodes in the graph and creates missing edges to the
+// appropriate 'netblock' nodes using data provided by the ASNCache parameter.
+func HealAddressNodes(g *netmap.Graph, cache *requests.ASNCache, uuid string) error {
+	var err error
+	cidrToNode := make(map[string]netmap.Node)
+
+	if cache == nil {
+		cache = requests.NewASNCache()
+
+		/*if err = system.ASNCacheFill(cache); err != nil {
+			return err
+		}*/
 	}
 
-	return e.Graph.EventOutput(e.Config.UUID.String(), filter, asinfo, e.Sys.Cache())
+	nodes, err := g.AllNodesOfType("ipaddr", uuid)
+	if err != nil {
+		return err
+	}
+
+	for _, node := range nodes {
+		addr := node.(string)
+
+		as := cache.AddrSearch(addr)
+		if as == nil {
+			continue
+		}
+
+		cidr, found := cidrToNode[as.Prefix]
+		if !found {
+			cidr, err = g.ReadNode(as.Prefix, netmap.TypeNetblock)
+			if err != nil {
+				if err := g.UpsertInfrastructure(as.ASN, as.Description, addr, as.Prefix, as.Source, uuid); err != nil {
+					continue
+				}
+
+				cidr, err = g.ReadNode(as.Prefix, netmap.TypeNetblock)
+				if err != nil {
+					continue
+				}
+			}
+
+			cidrToNode[as.Prefix] = cidr
+		}
+
+		if err := g.UpsertEdge(&netmap.Edge{
+			Predicate: "contains",
+			From:      cidr,
+			To:        node,
+		}); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (e *Enumeration) submitKnownNames() {
 	filter := filter.NewStringFilter()
+	srcTags := make(map[string]string)
+
+	for _, src := range e.Sys.DataSources() {
+		srcTags[src.String()] = src.Description()
+	}
 
 	for _, g := range e.Sys.GraphDatabases() {
-		var events []string
-
-		for _, event := range g.EventList() {
-			for _, domain := range g.EventDomains(event) {
-				if e.Config.IsDomainInScope(domain) {
-					events = append(events, event)
-					break
-				}
-			}
-		}
-
-		for _, event := range events {
-			for _, output := range g.EventNames(event, filter) {
+		for _, event := range g.EventsInScope(e.Config.Domains()...) {
+			for _, name := range g.EventFQDNs(event) {
 				select {
 				case <-e.done:
 					return
 				default:
 				}
 
-				if e.Config.IsDomainInScope(output.Name) {
-					e.nameSrc.InputName(&requests.DNSRequest{
-						Name:   output.Name,
-						Domain: output.Domain,
-						Tag:    output.Tag,
-						Source: output.Sources[0],
-					})
+				if filter.Duplicate(name) {
+					continue
+				}
+
+				if domain := e.Config.WhichDomain(name); domain != "" {
+					if srcs, err := g.NodeSources(netmap.Node(name), event); err == nil {
+						src := srcs[0]
+						tag := srcTags[src]
+
+						e.nameSrc.InputName(&requests.DNSRequest{
+							Name:   name,
+							Domain: domain,
+							Tag:    tag,
+							Source: src,
+						})
+					}
 				}
 			}
 		}

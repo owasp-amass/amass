@@ -127,7 +127,7 @@ func (dm *dataManager) insertCNAME(ctx context.Context, req *requests.DNSRequest
 		return errors.New("The request did not contain a domain name")
 	}
 
-	if err := dm.enum.Graph.InsertCNAME(req.Name, target, req.Source, req.Tag, cfg.UUID.String()); err != nil {
+	if err := dm.enum.Graph.UpsertCNAME(req.Name, target, req.Source, cfg.UUID.String()); err != nil {
 		return fmt.Errorf("%s failed to insert CNAME: %v", dm.enum.Graph, err)
 	}
 
@@ -152,7 +152,7 @@ func (dm *dataManager) insertA(ctx context.Context, req *requests.DNSRequest, re
 		return errors.New("Failed to extract an IP address from the DNS answer data")
 	}
 
-	if err := dm.enum.Graph.InsertA(req.Name, addr, req.Source, req.Tag, cfg.UUID.String()); err != nil {
+	if err := dm.enum.Graph.UpsertA(req.Name, addr, req.Source, cfg.UUID.String()); err != nil {
 		return fmt.Errorf("%s failed to insert A record: %v", dm.enum.Graph, err)
 	}
 
@@ -177,7 +177,7 @@ func (dm *dataManager) insertAAAA(ctx context.Context, req *requests.DNSRequest,
 		return errors.New("Failed to extract an IP address from the DNS answer data")
 	}
 
-	if err := dm.enum.Graph.InsertAAAA(req.Name, addr, req.Source, req.Tag, cfg.UUID.String()); err != nil {
+	if err := dm.enum.Graph.UpsertAAAA(req.Name, addr, req.Source, cfg.UUID.String()); err != nil {
 		return fmt.Errorf("%s failed to insert AAAA record: %v", dm.enum.Graph, err)
 	}
 
@@ -208,7 +208,7 @@ func (dm *dataManager) insertPTR(ctx context.Context, req *requests.DNSRequest, 
 		return nil
 	}
 
-	if err := dm.enum.Graph.InsertPTR(req.Name, target, req.Source, req.Tag, cfg.UUID.String()); err != nil {
+	if err := dm.enum.Graph.UpsertPTR(req.Name, target, req.Source, cfg.UUID.String()); err != nil {
 		return fmt.Errorf("%s failed to insert PTR record: %v", dm.enum.Graph, err)
 	}
 
@@ -234,7 +234,7 @@ func (dm *dataManager) insertSRV(ctx context.Context, req *requests.DNSRequest, 
 		return errors.New("Failed to extract service info from the DNS answer data")
 	}
 
-	if err := dm.enum.Graph.InsertSRV(req.Name, service, target, req.Source, req.Tag, cfg.UUID.String()); err != nil {
+	if err := dm.enum.Graph.UpsertSRV(req.Name, service, target, req.Source, cfg.UUID.String()); err != nil {
 		return fmt.Errorf("%s failed to insert SRV record: %v", dm.enum.Graph, err)
 	}
 
@@ -270,7 +270,7 @@ func (dm *dataManager) insertNS(ctx context.Context, req *requests.DNSRequest, r
 		return errors.New("The request did not contain a domain name")
 	}
 
-	if err := dm.enum.Graph.InsertNS(req.Name, target, req.Source, req.Tag, cfg.UUID.String()); err != nil {
+	if err := dm.enum.Graph.UpsertNS(req.Name, target, req.Source, cfg.UUID.String()); err != nil {
 		return fmt.Errorf("%s failed to insert NS record: %v", dm.enum.Graph, err)
 	}
 
@@ -306,7 +306,7 @@ func (dm *dataManager) insertMX(ctx context.Context, req *requests.DNSRequest, r
 		return errors.New("The request did not contain a domain name")
 	}
 
-	if err := dm.enum.Graph.InsertMX(req.Name, target, req.Source, req.Tag, cfg.UUID.String()); err != nil {
+	if err := dm.enum.Graph.UpsertMX(req.Name, target, req.Source, cfg.UUID.String()); err != nil {
 		return fmt.Errorf("%s failed to insert MX record: %v", dm.enum.Graph, err)
 	}
 
@@ -404,7 +404,7 @@ func (dm *dataManager) addrRequest(ctx context.Context, req *requests.AddrReques
 	}
 
 	if r := dm.enum.Sys.Cache().AddrSearch(req.Address); r != nil {
-		return graph.InsertInfrastructure(r.ASN, r.Description, r.Address, r.Prefix, r.Source, r.Tag, uuid)
+		return graph.UpsertInfrastructure(r.ASN, r.Description, r.Address, r.Prefix, r.Source, uuid)
 	}
 
 	for _, src := range dm.enum.srcs {
@@ -422,7 +422,7 @@ loop:
 			return nil
 		case <-t.C:
 			if r := dm.enum.Sys.Cache().AddrSearch(req.Address); r != nil {
-				err = graph.InsertInfrastructure(r.ASN, r.Description, r.Address, r.Prefix, r.Source, r.Tag, uuid)
+				err = graph.UpsertInfrastructure(r.ASN, r.Description, r.Address, r.Prefix, r.Source, uuid)
 				found = true
 				break loop
 			}
@@ -430,12 +430,10 @@ loop:
 	}
 
 	if !found {
-		err = graph.InsertInfrastructure(0, "Unknown", req.Address, fakePrefix(req.Address), "RIR", requests.RIR, uuid)
+		err = graph.UpsertInfrastructure(0, "Unknown", req.Address, fakePrefix(req.Address), "RIR", uuid)
 	}
-	if err != nil {
-		return err
-	}
-	return graph.HealAddressNodes(dm.enum.Sys.Cache(), uuid)
+
+	return err
 }
 
 func fakePrefix(addr string) string {

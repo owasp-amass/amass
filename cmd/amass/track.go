@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/v3/config"
-	"github.com/OWASP/Amass/v3/graph"
 	"github.com/OWASP/Amass/v3/requests"
+	"github.com/caffix/netmap"
 	"github.com/caffix/stringset"
 	"github.com/fatih/color"
 )
@@ -200,7 +200,7 @@ func runTrackCommand(clArgs []string) {
 	cumulativeOutput(uuids, args.Domains.Slice(), earliest, latest, memDB, cache)
 }
 
-func printOneEvent(uuid, domains []string, earliest, latest time.Time, db *graph.Graph, cache *requests.ASNCache) {
+func printOneEvent(uuid, domains []string, earliest, latest time.Time, db *netmap.Graph, cache *requests.ASNCache) {
 	one := getScopedOutput(uuid, domains, db, cache)
 
 	blueLine()
@@ -214,7 +214,7 @@ func printOneEvent(uuid, domains []string, earliest, latest time.Time, db *graph
 	}
 }
 
-func cumulativeOutput(uuids, domains []string, ea, la []time.Time, db *graph.Graph, cache *requests.ASNCache) {
+func cumulativeOutput(uuids, domains []string, ea, la []time.Time, db *netmap.Graph, cache *requests.ASNCache) {
 	idx := len(uuids) - 1
 	cum := getScopedOutput(uuids[:idx], domains, db, cache)
 
@@ -235,7 +235,7 @@ func cumulativeOutput(uuids, domains []string, ea, la []time.Time, db *graph.Gra
 	}
 }
 
-func getScopedOutput(uuids, domains []string, db *graph.Graph, cache *requests.ASNCache) []*requests.Output {
+func getScopedOutput(uuids, domains []string, db *netmap.Graph, cache *requests.ASNCache) []*requests.Output {
 	var output []*requests.Output
 
 	for _, out := range getEventOutput(uuids, false, db, cache) {
@@ -249,7 +249,7 @@ func getScopedOutput(uuids, domains []string, db *graph.Graph, cache *requests.A
 	return output
 }
 
-func completeHistoryOutput(uuids, domains []string, ea, la []time.Time, db *graph.Graph, cache *requests.ASNCache) {
+func completeHistoryOutput(uuids, domains []string, ea, la []time.Time, db *netmap.Graph, cache *requests.ASNCache) {
 	var prev string
 
 	for i, uuid := range uuids {

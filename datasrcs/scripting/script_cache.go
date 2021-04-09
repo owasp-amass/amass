@@ -20,7 +20,7 @@ func (s *Script) getCachedResponse(url string, ttl int) (string, error) {
 
 func (s *Script) setCachedResponse(url, resp string) error {
 	for _, db := range s.sys.GraphDatabases() {
-		if err := db.CacheSourceData(s.String(), s.SourceType, url, resp); err != nil {
+		if err := db.CacheSourceData(s.String(), url, resp); err != nil {
 			return err
 		}
 	}

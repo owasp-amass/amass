@@ -14,8 +14,8 @@ import (
 
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/format"
-	"github.com/OWASP/Amass/v3/graph"
 	"github.com/OWASP/Amass/v3/requests"
+	"github.com/caffix/netmap"
 	"github.com/caffix/stringset"
 	"github.com/fatih/color"
 )
@@ -173,7 +173,7 @@ func runDBCommand(clArgs []string) {
 	showEventData(&args, uuids, asninfo, memDB)
 }
 
-func listEvents(uuids []string, db *graph.Graph) {
+func listEvents(uuids []string, db *netmap.Graph) {
 	events, earliest, latest := orderedEvents(uuids, db)
 	// Check if the user has requested the list of enumerations
 	for pos, idx := 0, len(events)-1; idx >= 0; idx-- {
@@ -194,7 +194,7 @@ func listEvents(uuids []string, db *graph.Graph) {
 	}
 }
 
-func showEventData(args *dbArgs, uuids []string, asninfo bool, db *graph.Graph) {
+func showEventData(args *dbArgs, uuids []string, asninfo bool, db *netmap.Graph) {
 	var total int
 	var err error
 	var outfile *os.File
@@ -218,9 +218,9 @@ func showEventData(args *dbArgs, uuids []string, asninfo bool, db *graph.Graph) 
 	var cache *requests.ASNCache
 	if asninfo {
 		cache = requests.NewASNCache()
-		if err := db.ASNCacheFill(cache); err != nil {
+		/*if err := db.ASNCacheFill(cache); err != nil {
 			return
-		}
+		}*/
 	}
 
 	tags := make(map[string]int)
@@ -301,7 +301,7 @@ type jsonOutput struct {
 	Domains []*jsonDomain `json:"domains"`
 }
 
-func writeJSON(args *dbArgs, uuids []string, assets []*requests.Output, db *graph.Graph) {
+func writeJSON(args *dbArgs, uuids []string, assets []*requests.Output, db *netmap.Graph) {
 	var output jsonOutput
 
 	// Add the event data to the JSON

@@ -1,25 +1,40 @@
 // Copyright 2017-2021 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
-package graph
+package main
 
 import (
-	"context"
+	"math/rand"
 	"net"
 
+	"github.com/OWASP/Amass/v3/enum"
 	"github.com/OWASP/Amass/v3/filter"
 	"github.com/OWASP/Amass/v3/requests"
-	"github.com/caffix/stringset"
-	"github.com/cayleygraph/cayley"
-	"github.com/cayleygraph/quad"
+	"github.com/OWASP/Amass/v3/systems"
+	"github.com/caffix/netmap"
 	"golang.org/x/net/publicsuffix"
 )
+
+var sourceTags map[string]string
+
+func init() {
+	sourceTags = make(map[string]string)
+}
+
+// ExtractOutput is a convenience method for obtaining new discoveries made by the enumeration process.
+func ExtractOutput(e *enum.Enumeration, filter filter.Filter, asinfo bool) []*requests.Output {
+	if e.Config.Passive {
+		return EventNames(e.Graph, e.Config.UUID.String(), filter)
+	}
+
+	return EventOutput(e.Graph, e.Config.UUID.String(), filter, asinfo, e.Sys.Cache())
+}
 
 type outLookup map[string]*requests.Output
 
 // EventOutput returns findings within the receiver Graph for the event identified by the uuid string
 // parameter and not already in the filter StringFilter argument. The filter is updated by EventOutput.
-func (g *Graph) EventOutput(uuid string, f filter.Filter, asninfo bool, cache *requests.ASNCache) []*requests.Output {
+func EventOutput(g *netmap.Graph, uuid string, f filter.Filter, asninfo bool, cache *requests.ASNCache) []*requests.Output {
 	// Make sure a filter has been created
 	if f == nil {
 		f = filter.NewStringFilter()
@@ -33,7 +48,7 @@ func (g *Graph) EventOutput(uuid string, f filter.Filter, asninfo bool, cache *r
 	}
 
 	lookup := make(outLookup, len(names))
-	for _, o := range g.buildNameInfo(uuid, names) {
+	for _, o := range buildNameInfo(g, uuid, names) {
 		lookup[o.Name] = o
 	}
 
@@ -102,7 +117,7 @@ func addInfrastructureInfo(lookup outLookup, filter filter.Filter, cache *reques
 
 // EventNames returns findings within the receiver Graph for the event identified by the uuid string
 // parameter and not already in the filter StringFilter argument. The filter is updated by EventNames.
-func (g *Graph) EventNames(uuid string, f filter.Filter) []*requests.Output {
+func EventNames(g *netmap.Graph, uuid string, f filter.Filter) []*requests.Output {
 	// Make sure a filter has been created
 	if f == nil {
 		f = filter.NewStringFilter()
@@ -116,7 +131,7 @@ func (g *Graph) EventNames(uuid string, f filter.Filter) []*requests.Output {
 	}
 
 	var results []*requests.Output
-	for _, o := range g.buildNameInfo(uuid, names) {
+	for _, o := range buildNameInfo(g, uuid, names) {
 		if !f.Duplicate(o.Name) {
 			results = append(results, o)
 		}
@@ -124,75 +139,79 @@ func (g *Graph) EventNames(uuid string, f filter.Filter) []*requests.Output {
 	return results
 }
 
-func (g *Graph) buildNameInfo(uuid string, names []string) []*requests.Output {
+func buildNameInfo(g *netmap.Graph, uuid string, names []string) []*requests.Output {
 	results := make(map[string]*requests.Output, len(names))
 
-	var nameVals []quad.Value
 	for _, name := range names {
-		nameVals = append(nameVals, quad.IRI(name))
+		if _, found := results[name]; found {
+			continue
+		}
+
+		n := netmap.Node(name)
+		if srcs, err := g.NodeSources(n, uuid); err == nil {
+			results[name] = &requests.Output{
+				Name:    name,
+				Sources: srcs,
+			}
+		}
 	}
-
-	g.db.Lock()
-	p := cayley.StartPath(g.db.store, nameVals...).Has(quad.IRI("type"), quad.String("fqdn"))
-	p = p.Tag("name").InWithTags([]string{"predicate"}).Is(quad.IRI(uuid))
-	err := p.Iterate(context.Background()).TagValues(nil, func(m map[string]quad.Value) {
-		name := valToStr(m["name"])
-		pred := valToStr(m["predicate"])
-
-		if notDataSourceSet.Has(pred) {
-			return
-		}
-		if _, found := results[name]; !found {
-			results[name] = &requests.Output{Name: name}
-		}
-
-		n := append(results[name].Sources, pred)
-		if s := stringset.Deduplicate(n); len(results[name].Sources) < len(s) {
-			results[name].Sources = n
-		}
-	})
-	g.db.Unlock()
 
 	var final []*requests.Output
-	if err != nil {
-		return final
-	}
-
-	sourceTags := make(map[string]string)
 	for _, o := range results {
-		domain, err := publicsuffix.EffectiveTLDPlusOne(o.Name)
+		d, err := publicsuffix.EffectiveTLDPlusOne(o.Name)
 		if err != nil {
 			continue
 		}
-		o.Domain = domain
+		o.Domain = d
 
-		if len(o.Sources) == 0 {
-			continue
-		}
-		o.Tag = g.selectTag(o.Sources, sourceTags)
-
+		o.Tag = selectTag(o.Sources)
 		final = append(final, o)
 	}
 	return final
 }
 
-func (g *Graph) selectTag(sources []string, sourceTags map[string]string) string {
-	var source, tag string
+func initializeSourceTags(sys systems.System) {
+	sourceTags["DNS"] = requests.DNS
+	sourceTags["Reverse DNS"] = requests.DNS
+	sourceTags["NSEC Walk"] = requests.DNS
+	sourceTags["DNS Zone XFR"] = requests.AXFR
+	sourceTags["Active Crawl"] = requests.CRAWL
+	sourceTags["Active Cert"] = requests.CERT
+
+	for _, src := range sys.DataSources() {
+		sourceTags[src.String()] = src.Description()
+	}
+}
+
+func selectTag(sources []string) string {
+	var trusted, others []string
 
 	for _, src := range sources {
-		var found bool
-
-		source = src
-		tag, found = sourceTags[source]
+		tag, found := sourceTags[src]
 		if !found {
-			tag = g.SourceTag(source)
-			sourceTags[source] = tag
+			continue
 		}
 
 		if requests.TrustedTag(tag) {
-			break
+			trusted = append(trusted, tag)
+		} else {
+			others = append(others, tag)
 		}
 	}
 
-	return tag
+	tags := others
+	if len(trusted) > 0 {
+		tags = trusted
+	}
+
+	if len(tags) == 0 {
+		return requests.DNS
+	}
+
+	sel := 0
+	if m := len(tags) - 1; m > 0 {
+		sel = rand.Int() % m
+	}
+
+	return tags[sel]
 }
