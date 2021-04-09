@@ -166,7 +166,7 @@ func runVizCommand(clArgs []string) {
 	}
 
 	// Obtain the visualization nodes & edges from the graph
-	nodes, edges := memDB.VizData(uuids)
+	nodes, edges := viz.VizData(memDB, uuids)
 
 	// Get the directory to save the files into
 	dir := args.Filepaths.Directory

@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/v3/config"
-	"github.com/OWASP/Amass/v3/graph"
 	"github.com/OWASP/Amass/v3/requests"
 	eb "github.com/caffix/eventbus"
+	"github.com/caffix/netmap"
 	"github.com/caffix/resolve"
 	"github.com/caffix/service"
 )
@@ -39,7 +39,7 @@ type System interface {
 	SetDataSources(sources []service.Service)
 
 	// GraphDatabases return the Graphs used by the System
-	GraphDatabases() []*graph.Graph
+	GraphDatabases() []*netmap.Graph
 
 	// GetMemoryUsage() returns the number bytes allocated to heap objects on this system
 	GetMemoryUsage() uint64
@@ -73,3 +73,49 @@ func PopulateCache(ctx context.Context, asn int, sys System) {
 	case <-t.C:
 	}
 }
+
+/*
+// ASNCacheFill populates an ASNCache object with the AS data in the receiver object.
+func ASNCacheFill(g *netmap.Graph, cache *requests.ASNCache) error {
+	nodes, err := g.AllNodesOfType("as")
+	if err != nil {
+		return err
+	}
+
+	for _, as := range nodes {
+		id := as.(string)
+		asn, _ := strconv.Atoi(id)
+		if asn <= 0 {
+			continue
+		}
+
+		desc := g.ReadASDescription(asn)
+		if g.alreadyClosed {
+			return nil
+		}
+
+		edges, err := g.db.ReadOutEdges(as, "prefix")
+		if err != nil {
+			continue
+		}
+
+		for _, edge := range edges {
+			if g.alreadyClosed {
+				return nil
+			}
+
+			if _, cidr, err := net.ParseCIDR(g.db.NodeToID(edge.To)); err == nil {
+				cache.Update(&requests.ASNRequest{
+					Address:     cidr.IP.String(),
+					ASN:         asn,
+					Prefix:      cidr.String(),
+					Description: desc,
+					Tag:         requests.RIR,
+					Source:      g.String(),
+				})
+			}
+		}
+	}
+	return nil
+}
+*/

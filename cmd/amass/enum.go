@@ -178,7 +178,9 @@ func runEnumCommand(clArgs []string) {
 	}
 	defer func() { _ = sys.Shutdown() }()
 	sys.SetDataSources(datasrcs.GetAllSources(sys))
+
 	// Expand data source category names into the associated source names
+	initializeSourceTags(sys)
 	cfg.SourceFilter.Sources = expandCategoryNames(cfg.SourceFilter.Sources, generateCategoryMap(sys))
 
 	// Setup the new enumeration
@@ -497,7 +499,7 @@ func processOutput(e *enum.Enumeration, outputs []chan *requests.Output, done ch
 	known := filter.NewBloomFilter(1 << 22)
 	// The function that obtains output from the enum and puts it on the channel
 	extract := func() {
-		for _, o := range e.ExtractOutput(known, true) {
+		for _, o := range ExtractOutput(e, known, true) {
 			if !e.Config.IsDomainInScope(o.Name) {
 				continue
 			}

@@ -15,10 +15,10 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/v3/config"
-	"github.com/OWASP/Amass/v3/graph"
 	"github.com/OWASP/Amass/v3/limits"
 	amassnet "github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/requests"
+	"github.com/caffix/netmap"
 	"github.com/caffix/resolve"
 	"github.com/caffix/service"
 )
@@ -27,7 +27,7 @@ import (
 type LocalSystem struct {
 	cfg               *config.Config
 	pool              resolve.Resolver
-	graphs            []*graph.Graph
+	graphs            []*netmap.Graph
 	cache             *requests.ASNCache
 	done              chan struct{}
 	doneAlreadyClosed bool
@@ -144,7 +144,7 @@ loop:
 }
 
 // GraphDatabases implements the System interface.
-func (l *LocalSystem) GraphDatabases() []*graph.Graph {
+func (l *LocalSystem) GraphDatabases() []*netmap.Graph {
 	return l.graphs
 }
 
@@ -213,18 +213,18 @@ func (l *LocalSystem) setupGraphDBs() error {
 	dbs = append(dbs, cfg.GraphDBs...)
 
 	for _, db := range dbs {
-		cayley := graph.NewCayleyGraph(db.System, db.URL, db.Options)
+		cayley := netmap.NewCayleyGraph(db.System, db.URL, db.Options)
 		if cayley == nil {
 			return fmt.Errorf("System: Failed to create the %s graph", db.System)
 		}
 
-		g := graph.NewGraph(cayley)
+		g := netmap.NewGraph(cayley)
 		if g == nil {
 			return fmt.Errorf("System: Failed to create the %s graph", g.String())
 		}
 
 		// Load the ASN Cache with all prior knowledge of IP address ranges and ASNs
-		_ = g.ASNCacheFill(l.Cache())
+		//_ = ASNCacheFill(g, l.Cache())
 
 		l.graphs = append(l.graphs, g)
 	}
