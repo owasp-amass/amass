@@ -21,18 +21,18 @@ func ZoneTransfer(sub, domain, server string) ([]*requests.DNSRequest, error) {
 	var results []*requests.DNSRequest
 
 	// Set the maximum time allowed for making the connection
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	conn, err := amassnet.DialContext(ctx, "tcp", server+":53")
 	if err != nil {
-		return results, fmt.Errorf("Zone xfr error: Failed to obtain TCP connection to %s: %v", server+":53", err)
+		return results, fmt.Errorf("Zone xfr error: Failed to obtain TCP connection to [%s]: %v", server+":53", err)
 	}
 	defer conn.Close()
 
 	xfr := &dns.Transfer{
 		Conn:        &dns.Conn{Conn: conn},
-		ReadTimeout: 30 * time.Second,
+		ReadTimeout: 15 * time.Second,
 	}
 
 	m := &dns.Msg{}
@@ -40,7 +40,7 @@ func ZoneTransfer(sub, domain, server string) ([]*requests.DNSRequest, error) {
 
 	in, err := xfr.In(m, "")
 	if err != nil {
-		return results, fmt.Errorf("DNS zone transfer error: %s: %v", server+":53", err)
+		return results, fmt.Errorf("DNS zone transfer error for [%s]: %v", server+":53", err)
 	}
 
 	for en := range in {
