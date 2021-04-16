@@ -25,7 +25,7 @@ import (
 
 // LocalSystem implements a System to be executed within a single process.
 type LocalSystem struct {
-	cfg               *config.Config
+	Cfg               *config.Config
 	pool              resolve.Resolver
 	graphs            []*netmap.Graph
 	cache             *requests.ASNCache
@@ -54,7 +54,7 @@ func NewLocalSystem(c *config.Config) (*LocalSystem, error) {
 	}
 
 	sys := &LocalSystem{
-		cfg:        c,
+		Cfg:        c,
 		pool:       pool,
 		cache:      requests.NewASNCache(),
 		done:       make(chan struct{}, 2),
@@ -84,7 +84,7 @@ func NewLocalSystem(c *config.Config) (*LocalSystem, error) {
 
 // Config implements the System interface.
 func (l *LocalSystem) Config() *config.Config {
-	return l.cfg
+	return l.Cfg
 }
 
 // Pool implements the System interface.
@@ -188,7 +188,7 @@ func (l *LocalSystem) GetAllSourceNames() []string {
 }
 
 func (l *LocalSystem) setupOutputDirectory() error {
-	path := config.OutputDirectory(l.cfg.Dir)
+	path := config.OutputDirectory(l.Cfg.Dir)
 	if path == "" {
 		return nil
 	}

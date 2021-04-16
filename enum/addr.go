@@ -35,24 +35,25 @@ func newAddressTask(e *Enumeration) *addrTask {
 	}
 }
 
-// Stop releases allocated resources by the AddressTask.
-func (r *addrTask) Stop() error {
-	r.filter = filter.NewBloomFilter(1 << filterSize)
-	r.sweepFilter = filter.NewBloomFilter(1 << filterSize)
-	return nil
+// Stop releases allocated resources by the addrTask.
+func (r *addrTask) Stop() {
+	r.filter = filter.NewBloomFilter(1)
+	r.sweepFilter = filter.NewBloomFilter(1)
 }
 
 // Process implements the pipeline Task interface.
 func (r *addrTask) Process(ctx context.Context, data pipeline.Data, tp pipeline.TaskParams) (pipeline.Data, error) {
+	select {
+	case <-ctx.Done():
+		return nil, nil
+	default:
+	}
+
 	req, ok := data.(*requests.AddrRequest)
 	if !ok {
 		return data, nil
 	}
 	if req == nil || !req.Valid() {
-		return nil, nil
-	}
-	// Does the address fall into a reserved address range?
-	if yes, _ := amassnet.IsReservedAddress(req.Address); yes {
 		return nil, nil
 	}
 	// Do not submit addresses after already processing them as in-scope
@@ -62,24 +63,47 @@ func (r *addrTask) Process(ctx context.Context, data pipeline.Data, tp pipeline.
 	if r.filter.Duplicate(req.Address + strconv.FormatBool(req.InScope)) {
 		return nil, nil
 	}
-	// Generate the additional addresses to sweep across
-	r.genSweepAddrs(ctx, req, tp)
-	return data, nil
+
+	if req.InScope {
+		r.sendAddr(ctx, req, tp)
+		// Does the address fall into a reserved address range?
+		if yes, _ := amassnet.IsReservedAddress(req.Address); !yes {
+			// Generate the additional addresses to sweep across
+			r.sweepAddrs(ctx, req, tp)
+		}
+	}
+	return nil, nil
 }
 
-func (r *addrTask) genSweepAddrs(ctx context.Context, req *requests.AddrRequest, tp pipeline.TaskParams) {
+func (r *addrTask) sendAddr(ctx context.Context, req *requests.AddrRequest, tp pipeline.TaskParams) {
+	pipeline.SendData(ctx, "store", &requests.AddrRequest{
+		Address: req.Address,
+		InScope: req.InScope,
+		Domain:  req.Domain,
+		Tag:     req.Tag,
+		Source:  req.Source,
+	}, tp)
+}
+
+func (r *addrTask) sweepAddrs(ctx context.Context, req *requests.AddrRequest, tp pipeline.TaskParams) {
 	size := defaultSweepSize
 	if r.enum.Config.Active {
 		size = activeSweepSize
 	}
 
-	cidr := r.getAddrCIDR(req.Address)
+	cidr := r.addrCIDR(req.Address)
 	// Get information about nearby IP addresses
 	ips := amassnet.CIDRSubset(cidr, req.Address, size)
 
 	for _, ip := range ips {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
 		if a := ip.String(); !r.sweepFilter.Duplicate(a) {
-			go pipeline.SendData(ctx, "dns", &requests.AddrRequest{
+			pipeline.SendData(ctx, "dns", &requests.AddrRequest{
 				Address: a,
 				Domain:  req.Domain,
 				Tag:     req.Tag,
@@ -89,7 +113,7 @@ func (r *addrTask) genSweepAddrs(ctx context.Context, req *requests.AddrRequest,
 	}
 }
 
-func (r *addrTask) getAddrCIDR(addr string) *net.IPNet {
+func (r *addrTask) addrCIDR(addr string) *net.IPNet {
 	if asn := r.enum.Sys.Cache().AddrSearch(addr); asn != nil {
 		if _, cidr, err := net.ParseCIDR(asn.Prefix); err == nil {
 			return cidr

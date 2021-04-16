@@ -360,17 +360,18 @@ func healASInfo(uuids []string, db *netmap.Graph) bool {
 	cfg := config.NewConfig()
 	cfg.LocalDatabase = false
 
-	sys, err := systems.NewLocalSystem(cfg)
-	if err != nil {
+	srcs := datasrcs.GetAllSources(&systems.LocalSystem{Cfg: cfg})
+	defer func() {
+		for _, src := range srcs {
+			_ = src.Stop()
+		}
+	}()
+
+	cache := requests.NewASNCache()
+	if err := fillCache(cache, db); err != nil {
+		r.Println("Failed to populate the ASN cache")
 		return false
 	}
-	sys.SetDataSources(datasrcs.GetAllSources(sys))
-	defer func() { _ = sys.Shutdown() }()
-
-	cache := sys.Cache()
-	/*for _, g := range sys.GraphDatabases() {
-		_ = g.ASNCacheFill(cache)
-	}*/
 
 	bus := eventbus.NewEventBus()
 	bus.Subscribe(requests.NewASNTopic, cache.Update)
@@ -384,14 +385,15 @@ func healASInfo(uuids []string, db *netmap.Graph) bool {
 			for _, a := range out.Addresses {
 				if r := cache.AddrSearch(a.Address.String()); r != nil {
 					_ = db.UpsertInfrastructure(r.ASN, r.Description, r.Address, r.Prefix, r.Source, uuid)
+					updated = true
 					continue
 				}
 
-				for _, src := range sys.DataSources() {
+				for _, src := range srcs {
 					src.Request(ctx, &requests.ASNRequest{Address: a.Address.String()})
 				}
 
-				for i := 0; i < 30; i++ {
+				for i := 0; i < 10; i++ {
 					if cache.AddrSearch(a.Address.String()) != nil {
 						break
 					}
@@ -400,9 +402,8 @@ func healASInfo(uuids []string, db *netmap.Graph) bool {
 
 				if r := cache.AddrSearch(a.Address.String()); r != nil {
 					_ = db.UpsertInfrastructure(r.ASN, r.Description, r.Address, r.Prefix, r.Source, uuid)
+					updated = true
 				}
-
-				updated = true
 			}
 		}
 	}

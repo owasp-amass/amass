@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 
+	amassdns "github.com/OWASP/Amass/v3/net/dns"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/caffix/eventbus"
 	"github.com/caffix/pipeline"
@@ -212,7 +213,7 @@ func (dt *dNSTask) subdomainQueries(ctx context.Context, req *requests.DNSReques
 		rr := resolve.AnswersByType(ans, dns.TypeNS)
 
 		for _, a := range rr {
-			go pipeline.SendData(ctx, "active", &requests.ZoneXFRRequest{
+			pipeline.SendData(ctx, "active", &requests.ZoneXFRRequest{
 				Name:   req.Name,
 				Domain: req.Domain,
 				Server: a.Data,
@@ -265,14 +266,19 @@ func (dt *dNSTask) subdomainQueries(ctx context.Context, req *requests.DNSReques
 	}
 
 	if req.Valid() && len(req.Records) > 0 {
-		go pipeline.SendData(ctx, "store", req, tp)
+		pipeline.SendData(ctx, "store", req, tp)
 	}
 }
 
 func (dt *dNSTask) queryServiceNames(ctx context.Context, req *requests.DNSRequest, tp pipeline.TaskParams) {
 	for _, name := range popularSRVRecords {
-		srvName := name + "." + req.Name
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
 
+		srvName := name + "." + req.Name
 		msg := resolve.QueryMsg(srvName, dns.TypeSRV)
 		if resp, err := dt.enum.Sys.Pool().Query(ctx, msg, resolve.PriorityLow,
 			resolve.PoolRetryPolicy); err == nil && len(resp.Answer) > 0 {
@@ -298,7 +304,7 @@ func (dt *dNSTask) queryServiceNames(ctx context.Context, req *requests.DNSReque
 			}
 
 			if dt.enum.Sys.Pool().WildcardType(ctx, resp, req.Domain) == resolve.WildcardTypeNone {
-				go pipeline.SendData(ctx, "filter", req, tp)
+				pipeline.SendData(ctx, "filter", req, tp)
 			}
 		} else {
 			dt.handleResolverError(ctx, err)
@@ -307,6 +313,12 @@ func (dt *dNSTask) queryServiceNames(ctx context.Context, req *requests.DNSReque
 }
 
 func (dt *dNSTask) reverseDNSQuery(ctx context.Context, addr string, tp pipeline.TaskParams) bool {
+	select {
+	case <-ctx.Done():
+		return false
+	default:
+	}
+
 	msg := resolve.ReverseMsg(addr)
 	if msg == nil {
 		return false
@@ -340,8 +352,17 @@ func (dt *dNSTask) reverseDNSQuery(ctx context.Context, addr string, tp pipeline
 		return false
 	}
 
+	if amassdns.RemoveAsteriskLabel(answer) != answer {
+		return false
+	}
+
 	// Check that the name discovered is in scope
-	if dt.enum.Config.WhichDomain(answer) == "" {
+	d := dt.enum.Config.WhichDomain(answer)
+	if d == "" {
+		return false
+	}
+
+	if re := dt.enum.Config.DomainRegex(d); re == nil || re.FindString(answer) != answer {
 		return false
 	}
 
@@ -351,7 +372,7 @@ func (dt *dNSTask) reverseDNSQuery(ctx context.Context, addr string, tp pipeline
 		return true
 	}
 
-	go pipeline.SendData(ctx, "filter", &requests.DNSRequest{
+	pipeline.SendData(ctx, "filter", &requests.DNSRequest{
 		Name:   ptr,
 		Domain: domain,
 		Records: []requests.DNSAnswer{{

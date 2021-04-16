@@ -16,7 +16,6 @@ import (
 	"github.com/caffix/netmap"
 	"github.com/caffix/pipeline"
 	"github.com/caffix/queue"
-	"github.com/caffix/resolve"
 	"github.com/caffix/service"
 )
 
@@ -84,16 +83,21 @@ func (e *Enumeration) Start(ctx context.Context) error {
 		return err
 	}
 
-	max := e.Config.MaxDNSQueries * int(resolve.QueryTimeout.Seconds())
+	max := e.Config.MaxDNSQueries
 	// The pipeline input source will receive all the names
 	e.nameSrc = newEnumSource(e, max)
+	defer e.nameSrc.Stop()
 	e.startupAndCleanup(ctx)
+	defer e.stop()
 
 	var stages []pipeline.Stage
 	if !e.Config.Passive {
+		ntask := newFQDNFilter(e)
+		defer ntask.Stop()
+		atask := newAddressTask(e)
+		defer atask.Stop()
 		// Task that performs initial filtering for new FQDNs and IP addresses
-		stages = append(stages, pipeline.FixedPool("new",
-			e.makeNewDataTaskFunc(newFQDNFilter(e), newAddressTask(e)), 50))
+		stages = append(stages, pipeline.FixedPool("new", e.makeNewDataTaskFunc(ntask, atask), 50))
 		stages = append(stages, pipeline.FixedPool("", e.dnsTask.makeBlacklistTaskFunc(), 50))
 		// Task that performs DNS queries for root domain names
 		stages = append(stages, pipeline.DynamicPool("root", e.dnsTask.makeRootTaskFunc(), max))
@@ -104,11 +108,13 @@ func (e *Enumeration) Start(ctx context.Context) error {
 	stages = append(stages, pipeline.FIFO("filter", e.makeFilterTaskFunc()))
 
 	if !e.Config.Passive {
-		stages = append(stages, pipeline.FIFO("store", newDataManager(e)))
+		stages = append(stages, pipeline.DynamicPool("store", newDataManager(e), 50))
 		stages = append(stages, pipeline.FIFO("", e.subTask))
 	}
 	if e.Config.Active {
-		stages = append(stages, pipeline.FIFO("active", newActiveTask(e, 50)))
+		activetask := newActiveTask(e, 25)
+		defer activetask.Stop()
+		stages = append(stages, pipeline.FIFO("active", activetask))
 	}
 
 	/*
@@ -116,7 +122,7 @@ func (e *Enumeration) Start(ctx context.Context) error {
 	 * by the user and names acquired from the graph database can be brought
 	 * into the enumeration
 	 */
-	e.submitKnownNames()
+	go e.submitKnownNames()
 	e.submitProvidedNames()
 	e.submitDomainNames()
 	e.submitASNs()
@@ -141,18 +147,16 @@ func (e *Enumeration) startupAndCleanup(ctx context.Context) {
 
 	go func() {
 		<-e.done
-		defer e.Bus.Unsubscribe(requests.NewNameTopic, e.nameSrc.InputName)
-		defer e.Bus.Unsubscribe(requests.LogTopic, e.queueLog)
+		e.Bus.Unsubscribe(requests.NewNameTopic, e.nameSrc.InputName)
+		e.Bus.Unsubscribe(requests.LogTopic, e.queueLog)
 
 		if !e.Config.Passive {
-			defer e.Bus.Unsubscribe(requests.NewAddrTopic, e.nameSrc.InputAddress)
-			defer e.Bus.Unsubscribe(requests.NewASNTopic, e.Sys.Cache().Update)
-			// Attempt to fix IP address nodes without edges to netblocks
-			defer func() { _ = HealAddressNodes(e.Graph, e.Sys.Cache(), e.Config.UUID.String()) }()
+			e.Bus.Unsubscribe(requests.NewAddrTopic, e.nameSrc.InputAddress)
+			e.Bus.Unsubscribe(requests.NewASNTopic, e.Sys.Cache().Update)
+			e.subTask.Stop()
 		}
 
-		defer e.stop()
-		defer e.writeLogs(true)
+		e.writeLogs(true)
 	}()
 }
 

@@ -180,7 +180,7 @@ func runEnumCommand(clArgs []string) {
 	sys.SetDataSources(datasrcs.GetAllSources(sys))
 
 	// Expand data source category names into the associated source names
-	initializeSourceTags(sys)
+	initializeSourceTags(sys.DataSources())
 	cfg.SourceFilter.Sources = expandCategoryNames(cfg.SourceFilter.Sources, generateCategoryMap(sys))
 
 	// Setup the new enumeration
@@ -510,22 +510,15 @@ func processOutput(e *enum.Enumeration, outputs []chan *requests.Output, done ch
 		}
 	}
 
-	t := time.NewTimer(15 * time.Second)
+	t := time.NewTicker(15 * time.Second)
+	defer t.Stop()
 loop:
 	for {
 		select {
 		case <-done:
 			break loop
 		case <-t.C:
-			started := time.Now()
 			extract()
-			next := time.Since(started) * 5
-			if next < 3*time.Second {
-				next = 3 * time.Second
-			} else if next > 10*time.Second {
-				next = 10 * time.Second
-			}
-			t.Reset(next)
 		}
 	}
 

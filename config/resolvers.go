@@ -18,10 +18,10 @@ import (
 )
 
 // DefaultQueriesPerPublicResolver is the number of queries sent to each public DNS resolver per second.
-const DefaultQueriesPerPublicResolver = 100
+const DefaultQueriesPerPublicResolver = 50
 
 // DefaultQueriesPerBaselineResolver is the number of queries sent to each trusted DNS resolver per second.
-const DefaultQueriesPerBaselineResolver = 500
+const DefaultQueriesPerBaselineResolver = 50
 
 const minResolverReliability = 0.85
 

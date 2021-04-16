@@ -5,12 +5,14 @@ package enum
 
 import (
 	"context"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/OWASP/Amass/v3/filter"
+	"github.com/OWASP/Amass/v3/net/dns"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/caffix/pipeline"
 	"github.com/caffix/queue"
@@ -23,6 +25,7 @@ type fqdnFilter struct {
 	count  int64
 	enum   *Enumeration
 	queue  queue.Queue
+	subre  *regexp.Regexp
 }
 
 func newFQDNFilter(e *Enumeration) *fqdnFilter {
@@ -30,13 +33,26 @@ func newFQDNFilter(e *Enumeration) *fqdnFilter {
 		filter: filter.NewBloomFilter(filterMaxSize),
 		enum:   e,
 		queue:  queue.NewQueue(),
+		subre:  dns.AnySubdomainRegex(),
 	}
 
 	go f.processDupNames()
 	return f
 }
 
+// Stop releases allocated resources by the fqdnFilter.
+func (f *fqdnFilter) Stop() {
+	f.filter = filter.NewBloomFilter(1)
+	f.queue.Process(func(e interface{}) {})
+}
+
 func (f *fqdnFilter) Process(ctx context.Context, data pipeline.Data, tp pipeline.TaskParams) (pipeline.Data, error) {
+	select {
+	case <-ctx.Done():
+		return nil, nil
+	default:
+	}
+
 	req, ok := data.(*requests.DNSRequest)
 	if !ok {
 		return data, nil
@@ -44,6 +60,10 @@ func (f *fqdnFilter) Process(ctx context.Context, data pipeline.Data, tp pipelin
 
 	// Clean up the newly discovered name and domain
 	requests.SanitizeDNSRequest(req)
+	// Check that the name is valid
+	if f.subre.FindString(req.Name) != req.Name {
+		return nil, nil
+	}
 	// Do not further evaluate service subdomains
 	for _, label := range strings.Split(req.Name, ".") {
 		l := strings.ToLower(label)
@@ -97,6 +117,7 @@ func (f *fqdnFilter) processDupNames() {
 		Tag       string
 		Timestamp time.Time
 	}
+
 	var pending []*altsource
 	each := func(element interface{}) {
 		req := element.(*requests.DNSRequest)
@@ -108,6 +129,7 @@ func (f *fqdnFilter) processDupNames() {
 			Timestamp: time.Now(),
 		})
 	}
+
 	t := time.NewTicker(5 * time.Second)
 	defer t.Stop()
 loop:
@@ -164,12 +186,18 @@ func newSubdomainTask(e *Enumeration) *subdomainTask {
 // Stop releases resources allocated by the instance.
 func (r *subdomainTask) Stop() error {
 	close(r.done)
-	r.queue = queue.NewQueue()
+	r.queue.Process(func(e interface{}) {})
 	return nil
 }
 
 // Process implements the pipeline Task interface.
 func (r *subdomainTask) Process(ctx context.Context, data pipeline.Data, tp pipeline.TaskParams) (pipeline.Data, error) {
+	select {
+	case <-ctx.Done():
+		return nil, nil
+	default:
+	}
+
 	req, ok := data.(*requests.DNSRequest)
 	if !ok {
 		return data, nil
@@ -228,7 +256,7 @@ func (r *subdomainTask) checkForSubdomains(ctx context.Context, req *requests.DN
 	r.queue.Append(subreq)
 	// First time this proper subdomain has been seen?
 	if sub != req.Domain && subreq.Times == 1 {
-		go pipeline.SendData(ctx, "root", subreq, tp)
+		pipeline.SendData(ctx, "root", subreq, tp)
 	}
 	return req, nil
 }
@@ -242,6 +270,12 @@ func (r *subdomainTask) OutputRequests(num int) int {
 	var count int
 loop:
 	for {
+		select {
+		case <-r.enum.ctx.Done():
+			break loop
+		default:
+		}
+
 		element, ok := r.queue.Next()
 		if !ok {
 			break

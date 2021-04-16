@@ -51,9 +51,18 @@ func newEnumSource(e *Enumeration, slots int) *enumSource {
 	return r
 }
 
+func (r *enumSource) Stop() {
+	r.filter = filter.NewBloomFilter(1)
+	r.queue.Process(func(e interface{}) {})
+}
+
 // InputName allows the input source to accept new names from data sources.
 func (r *enumSource) InputName(req *requests.DNSRequest) {
 	select {
+	case <-r.enum.ctx.Done():
+		return
+	case <-r.enum.done:
+		return
 	case <-r.done:
 		return
 	default:
@@ -70,6 +79,10 @@ func (r *enumSource) InputName(req *requests.DNSRequest) {
 // InputAddress allows the input source to accept new addresses from data sources.
 func (r *enumSource) InputAddress(req *requests.AddrRequest) {
 	select {
+	case <-r.enum.ctx.Done():
+		return
+	case <-r.enum.done:
+		return
 	case <-r.done:
 		return
 	default:
@@ -123,6 +136,14 @@ func (r *enumSource) Next(ctx context.Context) bool {
 
 	for {
 		select {
+		case <-r.enum.ctx.Done():
+			close(r.done)
+			return false
+		case <-r.enum.done:
+			close(r.done)
+			return false
+		case <-r.done:
+			return false
 		case <-t.C:
 			close(r.done)
 			return false
@@ -136,10 +157,15 @@ func (r *enumSource) Next(ctx context.Context) bool {
 
 // Data implements the pipeline InputSource interface.
 func (r *enumSource) Data() pipeline.Data {
+	var data pipeline.Data
+
 	if element, ok := r.queue.Next(); ok {
-		return element.(pipeline.Data)
+		if d, good := element.(pipeline.Data); good {
+			data = d
+		}
 	}
-	return nil
+
+	return data
 }
 
 // Error implements the pipeline InputSource interface.
@@ -148,19 +174,35 @@ func (r *enumSource) Error() error {
 }
 
 func (r *enumSource) checkForData() {
-	required := r.maxSlots * 10
-	t := time.NewTicker(time.Second)
+	required := r.maxSlots
+	t := time.NewTicker(500 * time.Millisecond)
 	defer t.Stop()
+
+	worth := 50 * len(r.enum.Sys.DataSources())
+	if r.enum.Config.Alterations {
+		worth += 1000
+	}
+	if r.enum.Config.BruteForcing && r.enum.Config.MinForRecursive == 0 {
+		worth += len(r.enum.Config.Wordlist)
+	}
 
 	for {
 		select {
+		case <-r.enum.ctx.Done():
+			return
 		case <-r.enum.done:
 			return
 		case <-r.done:
 			return
 		case <-t.C:
-			if avail := r.queue.Len(); avail < required {
-				r.enum.subTask.OutputRequests(required - avail)
+			if needed := required - r.queue.Len(); needed > 0 {
+				num := 1
+
+				if n := needed / worth; n > num {
+					num = n
+				}
+
+				r.enum.subTask.OutputRequests(num)
 			}
 		}
 	}

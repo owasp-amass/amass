@@ -10,8 +10,8 @@ import (
 	"github.com/OWASP/Amass/v3/enum"
 	"github.com/OWASP/Amass/v3/filter"
 	"github.com/OWASP/Amass/v3/requests"
-	"github.com/OWASP/Amass/v3/systems"
 	"github.com/caffix/netmap"
+	"github.com/caffix/service"
 	"golang.org/x/net/publicsuffix"
 )
 
@@ -170,7 +170,7 @@ func buildNameInfo(g *netmap.Graph, uuid string, names []string) []*requests.Out
 	return final
 }
 
-func initializeSourceTags(sys systems.System) {
+func initializeSourceTags(srcs []service.Service) {
 	sourceTags["DNS"] = requests.DNS
 	sourceTags["Reverse DNS"] = requests.DNS
 	sourceTags["NSEC Walk"] = requests.DNS
@@ -178,7 +178,7 @@ func initializeSourceTags(sys systems.System) {
 	sourceTags["Active Crawl"] = requests.CRAWL
 	sourceTags["Active Cert"] = requests.CERT
 
-	for _, src := range sys.DataSources() {
+	for _, src := range srcs {
 		sourceTags[src.String()] = src.Description()
 	}
 }
@@ -209,7 +209,7 @@ func selectTag(sources []string) string {
 	}
 
 	sel := 0
-	if m := len(tags) - 1; m > 0 {
+	if m := len(tags); m > 0 {
 		sel = rand.Int() % m
 	}
 

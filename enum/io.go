@@ -4,6 +4,8 @@
 package enum
 
 import (
+	"net"
+	"strconv"
 	"time"
 
 	"github.com/OWASP/Amass/v3/filter"
@@ -11,56 +13,40 @@ import (
 	"github.com/caffix/netmap"
 )
 
-// HealAddressNodes looks for 'ipaddr' nodes in the graph and creates missing edges to the
-// appropriate 'netblock' nodes using data provided by the ASNCache parameter.
-func HealAddressNodes(g *netmap.Graph, cache *requests.ASNCache, uuid string) error {
-	var err error
-	cidrToNode := make(map[string]netmap.Node)
-
-	if cache == nil {
-		cache = requests.NewASNCache()
-
-		/*if err = system.ASNCacheFill(cache); err != nil {
-			return err
-		}*/
-	}
-
-	nodes, err := g.AllNodesOfType("ipaddr", uuid)
+func fillCache(cache *requests.ASNCache, db *netmap.Graph) error {
+	aslist, err := db.AllNodesOfType(netmap.TypeAS)
 	if err != nil {
 		return err
 	}
 
-	for _, node := range nodes {
-		addr := node.(string)
-
-		as := cache.AddrSearch(addr)
-		if as == nil {
+	for _, as := range aslist {
+		asn, err := strconv.Atoi(as.(string))
+		if err != nil {
 			continue
 		}
 
-		cidr, found := cidrToNode[as.Prefix]
-		if !found {
-			cidr, err = g.ReadNode(as.Prefix, netmap.TypeNetblock)
-			if err != nil {
-				if err := g.UpsertInfrastructure(as.ASN, as.Description, addr, as.Prefix, as.Source, uuid); err != nil {
-					continue
-				}
-
-				cidr, err = g.ReadNode(as.Prefix, netmap.TypeNetblock)
-				if err != nil {
-					continue
-				}
-			}
-
-			cidrToNode[as.Prefix] = cidr
+		desc := db.ReadASDescription(asn)
+		if desc == "" {
+			continue
 		}
 
-		if err := g.UpsertEdge(&netmap.Edge{
-			Predicate: "contains",
-			From:      cidr,
-			To:        node,
-		}); err != nil {
-			return err
+		for _, prefix := range db.ReadASPrefixes(asn) {
+			first, cidr, err := net.ParseCIDR(prefix)
+			if err != nil {
+				continue
+			}
+			if ones, _ := cidr.Mask.Size(); ones == 0 {
+				continue
+			}
+
+			cache.Update(&requests.ASNRequest{
+				Address:     first.String(),
+				ASN:         asn,
+				Prefix:      cidr.String(),
+				Description: desc,
+				Tag:         requests.RIR,
+				Source:      "RIR",
+			})
 		}
 	}
 

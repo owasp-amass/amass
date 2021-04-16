@@ -17,6 +17,7 @@ import (
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/caffix/eventbus"
 	"github.com/caffix/pipeline"
+	"github.com/caffix/queue"
 	"github.com/caffix/resolve"
 	"github.com/miekg/dns"
 	"golang.org/x/net/publicsuffix"
@@ -24,12 +25,19 @@ import (
 
 // dataManager is the stage that stores all data processed by the pipeline.
 type dataManager struct {
-	enum *Enumeration
+	enum  *Enumeration
+	queue queue.Queue
 }
 
 // newDataManager returns a dataManager specific to the provided Enumeration.
 func newDataManager(e *Enumeration) *dataManager {
-	return &dataManager{enum: e}
+	dm := &dataManager{
+		enum:  e,
+		queue: queue.NewQueue(),
+	}
+
+	go dm.processASNRequests()
+	return dm
 }
 
 // Process implements the pipeline Task interface.
@@ -79,6 +87,12 @@ func (dm *dataManager) dnsRequest(ctx context.Context, req *requests.DNSRequest,
 
 	var err error
 	for i, r := range req.Records {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+
 		switch uint16(r.Type) {
 		case dns.TypeA:
 			err = dm.insertA(ctx, req, i, tp)
@@ -132,7 +146,7 @@ func (dm *dataManager) insertCNAME(ctx context.Context, req *requests.DNSRequest
 	}
 
 	// Important - Allows chained CNAME records to be resolved until an A/AAAA record
-	go pipeline.SendData(ctx, "new", &requests.DNSRequest{
+	pipeline.SendData(ctx, "new", &requests.DNSRequest{
 		Name:   target,
 		Domain: domain,
 		Tag:    requests.DNS,
@@ -156,7 +170,7 @@ func (dm *dataManager) insertA(ctx context.Context, req *requests.DNSRequest, re
 		return fmt.Errorf("%s failed to insert A record: %v", dm.enum.Graph, err)
 	}
 
-	go pipeline.SendData(ctx, "new", &requests.AddrRequest{
+	pipeline.SendData(ctx, "new", &requests.AddrRequest{
 		Address: addr,
 		InScope: true,
 		Domain:  req.Domain,
@@ -181,7 +195,7 @@ func (dm *dataManager) insertAAAA(ctx context.Context, req *requests.DNSRequest,
 		return fmt.Errorf("%s failed to insert AAAA record: %v", dm.enum.Graph, err)
 	}
 
-	go pipeline.SendData(ctx, "new", &requests.AddrRequest{
+	pipeline.SendData(ctx, "new", &requests.AddrRequest{
 		Address: addr,
 		InScope: true,
 		Domain:  req.Domain,
@@ -213,7 +227,7 @@ func (dm *dataManager) insertPTR(ctx context.Context, req *requests.DNSRequest, 
 	}
 
 	// Important - Allows the target DNS name to be resolved in the forward direction
-	go pipeline.SendData(ctx, "new", &requests.DNSRequest{
+	pipeline.SendData(ctx, "new", &requests.DNSRequest{
 		Name:   target,
 		Domain: domain,
 		Tag:    requests.DNS,
@@ -239,7 +253,7 @@ func (dm *dataManager) insertSRV(ctx context.Context, req *requests.DNSRequest, 
 	}
 
 	if domain := cfg.WhichDomain(target); domain != "" {
-		go pipeline.SendData(ctx, "new", &requests.DNSRequest{
+		pipeline.SendData(ctx, "new", &requests.DNSRequest{
 			Name:   target,
 			Domain: domain,
 			Tag:    requests.DNS,
@@ -275,7 +289,7 @@ func (dm *dataManager) insertNS(ctx context.Context, req *requests.DNSRequest, r
 	}
 
 	if target != domain {
-		go pipeline.SendData(ctx, "new", &requests.DNSRequest{
+		pipeline.SendData(ctx, "new", &requests.DNSRequest{
 			Name:   target,
 			Domain: domain,
 			Tag:    requests.DNS,
@@ -311,7 +325,7 @@ func (dm *dataManager) insertMX(ctx context.Context, req *requests.DNSRequest, r
 	}
 
 	if target != domain {
-		go pipeline.SendData(ctx, "new", &requests.DNSRequest{
+		pipeline.SendData(ctx, "new", &requests.DNSRequest{
 			Name:   target,
 			Domain: domain,
 			Tag:    requests.DNS,
@@ -366,7 +380,7 @@ func (dm *dataManager) insertSPF(ctx context.Context, req *requests.DNSRequest, 
 func (dm *dataManager) findNamesAndAddresses(ctx context.Context, data, domain string, tp pipeline.TaskParams) {
 	ipre := regexp.MustCompile(amassnet.IPv4RE)
 	for _, ip := range ipre.FindAllString(data, -1) {
-		go pipeline.SendData(ctx, "new", &requests.AddrRequest{
+		pipeline.SendData(ctx, "new", &requests.AddrRequest{
 			Address: ip,
 			Domain:  domain,
 			Tag:     requests.DNS,
@@ -381,13 +395,18 @@ func (dm *dataManager) findNamesAndAddresses(ctx context.Context, data, domain s
 			continue
 		}
 
-		go pipeline.SendData(ctx, "new", &requests.DNSRequest{
+		pipeline.SendData(ctx, "new", &requests.DNSRequest{
 			Name:   name,
 			Domain: domain,
 			Tag:    requests.DNS,
 			Source: "DNS",
 		}, tp)
 	}
+}
+
+type queuedAddrRequest struct {
+	Req *requests.AddrRequest
+	Tp  pipeline.TaskParams
 }
 
 func (dm *dataManager) addrRequest(ctx context.Context, req *requests.AddrRequest, tp pipeline.TaskParams) error {
@@ -403,37 +422,103 @@ func (dm *dataManager) addrRequest(ctx context.Context, req *requests.AddrReques
 		return nil
 	}
 
+	if yes, prefix := amassnet.IsReservedAddress(req.Address); yes {
+		return graph.UpsertInfrastructure(0, amassnet.ReservedCIDRDescription, req.Address, prefix, "RIR", uuid)
+	}
+
 	if r := dm.enum.Sys.Cache().AddrSearch(req.Address); r != nil {
-		return graph.UpsertInfrastructure(r.ASN, r.Description, r.Address, r.Prefix, r.Source, uuid)
+		return graph.UpsertInfrastructure(r.ASN, r.Description, req.Address, r.Prefix, r.Source, uuid)
 	}
 
-	for _, src := range dm.enum.srcs {
-		src.Request(ctx, &requests.ASNRequest{Address: req.Address})
-	}
+	// Hold the pipeline during slow activities
+	tp.NewData() <- req
+	dm.queue.Append(&queuedAddrRequest{
+		Req: req,
+		Tp:  tp,
+	})
+	return nil
+}
 
-	var err error
-	var found bool
-	t := time.NewTicker(time.Second)
-	defer t.Stop()
+func (dm *dataManager) processASNRequests() {
+	graph := dm.enum.Graph
+	uuid := dm.enum.Config.UUID.String()
 loop:
-	for i := 0; i < 10; i++ {
+	for {
 		select {
-		case <-ctx.Done():
-			return nil
-		case <-t.C:
-			if r := dm.enum.Sys.Cache().AddrSearch(req.Address); r != nil {
-				err = graph.UpsertInfrastructure(r.ASN, r.Description, r.Address, r.Prefix, r.Source, uuid)
-				found = true
-				break loop
+		case <-dm.enum.ctx.Done():
+			break loop
+		case <-dm.enum.done:
+			break loop
+		case <-dm.queue.Signal():
+			e, found := dm.queue.Next()
+			if !found {
+				continue loop
 			}
+
+			qar, ok := e.(*queuedAddrRequest)
+			if !ok {
+				continue loop
+			}
+			req := qar.Req
+			tp := qar.Tp
+
+			if r := dm.enum.Sys.Cache().AddrSearch(req.Address); r != nil {
+				_ = graph.UpsertInfrastructure(r.ASN, r.Description, req.Address, r.Prefix, r.Source, uuid)
+				tp.ProcessedData() <- req
+				continue loop
+			}
+
+			for _, src := range dm.enum.srcs {
+				src.Request(dm.enum.ctx, &requests.ASNRequest{Address: req.Address})
+			}
+			time.Sleep(10 * time.Second)
+
+			if r := dm.enum.Sys.Cache().AddrSearch(req.Address); r != nil {
+				_ = graph.UpsertInfrastructure(r.ASN, r.Description, req.Address, r.Prefix, r.Source, uuid)
+				tp.ProcessedData() <- req
+				continue loop
+			}
+
+			asn := 0
+			desc := "Unknown"
+			prefix := fakePrefix(req.Address)
+			_ = graph.UpsertInfrastructure(asn, desc, req.Address, prefix, "RIR", uuid)
+
+			first, cidr, err := net.ParseCIDR(prefix)
+			if err != nil {
+				tp.ProcessedData() <- req
+				continue loop
+			}
+			if ones, _ := cidr.Mask.Size(); ones == 0 {
+				tp.ProcessedData() <- req
+				continue loop
+			}
+
+			dm.enum.Sys.Cache().Update(&requests.ASNRequest{
+				Address:     first.String(),
+				ASN:         asn,
+				Prefix:      cidr.String(),
+				Description: desc,
+				Tag:         requests.RIR,
+				Source:      "RIR",
+			})
+			tp.ProcessedData() <- req
 		}
 	}
 
-	if !found {
-		err = graph.UpsertInfrastructure(0, "Unknown", req.Address, fakePrefix(req.Address), "RIR", uuid)
-	}
+	// Empty the queue
+	dm.queue.Process(func(e interface{}) {
+		e, found := dm.queue.Next()
+		if !found {
+			return
+		}
 
-	return err
+		qar, ok := e.(*queuedAddrRequest)
+		if !ok {
+			return
+		}
+		qar.Tp.ProcessedData() <- qar.Req
+	})
 }
 
 func fakePrefix(addr string) string {

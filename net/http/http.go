@@ -138,6 +138,12 @@ func RequestWebPage(ctx context.Context, u string, body io.Reader, hvals map[str
 
 // Crawl will spider the web page at the URL argument looking for DNS names within the scope argument.
 func Crawl(ctx context.Context, u string, scope []string, max int, f filter.Filter) ([]string, error) {
+	select {
+	case <-ctx.Done():
+		return nil, fmt.Errorf("The context expired")
+	default:
+	}
+
 	newScope := append([]string{}, scope...)
 
 	target := subRE.FindString(u)
@@ -287,6 +293,12 @@ func PullCertificateNames(ctx context.Context, addr string, ports []int) []strin
 
 	// Check hosts for certificates that contain subdomain names
 	for _, port := range ports {
+		select {
+		case <-ctx.Done():
+			return names
+		default:
+		}
+
 		// Set the maximum time allowed for making the connection
 		tCtx, cancel := context.WithTimeout(ctx, handshakeTimeout)
 		defer cancel()

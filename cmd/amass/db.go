@@ -10,11 +10,15 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net"
 	"os"
+	"strconv"
 
 	"github.com/OWASP/Amass/v3/config"
+	"github.com/OWASP/Amass/v3/datasrcs"
 	"github.com/OWASP/Amass/v3/format"
 	"github.com/OWASP/Amass/v3/requests"
+	"github.com/OWASP/Amass/v3/systems"
 	"github.com/caffix/netmap"
 	"github.com/caffix/stringset"
 	"github.com/fatih/color"
@@ -121,6 +125,12 @@ func runDBCommand(clArgs []string) {
 		os.Exit(1)
 	}
 
+	srcs := datasrcs.GetAllSources(&systems.LocalSystem{Cfg: cfg})
+	initializeSourceTags(srcs)
+	for _, src := range srcs {
+		_ = src.Stop()
+	}
+
 	db := openGraphDatabase(args.Filepaths.Directory, cfg)
 	if db == nil {
 		r.Fprintln(color.Error, "Failed to connect with the database")
@@ -218,9 +228,10 @@ func showEventData(args *dbArgs, uuids []string, asninfo bool, db *netmap.Graph)
 	var cache *requests.ASNCache
 	if asninfo {
 		cache = requests.NewASNCache()
-		/*if err := db.ASNCacheFill(cache); err != nil {
+		if err := fillCache(cache, db); err != nil {
+			r.Println("Failed to populate the ASN cache")
 			return
-		}*/
+		}
 	}
 
 	tags := make(map[string]int)
@@ -346,4 +357,44 @@ func writeJSON(args *dbArgs, uuids []string, assets []*requests.Output, db *netm
 	_ = json.NewEncoder(jsonptr).Encode(output)
 	_ = jsonptr.Sync()
 	_ = jsonptr.Close()
+}
+
+func fillCache(cache *requests.ASNCache, db *netmap.Graph) error {
+	aslist, err := db.AllNodesOfType(netmap.TypeAS)
+	if err != nil {
+		return err
+	}
+
+	for _, as := range aslist {
+		asn, err := strconv.Atoi(as.(string))
+		if err != nil {
+			continue
+		}
+
+		desc := db.ReadASDescription(asn)
+		if desc == "" {
+			continue
+		}
+
+		for _, prefix := range db.ReadASPrefixes(asn) {
+			first, cidr, err := net.ParseCIDR(prefix)
+			if err != nil {
+				continue
+			}
+			if ones, _ := cidr.Mask.Size(); ones == 0 {
+				continue
+			}
+
+			cache.Update(&requests.ASNRequest{
+				Address:     first.String(),
+				ASN:         asn,
+				Prefix:      cidr.String(),
+				Description: desc,
+				Tag:         requests.RIR,
+				Source:      "RIR",
+			})
+		}
+	}
+
+	return nil
 }

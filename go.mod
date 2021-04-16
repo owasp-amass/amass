@@ -6,10 +6,10 @@ require (
 	github.com/AndreasBriese/bbloom v0.0.0-20190825152654-46b345b51c96
 	github.com/PuerkitoBio/goquery v1.6.0
 	github.com/caffix/eventbus v0.0.0-20210301213705-9ab42753d12d
-	github.com/caffix/netmap v0.0.0-20210407042802-5d7b85fde85f
-	github.com/caffix/pipeline v0.0.0-20210301171240-503915daec5b
+	github.com/caffix/netmap v0.0.0-20210412003155-5aec13909475
+	github.com/caffix/pipeline v0.0.0-20210415183235-cd7a519dd0e6
 	github.com/caffix/queue v0.0.0-20210301212750-6e488abe1004
-	github.com/caffix/resolve v0.0.0-20210409001910-aa18dc6b2233
+	github.com/caffix/resolve v0.0.0-20210410021921-f3697cc77395
 	github.com/caffix/service v0.0.0-20210321183606-3819810293b0
 	github.com/caffix/stringset v0.0.0-20210320213318-a00bc23f59bc
 	github.com/cayleygraph/quad v1.2.4
@@ -24,7 +24,7 @@ require (
 	github.com/rakyll/statik v0.1.7
 	github.com/yl2chen/cidranger v1.0.2
 	github.com/yuin/gopher-lua v0.0.0-20200816102855-ee81675732da
-	golang.org/x/net v0.0.0-20210405180319-a5a99cb37ef4
+	golang.org/x/net v0.0.0-20210410081132-afb366fc7cd1
 	golang.org/x/oauth2 v0.0.0-20201208152858-08078c50e5b5
 	golang.org/x/term v0.0.0-20210406210042-72f3dc4e9b72 // indirect
 	gopkg.in/ini.v1 v1.62.0 // indirect
