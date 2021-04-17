@@ -184,10 +184,9 @@ func newSubdomainTask(e *Enumeration) *subdomainTask {
 }
 
 // Stop releases resources allocated by the instance.
-func (r *subdomainTask) Stop() error {
+func (r *subdomainTask) Stop() {
 	close(r.done)
 	r.queue.Process(func(e interface{}) {})
-	return nil
 }
 
 // Process implements the pipeline Task interface.

@@ -4,54 +4,12 @@
 package enum
 
 import (
-	"net"
-	"strconv"
 	"time"
 
 	"github.com/OWASP/Amass/v3/filter"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/caffix/netmap"
 )
-
-func fillCache(cache *requests.ASNCache, db *netmap.Graph) error {
-	aslist, err := db.AllNodesOfType(netmap.TypeAS)
-	if err != nil {
-		return err
-	}
-
-	for _, as := range aslist {
-		asn, err := strconv.Atoi(as.(string))
-		if err != nil {
-			continue
-		}
-
-		desc := db.ReadASDescription(asn)
-		if desc == "" {
-			continue
-		}
-
-		for _, prefix := range db.ReadASPrefixes(asn) {
-			first, cidr, err := net.ParseCIDR(prefix)
-			if err != nil {
-				continue
-			}
-			if ones, _ := cidr.Mask.Size(); ones == 0 {
-				continue
-			}
-
-			cache.Update(&requests.ASNRequest{
-				Address:     first.String(),
-				ASN:         asn,
-				Prefix:      cidr.String(),
-				Description: desc,
-				Tag:         requests.RIR,
-				Source:      "RIR",
-			})
-		}
-	}
-
-	return nil
-}
 
 func (e *Enumeration) submitKnownNames() {
 	filter := filter.NewStringFilter()

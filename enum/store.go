@@ -508,16 +508,9 @@ loop:
 
 	// Empty the queue
 	dm.queue.Process(func(e interface{}) {
-		e, found := dm.queue.Next()
-		if !found {
-			return
+		if q, ok := e.(*queuedAddrRequest); ok {
+			q.Tp.ProcessedData() <- q.Req
 		}
-
-		qar, ok := e.(*queuedAddrRequest)
-		if !ok {
-			return
-		}
-		qar.Tp.ProcessedData() <- qar.Req
 	})
 }
 

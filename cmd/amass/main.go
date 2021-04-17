@@ -23,7 +23,6 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -41,7 +40,6 @@ import (
 	amassnet "github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/systems"
-	"github.com/caffix/eventbus"
 	"github.com/caffix/netmap"
 	"github.com/caffix/service"
 	"github.com/fatih/color"
@@ -354,61 +352,6 @@ func domainNameInScope(name string, scope []string) bool {
 	}
 
 	return discovered
-}
-
-func healASInfo(uuids []string, db *netmap.Graph) bool {
-	cfg := config.NewConfig()
-	cfg.LocalDatabase = false
-
-	srcs := datasrcs.GetAllSources(&systems.LocalSystem{Cfg: cfg})
-	defer func() {
-		for _, src := range srcs {
-			_ = src.Stop()
-		}
-	}()
-
-	cache := requests.NewASNCache()
-	if err := fillCache(cache, db); err != nil {
-		r.Println("Failed to populate the ASN cache")
-		return false
-	}
-
-	bus := eventbus.NewEventBus()
-	bus.Subscribe(requests.NewASNTopic, cache.Update)
-	defer bus.Unsubscribe(requests.NewASNTopic, cache.Update)
-	ctx := context.WithValue(context.Background(), requests.ContextConfig, cfg)
-	ctx = context.WithValue(ctx, requests.ContextEventBus, bus)
-
-	var updated bool
-	for _, uuid := range uuids {
-		for _, out := range EventOutput(db, uuid, nil, false, cache) {
-			for _, a := range out.Addresses {
-				if r := cache.AddrSearch(a.Address.String()); r != nil {
-					_ = db.UpsertInfrastructure(r.ASN, r.Description, r.Address, r.Prefix, r.Source, uuid)
-					updated = true
-					continue
-				}
-
-				for _, src := range srcs {
-					src.Request(ctx, &requests.ASNRequest{Address: a.Address.String()})
-				}
-
-				for i := 0; i < 10; i++ {
-					if cache.AddrSearch(a.Address.String()) != nil {
-						break
-					}
-					time.Sleep(time.Second)
-				}
-
-				if r := cache.AddrSearch(a.Address.String()); r != nil {
-					_ = db.UpsertInfrastructure(r.ASN, r.Description, r.Address, r.Prefix, r.Source, uuid)
-					updated = true
-				}
-			}
-		}
-	}
-
-	return updated
 }
 
 func assignNetInterface(iface *net.Interface) error {
