@@ -131,10 +131,6 @@ func (a *activeTask) crawlName(ctx context.Context, req *requests.DNSRequest, tp
 		return
 	}
 
-	// Hold the pipeline during slow activities
-	tp.NewData() <- req
-	defer func() { tp.ProcessedData() <- req }()
-
 	cfg := a.enum.Config
 	var protocol string
 	for _, port := range cfg.Ports {
@@ -180,10 +176,6 @@ func (a *activeTask) certEnumeration(ctx context.Context, req *requests.AddrRequ
 		return
 	}
 
-	// Hold the pipeline during slow activities
-	tp.NewData() <- req
-	defer func() { tp.ProcessedData() <- req }()
-
 	for _, name := range http.PullCertificateNames(ctx, req.Address, a.enum.Config.Ports) {
 		select {
 		case <-ctx.Done():
@@ -216,10 +208,6 @@ func (a *activeTask) zoneTransfer(ctx context.Context, req *requests.ZoneXFRRequ
 		return
 	}
 
-	// Hold the pipeline during slow activities
-	tp.NewData() <- req
-	defer func() { tp.ProcessedData() <- req }()
-
 	addr, err := a.nameserverAddr(ctx, req.Server)
 	if addr == "" {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("DNS: Zone XFR failed: %v", err))
@@ -245,10 +233,6 @@ func (a *activeTask) zoneWalk(ctx context.Context, req *requests.ZoneXFRRequest,
 	if err != nil {
 		return
 	}
-
-	// Hold the pipeline during slow activities
-	tp.NewData() <- req
-	defer func() { tp.ProcessedData() <- req }()
 
 	addr, err := a.nameserverAddr(ctx, req.Server)
 	if addr == "" {

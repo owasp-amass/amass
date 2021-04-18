@@ -7,7 +7,7 @@ require (
 	github.com/PuerkitoBio/goquery v1.6.0
 	github.com/caffix/eventbus v0.0.0-20210301213705-9ab42753d12d
 	github.com/caffix/netmap v0.0.0-20210412003155-5aec13909475
-	github.com/caffix/pipeline v0.0.0-20210415183235-cd7a519dd0e6
+	github.com/caffix/pipeline v0.0.0-20210418164919-d5f7558afa54
 	github.com/caffix/queue v0.0.0-20210301212750-6e488abe1004
 	github.com/caffix/resolve v0.0.0-20210410021921-f3697cc77395
 	github.com/caffix/service v0.0.0-20210321183606-3819810293b0

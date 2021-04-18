@@ -146,7 +146,7 @@ func (dm *dataManager) insertCNAME(ctx context.Context, req *requests.DNSRequest
 	}
 
 	// Important - Allows chained CNAME records to be resolved until an A/AAAA record
-	pipeline.SendData(ctx, "new", &requests.DNSRequest{
+	dm.enum.nameSrc.pipelineData(ctx, &requests.DNSRequest{
 		Name:   target,
 		Domain: domain,
 		Tag:    requests.DNS,
@@ -170,7 +170,7 @@ func (dm *dataManager) insertA(ctx context.Context, req *requests.DNSRequest, re
 		return fmt.Errorf("%s failed to insert A record: %v", dm.enum.Graph, err)
 	}
 
-	pipeline.SendData(ctx, "new", &requests.AddrRequest{
+	dm.enum.nameSrc.pipelineData(ctx, &requests.AddrRequest{
 		Address: addr,
 		InScope: true,
 		Domain:  req.Domain,
@@ -195,7 +195,7 @@ func (dm *dataManager) insertAAAA(ctx context.Context, req *requests.DNSRequest,
 		return fmt.Errorf("%s failed to insert AAAA record: %v", dm.enum.Graph, err)
 	}
 
-	pipeline.SendData(ctx, "new", &requests.AddrRequest{
+	dm.enum.nameSrc.pipelineData(ctx, &requests.AddrRequest{
 		Address: addr,
 		InScope: true,
 		Domain:  req.Domain,
@@ -227,7 +227,7 @@ func (dm *dataManager) insertPTR(ctx context.Context, req *requests.DNSRequest, 
 	}
 
 	// Important - Allows the target DNS name to be resolved in the forward direction
-	pipeline.SendData(ctx, "new", &requests.DNSRequest{
+	dm.enum.nameSrc.pipelineData(ctx, &requests.DNSRequest{
 		Name:   target,
 		Domain: domain,
 		Tag:    requests.DNS,
@@ -253,7 +253,7 @@ func (dm *dataManager) insertSRV(ctx context.Context, req *requests.DNSRequest, 
 	}
 
 	if domain := cfg.WhichDomain(target); domain != "" {
-		pipeline.SendData(ctx, "new", &requests.DNSRequest{
+		dm.enum.nameSrc.pipelineData(ctx, &requests.DNSRequest{
 			Name:   target,
 			Domain: domain,
 			Tag:    requests.DNS,
@@ -289,7 +289,7 @@ func (dm *dataManager) insertNS(ctx context.Context, req *requests.DNSRequest, r
 	}
 
 	if target != domain {
-		pipeline.SendData(ctx, "new", &requests.DNSRequest{
+		dm.enum.nameSrc.pipelineData(ctx, &requests.DNSRequest{
 			Name:   target,
 			Domain: domain,
 			Tag:    requests.DNS,
@@ -325,7 +325,7 @@ func (dm *dataManager) insertMX(ctx context.Context, req *requests.DNSRequest, r
 	}
 
 	if target != domain {
-		pipeline.SendData(ctx, "new", &requests.DNSRequest{
+		dm.enum.nameSrc.pipelineData(ctx, &requests.DNSRequest{
 			Name:   target,
 			Domain: domain,
 			Tag:    requests.DNS,
@@ -380,7 +380,7 @@ func (dm *dataManager) insertSPF(ctx context.Context, req *requests.DNSRequest, 
 func (dm *dataManager) findNamesAndAddresses(ctx context.Context, data, domain string, tp pipeline.TaskParams) {
 	ipre := regexp.MustCompile(amassnet.IPv4RE)
 	for _, ip := range ipre.FindAllString(data, -1) {
-		pipeline.SendData(ctx, "new", &requests.AddrRequest{
+		dm.enum.nameSrc.pipelineData(ctx, &requests.AddrRequest{
 			Address: ip,
 			Domain:  domain,
 			Tag:     requests.DNS,
@@ -395,7 +395,7 @@ func (dm *dataManager) findNamesAndAddresses(ctx context.Context, data, domain s
 			continue
 		}
 
-		pipeline.SendData(ctx, "new", &requests.DNSRequest{
+		dm.enum.nameSrc.pipelineData(ctx, &requests.DNSRequest{
 			Name:   name,
 			Domain: domain,
 			Tag:    requests.DNS,
@@ -430,8 +430,6 @@ func (dm *dataManager) addrRequest(ctx context.Context, req *requests.AddrReques
 		return graph.UpsertInfrastructure(r.ASN, r.Description, req.Address, r.Prefix, r.Source, uuid)
 	}
 
-	// Hold the pipeline during slow activities
-	tp.NewData() <- req
 	dm.queue.Append(&queuedAddrRequest{
 		Req: req,
 		Tp:  tp,
@@ -460,11 +458,9 @@ loop:
 				continue loop
 			}
 			req := qar.Req
-			tp := qar.Tp
 
 			if r := dm.enum.Sys.Cache().AddrSearch(req.Address); r != nil {
 				_ = graph.UpsertInfrastructure(r.ASN, r.Description, req.Address, r.Prefix, r.Source, uuid)
-				tp.ProcessedData() <- req
 				continue loop
 			}
 
@@ -475,7 +471,6 @@ loop:
 
 			if r := dm.enum.Sys.Cache().AddrSearch(req.Address); r != nil {
 				_ = graph.UpsertInfrastructure(r.ASN, r.Description, req.Address, r.Prefix, r.Source, uuid)
-				tp.ProcessedData() <- req
 				continue loop
 			}
 
@@ -486,11 +481,9 @@ loop:
 
 			first, cidr, err := net.ParseCIDR(prefix)
 			if err != nil {
-				tp.ProcessedData() <- req
 				continue loop
 			}
 			if ones, _ := cidr.Mask.Size(); ones == 0 {
-				tp.ProcessedData() <- req
 				continue loop
 			}
 
@@ -502,16 +495,11 @@ loop:
 				Tag:         requests.RIR,
 				Source:      "RIR",
 			})
-			tp.ProcessedData() <- req
 		}
 	}
 
 	// Empty the queue
-	dm.queue.Process(func(e interface{}) {
-		if q, ok := e.(*queuedAddrRequest); ok {
-			q.Tp.ProcessedData() <- q.Req
-		}
-	})
+	dm.queue.Process(func(e interface{}) {})
 }
 
 func fakePrefix(addr string) string {

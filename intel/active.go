@@ -116,10 +116,6 @@ func (a *activeTask) certEnumeration(ctx context.Context, req *requests.AddrRequ
 		return
 	}
 
-	// Hold the pipeline during slow activities
-	tp.NewData() <- req
-	defer func() { tp.ProcessedData() <- req }()
-
 	c := a.c
 	addrinfo := requests.AddressInfo{Address: ip}
 	for _, name := range http.PullCertificateNames(ctx, req.Address, c.Config.Ports) {

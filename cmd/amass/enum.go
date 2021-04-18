@@ -214,9 +214,6 @@ func runEnumCommand(clArgs []string) {
 	go saveJSONOutput(e, args, jsonOutChan, &wg)
 	outChans = append(outChans, jsonOutChan)
 
-	wg.Add(1)
-	go processOutput(e, outChans, done, &wg)
-
 	var ctx context.Context
 	var cancel context.CancelFunc
 	if args.Timeout == 0 {
@@ -225,6 +222,9 @@ func runEnumCommand(clArgs []string) {
 		ctx, cancel = context.WithTimeout(context.Background(), time.Duration(args.Timeout)*time.Minute)
 	}
 	defer cancel()
+
+	wg.Add(1)
+	go processOutput(ctx, e, outChans, done, &wg)
 
 	// Monitor for cancellation by the user
 	go func() {
@@ -244,7 +244,7 @@ func runEnumCommand(clArgs []string) {
 		r.Println(err)
 		os.Exit(1)
 	}
-	// Let all the goroutines know that the enumeration has finished
+	// Let all the output goroutines know that the enumeration has finished
 	close(done)
 	wg.Wait()
 
@@ -492,8 +492,14 @@ func saveJSONOutput(e *enum.Enumeration, args *enumArgs, output chan *requests.O
 	}
 }
 
-func processOutput(e *enum.Enumeration, outputs []chan *requests.Output, done chan struct{}, wg *sync.WaitGroup) {
+func processOutput(ctx context.Context, e *enum.Enumeration, outputs []chan *requests.Output, done chan struct{}, wg *sync.WaitGroup) {
 	defer wg.Done()
+	defer func() {
+		// Signal all the other output goroutines to terminate
+		for _, ch := range outputs {
+			close(ch)
+		}
+	}()
 
 	// This filter ensures that we only get new names
 	known := filter.NewBloomFilter(1 << 22)
@@ -512,21 +518,17 @@ func processOutput(e *enum.Enumeration, outputs []chan *requests.Output, done ch
 
 	t := time.NewTicker(15 * time.Second)
 	defer t.Stop()
-loop:
 	for {
 		select {
+		case <-ctx.Done():
+			return
 		case <-done:
-			break loop
+			// Check one last time
+			extract()
+			return
 		case <-t.C:
 			extract()
 		}
-	}
-
-	// Check one last time
-	extract()
-	// Signal all the other goroutines to terminate
-	for _, ch := range outputs {
-		close(ch)
 	}
 }
 

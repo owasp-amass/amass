@@ -86,18 +86,11 @@ func (e *Enumeration) Start(ctx context.Context) error {
 	max := e.Config.MaxDNSQueries
 	// The pipeline input source will receive all the names
 	e.nameSrc = newEnumSource(e, max)
-	defer e.nameSrc.Stop()
 	e.startupAndCleanup(ctx)
 	defer e.stop()
 
 	var stages []pipeline.Stage
 	if !e.Config.Passive {
-		ntask := newFQDNFilter(e)
-		defer ntask.Stop()
-		atask := newAddressTask(e)
-		defer atask.Stop()
-		// Task that performs initial filtering for new FQDNs and IP addresses
-		stages = append(stages, pipeline.FixedPool("new", e.makeNewDataTaskFunc(ntask, atask), 50))
 		stages = append(stages, pipeline.FixedPool("", e.dnsTask.makeBlacklistTaskFunc(), 50))
 		// Task that performs DNS queries for root domain names
 		stages = append(stages, pipeline.DynamicPool("root", e.dnsTask.makeRootTaskFunc(), max))
@@ -135,10 +128,10 @@ func (e *Enumeration) startupAndCleanup(ctx context.Context) {
 	 * These events are important to the engine in order to receive data,
 	 * logs, and notices about discoveries made during the enumeration
 	 */
-	e.Bus.Subscribe(requests.NewNameTopic, e.nameSrc.InputName)
+	e.Bus.Subscribe(requests.NewNameTopic, e.nameSrc.dataSourceName)
 	e.Bus.Subscribe(requests.LogTopic, e.queueLog)
 	if !e.Config.Passive {
-		e.Bus.Subscribe(requests.NewAddrTopic, e.nameSrc.InputAddress)
+		e.Bus.Subscribe(requests.NewAddrTopic, e.nameSrc.dataSourceAddr)
 		e.Bus.Subscribe(requests.NewASNTopic, e.Sys.Cache().Update)
 	}
 
@@ -147,12 +140,13 @@ func (e *Enumeration) startupAndCleanup(ctx context.Context) {
 
 	go func() {
 		<-e.done
-		e.Bus.Unsubscribe(requests.NewNameTopic, e.nameSrc.InputName)
+		e.Bus.Unsubscribe(requests.NewNameTopic, e.nameSrc.dataSourceName)
 		e.Bus.Unsubscribe(requests.LogTopic, e.queueLog)
 
 		if !e.Config.Passive {
-			e.Bus.Unsubscribe(requests.NewAddrTopic, e.nameSrc.InputAddress)
+			e.Bus.Unsubscribe(requests.NewAddrTopic, e.nameSrc.dataSourceAddr)
 			e.Bus.Unsubscribe(requests.NewASNTopic, e.Sys.Cache().Update)
+			e.nameSrc.Stop()
 			e.subTask.Stop()
 		}
 
@@ -161,16 +155,9 @@ func (e *Enumeration) startupAndCleanup(ctx context.Context) {
 }
 
 // This context, used throughout the enumeration, will provide the ability to cancel operations
-// and to pass the configuration and event bus to all the components. If a timeout was provided
-// in the configuration, it will go off that many minutes from this point in the enumeration
-// process and terminate the pipeline.
-func (e *Enumeration) setupContext(ctx context.Context) context.Context {
-	var cancel context.CancelFunc
-
-	ctx, cancel = context.WithCancel(ctx)
-	ctx = context.WithValue(ctx, requests.ContextConfig, e.Config)
-	ctx = context.WithValue(ctx, requests.ContextEventBus, e.Bus)
-	e.ctx = ctx
+// and to pass the configuration and event bus to all the components.
+func (e *Enumeration) setupContext(ctx context.Context) {
+	newctx, cancel := context.WithCancel(ctx)
 
 	// Monitor for termination of the enumeration
 	go func() {
@@ -178,7 +165,9 @@ func (e *Enumeration) setupContext(ctx context.Context) context.Context {
 		cancel()
 	}()
 
-	return ctx
+	newctx = context.WithValue(newctx, requests.ContextConfig, e.Config)
+	newctx = context.WithValue(newctx, requests.ContextEventBus, e.Bus)
+	e.ctx = newctx
 }
 
 // Release the root domain names to the input source and each data source.
@@ -191,7 +180,7 @@ func (e *Enumeration) submitDomainNames() {
 			Source: "DNS",
 		}
 
-		e.nameSrc.InputName(req)
+		e.nameSrc.dataSourceName(req)
 		for _, src := range e.srcs {
 			src.Request(e.ctx, req.Clone().(*requests.DNSRequest))
 		}
@@ -227,30 +216,6 @@ func (e *Enumeration) makeOutputSink() pipeline.SinkFunc {
 			}
 		}
 		return nil
-	})
-}
-
-func (e *Enumeration) makeNewDataTaskFunc(fqdn *fqdnFilter, addrs *addrTask) pipeline.TaskFunc {
-	return pipeline.TaskFunc(func(ctx context.Context, data pipeline.Data, tp pipeline.TaskParams) (pipeline.Data, error) {
-		select {
-		case <-ctx.Done():
-			return nil, nil
-		default:
-		}
-
-		switch v := data.(type) {
-		case *requests.DNSRequest:
-			if v != nil && v.Valid() {
-				return fqdn.Process(ctx, data, tp)
-			}
-			return nil, nil
-		case *requests.AddrRequest:
-			if v != nil && v.Valid() {
-				return addrs.Process(ctx, data, tp)
-			}
-			return nil, nil
-		}
-		return data, nil
 	})
 }
 

@@ -99,9 +99,6 @@ func (dt *dNSTask) makeRootTaskFunc() pipeline.TaskFunc {
 			return data, nil
 		}
 
-		tp.NewData() <- r
-		defer func() { tp.ProcessedData() <- r }()
-
 		dt.subdomainQueries(ctx, r, tp)
 		dt.queryServiceNames(ctx, r, tp)
 		return data, nil

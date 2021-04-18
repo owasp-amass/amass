@@ -37,7 +37,7 @@ func (e *Enumeration) submitKnownNames() {
 						src := srcs[0]
 						tag := srcTags[src]
 
-						e.nameSrc.InputName(&requests.DNSRequest{
+						e.nameSrc.dataSourceName(&requests.DNSRequest{
 							Name:   name,
 							Domain: domain,
 							Tag:    tag,
@@ -53,7 +53,7 @@ func (e *Enumeration) submitKnownNames() {
 func (e *Enumeration) submitProvidedNames() {
 	for _, name := range e.Config.ProvidedNames {
 		if domain := e.Config.WhichDomain(name); domain != "" {
-			e.nameSrc.InputName(&requests.DNSRequest{
+			e.nameSrc.dataSourceName(&requests.DNSRequest{
 				Name:   name,
 				Domain: domain,
 				Tag:    requests.EXTERNAL,
