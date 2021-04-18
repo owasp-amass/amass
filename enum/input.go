@@ -143,11 +143,7 @@ func (r *enumSource) newAddr(ctx context.Context, req *requests.AddrRequest, tp 
 	// Does the address fall into a reserved address range?
 	if yes, _ := amassnet.IsReservedAddress(req.Address); !yes {
 		// Queue the request for later use in reverse DNS sweeps
-		r.sweeps.Append(&aRequest{
-			Ctx: ctx,
-			Req: req,
-			Tp:  tp,
-		})
+		r.sweeps.Append(req)
 	}
 }
 
@@ -278,14 +274,14 @@ func (r *enumSource) checkForData() {
 			return
 		case <-t.C:
 			if needed := required - r.queue.Len(); needed > 0 {
-				num := 1
+				if gen := r.requestSweeps(needed); needed-gen > 0 {
+					num := 1
 
-				if n := needed / worth; n > num {
-					num = n
+					if n := needed / worth; n > num {
+						num = n
+					}
+					r.enum.subTask.OutputRequests(num)
 				}
-
-				r.enum.subTask.OutputRequests(num)
-				r.requestSweeps(needed)
 			}
 		}
 	}
@@ -358,12 +354,6 @@ loop:
 	}
 }
 
-type aRequest struct {
-	Ctx context.Context
-	Req *requests.AddrRequest
-	Tp  pipeline.TaskParams
-}
-
 func (r *enumSource) requestSweeps(num int) int {
 	var count int
 
@@ -373,16 +363,16 @@ func (r *enumSource) requestSweeps(num int) int {
 			break
 		}
 
-		if q, good := e.(*aRequest); good {
+		if a, good := e.(*requests.AddrRequest); good {
 			// Generate the additional addresses to sweep across
-			count += r.sweepAddrs(q.Ctx, q.Req, q.Tp)
+			count += r.sweepAddrs(r.enum.ctx, a)
 		}
 	}
 
 	return count
 }
 
-func (r *enumSource) sweepAddrs(ctx context.Context, req *requests.AddrRequest, tp pipeline.TaskParams) int {
+func (r *enumSource) sweepAddrs(ctx context.Context, req *requests.AddrRequest) int {
 	size := defaultSweepSize
 	if r.enum.Config.Active {
 		size = activeSweepSize
