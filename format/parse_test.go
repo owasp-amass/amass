@@ -267,3 +267,52 @@ func TestParseCIDRs(t *testing.T) {
 		t.Run(c.label, f)
 	}
 }
+
+func TestParseASNs(t *testing.T) {
+	cases := []struct {
+		label string
+		input string
+		ok    bool
+		want  string
+	}{
+		{
+			label: "empty",
+			input: "",
+		}, {
+			label: "valid ASNs with and without AS prefix",
+			input: "AS1234,AS4567,7777",
+			ok:    true,
+			want:  "1234,4567,7777",
+		}, {
+			label: "invalid ASN",
+			input: "AS1234,4567,ASABC",
+		}, {
+			label: "whitespace",
+			input: "\tAS1234 , 4567 ",
+			ok:    true,
+			want:  "1234,4567",
+		}, {
+			label: "extraneous comma",
+			input: "AS1234,",
+		},
+	}
+	for _, c := range cases {
+		f := func(t *testing.T) {
+			var asns ParseASNs
+			err := asns.Set(c.input)
+			if err != nil && c.ok {
+				t.Errorf("got %v; want <nil>", err)
+			}
+			if err == nil && !c.ok {
+				t.Error("got <nil>; want some error")
+			}
+			if err == nil && c.ok {
+				got := asns.String()
+				if got != c.want {
+					t.Errorf("got %q; want %q", got, c.want)
+				}
+			}
+		}
+		t.Run(c.label, f)
+	}
+}

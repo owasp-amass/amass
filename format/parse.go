@@ -25,6 +25,9 @@ type ParseIPs []net.IP
 // ParseCIDRs implements the flag.Value interface.
 type ParseCIDRs []*net.IPNet
 
+// ParseASNs implements the flag.Value interface.
+type ParseASNs []int
+
 func (p *ParseStrings) String() string {
 	if p == nil {
 		return ""
@@ -168,6 +171,37 @@ func (p *ParseCIDRs) Set(s string) error {
 		}
 
 		*p = append(*p, ipnet)
+	}
+	return nil
+}
+
+func (p *ParseASNs) String() string {
+	if p == nil {
+		return ""
+	}
+	var builder strings.Builder
+	for i, n := range *p {
+		if i > 0 {
+			builder.WriteRune(',')
+		}
+		builder.WriteString(strconv.Itoa(n))
+	}
+	return builder.String()
+}
+
+// Set implements the flag.Value interface.
+func (p *ParseASNs) Set(s string) error {
+	if s == "" {
+		return fmt.Errorf("ASN parsing failed")
+	}
+
+	asns := strings.Split(s, ",")
+	for _, asn := range asns {
+		i, err := strconv.Atoi(strings.TrimPrefix(strings.TrimSpace(asn), "AS"))
+		if err != nil {
+			return err
+		}
+		*p = append(*p, i)
 	}
 	return nil
 }
