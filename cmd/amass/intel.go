@@ -33,7 +33,7 @@ const (
 
 type intelArgs struct {
 	Addresses        format.ParseIPs
-	ASNs             format.ParseInts
+	ASNs             format.ParseASNs
 	CIDRs            format.ParseCIDRs
 	OrganizationName string
 	Domains          stringset.Set
