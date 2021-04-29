@@ -99,7 +99,7 @@ $ amass intel -org 'Example Ltd'
 222222, SECONDARY_PRODUCT - Example Ltd
 [...]
 
-Please note that the above data is fictious for demonstration purposes. Retrieved ASN IDs could then be fed back into Amass. The below command attempts to retrieve parent domains on the specified ASN ID and return them along with the IP address they resolve to (127.0.0.1 in this case for demonstration purposes):
+Please note that the above data is fictitious for demonstration purposes. Retrieved ASN IDs could then be fed back into Amass. The below command attempts to retrieve parent domains on the specified ASN ID and return them along with the IP address they resolve to (127.0.0.1 in this case for demonstration purposes):
 
 $ amass intel -active -asn 222222 -ip
 some-example-ltd-domain.com 127.0.0.1
