@@ -39,12 +39,11 @@ type dnsArgs struct {
 	Resolvers     stringset.Set
 	Timeout       int
 	Options       struct {
-		DemoMode            bool
-		IPs                 bool
-		IPv4                bool
-		IPv6                bool
-		MonitorResolverRate bool
-		Verbose             bool
+		DemoMode bool
+		IPs      bool
+		IPv4     bool
+		IPv6     bool
+		Verbose  bool
 	}
 	Filepaths struct {
 		AllFilePrefix string
@@ -74,7 +73,6 @@ func defineDNSOptionFlags(dnsFlags *flag.FlagSet, args *dnsArgs) {
 	dnsFlags.BoolVar(&args.Options.IPs, "ip", false, "Show the IP addresses for discovered names")
 	dnsFlags.BoolVar(&args.Options.IPv4, "ipv4", false, "Show the IPv4 addresses for discovered names")
 	dnsFlags.BoolVar(&args.Options.IPv6, "ipv6", false, "Show the IPv6 addresses for discovered names")
-	dnsFlags.BoolVar(&args.Options.MonitorResolverRate, "noresolvrate", true, "Disable resolver rate monitoring")
 	dnsFlags.BoolVar(&args.Options.Verbose, "v", false, "Output status / debug / troubleshooting info")
 }
 
@@ -389,9 +387,6 @@ func (d dnsArgs) OverrideConfig(conf *config.Config) error {
 	}
 	if d.MaxDNSQueries > 0 {
 		conf.MaxDNSQueries = d.MaxDNSQueries
-	}
-	if !d.Options.MonitorResolverRate {
-		conf.MonitorResolverRate = false
 	}
 
 	// Attempt to add the provided domains to the configuration

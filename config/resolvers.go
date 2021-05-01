@@ -100,7 +100,6 @@ func (c *Config) loadResolverSettings(cfg *ini.File) error {
 		return errors.New("No resolver keys were found in the resolvers section")
 	}
 
-	c.MonitorResolverRate = sec.Key("monitor_resolver_rate").MustBool(true)
 	return nil
 }
 

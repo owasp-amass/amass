@@ -130,8 +130,7 @@ type Config struct {
 	RecordTypes []string
 
 	// Resolver settings
-	Resolvers           []string
-	MonitorResolverRate bool
+	Resolvers []string
 
 	// Option for verbose logging and output
 	Verbose bool
@@ -149,12 +148,11 @@ type Config struct {
 // NewConfig returns a default configuration object.
 func NewConfig() *Config {
 	c := &Config{
-		UUID:                uuid.New(),
-		Log:                 log.New(ioutil.Discard, "", 0),
-		Ports:               []int{80, 443},
-		MinForRecursive:     1,
-		MonitorResolverRate: true,
-		LocalDatabase:       true,
+		UUID:            uuid.New(),
+		Log:             log.New(ioutil.Discard, "", 0),
+		Ports:           []int{80, 443},
+		MinForRecursive: 1,
+		LocalDatabase:   true,
 		// The following is enum-only, but intel will just ignore them anyway
 		Alterations:    true,
 		FlipWords:      true,

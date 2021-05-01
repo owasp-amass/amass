@@ -44,16 +44,15 @@ type intelArgs struct {
 	Resolvers        stringset.Set
 	Timeout          int
 	Options          struct {
-		Active              bool
-		DemoMode            bool
-		IPs                 bool
-		IPv4                bool
-		IPv6                bool
-		ListSources         bool
-		ReverseWhois        bool
-		Sources             bool
-		MonitorResolverRate bool
-		Verbose             bool
+		Active       bool
+		DemoMode     bool
+		IPs          bool
+		IPv4         bool
+		IPv6         bool
+		ListSources  bool
+		ReverseWhois bool
+		Sources      bool
+		Verbose      bool
 	}
 	Filepaths struct {
 		ConfigFile   string
@@ -88,7 +87,6 @@ func defineIntelOptionFlags(intelFlags *flag.FlagSet, args *intelArgs) {
 	intelFlags.BoolVar(&args.Options.IPv4, "ipv4", false, "Show the IPv4 addresses for discovered names")
 	intelFlags.BoolVar(&args.Options.IPv6, "ipv6", false, "Show the IPv6 addresses for discovered names")
 	intelFlags.BoolVar(&args.Options.ListSources, "list", false, "Print additional information")
-	intelFlags.BoolVar(&args.Options.MonitorResolverRate, "noresolvrate", true, "Disable resolver rate monitoring")
 	intelFlags.BoolVar(&args.Options.ReverseWhois, "whois", false, "All provided domains are run through reverse whois")
 	intelFlags.BoolVar(&args.Options.Sources, "src", false, "Print data sources for the discovered names")
 	intelFlags.BoolVar(&args.Options.Verbose, "v", false, "Output status / debug / troubleshooting info")
@@ -385,9 +383,6 @@ func (i intelArgs) OverrideConfig(conf *config.Config) error {
 	}
 	if i.MaxDNSQueries > 0 {
 		conf.MaxDNSQueries = i.MaxDNSQueries
-	}
-	if !i.Options.MonitorResolverRate {
-		conf.MonitorResolverRate = false
 	}
 
 	if len(i.Included) > 0 {

@@ -80,8 +80,6 @@ The intel subcommand can help you discover additional root domain names associat
 | -list | Print the names of all available data sources | amass intel -list |
 | -log | Path to the log file where errors will be written | amass intel -log amass.log -whois -d example.com |
 | -max-dns-queries | Maximum number of concurrent DNS queries | amass intel -max-dns-queries 200 -whois -d example.com |
-| -noresolvrate | Disable resolver rate monitoring | amass intel -cidr 104.154.0.0/15 -noresolvrate |
-| -noresolvscore | Disable resolver reliability scoring | amass intel -cidr 104.154.0.0/15 -noresolvscore |
 | -o | Path to the text output file | amass intel -o out.txt -whois -d example.com |
 | -org | Search string provided against AS description information | amass intel -org Facebook |
 | -p | Ports separated by commas (default: 80, 443) | amass intel -cidr 104.154.0.0/15 -p 443,8080 |
@@ -123,8 +121,6 @@ This subcommand will perform DNS enumeration and network mapping while populatin
 | -noalts | Disable generation of altered names | amass enum -noalts -d example.com |
 | -nolocaldb | Disable saving data into a local database | amass enum -nolocaldb -d example.com |
 | -norecursive | Turn off recursive brute forcing | amass enum -brute -norecursive -d example.com |
-| -noresolvrate | Disable resolver rate monitoring | amass enum -d example.com -noresolvrate |
-| -noresolvscore | Disable resolver reliability scoring | amass enum -d example.com -noresolvscore |
 | -o | Path to the text output file | amass enum -o out.txt -d example.com |
 | -oA | Path prefix used for naming all output files | amass enum -oA amass_scan -d example.com |
 | -passive | A purely passive mode of execution | amass enum --passive -d example.com |
@@ -250,8 +246,6 @@ Note that these locations are based on the [output directory](#the-output-direct
 | Option | Description |
 |--------|-------------|
 | resolver | The IP address of a DNS resolver and used globally by the amass package |
-| score_resolvers | Toggle resolver reliability scoring |
-| monitor_resolver_rate | Toggle resolver rate monitoring |
 
 ### The blacklisted Section
 

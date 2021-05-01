@@ -57,22 +57,21 @@ type enumArgs struct {
 	Resolvers         stringset.Set
 	Timeout           int
 	Options           struct {
-		Active              bool
-		BruteForcing        bool
-		DemoMode            bool
-		IPs                 bool
-		IPv4                bool
-		IPv6                bool
-		ListSources         bool
-		MonitorResolverRate bool
-		NoAlts              bool
-		NoColor             bool
-		NoLocalDatabase     bool
-		NoRecursive         bool
-		Passive             bool
-		Silent              bool
-		Sources             bool
-		Verbose             bool
+		Active          bool
+		BruteForcing    bool
+		DemoMode        bool
+		IPs             bool
+		IPv4            bool
+		IPv6            bool
+		ListSources     bool
+		NoAlts          bool
+		NoColor         bool
+		NoLocalDatabase bool
+		NoRecursive     bool
+		Passive         bool
+		Silent          bool
+		Sources         bool
+		Verbose         bool
 	}
 	Filepaths struct {
 		AllFilePrefix    string
@@ -119,7 +118,6 @@ func defineEnumOptionFlags(enumFlags *flag.FlagSet, args *enumArgs) {
 	enumFlags.BoolVar(&args.Options.IPv4, "ipv4", false, "Show the IPv4 addresses for discovered names")
 	enumFlags.BoolVar(&args.Options.IPv6, "ipv6", false, "Show the IPv6 addresses for discovered names")
 	enumFlags.BoolVar(&args.Options.ListSources, "list", false, "Print the names of all available data sources")
-	enumFlags.BoolVar(&args.Options.MonitorResolverRate, "noresolvrate", true, "Disable resolver rate monitoring")
 	enumFlags.BoolVar(&args.Options.NoAlts, "noalts", false, "Disable generation of altered names")
 	enumFlags.BoolVar(&args.Options.NoColor, "nocolor", false, "Disable colorized output")
 	enumFlags.BoolVar(&args.Options.NoLocalDatabase, "nolocaldb", false, "Disable saving data into a local database")
@@ -720,9 +718,6 @@ func (e enumArgs) OverrideConfig(conf *config.Config) error {
 	}
 	if e.MaxDNSQueries > 0 {
 		conf.MaxDNSQueries = e.MaxDNSQueries
-	}
-	if !e.Options.MonitorResolverRate {
-		conf.MonitorResolverRate = false
 	}
 
 	if len(e.Included) > 0 {
