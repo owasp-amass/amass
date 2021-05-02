@@ -258,7 +258,7 @@ func (r *enumSource) checkForData() {
 
 	worth := 50 * len(r.enum.Sys.DataSources())
 	if r.enum.Config.Alterations {
-		worth += 1000
+		worth += 500
 	}
 	if r.enum.Config.BruteForcing && r.enum.Config.MinForRecursive == 0 {
 		worth += len(r.enum.Config.Wordlist)
@@ -328,7 +328,7 @@ loop:
 
 			var count int
 			for _, a := range pending {
-				if now.Before(a.Timestamp.Add(10 * time.Minute)) {
+				if now.Before(a.Timestamp.Add(2 * time.Minute)) {
 					break
 				}
 				if _, err := r.enum.Graph.ReadNode(a.Name, "fqdn"); err == nil {

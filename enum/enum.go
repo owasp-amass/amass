@@ -19,6 +19,14 @@ import (
 	"github.com/caffix/service"
 )
 
+const (
+	defaultPipelineTasks   int = 50
+	maxInputSourceBuffer   int = 20000
+	maxRootPipelineTasks   int = 1000
+	maxDnsPipelineTasks    int = 15000
+	maxActivePipelineTasks int = 25
+)
+
 var filterMaxSize int64 = 1 << 23
 
 // Enumeration is the object type used to execute a DNS enumeration.
@@ -83,30 +91,30 @@ func (e *Enumeration) Start(ctx context.Context) error {
 		return err
 	}
 
-	max := e.Config.MaxDNSQueries
 	// The pipeline input source will receive all the names
-	e.nameSrc = newEnumSource(e, max)
+	e.nameSrc = newEnumSource(e, maxInputSourceBuffer)
 	e.startupAndCleanup(ctx)
 	defer e.stop()
 
 	var stages []pipeline.Stage
 	if !e.Config.Passive {
-		stages = append(stages, pipeline.FixedPool("", e.dnsTask.makeBlacklistTaskFunc(), 50))
+		stages = append(stages, pipeline.FixedPool("", e.dnsTask.makeBlacklistTaskFunc(), defaultPipelineTasks))
 		// Task that performs DNS queries for root domain names
-		stages = append(stages, pipeline.DynamicPool("root", e.dnsTask.makeRootTaskFunc(), max))
+		stages = append(stages, pipeline.DynamicPool("root", e.dnsTask.makeRootTaskFunc(), maxRootPipelineTasks))
 		// Add the dynamic pool of DNS resolution tasks
-		stages = append(stages, pipeline.DynamicPool("dns", e.dnsTask, max))
+		stages = append(stages, pipeline.DynamicPool("dns", e.dnsTask, maxDnsPipelineTasks))
 	}
 
 	stages = append(stages, pipeline.FIFO("filter", e.makeFilterTaskFunc()))
 
 	if !e.Config.Passive {
-		stages = append(stages, pipeline.DynamicPool("store", newDataManager(e), 50))
+		stages = append(stages, pipeline.DynamicPool("store", newDataManager(e), defaultPipelineTasks))
 		stages = append(stages, pipeline.FIFO("", e.subTask))
 	}
 	if e.Config.Active {
-		activetask := newActiveTask(e, 25)
+		activetask := newActiveTask(e, maxActivePipelineTasks)
 		defer activetask.Stop()
+
 		stages = append(stages, pipeline.FIFO("active", activetask))
 	}
 
