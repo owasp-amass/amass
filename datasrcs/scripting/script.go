@@ -193,7 +193,10 @@ func (s *Script) OnStart() error {
 		s.sys.Config().Log.Print(fmt.Sprintf("%s: start callback: %v", s.String(), err))
 	}
 
-	s.SetRateLimit(1)
+	if s.seconds > 0 {
+		s.SetRateLimit(1)
+	}
+
 	return s.checkConfig()
 }
 
