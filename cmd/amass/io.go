@@ -6,6 +6,7 @@ package main
 import (
 	"math/rand"
 	"net"
+	"time"
 
 	"github.com/OWASP/Amass/v3/enum"
 	"github.com/OWASP/Amass/v3/filter"
@@ -22,31 +23,32 @@ func init() {
 }
 
 // ExtractOutput is a convenience method for obtaining new discoveries made by the enumeration process.
-func ExtractOutput(e *enum.Enumeration, filter filter.Filter, asinfo bool) []*requests.Output {
+func ExtractOutput(e *enum.Enumeration, filter filter.Filter, asinfo bool, limit int) []*requests.Output {
 	if e.Config.Passive {
 		return EventNames(e.Graph, e.Config.UUID.String(), filter)
 	}
 
-	return EventOutput(e.Graph, e.Config.UUID.String(), filter, asinfo, e.Sys.Cache())
+	return EventOutput(e.Graph, e.Config.UUID.String(), filter, asinfo, e.Sys.Cache(), limit)
 }
 
 type outLookup map[string]*requests.Output
 
 // EventOutput returns findings within the receiver Graph for the event identified by the uuid string
 // parameter and not already in the filter StringFilter argument. The filter is updated by EventOutput.
-func EventOutput(g *netmap.Graph, uuid string, f filter.Filter, asninfo bool, cache *requests.ASNCache) []*requests.Output {
+func EventOutput(g *netmap.Graph, uuid string, f filter.Filter, asninfo bool, cache *requests.ASNCache, limit int) []*requests.Output {
 	// Make sure a filter has been created
 	if f == nil {
 		f = filter.NewStringFilter()
 	}
 
-	var names []string
+	var fqdns []string
 	for _, name := range g.EventFQDNs(uuid) {
 		if !f.Has(name) {
-			names = append(names, name)
+			fqdns = append(fqdns, name)
 		}
 	}
 
+	names := randomSelection(fqdns, limit)
 	lookup := make(outLookup, len(names))
 	for _, o := range buildNameInfo(g, uuid, names) {
 		lookup[o.Name] = o
@@ -70,6 +72,21 @@ func EventOutput(g *netmap.Graph, uuid string, f filter.Filter, asninfo bool, ca
 		return removeDuplicates(lookup, f)
 	}
 	return addInfrastructureInfo(lookup, f, cache)
+}
+
+func randomSelection(names []string, limit int) []string {
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+
+	var sel []string
+	for i, n := range r.Perm(len(names)) {
+		if limit > 0 && i >= limit {
+			break
+		}
+
+		sel = append(sel, names[n])
+	}
+
+	return sel
 }
 
 func removeDuplicates(lookup outLookup, filter filter.Filter) []*requests.Output {

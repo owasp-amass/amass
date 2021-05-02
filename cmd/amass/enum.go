@@ -502,8 +502,8 @@ func processOutput(ctx context.Context, e *enum.Enumeration, outputs []chan *req
 	// This filter ensures that we only get new names
 	known := filter.NewBloomFilter(1 << 22)
 	// The function that obtains output from the enum and puts it on the channel
-	extract := func() {
-		for _, o := range ExtractOutput(e, known, true) {
+	extract := func(limit int) {
+		for _, o := range ExtractOutput(e, known, true, limit) {
 			if !e.Config.IsDomainInScope(o.Name) {
 				continue
 			}
@@ -514,7 +514,7 @@ func processOutput(ctx context.Context, e *enum.Enumeration, outputs []chan *req
 		}
 	}
 
-	t := time.NewTicker(15 * time.Second)
+	t := time.NewTicker(5 * time.Second)
 	defer t.Stop()
 	for {
 		select {
@@ -522,10 +522,10 @@ func processOutput(ctx context.Context, e *enum.Enumeration, outputs []chan *req
 			return
 		case <-done:
 			// Check one last time
-			extract()
+			extract(0)
 			return
 		case <-t.C:
-			extract()
+			extract(100)
 		}
 	}
 }

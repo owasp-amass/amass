@@ -332,7 +332,7 @@ func getEventOutput(uuids []string, asninfo bool, db *netmap.Graph, cache *reque
 	filter := filter.NewStringFilter()
 
 	for i := len(uuids) - 1; i >= 0; i-- {
-		output = append(output, EventOutput(db, uuids[i], filter, asninfo, cache)...)
+		output = append(output, EventOutput(db, uuids[i], filter, asninfo, cache, 0)...)
 	}
 
 	return output
