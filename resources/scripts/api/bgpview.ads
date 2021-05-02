@@ -39,7 +39,7 @@ function asn(ctx, addr, asn)
     end
 
     local cidrs = netblocks(ctx, asn, cfg.ttl)
-    if (#cidrs == 0) then
+    if (cidrs == nil or #cidrs == 0) then
         return
     end
 
