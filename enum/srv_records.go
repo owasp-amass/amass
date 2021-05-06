@@ -107,4 +107,5 @@ var popularSRVRecords = []string{
 	"_nicname._tcp",
 	"_nicname._udp",
 	"_collab-edge._tls",
+	"_cuplogin._tcp",
 }
