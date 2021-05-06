@@ -70,6 +70,7 @@ var popularSRVRecords = []string{
 	"_sip._sctp",
 	"_sip._tcp",
 	"_sip._udp",
+	"_sipfederationtls._tcp",
 	"_sips._sctp",
 	"_sips._tcp",
 	"_sips._udp",
