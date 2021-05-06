@@ -15,6 +15,7 @@ var popularSRVRecords = []string{
 	"_ceph._tcp",
 	"_collab-edge._tls",
 	"_cuplogin._tcp",
+	"_gc._tcp",
 	"_hip-nat-t._udp",
 	"_http._sctp",
 	"_http._tcp",
