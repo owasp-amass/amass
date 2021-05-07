@@ -43,8 +43,6 @@ var DefaultBaselineResolvers = []string{
 	"64.6.65.6",       // Verisign Secondary
 	"8.26.56.26",      // Comodo Secure DNS
 	"8.20.247.20",     // Comodo Secure DNS Secondary
-	"185.222.222.222", // dns.sb
-	"185.184.222.222", // dns.sb Secondary
 	"198.101.242.72",  // Alternate DNS
 	"23.253.163.53",   // Alternate DNS Secondary
 	"156.154.70.1",    // Neustar DNS Advantage
