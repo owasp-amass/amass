@@ -21,23 +21,40 @@ import (
 const DefaultQueriesPerPublicResolver = 50
 
 // DefaultQueriesPerBaselineResolver is the number of queries sent to each trusted DNS resolver per second.
-const DefaultQueriesPerBaselineResolver = 100
+const DefaultQueriesPerBaselineResolver = 75
 
 const minResolverReliability = 0.85
 
 // DefaultBaselineResolvers is a list of trusted public DNS resolvers.
 var DefaultBaselineResolvers = []string{
-	"8.8.8.8",        // Google
-	"1.1.1.1",        // Cloudflare
-	"9.9.9.9",        // Quad9
-	"208.67.222.222", // Cisco OpenDNS
-	"209.244.0.3",    // Level3
-	"64.6.64.6",      // Verisign
-	"84.200.69.80",   // DNS.WATCH
-	"8.26.56.26",     // Comodo Secure DNS
-	"109.69.8.51",    // puntCAT
-	"74.82.42.42",    // Hurricane Electric
-	"77.88.8.8",      // Yandex.DNS
+	"8.8.8.8",         // Google
+	"8.8.4.4",         // Google Secondary
+	"1.1.1.1",         // Cloudflare
+	"1.0.0.1",         // Cloudflare Secondary
+	"9.9.9.9",         // Quad9
+	"149.112.112.112", // Quad9 Secondary
+	"208.67.222.222",  // Cisco OpenDNS
+	"208.67.220.220",  // Cisco OpenDNS Secondary
+	"84.200.69.80",    // DNS.WATCH
+	"84.200.70.40",    // DNS.WATCH Secondary
+	"209.244.0.3",     // Level3
+	"209.244.0.4",     // Level3 Secondary
+	"64.6.64.6",       // Verisign
+	"64.6.65.6",       // Verisign Secondary
+	"8.26.56.26",      // Comodo Secure DNS
+	"8.20.247.20",     // Comodo Secure DNS Secondary
+	"185.222.222.222", // dns.sb
+	"185.184.222.222", // dns.sb Secondary
+	"198.101.242.72",  // Alternate DNS
+	"23.253.163.53",   // Alternate DNS Secondary
+	"156.154.70.1",    // Neustar DNS Advantage
+	"156.154.71.1",    // Neustar DNS Advantage Secondary
+	"77.88.8.8",       // Yandex.DNS
+	"77.88.8.2",       // Yandex.DNS Secondary
+	"75.75.75.75",     // Xfinity
+	"75.75.76.76",     // Xfinity Secondary
+	"109.69.8.51",     // puntCAT
+	"74.82.42.42",     // Hurricane Electric
 }
 
 // PublicResolvers includes the addresses of public resolvers obtained dynamically.
