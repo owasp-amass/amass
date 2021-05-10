@@ -299,7 +299,7 @@ func customResolverSetup(cfg *config.Config, max int) resolve.Resolver {
 
 	rate := cfg.MaxDNSQueries / num
 	var trusted []resolve.Resolver
-	for _, addr := range cfg.Resolvers {
+	for _, addr := range config.DefaultBaselineResolvers {
 		if r := resolve.NewBaseResolver(addr, rate, cfg.Log); r != nil {
 			trusted = append(trusted, r)
 		}
@@ -321,7 +321,7 @@ func publicResolverSetup(cfg *config.Config, max int) resolve.Resolver {
 	}
 
 	var trusted []resolve.Resolver
-	for _, addr := range config.DefaultBaselineResolvers {
+	for _, addr := range cfg.Resolvers {
 		if r := resolve.NewBaseResolver(addr, config.DefaultQueriesPerBaselineResolver, cfg.Log); r != nil {
 			trusted = append(trusted, r)
 		}
