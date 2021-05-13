@@ -79,7 +79,7 @@ function search_item(ctx, item)
 end
 
 function buildurl(domain, pagenum)
-    return "https://api.github.com/search/code?q=\"" .. domain .. "\"&page=" .. pagenum .. "&per_page=100"
+    return "https://api.github.com/search/code?q=\"" .. domain .. "\"&page=" .. pagenum .. "&per_page=100&type=Code"
 end
 
 function sendnames(ctx, content)

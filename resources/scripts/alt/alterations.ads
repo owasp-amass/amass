@@ -166,6 +166,7 @@ function add_prefix_word(name, words)
     for i, w in pairs(words) do
         set_insert(s, w .. hostname .. "." .. base)
         set_insert(s, w .. "-" .. hostname .. "." .. base)
+        set_insert(s, w .. "." .. hostname .. "." .. base)
     end
 
     return set_elements(s)
@@ -180,6 +181,7 @@ function add_suffix_word(name, words)
     for i, w in pairs(words) do
         set_insert(s, hostname .. w .. "." .. base)
         set_insert(s, hostname .. "-" .. w .. "." .. base)
+        set_insert(s, hostname .. "." .. w .. "." .. base)
     end
 
     return set_elements(s)
