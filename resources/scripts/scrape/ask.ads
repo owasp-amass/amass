@@ -27,7 +27,7 @@ function buildurl(domain, pagenum)
         o="0",
         l="dir",
         qo="pagination",
-        page=tostring(pagenum),
+        page=pagenum,
     }
 
     return "https://www.ask.com/web?" .. url.build_query_string(params)

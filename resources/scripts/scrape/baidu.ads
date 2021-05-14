@@ -27,7 +27,7 @@ function buildurl(domain, pagenum)
     local params = {
         wd=query,
         oq=query,
-        pn=tostring(pagenum),
+        pn=pagenum,
     }
 
     return "https://www.baidu.com/s?" .. url.build_query_string(params)
