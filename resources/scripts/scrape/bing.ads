@@ -22,10 +22,10 @@ function vertical(ctx, domain)
 end
 
 function buildurl(domain, pagenum)
-    local query = "domain:" .. domain
+    local query = "domain:" .. domain .. " -site:www." .. domain
     local params = {
         q=query,
-        first=pagenum,
+        first=tostring(pagenum),
         FORM="PORE",
     }
 
