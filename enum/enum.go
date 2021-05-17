@@ -90,10 +90,11 @@ func (e *Enumeration) Start(ctx context.Context) error {
 	if err := e.Config.CheckSettings(); err != nil {
 		return err
 	}
+	e.setupContext(ctx)
 
 	// The pipeline input source will receive all the names
 	e.nameSrc = newEnumSource(e, maxInputSourceBuffer)
-	e.startupAndCleanup(ctx)
+	e.startupAndCleanup()
 	defer e.stop()
 
 	var stages []pipeline.Stage
@@ -131,7 +132,7 @@ func (e *Enumeration) Start(ctx context.Context) error {
 	return pipeline.NewPipeline(stages...).Execute(e.ctx, e.nameSrc, e.makeOutputSink())
 }
 
-func (e *Enumeration) startupAndCleanup(ctx context.Context) {
+func (e *Enumeration) startupAndCleanup() {
 	/*
 	 * These events are important to the engine in order to receive data,
 	 * logs, and notices about discoveries made during the enumeration
@@ -143,7 +144,6 @@ func (e *Enumeration) startupAndCleanup(ctx context.Context) {
 		e.Bus.Subscribe(requests.NewASNTopic, e.Sys.Cache().Update)
 	}
 
-	e.setupContext(ctx)
 	go e.periodicLogging()
 
 	go func() {
