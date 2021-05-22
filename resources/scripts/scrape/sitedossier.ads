@@ -5,7 +5,7 @@ name = "SiteDossier"
 type = "scrape"
 
 function start()
-    setratelimit(1)
+    setratelimit(2)
 end
 
 function vertical(ctx, domain)

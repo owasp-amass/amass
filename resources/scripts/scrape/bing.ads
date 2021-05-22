@@ -22,12 +22,12 @@ function vertical(ctx, domain)
 end
 
 function buildurl(domain, pagenum)
-    local query = "domain:" .. domain
+    local query = "domain:" .. domain .. " -site:www." .. domain
     local params = {
         q=query,
         first=pagenum,
         FORM="PORE",
     }
 
-    return "http://www.bing.com/search?" .. url.build_query_string(params)
+    return "https://www.bing.com/search?" .. url.build_query_string(params)
 end
