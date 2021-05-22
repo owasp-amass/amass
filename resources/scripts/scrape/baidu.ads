@@ -12,7 +12,7 @@ function start()
 end
 
 function vertical(ctx, domain)
-    for i=0,100,10 do
+    for i=0,10 do
         checkratelimit()
 
         local ok = scrape(ctx, {['url']=buildurl(domain, i)})
