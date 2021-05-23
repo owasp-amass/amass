@@ -56,6 +56,9 @@ type Config struct {
 	// Logger for error messages
 	Log *log.Logger
 
+	// Share activates the process that shares findings with providers for service credits
+	Share bool `ini:"share"`
+
 	// The directory that stores the bolt db and other files created
 	Dir string `ini:"output_directory"`
 
@@ -115,7 +118,8 @@ type Config struct {
 	Active bool
 
 	// A blacklist of subdomain names that will not be investigated
-	Blacklist []string
+	Blacklist     []string
+	blacklistLock sync.Mutex
 
 	// A list of data sources that should not be utilized
 	SourceFilter struct {
