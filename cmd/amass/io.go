@@ -165,7 +165,7 @@ func buildNameInfo(g *netmap.Graph, uuid string, names []string) []*requests.Out
 		}
 
 		n := netmap.Node(name)
-		if srcs, err := g.NodeSources(n, uuid); err == nil {
+		if srcs, err := g.NodeSources(n, uuid); err == nil && len(srcs) > 0 {
 			results[name] = &requests.Output{
 				Name:    name,
 				Sources: srcs,
