@@ -21,10 +21,11 @@ import (
 )
 
 const (
-	minWaitForData   = 15 * time.Second
-	maxWaitForData   = 30 * time.Second
-	defaultSweepSize = 100
-	activeSweepSize  = 200
+	minWaitForData    = 15 * time.Second
+	maxWaitForData    = 30 * time.Second
+	defaultSweepSize  = 100
+	activeSweepSize   = 200
+	defaultOutputReqs = 100
 )
 
 // enumSource handles the filtering and release of new Data in the enumeration.
@@ -39,6 +40,7 @@ type enumSource struct {
 	subre       *regexp.Regexp
 	count       int64
 	done        chan struct{}
+	doneOnce    sync.Once
 	maxSlots    int
 	timeout     time.Duration
 }
@@ -58,6 +60,16 @@ func newEnumSource(e *Enumeration, slots int) *enumSource {
 		timeout:     minWaitForData,
 	}
 
+	// Monitor the enumeration for completion or termination
+	go func() {
+		select {
+		case <-r.enum.ctx.Done():
+			r.markDone()
+		case <-r.enum.done:
+			r.markDone()
+		}
+	}()
+
 	if !e.Config.Passive {
 		r.timeout = maxWaitForData
 		go r.checkForData()
@@ -68,11 +80,18 @@ func newEnumSource(e *Enumeration, slots int) *enumSource {
 }
 
 func (r *enumSource) Stop() {
+	r.markDone()
 	r.filter = filter.NewBloomFilter(1)
 	r.sweepFilter = filter.NewBloomFilter(1)
 	r.queue.Process(func(e interface{}) {})
 	r.dups.Process(func(e interface{}) {})
 	r.sweeps.Process(func(e interface{}) {})
+}
+
+func (r *enumSource) markDone() {
+	r.doneOnce.Do(func() {
+		close(r.done)
+	})
 }
 
 func (r *enumSource) dataSourceName(req *requests.DNSRequest) {
@@ -92,9 +111,7 @@ func (r *enumSource) dataSourceAddr(req *requests.AddrRequest) {
 
 func (r *enumSource) pipelineData(ctx context.Context, data pipeline.Data, tp pipeline.TaskParams) {
 	select {
-	case <-r.enum.ctx.Done():
-		return
-	case <-r.enum.done:
+	case <-ctx.Done():
 		return
 	case <-r.done:
 		return
@@ -214,16 +231,10 @@ func (r *enumSource) Next(ctx context.Context) bool {
 
 	for {
 		select {
-		case <-r.enum.ctx.Done():
-			close(r.done)
-			return false
-		case <-r.enum.done:
-			close(r.done)
-			return false
 		case <-r.done:
 			return false
 		case <-t.C:
-			close(r.done)
+			r.markDone()
 			return false
 		case <-r.queue.Signal():
 			if !r.queue.Empty() {
@@ -256,31 +267,14 @@ func (r *enumSource) checkForData() {
 	t := time.NewTicker(500 * time.Millisecond)
 	defer t.Stop()
 
-	worth := 50 * len(r.enum.Sys.DataSources())
-	if r.enum.Config.Alterations {
-		worth += 500
-	}
-	if r.enum.Config.BruteForcing && r.enum.Config.MinForRecursive == 0 {
-		worth += len(r.enum.Config.Wordlist)
-	}
-
 	for {
 		select {
-		case <-r.enum.ctx.Done():
-			return
-		case <-r.enum.done:
-			return
 		case <-r.done:
 			return
 		case <-t.C:
 			if needed := required - r.queue.Len(); needed > 0 {
 				if gen := r.requestSweeps(needed); needed-gen > 0 {
-					num := 1
-
-					if n := needed / worth; n > num {
-						num = n
-					}
-					r.enum.subTask.OutputRequests(num)
+					r.enum.subTask.OutputRequests(defaultOutputReqs)
 				}
 			}
 		}
@@ -310,22 +304,16 @@ func (r *enumSource) processDupNames() {
 		})
 	}
 
-	t := time.NewTicker(5 * time.Second)
+	t := time.NewTicker(10 * time.Second)
 	defer t.Stop()
 loop:
 	for {
 		select {
-		case <-r.enum.done:
+		case <-r.done:
 			break loop
 		case <-r.dups.Signal():
 			r.dups.Process(each)
 		case now := <-t.C:
-			select {
-			case <-r.enum.ctx.Done():
-				break loop
-			default:
-			}
-
 			var count int
 			for _, a := range pending {
 				if now.Before(a.Timestamp.Add(2 * time.Minute)) {
@@ -338,12 +326,6 @@ loop:
 			}
 			pending = pending[count:]
 		}
-	}
-
-	select {
-	case <-r.enum.ctx.Done():
-		return
-	default:
 	}
 
 	r.dups.Process(each)
