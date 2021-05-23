@@ -1,4 +1,4 @@
-// Copyright 2017-2020 Jeff Foley. All rights reserved.
+// Copyright 2017-2021 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 package config
@@ -141,8 +141,22 @@ func (c *Config) IsAddressInScope(addr string) bool {
 	return false
 }
 
+// BlacklistSubdomain adds a subdomain name to the config blacklist.
+func (c *Config) BlacklistSubdomain(name string) {
+	c.blacklistLock.Lock()
+	defer c.blacklistLock.Unlock()
+
+	set := stringset.New(c.Blacklist...)
+	set.Insert(strings.TrimSpace(name))
+
+	c.Blacklist = set.Slice()
+}
+
 // Blacklisted returns true is the name in the parameter ends with a subdomain name in the config blacklist.
 func (c *Config) Blacklisted(name string) bool {
+	c.blacklistLock.Lock()
+	defer c.blacklistLock.Unlock()
+
 	n := strings.ToLower(strings.TrimSpace(name))
 
 	for _, bl := range c.Blacklist {
