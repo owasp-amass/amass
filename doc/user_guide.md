@@ -127,6 +127,7 @@ This subcommand will perform DNS enumeration and network mapping while populatin
 | -p | Ports separated by commas (default: 443) | amass enum -d example.com -p 443,8080 |
 | -r | IP addresses of preferred DNS resolvers (can be used multiple times) | amass enum -r 8.8.8.8,1.1.1.1 -d example.com |
 | -rf | Path to a file providing preferred DNS resolvers | amass enum -rf data/resolvers.txt -d example.com |
+| -share | Share findings with data source providers | amass enum -share -config config.ini -d example.com |
 | -src | Print data sources for the discovered names | amass enum -src -d example.com |
 | -timeout | Number of minutes to execute the enumeration | amass enum -timeout 30 -d example.com |
 | -w | Path to a different wordlist file | amass enum -brute -w wordlist.txt -d example.com |

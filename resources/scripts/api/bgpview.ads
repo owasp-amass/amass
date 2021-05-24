@@ -103,7 +103,7 @@ function asinfo(ctx, asn, ttl)
     end
 
     j = json.decode(resp)
-    if (j == nil or j.status ~= "ok" or j.status_message ~= "Query was successful") then
+    if (j == nil or j.data == nil or j.status ~= "ok" or j.status_message ~= "Query was successful") then
         return nil
     end
 

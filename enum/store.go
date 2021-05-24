@@ -74,6 +74,10 @@ func (dm *dataManager) Process(ctx context.Context, data pipeline.Data, tp pipel
 }
 
 func (dm *dataManager) dnsRequest(ctx context.Context, req *requests.DNSRequest, tp pipeline.TaskParams) error {
+	if dm.enum.Config.Blacklisted(req.Name) {
+		return nil
+	}
+
 	// Check for CNAME records first
 	for i, r := range req.Records {
 		req.Records[i].Name = strings.Trim(strings.ToLower(r.Name), ".")
@@ -170,6 +174,7 @@ func (dm *dataManager) insertA(ctx context.Context, req *requests.DNSRequest, re
 		return fmt.Errorf("%s failed to insert A record: %v", dm.enum.Graph, err)
 	}
 
+	dm.enum.checkForMissedWildcards(addr)
 	dm.enum.nameSrc.pipelineData(ctx, &requests.AddrRequest{
 		Address: addr,
 		InScope: true,
@@ -195,6 +200,7 @@ func (dm *dataManager) insertAAAA(ctx context.Context, req *requests.DNSRequest,
 		return fmt.Errorf("%s failed to insert AAAA record: %v", dm.enum.Graph, err)
 	}
 
+	dm.enum.checkForMissedWildcards(addr)
 	dm.enum.nameSrc.pipelineData(ctx, &requests.AddrRequest{
 		Address: addr,
 		InScope: true,

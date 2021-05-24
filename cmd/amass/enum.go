@@ -69,6 +69,7 @@ type enumArgs struct {
 		NoLocalDatabase bool
 		NoRecursive     bool
 		Passive         bool
+		Share           bool
 		Silent          bool
 		Sources         bool
 		Verbose         bool
@@ -123,6 +124,7 @@ func defineEnumOptionFlags(enumFlags *flag.FlagSet, args *enumArgs) {
 	enumFlags.BoolVar(&args.Options.NoLocalDatabase, "nolocaldb", false, "Disable saving data into a local database")
 	enumFlags.BoolVar(&args.Options.NoRecursive, "norecursive", false, "Turn off recursive brute forcing")
 	enumFlags.BoolVar(&args.Options.Passive, "passive", false, "Disable DNS resolution of names and dependent features")
+	enumFlags.BoolVar(&args.Options.Share, "share", false, "Share findings with data source providers")
 	enumFlags.BoolVar(&args.Options.Silent, "silent", false, "Disable all output during execution")
 	enumFlags.BoolVar(&args.Options.Sources, "src", false, "Print data sources for the discovered names")
 	enumFlags.BoolVar(&args.Options.Verbose, "v", false, "Output status / debug / troubleshooting info")
@@ -245,8 +247,6 @@ func runEnumCommand(clArgs []string) {
 	// Let all the output goroutines know that the enumeration has finished
 	close(done)
 	wg.Wait()
-
-	//e.Graph.DumpGraph()
 	// If necessary, handle graph database migration
 	if !cfg.Passive && len(e.Sys.GraphDatabases()) > 0 {
 		fmt.Fprintf(color.Error, "\n%s\n", green("The enumeration has finished"))
@@ -261,6 +261,10 @@ func runEnumCommand(clArgs []string) {
 					red("The database migration to "), red(g.String()), red(" failed: "), red(err.Error()))
 			}
 		}
+	}
+
+	if cfg.Share {
+		shareFindings(e, cfg)
 	}
 }
 
@@ -659,6 +663,9 @@ func processEnumInputFiles(args *enumArgs) error {
 
 // Setup the amass enumeration settings
 func (e enumArgs) OverrideConfig(conf *config.Config) error {
+	if e.Options.Share {
+		conf.Share = true
+	}
 	if len(e.Addresses) > 0 {
 		conf.Addresses = e.Addresses
 	}
@@ -703,9 +710,13 @@ func (e enumArgs) OverrideConfig(conf *config.Config) error {
 	}
 	if e.Options.Active {
 		conf.Active = true
+		conf.Passive = false
 	}
 	if e.Options.Passive {
 		conf.Passive = true
+		conf.Active = false
+		conf.BruteForcing = false
+		conf.Alterations = false
 	}
 	if e.Blacklist.Len() > 0 {
 		conf.Blacklist = e.Blacklist.Slice()

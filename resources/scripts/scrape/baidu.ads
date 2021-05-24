@@ -12,7 +12,7 @@ function start()
 end
 
 function vertical(ctx, domain)
-    for i=1,10 do
+    for i=0,10 do
         checkratelimit()
 
         local ok = scrape(ctx, {['url']=buildurl(domain, i)})
@@ -27,7 +27,7 @@ function buildurl(domain, pagenum)
     local params = {
         wd=query,
         oq=query,
-        pn=tostring(pagenum),
+        pn=pagenum,
     }
 
     return "https://www.baidu.com/s?" .. url.build_query_string(params)

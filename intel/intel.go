@@ -26,6 +26,11 @@ import (
 	"golang.org/x/net/publicsuffix"
 )
 
+const (
+	maxDnsPipelineTasks    int = 15000
+	maxActivePipelineTasks int = 25
+)
+
 // Collection is the object type used to execute a open source information gathering with Amass.
 type Collection struct {
 	sync.Mutex
@@ -86,10 +91,9 @@ func (c *Collection) HostedDomains(ctx context.Context) error {
 	}()
 
 	var stages []pipeline.Stage
-	max := c.Config.MaxDNSQueries * int(resolve.QueryTimeout.Seconds())
-	stages = append(stages, pipeline.DynamicPool("", c.makeDNSTaskFunc(), max))
+	stages = append(stages, pipeline.DynamicPool("", c.makeDNSTaskFunc(), maxDnsPipelineTasks))
 	if c.Config.Active {
-		stages = append(stages, pipeline.FIFO("", newActiveTask(c, 100)))
+		stages = append(stages, pipeline.FIFO("", newActiveTask(c, maxActivePipelineTasks)))
 	}
 	stages = append(stages, pipeline.FIFO("filter", c.makeFilterTaskFunc()))
 
