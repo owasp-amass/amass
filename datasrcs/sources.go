@@ -30,7 +30,6 @@ func GetAllSources(sys systems.System) []service.Service {
 		NewTwitter(sys),
 		NewUmbrella(sys),
 		NewURLScan(sys),
-		NewWhoisXML(sys),
 	}
 
 	if scripts, err := sys.Config().AcquireScripts(); err == nil {
