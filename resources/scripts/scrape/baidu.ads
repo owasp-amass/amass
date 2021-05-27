@@ -1,4 +1,4 @@
--- Copyright 2017 Jeff Foley. All rights reserved.
+-- Copyright 2017-2021 Jeff Foley. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 local url = require("url")
@@ -12,7 +12,7 @@ function start()
 end
 
 function vertical(ctx, domain)
-    for i=0,10 do
+    for i=0,100,10 do
         checkratelimit()
 
         local ok = scrape(ctx, {['url']=buildurl(domain, i)})

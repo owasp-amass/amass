@@ -55,7 +55,3 @@ end
 function verturl(domain, key)
     return "https://api.threatbook.cn/v3/domain/sub_domains?apikey=" .. key .. "&resource=" .. domain
 end
-
-function cacheurl(domain)
-    return "https://api.threatbook.cn/v3/domain/sub_domains?resource=" .. domain
-end

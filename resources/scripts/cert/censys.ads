@@ -30,38 +30,26 @@ function apiquery(ctx, cfg, domain)
     local p = 1
 
     while(true) do
-        local resp
-        local reqstr = domain .. "page: " .. p
-        -- Check if the response data is in the graph database
-        if (cfg.ttl ~= nil and cfg.ttl > 0) then
-            resp = obtain_response(reqstr, cfg.ttl)
+        local err, body, resp
+        body, err = json.encode({
+            query="parsed.names: " .. domain, 
+            page=p,
+            fields={"parsed.names"},
+        })
+        if (err ~= nil and err ~= "") then
+            return
         end
-
-        if (resp == nil or resp == "") then
-            local body, err = json.encode({
-                query="parsed.names: " .. domain, 
-                page=p,
-                fields={"parsed.names"},
-            })
-            if (err ~= nil and err ~= "") then
-                return
-            end
     
-            resp, err = request(ctx, {
-                method="POST",
-                data=body,
-                url=apiurl(),
-                headers={['Content-Type']="application/json"},
-                id=cfg["credentials"].key,
-                pass=cfg["credentials"].secret,
-            })
-            if (err ~= nil and err ~= "") then
-                return
-            end
-
-            if (cfg.ttl ~= nil and cfg.ttl > 0) then
-                cache_response(reqstr, resp)
-            end
+        resp, err = request(ctx, {
+            method="POST",
+            data=body,
+            url="https://www.censys.io/api/v1/search/certificates",
+            headers={['Content-Type']="application/json"},
+            id=cfg["credentials"].key,
+            pass=cfg["credentials"].secret,
+        })
+        if (err ~= nil and err ~= "") then
+            return
         end
 
         local d = json.decode(resp)
@@ -79,13 +67,8 @@ function apiquery(ctx, cfg, domain)
             return
         end
 
-        checkratelimit()
         p = p + 1
     end
-end
-
-function apiurl()
-    return "https://www.censys.io/api/v1/search/certificates"
 end
 
 function scrapeurl(domain)

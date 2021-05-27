@@ -81,7 +81,7 @@ function horizontal(ctx, domain)
         c = cfg.credentials
     end
 
-    if (c == nil or c.key == "") then
+    if (c == nil or c.key == nil or c.key == "") then
         return
     end
 
@@ -101,7 +101,7 @@ function horizontal(ctx, domain)
         return
     end
 
-    for i, r in pairs(j.records) do
+    for _, r in pairs(j.records) do
         if (r.hostname ~= "") then
             associated(ctx, domain, r.hostname)
         end
