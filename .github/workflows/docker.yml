@@ -2,8 +2,12 @@ name: docker
 
 on:
   push:
-    tags:
-      - 'v*.*.*'
+    branches:
+      - "master"
+      - "develop"
+  pull_request:
+    branches:
+      - "develop"
 
 jobs:
   dockerhub-publish:
@@ -13,7 +17,8 @@ jobs:
         name: Checkout
         uses: actions/checkout@v2
       -
-        name: Docker meta
+        name: Docker meta master
+        if: github.ref == 'refs/heads/master'
         id: docker_meta
         uses: crazy-max/ghaction-docker-meta@v1
         with:
@@ -22,6 +27,15 @@ jobs:
             v{{major}}
             v{{major}}.{{minor}}
             v{{major}}.{{minor}}.{{patch}}
+      -
+        name: Docker meta develop
+        if: github.ref == 'refs/heads/develop'
+        id: docker_meta
+        uses: crazy-max/ghaction-docker-meta@v1
+        with:
+          images: caffix/amass
+          tags: |
+            type=raw,value=dev
       -
         name: Set up QEMU
         uses: docker/setup-qemu-action@v1
