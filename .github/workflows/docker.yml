@@ -17,25 +17,18 @@ jobs:
         name: Checkout
         uses: actions/checkout@v2
       -
-        name: Docker meta master
-        if: github.ref == 'refs/heads/master'
-        id: docker_meta
-        uses: crazy-max/ghaction-docker-meta@v1
-        with:
-          images: caffix/amass
-          tag-semver: |
-            v{{major}}
-            v{{major}}.{{minor}}
-            v{{major}}.{{minor}}.{{patch}}
-      -
-        name: Docker meta develop
-        if: github.ref == 'refs/heads/develop'
+        name: Docker meta
         id: docker_meta
         uses: crazy-max/ghaction-docker-meta@v1
         with:
           images: caffix/amass
           tags: |
             type=raw,value=dev
+          if: github.ref == 'refs/heads/master'
+          tag-semver: |
+            v{{major}}
+            v{{major}}.{{minor}}
+            v{{major}}.{{minor}}.{{patch}}
       -
         name: Set up QEMU
         uses: docker/setup-qemu-action@v1
