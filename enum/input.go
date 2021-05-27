@@ -264,7 +264,7 @@ func (r *enumSource) Error() error {
 
 func (r *enumSource) checkForData() {
 	required := r.maxSlots
-	t := time.NewTicker(500 * time.Millisecond)
+	t := time.NewTicker(100 * time.Millisecond)
 	defer t.Stop()
 
 	for {
