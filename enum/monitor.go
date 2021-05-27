@@ -42,7 +42,7 @@ func (e *Enumeration) checkForMissedWildcards(ip string) {
 
 		e.Config.BlacklistSubdomain(sub)
 		for _, node := range nodes {
-			e.Graph.DeleteNode(node)
+			_ = e.Graph.DeleteNode(node)
 		}
 	}
 }

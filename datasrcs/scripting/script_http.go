@@ -32,10 +32,10 @@ func (s *Script) request(L *lua.LState) int {
 		return 2
 	}
 
-	var body io.Reader
+	var data string
 	if method, ok := getStringField(L, opt, "method"); ok && (method == "POST" || method == "post") {
-		if data, ok := getStringField(L, opt, "data"); ok {
-			body = strings.NewReader(data)
+		if d, ok := getStringField(L, opt, "data"); ok {
+			data = d
 		}
 	}
 
@@ -57,7 +57,7 @@ func (s *Script) request(L *lua.LState) int {
 	id, _ := getStringField(L, opt, "id")
 	pass, _ := getStringField(L, opt, "pass")
 
-	page, err := s.req(ctx, url, body, headers, &http.BasicAuth{
+	page, err := s.req(ctx, url, data, headers, &http.BasicAuth{
 		Username: id,
 		Password: pass,
 	})
@@ -109,7 +109,7 @@ func (s *Script) scrape(L *lua.LState) int {
 	id, _ := getStringField(L, opt, "id")
 	pass, _ := getStringField(L, opt, "pass")
 
-	resp, err := s.req(ctx, url, nil, headers, &http.BasicAuth{
+	resp, err := s.req(ctx, url, "", headers, &http.BasicAuth{
 		Username: id,
 		Password: pass,
 	})
@@ -139,7 +139,7 @@ func (s *Script) scrape(L *lua.LState) int {
 	return 1
 }
 
-func (s *Script) req(ctx context.Context, url string, body io.Reader, headers map[string]string, auth *http.BasicAuth) (string, error) {
+func (s *Script) req(ctx context.Context, url, data string, headers map[string]string, auth *http.BasicAuth) (string, error) {
 	cfg, bus, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return "", err
@@ -148,19 +148,24 @@ func (s *Script) req(ctx context.Context, url string, body io.Reader, headers ma
 	// Check for cached responses first
 	dsc := s.sys.Config().GetDataSourceConfig(s.String())
 	if dsc != nil && dsc.TTL > 0 {
-		if r, err := s.getCachedResponse(url, dsc.TTL); err == nil {
+		if r, err := s.getCachedResponse(url+data, dsc.TTL); err == nil {
 			return r, err
 		}
 	}
 
+	var body io.Reader
+	if data != "" {
+		body = strings.NewReader(data)
+	}
+
 	numRateLimitChecks(s, s.seconds)
-	resp, err := http.RequestWebPage(ctx, url, nil, headers, auth)
+	resp, err := http.RequestWebPage(ctx, url, body, headers, auth)
 	if err != nil {
 		if cfg.Verbose {
 			bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", s.String(), url, err))
 		}
 	} else if dsc != nil && dsc.TTL > 0 {
-		_ = s.setCachedResponse(url, resp)
+		_ = s.setCachedResponse(url+data, resp)
 	}
 
 	return resp, err

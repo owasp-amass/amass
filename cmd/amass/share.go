@@ -71,7 +71,9 @@ func shareFindings(e *enum.Enumeration, cfg *config.Config) {
 	zw.Comment = "OWASP Amass enumeration findings"
 	zw.ModTime = time.Now()
 
-	json.NewEncoder(zw).Encode(f)
+	if err := json.NewEncoder(zw).Encode(f); err != nil {
+		return
+	}
 	_ = zw.Flush()
 	_ = zw.Close()
 
