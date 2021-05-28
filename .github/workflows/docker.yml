@@ -56,7 +56,5 @@ jobs:
           builder: ${{ steps.buildx.outputs.name }}
           platforms: linux/amd64,linux/arm64
           push: true
-          tags:
-            - ${{ steps.meta_master.outputs.tags }}
-            - ${{ steps.meta_develop.outputs.tags }}
+          tags: '${{ steps.meta_master.outputs.tags }}${{ steps.meta_develop.outputs.tags }}'
           labels: ${{ steps.docker_meta.outputs.labels }}
