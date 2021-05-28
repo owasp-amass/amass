@@ -16,13 +16,17 @@ jobs:
       -
         name: Checkout
         uses: actions/checkout@v2
+      -
+        name: Version
+        id: get_version
+        run: echo ::set-output name=VERSION::$(echo $GITHUB_REF | cut -d / -f 3)
       - if: github.ref == 'refs/heads/master'
         id: meta_master
         uses: docker/metadata-action@v3
         with:
           images: caffix/amass
           tags: |
-            type=semver,pattern=v{{version}}
+            type=semver,pattern={{version}},value=${{ steps.get_version.outputs.VERSION }}
             type=semver,pattern=v{{major}}
             type=semver,pattern=v{{major}}.{{minor}}
       - if: github.ref == 'refs/heads/develop'
@@ -57,4 +61,4 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: '${{ steps.meta_master.outputs.tags }}${{ steps.meta_develop.outputs.tags }}'
-          labels: ${{ steps.docker_meta.outputs.labels }}
+          labels: '${{ steps.meta_master.outputs.labels }}${{ steps.meta_develop.outputs.labels }}'
