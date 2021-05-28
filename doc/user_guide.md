@@ -27,7 +27,7 @@ amass enum -d example.com
 Typical parameters for DNS enumeration:
 
 ```bash
-$ amass enum -v -src -ip -brute -min-for-recursive 2 -d example.com
+$ amass enum -v -src -ip -brute -min-for-recursive 2 -share -d example.com
 [Google] www.example.com
 [VirusTotal] ns.example.com
 ...
@@ -206,7 +206,9 @@ If you decide to use an Amass configuration file, it will be automatically disco
 
 You will need a config file to use your API keys with Amass. See the [Example Configuration File](../examples/config.ini) for more details.
 
-Amass automatically tries to discover the configuration file in the following locations:
+The location of the configuration file can be specified using the `-config` flag or the `AMASS_CONFIG` environment variable.
+
+Amass automatically tries to discover the configuration file (named `config.ini`) in the following locations:
 
 | Operating System | Path |
 | ---------------- | ---- |

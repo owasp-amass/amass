@@ -35,7 +35,7 @@ The volume argument allows the Amass graph database to persist between execution
 The wordlists maintained in the Amass git repository are available in `/examples/wordlists/` within the docker container. For example, to use `all.txt`:
 
 ```bash
-docker run -v OUTPUT_DIR_PATH:/.config/amass/ amass enum -brute -w /wordlists/all.txt -d example.com
+docker run -v OUTPUT_DIR_PATH:/.config/amass/ amass enum -brute -w /wordlists/all.txt -share -d example.com
 ```
 
 ## From Source
@@ -46,10 +46,6 @@ Simply execute the following commands:
 
 1. Download OWASP Amass:
 
-```bash
-go get -v github.com/OWASP/Amass/cmd/amass
-```
-Or:
 ```bash
 go get -v github.com/OWASP/Amass/v3/...
 ```
