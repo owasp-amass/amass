@@ -19,7 +19,7 @@ jobs:
       -
         name: Version
         id: get_version
-        run: echo ::set-output name=VERSION::$(echo $GITHUB_REF | cut -d / -f 3)
+        run: echo ::set-output name=VERSION::$(echo ${GITHUB_REF/refs\/tags\//})
       - if: github.ref == 'refs/heads/master'
         id: meta_master
         uses: docker/metadata-action@v3
