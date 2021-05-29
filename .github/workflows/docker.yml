@@ -2,9 +2,8 @@ name: docker
 
 on:
   push:
-    branches:
-      - "master"
-      - "develop"
+    tags:
+      - 'v*.*.*'
   pull_request:
     branches:
       - "develop"
@@ -16,19 +15,15 @@ jobs:
       -
         name: Checkout
         uses: actions/checkout@v2
-      -
-        name: Version
-        id: get_version
-        run: echo ::set-output name=VERSION::$(echo ${GITHUB_REF/refs\/tags\//})
       - if: github.ref == 'refs/heads/master'
         id: meta_master
         uses: docker/metadata-action@v3
         with:
           images: caffix/amass
           tags: |
-            type=semver,pattern={{version}},value=${{ steps.get_version.outputs.VERSION }}
             type=semver,pattern=v{{major}}
             type=semver,pattern=v{{major}}.{{minor}}
+            type=semver,pattern=v{{major}}.{{minor}}.{{patch}}
       - if: github.ref == 'refs/heads/develop'
         id: meta_develop
         uses: docker/metadata-action@v3
