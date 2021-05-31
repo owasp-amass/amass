@@ -9,3 +9,11 @@ repos:
     -   id: check-yaml
     -   id: check-added-large-files
     -   id: detect-aws-credentials
+-   repo: https://github.com/zricethezav/gitleaks
+    rev: v7.5.0
+    hooks:
+    -   id: gitleaks
+-   repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v3.4.0
+    hooks:
+      - id: no-commit-to-branch

@@ -25,7 +25,7 @@ const htmlStart string = `<!doctype html>
       border: 1px solid lightgray;
     }
   </style>
-  
+
 </head>
 
 <body>

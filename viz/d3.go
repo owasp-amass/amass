@@ -17,7 +17,7 @@ const d3Template = `
     <script src="https://d3js.org/d3.v4.min.js"></script>
     <style>
         div#tooltip {
-            position: absolute;        
+            position: absolute;
             display: inline-block;
             padding: 10px;
             font-family: 'Open Sans' sans-serif;
@@ -111,7 +111,7 @@ function nodeLinkDistance(e) {
         n2 = graph.nodes[e.target.id];
 
     var avg = (nodePercent(n1) + nodePercent(n2)) / 2;
-    
+
     return 60 * avg;
 }
 

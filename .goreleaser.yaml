@@ -101,7 +101,7 @@ snapcrafts:
     grade: stable
     confinement: strict
     # Your app's license, based on SPDX license expressions: https://spdx.org/licenses
-    license: Apache-2.0	
+    license: Apache-2.0
 
     apps:
       amass:
