@@ -87,7 +87,7 @@ function asn(ctx, addr, asn)
     if (desc == nil) then
         desc = ""
     end
-    if (string.len(desc) < string.len(d.whoisdesc)) then
+    if (d.whoisdesc ~= nil and string.len(desc) < string.len(d.whoisdesc)) then
         desc = d.whoisdesc
     end
     if (d.asdesc ~= nil and string.len(d.asdesc) > 0) then
