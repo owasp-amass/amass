@@ -347,6 +347,7 @@ func setupResolvers(addrs []string, max, rate int, log *log.Logger) []resolve.Re
 			if err := resolve.ClientSubnetCheck(ip); err == nil {
 				if n := resolve.NewBaseResolver(ip, rate, log); n != nil {
 					ch <- n
+					return
 				}
 			}
 			ch <- nil
