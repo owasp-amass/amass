@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	amassdns "github.com/OWASP/Amass/v3/net/dns"
 	"github.com/OWASP/Amass/v3/net/http"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/caffix/eventbus"
@@ -222,6 +223,18 @@ func (a *activeTask) zoneTransfer(ctx context.Context, req *requests.ZoneXFRRequ
 	}
 
 	for _, req := range reqs {
+		// Zone Transfers can reveal DNS wildcards
+		if name := amassdns.RemoveAsteriskLabel(req.Name); len(name) < len(req.Name) {
+			// Signal the wildcard discovery
+			pipeline.SendData(ctx, "dns", &requests.DNSRequest{
+				Name:   "www." + name,
+				Domain: req.Domain,
+				Tag:    requests.DNS,
+				Source: "DNS",
+			}, tp)
+			continue
+		}
+
 		pipeline.SendData(ctx, "filter", req, tp)
 	}
 }
