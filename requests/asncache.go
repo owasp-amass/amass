@@ -72,19 +72,15 @@ func (c *ASNCache) Update(req *ASNRequest) {
 	c.Lock()
 	defer c.Unlock()
 
-	if _, found := c.cache[req.ASN]; !found {
+	as, found := c.cache[req.ASN]
+	if !found {
 		c.cache[req.ASN] = req
 		if req.Netblocks == nil {
 			req.Netblocks = stringset.New(req.Prefix)
 		}
 		return
 	}
-
-	as := c.cache[req.ASN]
 	// This is additional information for an ASN entry
-	if as.Prefix == "" && req.Prefix != "" {
-		as.Prefix = req.Prefix
-	}
 	if as.CC == "" && req.CC != "" {
 		as.CC = req.CC
 	}
@@ -94,12 +90,12 @@ func (c *ASNCache) Update(req *ASNRequest) {
 	if as.AllocationDate.IsZero() && !req.AllocationDate.IsZero() {
 		as.AllocationDate = req.AllocationDate
 	}
-	if as.Description == "" && req.Description != "" {
+	if len(as.Description) < len(req.Description) {
 		as.Description = req.Description
 	}
-	if req.Netblocks == nil {
-		as.Netblocks.Union(stringset.New(req.Prefix))
-	} else {
+
+	as.Netblocks.Insert(req.Prefix)
+	if req.Netblocks != nil {
 		as.Netblocks.Union(req.Netblocks)
 	}
 }
@@ -140,12 +136,16 @@ func (c *ASNCache) AddrSearch(addr string) *ASNRequest {
 		}
 	}
 
+	prefix := entry.IPNet.String()
+	netblocks := stringset.New(prefix)
+	netblocks.Union(entry.Data.Netblocks)
+
 	return &ASNRequest{
 		Address:     addr,
 		ASN:         entry.Data.ASN,
 		CC:          entry.Data.CC,
-		Prefix:      entry.IPNet.String(),
-		Netblocks:   stringset.New(entry.IPNet.String()),
+		Prefix:      prefix,
+		Netblocks:   netblocks,
 		Description: entry.Data.Description,
 		Tag:         RIR,
 		Source:      "RIR",
