@@ -46,6 +46,7 @@ type Enumeration struct {
 	nameSrc        *enumSource
 	subTask        *subdomainTask
 	dnsTask        *dNSTask
+	store          *dataManager
 }
 
 // NewEnumeration returns an initialized Enumeration that has not been started yet.
@@ -68,6 +69,7 @@ func NewEnumeration(cfg *config.Config, sys systems.System) *Enumeration {
 
 	e.dnsTask = newDNSTask(e)
 	e.subTask = newSubdomainTask(e)
+	e.store = newDataManager(e)
 	return e
 }
 
@@ -109,7 +111,7 @@ func (e *Enumeration) Start(ctx context.Context) error {
 	stages = append(stages, pipeline.FIFO("filter", e.makeFilterTaskFunc()))
 
 	if !e.Config.Passive {
-		stages = append(stages, pipeline.DynamicPool("store", newDataManager(e), defaultPipelineTasks))
+		stages = append(stages, pipeline.DynamicPool("store", e.store, defaultPipelineTasks))
 		stages = append(stages, pipeline.FIFO("", e.subTask))
 	}
 	if e.Config.Active {
@@ -124,12 +126,18 @@ func (e *Enumeration) Start(ctx context.Context) error {
 	 * by the user and names acquired from the graph database can be brought
 	 * into the enumeration
 	 */
-	go e.submitKnownNames()
+	e.submitKnownNames()
 	e.submitProvidedNames()
 	e.submitDomainNames()
 	e.submitASNs()
 
-	return pipeline.NewPipeline(stages...).Execute(e.ctx, e.nameSrc, e.makeOutputSink())
+	err := pipeline.NewPipeline(stages...).Execute(e.ctx, e.nameSrc, e.makeOutputSink())
+	if !e.Config.Passive {
+		// Ensure all data has been stored
+		e.store.signalDone <- struct{}{}
+		<-e.store.confirmDone
+	}
+	return err
 }
 
 func (e *Enumeration) startupAndCleanup() {

@@ -25,15 +25,19 @@ import (
 
 // dataManager is the stage that stores all data processed by the pipeline.
 type dataManager struct {
-	enum  *Enumeration
-	queue queue.Queue
+	enum        *Enumeration
+	queue       queue.Queue
+	signalDone  chan struct{}
+	confirmDone chan struct{}
 }
 
 // newDataManager returns a dataManager specific to the provided Enumeration.
 func newDataManager(e *Enumeration) *dataManager {
 	dm := &dataManager{
-		enum:  e,
-		queue: queue.NewQueue(),
+		enum:        e,
+		queue:       queue.NewQueue(),
+		signalDone:  make(chan struct{}, 2),
+		confirmDone: make(chan struct{}, 2),
 	}
 
 	go dm.processASNRequests()
@@ -444,68 +448,70 @@ func (dm *dataManager) addrRequest(ctx context.Context, req *requests.AddrReques
 }
 
 func (dm *dataManager) processASNRequests() {
-	graph := dm.enum.Graph
-	uuid := dm.enum.Config.UUID.String()
-loop:
 	for {
 		select {
-		case <-dm.enum.ctx.Done():
-			break loop
-		case <-dm.enum.done:
-			break loop
+		case <-dm.signalDone:
+			if dm.queue.Len() > 0 {
+				dm.queue.Process(func(e interface{}) {
+					if qar, ok := e.(*queuedAddrRequest); ok {
+						dm.findInfraInfo(qar.Req)
+					}
+				})
+			}
+			dm.confirmDone <- struct{}{}
+			return
 		case <-dm.queue.Signal():
-			e, found := dm.queue.Next()
-			if !found {
-				continue loop
-			}
-
-			qar, ok := e.(*queuedAddrRequest)
-			if !ok {
-				continue loop
-			}
-			req := qar.Req
-
-			if r := dm.enum.Sys.Cache().AddrSearch(req.Address); r != nil {
-				_ = graph.UpsertInfrastructure(r.ASN, r.Description, req.Address, r.Prefix, r.Source, uuid)
-				continue loop
-			}
-
-			for _, src := range dm.enum.srcs {
-				src.Request(dm.enum.ctx, &requests.ASNRequest{Address: req.Address})
-			}
-			time.Sleep(10 * time.Second)
-
-			if r := dm.enum.Sys.Cache().AddrSearch(req.Address); r != nil {
-				_ = graph.UpsertInfrastructure(r.ASN, r.Description, req.Address, r.Prefix, r.Source, uuid)
-				continue loop
-			}
-
-			asn := 0
-			desc := "Unknown"
-			prefix := fakePrefix(req.Address)
-			_ = graph.UpsertInfrastructure(asn, desc, req.Address, prefix, "RIR", uuid)
-
-			first, cidr, err := net.ParseCIDR(prefix)
-			if err != nil {
-				continue loop
-			}
-			if ones, _ := cidr.Mask.Size(); ones == 0 {
-				continue loop
-			}
-
-			dm.enum.Sys.Cache().Update(&requests.ASNRequest{
-				Address:     first.String(),
-				ASN:         asn,
-				Prefix:      cidr.String(),
-				Description: desc,
-				Tag:         requests.RIR,
-				Source:      "RIR",
+			dm.queue.Process(func(e interface{}) {
+				if qar, ok := e.(*queuedAddrRequest); ok {
+					dm.findInfraInfo(qar.Req)
+				}
 			})
 		}
 	}
+}
 
-	// Empty the queue
-	dm.queue.Process(func(e interface{}) {})
+func (dm *dataManager) findInfraInfo(req *requests.AddrRequest) {
+	graph := dm.enum.Graph
+	uuid := dm.enum.Config.UUID.String()
+
+	if r := dm.enum.Sys.Cache().AddrSearch(req.Address); r != nil {
+		_ = graph.UpsertInfrastructure(r.ASN, r.Description, req.Address, r.Prefix, r.Source, uuid)
+		return
+	}
+
+	for _, src := range dm.enum.srcs {
+		src.Request(dm.enum.ctx, &requests.ASNRequest{Address: req.Address})
+	}
+
+	for i := 0; i < 20; i++ {
+		if r := dm.enum.Sys.Cache().AddrSearch(req.Address); r != nil {
+			_ = graph.UpsertInfrastructure(r.ASN, r.Description, req.Address, r.Prefix, r.Source, uuid)
+			return
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+
+	asn := 0
+	desc := "Unknown"
+	prefix := fakePrefix(req.Address)
+	_ = graph.UpsertInfrastructure(asn, desc, req.Address, prefix, "RIR", uuid)
+
+	first, cidr, err := net.ParseCIDR(prefix)
+	if err != nil {
+		return
+	}
+	if ones, _ := cidr.Mask.Size(); ones == 0 {
+		return
+	}
+
+	dm.enum.Sys.Cache().Update(&requests.ASNRequest{
+		Address:     first.String(),
+		ASN:         asn,
+		Prefix:      cidr.String(),
+		Description: desc,
+		Tag:         requests.RIR,
+		Source:      "RIR",
+	})
 }
 
 func fakePrefix(addr string) string {
