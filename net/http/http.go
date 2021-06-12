@@ -186,59 +186,37 @@ func Crawl(ctx context.Context, u string, scope []string, max int, f filter.Filt
 				}
 			}
 
-			processURL := func(u string) {
-				if p, err := url.Parse(u); err == nil && whichDomain(p.Hostname(), newScope) != "" {
-					// Attempt to save the name in our results
-					if name := p.Hostname(); whichDomain(name, scope) != "" {
-						m.Lock()
-						results.Insert(name)
-						m.Unlock()
-					}
-					// Check that the URL has an appropriate scheme for scraping
-					if !p.IsAbs() || (p.Scheme != "http" && p.Scheme != "https") {
-						return
-					}
-					// If the URL path has a file extension, check that it's of interest
-					if ext := crawlRE.FindString(p.Path); ext != "" {
-						ext = strings.ToLower(ext)
+			processURL := func(u *url.URL) {
+				// Attempt to save the name in our results
+				m.Lock()
+				results.Insert(u.Hostname())
+				m.Unlock()
 
-						var found bool
-						for _, t := range crawlFileTypes {
-							if ext == t {
-								found = true
-								break
-							}
-						}
-						if !found {
-							return
-						}
-					}
-					// Remove fragments and check if we've seen this URL before
-					p.Fragment = ""
-					p.RawFragment = ""
-					if f.Duplicate(p.String()) {
-						return
-					}
+				if s := crawlFilterURLs(u, f); s != "" {
 					// Be sure the crawl has not exceeded the maximum links to be followed
 					m.Lock()
 					count++
 					current := count
 					m.Unlock()
 					if max <= 0 || current < max {
-						g.Get(p.String(), g.Opt.ParseFunc)
+						g.Get(s, g.Opt.ParseFunc)
 					}
 				}
 			}
 
 			r.HTMLDoc.Find("a").Each(func(i int, s *goquery.Selection) {
 				if href, ok := s.Attr("href"); ok {
-					processURL(r.JoinURL(href))
+					if u, err := r.JoinURL(href); err == nil && whichDomain(u.Hostname(), newScope) != "" {
+						processURL(u)
+					}
 				}
 			})
 
 			r.HTMLDoc.Find("script").Each(func(i int, s *goquery.Selection) {
 				if src, ok := s.Attr("src"); ok {
-					processURL(r.JoinURL(src))
+					if u, err := r.JoinURL(src); err == nil && whichDomain(u.Hostname(), newScope) != "" {
+						processURL(u)
+					}
 				}
 			})
 		},
@@ -268,6 +246,35 @@ func Crawl(ctx context.Context, u string, scope []string, max int, f filter.Filt
 	}
 
 	return results.Slice(), err
+}
+
+func crawlFilterURLs(p *url.URL, f filter.Filter) string {
+	// Check that the URL has an appropriate scheme for scraping
+	if !p.IsAbs() || (p.Scheme != "http" && p.Scheme != "https") {
+		return ""
+	}
+	// If the URL path has a file extension, check that it's of interest
+	if ext := crawlRE.FindString(p.Path); ext != "" {
+		ext = strings.ToLower(ext)
+
+		var found bool
+		for _, t := range crawlFileTypes {
+			if ext == t {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return ""
+		}
+	}
+	// Remove fragments and check if we've seen this URL before
+	p.Fragment = ""
+	p.RawFragment = ""
+	if f.Duplicate(p.String()) {
+		return ""
+	}
+	return p.String()
 }
 
 func whichDomain(name string, scope []string) string {

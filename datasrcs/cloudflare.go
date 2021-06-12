@@ -82,13 +82,13 @@ func (c *Cloudflare) dnsRequest(ctx context.Context, req *requests.DNSRequest) {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %v", c.String(), err))
 	}
 
-	zones, err := api.ListZones(req.Domain)
+	zones, err := api.ListZones(ctx, req.Domain)
 	if err != nil {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %v", c.String(), err))
 	}
 
 	for _, zone := range zones {
-		records, err := api.DNSRecords(zone.ID, cloudflare.DNSRecord{})
+		records, err := api.DNSRecords(ctx, zone.ID, cloudflare.DNSRecord{})
 		if err != nil {
 			bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %v", c.String(), err))
 		}
