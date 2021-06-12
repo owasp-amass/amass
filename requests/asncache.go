@@ -103,12 +103,18 @@ func (c *ASNCache) Update(req *ASNRequest) {
 // ASNSearch return the cached ASN / netblock info associated with the provided asn parameter,
 // or nil when not found in the cache.
 func (c *ASNCache) ASNSearch(asn int) *ASNRequest {
+	c.Lock()
+	defer c.Unlock()
+
 	return c.cache[asn]
 }
 
 // AddrSearch returns the cached ASN / netblock info that the addr parameter belongs in,
 // or nil when not found in the cache.
 func (c *ASNCache) AddrSearch(addr string) *ASNRequest {
+	c.Lock()
+	defer c.Unlock()
+
 	ip := net.ParseIP(addr)
 	if ip == nil {
 		return nil
@@ -153,9 +159,6 @@ func (c *ASNCache) AddrSearch(addr string) *ASNRequest {
 }
 
 func (c *ASNCache) searchRangerData(ip net.IP) *cacheRangerEntry {
-	c.RLock()
-	defer c.RUnlock()
-
 	if entries, err := c.ranger.ContainingNetworks(ip); err == nil {
 		for _, e := range entries {
 			if entry, ok := e.(*cacheRangerEntry); ok {
@@ -163,16 +166,13 @@ func (c *ASNCache) searchRangerData(ip net.IP) *cacheRangerEntry {
 			}
 		}
 	}
-
 	return nil
 }
 
 func (c *ASNCache) rawData2Ranger(ip net.IP) {
-	c.Lock()
-	defer c.Unlock()
-
 	var cidr *net.IPNet
 	var data *ASNRequest
+
 	for _, record := range c.cache {
 		for netblock := range record.Netblocks {
 			_, ipnet, err := net.ParseCIDR(netblock)
