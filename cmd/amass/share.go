@@ -37,6 +37,7 @@ type domain struct {
 
 type asset struct {
 	FQDN        string     `json:"fqdn"`
+	SourceCount int        `json:"source_count"`
 	SourceTypes []string   `json:"source_types"`
 	Addrs       []*address `json:"addrs"`
 }
@@ -204,13 +205,17 @@ func buildAssetInfo(e *enum.Enumeration, sub string) *asset {
 		return nil
 	}
 
-	set := stringset.New()
+	var count int
+	tags := stringset.New()
 	for _, source := range sources {
+		count++
+
 		if tag, found := sourceTags[source]; found {
-			set.Insert(tag)
+			tags.Insert(tag)
 		}
 	}
-	a.SourceTypes = set.Slice()
 
+	a.SourceCount = count
+	a.SourceTypes = tags.Slice()
 	return a
 }
