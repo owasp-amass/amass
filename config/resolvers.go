@@ -35,7 +35,6 @@ var DefaultBaselineResolvers = []string{
 	"209.244.0.3",     // Level3
 	"64.6.64.6",       // Verisign
 	"8.26.56.26",      // Comodo Secure DNS
-	"198.101.242.72",  // Alternate DNS
 	"64.6.64.6",       // Neustar DNS Advantage
 	"77.88.8.1",       // Yandex.DNS
 	"94.140.14.140",   // AdGuard
