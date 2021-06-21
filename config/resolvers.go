@@ -35,11 +35,15 @@ var DefaultBaselineResolvers = []string{
 	"209.244.0.3",     // Level3
 	"64.6.64.6",       // Verisign
 	"8.26.56.26",      // Comodo Secure DNS
-	"64.6.64.6",       // Neustar DNS Advantage
+	"64.6.64.6",       // Neustar DNS
+	"195.46.39.39",    // SafeDNS
+	"185.228.168.9",   // CleanBrowsing
+	"76.76.19.19",     // Alternate DNS
 	"77.88.8.1",       // Yandex.DNS
 	"94.140.14.140",   // AdGuard
 	"216.146.35.35",   // Dyn
-	"185.121.177.177", // OpenNIC
+	"192.71.245.208",  // OpenNIC
+	"38.132.106.139",  // CyberGhost
 	"109.69.8.51",     // puntCAT
 	"74.82.42.42",     // Hurricane Electric
 }
