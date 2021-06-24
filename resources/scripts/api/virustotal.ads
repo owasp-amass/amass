@@ -50,6 +50,10 @@ function vertical(ctx, domain)
             sendnames(ctx, sub)
         end
     else
+        if d.data == nil then
+            return
+        end
+
         for i, data in pairs(d.data) do
             if data.type == "domain" then
                 sendnames(ctx, data.id)
