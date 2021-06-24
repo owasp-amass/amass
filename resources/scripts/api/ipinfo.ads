@@ -70,7 +70,7 @@ function getasn(ctx, addr, ttl, token)
     end
 
     local j = json.decode(resp)
-    if (j ~= nil and j.error ~= nil) then
+    if (j == nil or j.error ~= nil or j.asn == nil) then
         return 0, ""
     end
 
