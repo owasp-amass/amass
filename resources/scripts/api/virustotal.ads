@@ -42,6 +42,10 @@ function vertical(ctx, domain)
             return
         end
 
+        if d.subdomains == nil then
+            return
+        end
+
         for i, sub in pairs(d.subdomains) do
             sendnames(ctx, sub)
         end
