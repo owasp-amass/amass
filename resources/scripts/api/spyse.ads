@@ -33,11 +33,11 @@ function vertical(ctx, domain)
     if (c == nil or c.key == nil or c.key == "") then
         return
     end
+    local step = 100
+    for i = 0,10000,step do
+        local payload = '{"search_params":[{"name":{"operator":"ends","value":".' .. domain .. '"}}],"limit":100,"offset":' .. tostring(i) .. '}'
+        local resp = postreq(ctx, "https://api.spyse.com/v4/data/domain/search", c.key, cfg.ttl, payload)
 
-    for i = 0,10000,100 do
-        local u = subsurl(domain, i)
-
-        local resp = getpage(ctx, u, c.key, cfg.ttl)
         if (resp == "") then
             break
         end
@@ -50,11 +50,10 @@ function vertical(ctx, domain)
         for i, item in pairs(d['data'].items) do
             sendnames(ctx, item.name)
         end
+        if (i+step >= d['data'].total_items) then
+            break
+        end
     end
-end
-
-function subsurl(domain, offset)
-    return "https://api.spyse.com/v3/data/domain/subdomain?domain=" .. domain .. "&limit=100&offset=" .. tostring(offset)
 end
 
 function horizontal(ctx, domain)
@@ -68,85 +67,48 @@ function horizontal(ctx, domain)
         return
     end
 
-    -- Spyse API domain/related/domain often returns false positives (domains not owned by the provided domain)
-    --horizonnames(ctx, domain, c.key, cfg.ttl)
     horizoncerts(ctx, domain, c.key, cfg.ttl)
 end
 
-function horizonnames(ctx, domain, key, ttl)
-    for i = 0,10000,100 do
-        u = namesurl(domain, i)
-
-        resp = getpage(ctx, u, key, ttl)
-        if (resp == "") then
-            break
-        end
-
-        local d = json.decode(resp)
-        if (d == nil or #(d['data'].items) == 0) then
-            break
-        end
-
-        for i, item in pairs(d['data'].items) do
-            if (item.domain.name ~= "") then
-                local names = find(item.domain.name, subdomainre)
-
-                if (names ~= nil and #names > 0 and names[1] ~= "") then
-                    associated(ctx, domain, names[1])
-                end
-            end
-        end
-    end
-end
-
-function namesurl(domain, offset)
-    return "https://api.spyse.com/v3/data/domain/related/domain?domain=" .. domain .. "&limit=100&offset=" .. tostring(offset)
-end
 
 function horizoncerts(ctx, domain, key, ttl)
-    local u = "https://api.spyse.com/v3/data/domain/org?domain=" .. domain
+    local u = "https://api.spyse.com/v4/data/domain/" .. domain
     local resp = getpage(ctx, u, key, ttl)
     if (resp == "") then
         return
     end
-
     local d = json.decode(resp)
-    if (d == nil or d['data'].id == nil) then
+    if (d == nil or #(d['data'].items) == 0) then
         return
     end
-    local orgid = d['data'].id
+    if (d['data'].items[0].cert_summary == nil) then
+        return
+    end
 
-    for i = 0,10000,100 do
-        u = certsurl(orgid, i)
+    local certid = d['data'].items[0].cert_summary.fingerprint_sha256
 
-        resp = getpage(ctx, u, key, ttl)
-        if (resp == "") then
-            break
-        end
+    u = "https://api.spyse.com/v4/data/certificate/" .. certid
+    resp = getpage(ctx, u, key, ttl)
 
-        local d = json.decode(resp)
-        if (d == nil or #(d['data'].items) == 0) then
-            break
-        end
+    if (resp == "") then
+        return
+    end
 
-        for i, item in pairs(d['data'].items) do
-            local san = item.parsed.extensions.subject_alt_name
+    d = json.decode(resp)
+    if (d == nil or #(d['data'].items) == 0) then
+        return
+    end
 
-            if (san ~= nil and #(san.dns_names) > 0) then
-                for j, name in pairs(san.dns_names) do
-                    local names = find(name, subdomainre)
+    local san = d['data'].items[0].parsed.extensions.subject_alt_name
 
-                    if (names ~= nil and #names > 0 and names[1] ~= "") then
-                        associated(ctx, domain, names[1])
-                    end
-                end
+    if (san ~= nil and #(san.dns_names) > 0) then
+        for j, name in pairs(san.dns_names) do
+            local names = find(name, subdomainre)
+            if (names ~= nil and #names > 0 and names[1] ~= "") then
+                associated(ctx, domain, names[1])
             end
         end
     end
-end
-
-function certsurl(id, offset)
-    return "https://api.spyse.com/v3/data/org/cert/subject?id=" .. id .. "&limit=100&offset=" .. tostring(offset)
 end
 
 function asn(ctx, addr, asn)
@@ -193,7 +155,7 @@ function asn(ctx, addr, asn)
 end
 
 function getasn(ctx, ip, key, ttl)
-    local u = "https://api.spyse.com/v3/data/ip?ip=" .. tostring(ip)
+    local u = "https://api.spyse.com/v4/data/ip/" .. tostring(ip)
 
     local resp = getpage(ctx, u, key, ttl)
     if (resp == "") then
@@ -220,7 +182,7 @@ function getasn(ctx, ip, key, ttl)
 end
 
 function asinfo(ctx, asn, key, ttl)
-    local u = "https://api.spyse.com/v3/data/as?asn=" .. tostring(asn)
+    local u = "https://api.spyse.com/v4/data/as/" .. tostring(asn)
 
     local resp = getpage(ctx, u, key, ttl)
     if (resp == "") then
@@ -249,6 +211,23 @@ end
 function getpage(ctx, url, key, ttl)
     local resp, err = request(ctx, {
         ['url']=url,
+        headers={
+            ['Authorization']="Bearer " .. key,
+            ['Content-Type']="application/json",
+        },
+    })
+    if (err ~= nil and err ~= "") then
+        return ""
+    end
+
+    return resp
+end
+
+function postreq(ctx, url, key, ttl, payload)
+    local resp, err = request(ctx, {
+        ['url']=url,
+        method="POST",
+        data=payload,
         headers={
             ['Authorization']="Bearer " .. key,
             ['Content-Type']="application/json",
