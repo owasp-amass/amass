@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -28,7 +29,10 @@ import (
 )
 
 const (
-	outputDirectoryName = "amass"
+	outputDirName  = "amass"
+	defaultCfgFile = "config.ini"
+	cfgEnvironVar  = "AMASS_CONFIG"
+	systemCfgDir   = "/etc"
 )
 
 var (
@@ -259,16 +263,25 @@ func (c *Config) LoadSettings(path string) error {
 
 // AcquireConfig populates the Config struct provided by the Config argument.
 func AcquireConfig(dir, file string, cfg *Config) error {
-	var path string
+	var path, dircfg, syscfg string
+
+	d := OutputDirectory(dir)
+	if finfo, err := os.Stat(d); d != "" && !os.IsNotExist(err) && finfo.IsDir() {
+		dircfg = filepath.Join(d, defaultCfgFile)
+	}
+
+	if runtime.GOOS != "windows" {
+		syscfg = filepath.Join(filepath.Join(systemCfgDir, outputDirName), defaultCfgFile)
+	}
 
 	if file != "" {
 		path = file
-	} else if f, set := os.LookupEnv("AMASS_CONFIG"); set {
+	} else if f, set := os.LookupEnv(cfgEnvironVar); set {
 		path = f
-	} else if d := OutputDirectory(dir); d != "" {
-		if finfo, err := os.Stat(d); !os.IsNotExist(err) && finfo.IsDir() {
-			path = filepath.Join(d, "config.ini")
-		}
+	} else if _, err := os.Stat(dircfg); err == nil {
+		path = dircfg
+	} else if _, err := os.Stat(syscfg); err == nil {
+		path = syscfg
 	}
 
 	return cfg.LoadSettings(path)
@@ -282,7 +295,7 @@ func OutputDirectory(dir ...string) string {
 	}
 
 	if path, err := os.UserConfigDir(); err == nil {
-		return filepath.Join(path, outputDirectoryName)
+		return filepath.Join(path, outputDirName)
 	}
 
 	return ""
