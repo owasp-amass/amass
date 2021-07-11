@@ -5,9 +5,10 @@ local json = require("json")
 
 name = "FacebookCT"
 type = "cert"
+api_version = "v11.0"
 
 function start()
-    setratelimit(10)
+    setratelimit(5)
 end
 
 function check()
@@ -25,6 +26,36 @@ function check()
 end
 
 function vertical(ctx, domain)
+    local next = queryurl(domain, gettoken(ctx))
+
+    while next ~= "" do
+        resp, err = request(ctx, {
+            url=next,
+            headers={['Content-Type']="application/json"},
+        })
+        if (err ~= nil and err ~= "") then
+            return
+        end
+
+        dec = json.decode(resp)
+        if (dec == nil or dec.data == nil or #(dec.data) == 0) then
+            return
+        end
+
+        for _, r in pairs(dec.data) do
+            for _, name in pairs(r.domains) do
+                newname(ctx, name)
+            end
+        end
+
+        next = ""
+        if (dec.paging ~= nil and dec.paging.next ~= nil and dec.paging.next ~= "") then
+            next = dec.paging.next
+        end
+    end
+end
+
+function gettoken(ctx)
     local c
     local cfg = datasrc_config()
     if cfg ~= nil then
@@ -33,61 +64,33 @@ function vertical(ctx, domain)
 
     if (c == nil or c.key == nil or 
         c.secret == nil or c.key == "" or c.secret == "") then
-        return
+        return ""
     end
 
+    local authurl = "https://graph.facebook.com/oauth/access_token"
+    authurl = authurl .. "?client_id=" .. c.key .. "&client_secret=" .. c.secret .. "&grant_type=client_credentials"
+
     local resp, err = request(ctx, {
-        url=authurl(c.key, c.secret),
+        url=authurl,
         headers={['Content-Type']="application/json"},
     })
     if (err ~= nil and err ~= "") then
-        return
+        return ""
     end
     
     local dec = json.decode(resp)
     if (dec == nil or dec.access_token == nil or dec.access_token == "") then
-        return
-    end
-    
-    resp, err = request(ctx, {
-        url=queryurl(domain, dec.access_token),
-        headers={['Content-Type']="application/json"},
-    })
-    if (err ~= nil and err ~= "") then
-        return
+        return ""
     end
 
-    dec = json.decode(resp)
-    if (dec == nil or #(dec.data) == 0) then
-        return
-    end
-
-    for i, r in pairs(dec.data) do
-        for j, name in pairs(r.domains) do
-            sendnames(ctx, name)
-        end
-    end
-end
-
-function authurl(id, secret)
-    return "https://graph.facebook.com/oauth/access_token?client_id=" .. id .. "&client_secret=" .. secret .. "&grant_type=client_credentials"
+    return dec.access_token
 end
 
 function queryurl(domain, token)
-    return "https://graph.facebook.com/certificates?fields=domains&access_token=" .. token .. "&query=*." .. domain
-end
-
-function sendnames(ctx, content)
-    local names = find(content, subdomainre)
-    if names == nil then
-        return
+    if token == "" then
+        return ""
     end
 
-    local found = {}
-    for i, v in pairs(names) do
-        if found[v] == nil then
-            newname(ctx, v)
-            found[v] = true
-        end
-    end
+    local u = "https://graph.facebook.com/" .. api_version
+    return u .. "/certificates?fields=domains&access_token=" .. token .. "&query=*." .. domain
 end

@@ -21,27 +21,29 @@ import (
 	luajson "layeh.com/gopher-json"
 )
 
+// Script callback functions
+type callbacks struct {
+	Start      lua.LValue
+	Stop       lua.LValue
+	Check      lua.LValue
+	Vertical   lua.LValue
+	Horizontal lua.LValue
+	Address    lua.LValue
+	Asn        lua.LValue
+	Resolved   lua.LValue
+	Subdomain  lua.LValue
+}
+
 // Script is the Service that handles access to the Script data source.
 type Script struct {
 	service.BaseService
-
 	SourceType string
 	sys        systems.System
 	luaState   *lua.LState
-	// Script callback functions
-	start      lua.LValue
-	stop       lua.LValue
-	check      lua.LValue
-	vertical   lua.LValue
-	horizontal lua.LValue
-	address    lua.LValue
-	asn        lua.LValue
-	resolved   lua.LValue
-	subdomain  lua.LValue
-	// Regexp to match any subdomain name
-	subre   *regexp.Regexp
-	seconds int
-	cancel  context.CancelFunc
+	cbs        *callbacks
+	subre      *regexp.Regexp
+	seconds    int
+	cancel     context.CancelFunc
 }
 
 // NewScript returns he object initialized, but not yet started.
@@ -91,7 +93,7 @@ func NewScript(script string, sys systems.System) *Script {
 	s.BaseService = *service.NewBaseService(s, name)
 
 	// Save references to the callbacks defined within the script
-	s.getScriptCallbacks()
+	s.assignCallbacks()
 	return s
 }
 
@@ -126,18 +128,20 @@ func (s *Script) newLuaState(cfg *config.Config) *lua.LState {
 }
 
 // Save references to the script functions that serve as callbacks for Amass events.
-func (s *Script) getScriptCallbacks() {
+func (s *Script) assignCallbacks() {
 	L := s.luaState
 
-	s.start = L.GetGlobal("start")
-	s.stop = L.GetGlobal("stop")
-	s.check = L.GetGlobal("check")
-	s.vertical = L.GetGlobal("vertical")
-	s.horizontal = L.GetGlobal("horizontal")
-	s.address = L.GetGlobal("address")
-	s.asn = L.GetGlobal("asn")
-	s.resolved = L.GetGlobal("resolved")
-	s.subdomain = L.GetGlobal("subdomain")
+	s.cbs = &callbacks{
+		Start:      L.GetGlobal("start"),
+		Stop:       L.GetGlobal("stop"),
+		Check:      L.GetGlobal("check"),
+		Vertical:   L.GetGlobal("vertical"),
+		Horizontal: L.GetGlobal("horizontal"),
+		Address:    L.GetGlobal("address"),
+		Asn:        L.GetGlobal("asn"),
+		Resolved:   L.GetGlobal("resolved"),
+		Subdomain:  L.GetGlobal("subdomain"),
+	}
 }
 
 // Acquires the script name of the script by accessing the global variable.
@@ -180,12 +184,12 @@ func (s *Script) Description() string {
 // OnStart implements the Service interface.
 func (s *Script) OnStart() error {
 	L := s.luaState
-	if s.start.Type() == lua.LTNil {
+	if s.cbs.Start.Type() == lua.LTNil {
 		return nil
 	}
 
 	err := L.CallByParam(lua.P{
-		Fn:      s.start,
+		Fn:      s.cbs.Start,
 		NRet:    0,
 		Protect: true,
 	})
@@ -210,9 +214,9 @@ func (s *Script) OnStop() error {
 
 	var err error
 	L := s.luaState
-	if s.stop.Type() != lua.LTNil {
+	if s.cbs.Stop.Type() != lua.LTNil {
 		err = L.CallByParam(lua.P{
-			Fn:      s.stop,
+			Fn:      s.cbs.Stop,
 			NRet:    0,
 			Protect: true,
 		})
@@ -229,12 +233,12 @@ func (s *Script) OnStop() error {
 func (s *Script) checkConfig() error {
 	L := s.luaState
 
-	if s.check.Type() == lua.LTNil {
+	if s.cbs.Check.Type() == lua.LTNil {
 		return nil
 	}
 
 	err := L.CallByParam(lua.P{
-		Fn:      s.check,
+		Fn:      s.cbs.Check,
 		NRet:    1,
 		Protect: true,
 	})
@@ -260,43 +264,31 @@ func (s *Script) checkConfig() error {
 
 // OnRequest implements the Service interface.
 func (s *Script) OnRequest(ctx context.Context, args service.Args) {
-	var check bool
-
 	switch req := args.(type) {
 	case *requests.DNSRequest:
-		if s.vertical.Type() != lua.LTNil && req != nil && req.Domain != "" {
+		if s.cbs.Vertical.Type() != lua.LTNil && req != nil && req.Domain != "" {
 			s.dnsRequest(ctx, req)
-			check = true
 		}
 	case *requests.ResolvedRequest:
-		if s.resolved.Type() != lua.LTNil && req != nil && req.Name != "" && len(req.Records) > 0 {
+		if s.cbs.Resolved.Type() != lua.LTNil && req != nil && req.Name != "" && len(req.Records) > 0 {
 			s.resolvedRequest(ctx, req)
-			check = true
 		}
 	case *requests.SubdomainRequest:
-		if s.subdomain.Type() != lua.LTNil && req != nil && req.Name != "" {
+		if s.cbs.Subdomain.Type() != lua.LTNil && req != nil && req.Name != "" {
 			s.subdomainRequest(ctx, req)
-			check = true
 		}
 	case *requests.AddrRequest:
-		if s.address.Type() != lua.LTNil && req != nil && req.Address != "" {
+		if s.cbs.Address.Type() != lua.LTNil && req != nil && req.Address != "" {
 			s.addrRequest(ctx, req)
-			check = true
 		}
 	case *requests.ASNRequest:
-		if s.asn.Type() != lua.LTNil && req != nil && (req.Address != "" || req.ASN != 0) {
+		if s.cbs.Asn.Type() != lua.LTNil && req != nil && (req.Address != "" || req.ASN != 0) {
 			s.asnRequest(ctx, req)
-			check = true
 		}
 	case *requests.WhoisRequest:
-		if s.horizontal.Type() != lua.LTNil {
+		if s.cbs.Horizontal.Type() != lua.LTNil {
 			s.whoisRequest(ctx, req)
-			check = true
 		}
-	}
-
-	if check {
-		numRateLimitChecks(s, s.seconds)
 	}
 }
 
@@ -316,7 +308,7 @@ func (s *Script) dnsRequest(ctx context.Context, req *requests.DNSRequest) {
 		fmt.Sprintf("Querying %s for %s subdomains", s.String(), req.Domain))
 
 	err = L.CallByParam(lua.P{
-		Fn:      s.vertical,
+		Fn:      s.cbs.Vertical,
 		NRet:    0,
 		Protect: true,
 	}, s.contextToUserData(ctx), lua.LString(req.Domain))
@@ -350,7 +342,7 @@ func (s *Script) resolvedRequest(ctx context.Context, req *requests.ResolvedRequ
 	}
 
 	err = L.CallByParam(lua.P{
-		Fn:      s.resolved,
+		Fn:      s.cbs.Resolved,
 		NRet:    0,
 		Protect: true,
 	}, s.contextToUserData(ctx), lua.LString(req.Name), lua.LString(req.Domain), records)
@@ -374,7 +366,7 @@ func (s *Script) subdomainRequest(ctx context.Context, req *requests.SubdomainRe
 	}
 
 	err = L.CallByParam(lua.P{
-		Fn:      s.subdomain,
+		Fn:      s.cbs.Subdomain,
 		NRet:    0,
 		Protect: true,
 	}, s.contextToUserData(ctx), lua.LString(req.Name), lua.LString(req.Domain), lua.LNumber(req.Times))
@@ -398,7 +390,7 @@ func (s *Script) addrRequest(ctx context.Context, req *requests.AddrRequest) {
 	}
 
 	err = L.CallByParam(lua.P{
-		Fn:      s.address,
+		Fn:      s.cbs.Address,
 		NRet:    0,
 		Protect: true,
 	}, s.contextToUserData(ctx), lua.LString(req.Address))
@@ -422,7 +414,7 @@ func (s *Script) asnRequest(ctx context.Context, req *requests.ASNRequest) {
 	}
 
 	err = L.CallByParam(lua.P{
-		Fn:      s.asn,
+		Fn:      s.cbs.Asn,
 		NRet:    0,
 		Protect: true,
 	}, s.contextToUserData(ctx), lua.LString(req.Address), lua.LNumber(req.ASN))
@@ -446,7 +438,7 @@ func (s *Script) whoisRequest(ctx context.Context, req *requests.WhoisRequest) {
 	}
 
 	err = L.CallByParam(lua.P{
-		Fn:      s.horizontal,
+		Fn:      s.cbs.Horizontal,
 		NRet:    0,
 		Protect: true,
 	}, s.contextToUserData(ctx), lua.LString(req.Domain))
