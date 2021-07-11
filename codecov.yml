@@ -6,14 +6,14 @@ fixes:
 
 ignore:
   - encode_optype.go
-  - ./examples/**/*
-  - ./resources/**/*
-  - ./wordlist/**/*
   - ./doc/**/*
+  - ./examples/**/*
+  - ./images/**/*
+  - ./resources/**/*
 
 coverage:
   range: 20..60
-  round: down
+  round: up
   precision: 2
 
 comment:
