@@ -39,12 +39,6 @@ Did you write a blog post, magazine article or do a podcast about or mentioning 
 
 ### Blogs & Articles
 
-* Article on [ThreadFix](threadfix.it):
-  * [Applied ThreadFix: Seeding Your Application Portfolio with OWASP Amass](https://threadfix.it/resources/applied-threadfix-seeding-your-application-portfolio-with-owasp-amass/)
-* Blog post on [Luke Stephens' (@hakluke)](https://medium.com/@hakluke):
-  * [Hakluke’s Guide to Amass — How to Use Amass More Effectively for Bug Bounties](https://medium.com/@hakluke/haklukes-guide-to-amass-how-to-use-amass-more-effectively-for-bug-bounties-7c37570b83f7)
-* Blog post on [WW Tech Blog](https://medium.com/ww-tech-blog):
-  * [Reducing Our Attack Surface with AppSec Platform](https://medium.com/ww-tech-blog/reducing-our-attack-surface-with-appsec-platform-4b6717a16709)
 * Blog post on [SecurityTrail's Blog](https://securitytrails.com/blog/):
   * [What is DNS Intelligence?](https://securitytrails.com/blog/dns-intelligence)
   * [What is OWASP? Top 10 Web Application Security Risks](https://securitytrails.com/blog/owasp-top-10)
@@ -53,6 +47,16 @@ Did you write a blog post, magazine article or do a podcast about or mentioning 
   * [5 Subdomain Takeover #ProTips](https://securitytrails.com/blog/subdomain-takeover-tips)
   * [Where You’ll Find Us: An Overview of SecurityTrails Integrations](https://securitytrails.com/blog/integrations-overview)
   * [Top 7 Subdomain Scanner Tools: Find Subdomains in Seconds](https://securitytrails.com/blog/subdomain-scanner-find-subdomains)
+* Blog post on [WhoisXML API's Blog](https://www.whoisxmlapi.com/blog):
+  * [OWASP Amass and WhoisXML API Are Now Integration Partners](https://main.whoisxmlapi.com/success-stories/cyber-security-solutions/owasp-amass-and-whoisxml-api-are-now-integration-partners)
+* Blog post on [Intigriti's Blog](https://blog.intigriti.com):
+  * [Hacker tools: Amass – Hunting for Subdomains](https://blog.intigriti.com/2021/06/08/hacker-tools-amass-hunting-for-subdomains)
+* Article on [ThreadFix](threadfix.it):
+  * [Applied ThreadFix: Seeding Your Application Portfolio with OWASP Amass](https://threadfix.it/resources/applied-threadfix-seeding-your-application-portfolio-with-owasp-amass/)
+* Blog post on [Luke Stephens' (@hakluke)](https://medium.com/@hakluke):
+  * [Hakluke’s Guide to Amass — How to Use Amass More Effectively for Bug Bounties](https://medium.com/@hakluke/haklukes-guide-to-amass-how-to-use-amass-more-effectively-for-bug-bounties-7c37570b83f7)
+* Blog post on [WW Tech Blog](https://medium.com/ww-tech-blog):
+  * [Reducing Our Attack Surface with AppSec Platform](https://medium.com/ww-tech-blog/reducing-our-attack-surface-with-appsec-platform-4b6717a16709)
 * Blog post on [HackerOne's Blog](https://www.hackerone.com/blog):
   * [100 Hacking Tools and Resources](https://www.hackerone.com/blog/100-hacking-tools-and-resources)
 * Blog post on [Synk's Blog](https://snyk.io/blog/):
@@ -251,10 +255,3 @@ Did you write a blog post, magazine article or do a podcast about or mentioning 
   Bugcrowd LevelUp 0x02,
   28.05.2018
   ([Slides](https://docs.google.com/presentation/d/1R-3eqlt31sL7_rj2f1_vGEqqb7hcx4vxX_L7E23lJVo/))
-
-### 2017
-
-* [Designing Your Own Tools: The Amass Penetration Testing Tool](https://www.youtube.com/watch?v=pCqxOk8Yq10)
-  by Jeff Foley,
-  [Fall 2017 CNY Hackathon](https://www.cnyhackathon.org/?p=882),
-  17.12.2017
