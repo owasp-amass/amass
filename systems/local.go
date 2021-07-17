@@ -327,7 +327,7 @@ func publicResolverSetup(cfg *config.Config, max int) resolve.Resolver {
 		return nil
 	}
 
-	wcd := resolve.NewBaseResolver("8.8.8.8", 100, cfg.Log)
+	wcd := resolve.NewBaseResolver("8.8.8.8", 50, cfg.Log)
 	baseline := resolve.NewResolverPool(trusted, time.Second, wcd, 1, cfg.Log)
 
 	r := setupResolvers(config.PublicResolvers, max, config.DefaultQueriesPerPublicResolver, cfg.Log)
