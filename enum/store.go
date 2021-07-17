@@ -448,24 +448,24 @@ func (dm *dataManager) addrRequest(ctx context.Context, req *requests.AddrReques
 }
 
 func (dm *dataManager) processASNRequests() {
+	empty := func() {
+		dm.queue.Process(func(e interface{}) {
+			if qar, ok := e.(*queuedAddrRequest); ok {
+				dm.findInfraInfo(qar.Req)
+			}
+		})
+	}
+
 	for {
 		select {
 		case <-dm.signalDone:
 			if dm.queue.Len() > 0 {
-				dm.queue.Process(func(e interface{}) {
-					if qar, ok := e.(*queuedAddrRequest); ok {
-						dm.findInfraInfo(qar.Req)
-					}
-				})
+				empty()
 			}
 			dm.confirmDone <- struct{}{}
 			return
 		case <-dm.queue.Signal():
-			dm.queue.Process(func(e interface{}) {
-				if qar, ok := e.(*queuedAddrRequest); ok {
-					dm.findInfraInfo(qar.Req)
-				}
-			})
+			empty()
 		}
 	}
 }
