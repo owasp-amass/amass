@@ -22,7 +22,10 @@ import (
 	"github.com/fatih/color"
 )
 
-var endpoints = map[string]string{"SecurityTrails": "https://api.securitytrails.com/v1/submit/hostnames?format=amass"}
+var endpoints = map[string][]string{
+	"SecurityTrails": {"APIKEY", "https://api.securitytrails.com/v1/submit/hostnames?format=amass"},
+	"WhoisXMLAPI":    {"X-Authentication-Token", "https://data-exchange.whoisxmlapi.com/data-exchange/1.0/amass/"},
+}
 
 type findings struct {
 	Mode       string    `json:"mode"`
@@ -66,33 +69,37 @@ func shareFindings(e *enum.Enumeration, cfg *config.Config) {
 		return
 	}
 
-	var buf bytes.Buffer
-	zw := gzip.NewWriter(&buf)
-	zw.Name = "share.json"
-	zw.Comment = "OWASP Amass enumeration findings"
-	zw.ModTime = time.Now()
-
-	if err := json.NewEncoder(zw).Encode(f); err != nil {
+	j, err := json.Marshal(f)
+	if err != nil {
 		return
 	}
-	_ = zw.Flush()
-	_ = zw.Close()
 
 	fmt.Fprintf(color.Error, "%s\n", yellow("Sharing enumeration findings"))
 
-	for ds, url := range endpoints {
+	for ds, info := range endpoints {
+		var buf bytes.Buffer
+
+		zw := gzip.NewWriter(&buf)
+		zw.Name = "share.json"
+		zw.Comment = "OWASP Amass enumeration findings"
+		zw.ModTime = time.Now()
+		if n, err := zw.Write(j); err != nil || n != len(j) || zw.Close() != nil {
+			fmt.Fprintf(color.Error, "%s%s: %s\n", red("Failed to create the gzip file for "), red(ds), red(err.Error()))
+			continue
+		}
+
 		if creds := dscfgs[ds].GetCredentials(); creds != nil {
-			if err := sendFindings(url, &buf, creds.Key); err != nil {
+			if err := sendFindings(info[1], &buf, info[0], creds.Key); err != nil {
 				fmt.Fprintf(color.Error, "%s%s: %s\n", red("Failed to share findings with "), red(ds), red(err.Error()))
 			}
 		}
 	}
 }
 
-func sendFindings(url string, data io.Reader, key string) error {
+func sendFindings(url string, data io.Reader, hdr, key string) error {
 	headers := map[string]string{
 		"Content-Encoding": "gzip",
-		"APIKEY":           key,
+		hdr:                key,
 	}
 
 	_, err := http.RequestWebPage(context.Background(), url, data, headers, nil)
