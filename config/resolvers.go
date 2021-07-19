@@ -33,7 +33,6 @@ var DefaultBaselineResolvers = []string{
 	"208.67.222.222",  // Cisco OpenDNS
 	"84.200.69.80",    // DNS.WATCH
 	"209.244.0.3",     // Level3
-	"64.6.64.6",       // Verisign
 	"8.26.56.26",      // Comodo Secure DNS
 	"64.6.64.6",       // Neustar DNS
 	"195.46.39.39",    // SafeDNS
