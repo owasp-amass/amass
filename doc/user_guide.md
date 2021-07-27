@@ -131,8 +131,8 @@ This subcommand will perform DNS enumeration and network mapping while populatin
 | -src | Print data sources for the discovered names | amass enum -src -d example.com |
 | -timeout | Number of minutes to execute the enumeration | amass enum -timeout 30 -d example.com |
 | -w | Path to a different wordlist file | amass enum -brute -w wordlist.txt -d example.com |
-| -nocerts | Disables certificate name grabs when -active mode is enabled | amass enum -active --no-certs -d example.com
-| -noaxfr | Disables zone transfers when -active mode is enabled | amass enum -active -no-axfr -d example.com
+| -nocerts | Disables certificate name grabs when -active mode is enabled | amass enum -active -nocerts -d example.com
+| -noaxfr | Disables zone transfers when -active mode is enabled | amass enum -active -noaxfr -d example.com
 
 ### The 'viz' Subcommand
 
