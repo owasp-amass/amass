@@ -69,8 +69,14 @@ func (a *activeTask) Process(ctx context.Context, data pipeline.Data, tp pipelin
 	switch data.(type) {
 	case *requests.DNSRequest:
 		ok = true
+	case *requests.AddrRequest:
+		if !a.enum.Config.NoCerts {
+			ok = true
+		}
 	case *requests.ZoneXFRRequest:
-		ok = true
+		if !a.enum.Config.NoAxfr {
+			ok = true
+		}
 	}
 
 	if ok {
@@ -112,9 +118,15 @@ func (a *activeTask) processTask() {
 		switch v := args.Data.(type) {
 		case *requests.DNSRequest:
 			go a.crawlName(args.Ctx, v, args.Params)
+		case *requests.AddrRequest:
+			if v.InScope && !a.enum.Config.NoCerts {
+				go a.certEnumeration(args.Ctx, v, args.Params)
+			}
 		case *requests.ZoneXFRRequest:
-			go a.zoneTransfer(args.Ctx, v, args.Params)
-			go a.zoneWalk(args.Ctx, v, args.Params)
+			if !a.enum.Config.NoAxfr {
+				go a.zoneTransfer(args.Ctx, v, args.Params)
+				go a.zoneWalk(args.Ctx, v, args.Params)
+			}
 		}
 	}
 }
@@ -159,6 +171,33 @@ func (a *activeTask) crawlName(ctx context.Context, req *requests.DNSRequest, tp
 						Source: "Active Crawl",
 					}, tp)
 				}
+			}
+		}
+	}
+}
+
+func (a *activeTask) certEnumeration(ctx context.Context, req *requests.AddrRequest, tp pipeline.TaskParams) {
+	defer func() { a.tokenPool <- struct{}{} }()
+
+	if req == nil || !req.Valid() {
+		return
+	}
+
+	for _, name := range http.PullCertificateNames(ctx, req.Address, a.enum.Config.Ports) {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		if n := strings.TrimSpace(name); n != "" {
+			if domain := a.enum.Config.WhichDomain(n); domain != "" {
+				pipeline.SendData(ctx, "new", &requests.DNSRequest{
+					Name:   n,
+					Domain: domain,
+					Tag:    requests.CERT,
+					Source: "Active Cert",
+				}, tp)
 			}
 		}
 	}
