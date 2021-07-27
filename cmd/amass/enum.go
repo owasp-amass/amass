@@ -73,6 +73,7 @@ type enumArgs struct {
 		Silent          bool
 		Sources         bool
 		Verbose         bool
+		Certs           bool
 	}
 	Filepaths struct {
 		AllFilePrefix    string
@@ -128,6 +129,7 @@ func defineEnumOptionFlags(enumFlags *flag.FlagSet, args *enumArgs) {
 	enumFlags.BoolVar(&args.Options.Silent, "silent", false, "Disable all output during execution")
 	enumFlags.BoolVar(&args.Options.Sources, "src", false, "Print data sources for the discovered names")
 	enumFlags.BoolVar(&args.Options.Verbose, "v", false, "Output status / debug / troubleshooting info")
+	enumFlags.BoolVar(&args.Options.Certs, "c", false, "Determines if ssl certifications should be extracted")
 }
 
 func defineEnumFilepathFlags(enumFlags *flag.FlagSet, args *enumArgs) {
@@ -653,7 +655,7 @@ func processEnumInputFiles(args *enumArgs) error {
 		for _, f := range args.Filepaths.Resolvers {
 			list, err := config.GetListFromFile(f)
 			if err != nil {
-				return fmt.Errorf("Failed to parse the esolver file: %v", err)
+				return fmt.Errorf("Failed to parse the resolver file: %v", err)
 			}
 			args.Resolvers.InsertMany(list...)
 		}
@@ -710,6 +712,7 @@ func (e enumArgs) OverrideConfig(conf *config.Config) error {
 	}
 	if e.Options.Active {
 		conf.Active = true
+		conf.Certs = true
 		conf.Passive = false
 	}
 	if e.Options.Passive {
@@ -729,6 +732,9 @@ func (e enumArgs) OverrideConfig(conf *config.Config) error {
 	}
 	if e.MaxDNSQueries > 0 {
 		conf.MaxDNSQueries = e.MaxDNSQueries
+	}
+	if e.Options.Certs {
+		conf.Certs = true
 	}
 
 	if len(e.Included) > 0 {

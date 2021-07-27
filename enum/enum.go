@@ -120,6 +120,12 @@ func (e *Enumeration) Start(ctx context.Context) error {
 
 		stages = append(stages, pipeline.FIFO("active", activetask))
 	}
+	if e.Config.Certs {
+		certstask := newCertsTask(e, maxActivePipelineTasks)
+		defer certstask.Stop()
+
+		stages = append(stages, pipeline.FIFO("certs", certstask))
+	}
 
 	/*
 	 * Now that the pipeline input source has been setup, names provided

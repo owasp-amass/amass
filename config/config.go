@@ -121,6 +121,9 @@ type Config struct {
 	// Determines if zone transfers will be attempted
 	Active bool
 
+	// Determines if ssl certifications should be extracted
+	Certs bool
+
 	// A blacklist of subdomain names that will not be investigated
 	Blacklist     []string
 	blacklistLock sync.Mutex

@@ -131,6 +131,7 @@ This subcommand will perform DNS enumeration and network mapping while populatin
 | -src | Print data sources for the discovered names | amass enum -src -d example.com |
 | -timeout | Number of minutes to execute the enumeration | amass enum -timeout 30 -d example.com |
 | -w | Path to a different wordlist file | amass enum -brute -w wordlist.txt -d example.com |
+| -c | Determines if ssl certifications should be extracted(This is enabled by default on -active mode) | amass enum -c -d example.com
 
 ### The 'viz' Subcommand
 
