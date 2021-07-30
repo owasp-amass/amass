@@ -67,7 +67,7 @@ The volume argument allows the Amass graph database to persist between execution
 ### From Sources
 
 1. Install [Go](https://golang.org/doc/install) and setup your Go workspace
-2. Download OWASP Amass by running `go get -v github.com/OWASP/Amass/v3/...`
+2. Download OWASP Amass by running `GO111MODULE=on go get -v github.com/OWASP/Amass/v3/...`
 3. At this point, the binary should be in `$GOPATH/bin`
 
 ## Documentation [![GoDoc](https://pkg.go.dev/badge/github.com/OWASP/Amass/v3?utm_source=godoc)](https://pkg.go.dev/github.com/OWASP/Amass/v3)
