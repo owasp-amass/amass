@@ -35,7 +35,7 @@ function vertical(ctx, domain)
     end
 
     local resp, err = request(ctx, {
-        url=verturl(domain, key),
+        url=verturl(domain, c.key),
         headers={['Content-Type']="application/json"},
     })
     if (err ~= nil and err ~= "") then
