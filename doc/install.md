@@ -47,7 +47,7 @@ Simply execute the following commands:
 1. Download OWASP Amass:
 
 ```bash
-go get -v github.com/OWASP/Amass/v3/...
+GO111MODULE=on go get -v github.com/OWASP/Amass/v3/...
 ```
 
 At this point, the binary should be in *$GOPATH/bin*.
