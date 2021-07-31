@@ -115,6 +115,7 @@ func (d *DNSDumpster) postForm(ctx context.Context, token, domain string) (strin
 	params := url.Values{
 		"csrfmiddlewaretoken": {token},
 		"targetip":            {domain},
+		"user":                "free",
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", "https://dnsdumpster.com/", strings.NewReader(params.Encode()))
