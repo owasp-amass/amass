@@ -9,5 +9,9 @@ function start()
 end
 
 function vertical(ctx, domain)
-    scrape(ctx, {['url']="https://html.duckduckgo.com/html/?q=site:" .. domain})
+    scrape(ctx, {['url']=buildurl(domain)})
+end
+
+function buildurl(domain)
+    return "https://html.duckduckgo.com/html/?q=site:" .. domain .. " -site:www." .. domain
 end
