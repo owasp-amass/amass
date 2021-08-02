@@ -23,6 +23,7 @@ func GetAllSources(sys systems.System) []service.Service {
 		NewCloudflare(sys),
 		NewDNSDB(sys),
 		NewDNSDumpster(sys),
+		NewFOFA(sys),
 		NewNetworksDB(sys),
 		NewRADb(sys),
 		NewShadowServer(sys),
