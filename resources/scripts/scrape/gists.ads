@@ -5,11 +5,11 @@ name = "Gists"
 type = "scrape"
 
 function start()
-    setratelimit(2)
+    setratelimit(1)
 end
 
 function vertical(ctx, domain)
-    local gistre = "https://gist\\.github\\.com/.(.*)/[a-z0-9]{32}"
+    local gistre = "https://gist\\.github\\.com/[a-zA-Z0-9\\-]{1,39}/[a-z0-9]{32}"
     for i=1,10 do
         local resp, err = request(ctx, {url=buildurl(domain, i)})
         if (err ~= nil and err ~= "") then
@@ -21,10 +21,10 @@ function vertical(ctx, domain)
             break
         end
 
-        for _, url in pairs(gists) do
+        for i, url in pairs(gists) do
             scrape(ctx, {['url']=url})
-            checkratelimit()
         end
+        checkratelimit()
     end
 end
 
