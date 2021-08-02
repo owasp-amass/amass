@@ -34,7 +34,7 @@ function vertical(ctx, domain)
 
     local scopes = {"issues", "wiki_blobs", "blobs", "notes"}
 
-    for _, s in pairs(scopes) do
+    for i, s in pairs(scopes) do
         scrape(ctx, {
             url=apiurl(domain, s),
             headers={['PRIVATE-TOKEN']=c.key},
@@ -43,5 +43,5 @@ function vertical(ctx, domain)
 end
 
 function apiurl(domain, scope)
-    return "https://gitlab.com/api/v4/search?scope=" .. scope .. "&search=." .. domain
+    return "https://gitlab.com/api/v4/search?scope=" .. scope .. "&search=" .. domain
 end
