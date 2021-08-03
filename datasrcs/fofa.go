@@ -82,8 +82,7 @@ func (f *FOFA) dnsRequest(ctx context.Context, req *requests.DNSRequest) {
 		return
 	}
 
-	i := 1
-	for i <= 10 {
+	for i := 1; i <= 10; i++ {
 		results, err := client.QueryAsArray(uint(i), []byte(fmt.Sprintf("domain=\"%s\"", req.Domain)), []byte("domain"))
 		if err != nil {
 			bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %v", f.String(), err))
@@ -98,6 +97,5 @@ func (f *FOFA) dnsRequest(ctx context.Context, req *requests.DNSRequest) {
 		}
 
 		f.CheckRateLimit()
-		i += 1
 	}
 }
