@@ -13,7 +13,9 @@ import (
 	"net"
 	"os"
 	"strconv"
+	"strings"
 
+	amassnet "github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/datasrcs"
 	"github.com/OWASP/Amass/v3/format"
@@ -31,6 +33,7 @@ const (
 type dbArgs struct {
 	Domains stringset.Set
 	Enum    int
+	Search  string
 	Options struct {
 		DemoMode         bool
 		IPs              bool
@@ -66,6 +69,7 @@ func runDBCommand(clArgs []string) {
 	dbCommand.BoolVar(&help2, "help", false, "Show the program usage message")
 	dbCommand.Var(&args.Domains, "d", "Domain names separated by commas (can be used multiple times)")
 	dbCommand.IntVar(&args.Enum, "enum", 0, "Identify an enumeration via an index from the listing")
+	dbCommand.StringVar(&args.Search, "search", "", "Search results by keyword/name/IP")
 	dbCommand.BoolVar(&args.Options.DemoMode, "demo", false, "Censor output to make it suitable for demonstrations")
 	dbCommand.BoolVar(&args.Options.IPs, "ip", false, "Show the IP addresses for discovered names")
 	dbCommand.BoolVar(&args.Options.IPv4, "ipv4", false, "Show the IPv4 addresses for discovered names")
@@ -257,6 +261,22 @@ func showEventData(args *dbArgs, uuids []string, asninfo bool, db *netmap.Graph)
 
 		if args.Options.DiscoveredNames {
 			var written bool
+			if amassnet.IsIP(args.Search) {
+				found := false
+				for _, a := range out.Addresses {
+					if a.Address.String() == args.Search {
+						found = true
+						break
+					}
+				}
+
+				if !found {
+					continue
+				}
+			} else if !strings.Contains(name, args.Search) {
+				continue
+			}
+
 			if outfile != nil {
 				fmt.Fprintf(outfile, "%s%s%s\n", source, name, ips)
 				written = true
