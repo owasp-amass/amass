@@ -46,10 +46,11 @@ const (
 )
 
 var (
-	subRE          = dns.AnySubdomainRegex()
-	crawlRE        = regexp.MustCompile(`\.\w{3,4}($|\?)`)
-	crawlFileTypes = []string{".html", ".htm", "xhtml", ".js", ".php"}
-	nameStripRE    = regexp.MustCompile(`^u[0-9a-f]{4}|20|22|25|2b|2f|3d|3a|40`)
+	subRE           = dns.AnySubdomainRegex()
+	crawlRE         = regexp.MustCompile(`\.[a-z0-9]{2,6}($|\?|#)`)
+	crawlFileStarts = []string{"js", "htm", "as", "php", "inc"}
+	crawlFileEnds   = []string{"html", "do", "action", "cgi"}
+	nameStripRE     = regexp.MustCompile(`^u[0-9a-f]{4}|20|22|25|2b|2f|3d|3a|40`)
 )
 
 // DefaultClient is the same HTTP client used by the package methods.
@@ -137,7 +138,7 @@ func RequestWebPage(ctx context.Context, u string, body io.Reader, hvals map[str
 }
 
 // Crawl will spider the web page at the URL argument looking for DNS names within the scope argument.
-func Crawl(ctx context.Context, u string, scope []string, max int, f filter.Filter) ([]string, error) {
+func Crawl(ctx context.Context, u string, scope []string, max int, f filter.Filter, crawlScript bool) ([]string, error) {
 	select {
 	case <-ctx.Done():
 		return nil, fmt.Errorf("The context expired")
@@ -212,13 +213,15 @@ func Crawl(ctx context.Context, u string, scope []string, max int, f filter.Filt
 				}
 			})
 
-			r.HTMLDoc.Find("script").Each(func(i int, s *goquery.Selection) {
-				if src, ok := s.Attr("src"); ok {
-					if u, err := r.JoinURL(src); err == nil && whichDomain(u.Hostname(), newScope) != "" {
-						processURL(u)
+			if crawlScript {
+				r.HTMLDoc.Find("script").Each(func(i int, s *goquery.Selection) {
+					if src, ok := s.Attr("src"); ok {
+						if u, err := r.JoinURL(src); err == nil && whichDomain(u.Hostname(), newScope) != "" {
+							processURL(u)
+						}
 					}
-				}
-			})
+				})
+			}
 		},
 	})
 	options := &client.Options{
@@ -255,11 +258,17 @@ func crawlFilterURLs(p *url.URL, f filter.Filter) string {
 	}
 	// If the URL path has a file extension, check that it's of interest
 	if ext := crawlRE.FindString(p.Path); ext != "" {
-		ext = strings.ToLower(ext)
+		ext = strings.TrimRight(ext, "?#")
 
 		var found bool
-		for _, t := range crawlFileTypes {
-			if ext == t {
+		for _, s := range crawlFileStarts {
+			if strings.HasPrefix(ext, "." + s) {
+				found = true
+				break
+			}
+		}
+		for _, e := range crawlFileEnds {
+			if strings.HasSuffix(ext, e) {
 				found = true
 				break
 			}

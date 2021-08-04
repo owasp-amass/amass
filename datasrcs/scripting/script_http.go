@@ -203,7 +203,7 @@ func (s *Script) crawl(L *lua.LState) int {
 		return 0
 	}
 
-	names, err := http.Crawl(ctx, string(u), cfg.Domains(), int(max), nil)
+	names, err := http.Crawl(ctx, string(u), cfg.Domains(), int(max), nil, false)
 	if err != nil {
 		if cfg.Verbose {
 			bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", s.String(), u, err))
