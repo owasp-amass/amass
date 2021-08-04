@@ -1,6 +1,8 @@
 -- Copyright 2021 Jeff Foley. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
+local url = require("url")
+
 name = "Gists"
 type = "scrape"
 
@@ -29,5 +31,10 @@ function vertical(ctx, domain)
 end
 
 function buildurl(domain, pagenum)
-    return "https://gist.github.com/search?ref=searchresults&q=" .. domain .. "&p=" .. pagenum
+    local params = {
+        ref="searchresults",
+        q=domain,
+        p=pagenum,
+    }
+    return "https://gist.github.com/search?" .. url.build_query_string(params)
 end
