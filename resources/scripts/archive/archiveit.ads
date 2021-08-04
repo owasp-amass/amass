@@ -1,6 +1,8 @@
 -- Copyright 2017-2021 Jeff Foley. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
+local url = require("url")
+
 name = "ArchiveIt"
 type = "archive"
 
@@ -20,5 +22,10 @@ function vertical(ctx, domain)
 end
 
 function buildurl(domain, pagenum)
-    return "https://archive-it.org/explore?show=Sites&q=" .. domain .. "&page=" .. pagenum
+    local params = {
+        show="Sites",
+        q=domain,
+        page=pagenum,
+    }
+    return "https://archive-it.org/explore?" .. url.build_query_string(params)
 end
