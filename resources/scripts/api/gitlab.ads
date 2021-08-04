@@ -1,6 +1,8 @@
 -- Copyright 2017-2021 Jeff Foley. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
+local url = require("url")
+
 name = "GitLab"
 type = "api"
 
@@ -43,5 +45,9 @@ function vertical(ctx, domain)
 end
 
 function apiurl(domain, scope)
-    return "https://gitlab.com/api/v4/search?scope=" .. scope .. "&search=" .. domain
+    local params = {
+        scope=scope,
+        search=domain,
+    }
+    return "https://gitlab.com/api/v4/search?" .. url.build_query_string(params)
 end
