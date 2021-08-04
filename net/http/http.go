@@ -36,7 +36,7 @@ const (
 	UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.49 Safari/537.36"
 
 	// Accept is the default HTTP Accept header value used by Amass.
-	Accept = "text/html,application/json,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+	Accept = "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
 
 	// AcceptLang is the default HTTP Accept-Language header value used by Amass.
 	AcceptLang = "en-US,en;q=0.8"

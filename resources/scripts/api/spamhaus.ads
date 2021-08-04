@@ -44,6 +44,7 @@ function vertical(ctx, domain)
     local resp, err = request(ctx, {
         url=buildurl(domain),
         headers={
+            ['Accept']="application/json",
             ['Content-Type']="application/json",
             ['Authorization']="Bearer " .. token,
         },
@@ -82,7 +83,10 @@ function bearer_token(ctx, username, password)
         method="POST",
         data=body,
         url="https://api-pdns.spamhaustech.com/v2/login?pretty",
-        headers={['Content-Type']="application/json"},
+        headers={
+            ['Accept']="application/json",
+            ['Content-Type']="application/json",
+        },
     })
     if (err ~= nil and err ~= "") then
         return ""
