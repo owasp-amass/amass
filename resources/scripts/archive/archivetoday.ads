@@ -9,5 +9,9 @@ function start()
 end
 
 function vertical(ctx, domain)
-    scrape(ctx, {url="http://archive.is/*." .. domain})
+    crawl(ctx, buildurl(domain), 3)
+end
+
+function buildurl(domain)
+    return "http://archive.is/*." .. domain
 end
