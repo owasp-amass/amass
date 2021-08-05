@@ -11,8 +11,8 @@ function start()
 end
 
 function vertical(ctx, domain)
-    for i=1,25,1 do
-        local ok = scrape(ctx, {['url']=buildurl(domain, i)})
+    for i=1,25 do
+        local ok = scrape(ctx, {['url']=firsturl(domain, i)})
         if not ok then
             break
         end
@@ -21,11 +21,19 @@ function vertical(ctx, domain)
     end
 end
 
-function buildurl(domain, pagenum)
+function resolved(ctx, name, domain, records)
+    crawl(ctx, secondurl(domain), 5)
+end
+
+function firsturl(domain, pagenum)
     local params = {
         show="Sites",
         q=domain,
         page=pagenum,
     }
     return "https://archive-it.org/explore?" .. url.build_query_string(params)
+end
+
+function secondurl(domain)
+    return "https://wayback.archive-it.org/all/*/https://" .. domain
 end
