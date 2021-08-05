@@ -405,7 +405,7 @@ end
 
 ### `submatch` Function
 
-The `submatch` function performs simple regular expression pattern matching that supports submatches. The function accepts a string containing content to be searched and a regular expression pattern as [defined by the Go standard library](https://golang.org/pkg/regexp/). The `submatch` function returns a Lua table containing the leftmost match found in the provided string and the submatches. The matches are in the expected order of the 1-based array (table) returned by the function.
+The `submatch` function performs simple regular expression pattern matching that supports submatches. The function accepts a string containing content to be searched and a regular expression pattern as [defined by the Go standard library](https://golang.org/pkg/regexp/). The `submatch` function returns a Lua table containing all the submatches.
 
 ```lua
 function vertical(ctx, domain)
@@ -419,8 +419,10 @@ function vertical(ctx, domain)
 
     local matches = submatch(page, pattern)
     -- Send the first submatch
-    if (matches ~= nil and #matches >=2 and matches[2] ~= "") then
-        newname(ctx, matches[2])
+    if (matches ~= nil and #matches ~= 0 and matches[1] ~= "") then
+        for i, name in pairs(matches) do
+            newname(ctx, name)
+        end
     end
 end
 ```

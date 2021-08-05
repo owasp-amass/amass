@@ -156,7 +156,7 @@ func (s *Script) submatch(L *lua.LState) int {
 		return 1
 	}
 
-	matches := re.FindStringSubmatch(string(str))
+	matches := re.FindAllStringSubmatch(string(str), -1)
 	if matches == nil {
 		L.Push(lua.LNil)
 		return 1
@@ -164,7 +164,9 @@ func (s *Script) submatch(L *lua.LState) int {
 
 	tb := L.NewTable()
 	for _, match := range matches {
-		tb.Append(lua.LString(match))
+		if len(match) > 1 {
+			tb.Append(lua.LString(match[1]))
+		}
 	}
 
 	L.Push(tb)

@@ -69,11 +69,11 @@ function sendnames(ctx, content)
 end
 
 function gettoken(content)
-    local pattern = "\\[(null|\"[a-zA-Z0-9]+\"),\"([a-zA-Z0-9]+)\",null,([0-9]+),([0-9]+)\\]"
+    local pattern = "\"([a-zA-Z0-9]{39,40})\""
     local match = submatch(content, pattern)
 
-    if (match ~= nil and #match == 5 and (match[4] < match[5])) then
-        return match[3]
+    if (match ~= nil and #match ~= 0) then
+        return match[1]
     end
 
     return ""
