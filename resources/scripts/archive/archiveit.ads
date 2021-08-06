@@ -22,7 +22,11 @@ function vertical(ctx, domain)
 end
 
 function resolved(ctx, name, domain, records)
-    crawl(ctx, secondurl(domain), 5)
+    local page, err = request({['url']=secondurl(domain)})
+    if (err ~= nil and err ~= "") then
+        return
+    end
+    crawl(ctx, secondurl(domain), 3)
 end
 
 function firsturl(domain, pagenum)
