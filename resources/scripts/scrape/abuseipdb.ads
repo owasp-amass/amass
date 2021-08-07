@@ -19,7 +19,7 @@ function vertical(ctx, domain)
         return
     end
 
-    local subre = "<li>([\\.a-z0-9]{1,70})</li>"
+    local subre = "<li>([\\.a-z0-9-]{1,70})</li>"
     local matches = submatch(page, subre)
     if (matches == nil or #matches == 0) then
         return
