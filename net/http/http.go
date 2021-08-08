@@ -15,6 +15,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/cookiejar"
+	"net/http/httputil"
 	"net/url"
 	"regexp"
 	"strconv"
@@ -46,10 +47,11 @@ const (
 )
 
 var (
-	subRE          = dns.AnySubdomainRegex()
-	crawlRE        = regexp.MustCompile(`\.\w{3,4}($|\?)`)
-	crawlFileTypes = []string{".html", ".htm", "xhtml", ".js", ".php"}
-	nameStripRE    = regexp.MustCompile(`^u[0-9a-f]{4}|20|22|25|2b|2f|3d|3a|40`)
+	subRE           = dns.AnySubdomainRegex()
+	crawlFileEnds   = []string{"html", "do", "action", "cgi"}
+	crawlFileStarts = []string{"js", "htm", "as", "php", "inc"}
+	crawlRE         = regexp.MustCompile(`\.[a-z0-9]{2,6}($|\?|#)`)
+	nameStripRE     = regexp.MustCompile(`^u[0-9a-f]{4}|20|22|25|2b|2f|3d|3a|40`)
 )
 
 // DefaultClient is the same HTTP client used by the package methods.
@@ -178,11 +180,14 @@ func Crawl(ctx context.Context, u string, scope []string, max int, f filter.Filt
 		RequestDelay:          750 * time.Millisecond,
 		RequestDelayRandomize: true,
 		ParseFunc: func(g *geziyor.Geziyor, r *client.Response) {
-			for _, n := range subRE.FindAllString(string(r.Body), -1) {
-				if name := CleanName(n); whichDomain(name, scope) != "" {
-					m.Lock()
-					results.Insert(name)
-					m.Unlock()
+			resp, err := httputil.DumpResponse(interface{}(r).(*http.Response), true)
+			if err == nil {
+				for _, n := range subRE.FindAllString(string(resp), -1) {
+					if name := CleanName(n); whichDomain(name, scope) != "" {
+						m.Lock()
+						results.Insert(name)
+						m.Unlock()
+					}
 				}
 			}
 
@@ -255,11 +260,17 @@ func crawlFilterURLs(p *url.URL, f filter.Filter) string {
 	}
 	// If the URL path has a file extension, check that it's of interest
 	if ext := crawlRE.FindString(p.Path); ext != "" {
-		ext = strings.ToLower(ext)
+		ext = strings.TrimRight(ext, "?#")
 
 		var found bool
-		for _, t := range crawlFileTypes {
-			if ext == t {
+		for _, s := range crawlFileStarts {
+			if strings.HasPrefix(ext, "." + s) {
+				found = true
+				break
+			}
+		}
+		for _, e := range crawlFileEnds {
+			if strings.HasSuffix(ext, e) {
 				found = true
 				break
 			}
