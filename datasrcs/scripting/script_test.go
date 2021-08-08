@@ -17,10 +17,9 @@ import (
 func setupMockScriptEnv(script string) (context.Context, systems.System) {
 	cfg := config.NewConfig()
 	sys := newMockSystem(cfg)
-	bus := eventbus.NewEventBus()
 
 	ctx := context.WithValue(context.Background(), requests.ContextConfig, cfg)
-	ctx = context.WithValue(ctx, requests.ContextEventBus, bus)
+	ctx = context.WithValue(ctx, requests.ContextEventBus, eventbus.NewEventBus())
 
 	if s := NewScript(script, sys); s != nil {
 		if err := sys.AddAndStart(s); err == nil {

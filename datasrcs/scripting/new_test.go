@@ -5,7 +5,6 @@ package scripting
 
 import (
 	"testing"
-	"time"
 
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/caffix/stringset"
@@ -66,19 +65,12 @@ func TestNewNames(t *testing.T) {
 	cfg.AddDomain(domain)
 	sys.DataSources()[0].Request(ctx, &requests.DNSRequest{Domain: domain})
 
-	timer := time.NewTimer(5 * time.Second)
-	defer timer.Stop()
-loop:
 	for i := 0; i < num; i++ {
-		select {
-		case <-timer.C:
-			t.Error("The test timed out")
-			break loop
-		case req := <-ch:
-			if exp := expected[i]; req.Name != exp ||
-				req.Domain != domain || req.Tag != "testing" || req.Source != "names" {
-				t.Errorf("Incorrect output for name %d, expected: %s, got: %v", i+1, exp, req)
-			}
+		req := <-ch
+
+		if exp := expected[i]; req.Name != exp ||
+			req.Domain != domain || req.Tag != "testing" || req.Source != "names" {
+			t.Errorf("Incorrect output for name %d, expected: %s, got: %v", i+1, exp, req)
 		}
 	}
 }
@@ -124,19 +116,12 @@ func TestNewAddrs(t *testing.T) {
 	cfg.AddDomain(domain)
 	sys.DataSources()[0].Request(ctx, &requests.DNSRequest{Domain: domain})
 
-	timer := time.NewTimer(5 * time.Second)
-	defer timer.Stop()
-loop:
 	for i := 0; i < num; i++ {
-		select {
-		case <-timer.C:
-			t.Error("The test timed out")
-			break loop
-		case req := <-ch:
-			if exp := expected[i]; req.Address != exp ||
-				req.Domain != domain || req.Tag != "testing" || req.Source != "addrs" {
-				t.Errorf("Incorrect output for address %d, expected: %s, got: %v", i+1, exp, req)
-			}
+		req := <-ch
+
+		if exp := expected[i]; req.Address != exp ||
+			req.Domain != domain || req.Tag != "testing" || req.Source != "addrs" {
+			t.Errorf("Incorrect output for address %d, expected: %s, got: %v", i+1, exp, req)
 		}
 	}
 }
@@ -244,18 +229,11 @@ func TestNewASNs(t *testing.T) {
 	address := "72.237.4.113"
 	sys.DataSources()[0].Request(ctx, &requests.ASNRequest{Address: address})
 
-	timer := time.NewTimer(5 * time.Second)
-	defer timer.Stop()
-loop:
 	for i := 0; i < num; i++ {
-		select {
-		case <-timer.C:
-			t.Error("The test timed out")
-			break loop
-		case req := <-ch:
-			if exp := expected[i]; !matchingASNs(req, &exp) {
-				t.Errorf("Incorrect output for ASN %d, expected: %v, got: %v", i+1, exp, req)
-			}
+		req := <-ch
+
+		if exp := expected[i]; !matchingASNs(req, &exp) {
+			t.Errorf("Incorrect output for ASN %d, expected: %v, got: %v", i+1, exp, req)
 		}
 	}
 }
@@ -362,19 +340,12 @@ func TestAssociated(t *testing.T) {
 	cfg.AddDomains(domain, "utica.edu")
 	sys.DataSources()[0].Request(ctx, &requests.WhoisRequest{Domain: domain})
 
-	timer := time.NewTimer(5 * time.Second)
-	defer timer.Stop()
-loop:
 	for i := 0; i < num; i++ {
-		select {
-		case <-timer.C:
-			t.Error("The test timed out")
-			break loop
-		case req := <-ch:
-			if exp := expected[i]; req.Domain != exp.Domain ||
-				req.NewDomains[0] != exp.NewDomains[0] || req.Tag != "testing" || req.Source != "associated" {
-				t.Errorf("Incorrect output for associated %d, expected: %s, got: %v", i+1, exp, req)
-			}
+		req := <-ch
+
+		if exp := expected[i]; req.Domain != exp.Domain ||
+			req.NewDomains[0] != exp.NewDomains[0] || req.Tag != "testing" || req.Source != "associated" {
+			t.Errorf("Incorrect output for associated %d, expected: %s, got: %v", i+1, exp, req)
 		}
 	}
 }

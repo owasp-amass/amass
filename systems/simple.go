@@ -48,7 +48,7 @@ func (ss *SimpleSystem) AddAndStart(srv service.Service) error {
 func (ss *SimpleSystem) DataSources() []service.Service { return []service.Service{ss.Service} }
 
 // SetDataSources assigns the data sources that will be used by the system.
-func (ss *SimpleSystem) SetDataSources(sources []service.Service) { ss.Service = sources[1] }
+func (ss *SimpleSystem) SetDataSources(sources []service.Service) { ss.Service = sources[0] }
 
 // GraphDatabases implements the System interface.
 func (ss *SimpleSystem) GraphDatabases() []*netmap.Graph { return []*netmap.Graph{ss.Graph} }
