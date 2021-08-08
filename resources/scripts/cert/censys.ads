@@ -1,4 +1,4 @@
--- Copyright 2017-2021 Jeff Foley. All rights reserved.
+-- Copyright 2020-2021 Jeff Foley. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 local json = require("json")
@@ -7,7 +7,7 @@ name = "Censys"
 type = "cert"
 
 function start()
-    setratelimit(3)
+    set_rate_limit(3)
 end
 
 function vertical(ctx, domain)
@@ -19,14 +19,14 @@ function vertical(ctx, domain)
 
     if (c == nil or c.key == nil or 
         c.key == "" or c.secret == nil or c.secret == "") then
-        scrape(ctx, {url=scrapeurl(domain)})
+        scrape(ctx, {url="https://www.censys.io/domain/" .. domain .. "/table"})
         return
     end
 
-    apiquery(ctx, cfg, domain)
+    api_query(ctx, cfg, domain)
 end
 
-function apiquery(ctx, cfg, domain)
+function api_query(ctx, cfg, domain)
     local p = 1
 
     while(true) do
@@ -59,7 +59,7 @@ function apiquery(ctx, cfg, domain)
 
         for i, r in pairs(d.results) do
             for j, v in pairs(r["parsed.names"]) do
-                sendnames(ctx, v)
+                new_name(ctx, v)
             end
         end
 
@@ -68,24 +68,5 @@ function apiquery(ctx, cfg, domain)
         end
 
         p = p + 1
-    end
-end
-
-function scrapeurl(domain)
-    return "https://www.censys.io/domain/" .. domain .. "/table"
-end
-
-function sendnames(ctx, content)
-    local names = find(content, subdomainre)
-    if names == nil then
-        return
-    end
-
-    local found = {}
-    for i, v in pairs(names) do
-        if found[v] == nil then
-            newname(ctx, v)
-            found[v] = true
-        end
     end
 end
