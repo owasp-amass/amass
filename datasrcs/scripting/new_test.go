@@ -46,7 +46,7 @@ func TestNewNames(t *testing.T) {
 	if ctx == nil || sys == nil {
 		t.Fatal("Failed to initialize the scripting environment")
 	}
-	defer sys.Shutdown()
+	defer func() { _ = sys.Shutdown() }()
 
 	cfg, bus, err := requests.ContextConfigBus(ctx)
 	if err != nil {
@@ -66,7 +66,7 @@ func TestNewNames(t *testing.T) {
 	cfg.AddDomain(domain)
 	sys.DataSources()[0].Request(ctx, &requests.DNSRequest{Domain: domain})
 
-	timer := time.NewTimer(time.Second)
+	timer := time.NewTimer(5 * time.Second)
 	defer timer.Stop()
 loop:
 	for i := 0; i < num; i++ {
@@ -104,7 +104,7 @@ func TestNewAddrs(t *testing.T) {
 	if ctx == nil || sys == nil {
 		t.Fatal("Failed to initialize the scripting environment")
 	}
-	defer sys.Shutdown()
+	defer func() { _ = sys.Shutdown() }()
 
 	cfg, bus, err := requests.ContextConfigBus(ctx)
 	if err != nil {
@@ -124,7 +124,7 @@ func TestNewAddrs(t *testing.T) {
 	cfg.AddDomain(domain)
 	sys.DataSources()[0].Request(ctx, &requests.DNSRequest{Domain: domain})
 
-	timer := time.NewTimer(time.Second)
+	timer := time.NewTimer(5 * time.Second)
 	defer timer.Stop()
 loop:
 	for i := 0; i < num; i++ {
@@ -225,7 +225,7 @@ func TestNewASNs(t *testing.T) {
 	if ctx == nil || sys == nil {
 		t.Fatal("Failed to initialize the scripting environment")
 	}
-	defer sys.Shutdown()
+	defer func() { _ = sys.Shutdown() }()
 
 	_, bus, err := requests.ContextConfigBus(ctx)
 	if err != nil {
@@ -244,7 +244,7 @@ func TestNewASNs(t *testing.T) {
 	address := "72.237.4.113"
 	sys.DataSources()[0].Request(ctx, &requests.ASNRequest{Address: address})
 
-	timer := time.NewTimer(time.Second)
+	timer := time.NewTimer(5 * time.Second)
 	defer timer.Stop()
 loop:
 	for i := 0; i < num; i++ {
@@ -342,7 +342,7 @@ func TestAssociated(t *testing.T) {
 	if ctx == nil || sys == nil {
 		t.Fatal("Failed to initialize the scripting environment")
 	}
-	defer sys.Shutdown()
+	defer func() { _ = sys.Shutdown() }()
 
 	cfg, bus, err := requests.ContextConfigBus(ctx)
 	if err != nil {
@@ -362,7 +362,7 @@ func TestAssociated(t *testing.T) {
 	cfg.AddDomains(domain, "utica.edu")
 	sys.DataSources()[0].Request(ctx, &requests.WhoisRequest{Domain: domain})
 
-	timer := time.NewTimer(time.Second)
+	timer := time.NewTimer(5 * time.Second)
 	defer timer.Stop()
 loop:
 	for i := 0; i < num; i++ {

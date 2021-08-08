@@ -35,9 +35,13 @@ func (ss *SimpleSystem) AddSource(src service.Service) error { ss.Service = src;
 
 // AddAndStart implements the System interface.
 func (ss *SimpleSystem) AddAndStart(srv service.Service) error {
-	srv.Start()
-	ss.AddSource(srv)
-	return nil
+	err := srv.Start()
+
+	if err == nil {
+		err = ss.AddSource(srv)
+	}
+
+	return err
 }
 
 // DataSources implements the System interface.

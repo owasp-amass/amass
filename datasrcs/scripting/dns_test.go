@@ -46,7 +46,7 @@ func TestResolve(t *testing.T) {
 	if ctx == nil || sys == nil {
 		t.Fatal("Failed to initialize the scripting environment")
 	}
-	defer sys.Shutdown()
+	defer func() { _ = sys.Shutdown() }()
 
 	cfg, bus, err := requests.ContextConfigBus(ctx)
 	if err != nil {

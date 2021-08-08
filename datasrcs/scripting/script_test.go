@@ -23,8 +23,9 @@ func setupMockScriptEnv(script string) (context.Context, systems.System) {
 	ctx = context.WithValue(ctx, requests.ContextEventBus, bus)
 
 	if s := NewScript(script, sys); s != nil {
-		sys.AddAndStart(s)
-		return ctx, sys
+		if err := sys.AddAndStart(s); err == nil {
+			return ctx, sys
+		}
 	}
 	return nil, nil
 }
