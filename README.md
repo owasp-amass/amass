@@ -26,10 +26,10 @@ The OWASP Amass Project performs network mapping of attack surfaces and external
 | Technique    | Data Sources |
 |:-------------|:-------------|
 | DNS          | Brute forcing, Reverse DNS sweeping, NSEC zone walking, Zone transfers, FQDN alterations/permutations, FQDN Similarity-based Guessing |
-| Scraping     | Ask, Baidu, Bing, BuiltWith, DNSDumpster, DuckDuckGo, HackerOne, IPv4Info, RapidDNS, Riddler, SiteDossier, Yahoo |
-| Certificates | Active pulls (optional), Censys, CertSpotter, Crtsh, FacebookCT, GoogleCT |
-| APIs         | AlienVault, Anubis, BinaryEdge, BGPView, BufferOver, C99, Chaos, CIRCL, Cloudflare, CommonCrawl, DNSDB, GitHub, HackerTarget, Hunter, IPinfo, Mnemonic, NetworksDB, PassiveTotal, RADb, ReconDev, Robtex, SecurityTrails, ShadowServer, Shodan, SonarSearch, Spyse, Sublist3rAPI, TeamCymru, ThreatBook, ThreatCrowd, ThreatMiner, Twitter, Umbrella, URLScan, VirusTotal, WhoisXMLAPI, ZETAlytics, ZoomEye |
-| Web Archives | ArchiveIt, ArchiveToday, Wayback |
+| Scraping     | AbuseIPDB, Ask, AskDNS, Baidu, Bing, BuiltWith, DNSDumpster, DuckDuckGo, HackerOne, IPv4Info, RapidDNS, Riddler, SiteDossier, SpyOnWeb, Yahoo |
+| Certificates | Active pulls (optional), Censys, CertDetails, CertSpotter, Crtsh, FacebookCT, GoogleCT |
+| APIs         | ARIN, AlienVault, Anubis, BinaryEdge, BGPView, BufferOver, C99, Chaos, CIRCL, Cloudflare, CommonCrawl, DNSDB, DNSlytics, GitHub, HackerTarget, Hunter, IPinfo, Mnemonic, NetworksDB, PassiveTotal, RADb, ReconDev, Robtex, SecurityTrails, ShadowServer, Shodan, SonarSearch, Spamhaus, Spyse, Sublist3rAPI, TeamCymru, ThreatBook, ThreatCrowd, ThreatMiner, Twitter, Umbrella, URLScan, VirusTotal, WhoisXMLAPI, ZETAlytics, ZoomEye |
+| Web Archives | ArchiveIt, ArchiveToday, UKWebArchive, Wayback |
 
 ----
 
