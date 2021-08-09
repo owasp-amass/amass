@@ -49,9 +49,9 @@ var (
 	UserAgent       string
 	subRE           = dns.AnySubdomainRegex()
 	crawlRE         = regexp.MustCompile(`\.\w{2,6}($|\?|#)`)
-  crawlFileEnds   = []string{"html", "do", "action", "cgi"}
+	crawlFileEnds   = []string{"html", "do", "action", "cgi"}
 	crawlFileStarts = []string{"js", "htm", "as", "php", "inc"}
-  nameStripRE     = regexp.MustCompile(`^u[0-9a-f]{4}|20|22|25|2b|2f|3d|3a|40`)
+	nameStripRE     = regexp.MustCompile(`^u[0-9a-f]{4}|20|22|25|2b|2f|3d|3a|40`)
 )
 
 // DefaultClient is the same HTTP client used by the package methods.
