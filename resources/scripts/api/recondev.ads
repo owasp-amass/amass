@@ -47,14 +47,14 @@ function vertical(ctx, domain)
     for i, set in pairs(data) do
         local domains = set["rawDomains"]
         if domains ~= nil and #domains > 0 then
-            for j, name in pairs(domains) do
-                send_names(ctx, name)
+            for _, name in pairs(domains) do
+                new_name(ctx, name)
             end
         end
 
-        local addrs = set["rawIp"]
+        local addr = set["rawIp"]
         if addr ~= nil then
-            new_addr(ctx, domain, addr)
+            new_addr(ctx, addr, domain)
         end
     end
 end
