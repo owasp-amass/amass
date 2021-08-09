@@ -17,6 +17,7 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -32,9 +33,6 @@ import (
 )
 
 const (
-	// UserAgent is the default user agent used by Amass during HTTP requests.
-	UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.49 Safari/537.36"
-
 	// Accept is the default HTTP Accept header value used by Amass.
 	Accept = "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
 
@@ -46,6 +44,8 @@ const (
 )
 
 var (
+	// UserAgent is the default user agent used by Amass during HTTP requests.
+	UserAgent      string
 	subRE          = dns.AnySubdomainRegex()
 	crawlRE        = regexp.MustCompile(`\.\w{3,4}($|\?)`)
 	crawlFileTypes = []string{".html", ".htm", "xhtml", ".js", ".php"}
@@ -76,6 +76,15 @@ func init() {
 			TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
 		},
 		Jar: jar,
+	}
+
+	switch runtime.GOOS {
+	case "windows":
+		UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.164 Safari/537.36"
+	case "darwin":
+		UserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 11_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.164 Safari/537.36"
+	default:
+		UserAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.164 Safari/537.36"
 	}
 }
 

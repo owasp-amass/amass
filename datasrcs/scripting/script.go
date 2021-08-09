@@ -1,4 +1,4 @@
-// Copyright 2017-2021 Jeff Foley. All rights reserved.
+// Copyright 2020-2021 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 package scripting
@@ -8,7 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
-	"time"
+	"sync"
 
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/net/dns"
@@ -43,6 +43,7 @@ type Script struct {
 	cbs        *callbacks
 	subre      *regexp.Regexp
 	seconds    int
+	active     sync.Mutex
 	cancel     context.CancelFunc
 }
 
@@ -70,6 +71,7 @@ func NewScript(script string, sys systems.System) *Script {
 		msg := fmt.Sprintf("Script: Failed to load script: %v", err)
 
 		sys.Config().Log.Print(msg)
+		sys.Config().Log.Print(script)
 		return nil
 	}
 
@@ -79,6 +81,7 @@ func NewScript(script string, sys systems.System) *Script {
 		msg := fmt.Sprintf("Script: Failed to obtain the script type: %v", err)
 
 		sys.Config().Log.Print(msg)
+		sys.Config().Log.Print(script)
 		return nil
 	}
 
@@ -88,6 +91,7 @@ func NewScript(script string, sys systems.System) *Script {
 		msg := fmt.Sprintf("Script: Failed to obtain the script name: %v", err)
 
 		sys.Config().Log.Print(msg)
+		sys.Config().Log.Print(script)
 		return nil
 	}
 	s.BaseService = *service.NewBaseService(s, name)
@@ -110,20 +114,22 @@ func (s *Script) newLuaState(cfg *config.Config) *lua.LState {
 	L.SetGlobal("log", L.NewFunction(s.log))
 	L.SetGlobal("find", L.NewFunction(s.find))
 	L.SetGlobal("submatch", L.NewFunction(s.submatch))
-	L.SetGlobal("newname", L.NewFunction(s.newName))
-	L.SetGlobal("newaddr", L.NewFunction(s.newAddr))
-	L.SetGlobal("newasn", L.NewFunction(s.newASN))
+	L.SetGlobal("new_name", L.NewFunction(s.newName))
+	L.SetGlobal("send_names", L.NewFunction(s.sendNames))
+	L.SetGlobal("new_addr", L.NewFunction(s.newAddr))
+	L.SetGlobal("new_asn", L.NewFunction(s.newASN))
 	L.SetGlobal("associated", L.NewFunction(s.associated))
-	L.SetGlobal("inscope", L.NewFunction(s.inScope))
+	L.SetGlobal("in_scope", L.NewFunction(s.inScope))
 	L.SetGlobal("request", L.NewFunction(s.request))
 	L.SetGlobal("scrape", L.NewFunction(s.scrape))
 	L.SetGlobal("crawl", L.NewFunction(s.crawl))
-	L.SetGlobal("outputdir", L.NewFunction(s.outputdir))
-	L.SetGlobal("setratelimit", L.NewFunction(s.setRateLimit))
-	L.SetGlobal("checkratelimit", L.NewFunction(s.checkRateLimit))
+	L.SetGlobal("resolve", L.NewFunction(s.resolve))
+	L.SetGlobal("output_dir", L.NewFunction(s.outputdir))
+	L.SetGlobal("set_rate_limit", L.NewFunction(s.setRateLimit))
+	L.SetGlobal("check_rate_limit", L.NewFunction(s.checkRateLimit))
 	L.SetGlobal("obtain_response", L.NewFunction(s.obtainResponse))
 	L.SetGlobal("cache_response", L.NewFunction(s.cacheResponse))
-	L.SetGlobal("subdomainre", lua.LString(dns.AnySubdomainRegexString()))
+	L.SetGlobal("subdomain_regex", lua.LString(dns.AnySubdomainRegexString()))
 	return L
 }
 
@@ -183,18 +189,18 @@ func (s *Script) Description() string {
 
 // OnStart implements the Service interface.
 func (s *Script) OnStart() error {
-	L := s.luaState
-	if s.cbs.Start.Type() == lua.LTNil {
-		return nil
-	}
+	s.active.Lock()
+	defer s.active.Unlock()
 
-	err := L.CallByParam(lua.P{
-		Fn:      s.cbs.Start,
-		NRet:    0,
-		Protect: true,
-	})
-	if err != nil {
-		s.sys.Config().Log.Print(fmt.Sprintf("%s: start callback: %v", s.String(), err))
+	if L := s.luaState; s.cbs.Start.Type() != lua.LTNil {
+		err := L.CallByParam(lua.P{
+			Fn:      s.cbs.Start,
+			NRet:    0,
+			Protect: true,
+		})
+		if err != nil {
+			s.sys.Config().Log.Print(fmt.Sprintf("%s: start callback: %v", s.String(), err))
+		}
 	}
 
 	if s.seconds > 0 {
@@ -206,15 +212,11 @@ func (s *Script) OnStart() error {
 
 // OnStop implements the Service interface.
 func (s *Script) OnStop() error {
-	defer func() {
-		s.cancel()
-		time.Sleep(2 * time.Second)
-		s.luaState.Close()
-	}()
+	s.active.Lock()
+	defer s.active.Unlock()
 
 	var err error
-	L := s.luaState
-	if s.cbs.Stop.Type() != lua.LTNil {
+	if L := s.luaState; s.cbs.Stop.Type() != lua.LTNil {
 		err = L.CallByParam(lua.P{
 			Fn:      s.cbs.Stop,
 			NRet:    0,
@@ -227,6 +229,8 @@ func (s *Script) OnStop() error {
 		}
 	}
 
+	s.cancel()
+	s.luaState.Close()
 	return err
 }
 
@@ -264,6 +268,9 @@ func (s *Script) checkConfig() error {
 
 // OnRequest implements the Service interface.
 func (s *Script) OnRequest(ctx context.Context, args service.Args) {
+	s.active.Lock()
+	defer s.active.Unlock()
+
 	switch req := args.(type) {
 	case *requests.DNSRequest:
 		if s.cbs.Vertical.Type() != lua.LTNil && req != nil && req.Domain != "" {

@@ -7,7 +7,7 @@ name = "WhoisXMLAPI"
 type = "api"
 
 function start()
-    setratelimit(2)
+    set_rate_limit(2)
 end
 
 function check()
@@ -35,7 +35,7 @@ function vertical(ctx, domain)
     end
 
     local resp, err = request(ctx, {
-        url=verturl(domain, c.key),
+        url=build_url(domain, c.key),
         headers={['Content-Type']="application/json"},
     })
     if (err ~= nil and err ~= "") then
@@ -48,11 +48,11 @@ function vertical(ctx, domain)
     end
 
     for _, r in pairs(j.result.records) do
-        newname(ctx, r.domain)
+        new_name(ctx, r.domain)
     end
 end
 
-function verturl(domain, key)
+function build_url(domain, key)
     return "https://subdomains.whoisxmlapi.com/api/v1?apiKey=" .. key .. "&domainName=" .. domain
 end
 
@@ -116,18 +116,18 @@ function asn(ctx, addr, asn)
             return
         end
 
-        asn = getasn(ctx, addr, c.key)
+        asn = get_asn(ctx, addr, c.key)
         if (asn == 0) then
             return
         end
     end
 
-    local a = asinfo(ctx, asn, c.key)
+    local a = as_info(ctx, asn, c.key)
     if (a == nil) then
         return
     end
 
-    newasn(ctx, {
+    new_asn(ctx, {
         ['addr']=addr,
         ['asn']=asn,
         ['prefix']=a.netblocks[1],
@@ -138,7 +138,7 @@ function asn(ctx, addr, asn)
     })
 end
 
-function getasn(ctx, ip, key)
+function get_asn(ctx, ip, key)
     local resp, err = request(ctx, {
         url="https://ip-netblocks.whoisxmlapi.com/api/v2?apiKey=" .. key .. "&ip=" .. ip,
         headers={['Content-Type']="application/json"},
@@ -163,7 +163,7 @@ function getasn(ctx, ip, key)
     return asn
 end
 
-function asinfo(ctx, asn, key)
+function as_info(ctx, asn, key)
     local resp, err = request(ctx, {
         url="https://ip-netblocks.whoisxmlapi.com/api/v2?apiKey=" .. key .. "&asn=" .. tostring(asn),
         headers={['Content-Type']="application/json"},

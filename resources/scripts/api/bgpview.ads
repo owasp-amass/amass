@@ -7,38 +7,34 @@ name = "BGPView"
 type = "api"
 
 function start()
-    setratelimit(1)
+    set_rate_limit(1)
 end
 
 function asn(ctx, addr, asn)
-    local cfg = datasrc_config()
-    if (cfg == nil) then
-        return
-    end
-
     local prefix
+
     if (asn == 0) then
         if (addr == "") then
             return
         end
 
-        local ip, prefix = getcidr(ctx, addr, cfg.ttl)
+        local ip, prefix = get_cidr(ctx, addr)
         if (ip == "") then
             return
         end
 
-        asn = getasn(ctx, ip, prefix, cfg.ttl)
+        asn = get_asn(ctx, ip, prefix)
         if (asn == 0) then
             return
         end
     end
 
-    local a = asinfo(ctx, asn, cfg.ttl)
+    local a = as_info(ctx, asn)
     if (a == nil) then
         return
     end
 
-    local cidrs = netblocks(ctx, asn, cfg.ttl)
+    local cidrs = netblocks(ctx, asn)
     if (cidrs == nil or #cidrs == 0) then
         return
     end
@@ -49,7 +45,7 @@ function asn(ctx, addr, asn)
         addr = parts[1]
     end
 
-    newasn(ctx, {
+    new_asn(ctx, {
         ['addr']=addr,
         ['asn']=asn,
         ['prefix']=prefix,
@@ -60,9 +56,10 @@ function asn(ctx, addr, asn)
     })
 end
 
-function getcidr(ctx, addr, ttl)
-    local resp = cacherequest(ctx, "https://api.bgpview.io/ip/" .. addr, ttl)
-    if (resp == "") then
+function get_cidr(ctx, addr)
+    local url = "https://api.bgpview.io/ip/" .. addr
+    local resp, err = request(ctx, {['url']=url})
+    if (err ~= nil and err ~= "") then
         return "", 0
     end
 
@@ -76,10 +73,10 @@ function getcidr(ctx, addr, ttl)
     return ip, cidr
 end
 
-function getasn(ctx, ip, cidr, ttl)
-    local u = "https://api.bgpview.io/prefix/" .. ip .. "/" .. tostring(cidr)
-    local resp = cacherequest(ctx, u, ttl)
-    if resp == "" then
+function get_asn(ctx, ip, cidr)
+    local url = "https://api.bgpview.io/prefix/" .. ip .. "/" .. tostring(cidr)
+    local resp, err = request(ctx, {['url']=url})
+    if (err ~= nil and err ~= "") then
         return 0
     end
 
@@ -96,9 +93,10 @@ function getasn(ctx, ip, cidr, ttl)
     return j.data.asns[last].asn
 end
 
-function asinfo(ctx, asn, ttl)
-    resp = cacherequest(ctx, "https://api.bgpview.io/asn/" .. tostring(asn), ttl)
-    if (resp == "") then
+function as_info(ctx, asn)
+    local url = "https://api.bgpview.io/asn/" .. tostring(asn)
+    local resp, err = request(ctx, {['url']=url})
+    if (err ~= nil and err ~= "") then
         return nil
     end
 
@@ -131,10 +129,10 @@ function asinfo(ctx, asn, ttl)
     }
 end
 
-function netblocks(ctx, asn, ttl)
-    local u = "https://api.bgpview.io/asn/" .. tostring(asn) .. "/prefixes"
-    local resp = cacherequest(ctx, u, ttl)
-    if (resp == "") then
+function netblocks(ctx, asn)
+    local url = "https://api.bgpview.io/asn/" .. tostring(asn) .. "/prefixes"
+    local resp, err = request(ctx, {['url']=url})
+    if (err ~= nil and err ~= "") then
         return nil
     end
 
@@ -151,18 +149,6 @@ function netblocks(ctx, asn, ttl)
         table.insert(netblocks, p.ip .. "/" .. tostring(p.cidr))
     end
     return netblocks
-end
-
-function cacherequest(ctx, url, ttl)
-    local resp, err = request(ctx, {
-        ['url']=url,
-        headers={['Content-Type']="application/json"},
-    })
-    if (err ~= nil and err ~= "") then
-        return ""
-    end
-
-    return resp
 end
 
 function split(str, delim)

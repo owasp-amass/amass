@@ -1,4 +1,4 @@
--- Copyright 2017-2021 Jeff Foley. All rights reserved.
+-- Copyright 2020-2021 Jeff Foley. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 local json = require("json")
@@ -7,7 +7,7 @@ name = "GitHub"
 type = "api"
 
 function start()
-    setratelimit(7)
+    set_rate_limit(7)
 end
 
 function check()
@@ -35,13 +35,9 @@ function vertical(ctx, domain)
     end
 
     for i=1,100 do
-        local vurl = buildurl(domain, i)
         local resp, err = request(ctx, {
-            url=vurl,
-            headers={
-                ['Authorization']="token " .. c.key,
-                ['Content-Type']="application/json",
-            },
+            url=build_url(domain, i),
+            headers={['Authorization']="token " .. c.key},
         })
         if (err ~= nil and err ~= "") then
             return
@@ -59,10 +55,7 @@ function vertical(ctx, domain)
 end
 
 function search_item(ctx, item)
-    local info, err = request(ctx, {
-        url=item.url,
-        headers={['Content-Type']="application/json"},
-    })
+    local info, err = request(ctx, {['url']=item.url})
     if (err ~= nil and err ~= "") then
         return
     end
@@ -72,27 +65,12 @@ function search_item(ctx, item)
         return
     end
 
-    local content, err = request(ctx, {url=data['download_url']})
+    local content, err = request(ctx, {['url']=data['download_url']})
     if err == nil then
-        sendnames(ctx, content)
+        send_names(ctx, content)
     end
 end
 
-function buildurl(domain, pagenum)
+function build_url(domain, pagenum)
     return "https://api.github.com/search/code?q=\"" .. domain .. "\"&page=" .. pagenum .. "&per_page=100"
-end
-
-function sendnames(ctx, content)
-    local names = find(content, subdomainre)
-    if names == nil then
-        return
-    end
-
-    local found = {}
-    for i, v in pairs(names) do
-        if found[v] == nil then
-            newname(ctx, v)
-            found[v] = true
-        end
-    end
 end
