@@ -11,9 +11,9 @@ import (
 )
 
 func TestNewNames(t *testing.T) {
-	expected := []string{"owasp.org", "www.owasp.org", "ftp.owasp.org", "mail.owasp.org",
+	expected := stringset.New("owasp.org", "www.owasp.org", "ftp.owasp.org", "mail.owasp.org",
 		"dev.owasp.org", "prod.owasp.org", "vpn.owasp.org", "uat.owasp.org", "stage.owasp.org",
-		"confluence.owasp.org", "api.owasp.org", "test.owasp.org"}
+		"confluence.owasp.org", "api.owasp.org", "test.owasp.org")
 
 	ctx, sys := setupMockScriptEnv(`
 		name="names"
@@ -68,16 +68,17 @@ func TestNewNames(t *testing.T) {
 	for i := 0; i < num; i++ {
 		req := <-ch
 
-		if exp := expected[i]; req.Name != exp ||
-			req.Domain != domain || req.Tag != "testing" || req.Source != "names" {
-			t.Errorf("Incorrect output for name %d, expected: %s, got: %v", i+1, exp, req)
+		if !expected.Has(req.Name) || req.Domain != domain || req.Tag != "testing" || req.Source != "names" {
+			t.Errorf("Name %d: %v was not found in the list of expected names", i+1, req.Name)
 		}
+
+		expected.Remove(req.Name)
 	}
 }
 
 func TestNewAddrs(t *testing.T) {
-	expected := []string{"72.237.4.113", "72.237.4.114", "72.237.4.35", "72.237.4.38", "72.237.4.79",
-		"72.237.4.90", "72.237.4.103", "72.237.4.243", "4.26.24.234", "44.193.34.238", "52.206.190.41", "18.211.32.87"}
+	expected := stringset.New("72.237.4.113", "72.237.4.114", "72.237.4.35", "72.237.4.38", "72.237.4.79",
+		"72.237.4.90", "72.237.4.103", "72.237.4.243", "4.26.24.234", "44.193.34.238", "52.206.190.41", "18.211.32.87")
 
 	ctx, sys := setupMockScriptEnv(`
 		name="addrs"
@@ -119,16 +120,17 @@ func TestNewAddrs(t *testing.T) {
 	for i := 0; i < num; i++ {
 		req := <-ch
 
-		if exp := expected[i]; req.Address != exp ||
-			req.Domain != domain || req.Tag != "testing" || req.Source != "addrs" {
-			t.Errorf("Incorrect output for address %d, expected: %s, got: %v", i+1, exp, req)
+		if !expected.Has(req.Address) || req.Domain != domain || req.Tag != "testing" || req.Source != "addrs" {
+			t.Errorf("Address %d: %v was not found in the list of expected addresses", i+1, req.Address)
 		}
+
+		expected.Remove(req.Address)
 	}
 }
 
 func TestNewASNs(t *testing.T) {
-	expected := []requests.ASNRequest{
-		{
+	expected := map[int]*requests.ASNRequest{
+		26808: {
 			Address:     "72.237.4.113",
 			ASN:         26808,
 			Prefix:      "72.237.4.0/24",
@@ -137,7 +139,7 @@ func TestNewASNs(t *testing.T) {
 			Tag:         "testing",
 			Source:      "asns",
 		},
-		{
+		13335: {
 			Address:     "104.16.0.1",
 			ASN:         13335,
 			Prefix:      "104.16.0.0/14",
@@ -232,7 +234,7 @@ func TestNewASNs(t *testing.T) {
 	for i := 0; i < num; i++ {
 		req := <-ch
 
-		if exp := expected[i]; !matchingASNs(req, &exp) {
+		if exp, found := expected[req.ASN]; !found || !matchingASNs(req, exp) {
 			t.Errorf("Incorrect output for ASN %d, expected: %v, got: %v", i+1, exp, req)
 		}
 	}
@@ -281,14 +283,14 @@ func matchingASNs(first, second *requests.ASNRequest) bool {
 }
 
 func TestAssociated(t *testing.T) {
-	expected := []requests.WhoisRequest{
-		{
+	expected := map[string]*requests.WhoisRequest{
+		"owasp.org": {
 			Domain:     "owasp.org",
 			NewDomains: []string{"globalappsec.org"},
 			Tag:        "testing",
 			Source:     "associated",
 		},
-		{
+		"utica.edu": {
 			Domain:     "utica.edu",
 			NewDomains: []string{"necyber.com"},
 			Tag:        "testing",
@@ -343,7 +345,7 @@ func TestAssociated(t *testing.T) {
 	for i := 0; i < num; i++ {
 		req := <-ch
 
-		if exp := expected[i]; req.Domain != exp.Domain ||
+		if exp, found := expected[req.Domain]; !found || req.Domain != exp.Domain ||
 			req.NewDomains[0] != exp.NewDomains[0] || req.Tag != "testing" || req.Source != "associated" {
 			t.Errorf("Incorrect output for associated %d, expected: %s, got: %v", i+1, exp, req)
 		}
