@@ -7,7 +7,7 @@ name = "Robtex"
 type = "api"
 
 function start()
-    setratelimit(1)
+    set_rate_limit(1)
 end
 
 function vertical(ctx, domain)
@@ -16,11 +16,8 @@ function vertical(ctx, domain)
         return
     end
 
-    local url = "https://freeapi.robtex.com/pdns/forward/" .. domain
-    local resp, err = request(ctx, {
-        ['url']=url,
-        headers={['Content-Type']="application/json"},
-    })
+    local vurl = "https://freeapi.robtex.com/pdns/forward/" .. domain
+    local resp, err = request(ctx, {['url']=vurl})
     if (err ~= nil and err ~= "") then
         return
     end
@@ -36,9 +33,9 @@ function vertical(ctx, domain)
             if (d == nil) then
                 return
             end
-            extractnames(ctx, d)
+            extract_names(ctx, d)
         elseif (rr.rrtype == "NS" or rr.rrtype == "MX") then
-            sendnames(ctx, rr.rrdata)
+            send_names(ctx, rr.rrdata)
         end
     end
 end
@@ -56,7 +53,7 @@ function asn(ctx, addr, asn)
             return
         end
 
-        d = ipinfo(ctx, addr, cfg.ttl)
+        d = ip_info(ctx, addr, cfg.ttl)
         if (d == nil) then
             return
         end
@@ -75,13 +72,13 @@ function asn(ctx, addr, asn)
         parts = split(prefix, "/")
         addr = parts[1]
 
-        d = ipinfo(ctx, addr, cfg.ttl)
+        d = ip_info(ctx, addr, cfg.ttl)
         if (d == nil) then
             return
         end
     end
 
-    extractnames(ctx, d)
+    extract_names(ctx, d)
 
     local desc = d.asname
     if (desc == nil) then
@@ -96,7 +93,7 @@ function asn(ctx, addr, asn)
         desc = desc .. " - " .. d.routedesc
     end
 
-    newasn(ctx, {
+    new_asn(ctx, {
         ['addr']=addr,
         ['asn']=asn,
         ['prefix']=prefix,
@@ -105,12 +102,9 @@ function asn(ctx, addr, asn)
     })
 end
 
-function ipinfo(ctx, addr, ttl)
+function ip_info(ctx, addr, ttl)
     local url = "https://freeapi.robtex.com/ipquery/" .. addr
-    local resp, err = request(ctx, {
-        ['url']=url,
-        headers={['Content-Type']="application/json"},
-    })
+    local resp, err = request(ctx, {['url']=url})
     if (err ~= nil and err ~= "") then
         return nil
     end
@@ -123,14 +117,14 @@ function ipinfo(ctx, addr, ttl)
     return j
 end
 
-function extractnames(ctx, djson)
+function extract_names(ctx, djson)
     local sections = {"act", "acth", "pas", "pash"}
 
     for _, s in pairs(sections) do
         if (djson[s] ~= nil and #(djson[s]) > 0) then
             for _, name in pairs(djson[s]) do
-                if inscope(ctx, name.o) then
-                    newname(ctx, name.o)
+                if in_scope(ctx, name.o) then
+                    new_name(ctx, name.o)
                 end
             end
         end
@@ -139,10 +133,7 @@ end
 
 function netblocks(ctx, asn, ttl)
     local url = "https://freeapi.robtex.com/asquery/" .. tostring(asn)
-    local resp, err = request(ctx, {
-        ['url']=url,
-        headers={['Content-Type']="application/json"},
-    })
+    local resp, err = request(ctx, {['url']=url})
     if (err ~= nil and err ~= "") then
         return nil
     end
@@ -161,21 +152,6 @@ function netblocks(ctx, asn, ttl)
         return nil
     end
     return netblocks
-end
-
-function sendnames(ctx, content)
-    local names = find(content, subdomainre)
-    if (names == nil) then
-        return
-    end
-
-    local found = {}
-    for i, v in pairs(names) do
-        if (found[v] == nil) then
-            newname(ctx, v)
-            found[v] = true
-        end
-    end
 end
 
 function split(str, delim)

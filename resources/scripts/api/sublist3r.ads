@@ -1,4 +1,4 @@
--- Copyright 2017 Jeff Foley. All rights reserved.
+-- Copyright 2017-2021 Jeff Foley. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 local json = require("json")
@@ -7,11 +7,11 @@ name = "Sublist3rAPI"
 type = "api"
 
 function start()
-    setratelimit(1)
+    set_rate_limit(1)
 end
 
 function vertical(ctx, domain)
-    local page, err = request(ctx, {url=buildurl(domain)})
+    local page, err = request(ctx, {url=build_url(domain)})
     if (err ~= nil and err ~= "") then
         return
     end
@@ -22,10 +22,10 @@ function vertical(ctx, domain)
     end
 
     for i, v in pairs(resp) do
-        newname(ctx, v)
+        new_name(ctx, v)
     end
 end
 
-function buildurl(domain)
+function build_url(domain)
     return "https://api.sublist3r.com/search.php?domain=" .. domain
 end

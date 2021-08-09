@@ -18,6 +18,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -33,9 +34,6 @@ import (
 )
 
 const (
-	// UserAgent is the default user agent used by Amass during HTTP requests.
-	UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.49 Safari/537.36"
-
 	// Accept is the default HTTP Accept header value used by Amass.
 	Accept = "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
 
@@ -47,11 +45,13 @@ const (
 )
 
 var (
+  // UserAgent is the default user agent used by Amass during HTTP requests.
+	UserAgent       string
 	subRE           = dns.AnySubdomainRegex()
-	crawlFileEnds   = []string{"html", "do", "action", "cgi"}
+	crawlRE         = regexp.MustCompile(`\.\w{2,6}($|\?|#)`)
+  crawlFileEnds   = []string{"html", "do", "action", "cgi"}
 	crawlFileStarts = []string{"js", "htm", "as", "php", "inc"}
-	crawlRE         = regexp.MustCompile(`\.[a-z0-9]{2,6}($|\?|#)`)
-	nameStripRE     = regexp.MustCompile(`^u[0-9a-f]{4}|20|22|25|2b|2f|3d|3a|40`)
+  nameStripRE     = regexp.MustCompile(`^u[0-9a-f]{4}|20|22|25|2b|2f|3d|3a|40`)
 )
 
 // DefaultClient is the same HTTP client used by the package methods.
@@ -78,6 +78,15 @@ func init() {
 			TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
 		},
 		Jar: jar,
+	}
+
+	switch runtime.GOOS {
+	case "windows":
+		UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.164 Safari/537.36"
+	case "darwin":
+		UserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 11_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.164 Safari/537.36"
+	default:
+		UserAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.164 Safari/537.36"
 	}
 }
 

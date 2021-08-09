@@ -7,14 +7,14 @@ name = "HackerTarget"
 type = "api"
 
 function start()
-    setratelimit(1)
+    set_rate_limit(1)
 end
 
 function vertical(ctx, domain)
-    scrape(ctx, {url=buildurl(domain)})
+    scrape(ctx, {['url']=build_url(domain)})
 end
 
-function buildurl(domain)
+function build_url(domain)
     return "http://api.hackertarget.com/hostsearch/?q=" .. domain
 end
 
@@ -23,8 +23,7 @@ function asn(ctx, addr, asn)
         return
     end
 
-    local aurl = asnurl(addr)
-    local resp, err = request(ctx, {url=aurl})
+    local resp, err = request(ctx, {['url']=asn_url(addr)})
     if (err ~= nil and err ~= "") then
         return
     end
@@ -34,7 +33,7 @@ function asn(ctx, addr, asn)
         return
     end
 
-    newasn(ctx, {
+    new_asn(ctx, {
         ['addr']=addr,
         asn=tonumber(j.results[2]),
         prefix=j.results[3],
@@ -42,6 +41,6 @@ function asn(ctx, addr, asn)
     })
 end
 
-function asnurl(addr)
+function asn_url(addr)
     return "https://api.hackertarget.com/aslookup/?q=" .. addr
 end

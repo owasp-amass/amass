@@ -9,32 +9,26 @@ type = "api"
 local urls = {}
 
 function start()
-    setratelimit(2)
+    set_rate_limit(2)
 end
 
 function vertical(ctx, domain)
-    urls = indexurls(ctx)
+    urls = index_urls(ctx)
     if (urls == nil or #urls == 0) then
         return
     end
 
     for _, url in pairs(urls) do
-        scrape(ctx, {
-            ['url']=buildurl(url, domain),
-            headers={['Content-Type']="application/json"},
-        })
+        scrape(ctx, {['url']=build_url(url, domain)})
     end
 end
 
-function buildurl(url, domain)
+function build_url(url, domain)
     return url .. "?url=*." .. domain .. "&output=json&fl=url"
 end
 
-function indexurls(ctx)
-    local resp, err = request(ctx, {
-        url="https://index.commoncrawl.org/collinfo.json",
-        headers={['Content-Type']="application/json"},
-    })
+function index_urls(ctx)
+    local resp, err = request(ctx, {['url']="https://index.commoncrawl.org/collinfo.json"})
     if (err ~= nil and err ~= "") then
         return nil
     end
