@@ -1,17 +1,17 @@
 -- Copyright 2021 Jeff Foley. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
-name = "UKWebArchive"
-type = "archive"
+name = "CertDetails"
+type = "cert"
 
 function start()
     set_rate_limit(1)
 end
 
 function vertical(ctx, domain)
-    scrape(ctx, {['url']=build_url(domain)})
+    scrape(ctx, {url=build_url(domain)})
 end
 
 function build_url(domain)
-    return "https://www.webarchive.org.uk/wayback/archive/cdx?matchType=domain&output=json&url=" .. domain
+    return "https://certificatedetails.com/api/list/" .. domain
 end

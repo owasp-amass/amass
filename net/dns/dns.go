@@ -33,7 +33,7 @@ func AnySubdomainRegex() *regexp.Regexp {
 
 // AnySubdomainRegexString returns a regular expression string to match any DNS subdomain name.
 func AnySubdomainRegexString() string {
-	return SUBRE + "[.a-zA-Z-]{2,61}"
+	return SUBRE + "[a-zA-Z]{2,61}"
 }
 
 // CopyString return a new string variable with the same value as the parameter.
