@@ -5,314 +5,308 @@ import (
 )
 
 func TestNilParseStrings(t *testing.T) {
-	const want = ""
-	got := (*ParseStrings)(nil).String()
-	if got != want {
-		t.Errorf("got %q; want %q", got, want)
+	const expected = ""
+
+	if got := (*ParseStrings)(nil).String(); got != expected {
+		t.Errorf("Got: %q; Expected: %q", got, expected)
 	}
 }
 
 func TestParseStrings(t *testing.T) {
 	cases := []struct {
-		label string
-		input string
-		ok    bool
-		want  string
+		label    string
+		input    string
+		ok       bool
+		expected string
 	}{
 		{
-			label: "empty input",
+			label: "Empty_Input",
 			input: "",
 		}, {
-			label: "",
-			input: "234,foo,bar",
-			ok:    true,
-			want:  "234,foo,bar",
+			label:    "Valid_Input",
+			input:    "234,foo,bar",
+			ok:       true,
+			expected: "234,foo,bar",
 		}, {
-			label: "extra comma",
-			input: "234,foo,bar,",
-			ok:    true,
-			want:  "234,foo,bar,",
+			label:    "Extra_Comma",
+			input:    "234,foo,bar,",
+			ok:       true,
+			expected: "234,foo,bar,",
 		}, {
-			label: "with whitespace",
-			input: "234  , foo ,\tbar",
-			ok:    true,
-			want:  "234,foo,bar",
+			label:    "With_Whitespace",
+			input:    "234  , foo ,\tbar",
+			ok:       true,
+			expected: "234,foo,bar",
 		},
 	}
+
 	for _, c := range cases {
 		f := func(t *testing.T) {
 			var ints ParseStrings
-			err := ints.Set(c.input)
-			if err != nil && c.ok {
-				t.Errorf("got %v; want <nil>", err)
-			}
-			if err == nil && !c.ok {
-				t.Error("got <nil>; want some error")
-			}
-			if err == nil && c.ok {
-				got := ints.String()
-				if got != c.want {
-					t.Errorf("got %q; want %q", got, c.want)
+
+			if err := ints.Set(c.input); err != nil && c.ok {
+				t.Errorf("Got: %v; Expected: <nil>", err)
+			} else if err == nil && !c.ok {
+				t.Error("Got: <nil>; Expected: some error")
+			} else if err == nil && c.ok {
+				if got := ints.String(); got != c.expected {
+					t.Errorf("Got: %q; Expected: %q", got, c.expected)
 				}
 			}
 		}
+
 		t.Run(c.label, f)
 	}
 }
 
 func TestNilParseInts(t *testing.T) {
-	const want = ""
-	got := (*ParseInts)(nil).String()
-	if got != want {
-		t.Errorf("got %q; want %q", got, want)
+	const expected = ""
+
+	if got := (*ParseInts)(nil).String(); got != expected {
+		t.Errorf("Got: %q; Expected: %q", got, expected)
 	}
 }
 
 func TestParseInts(t *testing.T) {
 	cases := []struct {
-		label string
-		input string
-		ok    bool
-		want  string
+		label    string
+		input    string
+		ok       bool
+		expected string
 	}{
 		{
-			label: "empty input",
+			label: "Empty_Input",
 			input: "",
 		}, {
-			label: "invalid int",
+			label: "Invalid_Int",
 			input: "1,sdfg,2,3",
 		}, {
-			label: "extraneous comma",
+			label: "Extraneous_Comma",
 			input: "-1,2,,",
 		}, {
-			label: "without whitespace",
-			input: "-1,10,42",
-			ok:    true,
-			want:  "-1,10,42",
+			label:    "Without_Whitespace",
+			input:    "-1,10,42",
+			ok:       true,
+			expected: "-1,10,42",
 		}, {
-			label: "with whitespace",
-			input: "-1, 10 ,\t42",
-			ok:    true,
-			want:  "-1,10,42",
+			label:    "With_Whitespace",
+			input:    "-1, 10 ,\t42",
+			ok:       true,
+			expected: "-1,10,42",
 		},
 	}
+
 	for _, c := range cases {
 		f := func(t *testing.T) {
 			var ints ParseInts
-			err := ints.Set(c.input)
-			if err != nil && c.ok {
-				t.Errorf("got %v; want <nil>", err)
-			}
-			if err == nil && !c.ok {
-				t.Error("got <nil>; want some error")
-			}
-			if err == nil && c.ok {
-				got := ints.String()
-				if got != c.want {
-					t.Errorf("got %q; want %q", got, c.want)
+
+			if err := ints.Set(c.input); err != nil && c.ok {
+				t.Errorf("Got: %v; Expected: <nil>", err)
+			} else if err == nil && !c.ok {
+				t.Error("Got: <nil>; Expected: some error")
+			} else if err == nil && c.ok {
+				if got := ints.String(); got != c.expected {
+					t.Errorf("Got: %q; Expected: %q", got, c.expected)
 				}
 			}
 		}
+
 		t.Run(c.label, f)
 	}
 }
 
 func TestNilParseIPs(t *testing.T) {
-	const want = ""
-	got := (*ParseIPs)(nil).String()
-	if got != want {
-		t.Errorf("got %q; want %q", got, want)
+	const expected = ""
+
+	if got := (*ParseIPs)(nil).String(); got != expected {
+		t.Errorf("Got: %q; Expected: %q", got, expected)
 	}
 }
 
 func TestParseIPs(t *testing.T) {
 	cases := []struct {
-		label string
-		input string
-		ok    bool
-		want  string
+		label    string
+		input    string
+		ok       bool
+		expected string
 	}{
 		{
-			label: "empty input",
+			label: "Empty_Input",
 			input: "",
 		}, {
-			label: "single valid IPv4",
-			input: "127.0.0.1",
-			ok:    true,
-			want:  "127.0.0.1",
+			label:    "Single_Valid_IPv4",
+			input:    "127.0.0.1",
+			ok:       true,
+			expected: "127.0.0.1",
 		}, {
-			label: "single valid IPv6",
-			input: "2001:0db8:85a3:0000:0000:8a2e:0370:7334",
-			ok:    true,
-			want:  "2001:db8:85a3::8a2e:370:7334",
+			label:    "Single_Valid_IPv6",
+			input:    "2001:0db8:85a3:0000:0000:8a2e:0370:7334",
+			ok:       true,
+			expected: "2001:db8:85a3::8a2e:370:7334",
 		}, {
-			label: "single IPv4 byte overflow",
+			label: "Single_IPv4_Byte_Overflow",
 			input: "256.0.0.1",
 		}, {
-			label: "valid compact range",
-			input: "127.0.0.1-3",
-			ok:    true,
-			want:  "127.0.0.1,127.0.0.2,127.0.0.3",
+			label:    "Valid_Compact_Range",
+			input:    "127.0.0.1-3",
+			ok:       true,
+			expected: "127.0.0.1,127.0.0.2,127.0.0.3",
 		}, {
-			label: "valid range",
-			input: "127.0.0.1-127.0.0.3",
-			ok:    true,
-			want:  "127.0.0.1,127.0.0.2,127.0.0.3",
+			label:    "Valid_Range",
+			input:    "127.0.0.1-127.0.0.3",
+			ok:       true,
+			expected: "127.0.0.1,127.0.0.2,127.0.0.3",
 		}, {
-			label: "empty range",
+			label: "Empty_Range",
 			input: "127.0.0.2-127.0.0.1",
 		}, {
-			label: "range end overflows byte",
+			label: "Range_End_Overflows_Byte",
 			input: "0.0.0.0-256",
 		}, {
-			label: "invalid range end",
+			label: "Invalid_Range_End",
 			input: "0.0.0.0-1-sdfgkjhsdfg",
 		}, {
-			label: "invalid range start",
+			label: "Invalid_Range_Start",
 			input: "foo-3",
 		}, {
-			label: "range and IP",
-			input: "127.0.0.1-3,255.0.0.0",
-			ok:    true,
-			want:  "127.0.0.1,127.0.0.2,127.0.0.3,255.0.0.0",
+			label:    "Range_And_IP",
+			input:    "127.0.0.1-3,255.0.0.0",
+			ok:       true,
+			expected: "127.0.0.1,127.0.0.2,127.0.0.3,255.0.0.0",
 		}, {
-			label: "extraneous comma",
+			label: "Extraneous_Comma",
 			input: "127.0.0.1-3,255.0.0.0,",
 		}, {
-			label: "whitespace after comma",
+			label: "Whitespace_After_Comma",
 			input: "127.0.0.1-3, 255.0.0.0",
 		}, {
-			label: "whitespace before comma",
+			label: "Whitespace_Before_Comma",
 			input: "127.0.0.1-3 ,255.0.0.0",
 		}, {
-			label: "trailing whitespace",
+			label: "Trailing_Whitespace",
 			input: "127.0.0.1-3,255.0.0.0 ",
 		}, {
-			label: "leading whitespace",
+			label: "Leading_Whitespace",
 			input: " 127.0.0.1-3,255.0.0.0",
 		},
 	}
+
 	for _, c := range cases {
 		f := func(t *testing.T) {
 			var ips ParseIPs
-			err := ips.Set(c.input)
-			if err != nil && c.ok {
-				t.Errorf("got %v; want <nil>", err)
-			}
-			if err == nil && !c.ok {
-				t.Error("got <nil>; want some error")
-			}
-			if err == nil && c.ok {
-				got := ips.String()
-				if got != c.want {
-					t.Errorf("got %q; want %q", got, c.want)
+
+			if err := ips.Set(c.input); err != nil && c.ok {
+				t.Errorf("Got: %v; Expected: <nil>", err)
+			} else if err == nil && !c.ok {
+				t.Error("got <nil>; Expected: some error")
+			} else if err == nil && c.ok {
+				if got := ips.String(); got != c.expected {
+					t.Errorf("got %q; Expected: %q", got, c.expected)
 				}
 			}
 		}
+
 		t.Run(c.label, f)
 	}
 }
 
 func TestNilParseCIDRs(t *testing.T) {
-	const want = ""
-	got := (*ParseCIDRs)(nil).String()
-	if got != want {
-		t.Errorf("got %q; want %q", got, want)
+	const expected = ""
+
+	if got := (*ParseCIDRs)(nil).String(); got != expected {
+		t.Errorf("Got: %q; Expected: %q", got, expected)
 	}
 }
 
 func TestParseCIDRs(t *testing.T) {
 	cases := []struct {
-		label string
-		input string
-		ok    bool
-		want  string
+		label    string
+		input    string
+		ok       bool
+		expected string
 	}{
 		{
-			label: "empty",
+			label: "Empty",
 			input: "",
 		}, {
-			label: "valid CIDRs",
-			input: "192.0.2.1/24,193.0.2.1/16",
-			ok:    true,
-			want:  "192.0.2.0/24,193.0.0.0/16",
+			label:    "Valid_CIDRs",
+			input:    "192.0.2.1/24,193.0.2.1/16",
+			ok:       true,
+			expected: "192.0.2.0/24,193.0.0.0/16",
 		}, {
-			label: "invalid CIDRs",
+			label: "Invalid_CIDRs",
 			input: "192.0.2.1/24,193.0.2.1/66",
 		}, {
-			label: "whitespace",
+			label: "Whitespace",
 			input: "\t192.0.2.1/24, 193.0.2.1/16 ",
 		}, {
-			label: "extraneous comma",
+			label: "Extraneous_Comma",
 			input: "192.0.2.1/24,193.0.2.1/16,",
 		},
 	}
 	for _, c := range cases {
 		f := func(t *testing.T) {
 			var cidrs ParseCIDRs
-			err := cidrs.Set(c.input)
-			if err != nil && c.ok {
-				t.Errorf("got %v; want <nil>", err)
-			}
-			if err == nil && !c.ok {
-				t.Error("got <nil>; want some error")
-			}
-			if err == nil && c.ok {
-				got := cidrs.String()
-				if got != c.want {
-					t.Errorf("got %q; want %q", got, c.want)
+
+			if err := cidrs.Set(c.input); err != nil && c.ok {
+				t.Errorf("Got %v; Expected: <nil>", err)
+			} else if err == nil && !c.ok {
+				t.Error("Got <nil>; Expected: some error")
+			} else if err == nil && c.ok {
+				if got := cidrs.String(); got != c.expected {
+					t.Errorf("Got %q; Expected: %q", got, c.expected)
 				}
 			}
 		}
+
 		t.Run(c.label, f)
 	}
 }
 
 func TestParseASNs(t *testing.T) {
 	cases := []struct {
-		label string
-		input string
-		ok    bool
-		want  string
+		label    string
+		input    string
+		ok       bool
+		expected string
 	}{
 		{
-			label: "empty",
+			label: "Empty",
 			input: "",
 		}, {
-			label: "valid ASNs with and without AS prefix",
-			input: "AS1234,AS4567,7777",
-			ok:    true,
-			want:  "1234,4567,7777",
+			label:    "Valid_ASNs_With_And_Without_AS_Prefix",
+			input:    "AS1234,AS4567,7777",
+			ok:       true,
+			expected: "1234,4567,7777",
 		}, {
-			label: "invalid ASN",
+			label: "Invalid_ASN",
 			input: "AS1234,4567,ASABC",
 		}, {
-			label: "whitespace",
-			input: "\tAS1234 , 4567 ",
-			ok:    true,
-			want:  "1234,4567",
+			label:    "Whitespace",
+			input:    "\tAS1234 , 4567 ",
+			ok:       true,
+			expected: "1234,4567",
 		}, {
-			label: "extraneous comma",
+			label: "Extraneous_Comma",
 			input: "AS1234,",
 		},
 	}
+
 	for _, c := range cases {
 		f := func(t *testing.T) {
 			var asns ParseASNs
-			err := asns.Set(c.input)
-			if err != nil && c.ok {
-				t.Errorf("got %v; want <nil>", err)
-			}
-			if err == nil && !c.ok {
-				t.Error("got <nil>; want some error")
-			}
-			if err == nil && c.ok {
-				got := asns.String()
-				if got != c.want {
-					t.Errorf("got %q; want %q", got, c.want)
+
+			if err := asns.Set(c.input); err != nil && c.ok {
+				t.Errorf("Got: %v; Expected: <nil>", err)
+			} else if err == nil && !c.ok {
+				t.Error("Got: <nil>; Expected: some error")
+			} else if err == nil && c.ok {
+				if got := asns.String(); got != c.expected {
+					t.Errorf("Got: %q; Expected: %q", got, c.expected)
 				}
 			}
 		}
+
 		t.Run(c.label, f)
 	}
 }

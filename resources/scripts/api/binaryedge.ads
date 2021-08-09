@@ -7,7 +7,7 @@ name = "BinaryEdge"
 type = "api"
 
 function start()
-    setratelimit(1)
+    set_rate_limit(1)
 end
 
 function check()
@@ -30,15 +30,10 @@ function vertical(ctx, domain)
         c = cfg.credentials
     end
 
-    local hdrs={
-        ['X-KEY']=c["key"],
-        ['Content-Type']="application/json",
-    }
-
     for i=1,500 do
         local resp, err = request(ctx, {
-            url=apiurl(domain, i),
-            headers=hdrs,
+            url=api_url(domain, i),
+            headers={['X-KEY']=c["key"]},
         })
         if (err ~= nil and err ~= "") then
             return
@@ -50,7 +45,7 @@ function vertical(ctx, domain)
         end
     
         for i, v in pairs(d.events) do
-            newname(ctx, v)
+            new_name(ctx, v)
         end
 
         if (d.page > 500 or d.page > (d.total / d.pagesize)) then
@@ -59,6 +54,6 @@ function vertical(ctx, domain)
     end
 end
 
-function apiurl(domain, pagenum)
+function api_url(domain, pagenum)
     return "https://api.binaryedge.io/v2/query/domains/subdomain/" .. domain .. "?page=" .. pagenum
 end

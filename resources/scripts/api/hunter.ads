@@ -7,7 +7,7 @@ name = "Hunter"
 type = "api"
 
 function start()
-    setratelimit(1)
+    set_rate_limit(1)
 end
 
 function check()
@@ -34,10 +34,7 @@ function vertical(ctx, domain)
         return
     end
 
-    local resp, err = request(ctx, {
-        url=verturl(domain, c.key),
-        headers={['Content-Type']="application/json"},
-    })
+    local resp, err = request(ctx, {['url']=build_url(domain, c.key)})
     if (err ~= nil and err ~= "") then
         return
     end
@@ -49,11 +46,11 @@ function vertical(ctx, domain)
 
     for _, email in pairs(j.data.emails) do
         for _, src in pairs(email.sources) do
-            newname(ctx, src.domain)
+            new_name(ctx, src.domain)
         end
     end
 end
 
-function verturl(domain, key)
+function build_url(domain, key)
     return "https://api.hunter.io/v2/domain-search?domain=" .. domain .. "&api_key=" .. key
 end

@@ -7,7 +7,7 @@ name = "ReconDev"
 type = "api"
 
 function start()
-    setratelimit(5)
+    set_rate_limit(5)
 end
 
 function check()
@@ -34,10 +34,7 @@ function vertical(ctx, domain)
         return
     end
 
-    local resp, err = request(ctx, {
-        url=buildurl(domain, c.key),
-        headers={['Content-Type']="application/json"},
-    })
+    local resp, err = request(ctx, {['url']=build_url(domain, c.key)})
     if (err ~= nil and err ~= "") then
         return
     end
@@ -50,33 +47,18 @@ function vertical(ctx, domain)
     for i, set in pairs(data) do
         local domains = set["rawDomains"]
         if domains ~= nil and #domains > 0 then
-            for j, name in pairs(domains) do
-                sendnames(ctx, name)
+            for _, name in pairs(domains) do
+                new_name(ctx, name)
             end
         end
 
-        local addrs = set["rawIp"]
+        local addr = set["rawIp"]
         if addr ~= nil then
-            newaddr(ctx, domain, addr)
+            new_addr(ctx, addr, domain)
         end
     end
 end
 
-function buildurl(domain, key)
+function build_url(domain, key)
     return "https://recon.dev/api/search?key=" .. key .. "&domain=" .. domain
-end
-
-function sendnames(ctx, content)
-    local names = find(content, subdomainre)
-    if names == nil then
-        return
-    end
-
-    local found = {}
-    for i, v in pairs(names) do
-        if found[v] == nil then
-            newname(ctx, v)
-            found[v] = true
-        end
-    end
 end
