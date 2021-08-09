@@ -5,14 +5,14 @@ name = "BufferOver"
 type = "api"
 
 function start()
-    setratelimit(1)
+    set_rate_limit(1)
 end
 
 function vertical(ctx, domain)
-    scrape(ctx, {url=buildurl(domain, "dns")})
-    scrape(ctx, {url=buildurl(domain, "tls")})
+    scrape(ctx, {url=build_url(domain, "dns")})
+    scrape(ctx, {url=build_url(domain, "tls")})
 end
 
-function buildurl(domain, sub)
+function build_url(domain, sub)
     return "https://" .. sub .. ".bufferover.run/dns?q=." .. domain
 end

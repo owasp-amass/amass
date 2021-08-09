@@ -1,4 +1,4 @@
--- Copyright 2017-2021 Jeff Foley. All rights reserved.
+-- Copyright 2020-2021 Jeff Foley. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 local json = require("json")
@@ -7,7 +7,7 @@ name = "SecurityTrails"
 type = "api"
 
 function start()
-    setratelimit(1)
+    set_rate_limit(2)
 end
 
 function check()
@@ -34,12 +34,10 @@ function vertical(ctx, domain)
         return
     end
 
+    local vurl = "https://api.securitytrails.com/v1/domain/" .. domain .. "/subdomains"
     local resp, err = request(ctx, {
-        url=verturl(domain),
-        headers={
-            APIKEY=c.key,
-            ['Content-Type']="application/json",
-        },
+        url=vurl,
+        headers={APIKEY=c.key},
     })
     if (err ~= nil and err ~= "") then
         return
@@ -50,27 +48,8 @@ function vertical(ctx, domain)
         return
     end
 
-    for i, sub in pairs(j.subdomains) do
-        sendnames(ctx, sub .. "." .. domain)
-    end
-end
-
-function verturl(domain)
-    return "https://api.securitytrails.com/v1/domain/" .. domain .. "/subdomains"
-end
-
-function sendnames(ctx, content)
-    local names = find(content, subdomainre)
-    if (names == nil) then
-        return
-    end
-
-    local found = {}
-    for i, v in pairs(names) do
-        if (found[v] == nil) then
-            newname(ctx, v)
-            found[v] = true
-        end
+    for _, sub in pairs(j.subdomains) do
+        new_name(ctx, sub .. "." .. domain)
     end
 end
 
@@ -85,12 +64,10 @@ function horizontal(ctx, domain)
         return
     end
 
+    local hurl = "https://api.securitytrails.com/v1/domain/" .. domain .. "/associated"
     local resp, err = request(ctx, {
-        url=horizonurl(domain),
-        headers={
-            APIKEY=c.key,
-            ['Content-Type']="application/json",
-        },
+        url=hurl,
+        headers={APIKEY=c.key},
     })
     if (err ~= nil and err ~= "") then
         return
@@ -102,12 +79,8 @@ function horizontal(ctx, domain)
     end
 
     for _, r in pairs(j.records) do
-        if (r.hostname ~= "") then
+        if (r.hostname ~= nil and r.hostname ~= "") then
             associated(ctx, domain, r.hostname)
         end
     end
-end
-
-function horizonurl(domain)
-    return "https://api.securitytrails.com/v1/domain/" .. domain .. "/associated"
 end

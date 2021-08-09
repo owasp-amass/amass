@@ -1,4 +1,4 @@
--- Copyright 2017 Jeff Foley. All rights reserved.
+-- Copyright 2017-2021 Jeff Foley. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 local json = require("json")
@@ -7,11 +7,11 @@ name = "Mnemonic"
 type = "api"
 
 function start()
-    setratelimit(1)
+    set_rate_limit(1)
 end
 
 function vertical(ctx, domain)
-    local page, err = request(ctx, {url=apiurl(domain)})
+    local page, err = request(ctx, {url=api_url(domain)})
     if (err ~= nil and err ~= '') then
         return
     end
@@ -22,13 +22,13 @@ function vertical(ctx, domain)
     end
 
     for i, tb in pairs(resp.data) do
-        if ((tb.rrtype == "a" or tb.rrtype == "aaaa") and inscope(ctx, tb.query)) then
-            newname(ctx, tb.query)
-            newaddr(ctx, tb.answer, tb.query)
+        if ((tb.rrtype == "a" or tb.rrtype == "aaaa") and in_scope(ctx, tb.query)) then
+            new_name(ctx, tb.query)
+            new_addr(ctx, tb.answer, tb.query)
         end
     end
 end
 
-function apiurl(domain)
+function api_url(domain)
     return "https://api.mnemonic.no/pdns/v3/" .. domain
 end
