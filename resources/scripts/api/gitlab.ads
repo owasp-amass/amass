@@ -1,13 +1,11 @@
--- Copyright 2017-2021 Jeff Foley. All rights reserved.
+-- Copyright 2021 Jeff Foley. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
-
-local url = require("url")
 
 name = "GitLab"
 type = "api"
 
 function start()
-    setratelimit(1)
+    set_rate_limit(1)
 end
 
 function check()
@@ -38,16 +36,12 @@ function vertical(ctx, domain)
 
     for i, s in pairs(scopes) do
         scrape(ctx, {
-            url=apiurl(domain, s),
+            url=api_url(domain, s),
             headers={['PRIVATE-TOKEN']=c.key},
         })
     end
 end
 
-function apiurl(domain, scope)
-    local params = {
-        scope=scope,
-        search=domain,
-    }
-    return "https://gitlab.com/api/v4/search?" .. url.build_query_string(params)
+function api_url(domain, scope)
+    return "https://gitlab.com/api/v4/search?scope=" .. scope .. "&search=" .. domain
 end
