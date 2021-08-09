@@ -7,38 +7,28 @@ name = "SonarSearch"
 type = "api"
 
 function start()
-    setratelimit(1)
+    set_rate_limit(1)
 end
 
 function vertical(ctx, domain)
     local p = 0
     while(true) do
-        local resp, err = request(ctx, {url=buildurl(domain, p)})
+        local vurl = "https://sonar.omnisint.io/subdomains/" .. domain .. "?page=" .. p
+        local resp, err = request(ctx, {['url']=vurl})
         if (err ~= nil and err ~= "") then
             return
         end
+        resp = "{subdomains:" .. resp .. "}"
 
         local d = json.decode(resp)
-        if (d == nil or #d == 0) then
+        if (d == nil or d.subdomains == nil or #(d.subdomains) == 0) then
             return
         end
 
-        sendnames(ctx, resp)
+        for _, sub in pairs(d.subdomains) do
+            new_name(ctx, sub)
+        end
+
         p = p + 1
-    end
-end
-
-function buildurl(domain, page)
-    return "https://sonar.omnisint.io/subdomains/" .. domain .. "?page=" .. page
-end
-
-function sendnames(ctx, content)
-    local names = find(content, subdomainre)
-    if names == nil then
-        return
-    end
-
-    for i, v in pairs(names) do
-        newname(ctx, v)
     end
 end

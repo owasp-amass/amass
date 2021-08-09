@@ -7,7 +7,7 @@ name = "Chaos"
 type = "api"
 
 function start()
-    setratelimit(10)
+    set_rate_limit(10)
 end
 
 function check()
@@ -31,23 +31,23 @@ function vertical(ctx, domain)
     end
 
     local resp, err = request(ctx, {
-        ['url']=apiurl(domain),
-        headers={['Authorization']=c["key"]},
+        ['url']=api_url(domain),
+        headers={['Authorization']=c['key']},
     })
     if (err ~= nil and err ~= "") then
         return
     end
 
     local d = json.decode(resp)
-    if (d == nil or #(d.subdomains) == 0) then
+    if (d == nil or d.subdomains == nil or #(d.subdomains) == 0) then
         return
     end
 
     for i, sub in pairs(d.subdomains) do
-        newname(ctx, sub .. "." .. d.domain)
+        new_name(ctx, sub .. "." .. d.domain)
     end
 end
 
-function apiurl(domain)
+function api_url(domain)
     return "https://dns.projectdiscovery.io/dns/" .. domain .. "/subdomains"
 end

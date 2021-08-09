@@ -6,6 +6,7 @@ package enum
 import (
 	"context"
 	"fmt"
+	"net"
 	"strings"
 	"time"
 
@@ -24,9 +25,10 @@ func ZoneTransfer(sub, domain, server string) ([]*requests.DNSRequest, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	conn, err := amassnet.DialContext(ctx, "tcp", server+":53")
+	addr := net.JoinHostPort(server, "53")
+	conn, err := amassnet.DialContext(ctx, "tcp", addr)
 	if err != nil {
-		return results, fmt.Errorf("Zone xfr error: Failed to obtain TCP connection to [%s]: %v", server+":53", err)
+		return results, fmt.Errorf("Zone xfr error: Failed to obtain TCP connection to [%s]: %v", addr, err)
 	}
 	defer conn.Close()
 
@@ -40,7 +42,7 @@ func ZoneTransfer(sub, domain, server string) ([]*requests.DNSRequest, error) {
 
 	in, err := xfr.In(m, "")
 	if err != nil {
-		return results, fmt.Errorf("DNS zone transfer error for [%s]: %v", server+":53", err)
+		return results, fmt.Errorf("DNS zone transfer error for [%s]: %v", addr, err)
 	}
 
 	for en := range in {

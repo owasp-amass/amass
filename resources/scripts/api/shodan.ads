@@ -1,4 +1,4 @@
--- Copyright 2017-2021 Jeff Foley. All rights reserved.
+-- Copyright 2020-2021 Jeff Foley. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 local json = require("json")
@@ -7,7 +7,7 @@ name = "Shodan"
 type = "api"
 
 function start()
-    setratelimit(2)
+    set_rate_limit(2)
 end
 
 function check()
@@ -34,11 +34,8 @@ function vertical(ctx, domain)
         return
     end
 
-    local vurl = buildurl(domain, c.key)
-    local resp, err = request(ctx, {
-        url=vurl,
-        headers={['Content-Type']="application/json"},
-    })
+    local vurl = "https://api.shodan.io/dns/domain/" .. domain .. "?key=" .. c.key
+    local resp, err = request(ctx, {url=vurl})
     if (err ~= nil and err ~= "") then
         return
     end
@@ -48,26 +45,7 @@ function vertical(ctx, domain)
         return
     end
 
-    for i, sub in pairs(d.subdomains) do
-        sendnames(ctx, sub .. "." .. domain)
-    end
-end
-
-function buildurl(domain, key)
-    return "https://api.shodan.io/dns/domain/" .. domain .. "?key=" .. key
-end
-
-function sendnames(ctx, content)
-    local names = find(content, subdomainre)
-    if names == nil then
-        return
-    end
-
-    local found = {}
-    for i, v in pairs(names) do
-        if found[v] == nil then
-            newname(ctx, v)
-            found[v] = true
-        end
+    for _, sub in pairs(d.subdomains) do
+        new_name(ctx, sub .. "." .. domain)
     end
 end

@@ -1,4 +1,4 @@
--- Copyright 2017-2021 Jeff Foley. All rights reserved.
+-- Copyright 2020-2021 Jeff Foley. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 local json = require("json")
@@ -7,7 +7,7 @@ name = "Spyse"
 type = "api"
 
 function start()
-    setratelimit(1)
+    set_rate_limit(1)
 end
 
 function check()
@@ -35,9 +35,33 @@ function vertical(ctx, domain)
 
     local step = 100
     for i = 0,10000,step do
-        local payload = '{"search_params":[{"name":{"operator":"ends","value":".' .. domain .. '"}}],"limit":100,"offset":' .. tostring(i) .. '}'
-        local resp = postreq(ctx, "https://api.spyse.com/v4/data/domain/search", c.key, cfg.ttl, payload)
-        if (resp == "") then
+        local resp, body, err
+        body, err = json.encode({
+            ['search_params']={
+                {
+                    ['name']={
+                        ['operator']="ends",
+                        ['value']="." .. domain
+                    },
+                }
+            },
+            ['limit']=100,
+            ['offset']=i, 
+        })
+        if (err ~= nil and err ~= "") then
+            break
+        end
+
+        resp, err = request(ctx, {
+            ['url']="https://api.spyse.com/v4/data/domain/search",
+            method="POST",
+            data=body,
+            headers={
+                ['Authorization']="Bearer " .. c.key,
+                ['Content-Type']="application/json",
+            },
+        })
+        if (err ~= nil and err ~= "") then
             break
         end
 
@@ -48,7 +72,7 @@ function vertical(ctx, domain)
         end
 
         for i, item in pairs(d['data'].items) do
-            sendnames(ctx, item.name)
+            send_names(ctx, item.name)
         end
 
         if (i+step >= d['data'].total_items) then
@@ -68,13 +92,13 @@ function horizontal(ctx, domain)
         return
     end
 
-    horizoncerts(ctx, domain, c.key, cfg.ttl)
+    hcerts(ctx, domain, c.key, cfg.ttl)
 end
 
 
-function horizoncerts(ctx, domain, key, ttl)
+function hcerts(ctx, domain, key, ttl)
     local u = "https://api.spyse.com/v4/data/domain/" .. domain
-    local resp = getpage(ctx, u, key, ttl)
+    local resp = get_page(ctx, u, key, ttl)
     if (resp == "") then
         return
     end
@@ -87,7 +111,7 @@ function horizoncerts(ctx, domain, key, ttl)
 
     local certid = d['data'].items[0].cert_summary.fingerprint_sha256
     u = "https://api.spyse.com/v4/data/certificate/" .. certid
-    resp = getpage(ctx, u, key, ttl)
+    resp = get_page(ctx, u, key, ttl)
     if (resp == "") then
         return
     end
@@ -100,10 +124,11 @@ function horizoncerts(ctx, domain, key, ttl)
 
     local san = d['data'].items[0].parsed.extensions.subject_alt_name
     if (san ~= nil and #(san.dns_names) > 0) then
-        for j, name in pairs(san.dns_names) do
-            local names = find(name, subdomainre)
-            if (names ~= nil and #names > 0 and names[1] ~= "") then
-                associated(ctx, domain, names[1])
+        for _, name in pairs(san.dns_names) do
+            local n = find(name, subdomain_regex)
+
+            if (n ~= nil and #n > 0 and n[1] ~= "") then
+                associated(ctx, domain, n[1])
             end
         end
     end
@@ -126,13 +151,13 @@ function asn(ctx, addr, asn)
             return
         end
 
-        asn, prefix = getasn(ctx, addr, c.key, cfg.ttl)
+        asn, prefix = get_asn(ctx, addr, c.key, cfg.ttl)
         if (asn == 0) then
             return
         end
     end
 
-    local a = asinfo(ctx, asn, c.key, cfg.ttl)
+    local a = as_info(ctx, asn, c.key, cfg.ttl)
     if (a == nil or a.netblocks == nil or #(a.netblocks) == 0) then
         return
     end
@@ -143,7 +168,7 @@ function asn(ctx, addr, asn)
         addr = parts[1]
     end
 
-    newasn(ctx, {
+    new_asn(ctx, {
         ['addr']=addr,
         ['asn']=asn,
         ['prefix']=prefix,
@@ -152,10 +177,10 @@ function asn(ctx, addr, asn)
     })
 end
 
-function getasn(ctx, ip, key, ttl)
+function get_asn(ctx, ip, key, ttl)
     local u = "https://api.spyse.com/v4/data/ip/" .. tostring(ip)
 
-    local resp = getpage(ctx, u, key, ttl)
+    local resp = get_page(ctx, u, key, ttl)
     if (resp == "") then
         return 0, ""
     end
@@ -180,10 +205,10 @@ function getasn(ctx, ip, key, ttl)
     return asn, cidr
 end
 
-function asinfo(ctx, asn, key, ttl)
+function as_info(ctx, asn, key, ttl)
     local u = "https://api.spyse.com/v4/data/as/" .. tostring(asn)
 
-    local resp = getpage(ctx, u, key, ttl)
+    local resp = get_page(ctx, u, key, ttl)
     if (resp == "") then
         return nil
     end
@@ -216,49 +241,15 @@ function asinfo(ctx, asn, key, ttl)
     }
 end
 
-function getpage(ctx, url, key, ttl)
+function get_page(ctx, url, key, ttl)
     local resp, err = request(ctx, {
         ['url']=url,
-        headers={
-            ['Authorization']="Bearer " .. key,
-            ['Content-Type']="application/json",
-        },
+        headers={['Authorization']="Bearer " .. key,},
     })
     if (err ~= nil and err ~= "") then
         return ""
     end
     return resp
-end
-
-function postreq(ctx, url, key, ttl, payload)
-    local resp, err = request(ctx, {
-        ['url']=url,
-        method="POST",
-        data=payload,
-        headers={
-            ['Authorization']="Bearer " .. key,
-            ['Content-Type']="application/json",
-        },
-    })
-    if (err ~= nil and err ~= "") then
-        return ""
-    end
-    return resp
-end
-
-function sendnames(ctx, content)
-    local names = find(content, subdomainre)
-    if (names == nil) then
-        return
-    end
-
-    local found = {}
-    for i, v in pairs(names) do
-        if (found[v] == nil) then
-            newname(ctx, v)
-            found[v] = true
-        end
-    end
 end
 
 function split(str, delim)

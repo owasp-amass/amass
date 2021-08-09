@@ -1,4 +1,4 @@
--- Copyright 2017-2021 Jeff Foley. All rights reserved.
+-- Copyright 2020-2021 Jeff Foley. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 local url = require("url")
@@ -7,7 +7,7 @@ name = "GoogleCT"
 type = "cert"
 
 function start()
-    setratelimit(1)
+    set_rate_limit(2)
 end
 
 function vertical(ctx, domain)
@@ -19,23 +19,23 @@ function vertical(ctx, domain)
 
     while(true) do
         local page, err = request(ctx, {
-            ['url']=buildurl(domain, token),
+            ['url']=build_url(domain, token),
             headers=hdrs,
         })
         if (err ~= nil and err ~= "") then
             break
         end
 
-        sendnames(ctx, page)
+        send_names(ctx, page)
 
-        token = gettoken(page)
+        token = get_token(page)
         if token == "" then
             break
         end
     end
 end
 
-function buildurl(domain, token)
+function build_url(domain, token)
     local base = "https://www.google.com/transparencyreport/api/v3/httpsreport/ct/certsearch"
     if token ~= "" then
         base = base .. "/page"
@@ -53,25 +53,15 @@ function buildurl(domain, token)
     return base .. "?" .. url.build_query_string(params)
 end
 
-function sendnames(ctx, content)
-    local names = find(content, subdomainre)
-    if names == nil then
-        return
-    end
-
-    local found = {}
-    for i, v in pairs(names) do
-        if found[v] == nil then
-            newname(ctx, v)
-            found[v] = true
-        end
-    end
-end
-
-function gettoken(content)
+function get_token(content)
     local pattern = "\\[(null|\"[a-zA-Z0-9]+\"),\"([a-zA-Z0-9]+)\",null,([0-9]+),([0-9]+)\\]"
-    local match = submatch(content, pattern)
 
+    local matches = submatch(content, pattern)
+    if (matches == nil or #matches == 0) then
+        return ""
+    end
+
+    local match = matches[1]
     if (match ~= nil and #match == 5 and (match[4] < match[5])) then
         return match[3]
     end

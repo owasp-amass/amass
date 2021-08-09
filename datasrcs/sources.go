@@ -22,15 +22,12 @@ func GetAllSources(sys systems.System) []service.Service {
 		NewAlienVault(sys),
 		NewCloudflare(sys),
 		NewDNSDB(sys),
-		NewDNSDumpster(sys),
 		NewFOFA(sys),
 		NewNetworksDB(sys),
 		NewRADb(sys),
-		NewShadowServer(sys),
 		NewTeamCymru(sys),
 		NewTwitter(sys),
 		NewUmbrella(sys),
-		NewURLScan(sys),
 	}
 
 	if scripts, err := sys.Config().AcquireScripts(); err == nil {
