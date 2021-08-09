@@ -10,7 +10,7 @@ The Amass Scripting Engine allows users to provide their own data source impleme
 
 This document will show the format of an Amass data source script, the callback functions that are triggered during enumerations, and the custom functions made available in the environment. These callbacks and custom functions allows scripts to receive requests from Amass and return discoveries to be shared with the architecture. Users can leverage the [Lua Programming Language](https://www.lua.org/pil/#2ed) and the [Lua Standard Library](https://www.lua.org/manual/5.1/manual.html) documentation to take full advantage of the Amass Scripting Engine.
 
-The default Amass data source scripts can be found in [resources/scripts](../resources/scripts), and are separated by the various scripts types. In order to execute your own script, put the `.ads` file under a directory named `scripts` that exists in the Amass output directory. Amass will find the script in that directory and use it during each enumeration.
+The default Amass data source scripts can be found in [resources/scripts](../resources/scripts), and are separated by the various script types. In order to execute your own script, put the `.ads` file under a directory named `scripts` that exists in the Amass output directory. Amass will find the script in that directory and use it during each enumeration. Your data source scripts can also be provided to Amass using the `-scripts` flag on the command-line.
 
 The Amass Scripting Engine also makes two Lua modules available to users: [gluaurl](https://github.com/cjoudrey/gluaurl) for URL parsing/building and [gopher-json](https://github.com/layeh/gopher-json) for simple JSON encoding/decoding. These modules are made available by default and can be used by scripts via `require("url")` and `require("json")`, respectively.
 
@@ -45,13 +45,13 @@ The `type` field provides the category of the data source implemented by the scr
 | "rir"       | Regional Internet Registry |
 | "ext"       | External Program / Data Source |
 
-### `subdomainre` String
+### `subdomain_regex` String
 
-The `subdomainre` string is a global variable that contains a regular expression pattern that will match fully qualified domain names.
+The `subdomain_regex` string is a global variable that contains a regular expression pattern that will match subdomain names.
 
 ### `api` Table
 
-If the `name` field for a script has a matching entry in the Amass configuration file for API authentication information, then a Lua table will be made global in the script. The `api` table fields are show below. Only the fields set in the configuration file will be set in the `api` table for the script.
+If the `name` field for a script has a matching entry in the Amass configuration file for API authentication information, then a Lua table will be made global in the script. The `api` table fields are shown below. Only the fields set in the configuration file will be set in the `api` table for the script.
 
 | Field Name | Data Type |
 |:-----------|:----------|
@@ -67,7 +67,7 @@ Amass will execute the `start` function (if the script defines it) once, at the 
 
 ```lua
 function start()
-    setratelimit(1)
+    set_rate_limit(1)
 end
 ```
 
@@ -88,7 +88,7 @@ Amass executes the `vertical` callback function when attempting to perform verti
 ```lua
 function vertical(ctx, domain)
     -- Send back discovered subdomain names
-    newname(ctx, name)
+    new_name(ctx, name)
 end
 ```
 
@@ -119,7 +119,7 @@ The `ctx` parameter is a reference to the context of the caller, which is necess
 
 ### `resolved` Callback
 
-Amass executes the `resolved` callback function after successfully resolving the provided `name` via DNS query. The callback is executed for each DNS name validated this way.
+Amass executes the `resolved` callback function after successfully resolving `name` via DNS query during the enumeration. The callback is executed for each DNS name validated this way.
 
 ```lua
 function resolved(ctx, name, domain, records)
@@ -144,7 +144,7 @@ The `records` parameter is a table of tables that each contain the following fie
 
 ### `subdomain` Callback
 
-Amass executes the `subdomain` callback function after successfully resolving the provided `name` via DNS query and checking that it is a proper subdomain name. A proper subdomain name must have more labels than the root domain name and be resolved with a hostname label. For example, if `example.com` is the root domain name, and the FQDN `www.depta.example.com` is successfully resolved, then the proper subdomain name `depta.example.com` will be provided to the `subdomain` callback function. The `times` parameter shares how many hostnames have been discovered within this proper subdomain name.
+Amass executes the `subdomain` callback function after successfully resolving `name` via DNS query and checking that it is a proper subdomain name. A proper subdomain name must have more labels than the root domain name and be resolved with a hostname label. For example, if `example.com` is the root domain name, and `www.depta.example.com` is successfully resolved, then the proper subdomain name `depta.example.com` will be provided to the `subdomain` callback function. The `times` parameter shares how many hostnames have been discovered within this proper subdomain name.
 
 ```lua
 function subdomain(ctx, name, domain, times)
@@ -163,14 +163,14 @@ end
 
 ### `address` Callback
 
-Amass executes the `address` callback function when attempting to discover additional FQDNs and IP addresses that are within scope. The function is provided an IP address that is within scope and the script sends back related findings.
+Amass executes the `address` callback function when attempting to discover additional subdomain names and IP addresses that are within scope. The function is provided an IP address that is within scope and the script sends back related findings.
 
 ```lua
 function address(ctx, addr)
     -- Send back a related subdomain name
-    newname(ctx, name)
+    new_name(ctx, name)
     -- Send back a related IP address
-    newaddr(ctx, ipaddr, domain)
+    new_addr(ctx, ipaddr, domain)
 end
 ```
 
@@ -181,16 +181,19 @@ end
 
 ### `asn` Callback
 
-Amass executes the `asn` callback function when attempting to obtain autonomous system (AS) information from the provided IP address and/or AS number. The function is provided an IP address and/or AS number that is within scope and the script sends back the information for the associated AS using the `newasn` (more about this below) function.
+Amass executes the `asn` callback function when attempting to obtain autonomous system (AS) information from the provided IP address and/or AS number. The function is provided an IP address and/or AS number that is within scope and the script sends back the information for the associated AS using the `new_asn` (more about this below) function.
 
 ```lua
 function asn(ctx, addr, asn)
     -- Send back the related AS information
-    newasn(ctx, {
+    new_asn(ctx, {
         ['addr']=addr,
         ['asn']=tonumber(asn),
         ['desc']=desc,
         prefix=cidr,
+        cc="US",
+        registry="ARIN",
+        netblocks={cidr},
     })
 end
 ```
@@ -305,7 +308,7 @@ A script can contribute to the enumeration log file by sending a message through
 
 ```lua
 function sendmsg(ctx, msg)
-    log(ctx, name .. ": " .. msg)
+    log(ctx, msg)
 end
 ```
 
@@ -314,13 +317,13 @@ end
 | ctx        | UserData  |
 | msg        | string    |
 
-### `outputdir` Function
+### `output_dir` Function
 
-A script can request the filepath to the Amass output directory by executing the `outputdir` function. The returned path can be relative.
+A script can request the filepath to the Amass output directory by executing the `output_dir` function. The returned path can be relative.
 
 ```lua
 function get_bin(ctx)
-    local path = outputdir(ctx)
+    local path = output_dir(ctx)
 
     return path .. "/bin"
 end
@@ -330,13 +333,13 @@ end
 |:-----------|:----------|
 | ctx        | UserData  |
 
-### `inscope` Function
+### `in_scope` Function
 
-A script can check if a FQDN is in scope of the enumeration process by executing the `inscope` function. The function returns `true` if the name is in scope and `false` otherwise.
+A script can check if a subdomain name is in scope of the current enumeration process by executing the `in_scope` function. The function returns `true` if the name is in scope and `false` otherwise.
 
 ```lua
 function get_names(ctx, sub)
-    if inscope(ctx, sub) then
+    if in_scope(ctx, sub) then
         crawl(ctx, "https://" .. sub, 0)
     end
 end
@@ -347,13 +350,13 @@ end
 | ctx        | UserData  |
 | fqdn       | string    |
 
-### `setratelimit` Function
+### `set_rate_limit` Function
 
-A script can set the number of seconds to wait between each execution of a callback function by using the `setratelimit` function.
+A script can set the number of seconds to wait between each execution of a callback function by using the `set_rate_limit` function.
 
 ```lua
 function start()
-    setratelimit(2)
+    set_rate_limit(2)
 end
 ```
 
@@ -361,15 +364,15 @@ end
 |:-----------|:----------|
 | seconds    | number    |
 
-### `checkratelimit` Function
+### `check_rate_limit` Function
 
-A script can check if the rate limit bucket has been exceeded, and if so, will block for the appropriate amount of time by executing the `checkratelimit` function.
+A script can check if the rate limit bucket has been exceeded, and if so, will block for the appropriate amount of time by executing the `check_rate_limit` function.
 
 ```lua
 function vertical(ctx, domain)
     -- Obtain several subdomain names
     for i, n in pairs(subs) do
-        checkratelimit()
+        check_rate_limit()
         crawl(ctx, "https://" .. n, 0)
     end
 end
@@ -393,7 +396,7 @@ function vertical(ctx, domain)
     end
 
     for i, sub in pairs(matches) do
-        newname(ctx, sub)
+        new_name(ctx, sub)
     end
 end
 ```
@@ -405,7 +408,7 @@ end
 
 ### `submatch` Function
 
-The `submatch` function performs simple regular expression pattern matching that supports submatches. The function accepts a string containing content to be searched and a regular expression pattern as [defined by the Go standard library](https://golang.org/pkg/regexp/). The `submatch` function returns a Lua table containing the leftmost match found in the provided string and the submatches. The matches are in the expected order of the 1-based array (table) returned by the function.
+The `submatch` function performs simple regular expression pattern matching that supports submatches. The function accepts a string containing content to be searched and a regular expression pattern as [defined by the Go standard library](https://golang.org/pkg/regexp/). The `submatch` function returns a Lua table of tables, each containing the leftmost match found in the provided string and the submatches. The matches are in the expected order of the 1-based array (table) returned by the function.
 
 ```lua
 function vertical(ctx, domain)
@@ -418,9 +421,14 @@ function vertical(ctx, domain)
     -- Create the pattern that contains submatches
 
     local matches = submatch(page, pattern)
+    if (matches == nil or #matches == 0) then
+        return
+    end
+
+    local first = matches[1]
     -- Send the first submatch
-    if (matches ~= nil and #matches >=2 and matches[2] ~= "") then
-        newname(ctx, matches[2])
+    if (first ~= nil and #first >=2 and first[2] ~= "") then
+        new_name(ctx, first[2])
     end
 end
 ```
@@ -432,12 +440,12 @@ end
 
 ### `request` Function
 
-The `request` function performs HTTP(s) client requests for Amass data source scripts. The function returns the page content and an error value. The function accepts an options table that can include the fields shown below.
+The `request` function performs HTTP(s) client requests for Amass data source scripts. The function returns the page content and an error value. The function accepts an options table that can include the fields shown below. The `request` function will not execute faster than a rate limit identified by the `set_rate_limit` function.
 
 ```lua
 function vertical(ctx, domain)
     local url = "https://" .. domain
-    local page, err = request(ctx, {
+    local resp, err = request(ctx, {
         method="POST",
         data=body,
         ['url']=url,
@@ -449,7 +457,7 @@ function vertical(ctx, domain)
         return
     end
 
-    -- Utilize the body provided in the response
+    -- Utilize the content provided in the response
 end
 ```
 
@@ -471,14 +479,14 @@ The `params` table has the following fields:
 
 ### `scrape` Function
 
-The `scrape` function performs HTTP(s) client requests for Amass data source scripts. The body of the response is automatically checked for subdomain names that are in scope of the enumeration process. The function returns a boolean value indicating the success of the client request, and it also returns `false` if no subdomain was found in the body. The function accepts an options table that can include the fields shown below.
+The `scrape` function performs HTTP(s) client requests for Amass data source scripts. The body of the response is automatically checked for subdomain names that are in scope of the enumeration process. The function returns a boolean value indicating the success of the client request, and it also returns `false` if no subdomain names were found in the body. The function accepts an options table that can include the fields shown below. The `scrape` function will not execute faster than a rate limit identified by the `set_rate_limit` function.
 
 ```lua
 function vertical(ctx, domain)
     local url = "https://" .. domain
     local ok = scrape(ctx, {
         ['url']=url,
-        headers={['Content-Type']="application/json"},
+        headers={['Accept']="text/*, text/html, text/html;level=1, */*"},
         id=api["username"],
         pass=api["password"],
     })
@@ -510,15 +518,15 @@ end
 | url        | string    |
 | max        | number    |
 
-### `newname` Function
+### `new_name` Function
 
-The `newname` function allows Amass data source scripts to submit a discovered FQDN. The `fqdn` parameter is automatically checked against the enumeration scope.
+The `new_name` function allows Amass data source scripts to submit a discovered FQDN. The `fqdn` parameter is automatically checked against the enumeration scope.
 
 ```lua
 function vertical(ctx, domain)
     -- Discover subdomain names
 
-    newname(ctx, fqdn)
+    new_name(ctx, fqdn)
 end
 ```
 
@@ -527,9 +535,26 @@ end
 | ctx        | UserData  |
 | fqdn       | string    |
 
+### `send_names` Function
+
+The `send_names` function allows Amass data source scripts to submit `content` to be checked for subdomain names that are in scope of the current enumeration process.
+
+```lua
+function vertical(ctx, domain)
+    -- Discover content containing subdomain names
+
+    send_names(ctx, content)
+end
+```
+
+| Field Name | Data Type |
+|:-----------|:----------|
+| ctx        | UserData  |
+| content    | string    |
+
 ### `associated` Function
 
-The `associated` function allows Amass data source scripts to submit a discovered domain name that is associated with a domain name provided by the current enumeration process.
+The `associated` function allows Amass data source scripts to submit a discovered domain name that is associated with the domain name provided by the current enumeration process.
 
 ```lua
 function horizontal(ctx, domain)
@@ -545,15 +570,15 @@ end
 | domain     | string    |
 | assoc      | string    |
 
-### `newaddr` Function
+### `new_addr` Function
 
-The `newaddr` function allows Amass data source scripts to submit a discovered IP address. The `fqdn` parameter is automatically checked against the enumeration scope.
+The `new_addr` function allows Amass data source scripts to submit a discovered IP address. The `fqdn` parameter is automatically checked against the enumeration scope.
 
 ```lua
 function vertical(ctx, domain)
     -- Discover subdomain names and associated IP addresses
 
-    newaddr(ctx, addr, fqdn)
+    new_addr(ctx, addr, fqdn)
 end
 ```
 
@@ -563,17 +588,19 @@ end
 | addr       | string    |
 | fqdn       | string    |
 
-### `newasn` Function
+### `new_asn` Function
 
-The `newasn` function allows Amass data source scripts to submit discovered autonomous system information related to the provided `addr` or `asn` parameters. The function accepts a table of return values that is defined below.
+The `new_asn` function allows Amass data source scripts to submit discovered autonomous system information related to the provided `addr` or `asn` parameters. The function accepts a table of return values that is defined below.
 
 ```lua
 function asn(ctx, addr, asn)
     -- Send back the related AS information
-    newasn(ctx, {
+    new_asn(ctx, {
         ['addr']=addr,
         ['asn']=tonumber(asn),
         prefix=cidr,
+        cc="US",
+        registry="ARIN",
         ['desc']=desc,
         ['netblocks']={cidr},
     })
@@ -589,3 +616,38 @@ end
 | registry   | string    |
 | desc       | string    |
 | netblocks  | table     |
+
+### `resolve` Function
+
+The `resolve` function allows Amass data source scripts to perform a DNS query of resource records for the provided `name` and `type`.
+
+```lua
+function subdomain(ctx, name, domain, times)
+    if times ~= 1 then
+        return
+    end
+
+    local records, err = resolve(ctx, name, "NS")
+    if (err ~= nil and err ~= "") then
+        return
+    end
+
+    for _, record in pairs(records) do
+        new_name(ctx, record.rrname)
+    end
+end
+```
+
+| Field Name | Data Type |
+|:-----------|:----------|
+| ctx        | UserData  |
+| name       | string    |
+| type       | string    |
+
+The `resolve` function returns a Lua table of tables, each containing a DNS resource record name, type, and data. The field names are shown below:
+
+| Field Name | Data Type |
+|:-----------|:----------|
+| rrname     | string    |
+| rrtype     | number    |
+| rrdata     | string    |

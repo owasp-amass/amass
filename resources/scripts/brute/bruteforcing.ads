@@ -9,7 +9,7 @@ probes = {"www", "online", "webserver", "ns", "ns1", "mail", "smtp", "webmail", 
             "remote", "server", "cpanel", "cloud", "autodiscover", "api", "m", "blog"}
 
 function start()
-    setratelimit(1)
+    set_rate_limit(1)
 end
 
 function vertical(ctx, domain)
@@ -19,7 +19,7 @@ function vertical(ctx, domain)
     end
 
     if cfg['brute_forcing'].active then
-        makenames(ctx, domain)
+        make_names(ctx, domain)
     end
 end
 
@@ -43,7 +43,7 @@ function resolved(ctx, name, domain, records)
 
     local bf = cfg['brute_forcing']
     if (bf.active and bf.recursive and (bf['min_for_recursive'] == 0)) then
-        makenames(ctx, name)
+        make_names(ctx, name)
     end
 end
 
@@ -55,21 +55,18 @@ function subdomain(ctx, name, domain, times)
 
     local bf = cfg['brute_forcing']
     if (bf.active and bf.recursive and (bf['min_for_recursive'] == times)) then
-        makenames(ctx, name)
+        make_names(ctx, name)
     end
 end
 
-function makenames(ctx, base)
+function make_names(ctx, base)
     local wordlist = brute_wordlist(ctx)
 
     for i, word in pairs(wordlist) do
-        local expired = newname(ctx, word .. "." .. base)
-        if expired then
-            return
-        end
+        new_name(ctx, word .. "." .. base)
 
         if i % 1000 == 0 then
-            checkratelimit()
+            check_rate_limit()
         end
     end
 end
