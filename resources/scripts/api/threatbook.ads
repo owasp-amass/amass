@@ -34,7 +34,7 @@ function vertical(ctx, domain)
         return
     end
 
-    local resp, err = request(ctx, {url=build_url(domain, key)})
+    local resp, err = request(ctx, {url=build_url(domain, c.key)})
     if (err ~= nil and err ~= "") then
         return
     end
