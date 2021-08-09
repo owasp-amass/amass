@@ -7,7 +7,7 @@ name = "IPinfo"
 type = "api"
 
 function start()
-    setratelimit(1)
+    set_rate_limit(1)
 end
 
 function check()
@@ -40,18 +40,18 @@ function asn(ctx, addr, asn)
             return
         end
 
-        asn, prefix = getasn(ctx, addr, cfg.ttl, c.key)
+        asn, prefix = get_asn(ctx, addr, cfg.ttl, c.key)
         if (asn == 0) then
             return
         end
     end
 
-    local a = asinfo(ctx, asn, cfg.ttl, c.key)
+    local a = as_info(ctx, asn, cfg.ttl, c.key)
     if (a == nil) then
         return
     end
 
-    newasn(ctx, {
+    new_asn(ctx, {
         ['addr']=addr,
         ['asn']=asn,
         ['prefix']=prefix,
@@ -62,9 +62,9 @@ function asn(ctx, addr, asn)
     })
 end
 
-function getasn(ctx, addr, ttl, token)
+function get_asn(ctx, addr, ttl, token)
     local u = "https://ipinfo.io/" .. addr .. "/asn?token=" .. token
-    local resp = cacherequest(ctx, u, ttl)
+    local resp = cache_request(ctx, u, ttl)
     if (resp == "") then
         return 0, ""
     end
@@ -77,9 +77,9 @@ function getasn(ctx, addr, ttl, token)
     return tonumber(string.sub(j.asn, 3)), j.route
 end
 
-function asinfo(ctx, asn, ttl, token)
+function as_info(ctx, asn, ttl, token)
     local strasn = "AS" .. tostring(asn)
-    resp = cacherequest(ctx, "https://ipinfo.io/" .. strasn .. "/json?token=" .. token, ttl)
+    resp = cache_request(ctx, "https://ipinfo.io/" .. strasn .. "/json?token=" .. token, ttl)
     if (resp == "") then
         return nil
     end
@@ -105,11 +105,8 @@ function asinfo(ctx, asn, ttl, token)
     }
 end
 
-function cacherequest(ctx, url, ttl)
-    local resp, err = request(ctx, {
-        ['url']=url,
-        headers={['Content-Type']="application/json"},
-    })
+function cache_request(ctx, url, ttl)
+    local resp, err = request(ctx, {['url']=url})
     if (err ~= nil and err ~= "") then
         return ""
     end

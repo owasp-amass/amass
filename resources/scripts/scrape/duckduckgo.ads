@@ -5,13 +5,11 @@ name = "DuckDuckGo"
 type = "scrape"
 
 function start()
-    setratelimit(1)
+    set_rate_limit(1)
 end
 
 function vertical(ctx, domain)
-    scrape(ctx, {['url']=buildurl(domain)})
-end
+    local vurl = "https://html.duckduckgo.com/html/?q=site:" .. domain .. " -site:www." .. domain
 
-function buildurl(domain)
-    return "https://html.duckduckgo.com/html/?q=site:" .. domain .. " -site:www." .. domain
+    scrape(ctx, {['url']=vurl})
 end
