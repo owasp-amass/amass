@@ -8,7 +8,7 @@ type = "cert"
 api_version = "v11.0"
 
 function start()
-    setratelimit(5)
+    set_rate_limit(5)
 end
 
 function check()
@@ -26,13 +26,10 @@ function check()
 end
 
 function vertical(ctx, domain)
-    local next = queryurl(domain, gettoken(ctx))
+    local nxt = query_url(domain, get_token(ctx))
 
-    while next ~= "" do
-        resp, err = request(ctx, {
-            url=next,
-            headers={['Content-Type']="application/json"},
-        })
+    while nxt ~= "" do
+        resp, err = request(ctx, {['url']=nxt})
         if (err ~= nil and err ~= "") then
             return
         end
@@ -44,18 +41,18 @@ function vertical(ctx, domain)
 
         for _, r in pairs(dec.data) do
             for _, name in pairs(r.domains) do
-                newname(ctx, name)
+                new_name(ctx, name)
             end
         end
 
-        next = ""
+        nxt = ""
         if (dec.paging ~= nil and dec.paging.next ~= nil and dec.paging.next ~= "") then
-            next = dec.paging.next
+            nxt = dec.paging.next
         end
     end
 end
 
-function gettoken(ctx)
+function get_token(ctx)
     local c
     local cfg = datasrc_config()
     if cfg ~= nil then
@@ -70,10 +67,7 @@ function gettoken(ctx)
     local authurl = "https://graph.facebook.com/oauth/access_token"
     authurl = authurl .. "?client_id=" .. c.key .. "&client_secret=" .. c.secret .. "&grant_type=client_credentials"
 
-    local resp, err = request(ctx, {
-        url=authurl,
-        headers={['Content-Type']="application/json"},
-    })
+    local resp, err = request(ctx, {['url']=authurl})
     if (err ~= nil and err ~= "") then
         return ""
     end
@@ -86,7 +80,7 @@ function gettoken(ctx)
     return dec.access_token
 end
 
-function queryurl(domain, token)
+function query_url(domain, token)
     if token == "" then
         return ""
     end

@@ -1,4 +1,4 @@
--- Copyright 2017-2021 Jeff Foley. All rights reserved.
+-- Copyright 2020-2021 Jeff Foley. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 local json = require("json")
@@ -7,7 +7,7 @@ name = "ZoomEye"
 type = "api"
 
 function start()
-    setratelimit(3)
+    set_rate_limit(3)
 end
 
 function check()
@@ -42,11 +42,8 @@ function vertical(ctx, domain)
     end
 
     local resp, err = request(ctx, {
-        url=buildurl(domain),
-        headers={
-            ['Content-Type']="application/json",
-            ['Authorization']="JWT " .. token,
-        },
+        url="https://api.zoomeye.org/host/search?query=hostname:*." .. domain,
+        headers={['Authorization']="JWT " .. token},
     })
     if (err ~= nil and err ~= "") then
         return
@@ -58,16 +55,18 @@ function vertical(ctx, domain)
     end
 
     for i, host in pairs(d.matches) do
-        sendnames(ctx, host.rdns)
-        sendnames(ctx, host['rdns_new'])
-        newaddr(ctx, domain, host.ip)
+        if (host ~= nil and host['rdns'] ~= nil and host['rdns'] ~= "") then
+            new_name(ctx, host['rdns'])
+        end
+        if (host ~= nil and host['rdns_new'] ~= nil and host['rdns_new'] ~= "") then
+            new_name(ctx, host['rdns_new'])
+        end
+        if (host ~= nil and host['ip'] ~= nil and host['ip'] ~= "") then
+            new_addr(ctx, host['ip'], domain)
+        end
     end
     -- Just in case
-    sendnames(ctx, resp)
-end
-
-function buildurl(domain)
-    return "https://api.zoomeye.org/host/search?query=hostname:*." .. domain
+    send_names(ctx, resp)
 end
 
 function bearer_token(ctx, username, password)
@@ -95,19 +94,4 @@ function bearer_token(ctx, username, password)
     end
 
     return d.access_token
-end
-
-function sendnames(ctx, content)
-    local names = find(content, subdomainre)
-    if names == nil then
-        return
-    end
-
-    local found = {}
-    for i, v in pairs(names) do
-        if found[v] == nil then
-            newname(ctx, v)
-            found[v] = true
-        end
-    end
 end

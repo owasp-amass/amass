@@ -5,7 +5,7 @@ name = "ArchiveToday"
 type = "archive"
 
 function start()
-    setratelimit(2)
+    set_rate_limit(2)
 end
 
 function vertical(ctx, domain)

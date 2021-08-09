@@ -1,4 +1,4 @@
--- Copyright 2017-2021 Jeff Foley. All rights reserved.
+-- Copyright 2020-2021 Jeff Foley. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 local json = require("json")
@@ -7,7 +7,7 @@ name = "PassiveTotal"
 type = "api"
 
 function start()
-    setratelimit(5)
+    set_rate_limit(5)
 end
 
 function check()
@@ -36,10 +36,9 @@ function vertical(ctx, domain)
         return
     end
 
-    local vurl = buildurl(domain)
+    local vurl = "https://api.passivetotal.org/v2/enrichment/subdomains?query=" .. domain
     local resp, err = request(ctx, {
         url=vurl,
-        headers={['Content-Type']="application/json"},
         id=c.username,
         pass=c.key,
     })
@@ -53,25 +52,6 @@ function vertical(ctx, domain)
     end
 
     for i, sub in pairs(d.subdomains) do
-        sendnames(ctx, sub .. "." .. domain)
-    end
-end
-
-function buildurl(domain)
-    return "https://api.passivetotal.org/v2/enrichment/subdomains?query=" .. domain
-end
-
-function sendnames(ctx, content)
-    local names = find(content, subdomainre)
-    if names == nil then
-        return
-    end
-
-    local found = {}
-    for i, v in pairs(names) do
-        if found[v] == nil then
-            newname(ctx, v)
-            found[v] = true
-        end
+        new_name(ctx, sub .. "." .. domain)
     end
 end
