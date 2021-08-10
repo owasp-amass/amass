@@ -7,12 +7,12 @@ name = "Gists"
 type = "scrape"
 
 function start()
-    set_rate_limit(1)
+    set_rate_limit(2)
 end
 
 function vertical(ctx, domain)
     local gist_re = "https://gist[.]github[.]com/[a-zA-Z0-9-]{1,39}/[a-z0-9]{32}"
-    for i=1,10 do
+    for i=1,20 do
         local resp, err = request(ctx, {url=build_url(domain, i)})
         if (err ~= nil and err ~= "") then
             break
