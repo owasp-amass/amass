@@ -21,7 +21,7 @@ import (
 const DefaultQueriesPerPublicResolver = 35
 
 // DefaultQueriesPerBaselineResolver is the number of queries sent to each trusted DNS resolver per second.
-const DefaultQueriesPerBaselineResolver = 40
+const DefaultQueriesPerBaselineResolver = 35
 
 const minResolverReliability = 0.85
 
@@ -33,19 +33,29 @@ var DefaultBaselineResolvers = []string{
 	"208.67.222.222",  // Cisco OpenDNS
 	"84.200.69.80",    // DNS.WATCH
 	"209.244.0.3",     // Level3
+	"4.2.2.1",         // Level3 Alternative
+	"4.2.2.2",         // Level3 Alternative
+	"4.2.2.3",         // Level3 Alternative
+	"4.2.2.4",         // Level3 Alternative
+	"4.2.2.5",         // Level3 Alternative
+	"4.2.2.6",         // Level3 Alternative
 	"64.6.64.6",       // Verisign
 	"8.26.56.26",      // Comodo Secure DNS
-	"64.6.64.6",       // Neustar DNS
+	"156.154.70.1",    // Neustar DNS Advantage
 	"195.46.39.39",    // SafeDNS
 	"185.228.168.9",   // CleanBrowsing
 	"76.76.19.19",     // Alternate DNS
-	"77.88.8.1",       // Yandex.DNS
+	"77.88.8.8",       // Yandex.DNS
 	"94.140.14.140",   // AdGuard
 	"216.146.35.35",   // Dyn
-	"192.71.245.208",  // OpenNIC
 	"38.132.106.139",  // CyberGhost
 	"109.69.8.51",     // puntCAT
 	"74.82.42.42",     // Hurricane Electric
+	"204.117.214.10",  // Sprintlink
+	"205.171.3.66",    // CenturyLink
+	"89.233.43.71",    // UncensoredDNS
+	"80.80.80.80",     // Freenom World
+	"223.5.5.5",       // AliDNS
 }
 
 // PublicResolvers includes the addresses of public resolvers obtained dynamically.
