@@ -12,15 +12,9 @@ end
 
 function vertical(ctx, domain)
     for i=1,20 do
-        local page, err = request(ctx, {url=api_url(domain, i)})
-        if (err ~= nil and err ~= "") then
-            break
-        end
-
-        page = page:gsub("<mark>", "")
-        local ok = find_names(ctx, page)
+        local ok = scrape(ctx, {url=api_url(domain, i)})
         if not ok then
-            break
+            return
         end
 
         check_rate_limit()
@@ -28,23 +22,13 @@ function vertical(ctx, domain)
 end
 
 function api_url(domain, pagenum)
+    local regex = "[.a-zA-Z0-9-]*[.]" .. domain:gsub("%.", "[.]")
     local params = {
-        ['q']="." .. domain,
+        ['q']=regex,
         ['format']="e",
         ['page']=pagenum,
+        ['regexp']='true',
     }
 
     return "https://grep.app/api/search?" .. url.build_query_string(params)
-end
-
-function find_names(ctx, content)
-    local names = find(content, subdomain_regex)
-    if (names == nil or #names == 0) then
-        return false
-    end
-
-    for i, name in pairs(names) do
-        new_name(ctx, name)
-    end
-    return true
 end
