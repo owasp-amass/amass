@@ -83,6 +83,13 @@ func (s *Script) scrape(L *lua.LState) int {
 		return 1
 	}
 
+	var data string
+	if method, ok := getStringField(L, opt, "method"); ok && strings.ToLower(method) == "post" {
+		if d, ok := getStringField(L, opt, "data"); ok {
+			data = d
+		}
+	}
+
 	url, found := getStringField(L, opt, "url")
 	if !found {
 		L.Push(lua.LFalse)
@@ -101,7 +108,7 @@ func (s *Script) scrape(L *lua.LState) int {
 	pass, _ := getStringField(L, opt, "pass")
 
 	sucess := lua.LFalse
-	if resp, err := s.req(ctx, url, "", headers, &http.BasicAuth{
+	if resp, err := s.req(ctx, url, data, headers, &http.BasicAuth{
 		Username: id,
 		Password: pass,
 	}); err == nil {
