@@ -32,7 +32,7 @@ function vertical(ctx, domain)
         return
     end
 
-    local scopes = {"issues", "wiki_blobs", "blobs", "notes"}
+    local scopes = {"issues", "blobs", "notes"}
     for i, s in pairs(scopes) do
         scrape(ctx, {
             url=api_url(domain, s),

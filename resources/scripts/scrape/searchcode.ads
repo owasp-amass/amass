@@ -9,7 +9,7 @@ function start()
 end
 
 function vertical(ctx, domain)
-    for i=1,21 do
+    for i=0,20 do
         local page, err = request(ctx, {url=build_url(domain, i)})
         if (err ~= nil and err ~= "") then
             break
