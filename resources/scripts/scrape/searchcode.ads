@@ -16,7 +16,7 @@ function vertical(ctx, domain)
         end
 
         page = page:gsub("<strong>", "")
-        local ok = find_names(ctx, page)
+        local ok = find_names(ctx, page, domain)
         if not ok then
             break
         end
@@ -29,14 +29,24 @@ function build_url(domain, pagenum)
     return "https://searchcode.com/?q=." .. domain .. "&p=" .. pagenum
 end
 
-function find_names(ctx, content)
+function find_names(ctx, content, domain)
     local names = find(content, subdomain_regex)
     if (names == nil or #names == 0) then
         return false
     end
 
+    local found = false
     for i, name in pairs(names) do
-        new_name(ctx, name)
+        local regex = "[.]" .. domain:gsub("%.", "[.]") .. "$"
+        local in_scope = find(name, regex)
+        if (in_scope ~= nil) then
+            found = true
+            new_name(ctx, name)
+        end
+    end
+
+    if not found then
+        return false
     end
     return true
 end
