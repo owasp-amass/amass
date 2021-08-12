@@ -5,7 +5,7 @@ name = "SiteDossier"
 type = "scrape"
 
 function start()
-    set_rate_limit(2)
+    set_rate_limit(3)
 end
 
 function vertical(ctx, domain)
@@ -17,6 +17,7 @@ function vertical(ctx, domain)
             break
         end
 
+        check_rate_limit()
         p = p + 100
     end
 end

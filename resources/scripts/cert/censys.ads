@@ -19,11 +19,20 @@ function vertical(ctx, domain)
 
     if (c == nil or c.key == nil or 
         c.key == "" or c.secret == nil or c.secret == "") then
-        scrape(ctx, {url="https://www.censys.io/domain/" .. domain .. "/table"})
+        for i=1,10 do
+            local ok = scrape(ctx, {url=build_url(domain, i)})
+            if not ok then
+                break
+            end
+        end
         return
     end
 
     api_query(ctx, cfg, domain)
+end
+
+function build_url(domain, pagenum)
+    return "https://censys.io/certificates/_search?q=" .. domain .. "&page=" .. pagenum
 end
 
 function api_query(ctx, cfg, domain)

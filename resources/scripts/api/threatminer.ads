@@ -11,13 +11,13 @@ function start()
 end
 
 function vertical(ctx, domain)
-    local resp, err = request(ctx, {url="https://api.threatminer.org/v2/domain.php?q=" .. domain .. "&api=True&rt=5"})
+    local resp, err = request(ctx, {url="https://api.threatminer.org/v2/domain.php?q=" .. domain .. "&rt=5"})
     if (err ~= nil and err ~= "") then
         return
     end
 
     local d = json.decode(resp)
-    if (d == nil or d['status_code'] ~= "200" or d['status_message'] ~= "Results found." or #(d.results) == 0) then
+    if (d == nil or d['status_code'] ~= "200" or #(d.results) == 0) then
         return
     end
 
