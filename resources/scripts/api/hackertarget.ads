@@ -11,11 +11,26 @@ function start()
 end
 
 function vertical(ctx, domain)
-    scrape(ctx, {['url']=build_url(domain)})
+    local c
+    local cfg = datasrc_config()
+    if cfg ~= nil then
+        c = cfg.credentials
+    end
+
+    local key = nil
+    if (c ~= nil and c.key ~= nil and c.key ~= "") then
+        key = c.key
+    end
+
+    scrape(ctx, {['url']=build_url(domain, key)})
 end
 
-function build_url(domain)
-    return "http://api.hackertarget.com/hostsearch/?q=" .. domain
+function build_url(domain, key)
+    local url = "http://api.hackertarget.com/hostsearch/?q=" .. domain
+    if (key ~= nil) then
+        return url .. "&apikey=" .. key
+    end
+    return url
 end
 
 function asn(ctx, addr, asn)

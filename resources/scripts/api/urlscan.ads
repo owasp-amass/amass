@@ -44,9 +44,8 @@ end
 function api_url(domain, last)
     local url = "https://urlscan.io/api/v1/search/?q=domain:" .. domain
     if (last ~= nil) then
-        url = url .. "&search_after=" .. last
+        return url .. "&search_after=" .. last
     end
-
     return url
 end
 
