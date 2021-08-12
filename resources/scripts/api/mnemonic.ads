@@ -28,6 +28,9 @@ function vertical(ctx, domain)
                 new_addr(ctx, tb['answer'], tb['query'])
             end
         end
+        if (tb['rrtype'] == "cname") then
+            new_name(ctx, tb['answer'])
+        end
     end
 end
 

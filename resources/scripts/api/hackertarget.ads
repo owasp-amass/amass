@@ -26,7 +26,7 @@ function vertical(ctx, domain)
 end
 
 function build_url(domain, key)
-    local url = "http://api.hackertarget.com/hostsearch/?q=" .. domain
+    local url = "https://api.hackertarget.com/hostsearch/?q=" .. domain
     if (key ~= nil) then
         return url .. "&apikey=" .. key
     end
