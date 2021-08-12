@@ -37,10 +37,7 @@ function find_names(ctx, content, domain)
 
     local found = false
     for i, name in pairs(names) do
-        -- Check if names are in scope
-        local inscope_regex = "[.]" .. domain:gsub("%.", "[.]") .. "$"
-        local match = find(name, inscope_regex)
-        if (match ~= nil and #match ~= 0) then
+        if in_scope(ctx, name) then
             found = true
             new_name(ctx, name)
         end
