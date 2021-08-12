@@ -141,11 +141,16 @@ func (a *activeTask) crawlName(ctx context.Context, req *requests.DNSRequest, tp
 		default:
 		}
 
-		if strings.HasSuffix(strconv.Itoa(port), "80") {
+		if port == 80 {
+			protocol = "http://"
+		} else if strings.HasSuffix(strconv.Itoa(port), "443") {
+			protocol = "https://"
+		} else if _, err := http.TLSConn(ctx, req.Name, port); err != nil {
 			protocol = "http://"
 		} else {
 			protocol = "https://"
 		}
+
 		u := protocol + req.Name + ":" + strconv.Itoa(port)
 		names, err := http.Crawl(ctx, u, cfg.Domains(), 50, a.enum.crawlFilter)
 		if err != nil {

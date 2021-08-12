@@ -315,31 +315,7 @@ func PullCertificateNames(ctx context.Context, addr string, ports []int) []strin
 		default:
 		}
 
-		// Set the maximum time allowed for making the connection
-		tCtx, cancel := context.WithTimeout(ctx, handshakeTimeout)
-		defer cancel()
-		// Obtain the connection
-		conn, err := amassnet.DialContext(tCtx, "tcp", net.JoinHostPort(addr, strconv.Itoa(port)))
-		if err != nil {
-			continue
-		}
-		defer conn.Close()
-
-		c := tls.Client(conn, &tls.Config{InsecureSkipVerify: true})
-		// Attempt to acquire the certificate chain
-		errChan := make(chan error, 2)
-		go func() {
-			errChan <- c.Handshake()
-		}()
-
-		t := time.NewTimer(handshakeTimeout)
-		select {
-		case <-t.C:
-			err = errors.New("Handshake timeout")
-		case e := <-errChan:
-			err = e
-		}
-		t.Stop()
+		c, err := TLSConn(ctx, addr, port)
 
 		if err != nil {
 			continue
@@ -352,6 +328,37 @@ func PullCertificateNames(ctx context.Context, addr string, ports []int) []strin
 	}
 
 	return names
+}
+
+// TLSConn attempts to make a TLS connection with the host on given port
+func TLSConn(ctx context.Context, host string, port int) (*tls.Conn, error) {
+	// Set the maximum time allowed for making the connection
+	tCtx, cancel := context.WithTimeout(ctx, handshakeTimeout)
+	defer cancel()
+	// Obtain the connection
+	conn, err := amassnet.DialContext(tCtx, "tcp", net.JoinHostPort(host, strconv.Itoa(port)))
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+
+	c := tls.Client(conn, &tls.Config{InsecureSkipVerify: true})
+	// Attempt to acquire the certificate chain
+	errChan := make(chan error, 2)
+	go func() {
+		errChan <- c.Handshake()
+	}()
+
+	t := time.NewTimer(handshakeTimeout)
+	select {
+	case <-t.C:
+		err = errors.New("Handshake timeout")
+	case e := <-errChan:
+		err = e
+	}
+	t.Stop()
+
+	return c, err
 }
 
 func namesFromCert(cert *x509.Certificate) []string {
