@@ -6,13 +6,24 @@ local url = require("url")
 name = "Searx"
 type = "scrape"
 
-local urls = {}
-
 function start()
     set_rate_limit(1)
 end
 
 function vertical(ctx, domain)
+    -- Qualified best Searx instances
+    local instances = {
+        "https://anon.sx",
+        "https://searx.info",
+        "https://searx.ru",
+        "https://searx.run",
+        "https://searx.sk",
+        "https://xeek.com",
+    }
+    -- Randomly choose one instance for scraping
+    math.randomseed(os.time())
+    local vurl = instances[math.random(1, 6)] .. "/search"
+
     for i=1,20 do
         local query = "site:" .. domain .. " -www"
         local params = {
@@ -26,7 +37,7 @@ function vertical(ctx, domain)
         local ok = scrape(ctx, {
             ['method']="POST",
             ['data']=url.build_query_string(params),
-            ['url']="https://searx.info/search",
+            ['url']=vurl,
             ['headers']={['Content-Type']="application/x-www-form-urlencoded"},
         })
         if not ok then
