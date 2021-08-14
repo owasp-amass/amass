@@ -34,9 +34,9 @@ function vertical(ctx, domain)
         return
     end
 
-    for i=1,1000 do
+    for pagenum=1,1000 do
         local resp, err = request(ctx, {
-            url=api_url(domain, i),
+            url=vert_url(domain, pagenum),
             headers={
                 ['Content-Type']="application/json",
                 ['Authorization']="apikey " .. c.key,
@@ -86,13 +86,69 @@ function vertical(ctx, domain)
             end
         end
 
-        if (i == r.max_page) then
+        if pagenum == r.max_page then
             break
         end
         check_rate_limit()
     end
 end
 
-function api_url(domain, pagenum)
+function vert_url(domain, pagenum)
     return "https://www.onyphe.io/api/v2/summary/domain/" .. domain .. "?page=" .. pagenum
+end
+
+function horizontal(ctx, domain)
+    local c
+    local cfg = datasrc_config()
+    if cfg ~= nil then
+        c = cfg.credentials
+    end
+
+    if (c == nil or c.key == nil or c.key == "") then
+        return
+    end
+
+    local ips, err = resolve(ctx, domain, "A")
+    if (err ~= nil and err ~= "") then
+        return
+    end
+
+    for i, ip in pairs(ips) do
+        for pagenum=1,1000 do
+            local resp, err = request(ctx, {
+                url=horizon_url(ip, pagenum),
+                headers={
+                    ['Content-Type']="application/json",
+                    ['Authorization']="apikey " .. c.key,
+                },
+            })
+            if (err ~= nil and err ~= "") then
+                return
+            end
+
+            d = json.decode(resp)
+            if (d == nil or d.count == 0) then
+                return
+            end
+
+            for i, r in pairs(d.results) do
+                if (r['@category'] == "resolver") then
+                    associated(ctx, domain, r['domain'])
+                elseif (r['@category'] == "datascan" and r['domain'] ~= nil) then
+                    for i, name in pairs(r['domain']) do
+                        associated(ctx, domain, name)
+                    end
+                end
+            end
+
+            if pagenum == r.max_page then
+                break
+            end
+            check_rate_limit()
+        end
+    end
+end
+
+function horizon_url(ip, pagenum)
+    return "https://www.onyphe.io/api/v2/summary/ip/" .. ip .. "?page=" .. pagenum
 end

@@ -9,6 +9,7 @@ require (
 	github.com/apache/thrift v0.13.0 // indirect
 	github.com/aryann/difflib v0.0.0-20170710044230-e206f873d14a // indirect
 	github.com/aws/aws-lambda-go v1.13.3 // indirect
+	github.com/buger/jsonparser v1.1.1 // indirect
 	github.com/caffix/eventbus v0.0.0-20210809004957-a6580c193ef5
 	github.com/caffix/netmap v0.0.0-20210716010443-7ef07a5facdd
 	github.com/caffix/pipeline v0.0.0-20210522041607-d06330c4484a
@@ -23,6 +24,7 @@ require (
 	github.com/coreos/etcd v3.3.13+incompatible // indirect
 	github.com/dghubble/go-twitter v0.0.0-20210609183100-2fdbf421508e
 	github.com/fatih/color v1.12.0
+	github.com/fofapro/fofa-go v0.0.0-20200317042037-c0caee09013d // indirect
 	github.com/geziyor/geziyor v0.0.0-20210808190847-242b025c9a05
 	github.com/go-ini/ini v1.62.0
 	github.com/go-kit/kit v0.11.0 // indirect
