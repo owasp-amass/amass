@@ -7,7 +7,7 @@ name = "Gists"
 type = "scrape"
 
 function start()
-    set_rate_limit(2)
+    set_rate_limit(1)
 end
 
 function vertical(ctx, domain)

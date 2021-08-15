@@ -4,7 +4,7 @@
 local url = require("url")
 local json = require("json")
 
-name = "ArquivoPt"
+name = "Arquivo"
 type = "archive"
 
 function start()
@@ -31,7 +31,7 @@ function build_url(domain)
     local params = {
         ['q']=domain,
         ['offset']="0",
-        ['maxItems']="500",
+        ['maxItems']="600",
         ['siteSearch']="",
         ['type']="",
         ['collection']="",

@@ -34,9 +34,9 @@ function vertical(ctx, domain)
         return
     end
 
-    for pagenum=1,1000 do
+    for page=1,1000 do
         local resp, err = request(ctx, {
-            url=vert_url(domain, pagenum),
+            url=vert_url(domain, page),
             headers={
                 ['Content-Type']="application/json",
                 ['Authorization']="apikey " .. c.key,
@@ -86,7 +86,7 @@ function vertical(ctx, domain)
             end
         end
 
-        if pagenum == r.max_page then
+        if page == r.max_page then
             break
         end
         check_rate_limit()
@@ -114,9 +114,9 @@ function horizontal(ctx, domain)
     end
 
     for i, ip in pairs(ips) do
-        for pagenum=1,1000 do
+        for page=1,1000 do
             local resp, err = request(ctx, {
-                url=horizon_url(ip, pagenum),
+                url=horizon_url(ip, page),
                 headers={
                     ['Content-Type']="application/json",
                     ['Authorization']="apikey " .. c.key,
@@ -141,7 +141,7 @@ function horizontal(ctx, domain)
                 end
             end
 
-            if pagenum == r.max_page then
+            if page == r.max_page then
                 break
             end
             check_rate_limit()

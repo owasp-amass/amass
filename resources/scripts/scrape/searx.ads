@@ -24,7 +24,7 @@ function vertical(ctx, domain)
     math.randomseed(os.time())
     local host = instances[math.random(1, 6)] .. "/search"
 
-    for i=1,20 do
+    for i=1,15 do
         local query = "site:" .. domain .. " -www"
         local params = {
             ['q']=query,

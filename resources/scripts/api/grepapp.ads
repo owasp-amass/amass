@@ -16,8 +16,6 @@ function vertical(ctx, domain)
         if not ok then
             return
         end
-
-        check_rate_limit()
     end
 end
 
