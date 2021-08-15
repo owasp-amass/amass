@@ -63,8 +63,8 @@ function asn(ctx, addr, asn)
 end
 
 function get_asn(ctx, addr, ttl, token)
-    local u = "https://ipinfo.io/" .. addr .. "/asn?token=" .. token
-    local resp = cache_request(ctx, u, ttl)
+    local url = "https://ipinfo.io/" .. addr .. "/asn?token=" .. token
+    local resp = cache_request(ctx, url, ttl)
     if (resp == "") then
         return 0, ""
     end
@@ -78,8 +78,8 @@ function get_asn(ctx, addr, ttl, token)
 end
 
 function as_info(ctx, asn, ttl, token)
-    local strasn = "AS" .. tostring(asn)
-    resp = cache_request(ctx, "https://ipinfo.io/" .. strasn .. "/json?token=" .. token, ttl)
+    local url = "https://ipinfo.io/AS" .. tostring(asn) .. "/json?token=" .. token
+    resp = cache_request(ctx, url, ttl)
     if (resp == "") then
         return nil
     end
@@ -106,7 +106,7 @@ function as_info(ctx, asn, ttl, token)
 end
 
 function cache_request(ctx, url, ttl)
-    local resp, err = request(ctx, {['url']=url})
+    local resp, err = request(ctx, {url=url})
     if (err ~= nil and err ~= "") then
         return ""
     end

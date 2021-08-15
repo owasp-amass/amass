@@ -18,8 +18,8 @@ function vertical(ctx, domain)
         return
     end
 
-    for _, url in pairs(urls) do
-        scrape(ctx, {['url']=build_url(url, domain)})
+    for _, u in pairs(urls) do
+        scrape(ctx, {url=build_url(u, domain)})
     end
 end
 
@@ -28,7 +28,7 @@ function build_url(url, domain)
 end
 
 function index_urls(ctx)
-    local resp, err = request(ctx, {['url']="https://index.commoncrawl.org/collinfo.json"})
+    local resp, err = request(ctx, {url="https://index.commoncrawl.org/collinfo.json"})
     if (err ~= nil and err ~= "") then
         return nil
     end
@@ -39,8 +39,8 @@ function index_urls(ctx)
     end
 
     local urls = {}
-    for _, u in pairs(data) do
-        local url = u["cdx-api"]
+    for _, c in pairs(data) do
+        local url = c['cdx-api']
         if (url ~= nil and url ~= "") then
             table.insert(urls, url)
         end

@@ -14,8 +14,8 @@ function vertical(ctx, domain)
         return
     end
 
-    local u = "http://ipv4info.com/subdomains/" .. token .. "/" .. domain .. ".html"
-    local resp, err = request(ctx, {['url']=u})
+    local url = "http://ipv4info.com/subdomains/" .. token .. "/" .. domain .. ".html"
+    local resp, err = request(ctx, {url=url})
     if (err ~= nil and err ~= "") then
         return
     end
@@ -41,8 +41,8 @@ function vertical(ctx, domain)
 end
 
 function get_token(ctx, domain)
-    local u = "http://ipv4info.com/search/NF/" .. domain
-    local page, err = request(ctx, {['url']=u})
+    local url = "http://ipv4info.com/search/NF/" .. domain
+    local page, err = request(ctx, {url=url})
     if (err ~= nil and err ~= "") then
         return ""
     end
@@ -66,8 +66,8 @@ function next_page(ctx, domain, resp, page)
         return ""
     end
 
-    local u = "http://ipv4info.com" .. match[1]
-    local page, err = request(ctx, {['url']=u})
+    local url = "http://ipv4info.com" .. match[1]
+    local page, err = request(ctx, {url=url})
     if (err ~= nil and err ~= "") then
         return ""
     end

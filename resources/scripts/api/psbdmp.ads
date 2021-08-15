@@ -34,7 +34,7 @@ function vertical(ctx, domain)
         return
     end
 
-    local resp, err = request(ctx, {['url']=search_url(domain)})
+    local resp, err = request(ctx, {url=search_url(domain)})
     if (err ~= nil and err ~= "") then
         return
     end
@@ -45,7 +45,7 @@ function vertical(ctx, domain)
     end
 
     for i, dump in pairs(d.data) do
-        scrape(ctx, {['url']=dump_url(dump.id, c.key)})
+        scrape(ctx, {url=dump_url(dump.id, c.key)})
     end
 end
 

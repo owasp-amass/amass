@@ -17,17 +17,17 @@ function vertical(ctx, domain)
         c = cfg.credentials
     end
 
-    local key = nil
-    if (c ~= nil and c.key ~= nil and c.key ~= "") then
+    local key = ""
+    if (c ~= nil and c.key ~= nil) then
         key = c.key
     end
 
-    scrape(ctx, {['url']=build_url(domain, key)})
+    scrape(ctx, {url=build_url(domain, key)})
 end
 
 function build_url(domain, key)
     local url = "https://api.hackertarget.com/hostsearch/?q=" .. domain
-    if (key ~= nil) then
+    if (key ~= "") then
         return url .. "&apikey=" .. key
     end
     return url
@@ -38,21 +38,21 @@ function asn(ctx, addr, asn)
         return
     end
 
-    local resp, err = request(ctx, {['url']=asn_url(addr)})
+    local resp, err = request(ctx, {url=asn_url(addr)})
     if (err ~= nil and err ~= "") then
         return
     end
 
-    local j = json.decode("{\"results\": [" .. resp .. "]}")
-    if (j == nil or #(j.results) < 4) then
+    local data = json.decode("[" .. resp .. "]")
+    if (data == nil or #data < 4) then
         return
     end
 
     new_asn(ctx, {
         ['addr']=addr,
-        asn=tonumber(j.results[2]),
-        prefix=j.results[3],
-        desc=j.results[4],
+        ['asn']=tonumber(data[2]),
+        ['prefix']=data[3],
+        ['desc']=data[4],
     })
 end
 

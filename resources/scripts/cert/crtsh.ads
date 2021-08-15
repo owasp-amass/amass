@@ -11,7 +11,9 @@ function start()
 end
 
 function vertical(ctx, domain)
-    local vurl = "https://crt.sh/?q=%25." .. domain .. "&output=json"
+    scrape(ctx, {url=build_url(domain)})
+end
 
-    scrape(ctx, {['url']=vurl})
+function build_url(domain)
+    return "https://crt.sh/?output=json&q=%25." .. domain
 end

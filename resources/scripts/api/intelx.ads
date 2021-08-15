@@ -55,9 +55,9 @@ function phonebook(ctx, domain, key)
         end
 
         status = resp.status
-        if ((status == 0 or status == 1) and resp.selectors ~= nil and #(resp.selectors) > 0) then
-            if #(resp.selectors) < limit then
-                limit = limit - #(resp.selectors)
+        if ((status == 0 or status == 1) and resp.selectors ~= nil and #resp.selectors > 0) then
+            if #resp.selectors < limit then
+                limit = limit - #resp.selectors
             end
 
             for _, s in pairs(resp.selectors) do

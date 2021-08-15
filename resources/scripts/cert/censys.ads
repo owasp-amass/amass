@@ -41,9 +41,9 @@ function api_query(ctx, cfg, domain)
     while(true) do
         local err, body, resp
         body, err = json.encode({
-            query="parsed.names: " .. domain, 
-            page=p,
-            fields={"parsed.names"},
+            ['query']="parsed.names: " .. domain, 
+            ['page']=p,
+            ['fields']={"parsed.names"},
         })
         if (err ~= nil and err ~= "") then
             return
@@ -54,25 +54,25 @@ function api_query(ctx, cfg, domain)
             data=body,
             url="https://www.censys.io/api/v1/search/certificates",
             headers={['Content-Type']="application/json"},
-            id=cfg["credentials"].key,
-            pass=cfg["credentials"].secret,
+            id=cfg['credentials'].key,
+            pass=cfg['credentials'].secret,
         })
         if (err ~= nil and err ~= "") then
             return
         end
 
         local d = json.decode(resp)
-        if (d == nil or d.status ~= "ok" or #(d.results) == 0) then
+        if (d == nil or d.status ~= "ok" or #d.results == 0) then
             return
         end
 
         for i, r in pairs(d.results) do
-            for j, v in pairs(r["parsed.names"]) do
+            for j, v in pairs(r['parsed.names']) do
                 new_name(ctx, v)
             end
         end
 
-        if d["metadata"].page >= d["metadata"].pages then
+        if d['metadata'].page >= d['metadata'].pages then
             return
         end
 

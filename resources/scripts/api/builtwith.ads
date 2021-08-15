@@ -32,14 +32,10 @@ function vertical(ctx, domain)
         return
     end
 
-    scrape(ctx, {url=first_url(domain, c.key)})
-    scrape(ctx, {url=second_url(domain, c.key)})
+    scrape(ctx, {url=build_url(domain, "v19", c.key)})
+    scrape(ctx, {url=build_url(domain, "rv1", c.key)})
 end
 
-function first_url(domain, key)
-    return "https://api.builtwith.com/v19/api.json?LOOKUP=" .. domain .. "&KEY=" .. key
-end
-
-function second_url(domain, key)
-    return "https://api.builtwith.com/rv1/api.json?LOOKUP=" .. domain .. "&KEY=" .. key
+function build_url(domain, api, key)
+    return "https://api.builtwith.com/" .. api .. "/api.json?LOOKUP=" .. domain .. "&KEY=" .. key
 end

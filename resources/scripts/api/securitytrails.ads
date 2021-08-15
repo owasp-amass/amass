@@ -34,17 +34,16 @@ function vertical(ctx, domain)
         return
     end
 
-    local vurl = "https://api.securitytrails.com/v1/domain/" .. domain .. "/subdomains"
     local resp, err = request(ctx, {
-        url=vurl,
-        headers={APIKEY=c.key},
+        url=build_url(domain, "subdomains"),
+        headers={['APIKEY']=c.key},
     })
     if (err ~= nil and err ~= "") then
         return
     end
 
     local j = json.decode(resp)
-    if (j == nil or #(j.subdomains) == 0) then
+    if (j == nil or #j.subdomains == 0) then
         return
     end
 
@@ -64,17 +63,16 @@ function horizontal(ctx, domain)
         return
     end
 
-    local hurl = "https://api.securitytrails.com/v1/domain/" .. domain .. "/associated"
     local resp, err = request(ctx, {
-        url=hurl,
-        headers={APIKEY=c.key},
+        url=build_url(domain, "associated"),
+        headers={['APIKEY']=c.key},
     })
     if (err ~= nil and err ~= "") then
         return
     end
 
     local j = json.decode(resp)
-    if (j == nil or #(j.records) == 0) then
+    if (j == nil or #j.records == 0) then
         return
     end
 
@@ -83,4 +81,8 @@ function horizontal(ctx, domain)
             associated(ctx, domain, r.hostname)
         end
     end
+end
+
+function build_url(domain, query)
+    return "https://api.securitytrails.com/v1/domain/" .. domain .. "/" .. query
 end

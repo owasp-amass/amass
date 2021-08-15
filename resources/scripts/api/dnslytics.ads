@@ -41,11 +41,11 @@ function horizontal(ctx, domain)
     end
 
     local d = json.decode(resp)
-    if (d == nil or d.data == nil or d.data['domains'] == nil) then
+    if (d == nil or d.data == nil or d['data'].domains == nil) then
         return
     end
 
-    for i, name in pairs(d.data['domains']) do
+    for i, name in pairs(d['data'].domains) do
         associated(ctx, domain, name)
     end
 
@@ -56,11 +56,11 @@ function horizontal(ctx, domain)
     end
 
     d = json.decode(resp)
-    if (d == nil or d.data == nil or d.data['domains'] == nil) then
+    if (d == nil or d.data == nil or d['data'].domains == nil) then
         return
     end
 
-    for i, res in pairs(d.data['domains']) do
+    for i, res in pairs(d['data'].domains) do
         associated(ctx, domain, res['domain'])
     end
 end

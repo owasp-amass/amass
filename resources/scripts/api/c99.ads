@@ -34,13 +34,13 @@ function vertical(ctx, domain)
         return
     end
 
-    local resp, err = request(ctx, {['url']=build_url(domain, c.key)})
+    local resp, err = request(ctx, {url=build_url(domain, c.key)})
     if (err ~= nil and err ~= "") then
         return
     end
 
     local d = json.decode(resp)
-    if (d == nil or d.success ~= true or #(d.subdomains) == 0) then
+    if (d == nil or d.success ~= true or #d.subdomains == 0) then
         return
     end
 

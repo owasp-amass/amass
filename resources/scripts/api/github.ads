@@ -44,7 +44,7 @@ function vertical(ctx, domain)
         end
 
         local d = json.decode(resp)
-        if (d == nil or d['total_count'] == 0 or #(d.items) == 0) then
+        if (d == nil or d.total_count == 0 or #d.items == 0) then
             return
         end
 
@@ -55,17 +55,17 @@ function vertical(ctx, domain)
 end
 
 function search_item(ctx, item)
-    local info, err = request(ctx, {['url']=item.url})
+    local info, err = request(ctx, {url=item.url})
     if (err ~= nil and err ~= "") then
         return
     end
 
     local data = json.decode(info)
-    if (data == nil or data['download_url'] == nil) then
+    if (data == nil or data.download_url == nil) then
         return
     end
 
-    local content, err = request(ctx, {['url']=data['download_url']})
+    local content, err = request(ctx, {url=data.download_url})
     if err == nil then
         send_names(ctx, content)
     end

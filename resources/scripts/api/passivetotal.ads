@@ -36,9 +36,8 @@ function vertical(ctx, domain)
         return
     end
 
-    local vurl = "https://api.passivetotal.org/v2/enrichment/subdomains?query=" .. domain
     local resp, err = request(ctx, {
-        url=vurl,
+        url=build_url(domain),
         id=c.username,
         pass=c.key,
     })
@@ -47,11 +46,15 @@ function vertical(ctx, domain)
     end
 
     local d = json.decode(resp)
-    if (d == nil or d.success ~= true or #(d.subdomains) == 0) then
+    if (d == nil or d.success ~= true or #d.subdomains == 0) then
         return
     end
 
     for i, sub in pairs(d.subdomains) do
         new_name(ctx, sub .. "." .. domain)
     end
+end
+
+function build_url(domain)
+    return "https://api.passivetotal.org/v2/enrichment/subdomains?query=" .. domain
 end

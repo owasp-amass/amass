@@ -34,16 +34,14 @@ function vertical(ctx, domain)
         return
     end
 
-    local vurl = "https://www.virustotal.com/vtapi/v2/domain/report?apikey=" .. c.key .. "&domain=" .. domain
-
-    local resp, err = request(ctx, {url=vurl})
+    local resp, err = request(ctx, {url=build_url(domain, c.key)})
     if (err ~= nil and err ~= "") then
         return
     end
 
     local d = json.decode(resp)
-    if d['response_code'] ~= 1 then
-        log(ctx, name .. ": " .. vurl .. ": Response code " .. d['response_code'] .. ": " .. d['verbose_msg'])
+    if d.response_code ~= 1 then
+        log(ctx, name .. ": " .. build_url(domain, c.key) .. ": Response code " .. d.response_code .. ": " .. d.verbose_msg)
         return
     end
 
@@ -54,4 +52,8 @@ function vertical(ctx, domain)
     for i, sub in pairs(d.subdomains) do
         new_name(ctx, sub)
     end
+end
+
+function build_url(domain, key)
+    return "https://www.virustotal.com/vtapi/v2/domain/report?domain=" .. domain .. "&apikey=" .. key
 end

@@ -35,7 +35,7 @@ function vertical(ctx, domain)
     end
 
     local resp, err = request(ctx, {
-        url=build_url(domain, c.key),
+        url=vert_url(domain, c.key),
         headers={['Content-Type']="application/json"},
     })
     if (err ~= nil and err ~= "") then
@@ -43,16 +43,16 @@ function vertical(ctx, domain)
     end
 
     local j = json.decode(resp)
-    if (j == nil or j.result == nil or j.result.count == 0 or #(j.result.records) == 0) then
+    if (j == nil or j.result == nil or j['result'].count == 0 or #j['result'].records == 0) then
         return
     end
 
-    for _, r in pairs(j.result.records) do
+    for _, r in pairs(j['result'].records) do
         new_name(ctx, r.domain)
     end
 end
 
-function build_url(domain, key)
+function vert_url(domain, key)
     return "https://subdomains.whoisxmlapi.com/api/v1?apiKey=" .. key .. "&domainName=" .. domain
 end
 
@@ -68,11 +68,11 @@ function horizontal(ctx, domain)
     end
 
     local body, err = json.encode({
-        apiKey=c.key, 
-        searchType="current",
-        mode="purchase",
-        basicSearchTerms={
-            include={domain},
+        ['apiKey']=c.key,
+        ['searchType']="current",
+        ['mode']="purchase",
+        ['basicSearchTerms']={
+            ['include']={domain},
         },
     })
     if (err ~= nil and err ~= "") then
@@ -140,7 +140,7 @@ end
 
 function get_asn(ctx, ip, key)
     local resp, err = request(ctx, {
-        url="https://ip-netblocks.whoisxmlapi.com/api/v2?apiKey=" .. key .. "&ip=" .. ip,
+        url=asn_url(ip, "ip", key),
         headers={['Content-Type']="application/json"},
     })
     if (err ~= nil and err ~= "") then
@@ -148,12 +148,12 @@ function get_asn(ctx, ip, key)
     end
 
     local j = json.decode(resp)
-    if (j == nil or j.result == nil or j.result.count == 0 or #(j.result.inetnums) == 0) then
+    if (j == nil or j.result == nil or j['result'].count == 0 or #j['result'].inetnums == 0) then
         return
     end
 
     local asn = 0
-    for _, r in pairs(j.result.inetnums) do
+    for _, r in pairs(j['result'].inetnums) do
         if r.as ~= nil and r.as.asn > 0 then
             asn = r.as.asn
             break
@@ -165,7 +165,7 @@ end
 
 function as_info(ctx, asn, key)
     local resp, err = request(ctx, {
-        url="https://ip-netblocks.whoisxmlapi.com/api/v2?apiKey=" .. key .. "&asn=" .. tostring(asn),
+        url=asn_url(tostring(asn), "asn", key),
         headers={['Content-Type']="application/json"},
     })
     if (err ~= nil and err ~= "") then
@@ -173,7 +173,7 @@ function as_info(ctx, asn, key)
     end
 
     local j = json.decode(resp)
-    if (j == nil or j.result == nil or j.result.count == 0 or #(j.result.inetnums) == 0) then
+    if (j == nil or j.result == nil or j['result'].count == 0 or #j['result'].inetnums == 0) then
         return nil
     end
 
@@ -181,7 +181,7 @@ function as_info(ctx, asn, key)
     local name = ""
     local registry = ""
     local netblocks = {}
-    for i, r in pairs(j.result.inetnums) do
+    for i, r in pairs(j['result'].inetnums) do
         if i == 1 then
             registry = r.source
             if r.org ~= nil then
@@ -196,9 +196,13 @@ function as_info(ctx, asn, key)
 
     return {
         ['asn']=asn,
-        desc=name,
+        ['desc']=name,
         ['cc']=cc,
         ['registry']=registry,
         ['netblocks']=netblocks,
     }
+end
+
+function asn_url(value, type, key)
+    return "https://ip-netblocks.whoisxmlapi.com/api/v2?apiKey=" .. key .. "&" .. type .. "=" .. value
 end

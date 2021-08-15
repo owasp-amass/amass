@@ -12,7 +12,7 @@ end
 
 function vertical(ctx, domain)
     for i=1,20 do
-        local ok = scrape(ctx, {url=api_url(domain, i)})
+        local ok = scrape(ctx, {url=build_url(domain, i)})
         if not ok then
             return
         end
@@ -21,7 +21,7 @@ function vertical(ctx, domain)
     end
 end
 
-function api_url(domain, pagenum)
+function build_url(domain, pagenum)
     local regex = "[.a-zA-Z0-9-]*[.]" .. domain:gsub("%.", "[.]")
     local params = {
         ['q']=regex,

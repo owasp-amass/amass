@@ -23,8 +23,8 @@ function vertical(ctx, domain)
             break
         end
 
-        for i, url in pairs(gists) do
-            scrape(ctx, {['url']=url})
+        for i, gist in pairs(gists) do
+            scrape(ctx, {url=gist})
         end
         check_rate_limit()
     end
@@ -32,9 +32,9 @@ end
 
 function build_url(domain, pagenum)
     local params = {
-        ref="searchresults",
-        q=domain,
-        p=pagenum,
+        ['ref']="searchresults",
+        ['q']=domain,
+        ['p']=pagenum,
     }
     return "https://gist.github.com/search?" .. url.build_query_string(params)
 end

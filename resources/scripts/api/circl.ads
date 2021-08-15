@@ -37,7 +37,7 @@ function vertical(ctx, domain)
     end
 
     local resp, err = request(ctx, {
-        ['url']="https://www.circl.lu/pdns/query/" .. domain,
+        url=build_url(domain),
         id=c['username'],
         pass=c['password'],
     })
@@ -58,4 +58,8 @@ function vertical(ctx, domain)
             end
         end
     end
+end
+
+function build_url(domain)
+    return "https://www.circl.lu/pdns/query/" .. domain
 end

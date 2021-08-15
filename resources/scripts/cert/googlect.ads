@@ -12,15 +12,15 @@ end
 
 function vertical(ctx, domain)
     local token = ""
-    local hdrs={
-        Connection="close",
-        Referer="https://transparencyreport.google.com/https/certificates",
+    local headers={
+        ['Connection']="close",
+        ['Referer']="https://transparencyreport.google.com/https/certificates",
     }
 
     while(true) do
         local page, err = request(ctx, {
-            ['url']=build_url(domain, token),
-            headers=hdrs,
+            url=build_url(domain, token),
+            headers=headers,
         })
         if (err ~= nil and err ~= "") then
             break

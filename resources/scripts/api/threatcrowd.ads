@@ -11,14 +11,13 @@ function start()
 end
 
 function vertical(ctx, domain)
-    local vurl = "https://www.threatcrowd.org/searchApi/v2/domain/report/?domain=" .. domain
-    local resp, err = request(ctx, {url=vurl})
+    local resp, err = request(ctx, {url=build_url(domain)})
     if (err ~= nil and err ~= "") then
         return
     end
 
     local d = json.decode(resp)
-    if (d == nil or d.response_code ~= "1" or #(d.subdomains) == 0) then
+    if (d == nil or d.response_code ~= "1" or #d.subdomains == 0) then
         return
     end
 
@@ -29,4 +28,8 @@ function vertical(ctx, domain)
     for i, tb in pairs(d.resolutions) do
         new_addr(ctx, tb.ip_address, domain)
     end
+end
+
+function build_url(domain)
+    return "https://www.threatcrowd.org/searchApi/v2/domain/report/?domain=" .. domain
 end

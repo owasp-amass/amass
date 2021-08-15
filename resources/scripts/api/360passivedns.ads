@@ -33,7 +33,7 @@ function vertical(ctx, domain)
     end
 
     scrape(ctx, {
-        url=api_url(domain),
+        url=build_url(domain),
         headers={
             ['Accept']="application/json",
             ['X-Authtoken']=c.key,
@@ -41,6 +41,6 @@ function vertical(ctx, domain)
     })
 end
 
-function api_url(domain)
+function build_url(domain)
     return "https://api.passivedns.cn/flint/rrset/*." .. domain .. "/?source=ALL&batch=1000"
 end

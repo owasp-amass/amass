@@ -22,7 +22,7 @@ function vertical(ctx, domain)
     }
     -- Randomly choose one instance for scraping
     math.randomseed(os.time())
-    local vurl = instances[math.random(1, 6)] .. "/search"
+    local host = instances[math.random(1, 6)] .. "/search"
 
     for i=1,20 do
         local query = "site:" .. domain .. " -www"
@@ -35,10 +35,10 @@ function vertical(ctx, domain)
         }
 
         local ok = scrape(ctx, {
-            ['method']="POST",
-            ['data']=url.build_query_string(params),
-            ['url']=vurl,
-            ['headers']={['Content-Type']="application/x-www-form-urlencoded"},
+            url=host,
+            method="POST",
+            data=url.build_query_string(params),
+            headers={['Content-Type']="application/x-www-form-urlencoded"},
         })
         if not ok then
             break

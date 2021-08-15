@@ -17,9 +17,9 @@ function vertical(ctx, domain)
     }
 
     scrape(ctx, {
-        ['method']="POST",
-        ['data']=url.build_query_string(params),
-        ['url']="https://www.pkey.in/tools-i/search-subdomains",
-        ['headers']={['Content-Type']="application/x-www-form-urlencoded"},
+        url="https://www.pkey.in/tools-i/search-subdomains",
+        method="POST",
+        data=url.build_query_string(params),
+        headers={['Content-Type']="application/x-www-form-urlencoded"},
     })
 end

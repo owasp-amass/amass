@@ -72,8 +72,8 @@ end
 
 function bearer_token(ctx, username, password)
     local body, err = json.encode({
-        username=username, 
-        password=password,
+        ['username']=username,
+        ['password']=password,
     })
     if (err ~= nil and err ~= "") then
         return ""

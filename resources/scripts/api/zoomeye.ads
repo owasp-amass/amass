@@ -50,7 +50,7 @@ function vertical(ctx, domain)
     end
 
     local d = json.decode(resp)
-    if (d == nil or d.total == 0 or d.available == 0 or #(d.matches) == 0) then
+    if (d == nil or d.total == 0 or d.available == 0 or #d.matches == 0) then
         return
     end
 
@@ -71,8 +71,8 @@ end
 
 function bearer_token(ctx, username, password)
     local body, err = json.encode({
-        username=username, 
-        password=password,
+        ['username']=username,
+        ['password']=password,
     })
     if (err ~= nil and err ~= "") then
         return ""

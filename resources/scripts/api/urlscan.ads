@@ -11,14 +11,14 @@ function start()
 end
 
 function vertical(ctx, domain)
-    local id = submission(ctx, domain)
-    if (id ~= "") then
-        scrape(ctx, {url="https://urlscan.io/api/v1/result/" .. id})
+    local uuid = submission(ctx, domain)
+    if (uuid ~= "") then
+        scrape(ctx, {url="https://urlscan.io/api/v1/result/" .. uuid})
     end
 
     local last = nil
     while(true) do
-        local resp, err = request(ctx, {['url']=api_url(domain, last)})
+        local resp, err = request(ctx, {url=build_url(domain, last)})
         if (err ~= nil and err ~= "") then
             return
         end
@@ -29,19 +29,22 @@ function vertical(ctx, domain)
         end
 
         for i, r in pairs(d.results) do
-            scrape(ctx, {url=r['result']})
-            check_rate_limit()
+            local ok = scrape(ctx, {url=r['result']})
+            if not ok then
+                break
+            end
 
+            check_rate_limit()
             last = tostring(r['sort'][1]) .. "," .. r['sort'][2]
         end
 
-        if d.has_more == false then
+        if (not ok or d.has_more == false) then
             break
         end
     end
 end
 
-function api_url(domain, last)
+function build_url(domain, last)
     local url = "https://urlscan.io/api/v1/search/?q=domain:" .. domain
     if (last ~= nil) then
         return url .. "&search_after=" .. last
@@ -67,7 +70,7 @@ function submission(ctx, domain)
 
     local resp, body, err
     body, err = json.encode({
-        ['url']=domain,
+        url=domain,
         public="on",
         customagent="OWASP Amass", 
     })
@@ -76,29 +79,29 @@ function submission(ctx, domain)
     end
 
     resp, err = request(ctx, {
-        ['method']="POST",
-        ['data']=body,
-        ['url']="https://urlscan.io/api/v1/scan/",
-        ['headers']=headers,
+        url="https://urlscan.io/api/v1/scan/",
+        method="POST",
+        data=body,
+        headers=headers,
     })
     if (err ~= nil and err ~= "") then
         return ""
     end
 
     local d = json.decode(resp)
-    if (d == nil or d.message ~= "Submission successful" or #(d.results) == 0) then
+    if (d == nil or #d.results == 0) then
         return ""
     end
 
     -- Keep this data source active while waiting for the scan to complete
     while(true) do
-        _, err = request(ctx, {['url']=d.api})
-		if (err == nil or err ~= "404 Not Found") then
-			break
+        _, err = request(ctx, {url=d.api})
+        if (err == nil or err ~= "404 Not Found") then
+            break
         end
         -- A large pause between these requests
         for var=1,10 do check_rate_limit() end
     end
 
-	return d.uuid
+    return d.uuid
 end

@@ -12,7 +12,7 @@ function start()
 end
 
 function vertical(ctx, domain)
-    local page, err = request(ctx, {['url']=api_url(domain)})
+    local page, err = request(ctx, {url=build_url(domain)})
     if (err ~= nil and err ~= "") then
         return
     end
@@ -29,12 +29,12 @@ function vertical(ctx, domain)
     end
 end
 
-function api_url(domain)
+function build_url(domain)
     local params = {
         ['domain']=domain,
         ['include_subdomains']="true",
         ['match_wildcards']="true",
-        expand="dns_names",
+        ['expand']="dns_names",
     }
 
     return "https://api.certspotter.com/v1/issuances?" .. url.build_query_string(params)

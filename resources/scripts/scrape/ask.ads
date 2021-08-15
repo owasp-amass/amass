@@ -12,7 +12,7 @@ end
 
 function vertical(ctx, domain)
     for i=1,10 do
-        local ok = scrape(ctx, {['url']=build_url(domain, i)})
+        local ok = scrape(ctx, {url=build_url(domain, i)})
         if not ok then
             break
         end
@@ -21,11 +21,11 @@ end
 
 function build_url(domain, pagenum)
     local params = {
-        q="site:" .. domain .. " -www." .. domain,
-        o="0",
-        l="dir",
-        qo="pagination",
-        page=pagenum,
+        ['q']="site:" .. domain .. " -www." .. domain,
+        ['o']="0",
+        ['l']="dir",
+        ['qo']="pagination",
+        ['page']=pagenum,
     }
 
     return "https://www.ask.com/web?" .. url.build_query_string(params)
