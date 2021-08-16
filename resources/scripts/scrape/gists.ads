@@ -23,7 +23,7 @@ function vertical(ctx, domain)
             break
         end
 
-        for i, gist in pairs(gists) do
+        for _, gist in pairs(gists) do
             scrape(ctx, {url=gist})
         end
         check_rate_limit()

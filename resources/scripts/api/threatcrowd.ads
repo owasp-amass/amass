@@ -21,11 +21,11 @@ function vertical(ctx, domain)
         return
     end
 
-    for i, sub in pairs(d.subdomains) do
+    for _, sub in pairs(d.subdomains) do
         new_name(ctx, sub)
     end
 
-    for i, tb in pairs(d.resolutions) do
+    for _, tb in pairs(d.resolutions) do
         new_addr(ctx, tb.ip_address, domain)
     end
 end

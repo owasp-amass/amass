@@ -6,8 +6,6 @@ local json = require("json")
 name = "CommonCrawl"
 type = "api"
 
-local urls = {}
-
 function start()
     set_rate_limit(2)
 end

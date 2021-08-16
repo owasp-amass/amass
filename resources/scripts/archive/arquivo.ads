@@ -14,7 +14,7 @@ end
 function vertical(ctx, domain)
     local resp, err = request(ctx, {url=build_url(domain)})
     if (err ~= nil and err ~= "") then
-        return 
+        return
     end
 
     local d = json.decode(resp)
@@ -22,7 +22,7 @@ function vertical(ctx, domain)
         return
     end
 
-    for i, r in pairs(d.response_items) do
+    for _, r in pairs(d.response_items) do
         send_names(ctx, r.originalURL)
     end
 end

@@ -44,7 +44,7 @@ function vertical(ctx, domain)
         return
     end
 
-    for i, set in pairs(data) do
+    for _, set in pairs(data) do
         local domains = set['rawDomains']
         if domains ~= nil and #domains > 0 then
             for _, name in pairs(domains) do

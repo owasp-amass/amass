@@ -17,7 +17,7 @@ function vertical(ctx, domain)
         c = cfg.credentials
     end
 
-    if (c == nil or c.key == nil or 
+    if (c == nil or c.key == nil or
         c.key == "" or c.secret == nil or c.secret == "") then
         for i=1,10 do
             local ok = scrape(ctx, {url=build_url(domain, i)})
@@ -41,14 +41,14 @@ function api_query(ctx, cfg, domain)
     while(true) do
         local err, body, resp
         body, err = json.encode({
-            ['query']="parsed.names: " .. domain, 
+            ['query']="parsed.names: " .. domain,
             ['page']=p,
             ['fields']={"parsed.names"},
         })
         if (err ~= nil and err ~= "") then
             return
         end
-    
+
         resp, err = request(ctx, {
             method="POST",
             data=body,
@@ -66,8 +66,8 @@ function api_query(ctx, cfg, domain)
             return
         end
 
-        for i, r in pairs(d.results) do
-            for j, v in pairs(r['parsed.names']) do
+        for _, r in pairs(d.results) do
+            for _, v in pairs(r['parsed.names']) do
                 new_name(ctx, v)
             end
         end

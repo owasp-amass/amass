@@ -60,16 +60,16 @@ function get_token(ctx)
         c = cfg.credentials
     end
 
-    if (c == nil or c.key == nil or 
+    if (c == nil or c.key == nil or
         c.secret == nil or c.key == "" or c.secret == "") then
         return ""
     end
 
-    local resp, err = request(ctx, {url=auth_url(domain, c.key, c.secret)})
+    local resp, err = request(ctx, {url=auth_url(c.key, c.secret)})
     if (err ~= nil and err ~= "") then
         return ""
     end
-    
+
     local dec = json.decode(resp)
     if (dec == nil or dec.access_token == nil or dec.access_token == "") then
         return ""
@@ -78,7 +78,7 @@ function get_token(ctx)
     return dec.access_token
 end
 
-function auth_url(domain, key, secret)
+function auth_url(key, secret)
     local params = {
         ['client_id']=key,
         ['client_secret']=secret,

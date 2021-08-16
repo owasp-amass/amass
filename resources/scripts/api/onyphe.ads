@@ -51,25 +51,25 @@ function vertical(ctx, domain)
             return
         end
 
-        for i, r in pairs(d.results) do
+        for _, r in pairs(d.results) do
             if (r['@category'] == "resolver") then
                 new_name(ctx, r['hostname'])
                 new_addr(ctx, r['ip'], r['hostname'])
             else
-                for i, name in pairs(r['hostname']) do
+                for _, name in pairs(r['hostname']) do
                     if in_scope(ctx, name) then
                         new_name(ctx, name)
                     end
                 end
                 if (r['subject'] ~= nil) then
-                    for i, name in pairs(r['subject']['altname']) do
+                    for _, name in pairs(r['subject']['altname']) do
                         if in_scope(ctx, name) then
                             new_name(ctx, name)
                         end
                     end
                 end
                 if (r['subdomains'] ~= nil) then
-                    for i, name in pairs(r['subdomains']) do
+                    for _, name in pairs(r['subdomains']) do
                         if in_scope(ctx, name) then
                             new_name(ctx, name)
                         end
@@ -113,7 +113,7 @@ function horizontal(ctx, domain)
         return
     end
 
-    for i, ip in pairs(ips) do
+    for _, ip in pairs(ips) do
         for page=1,1000 do
             local resp, err = request(ctx, {
                 url=horizon_url(ip, page),
@@ -131,11 +131,11 @@ function horizontal(ctx, domain)
                 return
             end
 
-            for i, r in pairs(d.results) do
+            for _, r in pairs(d.results) do
                 if (r['@category'] == "resolver") then
                     associated(ctx, domain, r['domain'])
                 elseif (r['@category'] == "datascan" and r['domain'] ~= nil) then
-                    for i, name in pairs(r['domain']) do
+                    for _, name in pairs(r['domain']) do
                         associated(ctx, domain, name)
                     end
                 end

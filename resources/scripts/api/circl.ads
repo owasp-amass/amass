@@ -17,7 +17,7 @@ function check()
         c = cfg.credentials
     end
 
-    if (c ~= nil and c.username ~= nil and 
+    if (c ~= nil and c.username ~= nil and
         c.password ~= nil and c.username ~= "" and c.password ~= "") then
         return true
     end
@@ -31,7 +31,7 @@ function vertical(ctx, domain)
         c = cfg.credentials
     end
 
-    if (c == nil or c.username == nil or 
+    if (c == nil or c.username == nil or
         c.username == "" or c.password == nil or c.password == "") then
         return
     end

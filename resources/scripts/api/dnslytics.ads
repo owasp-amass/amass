@@ -45,7 +45,7 @@ function horizontal(ctx, domain)
         return
     end
 
-    for i, name in pairs(d['data'].domains) do
+    for _, name in pairs(d['data'].domains) do
         associated(ctx, domain, name)
     end
 
@@ -60,7 +60,7 @@ function horizontal(ctx, domain)
         return
     end
 
-    for i, res in pairs(d['data'].domains) do
+    for _, res in pairs(d['data'].domains) do
         associated(ctx, domain, res['domain'])
     end
 end

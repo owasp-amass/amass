@@ -163,7 +163,7 @@ function split(str, delim)
         return result
     end
 
-    for i, match in pairs(matches) do
+    for _, match in pairs(matches) do
         table.insert(result, match)
     end
 

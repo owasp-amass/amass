@@ -44,7 +44,7 @@ function vertical(ctx, domain)
         return
     end
 
-    for i, sub in pairs(d['sub_domains'].data) do
+    for _, sub in pairs(d['sub_domains'].data) do
         new_name(ctx, sub)
     end
 end

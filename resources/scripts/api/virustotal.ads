@@ -41,7 +41,7 @@ function vertical(ctx, domain)
 
     local d = json.decode(resp)
     if d.response_code ~= 1 then
-        log(ctx, name .. ": " .. build_url(domain, c.key) .. ": Response code " .. d.response_code .. ": " .. d.verbose_msg)
+        log(ctx, name .. ": " .. build_url(domain, c.key) .. ": HTTP status " .. d.response_code .. ": " .. d.verbose_msg)
         return
     end
 
@@ -49,7 +49,7 @@ function vertical(ctx, domain)
         return
     end
 
-    for i, sub in pairs(d.subdomains) do
+    for _, sub in pairs(d.subdomains) do
         new_name(ctx, sub)
     end
 end

@@ -17,7 +17,7 @@ function check()
         c = cfg.credentials
     end
 
-    if (c ~= nil and c.username ~= nil and 
+    if (c ~= nil and c.username ~= nil and
         c.password ~= nil and c.username ~= "" and c.password ~= "") then
         return true
     end
@@ -31,7 +31,7 @@ function vertical(ctx, domain)
         c = cfg.credentials
     end
 
-    if (c == nil or c.username == nil or 
+    if (c == nil or c.username == nil or
         c.username == "" or c.password == nil or c.password == "") then
         return
     end
@@ -58,7 +58,7 @@ function vertical(ctx, domain)
         return
     end
 
-    for i, record in pairs(d.records) do
+    for _, record in pairs(d.records) do
         new_name(ctx, record.rrname)
         if (record.rrtype == "A" or record.rrtype == "AAAA") then
              new_addr(ctx, record.rdata, record.rrname)

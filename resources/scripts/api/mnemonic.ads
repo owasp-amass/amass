@@ -21,7 +21,7 @@ function vertical(ctx, domain)
         return
     end
 
-    for i, tb in pairs(resp.data) do
+    for _, tb in pairs(resp.data) do
         if in_scope(ctx, tb['query']) then
             new_name(ctx, tb['query'])
             if (tb['rrtype'] == "a" or tb['rrtype'] == "aaaa") then

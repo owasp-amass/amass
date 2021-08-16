@@ -44,7 +44,7 @@ function vertical(ctx, domain)
         return
     end
 
-    for i, dump in pairs(d.data) do
+    for _, dump in pairs(d.data) do
         scrape(ctx, {url=dump_url(dump.id, c.key)})
     end
 end

@@ -1,6 +1,8 @@
 -- Copyright 2017-2021 Jeff Foley. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
+local url = require("url")
+
 name = "Wayback"
 type = "archive"
 
@@ -13,5 +15,13 @@ function vertical(ctx, domain)
 end
 
 function build_url(domain)
-    return "https://web.archive.org/cdx/search/cdx?matchType=domain&fl=original&output=json&collapse=urlkey&url=" .. domain
+    local params = {
+        ['matchType']="domain",
+        ['fl']="original",
+        ['output']="json",
+        ['collapse']="url",
+        ['url']=domain,
+    }
+
+    return "https://web.archive.org/cdx/search/cdx?" .. url.build_query_string(params)
 end

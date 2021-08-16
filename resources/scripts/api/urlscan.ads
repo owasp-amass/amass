@@ -28,7 +28,7 @@ function vertical(ctx, domain)
             return
         end
 
-        for i, r in pairs(d.results) do
+        for _, r in pairs(d.results) do
             local ok = scrape(ctx, {url=r['result']})
             if not ok then
                 break
@@ -72,7 +72,7 @@ function submission(ctx, domain)
     body, err = json.encode({
         url=domain,
         public="on",
-        customagent="OWASP Amass", 
+        customagent="OWASP Amass",
     })
     if (err ~= nil and err ~= "") then
         return ""
@@ -100,7 +100,7 @@ function submission(ctx, domain)
             break
         end
         -- A large pause between these requests
-        for var=1,10 do check_rate_limit() end
+        for _=1,10 do check_rate_limit() end
     end
 
     return d.uuid

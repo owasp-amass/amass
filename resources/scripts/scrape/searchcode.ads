@@ -5,7 +5,7 @@ name = "Searchcode"
 type = "scrape"
 
 function start()
-    set_rate_limit(3)
+    set_rate_limit(2)
 end
 
 function vertical(ctx, domain)
@@ -36,7 +36,7 @@ function find_names(ctx, content, domain)
     end
 
     local found = false
-    for i, name in pairs(names) do
+    for _, name in pairs(names) do
         if in_scope(ctx, name) then
             found = true
             new_name(ctx, name)

@@ -110,7 +110,6 @@ function asn(ctx, addr, asn)
         return
     end
 
-    local prefix
     if (asn == 0) then
         if (addr == "") then
             return

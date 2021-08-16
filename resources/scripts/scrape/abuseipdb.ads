@@ -25,7 +25,7 @@ function vertical(ctx, domain)
         return
     end
 
-    for i, match in pairs(matches) do
+    for _, match in pairs(matches) do
         if (match ~= nil and #match >=2) then
             local name = match[2] .. "." .. domain
             send_names(ctx, name)

@@ -47,7 +47,7 @@ function vertical(ctx, domain)
         return
     end
 
-    for i, r in pairs(d.results) do
+    for _, r in pairs(d.results) do
         send_names(ctx, r.qname)
     end
 end

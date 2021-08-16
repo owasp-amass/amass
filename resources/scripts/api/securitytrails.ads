@@ -35,7 +35,7 @@ function vertical(ctx, domain)
     end
 
     local resp, err = request(ctx, {
-        url=build_url(domain, "subdomains"),
+        url=vert_url(domain),
         headers={['APIKEY']=c.key},
     })
     if (err ~= nil and err ~= "") then
@@ -52,6 +52,10 @@ function vertical(ctx, domain)
     end
 end
 
+function vert_url(domain)
+    return "https://api.securitytrails.com/v1/domain/" .. domain .. "/subdomains"
+end
+
 function horizontal(ctx, domain)
     local c
     local cfg = datasrc_config()
@@ -63,26 +67,33 @@ function horizontal(ctx, domain)
         return
     end
 
-    local resp, err = request(ctx, {
-        url=build_url(domain, "associated"),
-        headers={['APIKEY']=c.key},
-    })
-    if (err ~= nil and err ~= "") then
-        return
-    end
-
-    local j = json.decode(resp)
-    if (j == nil or #j.records == 0) then
-        return
-    end
-
-    for _, r in pairs(j.records) do
-        if (r.hostname ~= nil and r.hostname ~= "") then
-            associated(ctx, domain, r.hostname)
+    for i=1,100 do
+        local resp, err = request(ctx, {
+            url=horizon_url(domain, i),
+            headers={['APIKEY']=c.key},
+        })
+        if (err ~= nil and err ~= "") then
+            return
         end
+
+        local j = json.decode(resp)
+        if (j == nil or #j.records == 0) then
+            return
+        end
+
+        for _, r in pairs(j.records) do
+            if (r.hostname ~= nil and r.hostname ~= "") then
+                associated(ctx, domain, r.hostname)
+            end
+        end
+
+        if #j.records < 100 then
+            break
+        end
+        check_rate_limit()
     end
 end
 
-function build_url(domain, query)
-    return "https://api.securitytrails.com/v1/domain/" .. domain .. "/" .. query
+function horizon_url(domain, pagenum)
+    return "https://api.securitytrails.com/v1/domain/" .. domain .. "/associated?page=" .. pagenum
 end

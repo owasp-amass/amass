@@ -33,7 +33,7 @@ function vertical(ctx, domain)
     end
 
     local scopes = {"issues", "blobs", "notes"}
-    for i, s in pairs(scopes) do
+    for _, s in pairs(scopes) do
         scrape(ctx, {
             url=build_url(domain, s),
             headers={['PRIVATE-TOKEN']=c.key},

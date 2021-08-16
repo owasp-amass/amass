@@ -38,13 +38,13 @@ function vertical(ctx, domain)
         if (err ~= nil and err ~= "") then
             return
         end
-    
+
         local d = json.decode(resp)
         if (d == nil or #d.events == 0) then
             return
         end
-    
-        for i, v in pairs(d.events) do
+
+        for _, v in pairs(d.events) do
             new_name(ctx, v)
         end
 

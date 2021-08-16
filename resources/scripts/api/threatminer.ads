@@ -21,7 +21,7 @@ function vertical(ctx, domain)
         return
     end
 
-    for i, sub in pairs(d.results) do
+    for _, sub in pairs(d.results) do
         new_name(ctx, sub)
     end
 end

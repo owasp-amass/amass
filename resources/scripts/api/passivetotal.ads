@@ -17,7 +17,7 @@ function check()
         c = cfg.credentials
     end
 
-    if (c ~= nil and c.key ~= nil and 
+    if (c ~= nil and c.key ~= nil and
         c.username ~= nil and c.key ~= "" and c.username ~= "") then
         return true
     end
@@ -31,7 +31,7 @@ function vertical(ctx, domain)
         c = cfg.credentials
     end
 
-    if (c == nil or c.key == nil or c.key == "" or 
+    if (c == nil or c.key == nil or c.key == "" or
         c.username == nil or c.username == "") then
         return
     end
@@ -50,7 +50,7 @@ function vertical(ctx, domain)
         return
     end
 
-    for i, sub in pairs(d.subdomains) do
+    for _, sub in pairs(d.subdomains) do
         new_name(ctx, sub .. "." .. domain)
     end
 end
