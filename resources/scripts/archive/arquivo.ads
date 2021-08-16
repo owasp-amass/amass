@@ -31,7 +31,7 @@ function build_url(domain)
     local params = {
         ['q']=domain,
         ['offset']="0",
-        ['maxItems']="600",
+        ['maxItems']="500",
         ['siteSearch']="",
         ['type']="",
         ['collection']="",
