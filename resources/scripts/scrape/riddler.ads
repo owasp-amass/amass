@@ -13,5 +13,5 @@ function vertical(ctx, domain)
 end
 
 function build_url(domain)
-    return "https://riddler.io/search?q=pld:" .. domain
+    return "https://riddler.io/search/exportcsv?q=pld:" .. domain
 end
