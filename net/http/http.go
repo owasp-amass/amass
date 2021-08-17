@@ -45,7 +45,7 @@ const (
 )
 
 var (
-  // UserAgent is the default user agent used by Amass during HTTP requests.
+	// UserAgent is the default user agent used by Amass during HTTP requests.
 	UserAgent       string
 	subRE           = dns.AnySubdomainRegex()
 	crawlRE         = regexp.MustCompile(`\.\w{2,6}($|\?|#)`)
@@ -269,7 +269,7 @@ func crawlFilterURLs(p *url.URL, f filter.Filter) string {
 	}
 	// If the URL path has a file extension, check that it's of interest
 	if ext := crawlRE.FindString(p.Path); ext != "" {
-		ext = strings.TrimRight(ext, "?#")
+		ext = strings.ToLower(ext)
 
 		var found bool
 		for _, s := range crawlFileStarts {
