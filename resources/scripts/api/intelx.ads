@@ -55,14 +55,14 @@ function phonebook(ctx, domain, key)
         end
 
         status = resp.status
-        if ((status == 0 or status == 1) and resp.selectors ~= nil and #(resp.selectors) > 0) then
-            if #(resp.selectors) < limit then
-                limit = limit - #(resp.selectors)
+        if ((status == 0 or status == 1) and resp.selectors ~= nil and #resp.selectors > 0) then
+            if #resp.selectors < limit then
+                limit = limit - #resp.selectors
             end
 
             for _, s in pairs(resp.selectors) do
                 local t = s.selectortype
-        
+
                 if (t == 2 or t == 3 or t == 23) then
                     print(s.selectorvalue)
                     send_names(ctx, s.selectorvalue)
@@ -80,7 +80,7 @@ function search(ctx, domain, key)
     local err, body, resp
 
     body, err = json.encode({
-        term=domain, 
+        term=domain,
         lookuplevel=0,
         timeout=0,
         maxresults=max,

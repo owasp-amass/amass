@@ -9,7 +9,9 @@ function start()
 end
 
 function vertical(ctx, domain)
-    local vurl = "https://html.duckduckgo.com/html/?q=site:" .. domain .. " -site:www." .. domain
+    scrape(ctx, {url=build_url(domain)})
+end
 
-    scrape(ctx, {['url']=vurl})
+function build_url(domain)
+    return "https://html.duckduckgo.com/html/?q=site:" .. domain .. " -site:www." .. domain
 end

@@ -17,7 +17,7 @@ function check()
         c = cfg.credentials
     end
 
-    if (c ~= nil and c.username ~= nil and 
+    if (c ~= nil and c.username ~= nil and
         c.password ~= nil and c.username ~= "" and c.password ~= "") then
         return true
     end
@@ -31,7 +31,7 @@ function vertical(ctx, domain)
         c = cfg.credentials
     end
 
-    if (c == nil or c.username == nil or 
+    if (c == nil or c.username == nil or
         c.username == "" or c.password == nil or c.password == "") then
         return
     end
@@ -50,11 +50,11 @@ function vertical(ctx, domain)
     end
 
     local d = json.decode(resp)
-    if (d == nil or d.total == 0 or d.available == 0 or #(d.matches) == 0) then
+    if (d == nil or d.total == 0 or d.available == 0 or #d.matches == 0) then
         return
     end
 
-    for i, host in pairs(d.matches) do
+    for _, host in pairs(d.matches) do
         if (host ~= nil and host['rdns'] ~= nil and host['rdns'] ~= "") then
             new_name(ctx, host['rdns'])
         end
@@ -71,8 +71,8 @@ end
 
 function bearer_token(ctx, username, password)
     local body, err = json.encode({
-        username=username, 
-        password=password,
+        ['username']=username,
+        ['password']=password,
     })
     if (err ~= nil and err ~= "") then
         return ""

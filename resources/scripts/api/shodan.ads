@@ -34,18 +34,21 @@ function vertical(ctx, domain)
         return
     end
 
-    local vurl = "https://api.shodan.io/dns/domain/" .. domain .. "?key=" .. c.key
-    local resp, err = request(ctx, {url=vurl})
+    local resp, err = request(ctx, {url=build_url(domain, c.key)})
     if (err ~= nil and err ~= "") then
         return
     end
 
     local d = json.decode(resp)
-    if (d == nil or #(d.subdomains) == 0) then
+    if (d == nil or #d.subdomains == 0) then
         return
     end
 
     for _, sub in pairs(d.subdomains) do
         new_name(ctx, sub .. "." .. domain)
     end
+end
+
+function build_url(domain, key)
+    return "https://api.shodan.io/dns/domain/" .. domain .. "?key=" .. key
 end

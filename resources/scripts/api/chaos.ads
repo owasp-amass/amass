@@ -31,23 +31,23 @@ function vertical(ctx, domain)
     end
 
     local resp, err = request(ctx, {
-        ['url']=api_url(domain),
-        headers={['Authorization']=c['key']},
+        url=build_url(domain),
+        headers={['Authorization']=c.key},
     })
     if (err ~= nil and err ~= "") then
         return
     end
 
     local d = json.decode(resp)
-    if (d == nil or d.subdomains == nil or #(d.subdomains) == 0) then
+    if (d == nil or d.subdomains == nil or #d.subdomains == 0) then
         return
     end
 
-    for i, sub in pairs(d.subdomains) do
+    for _, sub in pairs(d.subdomains) do
         new_name(ctx, sub .. "." .. d.domain)
     end
 end
 
-function api_url(domain)
+function build_url(domain)
     return "https://dns.projectdiscovery.io/dns/" .. domain .. "/subdomains"
 end

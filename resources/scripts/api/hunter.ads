@@ -34,17 +34,17 @@ function vertical(ctx, domain)
         return
     end
 
-    local resp, err = request(ctx, {['url']=build_url(domain, c.key)})
+    local resp, err = request(ctx, {url=build_url(domain, c.key)})
     if (err ~= nil and err ~= "") then
         return
     end
 
     local j = json.decode(resp)
-    if (j == nil or j.data == nil or #(j.data.emails) == 0) then
+    if (j == nil or j.data == nil or #j['data'].emails == 0) then
         return
     end
 
-    for _, email in pairs(j.data.emails) do
+    for _, email in pairs(j['data'].emails) do
         for _, src in pairs(email.sources) do
             new_name(ctx, src.domain)
         end

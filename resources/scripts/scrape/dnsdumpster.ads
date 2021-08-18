@@ -11,9 +11,7 @@ function start()
 end
 
 function vertical(ctx, domain)
-    local u = "https://dnsdumpster.com"
-
-    local token = get_token(ctx, u)
+    local token = get_token(ctx)
     if token == "" then
         return
     end
@@ -26,23 +24,23 @@ function vertical(ctx, domain)
 
     local params = {
         ['csrfmiddlewaretoken']=token,
-		['targetip']=domain,
+        ['targetip']=domain,
         ['user']="free"
     }
 
     local resp, err = request(ctx, {
-        ['method']="POST",
-        ['data']=url.build_query_string(params),
-        ['url']=u,
-        ['headers']=headers,
+        url="https://dnsdumpster.com",
+        method="POST",
+        data=url.build_query_string(params),
+        headers=headers,
     })
     if (err == nil and #resp > 0) then
         send_names(ctx, resp)
     end
 end
 
-function get_token(ctx, u)
-    local resp, err = request(ctx, {['url']=u})
+function get_token(ctx)
+    local resp, err = request(ctx, {url="https://dnsdumpster.com"})
     if (err ~= nil and err ~= "") then
         return ""
     end

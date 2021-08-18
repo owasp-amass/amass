@@ -190,10 +190,10 @@ function asn(ctx, addr, asn)
         ['addr']=addr,
         ['asn']=tonumber(asn),
         ['desc']=desc,
-        prefix=cidr,
-        cc="US",
-        registry="ARIN",
-        netblocks={cidr},
+        ['prefix']=cidr,
+        ['cc']="US",
+        ['registry']="ARIN",
+        ['netblocks']={cidr},
     })
 end
 ```
@@ -598,9 +598,9 @@ function asn(ctx, addr, asn)
     new_asn(ctx, {
         ['addr']=addr,
         ['asn']=tonumber(asn),
-        prefix=cidr,
-        cc="US",
-        registry="ARIN",
+        ['prefix']=cidr,
+        ['cc']="US",
+        ['registry']="ARIN",
         ['desc']=desc,
         ['netblocks']={cidr},
     })

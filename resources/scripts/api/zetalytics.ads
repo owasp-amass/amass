@@ -34,9 +34,8 @@ function vertical(ctx, domain)
         return
     end
 
-    local vurl = build_url(domain, c.key)
     local resp, err = request(ctx, {
-        url=vurl,
+        url=build_url(domain, c.key),
         headers={['Content-Type']="application/json"},
     })
     if (err ~= nil and err ~= "") then
@@ -44,11 +43,11 @@ function vertical(ctx, domain)
     end
 
     local d = json.decode(resp)
-    if (d == nil or #(d.results) == 0) then
+    if (d == nil or #d.results == 0) then
         return
     end
 
-    for i, r in pairs(d.results) do
+    for _, r in pairs(d.results) do
         send_names(ctx, r.qname)
     end
 end

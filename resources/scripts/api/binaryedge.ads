@@ -32,19 +32,19 @@ function vertical(ctx, domain)
 
     for i=1,500 do
         local resp, err = request(ctx, {
-            url=api_url(domain, i),
-            headers={['X-KEY']=c["key"]},
+            url=build_url(domain, i),
+            headers={['X-KEY']=c.key},
         })
         if (err ~= nil and err ~= "") then
             return
         end
-    
+
         local d = json.decode(resp)
-        if (d == nil or #(d.events) == 0) then
+        if (d == nil or #d.events == 0) then
             return
         end
-    
-        for i, v in pairs(d.events) do
+
+        for _, v in pairs(d.events) do
             new_name(ctx, v)
         end
 
@@ -54,6 +54,6 @@ function vertical(ctx, domain)
     end
 end
 
-function api_url(domain, pagenum)
+function build_url(domain, pagenum)
     return "https://api.binaryedge.io/v2/query/domains/subdomain/" .. domain .. "?page=" .. pagenum
 end

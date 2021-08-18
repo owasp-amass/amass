@@ -46,14 +46,14 @@ function vertical(ctx, domain)
                 }
             },
             ['limit']=100,
-            ['offset']=i, 
+            ['offset']=i,
         })
         if (err ~= nil and err ~= "") then
             break
         end
 
         resp, err = request(ctx, {
-            ['url']="https://api.spyse.com/v4/data/domain/search",
+            url="https://api.spyse.com/v4/data/domain/search",
             method="POST",
             data=body,
             headers={
@@ -66,12 +66,12 @@ function vertical(ctx, domain)
         end
 
         local d = json.decode(resp)
-        if (d == nil or d['data'] == nil or 
-            d['data'].items == nil or #(d['data'].items) == 0) then
+        if (d == nil or d.data == nil or
+            d['data'].items == nil or #d['data'].items == 0) then
             return false
         end
 
-        for i, item in pairs(d['data'].items) do
+        for _, item in pairs(d['data'].items) do
             send_names(ctx, item.name)
         end
 
@@ -97,27 +97,25 @@ end
 
 
 function hcerts(ctx, domain, key, ttl)
-    local u = "https://api.spyse.com/v4/data/domain/" .. domain
-    local resp = get_page(ctx, u, key, ttl)
+    local resp = get_page(ctx, build_url(domain, "domain"), key, ttl)
     if (resp == "") then
         return
     end
 
     local d = json.decode(resp)
-    if (d == nil or d['data'] == nil or d['data'].items == nil or 
-        #(d['data'].items) == 0 or d['data'].items[0].cert_summary == nil) then
+    if (d == nil or d.data == nil or d['data'].items == nil or
+        #d['data'].items == 0 or d['data'].items[0].cert_summary == nil) then
         return
     end
 
     local certid = d['data'].items[0].cert_summary.fingerprint_sha256
-    u = "https://api.spyse.com/v4/data/certificate/" .. certid
-    resp = get_page(ctx, u, key, ttl)
+    resp = get_page(ctx, build_url(certid, "certificate"), key, ttl)
     if (resp == "") then
         return
     end
 
     d = json.decode(resp)
-    if (d == nil or d['data'] == nil or 
+    if (d == nil or d.data == nil or
         d['data'].items == nil or #(d['data'].items) == 0) then
         return
     end
@@ -178,22 +176,20 @@ function asn(ctx, addr, asn)
 end
 
 function get_asn(ctx, ip, key, ttl)
-    local u = "https://api.spyse.com/v4/data/ip/" .. tostring(ip)
-
-    local resp = get_page(ctx, u, key, ttl)
+    local resp = get_page(ctx, u, build_url(ip, "ip"), ttl)
     if (resp == "") then
         return 0, ""
     end
 
     local d = json.decode(resp)
-    if (d == nil or d['data'] == nil or 
+    if (d == nil or d.data == nil or
         d['data'].items == nil or #(d['data'].items) == 0) then
         return 0, ""
     end
 
     local cidr
     local asn = 0
-    for i, item in pairs(d['data'].items) do
+    for _, item in pairs(d['data'].items) do
         local num = item.isp_info.as_num
 
         if (asn == 0 or asn < num) then
@@ -206,29 +202,27 @@ function get_asn(ctx, ip, key, ttl)
 end
 
 function as_info(ctx, asn, key, ttl)
-    local u = "https://api.spyse.com/v4/data/as/" .. tostring(asn)
-
-    local resp = get_page(ctx, u, key, ttl)
+    local resp = get_page(ctx, build_url(tostring(asn), "as"), key, ttl)
     if (resp == "") then
         return nil
     end
 
     local d = json.decode(resp)
-    if (d == nil or d['data'] == nil or 
+    if (d == nil or d.data == nil or
         d['data'].items == nil or #(d['data'].items) == 0) then
         return nil
     end
 
     local cidrs = {}
     if d['data'].items[1].ipv4_cidr_array ~= nil then
-        for i, p in pairs(d['data'].items[1].ipv4_cidr_array) do
+        for _, p in pairs(d['data'].items[1].ipv4_cidr_array) do
             if p.ip ~= nil and p.cidr ~= nil then
                 table.insert(cidrs, p.ip .. "/" .. tostring(p.cidr))
             end
         end
     end
     if d['data'].items[1].ipv6_cidr_array ~= nil then
-        for i, p in pairs(d['data'].items[1].ipv6_cidr_array) do
+        for _, p in pairs(d['data'].items[1].ipv6_cidr_array) do
             if p.ip ~= nil and p.cidr ~= nil then
                 table.insert(cidrs, p.ip .. "/" .. tostring(p.cidr))
             end
@@ -241,9 +235,13 @@ function as_info(ctx, asn, key, ttl)
     }
 end
 
+function build_url(target, query)
+    return "https://api.spyse.com/v4/data/" .. query .. "/" .. target
+end
+
 function get_page(ctx, url, key, ttl)
     local resp, err = request(ctx, {
-        ['url']=url,
+        url=url,
         headers={['Authorization']="Bearer " .. key,},
     })
     if (err ~= nil and err ~= "") then
@@ -261,7 +259,7 @@ function split(str, delim)
         return result
     end
 
-    for i, match in pairs(matches) do
+    for _, match in pairs(matches) do
         table.insert(result, match)
     end
 

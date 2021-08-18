@@ -17,7 +17,7 @@ function check()
         c = cfg.credentials
     end
 
-    if (c ~= nil and c.username ~= nil and 
+    if (c ~= nil and c.username ~= nil and
         c.password ~= nil and c.username ~= "" and c.password ~= "") then
         return true
     end
@@ -31,13 +31,13 @@ function vertical(ctx, domain)
         c = cfg.credentials
     end
 
-    if (c == nil or c.username == nil or 
+    if (c == nil or c.username == nil or
         c.username == "" or c.password == nil or c.password == "") then
         return
     end
 
     local resp, err = request(ctx, {
-        ['url']="https://www.circl.lu/pdns/query/" .. domain,
+        url=build_url(domain),
         id=c['username'],
         pass=c['password'],
     })
@@ -58,4 +58,8 @@ function vertical(ctx, domain)
             end
         end
     end
+end
+
+function build_url(domain)
+    return "https://www.circl.lu/pdns/query/" .. domain
 end

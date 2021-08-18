@@ -58,7 +58,7 @@ end
 
 function get_cidr(ctx, addr)
     local url = "https://api.bgpview.io/ip/" .. addr
-    local resp, err = request(ctx, {['url']=url})
+    local resp, err = request(ctx, {url=url})
     if (err ~= nil and err ~= "") then
         return "", 0
     end
@@ -68,14 +68,14 @@ function get_cidr(ctx, addr)
         return "", 0
     end
 
-    local ip = j.data.rir_allocation.ip
-    local cidr = j.data.rir_allocation.cidr
+    local ip = j['data'].rir_allocation.ip
+    local cidr = j['data'].rir_allocation.cidr
     return ip, cidr
 end
 
 function get_asn(ctx, ip, cidr)
     local url = "https://api.bgpview.io/prefix/" .. ip .. "/" .. tostring(cidr)
-    local resp, err = request(ctx, {['url']=url})
+    local resp, err = request(ctx, {url=url})
     if (err ~= nil and err ~= "") then
         return 0
     end
@@ -85,17 +85,17 @@ function get_asn(ctx, ip, cidr)
         return 0
     end
 
-    local last = #(j.data.asns)
+    local last = #j['data'].asns
     if (last == 0) then
         return 0
     end
 
-    return j.data.asns[last].asn
+    return j['data'].asns[last].asn
 end
 
 function as_info(ctx, asn)
     local url = "https://api.bgpview.io/asn/" .. tostring(asn)
-    local resp, err = request(ctx, {['url']=url})
+    local resp, err = request(ctx, {url=url})
     if (err ~= nil and err ~= "") then
         return nil
     end
@@ -106,32 +106,32 @@ function as_info(ctx, asn)
     end
 
     local registry = ""
-    if (#(j.data.rir_allocation) > 0) then
-        registry = j.data.rir_allocation.rir_name
+    if (#j['data'].rir_allocation > 0) then
+        registry = j['data'].rir_allocation.rir_name
     end
 
     local name = ""
-    if (j.data.name ~= nil) then
-        name = name .. j.data.name
+    if (j['data'].name ~= nil) then
+        name = name .. j['data'].name
     end
-    if (j.data.description_full ~= nil) then
+    if (j['data'].description_full ~= nil) then
         name = name .. " -"
-        for _, desc in pairs(j.data.description_full) do
+        for _, desc in pairs(j['data'].description_full) do
             name = name .. " " .. desc
         end
     end
 
     return {
         ['asn']=asn,
-        desc=name,
-        cc=j.data.country_code,
+        ['desc']=name,
+        ['cc']=j['data'].country_code,
         ['registry']=registry,
     }
 end
 
 function netblocks(ctx, asn)
     local url = "https://api.bgpview.io/asn/" .. tostring(asn) .. "/prefixes"
-    local resp, err = request(ctx, {['url']=url})
+    local resp, err = request(ctx, {url=url})
     if (err ~= nil and err ~= "") then
         return nil
     end
@@ -142,10 +142,10 @@ function netblocks(ctx, asn)
     end
 
     local netblocks = {}
-    for _, p in pairs(j.data.ipv4_prefixes) do
+    for _, p in pairs(j['data'].ipv4_prefixes) do
         table.insert(netblocks, p.ip .. "/" .. tostring(p.cidr))
     end
-    for _, p in pairs(j.data.ipv6_prefixes) do
+    for _, p in pairs(j['data'].ipv6_prefixes) do
         table.insert(netblocks, p.ip .. "/" .. tostring(p.cidr))
     end
     return netblocks

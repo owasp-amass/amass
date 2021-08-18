@@ -20,7 +20,7 @@ function horizontal(ctx, domain)
         return
     end
 
-    for i, match in pairs(matches) do
+    for _, match in pairs(matches) do
         if (match ~= nil and #match >= 2 and match[2] ~= "") then
             associated(ctx, domain, match[2])
         end

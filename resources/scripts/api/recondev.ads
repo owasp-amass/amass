@@ -34,7 +34,7 @@ function vertical(ctx, domain)
         return
     end
 
-    local resp, err = request(ctx, {['url']=build_url(domain, c.key)})
+    local resp, err = request(ctx, {url=build_url(domain, c.key)})
     if (err ~= nil and err ~= "") then
         return
     end
@@ -44,15 +44,15 @@ function vertical(ctx, domain)
         return
     end
 
-    for i, set in pairs(data) do
-        local domains = set["rawDomains"]
+    for _, set in pairs(data) do
+        local domains = set['rawDomains']
         if domains ~= nil and #domains > 0 then
             for _, name in pairs(domains) do
                 new_name(ctx, name)
             end
         end
 
-        local addr = set["rawIp"]
+        local addr = set['rawIp']
         if addr ~= nil then
             new_addr(ctx, addr, domain)
         end

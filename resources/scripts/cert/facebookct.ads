@@ -2,6 +2,7 @@
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 local json = require("json")
+local url = require("url")
 
 name = "FacebookCT"
 type = "cert"
@@ -29,25 +30,25 @@ function vertical(ctx, domain)
     local nxt = query_url(domain, get_token(ctx))
 
     while nxt ~= "" do
-        resp, err = request(ctx, {['url']=nxt})
+        resp, err = request(ctx, {url=nxt})
         if (err ~= nil and err ~= "") then
             return
         end
 
-        dec = json.decode(resp)
-        if (dec == nil or dec.data == nil or #(dec.data) == 0) then
+        d = json.decode(resp)
+        if (d == nil or d.data == nil or #d.data == 0) then
             return
         end
 
-        for _, r in pairs(dec.data) do
+        for _, r in pairs(d.data) do
             for _, name in pairs(r.domains) do
                 new_name(ctx, name)
             end
         end
 
         nxt = ""
-        if (dec.paging ~= nil and dec.paging.next ~= nil and dec.paging.next ~= "") then
-            nxt = dec.paging.next
+        if (d.paging ~= nil and d['paging'].next ~= nil and d['paging'].next ~= "") then
+            nxt = d['paging'].next
         end
     end
 end
@@ -59,19 +60,16 @@ function get_token(ctx)
         c = cfg.credentials
     end
 
-    if (c == nil or c.key == nil or 
+    if (c == nil or c.key == nil or
         c.secret == nil or c.key == "" or c.secret == "") then
         return ""
     end
 
-    local authurl = "https://graph.facebook.com/oauth/access_token"
-    authurl = authurl .. "?client_id=" .. c.key .. "&client_secret=" .. c.secret .. "&grant_type=client_credentials"
-
-    local resp, err = request(ctx, {['url']=authurl})
+    local resp, err = request(ctx, {url=auth_url(c.key, c.secret)})
     if (err ~= nil and err ~= "") then
         return ""
     end
-    
+
     local dec = json.decode(resp)
     if (dec == nil or dec.access_token == nil or dec.access_token == "") then
         return ""
@@ -80,11 +78,25 @@ function get_token(ctx)
     return dec.access_token
 end
 
+function auth_url(key, secret)
+    local params = {
+        ['client_id']=key,
+        ['client_secret']=secret,
+        ['grant_type']="client_credentials",
+    }
+
+    return "https://graph.facebook.com/oauth/access_token?" .. url.build_query_string(params)
+end
+
 function query_url(domain, token)
     if token == "" then
         return ""
     end
 
-    local u = "https://graph.facebook.com/" .. api_version
-    return u .. "/certificates?fields=domains&access_token=" .. token .. "&query=*." .. domain
+    local params = {
+        ['access_token']=token,
+        ['query']="*." .. domain,
+        ['fields']="domains",
+    }
+    return "https://graph.facebook.com/" .. api_version .. "/certificates?" .. url.build_query_string(params)
 end
