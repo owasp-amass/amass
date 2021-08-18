@@ -25,7 +25,7 @@ function vertical(ctx, domain)
         return
     end
 
-    for i, match in pairs(matches) do
+    for _, match in pairs(matches) do
         if (match ~= nil and #match >=2) then
             local name = match[2] .. "." .. domain
             send_names(ctx, name)
@@ -58,19 +58,4 @@ end
 
 function ip_url(domain)
     return "https://www.abuseipdb.com/check/" .. domain
-end
-
-function send_names(ctx, content)
-    local names = find(content, subdomain_regex)
-    if (names == nil) then
-        return
-    end
-
-    local found = {}
-    for i, v in pairs(names) do
-        if (found[v] == nil) then
-            new_name(ctx, v)
-            found[v] = true
-        end
-    end
 end

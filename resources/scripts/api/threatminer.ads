@@ -11,17 +11,21 @@ function start()
 end
 
 function vertical(ctx, domain)
-    local resp, err = request(ctx, {url="https://api.threatminer.org/v2/domain.php?q=" .. domain .. "&api=True&rt=5"})
+    local resp, err = request(ctx, {url=build_url(domain)})
     if (err ~= nil and err ~= "") then
         return
     end
 
     local d = json.decode(resp)
-    if (d == nil or d['status_code'] ~= "200" or d['status_message'] ~= "Results found." or #(d.results) == 0) then
+    if (d == nil or d.status_code ~= "200" or #d.results == 0) then
         return
     end
 
-    for i, sub in pairs(d.results) do
+    for _, sub in pairs(d.results) do
         new_name(ctx, sub)
     end
+end
+
+function build_url(domain)
+    return "https://api.threatminer.org/v2/domain.php?rt=5&q=" .. domain
 end
