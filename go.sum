@@ -99,6 +99,8 @@ github.com/bketelsen/crypt v0.0.3-0.20200106085610-5cbc8cc4026c/go.mod h1:MKsuJm
 github.com/bketelsen/crypt v0.0.4/go.mod h1:aI6NrJ0pMGgvZKL1iVgXLnfIFJtfV+bKCoqOes/6LfM=
 github.com/boltdb/bolt v1.3.1 h1:JQmyP4ZBrce+ZQu0dY660FMfatumYDLun9hBCUVIkF4=
 github.com/boltdb/bolt v1.3.1/go.mod h1:clJnj/oiGkjum5o1McbSZDSLxVThjynRyGBgiAx27Ps=
+github.com/buger/jsonparser v1.1.1 h1:2PnMjfWD7wBILjqQbt530v576A/cAbQvEW9gGIpYMUs=
+github.com/buger/jsonparser v1.1.1/go.mod h1:6RYKKt7H4d4+iWqouImQ9R2FZql3VbhNgx27UK13J/0=
 github.com/caffix/eventbus v0.0.0-20210522041342-56248842ee62 h1:ggGLhGnO6Tcrwi6XrRBJt2Zx+2/BkAFO4ZDWbsjXkSI=
 github.com/caffix/eventbus v0.0.0-20210522041342-56248842ee62/go.mod h1:IqiK9+A8aTFzfSvFZtHTCHd2wlJYHdToXUSultDJS44=
 github.com/caffix/eventbus v0.0.0-20210809004957-a6580c193ef5 h1:Tp0ZFt7jnTxxhlAOxwyJGyujvQZDkUeOJ3IL856yhlY=
@@ -253,6 +255,8 @@ github.com/flimzy/diff v0.1.5/go.mod h1:lFJtC7SPsK0EroDmGTSrdtWKAxOk3rO+q+e04LL0
 github.com/flimzy/diff v0.1.6/go.mod h1:lFJtC7SPsK0EroDmGTSrdtWKAxOk3rO+q+e04LL05Hs=
 github.com/flimzy/kivik v1.8.1/go.mod h1:S2aPycbG0eDFll4wgXt9uacSNkXISPufutnc9sv+mdA=
 github.com/flimzy/testy v0.1.16/go.mod h1:3szguN8NXqgq9bt9Gu8TQVj698PJWmyx/VY1frwwKrM=
+github.com/fofapro/fofa-go v0.0.0-20200317042037-c0caee09013d h1:UiqIc/3lkMuU/N3KPO0idxX5JDWxwxEexbc38IV3+0s=
+github.com/fofapro/fofa-go v0.0.0-20200317042037-c0caee09013d/go.mod h1:hcTueqMxqEIm7jD0wK7+rEJVvieYVgXv6Cif8PZsB2U=
 github.com/fortytw2/leaktest v1.2.0/go.mod h1:jDsjWgpAGjm2CA7WthBh/CdZYEPF31XHquHwclZch5g=
 github.com/fortytw2/leaktest v1.3.0 h1:u8491cBMTQ8ft8aeV+adlcytMZylmA5nnwwkRZjI8vw=
 github.com/fortytw2/leaktest v1.3.0/go.mod h1:jDsjWgpAGjm2CA7WthBh/CdZYEPF31XHquHwclZch5g=
