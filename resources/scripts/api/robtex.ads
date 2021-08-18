@@ -22,12 +22,12 @@ function vertical(ctx, domain)
         return
     end
 
-    local j = json.decode("{\"results\": [" .. resp .. "]}")
-    if (j == nil or #(j.results) == 0) then
+    local data = json.decode("[" .. resp .. "]")
+    if (data == nil or #data == 0) then
         return
     end
 
-    for _, rr in pairs(j.results) do
+    for _, rr in pairs(data) do
         if (rr.rrtype == "A") then
             local d = ipinfo(ctx, rr.rrdata, cfg.ttl)
             if (d == nil) then
@@ -104,7 +104,7 @@ end
 
 function ip_info(ctx, addr, ttl)
     local url = "https://freeapi.robtex.com/ipquery/" .. addr
-    local resp, err = request(ctx, {['url']=url})
+    local resp, err = request(ctx, {url=url})
     if (err ~= nil and err ~= "") then
         return nil
     end
@@ -121,7 +121,7 @@ function extract_names(ctx, djson)
     local sections = {"act", "acth", "pas", "pash"}
 
     for _, s in pairs(sections) do
-        if (djson[s] ~= nil and #(djson[s]) > 0) then
+        if (djson[s] ~= nil and #djson[s] > 0) then
             for _, name in pairs(djson[s]) do
                 if in_scope(ctx, name.o) then
                     new_name(ctx, name.o)
@@ -133,7 +133,7 @@ end
 
 function netblocks(ctx, asn, ttl)
     local url = "https://freeapi.robtex.com/asquery/" .. tostring(asn)
-    local resp, err = request(ctx, {['url']=url})
+    local resp, err = request(ctx, {url=url})
     if (err ~= nil and err ~= "") then
         return nil
     end
@@ -163,7 +163,7 @@ function split(str, delim)
         return result
     end
 
-    for i, match in pairs(matches) do
+    for _, match in pairs(matches) do
         table.insert(result, match)
     end
 
