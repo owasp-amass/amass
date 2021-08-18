@@ -5,7 +5,7 @@ name = "Digitorus"
 type = "cert"
 
 function start()
-    set_rate_limit(3)
+    set_rate_limit(2)
 end
 
 function vertical(ctx, domain)

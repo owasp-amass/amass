@@ -7,7 +7,7 @@ name = "ThreatBook"
 type = "api"
 
 function start()
-    set_rate_limit(5)
+    set_rate_limit(1)
 end
 
 function check()
