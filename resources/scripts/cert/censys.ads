@@ -19,10 +19,17 @@ function vertical(ctx, domain)
 
     if (c == nil or c.key == nil or
         c.key == "" or c.secret == nil or c.secret == "") then
+        local certpath_re = "/certificates/[a-z0-9]{64}"
         for i=1,10 do
-            local ok = scrape(ctx, {url=build_url(domain, i)})
-            if not ok then
-                break
+            local page, err = request(ctx, {url=build_url(domain, i)})
+            if (err ~= nil and err ~= "") then
+                return
+            end
+
+            local paths = find(page, certpath_re)
+            for _, path in pairs(paths) do
+                local cert_url = "https://censys.io" .. path
+                scrape(ctx, {url=cert_url})
             end
         end
         return
