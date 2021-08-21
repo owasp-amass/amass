@@ -1,6 +1,8 @@
 -- Copyright 2021 Jeff Foley. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
+local json = require("json")
+
 name = "Quake"
 type = "api"
 
@@ -32,7 +34,7 @@ function vertical(ctx, domain)
         return
     end
 
-    p = 0
+    local p = 0
     while(true) do
         local body = json.encode({
             ['query']="domain:*." .. domain,
@@ -65,6 +67,6 @@ function vertical(ctx, domain)
         if j['meta'].pagination.total < 1000 then
             break
         end
-        p += 1000
+        p = p + 1000
     end
 end
