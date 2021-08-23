@@ -11,8 +11,8 @@ function start()
 end
 
 function horizontal(ctx, domain)
-    local url = "https://whoisology.com/" .. domain
-    local page, err = request(ctx, {url=url})
+    local hurl = "https://whoisology.com/" .. domain
+    local page, err = request(ctx, {url=hurl})
     if (err ~= nil and err ~= "") then
         return
     end

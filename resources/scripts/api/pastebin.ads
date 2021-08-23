@@ -15,5 +15,5 @@ function vertical(ctx, domain)
 end
 
 function build_url(domain)
-    return "https://psbdmp.ws/api/v3/search/[.]" .. domain
+    return "https://psbdmp.ws/api/v3/search/[.]" .. domain:gsub("%.", "[.]")
 end
