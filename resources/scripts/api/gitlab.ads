@@ -42,5 +42,5 @@ function vertical(ctx, domain)
 end
 
 function build_url(domain, scope)
-    return "https://gitlab.com/api/v4/search?scope=" .. scope .. "&search=" .. domain
+    return "https://gitlab.com/api/v4/search?scope=" .. scope .. "&search=" .. domain:gsub("%.", "[.]")
 end
