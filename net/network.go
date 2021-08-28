@@ -87,14 +87,6 @@ func DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	return d.DialContext(ctx, network, addr)
 }
 
-// IsIP returns true when the provided string is an IP address.
-func IsIP(name string) bool {
-	if addr := net.ParseIP(name); addr == nil {
-		return false
-	}
-	return true
-}
-
 // IsIPv4 returns true when the provided net.IP address is an IPv4 address.
 func IsIPv4(ip net.IP) bool {
 	return strings.Count(ip.String(), ":") < 2

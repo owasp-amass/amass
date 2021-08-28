@@ -15,7 +15,6 @@ import (
 	"strconv"
 	"strings"
 
-	amassnet "github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/datasrcs"
 	"github.com/OWASP/Amass/v3/format"
@@ -35,17 +34,18 @@ type dbArgs struct {
 	Enum    int
 	Search  string
 	Options struct {
-		DemoMode         bool
-		IPs              bool
-		IPv4             bool
-		IPv6             bool
-		ListEnumerations bool
-		ASNTableSummary  bool
-		DiscoveredNames  bool
-		NoColor          bool
-		ShowAll          bool
-		Silent           bool
-		Sources          bool
+		DemoMode              bool
+		IPs                   bool
+		IPv4                  bool
+		IPv6                  bool
+		ListEnumerations      bool
+		ASNTableSummary       bool
+		DiscoveredNames       bool
+		DiscoveredIPAddresses bool
+		NoColor               bool
+		ShowAll               bool
+		Silent                bool
+		Sources               bool
 	}
 	Filepaths struct {
 		ConfigFile string
@@ -78,6 +78,7 @@ func runDBCommand(clArgs []string) {
 	dbCommand.BoolVar(&args.Options.Sources, "src", false, "Print data sources for the discovered names")
 	dbCommand.BoolVar(&args.Options.ASNTableSummary, "summary", false, "Print Just ASN Table Summary")
 	dbCommand.BoolVar(&args.Options.DiscoveredNames, "names", false, "Print Just Discovered Names")
+	dbCommand.BoolVar(&args.Options.DiscoveredIPAddresses, "addresses", false, "Print Just Discovered IP Addresses")
 	dbCommand.BoolVar(&args.Options.NoColor, "nocolor", false, "Disable colorized output")
 	dbCommand.BoolVar(&args.Options.ShowAll, "show", false, "Print the results for the enumeration index + domains provided")
 	dbCommand.BoolVar(&args.Options.Silent, "silent", false, "Disable all output during execution")
@@ -162,7 +163,7 @@ func runDBCommand(clArgs []string) {
 		args.Options.DiscoveredNames = true
 		args.Options.ASNTableSummary = true
 	}
-	if !args.Options.DiscoveredNames && !args.Options.ASNTableSummary {
+	if !args.Options.DiscoveredNames && !args.Options.DiscoveredIPAddresses && !args.Options.ASNTableSummary {
 		commandUsage(dbUsageMsg, dbCommand, dbBuf)
 		return
 	}
@@ -211,6 +212,7 @@ func listEvents(uuids []string, db *netmap.Graph) {
 func showEventData(args *dbArgs, uuids []string, asninfo bool, db *netmap.Graph) {
 	var total int
 	var err error
+	var written bool
 	var outfile *os.File
 	var discovered []*requests.Output
 	domains := args.Domains.Slice()
@@ -240,13 +242,14 @@ func showEventData(args *dbArgs, uuids []string, asninfo bool, db *netmap.Graph)
 
 	tags := make(map[string]int)
 	asns := make(map[int]*format.ASNSummaryData)
+	addresses := stringset.New()
 	for _, out := range getEventOutput(uuids, asninfo, db, cache) {
 		if len(domains) > 0 && !domainNameInScope(out.Name, domains) {
 			continue
 		}
 
 		out.Addresses = format.DesiredAddrTypes(out.Addresses, args.Options.IPv4, args.Options.IPv6)
-		if l := len(out.Addresses); (args.Options.IPs || args.Options.IPv4 || args.Options.IPv6) && l == 0 {
+		if l := len(out.Addresses); (args.Options.DiscoveredIPAddresses || args.Options.IPs || args.Options.IPv4 || args.Options.IPv6) && l == 0 {
 			continue
 		} else if l > 0 {
 			total++
@@ -254,29 +257,18 @@ func showEventData(args *dbArgs, uuids []string, asninfo bool, db *netmap.Graph)
 		}
 
 		source, name, ips := format.OutputLineParts(out, args.Options.Sources,
-			args.Options.IPs || args.Options.IPv4 || args.Options.IPv6, args.Options.DemoMode)
-		if ips != "" {
-			ips = " " + ips
+			args.Options.DiscoveredIPAddresses || args.Options.IPs || args.Options.IPv4 || args.Options.IPv6, args.Options.DemoMode)
+
+		if !strings.Contains(name, args.Search) && !strings.Contains(ips, args.Search) {
+			continue
 		}
 
 		if args.Options.DiscoveredNames {
-			var written bool
-			if amassnet.IsIP(args.Search) {
-				found := false
-				for _, a := range out.Addresses {
-					if a.Address.String() == args.Search {
-						found = true
-						break
-					}
-				}
-
-				if !found {
-					continue
-				}
-			} else if !strings.Contains(name, args.Search) {
-				continue
+			if ips != "" {
+				ips = " " + ips
 			}
 
+			var written bool
 			if outfile != nil {
 				fmt.Fprintf(outfile, "%s%s%s\n", source, name, ips)
 				written = true
@@ -288,6 +280,17 @@ func showEventData(args *dbArgs, uuids []string, asninfo bool, db *netmap.Graph)
 			if !written {
 				fmt.Fprintf(color.Output, "%s%s%s\n", blue(source), green(name), yellow(ips))
 			}
+		} else if args.Options.DiscoveredIPAddresses {
+			addresses.InsertMany(strings.Split(ips, ",")...)
+		}
+	}
+	for _, address := range addresses.Slice() {
+		if outfile != nil {
+			fmt.Fprintf(outfile, "%s\n", address)
+			written = true
+		}
+		if !written {
+			fmt.Fprintf(color.Output, "%s\n", green(address))
 		}
 	}
 
