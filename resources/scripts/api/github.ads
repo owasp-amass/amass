@@ -49,7 +49,10 @@ function vertical(ctx, domain)
         end
 
         for i, item in pairs(d.items) do
-            search_item(ctx, item)
+            local ok = search_item(ctx, item)
+            if not ok then
+                return
+            end
         end
     end
 end
@@ -57,18 +60,21 @@ end
 function search_item(ctx, item)
     local info, err = request(ctx, {['url']=item.url})
     if (err ~= nil and err ~= "") then
-        return
+        return false
     end
 
     local data = json.decode(info)
     if (data == nil or data['download_url'] == nil) then
-        return
+        return false
     end
 
     local content, err = request(ctx, {['url']=data['download_url']})
-    if err == nil then
-        send_names(ctx, content)
+    if (err ~= nil and err ~= "") then
+        return false
     end
+
+    send_names(ctx, content)
+    return true
 end
 
 function build_url(domain, pagenum)
