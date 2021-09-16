@@ -86,7 +86,7 @@ function vertical(ctx, domain)
             end
         end
 
-        if page == r.max_page then
+        if page == d.max_page then
             break
         end
         check_rate_limit()
