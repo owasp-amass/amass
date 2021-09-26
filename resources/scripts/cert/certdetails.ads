@@ -1,8 +1,8 @@
--- Copyright 2017-2021 Jeff Foley. All rights reserved.
+-- Copyright 2021 Jeff Foley. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
-name = "Riddler"
-type = "scrape"
+name = "CertDetails"
+type = "cert"
 
 function start()
     set_rate_limit(1)
@@ -13,5 +13,5 @@ function vertical(ctx, domain)
 end
 
 function build_url(domain)
-    return "https://riddler.io/search/exportcsv?q=pld:" .. domain
+    return "https://certificatedetails.com/api/list/" .. domain
 end
