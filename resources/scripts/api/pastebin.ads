@@ -1,11 +1,11 @@
--- Copyright 2017-2021 Jeff Foley. All rights reserved.
+-- Copyright 2021 Jeff Foley. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
-name = "BuiltWith"
-type = "scrape"
+name = "Pastebin"
+type = "api"
 
 function start()
-    set_rate_limit(3)
+    set_rate_limit(2)
 end
 
 function vertical(ctx, domain)
@@ -13,5 +13,5 @@ function vertical(ctx, domain)
 end
 
 function build_url(domain)
-    return "https://builtwith.com/relationships/" .. domain
+    return "https://psbdmp.ws/api/v3/search/[.]" .. domain:gsub("%.", "[.]")
 end

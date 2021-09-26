@@ -3,7 +3,7 @@
 
 local json = require("json")
 
-name = "ThreatBook"
+name = "IPdata"
 type = "api"
 
 function start()
@@ -23,7 +23,11 @@ function check()
     return false
 end
 
-function vertical(ctx, domain)
+function asn(ctx, addr, asn)
+    if addr == "" then
+        return
+    end
+
     local c
     local cfg = datasrc_config()
     if cfg ~= nil then
@@ -34,21 +38,25 @@ function vertical(ctx, domain)
         return
     end
 
-    local resp, err = request(ctx, {url=build_url(domain, c.key)})
+    local resp, err = request(ctx, {url=build_url(addr, c.key)})
     if (err ~= nil and err ~= "") then
         return
     end
 
     local d = json.decode(resp)
-    if (d == nil or d.response_code ~= 0 or #(d.sub_domains.data) == 0) then
+    if (d == nil or d.asn == nil) then
         return
     end
 
-    for i, sub in pairs(d.sub_domains.data) do
-        new_name(ctx, sub)
-    end
+    new_asn(ctx, {
+        addr=addr,
+        asn=tonumber(d.asn:gsub(3)),
+        desc=d.name,
+        prefix=d.route,
+        netblocks={d.route},
+    })
 end
 
-function build_url(domain, key)
-    return "https://api.threatbook.cn/v3/domain/sub_domains?apikey=" .. key .. "&resource=" .. domain
+function build_url(addr, key)
+    return "https://api.ipdata.co/" .. addr .. "/asn?api-key=" .. key
 end

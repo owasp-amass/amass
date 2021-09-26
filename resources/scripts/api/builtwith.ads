@@ -1,9 +1,7 @@
--- Copyright 2021 Jeff Foley. All rights reserved.
+-- Copyright 2017-2021 Jeff Foley. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
-local json = require("json")
-
-name = "ThreatBook"
+name = "BuiltWith"
 type = "api"
 
 function start()
@@ -34,21 +32,10 @@ function vertical(ctx, domain)
         return
     end
 
-    local resp, err = request(ctx, {url=build_url(domain, c.key)})
-    if (err ~= nil and err ~= "") then
-        return
-    end
-
-    local d = json.decode(resp)
-    if (d == nil or d.response_code ~= 0 or #(d.sub_domains.data) == 0) then
-        return
-    end
-
-    for i, sub in pairs(d.sub_domains.data) do
-        new_name(ctx, sub)
-    end
+    scrape(ctx, {url=build_url(domain, "v19", c.key)})
+    scrape(ctx, {url=build_url(domain, "rv1", c.key)})
 end
 
-function build_url(domain, key)
-    return "https://api.threatbook.cn/v3/domain/sub_domains?apikey=" .. key .. "&resource=" .. domain
+function build_url(domain, api, key)
+    return "https://api.builtwith.com/" .. api .. "/api.json?LOOKUP=" .. domain .. "&KEY=" .. key
 end
