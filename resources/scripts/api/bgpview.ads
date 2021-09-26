@@ -19,7 +19,7 @@ function asn(ctx, addr, asn)
         end
 
         local ip, prefix = get_cidr(ctx, addr)
-        if (ip == "") then
+        if (ip == "" or prefix == nil) then
             return
         end
 
@@ -60,6 +60,7 @@ function get_cidr(ctx, addr)
     local url = "https://api.bgpview.io/ip/" .. addr
     local resp, err = request(ctx, {['url']=url})
     if (err ~= nil and err ~= "") then
+        log(ctx, "get_cidr request to service failed: " .. err)
         return "", 0
     end
 
@@ -73,10 +74,11 @@ function get_cidr(ctx, addr)
     return ip, cidr
 end
 
-function get_asn(ctx, ip, cidr)
-    local url = "https://api.bgpview.io/prefix/" .. ip .. "/" .. tostring(cidr)
+function get_asn(ctx, ip, mask)
+    local url = "https://api.bgpview.io/prefix/" .. ip .. "/" .. tostring(mask)
     local resp, err = request(ctx, {['url']=url})
     if (err ~= nil and err ~= "") then
+        log(ctx, "get_asn request to service failed: " .. err)
         return 0
     end
 
@@ -97,6 +99,7 @@ function as_info(ctx, asn)
     local url = "https://api.bgpview.io/asn/" .. tostring(asn)
     local resp, err = request(ctx, {['url']=url})
     if (err ~= nil and err ~= "") then
+        log(ctx, "as_info request to service failed: " .. err)
         return nil
     end
 
@@ -133,6 +136,7 @@ function netblocks(ctx, asn)
     local url = "https://api.bgpview.io/asn/" .. tostring(asn) .. "/prefixes"
     local resp, err = request(ctx, {['url']=url})
     if (err ~= nil and err ~= "") then
+        log(ctx, "netblocks request to service failed: " .. err)
         return nil
     end
 

@@ -50,6 +50,7 @@ function vertical(ctx, domain)
         },
     })
     if (err ~= nil and err ~= "") then
+        log(ctx, "vertical request to service failed: " .. err)
         return
     end
 
@@ -72,8 +73,8 @@ end
 
 function bearer_token(ctx, username, password)
     local body, err = json.encode({
-        username=username, 
-        password=password,
+        ['username']=username, 
+        ['password']=password,
     })
     if (err ~= nil and err ~= "") then
         return ""

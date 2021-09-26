@@ -13,6 +13,7 @@ end
 function vertical(ctx, domain)
     local page, err = request(ctx, {url=build_url(domain)})
     if (err ~= nil and err ~= "") then
+        log(ctx, "vertical request to service failed: " .. err)
         return
     end
 

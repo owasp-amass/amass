@@ -35,6 +35,7 @@ function vertical(ctx, domain)
         headers={['Authorization']=c['key']},
     })
     if (err ~= nil and err ~= "") then
+        log(ctx, "vertical request to service failed: " .. err)
         return
     end
 

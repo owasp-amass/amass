@@ -19,6 +19,7 @@ function vertical(ctx, domain)
     local vurl = "https://freeapi.robtex.com/pdns/forward/" .. domain
     local resp, err = request(ctx, {['url']=vurl})
     if (err ~= nil and err ~= "") then
+        log(ctx, "vertical request to service failed: " .. err)
         return
     end
 
@@ -106,6 +107,7 @@ function ip_info(ctx, addr, ttl)
     local url = "https://freeapi.robtex.com/ipquery/" .. addr
     local resp, err = request(ctx, {['url']=url})
     if (err ~= nil and err ~= "") then
+        log(ctx, "ip_info request to service failed: " .. err)
         return nil
     end
 
@@ -135,6 +137,7 @@ function netblocks(ctx, asn, ttl)
     local url = "https://freeapi.robtex.com/asquery/" .. tostring(asn)
     local resp, err = request(ctx, {['url']=url})
     if (err ~= nil and err ~= "") then
+        log(ctx, "netblocks request to service failed: " .. err)
         return nil
     end
 

@@ -14,6 +14,7 @@ function vertical(ctx, domain)
     local url = "https://urlscan.io/api/v1/search/?q=domain:" .. domain
     local resp, err = request(ctx, {['url']=url})
     if (err ~= nil and err ~= "") then
+        log(ctx, "vertical request to service failed: " .. err)
         return
     end
 
@@ -40,6 +41,7 @@ function subs(ctx, id)
     local url = "https://urlscan.io/api/v1/result/" .. id .. "/"
     local resp, err = request(ctx, {['url']=url})
     if (err ~= nil and err ~= "") then
+        log(ctx, "result request to service failed: " .. err)
         return
     end
 
@@ -87,6 +89,7 @@ function submission(ctx, domain)
         ['headers']=headers,
     })
     if (err ~= nil and err ~= "") then
+        log(ctx, "scan request to service failed: " .. err)
         return ""
     end
 

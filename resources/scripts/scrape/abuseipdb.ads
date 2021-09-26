@@ -14,8 +14,10 @@ function vertical(ctx, domain)
         return
     end
 
-    local page, err = request(ctx, {url=build_url(ip)})
+    local vurl = "https://www.abuseipdb.com/whois/" .. ip
+    local page, err = request(ctx, {['url']=vurl})
     if (err ~= nil and err ~= "") then
+        log(ctx, "vertical request to service failed: " .. err)
         return
     end
 
@@ -27,14 +29,9 @@ function vertical(ctx, domain)
 
     for i, match in pairs(matches) do
         if (match ~= nil and #match >=2) then
-            local name = match[2] .. "." .. domain
-            send_names(ctx, name)
+            new_name(ctx, match[2] .. "." .. domain)
         end
     end
-end
-
-function build_url(ip)
-    return "https://www.abuseipdb.com/whois/" .. ip
 end
 
 function get_ip(ctx, domain)
@@ -58,19 +55,4 @@ end
 
 function ip_url(domain)
     return "https://www.abuseipdb.com/check/" .. domain
-end
-
-function send_names(ctx, content)
-    local names = find(content, subdomain_regex)
-    if (names == nil) then
-        return
-    end
-
-    local found = {}
-    for i, v in pairs(names) do
-        if (found[v] == nil) then
-            new_name(ctx, v)
-            found[v] = true
-        end
-    end
 end

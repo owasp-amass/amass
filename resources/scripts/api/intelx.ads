@@ -105,7 +105,7 @@ function search(ctx, domain, key)
         },
     })
     if (err ~= nil and err ~= "") then
-        print("Search: " .. err)
+        log(ctx, "vertical search request to service failed: " .. err)
         return ""
     end
 
@@ -126,7 +126,7 @@ function results(ctx, id, limit, key)
         },
     })
     if (err ~= nil and err ~= "") then
-        print("Results: " .. err)
+        log(ctx, "vertical results request to service failed: " .. err)
         return nil
     end
 

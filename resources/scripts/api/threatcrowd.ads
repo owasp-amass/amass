@@ -14,6 +14,7 @@ function vertical(ctx, domain)
     local vurl = "https://www.threatcrowd.org/searchApi/v2/domain/report/?domain=" .. domain
     local resp, err = request(ctx, {url=vurl})
     if (err ~= nil and err ~= "") then
+        log(ctx, "vertical request to service failed: " .. err)
         return
     end
 

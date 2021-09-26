@@ -108,6 +108,12 @@ func (s *Script) scrape(L *lua.LState) int {
 		if num := s.internalSendNames(ctx, resp); num > 0 {
 			sucess = lua.LTrue
 		}
+	} else {
+		msg := err.Error()
+
+		if _, bus, err := requests.ContextConfigBus(ctx); err == nil {
+			bus.Publish(requests.LogTopic, eventbus.PriorityHigh, s.String()+": scrape: "+msg)
+		}
 	}
 
 	L.Push(sucess)
@@ -123,7 +129,7 @@ func (s *Script) req(ctx context.Context, url, data string, headers map[string]s
 	// Check for cached responses first
 	dsc := s.sys.Config().GetDataSourceConfig(s.String())
 	if dsc != nil && dsc.TTL > 0 {
-		if r, err := s.getCachedResponse(url+data, dsc.TTL); err == nil {
+		if r, err := s.getCachedResponse(ctx, url+data, dsc.TTL); err == nil {
 			return r, err
 		}
 	}
@@ -140,7 +146,7 @@ func (s *Script) req(ctx context.Context, url, data string, headers map[string]s
 			bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", s.String(), url, err))
 		}
 	} else if dsc != nil && dsc.TTL > 0 {
-		_ = s.setCachedResponse(url+data, resp)
+		_ = s.setCachedResponse(ctx, url+data, resp)
 	}
 
 	return resp, err

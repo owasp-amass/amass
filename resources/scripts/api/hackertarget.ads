@@ -25,6 +25,7 @@ function asn(ctx, addr, asn)
 
     local resp, err = request(ctx, {['url']=asn_url(addr)})
     if (err ~= nil and err ~= "") then
+        log(ctx, "asn request to service failed: " .. err)
         return
     end
 
@@ -35,7 +36,7 @@ function asn(ctx, addr, asn)
 
     new_asn(ctx, {
         ['addr']=addr,
-        asn=tonumber(j.results[2]),
+        ['asn']=tonumber(j.results[2]),
         prefix=j.results[3],
         desc=j.results[4],
     })

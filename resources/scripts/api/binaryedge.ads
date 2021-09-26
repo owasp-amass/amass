@@ -32,10 +32,11 @@ function vertical(ctx, domain)
 
     for i=1,500 do
         local resp, err = request(ctx, {
-            url=api_url(domain, i),
+            ['url']=api_url(domain, i),
             headers={['X-KEY']=c["key"]},
         })
         if (err ~= nil and err ~= "") then
+            log(ctx, "vertical request to service failed: " .. err)
             return
         end
     

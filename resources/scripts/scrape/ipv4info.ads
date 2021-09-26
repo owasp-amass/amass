@@ -22,6 +22,7 @@ function vertical(ctx, domain)
     local u = "http://ipv4info.com/subdomains/" .. token .. "/" .. domain .. ".html"
     local resp, err = request(ctx, {['url']=u})
     if (err ~= nil and err ~= "") then
+        log(ctx, "vertical request to service failed: " .. err)
         return
     end
 
@@ -49,6 +50,7 @@ function get_path(ctx, domain)
     local u = "http://ipv4info.com/search/" .. domain
     local page, err = request(ctx, {['url']=u})
     if (err ~= nil and err ~= "") then
+        log(ctx, "get_path request to service failed: " .. err)
         return ""
     end
 
@@ -64,6 +66,7 @@ function get_token(ctx, domain, path)
     local u = "http://ipv4info.com" .. path
     local page, err = request(ctx, {['url']=u})
     if (err ~= nil and err ~= "") then
+        log(ctx, "get_token request to service failed: " .. err)
         return ""
     end
 
@@ -89,6 +92,7 @@ function next_page(ctx, domain, resp, page)
     local u = "http://ipv4info.com" .. match[1]
     local page, err = request(ctx, {['url']=u})
     if (err ~= nil and err ~= "") then
+        log(ctx, "next_page request to service failed: " .. err)
         return ""
     end
 

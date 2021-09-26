@@ -49,6 +49,7 @@ function api_query(ctx, cfg, domain)
             pass=cfg["credentials"].secret,
         })
         if (err ~= nil and err ~= "") then
+            log(ctx, "vertical request to service failed: " .. err)
             return
         end
 

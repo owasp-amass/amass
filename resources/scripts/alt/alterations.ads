@@ -26,32 +26,32 @@ function make_names(ctx, cfg, name)
     local words = alt_wordlist(ctx)
 
     if cfg['flip_words'] then
-        for i, n in pairs(flip_words(name, words)) do
+        for _, n in pairs(flip_words(name, words)) do
             new_name(ctx, n)
         end
     end
     if cfg['flip_numbers'] then
-        for i, n in pairs(flip_numbers(name)) do
+        for _, n in pairs(flip_numbers(name)) do
             new_name(ctx, n)
         end
     end
     if cfg['add_numbers'] then
-        for i, n in pairs(append_numbers(name)) do
+        for _, n in pairs(append_numbers(name)) do
             new_name(ctx, n)
         end
     end
     if cfg['add_words'] then
-        for i, n in pairs(add_prefix_word(name, words)) do
+        for _, n in pairs(add_prefix_word(name, words)) do
             new_name(ctx, n)
         end
-        for i, n in pairs(add_suffix_word(name, words)) do
+        for _, n in pairs(add_suffix_word(name, words)) do
             new_name(ctx, n)
         end
     end
 
     local distance = cfg['edit_distance']
     if distance > 0 then
-        for i, n in pairs(fuzzy_label_searches(name, distance)) do
+        for _, n in pairs(fuzzy_label_searches(name, distance)) do
             new_name(ctx, n)
         end
     end
@@ -69,12 +69,12 @@ function flip_words(name, words)
     end
 
     local post = partial_join(parts, "-", 2, #parts)
-    for i, word in pairs(words) do
+    for _, word in pairs(words) do
         set_insert(s, word .. "-" .. post .. "." .. base)
     end
 
     local pre = partial_join(parts, "-", 1, #parts - 1)
-    for i, word in pairs(words) do
+    for _, word in pairs(words) do
         set_insert(s, pre .. "-" .. word .. "." .. base)
     end
 
@@ -101,7 +101,7 @@ function flip_numbers(name)
         -- Create an entry with the number removed
         set_insert(s, pre .. post .. "." .. base)
         local seq = num_seq(tonumber(string.sub(hostname, b, e)))
-        for i, sn in pairs(seq) do
+        for _, sn in pairs(seq) do
             set_insert(s, pre .. sn .. post .. "." .. base)
         end
     end
@@ -145,7 +145,7 @@ function add_prefix_word(name, words)
     local hostname = parts[1]
     local base = partial_join(parts, ".", 2, #parts)
 
-    for i, w in pairs(words) do
+    for _, w in pairs(words) do
         set_insert(s, w .. hostname .. "." .. base)
         set_insert(s, w .. "-" .. hostname .. "." .. base)
     end
@@ -159,7 +159,7 @@ function add_suffix_word(name, words)
     local hostname = parts[1]
     local base = partial_join(parts, ".", 2, #parts)
 
-    for i, w in pairs(words) do
+    for _, w in pairs(words) do
         set_insert(s, hostname .. w .. "." .. base)
         set_insert(s, hostname .. "-" .. w .. "." .. base)
     end
@@ -182,7 +182,7 @@ function fuzzy_label_searches(name, distance)
     end
 
     local results = {}
-    for i, n in pairs(set_elements(s)) do
+    for _, n in pairs(set_elements(s)) do
         set_insert(results, n .. "." .. base)
     end
 

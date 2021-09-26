@@ -39,6 +39,7 @@ function vertical(ctx, domain)
         headers={['Content-Type']="application/json"},
     })
     if (err ~= nil and err ~= "") then
+        log(ctx, "vertical request to service failed: " .. err)
         return
     end
 
@@ -86,6 +87,7 @@ function horizontal(ctx, domain)
         headers={['Content-Type']="application/json"},
     })
     if (err ~= nil and err ~= "") then
+        log(ctx, "horizontal request to service failed: " .. err)
         return
     end
 
@@ -144,6 +146,7 @@ function get_asn(ctx, ip, key)
         headers={['Content-Type']="application/json"},
     })
     if (err ~= nil and err ~= "") then
+        log(ctx, "get_asn request to service failed: " .. err)
         return 0
     end
 
@@ -169,6 +172,7 @@ function as_info(ctx, asn, key)
         headers={['Content-Type']="application/json"},
     })
     if (err ~= nil and err ~= "") then
+        log(ctx, "as_info request to service failed: " .. err)
         return nil
     end
 

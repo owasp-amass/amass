@@ -23,6 +23,7 @@ function vertical(ctx, domain)
             headers=hdrs,
         })
         if (err ~= nil and err ~= "") then
+            log(ctx, "vertical request to service failed: " .. err)
             break
         end
 

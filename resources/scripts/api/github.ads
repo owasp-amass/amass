@@ -36,10 +36,11 @@ function vertical(ctx, domain)
 
     for i=1,100 do
         local resp, err = request(ctx, {
-            url=build_url(domain, i),
+            ['url']=build_url(domain, i),
             headers={['Authorization']="token " .. c.key},
         })
         if (err ~= nil and err ~= "") then
+            log(ctx, "vertical request to service failed: " .. err)
             return
         end
 

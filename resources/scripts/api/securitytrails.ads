@@ -36,10 +36,11 @@ function vertical(ctx, domain)
 
     local vurl = "https://api.securitytrails.com/v1/domain/" .. domain .. "/subdomains"
     local resp, err = request(ctx, {
-        url=vurl,
+        ['url']=vurl,
         headers={APIKEY=c.key},
     })
     if (err ~= nil and err ~= "") then
+        log(ctx, "vertical request to service failed: " .. err)
         return
     end
 
@@ -66,10 +67,11 @@ function horizontal(ctx, domain)
 
     local hurl = "https://api.securitytrails.com/v1/domain/" .. domain .. "/associated"
     local resp, err = request(ctx, {
-        url=hurl,
+        ['url']=hurl,
         headers={APIKEY=c.key},
     })
     if (err ~= nil and err ~= "") then
+        log(ctx, "horizontal request to service failed: " .. err)
         return
     end
 

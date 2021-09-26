@@ -29,13 +29,14 @@ function vertical(ctx, domain)
 
     local resp, err = request(ctx, {url=vurl})
     if (err ~= nil and err ~= "") then
+        log(ctx, "vertical request to service failed: " .. err)
         return
     end
 
     local d = json.decode(resp)
     if haskey then
         if d['response_code'] ~= 1 then
-            log(ctx, name .. ": " .. vurl .. ": Response code " .. d['response_code'] .. ": " .. d['verbose_msg'])
+            log(ctx, vurl .. ": Response code " .. d['response_code'] .. ": " .. d['verbose_msg'])
             return
         end
 

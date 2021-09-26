@@ -46,6 +46,7 @@ function vertical(ctx, domain)
         headers={['Authorization']="JWT " .. token},
     })
     if (err ~= nil and err ~= "") then
+        log(ctx, "vertical request to service failed: " .. err)
         return
     end
 
@@ -85,6 +86,7 @@ function bearer_token(ctx, username, password)
         headers={['Content-Type']="application/json"},
     })
     if (err ~= nil and err ~= "") then
+        log(ctx, "bearer_token request to service failed: " .. err)
         return ""
     end
 

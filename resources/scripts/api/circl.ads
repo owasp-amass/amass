@@ -42,6 +42,7 @@ function vertical(ctx, domain)
         pass=c['password'],
     })
     if (err ~= nil and err ~= "") then
+        log(ctx, "vertical request to service failed: " .. err)
         return
     end
 

@@ -9,7 +9,7 @@ function start()
 end
 
 function vertical(ctx, domain)
-    scrape(ctx, {url=build_url(domain)})
+    scrape(ctx, {['url']=build_url(domain)})
 end
 
 function build_url(domain)
