@@ -101,6 +101,7 @@ github.com/bgentry/speakeasy v0.1.0/go.mod h1:+zsyZBPWlz7T6j88CTgSN5bM796AkVf0kB
 github.com/bketelsen/crypt v0.0.4/go.mod h1:aI6NrJ0pMGgvZKL1iVgXLnfIFJtfV+bKCoqOes/6LfM=
 github.com/boltdb/bolt v1.3.1 h1:JQmyP4ZBrce+ZQu0dY660FMfatumYDLun9hBCUVIkF4=
 github.com/boltdb/bolt v1.3.1/go.mod h1:clJnj/oiGkjum5o1McbSZDSLxVThjynRyGBgiAx27Ps=
+<<<<<<< HEAD
 github.com/caffix/eventbus v0.0.0-20210920204849-80ad577dc223 h1:b9kyyXDJLbjZr+rnvlWxiCXcyfDMArYLmbsgIIDDDkE=
 github.com/caffix/eventbus v0.0.0-20210920204849-80ad577dc223/go.mod h1:qVDKUEHP5eFKbGPDtbT7aT7jV3G2qLkbiKWYrP7Xenw=
 github.com/caffix/netmap v0.0.0-20210920194712-8d5679f7d783 h1:wkAEofCgns0Lz3k5RpAneWR81r4poBcUCG9LtsHXAas=
@@ -121,6 +122,38 @@ github.com/caffix/service v0.0.0-20210920205156-38bde8eb0503/go.mod h1:LYhdSmZXW
 github.com/caffix/stringset v0.0.0-20210920192539-d9d55f4dd469/go.mod h1:LlF238uAHb6xk7lg+L+nKj3yWAlxin2POgV4avSjAFw=
 github.com/caffix/stringset v0.0.0-20210920202210-bde5591d523d h1:dpCtvd6O9ogZIWLVImlllJgN/m0wHU7a+fo0VI8/FF8=
 github.com/caffix/stringset v0.0.0-20210920202210-bde5591d523d/go.mod h1:LlF238uAHb6xk7lg+L+nKj3yWAlxin2POgV4avSjAFw=
+=======
+github.com/buger/jsonparser v1.1.1 h1:2PnMjfWD7wBILjqQbt530v576A/cAbQvEW9gGIpYMUs=
+github.com/buger/jsonparser v1.1.1/go.mod h1:6RYKKt7H4d4+iWqouImQ9R2FZql3VbhNgx27UK13J/0=
+github.com/caffix/eventbus v0.0.0-20210522041342-56248842ee62 h1:ggGLhGnO6Tcrwi6XrRBJt2Zx+2/BkAFO4ZDWbsjXkSI=
+github.com/caffix/eventbus v0.0.0-20210522041342-56248842ee62/go.mod h1:IqiK9+A8aTFzfSvFZtHTCHd2wlJYHdToXUSultDJS44=
+github.com/caffix/eventbus v0.0.0-20210809004957-a6580c193ef5 h1:Tp0ZFt7jnTxxhlAOxwyJGyujvQZDkUeOJ3IL856yhlY=
+github.com/caffix/eventbus v0.0.0-20210809004957-a6580c193ef5/go.mod h1:IqiK9+A8aTFzfSvFZtHTCHd2wlJYHdToXUSultDJS44=
+github.com/caffix/netmap v0.0.0-20210608001100-88b18a6c45e6 h1:yhi18ikAk8J1TR7HwkRhd8tdd1kn2FaC/jSn8M61plE=
+github.com/caffix/netmap v0.0.0-20210608001100-88b18a6c45e6/go.mod h1:3Gx5QZK1v7wH/0sLeDcs46amOeDADZjoTBw17+Qqmfk=
+github.com/caffix/netmap v0.0.0-20210713232424-345ed04dd495 h1:6cQNXBh/DTtWZQcfksm8eeyY+FdtuDFxM/d/CloDw+w=
+github.com/caffix/netmap v0.0.0-20210713232424-345ed04dd495/go.mod h1:UK6UYL7jLYW5ON1Q8tjet8vL9YTbrrclVCRXQf+e8PU=
+github.com/caffix/netmap v0.0.0-20210715165045-3ed7a4527a3d h1:RlYHd4QM8I8ka1pcfKf5BizH/i+fmFuAmeJ37KnqZ3w=
+github.com/caffix/netmap v0.0.0-20210715165045-3ed7a4527a3d/go.mod h1:UK6UYL7jLYW5ON1Q8tjet8vL9YTbrrclVCRXQf+e8PU=
+github.com/caffix/netmap v0.0.0-20210716010443-7ef07a5facdd h1:ul1mVRrFVNjqE48SUUpIkipx78xifLe2G9x41ujS9Ks=
+github.com/caffix/netmap v0.0.0-20210716010443-7ef07a5facdd/go.mod h1:UcZx0j7+EvZwd8ZvZ/IJvpth/QfBq5zNZThgG1i2HnE=
+github.com/caffix/pipeline v0.0.0-20210522041607-d06330c4484a h1:hC5Aw5EM8IE7VuhITCtVSf25pGFETfzXXwDy+/Ne4pI=
+github.com/caffix/pipeline v0.0.0-20210522041607-d06330c4484a/go.mod h1:Y7x9r/rSUT+EFt8XjFk+hKVDGgxGPOgV5H9Kkg7dhdI=
+github.com/caffix/queue v0.0.0-20210420232735-50705a598e3e h1:gdc9OHKSHoi9h8V7V4KI4CJYlyD/9k91VPhLohp6Opg=
+github.com/caffix/queue v0.0.0-20210420232735-50705a598e3e/go.mod h1:jQmcf5a/YBH3dS7onNXaIG4dhfJLwPOQEj6B/PsXodI=
+github.com/caffix/resolve v0.0.0-20210608001200-208b45a02ad0 h1:CUySZ0Tk+NAwCGDUtnP03LIGJFQPePMKDmbARvD/FFI=
+github.com/caffix/resolve v0.0.0-20210608001200-208b45a02ad0/go.mod h1:7QXKdMOMG3Ic+6I3I+tZ5fGyVrRQetNI7Y2dDtSh4l4=
+github.com/caffix/resolve v0.0.0-20210713232312-b68cd71e4a53 h1:xlLztml3zVbRLG13Lujv69xZ/p2MeLMk9SXLFZuwkLk=
+github.com/caffix/resolve v0.0.0-20210713232312-b68cd71e4a53/go.mod h1:D5OjB905920GgG8W5cAl3NVgbX8xRLsA3gMJatt9Jg4=
+github.com/caffix/service v0.0.0-20210522041423-4707edf94ff2 h1:yRkXdZFQH1rt39uU9exHoeA8mIZoWFJG/LDB3SN55I0=
+github.com/caffix/service v0.0.0-20210522041423-4707edf94ff2/go.mod h1:2MgGcJyiRUPfXxYRnqMsD6ADpRMCEOEO2Qc7ZtbTTr4=
+github.com/caffix/service v0.0.0-20210723192808-9d6298e4e390 h1:/r6wvGSxknp9R1GbzPmY7/J+tMl1piyKPouQHhEf20I=
+github.com/caffix/service v0.0.0-20210723192808-9d6298e4e390/go.mod h1:2MgGcJyiRUPfXxYRnqMsD6ADpRMCEOEO2Qc7ZtbTTr4=
+github.com/caffix/stringset v0.0.0-20201218015502-4f60634ff035/go.mod h1:28GU9FTlJHzfjrFJ5Ep7vmXNkSSM3JF0miNt7ZM9V5w=
+github.com/caffix/stringset v0.0.0-20210420232605-81a3d140a6a2 h1:z0zS8S1/5ubEDqhztn25k/wFr6rfp+y6Qv/Yot9ZvUs=
+github.com/caffix/stringset v0.0.0-20210420232605-81a3d140a6a2/go.mod h1:nkPxBN9hKiSesggscqWn0fMhiQLuvYPCLWnPNewKlJo=
+github.com/casbin/casbin/v2 v2.1.2/go.mod h1:YcPU1XXisHhLzuxH9coDNf2FbKpjGlbCg3n9yuLkIJQ=
+>>>>>>> 9b9ca1e78fe84ad3a2e694281d62a61a534c60f5
 github.com/casbin/casbin/v2 v2.31.6/go.mod h1:vByNa/Fchek0KZUgG5wEsl7iFsiviAYKRtgrQfcJqHg=
 github.com/casbin/casbin/v2 v2.37.0/go.mod h1:vByNa/Fchek0KZUgG5wEsl7iFsiviAYKRtgrQfcJqHg=
 github.com/cayleygraph/cayley v0.7.7 h1:z+7xkAbg6bKiXJOtOkEG3zCm2K084sr/aGwFV7xcQNs=
@@ -244,7 +277,12 @@ github.com/flimzy/diff v0.1.5/go.mod h1:lFJtC7SPsK0EroDmGTSrdtWKAxOk3rO+q+e04LL0
 github.com/flimzy/diff v0.1.6/go.mod h1:lFJtC7SPsK0EroDmGTSrdtWKAxOk3rO+q+e04LL05Hs=
 github.com/flimzy/kivik v1.8.1/go.mod h1:S2aPycbG0eDFll4wgXt9uacSNkXISPufutnc9sv+mdA=
 github.com/flimzy/testy v0.1.16/go.mod h1:3szguN8NXqgq9bt9Gu8TQVj698PJWmyx/VY1frwwKrM=
+<<<<<<< HEAD
 github.com/fogleman/gg v1.2.1-0.20190220221249-0403632d5b90/go.mod h1:R/bRT+9gY/C5z7JzPU0zXsXHKM4/ayA+zqcVNZzPa1k=
+=======
+github.com/fofapro/fofa-go v0.0.0-20200317042037-c0caee09013d h1:UiqIc/3lkMuU/N3KPO0idxX5JDWxwxEexbc38IV3+0s=
+github.com/fofapro/fofa-go v0.0.0-20200317042037-c0caee09013d/go.mod h1:hcTueqMxqEIm7jD0wK7+rEJVvieYVgXv6Cif8PZsB2U=
+>>>>>>> 9b9ca1e78fe84ad3a2e694281d62a61a534c60f5
 github.com/fortytw2/leaktest v1.2.0/go.mod h1:jDsjWgpAGjm2CA7WthBh/CdZYEPF31XHquHwclZch5g=
 github.com/fortytw2/leaktest v1.3.0 h1:u8491cBMTQ8ft8aeV+adlcytMZylmA5nnwwkRZjI8vw=
 github.com/fortytw2/leaktest v1.3.0/go.mod h1:jDsjWgpAGjm2CA7WthBh/CdZYEPF31XHquHwclZch5g=

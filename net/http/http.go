@@ -15,6 +15,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/cookiejar"
+	"net/http/httputil"
 	"net/url"
 	"regexp"
 	"runtime"
@@ -40,16 +41,17 @@ const (
 	AcceptLang = "en-US,en;q=0.5"
 
 	httpTimeout      = 30 * time.Second
-	handshakeTimeout = 5 * time.Second
+	handshakeTimeout = 10 * time.Second
 )
 
 var (
 	// UserAgent is the default user agent used by Amass during HTTP requests.
-	UserAgent      string
-	subRE          = dns.AnySubdomainRegex()
-	crawlRE        = regexp.MustCompile(`\.\w{3,4}($|\?)`)
-	crawlFileTypes = []string{".html", ".htm", "xhtml", ".js", ".php"}
-	nameStripRE    = regexp.MustCompile(`^u[0-9a-f]{4}|20|22|25|2b|2f|3d|3a|40`)
+	UserAgent       string
+	subRE           = dns.AnySubdomainRegex()
+	crawlRE         = regexp.MustCompile(`\.\w{2,6}($|\?|#)`)
+	crawlFileEnds   = []string{"html", "do", "action", "cgi"}
+	crawlFileStarts = []string{"js", "htm", "as", "php", "inc"}
+	nameStripRE     = regexp.MustCompile(`^u[0-9a-f]{4}|20|22|25|27|2b|2f|3d|3a|40`)
 )
 
 // DefaultClient is the same HTTP client used by the package methods.
@@ -192,11 +194,14 @@ func Crawl(ctx context.Context, u string, scope []string, max int, f filter.Filt
 		RequestDelay:          750 * time.Millisecond,
 		RequestDelayRandomize: true,
 		ParseFunc: func(g *geziyor.Geziyor, r *client.Response) {
-			for _, n := range subRE.FindAllString(string(r.Body), -1) {
-				if name := CleanName(n); whichDomain(name, scope) != "" {
-					m.Lock()
-					results.Insert(name)
-					m.Unlock()
+			resp, err := httputil.DumpResponse(interface{}(r).(*http.Response), true)
+			if err == nil {
+				for _, n := range subRE.FindAllString(string(resp), -1) {
+					if name := CleanName(n); whichDomain(name, scope) != "" {
+						m.Lock()
+						results.Insert(name)
+						m.Unlock()
+					}
 				}
 			}
 
@@ -272,8 +277,14 @@ func crawlFilterURLs(p *url.URL, f filter.Filter) string {
 		ext = strings.ToLower(ext)
 
 		var found bool
-		for _, t := range crawlFileTypes {
-			if ext == t {
+		for _, s := range crawlFileStarts {
+			if strings.HasPrefix(ext, "." + s) {
+				found = true
+				break
+			}
+		}
+		for _, e := range crawlFileEnds {
+			if strings.HasSuffix(ext, e) {
 				found = true
 				break
 			}
@@ -320,31 +331,7 @@ func PullCertificateNames(ctx context.Context, addr string, ports []int) []strin
 		default:
 		}
 
-		// Set the maximum time allowed for making the connection
-		tCtx, cancel := context.WithTimeout(ctx, handshakeTimeout)
-		defer cancel()
-		// Obtain the connection
-		conn, err := amassnet.DialContext(tCtx, "tcp", net.JoinHostPort(addr, strconv.Itoa(port)))
-		if err != nil {
-			continue
-		}
-		defer conn.Close()
-
-		c := tls.Client(conn, &tls.Config{InsecureSkipVerify: true})
-		// Attempt to acquire the certificate chain
-		errChan := make(chan error, 2)
-		go func() {
-			errChan <- c.Handshake()
-		}()
-
-		t := time.NewTimer(handshakeTimeout)
-		select {
-		case <-t.C:
-			err = errors.New("Handshake timeout")
-		case e := <-errChan:
-			err = e
-		}
-		t.Stop()
+		c, err := TLSConn(ctx, addr, port)
 
 		if err != nil {
 			continue
@@ -357,6 +344,37 @@ func PullCertificateNames(ctx context.Context, addr string, ports []int) []strin
 	}
 
 	return names
+}
+
+// TLSConn attempts to make a TLS connection with the host on given port
+func TLSConn(ctx context.Context, host string, port int) (*tls.Conn, error) {
+	// Set the maximum time allowed for making the connection
+	tCtx, cancel := context.WithTimeout(ctx, handshakeTimeout)
+	defer cancel()
+	// Obtain the connection
+	conn, err := amassnet.DialContext(tCtx, "tcp", net.JoinHostPort(host, strconv.Itoa(port)))
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+
+	c := tls.Client(conn, &tls.Config{InsecureSkipVerify: true})
+	// Attempt to acquire the certificate chain
+	errChan := make(chan error, 2)
+	go func() {
+		errChan <- c.Handshake()
+	}()
+
+	t := time.NewTimer(handshakeTimeout)
+	select {
+	case <-t.C:
+		err = errors.New("Handshake timeout")
+	case e := <-errChan:
+		err = e
+	}
+	t.Stop()
+
+	return c, err
 }
 
 func namesFromCert(cert *x509.Certificate) []string {
