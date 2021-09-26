@@ -1,9 +1,10 @@
 -- Copyright 2021 Jeff Foley. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
+local url = require("url")
 local json = require("json")
 
-name = "ThreatBook"
+name = "Ahrefs"
 type = "api"
 
 function start()
@@ -40,15 +41,25 @@ function vertical(ctx, domain)
     end
 
     local d = json.decode(resp)
-    if (d == nil or d.response_code ~= 0 or #(d.sub_domains.data) == 0) then
+    if (d == nil or d.refpages == nil or #d.refpages == 0) then
         return
     end
 
-    for i, sub in pairs(d.sub_domains.data) do
-        new_name(ctx, sub)
+    for _, r in pairs(d.refpages) do
+        send_names(ctx, r.url_to)
     end
 end
 
 function build_url(domain, key)
-    return "https://api.threatbook.cn/v3/domain/sub_domains?apikey=" .. key .. "&resource=" .. domain
+    local params = {
+        ['target']=domain,
+        ['token']=key,
+        ['from']="backlinks",
+        ['mode']="subdomains",
+        ['limit']="1000",
+        ['order_by']="first_seen%3Adesc",
+        ['output']="json",
+    }
+
+    return "https://apiv2.ahrefs.com/?" .. url.build_query_string(params)
 end

@@ -41,7 +41,7 @@ const (
 	AcceptLang = "en-US,en;q=0.8"
 
 	httpTimeout      = 30 * time.Second
-	handshakeTimeout = 5 * time.Second
+	handshakeTimeout = 10 * time.Second
 )
 
 var (
