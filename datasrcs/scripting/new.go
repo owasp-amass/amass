@@ -58,6 +58,7 @@ func (s *Script) sendNames(L *lua.LState) int {
 
 func (s *Script) internalSendNames(ctx context.Context, content string) int {
 	filter := stringset.New()
+	defer filter.Close()
 
 	for _, name := range s.subre.FindAllString(string(content), -1) {
 		if n := http.CleanName(name); n != "" && !filter.Has(n) {
@@ -127,12 +128,12 @@ func (s *Script) newASN(L *lua.LState) int {
 				return 0
 			}
 
-			netblocks := stringset.New(cidr.String())
+			netblocks := []string{cidr.String()}
 			lv := L.GetField(params, "netblocks")
 			if tbl, ok := lv.(*lua.LTable); ok {
 				tbl.ForEach(func(_, v lua.LValue) {
 					if _, cidr, err := net.ParseCIDR(v.String()); err == nil {
-						netblocks.Insert(cidr.String())
+						netblocks = append(netblocks, cidr.String())
 					}
 				})
 			}

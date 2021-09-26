@@ -235,9 +235,8 @@ func (u *Umbrella) executeASNAddrQuery(ctx context.Context, req *requests.ASNReq
 	req.Description = as[0].Description
 	req.Tag = u.SourceType
 	req.Source = u.String()
-	if req.Netblocks == nil {
-		req.Netblocks = stringset.New()
-		req.Netblocks.Insert(strings.TrimSpace(req.Prefix))
+	if len(req.Netblocks) == 0 {
+		req.Netblocks = []string{strings.TrimSpace(req.Prefix)}
 
 		u.CheckRateLimit()
 		u.executeASNQuery(ctx, req)
@@ -270,12 +269,8 @@ func (u *Umbrella) executeASNQuery(ctx context.Context, req *requests.ASNRequest
 		return
 	}
 
-	if req.Netblocks == nil {
-		req.Netblocks = stringset.New()
-	}
-
 	for _, nb := range netblock {
-		req.Netblocks.Insert(strings.TrimSpace(nb.CIDR))
+		req.Netblocks = append(req.Netblocks, strings.TrimSpace(nb.CIDR))
 		if nb.CIDR == req.Prefix {
 			req.CC = nb.Geo.CountryCode
 		}
@@ -329,6 +324,7 @@ type rWhoisResponse struct {
 
 func (u *Umbrella) collateEmails(ctx context.Context, record *whoisRecord) []string {
 	emails := stringset.New()
+	defer emails.Close()
 
 	if u.validateScope(ctx, record.AdminContactEmail) {
 		emails.InsertMany(record.AdminContactEmail)
@@ -375,6 +371,8 @@ func (u *Umbrella) queryWhois(ctx context.Context, domain string) *whoisRecord {
 
 func (u *Umbrella) queryReverseWhois(ctx context.Context, apiURL string) []string {
 	domains := stringset.New()
+	defer domains.Close()
+
 	headers := u.restHeaders()
 	var whois map[string]rWhoisResponse
 
@@ -413,6 +411,7 @@ func (u *Umbrella) queryReverseWhois(ctx context.Context, apiURL string) []strin
 			}
 		}
 	}
+
 	return domains.Slice()
 }
 
@@ -445,6 +444,8 @@ func (u *Umbrella) whoisRequest(ctx context.Context, req *requests.WhoisRequest)
 	}
 
 	domains := stringset.New()
+	defer domains.Close()
+
 	emails := u.collateEmails(ctx, whoisRecord)
 	if len(emails) > 0 {
 		emailURL := u.reverseWhoisByEmailURL(emails...)
@@ -470,7 +471,7 @@ func (u *Umbrella) whoisRequest(ctx context.Context, req *requests.WhoisRequest)
 		}
 	}
 
-	if len(domains) > 0 {
+	if domains.Len() > 0 {
 		bus.Publish(requests.NewWhoisTopic, eventbus.PriorityHigh, &requests.WhoisRequest{
 			Domain:     req.Domain,
 			NewDomains: domains.Slice(),

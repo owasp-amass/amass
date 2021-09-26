@@ -34,10 +34,10 @@ import (
 
 const (
 	// Accept is the default HTTP Accept header value used by Amass.
-	Accept = "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+	Accept = "text/html,application/json,application/xhtml+xml,application/xml;q=0.5,*/*;q=0.2"
 
 	// AcceptLang is the default HTTP Accept-Language header value used by Amass.
-	AcceptLang = "en-US,en;q=0.8"
+	AcceptLang = "en-US,en;q=0.5"
 
 	httpTimeout      = 30 * time.Second
 	handshakeTimeout = 5 * time.Second
@@ -72,7 +72,7 @@ func init() {
 			MaxConnsPerHost:       50,
 			IdleConnTimeout:       90 * time.Second,
 			TLSHandshakeTimeout:   handshakeTimeout,
-			ExpectContinueTimeout: 10 * time.Second,
+			ExpectContinueTimeout: 5 * time.Second,
 			TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
 		},
 		Jar: jar,
@@ -120,13 +120,15 @@ func RequestWebPage(ctx context.Context, u string, body io.Reader, hvals map[str
 	if err != nil {
 		return "", err
 	}
+	req.Close = true
+
 	if auth != nil && auth.Username != "" && auth.Password != "" {
 		req.SetBasicAuth(auth.Username, auth.Password)
 	}
+
 	req.Header.Set("User-Agent", UserAgent)
 	req.Header.Set("Accept", Accept)
 	req.Header.Set("Accept-Language", AcceptLang)
-
 	for k, v := range hvals {
 		req.Header.Set(k, v)
 	}
@@ -140,7 +142,7 @@ func RequestWebPage(ctx context.Context, u string, body io.Reader, hvals map[str
 	resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 400 {
-		err = errors.New(resp.Status)
+		err = fmt.Errorf("%d: %s", resp.StatusCode, resp.Status)
 	}
 	return string(in), err
 }
@@ -171,11 +173,14 @@ func Crawl(ctx context.Context, u string, scope []string, max int, f filter.Filt
 
 	if f == nil {
 		f = filter.NewStringFilter()
+		defer f.Close()
 	}
 
 	var count int
 	var m sync.Mutex
 	results := stringset.New()
+	defer results.Close()
+
 	g := geziyor.NewGeziyor(&geziyor.Options{
 		AllowedDomains:        newScope,
 		StartURLs:             []string{u},
@@ -368,6 +373,8 @@ func namesFromCert(cert *x509.Certificate) []string {
 	}
 
 	subdomains := stringset.New()
+	defer subdomains.Close()
+
 	// Add the subject common name to the list of subdomain names
 	commonName := dns.RemoveAsteriskLabel(cn)
 	if commonName != "" {

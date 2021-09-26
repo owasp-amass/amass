@@ -18,7 +18,6 @@ import (
 	"github.com/caffix/eventbus"
 	"github.com/caffix/resolve"
 	"github.com/caffix/service"
-	"github.com/caffix/stringset"
 	"github.com/miekg/dns"
 )
 
@@ -150,7 +149,7 @@ func (t *TeamCymru) origin(ctx context.Context, addr string) *requests.ASNReques
 		CC:             strings.TrimSpace(fields[2]),
 		Registry:       strings.TrimSpace(fields[3]),
 		AllocationDate: at,
-		Netblocks:      stringset.New(strings.TrimSpace(fields[1])),
+		Netblocks:      []string{strings.TrimSpace(fields[1])},
 		Tag:            t.SourceType,
 		Source:         t.String(),
 	}

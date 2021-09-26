@@ -181,7 +181,9 @@ func (n *NetworksDB) getIPURL(addr string) string {
 	return networksdbBaseURL + "/ip/" + addr
 }
 
-func (n *NetworksDB) executeASNQuery(ctx context.Context, asn int, addr string, netblocks stringset.Set) {
+func (n *NetworksDB) executeASNQuery(ctx context.Context, asn int, addr string, netblocks *stringset.Set) {
+	defer netblocks.Close()
+
 	_, bus, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return
@@ -223,14 +225,14 @@ func (n *NetworksDB) executeASNQuery(ctx context.Context, asn int, addr string, 
 	if addr != "" {
 		ip := net.ParseIP(addr)
 
-		for cidr := range netblocks {
+		for _, cidr := range netblocks.Slice() {
 			if _, ipnet, err := net.ParseCIDR(cidr); err == nil && ipnet.Contains(ip) {
 				prefix = cidr
 				break
 			}
 		}
 	}
-	if prefix == "" && len(netblocks) > 0 {
+	if prefix == "" && netblocks.Len() > 0 {
 		prefix = netblocks.Slice()[0] // TODO order may matter here :shrug:
 	}
 
@@ -240,7 +242,7 @@ func (n *NetworksDB) executeASNQuery(ctx context.Context, asn int, addr string, 
 		Prefix:      prefix,
 		CC:          cc,
 		Description: name + ", " + cc,
-		Netblocks:   netblocks,
+		Netblocks:   netblocks.Slice(),
 		Tag:         n.SourceType,
 		Source:      n.String(),
 	})
@@ -275,18 +277,21 @@ func (n *NetworksDB) executeAPIASNAddrQuery(ctx context.Context, addr string) {
 
 	var asn int
 	cidrs := stringset.New()
+	defer cidrs.Close()
 	ip := net.ParseIP(addr)
 loop:
 	for _, a := range asns {
 		numRateLimitChecks(n, 3)
 		cidrs = n.apiNetblocksQuery(ctx, a)
-		if len(cidrs) == 0 {
+		defer cidrs.Close()
+
+		if cidrs.Len() == 0 {
 			bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 				fmt.Sprintf("%s: %d: Failed to obtain netblocks associated with the ASN", n.String(), a),
 			)
 		}
 
-		for cidr := range cidrs {
+		for _, cidr := range cidrs.Slice() {
 			if _, ipnet, err := net.ParseCIDR(cidr); err == nil {
 				if ipnet.Contains(ip) {
 					asn = a
@@ -305,18 +310,19 @@ loop:
 	n.executeAPIASNQuery(ctx, asn, addr, cidrs)
 }
 
-func (n *NetworksDB) executeAPIASNQuery(ctx context.Context, asn int, addr string, netblocks stringset.Set) {
+func (n *NetworksDB) executeAPIASNQuery(ctx context.Context, asn int, addr string, netblocks *stringset.Set) {
 	_, bus, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return
 	}
 	if netblocks == nil {
 		netblocks = stringset.New()
+		defer netblocks.Close()
 	}
 
-	if len(netblocks) == 0 {
+	if netblocks.Len() == 0 {
 		netblocks.Union(n.apiNetblocksQuery(ctx, asn))
-		if len(netblocks) == 0 {
+		if netblocks.Len() == 0 {
 			bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 				fmt.Sprintf("%s: %d: Failed to obtain netblocks associated with the ASN", n.String(), asn),
 			)
@@ -327,7 +333,7 @@ func (n *NetworksDB) executeAPIASNQuery(ctx context.Context, asn int, addr strin
 	var prefix string
 	if addr != "" {
 		ip := net.ParseIP(addr)
-		for cidr := range netblocks {
+		for _, cidr := range netblocks.Slice() {
 			if _, ipnet, err := net.ParseCIDR(cidr); err == nil && ipnet.Contains(ip) {
 				prefix = cidr
 				break
@@ -351,7 +357,7 @@ func (n *NetworksDB) executeAPIASNQuery(ctx context.Context, asn int, addr strin
 		req.Address = addr
 	}
 	req.Prefix = prefix
-	req.Netblocks = netblocks
+	req.Netblocks = netblocks.Slice()
 	bus.Publish(requests.NewASNTopic, eventbus.PriorityHigh, req)
 }
 
@@ -499,7 +505,7 @@ func (n *NetworksDB) getAPIASNInfoURL() string {
 	return networksdbBaseURL + networksdbAPIPATH + "/as/info"
 }
 
-func (n *NetworksDB) apiNetblocksQuery(ctx context.Context, asn int) stringset.Set {
+func (n *NetworksDB) apiNetblocksQuery(ctx context.Context, asn int) *stringset.Set {
 	netblocks := stringset.New()
 
 	_, bus, err := requests.ContextConfigBus(ctx)
@@ -584,6 +590,8 @@ func (n *NetworksDB) whoisRequest(ctx context.Context, req *requests.WhoisReques
 	}
 
 	newdomains := stringset.New()
+	defer newdomains.Close()
+
 	re := dns.AnySubdomainRegex()
 	for _, match := range matches {
 		if len(match) < 2 {

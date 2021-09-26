@@ -4,6 +4,7 @@
 package enum
 
 import (
+	"context"
 	"time"
 
 	"github.com/OWASP/Amass/v3/filter"
@@ -13,15 +14,19 @@ import (
 
 func (e *Enumeration) submitKnownNames() {
 	filter := filter.NewStringFilter()
-	srcTags := make(map[string]string)
+	defer filter.Close()
 
+	srcTags := make(map[string]string)
 	for _, src := range e.Sys.DataSources() {
 		srcTags[src.String()] = src.Description()
 	}
 
+	tCtx, cancel := context.WithTimeout(e.ctx, time.Minute)
+	defer cancel()
+
 	for _, g := range e.Sys.GraphDatabases() {
-		for _, event := range g.EventsInScope(e.Config.Domains()...) {
-			for _, name := range g.EventFQDNs(event) {
+		for _, event := range g.EventsInScope(tCtx, e.Config.Domains()...) {
+			for _, name := range g.EventFQDNs(tCtx, event) {
 				select {
 				case <-e.done:
 					return
@@ -33,7 +38,7 @@ func (e *Enumeration) submitKnownNames() {
 				}
 
 				if domain := e.Config.WhichDomain(name); domain != "" {
-					if srcs, err := g.NodeSources(netmap.Node(name), event); err == nil {
+					if srcs, err := g.NodeSources(tCtx, netmap.Node(name), event); err == nil {
 						src := srcs[0]
 						tag := srcTags[src]
 

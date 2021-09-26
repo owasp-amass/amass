@@ -14,6 +14,7 @@ func TestNewNames(t *testing.T) {
 	expected := stringset.New("owasp.org", "www.owasp.org", "ftp.owasp.org", "mail.owasp.org",
 		"dev.owasp.org", "prod.owasp.org", "vpn.owasp.org", "uat.owasp.org", "stage.owasp.org",
 		"confluence.owasp.org", "api.owasp.org", "test.owasp.org")
+	defer expected.Close()
 
 	ctx, sys := setupMockScriptEnv(`
 		name="names"
@@ -52,7 +53,7 @@ func TestNewNames(t *testing.T) {
 		t.Fatal("Failed to obtain the config and event bus")
 	}
 
-	num := len(expected)
+	num := expected.Len()
 	ch := make(chan *requests.DNSRequest, num)
 	fn := func(req *requests.DNSRequest) {
 		ch <- req
@@ -79,6 +80,7 @@ func TestNewNames(t *testing.T) {
 func TestNewAddrs(t *testing.T) {
 	expected := stringset.New("72.237.4.113", "72.237.4.114", "72.237.4.35", "72.237.4.38", "72.237.4.79",
 		"72.237.4.90", "72.237.4.103", "72.237.4.243", "4.26.24.234", "44.193.34.238", "52.206.190.41", "18.211.32.87")
+	defer expected.Close()
 
 	ctx, sys := setupMockScriptEnv(`
 		name="addrs"
@@ -104,7 +106,7 @@ func TestNewAddrs(t *testing.T) {
 		t.Fatal("Failed to obtain the config and event bus")
 	}
 
-	num := len(expected)
+	num := expected.Len()
 	ch := make(chan *requests.AddrRequest, num)
 	fn := func(req *requests.AddrRequest) {
 		ch <- req
@@ -135,7 +137,7 @@ func TestNewASNs(t *testing.T) {
 			ASN:         26808,
 			Prefix:      "72.237.4.0/24",
 			Description: "UTICA-COLLEGE - Utica College",
-			Netblocks:   stringset.New("72.237.4.0/24"),
+			Netblocks:   []string{"72.237.4.0/24"},
 			Tag:         "testing",
 			Source:      "asns",
 		},
@@ -146,7 +148,7 @@ func TestNewASNs(t *testing.T) {
 			CC:          "US",
 			Registry:    "ARIN",
 			Description: "CLOUDFLARENET - Cloudflare, Inc.",
-			Netblocks:   stringset.New("104.16.0.0/14", "2606:4700::/47"),
+			Netblocks:   []string{"104.16.0.0/14", "2606:4700::/47"},
 			Tag:         "testing",
 			Source:      "asns",
 		},
@@ -262,12 +264,17 @@ func matchingASNs(first, second *requests.ASNRequest) bool {
 		match = false
 	}
 
-	nb := first.Netblocks
+	nb := stringset.New(first.Netblocks...)
+	defer nb.Close()
+
 	if nb.Len() == 0 {
 		match = false
 	}
 
-	nb.Subtract(second.Netblocks)
+	snb := stringset.New(second.Netblocks...)
+	defer snb.Close()
+
+	nb.Subtract(snb)
 	if nb.Len() != 0 {
 		match = false
 	}

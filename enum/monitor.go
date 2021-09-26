@@ -14,11 +14,11 @@ const falsePositiveThreshold int = 100
 func (e *Enumeration) checkForMissedWildcards(ip string) {
 	addr := netmap.Node(ip)
 
-	if count, err := e.Graph.CountInEdges(addr, "a_record", "aaaa_record"); err != nil || count < falsePositiveThreshold {
+	if count, err := e.Graph.CountInEdges(e.ctx, addr, "a_record", "aaaa_record"); err != nil || count < falsePositiveThreshold {
 		return
 	}
 
-	edges, err := e.Graph.ReadInEdges(addr, "a_record", "aaaa_record")
+	edges, err := e.Graph.ReadInEdges(e.ctx, addr, "a_record", "aaaa_record")
 	if err != nil {
 		return
 	}
@@ -42,7 +42,7 @@ func (e *Enumeration) checkForMissedWildcards(ip string) {
 
 		e.Config.BlacklistSubdomain(sub)
 		for _, node := range nodes {
-			_ = e.Graph.DeleteNode(node)
+			_ = e.Graph.DeleteNode(e.ctx, node)
 		}
 	}
 }

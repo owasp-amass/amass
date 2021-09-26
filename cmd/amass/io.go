@@ -4,6 +4,7 @@
 package main
 
 import (
+	"context"
 	"math/rand"
 	"net"
 	"time"
@@ -23,26 +24,27 @@ func init() {
 }
 
 // ExtractOutput is a convenience method for obtaining new discoveries made by the enumeration process.
-func ExtractOutput(e *enum.Enumeration, filter filter.Filter, asinfo bool, limit int) []*requests.Output {
+func ExtractOutput(ctx context.Context, e *enum.Enumeration, filter filter.Filter, asinfo bool, limit int) []*requests.Output {
 	if e.Config.Passive {
-		return EventNames(e.Graph, e.Config.UUID.String(), filter)
+		return EventNames(ctx, e.Graph, e.Config.UUID.String(), filter)
 	}
 
-	return EventOutput(e.Graph, e.Config.UUID.String(), filter, asinfo, e.Sys.Cache(), limit)
+	return EventOutput(ctx, e.Graph, e.Config.UUID.String(), filter, asinfo, e.Sys.Cache(), limit)
 }
 
 type outLookup map[string]*requests.Output
 
 // EventOutput returns findings within the receiver Graph for the event identified by the uuid string
 // parameter and not already in the filter StringFilter argument. The filter is updated by EventOutput.
-func EventOutput(g *netmap.Graph, uuid string, f filter.Filter, asninfo bool, cache *requests.ASNCache, limit int) []*requests.Output {
+func EventOutput(ctx context.Context, g *netmap.Graph, uuid string, f filter.Filter, asninfo bool, cache *requests.ASNCache, limit int) []*requests.Output {
 	// Make sure a filter has been created
 	if f == nil {
 		f = filter.NewStringFilter()
+		defer f.Close()
 	}
 
 	var fqdns []string
-	for _, name := range g.EventFQDNs(uuid) {
+	for _, name := range g.EventFQDNs(ctx, uuid) {
 		if !f.Has(name) {
 			fqdns = append(fqdns, name)
 		}
@@ -50,11 +52,11 @@ func EventOutput(g *netmap.Graph, uuid string, f filter.Filter, asninfo bool, ca
 
 	names := randomSelection(fqdns, limit)
 	lookup := make(outLookup, len(names))
-	for _, o := range buildNameInfo(g, uuid, names) {
+	for _, o := range buildNameInfo(ctx, g, uuid, names) {
 		lookup[o.Name] = o
 	}
 
-	pairs, err := g.NamesToAddrs(uuid, names...)
+	pairs, err := g.NamesToAddrs(ctx, uuid, names...)
 	if err != nil {
 		return nil
 	}
@@ -134,21 +136,22 @@ func addInfrastructureInfo(lookup outLookup, filter filter.Filter, cache *reques
 
 // EventNames returns findings within the receiver Graph for the event identified by the uuid string
 // parameter and not already in the filter StringFilter argument. The filter is updated by EventNames.
-func EventNames(g *netmap.Graph, uuid string, f filter.Filter) []*requests.Output {
+func EventNames(ctx context.Context, g *netmap.Graph, uuid string, f filter.Filter) []*requests.Output {
 	// Make sure a filter has been created
 	if f == nil {
 		f = filter.NewStringFilter()
+		defer f.Close()
 	}
 
 	var names []string
-	for _, name := range g.EventFQDNs(uuid) {
+	for _, name := range g.EventFQDNs(ctx, uuid) {
 		if !f.Has(name) {
 			names = append(names, name)
 		}
 	}
 
 	var results []*requests.Output
-	for _, o := range buildNameInfo(g, uuid, names) {
+	for _, o := range buildNameInfo(ctx, g, uuid, names) {
 		if !f.Duplicate(o.Name) {
 			results = append(results, o)
 		}
@@ -156,7 +159,7 @@ func EventNames(g *netmap.Graph, uuid string, f filter.Filter) []*requests.Outpu
 	return results
 }
 
-func buildNameInfo(g *netmap.Graph, uuid string, names []string) []*requests.Output {
+func buildNameInfo(ctx context.Context, g *netmap.Graph, uuid string, names []string) []*requests.Output {
 	results := make(map[string]*requests.Output, len(names))
 
 	for _, name := range names {
@@ -165,7 +168,7 @@ func buildNameInfo(g *netmap.Graph, uuid string, names []string) []*requests.Out
 		}
 
 		n := netmap.Node(name)
-		if srcs, err := g.NodeSources(n, uuid); err == nil && len(srcs) > 0 {
+		if srcs, err := g.NodeSources(ctx, n, uuid); err == nil && len(srcs) > 0 {
 			results[name] = &requests.Output{
 				Name:    name,
 				Sources: srcs,

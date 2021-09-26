@@ -137,7 +137,11 @@ func (a *AlienVault) executeDNSQuery(ctx context.Context, req *requests.DNSReque
 	}
 
 	ips := stringset.New()
+	defer ips.Close()
+
 	names := stringset.New()
+	defer names.Close()
+
 	for _, sub := range m.Subdomains {
 		n := strings.ToLower(sub.Hostname)
 
@@ -149,11 +153,11 @@ func (a *AlienVault) executeDNSQuery(ctx context.Context, req *requests.DNSReque
 		}
 	}
 
-	for name := range names {
+	for _, name := range names.Slice() {
 		genNewNameEvent(ctx, a.sys, a, name)
 	}
 
-	for ip := range ips {
+	for _, ip := range ips.Slice() {
 		bus.Publish(requests.NewAddrTopic, eventbus.PriorityHigh, &requests.AddrRequest{
 			Address: ip,
 			Domain:  req.Domain,
@@ -209,11 +213,16 @@ func (a *AlienVault) executeURLQuery(ctx context.Context, req *requests.DNSReque
 	}
 
 	ips := stringset.New()
+	defer ips.Close()
+
 	names := stringset.New()
+	defer names.Close()
+
 	extractNamesIPs(m.URLs, names, ips, re)
 	// If there are additional pages of URLs, obtain that info as well
 	if m.HasNext {
 		pages := int(math.Ceil(float64(m.FullSize) / float64(m.Limit)))
+
 		for cur := m.PageNum + 1; cur <= pages; cur++ {
 			a.CheckRateLimit()
 			pageURL := u + "?page=" + strconv.Itoa(cur)
@@ -239,11 +248,11 @@ func (a *AlienVault) executeURLQuery(ctx context.Context, req *requests.DNSReque
 		}
 	}
 
-	for name := range names {
+	for _, name := range names.Slice() {
 		genNewNameEvent(ctx, a.sys, a, name)
 	}
 
-	for ip := range ips {
+	for _, ip := range ips.Slice() {
 		bus.Publish(requests.NewAddrTopic, eventbus.PriorityHigh, &requests.AddrRequest{
 			Address: ip,
 			Domain:  req.Domain,
@@ -253,7 +262,7 @@ func (a *AlienVault) executeURLQuery(ctx context.Context, req *requests.DNSReque
 	}
 }
 
-func extractNamesIPs(urls []avURL, names stringset.Set, ips stringset.Set, re *regexp.Regexp) {
+func extractNamesIPs(urls []avURL, names *stringset.Set, ips *stringset.Set, re *regexp.Regexp) {
 	for _, u := range urls {
 		n := strings.ToLower(u.Hostname)
 
@@ -276,6 +285,8 @@ func (a *AlienVault) executeWhoisQuery(ctx context.Context, req *requests.WhoisR
 	a.CheckRateLimit()
 
 	newDomains := stringset.New()
+	defer newDomains.Close()
+
 	headers := a.getHeaders()
 	for _, email := range emails {
 		pageURL := a.getReverseWhoisURL(email)
@@ -303,7 +314,7 @@ func (a *AlienVault) executeWhoisQuery(ctx context.Context, req *requests.WhoisR
 		a.CheckRateLimit()
 	}
 
-	if len(newDomains) == 0 {
+	if newDomains.Len() == 0 {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: Reverse whois failed to discover new domain names for %s", a.String(), req.Domain),
 		)
@@ -320,8 +331,9 @@ func (a *AlienVault) executeWhoisQuery(ctx context.Context, req *requests.WhoisR
 
 func (a *AlienVault) queryWhoisForEmails(ctx context.Context, req *requests.WhoisRequest) []string {
 	emails := stringset.New()
-	u := a.getWhoisURL(req.Domain)
+	defer emails.Close()
 
+	u := a.getWhoisURL(req.Domain)
 	cfg, bus, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return emails.Slice()

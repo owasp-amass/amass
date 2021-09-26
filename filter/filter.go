@@ -4,8 +4,6 @@
 package filter
 
 import (
-	"sync"
-
 	"github.com/AndreasBriese/bbloom"
 	"github.com/caffix/stringset"
 )
@@ -18,13 +16,15 @@ type Filter interface {
 
 	// Has returns true if the receiver StringFilter already contains the string argument.
 	Has(s string) bool
+
+	// Release resources allocated by the filter.
+	Close()
 }
 
 // StringFilter implements the Filter interface using a Set
 // so that only unique items get through the filter.
 type StringFilter struct {
-	sync.Mutex
-	filter stringset.Set
+	filter *stringset.Set
 }
 
 // NewStringFilter returns an initialized StringFilter.
@@ -32,12 +32,15 @@ func NewStringFilter() *StringFilter {
 	return &StringFilter{filter: stringset.New()}
 }
 
+// Close implements the Filter interface.
+func (r *StringFilter) Close() {
+	r.filter.Close()
+}
+
 // Duplicate implements the Filter interface.
 func (r *StringFilter) Duplicate(s string) bool {
-	r.Lock()
-	defer r.Unlock()
-
 	found := r.filter.Has(s)
+
 	if !found {
 		r.filter.Insert(s)
 	}
@@ -47,9 +50,6 @@ func (r *StringFilter) Duplicate(s string) bool {
 
 // Has implements the Filter interface.
 func (r *StringFilter) Has(s string) bool {
-	r.Lock()
-	defer r.Unlock()
-
 	return r.filter.Has(s)
 }
 
@@ -65,6 +65,9 @@ func NewBloomFilter(num int64) *BloomFilter {
 
 	return &BloomFilter{filter: b}
 }
+
+// Close implements the Filter interface.
+func (r *BloomFilter) Close() {}
 
 // Duplicate implements the Filter interface.
 func (r *BloomFilter) Duplicate(s string) bool {

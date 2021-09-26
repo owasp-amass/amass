@@ -4,6 +4,7 @@
 package viz
 
 import (
+	"context"
 	"strings"
 
 	"github.com/caffix/netmap"
@@ -29,8 +30,8 @@ type Node struct {
 }
 
 // VizData returns the current state of the Graph as viz package Nodes and Edges.
-func VizData(g *netmap.Graph, uuids []string) ([]Node, []Edge) {
-	quads, err := g.ReadEventQuads(uuids...)
+func VizData(ctx context.Context, g *netmap.Graph, uuids []string) ([]Node, []Edge) {
+	quads, err := g.ReadEventQuads(ctx, uuids...)
 	if err != nil {
 		return nil, nil
 	}
@@ -181,6 +182,8 @@ func outEdges(quads []quad.Quad, preds ...string) []quad.Quad {
 	var results []quad.Quad
 
 	list := stringset.New(preds...)
+	defer list.Close()
+
 	for _, q := range quads {
 		if p := valToStr(q.Get(quad.Predicate)); p != "" && list.Has(p) {
 			results = append(results, q)
@@ -218,6 +221,8 @@ func inEdges(id string, quads map[string][]quad.Quad, preds ...string) string {
 	var result string
 
 	list := stringset.New(preds...)
+	defer list.Close()
+
 	for _, s := range quads {
 		for _, q := range s {
 			if obj := valToStr(q.Get(quad.Object)); obj == id {

@@ -89,7 +89,7 @@ func (r *subdomainTask) checkForSubdomains(ctx context.Context, req *requests.DN
 
 	sub := strings.TrimSpace(strings.Join(labels[1:], "."))
 	// CNAMEs are not a proper subdomain
-	if r.enum.Graph.IsCNAMENode(sub) {
+	if r.enum.Graph.IsCNAMENode(ctx, sub) {
 		return req, nil
 	}
 
