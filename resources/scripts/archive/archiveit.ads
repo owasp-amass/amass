@@ -11,10 +11,10 @@ function start()
 end
 
 function vertical(ctx, domain)
-    scrape(ctx, {url=first_url(domain)})
+    scrape(ctx, {['url']=first_url(domain)})
 
     for i=1,20 do
-        local ok = scrape(ctx, {url=second_url(domain, i)})
+        local ok = scrape(ctx, {['url']=second_url(domain, i)})
         if not ok then
             break
         end

@@ -13,7 +13,7 @@ end
 function vertical(ctx, domain)
     local gist_re = "https://gist[.]github[.]com/[a-zA-Z0-9-]{1,39}/[a-z0-9]{32}"
     for i=1,20 do
-        local resp, err = request(ctx, {url=build_url(domain, i)})
+        local resp, err = request(ctx, {['url']=build_url(domain, i)})
         if (err ~= nil and err ~= "") then
             break
         end
@@ -24,7 +24,7 @@ function vertical(ctx, domain)
         end
 
         for _, gist in pairs(gists) do
-            scrape(ctx, {url=gist})
+            scrape(ctx, {['url']=gist})
         end
         check_rate_limit()
     end
