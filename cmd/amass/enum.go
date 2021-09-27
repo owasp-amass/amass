@@ -73,6 +73,8 @@ type enumArgs struct {
 		Silent          bool
 		Sources         bool
 		Verbose         bool
+		NoCerts         bool
+		NoAxfr          bool
 	}
 	Filepaths struct {
 		AllFilePrefix    string
@@ -128,6 +130,8 @@ func defineEnumOptionFlags(enumFlags *flag.FlagSet, args *enumArgs) {
 	enumFlags.BoolVar(&args.Options.Silent, "silent", false, "Disable all output during execution")
 	enumFlags.BoolVar(&args.Options.Sources, "src", false, "Print data sources for the discovered names")
 	enumFlags.BoolVar(&args.Options.Verbose, "v", false, "Output status / debug / troubleshooting info")
+	enumFlags.BoolVar(&args.Options.NoCerts, "nocerts", false, "Disables certificate name grabs when -active mode is enabled")
+	enumFlags.BoolVar(&args.Options.NoAxfr, "noaxfr", false, "Disables zone transfers when -active mode is enabled")
 }
 
 func defineEnumFilepathFlags(enumFlags *flag.FlagSet, args *enumArgs) {
@@ -369,9 +373,19 @@ func argsAndConfig(clArgs []string) (*config.Config, *enumArgs) {
 		r.Fprintln(color.Error, "IP addresses cannot be provided without DNS resolution")
 		os.Exit(1)
 	}
-	if !cfg.Active && len(args.Ports) > 0 {
-		r.Fprintln(color.Error, "Ports can only be scanned in the active mode")
-		os.Exit(1)
+	if !cfg.Active {
+		if len(args.Ports) > 0 {
+			r.Fprintln(color.Error, "Ports can only be scanned in the active mode")
+			os.Exit(1)
+		}
+		if args.Options.NoCerts {
+			r.Fprintln(color.Error, "Certificate name grabbing can only be disabled in the active mode")
+			os.Exit(1)
+		}
+		if args.Options.NoAxfr {
+			r.Fprintln(color.Error, "Zone transfers can only be disabled in the active mode")
+			os.Exit(1)
+		}
 	}
 	if len(cfg.Domains()) == 0 {
 		r.Fprintln(color.Error, "Configuration error: No root domain names were provided")
@@ -653,7 +667,7 @@ func processEnumInputFiles(args *enumArgs) error {
 		for _, f := range args.Filepaths.Resolvers {
 			list, err := config.GetListFromFile(f)
 			if err != nil {
-				return fmt.Errorf("Failed to parse the esolver file: %v", err)
+				return fmt.Errorf("Failed to parse the resolver file: %v", err)
 			}
 			args.Resolvers.InsertMany(list...)
 		}
@@ -729,6 +743,12 @@ func (e enumArgs) OverrideConfig(conf *config.Config) error {
 	}
 	if e.MaxDNSQueries > 0 {
 		conf.MaxDNSQueries = e.MaxDNSQueries
+	}
+	if e.Options.NoCerts {
+		conf.NoCerts = true
+	}
+	if e.Options.NoAxfr {
+		conf.NoAxfr = true
 	}
 
 	if len(e.Included) > 0 {

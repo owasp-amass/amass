@@ -70,9 +70,13 @@ func (a *activeTask) Process(ctx context.Context, data pipeline.Data, tp pipelin
 	case *requests.DNSRequest:
 		ok = true
 	case *requests.AddrRequest:
-		ok = true
+		if !a.enum.Config.NoCerts {
+			ok = true
+		}
 	case *requests.ZoneXFRRequest:
-		ok = true
+		if !a.enum.Config.NoAxfr {
+			ok = true
+		}
 	}
 
 	if ok {
@@ -115,12 +119,14 @@ func (a *activeTask) processTask() {
 		case *requests.DNSRequest:
 			go a.crawlName(args.Ctx, v, args.Params)
 		case *requests.AddrRequest:
-			if v.InScope {
+			if v.InScope && !a.enum.Config.NoCerts {
 				go a.certEnumeration(args.Ctx, v, args.Params)
 			}
 		case *requests.ZoneXFRRequest:
-			go a.zoneTransfer(args.Ctx, v, args.Params)
-			go a.zoneWalk(args.Ctx, v, args.Params)
+			if !a.enum.Config.NoAxfr {
+				go a.zoneTransfer(args.Ctx, v, args.Params)
+				go a.zoneWalk(args.Ctx, v, args.Params)
+			}
 		}
 	}
 }

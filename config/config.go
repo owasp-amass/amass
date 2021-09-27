@@ -118,8 +118,14 @@ type Config struct {
 	// Only access the data sources for names and return results?
 	Passive bool
 
-	// Determines if zone transfers will be attempted
+	// Determines if zone transfers and ssl certification extraction will be attempted
 	Active bool
+
+	// Determines if certificate name grabbing will be attempted
+	NoCerts bool
+
+	// Determines if zone transfers will be attempted
+	NoAxfr bool
 
 	// A blacklist of subdomain names that will not be investigated
 	Blacklist     []string
