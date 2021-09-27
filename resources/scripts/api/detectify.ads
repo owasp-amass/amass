@@ -41,12 +41,13 @@ function vertical(ctx, domain)
 
     -- Add domain to monitoring assets
     local resp, err = request(ctx, {
-        url="https://api.detectify.com/rest/v2/domains/",
+        ['url']="https://api.detectify.com/rest/v2/domains/",
         method="POST",
         data=json.encode({['name']=domain}),
         headers={['X-Detectify-Key']=c.key},
     })
     if (err ~= nil and err ~= "") then
+        log(ctx, "vertical request to service failed: " .. err)
         return
     end
 
@@ -57,10 +58,11 @@ end
 
 function query_asset(ctx, domain, key)
     local resp, err = request(ctx, {
-        url="https://api.detectify.com/rest/v2/domains/",
+        ['url']="https://api.detectify.com/rest/v2/domains/",
         headers={['X-Detectify-Key']=key},
     })
     if (err ~= nil and err ~= "") then
+        log(ctx, "query_asset request to service failed: " .. err)
         return false
     end
 
@@ -78,10 +80,11 @@ end
 
 function query_subdomains(ctx, token, key)
     local resp, err = request(ctx, {
-        url=build_url(token),
+        ['url']=build_url(token),
         headers={['X-Detectify-Key']=key},
     })
     if (err ~= nil and err ~= "") then
+        log(ctx, "query_subdomains request to service failed: " .. err)
         return
     end
 

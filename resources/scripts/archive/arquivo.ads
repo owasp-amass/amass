@@ -8,17 +8,18 @@ name = "Arquivo"
 type = "archive"
 
 function start()
-    set_rate_limit(1)
+    set_rate_limit(5)
 end
 
 function vertical(ctx, domain)
-    local resp, err = request(ctx, {url=build_url(domain)})
+    local resp, err = request(ctx, {['url']=build_url(domain)})
     if (err ~= nil and err ~= "") then
+        log(ctx, "vertical request to service failed: " .. err)
         return
     end
 
     local d = json.decode(resp)
-    if (d == nil or #d.response_items == 0) then
+    if (d == nil or #(d.response_items) == 0) then
         return
     end
 

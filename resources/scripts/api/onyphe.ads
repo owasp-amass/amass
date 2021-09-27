@@ -36,13 +36,14 @@ function vertical(ctx, domain)
 
     for page=1,1000 do
         local resp, err = request(ctx, {
-            url=vert_url(domain, page),
+            ['url']=vert_url(domain, page),
             headers={
                 ['Content-Type']="application/json",
                 ['Authorization']="apikey " .. c.key,
             },
         })
         if (err ~= nil and err ~= "") then
+            log(ctx, "vertical request to service failed: " .. err)
             return
         end
 
@@ -89,7 +90,6 @@ function vertical(ctx, domain)
         if page == d.max_page then
             break
         end
-        check_rate_limit()
     end
 end
 
@@ -110,19 +110,21 @@ function horizontal(ctx, domain)
 
     local ips, err = resolve(ctx, domain, "A")
     if (err ~= nil and err ~= "") then
+        log(ctx, "horizontal resolve request to service failed: " .. err)
         return
     end
 
     for _, ip in pairs(ips) do
         for page=1,1000 do
             local resp, err = request(ctx, {
-                url=horizon_url(ip, page),
+                ['url']=horizon_url(ip, page),
                 headers={
                     ['Content-Type']="application/json",
                     ['Authorization']="apikey " .. c.key,
                 },
             })
             if (err ~= nil and err ~= "") then
+                log(ctx, "horizontal request to service failed: " .. err)
                 return
             end
 
@@ -144,7 +146,6 @@ function horizontal(ctx, domain)
             if page == r.max_page then
                 break
             end
-            check_rate_limit()
         end
     end
 end

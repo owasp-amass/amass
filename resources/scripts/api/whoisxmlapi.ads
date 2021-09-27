@@ -34,10 +34,7 @@ function vertical(ctx, domain)
         return
     end
 
-    local resp, err = request(ctx, {
-        url=build_url(domain, c.key),
-        headers={['Content-Type']="application/json"},
-    })
+    local resp, err = request(ctx, {['url']=build_url(domain, c.key)})
     if (err ~= nil and err ~= "") then
         log(ctx, "vertical request to service failed: " .. err)
         return
@@ -83,7 +80,7 @@ function horizontal(ctx, domain)
     resp, err = request(ctx, {
         method="POST",
         data=body,
-        url="https://reverse-whois.whoisxmlapi.com/api/v2",
+        ['url']="https://reverse-whois.whoisxmlapi.com/api/v2",
         headers={['Content-Type']="application/json"},
     })
     if (err ~= nil and err ~= "") then
@@ -141,10 +138,7 @@ function asn(ctx, addr, asn)
 end
 
 function get_asn(ctx, ip, key)
-    local resp, err = request(ctx, {
-        url="https://ip-netblocks.whoisxmlapi.com/api/v2?apiKey=" .. key .. "&ip=" .. ip,
-        headers={['Content-Type']="application/json"},
-    })
+    local resp, err = request(ctx, {['url']="https://ip-netblocks.whoisxmlapi.com/api/v2?apiKey=" .. key .. "&ip=" .. ip})
     if (err ~= nil and err ~= "") then
         log(ctx, "get_asn request to service failed: " .. err)
         return 0
@@ -167,10 +161,7 @@ function get_asn(ctx, ip, key)
 end
 
 function as_info(ctx, asn, key)
-    local resp, err = request(ctx, {
-        url="https://ip-netblocks.whoisxmlapi.com/api/v2?apiKey=" .. key .. "&asn=" .. tostring(asn),
-        headers={['Content-Type']="application/json"},
-    })
+    local resp, err = request(ctx, {['url']="https://ip-netblocks.whoisxmlapi.com/api/v2?apiKey=" .. key .. "&asn=" .. tostring(asn)})
     if (err ~= nil and err ~= "") then
         log(ctx, "as_info request to service failed: " .. err)
         return nil

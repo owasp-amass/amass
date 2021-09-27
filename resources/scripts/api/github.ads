@@ -58,6 +58,7 @@ end
 function search_item(ctx, item)
     local info, err = request(ctx, {['url']=item.url})
     if (err ~= nil and err ~= "") then
+        log(ctx, "first search_item request to service failed: " .. err)
         return
     end
 
@@ -67,9 +68,11 @@ function search_item(ctx, item)
     end
 
     local content, err = request(ctx, {['url']=data['download_url']})
-    if err == nil then
-        send_names(ctx, content)
+    if err ~= nil and err ~= "" then
+        log(ctx, "second search_item request to service failed: " .. err)
     end
+
+    send_names(ctx, content)
 end
 
 function build_url(domain, pagenum)

@@ -22,7 +22,7 @@ function vertical(ctx, domain)
         key = c.key
     end
 
-    scrape(ctx, {url=build_url(domain, key)})
+    scrape(ctx, {['url']=build_url(domain, key)})
 end
 
 function build_url(domain, key)
@@ -38,8 +38,7 @@ function asn(ctx, addr, asn)
         return
     end
 
-    local aurl = asnurl(addr)
-    local resp, err = request(ctx, {url=aurl})
+    local resp, err = request(ctx, {['url']=asn_url(addr)})
     if (err ~= nil and err ~= "") then
         log(ctx, "asn request to service failed: " .. err)
         return
@@ -50,7 +49,7 @@ function asn(ctx, addr, asn)
         return
     end
 
-    newasn(ctx, {
+    new_asn(ctx, {
         ['addr']=addr,
         ['asn']=tonumber(j.results[2]),
         prefix=j.results[3],

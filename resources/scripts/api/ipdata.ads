@@ -38,8 +38,9 @@ function asn(ctx, addr, asn)
         return
     end
 
-    local resp, err = request(ctx, {url=build_url(addr, c.key)})
+    local resp, err = request(ctx, {['url']=build_url(addr, c.key)})
     if (err ~= nil and err ~= "") then
+        log(ctx, "asn request to service failed: " .. err)
         return
     end
 
@@ -49,8 +50,8 @@ function asn(ctx, addr, asn)
     end
 
     new_asn(ctx, {
-        addr=addr,
-        asn=tonumber(d.asn:gsub(3)),
+        ['addr']=addr,
+        ['asn']=tonumber(d.asn:gsub(3)),
         desc=d.name,
         prefix=d.route,
         netblocks={d.route},

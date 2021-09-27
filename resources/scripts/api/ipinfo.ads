@@ -64,9 +64,9 @@ end
 
 function get_asn(ctx, addr, ttl, token)
     local u = "https://ipinfo.io/" .. addr .. "/asn?token=" .. token
-    local resp = cache_request(ctx, u, ttl)
-    if (resp == "") then
-        log(ctx, "asn request to service failed: " .. err)
+    local resp, err = request(ctx, {['url']=u})
+    if (err ~= nil and err ~= "") then
+        log(ctx, "get_asn request to service failed: " .. err)
         return 0, ""
     end
 
@@ -80,9 +80,10 @@ end
 
 function as_info(ctx, asn, ttl, token)
     local strasn = "AS" .. tostring(asn)
-    resp = cache_request(ctx, "https://ipinfo.io/" .. strasn .. "/json?token=" .. token, ttl)
-    if (resp == "") then
-        log(ctx, "asn request to service failed: " .. err)
+    local u = "https://ipinfo.io/" .. strasn .. "/json?token=" .. token
+    local resp, err = request(ctx, {['url']=u})
+    if (err ~= nil and err ~= "") then
+        log(ctx, "as_info request to service failed: " .. err)
         return nil
     end
 
@@ -105,13 +106,4 @@ function as_info(ctx, asn, ttl, token)
         ['registry']=j.registry,
         ['netblocks']=netblocks,
     }
-end
-
-function cache_request(ctx, url, ttl)
-    local resp, err = request(ctx, {['url']=url})
-    if (err ~= nil and err ~= "") then
-        return ""
-    end
-
-    return resp
 end

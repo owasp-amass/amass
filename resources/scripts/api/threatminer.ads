@@ -11,7 +11,8 @@ function start()
 end
 
 function vertical(ctx, domain)
-    local resp, err = request(ctx, {url="https://api.threatminer.org/v2/domain.php?q=" .. domain .. "&api=True&rt=5"})
+    local u = "https://api.threatminer.org/v2/domain.php?q=" .. domain .. "&api=True&rt=5"
+    local resp, err = request(ctx, {['url']=u})
     if (err ~= nil and err ~= "") then
         log(ctx, "vertical request to service failed: " .. err)
         return

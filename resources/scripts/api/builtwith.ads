@@ -32,8 +32,8 @@ function vertical(ctx, domain)
         return
     end
 
-    scrape(ctx, {url=build_url(domain, "v19", c.key)})
-    scrape(ctx, {url=build_url(domain, "rv1", c.key)})
+    scrape(ctx, {['url']=build_url(domain, "v19", c.key)})
+    scrape(ctx, {['url']=build_url(domain, "rv1", c.key)})
 end
 
 function build_url(domain, api, key)

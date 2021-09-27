@@ -7,7 +7,7 @@ name = "URLScan"
 type = "api"
 
 function start()
-    set_rate_limit(2)
+    set_rate_limit(5)
 end
 
 function vertical(ctx, domain)
@@ -105,7 +105,7 @@ function submission(ctx, domain)
 			break
         end
         -- A large pause between these requests
-        for var=1,5 do check_rate_limit() end
+        for var=1,3 do check_rate_limit() end
 	end
 
 	return d.uuid

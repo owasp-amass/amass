@@ -43,7 +43,7 @@ function vertical(ctx, domain)
         })
 
         local resp, err = request(ctx, {
-            url="https://quake.360.cn/api/v3/search/quake_service",
+            ['url']="https://quake.360.cn/api/v3/search/quake_service",
             method="POST",
             data=body,
             headers={
@@ -52,6 +52,7 @@ function vertical(ctx, domain)
             }
         })
         if (err ~= nil and err ~= "") then
+            log(ctx, "vertical request to service failed: " .. err)
             return
         end
 

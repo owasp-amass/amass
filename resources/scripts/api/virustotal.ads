@@ -27,7 +27,7 @@ function vertical(ctx, domain)
         vurl = "https://www.virustotal.com/vtapi/v2/domain/report?apikey=" .. c.key .. "&domain=" .. domain
     end
 
-    local resp, err = request(ctx, {url=vurl})
+    local resp, err = request(ctx, {['url']=vurl})
     if (err ~= nil and err ~= "") then
         log(ctx, "vertical request to service failed: " .. err)
         return

@@ -96,7 +96,7 @@ function search(ctx, domain, key)
     resp, err = request(ctx, {
         method="POST",
         data=body,
-        url=host .. "phonebook/search",
+        ['url']=host .. "phonebook/search",
         headers={
             ['x-key']=key,
             ['Content-Type']="application/json",
@@ -118,7 +118,7 @@ end
 
 function results(ctx, id, limit, key)
     local resp, err = request(ctx, {
-        url=host .. "phonebook/search/result?id=" .. id .. "&limit=" .. limit,
+        ['url']=host .. "phonebook/search/result?id=" .. id .. "&limit=" .. limit,
         headers={
             ['x-key']=key,
             ['User-Agent']=useragent,

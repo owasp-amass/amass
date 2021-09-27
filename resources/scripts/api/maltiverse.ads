@@ -14,8 +14,9 @@ end
 function vertical(ctx, domain)
     p = 0
     while(true) do
-        local resp, err = request(ctx, {url=build_url(domain, p)})
+        local resp, err = request(ctx, {['url']=build_url(domain, p)})
         if (err ~= nil and err ~= "") then
+            log(ctx, "vertical request to service failed: " .. err)
             return
         end
 

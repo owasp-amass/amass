@@ -30,6 +30,7 @@ end
 function index_urls(ctx)
     local resp, err = request(ctx, {['url']="https://index.commoncrawl.org/collinfo.json"})
     if (err ~= nil and err ~= "") then
+        log(ctx, "index URLs request to service failed: " .. err)
         return nil
     end
 

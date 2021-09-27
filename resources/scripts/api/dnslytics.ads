@@ -80,8 +80,9 @@ function asn(ctx, addr, asn)
         return
     end
 
-    local resp, err = request(ctx, {url=asn_url(addr)})
+    local resp, err = request(ctx, {['url']=asn_url(addr)})
     if (err ~= nil and err ~= "") then
+        log(ctx, "asn request to service failed: " .. err)
         return
     end
 

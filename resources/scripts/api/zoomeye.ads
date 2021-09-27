@@ -42,7 +42,7 @@ function vertical(ctx, domain)
     end
 
     local resp, err = request(ctx, {
-        url="https://api.zoomeye.org/host/search?query=hostname:*." .. domain,
+        ['url']="https://api.zoomeye.org/host/search?query=hostname:*." .. domain,
         headers={['Authorization']="JWT " .. token},
     })
     if (err ~= nil and err ~= "") then
@@ -82,7 +82,7 @@ function bearer_token(ctx, username, password)
     resp, err = request(ctx, {
         method="POST",
         data=body,
-        url="https://api.zoomeye.org/user/login",
+        ['url']="https://api.zoomeye.org/user/login",
         headers={['Content-Type']="application/json"},
     })
     if (err ~= nil and err ~= "") then
