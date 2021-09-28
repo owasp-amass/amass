@@ -319,8 +319,8 @@ loop:
 				if now.Before(a.Timestamp.Add(2 * time.Minute)) {
 					break
 				}
-				if _, err := r.enum.Graph.ReadNode(a.Name, "fqdn"); err == nil {
-					_, _ = r.enum.Graph.UpsertFQDN(a.Name, a.Source, uuid)
+				if _, err := r.enum.Graph.ReadNode(r.enum.ctx, a.Name, "fqdn"); err == nil {
+					_, _ = r.enum.Graph.UpsertFQDN(r.enum.ctx, a.Name, a.Source, uuid)
 				}
 				count++
 			}
@@ -330,8 +330,8 @@ loop:
 
 	r.dups.Process(each)
 	for _, a := range pending {
-		if _, err := r.enum.Graph.ReadNode(a.Name, "fqdn"); err == nil {
-			_, _ = r.enum.Graph.UpsertFQDN(a.Name, a.Source, uuid)
+		if _, err := r.enum.Graph.ReadNode(r.enum.ctx, a.Name, "fqdn"); err == nil {
+			_, _ = r.enum.Graph.UpsertFQDN(r.enum.ctx, a.Name, a.Source, uuid)
 		}
 	}
 }

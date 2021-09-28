@@ -6,6 +6,7 @@ import (
 
 func TestStringFilterDuplicate(t *testing.T) {
 	sf := NewStringFilter()
+	defer sf.Close()
 
 	if sf.Duplicate("test1") {
 		t.Errorf("StringFilter failed duplicate check")

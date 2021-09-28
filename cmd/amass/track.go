@@ -5,6 +5,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -25,7 +26,7 @@ const (
 )
 
 type trackArgs struct {
-	Domains stringset.Set
+	Domains *stringset.Set
 	Last    int
 	Since   string
 	Options struct {
@@ -46,13 +47,14 @@ func runTrackCommand(clArgs []string) {
 	trackCommand := flag.NewFlagSet("track", flag.ContinueOnError)
 
 	args.Domains = stringset.New()
+	defer args.Domains.Close()
 
 	trackBuf := new(bytes.Buffer)
 	trackCommand.SetOutput(trackBuf)
 
 	trackCommand.BoolVar(&help1, "h", false, "Show the program usage message")
 	trackCommand.BoolVar(&help2, "help", false, "Show the program usage message")
-	trackCommand.Var(&args.Domains, "d", "Domain names separated by commas (can be used multiple times)")
+	trackCommand.Var(args.Domains, "d", "Domain names separated by commas (can be used multiple times)")
 	trackCommand.IntVar(&args.Last, "last", 0, "The number of recent enumerations to include in the tracking")
 	trackCommand.StringVar(&args.Since, "since", "", "Exclude all enumerations before (format: "+timeFormat+")")
 	trackCommand.BoolVar(&args.Options.History, "history", false, "Show the difference between all enumeration pairs")
@@ -101,7 +103,7 @@ func runTrackCommand(clArgs []string) {
 		}
 		args.Domains.InsertMany(list...)
 	}
-	if len(args.Domains) == 0 {
+	if args.Domains.Len() == 0 {
 		r.Fprintln(color.Error, "No root domain names were provided")
 		os.Exit(1)
 	}
@@ -124,7 +126,7 @@ func runTrackCommand(clArgs []string) {
 		if args.Filepaths.Directory == "" {
 			args.Filepaths.Directory = cfg.Dir
 		}
-		if len(args.Domains) == 0 {
+		if args.Domains.Len() == 0 {
 			args.Domains.InsertMany(cfg.Domains()...)
 		}
 	} else if args.Filepaths.ConfigFile != "" {
@@ -141,14 +143,14 @@ func runTrackCommand(clArgs []string) {
 	defer db.Close()
 
 	// Create the in-memory graph database
-	memDB, err := memGraphForScope(args.Domains.Slice(), db)
+	memDB, err := memGraphForScope(context.TODO(), args.Domains.Slice(), db)
 	if err != nil {
 		r.Fprintln(color.Error, err.Error())
 		os.Exit(1)
 	}
 
 	// Get all the UUIDs for events that have information in scope
-	uuids := eventUUIDs(args.Domains.Slice(), memDB)
+	uuids := eventUUIDs(context.TODO(), args.Domains.Slice(), memDB)
 	if len(uuids) == 0 {
 		r.Fprintln(color.Error, "Failed to find the domains of interest in the database")
 		os.Exit(1)
@@ -156,7 +158,7 @@ func runTrackCommand(clArgs []string) {
 
 	var earliest, latest []time.Time
 	// Put the events in chronological order
-	uuids, earliest, latest = orderedEvents(uuids, memDB)
+	uuids, earliest, latest = orderedEvents(context.TODO(), uuids, memDB)
 	if len(uuids) == 0 {
 		r.Fprintln(color.Error, "Failed to sort the events")
 		os.Exit(1)
@@ -238,7 +240,7 @@ func cumulativeOutput(uuids, domains []string, ea, la []time.Time, db *netmap.Gr
 func getScopedOutput(uuids, domains []string, db *netmap.Graph, cache *requests.ASNCache) []*requests.Output {
 	var output []*requests.Output
 
-	for _, out := range getEventOutput(uuids, false, db, cache) {
+	for _, out := range getEventOutput(context.TODO(), uuids, false, db, cache) {
 		if len(domains) > 0 && !domainNameInScope(out.Name, domains) {
 			continue
 		}

@@ -4,6 +4,7 @@
 package viz
 
 import (
+	"context"
 	"testing"
 
 	"github.com/caffix/netmap"
@@ -25,12 +26,12 @@ func TestViz(t *testing.T) {
 
 	for _, tc := range tt {
 		t.Run("Testing VizData...", func(t *testing.T) {
-			err := g.UpsertA(tc.fqdn, tc.addr, tc.source, tc.eventID)
+			err := g.UpsertA(context.Background(), tc.fqdn, tc.addr, tc.source, tc.eventID)
 
 			if err != nil {
 				t.Errorf("Error inserting A record.\n%v", err)
 			}
-			gotNode, gotEdge := VizData(g, []string{tc.eventID})
+			gotNode, gotEdge := VizData(context.Background(), g, []string{tc.eventID})
 			if gotNode == nil {
 				t.Errorf("Failed to obtain node.\n%v", gotNode)
 			}

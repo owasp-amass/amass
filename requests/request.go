@@ -14,7 +14,6 @@ import (
 	amassdns "github.com/OWASP/Amass/v3/net/dns"
 	"github.com/caffix/eventbus"
 	"github.com/caffix/pipeline"
-	"github.com/caffix/stringset"
 	"github.com/miekg/dns"
 )
 
@@ -276,7 +275,7 @@ type ASNRequest struct {
 	Registry       string
 	AllocationDate time.Time
 	Description    string
-	Netblocks      stringset.Set
+	Netblocks      []string
 	Tag            string
 	Source         string
 }
@@ -291,7 +290,7 @@ func (a *ASNRequest) Clone() pipeline.Data {
 		Registry:       a.Registry,
 		AllocationDate: a.AllocationDate,
 		Description:    a.Description,
-		Netblocks:      stringset.New(a.Netblocks.Slice()...),
+		Netblocks:      a.Netblocks,
 		Tag:            a.Tag,
 		Source:         a.Source,
 	}
@@ -308,7 +307,7 @@ func (a *ASNRequest) Valid() bool {
 	if _, _, err := net.ParseCIDR(a.Prefix); err != nil {
 		return false
 	}
-	for _, netblock := range a.Netblocks.Slice() {
+	for _, netblock := range a.Netblocks {
 		if _, _, err := net.ParseCIDR(netblock); err != nil {
 			return false
 		}
@@ -348,6 +347,29 @@ func (o *Output) Clone() pipeline.Data {
 
 // MarkAsProcessed implements pipeline Data.
 func (o *Output) MarkAsProcessed() {}
+
+// Complete checks that all the required fields have been populated.
+func (o *Output) Complete(passive bool) bool {
+	if o.Name == "" || o.Domain == "" || o.Tag == "" || len(o.Sources) == 0 {
+		return false
+	}
+
+	for _, src := range o.Sources {
+		if src == "" {
+			return false
+		}
+	}
+
+	if !passive {
+		for _, a := range o.Addresses {
+			if a.Address == nil || a.Netblock == nil || a.CIDRStr == "" || a.Description == "" {
+				return false
+			}
+		}
+	}
+
+	return true
+}
 
 // AddressInfo stores all network addressing info for the Output type.
 type AddressInfo struct {

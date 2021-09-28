@@ -16,9 +16,10 @@ function vertical(ctx, domain)
         local vurl = "https://sonar.omnisint.io/subdomains/" .. domain .. "?page=" .. p
         local resp, err = request(ctx, {['url']=vurl})
         if (err ~= nil and err ~= "") then
+            log(ctx, "vertical request to service failed: " .. err)
             return
         end
-        resp = "{subdomains:" .. resp .. "}"
+        resp = "{\"subdomains\":" .. resp .. "}"
 
         local d = json.decode(resp)
         if (d == nil or d.subdomains == nil or #(d.subdomains) == 0) then

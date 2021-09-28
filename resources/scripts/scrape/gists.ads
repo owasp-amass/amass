@@ -15,6 +15,7 @@ function vertical(ctx, domain)
     for i=1,10 do
         local resp, err = request(ctx, {url=build_url(domain, i)})
         if (err ~= nil and err ~= "") then
+            log(ctx, "vertical request to service failed: " .. err)
             break
         end
 
@@ -26,7 +27,6 @@ function vertical(ctx, domain)
         for i, url in pairs(gists) do
             scrape(ctx, {['url']=url})
         end
-        check_rate_limit()
     end
 end
 

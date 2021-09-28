@@ -5,6 +5,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"flag"
 	"io/ioutil"
 	"math/rand"
@@ -23,7 +24,7 @@ const (
 )
 
 type vizArgs struct {
-	Domains stringset.Set
+	Domains *stringset.Set
 	Enum    int
 	Options struct {
 		D3         bool
@@ -49,13 +50,14 @@ func runVizCommand(clArgs []string) {
 	vizCommand := flag.NewFlagSet("viz", flag.ContinueOnError)
 
 	args.Domains = stringset.New()
+	defer args.Domains.Close()
 
 	vizBuf := new(bytes.Buffer)
 	vizCommand.SetOutput(vizBuf)
 
 	vizCommand.BoolVar(&help1, "h", false, "Show the program usage message")
 	vizCommand.BoolVar(&help2, "help", false, "Show the program usage message")
-	vizCommand.Var(&args.Domains, "d", "Domain names separated by commas (can be used multiple times)")
+	vizCommand.Var(args.Domains, "d", "Domain names separated by commas (can be used multiple times)")
 	vizCommand.IntVar(&args.Enum, "enum", 0, "Identify an enumeration via an index from the listing")
 	vizCommand.StringVar(&args.Filepaths.ConfigFile, "config", "", "Path to the INI configuration file. Additional details below")
 	vizCommand.StringVar(&args.Filepaths.Directory, "dir", "", "Path to the directory containing the graph database")
@@ -117,7 +119,7 @@ func runVizCommand(clArgs []string) {
 		if args.Filepaths.Directory == "" {
 			args.Filepaths.Directory = config.OutputDirectory(cfg.Dir)
 		}
-		if len(args.Domains) == 0 {
+		if args.Domains.Len() == 0 {
 			args.Domains.InsertMany(cfg.Domains()...)
 		}
 	} else if args.Filepaths.ConfigFile != "" {
@@ -133,21 +135,21 @@ func runVizCommand(clArgs []string) {
 	defer db.Close()
 
 	// Create the in-memory graph database
-	memDB, err := memGraphForScope(args.Domains.Slice(), db)
+	memDB, err := memGraphForScope(context.TODO(), args.Domains.Slice(), db)
 	if err != nil {
 		r.Fprintln(color.Error, err.Error())
 		os.Exit(1)
 	}
 
 	// Get all the UUIDs for events that have information in scope
-	uuids := eventUUIDs(args.Domains.Slice(), memDB)
+	uuids := eventUUIDs(context.TODO(), args.Domains.Slice(), memDB)
 	if len(uuids) == 0 {
 		r.Fprintln(color.Error, "Failed to find the domains of interest in the database")
 		os.Exit(1)
 	}
 
 	// Put the events in chronological order
-	uuids, _, _ = orderedEvents(uuids, memDB)
+	uuids, _, _ = orderedEvents(context.TODO(), uuids, memDB)
 	if len(uuids) == 0 {
 		r.Fprintln(color.Error, "Failed to sort the events")
 		os.Exit(1)
@@ -159,7 +161,7 @@ func runVizCommand(clArgs []string) {
 	}
 
 	// Obtain the visualization nodes & edges from the graph
-	nodes, edges := viz.VizData(memDB, uuids)
+	nodes, edges := viz.VizData(context.TODO(), memDB, uuids)
 
 	// Get the directory to save the files into
 	dir := args.Filepaths.Directory

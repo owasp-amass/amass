@@ -129,12 +129,12 @@ func buildSharedData(e *enum.Enumeration, cfg *config.Config) *findings {
 		f.Mode = "active"
 	}
 
-	for _, d := range e.Graph.EventDomains(uuid) {
+	for _, d := range e.Graph.EventDomains(context.TODO(), uuid) {
 		if !e.Config.IsDomainInScope(d) {
 			continue
 		}
 
-		if n, err := e.Graph.ReadNode(d, netmap.TypeFQDN); err == nil {
+		if n, err := e.Graph.ReadNode(context.TODO(), d, netmap.TypeFQDN); err == nil {
 			s := &domain{
 				Domain: d,
 				Assets: getDomainAssets(e, n),
@@ -151,7 +151,7 @@ func buildSharedData(e *enum.Enumeration, cfg *config.Config) *findings {
 func getDomainAssets(e *enum.Enumeration, dnode netmap.Node) []*asset {
 	var assets []*asset
 
-	edges, err := e.Graph.ReadInEdges(dnode, "root")
+	edges, err := e.Graph.ReadInEdges(context.TODO(), dnode, "root")
 	if err != nil {
 		return assets
 	}
@@ -173,7 +173,7 @@ func getDomainAssets(e *enum.Enumeration, dnode netmap.Node) []*asset {
 		return assets
 	}
 
-	pairs, err := e.Graph.NamesToAddrs(e.Config.UUID.String(), names...)
+	pairs, err := e.Graph.NamesToAddrs(context.TODO(), e.Config.UUID.String(), names...)
 	if err != nil {
 		return assets
 	}
@@ -207,13 +207,15 @@ func buildAssetInfo(e *enum.Enumeration, sub string) *asset {
 		return nil
 	}
 
-	sources, err := e.Graph.NodeSources(sub, e.Config.UUID.String())
+	sources, err := e.Graph.NodeSources(context.TODO(), sub, e.Config.UUID.String())
 	if err != nil {
 		return nil
 	}
 
 	var count int
 	tags := stringset.New()
+	defer tags.Close()
+
 	for _, source := range sources {
 		count++
 

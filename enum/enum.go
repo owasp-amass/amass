@@ -78,6 +78,7 @@ func (e *Enumeration) Close() {
 	e.closedOnce.Do(func() {
 		e.Bus.Stop()
 		e.Graph.Close()
+		e.crawlFilter.Close()
 	})
 }
 
@@ -227,7 +228,7 @@ func (e *Enumeration) makeOutputSink() pipeline.SinkFunc {
 		}
 
 		if e.Config.IsDomainInScope(req.Name) {
-			if _, err := e.Graph.UpsertFQDN(req.Name, req.Source, e.Config.UUID.String()); err != nil {
+			if _, err := e.Graph.UpsertFQDN(e.ctx, req.Name, req.Source, e.Config.UUID.String()); err != nil {
 				e.Bus.Publish(requests.LogTopic, eventbus.PriorityHigh, err.Error())
 			}
 		}

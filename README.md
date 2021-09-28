@@ -26,12 +26,18 @@ The OWASP Amass Project performs network mapping of attack surfaces and external
 | Technique    | Data Sources |
 |:-------------|:-------------|
 | DNS          | Brute forcing, Reverse DNS sweeping, NSEC zone walking, Zone transfers, FQDN alterations/permutations, FQDN Similarity-based Guessing |
-| Scraping     | AbuseIPDB, Ask, AskDNS, Baidu, Bing, BuiltWith, DNSDumpster, DuckDuckGo, Gists, HackerOne, IPv4Info, RapidDNS, Riddler, SiteDossier, SpyOnWeb, Yahoo |
-| Certificates | Active pulls (optional), Censys, CertDetails, CertSpotter, Crtsh, FacebookCT, GoogleCT |
-| APIs         | ARIN, AlienVault, AnubisDB, BinaryEdge, BGPView, BufferOver, C99, Chaos, CIRCL, Cloudflare, CommonCrawl, DNSDB, DNSlytics, GitHub, HackerTarget, Hunter, IPinfo, Mnemonic, NetworksDB, PassiveTotal, RADb, ReconDev, Robtex, SecurityTrails, ShadowServer, Shodan, SonarSearch, Spamhaus, Spyse, Sublist3rAPI, TeamCymru, ThreatBook, ThreatCrowd, ThreatMiner, Twitter, Umbrella, URLScan, VirusTotal, WhoisXMLAPI, ZETAlytics, ZoomEye |
-| Web Archives | ArchiveIt, ArchiveToday, UKWebArchive, Wayback |
+| Scraping     | AbuseIPDB, Ask, AskDNS, Baidu, Bing, DNSDumpster, DuckDuckGo, Gists, HackerOne, HyperStat, IPv4Info, PKey, RapidDNS, Riddler, Searchcode, Searx, SiteDossier, SpyOnWeb, Yahoo |
+| Certificates | Active pulls (optional), Censys, CertSpotter, Crtsh, Digitorus, FacebookCT, GoogleCT |
+| APIs         | 360PassiveDNS, ARIN, Ahrefs, AlienVault, AnubisDB, BinaryEdge, BGPView, BufferOver, BuiltWith, C99, Chaos, CIRCL, Cloudflare, CommonCrawl, DNSDB, DNSlytics, Detectify, FOFA, GitHub, GitLab, Greynoise, HackerTarget, Hunter, IntelX, IPdata, IPinfo, Maltiverse, Mnemonic, N45HT, NetworksDB, ONYPHE, PassiveTotal, Pastebin, PentestTools, Quake, RADb, ReconDev, Robtex, SecurityTrails, ShadowServer, Shodan, SonarSearch, Spamhaus, Spyse, Sublist3rAPI, TeamCymru, ThreatBook, ThreatCrowd, ThreatMiner, Twitter, Umbrella, URLScan, VirusTotal, WhoisXMLAPI, ZETAlytics, ZoomEye |
+| Web Archives | ArchiveIt, Arquivo, HAW, UKWebArchive, Wayback |
 
 ----
+
+## Testimonials
+
+*"Accenture’s adversary simulation team has used Amass as our primary tool suite on a variety of external enumeration projects and attack surface assessments for clients. It’s been an absolutely invaluable basis for infrastructure enumeration, and we’re really grateful for all the hard work that’s gone into making and maintaining it – it’s made our job much easier!"*
+
+- Max Deighton, Accenture Cyber Defense Manager
 
 ## Installation [![Go Version](https://img.shields.io/github/go-mod/go-version/OWASP/Amass)](https://golang.org/dl/) [![Docker Images](https://img.shields.io/docker/pulls/caffix/amass.svg)](https://hub.docker.com/r/caffix/amass) [![Snapcraft](https://snapcraft.io/amass/badge.svg)](https://snapcraft.io/amass) [![GitHub Downloads](https://img.shields.io/github/downloads/OWASP/Amass/latest/total.svg)](https://github.com/OWASP/Amass/releases/latest)
 
@@ -95,7 +101,8 @@ For a list of all contributors to the OWASP Amass Project please visit our [HALL
 
 ### External Projects Helping Amass Users
 
-* [Patrik's Amass data source scripts](https://github.com/PatrikFehrenbach/amass-tools/)
+* [Patrik's Amass data source scripts](https://github.com/PatrikFehrenbach/amass-tools)
+* [Paradigm](https://github.com/jeredbare/paradigm)
 * [amass-to-csv](https://github.com/amroot/amass-to-csv)
 
 ## References [![Bugcrowd LevelUp 0x04](https://img.shields.io/badge/bugcrowd-levelup%200x04-orange.svg)](https://www.youtube.com/watch?v=C-GabM2db9A) [![DEF CON 27 Demo Labs](https://img.shields.io/badge/defcon%2027-demo%20labs-purple.svg)](https://www.defcon.org/html/defcon-27/dc-27-demolabs.html) [![DEF CON 27 Recon Village](https://img.shields.io/badge/defcon%2027-recon%20village-lightgrey.svg)](https://reconvillage.org/) [![DEF CON 28 Red Team Village](https://img.shields.io/badge/defcon%2028-red%20team%20village-red.svg)](https://www.youtube.com/c/RedTeamVillage/featured) [![Bugcrowd LevelUp 0x07](https://img.shields.io/badge/bugcrowd-levelup%200x07-orange.svg)](https://www.twitch.tv/videos/723418873) [![Grayhat 2020](https://img.shields.io/badge/grayhat%202020-bootcamp-lightgrey.svg)](https://www.youtube.com/watch?v=J33JmuQ79tE) [![BeNeLux 2020](https://img.shields.io/badge/owasp%202020-benelux%20days-blue.svg)](https://www.youtube.com/watch?v=fDlKQXRaGl0) [![BSides København 2020](https://img.shields.io/badge/bsides%202020-københavn-red.svg)](https://vimeo.com/481985359) [![ESW 2021](https://img.shields.io/badge/security%20weekly-esw%20219-blue.svg)](https://www.youtube.com/watch?v=fDlKQXRaGl0)

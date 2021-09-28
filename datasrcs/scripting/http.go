@@ -83,6 +83,13 @@ func (s *Script) scrape(L *lua.LState) int {
 		return 1
 	}
 
+	var data string
+	if method, ok := getStringField(L, opt, "method"); ok && strings.ToLower(method) == "post" {
+		if d, ok := getStringField(L, opt, "data"); ok {
+			data = d
+		}
+	}
+
 	url, found := getStringField(L, opt, "url")
 	if !found {
 		L.Push(lua.LFalse)
@@ -101,12 +108,18 @@ func (s *Script) scrape(L *lua.LState) int {
 	pass, _ := getStringField(L, opt, "pass")
 
 	sucess := lua.LFalse
-	if resp, err := s.req(ctx, url, "", headers, &http.BasicAuth{
+	if resp, err := s.req(ctx, url, data, headers, &http.BasicAuth{
 		Username: id,
 		Password: pass,
 	}); err == nil {
 		if num := s.internalSendNames(ctx, resp); num > 0 {
 			sucess = lua.LTrue
+		}
+	} else {
+		msg := err.Error()
+
+		if _, bus, err := requests.ContextConfigBus(ctx); err == nil {
+			bus.Publish(requests.LogTopic, eventbus.PriorityHigh, s.String()+": scrape: "+msg)
 		}
 	}
 
@@ -123,7 +136,7 @@ func (s *Script) req(ctx context.Context, url, data string, headers map[string]s
 	// Check for cached responses first
 	dsc := s.sys.Config().GetDataSourceConfig(s.String())
 	if dsc != nil && dsc.TTL > 0 {
-		if r, err := s.getCachedResponse(url+data, dsc.TTL); err == nil {
+		if r, err := s.getCachedResponse(ctx, url+data, dsc.TTL); err == nil {
 			return r, err
 		}
 	}
@@ -140,7 +153,7 @@ func (s *Script) req(ctx context.Context, url, data string, headers map[string]s
 			bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", s.String(), url, err))
 		}
 	} else if dsc != nil && dsc.TTL > 0 {
-		_ = s.setCachedResponse(url+data, resp)
+		_ = s.setCachedResponse(ctx, url+data, resp)
 	}
 
 	return resp, err

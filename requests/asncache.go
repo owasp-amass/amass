@@ -75,8 +75,8 @@ func (c *ASNCache) Update(req *ASNRequest) {
 	as, found := c.cache[req.ASN]
 	if !found {
 		c.cache[req.ASN] = req
-		if req.Netblocks == nil {
-			req.Netblocks = stringset.New(req.Prefix)
+		if len(req.Netblocks) == 0 {
+			req.Netblocks = []string{req.Prefix}
 		}
 		return
 	}
@@ -94,10 +94,13 @@ func (c *ASNCache) Update(req *ASNRequest) {
 		as.Description = req.Description
 	}
 
-	as.Netblocks.Insert(req.Prefix)
-	if req.Netblocks != nil {
-		as.Netblocks.Union(req.Netblocks)
+	nb := stringset.New(req.Prefix)
+	defer nb.Close()
+
+	if len(req.Netblocks) > 0 {
+		nb.InsertMany(req.Netblocks...)
 	}
+	as.Netblocks = nb.Slice()
 }
 
 // ASNSearch return the cached ASN / netblock info associated with the provided asn parameter,
@@ -144,14 +147,15 @@ func (c *ASNCache) AddrSearch(addr string) *ASNRequest {
 
 	prefix := entry.IPNet.String()
 	netblocks := stringset.New(prefix)
-	netblocks.Union(entry.Data.Netblocks)
+	defer netblocks.Close()
 
+	netblocks.InsertMany(entry.Data.Netblocks...)
 	return &ASNRequest{
 		Address:     addr,
 		ASN:         entry.Data.ASN,
 		CC:          entry.Data.CC,
 		Prefix:      prefix,
-		Netblocks:   netblocks,
+		Netblocks:   netblocks.Slice(),
 		Description: entry.Data.Description,
 		Tag:         RIR,
 		Source:      "RIR",
@@ -174,7 +178,7 @@ func (c *ASNCache) rawData2Ranger(ip net.IP) {
 	var data *ASNRequest
 
 	for _, record := range c.cache {
-		for netblock := range record.Netblocks {
+		for _, netblock := range record.Netblocks {
 			_, ipnet, err := net.ParseCIDR(netblock)
 			if err != nil {
 				continue

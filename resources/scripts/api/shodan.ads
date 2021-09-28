@@ -35,8 +35,9 @@ function vertical(ctx, domain)
     end
 
     local vurl = "https://api.shodan.io/dns/domain/" .. domain .. "?key=" .. c.key
-    local resp, err = request(ctx, {url=vurl})
+    local resp, err = request(ctx, {['url']=vurl})
     if (err ~= nil and err ~= "") then
+        log(ctx, "vertical request to service failed: " .. err)
         return
     end
 

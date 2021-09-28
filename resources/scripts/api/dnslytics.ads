@@ -35,8 +35,9 @@ function horizontal(ctx, domain)
     end
 
     -- DNSlytics ReverseIP API
-    local resp, err = request(ctx, {url=first_url(domain, c.key)})
+    local resp, err = request(ctx, {['url']=first_url(domain, c.key)})
     if (err ~= nil and err ~= "") then
+        log(ctx, "horizontal request to service failed: " .. err)
         return
     end
 
@@ -50,8 +51,9 @@ function horizontal(ctx, domain)
     end
 
     -- DNSlytics ReverseGAnalytics API
-    resp, err = request(ctx, {url=second_url(domain, c.key)})
+    resp, err = request(ctx, {['url']=second_url(domain, c.key)})
     if (err ~= nil and err ~= "") then
+        log(ctx, "horizontal request to service failed: " .. err)
         return
     end
 
@@ -78,8 +80,9 @@ function asn(ctx, addr, asn)
         return
     end
 
-    local resp, err = request(ctx, {url=asn_url(addr)})
+    local resp, err = request(ctx, {['url']=asn_url(addr)})
     if (err ~= nil and err ~= "") then
+        log(ctx, "asn request to service failed: " .. err)
         return
     end
 

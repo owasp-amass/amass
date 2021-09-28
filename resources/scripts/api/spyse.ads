@@ -62,6 +62,7 @@ function vertical(ctx, domain)
             },
         })
         if (err ~= nil and err ~= "") then
+            log(ctx, "vertical request to service failed: " .. err)
             break
         end
 
@@ -247,6 +248,7 @@ function get_page(ctx, url, key, ttl)
         headers={['Authorization']="Bearer " .. key,},
     })
     if (err ~= nil and err ~= "") then
+        log(ctx, "request to " .. url .. " failed: " .. err)
         return ""
     end
     return resp

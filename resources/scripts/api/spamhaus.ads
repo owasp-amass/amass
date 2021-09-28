@@ -42,7 +42,7 @@ function vertical(ctx, domain)
     end
 
     local resp, err = request(ctx, {
-        url=build_url(domain),
+        ['url']=build_url(domain),
         headers={
             ['Accept']="application/json",
             ['Content-Type']="application/json",
@@ -50,6 +50,7 @@ function vertical(ctx, domain)
         },
     })
     if (err ~= nil and err ~= "") then
+        log(ctx, "vertical request to service failed: " .. err)
         return
     end
 
@@ -72,8 +73,8 @@ end
 
 function bearer_token(ctx, username, password)
     local body, err = json.encode({
-        username=username, 
-        password=password,
+        ['username']=username, 
+        ['password']=password,
     })
     if (err ~= nil and err ~= "") then
         return ""
@@ -82,13 +83,14 @@ function bearer_token(ctx, username, password)
     resp, err = request(ctx, {
         method="POST",
         data=body,
-        url="https://api-pdns.spamhaustech.com/v2/login",
+        ['url']="https://api-pdns.spamhaustech.com/v2/login",
         headers={
             ['Accept']="application/json",
             ['Content-Type']="application/json",
         },
     })
     if (err ~= nil and err ~= "") then
+        log(ctx, "bearer_token request to service failed: " .. err)
         return ""
     end
 

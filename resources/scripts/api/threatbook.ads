@@ -7,7 +7,7 @@ name = "ThreatBook"
 type = "api"
 
 function start()
-    set_rate_limit(5)
+    set_rate_limit(1)
 end
 
 function check()
@@ -34,8 +34,9 @@ function vertical(ctx, domain)
         return
     end
 
-    local resp, err = request(ctx, {url=build_url(domain, c.key)})
+    local resp, err = request(ctx, {['url']=build_url(domain, c.key)})
     if (err ~= nil and err ~= "") then
+        log(ctx, "vertical request to service failed: " .. err)
         return
     end
 

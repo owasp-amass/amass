@@ -22,6 +22,7 @@ func GetAllSources(sys systems.System) []service.Service {
 		NewAlienVault(sys),
 		NewCloudflare(sys),
 		NewDNSDB(sys),
+		NewFOFA(sys),
 		NewNetworksDB(sys),
 		NewRADb(sys),
 		NewTeamCymru(sys),
@@ -46,9 +47,11 @@ func GetAllSources(sys systems.System) []service.Service {
 // SelectedDataSources uses the config and available data sources to return the selected data sources.
 func SelectedDataSources(cfg *config.Config, avail []service.Service) []service.Service {
 	specified := stringset.New()
+	defer specified.Close()
 	specified.InsertMany(cfg.SourceFilter.Sources...)
 
 	available := stringset.New()
+	defer available.Close()
 	for _, src := range avail {
 		available.Insert(src.String())
 	}

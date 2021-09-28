@@ -34,12 +34,9 @@ function vertical(ctx, domain)
         return
     end
 
-    local vurl = build_url(domain, c.key)
-    local resp, err = request(ctx, {
-        url=vurl,
-        headers={['Content-Type']="application/json"},
-    })
+    local resp, err = request(ctx, {['url']=build_url(domain, c.key)})
     if (err ~= nil and err ~= "") then
+        log(ctx, "vertical request to service failed: " .. err)
         return
     end
 

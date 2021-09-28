@@ -7,8 +7,6 @@ import (
 	"net"
 	"testing"
 	"time"
-
-	"github.com/caffix/stringset"
 )
 
 func TestEmpty(t *testing.T) {
@@ -49,7 +47,7 @@ func TestUpdate(t *testing.T) {
 		Registry:       "ARIN",
 		AllocationDate: time.Now(),
 		Description:    "UTICA-COLLEGE",
-		Netblocks:      stringset.New("72.237.4.0/24", "8.24.68.0/23"),
+		Netblocks:      []string{"72.237.4.0/24", "8.24.68.0/23"},
 		Tag:            RIR,
 		Source:         "RIR",
 	})
@@ -100,7 +98,7 @@ func TestAddrSearch(t *testing.T) {
 		Registry:       "ARIN",
 		AllocationDate: time.Now(),
 		Description:    "UTICA-COLLEGE",
-		Netblocks:      stringset.New("72.237.4.0/24", "8.24.68.0/23"),
+		Netblocks:      []string{"72.237.4.0/24", "8.24.68.0/23"},
 		Tag:            RIR,
 		Source:         "RIR",
 	})

@@ -50,7 +50,7 @@ func NewLocalSystem(c *config.Config) (*LocalSystem, error) {
 		pool = customResolverSetup(c, max)
 	}
 	if pool == nil {
-		return nil, errors.New("The system was unable to build the pool of resolvers")
+		return nil, errors.New("the system was unable to build the pool of resolvers")
 	}
 
 	sys := &LocalSystem{
@@ -223,9 +223,6 @@ func (l *LocalSystem) setupGraphDBs() error {
 			return fmt.Errorf("System: Failed to create the %s graph", g.String())
 		}
 
-		// Load the ASN Cache with all prior knowledge of IP address ranges and ASNs
-		//_ = ASNCacheFill(g, l.Cache())
-
 		l.graphs = append(l.graphs, g)
 	}
 
@@ -339,34 +336,32 @@ func setupResolvers(addrs []string, max, rate int, log *log.Logger) []resolve.Re
 		return nil
 	}
 
+	addrs = checkAddresses(addrs)
+	addrs = runSubnetChecks(addrs)
+
 	finished := make(chan resolve.Resolver, 10)
+
 	for _, addr := range addrs {
-		if _, _, err := net.SplitHostPort(addr); err != nil {
-			// Add the default port number to the IP address
-			addr = net.JoinHostPort(addr, "53")
-		}
 		go func(ip string, ch chan resolve.Resolver) {
-			if err := resolve.ClientSubnetCheck(ip); err == nil {
-				if n := resolve.NewBaseResolver(ip, rate, log); n != nil {
-					ch <- n
-					return
-				}
+			if n := resolve.NewBaseResolver(ip, rate, log); n != nil {
+				ch <- n
+				return
 			}
 			ch <- nil
 		}(addr, finished)
 	}
 
-	l := len(addrs)
 	var count int
+	l := len(addrs)
 	var resolvers []resolve.Resolver
 	for i := 0; i < l; i++ {
 		if r := <-finished; r != nil {
-			if count < max {
-				resolvers = append(resolvers, r)
-				count++
+			if count > max {
+				r.Stop()
 				continue
 			}
-			r.Stop()
+			resolvers = append(resolvers, r)
+			count++
 		}
 	}
 
@@ -374,4 +369,45 @@ func setupResolvers(addrs []string, max, rate int, log *log.Logger) []resolve.Re
 		return nil
 	}
 	return resolvers
+}
+
+func checkAddresses(addrs []string) []string {
+	var ips []string
+
+	for _, addr := range addrs {
+		if _, _, err := net.SplitHostPort(addr); err != nil {
+			// Add the default port number to the IP address
+			addr = net.JoinHostPort(addr, "53")
+		}
+		ips = append(ips, addr)
+	}
+
+	return ips
+}
+
+func runSubnetChecks(addrs []string) []string {
+	finished := make(chan string, 10)
+
+	for _, addr := range addrs {
+		go func(ip string, ch chan string) {
+			if err := resolve.ClientSubnetCheck(ip); err == nil {
+				ch <- ip
+				return
+			}
+			ch <- ""
+		}(addr, finished)
+	}
+
+	l := len(addrs)
+	var ips []string
+	for i := 0; i < l; i++ {
+		if ip := <-finished; ip != "" {
+			ips = append(ips, ip)
+		}
+	}
+
+	if len(ips) == 0 {
+		return addrs
+	}
+	return ips
 }

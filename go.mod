@@ -5,66 +5,37 @@ go 1.16
 require (
 	github.com/AndreasBriese/bbloom v0.0.0-20190825152654-46b345b51c96
 	github.com/PuerkitoBio/goquery v1.7.1
-	github.com/andybalholm/cascadia v1.2.0 // indirect
-	github.com/apache/thrift v0.13.0 // indirect
-	github.com/aryann/difflib v0.0.0-20170710044230-e206f873d14a // indirect
-	github.com/aws/aws-lambda-go v1.13.3 // indirect
-	github.com/caffix/eventbus v0.0.0-20210809004957-a6580c193ef5
-	github.com/caffix/netmap v0.0.0-20210716010443-7ef07a5facdd
-	github.com/caffix/pipeline v0.0.0-20210522041607-d06330c4484a
-	github.com/caffix/queue v0.0.0-20210420232735-50705a598e3e
-	github.com/caffix/resolve v0.0.0-20210713232312-b68cd71e4a53
-	github.com/caffix/service v0.0.0-20210723192808-9d6298e4e390
-	github.com/caffix/stringset v0.0.0-20210420232605-81a3d140a6a2
+	github.com/andybalholm/cascadia v1.3.1 // indirect
+	github.com/buger/jsonparser v1.1.1 // indirect
+	github.com/caffix/eventbus v0.0.0-20210920204849-80ad577dc223
+	github.com/caffix/netmap v0.0.0-20210920205002-55c52c6d2030
+	github.com/caffix/pipeline v0.0.0-20210920205042-4b77f7a2ba03
+	github.com/caffix/queue v0.0.0-20210920204733-0876f7e7e7a1
+	github.com/caffix/resolve v0.0.0-20210920205119-7c35ff3e3771
+	github.com/caffix/service v0.0.0-20210920205156-38bde8eb0503
+	github.com/caffix/stringset v0.0.0-20210920202210-bde5591d523d
 	github.com/cayleygraph/quad v1.2.4
-	github.com/chromedp/cdproto v0.0.0-20210808225517-c36c1bd4c35e // indirect
+	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
+	github.com/chromedp/cdproto v0.0.0-20210921215903-b0b4414ddbe0 // indirect
 	github.com/cjoudrey/gluaurl v0.0.0-20161028222611-31cbb9bef199
-	github.com/cloudflare/cloudflare-go v0.20.0
-	github.com/coreos/etcd v3.3.13+incompatible // indirect
+	github.com/cloudflare/cloudflare-go v0.24.0
 	github.com/dghubble/go-twitter v0.0.0-20210609183100-2fdbf421508e
-	github.com/fatih/color v1.12.0
-	github.com/geziyor/geziyor v0.0.0-20210808190847-242b025c9a05
-	github.com/go-ini/ini v1.62.0
-	github.com/go-kit/kit v0.11.0 // indirect
-	github.com/go-sql-driver/mysql v1.6.0 // indirect
-	github.com/gobuffalo/envy v1.9.0 // indirect
-	github.com/gobuffalo/logger v1.0.4 // indirect
-	github.com/gobuffalo/packr/v2 v2.8.1 // indirect
+	github.com/fatih/color v1.13.0
+	github.com/fofapro/fofa-go v0.0.0-20200317042037-c0caee09013d
+	github.com/geziyor/geziyor v0.0.0-20210830182932-110394a75314
+	github.com/go-ini/ini v1.63.2
+	github.com/go-kit/kit v0.12.0 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/google/uuid v1.3.0
-	github.com/gorilla/websocket v1.4.2 // indirect
-	github.com/hashicorp/go-version v1.2.0 // indirect
-	github.com/hidal-go/hidalgo v0.0.0-20201109092204-05749a6d73df // indirect
-	github.com/karrick/godirwalk v1.16.1 // indirect
-	github.com/lib/pq v1.10.2 // indirect
-	github.com/lightstep/lightstep-tracer-go v0.18.1 // indirect
-	github.com/mattn/go-isatty v0.0.13 // indirect
+	github.com/mattn/go-colorable v0.1.10 // indirect
 	github.com/miekg/dns v1.1.43
-	github.com/oklog/oklog v0.3.2 // indirect
-	github.com/oklog/run v1.0.0 // indirect
-	github.com/opentracing/basictracer-go v1.0.0 // indirect
-	github.com/openzipkin-contrib/zipkin-go-opentracing v0.4.5 // indirect
-	github.com/pact-foundation/pact-go v1.0.4 // indirect
-	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2 // indirect
-	github.com/prometheus/common v0.30.0 // indirect
-	github.com/prometheus/procfs v0.7.2 // indirect
+	github.com/prometheus/common v0.31.0 // indirect
 	github.com/rakyll/statik v0.1.7
-	github.com/rogpeppe/go-internal v1.8.0 // indirect
-	github.com/samuel/go-zookeeper v0.0.0-20190923202752-2cc03de413da // indirect
-	github.com/spf13/cobra v1.2.1 // indirect
 	github.com/temoto/robotstxt v1.1.2 // indirect
-	github.com/tylertreat/BoomFilters v0.0.0-20210315201527-1a82519a3e43 // indirect
 	github.com/yl2chen/cidranger v1.0.2
 	github.com/yuin/gopher-lua v0.0.0-20210529063254-f4c35e4016d9
-	go.etcd.io/etcd v0.0.0-20191023171146-3cf2f69b5738 // indirect
-	go.uber.org/tools v0.0.0-20190618225709-2cfd321de3ee // indirect
-	golang.org/x/crypto v0.0.0-20210513164829-c07d793c2f9a // indirect
-	golang.org/x/net v0.0.0-20210805182204-aaa1db679c0d
-	golang.org/x/oauth2 v0.0.0-20210805134026-6f1e6394065a
-	golang.org/x/sys v0.0.0-20210806184541-e5e7981a1069 // indirect
-	golang.org/x/term v0.0.0-20210615171337-6886f2dfbf5b // indirect
-	golang.org/x/time v0.0.0-20210723032227-1f47c861a9ac // indirect
-	golang.org/x/tools v0.1.5 // indirect
+	golang.org/x/net v0.0.0-20210924151903-3ad01bbaa167
+	golang.org/x/oauth2 v0.0.0-20210819190943-2bc19b11175f
+	golang.org/x/sys v0.0.0-20210925032602-92d5a993a665 // indirect
 	layeh.com/gopher-json v0.0.0-20201124131017-552bb3c4c3bf
-	sourcegraph.com/sourcegraph/appdash v0.0.0-20190731080439-ebfcffb1b5c0 // indirect
 )

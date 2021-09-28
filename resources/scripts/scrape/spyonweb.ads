@@ -5,12 +5,13 @@ name = "SpyOnWeb"
 type = "scrape"
 
 function start()
-    set_rate_limit(4)
+    set_rate_limit(2)
 end
 
 function horizontal(ctx, domain)
     local page, err = request(ctx, {url=build_url(domain)})
     if (err ~= nil and err ~= "") then
+        log(ctx, "horizontal request to service failed: " .. err)
         return
     end
 

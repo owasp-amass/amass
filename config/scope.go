@@ -147,6 +147,7 @@ func (c *Config) BlacklistSubdomain(name string) {
 	defer c.blacklistLock.Unlock()
 
 	set := stringset.New(c.Blacklist...)
+	defer set.Close()
 	set.Insert(strings.TrimSpace(name))
 
 	c.Blacklist = set.Slice()

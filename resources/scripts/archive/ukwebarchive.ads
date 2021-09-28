@@ -5,7 +5,7 @@ name = "UKWebArchive"
 type = "archive"
 
 function start()
-    set_rate_limit(1)
+    set_rate_limit(3)
 end
 
 function vertical(ctx, domain)

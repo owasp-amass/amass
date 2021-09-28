@@ -11,6 +11,7 @@ end
 function horizontal(ctx, domain)
     local page, err = request(ctx, {url=build_url(domain)})
     if (err ~= nil and err ~= "") then
+        log(ctx, "horizontal request to service failed: " .. err)
         return
     end
 

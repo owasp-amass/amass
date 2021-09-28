@@ -5,7 +5,7 @@ name = "ArchiveIt"
 type = "archive"
 
 function start()
-    set_rate_limit(1)
+    set_rate_limit(2)
 end
 
 function vertical(ctx, domain)
@@ -21,8 +21,6 @@ function vertical(ctx, domain)
         if not ok then
             break
         end
-
-        check_rate_limit()
     end
 end
 
@@ -38,6 +36,7 @@ function pages(ctx, domain)
     local u = "https://archive-it.org/explore?show=Sites&q=" .. domain
     local resp, err = request(ctx, {['url']=u})
     if (err ~= nil and err ~= "") then
+        log(ctx, "vertical request to service failed: " .. err)
         return false
     end
 

@@ -5,6 +5,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -29,7 +30,7 @@ const (
 )
 
 type dbArgs struct {
-	Domains stringset.Set
+	Domains *stringset.Set
 	Enum    int
 	Options struct {
 		DemoMode         bool
@@ -61,10 +62,11 @@ func runDBCommand(clArgs []string) {
 	dbBuf := new(bytes.Buffer)
 	dbCommand.SetOutput(dbBuf)
 	args.Domains = stringset.New()
+	defer args.Domains.Close()
 
 	dbCommand.BoolVar(&help1, "h", false, "Show the program usage message")
 	dbCommand.BoolVar(&help2, "help", false, "Show the program usage message")
-	dbCommand.Var(&args.Domains, "d", "Domain names separated by commas (can be used multiple times)")
+	dbCommand.Var(args.Domains, "d", "Domain names separated by commas (can be used multiple times)")
 	dbCommand.IntVar(&args.Enum, "enum", 0, "Identify an enumeration via an index from the listing")
 	dbCommand.BoolVar(&args.Options.DemoMode, "demo", false, "Censor output to make it suitable for demonstrations")
 	dbCommand.BoolVar(&args.Options.IPs, "ip", false, "Show the IP addresses for discovered names")
@@ -117,7 +119,7 @@ func runDBCommand(clArgs []string) {
 		if args.Filepaths.Directory == "" {
 			args.Filepaths.Directory = cfg.Dir
 		}
-		if len(args.Domains) == 0 {
+		if args.Domains.Len() == 0 {
 			args.Domains.InsertMany(cfg.Domains()...)
 		}
 	} else if args.Filepaths.ConfigFile != "" {
@@ -139,13 +141,13 @@ func runDBCommand(clArgs []string) {
 	defer db.Close()
 
 	// Create the in-memory graph database for events that have information in scope
-	memDB, err := memGraphForScope(args.Domains.Slice(), db)
+	memDB, err := memGraphForScope(context.TODO(), args.Domains.Slice(), db)
 	if err != nil {
 		r.Fprintln(color.Error, err.Error())
 		os.Exit(1)
 	}
 	// Get all the UUIDs for events that have information in scope
-	uuids := memDB.EventList()
+	uuids := memDB.EventList(context.TODO())
 	if len(uuids) == 0 {
 		r.Fprintln(color.Error, "Failed to find the domains of interest in the database")
 		os.Exit(1)
@@ -163,7 +165,7 @@ func runDBCommand(clArgs []string) {
 		return
 	}
 	// Put the events in chronological order
-	uuids, _, _ = orderedEvents(uuids, memDB)
+	uuids, _, _ = orderedEvents(context.TODO(), uuids, memDB)
 	if len(uuids) == 0 {
 		r.Fprintln(color.Error, "Failed to sort the events")
 		os.Exit(1)
@@ -184,7 +186,7 @@ func runDBCommand(clArgs []string) {
 }
 
 func listEvents(uuids []string, db *netmap.Graph) {
-	events, earliest, latest := orderedEvents(uuids, db)
+	events, earliest, latest := orderedEvents(context.TODO(), uuids, db)
 	// Check if the user has requested the list of enumerations
 	for pos, idx := 0, len(events)-1; idx >= 0; idx-- {
 		if pos != 0 {
@@ -193,7 +195,7 @@ func listEvents(uuids []string, db *netmap.Graph) {
 
 		g.Printf("%d) %s -> %s: ", pos+1, earliest[idx].Format(timeFormat), latest[idx].Format(timeFormat))
 		// Print out the scope for this enumeration
-		for x, domain := range db.EventDomains(events[idx]) {
+		for x, domain := range db.EventDomains(context.TODO(), events[idx]) {
 			if x != 0 {
 				g.Print(", ")
 			}
@@ -236,7 +238,7 @@ func showEventData(args *dbArgs, uuids []string, asninfo bool, db *netmap.Graph)
 
 	tags := make(map[string]int)
 	asns := make(map[int]*format.ASNSummaryData)
-	for _, out := range getEventOutput(uuids, asninfo, db, cache) {
+	for _, out := range getEventOutput(context.TODO(), uuids, asninfo, db, cache) {
 		if len(domains) > 0 && !domainNameInScope(out.Name, domains) {
 			continue
 		}
@@ -316,7 +318,7 @@ func writeJSON(args *dbArgs, uuids []string, assets []*requests.Output, db *netm
 	var output jsonOutput
 
 	// Add the event data to the JSON
-	events, earliest, latest := orderedEvents(uuids, db)
+	events, earliest, latest := orderedEvents(context.TODO(), uuids, db)
 	for i, uuid := range events {
 		output.Events = append(output.Events, &jsonEvent{
 			UUID:   uuid,
@@ -360,7 +362,7 @@ func writeJSON(args *dbArgs, uuids []string, assets []*requests.Output, db *netm
 }
 
 func fillCache(cache *requests.ASNCache, db *netmap.Graph) error {
-	aslist, err := db.AllNodesOfType(netmap.TypeAS)
+	aslist, err := db.AllNodesOfType(context.TODO(), netmap.TypeAS)
 	if err != nil {
 		return err
 	}
@@ -371,12 +373,12 @@ func fillCache(cache *requests.ASNCache, db *netmap.Graph) error {
 			continue
 		}
 
-		desc := db.ReadASDescription(asn)
+		desc := db.ReadASDescription(context.TODO(), asn)
 		if desc == "" {
 			continue
 		}
 
-		for _, prefix := range db.ReadASPrefixes(asn) {
+		for _, prefix := range db.ReadASPrefixes(context.TODO(), asn) {
 			first, cidr, err := net.ParseCIDR(prefix)
 			if err != nil {
 				continue

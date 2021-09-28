@@ -221,12 +221,17 @@ func (r *RADb) executeASNQuery(ctx context.Context, asn int, addr, prefix string
 
 	numRateLimitChecks(r, 2)
 	blocks := stringset.New()
+	defer blocks.Close()
+
 	if prefix != "" {
 		blocks.Insert(prefix)
 	}
-	blocks.Union(r.netblocks(ctx, asn))
 
-	if len(blocks) == 0 {
+	nb := r.netblocks(ctx, asn)
+	defer nb.Close()
+
+	blocks.Union(nb)
+	if blocks.Len() == 0 {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: %s: The query returned zero netblocks", r.String(), url),
 		)
@@ -239,7 +244,7 @@ func (r *RADb) executeASNQuery(ctx context.Context, asn int, addr, prefix string
 		Prefix:         prefix,
 		AllocationDate: at,
 		Description:    m.Description,
-		Netblocks:      blocks,
+		Netblocks:      blocks.Slice(),
 		Tag:            r.SourceType,
 		Source:         r.String(),
 	})
@@ -251,7 +256,7 @@ func (r *RADb) getASNURL(registry, asn string) string {
 	return fmt.Sprintf(format, asn)
 }
 
-func (r *RADb) netblocks(ctx context.Context, asn int) stringset.Set {
+func (r *RADb) netblocks(ctx context.Context, asn int) *stringset.Set {
 	netblocks := stringset.New()
 
 	_, bus, err := requests.ContextConfigBus(ctx)
@@ -307,7 +312,7 @@ func (r *RADb) netblocks(ctx context.Context, asn int) stringset.Set {
 		}
 	}
 
-	if len(netblocks) == 0 {
+	if netblocks.Len() == 0 {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: Failed to acquire netblocks for ASN %d", r.String(), asn),
 		)

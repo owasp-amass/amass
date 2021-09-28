@@ -7,13 +7,14 @@ name = "URLScan"
 type = "api"
 
 function start()
-    set_rate_limit(2)
+    set_rate_limit(5)
 end
 
 function vertical(ctx, domain)
     local url = "https://urlscan.io/api/v1/search/?q=domain:" .. domain
     local resp, err = request(ctx, {['url']=url})
     if (err ~= nil and err ~= "") then
+        log(ctx, "vertical request to service failed: " .. err)
         return
     end
 
@@ -40,6 +41,7 @@ function subs(ctx, id)
     local url = "https://urlscan.io/api/v1/result/" .. id .. "/"
     local resp, err = request(ctx, {['url']=url})
     if (err ~= nil and err ~= "") then
+        log(ctx, "result request to service failed: " .. err)
         return
     end
 
@@ -87,6 +89,7 @@ function submission(ctx, domain)
         ['headers']=headers,
     })
     if (err ~= nil and err ~= "") then
+        log(ctx, "scan request to service failed: " .. err)
         return ""
     end
 
@@ -102,7 +105,7 @@ function submission(ctx, domain)
 			break
         end
         -- A large pause between these requests
-        for var=1,5 do check_rate_limit() end
+        for var=1,3 do check_rate_limit() end
 	end
 
 	return d.uuid

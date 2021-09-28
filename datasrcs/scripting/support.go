@@ -30,7 +30,7 @@ func (s *Script) contextToUserData(ctx context.Context) *lua.LUserData {
 func checkContextExpired(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
-		return errors.New("Context expired")
+		return errors.New("context expired")
 	default:
 	}
 	return nil
@@ -38,17 +38,17 @@ func checkContextExpired(ctx context.Context) error {
 
 func extractContext(udata *lua.LUserData) (context.Context, error) {
 	if udata == nil {
-		return nil, errors.New("Lua user data was nil")
+		return nil, errors.New("the Lua user data was nil")
 	}
 
 	val := udata.Value
 	if val == lua.LNil {
-		return nil, errors.New("The user data value was nil")
+		return nil, errors.New("the user data value was nil")
 	}
 
 	wrapper, ok := val.(*contextWrapper)
 	if !ok {
-		return nil, errors.New("The user data was not a script context wrapper")
+		return nil, errors.New("the user data was not a script context wrapper")
 	}
 
 	ctx := wrapper.Ctx

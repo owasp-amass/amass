@@ -43,18 +43,20 @@ type Collection struct {
 	done              chan struct{}
 	doneAlreadyClosed bool
 	filter            filter.Filter
+	timeChan          chan time.Time
 }
 
 // NewCollection returns an initialized Collection object that has not been started yet.
 func NewCollection(cfg *config.Config, sys systems.System) *Collection {
 	return &Collection{
-		Config: cfg,
-		Bus:    eb.NewEventBus(),
-		Sys:    sys,
-		srcs:   datasrcs.SelectedDataSources(cfg, sys.DataSources()),
-		Output: make(chan *requests.Output, 100),
-		done:   make(chan struct{}, 2),
-		filter: filter.NewStringFilter(),
+		Config:   cfg,
+		Bus:      eb.NewEventBus(),
+		Sys:      sys,
+		srcs:     datasrcs.SelectedDataSources(cfg, sys.DataSources()),
+		Output:   make(chan *requests.Output, 100),
+		done:     make(chan struct{}, 2),
+		filter:   filter.NewStringFilter(),
+		timeChan: make(chan time.Time, 50),
 	}
 }
 
@@ -72,7 +74,7 @@ func (c *Collection) Done() {
 // HostedDomains uses open source intelligence to discover root domain names in the target infrastructure.
 func (c *Collection) HostedDomains(ctx context.Context) error {
 	if c.Output == nil {
-		return errors.New("The intelligence collection did not have an output channel")
+		return errors.New("the intelligence collection did not have an output channel")
 	} else if err := c.Config.CheckSettings(); err != nil {
 		return err
 	}
@@ -208,6 +210,8 @@ func (c *Collection) asnsToCIDRs() []*net.IPNet {
 	}
 
 	cidrSet := stringset.New()
+	defer cidrSet.Close()
+
 	for _, asn := range c.Config.ASNs {
 		req := c.Sys.Cache().ASNSearch(asn)
 
@@ -219,10 +223,12 @@ func (c *Collection) asnsToCIDRs() []*net.IPNet {
 			}
 		}
 
-		cidrSet.Union(req.Netblocks)
+		cidrSet.InsertMany(req.Netblocks...)
 	}
 
 	filter := filter.NewStringFilter()
+	defer filter.Close()
+
 	// Do not return CIDRs that are already in the config
 	for _, cidr := range c.Config.CIDRs {
 		filter.Duplicate(cidr.String())
@@ -245,24 +251,8 @@ func (c *Collection) ReverseWhois() error {
 		return err
 	}
 
-	ch := make(chan time.Time, 10)
-	filter := filter.NewStringFilter()
-	collect := func(req *requests.WhoisRequest) {
-		ch <- time.Now()
-
-		for _, name := range req.NewDomains {
-			if d, err := publicsuffix.EffectiveTLDPlusOne(name); err == nil && !filter.Duplicate(d) {
-				c.Output <- &requests.Output{
-					Name:    d,
-					Domain:  d,
-					Tag:     req.Tag,
-					Sources: []string{req.Source},
-				}
-			}
-		}
-	}
-	c.Bus.Subscribe(requests.NewWhoisTopic, collect)
-	defer c.Bus.Unsubscribe(requests.NewWhoisTopic, collect)
+	c.Bus.Subscribe(requests.NewWhoisTopic, c.collect)
+	defer c.Bus.Unsubscribe(requests.NewWhoisTopic, c.collect)
 
 	// Setup the context used throughout the collection
 	ctx := context.WithValue(context.Background(), requests.ContextConfig, c.Config)
@@ -283,17 +273,31 @@ loop:
 		select {
 		case <-c.done:
 			break loop
-		case l := <-ch:
+		case l := <-c.timeChan:
 			if l.After(last) {
 				last = l
 			}
 		case now := <-t.C:
-			if now.Sub(last) > 10*time.Second {
+			if now.Sub(last) > 15*time.Second {
 				break loop
 			}
 		}
 	}
-
 	close(c.Output)
 	return nil
+}
+
+func (c *Collection) collect(req *requests.WhoisRequest) {
+	c.timeChan <- time.Now()
+
+	for _, name := range req.NewDomains {
+		if d, err := publicsuffix.EffectiveTLDPlusOne(name); err == nil && !c.filter.Duplicate(d) {
+			c.Output <- &requests.Output{
+				Name:    d,
+				Domain:  d,
+				Tag:     req.Tag,
+				Sources: []string{req.Source},
+			}
+		}
+	}
 }

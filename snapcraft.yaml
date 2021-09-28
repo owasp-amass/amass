@@ -1,14 +1,21 @@
 name: amass
 version: git
 summary: In-depth Attack Surface Mapping and Asset Discovery.
+contact: https://github.com/OWASP/Amass
+issues: https://discord.gg/rtN8GMd
+source-code: https://github.com/OWASP/Amass
+website: https://owasp.org/www-project-amass/
 description: The OWASP Amass Project has developed a tool to help information security professionals perform network mapping of attack surfaces and external asset discovery using open source information gathering and active reconnaissance techniques.
-version: v3.13.4
+version: git
 icon: images/snapcraft_icon.png
 license: Apache-2.0	
 base: core20
 type: app
 grade: stable
 confinement: strict
+architectures:
+  - build-on: [s390x, ppc64el, arm64, armhf and amd64]
+    run-on: [s390x, ppc64el, arm64, armhf and amd64]
 
 apps:
   amass:
@@ -27,7 +34,9 @@ plugs:
       - $HOME/.config/amass
 
 parts:
+  build-packages:
+    - git
   amass:
-    plugin: go
     source: https://github.com/OWASP/Amass.git
-    source-type: git
+    plugin: go
+    go-channel: latest/stable

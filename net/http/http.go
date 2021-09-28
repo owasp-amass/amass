@@ -15,6 +15,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/cookiejar"
+	"net/http/httputil"
 	"net/url"
 	"regexp"
 	"runtime"
@@ -34,22 +35,23 @@ import (
 
 const (
 	// Accept is the default HTTP Accept header value used by Amass.
-	Accept = "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+	Accept = "text/html,application/json,application/xhtml+xml,application/xml;q=0.5,*/*;q=0.2"
 
 	// AcceptLang is the default HTTP Accept-Language header value used by Amass.
-	AcceptLang = "en-US,en;q=0.8"
+	AcceptLang = "en-US,en;q=0.5"
 
 	httpTimeout      = 30 * time.Second
-	handshakeTimeout = 5 * time.Second
+	handshakeTimeout = 10 * time.Second
 )
 
 var (
 	// UserAgent is the default user agent used by Amass during HTTP requests.
-	UserAgent      string
-	subRE          = dns.AnySubdomainRegex()
-	crawlRE        = regexp.MustCompile(`\.\w{3,4}($|\?)`)
-	crawlFileTypes = []string{".html", ".htm", "xhtml", ".js", ".php"}
-	nameStripRE    = regexp.MustCompile(`^u[0-9a-f]{4}|20|22|25|2b|2f|3d|3a|40`)
+	UserAgent       string
+	subRE           = dns.AnySubdomainRegex()
+	crawlRE         = regexp.MustCompile(`\.\w{2,6}($|\?|#)`)
+	crawlFileEnds   = []string{"html", "do", "action", "cgi"}
+	crawlFileStarts = []string{"js", "htm", "as", "php", "inc"}
+	nameStripRE     = regexp.MustCompile(`^u[0-9a-f]{4}|20|22|25|27|2b|2f|3d|3a|40`)
 )
 
 // DefaultClient is the same HTTP client used by the package methods.
@@ -72,7 +74,7 @@ func init() {
 			MaxConnsPerHost:       50,
 			IdleConnTimeout:       90 * time.Second,
 			TLSHandshakeTimeout:   handshakeTimeout,
-			ExpectContinueTimeout: 10 * time.Second,
+			ExpectContinueTimeout: 5 * time.Second,
 			TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
 		},
 		Jar: jar,
@@ -120,13 +122,15 @@ func RequestWebPage(ctx context.Context, u string, body io.Reader, hvals map[str
 	if err != nil {
 		return "", err
 	}
+	req.Close = true
+
 	if auth != nil && auth.Username != "" && auth.Password != "" {
 		req.SetBasicAuth(auth.Username, auth.Password)
 	}
+
 	req.Header.Set("User-Agent", UserAgent)
 	req.Header.Set("Accept", Accept)
 	req.Header.Set("Accept-Language", AcceptLang)
-
 	for k, v := range hvals {
 		req.Header.Set(k, v)
 	}
@@ -140,7 +144,7 @@ func RequestWebPage(ctx context.Context, u string, body io.Reader, hvals map[str
 	resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 400 {
-		err = errors.New(resp.Status)
+		err = fmt.Errorf("%d: %s", resp.StatusCode, resp.Status)
 	}
 	return string(in), err
 }
@@ -171,11 +175,14 @@ func Crawl(ctx context.Context, u string, scope []string, max int, f filter.Filt
 
 	if f == nil {
 		f = filter.NewStringFilter()
+		defer f.Close()
 	}
 
 	var count int
 	var m sync.Mutex
 	results := stringset.New()
+	defer results.Close()
+
 	g := geziyor.NewGeziyor(&geziyor.Options{
 		AllowedDomains:        newScope,
 		StartURLs:             []string{u},
@@ -187,11 +194,14 @@ func Crawl(ctx context.Context, u string, scope []string, max int, f filter.Filt
 		RequestDelay:          750 * time.Millisecond,
 		RequestDelayRandomize: true,
 		ParseFunc: func(g *geziyor.Geziyor, r *client.Response) {
-			for _, n := range subRE.FindAllString(string(r.Body), -1) {
-				if name := CleanName(n); whichDomain(name, scope) != "" {
-					m.Lock()
-					results.Insert(name)
-					m.Unlock()
+			resp, err := httputil.DumpResponse(interface{}(r).(*http.Response), true)
+			if err == nil {
+				for _, n := range subRE.FindAllString(string(resp), -1) {
+					if name := CleanName(n); whichDomain(name, scope) != "" {
+						m.Lock()
+						results.Insert(name)
+						m.Unlock()
+					}
 				}
 			}
 
@@ -267,8 +277,14 @@ func crawlFilterURLs(p *url.URL, f filter.Filter) string {
 		ext = strings.ToLower(ext)
 
 		var found bool
-		for _, t := range crawlFileTypes {
-			if ext == t {
+		for _, s := range crawlFileStarts {
+			if strings.HasPrefix(ext, "." + s) {
+				found = true
+				break
+			}
+		}
+		for _, e := range crawlFileEnds {
+			if strings.HasSuffix(ext, e) {
 				found = true
 				break
 			}
@@ -375,6 +391,8 @@ func namesFromCert(cert *x509.Certificate) []string {
 	}
 
 	subdomains := stringset.New()
+	defer subdomains.Close()
+
 	// Add the subject common name to the list of subdomain names
 	commonName := dns.RemoveAsteriskLabel(cn)
 	if commonName != "" {

@@ -23,6 +23,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -35,7 +36,6 @@ import (
 
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/datasrcs"
-	"github.com/OWASP/Amass/v3/filter"
 	"github.com/OWASP/Amass/v3/format"
 	amassnet "github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/requests"
@@ -256,12 +256,12 @@ func openGraphDatabase(dir string, cfg *config.Config) *netmap.Graph {
 	return nil
 }
 
-func orderedEvents(events []string, db *netmap.Graph) ([]string, []time.Time, []time.Time) {
+func orderedEvents(ctx context.Context, events []string, db *netmap.Graph) ([]string, []time.Time, []time.Time) {
 	sort.Slice(events, func(i, j int) bool {
 		var less bool
 
-		e1, l1 := db.EventDateRange(events[i])
-		e2, l2 := db.EventDateRange(events[j])
+		e1, l1 := db.EventDateRange(ctx, events[i])
+		e2, l2 := db.EventDateRange(ctx, events[j])
 		if l2.After(l1) || e1.Before(e2) {
 			less = true
 		}
@@ -271,7 +271,7 @@ func orderedEvents(events []string, db *netmap.Graph) ([]string, []time.Time, []
 
 	var earliest, latest []time.Time
 	for _, event := range events {
-		e, l := db.EventDateRange(event)
+		e, l := db.EventDateRange(ctx, event)
 
 		earliest = append(earliest, e)
 		latest = append(latest, l)
@@ -281,17 +281,17 @@ func orderedEvents(events []string, db *netmap.Graph) ([]string, []time.Time, []
 }
 
 // Obtain the enumeration IDs that include the provided domain
-func eventUUIDs(domains []string, db *netmap.Graph) []string {
+func eventUUIDs(ctx context.Context, domains []string, db *netmap.Graph) []string {
 	var uuids []string
 
-	for _, id := range db.EventList() {
+	for _, id := range db.EventList(ctx) {
 		if len(domains) == 0 {
 			uuids = append(uuids, id)
 			continue
 		}
 
 		var found bool
-		surface := db.EventDomains(id)
+		surface := db.EventDomains(ctx, id)
 		for _, domain := range surface {
 			if domainNameInScope(domain, domains) {
 				found = true
@@ -307,32 +307,31 @@ func eventUUIDs(domains []string, db *netmap.Graph) []string {
 	return uuids
 }
 
-func memGraphForScope(domains []string, from *netmap.Graph) (*netmap.Graph, error) {
+func memGraphForScope(ctx context.Context, domains []string, from *netmap.Graph) (*netmap.Graph, error) {
 	db := netmap.NewGraph(netmap.NewCayleyGraphMemory())
 	if db == nil {
-		return nil, errors.New("Failed to create the in-memory graph database")
+		return nil, errors.New("failed to create the in-memory graph database")
 	}
 
 	var err error
 	// Migrate the event data into the in-memory graph database
 	if len(domains) == 0 {
-		err = from.MigrateEvents(db)
+		err = from.MigrateEvents(ctx, db)
 	} else {
-		err = from.MigrateEventsInScope(db, domains)
+		err = from.MigrateEventsInScope(ctx, db, domains)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("Failed to move the data into the in-memory graph database: %v", err)
+		return nil, fmt.Errorf("failed to move the data into the in-memory graph database: %v", err)
 	}
 
 	return db, nil
 }
 
-func getEventOutput(uuids []string, asninfo bool, db *netmap.Graph, cache *requests.ASNCache) []*requests.Output {
+func getEventOutput(ctx context.Context, uuids []string, asninfo bool, db *netmap.Graph, cache *requests.ASNCache) []*requests.Output {
 	var output []*requests.Output
-	filter := filter.NewStringFilter()
 
 	for i := len(uuids) - 1; i >= 0; i-- {
-		output = append(output, EventOutput(db, uuids[i], filter, asninfo, cache, 0)...)
+		output = append(output, EventOutput(ctx, db, uuids[i], nil, asninfo, cache, 0)...)
 	}
 
 	return output
@@ -357,7 +356,7 @@ func domainNameInScope(name string, scope []string) bool {
 func assignNetInterface(iface *net.Interface) error {
 	addrs, err := iface.Addrs()
 	if err != nil {
-		return fmt.Errorf("Network interface '%s' has no assigned addresses", iface.Name)
+		return fmt.Errorf("network interface '%s' has no assigned addresses", iface.Name)
 	}
 
 	var best net.Addr
@@ -374,7 +373,7 @@ func assignNetInterface(iface *net.Interface) error {
 	}
 
 	if best == nil {
-		return fmt.Errorf("Network interface '%s' does not have assigned IP addresses", iface.Name)
+		return fmt.Errorf("network interface '%s' does not have assigned IP addresses", iface.Name)
 	}
 
 	amassnet.LocalAddr = best

@@ -129,6 +129,8 @@ func (d *DNSDB) parse(ctx context.Context, page, domain string) []string {
 	}
 
 	unique := stringset.New()
+	defer unique.Close()
+
 	scanner := bufio.NewScanner(strings.NewReader(page))
 	for scanner.Scan() {
 		// Get the next line of JSON
