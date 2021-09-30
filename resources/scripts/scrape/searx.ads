@@ -7,7 +7,8 @@ name = "Searx"
 type = "scrape"
 
 function start()
-    set_rate_limit(2)
+    set_rate_limit(4)
+    math.randomseed(os.time())
 end
 
 function vertical(ctx, domain)
@@ -21,7 +22,6 @@ function vertical(ctx, domain)
         "https://xeek.com",
     }
     -- Randomly choose one instance for scraping
-    math.randomseed(os.time())
     local host = instances[math.random(1, 6)] .. "/search"
 
     for i=1,15 do
@@ -35,7 +35,7 @@ function vertical(ctx, domain)
         }
 
         local ok = scrape(ctx, {
-            url=host,
+            ['url']=host,
             method="POST",
             data=url.build_query_string(params),
             headers={['Content-Type']="application/x-www-form-urlencoded"},

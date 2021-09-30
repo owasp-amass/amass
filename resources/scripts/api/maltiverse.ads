@@ -22,7 +22,7 @@ function vertical(ctx, domain)
 
         local d = json.decode(resp)
         if (d == nil or d.hits == nil or
-            d['hits'].hits == nil or #d['hits'].hits == 0) then
+            d['hits'].hits == nil or #(d['hits'].hits) == 0) then
             return
         end
 
@@ -33,7 +33,7 @@ function vertical(ctx, domain)
             end
         end
 
-        if #d['hits'].hits < 500 then
+        if #(d['hits'].hits) < 500 then
             break
         end
         p = p + 500

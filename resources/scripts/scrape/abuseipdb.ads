@@ -14,29 +14,33 @@ function vertical(ctx, domain)
         return
     end
 
-    local vurl = "https://www.abuseipdb.com/whois/" .. ip
-    local page, err = request(ctx, {['url']=vurl})
+    local page, err = request(ctx, {['url']=build_url(ip)})
     if (err ~= nil and err ~= "") then
         log(ctx, "vertical request to service failed: " .. err)
         return
     end
 
-    local pattern = "<li>([.a-z0-9-]{1,70})</li>"
+    local pattern = "<li>([.a-z0-9-]{1,256})</li>"
     local matches = submatch(page, pattern)
     if (matches == nil or #matches == 0) then
         return
     end
 
-    for i, match in pairs(matches) do
+    for _, match in pairs(matches) do
         if (match ~= nil and #match >=2) then
-            new_name(ctx, match[2] .. "." .. domain)
+            send_names(ctx, match[2] .. "." .. domain)
         end
     end
 end
 
+function build_url(ip)
+    return "https://www.abuseipdb.com/whois/" .. ip
+end
+
 function get_ip(ctx, domain)
-    local page, err = request(ctx, {url=ip_url(domain)})
+    local page, err = request(ctx, {['url']=ip_url(domain)})
     if (err ~= nil and err ~= "") then
+        log(ctx, "get_ip request to service failed: " .. err)
         return nil
     end
 

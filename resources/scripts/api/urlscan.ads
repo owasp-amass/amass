@@ -24,7 +24,7 @@ function vertical(ctx, domain)
     end
 
     if d.total > 0 then
-        for i, r in pairs(d.results) do
+        for _, r in pairs(d.results) do
             subs(ctx, r['_id'])
         end
         return
@@ -51,7 +51,7 @@ function subs(ctx, id)
         return
     end
 
-    for i, sub in pairs(d.lists.linkDomains) do
+    for _, sub in pairs(d.lists.linkDomains) do
         new_name(ctx, sub)
     end
 end
@@ -105,7 +105,7 @@ function submission(ctx, domain)
 			break
         end
         -- A large pause between these requests
-        for var=1,3 do check_rate_limit() end
+        for _=1,3 do check_rate_limit() end
 	end
 
 	return d.uuid

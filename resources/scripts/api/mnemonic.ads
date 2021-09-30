@@ -18,18 +18,24 @@ function vertical(ctx, domain)
     end
 
     local resp = json.decode(page)
-    if (resp == nil or resp["responseCode"] ~= 200) then
+    if (resp == nil or resp.responseCode ~= 200 or resp.count == 0) then
         return
     end
 
-    for i, tb in pairs(resp.data) do
-        if ((tb.rrtype == "a" or tb.rrtype == "aaaa") and in_scope(ctx, tb.query)) then
+    for _, tb in pairs(resp.data) do
+        if in_scope(ctx, tb.query) then
             new_name(ctx, tb.query)
+        end
+
+        if (tb.rrtype == "a" or tb.rrtype == "aaaa") then
             new_addr(ctx, tb.answer, tb.query)
+        end
+        if (tb.rrtype == "cname") then
+            new_name(ctx, tb.answer)
         end
     end
 end
 
 function api_url(domain)
-    return "https://api.mnemonic.no/pdns/v3/" .. domain
+    return "https://api.mnemonic.no/pdns/v3/" .. domain .. "?limit=1000"
 end

@@ -5,22 +5,22 @@ name = "SiteDossier"
 type = "scrape"
 
 function start()
-    set_rate_limit(2)
+    set_rate_limit(4)
 end
 
 function vertical(ctx, domain)
-    local p = 1
+    local num = 1
 
     while(true) do
-        local ok = scrape(ctx, {url=build_url(domain, p)})
+        local ok = scrape(ctx, {['url']=build_url(domain, num)})
         if not ok then
             break
         end
 
-        p = p + 100
+        num = num + 100
     end
 end
 
-function build_url(domain, pagenum)
-    return "http://www.sitedossier.com/parentdomain/" .. domain .. "/" .. pagenum
+function build_url(domain, itemnum)
+    return "http://www.sitedossier.com/parentdomain/" .. domain .. "/" .. itemnum
 end

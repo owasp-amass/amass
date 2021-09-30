@@ -49,7 +49,7 @@ function vertical(ctx, domain)
             return
         end
 
-        for i, item in pairs(d.items) do
+        for _, item in pairs(d.items) do
             search_item(ctx, item)
         end
     end

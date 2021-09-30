@@ -19,11 +19,27 @@ function vertical(ctx, domain)
 
     if (c == nil or c.key == nil or 
         c.key == "" or c.secret == nil or c.secret == "") then
-        scrape(ctx, {url="https://www.censys.io/domain/" .. domain .. "/table"})
+        local certpath_re = "/certificates/[a-z0-9]{64}"
+        for i=1,10 do
+            local page, err = request(ctx, {['url']=build_url(domain, i)})
+            if (err ~= nil and err ~= "") then
+                log(ctx, "vertical request to service failed: " .. err)
+                return
+            end
+    
+            local paths = find(page, certpath_re)
+            for _, path in pairs(paths) do
+                scrape(ctx, {['url']="https://censys.io" .. path})
+            end
+        end
         return
     end
 
     api_query(ctx, cfg, domain)
+end
+
+function build_url(domain, pagenum)
+    return "https://censys.io/certificates/_search?q=" .. domain .. "&page=" .. pagenum
 end
 
 function api_query(ctx, cfg, domain)
@@ -32,9 +48,9 @@ function api_query(ctx, cfg, domain)
     while(true) do
         local err, body, resp
         body, err = json.encode({
-            query="parsed.names: " .. domain, 
-            page=p,
-            fields={"parsed.names"},
+            ['query']="parsed.names: " .. domain, 
+            ['page']=p,
+            ['fields']={"parsed.names"},
         })
         if (err ~= nil and err ~= "") then
             return
@@ -43,7 +59,7 @@ function api_query(ctx, cfg, domain)
         resp, err = request(ctx, {
             method="POST",
             data=body,
-            url="https://www.censys.io/api/v1/search/certificates",
+            ['url']="https://www.censys.io/api/v1/search/certificates",
             headers={['Content-Type']="application/json"},
             id=cfg["credentials"].key,
             pass=cfg["credentials"].secret,
@@ -58,8 +74,8 @@ function api_query(ctx, cfg, domain)
             return
         end
 
-        for i, r in pairs(d.results) do
-            for j, v in pairs(r["parsed.names"]) do
+        for _, r in pairs(d.results) do
+            for _, v in pairs(r["parsed.names"]) do
                 new_name(ctx, v)
             end
         end

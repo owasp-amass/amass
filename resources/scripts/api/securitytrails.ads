@@ -34,10 +34,9 @@ function vertical(ctx, domain)
         return
     end
 
-    local vurl = "https://api.securitytrails.com/v1/domain/" .. domain .. "/subdomains"
     local resp, err = request(ctx, {
-        ['url']=vurl,
-        headers={APIKEY=c.key},
+        ['url']=vert_url(domain),
+        headers={['APIKEY']=c.key},
     })
     if (err ~= nil and err ~= "") then
         log(ctx, "vertical request to service failed: " .. err)
@@ -54,6 +53,10 @@ function vertical(ctx, domain)
     end
 end
 
+function vert_url(domain)
+    return "https://api.securitytrails.com/v1/domain/" .. domain .. "/subdomains"
+end
+
 function horizontal(ctx, domain)
     local c
     local cfg = datasrc_config()
@@ -65,24 +68,29 @@ function horizontal(ctx, domain)
         return
     end
 
-    local hurl = "https://api.securitytrails.com/v1/domain/" .. domain .. "/associated"
-    local resp, err = request(ctx, {
-        ['url']=hurl,
-        headers={APIKEY=c.key},
-    })
-    if (err ~= nil and err ~= "") then
-        log(ctx, "horizontal request to service failed: " .. err)
-        return
-    end
+    for i=1,100 do
+        local resp, err = request(ctx, {
+            ['url']=horizon_url(domain, i),
+            headers={['APIKEY']=c.key},
+        })
+        if (err ~= nil and err ~= "") then
+            log(ctx, "horizontal request to service failed: " .. err)
+            return
+        end
 
-    local j = json.decode(resp)
-    if (j == nil or #(j.records) == 0) then
-        return
-    end
+        local j = json.decode(resp)
+        if (j == nil or #(j.records) == 0) then
+            return
+        end
 
-    for _, r in pairs(j.records) do
-        if (r.hostname ~= nil and r.hostname ~= "") then
-            associated(ctx, domain, r.hostname)
+        for _, r in pairs(j.records) do
+            if (r.hostname ~= nil and r.hostname ~= "") then
+                associated(ctx, domain, r.hostname)
+            end
         end
     end
+end
+
+function horizon_url(domain, pagenum)
+    return "https://api.securitytrails.com/v1/domain/" .. domain .. "/associated?page=" .. pagenum
 end

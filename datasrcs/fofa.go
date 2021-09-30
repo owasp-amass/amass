@@ -5,6 +5,7 @@ package datasrcs
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/OWASP/Amass/v3/config"
@@ -45,8 +46,12 @@ func (f *FOFA) OnStart() error {
 	f.creds = f.sys.Config().GetDataSourceConfig(f.String()).GetCredentials()
 
 	if f.creds == nil || f.creds.Username == "" || f.creds.Key == "" {
-		f.sys.Config().Log.Printf("%s: Email address or API key data was not provided", f.String())
+		estr := fmt.Sprintf("%s: Email address or API key data was not provided", f.String())
+
+		f.sys.Config().Log.Print(estr)
+		return errors.New(estr)
 	}
+
 	f.SetRateLimit(1)
 	return nil
 }
@@ -55,7 +60,6 @@ func (f *FOFA) OnStart() error {
 func (f *FOFA) OnRequest(ctx context.Context, args service.Args) {
 	if req, ok := args.(*requests.DNSRequest); ok {
 		f.dnsRequest(ctx, req)
-		f.CheckRateLimit()
 	}
 }
 

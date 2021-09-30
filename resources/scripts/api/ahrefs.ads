@@ -35,14 +35,14 @@ function vertical(ctx, domain)
         return
     end
 
-    local resp, err = request(ctx, {url=build_url(domain, c.key)})
+    local resp, err = request(ctx, {['url']=build_url(domain, c.key)})
     if (err ~= nil and err ~= "") then
         log(ctx, "vertical request to service failed: " .. err)
         return
     end
 
     local d = json.decode(resp)
-    if (d == nil or d.refpages == nil or #d.refpages == 0) then
+    if (d == nil or d.refpages == nil or #(d.refpages) == 0) then
         return
     end
 

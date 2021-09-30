@@ -18,7 +18,7 @@ function vertical(ctx, domain)
     end
 
     local d = json.decode(resp)
-    if (d == nil or #d.subdomains <= 1) then
+    if (d == nil or #(d.subdomains) <= 1) then
         return
     end
 
