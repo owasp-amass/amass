@@ -6,7 +6,7 @@ issues: https://discord.gg/rtN8GMd
 source-code: https://github.com/OWASP/Amass
 website: https://owasp.org/www-project-amass/
 description: The OWASP Amass Project has developed a tool to help information security professionals perform network mapping of attack surfaces and external asset discovery using open source information gathering and active reconnaissance techniques.
-version: git
+version: v3.14.0
 icon: images/snapcraft_icon.png
 license: Apache-2.0	
 base: core20
@@ -34,8 +34,6 @@ plugs:
       - $HOME/.config/amass
 
 parts:
-  build-packages:
-    - git
   amass:
     source: https://github.com/OWASP/Amass.git
     plugin: go
