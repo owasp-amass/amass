@@ -60,6 +60,7 @@ func (f *FOFA) OnStart() error {
 func (f *FOFA) OnRequest(ctx context.Context, args service.Args) {
 	if req, ok := args.(*requests.DNSRequest); ok {
 		f.dnsRequest(ctx, req)
+		f.CheckRateLimit()
 	}
 }
 

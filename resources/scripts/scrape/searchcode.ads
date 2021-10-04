@@ -10,19 +10,16 @@ end
 
 function vertical(ctx, domain)
     for i=0,20 do
-        local page, err = request(ctx, {url=build_url(domain, i)})
+        local page, err = request(ctx, {['url']=build_url(domain, i)})
         if (err ~= nil and err ~= "") then
             log(ctx, "vertical request to service failed: " .. err)
             break
         end
 
-        page = page:gsub("<strong>", "")
-        local ok = find_names(ctx, page, domain)
-        if not ok then
+        local found = find_names(ctx, page:gsub("<strong>", ""), domain)
+        if not found then
             break
         end
-
-        check_rate_limit()
     end
 end
 
@@ -44,8 +41,5 @@ function find_names(ctx, content, domain)
         end
     end
 
-    if not found then
-        return false
-    end
-    return true
+    return found
 end

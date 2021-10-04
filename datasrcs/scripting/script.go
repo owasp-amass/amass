@@ -105,6 +105,7 @@ func NewScript(script string, sys systems.System) *Script {
 func (s *Script) newLuaState(cfg *config.Config) *lua.LState {
 	L := lua.NewState()
 
+	registerSocketType(L)
 	L.PreloadModule("url", luaurl.Loader)
 	L.PreloadModule("json", luajson.Loader)
 	L.SetGlobal("config", L.NewFunction(s.config))
@@ -163,7 +164,7 @@ func (s *Script) scriptName() (string, error) {
 		return string(str), nil
 	}
 
-	return "", errors.New("The script global 'name' is not a string")
+	return "", errors.New("the script global 'name' is not a string")
 }
 
 // Acquires the script type of the script by accessing the global variable.
@@ -179,7 +180,7 @@ func (s *Script) scriptType() (string, error) {
 		return string(str), nil
 	}
 
-	return "", errors.New("The script global 'type' is not a string")
+	return "", errors.New("the script global 'type' is not a string")
 }
 
 // Description implements the Service interface.
