@@ -495,6 +495,8 @@ end
 
 | Field Name | Data Type |
 |:-----------|:----------|
+| method     | string    |
+| data       | string    |
 | url        | string    |
 | headers    | table     |
 | id         | string    |
@@ -627,7 +629,7 @@ function subdomain(ctx, name, domain, times)
         return
     end
 
-    local records, err = resolve(ctx, name, "NS")
+    local records, err = resolve(ctx, name, "NS", false)
     if (err ~= nil and err ~= "") then
         return
     end
@@ -643,6 +645,7 @@ end
 | ctx        | UserData  |
 | name       | string    |
 | type       | string    |
+| detection  | bool (opt)|
 
 The `resolve` function returns a Lua table of tables, each containing a DNS resource record name, type, and data. The field names are shown below:
 
@@ -651,3 +654,133 @@ The `resolve` function returns a Lua table of tables, each containing a DNS reso
 | rrname     | string    |
 | rrtype     | number    |
 | rrdata     | string    |
+
+### `socket` Module
+
+The socket module provides Amass data source scripts with access to basic socket communication functionality.
+
+### `connect` Function
+
+The `connect` function allows Amass data source scripts to establish a TCP connection to the provided `host` and `port`. The `connect` function returns a `connection` data type on success and an error string on failure. The returned connection data type needs to be closed to release resources.
+
+```lua
+function vertical(ctx, domain)
+    local conn, err = socket.connect(ctx, "owasp.org", 80, "tcp")
+    if (err ~= nil and err ~= "") then
+        log(ctx, err)
+        return
+    end
+
+    conn:close()
+end
+```
+
+| Field Name | Data Type |
+|:-----------|:----------|
+| ctx        | UserData  |
+| host       | string    |
+| port       | number    |
+| protocol   | string    |
+
+### `Connection` Data Type
+
+The `connection` data type represents a TCP connection and provides methods for reading data, writing data, and closing the connection.
+
+### `recv` Method
+
+The `recv` method reads at least `num` bytes from the receiver connection data type. The method returns a string of the read bytes on success and an error string on failure.
+
+```lua
+function vertical(ctx, domain)
+    local conn, err = socket.connect(ctx, "owasp.org", 80, "tcp")
+    if (err ~= nil and err ~= "") then
+        log(ctx, err)
+        return
+    end
+
+    local data
+	data, err = conn:recv(32)
+	if (err ~= nil and err ~= "") then
+		log(ctx, err)
+        conn:close()
+        return
+    end
+
+    use_data(data)
+    conn:close()
+end
+```
+
+| Field Name | Data Type |
+|:-----------|:----------|
+| num        | number    |
+
+### `recv_all` Method
+
+The `recv_all` method reads all bytes from the receiver connection until the EOF. The method returns a string of the read bytes on success and an error string on failure.
+
+```lua
+function vertical(ctx, domain)
+    local conn, err = socket.connect(ctx, "owasp.org", 80, "tcp")
+    if (err ~= nil and err ~= "") then
+        log(ctx, err)
+        return
+    end
+
+    local data
+	data, err = conn:recv_all()
+	if (err ~= nil and err ~= "") then
+		log(ctx, err)
+        conn:close()
+        return
+    end
+
+    use_data(data)
+    conn:close()
+end
+```
+
+### `send` Method
+
+The `send` method sends the provides `data` to the receiver connection. The method returns the number of bytes sent on success and an error string on failure.
+
+```lua
+function asn(ctx, addr, asn)
+    local conn, err = socket.connect(ctx, "whois.owasp.org", 43, "tcp")
+    if (err ~= nil and err ~= "") then
+        log(ctx, err)
+        return
+    end
+
+    local n
+	n, err = conn:send("prefix " .. tostring(asn) .. "\n")
+	if (err ~= nil and err ~= "") then
+		log(ctx, err)
+        conn:close()
+        return
+    end
+
+    read_netblocks(conn)
+    conn:close()
+end
+```
+
+| Field Name | Data Type |
+|:-----------|:----------|
+| data       | string    |
+
+### `close` Method
+
+The `close` method releases resources used and closes the receiver network connection.
+
+```lua
+function asn(ctx, addr, asn)
+    local conn, err = socket.connect(ctx, "whois.owasp.org", 43, "tcp")
+    if (err ~= nil and err ~= "") then
+        log(ctx, err)
+        return
+    end
+
+    conn:close()
+end
+```
