@@ -1,31 +1,30 @@
 package systems
 
 import (
-	"reflect"
-	"testing"
+    "reflect"
+    "testing"
 )
-
 
 func TestCheckAddresses(t *testing.T) {
     tests := []struct {
-        name        string
-        addr        []string
-        expected    []string
+        name     string
+        addr     []string
+        expected []string
     }{
         {
-            name:       "IP without port",
-            addr:       []string{"1.1.1.1"},
-            expected:   []string{"1.1.1.1:53"}, 
+            name:     "IP without port",
+            addr:     []string{"1.1.1.1"},
+            expected: []string{"1.1.1.1:53"},
         },
         {
-            name:       "IP with port already set",
-            addr:       []string{"1.1.1.1:58"},
-            expected:   []string{"1.1.1.1:58"},
+            name:     "IP with port already set",
+            addr:     []string{"1.1.1.1:58"},
+            expected: []string{"1.1.1.1:58"},
         },
         {
-            name:       "Multiple IPs",
-            addr:       []string{"1.1.1.1", "8.8.8.8:8", "111.111.111.111"},
-            expected:   []string{"1.1.1.1:53", "8.8.8.8:8", "111.111.111.111:53"},
+            name:     "Multiple IPs",
+            addr:     []string{"1.1.1.1", "8.8.8.8:8", "111.111.111.111"},
+            expected: []string{"1.1.1.1:53", "8.8.8.8:8", "111.111.111.111:53"},
         },
     }
 
