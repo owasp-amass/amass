@@ -31,11 +31,19 @@ func (s *Script) resolve(L *lua.LState) int {
 		return 2
 	}
 
-	domain, err := publicsuffix.EffectiveTLDPlusOne(name)
-	if err != nil || s.sys.Pool().WildcardType(ctx, resp, domain) != resolve.WildcardTypeNone {
-		L.Push(lua.LNil)
-		L.Push(lua.LString("DNS wildcard detection made a positive match for " + name))
-		return 2
+	detection := true
+	if L.GetTop() == 4 {
+		detection = L.CheckBool(4)
+	}
+
+	if detection {
+		domain, err := publicsuffix.EffectiveTLDPlusOne(name)
+
+		if err != nil || s.sys.Pool().WildcardType(ctx, resp, domain) != resolve.WildcardTypeNone {
+			L.Push(lua.LNil)
+			L.Push(lua.LString("DNS wildcard detection made a positive match for " + name))
+			return 2
+		}
 	}
 
 	tb := L.NewTable()
@@ -79,6 +87,5 @@ func convertType(qtype string) uint16 {
 	case "srv":
 		t = dns.TypeSRV
 	}
-
 	return t
 }

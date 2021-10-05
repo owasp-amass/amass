@@ -25,7 +25,6 @@ func GetAllSources(sys systems.System) []service.Service {
 		NewFOFA(sys),
 		NewNetworksDB(sys),
 		NewRADb(sys),
-		NewTeamCymru(sys),
 		NewTwitter(sys),
 		NewUmbrella(sys),
 	}
