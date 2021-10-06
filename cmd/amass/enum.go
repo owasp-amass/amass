@@ -196,11 +196,14 @@ func runEnumCommand(clArgs []string) {
 	// This channel sends the signal for goroutines to terminate
 	done := make(chan struct{})
 
-	wg.Add(1)
-	// This goroutine will handle printing the output
-	printOutChan := make(chan *requests.Output, 10)
-	go printOutput(e, args, printOutChan, &wg)
-	outChans = append(outChans, printOutChan)
+	// Print output only if JSONOutput is not meant for STDOUT
+	if args.Filepaths.JSONOutput != "-" {
+		wg.Add(1)
+		// This goroutine will handle printing the output
+		printOutChan := make(chan *requests.Output, 10)
+		go printOutput(e, args, printOutChan, &wg)
+		outChans = append(outChans, printOutChan)
+	}
 
 	wg.Add(1)
 	// This goroutine will handle saving the output to the text file
@@ -477,11 +480,20 @@ func saveJSONOutput(e *enum.Enumeration, args *enumArgs, output chan *requests.O
 		return
 	}
 
-	jsonptr, err := os.OpenFile(jsonfile, os.O_WRONLY|os.O_CREATE, 0644)
-	if err != nil {
-		r.Fprintf(color.Error, "Failed to open the JSON output file: %v\n", err)
-		os.Exit(1)
+	var jsonptr *os.File
+	var err error
+
+	// Write to STDOUT and not a file if named "-"
+	if args.Filepaths.JSONOutput == "-" {
+		jsonptr = os.Stdout
+	} else {
+		jsonptr, err = os.OpenFile(jsonfile, os.O_WRONLY|os.O_CREATE, 0644)
+		if err != nil {
+			r.Fprintf(color.Error, "Failed to open the JSON output file: %v\n", err)
+			os.Exit(1)
+		}
 	}
+
 	defer func() {
 		_ = jsonptr.Sync()
 		_ = jsonptr.Close()
