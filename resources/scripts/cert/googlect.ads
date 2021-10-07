@@ -2,12 +2,13 @@
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 local url = require("url")
+local json = require("json")
 
 name = "GoogleCT"
 type = "cert"
 
 function start()
-    set_rate_limit(2)
+    set_rate_limit(1)
 end
 
 function vertical(ctx, domain)
@@ -27,10 +28,17 @@ function vertical(ctx, domain)
             break
         end
 
-        send_names(ctx, page)
+        local j = json.decode("{\"results\": " .. page:gsub('^.*\n\n', "") .. " }")
+        if (j == nil or #(j.results[1][2]) == 0) then
+            break
+        end
+
+        for _, cert in pairs(j.results[1][2]) do
+            get_cert_details(ctx, cert[5])
+        end
 
         token = get_token(page)
-        if token == "" then
+        if (token == "") then
             break
         end
     end
@@ -55,17 +63,38 @@ function build_url(domain, token)
 end
 
 function get_token(content)
-    local pattern = "\\[(null|\"[a-zA-Z0-9]+\"),\"([a-zA-Z0-9]+)\",null,([0-9]+),([0-9]+)\\]"
+    local token = ""
+    local pattern = '\\[(null|"[a-zA-Z0-9]+"),"([a-zA-Z0-9]+)",null,([0-9]+),([0-9]+)\\]'
 
     local matches = submatch(content, pattern)
     if (matches == nil or #matches == 0) then
-        return ""
+        return token
     end
 
     local match = matches[1]
     if (match ~= nil and #match == 5 and (match[4] < match[5])) then
-        return match[3]
+        token = match[3]
     end
 
-    return ""
+    return token
+end
+
+function get_cert_details(ctx, hash)
+    local base = "https://www.google.com/transparencyreport/api/v3/httpsreport/ct/certbyhash"
+
+    local u = base .. "?" .. url.build_query_string({['hash']=hash})
+    local resp, err = request(ctx, {['url']=u})
+    if (err ~= nil and err ~= "") then
+        log(ctx, "get_cert_details request to service failed: " .. err .. ", URL: " .. u)
+        return
+    end
+
+    local j = json.decode("{\"results\": " .. resp:gsub('^.*\n\n', "") .. " }")
+    if (j == nil or #(j.results[1][2][6]) == 0) then
+        return
+    end
+
+    for _, name in pairs(j.results[1][2][6]) do
+        new_name(ctx, name)
+    end
 end
