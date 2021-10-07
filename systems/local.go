@@ -177,16 +177,6 @@ func (l *LocalSystem) Shutdown() error {
 	return nil
 }
 
-// GetAllSourceNames returns the names of all the available data sources.
-func (l *LocalSystem) GetAllSourceNames() []string {
-	var names []string
-
-	for _, src := range l.DataSources() {
-		names = append(names, src.String())
-	}
-	return names
-}
-
 func (l *LocalSystem) setupOutputDirectory() error {
 	path := config.OutputDirectory(l.Cfg.Dir)
 	if path == "" {
@@ -372,12 +362,21 @@ func setupResolvers(addrs []string, max, rate int, log *log.Logger) []resolve.Re
 }
 
 func checkAddresses(addrs []string) []string {
-	var ips []string
+	ips := []string{}
 
 	for _, addr := range addrs {
-		if _, _, err := net.SplitHostPort(addr); err != nil {
+		ip, port, err := net.SplitHostPort(addr)
+		if err != nil {
+			if net.ParseIP(addr) == nil {
+				continue
+			}
 			// Add the default port number to the IP address
 			addr = net.JoinHostPort(addr, "53")
+		} else {
+			if net.ParseIP(ip) == nil {
+				continue
+			}
+			addr = net.JoinHostPort(ip, port)
 		}
 		ips = append(ips, addr)
 	}
