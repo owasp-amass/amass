@@ -63,6 +63,11 @@ sudo snap install amass
 3. Run `docker run -v OUTPUT_DIR_PATH:/.config/amass/ caffix/amass enum -share -d example.com`
 
 The volume argument allows the Amass graph database to persist between executions and output files to be accessed on the host system. The first field (left of the colon) of the volume option is the amass output directory that is external to Docker, while the second field is the path, internal to Docker, where amass will write the output files.
+### AUR 
+Using a AUR helper like `yay`
+``` 
+yay -S amass
+```
 
 ### From Sources
 
