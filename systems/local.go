@@ -367,17 +367,13 @@ func checkAddresses(addrs []string) []string {
 	for _, addr := range addrs {
 		ip, port, err := net.SplitHostPort(addr)
 		if err != nil {
-			if net.ParseIP(addr) == nil {
-				continue
-			}
-			// Add the default port number to the IP address
-			addr = net.JoinHostPort(addr, "53")
-		} else {
-			if net.ParseIP(ip) == nil {
-				continue
-			}
-			addr = net.JoinHostPort(ip, port)
+			ip = addr
+			port = "53"
 		}
+		if net.ParseIP(ip) == nil {
+			continue
+		}
+		addr = net.JoinHostPort(ip, port)
 		ips = append(ips, addr)
 	}
 
