@@ -153,7 +153,7 @@ func RequestWebPage(ctx context.Context, u string, body io.Reader, hvals map[str
 func Crawl(ctx context.Context, u string, scope []string, max int, f filter.Filter) ([]string, error) {
 	select {
 	case <-ctx.Done():
-		return nil, fmt.Errorf("The context expired")
+		return nil, fmt.Errorf("the context expired")
 	default:
 	}
 
@@ -225,7 +225,7 @@ func Crawl(ctx context.Context, u string, scope []string, max int, f filter.Filt
 
 			r.HTMLDoc.Find("a").Each(func(i int, s *goquery.Selection) {
 				if href, ok := s.Attr("href"); ok {
-					if u, err := r.JoinURL(href); err == nil && whichDomain(u.Hostname(), newScope) != "" {
+					if u, err := r.Request.URL.Parse(href); err == nil && whichDomain(u.Hostname(), newScope) != "" {
 						processURL(u)
 					}
 				}
@@ -233,7 +233,7 @@ func Crawl(ctx context.Context, u string, scope []string, max int, f filter.Filt
 
 			r.HTMLDoc.Find("script").Each(func(i int, s *goquery.Selection) {
 				if src, ok := s.Attr("src"); ok {
-					if u, err := r.JoinURL(src); err == nil && whichDomain(u.Hostname(), newScope) != "" {
+					if u, err := r.Request.URL.Parse(src); err == nil && whichDomain(u.Hostname(), newScope) != "" {
 						processURL(u)
 					}
 				}
@@ -257,10 +257,10 @@ func Crawl(ctx context.Context, u string, scope []string, max int, f filter.Filt
 	var err error
 	select {
 	case <-ctx.Done():
-		err = fmt.Errorf("The context expired during the crawl of %s", u)
+		err = fmt.Errorf("the context expired during the crawl of %s", u)
 	case <-done:
 		if len(results.Slice()) == 0 {
-			err = fmt.Errorf("No DNS names were discovered during the crawl of %s", u)
+			err = fmt.Errorf("no DNS names were discovered during the crawl of %s", u)
 		}
 	}
 
@@ -278,7 +278,7 @@ func crawlFilterURLs(p *url.URL, f filter.Filter) string {
 
 		var found bool
 		for _, s := range crawlFileStarts {
-			if strings.HasPrefix(ext, "." + s) {
+			if strings.HasPrefix(ext, "."+s) {
 				found = true
 				break
 			}
@@ -368,7 +368,7 @@ func TLSConn(ctx context.Context, host string, port int) (*tls.Conn, error) {
 	t := time.NewTimer(handshakeTimeout)
 	select {
 	case <-t.C:
-		err = errors.New("Handshake timeout")
+		err = errors.New("handshake timeout")
 	case e := <-errChan:
 		err = e
 	}
