@@ -6,6 +6,8 @@ package http
 import (
 	"context"
 	"net"
+	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -42,5 +44,55 @@ func TestPullCertificateNames(t *testing.T) {
 
 	if names := PullCertificateNames(context.Background(), ip.String(), []int{443}); len(names) == 0 {
 		t.Errorf("Failed to obtain names from a certificate from address %s", ip.String())
+	}
+}
+
+func TestCheckCookie(t *testing.T) {
+	type args struct {
+		urlString  string
+		cookieName string
+	}
+	tests := []struct {
+		name string
+		init func()
+		args args
+		want bool
+	}{
+		{
+			name: "basic-success",
+			init: func() {
+				sampleURL, err := url.Parse("http://owasp.org")
+				if err != nil {
+					t.Errorf("CheckCookie() parse error: got error = %v", err)
+				}
+
+				cookies := []*http.Cookie{{Name: "cookie1", Value: "sample cookie value"}}
+				DefaultClient.Jar.SetCookies(sampleURL, cookies)
+
+			},
+			args: args{
+				urlString:  "https://owasp.org",
+				cookieName: "cookie1",
+			},
+			want: true,
+		},
+		{
+			name: "basic-failure",
+			init: func() {},
+			args: args{
+				urlString:  "http://domain.local",
+				cookieName: "cookie2",
+			},
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.init()
+			if got := CheckCookie(tt.args.urlString, tt.args.cookieName); got != tt.want {
+				t.Errorf("CheckCookie() = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }

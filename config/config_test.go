@@ -110,3 +110,57 @@ func TestLoadSettings(t *testing.T) {
 		t.Errorf("Config file failed to load.")
 	}
 }
+
+func TestConfigCheckSettings(t *testing.T) {
+	type fields struct {
+		c *Config
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		wantErr bool
+	}{
+		{
+			name: "brute-force & passive set",
+			fields: fields{
+				&Config{BruteForcing: true, Passive: true},
+			},
+			wantErr: true,
+		},
+		{
+			name: "brute-force & empty wordlist - load default wordlist",
+			fields: fields{
+				&Config{BruteForcing: true, Passive: false, Wordlist: []string{}},
+			},
+			wantErr: false,
+		},
+		{
+			name: "active & passive enumeration set",
+			fields: fields{
+				&Config{Passive: true, Active: true},
+			},
+			wantErr: true,
+		},
+		{
+			name: "alterations set with empty alt-wordlist - load default alt-wordlist",
+			fields: fields{
+				&Config{Alterations: true, AltWordlist: []string{}},
+			},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := tt.fields.c.CheckSettings(); (err != nil) != tt.wantErr {
+				t.Errorf("Config.CheckSettings() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestConfigGetListFromFile(t *testing.T) {
+	var list = "../examples/wordlists/deepmagic.com_top500prefixes.txt"
+	if _, err := GetListFromFile(list); err != nil {
+		t.Errorf("GetListFromFile() error = %v", err)
+	}
+}
