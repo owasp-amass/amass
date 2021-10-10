@@ -373,8 +373,7 @@ func checkAddresses(addrs []string) []string {
 		if net.ParseIP(ip) == nil {
 			continue
 		}
-		addr = net.JoinHostPort(ip, port)
-		ips = append(ips, addr)
+		ips = append(ips, net.JoinHostPort(ip, port))
 	}
 
 	return ips

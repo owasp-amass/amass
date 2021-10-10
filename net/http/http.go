@@ -139,9 +139,12 @@ func RequestWebPage(ctx context.Context, u string, body io.Reader, hvals map[str
 	if err != nil {
 		return "", err
 	}
+	defer func() { _ = resp.Body.Close() }()
 
 	in, err := ioutil.ReadAll(resp.Body)
-	resp.Body.Close()
+	if err != nil {
+		return "", err
+	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 400 {
 		err = fmt.Errorf("%d: %s", resp.StatusCode, resp.Status)
@@ -332,7 +335,6 @@ func PullCertificateNames(ctx context.Context, addr string, ports []int) []strin
 		}
 
 		c, err := TLSConn(ctx, addr, port)
-
 		if err != nil {
 			continue
 		}
@@ -430,23 +432,24 @@ func ClientCountryCode(ctx context.Context) string {
 
 // CleanName will clean up the names scraped from the web.
 func CleanName(name string) string {
-	var err error
-
-	name, err = strconv.Unquote("\"" + strings.TrimSpace(name) + "\"")
-	if err == nil {
-		name = subRE.FindString(name)
+	clean, err := strconv.Unquote("\"" + strings.TrimSpace(name) + "\"")
+	if err != nil {
+		return name
 	}
 
-	name = strings.ToLower(name)
-	for {
-		name = strings.Trim(name, "-.")
+	if re := subRE.FindString(clean); re != "" {
+		clean = re
+	}
 
-		if i := nameStripRE.FindStringIndex(name); i != nil {
-			name = name[i[1]:]
-		} else {
+	clean = strings.ToLower(clean)
+	for {
+		clean = strings.Trim(clean, "-.")
+
+		i := nameStripRE.FindStringIndex(clean)
+		if i == nil {
 			break
 		}
+		clean = clean[i[1]:]
 	}
-
-	return name
+	return clean
 }
