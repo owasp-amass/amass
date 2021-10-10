@@ -21,8 +21,8 @@ import (
 )
 
 const (
-	minWaitForData    = 15 * time.Second
-	maxWaitForData    = 30 * time.Second
+	minWaitForData    = 45 * time.Second
+	maxWaitForData    = 60 * time.Second
 	defaultSweepSize  = 100
 	activeSweepSize   = 200
 	defaultOutputReqs = 100

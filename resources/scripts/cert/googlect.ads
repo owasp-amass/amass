@@ -7,18 +7,15 @@ local json = require("json")
 name = "GoogleCT"
 type = "cert"
 
-function start()
-    set_rate_limit(1)
-end
+local hdrs={
+    Connection="close",
+    Referer="https://transparencyreport.google.com/https/certificates",
+}
 
 function vertical(ctx, domain)
     local token = ""
-    local hdrs={
-        Connection="close",
-        Referer="https://transparencyreport.google.com/https/certificates",
-    }
 
-    while(true) do
+    while (true) do
         local page, err = request(ctx, {
             ['url']=build_url(domain, token),
             headers=hdrs,
@@ -29,12 +26,10 @@ function vertical(ctx, domain)
         end
 
         local j = json.decode("{\"results\": " .. page:gsub('^.*\n\n', "") .. " }")
-        if (j == nil or #(j.results[1][2]) == 0) then
-            break
-        end
-
-        for _, cert in pairs(j.results[1][2]) do
-            get_cert_details(ctx, cert[5])
+        if (j ~= nil and #(j.results[1][2]) > 0) then
+            for _, cert in ipairs(j.results[1][2]) do
+                get_cert_details(ctx, cert[1], cert[5])
+            end
         end
 
         token = get_token(page)
@@ -72,18 +67,24 @@ function get_token(content)
     end
 
     local match = matches[1]
-    if (match ~= nil and #match == 5 and (match[4] < match[5])) then
+    if (match ~= nil and #match == 5 and (tonumber(match[4]) <= tonumber(match[5]))) then
         token = match[3]
     end
 
     return token
 end
 
-function get_cert_details(ctx, hash)
-    local base = "https://www.google.com/transparencyreport/api/v3/httpsreport/ct/certbyhash"
+function get_cert_details(ctx, common, hash)
+    if in_scope(ctx, common) then
+        new_name(ctx, common)
+    end
 
+    local base = "https://www.google.com/transparencyreport/api/v3/httpsreport/ct/certbyhash"
     local u = base .. "?" .. url.build_query_string({['hash']=hash})
-    local resp, err = request(ctx, {['url']=u})
+    local resp, err = request(ctx, {
+        ['url']=u,
+        headers=hdrs,
+    })
     if (err ~= nil and err ~= "") then
         log(ctx, "get_cert_details request to service failed: " .. err .. ", URL: " .. u)
         return
@@ -94,7 +95,9 @@ function get_cert_details(ctx, hash)
         return
     end
 
-    for _, name in pairs(j.results[1][2][6]) do
-        new_name(ctx, name)
+    for _, name in ipairs(j.results[1][2][6]) do
+        if in_scope(ctx, name) then
+            new_name(ctx, name)
+        end
     end
 end
