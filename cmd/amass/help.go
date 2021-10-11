@@ -9,7 +9,7 @@ import (
 func runHelpCommand(clArgs []string) {
 	help := []string{"-help"}
 	helpBuf := new(bytes.Buffer)
-	helpCommand := flag.NewFlagSet("db", flag.ContinueOnError)
+	helpCommand := flag.NewFlagSet("help", flag.ContinueOnError)
 	helpCommand.SetOutput(helpBuf)
 	if len(clArgs) < 1 {
 		commandUsage(mainUsageMsg, helpCommand, helpBuf)
