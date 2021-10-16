@@ -34,7 +34,7 @@ func newDNSTask(e *Enumeration) *dNSTask {
 	return &dNSTask{enum: e}
 }
 
-func (dt *dNSTask) makeBlacklistTaskFunc() pipeline.TaskFunc {
+func (dt *dNSTask) blacklistTaskFunc() pipeline.TaskFunc {
 	return pipeline.TaskFunc(func(ctx context.Context, data pipeline.Data, tp pipeline.TaskParams) (pipeline.Data, error) {
 		select {
 		case <-ctx.Done():
@@ -67,12 +67,11 @@ func (dt *dNSTask) makeBlacklistTaskFunc() pipeline.TaskFunc {
 		if name != "" && !dt.enum.Config.Blacklisted(name) {
 			return data, nil
 		}
-
 		return nil, nil
 	})
 }
 
-func (dt *dNSTask) makeRootTaskFunc() pipeline.TaskFunc {
+func (dt *dNSTask) rootTaskFunc() pipeline.TaskFunc {
 	return pipeline.TaskFunc(func(ctx context.Context, data pipeline.Data, tp pipeline.TaskParams) (pipeline.Data, error) {
 		select {
 		case <-ctx.Done():
@@ -84,7 +83,7 @@ func (dt *dNSTask) makeRootTaskFunc() pipeline.TaskFunc {
 		// Is this a root domain or proper subdomain name?
 		switch v := data.(type) {
 		case *requests.DNSRequest:
-			if v.Name != v.Domain {
+			if v.Domain == "" || v.Name != v.Domain {
 				return data, nil
 			}
 			r = v.Clone().(*requests.DNSRequest)
@@ -138,17 +137,8 @@ loop:
 		default:
 		}
 
-		var nxdomain bool
 		msg := resolve.QueryMsg(req.Name, t)
-		resp, err := dt.enum.Sys.Pool().Query(ctx, msg, resolve.PriorityLow, func(times, priority int, m *dns.Msg) bool {
-			// Try one more time if we receive NXDOMAIN
-			if m.Rcode == dns.RcodeNameError && !nxdomain {
-				nxdomain = true
-				return true
-			}
-			return resolve.PoolRetryPolicy(times, priority, m)
-		})
-
+		resp, err := dt.enum.Sys.Pool().Query(ctx, msg, resolve.PriorityLow, resolve.PoolRetryPolicy)
 		if err == nil && resp != nil && len(resp.Answer) > 0 {
 			if !requests.TrustedTag(req.Tag) &&
 				dt.enum.Sys.Pool().WildcardType(ctx, resp, req.Domain) != resolve.WildcardTypeNone {
@@ -194,7 +184,7 @@ func (dt *dNSTask) handleResolverError(ctx context.Context, e error) {
 		return
 	}
 
-	if rcode := rerr.Rcode; !cfg.Verbose && (rcode == resolve.TimeoutRcode ||
+	if rcode := rerr.Rcode; !cfg.Verbose && (rcode == resolve.TimeoutRcode || rcode == dns.RcodeRefused ||
 		rcode == resolve.ResolverErrRcode || rcode == dns.RcodeNameError || rcode == dns.RcodeServerFailure) {
 		return
 	}
@@ -277,34 +267,32 @@ func (dt *dNSTask) queryServiceNames(ctx context.Context, req *requests.DNSReque
 
 		srvName := name + "." + req.Name
 		msg := resolve.QueryMsg(srvName, dns.TypeSRV)
-		if resp, err := dt.enum.Sys.Pool().Query(ctx, msg, resolve.PriorityLow,
-			resolve.PoolRetryPolicy); err == nil && len(resp.Answer) > 0 {
-			ans := resolve.ExtractAnswers(resp)
-			if len(ans) == 0 {
-				continue
-			}
-
-			rr := resolve.AnswersByType(ans, dns.TypeSRV)
-			if len(rr) == 0 {
-				continue
-			}
-
-			req := &requests.DNSRequest{
-				Name:    srvName,
-				Domain:  req.Domain,
-				Records: convertAnswers(rr),
-				Tag:     requests.DNS,
-				Source:  "DNS",
-			}
-			if !req.Valid() {
-				continue
-			}
-
-			if dt.enum.Sys.Pool().WildcardType(ctx, resp, req.Domain) == resolve.WildcardTypeNone {
-				pipeline.SendData(ctx, "filter", req, tp)
-			}
-		} else {
+		resp, err := dt.enum.Sys.Pool().Query(ctx, msg, resolve.PriorityLow, resolve.PoolRetryPolicy)
+		if err != nil || len(resp.Answer) == 0 {
 			dt.handleResolverError(ctx, err)
+			continue
+		}
+
+		ans := resolve.ExtractAnswers(resp)
+		if len(ans) == 0 {
+			continue
+		}
+
+		rr := resolve.AnswersByType(ans, dns.TypeSRV)
+		if len(rr) == 0 {
+			continue
+		}
+
+		req := &requests.DNSRequest{
+			Name:    srvName,
+			Domain:  req.Domain,
+			Records: convertAnswers(rr),
+			Tag:     requests.DNS,
+			Source:  "DNS",
+		}
+
+		if req.Valid() && dt.enum.Sys.Pool().WildcardType(ctx, resp, req.Domain) == resolve.WildcardTypeNone {
+			pipeline.SendData(ctx, "filter", req, tp)
 		}
 	}
 }
@@ -321,15 +309,7 @@ func (dt *dNSTask) reverseDNSQuery(ctx context.Context, addr string, tp pipeline
 		return false
 	}
 
-	var nxdomain bool
-	resp, err := dt.enum.Sys.Pool().Query(ctx, msg, resolve.PriorityLow, func(times, priority int, m *dns.Msg) bool {
-		// Try one more time if we receive NXDOMAIN
-		if m.Rcode == dns.RcodeNameError && !nxdomain {
-			nxdomain = true
-			return true
-		}
-		return resolve.PoolRetryPolicy(times, priority, m)
-	})
+	resp, err := dt.enum.Sys.Pool().Query(ctx, msg, resolve.PriorityLow, resolve.PoolRetryPolicy)
 	if err != nil {
 		return false
 	}
@@ -348,7 +328,6 @@ func (dt *dNSTask) reverseDNSQuery(ctx context.Context, addr string, tp pipeline
 	if _, ok := dns.IsDomainName(answer); !ok {
 		return false
 	}
-
 	if amassdns.RemoveAsteriskLabel(answer) != answer {
 		return false
 	}
@@ -358,7 +337,6 @@ func (dt *dNSTask) reverseDNSQuery(ctx context.Context, addr string, tp pipeline
 	if d == "" {
 		return false
 	}
-
 	if re := dt.enum.Config.DomainRegex(d); re == nil || re.FindString(answer) != answer {
 		return false
 	}

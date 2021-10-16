@@ -84,7 +84,6 @@ func (dm *dataManager) dnsRequest(ctx context.Context, req *requests.DNSRequest,
 	if dm.enum.Config.Blacklisted(req.Name) {
 		return nil
 	}
-
 	// Check for CNAME records first
 	for i, r := range req.Records {
 		req.Records[i].Name = strings.Trim(strings.ToLower(r.Name), ".")
@@ -134,32 +133,25 @@ func (dm *dataManager) dnsRequest(ctx context.Context, req *requests.DNSRequest,
 func (dm *dataManager) insertCNAME(ctx context.Context, req *requests.DNSRequest, recidx int, tp pipeline.TaskParams) error {
 	cfg, _, err := requests.ContextConfigBus(ctx)
 	if err != nil {
-		return errors.New("The context did not contain the expected values")
+		return errors.New("the context did not contain the expected values")
 	}
 
 	target := resolve.RemoveLastDot(req.Records[recidx].Data)
 	if target == "" {
-		return errors.New("Failed to extract a FQDN from the DNS answer data")
+		return errors.New("failed to extract a FQDN from the DNS answer data")
 	}
 
 	domain, err := publicsuffix.EffectiveTLDPlusOne(target)
-	if err != nil {
-		return errors.New("Failed to extract a domain name from the FQDN")
+	if err != nil || domain == "" {
+		return errors.New("failed to extract a domain name from the FQDN")
 	}
-
-	domain = strings.ToLower(domain)
-	if domain == "" {
-		return errors.New("The request did not contain a domain name")
-	}
-
 	if err := dm.enum.Graph.UpsertCNAME(ctx, req.Name, target, req.Source, cfg.UUID.String()); err != nil {
 		return fmt.Errorf("%s failed to insert CNAME: %v", dm.enum.Graph, err)
 	}
-
 	// Important - Allows chained CNAME records to be resolved until an A/AAAA record
 	dm.enum.nameSrc.pipelineData(ctx, &requests.DNSRequest{
 		Name:   target,
-		Domain: domain,
+		Domain: strings.ToLower(domain),
 		Tag:    requests.DNS,
 		Source: "DNS",
 	}, tp)
@@ -169,14 +161,13 @@ func (dm *dataManager) insertCNAME(ctx context.Context, req *requests.DNSRequest
 func (dm *dataManager) insertA(ctx context.Context, req *requests.DNSRequest, recidx int, tp pipeline.TaskParams) error {
 	cfg, _, err := requests.ContextConfigBus(ctx)
 	if err != nil {
-		return errors.New("The context did not contain the expected values")
+		return errors.New("the context did not contain the expected values")
 	}
 
 	addr := strings.TrimSpace(req.Records[recidx].Data)
 	if addr == "" {
-		return errors.New("Failed to extract an IP address from the DNS answer data")
+		return errors.New("failed to extract an IP address from the DNS answer data")
 	}
-
 	if err := dm.enum.Graph.UpsertA(ctx, req.Name, addr, req.Source, cfg.UUID.String()); err != nil {
 		return fmt.Errorf("%s failed to insert A record: %v", dm.enum.Graph, err)
 	}
@@ -195,14 +186,13 @@ func (dm *dataManager) insertA(ctx context.Context, req *requests.DNSRequest, re
 func (dm *dataManager) insertAAAA(ctx context.Context, req *requests.DNSRequest, recidx int, tp pipeline.TaskParams) error {
 	cfg, _, err := requests.ContextConfigBus(ctx)
 	if err != nil {
-		return errors.New("The context did not contain the expected values")
+		return errors.New("the context did not contain the expected values")
 	}
 
 	addr := strings.TrimSpace(req.Records[recidx].Data)
 	if addr == "" {
-		return errors.New("Failed to extract an IP address from the DNS answer data")
+		return errors.New("failed to extract an IP address from the DNS answer data")
 	}
-
 	if err := dm.enum.Graph.UpsertAAAA(ctx, req.Name, addr, req.Source, cfg.UUID.String()); err != nil {
 		return fmt.Errorf("%s failed to insert AAAA record: %v", dm.enum.Graph, err)
 	}
@@ -221,30 +211,27 @@ func (dm *dataManager) insertAAAA(ctx context.Context, req *requests.DNSRequest,
 func (dm *dataManager) insertPTR(ctx context.Context, req *requests.DNSRequest, recidx int, tp pipeline.TaskParams) error {
 	cfg, _, err := requests.ContextConfigBus(ctx)
 	if err != nil {
-		return errors.New("The context did not contain the expected values")
+		return errors.New("the context did not contain the expected values")
 	}
 
 	target := resolve.RemoveLastDot(req.Records[recidx].Data)
 	if target == "" {
-		return errors.New("Failed to extract a FQDN from the DNS answer data")
+		return errors.New("failed to extract a FQDN from the DNS answer data")
 	}
-
 	// Do not go further if the target is not in scope
 	domain := strings.ToLower(cfg.WhichDomain(target))
 	if domain == "" {
 		return nil
 	}
-
 	if err := dm.enum.Graph.UpsertPTR(ctx, req.Name, target, req.Source, cfg.UUID.String()); err != nil {
 		return fmt.Errorf("%s failed to insert PTR record: %v", dm.enum.Graph, err)
 	}
-
 	// Important - Allows the target DNS name to be resolved in the forward direction
 	dm.enum.nameSrc.pipelineData(ctx, &requests.DNSRequest{
 		Name:   target,
 		Domain: domain,
 		Tag:    requests.DNS,
-		Source: "DNS",
+		Source: "Reverse DNS",
 	}, tp)
 	return nil
 }
@@ -252,19 +239,17 @@ func (dm *dataManager) insertPTR(ctx context.Context, req *requests.DNSRequest, 
 func (dm *dataManager) insertSRV(ctx context.Context, req *requests.DNSRequest, recidx int, tp pipeline.TaskParams) error {
 	cfg, _, err := requests.ContextConfigBus(ctx)
 	if err != nil {
-		return errors.New("The context did not contain the expected values")
+		return errors.New("the context did not contain the expected values")
 	}
 
 	service := resolve.RemoveLastDot(req.Records[recidx].Name)
 	target := resolve.RemoveLastDot(req.Records[recidx].Data)
 	if target == "" || service == "" {
-		return errors.New("Failed to extract service info from the DNS answer data")
+		return errors.New("failed to extract service info from the DNS answer data")
 	}
-
 	if err := dm.enum.Graph.UpsertSRV(ctx, req.Name, service, target, req.Source, cfg.UUID.String()); err != nil {
 		return fmt.Errorf("%s failed to insert SRV record: %v", dm.enum.Graph, err)
 	}
-
 	if domain := cfg.WhichDomain(target); domain != "" {
 		dm.enum.nameSrc.pipelineData(ctx, &requests.DNSRequest{
 			Name:   target,
@@ -279,32 +264,25 @@ func (dm *dataManager) insertSRV(ctx context.Context, req *requests.DNSRequest, 
 func (dm *dataManager) insertNS(ctx context.Context, req *requests.DNSRequest, recidx int, tp pipeline.TaskParams) error {
 	cfg, _, err := requests.ContextConfigBus(ctx)
 	if err != nil {
-		return errors.New("The context did not contain the expected values")
+		return errors.New("the context did not contain the expected values")
 	}
 
 	target := req.Records[recidx].Data
 	if target == "" {
-		return errors.New("Failed to extract NS info from the DNS answer data")
+		return errors.New("failed to extract NS info from the DNS answer data")
 	}
 
 	domain, err := publicsuffix.EffectiveTLDPlusOne(target)
-	if err != nil {
-		return errors.New("Failed to extract a domain name from the FQDN")
+	if err != nil || domain == "" {
+		return errors.New("failed to extract a domain name from the FQDN")
 	}
-
-	domain = strings.ToLower(domain)
-	if domain == "" {
-		return errors.New("The request did not contain a domain name")
-	}
-
 	if err := dm.enum.Graph.UpsertNS(ctx, req.Name, target, req.Source, cfg.UUID.String()); err != nil {
 		return fmt.Errorf("%s failed to insert NS record: %v", dm.enum.Graph, err)
 	}
-
-	if target != domain {
+	if d := strings.ToLower(domain); target != d {
 		dm.enum.nameSrc.pipelineData(ctx, &requests.DNSRequest{
 			Name:   target,
-			Domain: domain,
+			Domain: d,
 			Tag:    requests.DNS,
 			Source: "DNS",
 		}, tp)
@@ -315,32 +293,25 @@ func (dm *dataManager) insertNS(ctx context.Context, req *requests.DNSRequest, r
 func (dm *dataManager) insertMX(ctx context.Context, req *requests.DNSRequest, recidx int, tp pipeline.TaskParams) error {
 	cfg, _, err := requests.ContextConfigBus(ctx)
 	if err != nil {
-		return errors.New("The context did not contain the expected values")
+		return errors.New("the context did not contain the expected values")
 	}
 
 	target := resolve.RemoveLastDot(req.Records[recidx].Data)
 	if target == "" {
-		return errors.New("Failed to extract a FQDN from the DNS answer data")
+		return errors.New("failed to extract a FQDN from the DNS answer data")
 	}
 
 	domain, err := publicsuffix.EffectiveTLDPlusOne(target)
-	if err != nil {
-		return errors.New("Failed to extract a domain name from the FQDN")
+	if err != nil || domain == "" {
+		return errors.New("failed to extract a domain name from the FQDN")
 	}
-
-	domain = strings.ToLower(domain)
-	if domain == "" {
-		return errors.New("The request did not contain a domain name")
-	}
-
 	if err := dm.enum.Graph.UpsertMX(ctx, req.Name, target, req.Source, cfg.UUID.String()); err != nil {
 		return fmt.Errorf("%s failed to insert MX record: %v", dm.enum.Graph, err)
 	}
-
-	if target != domain {
+	if d := strings.ToLower(domain); target != d {
 		dm.enum.nameSrc.pipelineData(ctx, &requests.DNSRequest{
 			Name:   target,
-			Domain: domain,
+			Domain: d,
 			Tag:    requests.DNS,
 			Source: "DNS",
 		}, tp)
@@ -351,42 +322,33 @@ func (dm *dataManager) insertMX(ctx context.Context, req *requests.DNSRequest, r
 func (dm *dataManager) insertTXT(ctx context.Context, req *requests.DNSRequest, recidx int, tp pipeline.TaskParams) error {
 	cfg, _, err := requests.ContextConfigBus(ctx)
 	if err != nil {
-		return errors.New("The context did not contain the expected values")
+		return errors.New("the context did not contain the expected values")
 	}
-
-	if !cfg.IsDomainInScope(req.Name) {
-		return nil
+	if cfg.IsDomainInScope(req.Name) {
+		dm.findNamesAndAddresses(ctx, req.Records[recidx].Data, req.Domain, tp)
 	}
-
-	dm.findNamesAndAddresses(ctx, req.Records[recidx].Data, req.Domain, tp)
 	return nil
 }
 
 func (dm *dataManager) insertSOA(ctx context.Context, req *requests.DNSRequest, recidx int, tp pipeline.TaskParams) error {
 	cfg, _, err := requests.ContextConfigBus(ctx)
 	if err != nil {
-		return errors.New("The context did not contain the expected values")
+		return errors.New("the context did not contain the expected values")
 	}
-
-	if !cfg.IsDomainInScope(req.Name) {
-		return nil
+	if cfg.IsDomainInScope(req.Name) {
+		dm.findNamesAndAddresses(ctx, req.Records[recidx].Data, req.Domain, tp)
 	}
-
-	dm.findNamesAndAddresses(ctx, req.Records[recidx].Data, req.Domain, tp)
 	return nil
 }
 
 func (dm *dataManager) insertSPF(ctx context.Context, req *requests.DNSRequest, recidx int, tp pipeline.TaskParams) error {
 	cfg, _, err := requests.ContextConfigBus(ctx)
 	if err != nil {
-		return errors.New("The context did not contain the expected values")
+		return errors.New("the context did not contain the expected values")
 	}
-
-	if !cfg.IsDomainInScope(req.Name) {
-		return nil
+	if cfg.IsDomainInScope(req.Name) {
+		dm.findNamesAndAddresses(ctx, req.Records[recidx].Data, req.Domain, tp)
 	}
-
-	dm.findNamesAndAddresses(ctx, req.Records[recidx].Data, req.Domain, tp)
 	return nil
 }
 
@@ -403,17 +365,14 @@ func (dm *dataManager) findNamesAndAddresses(ctx context.Context, data, domain s
 
 	subre := amassdns.AnySubdomainRegex()
 	for _, name := range subre.FindAllString(data, -1) {
-		domain := strings.ToLower(dm.enum.Config.WhichDomain(name))
-		if domain == "" {
-			continue
+		if domain := strings.ToLower(dm.enum.Config.WhichDomain(name)); domain != "" {
+			dm.enum.nameSrc.pipelineData(ctx, &requests.DNSRequest{
+				Name:   name,
+				Domain: domain,
+				Tag:    requests.DNS,
+				Source: "DNS",
+			}, tp)
 		}
-
-		dm.enum.nameSrc.pipelineData(ctx, &requests.DNSRequest{
-			Name:   name,
-			Domain: domain,
-			Tag:    requests.DNS,
-			Source: "DNS",
-		}, tp)
 	}
 }
 
@@ -434,11 +393,9 @@ func (dm *dataManager) addrRequest(ctx context.Context, req *requests.AddrReques
 	if req == nil || !req.InScope || graph == nil || uuid == "" {
 		return nil
 	}
-
 	if yes, prefix := amassnet.IsReservedAddress(req.Address); yes {
 		return graph.UpsertInfrastructure(ctx, 0, amassnet.ReservedCIDRDescription, req.Address, prefix, "RIR", uuid)
 	}
-
 	if r := dm.enum.Sys.Cache().AddrSearch(req.Address); r != nil {
 		return graph.UpsertInfrastructure(ctx, r.ASN, r.Description, req.Address, r.Prefix, r.Source, uuid)
 	}
@@ -481,11 +438,9 @@ func (dm *dataManager) findInfraInfo(req *requests.AddrRequest) {
 		_ = graph.UpsertInfrastructure(dm.enum.ctx, r.ASN, r.Description, req.Address, r.Prefix, r.Source, uuid)
 		return
 	}
-
 	for _, src := range dm.enum.srcs {
 		src.Request(dm.enum.ctx, &requests.ASNRequest{Address: req.Address})
 	}
-
 	for i := 0; i < 20; i++ {
 		if r := dm.enum.Sys.Cache().AddrSearch(req.Address); r != nil {
 			_ = graph.UpsertInfrastructure(dm.enum.ctx, r.ASN, r.Description, req.Address, r.Prefix, r.Source, uuid)
@@ -506,7 +461,6 @@ func (dm *dataManager) findInfraInfo(req *requests.AddrRequest) {
 	if ones, _ := cidr.Mask.Size(); ones == 0 {
 		return
 	}
-
 	dm.enum.Sys.Cache().Update(&requests.ASNRequest{
 		Address:     first.String(),
 		ASN:         asn,

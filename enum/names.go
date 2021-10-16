@@ -54,7 +54,6 @@ func (r *subdomainTask) Process(ctx context.Context, data pipeline.Data, tp pipe
 	if req == nil || !r.enum.Config.IsDomainInScope(req.Name) {
 		return nil, nil
 	}
-
 	// Do not further evaluate service subdomains
 	for _, label := range strings.Split(req.Name, ".") {
 		l := strings.ToLower(label)
@@ -71,7 +70,6 @@ func (r *subdomainTask) Process(ctx context.Context, data pipeline.Data, tp pipe
 		Tag:     req.Tag,
 		Source:  req.Source,
 	})
-
 	return r.checkForSubdomains(ctx, req, tp)
 }
 
@@ -88,8 +86,8 @@ func (r *subdomainTask) checkForSubdomains(ctx context.Context, req *requests.DN
 	}
 
 	sub := strings.TrimSpace(strings.Join(labels[1:], "."))
-	// CNAMEs are not a proper subdomain
-	if r.enum.Graph.IsCNAMENode(ctx, sub) {
+	times := r.timesForSubdomain(sub)
+	if times > r.enum.Config.MinForRecursive || r.enum.Graph.IsCNAMENode(ctx, sub) {
 		return req, nil
 	}
 
@@ -99,12 +97,11 @@ func (r *subdomainTask) checkForSubdomains(ctx context.Context, req *requests.DN
 		Records: append([]requests.DNSAnswer(nil), req.Records...),
 		Tag:     req.Tag,
 		Source:  req.Source,
-		Times:   r.timesForSubdomain(sub),
+		Times:   times,
 	}
 
 	r.queue.Append(subreq)
-	// First time this proper subdomain has been seen?
-	if sub != req.Domain && subreq.Times == 1 {
+	if times == 1 {
 		pipeline.SendData(ctx, "root", subreq, tp)
 	}
 	return req, nil
@@ -112,15 +109,11 @@ func (r *subdomainTask) checkForSubdomains(ctx context.Context, req *requests.DN
 
 // OutputRequests sends discovered subdomain names to the enumeration data sources.
 func (r *subdomainTask) OutputRequests(num int) int {
-	if num <= 0 {
-		return 0
-	}
-
 	var count int
 loop:
-	for {
+	for ; count < num; count++ {
 		select {
-		case <-r.enum.ctx.Done():
+		case <-r.done:
 			break loop
 		default:
 		}
@@ -136,17 +129,9 @@ loop:
 				src.Request(r.enum.ctx, v.Clone())
 			case *requests.SubdomainRequest:
 				src.Request(r.enum.ctx, v.Clone())
-			default:
-				continue loop
 			}
-			count++
-		}
-
-		if count >= num {
-			break
 		}
 	}
-
 	return count
 }
 
@@ -157,7 +142,6 @@ func (r *subdomainTask) timesForSubdomain(sub string) int {
 		Sub: sub,
 		Ch:  ch,
 	}
-
 	return <-ch
 }
 

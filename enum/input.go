@@ -12,20 +12,18 @@ import (
 	"sync"
 	"time"
 
-	"github.com/OWASP/Amass/v3/filter"
 	amassnet "github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/net/dns"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/caffix/pipeline"
 	"github.com/caffix/queue"
+	"github.com/caffix/stringset"
 )
 
 const (
-	minWaitForData    = 45 * time.Second
-	maxWaitForData    = 60 * time.Second
-	defaultSweepSize  = 100
-	activeSweepSize   = 200
-	defaultOutputReqs = 100
+	waitForData      = 45 * time.Second
+	defaultSweepSize = 100
+	activeSweepSize  = 200
 )
 
 // enumSource handles the filtering and release of new Data in the enumeration.
@@ -35,10 +33,9 @@ type enumSource struct {
 	queue       queue.Queue
 	dups        queue.Queue
 	sweeps      queue.Queue
-	filter      filter.Filter
-	sweepFilter filter.Filter
+	filter      *stringset.Set
+	sweepFilter *stringset.Set
 	subre       *regexp.Regexp
-	count       int64
 	done        chan struct{}
 	doneOnce    sync.Once
 	maxSlots    int
@@ -52,12 +49,12 @@ func newEnumSource(e *Enumeration, slots int) *enumSource {
 		queue:       queue.NewQueue(),
 		dups:        queue.NewQueue(),
 		sweeps:      queue.NewQueue(),
-		filter:      filter.NewBloomFilter(filterMaxSize),
-		sweepFilter: filter.NewBloomFilter(filterMaxSize),
+		filter:      stringset.New(),
+		sweepFilter: stringset.New(),
 		subre:       dns.AnySubdomainRegex(),
 		done:        make(chan struct{}),
 		maxSlots:    slots,
-		timeout:     minWaitForData,
+		timeout:     waitForData,
 	}
 
 	// Monitor the enumeration for completion or termination
@@ -71,18 +68,16 @@ func newEnumSource(e *Enumeration, slots int) *enumSource {
 	}()
 
 	if !e.Config.Passive {
-		r.timeout = maxWaitForData
 		go r.checkForData()
 		go r.processDupNames()
 	}
-
 	return r
 }
 
 func (r *enumSource) Stop() {
 	r.markDone()
-	r.filter = filter.NewBloomFilter(1)
-	r.sweepFilter = filter.NewBloomFilter(1)
+	r.filter.Close()
+	r.sweepFilter.Close()
 	r.queue.Process(func(e interface{}) {})
 	r.dups.Process(func(e interface{}) {})
 	r.sweeps.Process(func(e interface{}) {})
@@ -178,12 +173,6 @@ func (r *enumSource) accept(s, tag, source string, name bool) bool {
 	r.Lock()
 	defer r.Unlock()
 
-	// Check if it's time to reset our bloom filter due to number of elements seen
-	if r.count >= filterMaxSize {
-		r.count = 0
-		r.filter = filter.NewBloomFilter(filterMaxSize)
-	}
-
 	trusted := requests.TrustedTag(tag)
 	// Do not submit names from untrusted sources, after already receiving the name
 	// from a trusted source
@@ -199,7 +188,7 @@ func (r *enumSource) accept(s, tag, source string, name bool) bool {
 	}
 	// At most, a FQDN will be accepted from an untrusted source first, and then
 	// reconsidered from a trusted data source
-	if r.filter.Duplicate(s + strconv.FormatBool(trusted)) {
+	if r.filter.Has(s + strconv.FormatBool(trusted)) {
 		if name && !r.enum.Config.Passive {
 			r.dups.Append(&requests.DNSRequest{
 				Name:   s,
@@ -210,7 +199,7 @@ func (r *enumSource) accept(s, tag, source string, name bool) bool {
 		return false
 	}
 
-	r.count++
+	r.filter.Insert(s + strconv.FormatBool(trusted))
 	return true
 }
 
@@ -263,20 +252,29 @@ func (r *enumSource) Error() error {
 }
 
 func (r *enumSource) checkForData() {
-	required := r.maxSlots
-	t := time.NewTicker(50 * time.Millisecond)
-	defer t.Stop()
-
 	for {
 		select {
 		case <-r.done:
 			return
-		case <-t.C:
-			if needed := required - r.queue.Len(); needed > 0 {
-				if gen := r.requestSweeps(needed); needed-gen > 0 {
-					r.enum.subTask.OutputRequests(defaultOutputReqs)
-				}
+		default:
+		}
+
+		needed := r.maxSlots - r.queue.Len()
+		if needed <= 0 {
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+
+		var sent bool
+		if gen := r.requestSweeps(needed); needed-gen > 0 {
+			gen += r.enum.subTask.OutputRequests(needed - gen)
+			if gen > 0 {
+				sent = true
 			}
+		}
+
+		if !sent {
+			time.Sleep(250 * time.Millisecond)
 		}
 	}
 }
@@ -372,8 +370,9 @@ func (r *enumSource) sweepAddrs(ctx context.Context, req *requests.AddrRequest) 
 		default:
 		}
 
-		if a := ip.String(); !r.sweepFilter.Duplicate(a) {
+		if a := ip.String(); !r.sweepFilter.Has(a) {
 			count++
+			r.sweepFilter.Insert(a)
 			r.queue.Append(&requests.AddrRequest{
 				Address: a,
 				Domain:  req.Domain,

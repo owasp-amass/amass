@@ -24,7 +24,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/OWASP/Amass/v3/filter"
 	amassnet "github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/net/dns"
 	"github.com/PuerkitoBio/goquery"
@@ -153,7 +152,7 @@ func RequestWebPage(ctx context.Context, u string, body io.Reader, hvals map[str
 }
 
 // Crawl will spider the web page at the URL argument looking for DNS names within the scope argument.
-func Crawl(ctx context.Context, u string, scope []string, max int, f filter.Filter) ([]string, error) {
+func Crawl(ctx context.Context, u string, scope []string, max int, f *stringset.Set) ([]string, error) {
 	select {
 	case <-ctx.Done():
 		return nil, fmt.Errorf("the context expired")
@@ -177,7 +176,7 @@ func Crawl(ctx context.Context, u string, scope []string, max int, f filter.Filt
 	}
 
 	if f == nil {
-		f = filter.NewStringFilter()
+		f = stringset.New()
 		defer f.Close()
 	}
 
@@ -270,7 +269,7 @@ func Crawl(ctx context.Context, u string, scope []string, max int, f filter.Filt
 	return results.Slice(), err
 }
 
-func crawlFilterURLs(p *url.URL, f filter.Filter) string {
+func crawlFilterURLs(p *url.URL, f *stringset.Set) string {
 	// Check that the URL has an appropriate scheme for scraping
 	if !p.IsAbs() || (p.Scheme != "http" && p.Scheme != "https") {
 		return ""
@@ -299,10 +298,11 @@ func crawlFilterURLs(p *url.URL, f filter.Filter) string {
 	// Remove fragments and check if we've seen this URL before
 	p.Fragment = ""
 	p.RawFragment = ""
-	if f.Duplicate(p.String()) {
-		return ""
+	if n := p.String(); !f.Has(n) {
+		f.Insert(n)
+		return n
 	}
-	return p.String()
+	return ""
 }
 
 func whichDomain(name string, scope []string) string {

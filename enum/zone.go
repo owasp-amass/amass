@@ -28,7 +28,7 @@ func ZoneTransfer(sub, domain, server string) ([]*requests.DNSRequest, error) {
 	addr := net.JoinHostPort(server, "53")
 	conn, err := amassnet.DialContext(ctx, "tcp", addr)
 	if err != nil {
-		return results, fmt.Errorf("Zone xfr error: Failed to obtain TCP connection to [%s]: %v", addr, err)
+		return results, fmt.Errorf("zone xfr error: Failed to obtain TCP connection to [%s]: %v", addr, err)
 	}
 	defer conn.Close()
 

@@ -7,10 +7,10 @@ import (
 	"context"
 	"time"
 
-	"github.com/OWASP/Amass/v3/filter"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/caffix/pipeline"
 	"github.com/caffix/queue"
+	"github.com/caffix/stringset"
 )
 
 const minWaitForData = 10 * time.Second
@@ -18,7 +18,7 @@ const minWaitForData = 10 * time.Second
 // intelSource handles the filtering and release of new Data in the enumeration.
 type intelSource struct {
 	collection *Collection
-	filter     *filter.StringFilter
+	filter     *stringset.Set
 	queue      queue.Queue
 	done       chan struct{}
 	timeout    time.Duration
@@ -28,7 +28,7 @@ type intelSource struct {
 func newIntelSource(c *Collection) *intelSource {
 	return &intelSource{
 		collection: c,
-		filter:     filter.NewStringFilter(),
+		filter:     stringset.New(),
 		queue:      queue.NewQueue(),
 		done:       make(chan struct{}),
 		timeout:    minWaitForData,
@@ -43,7 +43,8 @@ func (r *intelSource) InputAddress(req *requests.AddrRequest) {
 	default:
 	}
 
-	if req != nil && !r.filter.Duplicate(req.Address) {
+	if req != nil && !r.filter.Has(req.Address) {
+		r.filter.Insert(req.Address)
 		r.queue.Append(req)
 	}
 }

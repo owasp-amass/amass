@@ -13,7 +13,6 @@ import (
 
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/datasrcs"
-	"github.com/OWASP/Amass/v3/filter"
 	amassnet "github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/systems"
@@ -42,7 +41,7 @@ type Collection struct {
 	Output            chan *requests.Output
 	done              chan struct{}
 	doneAlreadyClosed bool
-	filter            filter.Filter
+	filter            *stringset.Set
 	timeChan          chan time.Time
 }
 
@@ -55,7 +54,7 @@ func NewCollection(cfg *config.Config, sys systems.System) *Collection {
 		srcs:     datasrcs.SelectedDataSources(cfg, sys.DataSources()),
 		Output:   make(chan *requests.Output, 100),
 		done:     make(chan struct{}, 2),
-		filter:   filter.NewStringFilter(),
+		filter:   stringset.New(),
 		timeChan: make(chan time.Time, 50),
 	}
 }
@@ -195,7 +194,8 @@ func (c *Collection) makeFilterTaskFunc() pipeline.TaskFunc {
 		default:
 		}
 
-		if req, ok := data.(*requests.Output); ok && req != nil && !c.filter.Duplicate(req.Domain) {
+		if req, ok := data.(*requests.Output); ok && req != nil && !c.filter.Has(req.Domain) {
+			c.filter.Insert(req.Domain)
 			return data, nil
 		}
 		return nil, nil
@@ -226,18 +226,18 @@ func (c *Collection) asnsToCIDRs() []*net.IPNet {
 		cidrSet.InsertMany(req.Netblocks...)
 	}
 
-	filter := filter.NewStringFilter()
+	filter := stringset.New()
 	defer filter.Close()
 
 	// Do not return CIDRs that are already in the config
 	for _, cidr := range c.Config.CIDRs {
-		filter.Duplicate(cidr.String())
+		filter.Insert(cidr.String())
 	}
 
 	for _, netblock := range cidrSet.Slice() {
 		_, ipnet, err := net.ParseCIDR(netblock)
 
-		if err == nil && !filter.Duplicate(ipnet.String()) {
+		if err == nil && !filter.Has(ipnet.String()) {
 			cidrs = append(cidrs, ipnet)
 		}
 	}
@@ -291,7 +291,8 @@ func (c *Collection) collect(req *requests.WhoisRequest) {
 	c.timeChan <- time.Now()
 
 	for _, name := range req.NewDomains {
-		if d, err := publicsuffix.EffectiveTLDPlusOne(name); err == nil && !c.filter.Duplicate(d) {
+		if d, err := publicsuffix.EffectiveTLDPlusOne(name); err == nil && !c.filter.Has(d) {
+			c.filter.Insert(d)
 			c.Output <- &requests.Output{
 				Name:    d,
 				Domain:  d,
