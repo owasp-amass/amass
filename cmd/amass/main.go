@@ -127,6 +127,8 @@ func main() {
 		runTrackCommand(os.Args[2:])
 	case "viz":
 		runVizCommand(os.Args[2:])
+	case "help":
+		runHelpCommand(os.Args[2:])
 	default:
 		commandUsage(mainUsageMsg, mainFlagSet, defaultBuf)
 		os.Exit(1)
