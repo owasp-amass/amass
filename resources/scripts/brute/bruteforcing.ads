@@ -8,13 +8,9 @@ probes = {"www", "online", "webserver", "ns", "ns1", "mail", "smtp", "webmail", 
             "prod", "test", "vpn", "ftp", "ssh", "secure", "whm", "admin", "webdisk", "mobile",
             "remote", "server", "cpanel", "cloud", "autodiscover", "api", "m", "blog"}
 
-function start()
-    set_rate_limit(1)
-end
-
 function vertical(ctx, domain)
     local cfg = config(ctx)
-    if cfg.mode == "passive" then
+    if (cfg.mode == "passive") then
         return
     end
 
@@ -24,20 +20,20 @@ function vertical(ctx, domain)
 end
 
 function resolved(ctx, name, domain, records)
+    local cfg = config(ctx)
+    if (cfg.mode == "passive") then
+        return
+    end
+
     local nparts = split(name, ".")
     local dparts = split(domain, ".")
     -- Do not process resolved root domain names
-    if #nparts == #dparts then
+    if (#nparts == #dparts) then
         return
     end
 
     -- Do not generate names from CNAMEs or names without A/AAAA records
     if (#records == 0 or (has_cname(records) or not has_addr(records))) then
-        return
-    end
-
-    local cfg = config(ctx)
-    if cfg.mode == "passive" then
         return
     end
 
@@ -49,7 +45,7 @@ end
 
 function subdomain(ctx, name, domain, times)
     local cfg = config(ctx)
-    if cfg.mode == "passive" then
+    if (cfg.mode == "passive") then
         return
     end
 
@@ -64,15 +60,11 @@ function make_names(ctx, base)
 
     for i, word in pairs(wordlist) do
         new_name(ctx, word .. "." .. base)
-
-        if i % 1000 == 0 then
-            check_rate_limit()
-        end
     end
 end
 
 function has_cname(records)
-    if #records == 0 then
+    if (#records == 0) then
         return false
     end
 
@@ -86,7 +78,7 @@ function has_cname(records)
 end
 
 function has_addr(records)
-    if #records == 0 then
+    if (#records == 0) then
         return false
     end
 
