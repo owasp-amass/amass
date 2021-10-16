@@ -292,7 +292,7 @@ func customResolverSetup(cfg *config.Config, max int) resolve.Resolver {
 		}
 	}
 
-	return resolve.NewResolverPool(trusted, 2*time.Second, nil, 1, cfg.Log)
+	return resolve.NewResolverPool(trusted, nil, 1, cfg.Log)
 }
 
 func publicResolverSetup(cfg *config.Config, max int) resolve.Resolver {
@@ -315,10 +315,10 @@ func publicResolverSetup(cfg *config.Config, max int) resolve.Resolver {
 	}
 
 	wcd := resolve.NewBaseResolver("8.8.8.8", 50, cfg.Log)
-	baseline := resolve.NewResolverPool(trusted, time.Second, wcd, 1, cfg.Log)
+	baseline := resolve.NewResolverPool(trusted, wcd, 1, cfg.Log)
 
 	r := setupResolvers(config.PublicResolvers, max, config.DefaultQueriesPerPublicResolver, cfg.Log)
-	return resolve.NewResolverPool(r, 2*time.Second, baseline, 2, cfg.Log)
+	return resolve.NewResolverPool(r, baseline, 2, cfg.Log)
 }
 
 func setupResolvers(addrs []string, max, rate int, log *log.Logger) []resolve.Resolver {
