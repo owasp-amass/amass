@@ -31,7 +31,6 @@ func TestLoadDatabaseSettings(t *testing.T) {
 		url = username:password@tcp(host:3306)/database-name?timeout=10s
 		`),
 	)
-
 	if err := c.loadDatabaseSettings(cfg); err != nil {
 		t.Errorf("Load failed")
 	}
@@ -44,13 +43,41 @@ func TestLoadDatabaseSettings(t *testing.T) {
 	if !sec.HasKey("local_database") {
 		t.Errorf("Failed to load local_database setting")
 	}
+
+	cfg, _ = ini.LoadSources(
+		ini.LoadOptions{},
+		[]byte(`
+		output_directory = ./test_graphdb
+		[graphdbs]
+		local_database = false
+		`),
+	)
+	if err := c.loadDatabaseSettings(cfg); err != nil {
+		t.Errorf("Load failed")
+	}
 }
 
 func TestLocalDatabaseSettings(t *testing.T) {
 	c := NewConfig()
 	db := new(Database)
-	var dbs = make([]*Database, 0)
-	dbs = append(dbs, db)
+	db.Primary = true
+	dbs := []*Database{db}
+	if loaded := c.LocalDatabaseSettings(dbs); loaded == nil {
+		t.Errorf("LocalDatabaseSettings failed")
+	}
+
+	cfg, _ := ini.LoadSources(
+		ini.LoadOptions{},
+		[]byte(`
+		output_directory = ./test_graphdb
+		[graphdbs]
+		primary = true
+		local_database = true`),
+	)
+	if err := c.loadDatabaseSettings(cfg); err != nil {
+		t.Errorf("Load failed")
+	}
+
 	if loaded := c.LocalDatabaseSettings(dbs); loaded == nil {
 		t.Errorf("LocalDatabaseSettings failed")
 	}
