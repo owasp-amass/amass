@@ -53,6 +53,38 @@ func TestConfigloadBruteForceSettings(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "sucess - not enabled",
+			args: args{cfg: []byte(`
+			[bruteforce]
+			enabled = false
+			`)},
+			wantErr: false,
+			assertionFunc: func(t *testing.T, c *Config) {
+			},
+		},
+		{
+			name: "failure - missing wordlist",
+			args: args{cfg: []byte(`
+			[bruteforce]
+			enabled = true
+			wordlist_file = ./nonexistant_file
+			`)},
+			wantErr: true,
+			assertionFunc: func(t *testing.T, c *Config) {
+			},
+		},
+		{
+			name: "sucess - minimal wordlist",
+			args: args{cfg: []byte(`
+			[bruteforce]
+			enabled = true
+			wordlist_file = ./test_wordlist.txt
+			`)},
+			wantErr: false,
+			assertionFunc: func(t *testing.T, c *Config) {
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
