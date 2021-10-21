@@ -212,7 +212,7 @@ func TestLoadScopeSettings(t *testing.T) {
 		assertionFunc func(*testing.T, *Config)
 	}{
 		{
-			name: "success - section missing",
+			name: "no error - scope section missing",
 			args: args{cfg: []byte(`
 			#[missing-scope]
 			`)},
@@ -241,15 +241,28 @@ func TestLoadScopeSettings(t *testing.T) {
 			},
 		},
 		{
-			name: "success - valid address",
+			name: "success - valid IPv4 addresses",
 			args: args{cfg: []byte(`
 			[scope]
-			address = 1.2.3.4
+			address = 1.2.3.4,0.0.0.0,255.255.255.255 ; 01.102.103.104
 			`)},
 			wantErr: false,
 			assertionFunc: func(t *testing.T, c *Config) {
-				if len(c.Addresses) != 1 {
-					t.Errorf("Config.loadScopeSettings() - failed to load address")
+				if len(c.Addresses) != 3 {
+					t.Errorf("Config.loadScopeSettings() - failed to load addresses")
+				}
+			},
+		},
+		{
+			name: "success - valid IPv6 addresses",
+			args: args{cfg: []byte(`
+			[scope]
+			address = ::,1111:2222:3333:4444:5555:6666:7777:8888,1:2:0001:deca:f000:00c0:ff:ee ; ::1234:5678:1.2.3.4
+			`)},
+			wantErr: false,
+			assertionFunc: func(t *testing.T, c *Config) {
+				if len(c.Addresses) != 3 {
+					t.Errorf("Config.loadScopeSettings() - failed to load addresses %v", c.Addresses)
 				}
 			},
 		},
@@ -322,6 +335,7 @@ func TestLoadScopeSettings(t *testing.T) {
 		{
 			name: "success - valid domain in scope domains",
 			args: args{cfg: []byte(`
+			[scope]
 			[scope.domains]
 			domain = owasp.org
 			`)},
@@ -330,8 +344,9 @@ func TestLoadScopeSettings(t *testing.T) {
 			},
 		},
 		{
-			name: "no error - invalid subdomain in scope blacklisted",
+			name: "no error - invalid subdomain in section scope.blacklisted",
 			args: args{cfg: []byte(`
+			[scope]
 			[scope.blacklisted]
 			subdomain = (invalid value)
 			`)},
@@ -340,7 +355,7 @@ func TestLoadScopeSettings(t *testing.T) {
 			},
 		},
 		{
-			name: "success - valid subdomain in scope blacklisted",
+			name: "success - valid subdomain in section scope.blacklisted",
 			args: args{cfg: []byte(`
 			[scope.blacklisted]
 			subdomain = gopher.example.com
