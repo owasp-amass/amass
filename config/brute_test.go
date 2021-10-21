@@ -104,3 +104,67 @@ func TestConfigloadBruteForceSettings(t *testing.T) {
 
 	}
 }
+
+func TestConfigloadAlterationSettings(t *testing.T) {
+	type args struct {
+		cfg []byte
+	}
+
+	tests := []struct {
+		name          string
+		args          args
+		wantErr       bool
+		assertionFunc func(*testing.T, *Config)
+	}{
+		{
+			name: "success - check default for enabled",
+			args: args{cfg: []byte(`
+			[alterations]
+			enabled: false
+			`)},
+			wantErr: false,
+			assertionFunc: func(t *testing.T, c *Config) {
+				if c.Alterations {
+					t.Errorf("Config.loadAlterationSettings(): default for alterations changed")
+				}
+			},
+		},
+		{
+			name: "success - enabled, with wordlist file",
+			args: args{cfg: []byte(`
+			[alterations]
+			enabled: true
+			wordlist_file: ./test_wordlist.txt
+			`)},
+			wantErr: false,
+			assertionFunc: func(t *testing.T, c *Config) {
+			},
+		},
+		{
+			name: "success - enabled",
+			args: args{cfg: []byte(`
+			[alterations]
+			enabled: true
+			wordlist_file: ./nonexistant_file
+			`)},
+			wantErr: true,
+			assertionFunc: func(t *testing.T, c *Config) {
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := new(Config)
+			iniFile, err := ini.Load(tt.args.cfg)
+			if err != nil {
+				t.Errorf("Config.loadAlterationSettings() error = %v", err)
+			}
+
+			if err := c.loadAlterationSettings(iniFile); (err != nil) != tt.wantErr {
+				t.Errorf("Config.loadAlterationSettings() error = %v, wantErr %v", err, tt.wantErr)
+			}
+
+			tt.assertionFunc(t, c)
+		})
+	}
+}
