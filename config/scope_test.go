@@ -8,6 +8,8 @@ import (
 	"reflect"
 	"sort"
 	"testing"
+
+	"github.com/go-ini/ini"
 )
 
 func TestConfigAddDomains(t *testing.T) {
@@ -194,6 +196,173 @@ func TestConfigBlacklistSubdomain(t *testing.T) {
 			if !reflect.DeepEqual(tt.domains, tt.config.Blacklist) {
 				t.Errorf("BlacklistSubdomain() wanted %v, got %v", tt.domains, tt.config.Blacklist)
 			}
+		})
+	}
+}
+
+func TestLoadScopeSettings(t *testing.T) {
+	type args struct {
+		cfg []byte
+	}
+
+	tests := []struct {
+		name          string
+		args          args
+		wantErr       bool
+		assertionFunc func(*testing.T, *Config)
+	}{
+		{
+			name: "success - section missing",
+			args: args{cfg: []byte(`
+			#[missing-scope]
+			`)},
+			wantErr: false,
+			assertionFunc: func(t *testing.T, c *Config) {
+			},
+		},
+		{
+			name: "failure - invalid address or range",
+			args: args{cfg: []byte(`
+			[scope]
+			address = (invalid value)
+			`)},
+			wantErr: true,
+			assertionFunc: func(t *testing.T, c *Config) {
+			},
+		},
+		{
+			name: "failure - invalid address range",
+			args: args{cfg: []byte(`
+			[scope]
+			address = 1.2.3.4-1.1.1.1
+			`)},
+			wantErr: true,
+			assertionFunc: func(t *testing.T, c *Config) {
+			},
+		},
+		{
+			name: "success - valid address",
+			args: args{cfg: []byte(`
+			[scope]
+			address = 1.2.3.4
+			`)},
+			wantErr: false,
+			assertionFunc: func(t *testing.T, c *Config) {
+				if len(c.Addresses) != 1 {
+					t.Errorf("Config.loadScopeSettings() - failed to load address")
+				}
+			},
+		},
+		{
+			name: "success - valid address range",
+			args: args{cfg: []byte(`
+			[scope]
+			address = 1.2.3.4-1.2.3.5
+			`)},
+			wantErr: false,
+			assertionFunc: func(t *testing.T, c *Config) {
+				if len(c.Addresses) != 2 {
+					t.Errorf("Config.loadScopeSettings() - failed to collect ips from range")
+				}
+			},
+		},
+		{
+			name: "failure - invalid cidr",
+			args: args{cfg: []byte(`
+			[scope]
+			cidr = (invalid value)
+			`)},
+			wantErr: true,
+			assertionFunc: func(t *testing.T, c *Config) {
+			},
+		},
+		{
+			name: "success - valid cidr",
+			args: args{cfg: []byte(`
+			[scope]
+			cidr = 1.2.3.4/8
+			`)},
+			wantErr: false,
+			assertionFunc: func(t *testing.T, c *Config) {
+				if len(c.CIDRs) != 1 {
+					t.Errorf("Config.loadScopeSettings() - failed to load cidr")
+				}
+			},
+		},
+		{
+			name: "no error - invalid asn",
+			args: args{cfg: []byte(`
+			[scope]
+			asn = (invalid value)
+			`)},
+			wantErr: false,
+			assertionFunc: func(t *testing.T, c *Config) {
+			},
+		},
+		{
+			name: "success - valid asn",
+			args: args{cfg: []byte(`
+			[scope]
+			asn = 26808
+			`)},
+			wantErr: false,
+			assertionFunc: func(t *testing.T, c *Config) {
+			},
+		},
+		{
+			name: "no error - invalid domain in scope domains",
+			args: args{cfg: []byte(`
+			[scope.domains]
+			domain = (invalid value)
+			`)},
+			wantErr: false,
+			assertionFunc: func(t *testing.T, c *Config) {
+			},
+		},
+		{
+			name: "success - valid domain in scope domains",
+			args: args{cfg: []byte(`
+			[scope.domains]
+			domain = owasp.org
+			`)},
+			wantErr: false,
+			assertionFunc: func(t *testing.T, c *Config) {
+			},
+		},
+		{
+			name: "no error - invalid subdomain in scope blacklisted",
+			args: args{cfg: []byte(`
+			[scope.blacklisted]
+			subdomain = (invalid value)
+			`)},
+			wantErr: false,
+			assertionFunc: func(t *testing.T, c *Config) {
+			},
+		},
+		{
+			name: "success - valid subdomain in scope blacklisted",
+			args: args{cfg: []byte(`
+			[scope.blacklisted]
+			subdomain = gopher.example.com
+			`)},
+			wantErr: false,
+			assertionFunc: func(t *testing.T, c *Config) {
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := new(Config)
+			iniFile, err := ini.Load(tt.args.cfg)
+			if err != nil {
+				t.Errorf("Config.loadScopeSettings() %v error = %v", tt.name, err)
+			}
+
+			if err := c.loadScopeSettings(iniFile); (err != nil) != tt.wantErr {
+				t.Errorf("Config.loadScopeSettings() %v error = %v", tt.name, err)
+			}
+
+			tt.assertionFunc(t, c)
 		})
 	}
 }
