@@ -296,11 +296,9 @@ func customResolverSetup(cfg *config.Config, max int) resolve.Resolver {
 }
 
 func publicResolverSetup(cfg *config.Config, max int) resolve.Resolver {
-	baselines := len(config.DefaultBaselineResolvers)
-
 	num := len(config.PublicResolvers)
 	if num > max {
-		num = max - baselines
+		num = max
 	}
 
 	if cfg.MaxDNSQueries == 0 {
@@ -309,14 +307,7 @@ func publicResolverSetup(cfg *config.Config, max int) resolve.Resolver {
 		cfg.MaxDNSQueries = num
 	}
 
-	trusted := setupResolvers(config.DefaultBaselineResolvers, baselines, config.DefaultQueriesPerBaselineResolver, cfg.Log)
-	if len(trusted) == 0 {
-		return nil
-	}
-
-	wcd := resolve.NewBaseResolver("8.8.8.8", 50, cfg.Log)
-	baseline := resolve.NewResolverPool(trusted, wcd, 1, cfg.Log)
-
+	baseline := resolve.NewBaseResolver(config.DefaultBaselineResolver, 50, cfg.Log)
 	r := setupResolvers(config.PublicResolvers, max, config.DefaultQueriesPerPublicResolver, cfg.Log)
 	return resolve.NewResolverPool(r, baseline, 2, cfg.Log)
 }

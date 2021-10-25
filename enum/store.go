@@ -57,26 +57,22 @@ func (dm *dataManager) Process(ctx context.Context, data pipeline.Data, tp pipel
 		return data, nil
 	}
 
-	tCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-
 	switch v := data.(type) {
 	case *requests.DNSRequest:
 		if v == nil {
 			return nil, nil
 		}
-		if err := dm.dnsRequest(tCtx, v, tp); err != nil {
+		if err := dm.dnsRequest(ctx, v, tp); err != nil {
 			bus.Publish(requests.LogTopic, eventbus.PriorityHigh, err.Error())
 		}
 	case *requests.AddrRequest:
 		if v == nil {
 			return nil, nil
 		}
-		if err := dm.addrRequest(tCtx, v, tp); err != nil {
+		if err := dm.addrRequest(ctx, v, tp); err != nil {
 			bus.Publish(requests.LogTopic, eventbus.PriorityHigh, err.Error())
 		}
 	}
-
 	return data, nil
 }
 
@@ -377,6 +373,7 @@ func (dm *dataManager) findNamesAndAddresses(ctx context.Context, data, domain s
 }
 
 type queuedAddrRequest struct {
+	Ctx context.Context
 	Req *requests.AddrRequest
 	Tp  pipeline.TaskParams
 }
@@ -401,6 +398,7 @@ func (dm *dataManager) addrRequest(ctx context.Context, req *requests.AddrReques
 	}
 
 	dm.queue.Append(&queuedAddrRequest{
+		Ctx: ctx,
 		Req: req,
 		Tp:  tp,
 	})
@@ -408,59 +406,110 @@ func (dm *dataManager) addrRequest(ctx context.Context, req *requests.AddrReques
 }
 
 func (dm *dataManager) processASNRequests() {
-	empty := func() {
-		dm.queue.Process(func(e interface{}) {
-			if qar, ok := e.(*queuedAddrRequest); ok {
-				dm.findInfraInfo(qar.Req)
-			}
-		})
-	}
-
+	var pending int
+	var finish bool
+	graph := dm.enum.Graph
+	ch := make(chan string, 2)
+	uuid := dm.enum.Config.UUID.String()
+	waiting := make(map[string][]*queuedAddrRequest)
+loop:
 	for {
 		select {
 		case <-dm.signalDone:
-			if dm.queue.Len() > 0 {
-				empty()
+			if pending == 0 {
+				break loop
 			}
-			dm.confirmDone <- struct{}{}
-			return
+			finish = true
 		case <-dm.queue.Signal():
-			empty()
+			e, ok := dm.queue.Next()
+			if !ok {
+				continue loop
+			}
+
+			qar, ok := e.(*queuedAddrRequest)
+			if !ok {
+				continue loop
+			}
+			if key := waitMapKey(qar.Req.Address); key != "" {
+				if _, found := waiting[key]; !found {
+					pending++
+					go dm.findInfraInfo(qar.Ctx, qar.Req, ch)
+				}
+				waiting[key] = append(waiting[key], qar)
+			}
+		case addr := <-ch:
+			var keep []*queuedAddrRequest
+
+			pending--
+			key := waitMapKey(addr)
+			for _, qar := range waiting[key] {
+				if r := dm.enum.Sys.Cache().AddrSearch(qar.Req.Address); r != nil {
+					_ = graph.UpsertInfrastructure(qar.Ctx, r.ASN,
+						r.Description, qar.Req.Address, r.Prefix, r.Source, uuid)
+				} else {
+					keep = append(keep, qar)
+				}
+			}
+			if len(keep) == 0 {
+				waiting[key] = nil
+				delete(waiting, key)
+			} else {
+				waiting[key] = keep
+				pending++
+				go dm.findInfraInfo(keep[0].Ctx, keep[0].Req, ch)
+			}
+			// Is it time to exit the goroutine?
+			if finish && pending == 0 {
+				break loop
+			}
 		}
 	}
+	dm.confirmDone <- struct{}{}
 }
 
-func (dm *dataManager) findInfraInfo(req *requests.AddrRequest) {
+func waitMapKey(addr string) string {
+	ip := net.ParseIP(addr)
+	if ip == nil {
+		return ""
+	}
+
+	var del string
+	if amassnet.IsIPv4(ip) {
+		del = "."
+	} else {
+		del = ":"
+	}
+
+	parts := strings.Split(addr, del)
+	return strings.Join(parts[:2], del)
+}
+
+func (dm *dataManager) findInfraInfo(ctx context.Context, req *requests.AddrRequest, done chan string) {
+	defer func() { done <- req.Address }()
+
 	graph := dm.enum.Graph
 	uuid := dm.enum.Config.UUID.String()
-
 	if r := dm.enum.Sys.Cache().AddrSearch(req.Address); r != nil {
-		_ = graph.UpsertInfrastructure(dm.enum.ctx, r.ASN, r.Description, req.Address, r.Prefix, r.Source, uuid)
+		_ = graph.UpsertInfrastructure(ctx, r.ASN, r.Description, req.Address, r.Prefix, r.Source, uuid)
 		return
 	}
 	for _, src := range dm.enum.srcs {
-		src.Request(dm.enum.ctx, &requests.ASNRequest{Address: req.Address})
+		src.Request(ctx, &requests.ASNRequest{Address: req.Address})
 	}
-	for i := 0; i < 20; i++ {
+	for i := 0; i < 120; i++ {
 		if r := dm.enum.Sys.Cache().AddrSearch(req.Address); r != nil {
-			_ = graph.UpsertInfrastructure(dm.enum.ctx, r.ASN, r.Description, req.Address, r.Prefix, r.Source, uuid)
+			_ = graph.UpsertInfrastructure(ctx, r.ASN, r.Description, req.Address, r.Prefix, r.Source, uuid)
 			return
 		}
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(time.Second)
 	}
 
 	asn := 0
 	desc := "Unknown"
 	prefix := fakePrefix(req.Address)
-	_ = graph.UpsertInfrastructure(dm.enum.ctx, asn, desc, req.Address, prefix, "RIR", uuid)
+	_ = graph.UpsertInfrastructure(ctx, asn, desc, req.Address, prefix, "RIR", uuid)
 
-	first, cidr, err := net.ParseCIDR(prefix)
-	if err != nil {
-		return
-	}
-	if ones, _ := cidr.Mask.Size(); ones == 0 {
-		return
-	}
+	first, cidr, _ := net.ParseCIDR(prefix)
 	dm.enum.Sys.Cache().Update(&requests.ASNRequest{
 		Address:     first.String(),
 		ASN:         asn,

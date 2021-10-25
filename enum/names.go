@@ -10,23 +10,29 @@ import (
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/caffix/pipeline"
 	"github.com/caffix/queue"
+	"github.com/caffix/resolve"
+	"github.com/caffix/stringset"
 )
 
 // subdomainTask handles newly discovered proper subdomain names in the enumeration.
 type subdomainTask struct {
-	enum      *Enumeration
-	queue     queue.Queue
-	timesChan chan *timesReq
-	done      chan struct{}
+	enum            *Enumeration
+	queue           queue.Queue
+	cnames          *stringset.Set
+	withinWildcards *stringset.Set
+	timesChan       chan *timesReq
+	done            chan struct{}
 }
 
 // newSubdomainTask returns an initialized SubdomainTask.
 func newSubdomainTask(e *Enumeration) *subdomainTask {
 	r := &subdomainTask{
-		enum:      e,
-		queue:     queue.NewQueue(),
-		timesChan: make(chan *timesReq, 10),
-		done:      make(chan struct{}, 2),
+		enum:            e,
+		queue:           queue.NewQueue(),
+		cnames:          stringset.New(),
+		withinWildcards: stringset.New(),
+		timesChan:       make(chan *timesReq, 10),
+		done:            make(chan struct{}, 2),
 	}
 
 	go r.timesManager()
@@ -37,6 +43,8 @@ func newSubdomainTask(e *Enumeration) *subdomainTask {
 func (r *subdomainTask) Stop() {
 	close(r.done)
 	r.queue.Process(func(e interface{}) {})
+	r.cnames.Close()
+	r.withinWildcards.Close()
 }
 
 // Process implements the pipeline Task interface.
@@ -63,53 +71,86 @@ func (r *subdomainTask) Process(ctx context.Context, data pipeline.Data, tp pipe
 		}
 	}
 
-	r.queue.Append(&requests.ResolvedRequest{
-		Name:    req.Name,
-		Domain:  req.Domain,
-		Records: append([]requests.DNSAnswer(nil), req.Records...),
-		Tag:     req.Tag,
-		Source:  req.Source,
-	})
-	return r.checkForSubdomains(ctx, req, tp)
+	if r.checkForSubdomains(ctx, req, tp) {
+		r.queue.Append(&requests.ResolvedRequest{
+			Name:    req.Name,
+			Domain:  req.Domain,
+			Records: req.Records,
+			Tag:     req.Tag,
+			Source:  req.Source,
+		})
+	}
+	return req, nil
 }
 
-func (r *subdomainTask) checkForSubdomains(ctx context.Context, req *requests.DNSRequest, tp pipeline.TaskParams) (pipeline.Data, error) {
+func (r *subdomainTask) checkForSubdomains(ctx context.Context, req *requests.DNSRequest, tp pipeline.TaskParams) bool {
 	labels := strings.Split(req.Name, ".")
 	num := len(labels)
 	// Is this large enough to consider further?
 	if num < 2 {
-		return req, nil
+		return false
 	}
 	// It cannot have fewer labels than the root domain name
 	if num-1 < len(strings.Split(req.Domain, ".")) {
-		return req, nil
+		return false
 	}
 
 	sub := strings.TrimSpace(strings.Join(labels[1:], "."))
 	times := r.timesForSubdomain(sub)
-	if times > r.enum.Config.MinForRecursive || r.enum.Graph.IsCNAMENode(ctx, sub) {
-		return req, nil
+	if times == 1 && r.subWithinWildcard(ctx, sub, req.Domain) {
+		r.withinWildcards.Insert(sub)
+		return false
+	} else if times > 1 && r.withinWildcards.Has(sub) {
+		return false
+	} else if times == 1 && r.enum.Graph.IsCNAMENode(ctx, sub) {
+		r.cnames.Insert(sub)
+		return false
+	} else if times > 1 && r.cnames.Has(sub) {
+		return false
+	} else if times > r.enum.Config.MinForRecursive {
+		return true
 	}
 
 	subreq := &requests.SubdomainRequest{
-		Name:    sub,
-		Domain:  req.Domain,
-		Records: append([]requests.DNSAnswer(nil), req.Records...),
-		Tag:     req.Tag,
-		Source:  req.Source,
-		Times:   times,
+		Name:   sub,
+		Domain: req.Domain,
+		Tag:    req.Tag,
+		Source: req.Source,
+		Times:  times,
 	}
 
 	r.queue.Append(subreq)
 	if times == 1 {
 		pipeline.SendData(ctx, "root", subreq, tp)
 	}
-	return req, nil
+	return true
+}
+
+func (r *subdomainTask) subWithinWildcard(ctx context.Context, name, domain string) bool {
+	for _, t := range InitialQueryTypes {
+		select {
+		case <-ctx.Done():
+			return false
+		default:
+		}
+
+		msg := resolve.QueryMsg("a."+name, t)
+		resp, err := r.enum.Sys.Pool().Query(ctx, msg, resolve.PriorityHigh, resolve.PoolRetryPolicy)
+		if err == nil && resp != nil && len(resp.Answer) > 0 &&
+			r.enum.Sys.Pool().WildcardType(ctx, resp, domain) != resolve.WildcardTypeNone {
+			return true
+		}
+	}
+	return false
 }
 
 // OutputRequests sends discovered subdomain names to the enumeration data sources.
 func (r *subdomainTask) OutputRequests(num int) int {
 	var count int
+
+	if num <= 0 {
+		return count
+	}
 loop:
 	for ; count < num; count++ {
 		select {
@@ -120,15 +161,15 @@ loop:
 
 		element, ok := r.queue.Next()
 		if !ok {
-			break
+			break loop
 		}
 
 		for _, src := range r.enum.srcs {
 			switch v := element.(type) {
 			case *requests.ResolvedRequest:
-				src.Request(r.enum.ctx, v.Clone())
+				src.Request(r.enum.ctx, v)
 			case *requests.SubdomainRequest:
-				src.Request(r.enum.ctx, v.Clone())
+				src.Request(r.enum.ctx, v)
 			}
 		}
 	}

@@ -267,36 +267,51 @@ func (e *Enumeration) submitKnownNames() {
 		srcTags[src.String()] = src.Description()
 	}
 
-	tCtx, cancel := context.WithTimeout(e.ctx, time.Minute)
-	defer cancel()
-
 	for _, g := range e.Sys.GraphDatabases() {
-		for _, event := range g.EventsInScope(tCtx, e.Config.Domains()...) {
-			for _, name := range g.EventFQDNs(tCtx, event) {
-				select {
-				case <-e.done:
-					return
-				default:
-				}
+		e.readNamesFromDatabase(e.ctx, g, filter, srcTags)
+	}
+}
 
-				if filter.Has(name) {
-					continue
-				}
-				filter.Insert(name)
+func (e *Enumeration) readNamesFromDatabase(ctx context.Context, g *netmap.Graph, filter *stringset.Set, stags map[string]string) {
+	db := netmap.NewGraph(netmap.NewCayleyGraphMemory())
+	if db == nil {
+		return
+	}
+	defer db.Close()
 
-				if domain := e.Config.WhichDomain(name); domain != "" {
-					if srcs, err := g.NodeSources(tCtx, netmap.Node(name), event); err == nil {
-						src := srcs[0]
-						tag := srcTags[src]
+	// Migrate the data into an in-memory graph database
+	domains := e.Config.Domains()
+	if err := g.MigrateEventsInScope(ctx, db, domains); err != nil {
+		return
+	}
 
-						e.nameSrc.dataSourceName(&requests.DNSRequest{
-							Name:   name,
-							Domain: domain,
-							Tag:    tag,
-							Source: src,
-						})
-					}
-				}
+	for _, event := range db.EventsInScope(ctx, domains...) {
+		for _, name := range db.EventFQDNs(ctx, event) {
+			select {
+			case <-e.done:
+				return
+			default:
+			}
+
+			if filter.Has(name) {
+				continue
+			}
+			filter.Insert(name)
+
+			domain := e.Config.WhichDomain(name)
+			if domain == "" {
+				continue
+			}
+			if srcs, err := db.NodeSources(ctx, netmap.Node(name), event); err == nil {
+				src := srcs[0]
+				tag := stags[src]
+
+				e.nameSrc.dataSourceName(&requests.DNSRequest{
+					Name:   name,
+					Domain: domain,
+					Tag:    tag,
+					Source: src,
+				})
 			}
 		}
 	}

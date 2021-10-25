@@ -21,14 +21,14 @@ import (
 )
 
 const (
-	waitForData      = 45 * time.Second
-	defaultSweepSize = 100
-	activeSweepSize  = 200
+	waitForData       = 45 * time.Second
+	defaultSweepSize  = 100
+	activeSweepSize   = 200
+	numDataItemsInput = 100
 )
 
 // enumSource handles the filtering and release of new Data in the enumeration.
 type enumSource struct {
-	sync.Mutex
 	enum        *Enumeration
 	queue       queue.Queue
 	dups        queue.Queue
@@ -37,6 +37,7 @@ type enumSource struct {
 	sweepFilter *stringset.Set
 	subre       *regexp.Regexp
 	done        chan struct{}
+	tokens      chan struct{}
 	doneOnce    sync.Once
 	maxSlots    int
 	timeout     time.Duration
@@ -53,8 +54,13 @@ func newEnumSource(e *Enumeration, slots int) *enumSource {
 		sweepFilter: stringset.New(),
 		subre:       dns.AnySubdomainRegex(),
 		done:        make(chan struct{}),
+		tokens:      make(chan struct{}, numDataItemsInput),
 		maxSlots:    slots,
 		timeout:     waitForData,
+	}
+
+	for i := 0; i < numDataItemsInput; i++ {
+		r.tokens <- struct{}{}
 	}
 
 	// Monitor the enumeration for completion or termination
@@ -76,11 +82,11 @@ func newEnumSource(e *Enumeration, slots int) *enumSource {
 
 func (r *enumSource) Stop() {
 	r.markDone()
-	r.filter.Close()
-	r.sweepFilter.Close()
 	r.queue.Process(func(e interface{}) {})
 	r.dups.Process(func(e interface{}) {})
 	r.sweeps.Process(func(e interface{}) {})
+	r.filter.Close()
+	r.sweepFilter.Close()
 }
 
 func (r *enumSource) markDone() {
@@ -116,16 +122,19 @@ func (r *enumSource) pipelineData(ctx context.Context, data pipeline.Data, tp pi
 	switch v := data.(type) {
 	case *requests.DNSRequest:
 		if v != nil && v.Valid() {
-			r.newName(ctx, v, tp)
+			<-r.tokens
+			go r.newName(ctx, v, tp)
 		}
 	case *requests.AddrRequest:
 		if v != nil && v.Valid() {
-			r.newAddr(ctx, v, tp)
+			<-r.tokens
+			go r.newAddr(ctx, v, tp)
 		}
 	}
 }
 
 func (r *enumSource) newName(ctx context.Context, req *requests.DNSRequest, tp pipeline.TaskParams) {
+	defer func() { r.tokens <- struct{}{} }()
 	// Clean up the newly discovered name and domain
 	requests.SanitizeDNSRequest(req)
 	// Check that the name is valid
@@ -147,6 +156,8 @@ func (r *enumSource) newName(ctx context.Context, req *requests.DNSRequest, tp p
 }
 
 func (r *enumSource) newAddr(ctx context.Context, req *requests.AddrRequest, tp pipeline.TaskParams) {
+	defer func() { r.tokens <- struct{}{} }()
+
 	if !req.InScope || tp == nil || !r.accept(req.Address, req.Tag, req.Source, false) {
 		return
 	}
@@ -170,9 +181,6 @@ func (r *enumSource) sendAddr(ctx context.Context, req *requests.AddrRequest, tp
 }
 
 func (r *enumSource) accept(s, tag, source string, name bool) bool {
-	r.Lock()
-	defer r.Unlock()
-
 	trusted := requests.TrustedTag(tag)
 	// Do not submit names from untrusted sources, after already receiving the name
 	// from a trusted source
@@ -272,7 +280,6 @@ func (r *enumSource) checkForData() {
 				sent = true
 			}
 		}
-
 		if !sent {
 			time.Sleep(250 * time.Millisecond)
 		}
@@ -348,7 +355,6 @@ func (r *enumSource) requestSweeps(num int) int {
 			count += r.sweepAddrs(r.enum.ctx, a)
 		}
 	}
-
 	return count
 }
 
