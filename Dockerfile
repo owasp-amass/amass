@@ -11,6 +11,7 @@ ENV HOME /
 RUN addgroup user \
     && adduser user -D -G user \
     && mkdir /.config \
+    && mkdir /.config/amass \
     && chown -R user:user /.config
 USER user
 ENTRYPOINT ["/bin/amass"]
