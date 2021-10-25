@@ -4,7 +4,7 @@
 local json = require("json")
 
 name = "CommonCrawl"
-type = "api"
+type = "crawl"
 
 local urls = {}
 
