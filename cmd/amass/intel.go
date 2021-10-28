@@ -201,9 +201,9 @@ func runIntelCommand(clArgs []string) {
 	sys.SetDataSources(datasrcs.GetAllSources(sys))
 
 	if args.OrganizationName != "" {
-		asns, _, err := config.LookupASNsByName(args.OrganizationName)
-		if err != nil {
-			fmt.Printf("%v\n", err)
+		var asns []int
+		for _, entry := range sys.Cache().DescriptionSearch(args.OrganizationName) {
+			asns = append(asns, entry.ASN)
 		}
 		if len(asns) > 0 {
 			printNetblocks(asns, cfg, sys)

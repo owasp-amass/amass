@@ -4,50 +4,13 @@
 package config
 
 import (
-	"bufio"
 	"compress/gzip"
 	"encoding/csv"
 	"fmt"
 	"io"
 	"net"
 	"strconv"
-	"strings"
 )
-
-// LookupASNsByName returns ASNs and descriptions for autonomous systems
-// that have descriptions containing the string provided.
-func LookupASNsByName(s string) ([]int, []string, error) {
-	var asns []int
-	var descs []string
-
-	fsOnce.Do(openTheFS)
-
-	content, err := StatikFS.Open("/asnlist.txt")
-	if err != nil {
-		return asns, descs, fmt.Errorf("Failed to obtain the embedded ASN information: asnlist.txt: %v", err)
-	}
-	defer content.Close()
-
-	s = strings.ToLower(s)
-	scanner := bufio.NewScanner(content)
-	for scanner.Scan() {
-		line := scanner.Text()
-
-		if err := scanner.Err(); err == nil {
-			parts := strings.Fields(strings.TrimSpace(line))
-
-			if strings.Contains(strings.ToLower(parts[1]), s) {
-				a, err := strconv.Atoi(parts[0])
-				if err == nil {
-					asns = append(asns, a)
-					descs = append(descs, parts[1])
-				}
-			}
-		}
-	}
-
-	return asns, descs, nil
-}
 
 // IP2ASN is a range record provided by the iptoasn.com service.
 type IP2ASN struct {
@@ -64,13 +27,13 @@ func GetIP2ASNData() ([]*IP2ASN, error) {
 
 	file, err := StatikFS.Open("/ip2asn-combined.tsv.gz")
 	if err != nil {
-		return nil, fmt.Errorf("Failed to open the 'ip2asn-combined.tsv.gz' file: %v", err)
+		return nil, fmt.Errorf("failed to open the 'ip2asn-combined.tsv.gz' file: %v", err)
 	}
 	defer file.Close()
 
 	zr, err := gzip.NewReader(file)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to obtain the gzip reader for the 'ip2asn-combined.tsv.gz' file: %v", err)
+		return nil, fmt.Errorf("failed to obtain the gzip reader for the 'ip2asn-combined.tsv.gz' file: %v", err)
 	}
 	defer zr.Close()
 
