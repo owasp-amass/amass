@@ -5,8 +5,7 @@
 </p>
 
 [![OWASP Flagship](https://img.shields.io/badge/owasp-flagship%20project-48A646.svg)](https://owasp.org/projects/#sec-flagships)
-[![GitHub Release](https://img.shields.io/github/release/OWASP/Amass)](https://github.com/OWASP/Amass/releases)
-[![GitHub Release Date](https://img.shields.io/github/release-date/OWASP/Amass)](https://github.com/OWASP/Amass/releases/latest)
+[![GitHub Release](https://img.shields.io/github/release/OWASP/Amass)](https://github.com/OWASP/Amass/releases/latest)
 [![Docker Images](https://img.shields.io/docker/pulls/caffix/amass.svg)](https://hub.docker.com/r/caffix/amass)
 [![Follow on Twitter](https://img.shields.io/twitter/follow/owaspamass.svg?logo=twitter)](https://twitter.com/owaspamass)
 [![Chat on Discord](https://img.shields.io/discord/433729817918308352.svg?logo=discord)](https://discord.gg/rtN8GMd)
@@ -101,6 +100,8 @@ For a list of all contributors to the OWASP Amass Project please visit our [HALL
 
 ## Testimonials
 
+### [![Accenture Logo](./images/accenture_logo.png) Accenture](https://www.accenture.com/)
+
 *"Accenture’s adversary simulation team has used Amass as our primary tool suite on a variety of external enumeration projects and attack surface assessments for clients. It’s been an absolutely invaluable basis for infrastructure enumeration, and we’re really grateful for all the hard work that’s gone into making and maintaining it – it’s made our job much easier!"*
 
 \- Max Deighton, Accenture Cyber Defense Manager
@@ -113,7 +114,6 @@ Add it to our ever-growing list of [REFERENCES.md](REFERENCES.md) by forking and
 
 ### Top Mentions
 
-* [SecurityTrails | Introducing the new OWASP Amass Information Sharing Feature: a Big Community Effort to Share Accurate Domain and Subdomain data, for everyone](https://securitytrails.com/blog/introducing-owasp-amass-information-sharing-feature)
 * [WhoisXML API | OWASP Amass and WhoisXML API Are Now Integration Partners](https://main.whoisxmlapi.com/success-stories/cyber-security-solutions/owasp-amass-and-whoisxml-api-are-now-integration-partners)
 * [Intigriti | Hacker tools: Amass – Hunting for Subdomains](https://blog.intigriti.com/2021/06/08/hacker-tools-amass-hunting-for-subdomains)
 * [Hakluke | Guide to Amass — How to Use Amass More Effectively for Bug Bounties](https://medium.com/@hakluke/haklukes-guide-to-amass-how-to-use-amass-more-effectively-for-bug-bounties-7c37570b83f7)
