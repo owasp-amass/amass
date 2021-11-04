@@ -18,6 +18,7 @@ import (
 	"github.com/OWASP/Amass/v3/limits"
 	amassnet "github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/requests"
+	"github.com/OWASP/Amass/v3/resources"
 	"github.com/caffix/netmap"
 	"github.com/caffix/resolve"
 	"github.com/caffix/service"
@@ -246,7 +247,7 @@ func (l *LocalSystem) manageDataSources() {
 }
 
 func (l *LocalSystem) loadCacheData() error {
-	ranges, err := config.GetIP2ASNData()
+	ranges, err := resources.GetIP2ASNData()
 	if err != nil {
 		return err
 	}
@@ -279,15 +280,12 @@ func customResolverSetup(cfg *config.Config, max int) resolve.Resolver {
 	}
 
 	if cfg.MaxDNSQueries == 0 {
-		cfg.MaxDNSQueries = num * config.DefaultQueriesPerBaselineResolver
-	} else if cfg.MaxDNSQueries < num {
-		cfg.MaxDNSQueries = num
+		cfg.MaxDNSQueries = num * config.DefaultQueriesPerPublicResolver
 	}
 
-	rate := cfg.MaxDNSQueries / num
 	var trusted []resolve.Resolver
 	for _, addr := range cfg.Resolvers {
-		if r := resolve.NewBaseResolver(addr, rate, cfg.Log); r != nil {
+		if r := resolve.NewBaseResolver(addr, config.DefaultQueriesPerPublicResolver, cfg.Log); r != nil {
 			trusted = append(trusted, r)
 		}
 	}
@@ -303,13 +301,23 @@ func publicResolverSetup(cfg *config.Config, max int) resolve.Resolver {
 
 	if cfg.MaxDNSQueries == 0 {
 		cfg.MaxDNSQueries = num * config.DefaultQueriesPerPublicResolver
-	} else if cfg.MaxDNSQueries < num {
-		cfg.MaxDNSQueries = num
 	}
 
-	baseline := resolve.NewBaseResolver(config.DefaultBaselineResolver, 50, cfg.Log)
-	r := setupResolvers(config.PublicResolvers, max, config.DefaultQueriesPerPublicResolver, cfg.Log)
-	return resolve.NewResolverPool(r, baseline, 2, cfg.Log)
+	trusted := setupResolvers(
+		config.DefaultBaselineResolvers,
+		len(config.DefaultBaselineResolvers),
+		config.DefaultQueriesPerBaselineResolver,
+		cfg.Log,
+	)
+	if len(trusted) == 0 {
+		return nil
+	}
+
+	google := resolve.NewBaseResolver("8.8.8.8", config.DefaultQueriesPerBaselineResolver, cfg.Log)
+	baseline := resolve.NewResolverPool(trusted, google, 1, cfg.Log)
+
+	r := setupResolvers(config.PublicResolvers, cfg.MaxDNSQueries, config.DefaultQueriesPerPublicResolver, cfg.Log)
+	return resolve.NewResolverPool(r, baseline, 1, cfg.Log)
 }
 
 func setupResolvers(addrs []string, max, rate int, log *log.Logger) []resolve.Resolver {

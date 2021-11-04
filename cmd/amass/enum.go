@@ -229,17 +229,18 @@ func runEnumCommand(clArgs []string) {
 	go processOutput(ctx, e, outChans, done, &wg)
 
 	// Monitor for cancellation by the user
-	go func() {
+	go func(c context.CancelFunc) {
 		quit := make(chan os.Signal, 1)
 		signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+		defer signal.Stop(quit)
 
 		select {
 		case <-quit:
-			cancel()
+			c()
 		case <-done:
 		case <-ctx.Done():
 		}
-	}()
+	}(cancel)
 
 	// Start the enumeration process
 	if err := e.Start(ctx); err != nil {
@@ -254,13 +255,23 @@ func runEnumCommand(clArgs []string) {
 	if !cfg.Passive && len(e.Sys.GraphDatabases()) > 0 {
 		fmt.Fprintf(color.Error, "\n%s\n", green("The enumeration has finished"))
 
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		defer cancel()
+
+		// Monitor for cancellation by the user
+		go func(c context.CancelFunc) {
+			quit := make(chan os.Signal, 1)
+			signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+			defer signal.Stop(quit)
+
+			<-quit
+			c()
+		}(cancel)
+
 		// Copy the graph of findings into the system graph databases
 		for _, g := range e.Sys.GraphDatabases() {
 			fmt.Fprintf(color.Error, "%s%s%s\n",
 				yellow("Discoveries are being migrated into the "), yellow(g.String()), yellow(" database"))
-
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-			defer cancel()
 
 			if err := e.Graph.MigrateEvents(ctx, g, e.Config.UUID.String()); err != nil {
 				fmt.Fprintf(color.Error, "%s%s%s%s\n",

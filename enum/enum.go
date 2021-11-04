@@ -21,10 +21,7 @@ import (
 )
 
 const (
-	defaultPipelineTasks   int = 50
-	maxInputSourceBuffer   int = 20000
-	maxDnsPipelineTasks    int = 15000
-	maxStorePipelineTasks  int = 10
+	maxDNSPipelineTasks    int = 2000
 	maxActivePipelineTasks int = 25
 )
 
@@ -93,21 +90,24 @@ func (e *Enumeration) Start(ctx context.Context) error {
 	e.setupContext(ctx)
 
 	// The pipeline input source will receive all the names
-	e.nameSrc = newEnumSource(e, maxInputSourceBuffer)
+	e.nameSrc = newEnumSource(e)
 	e.startupAndCleanup()
 	defer e.stop()
 
 	var stages []pipeline.Stage
 	if !e.Config.Passive {
+		num := e.Config.MaxDNSQueries
+		if num > maxDNSPipelineTasks {
+			num = maxDNSPipelineTasks
+		}
 		stages = append(stages, pipeline.FIFO("", e.dnsTask.blacklistTaskFunc()))
-		stages = append(stages, pipeline.DynamicPool("root", e.dnsTask.rootTaskFunc(), maxDnsPipelineTasks))
-		stages = append(stages, pipeline.DynamicPool("dns", e.dnsTask, maxDnsPipelineTasks))
+		stages = append(stages, pipeline.FIFO("root", e.dnsTask.rootTaskFunc()))
+		stages = append(stages, pipeline.DynamicPool("dns", e.dnsTask, num))
 	}
 
 	stages = append(stages, pipeline.FIFO("filter", e.filterTaskFunc()))
 	if !e.Config.Passive {
-		stages = append(stages, pipeline.FixedPool("store", e.store, maxStorePipelineTasks))
-		stages = append(stages, pipeline.FixedPool("", e.subTask, defaultPipelineTasks))
+		stages = append(stages, pipeline.Parallel("store", e.store, e.subTask))
 	}
 	if e.Config.Active {
 		activetask := newActiveTask(e, maxActivePipelineTasks)

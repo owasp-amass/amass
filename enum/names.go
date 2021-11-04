@@ -71,15 +71,17 @@ func (r *subdomainTask) Process(ctx context.Context, data pipeline.Data, tp pipe
 		}
 	}
 
-	if r.checkForSubdomains(ctx, req, tp) {
-		r.queue.Append(&requests.ResolvedRequest{
-			Name:    req.Name,
-			Domain:  req.Domain,
-			Records: req.Records,
-			Tag:     req.Tag,
-			Source:  req.Source,
-		})
-	}
+	go func() {
+		if r.checkForSubdomains(ctx, req, tp) {
+			r.queue.Append(&requests.ResolvedRequest{
+				Name:    req.Name,
+				Domain:  req.Domain,
+				Records: req.Records,
+				Tag:     req.Tag,
+				Source:  req.Source,
+			})
+		}
+	}()
 	return req, nil
 }
 
@@ -168,8 +170,17 @@ loop:
 			switch v := element.(type) {
 			case *requests.ResolvedRequest:
 				src.Request(r.enum.ctx, v)
+				if r.enum.Config.Alterations && src.String() == "Alterations" {
+					count += len(r.enum.Config.AltWordlist)
+				}
+				if r.enum.Config.BruteForcing && src.String() == "Brute Forcing" && r.enum.Config.MinForRecursive == 0 {
+					count += len(r.enum.Config.Wordlist)
+				}
 			case *requests.SubdomainRequest:
 				src.Request(r.enum.ctx, v)
+				if r.enum.Config.BruteForcing && src.String() == "Brute Forcing" && v.Times >= r.enum.Config.MinForRecursive {
+					count += len(r.enum.Config.Wordlist)
+				}
 			}
 		}
 	}

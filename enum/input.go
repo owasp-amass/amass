@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	waitForData       = 45 * time.Second
+	waitForDuration   = 45 * time.Second
 	defaultSweepSize  = 100
 	activeSweepSize   = 200
 	numDataItemsInput = 100
@@ -40,11 +40,10 @@ type enumSource struct {
 	tokens      chan struct{}
 	doneOnce    sync.Once
 	maxSlots    int
-	timeout     time.Duration
 }
 
 // newEnumSource returns an initialized input source for the enumeration pipeline.
-func newEnumSource(e *Enumeration, slots int) *enumSource {
+func newEnumSource(e *Enumeration) *enumSource {
 	r := &enumSource{
 		enum:        e,
 		queue:       queue.NewQueue(),
@@ -55,8 +54,7 @@ func newEnumSource(e *Enumeration, slots int) *enumSource {
 		subre:       dns.AnySubdomainRegex(),
 		done:        make(chan struct{}),
 		tokens:      make(chan struct{}, numDataItemsInput),
-		maxSlots:    slots,
-		timeout:     waitForData,
+		maxSlots:    e.Config.MaxDNSQueries,
 	}
 
 	for i := 0; i < numDataItemsInput; i++ {
@@ -223,7 +221,7 @@ func (r *enumSource) Next(ctx context.Context) bool {
 		return true
 	}
 
-	t := time.NewTimer(r.timeout)
+	t := time.NewTimer(waitForDuration)
 	defer t.Stop()
 
 	for {
@@ -269,19 +267,16 @@ func (r *enumSource) checkForData() {
 
 		needed := r.maxSlots - r.queue.Len()
 		if needed <= 0 {
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(25 * time.Millisecond)
 			continue
 		}
 
-		var sent bool
-		if gen := r.requestSweeps(needed); needed-gen > 0 {
-			gen += r.enum.subTask.OutputRequests(needed - gen)
-			if gen > 0 {
-				sent = true
-			}
+		gen := r.requestSweeps(needed)
+		if remains := needed - gen; remains > 0 {
+			gen += r.enum.subTask.OutputRequests(remains)
 		}
-		if !sent {
-			time.Sleep(250 * time.Millisecond)
+		if gen <= 0 {
+			time.Sleep(25 * time.Millisecond)
 		}
 	}
 }
@@ -321,7 +316,7 @@ loop:
 		case now := <-t.C:
 			var count int
 			for _, a := range pending {
-				if now.Before(a.Timestamp.Add(2 * time.Minute)) {
+				if now.Before(a.Timestamp.Add(time.Minute)) {
 					break
 				}
 				if _, err := r.enum.Graph.ReadNode(r.enum.ctx, a.Name, "fqdn"); err == nil {
