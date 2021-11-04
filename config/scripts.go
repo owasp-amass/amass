@@ -9,12 +9,15 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/rakyll/statik/fs"
+	"github.com/OWASP/Amass/v3/resources"
 )
 
 // AcquireScripts returns all the default and user provided scripts for data sources.
 func (c *Config) AcquireScripts() ([]string, error) {
-	scripts := getDefaultScripts()
+	scripts, err := resources.GetDefaultScripts()
+	if err != nil {
+		return scripts, err
+	}
 
 	dir := OutputDirectory(c.Dir)
 	if dir == "" {
@@ -23,7 +26,7 @@ func (c *Config) AcquireScripts() ([]string, error) {
 
 	finfo, err := os.Stat(dir)
 	if os.IsNotExist(err) || !finfo.IsDir() {
-		return scripts, errors.New("The output directory does not exist or is not a directory")
+		return scripts, errors.New("the output directory does not exist or is not a directory")
 	}
 
 	paths := []string{filepath.Join(dir, "scripts")}
@@ -52,29 +55,4 @@ func (c *Config) AcquireScripts() ([]string, error) {
 	}
 
 	return scripts, nil
-}
-
-func getDefaultScripts() []string {
-	fsOnce.Do(openTheFS)
-
-	var scripts []string
-	_ = fs.Walk(StatikFS, "/scripts", func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		// Is this file not a script?
-		if info.IsDir() || filepath.Ext(info.Name()) != ".ads" {
-			return nil
-		}
-		// Get the script content
-		data, err := fs.ReadFile(StatikFS, path)
-		if err != nil {
-			return err
-		}
-
-		scripts = append(scripts, string(data))
-		return nil
-	})
-
-	return scripts
 }

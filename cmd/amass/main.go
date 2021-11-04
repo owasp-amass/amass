@@ -39,6 +39,7 @@ import (
 	"github.com/OWASP/Amass/v3/format"
 	amassnet "github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/requests"
+	"github.com/OWASP/Amass/v3/resources"
 	"github.com/OWASP/Amass/v3/systems"
 	"github.com/caffix/netmap"
 	"github.com/caffix/service"
@@ -383,7 +384,7 @@ func assignNetInterface(iface *net.Interface) error {
 }
 
 func cacheWithData() *requests.ASNCache {
-	ranges, err := config.GetIP2ASNData()
+	ranges, err := resources.GetIP2ASNData()
 	if err != nil {
 		return nil
 	}
@@ -398,6 +399,5 @@ func cacheWithData() *requests.ASNCache {
 			Description: r.Description,
 		})
 	}
-
 	return cache
 }

@@ -21,11 +21,10 @@ import (
 	"strings"
 	"sync"
 
-	_ "github.com/OWASP/Amass/v3/config/statik" // The content being embedded into the binary
+	"github.com/OWASP/Amass/v3/resources"
 	"github.com/caffix/stringset"
 	"github.com/go-ini/ini"
 	"github.com/google/uuid"
-	"github.com/rakyll/statik/fs"
 )
 
 const (
@@ -34,16 +33,6 @@ const (
 	cfgEnvironVar  = "AMASS_CONFIG"
 	systemCfgDir   = "/etc"
 )
-
-var (
-	// StatikFS is the ./resources project directory embedded into the binary.
-	StatikFS http.FileSystem
-	fsOnce   sync.Once
-)
-
-func openTheFS() {
-	StatikFS, _ = fs.New()
-}
 
 // Updater allows an object to implement a method that updates a configuration.
 type Updater interface {
@@ -188,20 +177,30 @@ func (c *Config) CheckSettings() error {
 
 	if c.BruteForcing {
 		if c.Passive {
-			return errors.New("Brute forcing cannot be performed without DNS resolution")
+			return errors.New("brute forcing cannot be performed without DNS resolution")
 		} else if len(c.Wordlist) == 0 {
-			c.Wordlist, err = getWordlistByFS("/namelist.txt")
+			f, err := resources.GetResourceFile("namelist.txt")
+			if err != nil {
+				return err
+			}
+
+			c.Wordlist, err = getWordList(f)
 			if err != nil {
 				return err
 			}
 		}
 	}
 	if c.Passive && c.Active {
-		return errors.New("Active enumeration cannot be performed without DNS resolution")
+		return errors.New("active enumeration cannot be performed without DNS resolution")
 	}
 	if c.Alterations {
 		if len(c.AltWordlist) == 0 {
-			c.AltWordlist, err = getWordlistByFS("/alterations.txt")
+			f, err := resources.GetResourceFile("alterations.txt")
+			if err != nil {
+				return err
+			}
+
+			c.AltWordlist, err = getWordList(f)
 			if err != nil {
 				return err
 			}
@@ -227,11 +226,11 @@ func (c *Config) LoadSettings(path string) error {
 		AllowShadows: true,
 	}, path)
 	if err != nil {
-		return fmt.Errorf("Failed to load the configuration file: %v", err)
+		return fmt.Errorf("failed to load the configuration file: %v", err)
 	}
 	// Get the easy ones out of the way using mapping
 	if err = cfg.MapTo(c); err != nil {
-		return fmt.Errorf("Error mapping configuration settings to internal values: %v", err)
+		return fmt.Errorf("error mapping configuration settings to internal values: %v", err)
 	}
 	// Attempt to load a special mode of operation specified by the user
 	if cfg.Section(ini.DefaultSection).HasKey("mode") {
@@ -307,7 +306,7 @@ func GetListFromFile(path string) ([]string, error) {
 
 	file, err := os.Open(path)
 	if err != nil {
-		return nil, fmt.Errorf("Error opening the file %s: %v", path, err)
+		return nil, fmt.Errorf("error opening the file %s: %v", path, err)
 	}
 	defer file.Close()
 	reader = file
@@ -318,17 +317,17 @@ func GetListFromFile(path string) ([]string, error) {
 	// next reader
 	head := make([]byte, 512)
 	if _, err = file.Read(head); err != nil {
-		return nil, fmt.Errorf("Error reading the first 512 bytes from %s: %s", path, err)
+		return nil, fmt.Errorf("error reading the first 512 bytes from %s: %s", path, err)
 	}
 	if _, err = file.Seek(0, 0); err != nil {
-		return nil, fmt.Errorf("Error rewinding the file %s: %s", path, err)
+		return nil, fmt.Errorf("error rewinding the file %s: %s", path, err)
 	}
 
 	// Read the file as gzip if it's actually compressed
 	if mt := http.DetectContentType(head); mt == "application/gzip" || mt == "application/x-gzip" {
 		gzReader, err := gzip.NewReader(file)
 		if err != nil {
-			return nil, fmt.Errorf("Error gz-reading the file %s: %v", path, err)
+			return nil, fmt.Errorf("error gz-reading the file %s: %v", path, err)
 		}
 		defer gzReader.Close()
 		reader = gzReader
@@ -336,16 +335,6 @@ func GetListFromFile(path string) ([]string, error) {
 
 	s, err := getWordList(reader)
 	return s, err
-}
-
-func getWordlistByFS(path string) ([]string, error) {
-	fsOnce.Do(openTheFS)
-
-	content, err := StatikFS.Open(path)
-	if err != nil {
-		return nil, fmt.Errorf("Failed to obtain the embedded wordlist: %s: %v", path, err)
-	}
-	return getWordList(content)
 }
 
 func getWordList(reader io.Reader) ([]string, error) {
