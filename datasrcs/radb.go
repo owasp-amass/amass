@@ -57,7 +57,7 @@ func (r *RADb) Description() string {
 func (r *RADb) OnStart() error {
 	msg := resolve.QueryMsg(radbWhoisURL, dns.TypeA)
 	if resp, err := r.sys.Pool().Query(context.TODO(),
-		msg, resolve.PriorityCritical, resolve.RetryPolicy); err == nil {
+		msg, resolve.PriorityCritical, resolve.PoolRetryPolicy); err == nil {
 		if ans := resolve.ExtractAnswers(resp); len(ans) > 0 {
 			ip := ans[0].Data
 			if ip != "" {

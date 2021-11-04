@@ -27,9 +27,13 @@ function vertical(ctx, domain)
         end
 
         for _, h in pairs(d['hits'].hits) do
-            new_name(ctx, h['_source'].hostname)
-            for _, i in pairs(h['_source'].resolved_ip) do
-                new_addr(ctx, i.ip_addr, h['_source'].hostname)
+            if (h['_source'].hostname ~= nil and h['_source'].hostname ~= "") then
+                new_name(ctx, h['_source'].hostname)
+            end
+            if (h['_source'].resolved_ip ~= nil) then
+                for _, i in pairs(h['_source'].resolved_ip) do
+                    new_addr(ctx, i.ip_addr, h['_source'].hostname)
+                end
             end
         end
 

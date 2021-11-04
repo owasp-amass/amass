@@ -137,5 +137,8 @@ function reverse_ip(addr)
 end
 
 function trim_space(s)
+    if (s == nil) then
+        return ""
+    end
     return s:match( "^%s*(.-)%s*$" )
 end
