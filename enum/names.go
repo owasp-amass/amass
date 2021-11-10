@@ -73,9 +73,9 @@ func (r *subdomainTask) Process(ctx context.Context, data pipeline.Data, tp pipe
 	}
 	labels := strings.Split(req.Name, ".")
 	num := len(labels)
-    if num > r.enum.Config.MaxDepth + 2 && r.enum.Config.BruteForcing {
-        return nil, nil
-    }
+	if num > r.enum.Config.MaxDepth+2 && r.enum.Config.BruteForcing {
+		return nil, nil
+	}
 
 	go func() {
 		if r.checkForSubdomains(ctx, req, tp) {

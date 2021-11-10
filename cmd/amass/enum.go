@@ -50,7 +50,7 @@ type enumArgs struct {
 	Included          *stringset.Set
 	Interface         string
 	MaxDNSQueries     int
-    MaxDepth          int
+	MaxDepth          int
 	MinForRecursive   int
 	Names             *stringset.Set
 	Ports             format.ParseInts
@@ -741,9 +741,9 @@ func (e enumArgs) OverrideConfig(conf *config.Config) error {
 		conf.MinForRecursive = e.MinForRecursive
 	}
 
-    if e.MaxDepth != 3 {
-        conf.MaxDepth = e.MaxDepth
-    }
+	if e.MaxDepth != 3 {
+		conf.MaxDepth = e.MaxDepth
+	}
 
 	if e.Options.Active {
 		conf.Active = true

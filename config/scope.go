@@ -48,8 +48,8 @@ func (c *Config) AddDomain(domain string) {
 	labels := strings.Split(d, ".")
 	if len(labels) < 2 {
 		return
-    }
-    
+	}
+
 	// Check that none of the labels are empty
 	for _, label := range labels {
 		if label == "" {
