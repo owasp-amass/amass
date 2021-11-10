@@ -9,7 +9,6 @@ probes = {"www", "online", "webserver", "ns", "ns1", "mail", "smtp", "webmail", 
             "remote", "server", "cpanel", "cloud", "autodiscover", "api", "m", "blog"}
 
 function vertical(ctx, domain)
-    print("Vertical in Lua")
     local cfg = config(ctx)
     if (cfg.mode == "passive") then
         return
@@ -21,7 +20,6 @@ function vertical(ctx, domain)
 end
 
 function resolved(ctx, name, domain, records)
-    print("Resovled in Lua")
     local cfg = config(ctx)
     if (cfg.mode == "passive") then
         return
