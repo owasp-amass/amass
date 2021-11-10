@@ -5,6 +5,7 @@ package enum
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/OWASP/Amass/v3/requests"
@@ -49,6 +50,7 @@ func (r *subdomainTask) Stop() {
 
 // Process implements the pipeline Task interface.
 func (r *subdomainTask) Process(ctx context.Context, data pipeline.Data, tp pipeline.TaskParams) (pipeline.Data, error) {
+    fmt.Println("Run Process")
 	select {
 	case <-ctx.Done():
 		return nil, nil
@@ -62,6 +64,7 @@ func (r *subdomainTask) Process(ctx context.Context, data pipeline.Data, tp pipe
 	if req == nil || !r.enum.Config.IsDomainInScope(req.Name) {
 		return nil, nil
 	}
+
 	// Do not further evaluate service subdomains
 	for _, label := range strings.Split(req.Name, ".") {
 		l := strings.ToLower(label)
@@ -70,6 +73,12 @@ func (r *subdomainTask) Process(ctx context.Context, data pipeline.Data, tp pipe
 			return nil, nil
 		}
 	}
+	labels := strings.Split(req.Name, ".")
+	num := len(labels)
+    if num >= r.enum.Config.MaxDepth + 2 && r.enum.Config.BruteForcing {
+        fmt.Println("Max Depth Check Triggered")
+        return nil, nil
+    }
 
 	go func() {
 		if r.checkForSubdomains(ctx, req, tp) {
@@ -92,6 +101,7 @@ func (r *subdomainTask) checkForSubdomains(ctx context.Context, req *requests.DN
 	if num < 2 {
 		return false
 	}
+
 	// It cannot have fewer labels than the root domain name
 	if num-1 < len(strings.Split(req.Domain, ".")) {
 		return false

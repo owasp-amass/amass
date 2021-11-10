@@ -5,6 +5,7 @@ package enum
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -84,6 +85,7 @@ func (e *Enumeration) stop() {
 
 // Start begins the vertical domain correlation process.
 func (e *Enumeration) Start(ctx context.Context) error {
+    fmt.Println("Enum Start")
 	if err := e.Config.CheckSettings(); err != nil {
 		return err
 	}
@@ -180,6 +182,7 @@ func (e *Enumeration) setupContext(ctx context.Context) {
 
 // Release the root domain names to the input source and each data source.
 func (e *Enumeration) submitDomainNames() {
+    fmt.Println("Run submitDomainNames")
 	for _, domain := range e.Config.Domains() {
 		req := &requests.DNSRequest{
 			Name:   domain,
