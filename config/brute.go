@@ -23,6 +23,7 @@ func (c *Config) loadBruteForceSettings(cfg *ini.File) error {
 
 	c.Recursive = bruteforce.Key("recursive").MustBool(true)
 	c.MinForRecursive = bruteforce.Key("minimum_for_recursive").MustInt(0)
+    c.MaxDepth = bruteforce.Key("max_depth").MustInt(0)
 
 	if bruteforce.HasKey("wordlist_file") {
 		for _, wordlist := range bruteforce.Key("wordlist_file").ValueWithShadows() {

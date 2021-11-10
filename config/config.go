@@ -105,6 +105,9 @@ type Config struct {
 	// Minimum number of subdomain discoveries before performing recursive brute forcing
 	MinForRecursive int
 
+    // Maximum depth for bruteforcing
+    MaxDepth int
+
 	// Will discovered subdomain name alterations be generated?
 	Alterations    bool
 	FlipWords      bool

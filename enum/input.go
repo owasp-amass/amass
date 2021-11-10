@@ -5,6 +5,7 @@ package enum
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"regexp"
 	"strconv"
@@ -99,6 +100,7 @@ func (r *enumSource) dataSourceName(req *requests.DNSRequest) {
 }
 
 func (r *enumSource) dataSourceAddr(req *requests.AddrRequest) {
+    fmt.Println("Run dataSourceAddre")
 	if req != nil && req.Address != "" {
 		r.pipelineData(r.enum.ctx, req, nil)
 	}
