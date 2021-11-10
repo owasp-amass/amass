@@ -150,6 +150,7 @@ func defineEnumFilepathFlags(enumFlags *flag.FlagSet, args *enumArgs) {
 }
 
 func runEnumCommand(clArgs []string) {
+    fmt.Println("Start Enumeration Setup")
 	// Seed the default pseudo-random number generator
 	rand.Seed(time.Now().UTC().UnixNano())
 

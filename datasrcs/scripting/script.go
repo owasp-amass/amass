@@ -49,6 +49,7 @@ type Script struct {
 
 // NewScript returns he object initialized, but not yet started.
 func NewScript(script string, sys systems.System) *Script {
+    fmt.Println("New Script")
 	re, err := regexp.Compile(dns.AnySubdomainRegexString())
 	if err != nil {
 		return nil

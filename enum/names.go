@@ -5,6 +5,7 @@ package enum
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/OWASP/Amass/v3/requests"
@@ -49,6 +50,7 @@ func (r *subdomainTask) Stop() {
 
 // Process implements the pipeline Task interface.
 func (r *subdomainTask) Process(ctx context.Context, data pipeline.Data, tp pipeline.TaskParams) (pipeline.Data, error) {
+    fmt.Println("Run Process")
 	select {
 	case <-ctx.Done():
 		return nil, nil
