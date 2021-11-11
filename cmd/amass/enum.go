@@ -50,6 +50,7 @@ type enumArgs struct {
 	Included          *stringset.Set
 	Interface         string
 	MaxDNSQueries     int
+	MaxDepth          int
 	MinForRecursive   int
 	Names             *stringset.Set
 	Ports             format.ParseInts
@@ -104,6 +105,7 @@ func defineEnumArgumentFlags(enumFlags *flag.FlagSet, args *enumArgs) {
 	enumFlags.Var(args.Included, "include", "Data source names separated by commas to be included")
 	enumFlags.StringVar(&args.Interface, "iface", "", "Provide the network interface to send traffic through")
 	enumFlags.IntVar(&args.MaxDNSQueries, "max-dns-queries", 0, "Maximum number of DNS queries per second")
+	enumFlags.IntVar(&args.MaxDepth, "max-depth", 2, "Maximum number of subdomain labels for brute forcing")
 	enumFlags.IntVar(&args.MinForRecursive, "min-for-recursive", 1, "Subdomain labels seen before recursive brute forcing (Default: 1)")
 	enumFlags.Var(&args.Ports, "p", "Ports separated by commas (default: 80, 443)")
 	enumFlags.Var(args.Resolvers, "r", "IP addresses of preferred DNS resolvers (can be used multiple times)")
@@ -738,6 +740,11 @@ func (e enumArgs) OverrideConfig(conf *config.Config) error {
 	if e.MinForRecursive != 1 {
 		conf.MinForRecursive = e.MinForRecursive
 	}
+
+	if e.MaxDepth != 3 {
+		conf.MaxDepth = e.MaxDepth
+	}
+
 	if e.Options.Active {
 		conf.Active = true
 		conf.Passive = false
