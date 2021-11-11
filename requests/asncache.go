@@ -81,6 +81,7 @@ func (c *ASNCache) Update(req *ASNRequest) {
 		}
 		return
 	}
+
 	// This is additional information for an ASN entry
 	if as.CC == "" && req.CC != "" {
 		as.CC = req.CC
@@ -95,13 +96,21 @@ func (c *ASNCache) Update(req *ASNRequest) {
 		as.Description = req.Description
 	}
 
-	nb := stringset.New(req.Prefix)
-	defer nb.Close()
+	// Add new CIDR ranges to cached netblocks
+	for _, cidr := range append([]string{req.Prefix}, req.Netblocks...) {
+		var known bool
 
-	if len(req.Netblocks) > 0 {
-		nb.InsertMany(req.Netblocks...)
+		for _, prefix := range as.Netblocks {
+			if prefix == cidr {
+				known = true
+				break
+			}
+		}
+
+		if !known {
+			as.Netblocks = append(as.Netblocks, cidr)
+		}
 	}
-	as.Netblocks = nb.Slice()
 }
 
 // DescriptionSearch matches the provided string against description fields in the cache and
