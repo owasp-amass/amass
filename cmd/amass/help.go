@@ -5,7 +5,6 @@ import (
 	"flag"
 )
 
-
 func runHelpCommand(clArgs []string) {
 	help := []string{"-help"}
 	helpBuf := new(bytes.Buffer)
@@ -13,7 +12,7 @@ func runHelpCommand(clArgs []string) {
 	helpCommand.SetOutput(helpBuf)
 	if len(clArgs) < 1 {
 		commandUsage(mainUsageMsg, helpCommand, helpBuf)
-		return 
+		return
 	}
 	switch clArgs[0] {
 	case "db":
@@ -30,6 +29,6 @@ func runHelpCommand(clArgs []string) {
 		runVizCommand(help)
 	default:
 		commandUsage(mainUsageMsg, helpCommand, helpBuf)
-		return	
+		return
 	}
 }

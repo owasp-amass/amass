@@ -62,6 +62,7 @@ func (r *subdomainTask) Process(ctx context.Context, data pipeline.Data, tp pipe
 	if req == nil || !r.enum.Config.IsDomainInScope(req.Name) {
 		return nil, nil
 	}
+
 	// Do not further evaluate service subdomains
 	for _, label := range strings.Split(req.Name, ".") {
 		l := strings.ToLower(label)
@@ -69,6 +70,11 @@ func (r *subdomainTask) Process(ctx context.Context, data pipeline.Data, tp pipe
 		if l == "_tcp" || l == "_udp" || l == "_tls" {
 			return nil, nil
 		}
+	}
+	labels := strings.Split(req.Name, ".")
+	num := len(labels)
+	if num > r.enum.Config.MaxDepth+2 && r.enum.Config.BruteForcing {
+		return nil, nil
 	}
 
 	if r.checkForSubdomains(ctx, req, tp) {
@@ -90,6 +96,7 @@ func (r *subdomainTask) checkForSubdomains(ctx context.Context, req *requests.DN
 	if num < 2 {
 		return false
 	}
+
 	// It cannot have fewer labels than the root domain name
 	if num-1 < len(strings.Split(req.Domain, ".")) {
 		return false
