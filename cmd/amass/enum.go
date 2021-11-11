@@ -273,7 +273,7 @@ func runEnumCommand(clArgs []string) {
 			fmt.Fprintf(color.Error, "%s%s%s\n",
 				yellow("Discoveries are being migrated into the "), yellow(g.String()), yellow(" database"))
 
-			if err := e.Graph.MigrateEvents(ctx, g, e.Config.UUID.String()); err != nil {
+			if err := e.Graph.Migrate(ctx, g); err != nil {
 				fmt.Fprintf(color.Error, "%s%s%s%s\n",
 					red("The database migration to "), red(g.String()), red(" failed: "), red(err.Error()))
 			}
