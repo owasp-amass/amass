@@ -71,17 +71,15 @@ func (r *subdomainTask) Process(ctx context.Context, data pipeline.Data, tp pipe
 		}
 	}
 
-	go func() {
-		if r.checkForSubdomains(ctx, req, tp) {
-			r.queue.Append(&requests.ResolvedRequest{
-				Name:    req.Name,
-				Domain:  req.Domain,
-				Records: req.Records,
-				Tag:     req.Tag,
-				Source:  req.Source,
-			})
-		}
-	}()
+	if r.checkForSubdomains(ctx, req, tp) {
+		r.queue.Append(&requests.ResolvedRequest{
+			Name:    req.Name,
+			Domain:  req.Domain,
+			Records: req.Records,
+			Tag:     req.Tag,
+			Source:  req.Source,
+		})
+	}
 	return req, nil
 }
 

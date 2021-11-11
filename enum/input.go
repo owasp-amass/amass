@@ -267,7 +267,7 @@ func (r *enumSource) checkForData() {
 
 		needed := r.maxSlots - r.queue.Len()
 		if needed <= 0 {
-			time.Sleep(25 * time.Millisecond)
+			time.Sleep(250 * time.Millisecond)
 			continue
 		}
 
@@ -276,7 +276,7 @@ func (r *enumSource) checkForData() {
 			gen += r.enum.subTask.OutputRequests(remains)
 		}
 		if gen <= 0 {
-			time.Sleep(25 * time.Millisecond)
+			time.Sleep(250 * time.Millisecond)
 		}
 	}
 }

@@ -313,10 +313,13 @@ func publicResolverSetup(cfg *config.Config, max int) resolve.Resolver {
 		return nil
 	}
 
-	google := resolve.NewBaseResolver("8.8.8.8", config.DefaultQueriesPerBaselineResolver, cfg.Log)
-	baseline := resolve.NewResolverPool(trusted, google, 1, cfg.Log)
-
-	r := setupResolvers(config.PublicResolvers, cfg.MaxDNSQueries, config.DefaultQueriesPerPublicResolver, cfg.Log)
+	baseline := resolve.NewResolverPool(trusted, nil, 1, cfg.Log)
+	r := setupResolvers(
+		config.PublicResolvers,
+		len(config.PublicResolvers),
+		config.DefaultQueriesPerPublicResolver,
+		cfg.Log,
+	)
 	return resolve.NewResolverPool(r, baseline, 1, cfg.Log)
 }
 

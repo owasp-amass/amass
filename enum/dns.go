@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"strings"
 	"sync"
-	"time"
 
 	amassdns "github.com/OWASP/Amass/v3/net/dns"
 	"github.com/OWASP/Amass/v3/requests"
@@ -118,14 +117,11 @@ func (dt *dNSTask) Process(ctx context.Context, data pipeline.Data, tp pipeline.
 	default:
 	}
 
-	tctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
-	defer cancel()
-
 	switch v := data.(type) {
 	case *requests.DNSRequest:
-		return dt.processDNSRequest(tctx, v, tp)
+		return dt.processDNSRequest(ctx, v, tp)
 	case *requests.AddrRequest:
-		if dt.reverseDNSQuery(tctx, v.Address, tp) || v.InScope {
+		if dt.reverseDNSQuery(ctx, v.Address, tp) || v.InScope {
 			return data, nil
 		}
 		return nil, nil

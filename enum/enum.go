@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	maxDNSPipelineTasks    int = 2000
+	maxDNSPipelineTasks    int = 5000
 	maxActivePipelineTasks int = 25
 )
 
@@ -96,13 +96,9 @@ func (e *Enumeration) Start(ctx context.Context) error {
 
 	var stages []pipeline.Stage
 	if !e.Config.Passive {
-		num := e.Config.MaxDNSQueries
-		if num > maxDNSPipelineTasks {
-			num = maxDNSPipelineTasks
-		}
 		stages = append(stages, pipeline.FIFO("", e.dnsTask.blacklistTaskFunc()))
 		stages = append(stages, pipeline.FIFO("root", e.dnsTask.rootTaskFunc()))
-		stages = append(stages, pipeline.DynamicPool("dns", e.dnsTask, num))
+		stages = append(stages, pipeline.DynamicPool("dns", e.dnsTask, e.min()))
 	}
 
 	stages = append(stages, pipeline.FIFO("filter", e.filterTaskFunc()))
@@ -132,6 +128,17 @@ func (e *Enumeration) Start(ctx context.Context) error {
 		<-e.store.confirmDone
 	}
 	return err
+}
+
+func (e *Enumeration) min() int {
+	num := e.Config.MaxDNSQueries
+	if num > maxDNSPipelineTasks {
+		return maxDNSPipelineTasks
+	}
+	if num < 1 {
+		return 1
+	}
+	return num
 }
 
 func (e *Enumeration) startupAndCleanup() {
