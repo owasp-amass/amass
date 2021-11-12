@@ -96,6 +96,7 @@ func (s *Script) config(L *lua.LState) int {
 	tb.RawSetString("active", lua.LBool(cfg.BruteForcing))
 	tb.RawSetString("recursive", lua.LBool(cfg.Recursive))
 	tb.RawSetString("min_for_recursive", lua.LNumber(cfg.MinForRecursive))
+	tb.RawSetString("max_depth", lua.LNumber(cfg.MaxDepth))
 	r.RawSetString("brute_forcing", tb)
 
 	tb = L.NewTable()

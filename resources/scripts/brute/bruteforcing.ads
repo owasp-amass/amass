@@ -38,8 +38,13 @@ function resolved(ctx, name, domain, records)
     end
 
     local bf = cfg['brute_forcing']
-    if (bf.active and bf.recursive and (bf['min_for_recursive'] == 0)) then
-        make_names(ctx, name)
+    if (bf.active and bf.recursive) then
+        if (bf['max_depth'] > 0 and #nparts > bf['max_depth'] + #dparts) then
+            return
+        end
+        if (bf['min_for_recursive'] == 0) then
+            make_names(ctx, name)
+        end
     end
 end
 
@@ -50,8 +55,15 @@ function subdomain(ctx, name, domain, times)
     end
 
     local bf = cfg['brute_forcing']
-    if (bf.active and bf.recursive and (bf['min_for_recursive'] == times)) then
-        make_names(ctx, name)
+    local nparts = split(name, ".")
+    local dparts = split(domain, ".")
+    if (bf.active and bf.recursive) then
+        if (bf['max_depth'] > 0 and #nparts > bf['max_depth'] + #dparts) then
+            return
+        end
+        if (bf['min_for_recursive'] == times) then
+            make_names(ctx, name)
+        end
     end
 end
 

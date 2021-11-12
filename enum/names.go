@@ -71,11 +71,6 @@ func (r *subdomainTask) Process(ctx context.Context, data pipeline.Data, tp pipe
 			return nil, nil
 		}
 	}
-	labels := strings.Split(req.Name, ".")
-	num := len(labels)
-	if num > r.enum.Config.MaxDepth+2 && r.enum.Config.BruteForcing {
-		return nil, nil
-	}
 
 	if r.checkForSubdomains(ctx, req, tp) {
 		r.queue.Append(&requests.ResolvedRequest{
@@ -90,19 +85,19 @@ func (r *subdomainTask) Process(ctx context.Context, data pipeline.Data, tp pipe
 }
 
 func (r *subdomainTask) checkForSubdomains(ctx context.Context, req *requests.DNSRequest, tp pipeline.TaskParams) bool {
-	labels := strings.Split(req.Name, ".")
-	num := len(labels)
+	nlabels := strings.Split(req.Name, ".")
 	// Is this large enough to consider further?
-	if num < 2 {
+	if len(nlabels) < 2 {
 		return false
 	}
 
+	dlabels := strings.Split(req.Domain, ".")
 	// It cannot have fewer labels than the root domain name
-	if num-1 < len(strings.Split(req.Domain, ".")) {
+	if len(nlabels)-1 < len(dlabels) {
 		return false
 	}
 
-	sub := strings.TrimSpace(strings.Join(labels[1:], "."))
+	sub := strings.TrimSpace(strings.Join(nlabels[1:], "."))
 	times := r.timesForSubdomain(sub)
 	if times == 1 && r.subWithinWildcard(ctx, sub, req.Domain) {
 		r.withinWildcards.Insert(sub)
