@@ -13,10 +13,10 @@ func TestWriteD3DataHappyPath(t *testing.T) {
 	assert.Nil(t, err)
 
 	output := buf.String()
-	assert.Equalf(t, expectedOutput, output, "Expected output to match")
+	assert.Equalf(t, expectedD3Output, output, "Expected output to match")
 }
 
-const expectedOutput = `
+const expectedD3Output = `
 <!DOCTYPE html>
 <html lang="en">
 <head>
