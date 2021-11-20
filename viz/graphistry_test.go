@@ -43,5 +43,5 @@ func TestWriteGraphistryData(t *testing.T) {
       "type": "address",
       "source": "DNS"
     }
-  ]`, "Expected output to match")
+  ]`, "Graphistry output should contain")
 }
