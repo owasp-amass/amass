@@ -12,13 +12,10 @@ func TestWriteGEXFDataHappyPath(t *testing.T) {
 	assert.Nil(t, err)
 
 	output := buf.String()
-	assert.Equalf(t, expectedGexfOutput, output, "Expected output to match")
+	assert.Contains(t, output, expectedGexfOutput, "Gexf output should contain")
 }
 
-const expectedGexfOutput = `<?xml version="1.0" encoding="UTF-8"?>
-  <gexf xmlns="http://www.gephi.org/gexf" version="1.3" xmlns:viz="http://www.gephi.org/gexf/viz">
-      <meta lastmodifieddate="2021-11-19">
-          <creator>OWASP Amass - https://github.com/OWASP/Amass</creator>
+const expectedGexfOutput = `<creator>OWASP Amass - https://github.com/OWASP/Amass</creator>
           <description>OWASP Amass Network Mapping</description>
       </meta>
       <graph mode="static" defaultedgetype="directed">
