@@ -42,3 +42,35 @@ func TestViz(t *testing.T) {
 		})
 	}
 }
+
+func testEdges() []Edge {
+	return []Edge{
+		{
+			From:  0,
+			To:    1,
+			Label: "",
+			Title: "a_record",
+		},
+	}
+}
+
+func testNodes() []Node {
+	return []Node{
+		{
+			ID:         0,
+			Type:       "domain",
+			Label:      "owasp.org",
+			Title:      "domain: owasp.org",
+			Source:     "DNS",
+			ActualType: "fqdn",
+		},
+		{
+			ID:         1,
+			Type:       "address",
+			Label:      "205.251.199.98",
+			Title:      "address: 205.251.199.98",
+			Source:     "DNS",
+			ActualType: "ipaddr",
+		},
+	}
+}

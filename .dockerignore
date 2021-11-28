@@ -3,3 +3,4 @@ Dockerfile
 snapcraft.yaml
 images/*
 examples/*
+.idea
