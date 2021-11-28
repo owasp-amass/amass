@@ -163,7 +163,7 @@ func (a *activeTask) crawlName(ctx context.Context, req *requests.DNSRequest, tp
 		for _, name := range names {
 			if n := strings.TrimSpace(name); n != "" {
 				if domain := cfg.WhichDomain(n); domain != "" {
-					pipeline.SendData(ctx, "new", &requests.DNSRequest{
+					a.enum.nameSrc.pipelineData(ctx, &requests.DNSRequest{
 						Name:   n,
 						Domain: domain,
 						Tag:    requests.CRAWL,
@@ -191,7 +191,7 @@ func (a *activeTask) certEnumeration(ctx context.Context, req *requests.AddrRequ
 
 		if n := strings.TrimSpace(name); n != "" {
 			if domain := a.enum.Config.WhichDomain(n); domain != "" {
-				pipeline.SendData(ctx, "new", &requests.DNSRequest{
+				a.enum.nameSrc.pipelineData(ctx, &requests.DNSRequest{
 					Name:   n,
 					Domain: domain,
 					Tag:    requests.CERT,
@@ -275,7 +275,7 @@ func (a *activeTask) zoneWalk(ctx context.Context, req *requests.ZoneXFRRequest,
 		name := resolve.RemoveLastDot(nsec.NextDomain)
 
 		if domain := cfg.WhichDomain(name); domain != "" {
-			pipeline.SendData(ctx, "new", &requests.DNSRequest{
+			a.enum.nameSrc.pipelineData(ctx, &requests.DNSRequest{
 				Name:   name,
 				Domain: domain,
 				Tag:    requests.DNS,

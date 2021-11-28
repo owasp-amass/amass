@@ -254,7 +254,7 @@ func runEnumCommand(clArgs []string) {
 	wg.Wait()
 
 	// If necessary, handle graph database migration
-	if !cfg.Passive && len(e.Sys.GraphDatabases()) > 0 {
+	if len(e.Sys.GraphDatabases()) > 0 {
 		fmt.Fprintf(color.Error, "\n%s\n", green("The enumeration has finished"))
 
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
@@ -542,15 +542,14 @@ func processOutput(ctx context.Context, e *enum.Enumeration, outputs []chan *req
 			}
 
 			for _, ch := range outputs {
-				if !o.Complete(e.Config.Passive) {
-					e.Config.Log.Printf("Incomplete output: %v", o)
+				if o.Complete(e.Config.Passive) {
+					ch <- o
 				}
-				ch <- o
 			}
 		}
 	}
 
-	t := time.NewTicker(5 * time.Second)
+	t := time.NewTicker(10 * time.Second)
 	defer t.Stop()
 	for {
 		select {

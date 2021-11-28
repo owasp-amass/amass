@@ -271,9 +271,9 @@ func (r *enumSource) checkForData() {
 			continue
 		}
 
-		gen := r.requestSweeps(needed)
+		gen := r.enum.subTask.OutputRequests(needed)
 		if remains := needed - gen; remains > 0 {
-			gen += r.enum.subTask.OutputRequests(remains)
+			gen += r.requestSweeps(remains)
 		}
 		if gen <= 0 {
 			time.Sleep(250 * time.Millisecond)
