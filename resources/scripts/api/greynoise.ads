@@ -18,13 +18,17 @@ function vertical(ctx, domain)
     end
 
     local j = json.decode(resp)
-    if (j == nil or j.count == 0) then
+    if (j == nil or j.data == nil or j.count == 0) then
         return
     end
 
     for _, d in pairs(j.data) do
-        new_name(ctx, d.rdns)
-        new_addr(ctx, d.ip, d.rdns)
+        if (d.rdns ~= nil and d.rdns ~= "" and in_scope(ctx, d.rdns)) then
+            new_name(ctx, d.rdns)
+            if (d.ip ~= nil and d.ip ~= "") then
+                new_addr(ctx, d.ip, d.rdns)
+            end
+        end
     end
 end
 

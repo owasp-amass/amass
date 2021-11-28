@@ -10,7 +10,8 @@ end
 
 function vertical(ctx, domain)
     scrape(ctx, {url=build_url(domain, "dns")})
-    scrape(ctx, {url=build_url(domain, "tls")})
+    -- The owner requested that this endpoint not be used for now
+    -- scrape(ctx, {url=build_url(domain, "tls")})
 end
 
 function build_url(domain, sub)

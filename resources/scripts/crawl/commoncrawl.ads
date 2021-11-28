@@ -9,7 +9,7 @@ type = "crawl"
 local urls = {}
 
 function start()
-    set_rate_limit(5)
+    set_rate_limit(10)
 end
 
 function vertical(ctx, domain)

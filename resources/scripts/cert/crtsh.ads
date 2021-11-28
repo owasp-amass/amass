@@ -26,10 +26,14 @@ function vertical(ctx, domain)
     end
 
     for _, r in pairs(d.subdomains) do
-        new_name(ctx, r['common_name'])
+        if (r['common_name'] ~= nil and r['common_name'] ~= "") then
+            new_name(ctx, r['common_name'])
+        end
 
         for _, n in pairs(split(r['name_value'], "\\n")) do
-            new_name(ctx, n)
+            if (n ~= nil and n ~= "") then
+                new_name(ctx, n)
+            end
         end
     end
 end
