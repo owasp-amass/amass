@@ -537,14 +537,12 @@ func processOutput(ctx context.Context, e *enum.Enumeration, outputs []chan *req
 	// The function that obtains output from the enum and puts it on the channel
 	extract := func(limit int) {
 		for _, o := range ExtractOutput(ctx, e, known, true, limit) {
-			if !e.Config.IsDomainInScope(o.Name) {
+			if !o.Complete(e.Config.Passive) || !e.Config.IsDomainInScope(o.Name) {
 				continue
 			}
 
 			for _, ch := range outputs {
-				if o.Complete(e.Config.Passive) {
-					ch <- o
-				}
+				ch <- o
 			}
 		}
 	}

@@ -73,8 +73,8 @@ func newEnumSource(e *Enumeration) *enumSource {
 
 	if !e.Config.Passive {
 		go r.checkForData()
-		go r.processDupNames()
 	}
+	go r.processDupNames()
 	return r
 }
 
@@ -183,7 +183,7 @@ func (r *enumSource) accept(s, tag, source string, name bool) bool {
 	// Do not submit names from untrusted sources, after already receiving the name
 	// from a trusted source
 	if !trusted && r.filter.Has(s+strconv.FormatBool(true)) {
-		if name && !r.enum.Config.Passive {
+		if name {
 			r.dups.Append(&requests.DNSRequest{
 				Name:   s,
 				Tag:    tag,
@@ -195,7 +195,7 @@ func (r *enumSource) accept(s, tag, source string, name bool) bool {
 	// At most, a FQDN will be accepted from an untrusted source first, and then
 	// reconsidered from a trusted data source
 	if r.filter.Has(s + strconv.FormatBool(trusted)) {
-		if name && !r.enum.Config.Passive {
+		if name {
 			r.dups.Append(&requests.DNSRequest{
 				Name:   s,
 				Tag:    tag,

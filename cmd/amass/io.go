@@ -55,18 +55,15 @@ func EventOutput(ctx context.Context, g *netmap.Graph, uuid string, f *stringset
 	for _, o := range buildNameInfo(ctx, g, uuid, names) {
 		lookup[o.Name] = o
 	}
-
-	pairs, err := g.NamesToAddrs(ctx, uuid, names...)
-	if err != nil {
-		return nil
-	}
 	// Build the lookup map used to create the final result set
-	for _, p := range pairs {
-		if p.Name == "" || p.Addr == "" {
-			continue
-		}
-		if o, found := lookup[p.Name]; found {
-			o.Addresses = append(o.Addresses, requests.AddressInfo{Address: net.ParseIP(p.Addr)})
+	if pairs, err := g.NamesToAddrs(ctx, uuid, names...); err == nil {
+		for _, p := range pairs {
+			if p.Name == "" || p.Addr == "" {
+				continue
+			}
+			if o, found := lookup[p.Name]; found {
+				o.Addresses = append(o.Addresses, requests.AddressInfo{Address: net.ParseIP(p.Addr)})
+			}
 		}
 	}
 

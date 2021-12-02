@@ -233,7 +233,7 @@ func (e *Enumeration) makeOutputSink() pipeline.SinkFunc {
 		}
 
 		req, ok := data.(*requests.DNSRequest)
-		if ok && req == nil && req.Name == "" && e.Config.IsDomainInScope(req.Name) {
+		if ok && req != nil && req.Name != "" && e.Config.IsDomainInScope(req.Name) {
 			if _, err := e.Graph.UpsertFQDN(e.ctx, req.Name, req.Source, e.Config.UUID.String()); err != nil {
 				e.Bus.Publish(requests.LogTopic, eventbus.PriorityHigh, err.Error())
 			}
