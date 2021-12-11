@@ -4,8 +4,8 @@
 package requests
 
 import (
-	"testing"
 	"github.com/stretchr/testify/require"
+	"testing"
 )
 
 func TestTrustedTag(t *testing.T) {
@@ -34,247 +34,317 @@ func TestTrustedTag(t *testing.T) {
 }
 
 func TestDNSRequestClone(t *testing.T) {
-    t.Parallel()
-    tests := []struct{
-        name        string
-        req         DNSRequest
-    }{
-        {
-            name: "Simple test",
-            req:  DNSRequest{
-                Name: "test",
-                Domain: "www.example.com",
-                Records: append([]DNSAnswer(nil), []DNSAnswer{}...),
-                Tag:    "test",
-                Source: "test",
-            },
-        },
-    }
-    for _, test := range tests {
-        t.Run(test.name, func(t *testing.T) {
-            clone := test.req.Clone().(*DNSRequest)
-            require.Equal(t, clone.Name, test.req.Name)
-            require.Equal(t, clone.Domain, test.req.Domain)
-            require.Equal(t, clone.Records, test.req.Records)
-            require.Equal(t, clone.Tag, test.req.Tag)
-            require.Equal(t, clone.Source, test.req.Source)
-        })
-    }
+	t.Parallel()
+	tests := []struct {
+		name string
+		req  DNSRequest
+	}{
+		{
+			name: "Simple test",
+			req: DNSRequest{
+				Name:    "test",
+				Domain:  "www.example.com",
+				Records: append([]DNSAnswer(nil), []DNSAnswer{}...),
+				Tag:     "test",
+				Source:  "test",
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			clone := test.req.Clone().(*DNSRequest)
+			require.Equal(t, clone.Name, test.req.Name)
+			require.Equal(t, clone.Domain, test.req.Domain)
+			require.Equal(t, clone.Records, test.req.Records)
+			require.Equal(t, clone.Tag, test.req.Tag)
+			require.Equal(t, clone.Source, test.req.Source)
+		})
+	}
 
 }
 
 func TestDNSRequestValid(t *testing.T) {
-    tests := []struct{
-        name        string
-        req         DNSRequest
-        success     bool
-    }{
-        {
-            name: "Invalid test",
-            req:  DNSRequest{
-                Name: "test",
-                Domain: "www.example.com",
-                Records: append([]DNSAnswer(nil), []DNSAnswer{}...),
-                Tag:    "test",
-                Source: "test",
-            },
-            success: false,
-        },
-        {
-            name: "Valid test",
-            req:  DNSRequest{
-                Name: "example.com",
-                Domain: "example.com",
-                Records: append([]DNSAnswer(nil), []DNSAnswer{}...),
-                Tag:    "test",
-                Source: "test",
-            },
-            success: true,
-        },
-    }
-    for _, test := range tests {
-        t.Run(test.name, func(t *testing.T) {
-            if test.success {
-                valid := test.req.Valid()
-                require.True(t, valid)
-            } else {
-                valid := test.req.Valid()
-                require.False(t, valid)
-            }
-        })
-    }
+	tests := []struct {
+		name    string
+		req     DNSRequest
+		success bool
+	}{
+		{
+			name: "Invalid test",
+			req: DNSRequest{
+				Name:    "test",
+				Domain:  "www.example.com",
+				Records: append([]DNSAnswer(nil), []DNSAnswer{}...),
+				Tag:     "test",
+				Source:  "test",
+			},
+			success: false,
+		},
+		{
+			name: "Valid test",
+			req: DNSRequest{
+				Name:    "example.com",
+				Domain:  "example.com",
+				Records: append([]DNSAnswer(nil), []DNSAnswer{}...),
+				Tag:     "test",
+				Source:  "test",
+			},
+			success: true,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if test.success {
+				valid := test.req.Valid()
+				require.True(t, valid)
+			} else {
+				valid := test.req.Valid()
+				require.False(t, valid)
+			}
+		})
+	}
 }
 
-
 func TestResolvedRequestClone(t *testing.T) {
-    t.Parallel()
-    tests := []struct{
-        name        string
-        req         ResolvedRequest
-    }{
-        {
-            name: "Simple test",
-            req:  ResolvedRequest{
-                Name: "test",
-                Domain: "www.example.com",
-                Records: append([]DNSAnswer(nil), []DNSAnswer{}...),
-                Tag:    "test",
-                Source: "test",
-            },
-        },
-    }
-    for _, test := range tests {
-        t.Run(test.name, func(t *testing.T) {
-            clone := test.req.Clone().(*ResolvedRequest)
-            require.Equal(t, clone.Name, test.req.Name)
-            require.Equal(t, clone.Domain, test.req.Domain)
-            require.Equal(t, clone.Records, test.req.Records)
-            require.Equal(t, clone.Tag, test.req.Tag)
-            require.Equal(t, clone.Source, test.req.Source)
-        })
-    }
+	t.Parallel()
+	tests := []struct {
+		name string
+		req  ResolvedRequest
+	}{
+		{
+			name: "Simple test",
+			req: ResolvedRequest{
+				Name:    "test",
+				Domain:  "www.example.com",
+				Records: append([]DNSAnswer(nil), []DNSAnswer{}...),
+				Tag:     "test",
+				Source:  "test",
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			clone := test.req.Clone().(*ResolvedRequest)
+			require.Equal(t, clone.Name, test.req.Name)
+			require.Equal(t, clone.Domain, test.req.Domain)
+			require.Equal(t, clone.Records, test.req.Records)
+			require.Equal(t, clone.Tag, test.req.Tag)
+			require.Equal(t, clone.Source, test.req.Source)
+		})
+	}
 }
 
 func TestResolvedRequestValid(t *testing.T) {
-    tests := []struct{
-        name        string
-        req         ResolvedRequest
-        success     bool
-    }{
-        {
-            name: "Invalid test",
-            req:  ResolvedRequest{
-                Name: "test",
-                Domain: "www.example.com",
-                Records: append([]DNSAnswer(nil), []DNSAnswer{}...),
-                Tag:    "test",
-                Source: "test",
-            },
-            success: false,
-        },
-        {
-            name: "Valid test",
-            req:  ResolvedRequest{
-                Name: "example.com",
-                Domain: "example.com",
-                Records: append([]DNSAnswer(nil), []DNSAnswer{}...),
-                Tag:    "test",
-                Source: "test",
-            },
-            success: true,
-        },
-    }
-    for _, test := range tests {
-        t.Run(test.name, func(t *testing.T) {
-            if test.success {
-                valid := test.req.Valid()
-                require.True(t, valid)
-            } else {
-                valid := test.req.Valid()
-                require.False(t, valid)
-            }
-        })
-    }
+	tests := []struct {
+		name    string
+		req     ResolvedRequest
+		success bool
+	}{
+		{
+			name: "Invalid test",
+			req: ResolvedRequest{
+				Name:    "test",
+				Domain:  "www.example.com",
+				Records: append([]DNSAnswer(nil), []DNSAnswer{}...),
+				Tag:     "test",
+				Source:  "test",
+			},
+			success: false,
+		},
+		{
+			name: "Valid test",
+			req: ResolvedRequest{
+				Name:    "example.com",
+				Domain:  "example.com",
+				Records: append([]DNSAnswer(nil), []DNSAnswer{}...),
+				Tag:     "test",
+				Source:  "test",
+			},
+			success: true,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if test.success {
+				valid := test.req.Valid()
+				require.True(t, valid)
+			} else {
+				valid := test.req.Valid()
+				require.False(t, valid)
+			}
+		})
+	}
 }
 
 func TestSubdomainRequestClone(t *testing.T) {
-    t.Parallel()
-    tests := []struct{
-        name        string
-        req         SubdomainRequest
-    }{
-        {
-            name: "Simple test",
-            req:  SubdomainRequest{
-                Name: "test",
-                Domain: "www.example.com",
-                Records: append([]DNSAnswer(nil), []DNSAnswer{}...),
-                Tag:    "test",
-                Source: "test",
-            },
-        },
-    }
-    for _, test := range tests {
-        t.Run(test.name, func(t *testing.T) {
-            clone := test.req.Clone().(*SubdomainRequest)
-            require.Equal(t, clone.Name, test.req.Name)
-            require.Equal(t, clone.Domain, test.req.Domain)
-            require.Equal(t, clone.Records, test.req.Records)
-            require.Equal(t, clone.Tag, test.req.Tag)
-            require.Equal(t, clone.Source, test.req.Source)
-        })
-    }
+	t.Parallel()
+	tests := []struct {
+		name string
+		req  SubdomainRequest
+	}{
+		{
+			name: "Simple test",
+			req: SubdomainRequest{
+				Name:    "test",
+				Domain:  "www.example.com",
+				Records: append([]DNSAnswer(nil), []DNSAnswer{}...),
+				Tag:     "test",
+				Source:  "test",
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			clone := test.req.Clone().(*SubdomainRequest)
+			require.Equal(t, clone.Name, test.req.Name)
+			require.Equal(t, clone.Domain, test.req.Domain)
+			require.Equal(t, clone.Records, test.req.Records)
+			require.Equal(t, clone.Tag, test.req.Tag)
+			require.Equal(t, clone.Source, test.req.Source)
+		})
+	}
 }
 
 func TestSubdomainRequestValid(t *testing.T) {
-    tests := []struct{
-        name        string
-        req         SubdomainRequest
-        success     bool
-    }{
-        {
-            name: "Invalid test",
-            req:  SubdomainRequest{
-                Name: "test",
-                Domain: "www.example.com",
-                Records: append([]DNSAnswer(nil), []DNSAnswer{}...),
-                Tag:    "test",
-                Source: "test",
-                Times: 0,
-            },
-            success: false,
-        },
-        {
-            name: "Valid test",
-            req:  SubdomainRequest{
-                Name: "example.com",
-                Domain: "example.com",
-                Records: append([]DNSAnswer(nil), []DNSAnswer{}...),
-                Tag:    "test",
-                Source: "test",
-                Times:  3,
-            },
-            success: true,
-        },
-    }
-    for _, test := range tests {
-        t.Run(test.name, func(t *testing.T) {
-            if test.success {
-                valid := test.req.Valid()
-                require.True(t, valid)
-            } else {
-                valid := test.req.Valid()
-                require.False(t, valid)
-            }
-        })
-    }
+	tests := []struct {
+		name    string
+		req     SubdomainRequest
+		success bool
+	}{
+		{
+			name: "Invalid test",
+			req: SubdomainRequest{
+				Name:    "test",
+				Domain:  "www.example.com",
+				Records: append([]DNSAnswer(nil), []DNSAnswer{}...),
+				Tag:     "test",
+				Source:  "test",
+				Times:   0,
+			},
+			success: false,
+		},
+		{
+			name: "Valid test",
+			req: SubdomainRequest{
+				Name:    "example.com",
+				Domain:  "example.com",
+				Records: append([]DNSAnswer(nil), []DNSAnswer{}...),
+				Tag:     "test",
+				Source:  "test",
+				Times:   3,
+			},
+			success: true,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if test.success {
+				valid := test.req.Valid()
+				require.True(t, valid)
+			} else {
+				valid := test.req.Valid()
+				require.False(t, valid)
+			}
+		})
+	}
 }
 
 func TestZoneXFRRequestClone(t *testing.T) {
-    t.Parallel()
-    tests := []struct{
-        name        string
-        req         ZoneXFRRequest
-    }{
-        {
-            name: "Simple test",
-            req:  ZoneXFRRequest{
-                Name: "test",
-                Domain: "www.example.com",
-                Server:  "test",
-                Tag:    "test",
-                Source: "test",
-            },
-        },
-    }
-    for _, test := range tests {
-        t.Run(test.name, func(t *testing.T) {
-            clone := test.req.Clone().(*ZoneXFRRequest)
-            require.Equal(t, clone.Name, test.req.Name)
-            require.Equal(t, clone.Domain, test.req.Domain)
-            require.Equal(t, clone.Server, test.req.Server)
-            require.Equal(t, clone.Tag, test.req.Tag)
-            require.Equal(t, clone.Source, test.req.Source)
-        })
-    }
+	t.Parallel()
+	tests := []struct {
+		name string
+		req  ZoneXFRRequest
+	}{
+		{
+			name: "Simple test",
+			req: ZoneXFRRequest{
+				Name:   "test",
+				Domain: "www.example.com",
+				Server: "test",
+				Tag:    "test",
+				Source: "test",
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			clone := test.req.Clone().(*ZoneXFRRequest)
+			require.Equal(t, clone.Name, test.req.Name)
+			require.Equal(t, clone.Domain, test.req.Domain)
+			require.Equal(t, clone.Server, test.req.Server)
+			require.Equal(t, clone.Tag, test.req.Tag)
+			require.Equal(t, clone.Source, test.req.Source)
+		})
+	}
+}
+
+func TestAddrRequestClone(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		req  AddrRequest
+	}{
+		{
+			name: "Simple test",
+			req: AddrRequest{
+				Address: "8.8.8.8",
+				Domain:  "www.example.com",
+				InScope: true,
+				Tag:     "test",
+				Source:  "test",
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			clone := test.req.Clone().(*AddrRequest)
+			require.Equal(t, clone.Address, test.req.Address)
+			require.Equal(t, clone.Domain, test.req.Domain)
+			require.Equal(t, clone.InScope, test.req.InScope)
+			require.Equal(t, clone.Tag, test.req.Tag)
+			require.Equal(t, clone.Source, test.req.Source)
+		})
+	}
+}
+
+func TestAddrRequestValid(t *testing.T) {
+	tests := []struct {
+		name    string
+		req     AddrRequest
+		success bool
+	}{
+		{
+			name: "Invalid test",
+			req: AddrRequest{
+				Address: "NotAnIP",
+				Domain:  "www.example.com",
+				InScope: false,
+				Tag:     "test",
+				Source:  "test",
+			},
+			success: false,
+		},
+		{
+			name: "Valid test",
+			req: AddrRequest{
+				Address: "8.8.8.8",
+				Domain:  "example.com",
+				InScope: true,
+				Tag:     "test",
+				Source:  "test",
+			},
+			success: true,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if test.success {
+				valid := test.req.Valid()
+				require.True(t, valid)
+			} else {
+				valid := test.req.Valid()
+				require.False(t, valid)
+			}
+		})
+	}
 }
