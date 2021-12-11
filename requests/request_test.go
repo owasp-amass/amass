@@ -249,3 +249,32 @@ func TestSubdomainRequestValid(t *testing.T) {
         })
     }
 }
+
+func TestZoneXFRRequestClone(t *testing.T) {
+    t.Parallel()
+    tests := []struct{
+        name        string
+        req         ZoneXFRRequest
+    }{
+        {
+            name: "Simple test",
+            req:  ZoneXFRRequest{
+                Name: "test",
+                Domain: "www.example.com",
+                Server:  "test",
+                Tag:    "test",
+                Source: "test",
+            },
+        },
+    }
+    for _, test := range tests {
+        t.Run(test.name, func(t *testing.T) {
+            clone := test.req.Clone().(*ZoneXFRRequest)
+            require.Equal(t, clone.Name, test.req.Name)
+            require.Equal(t, clone.Domain, test.req.Domain)
+            require.Equal(t, clone.Server, test.req.Server)
+            require.Equal(t, clone.Tag, test.req.Tag)
+            require.Equal(t, clone.Source, test.req.Source)
+        })
+    }
+}
