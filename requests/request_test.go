@@ -4,9 +4,7 @@
 package requests
 
 import (
-	"context"
 	"testing"
-
 	"github.com/stretchr/testify/require"
 )
 
@@ -86,7 +84,79 @@ func TestDNSRequestValid(t *testing.T) {
             name: "Valid test",
             req:  DNSRequest{
                 Name: "example.com",
+                Domain: "example.com",
+                Records: append([]DNSAnswer(nil), []DNSAnswer{}...),
+                Tag:    "test",
+                Source: "test",
+            },
+            success: true,
+        },
+    }
+    for _, test := range tests {
+        t.Run(test.name, func(t *testing.T) {
+            if test.success {
+                valid := test.req.Valid()
+                require.True(t, valid)
+            } else {
+                valid := test.req.Valid()
+                require.False(t, valid)
+            }
+        })
+    }
+}
+
+
+func TestResolvedRequestClone(t *testing.T) {
+    t.Parallel()
+    tests := []struct{
+        name        string
+        req         ResolvedRequest
+    }{
+        {
+            name: "Simple test",
+            req:  ResolvedRequest{
+                Name: "test",
                 Domain: "www.example.com",
+                Records: append([]DNSAnswer(nil), []DNSAnswer{}...),
+                Tag:    "test",
+                Source: "test",
+            },
+        },
+    }
+    for _, test := range tests {
+        t.Run(test.name, func(t *testing.T) {
+            clone := test.req.Clone().(*ResolvedRequest)
+            require.Equal(t, clone.Name, test.req.Name)
+            require.Equal(t, clone.Domain, test.req.Domain)
+            require.Equal(t, clone.Records, test.req.Records)
+            require.Equal(t, clone.Tag, test.req.Tag)
+            require.Equal(t, clone.Source, test.req.Source)
+        })
+    }
+}
+
+func TestResolvedRequestValid(t *testing.T) {
+    tests := []struct{
+        name        string
+        req         ResolvedRequest
+        success     bool
+    }{
+        {
+            name: "Invalid test",
+            req:  ResolvedRequest{
+                Name: "test",
+                Domain: "www.example.com",
+                Records: append([]DNSAnswer(nil), []DNSAnswer{}...),
+                Tag:    "test",
+                Source: "test",
+            },
+            success: false,
+        },
+        {
+            name: "Valid test",
+            req:  ResolvedRequest{
+                Name: "example.com",
+                Domain: "example.com",
                 Records: append([]DNSAnswer(nil), []DNSAnswer{}...),
                 Tag:    "test",
                 Source: "test",
