@@ -176,3 +176,76 @@ func TestResolvedRequestValid(t *testing.T) {
         })
     }
 }
+
+func TestSubdomainRequestClone(t *testing.T) {
+    t.Parallel()
+    tests := []struct{
+        name        string
+        req         SubdomainRequest
+    }{
+        {
+            name: "Simple test",
+            req:  SubdomainRequest{
+                Name: "test",
+                Domain: "www.example.com",
+                Records: append([]DNSAnswer(nil), []DNSAnswer{}...),
+                Tag:    "test",
+                Source: "test",
+            },
+        },
+    }
+    for _, test := range tests {
+        t.Run(test.name, func(t *testing.T) {
+            clone := test.req.Clone().(*SubdomainRequest)
+            require.Equal(t, clone.Name, test.req.Name)
+            require.Equal(t, clone.Domain, test.req.Domain)
+            require.Equal(t, clone.Records, test.req.Records)
+            require.Equal(t, clone.Tag, test.req.Tag)
+            require.Equal(t, clone.Source, test.req.Source)
+        })
+    }
+}
+
+func TestSubdomainRequestValid(t *testing.T) {
+    tests := []struct{
+        name        string
+        req         SubdomainRequest
+        success     bool
+    }{
+        {
+            name: "Invalid test",
+            req:  SubdomainRequest{
+                Name: "test",
+                Domain: "www.example.com",
+                Records: append([]DNSAnswer(nil), []DNSAnswer{}...),
+                Tag:    "test",
+                Source: "test",
+                Times: 0,
+            },
+            success: false,
+        },
+        {
+            name: "Valid test",
+            req:  SubdomainRequest{
+                Name: "example.com",
+                Domain: "example.com",
+                Records: append([]DNSAnswer(nil), []DNSAnswer{}...),
+                Tag:    "test",
+                Source: "test",
+                Times:  3,
+            },
+            success: true,
+        },
+    }
+    for _, test := range tests {
+        t.Run(test.name, func(t *testing.T) {
+            if test.success {
+                valid := test.req.Valid()
+                require.True(t, valid)
+            } else {
+                valid := test.req.Valid()
+                require.False(t, valid)
+            }
+        })
+    }
+}
