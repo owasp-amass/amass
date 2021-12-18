@@ -4,8 +4,10 @@
 package requests
 
 import (
-	"github.com/stretchr/testify/require"
 	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestTrustedTag(t *testing.T) {
@@ -384,4 +386,112 @@ func TestSanitizeDNSRequest(t *testing.T) {
 		})
 	}
 
+}
+
+func TestASNRequestClone(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		req  ASNRequest
+	}{
+		{
+			name: "Simple test",
+			req: ASNRequest{
+                Address: "8.8.8.8",
+                ASN: 11111,
+                Prefix: "",
+                CC: "",
+                Registry: "",
+                AllocationDate: time.Now(),
+                Description: "",
+                Netblocks: []string{},
+				Tag:     "test",
+				Source:  "test",
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			clone := test.req.Clone().(*ASNRequest)
+			require.Equal(t, clone.Address, test.req.Address)
+			require.Equal(t, clone.ASN, test.req.ASN)
+			require.Equal(t, clone.Prefix, test.req.Prefix)
+			require.Equal(t, clone.CC, test.req.CC)
+			require.Equal(t, clone.Registry, test.req.Registry)
+			require.Equal(t, clone.AllocationDate, test.req.AllocationDate)
+			require.Equal(t, clone.Description, test.req.Description)
+			require.Equal(t, clone.Netblocks, test.req.Netblocks)
+			require.Equal(t, clone.Tag, test.req.Tag)
+			require.Equal(t, clone.Source, test.req.Source)
+		})
+	}
+
+}
+
+func TestASNRequestValid(t *testing.T) {
+	tests := []struct {
+		name    string
+		req     ASNRequest
+		success bool
+	}{
+		{
+			name: "Valid test",
+			req: ASNRequest{
+                Address: "8.8.8.8",
+                ASN: 11111,
+                Prefix: "8.8.8.8/8",
+                CC: "",
+                Registry: "",
+                AllocationDate: time.Now(),
+                Description: "",
+                Netblocks: []string{},
+				Tag:     "test",
+				Source:  "test",
+			},
+			success: true,
+		},
+		{
+			name: "Invalid test - Empty Prefix",
+			req: ASNRequest{
+                Address: "8.8.8.8",
+                ASN: 11111,
+                Prefix: "",
+                CC: "",
+                Registry: "",
+                AllocationDate: time.Now(),
+                Description: "",
+                Netblocks: []string{},
+				Tag:     "test",
+				Source:  "test",
+			},
+			success: false,
+		},
+		{
+			name: "Invalid test - Malformed Address",
+			req: ASNRequest{
+                Address: "300.300.300.300",
+                ASN: 11111,
+                Prefix: "8.8.8.8/8",
+                CC: "",
+                Registry: "",
+                AllocationDate: time.Now(),
+                Description: "",
+                Netblocks: []string{},
+				Tag:     "test",
+				Source:  "test",
+			},
+			success: false,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if test.success {
+				valid := test.req.Valid()
+				require.True(t, valid)
+			} else {
+				valid := test.req.Valid()
+				require.False(t, valid)
+			}
+		})
+	}
 }
