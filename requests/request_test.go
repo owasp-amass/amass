@@ -66,6 +66,7 @@ func TestDNSRequestClone(t *testing.T) {
 }
 
 func TestDNSRequestValid(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		req     DNSRequest
@@ -137,6 +138,7 @@ func TestResolvedRequestClone(t *testing.T) {
 }
 
 func TestResolvedRequestValid(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		req     ResolvedRequest
@@ -208,6 +210,7 @@ func TestSubdomainRequestClone(t *testing.T) {
 }
 
 func TestSubdomainRequestValid(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		req     SubdomainRequest
@@ -310,6 +313,7 @@ func TestAddrRequestClone(t *testing.T) {
 }
 
 func TestAddrRequestValid(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		req     AddrRequest
@@ -429,6 +433,7 @@ func TestASNRequestClone(t *testing.T) {
 }
 
 func TestASNRequestValid(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		req     ASNRequest
