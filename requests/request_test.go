@@ -348,3 +348,40 @@ func TestAddrRequestValid(t *testing.T) {
 		})
 	}
 }
+
+func TestSanitizeDNSRequest(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		req  DNSRequest
+	}{
+		{
+			name: "Simple test",
+			req: DNSRequest{
+				Name:    "   Example.com   ",
+				Domain:  "                    Example.com",
+				Records: append([]DNSAnswer(nil), []DNSAnswer{}...),
+				Tag:     "test",
+				Source:  "test",
+			},
+		},
+		{
+			name: "RemoveAsteriksTest",
+			req: DNSRequest{
+				Name:    "*.Example.com",
+				Domain:  "Example.com",
+				Records: append([]DNSAnswer(nil), []DNSAnswer{}...),
+				Tag:     "test",
+				Source:  "test",
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			SanitizeDNSRequest(&test.req)
+			require.Equal(t, "example.com", test.req.Name)
+			require.Equal(t, "example.com", test.req.Domain)
+		})
+	}
+
+}
