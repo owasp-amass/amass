@@ -4,7 +4,6 @@ go 1.16
 
 require (
 	github.com/PuerkitoBio/goquery v1.8.0
-	github.com/buger/jsonparser v1.1.1 // indirect
 	github.com/caffix/eventbus v0.0.0-20210920204849-80ad577dc223
 	github.com/caffix/netmap v0.0.0-20211113232947-ff0f98460b11
 	github.com/caffix/pipeline v0.0.0-20211016020340-7e6f803c0762
@@ -18,14 +17,14 @@ require (
 	github.com/cloudflare/cloudflare-go v0.27.0
 	github.com/dghubble/go-twitter v0.0.0-20211002212826-ad02880e616b
 	github.com/fatih/color v1.13.0
-	github.com/fofapro/fofa-go v0.0.0-20200317042037-c0caee09013d
 	github.com/geziyor/geziyor v0.0.0-20211021191925-369b42cbc6c5
 	github.com/go-ini/ini v1.63.2
 	github.com/go-kit/kit v0.12.0 // indirect
 	github.com/google/uuid v1.3.0
+	github.com/json-iterator/go v1.1.12
 	github.com/mattn/go-colorable v0.1.11 // indirect
 	github.com/miekg/dns v1.1.43
-	github.com/stretchr/testify v1.7.0 // indirect
+	github.com/stretchr/testify v1.7.0
 	github.com/temoto/robotstxt v1.1.2 // indirect
 	github.com/yl2chen/cidranger v1.0.2
 	github.com/yuin/gopher-lua v0.0.0-20210529063254-f4c35e4016d9

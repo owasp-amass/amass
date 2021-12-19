@@ -5,15 +5,17 @@ package datasrcs
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
-
 	"github.com/OWASP/Amass/v3/config"
+	"github.com/OWASP/Amass/v3/net/http"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/systems"
 	"github.com/caffix/eventbus"
 	"github.com/caffix/service"
-	"github.com/fofapro/fofa-go/fofa"
+	jsoniter "github.com/json-iterator/go"
+	"strings"
 )
 
 // FOFA is the Service that handles access to the FOFA data source.
@@ -23,6 +25,13 @@ type FOFA struct {
 	SourceType string
 	sys        systems.System
 	creds      *config.Credentials
+}
+
+type fofaResponse struct {
+	Error   bool     `json:"error"`
+	ErrMsg  string   `json:"errmsg"`
+	Size    int      `json:"size"`
+	Results []string `json:"results"`
 }
 
 // NewFOFA returns he object initialized, but not yet started.
@@ -44,7 +53,6 @@ func (f *FOFA) Description() string {
 // OnStart implements the Service interface.
 func (f *FOFA) OnStart() error {
 	f.creds = f.sys.Config().GetDataSourceConfig(f.String()).GetCredentials()
-
 	if f.creds == nil || f.creds.Username == "" || f.creds.Key == "" {
 		estr := fmt.Sprintf("%s: Email address or API key data was not provided", f.String())
 
@@ -81,26 +89,55 @@ func (f *FOFA) dnsRequest(ctx context.Context, req *requests.DNSRequest) {
 	bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 		fmt.Sprintf("Querying %s for %s subdomains", f.String(), req.Domain))
 
-	client := fofa.NewFofaClient([]byte(f.creds.Username), []byte(f.creds.Key))
-	if client == nil {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: Failed to create FOFA client", f.String()))
-		return
-	}
+	// fofa api doc https://fofa.so/static_pages/api_help
+	qbase64 := base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("domain=\"%s\"", req.Domain)))
 
+	headers := map[string]string{"Content-Type": "application/json"}
+
+	var flag = true
 	for i := 1; i <= 10; i++ {
-		results, err := client.QueryAsArray(uint(i), []byte(fmt.Sprintf("domain=\"%s\"", req.Domain)), []byte("domain"))
+		if !flag {
+			break
+		}
+		url := f.getURL(qbase64, i)
+		page, err := http.RequestWebPage(ctx, url, nil, headers, nil)
+
 		if err != nil {
 			bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %v", f.String(), err))
 			return
 		}
-		if len(results) == 0 {
-			break
+
+		var response fofaResponse
+
+		err = jsoniter.NewDecoder(strings.NewReader(page)).Decode(&response)
+		if err != nil {
+			bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %v", f.String(), err))
+			return
 		}
 
-		for _, res := range results {
-			genNewNameEvent(ctx, f.sys, f, res.Domain)
+		if response.Error {
+			bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %v", f.String(), err))
+			return
+		}
+
+		// 如果 size 小于 100 ，说明结果就一页，循环一次就行
+		// 如果 len(response.Results) == 0， 说明当前循环的页数，超过了结果个数，下次就不进行了请求了
+		if response.Size < 100 || len(response.Results) == 0 {
+			flag = false
+		}
+
+		for _, subdomain := range response.Results {
+			if strings.HasPrefix(strings.ToLower(subdomain), "http://") || strings.HasPrefix(strings.ToLower(subdomain), "https://") {
+				subdomain = subdomain[strings.Index(subdomain, "//")+2:]
+			}
+			genNewNameEvent(ctx, f.sys, f, subdomain)
 		}
 
 		f.CheckRateLimit()
 	}
+
+}
+
+func (f *FOFA) getURL(qbase64 string, page int) string {
+	return fmt.Sprintf("https://fofa.so/api/v1/search/all?full=true&fields=host&page=%d&size=100&email=%s&key=%s&qbase64=%s", page, f.creds.Username, f.creds.Key, qbase64)
 }
