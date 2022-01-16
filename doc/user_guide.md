@@ -356,6 +356,7 @@ import (
 	"github.com/OWASP/Amass/v3/datasrcs"
 	"github.com/OWASP/Amass/v3/enum"
 	"github.com/OWASP/Amass/v3/systems"
+b	"github.com/Forchapeatl/OWASP-Amass-cmd-amass-io"
 )
 
 func main() {
@@ -365,6 +366,8 @@ func main() {
 	// Setup the most basic amass configuration
 	cfg := config.NewConfig()
 	cfg.AddDomain("example.com")
+	ctx, cancel := context.WithCancel(context.Background())
+	known := stringset.New()
 
 	sys, err := systems.NewLocalSystem(cfg)
 	if err != nil {
@@ -377,9 +380,11 @@ func main() {
 		return
 	}
 	defer e.Close()
+	defer known.Close()
+
 
 	e.Start()
-	for _, o := range e.ExtractOutput(nil) {
+	for _, o := range b.ExtractOutput(nil) {
 		fmt.Println(o.Name)
 	}
 }
