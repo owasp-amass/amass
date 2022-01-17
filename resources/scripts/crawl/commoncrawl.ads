@@ -1,4 +1,4 @@
--- Copyright 2021 Jeff Foley. All rights reserved.
+-- Copyright 2021-2022 Jeff Foley. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 local json = require("json")
@@ -9,7 +9,7 @@ type = "crawl"
 local urls = {}
 
 function start()
-    set_rate_limit(10)
+    set_rate_limit(7)
 end
 
 function vertical(ctx, domain)
@@ -18,30 +18,25 @@ function vertical(ctx, domain)
     end
 
     for _, url in pairs(urls) do
-        scrape(ctx, {['url']=build_url(url, domain)})
+        scrape(ctx, {['url']=url .. domain})
     end
 end
 
-function build_url(url, domain)
-    return url .. "?url=*." .. domain .. "&output=json&fl=url"
-end
-
 function get_urls(ctx)
-    local resp, err = request(ctx, {['url']="https://index.commoncrawl.org/collinfo.json"})
+    local u = "https://index.commoncrawl.org"
+    local resp, err = request(ctx, {['url']=u})
     if (err ~= nil and err ~= "") then
         log(ctx, "get_urls request to service failed: " .. err)
         return
     end
 
-    local data = json.decode(resp)
-    if (data == nil or #data == 0) then
+    local matches = find(resp, 'CC-MAIN[0-9-]*-index')
+    if (matches == nil or #matches == 0) then
+        log(ctx, "get_urls failed to extract endpoints")
         return
     end
 
-    for _, u in pairs(data) do
-        local url = u['cdx-api']
-        if (url ~= nil and url ~= "") then
-            table.insert(urls, url)
-        end
+    for _, endpoint in pairs(matches) do
+        table.insert(urls, u .. "/" .. endpoint .. "?output=json&fl=url&url=*.")
     end
 end
