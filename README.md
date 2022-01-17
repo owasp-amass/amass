@@ -132,6 +132,6 @@ Add it to our ever-growing list of [REFERENCES.md](REFERENCES.md) by forking and
 
 ## Licensing [![License](https://img.shields.io/github/license/OWASP/Amass)](https://www.apache.org/licenses/LICENSE-2.0)
 
-This program is free software: you can redistribute it and/or modify it under the terms of the [Apache license](LICENSE). OWASP Amass and any contributions are Copyright © by Jeff Foley 2017-2021. Some subcomponents have separate licenses.
+This program is free software: you can redistribute it and/or modify it under the terms of the [Apache license](LICENSE). OWASP Amass and any contributions are Copyright © by Jeff Foley 2017-2022. Some subcomponents have separate licenses.
 
 ![Network graph](./images/network_06092018.png "Amass Network Mapping")
