@@ -1,3 +1,4 @@
+//go:build aix || darwin || dragonfly || freebsd || (js && wasm) || linux || nacl || netbsd || openbsd || solaris
 // +build aix darwin dragonfly freebsd js,wasm linux nacl netbsd openbsd solaris
 
 // Copyright 2017-2021 Jeff Foley. All rights reserved.

@@ -7,6 +7,8 @@ import (
 	"net"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestEmpty(t *testing.T) {
@@ -116,4 +118,36 @@ func TestAddrSearch(t *testing.T) {
 	if _, ipnet, err := net.ParseCIDR(entry.Prefix); err != nil || !ipnet.Contains(ip) {
 		t.Errorf("AddrSearch returned the wrong Prefix value for the provided IP address: %s", entry.Prefix)
 	}
+}
+
+func TestIsReservedAddress(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name       string
+		addr       string
+		isReserved bool
+	}{
+		{
+			name:       "Test Invalid IP",
+			addr:       "300.300.300.300",
+			isReserved: false,
+		},
+		{
+			name:       "Test Reserved Address",
+			addr:       "192.168.0.0",
+			isReserved: true,
+		},
+		{
+			name:       "Test Unreserved Address",
+			addr:       "202.145.4.15",
+			isReserved: false,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			isReserved, _ := isReservedAddress(test.addr)
+			require.Equal(t, isReserved, test.isReserved)
+		})
+	}
+
 }
