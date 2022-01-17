@@ -27,7 +27,7 @@ The OWASP Amass Project performs network mapping of attack surfaces and external
 | DNS          | Brute forcing, Reverse DNS sweeping, NSEC zone walking, Zone transfers, FQDN alterations/permutations, FQDN Similarity-based Guessing |
 | Scraping     | AbuseIPDB, Ask, AskDNS, Baidu, Bing, DNSDumpster, DuckDuckGo, Gists, HackerOne, HyperStat, IPv4Info, PKey, RapidDNS, Riddler, Searchcode, Searx, SiteDossier, SpyOnWeb, Yahoo |
 | Certificates | Active pulls (optional), Censys, CertSpotter, Crtsh, Digitorus, FacebookCT, GoogleCT |
-| APIs         | 360PassiveDNS, ARIN, Ahrefs, AlienVault, AnubisDB, BinaryEdge, BGPView, BufferOver, BuiltWith, C99, Chaos, CIRCL, Cloudflare, CommonCrawl, DNSDB, DNSlytics, Detectify, FOFA, FullHunt, GitHub, GitLab, Greynoise, HackerTarget, Hunter, IntelX, IPdata, IPinfo, Maltiverse, Mnemonic, N45HT, NetworksDB, ONYPHE, PassiveTotal, PentestTools, Quake, RADb, ReconDev, Robtex, SecurityTrails, ShadowServer, Shodan, SonarSearch, Spamhaus, Spyse, Sublist3rAPI, TeamCymru, ThreatBook, ThreatCrowd, ThreatMiner, Twitter, Umbrella, URLScan, VirusTotal, WhoisXMLAPI, ZETAlytics, ZoomEye |
+| APIs         | 360PassiveDNS, ARIN, Ahrefs, AlienVault, AnubisDB, BinaryEdge, BGPView, BufferOver, BuiltWith, C99, Chaos, CIRCL, Cloudflare, CommonCrawl, DNSDB, DNSlytics, DNSRepo, Detectify, FOFA, FullHunt, GitHub, GitLab, Greynoise, HackerTarget, Hunter, IntelX, IPdata, IPinfo, Maltiverse, Mnemonic, N45HT, NetworksDB, ONYPHE, PassiveTotal, PentestTools, Quake, RADb, Robtex, SecurityTrails, ShadowServer, Shodan, SonarSearch, Spamhaus, Spyse, Sublist3rAPI, TeamCymru, ThreatBook, ThreatCrowd, ThreatMiner, Twitter, Umbrella, URLScan, VirusTotal, WhoisXMLAPI, ZETAlytics, ZoomEye |
 | Web Archives | ArchiveIt, Arquivo, HAW, UKWebArchive, Wayback |
 
 ----
@@ -66,7 +66,7 @@ The volume argument allows the Amass graph database to persist between execution
 ### From Sources
 
 1. Install [Go](https://golang.org/doc/install) and setup your Go workspace
-2. Download OWASP Amass by running `go get -v github.com/OWASP/Amass/v3/...`
+2. Download OWASP Amass by running `go install -v github.com/OWASP/Amass/v3/...@master`
 3. At this point, the binary should be in `$GOPATH/bin`
 
 ## Documentation [![GoDoc](https://pkg.go.dev/badge/github.com/OWASP/Amass/v3?utm_source=godoc)](https://pkg.go.dev/github.com/OWASP/Amass/v3)
@@ -97,6 +97,7 @@ For a list of all contributors to the OWASP Amass Project please visit our [HALL
 * [Patrik's Amass data source scripts](https://github.com/PatrikFehrenbach/amass-tools)
 * [Paradigm](https://github.com/jeredbare/paradigm)
 * [amass-to-csv](https://github.com/amroot/amass-to-csv)
+* [ruby-amass](https://github.com/postmodern/ruby-amass)
 
 ## Testimonials
 

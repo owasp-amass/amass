@@ -153,7 +153,6 @@ Switches for outputting the DNS and infrastructure findings as a network graph:
 | -graphistry | Output Graphistry JSON | amass viz -graphistry -d example.com |
 | -i | Path to the Amass data operations JSON input file | amass viz -d3 -d example.com |
 | -maltego | Output a Maltego Graph Table CSV file | amass viz -maltego -d example.com |
-| -visjs | Output HTML that employs VisJS | amass viz -visjs -d example.com |
 
 ### The 'track' Subcommand
 
@@ -185,7 +184,7 @@ Performs viewing and manipulation of the graph database. This subcommand only le
 | -ip | Show the IP addresses for discovered names | amass db -show -ip -d example.com |
 | -ipv4 | Show the IPv4 addresses for discovered names | amass db -show -ipv4 -d example.com |
 | -ipv6 | Show the IPv6 addresses for discovered names | amass db -show -ipv6 -d example.com |
-| -json | Path to the JSON output file | amass db -names -silent -json out.json -d example.com |
+| -json | Path to the JSON output file or '-' | amass db -names -silent -json out.json -d example.com |
 | -list | Print enumerations in the database and filter on domains specified | amass db -list |
 | -names | Print just discovered names | amass db -names -d example.com |
 | -nocolor | Disable colorized output | amass db -names -nocolor -d example.com |
