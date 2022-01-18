@@ -38,6 +38,7 @@ type Enumeration struct {
 	srcs        []service.Service
 	done        chan struct{}
 	doneOnce    sync.Once
+	filter      *stringset.Set
 	crawlFilter *stringset.Set
 	nameSrc     *enumSource
 	subTask     *subdomainTask
@@ -55,6 +56,7 @@ func NewEnumeration(cfg *config.Config, sys systems.System) *Enumeration {
 		srcs:        datasrcs.SelectedDataSources(cfg, sys.DataSources()),
 		logQueue:    queue.NewQueue(),
 		done:        make(chan struct{}),
+		filter:      stringset.New(),
 		crawlFilter: stringset.New(),
 	}
 
@@ -73,6 +75,7 @@ func (e *Enumeration) Close() {
 	e.closedOnce.Do(func() {
 		e.Bus.Stop()
 		e.Graph.Close()
+		e.filter.Close()
 		e.crawlFilter.Close()
 	})
 }
@@ -102,7 +105,7 @@ func (e *Enumeration) Start(ctx context.Context) error {
 		stages = append(stages, pipeline.DynamicPool("dns", e.dnsTask, e.min()))
 	}
 
-	stages = append(stages, pipeline.FIFO("filter", e.filterTaskFunc()))
+	stages = append(stages, pipeline.FIFO("filter", e.filterTaskFunc(e.filter)))
 	if !e.Config.Passive {
 		stages = append(stages, pipeline.FixedPool("store", e.store, maxStorePipelineTasks))
 		stages = append(stages, pipeline.FIFO("", e.subTask))
@@ -242,9 +245,7 @@ func (e *Enumeration) makeOutputSink() pipeline.SinkFunc {
 	})
 }
 
-func (e *Enumeration) filterTaskFunc() pipeline.TaskFunc {
-	filter := stringset.New()
-
+func (e *Enumeration) filterTaskFunc(filter *stringset.Set) pipeline.TaskFunc {
 	return pipeline.TaskFunc(func(ctx context.Context, data pipeline.Data, tp pipeline.TaskParams) (pipeline.Data, error) {
 		select {
 		case <-ctx.Done():
