@@ -1,7 +1,7 @@
-
 package datasrcs
 
-import ("testing"
+import (
+        "testing"
         "fmt"   
         "github.com/OWASP/Amass/v3/config"
         "github.com/OWASP/Amass/v3/systems"
