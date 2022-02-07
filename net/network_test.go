@@ -252,3 +252,22 @@ func TestIPDec(t *testing.T) {
 		}
 	}
 }
+func TestIsReservedAddress(t *testing.T) {
+	tests := []struct {
+		Address  string
+		Expected bool
+	}{
+		{"72.237.4.1", false},
+		{"192.168.1.0", true},
+		{"174.129.0.0", false},
+		{"0.0.0.1", false},
+}
+	for _, test := range tests {
+		d,_:= IsReservedAddress(test.Address)
+		if d != test.Expected {
+			t.Errorf("%v caused %v to be returned instead of %v", test.Address, d, test.Expected)
+		}
+	}		
+
+
+}
