@@ -2,6 +2,7 @@ package format
 
 import (
 	"testing"
+	"fmt"
 )
 
 func TestNilParseStrings(t *testing.T) {
@@ -308,5 +309,58 @@ func TestParseASNs(t *testing.T) {
 		}
 
 		t.Run(c.label, f)
+	}
+}
+
+func TestParseRange(t *testing.T) {
+	type args struct {
+		s string
+	}
+	tests := []struct {
+		name    string
+		args    args
+		expectedStart string
+		expectedEnd string
+		expectedOk  bool
+	}{
+		{
+			name:    "basic success - full range",
+			args:    args{s: "192.168.0.1-192.168.0.3"},
+			expectedStart: "192.168.0.1",
+			expectedEnd:   "192.168.0.3",
+			expectedOk:    true,			
+		},
+		{
+			name:    "basic success - short-hand range",
+			args:    args{s: "192.168.0.1-4"},
+			expectedStart: "192.168.0.1",
+			expectedEnd:   "192.168.0.4",
+			expectedOk:    true,
+
+		},
+		{
+			name:    "illicit split",
+			args:    args{s: "192.168.0.1"},
+			expectedStart: "<nil>",
+			expectedEnd:   "<nil>",
+			expectedOk:    false,
+		},
+		{
+			name:    "illicit range",
+			args:    args{s: "192.168.0.255-192.168.0.260"},
+			expectedStart: "192.168.0.255",
+			expectedEnd:   "<nil>",
+			expectedOk:    true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			start,end,ok := parseRange(tt.args.s);
+			 if ((fmt.Sprintf("%v",start) != tt.expectedStart)&&(fmt.Sprintf("%v",end) != tt.expectedEnd)&&(ok != tt.expectedOk)){
+				t.Errorf("parseIPs.parseRange() error = %v, wantErr %v", start, tt.expectedStart)
+				t.Errorf("parseIPs.parseRange() error = %v, wantErr %v", end, tt.expectedEnd)
+				t.Errorf("parseIPs.parseRange() error = %v, wantErr %v", ok, tt.expectedOk)
+			}
+		})
 	}
 }
