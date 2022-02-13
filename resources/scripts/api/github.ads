@@ -50,7 +50,10 @@ function vertical(ctx, domain)
         end
 
         for _, item in pairs(d.items) do
-            search_item(ctx, item)
+            local rate_limited = search_item(ctx, item)
+            if rate_limited == true then
+                return
+            end
         end
     end
 end
@@ -64,11 +67,16 @@ function search_item(ctx, item)
 
     local data = json.decode(info)
     if (data == nil or data['download_url'] == nil) then
+        if (data ~= nil and data['documentation_url'] == "https://docs.github.com/rest/overview/resources-in-the-rest-api#rate-limiting") then
+            log(ctx, "API rate limit exceeded")
+            return true
+        end
+
         return
     end
 
     local content, err = request(ctx, {['url']=data['download_url']})
-    if err ~= nil and err ~= "" then
+    if (err ~= nil and err ~= "") then
         log(ctx, "second search_item request to service failed: " .. err)
     end
 
