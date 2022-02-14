@@ -1,23 +1,18 @@
 package datasrcs
-
 import (
 	"reflect"
 	"testing"
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/systems"
-
 )
 
-
 func TestRegistryRADbURL(t *testing.T) {
-
 	tests := []struct {
 		name    string
 		input    string
 		expected string
 	}{
-		{
-			name:     "Case arin",
+		{	name:     "Case arin",
 			input:     "arin",
 			expected: "https://rdap.arin.net/registry/",
 		},
@@ -37,15 +32,13 @@ func TestRegistryRADbURL(t *testing.T) {
 			input:     "afrinic",
 			expected: "https://rdap.afrinic.net/rdap/",
 		},								
-		
 	}
-	 cfg := config.NewConfig()
+	cfg := config.NewConfig()
 	sys, err := systems.NewLocalSystem(cfg)
 	if err != nil {
 		return
 	}
 	myRADb := NewRADb(sys)
-
 		for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := myRADb.registryRADbURL(tt.input)
@@ -54,5 +47,4 @@ func TestRegistryRADbURL(t *testing.T) {
 			}
 		})
 	}
-
 }
