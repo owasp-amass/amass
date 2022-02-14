@@ -13,5 +13,5 @@ function vertical(ctx, domain)
 end
 
 function build_url(domain)
-    return "https://certificatedetails.com/api/list/" .. domain
+    return "https://certificatedetails.com/" .. domain
 end
