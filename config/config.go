@@ -1,5 +1,6 @@
-// Copyright 2017-2021 Jeff Foley. All rights reserved.
+// Copyright © by Jeff Foley 2017-2022. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
 
 package config
 
@@ -48,9 +49,6 @@ type Config struct {
 
 	// Logger for error messages
 	Log *log.Logger
-
-	// Share activates the process that shares findings with providers for service credits
-	Share bool `ini:"share"`
 
 	// The directory that stores the bolt db and other files created
 	Dir string `ini:"output_directory"`

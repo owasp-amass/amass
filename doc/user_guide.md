@@ -27,7 +27,7 @@ amass enum -d example.com
 Typical parameters for DNS enumeration:
 
 ```bash
-$ amass enum -v -src -ip -brute -min-for-recursive 2 -share -d example.com
+$ amass enum -v -src -ip -brute -min-for-recursive 2 -d example.com
 [Google] www.example.com
 [VirusTotal] ns.example.com
 ...
