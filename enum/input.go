@@ -1,5 +1,6 @@
-// Copyright 2017-2021 Jeff Foley. All rights reserved.
+// Copyright © by Jeff Foley 2017-2022. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
 
 package enum
 
@@ -319,8 +320,10 @@ loop:
 				if now.Before(a.Timestamp.Add(time.Minute)) {
 					break
 				}
-				if _, err := r.enum.Graph.ReadNode(r.enum.ctx, a.Name, "fqdn"); err == nil {
-					_, _ = r.enum.Graph.UpsertFQDN(r.enum.ctx, a.Name, a.Source, uuid)
+				for _, g := range r.enum.Sys.GraphDatabases() {
+					if _, err := g.ReadNode(r.enum.ctx, a.Name, "fqdn"); err == nil {
+						_, _ = g.UpsertFQDN(r.enum.ctx, a.Name, a.Source, uuid)
+					}
 				}
 				count++
 			}
@@ -330,8 +333,10 @@ loop:
 
 	r.dups.Process(each)
 	for _, a := range pending {
-		if _, err := r.enum.Graph.ReadNode(r.enum.ctx, a.Name, "fqdn"); err == nil {
-			_, _ = r.enum.Graph.UpsertFQDN(r.enum.ctx, a.Name, a.Source, uuid)
+		for _, g := range r.enum.Sys.GraphDatabases() {
+			if _, err := g.ReadNode(r.enum.ctx, a.Name, "fqdn"); err == nil {
+				_, _ = g.UpsertFQDN(r.enum.ctx, a.Name, a.Source, uuid)
+			}
 		}
 	}
 }

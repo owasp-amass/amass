@@ -1,5 +1,6 @@
-// Copyright 2017-2021 Jeff Foley. All rights reserved.
+// Copyright © by Jeff Foley 2017-2022. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
 
 package main
 
@@ -26,10 +27,10 @@ func init() {
 // ExtractOutput is a convenience method for obtaining new discoveries made by the enumeration process.
 func ExtractOutput(ctx context.Context, e *enum.Enumeration, filter *stringset.Set, asinfo bool, limit int) []*requests.Output {
 	if e.Config.Passive {
-		return EventNames(ctx, e.Graph, e.Config.UUID.String(), filter)
+		return EventNames(ctx, e.Sys.GraphDatabases()[0], e.Config.UUID.String(), filter)
 	}
 
-	return EventOutput(ctx, e.Graph, e.Config.UUID.String(), filter, asinfo, e.Sys.Cache(), limit)
+	return EventOutput(ctx, e.Sys.GraphDatabases()[0], e.Config.UUID.String(), filter, asinfo, e.Sys.Cache(), limit)
 }
 
 type outLookup map[string]*requests.Output

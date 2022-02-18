@@ -27,12 +27,6 @@ func (c *Config) loadDatabaseSettings(cfg *ini.File) error {
 		return nil
 	}
 
-	if sec.HasKey("local_database") {
-		if localdb, err := sec.Key("local_database").Bool(); err == nil {
-			c.LocalDatabase = localdb
-		}
-	}
-
 	for _, child := range sec.ChildSections() {
 		db := new(Database)
 		name := strings.Split(child.Name(), ".")[1]
@@ -49,10 +43,6 @@ func (c *Config) loadDatabaseSettings(cfg *ini.File) error {
 
 // LocalDatabaseSettings returns the Database for the local bolt store.
 func (c *Config) LocalDatabaseSettings(dbs []*Database) *Database {
-	if !c.LocalDatabase {
-		return nil
-	}
-
 	bolt := &Database{
 		System:  "local",
 		Primary: true,

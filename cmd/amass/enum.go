@@ -123,7 +123,7 @@ func defineEnumOptionFlags(enumFlags *flag.FlagSet, args *enumArgs) {
 	enumFlags.BoolVar(&args.Options.ListSources, "list", false, "Print the names of all available data sources")
 	enumFlags.BoolVar(&args.Options.NoAlts, "noalts", false, "Disable generation of altered names")
 	enumFlags.BoolVar(&args.Options.NoColor, "nocolor", false, "Disable colorized output")
-	enumFlags.BoolVar(&args.Options.NoLocalDatabase, "nolocaldb", false, "Disable saving data into a local database")
+	enumFlags.BoolVar(&placeholder, "nolocaldb", false, "Deprecated feature to be removed in version 4.0")
 	enumFlags.BoolVar(&args.Options.NoRecursive, "norecursive", false, "Turn off recursive brute forcing")
 	enumFlags.BoolVar(&args.Options.Passive, "passive", false, "Disable DNS resolution of names and dependent features")
 	enumFlags.BoolVar(&placeholder, "share", false, "Deprecated feature to be removed in version 4.0")
@@ -688,9 +688,6 @@ func (e enumArgs) OverrideConfig(conf *config.Config) error {
 	}
 	if e.Options.NoAlts {
 		conf.Alterations = false
-	}
-	if e.Options.NoLocalDatabase {
-		conf.LocalDatabase = false
 	}
 	if e.Options.NoRecursive {
 		conf.Recursive = false

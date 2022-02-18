@@ -56,9 +56,6 @@ type Config struct {
 	// Alternative directory for scripts provided by the user
 	ScriptsDirectory string `ini:"scripts_directory"`
 
-	// Use a local graph database
-	LocalDatabase bool
-
 	// The graph databases used by the system / enumerations
 	GraphDBs []*Database
 
@@ -150,7 +147,6 @@ func NewConfig() *Config {
 		Log:             log.New(ioutil.Discard, "", 0),
 		Ports:           []int{80, 443},
 		MinForRecursive: 1,
-		LocalDatabase:   true,
 		// The following is enum-only, but intel will just ignore them anyway
 		Alterations:    true,
 		FlipWords:      true,

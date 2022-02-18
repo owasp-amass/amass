@@ -120,7 +120,6 @@ This subcommand will perform DNS enumeration and network mapping while populatin
 | -max-depth | Maximum number of subdomain labels for brute forcing | amass enum -brute -max-depth 3 -d example.com |
 | -nf | Path to a file providing already known subdomain names (from other tools/sources) | amass enum -nf names.txt -d example.com |
 | -noalts | Disable generation of altered names | amass enum -noalts -d example.com |
-| -nolocaldb | Disable saving data into a local database | amass enum -nolocaldb -d example.com |
 | -norecursive | Turn off recursive brute forcing | amass enum -brute -norecursive -d example.com |
 | -o | Path to the text output file | amass enum -o out.txt -d example.com |
 | -oA | Path prefix used for naming all output files | amass enum -oA amass_scan -d example.com |
@@ -128,7 +127,6 @@ This subcommand will perform DNS enumeration and network mapping while populatin
 | -p | Ports separated by commas (default: 443) | amass enum -d example.com -p 443,8080 |
 | -r | IP addresses of preferred DNS resolvers (can be used multiple times) | amass enum -r 8.8.8.8,1.1.1.1 -d example.com |
 | -rf | Path to a file providing preferred DNS resolvers | amass enum -rf data/resolvers.txt -d example.com |
-| -share | Share findings with data source providers | amass enum -share -config config.ini -d example.com |
 | -src | Print data sources for the discovered names | amass enum -src -d example.com |
 | -timeout | Number of minutes to execute the enumeration | amass enum -timeout 30 -d example.com |
 | -w | Path to a different wordlist file | amass enum -brute -w wordlist.txt -d example.com |

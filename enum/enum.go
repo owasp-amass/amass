@@ -1,5 +1,6 @@
-// Copyright 2017-2021 Jeff Foley. All rights reserved.
+// Copyright © by Jeff Foley 2017-2022. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
 
 package enum
 
@@ -22,7 +23,7 @@ import (
 
 const (
 	maxDNSPipelineTasks    int = 7500
-	maxStorePipelineTasks  int = 50
+	maxStorePipelineTasks  int = 25
 	maxActivePipelineTasks int = 25
 )
 
@@ -31,7 +32,6 @@ type Enumeration struct {
 	Config      *config.Config
 	Bus         *eventbus.EventBus
 	Sys         systems.System
-	Graph       *netmap.Graph
 	closedOnce  sync.Once
 	logQueue    queue.Queue
 	ctx         context.Context
@@ -51,7 +51,6 @@ func NewEnumeration(cfg *config.Config, sys systems.System) *Enumeration {
 		Config:      cfg,
 		Sys:         sys,
 		Bus:         eventbus.NewEventBus(),
-		Graph:       netmap.NewGraph(netmap.NewCayleyGraphMemory()),
 		srcs:        datasrcs.SelectedDataSources(cfg, sys.DataSources()),
 		logQueue:    queue.NewQueue(),
 		done:        make(chan struct{}),
@@ -72,7 +71,6 @@ func NewEnumeration(cfg *config.Config, sys systems.System) *Enumeration {
 func (e *Enumeration) Close() {
 	e.closedOnce.Do(func() {
 		e.Bus.Stop()
-		e.Graph.Close()
 		e.crawlFilter.Close()
 	})
 }
@@ -234,8 +232,10 @@ func (e *Enumeration) makeOutputSink() pipeline.SinkFunc {
 
 		req, ok := data.(*requests.DNSRequest)
 		if ok && req != nil && req.Name != "" && e.Config.IsDomainInScope(req.Name) {
-			if _, err := e.Graph.UpsertFQDN(e.ctx, req.Name, req.Source, e.Config.UUID.String()); err != nil {
-				e.Bus.Publish(requests.LogTopic, eventbus.PriorityHigh, err.Error())
+			for _, graph := range e.Sys.GraphDatabases() {
+				if _, err := graph.UpsertFQDN(e.ctx, req.Name, req.Source, e.Config.UUID.String()); err != nil {
+					e.Bus.Publish(requests.LogTopic, eventbus.PriorityHigh, err.Error())
+				}
 			}
 		}
 		return nil
@@ -291,20 +291,10 @@ func (e *Enumeration) submitKnownNames(wg *sync.WaitGroup) {
 }
 
 func (e *Enumeration) readNamesFromDatabase(ctx context.Context, g *netmap.Graph, filter *stringset.Set, stags map[string]string) {
-	db := netmap.NewGraph(netmap.NewCayleyGraphMemory())
-	if db == nil {
-		return
-	}
-	defer db.Close()
-
-	// Migrate the data into an in-memory graph database
 	domains := e.Config.Domains()
-	if err := g.MigrateEventsInScope(ctx, db, domains); err != nil {
-		return
-	}
 
-	for _, event := range db.EventsInScope(ctx, domains...) {
-		for _, name := range db.EventFQDNs(ctx, event) {
+	for _, event := range g.EventsInScope(ctx, domains...) {
+		for _, name := range g.EventFQDNs(ctx, event) {
 			select {
 			case <-e.done:
 				return
@@ -320,7 +310,7 @@ func (e *Enumeration) readNamesFromDatabase(ctx context.Context, g *netmap.Graph
 			if domain == "" {
 				continue
 			}
-			if srcs, err := db.NodeSources(ctx, netmap.Node(name), event); err == nil {
+			if srcs, err := g.NodeSources(ctx, netmap.Node(name), event); err == nil {
 				src := srcs[0]
 				tag := stags[src]
 
