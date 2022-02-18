@@ -1,5 +1,6 @@
-// Copyright 2017-2021 Jeff Foley. All rights reserved.
+// Copyright © by Jeff Foley 2017-2022. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
 
 package main
 
@@ -198,7 +199,10 @@ func runIntelCommand(clArgs []string) {
 	if err != nil {
 		return
 	}
-	sys.SetDataSources(datasrcs.GetAllSources(sys))
+
+	if err := sys.SetDataSources(datasrcs.GetAllSources(sys)); err != nil {
+		return
+	}
 
 	if args.OrganizationName != "" {
 		var asns []int

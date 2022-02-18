@@ -1,5 +1,6 @@
-// Copyright 2021 Jeff Foley. All rights reserved.
+// Copyright © by Jeff Foley 2021-2022. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
 
 package systems
 
@@ -48,7 +49,10 @@ func (ss *SimpleSystem) AddAndStart(srv service.Service) error {
 func (ss *SimpleSystem) DataSources() []service.Service { return []service.Service{ss.Service} }
 
 // SetDataSources assigns the data sources that will be used by the system.
-func (ss *SimpleSystem) SetDataSources(sources []service.Service) { ss.Service = sources[0] }
+func (ss *SimpleSystem) SetDataSources(sources []service.Service) error {
+	ss.Service = sources[0]
+	return nil
+}
 
 // GraphDatabases implements the System interface.
 func (ss *SimpleSystem) GraphDatabases() []*netmap.Graph { return []*netmap.Graph{ss.Graph} }

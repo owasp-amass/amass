@@ -99,4 +99,3 @@ func TestRunSubnetChecks(t *testing.T) {
 		})
 	}
 }
-

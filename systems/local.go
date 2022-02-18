@@ -1,5 +1,6 @@
-// Copyright 2017-2021 Jeff Foley. All rights reserved.
+// Copyright © by Jeff Foley 2017-2022. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
 
 package systems
 
@@ -123,7 +124,7 @@ func (l *LocalSystem) DataSources() []service.Service {
 }
 
 // SetDataSources assigns the data sources that will be used by the system.
-func (l *LocalSystem) SetDataSources(sources []service.Service) {
+func (l *LocalSystem) SetDataSources(sources []service.Service) error {
 	f := func(src service.Service, ch chan error) { ch <- l.AddAndStart(src) }
 
 	ch := make(chan error, len(sources))
@@ -132,16 +133,20 @@ func (l *LocalSystem) SetDataSources(sources []service.Service) {
 		go f(src, ch)
 	}
 
-	t := time.NewTimer(5 * time.Second)
+	t := time.NewTimer(30 * time.Second)
 	defer t.Stop()
+
+	var err error
 loop:
 	for i := 0; i < len(sources); i++ {
 		select {
 		case <-t.C:
+			err = errors.New("the data source startup routines timed out")
 			break loop
 		case <-ch:
 		}
 	}
+	return err
 }
 
 // GraphDatabases implements the System interface.
@@ -332,7 +337,6 @@ func setupResolvers(addrs []string, max, rate int, log *log.Logger) []resolve.Re
 	addrs = runSubnetChecks(addrs)
 
 	finished := make(chan resolve.Resolver, 10)
-
 	for _, addr := range addrs {
 		go func(ip string, ch chan resolve.Resolver) {
 			if n := resolve.NewBaseResolver(ip, rate, log); n != nil {
