@@ -1,5 +1,6 @@
-// Copyright 2017-2021 Jeff Foley. All rights reserved.
+// Copyright © by Jeff Foley 2017-2022. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
 
 package format
 
@@ -16,8 +17,7 @@ import (
 )
 
 // Banner is the ASCII art logo used within help output.
-const Banner = `
-        .+++:.            :                             .+++.
+const Banner = `        .+++:.            :                             .+++.
       +W@@@@@@8        &+W@#               o8W8:      +W@@@@@@#.   oW@@@W#+
      &@#+   .o@##.    .@@@o@W.o@@o       :@@#&W8o    .@#:  .:oW+  .@#+++&#&
     +@&        &@&     #@8 +@W@&8@+     :@W.   +@8   +@:          .@8
@@ -28,8 +28,7 @@ const Banner = `
      WW         +@W@8. &@+  :&    o@+ #@      :@W&@&         &@:  ..     :@o
      :@W:      o@# +Wo &@+        :W: +@W&o++o@W. &@&  8@#o+&@W.  #@:    o@+
       :W@@WWWW@@8       +              :&W@@@@&    &W  .o#@@W&.   :W@WWW@@&
-        +o&&&&+.                                                    +oooo.
-`
+        +o&&&&+.                                                    +oooo.`
 
 const (
 	// Version is used to display the current version of Amass.
@@ -46,6 +45,8 @@ var (
 	// Colors used to ease the reading of program output
 	g      = color.New(color.FgHiGreen)
 	b      = color.New(color.FgHiBlue)
+	y      = color.New(color.FgHiYellow)
+	r      = color.New(color.FgHiRed)
 	yellow = color.New(color.FgHiYellow).SprintFunc()
 	green  = color.New(color.FgHiGreen).SprintFunc()
 	blue   = color.New(color.FgHiBlue).SprintFunc()
@@ -145,15 +146,13 @@ func FprintEnumerationSummary(out io.Writer, total int, tags map[string]int, asn
 	}
 }
 
-// PrintBanner outputs the Amass banner the same for all tools.
+// PrintBanner outputs the Amass banner to stderr.
 func PrintBanner() {
 	FprintBanner(color.Error)
 }
 
 // FprintBanner outputs the Amass banner the same for all tools.
 func FprintBanner(out io.Writer) {
-	y := color.New(color.FgHiYellow)
-	r := color.New(color.FgHiRed)
 	rightmost := 76
 
 	pad := func(num int) {
@@ -161,13 +160,14 @@ func FprintBanner(out io.Writer) {
 			fmt.Fprint(out, " ")
 		}
 	}
-	r.Fprintln(out, Banner)
+
+	_, _ = r.Fprintf(out, "\n%s\n\n", Banner)
 	pad(rightmost - len(Version))
-	y.Fprintln(out, Version)
+	_, _ = y.Fprintln(out, Version)
 	pad(rightmost - len(Author))
-	y.Fprintln(out, Author)
+	_, _ = y.Fprintln(out, Author)
 	pad(rightmost - len(Description))
-	y.Fprintf(out, "%s\n\n\n", Description)
+	_, _ = y.Fprintf(out, "%s\n\n\n", Description)
 }
 
 func censorDomain(input string) string {
