@@ -1,5 +1,6 @@
--- Copyright 2022 Jeff Foley. All rights reserved.
+-- Copyright © by Jeff Foley 2022. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+-- SPDX-License-Identifier: Apache-2.0
 
 local json = require("json")
 
@@ -31,6 +32,7 @@ function vertical(ctx, domain)
     end
 
     if (c == nil or c.key == nil or c.key == "") then
+        scrape(ctx, {['url']="https://dnsrepo.noc.org/?domain=" .. domain})
         return
     end
 
