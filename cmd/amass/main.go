@@ -285,12 +285,12 @@ func orderedEvents(ctx context.Context, events []string, db *netmap.Graph) ([]st
 
 func getEventOutput(ctx context.Context, uuids []string, asninfo bool, db *netmap.Graph, cache *requests.ASNCache) []*requests.Output {
 	filter := stringset.New()
-	var output []*requests.Output
+	defer filter.Close()
 
+	var output []*requests.Output
 	for i := len(uuids) - 1; i >= 0; i-- {
 		output = append(output, EventOutput(ctx, db, uuids[i], filter, asninfo, cache, 0)...)
 	}
-
 	return output
 }
 

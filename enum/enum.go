@@ -37,7 +37,6 @@ type Enumeration struct {
 	ctx         context.Context
 	srcs        []service.Service
 	done        chan struct{}
-	doneOnce    sync.Once
 	crawlFilter *stringset.Set
 	nameSrc     *enumSource
 	subTask     *subdomainTask
@@ -47,51 +46,62 @@ type Enumeration struct {
 
 // NewEnumeration returns an initialized Enumeration that has not been started yet.
 func NewEnumeration(cfg *config.Config, sys systems.System) *Enumeration {
-	e := &Enumeration{
-		Config:      cfg,
-		Sys:         sys,
-		Bus:         eventbus.NewEventBus(),
-		srcs:        datasrcs.SelectedDataSources(cfg, sys.DataSources()),
-		logQueue:    queue.NewQueue(),
-		done:        make(chan struct{}),
-		crawlFilter: stringset.New(),
+	return &Enumeration{
+		Config:   cfg,
+		Sys:      sys,
+		Bus:      eventbus.NewEventBus(),
+		srcs:     datasrcs.SelectedDataSources(cfg, sys.DataSources()),
+		logQueue: queue.NewQueue(),
 	}
-
-	if cfg.Passive {
-		return e
-	}
-
-	e.dnsTask = newDNSTask(e)
-	e.subTask = newSubdomainTask(e)
-	e.store = newDataManager(e)
-	return e
 }
 
 // Close cleans up resources instantiated by the Enumeration.
 func (e *Enumeration) Close() {
-	e.closedOnce.Do(func() {
-		e.Bus.Stop()
-		e.crawlFilter.Close()
-	})
-}
-
-func (e *Enumeration) stop() {
-	e.doneOnce.Do(func() {
-		close(e.done)
-	})
+	e.closedOnce.Do(func() { e.Bus.Stop() })
 }
 
 // Start begins the vertical domain correlation process.
 func (e *Enumeration) Start(ctx context.Context) error {
+	e.done = make(chan struct{})
+	defer close(e.done)
+	go e.periodicLogging()
+	defer e.writeLogs(true)
+	e.crawlFilter = stringset.New()
+	defer e.crawlFilter.Close()
+
 	if err := e.Config.CheckSettings(); err != nil {
 		return err
 	}
-	e.setupContext(ctx)
+	// This context, used throughout the enumeration, will provide the
+	// ability to pass the configuration and event bus to all the components
+	newctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	newctx = context.WithValue(newctx, requests.ContextConfig, e.Config)
+	newctx = context.WithValue(newctx, requests.ContextEventBus, e.Bus)
+	e.ctx = newctx
+
+	if !e.Config.Passive {
+		e.dnsTask = newDNSTask(e)
+		e.store = newDataManager(e)
+		e.subTask = newSubdomainTask(e)
+		defer e.subTask.Stop()
+	}
 
 	// The pipeline input source will receive all the names
 	e.nameSrc = newEnumSource(e)
-	e.startupAndCleanup()
-	defer e.stop()
+	defer e.nameSrc.Stop()
+	// These events are important to the engine in order to receive data,
+	// logs, and notices about discoveries made during the enumeration
+	e.Bus.Subscribe(requests.NewNameTopic, e.nameSrc.dataSourceName)
+	defer e.Bus.Unsubscribe(requests.NewNameTopic, e.nameSrc.dataSourceName)
+	e.Bus.Subscribe(requests.LogTopic, e.queueLog)
+	defer e.Bus.Unsubscribe(requests.LogTopic, e.queueLog)
+	if !e.Config.Passive {
+		e.Bus.Subscribe(requests.NewAddrTopic, e.nameSrc.dataSourceAddr)
+		defer e.Bus.Unsubscribe(requests.NewAddrTopic, e.nameSrc.dataSourceAddr)
+		e.Bus.Subscribe(requests.NewASNTopic, e.Sys.Cache().Update)
+		defer e.Bus.Unsubscribe(requests.NewASNTopic, e.Sys.Cache().Update)
+	}
 
 	var stages []pipeline.Stage
 	if !e.Config.Passive {
@@ -100,7 +110,10 @@ func (e *Enumeration) Start(ctx context.Context) error {
 		stages = append(stages, pipeline.DynamicPool("dns", e.dnsTask, e.min()))
 	}
 
-	stages = append(stages, pipeline.FIFO("filter", e.filterTaskFunc()))
+	filter := stringset.New()
+	defer filter.Close()
+	stages = append(stages, pipeline.FIFO("filter", e.filterTaskFunc(filter)))
+
 	if !e.Config.Passive {
 		stages = append(stages, pipeline.FixedPool("store", e.store, maxStorePipelineTasks))
 		stages = append(stages, pipeline.FIFO("", e.subTask))
@@ -145,50 +158,6 @@ func (e *Enumeration) min() int {
 		return 1
 	}
 	return num
-}
-
-func (e *Enumeration) startupAndCleanup() {
-	/*
-	 * These events are important to the engine in order to receive data,
-	 * logs, and notices about discoveries made during the enumeration
-	 */
-	e.Bus.Subscribe(requests.NewNameTopic, e.nameSrc.dataSourceName)
-	e.Bus.Subscribe(requests.LogTopic, e.queueLog)
-	if !e.Config.Passive {
-		e.Bus.Subscribe(requests.NewAddrTopic, e.nameSrc.dataSourceAddr)
-		e.Bus.Subscribe(requests.NewASNTopic, e.Sys.Cache().Update)
-	}
-
-	go e.periodicLogging()
-	go func() {
-		<-e.done
-		e.Bus.Unsubscribe(requests.NewNameTopic, e.nameSrc.dataSourceName)
-		e.Bus.Unsubscribe(requests.LogTopic, e.queueLog)
-
-		if !e.Config.Passive {
-			e.Bus.Unsubscribe(requests.NewAddrTopic, e.nameSrc.dataSourceAddr)
-			e.Bus.Unsubscribe(requests.NewASNTopic, e.Sys.Cache().Update)
-			e.nameSrc.Stop()
-			e.subTask.Stop()
-		}
-		e.writeLogs(true)
-	}()
-}
-
-// This context, used throughout the enumeration, will provide the ability to cancel operations
-// and to pass the configuration and event bus to all the components.
-func (e *Enumeration) setupContext(ctx context.Context) {
-	newctx, cancel := context.WithCancel(ctx)
-
-	// Monitor for termination of the enumeration
-	go func() {
-		<-e.done
-		cancel()
-	}()
-
-	newctx = context.WithValue(newctx, requests.ContextConfig, e.Config)
-	newctx = context.WithValue(newctx, requests.ContextEventBus, e.Bus)
-	e.ctx = newctx
 }
 
 // Release the root domain names to the input source and each data source.
@@ -242,9 +211,7 @@ func (e *Enumeration) makeOutputSink() pipeline.SinkFunc {
 	})
 }
 
-func (e *Enumeration) filterTaskFunc() pipeline.TaskFunc {
-	filter := stringset.New()
-
+func (e *Enumeration) filterTaskFunc(filter *stringset.Set) pipeline.TaskFunc {
 	return pipeline.TaskFunc(func(ctx context.Context, data pipeline.Data, tp pipeline.TaskParams) (pipeline.Data, error) {
 		select {
 		case <-ctx.Done():
