@@ -43,10 +43,8 @@ func NewLocalSystem(c *config.Config) (*LocalSystem, error) {
 		return nil, err
 	}
 
-	max := int(float64(limits.GetFileLimit()) * 0.7)
-
 	var pool resolve.Resolver
-	if len(c.Resolvers) == 0 {
+	if max := int(float64(limits.GetFileLimit()) * 0.7); len(c.Resolvers) == 0 {
 		pool = publicResolverSetup(c, max)
 	} else {
 		pool = customResolverSetup(c, max)
@@ -221,7 +219,6 @@ func (l *LocalSystem) setupGraphDBs() error {
 
 		l.graphs = append(l.graphs, g)
 	}
-
 	return nil
 }
 
@@ -274,7 +271,6 @@ func (l *LocalSystem) loadCacheData() error {
 			Description: r.Description,
 		})
 	}
-
 	return nil
 }
 
@@ -294,12 +290,18 @@ func customResolverSetup(cfg *config.Config, max int) resolve.Resolver {
 			trusted = append(trusted, r)
 		}
 	}
-
 	return resolve.NewResolverPool(trusted, nil, 1, cfg.Log)
 }
 
 func publicResolverSetup(cfg *config.Config, max int) resolve.Resolver {
 	num := len(config.PublicResolvers)
+	if num == 0 {
+		if err := config.GetPublicDNSResolvers(); err != nil {
+			cfg.Log.Printf("%v", err)
+			return nil
+		}
+		num = len(config.PublicResolvers)
+	}
 	if num > max {
 		num = max
 	}
