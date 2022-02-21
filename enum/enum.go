@@ -18,12 +18,11 @@ import (
 	"github.com/caffix/pipeline"
 	"github.com/caffix/queue"
 	"github.com/caffix/service"
-	"github.com/caffix/stringset"
+	bf "github.com/tylertreat/BoomFilters"
 )
 
 const (
 	maxDNSPipelineTasks    int = 7500
-	maxStorePipelineTasks  int = 25
 	maxActivePipelineTasks int = 25
 )
 
@@ -37,7 +36,7 @@ type Enumeration struct {
 	ctx         context.Context
 	srcs        []service.Service
 	done        chan struct{}
-	crawlFilter *stringset.Set
+	crawlFilter *bf.StableBloomFilter
 	nameSrc     *enumSource
 	subTask     *subdomainTask
 	dnsTask     *dNSTask
@@ -66,8 +65,8 @@ func (e *Enumeration) Start(ctx context.Context) error {
 	defer close(e.done)
 	go e.periodicLogging()
 	defer e.writeLogs(true)
-	e.crawlFilter = stringset.New()
-	defer e.crawlFilter.Close()
+	e.crawlFilter = bf.NewDefaultStableBloomFilter(1000000, 0.01)
+	defer func() { _ = e.crawlFilter.Reset() }()
 
 	if err := e.Config.CheckSettings(); err != nil {
 		return err
@@ -77,8 +76,7 @@ func (e *Enumeration) Start(ctx context.Context) error {
 	newctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	newctx = context.WithValue(newctx, requests.ContextConfig, e.Config)
-	newctx = context.WithValue(newctx, requests.ContextEventBus, e.Bus)
-	e.ctx = newctx
+	e.ctx = context.WithValue(newctx, requests.ContextEventBus, e.Bus)
 
 	if !e.Config.Passive {
 		e.dnsTask = newDNSTask(e)
@@ -86,7 +84,6 @@ func (e *Enumeration) Start(ctx context.Context) error {
 		e.subTask = newSubdomainTask(e)
 		defer e.subTask.Stop()
 	}
-
 	// The pipeline input source will receive all the names
 	e.nameSrc = newEnumSource(e)
 	defer e.nameSrc.Stop()
@@ -110,12 +107,12 @@ func (e *Enumeration) Start(ctx context.Context) error {
 		stages = append(stages, pipeline.DynamicPool("dns", e.dnsTask, e.min()))
 	}
 
-	filter := stringset.New()
-	defer filter.Close()
+	filter := bf.NewDefaultStableBloomFilter(1000000, 0.001)
+	defer func() { _ = filter.Reset() }()
 	stages = append(stages, pipeline.FIFO("filter", e.filterTaskFunc(filter)))
 
 	if !e.Config.Passive {
-		stages = append(stages, pipeline.FixedPool("store", e.store, maxStorePipelineTasks))
+		stages = append(stages, pipeline.FIFO("store", e.store))
 		stages = append(stages, pipeline.FIFO("", e.subTask))
 	}
 	if e.Config.Active {
@@ -211,7 +208,7 @@ func (e *Enumeration) makeOutputSink() pipeline.SinkFunc {
 	})
 }
 
-func (e *Enumeration) filterTaskFunc(filter *stringset.Set) pipeline.TaskFunc {
+func (e *Enumeration) filterTaskFunc(filter *bf.StableBloomFilter) pipeline.TaskFunc {
 	return pipeline.TaskFunc(func(ctx context.Context, data pipeline.Data, tp pipeline.TaskParams) (pipeline.Data, error) {
 		select {
 		case <-ctx.Done():
@@ -233,8 +230,7 @@ func (e *Enumeration) filterTaskFunc(filter *stringset.Set) pipeline.TaskFunc {
 			return data, nil
 		}
 
-		if name != "" && !filter.Has(name) {
-			filter.Insert(name)
+		if name != "" && !filter.TestAndAdd([]byte(name)) {
 			return data, nil
 		}
 		return nil, nil
@@ -244,8 +240,8 @@ func (e *Enumeration) filterTaskFunc(filter *stringset.Set) pipeline.TaskFunc {
 func (e *Enumeration) submitKnownNames(wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	filter := stringset.New()
-	defer filter.Close()
+	filter := bf.NewDefaultStableBloomFilter(1000000, 0.01)
+	defer func() { _ = filter.Reset() }()
 
 	srcTags := make(map[string]string)
 	for _, src := range e.Sys.DataSources() {
@@ -257,7 +253,7 @@ func (e *Enumeration) submitKnownNames(wg *sync.WaitGroup) {
 	}
 }
 
-func (e *Enumeration) readNamesFromDatabase(ctx context.Context, g *netmap.Graph, filter *stringset.Set, stags map[string]string) {
+func (e *Enumeration) readNamesFromDatabase(ctx context.Context, g *netmap.Graph, filter *bf.StableBloomFilter, stags map[string]string) {
 	domains := e.Config.Domains()
 
 	for _, event := range g.EventsInScope(ctx, domains...) {
@@ -268,10 +264,9 @@ func (e *Enumeration) readNamesFromDatabase(ctx context.Context, g *netmap.Graph
 			default:
 			}
 
-			if filter.Has(name) {
+			if filter.TestAndAdd([]byte(name)) {
 				continue
 			}
-			filter.Insert(name)
 
 			domain := e.Config.WhichDomain(name)
 			if domain == "" {

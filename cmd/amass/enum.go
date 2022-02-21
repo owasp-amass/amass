@@ -33,6 +33,7 @@ import (
 	"github.com/OWASP/Amass/v3/systems"
 	"github.com/caffix/stringset"
 	"github.com/fatih/color"
+	bf "github.com/tylertreat/BoomFilters"
 )
 
 const enumUsageMsg = "enum [options] -d DOMAIN"
@@ -496,8 +497,8 @@ func processOutput(ctx context.Context, e *enum.Enumeration, outputs []chan *req
 	}()
 
 	// This filter ensures that we only get new names
-	known := stringset.New()
-	defer known.Close()
+	known := bf.NewDefaultStableBloomFilter(1000000, 0.01)
+	defer func() { _ = known.Reset() }()
 	// The function that obtains output from the enum and puts it on the channel
 	extract := func(limit int) {
 		for _, o := range ExtractOutput(ctx, e, known, true, limit) {
@@ -511,18 +512,18 @@ func processOutput(ctx context.Context, e *enum.Enumeration, outputs []chan *req
 		}
 	}
 
-	t := time.NewTicker(5 * time.Second)
+	t := time.NewTicker(time.Second)
 	defer t.Stop()
 	for {
 		select {
 		case <-ctx.Done():
+			extract(0)
 			return
 		case <-done:
-			// Check one last time
 			extract(0)
 			return
 		case <-t.C:
-			extract(50)
+			extract(20)
 		}
 	}
 }

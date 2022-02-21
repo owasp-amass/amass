@@ -1,5 +1,6 @@
-// Copyright 2017-2021 Jeff Foley. All rights reserved.
+// Copyright © by Jeff Foley 2017-2022. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
 
 package intel
 
@@ -22,6 +23,7 @@ import (
 	"github.com/caffix/service"
 	"github.com/caffix/stringset"
 	"github.com/miekg/dns"
+	bf "github.com/tylertreat/BoomFilters"
 	"golang.org/x/net/publicsuffix"
 )
 
@@ -41,7 +43,7 @@ type Collection struct {
 	Output            chan *requests.Output
 	done              chan struct{}
 	doneAlreadyClosed bool
-	filter            *stringset.Set
+	filter            *bf.StableBloomFilter
 	timeChan          chan time.Time
 }
 
@@ -54,7 +56,7 @@ func NewCollection(cfg *config.Config, sys systems.System) *Collection {
 		srcs:     datasrcs.SelectedDataSources(cfg, sys.DataSources()),
 		Output:   make(chan *requests.Output, 100),
 		done:     make(chan struct{}, 2),
-		filter:   stringset.New(),
+		filter:   bf.NewDefaultStableBloomFilter(1000000, 0.01),
 		timeChan: make(chan time.Time, 50),
 	}
 }
@@ -194,8 +196,7 @@ func (c *Collection) makeFilterTaskFunc() pipeline.TaskFunc {
 		default:
 		}
 
-		if req, ok := data.(*requests.Output); ok && req != nil && !c.filter.Has(req.Domain) {
-			c.filter.Insert(req.Domain)
+		if req, ok := data.(*requests.Output); ok && req != nil && !c.filter.TestAndAdd([]byte(req.Domain)) {
 			return data, nil
 		}
 		return nil, nil
@@ -226,18 +227,18 @@ func (c *Collection) asnsToCIDRs() []*net.IPNet {
 		cidrSet.InsertMany(req.Netblocks...)
 	}
 
-	filter := stringset.New()
-	defer filter.Close()
+	filter := bf.NewDefaultStableBloomFilter(1000000, 0.01)
+	defer filter.Reset()
 
 	// Do not return CIDRs that are already in the config
 	for _, cidr := range c.Config.CIDRs {
-		filter.Insert(cidr.String())
+		filter.Add([]byte(cidr.String()))
 	}
 
 	for _, netblock := range cidrSet.Slice() {
 		_, ipnet, err := net.ParseCIDR(netblock)
 
-		if err == nil && !filter.Has(ipnet.String()) {
+		if err == nil && !filter.Test([]byte(ipnet.String())) {
 			cidrs = append(cidrs, ipnet)
 		}
 	}
@@ -291,8 +292,7 @@ func (c *Collection) collect(req *requests.WhoisRequest) {
 	c.timeChan <- time.Now()
 
 	for _, name := range req.NewDomains {
-		if d, err := publicsuffix.EffectiveTLDPlusOne(name); err == nil && !c.filter.Has(d) {
-			c.filter.Insert(d)
+		if d, err := publicsuffix.EffectiveTLDPlusOne(name); err == nil && !c.filter.TestAndAdd([]byte(d)) {
 			c.Output <- &requests.Output{
 				Name:    d,
 				Domain:  d,

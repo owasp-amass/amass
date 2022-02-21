@@ -1,5 +1,6 @@
-// Copyright 2017-2021 Jeff Foley. All rights reserved.
+// Copyright © by Jeff Foley 2017-2022. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
 
 package http
 
@@ -28,6 +29,7 @@ import (
 	"github.com/caffix/stringset"
 	"github.com/geziyor/geziyor"
 	"github.com/geziyor/geziyor/client"
+	bf "github.com/tylertreat/BoomFilters"
 )
 
 const (
@@ -147,7 +149,7 @@ func RequestWebPage(ctx context.Context, u string, body io.Reader, hvals map[str
 }
 
 // Crawl will spider the web page at the URL argument looking for DNS names within the scope provided.
-func Crawl(ctx context.Context, u string, scope []string, max int, f *stringset.Set) ([]string, error) {
+func Crawl(ctx context.Context, u string, scope []string, max int, f *bf.StableBloomFilter) ([]string, error) {
 	select {
 	case <-ctx.Done():
 		return nil, fmt.Errorf("the context expired")
@@ -155,8 +157,8 @@ func Crawl(ctx context.Context, u string, scope []string, max int, f *stringset.
 	}
 
 	if f == nil {
-		f = stringset.New()
-		defer f.Close()
+		f = bf.NewDefaultStableBloomFilter(10000, 0.01)
+		defer f.Reset()
 	}
 
 	results := stringset.New()
@@ -189,7 +191,7 @@ func Crawl(ctx context.Context, u string, scope []string, max int, f *stringset.
 	return results.Slice(), err
 }
 
-func createCrawler(u string, scope []string, max int, results, filter *stringset.Set) *geziyor.Geziyor {
+func createCrawler(u string, scope []string, max int, results *stringset.Set, filter *bf.StableBloomFilter) *geziyor.Geziyor {
 	var count int
 	var m sync.Mutex
 
@@ -213,12 +215,12 @@ func createCrawler(u string, scope []string, max int, results, filter *stringset
 						return
 					}
 
-					if s := u.String(); s != "" && !filter.Has(s) {
+					if s := u.String(); s != "" && !filter.Test([]byte(s)) {
 						// Be sure the crawl has not exceeded the maximum links to be followed
 						m.Lock()
 						count++
 						if max <= 0 || count < max {
-							filter.Insert(s)
+							filter.Add([]byte(s))
 							g.Get(s, g.Opt.ParseFunc)
 						}
 						m.Unlock()
