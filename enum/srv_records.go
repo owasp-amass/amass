@@ -25,6 +25,7 @@ var popularSRVRecords = []string{
 	"_ceph._tcp",
 	"_certificates._tcp",
 	"_chat._udp",
+	"_citrixreceiver._tcp",
 	"_collab-edge._tls",
 	"_crls._tcp",
 	"_daap._tcp",
