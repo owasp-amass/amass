@@ -1,5 +1,6 @@
-// Copyright 2017-2021 Jeff Foley. All rights reserved.
+// Copyright © by Jeff Foley 2017-2022. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
 
 package main
 
@@ -13,7 +14,7 @@ import (
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/caffix/netmap"
 	"github.com/caffix/service"
-	"github.com/caffix/stringset"
+	bf "github.com/tylertreat/BoomFilters"
 	"golang.org/x/net/publicsuffix"
 )
 
@@ -24,28 +25,28 @@ func init() {
 }
 
 // ExtractOutput is a convenience method for obtaining new discoveries made by the enumeration process.
-func ExtractOutput(ctx context.Context, e *enum.Enumeration, filter *stringset.Set, asinfo bool, limit int) []*requests.Output {
+func ExtractOutput(ctx context.Context, e *enum.Enumeration, filter *bf.StableBloomFilter, asinfo bool, limit int) []*requests.Output {
 	if e.Config.Passive {
-		return EventNames(ctx, e.Graph, e.Config.UUID.String(), filter)
+		return EventNames(ctx, e.Sys.GraphDatabases()[0], e.Config.UUID.String(), filter)
 	}
 
-	return EventOutput(ctx, e.Graph, e.Config.UUID.String(), filter, asinfo, e.Sys.Cache(), limit)
+	return EventOutput(ctx, e.Sys.GraphDatabases()[0], e.Config.UUID.String(), filter, asinfo, e.Sys.Cache(), limit)
 }
 
 type outLookup map[string]*requests.Output
 
 // EventOutput returns findings within the receiver Graph for the event identified by the uuid string
 // parameter and not already in the filter argument. The filter is updated by EventOutput.
-func EventOutput(ctx context.Context, g *netmap.Graph, uuid string, f *stringset.Set, asninfo bool, cache *requests.ASNCache, limit int) []*requests.Output {
+func EventOutput(ctx context.Context, g *netmap.Graph, uuid string, f *bf.StableBloomFilter, asninfo bool, cache *requests.ASNCache, limit int) []*requests.Output {
 	// Make sure a filter has been created
 	if f == nil {
-		f = stringset.New()
-		defer f.Close()
+		f = bf.NewDefaultStableBloomFilter(1000000, 0.01)
+		defer func() { _ = f.Reset() }()
 	}
 
 	var fqdns []string
 	for _, name := range g.EventFQDNs(ctx, uuid) {
-		if !f.Has(name) {
+		if !f.Test([]byte(name)) {
 			fqdns = append(fqdns, name)
 		}
 	}
@@ -88,12 +89,11 @@ func randomSelection(names []string, limit int) []string {
 	return sel
 }
 
-func removeDuplicates(lookup outLookup, filter *stringset.Set) []*requests.Output {
+func removeDuplicates(lookup outLookup, filter *bf.StableBloomFilter) []*requests.Output {
 	output := make([]*requests.Output, 0, len(lookup))
 
 	for _, o := range lookup {
-		if !filter.Has(o.Name) {
-			filter.Insert(o.Name)
+		if !filter.TestAndAdd([]byte(o.Name)) {
 			output = append(output, o)
 		}
 	}
@@ -101,7 +101,7 @@ func removeDuplicates(lookup outLookup, filter *stringset.Set) []*requests.Outpu
 	return output
 }
 
-func addInfrastructureInfo(lookup outLookup, filter *stringset.Set, cache *requests.ASNCache) []*requests.Output {
+func addInfrastructureInfo(lookup outLookup, filter *bf.StableBloomFilter, cache *requests.ASNCache) []*requests.Output {
 	output := make([]*requests.Output, 0, len(lookup))
 
 	for _, o := range lookup {
@@ -124,8 +124,7 @@ func addInfrastructureInfo(lookup outLookup, filter *stringset.Set, cache *reque
 		}
 
 		o.Addresses = newaddrs
-		if len(o.Addresses) > 0 && !filter.Has(o.Name) {
-			filter.Insert(o.Name)
+		if len(o.Addresses) > 0 && !filter.TestAndAdd([]byte(o.Name)) {
 			output = append(output, o)
 		}
 	}
@@ -135,24 +134,23 @@ func addInfrastructureInfo(lookup outLookup, filter *stringset.Set, cache *reque
 
 // EventNames returns findings within the receiver Graph for the event identified by the uuid string
 // parameter and not already in the filter argument. The filter is updated by EventNames.
-func EventNames(ctx context.Context, g *netmap.Graph, uuid string, f *stringset.Set) []*requests.Output {
+func EventNames(ctx context.Context, g *netmap.Graph, uuid string, f *bf.StableBloomFilter) []*requests.Output {
 	// Make sure a filter has been created
 	if f == nil {
-		f = stringset.New()
-		defer f.Close()
+		f = bf.NewDefaultStableBloomFilter(1000000, 0.01)
+		defer func() { _ = f.Reset() }()
 	}
 
 	var names []string
 	for _, name := range g.EventFQDNs(ctx, uuid) {
-		if !f.Has(name) {
+		if !f.Test([]byte(name)) {
 			names = append(names, name)
 		}
 	}
 
 	var results []*requests.Output
 	for _, o := range buildNameInfo(ctx, g, uuid, names) {
-		if !f.Has(o.Name) {
-			f.Insert(o.Name)
+		if !f.TestAndAdd([]byte(o.Name)) {
 			results = append(results, o)
 		}
 	}

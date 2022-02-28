@@ -1,5 +1,6 @@
-// Copyright 2017-2021 Jeff Foley. All rights reserved.
+// Copyright © by Jeff Foley 2017-2022. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
 
 package enum
 
@@ -104,7 +105,7 @@ func (r *subdomainTask) checkForSubdomains(ctx context.Context, req *requests.DN
 		return false
 	} else if times > 1 && r.withinWildcards.Has(sub) {
 		return false
-	} else if times == 1 && r.enum.Graph.IsCNAMENode(ctx, sub) {
+	} else if times == 1 && r.enum.Sys.GraphDatabases()[0].IsCNAMENode(ctx, sub) {
 		r.cnames.Insert(sub)
 		return false
 	} else if times > 1 && r.cnames.Has(sub) {

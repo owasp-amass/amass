@@ -1,5 +1,6 @@
-// Copyright 2017-2020 Jeff Foley. All rights reserved.
+// Copyright © by Jeff Foley 2017-2022. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
 
 package config
 
@@ -26,12 +27,6 @@ func (c *Config) loadDatabaseSettings(cfg *ini.File) error {
 		return nil
 	}
 
-	if sec.HasKey("local_database") {
-		if localdb, err := sec.Key("local_database").Bool(); err == nil {
-			c.LocalDatabase = localdb
-		}
-	}
-
 	for _, child := range sec.ChildSections() {
 		db := new(Database)
 		name := strings.Split(child.Name(), ".")[1]
@@ -48,15 +43,10 @@ func (c *Config) loadDatabaseSettings(cfg *ini.File) error {
 
 // LocalDatabaseSettings returns the Database for the local bolt store.
 func (c *Config) LocalDatabaseSettings(dbs []*Database) *Database {
-	if !c.LocalDatabase {
-		return nil
-	}
-
 	bolt := &Database{
 		System:  "local",
 		Primary: true,
 		URL:     OutputDirectory(c.Dir),
-		Options: "nosync=true",
 	}
 
 	for _, db := range dbs {

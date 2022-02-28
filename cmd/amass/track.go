@@ -1,5 +1,6 @@
-// Copyright 2017-2021 Jeff Foley. All rights reserved.
+// Copyright © by Jeff Foley 2017-2022. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
 
 package main
 
@@ -142,15 +143,8 @@ func runTrackCommand(clArgs []string) {
 	}
 	defer db.Close()
 
-	// Create the in-memory graph database
-	memDB, err := memGraphForScope(context.TODO(), args.Domains.Slice(), db)
-	if err != nil {
-		r.Fprintln(color.Error, err.Error())
-		os.Exit(1)
-	}
-
 	// Get all the UUIDs for events that have information in scope
-	uuids := eventUUIDs(context.TODO(), args.Domains.Slice(), memDB)
+	uuids := db.EventsInScope(context.TODO(), args.Domains.Slice()...)
 	if len(uuids) == 0 {
 		r.Fprintln(color.Error, "Failed to find the domains of interest in the database")
 		os.Exit(1)
@@ -158,7 +152,7 @@ func runTrackCommand(clArgs []string) {
 
 	var earliest, latest []time.Time
 	// Put the events in chronological order
-	uuids, earliest, latest = orderedEvents(context.TODO(), uuids, memDB)
+	uuids, earliest, latest = orderedEvents(context.TODO(), uuids, db)
 	if len(uuids) == 0 {
 		r.Fprintln(color.Error, "Failed to sort the events")
 		os.Exit(1)
@@ -193,13 +187,13 @@ func runTrackCommand(clArgs []string) {
 
 	cache := cacheWithData()
 	if len(uuids) == 1 {
-		printOneEvent(uuids, args.Domains.Slice(), earliest[0], latest[0], memDB, cache)
+		printOneEvent(uuids, args.Domains.Slice(), earliest[0], latest[0], db, cache)
 		return
 	} else if args.Options.History {
-		completeHistoryOutput(uuids, args.Domains.Slice(), earliest, latest, memDB, cache)
+		completeHistoryOutput(uuids, args.Domains.Slice(), earliest, latest, db, cache)
 		return
 	}
-	cumulativeOutput(uuids, args.Domains.Slice(), earliest, latest, memDB, cache)
+	cumulativeOutput(uuids, args.Domains.Slice(), earliest, latest, db, cache)
 }
 
 func printOneEvent(uuid, domains []string, earliest, latest time.Time, db *netmap.Graph, cache *requests.ASNCache) {

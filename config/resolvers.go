@@ -1,5 +1,6 @@
-// Copyright 2017-2021 Jeff Foley. All rights reserved.
+// Copyright © by Jeff Foley 2017-2022. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
 
 package config
 
@@ -50,13 +51,41 @@ var DefaultBaselineResolvers = []string{
 // PublicResolvers includes the addresses of public resolvers obtained dynamically.
 var PublicResolvers []string
 
-func init() {
-	addrs, err := getPublicDNSResolvers()
+// GetPublicDNSResolvers obtains the public DNS server addresses from public-dns.info and assigns them to PublicResolvers.
+func GetPublicDNSResolvers() error {
+	url := "https://public-dns.info/nameservers-all.csv"
+	page, err := http.RequestWebPage(context.Background(), url, nil, nil, nil)
 	if err != nil {
-		return
+		return fmt.Errorf("failed to obtain the Public DNS csv file at %s: %v", url, err)
+	}
+
+	var resolvers []string
+	var ipIdx, reliabilityIdx int
+	r := csv.NewReader(strings.NewReader(page))
+	for i := 0; ; i++ {
+		record, err := r.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			continue
+		}
+		if i == 0 {
+			for idx, val := range record {
+				if val == "ip_address" {
+					ipIdx = idx
+				} else if val == "reliability" {
+					reliabilityIdx = idx
+				}
+			}
+			continue
+		}
+		if rel, err := strconv.ParseFloat(record[reliabilityIdx], 64); err == nil && rel >= minResolverReliability {
+			resolvers = append(resolvers, record[ipIdx])
+		}
 	}
 loop:
-	for _, addr := range addrs {
+	for _, addr := range resolvers {
 		for _, br := range DefaultBaselineResolvers {
 			if addr == br {
 				continue loop
@@ -64,6 +93,7 @@ loop:
 		}
 		PublicResolvers = append(PublicResolvers, addr)
 	}
+	return nil
 }
 
 // SetResolvers assigns the resolver names provided in the parameter to the list in the configuration.
@@ -111,41 +141,4 @@ func (c *Config) loadResolverSettings(cfg *ini.File) error {
 
 func (c *Config) calcDNSQueriesMax() {
 	c.MaxDNSQueries = len(c.Resolvers) * DefaultQueriesPerPublicResolver
-}
-
-func getPublicDNSResolvers() ([]string, error) {
-	url := "https://public-dns.info/nameservers-all.csv"
-	page, err := http.RequestWebPage(context.Background(), url, nil, nil, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to obtain the Public DNS csv file at %s: %v", url, err)
-	}
-
-	var resolvers []string
-	var ipIdx, reliabilityIdx int
-	r := csv.NewReader(strings.NewReader(page))
-	for i := 0; ; i++ {
-		record, err := r.Read()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			continue
-		}
-		if i == 0 {
-			for idx, val := range record {
-				if val == "ip_address" {
-					ipIdx = idx
-				} else if val == "reliability" {
-					reliabilityIdx = idx
-				}
-			}
-			continue
-		}
-
-		if rel, err := strconv.ParseFloat(record[reliabilityIdx], 64); err == nil && rel >= minResolverReliability {
-			resolvers = append(resolvers, record[ipIdx])
-		}
-	}
-
-	return resolvers, nil
 }

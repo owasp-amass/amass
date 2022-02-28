@@ -1,5 +1,6 @@
-// Copyright 2017-2021 Jeff Foley. All rights reserved.
+// Copyright © by Jeff Foley 2017-2022. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
 
 package main
 
@@ -140,20 +141,14 @@ func runDBCommand(clArgs []string) {
 	}
 	defer db.Close()
 
-	// Create the in-memory graph database for events that have information in scope
-	memDB, err := memGraphForScope(context.TODO(), args.Domains.Slice(), db)
-	if err != nil {
-		r.Fprintln(color.Error, err.Error())
-		os.Exit(1)
-	}
 	// Get all the UUIDs for events that have information in scope
-	uuids := memDB.EventList(context.TODO())
+	uuids := db.EventsInScope(context.TODO(), args.Domains.Slice()...)
 	if len(uuids) == 0 {
 		r.Fprintln(color.Error, "Failed to find the domains of interest in the database")
 		os.Exit(1)
 	}
 	if args.Options.ListEnumerations {
-		listEvents(uuids, memDB)
+		listEvents(uuids, db)
 		return
 	}
 	if args.Options.ShowAll || args.Filepaths.JSONOutput != "" {
@@ -165,7 +160,7 @@ func runDBCommand(clArgs []string) {
 		return
 	}
 	// Put the events in chronological order
-	uuids, _, _ = orderedEvents(context.TODO(), uuids, memDB)
+	uuids, _, _ = orderedEvents(context.TODO(), uuids, db)
 	if len(uuids) == 0 {
 		r.Fprintln(color.Error, "Failed to sort the events")
 		os.Exit(1)
@@ -182,7 +177,7 @@ func runDBCommand(clArgs []string) {
 		asninfo = true
 	}
 
-	showEventData(&args, uuids, asninfo, memDB)
+	showEventData(&args, uuids, asninfo, db)
 }
 
 func listEvents(uuids []string, db *netmap.Graph) {

@@ -1,5 +1,6 @@
-// Copyright 2017-2021 Jeff Foley. All rights reserved.
+// Copyright © by Jeff Foley 2017-2022. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
 
 package main
 
@@ -113,7 +114,6 @@ func runVizCommand(clArgs []string) {
 	rand.Seed(time.Now().UTC().UnixNano())
 
 	cfg := new(config.Config)
-	cfg.LocalDatabase = true
 	// Check if a configuration file was provided, and if so, load the settings
 	if err := config.AcquireConfig(args.Filepaths.Directory, args.Filepaths.ConfigFile, cfg); err == nil {
 		if args.Filepaths.Directory == "" {
@@ -134,22 +134,15 @@ func runVizCommand(clArgs []string) {
 	}
 	defer db.Close()
 
-	// Create the in-memory graph database
-	memDB, err := memGraphForScope(context.TODO(), args.Domains.Slice(), db)
-	if err != nil {
-		r.Fprintln(color.Error, err.Error())
-		os.Exit(1)
-	}
-
 	// Get all the UUIDs for events that have information in scope
-	uuids := eventUUIDs(context.TODO(), args.Domains.Slice(), memDB)
+	uuids := db.EventsInScope(context.TODO(), args.Domains.Slice()...)
 	if len(uuids) == 0 {
 		r.Fprintln(color.Error, "Failed to find the domains of interest in the database")
 		os.Exit(1)
 	}
 
 	// Put the events in chronological order
-	uuids, _, _ = orderedEvents(context.TODO(), uuids, memDB)
+	uuids, _, _ = orderedEvents(context.TODO(), uuids, db)
 	if len(uuids) == 0 {
 		r.Fprintln(color.Error, "Failed to sort the events")
 		os.Exit(1)
@@ -161,7 +154,7 @@ func runVizCommand(clArgs []string) {
 	}
 
 	// Obtain the visualization nodes & edges from the graph
-	nodes, edges := viz.VizData(context.TODO(), memDB, uuids)
+	nodes, edges := viz.VizData(context.TODO(), db, uuids)
 
 	// Get the directory to save the files into
 	dir := args.Filepaths.Directory
@@ -174,6 +167,7 @@ func runVizCommand(clArgs []string) {
 		dir = args.Filepaths.Output
 	}
 
+	var err error
 	if args.Options.D3 {
 		path := filepath.Join(dir, "amass_d3.html")
 		err = writeGraphOutputFile("d3", path, nodes, edges)

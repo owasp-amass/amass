@@ -1,5 +1,6 @@
-// Copyright 2017-2021 Jeff Foley. All rights reserved.
+// Copyright © by Jeff Foley 2017-2022. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
 
 package enum
 
@@ -17,12 +18,11 @@ import (
 	"github.com/caffix/pipeline"
 	"github.com/caffix/queue"
 	"github.com/caffix/service"
-	"github.com/caffix/stringset"
+	bf "github.com/tylertreat/BoomFilters"
 )
 
 const (
 	maxDNSPipelineTasks    int = 7500
-	maxStorePipelineTasks  int = 50
 	maxActivePipelineTasks int = 25
 )
 
@@ -31,14 +31,12 @@ type Enumeration struct {
 	Config      *config.Config
 	Bus         *eventbus.EventBus
 	Sys         systems.System
-	Graph       *netmap.Graph
 	closedOnce  sync.Once
 	logQueue    queue.Queue
 	ctx         context.Context
 	srcs        []service.Service
 	done        chan struct{}
-	doneOnce    sync.Once
-	crawlFilter *stringset.Set
+	crawlFilter *bf.StableBloomFilter
 	nameSrc     *enumSource
 	subTask     *subdomainTask
 	dnsTask     *dNSTask
@@ -47,53 +45,60 @@ type Enumeration struct {
 
 // NewEnumeration returns an initialized Enumeration that has not been started yet.
 func NewEnumeration(cfg *config.Config, sys systems.System) *Enumeration {
-	e := &Enumeration{
-		Config:      cfg,
-		Sys:         sys,
-		Bus:         eventbus.NewEventBus(),
-		Graph:       netmap.NewGraph(netmap.NewCayleyGraphMemory()),
-		srcs:        datasrcs.SelectedDataSources(cfg, sys.DataSources()),
-		logQueue:    queue.NewQueue(),
-		done:        make(chan struct{}),
-		crawlFilter: stringset.New(),
+	return &Enumeration{
+		Config:   cfg,
+		Sys:      sys,
+		Bus:      eventbus.NewEventBus(),
+		srcs:     datasrcs.SelectedDataSources(cfg, sys.DataSources()),
+		logQueue: queue.NewQueue(),
 	}
-
-	if cfg.Passive {
-		return e
-	}
-
-	e.dnsTask = newDNSTask(e)
-	e.subTask = newSubdomainTask(e)
-	e.store = newDataManager(e)
-	return e
 }
 
 // Close cleans up resources instantiated by the Enumeration.
 func (e *Enumeration) Close() {
-	e.closedOnce.Do(func() {
-		e.Bus.Stop()
-		e.Graph.Close()
-		e.crawlFilter.Close()
-	})
-}
-
-func (e *Enumeration) stop() {
-	e.doneOnce.Do(func() {
-		close(e.done)
-	})
+	e.closedOnce.Do(func() { e.Bus.Stop() })
 }
 
 // Start begins the vertical domain correlation process.
 func (e *Enumeration) Start(ctx context.Context) error {
+	e.done = make(chan struct{})
+	defer close(e.done)
+	go e.periodicLogging()
+	defer e.writeLogs(true)
+	e.crawlFilter = bf.NewDefaultStableBloomFilter(1000000, 0.01)
+	defer func() { _ = e.crawlFilter.Reset() }()
+
 	if err := e.Config.CheckSettings(); err != nil {
 		return err
 	}
-	e.setupContext(ctx)
+	// This context, used throughout the enumeration, will provide the
+	// ability to pass the configuration and event bus to all the components
+	newctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	newctx = context.WithValue(newctx, requests.ContextConfig, e.Config)
+	e.ctx = context.WithValue(newctx, requests.ContextEventBus, e.Bus)
 
+	if !e.Config.Passive {
+		e.dnsTask = newDNSTask(e)
+		e.store = newDataManager(e)
+		e.subTask = newSubdomainTask(e)
+		defer e.subTask.Stop()
+	}
 	// The pipeline input source will receive all the names
 	e.nameSrc = newEnumSource(e)
-	e.startupAndCleanup()
-	defer e.stop()
+	defer e.nameSrc.Stop()
+	// These events are important to the engine in order to receive data,
+	// logs, and notices about discoveries made during the enumeration
+	e.Bus.Subscribe(requests.NewNameTopic, e.nameSrc.dataSourceName)
+	defer e.Bus.Unsubscribe(requests.NewNameTopic, e.nameSrc.dataSourceName)
+	e.Bus.Subscribe(requests.LogTopic, e.queueLog)
+	defer e.Bus.Unsubscribe(requests.LogTopic, e.queueLog)
+	if !e.Config.Passive {
+		e.Bus.Subscribe(requests.NewAddrTopic, e.nameSrc.dataSourceAddr)
+		defer e.Bus.Unsubscribe(requests.NewAddrTopic, e.nameSrc.dataSourceAddr)
+		e.Bus.Subscribe(requests.NewASNTopic, e.Sys.Cache().Update)
+		defer e.Bus.Unsubscribe(requests.NewASNTopic, e.Sys.Cache().Update)
+	}
 
 	var stages []pipeline.Stage
 	if !e.Config.Passive {
@@ -102,9 +107,12 @@ func (e *Enumeration) Start(ctx context.Context) error {
 		stages = append(stages, pipeline.DynamicPool("dns", e.dnsTask, e.min()))
 	}
 
-	stages = append(stages, pipeline.FIFO("filter", e.filterTaskFunc()))
+	filter := bf.NewDefaultStableBloomFilter(1000000, 0.001)
+	defer func() { _ = filter.Reset() }()
+	stages = append(stages, pipeline.FIFO("filter", e.filterTaskFunc(filter)))
+
 	if !e.Config.Passive {
-		stages = append(stages, pipeline.FixedPool("store", e.store, maxStorePipelineTasks))
+		stages = append(stages, pipeline.FIFO("store", e.store))
 		stages = append(stages, pipeline.FIFO("", e.subTask))
 	}
 	if e.Config.Active {
@@ -149,50 +157,6 @@ func (e *Enumeration) min() int {
 	return num
 }
 
-func (e *Enumeration) startupAndCleanup() {
-	/*
-	 * These events are important to the engine in order to receive data,
-	 * logs, and notices about discoveries made during the enumeration
-	 */
-	e.Bus.Subscribe(requests.NewNameTopic, e.nameSrc.dataSourceName)
-	e.Bus.Subscribe(requests.LogTopic, e.queueLog)
-	if !e.Config.Passive {
-		e.Bus.Subscribe(requests.NewAddrTopic, e.nameSrc.dataSourceAddr)
-		e.Bus.Subscribe(requests.NewASNTopic, e.Sys.Cache().Update)
-	}
-
-	go e.periodicLogging()
-	go func() {
-		<-e.done
-		e.Bus.Unsubscribe(requests.NewNameTopic, e.nameSrc.dataSourceName)
-		e.Bus.Unsubscribe(requests.LogTopic, e.queueLog)
-
-		if !e.Config.Passive {
-			e.Bus.Unsubscribe(requests.NewAddrTopic, e.nameSrc.dataSourceAddr)
-			e.Bus.Unsubscribe(requests.NewASNTopic, e.Sys.Cache().Update)
-			e.nameSrc.Stop()
-			e.subTask.Stop()
-		}
-		e.writeLogs(true)
-	}()
-}
-
-// This context, used throughout the enumeration, will provide the ability to cancel operations
-// and to pass the configuration and event bus to all the components.
-func (e *Enumeration) setupContext(ctx context.Context) {
-	newctx, cancel := context.WithCancel(ctx)
-
-	// Monitor for termination of the enumeration
-	go func() {
-		<-e.done
-		cancel()
-	}()
-
-	newctx = context.WithValue(newctx, requests.ContextConfig, e.Config)
-	newctx = context.WithValue(newctx, requests.ContextEventBus, e.Bus)
-	e.ctx = newctx
-}
-
 // Release the root domain names to the input source and each data source.
 func (e *Enumeration) submitDomainNames(wg *sync.WaitGroup) {
 	defer wg.Done()
@@ -234,17 +198,17 @@ func (e *Enumeration) makeOutputSink() pipeline.SinkFunc {
 
 		req, ok := data.(*requests.DNSRequest)
 		if ok && req != nil && req.Name != "" && e.Config.IsDomainInScope(req.Name) {
-			if _, err := e.Graph.UpsertFQDN(e.ctx, req.Name, req.Source, e.Config.UUID.String()); err != nil {
-				e.Bus.Publish(requests.LogTopic, eventbus.PriorityHigh, err.Error())
+			for _, graph := range e.Sys.GraphDatabases() {
+				if _, err := graph.UpsertFQDN(e.ctx, req.Name, req.Source, e.Config.UUID.String()); err != nil {
+					e.Bus.Publish(requests.LogTopic, eventbus.PriorityHigh, err.Error())
+				}
 			}
 		}
 		return nil
 	})
 }
 
-func (e *Enumeration) filterTaskFunc() pipeline.TaskFunc {
-	filter := stringset.New()
-
+func (e *Enumeration) filterTaskFunc(filter *bf.StableBloomFilter) pipeline.TaskFunc {
 	return pipeline.TaskFunc(func(ctx context.Context, data pipeline.Data, tp pipeline.TaskParams) (pipeline.Data, error) {
 		select {
 		case <-ctx.Done():
@@ -266,8 +230,7 @@ func (e *Enumeration) filterTaskFunc() pipeline.TaskFunc {
 			return data, nil
 		}
 
-		if name != "" && !filter.Has(name) {
-			filter.Insert(name)
+		if name != "" && !filter.TestAndAdd([]byte(name)) {
 			return data, nil
 		}
 		return nil, nil
@@ -277,8 +240,8 @@ func (e *Enumeration) filterTaskFunc() pipeline.TaskFunc {
 func (e *Enumeration) submitKnownNames(wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	filter := stringset.New()
-	defer filter.Close()
+	filter := bf.NewDefaultStableBloomFilter(1000000, 0.01)
+	defer func() { _ = filter.Reset() }()
 
 	srcTags := make(map[string]string)
 	for _, src := range e.Sys.DataSources() {
@@ -290,37 +253,26 @@ func (e *Enumeration) submitKnownNames(wg *sync.WaitGroup) {
 	}
 }
 
-func (e *Enumeration) readNamesFromDatabase(ctx context.Context, g *netmap.Graph, filter *stringset.Set, stags map[string]string) {
-	db := netmap.NewGraph(netmap.NewCayleyGraphMemory())
-	if db == nil {
-		return
-	}
-	defer db.Close()
-
-	// Migrate the data into an in-memory graph database
+func (e *Enumeration) readNamesFromDatabase(ctx context.Context, g *netmap.Graph, filter *bf.StableBloomFilter, stags map[string]string) {
 	domains := e.Config.Domains()
-	if err := g.MigrateEventsInScope(ctx, db, domains); err != nil {
-		return
-	}
 
-	for _, event := range db.EventsInScope(ctx, domains...) {
-		for _, name := range db.EventFQDNs(ctx, event) {
+	for _, event := range g.EventsInScope(ctx, domains...) {
+		for _, name := range g.EventFQDNs(ctx, event) {
 			select {
 			case <-e.done:
 				return
 			default:
 			}
 
-			if filter.Has(name) {
+			if filter.TestAndAdd([]byte(name)) {
 				continue
 			}
-			filter.Insert(name)
 
 			domain := e.Config.WhichDomain(name)
 			if domain == "" {
 				continue
 			}
-			if srcs, err := db.NodeSources(ctx, netmap.Node(name), event); err == nil {
+			if srcs, err := g.NodeSources(ctx, netmap.Node(name), event); err == nil {
 				src := srcs[0]
 				tag := stags[src]
 

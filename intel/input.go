@@ -1,5 +1,6 @@
-// Copyright 2017-2021 Jeff Foley. All rights reserved.
+// Copyright © by Jeff Foley 2017-2022. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
 
 package intel
 
@@ -10,7 +11,7 @@ import (
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/caffix/pipeline"
 	"github.com/caffix/queue"
-	"github.com/caffix/stringset"
+	bf "github.com/tylertreat/BoomFilters"
 )
 
 const minWaitForData = 10 * time.Second
@@ -18,7 +19,7 @@ const minWaitForData = 10 * time.Second
 // intelSource handles the filtering and release of new Data in the enumeration.
 type intelSource struct {
 	collection *Collection
-	filter     *stringset.Set
+	filter     *bf.StableBloomFilter
 	queue      queue.Queue
 	done       chan struct{}
 	timeout    time.Duration
@@ -28,7 +29,7 @@ type intelSource struct {
 func newIntelSource(c *Collection) *intelSource {
 	return &intelSource{
 		collection: c,
-		filter:     stringset.New(),
+		filter:     bf.NewDefaultStableBloomFilter(1000000, 0.01),
 		queue:      queue.NewQueue(),
 		done:       make(chan struct{}),
 		timeout:    minWaitForData,
@@ -43,8 +44,7 @@ func (r *intelSource) InputAddress(req *requests.AddrRequest) {
 	default:
 	}
 
-	if req != nil && !r.filter.Has(req.Address) {
-		r.filter.Insert(req.Address)
+	if req != nil && !r.filter.TestAndAdd([]byte(req.Address)) {
 		r.queue.Append(req)
 	}
 }

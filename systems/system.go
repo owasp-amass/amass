@@ -1,5 +1,6 @@
-// Copyright 2017-2021 Jeff Foley. All rights reserved.
+// Copyright © by Jeff Foley 2017-2022. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
 
 package systems
 
@@ -36,7 +37,7 @@ type System interface {
 	DataSources() []service.Service
 
 	// SetDataSources assigns the data sources that will be used by System
-	SetDataSources(sources []service.Service)
+	SetDataSources(sources []service.Service) error
 
 	// GraphDatabases return the Graphs used by the System
 	GraphDatabases() []*netmap.Graph

@@ -1,5 +1,6 @@
--- Copyright 2020-2021 Jeff Foley. All rights reserved.
+-- Copyright © by Jeff Foley 2020-2022. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+-- SPDX-License-Identifier: Apache-2.0
 
 local json = require("json")
 
@@ -17,29 +18,11 @@ function vertical(ctx, domain)
         c = cfg.credentials
     end
 
-    if (c == nil or c.key == nil or 
-        c.key == "" or c.secret == nil or c.secret == "") then
-        local certpath_re = "/certificates/[a-z0-9]{64}"
-        for i=1,10 do
-            local page, err = request(ctx, {['url']=build_url(domain, i)})
-            if (err ~= nil and err ~= "") then
-                log(ctx, "vertical request to service failed: " .. err)
-                return
-            end
-    
-            local paths = find(page, certpath_re)
-            for _, path in pairs(paths) do
-                scrape(ctx, {['url']="https://censys.io" .. path})
-            end
-        end
+    if (c == nil or c.key == nil or c.key == "" or c.secret == nil or c.secret == "") then
         return
     end
 
     api_query(ctx, cfg, domain)
-end
-
-function build_url(domain, pagenum)
-    return "https://censys.io/certificates/_search?q=" .. domain .. "&page=" .. pagenum
 end
 
 function api_query(ctx, cfg, domain)

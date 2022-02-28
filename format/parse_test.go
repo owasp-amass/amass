@@ -1,6 +1,11 @@
+// Copyright © by Jeff Foley 2017-2022. All rights reserved.
+// Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
+
 package format
 
 import (
+	"fmt"
 	"testing"
 )
 
@@ -308,5 +313,54 @@ func TestParseASNs(t *testing.T) {
 		}
 
 		t.Run(c.label, f)
+	}
+}
+
+func TestParseRange(t *testing.T) {
+	tests := []struct {
+		name  string
+		args  string
+		start string
+		end   string
+		ok    bool
+	}{
+		{
+			name:  "basic success - full range",
+			args:  "192.168.0.1-192.168.0.3",
+			start: "192.168.0.1",
+			end:   "192.168.0.3",
+			ok:    true,
+		},
+		{
+			name:  "basic success - short-hand range",
+			args:  "192.168.0.1-4",
+			start: "192.168.0.1",
+			end:   "192.168.0.4",
+			ok:    true,
+		},
+		{
+			name:  "illicit split",
+			args:  "192.168.0.1",
+			start: "<nil>",
+			end:   "<nil>",
+			ok:    false,
+		},
+		{
+			name:  "illicit range",
+			args:  "192.168.0.255-192.168.0.260",
+			start: "192.168.0.255",
+			end:   "<nil>",
+			ok:    true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if start, end, ok := parseRange(tt.args); fmt.Sprintf("%v",
+				start) != tt.start && fmt.Sprintf("%v", end) != tt.end && ok != tt.ok {
+				t.Errorf("parseIPs.parseRange() error = %v, wantErr %v", start, tt.start)
+				t.Errorf("parseIPs.parseRange() error = %v, wantErr %v", end, tt.end)
+				t.Errorf("parseIPs.parseRange() error = %v, wantErr %v", ok, tt.ok)
+			}
+		})
 	}
 }

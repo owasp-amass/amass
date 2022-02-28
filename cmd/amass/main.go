@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2021. All rights reserved.
+// Copyright © by Jeff Foley 2017-2022. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -24,7 +24,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"net"
@@ -43,8 +42,8 @@ import (
 	"github.com/OWASP/Amass/v3/systems"
 	"github.com/caffix/netmap"
 	"github.com/caffix/service"
-	"github.com/caffix/stringset"
 	"github.com/fatih/color"
+	bf "github.com/tylertreat/BoomFilters"
 )
 
 const (
@@ -64,7 +63,6 @@ var (
 	yellow = color.New(color.FgHiYellow).SprintFunc()
 	green  = color.New(color.FgHiGreen).SprintFunc()
 	blue   = color.New(color.FgHiBlue).SprintFunc()
-	red    = color.New(color.FgHiRed).SprintFunc()
 )
 
 func commandUsage(msg string, cmdFlagSet *flag.FlagSet, errBuf *bytes.Buffer) {
@@ -150,8 +148,9 @@ func GetAllSourceInfo(cfg *config.Config) []string {
 	defer func() { _ = sys.Shutdown() }()
 
 	srcs := datasrcs.SelectedDataSources(cfg, datasrcs.GetAllSources(sys))
-	sys.SetDataSources(srcs)
-
+	if err := sys.SetDataSources(srcs); err != nil {
+		return []string{}
+	}
 	return DataSourceInfo(srcs, sys)
 }
 
@@ -284,61 +283,14 @@ func orderedEvents(ctx context.Context, events []string, db *netmap.Graph) ([]st
 	return events, earliest, latest
 }
 
-// Obtain the enumeration IDs that include the provided domain
-func eventUUIDs(ctx context.Context, domains []string, db *netmap.Graph) []string {
-	var uuids []string
-
-	for _, id := range db.EventList(ctx) {
-		if len(domains) == 0 {
-			uuids = append(uuids, id)
-			continue
-		}
-
-		var found bool
-		surface := db.EventDomains(ctx, id)
-		for _, domain := range surface {
-			if domainNameInScope(domain, domains) {
-				found = true
-				break
-			}
-		}
-
-		if found {
-			uuids = append(uuids, id)
-		}
-	}
-
-	return uuids
-}
-
-func memGraphForScope(ctx context.Context, domains []string, from *netmap.Graph) (*netmap.Graph, error) {
-	db := netmap.NewGraph(netmap.NewCayleyGraphMemory())
-	if db == nil {
-		return nil, errors.New("failed to create the in-memory graph database")
-	}
-
-	var err error
-	// Migrate the event data into the in-memory graph database
-	if len(domains) == 0 {
-		err = from.MigrateEvents(ctx, db)
-	} else {
-		err = from.MigrateEventsInScope(ctx, db, domains)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("failed to move the data into the in-memory graph database: %v", err)
-	}
-
-	return db, nil
-}
-
 func getEventOutput(ctx context.Context, uuids []string, asninfo bool, db *netmap.Graph, cache *requests.ASNCache) []*requests.Output {
-	filter := stringset.New()
-	var output []*requests.Output
+	filter := bf.NewDefaultStableBloomFilter(1000000, 0.01)
+	defer func() { _ = filter.Reset() }()
 
+	var output []*requests.Output
 	for i := len(uuids) - 1; i >= 0; i-- {
 		output = append(output, EventOutput(ctx, db, uuids[i], filter, asninfo, cache, 0)...)
 	}
-
 	return output
 }
 

@@ -1,5 +1,6 @@
-// Copyright 2017-2021 Jeff Foley. All rights reserved.
+// Copyright © by Jeff Foley 2017-2022. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
 
 package config
 
@@ -49,17 +50,11 @@ type Config struct {
 	// Logger for error messages
 	Log *log.Logger
 
-	// Share activates the process that shares findings with providers for service credits
-	Share bool `ini:"share"`
-
 	// The directory that stores the bolt db and other files created
 	Dir string `ini:"output_directory"`
 
 	// Alternative directory for scripts provided by the user
 	ScriptsDirectory string `ini:"scripts_directory"`
-
-	// Use a local graph database
-	LocalDatabase bool
 
 	// The graph databases used by the system / enumerations
 	GraphDBs []*Database
@@ -152,7 +147,6 @@ func NewConfig() *Config {
 		Log:             log.New(ioutil.Discard, "", 0),
 		Ports:           []int{80, 443},
 		MinForRecursive: 1,
-		LocalDatabase:   true,
 		// The following is enum-only, but intel will just ignore them anyway
 		Alterations:    true,
 		FlipWords:      true,

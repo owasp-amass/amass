@@ -4,7 +4,7 @@
 
 local json = require("json")
 
-name = "DNSRepo"
+name = "LeakIX"
 type = "api"
 
 function start()
@@ -32,27 +32,31 @@ function vertical(ctx, domain)
     end
 
     if (c == nil or c.key == nil or c.key == "") then
-        scrape(ctx, {['url']="https://dnsrepo.noc.org/?domain=" .. domain})
         return
     end
 
-    local resp, err = request(ctx, {['url']=build_url(domain, c.key)})
+    local resp, err = request(ctx, {
+        ['url']=vert_url(domain),
+        headers={
+            ['api-key']=c.key,
+            ['Accept']="application/json",
+        },
+    })
     if (err ~= nil and err ~= "") then
         log(ctx, "vertical request to service failed: " .. err)
         return
     end
-    resp = "{\"results\":" .. resp .. "}"
 
-    local d = json.decode(resp)
-    if (d == nil or d.results == nil or #(d.results) == 0) then
+    local j = json.decode(resp)
+    if (j == nil or j.nodes == nil or #(j.nodes) == 0) then
         return
     end
 
-    for _, r in pairs(d.results) do
-        new_name(ctx, r.domain)
+    for _, node in pairs(j.nodes) do
+        new_name(ctx, node.fqdn)
     end
 end
 
-function build_url(domain, key)
-    return "https://dnsrepo.noc.org/api/?apikey=" .. key .. "&search=" .. domain .. "&limit=5000"
+function vert_url(domain)
+    return "https://leakix.net/api/graph/hostname/" .. domain .. "?v%5B%5D=hostname&d=auto&l=1..5&f=3d-force"
 end

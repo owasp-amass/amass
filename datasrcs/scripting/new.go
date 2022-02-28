@@ -1,5 +1,6 @@
-// Copyright 2020-2021 Jeff Foley. All rights reserved.
+// Copyright © by Jeff Foley 2020-2022. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
 
 package scripting
 
@@ -13,7 +14,7 @@ import (
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/caffix/eventbus"
 	"github.com/caffix/service"
-	"github.com/caffix/stringset"
+	bf "github.com/tylertreat/BoomFilters"
 	lua "github.com/yuin/gopher-lua"
 )
 
@@ -57,17 +58,18 @@ func (s *Script) sendNames(L *lua.LState) int {
 }
 
 func (s *Script) internalSendNames(ctx context.Context, content string) int {
-	filter := stringset.New()
-	defer filter.Close()
+	filter := bf.NewDefaultStableBloomFilter(10000, 0.01)
+	defer filter.Reset()
 
+	var count int
 	for _, name := range s.subre.FindAllString(string(content), -1) {
-		if n := http.CleanName(name); n != "" && !filter.Has(n) {
-			filter.Insert(n)
+		if n := http.CleanName(name); n != "" && !filter.TestAndAdd([]byte(n)) {
 			genNewNameEvent(ctx, s, n)
+			count++
 		}
 	}
 
-	return filter.Len()
+	return count
 }
 
 // Wrapper so that scripts can send discovered IP addresses to Amass.

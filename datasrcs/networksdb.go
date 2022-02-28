@@ -1,5 +1,6 @@
-// Copyright 2017-2021 Jeff Foley. All rights reserved.
+// Copyright © by Jeff Foley 2017-2022. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
 
 package datasrcs
 
@@ -118,7 +119,10 @@ func (n *NetworksDB) asnRequest(ctx context.Context, req *requests.ASNRequest) {
 	if req.Address != "" {
 		n.executeASNAddrQuery(ctx, req.Address)
 	} else {
-		n.executeASNQuery(ctx, req.ASN, "", stringset.New())
+		set := stringset.New()
+		defer set.Close()
+
+		n.executeASNQuery(ctx, req.ASN, "", set)
 	}
 }
 
@@ -152,6 +156,8 @@ func (n *NetworksDB) executeASNAddrQuery(ctx context.Context, addr string) {
 	}
 
 	netblocks := stringset.New()
+	defer netblocks.Close()
+
 	for _, match := range networksdbCIDRRE.FindAllStringSubmatch(page, -1) {
 		if len(match) >= 2 {
 			netblocks.Insert(strings.TrimSpace(match[1]))
@@ -182,8 +188,6 @@ func (n *NetworksDB) getIPURL(addr string) string {
 }
 
 func (n *NetworksDB) executeASNQuery(ctx context.Context, asn int, addr string, netblocks *stringset.Set) {
-	defer netblocks.Close()
-
 	_, bus, err := requests.ContextConfigBus(ctx)
 	if err != nil {
 		return
@@ -321,7 +325,10 @@ func (n *NetworksDB) executeAPIASNQuery(ctx context.Context, asn int, addr strin
 	}
 
 	if netblocks.Len() == 0 {
-		netblocks.Union(n.apiNetblocksQuery(ctx, asn))
+		set := n.apiNetblocksQuery(ctx, asn)
+		defer set.Close()
+
+		netblocks.Union(set)
 		if netblocks.Len() == 0 {
 			bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 				fmt.Sprintf("%s: %d: Failed to obtain netblocks associated with the ASN", n.String(), asn),
