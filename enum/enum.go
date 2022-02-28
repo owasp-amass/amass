@@ -6,6 +6,7 @@ package enum
 
 import (
 	"context"
+	"strconv"
 	"sync"
 	"time"
 
@@ -21,10 +22,7 @@ import (
 	bf "github.com/tylertreat/BoomFilters"
 )
 
-const (
-	maxDNSPipelineTasks    int = 7500
-	maxActivePipelineTasks int = 25
-)
+const maxActivePipelineTasks int = 25
 
 // Enumeration is the object type used to execute a DNS enumeration.
 type Enumeration struct {
@@ -39,7 +37,7 @@ type Enumeration struct {
 	crawlFilter *bf.StableBloomFilter
 	nameSrc     *enumSource
 	subTask     *subdomainTask
-	dnsTask     *dNSTask
+	dnsTask     *dnsTask
 	store       *dataManager
 }
 
@@ -104,7 +102,7 @@ func (e *Enumeration) Start(ctx context.Context) error {
 	if !e.Config.Passive {
 		stages = append(stages, pipeline.FIFO("", e.dnsTask.blacklistTaskFunc()))
 		stages = append(stages, pipeline.FIFO("root", e.dnsTask.rootTaskFunc()))
-		stages = append(stages, pipeline.DynamicPool("dns", e.dnsTask, e.min()))
+		stages = append(stages, pipeline.FIFO("dns", e.dnsTask))
 	}
 
 	filter := bf.NewDefaultStableBloomFilter(1000000, 0.001)
@@ -140,21 +138,9 @@ func (e *Enumeration) Start(ctx context.Context) error {
 	} else {
 		err = p.ExecuteBuffered(e.ctx, e.nameSrc, e.makeOutputSink(), 50)
 		// Ensure all data has been stored
-		e.store.signalDone <- struct{}{}
-		<-e.store.confirmDone
+		<-e.store.Stop()
 	}
 	return err
-}
-
-func (e *Enumeration) min() int {
-	num := e.Config.MaxDNSQueries
-	if num > maxDNSPipelineTasks {
-		return maxDNSPipelineTasks
-	}
-	if num < 1 {
-		return 1
-	}
-	return num
 }
 
 // Release the root domain names to the input source and each data source.
@@ -216,11 +202,14 @@ func (e *Enumeration) filterTaskFunc(filter *bf.StableBloomFilter) pipeline.Task
 		default:
 		}
 
-		var name string
+		var name, qtype string
 		switch v := data.(type) {
 		case *requests.DNSRequest:
 			if v != nil && v.Valid() {
 				name = v.Name
+				if len(v.Records) > 0 {
+					qtype = strconv.Itoa(v.Records[0].Type)
+				}
 			}
 		case *requests.AddrRequest:
 			if v != nil && v.Valid() {
@@ -230,7 +219,7 @@ func (e *Enumeration) filterTaskFunc(filter *bf.StableBloomFilter) pipeline.Task
 			return data, nil
 		}
 
-		if name != "" && !filter.TestAndAdd([]byte(name)) {
+		if name != "" && !filter.TestAndAdd([]byte(name+qtype)) {
 			return data, nil
 		}
 		return nil, nil

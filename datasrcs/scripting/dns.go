@@ -1,5 +1,6 @@
-// Copyright 2021 Jeff Foley. All rights reserved.
+// Copyright © by Jeff Foley 2021-2022. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
 
 package scripting
 
@@ -24,8 +25,8 @@ func (s *Script) resolve(L *lua.LState) int {
 	}
 
 	msg := resolve.QueryMsg(name, qtype)
-	resp, err := s.sys.Pool().Query(ctx, msg, resolve.PriorityNormal, resolve.PoolRetryPolicy)
-	if err != nil || resp == nil || len(resp.Answer) == 0 {
+	resp, err := s.sys.TrustedResolvers().QueryBlocking(ctx, msg)
+	if err != nil || resp.Rcode != dns.RcodeSuccess || len(resp.Answer) == 0 {
 		L.Push(lua.LNil)
 		L.Push(lua.LString("The query was unsuccessful for " + name))
 		return 2
@@ -39,7 +40,7 @@ func (s *Script) resolve(L *lua.LState) int {
 	if detection {
 		domain, err := publicsuffix.EffectiveTLDPlusOne(name)
 
-		if err != nil || s.sys.Pool().WildcardType(ctx, resp, domain) != resolve.WildcardTypeNone {
+		if err != nil || s.sys.TrustedResolvers().WildcardType(ctx, resp, domain) != resolve.WildcardTypeNone {
 			L.Push(lua.LNil)
 			L.Push(lua.LString("DNS wildcard detection made a positive match for " + name))
 			return 2

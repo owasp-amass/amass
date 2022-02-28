@@ -13,7 +13,15 @@ import (
 	"github.com/caffix/queue"
 	"github.com/caffix/resolve"
 	"github.com/caffix/stringset"
+	"github.com/miekg/dns"
 )
+
+// InitialQueryTypes include the DNS record types that are queried for a discovered name.
+var InitialQueryTypes = []uint16{
+	dns.TypeCNAME,
+	dns.TypeA,
+	dns.TypeAAAA,
+}
 
 // subdomainTask handles newly discovered proper subdomain names in the enumeration.
 type subdomainTask struct {
@@ -137,10 +145,9 @@ func (r *subdomainTask) subWithinWildcard(ctx context.Context, name, domain stri
 		default:
 		}
 
-		msg := resolve.QueryMsg("a."+name, t)
-		resp, err := r.enum.Sys.Pool().Query(ctx, msg, resolve.PriorityHigh, resolve.PoolRetryPolicy)
-		if err == nil && resp != nil && len(resp.Answer) > 0 &&
-			r.enum.Sys.Pool().WildcardType(ctx, resp, domain) != resolve.WildcardTypeNone {
+		resp, err := r.enum.Sys.TrustedResolvers().QueryBlocking(ctx, resolve.QueryMsg("a."+name, t))
+		if err == nil && len(resp.Answer) > 0 &&
+			r.enum.Sys.TrustedResolvers().WildcardType(ctx, resp, domain) != resolve.WildcardTypeNone {
 			return true
 		}
 	}

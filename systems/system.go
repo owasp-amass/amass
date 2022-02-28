@@ -21,8 +21,11 @@ type System interface {
 	// Returns the configuration for the enumeration this service supports
 	Config() *config.Config
 
-	// Returns the resolver pool that handles DNS requests
-	Pool() resolve.Resolver
+	// Returns the pool that handles queries using untrusted DNS resolvers
+	Resolvers() *resolve.Resolvers
+
+	// Returns the pool that handles queries using trusted DNS resolvers
+	TrustedResolvers() *resolve.Resolvers
 
 	// Returns the cache populated by the system
 	Cache() *requests.ASNCache

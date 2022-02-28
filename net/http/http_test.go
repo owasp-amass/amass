@@ -217,13 +217,15 @@ func TestCrawl(t *testing.T) {
 }
 
 func TestPullCertificateNames(t *testing.T) {
-	r := resolve.NewBaseResolver("8.8.8.8", 10, nil)
+	r := resolve.NewResolvers()
 	if r == nil {
 		t.Errorf("Failed to setup the DNS resolver")
 	}
+	r.AddResolvers(10, "8.8.8.8")
+	defer r.Stop()
 
 	msg := resolve.QueryMsg("www.utica.edu", dns.TypeA)
-	resp, err := r.Query(context.Background(), msg, resolve.PriorityCritical, resolve.RetryPolicy)
+	resp, err := r.QueryBlocking(context.Background(), msg)
 	if err != nil && resp == nil && len(resp.Answer) > 0 {
 		t.Errorf("Failed to obtain the IP address")
 	}

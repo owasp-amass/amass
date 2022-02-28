@@ -16,7 +16,8 @@ import (
 
 type SimpleSystem struct {
 	Cfg      *config.Config
-	Resolver resolve.Resolver
+	Pool     *resolve.Resolvers
+	Trusted  *resolve.Resolvers
 	Graph    *netmap.Graph
 	ASNCache *requests.ASNCache
 	Service  service.Service
@@ -25,8 +26,11 @@ type SimpleSystem struct {
 // Config implements the System interface.
 func (ss *SimpleSystem) Config() *config.Config { return ss.Cfg }
 
-// Pool implements the System interface.
-func (ss *SimpleSystem) Pool() resolve.Resolver { return ss.Resolver }
+// Resolvers implements the System interface.
+func (ss *SimpleSystem) Resolvers() *resolve.Resolvers { return ss.Pool }
+
+// TrustedResolvers implements the System interface.
+func (ss *SimpleSystem) TrustedResolvers() *resolve.Resolvers { return ss.Trusted }
 
 // Cache implements the System interface.
 func (ss *SimpleSystem) Cache() *requests.ASNCache { return ss.ASNCache }
@@ -65,8 +69,8 @@ func (ss *SimpleSystem) Shutdown() error {
 	if ss.Graph != nil {
 		ss.Graph.Close()
 	}
-	if ss.Resolver != nil {
-		ss.Resolver.Stop()
+	if ss.Pool != nil {
+		ss.Pool.Stop()
 	}
 	if ss.ASNCache != nil {
 		ss.ASNCache = nil

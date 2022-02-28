@@ -96,21 +96,21 @@ loop:
 	return nil
 }
 
-// SetResolvers assigns the resolver names provided in the parameter to the list in the configuration.
+// SetResolvers assigns the untrusted resolver names provided in the parameter to the list in the configuration.
 func (c *Config) SetResolvers(resolvers ...string) {
 	c.Resolvers = []string{}
-
 	c.AddResolvers(resolvers...)
 }
 
-// AddResolvers appends the resolver names provided in the parameter to the list in the configuration.
+// AddResolvers appends the untrusted resolver names provided in the parameter to the list in the configuration.
 func (c *Config) AddResolvers(resolvers ...string) {
 	for _, r := range resolvers {
 		c.AddResolver(r)
 	}
+	c.CalcMaxQPS()
 }
 
-// AddResolver appends the resolver name provided in the parameter to the list in the configuration.
+// AddResolver appends the untrusted resolver name provided in the parameter to the list in the configuration.
 func (c *Config) AddResolver(resolver string) {
 	c.Lock()
 	defer c.Unlock()
@@ -122,7 +122,39 @@ func (c *Config) AddResolver(resolver string) {
 	}
 
 	c.Resolvers = stringset.Deduplicate(append(c.Resolvers, resolver))
-	c.calcDNSQueriesMax()
+}
+
+// SetTrustedResolvers assigns the trusted resolver names provided in the parameter to the list in the configuration.
+func (c *Config) SetTrustedResolvers(resolvers ...string) {
+	c.Resolvers = []string{}
+	c.AddResolvers(resolvers...)
+}
+
+// AddTrustedResolvers appends the trusted resolver names provided in the parameter to the list in the configuration.
+func (c *Config) AddTrustedResolvers(resolvers ...string) {
+	for _, r := range resolvers {
+		c.AddTrustedResolver(r)
+	}
+	c.CalcMaxQPS()
+}
+
+// AddTrustedResolver appends the trusted resolver name provided in the parameter to the list in the configuration.
+func (c *Config) AddTrustedResolver(resolver string) {
+	c.Lock()
+	defer c.Unlock()
+
+	// Check that the domain string is not empty
+	r := strings.TrimSpace(resolver)
+	if r == "" {
+		return
+	}
+
+	c.TrustedResolvers = stringset.Deduplicate(append(c.TrustedResolvers, resolver))
+}
+
+// CalcMaxQPS updates the MaxDNSQueries field of the configuration based on current settings.
+func (c *Config) CalcMaxQPS() {
+	c.MaxDNSQueries = (len(c.Resolvers) * c.ResolversQPS) + (len(c.TrustedResolvers) * c.TrustedQPS)
 }
 
 func (c *Config) loadResolverSettings(cfg *ini.File) error {
@@ -137,8 +169,4 @@ func (c *Config) loadResolverSettings(cfg *ini.File) error {
 	}
 
 	return nil
-}
-
-func (c *Config) calcDNSQueriesMax() {
-	c.MaxDNSQueries = len(c.Resolvers) * DefaultQueriesPerPublicResolver
 }

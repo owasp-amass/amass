@@ -7,7 +7,6 @@ package systems
 import (
 	"errors"
 	"fmt"
-	"log"
 	"net"
 	"os"
 	"runtime"
@@ -28,7 +27,8 @@ import (
 // LocalSystem implements a System to be executed within a single process.
 type LocalSystem struct {
 	Cfg               *config.Config
-	pool              resolve.Resolver
+	pool              *resolve.Resolvers
+	trusted           *resolve.Resolvers
 	graphs            []*netmap.Graph
 	cache             *requests.ASNCache
 	done              chan struct{}
@@ -38,24 +38,40 @@ type LocalSystem struct {
 }
 
 // NewLocalSystem returns an initialized LocalSystem object.
-func NewLocalSystem(c *config.Config) (*LocalSystem, error) {
-	if err := c.CheckSettings(); err != nil {
+func NewLocalSystem(cfg *config.Config) (*LocalSystem, error) {
+	if err := cfg.CheckSettings(); err != nil {
 		return nil, err
 	}
 
-	var pool resolve.Resolver
-	if max := int(float64(limits.GetFileLimit()) * 0.7); len(c.Resolvers) == 0 {
-		pool = publicResolverSetup(c, max)
-	} else {
-		pool = customResolverSetup(c, max)
+	var set bool
+	if cfg.MaxDNSQueries == 0 {
+		set = true
 	}
+
+	max := int(float64(limits.GetFileLimit()) * 0.7)
+	trusted, num := trustedResolvers(cfg, max)
+	if trusted == nil {
+		return nil, errors.New("the system was unable to build the pool of trusted resolvers")
+	}
+	max -= num
+	if set {
+		cfg.MaxDNSQueries += num * cfg.TrustedQPS
+	}
+
+	pool, num := untrustedResolvers(cfg, max)
 	if pool == nil {
-		return nil, errors.New("the system was unable to build the pool of resolvers")
+		return nil, errors.New("the system was unable to build the pool of untrusted resolvers")
+	}
+	if set {
+		cfg.MaxDNSQueries += num * cfg.ResolversQPS
+	} else {
+		pool.AddMaxQPS(cfg.MaxDNSQueries)
 	}
 
 	sys := &LocalSystem{
-		Cfg:        c,
+		Cfg:        cfg,
 		pool:       pool,
+		trusted:    trusted,
 		cache:      requests.NewASNCache(),
 		done:       make(chan struct{}, 2),
 		addSource:  make(chan service.Service),
@@ -87,9 +103,14 @@ func (l *LocalSystem) Config() *config.Config {
 	return l.Cfg
 }
 
-// Pool implements the System interface.
-func (l *LocalSystem) Pool() resolve.Resolver {
+// Resolvers implements the System interface.
+func (l *LocalSystem) Resolvers() *resolve.Resolvers {
 	return l.pool
+}
+
+// TrustedResolvers implements the System interface.
+func (l *LocalSystem) TrustedResolvers() *resolve.Resolvers {
+	return l.trusted
 }
 
 // Cache implements the System interface.
@@ -177,6 +198,7 @@ func (l *LocalSystem) Shutdown() error {
 	}
 
 	l.pool.Stop()
+	l.trusted.Stop()
 	l.cache = nil
 	return nil
 }
@@ -274,99 +296,69 @@ func (l *LocalSystem) loadCacheData() error {
 	return nil
 }
 
-func customResolverSetup(cfg *config.Config, max int) resolve.Resolver {
+func trustedResolvers(cfg *config.Config, max int) (*resolve.Resolvers, int) {
+	var num int
+	pool := resolve.NewResolvers()
+
+	if len(cfg.TrustedResolvers) > 0 {
+		num = len(cfg.TrustedResolvers)
+		pool.AddResolvers(cfg.TrustedQPS, cfg.TrustedResolvers...)
+	} else {
+		num = len(config.DefaultBaselineResolvers)
+		pool.AddResolvers(cfg.TrustedQPS, config.DefaultBaselineResolvers...)
+	}
+
+	pool.AddLogger(cfg.Log)
+	return pool, num
+}
+
+func untrustedResolvers(cfg *config.Config, max int) (*resolve.Resolvers, int) {
+	if max <= 0 {
+		return nil, 0
+	}
+	if len(cfg.Resolvers) > 0 {
+		return customResolverSetup(cfg, max)
+	}
+	return publicResolverSetup(cfg, max)
+}
+
+func customResolverSetup(cfg *config.Config, max int) (*resolve.Resolvers, int) {
 	num := len(cfg.Resolvers)
 	if num > max {
 		num = max
+		cfg.Resolvers = cfg.Resolvers[:num]
 	}
 
-	if cfg.MaxDNSQueries == 0 {
-		cfg.MaxDNSQueries = num * config.DefaultQueriesPerPublicResolver
-	}
-
-	var trusted []resolve.Resolver
-	for _, addr := range cfg.Resolvers {
-		if r := resolve.NewBaseResolver(addr, config.DefaultQueriesPerPublicResolver, cfg.Log); r != nil {
-			trusted = append(trusted, r)
-		}
-	}
-	return resolve.NewResolverPool(trusted, nil, 1, cfg.Log)
+	pool := resolve.NewResolvers()
+	pool.AddLogger(cfg.Log)
+	pool.AddResolvers(cfg.ResolversQPS, cfg.Resolvers...)
+	return pool, num
 }
 
-func publicResolverSetup(cfg *config.Config, max int) resolve.Resolver {
+func publicResolverSetup(cfg *config.Config, max int) (*resolve.Resolvers, int) {
+	addrs := config.PublicResolvers
 	num := len(config.PublicResolvers)
+
 	if num == 0 {
 		if err := config.GetPublicDNSResolvers(); err != nil {
 			cfg.Log.Printf("%v", err)
-			return nil
+			return nil, 0
 		}
+		addrs = config.PublicResolvers
 		num = len(config.PublicResolvers)
 	}
 	if num > max {
 		num = max
-	}
-
-	if cfg.MaxDNSQueries == 0 {
-		cfg.MaxDNSQueries = num * config.DefaultQueriesPerPublicResolver
-	}
-
-	trusted := setupResolvers(
-		config.DefaultBaselineResolvers,
-		len(config.DefaultBaselineResolvers),
-		config.DefaultQueriesPerBaselineResolver,
-		cfg.Log,
-	)
-	if len(trusted) == 0 {
-		return nil
-	}
-
-	baseline := resolve.NewResolverPool(trusted, nil, 1, cfg.Log)
-	r := setupResolvers(
-		config.PublicResolvers,
-		len(config.PublicResolvers),
-		config.DefaultQueriesPerPublicResolver,
-		cfg.Log,
-	)
-	return resolve.NewResolverPool(r, baseline, 1, cfg.Log)
-}
-
-func setupResolvers(addrs []string, max, rate int, log *log.Logger) []resolve.Resolver {
-	if len(addrs) <= 0 {
-		return nil
+		addrs = addrs[:num]
 	}
 
 	addrs = checkAddresses(addrs)
 	addrs = runSubnetChecks(addrs)
 
-	finished := make(chan resolve.Resolver, 10)
-	for _, addr := range addrs {
-		go func(ip string, ch chan resolve.Resolver) {
-			if n := resolve.NewBaseResolver(ip, rate, log); n != nil {
-				ch <- n
-				return
-			}
-			ch <- nil
-		}(addr, finished)
-	}
-
-	var count int
-	l := len(addrs)
-	var resolvers []resolve.Resolver
-	for i := 0; i < l; i++ {
-		if r := <-finished; r != nil {
-			if count > max {
-				r.Stop()
-				continue
-			}
-			resolvers = append(resolvers, r)
-			count++
-		}
-	}
-
-	if len(resolvers) == 0 {
-		return nil
-	}
-	return resolvers
+	r := resolve.NewResolvers()
+	r.AddLogger(cfg.Log)
+	r.AddResolvers(cfg.ResolversQPS, addrs...)
+	return r, len(addrs)
 }
 
 func checkAddresses(addrs []string) []string {

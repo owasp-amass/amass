@@ -21,6 +21,7 @@ import (
 	"github.com/caffix/queue"
 	"github.com/caffix/resolve"
 	"github.com/miekg/dns"
+	bf "github.com/tylertreat/BoomFilters"
 	"golang.org/x/net/publicsuffix"
 )
 
@@ -30,6 +31,7 @@ type dataManager struct {
 	queue       queue.Queue
 	signalDone  chan struct{}
 	confirmDone chan struct{}
+	filter      *bf.StableBloomFilter
 }
 
 // newDataManager returns a dataManager specific to the provided Enumeration.
@@ -39,10 +41,17 @@ func newDataManager(e *Enumeration) *dataManager {
 		queue:       queue.NewQueue(),
 		signalDone:  make(chan struct{}, 2),
 		confirmDone: make(chan struct{}, 2),
+		filter:      bf.NewDefaultStableBloomFilter(1000000, 0.01),
 	}
 
 	go dm.processASNRequests()
 	return dm
+}
+
+func (dm *dataManager) Stop() chan struct{} {
+	dm.filter.Reset()
+	dm.signalDone <- struct{}{}
+	return dm.confirmDone
 }
 
 // Process implements the pipeline Task interface.
@@ -58,11 +67,14 @@ func (dm *dataManager) Process(ctx context.Context, data pipeline.Data, tp pipel
 		return data, nil
 	}
 
+	var id string
 	switch v := data.(type) {
 	case *requests.DNSRequest:
 		if v == nil {
 			return nil, nil
 		}
+
+		id = v.Name
 		if err := dm.dnsRequest(ctx, v, tp); err != nil {
 			bus.Publish(requests.LogTopic, eventbus.PriorityHigh, err.Error())
 		}
@@ -70,9 +82,15 @@ func (dm *dataManager) Process(ctx context.Context, data pipeline.Data, tp pipel
 		if v == nil {
 			return nil, nil
 		}
+
+		id = v.Address
 		if err := dm.addrRequest(ctx, v, tp); err != nil {
 			bus.Publish(requests.LogTopic, eventbus.PriorityHigh, err.Error())
 		}
+	}
+
+	if id != "" && dm.filter.TestAndAdd([]byte(id)) {
+		return nil, nil
 	}
 	return data, nil
 }

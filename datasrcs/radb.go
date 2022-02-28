@@ -56,8 +56,7 @@ func (r *RADb) Description() string {
 // OnStart implements the Service interface.
 func (r *RADb) OnStart() error {
 	msg := resolve.QueryMsg(radbWhoisURL, dns.TypeA)
-	if resp, err := r.sys.Pool().Query(context.TODO(),
-		msg, resolve.PriorityCritical, resolve.PoolRetryPolicy); err == nil {
+	if resp, err := r.sys.TrustedResolvers().QueryBlocking(context.TODO(), msg); err == nil {
 		if ans := resolve.ExtractAnswers(resp); len(ans) > 0 {
 			ip := ans[0].Data
 			if ip != "" {
@@ -335,7 +334,7 @@ func (r *RADb) ipToASN(ctx context.Context, cidr string) int {
 	numRateLimitChecks(r, 2)
 	if r.addr == "" {
 		msg := resolve.QueryMsg(radbWhoisURL, dns.TypeA)
-		resp, err := r.sys.Pool().Query(ctx, msg, resolve.PriorityHigh, resolve.RetryPolicy)
+		resp, err := r.sys.TrustedResolvers().QueryBlocking(ctx, msg)
 		if err != nil {
 			bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 				fmt.Sprintf("%s: %s: %v", r.String(), radbWhoisURL, err))

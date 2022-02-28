@@ -1,5 +1,6 @@
-// Copyright 2017-2021 Jeff Foley. All rights reserved.
+// Copyright © by Jeff Foley 2017-2022. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
 
 package main
 
@@ -207,14 +208,14 @@ func processDNSRequest(ctx context.Context, req *requests.DNSRequest,
 		return
 	}
 
-	req.Domain = resolve.FirstProperSubdomain(ctx, sys.Pool(), req.Name, resolve.PriorityHigh)
+	req.Domain = resolve.FirstProperSubdomain(ctx, sys.Resolvers(), req.Name)
 	if req.Domain == "" {
 		c <- nil
 		return
 	}
 
 	msg := resolve.QueryMsg(req.Name, dns.TypeNone)
-	if cfg.Blacklisted(req.Name) || sys.Pool().WildcardType(ctx, msg, req.Domain) == resolve.WildcardTypeDynamic {
+	if cfg.Blacklisted(req.Name) || sys.TrustedResolvers().WildcardType(ctx, msg, req.Domain) == resolve.WildcardTypeDynamic {
 		c <- nil
 		return
 	}
@@ -222,8 +223,7 @@ func processDNSRequest(ctx context.Context, req *requests.DNSRequest,
 	var answers []requests.DNSAnswer
 	for _, t := range cfg.RecordTypes {
 		qtype := nameToType(t)
-		msg := resolve.QueryMsg(req.Name, qtype)
-		resp, err := sys.Pool().Query(ctx, msg, resolve.PriorityLow, resolve.RetryPolicy)
+		resp, err := sys.Resolvers().QueryBlocking(ctx, resolve.QueryMsg(req.Name, qtype))
 		if err == nil {
 			ans := resolve.ExtractAnswers(resp)
 			if len(ans) == 0 {
@@ -246,7 +246,7 @@ func processDNSRequest(ctx context.Context, req *requests.DNSRequest,
 		if t == "CNAME" && len(resp.Answer) > 0 {
 			break
 		}
-		if sys.Pool().WildcardType(ctx, msg, req.Domain) != resolve.WildcardTypeNone {
+		if sys.TrustedResolvers().WildcardType(ctx, msg, req.Domain) != resolve.WildcardTypeNone {
 			return
 		}
 	}

@@ -22,7 +22,6 @@ import (
 	"github.com/caffix/resolve"
 	"github.com/caffix/service"
 	"github.com/caffix/stringset"
-	"github.com/miekg/dns"
 	bf "github.com/tylertreat/BoomFilters"
 	"golang.org/x/net/publicsuffix"
 )
@@ -156,21 +155,13 @@ func (c *Collection) makeDNSTaskFunc() pipeline.TaskFunc {
 			return nil, nil
 		}
 
-		var nxdomain bool
 		addrinfo := requests.AddressInfo{Address: ip}
-		resp, err := c.Sys.Pool().Query(ctx, msg, resolve.PriorityLow, func(times, priority int, m *dns.Msg) bool {
-			// Try one more time if we receive NXDOMAIN
-			if m.Rcode == dns.RcodeNameError && !nxdomain {
-				nxdomain = true
-				return true
-			}
-			return resolve.PoolRetryPolicy(times, priority, m)
-		})
+		resp, err := c.Sys.TrustedResolvers().QueryBlocking(ctx, msg)
 		if err == nil {
 			ans := resolve.ExtractAnswers(resp)
 
 			if len(ans) > 0 {
-				d := strings.TrimSpace(resolve.FirstProperSubdomain(c.ctx, c.Sys.Pool(), ans[0].Data, resolve.PriorityHigh))
+				d := strings.TrimSpace(resolve.FirstProperSubdomain(c.ctx, c.Sys.TrustedResolvers(), ans[0].Data))
 
 				if d != "" {
 					go pipeline.SendData(ctx, "filter", &requests.Output{
@@ -183,7 +174,6 @@ func (c *Collection) makeDNSTaskFunc() pipeline.TaskFunc {
 				}
 			}
 		}
-
 		return data, nil
 	})
 }

@@ -1,5 +1,6 @@
-// Copyright 2017-2021 Jeff Foley. All rights reserved.
+// Copyright © by Jeff Foley 2017-2022. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
 
 package enum
 
@@ -258,13 +259,12 @@ func (a *activeTask) zoneWalk(ctx context.Context, req *requests.ZoneXFRRequest,
 		return
 	}
 
-	r := resolve.NewBaseResolver(addr, 50, a.enum.Config.Log)
-	if r == nil {
-		return
-	}
+	r := resolve.NewResolvers()
+	r.AddLogger(a.enum.Config.Log)
+	r.AddResolvers(50, addr)
 	defer r.Stop()
 
-	names, _, err := resolve.NsecTraversal(ctx, r, req.Name, resolve.PriorityHigh)
+	names, _, err := resolve.NsecTraversal(ctx, r, req.Name)
 	if err != nil {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("DNS: Zone Walk failed: %s: %v", req.Name, err))
@@ -292,10 +292,8 @@ func (a *activeTask) nameserverAddr(ctx context.Context, server string) (string,
 	var resp *dns.Msg
 
 	for _, t := range []uint16{dns.TypeA, dns.TypeAAAA} {
-		msg := resolve.QueryMsg(server, t)
-
-		resp, err = a.enum.Sys.Pool().Query(ctx, msg, resolve.PriorityHigh, resolve.RetryPolicy)
-		if err == nil && resp != nil && len(resp.Answer) > 0 {
+		resp, err = a.enum.Sys.TrustedResolvers().QueryBlocking(ctx, resolve.QueryMsg(server, t))
+		if err == nil && len(resp.Answer) > 0 {
 			qtype = t
 			found = true
 			break

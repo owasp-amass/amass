@@ -52,11 +52,14 @@ type enumArgs struct {
 	Included          *stringset.Set
 	Interface         string
 	MaxDNSQueries     int
+	ResolverQPS       int
+	TrustedQPS        int
 	MaxDepth          int
 	MinForRecursive   int
 	Names             *stringset.Set
 	Ports             format.ParseInts
 	Resolvers         *stringset.Set
+	Trusted           *stringset.Set
 	Timeout           int
 	Options           struct {
 		Active          bool
@@ -89,6 +92,7 @@ type enumArgs struct {
 		LogFile          string
 		Names            format.ParseStrings
 		Resolvers        format.ParseStrings
+		Trusted          format.ParseStrings
 		ScriptsDirectory string
 		TermOut          string
 	}
@@ -105,11 +109,15 @@ func defineEnumArgumentFlags(enumFlags *flag.FlagSet, args *enumArgs) {
 	enumFlags.Var(args.Excluded, "exclude", "Data source names separated by commas to be excluded")
 	enumFlags.Var(args.Included, "include", "Data source names separated by commas to be included")
 	enumFlags.StringVar(&args.Interface, "iface", "", "Provide the network interface to send traffic through")
-	enumFlags.IntVar(&args.MaxDNSQueries, "max-dns-queries", 0, "Maximum number of DNS queries per second")
+	enumFlags.IntVar(&args.MaxDNSQueries, "max-dns-queries", 0, "Deprecated flag to be replaced by dns-qps in version 4.0")
+	enumFlags.IntVar(&args.MaxDNSQueries, "dns-qps", 0, "Maximum number of DNS queries per second")
+	enumFlags.IntVar(&args.ResolverQPS, "rqps", 0, "Maximum number of DNS queries per second for untrusted resolvers")
+	enumFlags.IntVar(&args.TrustedQPS, "trqps", 0, "Maximum number of DNS queries per second for trusted resolvers")
 	enumFlags.IntVar(&args.MaxDepth, "max-depth", 0, "Maximum number of subdomain labels for brute forcing")
 	enumFlags.IntVar(&args.MinForRecursive, "min-for-recursive", 1, "Subdomain labels seen before recursive brute forcing (Default: 1)")
 	enumFlags.Var(&args.Ports, "p", "Ports separated by commas (default: 80, 443)")
-	enumFlags.Var(args.Resolvers, "r", "IP addresses of preferred DNS resolvers (can be used multiple times)")
+	enumFlags.Var(args.Resolvers, "r", "IP addresses of untrusted DNS resolvers (can be used multiple times)")
+	enumFlags.Var(args.Resolvers, "tr", "IP addresses of trusted DNS resolvers (can be used multiple times)")
 	enumFlags.IntVar(&args.Timeout, "timeout", 0, "Number of minutes to let enumeration run before quitting")
 }
 
@@ -146,7 +154,8 @@ func defineEnumFilepathFlags(enumFlags *flag.FlagSet, args *enumArgs) {
 	enumFlags.StringVar(&args.Filepaths.JSONOutput, "json", "", "Path to the JSON output file")
 	enumFlags.StringVar(&args.Filepaths.LogFile, "log", "", "Path to the log file where errors will be written")
 	enumFlags.Var(&args.Filepaths.Names, "nf", "Path to a file providing already known subdomain names (from other tools/sources)")
-	enumFlags.Var(&args.Filepaths.Resolvers, "rf", "Path to a file providing preferred DNS resolvers")
+	enumFlags.Var(&args.Filepaths.Resolvers, "rf", "Path to a file providing untrusted DNS resolvers")
+	enumFlags.Var(&args.Filepaths.Trusted, "trf", "Path to a file providing trusted DNS resolvers")
 	enumFlags.StringVar(&args.Filepaths.ScriptsDirectory, "scripts", "", "Path to a directory containing ADS scripts")
 	enumFlags.StringVar(&args.Filepaths.TermOut, "o", "", "Path to the text file containing terminal stdout/stderr")
 }
@@ -264,6 +273,7 @@ func argsAndConfig(clArgs []string) (*config.Config, *enumArgs) {
 		Included:          stringset.New(),
 		Names:             stringset.New(),
 		Resolvers:         stringset.New(),
+		Trusted:           stringset.New(),
 	}
 	var help1, help2 bool
 	enumCommand := flag.NewFlagSet("enum", flag.ContinueOnError)
@@ -512,7 +522,7 @@ func processOutput(ctx context.Context, e *enum.Enumeration, outputs []chan *req
 		}
 	}
 
-	t := time.NewTicker(time.Second)
+	t := time.NewTicker(5 * time.Second)
 	defer t.Stop()
 	for {
 		select {
@@ -523,7 +533,7 @@ func processOutput(ctx context.Context, e *enum.Enumeration, outputs []chan *req
 			extract(0)
 			return
 		case <-t.C:
-			extract(20)
+			extract(100)
 		}
 	}
 }
@@ -715,13 +725,21 @@ func (e enumArgs) OverrideConfig(conf *config.Config) error {
 	if e.Options.Verbose {
 		conf.Verbose = true
 	}
+	if e.ResolverQPS > 0 {
+		conf.ResolversQPS = e.ResolverQPS
+	}
+	if e.TrustedQPS > 0 {
+		conf.TrustedQPS = e.TrustedQPS
+	}
 	if e.Resolvers.Len() > 0 {
 		conf.SetResolvers(e.Resolvers.Slice()...)
+	}
+	if e.Trusted.Len() > 0 {
+		conf.SetTrustedResolvers(e.Trusted.Slice()...)
 	}
 	if e.MaxDNSQueries > 0 {
 		conf.MaxDNSQueries = e.MaxDNSQueries
 	}
-
 	if e.Included.Len() > 0 {
 		conf.SourceFilter.Include = true
 		// Check if brute forcing and alterations should be added

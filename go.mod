@@ -9,7 +9,7 @@ require (
 	github.com/caffix/netmap v0.0.0-20211113232947-ff0f98460b11
 	github.com/caffix/pipeline v0.0.0-20211016020340-7e6f803c0762
 	github.com/caffix/queue v0.0.0-20210927150606-04a67d1f0607
-	github.com/caffix/resolve v0.0.0-20211103235133-2517e4ff9a2a
+	github.com/caffix/resolve v0.0.0-20220228165244-e251c7cc479d
 	github.com/caffix/service v0.0.0-20210920205156-38bde8eb0503
 	github.com/caffix/stringset v0.0.0-20211127022128-4574bae71adb
 	github.com/cayleygraph/quad v1.2.4
@@ -31,8 +31,9 @@ require (
 	github.com/tylertreat/BoomFilters v0.0.0-20210315201527-1a82519a3e43
 	github.com/yl2chen/cidranger v1.0.2
 	github.com/yuin/gopher-lua v0.0.0-20210529063254-f4c35e4016d9
-	golang.org/x/net v0.0.0-20220127200216-cd36cc0744dd
+	golang.org/x/net v0.0.0-20220225172249-27dd8689420f
 	golang.org/x/oauth2 v0.0.0-20211104180415-d3ed0bb246c8
+	golang.org/x/sys v0.0.0-20220227234510-4e6760a101f9 // indirect
 	golang.org/x/time v0.0.0-20220210224613-90d013bbcef8 // indirect
 	golang.org/x/tools v0.1.9 // indirect
 	layeh.com/gopher-json v0.0.0-20201124131017-552bb3c4c3bf

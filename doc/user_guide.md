@@ -115,7 +115,10 @@ This subcommand will perform DNS enumeration and network mapping while populatin
 | -json | Path to the JSON output file | amass enum -json out.json -d example.com |
 | -list | Print the names of all available data sources | amass enum -list |
 | -log | Path to the log file where errors will be written | amass enum -log amass.log -d example.com |
-| -max-dns-queries | Maximum number of concurrent DNS queries | amass enum -max-dns-queries 200 -d example.com |
+| -max-dns-queries | Deprecated flag to be replaced by dns-qps in version 4.0 | amass enum -max-dns-queries 200 -d example.com |
+| -dns-qps | Maximum number of DNS queries per second | amass enum -dns-qps 200 -d example.com |
+| -rqps | Maximum number of DNS queries per second for untrusted resolvers | amass enum -rqps 10 -d example.com |
+| -trqps | Maximum number of DNS queries per second for trusted resolvers | amass enum -trqps 20 -d example.com |
 | -min-for-recursive | Subdomain labels seen before recursive brute forcing (Default: 1) | amass enum -brute -min-for-recursive 3 -d example.com |
 | -max-depth | Maximum number of subdomain labels for brute forcing | amass enum -brute -max-depth 3 -d example.com |
 | -nf | Path to a file providing already known subdomain names (from other tools/sources) | amass enum -nf names.txt -d example.com |
@@ -125,8 +128,10 @@ This subcommand will perform DNS enumeration and network mapping while populatin
 | -oA | Path prefix used for naming all output files | amass enum -oA amass_scan -d example.com |
 | -passive | A purely passive mode of execution | amass enum --passive -d example.com |
 | -p | Ports separated by commas (default: 443) | amass enum -d example.com -p 443,8080 |
-| -r | IP addresses of preferred DNS resolvers (can be used multiple times) | amass enum -r 8.8.8.8,1.1.1.1 -d example.com |
-| -rf | Path to a file providing preferred DNS resolvers | amass enum -rf data/resolvers.txt -d example.com |
+| -r | IP addresses of untrusted DNS resolvers (can be used multiple times) | amass enum -r 8.8.8.8,1.1.1.1 -d example.com |
+| -tr | IP addresses of trusted DNS resolvers (can be used multiple times) | amass enum -tr 8.8.8.8,1.1.1.1 -d example.com |
+| -rf | Path to a file providing untrusted DNS resolvers | amass enum -rf data/resolvers.txt -d example.com |
+| -trf | Path to a file providing trusted DNS resolvers | amass enum -trf data/trusted.txt -d example.com |
 | -src | Print data sources for the discovered names | amass enum -src -d example.com |
 | -timeout | Number of minutes to execute the enumeration | amass enum -timeout 30 -d example.com |
 | -w | Path to a different wordlist file | amass enum -brute -w wordlist.txt -d example.com |

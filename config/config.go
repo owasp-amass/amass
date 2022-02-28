@@ -125,7 +125,10 @@ type Config struct {
 	RecordTypes []string
 
 	// Resolver settings
-	Resolvers []string
+	Resolvers        []string
+	ResolversQPS     int
+	TrustedResolvers []string
+	TrustedQPS       int
 
 	// Option for verbose logging and output
 	Verbose bool
@@ -142,7 +145,7 @@ type Config struct {
 
 // NewConfig returns a default configuration object.
 func NewConfig() *Config {
-	c := &Config{
+	return &Config{
 		UUID:            uuid.New(),
 		Log:             log.New(ioutil.Discard, "", 0),
 		Ports:           []int{80, 443},
@@ -157,10 +160,9 @@ func NewConfig() *Config {
 		EditDistance:   1,
 		Recursive:      true,
 		MinimumTTL:     1440,
+		ResolversQPS:   DefaultQueriesPerPublicResolver,
+		TrustedQPS:     DefaultQueriesPerBaselineResolver,
 	}
-
-	c.calcDNSQueriesMax()
-	return c
 }
 
 // UpdateConfig allows the provided Updater to update the current configuration.
