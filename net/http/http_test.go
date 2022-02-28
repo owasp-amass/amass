@@ -276,6 +276,10 @@ func TestCleanName(t *testing.T) {
 			data: "http://www.owasp.org/index.html",
 			want: "www.owasp.org",
 		},
+		{
+			data: "http://blackhat2018.owasp.org/index.html",
+			want: "blackhat2018.owasp.org",
+		},
 	}
 
 	for _, test := range tests {
