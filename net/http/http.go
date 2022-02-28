@@ -48,7 +48,7 @@ var (
 	// UserAgent is the default user agent used by Amass during HTTP requests.
 	UserAgent   string
 	subRE       = dns.AnySubdomainRegex()
-	nameStripRE = regexp.MustCompile(`^u[0-9a-f]{4}|20|22|25|27|2b|2f|3d|3a|40`)
+	nameStripRE = regexp.MustCompile(`^(u[0-9a-f]{4}|20|22|25|27|2b|2f|3d|3a|40)`)
 )
 
 // DefaultClient is the same HTTP client used by the package methods.
