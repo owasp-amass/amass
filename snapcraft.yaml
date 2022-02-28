@@ -1,7 +1,7 @@
 name: amass
 summary: In-depth Attack Surface Mapping and Asset Discovery.
 description: The OWASP Amass Project has developed a tool to help information security professionals perform network mapping of attack surfaces and external asset discovery using open source information gathering and active reconnaissance techniques.
-version: v3.16.0
+version: v3.17.0
 icon: images/snapcraft_icon.png
 license: Apache-2.0	
 base: core20
