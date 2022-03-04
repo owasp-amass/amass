@@ -215,37 +215,44 @@ func createCrawler(u string, scope []string, max int, results *stringset.Set, fi
 						return
 					}
 
+					m.Lock()
+					defer m.Unlock()
+
 					if s := u.String(); s != "" && !filter.Test([]byte(s)) {
-						// Be sure the crawl has not exceeded the maximum links to be followed
-						m.Lock()
 						count++
+						// Be sure the crawl has not exceeded the maximum links to be followed
 						if max <= 0 || count < max {
 							filter.Add([]byte(s))
 							g.Get(s, g.Opt.ParseFunc)
 						}
-						m.Unlock()
 					}
 				}
 			}
 			tag := func(i int, s *goquery.Selection) {
-				// TODO: add the 'srcset' attr
-				attrs := []string{"action", "cite", "data", "formaction",
-					"href", "longdesc", "poster", "src", "srcset", "xmlns"}
-				for _, attr := range attrs {
+				for _, attr := range crawlAttrs() {
 					if name, ok := s.Attr(attr); ok {
 						process(name)
 					}
 				}
 			}
 
-			tagname := []string{"a", "area", "audio", "base", "blockquote", "button",
-				"embed", "form", "frame", "frameset", "html", "iframe", "img", "input",
-				"ins", "link", "noframes", "object", "q", "script", "source", "track", "video"}
-			for _, t := range tagname {
+			for _, t := range crawlTagNames() {
 				r.HTMLDoc.Find(t).Each(tag)
 			}
 		},
 	})
+}
+
+// TODO: add the 'srcset' attr
+func crawlAttrs() []string {
+	return []string{"action", "cite", "data", "formaction",
+		"href", "longdesc", "poster", "src", "srcset", "xmlns"}
+}
+
+func crawlTagNames() []string {
+	return []string{"a", "area", "audio", "base", "blockquote", "button",
+		"embed", "form", "frame", "frameset", "html", "iframe", "img", "input",
+		"ins", "link", "noframes", "object", "q", "script", "source", "track", "video"}
 }
 
 func whichDomain(name string, scope []string) string {

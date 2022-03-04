@@ -33,19 +33,18 @@ var DefaultBaselineResolvers = []string{
 	"9.9.9.9",        // Quad9
 	"208.67.222.222", // Cisco OpenDNS
 	"84.200.69.80",   // DNS.WATCH
-	"64.6.64.6",      // Verisign
-	"8.26.56.26",     // Comodo Secure DNS
 	"64.6.64.6",      // Neustar DNS
-	"195.46.39.39",   // SafeDNS
+	"8.26.56.26",     // Comodo Secure DNS
+	"205.171.3.65",   // Level3
+	"134.195.4.2",    // OpenNIC
 	"185.228.168.9",  // CleanBrowsing
 	"76.76.19.19",    // Alternate DNS
+	"37.235.1.177",   // FreeDNS
 	"77.88.8.1",      // Yandex.DNS
 	"94.140.14.140",  // AdGuard
-	"216.146.35.35",  // Dyn
-	"192.71.245.208", // OpenNIC
 	"38.132.106.139", // CyberGhost
-	"109.69.8.51",    // puntCAT
 	"74.82.42.42",    // Hurricane Electric
+	"76.76.2.0",      // ControlD
 }
 
 // PublicResolvers includes the addresses of public resolvers obtained dynamically.

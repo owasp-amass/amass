@@ -116,9 +116,9 @@ This subcommand will perform DNS enumeration and network mapping while populatin
 | -list | Print the names of all available data sources | amass enum -list |
 | -log | Path to the log file where errors will be written | amass enum -log amass.log -d example.com |
 | -max-dns-queries | Deprecated flag to be replaced by dns-qps in version 4.0 | amass enum -max-dns-queries 200 -d example.com |
-| -dns-qps | Maximum number of DNS queries per second | amass enum -dns-qps 200 -d example.com |
-| -rqps | Maximum number of DNS queries per second for untrusted resolvers | amass enum -rqps 10 -d example.com |
-| -trqps | Maximum number of DNS queries per second for trusted resolvers | amass enum -trqps 20 -d example.com |
+| -dns-qps | Maximum number of DNS queries per second across all resolvers | amass enum -dns-qps 200 -d example.com |
+| -rqps | Maximum number of DNS queries per second for each untrusted resolver | amass enum -rqps 10 -d example.com |
+| -trqps | Maximum number of DNS queries per second for each trusted resolver | amass enum -trqps 20 -d example.com |
 | -min-for-recursive | Subdomain labels seen before recursive brute forcing (Default: 1) | amass enum -brute -min-for-recursive 3 -d example.com |
 | -max-depth | Maximum number of subdomain labels for brute forcing | amass enum -brute -max-depth 3 -d example.com |
 | -nf | Path to a file providing already known subdomain names (from other tools/sources) | amass enum -nf names.txt -d example.com |
@@ -230,7 +230,6 @@ Note that these locations are based on the [output directory](#the-output-direct
 | mode | Determines which mode the enumeration is performed in: default, passive or active |
 | output_directory | The directory that stores the graph database and other output files |
 | maximum_dns_queries | The maximum number of concurrent DNS queries that can be performed |
-| include_unresolvable | When set to true, causes DNS names that did not resolve to be printed |
 
 ### The network_settings Section
 

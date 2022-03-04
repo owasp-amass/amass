@@ -261,10 +261,10 @@ func (a *activeTask) zoneWalk(ctx context.Context, req *requests.ZoneXFRRequest,
 
 	r := resolve.NewResolvers()
 	r.AddLogger(a.enum.Config.Log)
-	r.AddResolvers(50, addr)
+	_ = r.AddResolvers(5, addr)
 	defer r.Stop()
 
-	names, _, err := resolve.NsecTraversal(ctx, r, req.Name)
+	names, err := r.NsecTraversal(ctx, req.Name)
 	if err != nil {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("DNS: Zone Walk failed: %s: %v", req.Name, err))

@@ -302,10 +302,11 @@ func trustedResolvers(cfg *config.Config, max int) (*resolve.Resolvers, int) {
 
 	if len(cfg.TrustedResolvers) > 0 {
 		num = len(cfg.TrustedResolvers)
-		pool.AddResolvers(cfg.TrustedQPS, cfg.TrustedResolvers...)
+		_ = pool.AddResolvers(cfg.TrustedQPS, cfg.TrustedResolvers...)
 	} else {
 		num = len(config.DefaultBaselineResolvers)
-		pool.AddResolvers(cfg.TrustedQPS, config.DefaultBaselineResolvers...)
+		_ = pool.AddResolvers(cfg.TrustedQPS, config.DefaultBaselineResolvers...)
+		pool.SetDetectionResolver(cfg.TrustedQPS, "8.8.8.8")
 	}
 
 	pool.AddLogger(cfg.Log)
@@ -331,7 +332,7 @@ func customResolverSetup(cfg *config.Config, max int) (*resolve.Resolvers, int) 
 
 	pool := resolve.NewResolvers()
 	pool.AddLogger(cfg.Log)
-	pool.AddResolvers(cfg.ResolversQPS, cfg.Resolvers...)
+	_ = pool.AddResolvers(cfg.ResolversQPS, cfg.Resolvers...)
 	return pool, num
 }
 
@@ -357,7 +358,7 @@ func publicResolverSetup(cfg *config.Config, max int) (*resolve.Resolvers, int) 
 
 	r := resolve.NewResolvers()
 	r.AddLogger(cfg.Log)
-	r.AddResolvers(cfg.ResolversQPS, addrs...)
+	_ = r.AddResolvers(cfg.ResolversQPS, addrs...)
 	return r, len(addrs)
 }
 

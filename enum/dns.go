@@ -64,7 +64,7 @@ func newDNSTask(e *Enumeration) *dnsTask {
 		fwdChan: make(chan *dns.Msg, 1000),
 		revs:    make(map[string]*revElement),
 		revChan: make(chan *dns.Msg, 1000),
-		max:     e.Sys.Resolvers().QPS() * 2,
+		max:     e.Sys.Resolvers().QPS(),
 	}
 
 	go dt.processFwdResponses()
@@ -362,8 +362,7 @@ func (dt *dnsTask) handleFwdElement(f *fwdElement, resp *dns.Msg) bool {
 }
 
 func (dt *dnsTask) wildcardFiltering(ctx context.Context, req *requests.DNSRequest, resp *dns.Msg, tp pipeline.TaskParams) {
-	if !requests.TrustedTag(req.Tag) &&
-		dt.enum.Sys.TrustedResolvers().WildcardType(ctx, resp, req.Domain) != resolve.WildcardTypeNone {
+	if !requests.TrustedTag(req.Tag) && dt.enum.Sys.TrustedResolvers().WildcardDetected(ctx, resp, req.Domain) {
 		return
 	}
 	pipeline.SendData(ctx, "filter", req, tp)
@@ -610,7 +609,7 @@ func (dt *dnsTask) querySingleServiceName(ctx context.Context, name, domain stri
 		Source:  "DNS",
 	}
 
-	if req.Valid() && dt.enum.Sys.TrustedResolvers().WildcardType(ctx, resp, domain) == resolve.WildcardTypeNone {
+	if req.Valid() && !dt.enum.Sys.TrustedResolvers().WildcardDetected(ctx, resp, domain) {
 		pipeline.SendData(ctx, "filter", req, tp)
 	}
 }
