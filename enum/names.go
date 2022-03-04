@@ -146,8 +146,7 @@ func (r *subdomainTask) subWithinWildcard(ctx context.Context, name, domain stri
 		}
 
 		resp, err := r.enum.Sys.TrustedResolvers().QueryBlocking(ctx, resolve.QueryMsg("a."+name, t))
-		if err == nil && len(resp.Answer) > 0 &&
-			r.enum.Sys.TrustedResolvers().WildcardType(ctx, resp, domain) != resolve.WildcardTypeNone {
+		if err == nil && len(resp.Answer) > 0 && r.enum.Sys.TrustedResolvers().WildcardDetected(ctx, resp, domain) {
 			return true
 		}
 	}
