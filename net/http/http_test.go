@@ -221,7 +221,7 @@ func TestPullCertificateNames(t *testing.T) {
 	if r == nil {
 		t.Errorf("Failed to setup the DNS resolver")
 	}
-	r.AddResolvers(10, "8.8.8.8")
+	_ = r.AddResolvers(10, "8.8.8.8")
 	defer r.Stop()
 
 	msg := resolve.QueryMsg("www.utica.edu", dns.TypeA)

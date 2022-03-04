@@ -40,7 +40,6 @@ type enumSource struct {
 	done        chan struct{}
 	tokens      chan struct{}
 	doneOnce    sync.Once
-	maxSlots    int
 }
 
 // newEnumSource returns an initialized input source for the enumeration pipeline.
@@ -55,7 +54,6 @@ func newEnumSource(e *Enumeration) *enumSource {
 		subre:       dns.AnySubdomainRegex(),
 		done:        make(chan struct{}),
 		tokens:      make(chan struct{}, numDataItemsInput),
-		maxSlots:    e.Config.MaxDNSQueries,
 	}
 
 	for i := 0; i < numDataItemsInput; i++ {
@@ -266,7 +264,7 @@ func (r *enumSource) checkForData() {
 		default:
 		}
 
-		needed := r.maxSlots - r.queue.Len()
+		needed := r.enum.Config.MaxDNSQueries - r.queue.Len()
 		if needed <= 0 {
 			time.Sleep(250 * time.Millisecond)
 			continue

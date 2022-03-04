@@ -215,7 +215,7 @@ func processDNSRequest(ctx context.Context, req *requests.DNSRequest,
 	}
 
 	msg := resolve.QueryMsg(req.Name, dns.TypeNone)
-	if cfg.Blacklisted(req.Name) || sys.TrustedResolvers().WildcardType(ctx, msg, req.Domain) == resolve.WildcardTypeDynamic {
+	if cfg.Blacklisted(req.Name) || sys.TrustedResolvers().WildcardDetected(ctx, msg, req.Domain) {
 		c <- nil
 		return
 	}
@@ -246,7 +246,7 @@ func processDNSRequest(ctx context.Context, req *requests.DNSRequest,
 		if t == "CNAME" && len(resp.Answer) > 0 {
 			break
 		}
-		if sys.TrustedResolvers().WildcardType(ctx, msg, req.Domain) != resolve.WildcardTypeNone {
+		if sys.TrustedResolvers().WildcardDetected(ctx, msg, req.Domain) {
 			return
 		}
 	}

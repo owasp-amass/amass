@@ -40,7 +40,7 @@ func (s *Script) resolve(L *lua.LState) int {
 	if detection {
 		domain, err := publicsuffix.EffectiveTLDPlusOne(name)
 
-		if err != nil || s.sys.TrustedResolvers().WildcardType(ctx, resp, domain) != resolve.WildcardTypeNone {
+		if err != nil || s.sys.TrustedResolvers().WildcardDetected(ctx, resp, domain) {
 			L.Push(lua.LNil)
 			L.Push(lua.LString("DNS wildcard detection made a positive match for " + name))
 			return 2
