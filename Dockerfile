@@ -14,4 +14,5 @@ RUN addgroup user \
     && mkdir /.config/amass \
     && chown -R user:user /.config
 USER user
+WORKDIR /home/user
 ENTRYPOINT ["/bin/amass"]
