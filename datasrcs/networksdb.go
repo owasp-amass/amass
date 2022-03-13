@@ -27,7 +27,7 @@ import (
 
 const (
 	networksdbBaseURL = "https://networksdb.io"
-	networksdbAPIPATH = "/api/v1"
+	networksdbAPIPATH = "/api"
 )
 
 var (
@@ -385,35 +385,28 @@ func (n *NetworksDB) apiIPQuery(ctx context.Context, addr string) (string, strin
 	}
 
 	var m struct {
-		Error   string `json:"error"`
-		Total   int    `json:"total"`
-		Results []struct {
-			Org struct {
-				ID string `json:"id"`
-			} `json:"organisation"`
-			Network struct {
-				CIDR string `json:"cidr"`
-			} `json:"network"`
-		} `json:"results"`
+		Org struct {
+			ID string `json:"id"`
+		} `json:"organisation"`
+		Network struct {
+			CIDR string `json:"cidr"`
+		} `json:"network"`
 	}
 	if err := json.Unmarshal([]byte(page), &m); err != nil {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", n.String(), u, err))
 		return "", ""
-	} else if m.Error != "" {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %s", n.String(), u, m.Error))
-		return "", ""
-	} else if m.Total == 0 || len(m.Results) == 0 {
+	} else if m.Network.CIDR == "N/A" {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: %s: The request returned zero results", n.String(), u),
 		)
 		return "", ""
 	}
 
-	return m.Results[0].Network.CIDR, m.Results[0].Org.ID
+	return m.Network.CIDR, m.Org.ID
 }
 
 func (n *NetworksDB) getAPIIPURL() string {
-	return networksdbBaseURL + networksdbAPIPATH + "/ip/info"
+	return networksdbBaseURL + networksdbAPIPATH + "/ip-info"
 }
 
 func (n *NetworksDB) apiOrgInfoQuery(ctx context.Context, id string) []int {
@@ -433,30 +426,23 @@ func (n *NetworksDB) apiOrgInfoQuery(ctx context.Context, id string) []int {
 	}
 
 	var m struct {
-		Error   string `json:"error"`
-		Total   int    `json:"total"`
-		Results []struct {
-			ASNs []int `json:"asns"`
-		} `json:"results"`
+		ASNs []int `json:"asns"`
 	}
 	if err := json.Unmarshal([]byte(page), &m); err != nil {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", n.String(), u, err))
 		return []int{}
-	} else if m.Error != "" {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %s", n.String(), u, m.Error))
-		return []int{}
-	} else if m.Total == 0 || len(m.Results[0].ASNs) == 0 {
+	} else if len(m.ASNs) == 0 {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
 			fmt.Sprintf("%s: %s: The request returned zero results", n.String(), u),
 		)
 		return []int{}
 	}
 
-	return m.Results[0].ASNs
+	return m.ASNs
 }
 
 func (n *NetworksDB) getAPIOrgInfoURL() string {
-	return networksdbBaseURL + networksdbAPIPATH + "/org/info"
+	return networksdbBaseURL + networksdbAPIPATH + "/org-info"
 }
 
 func (n *NetworksDB) apiASNInfoQuery(ctx context.Context, asn int) *requests.ASNRequest {
@@ -476,40 +462,28 @@ func (n *NetworksDB) apiASNInfoQuery(ctx context.Context, asn int) *requests.ASN
 	}
 
 	var m struct {
-		Error   string `json:"error"`
-		Total   int    `json:"total"`
-		Results []struct {
-			ASN         int    `json:"asn"`
-			ASName      string `json:"as_name"`
-			Description string `json:"description"`
-			CountryCode string `json:"countrycode"`
-			Country     string `json:"country"`
-		} `json:"results"`
+		ASN         int    `json:"asn"`
+		ASName      string `json:"as_name"`
+		Description string `json:"description"`
+		CountryCode string `json:"countrycode"`
+		Country     string `json:"country"`
 	}
 	if err := json.Unmarshal([]byte(page), &m); err != nil {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", n.String(), u, err))
 		return nil
-	} else if m.Error != "" {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %s", n.String(), u, m.Error))
-		return nil
-	} else if m.Total == 0 || len(m.Results) == 0 {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
-			fmt.Sprintf("%s: %s: The request returned zero results", n.String(), u),
-		)
-		return nil
 	}
 
 	return &requests.ASNRequest{
-		ASN:         m.Results[0].ASN,
-		CC:          m.Results[0].CountryCode,
-		Description: m.Results[0].Description + ", " + m.Results[0].CountryCode,
+		ASN:         m.ASN,
+		CC:          m.CountryCode,
+		Description: m.Description + ", " + m.CountryCode,
 		Tag:         n.SourceType,
 		Source:      n.String(),
 	}
 }
 
 func (n *NetworksDB) getAPIASNInfoURL() string {
-	return networksdbBaseURL + networksdbAPIPATH + "/as/info"
+	return networksdbBaseURL + networksdbAPIPATH + "/asn-info"
 }
 
 func (n *NetworksDB) apiNetblocksQuery(ctx context.Context, asn int) *stringset.Set {
@@ -531,7 +505,6 @@ func (n *NetworksDB) apiNetblocksQuery(ctx context.Context, asn int) *stringset.
 	}
 
 	var m struct {
-		Error   string `json:"error"`
 		Total   int    `json:"total"`
 		Results []struct {
 			CIDR string `json:"cidr"`
@@ -539,9 +512,6 @@ func (n *NetworksDB) apiNetblocksQuery(ctx context.Context, asn int) *stringset.
 	}
 	if err := json.Unmarshal([]byte(page), &m); err != nil {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", n.String(), u, err))
-		return netblocks
-	} else if m.Error != "" {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %s", n.String(), u, m.Error))
 		return netblocks
 	} else if m.Total == 0 || len(m.Results) == 0 {
 		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
@@ -557,7 +527,7 @@ func (n *NetworksDB) apiNetblocksQuery(ctx context.Context, asn int) *stringset.
 }
 
 func (n *NetworksDB) getAPINetblocksURL() string {
-	return networksdbBaseURL + networksdbAPIPATH + "/as/networks"
+	return networksdbBaseURL + networksdbAPIPATH + "/asn-networks"
 }
 
 func (n *NetworksDB) getHeaders() map[string]string {
