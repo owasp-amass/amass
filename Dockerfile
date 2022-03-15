@@ -1,17 +1,38 @@
-FROM golang:1.16-alpine as build
-RUN apk --no-cache add git
+# syntax=docker/dockerfile:1.3-labs
+
+#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
+
+FROM golang:1.17-alpine AS builder
+
 WORKDIR /go/src/github.com/OWASP/Amass
 COPY . .
-RUN go install -v ./...
 
-FROM alpine:latest
-RUN apk --no-cache add ca-certificates
-COPY --from=build /go/bin/amass /bin/amass
-ENV HOME /
-RUN addgroup user \
-    && adduser user -D -G user \
-    && mkdir /.config \
-    && mkdir /.config/amass \
-    && chown -R user:user /.config
-USER user
-ENTRYPOINT ["/bin/amass"]
+ENV GO111MODULE=on
+RUN <<eot
+#!/bin/ash
+apk add -U git subversion
+go install -v ./...
+svn checkout https://github.com/OWASP/Amass/trunk/examples/wordlists /wordlists
+eot
+
+#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
+
+FROM alpine:latest AS final
+
+COPY --from=builder /go/bin/amass /usr/local/bin/
+COPY --from=builder /wordlists/*.txt /wordlists/
+
+COPY LICENSE /
+
+RUN <<eot
+#!/bin/ash
+apk add --no-cache -U ca-certificates
+mkdir -p /root/.config/amass
+ln -sf /root/.config/amass /amass
+eot
+
+WORKDIR /amass
+
+SHELL [ "/bin/ash", "-c" ]
+ENTRYPOINT [ "amass" ]
+CMD [ "-help" ]

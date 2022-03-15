@@ -18,6 +18,11 @@ Using this installation option on macOS is could result in an 'unidentified deve
 
 ## Using Docker
 
+To avoid output files being owned by root on your host, consider configuring Docker Rootless OR Linux Namespaces
+- [Run the Docker daemon as a non-root user (Rootless mode)](https://docs.docker.com/engine/security/rootless/)
+- [Isolate containers with a user namespace](https://docs.docker.com/engine/security/userns-remap/)
+- [Use Linux user namespaces to fix permissions in docker volumes](https://www.jujens.eu/posts/en/2017/Jul/02/docker-userns-remap/)
+
 1. Build the [Docker](https://docs.docker.com/) image:
 
 ```bash
@@ -27,7 +32,7 @@ docker build -t amass https://github.com/OWASP/Amass.git
 2. Run the Docker image:
 
 ```bash
-docker run -v OUTPUT_DIR_PATH:/.config/amass/ amass enum --list
+docker run -it --rm -v OUTPUT_DIR_PATH:/amass/ amass enum --list
 ```
 
 The volume argument allows the Amass graph database to persist between executions and output files to be accessed on the host system. The first field (left of the colon) of the volume option is the amass output directory that is external to Docker, while the second field is the path, internal to Docker, where amass will write the output files.
@@ -35,7 +40,7 @@ The volume argument allows the Amass graph database to persist between execution
 The wordlists maintained in the Amass git repository are available in `/examples/wordlists/` within the docker container. For example, to use `all.txt`:
 
 ```bash
-docker run -v OUTPUT_DIR_PATH:/.config/amass/ amass enum -brute -w /wordlists/all.txt -share -d example.com
+docker run -it --rm -v OUTPUT_DIR_PATH:/amass/ amass enum -brute -w /wordlists/all.txt -share -d example.com
 ```
 
 ## From Source
