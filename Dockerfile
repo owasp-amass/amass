@@ -5,7 +5,7 @@ ENV GO111MODULE on
 WORKDIR /go/src/github.com/OWASP/Amass
 RUN go install ./...
 
-FROM alpine:latest
+FROM alpine:3.15
 COPY --from=build /go/bin/amass /bin/amass
 COPY --from=build /go/src/github.com/OWASP/Amass/wordlists/ /wordlists/
 ENV HOME /
