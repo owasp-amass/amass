@@ -1,28 +1,18 @@
-// Copyright 2020-2021 Jeff Foley. All rights reserved.
+// Copyright © by Jeff Foley 2020-2022. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
 
 package scripting
 
 import (
 	"github.com/OWASP/Amass/v3/config"
-	"github.com/OWASP/Amass/v3/requests"
 	"github.com/caffix/service"
 	lua "github.com/yuin/gopher-lua"
 )
 
 // Wrapper so that scripts can obtain the configuration for the current enumeration.
 func (s *Script) config(L *lua.LState) int {
-	ctx, err := extractContext(L.CheckUserData(1))
-	if err != nil {
-		L.Push(lua.LNil)
-		return 1
-	}
-
-	cfg, _, err := requests.ContextConfigBus(ctx)
-	if err != nil {
-		L.Push(lua.LNil)
-		return 1
-	}
+	cfg := s.sys.Config()
 
 	r := L.NewTable()
 	if cfg.Active {
@@ -152,14 +142,11 @@ func (s *Script) dataSourceConfig(L *lua.LState) int {
 func (s *Script) inScope(L *lua.LState) int {
 	result := lua.LFalse
 
-	if ctx, err := extractContext(L.CheckUserData(1)); err == nil {
-		if cfg, _, err := requests.ContextConfigBus(ctx); err == nil {
-			if sub := L.CheckString(2); sub != "" && cfg.IsDomainInScope(sub) {
-				result = lua.LTrue
-			}
+	if _, err := extractContext(L.CheckUserData(1)); err == nil {
+		if sub := L.CheckString(2); sub != "" && s.sys.Config().IsDomainInScope(sub) {
+			result = lua.LTrue
 		}
 	}
-
 	L.Push(result)
 	return 1
 }
@@ -168,11 +155,9 @@ func (s *Script) inScope(L *lua.LState) int {
 func (s *Script) bruteWordlist(L *lua.LState) int {
 	tb := L.NewTable()
 
-	if ctx, err := extractContext(L.CheckUserData(1)); err == nil {
-		if cfg, _, err := requests.ContextConfigBus(ctx); err == nil {
-			for _, word := range cfg.Wordlist {
-				tb.Append(lua.LString(word))
-			}
+	if _, err := extractContext(L.CheckUserData(1)); err == nil {
+		for _, word := range s.sys.Config().Wordlist {
+			tb.Append(lua.LString(word))
 		}
 	}
 
@@ -188,11 +173,9 @@ func (s *Script) bruteWordlist(L *lua.LState) int {
 func (s *Script) altWordlist(L *lua.LState) int {
 	tb := L.NewTable()
 
-	if ctx, err := extractContext(L.CheckUserData(1)); err == nil {
-		if cfg, _, err := requests.ContextConfigBus(ctx); err == nil {
-			for _, word := range cfg.AltWordlist {
-				tb.Append(lua.LString(word))
-			}
+	if _, err := extractContext(L.CheckUserData(1)); err == nil {
+		for _, word := range s.sys.Config().AltWordlist {
+			tb.Append(lua.LString(word))
 		}
 	}
 
@@ -226,10 +209,8 @@ func (s *Script) checkRateLimit(L *lua.LState) int {
 func (s *Script) outputdir(L *lua.LState) int {
 	var dir string
 
-	if ctx, err := extractContext(L.CheckUserData(1)); err == nil {
-		if cfg, _, err := requests.ContextConfigBus(ctx); err == nil {
-			dir = config.OutputDirectory(cfg.Dir)
-		}
+	if _, err := extractContext(L.CheckUserData(1)); err == nil {
+		dir = config.OutputDirectory(s.sys.Config().Dir)
 	}
 
 	if dir != "" {

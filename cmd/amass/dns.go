@@ -20,7 +20,6 @@ import (
 	"github.com/OWASP/Amass/v3/format"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/systems"
-	"github.com/caffix/eventbus"
 	"github.com/caffix/resolve"
 	"github.com/caffix/stringset"
 	"github.com/fatih/color"
@@ -164,7 +163,6 @@ func runDNSCommand(clArgs []string) {
 func performResolutions(cfg *config.Config, args *dnsArgs, sys systems.System) {
 	done := make(chan struct{})
 	active := make(chan struct{}, 1000000)
-	bus := eventbus.NewEventBus()
 	answers := make(chan *requests.DNSRequest, 100000)
 
 	// Setup the context used throughout the resolutions
@@ -176,7 +174,6 @@ func performResolutions(cfg *config.Config, args *dnsArgs, sys systems.System) {
 		ctx, cancel = context.WithTimeout(context.Background(), time.Duration(args.Timeout)*time.Minute)
 	}
 	defer cancel()
-	ctx = context.WithValue(ctx, requests.ContextEventBus, bus)
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)

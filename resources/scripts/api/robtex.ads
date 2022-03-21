@@ -1,5 +1,6 @@
--- Copyright 2021 Jeff Foley. All rights reserved.
+-- Copyright © by Jeff Foley 2021-2022. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+-- SPDX-License-Identifier: Apache-2.0
 
 local json = require("json")
 
@@ -58,7 +59,6 @@ function asn(ctx, addr, asn)
         if (d == nil) then
             return
         end
-
         asn = d.as
         prefix = d.bgproute
     end
@@ -115,7 +115,6 @@ function ip_info(ctx, addr, ttl)
     if (j == nil or j.status ~= "ok") then
         return nil
     end
-
     return j
 end
 
@@ -150,7 +149,6 @@ function netblocks(ctx, asn, ttl)
     for _, net in pairs(j.nets) do
         table.insert(netblocks, net.n)
     end
-
     if (#netblocks == 0) then
         return nil
     end
@@ -165,10 +163,8 @@ function split(str, delim)
     if (matches == nil or #matches == 0) then
         return result
     end
-
     for i, match in pairs(matches) do
         table.insert(result, match)
     end
-
     return result
 end

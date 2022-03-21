@@ -1,26 +1,24 @@
-// Copyright 2020-2021 Jeff Foley. All rights reserved.
+// Copyright © by Jeff Foley 2020-2022. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
 
 package scripting
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"strings"
 
 	"github.com/OWASP/Amass/v3/net/http"
-	"github.com/OWASP/Amass/v3/requests"
-	"github.com/caffix/eventbus"
 	lua "github.com/yuin/gopher-lua"
 )
 
 // Wrapper that allows scripts to make HTTP client requests.
 func (s *Script) request(L *lua.LState) int {
 	ctx, err := extractContext(L.CheckUserData(1))
-	if err != nil {
+	if err != nil || contextExpired(ctx) {
 		L.Push(lua.LNil)
-		L.Push(lua.LString("The user data parameter was not provided"))
+		L.Push(lua.LString("No user data parameter or context expired"))
 		return 2
 	}
 
@@ -72,7 +70,7 @@ func (s *Script) request(L *lua.LState) int {
 // Wrapper so that scripts can scrape the contents of a GET request for subdomain names in scope.
 func (s *Script) scrape(L *lua.LState) int {
 	ctx, err := extractContext(L.CheckUserData(1))
-	if err != nil {
+	if err != nil || contextExpired(ctx) {
 		L.Push(lua.LFalse)
 		return 1
 	}
@@ -116,11 +114,7 @@ func (s *Script) scrape(L *lua.LState) int {
 			sucess = lua.LTrue
 		}
 	} else {
-		msg := err.Error()
-
-		if _, bus, err := requests.ContextConfigBus(ctx); err == nil {
-			bus.Publish(requests.LogTopic, eventbus.PriorityHigh, s.String()+": scrape: "+msg)
-		}
+		s.sys.Config().Log.Print(s.String() + ": scrape: " + err.Error())
 	}
 
 	L.Push(sucess)
@@ -128,13 +122,9 @@ func (s *Script) scrape(L *lua.LState) int {
 }
 
 func (s *Script) req(ctx context.Context, url, data string, headers map[string]string, auth *http.BasicAuth) (string, error) {
-	cfg, bus, err := requests.ContextConfigBus(ctx)
-	if err != nil {
-		return "", err
-	}
-
+	cfg := s.sys.Config()
 	// Check for cached responses first
-	dsc := s.sys.Config().GetDataSourceConfig(s.String())
+	dsc := cfg.GetDataSourceConfig(s.String())
 	if dsc != nil && dsc.TTL > 0 {
 		if r, err := s.getCachedResponse(ctx, url+data, dsc.TTL); err == nil {
 			return r, err
@@ -150,24 +140,19 @@ func (s *Script) req(ctx context.Context, url, data string, headers map[string]s
 	resp, err := http.RequestWebPage(ctx, url, body, headers, auth)
 	if err != nil {
 		if cfg.Verbose {
-			bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", s.String(), url, err))
+			cfg.Log.Printf("%s: %s: %v", s.String(), url, err)
 		}
 	} else if dsc != nil && dsc.TTL > 0 {
 		_ = s.setCachedResponse(ctx, url+data, resp)
 	}
-
 	return resp, err
 }
 
 // Wrapper so that scripts can crawl for subdomain names in scope.
 func (s *Script) crawl(L *lua.LState) int {
+	cfg := s.sys.Config()
 	ctx, err := extractContext(L.CheckUserData(1))
-	if err != nil {
-		return 0
-	}
-
-	cfg, bus, err := requests.ContextConfigBus(ctx)
-	if err != nil {
+	if err != nil || contextExpired(ctx) {
 		return 0
 	}
 
@@ -179,13 +164,13 @@ func (s *Script) crawl(L *lua.LState) int {
 		names, err = http.Crawl(ctx, u, cfg.Domains(), max, nil)
 		if err == nil {
 			for _, name := range names {
-				genNewNameEvent(ctx, s, http.CleanName(name))
+				genNewName(ctx, s.sys, s, http.CleanName(name))
 			}
 		}
 	}
 
 	if err != nil && cfg.Verbose {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", s.String(), u, err))
+		cfg.Log.Printf("%s: %s: %v", s.String(), u, err)
 	}
 	return 0
 }

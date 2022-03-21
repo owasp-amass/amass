@@ -6,27 +6,19 @@ package enum
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/caffix/pipeline"
-	"github.com/caffix/queue"
 	"github.com/caffix/resolve"
 	"github.com/caffix/stringset"
 	"github.com/miekg/dns"
 )
 
-// InitialQueryTypes include the DNS record types that are queried for a discovered name.
-var InitialQueryTypes = []uint16{
-	dns.TypeCNAME,
-	dns.TypeA,
-	dns.TypeAAAA,
-}
-
 // subdomainTask handles newly discovered proper subdomain names in the enumeration.
 type subdomainTask struct {
 	enum            *Enumeration
-	queue           queue.Queue
 	cnames          *stringset.Set
 	withinWildcards *stringset.Set
 	timesChan       chan *timesReq
@@ -37,7 +29,6 @@ type subdomainTask struct {
 func newSubdomainTask(e *Enumeration) *subdomainTask {
 	r := &subdomainTask{
 		enum:            e,
-		queue:           queue.NewQueue(),
 		cnames:          stringset.New(),
 		withinWildcards: stringset.New(),
 		timesChan:       make(chan *timesReq, 10),
@@ -51,7 +42,6 @@ func newSubdomainTask(e *Enumeration) *subdomainTask {
 // Stop releases resources allocated by the instance.
 func (r *subdomainTask) Stop() {
 	close(r.done)
-	r.queue.Process(func(e interface{}) {})
 	r.cnames.Close()
 	r.withinWildcards.Close()
 }
@@ -71,7 +61,6 @@ func (r *subdomainTask) Process(ctx context.Context, data pipeline.Data, tp pipe
 	if req == nil || !r.enum.Config.IsDomainInScope(req.Name) {
 		return nil, nil
 	}
-
 	// Do not further evaluate service subdomains
 	for _, label := range strings.Split(req.Name, ".") {
 		l := strings.ToLower(label)
@@ -82,7 +71,7 @@ func (r *subdomainTask) Process(ctx context.Context, data pipeline.Data, tp pipe
 	}
 
 	if r.checkForSubdomains(ctx, req, tp) {
-		r.queue.Append(&requests.ResolvedRequest{
+		r.enum.sendRequests(&requests.ResolvedRequest{
 			Name:    req.Name,
 			Domain:  req.Domain,
 			Records: req.Records,
@@ -113,7 +102,7 @@ func (r *subdomainTask) checkForSubdomains(ctx context.Context, req *requests.DN
 		return false
 	} else if times > 1 && r.withinWildcards.Has(sub) {
 		return false
-	} else if times == 1 && r.enum.Sys.GraphDatabases()[0].IsCNAMENode(ctx, sub) {
+	} else if times == 1 && r.enum.graph.IsCNAMENode(ctx, sub) {
 		r.cnames.Insert(sub)
 		return false
 	} else if times > 1 && r.cnames.Has(sub) {
@@ -130,7 +119,7 @@ func (r *subdomainTask) checkForSubdomains(ctx context.Context, req *requests.DN
 		Times:  times,
 	}
 
-	r.queue.Append(subreq)
+	r.enum.sendRequests(subreq)
 	if times == 1 {
 		pipeline.SendData(ctx, "root", subreq, tp)
 	}
@@ -145,53 +134,61 @@ func (r *subdomainTask) subWithinWildcard(ctx context.Context, name, domain stri
 		default:
 		}
 
-		resp, err := r.enum.Sys.TrustedResolvers().QueryBlocking(ctx, resolve.QueryMsg("a."+name, t))
-		if err == nil && len(resp.Answer) > 0 && r.enum.Sys.TrustedResolvers().WildcardDetected(ctx, resp, domain) {
+		if resp, err := r.fwdQuery(ctx, "a."+name, t); err == nil &&
+			len(resp.Answer) > 0 && r.enum.Sys.TrustedResolvers().WildcardDetected(ctx, resp, domain) {
 			return true
 		}
 	}
 	return false
 }
 
-// OutputRequests sends discovered subdomain names to the enumeration data sources.
-func (r *subdomainTask) OutputRequests(num int) int {
-	var count int
-
-	if num <= 0 {
-		return count
+func (r *subdomainTask) fwdQuery(ctx context.Context, name string, qtype uint16) (*dns.Msg, error) {
+	msg := resolve.QueryMsg(name, qtype)
+	resp, err := r.enum.Sys.Resolvers().QueryBlocking(ctx, msg)
+	// Check if the response indicates that the name does not exist
+	if err != nil || resp.Rcode == dns.RcodeNameError {
+		return nil, errors.New("name does not exist")
 	}
-loop:
-	for ; count < num; count++ {
-		select {
-		case <-r.done:
-			break loop
-		default:
+	if resp.Rcode == dns.RcodeSuccess && len(resp.Answer) == 0 {
+		return nil, errors.New("zero answers returned")
+	}
+	// Was there another reason why the query failed?
+	for attempts := 1; attempts < 50 && resp.Rcode != dns.RcodeSuccess; attempts++ {
+		resp, err = r.enum.Sys.Resolvers().QueryBlocking(ctx, msg)
+		// Check if the response indicates that the name does not exist
+		if err != nil || resp.Rcode == dns.RcodeNameError {
+			return nil, errors.New("name does not exist")
 		}
-
-		element, ok := r.queue.Next()
-		if !ok {
-			break loop
-		}
-
-		for _, src := range r.enum.srcs {
-			switch v := element.(type) {
-			case *requests.ResolvedRequest:
-				src.Request(r.enum.ctx, v)
-				if r.enum.Config.Alterations && src.String() == "Alterations" {
-					count += len(r.enum.Config.AltWordlist)
-				}
-				if r.enum.Config.BruteForcing && src.String() == "Brute Forcing" && r.enum.Config.MinForRecursive == 0 {
-					count += len(r.enum.Config.Wordlist)
-				}
-			case *requests.SubdomainRequest:
-				src.Request(r.enum.ctx, v)
-				if r.enum.Config.BruteForcing && src.String() == "Brute Forcing" && v.Times >= r.enum.Config.MinForRecursive {
-					count += len(r.enum.Config.Wordlist)
-				}
-			}
+		if resp.Rcode == dns.RcodeSuccess && len(resp.Answer) == 0 {
+			return nil, errors.New("zero answers returned")
 		}
 	}
-	return count
+	if resp.Rcode != dns.RcodeSuccess {
+		return nil, errors.New("query failed")
+	}
+
+	resp, err = r.enum.Sys.TrustedResolvers().QueryBlocking(ctx, msg)
+	// Check if the response indicates that the name does not exist
+	if err != nil || resp.Rcode == dns.RcodeNameError {
+		return nil, errors.New("name does not exist")
+	}
+	if resp.Rcode == dns.RcodeSuccess && len(resp.Answer) == 0 {
+		return nil, errors.New("zero answers returned")
+	}
+	for attempts := 1; attempts < 50 && resp.Rcode != dns.RcodeSuccess; attempts++ {
+		resp, err = r.enum.Sys.Resolvers().QueryBlocking(ctx, msg)
+		// Check if the response indicates that the name does not exist
+		if err != nil || resp.Rcode == dns.RcodeNameError {
+			return nil, errors.New("name does not exist")
+		}
+		if resp.Rcode == dns.RcodeSuccess && len(resp.Answer) == 0 {
+			return nil, errors.New("zero answers returned")
+		}
+	}
+	if resp.Rcode != dns.RcodeSuccess {
+		return nil, errors.New("query failed")
+	}
+	return resp, nil
 }
 
 func (r *subdomainTask) timesForSubdomain(sub string) int {

@@ -12,20 +12,22 @@ import (
 	amassnet "github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/net/http"
 	"github.com/OWASP/Amass/v3/requests"
-	"github.com/caffix/eventbus"
-	"github.com/caffix/service"
+	"github.com/OWASP/Amass/v3/systems"
 	bf "github.com/tylertreat/BoomFilters"
 	lua "github.com/yuin/gopher-lua"
 )
 
-func genNewNameEvent(ctx context.Context, srv service.Service, name string) {
-	if cfg, bus, err := requests.ContextConfigBus(ctx); err == nil {
-		if domain := cfg.WhichDomain(name); domain != "" {
-			bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
+func genNewName(ctx context.Context, sys systems.System, script *Script, name string) {
+	if domain := sys.Config().WhichDomain(name); domain != "" {
+		select {
+		case <-ctx.Done():
+		case <-script.Done():
+		default:
+			script.queue.Append(&requests.DNSRequest{
 				Name:   name,
 				Domain: domain,
-				Tag:    srv.Description(),
-				Source: srv.String(),
+				Tag:    script.Description(),
+				Source: script.String(),
 			})
 		}
 	}
@@ -33,10 +35,10 @@ func genNewNameEvent(ctx context.Context, srv service.Service, name string) {
 
 // Wrapper so that scripts can send a discovered FQDN to Amass.
 func (s *Script) newName(L *lua.LState) int {
-	if ctx, err := extractContext(L.CheckUserData(1)); err == nil {
+	if ctx, err := extractContext(L.CheckUserData(1)); err == nil && !contextExpired(ctx) {
 		if n := L.CheckString(2); n != "" {
 			if name := s.subre.FindString(n); name != "" {
-				genNewNameEvent(ctx, s, name)
+				genNewName(ctx, s.sys, s, name)
 			}
 		}
 	}
@@ -47,7 +49,7 @@ func (s *Script) newName(L *lua.LState) int {
 func (s *Script) sendNames(L *lua.LState) int {
 	var num int
 
-	if ctx, err := extractContext(L.CheckUserData(1)); err == nil {
+	if ctx, err := extractContext(L.CheckUserData(1)); err == nil && !contextExpired(ctx) {
 		if content := L.CheckString(2); content != "" {
 			num = s.internalSendNames(ctx, content)
 		}
@@ -58,17 +60,16 @@ func (s *Script) sendNames(L *lua.LState) int {
 }
 
 func (s *Script) internalSendNames(ctx context.Context, content string) int {
-	filter := bf.NewDefaultStableBloomFilter(10000, 0.01)
+	filter := bf.NewDefaultStableBloomFilter(1000, 0.01)
 	defer filter.Reset()
 
 	var count int
 	for _, name := range s.subre.FindAllString(string(content), -1) {
 		if n := http.CleanName(name); n != "" && !filter.TestAndAdd([]byte(n)) {
-			genNewNameEvent(ctx, s, n)
+			genNewName(ctx, s.sys, s, n)
 			count++
 		}
 	}
-
 	return count
 }
 
@@ -82,30 +83,29 @@ func (s *Script) newAddr(L *lua.LState) int {
 	if reserved, _ := amassnet.IsReservedAddress(ip.String()); reserved {
 		return 0
 	}
-
-	if ctx, err := extractContext(L.CheckUserData(1)); err == nil {
-		cfg, bus, err := requests.ContextConfigBus(ctx)
-
+	if ctx, err := extractContext(L.CheckUserData(1)); err == nil && !contextExpired(ctx) {
 		if name := L.CheckString(3); err == nil && name != "" {
-			if domain := cfg.WhichDomain(name); domain != "" {
-				bus.Publish(requests.NewAddrTopic, eventbus.PriorityHigh, &requests.AddrRequest{
-					Address: ip.String(),
-					Domain:  domain,
-					Tag:     s.SourceType,
-					Source:  s.String(),
-				})
+			if domain := s.sys.Config().WhichDomain(name); domain != "" {
+				select {
+				case <-ctx.Done():
+				case <-s.Done():
+				default:
+					s.queue.Append(&requests.AddrRequest{
+						Address: ip.String(),
+						Domain:  domain,
+						Tag:     s.SourceType,
+						Source:  s.String(),
+					})
+				}
 			}
 		}
 	}
-
 	return 0
 }
 
 // Wrapper so that scripts can send discovered ASNs to Amass.
 func (s *Script) newASN(L *lua.LState) int {
-	if ctx, err := extractContext(L.CheckUserData(1)); err == nil {
-		_, bus, err := requests.ContextConfigBus(ctx)
-
+	if ctx, err := extractContext(L.CheckUserData(1)); err == nil && !contextExpired(ctx) {
 		if params := L.CheckTable(2); err == nil && params != nil {
 			addr, _ := getStringField(L, params, "addr")
 			ip := net.ParseIP(addr)
@@ -142,7 +142,7 @@ func (s *Script) newASN(L *lua.LState) int {
 
 			cc, _ := getStringField(L, params, "cc")
 			registry, _ := getStringField(L, params, "registry")
-			bus.Publish(requests.NewASNTopic, eventbus.PriorityHigh, &requests.ASNRequest{
+			s.sys.Cache().Update(&requests.ASNRequest{
 				Address:        addr,
 				ASN:            int(asn),
 				Prefix:         prefix,
@@ -161,16 +161,19 @@ func (s *Script) newASN(L *lua.LState) int {
 
 // Wrapper so that scripts can send discovered associated domains to Amass.
 func (s *Script) associated(L *lua.LState) int {
-	if ctx, err := extractContext(L.CheckUserData(1)); err == nil {
-		_, bus, err := requests.ContextConfigBus(ctx)
-
+	if ctx, err := extractContext(L.CheckUserData(1)); err == nil && !contextExpired(ctx) {
 		if domain, assoc := L.CheckString(2), L.CheckString(3); err == nil && domain != "" && assoc != "" {
-			bus.Publish(requests.NewWhoisTopic, eventbus.PriorityHigh, &requests.WhoisRequest{
-				Domain:     domain,
-				NewDomains: []string{assoc},
-				Tag:        s.SourceType,
-				Source:     s.String(),
-			})
+			select {
+			case <-ctx.Done():
+			case <-s.Done():
+			default:
+				s.queue.Append(&requests.WhoisRequest{
+					Domain:     domain,
+					NewDomains: []string{assoc},
+					Tag:        s.SourceType,
+					Source:     s.String(),
+				})
+			}
 		}
 	}
 	return 0

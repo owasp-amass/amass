@@ -6,11 +6,8 @@ package enum
 
 import (
 	"context"
-	"fmt"
-	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	amassdns "github.com/OWASP/Amass/v3/net/dns"
 	"github.com/OWASP/Amass/v3/requests"
@@ -22,139 +19,25 @@ import (
 
 const maxDNSQueryAttempts int = 10
 
-type fwdElement struct {
-	Ctx      context.Context
-	Req      *requests.DNSRequest
-	Msg      *dns.Msg
-	Attempts int
-	Tp       pipeline.TaskParams
-	Trusted  bool
-}
-
-type revElement struct {
-	Ctx      context.Context
-	Req      *requests.AddrRequest
-	Msg      *dns.Msg
-	Attempts int
-	Tp       pipeline.TaskParams
-	Trusted  bool
+// InitialQueryTypes include the DNS record types that are queried for a discovered name.
+var InitialQueryTypes = []uint16{
+	dns.TypeCNAME,
+	dns.TypeA,
+	dns.TypeAAAA,
 }
 
 // dnsTask is the task that handles all DNS name resolution requests within the pipeline.
 type dnsTask struct {
-	enum      *Enumeration
-	done      chan struct{}
-	countLock sync.Mutex
-	sentCount int
-	fwdLock   sync.Mutex
-	fwds      map[string]*fwdElement
-	fwdChan   chan *dns.Msg
-	revLock   sync.Mutex
-	revs      map[string]*revElement
-	revChan   chan *dns.Msg
-	max       int
+	enum *Enumeration
+	done chan struct{}
 }
 
 // newDNSTask returns a dNSTask specific to the provided Enumeration.
 func newDNSTask(e *Enumeration) *dnsTask {
-	dt := &dnsTask{
-		enum:    e,
-		done:    make(chan struct{}, 2),
-		fwds:    make(map[string]*fwdElement),
-		fwdChan: make(chan *dns.Msg, 1000),
-		revs:    make(map[string]*revElement),
-		revChan: make(chan *dns.Msg, 1000),
-		max:     e.Sys.Resolvers().QPS(),
+	return &dnsTask{
+		enum: e,
+		done: make(chan struct{}, 2),
 	}
-
-	go dt.processFwdResponses()
-	go dt.processRevResponses()
-	return dt
-}
-
-func (dt *dnsTask) getCount() int {
-	dt.countLock.Lock()
-	defer dt.countLock.Unlock()
-	return dt.sentCount
-}
-
-func (dt *dnsTask) incCount() {
-	dt.countLock.Lock()
-	defer dt.countLock.Unlock()
-	dt.sentCount++
-}
-
-func (dt *dnsTask) decCount() {
-	dt.countLock.Lock()
-	defer dt.countLock.Unlock()
-	dt.sentCount--
-}
-
-func fwdkey(name string, qtype uint16) string {
-	n := strings.ToLower(resolve.RemoveLastDot(name))
-	return fmt.Sprintf("%s%s", n, strconv.Itoa(int(qtype)))
-}
-
-func (dt *dnsTask) addFwdElement(f *fwdElement) bool {
-	dt.fwdLock.Lock()
-	defer dt.fwdLock.Unlock()
-
-	var success bool
-	key := fwdkey(f.Msg.Question[0].Name, f.Msg.Question[0].Qtype)
-	if _, found := dt.fwds[key]; !found {
-		dt.fwds[key] = f
-		success = true
-	}
-	return success
-}
-
-func (dt *dnsTask) getFwdElement(name string, qtype uint16) *fwdElement {
-	dt.fwdLock.Lock()
-	defer dt.fwdLock.Unlock()
-
-	return dt.fwds[fwdkey(name, qtype)]
-}
-
-func (dt *dnsTask) delFwdElement(name string, qtype uint16) {
-	dt.fwdLock.Lock()
-	defer dt.fwdLock.Unlock()
-
-	key := fwdkey(name, qtype)
-	dt.fwds[key] = nil
-	delete(dt.fwds, key)
-}
-
-func revkey(name string) string {
-	return strings.ToLower(resolve.RemoveLastDot(name))
-}
-
-func (dt *dnsTask) addRevElement(r *revElement) bool {
-	dt.revLock.Lock()
-	defer dt.revLock.Unlock()
-
-	var success bool
-	key := revkey(r.Msg.Question[0].Name)
-	if _, found := dt.revs[key]; !found {
-		dt.revs[key] = r
-		success = true
-	}
-	return success
-}
-
-func (dt *dnsTask) getRevElement(name string) *revElement {
-	dt.revLock.Lock()
-	defer dt.revLock.Unlock()
-
-	return dt.revs[revkey(name)]
-}
-
-func (dt *dnsTask) delRevElement(name string) {
-	dt.revLock.Lock()
-	defer dt.revLock.Unlock()
-
-	key := revkey(name)
-	dt.revs[key] = nil
-	delete(dt.revs, key)
 }
 
 func (dt *dnsTask) blacklistTaskFunc() pipeline.TaskFunc {
@@ -239,228 +122,167 @@ func (dt *dnsTask) Process(ctx context.Context, data pipeline.Data, tp pipeline.
 	default:
 	}
 
-	select {
-	case <-ctx.Done():
-		dt.waitForResponses()
-		close(dt.done)
-		return nil, nil
-	default:
-	}
-
-	for dt.getCount() >= dt.max {
-		time.Sleep(100 * time.Millisecond)
-	}
-
 	switch v := data.(type) {
 	case *requests.DNSRequest:
-		dt.processFwdRequest(ctx, v, tp)
+		return dt.processFwdRequest(ctx, v, tp)
 	case *requests.AddrRequest:
-		dt.processRevRequest(ctx, v, tp)
-		if v.InScope {
+		if dt.processRevRequest(ctx, v.Address, tp) || v.InScope {
 			return data, nil
 		}
+		return nil, nil
+	}
+	return data, nil
+}
+
+func (dt *dnsTask) processFwdRequest(ctx context.Context, req *requests.DNSRequest, tp pipeline.TaskParams) (pipeline.Data, error) {
+	if req == nil || !req.Valid() {
+		return nil, nil
+	}
+
+	var err error
+	var resp *dns.Msg
+loop:
+	for _, qtype := range InitialQueryTypes {
+		select {
+		case <-dt.done:
+			break loop
+		case <-ctx.Done():
+			break loop
+		default:
+		}
+
+		msg := resolve.QueryMsg(req.Name, qtype)
+		resp, err = dt.enum.Sys.Resolvers().QueryBlocking(ctx, msg)
+		// Check if the response indicates that the name does not exist
+		if err != nil || resp.Rcode == dns.RcodeNameError {
+			return nil, nil
+		}
+		if resp.Rcode == dns.RcodeSuccess && len(resp.Answer) == 0 && qtype == dns.TypeCNAME {
+			continue
+		}
+
+		// Was there another reason why the query failed?
+		for attempts := 1; attempts < maxDNSQueryAttempts && resp.Rcode != dns.RcodeSuccess; attempts++ {
+			resp, err = dt.enum.Sys.Resolvers().QueryBlocking(ctx, msg)
+			if err != nil {
+				break loop
+			}
+		}
+		if resp.Rcode != dns.RcodeSuccess {
+			continue
+		}
+
+		resp, err = dt.enum.Sys.TrustedResolvers().QueryBlocking(ctx, msg)
+		// Check if the response indicates that the name does not exist
+		if err != nil || resp.Rcode == dns.RcodeNameError {
+			return nil, nil
+		}
+		if resp.Rcode == dns.RcodeSuccess && len(resp.Answer) == 0 && qtype == dns.TypeCNAME {
+			continue
+		}
+		for attempts := 1; attempts < maxDNSQueryAttempts && resp.Rcode != dns.RcodeSuccess; attempts++ {
+			resp, err = dt.enum.Sys.Resolvers().QueryBlocking(ctx, msg)
+			// Check if the response indicates that the name does not exist
+			if err != nil || resp.Rcode == dns.RcodeNameError {
+				return nil, nil
+			}
+			if resp.Rcode == dns.RcodeSuccess && len(resp.Answer) == 0 && qtype == dns.TypeCNAME {
+				continue loop
+			}
+		}
+		if resp.Rcode != dns.RcodeSuccess {
+			continue
+		}
+
+		ans := resolve.ExtractAnswers(resp)
+		if len(ans) == 0 {
+			continue
+		}
+
+		rr := resolve.AnswersByType(ans, qtype)
+		if len(rr) == 0 {
+			continue
+		}
+
+		req.Records = append(req.Records, convertAnswers(rr)...)
+	}
+
+	if len(req.Records) > 0 && dt.wildcardFiltering(ctx, req, resp) {
+		return req, nil
 	}
 	return nil, nil
 }
 
-func (dt *dnsTask) waitForResponses() {
-	for dt.getCount() > 0 {
-		time.Sleep(100 * time.Millisecond)
-	}
-}
-
-func (dt *dnsTask) processFwdRequest(ctx context.Context, req *requests.DNSRequest, tp pipeline.TaskParams) {
-	if req != nil && req.Valid() {
-		dt.sendFwdQuery(ctx, req, dns.TypeCNAME, tp)
-	}
-}
-
-func (dt *dnsTask) sendFwdQuery(ctx context.Context, req *requests.DNSRequest, qtype uint16, tp pipeline.TaskParams) {
-	msg := resolve.QueryMsg(req.Name, qtype)
-	f := &fwdElement{
-		Ctx:      ctx,
-		Req:      req,
-		Msg:      msg,
-		Attempts: 1,
-		Tp:       tp,
-	}
-
-	if dt.addFwdElement(f) {
-		dt.incCount()
-		dt.enum.Sys.Resolvers().Query(ctx, msg, dt.fwdChan)
-	}
-}
-
-func (dt *dnsTask) processFwdResponses() {
-	for {
-		select {
-		case <-dt.done:
-			return
-		case msg := <-dt.fwdChan:
-			if e := dt.getFwdElement(msg.Question[0].Name, msg.Question[0].Qtype); e != nil && dt.handleFwdElement(e, msg) {
-				dt.delFwdElement(msg.Question[0].Name, msg.Question[0].Qtype)
-				dt.decCount()
-			}
-		}
-	}
-}
-
-func (dt *dnsTask) handleFwdElement(f *fwdElement, resp *dns.Msg) bool {
-	select {
-	case <-f.Ctx.Done():
-		return true
-	default:
-	}
-	// Check if the response indicates that the name does not exist
-	if resp.Rcode == dns.RcodeNameError {
-		return true
-	}
-
-	qtype := resp.Question[0].Qtype
-	if resp.Rcode == dns.RcodeSuccess && len(resp.Answer) == 0 && qtype == dns.TypeCNAME {
-		dt.sendFwdQuery(f.Ctx, f.Req, dns.TypeA, f.Tp)
-		dt.sendFwdQuery(f.Ctx, f.Req, dns.TypeAAAA, f.Tp)
-		return true
-	}
-	// Was there another reason why the query failed?
-	if resp.Rcode != dns.RcodeSuccess {
-		// Should the query be sent again?
-		if f.Attempts < maxDNSQueryAttempts {
-			f.Attempts++
-			if f.Trusted {
-				dt.enum.Sys.TrustedResolvers().Query(f.Ctx, f.Msg, dt.fwdChan)
-			} else {
-				dt.enum.Sys.Resolvers().Query(f.Ctx, f.Msg, dt.fwdChan)
-			}
-			return false
-		}
-		return true
-	}
-
-	ans := resolve.ExtractAnswers(resp)
-	if len(ans) == 0 {
-		return true
-	}
-
-	rr := resolve.AnswersByType(ans, qtype)
-	if len(rr) == 0 {
-		return true
-	}
-
-	if !f.Trusted {
-		f.Trusted = true
-		f.Attempts = 1
-		dt.enum.Sys.TrustedResolvers().Query(f.Ctx, f.Msg, dt.fwdChan)
+func (dt *dnsTask) wildcardFiltering(ctx context.Context, req *requests.DNSRequest, resp *dns.Msg) bool {
+	if !requests.TrustedTag(req.Tag) && dt.enum.Sys.TrustedResolvers().WildcardDetected(ctx, resp, req.Domain) {
 		return false
-	}
-
-	f.Req.Records = append(f.Req.Records, convertAnswers(rr)...)
-	if len(f.Req.Records) > 0 {
-		go dt.wildcardFiltering(f.Ctx, f.Req, resp, f.Tp)
 	}
 	return true
 }
 
-func (dt *dnsTask) wildcardFiltering(ctx context.Context, req *requests.DNSRequest, resp *dns.Msg, tp pipeline.TaskParams) {
-	if !requests.TrustedTag(req.Tag) && dt.enum.Sys.TrustedResolvers().WildcardDetected(ctx, resp, req.Domain) {
-		return
-	}
-	pipeline.SendData(ctx, "filter", req, tp)
-}
-
-func (dt *dnsTask) processRevRequest(ctx context.Context, req *requests.AddrRequest, tp pipeline.TaskParams) {
-	if req != nil {
-		dt.sendRevQuery(ctx, req, tp)
-	}
-}
-
-func (dt *dnsTask) sendRevQuery(ctx context.Context, req *requests.AddrRequest, tp pipeline.TaskParams) {
-	msg := resolve.ReverseMsg(req.Address)
-	if msg == nil {
-		return
-	}
-
-	r := &revElement{
-		Ctx:      ctx,
-		Req:      req,
-		Msg:      msg,
-		Attempts: 1,
-		Tp:       tp,
-	}
-
-	if dt.addRevElement(r) {
-		dt.incCount()
-		dt.enum.Sys.Resolvers().Query(ctx, msg, dt.revChan)
-	}
-}
-
-func (dt *dnsTask) processRevResponses() {
-	for {
-		select {
-		case <-dt.done:
-			return
-		case msg := <-dt.revChan:
-			if e := dt.getRevElement(msg.Question[0].Name); e != nil && dt.handleRevElement(e, msg) {
-				dt.delRevElement(msg.Question[0].Name)
-				dt.decCount()
-			}
-		}
-	}
-}
-
-func (dt *dnsTask) handleRevElement(r *revElement, resp *dns.Msg) bool {
+func (dt *dnsTask) processRevRequest(ctx context.Context, addr string, tp pipeline.TaskParams) bool {
 	select {
-	case <-r.Ctx.Done():
-		return true
+	case <-ctx.Done():
+		return false
 	default:
 	}
-	// Check if the response indicates that the name does not exist
-	if resp.Rcode == dns.RcodeNameError {
-		return true
+
+	msg := resolve.ReverseMsg(addr)
+	if msg == nil {
+		return false
+	}
+
+	resp, err := dt.enum.Sys.Resolvers().QueryBlocking(ctx, msg)
+	if err != nil || resp.Rcode == dns.RcodeNameError {
+		return false
 	}
 	// Was there another reason why the query failed?
-	if resp.Rcode != dns.RcodeSuccess {
-		// Should the query be sent again?
-		if r.Attempts < maxDNSQueryAttempts {
-			r.Attempts++
-			if r.Trusted {
-				dt.enum.Sys.TrustedResolvers().Query(r.Ctx, r.Msg, dt.revChan)
-			} else {
-				dt.enum.Sys.Resolvers().Query(r.Ctx, r.Msg, dt.revChan)
-			}
+	for attempts := 1; attempts < maxDNSQueryAttempts && resp.Rcode != dns.RcodeSuccess; attempts++ {
+		resp, err = dt.enum.Sys.Resolvers().QueryBlocking(ctx, msg)
+		if err != nil {
 			return false
 		}
-		return true
+	}
+	if resp.Rcode != dns.RcodeSuccess {
+		return false
+	}
+
+	resp, err = dt.enum.Sys.TrustedResolvers().QueryBlocking(ctx, msg)
+	if err != nil || resp.Rcode == dns.RcodeNameError {
+		return false
+	}
+	// Was there another reason why the query failed?
+	for attempts := 1; attempts < maxDNSQueryAttempts && resp.Rcode != dns.RcodeSuccess; attempts++ {
+		resp, err = dt.enum.Sys.TrustedResolvers().QueryBlocking(ctx, msg)
+		if err != nil {
+			return false
+		}
+	}
+	if resp.Rcode != dns.RcodeSuccess {
+		return false
 	}
 
 	ans := resolve.ExtractAnswers(resp)
 	if len(ans) == 0 {
-		return true
+		return false
 	}
 
 	rr := resolve.AnswersByType(ans, dns.TypePTR)
 	if len(rr) == 0 {
-		return true
-	}
-
-	if !r.Trusted {
-		r.Trusted = true
-		r.Attempts = 1
-		dt.enum.Sys.TrustedResolvers().Query(r.Ctx, r.Msg, dt.revChan)
 		return false
 	}
 
 	answer := strings.ToLower(resolve.RemoveLastDot(rr[0].Data))
 	if amassdns.RemoveAsteriskLabel(answer) != answer {
-		return true
+		return false
 	}
 	// Check that the name discovered is in scope
 	d := dt.enum.Config.WhichDomain(answer)
 	if d == "" {
-		return true
+		return false
 	}
 	if re := dt.enum.Config.DomainRegex(d); re == nil || re.FindString(answer) != answer {
-		return true
+		return false
 	}
 
 	ptr := strings.ToLower(resolve.RemoveLastDot(rr[0].Name))
@@ -469,7 +291,7 @@ func (dt *dnsTask) handleRevElement(r *revElement, resp *dns.Msg) bool {
 		return true
 	}
 
-	pipeline.SendData(r.Ctx, "filter", &requests.DNSRequest{
+	pipeline.SendData(ctx, "filter", &requests.DNSRequest{
 		Name:   ptr,
 		Domain: domain,
 		Records: []requests.DNSAnswer{{
@@ -479,7 +301,7 @@ func (dt *dnsTask) handleRevElement(r *revElement, resp *dns.Msg) bool {
 		}},
 		Tag:    requests.DNS,
 		Source: "Reverse DNS",
-	}, r.Tp)
+	}, tp)
 	return true
 }
 

@@ -1,5 +1,6 @@
-// Copyright 2017-2021 Jeff Foley. All rights reserved.
+// Copyright © by Jeff Foley 2017-2022. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
 
 package datasrcs
 
@@ -15,7 +16,6 @@ import (
 	"github.com/OWASP/Amass/v3/net/http"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/systems"
-	"github.com/caffix/eventbus"
 	"github.com/caffix/service"
 	"github.com/caffix/stringset"
 )
@@ -36,6 +36,7 @@ func NewDNSDB(sys systems.System) *DNSDB {
 		sys:        sys,
 	}
 
+	go d.requests()
 	d.BaseService = *service.NewBaseService(d, "DNSDB")
 	return d
 }
@@ -69,21 +70,23 @@ func (d *DNSDB) checkConfig() error {
 	return nil
 }
 
-// OnRequest implements the Service interface.
-func (d *DNSDB) OnRequest(ctx context.Context, args service.Args) {
-	if req, ok := args.(*requests.DNSRequest); ok {
-		d.dnsRequest(ctx, req)
-		d.CheckRateLimit()
+func (d *DNSDB) requests() {
+	for {
+		select {
+		case <-d.Done():
+			return
+		case in := <-d.Input():
+			switch req := in.(type) {
+			case *requests.DNSRequest:
+				d.CheckRateLimit()
+				d.dnsRequest(context.TODO(), req)
+			}
+		}
 	}
 }
 
 func (d *DNSDB) dnsRequest(ctx context.Context, req *requests.DNSRequest) {
-	cfg, bus, err := requests.ContextConfigBus(ctx)
-	if err != nil {
-		return
-	}
-
-	if !cfg.IsDomainInScope(req.Domain) {
+	if !d.sys.Config().IsDomainInScope(req.Domain) {
 		return
 	}
 
@@ -92,8 +95,7 @@ func (d *DNSDB) dnsRequest(ctx context.Context, req *requests.DNSRequest) {
 	}
 
 	numRateLimitChecks(d, 120)
-	bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
-		fmt.Sprintf("Querying %s for %s subdomains", d.String(), req.Domain))
+	d.sys.Config().Log.Printf("Querying %s for %s subdomains", d.String(), req.Domain)
 
 	headers := map[string]string{
 		"X-API-Key":    d.creds.Key,
@@ -104,7 +106,7 @@ func (d *DNSDB) dnsRequest(ctx context.Context, req *requests.DNSRequest) {
 	url := d.getURL(req.Domain)
 	page, err := http.RequestWebPage(ctx, url, nil, headers, nil)
 	if err != nil {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", d.String(), url, err))
+		d.sys.Config().Log.Printf("%s: %s: %v", d.String(), url, err)
 		return
 	}
 
@@ -118,12 +120,7 @@ func (d *DNSDB) getURL(domain string) string {
 }
 
 func (d *DNSDB) parse(ctx context.Context, page, domain string) []string {
-	cfg, _, err := requests.ContextConfigBus(ctx)
-	if err != nil {
-		return []string{}
-	}
-
-	re := cfg.DomainRegex(domain)
+	re := d.sys.Config().DomainRegex(domain)
 	if re == nil {
 		return []string{}
 	}
@@ -150,6 +147,5 @@ func (d *DNSDB) parse(ctx context.Context, page, domain string) []string {
 			unique.Insert(j.Name)
 		}
 	}
-
 	return unique.Slice()
 }

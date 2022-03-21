@@ -192,7 +192,6 @@ func (l *LocalSystem) Shutdown() error {
 
 	wg.Wait()
 	close(l.done)
-
 	for _, g := range l.GraphDatabases() {
 		g.Close()
 	}

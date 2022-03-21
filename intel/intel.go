@@ -17,7 +17,6 @@ import (
 	amassnet "github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/systems"
-	eb "github.com/caffix/eventbus"
 	"github.com/caffix/pipeline"
 	"github.com/caffix/resolve"
 	"github.com/caffix/service"
@@ -35,7 +34,6 @@ const (
 type Collection struct {
 	sync.Mutex
 	Config            *config.Config
-	Bus               *eb.EventBus
 	Sys               systems.System
 	ctx               context.Context
 	srcs              []service.Service
@@ -50,7 +48,6 @@ type Collection struct {
 func NewCollection(cfg *config.Config, sys systems.System) *Collection {
 	return &Collection{
 		Config:   cfg,
-		Bus:      eb.NewEventBus(),
 		Sys:      sys,
 		srcs:     datasrcs.SelectedDataSources(cfg, sys.DataSources()),
 		Output:   make(chan *requests.Output, 100),
@@ -81,10 +78,7 @@ func (c *Collection) HostedDomains(ctx context.Context) error {
 
 	// Setup the context used throughout the collection
 	var cancel context.CancelFunc
-	ctx, cancel = context.WithCancel(ctx)
-	ctx = context.WithValue(ctx, requests.ContextConfig, c.Config)
-	ctx = context.WithValue(ctx, requests.ContextEventBus, c.Bus)
-	c.ctx = ctx
+	c.ctx, cancel = context.WithCancel(ctx)
 	defer cancel()
 
 	go func() {
@@ -242,17 +236,23 @@ func (c *Collection) ReverseWhois() error {
 		return err
 	}
 
-	c.Bus.Subscribe(requests.NewWhoisTopic, c.collect)
-	defer c.Bus.Unsubscribe(requests.NewWhoisTopic, c.collect)
-
-	// Setup the context used throughout the collection
-	ctx := context.WithValue(context.Background(), requests.ContextConfig, c.Config)
-	c.ctx = context.WithValue(ctx, requests.ContextEventBus, c.Bus)
-
+	go func() {
+		for {
+			for _, src := range c.srcs {
+				select {
+				case req := <-src.Output():
+					if w, ok := req.(*requests.WhoisRequest); ok {
+						c.collect(w)
+					}
+				default:
+				}
+			}
+		}
+	}()
 	// Send the whois requests to the data sources
 	for _, src := range c.srcs {
 		for _, domain := range c.Config.Domains() {
-			src.Request(c.ctx, &requests.WhoisRequest{Domain: domain})
+			src.Input() <- &requests.WhoisRequest{Domain: domain}
 		}
 	}
 

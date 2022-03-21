@@ -25,12 +25,11 @@ func init() {
 }
 
 // ExtractOutput is a convenience method for obtaining new discoveries made by the enumeration process.
-func ExtractOutput(ctx context.Context, e *enum.Enumeration, filter *bf.StableBloomFilter, asinfo bool, limit int) []*requests.Output {
+func ExtractOutput(ctx context.Context, g *netmap.Graph, e *enum.Enumeration, filter *bf.StableBloomFilter, asinfo bool, limit int) []*requests.Output {
 	if e.Config.Passive {
-		return EventNames(ctx, e.Sys.GraphDatabases()[0], e.Config.UUID.String(), filter)
+		return EventNames(ctx, g, e.Config.UUID.String(), filter)
 	}
-
-	return EventOutput(ctx, e.Sys.GraphDatabases()[0], e.Config.UUID.String(), filter, asinfo, e.Sys.Cache(), limit)
+	return EventOutput(ctx, g, e.Config.UUID.String(), filter, asinfo, e.Sys.Cache(), limit)
 }
 
 type outLookup map[string]*requests.Output

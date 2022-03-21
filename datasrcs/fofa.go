@@ -1,5 +1,6 @@
-// Copyright 2021 Jeff Foley. All rights reserved.
+// Copyright © by Jeff Foley 2021-2022. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
 
 package datasrcs
 
@@ -11,7 +12,6 @@ import (
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/systems"
-	"github.com/caffix/eventbus"
 	"github.com/caffix/service"
 	"github.com/fofapro/fofa-go/fofa"
 )
@@ -32,6 +32,7 @@ func NewFOFA(sys systems.System) *FOFA {
 		sys:        sys,
 	}
 
+	go f.requests()
 	f.BaseService = *service.NewBaseService(f, "FOFA")
 	return f
 }
@@ -56,41 +57,42 @@ func (f *FOFA) OnStart() error {
 	return nil
 }
 
-// OnRequest implements the Service interface.
-func (f *FOFA) OnRequest(ctx context.Context, args service.Args) {
-	if req, ok := args.(*requests.DNSRequest); ok {
-		f.dnsRequest(ctx, req)
-		f.CheckRateLimit()
+func (f *FOFA) requests() {
+	for {
+		select {
+		case <-f.Done():
+			return
+		case in := <-f.Input():
+			switch req := in.(type) {
+			case *requests.DNSRequest:
+				f.CheckRateLimit()
+				f.dnsRequest(context.TODO(), req)
+			}
+		}
 	}
 }
 
 func (f *FOFA) dnsRequest(ctx context.Context, req *requests.DNSRequest) {
-	cfg, bus, err := requests.ContextConfigBus(ctx)
-	if err != nil {
-		return
-	}
-
 	if f.creds == nil || f.creds.Username == "" || f.creds.Key == "" {
 		return
 	}
 
-	if !cfg.IsDomainInScope(req.Domain) {
+	if !f.sys.Config().IsDomainInScope(req.Domain) {
 		return
 	}
 
-	bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
-		fmt.Sprintf("Querying %s for %s subdomains", f.String(), req.Domain))
+	f.sys.Config().Log.Printf("Querying %s for %s subdomains", f.String(), req.Domain)
 
 	client := fofa.NewFofaClient([]byte(f.creds.Username), []byte(f.creds.Key))
 	if client == nil {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: Failed to create FOFA client", f.String()))
+		f.sys.Config().Log.Printf("%s: Failed to create FOFA client", f.String())
 		return
 	}
 
 	for i := 1; i <= 10; i++ {
 		results, err := client.QueryAsArray(uint(i), []byte(fmt.Sprintf("domain=\"%s\"", req.Domain)), []byte("domain"))
 		if err != nil {
-			bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %v", f.String(), err))
+			f.sys.Config().Log.Printf("%s: %v", f.String(), err)
 			return
 		}
 		if len(results) == 0 {
@@ -100,7 +102,6 @@ func (f *FOFA) dnsRequest(ctx context.Context, req *requests.DNSRequest) {
 		for _, res := range results {
 			genNewNameEvent(ctx, f.sys, f, res.Domain)
 		}
-
 		f.CheckRateLimit()
 	}
 }

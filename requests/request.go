@@ -1,18 +1,15 @@
-// Copyright 2017-2021 Jeff Foley. All rights reserved.
+// Copyright © by Jeff Foley 2017-2022. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
 
 package requests
 
 import (
-	"context"
-	"errors"
 	"net"
 	"strings"
 	"time"
 
-	"github.com/OWASP/Amass/v3/config"
 	amassdns "github.com/OWASP/Amass/v3/net/dns"
-	"github.com/caffix/eventbus"
 	"github.com/caffix/pipeline"
 	"github.com/miekg/dns"
 )
@@ -34,15 +31,6 @@ const (
 	SCRAPE   = "scrape"
 )
 
-// ContextKey is the type used for context value keys.
-type ContextKey int
-
-// The key used when values are obtained during service requests.
-const (
-	ContextConfig ContextKey = iota
-	ContextEventBus
-)
-
 // Request Pub/Sub topics used across Amass.
 const (
 	NewNameTopic       = "amass:newname"
@@ -55,33 +43,6 @@ const (
 	LogTopic           = "amass:log"
 	OutputTopic        = "amass:output"
 )
-
-// ContextConfigBus extracts the Config and EventBus references from the Context argument.
-func ContextConfigBus(ctx context.Context) (*config.Config, *eventbus.EventBus, error) {
-	var ok bool
-	var cfg *config.Config
-
-	if c := ctx.Value(ContextConfig); c != nil {
-		cfg, ok = c.(*config.Config)
-		if !ok {
-			return nil, nil, errors.New("Failed to extract the configuration from the context")
-		}
-	} else {
-		return nil, nil, errors.New("Failed to extract the configuration from the context")
-	}
-
-	var bus *eventbus.EventBus
-	if b := ctx.Value(ContextEventBus); b != nil {
-		bus, ok = b.(*eventbus.EventBus)
-		if !ok {
-			return nil, nil, errors.New("Failed to extract the event bus from the context")
-		}
-	} else {
-		return nil, nil, errors.New("Failed to extract the event bus from the context")
-	}
-
-	return cfg, bus, nil
-}
 
 // DNSAnswer is the type used by Amass to represent a DNS record.
 type DNSAnswer struct {

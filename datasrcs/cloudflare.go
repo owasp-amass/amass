@@ -1,16 +1,15 @@
-// Copyright 2017-2021 Jeff Foley. All rights reserved.
+// Copyright © by Jeff Foley 2017-2022. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
 
 package datasrcs
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/systems"
-	"github.com/caffix/eventbus"
 	"github.com/caffix/service"
 	"github.com/cloudflare/cloudflare-go"
 )
@@ -31,6 +30,7 @@ func NewCloudflare(sys systems.System) *Cloudflare {
 		sys:        sys,
 	}
 
+	go c.requests()
 	c.BaseService = *service.NewBaseService(c, "Cloudflare")
 	return c
 }
@@ -52,64 +52,65 @@ func (c *Cloudflare) OnStart() error {
 	return nil
 }
 
-// OnRequest implements the Service interface.
-func (c *Cloudflare) OnRequest(ctx context.Context, args service.Args) {
-	if req, ok := args.(*requests.DNSRequest); ok {
-		c.dnsRequest(ctx, req)
-		c.CheckRateLimit()
+func (c *Cloudflare) requests() {
+	for {
+		select {
+		case <-c.Done():
+			return
+		case in := <-c.Input():
+			switch req := in.(type) {
+			case *requests.DNSRequest:
+				c.CheckRateLimit()
+				c.dnsRequest(context.TODO(), req)
+			}
+		}
 	}
 }
 
 func (c *Cloudflare) dnsRequest(ctx context.Context, req *requests.DNSRequest) {
-	cfg, bus, err := requests.ContextConfigBus(ctx)
-	if err != nil {
-		return
-	}
-
 	if c.creds == nil || c.creds.Key == "" {
 		return
 	}
 
-	if !cfg.IsDomainInScope(req.Domain) {
+	if !c.sys.Config().IsDomainInScope(req.Domain) {
 		return
 	}
 
-	bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
-		fmt.Sprintf("Querying %s for %s subdomains", c.String(), req.Domain))
+	c.sys.Config().Log.Printf("Querying %s for %s subdomains", c.String(), req.Domain)
 
 	api, err := cloudflare.NewWithAPIToken(c.creds.Key)
 	if err != nil {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %v", c.String(), err))
+		c.sys.Config().Log.Printf("%s: %v", c.String(), err)
 	}
 
 	zones, err := api.ListZones(ctx, req.Domain)
 	if err != nil {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %v", c.String(), err))
+		c.sys.Config().Log.Printf("%s: %v", c.String(), err)
 	}
 
 	for _, zone := range zones {
 		records, err := api.DNSRecords(ctx, zone.ID, cloudflare.DNSRecord{})
 		if err != nil {
-			bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %v", c.String(), err))
+			c.sys.Config().Log.Printf("%s: %v", c.String(), err)
 		}
 
 		for _, record := range records {
-			if d := cfg.WhichDomain(record.Name); d != "" {
-				bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
+			if d := c.sys.Config().WhichDomain(record.Name); d != "" {
+				c.Output() <- &requests.DNSRequest{
 					Name:   record.Name,
 					Domain: req.Domain,
 					Tag:    c.SourceType,
 					Source: c.String(),
-				})
+				}
 			}
 			if record.Type == "CNAME" {
-				if d := cfg.WhichDomain(record.Content); d != "" {
-					bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
+				if d := c.sys.Config().WhichDomain(record.Content); d != "" {
+					c.Output() <- &requests.DNSRequest{
 						Name:   record.Content,
 						Domain: req.Domain,
 						Tag:    c.SourceType,
 						Source: c.String(),
-					})
+					}
 				}
 			}
 		}

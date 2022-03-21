@@ -1,5 +1,6 @@
-// Copyright 2017-2021 Jeff Foley. All rights reserved.
+// Copyright © by Jeff Foley 2017-2022. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
 
 package datasrcs
 
@@ -16,7 +17,6 @@ import (
 	"github.com/OWASP/Amass/v3/net/http"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/systems"
-	"github.com/caffix/eventbus"
 	"github.com/caffix/resolve"
 	"github.com/caffix/service"
 	"github.com/caffix/stringset"
@@ -38,6 +38,7 @@ func NewUmbrella(sys systems.System) *Umbrella {
 		sys:        sys,
 	}
 
+	go u.requests()
 	u.BaseService = *service.NewBaseService(u, "Umbrella")
 	return u
 }
@@ -72,48 +73,45 @@ func (u *Umbrella) checkConfig() error {
 	return nil
 }
 
-// OnRequest implements the Service interface.
-func (u *Umbrella) OnRequest(ctx context.Context, args service.Args) {
-	check := true
-
-	switch req := args.(type) {
-	case *requests.DNSRequest:
-		u.dnsRequest(ctx, req)
-	case *requests.AddrRequest:
-		u.addrRequest(ctx, req)
-	case *requests.ASNRequest:
-		u.asnRequest(ctx, req)
-	case *requests.WhoisRequest:
-		u.whoisRequest(ctx, req)
-	default:
-		check = false
-	}
-
-	if check {
-		u.CheckRateLimit()
+func (u *Umbrella) requests() {
+	for {
+		select {
+		case <-u.Done():
+			return
+		case in := <-u.Input():
+			switch req := in.(type) {
+			case *requests.DNSRequest:
+				u.CheckRateLimit()
+				u.dnsRequest(context.TODO(), req)
+			case *requests.AddrRequest:
+				u.CheckRateLimit()
+				u.addrRequest(context.TODO(), req)
+			case *requests.ASNRequest:
+				u.CheckRateLimit()
+				u.asnRequest(context.TODO(), req)
+			case *requests.WhoisRequest:
+				u.CheckRateLimit()
+				u.whoisRequest(context.TODO(), req)
+			}
+		}
 	}
 }
 
 func (u *Umbrella) dnsRequest(ctx context.Context, req *requests.DNSRequest) {
-	cfg, bus, err := requests.ContextConfigBus(ctx)
-	if err != nil {
-		return
-	}
 	if u.creds == nil || u.creds.Key == "" {
 		return
 	}
-	if !cfg.IsDomainInScope(req.Domain) {
+	if !u.sys.Config().IsDomainInScope(req.Domain) {
 		return
 	}
 
-	bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
-		fmt.Sprintf("Querying %s for %s subdomains", u.String(), req.Domain))
+	u.sys.Config().Log.Printf("Querying %s for %s subdomains", u.String(), req.Domain)
 
 	headers := u.restHeaders()
 	url := u.restDNSURL(req.Domain)
 	page, err := http.RequestWebPage(ctx, url, nil, headers, nil)
 	if err != nil {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", u.String(), url, err))
+		u.sys.Config().Log.Printf("%s: %s: %v", u.String(), url, err)
 		return
 	}
 	// Extract the subdomain names from the REST API results
@@ -125,17 +123,12 @@ func (u *Umbrella) dnsRequest(ctx context.Context, req *requests.DNSRequest) {
 	if err := json.Unmarshal([]byte(page), &subs); err != nil {
 		return
 	}
-
 	for _, m := range subs.Matches {
 		genNewNameEvent(ctx, u.sys, u, m.Name)
 	}
 }
 
 func (u *Umbrella) addrRequest(ctx context.Context, req *requests.AddrRequest) {
-	_, bus, err := requests.ContextConfigBus(ctx)
-	if err != nil {
-		return
-	}
 	if u.creds == nil || u.creds.Key == "" {
 		return
 	}
@@ -147,7 +140,7 @@ func (u *Umbrella) addrRequest(ctx context.Context, req *requests.AddrRequest) {
 	url := u.restAddrURL(req.Address)
 	page, err := http.RequestWebPage(ctx, url, nil, headers, nil)
 	if err != nil {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", u.String(), url, err))
+		u.sys.Config().Log.Printf("%s: %s: %v", u.String(), url, err)
 		return
 	}
 	// Extract the subdomain names from the REST API results
@@ -174,7 +167,6 @@ func (u *Umbrella) asnRequest(ctx context.Context, req *requests.ASNRequest) {
 	if req.Address == "" && req.ASN == 0 {
 		return
 	}
-
 	if req.Address != "" {
 		u.executeASNAddrQuery(ctx, req)
 		return
@@ -183,16 +175,11 @@ func (u *Umbrella) asnRequest(ctx context.Context, req *requests.ASNRequest) {
 }
 
 func (u *Umbrella) executeASNAddrQuery(ctx context.Context, req *requests.ASNRequest) {
-	_, bus, err := requests.ContextConfigBus(ctx)
-	if err != nil {
-		return
-	}
-
 	headers := u.restHeaders()
 	url := u.restAddrToASNURL(req.Address)
 	page, err := http.RequestWebPage(ctx, url, nil, headers, nil)
 	if err != nil {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", u.String(), url, err))
+		u.sys.Config().Log.Printf("%s: %s: %v", u.String(), url, err)
 		return
 	}
 	// Extract the AS information from the REST API results
@@ -241,20 +228,16 @@ func (u *Umbrella) executeASNAddrQuery(ctx context.Context, req *requests.ASNReq
 		u.CheckRateLimit()
 		u.executeASNQuery(ctx, req)
 	}
-	bus.Publish(requests.NewASNTopic, eventbus.PriorityHigh, req)
+
+	u.sys.Cache().Update(req)
 }
 
 func (u *Umbrella) executeASNQuery(ctx context.Context, req *requests.ASNRequest) {
-	_, bus, err := requests.ContextConfigBus(ctx)
-	if err != nil {
-		return
-	}
-
 	headers := u.restHeaders()
 	url := u.restASNToCIDRsURL(req.ASN)
 	page, err := http.RequestWebPage(ctx, url, nil, headers, nil)
 	if err != nil {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", u.String(), url, err))
+		u.sys.Config().Log.Printf("%s: %s: %v", u.String(), url, err)
 		return
 	}
 	// Extract the netblock information from the REST API results
@@ -345,11 +328,6 @@ func (u *Umbrella) collateEmails(ctx context.Context, record *whoisRecord) []str
 }
 
 func (u *Umbrella) queryWhois(ctx context.Context, domain string) *whoisRecord {
-	_, bus, err := requests.ContextConfigBus(ctx)
-	if err != nil {
-		return nil
-	}
-
 	var whois whoisRecord
 	headers := u.restHeaders()
 	whoisURL := u.whoisRecordURL(domain)
@@ -357,13 +335,13 @@ func (u *Umbrella) queryWhois(ctx context.Context, domain string) *whoisRecord {
 	u.CheckRateLimit()
 	record, err := http.RequestWebPage(ctx, whoisURL, nil, headers, nil)
 	if err != nil {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", u.String(), whoisURL, err))
+		u.sys.Config().Log.Printf("%s: %s: %v", u.String(), whoisURL, err)
 		return nil
 	}
 
 	err = json.Unmarshal([]byte(record), &whois)
 	if err != nil {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", u.String(), whoisURL, err))
+		u.sys.Config().Log.Printf("%s: %s: %v", u.String(), whoisURL, err)
 		return nil
 	}
 	return &whois
@@ -375,25 +353,19 @@ func (u *Umbrella) queryReverseWhois(ctx context.Context, apiURL string) []strin
 
 	headers := u.restHeaders()
 	var whois map[string]rWhoisResponse
-
-	_, bus, err := requests.ContextConfigBus(ctx)
-	if err != nil {
-		return domains.Slice()
-	}
-
 	// Umbrella provides data in 500 piece chunks
 	for count, more := 0, true; more; count = count + 500 {
 		u.CheckRateLimit()
 		fullAPIURL := fmt.Sprintf("%s&offset=%d", apiURL, count)
 		record, err := http.RequestWebPage(ctx, fullAPIURL, nil, headers, nil)
 		if err != nil {
-			bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", u.String(), apiURL, err))
+			u.sys.Config().Log.Printf("%s: %s: %v", u.String(), apiURL, err)
 			return domains.Slice()
 		}
 
 		err = json.Unmarshal([]byte(record), &whois)
 		if err != nil {
-			bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", u.String(), apiURL, err))
+			u.sys.Config().Log.Printf("%s: %s: %v", u.String(), apiURL, err)
 			return domains.Slice()
 		}
 
@@ -411,30 +383,21 @@ func (u *Umbrella) queryReverseWhois(ctx context.Context, apiURL string) []strin
 			}
 		}
 	}
-
 	return domains.Slice()
 }
 
 func (u *Umbrella) validateScope(ctx context.Context, input string) bool {
-	cfg, _, err := requests.ContextConfigBus(ctx)
-	if err != nil {
-		return false
-	}
-	if input != "" && cfg.IsDomainInScope(input) {
+	if input != "" && u.sys.Config().IsDomainInScope(input) {
 		return true
 	}
 	return false
 }
 
 func (u *Umbrella) whoisRequest(ctx context.Context, req *requests.WhoisRequest) {
-	cfg, bus, err := requests.ContextConfigBus(ctx)
-	if err != nil {
-		return
-	}
 	if u.creds == nil || u.creds.Key == "" {
 		return
 	}
-	if !cfg.IsDomainInScope(req.Domain) {
+	if !u.sys.Config().IsDomainInScope(req.Domain) {
 		return
 	}
 
@@ -450,7 +413,7 @@ func (u *Umbrella) whoisRequest(ctx context.Context, req *requests.WhoisRequest)
 	if len(emails) > 0 {
 		emailURL := u.reverseWhoisByEmailURL(emails...)
 		for _, d := range u.queryReverseWhois(ctx, emailURL) {
-			if !cfg.IsDomainInScope(d) {
+			if !u.sys.Config().IsDomainInScope(d) {
 				domains.Insert(d)
 			}
 		}
@@ -465,19 +428,19 @@ func (u *Umbrella) whoisRequest(ctx context.Context, req *requests.WhoisRequest)
 	if len(nameservers) > 0 {
 		nsURL := u.reverseWhoisByNSURL(nameservers...)
 		for _, d := range u.queryReverseWhois(ctx, nsURL) {
-			if !cfg.IsDomainInScope(d) {
+			if !u.sys.Config().IsDomainInScope(d) {
 				domains.Insert(d)
 			}
 		}
 	}
 
 	if domains.Len() > 0 {
-		bus.Publish(requests.NewWhoisTopic, eventbus.PriorityHigh, &requests.WhoisRequest{
+		u.Output() <- &requests.WhoisRequest{
 			Domain:     req.Domain,
 			NewDomains: domains.Slice(),
 			Tag:        u.SourceType,
 			Source:     u.String(),
-		})
+		}
 	}
 }
 
