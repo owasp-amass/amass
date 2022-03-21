@@ -53,7 +53,7 @@ sboms:
     env:
       - GOOS={{ .Os }}
       - GOARCH={{ .Arch }}
-    args: [ "app", "-main", "./cmd/amass/", "-licenses", "-packages", "-json", "-output", "$document", "$PWD" ]
+    args: [ "app", "-main", "cmd/amass", "-licenses", "-packages", "-json", "-output", "$document", "$PWD" ]
 
 checksum:
   name_template: "{{ .ProjectName }}_checksums.txt"
