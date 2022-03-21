@@ -149,22 +149,17 @@ func RequestWebPage(ctx context.Context, u string, body io.Reader, hvals map[str
 }
 
 // Crawl will spider the web page at the URL argument looking for DNS names within the scope provided.
-func Crawl(ctx context.Context, u string, scope []string, max int, f *bf.StableBloomFilter) ([]string, error) {
+func Crawl(ctx context.Context, u string, scope []string, max int) ([]string, error) {
 	select {
 	case <-ctx.Done():
 		return nil, fmt.Errorf("the context expired")
 	default:
 	}
 
-	if f == nil {
-		f = bf.NewDefaultStableBloomFilter(10000, 0.01)
-		defer f.Reset()
-	}
-
 	results := stringset.New()
 	defer results.Close()
 
-	g := createCrawler(u, scope, max, results, f)
+	g := createCrawler(u, scope, max, results)
 	g.Client = client.NewClient(&client.Options{
 		MaxBodySize:    50 * 1024 * 1024, // 50MB
 		RetryTimes:     2,
@@ -187,13 +182,14 @@ func Crawl(ctx context.Context, u string, scope []string, max int, f *bf.StableB
 			err = fmt.Errorf("no DNS names were discovered during the crawl of %s", u)
 		}
 	}
-
 	return results.Slice(), err
 }
 
-func createCrawler(u string, scope []string, max int, results *stringset.Set, filter *bf.StableBloomFilter) *geziyor.Geziyor {
+func createCrawler(u string, scope []string, max int, results *stringset.Set) *geziyor.Geziyor {
 	var count int
 	var m sync.Mutex
+	filter := bf.NewDefaultStableBloomFilter(10000, 0.01)
+	defer filter.Reset()
 
 	return geziyor.NewGeziyor(&geziyor.Options{
 		StartURLs:             []string{u},

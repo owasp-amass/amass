@@ -152,7 +152,7 @@ func (a *activeTask) crawlName(ctx context.Context, req *requests.DNSRequest, tp
 		}
 
 		u := protocol + req.Name + ":" + strconv.Itoa(port)
-		names, err := http.Crawl(ctx, u, cfg.Domains(), 50, a.enum.crawlFilter)
+		names, err := http.Crawl(ctx, u, cfg.Domains(), 50)
 		if err != nil {
 			if cfg.Verbose {
 				cfg.Log.Printf("Active Crawl: %v", err)

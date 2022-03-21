@@ -23,17 +23,16 @@ const maxActivePipelineTasks int = 25
 
 // Enumeration is the object type used to execute a DNS enumeration.
 type Enumeration struct {
-	Config      *config.Config
-	Sys         systems.System
-	ctx         context.Context
-	graph       *netmap.Graph
-	srcs        []service.Service
-	done        chan struct{}
-	crawlFilter *bf.StableBloomFilter
-	nameSrc     *enumSource
-	subTask     *subdomainTask
-	dnsTask     *dnsTask
-	store       *dataManager
+	Config  *config.Config
+	Sys     systems.System
+	ctx     context.Context
+	graph   *netmap.Graph
+	srcs    []service.Service
+	done    chan struct{}
+	nameSrc *enumSource
+	subTask *subdomainTask
+	dnsTask *dnsTask
+	store   *dataManager
 }
 
 // NewEnumeration returns an initialized Enumeration that has not been started yet.
@@ -50,9 +49,6 @@ func NewEnumeration(cfg *config.Config, sys systems.System, graph *netmap.Graph)
 func (e *Enumeration) Start(ctx context.Context) error {
 	e.done = make(chan struct{})
 	defer close(e.done)
-
-	e.crawlFilter = bf.NewDefaultStableBloomFilter(100000, 0.01)
-	defer func() { _ = e.crawlFilter.Reset() }()
 
 	if err := e.Config.CheckSettings(); err != nil {
 		return err

@@ -170,7 +170,7 @@ func TestCrawl(t *testing.T) {
 		set := stringset.New(test.want...)
 		defer set.Close()
 
-		got, err := Crawl(context.TODO(), ts.URL, []string{"127.0.0.1"}, test.depth, nil)
+		got, err := Crawl(context.Background(), ts.URL, []string{"127.0.0.1"}, test.depth)
 		if err != nil {
 			t.Errorf("Failed to crawl the static web content: %s: %v", test.name, err)
 			continue
@@ -187,12 +187,12 @@ func TestCrawl(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	_, err := Crawl(ctx, ts.URL, []string{"127.0.0.1"}, 0, nil)
+	_, err := Crawl(ctx, ts.URL, []string{"127.0.0.1"}, 0)
 	if err.Error() != "the context expired during the crawl of "+ts.URL {
 		t.Errorf("Failed to catch the expired context during the crawl")
 	}
 
-	_, err = Crawl(ctx, ts.URL, []string{"127.0.0.1"}, 0, nil)
+	_, err = Crawl(ctx, ts.URL, []string{"127.0.0.1"}, 0)
 	if err.Error() != "the context expired" {
 		t.Errorf("Failed to catch the expired context before the crawl")
 	}
@@ -210,7 +210,7 @@ func TestCrawl(t *testing.T) {
 	}))
 	defer next.Close()
 
-	_, err = Crawl(context.TODO(), next.URL, []string{"127.0.0.1"}, 0, nil)
+	_, err = Crawl(context.Background(), next.URL, []string{"127.0.0.1"}, 0)
 	if err.Error() != "no DNS names were discovered during the crawl of "+next.URL {
 		t.Errorf("Failed to detect the crawl returned zero names")
 	}

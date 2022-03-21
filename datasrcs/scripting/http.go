@@ -161,7 +161,7 @@ func (s *Script) crawl(L *lua.LState) int {
 		var names []string
 		max := L.CheckInt(3)
 
-		names, err = http.Crawl(ctx, u, cfg.Domains(), max, nil)
+		names, err = http.Crawl(ctx, u, cfg.Domains(), max)
 		if err == nil {
 			for _, name := range names {
 				genNewName(ctx, s.sys, s, http.CleanName(name))
