@@ -65,7 +65,7 @@ func (p *ParseInts) String() string {
 // Set implements the flag.Value interface.
 func (p *ParseInts) Set(s string) error {
 	if s == "" {
-		return fmt.Errorf("Integer parsing failed")
+		return fmt.Errorf("integer parsing failed")
 	}
 
 	nums := strings.Split(s, ",")
@@ -167,7 +167,7 @@ func (p *ParseCIDRs) Set(s string) error {
 	for _, cidr := range cidrs {
 		_, ipnet, err := net.ParseCIDR(cidr)
 		if err != nil {
-			return fmt.Errorf("Failed to parse %s as a CIDR", cidr)
+			return fmt.Errorf("failed to parse %s as a CIDR", cidr)
 		}
 
 		*p = append(*p, ipnet)
