@@ -1,5 +1,6 @@
-// Copyright 2017-2021 Jeff Foley. All rights reserved.
+// Copyright © by Jeff Foley 2017-2022. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
 
 package datasrcs
 
@@ -17,7 +18,6 @@ import (
 	"github.com/OWASP/Amass/v3/net/http"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/systems"
-	"github.com/caffix/eventbus"
 	"github.com/caffix/service"
 	"github.com/caffix/stringset"
 )
@@ -38,6 +38,7 @@ func NewAlienVault(sys systems.System) *AlienVault {
 		sys:        sys,
 	}
 
+	go a.requests()
 	a.BaseService = *service.NewBaseService(a, "AlienVault")
 	return a
 }
@@ -59,21 +60,21 @@ func (a *AlienVault) OnStart() error {
 	return nil
 }
 
-// OnRequest implements the Service interface.
-func (a *AlienVault) OnRequest(ctx context.Context, args service.Args) {
-	check := true
-
-	switch req := args.(type) {
-	case *requests.DNSRequest:
-		a.dnsRequest(ctx, req)
-	case *requests.WhoisRequest:
-		a.whoisRequest(ctx, req)
-	default:
-		check = false
-	}
-
-	if check {
-		a.CheckRateLimit()
+func (a *AlienVault) requests() {
+	for {
+		select {
+		case <-a.Done():
+			return
+		case in := <-a.Input():
+			switch req := in.(type) {
+			case *requests.DNSRequest:
+				a.CheckRateLimit()
+				a.dnsRequest(context.TODO(), req)
+			case *requests.WhoisRequest:
+				a.CheckRateLimit()
+				a.whoisRequest(context.TODO(), req)
+			}
+		}
 	}
 }
 
@@ -82,13 +83,7 @@ func (a *AlienVault) dnsRequest(ctx context.Context, req *requests.DNSRequest) {
 		return
 	}
 
-	_, bus, err := requests.ContextConfigBus(ctx)
-	if err != nil {
-		return
-	}
-
-	bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
-		fmt.Sprintf("Querying %s for %s subdomains", a.String(), req.Domain))
+	a.sys.Config().Log.Printf("Querying %s for %s subdomains", a.String(), req.Domain)
 	a.executeDNSQuery(ctx, req)
 
 	a.CheckRateLimit()
@@ -99,17 +94,11 @@ func (a *AlienVault) whoisRequest(ctx context.Context, req *requests.WhoisReques
 	if !a.sys.Config().IsDomainInScope(req.Domain) {
 		return
 	}
-
 	a.executeWhoisQuery(ctx, req)
 }
 
 func (a *AlienVault) executeDNSQuery(ctx context.Context, req *requests.DNSRequest) {
-	cfg, bus, err := requests.ContextConfigBus(ctx)
-	if err != nil {
-		return
-	}
-
-	re := cfg.DomainRegex(req.Domain)
+	re := a.sys.Config().DomainRegex(req.Domain)
 	if re == nil {
 		return
 	}
@@ -117,7 +106,7 @@ func (a *AlienVault) executeDNSQuery(ctx context.Context, req *requests.DNSReque
 	u := a.getURL(req.Domain) + "passive_dns"
 	page, err := http.RequestWebPage(ctx, u, nil, a.getHeaders(), nil)
 	if err != nil {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", a.String(), u, err))
+		a.sys.Config().Log.Printf("%s: %s: %v", a.String(), u, err)
 		return
 	}
 	// Extract the subdomain names and IP addresses from the passive DNS information
@@ -128,11 +117,10 @@ func (a *AlienVault) executeDNSQuery(ctx context.Context, req *requests.DNSReque
 		} `json:"passive_dns"`
 	}
 	if err := json.Unmarshal([]byte(page), &m); err != nil {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", a.String(), u, err))
+		a.sys.Config().Log.Printf("%s: %s: %v", a.String(), u, err)
 		return
 	} else if len(m.Subdomains) == 0 {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
-			fmt.Sprintf("%s: %s: The query returned zero results", a.String(), u))
+		a.sys.Config().Log.Printf("%s: %s: The query returned zero results", a.String(), u)
 		return
 	}
 
@@ -158,12 +146,12 @@ func (a *AlienVault) executeDNSQuery(ctx context.Context, req *requests.DNSReque
 	}
 
 	for _, ip := range ips.Slice() {
-		bus.Publish(requests.NewAddrTopic, eventbus.PriorityHigh, &requests.AddrRequest{
+		a.Output() <- &requests.AddrRequest{
 			Address: ip,
 			Domain:  req.Domain,
 			Tag:     a.SourceType,
 			Source:  a.String(),
-		})
+		}
 	}
 }
 
@@ -178,12 +166,7 @@ type avURL struct {
 }
 
 func (a *AlienVault) executeURLQuery(ctx context.Context, req *requests.DNSRequest) {
-	cfg, bus, err := requests.ContextConfigBus(ctx)
-	if err != nil {
-		return
-	}
-
-	re := cfg.DomainRegex(req.Domain)
+	re := a.sys.Config().DomainRegex(req.Domain)
 	if re == nil {
 		return
 	}
@@ -192,7 +175,7 @@ func (a *AlienVault) executeURLQuery(ctx context.Context, req *requests.DNSReque
 	u := a.getURL(req.Domain) + "url_list"
 	page, err := http.RequestWebPage(ctx, u, nil, headers, nil)
 	if err != nil {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", a.String(), u, err))
+		a.sys.Config().Log.Printf("%s: %s: %v", a.String(), u, err)
 		return
 	}
 	// Extract the subdomain names and IP addresses from the URL information
@@ -204,11 +187,10 @@ func (a *AlienVault) executeURLQuery(ctx context.Context, req *requests.DNSReque
 		URLs     []avURL `json:"url_list"`
 	}
 	if err := json.Unmarshal([]byte(page), &m); err != nil {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", a.String(), u, err))
+		a.sys.Config().Log.Printf("%s: %s: %v", a.String(), u, err)
 		return
 	} else if len(m.URLs) == 0 {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
-			fmt.Sprintf("%s: %s: The query returned zero results", a.String(), u))
+		a.sys.Config().Log.Printf("%s: %s: The query returned zero results", a.String(), u)
 		return
 	}
 
@@ -228,19 +210,15 @@ func (a *AlienVault) executeURLQuery(ctx context.Context, req *requests.DNSReque
 			pageURL := u + "?page=" + strconv.Itoa(cur)
 			page, err = http.RequestWebPage(ctx, pageURL, nil, headers, nil)
 			if err != nil {
-				bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
-					fmt.Sprintf("%s: %s: %v", a.String(), pageURL, err))
+				a.sys.Config().Log.Printf("%s: %s: %v", a.String(), pageURL, err)
 				break
 			}
 
 			if err := json.Unmarshal([]byte(page), &m); err != nil {
-				bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
-					fmt.Sprintf("%s: %s: %v", a.String(), pageURL, err))
+				a.sys.Config().Log.Printf("%s: %s: %v", a.String(), pageURL, err)
 				break
 			} else if len(m.URLs) == 0 {
-				bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
-					fmt.Sprintf("%s: %s: The query returned zero results", a.String(), pageURL),
-				)
+				a.sys.Config().Log.Printf("%s: %s: The query returned zero results", a.String(), pageURL)
 				break
 			}
 
@@ -253,12 +231,12 @@ func (a *AlienVault) executeURLQuery(ctx context.Context, req *requests.DNSReque
 	}
 
 	for _, ip := range ips.Slice() {
-		bus.Publish(requests.NewAddrTopic, eventbus.PriorityHigh, &requests.AddrRequest{
+		a.Output() <- &requests.AddrRequest{
 			Address: ip,
 			Domain:  req.Domain,
 			Tag:     a.SourceType,
 			Source:  a.String(),
-		})
+		}
 	}
 }
 
@@ -276,11 +254,6 @@ func extractNamesIPs(urls []avURL, names *stringset.Set, ips *stringset.Set, re 
 }
 
 func (a *AlienVault) executeWhoisQuery(ctx context.Context, req *requests.WhoisRequest) {
-	cfg, bus, err := requests.ContextConfigBus(ctx)
-	if err != nil {
-		return
-	}
-
 	emails := a.queryWhoisForEmails(ctx, req)
 	a.CheckRateLimit()
 
@@ -292,8 +265,7 @@ func (a *AlienVault) executeWhoisQuery(ctx context.Context, req *requests.WhoisR
 		pageURL := a.getReverseWhoisURL(email)
 		page, err := http.RequestWebPage(ctx, pageURL, nil, headers, nil)
 		if err != nil {
-			bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
-				fmt.Sprintf("%s: %s: %v", a.String(), pageURL, err))
+			a.sys.Config().Log.Printf("%s: %s: %v", a.String(), pageURL, err)
 			continue
 		}
 
@@ -302,12 +274,11 @@ func (a *AlienVault) executeWhoisQuery(ctx context.Context, req *requests.WhoisR
 		}
 		var domains []record
 		if err := json.Unmarshal([]byte(page), &domains); err != nil {
-			bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
-				fmt.Sprintf("%s: %s: %v", a.String(), pageURL, err))
+			a.sys.Config().Log.Printf("%s: %s: %v", a.String(), pageURL, err)
 			continue
 		}
 		for _, d := range domains {
-			if !cfg.IsDomainInScope(d.Domain) {
+			if !a.sys.Config().IsDomainInScope(d.Domain) {
 				newDomains.Insert(d.Domain)
 			}
 		}
@@ -315,18 +286,16 @@ func (a *AlienVault) executeWhoisQuery(ctx context.Context, req *requests.WhoisR
 	}
 
 	if newDomains.Len() == 0 {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
-			fmt.Sprintf("%s: Reverse whois failed to discover new domain names for %s", a.String(), req.Domain),
-		)
+		a.sys.Config().Log.Printf("%s: Reverse whois failed to discover new domain names for %s", a.String(), req.Domain)
 		return
 	}
 
-	bus.Publish(requests.NewWhoisTopic, eventbus.PriorityHigh, &requests.WhoisRequest{
+	a.Output() <- &requests.WhoisRequest{
 		Domain:     req.Domain,
 		NewDomains: newDomains.Slice(),
 		Tag:        a.SourceType,
 		Source:     a.String(),
-	})
+	}
 }
 
 func (a *AlienVault) queryWhoisForEmails(ctx context.Context, req *requests.WhoisRequest) []string {
@@ -334,14 +303,9 @@ func (a *AlienVault) queryWhoisForEmails(ctx context.Context, req *requests.Whoi
 	defer emails.Close()
 
 	u := a.getWhoisURL(req.Domain)
-	cfg, bus, err := requests.ContextConfigBus(ctx)
-	if err != nil {
-		return emails.Slice()
-	}
-
 	page, err := http.RequestWebPage(ctx, u, nil, a.getHeaders(), nil)
 	if err != nil {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", a.String(), u, err))
+		a.sys.Config().Log.Printf("%s: %s: %v", a.String(), u, err)
 		return emails.Slice()
 	}
 
@@ -354,11 +318,10 @@ func (a *AlienVault) queryWhoisForEmails(ctx context.Context, req *requests.Whoi
 		} `json:"data"`
 	}
 	if err := json.Unmarshal([]byte(page), &m); err != nil {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", a.String(), u, err))
+		a.sys.Config().Log.Printf("%s: %s: %v", a.String(), u, err)
 		return emails.Slice()
 	} else if m.Count == 0 {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
-			fmt.Sprintf("%s: %s: The query returned zero results", a.String(), u))
+		a.sys.Config().Log.Printf("%s: %s: The query returned zero results", a.String(), u)
 		return emails.Slice()
 	}
 
@@ -373,7 +336,7 @@ func (a *AlienVault) queryWhoisForEmails(ctx context.Context, req *requests.Whoi
 
 			// Unfortunately AlienVault doesn't categorize the email addresses so we
 			// have to filter by something we know to avoid adding registrar emails
-			if cfg.IsDomainInScope(d) {
+			if a.sys.Config().IsDomainInScope(d) {
 				emails.Insert(email)
 			}
 		}

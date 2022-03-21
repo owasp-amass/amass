@@ -1,5 +1,6 @@
-// Copyright 2017-2021 Jeff Foley. All rights reserved.
+// Copyright © by Jeff Foley 2017-2022. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
 
 package datasrcs
 
@@ -11,7 +12,6 @@ import (
 	"github.com/OWASP/Amass/v3/datasrcs/scripting"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/systems"
-	"github.com/caffix/eventbus"
 	"github.com/caffix/service"
 	"github.com/caffix/stringset"
 )
@@ -75,18 +75,13 @@ func SelectedDataSources(cfg *config.Config, avail []service.Service) []service.
 }
 
 func genNewNameEvent(ctx context.Context, sys systems.System, srv service.Service, name string) {
-	cfg, bus, err := requests.ContextConfigBus(ctx)
-	if err != nil {
-		return
-	}
-
-	if domain := cfg.WhichDomain(name); domain != "" {
-		bus.Publish(requests.NewNameTopic, eventbus.PriorityHigh, &requests.DNSRequest{
+	if domain := sys.Config().WhichDomain(name); domain != "" {
+		srv.Output() <- &requests.DNSRequest{
 			Name:   name,
 			Domain: domain,
 			Tag:    srv.Description(),
 			Source: srv.String(),
-		})
+		}
 	}
 }
 

@@ -5,6 +5,8 @@
 package scripting
 
 import (
+	"context"
+	"errors"
 	"strings"
 
 	"github.com/caffix/resolve"
@@ -24,8 +26,7 @@ func (s *Script) resolve(L *lua.LState) int {
 		return 2
 	}
 
-	msg := resolve.QueryMsg(name, qtype)
-	resp, err := s.sys.TrustedResolvers().QueryBlocking(ctx, msg)
+	resp, err := s.fwdQuery(ctx, name, qtype)
 	if err != nil || resp.Rcode != dns.RcodeSuccess || len(resp.Answer) == 0 {
 		L.Push(lua.LNil)
 		L.Push(lua.LString("The query was unsuccessful for " + name))
@@ -59,10 +60,58 @@ func (s *Script) resolve(L *lua.LState) int {
 			}
 		}
 	}
-
 	L.Push(tb)
 	L.Push(lua.LNil)
 	return 2
+}
+
+func (s *Script) fwdQuery(ctx context.Context, name string, qtype uint16) (*dns.Msg, error) {
+	msg := resolve.QueryMsg(name, qtype)
+	resp, err := s.sys.Resolvers().QueryBlocking(ctx, msg)
+	// Check if the response indicates that the name does not exist
+	if err != nil || resp.Rcode == dns.RcodeNameError {
+		return nil, errors.New("name does not exist")
+	}
+	if resp.Rcode == dns.RcodeSuccess && len(resp.Answer) == 0 {
+		return nil, errors.New("zero answers returned")
+	}
+	// Was there another reason why the query failed?
+	for attempts := 1; attempts < 50 && resp.Rcode != dns.RcodeSuccess; attempts++ {
+		resp, err = s.sys.Resolvers().QueryBlocking(ctx, msg)
+		// Check if the response indicates that the name does not exist
+		if err != nil || resp.Rcode == dns.RcodeNameError {
+			return nil, errors.New("name does not exist")
+		}
+		if resp.Rcode == dns.RcodeSuccess && len(resp.Answer) == 0 {
+			return nil, errors.New("zero answers returned")
+		}
+	}
+	if resp.Rcode != dns.RcodeSuccess {
+		return nil, errors.New("query failed")
+	}
+
+	resp, err = s.sys.TrustedResolvers().QueryBlocking(ctx, msg)
+	// Check if the response indicates that the name does not exist
+	if err != nil || resp.Rcode == dns.RcodeNameError {
+		return nil, errors.New("name does not exist")
+	}
+	if resp.Rcode == dns.RcodeSuccess && len(resp.Answer) == 0 {
+		return nil, errors.New("zero answers returned")
+	}
+	for attempts := 1; attempts < 50 && resp.Rcode != dns.RcodeSuccess; attempts++ {
+		resp, err = s.sys.Resolvers().QueryBlocking(ctx, msg)
+		// Check if the response indicates that the name does not exist
+		if err != nil || resp.Rcode == dns.RcodeNameError {
+			return nil, errors.New("name does not exist")
+		}
+		if resp.Rcode == dns.RcodeSuccess && len(resp.Answer) == 0 {
+			return nil, errors.New("zero answers returned")
+		}
+	}
+	if resp.Rcode != dns.RcodeSuccess {
+		return nil, errors.New("query failed")
+	}
+	return resp, nil
 }
 
 func convertType(qtype string) uint16 {

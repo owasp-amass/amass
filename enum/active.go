@@ -13,7 +13,6 @@ import (
 	amassdns "github.com/OWASP/Amass/v3/net/dns"
 	"github.com/OWASP/Amass/v3/net/http"
 	"github.com/OWASP/Amass/v3/requests"
-	"github.com/caffix/eventbus"
 	"github.com/caffix/pipeline"
 	"github.com/caffix/queue"
 	"github.com/caffix/resolve"
@@ -153,7 +152,7 @@ func (a *activeTask) crawlName(ctx context.Context, req *requests.DNSRequest, tp
 		}
 
 		u := protocol + req.Name + ":" + strconv.Itoa(port)
-		names, err := http.Crawl(ctx, u, cfg.Domains(), 50, a.enum.crawlFilter)
+		names, err := http.Crawl(ctx, u, cfg.Domains(), 50)
 		if err != nil {
 			if cfg.Verbose {
 				cfg.Log.Printf("Active Crawl: %v", err)
@@ -210,21 +209,15 @@ func (a *activeTask) zoneTransfer(ctx context.Context, req *requests.ZoneXFRRequ
 	default:
 	}
 
-	_, bus, err := requests.ContextConfigBus(ctx)
-	if err != nil {
-		return
-	}
-
 	addr, err := a.nameserverAddr(ctx, req.Server)
 	if addr == "" {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("DNS: Zone XFR failed: %v", err))
+		a.enum.Config.Log.Printf("DNS: Zone XFR failed: %v", err)
 		return
 	}
 
 	reqs, err := ZoneTransfer(req.Name, req.Domain, addr)
 	if err != nil {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
-			fmt.Sprintf("DNS: Zone XFR failed: %s: %v", req.Server, err))
+		a.enum.Config.Log.Printf("DNS: Zone XFR failed: %s: %v", req.Server, err)
 		return
 	}
 
@@ -248,14 +241,9 @@ func (a *activeTask) zoneTransfer(ctx context.Context, req *requests.ZoneXFRRequ
 func (a *activeTask) zoneWalk(ctx context.Context, req *requests.ZoneXFRRequest, tp pipeline.TaskParams) {
 	defer func() { a.tokenPool <- struct{}{} }()
 
-	cfg, bus, err := requests.ContextConfigBus(ctx)
-	if err != nil {
-		return
-	}
-
 	addr, err := a.nameserverAddr(ctx, req.Server)
 	if addr == "" {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("DNS: Zone Walk failed: %v", err))
+		a.enum.Config.Log.Printf("DNS: Zone Walk failed: %v", err)
 		return
 	}
 
@@ -266,15 +254,14 @@ func (a *activeTask) zoneWalk(ctx context.Context, req *requests.ZoneXFRRequest,
 
 	names, err := r.NsecTraversal(ctx, req.Name)
 	if err != nil {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
-			fmt.Sprintf("DNS: Zone Walk failed: %s: %v", req.Name, err))
+		a.enum.Config.Log.Printf("DNS: Zone Walk failed: %s: %v", req.Name, err)
 		return
 	}
 
 	for _, nsec := range names {
 		name := resolve.RemoveLastDot(nsec.NextDomain)
 
-		if domain := cfg.WhichDomain(name); domain != "" {
+		if domain := a.enum.Config.WhichDomain(name); domain != "" {
 			a.enum.nameSrc.pipelineData(ctx, &requests.DNSRequest{
 				Name:   name,
 				Domain: domain,

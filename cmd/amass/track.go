@@ -69,7 +69,6 @@ func runTrackCommand(clArgs []string) {
 		commandUsage(trackUsageMsg, trackCommand, trackBuf)
 		return
 	}
-
 	if err := trackCommand.Parse(clArgs); err != nil {
 		r.Fprintf(color.Error, "%v\n", err)
 		os.Exit(1)
@@ -78,7 +77,6 @@ func runTrackCommand(clArgs []string) {
 		commandUsage(trackUsageMsg, trackCommand, trackBuf)
 		return
 	}
-
 	if args.Options.NoColor {
 		color.NoColor = true
 	}
@@ -86,7 +84,6 @@ func runTrackCommand(clArgs []string) {
 		color.Output = ioutil.Discard
 		color.Error = ioutil.Discard
 	}
-
 	// Some input validation
 	if args.Since != "" && args.Last != 0 {
 		r.Fprintln(color.Error, "The since flag cannot be used with the last or all flags")
@@ -134,7 +131,6 @@ func runTrackCommand(clArgs []string) {
 		r.Fprintf(color.Error, "Failed to load the configuration file: %v\n", err)
 		os.Exit(1)
 	}
-
 	// Connect with the graph database containing the enumeration data
 	db := openGraphDatabase(args.Filepaths.Directory, cfg)
 	if db == nil {
@@ -142,9 +138,15 @@ func runTrackCommand(clArgs []string) {
 		os.Exit(1)
 	}
 	defer db.Close()
-
+	// Create the in-memory graph database
+	memDB, err := memGraphForScope(context.Background(), args.Domains.Slice(), db)
+	if err != nil {
+		r.Fprintln(color.Error, err.Error())
+		os.Exit(1)
+	}
+	defer memDB.Close()
 	// Get all the UUIDs for events that have information in scope
-	uuids := db.EventsInScope(context.TODO(), args.Domains.Slice()...)
+	uuids := memDB.EventsInScope(context.Background(), args.Domains.Slice()...)
 	if len(uuids) == 0 {
 		r.Fprintln(color.Error, "Failed to find the domains of interest in the database")
 		os.Exit(1)
@@ -152,12 +154,11 @@ func runTrackCommand(clArgs []string) {
 
 	var earliest, latest []time.Time
 	// Put the events in chronological order
-	uuids, earliest, latest = orderedEvents(context.TODO(), uuids, db)
+	uuids, earliest, latest = orderedEvents(context.Background(), uuids, memDB)
 	if len(uuids) == 0 {
 		r.Fprintln(color.Error, "Failed to sort the events")
 		os.Exit(1)
 	}
-
 	// The default is to use all the enumerations available
 	if args.Last == 0 {
 		args.Last = len(uuids)
@@ -187,13 +188,13 @@ func runTrackCommand(clArgs []string) {
 
 	cache := cacheWithData()
 	if len(uuids) == 1 {
-		printOneEvent(uuids, args.Domains.Slice(), earliest[0], latest[0], db, cache)
+		printOneEvent(uuids, args.Domains.Slice(), earliest[0], latest[0], memDB, cache)
 		return
 	} else if args.Options.History {
-		completeHistoryOutput(uuids, args.Domains.Slice(), earliest, latest, db, cache)
+		completeHistoryOutput(uuids, args.Domains.Slice(), earliest, latest, memDB, cache)
 		return
 	}
-	cumulativeOutput(uuids, args.Domains.Slice(), earliest, latest, db, cache)
+	cumulativeOutput(uuids, args.Domains.Slice(), earliest, latest, memDB, cache)
 }
 
 func printOneEvent(uuid, domains []string, earliest, latest time.Time, db *netmap.Graph, cache *requests.ASNCache) {
@@ -238,10 +239,8 @@ func getScopedOutput(uuids, domains []string, db *netmap.Graph, cache *requests.
 		if len(domains) > 0 && !domainNameInScope(out.Name, domains) {
 			continue
 		}
-
 		output = append(output, out)
 	}
-
 	return output
 }
 
@@ -317,7 +316,6 @@ func diffEnumOutput(older, newer []*requests.Output) []string {
 				green(name), yellow(lineOfAddresses(o.Addresses))))
 		}
 	}
-
 	return diff
 }
 

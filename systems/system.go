@@ -10,7 +10,6 @@ import (
 
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/requests"
-	eb "github.com/caffix/eventbus"
 	"github.com/caffix/netmap"
 	"github.com/caffix/resolve"
 	"github.com/caffix/service"
@@ -54,26 +53,17 @@ type System interface {
 
 // PopulateCache updates the provided System cache with ASN information from the System data sources.
 func PopulateCache(ctx context.Context, asn int, sys System) {
-	bus := eb.NewEventBus()
-	defer bus.Stop()
-
-	cache := sys.Cache()
-	bus.Subscribe(requests.NewASNTopic, cache.Update)
-	defer bus.Unsubscribe(requests.NewASNTopic, cache.Update)
-
-	ctx = context.WithValue(ctx, requests.ContextConfig, sys.Config())
-	ctx = context.WithValue(ctx, requests.ContextEventBus, bus)
-
 	// Send the ASN requests to the data sources
 	for _, src := range sys.DataSources() {
-		src.Request(ctx, &requests.ASNRequest{ASN: asn})
-	}
-
-	// Wait for the ASN requests to return responses
-	t := time.NewTimer(10 * time.Second)
-	defer t.Stop()
-	select {
-	case <-ctx.Done():
-	case <-t.C:
+		src.Input() <- &requests.ASNRequest{ASN: asn}
+		time.Sleep(time.Second)
+		select {
+		case <-ctx.Done():
+		case req := <-src.Output():
+			if a, ok := req.(*requests.ASNRequest); ok {
+				sys.Cache().Update(a)
+			}
+		default:
+		}
 	}
 }

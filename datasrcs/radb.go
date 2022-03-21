@@ -1,5 +1,6 @@
-// Copyright 2017-2021 Jeff Foley. All rights reserved.
+// Copyright © by Jeff Foley 2017-2022. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
 
 package datasrcs
 
@@ -16,7 +17,6 @@ import (
 	"github.com/OWASP/Amass/v3/net/http"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/systems"
-	"github.com/caffix/eventbus"
 	"github.com/caffix/resolve"
 	"github.com/caffix/service"
 	"github.com/caffix/stringset"
@@ -44,6 +44,7 @@ func NewRADb(sys systems.System) *RADb {
 		sys:        sys,
 	}
 
+	go r.requests()
 	r.BaseService = *service.NewBaseService(r, "RADb")
 	return r
 }
@@ -64,7 +65,6 @@ func (r *RADb) OnStart() error {
 			}
 		}
 	}
-
 	r.SetRateLimit(1)
 	return nil
 }
@@ -87,11 +87,18 @@ func (r *RADb) registryRADbURL(registry string) string {
 	return url
 }
 
-// OnRequest implements the Service interface.
-func (r *RADb) OnRequest(ctx context.Context, args service.Args) {
-	if req, ok := args.(*requests.ASNRequest); ok {
-		r.asnRequest(ctx, req)
-		r.CheckRateLimit()
+func (r *RADb) requests() {
+	for {
+		select {
+		case <-r.Done():
+			return
+		case in := <-r.Input():
+			switch req := in.(type) {
+			case *requests.ASNRequest:
+				r.CheckRateLimit()
+				r.asnRequest(context.TODO(), req)
+			}
+		}
 	}
 }
 
@@ -105,21 +112,15 @@ func (r *RADb) asnRequest(ctx context.Context, req *requests.ASNRequest) {
 		r.executeASNAddrQuery(ctx, req.Address)
 		return
 	}
-
 	r.executeASNQuery(ctx, req.ASN, "", "")
 }
 
 func (r *RADb) executeASNAddrQuery(ctx context.Context, addr string) {
-	_, bus, err := requests.ContextConfigBus(ctx)
-	if err != nil {
-		return
-	}
-
 	url := r.getIPURL("arin", addr)
 	headers := map[string]string{"Content-Type": "application/json"}
 	page, err := http.RequestWebPage(ctx, url, nil, headers, nil)
 	if err != nil {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", r.String(), url, err))
+		r.sys.Config().Log.Printf("%s: %s: %v", r.String(), url, err)
 		return
 	}
 
@@ -133,12 +134,10 @@ func (r *RADb) executeASNAddrQuery(ctx context.Context, addr string) {
 		} `json:"cidr0_cidrs"`
 	}
 	if err := json.Unmarshal([]byte(page), &m); err != nil {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", r.String(), url, err))
+		r.sys.Config().Log.Printf("%s: %s: %v", r.String(), url, err)
 		return
 	} else if m.ClassName != "ip network" || len(m.CIDRs) == 0 {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
-			fmt.Sprintf("%s: %s: The request returned zero results", r.String(), url),
-		)
+		r.sys.Config().Log.Printf("%s: %s: The request returned zero results", r.String(), url)
 		return
 	}
 
@@ -166,11 +165,6 @@ func (r *RADb) getIPURL(registry, addr string) string {
 }
 
 func (r *RADb) executeASNQuery(ctx context.Context, asn int, addr, prefix string) {
-	_, bus, err := requests.ContextConfigBus(ctx)
-	if err != nil {
-		return
-	}
-
 	if asn == 0 {
 		return
 	}
@@ -180,7 +174,7 @@ func (r *RADb) executeASNQuery(ctx context.Context, asn int, addr, prefix string
 	headers := map[string]string{"Content-Type": "application/json"}
 	page, err := http.RequestWebPage(ctx, url, nil, headers, nil)
 	if err != nil {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", r.String(), url, err))
+		r.sys.Config().Log.Printf("%s: %s: %v", r.String(), url, err)
 		return
 	}
 
@@ -193,12 +187,10 @@ func (r *RADb) executeASNQuery(ctx context.Context, asn int, addr, prefix string
 		}
 	}
 	if err := json.Unmarshal([]byte(page), &m); err != nil {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", r.String(), url, err))
+		r.sys.Config().Log.Printf("%s: %s: %v", r.String(), url, err)
 		return
 	} else if m.ClassName != "autnum" {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
-			fmt.Sprintf("%s: %s: The query returned incorrect results", r.String(), url),
-		)
+		r.sys.Config().Log.Printf("%s: %s: The query returned incorrect results", r.String(), url)
 		return
 	}
 
@@ -231,13 +223,11 @@ func (r *RADb) executeASNQuery(ctx context.Context, asn int, addr, prefix string
 
 	blocks.Union(nb)
 	if blocks.Len() == 0 {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
-			fmt.Sprintf("%s: %s: The query returned zero netblocks", r.String(), url),
-		)
+		r.sys.Config().Log.Printf("%s: %s: The query returned zero netblocks", r.String(), url)
 		return
 	}
 
-	bus.Publish(requests.NewASNTopic, eventbus.PriorityHigh, &requests.ASNRequest{
+	r.sys.Cache().Update(&requests.ASNRequest{
 		Address:        addr,
 		ASN:            asn,
 		Prefix:         prefix,
@@ -258,17 +248,12 @@ func (r *RADb) getASNURL(registry, asn string) string {
 func (r *RADb) netblocks(ctx context.Context, asn int) *stringset.Set {
 	netblocks := stringset.New()
 
-	_, bus, err := requests.ContextConfigBus(ctx)
-	if err != nil {
-		return netblocks
-	}
-
 	numRateLimitChecks(r, 2)
 	url := r.getNetblocksURL(strconv.Itoa(asn))
 	headers := map[string]string{"Content-Type": "application/json"}
 	page, err := http.RequestWebPage(ctx, url, nil, headers, nil)
 	if err != nil {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", r.String(), url, err))
+		r.sys.Config().Log.Printf("%s: %s: %v", r.String(), url, err)
 		return netblocks
 	}
 
@@ -284,7 +269,7 @@ func (r *RADb) netblocks(ctx context.Context, asn int) *stringset.Set {
 		} `json:"arin_originas0_networkSearchResults"`
 	}
 	if err := json.Unmarshal([]byte(page), &m); err != nil {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %s: %v", r.String(), url, err))
+		r.sys.Config().Log.Printf("%s: %s: %v", r.String(), url, err)
 		return netblocks
 	}
 
@@ -312,9 +297,7 @@ func (r *RADb) netblocks(ctx context.Context, asn int) *stringset.Set {
 	}
 
 	if netblocks.Len() == 0 {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
-			fmt.Sprintf("%s: Failed to acquire netblocks for ASN %d", r.String(), asn),
-		)
+		r.sys.Config().Log.Printf("%s: Failed to acquire netblocks for ASN %d", r.String(), asn)
 	}
 	return netblocks
 }
@@ -326,18 +309,12 @@ func (r *RADb) getNetblocksURL(asn string) string {
 }
 
 func (r *RADb) ipToASN(ctx context.Context, cidr string) int {
-	_, bus, err := requests.ContextConfigBus(ctx)
-	if err != nil {
-		return 0
-	}
-
 	numRateLimitChecks(r, 2)
 	if r.addr == "" {
 		msg := resolve.QueryMsg(radbWhoisURL, dns.TypeA)
 		resp, err := r.sys.TrustedResolvers().QueryBlocking(ctx, msg)
 		if err != nil {
-			bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
-				fmt.Sprintf("%s: %s: %v", r.String(), radbWhoisURL, err))
+			r.sys.Config().Log.Printf("%s: %s: %v", r.String(), radbWhoisURL, err)
 			return 0
 		}
 
@@ -348,8 +325,7 @@ func (r *RADb) ipToASN(ctx context.Context, cidr string) int {
 
 		ip := ans[0].Data
 		if ip == "" {
-			bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
-				fmt.Sprintf("%s: Failed to resolve %s", r.String(), radbWhoisURL))
+			r.sys.Config().Log.Printf("%s: Failed to resolve %s", r.String(), radbWhoisURL)
 			return 0
 		}
 		r.addr = ip
@@ -360,7 +336,7 @@ func (r *RADb) ipToASN(ctx context.Context, cidr string) int {
 
 	conn, err := amassnet.DialContext(ctx, "tcp", r.addr+":43")
 	if err != nil {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %v", r.String(), err))
+		r.sys.Config().Log.Printf("%s: %v", r.String(), err)
 		return 0
 	}
 	defer conn.Close()
@@ -375,7 +351,6 @@ func (r *RADb) ipToASN(ctx context.Context, cidr string) int {
 		if err := scanner.Err(); err != nil {
 			continue
 		}
-
 		if !strings.HasPrefix(line, "AS") {
 			continue
 		}

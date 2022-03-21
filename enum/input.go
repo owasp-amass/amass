@@ -18,14 +18,14 @@ import (
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/caffix/pipeline"
 	"github.com/caffix/queue"
+	"github.com/caffix/service"
 	bf "github.com/tylertreat/BoomFilters"
 )
 
 const (
-	waitForDuration   = 45 * time.Second
-	defaultSweepSize  = 100
-	activeSweepSize   = 200
-	numDataItemsInput = 100
+	waitForDuration  = 10 * time.Second
+	defaultSweepSize = 100
+	activeSweepSize  = 200
 )
 
 // enumSource handles the filtering and release of new Data in the enumeration.
@@ -38,28 +38,35 @@ type enumSource struct {
 	sweepFilter *bf.StableBloomFilter
 	subre       *regexp.Regexp
 	done        chan struct{}
-	tokens      chan struct{}
 	doneOnce    sync.Once
+	release     chan struct{}
+	inputsig    chan uint32
+	lastFill    time.Time
+	max         int
+	countLock   sync.Mutex
+	count       uint32
 }
 
 // newEnumSource returns an initialized input source for the enumeration pipeline.
 func newEnumSource(e *Enumeration) *enumSource {
+	qps := e.Sys.Resolvers().QPS()
+	if qps < 1000 {
+		qps = 1000
+	}
+
 	r := &enumSource{
 		enum:        e,
 		queue:       queue.NewQueue(),
 		dups:        queue.NewQueue(),
 		sweeps:      queue.NewQueue(),
 		filter:      bf.NewDefaultStableBloomFilter(1000000, 0.01),
-		sweepFilter: bf.NewDefaultStableBloomFilter(1000000, 0.01),
+		sweepFilter: bf.NewDefaultStableBloomFilter(100000, 0.01),
 		subre:       dns.AnySubdomainRegex(),
 		done:        make(chan struct{}),
-		tokens:      make(chan struct{}, numDataItemsInput),
+		release:     make(chan struct{}, qps),
+		inputsig:    make(chan uint32, qps*2),
+		max:         qps,
 	}
-
-	for i := 0; i < numDataItemsInput; i++ {
-		r.tokens <- struct{}{}
-	}
-
 	// Monitor the enumeration for completion or termination
 	go func() {
 		select {
@@ -70,9 +77,14 @@ func newEnumSource(e *Enumeration) *enumSource {
 		}
 	}()
 
-	if !e.Config.Passive {
-		go r.checkForData()
+	for _, src := range e.srcs {
+		go r.monitorDataSrcOutput(src)
 	}
+
+	for i := 0; i < qps; i++ {
+		r.release <- struct{}{}
+	}
+
 	go r.processDupNames()
 	return r
 }
@@ -93,10 +105,7 @@ func (r *enumSource) markDone() {
 }
 
 func (r *enumSource) dataSourceName(req *requests.DNSRequest) {
-	if req == nil || req.Name == "" {
-		return
-	}
-	if r.enum.Config.IsDomainInScope(req.Name) {
+	if req != nil && req.Name != "" && r.enum.Config.IsDomainInScope(req.Name) {
 		r.pipelineData(r.enum.ctx, req, nil)
 	}
 }
@@ -119,19 +128,16 @@ func (r *enumSource) pipelineData(ctx context.Context, data pipeline.Data, tp pi
 	switch v := data.(type) {
 	case *requests.DNSRequest:
 		if v != nil && v.Valid() {
-			<-r.tokens
-			go r.newName(ctx, v, tp)
+			go r.newName(v)
 		}
 	case *requests.AddrRequest:
 		if v != nil && v.Valid() {
-			<-r.tokens
 			go r.newAddr(ctx, v, tp)
 		}
 	}
 }
 
-func (r *enumSource) newName(ctx context.Context, req *requests.DNSRequest, tp pipeline.TaskParams) {
-	defer func() { r.tokens <- struct{}{} }()
+func (r *enumSource) newName(req *requests.DNSRequest) {
 	// Clean up the newly discovered name and domain
 	requests.SanitizeDNSRequest(req)
 	// Check that the name is valid
@@ -146,15 +152,12 @@ func (r *enumSource) newName(ctx context.Context, req *requests.DNSRequest, tp p
 			return
 		}
 	}
-
 	if r.accept(req.Name, req.Tag, req.Source, true) {
 		r.queue.Append(req)
 	}
 }
 
 func (r *enumSource) newAddr(ctx context.Context, req *requests.AddrRequest, tp pipeline.TaskParams) {
-	defer func() { r.tokens <- struct{}{} }()
-
 	if !req.InScope || tp == nil || !r.accept(req.Address, req.Tag, req.Source, false) {
 		return
 	}
@@ -210,30 +213,27 @@ func (r *enumSource) accept(s, tag, source string, name bool) bool {
 
 // Next implements the pipeline InputSource interface.
 func (r *enumSource) Next(ctx context.Context) bool {
-	select {
-	case <-r.done:
-		return false
-	default:
-	}
-
-	if !r.queue.Empty() {
-		return true
-	}
-
 	t := time.NewTimer(waitForDuration)
 	defer t.Stop()
+	check := time.NewTimer(10 * time.Millisecond)
+	defer check.Stop()
 
 	for {
 		select {
 		case <-r.done:
 			return false
+		case <-ctx.Done():
+			r.markDone()
+			return false
 		case <-t.C:
 			r.markDone()
 			return false
 		case <-r.queue.Signal():
-			if !r.queue.Empty() {
-				return true
-			}
+			r.fillQueue()
+			return true
+		case <-check.C:
+			r.fillQueue()
+			check.Reset(500 * time.Millisecond)
 		}
 	}
 }
@@ -243,12 +243,34 @@ func (r *enumSource) Data() pipeline.Data {
 	var data pipeline.Data
 
 	if element, ok := r.queue.Next(); ok {
-		if d, good := element.(pipeline.Data); good {
-			data = d
+		data = element.(pipeline.Data)
+		// Attempt to signal that new input was added to the pipeline
+		select {
+		case r.inputsig <- r.incrementCount():
+		default:
 		}
 	}
-
 	return data
+}
+
+func (r *enumSource) getCount() uint32 {
+	r.countLock.Lock()
+	defer r.countLock.Unlock()
+
+	return r.count
+}
+
+func (r *enumSource) incrementCount() uint32 {
+	r.countLock.Lock()
+	defer r.countLock.Unlock()
+
+	if r.count < (1<<32)-1 {
+		r.count++
+		return r.count
+	}
+
+	r.count = 0
+	return 0
 }
 
 // Error implements the pipeline InputSource interface.
@@ -256,84 +278,53 @@ func (r *enumSource) Error() error {
 	return nil
 }
 
-func (r *enumSource) checkForData() {
-	for {
+func (r *enumSource) fillQueue() {
+	if time.Since(r.lastFill) < 500*time.Millisecond {
+		return
+	}
+	if unfilled := r.max - r.queue.Len(); unfilled > 0 {
+		fill := unfilled - len(r.release)
+
+		if fill > 0 {
+			r.releaseOutput(fill)
+		}
+		if remaining := unfilled - fill; remaining > 0 {
+			go func(num int) { _ = r.requestSweeps(num) }(remaining)
+		}
+	}
+	r.lastFill = time.Now()
+}
+
+func (r *enumSource) releaseOutput(num int) {
+	for i := 0; i < num; i++ {
 		select {
-		case <-r.done:
-			return
+		case r.release <- struct{}{}:
 		default:
-		}
-
-		needed := r.enum.Config.MaxDNSQueries - r.queue.Len()
-		if needed <= 0 {
-			time.Sleep(250 * time.Millisecond)
-			continue
-		}
-
-		gen := r.enum.subTask.OutputRequests(needed)
-		if remains := needed - gen; remains > 0 {
-			gen += r.requestSweeps(remains)
-		}
-		if gen <= 0 {
-			time.Sleep(250 * time.Millisecond)
 		}
 	}
 }
 
-// This goroutine ensures that duplicate names from other sources are shown in the Graph.
-func (r *enumSource) processDupNames() {
-	uuid := r.enum.Config.UUID.String()
-
-	type altsource struct {
-		Name      string
-		Source    string
-		Tag       string
-		Timestamp time.Time
-	}
-
-	var pending []*altsource
-	each := func(element interface{}) {
-		req := element.(*requests.DNSRequest)
-
-		pending = append(pending, &altsource{
-			Name:      req.Name,
-			Source:    req.Source,
-			Tag:       req.Tag,
-			Timestamp: time.Now(),
-		})
-	}
-
-	t := time.NewTicker(10 * time.Second)
-	defer t.Stop()
-loop:
+func (r *enumSource) monitorDataSrcOutput(srv service.Service) {
 	for {
 		select {
 		case <-r.done:
-			break loop
-		case <-r.dups.Signal():
-			r.dups.Process(each)
-		case now := <-t.C:
-			var count int
-			for _, a := range pending {
-				if now.Before(a.Timestamp.Add(time.Minute)) {
-					break
-				}
-				for _, g := range r.enum.Sys.GraphDatabases() {
-					if _, err := g.ReadNode(r.enum.ctx, a.Name, "fqdn"); err == nil {
-						_, _ = g.UpsertFQDN(r.enum.ctx, a.Name, a.Source, uuid)
-					}
-				}
-				count++
+			return
+		case <-srv.Done():
+			return
+		case in := <-srv.Output():
+			select {
+			case <-r.done:
+				return
+			case <-srv.Done():
+				return
+			case <-r.release:
 			}
-			pending = pending[count:]
-		}
-	}
 
-	r.dups.Process(each)
-	for _, a := range pending {
-		for _, g := range r.enum.Sys.GraphDatabases() {
-			if _, err := g.ReadNode(r.enum.ctx, a.Name, "fqdn"); err == nil {
-				_, _ = g.UpsertFQDN(r.enum.ctx, a.Name, a.Source, uuid)
+			switch req := in.(type) {
+			case *requests.DNSRequest:
+				r.newName(req)
+			case *requests.AddrRequest:
+				r.dataSourceAddr(req)
 			}
 		}
 	}
@@ -343,14 +334,9 @@ func (r *enumSource) requestSweeps(num int) int {
 	var count int
 
 	for count < num {
-		e, ok := r.sweeps.Next()
-		if !ok {
-			break
-		}
-
-		if a, good := e.(*requests.AddrRequest); good {
+		if e, ok := r.sweeps.Next(); ok {
 			// Generate the additional addresses to sweep across
-			count += r.sweepAddrs(r.enum.ctx, a)
+			count += r.sweepAddrs(r.enum.ctx, e.(*requests.AddrRequest))
 		}
 	}
 	return count
@@ -406,5 +392,77 @@ func (r *enumSource) addrCIDR(addr string) *net.IPNet {
 	return &net.IPNet{
 		IP:   ip,
 		Mask: mask,
+	}
+}
+
+// This goroutine ensures that duplicate names from other sources are shown in the Graph.
+func (r *enumSource) processDupNames() {
+	countdown := r.max * 2
+	var inc uint32 = uint32(r.max) * 2
+	var highest uint32 = (1 << 32) - 1
+
+	type altsource struct {
+		Name      string
+		Source    string
+		Tag       string
+		Min       uint32
+		Countdown int
+	}
+
+	var pending []*altsource
+	each := func(element interface{}) {
+		if req := element.(*requests.DNSRequest); req.Tag != requests.BRUTE && req.Tag != requests.ALT {
+			min := r.getCount()
+			if highest-min < inc {
+				min = 0
+			}
+			pending = append(pending, &altsource{
+				Name:      req.Name,
+				Source:    req.Source,
+				Tag:       req.Tag,
+				Min:       min,
+				Countdown: countdown,
+			})
+		}
+	}
+
+	uuid := r.enum.Config.UUID.String()
+loop:
+	for {
+		select {
+		case <-r.done:
+			break loop
+		case <-r.dups.Signal():
+			r.dups.Process(each)
+		case num := <-r.inputsig:
+			var removed int
+
+			for i, a := range pending {
+				if i >= len(pending)-removed {
+					break
+				}
+				if a.Min >= num {
+					a.Countdown--
+				}
+				if a.Countdown <= 0 {
+					if _, err := r.enum.graph.ReadNode(r.enum.ctx, a.Name, "fqdn"); err == nil {
+						_, _ = r.enum.graph.UpsertFQDN(r.enum.ctx, a.Name, a.Source, uuid)
+					}
+					// Remove the element
+					removed++
+					pending[i] = pending[len(pending)-removed]
+				}
+			}
+			if removed > 0 {
+				pending = pending[:len(pending)-removed]
+			}
+		}
+	}
+	// Last attempt to update the sources information
+	r.dups.Process(each)
+	for _, a := range pending {
+		if _, err := r.enum.graph.ReadNode(r.enum.ctx, a.Name, "fqdn"); err == nil {
+			_, _ = r.enum.graph.UpsertFQDN(r.enum.ctx, a.Name, a.Source, uuid)
+		}
 	}
 }

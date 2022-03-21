@@ -1,5 +1,6 @@
-// Copyright 2020-2021 Jeff Foley. All rights reserved.
+// Copyright © by Jeff Foley 2020-2022. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
 
 package scripting
 
@@ -9,12 +10,13 @@ import (
 	"fmt"
 	"regexp"
 	"sync"
+	"time"
 
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/net/dns"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/systems"
-	"github.com/caffix/eventbus"
+	"github.com/caffix/queue"
 	"github.com/caffix/service"
 	luaurl "github.com/cjoudrey/gluaurl"
 	lua "github.com/yuin/gopher-lua"
@@ -44,7 +46,9 @@ type Script struct {
 	subre      *regexp.Regexp
 	seconds    int
 	active     sync.Mutex
+	ctx        context.Context
 	cancel     context.CancelFunc
+	queue      queue.Queue
 }
 
 // NewScript returns he object initialized, but not yet started.
@@ -54,50 +58,38 @@ func NewScript(script string, sys systems.System) *Script {
 		return nil
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-
 	s := &Script{
-		sys:    sys,
-		subre:  re,
-		cancel: cancel,
+		sys:   sys,
+		subre: re,
+		queue: queue.NewQueue(),
 	}
+	s.ctx, s.cancel = context.WithCancel(context.Background())
 
 	L := s.newLuaState(sys.Config())
 	s.luaState = L
-	L.SetContext(ctx)
-
+	//L.SetContext(s.ctx)
 	// Load the script
 	if err := L.DoString(script); err != nil {
-		msg := fmt.Sprintf("Script: Failed to load script: %v", err)
-
-		sys.Config().Log.Print(msg)
-		sys.Config().Log.Print(script)
+		sys.Config().Log.Printf("Script: Failed to load the %s script: %v", script, err)
 		return nil
 	}
-
 	// Pull the script type from the script
 	s.SourceType, err = s.scriptType()
 	if err != nil {
-		msg := fmt.Sprintf("Script: Failed to obtain the script type: %v", err)
-
-		sys.Config().Log.Print(msg)
-		sys.Config().Log.Print(script)
+		sys.Config().Log.Printf("Script: Failed to obtain the %s script type: %v", script, err)
 		return nil
 	}
-
 	// Pull the script name from the script
 	name, err := s.scriptName()
 	if err != nil {
-		msg := fmt.Sprintf("Script: Failed to obtain the script name: %v", err)
-
-		sys.Config().Log.Print(msg)
-		sys.Config().Log.Print(script)
+		sys.Config().Log.Printf("Script: Failed to obtain the %s script name: %v", script, err)
 		return nil
 	}
 	s.BaseService = *service.NewBaseService(s, name)
-
 	// Save references to the callbacks defined within the script
 	s.assignCallbacks()
+	go s.manageOutput()
+	go s.requests()
 	return s
 }
 
@@ -154,32 +146,28 @@ func (s *Script) assignCallbacks() {
 // Acquires the script name of the script by accessing the global variable.
 func (s *Script) scriptName() (string, error) {
 	L := s.luaState
-
 	lv := L.GetGlobal("name")
+
 	if lv.Type() == lua.LTNil {
 		return "", errors.New("Script does not contain the 'name' global")
 	}
-
 	if str, ok := lv.(lua.LString); ok {
 		return string(str), nil
 	}
-
 	return "", errors.New("the script global 'name' is not a string")
 }
 
 // Acquires the script type of the script by accessing the global variable.
 func (s *Script) scriptType() (string, error) {
 	L := s.luaState
-
 	lv := L.GetGlobal("type")
+
 	if lv.Type() == lua.LTNil {
 		return "", errors.New("Script does not contain the 'type' global")
 	}
-
 	if str, ok := lv.(lua.LString); ok {
 		return string(str), nil
 	}
-
 	return "", errors.New("the script global 'type' is not a string")
 }
 
@@ -200,19 +188,19 @@ func (s *Script) OnStart() error {
 			Protect: true,
 		})
 		if err != nil {
-			s.sys.Config().Log.Print(fmt.Sprintf("%s: start callback: %v", s.String(), err))
+			s.sys.Config().Log.Printf("%s: start callback: %v", s.String(), err)
 		}
 	}
-
 	if s.seconds > 0 {
 		s.SetRateLimit(1)
 	}
-
 	return s.checkConfig()
 }
 
 // OnStop implements the Service interface.
 func (s *Script) OnStop() error {
+	s.cancel()
+
 	s.active.Lock()
 	defer s.active.Unlock()
 
@@ -225,12 +213,10 @@ func (s *Script) OnStop() error {
 		})
 		if err != nil {
 			err = fmt.Errorf("%s: stop callback: %v", s.String(), err)
-
 			s.sys.Config().Log.Print(err.Error())
 		}
 	}
 
-	s.cancel()
 	s.luaState.Close()
 	return err
 }
@@ -267,35 +253,117 @@ func (s *Script) checkConfig() error {
 	return errors.New(estr)
 }
 
-// OnRequest implements the Service interface.
-func (s *Script) OnRequest(ctx context.Context, args service.Args) {
+func (s *Script) manageOutput() {
+loop:
+	for {
+		select {
+		case <-s.Done():
+			break loop
+		case <-s.ctx.Done():
+			break loop
+		case <-s.queue.Signal():
+			if element, ok := s.queue.Next(); ok {
+				select {
+				case <-s.Done():
+					break loop
+				case <-s.ctx.Done():
+					break loop
+				case s.Output() <- element:
+				}
+			}
+		}
+	}
+	// Empty the queue
+	for {
+		_, _ = s.queue.Next()
+		if s.queue.Len() == 0 {
+			break
+		}
+	}
+	// Empty the output channel
+	for {
+		select {
+		case <-s.Output():
+		default:
+			return
+		}
+	}
+}
+
+func (s *Script) requests() {
+	ready := make(chan struct{}, 1)
+	t := time.NewTimer(50 * time.Millisecond)
+	defer t.Stop()
+loop:
+	for {
+		select {
+		case <-s.Done():
+			break loop
+		case <-s.ctx.Done():
+			break loop
+		case <-ready:
+			select {
+			case <-s.Done():
+				break loop
+			case <-s.ctx.Done():
+				break loop
+			case in := <-s.Input():
+				s.dispatch(in)
+			}
+		case <-t.C:
+			if s.queue.Len() == 0 {
+				select {
+				case ready <- struct{}{}:
+				default:
+				}
+			}
+		}
+		t.Reset(50 * time.Millisecond)
+	}
+	// Empty the input channel
+	for {
+		select {
+		case <-s.Input():
+		default:
+			return
+		}
+	}
+}
+
+func (s *Script) dispatch(in interface{}) {
 	s.active.Lock()
 	defer s.active.Unlock()
 
-	switch req := args.(type) {
+	switch req := in.(type) {
 	case *requests.DNSRequest:
 		if s.cbs.Vertical.Type() != lua.LTNil && req != nil && req.Domain != "" {
-			s.dnsRequest(ctx, req)
+			s.CheckRateLimit()
+			s.dnsRequest(s.ctx, req)
 		}
 	case *requests.ResolvedRequest:
 		if s.cbs.Resolved.Type() != lua.LTNil && req != nil && req.Name != "" && len(req.Records) > 0 {
-			s.resolvedRequest(ctx, req)
+			s.CheckRateLimit()
+			s.resolvedRequest(s.ctx, req)
 		}
 	case *requests.SubdomainRequest:
 		if s.cbs.Subdomain.Type() != lua.LTNil && req != nil && req.Name != "" {
-			s.subdomainRequest(ctx, req)
+			s.CheckRateLimit()
+			s.subdomainRequest(s.ctx, req)
 		}
 	case *requests.AddrRequest:
 		if s.cbs.Address.Type() != lua.LTNil && req != nil && req.Address != "" {
-			s.addrRequest(ctx, req)
+			s.CheckRateLimit()
+			s.addrRequest(s.ctx, req)
 		}
 	case *requests.ASNRequest:
 		if s.cbs.Asn.Type() != lua.LTNil && req != nil && (req.Address != "" || req.ASN != 0) {
-			s.asnRequest(ctx, req)
+			s.CheckRateLimit()
+			s.asnRequest(s.ctx, req)
 		}
 	case *requests.WhoisRequest:
 		if s.cbs.Horizontal.Type() != lua.LTNil {
-			s.whoisRequest(ctx, req)
+			s.CheckRateLimit()
+			s.whoisRequest(s.ctx, req)
 		}
 	}
 }
@@ -303,39 +371,26 @@ func (s *Script) OnRequest(ctx context.Context, args service.Args) {
 func (s *Script) dnsRequest(ctx context.Context, req *requests.DNSRequest) {
 	L := s.luaState
 
-	if err := checkContextExpired(ctx); err != nil {
+	if contextExpired(ctx) {
 		return
 	}
 
-	_, bus, err := requests.ContextConfigBus(ctx)
-	if err != nil {
-		return
-	}
+	s.sys.Config().Log.Printf("Querying %s for %s subdomains", s.String(), req.Domain)
 
-	bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
-		fmt.Sprintf("Querying %s for %s subdomains", s.String(), req.Domain))
-
-	err = L.CallByParam(lua.P{
+	err := L.CallByParam(lua.P{
 		Fn:      s.cbs.Vertical,
 		NRet:    0,
 		Protect: true,
 	}, s.contextToUserData(ctx), lua.LString(req.Domain))
-
 	if err != nil {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
-			fmt.Sprintf("%s: vertical callback: %v", s.String(), err))
+		s.sys.Config().Log.Printf("%s: vertical callback: %v", s.String(), err)
 	}
 }
 
 func (s *Script) resolvedRequest(ctx context.Context, req *requests.ResolvedRequest) {
 	L := s.luaState
 
-	if err := checkContextExpired(ctx); err != nil {
-		return
-	}
-
-	_, bus, err := requests.ContextConfigBus(ctx)
-	if err != nil {
+	if contextExpired(ctx) {
 		return
 	}
 
@@ -349,110 +404,80 @@ func (s *Script) resolvedRequest(ctx context.Context, req *requests.ResolvedRequ
 		records.Append(tb)
 	}
 
-	err = L.CallByParam(lua.P{
+	err := L.CallByParam(lua.P{
 		Fn:      s.cbs.Resolved,
 		NRet:    0,
 		Protect: true,
 	}, s.contextToUserData(ctx), lua.LString(req.Name), lua.LString(req.Domain), records)
-
 	if err != nil {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
-			fmt.Sprintf("%s: resolved callback: %v", s.String(), err))
+		s.sys.Config().Log.Printf("%s: resolved callback: %v", s.String(), err)
 	}
 }
 
 func (s *Script) subdomainRequest(ctx context.Context, req *requests.SubdomainRequest) {
 	L := s.luaState
 
-	if err := checkContextExpired(ctx); err != nil {
+	if contextExpired(ctx) {
 		return
 	}
 
-	_, bus, err := requests.ContextConfigBus(ctx)
-	if err != nil {
-		return
-	}
-
-	err = L.CallByParam(lua.P{
+	err := L.CallByParam(lua.P{
 		Fn:      s.cbs.Subdomain,
 		NRet:    0,
 		Protect: true,
 	}, s.contextToUserData(ctx), lua.LString(req.Name), lua.LString(req.Domain), lua.LNumber(req.Times))
-
 	if err != nil {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
-			fmt.Sprintf("%s: subdomain callback: %v", s.String(), err))
+		s.sys.Config().Log.Printf("%s: subdomain callback: %v", s.String(), err)
 	}
 }
 
 func (s *Script) addrRequest(ctx context.Context, req *requests.AddrRequest) {
 	L := s.luaState
 
-	if err := checkContextExpired(ctx); err != nil {
+	if contextExpired(ctx) {
 		return
 	}
 
-	_, bus, err := requests.ContextConfigBus(ctx)
-	if err != nil {
-		return
-	}
-
-	err = L.CallByParam(lua.P{
+	err := L.CallByParam(lua.P{
 		Fn:      s.cbs.Address,
 		NRet:    0,
 		Protect: true,
 	}, s.contextToUserData(ctx), lua.LString(req.Address))
-
 	if err != nil {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
-			fmt.Sprintf("%s: address callback: %v", s.String(), err))
+		s.sys.Config().Log.Printf("%s: address callback: %v", s.String(), err)
 	}
 }
 
 func (s *Script) asnRequest(ctx context.Context, req *requests.ASNRequest) {
 	L := s.luaState
 
-	if err := checkContextExpired(ctx); err != nil {
+	if contextExpired(ctx) {
 		return
 	}
 
-	_, bus, err := requests.ContextConfigBus(ctx)
-	if err != nil {
-		return
-	}
-
-	err = L.CallByParam(lua.P{
+	err := L.CallByParam(lua.P{
 		Fn:      s.cbs.Asn,
 		NRet:    0,
 		Protect: true,
 	}, s.contextToUserData(ctx), lua.LString(req.Address), lua.LNumber(req.ASN))
-
 	if err != nil {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
-			fmt.Sprintf("%s: asn callback: %v", s.String(), err))
+		s.sys.Config().Log.Printf("%s: asn callback: %v", s.String(), err)
 	}
 }
 
 func (s *Script) whoisRequest(ctx context.Context, req *requests.WhoisRequest) {
 	L := s.luaState
 
-	if err := checkContextExpired(ctx); err != nil {
+	if contextExpired(ctx) {
 		return
 	}
 
-	_, bus, err := requests.ContextConfigBus(ctx)
-	if err != nil {
-		return
-	}
-
-	err = L.CallByParam(lua.P{
+	err := L.CallByParam(lua.P{
 		Fn:      s.cbs.Horizontal,
 		NRet:    0,
 		Protect: true,
 	}, s.contextToUserData(ctx), lua.LString(req.Domain))
-
 	if err != nil {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
-			fmt.Sprintf("%s: horizontal callback: %v", s.String(), err))
+		s.sys.Config().Log.Printf("%s: horizontal callback: %v", s.String(), err)
 	}
 }

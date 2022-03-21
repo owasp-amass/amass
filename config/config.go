@@ -151,7 +151,6 @@ func NewConfig() *Config {
 		Ports:           []int{80, 443},
 		MinForRecursive: 1,
 		// The following is enum-only, but intel will just ignore them anyway
-		Alterations:    true,
 		FlipWords:      true,
 		FlipNumbers:    true,
 		AddWords:       true,

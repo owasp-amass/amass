@@ -1,5 +1,6 @@
-// Copyright 2017-2021 Jeff Foley. All rights reserved.
+// Copyright © by Jeff Foley 2017-2022. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
 
 package datasrcs
 
@@ -14,7 +15,6 @@ import (
 	"github.com/OWASP/Amass/v3/net/http"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/systems"
-	"github.com/caffix/eventbus"
 	"github.com/caffix/service"
 	"github.com/dghubble/go-twitter/twitter"
 	"golang.org/x/oauth2"
@@ -37,6 +37,7 @@ func NewTwitter(sys systems.System) *Twitter {
 		sys:        sys,
 	}
 
+	go t.requests()
 	t.BaseService = *service.NewBaseService(t, "Twitter")
 	return t
 }
@@ -80,28 +81,29 @@ func (t *Twitter) checkConfig() error {
 	return nil
 }
 
-// OnRequest implements the Service interface.
-func (t *Twitter) OnRequest(ctx context.Context, args service.Args) {
-	if req, ok := args.(*requests.DNSRequest); ok {
-		t.dnsRequest(ctx, req)
-		t.CheckRateLimit()
+func (t *Twitter) requests() {
+	for {
+		select {
+		case <-t.Done():
+			return
+		case in := <-t.Input():
+			switch req := in.(type) {
+			case *requests.DNSRequest:
+				t.CheckRateLimit()
+				t.dnsRequest(context.TODO(), req)
+			}
+		}
 	}
 }
 
 func (t *Twitter) dnsRequest(ctx context.Context, req *requests.DNSRequest) {
-	cfg, bus, err := requests.ContextConfigBus(ctx)
-	if err != nil {
-		return
-	}
-
-	re := cfg.DomainRegex(req.Domain)
+	re := t.sys.Config().DomainRegex(req.Domain)
 	if t.client == nil || re == nil {
 		return
 	}
 
 	numRateLimitChecks(t, 2)
-	bus.Publish(requests.LogTopic, eventbus.PriorityHigh,
-		fmt.Sprintf("Querying %s for %s subdomains", t.String(), req.Domain))
+	t.sys.Config().Log.Printf("Querying %s for %s subdomains", t.String(), req.Domain)
 
 	searchParams := &twitter.SearchTweetParams{
 		Query: req.Domain,
@@ -109,7 +111,7 @@ func (t *Twitter) dnsRequest(ctx context.Context, req *requests.DNSRequest) {
 	}
 	search, _, err := t.client.Search.Tweets(searchParams)
 	if err != nil {
-		bus.Publish(requests.LogTopic, eventbus.PriorityHigh, fmt.Sprintf("%s: %v", t.String(), err))
+		t.sys.Config().Log.Printf("%s: %v", t.String(), err)
 		return
 	}
 
@@ -120,7 +122,6 @@ func (t *Twitter) dnsRequest(ctx context.Context, req *requests.DNSRequest) {
 				genNewNameEvent(ctx, t.sys, t, name)
 			}
 		}
-
 		// Source of the tweet
 		for _, name := range re.FindAllString(tweet.Source, -1) {
 			genNewNameEvent(ctx, t.sys, t, name)
