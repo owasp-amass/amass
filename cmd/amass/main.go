@@ -24,6 +24,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"net"
@@ -60,6 +61,7 @@ var (
 	b      = color.New(color.FgHiBlue)
 	fgR    = color.New(color.FgRed)
 	fgY    = color.New(color.FgYellow)
+	red    = color.New(color.FgHiRed).SprintFunc()
 	yellow = color.New(color.FgHiYellow).SprintFunc()
 	green  = color.New(color.FgHiGreen).SprintFunc()
 	blue   = color.New(color.FgHiBlue).SprintFunc()
@@ -257,6 +259,25 @@ func openGraphDatabase(dir string, cfg *config.Config) *netmap.Graph {
 	}
 
 	return nil
+}
+
+func memGraphForScope(ctx context.Context, domains []string, from *netmap.Graph) (*netmap.Graph, error) {
+	db := netmap.NewGraph(netmap.NewCayleyGraphMemory())
+	if db == nil {
+		return nil, errors.New("failed to create the in-memory graph database")
+	}
+
+	var err error
+	// Migrate the event data into the in-memory graph database
+	if len(domains) == 0 {
+		err = from.MigrateEvents(ctx, db)
+	} else {
+		err = from.MigrateEventsInScope(ctx, db, domains)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to move the data into the in-memory graph database: %v", err)
+	}
+	return db, nil
 }
 
 func orderedEvents(ctx context.Context, events []string, db *netmap.Graph) ([]string, []time.Time, []time.Time) {

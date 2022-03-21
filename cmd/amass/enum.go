@@ -31,6 +31,7 @@ import (
 	"github.com/OWASP/Amass/v3/format"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/systems"
+	"github.com/caffix/netmap"
 	"github.com/caffix/stringset"
 	"github.com/fatih/color"
 	bf "github.com/tylertreat/BoomFilters"
@@ -63,6 +64,7 @@ type enumArgs struct {
 	Timeout           int
 	Options           struct {
 		Active          bool
+		Alterations     bool
 		BruteForcing    bool
 		DemoMode        bool
 		IPs             bool
@@ -130,7 +132,8 @@ func defineEnumOptionFlags(enumFlags *flag.FlagSet, args *enumArgs) {
 	enumFlags.BoolVar(&args.Options.IPv4, "ipv4", false, "Show the IPv4 addresses for discovered names")
 	enumFlags.BoolVar(&args.Options.IPv6, "ipv6", false, "Show the IPv6 addresses for discovered names")
 	enumFlags.BoolVar(&args.Options.ListSources, "list", false, "Print the names of all available data sources")
-	enumFlags.BoolVar(&args.Options.NoAlts, "noalts", false, "Disable generation of altered names")
+	enumFlags.BoolVar(&args.Options.Alterations, "alts", false, "Enable generation of altered names")
+	enumFlags.BoolVar(&args.Options.NoAlts, "noalts", true, "Deprecated flag to be removed in version 4.0")
 	enumFlags.BoolVar(&args.Options.NoColor, "nocolor", false, "Disable colorized output")
 	enumFlags.BoolVar(&placeholder, "nolocaldb", false, "Deprecated feature to be removed in version 4.0")
 	enumFlags.BoolVar(&args.Options.NoRecursive, "norecursive", false, "Turn off recursive brute forcing")
@@ -194,13 +197,15 @@ func runEnumCommand(clArgs []string) {
 	// Expand data source category names into the associated source names
 	initializeSourceTags(sys.DataSources())
 	cfg.SourceFilter.Sources = expandCategoryNames(cfg.SourceFilter.Sources, generateCategoryMap(sys))
+	// Create the in-memory graph database used to store enumeration findings
+	graph := netmap.NewGraph(netmap.NewCayleyGraphMemory())
+	defer graph.Close()
 	// Setup the new enumeration
-	e := enum.NewEnumeration(cfg, sys)
+	e := enum.NewEnumeration(cfg, sys, graph)
 	if e == nil {
 		r.Fprintf(color.Error, "%s\n", "Failed to setup the enumeration")
 		os.Exit(1)
 	}
-	defer e.Close()
 
 	var wg sync.WaitGroup
 	var outChans []chan *requests.Output
@@ -237,7 +242,7 @@ func runEnumCommand(clArgs []string) {
 	defer cancel()
 
 	wg.Add(1)
-	go processOutput(ctx, e, outChans, done, &wg)
+	go processOutput(ctx, graph, e, outChans, done, &wg)
 	// Monitor for cancellation by the user
 	go func(c context.CancelFunc) {
 		quit := make(chan os.Signal, 1)
@@ -259,6 +264,32 @@ func runEnumCommand(clArgs []string) {
 	// Let all the output goroutines know that the enumeration has finished
 	close(done)
 	wg.Wait()
+	// If necessary, handle graph database migration
+	if len(e.Sys.GraphDatabases()) > 0 {
+		fmt.Fprintf(color.Error, "\n%s\n", green("The enumeration has finished"))
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		defer cancel()
+		// Monitor for cancellation by the user
+		go func(c context.CancelFunc) {
+			quit := make(chan os.Signal, 1)
+			signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+			defer signal.Stop(quit)
+
+			<-quit
+			c()
+		}(cancel)
+		// Copy the graph of findings into the system graph databases
+		for _, g := range e.Sys.GraphDatabases() {
+			fmt.Fprintf(color.Error, "%s%s%s\n",
+				yellow("Discoveries are being migrated into the "), yellow(g.String()), yellow(" database"))
+
+			if err := graph.Migrate(ctx, g); err != nil {
+				fmt.Fprintf(color.Error, "%s%s%s%s\n",
+					red("The database migration to "), red(g.String()), red(" failed: "), red(err.Error()))
+			}
+		}
+	}
 }
 
 func argsAndConfig(clArgs []string) (*config.Config, *enumArgs) {
@@ -497,7 +528,7 @@ func saveJSONOutput(e *enum.Enumeration, args *enumArgs, output chan *requests.O
 	}
 }
 
-func processOutput(ctx context.Context, e *enum.Enumeration, outputs []chan *requests.Output, done chan struct{}, wg *sync.WaitGroup) {
+func processOutput(ctx context.Context, g *netmap.Graph, e *enum.Enumeration, outputs []chan *requests.Output, done chan struct{}, wg *sync.WaitGroup) {
 	defer wg.Done()
 	defer func() {
 		// Signal all the other output goroutines to terminate
@@ -511,18 +542,17 @@ func processOutput(ctx context.Context, e *enum.Enumeration, outputs []chan *req
 	defer func() { _ = known.Reset() }()
 	// The function that obtains output from the enum and puts it on the channel
 	extract := func(limit int) {
-		for _, o := range ExtractOutput(ctx, e, known, true, limit) {
+		for _, o := range ExtractOutput(ctx, g, e, known, true, limit) {
 			if !o.Complete(e.Config.Passive) || !e.Config.IsDomainInScope(o.Name) {
 				continue
 			}
-
 			for _, ch := range outputs {
 				ch <- o
 			}
 		}
 	}
 
-	t := time.NewTicker(5 * time.Second)
+	t := time.NewTicker(3 * time.Second)
 	defer t.Stop()
 	for {
 		select {
@@ -540,8 +570,6 @@ func processOutput(ctx context.Context, e *enum.Enumeration, outputs []chan *req
 
 func writeLogsAndMessages(logs *io.PipeReader, logfile string, verbose bool) {
 	wildcard := regexp.MustCompile("DNS wildcard")
-	avg := regexp.MustCompile("Average DNS queries")
-	rScore := regexp.MustCompile("Resolver .* has a low score")
 	queries := regexp.MustCompile("Querying")
 
 	var filePtr *os.File
@@ -575,14 +603,6 @@ func writeLogsAndMessages(logs *io.PipeReader, logfile string, verbose bool) {
 		// Remove the timestamp
 		parts := strings.Split(line, " ")
 		line = strings.Join(parts[1:], " ")
-		// Check for the Amass average DNS names messages
-		if avg.FindString(line) != "" {
-			fgY.Fprintln(color.Error, line)
-		}
-		// Check if a DNS resolver was lost due to its score
-		if rScore.FindString(line) != "" {
-			fgR.Fprintln(color.Error, line)
-		}
 		// Check for Amass DNS wildcard messages
 		if verbose && wildcard.FindString(line) != "" {
 			fgR.Fprintln(color.Error, line)
@@ -697,8 +717,8 @@ func (e enumArgs) OverrideConfig(conf *config.Config) error {
 	if e.Options.BruteForcing {
 		conf.BruteForcing = true
 	}
-	if e.Options.NoAlts {
-		conf.Alterations = false
+	if e.Options.Alterations {
+		conf.Alterations = true
 	}
 	if e.Options.NoRecursive {
 		conf.Recursive = false

@@ -77,7 +77,6 @@ func runVizCommand(clArgs []string) {
 		commandUsage(vizUsageMsg, vizCommand, vizBuf)
 		return
 	}
-
 	if err := vizCommand.Parse(clArgs); err != nil {
 		r.Fprintf(color.Error, "%v\n", err)
 		os.Exit(1)
@@ -86,7 +85,6 @@ func runVizCommand(clArgs []string) {
 		commandUsage(vizUsageMsg, vizCommand, vizBuf)
 		return
 	}
-
 	if args.Options.NoColor {
 		color.NoColor = true
 	}
@@ -94,14 +92,12 @@ func runVizCommand(clArgs []string) {
 		color.Output = ioutil.Discard
 		color.Error = ioutil.Discard
 	}
-
 	// Make sure at least one graph file format has been identified on the command-line
 	if !args.Options.D3 && !args.Options.DOT &&
 		!args.Options.GEXF && !args.Options.Graphistry && !args.Options.Maltego {
 		r.Fprintln(color.Error, "At least one file format must be selected")
 		os.Exit(1)
 	}
-
 	if args.Filepaths.Domains != "" {
 		list, err := config.GetListFromFile(args.Filepaths.Domains)
 		if err != nil {
@@ -133,29 +129,31 @@ func runVizCommand(clArgs []string) {
 		os.Exit(1)
 	}
 	defer db.Close()
-
+	// Create the in-memory graph database
+	memDB, err := memGraphForScope(context.Background(), args.Domains.Slice(), db)
+	if err != nil {
+		r.Fprintln(color.Error, err.Error())
+		os.Exit(1)
+	}
+	defer memDB.Close()
 	// Get all the UUIDs for events that have information in scope
-	uuids := db.EventsInScope(context.TODO(), args.Domains.Slice()...)
+	uuids := memDB.EventsInScope(context.Background(), args.Domains.Slice()...)
 	if len(uuids) == 0 {
 		r.Fprintln(color.Error, "Failed to find the domains of interest in the database")
 		os.Exit(1)
 	}
-
 	// Put the events in chronological order
-	uuids, _, _ = orderedEvents(context.TODO(), uuids, db)
+	uuids, _, _ = orderedEvents(context.Background(), uuids, memDB)
 	if len(uuids) == 0 {
 		r.Fprintln(color.Error, "Failed to sort the events")
 		os.Exit(1)
 	}
-
 	// Select the enumeration that the user specified
 	if args.Enum > 0 && len(uuids) > args.Enum {
 		uuids = []string{uuids[args.Enum]}
 	}
-
 	// Obtain the visualization nodes & edges from the graph
-	nodes, edges := viz.VizData(context.TODO(), db, uuids)
-
+	nodes, edges := viz.VizData(context.Background(), memDB, uuids)
 	// Get the directory to save the files into
 	dir := args.Filepaths.Directory
 	if args.Filepaths.Output != "" {
@@ -163,11 +161,8 @@ func runVizCommand(clArgs []string) {
 			r.Fprintln(color.Error, "The output location does not exist or is not a directory")
 			os.Exit(1)
 		}
-
 		dir = args.Filepaths.Output
 	}
-
-	var err error
 	if args.Options.D3 {
 		path := filepath.Join(dir, "amass_d3.html")
 		err = writeGraphOutputFile("d3", path, nodes, edges)
@@ -188,7 +183,6 @@ func runVizCommand(clArgs []string) {
 		path := filepath.Join(dir, "amass_maltego.csv")
 		err = writeGraphOutputFile("maltego", path, nodes, edges)
 	}
-
 	if err != nil {
 		r.Fprintf(color.Error, "Failed to write the output file: %v\n", err)
 		os.Exit(1)
@@ -220,6 +214,5 @@ func writeGraphOutputFile(t string, path string, nodes []viz.Node, edges []viz.E
 	case "maltego":
 		viz.WriteMaltegoData(f, nodes, edges)
 	}
-
 	return err
 }
