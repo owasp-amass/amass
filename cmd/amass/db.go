@@ -187,7 +187,7 @@ func runDBCommand(clArgs []string) {
 }
 
 func listEvents(uuids []string, db *netmap.Graph) {
-	events, earliest, latest := orderedEvents(context.TODO(), uuids, db)
+	events, earliest, latest := orderedEvents(context.Background(), uuids, db)
 	// Check if the user has requested the list of enumerations
 	for pos, idx := 0, len(events)-1; idx >= 0; idx-- {
 		if pos != 0 {
@@ -196,7 +196,7 @@ func listEvents(uuids []string, db *netmap.Graph) {
 
 		g.Printf("%d) %s -> %s: ", pos+1, earliest[idx].Format(timeFormat), latest[idx].Format(timeFormat))
 		// Print out the scope for this enumeration
-		for x, domain := range db.EventDomains(context.TODO(), events[idx]) {
+		for x, domain := range db.EventDomains(context.Background(), events[idx]) {
 			if x != 0 {
 				g.Print(", ")
 			}
@@ -239,7 +239,7 @@ func showEventData(args *dbArgs, uuids []string, asninfo bool, db *netmap.Graph)
 
 	tags := make(map[string]int)
 	asns := make(map[int]*format.ASNSummaryData)
-	for _, out := range getEventOutput(context.TODO(), uuids, asninfo, db, cache) {
+	for _, out := range getEventOutput(context.Background(), uuids, asninfo, db, cache) {
 		if len(domains) > 0 && !domainNameInScope(out.Name, domains) {
 			continue
 		}
@@ -319,7 +319,7 @@ func writeJSON(args *dbArgs, uuids []string, assets []*requests.Output, db *netm
 	var output jsonOutput
 
 	// Add the event data to the JSON
-	events, earliest, latest := orderedEvents(context.TODO(), uuids, db)
+	events, earliest, latest := orderedEvents(context.Background(), uuids, db)
 	for i, uuid := range events {
 		output.Events = append(output.Events, &jsonEvent{
 			UUID:   uuid,
@@ -372,7 +372,7 @@ func writeJSON(args *dbArgs, uuids []string, assets []*requests.Output, db *netm
 }
 
 func fillCache(cache *requests.ASNCache, db *netmap.Graph) error {
-	aslist, err := db.AllNodesOfType(context.TODO(), netmap.TypeAS)
+	aslist, err := db.AllNodesOfType(context.Background(), netmap.TypeAS)
 	if err != nil {
 		return err
 	}
@@ -383,12 +383,12 @@ func fillCache(cache *requests.ASNCache, db *netmap.Graph) error {
 			continue
 		}
 
-		desc := db.ReadASDescription(context.TODO(), asn)
+		desc := db.ReadASDescription(context.Background(), asn)
 		if desc == "" {
 			continue
 		}
 
-		for _, prefix := range db.ReadASPrefixes(context.TODO(), asn) {
+		for _, prefix := range db.ReadASPrefixes(context.Background(), asn) {
 			first, cidr, err := net.ParseCIDR(prefix)
 			if err != nil {
 				continue

@@ -15,6 +15,7 @@ import (
 	"github.com/OWASP/Amass/v3/systems"
 	"github.com/caffix/netmap"
 	"github.com/caffix/pipeline"
+	"github.com/caffix/queue"
 	"github.com/caffix/service"
 	bf "github.com/tylertreat/BoomFilters"
 )
@@ -23,25 +24,27 @@ const maxActivePipelineTasks int = 25
 
 // Enumeration is the object type used to execute a DNS enumeration.
 type Enumeration struct {
-	Config  *config.Config
-	Sys     systems.System
-	ctx     context.Context
-	graph   *netmap.Graph
-	srcs    []service.Service
-	done    chan struct{}
-	nameSrc *enumSource
-	subTask *subdomainTask
-	dnsTask *dnsTask
-	store   *dataManager
+	Config   *config.Config
+	Sys      systems.System
+	ctx      context.Context
+	graph    *netmap.Graph
+	srcs     []service.Service
+	done     chan struct{}
+	nameSrc  *enumSource
+	subTask  *subdomainTask
+	dnsTask  *dnsTask
+	store    *dataManager
+	requests queue.Queue
 }
 
 // NewEnumeration returns an initialized Enumeration that has not been started yet.
 func NewEnumeration(cfg *config.Config, sys systems.System, graph *netmap.Graph) *Enumeration {
 	return &Enumeration{
-		Config: cfg,
-		Sys:    sys,
-		graph:  graph,
-		srcs:   datasrcs.SelectedDataSources(cfg, sys.DataSources()),
+		Config:   cfg,
+		Sys:      sys,
+		graph:    graph,
+		srcs:     datasrcs.SelectedDataSources(cfg, sys.DataSources()),
+		requests: queue.NewQueue(),
 	}
 }
 
@@ -58,6 +61,7 @@ func (e *Enumeration) Start(ctx context.Context) error {
 	var cancel context.CancelFunc
 	e.ctx, cancel = context.WithCancel(ctx)
 	defer cancel()
+	go e.manageDataSrcRequests()
 
 	if !e.Config.Passive {
 		e.dnsTask = newDNSTask(e)
@@ -74,20 +78,16 @@ func (e *Enumeration) Start(ctx context.Context) error {
 		stages = append(stages, pipeline.FIFO("", e.dnsTask.blacklistTaskFunc()))
 		stages = append(stages, pipeline.FIFO("root", e.dnsTask.rootTaskFunc()))
 		stages = append(stages, pipeline.DynamicPool("dns", e.dnsTask, e.Sys.Resolvers().QPS()))
-	}
-
-	filter := bf.NewDefaultStableBloomFilter(100000, 0.01)
-	defer func() { _ = filter.Reset() }()
-	stages = append(stages, pipeline.FIFO("filter", e.filterTaskFunc(filter)))
-
-	if !e.Config.Passive {
 		stages = append(stages, pipeline.FIFO("store", e.store))
 		stages = append(stages, pipeline.FIFO("", e.subTask))
+	} else {
+		filter := bf.NewDefaultStableBloomFilter(1000000, 0.01)
+		defer func() { _ = filter.Reset() }()
+		stages = append(stages, pipeline.FIFO("filter", e.filterTaskFunc(filter)))
 	}
 	if e.Config.Active {
 		activetask := newActiveTask(e, maxActivePipelineTasks)
 		defer activetask.Stop()
-
 		stages = append(stages, pipeline.FIFO("active", activetask))
 	}
 
@@ -125,7 +125,7 @@ func (e *Enumeration) submitDomainNames() {
 			Source: "DNS",
 		}
 
-		e.nameSrc.dataSourceName(req)
+		e.nameSrc.newName(req)
 		e.sendRequests(req.Clone().(*requests.DNSRequest))
 	}
 }
@@ -139,16 +139,63 @@ func (e *Enumeration) submitASNs() {
 }
 
 func (e *Enumeration) sendRequests(element interface{}) {
+	e.requests.Append(element)
+}
+
+func (e *Enumeration) manageDataSrcRequests() {
+	nameToSrc := make(map[string]service.Service)
 	for _, src := range e.srcs {
-		go func(srv service.Service) {
-			select {
-			case <-e.done:
-			case <-e.ctx.Done():
-			case <-srv.Done():
-			case srv.Input() <- element:
-			}
-		}(src)
+		nameToSrc[src.String()] = src
 	}
+
+	pending := make(map[string]bool)
+	for _, src := range e.srcs {
+		pending[src.String()] = false
+	}
+
+	finished := make(chan string, len(e.srcs))
+	requestsMap := make(map[string][]interface{})
+loop:
+	for {
+		select {
+		case <-e.done:
+			break loop
+		case <-e.ctx.Done():
+			break loop
+		case <-e.requests.Signal():
+			element, ok := e.requests.Next()
+			if !ok {
+				continue loop
+			}
+			for name := range nameToSrc {
+				if len(requestsMap[name]) == 0 && !pending[name] {
+					go e.fireRequest(nameToSrc[name], element, finished)
+					pending[name] = true
+				} else {
+					requestsMap[name] = append(requestsMap[name], element)
+				}
+			}
+		case name := <-finished:
+			if len(requestsMap[name]) == 0 {
+				pending[name] = false
+				continue loop
+			}
+
+			go e.fireRequest(nameToSrc[name], requestsMap[name][0], finished)
+			requestsMap[name] = requestsMap[name][1:]
+		}
+	}
+	e.requests.Process(func(e interface{}) {})
+}
+
+func (e *Enumeration) fireRequest(srv service.Service, req interface{}, finished chan string) {
+	select {
+	case <-e.done:
+	case <-e.ctx.Done():
+	case <-srv.Done():
+	case srv.Input() <- req:
+	}
+	finished <- srv.String()
 }
 
 func (e *Enumeration) makeOutputSink() pipeline.SinkFunc {
@@ -237,13 +284,16 @@ func (e *Enumeration) readNamesFromDatabase(ctx context.Context, g *netmap.Graph
 			if srcs, err := g.NodeSources(ctx, netmap.Node(name), event); err == nil {
 				src := srcs[0]
 				tag := stags[src]
-
-				e.nameSrc.dataSourceName(&requests.DNSRequest{
+				req := &requests.DNSRequest{
 					Name:   name,
 					Domain: domain,
 					Tag:    tag,
 					Source: src,
-				})
+				}
+
+				if e.Config.IsDomainInScope(req.Name) {
+					e.nameSrc.newName(req)
+				}
 			}
 		}
 	}
@@ -254,12 +304,16 @@ func (e *Enumeration) submitProvidedNames(wg *sync.WaitGroup) {
 
 	for _, name := range e.Config.ProvidedNames {
 		if domain := e.Config.WhichDomain(name); domain != "" {
-			e.nameSrc.dataSourceName(&requests.DNSRequest{
+			req := &requests.DNSRequest{
 				Name:   name,
 				Domain: domain,
 				Tag:    requests.EXTERNAL,
 				Source: "User Input",
-			})
+			}
+
+			if e.Config.IsDomainInScope(req.Name) {
+				e.nameSrc.newName(req)
+			}
 		}
 	}
 }

@@ -34,7 +34,6 @@ import (
 	"github.com/caffix/netmap"
 	"github.com/caffix/stringset"
 	"github.com/fatih/color"
-	bf "github.com/tylertreat/BoomFilters"
 )
 
 const enumUsageMsg = "enum [options] -d DOMAIN"
@@ -538,8 +537,8 @@ func processOutput(ctx context.Context, g *netmap.Graph, e *enum.Enumeration, ou
 	}()
 
 	// This filter ensures that we only get new names
-	known := bf.NewDefaultStableBloomFilter(1000000, 0.01)
-	defer func() { _ = known.Reset() }()
+	known := stringset.New()
+	defer known.Close()
 	// The function that obtains output from the enum and puts it on the channel
 	extract := func(limit int) {
 		for _, o := range ExtractOutput(ctx, g, e, known, true, limit) {

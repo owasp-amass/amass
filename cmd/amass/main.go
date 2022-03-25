@@ -43,8 +43,8 @@ import (
 	"github.com/OWASP/Amass/v3/systems"
 	"github.com/caffix/netmap"
 	"github.com/caffix/service"
+	"github.com/caffix/stringset"
 	"github.com/fatih/color"
-	bf "github.com/tylertreat/BoomFilters"
 )
 
 const (
@@ -305,8 +305,8 @@ func orderedEvents(ctx context.Context, events []string, db *netmap.Graph) ([]st
 }
 
 func getEventOutput(ctx context.Context, uuids []string, asninfo bool, db *netmap.Graph, cache *requests.ASNCache) []*requests.Output {
-	filter := bf.NewDefaultStableBloomFilter(1000000, 0.01)
-	defer func() { _ = filter.Reset() }()
+	filter := stringset.New()
+	defer filter.Close()
 
 	var output []*requests.Output
 	for i := len(uuids) - 1; i >= 0; i-- {
