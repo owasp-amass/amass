@@ -1,5 +1,6 @@
--- Copyright 2017-2021 Jeff Foley. All rights reserved.
+-- Copyright © by Jeff Foley 2017-2022. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+-- SPDX-License-Identifier: Apache-2.0
 
 name = "ShadowServer"
 type = "misc"
@@ -46,7 +47,6 @@ function asn(ctx, addr, asn)
     end
 
     new_asn(ctx, result)
-    check_rate_limit()
 end
 
 function origin(ctx, addr)
@@ -137,8 +137,6 @@ function reverse_ip(addr)
 end
 
 function trim_space(s)
-    if (s == nil) then
-        return ""
-    end
+    if (s == nil) then return "" end
     return s:match( "^%s*(.-)%s*$" )
 end
