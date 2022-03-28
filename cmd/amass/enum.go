@@ -243,18 +243,18 @@ func runEnumCommand(clArgs []string) {
 	wg.Add(1)
 	go processOutput(ctx, graph, e, outChans, done, &wg)
 	// Monitor for cancellation by the user
-	go func(c context.CancelFunc) {
+	go func(d chan struct{}, c context.Context, f context.CancelFunc) {
 		quit := make(chan os.Signal, 1)
 		signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 		defer signal.Stop(quit)
 
 		select {
 		case <-quit:
-			c()
-		case <-done:
-		case <-ctx.Done():
+			f()
+		case <-d:
+		case <-c.Done():
 		}
-	}(cancel)
+	}(done, ctx, cancel)
 	// Start the enumeration process
 	if err := e.Start(ctx); err != nil {
 		r.Println(err)

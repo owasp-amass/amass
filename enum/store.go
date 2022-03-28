@@ -336,11 +336,6 @@ func (dm *dataManager) findNamesAndAddresses(ctx context.Context, data, domain s
 	}
 }
 
-type queuedAddrRequest struct {
-	Ctx context.Context
-	Req *requests.AddrRequest
-}
-
 func (dm *dataManager) addrRequest(ctx context.Context, req *requests.AddrRequest, tp pipeline.TaskParams) error {
 	select {
 	case <-ctx.Done():
@@ -369,10 +364,7 @@ func (dm *dataManager) addrRequest(ctx context.Context, req *requests.AddrReques
 		return err
 	}
 
-	dm.queue.Append(&queuedAddrRequest{
-		Ctx: ctx,
-		Req: req,
-	})
+	dm.queue.Append(req)
 	return nil
 }
 
@@ -397,10 +389,9 @@ func (dm *dataManager) nextInfraInfo() {
 	if !ok {
 		return
 	}
-	qar := e.(*queuedAddrRequest)
 
-	ctx := qar.Ctx
-	req := qar.Req
+	ctx := context.Background()
+	req := e.(*requests.AddrRequest)
 	uuid := dm.enum.Config.UUID.String()
 	if r := dm.enum.Sys.Cache().AddrSearch(req.Address); r != nil {
 		_ = dm.enum.graph.UpsertInfrastructure(ctx, r.ASN, r.Description, req.Address, r.Prefix, r.Source, uuid)
@@ -408,13 +399,19 @@ func (dm *dataManager) nextInfraInfo() {
 	}
 
 	dm.enum.sendRequests(&requests.ASNRequest{Address: req.Address})
-
+loop:
 	for i := 0; i < 30; i++ {
+		select {
+		case <-dm.enum.ctx.Done():
+			break loop
+		default:
+		}
+
+		time.Sleep(2 * time.Second)
 		if r := dm.enum.Sys.Cache().AddrSearch(req.Address); r != nil {
 			_ = dm.enum.graph.UpsertInfrastructure(ctx, r.ASN, r.Description, req.Address, r.Prefix, r.Source, uuid)
 			return
 		}
-		time.Sleep(time.Second)
 	}
 
 	asn := 0
