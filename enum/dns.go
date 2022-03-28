@@ -6,9 +6,11 @@ package enum
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync"
 
+	amassnet "github.com/OWASP/Amass/v3/net"
 	amassdns "github.com/OWASP/Amass/v3/net/dns"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/caffix/pipeline"
@@ -124,7 +126,12 @@ func (dt *dnsTask) Process(ctx context.Context, data pipeline.Data, tp pipeline.
 
 	switch v := data.(type) {
 	case *requests.DNSRequest:
-		return dt.processFwdRequest(ctx, v, tp)
+		if req, err := dt.processFwdRequest(ctx, v); err == nil {
+			v.Records = append(v.Records, req.Records...)
+		}
+		if len(v.Records) == 0 {
+			return nil, nil
+		}
 	case *requests.AddrRequest:
 		if dt.processRevRequest(ctx, v.Address, tp) || v.InScope {
 			return data, nil
@@ -134,9 +141,9 @@ func (dt *dnsTask) Process(ctx context.Context, data pipeline.Data, tp pipeline.
 	return data, nil
 }
 
-func (dt *dnsTask) processFwdRequest(ctx context.Context, req *requests.DNSRequest, tp pipeline.TaskParams) (pipeline.Data, error) {
+func (dt *dnsTask) processFwdRequest(ctx context.Context, req *requests.DNSRequest) (*requests.DNSRequest, error) {
 	if req == nil || !req.Valid() {
-		return nil, nil
+		return nil, errors.New("invalid request")
 	}
 
 	var err error
@@ -155,12 +162,11 @@ loop:
 		resp, err = dt.enum.Sys.Resolvers().QueryBlocking(ctx, msg)
 		// Check if the response indicates that the name does not exist
 		if err != nil || resp.Rcode == dns.RcodeNameError {
-			return nil, nil
+			return nil, errors.New("name does not exist")
 		}
 		if resp.Rcode == dns.RcodeSuccess && len(resp.Answer) == 0 && qtype == dns.TypeCNAME {
 			continue
 		}
-
 		// Was there another reason why the query failed?
 		for attempts := 1; attempts < maxDNSQueryAttempts && resp.Rcode != dns.RcodeSuccess; attempts++ {
 			resp, err = dt.enum.Sys.Resolvers().QueryBlocking(ctx, msg)
@@ -175,7 +181,7 @@ loop:
 		resp, err = dt.enum.Sys.TrustedResolvers().QueryBlocking(ctx, msg)
 		// Check if the response indicates that the name does not exist
 		if err != nil || resp.Rcode == dns.RcodeNameError {
-			return nil, nil
+			return nil, errors.New("name does not exist")
 		}
 		if resp.Rcode == dns.RcodeSuccess && len(resp.Answer) == 0 && qtype == dns.TypeCNAME {
 			continue
@@ -184,7 +190,7 @@ loop:
 			resp, err = dt.enum.Sys.Resolvers().QueryBlocking(ctx, msg)
 			// Check if the response indicates that the name does not exist
 			if err != nil || resp.Rcode == dns.RcodeNameError {
-				return nil, nil
+				return nil, errors.New("name does not exist")
 			}
 			if resp.Rcode == dns.RcodeSuccess && len(resp.Answer) == 0 && qtype == dns.TypeCNAME {
 				continue loop
@@ -210,7 +216,56 @@ loop:
 	if len(req.Records) > 0 && dt.wildcardFiltering(ctx, req, resp) {
 		return req, nil
 	}
-	return nil, nil
+	return nil, errors.New("wildcard detected")
+}
+
+func (e *Enumeration) fwdQuery(ctx context.Context, name string, qtype uint16) (*dns.Msg, error) {
+	msg := resolve.QueryMsg(name, qtype)
+	resp, err := e.Sys.Resolvers().QueryBlocking(ctx, msg)
+	// Check if the response indicates that the name does not exist
+	if err != nil || resp.Rcode == dns.RcodeNameError {
+		return nil, errors.New("name does not exist")
+	}
+	if resp.Rcode == dns.RcodeSuccess && len(resp.Answer) == 0 {
+		return nil, errors.New("zero answers returned")
+	}
+	// Was there another reason why the query failed?
+	for attempts := 1; attempts < 50 && resp.Rcode != dns.RcodeSuccess; attempts++ {
+		resp, err = e.Sys.Resolvers().QueryBlocking(ctx, msg)
+		// Check if the response indicates that the name does not exist
+		if err != nil || resp.Rcode == dns.RcodeNameError {
+			return nil, errors.New("name does not exist")
+		}
+		if resp.Rcode == dns.RcodeSuccess && len(resp.Answer) == 0 {
+			return nil, errors.New("zero answers returned")
+		}
+	}
+	if resp.Rcode != dns.RcodeSuccess {
+		return nil, errors.New("query failed")
+	}
+
+	resp, err = e.Sys.TrustedResolvers().QueryBlocking(ctx, msg)
+	// Check if the response indicates that the name does not exist
+	if err != nil || resp.Rcode == dns.RcodeNameError {
+		return nil, errors.New("name does not exist")
+	}
+	if resp.Rcode == dns.RcodeSuccess && len(resp.Answer) == 0 {
+		return nil, errors.New("zero answers returned")
+	}
+	for attempts := 1; attempts < 50 && resp.Rcode != dns.RcodeSuccess; attempts++ {
+		resp, err = e.Sys.Resolvers().QueryBlocking(ctx, msg)
+		// Check if the response indicates that the name does not exist
+		if err != nil || resp.Rcode == dns.RcodeNameError {
+			return nil, errors.New("name does not exist")
+		}
+		if resp.Rcode == dns.RcodeSuccess && len(resp.Answer) == 0 {
+			return nil, errors.New("zero answers returned")
+		}
+	}
+	if resp.Rcode != dns.RcodeSuccess {
+		return nil, errors.New("query failed")
+	}
+	return resp, nil
 }
 
 func (dt *dnsTask) wildcardFiltering(ctx context.Context, req *requests.DNSRequest, resp *dns.Msg) bool {
@@ -225,6 +280,10 @@ func (dt *dnsTask) processRevRequest(ctx context.Context, addr string, tp pipeli
 	case <-ctx.Done():
 		return false
 	default:
+	}
+
+	if yes, _ := amassnet.IsReservedAddress(addr); yes {
+		return false
 	}
 
 	msg := resolve.ReverseMsg(addr)
@@ -291,7 +350,7 @@ func (dt *dnsTask) processRevRequest(ctx context.Context, addr string, tp pipeli
 		return true
 	}
 
-	pipeline.SendData(ctx, "filter", &requests.DNSRequest{
+	dt.enum.nameSrc.newName(&requests.DNSRequest{
 		Name:   ptr,
 		Domain: domain,
 		Records: []requests.DNSAnswer{{
@@ -301,7 +360,7 @@ func (dt *dnsTask) processRevRequest(ctx context.Context, addr string, tp pipeli
 		}},
 		Tag:    requests.DNS,
 		Source: "Reverse DNS",
-	}, tp)
+	})
 	return true
 }
 
@@ -326,8 +385,7 @@ func (dt *dnsTask) subdomainQueries(ctx context.Context, req *requests.DNSReques
 
 func (dt *dnsTask) queryNS(ctx context.Context, name, domain string, ch chan []requests.DNSAnswer, tp pipeline.TaskParams) {
 	// Obtain the DNS answers for the NS records related to the domain
-	resp, err := dt.enum.Sys.TrustedResolvers().QueryBlocking(ctx, resolve.QueryMsg(name, dns.TypeNS))
-	if err == nil {
+	if resp, err := dt.enum.fwdQuery(ctx, name, dns.TypeNS); err == nil {
 		ans := resolve.ExtractAnswers(resp)
 		rr := resolve.AnswersByType(ans, dns.TypeNS)
 
@@ -350,8 +408,7 @@ func (dt *dnsTask) queryNS(ctx context.Context, name, domain string, ch chan []r
 
 func (dt *dnsTask) queryMX(ctx context.Context, name string, ch chan []requests.DNSAnswer) {
 	// Obtain the DNS answers for the MX records related to the domain
-	resp, err := dt.enum.Sys.TrustedResolvers().QueryBlocking(ctx, resolve.QueryMsg(name, dns.TypeMX))
-	if err == nil {
+	if resp, err := dt.enum.fwdQuery(ctx, name, dns.TypeMX); err == nil {
 		ans := resolve.ExtractAnswers(resp)
 		rr := resolve.AnswersByType(ans, dns.TypeMX)
 		ch <- convertAnswers(rr)
@@ -362,8 +419,7 @@ func (dt *dnsTask) queryMX(ctx context.Context, name string, ch chan []requests.
 
 func (dt *dnsTask) querySOA(ctx context.Context, name string, ch chan []requests.DNSAnswer) {
 	// Obtain the DNS answers for the SOA records related to the domain
-	resp, err := dt.enum.Sys.TrustedResolvers().QueryBlocking(ctx, resolve.QueryMsg(name, dns.TypeSOA))
-	if err == nil {
+	if resp, err := dt.enum.fwdQuery(ctx, name, dns.TypeSOA); err == nil {
 		ans := resolve.ExtractAnswers(resp)
 		rr := resolve.AnswersByType(ans, dns.TypeSOA)
 
@@ -379,8 +435,7 @@ func (dt *dnsTask) querySOA(ctx context.Context, name string, ch chan []requests
 
 func (dt *dnsTask) querySPF(ctx context.Context, name string, ch chan []requests.DNSAnswer) {
 	// Obtain the DNS answers for the SPF records related to the domain
-	resp, err := dt.enum.Sys.TrustedResolvers().QueryBlocking(ctx, resolve.QueryMsg(name, dns.TypeSPF))
-	if err == nil {
+	if resp, err := dt.enum.fwdQuery(ctx, name, dns.TypeSPF); err == nil {
 		ans := resolve.ExtractAnswers(resp)
 		rr := resolve.AnswersByType(ans, dns.TypeSPF)
 		ch <- convertAnswers(rr)
@@ -408,7 +463,7 @@ func (dt *dnsTask) querySingleServiceName(ctx context.Context, name, domain stri
 	default:
 	}
 
-	resp, err := dt.enum.Sys.TrustedResolvers().QueryBlocking(ctx, resolve.QueryMsg(name, dns.TypeSRV))
+	resp, err := dt.enum.fwdQuery(ctx, name, dns.TypeSRV)
 	if err != nil || len(resp.Answer) == 0 {
 		return
 	}
@@ -432,7 +487,7 @@ func (dt *dnsTask) querySingleServiceName(ctx context.Context, name, domain stri
 	}
 
 	if req.Valid() && !dt.enum.Sys.TrustedResolvers().WildcardDetected(ctx, resp, domain) {
-		pipeline.SendData(ctx, "filter", req, tp)
+		pipeline.SendData(ctx, "store", req, tp)
 	}
 }
 

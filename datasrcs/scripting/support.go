@@ -7,6 +7,7 @@ package scripting
 import (
 	"context"
 	"errors"
+	"os"
 	"regexp"
 
 	lua "github.com/yuin/gopher-lua"
@@ -112,6 +113,19 @@ func (s *Script) submatch(L *lua.LState) int {
 	} else {
 		L.Push(lua.LNil)
 	}
+	return 1
+}
+
+// Wrapper that exposes a function that returns the modification date/time of a file.
+func (s *Script) modDateTime(L *lua.LState) int {
+	var seconds int64
+
+	fpath := L.CheckString(1)
+	if fi, err := os.Stat(fpath); err == nil {
+		seconds = fi.ModTime().Unix()
+	}
+
+	L.Push(lua.LNumber(seconds))
 	return 1
 }
 

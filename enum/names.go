@@ -6,14 +6,11 @@ package enum
 
 import (
 	"context"
-	"errors"
 	"strings"
 
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/caffix/pipeline"
-	"github.com/caffix/resolve"
 	"github.com/caffix/stringset"
-	"github.com/miekg/dns"
 )
 
 // subdomainTask handles newly discovered proper subdomain names in the enumeration.
@@ -75,8 +72,6 @@ func (r *subdomainTask) Process(ctx context.Context, data pipeline.Data, tp pipe
 			Name:    req.Name,
 			Domain:  req.Domain,
 			Records: req.Records,
-			Tag:     req.Tag,
-			Source:  req.Source,
 		})
 	}
 	return req, nil
@@ -134,61 +129,12 @@ func (r *subdomainTask) subWithinWildcard(ctx context.Context, name, domain stri
 		default:
 		}
 
-		if resp, err := r.fwdQuery(ctx, "a."+name, t); err == nil &&
+		if resp, err := r.enum.fwdQuery(ctx, "a."+name, t); err == nil &&
 			len(resp.Answer) > 0 && r.enum.Sys.TrustedResolvers().WildcardDetected(ctx, resp, domain) {
 			return true
 		}
 	}
 	return false
-}
-
-func (r *subdomainTask) fwdQuery(ctx context.Context, name string, qtype uint16) (*dns.Msg, error) {
-	msg := resolve.QueryMsg(name, qtype)
-	resp, err := r.enum.Sys.Resolvers().QueryBlocking(ctx, msg)
-	// Check if the response indicates that the name does not exist
-	if err != nil || resp.Rcode == dns.RcodeNameError {
-		return nil, errors.New("name does not exist")
-	}
-	if resp.Rcode == dns.RcodeSuccess && len(resp.Answer) == 0 {
-		return nil, errors.New("zero answers returned")
-	}
-	// Was there another reason why the query failed?
-	for attempts := 1; attempts < 50 && resp.Rcode != dns.RcodeSuccess; attempts++ {
-		resp, err = r.enum.Sys.Resolvers().QueryBlocking(ctx, msg)
-		// Check if the response indicates that the name does not exist
-		if err != nil || resp.Rcode == dns.RcodeNameError {
-			return nil, errors.New("name does not exist")
-		}
-		if resp.Rcode == dns.RcodeSuccess && len(resp.Answer) == 0 {
-			return nil, errors.New("zero answers returned")
-		}
-	}
-	if resp.Rcode != dns.RcodeSuccess {
-		return nil, errors.New("query failed")
-	}
-
-	resp, err = r.enum.Sys.TrustedResolvers().QueryBlocking(ctx, msg)
-	// Check if the response indicates that the name does not exist
-	if err != nil || resp.Rcode == dns.RcodeNameError {
-		return nil, errors.New("name does not exist")
-	}
-	if resp.Rcode == dns.RcodeSuccess && len(resp.Answer) == 0 {
-		return nil, errors.New("zero answers returned")
-	}
-	for attempts := 1; attempts < 50 && resp.Rcode != dns.RcodeSuccess; attempts++ {
-		resp, err = r.enum.Sys.Resolvers().QueryBlocking(ctx, msg)
-		// Check if the response indicates that the name does not exist
-		if err != nil || resp.Rcode == dns.RcodeNameError {
-			return nil, errors.New("name does not exist")
-		}
-		if resp.Rcode == dns.RcodeSuccess && len(resp.Answer) == 0 {
-			return nil, errors.New("zero answers returned")
-		}
-	}
-	if resp.Rcode != dns.RcodeSuccess {
-		return nil, errors.New("query failed")
-	}
-	return resp, nil
 }
 
 func (r *subdomainTask) timesForSubdomain(sub string) int {

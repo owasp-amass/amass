@@ -82,7 +82,6 @@ func (a *activeTask) Process(ctx context.Context, data pipeline.Data, tp pipelin
 			Params: tp,
 		})
 	}
-
 	return data, nil
 }
 
@@ -163,12 +162,12 @@ func (a *activeTask) crawlName(ctx context.Context, req *requests.DNSRequest, tp
 		for _, name := range names {
 			if n := strings.TrimSpace(name); n != "" {
 				if domain := cfg.WhichDomain(n); domain != "" {
-					a.enum.nameSrc.pipelineData(ctx, &requests.DNSRequest{
+					a.enum.nameSrc.newName(&requests.DNSRequest{
 						Name:   n,
 						Domain: domain,
 						Tag:    requests.CRAWL,
 						Source: "Active Crawl",
-					}, tp)
+					})
 				}
 			}
 		}
@@ -191,12 +190,12 @@ func (a *activeTask) certEnumeration(ctx context.Context, req *requests.AddrRequ
 
 		if n := strings.TrimSpace(name); n != "" {
 			if domain := a.enum.Config.WhichDomain(n); domain != "" {
-				a.enum.nameSrc.pipelineData(ctx, &requests.DNSRequest{
+				a.enum.nameSrc.newName(&requests.DNSRequest{
 					Name:   n,
 					Domain: domain,
 					Tag:    requests.CERT,
 					Source: "Active Cert",
-				}, tp)
+				})
 			}
 		}
 	}
@@ -233,8 +232,7 @@ func (a *activeTask) zoneTransfer(ctx context.Context, req *requests.ZoneXFRRequ
 			}, tp)
 			continue
 		}
-
-		pipeline.SendData(ctx, "filter", req, tp)
+		a.enum.nameSrc.newName(req)
 	}
 }
 
@@ -262,12 +260,12 @@ func (a *activeTask) zoneWalk(ctx context.Context, req *requests.ZoneXFRRequest,
 		name := resolve.RemoveLastDot(nsec.NextDomain)
 
 		if domain := a.enum.Config.WhichDomain(name); domain != "" {
-			a.enum.nameSrc.pipelineData(ctx, &requests.DNSRequest{
+			a.enum.nameSrc.newName(&requests.DNSRequest{
 				Name:   name,
 				Domain: domain,
 				Tag:    requests.DNS,
 				Source: "NSEC Walk",
-			}, tp)
+			})
 		}
 	}
 }
@@ -279,8 +277,9 @@ func (a *activeTask) nameserverAddr(ctx context.Context, server string) (string,
 	var resp *dns.Msg
 
 	for _, t := range []uint16{dns.TypeA, dns.TypeAAAA} {
-		resp, err = a.enum.Sys.TrustedResolvers().QueryBlocking(ctx, resolve.QueryMsg(server, t))
-		if err == nil && len(resp.Answer) > 0 {
+		resp, err = a.enum.fwdQuery(ctx, server, t)
+
+		if err == nil && resp.Rcode == dns.RcodeSuccess && len(resp.Answer) > 0 {
 			qtype = t
 			found = true
 			break
@@ -294,6 +293,5 @@ func (a *activeTask) nameserverAddr(ctx context.Context, server string) (string,
 	if len(rr) == 0 {
 		return "", fmt.Errorf("DNS server %s has no A or AAAA records", server)
 	}
-
 	return rr[0].Data, nil
 }

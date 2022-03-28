@@ -35,13 +35,13 @@ type enumSource struct {
 	dups        queue.Queue
 	sweeps      queue.Queue
 	filter      *bf.StableBloomFilter
+	sweepLock   sync.Mutex
 	sweepFilter *bf.StableBloomFilter
 	subre       *regexp.Regexp
 	done        chan struct{}
 	doneOnce    sync.Once
 	release     chan struct{}
 	inputsig    chan uint32
-	lastFill    time.Time
 	max         int
 	countLock   sync.Mutex
 	count       uint32
@@ -60,7 +60,7 @@ func newEnumSource(e *Enumeration) *enumSource {
 		dups:        queue.NewQueue(),
 		sweeps:      queue.NewQueue(),
 		filter:      bf.NewDefaultStableBloomFilter(1000000, 0.01),
-		sweepFilter: bf.NewDefaultStableBloomFilter(100000, 0.01),
+		sweepFilter: bf.NewDefaultStableBloomFilter(1000000, 0.01),
 		subre:       dns.AnySubdomainRegex(),
 		done:        make(chan struct{}),
 		release:     make(chan struct{}, qps),
@@ -80,7 +80,6 @@ func newEnumSource(e *Enumeration) *enumSource {
 	for _, src := range e.srcs {
 		go r.monitorDataSrcOutput(src)
 	}
-
 	for i := 0; i < qps; i++ {
 		r.release <- struct{}{}
 	}
@@ -104,40 +103,16 @@ func (r *enumSource) markDone() {
 	})
 }
 
-func (r *enumSource) dataSourceName(req *requests.DNSRequest) {
-	if req != nil && req.Name != "" && r.enum.Config.IsDomainInScope(req.Name) {
-		r.pipelineData(r.enum.ctx, req, nil)
-	}
-}
-
-func (r *enumSource) dataSourceAddr(req *requests.AddrRequest) {
-	if req != nil && req.Address != "" {
-		r.pipelineData(r.enum.ctx, req, nil)
-	}
-}
-
-func (r *enumSource) pipelineData(ctx context.Context, data pipeline.Data, tp pipeline.TaskParams) {
+func (r *enumSource) newName(req *requests.DNSRequest) {
 	select {
-	case <-ctx.Done():
-		return
 	case <-r.done:
 		return
 	default:
 	}
 
-	switch v := data.(type) {
-	case *requests.DNSRequest:
-		if v != nil && v.Valid() {
-			go r.newName(v)
-		}
-	case *requests.AddrRequest:
-		if v != nil && v.Valid() {
-			go r.newAddr(ctx, v, tp)
-		}
+	if !req.Valid() {
+		return
 	}
-}
-
-func (r *enumSource) newName(req *requests.DNSRequest) {
 	// Clean up the newly discovered name and domain
 	requests.SanitizeDNSRequest(req)
 	// Check that the name is valid
@@ -157,27 +132,23 @@ func (r *enumSource) newName(req *requests.DNSRequest) {
 	}
 }
 
-func (r *enumSource) newAddr(ctx context.Context, req *requests.AddrRequest, tp pipeline.TaskParams) {
-	if !req.InScope || tp == nil || !r.accept(req.Address, req.Tag, req.Source, false) {
+func (r *enumSource) newAddr(req *requests.AddrRequest) {
+	select {
+	case <-r.done:
+		return
+	default:
+	}
+
+	if !req.Valid() || !req.InScope || !r.accept(req.Address, req.Tag, req.Source, false) {
 		return
 	}
 
-	r.sendAddr(ctx, req, tp)
+	r.queue.Append(req)
 	// Does the address fall into a reserved address range?
 	if yes, _ := amassnet.IsReservedAddress(req.Address); !yes {
 		// Queue the request for later use in reverse DNS sweeps
 		r.sweeps.Append(req)
 	}
-}
-
-func (r *enumSource) sendAddr(ctx context.Context, req *requests.AddrRequest, tp pipeline.TaskParams) {
-	pipeline.SendData(ctx, "store", &requests.AddrRequest{
-		Address: req.Address,
-		InScope: req.InScope,
-		Domain:  req.Domain,
-		Tag:     req.Tag,
-		Source:  req.Source,
-	}, tp)
 }
 
 func (r *enumSource) accept(s, tag, source string, name bool) bool {
@@ -213,9 +184,15 @@ func (r *enumSource) accept(s, tag, source string, name bool) bool {
 
 // Next implements the pipeline InputSource interface.
 func (r *enumSource) Next(ctx context.Context) bool {
+	low := make(chan struct{}, 1)
+	// Mark low if below 10%
+	if p := (float32(r.queue.Len()) / float32(r.max)) * 100; p < 10 {
+		low <- struct{}{}
+	}
+
 	t := time.NewTimer(waitForDuration)
 	defer t.Stop()
-	check := time.NewTimer(10 * time.Millisecond)
+	check := time.NewTicker(time.Second)
 	defer check.Stop()
 
 	for {
@@ -229,11 +206,11 @@ func (r *enumSource) Next(ctx context.Context) bool {
 			r.markDone()
 			return false
 		case <-r.queue.Signal():
-			r.fillQueue()
 			return true
+		case <-low:
+			r.fillQueue()
 		case <-check.C:
 			r.fillQueue()
-			check.Reset(500 * time.Millisecond)
 		}
 	}
 }
@@ -244,11 +221,8 @@ func (r *enumSource) Data() pipeline.Data {
 
 	if element, ok := r.queue.Next(); ok {
 		data = element.(pipeline.Data)
-		// Attempt to signal that new input was added to the pipeline
-		select {
-		case r.inputsig <- r.incrementCount():
-		default:
-		}
+		// Signal that new input was added to the pipeline
+		r.inputsig <- r.incrementCount()
 	}
 	return data
 }
@@ -279,20 +253,12 @@ func (r *enumSource) Error() error {
 }
 
 func (r *enumSource) fillQueue() {
-	if time.Since(r.lastFill) < 500*time.Millisecond {
-		return
-	}
 	if unfilled := r.max - r.queue.Len(); unfilled > 0 {
-		fill := unfilled - len(r.release)
-
-		if fill > 0 {
+		if fill := unfilled - len(r.release); fill > 0 {
 			r.releaseOutput(fill)
 		}
-		if remaining := unfilled - fill; remaining > 0 {
-			go func(num int) { _ = r.requestSweeps(num) }(remaining)
-		}
+		go r.requestSweeps()
 	}
-	r.lastFill = time.Now()
 }
 
 func (r *enumSource) releaseOutput(num int) {
@@ -324,22 +290,25 @@ func (r *enumSource) monitorDataSrcOutput(srv service.Service) {
 			case *requests.DNSRequest:
 				r.newName(req)
 			case *requests.AddrRequest:
-				r.dataSourceAddr(req)
+				r.newAddr(req)
 			}
 		}
 	}
 }
 
-func (r *enumSource) requestSweeps(num int) int {
-	var count int
+func (r *enumSource) requestSweeps() {
+	r.sweepLock.Lock()
+	defer r.sweepLock.Unlock()
 
-	for count < num {
+	for {
+		if unfilled := r.max - r.queue.Len(); unfilled <= 0 {
+			break
+		}
 		if e, ok := r.sweeps.Next(); ok {
 			// Generate the additional addresses to sweep across
-			count += r.sweepAddrs(r.enum.ctx, e.(*requests.AddrRequest))
+			_ = r.sweepAddrs(r.enum.ctx, e.(*requests.AddrRequest))
 		}
 	}
-	return count
 }
 
 func (r *enumSource) sweepAddrs(ctx context.Context, req *requests.AddrRequest) int {
@@ -348,12 +317,9 @@ func (r *enumSource) sweepAddrs(ctx context.Context, req *requests.AddrRequest) 
 		size = activeSweepSize
 	}
 
-	cidr := r.addrCIDR(req.Address)
-	// Get information about nearby IP addresses
-	ips := amassnet.CIDRSubset(cidr, req.Address, size)
-
 	var count int
-	for _, ip := range ips {
+	cidr := r.addrCIDR(req.Address)
+	for _, ip := range amassnet.CIDRSubset(cidr, req.Address, size) {
 		select {
 		case <-ctx.Done():
 			return count
@@ -380,17 +346,14 @@ func (r *enumSource) addrCIDR(addr string) *net.IPNet {
 		}
 	}
 
-	var mask net.IPMask
 	ip := net.ParseIP(addr)
+	mask := net.CIDRMask(18, 32)
 	if amassnet.IsIPv6(ip) {
 		mask = net.CIDRMask(64, 128)
-	} else {
-		mask = net.CIDRMask(18, 32)
 	}
-	ip = ip.Mask(mask)
 
 	return &net.IPNet{
-		IP:   ip,
+		IP:   ip.Mask(mask),
 		Mask: mask,
 	}
 }
@@ -400,6 +363,7 @@ func (r *enumSource) processDupNames() {
 	countdown := r.max * 2
 	var inc uint32 = uint32(r.max) * 2
 	var highest uint32 = (1 << 32) - 1
+	uuid := r.enum.Config.UUID.String()
 
 	type altsource struct {
 		Name      string
@@ -411,7 +375,12 @@ func (r *enumSource) processDupNames() {
 
 	var pending []*altsource
 	each := func(element interface{}) {
-		if req := element.(*requests.DNSRequest); req.Tag != requests.BRUTE && req.Tag != requests.ALT {
+		req := element.(*requests.DNSRequest)
+
+		if r.addSourceToEntry(uuid, req.Name, req.Source) {
+			return
+		}
+		if req.Tag != requests.BRUTE && req.Tag != requests.ALT {
 			min := r.getCount()
 			if highest-min < inc {
 				min = 0
@@ -425,15 +394,15 @@ func (r *enumSource) processDupNames() {
 			})
 		}
 	}
-
-	uuid := r.enum.Config.UUID.String()
 loop:
 	for {
 		select {
 		case <-r.done:
 			break loop
 		case <-r.dups.Signal():
-			r.dups.Process(each)
+			if element, ok := r.dups.Next(); ok {
+				each(element)
+			}
 		case num := <-r.inputsig:
 			var removed int
 
@@ -441,13 +410,11 @@ loop:
 				if i >= len(pending)-removed {
 					break
 				}
-				if a.Min >= num {
+				if num >= a.Min {
 					a.Countdown--
 				}
 				if a.Countdown <= 0 {
-					if _, err := r.enum.graph.ReadNode(r.enum.ctx, a.Name, "fqdn"); err == nil {
-						_, _ = r.enum.graph.UpsertFQDN(r.enum.ctx, a.Name, a.Source, uuid)
-					}
+					go func() { _ = r.addSourceToEntry(uuid, a.Name, a.Source) }()
 					// Remove the element
 					removed++
 					pending[i] = pending[len(pending)-removed]
@@ -461,8 +428,14 @@ loop:
 	// Last attempt to update the sources information
 	r.dups.Process(each)
 	for _, a := range pending {
-		if _, err := r.enum.graph.ReadNode(r.enum.ctx, a.Name, "fqdn"); err == nil {
-			_, _ = r.enum.graph.UpsertFQDN(r.enum.ctx, a.Name, a.Source, uuid)
-		}
+		_ = r.addSourceToEntry(uuid, a.Name, a.Source)
 	}
+}
+
+func (r *enumSource) addSourceToEntry(uuid, name, source string) bool {
+	if _, err := r.enum.graph.ReadNode(r.enum.ctx, name, "fqdn"); err == nil {
+		_, _ = r.enum.graph.UpsertFQDN(r.enum.ctx, name, source, uuid)
+		return true
+	}
+	return false
 }

@@ -107,6 +107,7 @@ func (s *Script) newLuaState(cfg *config.Config) *lua.LState {
 	L.SetGlobal("log", L.NewFunction(s.log))
 	L.SetGlobal("find", L.NewFunction(s.find))
 	L.SetGlobal("submatch", L.NewFunction(s.submatch))
+	L.SetGlobal("mtime", L.NewFunction(s.modDateTime))
 	L.SetGlobal("new_name", L.NewFunction(s.newName))
 	L.SetGlobal("send_names", L.NewFunction(s.sendNames))
 	L.SetGlobal("new_addr", L.NewFunction(s.newAddr))

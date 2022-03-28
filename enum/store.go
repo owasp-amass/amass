@@ -40,7 +40,7 @@ func newDataManager(e *Enumeration) *dataManager {
 		queue:       queue.NewQueue(),
 		signalDone:  make(chan struct{}, 2),
 		confirmDone: make(chan struct{}, 2),
-		filter:      bf.NewDefaultStableBloomFilter(100000, 0.01),
+		filter:      bf.NewDefaultStableBloomFilter(1000000, 0.01),
 	}
 
 	go dm.processASNRequests()
@@ -150,12 +150,12 @@ func (dm *dataManager) insertCNAME(ctx context.Context, req *requests.DNSRequest
 		return errors.New("failed to extract a domain name from the FQDN")
 	}
 	// Important - Allows chained CNAME records to be resolved until an A/AAAA record
-	dm.enum.nameSrc.pipelineData(ctx, &requests.DNSRequest{
+	dm.enum.nameSrc.newName(&requests.DNSRequest{
 		Name:   target,
 		Domain: strings.ToLower(domain),
 		Tag:    requests.DNS,
 		Source: "DNS",
-	}, tp)
+	})
 	if err := dm.enum.graph.UpsertCNAME(ctx, req.Name, target, req.Source, dm.enum.Config.UUID.String()); err != nil {
 		return fmt.Errorf("%s failed to insert CNAME: %v", dm.enum.graph, err)
 	}
@@ -168,13 +168,13 @@ func (dm *dataManager) insertA(ctx context.Context, req *requests.DNSRequest, re
 		return errors.New("failed to extract an IP address from the DNS answer data")
 	}
 	dm.enum.checkForMissedWildcards(addr)
-	dm.enum.nameSrc.pipelineData(ctx, &requests.AddrRequest{
+	dm.enum.nameSrc.newAddr(&requests.AddrRequest{
 		Address: addr,
 		InScope: true,
 		Domain:  req.Domain,
 		Tag:     requests.DNS,
 		Source:  "DNS",
-	}, tp)
+	})
 	if err := dm.enum.graph.UpsertA(ctx, req.Name, addr, req.Source, dm.enum.Config.UUID.String()); err != nil {
 		return fmt.Errorf("%s failed to insert A record: %v", dm.enum.graph, err)
 	}
@@ -187,13 +187,13 @@ func (dm *dataManager) insertAAAA(ctx context.Context, req *requests.DNSRequest,
 		return errors.New("failed to extract an IP address from the DNS answer data")
 	}
 	dm.enum.checkForMissedWildcards(addr)
-	dm.enum.nameSrc.pipelineData(ctx, &requests.AddrRequest{
+	dm.enum.nameSrc.newAddr(&requests.AddrRequest{
 		Address: addr,
 		InScope: true,
 		Domain:  req.Domain,
 		Tag:     requests.DNS,
 		Source:  "DNS",
-	}, tp)
+	})
 	if err := dm.enum.graph.UpsertAAAA(ctx, req.Name, addr, req.Source, dm.enum.Config.UUID.String()); err != nil {
 		return fmt.Errorf("%s failed to insert AAAA record: %v", dm.enum.graph, err)
 	}
@@ -211,12 +211,12 @@ func (dm *dataManager) insertPTR(ctx context.Context, req *requests.DNSRequest, 
 		return nil
 	}
 	// Important - Allows the target DNS name to be resolved in the forward direction
-	dm.enum.nameSrc.pipelineData(ctx, &requests.DNSRequest{
+	dm.enum.nameSrc.newName(&requests.DNSRequest{
 		Name:   target,
 		Domain: domain,
 		Tag:    requests.DNS,
 		Source: "Reverse DNS",
-	}, tp)
+	})
 	if err := dm.enum.graph.UpsertPTR(ctx, req.Name, target, req.Source, dm.enum.Config.UUID.String()); err != nil {
 		return fmt.Errorf("%s failed to insert PTR record: %v", dm.enum.graph, err)
 	}
@@ -230,12 +230,12 @@ func (dm *dataManager) insertSRV(ctx context.Context, req *requests.DNSRequest, 
 		return errors.New("failed to extract service info from the DNS answer data")
 	}
 	if domain := dm.enum.Config.WhichDomain(target); domain != "" {
-		dm.enum.nameSrc.pipelineData(ctx, &requests.DNSRequest{
+		dm.enum.nameSrc.newName(&requests.DNSRequest{
 			Name:   target,
 			Domain: domain,
 			Tag:    requests.DNS,
 			Source: "DNS",
-		}, tp)
+		})
 	}
 	if err := dm.enum.graph.UpsertSRV(ctx, req.Name, service, target, req.Source, dm.enum.Config.UUID.String()); err != nil {
 		return fmt.Errorf("%s failed to insert SRV record: %v", dm.enum.graph, err)
@@ -254,12 +254,12 @@ func (dm *dataManager) insertNS(ctx context.Context, req *requests.DNSRequest, r
 		return errors.New("failed to extract a domain name from the FQDN")
 	}
 	if d := strings.ToLower(domain); target != d {
-		dm.enum.nameSrc.pipelineData(ctx, &requests.DNSRequest{
+		dm.enum.nameSrc.newName(&requests.DNSRequest{
 			Name:   target,
 			Domain: d,
 			Tag:    requests.DNS,
 			Source: "DNS",
-		}, tp)
+		})
 	}
 	if err := dm.enum.graph.UpsertNS(ctx, req.Name, target, req.Source, dm.enum.Config.UUID.String()); err != nil {
 		return fmt.Errorf("%s failed to insert NS record: %v", dm.enum.graph, err)
@@ -278,12 +278,12 @@ func (dm *dataManager) insertMX(ctx context.Context, req *requests.DNSRequest, r
 		return errors.New("failed to extract a domain name from the FQDN")
 	}
 	if d := strings.ToLower(domain); target != d {
-		dm.enum.nameSrc.pipelineData(ctx, &requests.DNSRequest{
+		dm.enum.nameSrc.newName(&requests.DNSRequest{
 			Name:   target,
 			Domain: d,
 			Tag:    requests.DNS,
 			Source: "DNS",
-		}, tp)
+		})
 	}
 	if err := dm.enum.graph.UpsertMX(ctx, req.Name, target, req.Source, dm.enum.Config.UUID.String()); err != nil {
 		return fmt.Errorf("%s failed to insert MX record: %v", dm.enum.graph, err)
@@ -315,30 +315,25 @@ func (dm *dataManager) insertSPF(ctx context.Context, req *requests.DNSRequest, 
 func (dm *dataManager) findNamesAndAddresses(ctx context.Context, data, domain string, tp pipeline.TaskParams) {
 	ipre := regexp.MustCompile(amassnet.IPv4RE)
 	for _, ip := range ipre.FindAllString(data, -1) {
-		dm.enum.nameSrc.pipelineData(ctx, &requests.AddrRequest{
+		dm.enum.nameSrc.newAddr(&requests.AddrRequest{
 			Address: ip,
 			Domain:  domain,
 			Tag:     requests.DNS,
 			Source:  "DNS",
-		}, tp)
+		})
 	}
 
 	subre := amassdns.AnySubdomainRegex()
 	for _, name := range subre.FindAllString(data, -1) {
 		if domain := strings.ToLower(dm.enum.Config.WhichDomain(name)); domain != "" {
-			dm.enum.nameSrc.pipelineData(ctx, &requests.DNSRequest{
+			dm.enum.nameSrc.newName(&requests.DNSRequest{
 				Name:   name,
 				Domain: domain,
 				Tag:    requests.DNS,
 				Source: "DNS",
-			}, tp)
+			})
 		}
 	}
-}
-
-type queuedAddrRequest struct {
-	Ctx context.Context
-	Req *requests.AddrRequest
 }
 
 func (dm *dataManager) addrRequest(ctx context.Context, req *requests.AddrRequest, tp pipeline.TaskParams) error {
@@ -369,10 +364,7 @@ func (dm *dataManager) addrRequest(ctx context.Context, req *requests.AddrReques
 		return err
 	}
 
-	dm.queue.Append(&queuedAddrRequest{
-		Ctx: ctx,
-		Req: req,
-	})
+	dm.queue.Append(req)
 	return nil
 }
 
@@ -397,10 +389,9 @@ func (dm *dataManager) nextInfraInfo() {
 	if !ok {
 		return
 	}
-	qar := e.(*queuedAddrRequest)
 
-	ctx := qar.Ctx
-	req := qar.Req
+	ctx := context.Background()
+	req := e.(*requests.AddrRequest)
 	uuid := dm.enum.Config.UUID.String()
 	if r := dm.enum.Sys.Cache().AddrSearch(req.Address); r != nil {
 		_ = dm.enum.graph.UpsertInfrastructure(ctx, r.ASN, r.Description, req.Address, r.Prefix, r.Source, uuid)
@@ -408,13 +399,19 @@ func (dm *dataManager) nextInfraInfo() {
 	}
 
 	dm.enum.sendRequests(&requests.ASNRequest{Address: req.Address})
-
+loop:
 	for i := 0; i < 30; i++ {
+		select {
+		case <-dm.enum.ctx.Done():
+			break loop
+		default:
+		}
+
+		time.Sleep(2 * time.Second)
 		if r := dm.enum.Sys.Cache().AddrSearch(req.Address); r != nil {
 			_ = dm.enum.graph.UpsertInfrastructure(ctx, r.ASN, r.Description, req.Address, r.Prefix, r.Source, uuid)
 			return
 		}
-		time.Sleep(time.Second)
 	}
 
 	asn := 0

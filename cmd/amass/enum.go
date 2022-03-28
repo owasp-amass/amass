@@ -34,7 +34,6 @@ import (
 	"github.com/caffix/netmap"
 	"github.com/caffix/stringset"
 	"github.com/fatih/color"
-	bf "github.com/tylertreat/BoomFilters"
 )
 
 const enumUsageMsg = "enum [options] -d DOMAIN"
@@ -244,18 +243,18 @@ func runEnumCommand(clArgs []string) {
 	wg.Add(1)
 	go processOutput(ctx, graph, e, outChans, done, &wg)
 	// Monitor for cancellation by the user
-	go func(c context.CancelFunc) {
+	go func(d chan struct{}, c context.Context, f context.CancelFunc) {
 		quit := make(chan os.Signal, 1)
 		signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 		defer signal.Stop(quit)
 
 		select {
 		case <-quit:
-			c()
-		case <-done:
-		case <-ctx.Done():
+			f()
+		case <-d:
+		case <-c.Done():
 		}
-	}(cancel)
+	}(done, ctx, cancel)
 	// Start the enumeration process
 	if err := e.Start(ctx); err != nil {
 		r.Println(err)
@@ -538,8 +537,8 @@ func processOutput(ctx context.Context, g *netmap.Graph, e *enum.Enumeration, ou
 	}()
 
 	// This filter ensures that we only get new names
-	known := bf.NewDefaultStableBloomFilter(1000000, 0.01)
-	defer func() { _ = known.Reset() }()
+	known := stringset.New()
+	defer known.Close()
 	// The function that obtains output from the enum and puts it on the channel
 	extract := func(limit int) {
 		for _, o := range ExtractOutput(ctx, g, e, known, true, limit) {

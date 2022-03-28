@@ -317,6 +317,20 @@ end
 | ctx        | UserData  |
 | msg        | string    |
 
+### `mtime` Function
+
+A script can request the file modification time associated with the provided path through the `mtime` function. A return value of zero indicates the file could not be accessed or does not exist.
+
+```lua
+function file_unix_mtime(path)
+    return mtime(path)
+end
+```
+
+| Field Name | Data Type |
+|:-----------|:----------|
+| path       | string    |
+
 ### `output_dir` Function
 
 A script can request the filepath to the Amass output directory by executing the `output_dir` function. The returned path can be relative.
@@ -600,9 +614,9 @@ function asn(ctx, addr, asn)
     new_asn(ctx, {
         ['addr']=addr,
         ['asn']=tonumber(asn),
-        prefix=cidr,
-        cc="US",
-        registry="ARIN",
+        ['prefix']=cidr,
+        ['cc']="US",
+        ['registry']="ARIN",
         ['desc']=desc,
         ['netblocks']={cidr},
     })
