@@ -95,7 +95,10 @@ func NewScript(script string, sys systems.System) *Script {
 
 // Setup the Lua state with desired constraints and access to necessary functionality.
 func (s *Script) newLuaState(cfg *config.Config) *lua.LState {
-	L := lua.NewState()
+	L := lua.NewState(lua.Options{
+		CallStackSize:       120,
+		MinimizeStackMemory: true,
+	})
 
 	registerSocketType(L)
 	L.PreloadModule("url", luaurl.Loader)
