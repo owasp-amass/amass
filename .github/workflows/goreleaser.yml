@@ -19,11 +19,11 @@ jobs:
         uses: actions/setup-go@v2
         with:
           go-version: 1.16
-#      -
-#        name: set up CycloneDX
-#        uses: CycloneDX/gh-gomod-generate-sbom@v1
-#        with:
-#          version: v1
+      -
+       name: set up CycloneDX
+       uses: CycloneDX/gh-gomod-generate-sbom@v1
+       with:
+         version: v1
       -
         name: run GoReleaser
         uses: goreleaser/goreleaser-action@v2.4.1
