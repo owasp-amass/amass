@@ -33,9 +33,9 @@ func newMockSystem(cfg *config.Config) systems.System {
 		ASNCache: requests.NewASNCache(),
 	}
 
-	ss.Pool.AddLogger(cfg.Log)
+	ss.Pool.SetLogger(cfg.Log)
 	_ = ss.Pool.AddResolvers(30, "8.8.8.8")
-	ss.Trusted.AddLogger(cfg.Log)
+	ss.Trusted.SetLogger(cfg.Log)
 	_ = ss.Trusted.AddResolvers(30, "8.8.8.8")
 	return ss
 }
