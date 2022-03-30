@@ -246,7 +246,7 @@ func (a *activeTask) zoneWalk(ctx context.Context, req *requests.ZoneXFRRequest,
 	}
 
 	r := resolve.NewResolvers()
-	r.AddLogger(a.enum.Config.Log)
+	r.SetLogger(a.enum.Config.Log)
 	_ = r.AddResolvers(5, addr)
 	defer r.Stop()
 

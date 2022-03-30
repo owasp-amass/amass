@@ -65,7 +65,7 @@ func NewLocalSystem(cfg *config.Config) (*LocalSystem, error) {
 	if set {
 		cfg.MaxDNSQueries += num * cfg.ResolversQPS
 	} else {
-		pool.AddMaxQPS(cfg.MaxDNSQueries)
+		pool.SetMaxQPS(cfg.MaxDNSQueries)
 	}
 
 	sys := &LocalSystem{
@@ -308,7 +308,7 @@ func trustedResolvers(cfg *config.Config, max int) (*resolve.Resolvers, int) {
 		pool.SetDetectionResolver(cfg.TrustedQPS, "8.8.8.8")
 	}
 
-	pool.AddLogger(cfg.Log)
+	pool.SetLogger(cfg.Log)
 	return pool, num
 }
 
@@ -316,10 +316,15 @@ func untrustedResolvers(cfg *config.Config, max int) (*resolve.Resolvers, int) {
 	if max <= 0 {
 		return nil, 0
 	}
-	if len(cfg.Resolvers) > 0 {
-		return customResolverSetup(cfg, max)
+	if len(cfg.Resolvers) == 0 {
+		if pool, num := publicResolverSetup(cfg, max); num > 0 {
+			return pool, num
+		}
+		// Failed to use the public DNS resolvers database
+		cfg.Resolvers = config.DefaultBaselineResolvers
 	}
-	return publicResolverSetup(cfg, max)
+
+	return customResolverSetup(cfg, max)
 }
 
 func customResolverSetup(cfg *config.Config, max int) (*resolve.Resolvers, int) {
@@ -330,7 +335,7 @@ func customResolverSetup(cfg *config.Config, max int) (*resolve.Resolvers, int) 
 	}
 
 	pool := resolve.NewResolvers()
-	pool.AddLogger(cfg.Log)
+	pool.SetLogger(cfg.Log)
 	_ = pool.AddResolvers(cfg.ResolversQPS, cfg.Resolvers...)
 	return pool, num
 }
@@ -356,7 +361,7 @@ func publicResolverSetup(cfg *config.Config, max int) (*resolve.Resolvers, int) 
 	addrs = runSubnetChecks(addrs)
 
 	r := resolve.NewResolvers()
-	r.AddLogger(cfg.Log)
+	r.SetLogger(cfg.Log)
 	_ = r.AddResolvers(cfg.ResolversQPS, addrs...)
 	return r, len(addrs)
 }
