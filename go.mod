@@ -8,7 +8,7 @@ require (
 	github.com/caffix/netmap v0.0.0-20220329224824-86a226811ec6
 	github.com/caffix/pipeline v0.1.3
 	github.com/caffix/queue v0.1.3
-	github.com/caffix/resolve v0.4.3
+	github.com/caffix/resolve v0.4.5
 	github.com/caffix/service v0.2.3
 	github.com/caffix/stringset v0.1.0
 	github.com/cayleygraph/quad v1.2.4
