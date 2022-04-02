@@ -14,12 +14,15 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       -
+        name: setup
+        uses: actions/setup-go@v2
+      -
         name: checkout
         uses: actions/checkout@v2
       -
         name: golangci-lint
         uses: golangci/golangci-lint-action@v2
         with:
-          version: v1.36
+          version: v1.45.2
           args: --timeout=5m
           only-new-issues: true
