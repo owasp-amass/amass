@@ -103,8 +103,8 @@ github.com/caffix/pipeline v0.1.3 h1:Luqk3SVHI3S5NR7JREr58lLcYIu21MaAyXAKH9B3fbM
 github.com/caffix/pipeline v0.1.3/go.mod h1:lk9M3J+5FuS5MPnFLR34TwtkjLw+Ke0knA+JV443Wo8=
 github.com/caffix/queue v0.1.3 h1:rAMgUqdcBi5bI2H0dB/sL/ky710KBKHrQqFyJZktn5E=
 github.com/caffix/queue v0.1.3/go.mod h1:uZb+KY0S+jd6t9C6jgadV7CDSBMhLODCdwrxHKie2vI=
-github.com/caffix/resolve v0.4.3 h1:WaOD4JW14AQyPkN8jW0BsW7IMBe1xt717LCEgXwMJmY=
-github.com/caffix/resolve v0.4.3/go.mod h1:2wI2OUFg36bFN4zNgDv1gtthwc7yBgQ03nXs4vs6yU0=
+github.com/caffix/resolve v0.4.5 h1:zbiS3U2EL94a/mJhFFm8nKJl13CkfNk5nbOQTTu7Hn0=
+github.com/caffix/resolve v0.4.5/go.mod h1:2wI2OUFg36bFN4zNgDv1gtthwc7yBgQ03nXs4vs6yU0=
 github.com/caffix/service v0.2.3 h1:SHubeHQ87P90DwERehS2nDpyIOWWYfVhlkMrYhjQriA=
 github.com/caffix/service v0.2.3/go.mod h1:sokr1G9gu2dpikuGnRVEpS1Xhbu0t23locTQ04v+Dp8=
 github.com/caffix/stringset v0.0.0-20210920202210-bde5591d523d/go.mod h1:LlF238uAHb6xk7lg+L+nKj3yWAlxin2POgV4avSjAFw=
