@@ -42,43 +42,6 @@ func newDNSTask(e *Enumeration) *dnsTask {
 	}
 }
 
-func (dt *dnsTask) blacklistTaskFunc() pipeline.TaskFunc {
-	return pipeline.TaskFunc(func(ctx context.Context, data pipeline.Data, tp pipeline.TaskParams) (pipeline.Data, error) {
-		select {
-		case <-ctx.Done():
-			return nil, nil
-		default:
-		}
-
-		var name string
-		switch v := data.(type) {
-		case *requests.DNSRequest:
-			if v != nil && v.Valid() {
-				name = v.Name
-			}
-		case *requests.ResolvedRequest:
-			if v != nil && v.Valid() {
-				name = v.Name
-			}
-		case *requests.SubdomainRequest:
-			if v != nil && v.Valid() {
-				name = v.Name
-			}
-		case *requests.ZoneXFRRequest:
-			if v != nil {
-				name = v.Name
-			}
-		default:
-			return data, nil
-		}
-
-		if name != "" && !dt.enum.Config.Blacklisted(name) {
-			return data, nil
-		}
-		return nil, nil
-	})
-}
-
 func (dt *dnsTask) rootTaskFunc() pipeline.TaskFunc {
 	return pipeline.TaskFunc(func(ctx context.Context, data pipeline.Data, tp pipeline.TaskParams) (pipeline.Data, error) {
 		select {
@@ -145,9 +108,6 @@ func (dt *dnsTask) processFwdRequest(ctx context.Context, req *requests.DNSReque
 	if req == nil || !req.Valid() {
 		return nil, errors.New("invalid request")
 	}
-
-	var err error
-	var resp *dns.Msg
 loop:
 	for _, qtype := range InitialQueryTypes {
 		select {
@@ -159,45 +119,24 @@ loop:
 		}
 
 		msg := resolve.QueryMsg(req.Name, qtype)
-		resp, err = dt.enum.Sys.Resolvers().QueryBlocking(ctx, msg)
-		// Check if the response indicates that the name does not exist
-		if err != nil || resp.Rcode == dns.RcodeNameError {
-			return nil, errors.New("name does not exist")
-		}
-		if resp.Rcode == dns.RcodeSuccess && len(resp.Answer) == 0 && qtype == dns.TypeCNAME {
-			continue
-		}
-		// Was there another reason why the query failed?
-		for attempts := 1; attempts < maxDNSQueryAttempts && resp.Rcode != dns.RcodeSuccess; attempts++ {
-			resp, err = dt.enum.Sys.Resolvers().QueryBlocking(ctx, msg)
-			if err != nil {
-				break loop
-			}
-		}
-		if resp.Rcode != dns.RcodeSuccess {
-			continue
+		resp, err := dt.enum.dnsQuery(ctx, msg, dt.enum.Sys.Resolvers(), maxDNSQueryAttempts)
+		if err != nil && err.Error() != "no record of this type" {
+			return nil, err
+		} else if err == nil && resp == nil {
+			return nil, errors.New("failed to resolve name")
 		}
 
-		resp, err = dt.enum.Sys.TrustedResolvers().QueryBlocking(ctx, msg)
-		// Check if the response indicates that the name does not exist
-		if err != nil || resp.Rcode == dns.RcodeNameError {
-			return nil, errors.New("name does not exist")
-		}
-		if resp.Rcode == dns.RcodeSuccess && len(resp.Answer) == 0 && qtype == dns.TypeCNAME {
-			continue
-		}
-		for attempts := 1; attempts < maxDNSQueryAttempts && resp.Rcode != dns.RcodeSuccess; attempts++ {
-			resp, err = dt.enum.Sys.Resolvers().QueryBlocking(ctx, msg)
-			// Check if the response indicates that the name does not exist
-			if err != nil || resp.Rcode == dns.RcodeNameError {
-				return nil, errors.New("name does not exist")
+		resp, err = dt.enum.dnsQuery(ctx, msg, dt.enum.Sys.TrustedResolvers(), maxDNSQueryAttempts)
+		if err != nil {
+			if err.Error() == "no record of this type" {
+				continue
 			}
-			if resp.Rcode == dns.RcodeSuccess && len(resp.Answer) == 0 && qtype == dns.TypeCNAME {
-				continue loop
-			}
+			return nil, err
+		} else if resp == nil {
+			return nil, errors.New("failed to resolve name")
 		}
-		if resp.Rcode != dns.RcodeSuccess {
-			continue
+		if dt.enum.wildcardDetected(ctx, req, resp) {
+			return nil, errors.New("wildcard detected")
 		}
 
 		ans := resolve.ExtractAnswers(resp)
@@ -209,70 +148,57 @@ loop:
 		if len(rr) == 0 {
 			continue
 		}
-
 		req.Records = append(req.Records, convertAnswers(rr)...)
 	}
 
-	if len(req.Records) > 0 && dt.wildcardFiltering(ctx, req, resp) {
-		return req, nil
+	if len(req.Records) == 0 {
+		return nil, errors.New("no records found")
 	}
-	return nil, errors.New("wildcard detected")
+	return req, nil
 }
 
 func (e *Enumeration) fwdQuery(ctx context.Context, name string, qtype uint16) (*dns.Msg, error) {
 	msg := resolve.QueryMsg(name, qtype)
-	resp, err := e.Sys.Resolvers().QueryBlocking(ctx, msg)
-	// Check if the response indicates that the name does not exist
-	if err != nil || resp.Rcode == dns.RcodeNameError {
-		return nil, errors.New("name does not exist")
+	resp, err := e.dnsQuery(ctx, msg, e.Sys.Resolvers(), 50)
+	if err != nil {
+		return resp, err
 	}
-	if resp.Rcode == dns.RcodeSuccess && len(resp.Answer) == 0 {
-		return nil, errors.New("zero answers returned")
-	}
-	// Was there another reason why the query failed?
-	for attempts := 1; attempts < 50 && resp.Rcode != dns.RcodeSuccess; attempts++ {
-		resp, err = e.Sys.Resolvers().QueryBlocking(ctx, msg)
-		// Check if the response indicates that the name does not exist
-		if err != nil || resp.Rcode == dns.RcodeNameError {
-			return nil, errors.New("name does not exist")
-		}
-		if resp.Rcode == dns.RcodeSuccess && len(resp.Answer) == 0 {
-			return nil, errors.New("zero answers returned")
-		}
-	}
-	if resp.Rcode != dns.RcodeSuccess {
+	if resp == nil {
 		return nil, errors.New("query failed")
 	}
 
-	resp, err = e.Sys.TrustedResolvers().QueryBlocking(ctx, msg)
-	// Check if the response indicates that the name does not exist
-	if err != nil || resp.Rcode == dns.RcodeNameError {
-		return nil, errors.New("name does not exist")
-	}
-	if resp.Rcode == dns.RcodeSuccess && len(resp.Answer) == 0 {
-		return nil, errors.New("zero answers returned")
-	}
-	for attempts := 1; attempts < 50 && resp.Rcode != dns.RcodeSuccess; attempts++ {
-		resp, err = e.Sys.Resolvers().QueryBlocking(ctx, msg)
-		// Check if the response indicates that the name does not exist
-		if err != nil || resp.Rcode == dns.RcodeNameError {
-			return nil, errors.New("name does not exist")
-		}
-		if resp.Rcode == dns.RcodeSuccess && len(resp.Answer) == 0 {
-			return nil, errors.New("zero answers returned")
-		}
-	}
-	if resp.Rcode != dns.RcodeSuccess {
+	resp, err = e.dnsQuery(ctx, msg, e.Sys.TrustedResolvers(), 50)
+	if resp == nil {
 		return nil, errors.New("query failed")
 	}
-	return resp, nil
+	return resp, err
 }
 
-func (dt *dnsTask) wildcardFiltering(ctx context.Context, req *requests.DNSRequest, resp *dns.Msg) bool {
-	if !requests.TrustedTag(req.Tag) && dt.enum.Sys.TrustedResolvers().WildcardDetected(ctx, resp, req.Domain) {
-		return false
+func (e *Enumeration) dnsQuery(ctx context.Context, msg *dns.Msg, r *resolve.Resolvers, attempts int) (*dns.Msg, error) {
+	for num := 0; num < attempts; num++ {
+		resp, err := r.QueryBlocking(ctx, msg)
+
+		if err != nil {
+			return nil, errors.New("context expired")
+		}
+		if resp.Rcode == dns.RcodeNameError {
+			return nil, errors.New("name does not exist")
+		}
+		if resp.Rcode == dns.RcodeSuccess && len(resp.Answer) == 0 {
+			return nil, errors.New("no record of this type")
+		}
+		if resp.Rcode == dns.RcodeSuccess {
+			return resp, nil
+		}
 	}
-	return true
+	return nil, nil
+}
+
+func (e *Enumeration) wildcardDetected(ctx context.Context, req *requests.DNSRequest, resp *dns.Msg) bool {
+	if !requests.TrustedTag(req.Tag) && e.Sys.TrustedResolvers().WildcardDetected(ctx, resp, req.Domain) {
+		return true
+	}
+	return false
 }
 
 func (dt *dnsTask) processRevRequest(ctx context.Context, addr string, tp pipeline.TaskParams) bool {
@@ -291,33 +217,13 @@ func (dt *dnsTask) processRevRequest(ctx context.Context, addr string, tp pipeli
 		return false
 	}
 
-	resp, err := dt.enum.Sys.Resolvers().QueryBlocking(ctx, msg)
-	if err != nil || resp.Rcode == dns.RcodeNameError {
-		return false
-	}
-	// Was there another reason why the query failed?
-	for attempts := 1; attempts < maxDNSQueryAttempts && resp.Rcode != dns.RcodeSuccess; attempts++ {
-		resp, err = dt.enum.Sys.Resolvers().QueryBlocking(ctx, msg)
-		if err != nil {
-			return false
-		}
-	}
-	if resp.Rcode != dns.RcodeSuccess {
+	resp, err := dt.enum.dnsQuery(ctx, msg, dt.enum.Sys.Resolvers(), maxDNSQueryAttempts)
+	if err != nil || resp == nil {
 		return false
 	}
 
-	resp, err = dt.enum.Sys.TrustedResolvers().QueryBlocking(ctx, msg)
-	if err != nil || resp.Rcode == dns.RcodeNameError {
-		return false
-	}
-	// Was there another reason why the query failed?
-	for attempts := 1; attempts < maxDNSQueryAttempts && resp.Rcode != dns.RcodeSuccess; attempts++ {
-		resp, err = dt.enum.Sys.TrustedResolvers().QueryBlocking(ctx, msg)
-		if err != nil {
-			return false
-		}
-	}
-	if resp.Rcode != dns.RcodeSuccess {
+	resp, err = dt.enum.dnsQuery(ctx, msg, dt.enum.Sys.TrustedResolvers(), maxDNSQueryAttempts)
+	if err != nil || resp == nil {
 		return false
 	}
 

@@ -75,7 +75,6 @@ func (e *Enumeration) Start(ctx context.Context) error {
 
 	var stages []pipeline.Stage
 	if !e.Config.Passive {
-		stages = append(stages, pipeline.FIFO("", e.dnsTask.blacklistTaskFunc()))
 		stages = append(stages, pipeline.FIFO("root", e.dnsTask.rootTaskFunc()))
 		stages = append(stages, pipeline.DynamicPool("dns", e.dnsTask, e.Sys.Resolvers().QPS()))
 		stages = append(stages, pipeline.FIFO("store", e.store))

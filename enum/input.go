@@ -24,8 +24,8 @@ import (
 
 const (
 	waitForDuration  = 10 * time.Second
-	defaultSweepSize = 100
-	activeSweepSize  = 200
+	defaultSweepSize = 500
+	activeSweepSize  = 1000
 )
 
 // enumSource handles the filtering and release of new Data in the enumeration.
@@ -110,13 +110,16 @@ func (r *enumSource) newName(req *requests.DNSRequest) {
 	default:
 	}
 
-	if !req.Valid() {
+	if req.Name == "" || !req.Valid() {
 		return
 	}
 	// Clean up the newly discovered name and domain
 	requests.SanitizeDNSRequest(req)
 	// Check that the name is valid
 	if r.subre.FindString(req.Name) != req.Name {
+		return
+	}
+	if r.enum.Config.Blacklisted(req.Name) {
 		return
 	}
 	// Do not further evaluate service subdomains
