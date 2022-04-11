@@ -20,7 +20,7 @@ require (
 	github.com/irfansharif/cfilter v0.1.1
 	github.com/jmoiron/sqlx v1.3.4
 	github.com/lib/pq v1.10.5
-	github.com/miekg/dns v1.1.35
+	github.com/miekg/dns v1.1.48
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/prometheus/common v0.6.0 // indirect
 	github.com/prometheus/procfs v0.0.3 // indirect
