@@ -37,11 +37,12 @@ type vizArgs struct {
 		Silent     bool
 	}
 	Filepaths struct {
-		ConfigFile string
-		Directory  string
-		Domains    string
-		Input      string
-		Output     string
+		ConfigFile    string
+		Directory     string
+		Domains       string
+		Input         string
+		Output        string
+		AllFilePrefix string
 	}
 }
 
@@ -65,6 +66,7 @@ func runVizCommand(clArgs []string) {
 	vizCommand.StringVar(&args.Filepaths.Domains, "df", "", "Path to a file providing root domain names")
 	vizCommand.StringVar(&args.Filepaths.Input, "i", "", "The Amass data operations JSON file")
 	vizCommand.StringVar(&args.Filepaths.Output, "o", "", "Path to the directory for output files being generated")
+	vizCommand.StringVar(&args.Filepaths.AllFilePrefix, "oA", "", "Path prefix used for naming all output files")
 	vizCommand.BoolVar(&args.Options.D3, "d3", false, "Generate the D3 v4 force simulation HTML file")
 	vizCommand.BoolVar(&args.Options.DOT, "dot", false, "Generate the DOT output file")
 	vizCommand.BoolVar(&args.Options.GEXF, "gexf", false, "Generate the Gephi Graph Exchange XML Format (GEXF) file")
@@ -156,6 +158,13 @@ func runVizCommand(clArgs []string) {
 	nodes, edges := viz.VizData(context.Background(), memDB, uuids)
 	// Get the directory to save the files into
 	dir := args.Filepaths.Directory
+
+	// Set output file prefix, use 'amass' if '-oA' flag is not specified
+	prefix := args.Filepaths.AllFilePrefix
+	if prefix == "" {
+		prefix = "amass"
+	}
+
 	if args.Filepaths.Output != "" {
 		if finfo, err := os.Stat(args.Filepaths.Output); os.IsNotExist(err) || !finfo.IsDir() {
 			r.Fprintln(color.Error, "The output location does not exist or is not a directory")
@@ -164,23 +173,23 @@ func runVizCommand(clArgs []string) {
 		dir = args.Filepaths.Output
 	}
 	if args.Options.D3 {
-		path := filepath.Join(dir, "amass_d3.html")
+		path := filepath.Join(dir, prefix+".html")
 		err = writeGraphOutputFile("d3", path, nodes, edges)
 	}
 	if args.Options.DOT {
-		path := filepath.Join(dir, "amass.dot")
+		path := filepath.Join(dir, prefix+".dot")
 		err = writeGraphOutputFile("dot", path, nodes, edges)
 	}
 	if args.Options.GEXF {
-		path := filepath.Join(dir, "amass.gexf")
+		path := filepath.Join(dir, prefix+".gexf")
 		err = writeGraphOutputFile("gexf", path, nodes, edges)
 	}
 	if args.Options.Graphistry {
-		path := filepath.Join(dir, "amass_graphistry.json")
+		path := filepath.Join(dir, prefix+"_graphistry.json")
 		err = writeGraphOutputFile("graphistry", path, nodes, edges)
 	}
 	if args.Options.Maltego {
-		path := filepath.Join(dir, "amass_maltego.csv")
+		path := filepath.Join(dir, prefix+"_maltego.csv")
 		err = writeGraphOutputFile("maltego", path, nodes, edges)
 	}
 	if err != nil {
