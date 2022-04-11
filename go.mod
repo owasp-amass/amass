@@ -3,7 +3,7 @@ module github.com/OWASP/Amass
 go 1.12
 
 require (
-	github.com/PuerkitoBio/goquery v1.6.0
+	github.com/PuerkitoBio/goquery v1.8.0
 	github.com/caffix/cloudflare-roundtripper v0.0.0-20181218223503-4c29d231c9cb
 	github.com/cayleygraph/cayley v0.7.7
 	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
