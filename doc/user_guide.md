@@ -152,10 +152,13 @@ Switches for outputting the DNS and infrastructure findings as a network graph:
 | -df | Path to a file providing root domain names | amass viz -d3 -df domains.txt |
 | -dir | Path to the directory containing the graph database | amass viz -d3 -dir PATH -d example.com |
 | -enum | Identify an enumeration via an index from the db listing | amass viz -enum 1 -d3 -d example.com |
-| -gexf | Output to Graph Exchange XML Format (GEXF) | amass viz -gephi -d example.com |
+| -o | Path to a pre-existing directory that will hold output files | amass viz -d3 -o OUTPATH -d example.com |
+| -oA | Prefix used for naming all output files | amass viz -d3 -oA example -d example.com |
+| -gexf | Output to Graph Exchange XML Format (GEXF) | amass viz -gexf -d example.com |
 | -graphistry | Output Graphistry JSON | amass viz -graphistry -d example.com |
 | -i | Path to the Amass data operations JSON input file | amass viz -d3 -d example.com |
 | -maltego | Output a Maltego Graph Table CSV file | amass viz -maltego -d example.com |
+
 
 ### The 'track' Subcommand
 
