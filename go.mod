@@ -12,7 +12,7 @@ require (
 	github.com/dghubble/go-twitter v0.0.0-20190719072343-39e5462e111f
 	github.com/fatih/color v1.10.0
 	github.com/geziyor/geziyor v0.0.0-20190721090841-762854e5113a
-	github.com/go-ini/ini v1.62.0
+	github.com/go-ini/ini v1.66.4
 	github.com/go-kit/kit v0.9.0 // indirect
 	github.com/gobwas/ws v1.0.2 // indirect
 	github.com/golang/protobuf v1.3.2 // indirect
@@ -26,8 +26,6 @@ require (
 	github.com/prometheus/procfs v0.0.3 // indirect
 	github.com/qasaur/gremgo v0.0.0-20180719101618-fa23ada7c5da
 	github.com/robertkrimen/otto v0.0.0-20180617131154-15f95af6e78d // indirect
-	github.com/smartystreets/goconvey v1.6.4 // indirect
 	golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45
-	gopkg.in/ini.v1 v1.62.0 // indirect
 	gopkg.in/sourcemap.v1 v1.0.5 // indirect
 )
