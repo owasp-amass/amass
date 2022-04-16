@@ -1,5 +1,6 @@
-// Copyright 2017-2020 Jeff Foley. All rights reserved.
+// Copyright © by Jeff Foley 2017-2022. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
 
 package config
 
@@ -37,15 +38,12 @@ func (c *Config) GetDataSourceConfig(source string) *DataSourceConfig {
 	if key == "" {
 		return nil
 	}
-
 	if c.datasrcConfigs == nil {
 		c.datasrcConfigs = make(map[string]*DataSourceConfig)
 	}
-
 	if _, found := c.datasrcConfigs[key]; !found {
 		c.datasrcConfigs[key] = &DataSourceConfig{Name: key}
 	}
-
 	return c.datasrcConfigs[key]
 }
 
@@ -119,6 +117,5 @@ func (c *Config) loadDataSourceSettings(cfg *ini.File) error {
 			}
 		}
 	}
-
 	return nil
 }

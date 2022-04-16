@@ -21,7 +21,7 @@ func (s *Script) getCachedResponse(ctx context.Context, url string, ttl int) (st
 			return resp, err
 		}
 	}
-	return "", fmt.Errorf("Failed to obtain a cached response for %s", url)
+	return "", fmt.Errorf("failed to obtain a cached response for %s", url)
 }
 
 func (s *Script) setCachedResponse(ctx context.Context, url, resp string) error {
@@ -69,8 +69,8 @@ func (s *Script) cacheResponse(L *lua.LState) int {
 		return 0
 	}
 
-	url := L.CheckString(1)
-	resp := L.CheckString(2)
+	url := L.CheckString(2)
+	resp := L.CheckString(3)
 	if url != "" && resp != "" {
 		_ = s.setCachedResponse(ctx, url, resp)
 	}

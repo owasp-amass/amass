@@ -67,51 +67,44 @@ func (s *Script) resolve(L *lua.LState) int {
 
 func (s *Script) fwdQuery(ctx context.Context, name string, qtype uint16) (*dns.Msg, error) {
 	msg := resolve.QueryMsg(name, qtype)
-	resp, err := s.sys.Resolvers().QueryBlocking(ctx, msg)
-	// Check if the response indicates that the name does not exist
-	if err != nil || resp.Rcode == dns.RcodeNameError {
-		return nil, errors.New("name does not exist")
+	resp, err := s.dnsQuery(ctx, msg, s.sys.Resolvers(), 50)
+	if err != nil {
+		return resp, err
 	}
-	if resp.Rcode == dns.RcodeSuccess && len(resp.Answer) == 0 {
-		return nil, errors.New("zero answers returned")
-	}
-	// Was there another reason why the query failed?
-	for attempts := 1; attempts < 50 && resp.Rcode != dns.RcodeSuccess; attempts++ {
-		resp, err = s.sys.Resolvers().QueryBlocking(ctx, msg)
-		// Check if the response indicates that the name does not exist
-		if err != nil || resp.Rcode == dns.RcodeNameError {
-			return nil, errors.New("name does not exist")
-		}
-		if resp.Rcode == dns.RcodeSuccess && len(resp.Answer) == 0 {
-			return nil, errors.New("zero answers returned")
-		}
-	}
-	if resp.Rcode != dns.RcodeSuccess {
+	if resp == nil && err == nil {
 		return nil, errors.New("query failed")
 	}
 
-	resp, err = s.sys.TrustedResolvers().QueryBlocking(ctx, msg)
-	// Check if the response indicates that the name does not exist
-	if err != nil || resp.Rcode == dns.RcodeNameError {
-		return nil, errors.New("name does not exist")
+	resp, err = s.dnsQuery(ctx, msg, s.sys.TrustedResolvers(), 50)
+	if resp == nil && err == nil {
+		err = errors.New("query failed")
 	}
-	if resp.Rcode == dns.RcodeSuccess && len(resp.Answer) == 0 {
-		return nil, errors.New("zero answers returned")
-	}
-	for attempts := 1; attempts < 50 && resp.Rcode != dns.RcodeSuccess; attempts++ {
-		resp, err = s.sys.Resolvers().QueryBlocking(ctx, msg)
-		// Check if the response indicates that the name does not exist
-		if err != nil || resp.Rcode == dns.RcodeNameError {
+	return resp, err
+}
+
+func (s *Script) dnsQuery(ctx context.Context, msg *dns.Msg, r *resolve.Resolvers, attempts int) (*dns.Msg, error) {
+	for num := 0; num < attempts; num++ {
+		select {
+		case <-ctx.Done():
+			return nil, errors.New("context expired")
+		default:
+		}
+
+		resp, err := r.QueryBlocking(ctx, msg)
+		if err != nil {
+			continue
+		}
+		if resp.Rcode == dns.RcodeNameError {
 			return nil, errors.New("name does not exist")
 		}
 		if resp.Rcode == dns.RcodeSuccess && len(resp.Answer) == 0 {
-			return nil, errors.New("zero answers returned")
+			return nil, errors.New("no record of this type")
+		}
+		if resp.Rcode == dns.RcodeSuccess {
+			return resp, nil
 		}
 	}
-	if resp.Rcode != dns.RcodeSuccess {
-		return nil, errors.New("query failed")
-	}
-	return resp, nil
+	return nil, nil
 }
 
 func convertType(qtype string) uint16 {
