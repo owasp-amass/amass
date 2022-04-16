@@ -6,8 +6,6 @@ package enum
 
 import (
 	"context"
-	"strconv"
-	"sync"
 
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/datasrcs"
@@ -17,7 +15,6 @@ import (
 	"github.com/caffix/pipeline"
 	"github.com/caffix/queue"
 	"github.com/caffix/service"
-	bf "github.com/tylertreat/BoomFilters"
 )
 
 const maxActivePipelineTasks int = 25
@@ -79,10 +76,6 @@ func (e *Enumeration) Start(ctx context.Context) error {
 		stages = append(stages, pipeline.DynamicPool("dns", e.dnsTask, e.Sys.Resolvers().QPS()))
 		stages = append(stages, pipeline.FIFO("store", e.store))
 		stages = append(stages, pipeline.FIFO("", e.subTask))
-	} else {
-		filter := bf.NewDefaultStableBloomFilter(1000000, 0.01)
-		defer func() { _ = filter.Reset() }()
-		stages = append(stages, pipeline.FIFO("filter", e.filterTaskFunc(filter)))
 	}
 	if e.Config.Active {
 		activetask := newActiveTask(e, maxActivePipelineTasks)
@@ -97,11 +90,8 @@ func (e *Enumeration) Start(ctx context.Context) error {
 	 * by the user and names acquired from the graph database can be brought
 	 * into the enumeration
 	 */
-	var wg sync.WaitGroup
-	wg.Add(2)
-	go e.submitKnownNames(&wg)
-	go e.submitProvidedNames(&wg)
-	wg.Wait()
+	go e.submitKnownNames()
+	go e.submitProvidedNames()
 
 	var err error
 	if p := pipeline.NewPipeline(stages...); e.Config.Passive {
@@ -213,106 +203,60 @@ func (e *Enumeration) makeOutputSink() pipeline.SinkFunc {
 	})
 }
 
-func (e *Enumeration) filterTaskFunc(filter *bf.StableBloomFilter) pipeline.TaskFunc {
-	return pipeline.TaskFunc(func(ctx context.Context, data pipeline.Data, tp pipeline.TaskParams) (pipeline.Data, error) {
-		select {
-		case <-ctx.Done():
-			return nil, nil
-		default:
-		}
-
-		var name, qtype string
-		switch v := data.(type) {
-		case *requests.DNSRequest:
-			if v != nil && v.Valid() {
-				name = v.Name
-				if len(v.Records) > 0 {
-					qtype = strconv.Itoa(v.Records[0].Type)
-				}
-			}
-		case *requests.AddrRequest:
-			if v != nil && v.Valid() {
-				name = v.Address
-			}
-		default:
-			return data, nil
-		}
-
-		if name != "" && !filter.TestAndAdd([]byte(name+qtype)) {
-			return data, nil
-		}
-		return nil, nil
-	})
-}
-
-func (e *Enumeration) submitKnownNames(wg *sync.WaitGroup) {
-	defer wg.Done()
-
-	filter := bf.NewDefaultStableBloomFilter(1000000, 0.01)
-	defer func() { _ = filter.Reset() }()
-
+func (e *Enumeration) submitKnownNames() {
 	srcTags := make(map[string]string)
 	for _, src := range e.Sys.DataSources() {
 		srcTags[src.String()] = src.Description()
 	}
 
 	for _, g := range e.Sys.GraphDatabases() {
-		e.readNamesFromDatabase(e.ctx, g, filter, srcTags)
+		e.readNamesFromDatabase(g, srcTags)
 	}
 }
 
-func (e *Enumeration) readNamesFromDatabase(ctx context.Context, g *netmap.Graph, filter *bf.StableBloomFilter, stags map[string]string) {
+func (e *Enumeration) readNamesFromDatabase(db *netmap.Graph, stags map[string]string) {
 	domains := e.Config.Domains()
 
-	for _, event := range g.EventsInScope(ctx, domains...) {
-		for _, name := range g.EventFQDNs(ctx, event) {
+	for _, event := range db.EventsInScope(e.ctx, domains...) {
+		for _, name := range db.EventFQDNs(e.ctx, event) {
 			select {
 			case <-e.done:
 				return
 			default:
 			}
 
-			if filter.TestAndAdd([]byte(name)) {
-				continue
-			}
-
 			domain := e.Config.WhichDomain(name)
 			if domain == "" {
 				continue
 			}
-			if srcs, err := g.NodeSources(ctx, netmap.Node(name), event); err == nil {
+			if srcs, err := db.NodeSources(e.ctx, netmap.Node(name), event); err == nil {
 				src := srcs[0]
 				tag := stags[src]
-				req := &requests.DNSRequest{
+				e.nameSrc.newName(&requests.DNSRequest{
 					Name:   name,
 					Domain: domain,
 					Tag:    tag,
 					Source: src,
-				}
-
-				if e.Config.IsDomainInScope(req.Name) {
-					e.nameSrc.newName(req)
-				}
+				})
 			}
 		}
 	}
 }
 
-func (e *Enumeration) submitProvidedNames(wg *sync.WaitGroup) {
-	defer wg.Done()
-
+func (e *Enumeration) submitProvidedNames() {
 	for _, name := range e.Config.ProvidedNames {
+		select {
+		case <-e.done:
+			return
+		default:
+		}
 		if domain := e.Config.WhichDomain(name); domain != "" {
-			req := &requests.DNSRequest{
+			e.nameSrc.newName(&requests.DNSRequest{
 				Name:   name,
 				Domain: domain,
 				Tag:    requests.EXTERNAL,
 				Source: "User Input",
-			}
-
-			if e.Config.IsDomainInScope(req.Name) {
-				e.nameSrc.newName(req)
-			}
+			})
 		}
 	}
 }
