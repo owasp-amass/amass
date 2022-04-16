@@ -80,7 +80,6 @@ func commandUsage(msg string, cmdFlagSet *flag.FlagSet, errBuf *bytes.Buffer) {
 		g.Fprintf(color.Error, "\t%-11s - Visualize enumeration results\n", "amass viz")
 		g.Fprintf(color.Error, "\t%-11s - Track differences between enumerations\n", "amass track")
 		g.Fprintf(color.Error, "\t%-11s - Manipulate the Amass graph database\n", "amass db")
-		g.Fprintf(color.Error, "\t%-11s - Resolve DNS names at high performance\n\n", "amass dns")
 	}
 
 	g.Fprintf(color.Error, "The user's guide can be found here: \n%s\n\n", userGuideURL)
@@ -119,8 +118,6 @@ func main() {
 	switch os.Args[1] {
 	case "db":
 		runDBCommand(os.Args[2:])
-	case "dns":
-		runDNSCommand(os.Args[2:])
 	case "enum":
 		runEnumCommand(os.Args[2:])
 	case "intel":
