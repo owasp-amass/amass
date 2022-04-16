@@ -25,7 +25,6 @@ function asn(ctx, addr, asn)
 
         result = origin(ctx, addr)
         if (result == nil) then return end
-        check_rate_limit()
 
         local cidrs = netblocks(ctx, result.asn)
         if (cidrs == nil or #cidrs == 0) then return end
@@ -34,7 +33,6 @@ function asn(ctx, addr, asn)
         local cidrs = netblocks(ctx, asn)
         if (cidrs == nil or #cidrs == 0) then return end
 
-        check_rate_limit()
         if (addr == "") then
             local parts = split(cidrs[1], "/")
             if (#parts < 2) then return end

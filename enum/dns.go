@@ -132,7 +132,7 @@ loop:
 				continue
 			}
 			return nil, err
-		} else if resp == nil {
+		} else if resp == nil && err == nil {
 			return nil, errors.New("failed to resolve name")
 		}
 		if dt.enum.wildcardDetected(ctx, req, resp) {
@@ -163,23 +163,28 @@ func (e *Enumeration) fwdQuery(ctx context.Context, name string, qtype uint16) (
 	if err != nil {
 		return resp, err
 	}
-	if resp == nil {
+	if resp == nil && err == nil {
 		return nil, errors.New("query failed")
 	}
 
 	resp, err = e.dnsQuery(ctx, msg, e.Sys.TrustedResolvers(), 50)
-	if resp == nil {
-		return nil, errors.New("query failed")
+	if resp == nil && err == nil {
+		err = errors.New("query failed")
 	}
 	return resp, err
 }
 
 func (e *Enumeration) dnsQuery(ctx context.Context, msg *dns.Msg, r *resolve.Resolvers, attempts int) (*dns.Msg, error) {
 	for num := 0; num < attempts; num++ {
-		resp, err := r.QueryBlocking(ctx, msg)
-
-		if err != nil {
+		select {
+		case <-ctx.Done():
 			return nil, errors.New("context expired")
+		default:
+		}
+
+		resp, err := r.QueryBlocking(ctx, msg)
+		if err != nil {
+			continue
 		}
 		if resp.Rcode == dns.RcodeNameError {
 			return nil, errors.New("name does not exist")

@@ -323,7 +323,6 @@ func untrustedResolvers(cfg *config.Config, max int) (*resolve.Resolvers, int) {
 		// Failed to use the public DNS resolvers database
 		cfg.Resolvers = config.DefaultBaselineResolvers
 	}
-
 	return customResolverSetup(cfg, max)
 }
 
@@ -337,6 +336,12 @@ func customResolverSetup(cfg *config.Config, max int) (*resolve.Resolvers, int) 
 	pool := resolve.NewResolvers()
 	pool.SetLogger(cfg.Log)
 	_ = pool.AddResolvers(cfg.ResolversQPS, cfg.Resolvers...)
+	pool.SetThresholdOptions(&resolve.ThresholdOptions{
+		ThresholdValue:      200,
+		CountTimeouts:       true,
+		CountServerFailures: true,
+		CountQueryRefusals:  true,
+	})
 	return pool, num
 }
 
@@ -363,6 +368,14 @@ func publicResolverSetup(cfg *config.Config, max int) (*resolve.Resolvers, int) 
 	r := resolve.NewResolvers()
 	r.SetLogger(cfg.Log)
 	_ = r.AddResolvers(cfg.ResolversQPS, addrs...)
+	r.SetThresholdOptions(&resolve.ThresholdOptions{
+		ThresholdValue:      100,
+		CountTimeouts:       true,
+		CountFormatErrors:   true,
+		CountServerFailures: true,
+		CountNotImplemented: true,
+		CountQueryRefusals:  true,
+	})
 	return r, len(addrs)
 }
 

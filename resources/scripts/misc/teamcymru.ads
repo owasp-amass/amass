@@ -1,28 +1,22 @@
--- Copyright 2017-2021 Jeff Foley. All rights reserved.
+-- Copyright © by Jeff Foley 2017-2022. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+-- SPDX-License-Identifier: Apache-2.0
 
 name = "TeamCymru"
 type = "misc"
-
-function start()
-    set_rate_limit(2)
-end
 
 function asn(ctx, addr, asn)
     if (addr == "") then return end
 
     local result = origin(ctx, addr)
-    if (result == nil) then return end
+    if (result == nil or result.asn == 0) then return end
     result['netblocks'] = result.prefix
-
-    if (result.asn == 0) then return end
-    check_rate_limit()
+    
     local desc = get_desc(ctx, result.asn)
     if (desc == "") then return end
     result['desc'] = desc
 
     new_asn(ctx, result)
-    check_rate_limit()
 end
 
 function origin(ctx, addr)

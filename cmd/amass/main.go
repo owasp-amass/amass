@@ -48,7 +48,7 @@ import (
 )
 
 const (
-	mainUsageMsg         = "intel|enum|viz|track|db|dns [options]"
+	mainUsageMsg         = "intel|enum|viz|track|db [options]"
 	exampleConfigFileURL = "https://github.com/OWASP/Amass/blob/master/examples/config.ini"
 	userGuideURL         = "https://github.com/OWASP/Amass/blob/master/doc/user_guide.md"
 	tutorialURL          = "https://github.com/OWASP/Amass/blob/master/doc/tutorial.md"
@@ -82,6 +82,7 @@ func commandUsage(msg string, cmdFlagSet *flag.FlagSet, errBuf *bytes.Buffer) {
 		g.Fprintf(color.Error, "\t%-11s - Manipulate the Amass graph database\n", "amass db")
 	}
 
+	g.Fprintln(color.Error)
 	g.Fprintf(color.Error, "The user's guide can be found here: \n%s\n\n", userGuideURL)
 	g.Fprintf(color.Error, "An example configuration file can be found here: \n%s\n\n", exampleConfigFileURL)
 	g.Fprintf(color.Error, "The Amass tutorial can be found here: \n%s\n\n", tutorialURL)
