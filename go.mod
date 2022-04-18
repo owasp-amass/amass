@@ -18,7 +18,7 @@ require (
 	github.com/golang/protobuf v1.3.2 // indirect
 	github.com/google/uuid v1.3.0
 	github.com/irfansharif/cfilter v0.1.1
-	github.com/jmoiron/sqlx v1.3.4
+	github.com/jmoiron/sqlx v1.3.5
 	github.com/lib/pq v1.10.5
 	github.com/miekg/dns v1.1.48
 	github.com/mitchellh/go-homedir v1.1.0
