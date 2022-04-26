@@ -216,7 +216,7 @@ func (a *AddrRequest) MarkAsProcessed() {}
 
 // Valid performs input validation of the receiver.
 func (a *AddrRequest) Valid() bool {
-	if ip := net.ParseIP(a.Address); ip == nil {
+	if ip := net.ParseIP(a.Address); ip == nil && a.Domain == "" {
 		return false
 	}
 	if a.Domain != "" {

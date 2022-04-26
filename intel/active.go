@@ -111,14 +111,19 @@ func (a *activeTask) certEnumeration(ctx context.Context, req *requests.AddrRequ
 		return
 	}
 
-	ip := net.ParseIP(req.Address)
-	if ip == nil {
-		return
+	host := req.Domain
+	addrinfo := requests.AddressInfo{}
+	if req.Domain == "" {
+		host = req.Address
+		ip := net.ParseIP(req.Address)
+		if ip == nil {
+			return
+		}
+		addrinfo.Address = ip
 	}
 
 	c := a.c
-	addrinfo := requests.AddressInfo{Address: ip}
-	for _, name := range http.PullCertificateNames(ctx, req.Address, c.Config.Ports) {
+	for _, name := range http.PullCertificateNames(ctx, host, c.Config.Ports) {
 		if n := strings.TrimSpace(name); n != "" {
 			domain, err := publicsuffix.EffectiveTLDPlusOne(n)
 			if err != nil {
