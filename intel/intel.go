@@ -81,10 +81,7 @@ func (c *Collection) HostedDomains(ctx context.Context) error {
 	c.ctx, cancel = context.WithCancel(ctx)
 	defer cancel()
 
-	go func() {
-		<-ctx.Done()
-		close(c.Output)
-	}()
+	defer close(c.Output)
 
 	var stages []pipeline.Stage
 	stages = append(stages, pipeline.DynamicPool("", c.makeDNSTaskFunc(), maxDnsPipelineTasks))
@@ -109,6 +106,10 @@ func (c *Collection) HostedDomains(ctx context.Context) error {
 				source.InputAddress(&requests.AddrRequest{Address: addr.String()})
 			}
 		}(cidr)
+	}
+
+	for _, domain := range c.Config.Domains() {
+		source.InputAddress(&requests.AddrRequest{Domain: domain})
 	}
 
 	return pipeline.NewPipeline(stages...).Execute(ctx, source, c.makeOutputSink())
@@ -141,12 +142,12 @@ func (c *Collection) makeDNSTaskFunc() pipeline.TaskFunc {
 
 		ip := net.ParseIP(req.Address)
 		if ip == nil {
-			return nil, nil
+			return data, nil
 		}
 
 		msg := resolve.ReverseMsg(req.Address)
 		if msg == nil {
-			return nil, nil
+			return data, nil
 		}
 
 		addrinfo := requests.AddressInfo{Address: ip}

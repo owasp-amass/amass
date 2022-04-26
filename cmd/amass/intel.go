@@ -168,7 +168,7 @@ func runIntelCommand(clArgs []string) {
 
 	// Some input validation
 	if !args.Options.ReverseWhois && args.OrganizationName == "" && !args.Options.ListSources &&
-		len(args.Addresses) == 0 && len(args.CIDRs) == 0 && len(args.ASNs) == 0 {
+		len(args.Addresses) == 0 && len(args.CIDRs) == 0 && len(args.ASNs) == 0 && args.Domains.Len() == 0 {
 		commandUsage(intelUsageMsg, intelCommand, intelBuf)
 		os.Exit(1)
 	}
