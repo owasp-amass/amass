@@ -9,29 +9,29 @@ import (
 	"testing"
 )
 
-var cfg = NewConfig()
+type fields struct {
+	config *Config
+}
+
+type args struct {
+	resolvers []string
+}
+
+var tests = []struct {
+	name   string
+	fields fields
+	args   args
+}{
+	{
+		name:   "success",
+		fields: fields{config: &Config{}},
+		args: args{
+			resolvers: []string{"127.0.0.1", "127.0.0.2", "127.0.0.3"},
+		},
+	},
+}
 
 func TestConfigSetResolvers(t *testing.T) {
-	type fields struct {
-		config *Config
-	}
-	type args struct {
-		resolvers []string
-	}
-
-	tests := []struct {
-		name   string
-		fields fields
-		args   args
-	}{
-		{
-			name:   "success",
-			fields: fields{config: &Config{}},
-			args: args{
-				resolvers: []string{"127.0.0.1", "127.0.0.2", "127.0.0.3"},
-			},
-		},
-	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.fields.config.SetResolvers(tt.args.resolvers...)
@@ -42,6 +42,16 @@ func TestConfigSetResolvers(t *testing.T) {
 					tt.args.resolvers, tt.fields.config.Resolvers)
 			}
 		})
+	}
+}
+
+func BenchmarkTestConfigSetResolvers(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		for _, tt := range tests {
+			b.Run(tt.name, func(b *testing.B) {
+				tt.fields.config.SetResolvers(tt.args.resolvers...)
+			})
+		}
 	}
 }
 
