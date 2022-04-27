@@ -97,58 +97,36 @@ loop:
 
 // SetResolvers assigns the untrusted resolver names provided in the parameter to the list in the configuration.
 func (c *Config) SetResolvers(resolvers ...string) {
-	c.Resolvers = []string{}
-	c.AddResolvers(resolvers...)
-}
-
-// AddResolvers appends the untrusted resolver names provided in the parameter to the list in the configuration.
-func (c *Config) AddResolvers(resolvers ...string) {
-	for _, r := range resolvers {
-		c.AddResolver(r)
+	for _, resolver := range resolvers {
+		func() {
+			c.Lock()
+			defer c.Unlock()
+			// Check that the domain string is not empty
+			r := strings.TrimSpace(resolver)
+			if r == "" {
+				return
+			}
+			c.Resolvers = stringset.Deduplicate(append(c.Resolvers, resolver))
+		}()
 	}
 	c.CalcMaxQPS()
-}
-
-// AddResolver appends the untrusted resolver name provided in the parameter to the list in the configuration.
-func (c *Config) AddResolver(resolver string) {
-	c.Lock()
-	defer c.Unlock()
-
-	// Check that the domain string is not empty
-	r := strings.TrimSpace(resolver)
-	if r == "" {
-		return
-	}
-
-	c.Resolvers = stringset.Deduplicate(append(c.Resolvers, resolver))
 }
 
 // SetTrustedResolvers assigns the trusted resolver names provided in the parameter to the list in the configuration.
-func (c *Config) SetTrustedResolvers(resolvers ...string) {
-	c.Resolvers = []string{}
-	c.AddResolvers(resolvers...)
-}
-
-// AddTrustedResolvers appends the trusted resolver names provided in the parameter to the list in the configuration.
-func (c *Config) AddTrustedResolvers(resolvers ...string) {
-	for _, r := range resolvers {
-		c.AddTrustedResolver(r)
+func (c *Config) SetTrustedResolvers(trustedResolvers ...string) {
+	for _, trustedResolver := range trustedResolvers {
+		func() {
+			c.Lock()
+			defer c.Unlock()
+			// Check that the domain string is not empty
+			r := strings.TrimSpace(trustedResolver)
+			if r == "" {
+				return
+			}
+			c.TrustedResolvers = stringset.Deduplicate(append(c.TrustedResolvers, trustedResolver))
+		}()
 	}
 	c.CalcMaxQPS()
-}
-
-// AddTrustedResolver appends the trusted resolver name provided in the parameter to the list in the configuration.
-func (c *Config) AddTrustedResolver(resolver string) {
-	c.Lock()
-	defer c.Unlock()
-
-	// Check that the domain string is not empty
-	r := strings.TrimSpace(resolver)
-	if r == "" {
-		return
-	}
-
-	c.TrustedResolvers = stringset.Deduplicate(append(c.TrustedResolvers, resolver))
 }
 
 // CalcMaxQPS updates the MaxDNSQueries field of the configuration based on current settings.
