@@ -9,6 +9,8 @@ import (
 	"testing"
 )
 
+var cfg = NewConfig()
+
 func TestConfigSetResolvers(t *testing.T) {
 	type fields struct {
 		config *Config
@@ -40,5 +42,28 @@ func TestConfigSetResolvers(t *testing.T) {
 					tt.args.resolvers, tt.fields.config.Resolvers)
 			}
 		})
+	}
+}
+
+func TestGetPublicDNSResolvers(t *testing.T) {
+	err := GetPublicDNSResolvers()
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	if len(PublicResolvers) <= 0 {
+		t.Error("No resolvers obtained")
+	} else if PublicResolvers == nil {
+		t.Error("PublicResolvers is a nil slice")
+	}
+}
+
+func BenchmarkTestPublicDNSResolvers(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		err := GetPublicDNSResolvers()
+		if err != nil {
+			b.Error(err)
+			return
+		}
 	}
 }
