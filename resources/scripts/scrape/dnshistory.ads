@@ -1,4 +1,4 @@
--- Copyright 2017-2021 Jeff Foley. All rights reserved.
+-- Copyright 2022 Jeff Foley. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 name = "DNSHistory"
@@ -25,7 +25,7 @@ function vertical(ctx, domain)
         end
 
         for _, match in pairs(matches) do
-            send_names(ctx, match[2])
+            new_name(ctx, match[2])
         end
 
         local nxt = find(page, "next</a>")
