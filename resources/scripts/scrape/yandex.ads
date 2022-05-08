@@ -42,7 +42,7 @@ function vertical(ctx, domain)
         local correct_tld = false
         for i=1,10 do
             local found = scrape(ctx, {
-                url=build_url(c.username, c.key, domain, tld, i),
+                ['url']=build_url(c.username, c.key, domain, tld, i),
             })
 
             if not found then
