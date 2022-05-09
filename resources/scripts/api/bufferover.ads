@@ -16,13 +16,32 @@ function vertical(ctx, domain)
     end
 
     if (c ~= nil and c.key ~= nil and c.key ~= "") then
-        scrape(ctx, {
-            url=build_url(domain, "tls"),
-            headers={['x-api-key']=c["key"]},
-        })
+        local ok = commercial_api_query(ctx, domain, c.key)
+        if not ok then
+            scrape(ctx, {
+                url=build_url(domain, "tls"),
+                headers={['x-api-key']=c.key},
+            })
+        end
     end
 
     scrape(ctx, {url=build_url(domain, "dns")})
+end
+
+function commercial_api_query(ctx, domain, key)
+    local resp, err = request(ctx, {
+        url="https://bufferover-run-tls.p.rapidapi.com/ipv4/dns?q=." .. domain,
+        headers={
+            ['x-rapidapi-host']="bufferover-run-tls.p.rapidapi.com",
+            ['x-rapidapi-key']=key,
+        },
+    })
+    if (err ~= nil and err ~= "") then
+        return
+    end
+
+    send_names(ctx, resp)
+    return true
 end
 
 function build_url(domain, sub)
