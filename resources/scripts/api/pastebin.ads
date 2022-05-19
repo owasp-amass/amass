@@ -3,7 +3,7 @@
 
 local json = require("json")
 
-name = "PSBDMP"
+name = "Pastebin"
 type = "api"
 
 function start()
