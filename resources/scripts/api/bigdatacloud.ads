@@ -1,9 +1,10 @@
--- Copyright 2021 Jeff Foley. All rights reserved.
+-- Copyright 2022 Jeff Foley. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 local json = require("json")
+local url = require("url")
 
-name = "IPdata"
+name = "BigDataCloud"
 type = "api"
 
 function start()
@@ -24,10 +25,6 @@ function check()
 end
 
 function asn(ctx, addr, asn)
-    if addr == "" then
-        return
-    end
-
     local c
     local cfg = datasrc_config()
     if cfg ~= nil then
@@ -44,19 +41,27 @@ function asn(ctx, addr, asn)
         return
     end
 
-    local d = json.decode(resp)
-    if (d == nil or d.asn == nil) then
+    local j = json.decode(resp)
+    if j == nil then
         return
     end
 
     new_asn(ctx, {
         ['addr']=addr,
-        ['asn']=tonumber(d.asn:gsub(3)),
-        desc=d.name,
-        prefix=d.route,
+        ['asn']=j.carriers[1].asnNumeric,
+        ['cc']=j.registeredCountry,
+        ['desc']=j.organisation,
+        ['registry']=j.registry,
+        ['prefix']=j.bgpPrefix,
     })
 end
 
 function build_url(addr, key)
-    return "https://api.ipdata.co/" .. addr .. "/asn?api-key=" .. key
+    local params = {
+        ['localityLanguage']="en",
+        ['ip']=addr,
+        ['key']=key,
+    }
+
+    return "https://api.bigdatacloud.net/data/network-by-ip?" .. url.build_query_string(params)
 end
