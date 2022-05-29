@@ -104,7 +104,7 @@ func (d *DNSDB) dnsRequest(ctx context.Context, req *requests.DNSRequest) {
 	}
 
 	url := d.getURL(req.Domain)
-	page, err := http.RequestWebPage(ctx, url, nil, headers, nil)
+	page, err := http.RequestWebPage(ctx, url, "get", nil, headers, nil)
 	if err != nil {
 		d.sys.Config().Log.Printf("%s: %s: %v", d.String(), url, err)
 		return

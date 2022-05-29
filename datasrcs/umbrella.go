@@ -109,7 +109,7 @@ func (u *Umbrella) dnsRequest(ctx context.Context, req *requests.DNSRequest) {
 
 	headers := u.restHeaders()
 	url := u.restDNSURL(req.Domain)
-	page, err := http.RequestWebPage(ctx, url, nil, headers, nil)
+	page, err := http.RequestWebPage(ctx, url, "get", nil, headers, nil)
 	if err != nil {
 		u.sys.Config().Log.Printf("%s: %s: %v", u.String(), url, err)
 		return
@@ -138,7 +138,7 @@ func (u *Umbrella) addrRequest(ctx context.Context, req *requests.AddrRequest) {
 
 	headers := u.restHeaders()
 	url := u.restAddrURL(req.Address)
-	page, err := http.RequestWebPage(ctx, url, nil, headers, nil)
+	page, err := http.RequestWebPage(ctx, url, "get", nil, headers, nil)
 	if err != nil {
 		u.sys.Config().Log.Printf("%s: %s: %v", u.String(), url, err)
 		return
@@ -177,7 +177,7 @@ func (u *Umbrella) asnRequest(ctx context.Context, req *requests.ASNRequest) {
 func (u *Umbrella) executeASNAddrQuery(ctx context.Context, req *requests.ASNRequest) {
 	headers := u.restHeaders()
 	url := u.restAddrToASNURL(req.Address)
-	page, err := http.RequestWebPage(ctx, url, nil, headers, nil)
+	page, err := http.RequestWebPage(ctx, url, "get", nil, headers, nil)
 	if err != nil {
 		u.sys.Config().Log.Printf("%s: %s: %v", u.String(), url, err)
 		return
@@ -235,7 +235,7 @@ func (u *Umbrella) executeASNAddrQuery(ctx context.Context, req *requests.ASNReq
 func (u *Umbrella) executeASNQuery(ctx context.Context, req *requests.ASNRequest) {
 	headers := u.restHeaders()
 	url := u.restASNToCIDRsURL(req.ASN)
-	page, err := http.RequestWebPage(ctx, url, nil, headers, nil)
+	page, err := http.RequestWebPage(ctx, url, "get", nil, headers, nil)
 	if err != nil {
 		u.sys.Config().Log.Printf("%s: %s: %v", u.String(), url, err)
 		return
@@ -333,7 +333,7 @@ func (u *Umbrella) queryWhois(ctx context.Context, domain string) *whoisRecord {
 	whoisURL := u.whoisRecordURL(domain)
 
 	u.CheckRateLimit()
-	record, err := http.RequestWebPage(ctx, whoisURL, nil, headers, nil)
+	record, err := http.RequestWebPage(ctx, whoisURL, "get", nil, headers, nil)
 	if err != nil {
 		u.sys.Config().Log.Printf("%s: %s: %v", u.String(), whoisURL, err)
 		return nil
@@ -357,7 +357,7 @@ func (u *Umbrella) queryReverseWhois(ctx context.Context, apiURL string) []strin
 	for count, more := 0, true; more; count = count + 500 {
 		u.CheckRateLimit()
 		fullAPIURL := fmt.Sprintf("%s&offset=%d", apiURL, count)
-		record, err := http.RequestWebPage(ctx, fullAPIURL, nil, headers, nil)
+		record, err := http.RequestWebPage(ctx, fullAPIURL, "get", nil, headers, nil)
 		if err != nil {
 			u.sys.Config().Log.Printf("%s: %s: %v", u.String(), apiURL, err)
 			return domains.Slice()

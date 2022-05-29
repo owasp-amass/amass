@@ -110,13 +110,8 @@ func CheckCookie(urlString string, cookieName string) bool {
 }
 
 // RequestWebPage returns a string containing the entire response for the provided URL when successful.
-func RequestWebPage(ctx context.Context, u string, body io.Reader, hvals map[string]string, auth *BasicAuth) (string, error) {
-	method := "GET"
-	if body != nil {
-		method = "POST"
-	}
-
-	req, err := http.NewRequestWithContext(ctx, method, u, body)
+func RequestWebPage(ctx context.Context, u string, m string, body io.Reader, hvals map[string]string, auth *BasicAuth) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, strings.ToUpper(m), u, body)
 	if err != nil {
 		return "", err
 	}
