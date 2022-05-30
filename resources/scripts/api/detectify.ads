@@ -35,69 +35,91 @@ function vertical(ctx, domain)
     end
 
     -- Check if the asset has been monitored already
-    if query_asset(ctx, domain, key) then
+    local token, err = get_asset_token(ctx, domain, key)
+    if err ~= nil then
+        log(ctx, "get_asset_token request to service failed: " .. err)
         return
     end
 
-    -- Add domain to monitoring assets
-    local resp, err = request(ctx, {
-        ['url']="https://api.detectify.com/rest/v2/domains/",
-        method="POST",
-        data=json.encode({['name']=domain}),
-        headers={['X-Detectify-Key']=c.key},
-    })
-    if (err ~= nil and err ~= "") then
-        log(ctx, "vertical request to service failed: " .. err)
-        return
+    if token == nil then
+        -- Add new asset to the team
+        token = add_asset(ctx, domain, key)
+        if token == nil then
+            return
+        end
+
+        -- Wait a bit for Detectify to enumerate subdomains
+        for i=1,90 do check_rate_limit() end
     end
 
-    -- Wait a bit for Detectify to enumerate subdomains
-    for i=1,25 do check_rate_limit() end
-    query_asset(ctx, domain, key)
+    get_subdomains(ctx, token, key)
 end
 
-function query_asset(ctx, domain, key)
+function get_asset_token(ctx, domain, key)
     local resp, err = request(ctx, {
-        ['url']="https://api.detectify.com/rest/v2/domains/",
-        headers={['X-Detectify-Key']=key},
+        ['url']="https://api.detectify.com/rest/v2/assets/",
+        ['headers']={['X-Detectify-Key']=key},
     })
+    local j = json.decode(resp)
+
     if (err ~= nil and err ~= "") then
-        log(ctx, "query_asset request to service failed: " .. err)
-        return false
+        if (j ~= nil and j.error ~= nil) then
+            err = j.error.message
+        end
+
+        return nil, err
     end
 
-    local j = json.decode(resp)
-    if (j ~= nil and #j > 0) then
-        for _, a in pairs(j) do
-            if a.name == domain then
-                query_subdomains(ctx, a.token, key)
-                return true
-            end
+    for _, a in pairs(j.assets) do
+        if a.name == domain then
+            return a.token, nil
         end
     end
-    return false
+    return nil, nil
 end
 
-function query_subdomains(ctx, token, key)
+function add_asset(ctx, domain, key)
+    local resp, err = request(ctx, {
+        ['url']="https://api.detectify.com/rest/v2/assets/",
+        ['method']="POST",
+        ['data']=json.encode({['name']=domain}),
+        ['headers']={['X-Detectify-Key']=c.key},
+    })
+    local j = json.decode(resp)
+
+    if (err ~= nil and err ~= "") then
+        if (j ~= nil and j.error ~= nil) then
+            err = j.error.message
+        end
+
+        log(ctx, "add_asset request to service failed: " .. err)
+        return
+    end
+
+    return j.token
+end
+
+function get_subdomains(ctx, token, key)
     local resp, err = request(ctx, {
         ['url']=build_url(token),
-        headers={['X-Detectify-Key']=key},
+        ['headers']={['X-Detectify-Key']=key},
     })
-    if (err ~= nil and err ~= "") then
-        log(ctx, "query_subdomains request to service failed: " .. err)
-        return
-    end
-
     local j = json.decode(resp)
-    if (j == nil or #j == 0) then
+
+    if (err ~= nil and err ~= "") then
+        if (j ~= nil and j.error ~= nil) then
+            err = j.error.message
+        end
+
+        log(ctx, "get_subdomains request to service failed: " .. err)
         return
     end
 
-    for _, s in pairs(j) do
+    for _, a in pairs(j.assets) do
         new_name(ctx, s.name)
     end
 end
 
 function build_url(token)
-    return "https://api.detectify.com/rest/v2/domains/" .. token .. "/subdomains/"
+    return "https://api.detectify.com/rest/v2/assets/" .. token .. "/subdomains/"
 end
