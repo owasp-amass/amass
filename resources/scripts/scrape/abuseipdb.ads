@@ -20,8 +20,14 @@ function vertical(ctx, domain)
         return
     end
 
-    local pattern = "<li>([.a-z0-9-]{1,256})</li>"
+    local pattern = "<h1 style=text\\-align:center>([.a-z0-9-]{1,63})"
     local matches = submatch(page, pattern)
+    if (matches == nil or #matches == 0 or not in_scope(ctx, matches[1][2])) then
+        return
+    end
+
+    pattern = "<li>([.a-z0-9-]{1,256})</li>"
+    matches = submatch(page, pattern)
     if (matches == nil or #matches == 0) then
         return
     end
