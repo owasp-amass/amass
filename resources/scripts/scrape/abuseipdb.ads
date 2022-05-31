@@ -9,6 +9,11 @@ function start()
 end
 
 function vertical(ctx, domain)
+    local _, count = string.gsub(domain, "%.", "")
+    if count > 1 then
+        return
+    end
+
     local ip = get_ip(ctx, domain)
     if (ip == nil or ip == "") then
         return
