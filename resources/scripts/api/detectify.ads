@@ -79,10 +79,15 @@ function get_asset_token(ctx, domain, key)
 end
 
 function add_asset(ctx, domain, key)
+    local body, err = json.encode({['name']=domain})
+    if (err ~= nil and err ~= "") then
+        return
+    end
+
     local resp, err = request(ctx, {
         ['url']="https://api.detectify.com/rest/v2/assets/",
         ['method']="POST",
-        ['data']=json.encode({['name']=domain}),
+        ['data']=body,
         ['headers']={['X-Detectify-Key']=c.key},
     })
     local j = json.decode(resp)
