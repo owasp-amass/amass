@@ -4,7 +4,7 @@
 local url = require("url")
 
 name = "Yandex"
-type = "scrape"
+type = "api"
 
 function start()
     set_rate_limit(2)
@@ -37,28 +37,25 @@ function vertical(ctx, domain)
     end
 
     local tlds = {"com", "com.tr", "ru"}
-
+    local found = false
     for _, tld in pairs(tlds) do
-        local correct_tld = false
-        for i=1,10 do
-            local found = scrape(ctx, {
-                ['url']=build_url(c.username, c.key, domain, tld, i),
+        for i=1,20 do
+            local ok = scrape(ctx, {
+                ['url']=build_url(domain, c.username, c.key, tld, i),
             })
-
-            if not found then
+            if not ok then
                 break
-            elseif i == 1 then
-                correct_tld = true
             end
-        end
 
-        if correct_tld then
+            found = true
+        end
+        if found then
             break
         end
     end
 end
 
-function build_url(username, key, domain, tld, pagenum)
+function build_url(domain, username, key, tld, pagenum)
     local query = "site:" .. domain .. " -www"
     local params = {
         ['maxpassages']=1,
