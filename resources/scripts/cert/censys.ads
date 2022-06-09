@@ -42,7 +42,7 @@ function api_query(ctx, cfg, domain)
         resp, err = request(ctx, {
             method="POST",
             data=body,
-            ['url']="https://www.censys.io/api/v1/search/certificates",
+            ['url']="https://search.censys.io/api/v1/search/certificates",
             headers={['Content-Type']="application/json"},
             id=cfg["credentials"].key,
             pass=cfg["credentials"].secret,
@@ -66,7 +66,6 @@ function api_query(ctx, cfg, domain)
         if d["metadata"].page >= d["metadata"].pages then
             return
         end
-
         p = p + 1
     end
 end
