@@ -523,6 +523,8 @@ func saveJSONOutput(e *enum.Enumeration, args *enumArgs, output chan *requests.O
 	// Save all the output returned by the enumeration
 	for out := range output {
 		// Handle encoding the result as JSON
+		out.Mu.Lock()
+		defer out.Mu.Unlock()
 		_ = enc.Encode(out)
 	}
 }

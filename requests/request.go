@@ -8,6 +8,7 @@ import (
 	"net"
 	"strings"
 	"time"
+	"sync"
 
 	amassdns "github.com/OWASP/Amass/v3/net/dns"
 	"github.com/caffix/pipeline"
@@ -288,6 +289,7 @@ type WhoisRequest struct {
 
 // Output contains all the output data for an enumerated DNS name.
 type Output struct {
+	Mu sync.Mutex
 	Name      string        `json:"name"`
 	Domain    string        `json:"domain"`
 	Addresses []AddressInfo `json:"addresses"`
