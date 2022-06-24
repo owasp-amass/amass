@@ -44,8 +44,8 @@ function asn(ctx, addr, asn)
         return
     end
 
-    local d = json.decode(resp)
-    if (d == nil or d.asn == nil) then
+    local j = json.decode(resp)
+    if (j == nil or j.asn == nil) then
         return
     end
 

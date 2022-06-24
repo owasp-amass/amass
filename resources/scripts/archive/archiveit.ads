@@ -11,22 +11,10 @@ function start()
 end
 
 function vertical(ctx, domain)
-    scrape(ctx, {['url']=first_url(domain)})
-
-    local found = pages(ctx, domain)
-    if not found then
-        return
-    end
-
-    for i=1,50,1 do
-        local ok = scrape(ctx, {['url']=second_url(domain, i)})
-        if not ok then
-            break
-        end
-    end
+    scrape(ctx, {['url']=build_url(domain)})
 end
 
-function first_url(domain)
+function build_url(domain)
     local params = {
         ['url']=domain,
         ['matchType']="domain",
@@ -34,29 +22,4 @@ function first_url(domain)
         ['collapse']="urlkey",
     }
     return "https://wayback.archive-it.org/all/timemap/cdx?" .. url.build_query_string(params)
-end
-
-function second_url(domain, pagenum)
-    local params = {
-        ['show']="Sites",
-        ['q']=domain,
-        ['page']=pagenum,
-    }
-    return "https://archive-it.org/explore?" .. url.build_query_string(params)
-end
-
-function pages(ctx, domain)
-    local u = "https://archive-it.org/explore?show=Sites&q=" .. domain
-    local resp, err = request(ctx, {['url']=u})
-    if (err ~= nil and err ~= "") then
-        log(ctx, "pages request to service failed: " .. err)
-        return false
-    end
-
-    local match = find(resp, "No metadata results")
-    if (match == nil or #match == 0) then
-        return false
-    end
-
-    return true
 end
