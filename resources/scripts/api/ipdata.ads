@@ -44,17 +44,17 @@ function asn(ctx, addr, asn)
         return
     end
 
-    local d = json.decode(resp)
-    if (d == nil or d.asn == nil) then
+    local j = json.decode(resp)
+    if (j == nil or j.asn == nil) then
         return
     end
 
     new_asn(ctx, {
         ['addr']=addr,
-        ['asn']=tonumber(d.asn:gsub(3)),
-        desc=d.name,
-        prefix=d.route,
-        netblocks={d.route},
+        ['asn']=tonumber(string.sub(j.asn, 3)),
+        desc=j.name,
+        prefix=j.route,
+        netblocks={j.route},
     })
 end
 
