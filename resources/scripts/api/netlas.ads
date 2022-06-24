@@ -1,9 +1,9 @@
--- Copyright 2021 Jeff Foley. All rights reserved.
+-- Copyright 2022 Jeff Foley. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 local json = require("json")
 
-name = "IPdata"
+name = "Netlas"
 type = "api"
 
 function start()
@@ -23,11 +23,7 @@ function check()
     return false
 end
 
-function asn(ctx, addr, asn)
-    if addr == "" then
-        return
-    end
-
+function vertical(ctx, domain)
     local c
     local cfg = datasrc_config()
     if cfg ~= nil then
@@ -38,26 +34,28 @@ function asn(ctx, addr, asn)
         return
     end
 
-    local resp, err = request(ctx, {['url']=build_url(addr, c.key)})
+    local resp, err = request(ctx, {
+        url=build_url(domain),
+        headers={
+            ['Accept']="application/json",
+            ['X-API-Key']=c.key,
+        },
+    })
     if (err ~= nil and err ~= "") then
-        log(ctx, "asn request to service failed: " .. err)
+        log(ctx, "vertical request to service failed: " .. err)
         return
     end
 
     local j = json.decode(resp)
-    if (j == nil or j.asn == nil) then
+    if (j == nil or j.items == nil or #j.items == 0) then
         return
     end
 
-    new_asn(ctx, {
-        ['addr']=addr,
-        ['asn']=tonumber(string.sub(j.asn, 3)),
-        desc=j.name,
-        prefix=j.route,
-        netblocks={j.route},
-    })
+    for _, item in pairs(j.items) do
+        new_name(ctx, item['data'].domain)
+    end
 end
 
-function build_url(addr, key)
-    return "https://api.ipdata.co/" .. addr .. "/asn?api-key=" .. key
+function build_url(domain)
+    return "https://app.netlas.io/api/domains/?q=*." .. domain
 end
