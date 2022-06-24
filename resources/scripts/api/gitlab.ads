@@ -1,6 +1,8 @@
 -- Copyright 2021 Jeff Foley. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
+local json = require("json")
+
 name = "GitLab"
 type = "api"
 
@@ -32,15 +34,35 @@ function vertical(ctx, domain)
         return
     end
 
-    local scopes = {"issues", "blobs", "notes"}
-    for _, s in pairs(scopes) do
-        scrape(ctx, {
-            url=build_url(domain, s),
-            headers={['PRIVATE-TOKEN']=c.key},
+    local resp, err = request(ctx, {
+        ['url']=search_url(domain, scope),
+        ['headers']={['PRIVATE-TOKEN']=c.key},
+    })
+    if (err ~= nil and err ~= "") then
+        log(ctx, "vertical request to service failed: " .. err)
+        return
+    end
+
+    local j = json.decode(resp)
+    if (j == nil or #j == 0) then
+        return
+    end
+
+    for _, item in pairs(j) do
+        local ok = scrape(ctx, {
+            ['url']=get_file_url(item.project_id, item.path, item.ref),
+            ['headers']={['PRIVATE-TOKEN']=c.key},
         })
+        if not ok then
+            send_names(ctx, item.data)
+        end
     end
 end
 
-function build_url(domain, scope)
-    return "https://gitlab.com/api/v4/search?scope=" .. scope .. "&search=" .. domain:gsub("%.", "[.]")
+function get_file_url(id, path, ref)
+    return "https://gitlab.com/api/v4/projects/" .. id .. "/repository/files/" .. path:gsub("/", "%%2f") .. "/raw?ref=" .. ref
+end
+
+function search_url(domain)
+    return "https://gitlab.com/api/v4/search?scope=blobs&search=" .. domain
 end
