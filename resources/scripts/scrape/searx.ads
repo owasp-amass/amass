@@ -7,24 +7,27 @@ name = "Searx"
 type = "scrape"
 
 function start()
-    set_rate_limit(4)
+    set_rate_limit(2)
     math.randomseed(os.time())
 end
 
 function vertical(ctx, domain)
-    -- Qualified best Searx instances
+    -- Qualified best SearX/SearXNG instances
     local instances = {
         "https://anon.sx",
+        "https://etsi.me",
+        "https://northboot.xyz",
+        "https://procurx.pt",
+        "https://searx.be",
         "https://searx.info",
+        "https://searx.ninja",
         "https://searx.ru",
-        "https://searx.run",
-        "https://searx.sk",
-        "https://xeek.com",
+        "https://swag.pw",
     }
     -- Randomly choose one instance for scraping
-    local host = instances[math.random(1, 6)] .. "/search"
+    local host = instances[math.random(1, 9)] .. "/search"
 
-    for i=1,15 do
+    for i=1,10 do
         local query = "site:" .. domain .. " -www"
         local params = {
             ['q']=query,
