@@ -57,24 +57,7 @@ func (r *intelSource) Next(ctx context.Context) bool {
 	default:
 	}
 
-	if !r.queue.Empty() {
-		return true
-	}
-
-	t := time.NewTimer(r.timeout)
-	defer t.Stop()
-
-	for {
-		select {
-		case <-t.C:
-			close(r.done)
-			return false
-		case <-r.queue.Signal():
-			if !r.queue.Empty() {
-				return true
-			}
-		}
-	}
+	return !r.queue.Empty()
 }
 
 // Data implements the pipeline InputSource interface.
