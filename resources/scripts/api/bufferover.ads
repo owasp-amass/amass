@@ -37,7 +37,7 @@ function commercial_api_query(ctx, domain, key)
         },
     })
     if (err ~= nil and err ~= "") then
-        return
+        return false
     end
 
     send_names(ctx, resp)
