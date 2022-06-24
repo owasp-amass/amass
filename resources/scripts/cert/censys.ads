@@ -11,6 +11,20 @@ function start()
     set_rate_limit(3)
 end
 
+function check()
+    local c
+    local cfg = datasrc_config()
+    if cfg ~= nil then
+        c = cfg.credentials
+    end
+
+    if (c ~= nil and c.key ~= nil and 
+        c.key ~= "" and c.secret ~= nil and c.secret ~= "") then
+        return true
+    end
+    return false
+end
+
 function vertical(ctx, domain)
     local c
     local cfg = datasrc_config()
