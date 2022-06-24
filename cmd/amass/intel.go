@@ -260,7 +260,9 @@ func runIntelCommand(clArgs []string) {
 		go func() { _ = ic.HostedDomains(ctx) }()
 	}
 
-	processIntelOutput(ic, &args)
+	if !processIntelOutput(ic, &args) {
+		os.Exit(1)
+	}
 }
 
 func printNetblocks(asns []int, cfg *config.Config, sys systems.System) {
@@ -279,7 +281,7 @@ func printNetblocks(asns []int, cfg *config.Config, sys systems.System) {
 	}
 }
 
-func processIntelOutput(ic *intel.Collection, args *intelArgs) {
+func processIntelOutput(ic *intel.Collection, args *intelArgs) bool {
 	var err error
 	dir := config.OutputDirectory(ic.Config.Dir)
 
@@ -303,6 +305,7 @@ func processIntelOutput(ic *intel.Collection, args *intelArgs) {
 		_, _ = outptr.Seek(0, 0)
 	}
 
+	var found bool
 	// Collect all the names returned by the intelligence collection
 	for out := range ic.Output {
 		source, _, ips := format.OutputLineParts(out, args.Options.Sources,
@@ -317,7 +320,9 @@ func processIntelOutput(ic *intel.Collection, args *intelArgs) {
 		if outptr != nil {
 			fmt.Fprintf(outptr, "%s%s%s\n", source, out.Domain, ips)
 		}
+		found = true
 	}
+	return found
 }
 
 // Obtain parameters from provided input files
