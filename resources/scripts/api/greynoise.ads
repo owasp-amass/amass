@@ -33,5 +33,5 @@ function vertical(ctx, domain)
 end
 
 function build_url(domain)
-    return "https://greynoise-prod.herokuapp.com/enterprise/v2/experimental/gnql?size=1000&query=metadata.rdns:*." .. domain
+    return "https://www.greynoise.io/api/enterprise/v2/experimental/gnql?size=1000&query=metadata.rdns:*." .. domain
 end

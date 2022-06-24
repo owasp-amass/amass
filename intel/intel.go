@@ -26,8 +26,8 @@ import (
 )
 
 const (
-	maxDnsPipelineTasks    int = 15000
-	maxActivePipelineTasks int = 25
+	maxDnsPipelineTasks    int = 2000
+	maxActivePipelineTasks int = 50
 )
 
 // Collection is the object type used to execute a open source information gathering with Amass.
@@ -76,15 +76,11 @@ func (c *Collection) HostedDomains(ctx context.Context) error {
 		return err
 	}
 
+	defer close(c.Output)
 	// Setup the context used throughout the collection
 	var cancel context.CancelFunc
 	c.ctx, cancel = context.WithCancel(ctx)
 	defer cancel()
-
-	go func() {
-		<-ctx.Done()
-		close(c.Output)
-	}()
 
 	var stages []pipeline.Stage
 	stages = append(stages, pipeline.DynamicPool("", c.makeDNSTaskFunc(), maxDnsPipelineTasks))
@@ -104,11 +100,9 @@ func (c *Collection) HostedDomains(ctx context.Context) error {
 			continue
 		}
 
-		go func(n *net.IPNet) {
-			for _, addr := range amassnet.AllHosts(n) {
-				source.InputAddress(&requests.AddrRequest{Address: addr.String()})
-			}
-		}(cidr)
+		for _, addr := range amassnet.AllHosts(cidr) {
+			source.InputAddress(&requests.AddrRequest{Address: addr.String()})
+		}
 	}
 
 	return pipeline.NewPipeline(stages...).Execute(ctx, source, c.makeOutputSink())
