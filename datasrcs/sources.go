@@ -22,7 +22,6 @@ func GetAllSources(sys systems.System) []service.Service {
 		NewAlienVault(sys),
 		NewCloudflare(sys),
 		NewDNSDB(sys),
-		NewFOFA(sys),
 		NewNetworksDB(sys),
 		NewRADb(sys),
 		NewTwitter(sys),
