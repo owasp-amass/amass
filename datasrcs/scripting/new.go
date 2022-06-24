@@ -162,7 +162,7 @@ func (s *Script) newASN(L *lua.LState) int {
 // Wrapper so that scripts can send discovered associated domains to Amass.
 func (s *Script) associated(L *lua.LState) int {
 	if ctx, err := extractContext(L.CheckUserData(1)); err == nil && !contextExpired(ctx) {
-		if domain, assoc := L.CheckString(2), L.CheckString(3); err == nil && domain != "" && assoc != "" {
+		if domain, assoc := L.CheckString(2), L.CheckString(3); err == nil && domain != "" && assoc != "" && domain != assoc {
 			select {
 			case <-ctx.Done():
 			case <-s.Done():
