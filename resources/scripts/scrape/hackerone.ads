@@ -9,7 +9,9 @@ function start()
 end
 
 function vertical(ctx, domain)
-    local vurl = "http://h1.nobbd.de/search.php?q=" .. domain
+    scrape(ctx, {['url']=build_url(domain)})
+end
 
-    scrape(ctx, {['url']=vurl})
+function build_url(domain)
+    return "http://h1.nobbd.de/search.php?q=." .. domain
 end
