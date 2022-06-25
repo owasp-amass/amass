@@ -16,5 +16,5 @@ function vertical(ctx, domain)
 end
 
 function build_url(domain)
-    return "http://h1.nobbd.de/search.php?q=" .. domain
+    return "http://h1.nobbd.de/search.php?q=." .. domain
 end
