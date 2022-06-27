@@ -59,7 +59,7 @@ function vertical(ctx, domain)
         return
     end
 
-    for i, record in pairs(d.records) do
+    for _, record in pairs(d.records) do
         new_name(ctx, record.rrname)
         if (record.rrtype == "A" or record.rrtype == "AAAA") then
              new_addr(ctx, record.rdata, record.rrname)

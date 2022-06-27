@@ -37,7 +37,6 @@ acc
 account
 accounts
 admin
-admin1
 administrator
 akali
 akamai
@@ -46,8 +45,6 @@ alt
 america
 analytics
 api
-api-docs
-api1
 apollo
 app
 april
@@ -73,7 +70,6 @@ ci
 client
 cloudfront
 cms
-cms1
 cn
 com
 confluence
@@ -85,7 +81,6 @@ db
 dec
 demo
 dev
-dev1
 developer
 devops
 docker
@@ -119,7 +114,6 @@ g
 games
 germany
 gh
-ghcpi
 git
 github
 global
@@ -139,7 +133,6 @@ jinx
 july
 june
 k
-kor
 korea
 kr
 l
@@ -148,7 +141,6 @@ las
 latin
 latinamerica
 lax
-lax1
 lb
 loadbalancer
 login
@@ -179,7 +171,6 @@ org
 origin
 p
 page
-pantheon
 pass
 pay
 payment
@@ -230,7 +221,6 @@ sso
 staff
 stag
 stage
-stage1
 staging
 static
 stg
@@ -240,10 +230,8 @@ system
 t
 team
 test
-test1
 testbed
 testing
-testing1
 tomcat
 tpe
 tr
@@ -264,7 +252,6 @@ vpn
 w
 w3
 web
-web1
 webapp
 westeurope
 www

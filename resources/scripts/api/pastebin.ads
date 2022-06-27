@@ -1,9 +1,9 @@
--- Copyright 2021 Jeff Foley. All rights reserved.
+-- Copyright 2022 Jeff Foley. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 local json = require("json")
 
-name = "GitLab"
+name = "Pastebin"
 type = "api"
 
 function start()
@@ -34,35 +34,34 @@ function vertical(ctx, domain)
         return
     end
 
-    local resp, err = request(ctx, {
-        ['url']=search_url(domain, scope),
-        ['headers']={['PRIVATE-TOKEN']=c.key},
-    })
+    local resp, err = request(ctx, {url=search_url(domain)})
     if (err ~= nil and err ~= "") then
         log(ctx, "vertical request to service failed: " .. err)
         return
     end
 
-    local j = json.decode(resp)
-    if (j == nil or #j == 0) then
+    if (c == nil or c.key == nil or c.key == "") then
         return
     end
 
-    for _, item in pairs(j) do
-        local ok = scrape(ctx, {
-            ['url']=get_file_url(item.project_id, item.path, item.ref),
-            ['headers']={['PRIVATE-TOKEN']=c.key},
-        })
+    local j = json.decode(resp)
+    if (j == nil or j.count == nil or j.count == 0) then
+        return
+    end
+
+    for _, dump in pairs(j.data) do
+        local ok = scrape(ctx, {url=dump_url(dump.id, c.key)})
         if not ok then
-            send_names(ctx, item.data)
+            return
         end
     end
 end
 
-function get_file_url(id, path, ref)
-    return "https://gitlab.com/api/v4/projects/" .. id .. "/repository/files/" .. path:gsub("/", "%%2f") .. "/raw?ref=" .. ref
+function search_url(domain)
+    return "https://psbdmp.ws/api/v3/search/" .. domain
 end
 
-function search_url(domain)
-    return "https://gitlab.com/api/v4/search?scope=blobs&search=" .. domain
+function dump_url(id, key)
+    return "https://psbdmp.ws/api/v3/dump/" .. id .. "?key=" .. key
 end
+

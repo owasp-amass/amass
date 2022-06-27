@@ -53,7 +53,7 @@ end
 
 function origin(ctx, addr)
     local conn, err = socket.connect(ctx, bgptoolsWhoisAddress, 43, "tcp")
-	if (err ~= nil and err ~= "") then
+    if (err ~= nil and err ~= "") then
         log(ctx, "failed to connect to the whois server: " .. err)
         return nil
     end
@@ -66,9 +66,9 @@ function origin(ctx, addr)
     end
 
     local data
-	data, err = conn:recv_all()
+    data, err = conn:recv_all()
     conn:close()
-	if (err ~= nil and err ~= "") then
+    if (err ~= nil and err ~= "") then
         log(ctx, "failed to read the whois server response: " .. err)
         return nil
     end

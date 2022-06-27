@@ -1,8 +1,8 @@
--- Copyright 2021 Jeff Foley. All rights reserved.
+-- Copyright 2022 Jeff Foley. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
-name = "360PassiveDNS"
-type = "api"
+name = "PublicWWW"
+type = "crawl"
 
 function start()
     set_rate_limit(1)
@@ -32,15 +32,9 @@ function vertical(ctx, domain)
         return
     end
 
-    scrape(ctx, {
-        url=build_url(domain),
-        headers={
-            ['Accept']="application/json",
-            ['X-Authtoken']=c.key,
-        },
-    })
+    scrape(ctx, {url=build_url(domain, c.key)})
 end
 
-function build_url(domain)
-    return "https://api.passivedns.cn/flint/rrset/*." .. domain .. "/?source=ALL&batch=5000"
+function build_url(domain, key)
+    return "https://publicwww.com/websites/%22." .. domain .. "%22/?export=csvsnippetsu&key=" .. key
 end
