@@ -36,11 +36,14 @@ function vertical(ctx, domain)
 
     local p = 0
     while(true) do
-        local body = json.encode({
+        local body, err = json.encode({
             ['query']="domain:*." .. domain,
             ['start']=p,
             ['size']=1000,
         })
+        if (err ~= nil and err ~= "") then
+            break
+        end
 
         local resp, err = request(ctx, {
             ['url']="https://quake.360.cn/api/v3/search/quake_service",

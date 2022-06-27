@@ -23,8 +23,8 @@ function vertical(ctx, domain)
         return
     end
 
-    for i, r in pairs(resp) do
-        for i, name in pairs(r['dns_names']) do
+    for _, r in pairs(resp) do
+        for _, name in pairs(r['dns_names']) do
             new_name(ctx, name)
         end
     end
