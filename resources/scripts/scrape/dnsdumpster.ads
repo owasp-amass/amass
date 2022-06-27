@@ -26,7 +26,7 @@ function vertical(ctx, domain)
 
     local params = {
         ['csrfmiddlewaretoken']=token,
-		['targetip']=domain,
+        ['targetip']=domain,
         ['user']="free"
     }
 

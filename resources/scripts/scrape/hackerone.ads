@@ -9,7 +9,10 @@ function start()
 end
 
 function vertical(ctx, domain)
-    scrape(ctx, {['url']=build_url(domain)})
+    scrape(ctx, {
+        ['url']=build_url(domain),
+        ['headers']={['Cookie']="_gat=1"},
+    })
 end
 
 function build_url(domain)
