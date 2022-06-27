@@ -99,14 +99,14 @@ function submission(ctx, domain)
     end
 
     -- Keep this data source active while waiting for the scan to complete
-	while(true) do
+    while(true) do
         _, err = request(ctx, {['url']=d.api})
-		if (err == nil or err ~= "404 Not Found") then
-			break
+        if (err == nil or err ~= "404 Not Found") then
+            break
         end
         -- A large pause between these requests
         for _=1,3 do check_rate_limit() end
-	end
+    end
 
-	return d.uuid
+    return d.uuid
 end

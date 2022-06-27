@@ -1,10 +1,9 @@
--- Copyright 2021 Jeff Foley. All rights reserved.
+-- Copyright 2022 Jeff Foley. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
-local url = require("url")
 local json = require("json")
 
-name = "Ahrefs"
+name = "SOCRadar"
 type = "api"
 
 function start()
@@ -42,28 +41,15 @@ function vertical(ctx, domain)
     end
 
     local j = json.decode(resp)
-    if j == nil then
-        return
-    elseif j.error ~= nil then
-        log(ctx, "vertical request to service failed: " .. j.error)
+    if (j == nil or j.is_success ~= true) then
         return
     end
 
-    for _, item in pairs(d.pages) do
-        send_names(ctx, item.url)
+    for _, sub in pairs(j.data.subdomains) do
+        new_name(ctx, sub)
     end
 end
 
 function build_url(domain, key)
-    local params = {
-        ['target']=domain,
-        ['token']=key,
-        ['from']="ahrefs_rank",
-        ['mode']="subdomains",
-        ['limit']="1000",
-        ['order_by']="ahrefs_rank%3Adesc",
-        ['output']="json",
-    }
-
-    return "https://apiv2.ahrefs.com/?" .. url.build_query_string(params)
+    return "https://platform.socradar.com/api/threat/analysis?key=" .. key .. "&entity=" .. domain
 end
