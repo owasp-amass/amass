@@ -41,13 +41,16 @@ function vertical(ctx, domain)
         return
     end
 
-    local d = json.decode(resp)
-    if (d == nil or d.refpages == nil or #(d.refpages) == 0) then
+    local j = json.decode(resp)
+    if j == nil then
+        return
+    elseif j.error ~= nil then
+        log(ctx, "vertical request to service failed: " .. j.error)
         return
     end
 
-    for _, r in pairs(d.refpages) do
-        send_names(ctx, r.url_to)
+    for _, item in pairs(d.pages) do
+        send_names(ctx, item.url)
     end
 end
 
@@ -55,10 +58,10 @@ function build_url(domain, key)
     local params = {
         ['target']=domain,
         ['token']=key,
-        ['from']="backlinks",
+        ['from']="ahrefs_rank",
         ['mode']="subdomains",
         ['limit']="1000",
-        ['order_by']="first_seen%3Adesc",
+        ['order_by']="ahrefs_rank%3Adesc",
         ['output']="json",
     }
 

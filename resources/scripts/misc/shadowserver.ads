@@ -66,7 +66,7 @@ end
 
 function netblocks(ctx, asn)
     local conn, err = socket.connect(ctx, shadowServerWhoisAddress, 43, "tcp")
-	if (err ~= nil and err ~= "") then return nil end
+    if (err ~= nil and err ~= "") then return nil end
 
     _, err = conn:send("prefix " .. tostring(asn) .. "\n")
     if (err ~= nil and err ~= "") then
@@ -75,8 +75,8 @@ function netblocks(ctx, asn)
     end
 
     local data
-	data, err = conn:recv_all()
-	if (err ~= nil and err ~= "") then
+    data, err = conn:recv_all()
+    if (err ~= nil and err ~= "") then
         conn:close()
         return nil
     end

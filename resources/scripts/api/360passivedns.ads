@@ -42,5 +42,5 @@ function vertical(ctx, domain)
 end
 
 function build_url(domain)
-    return "https://api.passivedns.cn/flint/rrset/*." .. domain .. "/?source=ALL&batch=1000"
+    return "https://api.passivedns.cn/flint/rrset/*." .. domain .. "/?source=ALL&batch=5000"
 end
