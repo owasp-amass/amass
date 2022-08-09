@@ -12,7 +12,7 @@ require (
 	github.com/dghubble/go-twitter v0.0.0-20190719072343-39e5462e111f
 	github.com/fatih/color v1.13.0
 	github.com/geziyor/geziyor v0.0.0-20190721090841-762854e5113a
-	github.com/go-ini/ini v1.66.4
+	github.com/go-ini/ini v1.67.0
 	github.com/go-kit/kit v0.9.0 // indirect
 	github.com/gobwas/ws v1.0.2 // indirect
 	github.com/golang/protobuf v1.3.2 // indirect
