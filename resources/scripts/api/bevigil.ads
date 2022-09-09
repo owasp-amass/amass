@@ -1,13 +1,10 @@
--- Copyright 2021 Jeff Foley. All rights reserved.
--- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
-
 local json = require("json")
 
-name = "FullHunt"
+name = "BeVigil"
 type = "api"
 
 function start()
-    set_rate_limit(1)
+    set_rate_limit(2)
 end
 
 function check()
@@ -30,29 +27,27 @@ function vertical(ctx, domain)
         c = cfg.credentials
     end
 
-    if (c == nil or c.key == nil or c.key == "") then
-        return
-    end
+    -- if (c == nil or c.key == nil or c.key == "") then
+    --     return
+    -- end
 
+    local vurl = "http://osint.bevigil.com/api/" .. domain .. "/subdomains/"
     local resp, err = request(ctx, {
-        ['url']=build_url(domain),
-        ['headers']={['X-API-KEY']=c.key},
+        url=vurl,
+        headers={['X-Access-Token']=c.key},
     })
     if (err ~= nil and err ~= "") then
         log(ctx, "vertical request to service failed: " .. err)
         return
     end
 
-    local j = json.decode(resp)
-    if (j == nil or j.hosts == nil) then
+    local d = json.decode(resp)
+    if (d == nil or #(d.subdomains) == 0) then
         return
     end
 
-    for _, sub in pairs(j.hosts) do
-        new_name(ctx, sub)
+    for i, v in pairs(d.subdomains) do
+        new_name(ctx, v)
     end
-end
 
-function build_url(domain)
-    return "https://fullhunt.io/api/v1/domain/" .. domain .. "/subdomains"
 end

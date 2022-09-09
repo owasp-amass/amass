@@ -40,12 +40,12 @@ function vertical(ctx, domain)
         return
     end
 
-    local d = json.decode(resp)
-    if (d == nil or d.response_code ~= 0 or #(d.sub_domains.data) == 0) then
+    local j = json.decode(resp)
+    if (j == nil or j.response_code ~= 0) then
         return
     end
 
-    for i, sub in pairs(d.sub_domains.data) do
+    for _, sub in pairs(j['data']['sub_domains']['data']) do
         new_name(ctx, sub)
     end
 end
