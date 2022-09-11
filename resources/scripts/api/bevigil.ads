@@ -2,6 +2,7 @@ local json = require("json")
 
 name = "BeVigil"
 type = "api"
+useragent = "OWASP Amass"
 
 function start()
     set_rate_limit(2)
@@ -33,7 +34,10 @@ function vertical(ctx, domain)
 
     local resp, err = request(ctx, {
         url=build_url(domain),
-        headers={['X-Access-Token']=c.key},
+        headers={
+            ['X-Access-Token']=c.key,
+            ['User-Agent']=useragent
+        },
     })
     if (err ~= nil and err ~= "") then
         log(ctx, "vertical request to service failed: " .. err)
