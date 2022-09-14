@@ -12,17 +12,17 @@ jobs:
     strategy:
       matrix:
         os: [ "ubuntu-latest", "macos-latest", "windows-latest" ]
-        go-version: [ "1.16" ]
+        go-version: [ "1.18" ]
     runs-on: ${{ matrix.os }}
     steps:
       -
         name: setup Go ${{ matrix.go-version }}
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v3
         with:
           go-version: ${{ matrix.go-version }}
       -
         name: checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       -
         name: simple test
         run: go test -v ./...
@@ -39,11 +39,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: setup Go
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v3
         with:
-          go-version: 1.16
+          go-version: 1.18
       - name: checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: measure coverage
         run: go test -v -coverprofile=coverage.out ./...
       - name: report coverage

@@ -1,5 +1,6 @@
--- Copyright 2021 Jeff Foley. All rights reserved.
+-- Copyright © by Jeff Foley 2021-2022. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+-- SPDX-License-Identifier: Apache-2.0
 
 local url = require("url")
 
@@ -30,18 +31,12 @@ function vertical(ctx, domain)
         ['user']="free"
     }
 
-    local resp, err = request(ctx, {
+    scrape(ctx, {
         ['method']="POST",
         ['data']=url.build_query_string(params),
         ['url']=u,
         ['headers']=headers,
     })
-    if (err ~= nil and err ~= "") then
-        log(ctx, "vertical request to service failed: " .. err)
-        return
-    end
-
-    send_names(ctx, resp)
 end
 
 function get_token(ctx, u)
@@ -60,6 +55,5 @@ function get_token(ctx, u)
     if (match == nil or #match ~= 2) then
         return ""
     end
-
     return match[2]
 end
