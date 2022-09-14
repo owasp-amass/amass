@@ -40,7 +40,7 @@ docker run -v OUTPUT_DIR_PATH:/.config/amass/ amass enum -brute -w /wordlists/al
 
 ## From Source
 
-If you prefer to build your own binary from the latest release of the source code, make sure you have a correctly configured **Go >= 1.16** environment. More information about how to achieve this can be found [on the golang website.](https://golang.org/doc/install).
+If you prefer to build your own binary from the latest release of the source code, make sure you have a correctly configured **Go >= 1.18** environment. More information about how to achieve this can be found [on the golang website.](https://golang.org/doc/install).
 
 Simply execute the following command:
 
