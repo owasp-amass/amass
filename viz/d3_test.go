@@ -1,9 +1,13 @@
+// Copyright 2017-2022 Jeff Foley. All rights reserved.
+// Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+
 package viz
 
 import (
 	"bytes"
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestWriteD3DataHappyPath(t *testing.T) {
