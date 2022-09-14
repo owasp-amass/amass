@@ -2,7 +2,6 @@ local json = require("json")
 
 name = "BeVigil"
 type = "api"
-useragent = "OWASP Amass"
 
 function start()
     set_rate_limit(2)
@@ -36,7 +35,7 @@ function vertical(ctx, domain)
         url=build_url(domain),
         headers={
             ['X-Access-Token']=c.key,
-            ['User-Agent']=useragent
+            ['User-Agent']="OWASP Amass"
         },
     })
     if (err ~= nil and err ~= "") then
@@ -45,7 +44,7 @@ function vertical(ctx, domain)
     end
 
     local d = json.decode(resp)
-    if (d == nil or d.subdomains == nil) then
+    if (d == nil or d.subdomains == nil or #(d.subdomains) == 0) then
         return
     end
 
