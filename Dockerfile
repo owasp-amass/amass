@@ -1,4 +1,4 @@
-FROM golang:1.16-alpine as build
+FROM golang:1.18-alpine as build
 RUN apk --no-cache add git
 WORKDIR /go/src/github.com/OWASP/Amass
 COPY . .
