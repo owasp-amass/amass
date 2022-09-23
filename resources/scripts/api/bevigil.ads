@@ -1,3 +1,7 @@
+-- Copyright © by Jeff Foley 2022. All rights reserved.
+-- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+-- SPDX-License-Identifier: Apache-2.0
+
 local json = require("json")
 
 name = "BeVigil"
@@ -48,8 +52,8 @@ function vertical(ctx, domain)
         return
     end
 
-    for _, v in pairs(d.subdomains) do
-        new_name(ctx, v)
+    for _, sub in pairs(d.subdomains) do
+        new_name(ctx, sub)
     end
 
 end
