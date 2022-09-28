@@ -181,9 +181,8 @@ func getIpVersion(address string) string {
 
 // CreateMaltegoConfig function creates a default mapping configuration for Maltego that can be used
 // to import the Maltego csv
-func CreateMaltegoConfig() error {
-	mtzConfigName := "amass_maltego_mapping_config_default.mtz"
-	if _, err := os.Stat(mtzConfigName); err == nil { // mtz config already exists
+func CreateMaltegoConfig(mtzConfigPath string) error {
+	if _, err := os.Stat(mtzConfigPath); err == nil { // mtz config already exists
 		return nil
 	}
 	file, err := resources.GetResourceFile("maltego_mapping_config.tmapping")
@@ -191,7 +190,7 @@ func CreateMaltegoConfig() error {
 		return err
 	}
 	// *.mtz file is just a zip archive
-	mtz, err := os.Create(mtzConfigName)
+	mtz, err := os.Create(mtzConfigPath)
 	if nil != err {
 		return err
 	}
