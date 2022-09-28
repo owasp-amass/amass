@@ -191,6 +191,10 @@ func runVizCommand(clArgs []string) {
 	if args.Options.Maltego {
 		path := filepath.Join(dir, prefix+"_maltego.csv")
 		err = writeGraphOutputFile("maltego", path, nodes, edges)
+		if nil == err {
+			mtzConfigPath := filepath.Join(dir, prefix+"_maltego_mapping_config_default.mtz")
+			err = viz.CreateMaltegoConfig(mtzConfigPath)
+		}
 	}
 	if err != nil {
 		r.Fprintf(color.Error, "Failed to write the output file: %v\n", err)
@@ -222,7 +226,6 @@ func writeGraphOutputFile(t string, path string, nodes []viz.Node, edges []viz.E
 		err = viz.WriteGraphistryData(f, nodes, edges)
 	case "maltego":
 		viz.WriteMaltegoData(f, nodes, edges)
-		err = viz.CreateMaltegoConfig()
 	}
 	return err
 }
