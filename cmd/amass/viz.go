@@ -222,6 +222,7 @@ func writeGraphOutputFile(t string, path string, nodes []viz.Node, edges []viz.E
 		err = viz.WriteGraphistryData(f, nodes, edges)
 	case "maltego":
 		viz.WriteMaltegoData(f, nodes, edges)
+		err = viz.CreateMaltegoConfig()
 	}
 	return err
 }
