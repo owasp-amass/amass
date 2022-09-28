@@ -1,0 +1,81 @@
+<TabularGraph typeRowIndex="0" hasTypeRow="true" headerRowIndex="0" hasHeaderRow="false" name="Amass Graph Data Mapping" numEntities="10" numLinks="23" savedDate="2022-09-28 19:45:33.818 IST">
+   <description>Default Maltego import mapping configuration for Amass graph data</description>
+   <Entities>
+      <TabularGraphEntity type="maltego.Domain" id="0">
+         <MappedProperties>
+            <MappedProperty name="fqdn" type="string" nullable="true" hidden="false" readonly="false" column="0" displayName="Domain Name"/>
+         </MappedProperties>
+      </TabularGraphEntity>
+      <TabularGraphEntity type="maltego.DNSName" id="1">
+         <MappedProperties>
+            <MappedProperty name="fqdn" type="string" nullable="true" hidden="false" readonly="false" column="1" displayName="DNS Name"/>
+         </MappedProperties>
+      </TabularGraphEntity>
+      <TabularGraphEntity type="maltego.NSRecord" id="2">
+         <MappedProperties>
+            <MappedProperty name="fqdn" type="string" nullable="true" hidden="false" readonly="false" column="2" displayName="NS Record"/>
+         </MappedProperties>
+      </TabularGraphEntity>
+      <TabularGraphEntity type="maltego.MXRecord" id="3">
+         <MappedProperties>
+            <MappedProperty name="fqdn" type="string" nullable="true" hidden="false" readonly="false" column="3" displayName="MX Record"/>
+         </MappedProperties>
+      </TabularGraphEntity>
+      <TabularGraphEntity type="maltego.IPv4Address" id="4">
+         <MappedProperties>
+            <MappedProperty name="ipv4-address" type="string" nullable="true" hidden="false" readonly="false" column="4" displayName="IP Address"/>
+         </MappedProperties>
+      </TabularGraphEntity>
+      <TabularGraphEntity type="maltego.IPv6Address" id="5">
+         <MappedProperties>
+            <MappedProperty name="ipv6-address" type="string" nullable="true" hidden="false" readonly="false" column="5" displayName="IP Address"/>
+         </MappedProperties>
+      </TabularGraphEntity>
+      <TabularGraphEntity type="maltego.Netblock" id="6">
+         <MappedProperties>
+            <MappedProperty name="ipv4-range" type="string" nullable="true" hidden="false" readonly="false" column="6" displayName="IP Range"/>
+         </MappedProperties>
+      </TabularGraphEntity>
+      <TabularGraphEntity type="maltego.AS" id="7">
+         <MappedProperties>
+            <MappedProperty name="as.number" type="string" nullable="true" hidden="false" readonly="false" column="7" displayName="AS Number"/>
+         </MappedProperties>
+      </TabularGraphEntity>
+      <TabularGraphEntity type="maltego.Company" id="8">
+         <MappedProperties>
+            <MappedProperty name="title" type="string" nullable="true" hidden="false" readonly="false" column="8" displayName="Name"/>
+         </MappedProperties>
+      </TabularGraphEntity>
+      <TabularGraphEntity type="maltego.DNSName" id="9">
+         <MappedProperties>
+            <MappedProperty name="fqdn" type="string" nullable="true" hidden="false" readonly="false" column="9" displayName="DNS Name"/>
+         </MappedProperties>
+      </TabularGraphEntity>
+   </Entities>
+   <Links>
+      <TabularGraphLink sourceEntity="0" targetEntity="4" index="1"/>
+      <TabularGraphLink sourceEntity="0" targetEntity="5" index="2"/>
+      <TabularGraphLink sourceEntity="0" targetEntity="1" index="3"/>
+      <TabularGraphLink sourceEntity="0" targetEntity="9" index="4"/>
+      <TabularGraphLink sourceEntity="0" targetEntity="2" index="5"/>
+      <TabularGraphLink sourceEntity="0" targetEntity="3" index="6"/>
+      <TabularGraphLink sourceEntity="6" targetEntity="5" index="7"/>
+      <TabularGraphLink sourceEntity="6" targetEntity="4" index="8"/>
+      <TabularGraphLink sourceEntity="7" targetEntity="6" index="9"/>
+      <TabularGraphLink sourceEntity="8" targetEntity="7" index="10"/>
+      <TabularGraphLink sourceEntity="9" targetEntity="1" index="11"/>
+      <TabularGraphLink sourceEntity="1" targetEntity="9" index="12"/>
+      <TabularGraphLink sourceEntity="1" targetEntity="4" index="13"/>
+      <TabularGraphLink sourceEntity="1" targetEntity="5" index="14"/>
+      <TabularGraphLink sourceEntity="2" targetEntity="4" index="15"/>
+      <TabularGraphLink sourceEntity="2" targetEntity="5" index="16"/>
+      <TabularGraphLink sourceEntity="3" targetEntity="4" index="17"/>
+      <TabularGraphLink sourceEntity="3" targetEntity="5" index="18"/>
+      <TabularGraphLink sourceEntity="9" targetEntity="4" index="19"/>
+      <TabularGraphLink sourceEntity="9" targetEntity="5" index="20"/>
+      <TabularGraphLink sourceEntity="8" targetEntity="0" index="21"/>
+      <TabularGraphLink sourceEntity="8" targetEntity="9" index="22"/>
+      <TabularGraphLink sourceEntity="8" targetEntity="1" index="23"/>
+   </Links>
+   <StrictProperties/>
+</TabularGraph>
