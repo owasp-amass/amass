@@ -545,8 +545,20 @@ func processOutput(ctx context.Context, g *netmap.Graph, e *enum.Enumeration, ou
 			if !o.Complete(e.Config.Passive) || !e.Config.IsDomainInScope(o.Name) {
 				continue
 			}
+			//This is to create deep copies of the result object... it's not the most elegant way...
+			reusultObjectData, err := json.Marshal(o)
+			if err != nil {
+				r.Fprintln(color.Error, "Failed to create deep copies of results for output")
+				os.Exit(1)
+			}
 			for _, ch := range outputs {
-				ch <- o
+				var resultObject *requests.Output
+				err = json.Unmarshal(reusultObjectData, &resultObject)
+				if err != nil {
+					r.Fprintln(color.Error, "Failed to create deep copies of results for output")
+					os.Exit(1)
+				}
+				ch <- resultObject
 			}
 		}
 	}
