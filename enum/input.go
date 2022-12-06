@@ -24,12 +24,13 @@ import (
 
 const (
 	waitForDuration  = 10 * time.Second
-	defaultSweepSize = 500
-	activeSweepSize  = 1000
+	defaultSweepSize = 250
+	activeSweepSize  = 500
 )
 
 // enumSource handles the filtering and release of new Data in the enumeration.
 type enumSource struct {
+	pipeline    *pipeline.Pipeline
 	enum        *Enumeration
 	queue       queue.Queue
 	dups        queue.Queue
@@ -48,13 +49,11 @@ type enumSource struct {
 }
 
 // newEnumSource returns an initialized input source for the enumeration pipeline.
-func newEnumSource(e *Enumeration) *enumSource {
-	qps := e.Sys.Resolvers().QPS()
-	if qps < 1000 {
-		qps = 1000
-	}
+func newEnumSource(p *pipeline.Pipeline, e *Enumeration) *enumSource {
+	size := e.Sys.Resolvers().Len() * e.Config.ResolversQPS
 
 	r := &enumSource{
+		pipeline:    p,
 		enum:        e,
 		queue:       queue.NewQueue(),
 		dups:        queue.NewQueue(),
@@ -63,9 +62,9 @@ func newEnumSource(e *Enumeration) *enumSource {
 		sweepFilter: bf.NewDefaultStableBloomFilter(1000000, 0.01),
 		subre:       dns.AnySubdomainRegex(),
 		done:        make(chan struct{}),
-		release:     make(chan struct{}, qps),
-		inputsig:    make(chan uint32, qps*2),
-		max:         qps,
+		release:     make(chan struct{}, size),
+		inputsig:    make(chan uint32, size*2),
+		max:         size,
 	}
 	// Monitor the enumeration for completion or termination
 	go func() {
@@ -80,7 +79,7 @@ func newEnumSource(e *Enumeration) *enumSource {
 	for _, src := range e.srcs {
 		go r.monitorDataSrcOutput(src)
 	}
-	for i := 0; i < qps; i++ {
+	for i := 0; i < size; i++ {
 		r.release <- struct{}{}
 	}
 
@@ -148,7 +147,7 @@ func (r *enumSource) newAddr(req *requests.AddrRequest) {
 
 	r.queue.Append(req)
 	// Does the address fall into a reserved address range?
-	if yes, _ := amassnet.IsReservedAddress(req.Address); !yes {
+	if reserved, _ := amassnet.IsReservedAddress(req.Address); !reserved {
 		// Queue the request for later use in reverse DNS sweeps
 		r.sweeps.Append(req)
 	}
@@ -168,8 +167,8 @@ func (r *enumSource) accept(s, tag, source string, name bool) bool {
 		}
 		return false
 	}
-	// At most, a FQDN will be accepted from an untrusted source first, and then
-	// reconsidered from a trusted data source
+	// At most, a FQDN will be accepted from an untrusted source once, and then
+	// reconsidered when presented from a trusted data source
 	if r.filter.Test([]byte(s + strconv.FormatBool(trusted))) {
 		if name {
 			r.dups.Append(&requests.DNSRequest{
@@ -187,10 +186,9 @@ func (r *enumSource) accept(s, tag, source string, name bool) bool {
 
 // Next implements the pipeline InputSource interface.
 func (r *enumSource) Next(ctx context.Context) bool {
-	low := make(chan struct{}, 1)
-	// Mark low if below 10%
-	if p := (float32(r.queue.Len()) / float32(r.max)) * 100; p < 10 {
-		low <- struct{}{}
+	// Low if below 50%
+	if p := (float32(r.queue.Len()) / float32(r.max)) * 100; p < 50 {
+		r.fillQueue()
 	}
 
 	t := time.NewTimer(waitForDuration)
@@ -206,12 +204,14 @@ func (r *enumSource) Next(ctx context.Context) bool {
 			r.markDone()
 			return false
 		case <-t.C:
-			r.markDone()
-			return false
+			if r.pipeline.DataItemCount() <= 0 {
+				r.markDone()
+				return false
+			}
+			r.fillQueue()
+			t.Reset(waitForDuration)
 		case <-r.queue.Signal():
 			return true
-		case <-low:
-			r.fillQueue()
 		case <-check.C:
 			r.fillQueue()
 		}

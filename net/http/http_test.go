@@ -1,12 +1,13 @@
-// Copyright 2021 Jeff Foley. All rights reserved.
+// Copyright © by Jeff Foley 2021-2022. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
 
 package http
 
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -106,7 +107,7 @@ func TestRequestWebPage(t *testing.T) {
 			fmt.Fprint(w, "Method was not POST")
 			return
 		}
-		if in, err := ioutil.ReadAll(r.Body); err != nil || string(in) != post {
+		if in, err := io.ReadAll(r.Body); err != nil || string(in) != post {
 			w.WriteHeader(http.StatusBadRequest)
 			fmt.Fprint(w, "POST body did not match")
 			return
@@ -221,7 +222,7 @@ func TestPullCertificateNames(t *testing.T) {
 	if r == nil {
 		t.Errorf("Failed to setup the DNS resolver")
 	}
-	_ = r.AddResolvers(10, "8.8.8.8")
+	_ = r.AddResolvers(20, "8.8.8.8")
 	defer r.Stop()
 
 	msg := resolve.QueryMsg("www.utica.edu", dns.TypeA)

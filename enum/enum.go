@@ -30,6 +30,7 @@ type Enumeration struct {
 	nameSrc  *enumSource
 	subTask  *subdomainTask
 	dnsTask  *dnsTask
+	valTask  *dnsTask
 	store    *dataManager
 	requests queue.Queue
 }
@@ -61,19 +62,20 @@ func (e *Enumeration) Start(ctx context.Context) error {
 	go e.manageDataSrcRequests()
 
 	if !e.Config.Passive {
-		e.dnsTask = newDNSTask(e)
+		e.dnsTask = newDNSTask(e, false)
+		e.valTask = newDNSTask(e, true)
 		e.store = newDataManager(e)
 		e.subTask = newSubdomainTask(e)
 		defer e.subTask.Stop()
+		defer e.dnsTask.stop()
+		defer e.valTask.stop()
 	}
-	// The pipeline input source will receive all the names
-	e.nameSrc = newEnumSource(e)
-	defer e.nameSrc.Stop()
 
 	var stages []pipeline.Stage
 	if !e.Config.Passive {
-		stages = append(stages, pipeline.FIFO("root", e.dnsTask.rootTaskFunc()))
-		stages = append(stages, pipeline.DynamicPool("dns", e.dnsTask, e.Sys.Resolvers().QPS()))
+		stages = append(stages, pipeline.FIFO("root", e.valTask.rootTaskFunc()))
+		stages = append(stages, pipeline.FIFO("dns", e.dnsTask))
+		stages = append(stages, pipeline.FIFO("validate", e.valTask))
 		stages = append(stages, pipeline.FIFO("store", e.store))
 		stages = append(stages, pipeline.FIFO("", e.subTask))
 	}
@@ -82,6 +84,11 @@ func (e *Enumeration) Start(ctx context.Context) error {
 		defer activetask.Stop()
 		stages = append(stages, pipeline.FIFO("active", activetask))
 	}
+
+	p := pipeline.NewPipeline(stages...)
+	// The pipeline input source will receive all the names
+	e.nameSrc = newEnumSource(p, e)
+	defer e.nameSrc.Stop()
 
 	e.submitASNs()
 	e.submitDomainNames()
@@ -94,7 +101,7 @@ func (e *Enumeration) Start(ctx context.Context) error {
 	go e.submitProvidedNames()
 
 	var err error
-	if p := pipeline.NewPipeline(stages...); e.Config.Passive {
+	if e.Config.Passive {
 		err = p.Execute(e.ctx, e.nameSrc, e.makeOutputSink())
 	} else {
 		err = p.ExecuteBuffered(e.ctx, e.nameSrc, e.makeOutputSink(), 50)
