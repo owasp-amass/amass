@@ -270,13 +270,14 @@ func whichDomain(name string, scope []string) string {
 // PullCertificateNames attempts to pull a cert from one or more ports on an IP.
 func PullCertificateNames(ctx context.Context, addr string, ports []int) []string {
 	var names []string
-	// Check hosts for certificates that contain subdomain names
+	// check hosts for certificates that contain subdomain names
 	for _, port := range ports {
 		if c, err := TLSConn(ctx, addr, port); err == nil {
-			// Get the correct certificate in the chain
+			// get the correct certificate in the chain
 			certChain := c.ConnectionState().PeerCertificates
-			// Create the new requests from names found within the cert
+			// create the new requests from names found within the cert
 			names = append(names, namesFromCert(certChain[0])...)
+			c.Close()
 		}
 
 		select {
@@ -288,20 +289,19 @@ func PullCertificateNames(ctx context.Context, addr string, ports []int) []strin
 	return names
 }
 
-// TLSConn attempts to make a TLS connection with the host on given port
+// TLSConn attempts to make a TLS connection with the host on the given port.
 func TLSConn(ctx context.Context, host string, port int) (*tls.Conn, error) {
-	// Set the maximum time allowed for making the connection
+	// set the maximum time allowed for making the connection
 	tCtx, cancel := context.WithTimeout(ctx, handshakeTimeout)
 	defer cancel()
-	// Obtain the connection
+	// obtain the connection
 	conn, err := amassnet.DialContext(tCtx, "tcp", net.JoinHostPort(host, strconv.Itoa(port)))
 	if err != nil {
 		return nil, err
 	}
-	defer conn.Close()
 
 	c := tls.Client(conn, &tls.Config{InsecureSkipVerify: true})
-	// Attempt to acquire the certificate chain
+	// attempt to acquire the certificate chain
 	errChan := make(chan error, 2)
 	go func() {
 		errChan <- c.Handshake()
@@ -316,6 +316,10 @@ func TLSConn(ctx context.Context, host string, port int) (*tls.Conn, error) {
 	}
 	t.Stop()
 
+	if err != nil {
+		c.Close()
+		return nil, err
+	}
 	return c, err
 }
 

@@ -1,4 +1,4 @@
-// Copyright 2017-2021 Jeff Foley. All rights reserved.
+// Copyright 2017-2022 Jeff Foley. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 
 package requests
@@ -60,7 +60,7 @@ func (e *cacheRangerEntry) Network() net.IPNet {
 	return e.IPNet
 }
 
-// NewASNCache returns an empty ASNCache for saving and search ASN and netblock information.
+// NewASNCache returns an empty ASNCache for saving and searching ASN and netblock information.
 func NewASNCache() *ASNCache {
 	return &ASNCache{
 		cache:  make(map[int]*ASNRequest),
@@ -68,7 +68,7 @@ func NewASNCache() *ASNCache {
 	}
 }
 
-// Update uses the saves the information in ASNRequest into the ASNCache.
+// Update saves the information in ASNRequest into the ASNCache.
 func (c *ASNCache) Update(req *ASNRequest) {
 	c.Lock()
 	defer c.Unlock()

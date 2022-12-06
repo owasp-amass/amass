@@ -50,7 +50,7 @@ func NewLocalSystem(cfg *config.Config) (*LocalSystem, error) {
 
 	max := int(float64(limits.GetFileLimit()) * 0.7)
 	trusted, num := trustedResolvers(cfg, max)
-	if trusted == nil {
+	if trusted == nil || num == 0 {
 		return nil, errors.New("the system was unable to build the pool of trusted resolvers")
 	}
 	max -= num
@@ -59,7 +59,7 @@ func NewLocalSystem(cfg *config.Config) (*LocalSystem, error) {
 	}
 
 	pool, num := untrustedResolvers(cfg, max)
-	if pool == nil {
+	if pool == nil || num == 0 {
 		return nil, errors.New("the system was unable to build the pool of untrusted resolvers")
 	}
 	if set {
@@ -67,6 +67,10 @@ func NewLocalSystem(cfg *config.Config) (*LocalSystem, error) {
 	} else {
 		pool.SetMaxQPS(cfg.MaxDNSQueries)
 	}
+	// set a single name server rate limiter for both resolver pools
+	rate := resolve.NewRateTracker()
+	trusted.SetRateTracker(rate)
+	pool.SetRateTracker(rate)
 
 	sys := &LocalSystem{
 		Cfg:        cfg,
@@ -296,20 +300,21 @@ func (l *LocalSystem) loadCacheData() error {
 }
 
 func trustedResolvers(cfg *config.Config, max int) (*resolve.Resolvers, int) {
-	var num int
 	pool := resolve.NewResolvers()
+	if cfg.MaxDNSQueries > 0 {
+		pool.SetMaxQPS(cfg.MaxDNSQueries / 2)
+	}
 
 	if len(cfg.TrustedResolvers) > 0 {
-		num = len(cfg.TrustedResolvers)
 		_ = pool.AddResolvers(cfg.TrustedQPS, cfg.TrustedResolvers...)
 	} else {
-		num = len(config.DefaultBaselineResolvers)
 		_ = pool.AddResolvers(cfg.TrustedQPS, config.DefaultBaselineResolvers...)
 		pool.SetDetectionResolver(cfg.TrustedQPS, "8.8.8.8")
 	}
 
 	pool.SetLogger(cfg.Log)
-	return pool, num
+	pool.SetTimeout(time.Second)
+	return pool, pool.Len()
 }
 
 func untrustedResolvers(cfg *config.Config, max int) (*resolve.Resolvers, int) {
@@ -317,66 +322,47 @@ func untrustedResolvers(cfg *config.Config, max int) (*resolve.Resolvers, int) {
 		return nil, 0
 	}
 	if len(cfg.Resolvers) == 0 {
-		if pool, num := publicResolverSetup(cfg, max); num > 0 {
-			return pool, num
+		cfg.Resolvers = publicResolverAddrs(cfg)
+		if len(cfg.Resolvers) == 0 {
+			// Failed to use the public DNS resolvers database
+			cfg.Resolvers = config.DefaultBaselineResolvers
 		}
-		// Failed to use the public DNS resolvers database
-		cfg.Resolvers = config.DefaultBaselineResolvers
 	}
-	return customResolverSetup(cfg, max)
-}
+	cfg.Resolvers = checkAddresses(cfg.Resolvers)
 
-func customResolverSetup(cfg *config.Config, max int) (*resolve.Resolvers, int) {
-	num := len(cfg.Resolvers)
-	if num > max {
-		num = max
-		cfg.Resolvers = cfg.Resolvers[:num]
+	if len(cfg.Resolvers) > max {
+		cfg.Resolvers = cfg.Resolvers[:max]
 	}
 
 	pool := resolve.NewResolvers()
 	pool.SetLogger(cfg.Log)
+	if cfg.MaxDNSQueries > 0 {
+		pool.SetMaxQPS(cfg.MaxDNSQueries / 2)
+	}
 	_ = pool.AddResolvers(cfg.ResolversQPS, cfg.Resolvers...)
+	pool.SetTimeout(3 * time.Second)
 	pool.SetThresholdOptions(&resolve.ThresholdOptions{
-		ThresholdValue:      200,
-		CountTimeouts:       true,
-		CountServerFailures: true,
-		CountQueryRefusals:  true,
-	})
-	return pool, num
-}
-
-func publicResolverSetup(cfg *config.Config, max int) (*resolve.Resolvers, int) {
-	addrs := config.PublicResolvers
-	num := len(config.PublicResolvers)
-
-	if num == 0 {
-		if err := config.GetPublicDNSResolvers(); err != nil {
-			cfg.Log.Printf("%v", err)
-			return nil, 0
-		}
-		addrs = config.PublicResolvers
-		num = len(config.PublicResolvers)
-	}
-	if num > max {
-		num = max
-		addrs = addrs[:num]
-	}
-
-	addrs = checkAddresses(addrs)
-	addrs = runSubnetChecks(addrs)
-
-	r := resolve.NewResolvers()
-	r.SetLogger(cfg.Log)
-	_ = r.AddResolvers(cfg.ResolversQPS, addrs...)
-	r.SetThresholdOptions(&resolve.ThresholdOptions{
-		ThresholdValue:      100,
+		ThresholdValue:      20,
 		CountTimeouts:       true,
 		CountFormatErrors:   true,
 		CountServerFailures: true,
 		CountNotImplemented: true,
 		CountQueryRefusals:  true,
 	})
-	return r, len(addrs)
+	pool.ClientSubnetCheck()
+	return pool, pool.Len()
+}
+
+func publicResolverAddrs(cfg *config.Config) []string {
+	addrs := config.PublicResolvers
+
+	if len(config.PublicResolvers) == 0 {
+		if err := config.GetPublicDNSResolvers(); err != nil {
+			cfg.Log.Printf("%v", err)
+		}
+		addrs = config.PublicResolvers
+	}
+	return addrs
 }
 
 func checkAddresses(addrs []string) []string {
@@ -392,34 +378,6 @@ func checkAddresses(addrs []string) []string {
 			continue
 		}
 		ips = append(ips, net.JoinHostPort(ip, port))
-	}
-
-	return ips
-}
-
-func runSubnetChecks(addrs []string) []string {
-	finished := make(chan string, 10)
-
-	for _, addr := range addrs {
-		go func(ip string, ch chan string) {
-			if err := resolve.ClientSubnetCheck(ip); err == nil {
-				ch <- ip
-				return
-			}
-			ch <- ""
-		}(addr, finished)
-	}
-
-	l := len(addrs)
-	var ips []string
-	for i := 0; i < l; i++ {
-		if ip := <-finished; ip != "" {
-			ips = append(ips, ip)
-		}
-	}
-
-	if len(ips) == 0 {
-		return addrs
 	}
 	return ips
 }

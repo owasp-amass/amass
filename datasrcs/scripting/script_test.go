@@ -34,8 +34,8 @@ func newMockSystem(cfg *config.Config) systems.System {
 	}
 
 	ss.Pool.SetLogger(cfg.Log)
-	_ = ss.Pool.AddResolvers(30, "8.8.8.8")
+	_ = ss.Pool.AddResolvers(20, "8.8.8.8")
 	ss.Trusted.SetLogger(cfg.Log)
-	_ = ss.Trusted.AddResolvers(30, "8.8.8.8")
+	_ = ss.Trusted.AddResolvers(20, "8.8.8.8")
 	return ss
 }
