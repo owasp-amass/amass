@@ -7,7 +7,7 @@ require (
 	github.com/caffix/netmap v0.0.0-20220914054450-df95cd3987ae
 	github.com/caffix/pipeline v0.2.0
 	github.com/caffix/queue v0.1.4-0.20221117050542-621305ceff1f
-	github.com/caffix/resolve v0.6.15
+	github.com/caffix/resolve v0.6.17
 	github.com/caffix/service v0.2.4-0.20220914052955-87095f01d576
 	github.com/caffix/stringset v0.1.1-0.20220914051654-14e33fbe8739
 	github.com/cayleygraph/quad v1.2.4
@@ -23,7 +23,7 @@ require (
 	github.com/tylertreat/BoomFilters v0.0.0-20210315201527-1a82519a3e43
 	github.com/yl2chen/cidranger v1.0.2
 	github.com/yuin/gopher-lua v0.0.0-20220504180219-658193537a64
-	golang.org/x/net v0.2.0
+	golang.org/x/net v0.4.0
 	golang.org/x/oauth2 v0.0.0-20220909003341-f21342109be1
 	layeh.com/gopher-json v0.0.0-20201124131017-552bb3c4c3bf
 )
@@ -90,10 +90,10 @@ require (
 	golang.org/x/mod v0.7.0 // indirect
 	golang.org/x/sync v0.1.0 // indirect
 	golang.org/x/sys v0.3.0 // indirect
-	golang.org/x/term v0.2.0 // indirect
-	golang.org/x/text v0.4.0 // indirect
+	golang.org/x/term v0.3.0 // indirect
+	golang.org/x/text v0.5.0 // indirect
 	golang.org/x/time v0.0.0-20220411224347-583f2d630306 // indirect
-	golang.org/x/tools v0.3.0 // indirect
+	golang.org/x/tools v0.4.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/protobuf v1.28.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
