@@ -7,7 +7,7 @@ require (
 	github.com/caffix/netmap v0.0.0-20220914054450-df95cd3987ae
 	github.com/caffix/pipeline v0.2.0
 	github.com/caffix/queue v0.1.4-0.20221117050542-621305ceff1f
-	github.com/caffix/resolve v0.6.17
+	github.com/caffix/resolve v0.6.18
 	github.com/caffix/service v0.2.4-0.20220914052955-87095f01d576
 	github.com/caffix/stringset v0.1.1-0.20220914051654-14e33fbe8739
 	github.com/cayleygraph/quad v1.2.4
