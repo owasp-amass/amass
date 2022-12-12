@@ -127,7 +127,7 @@ func (n *NetworksDB) asnRequest(ctx context.Context, req *requests.ASNRequest) {
 
 func (n *NetworksDB) executeASNAddrQuery(ctx context.Context, addr string) {
 	u := n.getIPURL(addr)
-	page, err := http.RequestWebPage(ctx, u, nil, nil, nil)
+	page, err := http.RequestWebPage(ctx, u, "get", nil, nil, nil)
 	if err != nil {
 		n.sys.Config().Log.Printf("%s: %s: %v", n.String(), u, err)
 		return
@@ -141,7 +141,7 @@ func (n *NetworksDB) executeASNAddrQuery(ctx context.Context, addr string) {
 
 	numRateLimitChecks(n, 3)
 	u = networksdbBaseURL + matches[1]
-	page, err = http.RequestWebPage(ctx, u, nil, nil, nil)
+	page, err = http.RequestWebPage(ctx, u, "get", nil, nil, nil)
 	if err != nil {
 		n.sys.Config().Log.Printf("%s: %s: %v", n.String(), u, err)
 		return
@@ -178,7 +178,7 @@ func (n *NetworksDB) getIPURL(addr string) string {
 func (n *NetworksDB) executeASNQuery(ctx context.Context, asn int, addr string, netblocks *stringset.Set) {
 	numRateLimitChecks(n, 3)
 	u := n.getASNURL(asn)
-	page, err := http.RequestWebPage(ctx, u, nil, nil, nil)
+	page, err := http.RequestWebPage(ctx, u, "get", nil, nil, nil)
 	if err != nil {
 		n.sys.Config().Log.Printf("%s: %s: %v", n.String(), u, err)
 		return
@@ -331,7 +331,7 @@ func (n *NetworksDB) apiIPQuery(ctx context.Context, addr string) (string, strin
 	u := n.getAPIIPURL()
 	params := url.Values{"ip": {addr}}
 	body := strings.NewReader(params.Encode())
-	page, err := http.RequestWebPage(ctx, u, body, n.getHeaders(), nil)
+	page, err := http.RequestWebPage(ctx, u, "post", body, n.getHeaders(), nil)
 	if err != nil {
 		n.sys.Config().Log.Printf("%s: %s: %v", n.String(), u, err)
 		return "", ""
@@ -372,7 +372,7 @@ func (n *NetworksDB) apiOrgInfoQuery(ctx context.Context, id string) []int {
 	u := n.getAPIOrgInfoURL()
 	params := url.Values{"id": {id}}
 	body := strings.NewReader(params.Encode())
-	page, err := http.RequestWebPage(ctx, u, body, n.getHeaders(), nil)
+	page, err := http.RequestWebPage(ctx, u, "post", body, n.getHeaders(), nil)
 	if err != nil {
 		n.sys.Config().Log.Printf("%s: %s: %v", n.String(), u, err)
 		return []int{}
@@ -408,7 +408,7 @@ func (n *NetworksDB) apiASNInfoQuery(ctx context.Context, asn int) *requests.ASN
 	u := n.getAPIASNInfoURL()
 	params := url.Values{"asn": {strconv.Itoa(asn)}}
 	body := strings.NewReader(params.Encode())
-	page, err := http.RequestWebPage(ctx, u, body, n.getHeaders(), nil)
+	page, err := http.RequestWebPage(ctx, u, "post", body, n.getHeaders(), nil)
 	if err != nil {
 		n.sys.Config().Log.Printf("%s: %s: %v", n.String(), u, err)
 		return nil
@@ -456,7 +456,7 @@ func (n *NetworksDB) apiNetblocksQuery(ctx context.Context, asn int) *stringset.
 	u := n.getAPINetblocksURL()
 	params := url.Values{"asn": {strconv.Itoa(asn)}}
 	body := strings.NewReader(params.Encode())
-	page, err := http.RequestWebPage(ctx, u, body, n.getHeaders(), nil)
+	page, err := http.RequestWebPage(ctx, u, "post", body, n.getHeaders(), nil)
 	if err != nil {
 		n.sys.Config().Log.Printf("%s: %s: %v", n.String(), u, err)
 		return netblocks
@@ -508,7 +508,7 @@ func (n *NetworksDB) whoisRequest(ctx context.Context, req *requests.WhoisReques
 
 	numRateLimitChecks(n, 2)
 	u := n.getDomainToIPURL(req.Domain)
-	page, err := http.RequestWebPage(ctx, u, nil, nil, nil)
+	page, err := http.RequestWebPage(ctx, u, "get", nil, nil, nil)
 	if err != nil {
 		n.sys.Config().Log.Printf("%s: %s: %v", n.String(), u, err)
 		return
@@ -531,7 +531,7 @@ func (n *NetworksDB) whoisRequest(ctx context.Context, req *requests.WhoisReques
 
 		numRateLimitChecks(n, 3)
 		u = networksdbBaseURL + match[1]
-		page, err = http.RequestWebPage(ctx, u, nil, nil, nil)
+		page, err = http.RequestWebPage(ctx, u, "get", nil, nil, nil)
 		if err != nil {
 			n.sys.Config().Log.Printf("%s: %s: %v", n.String(), u, err)
 			continue
@@ -552,7 +552,7 @@ func (n *NetworksDB) whoisRequest(ctx context.Context, req *requests.WhoisReques
 		first, last := amassnet.FirstLast(cidr)
 		u := n.getDomainsInNetworkURL(first.String(), last.String())
 
-		page, err = http.RequestWebPage(ctx, u, nil, nil, nil)
+		page, err = http.RequestWebPage(ctx, u, "get", nil, nil, nil)
 		if err != nil {
 			n.sys.Config().Log.Printf("%s: %s: %v", n.String(), u, err)
 			continue

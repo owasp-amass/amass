@@ -104,7 +104,7 @@ func (a *AlienVault) executeDNSQuery(ctx context.Context, req *requests.DNSReque
 	}
 
 	u := a.getURL(req.Domain) + "passive_dns"
-	page, err := http.RequestWebPage(ctx, u, nil, a.getHeaders(), nil)
+	page, err := http.RequestWebPage(ctx, u, "get", nil, a.getHeaders(), nil)
 	if err != nil {
 		a.sys.Config().Log.Printf("%s: %s: %v", a.String(), u, err)
 		return
@@ -173,7 +173,7 @@ func (a *AlienVault) executeURLQuery(ctx context.Context, req *requests.DNSReque
 
 	headers := a.getHeaders()
 	u := a.getURL(req.Domain) + "url_list"
-	page, err := http.RequestWebPage(ctx, u, nil, headers, nil)
+	page, err := http.RequestWebPage(ctx, u, "get", nil, headers, nil)
 	if err != nil {
 		a.sys.Config().Log.Printf("%s: %s: %v", a.String(), u, err)
 		return
@@ -208,7 +208,7 @@ func (a *AlienVault) executeURLQuery(ctx context.Context, req *requests.DNSReque
 		for cur := m.PageNum + 1; cur <= pages; cur++ {
 			a.CheckRateLimit()
 			pageURL := u + "?page=" + strconv.Itoa(cur)
-			page, err = http.RequestWebPage(ctx, pageURL, nil, headers, nil)
+			page, err = http.RequestWebPage(ctx, pageURL, "get", nil, headers, nil)
 			if err != nil {
 				a.sys.Config().Log.Printf("%s: %s: %v", a.String(), pageURL, err)
 				break
@@ -263,7 +263,7 @@ func (a *AlienVault) executeWhoisQuery(ctx context.Context, req *requests.WhoisR
 	headers := a.getHeaders()
 	for _, email := range emails {
 		pageURL := a.getReverseWhoisURL(email)
-		page, err := http.RequestWebPage(ctx, pageURL, nil, headers, nil)
+		page, err := http.RequestWebPage(ctx, pageURL, "get", nil, headers, nil)
 		if err != nil {
 			a.sys.Config().Log.Printf("%s: %s: %v", a.String(), pageURL, err)
 			continue
@@ -303,7 +303,7 @@ func (a *AlienVault) queryWhoisForEmails(ctx context.Context, req *requests.Whoi
 	defer emails.Close()
 
 	u := a.getWhoisURL(req.Domain)
-	page, err := http.RequestWebPage(ctx, u, nil, a.getHeaders(), nil)
+	page, err := http.RequestWebPage(ctx, u, "get", nil, a.getHeaders(), nil)
 	if err != nil {
 		a.sys.Config().Log.Printf("%s: %s: %v", a.String(), u, err)
 		return emails.Slice()

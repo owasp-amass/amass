@@ -131,7 +131,7 @@ func (t *Twitter) dnsRequest(ctx context.Context, req *requests.DNSRequest) {
 
 func (t *Twitter) getBearerToken() (string, error) {
 	headers := map[string]string{"Content-Type": "application/x-www-form-urlencoded;charset=UTF-8"}
-	page, err := http.RequestWebPage(context.Background(), "https://api.twitter.com/oauth2/token",
+	page, err := http.RequestWebPage(context.Background(), "https://api.twitter.com/oauth2/token", "post",
 		strings.NewReader("grant_type=client_credentials"), headers,
 		&http.BasicAuth{
 			Username: t.creds.Key,

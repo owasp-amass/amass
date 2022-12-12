@@ -29,19 +29,18 @@ func (s *Script) request(L *lua.LState) int {
 		return 2
 	}
 
-	var data string
-	if method, ok := getStringField(L, opt, "method"); ok && strings.ToLower(method) == "post" {
-		if d, ok := getStringField(L, opt, "data"); ok {
-			data = d
-		}
-	}
-
 	url, found := getStringField(L, opt, "url")
 	if !found {
 		L.Push(lua.LNil)
 		L.Push(lua.LString("No URL found in the parameters"))
 		return 2
 	}
+
+	method, ok := getStringField(L, opt, "method")
+	if !ok {
+		method = "get"
+	}
+	data, _ := getStringField(L, opt, "data")
 
 	headers := make(map[string]string)
 	lv := L.GetField(opt, "headers")
@@ -53,7 +52,7 @@ func (s *Script) request(L *lua.LState) int {
 
 	id, _ := getStringField(L, opt, "id")
 	pass, _ := getStringField(L, opt, "pass")
-	page, err := s.req(ctx, url, data, headers, &http.BasicAuth{
+	page, err := s.req(ctx, url, method, data, headers, &http.BasicAuth{
 		Username: id,
 		Password: pass,
 	})
@@ -81,18 +80,17 @@ func (s *Script) scrape(L *lua.LState) int {
 		return 1
 	}
 
-	var data string
-	if method, ok := getStringField(L, opt, "method"); ok && strings.ToLower(method) == "post" {
-		if d, ok := getStringField(L, opt, "data"); ok {
-			data = d
-		}
-	}
-
 	url, found := getStringField(L, opt, "url")
 	if !found {
 		L.Push(lua.LFalse)
 		return 1
 	}
+
+	method, ok := getStringField(L, opt, "method")
+	if !ok {
+		method = "get"
+	}
+	data, _ := getStringField(L, opt, "data")
 
 	headers := make(map[string]string)
 	lv := L.GetField(opt, "headers")
@@ -106,7 +104,7 @@ func (s *Script) scrape(L *lua.LState) int {
 	pass, _ := getStringField(L, opt, "pass")
 
 	sucess := lua.LFalse
-	if resp, err := s.req(ctx, url, data, headers, &http.BasicAuth{
+	if resp, err := s.req(ctx, url, method, data, headers, &http.BasicAuth{
 		Username: id,
 		Password: pass,
 	}); err == nil {
@@ -121,7 +119,7 @@ func (s *Script) scrape(L *lua.LState) int {
 	return 1
 }
 
-func (s *Script) req(ctx context.Context, url, data string, headers map[string]string, auth *http.BasicAuth) (string, error) {
+func (s *Script) req(ctx context.Context, url, method string, data string, headers map[string]string, auth *http.BasicAuth) (string, error) {
 	cfg := s.sys.Config()
 	// Check for cached responses first
 	dsc := cfg.GetDataSourceConfig(s.String())
@@ -137,7 +135,7 @@ func (s *Script) req(ctx context.Context, url, data string, headers map[string]s
 	}
 
 	numRateLimitChecks(s, s.seconds)
-	resp, err := http.RequestWebPage(ctx, url, body, headers, auth)
+	resp, err := http.RequestWebPage(ctx, url, method, body, headers, auth)
 	if err != nil {
 		if cfg.Verbose {
 			cfg.Log.Printf("%s: %s: %v", s.String(), url, err)
