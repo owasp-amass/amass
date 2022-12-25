@@ -122,7 +122,7 @@ func (r *subdomainTask) checkForSubdomains(ctx context.Context, req *requests.DN
 }
 
 func (r *subdomainTask) subWithinWildcard(ctx context.Context, name, domain string) bool {
-	for _, t := range InitialQueryTypes {
+	for _, t := range FwdQueryTypes {
 		select {
 		case <-ctx.Done():
 			return false

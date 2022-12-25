@@ -144,9 +144,10 @@ func (a *activeTask) crawlName(ctx context.Context, req *requests.DNSRequest, tp
 			protocol = "http://"
 		} else if strings.HasSuffix(strconv.Itoa(port), "443") {
 			protocol = "https://"
-		} else if _, err := http.TLSConn(ctx, req.Name, port); err != nil {
+		} else if c, err := http.TLSConn(ctx, req.Name, port); err != nil {
 			protocol = "http://"
 		} else {
+			c.Close()
 			protocol = "https://"
 		}
 
@@ -224,12 +225,12 @@ func (a *activeTask) zoneTransfer(ctx context.Context, req *requests.ZoneXFRRequ
 		// Zone Transfers can reveal DNS wildcards
 		if name := amassdns.RemoveAsteriskLabel(req.Name); len(name) < len(req.Name) {
 			// Signal the wildcard discovery
-			pipeline.SendData(ctx, "dns", &requests.DNSRequest{
+			a.enum.nameSrc.newName(&requests.DNSRequest{
 				Name:   "www." + name,
 				Domain: req.Domain,
 				Tag:    requests.DNS,
 				Source: "DNS",
-			}, tp)
+			})
 			continue
 		}
 		a.enum.nameSrc.newName(req)
@@ -247,7 +248,7 @@ func (a *activeTask) zoneWalk(ctx context.Context, req *requests.ZoneXFRRequest,
 
 	r := resolve.NewResolvers()
 	r.SetLogger(a.enum.Config.Log)
-	_ = r.AddResolvers(5, addr)
+	_ = r.AddResolvers(15, addr)
 	defer r.Stop()
 
 	names, err := r.NsecTraversal(ctx, req.Name)
@@ -277,9 +278,9 @@ func (a *activeTask) nameserverAddr(ctx context.Context, server string) (string,
 	var resp *dns.Msg
 
 	for _, t := range []uint16{dns.TypeA, dns.TypeAAAA} {
-		resp, err = a.enum.fwdQuery(ctx, server, t)
+		resp, err = a.enum.dnsQuery(ctx, server, t, a.enum.Sys.TrustedResolvers(), maxDNSQueryAttempts)
 
-		if err == nil && resp.Rcode == dns.RcodeSuccess && len(resp.Answer) > 0 {
+		if err == nil && resp != nil && resp.Rcode == dns.RcodeSuccess && len(resp.Answer) > 0 {
 			qtype = t
 			found = true
 			break

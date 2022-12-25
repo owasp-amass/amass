@@ -5,9 +5,9 @@ go 1.18
 require (
 	github.com/PuerkitoBio/goquery v1.8.0
 	github.com/caffix/netmap v0.0.0-20220914054450-df95cd3987ae
-	github.com/caffix/pipeline v0.1.4-0.20220914052754-bb8b10ebdf99
-	github.com/caffix/queue v0.1.4-0.20220914052144-9c8ccf1d8002
-	github.com/caffix/resolve v0.5.5-0.20220914053910-6b1f5ae17ac9
+	github.com/caffix/pipeline v0.2.0
+	github.com/caffix/queue v0.1.4-0.20221117050542-621305ceff1f
+	github.com/caffix/resolve v0.6.18
 	github.com/caffix/service v0.2.4-0.20220914052955-87095f01d576
 	github.com/caffix/stringset v0.1.1-0.20220914051654-14e33fbe8739
 	github.com/cayleygraph/quad v1.2.4
@@ -23,7 +23,7 @@ require (
 	github.com/tylertreat/BoomFilters v0.0.0-20210315201527-1a82519a3e43
 	github.com/yl2chen/cidranger v1.0.2
 	github.com/yuin/gopher-lua v0.0.0-20220504180219-658193537a64
-	golang.org/x/net v0.0.0-20220909164309-bea034e7d591
+	golang.org/x/net v0.4.0
 	golang.org/x/oauth2 v0.0.0-20220909003341-f21342109be1
 	layeh.com/gopher-json v0.0.0-20201124131017-552bb3c4c3bf
 )
@@ -37,7 +37,7 @@ require (
 	github.com/boltdb/bolt v1.3.1 // indirect
 	github.com/cayleygraph/cayley v0.7.7-0.20220304214302-275a7428fb10 // indirect
 	github.com/cenkalti/backoff/v4 v4.1.3 // indirect
-	github.com/cespare/xxhash/v2 v2.1.2 // indirect
+	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/chromedp/cdproto v0.0.0-20220428002153-285dfb42699c // indirect
 	github.com/chromedp/chromedp v0.8.0 // indirect
 	github.com/chromedp/sysutil v1.0.0 // indirect
@@ -45,7 +45,7 @@ require (
 	github.com/dennwc/base v1.0.0 // indirect
 	github.com/dghubble/sling v1.4.0 // indirect
 	github.com/dgraph-io/badger v1.6.2 // indirect
-	github.com/dgraph-io/ristretto v0.1.0 // indirect
+	github.com/dgraph-io/ristretto v0.1.1 // indirect
 	github.com/dustin/go-humanize v1.0.0 // indirect
 	github.com/go-kit/kit v0.12.0 // indirect
 	github.com/go-sql-driver/mysql v1.6.0 // indirect
@@ -87,13 +87,13 @@ require (
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/temoto/robotstxt v1.1.2 // indirect
 	go.uber.org/ratelimit v0.2.0 // indirect
-	golang.org/x/mod v0.6.0-dev.0.20220419223038-86c51ed26bb4 // indirect
-	golang.org/x/sync v0.0.0-20220907140024-f12130a52804 // indirect
-	golang.org/x/sys v0.0.0-20220913175220-63ea55921009 // indirect
-	golang.org/x/term v0.0.0-20220722155259-a9ba230a4035 // indirect
-	golang.org/x/text v0.3.7 // indirect
+	golang.org/x/mod v0.7.0 // indirect
+	golang.org/x/sync v0.1.0 // indirect
+	golang.org/x/sys v0.3.0 // indirect
+	golang.org/x/term v0.3.0 // indirect
+	golang.org/x/text v0.5.0 // indirect
 	golang.org/x/time v0.0.0-20220411224347-583f2d630306 // indirect
-	golang.org/x/tools v0.1.12 // indirect
+	golang.org/x/tools v0.4.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/protobuf v1.28.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
