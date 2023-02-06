@@ -134,7 +134,7 @@ This subcommand will perform DNS enumeration and network mapping while populatin
 | -o | Path to the text output file | amass enum -o out.txt -d example.com |
 | -oA | Path prefix used for naming all output files | amass enum -oA amass_scan -d example.com |
 | -p | Ports separated by commas (default: 443) | amass enum -d example.com -p 443,8080 |
-| -passive | A purely passive mode of execution | amass enum --passive -d example.com |
+| -passive | A purely passive mode of execution | amass enum -passive -d example.com |
 | -r | IP addresses of untrusted DNS resolvers (can be used multiple times) | amass enum -r 8.8.8.8,1.1.1.1 -d example.com |
 | -rf | Path to a file providing untrusted DNS resolvers | amass enum -rf data/resolvers.txt -d example.com |
 | -rqps | Maximum number of DNS queries per second for each untrusted resolver | amass enum -rqps 10 -d example.com |
