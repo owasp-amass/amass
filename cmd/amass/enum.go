@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2022. All rights reserved.
+// Copyright © by Jeff Foley 2017-2023. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -12,7 +12,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"math/rand"
 	"net"
@@ -173,9 +172,10 @@ func runEnumCommand(clArgs []string) {
 	createOutputDirectory(cfg)
 
 	rLog, wLog := io.Pipe()
+	dir := config.OutputDirectory(cfg.Dir)
 	// Setup logging so that messages can be written to the file and used by the program
 	cfg.Log = log.New(wLog, "", log.Lmicroseconds)
-	logfile := filepath.Join(config.OutputDirectory(cfg.Dir), "amass.log")
+	logfile := filepath.Join(dir, "amass.log")
 	if args.Filepaths.LogFile != "" {
 		logfile = args.Filepaths.LogFile
 	}
@@ -196,9 +196,8 @@ func runEnumCommand(clArgs []string) {
 	// Expand data source category names into the associated source names
 	initializeSourceTags(sys.DataSources())
 	cfg.SourceFilter.Sources = expandCategoryNames(cfg.SourceFilter.Sources, generateCategoryMap(sys))
-	// Create the in-memory graph database used to store enumeration findings
-	graph := netmap.NewGraph(netmap.NewCayleyGraphMemory())
-	defer graph.Close()
+
+	graph := sys.GraphDatabases()[0]
 	// Setup the new enumeration
 	e := enum.NewEnumeration(cfg, sys, graph)
 	if e == nil {
@@ -263,10 +262,9 @@ func runEnumCommand(clArgs []string) {
 	// Let all the output goroutines know that the enumeration has finished
 	close(done)
 	wg.Wait()
+	fmt.Fprintf(color.Error, "\n%s\n", green("The enumeration has finished"))
 	// If necessary, handle graph database migration
-	if len(e.Sys.GraphDatabases()) > 0 {
-		fmt.Fprintf(color.Error, "\n%s\n", green("The enumeration has finished"))
-
+	if len(e.Sys.GraphDatabases()) > 1 {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		defer cancel()
 		// Monitor for cancellation by the user
@@ -279,7 +277,7 @@ func runEnumCommand(clArgs []string) {
 			c()
 		}(cancel)
 		// Copy the graph of findings into the system graph databases
-		for _, g := range e.Sys.GraphDatabases() {
+		for _, g := range e.Sys.GraphDatabases()[1:] {
 			fmt.Fprintf(color.Error, "%s%s%s\n",
 				yellow("Discoveries are being migrated into the "), yellow(g.String()), yellow(" database"))
 
@@ -345,8 +343,8 @@ func argsAndConfig(clArgs []string) (*config.Config, *enumArgs) {
 		color.NoColor = true
 	}
 	if args.Options.Silent {
-		color.Output = ioutil.Discard
-		color.Error = ioutil.Discard
+		color.Output = io.Discard
+		color.Error = io.Discard
 	}
 	if args.AltWordListMask.Len() > 0 {
 		args.AltWordList.Union(args.AltWordListMask)
@@ -551,7 +549,7 @@ func processOutput(ctx context.Context, g *netmap.Graph, e *enum.Enumeration, ou
 		}
 	}
 
-	t := time.NewTicker(3 * time.Second)
+	t := time.NewTimer(10 * time.Second)
 	defer t.Stop()
 	for {
 		select {
@@ -562,7 +560,8 @@ func processOutput(ctx context.Context, g *netmap.Graph, e *enum.Enumeration, ou
 			extract(0)
 			return
 		case <-t.C:
-			extract(100)
+			extract(500)
+			t.Reset(10 * time.Second)
 		}
 	}
 }
