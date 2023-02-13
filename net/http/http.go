@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2022. All rights reserved.
+// Copyright © by Jeff Foley 2017-2023. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -8,7 +8,6 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -302,25 +301,11 @@ func TLSConn(ctx context.Context, host string, port int) (*tls.Conn, error) {
 
 	c := tls.Client(conn, &tls.Config{InsecureSkipVerify: true})
 	// attempt to acquire the certificate chain
-	errChan := make(chan error, 2)
-	go func() {
-		errChan <- c.Handshake()
-	}()
-
-	t := time.NewTimer(handshakeTimeout)
-	select {
-	case <-t.C:
-		err = errors.New("handshake timeout")
-	case e := <-errChan:
-		err = e
-	}
-	t.Stop()
-
-	if err != nil {
+	if err := c.HandshakeContext(tCtx); err != nil {
 		c.Close()
 		return nil, err
 	}
-	return c, err
+	return c, nil
 }
 
 func namesFromCert(cert *x509.Certificate) []string {

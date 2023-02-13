@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2020-2022. All rights reserved.
+// Copyright © by Jeff Foley 2017-2023. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
-	"sync"
 	"time"
 
 	"github.com/OWASP/Amass/v3/config"
@@ -39,19 +38,21 @@ type callbacks struct {
 // Script is the Service that handles access to the Script data source.
 type Script struct {
 	service.BaseService
+	start      chan struct{}
+	startRet   chan error
+	stop       chan struct{}
 	SourceType string
 	sys        systems.System
 	luaState   *lua.LState
 	cbs        *callbacks
 	subre      *regexp.Regexp
 	seconds    int
-	active     sync.Mutex
 	ctx        context.Context
 	cancel     context.CancelFunc
 	queue      queue.Queue
 }
 
-// NewScript returns he object initialized, but not yet started.
+// NewScript returns the object initialized, but not yet started.
 func NewScript(script string, sys systems.System) *Script {
 	re, err := regexp.Compile(dns.AnySubdomainRegexString())
 	if err != nil {
@@ -59,24 +60,19 @@ func NewScript(script string, sys systems.System) *Script {
 	}
 
 	s := &Script{
-		sys:   sys,
-		subre: re,
-		queue: queue.NewQueue(),
+		start:    make(chan struct{}, 1),
+		startRet: make(chan error, 1),
+		stop:     make(chan struct{}, 1),
+		sys:      sys,
+		subre:    re,
+		queue:    queue.NewQueue(),
 	}
 	s.ctx, s.cancel = context.WithCancel(context.Background())
-
 	L := s.newLuaState(sys.Config())
-	s.luaState = L
-	//L.SetContext(s.ctx)
+
 	// Load the script
 	if err := L.DoString(script); err != nil {
 		sys.Config().Log.Printf("Script: Failed to load the %s script: %v", script, err)
-		return nil
-	}
-	// Pull the script type from the script
-	s.SourceType, err = s.scriptType()
-	if err != nil {
-		sys.Config().Log.Printf("Script: Failed to obtain the %s script type: %v", script, err)
 		return nil
 	}
 	// Pull the script name from the script
@@ -85,8 +81,14 @@ func NewScript(script string, sys systems.System) *Script {
 		sys.Config().Log.Printf("Script: Failed to obtain the %s script name: %v", script, err)
 		return nil
 	}
+	// Pull the script type from the script
+	s.SourceType, err = s.scriptType()
+	if err != nil {
+		sys.Config().Log.Printf("Script: Failed to obtain the %s script type: %v", script, err)
+		return nil
+	}
+
 	s.BaseService = *service.NewBaseService(s, name)
-	// Save references to the callbacks defined within the script
 	s.assignCallbacks()
 	go s.manageOutput()
 	go s.requests()
@@ -98,7 +100,11 @@ func (s *Script) newLuaState(cfg *config.Config) *lua.LState {
 	L := lua.NewState(lua.Options{
 		CallStackSize:       120,
 		MinimizeStackMemory: true,
+		RegistrySize:        32,
+		RegistryMaxSize:     1024 * 100,
+		RegistryGrowStep:    32,
 	})
+	s.luaState = L
 
 	registerSocketType(L)
 	L.PreloadModule("url", luaurl.Loader)
@@ -149,8 +155,7 @@ func (s *Script) assignCallbacks() {
 
 // Acquires the script name of the script by accessing the global variable.
 func (s *Script) scriptName() (string, error) {
-	L := s.luaState
-	lv := L.GetGlobal("name")
+	lv := s.luaState.GetGlobal("name")
 
 	if lv.Type() == lua.LTNil {
 		return "", errors.New("Script does not contain the 'name' global")
@@ -163,8 +168,7 @@ func (s *Script) scriptName() (string, error) {
 
 // Acquires the script type of the script by accessing the global variable.
 func (s *Script) scriptType() (string, error) {
-	L := s.luaState
-	lv := L.GetGlobal("type")
+	lv := s.luaState.GetGlobal("type")
 
 	if lv.Type() == lua.LTNil {
 		return "", errors.New("Script does not contain the 'type' global")
@@ -182,9 +186,90 @@ func (s *Script) Description() string {
 
 // OnStart implements the Service interface.
 func (s *Script) OnStart() error {
-	s.active.Lock()
-	defer s.active.Unlock()
+	s.start <- struct{}{}
+	return <-s.startRet
+}
 
+// OnStop implements the Service interface.
+func (s *Script) OnStop() error {
+	s.stop <- struct{}{}
+	return nil
+}
+
+func (s *Script) manageOutput() {
+loop:
+	for {
+		select {
+		case <-s.Done():
+			break loop
+		case <-s.ctx.Done():
+			break loop
+		case <-s.queue.Signal():
+			if element, ok := s.queue.Next(); ok {
+				select {
+				case <-s.Done():
+					break loop
+				case <-s.ctx.Done():
+					break loop
+				case s.Output() <- element:
+				}
+			}
+		}
+	}
+	// Empty the queue
+	s.queue.Process(func(e interface{}) {})
+	// Empty the output channel
+	for {
+		select {
+		case <-s.Output():
+		default:
+			return
+		}
+	}
+}
+
+func (s *Script) requests() {
+	ready := make(chan struct{}, 1)
+	t := time.NewTimer(100 * time.Millisecond)
+	defer t.Stop()
+loop:
+	for {
+		select {
+		case <-s.Done():
+			break loop
+		case <-s.ctx.Done():
+			break loop
+		case <-s.start:
+			s.startScript()
+		case <-s.stop:
+			s.stopScript()
+		case <-ready:
+			select {
+			case in := <-s.Input():
+				s.dispatch(in)
+			default:
+			}
+		case <-t.C:
+			if s.queue.Len() == 0 {
+				select {
+				case ready <- struct{}{}:
+				default:
+				}
+			}
+			t.Reset(100 * time.Millisecond)
+		}
+	}
+	// Empty the input channel
+	for {
+		select {
+		case <-s.Input():
+		default:
+			return
+		}
+	}
+}
+
+func (s *Script) startScript() {
 	if L := s.luaState; s.cbs.Start.Type() != lua.LTNil {
 		err := L.CallByParam(lua.P{
 			Fn:      s.cbs.Start,
@@ -193,36 +278,16 @@ func (s *Script) OnStart() error {
 		})
 		if err != nil {
 			s.sys.Config().Log.Printf("%s: start callback: %v", s.String(), err)
+			s.startRet <- err
+			return
 		}
 	}
+
 	if s.seconds > 0 {
 		s.SetRateLimit(1)
 	}
-	return s.checkConfig()
-}
 
-// OnStop implements the Service interface.
-func (s *Script) OnStop() error {
-	s.cancel()
-
-	s.active.Lock()
-	defer s.active.Unlock()
-
-	var err error
-	if L := s.luaState; s.cbs.Stop.Type() != lua.LTNil {
-		err = L.CallByParam(lua.P{
-			Fn:      s.cbs.Stop,
-			NRet:    0,
-			Protect: true,
-		})
-		if err != nil {
-			err = fmt.Errorf("%s: stop callback: %v", s.String(), err)
-			s.sys.Config().Log.Print(err.Error())
-		}
-	}
-
-	s.luaState.Close()
-	return err
+	s.startRet <- s.checkConfig()
 }
 
 func (s *Script) checkConfig() error {
@@ -257,87 +322,26 @@ func (s *Script) checkConfig() error {
 	return errors.New(estr)
 }
 
-func (s *Script) manageOutput() {
-loop:
-	for {
-		select {
-		case <-s.Done():
-			break loop
-		case <-s.ctx.Done():
-			break loop
-		case <-s.queue.Signal():
-			if element, ok := s.queue.Next(); ok {
-				select {
-				case <-s.Done():
-					break loop
-				case <-s.ctx.Done():
-					break loop
-				case s.Output() <- element:
-				}
-			}
-		}
-	}
-	// Empty the queue
-	for {
-		_, _ = s.queue.Next()
-		if s.queue.Len() == 0 {
-			break
-		}
-	}
-	// Empty the output channel
-	for {
-		select {
-		case <-s.Output():
-		default:
-			return
-		}
-	}
-}
+func (s *Script) stopScript() {
+	s.cancel()
 
-func (s *Script) requests() {
-	ready := make(chan struct{}, 1)
-	t := time.NewTimer(50 * time.Millisecond)
-	defer t.Stop()
-loop:
-	for {
-		select {
-		case <-s.Done():
-			break loop
-		case <-s.ctx.Done():
-			break loop
-		case <-ready:
-			select {
-			case <-s.Done():
-				break loop
-			case <-s.ctx.Done():
-				break loop
-			case in := <-s.Input():
-				s.dispatch(in)
-			}
-		case <-t.C:
-			if s.queue.Len() == 0 {
-				select {
-				case ready <- struct{}{}:
-				default:
-				}
-			}
-		}
-		t.Reset(50 * time.Millisecond)
-	}
-	// Empty the input channel
-	for {
-		select {
-		case <-s.Input():
-		default:
-			return
+	if L := s.luaState; s.cbs.Stop.Type() != lua.LTNil {
+		err := L.CallByParam(lua.P{
+			Fn:      s.cbs.Stop,
+			NRet:    0,
+			Protect: true,
+		})
+		if err != nil {
+			err = fmt.Errorf("%s: stop callback: %v", s.String(), err)
+			s.sys.Config().Log.Print(err.Error())
 		}
 	}
+
+	s.luaState.Close()
+	s.luaState = nil
 }
 
 func (s *Script) dispatch(in interface{}) {
-	s.active.Lock()
-	defer s.active.Unlock()
-
 	switch req := in.(type) {
 	case *requests.DNSRequest:
 		if s.cbs.Vertical.Type() != lua.LTNil && req != nil && req.Domain != "" {
