@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2022. All rights reserved.
+// Copyright © by Jeff Foley 2017-2023. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -147,7 +146,7 @@ type Config struct {
 func NewConfig() *Config {
 	return &Config{
 		UUID:            uuid.New(),
-		Log:             log.New(ioutil.Discard, "", 0),
+		Log:             log.New(io.Discard, "", 0),
 		Ports:           []int{80, 443},
 		MinForRecursive: 1,
 		// The following is enum-only, but intel will just ignore them anyway

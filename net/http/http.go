@@ -10,7 +10,6 @@ import (
 	"crypto/x509"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"net/http/cookiejar"
@@ -140,7 +139,7 @@ func RequestWebPage(ctx context.Context, u string, body io.Reader, hvals map[str
 		if resp.StatusCode < 200 || resp.StatusCode >= 400 {
 			err = fmt.Errorf("%d: %s", resp.StatusCode, resp.Status)
 		}
-		if b, err := ioutil.ReadAll(resp.Body); err == nil {
+		if b, err := io.ReadAll(resp.Body); err == nil {
 			in = string(b)
 		}
 	}

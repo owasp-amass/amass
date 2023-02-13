@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2022. All rights reserved.
+// Copyright © by Jeff Foley 2017-2023. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -8,7 +8,7 @@ import (
 	"bytes"
 	"context"
 	"flag"
-	"io/ioutil"
+	"io"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -91,8 +91,8 @@ func runVizCommand(clArgs []string) {
 		color.NoColor = true
 	}
 	if args.Options.Silent {
-		color.Output = ioutil.Discard
-		color.Error = ioutil.Discard
+		color.Output = io.Discard
+		color.Error = io.Discard
 	}
 	// Make sure at least one graph file format has been identified on the command-line
 	if !args.Options.D3 && !args.Options.DOT &&
