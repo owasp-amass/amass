@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2022. All rights reserved.
+// Copyright © by Jeff Foley 2017-2023. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -193,8 +193,6 @@ func (r *enumSource) Next(ctx context.Context) bool {
 
 	t := time.NewTimer(waitForDuration)
 	defer t.Stop()
-	check := time.NewTicker(time.Second)
-	defer check.Stop()
 
 	for {
 		select {
@@ -212,8 +210,6 @@ func (r *enumSource) Next(ctx context.Context) bool {
 			t.Reset(waitForDuration)
 		case <-r.queue.Signal():
 			return true
-		case <-check.C:
-			r.fillQueue()
 		}
 	}
 }
@@ -265,10 +261,12 @@ func (r *enumSource) fillQueue() {
 }
 
 func (r *enumSource) releaseOutput(num int) {
+loop:
 	for i := 0; i < num; i++ {
 		select {
 		case r.release <- struct{}{}:
 		default:
+			break loop
 		}
 	}
 }

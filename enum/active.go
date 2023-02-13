@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2022. All rights reserved.
+// Copyright © by Jeff Foley 2017-2023. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -144,11 +144,11 @@ func (a *activeTask) crawlName(ctx context.Context, req *requests.DNSRequest, tp
 			protocol = "http://"
 		} else if strings.HasSuffix(strconv.Itoa(port), "443") {
 			protocol = "https://"
-		} else if c, err := http.TLSConn(ctx, req.Name, port); err != nil {
-			protocol = "http://"
-		} else {
+		} else if c, err := http.TLSConn(ctx, req.Name, port); err == nil {
 			c.Close()
 			protocol = "https://"
+		} else {
+			protocol = "http://"
 		}
 
 		u := protocol + req.Name + ":" + strconv.Itoa(port)
