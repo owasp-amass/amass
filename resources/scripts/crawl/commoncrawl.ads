@@ -1,43 +1,58 @@
--- Copyright © by Jeff Foley 2021-2022. All rights reserved.
+-- Copyright © by Jeff Foley 2017-2023. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 -- SPDX-License-Identifier: Apache-2.0
 
+local url = require("url")
 local json = require("json")
 
 name = "CommonCrawl"
 type = "crawl"
 
-local urls = {}
+local endpoints = {}
 
 function start()
-    set_rate_limit(7)
+    set_rate_limit(1)
 end
 
 function vertical(ctx, domain)
-    if (urls == nil or #urls == 0) then
-        get_urls(ctx)
+    if (endpoints == nil or #endpoints == 0) then
+        get_endpoints(ctx)
     end
 
-    for _, url in pairs(urls) do
-        scrape(ctx, {['url']=url .. domain})
+    local params = {
+        ['output']="json",
+        ['fl']="url",
+        ['url']="*." .. domain,
+    }
+    local query_string = "?" .. url.build_query_string(params)
+
+    for _, endpoint in pairs(endpoints) do
+        scrape(ctx, {['url']=endpoint .. query_string})
     end
 end
 
-function get_urls(ctx)
-    local u = "https://index.commoncrawl.org"
-    local resp, err = request(ctx, {['url']=u})
+function get_endpoints(ctx)
+    local resp, err = request(ctx, {['url']="https://index.commoncrawl.org/collinfo.json"})
     if (err ~= nil and err ~= "") then
-        log(ctx, "get_urls request to service failed: " .. err)
+        log(ctx, "get_endpoints request for index collections failed: " .. err)
+        return
+    end
+    resp = "{\"collections\":" .. resp .. "}"
+
+    local d = json.decode(resp)
+    if (d == nil or d.collections == nil or #(d.collections) == 0) then
         return
     end
 
-    local matches = find(resp, 'CC-MAIN[0-9-]*-index')
-    if (matches == nil or #matches == 0) then
-        log(ctx, "get_urls failed to extract endpoints")
-        return
-    end
+    local count = 0
+    for _, r in pairs(d.collections) do
+        if (count >= 6) then
+            break
+        end
 
-    for _, endpoint in pairs(matches) do
-        table.insert(urls, u .. "/" .. endpoint .. "?output=json&fl=url&url=*.")
+        if (r['cdx-api'] ~= nil and r['cdx-api'] ~= "") then
+            count = count + 1
+            table.insert(endpoints, r['cdx-api'])
+        end
     end
 end

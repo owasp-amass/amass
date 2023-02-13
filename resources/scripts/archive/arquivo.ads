@@ -1,5 +1,6 @@
--- Copyright 2021 Jeff Foley. All rights reserved.
+-- Copyright © by Jeff Foley 2017-2023. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+-- SPDX-License-Identifier: Apache-2.0
 
 local url = require("url")
 local json = require("json")
@@ -33,9 +34,6 @@ function build_url(domain)
         ['q']=domain,
         ['offset']="0",
         ['maxItems']="500",
-        ['siteSearch']="",
-        ['type']="",
-        ['collection']="",
     }
 
     return "https://arquivo.pt/textsearch?" .. url.build_query_string(params)

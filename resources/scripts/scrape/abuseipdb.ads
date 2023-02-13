@@ -1,5 +1,6 @@
--- Copyright 2021 Jeff Foley. All rights reserved.
+-- Copyright © by Jeff Foley 2017-2023. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+-- SPDX-License-Identifier: Apache-2.0
 
 name = "AbuseIPDB"
 type = "scrape"
@@ -25,7 +26,7 @@ function vertical(ctx, domain)
         return
     end
 
-    local pattern = "<h1 style=text\\-align:center>([.a-z0-9-]{1,63})"
+    local pattern = "<h1 class=text-center>([.a-z0-9-]{1,63})"
     local matches = submatch(page, pattern)
     if (matches == nil or #matches == 0 or not in_scope(ctx, matches[1][2])) then
         return
