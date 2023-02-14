@@ -21,7 +21,6 @@ func GetAllSources(sys systems.System) []service.Service {
 	srvs := []service.Service{
 		NewAlienVault(sys),
 		NewCloudflare(sys),
-		NewDNSDB(sys),
 		NewNetworksDB(sys),
 		NewRADb(sys),
 		NewUmbrella(sys),
