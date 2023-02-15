@@ -1,5 +1,6 @@
-// Copyright 2017-2021 Jeff Foley. All rights reserved.
+// Copyright © by Jeff Foley 2017-2023. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
 
 package config
 
@@ -20,7 +21,7 @@ func ExpandMask(word string) ([]string, error) {
 	var chars string
 
 	if strings.Count(word, "?") > 3 {
-		return expanded, fmt.Errorf("Exceeded maximum mask size (3): %s", word)
+		return expanded, fmt.Errorf("exceeded maximum mask size (3): %s", word)
 	}
 
 	parts := strings.SplitN(word, "?", 2)
@@ -38,7 +39,7 @@ func ExpandMask(word string) ([]string, error) {
 			case 's':
 				chars = maskSpecial
 			default:
-				return expanded, fmt.Errorf("Improper mask used: %s", word)
+				return expanded, fmt.Errorf("improper mask used: %s", word)
 			}
 			for _, ch := range chars {
 				newWord := parts[0] + string(ch) + parts[1][1:]
