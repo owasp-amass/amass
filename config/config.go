@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"net"
 	"net/http"
 	"os"
@@ -20,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/OWASP/Amass/v3/resources"
 	"github.com/caffix/stringset"
@@ -45,6 +47,9 @@ type Config struct {
 
 	// A Universally Unique Identifier (UUID) for the enumeration
 	UUID uuid.UUID
+
+	// The pseudo-random number generator
+	Rand *rand.Rand
 
 	// Logger for error messages
 	Log *log.Logger
@@ -146,6 +151,7 @@ type Config struct {
 func NewConfig() *Config {
 	return &Config{
 		UUID:            uuid.New(),
+		Rand:            rand.New(rand.NewSource(time.Now().UTC().UnixNano())),
 		Log:             log.New(io.Discard, "", 0),
 		Ports:           []int{80, 443},
 		MinForRecursive: 1,

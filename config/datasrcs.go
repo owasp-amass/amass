@@ -6,7 +6,6 @@ package config
 
 import (
 	"fmt"
-	"math/rand"
 	"strings"
 
 	"github.com/caffix/stringset"
@@ -68,7 +67,7 @@ func (dsc *DataSourceConfig) GetCredentials() *Credentials {
 		for _, c := range dsc.creds {
 			creds = append(creds, c)
 		}
-		return creds[rand.Intn(num)]
+		return creds[0]
 	}
 	return nil
 }

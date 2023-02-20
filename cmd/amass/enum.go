@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math/rand"
 	"net"
 	"os"
 	"os/signal"
@@ -162,8 +161,6 @@ func defineEnumFilepathFlags(enumFlags *flag.FlagSet, args *enumArgs) {
 }
 
 func runEnumCommand(clArgs []string) {
-	// Seed the default pseudo-random number generator
-	rand.Seed(time.Now().UTC().UnixNano())
 	// Extract the correct config from the user provided arguments and/or configuration file
 	cfg, args := argsAndConfig(clArgs)
 	if cfg == nil {

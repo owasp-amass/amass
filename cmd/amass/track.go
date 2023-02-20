@@ -10,7 +10,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"math/rand"
 	"os"
 	"time"
 
@@ -115,8 +114,6 @@ func runTrackCommand(clArgs []string) {
 			os.Exit(1)
 		}
 	}
-
-	rand.Seed(time.Now().UTC().UnixNano())
 
 	cfg := config.NewConfig()
 	// Check if a configuration file was provided, and if so, load the settings
