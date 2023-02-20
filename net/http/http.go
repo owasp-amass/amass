@@ -35,9 +35,9 @@ const (
 	Accept = "text/html,application/json,application/xhtml+xml,application/xml;q=0.5,*/*;q=0.2"
 	// AcceptLang is the default HTTP Accept-Language header value used by Amass.
 	AcceptLang       = "en-US,en;q=0.5"
-	defaultUserAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.45 Safari/537.36"
-	windowsUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.45 Safari/537.36"
-	darwinUserAgent  = "Mozilla/5.0 (Macintosh; Intel Mac OS X 12_0_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.45 Safari/537.36"
+	defaultUserAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
+	windowsUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
+	darwinUserAgent  = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
 	httpTimeout      = 60 * time.Second
 	handshakeTimeout = 20 * time.Second
 )
@@ -51,6 +51,9 @@ var (
 
 // DefaultClient is the same HTTP client used by the package methods.
 var DefaultClient *http.Client
+
+// Header represents the HTTP headers for requests and responses.
+type Header map[string]string
 
 // BasicAuth contains the data used for HTTP basic authentication.
 type BasicAuth struct {
@@ -107,16 +110,18 @@ func CheckCookie(urlString string, cookieName string) bool {
 	return found
 }
 
-// RequestWebPage returns a string containing the entire response for the provided URL when successful.
-func RequestWebPage(ctx context.Context, u string, body io.Reader, hvals map[string]string, auth *BasicAuth) (string, error) {
+// RequestWebPage returns the response headers, body, and status code for the provided URL when successful.
+func RequestWebPage(ctx context.Context, u string, body io.Reader, hdrs Header, auth *BasicAuth) (Header, string, int, error) {
 	method := "GET"
 	if body != nil {
 		method = "POST"
 	}
 
+	var status int
+	headers := make(Header)
 	req, err := http.NewRequestWithContext(ctx, method, u, body)
 	if err != nil {
-		return "", err
+		return headers, "", status, err
 	}
 	req.Close = true
 
@@ -127,23 +132,26 @@ func RequestWebPage(ctx context.Context, u string, body io.Reader, hvals map[str
 	req.Header.Set("User-Agent", UserAgent)
 	req.Header.Set("Accept", Accept)
 	req.Header.Set("Accept-Language", AcceptLang)
-	for k, v := range hvals {
+	for k, v := range hdrs {
 		req.Header.Set(k, v)
 	}
 
 	var in string
 	resp, err := DefaultClient.Do(req)
 	if err == nil {
+		status = resp.StatusCode
 		defer func() { _ = resp.Body.Close() }()
 
-		if resp.StatusCode < 200 || resp.StatusCode >= 400 {
-			err = fmt.Errorf("%d: %s", resp.StatusCode, resp.Status)
+		for k, v := range resp.Header {
+			if len(k) > 0 && len(v) > 0 {
+				headers[k] = v[0]
+			}
 		}
 		if b, err := io.ReadAll(resp.Body); err == nil {
 			in = string(b)
 		}
 	}
-	return in, err
+	return headers, in, status, err
 }
 
 // Crawl will spider the web page at the URL argument looking for DNS names within the scope provided.

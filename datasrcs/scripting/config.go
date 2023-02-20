@@ -6,6 +6,7 @@ package scripting
 
 import (
 	"github.com/OWASP/Amass/v3/config"
+	"github.com/OWASP/Amass/v3/format"
 	"github.com/caffix/service"
 	lua "github.com/yuin/gopher-lua"
 )
@@ -15,6 +16,8 @@ func (s *Script) config(L *lua.LState) int {
 	cfg := s.sys.Config()
 
 	r := L.NewTable()
+	r.RawSetString("version", lua.LString(format.Version))
+
 	if cfg.Active {
 		r.RawSetString("mode", lua.LString("active"))
 	} else if cfg.Passive {

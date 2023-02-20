@@ -19,9 +19,9 @@ func TestCachedResponse(t *testing.T) {
 		function vertical(ctx, domain)
 			cache_response(ctx, "https://www.owasp.org", "success.owasp.org")
 
-			local resp, err = request(ctx, {['url']="https://www.owasp.org"})
-			if (err == nil and resp ~= "") then
-				new_name(ctx, resp)
+			local _, body, status, err = request(ctx, {['url']="https://www.owasp.org"})
+			if (err == nil and status == 200 and body ~= "") then
+				new_name(ctx, body)
     		end
 		end
 	`)

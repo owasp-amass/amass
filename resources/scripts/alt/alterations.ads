@@ -5,18 +5,22 @@
 name = "Alterations"
 type = "alt"
 
+local cfg
 local ldh_chars = "_abcdefghijklmnopqrstuvwxyz0123456789-"
 
+function start()
+    cfg = config()
+end
+
 function resolved(ctx, name, domain, records)
+    if (cfg == nil or cfg.mode == "passive" or not cfg['alterations'].active) then
+        return
+    end
+
     local nparts = split(name, ".")
     local dparts = split(domain, ".")
     -- Do not process resolved root domain names
     if #nparts <= #dparts then
-        return
-    end
-
-    local cfg = config(ctx)
-    if (cfg.mode == "passive" or not cfg['alterations'].active) then
         return
     end
 

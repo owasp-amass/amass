@@ -43,8 +43,8 @@ function api_query(ctx, cfg, domain)
     local p = 1
 
     while(true) do
-        local err, body, resp
-        body, err = json.encode({
+        local err, body, status, data
+        data, err = json.encode({
             ['query']="parsed.names: " .. domain, 
             ['page']=p,
             ['fields']={"parsed.names"},
@@ -53,21 +53,24 @@ function api_query(ctx, cfg, domain)
             return
         end
     
-        resp, err = request(ctx, {
-            method="POST",
-            data=body,
+        _, body, status, err = request(ctx, {
+            ['method']="POST",
+            ['data']=data,
             ['url']="https://search.censys.io/api/v1/search/certificates",
-            headers={['Content-Type']="application/json"},
-            id=cfg["credentials"].key,
-            pass=cfg["credentials"].secret,
+            ['headers']={['Content-Type']="application/json"},
+            ['id']=cfg["credentials"].key,
+            ['pass']=cfg["credentials"].secret,
         })
-        if (err ~= nil and err ~= "") then
-            log(ctx, "vertical request to service failed: " .. err)
-            return
+        if ((err ~= nil and err ~= "") or status < 200 or status >= 400) then
+            log(ctx, "vertical request to service failed with status code " .. tostring(status) .. ": " .. err)
+            return nil
         end
 
-        local d = json.decode(resp)
-        if (d == nil or d.status ~= "ok" or #(d.results) == 0) then
+        local d = json.decode(body)
+        if (d == nil) then
+            log(ctx, "failed to decode the JSON response")
+            return
+        elseif (d.status == nil or d.status ~= "ok" or #(d.results) == 0) then
             return
         end
 

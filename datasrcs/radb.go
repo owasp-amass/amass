@@ -118,8 +118,8 @@ func (r *RADb) asnRequest(ctx context.Context, req *requests.ASNRequest) {
 func (r *RADb) executeASNAddrQuery(ctx context.Context, addr string) {
 	url := r.getIPURL("arin", addr)
 	headers := map[string]string{"Content-Type": "application/json"}
-	page, err := http.RequestWebPage(ctx, url, nil, headers, nil)
-	if err != nil {
+	_, page, status, err := http.RequestWebPage(ctx, url, nil, headers, nil)
+	if err != nil || status < 200 || status >= 400 {
 		r.sys.Config().Log.Printf("%s: %s: %v", r.String(), url, err)
 		return
 	}
@@ -172,8 +172,8 @@ func (r *RADb) executeASNQuery(ctx context.Context, asn int, addr, prefix string
 	numRateLimitChecks(r, 2)
 	url := r.getASNURL("arin", strconv.Itoa(asn))
 	headers := map[string]string{"Content-Type": "application/json"}
-	page, err := http.RequestWebPage(ctx, url, nil, headers, nil)
-	if err != nil {
+	_, page, status, err := http.RequestWebPage(ctx, url, nil, headers, nil)
+	if err != nil || status < 200 || status >= 400 {
 		r.sys.Config().Log.Printf("%s: %s: %v", r.String(), url, err)
 		return
 	}
@@ -251,8 +251,8 @@ func (r *RADb) netblocks(ctx context.Context, asn int) *stringset.Set {
 	numRateLimitChecks(r, 2)
 	url := r.getNetblocksURL(strconv.Itoa(asn))
 	headers := map[string]string{"Content-Type": "application/json"}
-	page, err := http.RequestWebPage(ctx, url, nil, headers, nil)
-	if err != nil {
+	_, page, status, err := http.RequestWebPage(ctx, url, nil, headers, nil)
+	if err != nil || status < 200 || status >= 400 {
 		r.sys.Config().Log.Printf("%s: %s: %v", r.String(), url, err)
 		return netblocks
 	}

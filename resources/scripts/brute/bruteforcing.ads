@@ -5,24 +5,29 @@
 name = "Brute Forcing"
 type = "brute"
 
-probes = {"www", "online", "webserver", "ns", "ns1", "mail", "smtp", "webmail", "shop", "dev",
+local cfg
+local probes = {"www", "online", "webserver", "ns", "ns1", "mail", "smtp", "webmail", "shop", "dev",
             "prod", "test", "vpn", "ftp", "ssh", "secure", "whm", "admin", "webdisk", "mobile",
             "remote", "server", "cpanel", "cloud", "autodiscover", "api", "m", "blog"}
 
-function vertical(ctx, domain)
-    local cfg = config(ctx)
-    if (cfg.mode == "passive") then
-        return
-    end
+function start()
+    cfg = config()
+end
 
-    if cfg['brute_forcing'].active then
+function vertical(ctx, domain)
+    if (cfg ~= nil and cfg.mode ~= "passive" and 
+        cfg.brute_forcing ~= nil and cfg['brute_forcing'].active) then
         make_names(ctx, domain)
     end
 end
 
 function resolved(ctx, name, domain, records)
-    local cfg = config(ctx)
-    if (cfg.mode == "passive") then
+    if (cfg == nil or cfg.mode == "passive") then
+        return
+    end
+
+    local bf = cfg.brute_forcing
+    if (bf == nil or not bf.active or not bf.recursive or bf.min_for_recursive ~= 0) then
         return
     end
 
@@ -37,35 +42,30 @@ function resolved(ctx, name, domain, records)
     if (#records == 0 or (has_cname(records) or not has_addr(records))) then
         return
     end
-
-    local bf = cfg['brute_forcing']
-    if (bf.active and bf.recursive) then
-        if (bf['max_depth'] > 0 and #nparts > bf['max_depth'] + #dparts) then
-            return
-        end
-        if (bf['min_for_recursive'] == 0) then
-            make_names(ctx, name)
-        end
+    -- Do not allow the recursive brute forcing to go beyond the maximum depth
+    if (bf.max_depth == nil or (bf.max_depth > 0 and #nparts > bf.max_depth + #dparts)) then
+        return
     end
+    make_names(ctx, name)
 end
 
 function subdomain(ctx, name, domain, times)
-    local cfg = config(ctx)
-    if (cfg.mode == "passive") then
+    if (cfg == nil or cfg.mode == "passive") then
         return
     end
 
-    local bf = cfg['brute_forcing']
+    local bf = cfg.brute_forcing
+    if (bf == nil or not bf.active or not bf.recursive or bf.min_for_recursive ~= times) then
+        return
+    end
+
     local nparts = split(name, ".")
     local dparts = split(domain, ".")
-    if (bf.active and bf.recursive) then
-        if (bf['max_depth'] > 0 and #nparts > bf['max_depth'] + #dparts) then
-            return
-        end
-        if (bf['min_for_recursive'] == times) then
-            make_names(ctx, name)
-        end
+    -- Do not allow the recursive brute forcing to go beyond the maximum depth
+    if (bf.max_depth == nil or (bf.max_depth > 0 and #nparts > bf.max_depth + #dparts)) then
+        return
     end
+    make_names(ctx, name)
 end
 
 function make_names(ctx, base)

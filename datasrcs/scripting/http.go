@@ -43,28 +43,35 @@ func (s *Script) request(L *lua.LState) int {
 		return 2
 	}
 
-	headers := make(map[string]string)
+	hdrs := make(map[string]string)
 	lv := L.GetField(opt, "headers")
 	if tbl, ok := lv.(*lua.LTable); ok {
 		tbl.ForEach(func(k, v lua.LValue) {
-			headers[k.String()] = v.String()
+			hdrs[k.String()] = v.String()
 		})
 	}
 
 	id, _ := getStringField(L, opt, "id")
 	pass, _ := getStringField(L, opt, "pass")
-	page, err := s.req(ctx, url, data, headers, &http.BasicAuth{
+	headers, body, status, err := s.req(ctx, url, data, hdrs, &http.BasicAuth{
 		Username: id,
 		Password: pass,
 	})
 
-	L.Push(lua.LString(page))
+	ht := L.NewTable()
+	for k, v := range headers {
+		ht.RawSetString(k, lua.LString(v))
+	}
+
+	L.Push(ht)
+	L.Push(lua.LString(body))
+	L.Push(lua.LNumber(status))
 	if err != nil {
 		L.Push(lua.LString(err.Error()))
 	} else {
 		L.Push(lua.LNil)
 	}
-	return 2
+	return 4
 }
 
 // Wrapper so that scripts can scrape the contents of a GET request for subdomain names in scope.
@@ -94,11 +101,11 @@ func (s *Script) scrape(L *lua.LState) int {
 		return 1
 	}
 
-	headers := make(map[string]string)
+	hdrs := make(map[string]string)
 	lv := L.GetField(opt, "headers")
 	if tbl, ok := lv.(*lua.LTable); ok {
 		tbl.ForEach(func(k, v lua.LValue) {
-			headers[k.String()] = v.String()
+			hdrs[k.String()] = v.String()
 		})
 	}
 
@@ -106,10 +113,10 @@ func (s *Script) scrape(L *lua.LState) int {
 	pass, _ := getStringField(L, opt, "pass")
 
 	sucess := lua.LFalse
-	if resp, err := s.req(ctx, url, data, headers, &http.BasicAuth{
+	if _, resp, status, err := s.req(ctx, url, data, hdrs, &http.BasicAuth{
 		Username: id,
 		Password: pass,
-	}); err == nil {
+	}); err == nil && status >= 200 && status < 400 {
 		if num := s.internalSendNames(ctx, resp); num > 0 {
 			sucess = lua.LTrue
 		}
@@ -121,31 +128,32 @@ func (s *Script) scrape(L *lua.LState) int {
 	return 1
 }
 
-func (s *Script) req(ctx context.Context, url, data string, headers map[string]string, auth *http.BasicAuth) (string, error) {
+func (s *Script) req(ctx context.Context, url, data string, hdrs http.Header, auth *http.BasicAuth) (http.Header, string, int, error) {
 	cfg := s.sys.Config()
 	// Check for cached responses first
 	dsc := cfg.GetDataSourceConfig(s.String())
 	if dsc != nil && dsc.TTL > 0 {
 		if r, err := s.getCachedResponse(ctx, url+data, dsc.TTL); err == nil {
-			return r, err
+			// TODO: Headers and status codes eventually need to be cached as well
+			return nil, r, 200, err
 		}
 	}
 
-	var body io.Reader
+	var b io.Reader
 	if data != "" {
-		body = strings.NewReader(data)
+		b = strings.NewReader(data)
 	}
 
 	numRateLimitChecks(s, s.seconds)
-	resp, err := http.RequestWebPage(ctx, url, body, headers, auth)
+	headers, body, status, err := http.RequestWebPage(ctx, url, b, hdrs, auth)
 	if err != nil {
 		if cfg.Verbose {
 			cfg.Log.Printf("%s: %s: %v", s.String(), url, err)
 		}
-	} else if dsc != nil && dsc.TTL > 0 {
-		_ = s.setCachedResponse(ctx, url+data, resp)
+	} else if dsc != nil && dsc.TTL > 0 && status == 200 {
+		_ = s.setCachedResponse(ctx, url+data, body)
 	}
-	return resp, err
+	return headers, body, status, err
 }
 
 // Wrapper so that scripts can crawl for subdomain names in scope.

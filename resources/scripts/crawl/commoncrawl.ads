@@ -32,15 +32,18 @@ function vertical(ctx, domain)
 end
 
 function get_endpoints(ctx)
-    local resp, err = request(ctx, {['url']="https://index.commoncrawl.org/collinfo.json"})
-    if (err ~= nil and err ~= "") then
-        log(ctx, "get_endpoints request for index collections failed: " .. err)
-        return
+    local _, body, status, err = request(ctx, {['url']="https://index.commoncrawl.org/collinfo.json"})
+    if ((err ~= nil and err ~= "") or status < 200 or status >= 400) then
+        log(ctx, "get_endpoints request to service failed with status code " .. tostring(status) .. ": " .. err)
+        return nil
     end
     resp = "{\"collections\":" .. resp .. "}"
 
-    local d = json.decode(resp)
-    if (d == nil or d.collections == nil or #(d.collections) == 0) then
+    local d = json.decode(body)
+    if (d == nil) then
+        log(ctx, "failed to decode the JSON response")
+        return
+    elseif (d.collections == nil or #(d.collections) == 0) then
         return
     end
 
