@@ -5,12 +5,10 @@
 package datasrcs
 
 import (
-	"context"
 	"sort"
 
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/datasrcs/scripting"
-	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/systems"
 	"github.com/caffix/service"
 	"github.com/caffix/stringset"
@@ -19,11 +17,8 @@ import (
 // GetAllSources returns a slice of all data source services initialized.
 func GetAllSources(sys systems.System) []service.Service {
 	srvs := []service.Service{
-		NewAlienVault(sys),
 		NewCloudflare(sys),
-		NewNetworksDB(sys),
 		NewRADb(sys),
-		NewUmbrella(sys),
 	}
 
 	if scripts, err := sys.Config().AcquireScripts(); err == nil {
@@ -69,17 +64,6 @@ func SelectedDataSources(cfg *config.Config, avail []service.Service) []service.
 		return results[i].String() < results[j].String()
 	})
 	return results
-}
-
-func genNewNameEvent(ctx context.Context, sys systems.System, srv service.Service, name string) {
-	if domain := sys.Config().WhichDomain(name); domain != "" {
-		srv.Output() <- &requests.DNSRequest{
-			Name:   name,
-			Domain: domain,
-			Tag:    srv.Description(),
-			Source: srv.String(),
-		}
-	}
 }
 
 func numRateLimitChecks(srv service.Service, num int) {
