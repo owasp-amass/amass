@@ -9,6 +9,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/OWASP/Amass/v3/net/dns"
 	"github.com/OWASP/Amass/v3/net/http"
 	lua "github.com/yuin/gopher-lua"
 )
@@ -29,10 +30,10 @@ func (s *Script) request(L *lua.LState) int {
 		return 2
 	}
 
-	var data string
+	var body string
 	if method, ok := getStringField(L, opt, "method"); ok && strings.ToLower(method) == "post" {
-		if d, ok := getStringField(L, opt, "data"); ok {
-			data = d
+		if d, ok := getStringField(L, opt, "body"); ok {
+			body = d
 		}
 	}
 
@@ -44,7 +45,7 @@ func (s *Script) request(L *lua.LState) int {
 	}
 
 	hdrs := make(map[string]string)
-	lv := L.GetField(opt, "headers")
+	lv := L.GetField(opt, "header")
 	if tbl, ok := lv.(*lua.LTable); ok {
 		tbl.ForEach(func(k, v lua.LValue) {
 			hdrs[k.String()] = v.String()
@@ -53,25 +54,73 @@ func (s *Script) request(L *lua.LState) int {
 
 	id, _ := getStringField(L, opt, "id")
 	pass, _ := getStringField(L, opt, "pass")
-	headers, body, status, err := s.req(ctx, url, data, hdrs, &http.BasicAuth{
+	resp, err := s.req(ctx, url, body, hdrs, &http.BasicAuth{
 		Username: id,
 		Password: pass,
 	})
 
-	ht := L.NewTable()
-	for k, v := range headers {
-		ht.RawSetString(k, lua.LString(v))
-	}
-
-	L.Push(ht)
-	L.Push(lua.LString(body))
-	L.Push(lua.LNumber(status))
 	if err != nil {
+		L.Push(lua.LNil)
 		L.Push(lua.LString(err.Error()))
 	} else {
+		L.Push(responseToTable(L, resp))
 		L.Push(lua.LNil)
 	}
-	return 4
+	return 2
+}
+
+func responseToTable(L *lua.LState, resp *http.Response) *lua.LTable {
+	r := L.NewTable()
+
+	r.RawSetString("status", lua.LString(resp.Status))
+	r.RawSetString("status_code", lua.LNumber(resp.StatusCode))
+	r.RawSetString("proto", lua.LString(resp.Proto))
+	r.RawSetString("proto_major", lua.LNumber(resp.ProtoMajor))
+	r.RawSetString("proto_minor", lua.LNumber(resp.ProtoMinor))
+
+	hdrs := L.NewTable()
+	for k, v := range resp.Header {
+		hdrs.RawSetString(k, lua.LString(v))
+	}
+	r.RawSetString("header", hdrs)
+
+	r.RawSetString("body", lua.LString(resp.Body))
+	r.RawSetString("length", lua.LNumber(resp.Length))
+
+	if resp.TLS != nil {
+		tls := L.NewTable()
+
+		tls.RawSetString("version", lua.LNumber(resp.TLS.Version))
+		tls.RawSetString("handshake_complete", lua.LBool(resp.TLS.HandshakeComplete))
+		tls.RawSetString("server_name", lua.LString(resp.TLS.ServerName))
+
+		if len(resp.TLS.PeerCertificates) > 0 {
+			certs := L.NewTable()
+
+			for _, cert := range resp.TLS.PeerCertificates {
+				c := L.NewTable()
+
+				c.RawSetString("version", lua.LNumber(cert.Version))
+				c.RawSetString("common_name", lua.LString(dns.RemoveAsteriskLabel(cert.Subject.CommonName)))
+
+				if len(cert.DNSNames) > 0 {
+					san := L.NewTable()
+
+					for _, name := range cert.DNSNames {
+						n := dns.RemoveAsteriskLabel(name)
+
+						san.Append(lua.LString(n))
+					}
+					c.RawSetString("subject_alternate_names", san)
+				}
+				certs.Append(c)
+			}
+			tls.RawSetString("certificates", certs)
+		}
+
+		r.RawSetString("tls", tls)
+	}
+	return r
 }
 
 // Wrapper so that scripts can scrape the contents of a GET request for subdomain names in scope.
@@ -88,10 +137,10 @@ func (s *Script) scrape(L *lua.LState) int {
 		return 1
 	}
 
-	var data string
+	var body string
 	if method, ok := getStringField(L, opt, "method"); ok && strings.ToLower(method) == "post" {
-		if d, ok := getStringField(L, opt, "data"); ok {
-			data = d
+		if d, ok := getStringField(L, opt, "body"); ok {
+			body = d
 		}
 	}
 
@@ -102,7 +151,7 @@ func (s *Script) scrape(L *lua.LState) int {
 	}
 
 	hdrs := make(map[string]string)
-	lv := L.GetField(opt, "headers")
+	lv := L.GetField(opt, "header")
 	if tbl, ok := lv.(*lua.LTable); ok {
 		tbl.ForEach(func(k, v lua.LValue) {
 			hdrs[k.String()] = v.String()
@@ -113,11 +162,11 @@ func (s *Script) scrape(L *lua.LState) int {
 	pass, _ := getStringField(L, opt, "pass")
 
 	sucess := lua.LFalse
-	if _, resp, status, err := s.req(ctx, url, data, hdrs, &http.BasicAuth{
+	if resp, err := s.req(ctx, url, body, hdrs, &http.BasicAuth{
 		Username: id,
 		Password: pass,
-	}); err == nil && status >= 200 && status < 400 {
-		if num := s.internalSendNames(ctx, resp); num > 0 {
+	}); err == nil && resp.StatusCode >= 200 && resp.StatusCode < 400 {
+		if num := s.internalSendNames(ctx, resp.Body); num > 0 {
 			sucess = lua.LTrue
 		}
 	} else {
@@ -128,14 +177,13 @@ func (s *Script) scrape(L *lua.LState) int {
 	return 1
 }
 
-func (s *Script) req(ctx context.Context, url, data string, hdrs http.Header, auth *http.BasicAuth) (http.Header, string, int, error) {
+func (s *Script) req(ctx context.Context, url, data string, hdrs http.Header, auth *http.BasicAuth) (*http.Response, error) {
 	cfg := s.sys.Config()
 	// Check for cached responses first
 	dsc := cfg.GetDataSourceConfig(s.String())
 	if dsc != nil && dsc.TTL > 0 {
 		if r, err := s.getCachedResponse(ctx, url+data, dsc.TTL); err == nil {
-			// TODO: Headers and status codes eventually need to be cached as well
-			return nil, r, 200, err
+			return r, err
 		}
 	}
 
@@ -145,15 +193,15 @@ func (s *Script) req(ctx context.Context, url, data string, hdrs http.Header, au
 	}
 
 	numRateLimitChecks(s, s.seconds)
-	headers, body, status, err := http.RequestWebPage(ctx, url, b, hdrs, auth)
+	resp, err := http.RequestWebPage(ctx, url, b, hdrs, auth)
 	if err != nil {
 		if cfg.Verbose {
 			cfg.Log.Printf("%s: %s: %v", s.String(), url, err)
 		}
-	} else if dsc != nil && dsc.TTL > 0 && status == 200 {
-		_ = s.setCachedResponse(ctx, url+data, body)
+	} else if dsc != nil && dsc.TTL > 0 && resp.StatusCode >= 200 && resp.StatusCode < 400 {
+		_ = s.setCachedResponse(ctx, url+data, resp)
 	}
-	return headers, body, status, err
+	return resp, err
 }
 
 // Wrapper so that scripts can crawl for subdomain names in scope.

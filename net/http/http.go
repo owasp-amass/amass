@@ -55,6 +55,19 @@ var DefaultClient *http.Client
 // Header represents the HTTP headers for requests and responses.
 type Header map[string]string
 
+// Response represents the HTTP response in the Amass preferred format.
+type Response struct {
+	Status     string
+	StatusCode int
+	Proto      string
+	ProtoMajor int
+	ProtoMinor int
+	Header     Header
+	Body       string
+	Length     int64
+	TLS        *tls.ConnectionState
+}
+
 // BasicAuth contains the data used for HTTP basic authentication.
 type BasicAuth struct {
 	Username string
@@ -111,17 +124,15 @@ func CheckCookie(urlString string, cookieName string) bool {
 }
 
 // RequestWebPage returns the response headers, body, and status code for the provided URL when successful.
-func RequestWebPage(ctx context.Context, u string, body io.Reader, hdrs Header, auth *BasicAuth) (Header, string, int, error) {
+func RequestWebPage(ctx context.Context, u string, body io.Reader, hdrs Header, auth *BasicAuth) (*Response, error) {
 	method := "GET"
 	if body != nil {
 		method = "POST"
 	}
 
-	var status int
-	headers := make(Header)
 	req, err := http.NewRequestWithContext(ctx, method, u, body)
 	if err != nil {
-		return headers, "", status, err
+		return nil, err
 	}
 	req.Close = true
 
@@ -136,22 +147,35 @@ func RequestWebPage(ctx context.Context, u string, body io.Reader, hdrs Header, 
 		req.Header.Set(k, v)
 	}
 
-	var in string
 	resp, err := DefaultClient.Do(req)
-	if err == nil {
-		status = resp.StatusCode
-		defer func() { _ = resp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
 
-		for k, v := range resp.Header {
-			if len(k) > 0 && len(v) > 0 {
-				headers[k] = v[0]
-			}
-		}
-		if b, err := io.ReadAll(resp.Body); err == nil {
-			in = string(b)
+	headers := make(Header)
+	for k, v := range resp.Header {
+		if len(k) > 0 && len(v) > 0 {
+			headers[k] = v[0]
 		}
 	}
-	return headers, in, status, err
+
+	var in string
+	defer func() { _ = resp.Body.Close() }()
+	if b, err := io.ReadAll(resp.Body); err == nil {
+		in = string(b)
+	}
+
+	return &Response{
+		Status:     resp.Status,
+		StatusCode: resp.StatusCode,
+		Proto:      resp.Proto,
+		ProtoMajor: resp.ProtoMajor,
+		ProtoMinor: resp.ProtoMinor,
+		Header:     headers,
+		Body:       in,
+		Length:     resp.ContentLength,
+		TLS:        req.TLS,
+	}, nil
 }
 
 // Crawl will spider the web page at the URL argument looking for DNS names within the scope provided.

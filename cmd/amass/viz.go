@@ -9,10 +9,8 @@ import (
 	"context"
 	"flag"
 	"io"
-	"math/rand"
 	"os"
 	"path/filepath"
-	"time"
 
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/viz"
@@ -108,8 +106,6 @@ func runVizCommand(clArgs []string) {
 		}
 		args.Domains.InsertMany(list...)
 	}
-
-	rand.Seed(time.Now().UTC().UnixNano())
 
 	cfg := new(config.Config)
 	// Check if a configuration file was provided, and if so, load the settings

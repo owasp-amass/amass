@@ -14,7 +14,7 @@ end
 function check()
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -28,7 +28,7 @@ end
 function vertical(ctx, domain)
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -48,19 +48,26 @@ function vertical(ctx, domain)
     local resp, err = request(ctx, {
         ['url']="https://daas.digicert.com/apicontroller/v1/scan/getSubdomains",
         ['method']="POST",
-        ['data']=body,
-        ['headers']={
+        ['header']={
             ['Content-Type']="application/json",
             ['X-DC-DEVKEY']=c.key,
         },
+        ['body']=body,
     })
     if (err ~= nil and err ~= "") then
         log(ctx, "vertical request to service failed: " .. err)
         return
+    elseif (resp.status_code < 200 or resp.status_code >= 400) then
+        log(ctx, "vertical request to service returned with status code: " .. resp.status)
+        return
     end
 
-    local j = json.decode(resp)
-    if (j == nil or j.error ~= nil) then
+    local j = json.decode(resp.body)
+    if (j == nil) then
+        log(ctx, "failed to decode the JSON response")
+        return
+    elseif (j.error ~= nil) then
+        log (ctx, "error returned by the vertical request: " .. j.error)
         return
     end
 

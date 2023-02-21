@@ -13,14 +13,20 @@ function start()
 end
 
 function vertical(ctx, domain)
-    local _, resp, status, err = request(ctx, {['url']=build_url(domain)})
-    if ((err ~= nil and err ~= "") or status < 200 or status >= 400) then
-        log(ctx, "vertical request to service failed with status code " .. tostring(status) .. ": " .. err)
-        return nil
+    local resp, err = request(ctx, {['url']=build_url(domain)})
+    if (err ~= nil and err ~= "") then
+        log(ctx, "vertical request to service failed: " .. err)
+        return
+    elseif (resp.status_code < 200 or resp.status_code >= 400) then
+        log(ctx, "vertical request to service returned with status code: " .. resp.status)
+        return
     end
 
-    local d = json.decode(resp)
-    if (d == nil or #(d.response_items) == 0) then
+    local d = json.decode(resp.body)
+    if (d == nil) then
+        log(ctx, "failed to decode the JSON response")
+        return
+    elseif (d.response_items == nil or #(d.response_items) == 0) then
         return
     end
 

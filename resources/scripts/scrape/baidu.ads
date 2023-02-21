@@ -24,9 +24,9 @@ end
 function build_url(domain, pagenum)
     local query = "site:" .. domain .. " -site:www." .. domain
     local params = {
-        wd=query,
-        oq=query,
-        pn=pagenum,
+        ['wd']=query,
+        ['oq']=query,
+        ['pn']=pagenum,
     }
 
     return "https://www.baidu.com/s?" .. url.build_query_string(params)

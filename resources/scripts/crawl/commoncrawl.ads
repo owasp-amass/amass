@@ -9,6 +9,7 @@ name = "CommonCrawl"
 type = "crawl"
 
 local endpoints = {}
+local max_collections = 6
 
 function start()
     set_rate_limit(1)
@@ -32,12 +33,15 @@ function vertical(ctx, domain)
 end
 
 function get_endpoints(ctx)
-    local _, body, status, err = request(ctx, {['url']="https://index.commoncrawl.org/collinfo.json"})
-    if ((err ~= nil and err ~= "") or status < 200 or status >= 400) then
-        log(ctx, "get_endpoints request to service failed with status code " .. tostring(status) .. ": " .. err)
-        return nil
+    local resp, err = request(ctx, {['url']="https://index.commoncrawl.org/collinfo.json"})
+    if (err ~= nil and err ~= "") then
+        log(ctx, "vertical request to service failed: " .. err)
+        return
+    elseif (resp.status_code < 200 or resp.status_code >= 400) then
+        log(ctx, "vertical request to service returned with status code: " .. resp.status)
+        return
     end
-    resp = "{\"collections\":" .. resp .. "}"
+    local body = "{\"collections\":" .. resp.body .. "}"
 
     local d = json.decode(body)
     if (d == nil) then
@@ -49,7 +53,7 @@ function get_endpoints(ctx)
 
     local count = 0
     for _, r in pairs(d.collections) do
-        if (count >= 6) then
+        if (count >= max_collections) then
             break
         end
 

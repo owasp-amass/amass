@@ -116,24 +116,24 @@ func TestRequestWebPage(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	_, resp, status, _ := RequestWebPage(context.TODO(), ts.URL, nil, nil, &BasicAuth{name, pass})
-	if status == 200 || resp == succ {
+	resp, _ := RequestWebPage(context.TODO(), ts.URL, nil, nil, &BasicAuth{name, pass})
+	if resp.StatusCode == 200 || resp.Body == succ {
 		t.Errorf("Failed to detect the bad request")
 	}
 
 	var err error
 	body := strings.NewReader(post)
 	var headers = map[string]string{hkey: name}
-	_, resp, status, err = RequestWebPage(context.TODO(), ts.URL, body, headers, &BasicAuth{name, pass})
-	if err != nil || status != 200 || resp != succ {
-		t.Errorf(resp)
+	resp, err = RequestWebPage(context.TODO(), ts.URL, body, headers, &BasicAuth{name, pass})
+	if err != nil || resp.StatusCode != 200 || resp.Body != succ {
+		t.Errorf(resp.Status + ": " + resp.Body)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	_, resp, _, err = RequestWebPage(ctx, ts.URL, nil, nil, nil)
-	if err == nil || resp != "" {
+	resp, err = RequestWebPage(ctx, ts.URL, nil, nil, nil)
+	if err == nil || resp != nil {
 		t.Errorf("Failed to detect the expired context")
 	}
 }

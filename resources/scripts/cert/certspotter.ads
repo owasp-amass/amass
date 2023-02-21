@@ -13,18 +13,25 @@ function start()
 end
 
 function vertical(ctx, domain)
-    local page, err = request(ctx, {['url']=api_url(domain)})
+    local resp, err = request(ctx, {['url']=api_url(domain)})
     if (err ~= nil and err ~= "") then
         log(ctx, "vertical request to service failed: " .. err)
         return
+    elseif (resp.status_code < 200 or resp.status_code >= 400) then
+        log(ctx, "vertical request to service returned with status code: " .. resp.status)
+        return
     end
+    local body = "{\"results\":" .. resp.body .. "}"
 
-    local resp = json.decode(page)
-    if (resp == nil or #resp == 0) then
+    local d = json.decode(body)
+    if (d == nil) then
+        log(ctx, "failed to decode the JSON response")
+        return
+    elseif (d.results == nil or #(d.results) == 0) then
         return
     end
 
-    for _, r in pairs(resp) do
+    for _, r in pairs(d.results) do
         for _, name in pairs(r['dns_names']) do
             new_name(ctx, name)
         end
@@ -36,7 +43,7 @@ function api_url(domain)
         ['domain']=domain,
         ['include_subdomains']="true",
         ['match_wildcards']="true",
-        expand="dns_names",
+        ['expand']="dns_names",
     }
 
     return "https://api.certspotter.com/v1/issuances?" .. url.build_query_string(params)

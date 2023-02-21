@@ -130,8 +130,6 @@ func (s *Script) newLuaState(cfg *config.Config) *lua.LState {
 	L.SetGlobal("output_dir", L.NewFunction(s.outputdir))
 	L.SetGlobal("set_rate_limit", L.NewFunction(s.setRateLimit))
 	L.SetGlobal("check_rate_limit", L.NewFunction(s.checkRateLimit))
-	L.SetGlobal("obtain_response", L.NewFunction(s.obtainResponse))
-	L.SetGlobal("cache_response", L.NewFunction(s.cacheResponse))
 	L.SetGlobal("subdomain_regex", lua.LString(dns.AnySubdomainRegexString()))
 	return L
 }

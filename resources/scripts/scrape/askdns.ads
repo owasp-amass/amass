@@ -10,14 +10,17 @@ function start()
 end
 
 function horizontal(ctx, domain)
-    local page, err = request(ctx, {url=build_url(domain)})
+    local resp, err = request(ctx, {['url']=build_url(domain)})
     if (err ~= nil and err ~= "") then
         log(ctx, "horizontal request to service failed: " .. err)
+        return
+    elseif (resp.status_code < 200 or resp.status_code >= 400) then
+        log(ctx, "horizontal request to service returned with status code: " .. resp.status)
         return
     end
 
     local pattern = "\"/domain/(.*)\""
-    local matches = submatch(page, pattern)
+    local matches = submatch(resp.body, pattern)
     if (matches == nil or #matches == 0) then
         return
     end

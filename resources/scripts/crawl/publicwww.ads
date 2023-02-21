@@ -12,7 +12,7 @@ end
 function check()
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -25,7 +25,7 @@ end
 function vertical(ctx, domain)
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
