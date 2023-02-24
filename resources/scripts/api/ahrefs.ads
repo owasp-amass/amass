@@ -1,5 +1,6 @@
--- Copyright 2021 Jeff Foley. All rights reserved.
+-- Copyright © by Jeff Foley 2017-2023. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+-- SPDX-License-Identifier: Apache-2.0
 
 local url = require("url")
 local json = require("json")
@@ -14,7 +15,7 @@ end
 function check()
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -27,7 +28,7 @@ end
 function vertical(ctx, domain)
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -39,18 +40,24 @@ function vertical(ctx, domain)
     if (err ~= nil and err ~= "") then
         log(ctx, "vertical request to service failed: " .. err)
         return
+    elseif (resp.status_code < 200 or resp.status_code >= 400) then
+        log(ctx, "vertical request to service returned with status: " .. resp.status)
+        return
     end
 
-    local j = json.decode(resp)
-    if j == nil then
+    local d = json.decode(resp.body)
+    if (d == nil) then
+        log(ctx, "failed to decode the JSON response")
         return
-    elseif j.error ~= nil then
-        log(ctx, "vertical request to service failed: " .. j.error)
+    elseif (d.error ~= nil and d.error ~= "") then
+        log(ctx, "error returned by the service: " .. j.error)
         return
     end
 
     for _, item in pairs(d.pages) do
-        send_names(ctx, item.url)
+        if (item ~= nil and item.url ~= nil and item.url ~= "") then
+            send_names(ctx, item.url)
+        end
     end
 end
 

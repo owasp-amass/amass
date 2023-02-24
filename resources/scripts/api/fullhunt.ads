@@ -1,5 +1,6 @@
--- Copyright 2021 Jeff Foley. All rights reserved.
+-- Copyright © by Jeff Foley 2017-2023. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+-- SPDX-License-Identifier: Apache-2.0
 
 local json = require("json")
 
@@ -13,7 +14,7 @@ end
 function check()
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -26,7 +27,7 @@ end
 function vertical(ctx, domain)
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -36,20 +37,28 @@ function vertical(ctx, domain)
 
     local resp, err = request(ctx, {
         ['url']=build_url(domain),
-        ['headers']={['X-API-KEY']=c.key},
+        ['header']={['X-API-KEY']=c.key},
     })
     if (err ~= nil and err ~= "") then
         log(ctx, "vertical request to service failed: " .. err)
         return
-    end
-
-    local j = json.decode(resp)
-    if (j == nil or j.hosts == nil) then
+    elseif (resp.status_code < 200 or resp.status_code >= 400) then
+        log(ctx, "vertical request to service returned with status: " .. resp.status)
         return
     end
 
-    for _, sub in pairs(j.hosts) do
-        new_name(ctx, sub)
+    local d = json.decode(resp.body)
+    if (d == nil) then
+        log(ctx, "failed to decode the JSON response")
+        return
+    elseif (d.hosts == nil or #(d.hosts) == 0) then
+        return
+    end
+
+    for _, sub in pairs(d.hosts) do
+        if (sub ~= nil and sub ~= "") then
+            new_name(ctx, sub)
+        end
     end
 end
 

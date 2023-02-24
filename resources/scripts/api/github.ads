@@ -1,10 +1,13 @@
--- Copyright 2020-2021 Jeff Foley. All rights reserved.
+-- Copyright © by Jeff Foley 2017-2023. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+-- SPDX-License-Identifier: Apache-2.0
 
 local json = require("json")
 
 name = "GitHub"
 type = "api"
+
+local rate_error_url = "https://docs.github.com/rest/overview/resources-in-the-rest-api#rate-limiting"
 
 function start()
     set_rate_limit(7)
@@ -13,7 +16,7 @@ end
 function check()
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -26,7 +29,7 @@ end
 function vertical(ctx, domain)
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -37,50 +40,62 @@ function vertical(ctx, domain)
     for i=1,100 do
         local resp, err = request(ctx, {
             ['url']=build_url(domain, i),
-            headers={['Authorization']="token " .. c.key},
+            ['header']={['Authorization']="token " .. c.key},
         })
         if (err ~= nil and err ~= "") then
             log(ctx, "vertical request to service failed: " .. err)
             return
+        elseif (resp.status_code < 200 or resp.status_code >= 400) then
+            log(ctx, "vertical request to service returned with status: " .. resp.status)
+            return
         end
 
-        local d = json.decode(resp)
-        if (d == nil or d['total_count'] == 0 or #(d.items) == 0) then
+        local d = json.decode(resp.body)
+        if (d == nil) then
+            log(ctx, "failed to decode the JSON response")
+            return
+        elseif (d.total_count == nil or d.total_count == 0 or #(d.items) == 0) then
             return
         end
 
         for _, item in pairs(d.items) do
-            local rate_limited = search_item(ctx, item)
-            if rate_limited == true then
+            if (item ~= nil and item.url ~= nil and 
+                item.url ~= "" and search_item(ctx, item.url)) then
                 return
             end
         end
     end
 end
 
-function search_item(ctx, item)
-    local info, err = request(ctx, {['url']=item.url})
+function search_item(ctx, url)
+    local resp, err = request(ctx, {['url']=url})
     if (err ~= nil and err ~= "") then
         log(ctx, "first search_item request to service failed: " .. err)
-        return
+        return true
+    elseif (resp.status_code < 200 or resp.status_code >= 400) then
+        log(ctx, "first search_item request to service returned with status: " .. resp.status)
+        return true
     end
 
-    local data = json.decode(info)
-    if (data == nil or data['download_url'] == nil) then
-        if (data ~= nil and data['documentation_url'] == "https://docs.github.com/rest/overview/resources-in-the-rest-api#rate-limiting") then
-            log(ctx, "API rate limit exceeded")
-            return true
-        end
-
-        return
+    local d = json.decode(resp.body)
+    if (d == nil) then
+        log(ctx, "failed to decode the JSON response")
+        return true
+    elseif (d.download_url == nil or d.download_url == rate_error_url)
+        log(ctx, "API rate limit exceeded")
+        return true
     end
 
-    local content, err = request(ctx, {['url']=data['download_url']})
+    resp, err = request(ctx, {['url']=d.download_url})
     if (err ~= nil and err ~= "") then
         log(ctx, "second search_item request to service failed: " .. err)
+        return
+    elseif (resp.status_code < 200 or resp.status_code >= 400) then
+        log(ctx, "second search_item request to service returned with status: " .. resp.status)
+        return
     end
 
-    send_names(ctx, content)
+    send_names(ctx, resp.body)
 end
 
 function build_url(domain, pagenum)

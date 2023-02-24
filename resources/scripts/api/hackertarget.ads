@@ -1,5 +1,6 @@
--- Copyright 2017-2021 Jeff Foley. All rights reserved.
+-- Copyright © by Jeff Foley 2017-2023. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+-- SPDX-License-Identifier: Apache-2.0
 
 local json = require("json")
 
@@ -13,12 +14,12 @@ end
 function vertical(ctx, domain)
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
     local key = ""
-    if (c ~= nil and c.key ~= nil) then
+    if (c ~= nil and c.key ~= nil and c.key ~= "") then
         key = c.key
     end
 
@@ -42,18 +43,24 @@ function asn(ctx, addr, asn)
     if (err ~= nil and err ~= "") then
         log(ctx, "asn request to service failed: " .. err)
         return
+    elseif (resp.status_code < 200 or resp.status_code >= 400) then
+        log(ctx, "asn request to service returned with status: " .. resp.status)
+        return
     end
 
-    local j = json.decode("{\"results\": [" .. resp .. "]}")
-    if (j == nil or #(j.results) < 4) then
+    local d = json.decode("{\"results\": [" .. resp.body .. "]}")
+    if (d == nil) then
+        log(ctx, "failed to decode the JSON response")
+        return
+    elseif (d.results == nil or #(d.results) < 4) then
         return
     end
 
     new_asn(ctx, {
         ['addr']=addr,
-        ['asn']=tonumber(j.results[2]),
-        prefix=j.results[3],
-        desc=j.results[4],
+        ['asn']=tonumber(d.results[2]),
+        ['prefix']=d.results[3],
+        ['desc']=d.results[4],
     })
 end
 

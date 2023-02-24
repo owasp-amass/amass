@@ -1,5 +1,6 @@
--- Copyright 2021 Jeff Foley. All rights reserved.
+-- Copyright © by Jeff Foley 2017-2023. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+-- SPDX-License-Identifier: Apache-2.0
 
 name = "360PassiveDNS"
 type = "api"
@@ -11,7 +12,7 @@ end
 function check()
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -24,7 +25,7 @@ end
 function vertical(ctx, domain)
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -33,8 +34,8 @@ function vertical(ctx, domain)
     end
 
     scrape(ctx, {
-        url=build_url(domain),
-        headers={
+        ['url']=build_url(domain),
+        ['header']={
             ['Accept']="application/json",
             ['X-Authtoken']=c.key,
         },

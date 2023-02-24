@@ -16,7 +16,7 @@ end
 function check()
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -29,7 +29,7 @@ end
 function vertical(ctx, domain)
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -55,7 +55,7 @@ end
 function query(ctx, url, ts, key)
     local resp, err = request(ctx, {
         ['url']=url,
-        ['headers']={
+        ['header']={
             ['X-API-Key']=key,
             ['Accept']="application/x-ndjson",
         },
@@ -63,16 +63,19 @@ function query(ctx, url, ts, key)
     if (err ~= nil and err ~= "") then
         log(ctx, "vertical request to service failed: " .. err)
         return
+    elseif (resp.status_code < 200 or resp.status_code >= 400) then
+        log(ctx, "vertical request to service returned with status: " .. resp.status)
+        return
     end
 
-    for line in magiclines(resp) do
-        local j = json.decode(line)
+    for line in magiclines(resp.body) do
+        local d = json.decode(line)
 
-        if (j ~= nil and j['obj'] ~= nil) then
-            local obj = j['obj']
+        if (d ~= nil and d['obj'] ~= nil) then
+            local obj = d['obj']
 
-            if (obj.time_last ~= nil and obj.time_last >= ts and 
-                obj.rrname ~= nil and obj.rrname ~= "") then
+            if (obj.rrname ~= nil and obj.rrname ~= "" and 
+                obj.time_last ~= nil and obj.time_last >= ts) then
                 new_name(ctx, obj.rrname)
             end
         end
@@ -85,10 +88,12 @@ end
 
 function magiclines(str)
     local pos = 1;
+
     return function()
-        if not pos then return nil end
-        local  p1, p2 = string.find(str, "\r?\n", pos)
+        if (not pos) then return nil end
+
         local line
+        local  p1, p2 = string.find(str, "\r?\n", pos)
         if p1 then
             line = str:sub(pos, p1 - 1)
             pos = p2 + 1
@@ -96,6 +101,7 @@ function magiclines(str)
             line = str:sub(pos)
             pos = nil
         end
+
         return line
     end
 end

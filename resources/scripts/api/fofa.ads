@@ -1,5 +1,6 @@
--- Copyright 2022 Jeff Foley. All rights reserved.
+-- Copyright © by Jeff Foley 2017-2023. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+-- SPDX-License-Identifier: Apache-2.0
 
 local json = require("json")
 local url = require("url")
@@ -14,7 +15,7 @@ end
 function check()
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -28,7 +29,7 @@ end
 function vertical(ctx, domain)
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -39,28 +40,31 @@ function vertical(ctx, domain)
 
     local p = 1
     while(true) do
-        local resp, err = request(ctx, {
-            ['url']=build_url(domain, c.username, c.key, p)
-        })
+        local resp, err = request(ctx, {['url']=build_url(domain, c.username, c.key, p)})
         if (err ~= nil and err ~= "") then
             log(ctx, "vertical request to service failed: " .. err)
             return
-        end
-
-        local j = json.decode(resp)
-        if (j == nil or j.error == true or j.size == 0) then
-            if (j.errmsg ~= nil and j.errmsg ~= "") then
-                log(ctx, "vertical request to service failed: " .. j.errmsg)
-            end
-
+        elseif (resp.status_code < 200 or resp.status_code >= 400) then
+            log(ctx, "vertical request to service returned with status: " .. resp.status)
             return
         end
 
-        for _, result in pairs(j.results) do
+        local d = json.decode(resp.body)
+        if (d == nil) then
+            log(ctx, "failed to decode the JSON response")
+            return
+        elseif (d.error == true or d.size == 0) then
+            if (d.errmsg ~= nil and d.errmsg ~= "") then
+                log(ctx, "error in vertical service response: " .. d.errmsg)
+            end
+            return
+        end
+
+        for _, result in pairs(d.results) do
             send_names(ctx, result)
         end
 
-        if j.size < 10000 then
+        if d.size < 10000 then
             return
         end
         i = i + 1

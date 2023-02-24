@@ -12,7 +12,7 @@ end
 function check()
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -25,7 +25,7 @@ end
 function vertical(ctx, domain)
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -36,25 +36,29 @@ function vertical(ctx, domain)
     local ok = commercial_api_query(ctx, domain, c.key)
     if not ok then
         scrape(ctx, {
-            url=build_url(domain),
-            headers={['x-api-key']=c.key},
+            ['url']=build_url(domain),
+            ['header']={['x-api-key']=c.key},
         })
     end
 end
 
 function commercial_api_query(ctx, domain, key)
     local resp, err = request(ctx, {
-        url="https://bufferover-run-tls.p.rapidapi.com/ipv4/dns?q=." .. domain,
-        headers={
+        ['url']="https://bufferover-run-tls.p.rapidapi.com/ipv4/dns?q=." .. domain,
+        ['header']={
             ['x-rapidapi-host']="bufferover-run-tls.p.rapidapi.com",
             ['x-rapidapi-key']=key,
         },
     })
     if (err ~= nil and err ~= "") then
+        log(ctx, "commercial_api_query to service failed: " .. err)
+        return false
+    elseif (resp.status_code < 200 or resp.status_code >= 400) then
+        log(ctx, "commercial_api_query to service returned with status: " .. resp.status)
         return false
     end
 
-    send_names(ctx, resp)
+    send_names(ctx, resp.body)
     return true
 end
 

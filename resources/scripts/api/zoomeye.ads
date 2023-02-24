@@ -1,5 +1,6 @@
--- Copyright 2020-2021 Jeff Foley. All rights reserved.
+-- Copyright © by Jeff Foley 2017-2023. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+-- SPDX-License-Identifier: Apache-2.0
 
 local json = require("json")
 
@@ -13,7 +14,7 @@ end
 function check()
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -27,7 +28,7 @@ end
 function vertical(ctx, domain)
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -37,61 +38,75 @@ function vertical(ctx, domain)
     end
 
     local token = bearer_token(ctx, c.username, c.password)
-    if token == "" then
+    if (token == "") then
         return
     end
 
     local resp, err = request(ctx, {
         ['url']="https://api.zoomeye.org/host/search?query=hostname:*." .. domain,
-        headers={['Authorization']="JWT " .. token},
+        ['header']={['Authorization']="JWT " .. token},
     })
     if (err ~= nil and err ~= "") then
         log(ctx, "vertical request to service failed: " .. err)
         return
+    elseif (resp.status_code < 200 or resp.status_code >= 400) then
+        log(ctx, "vertical request to service returned with status: " .. resp.status)
+        return
     end
 
-    local d = json.decode(resp)
-    if (d == nil or d.total == 0 or d.available == 0 or #(d.matches) == 0) then
+    local d = json.decode(resp.body)
+    if (d == nil) then
+        log(ctx, "failed to decode the JSON response")
+        return
+    elseif (d.total == nil or d.total == 0 or d.available == nil or d.available == 0) then
         return
     end
 
     for i, host in pairs(d.matches) do
-        if (host ~= nil and host['rdns'] ~= nil and host['rdns'] ~= "") then
-            new_name(ctx, host['rdns'])
-        end
-        if (host ~= nil and host['rdns_new'] ~= nil and host['rdns_new'] ~= "") then
-            new_name(ctx, host['rdns_new'])
-        end
-        if (host ~= nil and host['ip'] ~= nil and host['ip'] ~= "") then
-            new_addr(ctx, host['ip'], domain)
+        if (host ~= nil) then
+            if (host['rdns'] ~= nil and host['rdns'] ~= "") then
+                new_name(ctx, host['rdns'])
+            end
+            if (host['rdns_new'] ~= nil and host['rdns_new'] ~= "") then
+                new_name(ctx, host['rdns_new'])
+            end
+            if (host['ip'] ~= nil and host['ip'] ~= "") then
+                new_addr(ctx, host['ip'], domain)
+            end
         end
     end
     -- Just in case
-    send_names(ctx, resp)
+    send_names(ctx, resp.body)
 end
 
 function bearer_token(ctx, username, password)
     local body, err = json.encode({
-        username=username, 
-        password=password,
+        ['username']=username, 
+        ['password']=password,
     })
     if (err ~= nil and err ~= "") then
         return ""
     end
 
-    resp, err = request(ctx, {
-        method="POST",
-        data=body,
+    local resp, err = request(ctx, {
         ['url']="https://api.zoomeye.org/user/login",
-        headers={['Content-Type']="application/json"},
+        ['method']="POST",
+        ['header']={['Content-Type']="application/json"},
+        ['body']=body,
     })
     if (err ~= nil and err ~= "") then
         log(ctx, "bearer_token request to service failed: " .. err)
-        return ""
+        return
+    elseif (resp.status_code < 200 or resp.status_code >= 400) then
+        log(ctx, "bearer_token request to service returned with status: " .. resp.status)
+        return
     end
 
-    local d = json.decode(resp)
-    if (d == nil or d.access_token == nil or d.access_token == "") then
+    local d = json.decode(resp.body)
+    if (d == nil) then
+        log(ctx, "failed to decode the bearer_token response")
+        return ""
+    elseif (d.access_token == nil or d.access_token == "") then
         return ""
     end
 

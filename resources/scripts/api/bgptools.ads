@@ -127,8 +127,11 @@ function get_table_file(ctx)
         ['headers']={['User-Agent']=useragent},
     })
     if (err ~= nil and err ~= "") then
-        log(ctx, "failed to obtain the table.jsonl file: " .. err)
-        return false
+        log(ctx, "table.jsonl file request to service failed: " .. err)
+        return
+    elseif (resp.status_code < 200 or resp.status_code >= 400) then
+        log(ctx, "table.jsonl file request to service returned with status: " .. resp.status)
+        return
     end
 
     local prefixes = io.open(bgptoolsTableFile, "w")
@@ -137,7 +140,7 @@ function get_table_file(ctx)
         return false
     end
 
-    prefixes:write(resp)
+    prefixes:write(resp.body)
     prefixes:close()
     return true
 end

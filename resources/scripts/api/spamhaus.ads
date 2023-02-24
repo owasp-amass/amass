@@ -1,5 +1,6 @@
--- Copyright 2021 Jeff Foley. All rights reserved.
+-- Copyright © by Jeff Foley 2017-2023. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+-- SPDX-License-Identifier: Apache-2.0
 
 local json = require("json")
 
@@ -13,7 +14,7 @@ end
 function check()
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -27,7 +28,7 @@ end
 function vertical(ctx, domain)
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -37,13 +38,13 @@ function vertical(ctx, domain)
     end
 
     local token = bearer_token(ctx, c.username, c.password)
-    if token == "" then
+    if (token == "") then
         return
     end
 
     local resp, err = request(ctx, {
         ['url']=build_url(domain),
-        headers={
+        ['header']={
             ['Accept']="application/json",
             ['Content-Type']="application/json",
             ['Authorization']="Bearer " .. token,
@@ -52,17 +53,28 @@ function vertical(ctx, domain)
     if (err ~= nil and err ~= "") then
         log(ctx, "vertical request to service failed: " .. err)
         return
-    end
-
-    local d = json.decode(resp)
-    if (d == nil or d.error == true or d.hits == 0) then
+    elseif (resp.status_code < 200 or resp.status_code >= 400) then
+        log(ctx, "vertical request to service returned with status: " .. resp.status)
         return
     end
 
-    for _, record in pairs(d.records) do
-        new_name(ctx, record.rrname)
-        if (record.rrtype == "A" or record.rrtype == "AAAA") then
-             new_addr(ctx, record.rdata, record.rrname)
+    local d = json.decode(resp.body)
+    if (d == nil) then
+        log(ctx, "failed to decode the JSON response")
+        return
+    elseif (d.error ~= nil and d.error == true) then
+        log(ctx, "error returned in the JSON response")
+        return
+    elseif (d.hits == nil or d.hits == 0 or d.results == nil) then
+        return
+    end
+
+    for _, r in pairs(d.records) do
+        if (r.rrname ~= nil and r.rrname ~= "") then
+            new_name(ctx, r.rrname)
+        end
+        if (r.rrtype ~= nil and (r.rrtype == "A" or r.rrtype == "AAAA")) then
+             new_addr(ctx, r.rdata, r.rrname)
         end
     end
 end
@@ -80,22 +92,29 @@ function bearer_token(ctx, username, password)
         return ""
     end
 
-    resp, err = request(ctx, {
-        method="POST",
-        data=body,
+    local resp, err = request(ctx, {
         ['url']="https://api-pdns.spamhaustech.com/v2/login",
-        headers={
+        ['method']="POST",
+        ['header']={
             ['Accept']="application/json",
             ['Content-Type']="application/json",
         },
+        ['body']=body,
     })
     if (err ~= nil and err ~= "") then
         log(ctx, "bearer_token request to service failed: " .. err)
         return ""
+    elseif (resp.status_code < 200 or resp.status_code >= 400) then
+        log(ctx, "bearer_token request to service returned with status: " .. resp.status)
+        return ""
     end
 
-    local d = json.decode(resp)
-    if (d == nil or d.token == nil or d.token == "") then
+    local d = json.decode(resp.body)
+    if (d == nil) then
+        log(ctx, "failed to decode the bearer_token response")
+        return ""
+    elseif (d.token == nil or d.token == "") then
+        log(ctx, "the bearer_token response did not include the token data")
         return ""
     end
 
