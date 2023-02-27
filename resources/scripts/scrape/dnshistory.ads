@@ -33,7 +33,7 @@ function vertical(ctx, domain)
             new_name(ctx, match[2])
         end
 
-        local nxt = find(page, "next</a>")
+        local nxt = find(resp.body, "next</a>")
         if (nxt == nil or #nxt == 0) then
             return
         end

@@ -138,7 +138,7 @@ function as_info(ctx, asn)
     if (d == nil) then
         log(ctx, "failed to decode the JSON as_info response")
         return nil
-    elseif d.data == nil or d.status ~= "ok" or d.status_message ~= "Query was successful") then
+    elseif (d.data == nil or d.status ~= "ok" or d.status_message ~= "Query was successful") then
         return nil
     end
 

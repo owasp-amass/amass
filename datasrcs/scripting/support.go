@@ -28,6 +28,10 @@ func (s *Script) contextToUserData(ctx context.Context) *lua.LUserData {
 }
 
 func contextExpired(ctx context.Context) bool {
+	if ctx == nil {
+		return true
+	}
+
 	select {
 	case <-ctx.Done():
 		return true

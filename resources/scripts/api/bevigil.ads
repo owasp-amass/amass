@@ -54,7 +54,7 @@ function vertical(ctx, domain)
     if (d == nil) then
         log(ctx, "failed to decode the JSON response")
         return
-    else (d.subdomains == nil or #(d.subdomains) == 0) then
+    elseif (d.subdomains == nil or #(d.subdomains) == 0) then
         return
     end
 

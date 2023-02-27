@@ -14,7 +14,7 @@ end
 function vertical(ctx, domain)
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -48,24 +48,27 @@ function query(ctx, domain, hdrs, endpoint)
 end
 
 function extract(ctx, url, hdrs, endpoint)
-    local _, body, status, err = request(ctx, {
+    local resp, err = request(ctx, {
         ['url']=url,
-        ['headers']=hdrs,
+        ['header']=hdrs,
     })
-    if ((err ~= nil and err ~= "") or status < 200 or status >= 400) then
-        log(ctx, endpoint .. " request to service failed with status code " .. tostring(status) .. ": " .. err)
+    if (err ~= nil and err ~= "") then
+        log(ctx, endpoint .. " request to service failed: " .. err)
+        return nil
+    elseif (resp.status_code < 200 or resp.status_code >= 400) then
+        log(ctx, endpoint .. " request to service returned with status: " .. resp.status)
         return nil
     end
 
-    local j = json.decode(body)
-    if (j == nil) then
+    local d = json.decode(resp.body)
+    if (d == nil) then
         log(ctx, "failed to decode the " .. endpoint .. " JSON response")
         return nil
-    elseif (j[endpoint] == nil or #(j[endpoint]) == 0) then
+    elseif (d.endpoint == nil or #(d.endpoint) == 0) then
         return nil
     end
 
-    for _, e in pairs(j[endpoint]) do
+    for _, e in pairs(d.endpoint) do
         if (e.hostname ~= nil and e.hostname ~= "") then
             new_name(ctx, e.hostname)
         end
@@ -80,7 +83,7 @@ end
 function horizontal(ctx, domain)
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -102,24 +105,27 @@ end
 function get_whois_emails(ctx, domain, hdrs)
     local emails = {}
 
-    local _, body, status, err = request(ctx, {
+    local resp, err = request(ctx, {
         ['url']=whois_url(domain),
-        ['headers']=hdrs,
+        ['header']=hdrs,
     })
-    if ((err ~= nil and err ~= "") or status < 200 or status >= 400) then
-        log(ctx, "whois request to service failed with status code " .. tostring(status) .. ": " .. err)
+    if (err ~= nil and err ~= "") then
+        log(ctx, "whois request to service failed: " .. err)
+        return emails
+    elseif (resp.status_code < 200 or resp.status_code >= 400) then
+        log(ctx, "whois request to service returned with status: " .. resp.status)
         return emails
     end
 
-    local j = json.decode(body)
-    if (j == nil) then
+    local d = json.decode(resp.body)
+    if (d == nil) then
         log(ctx, "failed to decode the whois JSON response")
         return emails
-    elseif (j.count == nil or j.count == 0 or #(j.data) == 0) then
+    elseif (d.count == nil or d.count == 0 or #(d.data) == 0) then
         return emails
     end
 
-    for _, e in pairs(j.data) do
+    for _, e in pairs(d.data) do
         if (e.key ~= nil and e.key == "emails") then
             local parts = split(e.value, "@")
 
@@ -134,25 +140,27 @@ function whois_url(domain)
 end
 
 function reverse_whois(ctx, domain, hdrs, email)
-    local _, body, status, err = request(ctx, {
+    local resp, err = request(ctx, {
         ['url']=reverse_whois_url(email),
-        ['headers']=hdrs,
+        ['header']=hdrs,
     })
-    if ((err ~= nil and err ~= "") or status < 200 or status >= 400) then
-        log(ctx, "reverse whois request to service failed with status code " .. tostring(status) .. ": " .. err)
+    if (err ~= nil and err ~= "") then
+        log(ctx, "reverse_whois request to service failed: " .. err)
+        return
+    elseif (resp.status_code < 200 or resp.status_code >= 400) then
+        log(ctx, "reverse_whois request to service returned with status: " .. resp.status)
         return
     end
-    body = "{\"results\":" .. body .. "}"
 
-    local j = json.decode(body)
-    if (j == nil) then
+    local d = json.decode("{\"results\":" .. resp.body .. "}")
+    if (d == nil) then
         log(ctx, "failed to decode the reverse whois JSON response")
         return
-    elseif (j.results == nil or #(j.results) == 0) then
+    elseif (d.results == nil or #(d.results) == 0) then
         return
     end
 
-    for _, e in pairs(j.results) do
+    for _, e in pairs(d.results) do
         if (e.domain ~= nil and e.domain ~= "") then
             associated(ctx, domain, e.domain)
         end

@@ -52,7 +52,7 @@ function vertical(ctx, domain)
             ['header']={
                 ['Content-Type']="application/json",
                 ['X-QuakeToken']=c.key,
-            }
+            },
             ['body']=body,
         })
         if (err ~= nil and err ~= "") then

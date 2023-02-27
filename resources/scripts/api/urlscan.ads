@@ -59,11 +59,11 @@ function subs(ctx, id)
     if (d == nil) then
         log(ctx, "failed to decode the JSON subs response")
         return
-    else (d.lists == nil or #(d['lists']linkDomains) == 0) then
+    elseif (d.lists == nil or #(d['lists'].linkDomains) == 0) then
         return
     end
 
-    for _, sub in pairs(d['lists']linkDomains) do
+    for _, sub in pairs(d['lists'].linkDomains) do
         if (sub ~= nil and sub ~= "") then
             new_name(ctx, sub)
         end

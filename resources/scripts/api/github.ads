@@ -81,7 +81,7 @@ function search_item(ctx, url)
     if (d == nil) then
         log(ctx, "failed to decode the JSON response")
         return true
-    elseif (d.download_url == nil or d.download_url == rate_error_url)
+    elseif (d.download_url == nil or d.download_url == rate_error_url) then
         log(ctx, "API rate limit exceeded")
         return true
     end

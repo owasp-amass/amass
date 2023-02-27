@@ -17,7 +17,7 @@ import (
 // Wrapper that allows scripts to make HTTP client requests.
 func (s *Script) request(L *lua.LState) int {
 	ctx, err := extractContext(L.CheckUserData(1))
-	if err != nil || contextExpired(ctx) {
+	if err != nil {
 		L.Push(lua.LNil)
 		L.Push(lua.LString("No user data parameter or context expired"))
 		return 2
@@ -30,13 +30,6 @@ func (s *Script) request(L *lua.LState) int {
 		return 2
 	}
 
-	var body string
-	if method, ok := getStringField(L, opt, "method"); ok && strings.ToLower(method) == "post" {
-		if d, ok := getStringField(L, opt, "body"); ok {
-			body = d
-		}
-	}
-
 	url, found := getStringField(L, opt, "url")
 	if !found {
 		L.Push(lua.LNil)
@@ -44,17 +37,25 @@ func (s *Script) request(L *lua.LState) int {
 		return 2
 	}
 
-	hdrs := make(map[string]string)
+	var hdr http.Header
 	lv := L.GetField(opt, "header")
 	if tbl, ok := lv.(*lua.LTable); ok {
+		hdr = make(http.Header)
 		tbl.ForEach(func(k, v lua.LValue) {
-			hdrs[k.String()] = v.String()
+			hdr[k.String()] = v.String()
 		})
+	}
+
+	var body string
+	if method, ok := getStringField(L, opt, "method"); ok && strings.ToLower(method) == "post" {
+		if d, ok := getStringField(L, opt, "body"); ok {
+			body = d
+		}
 	}
 
 	id, _ := getStringField(L, opt, "id")
 	pass, _ := getStringField(L, opt, "pass")
-	resp, err := s.req(ctx, url, body, hdrs, &http.BasicAuth{
+	resp, err := s.req(ctx, url, body, hdr, &http.BasicAuth{
 		Username: id,
 		Password: pass,
 	})
@@ -126,7 +127,7 @@ func responseToTable(L *lua.LState, resp *http.Response) *lua.LTable {
 // Wrapper so that scripts can scrape the contents of a GET request for subdomain names in scope.
 func (s *Script) scrape(L *lua.LState) int {
 	ctx, err := extractContext(L.CheckUserData(1))
-	if err != nil || contextExpired(ctx) {
+	if err != nil {
 		L.Push(lua.LFalse)
 		return 1
 	}
@@ -137,6 +138,21 @@ func (s *Script) scrape(L *lua.LState) int {
 		return 1
 	}
 
+	url, found := getStringField(L, opt, "url")
+	if !found {
+		L.Push(lua.LFalse)
+		return 1
+	}
+
+	var hdr http.Header
+	lv := L.GetField(opt, "header")
+	if tbl, ok := lv.(*lua.LTable); ok {
+		hdr = make(http.Header)
+		tbl.ForEach(func(k, v lua.LValue) {
+			hdr[k.String()] = v.String()
+		})
+	}
+
 	var body string
 	if method, ok := getStringField(L, opt, "method"); ok && strings.ToLower(method) == "post" {
 		if d, ok := getStringField(L, opt, "body"); ok {
@@ -144,25 +160,11 @@ func (s *Script) scrape(L *lua.LState) int {
 		}
 	}
 
-	url, found := getStringField(L, opt, "url")
-	if !found {
-		L.Push(lua.LFalse)
-		return 1
-	}
-
-	hdrs := make(map[string]string)
-	lv := L.GetField(opt, "header")
-	if tbl, ok := lv.(*lua.LTable); ok {
-		tbl.ForEach(func(k, v lua.LValue) {
-			hdrs[k.String()] = v.String()
-		})
-	}
-
 	id, _ := getStringField(L, opt, "id")
 	pass, _ := getStringField(L, opt, "pass")
 
 	sucess := lua.LFalse
-	if resp, err := s.req(ctx, url, body, hdrs, &http.BasicAuth{
+	if resp, err := s.req(ctx, url, body, hdr, &http.BasicAuth{
 		Username: id,
 		Password: pass,
 	}); err == nil && resp.StatusCode >= 200 && resp.StatusCode < 400 {
@@ -177,13 +179,13 @@ func (s *Script) scrape(L *lua.LState) int {
 	return 1
 }
 
-func (s *Script) req(ctx context.Context, url, data string, hdrs http.Header, auth *http.BasicAuth) (*http.Response, error) {
+func (s *Script) req(ctx context.Context, url, data string, hdr http.Header, auth *http.BasicAuth) (*http.Response, error) {
 	cfg := s.sys.Config()
 	// Check for cached responses first
 	dsc := cfg.GetDataSourceConfig(s.String())
 	if dsc != nil && dsc.TTL > 0 {
 		if r, err := s.getCachedResponse(ctx, url+data, dsc.TTL); err == nil {
-			return r, err
+			return r, nil
 		}
 	}
 
@@ -193,7 +195,7 @@ func (s *Script) req(ctx context.Context, url, data string, hdrs http.Header, au
 	}
 
 	numRateLimitChecks(s, s.seconds)
-	resp, err := http.RequestWebPage(ctx, url, b, hdrs, auth)
+	resp, err := http.RequestWebPage(ctx, url, b, hdr, auth)
 	if err != nil {
 		if cfg.Verbose {
 			cfg.Log.Printf("%s: %s: %v", s.String(), url, err)
@@ -208,7 +210,7 @@ func (s *Script) req(ctx context.Context, url, data string, hdrs http.Header, au
 func (s *Script) crawl(L *lua.LState) int {
 	cfg := s.sys.Config()
 	ctx, err := extractContext(L.CheckUserData(1))
-	if err != nil || contextExpired(ctx) {
+	if err != nil {
 		return 0
 	}
 
