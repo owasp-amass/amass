@@ -147,7 +147,6 @@ func (dt *dnsTask) rootTaskFunc() pipeline.TaskFunc {
 
 		if r != nil && dt.enum.Config.IsDomainInScope(r.Name) {
 			go dt.subdomainQueries(ctx, r, tp)
-			go dt.queryServiceNames(ctx, r, tp)
 		}
 		return data, nil
 	})
@@ -567,56 +566,6 @@ func (dt *dnsTask) querySPF(ctx context.Context, name string, ch chan []requests
 		}
 	}
 	ch <- nil
-}
-
-func (dt *dnsTask) queryServiceNames(ctx context.Context, req *requests.DNSRequest, tp pipeline.TaskParams) {
-	var wg sync.WaitGroup
-
-	wg.Add(len(popularSRVRecords))
-	for _, name := range popularSRVRecords {
-		go dt.querySingleServiceName(ctx, name+"."+req.Name, req.Domain, &wg, tp)
-	}
-	wg.Wait()
-}
-
-func (dt *dnsTask) querySingleServiceName(ctx context.Context, name, domain string, wg *sync.WaitGroup, tp pipeline.TaskParams) {
-	defer wg.Done()
-
-	select {
-	case <-ctx.Done():
-		return
-	default:
-	}
-
-	tp.Pipeline().IncDataItemCount()
-	defer tp.Pipeline().DecDataItemCount()
-
-	resp, err := dt.enum.fwdQuery(ctx, name, dns.TypeSRV)
-	if err != nil || len(resp.Answer) == 0 {
-		return
-	}
-
-	ans := resolve.ExtractAnswers(resp)
-	if len(ans) == 0 {
-		return
-	}
-
-	rr := resolve.AnswersByType(ans, dns.TypeSRV)
-	if len(rr) == 0 {
-		return
-	}
-
-	req := &requests.DNSRequest{
-		Name:    name,
-		Domain:  domain,
-		Records: convertAnswers(rr),
-		Tag:     requests.DNS,
-		Source:  "DNS",
-	}
-
-	if req.Valid() && !dt.enum.Sys.TrustedResolvers().WildcardDetected(ctx, resp, domain) {
-		pipeline.SendData(ctx, "store", req, tp)
-	}
 }
 
 func (e *Enumeration) fwdQuery(ctx context.Context, name string, qtype uint16) (*dns.Msg, error) {

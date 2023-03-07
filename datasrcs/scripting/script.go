@@ -9,13 +9,11 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
-	"time"
 
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/net/dns"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/systems"
-	"github.com/caffix/queue"
 	"github.com/caffix/service"
 	luaurl "github.com/cjoudrey/gluaurl"
 	lua "github.com/yuin/gopher-lua"
@@ -49,7 +47,6 @@ type Script struct {
 	seconds    int
 	ctx        context.Context
 	cancel     context.CancelFunc
-	queue      queue.Queue
 }
 
 // NewScript returns the object initialized, but not yet started.
@@ -65,7 +62,6 @@ func NewScript(script string, sys systems.System) *Script {
 		stop:     make(chan struct{}, 1),
 		sys:      sys,
 		subre:    re,
-		queue:    queue.NewQueue(),
 	}
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 	L := s.newLuaState(sys.Config())
@@ -90,7 +86,6 @@ func NewScript(script string, sys systems.System) *Script {
 
 	s.BaseService = *service.NewBaseService(s, name)
 	s.assignCallbacks()
-	go s.manageOutput()
 	go s.requests()
 	return s
 }
@@ -119,6 +114,7 @@ func (s *Script) newLuaState(cfg *config.Config) *lua.LState {
 	L.SetGlobal("mtime", L.NewFunction(s.modDateTime))
 	L.SetGlobal("new_name", L.NewFunction(s.newName))
 	L.SetGlobal("send_names", L.NewFunction(s.sendNames))
+	L.SetGlobal("send_dns_records", L.NewFunction(s.sendDNSRecords))
 	L.SetGlobal("new_addr", L.NewFunction(s.newAddr))
 	L.SetGlobal("new_asn", L.NewFunction(s.newASN))
 	L.SetGlobal("associated", L.NewFunction(s.associated))
@@ -127,6 +123,8 @@ func (s *Script) newLuaState(cfg *config.Config) *lua.LState {
 	L.SetGlobal("scrape", L.NewFunction(s.scrape))
 	L.SetGlobal("crawl", L.NewFunction(s.crawl))
 	L.SetGlobal("resolve", L.NewFunction(s.resolve))
+	L.SetGlobal("zone_walk", L.NewFunction(s.zoneWalk))
+	L.SetGlobal("zone_transfer", L.NewFunction(s.wrapZoneTransfer))
 	L.SetGlobal("output_dir", L.NewFunction(s.outputdir))
 	L.SetGlobal("set_rate_limit", L.NewFunction(s.setRateLimit))
 	L.SetGlobal("check_rate_limit", L.NewFunction(s.checkRateLimit))
@@ -194,75 +192,19 @@ func (s *Script) OnStop() error {
 	return nil
 }
 
-func (s *Script) manageOutput() {
-loop:
-	for {
-		select {
-		case <-s.Done():
-			break loop
-		case <-s.ctx.Done():
-			break loop
-		case <-s.queue.Signal():
-			if element, ok := s.queue.Next(); ok {
-				select {
-				case <-s.Done():
-					break loop
-				case <-s.ctx.Done():
-					break loop
-				case s.Output() <- element:
-				}
-			}
-		}
-	}
-	// Empty the queue
-	s.queue.Process(func(e interface{}) {})
-	// Empty the output channel
-	for {
-		select {
-		case <-s.Output():
-		default:
-			return
-		}
-	}
-}
-
 func (s *Script) requests() {
-	ready := make(chan struct{}, 1)
-	t := time.NewTimer(100 * time.Millisecond)
-	defer t.Stop()
-loop:
 	for {
 		select {
 		case <-s.Done():
-			break loop
+			return
 		case <-s.ctx.Done():
-			break loop
+			return
 		case <-s.start:
 			s.startScript()
 		case <-s.stop:
 			s.stopScript()
-		case <-ready:
-			select {
-			case in := <-s.Input():
-				s.dispatch(in)
-			default:
-			}
-		case <-t.C:
-			if s.queue.Len() == 0 {
-				select {
-				case ready <- struct{}{}:
-				default:
-				}
-			}
-			t.Reset(100 * time.Millisecond)
-		}
-	}
-	// Empty the input channel
-	for {
-		select {
-		case <-s.Input():
-		default:
-			return
+		case in := <-s.Input():
+			s.dispatch(in)
 		}
 	}
 }

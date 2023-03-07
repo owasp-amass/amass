@@ -8,6 +8,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -55,6 +56,15 @@ var DefaultClient *http.Client
 // Header represents the HTTP headers for requests and responses.
 type Header map[string]string
 
+// Request represents the HTTP request in the Amass preferred format.
+type Request struct {
+	URL    string
+	Method string
+	Header Header
+	Body   string
+	Auth   *BasicAuth
+}
+
 // Response represents the HTTP response in the Amass preferred format.
 type Response struct {
 	Status     string
@@ -101,6 +111,67 @@ func init() {
 	}
 }
 
+// HdrToAmassHeader converts a net/http Header to an Amass Header.
+func HdrToAmassHeader(hdr http.Header) Header {
+	h := make(Header)
+	for k, v := range hdr {
+		if len(v) > 0 {
+			h[k] = strings.Join(v, ", ")
+		}
+	}
+	return h
+}
+
+// ReqToAmassRequest converts a net/http Request to an Amass Request.
+func ReqToAmassRequest(req *http.Request) *Request {
+	var body string
+	if req.Body != nil {
+		if b, err := io.ReadAll(req.Body); err == nil {
+			body = string(b)
+		}
+		_ = req.Body.Close()
+	}
+
+	var ba *BasicAuth
+	if user, pass, ok := req.BasicAuth(); ok {
+		ba = &BasicAuth{
+			Username: user,
+			Password: pass,
+		}
+	}
+
+	return &Request{
+		URL:    req.URL.String(),
+		Method: req.Method,
+		Header: HdrToAmassHeader(req.Header),
+		Body:   body,
+		Auth:   ba,
+	}
+}
+
+// RespToAmassResponse converts a net/http Response to an Amass Response.
+func RespToAmassResponse(resp *http.Response) *Response {
+	var body string
+	if resp.Body != nil {
+		if b, err := io.ReadAll(resp.Body); err == nil {
+			body = string(b)
+		}
+		_ = resp.Body.Close()
+	}
+
+	return &Response{
+		Status:     resp.Status,
+		StatusCode: resp.StatusCode,
+		Proto:      resp.Proto,
+		ProtoMajor: resp.ProtoMajor,
+		ProtoMinor: resp.ProtoMinor,
+		Header:     HdrToAmassHeader(resp.Header),
+		Body:       body,
+		Length:     resp.ContentLength,
+		TLS:        resp.TLS,
+	}
+}
+
 // CopyCookies copies cookies from one domain to another. Some of our data
 // sources rely on shared auth tokens and this avoids sending extra requests
 // to have the site reissue cookies for the other domains.
@@ -124,26 +195,31 @@ func CheckCookie(urlString string, cookieName string) bool {
 }
 
 // RequestWebPage returns the response headers, body, and status code for the provided URL when successful.
-func RequestWebPage(ctx context.Context, u string, body io.Reader, hdrs Header, auth *BasicAuth) (*Response, error) {
-	method := "GET"
-	if body != nil {
-		method = "POST"
+func RequestWebPage(ctx context.Context, r *Request) (*Response, error) {
+	if r == nil {
+		return nil, errors.New("failed to provide a valid Amass HTTP request")
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, u, body)
+	if r.Method == "" {
+		r.Method = "GET"
+	} else if r.Method != "GET" && r.Method != "POST" {
+		return nil, errors.New("failed to provide a valid HTTP method")
+	}
+
+	req, err := http.NewRequestWithContext(ctx, r.Method, r.URL, strings.NewReader(r.Body))
 	if err != nil {
 		return nil, err
 	}
 	req.Close = true
 
-	if auth != nil && auth.Username != "" && auth.Password != "" {
-		req.SetBasicAuth(auth.Username, auth.Password)
+	if r.Auth != nil && r.Auth.Username != "" && r.Auth.Password != "" {
+		req.SetBasicAuth(r.Auth.Username, r.Auth.Password)
 	}
 
 	req.Header.Set("User-Agent", UserAgent)
 	req.Header.Set("Accept", Accept)
 	req.Header.Set("Accept-Language", AcceptLang)
-	for k, v := range hdrs {
+	for k, v := range r.Header {
 		req.Header.Set(k, v)
 	}
 
@@ -151,134 +227,95 @@ func RequestWebPage(ctx context.Context, u string, body io.Reader, hdrs Header, 
 	if err != nil {
 		return nil, err
 	}
-
-	headers := make(Header)
-	for k, v := range resp.Header {
-		if len(k) > 0 && len(v) > 0 {
-			headers[k] = v[0]
-		}
-	}
-
-	var in string
-	defer func() { _ = resp.Body.Close() }()
-	if b, err := io.ReadAll(resp.Body); err == nil {
-		in = string(b)
-	}
-
-	return &Response{
-		Status:     resp.Status,
-		StatusCode: resp.StatusCode,
-		Proto:      resp.Proto,
-		ProtoMajor: resp.ProtoMajor,
-		ProtoMinor: resp.ProtoMinor,
-		Header:     headers,
-		Body:       in,
-		Length:     resp.ContentLength,
-		TLS:        req.TLS,
-	}, nil
+	return RespToAmassResponse(resp), nil
 }
 
-// Crawl will spider the web page at the URL argument looking for DNS names within the scope provided.
-func Crawl(ctx context.Context, u string, scope []string, max int) ([]string, error) {
+// Crawl will spider the web page at the URL argument looking while staying within the scope provided.
+func Crawl(ctx context.Context, u string, scope []string, max int, callback func(*Request, *Response)) error {
 	select {
 	case <-ctx.Done():
-		return nil, fmt.Errorf("the context expired")
+		return fmt.Errorf("the context expired")
 	default:
 	}
 
-	results := stringset.New()
-	defer results.Close()
-
-	g := createCrawler(u, scope, max, results)
-	g.Client = client.NewClient(&client.Options{
-		MaxBodySize:    50 * 1024 * 1024, // 50MB
-		RetryTimes:     2,
-		RetryHTTPCodes: []int{408, 500, 502, 503, 504, 522, 524},
-	})
-	g.Client.Client = http.DefaultClient
-
-	done := make(chan struct{}, 2)
-	go func() {
-		g.Start()
-		close(done)
-	}()
-
-	var err error
-	select {
-	case <-ctx.Done():
-		err = fmt.Errorf("the context expired during the crawl of %s", u)
-	case <-done:
-		if len(results.Slice()) == 0 {
-			err = fmt.Errorf("no DNS names were discovered during the crawl of %s", u)
-		}
-	}
-	return results.Slice(), err
-}
-
-func createCrawler(u string, scope []string, max int, results *stringset.Set) *geziyor.Geziyor {
 	var count int
 	var m sync.Mutex
 	filter := bf.NewDefaultStableBloomFilter(10000, 0.01)
 	defer filter.Reset()
+	attrs := []string{"action", "cite", "data", "formaction",
+		"href", "longdesc", "poster", "src", "srcset", "xmlns"}
+	tags := []string{"a", "area", "audio", "base", "blockquote", "button",
+		"embed", "form", "frame", "frameset", "html", "iframe", "img", "input",
+		"ins", "link", "noframes", "object", "q", "script", "source", "track", "video"}
 
-	return geziyor.NewGeziyor(&geziyor.Options{
+	g := geziyor.NewGeziyor(&geziyor.Options{
 		StartURLs:             []string{u},
-		Timeout:               5 * time.Minute,
 		RobotsTxtDisabled:     true,
 		UserAgent:             UserAgent,
 		LogDisabled:           true,
 		ConcurrentRequests:    5,
-		RequestDelay:          750 * time.Millisecond,
+		RequestDelay:          time.Second,
 		RequestDelayRandomize: true,
 		ParseFunc: func(g *geziyor.Geziyor, r *client.Response) {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+
 			process := func(n string) {
-				if u, err := r.Request.URL.Parse(n); err == nil {
-					host := u.Hostname()
-					if host != "" {
-						results.Insert(host)
-					}
-					if whichDomain(host, scope) == "" {
-						return
-					}
+				u, err := r.Request.URL.Parse(n)
+				if err != nil {
+					return
+				}
+				if host := u.Hostname(); host == "" || whichDomain(host, scope) == "" {
+					return
+				}
 
-					m.Lock()
-					defer m.Unlock()
-
-					if s := u.String(); s != "" && !filter.Test([]byte(s)) {
-						count++
-						// Be sure the crawl has not exceeded the maximum links to be followed
-						if max <= 0 || count < max {
-							filter.Add([]byte(s))
-							g.Get(s, g.Opt.ParseFunc)
-						}
+				m.Lock()
+				if s := u.String(); s != "" && !filter.Test([]byte(s)) {
+					count++
+					// Be sure the crawl has not exceeded the maximum links to be followed
+					if max <= 0 || count < max {
+						filter.Add([]byte(s))
+						g.Get(s, g.Opt.ParseFunc)
 					}
 				}
+				m.Unlock()
 			}
 			tag := func(i int, s *goquery.Selection) {
-				for _, attr := range crawlAttrs() {
+				for _, attr := range attrs {
 					if name, ok := s.Attr(attr); ok {
 						process(name)
 					}
 				}
 			}
-
-			for _, t := range crawlTagNames() {
+			for _, t := range tags {
 				r.HTMLDoc.Find(t).Each(tag)
 			}
+
+			callback(ReqToAmassRequest(r.Request.Request), &Response{
+				Status:     r.Status,
+				StatusCode: r.StatusCode,
+				Proto:      r.Proto,
+				ProtoMajor: r.ProtoMajor,
+				ProtoMinor: r.ProtoMinor,
+				Header:     HdrToAmassHeader(r.Header),
+				Body:       string(r.Body),
+				Length:     r.ContentLength,
+				TLS:        r.TLS,
+			})
 		},
 	})
-}
+	g.Client = client.NewClient(&client.Options{
+		MaxBodySize:    50 * 1024 * 1024, // 50MB
+		RetryTimes:     2,
+		RetryHTTPCodes: []int{408, 500, 502, 503, 504, 522, 524},
+	})
+	g.Client.Client = DefaultClient
 
-// TODO: add the 'srcset' attr
-func crawlAttrs() []string {
-	return []string{"action", "cite", "data", "formaction",
-		"href", "longdesc", "poster", "src", "srcset", "xmlns"}
-}
-
-func crawlTagNames() []string {
-	return []string{"a", "area", "audio", "base", "blockquote", "button",
-		"embed", "form", "frame", "frameset", "html", "iframe", "img", "input",
-		"ins", "link", "noframes", "object", "q", "script", "source", "track", "video"}
+	g.Start()
+	return nil
 }
 
 func whichDomain(name string, scope []string) string {
@@ -306,7 +343,7 @@ func PullCertificateNames(ctx context.Context, addr string, ports []int) []strin
 			// get the correct certificate in the chain
 			certChain := c.ConnectionState().PeerCertificates
 			// create the new requests from names found within the cert
-			names = append(names, namesFromCert(certChain[0])...)
+			names = append(names, NamesFromCert(certChain[0])...)
 			c.Close()
 		}
 
@@ -339,7 +376,8 @@ func TLSConn(ctx context.Context, host string, port int) (*tls.Conn, error) {
 	return c, nil
 }
 
-func namesFromCert(cert *x509.Certificate) []string {
+// NamesFromCert parses DNS names out of a TLS certificate.
+func NamesFromCert(cert *x509.Certificate) []string {
 	var cn string
 
 	for _, name := range cert.Subject.Names {

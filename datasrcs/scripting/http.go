@@ -6,7 +6,7 @@ package scripting
 
 import (
 	"context"
-	"io"
+	"net/url"
 	"strings"
 
 	"github.com/OWASP/Amass/v3/net/dns"
@@ -189,13 +189,19 @@ func (s *Script) req(ctx context.Context, url, data string, hdr http.Header, aut
 		}
 	}
 
-	var b io.Reader
+	method := "GET"
 	if data != "" {
-		b = strings.NewReader(data)
+		method = "POST"
 	}
 
 	numRateLimitChecks(s, s.seconds)
-	resp, err := http.RequestWebPage(ctx, url, b, hdr, auth)
+	resp, err := http.RequestWebPage(ctx, &http.Request{
+		URL:    url,
+		Method: method,
+		Header: hdr,
+		Body:   data,
+		Auth:   auth,
+	})
 	if err != nil {
 		if cfg.Verbose {
 			cfg.Log.Printf("%s: %s: %v", s.String(), url, err)
@@ -216,15 +222,27 @@ func (s *Script) crawl(L *lua.LState) int {
 
 	u := L.CheckString(2)
 	if u != "" {
-		var names []string
 		max := L.CheckInt(3)
 
-		names, err = http.Crawl(ctx, u, cfg.Domains(), max)
-		if err == nil {
-			for _, name := range names {
-				genNewName(ctx, s.sys, s, http.CleanName(name))
+		err = http.Crawl(ctx, u, cfg.Domains(), max, func(req *http.Request, resp *http.Response) {
+			if u, err := url.Parse(req.URL); err == nil {
+				s.genNewName(ctx, http.CleanName(u.Hostname()))
 			}
-		}
+			s.internalSendNames(ctx, resp.Body)
+
+			if resp.TLS != nil && len(resp.TLS.PeerCertificates) > 0 {
+				for _, name := range http.NamesFromCert(resp.TLS.PeerCertificates[0]) {
+					s.newNameWithSrc(ctx, http.CleanName(name), "cert", "Active Cert")
+				}
+			}
+			for k, v := range resp.Header {
+				if k == "Content-Security-Policy" ||
+					k == "Content-Security-Policy-Report-Only" ||
+					k == "X-Content-Security-Policy" || k == "X-Webkit-CSP" {
+					s.internalSendNamesWithSrc(ctx, v, s.Description(), "CSP Header")
+				}
+			}
+		})
 	}
 
 	if err != nil && cfg.Verbose {

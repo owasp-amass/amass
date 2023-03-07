@@ -17,8 +17,6 @@ import (
 	"github.com/caffix/service"
 )
 
-const maxActivePipelineTasks int = 25
-
 // Enumeration is the object type used to execute a DNS enumeration.
 type Enumeration struct {
 	Config   *config.Config
@@ -78,11 +76,6 @@ func (e *Enumeration) Start(ctx context.Context) error {
 		stages = append(stages, pipeline.FIFO("validate", e.valTask))
 		stages = append(stages, pipeline.FIFO("store", e.store))
 		stages = append(stages, pipeline.FIFO("", e.subTask))
-	}
-	if e.Config.Active {
-		activetask := newActiveTask(e, maxActivePipelineTasks)
-		defer activetask.Stop()
-		stages = append(stages, pipeline.FIFO("active", activetask))
 	}
 
 	p := pipeline.NewPipeline(stages...)

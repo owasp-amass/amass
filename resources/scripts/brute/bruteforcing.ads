@@ -71,7 +71,7 @@ end
 function make_names(ctx, base)
     local wordlist = brute_wordlist(ctx)
 
-    for i, word in pairs(wordlist) do
+    for _, word in pairs(wordlist) do
         new_name(ctx, word .. "." .. base)
     end
 end

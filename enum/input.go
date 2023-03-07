@@ -50,7 +50,7 @@ type enumSource struct {
 
 // newEnumSource returns an initialized input source for the enumeration pipeline.
 func newEnumSource(p *pipeline.Pipeline, e *Enumeration) *enumSource {
-	size := e.Sys.Resolvers().Len() * e.Config.ResolversQPS
+	size := e.Sys.TrustedResolvers().Len() * e.Config.TrustedQPS
 
 	r := &enumSource{
 		pipeline:    p,
@@ -186,8 +186,8 @@ func (r *enumSource) accept(s, tag, source string, name bool) bool {
 
 // Next implements the pipeline InputSource interface.
 func (r *enumSource) Next(ctx context.Context) bool {
-	// Low if below 50%
-	if p := (float32(r.queue.Len()) / float32(r.max)) * 100; p < 50 {
+	// Low if below 75%
+	if p := (float32(r.queue.Len()) / float32(r.max)) * 100; p < 75 {
 		r.fillQueue()
 	}
 

@@ -53,7 +53,7 @@ var PublicResolvers []string
 // GetPublicDNSResolvers obtains the public DNS server addresses from public-dns.info and assigns them to PublicResolvers.
 func GetPublicDNSResolvers() error {
 	url := "https://public-dns.info/nameservers-all.csv"
-	resp, err := http.RequestWebPage(context.Background(), url, nil, nil, nil)
+	resp, err := http.RequestWebPage(context.Background(), &http.Request{URL: url})
 	if err != nil || resp.StatusCode < 200 || resp.StatusCode >= 400 {
 		return fmt.Errorf("failed to obtain the Public DNS csv file at %s: %v", url, err)
 	}
