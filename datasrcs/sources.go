@@ -16,10 +16,7 @@ import (
 
 // GetAllSources returns a slice of all data source services initialized.
 func GetAllSources(sys systems.System) []service.Service {
-	srvs := []service.Service{
-		NewCloudflare(sys),
-		NewRADb(sys),
-	}
+	srvs := []service.Service{NewRADb(sys)}
 
 	if scripts, err := sys.Config().AcquireScripts(); err == nil {
 		for _, script := range scripts {

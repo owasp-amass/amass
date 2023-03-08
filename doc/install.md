@@ -61,26 +61,6 @@ brew tap caffix/amass
 brew install amass
 ```
 
-### Snapcraft
-
-If your operating environment supports [Snap](https://docs.snapcraft.io/core/install), you can [click here to install](https://snapcraft.io/amass), or perform the following from the command-line:
-
-```bash
-sudo snap install amass
-```
-
-Add the Snap bin directory to your PATH:
-
-```bash
-export PATH=$PATH:/snap/bin
-```
-
-Periodically, execute the following command to update all your snap packages:
-
-```bash
-sudo snap refresh
-```
-
 ## Packages Maintained by a Third Party
 
 ### Arch Linux
