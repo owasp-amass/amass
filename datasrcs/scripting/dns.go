@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"sync"
 	"time"
 
 	amassnet "github.com/OWASP/Amass/v3/net"
@@ -17,8 +18,19 @@ import (
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/caffix/resolve"
 	"github.com/miekg/dns"
+	bf "github.com/tylertreat/BoomFilters"
 	lua "github.com/yuin/gopher-lua"
 	"golang.org/x/net/publicsuffix"
+)
+
+const (
+	defaultSweepSize = 250
+	activeSweepSize  = 500
+)
+
+var (
+	sweepLock   sync.Mutex
+	sweepFilter *bf.StableBloomFilter = bf.NewDefaultStableBloomFilter(1000000, 0.01)
 )
 
 // Wrapper so that scripts can make DNS queries.
@@ -139,6 +151,102 @@ func convertType(qtype string) uint16 {
 	return t
 }
 
+func (s *Script) reverseSweep(L *lua.LState) int {
+	ctx, err := extractContext(L.CheckUserData(1))
+	if err != nil {
+		L.Push(lua.LString("failed to obtain the context"))
+		return 1
+	}
+
+	addr := L.CheckString(2)
+	if addr == "" {
+		L.Push(lua.LString("failed to obtain the IP address"))
+		return 1
+	}
+
+	size := defaultSweepSize
+	if s.sys.Config().Active {
+		size = activeSweepSize
+	}
+
+	var cidr *net.IPNet
+	if asn := s.sys.Cache().AddrSearch(addr); asn != nil {
+		if _, c, err := net.ParseCIDR(asn.Prefix); err == nil {
+			cidr = c
+		}
+	}
+
+	if cidr == nil {
+		ip := net.ParseIP(addr)
+		mask := net.CIDRMask(18, 32)
+		if amassnet.IsIPv6(ip) {
+			mask = net.CIDRMask(64, 128)
+		}
+
+		cidr = &net.IPNet{
+			IP:   ip.Mask(mask),
+			Mask: mask,
+		}
+	}
+
+	var count int
+	ch := make(chan *resolve.ExtractedAnswer, 10)
+	for _, ip := range amassnet.CIDRSubset(cidr, addr, size) {
+		select {
+		case <-ctx.Done():
+			L.Push(lua.LString("the context expired"))
+			return 1
+		default:
+		}
+
+		sweepLock.Lock()
+		if a := ip.String(); !sweepFilter.TestAndAdd([]byte(a)) {
+			count++
+			go s.getPTR(ctx, a, ch)
+		}
+		sweepLock.Unlock()
+	}
+
+	var records []*resolve.ExtractedAnswer
+	for i := 0; i < count; i++ {
+		if rr := <-ch; rr != nil {
+			records = append(records, rr)
+		}
+	}
+
+	for _, rr := range records {
+		s.newPTR(ctx, rr)
+	}
+	L.Push(lua.LNil)
+	return 1
+}
+
+func (s *Script) getPTR(ctx context.Context, addr string, ch chan *resolve.ExtractedAnswer) {
+	if reserved, _ := amassnet.IsReservedAddress(addr); reserved {
+		ch <- nil
+		return
+	}
+
+	msg := resolve.ReverseMsg(addr)
+	resp, err := s.dnsQuery(ctx, msg, s.sys.Resolvers(), 10)
+	if err != nil || resp == nil {
+		ch <- nil
+		return
+	}
+
+	resp, err = s.dnsQuery(ctx, msg, s.sys.TrustedResolvers(), 10)
+	if err != nil || resp == nil {
+		ch <- nil
+		return
+	}
+
+	if ans := resolve.ExtractAnswers(resp); len(ans) > 0 {
+		if records := resolve.AnswersByType(ans, dns.TypePTR); len(records) > 0 {
+			ch <- records[0]
+		}
+	}
+}
+
 func (s *Script) zoneWalk(L *lua.LState) int {
 	ctx, err := extractContext(L.CheckUserData(1))
 	if err != nil {
@@ -231,7 +339,6 @@ func (s *Script) wrapZoneTransfer(L *lua.LState) int {
 				entry.RawSetString("rrdata", lua.LString(rr.Data))
 				tb.Append(entry)
 			}
-
 			// Zone Transfers can reveal DNS wildcards
 			if n := amassdns.RemoveAsteriskLabel(req.Name); len(n) < len(req.Name) {
 				// Signal the wildcard discovery

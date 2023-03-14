@@ -123,6 +123,7 @@ func (s *Script) newLuaState(cfg *config.Config) *lua.LState {
 	L.SetGlobal("scrape", L.NewFunction(s.scrape))
 	L.SetGlobal("crawl", L.NewFunction(s.crawl))
 	L.SetGlobal("resolve", L.NewFunction(s.resolve))
+	L.SetGlobal("reverse_sweep", L.NewFunction(s.reverseSweep))
 	L.SetGlobal("zone_walk", L.NewFunction(s.zoneWalk))
 	L.SetGlobal("zone_transfer", L.NewFunction(s.wrapZoneTransfer))
 	L.SetGlobal("output_dir", L.NewFunction(s.outputdir))

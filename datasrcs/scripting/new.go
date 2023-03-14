@@ -7,13 +7,18 @@ package scripting
 import (
 	"context"
 	"net"
+	"strings"
 	"time"
 
 	amassnet "github.com/OWASP/Amass/v3/net"
+	amassdns "github.com/OWASP/Amass/v3/net/dns"
 	"github.com/OWASP/Amass/v3/net/http"
 	"github.com/OWASP/Amass/v3/requests"
+	"github.com/caffix/resolve"
+	"github.com/miekg/dns"
 	bf "github.com/tylertreat/BoomFilters"
 	lua "github.com/yuin/gopher-lua"
+	"golang.org/x/net/publicsuffix"
 )
 
 func (s *Script) genNewName(ctx context.Context, name string) {
@@ -25,13 +30,12 @@ func (s *Script) newNameWithSrc(ctx context.Context, name, tag, src string) {
 		select {
 		case <-ctx.Done():
 		case <-s.Done():
-		default:
-			s.Output() <- &requests.DNSRequest{
-				Name:   name,
-				Domain: domain,
-				Tag:    tag,
-				Source: src,
-			}
+		case s.Output() <- &requests.DNSRequest{
+			Name:   name,
+			Domain: domain,
+			Tag:    tag,
+			Source: src,
+		}:
 		}
 	}
 }
@@ -127,15 +131,47 @@ func (s *Script) internalSendDNSRecords(ctx context.Context, name string, record
 		select {
 		case <-ctx.Done():
 		case <-s.Done():
-		default:
-			s.Output() <- &requests.DNSRequest{
-				Name:    name,
-				Domain:  domain,
-				Records: records,
-				Tag:     s.Description(),
-				Source:  s.String(),
-			}
+		case s.Output() <- &requests.DNSRequest{
+			Name:    name,
+			Domain:  domain,
+			Records: records,
+			Tag:     s.Description(),
+			Source:  s.String(),
+		}:
 		}
+	}
+}
+
+func (s *Script) newPTR(ctx context.Context, record *resolve.ExtractedAnswer) {
+	answer := strings.ToLower(resolve.RemoveLastDot(record.Data))
+	if amassdns.RemoveAsteriskLabel(answer) != answer {
+		return
+	}
+	// Check that the name discovered is in scope
+	if d := s.sys.Config().WhichDomain(answer); d == "" {
+		return
+	}
+
+	ptr := strings.ToLower(resolve.RemoveLastDot(record.Name))
+	domain, err := publicsuffix.EffectiveTLDPlusOne(ptr)
+	if err != nil {
+		return
+	}
+
+	select {
+	case <-ctx.Done():
+	case <-s.Done():
+	case s.Output() <- &requests.DNSRequest{
+		Name:   ptr,
+		Domain: domain,
+		Records: []requests.DNSAnswer{{
+			Name: ptr,
+			Type: int(dns.TypePTR),
+			Data: answer,
+		}},
+		Tag:    s.Description(),
+		Source: s.String(),
+	}:
 	}
 }
 
@@ -155,13 +191,12 @@ func (s *Script) newAddr(L *lua.LState) int {
 				select {
 				case <-ctx.Done():
 				case <-s.Done():
-				default:
-					s.Output() <- &requests.AddrRequest{
-						Address: ip.String(),
-						Domain:  domain,
-						Tag:     s.SourceType,
-						Source:  s.String(),
-					}
+				case s.Output() <- &requests.AddrRequest{
+					Address: ip.String(),
+					Domain:  domain,
+					Tag:     s.SourceType,
+					Source:  s.String(),
+				}:
 				}
 			}
 		}
@@ -232,13 +267,12 @@ func (s *Script) associated(L *lua.LState) int {
 			select {
 			case <-ctx.Done():
 			case <-s.Done():
-			default:
-				s.Output() <- &requests.WhoisRequest{
-					Domain:     domain,
-					NewDomains: []string{assoc},
-					Tag:        s.SourceType,
-					Source:     s.String(),
-				}
+			case s.Output() <- &requests.WhoisRequest{
+				Domain:     domain,
+				NewDomains: []string{assoc},
+				Tag:        s.SourceType,
+				Source:     s.String(),
+			}:
 			}
 		}
 	}

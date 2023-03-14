@@ -12,14 +12,11 @@ import (
 	"sync"
 	"time"
 
-	amassnet "github.com/OWASP/Amass/v3/net"
-	amassdns "github.com/OWASP/Amass/v3/net/dns"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/caffix/pipeline"
 	"github.com/caffix/queue"
 	"github.com/caffix/resolve"
 	"github.com/miekg/dns"
-	"golang.org/x/net/publicsuffix"
 )
 
 const (
@@ -136,6 +133,11 @@ func (dt *dnsTask) rootTaskFunc() pipeline.TaskFunc {
 			if v.Domain != "" && v.Name == v.Domain {
 				r = v.Clone().(*requests.DNSRequest)
 			}
+			// send the PTR records straight to the store stage
+			if r != nil && (strings.HasSuffix(r.Name, ".in-addr.arpa") || strings.HasSuffix(r.Name, ".ip6.arpa")) {
+				pipeline.SendData(ctx, "store", r, tp)
+				return nil, nil
+			}
 		case *requests.SubdomainRequest:
 			r = &requests.DNSRequest{
 				Name:   v.Name,
@@ -185,24 +187,6 @@ func (dt *dnsTask) Process(ctx context.Context, data pipeline.Data, tp pipeline.
 			return nil, nil
 		} else {
 			dt.enum.Config.Log.Printf("Failed to enter %s into the request registry on the %s DNS task", msg.Question[0].Name, dt.trust)
-		}
-	case *requests.AddrRequest:
-		if reserved, _ := amassnet.IsReservedAddress(v.Address); !reserved {
-			msg := resolve.ReverseMsg(v.Address)
-			k := key(msg.Id, msg.Question[0].Name)
-
-			if dt.addReqWithIncrement(k, &req{
-				Ctx:      ctx,
-				Data:     data.Clone(),
-				Qtype:    dns.TypePTR,
-				Attempts: 1,
-				InScope:  v.InScope,
-			}) {
-				dt.pool.Query(ctx, msg, dt.resps)
-				return nil, nil
-			} else {
-				dt.enum.Config.Log.Printf("Failed to enter %s into the request registry on the %s DNS task", msg.Question[0].Name, dt.trust)
-			}
 		}
 	}
 	return data, nil
@@ -340,12 +324,6 @@ func (dt *dnsTask) processResp(resp *dns.Msg) {
 		} else {
 			go dt.retry(resolve.QueryMsg(v.Name, qtype), resp.Id, entry)
 		}
-	case *requests.AddrRequest:
-		if resp.Rcode == dns.RcodeSuccess {
-			dt.processRevRequest(ctx, resp, name, qtype, v, entry)
-		} else {
-			go dt.retry(resolve.ReverseMsg(v.Address), resp.Id, entry)
-		}
 	default:
 		dt.delReqWithDecrement(k)
 	}
@@ -417,57 +395,6 @@ func (dt *dnsTask) processFwdRequest(ctx context.Context, resp *dns.Msg, name st
 	}
 	// delReq will send the request to the next stage if it has records
 	dt.delReqWithDecrement(k)
-}
-
-func (dt *dnsTask) processRevRequest(ctx context.Context, resp *dns.Msg, name string, qtype uint16, req *requests.AddrRequest, entry *req) {
-	defer dt.delReqWithDecrement(key(resp.Id, resp.Question[0].Name))
-
-	ans := resolve.ExtractAnswers(resp)
-	if len(ans) == 0 {
-		return
-	}
-
-	rr := resolve.AnswersByType(ans, dns.TypePTR)
-	if len(rr) == 0 {
-		return
-	}
-
-	if !dt.trusted {
-		dt.nextStage(ctx, req)
-		entry.Sent = true
-		return
-	}
-
-	answer := strings.ToLower(resolve.RemoveLastDot(rr[0].Data))
-	if amassdns.RemoveAsteriskLabel(answer) != answer {
-		return
-	}
-	// Check that the name discovered is in scope
-	d := dt.enum.Config.WhichDomain(answer)
-	if d == "" {
-		return
-	}
-	if re := dt.enum.Config.DomainRegex(d); re == nil || re.FindString(answer) != answer {
-		return
-	}
-
-	ptr := strings.ToLower(resolve.RemoveLastDot(rr[0].Name))
-	domain, err := publicsuffix.EffectiveTLDPlusOne(ptr)
-	if err != nil {
-		return
-	}
-
-	dt.enum.nameSrc.newName(&requests.DNSRequest{
-		Name:   ptr,
-		Domain: domain,
-		Records: []requests.DNSAnswer{{
-			Name: ptr,
-			Type: int(dns.TypePTR),
-			Data: answer,
-		}},
-		Tag:    requests.DNS,
-		Source: "Reverse DNS",
-	})
 }
 
 func (dt *dnsTask) subdomainQueries(ctx context.Context, req *requests.DNSRequest, tp pipeline.TaskParams) {

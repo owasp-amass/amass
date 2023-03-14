@@ -6,10 +6,8 @@ package enum
 
 import (
 	"context"
-	"net"
 	"regexp"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -22,30 +20,24 @@ import (
 	bf "github.com/tylertreat/BoomFilters"
 )
 
-const (
-	waitForDuration  = 10 * time.Second
-	defaultSweepSize = 250
-	activeSweepSize  = 500
-)
+const waitForDuration = 10 * time.Second
 
 // enumSource handles the filtering and release of new Data in the enumeration.
 type enumSource struct {
-	pipeline    *pipeline.Pipeline
-	enum        *Enumeration
-	queue       queue.Queue
-	dups        queue.Queue
-	sweeps      queue.Queue
-	filter      *bf.StableBloomFilter
-	sweepLock   sync.Mutex
-	sweepFilter *bf.StableBloomFilter
-	subre       *regexp.Regexp
-	done        chan struct{}
-	doneOnce    sync.Once
-	release     chan struct{}
-	inputsig    chan uint32
-	max         int
-	countLock   sync.Mutex
-	count       uint32
+	pipeline  *pipeline.Pipeline
+	enum      *Enumeration
+	queue     queue.Queue
+	dups      queue.Queue
+	sweeps    queue.Queue
+	filter    *bf.StableBloomFilter
+	subre     *regexp.Regexp
+	done      chan struct{}
+	doneOnce  sync.Once
+	release   chan struct{}
+	inputsig  chan uint32
+	max       int
+	countLock sync.Mutex
+	count     uint32
 }
 
 // newEnumSource returns an initialized input source for the enumeration pipeline.
@@ -53,18 +45,17 @@ func newEnumSource(p *pipeline.Pipeline, e *Enumeration) *enumSource {
 	size := e.Sys.TrustedResolvers().Len() * e.Config.TrustedQPS
 
 	r := &enumSource{
-		pipeline:    p,
-		enum:        e,
-		queue:       queue.NewQueue(),
-		dups:        queue.NewQueue(),
-		sweeps:      queue.NewQueue(),
-		filter:      bf.NewDefaultStableBloomFilter(1000000, 0.01),
-		sweepFilter: bf.NewDefaultStableBloomFilter(1000000, 0.01),
-		subre:       dns.AnySubdomainRegex(),
-		done:        make(chan struct{}),
-		release:     make(chan struct{}, size),
-		inputsig:    make(chan uint32, size*2),
-		max:         size,
+		pipeline: p,
+		enum:     e,
+		queue:    queue.NewQueue(),
+		dups:     queue.NewQueue(),
+		sweeps:   queue.NewQueue(),
+		filter:   bf.NewDefaultStableBloomFilter(1000000, 0.01),
+		subre:    dns.AnySubdomainRegex(),
+		done:     make(chan struct{}),
+		release:  make(chan struct{}, size),
+		inputsig: make(chan uint32, size*2),
+		max:      size,
 	}
 	// Monitor the enumeration for completion or termination
 	go func() {
@@ -93,7 +84,6 @@ func (r *enumSource) Stop() {
 	r.dups.Process(func(e interface{}) {})
 	r.sweeps.Process(func(e interface{}) {})
 	r.filter.Reset()
-	r.sweepFilter.Reset()
 }
 
 func (r *enumSource) markDone() {
@@ -110,28 +100,25 @@ func (r *enumSource) newName(req *requests.DNSRequest) {
 	}
 
 	if req.Name == "" || !req.Valid() {
+		r.releaseOutput(1)
 		return
 	}
 	// Clean up the newly discovered name and domain
 	requests.SanitizeDNSRequest(req)
 	// Check that the name is valid
 	if r.subre.FindString(req.Name) != req.Name {
+		r.releaseOutput(1)
 		return
 	}
 	if r.enum.Config.Blacklisted(req.Name) {
+		r.releaseOutput(1)
 		return
 	}
-	// Do not further evaluate service subdomains
-	for _, label := range strings.Split(req.Name, ".") {
-		l := strings.ToLower(label)
-
-		if l == "_tcp" || l == "_udp" || l == "_tls" {
-			return
-		}
+	if !r.accept(req.Name, req.Tag, req.Source, true) {
+		r.releaseOutput(1)
+		return
 	}
-	if r.accept(req.Name, req.Tag, req.Source, true) {
-		r.queue.Append(req)
-	}
+	r.queue.Append(req)
 }
 
 func (r *enumSource) newAddr(req *requests.AddrRequest) {
@@ -202,13 +189,15 @@ func (r *enumSource) Next(ctx context.Context) bool {
 			r.markDone()
 			return false
 		case <-t.C:
-			if r.pipeline.DataItemCount() <= 0 {
+			if r.pipeline.DataItemCount() <= 0 &&
+				!r.enum.requestsPending() && r.queue.Len() == 0 {
 				r.markDone()
 				return false
 			}
 			r.fillQueue()
 			t.Reset(waitForDuration)
 		case <-r.queue.Signal():
+			t.Reset(waitForDuration)
 			return true
 		}
 	}
@@ -256,7 +245,6 @@ func (r *enumSource) fillQueue() {
 		if fill := unfilled - len(r.release); fill > 0 {
 			r.releaseOutput(fill)
 		}
-		go r.requestSweeps()
 	}
 }
 
@@ -294,68 +282,6 @@ func (r *enumSource) monitorDataSrcOutput(srv service.Service) {
 				r.newAddr(req)
 			}
 		}
-	}
-}
-
-func (r *enumSource) requestSweeps() {
-	r.sweepLock.Lock()
-	defer r.sweepLock.Unlock()
-
-	for {
-		if unfilled := r.max - r.queue.Len(); unfilled <= 0 {
-			break
-		}
-		if e, ok := r.sweeps.Next(); ok {
-			// Generate the additional addresses to sweep across
-			_ = r.sweepAddrs(r.enum.ctx, e.(*requests.AddrRequest))
-		}
-	}
-}
-
-func (r *enumSource) sweepAddrs(ctx context.Context, req *requests.AddrRequest) int {
-	size := defaultSweepSize
-	if r.enum.Config.Active {
-		size = activeSweepSize
-	}
-
-	var count int
-	cidr := r.addrCIDR(req.Address)
-	for _, ip := range amassnet.CIDRSubset(cidr, req.Address, size) {
-		select {
-		case <-ctx.Done():
-			return count
-		default:
-		}
-
-		if a := ip.String(); !r.sweepFilter.TestAndAdd([]byte(a)) {
-			count++
-			r.queue.Append(&requests.AddrRequest{
-				Address: a,
-				Domain:  req.Domain,
-				Tag:     req.Tag,
-				Source:  req.Source,
-			})
-		}
-	}
-	return count
-}
-
-func (r *enumSource) addrCIDR(addr string) *net.IPNet {
-	if asn := r.enum.Sys.Cache().AddrSearch(addr); asn != nil {
-		if _, cidr, err := net.ParseCIDR(asn.Prefix); err == nil {
-			return cidr
-		}
-	}
-
-	ip := net.ParseIP(addr)
-	mask := net.CIDRMask(18, 32)
-	if amassnet.IsIPv6(ip) {
-		mask = net.CIDRMask(64, 128)
-	}
-
-	return &net.IPNet{
-		IP:   ip.Mask(mask),
-		Mask: mask,
 	}
 }
 

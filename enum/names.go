@@ -87,7 +87,7 @@ func (r *subdomainTask) checkForSubdomains(ctx context.Context, req *requests.DN
 	dlabels := strings.Split(req.Domain, ".")
 	// It cannot have fewer labels than the root domain name
 	if len(nlabels)-1 < len(dlabels) {
-		return false
+		return true
 	}
 
 	sub := strings.TrimSpace(strings.Join(nlabels[1:], "."))
@@ -99,10 +99,8 @@ func (r *subdomainTask) checkForSubdomains(ctx context.Context, req *requests.DN
 		return false
 	} else if times == 1 && r.enum.graph.IsCNAMENode(ctx, sub) {
 		r.cnames.Insert(sub)
-		return false
+		return true
 	} else if times > 1 && r.cnames.Has(sub) {
-		return false
-	} else if times > r.enum.Config.MinForRecursive {
 		return true
 	}
 
