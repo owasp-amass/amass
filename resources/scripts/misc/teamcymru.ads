@@ -1,4 +1,4 @@
--- Copyright © by Jeff Foley 2017-2022. All rights reserved.
+-- Copyright © by Jeff Foley 2017-2023. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 -- SPDX-License-Identifier: Apache-2.0
 
@@ -31,8 +31,12 @@ function origin(ctx, addr)
     end
     if (name == "") then return nil end
 
-    local resp, err = resolve(ctx, name .. arpa, "TXT", false)
-    if ((err ~= nil and err ~= "") or #resp == 0) then return nil end
+    local n = name .. arpa
+    local resp, err = resolve(ctx, n, "TXT", false)
+    if ((err ~= nil and err ~= "") or #resp == 0) then
+        log(ctx, "failed to resolve the TXT record for " .. n .. ": " .. err)
+        return nil
+    end
 
     local fields = split(resp[1].rrdata, "|")
     return {
@@ -48,7 +52,10 @@ function get_desc(ctx, asn)
     local name = "AS" .. tostring(asn) .. ".asn.cymru.com"
 
     local resp, err = resolve(ctx, name, "TXT", false)
-    if ((err ~= nil and err ~= "") or #resp == 0) then return "" end
+    if ((err ~= nil and err ~= "") or #resp == 0) then
+        log(ctx, "failed to resolve the TXT record for " .. name .. ": " .. err)
+        return ""
+    end
 
     local fields = split(resp[1].rrdata, "|")
     if (#fields < 5) then return "" end

@@ -1,5 +1,6 @@
--- Copyright 2022 Jeff Foley. All rights reserved.
+-- Copyright © by Jeff Foley 2017-2023. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+-- SPDX-License-Identifier: Apache-2.0
 
 local url = require("url")
 
@@ -13,7 +14,7 @@ end
 function check()
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -27,7 +28,7 @@ end
 function vertical(ctx, domain)
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -40,15 +41,13 @@ function vertical(ctx, domain)
     local found = false
     for _, tld in pairs(tlds) do
         for i=1,20 do
-            local ok = scrape(ctx, {
-                ['url']=build_url(domain, c.username, c.key, tld, i),
-            })
+            local ok = scrape(ctx, {['url']=build_url(domain, c.username, c.key, tld, i)})
             if not ok then
                 break
             end
-
             found = true
         end
+
         if found then
             break
         end

@@ -1,21 +1,26 @@
--- Copyright 2020-2021 Jeff Foley. All rights reserved.
+-- Copyright © by Jeff Foley 2017-2023. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+-- SPDX-License-Identifier: Apache-2.0
 
 name = "Alterations"
 type = "alt"
 
-ldh_chars = "_abcdefghijklmnopqrstuvwxyz0123456789-"
+local cfg
+local ldh_chars = "_abcdefghijklmnopqrstuvwxyz0123456789-"
+
+function start()
+    cfg = config()
+end
 
 function resolved(ctx, name, domain, records)
+    if (cfg == nil or cfg.mode == "passive" or not cfg['alterations'].active) then
+        return
+    end
+
     local nparts = split(name, ".")
     local dparts = split(domain, ".")
     -- Do not process resolved root domain names
     if #nparts <= #dparts then
-        return
-    end
-
-    local cfg = config(ctx)
-    if (cfg.mode == "passive" or not cfg['alterations'].active) then
         return
     end
 
@@ -97,7 +102,6 @@ function flip_numbers(name)
 
         local pre = string.sub(hostname, 1, b - 1)
         local post = string.sub(hostname, e + 1)
-
         -- Create an entry with the number removed
         set_insert(s, pre .. post .. "." .. base)
         local seq = num_seq(tonumber(string.sub(hostname, b, e)))
@@ -111,7 +115,6 @@ end
 
 function num_seq(num)
     local s = {}
-
     local start = num - 50
     if start < 1 then
         start = 1

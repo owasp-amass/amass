@@ -1,5 +1,6 @@
--- Copyright 2021 Jeff Foley. All rights reserved.
+-- Copyright © by Jeff Foley 2017-2023. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+-- SPDX-License-Identifier: Apache-2.0
 
 local json = require("json")
 
@@ -13,7 +14,7 @@ end
 function check()
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -24,13 +25,13 @@ function check()
 end
 
 function asn(ctx, addr, asn)
-    if addr == "" then
+    if (addr == "") then
         return
     end
 
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -42,18 +43,24 @@ function asn(ctx, addr, asn)
     if (err ~= nil and err ~= "") then
         log(ctx, "asn request to service failed: " .. err)
         return
+    elseif (resp.status_code < 200 or resp.status_code >= 400) then
+        log(ctx, "asn request to service returned with status: " .. resp.status)
+        return
     end
 
-    local j = json.decode(resp)
-    if (j == nil or j.asn == nil) then
+    local d = json.decode(resp.body)
+    if (d == nil) then
+        log(ctx, "failed to decode the JSON response")
+        return
+    elseif (d.asn == nil or d.name == nil or d.route == nil) then
         return
     end
 
     new_asn(ctx, {
         ['addr']=addr,
         ['asn']=tonumber(d.asn:gsub(3)),
-        desc=d.name,
-        prefix=d.route,
+        ['desc']=d.name,
+        ['prefix']=d.route,
     })
 end
 

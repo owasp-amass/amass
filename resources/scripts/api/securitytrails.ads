@@ -1,4 +1,4 @@
--- Copyright © by Jeff Foley 2020-2022. All rights reserved.
+-- Copyright © by Jeff Foley 2017-2023. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 -- SPDX-License-Identifier: Apache-2.0
 
@@ -14,7 +14,7 @@ end
 function check()
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -27,7 +27,7 @@ end
 function vertical(ctx, domain)
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -37,20 +37,28 @@ function vertical(ctx, domain)
 
     local resp, err = request(ctx, {
         ['url']=vert_url(domain),
-        headers={['APIKEY']=c.key},
+        ['header']={['APIKEY']=c.key},
     })
     if (err ~= nil and err ~= "") then
         log(ctx, "vertical request to service failed: " .. err)
         return
-    end
-
-    local j = json.decode(resp)
-    if (j == nil or j.subdomains == nil or #(j.subdomains) == 0) then
+    elseif (resp.status_code < 200 or resp.status_code >= 400) then
+        log(ctx, "vertical request to service returned with status: " .. resp.status)
         return
     end
 
-    for _, sub in pairs(j.subdomains) do
-        new_name(ctx, sub .. "." .. domain)
+    local d = json.decode(resp.body)
+    if (d == nil) then
+        log(ctx, "failed to decode the JSON vertical response")
+        return
+    elseif (d.subdomains == nil or #(d.subdomains) == 0) then
+        return
+    end
+
+    for _, sub in pairs(d.subdomains) do
+        if (sub ~= nil and sub ~= "") then
+            new_name(ctx, sub .. "." .. domain)
+        end
     end
 end
 
@@ -61,7 +69,7 @@ end
 function horizontal(ctx, domain)
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -72,19 +80,25 @@ function horizontal(ctx, domain)
     for i=1,100 do
         local resp, err = request(ctx, {
             ['url']=horizon_url(domain, i),
-            headers={['APIKEY']=c.key},
+            ['header']={['APIKEY']=c.key},
         })
         if (err ~= nil and err ~= "") then
             log(ctx, "horizontal request to service failed: " .. err)
             return
-        end
-
-        local j = json.decode(resp)
-        if (j == nil or j.records == nil or #(j.records) == 0) then
+        elseif (resp.status_code < 200 or resp.status_code >= 400) then
+            log(ctx, "horizontal request to service returned with status: " .. resp.status)
             return
         end
 
-        for _, r in pairs(j.records) do
+        local d = json.decode(resp.body)
+        if (d == nil) then
+            log(ctx, "failed to decode the JSON horizontal response")
+            return
+        elseif (d.records == nil or #(d.records) == 0) then
+            return
+        end
+
+        for _, r in pairs(d.records) do
             if (r.hostname ~= nil and r.hostname ~= "") then
                 associated(ctx, domain, r.hostname)
             end

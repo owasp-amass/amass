@@ -1,5 +1,6 @@
--- Copyright 2021 Jeff Foley. All rights reserved.
+-- Copyright © by Jeff Foley 2017-2023. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+-- SPDX-License-Identifier: Apache-2.0
 
 local url = require("url")
 local json = require("json")
@@ -12,17 +13,23 @@ function start()
 end
 
 function vertical(ctx, domain)
-    p = 0
+    local p = 0
+
     while(true) do
         local resp, err = request(ctx, {['url']=build_url(domain, p)})
         if (err ~= nil and err ~= "") then
             log(ctx, "vertical request to service failed: " .. err)
             return
+        elseif (resp.status_code < 200 or resp.status_code >= 400) then
+            log(ctx, "vertical request to service returned with status: " .. resp.status)
+            return
         end
 
-        local d = json.decode(resp)
-        if (d == nil or d.hits == nil or
-            d['hits'].hits == nil or #(d['hits'].hits) == 0) then
+        local d = json.decode(resp.body)
+        if (d == nil) then
+            log(ctx, "failed to decode the JSON response")
+            return
+        elseif (d.hits == nil or #(d['hits'].hits) == 0) then
             return
         end
 
@@ -37,7 +44,7 @@ function vertical(ctx, domain)
             end
         end
 
-        if #(d['hits'].hits) < 500 then
+        if (#(d['hits'].hits) < 500) then
             break
         end
         p = p + 500

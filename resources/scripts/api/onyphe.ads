@@ -1,5 +1,6 @@
--- Copyright 2021 Jeff Foley. All rights reserved.
+-- Copyright © by Jeff Foley 2017-2023. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+-- SPDX-License-Identifier: Apache-2.0
 
 local json = require("json")
 
@@ -13,7 +14,7 @@ end
 function check()
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -26,7 +27,7 @@ end
 function vertical(ctx, domain)
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -37,7 +38,7 @@ function vertical(ctx, domain)
     for page=1,1000 do
         local resp, err = request(ctx, {
             ['url']=vert_url(domain, page),
-            headers={
+            ['header']={
                 ['Content-Type']="application/json",
                 ['Authorization']="apikey " .. c.key,
             },
@@ -45,10 +46,16 @@ function vertical(ctx, domain)
         if (err ~= nil and err ~= "") then
             log(ctx, "vertical request to service failed: " .. err)
             return
+        elseif (resp.status_code < 200 or resp.status_code >= 400) then
+            log(ctx, "vertical request to service returned with status: " .. resp.status)
+            return
         end
 
-        d = json.decode(resp)
-        if (d == nil or d.count == 0) then
+        d = json.decode(resp.body)
+        if (d == nil) then
+            log(ctx, "failed to decode the JSON response")
+            return
+        elseif (d.count == nil or d.count == 0 or #(d.results) == 0) then
             return
         end
 
@@ -87,7 +94,7 @@ function vertical(ctx, domain)
             end
         end
 
-        if page == d.max_page then
+        if (page == d.max_page) then
             break
         end
     end
@@ -100,7 +107,7 @@ end
 function horizontal(ctx, domain)
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -118,7 +125,7 @@ function horizontal(ctx, domain)
         for page=1,1000 do
             local resp, err = request(ctx, {
                 ['url']=horizon_url(ip, page),
-                headers={
+                ['header']={
                     ['Content-Type']="application/json",
                     ['Authorization']="apikey " .. c.key,
                 },
@@ -126,10 +133,16 @@ function horizontal(ctx, domain)
             if (err ~= nil and err ~= "") then
                 log(ctx, "horizontal request to service failed: " .. err)
                 return
+            elseif (resp.status_code < 200 or resp.status_code >= 400) then
+                log(ctx, "horizontal request to service returned with status: " .. resp.status)
+                return
             end
 
-            d = json.decode(resp)
-            if (d == nil or d.count == 0) then
+            d = json.decode(resp.body)
+            if (d == nil) then
+                log(ctx, "failed to decode the JSON horizontal response")
+                return
+            elseif (d.count == nil or d.count == 0 or #(d.results) == 0) then
                 return
             end
 
@@ -143,7 +156,7 @@ function horizontal(ctx, domain)
                 end
             end
 
-            if page == r.max_page then
+            if (page == r.max_page) then
                 break
             end
         end

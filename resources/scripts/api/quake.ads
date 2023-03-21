@@ -1,5 +1,6 @@
--- Copyright 2021 Jeff Foley. All rights reserved.
+-- Copyright © by Jeff Foley 2017-2023. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+-- SPDX-License-Identifier: Apache-2.0
 
 local json = require("json")
 
@@ -13,7 +14,7 @@ end
 function check()
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -26,7 +27,7 @@ end
 function vertical(ctx, domain)
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -47,28 +48,40 @@ function vertical(ctx, domain)
 
         local resp, err = request(ctx, {
             ['url']="https://quake.360.cn/api/v3/search/quake_service",
-            method="POST",
-            data=body,
-            headers={
+            ['method']="POST",
+            ['header']={
                 ['Content-Type']="application/json",
                 ['X-QuakeToken']=c.key,
-            }
+            },
+            ['body']=body,
         })
         if (err ~= nil and err ~= "") then
             log(ctx, "vertical request to service failed: " .. err)
             return
-        end
-
-        local j = json.decode(resp)
-        if (j == nil or j.code ~= 0 or j['meta'].pagination.total == 0) then
+        elseif (resp.status_code < 200 or resp.status_code >= 400) then
+            log(ctx, "vertical request to service returned with status: " .. resp.status)
             return
         end
 
-        for _, d in pairs(j.data) do
-            new_name(ctx, d['service'].http.host)
+        local d = json.decode(resp.body)
+        if (d == nil) then
+            log(ctx, "failed to decode the JSON response")
+            return
+        elseif (d.code == nil or d.code ~= 0) then
+            return
+        elseif (d.meta == nil or d['meta'].pagination == nil or 
+            d['meta']['pagination'].total == nil or d['meta']['pagination'].total == 0) then
+            return
         end
 
-        if j['meta'].pagination.total < 1000 then
+        for _, d in pairs(d.data) do
+            if (d.service ~= nil and d['service'].http ~= nil and 
+                d['service']['http'].host ~= nil and d['service']['http'].host ~= "") then
+                new_name(ctx, d['service']['http'].host)
+            end
+        end
+
+        if (d['meta']['pagination'].total < 1000) then
             break
         end
         p = p + 1000

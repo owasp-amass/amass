@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2022. All rights reserved.
+// Copyright © by Jeff Foley 2017-2023. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -112,28 +112,29 @@ func (dm *dataManager) dnsRequest(ctx context.Context, req *requests.DNSRequest,
 		default:
 		}
 
+		var e error
 		switch uint16(r.Type) {
 		case dns.TypeA:
-			err = dm.insertA(ctx, req, i, tp)
+			e = dm.insertA(ctx, req, i, tp)
 		case dns.TypeAAAA:
-			err = dm.insertAAAA(ctx, req, i, tp)
+			e = dm.insertAAAA(ctx, req, i, tp)
 		case dns.TypePTR:
-			err = dm.insertPTR(ctx, req, i, tp)
+			e = dm.insertPTR(ctx, req, i, tp)
 		case dns.TypeSRV:
-			err = dm.insertSRV(ctx, req, i, tp)
+			e = dm.insertSRV(ctx, req, i, tp)
 		case dns.TypeNS:
-			err = dm.insertNS(ctx, req, i, tp)
+			e = dm.insertNS(ctx, req, i, tp)
 		case dns.TypeMX:
-			err = dm.insertMX(ctx, req, i, tp)
+			e = dm.insertMX(ctx, req, i, tp)
 		case dns.TypeTXT:
-			err = dm.insertTXT(ctx, req, i, tp)
+			e = dm.insertTXT(ctx, req, i, tp)
 		case dns.TypeSOA:
-			err = dm.insertSOA(ctx, req, i, tp)
+			e = dm.insertSOA(ctx, req, i, tp)
 		case dns.TypeSPF:
-			err = dm.insertSPF(ctx, req, i, tp)
+			e = dm.insertSPF(ctx, req, i, tp)
 		}
-		if err != nil {
-			break
+		if err == nil {
+			err = e
 		}
 	}
 	return err
@@ -214,8 +215,8 @@ func (dm *dataManager) insertPTR(ctx context.Context, req *requests.DNSRequest, 
 	dm.enum.nameSrc.newName(&requests.DNSRequest{
 		Name:   target,
 		Domain: domain,
-		Tag:    requests.DNS,
-		Source: "Reverse DNS",
+		Tag:    req.Tag,
+		Source: req.Source,
 	})
 	if err := dm.enum.graph.UpsertPTR(ctx, req.Name, target, req.Source, dm.enum.Config.UUID.String()); err != nil {
 		return fmt.Errorf("%s failed to insert PTR record: %v", dm.enum.graph, err)

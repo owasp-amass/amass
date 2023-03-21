@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2022. All rights reserved.
+// Copyright © by Jeff Foley 2017-2023. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -32,7 +32,7 @@ const Banner = `        .+++:.            :                             .+++.
 
 const (
 	// Version is used to display the current version of Amass.
-	Version = "v3.21.2"
+	Version = "v3.22.2"
 
 	// Author is used to display the Amass Project Team.
 	Author = "OWASP Amass Project - @owaspamass"

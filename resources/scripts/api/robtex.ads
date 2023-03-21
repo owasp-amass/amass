@@ -1,4 +1,4 @@
--- Copyright © by Jeff Foley 2021-2022. All rights reserved.
+-- Copyright © by Jeff Foley 2017-2023. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 -- SPDX-License-Identifier: Apache-2.0
 
@@ -12,58 +12,56 @@ function start()
 end
 
 function vertical(ctx, domain)
-    local cfg = datasrc_config()
-    if (cfg == nil) then
-        return
-    end
+    local url = "https://freeapi.robtex.com/pdns/forward/" .. domain
 
-    local vurl = "https://freeapi.robtex.com/pdns/forward/" .. domain
-    local resp, err = request(ctx, {['url']=vurl})
+    local resp, err = request(ctx, {['url']=url})
     if (err ~= nil and err ~= "") then
         log(ctx, "vertical request to service failed: " .. err)
         return
-    end
-
-    local j = json.decode("{\"results\": [" .. resp .. "]}")
-    if (j == nil or #(j.results) == 0) then
+    elseif (resp.status_code < 200 or resp.status_code >= 400) then
+        log(ctx, "vertical request to service returned with status: " .. resp.status)
         return
     end
 
-    for _, rr in pairs(j.results) do
-        if (rr.rrtype == "A") then
-            local d = ipinfo(ctx, rr.rrdata, cfg.ttl)
-            if (d == nil) then
-                return
+    local d = json.decode("{\"results\": [" .. resp.body .. "]}")
+    if (d == nil) then
+        log(ctx, "failed to decode the JSON response")
+        return
+    elseif (d.results == nil or #(d.results) == 0) then
+        return
+    end
+
+    for _, rr in pairs(d.results) do
+        if (rr.rrtype ~= nil and rr.rrtype == "A") then
+            local ip = ipinfo(ctx, rr.rrdata)
+            if (ip ~= nil) then
+                extract_names(ctx, ip)
             end
-            extract_names(ctx, d)
-        elseif (rr.rrtype == "NS" or rr.rrtype == "MX") then
+        elseif (rr.rrtype ~= nil and (rr.rrtype == "NS" or rr.rrtype == "MX")) then
             send_names(ctx, rr.rrdata)
         end
     end
 end
 
 function asn(ctx, addr, asn)
-    local cfg = datasrc_config()
-    if (cfg == nil) then
-        return
-    end
-
     local d
     local prefix
+
     if (asn == 0) then
         if (addr == "") then
             return
         end
 
-        d = ip_info(ctx, addr, cfg.ttl)
+        d = ip_info(ctx, addr)
         if (d == nil) then
             return
         end
         asn = d.as
         prefix = d.bgproute
+        extract_names(ctx, d)
     end
 
-    local cidrs = netblocks(ctx, asn, cfg.ttl)
+    local cidrs = netblocks(ctx, asn)
     if (cidrs == nil or #cidrs == 0) then
         return
     end
@@ -73,13 +71,12 @@ function asn(ctx, addr, asn)
         parts = split(prefix, "/")
         addr = parts[1]
 
-        d = ip_info(ctx, addr, cfg.ttl)
+        d = ip_info(ctx, addr)
         if (d == nil) then
             return
         end
+        extract_names(ctx, d)
     end
-
-    extract_names(ctx, d)
 
     local desc = d.asname
     if (desc == nil) then
@@ -103,19 +100,26 @@ function asn(ctx, addr, asn)
     })
 end
 
-function ip_info(ctx, addr, ttl)
+function ip_info(ctx, addr)
     local url = "https://freeapi.robtex.com/ipquery/" .. addr
+
     local resp, err = request(ctx, {['url']=url})
     if (err ~= nil and err ~= "") then
         log(ctx, "ip_info request to service failed: " .. err)
-        return nil
+        return
+    elseif (resp.status_code < 200 or resp.status_code >= 400) then
+        log(ctx, "ip_info request to service returned with status: " .. resp.status)
+        return
     end
 
-    local j = json.decode(resp)
-    if (j == nil or j.status ~= "ok") then
+    local d = json.decode(resp.body)
+    if (d == nil) then
+        log(ctx, "failed to decode the JSON ip_info response")
+        return nil
+    elseif (d.status == nil or d.status ~= "ok") then
         return nil
     end
-    return j
+    return d
 end
 
 function extract_names(ctx, djson)
@@ -132,22 +136,31 @@ function extract_names(ctx, djson)
     end
 end
 
-function netblocks(ctx, asn, ttl)
+function netblocks(ctx, asn)
     local url = "https://freeapi.robtex.com/asquery/" .. tostring(asn)
+
     local resp, err = request(ctx, {['url']=url})
     if (err ~= nil and err ~= "") then
         log(ctx, "netblocks request to service failed: " .. err)
-        return nil
+        return
+    elseif (resp.status_code < 200 or resp.status_code >= 400) then
+        log(ctx, "netblocks request to service returned with status: " .. resp.status)
+        return
     end
 
-    local j = json.decode(resp)
-    if (j == nil or j.status ~= "ok") then
+    local d = json.decode(resp.body)
+    if (d == nil) then
+        log(ctx, "failed to decode the JSON netblocks response")
+        return nil
+    elseif (d.status == nil or d.status ~= "ok" or d.nets == nil) then
         return nil
     end
 
     local netblocks = {}
-    for _, net in pairs(j.nets) do
-        table.insert(netblocks, net.n)
+    for _, net in pairs(d.nets) do
+        if (net ~= nil and net.n ~= nil and net.n ~= "") then
+            table.insert(netblocks, net.n)
+        end
     end
     if (#netblocks == 0) then
         return nil
@@ -163,7 +176,7 @@ function split(str, delim)
     if (matches == nil or #matches == 0) then
         return result
     end
-    for i, match in pairs(matches) do
+    for _, match in pairs(matches) do
         table.insert(result, match)
     end
     return result

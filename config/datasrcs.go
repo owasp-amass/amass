@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2022. All rights reserved.
+// Copyright © by Jeff Foley 2017-2023. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -6,7 +6,6 @@ package config
 
 import (
 	"fmt"
-	"math/rand"
 	"strings"
 
 	"github.com/caffix/stringset"
@@ -68,7 +67,7 @@ func (dsc *DataSourceConfig) GetCredentials() *Credentials {
 		for _, c := range dsc.creds {
 			creds = append(creds, c)
 		}
-		return creds[rand.Intn(num)]
+		return creds[0]
 	}
 	return nil
 }

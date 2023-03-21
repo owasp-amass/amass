@@ -1,5 +1,6 @@
--- Copyright 2022 Jeff Foley. All rights reserved.
+-- Copyright © by Jeff Foley 2017-2023. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+-- SPDX-License-Identifier: Apache-2.0
 
 local json = require("json")
 
@@ -13,7 +14,7 @@ end
 function check()
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -26,7 +27,7 @@ end
 function asn(ctx, addr, asn)
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -35,7 +36,7 @@ function asn(ctx, addr, asn)
     end
 
     local api_url
-    if asn ~= 0 then
+    if (asn ~= 0) then
         api_url = asn_url(asn)
     else
         api_url = ip_url(addr)
@@ -43,22 +44,26 @@ function asn(ctx, addr, asn)
 
     local resp, err = request(ctx, {
         ['url']=api_url,
-        ['headers']={
+        ['header']={
             ['X-RapidAPI-Host']="asn-lookup.p.rapidapi.com",
             ['X-RapidAPI-Key']=c.key,
         },
     })
     if (err ~= nil and err ~= "") then
-        log(ctx, "asn request to service failed: " .. err)
+        log(ctx, "vertical request to service failed: " .. err)
+        return
+    elseif (resp.status_code < 200 or resp.status_code >= 400) then
+        log(ctx, "vertical request to service returned with status: " .. resp.status)
         return
     end
 
-    local j = json.decode(resp)
-    if j == nil then
+    local d = json.decode(resp.body)
+    if (d == nil) then
+        log(ctx, "failed to decode the JSON response")
         return
     end
 
-    for _, item in pairs(j) do
+    for _, item in pairs(d) do
         local registry
         for v in string.gmatch(item.orgID, "-(%w+)") do
             registry = v

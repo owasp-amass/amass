@@ -1,5 +1,6 @@
--- Copyright 2022 Jeff Foley. All rights reserved.
+-- Copyright © by Jeff Foley 2017-2023. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+-- SPDX-License-Identifier: Apache-2.0
 
 name = "DNSHistory"
 type = "scrape"
@@ -13,14 +14,18 @@ function vertical(ctx, domain)
     local pattern = "/dns\\-records/(.*)\">"
 
     while(true) do
-        local page, err = request(ctx, {['url']=build_url(domain, p)})
+        local resp, err = request(ctx, {['url']=build_url(domain, p)})
         if (err ~= nil and err ~= "") then
             log(ctx, "vertical request to service failed: " .. err)
             return
+        elseif (resp.status_code < 200 or resp.status_code >= 400) then
+            log(ctx, "vertical request to service returned with status code: " .. resp.status)
+            return
         end
 
-        local matches = submatch(page, pattern)
+        local matches = submatch(resp.body, pattern)
         if (matches == nil or #matches == 0) then
+            log(ctx, "failed to discover DNS records in the response")
             return
         end
 
@@ -28,7 +33,7 @@ function vertical(ctx, domain)
             new_name(ctx, match[2])
         end
 
-        local nxt = find(page, "next</a>")
+        local nxt = find(resp.body, "next</a>")
         if (nxt == nil or #nxt == 0) then
             return
         end

@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2020-2022. All rights reserved.
+// Copyright © by Jeff Foley 2017-2023. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -6,6 +6,7 @@ package scripting
 
 import (
 	"github.com/OWASP/Amass/v3/config"
+	"github.com/OWASP/Amass/v3/format"
 	"github.com/caffix/service"
 	lua "github.com/yuin/gopher-lua"
 )
@@ -15,6 +16,8 @@ func (s *Script) config(L *lua.LState) int {
 	cfg := s.sys.Config()
 
 	r := L.NewTable()
+	r.RawSetString("version", lua.LString(format.Version))
+
 	if cfg.Active {
 		r.RawSetString("mode", lua.LString("active"))
 	} else if cfg.Passive {

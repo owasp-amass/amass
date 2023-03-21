@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2022. All rights reserved.
+// Copyright © by Jeff Foley 2017-2023. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math/rand"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -140,9 +139,6 @@ func runIntelCommand(clArgs []string) {
 		commandUsage(intelUsageMsg, intelCommand, intelBuf)
 		os.Exit(1)
 	}
-
-	// Seed the default pseudo-random number generator
-	rand.Seed(time.Now().UTC().UnixNano())
 	if err := processIntelInputFiles(&args); err != nil {
 		fmt.Fprintf(color.Error, "%v\n", err)
 		os.Exit(1)

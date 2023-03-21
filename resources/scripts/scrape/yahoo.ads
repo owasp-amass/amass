@@ -1,5 +1,6 @@
--- Copyright 2017-2021 Jeff Foley. All rights reserved.
+-- Copyright © by Jeff Foley 2017-2023. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+-- SPDX-License-Identifier: Apache-2.0
 
 local url = require("url")
 
@@ -22,11 +23,11 @@ end
 function build_url(domain, pagenum)
     local query = "site:" .. domain .. " -domain:www." .. domain
     local params = {
-        p=query,
-        b=pagenum,
-        pz="10",
-        bct="0",
-        xargs="0",
+        ['p']=query,
+        ['b']=pagenum,
+        ['pz']="10",
+        ['bct']="0",
+        ['xargs']="0",
     }
 
     return "https://search.yahoo.com/search?" .. url.build_query_string(params)

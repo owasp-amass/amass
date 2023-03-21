@@ -1,9 +1,14 @@
+// Copyright © by Jeff Foley 2017-2023. All rights reserved.
+// Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
+
 package viz
 
 import (
 	"bytes"
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestWriteMaltegoData(t *testing.T) {
@@ -17,6 +22,7 @@ func TestWriteMaltegoData(t *testing.T) {
 
 const expectedMaltegoOutput = `maltego.Domain,maltego.DNSName,maltego.NSRecord,maltego.MXRecord,maltego.IPv4Address,maltego.Netblock,maltego.AS,maltego.Company,maltego.DNSName
 `
+
 func TestCidrToMaltegoNetblock(t *testing.T) {
 	cases := []struct {
 		label    string

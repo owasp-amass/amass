@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2022. All rights reserved.
+// Copyright © by Jeff Foley 2017-2023. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -43,14 +43,7 @@ func EventOutput(ctx context.Context, g *netmap.Graph, uuid string, f *stringset
 		defer f.Close()
 	}
 
-	var fqdns []string
-	for _, name := range g.EventFQDNs(ctx, uuid) {
-		if !f.Has(name) {
-			fqdns = append(fqdns, name)
-		}
-	}
-
-	names := randomSelection(fqdns, limit)
+	names := randomSelection(g.EventFQDNs(ctx, uuid), f, limit)
 	lookup := make(outLookup, len(names))
 	for _, o := range buildNameInfo(ctx, g, uuid, names) {
 		lookup[o.Name] = o
@@ -73,16 +66,19 @@ func EventOutput(ctx context.Context, g *netmap.Graph, uuid string, f *stringset
 	return addInfrastructureInfo(lookup, f, cache)
 }
 
-func randomSelection(names []string, limit int) []string {
+func randomSelection(names []string, filter *stringset.Set, limit int) []string {
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 
+	var count int
 	var sel []string
-	for i, n := range r.Perm(len(names)) {
-		if limit > 0 && i >= limit {
+	for _, n := range r.Perm(len(names)) {
+		if limit > 0 && count >= limit {
 			break
 		}
-
-		sel = append(sel, names[n])
+		if name := names[n]; !filter.Has(name) {
+			count++
+			sel = append(sel, name)
+		}
 	}
 	return sel
 }

@@ -1,5 +1,6 @@
--- Copyright 2020-2021 Jeff Foley. All rights reserved.
+-- Copyright © by Jeff Foley 2017-2023. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+-- SPDX-License-Identifier: Apache-2.0
 
 local json = require("json")
 
@@ -13,7 +14,7 @@ end
 function check()
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -27,7 +28,7 @@ end
 function vertical(ctx, domain)
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -38,24 +39,27 @@ function vertical(ctx, domain)
 
     local resp, err = request(ctx, {
         ['url']="https://www.circl.lu/pdns/query/" .. domain,
-        id=c['username'],
-        pass=c['password'],
+        ['id']=c.username,
+        ['pass']=c.password,
     })
     if (err ~= nil and err ~= "") then
         log(ctx, "vertical request to service failed: " .. err)
         return
+    elseif (resp.status_code < 200 or resp.status_code >= 400) then
+        log(ctx, "vertical request to service returned with status: " .. resp.status)
+        return
     end
 
-    for line in resp:gmatch("([^\n]*)\n?") do
-        local j = json.decode(line)
+    for line in resp.body:gmatch("([^\n]*)\n?") do
+        local d = json.decode(line)
 
-        if (j ~= nil and j.rrname ~= nil and j.rrname ~= "") then
-            new_name(ctx, j.rrname)
+        if (d ~= nil and d.rrname ~= nil and d.rrname ~= "") then
+            new_name(ctx, d.rrname)
 
-            if (j.rrtype ~= nil and (j.rrtype == "A" or j.rrtype == "AAAA")) then
-                new_addr(ctx, j.rdata, domain)
+            if (d.rrtype ~= nil and (d.rrtype == "A" or d.rrtype == "AAAA")) then
+                new_addr(ctx, d.rdata, domain)
             else
-                send_names(ctx, j.rdata)
+                send_names(ctx, d.rdata)
             end
         end
     end
