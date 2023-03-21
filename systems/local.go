@@ -47,7 +47,11 @@ func NewLocalSystem(cfg *config.Config) (*LocalSystem, error) {
 		return nil, errors.New("the system was unable to build the pool of trusted resolvers")
 	}
 
-	pool, num := untrustedResolvers(cfg)
+	pool, num := trusted, num
+	if !cfg.Passive {
+		pool, num = untrustedResolvers(cfg)
+	}
+
 	if pool == nil || num == 0 {
 		return nil, errors.New("the system was unable to build the pool of untrusted resolvers")
 	}
@@ -220,6 +224,9 @@ func (l *LocalSystem) setupGraphDBs() error {
 	}
 	dbs = append(dbs, cfg.GraphDBs...)
 
+	if cfg.Passive {
+		l.graphs = append(l.graphs, netmap.NewGraph(netmap.NewCayleyGraphMemory()))
+	}
 	for _, db := range dbs {
 		cayley := netmap.NewCayleyGraph(db.System, db.URL, db.Options)
 		if cayley == nil {
