@@ -1,5 +1,6 @@
--- Copyright 2017-2022 Jeff Foley. All rights reserved.
+-- Copyright © by Jeff Foley 2017-2023. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+-- SPDX-License-Identifier: Apache-2.0
 
 name = "BufferOver"
 type = "api"
@@ -8,42 +9,59 @@ function start()
     set_rate_limit(1)
 end
 
-function vertical(ctx, domain)
+function check()
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
     if (c ~= nil and c.key ~= nil and c.key ~= "") then
-        local ok = commercial_api_query(ctx, domain, c.key)
-        if not ok then
-            scrape(ctx, {
-                url=build_url(domain, "tls"),
-                headers={['x-api-key']=c.key},
-            })
-        end
+        return true
+    end
+    return false
+end
+
+function vertical(ctx, domain)
+    local c
+    local cfg = datasrc_config()
+    if (cfg ~= nil) then
+        c = cfg.credentials
     end
 
-    scrape(ctx, {url=build_url(domain, "dns")})
+    if (c == nil or c.key == nil or c.key == "") then
+        return
+    end
+
+    local ok = commercial_api_query(ctx, domain, c.key)
+    if not ok then
+        scrape(ctx, {
+            ['url']=build_url(domain),
+            ['header']={['x-api-key']=c.key},
+        })
+    end
 end
 
 function commercial_api_query(ctx, domain, key)
     local resp, err = request(ctx, {
-        url="https://bufferover-run-tls.p.rapidapi.com/ipv4/dns?q=." .. domain,
-        headers={
+        ['url']="https://bufferover-run-tls.p.rapidapi.com/ipv4/dns?q=." .. domain,
+        ['header']={
             ['x-rapidapi-host']="bufferover-run-tls.p.rapidapi.com",
             ['x-rapidapi-key']=key,
         },
     })
     if (err ~= nil and err ~= "") then
+        log(ctx, "commercial_api_query to service failed: " .. err)
+        return false
+    elseif (resp.status_code < 200 or resp.status_code >= 400) then
+        log(ctx, "commercial_api_query to service returned with status: " .. resp.status)
         return false
     end
 
-    send_names(ctx, resp)
+    send_names(ctx, resp.body)
     return true
 end
 
-function build_url(domain, sub)
-    return "https://" .. sub .. ".bufferover.run/dns?q=." .. domain
+function build_url(domain)
+    return "https://tls.bufferover.run/dns?q=." .. domain
 end

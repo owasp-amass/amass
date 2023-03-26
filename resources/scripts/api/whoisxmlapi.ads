@@ -1,5 +1,6 @@
--- Copyright 2017-2021 Jeff Foley. All rights reserved.
+-- Copyright © by Jeff Foley 2017-2023. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+-- SPDX-License-Identifier: Apache-2.0
 
 local json = require("json")
 
@@ -13,7 +14,7 @@ end
 function check()
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -26,7 +27,7 @@ end
 function vertical(ctx, domain)
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -38,15 +39,23 @@ function vertical(ctx, domain)
     if (err ~= nil and err ~= "") then
         log(ctx, "vertical request to service failed: " .. err)
         return
-    end
-
-    local j = json.decode(resp)
-    if (j == nil or j.result == nil or j.result.count == 0 or #(j.result.records) == 0) then
+    elseif (resp.status_code < 200 or resp.status_code >= 400) then
+        log(ctx, "vertical request to service returned with status: " .. resp.status)
         return
     end
 
-    for _, r in pairs(j.result.records) do
-        new_name(ctx, r.domain)
+    local d = json.decode(resp.body)
+    if (d == nil) then
+        log(ctx, "failed to decode the JSON response")
+        return
+    elseif (d.result == nil or d['result'].count == nil or d['result'].count == 0) then
+        return
+    end
+
+    for _, r in pairs(d['result'].records) do
+        if (r.domain ~= nil and r.domain ~= "") then
+            new_name(ctx, r.domain)
+        end
     end
 end
 
@@ -57,7 +66,7 @@ end
 function horizontal(ctx, domain)
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -66,42 +75,48 @@ function horizontal(ctx, domain)
     end
 
     local body, err = json.encode({
-        apiKey=c.key, 
-        searchType="current",
-        mode="purchase",
-        basicSearchTerms={
-            include={domain},
-        },
+        ['apiKey']=c.key, 
+        ['searchType']="current",
+        ['mode']="purchase",
+        ['basicSearchTerms']={include={domain}},
     })
     if (err ~= nil and err ~= "") then
         return
     end
 
-    resp, err = request(ctx, {
-        method="POST",
-        data=body,
+    local resp, err = request(ctx, {
         ['url']="https://reverse-whois.whoisxmlapi.com/api/v2",
-        headers={['Content-Type']="application/json"},
+        ['method']="POST",
+        ['header']={['Content-Type']="application/json"},
+        ['body']=body,
     })
     if (err ~= nil and err ~= "") then
         log(ctx, "horizontal request to service failed: " .. err)
         return
-    end
-
-    local j = json.decode(resp)
-    if (j == nil or j.domainsCount == 0) then
+    elseif (resp.status_code < 200 or resp.status_code >= 400) then
+        log(ctx, "horizontal request to service returned with status: " .. resp.status)
         return
     end
 
-    for _, name in pairs(j.domainsList) do
-        associated(ctx, domain, name)
+    local d = json.decode(resp.body)
+    if (d == nil) then
+        log(ctx, "failed to decode the JSON horizontal response")
+        return
+    elseif (d.domainsList == nil or d.domainsCount == nil or d.domainsCount == 0) then
+        return
+    end
+
+    for _, name in pairs(d.domainsList) do
+        if (name ~= nil and name ~= "") then
+            associated(ctx, domain, name)
+        end
     end
 end
 
 function asn(ctx, addr, asn)
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -138,21 +153,29 @@ function asn(ctx, addr, asn)
 end
 
 function get_asn(ctx, ip, key)
-    local resp, err = request(ctx, {['url']="https://ip-netblocks.whoisxmlapi.com/api/v2?apiKey=" .. key .. "&ip=" .. ip})
+    local url = "https://ip-netblocks.whoisxmlapi.com/api/v2?apiKey=" .. key .. "&ip=" .. ip
+
+    local resp, err = request(ctx, {['url']=url})
     if (err ~= nil and err ~= "") then
         log(ctx, "get_asn request to service failed: " .. err)
         return 0
+    elseif (resp.status_code < 200 or resp.status_code >= 400) then
+        log(ctx, "get_asn request to service returned with status: " .. resp.status)
+        return 0
     end
 
-    local j = json.decode(resp)
-    if (j == nil or j.result == nil or j.result.count == 0 or #(j.result.inetnums) == 0) then
+    local d = json.decode(resp.body)
+    if (d == nil) then
+    elseif (d.result == nil or d['result'].count == nil or d['result'].count == 0) then
+        return
+    elseif (d['result'].inetnums == nil or #(d['result'].inetnums) == 0) then
         return
     end
 
     local asn = 0
-    for _, r in pairs(j.result.inetnums) do
-        if r.as ~= nil and r.as.asn > 0 then
-            asn = r.as.asn
+    for _, r in pairs(d['result'].inetnums) do
+        if r.as ~= nil and r['as'].asn ~= nil and r['as'].asn > 0 then
+            asn = r['as'].asn
             break
         end
     end
@@ -161,22 +184,30 @@ function get_asn(ctx, ip, key)
 end
 
 function as_info(ctx, asn, key)
-    local resp, err = request(ctx, {['url']="https://ip-netblocks.whoisxmlapi.com/api/v2?apiKey=" .. key .. "&asn=" .. tostring(asn)})
+    local url = "https://ip-netblocks.whoisxmlapi.com/api/v2?apiKey=" .. key .. "&asn=" .. tostring(asn)
+
+    local resp, err = request(ctx, {['url']=url})
     if (err ~= nil and err ~= "") then
         log(ctx, "as_info request to service failed: " .. err)
         return nil
+    elseif (resp.status_code < 200 or resp.status_code >= 400) then
+        log(ctx, "as_info request to service returned with status: " .. resp.status)
+        return nil
     end
 
-    local j = json.decode(resp)
-    if (j == nil or j.result == nil or j.result.count == 0 or #(j.result.inetnums) == 0) then
-        return nil
+    local d = json.decode(resp.body)
+    if (d == nil) then
+    elseif (d.result == nil or d['result'].count == nil or d['result'].count == 0) then
+        return
+    elseif (d['result'].inetnums == nil or #(d['result'].inetnums) == 0) then
+        return
     end
 
     local cc = ""
     local name = ""
     local registry = ""
     local netblocks = {}
-    for i, r in pairs(j.result.inetnums) do
+    for i, r in pairs(d['result'].inetnums) do
         if i == 1 then
             registry = r.source
             if r.org ~= nil then
@@ -184,14 +215,14 @@ function as_info(ctx, asn, key)
                 name = r.org.name
             end
         end
-        if r.as ~= nil and r.as.asn == asn and r.as.route ~= nil and r.as.route ~= "" then
-            table.insert(netblocks, r.as.route)
+        if r.as ~= nil and r['as'].asn == asn and r['as'].route ~= nil and r['as'].route ~= "" then
+            table.insert(netblocks, r['as'].route)
         end
     end
 
     return {
         ['asn']=asn,
-        desc=name,
+        ['desc']=name,
         ['cc']=cc,
         ['registry']=registry,
         ['netblocks']=netblocks,

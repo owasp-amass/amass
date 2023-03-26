@@ -1,5 +1,6 @@
--- Copyright 2017-2021 Jeff Foley. All rights reserved.
+-- Copyright © by Jeff Foley 2017-2023. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+-- SPDX-License-Identifier: Apache-2.0
 
 local json = require("json")
 
@@ -14,7 +15,7 @@ end
 function check()
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -33,22 +34,28 @@ function vertical(ctx, domain)
         if (err ~= nil and err ~= "") then
             log(ctx, "vertical request to service failed: " .. err)
             return
-        end
-
-        dec = json.decode(resp)
-        if (dec == nil or dec.data == nil or #(dec.data) == 0) then
+        elseif (resp.status_code < 200 or resp.status_code >= 400) then
+            log(ctx, "vertical request to service returned with status code: " .. resp.status)
             return
         end
 
-        for _, r in pairs(dec.data) do
+        d = json.decode(resp.body)
+        if (d == nil) then
+            log(ctx, "failed to decode the JSON response")
+            return
+        elseif (d.data == nil or #(d.data) == 0) then
+            return
+        end
+
+        for _, r in pairs(d.data) do
             for _, name in pairs(r.domains) do
                 new_name(ctx, name)
             end
         end
 
         nxt = ""
-        if (dec.paging ~= nil and dec.paging.next ~= nil and dec.paging.next ~= "") then
-            nxt = dec.paging.next
+        if (d.paging ~= nil and d.paging.next ~= nil and d.paging.next ~= "") then
+            nxt = d.paging.next
         end
     end
 end
@@ -56,7 +63,7 @@ end
 function get_token(ctx)
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -70,15 +77,22 @@ function get_token(ctx)
 
     local resp, err = request(ctx, {['url']=authurl})
     if (err ~= nil and err ~= "") then
+        log(ctx, "auth request to service failed: " .. err)
+        return ""
+    elseif (resp.status_code < 200 or resp.status_code >= 400) then
+        log(ctx, "auth request to service returned with status code: " .. resp.status)
         return ""
     end
     
-    local dec = json.decode(resp)
-    if (dec == nil or dec.access_token == nil or dec.access_token == "") then
+    local d = json.decode(resp.body)
+    if (d == nil) then
+        log(ctx, "failed to decode the auth JSON response")
+        return ""
+    elseif (d.access_token == nil or d.access_token == "") then
         return ""
     end
 
-    return dec.access_token
+    return d.access_token
 end
 
 function query_url(domain, token)

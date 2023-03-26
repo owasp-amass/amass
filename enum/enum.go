@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2022. All rights reserved.
+// Copyright © by Jeff Foley 2017-2023. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -6,6 +6,7 @@ package enum
 
 import (
 	"context"
+	"sync"
 
 	"github.com/OWASP/Amass/v3/config"
 	"github.com/OWASP/Amass/v3/datasrcs"
@@ -16,8 +17,6 @@ import (
 	"github.com/caffix/queue"
 	"github.com/caffix/service"
 )
-
-const maxActivePipelineTasks int = 25
 
 // Enumeration is the object type used to execute a DNS enumeration.
 type Enumeration struct {
@@ -33,6 +32,8 @@ type Enumeration struct {
 	valTask  *dnsTask
 	store    *dataManager
 	requests queue.Queue
+	plock    sync.Mutex
+	pending  bool
 }
 
 // NewEnumeration returns an initialized Enumeration that has not been started yet.
@@ -78,11 +79,6 @@ func (e *Enumeration) Start(ctx context.Context) error {
 		stages = append(stages, pipeline.FIFO("validate", e.valTask))
 		stages = append(stages, pipeline.FIFO("store", e.store))
 		stages = append(stages, pipeline.FIFO("", e.subTask))
-	}
-	if e.Config.Active {
-		activetask := newActiveTask(e, maxActivePipelineTasks)
-		defer activetask.Stop()
-		stages = append(stages, pipeline.FIFO("active", activetask))
 	}
 
 	p := pipeline.NewPipeline(stages...)
@@ -163,6 +159,7 @@ loop:
 			if !ok {
 				continue loop
 			}
+
 			for name := range nameToSrc {
 				if len(requestsMap[name]) == 0 && !pending[name] {
 					go e.fireRequest(nameToSrc[name], element, finished)
@@ -174,6 +171,7 @@ loop:
 		case name := <-finished:
 			if len(requestsMap[name]) == 0 {
 				pending[name] = false
+				e.setRequestsPending(pending)
 				continue loop
 			}
 
@@ -182,6 +180,28 @@ loop:
 		}
 	}
 	e.requests.Process(func(e interface{}) {})
+}
+
+func (e *Enumeration) requestsPending() bool {
+	e.plock.Lock()
+	defer e.plock.Unlock()
+
+	return e.pending
+}
+
+func (e *Enumeration) setRequestsPending(p map[string]bool) {
+	var pending bool
+
+	for _, b := range p {
+		if b {
+			pending = true
+			break
+		}
+	}
+
+	e.plock.Lock()
+	e.pending = pending
+	e.plock.Unlock()
 }
 
 func (e *Enumeration) fireRequest(srv service.Service, req interface{}, finished chan string) {

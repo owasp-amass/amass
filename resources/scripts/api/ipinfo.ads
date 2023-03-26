@@ -1,5 +1,6 @@
--- Copyright 2021 Jeff Foley. All rights reserved.
+-- Copyright © by Jeff Foley 2017-2023. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+-- SPDX-License-Identifier: Apache-2.0
 
 local json = require("json")
 
@@ -13,7 +14,7 @@ end
 function check()
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -26,7 +27,7 @@ end
 function asn(ctx, addr, asn)
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -64,46 +65,60 @@ end
 
 function get_asn(ctx, addr, ttl, token)
     local u = "https://ipinfo.io/" .. addr .. "/asn?token=" .. token
+
     local resp, err = request(ctx, {['url']=u})
     if (err ~= nil and err ~= "") then
         log(ctx, "get_asn request to service failed: " .. err)
         return 0, ""
-    end
-
-    local j = json.decode(resp)
-    if (j == nil or j.error ~= nil or j.asn == nil) then
+    elseif (resp.status_code < 200 or resp.status_code >= 400) then
+        log(ctx, "get_asn request to service returned with status: " .. resp.status)
         return 0, ""
     end
 
-    return tonumber(string.sub(j.asn, 3)), j.route
+    local d = json.decode(resp.body)
+    if (d == nil) then
+        log(ctx, "failed to decode the JSON response")
+        return 0, ""
+    elseif (d.error ~= nil or d.asn == nil) then
+        return 0, ""
+    end
+
+    return tonumber(string.sub(d.asn, 3)), d.route
 end
 
 function as_info(ctx, asn, ttl, token)
     local strasn = "AS" .. tostring(asn)
     local u = "https://ipinfo.io/" .. strasn .. "/json?token=" .. token
+
     local resp, err = request(ctx, {['url']=u})
     if (err ~= nil and err ~= "") then
         log(ctx, "as_info request to service failed: " .. err)
         return nil
+    elseif (resp.status_code < 200 or resp.status_code >= 400) then
+        log(ctx, "as_info request to service returned with status: " .. resp.status)
+        return nil
     end
 
-    local j = json.decode(resp)
-    if (j == nil or j.asn == nil or j.asn ~= strasn) then
+    local d = json.decode(resp.body)
+    if (d == nil) then
+        log(ctx, "failed to decode the JSON response")
+        return nil
+    elseif (d.asn == nil or d.asn ~= strasn) then
         return nil
     end
 
     local netblocks = {}
-    for _, p in pairs(j.prefixes) do
+    for _, p in pairs(d.prefixes) do
         table.insert(netblocks, p.netblock)
     end
-    for _, p in pairs(j.prefixes6) do
+    for _, p in pairs(d.prefixes6) do
         table.insert(netblocks, p.netblock)
     end
 
     return {
-        ['desc']=j.name,
-        ['cc']=j.country,
-        ['registry']=j.registry,
+        ['desc']=d.name,
+        ['cc']=d.country,
+        ['registry']=d.registry,
         ['netblocks']=netblocks,
     }
 end

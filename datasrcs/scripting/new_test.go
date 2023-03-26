@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2021-2022. All rights reserved.
+// Copyright © by Jeff Foley 2017-2023. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -6,6 +6,7 @@ package scripting
 
 import (
 	"testing"
+	"time"
 
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/caffix/stringset"
@@ -61,6 +62,46 @@ func TestNewNames(t *testing.T) {
 			t.Errorf("Name %d: %v was not found in the list of expected names", i+1, d.Name)
 		} else {
 			expected.Remove(d.Name)
+		}
+	}
+}
+
+func TestSendDNSRecords(t *testing.T) {
+	script, sys := setupMockScriptEnv(`
+		name="dns_records"
+		type="testing"
+
+		function vertical(ctx, domain)
+			send_dns_records(ctx, domain, { {
+				['rrname']=domain,
+				['rrtype']=1,
+				['rrdata']="8.8.8.8",
+			}})
+		end
+	`)
+	if script == nil || sys == nil {
+		t.Fatal("failed to initialize the scripting environment")
+	}
+	defer func() { _ = sys.Shutdown() }()
+
+	sys.Config().MinimumTTL = 1440
+	dsc := sys.Config().GetDataSourceConfig(script.String())
+	dsc.TTL = 1440
+
+	sys.Config().AddDomain("owasp.org")
+	script.Input() <- &requests.DNSRequest{Domain: "owasp.org"}
+
+	timer := time.NewTimer(15 * time.Second)
+	defer timer.Stop()
+
+	select {
+	case <-timer.C:
+		t.Error("test timed out")
+	case req := <-script.Output():
+		if ans, ok := req.(*requests.DNSRequest); !ok || ans.Name != "owasp.org" ||
+			len(ans.Records) == 0 || ans.Records[0].Name != "owasp.org" ||
+			ans.Records[0].Type != 1 || ans.Records[0].Data != "8.8.8.8" {
+			t.Error("send DNS records failed")
 		}
 	}
 }

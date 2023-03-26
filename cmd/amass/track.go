@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2022. All rights reserved.
+// Copyright © by Jeff Foley 2017-2023. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -9,8 +9,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"io/ioutil"
-	"math/rand"
+	"io"
 	"os"
 	"time"
 
@@ -81,8 +80,8 @@ func runTrackCommand(clArgs []string) {
 		color.NoColor = true
 	}
 	if args.Options.Silent {
-		color.Output = ioutil.Discard
-		color.Error = ioutil.Discard
+		color.Output = io.Discard
+		color.Error = io.Discard
 	}
 	// Some input validation
 	if args.Since != "" && args.Last != 0 {
@@ -115,8 +114,6 @@ func runTrackCommand(clArgs []string) {
 			os.Exit(1)
 		}
 	}
-
-	rand.Seed(time.Now().UTC().UnixNano())
 
 	cfg := config.NewConfig()
 	// Check if a configuration file was provided, and if so, load the settings

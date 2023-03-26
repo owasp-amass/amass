@@ -1,4 +1,4 @@
--- Copyright © by Jeff Foley 2022. All rights reserved.
+-- Copyright © by Jeff Foley 2017-2023. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 -- SPDX-License-Identifier: Apache-2.0
 
@@ -12,15 +12,21 @@ local bgptoolsWhoisAddress = ""
 local bgptoolsWhoisURL = "bgp.tools"
 -- bgptoolsTableFile is the path to the file containing ASN prefixes.
 local bgptoolsTableFile = ""
+local useragent = "OWASP Amass "
 
 function start()
+    local cfg = config()
+
     set_rate_limit(1)
+    if (cfg ~= nil) then
+        useragent = useragent .. cfg.version .. " - admin@owasp.com"
+    end
 end
 
 function asn(ctx, addr, asn)
     if (bgptoolsWhoisAddress == "" and not get_whois_addr(ctx)) then return end
     -- Check if the table file containing ASN prefixes needs to be acquired
-    if (bgptoolsTableFile == "" and need_table_file(ctx) and not get_table_file(ctx)) then return end
+    if (need_table_file(ctx) and not get_table_file(ctx)) then return end
 
     local result
     if (asn == 0) then
@@ -90,8 +96,8 @@ function netblocks(ctx, asn)
     local netblocks = {}
     for line in prefixes:lines() do
         local j = json.decode(line)
-        if (j ~= nil and j['ASN'] ~= nil and j['ASN'] == asn) then
-            table.insert(netblocks, j['CIDR'])
+        if (j ~= nil and j.ASN ~= nil and j.ASN == asn and j.CIDR ~= nil and j.CIDR ~= "") then
+            table.insert(netblocks, j.CIDR)
         end
     end
     prefixes:close()
@@ -107,16 +113,25 @@ function need_table_file(ctx)
 
     hoursfrom = os.difftime(os.time(), modified) / (60 * 60)
     wholehours = math.floor(hoursfrom)
-    if (wholehours > 5) then return true end
+    if (wholehours > 24) then
+        os.remove(bgptoolsTableFile)
+        return true
+    end
 
     return false
 end
 
 function get_table_file(ctx)
-    local resp, err = request(ctx, {['url']="https://bgp.tools/table.jsonl"})
+    local resp, err = request(ctx, {
+        ['url']="https://bgp.tools/table.jsonl",
+        ['headers']={['User-Agent']=useragent},
+    })
     if (err ~= nil and err ~= "") then
-        log(ctx, "failed to obtain the table.jsonl file: " .. err)
-        return false
+        log(ctx, "table.jsonl file request to service failed: " .. err)
+        return
+    elseif (resp.status_code < 200 or resp.status_code >= 400) then
+        log(ctx, "table.jsonl file request to service returned with status: " .. resp.status)
+        return
     end
 
     local prefixes = io.open(bgptoolsTableFile, "w")
@@ -125,7 +140,7 @@ function get_table_file(ctx)
         return false
     end
 
-    prefixes:write(resp)
+    prefixes:write(resp.body)
     prefixes:close()
     return true
 end

@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2022. All rights reserved.
+// Copyright © by Jeff Foley 2017-2023. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/OWASP/Amass/v3/config"
-	"github.com/OWASP/Amass/v3/limits"
 	amassnet "github.com/OWASP/Amass/v3/net"
 	"github.com/OWASP/Amass/v3/requests"
 	"github.com/OWASP/Amass/v3/resources"
@@ -43,26 +42,20 @@ func NewLocalSystem(cfg *config.Config) (*LocalSystem, error) {
 		return nil, err
 	}
 
-	var set bool
-	if cfg.MaxDNSQueries == 0 {
-		set = true
-	}
-
-	max := int(float64(limits.GetFileLimit()) * 0.7)
-	trusted, num := trustedResolvers(cfg, max)
+	trusted, num := trustedResolvers(cfg)
 	if trusted == nil || num == 0 {
 		return nil, errors.New("the system was unable to build the pool of trusted resolvers")
 	}
-	max -= num
-	if set {
-		cfg.MaxDNSQueries += num * cfg.TrustedQPS
+
+	pool, num := trusted, num
+	if !cfg.Passive {
+		pool, num = untrustedResolvers(cfg)
 	}
 
-	pool, num := untrustedResolvers(cfg, max)
 	if pool == nil || num == 0 {
 		return nil, errors.New("the system was unable to build the pool of untrusted resolvers")
 	}
-	if set {
+	if cfg.MaxDNSQueries == 0 {
 		cfg.MaxDNSQueries += num * cfg.ResolversQPS
 	} else {
 		pool.SetMaxQPS(cfg.MaxDNSQueries)
@@ -231,6 +224,9 @@ func (l *LocalSystem) setupGraphDBs() error {
 	}
 	dbs = append(dbs, cfg.GraphDBs...)
 
+	if cfg.Passive {
+		l.graphs = append(l.graphs, netmap.NewGraph(netmap.NewCayleyGraphMemory()))
+	}
 	for _, db := range dbs {
 		cayley := netmap.NewCayleyGraph(db.System, db.URL, db.Options)
 		if cayley == nil {
@@ -299,28 +295,22 @@ func (l *LocalSystem) loadCacheData() error {
 	return nil
 }
 
-func trustedResolvers(cfg *config.Config, max int) (*resolve.Resolvers, int) {
+func trustedResolvers(cfg *config.Config) (*resolve.Resolvers, int) {
 	pool := resolve.NewResolvers()
-	if cfg.MaxDNSQueries > 0 {
-		pool.SetMaxQPS(cfg.MaxDNSQueries / 2)
+	trusted := config.DefaultBaselineResolvers
+	if len(cfg.TrustedResolvers) > 0 {
+		trusted = cfg.TrustedResolvers
 	}
 
-	if len(cfg.TrustedResolvers) > 0 {
-		_ = pool.AddResolvers(cfg.TrustedQPS, cfg.TrustedResolvers...)
-	} else {
-		_ = pool.AddResolvers(cfg.TrustedQPS, config.DefaultBaselineResolvers...)
-		pool.SetDetectionResolver(cfg.TrustedQPS, "8.8.8.8")
-	}
+	_ = pool.AddResolvers(cfg.TrustedQPS, trusted...)
+	pool.SetDetectionResolver(cfg.TrustedQPS, "8.8.8.8")
 
 	pool.SetLogger(cfg.Log)
-	pool.SetTimeout(time.Second)
+	pool.SetTimeout(2 * time.Second)
 	return pool, pool.Len()
 }
 
-func untrustedResolvers(cfg *config.Config, max int) (*resolve.Resolvers, int) {
-	if max <= 0 {
-		return nil, 0
-	}
+func untrustedResolvers(cfg *config.Config) (*resolve.Resolvers, int) {
 	if len(cfg.Resolvers) == 0 {
 		cfg.Resolvers = publicResolverAddrs(cfg)
 		if len(cfg.Resolvers) == 0 {
@@ -330,14 +320,10 @@ func untrustedResolvers(cfg *config.Config, max int) (*resolve.Resolvers, int) {
 	}
 	cfg.Resolvers = checkAddresses(cfg.Resolvers)
 
-	if len(cfg.Resolvers) > max {
-		cfg.Resolvers = cfg.Resolvers[:max]
-	}
-
 	pool := resolve.NewResolvers()
 	pool.SetLogger(cfg.Log)
 	if cfg.MaxDNSQueries > 0 {
-		pool.SetMaxQPS(cfg.MaxDNSQueries / 2)
+		pool.SetMaxQPS(cfg.MaxDNSQueries)
 	}
 	_ = pool.AddResolvers(cfg.ResolversQPS, cfg.Resolvers...)
 	pool.SetTimeout(3 * time.Second)

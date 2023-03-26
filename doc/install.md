@@ -2,7 +2,6 @@
 # [![OWASP Logo](../images/owasp_logo.png) OWASP Amass](https://owasp.org/www-project-amass/) - Installation Guide
 
 [![Packaging status](https://repology.org/badge/vertical-allrepos/amass.svg)](https://repology.org/metapackage/amass/versions)
-[![Get it from the Snap Store](https://snapcraft.io/static/images/badges/en/snap-store-white.svg)](https://snapcraft.io/amass)
 
 ## Prebuilt Binaries
 
@@ -59,26 +58,6 @@ For **Homebrew**, the following two commands will install Amass into your enviro
 ```bash
 brew tap caffix/amass
 brew install amass
-```
-
-### Snapcraft
-
-If your operating environment supports [Snap](https://docs.snapcraft.io/core/install), you can [click here to install](https://snapcraft.io/amass), or perform the following from the command-line:
-
-```bash
-sudo snap install amass
-```
-
-Add the Snap bin directory to your PATH:
-
-```bash
-export PATH=$PATH:/snap/bin
-```
-
-Periodically, execute the following command to update all your snap packages:
-
-```bash
-sudo snap refresh
 ```
 
 ## Packages Maintained by a Third Party

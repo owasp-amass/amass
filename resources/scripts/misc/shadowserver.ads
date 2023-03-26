@@ -1,4 +1,4 @@
--- Copyright © by Jeff Foley 2017-2022. All rights reserved.
+-- Copyright © by Jeff Foley 2017-2023. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 -- SPDX-License-Identifier: Apache-2.0
 
@@ -52,7 +52,10 @@ function origin(ctx, addr)
 
     local name = reverse_ip(addr) ..  ".origin.asn.shadowserver.org"
     local resp, err = resolve(ctx, name, "TXT", false)
-    if ((err ~= nil and err ~= "") or #resp == 0) then return nil end
+    if ((err ~= nil and err ~= "") or #resp == 0) then
+        log(ctx, "failed to resolve the TXT record for " .. name .. ": " .. err)
+        return nil
+    end
 
     local fields = split(resp[1].rrdata, "|")
     return {
@@ -66,10 +69,14 @@ end
 
 function netblocks(ctx, asn)
     local conn, err = socket.connect(ctx, shadowServerWhoisAddress, 43, "tcp")
-    if (err ~= nil and err ~= "") then return nil end
+    if (err ~= nil and err ~= "") then
+        log(ctx, "failed to connect to " .. shadowServerWhoisAddress .. " on port 43: " .. err)
+        return nil
+    end
 
     _, err = conn:send("prefix " .. tostring(asn) .. "\n")
     if (err ~= nil and err ~= "") then
+        log(ctx, "failed to send the ASN parameter to " .. shadowServerWhoisAddress .. ": " .. err)
         conn:close()
         return nil
     end
@@ -77,6 +84,7 @@ function netblocks(ctx, asn)
     local data
     data, err = conn:recv_all()
     if (err ~= nil and err ~= "") then
+        log(ctx, "failed to receive the response from " .. shadowServerWhoisAddress .. ": " .. err)
         conn:close()
         return nil
     end
@@ -105,7 +113,10 @@ end
 
 function get_whois_addr(ctx)
     local resp, err = resolve(ctx, shadowServerWhoisURL, "A", false)
-    if ((err ~= nil and err ~= "") or #resp == 0) then return "" end
+    if ((err ~= nil and err ~= "") or #resp == 0) then
+        log(ctx, "failed to resolve the A record for " .. shadowServerWhoisURL .. ": " .. err)
+        return ""
+    end
     return resp[1].rrdata
 end
 

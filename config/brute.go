@@ -1,5 +1,6 @@
-// Copyright 2017-2020 Jeff Foley. All rights reserved.
+// Copyright © by Jeff Foley 2017-2023. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
 
 package config
 
@@ -29,7 +30,7 @@ func (c *Config) loadBruteForceSettings(cfg *ini.File) error {
 		for _, wordlist := range bruteforce.Key("wordlist_file").ValueWithShadows() {
 			list, err := GetListFromFile(wordlist)
 			if err != nil {
-				return fmt.Errorf("Unable to load the file in the bruteforce wordlist_file setting: %s: %v", wordlist, err)
+				return fmt.Errorf("unable to load the file in the bruteforce wordlist_file setting: %s: %v", wordlist, err)
 			}
 			c.Wordlist = append(c.Wordlist, list...)
 		}
@@ -61,7 +62,7 @@ func (c *Config) loadAlterationSettings(cfg *ini.File) error {
 		for _, wordlist := range alterations.Key("wordlist_file").ValueWithShadows() {
 			list, err := GetListFromFile(wordlist)
 			if err != nil {
-				return fmt.Errorf("Unable to load the file in the alterations wordlist_file setting: %s: %v", wordlist, err)
+				return fmt.Errorf("unable to load the file in the alterations wordlist_file setting: %s: %v", wordlist, err)
 			}
 			c.AltWordlist = append(c.AltWordlist, list...)
 		}

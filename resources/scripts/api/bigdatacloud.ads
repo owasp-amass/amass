@@ -1,5 +1,6 @@
--- Copyright 2022 Jeff Foley. All rights reserved.
+-- Copyright © by Jeff Foley 2017-2023. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+-- SPDX-License-Identifier: Apache-2.0
 
 local json = require("json")
 local url = require("url")
@@ -14,7 +15,7 @@ end
 function check()
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -27,7 +28,7 @@ end
 function asn(ctx, addr, asn)
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -39,20 +40,29 @@ function asn(ctx, addr, asn)
     if (err ~= nil and err ~= "") then
         log(ctx, "asn request to service failed: " .. err)
         return
+    elseif (resp.status_code < 200 or resp.status_code >= 400) then
+        log(ctx, "as request to service returned with status: " .. resp.status)
+        return
     end
 
-    local j = json.decode(resp)
-    if j == nil then
+    local d = json.decode(resp.body)
+    if (d == nil) then
+        log(ctx, "failed to decode the JSON response")
+        return
+    elseif (d.carriers == nil or #(d.carriers) == 0) then
+        return
+    elseif (d.registry == nil or d.bgpPrefix == nil or 
+        d.registeredCountry == nil or d.organisation == nil) then
         return
     end
 
     new_asn(ctx, {
         ['addr']=addr,
-        ['asn']=j.carriers[1].asnNumeric,
-        ['cc']=j.registeredCountry,
-        ['desc']=j.organisation,
-        ['registry']=j.registry,
-        ['prefix']=j.bgpPrefix,
+        ['asn']=d['carriers'][1].asnNumeric,
+        ['cc']=d.registeredCountry,
+        ['desc']=d.organisation,
+        ['registry']=d.registry,
+        ['prefix']=d.bgpPrefix,
     })
 end
 
