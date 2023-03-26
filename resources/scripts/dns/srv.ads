@@ -1,10 +1,12 @@
-// Copyright © by Jeff Foley 2017-2022. All rights reserved.
-// Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
-// SPDX-License-Identifier: Apache-2.0
+-- Copyright © by Jeff Foley 2017-2023. All rights reserved.
+-- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+-- SPDX-License-Identifier: Apache-2.0
 
-package enum
+name = "DNS SRV"
+type = "dns"
 
-var popularSRVRecords = []string{
+local cfg
+local srv_record_names = {
 	"_afs3-kaserver._tcp",
 	"_afs3-kaserver._tcp",
 	"_afs3-kaserver._udp",
@@ -176,3 +178,34 @@ var popularSRVRecords = []string{
 	"_xmpp._tcp",
 	"_x-puppet._tcp",
 }
+
+function start()
+    cfg = config()
+end
+
+function vertical(ctx, domain)
+    if (cfg == nil or cfg.mode == "passive") then
+        return
+    end
+
+    query_names(ctx, domain)
+end
+
+function subdomain(ctx, name, domain, times)
+    if (cfg == nil or cfg.mode == "passive" or times > 1) then
+        return
+    end
+
+    query_names(ctx, name)
+end
+
+function query_names(ctx, base)
+    for _, sub in pairs(srv_record_names) do
+        local name = sub .. "." .. base
+
+        local resp, err = resolve(ctx, name, "SRV")
+        if (err == nil and #resp > 0) then
+            send_dns_records(ctx, name, resp)
+        end
+    end
+end

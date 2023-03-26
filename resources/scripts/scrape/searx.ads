@@ -1,5 +1,6 @@
--- Copyright 2021 Jeff Foley. All rights reserved.
+-- Copyright © by Jeff Foley 2017-2023. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+-- SPDX-License-Identifier: Apache-2.0
 
 local url = require("url")
 
@@ -39,9 +40,9 @@ function vertical(ctx, domain)
 
         local ok = scrape(ctx, {
             ['url']=host,
-            method="POST",
-            data=url.build_query_string(params),
-            headers={['Content-Type']="application/x-www-form-urlencoded"},
+            ['method']="POST",
+            ['header']={['Content-Type']="application/x-www-form-urlencoded"},
+            ['body']=url.build_query_string(params),
         })
         if not ok then
             break

@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2020-2022. All rights reserved.
+// Copyright © by Jeff Foley 2017-2023. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -7,28 +7,35 @@ package scripting
 import (
 	"context"
 	"net"
+	"strings"
 	"time"
 
 	amassnet "github.com/OWASP/Amass/v3/net"
+	amassdns "github.com/OWASP/Amass/v3/net/dns"
 	"github.com/OWASP/Amass/v3/net/http"
 	"github.com/OWASP/Amass/v3/requests"
-	"github.com/OWASP/Amass/v3/systems"
+	"github.com/caffix/resolve"
+	"github.com/miekg/dns"
 	bf "github.com/tylertreat/BoomFilters"
 	lua "github.com/yuin/gopher-lua"
+	"golang.org/x/net/publicsuffix"
 )
 
-func genNewName(ctx context.Context, sys systems.System, script *Script, name string) {
-	if domain := sys.Config().WhichDomain(name); domain != "" {
+func (s *Script) genNewName(ctx context.Context, name string) {
+	s.newNameWithSrc(ctx, name, s.Description(), s.String())
+}
+
+func (s *Script) newNameWithSrc(ctx context.Context, name, tag, src string) {
+	if domain := s.sys.Config().WhichDomain(name); domain != "" {
 		select {
 		case <-ctx.Done():
-		case <-script.Done():
-		default:
-			script.queue.Append(&requests.DNSRequest{
-				Name:   name,
-				Domain: domain,
-				Tag:    script.Description(),
-				Source: script.String(),
-			})
+		case <-s.Done():
+		case s.Output() <- &requests.DNSRequest{
+			Name:   name,
+			Domain: domain,
+			Tag:    tag,
+			Source: src,
+		}:
 		}
 	}
 }
@@ -38,7 +45,7 @@ func (s *Script) newName(L *lua.LState) int {
 	if ctx, err := extractContext(L.CheckUserData(1)); err == nil && !contextExpired(ctx) {
 		if n := L.CheckString(2); n != "" {
 			if name := s.subre.FindString(n); name != "" {
-				genNewName(ctx, s.sys, s, name)
+				s.genNewName(ctx, name)
 			}
 		}
 	}
@@ -60,17 +67,112 @@ func (s *Script) sendNames(L *lua.LState) int {
 }
 
 func (s *Script) internalSendNames(ctx context.Context, content string) int {
+	return s.internalSendNamesWithSrc(ctx, content, s.Description(), s.String())
+}
+
+func (s *Script) internalSendNamesWithSrc(ctx context.Context, content, tag, src string) int {
 	filter := bf.NewDefaultStableBloomFilter(1000, 0.01)
 	defer filter.Reset()
 
 	var count int
 	for _, name := range s.subre.FindAllString(string(content), -1) {
 		if n := http.CleanName(name); n != "" && !filter.TestAndAdd([]byte(n)) {
-			genNewName(ctx, s.sys, s, n)
+			s.newNameWithSrc(ctx, n, tag, src)
 			count++
 		}
 	}
 	return count
+}
+
+func (s *Script) sendDNSRecords(L *lua.LState) int {
+	ctx, err := extractContext(L.CheckUserData(1))
+	if err != nil || contextExpired(ctx) {
+		return 0
+	}
+
+	name := L.CheckString(2)
+	if name == "" {
+		return 0
+	}
+
+	array := L.CheckTable(3)
+	if array == nil {
+		return 0
+	}
+
+	var records []requests.DNSAnswer
+	array.ForEach(func(k, v lua.LValue) {
+		if tbl, ok := v.(*lua.LTable); ok {
+			var qtype int
+			if lv := L.GetField(tbl, "rrtype"); lv != nil {
+				if n, ok := lv.(lua.LNumber); ok {
+					qtype = int(n)
+				}
+			}
+
+			name, _ := getStringField(L, tbl, "rrname")
+			data, _ := getStringField(L, tbl, "rrdata")
+			if name != "" && qtype != 0 && data != "" {
+				records = append(records, requests.DNSAnswer{
+					Name: name,
+					Type: qtype,
+					Data: data,
+				})
+			}
+		}
+	})
+
+	s.internalSendDNSRecords(ctx, name, records)
+	return 0
+}
+
+func (s *Script) internalSendDNSRecords(ctx context.Context, name string, records []requests.DNSAnswer) {
+	if domain := s.sys.Config().WhichDomain(name); domain != "" {
+		select {
+		case <-ctx.Done():
+		case <-s.Done():
+		case s.Output() <- &requests.DNSRequest{
+			Name:    name,
+			Domain:  domain,
+			Records: records,
+			Tag:     s.Description(),
+			Source:  s.String(),
+		}:
+		}
+	}
+}
+
+func (s *Script) newPTR(ctx context.Context, record *resolve.ExtractedAnswer) {
+	answer := strings.ToLower(resolve.RemoveLastDot(record.Data))
+	if amassdns.RemoveAsteriskLabel(answer) != answer {
+		return
+	}
+	// Check that the name discovered is in scope
+	if d := s.sys.Config().WhichDomain(answer); d == "" {
+		return
+	}
+
+	ptr := strings.ToLower(resolve.RemoveLastDot(record.Name))
+	domain, err := publicsuffix.EffectiveTLDPlusOne(ptr)
+	if err != nil {
+		return
+	}
+
+	select {
+	case <-ctx.Done():
+	case <-s.Done():
+	case s.Output() <- &requests.DNSRequest{
+		Name:   ptr,
+		Domain: domain,
+		Records: []requests.DNSAnswer{{
+			Name: ptr,
+			Type: int(dns.TypePTR),
+			Data: answer,
+		}},
+		Tag:    s.Description(),
+		Source: s.String(),
+	}:
+	}
 }
 
 // Wrapper so that scripts can send discovered IP addresses to Amass.
@@ -89,13 +191,12 @@ func (s *Script) newAddr(L *lua.LState) int {
 				select {
 				case <-ctx.Done():
 				case <-s.Done():
-				default:
-					s.queue.Append(&requests.AddrRequest{
-						Address: ip.String(),
-						Domain:  domain,
-						Tag:     s.SourceType,
-						Source:  s.String(),
-					})
+				case s.Output() <- &requests.AddrRequest{
+					Address: ip.String(),
+					Domain:  domain,
+					Tag:     s.SourceType,
+					Source:  s.String(),
+				}:
 				}
 			}
 		}
@@ -166,13 +267,12 @@ func (s *Script) associated(L *lua.LState) int {
 			select {
 			case <-ctx.Done():
 			case <-s.Done():
-			default:
-				s.queue.Append(&requests.WhoisRequest{
-					Domain:     domain,
-					NewDomains: []string{assoc},
-					Tag:        s.SourceType,
-					Source:     s.String(),
-				})
+			case s.Output() <- &requests.WhoisRequest{
+				Domain:     domain,
+				NewDomains: []string{assoc},
+				Tag:        s.SourceType,
+				Source:     s.String(),
+			}:
 			}
 		}
 	}

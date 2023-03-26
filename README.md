@@ -8,7 +8,7 @@
 [![GitHub Release](https://img.shields.io/github/release/OWASP/Amass)](https://github.com/OWASP/Amass/releases/latest)
 [![Docker Images](https://img.shields.io/docker/pulls/caffix/amass.svg)](https://hub.docker.com/r/caffix/amass)
 [![Follow on Twitter](https://img.shields.io/twitter/follow/owaspamass.svg?logo=twitter)](https://twitter.com/owaspamass)
-[![Chat on Discord](https://img.shields.io/discord/433729817918308352.svg?logo=discord)](https://discord.gg/rtN8GMd)
+[![Chat on Discord](https://img.shields.io/discord/433729817918308352.svg?logo=discord)](https://discord.gg/TMMyYtBMTR)
 
 ![GitHub Test Status](https://github.com/OWASP/Amass/workflows/tests/badge.svg)
 [![GoDoc](https://pkg.go.dev/badge/github.com/OWASP/Amass/v3?utm_source=godoc)](https://pkg.go.dev/github.com/OWASP/Amass/v3)
@@ -24,17 +24,17 @@ The OWASP Amass Project performs network mapping of attack surfaces and external
 
 | Technique    | Data Sources |
 |:-------------|:-------------|
-| APIs         | 360PassiveDNS, Ahrefs, AnubisDB, BeVigil, BinaryEdge, BufferOver, BuiltWith, C99, Chaos, CIRCL, Cloudflare, DNSDB, DNSRepo, Deepinfo, Detectify, FOFA, FullHunt, GitHub, GitLab, Greynoise, HackerTarget, Hunter, IntelX, LeakIX, Maltiverse, Mnemonic, Netlas, Pastebin, PassiveTotal, PentestTools, Pulsedive, Quake, SOCRadar, Searchcode, Shodan, SonarSearch, Spamhaus, Spyse, Sublist3rAPI, ThreatBook, ThreatCrowd, ThreatMiner, Twitter, URLScan, VirusTotal, Yandex, ZETAlytics, ZoomEye |
-| Certificates | Active pulls (optional), Censys, CertCentral, CertSpotter, Crtsh, Digitorus, FacebookCT, GoogleCT |
+| APIs         | 360PassiveDNS, Ahrefs, AnubisDB, BeVigil, BinaryEdge, BufferOver, BuiltWith, C99, Chaos, CIRCL, DNSDB, DNSRepo, Deepinfo, Detectify, FOFA, FullHunt, GitHub, GitLab, GrepApp, Greynoise, HackerTarget, Hunter, IntelX, LeakIX, Maltiverse, Mnemonic, Netlas, Pastebin, PassiveTotal, PentestTools, Pulsedive, Quake, SOCRadar, Searchcode, Shodan, Spamhaus, Sublist3rAPI, ThreatBook, ThreatMiner, URLScan, VirusTotal, Yandex, ZETAlytics, ZoomEye |
+| Certificates | Active pulls (optional), Censys, CertCentral, CertSpotter, Crtsh, Digitorus, FacebookCT |
 | DNS          | Brute forcing, Reverse DNS sweeping, NSEC zone walking, Zone transfers, FQDN alterations/permutations, FQDN Similarity-based Guessing |
-| Routing      | ASNLookup, BGPTools, BGPView, BigDataCloud, IPdata, IPinfo, NetworksDB, RADb, Robtex, ShadowServer, TeamCymru |
-| Scraping     | AbuseIPDB, Ask, Baidu, Bing, DNSDumpster, DNSHistory, DNSSpy, DuckDuckGo, Gists, Google, HackerOne, HyperStat, PKey, RapidDNS, Riddler, Searx, SiteDossier, Yahoo |
-| Web Archives | ArchiveIt, Arquivo, CommonCrawl, HAW, PublicWWW, UKWebArchive, Wayback |
-| WHOIS        | AlienVault, AskDNS, DNSlytics, ONYPHE, SecurityTrails, SpyOnWeb, Umbrella, WhoisXMLAPI |
+| Routing      | ASNLookup, BGPTools, BGPView, BigDataCloud, IPdata, IPinfo, RADb, Robtex, ShadowServer, TeamCymru |
+| Scraping     | AbuseIPDB, Ask, Baidu, Bing, CSP Header, DNSDumpster, DNSHistory, DNSSpy, DuckDuckGo, Gists, Google, HackerOne, HyperStat, PKey, RapidDNS, Riddler, Searx, SiteDossier, Yahoo |
+| Web Archives | Arquivo, CommonCrawl, HAW, PublicWWW, UKWebArchive, Wayback |
+| WHOIS        | AlienVault, AskDNS, DNSlytics, ONYPHE, SecurityTrails, SpyOnWeb, WhoisXMLAPI |
 
 ----
 
-## Installation [![Go Version](https://img.shields.io/github/go-mod/go-version/OWASP/Amass)](https://golang.org/dl/) [![Docker Images](https://img.shields.io/docker/pulls/caffix/amass.svg)](https://hub.docker.com/r/caffix/amass) [![Snapcraft](https://snapcraft.io/amass/badge.svg)](https://snapcraft.io/amass) [![GitHub Downloads](https://img.shields.io/github/downloads/OWASP/Amass/latest/total.svg)](https://github.com/OWASP/Amass/releases/latest)
+## Installation [![Go Version](https://img.shields.io/github/go-mod/go-version/OWASP/Amass)](https://golang.org/dl/) [![Docker Images](https://img.shields.io/docker/pulls/caffix/amass.svg)](https://hub.docker.com/r/caffix/amass) [![GitHub Downloads](https://img.shields.io/github/downloads/OWASP/Amass/latest/total.svg)](https://github.com/OWASP/Amass/releases/latest)
 
 > You can find some additional installation variations in the [Installation Guide](./doc/install.md).
 
@@ -49,12 +49,6 @@ The OWASP Amass Project performs network mapping of attack surfaces and external
 ```bash
 brew tap caffix/amass
 brew install amass
-```
-
-#### Snapcraft
-
-```bash
-sudo snap install amass
 ```
 
 ### Docker Container
@@ -134,6 +128,6 @@ Add it to our ever-growing list of [REFERENCES.md](REFERENCES.md) by forking and
 
 ## Licensing [![License](https://img.shields.io/badge/license-apache%202-blue)](https://www.apache.org/licenses/LICENSE-2.0)
 
-This program is free software: you can redistribute it and/or modify it under the terms of the [Apache license](LICENSE). OWASP Amass and any contributions are Copyright © by Jeff Foley 2017-2022. Some subcomponents have separate licenses.
+This program is free software: you can redistribute it and/or modify it under the terms of the [Apache license](LICENSE). OWASP Amass and any contributions are Copyright © by Jeff Foley 2017-2023. Some subcomponents have separate licenses.
 
 ![Network graph](./images/network_06092018.png "Amass Network Mapping")

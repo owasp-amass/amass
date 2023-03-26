@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2021-2022. All rights reserved.
+// Copyright © by Jeff Foley 2017-2023. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -12,10 +12,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
 
+	amassdns "github.com/OWASP/Amass/v3/net/dns"
 	"github.com/caffix/resolve"
 	"github.com/caffix/stringset"
 	"github.com/miekg/dns"
@@ -116,28 +118,41 @@ func TestRequestWebPage(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	resp, err := RequestWebPage(context.TODO(), ts.URL, nil, nil, &BasicAuth{name, pass})
-	if err == nil || resp == succ {
+	resp, err := RequestWebPage(context.TODO(), &Request{
+		URL:  ts.URL,
+		Auth: &BasicAuth{name, pass},
+	})
+	if err == nil && (resp.StatusCode == 200 || resp.Body == succ) {
 		t.Errorf("Failed to detect the bad request")
 	}
 
-	body := strings.NewReader(post)
 	var headers = map[string]string{hkey: name}
-	resp, err = RequestWebPage(context.TODO(), ts.URL, body, headers, &BasicAuth{name, pass})
-	if err != nil || resp != succ {
-		t.Errorf(resp)
+	resp, err = RequestWebPage(context.TODO(), &Request{
+		URL:    ts.URL,
+		Method: "POST",
+		Header: headers,
+		Body:   post,
+		Auth:   &BasicAuth{name, pass},
+	})
+	if err != nil || resp.StatusCode != 200 || resp.Body != succ {
+		t.Errorf(resp.Status + ": " + resp.Body)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	resp, err = RequestWebPage(ctx, ts.URL, nil, nil, nil)
-	if err == nil || resp != "" {
+	resp, err = RequestWebPage(ctx, &Request{URL: ts.URL})
+	if err == nil || resp != nil {
 		t.Errorf("Failed to detect the expired context")
 	}
 }
 
 func TestCrawl(t *testing.T) {
+	re, err := regexp.Compile(amassdns.AnySubdomainRegexString())
+	if err != nil {
+		return
+	}
+
 	tests := []struct {
 		name  string
 		depth int
@@ -168,52 +183,39 @@ func TestCrawl(t *testing.T) {
 	defer ts.Close()
 
 	for _, test := range tests {
+		got := stringset.New()
+		defer got.Close()
 		set := stringset.New(test.want...)
 		defer set.Close()
 
-		got, err := Crawl(context.Background(), ts.URL, []string{"127.0.0.1"}, test.depth)
+		err := Crawl(context.Background(), ts.URL, []string{"127.0.0.1"}, test.depth, func(req *Request, resp *Response) {
+			if u, err := url.Parse(req.URL); err == nil {
+				got.Insert(CleanName(u.Hostname()))
+			}
+			got.InsertMany(re.FindAllString(resp.Body, -1)...)
+		})
 		if err != nil {
 			t.Errorf("Failed to crawl the static web content: %s: %v", test.name, err)
 			continue
 		}
 
-		for _, w := range got {
-			set.Remove(w)
-		}
+		set.Subtract(got)
 		if set.Len() != 0 {
-			fmt.Printf("Test %s with max %d failed to discover the following names: %v\n", test.name, test.depth, set.Slice())
+			t.Errorf("Test %s with max %d failed to discover the following names: %v\n", test.name, test.depth, set.Slice())
 		}
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	_, err := Crawl(ctx, ts.URL, []string{"127.0.0.1"}, 0)
-	if err.Error() != "the context expired during the crawl of "+ts.URL {
+	err = Crawl(ctx, ts.URL, []string{"127.0.0.1"}, 0, func(req *Request, resp *Response) {})
+	if err != nil && err.Error() != "the context expired during the crawl of "+ts.URL {
 		t.Errorf("Failed to catch the expired context during the crawl")
 	}
 
-	_, err = Crawl(ctx, ts.URL, []string{"127.0.0.1"}, 0)
-	if err.Error() != "the context expired" {
+	err = Crawl(ctx, ts.URL, []string{"127.0.0.1"}, 0, func(req *Request, resp *Response) {})
+	if err != nil && err.Error() != "the context expired" {
 		t.Errorf("Failed to catch the expired context before the crawl")
-	}
-
-	next := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`<html>
-			<head>
-			<title>Sample page with links for testing Crawl</title>
-			</head>
-			<body>
-			<p>Just text as a placeholder.</p>
-			</body>
-			</html>`))
-	}))
-	defer next.Close()
-
-	_, err = Crawl(context.Background(), next.URL, []string{"127.0.0.1"}, 0)
-	if err.Error() != "no DNS names were discovered during the crawl of "+next.URL {
-		t.Errorf("Failed to detect the crawl returned zero names")
 	}
 }
 

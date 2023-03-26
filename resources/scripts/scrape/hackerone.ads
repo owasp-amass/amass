@@ -1,5 +1,6 @@
--- Copyright 2017-2021 Jeff Foley. All rights reserved.
+-- Copyright © by Jeff Foley 2017-2023. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+-- SPDX-License-Identifier: Apache-2.0
 
 name = "HackerOne"
 type = "scrape"
@@ -11,7 +12,7 @@ end
 function vertical(ctx, domain)
     scrape(ctx, {
         ['url']=build_url(domain),
-        ['headers']={['Cookie']="_gat=1"},
+        ['header']={['Cookie']="_gat=1"},
     })
 end
 

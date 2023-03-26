@@ -1,78 +1,52 @@
-// Copyright © by Jeff Foley 2020-2022. All rights reserved.
+// Copyright © by Jeff Foley 2017-2023. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
 package scripting
 
 import (
+	"bytes"
 	"context"
+	"encoding/gob"
 	"fmt"
 	"time"
 
-	lua "github.com/yuin/gopher-lua"
+	"github.com/OWASP/Amass/v3/net/http"
 )
 
-func (s *Script) getCachedResponse(ctx context.Context, url string, ttl int) (string, error) {
+func (s *Script) getCachedResponse(ctx context.Context, url string, ttl int) (*http.Response, error) {
 	for _, db := range s.sys.GraphDatabases() {
 		tCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 
-		if resp, err := db.GetSourceData(tCtx, s.String(), url, ttl); err == nil {
-			return resp, err
+		if data, err := db.GetSourceData(tCtx, s.String(), url, ttl); err == nil {
+			resp := &http.Response{}
+			b := bytes.Buffer{}
+			b.Write([]byte(data))
+
+			d := gob.NewDecoder(&b)
+			if err := d.Decode(&resp); err == nil {
+				return resp, err
+			}
 		}
 	}
-	return "", fmt.Errorf("failed to obtain a cached response for %s", url)
+	return nil, fmt.Errorf("failed to obtain a cached response for %s", url)
 }
 
-func (s *Script) setCachedResponse(ctx context.Context, url, resp string) error {
+func (s *Script) setCachedResponse(ctx context.Context, url string, resp *http.Response) error {
+	b := bytes.Buffer{}
+	e := gob.NewEncoder(&b)
+	if err := e.Encode(resp); err != nil {
+		return err
+	}
+
 	for _, db := range s.sys.GraphDatabases() {
 		tCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 
-		if err := db.CacheSourceData(tCtx, s.String(), url, resp); err != nil {
+		if err := db.CacheSourceData(tCtx, s.String(), url, b.String()); err != nil {
 			return err
 		}
 	}
 	return nil
-}
-
-// Wrapper so that scripts can obtain cached data source responses.
-func (s *Script) obtainResponse(L *lua.LState) int {
-	ctx, err := extractContext(L.CheckUserData(1))
-	if err != nil {
-		L.Push(lua.LNil)
-		return 1
-	}
-
-	var result string
-	url := L.CheckString(2)
-	ttl := L.CheckInt(3)
-
-	if url != "" && ttl > 0 {
-		if resp, err := s.getCachedResponse(ctx, url, ttl); err == nil {
-			result = resp
-		}
-	}
-
-	if result != "" {
-		L.Push(lua.LString(result))
-	} else {
-		L.Push(lua.LNil)
-	}
-	return 1
-}
-
-// Wrapper so that scripts can cache data source responses.
-func (s *Script) cacheResponse(L *lua.LState) int {
-	ctx, err := extractContext(L.CheckUserData(1))
-	if err != nil {
-		return 0
-	}
-
-	url := L.CheckString(2)
-	resp := L.CheckString(3)
-	if url != "" && resp != "" {
-		_ = s.setCachedResponse(ctx, url, resp)
-	}
-	return 0
 }

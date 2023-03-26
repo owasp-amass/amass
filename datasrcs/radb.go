@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2022. All rights reserved.
+// Copyright © by Jeff Foley 2017-2023. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -118,8 +118,11 @@ func (r *RADb) asnRequest(ctx context.Context, req *requests.ASNRequest) {
 func (r *RADb) executeASNAddrQuery(ctx context.Context, addr string) {
 	url := r.getIPURL("arin", addr)
 	headers := map[string]string{"Content-Type": "application/json"}
-	page, err := http.RequestWebPage(ctx, url, nil, headers, nil)
-	if err != nil {
+	resp, err := http.RequestWebPage(ctx, &http.Request{
+		URL:    url,
+		Header: headers,
+	})
+	if err != nil || resp.StatusCode < 200 || resp.StatusCode >= 400 {
 		r.sys.Config().Log.Printf("%s: %s: %v", r.String(), url, err)
 		return
 	}
@@ -133,7 +136,7 @@ func (r *RADb) executeASNAddrQuery(ctx context.Context, addr string) {
 			Length   int    `json:"length"`
 		} `json:"cidr0_cidrs"`
 	}
-	if err := json.Unmarshal([]byte(page), &m); err != nil {
+	if err := json.Unmarshal([]byte(resp.Body), &m); err != nil {
 		r.sys.Config().Log.Printf("%s: %s: %v", r.String(), url, err)
 		return
 	} else if m.ClassName != "ip network" || len(m.CIDRs) == 0 {
@@ -172,8 +175,11 @@ func (r *RADb) executeASNQuery(ctx context.Context, asn int, addr, prefix string
 	numRateLimitChecks(r, 2)
 	url := r.getASNURL("arin", strconv.Itoa(asn))
 	headers := map[string]string{"Content-Type": "application/json"}
-	page, err := http.RequestWebPage(ctx, url, nil, headers, nil)
-	if err != nil {
+	resp, err := http.RequestWebPage(ctx, &http.Request{
+		URL:    url,
+		Header: headers,
+	})
+	if err != nil || resp.StatusCode < 200 || resp.StatusCode >= 400 {
 		r.sys.Config().Log.Printf("%s: %s: %v", r.String(), url, err)
 		return
 	}
@@ -186,7 +192,7 @@ func (r *RADb) executeASNQuery(ctx context.Context, asn int, addr, prefix string
 			Date   string `json:"eventDate"`
 		}
 	}
-	if err := json.Unmarshal([]byte(page), &m); err != nil {
+	if err := json.Unmarshal([]byte(resp.Body), &m); err != nil {
 		r.sys.Config().Log.Printf("%s: %s: %v", r.String(), url, err)
 		return
 	} else if m.ClassName != "autnum" {
@@ -251,8 +257,11 @@ func (r *RADb) netblocks(ctx context.Context, asn int) *stringset.Set {
 	numRateLimitChecks(r, 2)
 	url := r.getNetblocksURL(strconv.Itoa(asn))
 	headers := map[string]string{"Content-Type": "application/json"}
-	page, err := http.RequestWebPage(ctx, url, nil, headers, nil)
-	if err != nil {
+	resp, err := http.RequestWebPage(ctx, &http.Request{
+		URL:    url,
+		Header: headers,
+	})
+	if err != nil || resp.StatusCode < 200 || resp.StatusCode >= 400 {
 		r.sys.Config().Log.Printf("%s: %s: %v", r.String(), url, err)
 		return netblocks
 	}
@@ -268,7 +277,7 @@ func (r *RADb) netblocks(ctx context.Context, asn int) *stringset.Set {
 			} `json:"cidr0_cidrs"`
 		} `json:"arin_originas0_networkSearchResults"`
 	}
-	if err := json.Unmarshal([]byte(page), &m); err != nil {
+	if err := json.Unmarshal([]byte(resp.Body), &m); err != nil {
 		r.sys.Config().Log.Printf("%s: %s: %v", r.String(), url, err)
 		return netblocks
 	}

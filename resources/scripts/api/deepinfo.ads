@@ -1,5 +1,6 @@
--- Copyright 2022 Jeff Foley. All rights reserved.
+-- Copyright © by Jeff Foley 2017-2023. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+-- SPDX-License-Identifier: Apache-2.0
 
 local json = require("json")
 
@@ -13,7 +14,7 @@ end
 function check()
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -26,7 +27,7 @@ end
 function vertical(ctx, domain)
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -38,7 +39,7 @@ function vertical(ctx, domain)
     while(true) do
         local resp, err = request(ctx, {
             ['url']=vert_url(domain, p),
-            ['headers']={
+            ['header']={
                 ['Accept']="application/json",
                 ['apikey']=c.key,
             },
@@ -46,18 +47,26 @@ function vertical(ctx, domain)
         if (err ~= nil and err ~= "") then
             log(ctx, "vertical request to service failed: " .. err)
             return
-        end
-
-        local j = json.decode(resp)
-        if (j == nil or j.results == nil) then
+        elseif (resp.status_code < 200 or resp.status_code >= 400) then
+            log(ctx, "vertical request to service returned with status: " .. resp.status)
             return
         end
 
-        for _, r in pairs(j.results) do
-            new_name(ctx, r.punycode)
+        local d = json.decode(resp.body)
+        if (d == nil) then
+            log(ctx, "failed to decode the JSON response")
+            return
+        elseif (d.results == nil or #(d.results) == 0) then
+            return
         end
 
-        if j.result_count <= 100 * p then
+        for _, r in pairs(d.results) do
+            if (r ~= nil and r.punycode ~= nil and r.punycode ~= "") then
+                new_name(ctx, r.punycode)
+            end
+        end
+
+        if (d.result_count <= 100 * p) then
             break
         end
         p = p + 1
@@ -71,7 +80,7 @@ end
 function horizontal(ctx, domain)
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -83,26 +92,34 @@ function horizontal(ctx, domain)
     while(true) do
         local resp, err = request(ctx, {
             ['url']=horizon_url(domain, p),
-            ['headers']={
+            ['header']={
                 ['Accept']="application/json",
                 ['apikey']=c.key,
             },
         })
         if (err ~= nil and err ~= "") then
-            log(ctx, "vertical request to service failed: " .. err)
+            log(ctx, "horizontal request to service failed: " .. err)
+            return
+        elseif (resp.status_code < 200 or resp.status_code >= 400) then
+            log(ctx, "horizontal request to service returned with status: " .. resp.status)
             return
         end
 
-        local j = json.decode(resp)
-        if (j == nil or j.results == nil) then
+        local d = json.decode(resp.body)
+        if (d == nil) then
+            log(ctx, "failed to decode the JSON response")
+            return
+        elseif (d.results == nil or #(d.results) == 0) then
             return
         end
 
-        for _, r in pairs(j.results) do
-            associated(ctx, domain, r.punycode)
+        for _, r in pairs(d.results) do
+            if (r ~= nil and r.punycode ~= nil and r.punycode ~= "") then
+                associated(ctx, domain, r.punycode)
+            end
         end
 
-        if j.result_count <= 100 * i then
+        if (d.result_count <= 100 * i) then
             break
         end
         p = p + 1
@@ -116,7 +133,7 @@ end
 function asn(ctx, addr, asn)
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -130,28 +147,34 @@ function asn(ctx, addr, asn)
 
     local resp, err = request(ctx, {
         ['url']=asn_url(addr),
-        ['headers']={
+        ['header']={
             ['Accept']="application/json",
             ['apikey']=c.key,
         },
     })
     if (err ~= nil and err ~= "") then
-        log(ctx, "vertical request to service failed: " .. err)
+        log(ctx, "asn request to service failed: " .. err)
+        return
+    elseif (resp.status_code < 200 or resp.status_code >= 400) then
+        log(ctx, "asn request to service returned with status: " .. resp.status)
         return
     end
 
-    local j = json.decode(resp)
-    if (j == nil or j.ipwhois == nil) then
+    local d = json.decode(resp.body)
+    if (d == nil) then
+        log(ctx, "failed to decode the JSON response")
+        return
+    elseif (d.ipwhois == nil) then
         return
     end
 
     new_asn(ctx, {
         ['addr']=addr,
-        ['asn']=tonumber(string.sub(j.ipwhois.asn, 3)),
-        ['desc']=j.ipwhois.asn_description,
-        ['prefix']=j.ipwhois.asn_cidr,
-        ['cc']=j.ipwhois.asn_country_code,
-        ['registry']=j.ipwhois.asn_registry,
+        ['asn']=tonumber(string.sub(d.ipwhois.asn, 3)),
+        ['desc']=d.ipwhois.asn_description,
+        ['prefix']=d.ipwhois.asn_cidr,
+        ['cc']=d.ipwhois.asn_country_code,
+        ['registry']=d.ipwhois.asn_registry,
     })
 end
 

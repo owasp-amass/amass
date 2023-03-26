@@ -1,5 +1,6 @@
--- Copyright 2021 Jeff Foley. All rights reserved.
+-- Copyright © by Jeff Foley 2017-2023. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+-- SPDX-License-Identifier: Apache-2.0
 
 local json = require("json")
 
@@ -16,7 +17,7 @@ end
 function check()
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -29,7 +30,7 @@ end
 function vertical(ctx, domain)
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -42,7 +43,7 @@ end
 
 function phonebook(ctx, domain, key)
     local id = search(ctx, "", domain, key)
-    if id == "" then
+    if (id == "") then
         return
     end
 
@@ -50,13 +51,13 @@ function phonebook(ctx, domain, key)
     local limit = 1000
     while status == 0 or status == 3 do
         local resp = results(ctx, id, limit, key)
-        if resp == nil then
+        if (resp == nil) then
             break
         end
 
         status = resp.status
         if ((status == 0 or status == 1) and resp.selectors ~= nil and #(resp.selectors) > 0) then
-            if #(resp.selectors) < limit then
+            if (#(resp.selectors) < limit) then
                 limit = limit - #(resp.selectors)
             end
 
@@ -70,69 +71,83 @@ function phonebook(ctx, domain, key)
             end
         end
 
-        if limit <= 0 then
+        if (limit <= 0) then
             break
         end
     end
 end
 
 function search(ctx, domain, key)
-    local err, body, resp
+    local body, resp, err
 
     body, err = json.encode({
-        term=domain, 
-        lookuplevel=0,
-        timeout=0,
-        maxresults=max,
-        datefrom="",
-        dateto="",
-        sort=0,
-        media=0,
+        ['term']=domain, 
+        ['lookuplevel']=0,
+        ['timeout']=0,
+        ['maxresults']=max,
+        ['datefrom']="",
+        ['dateto']="",
+        ['sort']=0,
+        ['media']=0,
     })
     if (err ~= nil and err ~= "") then
         return ""
     end
 
     resp, err = request(ctx, {
-        method="POST",
-        data=body,
         ['url']=host .. "phonebook/search",
-        headers={
+        ['method']="POST",
+        ['header']={
             ['x-key']=key,
             ['Content-Type']="application/json",
             ['User-Agent']=useragent,
-            Connection="keep-alive",
+            ['Connection']="keep-alive",
         },
+        ['body']=body,
     })
     if (err ~= nil and err ~= "") then
-        log(ctx, "vertical search request to service failed: " .. err)
+        log(ctx, "search request to service failed: " .. err)
+        return ""
+    elseif (resp.status_code < 200 or resp.status_code >= 400) then
+        log(ctx, "search request to service returned with status: " .. resp.status)
         return ""
     end
 
-    local j = json.decode(resp)
-    if (j == nil or j.status == nil or j.id == nil or j.status ~= 0) then
+    local d = json.decode(resp.body)
+    if (d == nil) then
+        log(ctx, "failed to decode the JSON response")
+        return ""
+    elseif (d.status == nil or d.id == nil or d.status ~= 0) then
         return ""
     end
-    return j.id
+
+    return d.id
 end
 
 function results(ctx, id, limit, key)
     local resp, err = request(ctx, {
         ['url']=host .. "phonebook/search/result?id=" .. id .. "&limit=" .. limit,
-        headers={
+        ['header']={
             ['x-key']=key,
             ['User-Agent']=useragent,
-            Connection="keep-alive",
+            ['Connection']="keep-alive",
         },
     })
     if (err ~= nil and err ~= "") then
-        log(ctx, "vertical results request to service failed: " .. err)
+        log(ctx, "result request to service failed: " .. err)
+        return nil
+    elseif (resp.status_code < 200 or resp.status_code >= 400) then
+        log(ctx, "result request to service returned with status: " .. resp.status)
         return nil
     end
 
-    local j = json.decode(resp)
-    if (j == nil or j.status == nil) then
+    local d = json.decode(resp.body)
+    if (d == nil) then
+        log(ctx, "failed to decode the JSON response")
+        return nil
+    elseif (d.status == nil) then
         return nil
     end
-    return j
+
+    return d
 end

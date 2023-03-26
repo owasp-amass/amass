@@ -1,5 +1,6 @@
--- Copyright 2021 Jeff Foley. All rights reserved.
+-- Copyright © by Jeff Foley 2017-2023. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+-- SPDX-License-Identifier: Apache-2.0
 
 name = "AbuseIPDB"
 type = "scrape"
@@ -19,20 +20,23 @@ function vertical(ctx, domain)
         return
     end
 
-    local page, err = request(ctx, {['url']=build_url(ip)})
+    local resp, err = request(ctx, {['url']=build_url(ip)})
     if (err ~= nil and err ~= "") then
         log(ctx, "vertical request to service failed: " .. err)
         return
+    elseif (resp.status_code < 200 or resp.status_code >= 400) then
+        log(ctx, "vertical request to service returned with status code: " .. resp.status)
+        return
     end
 
-    local pattern = "<h1 style=text\\-align:center>([.a-z0-9-]{1,63})"
-    local matches = submatch(page, pattern)
+    local pattern = "<h1 class=text-center>([.a-z0-9-]{1,63})"
+    local matches = submatch(resp.body, pattern)
     if (matches == nil or #matches == 0 or not in_scope(ctx, matches[1][2])) then
         return
     end
 
     pattern = "<li>([.a-z0-9-]{1,256})</li>"
-    matches = submatch(page, pattern)
+    matches = submatch(resp.body, pattern)
     if (matches == nil or #matches == 0) then
         return
     end
@@ -49,14 +53,17 @@ function build_url(ip)
 end
 
 function get_ip(ctx, domain)
-    local page, err = request(ctx, {['url']=ip_url(domain)})
+    local resp, err = request(ctx, {['url']=ip_url(domain)})
     if (err ~= nil and err ~= "") then
         log(ctx, "get_ip request to service failed: " .. err)
+        return nil
+    elseif (resp.status_code < 200 or resp.status_code >= 400) then
+        log(ctx, "get_ip request to service returned with status code: " .. resp.status)
         return nil
     end
 
     local pattern = "<i\\ class=text\\-primary>(.*)</i>"
-    local matches = submatch(page, pattern)
+    local matches = submatch(resp.body, pattern)
     if (matches == nil or #matches == 0) then
         return nil
     end

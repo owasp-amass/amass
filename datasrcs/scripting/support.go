@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2020-2022. All rights reserved.
+// Copyright © by Jeff Foley 2017-2023. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -28,6 +28,10 @@ func (s *Script) contextToUserData(ctx context.Context) *lua.LUserData {
 }
 
 func contextExpired(ctx context.Context) bool {
+	if ctx == nil {
+		return true
+	}
+
 	select {
 	case <-ctx.Done():
 		return true

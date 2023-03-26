@@ -1,4 +1,4 @@
--- Copyright © by Jeff Foley 2022. All rights reserved.
+-- Copyright © by Jeff Foley 2017-2023. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 -- SPDX-License-Identifier: Apache-2.0
 
@@ -11,52 +11,42 @@ function start()
     set_rate_limit(2)
 end
 
-function check()
-    local c
-    local cfg = datasrc_config()
-    if cfg ~= nil then
-        c = cfg.credentials
-    end
-
-    if (c ~= nil and c.key ~= nil and c.key ~= "") then
-        return true
-    end
-    return false
-end
-
 function vertical(ctx, domain)
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    local headers = {
+      ['Accept']="application/json",
+    }
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
-
-    if (c == nil or c.key == nil or c.key == "") then
-        return
+    if (c ~= nil and c.key ~= nil and c.key ~= "") then
+       headers['api-key'] = c.key
     end
 
     local resp, err = request(ctx, {
         ['url']=vert_url(domain),
-        headers={
-            ['api-key']=c.key,
-            ['Accept']="application/json",
-        },
+        ['header']=headers,
     })
     if (err ~= nil and err ~= "") then
         log(ctx, "vertical request to service failed: " .. err)
         return
-    end
-
-    local j = json.decode(resp)
-    if (j == nil or j.nodes == nil or #(j.nodes) == 0) then
+    elseif (resp.status_code < 200 or resp.status_code >= 400) then
+        log(ctx, "vertical request to service returned with status: " .. resp.status)
         return
     end
 
-    for _, node in pairs(j.nodes) do
-        new_name(ctx, node.fqdn)
+    local d = json.decode(resp.body)
+    if (d == nil or #(d) == 0) then
+        return
+    end
+    for _, node in pairs(d) do
+        if (node ~= nil and node.subdomain ~= nil and node.subdomain ~= "") then
+            new_name(ctx, node.subdomain)
+        end
     end
 end
 
 function vert_url(domain)
-    return "https://leakix.net/api/graph/hostname/" .. domain .. "?v%5B%5D=hostname&d=auto&l=1..5&f=3d-force"
+    return "https://leakix.net/api/subdomains/" .. domain
 end

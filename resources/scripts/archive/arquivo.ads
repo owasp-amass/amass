@@ -1,5 +1,6 @@
--- Copyright 2021 Jeff Foley. All rights reserved.
+-- Copyright © by Jeff Foley 2017-2023. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+-- SPDX-License-Identifier: Apache-2.0
 
 local url = require("url")
 local json = require("json")
@@ -16,10 +17,16 @@ function vertical(ctx, domain)
     if (err ~= nil and err ~= "") then
         log(ctx, "vertical request to service failed: " .. err)
         return
+    elseif (resp.status_code < 200 or resp.status_code >= 400) then
+        log(ctx, "vertical request to service returned with status code: " .. resp.status)
+        return
     end
 
-    local d = json.decode(resp)
-    if (d == nil or #(d.response_items) == 0) then
+    local d = json.decode(resp.body)
+    if (d == nil) then
+        log(ctx, "failed to decode the JSON response")
+        return
+    elseif (d.response_items == nil or #(d.response_items) == 0) then
         return
     end
 
@@ -33,9 +40,6 @@ function build_url(domain)
         ['q']=domain,
         ['offset']="0",
         ['maxItems']="500",
-        ['siteSearch']="",
-        ['type']="",
-        ['collection']="",
     }
 
     return "https://arquivo.pt/textsearch?" .. url.build_query_string(params)

@@ -1,5 +1,6 @@
--- Copyright 2021 Jeff Foley. All rights reserved.
+-- Copyright © by Jeff Foley 2017-2023. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+-- SPDX-License-Identifier: Apache-2.0
 
 local json = require("json")
 
@@ -13,7 +14,7 @@ end
 function check()
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -26,7 +27,7 @@ end
 function vertical(ctx, domain)
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -36,25 +37,32 @@ function vertical(ctx, domain)
 
     local resp, err = request(ctx, {
         ['url']=search_url(domain, scope),
-        ['headers']={['PRIVATE-TOKEN']=c.key},
+        ['header']={['PRIVATE-TOKEN']=c.key},
     })
     if (err ~= nil and err ~= "") then
         log(ctx, "vertical request to service failed: " .. err)
         return
-    end
-
-    local j = json.decode(resp)
-    if (j == nil or #j == 0) then
+    elseif (resp.status_code < 200 or resp.status_code >= 400) then
+        log(ctx, "vertical request to service returned with status: " .. resp.status)
         return
     end
 
-    for _, item in pairs(j) do
-        local ok = scrape(ctx, {
-            ['url']=get_file_url(item.project_id, item.path, item.ref),
-            ['headers']={['PRIVATE-TOKEN']=c.key},
-        })
-        if not ok then
-            send_names(ctx, item.data)
+    local d = json.decode(resp.body)
+    if (d == nil) then
+        log(ctx, "failed to decode the JSON response")
+        return
+    end
+
+    for _, item in pairs(d) do
+        if (item ~= nil and item.project_id ~= nil and 
+            item.path ~= nil and item.ref ~= nil) then
+            local ok = scrape(ctx, {
+                ['url']=get_file_url(item.project_id, item.path, item.ref),
+                ['headers']={['PRIVATE-TOKEN']=c.key},
+            })
+            if not ok then
+                send_names(ctx, item.data)
+            end
         end
     end
 end

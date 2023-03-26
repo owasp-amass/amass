@@ -1,5 +1,6 @@
--- Copyright 2020-2021 Jeff Foley. All rights reserved.
+-- Copyright © by Jeff Foley 2017-2023. All rights reserved.
 -- Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+-- SPDX-License-Identifier: Apache-2.0
 
 local json = require("json")
 
@@ -7,13 +8,13 @@ name = "VirusTotal"
 type = "api"
 
 function start()
-    set_rate_limit(10)
+    set_rate_limit(5)
 end
 
 function check()
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -26,7 +27,7 @@ end
 function vertical(ctx, domain)
     local c
     local cfg = datasrc_config()
-    if cfg ~= nil then
+    if (cfg ~= nil) then
         c = cfg.credentials
     end
 
@@ -34,25 +35,30 @@ function vertical(ctx, domain)
         return
     end
 
-    local vurl = build_url(domain, c.key)
-    local resp, err = request(ctx, {['url']=vurl})
+    local resp, err = request(ctx, {['url']=build_url(domain, c.key)})
     if (err ~= nil and err ~= "") then
         log(ctx, "vertical request to service failed: " .. err)
         return
-    end
-
-    local d = json.decode(resp)
-    if d == nil or d.response_code ~= 1 then
-        log(ctx, name .. ": " .. vurl .. ": HTTP status " .. d.response_code .. ": " .. d.verbose_msg)
+    elseif (resp.status_code < 200 or resp.status_code >= 400) then
+        log(ctx, "vertical request to service returned with status: " .. resp.status)
         return
     end
 
-    if d.subdomains == nil then
+    local d = json.decode(resp.body)
+    if (d == nil) then
+        log(ctx, "failed to decode the JSON response")
+        return
+    elseif (d.response_code == nil or d.response_code ~= 1) then
+        if (d.verbose_msg ~= nil and d.verbose_msg ~= "") then
+            log(ctx, "error returned in the response: " .. d.verbose_msg)
+        end
         return
     end
 
     for _, sub in pairs(d.subdomains) do
-        new_name(ctx, sub)
+        if (sub ~= nil and sub ~= "") then
+            new_name(ctx, sub)
+        end
     end
 end
 
