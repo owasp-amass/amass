@@ -102,6 +102,21 @@ The intel subcommand can help you discover additional root domain names associat
 
 This subcommand will perform DNS enumeration and network mapping while populating the selected graph database. All the setting available in the configuration file are relevant to this subcommand. The following flags are available for configuration:
 
+#### Mode description
+
++ **Normal**: Run enum subcommand without specifing active or passive flag will seed the enumeration from data sources and leverage DNS to validate findings and further investigate the namespaces in scope (provided domain names)
+
+  `amass enum -d example.com`
+
++ **Active**: It will perform all of the Normal mode and reach out to the discovered assets and attempt to obtain TLS certificates, perform DNS zone transfers, use NSEC walking, and perform web crawling.
+
+  `amass enum -active -d example.com -p 80,443,8080`
+
++ **Passive**: It will only obtain information from data sources and blindly accept it.
+
+  `amass enum --passive -d example.com`
+  
+
 | Flag | Description | Example |
 |------|-------------|---------|
 | -active | Enable active recon methods | amass enum -active -d example.com -p 80,443,8080 |
