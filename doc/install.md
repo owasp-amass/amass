@@ -5,7 +5,7 @@
 
 ## Prebuilt Binaries
 
-A [precompiled version is available](https://github.com/OWASP/Amass/releases) with each release.
+A [precompiled version is available](https://github.com/owasp-amass/amass/releases) with each release.
 
 Using this installation option on macOS is could result in an 'unidentified developer' warning. This can be resolved by following the steps below:
 
@@ -20,7 +20,7 @@ Using this installation option on macOS is could result in an 'unidentified deve
 1. Build the [Docker](https://docs.docker.com/) image:
 
 ```bash
-docker build -t amass https://github.com/OWASP/Amass.git
+docker build -t amass https://github.com/owasp-amass/amass.git
 ```
 
 2. Run the Docker image:
@@ -44,7 +44,7 @@ If you prefer to build your own binary from the latest release of the source cod
 Simply execute the following command:
 
 ```bash
-go install -v github.com/OWASP/Amass/v3/...@master
+go install -v github.com/owasp-amass/amass/v3/...@master
 ```
 
 At this point, the binary should be in *$GOPATH/bin*.
@@ -56,7 +56,7 @@ At this point, the binary should be in *$GOPATH/bin*.
 For **Homebrew**, the following two commands will install Amass into your environment:
 
 ```bash
-brew tap caffix/amass
+brew tap owasp-amass/amass
 brew install amass
 ```
 

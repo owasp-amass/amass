@@ -1,6 +1,6 @@
 # Contributing
 
-Thank you for considering making contributions to Amass! Start by taking a look at the [open issues](https://github.com/OWASP/Amass/issues) for things we need help with!
+Thank you for considering making contributions to Amass! Start by taking a look at the [open issues](https://github.com/owasp-amass/amass/issues) for things we need help with!
 
 Please follow standard github best practices: fork the repo, branch from the tip of develop, make some commits, and submit a pull request to develop. 
 
@@ -9,17 +9,17 @@ Please make sure to use `gofmt` before every commit - the easiest way to do this
 ## Forking
 
 Please note that Go requires code to live under absolute paths, which complicates forking.
-While the fork for user 'foo' lives at `https://github.com/foo/Amass`,
-the code should never exist at  `$GOPATH/src/github.com/foo/Amass`.
+While the fork for user 'foo' lives at `https://github.com/foo/amass`,
+the code should never exist at  `$GOPATH/src/github.com/foo/amass`.
 Instead, we use `git remote` to add the fork as a new remote for the original repo,
-`$GOPATH/src/github.com/OWASP/Amass`, and do all the work there.
+`$GOPATH/src/github.com/owasp-amass/amass`, and do all the work there.
 
 For instance, to create a fork and work on a branch of it, user 'foo' would:
 
   * Create the fork on github, using the fork button.
-  * Go to the original repo checked out locally (ie. `$GOPATH/src/github.com/OWASP/Amass`)
+  * Go to the original repo checked out locally (ie. `$GOPATH/src/github.com/owasp-amass/amass`)
   * `git remote rename origin upstream`
-  * `git remote add origin git@github.com:foo/Amass.git`
+  * `git remote add origin git@github.com:foo/amass.git`
 
 Now `origin` refers to the foo fork and `upstream` refers to the OWASP version.
 So foo can `git push -u origin master` to update his/her fork, and make pull requests to OWASP from there.

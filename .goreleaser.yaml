@@ -67,17 +67,17 @@ changelog:
 
 release:
   github:
-    owner: OWASP
-    name: Amass
+    owner: owasp-amass
+    name: amass
 
 brews:
   -
     name: amass
     tap:
-      owner: caffix
+      owner: owasp-amass
       name: homebrew-amass
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
-    url_template: "https://github.com/OWASP/Amass/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
+    url_template: "https://github.com/owasp-amass/amass/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
     commit_author:
       name: caffix
       email: caffix@users.noreply.github.com

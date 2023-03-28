@@ -120,7 +120,7 @@ func WriteGEXFData(output io.Writer, nodes []Node, edges []Edge) error {
 		Viz:     xmlNSVIZ,
 		Meta: gexfMeta{
 			LastModified: time.Now().UTC().Format("2006-01-02"),
-			Creator:      "OWASP Amass - https://github.com/OWASP/Amass",
+			Creator:      "OWASP Amass - https://github.com/owasp-amass/amass",
 			Desc:         "OWASP Amass Network Mapping",
 		},
 		Graph: gexfGraph{

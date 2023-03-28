@@ -35,13 +35,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/OWASP/Amass/v3/config"
-	"github.com/OWASP/Amass/v3/datasrcs"
-	"github.com/OWASP/Amass/v3/format"
-	amassnet "github.com/OWASP/Amass/v3/net"
-	"github.com/OWASP/Amass/v3/requests"
-	"github.com/OWASP/Amass/v3/resources"
-	"github.com/OWASP/Amass/v3/systems"
+	"github.com/owasp-amass/amass/v3/config"
+	"github.com/owasp-amass/amass/v3/datasrcs"
+	"github.com/owasp-amass/amass/v3/format"
+	amassnet "github.com/owasp-amass/amass/v3/net"
+	"github.com/owasp-amass/amass/v3/requests"
+	"github.com/owasp-amass/amass/v3/resources"
+	"github.com/owasp-amass/amass/v3/systems"
 	"github.com/caffix/netmap"
 	"github.com/caffix/service"
 	"github.com/caffix/stringset"
@@ -50,9 +50,9 @@ import (
 
 const (
 	mainUsageMsg         = "intel|enum|viz|track|db [options]"
-	exampleConfigFileURL = "https://github.com/OWASP/Amass/blob/master/examples/config.ini"
-	userGuideURL         = "https://github.com/OWASP/Amass/blob/master/doc/user_guide.md"
-	tutorialURL          = "https://github.com/OWASP/Amass/blob/master/doc/tutorial.md"
+	exampleConfigFileURL = "https://github.com/owasp-amass/amass/blob/master/examples/config.ini"
+	userGuideURL         = "https://github.com/owasp-amass/amass/blob/master/doc/user_guide.md"
+	tutorialURL          = "https://github.com/owasp-amass/amass/blob/master/doc/tutorial.md"
 )
 
 var (

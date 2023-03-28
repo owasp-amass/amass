@@ -13,8 +13,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/OWASP/Amass/v3/config"
-	"github.com/OWASP/Amass/v3/requests"
+	"github.com/owasp-amass/amass/v3/config"
+	"github.com/owasp-amass/amass/v3/requests"
 	"github.com/caffix/netmap"
 	"github.com/caffix/stringset"
 	"github.com/fatih/color"

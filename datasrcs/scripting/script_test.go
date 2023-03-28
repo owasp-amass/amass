@@ -5,11 +5,11 @@
 package scripting
 
 import (
-	"github.com/OWASP/Amass/v3/config"
-	"github.com/OWASP/Amass/v3/requests"
-	"github.com/OWASP/Amass/v3/systems"
+	"github.com/owasp-amass/amass/v3/config"
+	"github.com/owasp-amass/amass/v3/requests"
+	"github.com/owasp-amass/amass/v3/systems"
 	"github.com/caffix/netmap"
-	"github.com/caffix/resolve"
+	"github.com/owasp-amass/resolve"
 	"github.com/caffix/service"
 )
 

@@ -22,8 +22,8 @@ import (
 	"sync"
 	"time"
 
-	amassnet "github.com/OWASP/Amass/v3/net"
-	"github.com/OWASP/Amass/v3/net/dns"
+	amassnet "github.com/owasp-amass/amass/v3/net"
+	"github.com/owasp-amass/amass/v3/net/dns"
 	"github.com/PuerkitoBio/goquery"
 	"github.com/caffix/stringset"
 	"github.com/geziyor/geziyor"

@@ -9,8 +9,8 @@ import (
 	"net"
 	"strings"
 
-	"github.com/OWASP/Amass/v3/net/http"
-	"github.com/OWASP/Amass/v3/requests"
+	"github.com/owasp-amass/amass/v3/net/http"
+	"github.com/owasp-amass/amass/v3/requests"
 	"github.com/caffix/pipeline"
 	"github.com/caffix/queue"
 	"golang.org/x/net/publicsuffix"

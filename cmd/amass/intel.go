@@ -18,11 +18,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/OWASP/Amass/v3/config"
-	"github.com/OWASP/Amass/v3/datasrcs"
-	"github.com/OWASP/Amass/v3/format"
-	"github.com/OWASP/Amass/v3/intel"
-	"github.com/OWASP/Amass/v3/systems"
+	"github.com/owasp-amass/amass/v3/config"
+	"github.com/owasp-amass/amass/v3/datasrcs"
+	"github.com/owasp-amass/amass/v3/format"
+	"github.com/owasp-amass/amass/v3/intel"
+	"github.com/owasp-amass/amass/v3/systems"
 	"github.com/caffix/stringset"
 	"github.com/fatih/color"
 )

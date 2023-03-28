@@ -11,8 +11,8 @@ import (
 	"strconv"
 	"strings"
 
-	amassnet "github.com/OWASP/Amass/v3/net"
-	"github.com/OWASP/Amass/v3/requests"
+	amassnet "github.com/owasp-amass/amass/v3/net"
+	"github.com/owasp-amass/amass/v3/requests"
 	"github.com/fatih/color"
 )
 
@@ -96,7 +96,7 @@ func FprintEnumerationSummary(out io.Writer, total int, tags map[string]int, asn
 	fmt.Fprintln(out)
 	// Print the header information
 	title := "OWASP Amass "
-	site := "https://github.com/OWASP/Amass"
+	site := "https://github.com/owasp-amass/amass"
 	b.Fprint(out, title+Version)
 	num := 80 - (len(title) + len(Version) + len(site))
 	pad(num, " ")

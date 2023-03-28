@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	amassdns "github.com/OWASP/Amass/v3/net/dns"
+	amassdns "github.com/owasp-amass/amass/v3/net/dns"
 	"github.com/caffix/pipeline"
 	"github.com/miekg/dns"
 )

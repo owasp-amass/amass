@@ -23,7 +23,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/OWASP/Amass/v3/resources"
+	"github.com/owasp-amass/amass/v3/resources"
 	"github.com/caffix/stringset"
 	"github.com/go-ini/ini"
 	"github.com/google/uuid"

@@ -20,7 +20,7 @@ func TestWriteGEXFDataHappyPath(t *testing.T) {
 	assert.Contains(t, output, expectedGexfOutput, "Gexf output should contain")
 }
 
-const expectedGexfOutput = `<creator>OWASP Amass - https://github.com/OWASP/Amass</creator>
+const expectedGexfOutput = `<creator>OWASP Amass - https://github.com/owasp-amass/amass</creator>
           <description>OWASP Amass Network Mapping</description>
       </meta>
       <graph mode="static" defaultedgetype="directed">

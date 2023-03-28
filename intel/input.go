@@ -8,7 +8,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/OWASP/Amass/v3/requests"
+	"github.com/owasp-amass/amass/v3/requests"
 	"github.com/caffix/pipeline"
 	"github.com/caffix/queue"
 	bf "github.com/tylertreat/BoomFilters"

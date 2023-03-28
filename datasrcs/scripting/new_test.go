@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/OWASP/Amass/v3/requests"
+	"github.com/owasp-amass/amass/v3/requests"
 	"github.com/caffix/stringset"
 )
 

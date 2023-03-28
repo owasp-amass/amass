@@ -13,7 +13,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/OWASP/Amass/v3/net/http"
+	"github.com/owasp-amass/amass/v3/net/http"
 	"github.com/caffix/stringset"
 	"github.com/go-ini/ini"
 )

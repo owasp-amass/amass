@@ -14,12 +14,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/OWASP/Amass/v3/config"
-	amassnet "github.com/OWASP/Amass/v3/net"
-	"github.com/OWASP/Amass/v3/requests"
-	"github.com/OWASP/Amass/v3/resources"
+	"github.com/owasp-amass/amass/v3/config"
+	amassnet "github.com/owasp-amass/amass/v3/net"
+	"github.com/owasp-amass/amass/v3/requests"
+	"github.com/owasp-amass/amass/v3/resources"
 	"github.com/caffix/netmap"
-	"github.com/caffix/resolve"
+	"github.com/owasp-amass/resolve"
 	"github.com/caffix/service"
 )
 

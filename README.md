@@ -1,22 +1,22 @@
 # [![OWASP Logo](./images/owasp_logo.png) OWASP Amass](https://owasp.org/www-project-amass/)
 
 <p align="center">
-  <img src="https://github.com/OWASP/Amass/blob/master/images/amass_video.gif">
+  <img src="https://github.com/owasp-amass/amass/blob/master/images/amass_video.gif">
 </p>
 
 [![OWASP Flagship](https://img.shields.io/badge/owasp-flagship%20project-48A646.svg)](https://owasp.org/projects/#sec-flagships)
-[![GitHub Release](https://img.shields.io/github/release/OWASP/Amass)](https://github.com/OWASP/Amass/releases/latest)
+[![GitHub Release](https://img.shields.io/github/release/owasp-amass/amass)](https://github.com/owasp-amass/amass/releases/latest)
 [![Docker Images](https://img.shields.io/docker/pulls/caffix/amass.svg)](https://hub.docker.com/r/caffix/amass)
 [![Follow on Twitter](https://img.shields.io/twitter/follow/owaspamass.svg?logo=twitter)](https://twitter.com/owaspamass)
-[![Chat on Discord](https://img.shields.io/discord/433729817918308352.svg?logo=discord)](https://discord.gg/TMMyYtBMTR)
+[![Chat on Discord](https://img.shields.io/discord/433729817918308352.svg?logo=discord)](https://discord.gg/HNePVyX3cp)
 
-![GitHub Test Status](https://github.com/OWASP/Amass/workflows/tests/badge.svg)
-[![GoDoc](https://pkg.go.dev/badge/github.com/OWASP/Amass/v3?utm_source=godoc)](https://pkg.go.dev/github.com/OWASP/Amass/v3)
+![GitHub Test Status](https://github.com/owasp-amass/amass/workflows/tests/badge.svg)
+[![GoDoc](https://pkg.go.dev/badge/github.com/owasp-amass/amass/v3?utm_source=godoc)](https://pkg.go.dev/github.com/owasp-amass/amass/v3)
 [![License](https://img.shields.io/badge/license-apache%202-blue)](https://www.apache.org/licenses/LICENSE-2.0)
-[![Go Report](https://goreportcard.com/badge/github.com/OWASP/Amass)](https://goreportcard.com/report/github.com/OWASP/Amass)
-[![CodeFactor](https://www.codefactor.io/repository/github/OWASP/Amass/badge)](https://www.codefactor.io/repository/github/OWASP/Amass)
-[![Maintainability](https://api.codeclimate.com/v1/badges/41c139f7cf5c23df1e58/maintainability)](https://codeclimate.com/github/OWASP/Amass/maintainability)
-[![Codecov](https://codecov.io/gh/OWASP/Amass/branch/master/graph/badge.svg)](https://codecov.io/gh/OWASP/Amass)
+[![Go Report](https://goreportcard.com/badge/github.com/owasp-amass/amass)](https://goreportcard.com/report/github.com/owasp-amass/amass)
+[![CodeFactor](https://www.codefactor.io/repository/github/owasp-amass/amass/badge)](https://www.codefactor.io/repository/github/owasp-amass/amass)
+[![Maintainability](https://api.codeclimate.com/v1/badges/234e4885e406953f91d0/maintainability)](https://codeclimate.com/github/owasp-amass/amass/maintainability)
+[![codecov](https://codecov.io/gh/owasp-amass/amass/branch/master/graph/badge.svg?token=zoPKxvLT1n)](https://codecov.io/gh/owasp-amass/amass)
 
 The OWASP Amass Project performs network mapping of attack surfaces and external asset discovery using open source information gathering and active reconnaissance techniques.
 
@@ -34,20 +34,20 @@ The OWASP Amass Project performs network mapping of attack surfaces and external
 
 ----
 
-## Installation [![Go Version](https://img.shields.io/github/go-mod/go-version/OWASP/Amass)](https://golang.org/dl/) [![Docker Images](https://img.shields.io/docker/pulls/caffix/amass.svg)](https://hub.docker.com/r/caffix/amass) [![GitHub Downloads](https://img.shields.io/github/downloads/OWASP/Amass/latest/total.svg)](https://github.com/OWASP/Amass/releases/latest)
+## Installation [![Go Version](https://img.shields.io/github/go-mod/go-version/owasp-amass/amass)](https://golang.org/dl/) [![Docker Images](https://img.shields.io/docker/pulls/caffix/amass.svg)](https://hub.docker.com/r/caffix/amass) [![GitHub Downloads](https://img.shields.io/github/downloads/owasp-amass/amass/latest/total.svg)](https://github.com/owasp-amass/amass/releases/latest)
 
 > You can find some additional installation variations in the [Installation Guide](./doc/install.md).
 
 ### Prebuilt Packages
 
-1. Simply unzip the [package](https://github.com/OWASP/Amass/releases/latest)
+1. Simply unzip the [package](https://github.com/owasp-amass/amass/releases/latest)
 2. Put the precompiled binary into your path
 3. Start using OWASP Amass!
 
 #### Homebrew
 
 ```bash
-brew tap caffix/amass
+brew tap owasp-amass/amass
 brew install amass
 ```
 
@@ -62,10 +62,10 @@ The volume argument allows the Amass graph database to persist between execution
 ### From Sources
 
 1. Install [Go](https://golang.org/doc/install) and setup your Go workspace
-2. Download OWASP Amass by running `go install -v github.com/OWASP/Amass/v3/...@master`
+2. Download OWASP Amass by running `go install -v github.com/owasp-amass/amass/v3/...@master`
 3. At this point, the binary should be in `$GOPATH/bin`
 
-## Documentation [![GoDoc](https://pkg.go.dev/badge/github.com/OWASP/Amass/v3?utm_source=godoc)](https://pkg.go.dev/github.com/OWASP/Amass/v3)
+## Documentation [![GoDoc](https://pkg.go.dev/badge/github.com/owasp-amass/amass/v3?utm_source=godoc)](https://pkg.go.dev/github.com/owasp-amass/amass/v3)
 
 Use the [Installation Guide](./doc/install.md) to get started.
 
@@ -75,18 +75,16 @@ See the [Tutorial](./doc/tutorial.md) for example usage.
 
 See the [Amass Scripting Engine Manual](./doc/scripting.md) for greater control over your enumeration process.
 
-## Troubleshooting [![Chat on Discord](https://img.shields.io/discord/433729817918308352.svg?logo=discord)](https://discord.gg/rtN8GMd)
+## Troubleshooting [![Chat on Discord](https://img.shields.io/discord/433729817918308352.svg?logo=discord)](https://discord.gg/HNePVyX3cp)
 
-If you need help with installation and/or usage of the tool, please join our [Discord server](https://discord.gg/rtN8GMd) where community members can best help you.
+If you need help with installation and/or usage of the tool, please join our [Discord server](https://discord.gg/HNePVyX3cp) where community members can best help you.
 
 :stop_sign:   **Please avoid opening GitHub issues for support requests or questions!**
 
-## Contributing [![Contribute Yes](https://img.shields.io/badge/contribute-yes-brightgreen.svg)](./CONTRIBUTING.md) [![Chat on Discord](https://img.shields.io/discord/433729817918308352.svg?logo=discord)](https://discord.gg/rtN8GMd)
+## Contributing [![Contribute Yes](https://img.shields.io/badge/contribute-yes-brightgreen.svg)](./CONTRIBUTING.md) [![Chat on Discord](https://img.shields.io/discord/433729817918308352.svg?logo=discord)](https://discord.gg/HNePVyX3cp)
 
 We are always happy to get new contributors on board! Please check [CONTRIBUTING.md](CONTRIBUTING.md) to learn how to
-contribute to our codebase, and join our [Discord Server](https://discord.gg/rtN8GMd) to discuss current project goals.
-
-For a list of all contributors to the OWASP Amass Project please visit our [HALL_OF_FAME.md](HALL_OF_FAME.md).
+contribute to our codebase, and join our [Discord Server](https://discord.gg/HNePVyX3cp) to discuss current project goals.
 
 ## Testimonials
 
@@ -104,7 +102,7 @@ For a list of all contributors to the OWASP Amass Project please visit our [HALL
 
 \- Joona Hoikkala ([@joohoi](https://github.com/joohoi)) & Alexis Fernández ([@six2dez](https://github.com/six2dez)), Visma Red Team
 
-## References [![Bugcrowd LevelUp 0x04](https://img.shields.io/badge/bugcrowd-levelup%200x04-orange.svg)](https://www.youtube.com/watch?v=C-GabM2db9A) [![DEF CON 27 Demo Labs](https://img.shields.io/badge/defcon%2027-demo%20labs-purple.svg)](https://www.defcon.org/html/defcon-27/dc-27-demolabs.html) [![DEF CON 27 Recon Village](https://img.shields.io/badge/defcon%2027-recon%20village-lightgrey.svg)](https://reconvillage.org/) [![DEF CON 28 Red Team Village](https://img.shields.io/badge/defcon%2028-red%20team%20village-red.svg)](https://www.youtube.com/c/RedTeamVillage/featured) [![Bugcrowd LevelUp 0x07](https://img.shields.io/badge/bugcrowd-levelup%200x07-orange.svg)](https://www.twitch.tv/videos/723418873) [![Grayhat 2020](https://img.shields.io/badge/grayhat%202020-bootcamp-lightgrey.svg)](https://www.youtube.com/watch?v=J33JmuQ79tE) [![BeNeLux 2020](https://img.shields.io/badge/owasp%202020-benelux%20days-blue.svg)](https://www.youtube.com/watch?v=fDlKQXRaGl0) [![BSides København 2020](https://img.shields.io/badge/bsides%202020-københavn-red.svg)](https://vimeo.com/481985359) [![ESW 2021](https://img.shields.io/badge/security%20weekly-esw%20219-blue.svg)](https://www.youtube.com/watch?v=fDlKQXRaGl0) [![DEF CON 30 Recon Village](https://img.shields.io/badge/defcon%2030-recon%20village-lightgrey.svg)](https://twitter.com/jeff_foley/status/1562246069278445568/photo/1) [![InfoSec Campus SecTool Podcast](https://img.shields.io/badge/infosec%20campus-sectools%20podcast-red)](https://infoseccampus.com/podcast/sectools-e44-jeff-foley/) [![NYC OWASP Chapter 2022](https://img.shields.io/badge/owasp%202022-nyc%20chapter-blue)](https://www.youtube.com/watch?v=tGitZO8EkMI)
+## References [![DEF CON 30 Recon Village](https://img.shields.io/badge/defcon%2030-recon%20village-lightgrey.svg)](https://twitter.com/jeff_foley/status/1562246069278445568/photo/1) [![DEF CON 28 Red Team Village](https://img.shields.io/badge/defcon%2028-red%20team%20village-red.svg)](https://www.youtube.com/c/RedTeamVillage/featured) [![DEF CON 27 Demo Labs](https://img.shields.io/badge/defcon%2027-demo%20labs-purple.svg)](https://www.defcon.org/html/defcon-27/dc-27-demolabs.html) 
 
 Did you write a blog post, magazine article or do a podcast about OWASP Amass? Or maybe you held or joined a conference talk or meetup session, a hacking workshop or public training where this project was mentioned?
 

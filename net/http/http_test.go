@@ -17,8 +17,8 @@ import (
 	"testing"
 	"time"
 
-	amassdns "github.com/OWASP/Amass/v3/net/dns"
-	"github.com/caffix/resolve"
+	amassdns "github.com/owasp-amass/amass/v3/net/dns"
+	"github.com/owasp-amass/resolve"
 	"github.com/caffix/stringset"
 	"github.com/miekg/dns"
 )

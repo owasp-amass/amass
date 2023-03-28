@@ -11,9 +11,9 @@ import (
 	"sync"
 	"time"
 
-	amassnet "github.com/OWASP/Amass/v3/net"
-	"github.com/OWASP/Amass/v3/net/dns"
-	"github.com/OWASP/Amass/v3/requests"
+	amassnet "github.com/owasp-amass/amass/v3/net"
+	"github.com/owasp-amass/amass/v3/net/dns"
+	"github.com/owasp-amass/amass/v3/requests"
 	"github.com/caffix/pipeline"
 	"github.com/caffix/queue"
 	"github.com/caffix/service"

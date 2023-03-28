@@ -7,9 +7,9 @@ package datasrcs
 import (
 	"sort"
 
-	"github.com/OWASP/Amass/v3/config"
-	"github.com/OWASP/Amass/v3/datasrcs/scripting"
-	"github.com/OWASP/Amass/v3/systems"
+	"github.com/owasp-amass/amass/v3/config"
+	"github.com/owasp-amass/amass/v3/datasrcs/scripting"
+	"github.com/owasp-amass/amass/v3/systems"
 	"github.com/caffix/service"
 	"github.com/caffix/stringset"
 )

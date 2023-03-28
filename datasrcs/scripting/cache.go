@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/OWASP/Amass/v3/net/http"
+	"github.com/owasp-amass/amass/v3/net/http"
 )
 
 func (s *Script) getCachedResponse(ctx context.Context, url string, ttl int) (*http.Response, error) {

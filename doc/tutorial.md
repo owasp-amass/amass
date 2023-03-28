@@ -1,6 +1,6 @@
-# [![OWASP Logo](https://github.com/OWASP/Amass/blob/master/images/owasp_logo.png) OWASP Amass](https://owasp.org/www-project-amass/) - An Extensive Tutorial
+# [![OWASP Logo](https://github.com/owasp-amass/amass/blob/master/images/owasp_logo.png) OWASP Amass](https://owasp.org/www-project-amass/) - An Extensive Tutorial
 
-![Network graph](https://github.com/OWASP/Amass/blob/master/images/network_06092018.png "Amass Network Mapping")
+![Network graph](https://github.com/owasp-amass/amass/blob/master/images/network_06092018.png "Amass Network Mapping")
 
 ----
 
@@ -29,7 +29,7 @@ There are a number of more technical reasons, which we will explain below and de
 -   Amass' subcommands can be used in conjunction, in some cases, which could allow you to create scripts that perform multiple Amass operations.
 -   Supports 55 sources, such as APIs and websites, at the time of writing as part of its subdomain discovery and information gathering techniques. These can be listed using the following command:
     -   amass enum -list
-    -   ```AlienVault,ArchiveIt,ArchiveToday,Arquivo,Ask,Baidu,BinaryEdge,Bing,BufferOver,Censys,CertSpotter,CIRCL,CommonCrawl,Crtsh,[...],ViewDNS,VirusTotal,Wayback,WhoisXML,Yahoo``` (full list [here](https://github.com/OWASP/Amass))
+    -   ```AlienVault,ArchiveIt,Arquivo,Ask,Baidu,BinaryEdge,Bing,BufferOver,Censys,CertSpotter,CIRCL,CommonCrawl,Crtsh,[...],VirusTotal,Wayback,WhoisXML,Yahoo``` (full list [here](https://github.com/owasp-amass/amass))
 
 -   It employs various information gathering techniques for DNS enumeration
     -   Brute-force of subdomains using a domain name wordlists and alteration wordlists
@@ -59,7 +59,7 @@ Usage: amass intel [options] [-whois -d DOMAIN] [-addr ADDR -asn ASN -cidr CIDR]
 
 It is probably worth noting at this point that another great perk of Amass is that all the subcommands attempt to maintain argument consistency.
 
-This subcommand will use a number of information gathering techniques and data sources by default, such as WHOIS and IPv4Info, in order to obtain intelligence and parent domains owned by the organisation, unless these are explicitly disabled in Amass' configuration file. An example Amass configuration file is available [on the GitHub repository](../examples/config.ini).
+This subcommand will use a number of information gathering techniques and data sources by default, such as WHOIS and IPv4Info, in order to obtain intelligence and parent domains owned by the organisation, unless these are explicitly disabled in Amass' configuration file. An example Amass configuration file is available [on the GitHub repository](../examples/config.ini).
 
 ```bash
 
