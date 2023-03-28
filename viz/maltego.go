@@ -5,16 +5,19 @@
 package viz
 
 import (
+	"archive/zip"
 	"fmt"
 	"io"
 	"net"
+	"os"
 	"strings"
 
 	amassnet "github.com/OWASP/Amass/v3/net"
+	"github.com/OWASP/Amass/v3/resources"
 )
 
 // WriteMaltegoData converts the Amass graph nodes and edges into a
-// structured table format (CSV) that can be input by Maltego.
+// structured table format (CSV) that can be imported by Maltego.
 func WriteMaltegoData(output io.Writer, nodes []Node, edges []Edge) {
 	filter := make(map[int]struct{})
 	types := []string{
@@ -23,6 +26,7 @@ func WriteMaltegoData(output io.Writer, nodes []Node, edges []Edge) {
 		"maltego.NSRecord",
 		"maltego.MXRecord",
 		"maltego.IPv4Address",
+		"maltego.IPv6Address",
 		"maltego.Netblock",
 		"maltego.AS",
 		"maltego.Company",
@@ -30,7 +34,7 @@ func WriteMaltegoData(output io.Writer, nodes []Node, edges []Edge) {
 	}
 	// Print the column types in the first row
 	fmt.Fprintln(output, strings.Join(types, ","))
-	// Start the graph tranersal from the autonomous systems
+	// Start the graph traversal from the autonomous systems
 	for idx, node := range nodes {
 		if node.Type == "as" {
 			traverseTree(output, idx, nodes, edges, filter)
@@ -55,27 +59,29 @@ func typeToIndex(t string) int {
 	case "subdomain":
 		idx = 1
 	case "ptr":
-		idx = 8
+		idx = 9
 	case "cname":
 		idx = 8
-	case "address":
+	case "v4address":
 		idx = 4
+	case "v6address":
+		idx = 5
 	case "ns":
 		idx = 2
 	case "mx":
 		idx = 3
 	case "netblock":
-		idx = 5
-	case "as":
 		idx = 6
-	case "company":
+	case "as":
 		idx = 7
+	case "company":
+		idx = 8
 	}
 	return idx
 }
 
 func writeMaltegoTableLine(out io.Writer, data1, type1, data2, type2 string) {
-	row := []string{"", "", "", "", "", "", "", "", ""}
+	row := []string{"", "", "", "", "", "", "", "", "", ""}
 
 	idx1 := typeToIndex(type1)
 	row[idx1] = data1
@@ -93,6 +99,10 @@ func writeMaltegoTableLine(out io.Writer, data1, type1, data2, type2 string) {
 func traverseTree(out io.Writer, id int, nodes []Node, edges []Edge, filter map[int]struct{}) {
 	d1 := nodes[id].Label
 	t1 := nodes[id].Type
+
+	if "address" == t1 {
+		t1 = getIpVersion(d1) // get exact address version
+	}
 
 	var from bool
 	if t1 == "netblock" || t1 == "as" {
@@ -121,6 +131,9 @@ func traverseTree(out io.Writer, id int, nodes []Node, edges []Edge, filter map[
 		}
 		d2 := nodes[n].Label
 		t2 := nodes[n].Type
+		if "address" == t2 {
+			t2 = getIpVersion(d2) // get exact address version
+		}
 		// Need to properly handle CNAME records
 		if strings.Contains(edge.Title, "cname") {
 			if subFrom {
@@ -156,4 +169,39 @@ func cidrToMaltegoNetblock(cidr string) string {
 
 	ip1, ip2 := amassnet.FirstLast(ipnet)
 	return ip1.String() + "-" + ip2.String()
+}
+
+// This function returns the IP address version number that should be used to set exact Maltego
+// IP Address Entity type
+func getIpVersion(address string) string {
+	if strings.Contains(address, ":") { // IPv6 address
+		return "v6address"
+	}
+	return "v4address" // all others are considered IPv4 address
+}
+
+// CreateMaltegoConfig function creates a default mapping configuration for Maltego that can be used
+// to import the Maltego csv
+func CreateMaltegoConfig(mtzConfigPath string) error {
+	if _, err := os.Stat(mtzConfigPath); err == nil { // mtz config already exists
+		return nil
+	}
+	file, err := resources.GetResourceFile("maltego_mapping_config.tmapping")
+	if nil != err {
+		return err
+	}
+	// *.mtz file is just a zip archive
+	mtz, err := os.Create(mtzConfigPath)
+	if nil != err {
+		return err
+	}
+	defer mtz.Close()
+	archiveWriter := zip.NewWriter(mtz)
+	defer archiveWriter.Close()
+	mtzWriter, err := archiveWriter.Create("TabularMappings/Amass Graph Data Mapping.tmapping")
+	if nil != err {
+		return err
+	}
+	io.Copy(mtzWriter, file)
+	return nil
 }

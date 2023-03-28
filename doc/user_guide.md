@@ -369,10 +369,15 @@ Here is an example of graph for an enumeration run on example.com:
 amass viz -maltego
 ```
 
-2. Import the CSV file with the correct Connectivity Table settings:
+2. Import `amass_maltego_mapping_config_default.mtz` Maltego configuration file into Maltego.
+   > This step is required only for the first time.
 
-![Connectivity table](../images/maltego_graph_import_wizard.png "Connectivity Table Settings")
+   ![Maltego Config Import Wizard](../images/maltego_config_import_wizard.png "Connectivity Table Settings")
 
-3. All the Amass findings will be brought into your Maltego Graph:
+3. Import the CSV file with the mapping configuration imported in the previous step:
 
-![Maltego results](../images/maltego_results.png "Maltego Results")
+   ![Maltego Graph Import Wizard](../images/maltego_graph_import_wizard.png "Connectivity Table Settings")
+
+4. All the Amass findings will be brought into your Maltego Graph:
+
+   ![Maltego results](../images/maltego_results.png "Maltego Results")

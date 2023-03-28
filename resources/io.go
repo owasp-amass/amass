@@ -16,7 +16,7 @@ import (
 	"strconv"
 )
 
-//go:embed scripts ip2asn-combined.tsv.gz alterations.txt namelist.txt user_agents.txt
+//go:embed scripts ip2asn-combined.tsv.gz alterations.txt namelist.txt user_agents.txt maltego_mapping_config.tmapping
 var resourceFS embed.FS
 
 // IP2ASN is a range record provided by the iptoasn.com service.

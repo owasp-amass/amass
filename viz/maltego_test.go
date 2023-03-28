@@ -20,7 +20,7 @@ func TestWriteMaltegoData(t *testing.T) {
 	assert.Contains(t, expectedMaltegoOutput, output, "Maltego output should contain")
 }
 
-const expectedMaltegoOutput = `maltego.Domain,maltego.DNSName,maltego.NSRecord,maltego.MXRecord,maltego.IPv4Address,maltego.Netblock,maltego.AS,maltego.Company,maltego.DNSName
+const expectedMaltegoOutput = `maltego.Domain,maltego.DNSName,maltego.NSRecord,maltego.MXRecord,maltego.IPv4Address,maltego.IPv6Address,maltego.Netblock,maltego.AS,maltego.Company,maltego.DNSName
 `
 
 func TestCidrToMaltegoNetblock(t *testing.T) {
