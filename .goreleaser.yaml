@@ -34,10 +34,12 @@ builds:
 
 archives:
   -
-    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
-    replacements:
-      darwin: macos
-      386: i386
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "darwin" }}macos
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
     wrap_in_directory: true
     format: zip
     files:
