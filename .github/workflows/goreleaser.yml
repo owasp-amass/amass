@@ -5,6 +5,9 @@ on:
     tags:
       - 'v*.*.*'
 
+permissions:
+  contents: write
+
 jobs:
   goreleaser:
     runs-on: ubuntu-latest
@@ -26,10 +29,11 @@ jobs:
           version: v1
       -
         name: run GoReleaser
-        uses: goreleaser/goreleaser-action@v3
+        uses: goreleaser/goreleaser-action@v4
         with:
+          distribution: goreleaser
           version: latest
-          args: release --rm-dist
+          args: release --clean
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.AMASS_TOKEN }}
           HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
