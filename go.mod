@@ -4,11 +4,11 @@ go 1.19
 
 require (
 	github.com/PuerkitoBio/goquery v1.8.1
-	github.com/caffix/netmap v0.0.0-20220914055814-1a7ef9510442
+	github.com/caffix/netmap v0.1.0
 	github.com/caffix/pipeline v0.2.1
-	github.com/caffix/queue v0.1.4-0.20221117050542-621305ceff1f
-	github.com/caffix/service v0.2.4-0.20220914052955-87095f01d576
-	github.com/caffix/stringset v0.1.1-0.20220914051654-14e33fbe8739
+	github.com/caffix/queue v0.1.4
+	github.com/caffix/service v0.2.4
+	github.com/caffix/stringset v0.1.1
 	github.com/cayleygraph/quad v1.2.4
 	github.com/cjoudrey/gluaurl v0.0.0-20161028222611-31cbb9bef199
 	github.com/fatih/color v1.15.0
