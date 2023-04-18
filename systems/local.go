@@ -14,13 +14,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/caffix/netmap"
+	"github.com/caffix/service"
 	"github.com/owasp-amass/amass/v3/config"
 	amassnet "github.com/owasp-amass/amass/v3/net"
 	"github.com/owasp-amass/amass/v3/requests"
 	"github.com/owasp-amass/amass/v3/resources"
-	"github.com/caffix/netmap"
 	"github.com/owasp-amass/resolve"
-	"github.com/caffix/service"
 )
 
 // LocalSystem implements a System to be executed within a single process.
@@ -141,15 +141,15 @@ func (l *LocalSystem) DataSources() []service.Service {
 
 // SetDataSources assigns the data sources that will be used by the system.
 func (l *LocalSystem) SetDataSources(sources []service.Service) error {
-	f := func(src service.Service, ch chan error) { ch <- l.AddAndStart(src) }
-
 	ch := make(chan error, len(sources))
 	// Add all the data sources that successfully start to the list
 	for _, src := range sources {
-		go f(src, ch)
+		go func(src service.Service, ch chan error) {
+			ch <- l.AddAndStart(src)
+		}(src, ch)
 	}
 
-	t := time.NewTimer(30 * time.Second)
+	t := time.NewTimer(time.Minute)
 	defer t.Stop()
 
 	var err error
