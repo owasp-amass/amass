@@ -100,8 +100,8 @@ github.com/caffix/pipeline v0.2.1 h1:sfkBebseEmIh39+wHiaWLwCirx4sfTofUuT7Do0tbM8
 github.com/caffix/pipeline v0.2.1/go.mod h1:0q0Dx1s1pIi7peIwz3aTIzQRmTEtH1n45NJyrTkiIHs=
 github.com/caffix/queue v0.1.4 h1:sQbFzwGaPM1tRnQHWCgHOwj7hLuhDQ3BhY1/1TFbBiE=
 github.com/caffix/queue v0.1.4/go.mod h1:l8Eg7UTUHTRlc5aQ37mRVjzLN6eC7hgwimN0pA4UHe8=
-github.com/caffix/service v0.2.4 h1:tTXdKua4dnPLsvO3V7eDZ40SaJ1BRRlR0uC32Xg8XYA=
-github.com/caffix/service v0.2.4/go.mod h1:rh+bjCHTYUfxPatYy8xWHypfr0s95UhqUMqW1jC9GxQ=
+github.com/caffix/service v0.3.0 h1:Sb0GVFaYnn7mJCWyfcGr4AumdoHKT9+7gn6A96U88eY=
+github.com/caffix/service v0.3.0/go.mod h1:rh+bjCHTYUfxPatYy8xWHypfr0s95UhqUMqW1jC9GxQ=
 github.com/caffix/stringset v0.1.1 h1:Tm4b7SBFAsRTBbBX90eP8xBv6BxSuU2w+6G/JNXtNpg=
 github.com/caffix/stringset v0.1.1/go.mod h1:9Ztc521vlcp8IWdtIowZyWbbddMKR9Rdr+d0pgnjcvk=
 github.com/casbin/casbin/v2 v2.37.0/go.mod h1:vByNa/Fchek0KZUgG5wEsl7iFsiviAYKRtgrQfcJqHg=
