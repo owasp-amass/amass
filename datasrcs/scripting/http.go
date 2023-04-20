@@ -38,12 +38,13 @@ func (s *Script) request(L *lua.LState) int {
 	}
 
 	var hdr http.Header
-	lv := L.GetField(opt, "header")
-	if tbl, ok := lv.(*lua.LTable); ok {
-		hdr = make(http.Header)
-		tbl.ForEach(func(k, v lua.LValue) {
-			hdr[k.String()] = v.String()
-		})
+	if lv := L.GetField(opt, "header"); lv != nil {
+		if tbl, ok := lv.(*lua.LTable); ok {
+			hdr = make(http.Header)
+			tbl.ForEach(func(k, v lua.LValue) {
+				hdr[k.String()] = v.String()
+			})
+		}
 	}
 
 	var body string
@@ -145,12 +146,13 @@ func (s *Script) scrape(L *lua.LState) int {
 	}
 
 	var hdr http.Header
-	lv := L.GetField(opt, "header")
-	if tbl, ok := lv.(*lua.LTable); ok {
-		hdr = make(http.Header)
-		tbl.ForEach(func(k, v lua.LValue) {
-			hdr[k.String()] = v.String()
-		})
+	if lv := L.GetField(opt, "header"); lv != nil {
+		if tbl, ok := lv.(*lua.LTable); ok {
+			hdr = make(http.Header)
+			tbl.ForEach(func(k, v lua.LValue) {
+				hdr[k.String()] = v.String()
+			})
+		}
 	}
 
 	var body string
