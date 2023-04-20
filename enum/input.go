@@ -189,14 +189,13 @@ func (r *enumSource) Next(ctx context.Context) bool {
 			r.markDone()
 			return false
 		case <-t.C:
-			if !r.enum.requestsPending() && r.queue.Len() == 0 {
+			if !r.enum.requestsPending() && r.pipeline.DataItemCount() <= 0 {
 				r.markDone()
 				return false
 			}
 			r.fillQueue()
 			t.Reset(waitForDuration)
 		case <-r.queue.Signal():
-			t.Reset(waitForDuration)
 			return true
 		}
 	}

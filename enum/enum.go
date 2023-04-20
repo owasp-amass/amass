@@ -8,14 +8,14 @@ import (
 	"context"
 	"sync"
 
-	"github.com/owasp-amass/amass/v3/config"
-	"github.com/owasp-amass/amass/v3/datasrcs"
-	"github.com/owasp-amass/amass/v3/requests"
-	"github.com/owasp-amass/amass/v3/systems"
 	"github.com/caffix/netmap"
 	"github.com/caffix/pipeline"
 	"github.com/caffix/queue"
 	"github.com/caffix/service"
+	"github.com/owasp-amass/amass/v3/config"
+	"github.com/owasp-amass/amass/v3/datasrcs"
+	"github.com/owasp-amass/amass/v3/requests"
+	"github.com/owasp-amass/amass/v3/systems"
 )
 
 // Enumeration is the object type used to execute a DNS enumeration.
@@ -145,7 +145,7 @@ func (e *Enumeration) manageDataSrcRequests() {
 		pending[src.String()] = false
 	}
 
-	finished := make(chan string, len(e.srcs))
+	finished := make(chan string, len(e.srcs)*2)
 	requestsMap := make(map[string][]interface{})
 loop:
 	for {
@@ -161,11 +161,13 @@ loop:
 			}
 
 			for name := range nameToSrc {
-				if len(requestsMap[name]) == 0 && !pending[name] {
-					go e.fireRequest(nameToSrc[name], element, finished)
-					pending[name] = true
-				} else {
-					requestsMap[name] = append(requestsMap[name], element)
+				if src := nameToSrc[name]; src != nil && src.HandlesReq(element) {
+					if len(requestsMap[name]) == 0 && !pending[name] {
+						go e.fireRequest(src, element, finished)
+						pending[name] = true
+					} else {
+						requestsMap[name] = append(requestsMap[name], element)
+					}
 				}
 			}
 		case name := <-finished:
