@@ -193,8 +193,9 @@ func runEnumCommand(clArgs []string) {
 	// Expand data source category names into the associated source names
 	initializeSourceTags(sys.DataSources())
 	cfg.SourceFilter.Sources = expandCategoryNames(cfg.SourceFilter.Sources, generateCategoryMap(sys))
-
-	graph := sys.GraphDatabases()[0]
+	// Create the in-memory graph database used to store enumeration findings
+	graph := netmap.NewGraph(netmap.NewCayleyGraphMemory())
+	defer graph.Close()
 	// Setup the new enumeration
 	e := enum.NewEnumeration(cfg, sys, graph)
 	if e == nil {
@@ -261,7 +262,7 @@ func runEnumCommand(clArgs []string) {
 	wg.Wait()
 	fmt.Fprintf(color.Error, "\n%s\n", green("The enumeration has finished"))
 	// If necessary, handle graph database migration
-	if len(e.Sys.GraphDatabases()) > 1 {
+	if len(e.Sys.GraphDatabases()) > 0 {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		defer cancel()
 		// Monitor for cancellation by the user
@@ -274,7 +275,7 @@ func runEnumCommand(clArgs []string) {
 			c()
 		}(cancel)
 		// Copy the graph of findings into the system graph databases
-		for _, g := range e.Sys.GraphDatabases()[1:] {
+		for _, g := range e.Sys.GraphDatabases() {
 			fmt.Fprintf(color.Error, "%s%s%s\n",
 				yellow("Discoveries are being migrated into the "), yellow(g.String()), yellow(" database"))
 

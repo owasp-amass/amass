@@ -224,9 +224,6 @@ func (l *LocalSystem) setupGraphDBs() error {
 	}
 	dbs = append(dbs, cfg.GraphDBs...)
 
-	if cfg.Passive {
-		l.graphs = append(l.graphs, netmap.NewGraph(netmap.NewCayleyGraphMemory()))
-	}
 	for _, db := range dbs {
 		cayley := netmap.NewCayleyGraph(db.System, db.URL, db.Options)
 		if cayley == nil {
