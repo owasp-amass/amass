@@ -12,11 +12,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/owasp-amass/amass/v3/requests"
 	"github.com/caffix/pipeline"
 	"github.com/caffix/queue"
-	"github.com/owasp-amass/resolve"
 	"github.com/miekg/dns"
+	"github.com/owasp-amass/amass/v3/requests"
+	"github.com/owasp-amass/resolve"
 )
 
 const (
@@ -239,7 +239,6 @@ func (dt *dnsTask) addReqWithIncrement(key string, entry *req) bool {
 
 	if added {
 		<-dt.release
-		_ = dt.params.Pipeline().IncDataItemCount()
 	}
 	return added
 }
@@ -259,7 +258,7 @@ func (dt *dnsTask) delReq(key string) *req {
 func (dt *dnsTask) delReqWithDecrement(key string) {
 	if req := dt.delReq(key); req != nil {
 		dt.release <- struct{}{}
-		_ = dt.params.Pipeline().DecDataItemCount()
+
 		if !req.Sent && (req.InScope || req.HasRecords) {
 			dt.nextStage(req.Ctx, req.Data)
 		}
@@ -417,8 +416,6 @@ func (dt *dnsTask) subdomainQueries(ctx context.Context, req *requests.DNSReques
 }
 
 func (dt *dnsTask) queryNS(ctx context.Context, name, domain string, ch chan []requests.DNSAnswer, tp pipeline.TaskParams) {
-	tp.Pipeline().IncDataItemCount()
-	defer tp.Pipeline().DecDataItemCount()
 	// Obtain the DNS answers for the NS records related to the domain
 	if resp, err := dt.enum.dnsQuery(ctx, name, dns.TypeNS, dt.enum.Sys.TrustedResolvers(), maxDNSQueryAttempts); err == nil {
 		if ans := resolve.ExtractAnswers(resp); len(ans) > 0 {
@@ -445,8 +442,6 @@ func (dt *dnsTask) queryNS(ctx context.Context, name, domain string, ch chan []r
 }
 
 func (dt *dnsTask) queryMX(ctx context.Context, name string, ch chan []requests.DNSAnswer, tp pipeline.TaskParams) {
-	tp.Pipeline().IncDataItemCount()
-	defer tp.Pipeline().DecDataItemCount()
 	// Obtain the DNS answers for the MX records related to the domain
 	if resp, err := dt.enum.dnsQuery(ctx, name, dns.TypeMX, dt.enum.Sys.TrustedResolvers(), maxDNSQueryAttempts); err == nil {
 		if ans := resolve.ExtractAnswers(resp); len(ans) > 0 {
@@ -460,8 +455,6 @@ func (dt *dnsTask) queryMX(ctx context.Context, name string, ch chan []requests.
 }
 
 func (dt *dnsTask) querySOA(ctx context.Context, name string, ch chan []requests.DNSAnswer, tp pipeline.TaskParams) {
-	tp.Pipeline().IncDataItemCount()
-	defer tp.Pipeline().DecDataItemCount()
 	// Obtain the DNS answers for the SOA records related to the domain
 	if resp, err := dt.enum.dnsQuery(ctx, name, dns.TypeSOA, dt.enum.Sys.TrustedResolvers(), maxDNSQueryAttempts); err == nil {
 		if ans := resolve.ExtractAnswers(resp); len(ans) > 0 {
@@ -481,8 +474,6 @@ func (dt *dnsTask) querySOA(ctx context.Context, name string, ch chan []requests
 }
 
 func (dt *dnsTask) querySPF(ctx context.Context, name string, ch chan []requests.DNSAnswer, tp pipeline.TaskParams) {
-	tp.Pipeline().IncDataItemCount()
-	defer tp.Pipeline().DecDataItemCount()
 	// Obtain the DNS answers for the SPF records related to the domain
 	if resp, err := dt.enum.dnsQuery(ctx, name, dns.TypeSPF, dt.enum.Sys.TrustedResolvers(), maxDNSQueryAttempts); err == nil {
 		if ans := resolve.ExtractAnswers(resp); len(ans) > 0 {
