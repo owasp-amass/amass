@@ -22,12 +22,12 @@ import (
 	"sync"
 	"time"
 
-	amassnet "github.com/owasp-amass/amass/v3/net"
-	"github.com/owasp-amass/amass/v3/net/dns"
 	"github.com/PuerkitoBio/goquery"
 	"github.com/caffix/stringset"
 	"github.com/geziyor/geziyor"
 	"github.com/geziyor/geziyor/client"
+	amassnet "github.com/owasp-amass/amass/v3/net"
+	"github.com/owasp-amass/amass/v3/net/dns"
 	bf "github.com/tylertreat/BoomFilters"
 )
 
@@ -39,8 +39,8 @@ const (
 	defaultUserAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
 	windowsUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
 	darwinUserAgent  = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
-	httpTimeout      = 60 * time.Second
-	handshakeTimeout = 20 * time.Second
+	httpTimeout      = 20 * time.Second
+	handshakeTimeout = 5 * time.Second
 )
 
 var (
@@ -93,7 +93,7 @@ func init() {
 			DialContext:           amassnet.DialContext,
 			MaxIdleConns:          200,
 			MaxConnsPerHost:       50,
-			IdleConnTimeout:       90 * time.Second,
+			IdleConnTimeout:       30 * time.Second,
 			TLSHandshakeTimeout:   handshakeTimeout,
 			ExpectContinueTimeout: 5 * time.Second,
 			TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
