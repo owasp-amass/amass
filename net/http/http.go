@@ -39,7 +39,7 @@ const (
 	defaultUserAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
 	windowsUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
 	darwinUserAgent  = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
-	httpTimeout      = 20 * time.Second
+	httpTimeout      = 10 * time.Second
 	handshakeTimeout = 5 * time.Second
 )
 
@@ -93,7 +93,7 @@ func init() {
 			DialContext:           amassnet.DialContext,
 			MaxIdleConns:          200,
 			MaxConnsPerHost:       50,
-			IdleConnTimeout:       30 * time.Second,
+			IdleConnTimeout:       10 * time.Second,
 			TLSHandshakeTimeout:   handshakeTimeout,
 			ExpectContinueTimeout: 5 * time.Second,
 			TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
@@ -254,7 +254,7 @@ func Crawl(ctx context.Context, u string, scope []string, max int, callback func
 		UserAgent:             UserAgent,
 		LogDisabled:           true,
 		ConcurrentRequests:    5,
-		RequestDelay:          time.Second,
+		RequestDelay:          50 * time.Millisecond,
 		RequestDelayRandomize: true,
 		ParseFunc: func(g *geziyor.Geziyor, r *client.Response) {
 			select {
