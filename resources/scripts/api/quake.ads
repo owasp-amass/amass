@@ -47,7 +47,7 @@ function vertical(ctx, domain)
         end
 
         local resp, err = request(ctx, {
-            ['url']="https://quake.360.cn/api/v3/search/quake_service",
+            ['url']="https://quake.360.net/api/v3/search/quake_service",
             ['method']="POST",
             ['header']={
                 ['Content-Type']="application/json",
