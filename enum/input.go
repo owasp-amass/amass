@@ -6,6 +6,7 @@ package enum
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 	"strconv"
 	"sync"
@@ -189,9 +190,24 @@ func (r *enumSource) Next(ctx context.Context) bool {
 			r.markDone()
 			return false
 		case <-t.C:
-			if !r.enum.requestsPending() && r.pipeline.DataItemCount() <= 0 {
+			count := r.pipeline.DataItemCount()
+			if !r.enum.requestsPending() && count <= 0 {
 				r.markDone()
 				return false
+			}
+			if r.enum.Config.Verbose {
+				r.enum.reqCountSig <- struct{}{}
+				reqs := <-r.enum.reqCountChan
+
+				var lines string
+				for k, v := range reqs {
+					lines += fmt.Sprintf("%s: %d requests\n", k, v)
+				}
+
+				r.enum.Config.Log.Printf("Input Source timed out, not terminating: %d data items on the pipeline\n", count)
+				if len(reqs) > 0 {
+					r.enum.Config.Log.Printf("Number of pending requests:\n%s", lines)
+				}
 			}
 			r.fillQueue()
 			t.Reset(waitForDuration)

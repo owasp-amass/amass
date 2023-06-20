@@ -8,6 +8,7 @@ import (
 	"context"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/owasp-amass/amass/v3/net/dns"
 	"github.com/owasp-amass/amass/v3/net/http"
@@ -197,6 +198,9 @@ func (s *Script) req(ctx context.Context, url, data string, hdr http.Header, aut
 	}
 
 	numRateLimitChecks(s, s.seconds)
+	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+
 	resp, err := http.RequestWebPage(ctx, &http.Request{
 		URL:    url,
 		Method: method,
@@ -223,29 +227,33 @@ func (s *Script) crawl(L *lua.LState) int {
 	}
 
 	u := L.CheckString(2)
-	if u != "" {
-		max := L.CheckInt(3)
-
-		err = http.Crawl(ctx, u, cfg.Domains(), max, func(req *http.Request, resp *http.Response) {
-			if u, err := url.Parse(req.URL); err == nil {
-				s.genNewName(ctx, http.CleanName(u.Hostname()))
-			}
-			s.internalSendNames(ctx, resp.Body)
-
-			if resp.TLS != nil && len(resp.TLS.PeerCertificates) > 0 {
-				for _, name := range http.NamesFromCert(resp.TLS.PeerCertificates[0]) {
-					s.newNameWithSrc(ctx, http.CleanName(name), "cert", "Active Cert")
-				}
-			}
-			for k, v := range resp.Header {
-				if k == "Content-Security-Policy" ||
-					k == "Content-Security-Policy-Report-Only" ||
-					k == "X-Content-Security-Policy" || k == "X-Webkit-CSP" {
-					s.internalSendNamesWithSrc(ctx, v, s.Description(), "CSP Header")
-				}
-			}
-		})
+	if u == "" {
+		return 0
 	}
+
+	max := L.CheckInt(3)
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+
+	err = http.Crawl(ctx, u, cfg.Domains(), max, func(req *http.Request, resp *http.Response) {
+		if u, err := url.Parse(req.URL); err == nil {
+			s.genNewName(ctx, http.CleanName(u.Hostname()))
+		}
+		s.internalSendNames(ctx, resp.Body)
+
+		if resp.TLS != nil && len(resp.TLS.PeerCertificates) > 0 {
+			for _, name := range http.NamesFromCert(resp.TLS.PeerCertificates[0]) {
+				s.newNameWithSrc(ctx, http.CleanName(name), "cert", "Active Cert")
+			}
+		}
+		for k, v := range resp.Header {
+			if k == "Content-Security-Policy" ||
+				k == "Content-Security-Policy-Report-Only" ||
+				k == "X-Content-Security-Policy" || k == "X-Webkit-CSP" {
+				s.internalSendNamesWithSrc(ctx, v, s.Description(), "CSP Header")
+			}
+		}
+	})
 
 	if err != nil && cfg.Verbose {
 		cfg.Log.Printf("%s: %s: %v", s.String(), u, err)

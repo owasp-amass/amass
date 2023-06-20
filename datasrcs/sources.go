@@ -7,16 +7,16 @@ package datasrcs
 import (
 	"sort"
 
+	"github.com/caffix/service"
+	"github.com/caffix/stringset"
 	"github.com/owasp-amass/amass/v3/config"
 	"github.com/owasp-amass/amass/v3/datasrcs/scripting"
 	"github.com/owasp-amass/amass/v3/systems"
-	"github.com/caffix/service"
-	"github.com/caffix/stringset"
 )
 
 // GetAllSources returns a slice of all data source services initialized.
 func GetAllSources(sys systems.System) []service.Service {
-	srvs := []service.Service{NewRADb(sys)}
+	var srvs []service.Service
 
 	if scripts, err := sys.Config().AcquireScripts(); err == nil {
 		for _, script := range scripts {
@@ -61,10 +61,4 @@ func SelectedDataSources(cfg *config.Config, avail []service.Service) []service.
 		return results[i].String() < results[j].String()
 	})
 	return results
-}
-
-func numRateLimitChecks(srv service.Service, num int) {
-	for i := 0; i < num; i++ {
-		srv.CheckRateLimit()
-	}
 }

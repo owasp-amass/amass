@@ -20,30 +20,34 @@ import (
 
 // Enumeration is the object type used to execute a DNS enumeration.
 type Enumeration struct {
-	Config   *config.Config
-	Sys      systems.System
-	ctx      context.Context
-	graph    *netmap.Graph
-	srcs     []service.Service
-	done     chan struct{}
-	nameSrc  *enumSource
-	subTask  *subdomainTask
-	dnsTask  *dnsTask
-	valTask  *dnsTask
-	store    *dataManager
-	requests queue.Queue
-	plock    sync.Mutex
-	pending  bool
+	Config       *config.Config
+	Sys          systems.System
+	ctx          context.Context
+	graph        *netmap.Graph
+	srcs         []service.Service
+	done         chan struct{}
+	nameSrc      *enumSource
+	subTask      *subdomainTask
+	dnsTask      *dnsTask
+	valTask      *dnsTask
+	store        *dataManager
+	requests     queue.Queue
+	plock        sync.Mutex
+	pending      bool
+	reqCountSig  chan struct{}
+	reqCountChan chan map[string]int
 }
 
 // NewEnumeration returns an initialized Enumeration that has not been started yet.
 func NewEnumeration(cfg *config.Config, sys systems.System, graph *netmap.Graph) *Enumeration {
 	return &Enumeration{
-		Config:   cfg,
-		Sys:      sys,
-		graph:    graph,
-		srcs:     datasrcs.SelectedDataSources(cfg, sys.DataSources()),
-		requests: queue.NewQueue(),
+		Config:       cfg,
+		Sys:          sys,
+		graph:        graph,
+		srcs:         datasrcs.SelectedDataSources(cfg, sys.DataSources()),
+		requests:     queue.NewQueue(),
+		reqCountSig:  make(chan struct{}, 1),
+		reqCountChan: make(chan map[string]int, 1),
 	}
 }
 
@@ -154,6 +158,14 @@ loop:
 			break loop
 		case <-e.ctx.Done():
 			break loop
+		case <-e.reqCountSig:
+			resp := make(map[string]int)
+			for k, v := range requestsMap {
+				if l := len(v); l > 0 {
+					resp[k] = l
+				}
+			}
+			e.reqCountChan <- resp
 		case <-e.requests.Signal():
 			element, ok := e.requests.Next()
 			if !ok {
