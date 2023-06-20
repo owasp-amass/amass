@@ -62,9 +62,13 @@ func (s *Script) request(L *lua.LState) int {
 		Password: pass,
 	})
 
-	if err != nil {
+	if err != nil || resp == nil {
 		L.Push(lua.LNil)
-		L.Push(lua.LString(err.Error()))
+		estr := "no HTTP response"
+		if err != nil {
+			estr = err.Error()
+		}
+		L.Push(lua.LString(estr))
 	} else {
 		L.Push(responseToTable(L, resp))
 		L.Push(lua.LNil)
@@ -170,9 +174,11 @@ func (s *Script) scrape(L *lua.LState) int {
 	if resp, err := s.req(ctx, url, body, hdr, &http.BasicAuth{
 		Username: id,
 		Password: pass,
-	}); err == nil && resp.StatusCode >= 200 && resp.StatusCode < 400 {
-		if num := s.internalSendNames(ctx, resp.Body); num > 0 {
-			sucess = lua.LTrue
+	}); err == nil {
+		if resp != nil && resp.StatusCode >= 200 && resp.StatusCode < 400 {
+			if num := s.internalSendNames(ctx, resp.Body); num > 0 {
+				sucess = lua.LTrue
+			}
 		}
 	} else {
 		s.sys.Config().Log.Print(s.String() + ": scrape: " + err.Error())
@@ -212,7 +218,7 @@ func (s *Script) req(ctx context.Context, url, data string, hdr http.Header, aut
 		if cfg.Verbose {
 			cfg.Log.Printf("%s: %s: %v", s.String(), url, err)
 		}
-	} else if dsc != nil && dsc.TTL > 0 && resp.StatusCode >= 200 && resp.StatusCode < 400 {
+	} else if dsc != nil && dsc.TTL > 0 && resp != nil && resp.StatusCode >= 200 && resp.StatusCode < 400 {
 		_ = s.setCachedResponse(ctx, url+data, resp)
 	}
 	return resp, err
