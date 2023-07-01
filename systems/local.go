@@ -6,9 +6,9 @@ package systems
 
 import (
 	"errors"
-	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"runtime"
 	"sort"
 	"sync"
@@ -189,8 +189,8 @@ func (l *LocalSystem) Shutdown() error {
 
 	wg.Wait()
 	close(l.done)
-	for _, g := range l.GraphDatabases() {
-		g.Close()
+	for range l.GraphDatabases() {
+		//g.Close()
 	}
 
 	l.pool.Stop()
@@ -217,26 +217,18 @@ func (l *LocalSystem) setupOutputDirectory() error {
 // Select the graph that will store the System findings.
 func (l *LocalSystem) setupGraphDBs() error {
 	cfg := l.Config()
-
-	var dbs []*config.Database
-	if db := cfg.LocalDatabaseSettings(cfg.GraphDBs); db != nil {
-		dbs = append(dbs, db)
-	}
-	dbs = append(dbs, cfg.GraphDBs...)
-
-	for _, db := range dbs {
-		cayley := netmap.NewCayleyGraph(db.System, db.URL, db.Options)
-		if cayley == nil {
-			return fmt.Errorf("System: Failed to create the %s graph", db.System)
+	/*
+		var dbs []*config.Database
+		if db := cfg.LocalDatabaseSettings(cfg.GraphDBs); db != nil {
+			dbs = append(dbs, db)
 		}
-
-		g := netmap.NewGraph(cayley)
-		if g == nil {
-			return fmt.Errorf("System: Failed to create the %s graph", g.String())
-		}
-
-		l.graphs = append(l.graphs, g)
+		dbs = append(dbs, cfg.GraphDBs...)
+	*/
+	g := netmap.NewGraph("local", filepath.Join(config.OutputDirectory(cfg.Dir), "amass.sqlite"), "")
+	if g == nil {
+		return errors.New("System: failed to create the graph")
 	}
+	l.graphs = append(l.graphs, g)
 	return nil
 }
 

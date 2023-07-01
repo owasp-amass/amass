@@ -190,14 +190,8 @@ func runEnumCommand(clArgs []string) {
 		r.Fprintf(color.Error, "%v\n", err)
 		os.Exit(1)
 	}
-	// Expand data source category names into the associated source names
-	initializeSourceTags(sys.DataSources())
-	cfg.SourceFilter.Sources = expandCategoryNames(cfg.SourceFilter.Sources, generateCategoryMap(sys))
-	// Create the in-memory graph database used to store enumeration findings
-	graph := netmap.NewGraph(netmap.NewCayleyGraphMemory())
-	defer graph.Close()
 	// Setup the new enumeration
-	e := enum.NewEnumeration(cfg, sys, graph)
+	e := enum.NewEnumeration(cfg, sys, sys.GraphDatabases()[0])
 	if e == nil {
 		r.Fprintf(color.Error, "%s\n", "Failed to setup the enumeration")
 		os.Exit(1)
@@ -238,7 +232,7 @@ func runEnumCommand(clArgs []string) {
 	defer cancel()
 
 	wg.Add(1)
-	go processOutput(ctx, graph, e, outChans, done, &wg)
+	go processOutput(ctx, sys.GraphDatabases()[0], e, outChans, done, &wg)
 	// Monitor for cancellation by the user
 	go func(d chan struct{}, c context.Context, f context.CancelFunc) {
 		quit := make(chan os.Signal, 1)
@@ -261,30 +255,6 @@ func runEnumCommand(clArgs []string) {
 	close(done)
 	wg.Wait()
 	fmt.Fprintf(color.Error, "\n%s\n", green("The enumeration has finished"))
-	// If necessary, handle graph database migration
-	if len(e.Sys.GraphDatabases()) > 0 {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-		defer cancel()
-		// Monitor for cancellation by the user
-		go func(c context.CancelFunc) {
-			quit := make(chan os.Signal, 1)
-			signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
-			defer signal.Stop(quit)
-
-			<-quit
-			c()
-		}(cancel)
-		// Copy the graph of findings into the system graph databases
-		for _, g := range e.Sys.GraphDatabases() {
-			fmt.Fprintf(color.Error, "%s%s%s\n",
-				yellow("Discoveries are being migrated into the "), yellow(g.String()), yellow(" database"))
-
-			if err := graph.Migrate(ctx, g); err != nil {
-				fmt.Fprintf(color.Error, "%s%s%s%s\n",
-					red("The database migration to "), red(g.String()), red(" failed: "), red(err.Error()))
-			}
-		}
-	}
 }
 
 func argsAndConfig(clArgs []string) (*config.Config, *enumArgs) {
@@ -404,7 +374,6 @@ func printOutput(e *enum.Enumeration, args *enumArgs, output chan *requests.Outp
 	defer wg.Done()
 
 	var total int
-	tags := make(map[string]int)
 	asns := make(map[int]*format.ASNSummaryData)
 	// Print all the output returned by the enumeration
 	for out := range output {
@@ -415,22 +384,21 @@ func printOutput(e *enum.Enumeration, args *enumArgs, output chan *requests.Outp
 
 		total++
 		if !args.Options.Passive {
-			format.UpdateSummaryData(out, tags, asns)
+			format.UpdateSummaryData(out, asns)
 		}
 
-		source, name, ips := format.OutputLineParts(out, args.Options.Sources,
-			args.Options.IPs || args.Options.IPv4 || args.Options.IPv6, args.Options.DemoMode)
+		name, ips := format.OutputLineParts(out, args.Options.IPs || args.Options.IPv4 || args.Options.IPv6, args.Options.DemoMode)
 		if ips != "" {
 			ips = " " + ips
 		}
 
-		fmt.Fprintf(color.Output, "%s%s%s\n", blue(source), green(name), yellow(ips))
+		fmt.Fprintf(color.Output, "%s%s\n", green(name), yellow(ips))
 	}
 
 	if total == 0 {
 		r.Println("No names were discovered")
 	} else if !args.Options.Passive {
-		format.PrintEnumerationSummary(total, tags, asns, args.Options.DemoMode)
+		format.PrintEnumerationSummary(total, asns, args.Options.DemoMode)
 	}
 }
 
@@ -468,13 +436,12 @@ func saveTextOutput(e *enum.Enumeration, args *enumArgs, output chan *requests.O
 			continue
 		}
 
-		source, name, ips := format.OutputLineParts(out, args.Options.Sources,
-			args.Options.IPs || args.Options.IPv4 || args.Options.IPv6, args.Options.DemoMode)
+		name, ips := format.OutputLineParts(out, args.Options.IPs || args.Options.IPv4 || args.Options.IPv6, args.Options.DemoMode)
 		if ips != "" {
 			ips = " " + ips
 		}
 		// Write the line to the output file
-		fmt.Fprintf(outptr, "%s%s%s\n", source, name, ips)
+		fmt.Fprintf(outptr, "%s%s\n", name, ips)
 	}
 }
 
@@ -755,27 +722,6 @@ func (e enumArgs) OverrideConfig(conf *config.Config) error {
 	}
 	if e.MaxDNSQueries > 0 {
 		conf.MaxDNSQueries = e.MaxDNSQueries
-	}
-	if e.Included.Len() > 0 {
-		conf.SourceFilter.Include = true
-		// Check if brute forcing and alterations should be added
-		if conf.Alterations {
-			e.Included.Insert(requests.ALT)
-		}
-		if conf.BruteForcing {
-			e.Included.Insert(requests.BRUTE)
-		}
-		conf.SourceFilter.Sources = e.Included.Slice()
-	} else if e.Excluded.Len() > 0 || conf.Alterations || conf.BruteForcing {
-		conf.SourceFilter.Include = false
-		// Check if brute forcing and alterations should be added
-		if conf.Alterations {
-			e.Included.Insert(requests.ALT)
-		}
-		if conf.BruteForcing {
-			e.Included.Insert(requests.BRUTE)
-		}
-		conf.SourceFilter.Sources = e.Excluded.Slice()
 	}
 	// Attempt to add the provided domains to the configuration
 	conf.AddDomains(e.Domains.Slice()...)

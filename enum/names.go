@@ -8,9 +8,9 @@ import (
 	"context"
 	"strings"
 
-	"github.com/owasp-amass/amass/v3/requests"
 	"github.com/caffix/pipeline"
 	"github.com/caffix/stringset"
+	"github.com/owasp-amass/amass/v3/requests"
 )
 
 // subdomainTask handles newly discovered proper subdomain names in the enumeration.
@@ -107,8 +107,6 @@ func (r *subdomainTask) checkForSubdomains(ctx context.Context, req *requests.DN
 	subreq := &requests.SubdomainRequest{
 		Name:   sub,
 		Domain: req.Domain,
-		Tag:    req.Tag,
-		Source: req.Source,
 		Times:  times,
 	}
 

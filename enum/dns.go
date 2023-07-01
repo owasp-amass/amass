@@ -142,8 +142,6 @@ func (dt *dnsTask) rootTaskFunc() pipeline.TaskFunc {
 			r = &requests.DNSRequest{
 				Name:   v.Name,
 				Domain: v.Domain,
-				Tag:    v.Tag,
-				Source: v.Source,
 			}
 		}
 
@@ -427,8 +425,6 @@ func (dt *dnsTask) queryNS(ctx context.Context, name, domain string, ch chan []r
 						Name:   name,
 						Domain: domain,
 						Server: record.Data,
-						Tag:    requests.DNS,
-						Source: "DNS",
 					}, tp)
 					records = append(records, convertAnswers([]*resolve.ExtractedAnswer{record})...)
 				}
@@ -530,10 +526,7 @@ func (e *Enumeration) dnsQuery(ctx context.Context, name string, qtype uint16, r
 }
 
 func (e *Enumeration) wildcardDetected(ctx context.Context, req *requests.DNSRequest, resp *dns.Msg) bool {
-	if !requests.TrustedTag(req.Tag) && e.Sys.TrustedResolvers().WildcardDetected(ctx, resp, req.Domain) {
-		return true
-	}
-	return false
+	return e.Sys.TrustedResolvers().WildcardDetected(ctx, resp, req.Domain)
 }
 
 func convertAnswers(ans []*resolve.ExtractedAnswer) []requests.DNSAnswer {

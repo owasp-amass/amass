@@ -11,13 +11,12 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"time"
 
-	"github.com/owasp-amass/amass/v3/config"
-	"github.com/owasp-amass/amass/v3/requests"
 	"github.com/caffix/netmap"
 	"github.com/caffix/stringset"
 	"github.com/fatih/color"
+	"github.com/owasp-amass/amass/v3/config"
+	"github.com/owasp-amass/amass/v3/requests"
 )
 
 const (
@@ -27,10 +26,7 @@ const (
 
 type trackArgs struct {
 	Domains *stringset.Set
-	Last    int
-	Since   string
 	Options struct {
-		History bool
 		NoColor bool
 		Silent  bool
 	}
@@ -55,9 +51,6 @@ func runTrackCommand(clArgs []string) {
 	trackCommand.BoolVar(&help1, "h", false, "Show the program usage message")
 	trackCommand.BoolVar(&help2, "help", false, "Show the program usage message")
 	trackCommand.Var(args.Domains, "d", "Domain names separated by commas (can be used multiple times)")
-	trackCommand.IntVar(&args.Last, "last", 0, "The number of recent enumerations to include in the tracking")
-	trackCommand.StringVar(&args.Since, "since", "", "Exclude all enumerations before (format: "+timeFormat+")")
-	trackCommand.BoolVar(&args.Options.History, "history", false, "Show the difference between all enumeration pairs")
 	trackCommand.BoolVar(&args.Options.NoColor, "nocolor", false, "Disable colorized output")
 	trackCommand.BoolVar(&args.Options.Silent, "silent", false, "Disable all output during execution")
 	trackCommand.StringVar(&args.Filepaths.ConfigFile, "config", "", "Path to the INI configuration file. Additional details below")
@@ -84,14 +77,6 @@ func runTrackCommand(clArgs []string) {
 		color.Error = io.Discard
 	}
 	// Some input validation
-	if args.Since != "" && args.Last != 0 {
-		r.Fprintln(color.Error, "The since flag cannot be used with the last or all flags")
-		os.Exit(1)
-	}
-	if args.Last > 0 && args.Last < 2 {
-		r.Fprintln(color.Error, "Tracking requires more than one enumeration")
-		os.Exit(1)
-	}
 	if args.Filepaths.Domains != "" {
 		list, err := config.GetListFromFile(args.Filepaths.Domains)
 		if err != nil {
@@ -103,16 +88,6 @@ func runTrackCommand(clArgs []string) {
 	if args.Domains.Len() == 0 {
 		r.Fprintln(color.Error, "No root domain names were provided")
 		os.Exit(1)
-	}
-
-	var err error
-	var start time.Time
-	if args.Since != "" {
-		start, err = time.Parse(timeFormat, args.Since)
-		if err != nil {
-			r.Fprintf(color.Error, "%s is not in the correct format: %s\n", args.Since, timeFormat)
-			os.Exit(1)
-		}
 	}
 
 	cfg := config.NewConfig()
@@ -134,92 +109,16 @@ func runTrackCommand(clArgs []string) {
 		r.Fprintln(color.Error, "Failed to connect with the database")
 		os.Exit(1)
 	}
-	defer db.Close()
-	// Create the in-memory graph database
-	memDB, err := memGraphForScope(context.Background(), args.Domains.Slice(), db)
-	if err != nil {
-		r.Fprintln(color.Error, err.Error())
-		os.Exit(1)
-	}
-	defer memDB.Close()
-	// Get all the UUIDs for events that have information in scope
-	uuids := memDB.EventsInScope(context.Background(), args.Domains.Slice()...)
-	if len(uuids) == 0 {
-		r.Fprintln(color.Error, "Failed to find the domains of interest in the database")
-		os.Exit(1)
-	}
-
-	var earliest, latest []time.Time
-	// Put the events in chronological order
-	uuids, earliest, latest = orderedEvents(context.Background(), uuids, memDB)
-	if len(uuids) == 0 {
-		r.Fprintln(color.Error, "Failed to sort the events")
-		os.Exit(1)
-	}
-	// The default is to use all the enumerations available
-	if args.Last == 0 {
-		args.Last = len(uuids)
-	}
-
-	var begin int
-	// Filter out enumerations that begin before the start date/time
-	if args.Since != "" {
-		for i := len(uuids) - 1; i >= 0; i-- {
-			if earliest[i].Before(start) {
-				break
-			}
-			begin++
-		}
-	} else { // Or the number of enumerations from the end of the timeline
-		if args.Last > len(uuids) {
-			r.Fprintf(color.Error, "%d enumerations are not available\n", args.Last)
-			os.Exit(1)
-		}
-
-		begin = args.Last
-	}
-	begin = len(uuids) - begin
-	uuids = uuids[begin:]
-	earliest = earliest[begin:]
-	latest = latest[begin:]
 
 	cache := cacheWithData()
-	if len(uuids) == 1 {
-		printOneEvent(uuids, args.Domains.Slice(), earliest[0], latest[0], memDB, cache)
-		return
-	} else if args.Options.History {
-		completeHistoryOutput(uuids, args.Domains.Slice(), earliest, latest, memDB, cache)
-		return
-	}
-	cumulativeOutput(uuids, args.Domains.Slice(), earliest, latest, memDB, cache)
+	cumulativeOutput(args.Domains.Slice(), db, cache)
 }
 
-func printOneEvent(uuid, domains []string, earliest, latest time.Time, db *netmap.Graph, cache *requests.ASNCache) {
-	one := getScopedOutput(uuid, domains, db, cache)
-
-	blueLine()
-	fmt.Fprintf(color.Output, "%s\t%s%s%s\n%s\t%s%s%s\n", blue("Between"),
-		yellow(earliest.Format(timeFormat)), blue(" -> "), yellow(latest.Format(timeFormat)),
-		blue("and"), yellow(earliest.Format(timeFormat)), blue(" -> "), yellow(latest.Format(timeFormat)))
-	blueLine()
-
-	for _, d := range diffEnumOutput([]*requests.Output{}, one) {
-		fmt.Fprintln(color.Output, d)
-	}
-}
-
-func cumulativeOutput(uuids, domains []string, ea, la []time.Time, db *netmap.Graph, cache *requests.ASNCache) {
-	idx := len(uuids) - 1
-	cum := getScopedOutput(uuids[:idx], domains, db, cache)
-
-	blueLine()
-	fmt.Fprintf(color.Output, "%s\t%s%s%s\n%s\t%s%s%s\n", blue("Between"),
-		yellow(ea[0].Format(timeFormat)), blue(" -> "), yellow(la[0].Format(timeFormat)),
-		blue("and"), yellow(ea[idx].Format(timeFormat)), blue(" -> "), yellow(la[idx].Format(timeFormat)))
-	blueLine()
+func cumulativeOutput(domains []string, db *netmap.Graph, cache *requests.ASNCache) {
+	cum := getScopedOutput(domains, db, cache)
 
 	var updates bool
-	out := getScopedOutput([]string{uuids[idx]}, domains, db, cache)
+	out := getScopedOutput(domains, db, cache)
 	for _, d := range diffEnumOutput(cum, out) {
 		updates = true
 		fmt.Fprintln(color.Output, d)
@@ -229,48 +128,16 @@ func cumulativeOutput(uuids, domains []string, ea, la []time.Time, db *netmap.Gr
 	}
 }
 
-func getScopedOutput(uuids, domains []string, db *netmap.Graph, cache *requests.ASNCache) []*requests.Output {
+func getScopedOutput(domains []string, db *netmap.Graph, cache *requests.ASNCache) []*requests.Output {
 	var output []*requests.Output
 
-	for _, out := range getEventOutput(context.TODO(), uuids, false, db, cache) {
+	for _, out := range getEventOutput(context.TODO(), domains, false, db, cache) {
 		if len(domains) > 0 && !domainNameInScope(out.Name, domains) {
 			continue
 		}
 		output = append(output, out)
 	}
 	return output
-}
-
-func completeHistoryOutput(uuids, domains []string, ea, la []time.Time, db *netmap.Graph, cache *requests.ASNCache) {
-	var prev string
-
-	for i, uuid := range uuids {
-		if prev == "" {
-			prev = uuid
-			continue
-		}
-		if i != 1 {
-			fmt.Println()
-		}
-
-		blueLine()
-		fmt.Fprintf(color.Output, "%s\t%s%s%s\n%s\t%s%s%s\n", blue("Between"),
-			yellow(ea[i-1].Format(timeFormat)), blue(" -> "), yellow(la[i-1].Format(timeFormat)),
-			blue("and"), yellow(ea[i].Format(timeFormat)), blue(" -> "), yellow(la[i].Format(timeFormat)))
-		blueLine()
-
-		var updates bool
-		out1 := getScopedOutput([]string{prev}, domains, db, cache)
-		out2 := getScopedOutput([]string{uuid}, domains, db, cache)
-		for _, d := range diffEnumOutput(out1, out2) {
-			updates = true
-			fmt.Fprintln(color.Output, d)
-		}
-		if !updates {
-			g.Println("No differences discovered")
-		}
-		prev = uuid
-	}
 }
 
 func blueLine() {

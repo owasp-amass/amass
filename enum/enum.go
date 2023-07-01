@@ -16,6 +16,7 @@ import (
 	"github.com/owasp-amass/amass/v3/datasrcs"
 	"github.com/owasp-amass/amass/v3/requests"
 	"github.com/owasp-amass/amass/v3/systems"
+	"github.com/owasp-amass/open-asset-model/domain"
 )
 
 // Enumeration is the object type used to execute a DNS enumeration.
@@ -117,8 +118,6 @@ func (e *Enumeration) submitDomainNames() {
 		req := &requests.DNSRequest{
 			Name:   domain,
 			Domain: domain,
-			Tag:    requests.DNS,
-			Source: "DNS",
 		}
 
 		e.nameSrc.newName(req)
@@ -236,7 +235,7 @@ func (e *Enumeration) makeOutputSink() pipeline.SinkFunc {
 
 		req, ok := data.(*requests.DNSRequest)
 		if ok && req != nil && req.Name != "" && e.Config.IsDomainInScope(req.Name) {
-			if _, err := e.graph.UpsertFQDN(e.ctx, req.Name, req.Source, e.Config.UUID.String()); err != nil {
+			if _, err := e.graph.UpsertFQDN(e.ctx, req.Name); err != nil {
 				e.Config.Log.Print(err.Error())
 			}
 		}
@@ -245,39 +244,34 @@ func (e *Enumeration) makeOutputSink() pipeline.SinkFunc {
 }
 
 func (e *Enumeration) submitKnownNames() {
-	srcTags := make(map[string]string)
-	for _, src := range e.Sys.DataSources() {
-		srcTags[src.String()] = src.Description()
-	}
-
 	for _, g := range e.Sys.GraphDatabases() {
-		e.readNamesFromDatabase(g, srcTags)
+		e.readNamesFromDatabase(g)
 	}
 }
 
-func (e *Enumeration) readNamesFromDatabase(db *netmap.Graph, stags map[string]string) {
-	domains := e.Config.Domains()
+func (e *Enumeration) readNamesFromDatabase(db *netmap.Graph) {
+	for _, d := range e.Config.Domains() {
+		assets, err := db.DB.FindByContent(domain.FQDN{Name: d})
+		if err != nil {
+			continue
+		}
 
-	for _, event := range db.EventsInScope(e.ctx, domains...) {
-		for _, name := range db.EventFQDNs(e.ctx, event) {
-			select {
-			case <-e.done:
-				return
-			default:
-			}
+		for _, a := range assets {
+			if fqdn, ok := a.Asset.(domain.FQDN); ok {
+				select {
+				case <-e.done:
+					return
+				default:
+				}
 
-			domain := e.Config.WhichDomain(name)
-			if domain == "" {
-				continue
-			}
-			if srcs, err := db.NodeSources(e.ctx, netmap.Node(name), event); err == nil {
-				src := srcs[0]
-				tag := stags[src]
+				domain := e.Config.WhichDomain(fqdn.Name)
+				if domain == "" {
+					continue
+				}
+
 				e.nameSrc.newName(&requests.DNSRequest{
-					Name:   name,
+					Name:   fqdn.Name,
 					Domain: domain,
-					Tag:    tag,
-					Source: src,
 				})
 			}
 		}
@@ -295,8 +289,6 @@ func (e *Enumeration) submitProvidedNames() {
 			e.nameSrc.newName(&requests.DNSRequest{
 				Name:   name,
 				Domain: domain,
-				Tag:    requests.EXTERNAL,
-				Source: "User Input",
 			})
 		}
 	}
