@@ -12,15 +12,15 @@ import (
 	"sync"
 	"time"
 
+	"github.com/caffix/pipeline"
+	"github.com/caffix/service"
+	"github.com/caffix/stringset"
 	"github.com/owasp-amass/amass/v3/config"
 	"github.com/owasp-amass/amass/v3/datasrcs"
 	amassnet "github.com/owasp-amass/amass/v3/net"
 	"github.com/owasp-amass/amass/v3/requests"
 	"github.com/owasp-amass/amass/v3/systems"
-	"github.com/caffix/pipeline"
 	"github.com/owasp-amass/resolve"
-	"github.com/caffix/service"
-	"github.com/caffix/stringset"
 	bf "github.com/tylertreat/BoomFilters"
 	"golang.org/x/net/publicsuffix"
 )
@@ -156,8 +156,6 @@ func (c *Collection) makeDNSTaskFunc() pipeline.TaskFunc {
 						Name:      d,
 						Domain:    d,
 						Addresses: []requests.AddressInfo{addrinfo},
-						Tag:       requests.DNS,
-						Sources:   []string{"Reverse DNS"},
 					}, tp)
 				}
 			}
@@ -278,10 +276,8 @@ func (c *Collection) collect(req *requests.WhoisRequest) {
 	for _, name := range req.NewDomains {
 		if d, err := publicsuffix.EffectiveTLDPlusOne(name); err == nil && !c.filter.TestAndAdd([]byte(d)) {
 			c.Output <- &requests.Output{
-				Name:    d,
-				Domain:  d,
-				Tag:     req.Tag,
-				Sources: []string{req.Source},
+				Name:   d,
+				Domain: d,
 			}
 		}
 	}

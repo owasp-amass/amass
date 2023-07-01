@@ -27,8 +27,6 @@ func runHelpCommand(clArgs []string) {
 		runIntelCommand(help)
 	case "track":
 		runTrackCommand(help)
-	case "viz":
-		runVizCommand(help)
 	default:
 		commandUsage(mainUsageMsg, helpCommand, helpBuf)
 		return

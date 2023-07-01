@@ -8,7 +8,6 @@ import (
 	"context"
 	"fmt"
 	"regexp"
-	"strconv"
 	"sync"
 	"time"
 
@@ -28,7 +27,6 @@ type enumSource struct {
 	pipeline  *pipeline.Pipeline
 	enum      *Enumeration
 	queue     queue.Queue
-	dups      queue.Queue
 	sweeps    queue.Queue
 	filter    *bf.StableBloomFilter
 	subre     *regexp.Regexp
@@ -49,7 +47,6 @@ func newEnumSource(p *pipeline.Pipeline, e *Enumeration) *enumSource {
 		pipeline: p,
 		enum:     e,
 		queue:    queue.NewQueue(),
-		dups:     queue.NewQueue(),
 		sweeps:   queue.NewQueue(),
 		filter:   bf.NewDefaultStableBloomFilter(1000000, 0.01),
 		subre:    dns.AnySubdomainRegex(),
@@ -74,15 +71,12 @@ func newEnumSource(p *pipeline.Pipeline, e *Enumeration) *enumSource {
 	for i := 0; i < size; i++ {
 		r.release <- struct{}{}
 	}
-
-	go r.processDupNames()
 	return r
 }
 
 func (r *enumSource) Stop() {
 	r.markDone()
 	r.queue.Process(func(e interface{}) {})
-	r.dups.Process(func(e interface{}) {})
 	r.sweeps.Process(func(e interface{}) {})
 	r.filter.Reset()
 }
@@ -115,7 +109,7 @@ func (r *enumSource) newName(req *requests.DNSRequest) {
 		r.releaseOutput(1)
 		return
 	}
-	if !r.accept(req.Name, req.Tag, req.Source, true) {
+	if !r.accept(req.Name, true) {
 		r.releaseOutput(1)
 		return
 	}
@@ -129,7 +123,7 @@ func (r *enumSource) newAddr(req *requests.AddrRequest) {
 	default:
 	}
 
-	if !req.Valid() || !req.InScope || !r.accept(req.Address, req.Tag, req.Source, false) {
+	if !req.Valid() || !req.InScope || !r.accept(req.Address, false) {
 		return
 	}
 
@@ -141,34 +135,12 @@ func (r *enumSource) newAddr(req *requests.AddrRequest) {
 	}
 }
 
-func (r *enumSource) accept(s, tag, source string, name bool) bool {
-	trusted := requests.TrustedTag(tag)
-	// Do not submit names from untrusted sources, after already receiving the name
-	// from a trusted source
-	if !trusted && r.filter.Test([]byte(s+strconv.FormatBool(true))) {
-		if name {
-			r.dups.Append(&requests.DNSRequest{
-				Name:   s,
-				Tag:    tag,
-				Source: source,
-			})
-		}
-		return false
-	}
-	// At most, a FQDN will be accepted from an untrusted source once, and then
-	// reconsidered when presented from a trusted data source
-	if r.filter.Test([]byte(s + strconv.FormatBool(trusted))) {
-		if name {
-			r.dups.Append(&requests.DNSRequest{
-				Name:   s,
-				Tag:    tag,
-				Source: source,
-			})
-		}
+func (r *enumSource) accept(s string, name bool) bool {
+	if r.filter.Test([]byte(s)) {
 		return false
 	}
 
-	r.filter.Add([]byte(s + strconv.FormatBool(trusted)))
+	r.filter.Add([]byte(s))
 	return true
 }
 
@@ -297,86 +269,4 @@ func (r *enumSource) monitorDataSrcOutput(srv service.Service) {
 			}
 		}
 	}
-}
-
-// This goroutine ensures that duplicate names from other sources are shown in the Graph.
-func (r *enumSource) processDupNames() {
-	countdown := r.max * 2
-	var inc uint32 = uint32(r.max) * 2
-	var highest uint32 = (1 << 32) - 1
-	uuid := r.enum.Config.UUID.String()
-
-	type altsource struct {
-		Name      string
-		Source    string
-		Tag       string
-		Min       uint32
-		Countdown int
-	}
-
-	var pending []*altsource
-	each := func(element interface{}) {
-		req := element.(*requests.DNSRequest)
-
-		if r.addSourceToEntry(uuid, req.Name, req.Source) {
-			return
-		}
-		if req.Tag != requests.BRUTE && req.Tag != requests.ALT {
-			min := r.getCount()
-			if highest-min < inc {
-				min = 0
-			}
-			pending = append(pending, &altsource{
-				Name:      req.Name,
-				Source:    req.Source,
-				Tag:       req.Tag,
-				Min:       min,
-				Countdown: countdown,
-			})
-		}
-	}
-loop:
-	for {
-		select {
-		case <-r.done:
-			break loop
-		case <-r.dups.Signal():
-			if element, ok := r.dups.Next(); ok {
-				each(element)
-			}
-		case num := <-r.inputsig:
-			var removed int
-
-			for i, a := range pending {
-				if i >= len(pending)-removed {
-					break
-				}
-				if num >= a.Min {
-					a.Countdown--
-				}
-				if a.Countdown <= 0 {
-					go func() { _ = r.addSourceToEntry(uuid, a.Name, a.Source) }()
-					// Remove the element
-					removed++
-					pending[i] = pending[len(pending)-removed]
-				}
-			}
-			if removed > 0 {
-				pending = pending[:len(pending)-removed]
-			}
-		}
-	}
-	// Last attempt to update the sources information
-	r.dups.Process(each)
-	for _, a := range pending {
-		_ = r.addSourceToEntry(uuid, a.Name, a.Source)
-	}
-}
-
-func (r *enumSource) addSourceToEntry(uuid, name, source string) bool {
-	if _, err := r.enum.graph.ReadNode(r.enum.ctx, name, "fqdn"); err == nil {
-		_, _ = r.enum.graph.UpsertFQDN(r.enum.ctx, name, source, uuid)
-		return true
-	}
-	return false
 }

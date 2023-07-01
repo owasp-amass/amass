@@ -10,12 +10,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/miekg/dns"
 	amassnet "github.com/owasp-amass/amass/v3/net"
 	amassdns "github.com/owasp-amass/amass/v3/net/dns"
 	"github.com/owasp-amass/amass/v3/net/http"
 	"github.com/owasp-amass/amass/v3/requests"
 	"github.com/owasp-amass/resolve"
-	"github.com/miekg/dns"
 	bf "github.com/tylertreat/BoomFilters"
 	lua "github.com/yuin/gopher-lua"
 	"golang.org/x/net/publicsuffix"
@@ -33,8 +33,6 @@ func (s *Script) newNameWithSrc(ctx context.Context, name, tag, src string) {
 		case s.Output() <- &requests.DNSRequest{
 			Name:   name,
 			Domain: domain,
-			Tag:    tag,
-			Source: src,
 		}:
 		}
 	}
@@ -135,8 +133,6 @@ func (s *Script) internalSendDNSRecords(ctx context.Context, name string, record
 			Name:    name,
 			Domain:  domain,
 			Records: records,
-			Tag:     s.Description(),
-			Source:  s.String(),
 		}:
 		}
 	}
@@ -169,8 +165,6 @@ func (s *Script) newPTR(ctx context.Context, record *resolve.ExtractedAnswer) {
 			Type: int(dns.TypePTR),
 			Data: answer,
 		}},
-		Tag:    s.Description(),
-		Source: s.String(),
 	}:
 	}
 }
@@ -194,8 +188,6 @@ func (s *Script) newAddr(L *lua.LState) int {
 				case s.Output() <- &requests.AddrRequest{
 					Address: ip.String(),
 					Domain:  domain,
-					Tag:     s.SourceType,
-					Source:  s.String(),
 				}:
 				}
 			}
@@ -252,8 +244,6 @@ func (s *Script) newASN(L *lua.LState) int {
 				AllocationDate: time.Now(),
 				Description:    desc,
 				Netblocks:      netblocks,
-				Tag:            s.SourceType,
-				Source:         s.String(),
 			})
 		}
 	}
@@ -270,8 +260,6 @@ func (s *Script) associated(L *lua.LState) int {
 			case s.Output() <- &requests.WhoisRequest{
 				Domain:     domain,
 				NewDomains: []string{assoc},
-				Tag:        s.SourceType,
-				Source:     s.String(),
 			}:
 			}
 		}

@@ -4,16 +4,10 @@
 
 package enum
 
-import (
-	"strings"
-
-	"github.com/caffix/netmap"
-)
-
 const falsePositiveThreshold int = 100
 
 func (e *Enumeration) checkForMissedWildcards(ip string) {
-	addr := netmap.Node(ip)
+	/*addr := netmap.Node(ip)
 
 	if count, err := e.graph.CountInEdges(e.ctx, addr, "a_record", "aaaa_record"); err != nil || count < falsePositiveThreshold {
 		return
@@ -45,5 +39,5 @@ func (e *Enumeration) checkForMissedWildcards(ip string) {
 		for _, node := range nodes {
 			_ = e.graph.DeleteNode(e.ctx, node)
 		}
-	}
+	}*/
 }
