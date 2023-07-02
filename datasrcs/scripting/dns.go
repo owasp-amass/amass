@@ -13,11 +13,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/miekg/dns"
 	amassnet "github.com/owasp-amass/amass/v3/net"
 	amassdns "github.com/owasp-amass/amass/v3/net/dns"
 	"github.com/owasp-amass/amass/v3/requests"
 	"github.com/owasp-amass/resolve"
-	"github.com/miekg/dns"
 	bf "github.com/tylertreat/BoomFilters"
 	lua "github.com/yuin/gopher-lua"
 	"golang.org/x/net/publicsuffix"
@@ -26,12 +26,20 @@ import (
 const (
 	defaultSweepSize = 250
 	activeSweepSize  = 500
+	maxSweepSize     = 1000
 )
 
 var (
 	sweepLock   sync.Mutex
+	sweepMaxCh  chan struct{}         = make(chan struct{}, maxSweepSize)
 	sweepFilter *bf.StableBloomFilter = bf.NewDefaultStableBloomFilter(1000000, 0.01)
 )
+
+func init() {
+	for i := 0; i < maxSweepSize; i++ {
+		sweepMaxCh <- struct{}{}
+	}
+}
 
 // Wrapper so that scripts can make DNS queries.
 func (s *Script) resolve(L *lua.LState) int {
@@ -85,7 +93,7 @@ func (s *Script) resolve(L *lua.LState) int {
 
 func (s *Script) fwdQuery(ctx context.Context, name string, qtype uint16) (*dns.Msg, error) {
 	msg := resolve.QueryMsg(name, qtype)
-	resp, err := s.dnsQuery(ctx, msg, s.sys.Resolvers(), 50)
+	resp, err := s.dnsQuery(ctx, msg, s.sys.Resolvers(), 5)
 	if err != nil {
 		return resp, err
 	}
@@ -93,7 +101,7 @@ func (s *Script) fwdQuery(ctx context.Context, name string, qtype uint16) (*dns.
 		return nil, errors.New("query failed")
 	}
 
-	resp, err = s.dnsQuery(ctx, msg, s.sys.TrustedResolvers(), 50)
+	resp, err = s.dnsQuery(ctx, msg, s.sys.TrustedResolvers(), 3)
 	if resp == nil && err == nil {
 		err = errors.New("query failed")
 	}
@@ -190,7 +198,6 @@ func (s *Script) reverseSweep(L *lua.LState) int {
 	}
 
 	var count int
-	ch := make(chan *resolve.ExtractedAnswer, 10)
 	for _, ip := range amassnet.CIDRSubset(cidr, addr, size) {
 		select {
 		case <-ctx.Done():
@@ -202,47 +209,38 @@ func (s *Script) reverseSweep(L *lua.LState) int {
 		sweepLock.Lock()
 		if a := ip.String(); !sweepFilter.TestAndAdd([]byte(a)) {
 			count++
-			go s.getPTR(ctx, a, ch)
+			<-sweepMaxCh
+			go s.getPTR(ctx, a, sweepMaxCh)
 		}
 		sweepLock.Unlock()
 	}
 
-	var records []*resolve.ExtractedAnswer
-	for i := 0; i < count; i++ {
-		if rr := <-ch; rr != nil {
-			records = append(records, rr)
-		}
-	}
-
-	for _, rr := range records {
-		s.newPTR(ctx, rr)
-	}
 	L.Push(lua.LNil)
 	return 1
 }
 
-func (s *Script) getPTR(ctx context.Context, addr string, ch chan *resolve.ExtractedAnswer) {
+func (s *Script) getPTR(ctx context.Context, addr string, ch chan struct{}) {
+	defer func() { ch <- struct{}{} }()
+
 	if reserved, _ := amassnet.IsReservedAddress(addr); reserved {
-		ch <- nil
 		return
 	}
 
 	msg := resolve.ReverseMsg(addr)
-	resp, err := s.dnsQuery(ctx, msg, s.sys.Resolvers(), 10)
+	resp, err := s.dnsQuery(ctx, msg, s.sys.Resolvers(), 5)
 	if err != nil || resp == nil {
-		ch <- nil
 		return
 	}
 
-	resp, err = s.dnsQuery(ctx, msg, s.sys.TrustedResolvers(), 10)
+	resp, err = s.dnsQuery(ctx, msg, s.sys.TrustedResolvers(), 3)
 	if err != nil || resp == nil {
-		ch <- nil
 		return
 	}
 
 	if ans := resolve.ExtractAnswers(resp); len(ans) > 0 {
 		if records := resolve.AnswersByType(ans, dns.TypePTR); len(records) > 0 {
-			ch <- records[0]
+			s.newPTR(ctx, records[0])
+			return
 		}
 	}
 }

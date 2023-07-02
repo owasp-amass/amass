@@ -357,8 +357,11 @@ func (s *Script) dispatch(in interface{}) {
 		if s.cbs.Asn.Type() != lua.LTNil && req != nil && (req.Address != "" || req.ASN != 0) {
 			callback := s.cbs.Asn
 			s.cbsLock.Unlock()
-			s.CheckRateLimit()
-			s.asnRequest(s.ctx, callback, req)
+			// check that the cache entry has not already been made by a previous request
+			if s.sys.Cache().AddrSearch(req.Address) == nil {
+				s.CheckRateLimit()
+				s.asnRequest(s.ctx, callback, req)
+			}
 		}
 	case *requests.WhoisRequest:
 		if s.cbs.Horizontal.Type() != lua.LTNil {
