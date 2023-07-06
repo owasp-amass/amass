@@ -18,18 +18,18 @@ import (
 )
 
 // ExtractOutput is a convenience method for obtaining new discoveries made by the enumeration process.
-func ExtractOutput(ctx context.Context, g *netmap.Graph, e *enum.Enumeration, filter *stringset.Set, asinfo bool, limit int) []*requests.Output {
+func ExtractOutput(ctx context.Context, g *netmap.Graph, e *enum.Enumeration, filter *stringset.Set, asinfo bool) []*requests.Output {
 	if e.Config.Passive {
 		return EventNames(ctx, g, e.Config.Domains(), filter)
 	}
-	return EventOutput(ctx, g, e.Config.Domains(), filter, asinfo, e.Sys.Cache(), limit)
+	return EventOutput(ctx, g, e.Config.Domains(), filter, asinfo, e.Sys.Cache())
 }
 
 type outLookup map[string]*requests.Output
 
 // EventOutput returns findings within the receiver Graph within the scope identified by the provided domain names.
 // The filter is updated by EventOutput.
-func EventOutput(ctx context.Context, g *netmap.Graph, domains []string, f *stringset.Set, asninfo bool, cache *requests.ASNCache, limit int) []*requests.Output {
+func EventOutput(ctx context.Context, g *netmap.Graph, domains []string, f *stringset.Set, asninfo bool, cache *requests.ASNCache) []*requests.Output {
 	var res []*requests.Output
 
 	if len(domains) == 0 {
@@ -75,11 +75,13 @@ func EventOutput(ctx context.Context, g *netmap.Graph, domains []string, f *stri
 	// Build the lookup map used to create the final result set
 	if pairs, err := g.NamesToAddrs(ctx, names...); err == nil {
 		for _, p := range pairs {
-			if p.FQDN.Name == "" || p.Addr.Address.String() == "" {
+			addr := p.Addr.Address.String()
+
+			if p.FQDN.Name == "" || addr == "" {
 				continue
 			}
 			if o, found := lookup[p.FQDN.Name]; found {
-				o.Addresses = append(o.Addresses, requests.AddressInfo{Address: net.ParseIP(p.Addr.Address.String())})
+				o.Addresses = append(o.Addresses, requests.AddressInfo{Address: net.ParseIP(addr)})
 			}
 		}
 	}
@@ -149,7 +151,7 @@ func EventNames(ctx context.Context, g *netmap.Graph, domains []string, f *strin
 
 	var fqdns []oam.Asset
 	for _, d := range domains {
-		fqdns = append(fqdns, &domain.FQDN{Name: d})
+		fqdns = append(fqdns, domain.FQDN{Name: d})
 	}
 
 	assets, err := g.DB.FindByScope(fqdns...)
@@ -161,6 +163,7 @@ func EventNames(ctx context.Context, g *netmap.Graph, domains []string, f *strin
 	for _, a := range assets {
 		if n, ok := a.Asset.(domain.FQDN); ok && !f.Has(n.Name) {
 			names = append(names, n.Name)
+			f.Insert(n.Name)
 		}
 	}
 
@@ -174,7 +177,6 @@ func EventNames(ctx context.Context, g *netmap.Graph, domains []string, f *strin
 			Name:   n,
 			Domain: d,
 		})
-		f.Insert(n)
 	}
 	return res
 }

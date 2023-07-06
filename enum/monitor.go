@@ -4,40 +4,85 @@
 
 package enum
 
+import (
+	"net/netip"
+	"strings"
+
+	"github.com/owasp-amass/asset-db/types"
+	"github.com/owasp-amass/open-asset-model/domain"
+	"github.com/owasp-amass/open-asset-model/network"
+)
+
 const falsePositiveThreshold int = 100
 
-func (e *Enumeration) checkForMissedWildcards(ip string) {
-	/*addr := netmap.Node(ip)
-
-	if count, err := e.graph.CountInEdges(e.ctx, addr, "a_record", "aaaa_record"); err != nil || count < falsePositiveThreshold {
-		return
-	}
-
-	edges, err := e.graph.ReadInEdges(e.ctx, addr, "a_record", "aaaa_record")
+func (e *Enumeration) checkForMissedWildcards(addr string) {
+	ip, err := netip.ParseAddr(addr)
 	if err != nil {
 		return
 	}
 
-	subsToNodes := make(map[string][]netmap.Node)
-	for _, edge := range edges {
-		name := e.graph.NodeToID(edge.From)
-		if name == "" {
-			continue
-		}
-
-		parts := strings.Split(name, ".")
-		sub := strings.Join(parts[1:], ".")
-		subsToNodes[sub] = append(subsToNodes[sub], edge.From)
+	var t string
+	if ip.Is4() {
+		t = "IPv4"
+	} else if ip.Is6() {
+		t = "IPv6"
+	} else {
+		return
 	}
 
-	for sub, nodes := range subsToNodes {
-		if len(nodes) < falsePositiveThreshold {
+	results, err := e.graph.DB.FindByContent(&network.IPAddress{
+		Address: ip,
+		Type:    t,
+	})
+	if err != nil {
+		return
+	}
+
+	var asset *types.Asset
+	for _, res := range results {
+		if i, ok := res.Asset.(network.IPAddress); ok && i.Address.String() == addr {
+			asset = res
+			break
+		}
+	}
+	if asset == nil {
+		return
+	}
+
+	in, err := e.graph.DB.IncomingRelations(asset, "a_record", "aaaa_record")
+	if err != nil {
+		return
+	}
+
+	if len(in) < falsePositiveThreshold {
+		return
+	}
+
+	subsToAssets := make(map[string][]*domain.FQDN)
+	for _, rel := range in {
+		var fqdn *domain.FQDN
+
+		n, err := e.graph.DB.FindById(rel.FromAsset.ID)
+		if err != nil {
+			continue
+		} else if name, ok := n.Asset.(domain.FQDN); ok {
+			fqdn = &name
+		}
+
+		parts := strings.Split(fqdn.Name, ".")
+		sub := strings.Join(parts[1:], ".")
+		subsToAssets[sub] = append(subsToAssets[sub], fqdn)
+	}
+
+	for sub, assets := range subsToAssets {
+		if len(assets) < falsePositiveThreshold {
 			continue
 		}
 
 		e.Config.BlacklistSubdomain(sub)
-		for _, node := range nodes {
-			_ = e.graph.DeleteNode(e.ctx, node)
+		for range assets {
+			// FIX
+			//_ = e.graph.DeleteNode(e.ctx, node)
 		}
-	}*/
+	}
 }

@@ -74,7 +74,6 @@ type enumArgs struct {
 		NoRecursive     bool
 		Passive         bool
 		Silent          bool
-		Sources         bool
 		Verbose         bool
 	}
 	Filepaths struct {
@@ -137,7 +136,6 @@ func defineEnumOptionFlags(enumFlags *flag.FlagSet, args *enumArgs) {
 	enumFlags.BoolVar(&args.Options.Passive, "passive", false, "Disable DNS resolution of names and dependent features")
 	enumFlags.BoolVar(&placeholder, "share", false, "Deprecated feature to be removed in version 4.0")
 	enumFlags.BoolVar(&args.Options.Silent, "silent", false, "Disable all output during execution")
-	enumFlags.BoolVar(&args.Options.Sources, "src", false, "Print data sources for the discovered names")
 	enumFlags.BoolVar(&args.Options.Verbose, "v", false, "Output status / debug / troubleshooting info")
 }
 
@@ -503,8 +501,8 @@ func processOutput(ctx context.Context, g *netmap.Graph, e *enum.Enumeration, ou
 	known := stringset.New()
 	defer known.Close()
 	// The function that obtains output from the enum and puts it on the channel
-	extract := func(limit int) {
-		for _, o := range ExtractOutput(ctx, g, e, known, true, limit) {
+	extract := func() {
+		for _, o := range ExtractOutput(ctx, g, e, known, true) {
 			if !o.Complete(e.Config.Passive) || !e.Config.IsDomainInScope(o.Name) {
 				continue
 			}
@@ -519,13 +517,13 @@ func processOutput(ctx context.Context, g *netmap.Graph, e *enum.Enumeration, ou
 	for {
 		select {
 		case <-ctx.Done():
-			extract(0)
+			extract()
 			return
 		case <-done:
-			extract(0)
+			extract()
 			return
 		case <-t.C:
-			extract(500)
+			extract()
 			t.Reset(10 * time.Second)
 		}
 	}

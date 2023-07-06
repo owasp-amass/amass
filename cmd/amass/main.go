@@ -47,7 +47,7 @@ import (
 )
 
 const (
-	mainUsageMsg         = "intel|enum|track|db [options]"
+	mainUsageMsg         = "intel|enum|db [options]"
 	exampleConfigFileURL = "https://github.com/owasp-amass/amass/blob/master/examples/config.ini"
 	userGuideURL         = "https://github.com/owasp-amass/amass/blob/master/doc/user_guide.md"
 	tutorialURL          = "https://github.com/owasp-amass/amass/blob/master/doc/tutorial.md"
@@ -121,8 +121,6 @@ func main() {
 		runEnumCommand(os.Args[2:])
 	case "intel":
 		runIntelCommand(os.Args[2:])
-	case "track":
-		runTrackCommand(os.Args[2:])
 	case "help":
 		runHelpCommand(os.Args[2:])
 	default:
@@ -209,7 +207,7 @@ func getEventOutput(ctx context.Context, domains []string, asninfo bool, db *net
 	filter := stringset.New()
 	defer filter.Close()
 
-	return EventOutput(ctx, db, domains, filter, asninfo, cache, 0)
+	return EventOutput(ctx, db, domains, filter, asninfo, cache)
 }
 
 func domainNameInScope(name string, scope []string) bool {

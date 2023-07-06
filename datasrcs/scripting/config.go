@@ -5,9 +5,9 @@
 package scripting
 
 import (
+	"github.com/caffix/service"
 	"github.com/owasp-amass/amass/v3/config"
 	"github.com/owasp-amass/amass/v3/format"
-	"github.com/caffix/service"
 	lua "github.com/yuin/gopher-lua"
 )
 
@@ -26,7 +26,6 @@ func (s *Script) config(L *lua.LState) int {
 		r.RawSetString("mode", lua.LString("normal"))
 	}
 
-	r.RawSetString("event_id", lua.LString(cfg.UUID.String()))
 	r.RawSetString("max_dns_queries", lua.LNumber(cfg.MaxDNSQueries))
 
 	scope := L.NewTable()
