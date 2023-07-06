@@ -243,20 +243,20 @@ func (s *Script) crawl(L *lua.LState) int {
 
 	err = http.Crawl(ctx, u, cfg.Domains(), max, func(req *http.Request, resp *http.Response) {
 		if u, err := url.Parse(req.URL); err == nil {
-			s.genNewName(ctx, http.CleanName(u.Hostname()))
+			s.newNameWithContext(ctx, http.CleanName(u.Hostname()))
 		}
 		s.internalSendNames(ctx, resp.Body)
 
 		if resp.TLS != nil && len(resp.TLS.PeerCertificates) > 0 {
 			for _, name := range http.NamesFromCert(resp.TLS.PeerCertificates[0]) {
-				s.newNameWithSrc(ctx, http.CleanName(name), "cert", "Active Cert")
+				s.newNameWithContext(ctx, http.CleanName(name))
 			}
 		}
 		for k, v := range resp.Header {
 			if k == "Content-Security-Policy" ||
 				k == "Content-Security-Policy-Report-Only" ||
 				k == "X-Content-Security-Policy" || k == "X-Webkit-CSP" {
-				s.internalSendNamesWithSrc(ctx, v, s.Description(), "CSP Header")
+				s.internalSendNames(ctx, v)
 			}
 		}
 	})

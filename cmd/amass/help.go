@@ -25,8 +25,6 @@ func runHelpCommand(clArgs []string) {
 		runEnumCommand(help)
 	case "intel":
 		runIntelCommand(help)
-	case "track":
-		runTrackCommand(help)
 	default:
 		commandUsage(mainUsageMsg, helpCommand, helpBuf)
 		return

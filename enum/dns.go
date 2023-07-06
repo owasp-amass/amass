@@ -168,8 +168,7 @@ func (dt *dnsTask) Process(ctx context.Context, data pipeline.Data, tp pipeline.
 		dt.Unlock()
 	})
 
-	switch v := data.(type) {
-	case *requests.DNSRequest:
+	if v, ok := data.(*requests.DNSRequest); ok {
 		qtype := FwdQueryTypes[0]
 		msg := resolve.QueryMsg(v.Name, qtype)
 		k := key(msg.Id, msg.Question[0].Name)
@@ -182,10 +181,10 @@ func (dt *dnsTask) Process(ctx context.Context, data pipeline.Data, tp pipeline.
 			HasRecords: len(v.Records) > 0,
 		}) {
 			dt.pool.Query(ctx, msg, dt.resps)
-			return nil, nil
 		} else {
 			dt.enum.Config.Log.Printf("Failed to enter %s into the request registry on the %s DNS task", msg.Question[0].Name, dt.trust)
 		}
+		return nil, nil
 	}
 	return data, nil
 }

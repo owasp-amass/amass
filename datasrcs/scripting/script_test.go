@@ -5,12 +5,12 @@
 package scripting
 
 import (
+	"github.com/caffix/netmap"
+	"github.com/caffix/service"
 	"github.com/owasp-amass/amass/v3/config"
 	"github.com/owasp-amass/amass/v3/requests"
 	"github.com/owasp-amass/amass/v3/systems"
-	"github.com/caffix/netmap"
 	"github.com/owasp-amass/resolve"
-	"github.com/caffix/service"
 )
 
 func setupMockScriptEnv(script string) (service.Service, systems.System) {
@@ -29,7 +29,7 @@ func newMockSystem(cfg *config.Config) systems.System {
 		Cfg:      cfg,
 		Pool:     resolve.NewResolvers(),
 		Trusted:  resolve.NewResolvers(),
-		Graph:    netmap.NewGraph(netmap.NewCayleyGraphMemory()),
+		Graph:    netmap.NewGraph("memory", "", ""),
 		ASNCache: requests.NewASNCache(),
 	}
 

@@ -156,7 +156,7 @@ func (dm *dataManager) insertCNAME(ctx context.Context, req *requests.DNSRequest
 		Domain: strings.ToLower(domain),
 	})
 	if err := dm.enum.graph.UpsertCNAME(ctx, req.Name, target); err != nil {
-		return fmt.Errorf("%s failed to insert CNAME: %v", dm.enum.graph, err)
+		return fmt.Errorf("failed to insert CNAME: %v", err)
 	}
 	return nil
 }
@@ -173,7 +173,7 @@ func (dm *dataManager) insertA(ctx context.Context, req *requests.DNSRequest, re
 		Domain:  req.Domain,
 	})
 	if err := dm.enum.graph.UpsertA(ctx, req.Name, addr); err != nil {
-		return fmt.Errorf("%s failed to insert A record: %v", dm.enum.graph, err)
+		return fmt.Errorf("failed to insert A record: %v", err)
 	}
 	return nil
 }
@@ -190,7 +190,7 @@ func (dm *dataManager) insertAAAA(ctx context.Context, req *requests.DNSRequest,
 		Domain:  req.Domain,
 	})
 	if err := dm.enum.graph.UpsertAAAA(ctx, req.Name, addr); err != nil {
-		return fmt.Errorf("%s failed to insert AAAA record: %v", dm.enum.graph, err)
+		return fmt.Errorf("failed to insert AAAA record: %v", err)
 	}
 	return nil
 }
@@ -211,7 +211,7 @@ func (dm *dataManager) insertPTR(ctx context.Context, req *requests.DNSRequest, 
 		Domain: domain,
 	})
 	if err := dm.enum.graph.UpsertPTR(ctx, req.Name, target); err != nil {
-		return fmt.Errorf("%s failed to insert PTR record: %v", dm.enum.graph, err)
+		return fmt.Errorf("failed to insert PTR record: %v", err)
 	}
 	return nil
 }
@@ -229,7 +229,7 @@ func (dm *dataManager) insertSRV(ctx context.Context, req *requests.DNSRequest, 
 		})
 	}
 	if err := dm.enum.graph.UpsertSRV(ctx, req.Name, service, target); err != nil {
-		return fmt.Errorf("%s failed to insert SRV record: %v", dm.enum.graph, err)
+		return fmt.Errorf("failed to insert SRV record: %v", err)
 	}
 	return nil
 }
@@ -251,7 +251,7 @@ func (dm *dataManager) insertNS(ctx context.Context, req *requests.DNSRequest, r
 		})
 	}
 	if err := dm.enum.graph.UpsertNS(ctx, req.Name, target); err != nil {
-		return fmt.Errorf("%s failed to insert NS record: %v", dm.enum.graph, err)
+		return fmt.Errorf("failed to insert NS record: %v", err)
 	}
 	return nil
 }
@@ -273,7 +273,7 @@ func (dm *dataManager) insertMX(ctx context.Context, req *requests.DNSRequest, r
 		})
 	}
 	if err := dm.enum.graph.UpsertMX(ctx, req.Name, target); err != nil {
-		return fmt.Errorf("%s failed to insert MX record: %v", dm.enum.graph, err)
+		return fmt.Errorf("failed to insert MX record: %v", err)
 	}
 	return nil
 }
@@ -326,8 +326,7 @@ func (dm *dataManager) addrRequest(ctx context.Context, req *requests.AddrReques
 	default:
 	}
 
-	uuid := dm.enum.Config.UUID.String()
-	if req == nil || !req.InScope || uuid == "" {
+	if req == nil || !req.InScope {
 		return nil
 	}
 	if yes, prefix := amassnet.IsReservedAddress(req.Address); yes {

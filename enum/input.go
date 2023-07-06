@@ -6,7 +6,6 @@ package enum
 
 import (
 	"context"
-	"fmt"
 	"regexp"
 	"sync"
 	"time"
@@ -14,7 +13,6 @@ import (
 	"github.com/caffix/pipeline"
 	"github.com/caffix/queue"
 	"github.com/caffix/service"
-	amassnet "github.com/owasp-amass/amass/v3/net"
 	"github.com/owasp-amass/amass/v3/net/dns"
 	"github.com/owasp-amass/amass/v3/requests"
 	bf "github.com/tylertreat/BoomFilters"
@@ -24,19 +22,15 @@ const waitForDuration = 10 * time.Second
 
 // enumSource handles the filtering and release of new Data in the enumeration.
 type enumSource struct {
-	pipeline  *pipeline.Pipeline
-	enum      *Enumeration
-	queue     queue.Queue
-	sweeps    queue.Queue
-	filter    *bf.StableBloomFilter
-	subre     *regexp.Regexp
-	done      chan struct{}
-	doneOnce  sync.Once
-	release   chan struct{}
-	inputsig  chan uint32
-	max       int
-	countLock sync.Mutex
-	count     uint32
+	pipeline *pipeline.Pipeline
+	enum     *Enumeration
+	queue    queue.Queue
+	filter   *bf.StableBloomFilter
+	subre    *regexp.Regexp
+	done     chan struct{}
+	doneOnce sync.Once
+	release  chan struct{}
+	max      int
 }
 
 // newEnumSource returns an initialized input source for the enumeration pipeline.
@@ -47,12 +41,10 @@ func newEnumSource(p *pipeline.Pipeline, e *Enumeration) *enumSource {
 		pipeline: p,
 		enum:     e,
 		queue:    queue.NewQueue(),
-		sweeps:   queue.NewQueue(),
 		filter:   bf.NewDefaultStableBloomFilter(1000000, 0.01),
 		subre:    dns.AnySubdomainRegex(),
 		done:     make(chan struct{}),
 		release:  make(chan struct{}, size),
-		inputsig: make(chan uint32, size*2),
 		max:      size,
 	}
 	// Monitor the enumeration for completion or termination
@@ -77,7 +69,6 @@ func newEnumSource(p *pipeline.Pipeline, e *Enumeration) *enumSource {
 func (r *enumSource) Stop() {
 	r.markDone()
 	r.queue.Process(func(e interface{}) {})
-	r.sweeps.Process(func(e interface{}) {})
 	r.filter.Reset()
 }
 
@@ -109,7 +100,7 @@ func (r *enumSource) newName(req *requests.DNSRequest) {
 		r.releaseOutput(1)
 		return
 	}
-	if !r.accept(req.Name, true) {
+	if !r.accept(req.Name) {
 		r.releaseOutput(1)
 		return
 	}
@@ -123,25 +114,13 @@ func (r *enumSource) newAddr(req *requests.AddrRequest) {
 	default:
 	}
 
-	if !req.Valid() || !req.InScope || !r.accept(req.Address, false) {
-		return
-	}
-
-	r.queue.Append(req)
-	// Does the address fall into a reserved address range?
-	if reserved, _ := amassnet.IsReservedAddress(req.Address); !reserved {
-		// Queue the request for later use in reverse DNS sweeps
-		r.sweeps.Append(req)
+	if req.Valid() && req.InScope && r.accept(req.Address) {
+		r.queue.Append(req)
 	}
 }
 
-func (r *enumSource) accept(s string, name bool) bool {
-	if r.filter.Test([]byte(s)) {
-		return false
-	}
-
-	r.filter.Add([]byte(s))
-	return true
+func (r *enumSource) accept(s string) bool {
+	return !r.filter.TestAndAdd([]byte(s))
 }
 
 // Next implements the pipeline InputSource interface.
@@ -164,21 +143,9 @@ func (r *enumSource) Next(ctx context.Context) bool {
 		case <-t.C:
 			count := r.pipeline.DataItemCount()
 			if !r.enum.requestsPending() && count <= 0 {
-				r.markDone()
-				return false
-			}
-			if r.enum.Config.Verbose {
-				r.enum.reqCountSig <- struct{}{}
-				reqs := <-r.enum.reqCountChan
-
-				var lines string
-				for k, v := range reqs {
-					lines += fmt.Sprintf("%s: %d requests\n", k, v)
-				}
-
-				r.enum.Config.Log.Printf("Input Source timed out, not terminating: %d data items on the pipeline\n", count)
-				if len(reqs) > 0 {
-					r.enum.Config.Log.Printf("Number of pending requests:\n%s", lines)
+				if r.enum.Config.Passive || r.enum.store.queue.Len() == 0 {
+					r.markDone()
+					return false
 				}
 			}
 			r.fillQueue()
@@ -195,30 +162,8 @@ func (r *enumSource) Data() pipeline.Data {
 
 	if element, ok := r.queue.Next(); ok {
 		data = element.(pipeline.Data)
-		// Signal that new input was added to the pipeline
-		r.inputsig <- r.incrementCount()
 	}
 	return data
-}
-
-func (r *enumSource) getCount() uint32 {
-	r.countLock.Lock()
-	defer r.countLock.Unlock()
-
-	return r.count
-}
-
-func (r *enumSource) incrementCount() uint32 {
-	r.countLock.Lock()
-	defer r.countLock.Unlock()
-
-	if r.count < (1<<32)-1 {
-		r.count++
-		return r.count
-	}
-
-	r.count = 0
-	return 0
 }
 
 // Error implements the pipeline InputSource interface.

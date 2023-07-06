@@ -21,11 +21,7 @@ import (
 	"golang.org/x/net/publicsuffix"
 )
 
-func (s *Script) genNewName(ctx context.Context, name string) {
-	s.newNameWithSrc(ctx, name, s.Description(), s.String())
-}
-
-func (s *Script) newNameWithSrc(ctx context.Context, name, tag, src string) {
+func (s *Script) newNameWithContext(ctx context.Context, name string) {
 	if domain := s.sys.Config().WhichDomain(name); domain != "" {
 		select {
 		case <-ctx.Done():
@@ -43,7 +39,7 @@ func (s *Script) newName(L *lua.LState) int {
 	if ctx, err := extractContext(L.CheckUserData(1)); err == nil && !contextExpired(ctx) {
 		if n := L.CheckString(2); n != "" {
 			if name := s.subre.FindString(n); name != "" {
-				s.genNewName(ctx, name)
+				s.newNameWithContext(ctx, name)
 			}
 		}
 	}
@@ -65,17 +61,13 @@ func (s *Script) sendNames(L *lua.LState) int {
 }
 
 func (s *Script) internalSendNames(ctx context.Context, content string) int {
-	return s.internalSendNamesWithSrc(ctx, content, s.Description(), s.String())
-}
-
-func (s *Script) internalSendNamesWithSrc(ctx context.Context, content, tag, src string) int {
 	filter := bf.NewDefaultStableBloomFilter(1000, 0.01)
 	defer filter.Reset()
 
 	var count int
 	for _, name := range s.subre.FindAllString(string(content), -1) {
 		if n := http.CleanName(name); n != "" && !filter.TestAndAdd([]byte(n)) {
-			s.newNameWithSrc(ctx, n, tag, src)
+			s.newNameWithContext(ctx, n)
 			count++
 		}
 	}

@@ -23,10 +23,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/owasp-amass/amass/v3/resources"
 	"github.com/caffix/stringset"
 	"github.com/go-ini/ini"
-	"github.com/google/uuid"
+	"github.com/owasp-amass/amass/v3/resources"
 )
 
 const (
@@ -44,9 +43,6 @@ type Updater interface {
 // Config passes along Amass configuration settings and options.
 type Config struct {
 	sync.Mutex
-
-	// A Universally Unique Identifier (UUID) for the enumeration
-	UUID uuid.UUID
 
 	// The pseudo-random number generator
 	Rand *rand.Rand
@@ -150,7 +146,6 @@ type Config struct {
 // NewConfig returns a default configuration object.
 func NewConfig() *Config {
 	return &Config{
-		UUID:            uuid.New(),
 		Rand:            rand.New(rand.NewSource(time.Now().UTC().UnixNano())),
 		Log:             log.New(io.Discard, "", 0),
 		Ports:           []int{80, 443},
