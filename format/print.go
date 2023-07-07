@@ -43,7 +43,6 @@ const (
 
 var (
 	// Colors used to ease the reading of program output
-	g      = color.New(color.FgHiGreen)
 	b      = color.New(color.FgHiBlue)
 	y      = color.New(color.FgHiYellow)
 	r      = color.New(color.FgHiRed)

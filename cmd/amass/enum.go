@@ -8,7 +8,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -213,12 +212,6 @@ func runEnumCommand(clArgs []string) {
 	txtOutChan := make(chan *requests.Output, 10)
 	go saveTextOutput(e, args, txtOutChan, &wg)
 	outChans = append(outChans, txtOutChan)
-
-	wg.Add(1)
-	// This goroutine will handle saving the output to the JSON file
-	jsonOutChan := make(chan *requests.Output, 10)
-	go saveJSONOutput(e, args, jsonOutChan, &wg)
-	outChans = append(outChans, jsonOutChan)
 
 	var ctx context.Context
 	var cancel context.CancelFunc
@@ -440,51 +433,6 @@ func saveTextOutput(e *enum.Enumeration, args *enumArgs, output chan *requests.O
 		}
 		// Write the line to the output file
 		fmt.Fprintf(outptr, "%s%s\n", name, ips)
-	}
-}
-
-func saveJSONOutput(e *enum.Enumeration, args *enumArgs, output chan *requests.Output, wg *sync.WaitGroup) {
-	defer wg.Done()
-
-	dir := config.OutputDirectory(e.Config.Dir)
-	jsonfile := filepath.Join(dir, "amass.json")
-	if args.Filepaths.JSONOutput != "" {
-		jsonfile = args.Filepaths.JSONOutput
-	}
-	if args.Filepaths.AllFilePrefix != "" {
-		jsonfile = args.Filepaths.AllFilePrefix + ".json"
-	}
-	if jsonfile == "" {
-		return
-	}
-
-	var jsonptr *os.File
-	var err error
-
-	// Write to STDOUT and not a file if named "-"
-	if args.Filepaths.JSONOutput == "-" {
-		jsonptr = os.Stdout
-	} else {
-		jsonptr, err = os.OpenFile(jsonfile, os.O_WRONLY|os.O_CREATE, 0644)
-		if err != nil {
-			r.Fprintf(color.Error, "Failed to open the JSON output file: %v\n", err)
-			os.Exit(1)
-		}
-	}
-
-	defer func() {
-		_ = jsonptr.Sync()
-		_ = jsonptr.Close()
-	}()
-
-	_ = jsonptr.Truncate(0)
-	_, _ = jsonptr.Seek(0, 0)
-
-	enc := json.NewEncoder(jsonptr)
-	// Save all the output returned by the enumeration
-	for out := range output {
-		// Handle encoding the result as JSON
-		_ = enc.Encode(out)
 	}
 }
 
