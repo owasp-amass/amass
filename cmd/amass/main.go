@@ -42,7 +42,6 @@ import (
 	"github.com/owasp-amass/amass/v3/format"
 	amassnet "github.com/owasp-amass/amass/v3/net"
 	"github.com/owasp-amass/amass/v3/requests"
-	"github.com/owasp-amass/amass/v3/resources"
 	"github.com/owasp-amass/amass/v3/systems"
 )
 
@@ -57,10 +56,8 @@ var (
 	// Colors used to ease the reading of program output
 	g      = color.New(color.FgHiGreen)
 	r      = color.New(color.FgHiRed)
-	b      = color.New(color.FgHiBlue)
 	fgR    = color.New(color.FgRed)
 	fgY    = color.New(color.FgYellow)
-	red    = color.New(color.FgHiRed).SprintFunc()
 	yellow = color.New(color.FgHiYellow).SprintFunc()
 	green  = color.New(color.FgHiGreen).SprintFunc()
 	blue   = color.New(color.FgHiBlue).SprintFunc()
@@ -251,23 +248,4 @@ func assignNetInterface(iface *net.Interface) error {
 
 	amassnet.LocalAddr = best
 	return nil
-}
-
-func cacheWithData() *requests.ASNCache {
-	ranges, err := resources.GetIP2ASNData()
-	if err != nil {
-		return nil
-	}
-
-	cache := requests.NewASNCache()
-	for _, r := range ranges {
-		cache.Update(&requests.ASNRequest{
-			Address:     r.FirstIP.String(),
-			ASN:         r.ASN,
-			CC:          r.CC,
-			Prefix:      amassnet.Range2CIDR(r.FirstIP, r.LastIP).String(),
-			Description: r.Description,
-		})
-	}
-	return cache
 }
