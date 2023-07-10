@@ -50,6 +50,9 @@ type Config struct {
 	// Logger for error messages
 	Log *log.Logger
 
+	// The date/time that discoveries must be active since to be included in the findings
+	CollectionStartTime time.Time
+
 	// The directory that stores the bolt db and other files created
 	Dir string `ini:"output_directory"`
 
@@ -146,10 +149,11 @@ type Config struct {
 // NewConfig returns a default configuration object.
 func NewConfig() *Config {
 	return &Config{
-		Rand:            rand.New(rand.NewSource(time.Now().UTC().UnixNano())),
-		Log:             log.New(io.Discard, "", 0),
-		Ports:           []int{80, 443},
-		MinForRecursive: 1,
+		Rand:                rand.New(rand.NewSource(time.Now().UTC().UnixNano())),
+		Log:                 log.New(io.Discard, "", 0),
+		CollectionStartTime: time.Now(),
+		Ports:               []int{80, 443},
+		MinForRecursive:     1,
 		// The following is enum-only, but intel will just ignore them anyway
 		FlipWords:      true,
 		FlipNumbers:    true,

@@ -228,7 +228,7 @@ func (dm *dataManager) insertSRV(ctx context.Context, req *requests.DNSRequest, 
 			Domain: domain,
 		})
 	}
-	if err := dm.enum.graph.UpsertSRV(ctx, req.Name, service, target); err != nil {
+	if err := dm.enum.graph.UpsertSRV(ctx, service, target); err != nil {
 		return fmt.Errorf("failed to insert SRV record: %v", err)
 	}
 	return nil

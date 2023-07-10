@@ -6,14 +6,12 @@ package enum
 
 import (
 	"context"
-	"regexp"
 	"sync"
 	"time"
 
 	"github.com/caffix/pipeline"
 	"github.com/caffix/queue"
 	"github.com/caffix/service"
-	"github.com/owasp-amass/amass/v3/net/dns"
 	"github.com/owasp-amass/amass/v3/requests"
 	bf "github.com/tylertreat/BoomFilters"
 )
@@ -26,7 +24,6 @@ type enumSource struct {
 	enum     *Enumeration
 	queue    queue.Queue
 	filter   *bf.StableBloomFilter
-	subre    *regexp.Regexp
 	done     chan struct{}
 	doneOnce sync.Once
 	release  chan struct{}
@@ -42,7 +39,6 @@ func newEnumSource(p *pipeline.Pipeline, e *Enumeration) *enumSource {
 		enum:     e,
 		queue:    queue.NewQueue(),
 		filter:   bf.NewDefaultStableBloomFilter(1000000, 0.01),
-		subre:    dns.AnySubdomainRegex(),
 		done:     make(chan struct{}),
 		release:  make(chan struct{}, size),
 		max:      size,
@@ -91,11 +87,7 @@ func (r *enumSource) newName(req *requests.DNSRequest) {
 	}
 	// Clean up the newly discovered name and domain
 	requests.SanitizeDNSRequest(req)
-	// Check that the name is valid
-	if r.subre.FindString(req.Name) != req.Name {
-		r.releaseOutput(1)
-		return
-	}
+
 	if r.enum.Config.Blacklisted(req.Name) {
 		r.releaseOutput(1)
 		return

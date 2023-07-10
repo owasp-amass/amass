@@ -7,6 +7,7 @@ package enum
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/caffix/netmap"
 	"github.com/caffix/pipeline"
@@ -16,6 +17,7 @@ import (
 	"github.com/owasp-amass/amass/v3/datasrcs"
 	"github.com/owasp-amass/amass/v3/requests"
 	"github.com/owasp-amass/amass/v3/systems"
+	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/domain"
 )
 
@@ -239,7 +241,7 @@ func (e *Enumeration) submitKnownNames() {
 
 func (e *Enumeration) readNamesFromDatabase(db *netmap.Graph) {
 	for _, d := range e.Config.Domains() {
-		assets, err := db.DB.FindByScope(domain.FQDN{Name: d})
+		assets, err := db.DB.FindByScope([]oam.Asset{domain.FQDN{Name: d}}, time.Time{})
 		if err != nil {
 			continue
 		}

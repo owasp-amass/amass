@@ -33,7 +33,7 @@ func (e *Enumeration) checkForMissedWildcards(addr string) {
 	results, err := e.graph.DB.FindByContent(&network.IPAddress{
 		Address: ip,
 		Type:    t,
-	})
+	}, e.Config.CollectionStartTime)
 	if err != nil {
 		return
 	}
@@ -49,7 +49,7 @@ func (e *Enumeration) checkForMissedWildcards(addr string) {
 		return
 	}
 
-	in, err := e.graph.DB.IncomingRelations(asset, "a_record", "aaaa_record")
+	in, err := e.graph.DB.IncomingRelations(asset, e.Config.CollectionStartTime, "a_record", "aaaa_record")
 	if err != nil {
 		return
 	}
@@ -58,20 +58,16 @@ func (e *Enumeration) checkForMissedWildcards(addr string) {
 		return
 	}
 
-	subsToAssets := make(map[string][]*domain.FQDN)
+	subsToAssets := make(map[string][]string)
 	for _, rel := range in {
-		var fqdn *domain.FQDN
-
-		n, err := e.graph.DB.FindById(rel.FromAsset.ID)
+		n, err := e.graph.DB.FindById(rel.FromAsset.ID, e.Config.CollectionStartTime)
 		if err != nil {
 			continue
-		} else if name, ok := n.Asset.(domain.FQDN); ok {
-			fqdn = &name
+		} else if fqdn, ok := n.Asset.(domain.FQDN); ok {
+			parts := strings.Split(fqdn.Name, ".")
+			sub := strings.Join(parts[1:], ".")
+			subsToAssets[sub] = append(subsToAssets[sub], rel.FromAsset.ID)
 		}
-
-		parts := strings.Split(fqdn.Name, ".")
-		sub := strings.Join(parts[1:], ".")
-		subsToAssets[sub] = append(subsToAssets[sub], fqdn)
 	}
 
 	for sub, assets := range subsToAssets {
@@ -80,9 +76,8 @@ func (e *Enumeration) checkForMissedWildcards(addr string) {
 		}
 
 		e.Config.BlacklistSubdomain(sub)
-		for range assets {
-			// FIX
-			//_ = e.graph.DeleteNode(e.ctx, node)
+		for _, id := range assets {
+			_ = e.graph.DB.DeleteAsset(id)
 		}
 	}
 }

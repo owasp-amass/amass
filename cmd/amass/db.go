@@ -12,6 +12,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"time"
 
 	"github.com/caffix/netmap"
 	"github.com/caffix/stringset"
@@ -224,7 +225,8 @@ func showEventData(args *dbArgs, asninfo bool, db *netmap.Graph) {
 }
 
 func fillCache(cache *requests.ASNCache, db *netmap.Graph) error {
-	assets, err := db.DB.FindByType(oam.ASN)
+	start := time.Now().Add(-730 * time.Hour)
+	assets, err := db.DB.FindByType(oam.ASN, start)
 	if err != nil {
 		return err
 	}
@@ -235,12 +237,12 @@ func fillCache(cache *requests.ASNCache, db *netmap.Graph) error {
 			continue
 		}
 
-		desc := db.ReadASDescription(context.Background(), as.Number)
+		desc := db.ReadASDescription(context.Background(), as.Number, start)
 		if desc == "" {
 			continue
 		}
 
-		for _, prefix := range db.ReadASPrefixes(context.Background(), as.Number) {
+		for _, prefix := range db.ReadASPrefixes(context.Background(), as.Number, start) {
 			first, cidr, err := net.ParseCIDR(prefix)
 			if err != nil {
 				continue
