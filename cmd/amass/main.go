@@ -32,6 +32,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/caffix/netmap"
 	"github.com/caffix/service"
@@ -204,7 +205,7 @@ func getEventOutput(ctx context.Context, domains []string, asninfo bool, db *net
 	filter := stringset.New()
 	defer filter.Close()
 
-	return EventOutput(ctx, db, domains, filter, asninfo, cache)
+	return EventOutput(ctx, db, domains, time.Time{}, filter, asninfo, cache)
 }
 
 func domainNameInScope(name string, scope []string) bool {

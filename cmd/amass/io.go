@@ -7,6 +7,7 @@ package main
 import (
 	"context"
 	"net"
+	"time"
 
 	"github.com/caffix/netmap"
 	"github.com/caffix/stringset"
@@ -20,16 +21,16 @@ import (
 // ExtractOutput is a convenience method for obtaining new discoveries made by the enumeration process.
 func ExtractOutput(ctx context.Context, g *netmap.Graph, e *enum.Enumeration, filter *stringset.Set, asinfo bool) []*requests.Output {
 	if e.Config.Passive {
-		return EventNames(ctx, g, e.Config.Domains(), filter)
+		return EventNames(ctx, g, e.Config.Domains(), e.Config.CollectionStartTime, filter)
 	}
-	return EventOutput(ctx, g, e.Config.Domains(), filter, asinfo, e.Sys.Cache())
+	return EventOutput(ctx, g, e.Config.Domains(), e.Config.CollectionStartTime, filter, asinfo, e.Sys.Cache())
 }
 
 type outLookup map[string]*requests.Output
 
 // EventOutput returns findings within the receiver Graph within the scope identified by the provided domain names.
 // The filter is updated by EventOutput.
-func EventOutput(ctx context.Context, g *netmap.Graph, domains []string, f *stringset.Set, asninfo bool, cache *requests.ASNCache) []*requests.Output {
+func EventOutput(ctx context.Context, g *netmap.Graph, domains []string, since time.Time, f *stringset.Set, asninfo bool, cache *requests.ASNCache) []*requests.Output {
 	var res []*requests.Output
 
 	if len(domains) == 0 {
@@ -46,7 +47,7 @@ func EventOutput(ctx context.Context, g *netmap.Graph, domains []string, f *stri
 		fqdns = append(fqdns, domain.FQDN{Name: d})
 	}
 
-	assets, err := g.DB.FindByScope(fqdns...)
+	assets, err := g.DB.FindByScope(fqdns, since)
 	if err != nil {
 		return res
 	}
@@ -73,7 +74,7 @@ func EventOutput(ctx context.Context, g *netmap.Graph, domains []string, f *stri
 		lookup[n] = o
 	}
 	// Build the lookup map used to create the final result set
-	if pairs, err := g.NamesToAddrs(ctx, names...); err == nil {
+	if pairs, err := g.NamesToAddrs(ctx, since, names...); err == nil {
 		for _, p := range pairs {
 			addr := p.Addr.Address.String()
 
@@ -137,7 +138,7 @@ func addInfrastructureInfo(lookup outLookup, filter *stringset.Set, cache *reque
 
 // EventNames returns findings within the receiver Graph within the scope identified by the provided domain names.
 // The filter is updated by EventNames.
-func EventNames(ctx context.Context, g *netmap.Graph, domains []string, f *stringset.Set) []*requests.Output {
+func EventNames(ctx context.Context, g *netmap.Graph, domains []string, since time.Time, f *stringset.Set) []*requests.Output {
 	var res []*requests.Output
 
 	if len(domains) == 0 {
@@ -154,7 +155,7 @@ func EventNames(ctx context.Context, g *netmap.Graph, domains []string, f *strin
 		fqdns = append(fqdns, domain.FQDN{Name: d})
 	}
 
-	assets, err := g.DB.FindByScope(fqdns...)
+	assets, err := g.DB.FindByScope(fqdns, since)
 	if err != nil {
 		return res
 	}
