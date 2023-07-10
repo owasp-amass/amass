@@ -4,7 +4,7 @@ go 1.19
 
 require (
 	github.com/PuerkitoBio/goquery v1.8.1
-	github.com/caffix/netmap v0.2.1-0.20230703163513-b5b43107cda1
+	github.com/caffix/netmap v0.2.3
 	github.com/caffix/pipeline v0.2.2
 	github.com/caffix/queue v0.1.4
 	github.com/caffix/service v0.3.0
@@ -14,7 +14,7 @@ require (
 	github.com/geziyor/geziyor v0.0.0-20230315135110-a242b58aaa65
 	github.com/go-ini/ini v1.67.0
 	github.com/miekg/dns v1.1.55
-	github.com/owasp-amass/asset-db v0.1.2-0.20230701021358-4365ad76d210
+	github.com/owasp-amass/asset-db v0.2.0
 	github.com/owasp-amass/open-asset-model v0.1.0-alpha.0.20230622033932-2f80ca929692
 	github.com/owasp-amass/resolve v0.6.20
 	github.com/stretchr/testify v1.8.2

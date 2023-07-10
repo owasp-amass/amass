@@ -76,8 +76,8 @@ github.com/beorn7/perks v1.0.0/go.mod h1:KWe93zE9D1o94FZ5RNwFwVgaQK1VOXiVxmqh+Ce
 github.com/beorn7/perks v1.0.1 h1:VlbKKnNfV8bJzeqoa4cOKqO6bYr3WgKZxO8Z16+hsOM=
 github.com/beorn7/perks v1.0.1/go.mod h1:G2ZrVWU2WbWT9wwq4/hrbKbnv/1ERSJQ0ibhJ6rlkpw=
 github.com/bgentry/speakeasy v0.1.0/go.mod h1:+zsyZBPWlz7T6j88CTgSN5bM796AkVf0kBD4zp0CCIs=
-github.com/caffix/netmap v0.2.1-0.20230703163513-b5b43107cda1 h1:HkiAqc5SME2mikV1gfBgMwVVLbez+1JxSw1BYpduF8k=
-github.com/caffix/netmap v0.2.1-0.20230703163513-b5b43107cda1/go.mod h1:ZMvuKqL28fnuJgUaCq7skvpEpeixwvoDjIwJpKRRnRo=
+github.com/caffix/netmap v0.2.3 h1:QFPh6yKdAnt0Flq3k1pJm/hNuXoKzTYGrcbX3d/BTlM=
+github.com/caffix/netmap v0.2.3/go.mod h1:IApB4oO5vb3Oq1Slv4xlfZLrBBzuRor8xW7hAJ0C/hE=
 github.com/caffix/pipeline v0.2.2 h1:d1l7CiBe7jFDc4ksvnNgHVb3XlVlCRFXFo3I6guksuQ=
 github.com/caffix/pipeline v0.2.2/go.mod h1:NlUnsifT5h0B9C51DPdp99KjlZjREnE0Iev7R8gEn/s=
 github.com/caffix/queue v0.1.4 h1:sQbFzwGaPM1tRnQHWCgHOwj7hLuhDQ3BhY1/1TFbBiE=
@@ -89,7 +89,6 @@ github.com/caffix/stringset v0.1.1/go.mod h1:9Ztc521vlcp8IWdtIowZyWbbddMKR9Rdr+d
 github.com/casbin/casbin/v2 v2.37.0/go.mod h1:vByNa/Fchek0KZUgG5wEsl7iFsiviAYKRtgrQfcJqHg=
 github.com/cenkalti/backoff/v4 v4.1.1/go.mod h1:scbssz8iZGpm3xbr14ovlUdkxfGXNInqkPWOWmG2CLw=
 github.com/census-instrumentation/opencensus-proto v0.2.1/go.mod h1:f6KPmirojxKA12rnyqOA5BBL4O983OfeGPqjHWSTneU=
-github.com/cespare/xxhash v1.1.0 h1:a6HrQnmkObjyL+Gs60czilIUGqrzKutQD6XZog3p+ko=
 github.com/cespare/xxhash v1.1.0/go.mod h1:XrSqR1VqqWfGrhpAt58auRo0WTKS1nRRg3ghfAqPWnc=
 github.com/cespare/xxhash/v2 v2.1.1/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=
 github.com/cespare/xxhash/v2 v2.1.2/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=
@@ -432,12 +431,10 @@ github.com/openzipkin/zipkin-go v0.2.5/go.mod h1:KpXfKdgRDnnhsxw4pNIH9Md5lyFqKUa
 github.com/orisano/pixelmatch v0.0.0-20210112091706-4fa4c7ba91d5/go.mod h1:nZgzbfBr3hhjoZnS66nKrHmduYNpc34ny7RK4z5/HM0=
 github.com/orisano/pixelmatch v0.0.0-20220722002657-fb0b55479cde h1:x0TT0RDC7UhAVbbWWBzr41ElhJx5tXPWkIHA2HWPRuw=
 github.com/orisano/pixelmatch v0.0.0-20220722002657-fb0b55479cde/go.mod h1:nZgzbfBr3hhjoZnS66nKrHmduYNpc34ny7RK4z5/HM0=
-github.com/owasp-amass/asset-db v0.1.2-0.20230701021358-4365ad76d210 h1:LBRd9EvgWeApwLfTsZswjCZiAQcf1Iwzz8/pUDa3NGM=
-github.com/owasp-amass/asset-db v0.1.2-0.20230701021358-4365ad76d210/go.mod h1:nMr55AjbTP5j0bZST6xLPQhE47aCbist0iQZh6zczDc=
+github.com/owasp-amass/asset-db v0.2.0 h1:m2l4SetUTDVX1MLqpKzZVLR9QoPFJ2is16T0jidmXjY=
+github.com/owasp-amass/asset-db v0.2.0/go.mod h1:nMr55AjbTP5j0bZST6xLPQhE47aCbist0iQZh6zczDc=
 github.com/owasp-amass/open-asset-model v0.1.0-alpha.0.20230622033932-2f80ca929692 h1:s5k5cTCRbVbIoRIwA44oWB4j/GGaYrmq1H3yqX1ic5A=
 github.com/owasp-amass/open-asset-model v0.1.0-alpha.0.20230622033932-2f80ca929692/go.mod h1:nwviDUc6sKkHScZFwXeNJNP2M4pgMTvB7we5r+EfNSk=
-github.com/owasp-amass/resolve v0.6.19 h1:Ga7JtvWfmDAlK6lkl9X9tYlG3qEtd+uLjQj7OaaYsHk=
-github.com/owasp-amass/resolve v0.6.19/go.mod h1:qnH4G9akBLRrDPVUMd8uOoncnYXJhV3dnam3gjYCcY4=
 github.com/owasp-amass/resolve v0.6.20 h1:wy4v+Z8sfQhn5Q+eVbQ6sb/b0wREfdauOL9SJzQyyNA=
 github.com/owasp-amass/resolve v0.6.20/go.mod h1:qnH4G9akBLRrDPVUMd8uOoncnYXJhV3dnam3gjYCcY4=
 github.com/pascaldekloe/goe v0.0.0-20180627143212-57f6aae5913c/go.mod h1:lzWF7FIEvWOWxwDKqyGYQf6ZUaNfKdP144TG7ZOy1lc=
