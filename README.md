@@ -59,7 +59,7 @@ brew install amass
 
 The volume argument allows the Amass graph database to persist between executions and output files to be accessed on the host system. The first field (left of the colon) of the volume option is the amass output directory that is external to Docker, while the second field is the path, internal to Docker, where amass will write the output files.
 
-### From Sources
+### From Source
 
 1. Install [Go](https://golang.org/doc/install) and setup your Go workspace
 2. Download OWASP Amass by running `go install -v github.com/owasp-amass/amass/v3/...@master`
