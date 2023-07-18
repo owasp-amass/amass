@@ -117,7 +117,7 @@ func (s *Script) dataSourceConfig(L *lua.LState) int {
 		tb.RawSetString("ttl", lua.LNumber(cfg.TTL))
 	}
 
-	if creds := s.sys.Config().DatasrcConfigs.GetCredentials(cfg.Name); creds != nil {
+	if creds := s.sys.Config().DataSrcConfigs.GetCredentials(cfg.Name); creds != nil {
 		c := L.NewTable()
 
 		c.RawSetString("name", lua.LString(creds.Name))
