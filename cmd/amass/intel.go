@@ -20,11 +20,11 @@ import (
 
 	"github.com/caffix/stringset"
 	"github.com/fatih/color"
-	"github.com/owasp-amass/amass/v3/config"
 	"github.com/owasp-amass/amass/v3/datasrcs"
 	"github.com/owasp-amass/amass/v3/format"
 	"github.com/owasp-amass/amass/v3/intel"
 	"github.com/owasp-amass/amass/v3/systems"
+	"github.com/owasp-amass/config/config"
 )
 
 const (
@@ -91,7 +91,7 @@ func defineIntelOptionFlags(intelFlags *flag.FlagSet, args *intelArgs) {
 }
 
 func defineIntelFilepathFlags(intelFlags *flag.FlagSet, args *intelArgs) {
-	intelFlags.StringVar(&args.Filepaths.ConfigFile, "config", "", "Path to the INI configuration file. Additional details below")
+	intelFlags.StringVar(&args.Filepaths.ConfigFile, "config", "", "Path to the YAML configuration file. Additional details below")
 	intelFlags.StringVar(&args.Filepaths.Directory, "dir", "", "Path to the directory containing the output files")
 	intelFlags.Var(&args.Filepaths.Domains, "df", "Path to a file providing root domain names")
 	intelFlags.StringVar(&args.Filepaths.ExcludedSrcs, "ef", "", "Path to a file providing data sources to exclude")
@@ -363,16 +363,16 @@ func (i intelArgs) OverrideConfig(conf *config.Config) error {
 		conf.Active = true
 	}
 	if len(i.Addresses) > 0 {
-		conf.Addresses = i.Addresses
+		conf.Scope.Addresses = i.Addresses
 	}
 	if len(i.ASNs) > 0 {
-		conf.ASNs = i.ASNs
+		conf.Scope.ASNs = i.ASNs
 	}
 	if len(i.CIDRs) > 0 {
-		conf.CIDRs = i.CIDRs
+		conf.Scope.CIDRs = i.CIDRs
 	}
 	if len(i.Ports) > 0 {
-		conf.Ports = i.Ports
+		conf.Scope.Ports = i.Ports
 	}
 	if i.Filepaths.Directory != "" {
 		conf.Dir = i.Filepaths.Directory
