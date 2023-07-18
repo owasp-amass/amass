@@ -10,6 +10,7 @@ import (
 
 	"github.com/caffix/stringset"
 	"github.com/owasp-amass/amass/v3/requests"
+	"github.com/owasp-amass/config/config"
 )
 
 func TestNewNames(t *testing.T) {
@@ -85,7 +86,23 @@ func TestSendDNSRecords(t *testing.T) {
 	defer func() { _ = sys.Shutdown() }()
 
 	sys.Config().MinimumTTL = 1440
-	dsc := sys.Config().GetDataSourceConfig(script.String())
+	cfg := sys.Config()
+	if cfg == nil {
+		t.Fatal("Config is nil")
+	}
+
+	if cfg.DatasrcConfigs == nil {
+		cfg.DatasrcConfigs = &config.DataSourceConfig{ // Initialize if DatasrcConfigs is nil
+			Datasources: []config.DataSource{},
+		}
+	}
+
+	dsc := cfg.GetDataSourceConfig(script.String())
+	if dsc == nil {
+		dsc = &config.DataSource{Name: script.String()} // Initialize if GetDataSourceConfig returns nil
+		cfg.DatasrcConfigs.Datasources = append(cfg.DatasrcConfigs.Datasources, *dsc)
+	}
+
 	dsc.TTL = 1440
 
 	sys.Config().AddDomain("owasp.org")

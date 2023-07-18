@@ -25,12 +25,12 @@ import (
 	"github.com/caffix/netmap"
 	"github.com/caffix/stringset"
 	"github.com/fatih/color"
-	"github.com/owasp-amass/amass/v3/config"
 	"github.com/owasp-amass/amass/v3/datasrcs"
 	"github.com/owasp-amass/amass/v3/enum"
 	"github.com/owasp-amass/amass/v3/format"
 	"github.com/owasp-amass/amass/v3/requests"
 	"github.com/owasp-amass/amass/v3/systems"
+	"github.com/owasp-amass/config/config"
 )
 
 const enumUsageMsg = "enum [options] -d DOMAIN"
@@ -143,7 +143,7 @@ func defineEnumFilepathFlags(enumFlags *flag.FlagSet, args *enumArgs) {
 	enumFlags.Var(&args.Filepaths.AltWordlist, "aw", "Path to a different wordlist file for alterations")
 	enumFlags.StringVar(&args.Filepaths.Blacklist, "blf", "", "Path to a file providing blacklisted subdomains")
 	enumFlags.Var(&args.Filepaths.BruteWordlist, "w", "Path to a different wordlist file for brute forcing")
-	enumFlags.StringVar(&args.Filepaths.ConfigFile, "config", "", "Path to the INI configuration file. Additional details below")
+	enumFlags.StringVar(&args.Filepaths.ConfigFile, "config", "", "Path to the YAML configuration file. Additional details below")
 	enumFlags.StringVar(&args.Filepaths.Directory, "dir", "", "Path to the directory containing the output files")
 	enumFlags.Var(&args.Filepaths.Domains, "df", "Path to a file providing root domain names")
 	enumFlags.StringVar(&args.Filepaths.ExcludedSrcs, "ef", "", "Path to a file providing data sources to exclude")
@@ -597,16 +597,16 @@ func processEnumInputFiles(args *enumArgs) error {
 // Setup the amass enumeration settings
 func (e enumArgs) OverrideConfig(conf *config.Config) error {
 	if len(e.Addresses) > 0 {
-		conf.Addresses = e.Addresses
+		conf.Scope.Addresses = e.Addresses
 	}
 	if len(e.ASNs) > 0 {
-		conf.ASNs = e.ASNs
+		conf.Scope.ASNs = e.ASNs
 	}
 	if len(e.CIDRs) > 0 {
-		conf.CIDRs = e.CIDRs
+		conf.Scope.CIDRs = e.CIDRs
 	}
 	if len(e.Ports) > 0 {
-		conf.Ports = e.Ports
+		conf.Scope.Ports = e.Ports
 	}
 	if e.Filepaths.Directory != "" {
 		conf.Dir = e.Filepaths.Directory
@@ -649,7 +649,7 @@ func (e enumArgs) OverrideConfig(conf *config.Config) error {
 		conf.Alterations = false
 	}
 	if e.Blacklist.Len() > 0 {
-		conf.Blacklist = e.Blacklist.Slice()
+		conf.Scope.Blacklist = e.Blacklist.Slice()
 	}
 	if e.Options.Verbose {
 		conf.Verbose = true

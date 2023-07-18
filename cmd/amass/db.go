@@ -17,9 +17,9 @@ import (
 	"github.com/caffix/netmap"
 	"github.com/caffix/stringset"
 	"github.com/fatih/color"
-	"github.com/owasp-amass/amass/v3/config"
 	"github.com/owasp-amass/amass/v3/format"
 	"github.com/owasp-amass/amass/v3/requests"
+	"github.com/owasp-amass/config/config"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/network"
 )
@@ -72,7 +72,7 @@ func runDBCommand(clArgs []string) {
 	dbCommand.BoolVar(&args.Options.NoColor, "nocolor", false, "Disable colorized output")
 	dbCommand.BoolVar(&args.Options.ShowAll, "show", false, "Print the results for the enumeration index + domains provided")
 	dbCommand.BoolVar(&args.Options.Silent, "silent", false, "Disable all output during execution")
-	dbCommand.StringVar(&args.Filepaths.ConfigFile, "config", "", "Path to the INI configuration file. Additional details below")
+	dbCommand.StringVar(&args.Filepaths.ConfigFile, "config", "", "Path to the YAML configuration file. Additional details below")
 	dbCommand.StringVar(&args.Filepaths.Directory, "dir", "", "Path to the directory containing the graph database")
 	dbCommand.StringVar(&args.Filepaths.Domains, "df", "", "Path to a file providing root domain names")
 	dbCommand.StringVar(&args.Filepaths.TermOut, "o", "", "Path to the text file containing terminal stdout/stderr")

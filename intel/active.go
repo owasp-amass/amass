@@ -119,7 +119,7 @@ func (a *activeTask) certEnumeration(ctx context.Context, req *requests.AddrRequ
 
 	c := a.c
 	addrinfo := requests.AddressInfo{Address: ip}
-	for _, name := range http.PullCertificateNames(ctx, req.Address, c.Config.Ports) {
+	for _, name := range http.PullCertificateNames(ctx, req.Address, c.Config.Scope.Ports) {
 		if n := strings.TrimSpace(name); n != "" {
 			domain, err := publicsuffix.EffectiveTLDPlusOne(n)
 			if err != nil {
