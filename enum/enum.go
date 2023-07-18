@@ -13,10 +13,10 @@ import (
 	"github.com/caffix/pipeline"
 	"github.com/caffix/queue"
 	"github.com/caffix/service"
-	"github.com/owasp-amass/amass/v3/config"
 	"github.com/owasp-amass/amass/v3/datasrcs"
 	"github.com/owasp-amass/amass/v3/requests"
 	"github.com/owasp-amass/amass/v3/systems"
+	"github.com/owasp-amass/config/config"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/domain"
 )
@@ -126,7 +126,7 @@ func (e *Enumeration) submitDomainNames() {
 // If requests were made for specific ASNs, then those requests are
 // sent to included data sources at this point.
 func (e *Enumeration) submitASNs() {
-	for _, asn := range e.Config.ASNs {
+	for _, asn := range e.Config.Scope.ASNs {
 		e.sendRequests(&requests.ASNRequest{ASN: asn})
 	}
 }
