@@ -15,7 +15,7 @@ require (
 	github.com/go-ini/ini v1.67.0
 	github.com/miekg/dns v1.1.55
 	github.com/owasp-amass/asset-db v0.2.0
-	github.com/owasp-amass/config v0.0.0-20230718031059-edd7ed34061f
+	github.com/owasp-amass/config v0.0.0-20230718064056-10f6aec11fb3
 	github.com/owasp-amass/open-asset-model v0.1.0-alpha.0.20230622033932-2f80ca929692
 	github.com/owasp-amass/resolve v0.6.20
 	github.com/stretchr/testify v1.8.2
