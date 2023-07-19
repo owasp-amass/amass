@@ -91,8 +91,8 @@ func TestSendDNSRecords(t *testing.T) {
 		t.Fatal("Config is nil")
 	}
 
-	if cfg.DatasrcConfigs == nil {
-		cfg.DatasrcConfigs = &config.DataSourceConfig{ // Initialize if DatasrcConfigs is nil
+	if cfg.DataSrcConfigs == nil {
+		cfg.DataSrcConfigs = &config.DataSourceConfig{ // Initialize if DataSrcConfigs is nil
 			Datasources: []config.DataSource{},
 		}
 	}
@@ -100,7 +100,7 @@ func TestSendDNSRecords(t *testing.T) {
 	dsc := cfg.GetDataSourceConfig(script.String())
 	if dsc == nil {
 		dsc = &config.DataSource{Name: script.String()} // Initialize if GetDataSourceConfig returns nil
-		cfg.DatasrcConfigs.Datasources = append(cfg.DatasrcConfigs.Datasources, *dsc)
+		cfg.DataSrcConfigs.Datasources = append(cfg.DataSrcConfigs.Datasources, *dsc)
 	}
 
 	dsc.TTL = 1440

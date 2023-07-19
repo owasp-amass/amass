@@ -105,6 +105,12 @@ func (s *Script) config(L *lua.LState) int {
 }
 
 func (s *Script) dataSourceConfig(L *lua.LState) int {
+	dsc := s.sys.Config().DataSrcConfigs
+	if dsc == nil {
+		L.Push(lua.LNil)
+		return 1
+	}
+
 	cfg := s.sys.Config().GetDataSourceConfig(s.String())
 	if cfg == nil {
 		L.Push(lua.LNil)
@@ -117,7 +123,7 @@ func (s *Script) dataSourceConfig(L *lua.LState) int {
 		tb.RawSetString("ttl", lua.LNumber(cfg.TTL))
 	}
 
-	if creds := s.sys.Config().DataSrcConfigs.GetCredentials(cfg.Name); creds != nil {
+	if creds := dsc.GetCredentials(cfg.Name); creds != nil {
 		c := L.NewTable()
 
 		c.RawSetString("name", lua.LString(creds.Name))
@@ -163,11 +169,7 @@ func (s *Script) bruteWordlist(L *lua.LState) int {
 		}
 	}
 
-	if tb.Len() > 0 {
-		L.Push(tb)
-	} else {
-		L.Push(lua.LNil)
-	}
+	L.Push(tb)
 	return 1
 }
 
@@ -181,11 +183,7 @@ func (s *Script) altWordlist(L *lua.LState) int {
 		}
 	}
 
-	if tb.Len() > 0 {
-		L.Push(tb)
-	} else {
-		L.Push(lua.LNil)
-	}
+	L.Push(tb)
 	return 1
 }
 
