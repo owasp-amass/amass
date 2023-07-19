@@ -92,15 +92,15 @@ func TestSendDNSRecords(t *testing.T) {
 	}
 
 	if cfg.DataSrcConfigs == nil {
-		cfg.DataSrcConfigs = &config.DataSourceConfig{ // Initialize if DataSrcConfigs is nil
-			Datasources: []config.DataSource{},
+		cfg.DataSrcConfigs = &config.DataSourceConfig{
+			GlobalOptions: make(map[string]int),
 		}
 	}
 
 	dsc := cfg.GetDataSourceConfig(script.String())
 	if dsc == nil {
 		dsc = &config.DataSource{Name: script.String()} // Initialize if GetDataSourceConfig returns nil
-		cfg.DataSrcConfigs.Datasources = append(cfg.DataSrcConfigs.Datasources, *dsc)
+		cfg.DataSrcConfigs.Datasources = append(cfg.DataSrcConfigs.Datasources, dsc)
 	}
 
 	dsc.TTL = 1440
