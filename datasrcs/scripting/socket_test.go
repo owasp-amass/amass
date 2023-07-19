@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/owasp-amass/amass/v3/requests"
+	"github.com/owasp-amass/amass/v4/requests"
 )
 
 func TestSocketRecv(t *testing.T) {

@@ -38,11 +38,11 @@ import (
 	"github.com/caffix/service"
 	"github.com/caffix/stringset"
 	"github.com/fatih/color"
-	"github.com/owasp-amass/amass/v3/datasrcs"
-	"github.com/owasp-amass/amass/v3/format"
-	amassnet "github.com/owasp-amass/amass/v3/net"
-	"github.com/owasp-amass/amass/v3/requests"
-	"github.com/owasp-amass/amass/v3/systems"
+	"github.com/owasp-amass/amass/v4/datasrcs"
+	"github.com/owasp-amass/amass/v4/format"
+	amassnet "github.com/owasp-amass/amass/v4/net"
+	"github.com/owasp-amass/amass/v4/requests"
+	"github.com/owasp-amass/amass/v4/systems"
 	"github.com/owasp-amass/config/config"
 )
 

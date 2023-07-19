@@ -11,8 +11,8 @@ import (
 
 	"github.com/caffix/netmap"
 	"github.com/caffix/stringset"
-	"github.com/owasp-amass/amass/v3/enum"
-	"github.com/owasp-amass/amass/v3/requests"
+	"github.com/owasp-amass/amass/v4/enum"
+	"github.com/owasp-amass/amass/v4/requests"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/domain"
 	"golang.org/x/net/publicsuffix"

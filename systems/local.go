@@ -17,9 +17,9 @@ import (
 
 	"github.com/caffix/netmap"
 	"github.com/caffix/service"
-	amassnet "github.com/owasp-amass/amass/v3/net"
-	"github.com/owasp-amass/amass/v3/requests"
-	"github.com/owasp-amass/amass/v3/resources"
+	amassnet "github.com/owasp-amass/amass/v4/net"
+	"github.com/owasp-amass/amass/v4/requests"
+	"github.com/owasp-amass/amass/v4/resources"
 	"github.com/owasp-amass/config/config"
 	"github.com/owasp-amass/resolve"
 )

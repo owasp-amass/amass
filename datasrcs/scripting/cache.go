@@ -8,7 +8,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/owasp-amass/amass/v3/net/http"
+	"github.com/owasp-amass/amass/v4/net/http"
 )
 
 func (s *Script) getCachedResponse(ctx context.Context, url string, ttl int) (*http.Response, error) {
