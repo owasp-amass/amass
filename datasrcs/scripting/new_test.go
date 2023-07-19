@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/caffix/stringset"
-	"github.com/owasp-amass/amass/v3/requests"
+	"github.com/owasp-amass/amass/v4/requests"
 	"github.com/owasp-amass/config/config"
 )
 

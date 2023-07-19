@@ -17,10 +17,10 @@ import (
 	"testing"
 	"time"
 
-	amassdns "github.com/owasp-amass/amass/v3/net/dns"
-	"github.com/owasp-amass/resolve"
 	"github.com/caffix/stringset"
 	"github.com/miekg/dns"
+	amassdns "github.com/owasp-amass/amass/v4/net/dns"
+	"github.com/owasp-amass/resolve"
 )
 
 func TestCopyCookies(t *testing.T) {

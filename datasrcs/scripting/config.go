@@ -6,7 +6,7 @@ package scripting
 
 import (
 	"github.com/caffix/service"
-	"github.com/owasp-amass/amass/v3/format"
+	"github.com/owasp-amass/amass/v4/format"
 	"github.com/owasp-amass/config/config"
 	lua "github.com/yuin/gopher-lua"
 )

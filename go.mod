@@ -1,4 +1,4 @@
-module github.com/owasp-amass/amass/v3
+module github.com/owasp-amass/amass/v4
 
 go 1.19
 

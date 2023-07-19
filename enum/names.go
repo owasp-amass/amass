@@ -10,7 +10,7 @@ import (
 
 	"github.com/caffix/pipeline"
 	"github.com/caffix/stringset"
-	"github.com/owasp-amass/amass/v3/requests"
+	"github.com/owasp-amass/amass/v4/requests"
 )
 
 // subdomainTask handles newly discovered proper subdomain names in the enumeration.

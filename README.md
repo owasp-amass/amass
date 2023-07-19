@@ -11,7 +11,7 @@
 [![Chat on Discord](https://img.shields.io/discord/433729817918308352.svg?logo=discord)](https://discord.gg/HNePVyX3cp)
 
 ![GitHub Test Status](https://github.com/owasp-amass/amass/workflows/tests/badge.svg)
-[![GoDoc](https://pkg.go.dev/badge/github.com/owasp-amass/amass/v3?utm_source=godoc)](https://pkg.go.dev/github.com/owasp-amass/amass/v3)
+[![GoDoc](https://pkg.go.dev/badge/github.com/owasp-amass/amass/v4?utm_source=godoc)](https://pkg.go.dev/github.com/owasp-amass/amass/v4)
 [![License](https://img.shields.io/badge/license-apache%202-blue)](https://www.apache.org/licenses/LICENSE-2.0)
 [![Go Report](https://goreportcard.com/badge/github.com/owasp-amass/amass)](https://goreportcard.com/report/github.com/owasp-amass/amass)
 [![CodeFactor](https://www.codefactor.io/repository/github/owasp-amass/amass/badge)](https://www.codefactor.io/repository/github/owasp-amass/amass)
@@ -62,10 +62,10 @@ The volume argument allows the Amass graph database to persist between execution
 ### From Source
 
 1. Install [Go](https://golang.org/doc/install) and setup your Go workspace
-2. Download OWASP Amass by running `go install -v github.com/owasp-amass/amass/v3/...@master`
+2. Download OWASP Amass by running `go install -v github.com/owasp-amass/amass/v4/...@master`
 3. At this point, the binary should be in `$GOPATH/bin`
 
-## Documentation [![GoDoc](https://pkg.go.dev/badge/github.com/owasp-amass/amass/v3?utm_source=godoc)](https://pkg.go.dev/github.com/owasp-amass/amass/v3)
+## Documentation [![GoDoc](https://pkg.go.dev/badge/github.com/owasp-amass/amass/v4?utm_source=godoc)](https://pkg.go.dev/github.com/owasp-amass/amass/v4)
 
 Use the [Installation Guide](./doc/install.md) to get started.
 

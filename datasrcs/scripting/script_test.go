@@ -7,8 +7,8 @@ package scripting
 import (
 	"github.com/caffix/netmap"
 	"github.com/caffix/service"
-	"github.com/owasp-amass/amass/v3/requests"
-	"github.com/owasp-amass/amass/v3/systems"
+	"github.com/owasp-amass/amass/v4/requests"
+	"github.com/owasp-amass/amass/v4/systems"
 	"github.com/owasp-amass/config/config"
 	"github.com/owasp-amass/resolve"
 )

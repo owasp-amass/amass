@@ -20,10 +20,10 @@ import (
 
 	"github.com/caffix/stringset"
 	"github.com/fatih/color"
-	"github.com/owasp-amass/amass/v3/datasrcs"
-	"github.com/owasp-amass/amass/v3/format"
-	"github.com/owasp-amass/amass/v3/intel"
-	"github.com/owasp-amass/amass/v3/systems"
+	"github.com/owasp-amass/amass/v4/datasrcs"
+	"github.com/owasp-amass/amass/v4/format"
+	"github.com/owasp-amass/amass/v4/intel"
+	"github.com/owasp-amass/amass/v4/systems"
 	"github.com/owasp-amass/config/config"
 )
 
