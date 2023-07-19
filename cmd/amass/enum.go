@@ -28,7 +28,6 @@ import (
 	"github.com/owasp-amass/amass/v4/datasrcs"
 	"github.com/owasp-amass/amass/v4/enum"
 	"github.com/owasp-amass/amass/v4/format"
-	"github.com/owasp-amass/amass/v4/requests"
 	"github.com/owasp-amass/amass/v4/resources"
 	"github.com/owasp-amass/amass/v4/systems"
 	"github.com/owasp-amass/config/config"
@@ -196,21 +195,21 @@ func runEnumCommand(clArgs []string) {
 	}
 
 	var wg sync.WaitGroup
-	var outChans []chan *requests.Output
+	var outChans []chan string
 	// This channel sends the signal for goroutines to terminate
 	done := make(chan struct{})
 	// Print output only if JSONOutput is not meant for STDOUT
 	if args.Filepaths.JSONOutput != "-" {
 		wg.Add(1)
 		// This goroutine will handle printing the output
-		printOutChan := make(chan *requests.Output, 10)
+		printOutChan := make(chan string, 10)
 		go printOutput(e, args, printOutChan, &wg)
 		outChans = append(outChans, printOutChan)
 	}
 
 	wg.Add(1)
 	// This goroutine will handle saving the output to the text file
-	txtOutChan := make(chan *requests.Output, 10)
+	txtOutChan := make(chan string, 10)
 	go saveTextOutput(e, args, txtOutChan, &wg)
 	outChans = append(outChans, txtOutChan)
 
@@ -362,39 +361,23 @@ func argsAndConfig(clArgs []string) (*config.Config, *enumArgs) {
 	return cfg, &args
 }
 
-func printOutput(e *enum.Enumeration, args *enumArgs, output chan *requests.Output, wg *sync.WaitGroup) {
+func printOutput(e *enum.Enumeration, args *enumArgs, output chan string, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	var total int
-	asns := make(map[int]*format.ASNSummaryData)
 	// Print all the output returned by the enumeration
 	for out := range output {
-		out.Addresses = format.DesiredAddrTypes(out.Addresses, args.Options.IPv4, args.Options.IPv6)
-		if !e.Config.Passive && len(out.Addresses) <= 0 {
-			continue
-		}
-
+		//fmt.Fprintf(color.Output, "%s%s\n", green(name), yellow(ips))
+		fmt.Fprintf(color.Output, "%s\n", out)
 		total++
-		if !args.Options.Passive {
-			format.UpdateSummaryData(out, asns)
-		}
-
-		name, ips := format.OutputLineParts(out, args.Options.IPs || args.Options.IPv4 || args.Options.IPv6, args.Options.DemoMode)
-		if ips != "" {
-			ips = " " + ips
-		}
-
-		fmt.Fprintf(color.Output, "%s%s\n", green(name), yellow(ips))
 	}
 
 	if total == 0 {
 		r.Println("No names were discovered")
-	} else if !args.Options.Passive {
-		format.PrintEnumerationSummary(total, asns, args.Options.DemoMode)
 	}
 }
 
-func saveTextOutput(e *enum.Enumeration, args *enumArgs, output chan *requests.Output, wg *sync.WaitGroup) {
+func saveTextOutput(e *enum.Enumeration, args *enumArgs, output chan string, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	dir := config.OutputDirectory(e.Config.Dir)
@@ -423,21 +406,12 @@ func saveTextOutput(e *enum.Enumeration, args *enumArgs, output chan *requests.O
 	_, _ = outptr.Seek(0, 0)
 	// Save all the output returned by the enumeration
 	for out := range output {
-		out.Addresses = format.DesiredAddrTypes(out.Addresses, args.Options.IPv4, args.Options.IPv6)
-		if !e.Config.Passive && len(out.Addresses) <= 0 {
-			continue
-		}
-
-		name, ips := format.OutputLineParts(out, args.Options.IPs || args.Options.IPv4 || args.Options.IPv6, args.Options.DemoMode)
-		if ips != "" {
-			ips = " " + ips
-		}
 		// Write the line to the output file
-		fmt.Fprintf(outptr, "%s%s\n", name, ips)
+		fmt.Fprintf(outptr, "%s\n", out)
 	}
 }
 
-func processOutput(ctx context.Context, g *netmap.Graph, e *enum.Enumeration, outputs []chan *requests.Output, done chan struct{}, wg *sync.WaitGroup) {
+func processOutput(ctx context.Context, g *netmap.Graph, e *enum.Enumeration, outputs []chan string, done chan struct{}, wg *sync.WaitGroup) {
 	defer wg.Done()
 	defer func() {
 		// Signal all the other output goroutines to terminate
@@ -451,10 +425,7 @@ func processOutput(ctx context.Context, g *netmap.Graph, e *enum.Enumeration, ou
 	defer known.Close()
 	// The function that obtains output from the enum and puts it on the channel
 	extract := func() {
-		for _, o := range ExtractOutput(ctx, g, e, known, true) {
-			if !o.Complete(e.Config.Passive) || !e.Config.IsDomainInScope(o.Name) {
-				continue
-			}
+		for _, o := range NewOutput(ctx, g, e, known) {
 			for _, ch := range outputs {
 				ch <- o
 			}

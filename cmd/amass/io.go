@@ -7,23 +7,93 @@ package main
 import (
 	"context"
 	"net"
+	"strconv"
 	"time"
 
 	"github.com/caffix/netmap"
 	"github.com/caffix/stringset"
 	"github.com/owasp-amass/amass/v4/enum"
 	"github.com/owasp-amass/amass/v4/requests"
+	"github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/domain"
+	"github.com/owasp-amass/open-asset-model/network"
 	"golang.org/x/net/publicsuffix"
 )
+
+func NewOutput(ctx context.Context, g *netmap.Graph, e *enum.Enumeration, filter *stringset.Set) []string {
+	var output []string
+
+	// Make sure a filter has been created
+	if filter == nil {
+		filter = stringset.New()
+		defer filter.Close()
+	}
+
+	var assets []*types.Asset
+	for _, atype := range []oam.AssetType{oam.FQDN, oam.IPAddress, oam.Netblock, oam.ASN, oam.RIROrg} {
+		if a, err := g.DB.FindByType(atype, e.Config.CollectionStartTime.UTC()); err == nil {
+			assets = append(assets, a...)
+		}
+	}
+
+	for _, from := range assets {
+		fromstr := extractAssetName(from, e.Config.CollectionStartTime.UTC())
+
+		if rels, err := g.DB.OutgoingRelations(from, e.Config.CollectionStartTime.UTC()); err == nil {
+			for _, rel := range rels {
+				lineid := from.ID + rel.ID + rel.ToAsset.ID
+				if filter.Has(lineid) {
+					continue
+				}
+				if to, err := g.DB.FindById(rel.ToAsset.ID, e.Config.CollectionStartTime.UTC()); err == nil {
+					tostr := extractAssetName(to, e.Config.CollectionStartTime.UTC())
+
+					output = append(output, fromstr+yellow(" --> ")+magenta(rel.Type)+yellow(" --> ")+tostr)
+					filter.Insert(lineid)
+				}
+			}
+		}
+	}
+
+	return output
+}
+
+func extractAssetName(a *types.Asset, since time.Time) string {
+	var result string
+
+	switch a.Asset.AssetType() {
+	case oam.FQDN:
+		if fqdn, ok := a.Asset.(domain.FQDN); ok {
+			result = green(fqdn.Name) + blue(" (FQDN)")
+		}
+	case oam.IPAddress:
+		if ip, ok := a.Asset.(network.IPAddress); ok {
+			result = green(ip.Address.String()) + blue(" (IPAddress)")
+		}
+	case oam.ASN:
+		if asn, ok := a.Asset.(network.AutonomousSystem); ok {
+			result = green(strconv.Itoa(asn.Number)) + blue(" (ASN)")
+		}
+	case oam.RIROrg:
+		if rir, ok := a.Asset.(network.RIROrganization); ok {
+			result = green(rir.RIRId+rir.Name) + blue(" (RIROrganization)")
+		}
+	case oam.Netblock:
+		if nb, ok := a.Asset.(network.Netblock); ok {
+			result = green(nb.Cidr.String()) + blue(" (Netblock)")
+		}
+	}
+
+	return result
+}
 
 // ExtractOutput is a convenience method for obtaining new discoveries made by the enumeration process.
 func ExtractOutput(ctx context.Context, g *netmap.Graph, e *enum.Enumeration, filter *stringset.Set, asinfo bool) []*requests.Output {
 	if e.Config.Passive {
-		return EventNames(ctx, g, e.Config.Domains(), e.Config.CollectionStartTime, filter)
+		return EventNames(ctx, g, e.Config.Domains(), e.Config.CollectionStartTime.UTC(), filter)
 	}
-	return EventOutput(ctx, g, e.Config.Domains(), e.Config.CollectionStartTime, filter, asinfo, e.Sys.Cache())
+	return EventOutput(ctx, g, e.Config.Domains(), e.Config.CollectionStartTime.UTC(), filter, asinfo, e.Sys.Cache())
 }
 
 type outLookup map[string]*requests.Output

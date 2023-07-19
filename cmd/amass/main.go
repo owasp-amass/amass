@@ -55,13 +55,14 @@ const (
 
 var (
 	// Colors used to ease the reading of program output
-	g      = color.New(color.FgHiGreen)
-	r      = color.New(color.FgHiRed)
-	fgR    = color.New(color.FgRed)
-	fgY    = color.New(color.FgYellow)
-	yellow = color.New(color.FgHiYellow).SprintFunc()
-	green  = color.New(color.FgHiGreen).SprintFunc()
-	blue   = color.New(color.FgHiBlue).SprintFunc()
+	g       = color.New(color.FgHiGreen)
+	r       = color.New(color.FgHiRed)
+	fgR     = color.New(color.FgRed)
+	fgY     = color.New(color.FgYellow)
+	yellow  = color.New(color.FgHiYellow).SprintFunc()
+	green   = color.New(color.FgHiGreen).SprintFunc()
+	blue    = color.New(color.FgHiBlue).SprintFunc()
+	magenta = color.New(color.FgHiMagenta).SprintFunc()
 )
 
 func commandUsage(msg string, cmdFlagSet *flag.FlagSet, errBuf *bytes.Buffer) {

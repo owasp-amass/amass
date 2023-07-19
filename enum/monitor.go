@@ -33,7 +33,7 @@ func (e *Enumeration) checkForMissedWildcards(addr string) {
 	results, err := e.graph.DB.FindByContent(&network.IPAddress{
 		Address: ip,
 		Type:    t,
-	}, e.Config.CollectionStartTime)
+	}, e.Config.CollectionStartTime.UTC())
 	if err != nil {
 		return
 	}
@@ -49,7 +49,7 @@ func (e *Enumeration) checkForMissedWildcards(addr string) {
 		return
 	}
 
-	in, err := e.graph.DB.IncomingRelations(asset, e.Config.CollectionStartTime, "a_record", "aaaa_record")
+	in, err := e.graph.DB.IncomingRelations(asset, e.Config.CollectionStartTime.UTC(), "a_record", "aaaa_record")
 	if err != nil {
 		return
 	}
@@ -60,7 +60,7 @@ func (e *Enumeration) checkForMissedWildcards(addr string) {
 
 	subsToAssets := make(map[string][]string)
 	for _, rel := range in {
-		n, err := e.graph.DB.FindById(rel.FromAsset.ID, e.Config.CollectionStartTime)
+		n, err := e.graph.DB.FindById(rel.FromAsset.ID, e.Config.CollectionStartTime.UTC())
 		if err != nil {
 			continue
 		} else if fqdn, ok := n.Asset.(domain.FQDN); ok {
