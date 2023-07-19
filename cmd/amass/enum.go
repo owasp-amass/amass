@@ -29,6 +29,7 @@ import (
 	"github.com/owasp-amass/amass/v3/enum"
 	"github.com/owasp-amass/amass/v3/format"
 	"github.com/owasp-amass/amass/v3/requests"
+	"github.com/owasp-amass/amass/v3/resources"
 	"github.com/owasp-amass/amass/v3/systems"
 	"github.com/owasp-amass/config/config"
 )
@@ -525,22 +526,38 @@ func writeLogsAndMessages(logs *io.PipeReader, logfile string, verbose bool) {
 
 // Obtain parameters from provided input files
 func processEnumInputFiles(args *enumArgs) error {
-	if args.Options.BruteForcing && len(args.Filepaths.BruteWordlist) > 0 {
-		for _, f := range args.Filepaths.BruteWordlist {
-			list, err := config.GetListFromFile(f)
-			if err != nil {
-				return fmt.Errorf("failed to parse the brute force wordlist file: %v", err)
+	if args.Options.BruteForcing {
+		if len(args.Filepaths.BruteWordlist) > 0 {
+			for _, f := range args.Filepaths.BruteWordlist {
+				list, err := config.GetListFromFile(f)
+				if err != nil {
+					return fmt.Errorf("failed to parse the brute force wordlist file: %v", err)
+				}
+				args.BruteWordList.InsertMany(list...)
 			}
-			args.BruteWordList.InsertMany(list...)
+		} else {
+			if f, err := resources.GetResourceFile("namelist.txt"); err == nil {
+				if list, err := getWordList(f); err == nil {
+					args.BruteWordList.InsertMany(list...)
+				}
+			}
 		}
 	}
-	if !args.Options.NoAlts && len(args.Filepaths.AltWordlist) > 0 {
-		for _, f := range args.Filepaths.AltWordlist {
-			list, err := config.GetListFromFile(f)
-			if err != nil {
-				return fmt.Errorf("failed to parse the alterations wordlist file: %v", err)
+	if !args.Options.NoAlts {
+		if len(args.Filepaths.AltWordlist) > 0 {
+			for _, f := range args.Filepaths.AltWordlist {
+				list, err := config.GetListFromFile(f)
+				if err != nil {
+					return fmt.Errorf("failed to parse the alterations wordlist file: %v", err)
+				}
+				args.AltWordList.InsertMany(list...)
 			}
-			args.AltWordList.InsertMany(list...)
+		} else {
+			if f, err := resources.GetResourceFile("alterations.txt"); err == nil {
+				if list, err := getWordList(f); err == nil {
+					args.AltWordList.InsertMany(list...)
+				}
+			}
 		}
 	}
 	if args.Filepaths.Blacklist != "" {
@@ -672,4 +689,18 @@ func (e enumArgs) OverrideConfig(conf *config.Config) error {
 	// Attempt to add the provided domains to the configuration
 	conf.AddDomains(e.Domains.Slice()...)
 	return nil
+}
+
+func getWordList(reader io.Reader) ([]string, error) {
+	var words []string
+
+	scanner := bufio.NewScanner(reader)
+	for scanner.Scan() {
+		// Get the next word in the list
+		w := strings.TrimSpace(scanner.Text())
+		if err := scanner.Err(); err == nil && w != "" {
+			words = append(words, w)
+		}
+	}
+	return stringset.Deduplicate(words), nil
 }
