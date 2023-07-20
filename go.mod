@@ -17,6 +17,9 @@ require (
 	github.com/gobwas/ws v1.0.2 // indirect
 	github.com/google/uuid v1.3.0
 	github.com/irfansharif/cfilter v0.1.1
+	github.com/jmoiron/sqlx v1.3.4
+	github.com/lib/pq v1.10.8
+	github.com/miekg/dns v1.1.48
 	github.com/jmoiron/sqlx v1.3.5
 	github.com/lib/pq v1.10.5
 	github.com/miekg/dns v1.1.53
