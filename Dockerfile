@@ -1,16 +1,16 @@
-FROM golang:1.12.6-alpine3.10 as build
+FROM golang:1.19-alpine as build
 RUN apk --no-cache add git
-RUN go get github.com/OWASP/Amass; exit 0
-ENV GO111MODULE on
-WORKDIR /go/src/github.com/OWASP/Amass
-RUN go install ./...
-
-<<<<<<< HEAD
-FROM alpine:3.15
-=======
-FROM alpine:3.15.4
->>>>>>> master
+WORKDIR /go/src/github.com/owasp-amass/amass
+COPY . .
+RUN go install -v ./...
+FROM alpine:latest
+RUN apk --no-cache add ca-certificates
 COPY --from=build /go/bin/amass /bin/amass
-COPY --from=build /go/src/github.com/OWASP/Amass/wordlists/ /wordlists/
 ENV HOME /
+RUN addgroup user \
+    && adduser user -D -G user \
+    && mkdir /.config \
+    && mkdir /.config/amass \
+    && chown -R user:user /.config
+USER user
 ENTRYPOINT ["/bin/amass"]

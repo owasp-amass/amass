@@ -1,0 +1,30 @@
+name: lint
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  golangci:
+    name: Lint
+    strategy:
+      matrix:
+        os: [ "ubuntu-latest", "macos-latest", "windows-latest" ]
+        go-version: [ "1.19" ]
+    runs-on: ${{ matrix.os }}
+    steps:
+      -
+        name: setup
+        uses: actions/setup-go@v3
+        with:
+          go-version: ${{ matrix.go-version }}
+      -
+        name: checkout
+        uses: actions/checkout@v3
+      -
+        name: golangci-lint
+        uses: golangci/golangci-lint-action@v3
+        with:
+          version: latest
+          args: --timeout=10m
+          only-new-issues: true

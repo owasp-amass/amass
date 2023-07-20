@@ -1,0 +1,51 @@
+name: tests
+
+on:
+  push:
+    branches: [ "master", "develop" ]
+  pull_request:
+    branches: develop
+
+jobs:
+  test:
+    name: Test
+    strategy:
+      matrix:
+        os: [ "ubuntu-latest", "macos-latest", "windows-latest" ]
+        go-version: [ "1.19" ]
+    runs-on: ${{ matrix.os }}
+    steps:
+      -
+        name: setup Go ${{ matrix.go-version }}
+        uses: actions/setup-go@v3
+        with:
+          go-version: ${{ matrix.go-version }}
+      -
+        name: checkout
+        uses: actions/checkout@v3
+      -
+        name: simple test
+        run: go test -v ./...
+      -
+        name: test with GC pressure
+        run: go test -v ./...
+        env:
+          GOGC: 1
+      -
+        name: test with race detector
+        run: go test -v -race ./...
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - name: setup Go
+        uses: actions/setup-go@v3
+        with:
+          go-version: 1.19
+      - name: checkout
+        uses: actions/checkout@v3
+      - name: measure coverage
+        run: go test -v -coverprofile=coverage.out ./...
+      - name: report coverage
+        run: |
+          bash <(curl -s https://codecov.io/bash)

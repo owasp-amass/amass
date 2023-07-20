@@ -1,0 +1,26 @@
+codecov:
+  disable_default_path_fixes: yes
+
+fixes:
+  - "github.com/owasp-amass/amass/v4/::github.com/owasp-amass/amass/"
+
+ignore:
+  - encode_optype.go
+  - ./doc/**/*
+  - ./examples/**/*
+  - ./images/**/*
+  - ./resources/**/*
+
+coverage:
+  range: 20..60
+  round: up
+  precision: 2
+
+comment:
+  layout: "reach, diff, files"
+  behavior: new
+  require_changes: true
+  require_base: yes
+  require_head: yes
+  branches:
+    - "develop"
