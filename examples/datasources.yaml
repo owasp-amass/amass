@@ -1,0 +1,32 @@
+datasources:
+  - name: MyDataSource1
+    ttl: 3600
+    creds:
+      Account1:
+        username: username1
+        password: password1
+        apikey: apikey1
+        secret: secret1
+      Account2:
+        username: username2
+        password: password2
+        apikey: apikey2
+        secret: secret2
+  - name: MyDataSource2
+    ttl: 7200
+    creds:
+      Account1:
+        username: username3
+        password: password3
+        apikey: apikey3
+        secret: secret3
+      Account2:
+        username: username4
+        password: password4
+        apikey: apikey4
+        secret: secret4
+
+# this is the global options that will be considered. For example, minimum_ttl would be a global option used to compare
+# the minimum_ttl to the other datasources ttl.
+global_options: 
+  minimum_ttl: 12345

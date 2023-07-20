@@ -1,249 +1,267 @@
-// Copyright 2017 Jeff Foley. All rights reserved.
+// Copyright © by Jeff Foley 2017-2023. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
 
 package enum
 
 import (
-	"errors"
-	"io/ioutil"
-	"log"
-	"strings"
+	"context"
 	"sync"
 	"time"
 
-	"github.com/OWASP/Amass/config"
-	eb "github.com/OWASP/Amass/eventbus"
-	"github.com/OWASP/Amass/graph"
-	"github.com/OWASP/Amass/requests"
-	"github.com/OWASP/Amass/resolvers"
-	"github.com/OWASP/Amass/services"
-	"github.com/OWASP/Amass/services/sources"
-	"github.com/OWASP/Amass/utils"
-	"github.com/google/uuid"
+	"github.com/caffix/netmap"
+	"github.com/caffix/pipeline"
+	"github.com/caffix/queue"
+	"github.com/caffix/service"
+	"github.com/owasp-amass/amass/v4/datasrcs"
+	"github.com/owasp-amass/amass/v4/requests"
+	"github.com/owasp-amass/amass/v4/systems"
+	"github.com/owasp-amass/config/config"
+	oam "github.com/owasp-amass/open-asset-model"
+	"github.com/owasp-amass/open-asset-model/domain"
 )
 
-// Enumeration is the object type used to execute a DNS enumeration with Amass.
+// Enumeration is the object type used to execute a DNS enumeration.
 type Enumeration struct {
-	Config *config.Config
-	Bus    *eb.EventBus
-	Pool   *resolvers.ResolverPool
-
-	// Link graph that collects all the information gathered by the enumeration
-	Graph graph.DataHandler
-
-	// Names already known prior to the enumeration
-	ProvidedNames []string
-
-	// The channel that will receive the results
-	Output chan *requests.Output
-
-	// Broadcast channel that indicates no further writes to the output channel
-	Done chan struct{}
-
-	dataSources []services.Service
-	bruteSrv    services.Service
-
-	// Pause/Resume channels for halting the enumeration
-	pause  chan struct{}
-	resume chan struct{}
-
-	filter      *utils.StringFilter
-	outputQueue *utils.Queue
-
-	metricsLock       sync.RWMutex
-	dnsQueriesPerSec  int
-	dnsNamesRemaining int
-
-	domainIdx int
+	Config   *config.Config
+	Sys      systems.System
+	ctx      context.Context
+	graph    *netmap.Graph
+	srcs     []service.Service
+	done     chan struct{}
+	nameSrc  *enumSource
+	subTask  *subdomainTask
+	dnsTask  *dnsTask
+	valTask  *dnsTask
+	store    *dataManager
+	requests queue.Queue
+	plock    sync.Mutex
+	pending  bool
 }
 
 // NewEnumeration returns an initialized Enumeration that has not been started yet.
-func NewEnumeration() *Enumeration {
-	e := &Enumeration{
-		Config: &config.Config{
-			UUID:           uuid.New(),
-			Log:            log.New(ioutil.Discard, "", 0),
-			Alterations:    true,
-			FlipWords:      true,
-			FlipNumbers:    true,
-			AddWords:       true,
-			AddNumbers:     true,
-			MinForWordFlip: 2,
-			EditDistance:   1,
-			Recursive:      true,
-		},
-		Bus:         eb.NewEventBus(),
-		Pool:        resolvers.NewResolverPool(nil),
-		Output:      make(chan *requests.Output, 100),
-		Done:        make(chan struct{}, 2),
-		pause:       make(chan struct{}, 2),
-		resume:      make(chan struct{}, 2),
-		filter:      utils.NewStringFilter(),
-		outputQueue: new(utils.Queue),
+func NewEnumeration(cfg *config.Config, sys systems.System, graph *netmap.Graph) *Enumeration {
+	return &Enumeration{
+		Config:   cfg,
+		Sys:      sys,
+		graph:    graph,
+		srcs:     datasrcs.SelectedDataSources(cfg, sys.DataSources()),
+		requests: queue.NewQueue(),
 	}
-	if e.Pool == nil {
-		return nil
-	}
-
-	e.dataSources = sources.GetAllSources(e.Config, e.Bus, e.Pool)
-	return e
 }
 
-// Start begins the DNS enumeration process for the Amass Enumeration object.
-func (e *Enumeration) Start() error {
-	if e.Output == nil {
-		return errors.New("The enumeration did not have an output channel")
-	} else if e.Config.Passive && e.Config.DataOptsWriter != nil {
-		return errors.New("Data operations cannot be saved without DNS resolution")
-	} else if err := e.Config.CheckSettings(); err != nil {
+// Start begins the vertical domain correlation process.
+func (e *Enumeration) Start(ctx context.Context) error {
+	e.done = make(chan struct{})
+	defer close(e.done)
+
+	if err := e.Config.CheckSettings(); err != nil {
 		return err
 	}
+	// This context, used throughout the enumeration, will provide the
+	// ability to pass the configuration and event bus to all the components
+	var cancel context.CancelFunc
+	e.ctx, cancel = context.WithCancel(ctx)
+	defer cancel()
+	go e.manageDataSrcRequests()
 
-	// Setup the correct graph database handler
-	err := e.setupGraph()
-	if err != nil {
-		return err
+	if !e.Config.Passive {
+		e.dnsTask = newDNSTask(e, false)
+		e.valTask = newDNSTask(e, true)
+		e.store = newDataManager(e)
+		e.subTask = newSubdomainTask(e)
+		defer e.subTask.Stop()
+		defer e.dnsTask.stop()
+		defer e.valTask.stop()
 	}
-	defer e.Graph.Close()
 
-	e.Bus.Subscribe(requests.OutputTopic, e.sendOutput)
-	defer e.Bus.Unsubscribe(requests.OutputTopic, e.sendOutput)
-
-	// Select the data sources desired by the user
-	if len(e.Config.DisabledDataSources) > 0 {
-		e.dataSources = ExcludeDisabledDataSources(e.dataSources, e.Config)
+	var stages []pipeline.Stage
+	if !e.Config.Passive {
+		stages = append(stages, pipeline.FIFO("root", e.valTask.rootTaskFunc()))
+		stages = append(stages, pipeline.FIFO("dns", e.dnsTask))
+		stages = append(stages, pipeline.FIFO("validate", e.valTask))
+		stages = append(stages, pipeline.FIFO("store", e.store))
+		stages = append(stages, pipeline.FIFO("", e.subTask))
 	}
 
-	// Add all the data sources that successfully start to the list
-	var sources []services.Service
-	for _, src := range e.dataSources {
-		if err := src.Start(); err != nil {
-			src.Stop()
-			continue
-		}
-		sources = append(sources, src)
-		defer src.Stop()
-	}
-	e.dataSources = sources
-	// Select the correct services to be used in this enumeration
-	services := e.requiredServices()
-	for _, srv := range services {
-		if err := srv.Start(); err != nil {
-			return err
-		}
-		defer srv.Stop()
-	}
-	services = append(services, e.dataSources...)
+	p := pipeline.NewPipeline(stages...)
+	// The pipeline input source will receive all the names
+	e.nameSrc = newEnumSource(p, e)
+	defer e.nameSrc.Stop()
 
-	// Use all previously discovered names that are in scope
+	e.submitASNs()
+	e.submitDomainNames()
+	/*
+	 * Now that the pipeline input source has been setup, names provided
+	 * by the user and names acquired from the graph database can be brought
+	 * into the enumeration
+	 */
 	go e.submitKnownNames()
 	go e.submitProvidedNames()
 
-	// Start with the first domain name provided in the configuration
-	e.releaseDomainName()
+	var err error
+	if e.Config.Passive {
+		err = p.Execute(e.ctx, e.nameSrc, e.makeOutputSink())
+	} else {
+		err = p.ExecuteBuffered(e.ctx, e.nameSrc, e.makeOutputSink(), 50)
+		// Ensure all data has been stored
+		<-e.store.Stop()
+	}
+	return err
+}
 
-	// The enumeration will not terminate until all output has been processed
-	var wg sync.WaitGroup
-	wg.Add(2)
-	go e.checkForOutput(&wg)
-	go e.processOutput(&wg)
+// Release the root domain names to the input source and each data source.
+func (e *Enumeration) submitDomainNames() {
+	for _, domain := range e.Config.Domains() {
+		req := &requests.DNSRequest{
+			Name:   domain,
+			Domain: domain,
+		}
 
-	t := time.NewTicker(2 * time.Second)
-	logTick := time.NewTicker(time.Minute)
+		e.nameSrc.newName(req)
+		e.sendRequests(req.Clone().(*requests.DNSRequest))
+	}
+}
+
+// If requests were made for specific ASNs, then those requests are
+// sent to included data sources at this point.
+func (e *Enumeration) submitASNs() {
+	for _, asn := range e.Config.Scope.ASNs {
+		e.sendRequests(&requests.ASNRequest{ASN: asn})
+	}
+}
+
+func (e *Enumeration) sendRequests(element interface{}) {
+	e.requests.Append(element)
+}
+
+func (e *Enumeration) manageDataSrcRequests() {
+	nameToSrc := make(map[string]service.Service)
+	for _, src := range e.srcs {
+		nameToSrc[src.String()] = src
+	}
+
+	pending := make(map[string]bool)
+	for _, src := range e.srcs {
+		pending[src.String()] = false
+	}
+
+	finished := make(chan string, len(e.srcs)*2)
+	requestsMap := make(map[string][]interface{})
 loop:
 	for {
 		select {
-		case <-e.Done:
+		case <-e.done:
 			break loop
-		case <-e.PauseChan():
-			t.Stop()
-		case <-e.ResumeChan():
-			t = time.NewTicker(time.Second)
-		case <-logTick.C:
-			if !e.Config.Passive {
-				e.Config.Log.Printf("Average DNS queries performed: %d/sec, DNS names remaining: %d",
-					e.DNSQueriesPerSec(), e.DNSNamesRemaining())
+		case <-e.ctx.Done():
+			break loop
+		case <-e.requests.Signal():
+			element, ok := e.requests.Next()
+			if !ok {
+				continue loop
 			}
-		case <-t.C:
-			e.periodicChecks(services)
+
+			for name := range nameToSrc {
+				if src := nameToSrc[name]; src != nil && src.HandlesReq(element) {
+					if len(requestsMap[name]) == 0 && !pending[name] {
+						go e.fireRequest(src, element, finished)
+						pending[name] = true
+					} else {
+						requestsMap[name] = append(requestsMap[name], element)
+					}
+				}
+			}
+		case name := <-finished:
+			if len(requestsMap[name]) == 0 {
+				pending[name] = false
+				e.setRequestsPending(pending)
+				continue loop
+			}
+
+			go e.fireRequest(nameToSrc[name], requestsMap[name][0], finished)
+			requestsMap[name] = requestsMap[name][1:]
 		}
 	}
-	t.Stop()
-	logTick.Stop()
-	wg.Wait()
-	return nil
+	e.requests.Process(func(e interface{}) {})
 }
 
-func (e *Enumeration) periodicChecks(srvcs []services.Service) {
-	done := true
-	for _, srv := range srvcs {
-		if srv.IsActive() {
-			done = false
+func (e *Enumeration) requestsPending() bool {
+	e.plock.Lock()
+	defer e.plock.Unlock()
+
+	return e.pending
+}
+
+func (e *Enumeration) setRequestsPending(p map[string]bool) {
+	var pending bool
+
+	for _, b := range p {
+		if b {
+			pending = true
 			break
 		}
 	}
-	if done {
-		close(e.Done)
-		return
-	}
 
-	if !e.Config.Passive {
-		e.processMetrics(srvcs)
-		psec := e.DNSQueriesPerSec()
-		// Check if it's too soon to release the next domain name
-		if psec > 0 && ((e.DNSNamesRemaining()*len(services.InitialQueryTypes))/psec) > 10 {
-			return
-		}
-		// Let the services know that the enumeration is ready for more names
-		for _, srv := range srvcs {
-			go srv.LowNumberOfNames()
-		}
-	}
-	// Attempt to send the next domain to data sources/brute forcing
-	e.releaseDomainName()
+	e.plock.Lock()
+	e.pending = pending
+	e.plock.Unlock()
 }
 
-func (e *Enumeration) releaseDomainName() {
-	domains := e.Config.Domains()
-
-	if e.domainIdx >= len(domains) {
-		return
+func (e *Enumeration) fireRequest(srv service.Service, req interface{}, finished chan string) {
+	select {
+	case <-e.done:
+	case <-e.ctx.Done():
+	case <-srv.Done():
+	case srv.Input() <- req:
 	}
+	finished <- srv.String()
+}
 
-	for _, srv := range append(e.dataSources, e.bruteSrv) {
-		if srv == nil {
-			continue
+func (e *Enumeration) makeOutputSink() pipeline.SinkFunc {
+	return pipeline.SinkFunc(func(ctx context.Context, data pipeline.Data) error {
+		if !e.Config.Passive {
+			return nil
 		}
 
-		srv.SendDNSRequest(&requests.DNSRequest{
-			Name:   domains[e.domainIdx],
-			Domain: domains[e.domainIdx],
-		})
-	}
-	e.domainIdx++
+		req, ok := data.(*requests.DNSRequest)
+		if ok && req != nil && req.Name != "" && e.Config.IsDomainInScope(req.Name) {
+			if _, err := e.graph.UpsertFQDN(e.ctx, req.Name); err != nil {
+				e.Config.Log.Print(err.Error())
+			}
+		}
+		return nil
+	})
 }
 
 func (e *Enumeration) submitKnownNames() {
-	for _, enum := range e.Graph.EnumerationList() {
-		var found bool
+	for _, g := range e.Sys.GraphDatabases() {
+		e.readNamesFromDatabase(g)
+	}
+}
 
-		for _, domain := range e.Graph.EnumerationDomains(enum) {
-			if e.Config.IsDomainInScope(domain) {
-				found = true
-				break
-			}
-		}
-		if !found {
+func (e *Enumeration) readNamesFromDatabase(db *netmap.Graph) {
+	for _, d := range e.Config.Domains() {
+		assets, err := db.DB.FindByScope([]oam.Asset{domain.FQDN{Name: d}}, time.Time{})
+		if err != nil {
 			continue
 		}
 
-		for _, o := range e.Graph.GetOutput(enum, true) {
-			if e.Config.IsDomainInScope(o.Name) {
-				e.Bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
-					Name:   o.Name,
-					Domain: o.Domain,
-					Tag:    o.Tag,
-					Source: o.Source,
+		for _, a := range assets {
+			if fqdn, ok := a.Asset.(domain.FQDN); ok {
+				select {
+				case <-e.done:
+					return
+				default:
+				}
+
+				domain := e.Config.WhichDomain(fqdn.Name)
+				if domain == "" {
+					continue
+				}
+
+				e.nameSrc.newName(&requests.DNSRequest{
+					Name:   fqdn.Name,
+					Domain: domain,
 				})
 			}
 		}
@@ -251,227 +269,17 @@ func (e *Enumeration) submitKnownNames() {
 }
 
 func (e *Enumeration) submitProvidedNames() {
-	for _, name := range e.ProvidedNames {
+	for _, name := range e.Config.ProvidedNames {
+		select {
+		case <-e.done:
+			return
+		default:
+		}
 		if domain := e.Config.WhichDomain(name); domain != "" {
-			e.Bus.Publish(requests.NewNameTopic, &requests.DNSRequest{
+			e.nameSrc.newName(&requests.DNSRequest{
 				Name:   name,
 				Domain: domain,
-				Tag:    requests.EXTERNAL,
-				Source: "User Input",
 			})
 		}
 	}
-}
-
-// Select the correct services to be used in this enumeration.
-func (e *Enumeration) requiredServices() []services.Service {
-	var srvcs []services.Service
-
-	if !e.Config.Passive {
-		dms := services.NewDataManagerService(e.Config, e.Bus, e.Pool)
-		dms.AddDataHandler(e.Graph)
-		if e.Config.DataOptsWriter != nil {
-			dms.AddDataHandler(graph.NewDataOptsHandler(e.Config.DataOptsWriter))
-		}
-		srvcs = append(srvcs, dms, services.NewDNSService(e.Config, e.Bus, e.Pool))
-	}
-
-	namesrv := services.NewNameService(e.Config, e.Bus, e.Pool)
-	namesrv.RegisterGraph(e.Graph)
-	srvcs = append(srvcs, namesrv,
-		services.NewLogService(e.Config, e.Bus, e.Pool),
-		services.NewAddressService(e.Config, e.Bus, e.Pool),
-	)
-
-	if !e.Config.Passive {
-		e.bruteSrv = services.NewBruteForceService(e.Config, e.Bus, e.Pool)
-		srvcs = append(srvcs, e.bruteSrv,
-			services.NewMarkovService(e.Config, e.Bus, e.Pool),
-			services.NewAlterationService(e.Config, e.Bus, e.Pool))
-	}
-	return srvcs
-}
-
-// Select the graph that will store the enumeration findings.
-func (e *Enumeration) setupGraph() error {
-	if e.Config.GremlinURL != "" {
-		gremlin := graph.NewGremlin(e.Config.GremlinURL,
-			e.Config.GremlinUser, e.Config.GremlinPass, e.Config.Log)
-		e.Graph = gremlin
-		return nil
-	}
-
-	g := graph.NewGraph(e.Config.Dir)
-	if g == nil {
-		return errors.New("Failed to create the graph")
-	}
-	e.Graph = g
-	return nil
-}
-
-// DNSQueriesPerSec returns the number of DNS queries the enumeration has performed per second.
-func (e *Enumeration) DNSQueriesPerSec() int {
-	e.metricsLock.RLock()
-	defer e.metricsLock.RUnlock()
-
-	return e.dnsQueriesPerSec
-}
-
-// DNSNamesRemaining returns the number of discovered DNS names yet to be handled by the enumeration.
-func (e *Enumeration) DNSNamesRemaining() int {
-	e.metricsLock.RLock()
-	defer e.metricsLock.RUnlock()
-
-	return e.dnsNamesRemaining
-}
-
-func (e *Enumeration) processMetrics(services []services.Service) {
-	var total, remaining int
-	for _, srv := range services {
-		stats := srv.Stats()
-
-		remaining += stats.NamesRemaining
-		total += stats.DNSQueriesPerSec
-	}
-
-	e.metricsLock.Lock()
-	e.dnsQueriesPerSec = total
-	e.dnsNamesRemaining = remaining
-	e.metricsLock.Unlock()
-}
-
-func (e *Enumeration) processOutput(wg *sync.WaitGroup) {
-	defer wg.Done()
-
-	curIdx := 0
-	maxIdx := 7
-	delays := []int{250, 500, 750, 1000, 1250, 1500, 1750, 2000}
-loop:
-	for {
-		select {
-		case <-e.Done:
-			break loop
-		default:
-			element, ok := e.outputQueue.Next()
-			if !ok {
-				if curIdx < maxIdx {
-					curIdx++
-				}
-				time.Sleep(time.Duration(delays[curIdx]) * time.Millisecond)
-				continue
-			}
-			curIdx = 0
-			output := element.(*requests.Output)
-			if !e.filter.Duplicate(output.Name) {
-				e.Output <- output
-			}
-		}
-	}
-	time.Sleep(5 * time.Second)
-	// Handle all remaining elements on the queue
-	for {
-		element, ok := e.outputQueue.Next()
-		if !ok {
-			break
-		}
-		output := element.(*requests.Output)
-		if !e.filter.Duplicate(output.Name) {
-			e.Output <- output
-		}
-	}
-	close(e.Output)
-}
-
-func (e *Enumeration) checkForOutput(wg *sync.WaitGroup) {
-	t := time.NewTicker(2 * time.Second)
-	defer t.Stop()
-	defer wg.Done()
-
-	for {
-		select {
-		case <-e.Done:
-			// Handle all remaining pieces of output
-			e.queueNewGraphEntries(e.Config.UUID.String(), time.Millisecond)
-			return
-		case <-t.C:
-			e.queueNewGraphEntries(e.Config.UUID.String(), 3*time.Second)
-		}
-	}
-}
-
-func (e *Enumeration) queueNewGraphEntries(uuid string, delay time.Duration) {
-	for _, o := range e.Graph.GetOutput(uuid, false) {
-		if time.Now().Add(delay).After(o.Timestamp) {
-			e.Graph.MarkAsRead(&graph.DataOptsParams{
-				UUID:   uuid,
-				Name:   o.Name,
-				Domain: o.Domain,
-			})
-
-			if e.Config.IsDomainInScope(o.Name) {
-				e.outputQueue.Append(o)
-			}
-		}
-	}
-}
-
-func (e *Enumeration) sendOutput(o *requests.Output) {
-	select {
-	case <-e.Done:
-		return
-	default:
-		if e.Config.IsDomainInScope(o.Name) {
-			e.outputQueue.Append(o)
-		}
-	}
-}
-
-// Pause temporarily halts the enumeration.
-func (e *Enumeration) Pause() {
-	e.pause <- struct{}{}
-}
-
-// PauseChan returns the channel that is signaled when Pause is called.
-func (e *Enumeration) PauseChan() <-chan struct{} {
-	return e.pause
-}
-
-// Resume causes a previously paused enumeration to resume execution.
-func (e *Enumeration) Resume() {
-	e.resume <- struct{}{}
-}
-
-// ResumeChan returns the channel that is signaled when Resume is called.
-func (e *Enumeration) ResumeChan() <-chan struct{} {
-	return e.resume
-}
-
-// GetAllSourceNames returns the names of all the available data sources.
-func (e *Enumeration) GetAllSourceNames() []string {
-	var names []string
-
-	for _, source := range e.dataSources {
-		names = append(names, source.String())
-	}
-	return names
-}
-
-// ExcludeDisabledDataSources returns a list of data sources excluding DisabledDataSources.
-func ExcludeDisabledDataSources(srvs []services.Service, cfg *config.Config) []services.Service {
-	var enabled []services.Service
-
-	for _, s := range srvs {
-		include := true
-
-		for _, disabled := range cfg.DisabledDataSources {
-			if strings.EqualFold(disabled, s.String()) {
-				include = false
-				break
-			}
-		}
-		if include {
-			enabled = append(enabled, s)
-		}
-	}
-	return enabled
 }
