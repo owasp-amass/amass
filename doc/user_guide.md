@@ -56,7 +56,7 @@ All subcommands have some default global arguments that can be seen below.
 | Flag | Description | Example |
 |------|-------------|---------|
 | -h/-help | Show the program usage message | amass subcommand -h |
-| -config | Path to the INI configuration file | amass subcommand -config config.ini |
+| -config | Path to the YAML configuration file | amass subcommand -config config.yaml |
 | -dir | Path to the directory containing the graph database | amass subcommand -dir PATH -d example.com |
 | -nocolor | Disable colorized output | amass subcommand -nocolor -d example.com |
 | -silent | Disable all output during execution | amass subcommand -silent -json out.json -d example.com |
@@ -183,25 +183,27 @@ Amass has several files that it outputs during an enumeration (e.g. the log file
 
 By default, the output directory is created in the operating system default root directory to use for user-specific configuration data and named *amass*. If this is not suitable for your needs, then the subcommands can be instructed to create the output directory in an alternative location using the **'-dir'** flag.
 
-If you decide to use an Amass configuration file, it will be automatically discovered when put in the output directory and named **config.ini**.
+If you decide to use an Amass configuration file, it will be automatically discovered when put in the output directory and named **config.yaml**.
 
 ## The Configuration File
 
-You will need a config file to use your API keys with Amass. See the [Example Configuration File](../examples/config.ini) for more details.
+Configuration files are provided so users can specify the scope and options with Amass. See the [Example Configuration File](../examples/config.yaml) for more details.
+
+API keys for data sources are stored in a separate file. See the [Example Data Sources File](../examples/datasources.yaml) for more details.
 
 The location of the configuration file can be specified using the `-config` flag or the `AMASS_CONFIG` environment variable.
 
-Amass automatically tries to discover the configuration file (named `config.ini`) in the following locations:
+Amass automatically tries to discover the configuration file (named `config.yaml`) in the following locations:
 
 | Operating System | Path |
 | ---------------- | ---- |
-| Linux / Unix | `$XDG_CONFIG_HOME/amass/config.ini` or `$HOME/.config/amass/config.ini` or `/etc/amass/config.ini` |
-| Windows | `%AppData%\amass\config.ini` |
-| OSX | `$HOME/Library/Application Support/amass/config.ini` |
+| Linux / Unix | `$XDG_CONFIG_HOME/amass/config.yaml` or `$HOME/.config/amass/config.yaml` or `/etc/amass/config.yaml` |
+| Windows | `%AppData%\amass\config.yaml` |
+| OSX | `$HOME/Library/Application Support/amass/config.yaml` |
 
 These are good places for you to put your configuration file.
 
-Note that these locations are based on the [output directory](#the-output-directory). If you use the `-dir` flag, the location where Amass will try to discover the configuration file will change. For example, if you pass in `-dir ./my-out-dir`, Amass will try to discover a configuration file in `./my-out-dir/config.ini`.
+Note that these locations are based on the [output directory](#the-output-directory). If you use the `-dir` flag, the location where Amass will try to discover the configuration file will change. For example, if you pass in `-dir ./my-out-dir`, Amass will try to discover a configuration file in `./my-out-dir/config.yaml`.
 
 ### Default Section
 
