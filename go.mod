@@ -10,7 +10,7 @@ require (
 	github.com/chromedp/cdproto v0.0.0-20190721111337-61a0348ea0b1 // indirect
 	github.com/chromedp/chromedp v0.3.1 // indirect
 	github.com/dghubble/go-twitter v0.0.0-20190719072343-39e5462e111f
-	github.com/fatih/color v1.13.0
+	github.com/fatih/color v1.15.0
 	github.com/geziyor/geziyor v0.0.0-20190721090841-762854e5113a
 	github.com/go-ini/ini v1.67.0
 	github.com/go-kit/kit v0.9.0 // indirect
