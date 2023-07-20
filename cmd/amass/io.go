@@ -32,23 +32,24 @@ func NewOutput(ctx context.Context, g *netmap.Graph, e *enum.Enumeration, filter
 	}
 
 	var assets []*types.Asset
+	qtime := e.Config.CollectionStartTime.UTC()
 	for _, atype := range []oam.AssetType{oam.FQDN, oam.IPAddress, oam.Netblock, oam.ASN, oam.RIROrg} {
-		if a, err := g.DB.FindByType(atype, e.Config.CollectionStartTime.UTC()); err == nil {
+		if a, err := g.DB.FindByType(atype, qtime); err == nil {
 			assets = append(assets, a...)
 		}
 	}
 
 	for _, from := range assets {
-		fromstr := extractAssetName(from, e.Config.CollectionStartTime.UTC())
+		fromstr := extractAssetName(from, qtime)
 
-		if rels, err := g.DB.OutgoingRelations(from, e.Config.CollectionStartTime.UTC()); err == nil {
+		if rels, err := g.DB.OutgoingRelations(from, qtime); err == nil {
 			for _, rel := range rels {
 				lineid := from.ID + rel.ID + rel.ToAsset.ID
 				if filter.Has(lineid) {
 					continue
 				}
-				if to, err := g.DB.FindById(rel.ToAsset.ID, e.Config.CollectionStartTime.UTC()); err == nil {
-					tostr := extractAssetName(to, e.Config.CollectionStartTime.UTC())
+				if to, err := g.DB.FindById(rel.ToAsset.ID, qtime); err == nil {
+					tostr := extractAssetName(to, qtime)
 
 					output = append(output, fmt.Sprintf("%s %s %s %s %s", fromstr, "-->", magenta(rel.Type), "-->", tostr))
 					filter.Insert(lineid)
