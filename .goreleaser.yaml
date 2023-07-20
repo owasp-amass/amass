@@ -45,7 +45,8 @@ archives:
     files:
       - LICENSE
       - README.md
-      - examples/config.ini
+      - examples/config.yaml
+      - examples/datasources.yaml
 
 sboms:
   - documents:
@@ -75,7 +76,7 @@ release:
 brews:
   -
     name: amass
-    tap:
+    repository:
       owner: owasp-amass
       name: homebrew-amass
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
