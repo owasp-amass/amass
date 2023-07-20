@@ -1,0 +1,36 @@
+scope:
+  domains: # domain names to be in scope
+    - example.com
+  ips: # IP addresses to be in scope, multiple methods of inserting ip addresses can be used
+    - 192.0.2.1
+    - 192.0.2.2
+    - 192.168.0.3-8
+    - 192.168.0.10-192.168.0.20
+  asns: # ASNs that are to be in scope
+    - 1234
+    - 5678
+  cidrs: # CIDR ranges that are to be in scope
+    - 192.0.2.0/24
+    - 192.0.2.128/25
+  ports: # ports to be used when actively reaching a service
+    - 80
+    - 443
+  blacklist: # subdomains to be blacklisted
+    - example.example1.com
+options:
+  resolvers: 
+    - "../examples/resolvers.txt" # array of 1 path or multiple IPs to use as a resolver
+    - 76.76.19.19
+  datasources: "./datasources.yaml" # the file path that will point to the data source configuration
+  wordlist: # global wordlist(s) to uses 
+    - "./wordlists/deepmagic.com_top50kprefixes.txt"
+    - "./wordlists/deepmagic.com_top500prefixes.txt"
+  database: "postgres://username:password@localhost:5432/database?testing=works" # databases URI to be used when adding entries
+  bruteforce: # specific option to use when brute forcing is needed
+    enabled: true
+    wordlists: # wordlist(s) to use that are specific to brute forcing
+      - "./wordlists/subdomains-top1mil-5000.txt"
+  alterations: # specific option to use when brute forcing is needed
+    enabled: true
+    wordlists: # wordlist(s) to use that are specific to alterations
+      - "./wordlists/subdomains-top1mil-110000.txt"
