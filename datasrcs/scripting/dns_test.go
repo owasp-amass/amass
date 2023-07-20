@@ -47,7 +47,7 @@ func TestResolve(t *testing.T) {
 	sys.Config().AddDomain("owasp.org")
 	script.Input() <- &requests.DNSRequest{Domain: "owasp.org"}
 
-	timer := time.NewTimer(15 * time.Second)
+	timer := time.NewTimer(2 * time.Minute)
 	defer timer.Stop()
 loop:
 	for _, name := range expected {

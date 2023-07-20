@@ -189,15 +189,6 @@ func (s *Script) scrape(L *lua.LState) int {
 }
 
 func (s *Script) req(ctx context.Context, url, data string, hdr http.Header, auth *http.BasicAuth) (*http.Response, error) {
-	cfg := s.sys.Config()
-	// Check for cached responses first
-	dsc := cfg.GetDataSourceConfig(s.String())
-	if dsc != nil && dsc.TTL > 0 {
-		if r, err := s.getCachedResponse(ctx, url+data, dsc.TTL); err == nil {
-			return r, nil
-		}
-	}
-
 	method := "GET"
 	if data != "" {
 		method = "POST"
@@ -215,11 +206,11 @@ func (s *Script) req(ctx context.Context, url, data string, hdr http.Header, aut
 		Auth:   auth,
 	})
 	if err != nil {
+		cfg := s.sys.Config()
+
 		if cfg.Verbose {
 			cfg.Log.Printf("%s: %s: %v", s.String(), url, err)
 		}
-	} else if dsc != nil && dsc.TTL > 0 && resp != nil && resp.StatusCode >= 200 && resp.StatusCode < 400 {
-		_ = s.setCachedResponse(ctx, url+data, resp)
 	}
 	return resp, err
 }

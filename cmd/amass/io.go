@@ -6,6 +6,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"strconv"
 	"time"
@@ -49,7 +50,7 @@ func NewOutput(ctx context.Context, g *netmap.Graph, e *enum.Enumeration, filter
 				if to, err := g.DB.FindById(rel.ToAsset.ID, e.Config.CollectionStartTime.UTC()); err == nil {
 					tostr := extractAssetName(to, e.Config.CollectionStartTime.UTC())
 
-					output = append(output, fromstr+yellow(" --> ")+magenta(rel.Type)+yellow(" --> ")+tostr)
+					output = append(output, fmt.Sprintf("%s %s %s %s %s", fromstr, "-->", magenta(rel.Type), "-->", tostr))
 					filter.Insert(lineid)
 				}
 			}

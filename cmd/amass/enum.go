@@ -59,21 +59,17 @@ type enumArgs struct {
 	Trusted           *stringset.Set
 	Timeout           int
 	Options           struct {
-		Active          bool
-		Alterations     bool
-		BruteForcing    bool
-		DemoMode        bool
-		IPs             bool
-		IPv4            bool
-		IPv6            bool
-		ListSources     bool
-		NoAlts          bool
-		NoColor         bool
-		NoLocalDatabase bool
-		NoRecursive     bool
-		Passive         bool
-		Silent          bool
-		Verbose         bool
+		Active       bool
+		Alterations  bool
+		BruteForcing bool
+		DemoMode     bool
+		ListSources  bool
+		NoAlts       bool
+		NoColor      bool
+		NoRecursive  bool
+		Passive      bool
+		Silent       bool
+		Verbose      bool
 	}
 	Filepaths struct {
 		AllFilePrefix    string
@@ -119,21 +115,14 @@ func defineEnumArgumentFlags(enumFlags *flag.FlagSet, args *enumArgs) {
 }
 
 func defineEnumOptionFlags(enumFlags *flag.FlagSet, args *enumArgs) {
-	var placeholder bool
 	enumFlags.BoolVar(&args.Options.Active, "active", false, "Attempt zone transfers and certificate name grabs")
 	enumFlags.BoolVar(&args.Options.BruteForcing, "brute", false, "Execute brute forcing after searches")
 	enumFlags.BoolVar(&args.Options.DemoMode, "demo", false, "Censor output to make it suitable for demonstrations")
-	enumFlags.BoolVar(&args.Options.IPs, "ip", false, "Show the IP addresses for discovered names")
-	enumFlags.BoolVar(&args.Options.IPv4, "ipv4", false, "Show the IPv4 addresses for discovered names")
-	enumFlags.BoolVar(&args.Options.IPv6, "ipv6", false, "Show the IPv6 addresses for discovered names")
 	enumFlags.BoolVar(&args.Options.ListSources, "list", false, "Print the names of all available data sources")
 	enumFlags.BoolVar(&args.Options.Alterations, "alts", false, "Enable generation of altered names")
-	enumFlags.BoolVar(&args.Options.NoAlts, "noalts", true, "Deprecated flag to be removed in version 4.0")
 	enumFlags.BoolVar(&args.Options.NoColor, "nocolor", false, "Disable colorized output")
-	enumFlags.BoolVar(&placeholder, "nolocaldb", false, "Deprecated feature to be removed in version 4.0")
 	enumFlags.BoolVar(&args.Options.NoRecursive, "norecursive", false, "Turn off recursive brute forcing")
 	enumFlags.BoolVar(&args.Options.Passive, "passive", false, "Disable DNS resolution of names and dependent features")
-	enumFlags.BoolVar(&placeholder, "share", false, "Deprecated feature to be removed in version 4.0")
 	enumFlags.BoolVar(&args.Options.Silent, "silent", false, "Disable all output during execution")
 	enumFlags.BoolVar(&args.Options.Verbose, "v", false, "Output status / debug / troubleshooting info")
 }
@@ -148,7 +137,6 @@ func defineEnumFilepathFlags(enumFlags *flag.FlagSet, args *enumArgs) {
 	enumFlags.Var(&args.Filepaths.Domains, "df", "Path to a file providing root domain names")
 	enumFlags.StringVar(&args.Filepaths.ExcludedSrcs, "ef", "", "Path to a file providing data sources to exclude")
 	enumFlags.StringVar(&args.Filepaths.IncludedSrcs, "if", "", "Path to a file providing data sources to include")
-	enumFlags.StringVar(&args.Filepaths.JSONOutput, "json", "", "Path to the JSON output file")
 	enumFlags.StringVar(&args.Filepaths.LogFile, "log", "", "Path to the log file where errors will be written")
 	enumFlags.Var(&args.Filepaths.Names, "nf", "Path to a file providing already known subdomain names (from other tools/sources)")
 	enumFlags.Var(&args.Filepaths.Resolvers, "rf", "Path to a file providing untrusted DNS resolvers")
@@ -346,10 +334,6 @@ func argsAndConfig(clArgs []string) (*config.Config, *enumArgs) {
 		return nil, &args
 	}
 	// Some input validation
-	if cfg.Passive && (args.Options.IPs || args.Options.IPv4 || args.Options.IPv6) {
-		r.Fprintln(color.Error, "IP addresses cannot be provided without DNS resolution")
-		os.Exit(1)
-	}
 	if !cfg.Active && len(args.Ports) > 0 {
 		r.Fprintln(color.Error, "Ports can only be scanned in the active mode")
 		os.Exit(1)
@@ -367,7 +351,6 @@ func printOutput(e *enum.Enumeration, args *enumArgs, output chan string, wg *sy
 	var total int
 	// Print all the output returned by the enumeration
 	for out := range output {
-		//fmt.Fprintf(color.Output, "%s%s\n", green(name), yellow(ips))
 		fmt.Fprintf(color.Output, "%s\n", out)
 		total++
 	}
