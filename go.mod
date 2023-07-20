@@ -15,7 +15,6 @@ require (
 	github.com/go-ini/ini v1.67.0
 	github.com/go-kit/kit v0.9.0 // indirect
 	github.com/gobwas/ws v1.0.2 // indirect
-	github.com/golang/protobuf v1.3.2 // indirect
 	github.com/google/uuid v1.3.0
 	github.com/irfansharif/cfilter v0.1.1
 	github.com/jmoiron/sqlx v1.3.5
@@ -26,7 +25,7 @@ require (
 	github.com/prometheus/procfs v0.0.3 // indirect
 	github.com/qasaur/gremgo v0.0.0-20180719101618-fa23ada7c5da
 	github.com/robertkrimen/otto v0.0.0-20180617131154-15f95af6e78d // indirect
-	golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45
+	golang.org/x/oauth2 v0.7.0
 	gopkg.in/sourcemap.v1 v1.0.5 // indirect
 	github.com/PuerkitoBio/goquery v1.8.1
 	github.com/caffix/netmap v0.2.3
