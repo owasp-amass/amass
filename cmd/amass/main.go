@@ -75,7 +75,6 @@ func commandUsage(msg string, cmdFlagSet *flag.FlagSet, errBuf *bytes.Buffer) {
 		g.Fprintf(color.Error, "\nSubcommands: \n\n")
 		g.Fprintf(color.Error, "\t%-11s - Discover targets for enumerations\n", "amass intel")
 		g.Fprintf(color.Error, "\t%-11s - Perform enumerations and network mapping\n", "amass enum")
-		g.Fprintf(color.Error, "\t%-11s - Track differences between enumerations\n", "amass track")
 		g.Fprintf(color.Error, "\t%-11s - Manipulate the Amass graph database\n", "amass db")
 	}
 
