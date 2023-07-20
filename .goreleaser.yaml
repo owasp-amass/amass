@@ -1,5 +1,4 @@
-env:
-  - GO111MODULE=on
+project_name: amass
 
 before:
   hooks:
@@ -13,89 +12,82 @@ builds:
       - windows
       - linux
       - darwin
+      - freebsd
     goarch:
       - amd64
       - 386
-    env:
-      - CGO_ENABLED=0
+      - arm
+      - arm64
     ignore:
       - goos: darwin
         goarch: 386
+      - goos: darwin
+        goarch: arm
       - goos: windows
         goarch: 386
+      - goos: windows
+        goarch: arm
+      - goos: windows
+        goarch: arm64
+      - goos: freebsd
+        goarch: arm
 
 archives:
   -
-    name_template: "amass_{{ .Tag }}_{{ .Os }}_{{ .Arch }}"
-    replacements:
-      darwin: macos
-      386: i386
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "darwin" }}macos
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
     wrap_in_directory: true
     format: zip
     files:
       - LICENSE
       - README.md
-      - doc/*
-      - wordlists/*
+      - examples/config.yaml
+      - examples/datasources.yaml
+
+sboms:
+  - documents:
+      - "{{ .Binary }}_{{ .Os }}_{{ .Arch }}.bom.json"
+    artifacts: binary
+    cmd: cyclonedx-gomod
+    env:
+      - GOOS={{ .Os }}
+      - GOARCH={{ .Arch }}
+    args: [ "app", "-main", "cmd/amass", "-licenses", "-packages", "-json", "-output", "$document", "../" ]
 
 checksum:
-  name_template: "amass_checksums.txt"
+  name_template: "{{ .ProjectName }}_checksums.txt"
 
 changelog:
-  sort: asc
+  sort: desc
   filters:
     exclude:
-    - '^doc:'
-    - '^test:'
+    - '^MERGE'
+    - "{{ .Tag }}"
 
 release:
   github:
-    owner: OWASP
-    name: Amass
-
-dockers:
-  -
-    dockerfile: Dockerfile
-    image_templates:
-      - "caffix/amass:v{{ .Major }}"
-      - "caffix/amass:v{{ .Major }}.{{ .Minor }}"
-      - "caffix/amass:{{ .Tag }}"
-      - "caffix/amass:latest"
+    owner: owasp-amass
+    name: amass
 
 brews:
   -
     name: amass
-    github:
-      owner: caffix
+    repository:
+      owner: owasp-amass
       name: homebrew-amass
-    url_template: "https://github.com/OWASP/Amass/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    url_template: "https://github.com/owasp-amass/amass/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
     commit_author:
       name: caffix
       email: caffix@users.noreply.github.com
     folder: Formula
-    homepage: "https://www.owasp.org/index.php/OWASP_Amass_Project"
-    description: "In-depth DNS Enumeration and Network Mapping"
-
-snapcrafts:
-  -
-    name: amass
-    # Remember you need to `snapcraft login` first.
-    publish: true
-    summary: In-depth DNS Enumeration and Network Mapping.
-    description: The OWASP Amass Project has developed a tool to help information security professionals perform network mapping of attack surfaces and external asset discovery using open source information gathering and active reconnaissance techniques.
-    grade: stable
-    confinement: strict
-    # Your app's license, based on SPDX license expressions: https://spdx.org/licenses
-    license: Apache-2.0	
-
-    apps:
-      amass:
-        plugs: ["home", "network", "removable-media"]
-#        plugs: ["home", "network", "removable-media", "personal-files"]
-
-#    plugs:
-#      personal-files:
-#        read:
-#        - $HOME/.amass
-#        write:
-#        - $HOME/.amass
+    homepage: "https://owasp.org/www-project-amass/"
+    description: "In-depth Attack Surface Mapping and Asset Discovery"
+    test: |
+      system "#{bin}/amass --version"
+    install: |
+      bin.install "amass"
