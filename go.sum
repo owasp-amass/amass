@@ -435,8 +435,8 @@ github.com/orisano/pixelmatch v0.0.0-20220722002657-fb0b55479cde h1:x0TT0RDC7UhA
 github.com/orisano/pixelmatch v0.0.0-20220722002657-fb0b55479cde/go.mod h1:nZgzbfBr3hhjoZnS66nKrHmduYNpc34ny7RK4z5/HM0=
 github.com/owasp-amass/asset-db v0.3.0 h1:G3qZhFHc/k1b89oyRDgqzgVsrh6oVApxlx+anSEKhKE=
 github.com/owasp-amass/asset-db v0.3.0/go.mod h1:ylDCIg2bFmQChSdjr8rJAdVFX/XAHECSedMM9fiCW7w=
-github.com/owasp-amass/config v0.1.1 h1:di9E5gNc88ogjP1rbALwTPZt+vZvwgWzgJJ4rOW4Enw=
-github.com/owasp-amass/config v0.1.1/go.mod h1:yHt9hXf96xpJPi+OiV/xK6m5XZ14cQ2UdxHis6CC2Ds=
+github.com/owasp-amass/config v0.1.2 h1:Lzl8zUbxS0IGI0qrmn/vIsNllnBZmfWPwy6nZTzlnvg=
+github.com/owasp-amass/config v0.1.2/go.mod h1:kJd/esucV/7rdCZr2K+6ePSmKJcmMQpL5fP1UPLZ9/Y=
 github.com/owasp-amass/open-asset-model v0.1.0-alpha.0.20230622033932-2f80ca929692 h1:s5k5cTCRbVbIoRIwA44oWB4j/GGaYrmq1H3yqX1ic5A=
 github.com/owasp-amass/open-asset-model v0.1.0-alpha.0.20230622033932-2f80ca929692/go.mod h1:nwviDUc6sKkHScZFwXeNJNP2M4pgMTvB7we5r+EfNSk=
 github.com/owasp-amass/resolve v0.6.20 h1:wy4v+Z8sfQhn5Q+eVbQ6sb/b0wREfdauOL9SJzQyyNA=
