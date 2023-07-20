@@ -92,9 +92,9 @@ func extractAssetName(a *types.Asset, since time.Time) string {
 // ExtractOutput is a convenience method for obtaining new discoveries made by the enumeration process.
 func ExtractOutput(ctx context.Context, g *netmap.Graph, e *enum.Enumeration, filter *stringset.Set, asinfo bool) []*requests.Output {
 	if e.Config.Passive {
-		return EventNames(ctx, g, e.Config.Domains(), e.Config.CollectionStartTime.UTC(), filter)
+		return EventNames(ctx, g, e.Config.Domains(), e.Config.CollectionStartTime, filter)
 	}
-	return EventOutput(ctx, g, e.Config.Domains(), e.Config.CollectionStartTime.UTC(), filter, asinfo, e.Sys.Cache())
+	return EventOutput(ctx, g, e.Config.Domains(), e.Config.CollectionStartTime, filter, asinfo, e.Sys.Cache())
 }
 
 type outLookup map[string]*requests.Output
@@ -118,7 +118,12 @@ func EventOutput(ctx context.Context, g *netmap.Graph, domains []string, since t
 		fqdns = append(fqdns, domain.FQDN{Name: d})
 	}
 
-	assets, err := g.DB.FindByScope(fqdns, since)
+	qtime := time.Time{}
+	if !since.IsZero() {
+		qtime = since.UTC()
+	}
+
+	assets, err := g.DB.FindByScope(fqdns, qtime)
 	if err != nil {
 		return res
 	}
@@ -226,7 +231,12 @@ func EventNames(ctx context.Context, g *netmap.Graph, domains []string, since ti
 		fqdns = append(fqdns, domain.FQDN{Name: d})
 	}
 
-	assets, err := g.DB.FindByScope(fqdns, since)
+	qtime := time.Time{}
+	if !since.IsZero() {
+		qtime = since.UTC()
+	}
+
+	assets, err := g.DB.FindByScope(fqdns, qtime)
 	if err != nil {
 		return res
 	}

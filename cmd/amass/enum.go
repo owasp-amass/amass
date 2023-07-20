@@ -356,7 +356,7 @@ func printOutput(e *enum.Enumeration, args *enumArgs, output chan string, wg *sy
 	}
 
 	if total == 0 {
-		r.Println("No names were discovered")
+		r.Println("No assets were discovered")
 	}
 }
 
