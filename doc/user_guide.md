@@ -187,7 +187,7 @@ If you decide to use an Amass configuration file, it will be automatically disco
 
 ## The Configuration File
 
-You will need a config file to use your API keys with Amass. See the [Example Configuration File](../examples/config.yaml) for more details.
+Configuration files are provided so users can specify the scope and options with Amass. See the [Example Configuration File](../examples/config.yaml) for more details.
 
 API keys for data sources are stored in a separate file. See the [Example Data Sources File](../examples/datasources.yaml) for more details.
 
