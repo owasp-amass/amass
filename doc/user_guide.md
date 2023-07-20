@@ -305,3 +305,19 @@ All Amass enumeration findings are stored in a graph database. This database is 
 When a new enumeration begins and a graph database already exists with previous findings for the same target(s), the subdomain names from those previous enumerations are utilized in the new enumeration. New DNS queries are performed against those subdomain names to ensure that they are still legitimate and to obtain current IP addresses.
 
 There is nothing preventing multiple users from sharing a single (remote) graph database and leveraging each others findings across enumerations.
+
+### Setting up PostgreSQL for OWASP Amass
+
+Once you have the postgres server running on your machine and access to the psql tool, execute the follow two commands to initialize your amass database:
+
+```bash
+psql postgres://username:password@localhost:5432/ -c "CREATE DATABASE amass"
+psql postgres://username:password@localhost:5432/ -c "ALTER DATABASE amass SET TIMEZONE to 'UTC'"
+```
+
+Now you can add the following setting into your Amass `config.yaml` file for storing and analyzing attack surface discoveries using PostgreSQL:
+
+```yaml
+options:
+  database: "postgres://username:password@localhost:5432/amass?testing=works"
+```
