@@ -175,6 +175,13 @@ func runEnumCommand(clArgs []string) {
 		r.Fprintf(color.Error, "%v\n", err)
 		os.Exit(1)
 	}
+
+	if cfg.Passive {
+		fmt.Fprintf(color.Error, "%s\n", green("Passive mode does not generate output during the enumeration"))
+		fmt.Fprintf(color.Error, "\t%s\n", green("Obtain your list of FQDNs using the following command:"))
+		fmt.Fprintf(color.Error, "\t%s\n", green("amass db -names -d "+strings.Join(cfg.Domains(), ",")))
+	}
+
 	// Setup the new enumeration
 	e := enum.NewEnumeration(cfg, sys, sys.GraphDatabases()[0])
 	if e == nil {
@@ -355,8 +362,8 @@ func printOutput(e *enum.Enumeration, args *enumArgs, output chan string, wg *sy
 		total++
 	}
 
-	if total == 0 {
-		r.Println("No names were discovered")
+	if !e.Config.Passive && total == 0 {
+		r.Println("No assets were discovered")
 	}
 }
 

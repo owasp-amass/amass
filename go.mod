@@ -32,6 +32,7 @@ require (
 	gopkg.in/sourcemap.v1 v1.0.5 // indirect
 	github.com/PuerkitoBio/goquery v1.8.1
 	github.com/caffix/netmap v0.2.3
+	github.com/caffix/netmap v0.2.4
 	github.com/caffix/pipeline v0.2.2
 	github.com/caffix/queue v0.1.4
 	github.com/caffix/service v0.3.0
@@ -40,7 +41,7 @@ require (
 	github.com/fatih/color v1.15.0
 	github.com/geziyor/geziyor v0.0.0-20230315135110-a242b58aaa65
 	github.com/miekg/dns v1.1.55
-	github.com/owasp-amass/asset-db v0.3.0
+	github.com/owasp-amass/asset-db v0.3.1
 	github.com/owasp-amass/config v0.1.2
 	github.com/owasp-amass/open-asset-model v0.1.0-alpha.0.20230622033932-2f80ca929692
 	github.com/owasp-amass/resolve v0.6.20
@@ -91,7 +92,6 @@ require (
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.19 // indirect
-	github.com/mattn/go-sqlite3 v1.14.17 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.4 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
@@ -100,7 +100,7 @@ require (
 	github.com/prometheus/common v0.44.0 // indirect
 	github.com/prometheus/procfs v0.11.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
-	github.com/rubenv/sql-migrate v1.5.1 // indirect
+	github.com/rubenv/sql-migrate v1.5.2 // indirect
 	github.com/sirupsen/logrus v1.9.0 // indirect
 	github.com/temoto/robotstxt v1.1.2 // indirect
 	go.uber.org/ratelimit v0.3.0 // indirect
@@ -115,7 +115,6 @@ require (
 	gorm.io/datatypes v1.2.0 // indirect
 	gorm.io/driver/mysql v1.5.1 // indirect
 	gorm.io/driver/postgres v1.5.2 // indirect
-	gorm.io/driver/sqlite v1.5.2 // indirect
 	gorm.io/gorm v1.25.2 // indirect
 	modernc.org/libc v1.24.1 // indirect
 	modernc.org/mathutil v1.6.0 // indirect

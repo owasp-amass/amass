@@ -56,7 +56,7 @@ All subcommands have some default global arguments that can be seen below.
 | Flag | Description | Example |
 |------|-------------|---------|
 | -h/-help | Show the program usage message | amass subcommand -h |
-| -config | Path to the INI configuration file | amass subcommand -config config.ini |
+| -config | Path to the YAML configuration file | amass subcommand -config config.yaml |
 | -dir | Path to the directory containing the graph database | amass subcommand -dir PATH -d example.com |
 | -nocolor | Disable colorized output | amass subcommand -nocolor -d example.com |
 | -silent | Disable all output during execution | amass subcommand -silent -json out.json -d example.com |
@@ -183,25 +183,27 @@ Amass has several files that it outputs during an enumeration (e.g. the log file
 
 By default, the output directory is created in the operating system default root directory to use for user-specific configuration data and named *amass*. If this is not suitable for your needs, then the subcommands can be instructed to create the output directory in an alternative location using the **'-dir'** flag.
 
-If you decide to use an Amass configuration file, it will be automatically discovered when put in the output directory and named **config.ini**.
+If you decide to use an Amass configuration file, it will be automatically discovered when put in the output directory and named **config.yaml**.
 
 ## The Configuration File
 
-You will need a config file to use your API keys with Amass. See the [Example Configuration File](../examples/config.ini) for more details.
+Configuration files are provided so users can specify the scope and options with Amass. See the [Example Configuration File](../examples/config.yaml) for more details.
+
+API keys for data sources are stored in a separate file. See the [Example Data Sources File](../examples/datasources.yaml) for more details.
 
 The location of the configuration file can be specified using the `-config` flag or the `AMASS_CONFIG` environment variable.
 
-Amass automatically tries to discover the configuration file (named `config.ini`) in the following locations:
+Amass automatically tries to discover the configuration file (named `config.yaml`) in the following locations:
 
 | Operating System | Path |
 | ---------------- | ---- |
-| Linux / Unix | `$XDG_CONFIG_HOME/amass/config.ini` or `$HOME/.config/amass/config.ini` or `/etc/amass/config.ini` |
-| Windows | `%AppData%\amass\config.ini` |
-| OSX | `$HOME/Library/Application Support/amass/config.ini` |
+| Linux / Unix | `$XDG_CONFIG_HOME/amass/config.yaml` or `$HOME/.config/amass/config.yaml` or `/etc/amass/config.yaml` |
+| Windows | `%AppData%\amass\config.yaml` |
+| OSX | `$HOME/Library/Application Support/amass/config.yaml` |
 
 These are good places for you to put your configuration file.
 
-Note that these locations are based on the [output directory](#the-output-directory). If you use the `-dir` flag, the location where Amass will try to discover the configuration file will change. For example, if you pass in `-dir ./my-out-dir`, Amass will try to discover a configuration file in `./my-out-dir/config.ini`.
+Note that these locations are based on the [output directory](#the-output-directory). If you use the `-dir` flag, the location where Amass will try to discover the configuration file will change. For example, if you pass in `-dir ./my-out-dir`, Amass will try to discover a configuration file in `./my-out-dir/config.yaml`.
 
 ### Default Section
 
@@ -303,3 +305,19 @@ All Amass enumeration findings are stored in a graph database. This database is 
 When a new enumeration begins and a graph database already exists with previous findings for the same target(s), the subdomain names from those previous enumerations are utilized in the new enumeration. New DNS queries are performed against those subdomain names to ensure that they are still legitimate and to obtain current IP addresses.
 
 There is nothing preventing multiple users from sharing a single (remote) graph database and leveraging each others findings across enumerations.
+
+### Setting up PostgreSQL for OWASP Amass
+
+Once you have the postgres server running on your machine and access to the psql tool, execute the follow two commands to initialize your amass database:
+
+```bash
+psql postgres://username:password@localhost:5432/ -c "CREATE DATABASE amass"
+psql postgres://username:password@localhost:5432/ -c "ALTER DATABASE amass SET TIMEZONE to 'UTC'"
+```
+
+Now you can add the following setting into your Amass `config.yaml` file for storing and analyzing attack surface discoveries using PostgreSQL:
+
+```yaml
+options:
+  database: "postgres://username:password@localhost:5432/amass?testing=works"
+```

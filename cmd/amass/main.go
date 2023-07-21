@@ -48,7 +48,7 @@ import (
 
 const (
 	mainUsageMsg         = "intel|enum|db [options]"
-	exampleConfigFileURL = "https://github.com/owasp-amass/amass/blob/master/examples/config.ini"
+	exampleConfigFileURL = "https://github.com/owasp-amass/amass/blob/master/examples/config.yaml"
 	userGuideURL         = "https://github.com/owasp-amass/amass/blob/master/doc/user_guide.md"
 	tutorialURL          = "https://github.com/owasp-amass/amass/blob/master/doc/tutorial.md"
 )
@@ -190,11 +190,24 @@ func createOutputDirectory(cfg *config.Config) {
 }
 
 func openGraphDatabase(dir string, cfg *config.Config) *netmap.Graph {
-	if db := cfg.LocalDatabaseSettings(cfg.GraphDBs); db != nil {
-		f := filepath.Join(config.OutputDirectory(dir), "amass.sqlite")
+	// Add the local database settings to the configuration
+	cfg.GraphDBs = append(cfg.GraphDBs, cfg.LocalDatabaseSettings(cfg.GraphDBs))
 
-		if g := netmap.NewGraph("local", f, ""); g != nil {
-			return g
+	for _, db := range cfg.GraphDBs {
+		if db.Primary {
+			var g *netmap.Graph
+
+			if db.System == "local" {
+				g = netmap.NewGraph(db.System, filepath.Join(config.OutputDirectory(cfg.Dir), "amass.sqlite"), db.Options)
+			} else {
+				connStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s", db.Host, db.Port, db.Username, db.Password, db.DBName)
+				g = netmap.NewGraph(db.System, connStr, db.Options)
+			}
+
+			if g != nil {
+				return g
+			}
+			break
 		}
 	}
 

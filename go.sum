@@ -173,8 +173,8 @@ github.com/go-ini/ini v1.66.4/go.mod h1:ByCAeIL28uOIIG0E3PJtZPDL8WnHpFKFOtgjp+3I
 github.com/beorn7/perks v1.0.1 h1:VlbKKnNfV8bJzeqoa4cOKqO6bYr3WgKZxO8Z16+hsOM=
 github.com/beorn7/perks v1.0.1/go.mod h1:G2ZrVWU2WbWT9wwq4/hrbKbnv/1ERSJQ0ibhJ6rlkpw=
 github.com/bgentry/speakeasy v0.1.0/go.mod h1:+zsyZBPWlz7T6j88CTgSN5bM796AkVf0kBD4zp0CCIs=
-github.com/caffix/netmap v0.2.3 h1:QFPh6yKdAnt0Flq3k1pJm/hNuXoKzTYGrcbX3d/BTlM=
-github.com/caffix/netmap v0.2.3/go.mod h1:IApB4oO5vb3Oq1Slv4xlfZLrBBzuRor8xW7hAJ0C/hE=
+github.com/caffix/netmap v0.2.4 h1:mzgmk0u+khenSw2qjG8T/KwDmt9Pdb7X4MRPjU99Ghw=
+github.com/caffix/netmap v0.2.4/go.mod h1:Qnm5FUdqf7Ey7IiScgdg8FT7m/6y3XhoG8Z+ZJZtYI0=
 github.com/caffix/pipeline v0.2.2 h1:d1l7CiBe7jFDc4ksvnNgHVb3XlVlCRFXFo3I6guksuQ=
 github.com/caffix/pipeline v0.2.2/go.mod h1:NlUnsifT5h0B9C51DPdp99KjlZjREnE0Iev7R8gEn/s=
 github.com/caffix/queue v0.1.4 h1:sQbFzwGaPM1tRnQHWCgHOwj7hLuhDQ3BhY1/1TFbBiE=
@@ -599,7 +599,6 @@ github.com/mattn/go-isatty v0.0.16/go.mod h1:kYGgaQfpe5nmfYZH+SKPsOc2e4SrIfOl2e/
 github.com/mattn/go-isatty v0.0.19 h1:JITubQf0MOLdlGRuRq+jtsDlekdYPia9ZFsB8h/APPA=
 github.com/mattn/go-isatty v0.0.19/go.mod h1:W+V8PltTTMOvKvAeJH7IuucS94S2C6jfK/D7dTCTo3Y=
 github.com/mattn/go-sqlite3 v1.14.17 h1:mCRHCLDUBXgpKAqIKsaAaAsrAlbkeomtRFKXh2L6YIM=
-github.com/mattn/go-sqlite3 v1.14.17/go.mod h1:2eHXhiwb8IkHr+BDWZGa96P6+rkvnG63S2DGjv9HUNg=
 github.com/matttproud/golang_protobuf_extensions v1.0.1/go.mod h1:D8He9yQNgCq6Z5Ld7szi9bcBfOoFv/3dc6xSMkL2PC0=
 github.com/matttproud/golang_protobuf_extensions v1.0.4 h1:mmDVorXM7PCGKw94cs5zkfA9PSy5pEvNWRP0ET0TIVo=
 github.com/matttproud/golang_protobuf_extensions v1.0.4/go.mod h1:BSXmuO+STAnVfrANrmjBb36TMTDstsz7MSK+HVaYKv4=
@@ -662,8 +661,8 @@ github.com/openzipkin/zipkin-go v0.2.5/go.mod h1:KpXfKdgRDnnhsxw4pNIH9Md5lyFqKUa
 github.com/orisano/pixelmatch v0.0.0-20210112091706-4fa4c7ba91d5/go.mod h1:nZgzbfBr3hhjoZnS66nKrHmduYNpc34ny7RK4z5/HM0=
 github.com/orisano/pixelmatch v0.0.0-20220722002657-fb0b55479cde h1:x0TT0RDC7UhAVbbWWBzr41ElhJx5tXPWkIHA2HWPRuw=
 github.com/orisano/pixelmatch v0.0.0-20220722002657-fb0b55479cde/go.mod h1:nZgzbfBr3hhjoZnS66nKrHmduYNpc34ny7RK4z5/HM0=
-github.com/owasp-amass/asset-db v0.3.0 h1:G3qZhFHc/k1b89oyRDgqzgVsrh6oVApxlx+anSEKhKE=
-github.com/owasp-amass/asset-db v0.3.0/go.mod h1:ylDCIg2bFmQChSdjr8rJAdVFX/XAHECSedMM9fiCW7w=
+github.com/owasp-amass/asset-db v0.3.1 h1:YNM60WYr2k6bJmgju7zrKs5dHfvs7BUg0pewhERk49E=
+github.com/owasp-amass/asset-db v0.3.1/go.mod h1:ylDCIg2bFmQChSdjr8rJAdVFX/XAHECSedMM9fiCW7w=
 github.com/owasp-amass/config v0.1.2 h1:Lzl8zUbxS0IGI0qrmn/vIsNllnBZmfWPwy6nZTzlnvg=
 github.com/owasp-amass/config v0.1.2/go.mod h1:kJd/esucV/7rdCZr2K+6ePSmKJcmMQpL5fP1UPLZ9/Y=
 github.com/owasp-amass/open-asset-model v0.1.0-alpha.0.20230622033932-2f80ca929692 h1:s5k5cTCRbVbIoRIwA44oWB4j/GGaYrmq1H3yqX1ic5A=
@@ -756,8 +755,8 @@ github.com/rogpeppe/fastuuid v1.2.0/go.mod h1:jVj6XXZzXRy/MSR5jhDC/2q6DgLz+nrA6L
 github.com/rogpeppe/go-charset v0.0.0-20180617210344-2471d30d28b4/go.mod h1:qgYeAmZ5ZIpBWTGllZSQnw97Dj+woV0toclVaRGI8pc=
 github.com/rogpeppe/go-internal v1.3.0/go.mod h1:M8bDsm7K2OlrFYOpmOWEs/qY81heoFRclV5y23lUDJ4=
 github.com/rogpeppe/go-internal v1.10.0 h1:TMyTOH3F/DB16zRVcYyreMH6GnZZrwQVAoYjRBZyWFQ=
-github.com/rubenv/sql-migrate v1.5.1 h1:WsZo4jPQfjmddDTh/suANP2aKPA7/ekN0LzuuajgQEo=
-github.com/rubenv/sql-migrate v1.5.1/go.mod h1:H38GW8Vqf8F0Su5XignRyaRcbXbJunSWxs+kmzlg0Is=
+github.com/rubenv/sql-migrate v1.5.2 h1:bMDqOnrJVV/6JQgQ/MxOpU+AdO8uzYYA/TxFUBzFtS0=
+github.com/rubenv/sql-migrate v1.5.2/go.mod h1:H38GW8Vqf8F0Su5XignRyaRcbXbJunSWxs+kmzlg0Is=
 github.com/russross/blackfriday v1.5.2/go.mod h1:JO/DiYxRf+HjHt06OyowR9PTA263kcR/rfWxYHBV53g=
 github.com/ryanuber/columnize v0.0.0-20160712163229-9b3edd62028f/go.mod h1:sm1tb6uqfes/u+d4ooFouqFdy9/2g9QGwK3SQygK0Ts=
 github.com/sean-/seed v0.0.0-20170313163322-e2103e2c3529/go.mod h1:DxrIzT+xaE7yg65j358z/aeFdxmN0P9QXhEzd20vsDc=
@@ -1452,7 +1451,6 @@ gorm.io/driver/mysql v1.5.1/go.mod h1:Jo3Xu7mMhCyj8dlrb3WoCaRd1FhsVh+yMXb1jUInf5
 gorm.io/driver/postgres v1.5.2 h1:ytTDxxEv+MplXOfFe3Lzm7SjG09fcdb3Z/c056DTBx0=
 gorm.io/driver/postgres v1.5.2/go.mod h1:fmpX0m2I1PKuR7mKZiEluwrP3hbs+ps7JIGMUBpCgl8=
 gorm.io/driver/sqlite v1.5.2 h1:TpQ+/dqCY4uCigCFyrfnrJnrW9zjpelWVoEVNy5qJkc=
-gorm.io/driver/sqlite v1.5.2/go.mod h1:qxAuCol+2r6PannQDpOP1FP6ag3mKi4esLnB/jHed+4=
 gorm.io/driver/sqlserver v1.4.1 h1:t4r4r6Jam5E6ejqP7N82qAJIJAht27EGT41HyPfXRw0=
 gorm.io/gorm v1.25.1/go.mod h1:L4uxeKpfBml98NYqVqwAdmV1a2nBtAec/cf3fpucW/k=
 gorm.io/gorm v1.25.2 h1:gs1o6Vsa+oVKG/a9ElL3XgyGfghFfkKA2SInQaCyMho=
