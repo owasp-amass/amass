@@ -234,5 +234,5 @@ datasources:
 
 # this is the global options that will be considered. For example, minimum_ttl would be a global option used to compare
 # the minimum_ttl to the other datasources ttl.
-#global_options: 
-#  minimum_ttl: 1440
+global_options: 
+  minimum_ttl: 1440
