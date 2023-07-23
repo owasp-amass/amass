@@ -38,7 +38,7 @@ function has_cname(records)
     end
 
     for _, rec in pairs(records) do
-        if rec.rrtype == 5 then
+        if (rec.rrtype == 5) then
             return true
         end
     end

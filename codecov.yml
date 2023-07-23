@@ -2,7 +2,7 @@ codecov:
   disable_default_path_fixes: yes
 
 fixes:
-  - "github.com/owasp-amass/amass/v3/::github.com/owasp-amass/amass/"
+  - "github.com/owasp-amass/amass/v4/::github.com/owasp-amass/amass/"
 
 ignore:
   - encode_optype.go

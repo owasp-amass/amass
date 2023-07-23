@@ -13,13 +13,13 @@ import (
 	"strings"
 	"time"
 
-	amassnet "github.com/owasp-amass/amass/v3/net"
-	amassdns "github.com/owasp-amass/amass/v3/net/dns"
-	"github.com/owasp-amass/amass/v3/requests"
 	"github.com/caffix/pipeline"
 	"github.com/caffix/queue"
-	"github.com/owasp-amass/resolve"
 	"github.com/miekg/dns"
+	amassnet "github.com/owasp-amass/amass/v4/net"
+	amassdns "github.com/owasp-amass/amass/v4/net/dns"
+	"github.com/owasp-amass/amass/v4/requests"
+	"github.com/owasp-amass/resolve"
 	bf "github.com/tylertreat/BoomFilters"
 	"golang.org/x/net/publicsuffix"
 )
@@ -154,11 +154,9 @@ func (dm *dataManager) insertCNAME(ctx context.Context, req *requests.DNSRequest
 	dm.enum.nameSrc.newName(&requests.DNSRequest{
 		Name:   target,
 		Domain: strings.ToLower(domain),
-		Tag:    requests.DNS,
-		Source: "DNS",
 	})
-	if err := dm.enum.graph.UpsertCNAME(ctx, req.Name, target, req.Source, dm.enum.Config.UUID.String()); err != nil {
-		return fmt.Errorf("%s failed to insert CNAME: %v", dm.enum.graph, err)
+	if err := dm.enum.graph.UpsertCNAME(ctx, req.Name, target); err != nil {
+		return fmt.Errorf("failed to insert CNAME: %v", err)
 	}
 	return nil
 }
@@ -173,11 +171,9 @@ func (dm *dataManager) insertA(ctx context.Context, req *requests.DNSRequest, re
 		Address: addr,
 		InScope: true,
 		Domain:  req.Domain,
-		Tag:     requests.DNS,
-		Source:  "DNS",
 	})
-	if err := dm.enum.graph.UpsertA(ctx, req.Name, addr, req.Source, dm.enum.Config.UUID.String()); err != nil {
-		return fmt.Errorf("%s failed to insert A record: %v", dm.enum.graph, err)
+	if err := dm.enum.graph.UpsertA(ctx, req.Name, addr); err != nil {
+		return fmt.Errorf("failed to insert A record: %v", err)
 	}
 	return nil
 }
@@ -192,11 +188,9 @@ func (dm *dataManager) insertAAAA(ctx context.Context, req *requests.DNSRequest,
 		Address: addr,
 		InScope: true,
 		Domain:  req.Domain,
-		Tag:     requests.DNS,
-		Source:  "DNS",
 	})
-	if err := dm.enum.graph.UpsertAAAA(ctx, req.Name, addr, req.Source, dm.enum.Config.UUID.String()); err != nil {
-		return fmt.Errorf("%s failed to insert AAAA record: %v", dm.enum.graph, err)
+	if err := dm.enum.graph.UpsertAAAA(ctx, req.Name, addr); err != nil {
+		return fmt.Errorf("failed to insert AAAA record: %v", err)
 	}
 	return nil
 }
@@ -215,11 +209,9 @@ func (dm *dataManager) insertPTR(ctx context.Context, req *requests.DNSRequest, 
 	dm.enum.nameSrc.newName(&requests.DNSRequest{
 		Name:   target,
 		Domain: domain,
-		Tag:    req.Tag,
-		Source: req.Source,
 	})
-	if err := dm.enum.graph.UpsertPTR(ctx, req.Name, target, req.Source, dm.enum.Config.UUID.String()); err != nil {
-		return fmt.Errorf("%s failed to insert PTR record: %v", dm.enum.graph, err)
+	if err := dm.enum.graph.UpsertPTR(ctx, req.Name, target); err != nil {
+		return fmt.Errorf("failed to insert PTR record: %v", err)
 	}
 	return nil
 }
@@ -234,12 +226,10 @@ func (dm *dataManager) insertSRV(ctx context.Context, req *requests.DNSRequest, 
 		dm.enum.nameSrc.newName(&requests.DNSRequest{
 			Name:   target,
 			Domain: domain,
-			Tag:    requests.DNS,
-			Source: "DNS",
 		})
 	}
-	if err := dm.enum.graph.UpsertSRV(ctx, req.Name, service, target, req.Source, dm.enum.Config.UUID.String()); err != nil {
-		return fmt.Errorf("%s failed to insert SRV record: %v", dm.enum.graph, err)
+	if err := dm.enum.graph.UpsertSRV(ctx, service, target); err != nil {
+		return fmt.Errorf("failed to insert SRV record: %v", err)
 	}
 	return nil
 }
@@ -258,12 +248,10 @@ func (dm *dataManager) insertNS(ctx context.Context, req *requests.DNSRequest, r
 		dm.enum.nameSrc.newName(&requests.DNSRequest{
 			Name:   target,
 			Domain: d,
-			Tag:    requests.DNS,
-			Source: "DNS",
 		})
 	}
-	if err := dm.enum.graph.UpsertNS(ctx, req.Name, target, req.Source, dm.enum.Config.UUID.String()); err != nil {
-		return fmt.Errorf("%s failed to insert NS record: %v", dm.enum.graph, err)
+	if err := dm.enum.graph.UpsertNS(ctx, req.Name, target); err != nil {
+		return fmt.Errorf("failed to insert NS record: %v", err)
 	}
 	return nil
 }
@@ -282,12 +270,10 @@ func (dm *dataManager) insertMX(ctx context.Context, req *requests.DNSRequest, r
 		dm.enum.nameSrc.newName(&requests.DNSRequest{
 			Name:   target,
 			Domain: d,
-			Tag:    requests.DNS,
-			Source: "DNS",
 		})
 	}
-	if err := dm.enum.graph.UpsertMX(ctx, req.Name, target, req.Source, dm.enum.Config.UUID.String()); err != nil {
-		return fmt.Errorf("%s failed to insert MX record: %v", dm.enum.graph, err)
+	if err := dm.enum.graph.UpsertMX(ctx, req.Name, target); err != nil {
+		return fmt.Errorf("failed to insert MX record: %v", err)
 	}
 	return nil
 }
@@ -319,8 +305,6 @@ func (dm *dataManager) findNamesAndAddresses(ctx context.Context, data, domain s
 		dm.enum.nameSrc.newAddr(&requests.AddrRequest{
 			Address: ip,
 			Domain:  domain,
-			Tag:     requests.DNS,
-			Source:  "DNS",
 		})
 	}
 
@@ -330,8 +314,6 @@ func (dm *dataManager) findNamesAndAddresses(ctx context.Context, data, domain s
 			dm.enum.nameSrc.newName(&requests.DNSRequest{
 				Name:   name,
 				Domain: domain,
-				Tag:    requests.DNS,
-				Source: "DNS",
 			})
 		}
 	}
@@ -344,22 +326,19 @@ func (dm *dataManager) addrRequest(ctx context.Context, req *requests.AddrReques
 	default:
 	}
 
-	uuid := dm.enum.Config.UUID.String()
-	if req == nil || !req.InScope || uuid == "" {
+	if req == nil || !req.InScope {
 		return nil
 	}
 	if yes, prefix := amassnet.IsReservedAddress(req.Address); yes {
 		var err error
-		if e := dm.enum.graph.UpsertInfrastructure(ctx, 0,
-			amassnet.ReservedCIDRDescription, req.Address, prefix, "RIR", uuid); e != nil {
+		if e := dm.enum.graph.UpsertInfrastructure(ctx, 0, amassnet.ReservedCIDRDescription, req.Address, prefix); e != nil {
 			err = e
 		}
 		return err
 	}
 	if r := dm.enum.Sys.Cache().AddrSearch(req.Address); r != nil {
 		var err error
-		if e := dm.enum.graph.UpsertInfrastructure(ctx, r.ASN,
-			r.Description, req.Address, r.Prefix, r.Source, uuid); e != nil {
+		if e := dm.enum.graph.UpsertInfrastructure(ctx, r.ASN, r.Description, req.Address, r.Prefix); e != nil {
 			err = e
 		}
 		return err
@@ -393,9 +372,8 @@ func (dm *dataManager) nextInfraInfo() {
 
 	ctx := context.Background()
 	req := e.(*requests.AddrRequest)
-	uuid := dm.enum.Config.UUID.String()
 	if r := dm.enum.Sys.Cache().AddrSearch(req.Address); r != nil {
-		_ = dm.enum.graph.UpsertInfrastructure(ctx, r.ASN, r.Description, req.Address, r.Prefix, r.Source, uuid)
+		_ = dm.enum.graph.UpsertInfrastructure(ctx, r.ASN, r.Description, req.Address, r.Prefix)
 		return
 	}
 
@@ -410,7 +388,7 @@ loop:
 
 		time.Sleep(2 * time.Second)
 		if r := dm.enum.Sys.Cache().AddrSearch(req.Address); r != nil {
-			_ = dm.enum.graph.UpsertInfrastructure(ctx, r.ASN, r.Description, req.Address, r.Prefix, r.Source, uuid)
+			_ = dm.enum.graph.UpsertInfrastructure(ctx, r.ASN, r.Description, req.Address, r.Prefix)
 			return
 		}
 	}
@@ -418,7 +396,7 @@ loop:
 	asn := 0
 	desc := "Unknown"
 	prefix := fakePrefix(req.Address)
-	_ = dm.enum.graph.UpsertInfrastructure(ctx, asn, desc, req.Address, prefix, "RIR", uuid)
+	_ = dm.enum.graph.UpsertInfrastructure(ctx, asn, desc, req.Address, prefix)
 
 	first, cidr, _ := net.ParseCIDR(prefix)
 	dm.enum.Sys.Cache().Update(&requests.ASNRequest{
@@ -426,8 +404,6 @@ loop:
 		ASN:         asn,
 		Prefix:      cidr.String(),
 		Description: desc,
-		Tag:         requests.RIR,
-		Source:      "RIR",
 	})
 }
 

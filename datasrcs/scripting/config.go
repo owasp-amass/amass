@@ -5,9 +5,9 @@
 package scripting
 
 import (
-	"github.com/owasp-amass/amass/v3/config"
-	"github.com/owasp-amass/amass/v3/format"
 	"github.com/caffix/service"
+	"github.com/owasp-amass/amass/v4/format"
+	"github.com/owasp-amass/config/config"
 	lua "github.com/yuin/gopher-lua"
 )
 
@@ -26,7 +26,6 @@ func (s *Script) config(L *lua.LState) int {
 		r.RawSetString("mode", lua.LString("normal"))
 	}
 
-	r.RawSetString("event_id", lua.LString(cfg.UUID.String()))
 	r.RawSetString("max_dns_queries", lua.LNumber(cfg.MaxDNSQueries))
 
 	scope := L.NewTable()
@@ -37,7 +36,7 @@ func (s *Script) config(L *lua.LState) int {
 	scope.RawSetString("domains", tb)
 
 	tb = L.NewTable()
-	for _, sub := range cfg.Blacklist {
+	for _, sub := range cfg.Scope.Blacklist {
 		tb.Append(lua.LString(sub))
 	}
 	scope.RawSetString("blacklist", tb)
@@ -61,25 +60,25 @@ func (s *Script) config(L *lua.LState) int {
 	r.RawSetString("provided_names", tb)
 
 	tb = L.NewTable()
-	for _, addr := range cfg.Addresses {
+	for _, addr := range cfg.Scope.Addresses {
 		tb.Append(lua.LString(addr.String()))
 	}
 	scope.RawSetString("addresses", tb)
 
 	tb = L.NewTable()
-	for _, cidr := range cfg.CIDRs {
+	for _, cidr := range cfg.Scope.CIDRs {
 		tb.Append(lua.LString(cidr.String()))
 	}
 	scope.RawSetString("cidrs", tb)
 
 	tb = L.NewTable()
-	for _, asn := range cfg.ASNs {
+	for _, asn := range cfg.Scope.ASNs {
 		tb.Append(lua.LNumber(asn))
 	}
 	scope.RawSetString("asns", tb)
 
 	tb = L.NewTable()
-	for _, port := range cfg.Ports {
+	for _, port := range cfg.Scope.Ports {
 		tb.Append(lua.LNumber(port))
 	}
 	scope.RawSetString("ports", tb)
@@ -106,6 +105,12 @@ func (s *Script) config(L *lua.LState) int {
 }
 
 func (s *Script) dataSourceConfig(L *lua.LState) int {
+	dsc := s.sys.Config().DataSrcConfigs
+	if dsc == nil {
+		L.Push(lua.LNil)
+		return 1
+	}
+
 	cfg := s.sys.Config().GetDataSourceConfig(s.String())
 	if cfg == nil {
 		L.Push(lua.LNil)
@@ -118,7 +123,7 @@ func (s *Script) dataSourceConfig(L *lua.LState) int {
 		tb.RawSetString("ttl", lua.LNumber(cfg.TTL))
 	}
 
-	if creds := cfg.GetCredentials(); creds != nil {
+	if creds := dsc.GetCredentials(cfg.Name); creds != nil {
 		c := L.NewTable()
 
 		c.RawSetString("name", lua.LString(creds.Name))
@@ -128,8 +133,8 @@ func (s *Script) dataSourceConfig(L *lua.LState) int {
 		if creds.Password != "" {
 			c.RawSetString("password", lua.LString(creds.Password))
 		}
-		if creds.Key != "" {
-			c.RawSetString("key", lua.LString(creds.Key))
+		if creds.Apikey != "" {
+			c.RawSetString("key", lua.LString(creds.Apikey))
 		}
 		if creds.Secret != "" {
 			c.RawSetString("secret", lua.LString(creds.Secret))
@@ -164,11 +169,7 @@ func (s *Script) bruteWordlist(L *lua.LState) int {
 		}
 	}
 
-	if tb.Len() > 0 {
-		L.Push(tb)
-	} else {
-		L.Push(lua.LNil)
-	}
+	L.Push(tb)
 	return 1
 }
 
@@ -182,11 +183,7 @@ func (s *Script) altWordlist(L *lua.LState) int {
 		}
 	}
 
-	if tb.Len() > 0 {
-		L.Push(tb)
-	} else {
-		L.Push(lua.LNil)
-	}
+	L.Push(tb)
 	return 1
 }
 

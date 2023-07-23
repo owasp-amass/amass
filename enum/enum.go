@@ -7,47 +7,46 @@ package enum
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/caffix/netmap"
 	"github.com/caffix/pipeline"
 	"github.com/caffix/queue"
 	"github.com/caffix/service"
-	"github.com/owasp-amass/amass/v3/config"
-	"github.com/owasp-amass/amass/v3/datasrcs"
-	"github.com/owasp-amass/amass/v3/requests"
-	"github.com/owasp-amass/amass/v3/systems"
+	"github.com/owasp-amass/amass/v4/datasrcs"
+	"github.com/owasp-amass/amass/v4/requests"
+	"github.com/owasp-amass/amass/v4/systems"
+	"github.com/owasp-amass/config/config"
+	oam "github.com/owasp-amass/open-asset-model"
+	"github.com/owasp-amass/open-asset-model/domain"
 )
 
 // Enumeration is the object type used to execute a DNS enumeration.
 type Enumeration struct {
-	Config       *config.Config
-	Sys          systems.System
-	ctx          context.Context
-	graph        *netmap.Graph
-	srcs         []service.Service
-	done         chan struct{}
-	nameSrc      *enumSource
-	subTask      *subdomainTask
-	dnsTask      *dnsTask
-	valTask      *dnsTask
-	store        *dataManager
-	requests     queue.Queue
-	plock        sync.Mutex
-	pending      bool
-	reqCountSig  chan struct{}
-	reqCountChan chan map[string]int
+	Config   *config.Config
+	Sys      systems.System
+	ctx      context.Context
+	graph    *netmap.Graph
+	srcs     []service.Service
+	done     chan struct{}
+	nameSrc  *enumSource
+	subTask  *subdomainTask
+	dnsTask  *dnsTask
+	valTask  *dnsTask
+	store    *dataManager
+	requests queue.Queue
+	plock    sync.Mutex
+	pending  bool
 }
 
 // NewEnumeration returns an initialized Enumeration that has not been started yet.
 func NewEnumeration(cfg *config.Config, sys systems.System, graph *netmap.Graph) *Enumeration {
 	return &Enumeration{
-		Config:       cfg,
-		Sys:          sys,
-		graph:        graph,
-		srcs:         datasrcs.SelectedDataSources(cfg, sys.DataSources()),
-		requests:     queue.NewQueue(),
-		reqCountSig:  make(chan struct{}, 1),
-		reqCountChan: make(chan map[string]int, 1),
+		Config:   cfg,
+		Sys:      sys,
+		graph:    graph,
+		srcs:     datasrcs.SelectedDataSources(cfg, sys.DataSources()),
+		requests: queue.NewQueue(),
 	}
 }
 
@@ -117,8 +116,6 @@ func (e *Enumeration) submitDomainNames() {
 		req := &requests.DNSRequest{
 			Name:   domain,
 			Domain: domain,
-			Tag:    requests.DNS,
-			Source: "DNS",
 		}
 
 		e.nameSrc.newName(req)
@@ -129,7 +126,7 @@ func (e *Enumeration) submitDomainNames() {
 // If requests were made for specific ASNs, then those requests are
 // sent to included data sources at this point.
 func (e *Enumeration) submitASNs() {
-	for _, asn := range e.Config.ASNs {
+	for _, asn := range e.Config.Scope.ASNs {
 		e.sendRequests(&requests.ASNRequest{ASN: asn})
 	}
 }
@@ -158,14 +155,6 @@ loop:
 			break loop
 		case <-e.ctx.Done():
 			break loop
-		case <-e.reqCountSig:
-			resp := make(map[string]int)
-			for k, v := range requestsMap {
-				if l := len(v); l > 0 {
-					resp[k] = l
-				}
-			}
-			e.reqCountChan <- resp
 		case <-e.requests.Signal():
 			element, ok := e.requests.Next()
 			if !ok {
@@ -236,7 +225,7 @@ func (e *Enumeration) makeOutputSink() pipeline.SinkFunc {
 
 		req, ok := data.(*requests.DNSRequest)
 		if ok && req != nil && req.Name != "" && e.Config.IsDomainInScope(req.Name) {
-			if _, err := e.graph.UpsertFQDN(e.ctx, req.Name, req.Source, e.Config.UUID.String()); err != nil {
+			if _, err := e.graph.UpsertFQDN(e.ctx, req.Name); err != nil {
 				e.Config.Log.Print(err.Error())
 			}
 		}
@@ -245,39 +234,34 @@ func (e *Enumeration) makeOutputSink() pipeline.SinkFunc {
 }
 
 func (e *Enumeration) submitKnownNames() {
-	srcTags := make(map[string]string)
-	for _, src := range e.Sys.DataSources() {
-		srcTags[src.String()] = src.Description()
-	}
-
 	for _, g := range e.Sys.GraphDatabases() {
-		e.readNamesFromDatabase(g, srcTags)
+		e.readNamesFromDatabase(g)
 	}
 }
 
-func (e *Enumeration) readNamesFromDatabase(db *netmap.Graph, stags map[string]string) {
-	domains := e.Config.Domains()
+func (e *Enumeration) readNamesFromDatabase(db *netmap.Graph) {
+	for _, d := range e.Config.Domains() {
+		assets, err := db.DB.FindByScope([]oam.Asset{domain.FQDN{Name: d}}, time.Time{})
+		if err != nil {
+			continue
+		}
 
-	for _, event := range db.EventsInScope(e.ctx, domains...) {
-		for _, name := range db.EventFQDNs(e.ctx, event) {
-			select {
-			case <-e.done:
-				return
-			default:
-			}
+		for _, a := range assets {
+			if fqdn, ok := a.Asset.(domain.FQDN); ok {
+				select {
+				case <-e.done:
+					return
+				default:
+				}
 
-			domain := e.Config.WhichDomain(name)
-			if domain == "" {
-				continue
-			}
-			if srcs, err := db.NodeSources(e.ctx, netmap.Node(name), event); err == nil {
-				src := srcs[0]
-				tag := stags[src]
+				domain := e.Config.WhichDomain(fqdn.Name)
+				if domain == "" {
+					continue
+				}
+
 				e.nameSrc.newName(&requests.DNSRequest{
-					Name:   name,
+					Name:   fqdn.Name,
 					Domain: domain,
-					Tag:    tag,
-					Source: src,
 				})
 			}
 		}
@@ -295,8 +279,6 @@ func (e *Enumeration) submitProvidedNames() {
 			e.nameSrc.newName(&requests.DNSRequest{
 				Name:   name,
 				Domain: domain,
-				Tag:    requests.EXTERNAL,
-				Source: "User Input",
 			})
 		}
 	}

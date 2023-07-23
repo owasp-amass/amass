@@ -8,7 +8,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -26,12 +25,12 @@ import (
 	"github.com/caffix/netmap"
 	"github.com/caffix/stringset"
 	"github.com/fatih/color"
-	"github.com/owasp-amass/amass/v3/config"
-	"github.com/owasp-amass/amass/v3/datasrcs"
-	"github.com/owasp-amass/amass/v3/enum"
-	"github.com/owasp-amass/amass/v3/format"
-	"github.com/owasp-amass/amass/v3/requests"
-	"github.com/owasp-amass/amass/v3/systems"
+	"github.com/owasp-amass/amass/v4/datasrcs"
+	"github.com/owasp-amass/amass/v4/enum"
+	"github.com/owasp-amass/amass/v4/format"
+	"github.com/owasp-amass/amass/v4/resources"
+	"github.com/owasp-amass/amass/v4/systems"
+	"github.com/owasp-amass/config/config"
 )
 
 const enumUsageMsg = "enum [options] -d DOMAIN"
@@ -60,22 +59,17 @@ type enumArgs struct {
 	Trusted           *stringset.Set
 	Timeout           int
 	Options           struct {
-		Active          bool
-		Alterations     bool
-		BruteForcing    bool
-		DemoMode        bool
-		IPs             bool
-		IPv4            bool
-		IPv6            bool
-		ListSources     bool
-		NoAlts          bool
-		NoColor         bool
-		NoLocalDatabase bool
-		NoRecursive     bool
-		Passive         bool
-		Silent          bool
-		Sources         bool
-		Verbose         bool
+		Active       bool
+		Alterations  bool
+		BruteForcing bool
+		DemoMode     bool
+		ListSources  bool
+		NoAlts       bool
+		NoColor      bool
+		NoRecursive  bool
+		Passive      bool
+		Silent       bool
+		Verbose      bool
 	}
 	Filepaths struct {
 		AllFilePrefix    string
@@ -121,23 +115,15 @@ func defineEnumArgumentFlags(enumFlags *flag.FlagSet, args *enumArgs) {
 }
 
 func defineEnumOptionFlags(enumFlags *flag.FlagSet, args *enumArgs) {
-	var placeholder bool
 	enumFlags.BoolVar(&args.Options.Active, "active", false, "Attempt zone transfers and certificate name grabs")
 	enumFlags.BoolVar(&args.Options.BruteForcing, "brute", false, "Execute brute forcing after searches")
 	enumFlags.BoolVar(&args.Options.DemoMode, "demo", false, "Censor output to make it suitable for demonstrations")
-	enumFlags.BoolVar(&args.Options.IPs, "ip", false, "Show the IP addresses for discovered names")
-	enumFlags.BoolVar(&args.Options.IPv4, "ipv4", false, "Show the IPv4 addresses for discovered names")
-	enumFlags.BoolVar(&args.Options.IPv6, "ipv6", false, "Show the IPv6 addresses for discovered names")
 	enumFlags.BoolVar(&args.Options.ListSources, "list", false, "Print the names of all available data sources")
 	enumFlags.BoolVar(&args.Options.Alterations, "alts", false, "Enable generation of altered names")
-	enumFlags.BoolVar(&args.Options.NoAlts, "noalts", true, "Deprecated flag to be removed in version 4.0")
 	enumFlags.BoolVar(&args.Options.NoColor, "nocolor", false, "Disable colorized output")
-	enumFlags.BoolVar(&placeholder, "nolocaldb", false, "Deprecated feature to be removed in version 4.0")
 	enumFlags.BoolVar(&args.Options.NoRecursive, "norecursive", false, "Turn off recursive brute forcing")
 	enumFlags.BoolVar(&args.Options.Passive, "passive", false, "Disable DNS resolution of names and dependent features")
-	enumFlags.BoolVar(&placeholder, "share", false, "Deprecated feature to be removed in version 4.0")
 	enumFlags.BoolVar(&args.Options.Silent, "silent", false, "Disable all output during execution")
-	enumFlags.BoolVar(&args.Options.Sources, "src", false, "Print data sources for the discovered names")
 	enumFlags.BoolVar(&args.Options.Verbose, "v", false, "Output status / debug / troubleshooting info")
 }
 
@@ -146,12 +132,11 @@ func defineEnumFilepathFlags(enumFlags *flag.FlagSet, args *enumArgs) {
 	enumFlags.Var(&args.Filepaths.AltWordlist, "aw", "Path to a different wordlist file for alterations")
 	enumFlags.StringVar(&args.Filepaths.Blacklist, "blf", "", "Path to a file providing blacklisted subdomains")
 	enumFlags.Var(&args.Filepaths.BruteWordlist, "w", "Path to a different wordlist file for brute forcing")
-	enumFlags.StringVar(&args.Filepaths.ConfigFile, "config", "", "Path to the INI configuration file. Additional details below")
+	enumFlags.StringVar(&args.Filepaths.ConfigFile, "config", "", "Path to the YAML configuration file. Additional details below")
 	enumFlags.StringVar(&args.Filepaths.Directory, "dir", "", "Path to the directory containing the output files")
 	enumFlags.Var(&args.Filepaths.Domains, "df", "Path to a file providing root domain names")
 	enumFlags.StringVar(&args.Filepaths.ExcludedSrcs, "ef", "", "Path to a file providing data sources to exclude")
 	enumFlags.StringVar(&args.Filepaths.IncludedSrcs, "if", "", "Path to a file providing data sources to include")
-	enumFlags.StringVar(&args.Filepaths.JSONOutput, "json", "", "Path to the JSON output file")
 	enumFlags.StringVar(&args.Filepaths.LogFile, "log", "", "Path to the log file where errors will be written")
 	enumFlags.Var(&args.Filepaths.Names, "nf", "Path to a file providing already known subdomain names (from other tools/sources)")
 	enumFlags.Var(&args.Filepaths.Resolvers, "rf", "Path to a file providing untrusted DNS resolvers")
@@ -190,43 +175,38 @@ func runEnumCommand(clArgs []string) {
 		r.Fprintf(color.Error, "%v\n", err)
 		os.Exit(1)
 	}
-	// Expand data source category names into the associated source names
-	initializeSourceTags(sys.DataSources())
-	cfg.SourceFilter.Sources = expandCategoryNames(cfg.SourceFilter.Sources, generateCategoryMap(sys))
-	// Create the in-memory graph database used to store enumeration findings
-	graph := netmap.NewGraph(netmap.NewCayleyGraphMemory())
-	defer graph.Close()
+
+	if cfg.Passive {
+		fmt.Fprintf(color.Error, "%s\n", green("Passive mode does not generate output during the enumeration"))
+		fmt.Fprintf(color.Error, "\t%s\n", green("Obtain your list of FQDNs using the following command:"))
+		fmt.Fprintf(color.Error, "\t%s\n", green("amass db -names -d "+strings.Join(cfg.Domains(), ",")))
+	}
+
 	// Setup the new enumeration
-	e := enum.NewEnumeration(cfg, sys, graph)
+	e := enum.NewEnumeration(cfg, sys, sys.GraphDatabases()[0])
 	if e == nil {
 		r.Fprintf(color.Error, "%s\n", "Failed to setup the enumeration")
 		os.Exit(1)
 	}
 
 	var wg sync.WaitGroup
-	var outChans []chan *requests.Output
+	var outChans []chan string
 	// This channel sends the signal for goroutines to terminate
 	done := make(chan struct{})
 	// Print output only if JSONOutput is not meant for STDOUT
 	if args.Filepaths.JSONOutput != "-" {
 		wg.Add(1)
 		// This goroutine will handle printing the output
-		printOutChan := make(chan *requests.Output, 10)
+		printOutChan := make(chan string, 10)
 		go printOutput(e, args, printOutChan, &wg)
 		outChans = append(outChans, printOutChan)
 	}
 
 	wg.Add(1)
 	// This goroutine will handle saving the output to the text file
-	txtOutChan := make(chan *requests.Output, 10)
+	txtOutChan := make(chan string, 10)
 	go saveTextOutput(e, args, txtOutChan, &wg)
 	outChans = append(outChans, txtOutChan)
-
-	wg.Add(1)
-	// This goroutine will handle saving the output to the JSON file
-	jsonOutChan := make(chan *requests.Output, 10)
-	go saveJSONOutput(e, args, jsonOutChan, &wg)
-	outChans = append(outChans, jsonOutChan)
 
 	var ctx context.Context
 	var cancel context.CancelFunc
@@ -238,7 +218,7 @@ func runEnumCommand(clArgs []string) {
 	defer cancel()
 
 	wg.Add(1)
-	go processOutput(ctx, graph, e, outChans, done, &wg)
+	go processOutput(ctx, sys.GraphDatabases()[0], e, outChans, done, &wg)
 	// Monitor for cancellation by the user
 	go func(d chan struct{}, c context.Context, f context.CancelFunc) {
 		quit := make(chan os.Signal, 1)
@@ -261,30 +241,6 @@ func runEnumCommand(clArgs []string) {
 	close(done)
 	wg.Wait()
 	fmt.Fprintf(color.Error, "\n%s\n", green("The enumeration has finished"))
-	// If necessary, handle graph database migration
-	if len(e.Sys.GraphDatabases()) > 0 {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-		defer cancel()
-		// Monitor for cancellation by the user
-		go func(c context.CancelFunc) {
-			quit := make(chan os.Signal, 1)
-			signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
-			defer signal.Stop(quit)
-
-			<-quit
-			c()
-		}(cancel)
-		// Copy the graph of findings into the system graph databases
-		for _, g := range e.Sys.GraphDatabases() {
-			fmt.Fprintf(color.Error, "%s%s%s\n",
-				yellow("Discoveries are being migrated into the "), yellow(g.String()), yellow(" database"))
-
-			if err := graph.Migrate(ctx, g); err != nil {
-				fmt.Fprintf(color.Error, "%s%s%s%s\n",
-					red("The database migration to "), red(g.String()), red(" failed: "), red(err.Error()))
-			}
-		}
-	}
 }
 
 func argsAndConfig(clArgs []string) (*config.Config, *enumArgs) {
@@ -385,10 +341,6 @@ func argsAndConfig(clArgs []string) (*config.Config, *enumArgs) {
 		return nil, &args
 	}
 	// Some input validation
-	if cfg.Passive && (args.Options.IPs || args.Options.IPv4 || args.Options.IPv6) {
-		r.Fprintln(color.Error, "IP addresses cannot be provided without DNS resolution")
-		os.Exit(1)
-	}
 	if !cfg.Active && len(args.Ports) > 0 {
 		r.Fprintln(color.Error, "Ports can only be scanned in the active mode")
 		os.Exit(1)
@@ -400,41 +352,22 @@ func argsAndConfig(clArgs []string) (*config.Config, *enumArgs) {
 	return cfg, &args
 }
 
-func printOutput(e *enum.Enumeration, args *enumArgs, output chan *requests.Output, wg *sync.WaitGroup) {
+func printOutput(e *enum.Enumeration, args *enumArgs, output chan string, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	var total int
-	tags := make(map[string]int)
-	asns := make(map[int]*format.ASNSummaryData)
 	// Print all the output returned by the enumeration
 	for out := range output {
-		out.Addresses = format.DesiredAddrTypes(out.Addresses, args.Options.IPv4, args.Options.IPv6)
-		if !e.Config.Passive && len(out.Addresses) <= 0 {
-			continue
-		}
-
+		fmt.Fprintf(color.Output, "%s\n", out)
 		total++
-		if !args.Options.Passive {
-			format.UpdateSummaryData(out, tags, asns)
-		}
-
-		source, name, ips := format.OutputLineParts(out, args.Options.Sources,
-			args.Options.IPs || args.Options.IPv4 || args.Options.IPv6, args.Options.DemoMode)
-		if ips != "" {
-			ips = " " + ips
-		}
-
-		fmt.Fprintf(color.Output, "%s%s%s\n", blue(source), green(name), yellow(ips))
 	}
 
-	if total == 0 {
-		r.Println("No names were discovered")
-	} else if !args.Options.Passive {
-		format.PrintEnumerationSummary(total, tags, asns, args.Options.DemoMode)
+	if !e.Config.Passive && total == 0 {
+		r.Println("No assets were discovered")
 	}
 }
 
-func saveTextOutput(e *enum.Enumeration, args *enumArgs, output chan *requests.Output, wg *sync.WaitGroup) {
+func saveTextOutput(e *enum.Enumeration, args *enumArgs, output chan string, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	dir := config.OutputDirectory(e.Config.Dir)
@@ -463,67 +396,12 @@ func saveTextOutput(e *enum.Enumeration, args *enumArgs, output chan *requests.O
 	_, _ = outptr.Seek(0, 0)
 	// Save all the output returned by the enumeration
 	for out := range output {
-		out.Addresses = format.DesiredAddrTypes(out.Addresses, args.Options.IPv4, args.Options.IPv6)
-		if !e.Config.Passive && len(out.Addresses) <= 0 {
-			continue
-		}
-
-		source, name, ips := format.OutputLineParts(out, args.Options.Sources,
-			args.Options.IPs || args.Options.IPv4 || args.Options.IPv6, args.Options.DemoMode)
-		if ips != "" {
-			ips = " " + ips
-		}
 		// Write the line to the output file
-		fmt.Fprintf(outptr, "%s%s%s\n", source, name, ips)
+		fmt.Fprintf(outptr, "%s\n", out)
 	}
 }
 
-func saveJSONOutput(e *enum.Enumeration, args *enumArgs, output chan *requests.Output, wg *sync.WaitGroup) {
-	defer wg.Done()
-
-	dir := config.OutputDirectory(e.Config.Dir)
-	jsonfile := filepath.Join(dir, "amass.json")
-	if args.Filepaths.JSONOutput != "" {
-		jsonfile = args.Filepaths.JSONOutput
-	}
-	if args.Filepaths.AllFilePrefix != "" {
-		jsonfile = args.Filepaths.AllFilePrefix + ".json"
-	}
-	if jsonfile == "" {
-		return
-	}
-
-	var jsonptr *os.File
-	var err error
-
-	// Write to STDOUT and not a file if named "-"
-	if args.Filepaths.JSONOutput == "-" {
-		jsonptr = os.Stdout
-	} else {
-		jsonptr, err = os.OpenFile(jsonfile, os.O_WRONLY|os.O_CREATE, 0644)
-		if err != nil {
-			r.Fprintf(color.Error, "Failed to open the JSON output file: %v\n", err)
-			os.Exit(1)
-		}
-	}
-
-	defer func() {
-		_ = jsonptr.Sync()
-		_ = jsonptr.Close()
-	}()
-
-	_ = jsonptr.Truncate(0)
-	_, _ = jsonptr.Seek(0, 0)
-
-	enc := json.NewEncoder(jsonptr)
-	// Save all the output returned by the enumeration
-	for out := range output {
-		// Handle encoding the result as JSON
-		_ = enc.Encode(out)
-	}
-}
-
-func processOutput(ctx context.Context, g *netmap.Graph, e *enum.Enumeration, outputs []chan *requests.Output, done chan struct{}, wg *sync.WaitGroup) {
+func processOutput(ctx context.Context, g *netmap.Graph, e *enum.Enumeration, outputs []chan string, done chan struct{}, wg *sync.WaitGroup) {
 	defer wg.Done()
 	defer func() {
 		// Signal all the other output goroutines to terminate
@@ -536,11 +414,8 @@ func processOutput(ctx context.Context, g *netmap.Graph, e *enum.Enumeration, ou
 	known := stringset.New()
 	defer known.Close()
 	// The function that obtains output from the enum and puts it on the channel
-	extract := func(limit int) {
-		for _, o := range ExtractOutput(ctx, g, e, known, true, limit) {
-			if !o.Complete(e.Config.Passive) || !e.Config.IsDomainInScope(o.Name) {
-				continue
-			}
+	extract := func() {
+		for _, o := range NewOutput(ctx, g, e, known) {
 			for _, ch := range outputs {
 				ch <- o
 			}
@@ -552,13 +427,13 @@ func processOutput(ctx context.Context, g *netmap.Graph, e *enum.Enumeration, ou
 	for {
 		select {
 		case <-ctx.Done():
-			extract(0)
+			extract()
 			return
 		case <-done:
-			extract(0)
+			extract()
 			return
 		case <-t.C:
-			extract(500)
+			extract()
 			t.Reset(10 * time.Second)
 		}
 	}
@@ -612,22 +487,38 @@ func writeLogsAndMessages(logs *io.PipeReader, logfile string, verbose bool) {
 
 // Obtain parameters from provided input files
 func processEnumInputFiles(args *enumArgs) error {
-	if args.Options.BruteForcing && len(args.Filepaths.BruteWordlist) > 0 {
-		for _, f := range args.Filepaths.BruteWordlist {
-			list, err := config.GetListFromFile(f)
-			if err != nil {
-				return fmt.Errorf("failed to parse the brute force wordlist file: %v", err)
+	if args.Options.BruteForcing {
+		if len(args.Filepaths.BruteWordlist) > 0 {
+			for _, f := range args.Filepaths.BruteWordlist {
+				list, err := config.GetListFromFile(f)
+				if err != nil {
+					return fmt.Errorf("failed to parse the brute force wordlist file: %v", err)
+				}
+				args.BruteWordList.InsertMany(list...)
 			}
-			args.BruteWordList.InsertMany(list...)
+		} else {
+			if f, err := resources.GetResourceFile("namelist.txt"); err == nil {
+				if list, err := getWordList(f); err == nil {
+					args.BruteWordList.InsertMany(list...)
+				}
+			}
 		}
 	}
-	if !args.Options.NoAlts && len(args.Filepaths.AltWordlist) > 0 {
-		for _, f := range args.Filepaths.AltWordlist {
-			list, err := config.GetListFromFile(f)
-			if err != nil {
-				return fmt.Errorf("failed to parse the alterations wordlist file: %v", err)
+	if !args.Options.NoAlts {
+		if len(args.Filepaths.AltWordlist) > 0 {
+			for _, f := range args.Filepaths.AltWordlist {
+				list, err := config.GetListFromFile(f)
+				if err != nil {
+					return fmt.Errorf("failed to parse the alterations wordlist file: %v", err)
+				}
+				args.AltWordList.InsertMany(list...)
 			}
-			args.AltWordList.InsertMany(list...)
+		} else {
+			if f, err := resources.GetResourceFile("alterations.txt"); err == nil {
+				if list, err := getWordList(f); err == nil {
+					args.AltWordList.InsertMany(list...)
+				}
+			}
 		}
 	}
 	if args.Filepaths.Blacklist != "" {
@@ -684,16 +575,16 @@ func processEnumInputFiles(args *enumArgs) error {
 // Setup the amass enumeration settings
 func (e enumArgs) OverrideConfig(conf *config.Config) error {
 	if len(e.Addresses) > 0 {
-		conf.Addresses = e.Addresses
+		conf.Scope.Addresses = e.Addresses
 	}
 	if len(e.ASNs) > 0 {
-		conf.ASNs = e.ASNs
+		conf.Scope.ASNs = e.ASNs
 	}
 	if len(e.CIDRs) > 0 {
-		conf.CIDRs = e.CIDRs
+		conf.Scope.CIDRs = e.CIDRs
 	}
 	if len(e.Ports) > 0 {
-		conf.Ports = e.Ports
+		conf.Scope.Ports = e.Ports
 	}
 	if e.Filepaths.Directory != "" {
 		conf.Dir = e.Filepaths.Directory
@@ -736,7 +627,7 @@ func (e enumArgs) OverrideConfig(conf *config.Config) error {
 		conf.Alterations = false
 	}
 	if e.Blacklist.Len() > 0 {
-		conf.Blacklist = e.Blacklist.Slice()
+		conf.Scope.Blacklist = e.Blacklist.Slice()
 	}
 	if e.Options.Verbose {
 		conf.Verbose = true
@@ -756,28 +647,21 @@ func (e enumArgs) OverrideConfig(conf *config.Config) error {
 	if e.MaxDNSQueries > 0 {
 		conf.MaxDNSQueries = e.MaxDNSQueries
 	}
-	if e.Included.Len() > 0 {
-		conf.SourceFilter.Include = true
-		// Check if brute forcing and alterations should be added
-		if conf.Alterations {
-			e.Included.Insert(requests.ALT)
-		}
-		if conf.BruteForcing {
-			e.Included.Insert(requests.BRUTE)
-		}
-		conf.SourceFilter.Sources = e.Included.Slice()
-	} else if e.Excluded.Len() > 0 || conf.Alterations || conf.BruteForcing {
-		conf.SourceFilter.Include = false
-		// Check if brute forcing and alterations should be added
-		if conf.Alterations {
-			e.Included.Insert(requests.ALT)
-		}
-		if conf.BruteForcing {
-			e.Included.Insert(requests.BRUTE)
-		}
-		conf.SourceFilter.Sources = e.Excluded.Slice()
-	}
 	// Attempt to add the provided domains to the configuration
 	conf.AddDomains(e.Domains.Slice()...)
 	return nil
+}
+
+func getWordList(reader io.Reader) ([]string, error) {
+	var words []string
+
+	scanner := bufio.NewScanner(reader)
+	for scanner.Scan() {
+		// Get the next word in the list
+		w := strings.TrimSpace(scanner.Text())
+		if err := scanner.Err(); err == nil && w != "" {
+			words = append(words, w)
+		}
+	}
+	return stringset.Deduplicate(words), nil
 }

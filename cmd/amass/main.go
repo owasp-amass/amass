@@ -25,47 +25,44 @@ package main
 import (
 	"bytes"
 	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"net"
 	"os"
 	"path"
-	"sort"
+	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/owasp-amass/amass/v3/config"
-	"github.com/owasp-amass/amass/v3/datasrcs"
-	"github.com/owasp-amass/amass/v3/format"
-	amassnet "github.com/owasp-amass/amass/v3/net"
-	"github.com/owasp-amass/amass/v3/requests"
-	"github.com/owasp-amass/amass/v3/resources"
-	"github.com/owasp-amass/amass/v3/systems"
 	"github.com/caffix/netmap"
 	"github.com/caffix/service"
 	"github.com/caffix/stringset"
 	"github.com/fatih/color"
+	"github.com/owasp-amass/amass/v4/datasrcs"
+	"github.com/owasp-amass/amass/v4/format"
+	amassnet "github.com/owasp-amass/amass/v4/net"
+	"github.com/owasp-amass/amass/v4/requests"
+	"github.com/owasp-amass/amass/v4/systems"
+	"github.com/owasp-amass/config/config"
 )
 
 const (
-	mainUsageMsg         = "intel|enum|viz|track|db [options]"
-	exampleConfigFileURL = "https://github.com/owasp-amass/amass/blob/master/examples/config.ini"
+	mainUsageMsg         = "intel|enum|db [options]"
+	exampleConfigFileURL = "https://github.com/owasp-amass/amass/blob/master/examples/config.yaml"
 	userGuideURL         = "https://github.com/owasp-amass/amass/blob/master/doc/user_guide.md"
 	tutorialURL          = "https://github.com/owasp-amass/amass/blob/master/doc/tutorial.md"
 )
 
 var (
 	// Colors used to ease the reading of program output
-	g      = color.New(color.FgHiGreen)
-	r      = color.New(color.FgHiRed)
-	b      = color.New(color.FgHiBlue)
-	fgR    = color.New(color.FgRed)
-	fgY    = color.New(color.FgYellow)
-	red    = color.New(color.FgHiRed).SprintFunc()
-	yellow = color.New(color.FgHiYellow).SprintFunc()
-	green  = color.New(color.FgHiGreen).SprintFunc()
-	blue   = color.New(color.FgHiBlue).SprintFunc()
+	g       = color.New(color.FgHiGreen)
+	r       = color.New(color.FgHiRed)
+	fgR     = color.New(color.FgRed)
+	fgY     = color.New(color.FgYellow)
+	yellow  = color.New(color.FgHiYellow).SprintFunc()
+	green   = color.New(color.FgHiGreen).SprintFunc()
+	blue    = color.New(color.FgHiBlue).SprintFunc()
+	magenta = color.New(color.FgHiMagenta).SprintFunc()
 )
 
 func commandUsage(msg string, cmdFlagSet *flag.FlagSet, errBuf *bytes.Buffer) {
@@ -78,8 +75,6 @@ func commandUsage(msg string, cmdFlagSet *flag.FlagSet, errBuf *bytes.Buffer) {
 		g.Fprintf(color.Error, "\nSubcommands: \n\n")
 		g.Fprintf(color.Error, "\t%-11s - Discover targets for enumerations\n", "amass intel")
 		g.Fprintf(color.Error, "\t%-11s - Perform enumerations and network mapping\n", "amass enum")
-		g.Fprintf(color.Error, "\t%-11s - Visualize enumeration results\n", "amass viz")
-		g.Fprintf(color.Error, "\t%-11s - Track differences between enumerations\n", "amass track")
 		g.Fprintf(color.Error, "\t%-11s - Manipulate the Amass graph database\n", "amass db")
 	}
 
@@ -124,10 +119,6 @@ func main() {
 		runEnumCommand(os.Args[2:])
 	case "intel":
 		runIntelCommand(os.Args[2:])
-	case "track":
-		runTrackCommand(os.Args[2:])
-	case "viz":
-		runVizCommand(os.Args[2:])
 	case "help":
 		runHelpCommand(os.Args[2:])
 	default:
@@ -198,120 +189,36 @@ func createOutputDirectory(cfg *config.Config) {
 	}
 }
 
-func generateCategoryMap(sys systems.System) map[string][]string {
-	catToSources := make(map[string][]string)
-
-	for _, src := range sys.DataSources() {
-		t := src.Description()
-
-		catToSources[t] = append(catToSources[t], src.String())
-	}
-
-	return catToSources
-}
-
-func expandCategoryNames(names []string, categories map[string][]string) []string {
-	var newnames []string
-
-	for _, name := range names {
-		if _, found := categories[name]; found {
-			newnames = append(newnames, categories[name]...)
-			continue
-		}
-
-		newnames = append(newnames, name)
-	}
-
-	return newnames
-}
-
 func openGraphDatabase(dir string, cfg *config.Config) *netmap.Graph {
+	// Add the local database settings to the configuration
+	cfg.GraphDBs = append(cfg.GraphDBs, cfg.LocalDatabaseSettings(cfg.GraphDBs))
+
 	for _, db := range cfg.GraphDBs {
-		if !db.Primary {
-			continue
-		}
+		if db.Primary {
+			var g *netmap.Graph
 
-		cayley := netmap.NewCayleyGraph(db.System, db.URL, db.Options)
-		if cayley == nil {
-			return nil
-		}
+			if db.System == "local" {
+				g = netmap.NewGraph(db.System, filepath.Join(config.OutputDirectory(cfg.Dir), "amass.sqlite"), db.Options)
+			} else {
+				connStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s", db.Host, db.Port, db.Username, db.Password, db.DBName)
+				g = netmap.NewGraph(db.System, connStr, db.Options)
+			}
 
-		g := netmap.NewGraph(cayley)
-		if g == nil {
-			return nil
-		}
-
-		return g
-	}
-
-	if db := cfg.LocalDatabaseSettings(cfg.GraphDBs); db != nil {
-		db.Options = ""
-
-		cayley := netmap.NewCayleyGraph(db.System, config.OutputDirectory(dir), db.Options)
-		if cayley == nil {
-			return nil
-		}
-
-		if g := netmap.NewGraph(cayley); g != nil {
-			return g
+			if g != nil {
+				return g
+			}
+			break
 		}
 	}
 
-	return nil
+	return netmap.NewGraph("memory", "", "")
 }
 
-func memGraphForScope(ctx context.Context, domains []string, from *netmap.Graph) (*netmap.Graph, error) {
-	db := netmap.NewGraph(netmap.NewCayleyGraphMemory())
-	if db == nil {
-		return nil, errors.New("failed to create the in-memory graph database")
-	}
-
-	var err error
-	// Migrate the event data into the in-memory graph database
-	if len(domains) == 0 {
-		err = from.MigrateEvents(ctx, db)
-	} else {
-		err = from.MigrateEventsInScope(ctx, db, domains)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("failed to move the data into the in-memory graph database: %v", err)
-	}
-	return db, nil
-}
-
-func orderedEvents(ctx context.Context, events []string, db *netmap.Graph) ([]string, []time.Time, []time.Time) {
-	sort.Slice(events, func(i, j int) bool {
-		var less bool
-
-		e1, l1 := db.EventDateRange(ctx, events[i])
-		e2, l2 := db.EventDateRange(ctx, events[j])
-		if l2.After(l1) || e1.Before(e2) {
-			less = true
-		}
-
-		return less
-	})
-
-	var earliest, latest []time.Time
-	for _, event := range events {
-		e, l := db.EventDateRange(ctx, event)
-
-		earliest = append(earliest, e)
-		latest = append(latest, l)
-	}
-
-	return events, earliest, latest
-}
-
-func getEventOutput(ctx context.Context, uuids []string, asninfo bool, db *netmap.Graph, cache *requests.ASNCache) []*requests.Output {
+func getEventOutput(ctx context.Context, domains []string, asninfo bool, db *netmap.Graph, cache *requests.ASNCache) []*requests.Output {
 	filter := stringset.New()
 	defer filter.Close()
 
-	var output []*requests.Output
-	for i := len(uuids) - 1; i >= 0; i-- {
-		output = append(output, EventOutput(ctx, db, uuids[i], filter, asninfo, cache, 0)...)
-	}
-	return output
+	return EventOutput(ctx, db, domains, time.Time{}, filter, asninfo, cache)
 }
 
 func domainNameInScope(name string, scope []string) bool {
@@ -355,23 +262,4 @@ func assignNetInterface(iface *net.Interface) error {
 
 	amassnet.LocalAddr = best
 	return nil
-}
-
-func cacheWithData() *requests.ASNCache {
-	ranges, err := resources.GetIP2ASNData()
-	if err != nil {
-		return nil
-	}
-
-	cache := requests.NewASNCache()
-	for _, r := range ranges {
-		cache.Update(&requests.ASNRequest{
-			Address:     r.FirstIP.String(),
-			ASN:         r.ASN,
-			CC:          r.CC,
-			Prefix:      amassnet.Range2CIDR(r.FirstIP, r.LastIP).String(),
-			Description: r.Description,
-		})
-	}
-	return cache
 }

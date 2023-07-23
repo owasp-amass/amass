@@ -15,7 +15,7 @@ import (
 	"github.com/caffix/pipeline"
 	"github.com/caffix/queue"
 	"github.com/miekg/dns"
-	"github.com/owasp-amass/amass/v3/requests"
+	"github.com/owasp-amass/amass/v4/requests"
 	"github.com/owasp-amass/resolve"
 )
 
@@ -142,8 +142,6 @@ func (dt *dnsTask) rootTaskFunc() pipeline.TaskFunc {
 			r = &requests.DNSRequest{
 				Name:   v.Name,
 				Domain: v.Domain,
-				Tag:    v.Tag,
-				Source: v.Source,
 			}
 		}
 
@@ -170,8 +168,7 @@ func (dt *dnsTask) Process(ctx context.Context, data pipeline.Data, tp pipeline.
 		dt.Unlock()
 	})
 
-	switch v := data.(type) {
-	case *requests.DNSRequest:
+	if v, ok := data.(*requests.DNSRequest); ok {
 		qtype := FwdQueryTypes[0]
 		msg := resolve.QueryMsg(v.Name, qtype)
 		k := key(msg.Id, msg.Question[0].Name)
@@ -184,10 +181,10 @@ func (dt *dnsTask) Process(ctx context.Context, data pipeline.Data, tp pipeline.
 			HasRecords: len(v.Records) > 0,
 		}) {
 			dt.pool.Query(ctx, msg, dt.resps)
-			return nil, nil
 		} else {
 			dt.enum.Config.Log.Printf("Failed to enter %s into the request registry on the %s DNS task", msg.Question[0].Name, dt.trust)
 		}
+		return nil, nil
 	}
 	return data, nil
 }
@@ -427,8 +424,6 @@ func (dt *dnsTask) queryNS(ctx context.Context, name, domain string, ch chan []r
 						Name:   name,
 						Domain: domain,
 						Server: record.Data,
-						Tag:    requests.DNS,
-						Source: "DNS",
 					}, tp)
 					records = append(records, convertAnswers([]*resolve.ExtractedAnswer{record})...)
 				}
@@ -530,10 +525,7 @@ func (e *Enumeration) dnsQuery(ctx context.Context, name string, qtype uint16, r
 }
 
 func (e *Enumeration) wildcardDetected(ctx context.Context, req *requests.DNSRequest, resp *dns.Msg) bool {
-	if !requests.TrustedTag(req.Tag) && e.Sys.TrustedResolvers().WildcardDetected(ctx, resp, req.Domain) {
-		return true
-	}
-	return false
+	return e.Sys.TrustedResolvers().WildcardDetected(ctx, resp, req.Domain)
 }
 
 func convertAnswers(ans []*resolve.ExtractedAnswer) []requests.DNSAnswer {

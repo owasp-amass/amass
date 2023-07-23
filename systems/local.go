@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"runtime"
 	"sort"
 	"sync"
@@ -16,10 +17,10 @@ import (
 
 	"github.com/caffix/netmap"
 	"github.com/caffix/service"
-	"github.com/owasp-amass/amass/v3/config"
-	amassnet "github.com/owasp-amass/amass/v3/net"
-	"github.com/owasp-amass/amass/v3/requests"
-	"github.com/owasp-amass/amass/v3/resources"
+	amassnet "github.com/owasp-amass/amass/v4/net"
+	"github.com/owasp-amass/amass/v4/requests"
+	"github.com/owasp-amass/amass/v4/resources"
+	"github.com/owasp-amass/config/config"
 	"github.com/owasp-amass/resolve"
 )
 
@@ -86,7 +87,7 @@ func NewLocalSystem(cfg *config.Config) (*LocalSystem, error) {
 		return nil, err
 	}
 	// Setup the correct graph database handler
-	if err := sys.setupGraphDBs(); err != nil {
+	if err := sys.setupGraphDBs(cfg); err != nil {
 		_ = sys.Shutdown()
 		return nil, err
 	}
@@ -189,8 +190,8 @@ func (l *LocalSystem) Shutdown() error {
 
 	wg.Wait()
 	close(l.done)
-	for _, g := range l.GraphDatabases() {
-		g.Close()
+	for range l.GraphDatabases() {
+		//g.Close()
 	}
 
 	l.pool.Stop()
@@ -215,27 +216,32 @@ func (l *LocalSystem) setupOutputDirectory() error {
 }
 
 // Select the graph that will store the System findings.
-func (l *LocalSystem) setupGraphDBs() error {
-	cfg := l.Config()
+func (l *LocalSystem) setupGraphDBs(cfg *config.Config) error {
+	// Add the local database settings to the configuration
+	cfg.GraphDBs = append(cfg.GraphDBs, cfg.LocalDatabaseSettings(cfg.GraphDBs))
 
-	var dbs []*config.Database
-	if db := cfg.LocalDatabaseSettings(cfg.GraphDBs); db != nil {
-		dbs = append(dbs, db)
+	for _, db := range cfg.GraphDBs {
+		if db.Primary {
+			var g *netmap.Graph
+
+			if db.System == "local" {
+				g = netmap.NewGraph(db.System, filepath.Join(config.OutputDirectory(cfg.Dir), "amass.sqlite"), db.Options)
+			} else {
+				connStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s", db.Host, db.Port, db.Username, db.Password, db.DBName)
+				g = netmap.NewGraph(db.System, connStr, db.Options)
+			}
+
+			if g == nil {
+				return fmt.Errorf("System: failed to create the graph for database: %s", db.System)
+			}
+
+			l.graphs = append(l.graphs, g)
+			break
+		}
 	}
-	dbs = append(dbs, cfg.GraphDBs...)
 
-	for _, db := range dbs {
-		cayley := netmap.NewCayleyGraph(db.System, db.URL, db.Options)
-		if cayley == nil {
-			return fmt.Errorf("System: Failed to create the %s graph", db.System)
-		}
-
-		g := netmap.NewGraph(cayley)
-		if g == nil {
-			return fmt.Errorf("System: Failed to create the %s graph", g.String())
-		}
-
-		l.graphs = append(l.graphs, g)
+	if len(l.graphs) == 0 {
+		return errors.New("System: no primary databases found to create the graph")
 	}
 	return nil
 }

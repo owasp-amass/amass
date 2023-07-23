@@ -44,7 +44,7 @@ If you prefer to build your own binary from the latest release of the source cod
 Simply execute the following command:
 
 ```bash
-go install -v github.com/owasp-amass/amass/v3/...@master
+go install -v github.com/owasp-amass/amass/v4/...@master
 ```
 
 At this point, the binary should be in *$GOPATH/bin*.

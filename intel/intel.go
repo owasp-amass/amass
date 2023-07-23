@@ -12,15 +12,15 @@ import (
 	"sync"
 	"time"
 
-	"github.com/owasp-amass/amass/v3/config"
-	"github.com/owasp-amass/amass/v3/datasrcs"
-	amassnet "github.com/owasp-amass/amass/v3/net"
-	"github.com/owasp-amass/amass/v3/requests"
-	"github.com/owasp-amass/amass/v3/systems"
 	"github.com/caffix/pipeline"
-	"github.com/owasp-amass/resolve"
 	"github.com/caffix/service"
 	"github.com/caffix/stringset"
+	"github.com/owasp-amass/amass/v4/datasrcs"
+	amassnet "github.com/owasp-amass/amass/v4/net"
+	"github.com/owasp-amass/amass/v4/requests"
+	"github.com/owasp-amass/amass/v4/systems"
+	"github.com/owasp-amass/config/config"
+	"github.com/owasp-amass/resolve"
 	bf "github.com/tylertreat/BoomFilters"
 	"golang.org/x/net/publicsuffix"
 )
@@ -91,10 +91,10 @@ func (c *Collection) HostedDomains(ctx context.Context) error {
 
 	// Send IP addresses to the input source to scan for domain names
 	source := newIntelSource(c)
-	for _, addr := range c.Config.Addresses {
+	for _, addr := range c.Config.Scope.Addresses {
 		source.InputAddress(&requests.AddrRequest{Address: addr.String()})
 	}
-	for _, cidr := range append(c.Config.CIDRs, c.asnsToCIDRs()...) {
+	for _, cidr := range append(c.Config.Scope.CIDRs, c.asnsToCIDRs()...) {
 		// Skip IPv6 netblocks, since they are simply too large
 		if ip := cidr.IP.Mask(cidr.Mask); amassnet.IsIPv6(ip) {
 			continue
@@ -156,8 +156,6 @@ func (c *Collection) makeDNSTaskFunc() pipeline.TaskFunc {
 						Name:      d,
 						Domain:    d,
 						Addresses: []requests.AddressInfo{addrinfo},
-						Tag:       requests.DNS,
-						Sources:   []string{"Reverse DNS"},
 					}, tp)
 				}
 			}
@@ -184,14 +182,14 @@ func (c *Collection) makeFilterTaskFunc() pipeline.TaskFunc {
 func (c *Collection) asnsToCIDRs() []*net.IPNet {
 	var cidrs []*net.IPNet
 
-	if len(c.Config.ASNs) == 0 {
+	if len(c.Config.Scope.ASNs) == 0 {
 		return cidrs
 	}
 
 	cidrSet := stringset.New()
 	defer cidrSet.Close()
 
-	for _, asn := range c.Config.ASNs {
+	for _, asn := range c.Config.Scope.ASNs {
 		req := c.Sys.Cache().ASNSearch(asn)
 
 		if req == nil {
@@ -209,7 +207,7 @@ func (c *Collection) asnsToCIDRs() []*net.IPNet {
 	defer filter.Reset()
 
 	// Do not return CIDRs that are already in the config
-	for _, cidr := range c.Config.CIDRs {
+	for _, cidr := range c.Config.Scope.CIDRs {
 		filter.Add([]byte(cidr.String()))
 	}
 
@@ -278,10 +276,8 @@ func (c *Collection) collect(req *requests.WhoisRequest) {
 	for _, name := range req.NewDomains {
 		if d, err := publicsuffix.EffectiveTLDPlusOne(name); err == nil && !c.filter.TestAndAdd([]byte(d)) {
 			c.Output <- &requests.Output{
-				Name:    d,
-				Domain:  d,
-				Tag:     req.Tag,
-				Sources: []string{req.Source},
+				Name:   d,
+				Domain: d,
 			}
 		}
 	}

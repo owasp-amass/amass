@@ -14,9 +14,9 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
-	amassnet "github.com/owasp-amass/amass/v3/net"
-	amassdns "github.com/owasp-amass/amass/v3/net/dns"
-	"github.com/owasp-amass/amass/v3/requests"
+	amassnet "github.com/owasp-amass/amass/v4/net"
+	amassdns "github.com/owasp-amass/amass/v4/net/dns"
+	"github.com/owasp-amass/amass/v4/requests"
 	"github.com/owasp-amass/resolve"
 	bf "github.com/tylertreat/BoomFilters"
 	lua "github.com/yuin/gopher-lua"
@@ -288,8 +288,6 @@ func (s *Script) zoneWalk(L *lua.LState) int {
 			s.Output() <- &requests.DNSRequest{
 				Name:   name,
 				Domain: domain,
-				Tag:    requests.DNS,
-				Source: "NSEC Walk",
 			}
 		}
 	}
@@ -343,8 +341,6 @@ func (s *Script) wrapZoneTransfer(L *lua.LState) int {
 				s.Output() <- &requests.DNSRequest{
 					Name:   "www." + n,
 					Domain: req.Domain,
-					Tag:    requests.DNS,
-					Source: "DNS",
 				}
 			} else {
 				s.Output() <- req
@@ -462,8 +458,6 @@ func getXfrRequests(en *dns.Envelope, domain string) []*requests.DNSRequest {
 				Name:    record.Name,
 				Domain:  domain,
 				Records: []requests.DNSAnswer{record},
-				Tag:     requests.AXFR,
-				Source:  "DNS Zone XFR",
 			}
 		}
 	}

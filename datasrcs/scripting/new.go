@@ -10,22 +10,18 @@ import (
 	"strings"
 	"time"
 
-	amassnet "github.com/owasp-amass/amass/v3/net"
-	amassdns "github.com/owasp-amass/amass/v3/net/dns"
-	"github.com/owasp-amass/amass/v3/net/http"
-	"github.com/owasp-amass/amass/v3/requests"
-	"github.com/owasp-amass/resolve"
 	"github.com/miekg/dns"
+	amassnet "github.com/owasp-amass/amass/v4/net"
+	amassdns "github.com/owasp-amass/amass/v4/net/dns"
+	"github.com/owasp-amass/amass/v4/net/http"
+	"github.com/owasp-amass/amass/v4/requests"
+	"github.com/owasp-amass/resolve"
 	bf "github.com/tylertreat/BoomFilters"
 	lua "github.com/yuin/gopher-lua"
 	"golang.org/x/net/publicsuffix"
 )
 
-func (s *Script) genNewName(ctx context.Context, name string) {
-	s.newNameWithSrc(ctx, name, s.Description(), s.String())
-}
-
-func (s *Script) newNameWithSrc(ctx context.Context, name, tag, src string) {
+func (s *Script) newNameWithContext(ctx context.Context, name string) {
 	if domain := s.sys.Config().WhichDomain(name); domain != "" {
 		select {
 		case <-ctx.Done():
@@ -33,8 +29,6 @@ func (s *Script) newNameWithSrc(ctx context.Context, name, tag, src string) {
 		case s.Output() <- &requests.DNSRequest{
 			Name:   name,
 			Domain: domain,
-			Tag:    tag,
-			Source: src,
 		}:
 		}
 	}
@@ -45,7 +39,7 @@ func (s *Script) newName(L *lua.LState) int {
 	if ctx, err := extractContext(L.CheckUserData(1)); err == nil && !contextExpired(ctx) {
 		if n := L.CheckString(2); n != "" {
 			if name := s.subre.FindString(n); name != "" {
-				s.genNewName(ctx, name)
+				s.newNameWithContext(ctx, name)
 			}
 		}
 	}
@@ -67,17 +61,13 @@ func (s *Script) sendNames(L *lua.LState) int {
 }
 
 func (s *Script) internalSendNames(ctx context.Context, content string) int {
-	return s.internalSendNamesWithSrc(ctx, content, s.Description(), s.String())
-}
-
-func (s *Script) internalSendNamesWithSrc(ctx context.Context, content, tag, src string) int {
 	filter := bf.NewDefaultStableBloomFilter(1000, 0.01)
 	defer filter.Reset()
 
 	var count int
 	for _, name := range s.subre.FindAllString(string(content), -1) {
 		if n := http.CleanName(name); n != "" && !filter.TestAndAdd([]byte(n)) {
-			s.newNameWithSrc(ctx, n, tag, src)
+			s.newNameWithContext(ctx, n)
 			count++
 		}
 	}
@@ -135,8 +125,6 @@ func (s *Script) internalSendDNSRecords(ctx context.Context, name string, record
 			Name:    name,
 			Domain:  domain,
 			Records: records,
-			Tag:     s.Description(),
-			Source:  s.String(),
 		}:
 		}
 	}
@@ -169,8 +157,6 @@ func (s *Script) newPTR(ctx context.Context, record *resolve.ExtractedAnswer) {
 			Type: int(dns.TypePTR),
 			Data: answer,
 		}},
-		Tag:    s.Description(),
-		Source: s.String(),
 	}:
 	}
 }
@@ -194,8 +180,6 @@ func (s *Script) newAddr(L *lua.LState) int {
 				case s.Output() <- &requests.AddrRequest{
 					Address: ip.String(),
 					Domain:  domain,
-					Tag:     s.SourceType,
-					Source:  s.String(),
 				}:
 				}
 			}
@@ -252,8 +236,6 @@ func (s *Script) newASN(L *lua.LState) int {
 				AllocationDate: time.Now(),
 				Description:    desc,
 				Netblocks:      netblocks,
-				Tag:            s.SourceType,
-				Source:         s.String(),
 			})
 		}
 	}
@@ -270,8 +252,6 @@ func (s *Script) associated(L *lua.LState) int {
 			case s.Output() <- &requests.WhoisRequest{
 				Domain:     domain,
 				NewDomains: []string{assoc},
-				Tag:        s.SourceType,
-				Source:     s.String(),
 			}:
 			}
 		}

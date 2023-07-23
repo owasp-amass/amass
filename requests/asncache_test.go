@@ -34,8 +34,6 @@ func TestUpdate(t *testing.T) {
 		Address: "72.237.4.113",
 		ASN:     26808,
 		Prefix:  "72.237.4.0/24",
-		Tag:     RIR,
-		Source:  "RIR",
 	})
 
 	if entry := cache.AddrSearch("72.237.4.113"); entry == nil {
@@ -51,8 +49,6 @@ func TestUpdate(t *testing.T) {
 		AllocationDate: time.Now(),
 		Description:    "UTICA-COLLEGE",
 		Netblocks:      []string{"72.237.4.0/24", "8.24.68.0/23"},
-		Tag:            RIR,
-		Source:         "RIR",
 	})
 
 	if entry := cache.AddrSearch("72.237.4.113"); entry == nil || entry.CC != "US" || entry.Description != "UTICA-COLLEGE" {
@@ -74,8 +70,6 @@ func TestASNSearch(t *testing.T) {
 		Address: "72.237.4.113",
 		ASN:     26808,
 		Prefix:  "72.237.4.0/24",
-		Tag:     RIR,
-		Source:  "RIR",
 	})
 
 	if entry := cache.ASNSearch(26808); entry == nil {
@@ -102,8 +96,6 @@ func TestAddrSearch(t *testing.T) {
 		AllocationDate: time.Now(),
 		Description:    "UTICA-COLLEGE",
 		Netblocks:      []string{"72.237.4.0/24", "8.24.68.0/23"},
-		Tag:            RIR,
-		Source:         "RIR",
 	})
 
 	if entry := cache.AddrSearch("72.237.4.120"); entry == nil {

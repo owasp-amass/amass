@@ -156,8 +156,6 @@ func (c *ASNCache) AddrSearch(addr string) *ASNRequest {
 			ASN:         0,
 			Prefix:      cidr,
 			Description: "Reserved Network Address Blocks",
-			Tag:         RIR,
-			Source:      "RIR",
 		}
 	}
 
@@ -183,8 +181,6 @@ func (c *ASNCache) AddrSearch(addr string) *ASNRequest {
 		Prefix:      prefix,
 		Netblocks:   netblocks.Slice(),
 		Description: entry.Data.Description,
-		Tag:         RIR,
-		Source:      "RIR",
 	}
 }
 

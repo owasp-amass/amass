@@ -12,8 +12,8 @@ import (
 	"strings"
 
 	"github.com/fatih/color"
-	amassnet "github.com/owasp-amass/amass/v3/net"
-	"github.com/owasp-amass/amass/v3/requests"
+	amassnet "github.com/owasp-amass/amass/v4/net"
+	"github.com/owasp-amass/amass/v4/requests"
 )
 
 // Banner is the ASCII art logo used within help output.
@@ -32,7 +32,7 @@ const Banner = `        .+++:.            :                             .+++.
 
 const (
 	// Version is used to display the current version of Amass.
-	Version = "v3.23.3"
+	Version = "v4.0.2"
 
 	// Author is used to display the Amass Project Team.
 	Author = "OWASP Amass Project - @owaspamass"
@@ -43,7 +43,6 @@ const (
 
 var (
 	// Colors used to ease the reading of program output
-	g      = color.New(color.FgHiGreen)
 	b      = color.New(color.FgHiBlue)
 	y      = color.New(color.FgHiYellow)
 	r      = color.New(color.FgHiRed)
@@ -59,9 +58,7 @@ type ASNSummaryData struct {
 }
 
 // UpdateSummaryData updates the summary maps using the provided requests.Output data.
-func UpdateSummaryData(output *requests.Output, tags map[string]int, asns map[int]*ASNSummaryData) {
-	tags[output.Tag]++
-
+func UpdateSummaryData(output *requests.Output, asns map[int]*ASNSummaryData) {
 	for _, addr := range output.Addresses {
 		if addr.CIDRStr == "" {
 			continue
@@ -81,12 +78,12 @@ func UpdateSummaryData(output *requests.Output, tags map[string]int, asns map[in
 }
 
 // PrintEnumerationSummary outputs the summary information utilized by the command-line tools.
-func PrintEnumerationSummary(total int, tags map[string]int, asns map[int]*ASNSummaryData, demo bool) {
-	FprintEnumerationSummary(color.Error, total, tags, asns, demo)
+func PrintEnumerationSummary(total int, asns map[int]*ASNSummaryData, demo bool) {
+	FprintEnumerationSummary(color.Error, total, asns, demo)
 }
 
 // FprintEnumerationSummary outputs the summary information utilized by the command-line tools.
-func FprintEnumerationSummary(out io.Writer, total int, tags map[string]int, asns map[int]*ASNSummaryData, demo bool) {
+func FprintEnumerationSummary(out io.Writer, total int, asns map[int]*ASNSummaryData, demo bool) {
 	pad := func(num int, chr string) {
 		for i := 0; i < num; i++ {
 			b.Fprint(out, chr)
@@ -102,16 +99,7 @@ func FprintEnumerationSummary(out io.Writer, total int, tags map[string]int, asn
 	pad(num, " ")
 	b.Fprintf(out, "%s\n", site)
 	pad(8, "----------")
-	fmt.Fprintf(out, "\n%s%s", yellow(strconv.Itoa(total)), green(" names discovered - "))
-	// Print the stats using tag information
-	num, length := 1, len(tags)
-	for k, v := range tags {
-		fmt.Fprintf(out, "%s: %s", green(k), yellow(strconv.Itoa(v)))
-		if num < length {
-			g.Fprint(out, ", ")
-		}
-		num++
-	}
+	fmt.Fprintf(out, "\n%s%s", yellow(strconv.Itoa(total)), green(" names discovered"))
 	fmt.Fprintln(out)
 
 	if len(asns) == 0 {
@@ -197,10 +185,7 @@ func censorString(input string, start, end int) string {
 }
 
 // OutputLineParts returns the parts of a line to be printed for a requests.Output.
-func OutputLineParts(out *requests.Output, src, addrs, demo bool) (source, name, ips string) {
-	if src {
-		source = fmt.Sprintf("%-18s", "["+out.Sources[0]+"] ")
-	}
+func OutputLineParts(out *requests.Output, addrs, demo bool) (name, ips string) {
 	if addrs {
 		for i, a := range out.Addresses {
 			if i != 0 {

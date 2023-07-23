@@ -8,8 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/owasp-amass/amass/v3/requests"
 	"github.com/caffix/stringset"
+	"github.com/owasp-amass/amass/v4/requests"
+	"github.com/owasp-amass/config/config"
 )
 
 func TestNewNames(t *testing.T) {
@@ -58,7 +59,7 @@ func TestNewNames(t *testing.T) {
 	for i := 0; i < l; i++ {
 		req := <-sys.DataSources()[0].Output()
 
-		if d, ok := req.(*requests.DNSRequest); !ok || !expected.Has(d.Name) || d.Domain != domain || d.Tag != "testing" || d.Source != "names" {
+		if d, ok := req.(*requests.DNSRequest); !ok || !expected.Has(d.Name) || d.Domain != domain {
 			t.Errorf("Name %d: %v was not found in the list of expected names", i+1, d.Name)
 		} else {
 			expected.Remove(d.Name)
@@ -85,7 +86,23 @@ func TestSendDNSRecords(t *testing.T) {
 	defer func() { _ = sys.Shutdown() }()
 
 	sys.Config().MinimumTTL = 1440
-	dsc := sys.Config().GetDataSourceConfig(script.String())
+	cfg := sys.Config()
+	if cfg == nil {
+		t.Fatal("Config is nil")
+	}
+
+	if cfg.DataSrcConfigs == nil {
+		cfg.DataSrcConfigs = &config.DataSourceConfig{
+			GlobalOptions: make(map[string]int),
+		}
+	}
+
+	dsc := cfg.GetDataSourceConfig(script.String())
+	if dsc == nil {
+		dsc = &config.DataSource{Name: script.String()} // Initialize if GetDataSourceConfig returns nil
+		cfg.DataSrcConfigs.Datasources = append(cfg.DataSrcConfigs.Datasources, dsc)
+	}
+
 	dsc.TTL = 1440
 
 	sys.Config().AddDomain("owasp.org")
@@ -138,7 +155,7 @@ func TestNewAddrs(t *testing.T) {
 	for i := 0; i < num; i++ {
 		req := <-sys.DataSources()[0].Output()
 
-		if a, ok := req.(*requests.AddrRequest); !ok || !expected.Has(a.Address) || a.Domain != domain || a.Tag != "testing" || a.Source != "addrs" {
+		if a, ok := req.(*requests.AddrRequest); !ok || !expected.Has(a.Address) || a.Domain != domain {
 			t.Errorf("Address %d: %v was not found in the list of expected addresses", i+1, a.Address)
 		} else {
 			expected.Remove(a.Address)
@@ -151,14 +168,10 @@ func TestAssociated(t *testing.T) {
 		"owasp.org": {
 			Domain:     "owasp.org",
 			NewDomains: []string{"globalappsec.org"},
-			Tag:        "testing",
-			Source:     "associated",
 		},
 		"utica.edu": {
 			Domain:     "utica.edu",
 			NewDomains: []string{"necyber.com"},
-			Tag:        "testing",
-			Source:     "associated",
 		},
 	}
 
@@ -197,8 +210,7 @@ func TestAssociated(t *testing.T) {
 		req := <-sys.DataSources()[0].Output()
 
 		if a, ok := req.(*requests.WhoisRequest); ok {
-			if exp, found := expected[a.Domain]; !found || a.Domain != exp.Domain ||
-				a.NewDomains[0] != exp.NewDomains[0] || a.Tag != "testing" || a.Source != "associated" {
+			if exp, found := expected[a.Domain]; !found || a.Domain != exp.Domain || a.NewDomains[0] != exp.NewDomains[0] {
 				t.Errorf("Incorrect output for associated %d, expected: %s, got: %v", i+1, exp, a)
 			}
 		}

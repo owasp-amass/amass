@@ -7,11 +7,11 @@ package systems
 import (
 	"runtime"
 
-	"github.com/owasp-amass/amass/v3/config"
-	"github.com/owasp-amass/amass/v3/requests"
 	"github.com/caffix/netmap"
-	"github.com/owasp-amass/resolve"
 	"github.com/caffix/service"
+	"github.com/owasp-amass/amass/v4/requests"
+	"github.com/owasp-amass/config/config"
+	"github.com/owasp-amass/resolve"
 )
 
 type SimpleSystem struct {
@@ -66,9 +66,9 @@ func (ss *SimpleSystem) Shutdown() error {
 	if ss.Service != nil {
 		_ = ss.Service.Stop()
 	}
-	if ss.Graph != nil {
+	/*if ss.Graph != nil {
 		ss.Graph.Close()
-	}
+	}*/
 	if ss.Pool != nil {
 		ss.Pool.Stop()
 	}
