@@ -22,7 +22,7 @@ import (
 	"golang.org/x/net/publicsuffix"
 )
 
-func NewOutput(ctx context.Context, g *netmap.Graph, e *enum.Enumeration, filter *stringset.Set) []string {
+func NewOutput(ctx context.Context, g *netmap.Graph, e *enum.Enumeration, filter *stringset.Set, since time.Time) []string {
 	var output []string
 
 	// Make sure a filter has been created
@@ -32,26 +32,27 @@ func NewOutput(ctx context.Context, g *netmap.Graph, e *enum.Enumeration, filter
 	}
 
 	var assets []*types.Asset
-	qtime := e.Config.CollectionStartTime.UTC()
 	for _, atype := range []oam.AssetType{oam.FQDN, oam.IPAddress, oam.Netblock, oam.ASN, oam.RIROrg} {
-		if a, err := g.DB.FindByType(atype, qtime); err == nil {
+		if a, err := g.DB.FindByType(atype, since.UTC()); err == nil {
 			assets = append(assets, a...)
 		}
 	}
 
+	arrow := white("-->")
+	start := e.Config.CollectionStartTime.UTC()
 	for _, from := range assets {
-		fromstr := extractAssetName(from, qtime)
+		fromstr := extractAssetName(from)
 
-		if rels, err := g.DB.OutgoingRelations(from, qtime); err == nil {
+		if rels, err := g.DB.OutgoingRelations(from, start); err == nil {
 			for _, rel := range rels {
 				lineid := from.ID + rel.ID + rel.ToAsset.ID
 				if filter.Has(lineid) {
 					continue
 				}
-				if to, err := g.DB.FindById(rel.ToAsset.ID, qtime); err == nil {
-					tostr := extractAssetName(to, qtime)
+				if to, err := g.DB.FindById(rel.ToAsset.ID, start); err == nil {
+					tostr := extractAssetName(to)
 
-					output = append(output, fmt.Sprintf("%s %s %s %s %s", fromstr, "-->", magenta(rel.Type), "-->", tostr))
+					output = append(output, fmt.Sprintf("%s %s %s %s %s", fromstr, arrow, magenta(rel.Type), arrow, tostr))
 					filter.Insert(lineid)
 				}
 			}
@@ -61,7 +62,7 @@ func NewOutput(ctx context.Context, g *netmap.Graph, e *enum.Enumeration, filter
 	return output
 }
 
-func extractAssetName(a *types.Asset, since time.Time) string {
+func extractAssetName(a *types.Asset) string {
 	var result string
 
 	switch a.Asset.AssetType() {

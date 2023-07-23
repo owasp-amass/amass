@@ -414,8 +414,8 @@ func processOutput(ctx context.Context, g *netmap.Graph, e *enum.Enumeration, ou
 	known := stringset.New()
 	defer known.Close()
 	// The function that obtains output from the enum and puts it on the channel
-	extract := func() {
-		for _, o := range NewOutput(ctx, g, e, known) {
+	extract := func(since time.Time) {
+		for _, o := range NewOutput(ctx, g, e, known, since) {
 			for _, ch := range outputs {
 				ch <- o
 			}
@@ -424,17 +424,20 @@ func processOutput(ctx context.Context, g *netmap.Graph, e *enum.Enumeration, ou
 
 	t := time.NewTimer(10 * time.Second)
 	defer t.Stop()
+	last := e.Config.CollectionStartTime
 	for {
 		select {
 		case <-ctx.Done():
-			extract()
+			extract(last)
 			return
 		case <-done:
-			extract()
+			extract(last)
 			return
 		case <-t.C:
-			extract()
+			next := time.Now()
+			extract(last)
 			t.Reset(10 * time.Second)
+			last = next
 		}
 	}
 }

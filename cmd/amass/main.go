@@ -63,6 +63,7 @@ var (
 	green   = color.New(color.FgHiGreen).SprintFunc()
 	blue    = color.New(color.FgHiBlue).SprintFunc()
 	magenta = color.New(color.FgHiMagenta).SprintFunc()
+	white   = color.New(color.FgHiWhite).SprintFunc()
 )
 
 func commandUsage(msg string, cmdFlagSet *flag.FlagSet, errBuf *bytes.Buffer) {
