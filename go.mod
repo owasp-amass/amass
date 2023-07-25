@@ -14,7 +14,7 @@ require (
 	github.com/geziyor/geziyor v0.0.0-20230315135110-a242b58aaa65
 	github.com/miekg/dns v1.1.55
 	github.com/owasp-amass/asset-db v0.3.1
-	github.com/owasp-amass/config v0.1.2
+	github.com/owasp-amass/config v0.1.3
 	github.com/owasp-amass/open-asset-model v0.1.0-alpha.0.20230622033932-2f80ca929692
 	github.com/owasp-amass/resolve v0.6.20
 	github.com/stretchr/testify v1.8.2
@@ -32,7 +32,7 @@ require (
 	github.com/benbjohnson/clock v1.3.5 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
-	github.com/chromedp/cdproto v0.0.0-20230716001748-3ed7c525ec8b // indirect
+	github.com/chromedp/cdproto v0.0.0-20230722233645-dbf72f61037f // indirect
 	github.com/chromedp/chromedp v0.9.1 // indirect
 	github.com/chromedp/sysutil v1.0.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
