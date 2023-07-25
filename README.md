@@ -75,16 +75,9 @@ See the [Tutorial](./doc/tutorial.md) for example usage.
 
 See the [Amass Scripting Engine Manual](./doc/scripting.md) for greater control over your enumeration process.
 
-## Troubleshooting [![Chat on Discord](https://img.shields.io/discord/433729817918308352.svg?logo=discord)](https://discord.gg/HNePVyX3cp)
+## Corporate Supporters
 
-If you need help with installation and/or usage of the tool, please join our [Discord server](https://discord.gg/HNePVyX3cp) where community members can best help you.
-
-:stop_sign:   **Please avoid opening GitHub issues for support requests or questions!**
-
-## Contributing [![Contribute Yes](https://img.shields.io/badge/contribute-yes-brightgreen.svg)](./CONTRIBUTING.md) [![Chat on Discord](https://img.shields.io/discord/433729817918308352.svg?logo=discord)](https://discord.gg/HNePVyX3cp)
-
-We are always happy to get new contributors on board! Please check [CONTRIBUTING.md](CONTRIBUTING.md) to learn how to
-contribute to our codebase, and join our [Discord Server](https://discord.gg/HNePVyX3cp) to discuss current project goals.
+[![ZeroFox Logo](./images/zerofox_logo.png) ZeroFox](https://www.zerofox.com/)
 
 ## Testimonials
 
@@ -123,6 +116,17 @@ Add it to our ever-growing list of [REFERENCES.md](REFERENCES.md) by forking and
 * [Dionach | How to Use OWASP Amass: An Extensive Tutorial](https://www.dionach.com/blog/how-to-use-owasp-amass-an-extensive-tutorial/)
 * [nynan | How to **Actually** Use Amass More Effectively — Bug Bounty](https://medium.com/@nynan/how-to-actually-use-amass-more-effectively-bug-bounty-59e83900de02)
 * [ToolWar | Extreme Subdomain Enumeration/Scanning on Windows : OWASP Amass](https://www.youtube.com/watch?v=mEQnVkSG19M)
+
+## Contributing [![Contribute Yes](https://img.shields.io/badge/contribute-yes-brightgreen.svg)](./CONTRIBUTING.md) [![Chat on Discord](https://img.shields.io/discord/433729817918308352.svg?logo=discord)](https://discord.gg/HNePVyX3cp)
+
+We are always happy to get new contributors on board! Please check [CONTRIBUTING.md](CONTRIBUTING.md) to learn how to
+contribute to our codebase, and join our [Discord Server](https://discord.gg/HNePVyX3cp) to discuss current project goals.
+
+## Troubleshooting [![Chat on Discord](https://img.shields.io/discord/433729817918308352.svg?logo=discord)](https://discord.gg/HNePVyX3cp)
+
+If you need help with installation and/or usage of the tool, please join our [Discord server](https://discord.gg/HNePVyX3cp) where community members can best help you.
+
+:stop_sign:   **Please avoid opening GitHub issues for support requests or questions!**
 
 ## Licensing [![License](https://img.shields.io/badge/license-apache%202-blue)](https://www.apache.org/licenses/LICENSE-2.0)
 
