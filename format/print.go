@@ -197,9 +197,6 @@ func OutputLineParts(out *requests.Output, addrs, demo bool) (name, ips string) 
 				ips += a.Address.String()
 			}
 		}
-		if ips == "" {
-			ips = "N/A"
-		}
 	}
 	name = out.Name
 	if demo {
@@ -210,20 +207,17 @@ func OutputLineParts(out *requests.Output, addrs, demo bool) (name, ips string) 
 
 // DesiredAddrTypes removes undesired address types from the AddressInfo slice.
 func DesiredAddrTypes(addrs []requests.AddressInfo, ipv4, ipv6 bool) []requests.AddressInfo {
-	if !ipv4 && !ipv6 {
-		return addrs
+	var kept []requests.AddressInfo
+
+	for _, addr := range addrs {
+		if ipv4 && amassnet.IsIPv4(addr.Address) {
+			kept = append(kept, addr)
+		} else if ipv6 && amassnet.IsIPv6(addr.Address) {
+			kept = append(kept, addr)
+		}
 	}
 
-	var keep []requests.AddressInfo
-	for _, addr := range addrs {
-		if amassnet.IsIPv4(addr.Address) && !ipv4 {
-			continue
-		} else if amassnet.IsIPv6(addr.Address) && !ipv6 {
-			continue
-		}
-		keep = append(keep, addr)
-	}
-	return keep
+	return kept
 }
 
 // InterfaceInfo returns network interface information specific to the current host.

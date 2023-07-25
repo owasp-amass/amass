@@ -96,6 +96,10 @@ func runDBCommand(clArgs []string) {
 		color.Output = io.Discard
 		color.Error = io.Discard
 	}
+	if args.Options.IPs {
+		args.Options.IPv4 = true
+		args.Options.IPv6 = true
+	}
 	if args.Filepaths.Domains != "" {
 		list, err := config.GetListFromFile(args.Filepaths.Domains)
 		if err != nil {

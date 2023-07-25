@@ -152,7 +152,7 @@ func EventOutput(ctx context.Context, g *netmap.Graph, domains []string, since t
 		lookup[n] = o
 	}
 	// Build the lookup map used to create the final result set
-	if pairs, err := g.NamesToAddrs(ctx, since, names...); err == nil {
+	if pairs, err := g.NamesToAddrs(ctx, qtime, names...); err == nil {
 		for _, p := range pairs {
 			addr := p.Addr.Address.String()
 
