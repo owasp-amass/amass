@@ -77,7 +77,7 @@ See the [Amass Scripting Engine Manual](./doc/scripting.md) for greater control 
 
 ## Corporate Supporters
 
-[![ZeroFox Logo](./images/zerofox_logo.png) ZeroFox](https://www.zerofox.com/)
+[![ZeroFox Logo](./images/zerofox_logo.png)](https://www.zerofox.com/) [![IPinfo Logo](./images/ipinfo_logo.png)](https://ipinfo.io/) [![WhoisXML API Logo](./images/whoisxmlapi_logo.png)](https://www.whoisxmlapi.com/)
 
 ## Testimonials
 
