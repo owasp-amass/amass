@@ -181,15 +181,18 @@ func showEventData(args *dbArgs, asninfo bool, db *netmap.Graph) {
 			continue
 		}
 
-		out.Addresses = format.DesiredAddrTypes(out.Addresses, args.Options.IPv4, args.Options.IPv6)
-		if l := len(out.Addresses); (args.Options.IPs || args.Options.IPv4 || args.Options.IPv6) && l == 0 {
+		if args.Options.IPv4 || args.Options.IPv6 {
+			out.Addresses = format.DesiredAddrTypes(out.Addresses, args.Options.IPv4, args.Options.IPv6)
+		}
+
+		if l := len(out.Addresses); (args.Options.IPv4 || args.Options.IPv6) && l == 0 {
 			continue
 		} else if l > 0 {
 			format.UpdateSummaryData(out, asns)
 		}
 
 		total++
-		name, ips := format.OutputLineParts(out, args.Options.IPs || args.Options.IPv4 || args.Options.IPv6, args.Options.DemoMode)
+		name, ips := format.OutputLineParts(out, args.Options.IPv4 || args.Options.IPv6, args.Options.DemoMode)
 		if ips != "" {
 			ips = " " + ips
 		}
