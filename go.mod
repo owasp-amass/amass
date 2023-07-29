@@ -13,9 +13,9 @@ require (
 	github.com/fatih/color v1.15.0
 	github.com/geziyor/geziyor v0.0.0-20230315135110-a242b58aaa65
 	github.com/miekg/dns v1.1.55
-	github.com/owasp-amass/asset-db v0.3.1
+	github.com/owasp-amass/asset-db v0.3.2
 	github.com/owasp-amass/config v0.1.3
-	github.com/owasp-amass/open-asset-model v0.1.0-alpha.0.20230622033932-2f80ca929692
+	github.com/owasp-amass/open-asset-model v0.2.0
 	github.com/owasp-amass/resolve v0.6.20
 	github.com/stretchr/testify v1.8.2
 	github.com/tylertreat/BoomFilters v0.0.0-20210315201527-1a82519a3e43
@@ -70,7 +70,7 @@ require (
 	github.com/prometheus/client_golang v1.16.0 // indirect
 	github.com/prometheus/client_model v0.4.0 // indirect
 	github.com/prometheus/common v0.44.0 // indirect
-	github.com/prometheus/procfs v0.11.0 // indirect
+	github.com/prometheus/procfs v0.11.1 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rubenv/sql-migrate v1.5.2 // indirect
 	github.com/sirupsen/logrus v1.9.0 // indirect
