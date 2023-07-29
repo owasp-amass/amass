@@ -11,6 +11,9 @@ import (
 	"github.com/caffix/pipeline"
 	"github.com/caffix/stringset"
 	"github.com/owasp-amass/amass/v4/requests"
+	"github.com/owasp-amass/asset-db/types"
+	oam "github.com/owasp-amass/open-asset-model"
+	"github.com/owasp-amass/open-asset-model/domain"
 )
 
 // subdomainTask handles newly discovered proper subdomain names in the enumeration.
@@ -20,6 +23,7 @@ type subdomainTask struct {
 	withinWildcards *stringset.Set
 	timesChan       chan *timesReq
 	done            chan struct{}
+	possibleApexes  map[string]struct{}
 }
 
 // newSubdomainTask returns an initialized SubdomainTask.
@@ -30,6 +34,7 @@ func newSubdomainTask(e *Enumeration) *subdomainTask {
 		withinWildcards: stringset.New(),
 		timesChan:       make(chan *timesReq, 10),
 		done:            make(chan struct{}, 2),
+		possibleApexes:  make(map[string]struct{}),
 	}
 
 	go r.timesManager()
@@ -41,6 +46,7 @@ func (r *subdomainTask) Stop() {
 	close(r.done)
 	r.cnames.Close()
 	r.withinWildcards.Close()
+	r.linkNodesToApexes()
 }
 
 // Process implements the pipeline Task interface.
@@ -112,6 +118,7 @@ func (r *subdomainTask) checkForSubdomains(ctx context.Context, req *requests.DN
 
 	r.enum.sendRequests(subreq)
 	if times == 1 {
+		r.possibleApexes[sub] = struct{}{}
 		pipeline.SendData(ctx, "root", subreq, tp)
 	}
 	return true
@@ -165,6 +172,49 @@ func (r *subdomainTask) timesManager() {
 
 			subdomains[req.Sub] = times
 			req.Ch <- times
+		}
+	}
+}
+
+func (r *subdomainTask) linkNodesToApexes() {
+	apexes := make(map[string]*types.Asset)
+
+	for k := range r.possibleApexes {
+		res, err := r.enum.graph.DB.FindByContent(domain.FQDN{Name: k}, r.enum.Config.CollectionStartTime)
+		if err != nil || len(res) == 0 {
+			continue
+		}
+		apex := res[0]
+
+		if rels, err := r.enum.graph.DB.OutgoingRelations(apex, r.enum.Config.CollectionStartTime, "ns_record"); err == nil && len(rels) > 0 {
+			apexes[k] = apex
+		}
+	}
+
+	for _, d := range r.enum.Config.Domains() {
+		names, err := r.enum.graph.DB.FindByScope([]oam.Asset{domain.FQDN{Name: d}}, r.enum.Config.CollectionStartTime)
+		if err != nil || len(names) == 0 {
+			continue
+		}
+
+		for _, name := range names {
+			n, ok := name.Asset.(domain.FQDN)
+			if !ok {
+				continue
+			}
+			// determine which domain apex this name is a node in
+			best := len(n.Name)
+			var apex *types.Asset
+			for fqdn, a := range apexes {
+				if idx := strings.Index(n.Name, fqdn); idx != -1 && idx != 0 && idx < best {
+					best = idx
+					apex = a
+				}
+			}
+
+			if apex != nil {
+				_, _ = r.enum.graph.DB.Create(apex, "node", n)
+			}
 		}
 	}
 }
