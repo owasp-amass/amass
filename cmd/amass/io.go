@@ -93,9 +93,6 @@ func extractAssetName(a *types.Asset) string {
 
 // ExtractOutput is a convenience method for obtaining new discoveries made by the enumeration process.
 func ExtractOutput(ctx context.Context, g *netmap.Graph, e *enum.Enumeration, filter *stringset.Set, asinfo bool) []*requests.Output {
-	if e.Config.Passive {
-		return EventNames(ctx, g, e.Config.Domains(), e.Config.CollectionStartTime, filter)
-	}
 	return EventOutput(ctx, g, e.Config.Domains(), e.Config.CollectionStartTime, filter, asinfo, e.Sys.Cache())
 }
 

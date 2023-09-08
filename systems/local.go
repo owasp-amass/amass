@@ -48,11 +48,7 @@ func NewLocalSystem(cfg *config.Config) (*LocalSystem, error) {
 		return nil, errors.New("the system was unable to build the pool of trusted resolvers")
 	}
 
-	pool, num := trusted, num
-	if !cfg.Passive {
-		pool, num = untrustedResolvers(cfg)
-	}
-
+	pool, num := untrustedResolvers(cfg)
 	if pool == nil || num == 0 {
 		return nil, errors.New("the system was unable to build the pool of untrusted resolvers")
 	}

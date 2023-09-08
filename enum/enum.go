@@ -65,24 +65,20 @@ func (e *Enumeration) Start(ctx context.Context) error {
 	defer cancel()
 	go e.manageDataSrcRequests()
 
-	if !e.Config.Passive {
-		e.dnsTask = newDNSTask(e, false)
-		e.valTask = newDNSTask(e, true)
-		e.store = newDataManager(e)
-		e.subTask = newSubdomainTask(e)
-		defer e.subTask.Stop()
-		defer e.dnsTask.stop()
-		defer e.valTask.stop()
-	}
+	e.dnsTask = newDNSTask(e, false)
+	e.valTask = newDNSTask(e, true)
+	e.store = newDataManager(e)
+	e.subTask = newSubdomainTask(e)
+	defer e.subTask.Stop()
+	defer e.dnsTask.stop()
+	defer e.valTask.stop()
 
 	var stages []pipeline.Stage
-	if !e.Config.Passive {
-		stages = append(stages, pipeline.FIFO("root", e.valTask.rootTaskFunc()))
-		stages = append(stages, pipeline.FIFO("dns", e.dnsTask))
-		stages = append(stages, pipeline.FIFO("validate", e.valTask))
-		stages = append(stages, pipeline.FIFO("store", e.store))
-		stages = append(stages, pipeline.FIFO("", e.subTask))
-	}
+	stages = append(stages, pipeline.FIFO("root", e.valTask.rootTaskFunc()))
+	stages = append(stages, pipeline.FIFO("dns", e.dnsTask))
+	stages = append(stages, pipeline.FIFO("validate", e.valTask))
+	stages = append(stages, pipeline.FIFO("store", e.store))
+	stages = append(stages, pipeline.FIFO("", e.subTask))
 
 	p := pipeline.NewPipeline(stages...)
 	// The pipeline input source will receive all the names
@@ -99,14 +95,9 @@ func (e *Enumeration) Start(ctx context.Context) error {
 	go e.submitKnownNames()
 	go e.submitProvidedNames()
 
-	var err error
-	if e.Config.Passive {
-		err = p.Execute(e.ctx, e.nameSrc, e.makeOutputSink())
-	} else {
-		err = p.ExecuteBuffered(e.ctx, e.nameSrc, e.makeOutputSink(), 50)
-		// Ensure all data has been stored
-		<-e.store.Stop()
-	}
+	err := p.ExecuteBuffered(e.ctx, e.nameSrc, e.makeOutputSink(), 50)
+	// Ensure all data has been stored
+	<-e.store.Stop()
 	return err
 }
 
@@ -219,16 +210,6 @@ func (e *Enumeration) fireRequest(srv service.Service, req interface{}, finished
 
 func (e *Enumeration) makeOutputSink() pipeline.SinkFunc {
 	return pipeline.SinkFunc(func(ctx context.Context, data pipeline.Data) error {
-		if !e.Config.Passive {
-			return nil
-		}
-
-		req, ok := data.(*requests.DNSRequest)
-		if ok && req != nil && req.Name != "" && e.Config.IsDomainInScope(req.Name) {
-			if _, err := e.graph.UpsertFQDN(e.ctx, req.Name); err != nil {
-				e.Config.Log.Print(err.Error())
-			}
-		}
 		return nil
 	})
 }

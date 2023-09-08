@@ -122,7 +122,7 @@ func defineEnumOptionFlags(enumFlags *flag.FlagSet, args *enumArgs) {
 	enumFlags.BoolVar(&args.Options.Alterations, "alts", false, "Enable generation of altered names")
 	enumFlags.BoolVar(&args.Options.NoColor, "nocolor", false, "Disable colorized output")
 	enumFlags.BoolVar(&args.Options.NoRecursive, "norecursive", false, "Turn off recursive brute forcing")
-	enumFlags.BoolVar(&args.Options.Passive, "passive", false, "Disable DNS resolution of names and dependent features")
+	enumFlags.BoolVar(&args.Options.Passive, "passive", false, "Deprecated since passive is the default setting")
 	enumFlags.BoolVar(&args.Options.Silent, "silent", false, "Disable all output during execution")
 	enumFlags.BoolVar(&args.Options.Verbose, "v", false, "Output status / debug / troubleshooting info")
 }
@@ -174,12 +174,6 @@ func runEnumCommand(clArgs []string) {
 	if err := sys.SetDataSources(datasrcs.GetAllSources(sys)); err != nil {
 		r.Fprintf(color.Error, "%v\n", err)
 		os.Exit(1)
-	}
-
-	if cfg.Passive {
-		fmt.Fprintf(color.Error, "%s\n", green("Passive mode does not generate output during the enumeration"))
-		fmt.Fprintf(color.Error, "\t%s\n", green("Obtain your list of FQDNs using the following command:"))
-		fmt.Fprintf(color.Error, "\t%s\n", green("amass db -names -d "+strings.Join(cfg.Domains(), ",")))
 	}
 
 	// Setup the new enumeration
@@ -362,7 +356,7 @@ func printOutput(e *enum.Enumeration, args *enumArgs, output chan string, wg *sy
 		total++
 	}
 
-	if !e.Config.Passive && total == 0 {
+	if total == 0 {
 		r.Println("No assets were discovered")
 	}
 }
@@ -622,12 +616,6 @@ func (e enumArgs) OverrideConfig(conf *config.Config) error {
 	if e.Options.Active {
 		conf.Active = true
 		conf.Passive = false
-	}
-	if e.Options.Passive {
-		conf.Passive = true
-		conf.Active = false
-		conf.BruteForcing = false
-		conf.Alterations = false
 	}
 	if e.Blacklist.Len() > 0 {
 		conf.Scope.Blacklist = e.Blacklist.Slice()

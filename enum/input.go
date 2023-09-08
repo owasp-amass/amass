@@ -135,7 +135,7 @@ func (r *enumSource) Next(ctx context.Context) bool {
 		case <-t.C:
 			count := r.pipeline.DataItemCount()
 			if !r.enum.requestsPending() && count <= 0 {
-				if r.enum.Config.Passive || r.enum.store.queue.Len() == 0 {
+				if r.enum.store.queue.Len() == 0 {
 					r.markDone()
 					return false
 				}
