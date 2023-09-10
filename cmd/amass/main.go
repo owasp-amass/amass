@@ -24,30 +24,23 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"flag"
 	"fmt"
 	"net"
 	"os"
 	"path"
-	"path/filepath"
-	"strings"
-	"time"
 
-	"github.com/caffix/netmap"
 	"github.com/caffix/service"
-	"github.com/caffix/stringset"
 	"github.com/fatih/color"
 	"github.com/owasp-amass/amass/v4/datasrcs"
 	"github.com/owasp-amass/amass/v4/format"
 	amassnet "github.com/owasp-amass/amass/v4/net"
-	"github.com/owasp-amass/amass/v4/requests"
 	"github.com/owasp-amass/amass/v4/systems"
 	"github.com/owasp-amass/config/config"
 )
 
 const (
-	mainUsageMsg         = "intel|enum|db [options]"
+	mainUsageMsg         = "intel|enum [options]"
 	exampleConfigFileURL = "https://github.com/owasp-amass/amass/blob/master/examples/config.yaml"
 	userGuideURL         = "https://github.com/owasp-amass/amass/blob/master/doc/user_guide.md"
 	tutorialURL          = "https://github.com/owasp-amass/amass/blob/master/doc/tutorial.md"
@@ -76,7 +69,6 @@ func commandUsage(msg string, cmdFlagSet *flag.FlagSet, errBuf *bytes.Buffer) {
 		g.Fprintf(color.Error, "\nSubcommands: \n\n")
 		g.Fprintf(color.Error, "\t%-11s - Discover targets for enumerations\n", "amass intel")
 		g.Fprintf(color.Error, "\t%-11s - Perform enumerations and network mapping\n", "amass enum")
-		g.Fprintf(color.Error, "\t%-11s - Manipulate the Amass graph database\n", "amass db")
 	}
 
 	g.Fprintln(color.Error)
@@ -114,8 +106,6 @@ func main() {
 	}
 
 	switch os.Args[1] {
-	case "db":
-		runDBCommand(os.Args[2:])
 	case "enum":
 		runEnumCommand(os.Args[2:])
 	case "intel":
@@ -188,54 +178,6 @@ func createOutputDirectory(cfg *config.Config) {
 		r.Fprintf(color.Error, "Failed to create the directory: %v\n", err)
 		os.Exit(1)
 	}
-}
-
-func openGraphDatabase(dir string, cfg *config.Config) *netmap.Graph {
-	// Add the local database settings to the configuration
-	cfg.GraphDBs = append(cfg.GraphDBs, cfg.LocalDatabaseSettings(cfg.GraphDBs))
-
-	for _, db := range cfg.GraphDBs {
-		if db.Primary {
-			var g *netmap.Graph
-
-			if db.System == "local" {
-				g = netmap.NewGraph(db.System, filepath.Join(config.OutputDirectory(cfg.Dir), "amass.sqlite"), db.Options)
-			} else {
-				connStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s", db.Host, db.Port, db.Username, db.Password, db.DBName)
-				g = netmap.NewGraph(db.System, connStr, db.Options)
-			}
-
-			if g != nil {
-				return g
-			}
-			break
-		}
-	}
-
-	return netmap.NewGraph("memory", "", "")
-}
-
-func getEventOutput(ctx context.Context, domains []string, asninfo bool, db *netmap.Graph, cache *requests.ASNCache) []*requests.Output {
-	filter := stringset.New()
-	defer filter.Close()
-
-	return EventOutput(ctx, db, domains, time.Time{}, filter, asninfo, cache)
-}
-
-func domainNameInScope(name string, scope []string) bool {
-	var discovered bool
-
-	n := strings.ToLower(strings.TrimSpace(name))
-	for _, d := range scope {
-		d = strings.ToLower(d)
-
-		if n == d || strings.HasSuffix(n, "."+d) {
-			discovered = true
-			break
-		}
-	}
-
-	return discovered
 }
 
 func assignNetInterface(iface *net.Interface) error {

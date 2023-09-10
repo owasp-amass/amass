@@ -19,8 +19,6 @@ func runHelpCommand(clArgs []string) {
 		return
 	}
 	switch clArgs[0] {
-	case "db":
-		runDBCommand(help)
 	case "enum":
 		runEnumCommand(help)
 	case "intel":
