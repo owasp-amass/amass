@@ -27,9 +27,9 @@ amass enum -d example.com
 Typical parameters for DNS enumeration:
 
 ```bash
-$ amass enum -v -src -ip -brute -min-for-recursive 2 -d example.com
-[Google] www.example.com
-[VirusTotal] ns.example.com
+$ amass enum -brute -min-for-recursive 2 -d example.com
+example.com (FQDN) --> node --> www.example.com (FQDN)
+www.example.com (FQDN) --> a_record --> 123.456.789.01 (IPAddress)
 ...
 ```
 
@@ -155,27 +155,6 @@ This subcommand will perform DNS enumeration and network mapping while populatin
 | -v | Output status / debug / troubleshooting info | amass enum -v -d example.com |
 | -w | Path to a different wordlist file for brute forcing | amass enum -brute -w wordlist.txt -d example.com |
 | -wm | "hashcat-style" wordlist masks for DNS brute forcing | amass enum -brute -wm ?l?l -d example.com |
-
-### The 'db' Subcommand
-
-Performs viewing and manipulation of the graph database. This subcommand only leverages the 'output_directory' and remote graph database settings from the configuration file. Flags for interacting with the enumeration findings in the graph database include:
-
-| Flag | Description | Example |
-|------|-------------|---------|
-| -d | Domain names separated by commas (can be used multiple times) | amass db -d example.com |
-| -demo | Censor output to make it suitable for demonstrations | amass db -demo -d example.com |
-| -df | Path to a file providing root domain names | amass db -df domains.txt |
-| -enum | Identify an enumeration via an index from the listing | amass db -enum 1 -show |
-| -ip | Show the IP addresses for discovered names | amass db -show -ip -d example.com |
-| -ipv4 | Show the IPv4 addresses for discovered names | amass db -show -ipv4 -d example.com |
-| -ipv6 | Show the IPv6 addresses for discovered names | amass db -show -ipv6 -d example.com |
-| -json | Path to the JSON output file or '-' | amass db -names -silent -json out.json -d example.com |
-| -list | Print enumerations in the database and filter on domains specified | amass db -list |
-| -names | Print just discovered names | amass db -names -d example.com |
-| -o | Path to the text output file | amass db -names -o out.txt -d example.com |
-| -show | Print the results for the enumeration index + domains provided | amass db -show |
-| -src | Print data sources for the discovered names | amass db -show -src -d example.com |
-| -summary | Print just ASN table summary | amass db -summary -d example.com |
 
 ## The Output Directory
 
@@ -311,13 +290,13 @@ There is nothing preventing multiple users from sharing a single (remote) graph 
 Once you have the postgres server running on your machine and access to the psql tool, execute the follow two commands to initialize your amass database:
 
 ```bash
-psql postgres://username:password@localhost:5432/ -c "CREATE DATABASE amass"
-psql postgres://username:password@localhost:5432/ -c "ALTER DATABASE amass SET TIMEZONE to 'UTC'"
+psql postgres://username:password@localhost:5432/ -c "CREATE DATABASE assetdb"
+psql postgres://username:password@localhost:5432/ -c "ALTER DATABASE assetdb SET TIMEZONE to 'UTC'"
 ```
 
 Now you can add the following setting into your Amass `config.yaml` file for storing and analyzing attack surface discoveries using PostgreSQL:
 
 ```yaml
 options:
-  database: "postgres://username:password@localhost:5432/amass?testing=works"
+  database: "postgres://username:password@localhost:5432/assetdb?testing=works"
 ```
