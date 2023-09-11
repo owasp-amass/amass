@@ -39,6 +39,8 @@ function vertical(ctx, domain)
     while(true) do
         local body, err = json.encode({
             ['query']="domain:*." .. domain,
+            ['include']={"service.http.host"},
+            ['latest']= true,
             ['start']=p,
             ['size']=1000,
         })
