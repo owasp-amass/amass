@@ -49,7 +49,6 @@ The amass tool has several subcommands shown below for handling your Internet ex
 |------------|-------------|
 | intel | Collect open source intelligence for investigation of the target organization |
 | enum | Perform DNS enumeration and network mapping of systems exposed to the Internet |
-| db | Manage the graph databases storing the enumeration results |
 
 All subcommands have some default global arguments that can be seen below.
 
