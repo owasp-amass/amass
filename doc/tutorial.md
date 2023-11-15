@@ -27,7 +27,7 @@ There are a number of more technical reasons, which we will explain below and de
 -   Amass' subcommands can be used in conjunction, in some cases, which could allow you to create scripts that perform multiple Amass operations.
 -   Supports > 80 sources, such as APIs and websites, at the time of writing as part of its subdomain discovery and information gathering techniques. These can be listed using the following command:
     -   amass enum -list
-    -   ```AlienVault,ArchiveIt,Arquivo,Ask,Baidu,BinaryEdge,Bing,BufferOver,Censys,CertSpotter,CIRCL,CommonCrawl,Crtsh,[...],VirusTotal,Wayback,WhoisXML,Yahoo``` (full list [here](https://github.com/owasp-amass/amass))
+    -   ```AlienVault,ArchiveIt,Arquivo,Ask,Baidu,BinaryEdge,Bing,BufferOver,Censys,CertSpotter,CIRCL,CommonCrawl,Crtsh,[...],VirusTotal,Wayback,WhoisXML,Yahoo``` (full list [here](https://github.com/owasp-amass/config/blob/master/examples/datasources.yaml))
 
 -   It employs various information gathering techniques for DNS enumeration
     -   Brute-force of subdomains using a domain name wordlists and alteration wordlists
