@@ -292,6 +292,7 @@ Once you have the postgres server running on your machine and access to the psql
 ```bash
 psql postgres://username:password@localhost:5432/ -c "CREATE DATABASE assetdb"
 psql postgres://username:password@localhost:5432/ -c "ALTER DATABASE assetdb SET TIMEZONE to 'UTC'"
+psql postgres://username:password@localhost:5432/assetdb -c "CREATE EXTENSION pg_trgm;"
 ```
 
 Now you can add the following setting into your Amass `config.yaml` file for storing and analyzing attack surface discoveries using PostgreSQL:
