@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2023. All rights reserved.
+// Copyright © by Jeff Foley 2017-2024. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -7,30 +7,29 @@ package main
 import (
 	"bufio"
 	"bytes"
-	"context"
 	"flag"
 	"fmt"
 	"io"
 	"log"
 	"net"
+	"net/netip"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"regexp"
 	"strings"
-	"sync"
-	"syscall"
 	"time"
 
-	"github.com/caffix/netmap"
 	"github.com/caffix/stringset"
+	pb "github.com/cheggaaa/pb/v3"
 	"github.com/fatih/color"
-	"github.com/owasp-amass/amass/v4/datasrcs"
-	"github.com/owasp-amass/amass/v4/enum"
 	"github.com/owasp-amass/amass/v4/format"
 	"github.com/owasp-amass/amass/v4/resources"
-	"github.com/owasp-amass/amass/v4/systems"
 	"github.com/owasp-amass/config/config"
+	"github.com/owasp-amass/engine/api/graphql/client"
+	et "github.com/owasp-amass/engine/types"
+	"github.com/owasp-amass/open-asset-model/domain"
+	oamnet "github.com/owasp-amass/open-asset-model/network"
 )
 
 const enumUsageMsg = "enum [options] -d DOMAIN"
@@ -164,76 +163,64 @@ func runEnumCommand(clArgs []string) {
 	// Start handling the log messages
 	go writeLogsAndMessages(rLog, logfile, args.Options.Verbose)
 	// Create the System that will provide architecture to this enumeration
-	sys, err := systems.NewLocalSystem(cfg)
+	client := client.NewClient("http://localhost:4000/graphql")
+	token, _ := client.CreateSession(cfg)
+	defer client.TerminateSession(token)
+
+	// Create interrupt channel and subscribe to server log messages
+	interrupt := make(chan os.Signal, 1)
+	signal.Notify(interrupt, os.Interrupt)
+
+	messages, err := client.Subscribe(token)
 	if err != nil {
-		r.Fprintf(color.Error, "%v\n", err)
-		os.Exit(1)
-	}
-	defer func() { _ = sys.Shutdown() }()
-
-	if err := sys.SetDataSources(datasrcs.GetAllSources(sys)); err != nil {
-		r.Fprintf(color.Error, "%v\n", err)
-		os.Exit(1)
+		fmt.Println(err)
+		return
 	}
 
-	// Setup the new enumeration
-	e := enum.NewEnumeration(cfg, sys, sys.GraphDatabases()[0])
-	if e == nil {
-		r.Fprintf(color.Error, "%s\n", "Failed to setup the enumeration")
-		os.Exit(1)
-	}
-
-	var wg sync.WaitGroup
-	var outChans []chan string
-	// This channel sends the signal for goroutines to terminate
-	done := make(chan struct{})
-	// Print output only if JSONOutput is not meant for STDOUT
-	if args.Filepaths.JSONOutput != "-" {
-		wg.Add(1)
-		// This goroutine will handle printing the output
-		printOutChan := make(chan string, 10)
-		go printOutput(e, args, printOutChan, &wg)
-		outChans = append(outChans, printOutChan)
-	}
-
-	wg.Add(1)
-	// This goroutine will handle saving the output to the text file
-	txtOutChan := make(chan string, 10)
-	go saveTextOutput(e, args, txtOutChan, &wg)
-	outChans = append(outChans, txtOutChan)
-
-	var ctx context.Context
-	var cancel context.CancelFunc
-	if args.Timeout == 0 {
-		ctx, cancel = context.WithCancel(context.Background())
-	} else {
-		ctx, cancel = context.WithTimeout(context.Background(), time.Duration(args.Timeout)*time.Minute)
-	}
-	defer cancel()
-
-	wg.Add(1)
-	go processOutput(ctx, sys.GraphDatabases()[0], e, outChans, done, &wg)
-	// Monitor for cancellation by the user
-	go func(d chan struct{}, c context.Context, f context.CancelFunc) {
-		quit := make(chan os.Signal, 1)
-		signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
-		defer signal.Stop(quit)
-
-		select {
-		case <-quit:
-			f()
-		case <-d:
-		case <-c.Done():
+	var count int
+	for _, a := range makeAssets(cfg) {
+		if err := client.CreateAsset(*a, token); err == nil {
+			count++
 		}
-	}(done, ctx, cancel)
-	// Start the enumeration process
-	if err := e.Start(ctx); err != nil {
-		r.Println(err)
-		os.Exit(1)
 	}
-	// Let all the output goroutines know that the enumeration has finished
-	close(done)
-	wg.Wait()
+
+	progress := pb.Start64(int64(count))
+	done := make(chan struct{})
+	go func() {
+		var finished int
+		t := time.NewTicker(2 * time.Second)
+		defer t.Stop()
+
+		for {
+			select {
+			case <-t.C:
+				if stats, err := client.SessionStats(token); err == nil {
+					progress.SetTotal(int64(stats.WorkItemsTotal))
+					progress.SetCurrent(int64(stats.WorkItemsCompleted))
+					if stats.WorkItemsCompleted == stats.WorkItemsTotal {
+						finished++
+						if finished == 5 {
+							close(done)
+						}
+					}
+				}
+			case message := <-messages:
+				cfg.Log.Print(message)
+			case <-done:
+				return
+			}
+		}
+	}()
+	// Terminate client session
+loop:
+	for {
+		select {
+		case <-done:
+			break loop
+		case <-interrupt:
+			close(done)
+		}
+	}
 	fmt.Fprintf(color.Error, "\n%s\n", green("The enumeration has finished"))
 }
 
@@ -275,18 +262,6 @@ func argsAndConfig(clArgs []string) (*config.Config, *enumArgs) {
 		commandUsage(enumUsageMsg, enumCommand, enumBuf)
 		return nil, &args
 	}
-
-	if args.Interface != "" {
-		iface, err := net.InterfaceByName(args.Interface)
-		if err != nil || iface == nil {
-			fmt.Fprint(color.Output, format.InterfaceInfo())
-			os.Exit(1)
-		}
-		if err := assignNetInterface(iface); err != nil {
-			r.Fprintf(color.Error, "%v\n", err)
-			os.Exit(1)
-		}
-	}
 	if args.Options.NoColor {
 		color.NoColor = true
 	}
@@ -327,13 +302,6 @@ func argsAndConfig(clArgs []string) (*config.Config, *enumArgs) {
 		r.Fprintf(color.Error, "Configuration error: %v\n", err)
 		os.Exit(1)
 	}
-	// Check if the user has requested the data source names
-	if args.Options.ListSources {
-		for _, line := range GetAllSourceInfo(cfg) {
-			fmt.Fprintln(color.Output, line)
-		}
-		return nil, &args
-	}
 	// Some input validation
 	if !cfg.Active && len(args.Ports) > 0 {
 		r.Fprintln(color.Error, "Ports can only be scanned in the active mode")
@@ -344,96 +312,6 @@ func argsAndConfig(clArgs []string) (*config.Config, *enumArgs) {
 		os.Exit(1)
 	}
 	return cfg, &args
-}
-
-func printOutput(e *enum.Enumeration, args *enumArgs, output chan string, wg *sync.WaitGroup) {
-	defer wg.Done()
-
-	var total int
-	// Print all the output returned by the enumeration
-	for out := range output {
-		fmt.Fprintf(color.Output, "%s\n", out)
-		total++
-	}
-
-	if total == 0 {
-		r.Println("No assets were discovered")
-	}
-}
-
-func saveTextOutput(e *enum.Enumeration, args *enumArgs, output chan string, wg *sync.WaitGroup) {
-	defer wg.Done()
-
-	dir := config.OutputDirectory(e.Config.Dir)
-	txtfile := filepath.Join(dir, "amass.txt")
-	if args.Filepaths.TermOut != "" {
-		txtfile = args.Filepaths.TermOut
-	}
-	if args.Filepaths.AllFilePrefix != "" {
-		txtfile = args.Filepaths.AllFilePrefix + ".txt"
-	}
-	if txtfile == "" {
-		return
-	}
-
-	outptr, err := os.OpenFile(txtfile, os.O_WRONLY|os.O_CREATE, 0644)
-	if err != nil {
-		r.Fprintf(color.Error, "Failed to open the text output file: %v\n", err)
-		os.Exit(1)
-	}
-	defer func() {
-		_ = outptr.Sync()
-		_ = outptr.Close()
-	}()
-
-	_ = outptr.Truncate(0)
-	_, _ = outptr.Seek(0, 0)
-	// Save all the output returned by the enumeration
-	for out := range output {
-		// Write the line to the output file
-		fmt.Fprintf(outptr, "%s\n", out)
-	}
-}
-
-func processOutput(ctx context.Context, g *netmap.Graph, e *enum.Enumeration, outputs []chan string, done chan struct{}, wg *sync.WaitGroup) {
-	defer wg.Done()
-	defer func() {
-		// Signal all the other output goroutines to terminate
-		for _, ch := range outputs {
-			close(ch)
-		}
-	}()
-
-	// This filter ensures that we only get new names
-	known := stringset.New()
-	defer known.Close()
-	// The function that obtains output from the enum and puts it on the channel
-	extract := func(since time.Time) {
-		for _, o := range NewOutput(ctx, g, e, known, since) {
-			for _, ch := range outputs {
-				ch <- o
-			}
-		}
-	}
-
-	t := time.NewTimer(10 * time.Second)
-	defer t.Stop()
-	last := e.Config.CollectionStartTime
-	for {
-		select {
-		case <-ctx.Done():
-			extract(last)
-			return
-		case <-done:
-			extract(last)
-			return
-		case <-t.C:
-			next := time.Now()
-			extract(last)
-			t.Reset(10 * time.Second)
-			last = next
-		}
-	}
 }
 
 func writeLogsAndMessages(logs *io.PipeReader, logfile string, verbose bool) {
@@ -655,4 +533,106 @@ func getWordList(reader io.Reader) ([]string, error) {
 		}
 	}
 	return stringset.Deduplicate(words), nil
+}
+
+// Below are helper functions for converting an Amass config / scope into OAM assets
+const (
+	ipv4 = "IPv4"
+	ipv6 = "IPv6"
+)
+
+// returns Asset objects by converting the contests of config.Scope
+func makeAssets(config *config.Config) []*et.Asset {
+	assets := convertScopeToAssets(config.Scope)
+
+	for i, asset := range assets {
+		asset.Name = fmt.Sprintf("asset#%d", i+1)
+	}
+
+	return assets
+}
+
+// ipnet2Prefix converts a net.IPNet to a netip.Prefix.
+func ipnet2Prefix(ipn net.IPNet) netip.Prefix {
+	addr, _ := netip.AddrFromSlice(ipn.IP)
+	cidr, _ := ipn.Mask.Size()
+	return netip.PrefixFrom(addr, cidr)
+}
+
+// convertScopeToAssets converts all items in a Scope to a slice of *Asset.
+func convertScopeToAssets(scope *config.Scope) []*et.Asset {
+	var assets []*et.Asset
+
+	// Convert Domains to assets.
+	for _, d := range scope.Domains {
+		fqdn := domain.FQDN{Name: d}
+		data := et.AssetData{
+			OAMAsset: fqdn,
+			OAMType:  fqdn.AssetType(),
+		}
+		asset := &et.Asset{
+			Data: data,
+		}
+		assets = append(assets, asset)
+	}
+
+	var ipType string
+	// Convert Addresses to assets.
+	for _, ip := range scope.Addresses {
+		// Convert net.IP to net.IPAddr.
+		if addr, ok := netip.AddrFromSlice(ip); ok {
+			// Determine the IP type based on the address characteristics.
+			if addr.Is4In6() {
+				addr = netip.AddrFrom4(addr.As4())
+				ipType = ipv4
+			} else if addr.Is6() {
+				ipType = ipv6
+			} else {
+				ipType = ipv4
+			}
+
+			// Create an asset from the IP address and append it to the assets slice.
+			asset := oamnet.IPAddress{Address: addr, Type: ipType}
+			data := et.AssetData{
+				OAMAsset: asset,
+				OAMType:  asset.AssetType(),
+			}
+			assets = append(assets, &et.Asset{Data: data})
+		}
+	}
+
+	// Convert CIDRs to assets.
+	for _, cidr := range scope.CIDRs {
+		prefix := ipnet2Prefix(*cidr) // Convert net.IPNet to netip.Prefix.
+
+		// Determine the IP type based on the address characteristics.
+		addr := prefix.Addr()
+		if addr.Is4In6() {
+			ipType = ipv4
+		} else if addr.Is6() {
+			ipType = ipv6
+		} else {
+			ipType = ipv4
+		}
+
+		// Create an asset from the CIDR and append it to the assets slice.
+		asset := oamnet.Netblock{Cidr: prefix, Type: ipType}
+		data := et.AssetData{
+			OAMAsset: asset,
+			OAMType:  asset.AssetType(),
+		}
+		assets = append(assets, &et.Asset{Data: data})
+	}
+
+	// Convert ASNs to assets.
+	for _, asn := range scope.ASNs {
+		asset := oamnet.AutonomousSystem{Number: asn}
+		data := et.AssetData{
+			OAMAsset: asset,
+			OAMType:  asset.AssetType(),
+		}
+		assets = append(assets, &et.Asset{Data: data})
+	}
+
+	return assets
 }

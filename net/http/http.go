@@ -26,8 +26,8 @@ import (
 	"github.com/caffix/stringset"
 	"github.com/geziyor/geziyor"
 	"github.com/geziyor/geziyor/client"
-	amassnet "github.com/owasp-amass/amass/v4/net"
-	"github.com/owasp-amass/amass/v4/net/dns"
+	amassnet "github.com/owasp-amass/engine/net"
+	"github.com/owasp-amass/engine/net/dns"
 	bf "github.com/tylertreat/BoomFilters"
 )
 

@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2023. All rights reserved.
+// Copyright © by Jeff Foley 2017-2024. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -26,16 +26,12 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
-	"net"
 	"os"
 	"path"
 
-	"github.com/caffix/service"
 	"github.com/fatih/color"
-	"github.com/owasp-amass/amass/v4/datasrcs"
 	"github.com/owasp-amass/amass/v4/format"
-	amassnet "github.com/owasp-amass/amass/v4/net"
-	"github.com/owasp-amass/amass/v4/systems"
+	"github.com/owasp-amass/amass/v4/launch"
 	"github.com/owasp-amass/config/config"
 )
 
@@ -108,62 +104,16 @@ func main() {
 	switch os.Args[1] {
 	case "enum":
 		runEnumCommand(os.Args[2:])
-	case "intel":
-		runIntelCommand(os.Args[2:])
+	case "engine":
+		if err := launch.LaunchEngine(); err != nil {
+			fmt.Printf("%v\n", err)
+		}
 	case "help":
 		runHelpCommand(os.Args[2:])
 	default:
 		commandUsage(mainUsageMsg, mainFlagSet, defaultBuf)
 		os.Exit(1)
 	}
-}
-
-// GetAllSourceInfo returns the output for the 'list' flag.
-func GetAllSourceInfo(cfg *config.Config) []string {
-	if cfg == nil {
-		cfg = config.NewConfig()
-	}
-
-	sys, err := systems.NewLocalSystem(cfg)
-	if err != nil {
-		return []string{}
-	}
-	defer func() { _ = sys.Shutdown() }()
-
-	srcs := datasrcs.SelectedDataSources(cfg, datasrcs.GetAllSources(sys))
-	if err := sys.SetDataSources(srcs); err != nil {
-		return []string{}
-	}
-	return DataSourceInfo(srcs, sys)
-}
-
-// DataSourceInfo acquires the information for data sources used by the provided System.
-func DataSourceInfo(all []service.Service, sys systems.System) []string {
-	var names []string
-
-	names = append(names, fmt.Sprintf("%-35s%-35s%s", blue("Data Source"), blue("| Type"), blue("| Available")))
-	var line string
-	for i := 0; i < 8; i++ {
-		line += blue("----------")
-	}
-	names = append(names, line)
-
-	available := sys.DataSources()
-	for _, src := range all {
-		var avail string
-
-		for _, a := range available {
-			if src.String() == a.String() {
-				avail = "*"
-				break
-			}
-		}
-
-		names = append(names, fmt.Sprintf("%-35s  %-35s  %s",
-			green(src.String()), yellow(src.Description()), yellow(avail)))
-	}
-
-	return names
 }
 
 func createOutputDirectory(cfg *config.Config) {
@@ -178,31 +128,4 @@ func createOutputDirectory(cfg *config.Config) {
 		r.Fprintf(color.Error, "Failed to create the directory: %v\n", err)
 		os.Exit(1)
 	}
-}
-
-func assignNetInterface(iface *net.Interface) error {
-	addrs, err := iface.Addrs()
-	if err != nil {
-		return fmt.Errorf("network interface '%s' has no assigned addresses", iface.Name)
-	}
-
-	var best net.Addr
-	for _, addr := range addrs {
-		if a, ok := addr.(*net.IPNet); ok {
-			if best == nil {
-				best = a
-			}
-			if amassnet.IsIPv4(a.IP) {
-				best = a
-				break
-			}
-		}
-	}
-
-	if best == nil {
-		return fmt.Errorf("network interface '%s' does not have assigned IP addresses", iface.Name)
-	}
-
-	amassnet.LocalAddr = best
-	return nil
 }
