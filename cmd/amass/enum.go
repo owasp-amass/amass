@@ -11,8 +11,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net"
-	"net/netip"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -27,9 +25,6 @@ import (
 	"github.com/owasp-amass/amass/v4/resources"
 	"github.com/owasp-amass/config/config"
 	"github.com/owasp-amass/engine/api/graphql/client"
-	et "github.com/owasp-amass/engine/types"
-	"github.com/owasp-amass/open-asset-model/domain"
-	oamnet "github.com/owasp-amass/open-asset-model/network"
 )
 
 const enumUsageMsg = "enum [options] -d DOMAIN"
@@ -160,11 +155,22 @@ func runEnumCommand(clArgs []string) {
 	if args.Filepaths.LogFile != "" {
 		logfile = args.Filepaths.LogFile
 	}
+
 	// Start handling the log messages
 	go writeLogsAndMessages(rLog, logfile, args.Options.Verbose)
-	// Create the System that will provide architecture to this enumeration
-	client := client.NewClient("http://localhost:4000/graphql")
-	token, _ := client.CreateSession(cfg)
+
+	// Create the client that will provide a connection to the engine
+	url := "http://localhost:4000/graphql"
+	if cfg.EngineAPI != nil && cfg.EngineAPI.URL != "" {
+		url = cfg.EngineAPI.URL
+	}
+
+	client := client.NewClient(url)
+	token, err := createSession(url, client, cfg)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 	defer client.TerminateSession(token)
 
 	// Create interrupt channel and subscribe to server log messages
@@ -519,120 +525,4 @@ func (e enumArgs) OverrideConfig(conf *config.Config) error {
 	// Attempt to add the provided domains to the configuration
 	conf.AddDomains(e.Domains.Slice()...)
 	return nil
-}
-
-func getWordList(reader io.Reader) ([]string, error) {
-	var words []string
-
-	scanner := bufio.NewScanner(reader)
-	for scanner.Scan() {
-		// Get the next word in the list
-		w := strings.TrimSpace(scanner.Text())
-		if err := scanner.Err(); err == nil && w != "" {
-			words = append(words, w)
-		}
-	}
-	return stringset.Deduplicate(words), nil
-}
-
-// Below are helper functions for converting an Amass config / scope into OAM assets
-const (
-	ipv4 = "IPv4"
-	ipv6 = "IPv6"
-)
-
-// returns Asset objects by converting the contests of config.Scope
-func makeAssets(config *config.Config) []*et.Asset {
-	assets := convertScopeToAssets(config.Scope)
-
-	for i, asset := range assets {
-		asset.Name = fmt.Sprintf("asset#%d", i+1)
-	}
-
-	return assets
-}
-
-// ipnet2Prefix converts a net.IPNet to a netip.Prefix.
-func ipnet2Prefix(ipn net.IPNet) netip.Prefix {
-	addr, _ := netip.AddrFromSlice(ipn.IP)
-	cidr, _ := ipn.Mask.Size()
-	return netip.PrefixFrom(addr, cidr)
-}
-
-// convertScopeToAssets converts all items in a Scope to a slice of *Asset.
-func convertScopeToAssets(scope *config.Scope) []*et.Asset {
-	var assets []*et.Asset
-
-	// Convert Domains to assets.
-	for _, d := range scope.Domains {
-		fqdn := domain.FQDN{Name: d}
-		data := et.AssetData{
-			OAMAsset: fqdn,
-			OAMType:  fqdn.AssetType(),
-		}
-		asset := &et.Asset{
-			Data: data,
-		}
-		assets = append(assets, asset)
-	}
-
-	var ipType string
-	// Convert Addresses to assets.
-	for _, ip := range scope.Addresses {
-		// Convert net.IP to net.IPAddr.
-		if addr, ok := netip.AddrFromSlice(ip); ok {
-			// Determine the IP type based on the address characteristics.
-			if addr.Is4In6() {
-				addr = netip.AddrFrom4(addr.As4())
-				ipType = ipv4
-			} else if addr.Is6() {
-				ipType = ipv6
-			} else {
-				ipType = ipv4
-			}
-
-			// Create an asset from the IP address and append it to the assets slice.
-			asset := oamnet.IPAddress{Address: addr, Type: ipType}
-			data := et.AssetData{
-				OAMAsset: asset,
-				OAMType:  asset.AssetType(),
-			}
-			assets = append(assets, &et.Asset{Data: data})
-		}
-	}
-
-	// Convert CIDRs to assets.
-	for _, cidr := range scope.CIDRs {
-		prefix := ipnet2Prefix(*cidr) // Convert net.IPNet to netip.Prefix.
-
-		// Determine the IP type based on the address characteristics.
-		addr := prefix.Addr()
-		if addr.Is4In6() {
-			ipType = ipv4
-		} else if addr.Is6() {
-			ipType = ipv6
-		} else {
-			ipType = ipv4
-		}
-
-		// Create an asset from the CIDR and append it to the assets slice.
-		asset := oamnet.Netblock{Cidr: prefix, Type: ipType}
-		data := et.AssetData{
-			OAMAsset: asset,
-			OAMType:  asset.AssetType(),
-		}
-		assets = append(assets, &et.Asset{Data: data})
-	}
-
-	// Convert ASNs to assets.
-	for _, asn := range scope.ASNs {
-		asset := oamnet.AutonomousSystem{Number: asn}
-		data := et.AssetData{
-			OAMAsset: asset,
-			OAMType:  asset.AssetType(),
-		}
-		assets = append(assets, &et.Asset{Data: data})
-	}
-
-	return assets
 }

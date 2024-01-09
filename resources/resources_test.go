@@ -16,10 +16,3 @@ func TestGetIP2ASNData(t *testing.T) {
 
 	}
 }
-func TestGetDefaultScripts(t *testing.T) {
-	_, err := GetDefaultScripts()
-	if fmt.Sprintf("%v", err) != "<nil>" {
-		t.Errorf("parseIPs.parseRange() error = %v, wantErr <nil>", err)
-
-	}
-}

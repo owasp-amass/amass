@@ -23,16 +23,29 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"flag"
 	"fmt"
+	"io"
+	"net"
+	"net/netip"
+	"net/url"
 	"os"
 	"path"
+	"strings"
+	"time"
 
+	"github.com/caffix/stringset"
 	"github.com/fatih/color"
+	"github.com/google/uuid"
 	"github.com/owasp-amass/amass/v4/format"
 	"github.com/owasp-amass/amass/v4/launch"
 	"github.com/owasp-amass/config/config"
+	"github.com/owasp-amass/engine/api/graphql/client"
+	et "github.com/owasp-amass/engine/types"
+	"github.com/owasp-amass/open-asset-model/domain"
+	oamnet "github.com/owasp-amass/open-asset-model/network"
 )
 
 const (
@@ -44,15 +57,17 @@ const (
 
 var (
 	// Colors used to ease the reading of program output
-	g       = color.New(color.FgHiGreen)
-	r       = color.New(color.FgHiRed)
-	fgR     = color.New(color.FgRed)
-	fgY     = color.New(color.FgYellow)
-	yellow  = color.New(color.FgHiYellow).SprintFunc()
-	green   = color.New(color.FgHiGreen).SprintFunc()
-	blue    = color.New(color.FgHiBlue).SprintFunc()
-	magenta = color.New(color.FgHiMagenta).SprintFunc()
-	white   = color.New(color.FgHiWhite).SprintFunc()
+	//b       = color.New(color.FgHiBlue)
+	//y       = color.New(color.FgHiYellow)
+	g   = color.New(color.FgHiGreen)
+	r   = color.New(color.FgHiRed)
+	fgR = color.New(color.FgRed)
+	fgY = color.New(color.FgYellow)
+	//yellow  = color.New(color.FgHiYellow).SprintFunc()
+	green = color.New(color.FgHiGreen).SprintFunc()
+	//blue    = color.New(color.FgHiBlue).SprintFunc()
+	//magenta = color.New(color.FgHiMagenta).SprintFunc()
+	//white   = color.New(color.FgHiWhite).SprintFunc()
 )
 
 func commandUsage(msg string, cmdFlagSet *flag.FlagSet, errBuf *bytes.Buffer) {
@@ -128,4 +143,131 @@ func createOutputDirectory(cfg *config.Config) {
 		r.Fprintf(color.Error, "Failed to create the directory: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+func getWordList(reader io.Reader) ([]string, error) {
+	var words []string
+
+	scanner := bufio.NewScanner(reader)
+	for scanner.Scan() {
+		// Get the next word in the list
+		w := strings.TrimSpace(scanner.Text())
+		if err := scanner.Err(); err == nil && w != "" {
+			words = append(words, w)
+		}
+	}
+	return stringset.Deduplicate(words), nil
+}
+
+func createSession(ustr string, c *client.Client, cfg *config.Config) (uuid.UUID, error) {
+	if token, err := c.CreateSession(cfg); err == nil {
+		return token, err
+	}
+
+	if u, err := url.Parse(ustr); err == nil {
+		if host := u.Hostname(); host == "localhost" || host == "127.0.0.1" {
+			_ = launch.LaunchEngine()
+			time.Sleep(30 * time.Second)
+		}
+	}
+
+	return c.CreateSession(cfg)
+}
+
+// returns Asset objects by converting the contests of config.Scope
+func makeAssets(config *config.Config) []*et.Asset {
+	assets := convertScopeToAssets(config.Scope)
+
+	for i, asset := range assets {
+		asset.Name = fmt.Sprintf("asset#%d", i+1)
+	}
+
+	return assets
+}
+
+// ipnet2Prefix converts a net.IPNet to a netip.Prefix.
+func ipnet2Prefix(ipn net.IPNet) netip.Prefix {
+	addr, _ := netip.AddrFromSlice(ipn.IP)
+	cidr, _ := ipn.Mask.Size()
+	return netip.PrefixFrom(addr, cidr)
+}
+
+// convertScopeToAssets converts all items in a Scope to a slice of *Asset.
+func convertScopeToAssets(scope *config.Scope) []*et.Asset {
+	const ipv4 = "IPv4"
+	const ipv6 = "IPv6"
+	var assets []*et.Asset
+
+	// Convert Domains to assets.
+	for _, d := range scope.Domains {
+		fqdn := domain.FQDN{Name: d}
+		data := et.AssetData{
+			OAMAsset: fqdn,
+			OAMType:  fqdn.AssetType(),
+		}
+		asset := &et.Asset{
+			Data: data,
+		}
+		assets = append(assets, asset)
+	}
+
+	var ipType string
+	// Convert Addresses to assets.
+	for _, ip := range scope.Addresses {
+		// Convert net.IP to net.IPAddr.
+		if addr, ok := netip.AddrFromSlice(ip); ok {
+			// Determine the IP type based on the address characteristics.
+			if addr.Is4In6() {
+				addr = netip.AddrFrom4(addr.As4())
+				ipType = ipv4
+			} else if addr.Is6() {
+				ipType = ipv6
+			} else {
+				ipType = ipv4
+			}
+
+			// Create an asset from the IP address and append it to the assets slice.
+			asset := oamnet.IPAddress{Address: addr, Type: ipType}
+			data := et.AssetData{
+				OAMAsset: asset,
+				OAMType:  asset.AssetType(),
+			}
+			assets = append(assets, &et.Asset{Data: data})
+		}
+	}
+
+	// Convert CIDRs to assets.
+	for _, cidr := range scope.CIDRs {
+		prefix := ipnet2Prefix(*cidr) // Convert net.IPNet to netip.Prefix.
+
+		// Determine the IP type based on the address characteristics.
+		addr := prefix.Addr()
+		if addr.Is4In6() {
+			ipType = ipv4
+		} else if addr.Is6() {
+			ipType = ipv6
+		} else {
+			ipType = ipv4
+		}
+
+		// Create an asset from the CIDR and append it to the assets slice.
+		asset := oamnet.Netblock{Cidr: prefix, Type: ipType}
+		data := et.AssetData{
+			OAMAsset: asset,
+			OAMType:  asset.AssetType(),
+		}
+		assets = append(assets, &et.Asset{Data: data})
+	}
+
+	// Convert ASNs to assets.
+	for _, asn := range scope.ASNs {
+		asset := oamnet.AutonomousSystem{Number: asn}
+		data := et.AssetData{
+			OAMAsset: asset,
+			OAMType:  asset.AssetType(),
+		}
+		assets = append(assets, &et.Asset{Data: data})
+	}
+
+	return assets
 }

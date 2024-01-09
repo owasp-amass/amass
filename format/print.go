@@ -38,12 +38,17 @@ const (
 
 var (
 	// Colors used to ease the reading of program output
-	b      = color.New(color.FgHiBlue)
-	y      = color.New(color.FgHiYellow)
-	r      = color.New(color.FgHiRed)
-	yellow = color.New(color.FgHiYellow).SprintFunc()
-	green  = color.New(color.FgHiGreen).SprintFunc()
-	blue   = color.New(color.FgHiBlue).SprintFunc()
+	//b       = color.New(color.FgHiBlue)
+	y = color.New(color.FgHiYellow)
+	//g       = color.New(color.FgHiGreen)
+	r = color.New(color.FgHiRed)
+	//fgR     = color.New(color.FgRed)
+	//fgY     = color.New(color.FgYellow)
+	//yellow  = color.New(color.FgHiYellow).SprintFunc()
+	//green   = color.New(color.FgHiGreen).SprintFunc()
+	//blue    = color.New(color.FgHiBlue).SprintFunc()
+	//magenta = color.New(color.FgHiMagenta).SprintFunc()
+	//white   = color.New(color.FgHiWhite).SprintFunc()
 )
 
 // PrintBanner outputs the Amass banner to stderr.
