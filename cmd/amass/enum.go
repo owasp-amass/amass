@@ -208,6 +208,8 @@ func runEnumCommand(clArgs []string) {
 						if finished == 5 {
 							close(done)
 						}
+					} else {
+						finished = 0
 					}
 				}
 			case message := <-messages:

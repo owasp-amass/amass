@@ -160,17 +160,17 @@ func getWordList(reader io.Reader) ([]string, error) {
 }
 
 func createSession(ustr string, c *client.Client, cfg *config.Config) (uuid.UUID, error) {
-	if token, err := c.CreateSession(cfg); err == nil {
-		return token, err
-	}
-
-	if u, err := url.Parse(ustr); err == nil {
-		if host := u.Hostname(); host == "localhost" || host == "127.0.0.1" {
-			_ = launch.LaunchEngine()
-			time.Sleep(30 * time.Second)
+	for i := 0; i < 10; i++ {
+		if token, err := c.CreateSession(cfg); err == nil {
+			return token, err
 		}
+		if u, err := url.Parse(ustr); err == nil && i == 0 {
+			if host := u.Hostname(); host == "localhost" || host == "127.0.0.1" {
+				_ = launch.LaunchEngine()
+			}
+		}
+		time.Sleep(30 * time.Second)
 	}
-
 	return c.CreateSession(cfg)
 }
 
