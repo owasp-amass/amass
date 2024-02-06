@@ -59,11 +59,33 @@ brew install amass
 
 The volume argument allows the Amass graph database to persist between executions and output files to be accessed on the host system. The first field (left of the colon) of the volume option is the amass output directory that is external to Docker, while the second field is the path, internal to Docker, where amass will write the output files.
 
-### From Source
+### Building the "amass" binary from source on the "develop" branch
 
 1. Install [Go](https://golang.org/doc/install) and setup your Go workspace
-2. Download OWASP Amass by running `go install -v github.com/owasp-amass/amass/v4/...@master`
-3. At this point, the binary should be in `$GOPATH/bin`
+2. At this point, the binary should be in `$GOPATH/bin`
+
+The amass_engine must be built first as it is embedded within the "amass" project
+3. Extract and build the amass_engine source code:
+    git clone https://github.com/owasp-amass/engine.git
+    cd engine
+    git checkout develop
+    cd cmd/amass_engine/
+    go build
+    go install
+4. Extract the amass source code:
+    git clone https://github.com/owasp-amass/amass.git
+    cd amass
+    git checkout develop
+5. Copy the amass_engine binary where it's needed:
+    cp ~/go/bin/amass_engine resources/.
+6. Build the amass project:
+    cd cmd/amass
+    go build
+
+
+
+
+
 
 ## Documentation [![GoDoc](https://pkg.go.dev/badge/github.com/owasp-amass/amass/v4?utm_source=godoc)](https://pkg.go.dev/github.com/owasp-amass/amass/v4)
 
