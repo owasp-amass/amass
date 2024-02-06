@@ -2,7 +2,7 @@ project_name: amass
 
 before:
   hooks:
-  - go mod download
+  - go mod tidy
 
 builds:
   -
@@ -31,6 +31,10 @@ builds:
         goarch: arm64
       - goos: freebsd
         goarch: arm
+    hooks:
+      pre:
+        - go install github.com/owasp-amass/engine@master
+        - cp {{ .Env.HOME }}/go/bin/amass_engine ./resources/amass_engine
 
 archives:
   -
