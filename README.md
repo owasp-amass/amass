@@ -65,15 +65,15 @@ The volume argument allows the Amass graph database to persist between execution
 2. At this point, the binary should be in `$GOPATH/bin`
 
 The amass_engine must be built first as it is embedded within the "amass" project
-3. Extract and build the amass_engine source code:
-    git clone https://github.com/owasp-amass/engine.git
+3. Extract and build the amass_engine source code, e.g.:
+    git clone {engine repository or fork}
     cd engine
     git checkout develop
     cd cmd/amass_engine/
     go build
     go install
-4. Extract the amass source code:
-    git clone https://github.com/owasp-amass/amass.git
+4. Extract the amass source code, e.g.:
+    git clone {amass repository or fork}
     cd amass
     git checkout develop
 5. Copy the amass_engine binary where it's needed:
