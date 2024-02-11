@@ -190,8 +190,8 @@ func runEnumCommand(clArgs []string) {
 		}
 	}
 
-	progress := pb.Start64(int64(count))
 	done := make(chan struct{})
+	progress := pb.Start64(int64(count))
 	go func() {
 		var finished int
 		t := time.NewTicker(2 * time.Second)
@@ -207,6 +207,7 @@ func runEnumCommand(clArgs []string) {
 						finished++
 						if finished == 5 {
 							close(done)
+							return
 						}
 					} else {
 						finished = 0
@@ -219,7 +220,6 @@ func runEnumCommand(clArgs []string) {
 			}
 		}
 	}()
-	// Terminate client session
 loop:
 	for {
 		select {
@@ -229,7 +229,7 @@ loop:
 			close(done)
 		}
 	}
-	fmt.Fprintf(color.Error, "\n%s\n", green("The enumeration has finished"))
+	progress.Finish()
 }
 
 func argsAndConfig(clArgs []string) (*config.Config, *enumArgs) {
