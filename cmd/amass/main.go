@@ -169,7 +169,7 @@ func createSession(ustr string, c *client.Client, cfg *config.Config) (uuid.UUID
 				_ = launch.LaunchEngine()
 			}
 		}
-		time.Sleep(30 * time.Second)
+		time.Sleep(10 * time.Second)
 	}
 	return c.CreateSession(cfg)
 }
