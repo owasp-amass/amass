@@ -70,23 +70,20 @@ The amass_engine must be built first as it is embedded within the "amass" projec
     cd engine
     git checkout develop
  
-4. Ensure that you build against the "develop" branch (and not main) of the modules that the "engine" module depends upon. i.e:
-   go get github.com/owasp-amass/resolve@develop
-   go get github.com/owasp-amass/open-asset-model@develop
-   go get github.com/owasp-amass/asset-db@develop
-   go get github.com/owasp-amass/config@develop
-
-5. Build the amass_engine
+4. Build the amass_engine
     cd cmd/amass_engine/
     go build
     go install
-6. Extract the amass source code, e.g.:
+
+5. Extract the amass source code, e.g.:
     git clone {amass repository or fork}
     cd amass
     git checkout develop
-7. Copy the amass_engine binary where it's needed:
+
+6. Copy the amass_engine binary where it's needed:
     cp ~/go/bin/amass_engine resources/.
-8. Build the amass project:
+
+7. Build the amass project:
     cd cmd/amass
     go build
     go install
