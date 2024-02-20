@@ -33,6 +33,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -43,6 +44,7 @@ import (
 	"github.com/owasp-amass/amass/v4/launch"
 	"github.com/owasp-amass/config/config"
 	"github.com/owasp-amass/engine/api/graphql/client"
+	"github.com/owasp-amass/engine/graph"
 	et "github.com/owasp-amass/engine/types"
 	"github.com/owasp-amass/open-asset-model/domain"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
@@ -57,15 +59,15 @@ const (
 
 var (
 	// Colors used to ease the reading of program output
-	//b       = color.New(color.FgHiBlue)
+	b = color.New(color.FgHiBlue)
 	//y       = color.New(color.FgHiYellow)
-	g   = color.New(color.FgHiGreen)
-	r   = color.New(color.FgHiRed)
-	fgR = color.New(color.FgRed)
-	fgY = color.New(color.FgYellow)
-	//yellow  = color.New(color.FgHiYellow).SprintFunc()
-	green = color.New(color.FgHiGreen).SprintFunc()
-	//blue    = color.New(color.FgHiBlue).SprintFunc()
+	g      = color.New(color.FgHiGreen)
+	r      = color.New(color.FgHiRed)
+	fgR    = color.New(color.FgRed)
+	fgY    = color.New(color.FgYellow)
+	yellow = color.New(color.FgHiYellow).SprintFunc()
+	green  = color.New(color.FgHiGreen).SprintFunc()
+	blue   = color.New(color.FgHiBlue).SprintFunc()
 	//magenta = color.New(color.FgHiMagenta).SprintFunc()
 	//white   = color.New(color.FgHiWhite).SprintFunc()
 )
@@ -80,6 +82,9 @@ func commandUsage(msg string, cmdFlagSet *flag.FlagSet, errBuf *bytes.Buffer) {
 		g.Fprintf(color.Error, "\nSubcommands: \n\n")
 		g.Fprintf(color.Error, "\t%-11s - Discover targets for enumerations\n", "amass intel")
 		g.Fprintf(color.Error, "\t%-11s - Perform enumerations and network mapping\n", "amass enum")
+		g.Fprintf(color.Error, "\t%-11s - Analyze subdomain information in the asset-db\n", "amass subs")
+		g.Fprintf(color.Error, "\t%-11s - Analyze OAM data to generate graph visualizations\n", "amass viz")
+		g.Fprintf(color.Error, "\t%-11s - Analyze OAM data to identify newly discovered assets\n", "amass track")
 	}
 
 	g.Fprintln(color.Error)
@@ -119,6 +124,12 @@ func main() {
 	switch os.Args[1] {
 	case "enum":
 		runEnumCommand(os.Args[2:])
+	case "subs":
+		runSubsCommand(os.Args[2:])
+	case "viz":
+		runVizCommand(os.Args[2:])
+	case "track":
+		runTrackCommand(os.Args[2:])
 	case "engine":
 		if err := launch.LaunchEngine(); err != nil {
 			fmt.Printf("%v\n", err)
@@ -143,6 +154,31 @@ func createOutputDirectory(cfg *config.Config) {
 		r.Fprintf(color.Error, "Failed to create the directory: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+func openGraphDatabase(cfg *config.Config) *graph.Graph {
+	// Add the local database settings to the configuration
+	cfg.GraphDBs = append(cfg.GraphDBs, cfg.LocalDatabaseSettings(cfg.GraphDBs))
+
+	for _, db := range cfg.GraphDBs {
+		if db.Primary {
+			var g *graph.Graph
+
+			if db.System == "local" {
+				g = graph.NewGraph(db.System, filepath.Join(config.OutputDirectory(cfg.Dir), "amass.sqlite"), db.Options)
+			} else {
+				connStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s", db.Host, db.Port, db.Username, db.Password, db.DBName)
+				g = graph.NewGraph(db.System, connStr, db.Options)
+			}
+
+			if g != nil {
+				return g
+			}
+			break
+		}
+	}
+
+	return graph.NewGraph("memory", "", "")
 }
 
 func getWordList(reader io.Reader) ([]string, error) {

@@ -21,6 +21,12 @@ func runHelpCommand(clArgs []string) {
 	switch clArgs[0] {
 	case "enum":
 		runEnumCommand(help)
+	case "subs":
+		runSubsCommand(help)
+	case "viz":
+		runVizCommand(help)
+	case "track":
+		runTrackCommand(help)
 	default:
 		commandUsage(mainUsageMsg, helpCommand, helpBuf)
 		return
