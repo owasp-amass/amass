@@ -19,4 +19,5 @@ RUN addgroup user \
     && mkdir /.config/amass \
     && chown -R user:user /.config/amass
 USER user
+STOPSIGNAL SIGINT
 ENTRYPOINT ["/bin/amass"]
