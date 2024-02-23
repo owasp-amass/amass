@@ -1,0 +1,3 @@
+#!/bin/execlineb -P
+
+/usr/sbin/syslog-ng --cfgfile=/etc/syslog-ng/syslog-ng.conf -F
