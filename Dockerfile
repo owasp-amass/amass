@@ -16,8 +16,12 @@ ENV HOME /
 RUN addgroup user \
     && adduser user -D -G user \
     && mkdir /.config \
+    && chown user:user /.config \
     && mkdir /.config/amass \
-    && chown -R user:user /.config/amass
+    && chown user:user /.config/amass \
+    && mkdir /data \
+    && chown user:user /data
 USER user
+WORKDIR /data
 STOPSIGNAL SIGINT
 ENTRYPOINT ["/bin/amass"]
