@@ -14,8 +14,7 @@ RUN apk add --no-cache busybox-openrc
 RUN apk add --no-cache bash ca-certificates
 RUN apk --no-cache --update upgrade
 RUN rc-update add syslog boot
-COPY --from=build /go/bin/amass_engine /bin/engine
-COPY --from=build /go/bin/ae_isready /bin/ae_isready
+COPY --from=build /go/bin/amass /bin/amass
 ENV HOME /
 RUN addgroup user \
     && adduser user -D -G user \
