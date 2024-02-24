@@ -10,13 +10,12 @@ COPY --from=engine /go/bin/amass_engine ./resources/amass_engine
 RUN go install -v ./...
 
 FROM alpine:latest
-RUN apk add --no-cache syslog-ng
+RUN apk add --no-cache busybox-openrc
 RUN apk add --no-cache bash ca-certificates
-#RUN apk add --no-cache busybox-openrc
-#RUN rc-update add syslog boot
 RUN apk --no-cache --update upgrade
-COPY ./container-files /
-COPY --from=build /go/bin/amass /bin/amass
+RUN rc-update add syslog boot
+COPY --from=build /go/bin/amass_engine /bin/engine
+COPY --from=build /go/bin/ae_isready /bin/ae_isready
 ENV HOME /
 RUN addgroup user \
     && adduser user -D -G user \
