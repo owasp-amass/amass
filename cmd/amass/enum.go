@@ -5,17 +5,15 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
+	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"os"
 	"os/signal"
-	"path/filepath"
-	"regexp"
-	"strings"
 	"time"
 
 	"github.com/caffix/stringset"
@@ -147,17 +145,13 @@ func runEnumCommand(clArgs []string) {
 	}
 	createOutputDirectory(cfg)
 
-	rLog, wLog := io.Pipe()
 	dir := config.OutputDirectory(cfg.Dir)
-	// Setup logging so that messages can be written to the file and used by the program
-	cfg.Log = log.New(wLog, "", log.Lmicroseconds)
-	logfile := filepath.Join(dir, "amass.log")
+	// Setup logging
+	var logfile string
 	if args.Filepaths.LogFile != "" {
 		logfile = args.Filepaths.LogFile
 	}
-
-	// Start handling the log messages
-	go writeLogsAndMessages(rLog, logfile, args.Options.Verbose)
+	l := selectLogger(dir, logfile)
 
 	// Create the client that will provide a connection to the engine
 	url := "http://localhost:4000/graphql"
@@ -214,7 +208,7 @@ func runEnumCommand(clArgs []string) {
 					}
 				}
 			case message := <-messages:
-				cfg.Log.Print(message)
+				writeLogMessage(l, message)
 			case <-done:
 				return
 			}
@@ -322,62 +316,78 @@ func argsAndConfig(clArgs []string) (*config.Config, *enumArgs) {
 	return cfg, &args
 }
 
-func writeLogsAndMessages(logs *io.PipeReader, logfile string, verbose bool) {
-	wildcard := regexp.MustCompile("DNS wildcard")
-	queries := regexp.MustCompile("Querying")
-
-	var filePtr *os.File
-	if logfile != "" {
-		var err error
-
-		filePtr, err = os.OpenFile(logfile, os.O_WRONLY|os.O_CREATE, 0644)
-		if err != nil {
-			r.Fprintf(color.Error, "Failed to open the log file: %v\n", err)
-		} else {
-			defer func() {
-				_ = filePtr.Sync()
-				_ = filePtr.Close()
-			}()
-			_ = filePtr.Truncate(0)
-			_, _ = filePtr.Seek(0, 0)
-		}
+func writeLogMessage(l *slog.Logger, logstr string) {
+	j := make(map[string]interface{})
+	if err := json.Unmarshal([]byte(logstr), &j); err != nil {
+		return
 	}
+	// check that this is a log message sent over the subscription channel
+	if p, found := j["payload"]; !found {
+		return
+	} else if pmap, ok := p.(map[string]interface{}); !ok {
+		return
+	} else if d, found := pmap["data"]; !found {
+		return
+	} else if dmap, ok := d.(map[string]interface{}); !ok {
+		return
+	} else if lm, found := dmap["logMessages"]; !found {
+		return
+	} else if lmmap, ok := lm.(map[string]interface{}); !ok {
+		return
+	} else {
+		// set our json map to the log message within the channel data
+		j = lmmap
+	}
+	delete(j, slog.TimeKey)
+	delete(j, slog.SourceKey)
 
-	scanner := bufio.NewScanner(logs)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if err := scanner.Err(); err != nil {
-			fmt.Fprintf(color.Error, "Error reading the Amass logs: %v\n", err)
-			break
-		}
+	var level slog.Level
+	if val, found := j[slog.LevelKey]; !found {
+		return
+	} else if str, ok := val.(string); !ok {
+		return
+	} else if level.UnmarshalText([]byte(str)) != nil {
+		return
+	}
+	delete(j, slog.LevelKey)
 
-		if filePtr != nil {
-			fmt.Fprintln(filePtr, line)
-		}
-		// Remove the timestamp
-		parts := strings.Split(line, " ")
-		line = strings.Join(parts[1:], " ")
-		// Check for Amass DNS wildcard messages
-		if verbose && wildcard.FindString(line) != "" {
-			fgR.Fprintln(color.Error, line)
-		}
-		// Let the user know when data sources are being queried
-		if verbose && queries.FindString(line) != "" {
-			fgY.Fprintln(color.Error, line)
-		}
+	var msg string
+	if val, found := j[slog.MessageKey]; !found {
+		return
+	} else if str, ok := val.(string); !ok {
+		return
+	} else {
+		msg = str
+	}
+	delete(j, slog.MessageKey)
+
+	var pc uintptr
+	ctx := context.Background()
+	r := slog.NewRecord(time.Now(), level, msg, pc)
+	if l.Handler().Enabled(ctx, level) {
+		l.Handler().Handle(ctx, r)
 	}
 }
 
 // Obtain parameters from provided input files
 func processEnumInputFiles(args *enumArgs) error {
+	getList := func(fp []string, name string, s *stringset.Set) error {
+		for _, p := range fp {
+			if p != "" {
+				list, err := config.GetListFromFile(p)
+				if err != nil {
+					return fmt.Errorf("failed to parse the %s file: %v", name, err)
+				}
+				s.InsertMany(list...)
+			}
+		}
+		return nil
+	}
+
 	if args.Options.BruteForcing {
 		if len(args.Filepaths.BruteWordlist) > 0 {
-			for _, f := range args.Filepaths.BruteWordlist {
-				list, err := config.GetListFromFile(f)
-				if err != nil {
-					return fmt.Errorf("failed to parse the brute force wordlist file: %v", err)
-				}
-				args.BruteWordList.InsertMany(list...)
+			if err := getList(args.Filepaths.BruteWordlist, "brute force wordlist", args.BruteWordList); err != nil {
+				return err
 			}
 		} else {
 			if f, err := resources.GetResourceFile("namelist.txt"); err == nil {
@@ -389,12 +399,8 @@ func processEnumInputFiles(args *enumArgs) error {
 	}
 	if !args.Options.NoAlts {
 		if len(args.Filepaths.AltWordlist) > 0 {
-			for _, f := range args.Filepaths.AltWordlist {
-				list, err := config.GetListFromFile(f)
-				if err != nil {
-					return fmt.Errorf("failed to parse the alterations wordlist file: %v", err)
-				}
-				args.AltWordList.InsertMany(list...)
+			if err := getList(args.Filepaths.AltWordlist, "alterations wordlist", args.AltWordList); err != nil {
+				return err
 			}
 		} else {
 			if f, err := resources.GetResourceFile("alterations.txt"); err == nil {
@@ -404,53 +410,23 @@ func processEnumInputFiles(args *enumArgs) error {
 			}
 		}
 	}
-	if args.Filepaths.Blacklist != "" {
-		list, err := config.GetListFromFile(args.Filepaths.Blacklist)
-		if err != nil {
-			return fmt.Errorf("failed to parse the blacklist file: %v", err)
-		}
-		args.Blacklist.InsertMany(list...)
+	if err := getList([]string{args.Filepaths.Blacklist}, "blacklist", args.Blacklist); err != nil {
+		return err
 	}
-	if args.Filepaths.ExcludedSrcs != "" {
-		list, err := config.GetListFromFile(args.Filepaths.ExcludedSrcs)
-		if err != nil {
-			return fmt.Errorf("failed to parse the exclude file: %v", err)
-		}
-		args.Excluded.InsertMany(list...)
+	if err := getList([]string{args.Filepaths.ExcludedSrcs}, "exclude", args.Excluded); err != nil {
+		return err
 	}
-	if args.Filepaths.IncludedSrcs != "" {
-		list, err := config.GetListFromFile(args.Filepaths.IncludedSrcs)
-		if err != nil {
-			return fmt.Errorf("failed to parse the include file: %v", err)
-		}
-		args.Included.InsertMany(list...)
+	if err := getList([]string{args.Filepaths.IncludedSrcs}, "include", args.Included); err != nil {
+		return err
 	}
-	if len(args.Filepaths.Names) > 0 {
-		for _, f := range args.Filepaths.Names {
-			list, err := config.GetListFromFile(f)
-			if err != nil {
-				return fmt.Errorf("failed to parse the subdomain names file: %v", err)
-			}
-			args.Names.InsertMany(list...)
-		}
+	if err := getList(args.Filepaths.Names, "subdomain names", args.Names); err != nil {
+		return err
 	}
-	if len(args.Filepaths.Domains) > 0 {
-		for _, f := range args.Filepaths.Domains {
-			list, err := config.GetListFromFile(f)
-			if err != nil {
-				return fmt.Errorf("failed to parse the domain names file: %v", err)
-			}
-			args.Domains.InsertMany(list...)
-		}
+	if err := getList(args.Filepaths.Domains, "domain names", args.Domains); err != nil {
+		return err
 	}
-	if len(args.Filepaths.Resolvers) > 0 {
-		for _, f := range args.Filepaths.Resolvers {
-			list, err := config.GetListFromFile(f)
-			if err != nil {
-				return fmt.Errorf("failed to parse the esolver file: %v", err)
-			}
-			args.Resolvers.InsertMany(list...)
-		}
+	if err := getList(args.Filepaths.Resolvers, "resolver", args.Resolvers); err != nil {
+		return err
 	}
 	return nil
 }

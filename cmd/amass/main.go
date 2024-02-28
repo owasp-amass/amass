@@ -28,6 +28,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/netip"
 	"net/url"
@@ -48,6 +49,8 @@ import (
 	et "github.com/owasp-amass/engine/types"
 	"github.com/owasp-amass/open-asset-model/domain"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
+	slogcommon "github.com/samber/slog-common"
+	slogsyslog "github.com/samber/slog-syslog/v2"
 )
 
 const (
@@ -306,4 +309,72 @@ func convertScopeToAssets(scope *config.Scope) []*et.Asset {
 	}
 
 	return assets
+}
+
+func selectLogger(dir, logfile string) *slog.Logger {
+	if logfile == "" {
+		if l := setupSyslogLogger(); l != nil {
+			return l
+		}
+	}
+	return setupFileLogger(dir, logfile)
+}
+
+func setupFileLogger(dir, logfile string) *slog.Logger {
+	if dir != "" {
+		if err := os.MkdirAll(dir, 0640); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to create the log directory: %v", err)
+		}
+	}
+
+	p := filepath.Join(dir, fmt.Sprintf("amass_client_%s.log", time.Now().Format("2006-01-02T15:04:05")))
+	if logfile != "" {
+		p = logfile
+	}
+
+	f, err := os.OpenFile(p, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to open log file: %v", err)
+	}
+
+	return slog.New(slog.NewJSONHandler(f, nil))
+}
+
+func setupSyslogLogger() *slog.Logger {
+	port := os.Getenv("SYSLOG_PORT")
+	host := strings.ToLower(os.Getenv("SYSLOG_HOST"))
+	transport := strings.ToLower(os.Getenv("SYSLOG_TRANSPORT"))
+
+	if host == "" {
+		return nil
+	}
+	if port == "" {
+		port = "514"
+	}
+	if transport == "" {
+		transport = "udp"
+	}
+
+	writer, err := net.Dial(transport, net.JoinHostPort(host, port))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to create the connection to the log server: %v", err)
+		return nil
+	}
+
+	return slog.New(slogsyslog.Option{
+		Level:     slog.LevelInfo,
+		Converter: syslogConverter,
+		Writer:    writer,
+	}.NewSyslogHandler())
+}
+
+func syslogConverter(addSource bool, replaceAttr func(groups []string, a slog.Attr) slog.Attr, loggerAttr []slog.Attr, groups []string, record *slog.Record) map[string]any {
+	attrs := slogcommon.AppendRecordAttrsToAttrs(loggerAttr, groups, record)
+	attrs = slogcommon.ReplaceAttrs(replaceAttr, []string{}, attrs...)
+
+	return map[string]any{
+		"level":   record.Level.String(),
+		"message": record.Message,
+		"attrs":   slogcommon.AttrsToMap(attrs...),
+	}
 }
