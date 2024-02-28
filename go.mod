@@ -5,7 +5,7 @@ go 1.21
 toolchain go1.21.4
 
 require (
-	github.com/PuerkitoBio/goquery v1.8.1
+	github.com/PuerkitoBio/goquery v1.9.0
 	github.com/caffix/stringset v0.1.2
 	github.com/cheggaaa/pb/v3 v3.1.5
 	github.com/fatih/color v1.16.0
@@ -17,6 +17,8 @@ require (
 	github.com/owasp-amass/engine v0.0.0-20240113161848-1f756cf7789d
 	github.com/owasp-amass/open-asset-model v0.2.1-0.20240113165517-79f7a07407c7
 	github.com/owasp-amass/resolve v0.6.21
+	github.com/samber/slog-common v0.15.0
+	github.com/samber/slog-syslog/v2 v2.2.0
 	github.com/stretchr/testify v1.8.4
 	github.com/tylertreat/BoomFilters v0.0.0-20210315201527-1a82519a3e43
 	github.com/yl2chen/cidranger v1.0.2
@@ -32,7 +34,7 @@ require (
 	github.com/caffix/pipeline v0.2.3 // indirect
 	github.com/caffix/queue v0.1.5 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
-	github.com/chromedp/cdproto v0.0.0-20240214232516-ad4608604e9e // indirect
+	github.com/chromedp/cdproto v0.0.0-20240226204813-532e667d868f // indirect
 	github.com/chromedp/chromedp v0.9.5 // indirect
 	github.com/chromedp/sysutil v1.0.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
@@ -63,27 +65,28 @@ require (
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-runewidth v0.0.15 // indirect
-	github.com/matttproud/golang_protobuf_extensions/v2 v2.0.0 // indirect
 	github.com/ncruces/go-strftime v0.1.9 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/prometheus/client_golang v1.18.0 // indirect
+	github.com/prometheus/client_golang v1.19.0 // indirect
 	github.com/prometheus/client_model v0.6.0 // indirect
-	github.com/prometheus/common v0.47.0 // indirect
+	github.com/prometheus/common v0.48.0 // indirect
 	github.com/prometheus/procfs v0.12.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/rubenv/sql-migrate v1.6.1 // indirect
+	github.com/samber/lo v1.39.0 // indirect
 	github.com/temoto/robotstxt v1.1.2 // indirect
 	go.uber.org/ratelimit v0.3.0 // indirect
-	golang.org/x/crypto v0.19.0 // indirect
-	golang.org/x/mod v0.14.0 // indirect
+	golang.org/x/crypto v0.20.0 // indirect
+	golang.org/x/exp v0.0.0-20240222234643-814bf88cf225 // indirect
+	golang.org/x/mod v0.15.0 // indirect
 	golang.org/x/net v0.21.0 // indirect
 	golang.org/x/sync v0.6.0 // indirect
 	golang.org/x/sys v0.17.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
 	golang.org/x/time v0.5.0 // indirect
-	golang.org/x/tools v0.17.0 // indirect
+	golang.org/x/tools v0.18.0 // indirect
 	google.golang.org/protobuf v1.32.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gorm.io/datatypes v1.2.0 // indirect
@@ -93,5 +96,5 @@ require (
 	modernc.org/libc v1.41.0 // indirect
 	modernc.org/mathutil v1.6.0 // indirect
 	modernc.org/memory v1.7.2 // indirect
-	modernc.org/sqlite v1.29.1 // indirect
+	modernc.org/sqlite v1.29.2 // indirect
 )
