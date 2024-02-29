@@ -334,7 +334,8 @@ func setupFileLogger(dir, logfile string) *slog.Logger {
 
 	f, err := os.OpenFile(p, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to open log file: %v", err)
+		fmt.Fprintf(os.Stderr, "Failed to open the log file: %v", err)
+		return nil
 	}
 
 	return slog.New(slog.NewJSONHandler(f, nil))

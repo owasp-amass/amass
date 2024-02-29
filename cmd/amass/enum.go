@@ -146,13 +146,7 @@ func runEnumCommand(clArgs []string) {
 	createOutputDirectory(cfg)
 
 	dir := config.OutputDirectory(cfg.Dir)
-	// Setup logging
-	var logfile string
-	if args.Filepaths.LogFile != "" {
-		logfile = args.Filepaths.LogFile
-	}
-	l := selectLogger(dir, logfile)
-
+	l := selectLogger(dir, args.Filepaths.LogFile)
 	// Create the client that will provide a connection to the engine
 	url := "http://localhost:4000/graphql"
 	if cfg.EngineAPI != nil && cfg.EngineAPI.URL != "" {
@@ -224,6 +218,47 @@ loop:
 		}
 	}
 	progress.Finish()
+}
+
+func writeLogMessage(l *slog.Logger, message string) {
+	logstr := channelJSONLog(message)
+	if logstr == "" {
+		return
+	}
+
+	record, err := format.JSONLogToRecord(logstr)
+	if err != nil {
+		return
+	}
+
+	ctx := context.Background()
+	if l.Handler().Enabled(ctx, record.Level) {
+		l.Handler().Handle(ctx, record)
+	}
+}
+
+func channelJSONLog(data string) string {
+	j := make(map[string]interface{})
+	if err := json.Unmarshal([]byte(data), &j); err != nil {
+		return ""
+	}
+
+	var logstr string
+	// check that this is a log message sent over the sub channel
+	if p, found := j["payload"]; !found {
+		return ""
+	} else if pmap, ok := p.(map[string]interface{}); !ok {
+		return ""
+	} else if d, found := pmap["data"]; !found {
+		return ""
+	} else if dmap, ok := d.(map[string]interface{}); !ok {
+		return ""
+	} else if lm, found := dmap["logMessages"]; !found {
+		return ""
+	} else if lmstr, ok := lm.(string); ok {
+		logstr = lmstr
+	}
+	return logstr
 }
 
 func argsAndConfig(clArgs []string) (*config.Config, *enumArgs) {
@@ -314,59 +349,6 @@ func argsAndConfig(clArgs []string) (*config.Config, *enumArgs) {
 		os.Exit(1)
 	}
 	return cfg, &args
-}
-
-func writeLogMessage(l *slog.Logger, logstr string) {
-	j := make(map[string]interface{})
-	if err := json.Unmarshal([]byte(logstr), &j); err != nil {
-		return
-	}
-	// check that this is a log message sent over the subscription channel
-	if p, found := j["payload"]; !found {
-		return
-	} else if pmap, ok := p.(map[string]interface{}); !ok {
-		return
-	} else if d, found := pmap["data"]; !found {
-		return
-	} else if dmap, ok := d.(map[string]interface{}); !ok {
-		return
-	} else if lm, found := dmap["logMessages"]; !found {
-		return
-	} else if lmmap, ok := lm.(map[string]interface{}); !ok {
-		return
-	} else {
-		// set our json map to the log message within the channel data
-		j = lmmap
-	}
-	delete(j, slog.TimeKey)
-	delete(j, slog.SourceKey)
-
-	var level slog.Level
-	if val, found := j[slog.LevelKey]; !found {
-		return
-	} else if str, ok := val.(string); !ok {
-		return
-	} else if level.UnmarshalText([]byte(str)) != nil {
-		return
-	}
-	delete(j, slog.LevelKey)
-
-	var msg string
-	if val, found := j[slog.MessageKey]; !found {
-		return
-	} else if str, ok := val.(string); !ok {
-		return
-	} else {
-		msg = str
-	}
-	delete(j, slog.MessageKey)
-
-	var pc uintptr
-	ctx := context.Background()
-	r := slog.NewRecord(time.Now(), level, msg, pc)
-	if l.Handler().Enabled(ctx, level) {
-		l.Handler().Handle(ctx, r)
-	}
 }
 
 // Obtain parameters from provided input files
