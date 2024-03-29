@@ -178,8 +178,12 @@ func runEnumCommand(clArgs []string) {
 		}
 	}
 
-	done := make(chan struct{})
-	progress := pb.Start64(int64(count))
+	var progress *pb.ProgressBar
+	if !args.Options.Silent {
+		progress = pb.Start64(int64(count))
+	}
+
+	done := make(chan struct{}, 1)
 	go func() {
 		var finished int
 		t := time.NewTicker(2 * time.Second)
@@ -187,10 +191,17 @@ func runEnumCommand(clArgs []string) {
 
 		for {
 			select {
+			case <-done:
+				return
+			case message := <-messages:
+				writeLogMessage(l, message)
 			case <-t.C:
 				if stats, err := client.SessionStats(token); err == nil {
-					progress.SetTotal(int64(stats.WorkItemsTotal))
-					progress.SetCurrent(int64(stats.WorkItemsCompleted))
+					if !args.Options.Silent {
+						progress.SetTotal(int64(stats.WorkItemsTotal))
+						progress.SetCurrent(int64(stats.WorkItemsCompleted))
+					}
+
 					if stats.WorkItemsCompleted == stats.WorkItemsTotal {
 						finished++
 						if finished == 5 {
@@ -201,23 +212,33 @@ func runEnumCommand(clArgs []string) {
 						finished = 0
 					}
 				}
-			case message := <-messages:
-				writeLogMessage(l, message)
-			case <-done:
-				return
 			}
 		}
 	}()
-loop:
-	for {
-		select {
-		case <-done:
-			break loop
-		case <-interrupt:
-			close(done)
-		}
+
+	if args.Timeout > 0 {
+		go func() {
+			t := time.NewTimer(time.Minute * time.Duration(args.Timeout))
+			defer t.Stop()
+
+			select {
+			case <-done:
+			case <-t.C:
+				close(done)
+			}
+		}()
 	}
-	progress.Finish()
+
+	select {
+	case <-done:
+	case <-interrupt:
+		close(done)
+		return
+	}
+
+	if !args.Options.Silent {
+		progress.Finish()
+	}
 }
 
 func writeLogMessage(l *slog.Logger, message string) {
@@ -233,7 +254,7 @@ func writeLogMessage(l *slog.Logger, message string) {
 
 	ctx := context.Background()
 	if l.Handler().Enabled(ctx, record.Level) {
-		l.Handler().Handle(ctx, record)
+		_ = l.Handler().Handle(ctx, record)
 	}
 }
 
