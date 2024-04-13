@@ -20,7 +20,7 @@ func SubdomainRegex(domain string) *regexp.Regexp {
 	return regexp.MustCompile(SubdomainRegexString(domain))
 }
 
-// SubdomainRegexString returns a regular expression string that matchs
+// SubdomainRegexString returns a regular expression string that matches
 // subdomain names ending with the domain provided by the parameter.
 func SubdomainRegexString(domain string) string {
 	// Change all the periods into literal periods for the regex
