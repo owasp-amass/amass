@@ -100,7 +100,7 @@ This subcommand will perform DNS enumeration and network mapping while populatin
 
 #### Mode description
 
-+ **Normal**: Run enum subcommand without specifing active or passive flag will seed the enumeration from data sources and leverage DNS to validate findings and further investigate the namespaces in scope (provided domain names)
++ **Normal**: Run enum subcommand without specifying active or passive flag will seed the enumeration from data sources and leverage DNS to validate findings and further investigate the namespaces in scope (provided domain names)
 
   `amass enum -d example.com`
 
