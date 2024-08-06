@@ -23,6 +23,8 @@ func runHelpCommand(clArgs []string) {
 		runEnumCommand(help)
 	case "subs":
 		runSubsCommand(help)
+	case "emails":
+		runEmailsCommand(help)
 	case "viz":
 		runVizCommand(help)
 	case "track":

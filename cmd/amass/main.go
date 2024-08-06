@@ -129,6 +129,8 @@ func main() {
 		runEnumCommand(os.Args[2:])
 	case "subs":
 		runSubsCommand(os.Args[2:])
+	case "emails":
+		runEmailsCommand(os.Args[2:])
 	case "viz":
 		runVizCommand(os.Args[2:])
 	case "track":
