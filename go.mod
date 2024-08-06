@@ -13,7 +13,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/miekg/dns v1.1.57
 	github.com/owasp-amass/asset-db v0.3.9
-	github.com/owasp-amass/config v0.3.0
+	github.com/owasp-amass/config v0.3.1
 	github.com/owasp-amass/engine v0.0.0-20240113161848-1f756cf7789d
 	github.com/owasp-amass/open-asset-model v0.3.2
 	github.com/owasp-amass/resolve v0.6.21
