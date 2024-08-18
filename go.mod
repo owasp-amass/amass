@@ -12,10 +12,10 @@ require (
 	github.com/geziyor/geziyor v0.0.0-20240812061556-229b8ca83ac1
 	github.com/google/uuid v1.6.0
 	github.com/miekg/dns v1.1.62
-	github.com/owasp-amass/asset-db v0.4.1
-	github.com/owasp-amass/config v0.3.2-0.20240818060108-ce70cd723470
+	github.com/owasp-amass/asset-db v0.4.2
+	github.com/owasp-amass/config v0.4.0
 	github.com/owasp-amass/engine v0.0.0-20240113161848-1f756cf7789d
-	github.com/owasp-amass/open-asset-model v0.4.1
+	github.com/owasp-amass/open-asset-model v0.4.2
 	github.com/owasp-amass/resolve v0.8.1
 	github.com/samber/slog-common v0.17.1
 	github.com/samber/slog-syslog/v2 v2.5.0
