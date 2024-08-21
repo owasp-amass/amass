@@ -10,7 +10,6 @@ require (
 	github.com/cheggaaa/pb/v3 v3.1.5
 	github.com/fatih/color v1.17.0
 	github.com/geziyor/geziyor v0.0.0-20240812061556-229b8ca83ac1
-	github.com/google/uuid v1.6.0
 	github.com/miekg/dns v1.1.62
 	github.com/owasp-amass/asset-db v0.4.2
 	github.com/owasp-amass/config v0.4.0
@@ -52,6 +51,7 @@ require (
 	github.com/gobwas/ws v1.4.0 // indirect
 	github.com/golang/glog v1.2.2 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
+	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
@@ -71,7 +71,7 @@ require (
 	github.com/ncruces/go-strftime v0.1.9 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/prometheus/client_golang v1.20.0 // indirect
+	github.com/prometheus/client_golang v1.20.1 // indirect
 	github.com/prometheus/client_model v0.6.1 // indirect
 	github.com/prometheus/common v0.55.0 // indirect
 	github.com/prometheus/procfs v0.15.1 // indirect
