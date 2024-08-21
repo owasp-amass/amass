@@ -31,7 +31,6 @@ import (
 	"log/slog"
 	"net"
 	"net/netip"
-	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -40,11 +39,8 @@ import (
 
 	"github.com/caffix/stringset"
 	"github.com/fatih/color"
-	"github.com/google/uuid"
 	"github.com/owasp-amass/amass/v4/format"
-	"github.com/owasp-amass/amass/v4/launch"
 	"github.com/owasp-amass/config/config"
-	"github.com/owasp-amass/engine/api/graphql/client"
 	"github.com/owasp-amass/engine/graph"
 	et "github.com/owasp-amass/engine/types"
 	"github.com/owasp-amass/open-asset-model/domain"
@@ -135,10 +131,6 @@ func main() {
 		runVizCommand(os.Args[2:])
 	case "track":
 		runTrackCommand(os.Args[2:])
-	case "engine":
-		if err := launch.LaunchEngine(); err != nil {
-			fmt.Printf("%v\n", err)
-		}
 	case "help":
 		runHelpCommand(os.Args[2:])
 	default:
@@ -198,21 +190,6 @@ func getWordList(reader io.Reader) ([]string, error) {
 		}
 	}
 	return stringset.Deduplicate(words), nil
-}
-
-func createSession(ustr string, c *client.Client, cfg *config.Config) (uuid.UUID, error) {
-	for i := 0; i < 10; i++ {
-		if token, err := c.CreateSession(cfg); err == nil {
-			return token, err
-		}
-		if u, err := url.Parse(ustr); err == nil && i == 0 {
-			if host := u.Hostname(); host == "localhost" || host == "127.0.0.1" {
-				_ = launch.LaunchEngine()
-			}
-		}
-		time.Sleep(10 * time.Second)
-	}
-	return c.CreateSession(cfg)
 }
 
 // returns Asset objects by converting the contests of config.Scope

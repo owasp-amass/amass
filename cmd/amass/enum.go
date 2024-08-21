@@ -154,7 +154,7 @@ func runEnumCommand(clArgs []string) {
 	}
 
 	client := client.NewClient(url)
-	token, err := createSession(url, client, cfg)
+	token, err := client.CreateSession(cfg)
 	if err != nil {
 		fmt.Println(err)
 		return

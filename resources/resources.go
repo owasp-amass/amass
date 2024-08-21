@@ -14,7 +14,7 @@ import (
 	"strconv"
 )
 
-//go:embed amass_engine ip2asn-combined.tsv.gz alterations.txt namelist.txt user_agents.txt
+//go:embed ip2asn-combined.tsv.gz alterations.txt namelist.txt user_agents.txt
 var resourceFS embed.FS
 
 // IP2ASN is a range record provided by the iptoasn.com service.
