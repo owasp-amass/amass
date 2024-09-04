@@ -12,8 +12,8 @@ require (
 	github.com/geziyor/geziyor v0.0.0-20240812061556-229b8ca83ac1
 	github.com/miekg/dns v1.1.62
 	github.com/owasp-amass/asset-db v0.5.2
-	github.com/owasp-amass/config v0.5.0
-	github.com/owasp-amass/engine v0.0.0-20240822063517-f15fecf8a02f
+	github.com/owasp-amass/config v0.5.1
+	github.com/owasp-amass/engine v0.0.0-20240113161848-1f756cf7789d
 	github.com/owasp-amass/open-asset-model v0.5.1
 	github.com/owasp-amass/resolve v0.8.1
 	github.com/samber/slog-common v0.17.1
@@ -73,7 +73,7 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/prometheus/client_golang v1.20.2 // indirect
 	github.com/prometheus/client_model v0.6.1 // indirect
-	github.com/prometheus/common v0.57.0 // indirect
+	github.com/prometheus/common v0.58.0 // indirect
 	github.com/prometheus/procfs v0.15.1 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
@@ -85,8 +85,8 @@ require (
 	golang.org/x/mod v0.20.0 // indirect
 	golang.org/x/net v0.28.0 // indirect
 	golang.org/x/sync v0.8.0 // indirect
-	golang.org/x/sys v0.24.0 // indirect
-	golang.org/x/text v0.17.0 // indirect
+	golang.org/x/sys v0.25.0 // indirect
+	golang.org/x/text v0.18.0 // indirect
 	golang.org/x/time v0.6.0 // indirect
 	golang.org/x/tools v0.24.0 // indirect
 	google.golang.org/protobuf v1.34.2 // indirect
