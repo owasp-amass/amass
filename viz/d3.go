@@ -7,6 +7,8 @@ package viz
 import (
 	"io"
 	"text/template"
+
+	oam "github.com/owasp-amass/open-asset-model"
 )
 
 const d3Template = `
@@ -68,7 +70,7 @@ var div = d3.select("body").append("div")
     .attr("class", "tooltip")
     .style("opacity", 0);
 
-var r = 5,
+var r = 9,
     max = {{ .MaxNum }},
     simulation = d3.forceSimulation()
         .nodes(graph.nodes)
@@ -79,7 +81,7 @@ var r = 5,
             .id(function(d) { return d.id; }))
         .force("charge", d3.forceManyBody()
             .strength(nodeChargeStrength)
-            .distanceMax(graphWidth *2))
+            .distanceMax(graphWidth))
         .force("collide", d3.forceCollide()
             .radius(nodeCollideRadius))
         .force("center", d3.forceCenter(graphWidth / 2, graphHeight / 2))
@@ -100,11 +102,19 @@ function nodePercent(n) {
 }
 
 function nodeRadius(n) {
-    return (1.5 * r) + ((3 * r) * nodePercent(n));
+    var p = nodePercent(n);
+
+    if (p > 0.1 && p < 0.5) {
+        p = p * 2;
+    }
+    if (p < 0.1) {
+        p = 0.1;
+    }
+    return (1 * r) + ((3 * r) * p);
 }
 
 function nodeCollideRadius(n) {
-    return nodeRadius(n) + 1;
+    return nodeRadius(n) * 2.5;
 }
 
 function nodeLinkDistance(e) {
@@ -112,21 +122,41 @@ function nodeLinkDistance(e) {
         n2 = graph.nodes[e.target.id];
 
     var avg = (nodePercent(n1) + nodePercent(n2)) / 2;
-    
-    return 60 * avg;
+
+    if (avg > 0.7) {
+        avg = 0.7;
+    }
+    if (avg < 0.5) {
+        avg = 0.5;
+    }
+    return 100 * avg;
 }
 
 function nodeLinkStrength(e) {
     var n1 = graph.nodes[e.source.id],
         n2 = graph.nodes[e.target.id];
 
-    var avg = (nodePercent(n1) + nodePercent(n2)) / 2;
+    var fp,
+        p1 = nodePercent(n1),
+        p2 = nodePercent(n2);
 
-    return 1 - (1 * avg);
+    if (p1 > p2) {
+        fp = p1;
+    } else {
+        fp = p2;
+    }
+
+    if (fp > 0.7) {
+        fp = 0.7;
+    }
+    if (fp < 0.5) {
+        fp = 0.5;
+    }
+    return 1 - (1 * fp);
 }
 
 function nodeChargeStrength(n) {
-    return -100 + (-300 * nodePercent(n));
+    return -300 + (-50 * nodePercent(n));
 }
 
 function zoomed() {
@@ -280,11 +310,23 @@ type d3Graph struct {
 // WriteD3Data generates a HTML file that displays the Amass graph using D3.
 func WriteD3Data(output io.Writer, nodes []Node, edges []Edge) error {
 	colors := map[string]string{
-		"FQDN":      "green",
-		"IPAddress": "orange",
-		"RIROrg":    "cyan",
-		"Netblock":  "pink",
-		"ASN":       "blue",
+		string(oam.FQDN):             "green",
+		string(oam.IPAddress):        "orange",
+		string(oam.AutnumRecord):     "yellow",
+		string(oam.Netblock):         "pink",
+		string(oam.AutonomousSystem): "blue",
+		string(oam.SocketAddress):    "blueviolet",
+		string(oam.ContactRecord):    "cornsilk",
+		string(oam.EmailAddress):     "chocolate",
+		string(oam.Location):         "darkgray",
+		string(oam.Phone):            "coral",
+		string(oam.Fingerprint):      "red",
+		string(oam.Organization):     "aqua",
+		string(oam.Person):           "bisque",
+		string(oam.TLSCertificate):   "aquamarine",
+		string(oam.URL):              "azure",
+		string(oam.DomainRecord):     "yellow",
+		string(oam.Source):           "burlywood",
 	}
 
 	graph := &d3Graph{Name: "OWASP Amass - Attack Surface Mapping"}
