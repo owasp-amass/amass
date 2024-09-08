@@ -374,7 +374,7 @@ func fillCache(cache *ASNCache, db *graph.Graph) error {
 		}
 
 		for _, rel := range rels {
-			if asset, err := db.DB.FindById(rel.ID, start); err == nil && asset != nil {
+			if asset, err := db.DB.FindById(rel.ToAsset.ID, start); err == nil && asset != nil {
 				if autnum, ok := asset.Asset.(*whois.AutnumRecord); ok && autnum != nil {
 					desc = autnum.Handle + " - " + autnum.Name
 					break
