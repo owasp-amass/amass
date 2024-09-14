@@ -14,6 +14,7 @@ import (
 	"github.com/owasp-amass/open-asset-model/contact"
 	"github.com/owasp-amass/open-asset-model/domain"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
+	"github.com/owasp-amass/open-asset-model/source"
 )
 
 // Edge represents an Amass graph edge in the viz package.
@@ -190,17 +191,22 @@ func VizData(domains []string, since time.Time, db *assetdb.AssetDB) ([]Node, []
 }
 
 func newNode(idx int, a *types.Asset) *Node {
-	key := a.Asset.Key()
+	if a == nil || a.Asset == nil {
+		return nil
+	}
+	asset := a.Asset
+
+	key := asset.Key()
 	if key == "" {
 		return nil
 	}
 
-	atype := string(a.Asset.AssetType())
+	atype := string(asset.AssetType())
 	if atype == string(oam.Source) {
 		return nil
 	}
 
-	switch v := a.Asset.(type) {
+	switch v := asset.(type) {
 	case *oamreg.AutnumRecord:
 		key = v.Handle + " - " + key
 	case *contact.ContactRecord:
@@ -210,7 +216,7 @@ func newNode(idx int, a *types.Asset) *Node {
 		key = strings.Join(parts, " ")
 	case *oamreg.DomainRecord:
 		key = "WHOIS: " + key
-	default:
+	case *source.Source:
 		return nil
 	}
 	title := atype + ": " + key
