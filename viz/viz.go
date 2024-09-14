@@ -5,21 +5,15 @@
 package viz
 
 import (
-	"strconv"
 	"strings"
 	"time"
 
+	assetdb "github.com/owasp-amass/asset-db"
 	"github.com/owasp-amass/asset-db/types"
-	"github.com/owasp-amass/engine/graph"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/contact"
 	"github.com/owasp-amass/open-asset-model/domain"
-	"github.com/owasp-amass/open-asset-model/network"
-	"github.com/owasp-amass/open-asset-model/org"
-	"github.com/owasp-amass/open-asset-model/people"
-	oamcert "github.com/owasp-amass/open-asset-model/tls_certificate"
-	"github.com/owasp-amass/open-asset-model/url"
-	"github.com/owasp-amass/open-asset-model/whois"
+	oamreg "github.com/owasp-amass/open-asset-model/registration"
 )
 
 // Edge represents an Amass graph edge in the viz package.
@@ -38,7 +32,7 @@ type Node struct {
 }
 
 // VizData returns the current state of the Graph as viz package Nodes and Edges.
-func VizData(domains []string, since time.Time, g *graph.Graph) ([]Node, []Edge) {
+func VizData(domains []string, since time.Time, db *assetdb.AssetDB) ([]Node, []Edge) {
 	if len(domains) == 0 {
 		return []Node{}, []Edge{}
 	}
@@ -52,7 +46,7 @@ func VizData(domains []string, since time.Time, g *graph.Graph) ([]Node, []Edge)
 		since = since.UTC()
 	}
 
-	next, err := g.DB.FindByScope(fqdns, since)
+	next, err := db.FindByScope(fqdns, since)
 	if err != nil {
 		return []Node{}, []Edge{}
 	}
@@ -107,19 +101,21 @@ func VizData(domains []string, since time.Time, g *graph.Graph) ([]Node, []Edge)
 				out = true
 			case oam.SocketAddress:
 			case oam.ContactRecord:
-				fallthrough
+				out = true
 			case oam.EmailAddress:
-				fallthrough
+				out = true
 			case oam.Location:
 				out = true
 			case oam.Phone:
+				out = true
 			case oam.Fingerprint:
 			case oam.Organization:
 				out = true
 			case oam.Person:
+				out = true
 			case oam.TLSCertificate:
 			case oam.URL:
-				fallthrough
+				out = true
 			case oam.DomainRecord:
 				out = true
 			case oam.Source:
@@ -127,10 +123,10 @@ func VizData(domains []string, since time.Time, g *graph.Graph) ([]Node, []Edge)
 			}
 			// Obtain relations to additional assets in the graph
 			if out {
-				if rels, err := g.DB.OutgoingRelations(a, since, outRels...); err == nil && len(rels) > 0 {
+				if rels, err := db.OutgoingRelations(a, since, outRels...); err == nil && len(rels) > 0 {
 					fromID := id
 					for _, rel := range rels {
-						if to, err := g.DB.FindById(rel.ToAsset.ID, since); err == nil {
+						if to, err := db.FindById(rel.ToAsset.ID, since); err == nil {
 							toID := idx
 							n2 := newNode(toID, to)
 							if n2 == nil {
@@ -157,10 +153,10 @@ func VizData(domains []string, since time.Time, g *graph.Graph) ([]Node, []Edge)
 				}
 			}
 			if in {
-				if rels, err := g.DB.IncomingRelations(a, since, inRels...); err == nil && len(rels) > 0 {
+				if rels, err := db.IncomingRelations(a, since, inRels...); err == nil && len(rels) > 0 {
 					toID := id
 					for _, rel := range rels {
-						if from, err := g.DB.FindById(rel.FromAsset.ID, since); err == nil {
+						if from, err := db.FindById(rel.FromAsset.ID, since); err == nil {
 							fromID := idx
 							n2 := newNode(fromID, from)
 							if n2 == nil {
@@ -194,85 +190,35 @@ func VizData(domains []string, since time.Time, g *graph.Graph) ([]Node, []Edge)
 }
 
 func newNode(idx int, a *types.Asset) *Node {
-	var name, atype, title string
+	key := a.Asset.Key()
+	if key == "" {
+		return nil
+	}
+
+	atype := string(a.Asset.AssetType())
+	if atype == string(oam.Source) {
+		return nil
+	}
 
 	switch v := a.Asset.(type) {
-	case *domain.FQDN:
-		name = v.Name
-		atype = string(oam.FQDN)
-		title = atype + ": " + name
-	case *network.IPAddress:
-		name = v.Address.String()
-		atype = string(oam.IPAddress)
-		title = atype + ": " + name
-	case *network.AutonomousSystem:
-		name = strconv.Itoa(v.Number)
-		atype = string(oam.AutonomousSystem)
-		title = atype + ": AS" + name
-	case *whois.AutnumRecord:
-		name = v.Handle + " - " + v.Name
-		atype = string(oam.AutnumRecord)
-		title = atype + ": " + name
-	case *network.Netblock:
-		name = v.Cidr.String()
-		atype = string(oam.Netblock)
-		title = atype + ": " + name
-	case *network.SocketAddress:
-		name = v.Address.String()
-		atype = string(oam.SocketAddress)
-		title = atype + ": " + name
+	case *oamreg.AutnumRecord:
+		key = v.Handle + " - " + key
 	case *contact.ContactRecord:
-		name = v.DiscoveredAt
-		atype = string(oam.ContactRecord)
-		title = atype + ": " + name
-	case *contact.EmailAddress:
-		name = v.Address
-		atype = string(oam.EmailAddress)
-		title = atype + ": " + name
+		key = "Found->" + key
 	case *contact.Location:
-		name = v.Address
-		atype = string(oam.Location)
-		title = atype + ": " + name
-	case *contact.Phone:
-		name = v.Raw
-		atype = string(oam.Phone)
-		title = atype + ": " + name
-	/*case *fingerprint.Fingerprint:
-	name = v.Value
-	atype = string(oam.Fingerprint)
-	title = atype + ": " + name*/
-	case *org.Organization:
-		name = v.Name
-		atype = string(oam.Organization)
-		title = atype + ": " + name
-	case *people.Person:
-		name = v.FullName
-		atype = string(oam.Person)
-		title = atype + ": " + name
-	case *oamcert.TLSCertificate:
-		name = v.SerialNumber
-		atype = string(oam.TLSCertificate)
-		title = atype + ": " + name
-	case *url.URL:
-		name = v.Raw
-		atype = string(oam.URL)
-		title = atype + ": " + name
-	case *whois.DomainRecord:
-		name = v.Domain
-		atype = string(oam.DomainRecord)
-		title = atype + ": " + name
-	/*case *source.Source:
-	name = v.Name
-	atype = string(oam.Source)
-	title = atype + ": " + name*/
+		parts := []string{v.BuildingNumber, v.StreetName, v.City, v.Province, v.PostalCode}
+		key = strings.Join(parts, " ")
+	case *oamreg.DomainRecord:
+		key = "WHOIS: " + key
 	default:
 		return nil
 	}
+	title := atype + ": " + key
 
 	return &Node{
 		ID:    idx,
 		Type:  atype,
-		Label: name,
+		Label: key,
 		Title: title,
 	}
 }

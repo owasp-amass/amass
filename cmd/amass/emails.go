@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2024. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -6,7 +6,6 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"flag"
 	"io"
 	"os"
@@ -15,8 +14,8 @@ import (
 
 	"github.com/caffix/stringset"
 	"github.com/fatih/color"
+	assetdb "github.com/owasp-amass/asset-db"
 	"github.com/owasp-amass/config/config"
-	"github.com/owasp-amass/engine/graph"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/contact"
 	"github.com/owasp-amass/open-asset-model/domain"
@@ -119,7 +118,7 @@ func runEmailsCommand(clArgs []string) {
 	showEmails(&args, db)
 }
 
-func showEmails(args *emailsArgs, db *graph.Graph) {
+func showEmails(args *emailsArgs, db *assetdb.AssetDB) {
 	var err error
 	var outfile *os.File
 	domains := args.Domains.Slice()
@@ -138,7 +137,7 @@ func showEmails(args *emailsArgs, db *graph.Graph) {
 		_, _ = outfile.Seek(0, 0)
 	}
 
-	addrs := getAddresses(context.Background(), domains, db)
+	addrs := getAddresses(db, domains)
 	if len(addrs) == 0 {
 		r.Println("No email addresses were discovered")
 		return
@@ -149,7 +148,7 @@ func showEmails(args *emailsArgs, db *graph.Graph) {
 	}
 }
 
-func getAddresses(ctx context.Context, domains []string, g *graph.Graph) []string {
+func getAddresses(db *assetdb.AssetDB, domains []string) []string {
 	if len(domains) == 0 {
 		return nil
 	}
@@ -163,7 +162,7 @@ func getAddresses(ctx context.Context, domains []string, g *graph.Graph) []strin
 		fqdns = append(fqdns, &domain.FQDN{Name: d})
 	}
 
-	assets, err := g.DB.FindByScope(fqdns, qtime)
+	assets, err := db.FindByScope(fqdns, qtime)
 	if err != nil {
 		return nil
 	}

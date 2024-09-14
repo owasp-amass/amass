@@ -14,8 +14,8 @@ import (
 
 	"github.com/caffix/stringset"
 	"github.com/fatih/color"
+	assetdb "github.com/owasp-amass/asset-db"
 	"github.com/owasp-amass/config/config"
-	"github.com/owasp-amass/engine/graph"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/domain"
 )
@@ -130,7 +130,7 @@ func runTrackCommand(clArgs []string) {
 	}
 }
 
-func getNewNames(domains []string, since time.Time, g *graph.Graph) []string {
+func getNewNames(domains []string, since time.Time, db *assetdb.AssetDB) []string {
 	if len(domains) == 0 {
 		return []string{}
 	}
@@ -144,7 +144,7 @@ func getNewNames(domains []string, since time.Time, g *graph.Graph) []string {
 		since = since.UTC()
 	}
 
-	assets, err := g.DB.FindByScope(fqdns, since)
+	assets, err := db.FindByScope(fqdns, since)
 	if err != nil {
 		return []string{}
 	}
