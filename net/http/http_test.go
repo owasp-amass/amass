@@ -135,7 +135,7 @@ func TestRequestWebPage(t *testing.T) {
 		Auth:   &BasicAuth{name, pass},
 	})
 	if err != nil || resp.StatusCode != 200 || resp.Body != succ {
-		t.Errorf(resp.Status + ": " + resp.Body)
+		t.Error(resp.Status + ": " + resp.Body)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

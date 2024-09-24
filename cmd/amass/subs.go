@@ -419,7 +419,7 @@ func readASPrefixes(db *assetdb.AssetDB, asn int, since time.Time) []string {
 			if a, err := db.FindById(rel.ToAsset.ID, since); err != nil {
 				continue
 			} else if netblock, ok := a.Asset.(*network.Netblock); ok {
-				prefixes = append(prefixes, netblock.Cidr.String())
+				prefixes = append(prefixes, netblock.CIDR.String())
 			}
 		}
 	}

@@ -10,15 +10,14 @@ require (
 	github.com/geziyor/geziyor v0.0.0-20240812061556-229b8ca83ac1
 	github.com/glebarez/sqlite v1.11.0
 	github.com/miekg/dns v1.1.62
-	github.com/owasp-amass/asset-db v0.7.0
-	github.com/owasp-amass/config v0.7.1
-	github.com/owasp-amass/engine v0.0.2
-	github.com/owasp-amass/open-asset-model v0.7.1
+	github.com/owasp-amass/asset-db v0.8.1
+	github.com/owasp-amass/config v0.8.0
+	github.com/owasp-amass/engine v0.0.3-0.20240923235739-7d115c76590b
+	github.com/owasp-amass/open-asset-model v0.8.0
 	github.com/owasp-amass/resolve v0.8.1
 	github.com/rubenv/sql-migrate v1.7.0
 	github.com/samber/slog-common v0.17.1
 	github.com/samber/slog-syslog/v2 v2.5.0
-	github.com/stretchr/testify v1.9.0
 	github.com/tylertreat/BoomFilters v0.0.0-20210315201527-1a82519a3e43
 	github.com/yl2chen/cidranger v1.0.2
 	gorm.io/driver/postgres v1.5.9
@@ -36,10 +35,9 @@ require (
 	github.com/caffix/pipeline v0.2.3 // indirect
 	github.com/caffix/queue v0.1.5 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	github.com/chromedp/cdproto v0.0.0-20240810084448-b931b754e476 // indirect
+	github.com/chromedp/cdproto v0.0.0-20240919203636-12af5e8a671f // indirect
 	github.com/chromedp/chromedp v0.10.0 // indirect
 	github.com/chromedp/sysutil v1.0.0 // indirect
-	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dgraph-io/badger v1.6.2 // indirect
 	github.com/dgraph-io/ristretto v1.0.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
@@ -50,7 +48,6 @@ require (
 	github.com/gobwas/httphead v0.1.0 // indirect
 	github.com/gobwas/pool v0.2.1 // indirect
 	github.com/gobwas/ws v1.4.0 // indirect
-	github.com/golang/glog v1.2.2 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
@@ -63,7 +60,7 @@ require (
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
-	github.com/klauspost/compress v1.17.9 // indirect
+	github.com/klauspost/compress v1.17.10 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
@@ -71,7 +68,6 @@ require (
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/ncruces/go-strftime v0.1.9 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
-	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/prometheus/client_golang v1.20.4 // indirect
 	github.com/prometheus/client_model v0.6.1 // indirect
 	github.com/prometheus/common v0.59.1 // indirect

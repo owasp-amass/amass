@@ -25,10 +25,6 @@ func runHelpCommand(clArgs []string) {
 		runSubsCommand(help)
 	case "emails":
 		runEmailsCommand(help)
-	case "viz":
-		runVizCommand(help)
-	case "track":
-		runTrackCommand(help)
 	default:
 		commandUsage(mainUsageMsg, helpCommand, helpBuf)
 		return

@@ -92,7 +92,6 @@ func commandUsage(msg string, cmdFlagSet *flag.FlagSet, errBuf *bytes.Buffer) {
 		g.Fprintf(color.Error, "\t%-11s - Discover targets for enumerations\n", "amass intel")
 		g.Fprintf(color.Error, "\t%-11s - Perform enumerations and network mapping\n", "amass enum")
 		g.Fprintf(color.Error, "\t%-11s - Analyze subdomain information in the asset-db\n", "amass subs")
-		g.Fprintf(color.Error, "\t%-11s - Analyze OAM data to generate graph visualizations\n", "amass viz")
 		g.Fprintf(color.Error, "\t%-11s - Analyze OAM data to identify newly discovered assets\n", "amass track")
 	}
 
@@ -137,10 +136,6 @@ func main() {
 		runSubsCommand(os.Args[2:])
 	case "emails":
 		runEmailsCommand(os.Args[2:])
-	case "viz":
-		runVizCommand(os.Args[2:])
-	case "track":
-		runTrackCommand(os.Args[2:])
 	case "help":
 		runHelpCommand(os.Args[2:])
 	default:
@@ -338,7 +333,7 @@ func convertScopeToAssets(scope *config.Scope) []*et.Asset {
 		}
 
 		// Create an asset from the CIDR and append it to the assets slice.
-		asset := oamnet.Netblock{Cidr: prefix, Type: ipType}
+		asset := oamnet.Netblock{CIDR: prefix, Type: ipType}
 		data := et.AssetData{
 			OAMAsset: asset,
 			OAMType:  asset.AssetType(),
