@@ -5,7 +5,7 @@ COPY . .
 RUN go install -v ./...
 
 FROM alpine:latest
-RUN apk add --no-cache bash ca-certificates
+RUN apk add --no-cache bash ca-certificates nfs-utils
 RUN apk --no-cache --update upgrade
 COPY --from=build /go/bin/amass /bin/amass
 ENV HOME=/
