@@ -1,0 +1,64 @@
+scalar JSON
+scalar Any
+scalar LogMessage
+
+
+input Config {
+   scope: [Any]
+   ports: [Int]
+   blacklist: [String]
+   domains: [String]
+   resolvers: [String]
+   ips: [String]
+   cirds: [Any]
+   transformations: [Any]
+   database: [Any]
+   bruteForce: Boolean
+   alterations: Boolean
+}
+
+type Session {
+  sessionToken: ID!
+}
+
+#input SessionInput {
+#  sessionToken: ID!
+#}
+
+input CreateSessionInput {
+  config: Any!
+}
+
+input CreateSessionJsonInput {
+  config: String!
+}
+
+type Asset {
+  id: ID!
+}
+
+type SessionStats {
+	WorkItemsCompleted: Int
+	WorkItemsTotal:     Int
+}
+
+type Subscription {
+  logMessages(sessionToken: String!): String
+}
+
+type Query {
+  sessionStats(sessionToken: String!): SessionStats
+}
+
+input CreateAssetInput {
+  sessionToken: ID!
+  assetName: String
+  data: Any
+}
+
+type Mutation {
+  createSession(input: CreateSessionInput!): Session
+  createSessionFromJson(input: CreateSessionJsonInput!): Session
+  createAsset(input: CreateAssetInput!): Asset
+  terminateSession(sessionToken: String!): Boolean
+}

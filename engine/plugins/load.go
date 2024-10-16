@@ -1,0 +1,80 @@
+// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
+
+package plugins
+
+import (
+	"github.com/owasp-amass/engine/plugins/api"
+	"github.com/owasp-amass/engine/plugins/archive"
+	"github.com/owasp-amass/engine/plugins/brute"
+	"github.com/owasp-amass/engine/plugins/dns"
+	"github.com/owasp-amass/engine/plugins/expansion"
+	"github.com/owasp-amass/engine/plugins/horizontals"
+	"github.com/owasp-amass/engine/plugins/rdap"
+	"github.com/owasp-amass/engine/plugins/scrape"
+	hp "github.com/owasp-amass/engine/plugins/service_discovery/http_probes"
+	"github.com/owasp-amass/engine/plugins/whois"
+	"github.com/owasp-amass/engine/plugins/whois/bgptools"
+	et "github.com/owasp-amass/engine/types"
+)
+
+var pluginNewFuncs = []func() et.Plugin{
+	api.NewBinaryEdge,
+	api.NewChaos,
+	api.NewCrtsh,
+	api.NewDNSRepo,
+	api.NewGrepApp,
+	api.NewHackerTarget,
+	//api.NewHunterIO,
+	api.NewLeakIX,
+	api.NewPassiveTotal,
+	api.NewProspeo,
+	api.NewSecurityTrails,
+	api.NewURLScan,
+	api.NewVirusTotal,
+	api.NewZetalytics,
+	archive.NewWayback,
+	bgptools.NewBGPTools,
+	brute.NewFQDNAlterations,
+	dns.NewDNS,
+	expansion.NewBannerURLs,
+	expansion.NewContacts,
+	expansion.NewEmails,
+	expansion.NewTLSCerts,
+	expansion.NewURLs,
+	horizontals.NewHorizontals,
+	hp.NewHTTPProbing,
+	rdap.NewRDAP,
+	scrape.NewBing,
+	scrape.NewDNSHistory,
+	scrape.NewDuckDuckGo,
+	scrape.NewIPVerse,
+	scrape.NewRapidDNS,
+	scrape.NewSiteDossier,
+	whois.NewWHOIS,
+	NewIPNetblock,
+	NewJARMFingerprint,
+	NewKnownFQDN,
+	NewVerifiedEmail,
+}
+
+func LoadAndStartPlugins(r et.Registry) error {
+	var started []et.Plugin
+
+	for _, f := range pluginNewFuncs {
+		if p := f(); p != nil {
+			if err := p.Start(r); err != nil {
+				stopPlugins(started)
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func stopPlugins(started []et.Plugin) {
+	for _, p := range started {
+		p.Stop()
+	}
+}
