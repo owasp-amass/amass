@@ -2,7 +2,7 @@
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
-package main
+package utils
 
 import (
 	"net"
@@ -11,6 +11,10 @@ import (
 	"time"
 
 	"github.com/caffix/stringset"
+	assetdb "github.com/owasp-amass/asset-db"
+	oam "github.com/owasp-amass/open-asset-model"
+	"github.com/owasp-amass/open-asset-model/network"
+	oamreg "github.com/owasp-amass/open-asset-model/registration"
 	"github.com/yl2chen/cidranger"
 )
 
@@ -51,6 +55,12 @@ type cacheRangerEntry struct {
 type Output struct {
 	Name      string        `json:"name"`
 	Addresses []AddressInfo `json:"addresses"`
+}
+
+// ASNSummaryData stores information related to discovered ASs and netblocks.
+type ASNSummaryData struct {
+	Name      string
+	Netblocks map[string]int
 }
 
 // AddressInfo stores all network addressing info for the Output type.
@@ -210,6 +220,57 @@ func (c *ASNCache) AddrSearch(addr string) *ASNRequest {
 		Netblocks:   netblocks.Slice(),
 		Description: entry.Data.Description,
 	}
+}
+
+func FillCache(cache *ASNCache, db *assetdb.AssetDB) error {
+	start := time.Now().Add(-730 * time.Hour)
+	assets, err := db.FindByType(oam.AutonomousSystem, start)
+	if err != nil {
+		return err
+	}
+
+	for _, a := range assets {
+		as, ok := a.Asset.(*network.AutonomousSystem)
+		if !ok {
+			continue
+		}
+
+		var desc string
+		rels, err := db.OutgoingRelations(a, start, "registration")
+		if err != nil || len(rels) == 0 {
+			continue
+		}
+
+		for _, rel := range rels {
+			if asset, err := db.FindById(rel.ToAsset.ID, start); err == nil && asset != nil {
+				if autnum, ok := asset.Asset.(*oamreg.AutnumRecord); ok && autnum != nil {
+					desc = autnum.Handle + " - " + autnum.Name
+					break
+				}
+			}
+		}
+		if desc == "" {
+			continue
+		}
+
+		for _, prefix := range ReadASPrefixes(db, as.Number, start) {
+			first, cidr, err := net.ParseCIDR(prefix)
+			if err != nil {
+				continue
+			}
+			if ones, _ := cidr.Mask.Size(); ones == 0 {
+				continue
+			}
+
+			cache.Update(&ASNRequest{
+				Address:     first.String(),
+				ASN:         as.Number,
+				Prefix:      cidr.String(),
+				Description: desc,
+			})
+		}
+	}
+	return nil
 }
 
 func (c *ASNCache) searchRangerData(ip net.IP) *cacheRangerEntry {

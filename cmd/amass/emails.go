@@ -15,6 +15,8 @@ import (
 	"github.com/caffix/stringset"
 	"github.com/fatih/color"
 	"github.com/owasp-amass/amass/v4/config"
+	"github.com/owasp-amass/amass/v4/utils"
+	"github.com/owasp-amass/amass/v4/utils/afmt"
 	assetdb "github.com/owasp-amass/asset-db"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/contact"
@@ -62,9 +64,9 @@ func runEmailsCommand(clArgs []string) {
 	emailsCommand.StringVar(&args.Filepaths.TermOut, "o", "", "Path to the text file containing terminal stdout/stderr")
 
 	var usage = func() {
-		g.Fprintf(color.Error, "Usage: %s %s\n\n", path.Base(os.Args[0]), emailsUsageMsg)
+		afmt.G.Fprintf(color.Error, "Usage: %s %s\n\n", path.Base(os.Args[0]), emailsUsageMsg)
 		emailsCommand.PrintDefaults()
-		g.Fprintln(color.Error, emailsBuf.String())
+		afmt.G.Fprintln(color.Error, emailsBuf.String())
 	}
 
 	if len(clArgs) < 1 {
@@ -72,7 +74,7 @@ func runEmailsCommand(clArgs []string) {
 		return
 	}
 	if err := emailsCommand.Parse(clArgs); err != nil {
-		r.Fprintf(color.Error, "%v\n", err)
+		afmt.R.Fprintf(color.Error, "%v\n", err)
 		os.Exit(1)
 	}
 	if help1 || help2 {
@@ -89,7 +91,7 @@ func runEmailsCommand(clArgs []string) {
 	if args.Filepaths.Domains != "" {
 		list, err := config.GetListFromFile(args.Filepaths.Domains)
 		if err != nil {
-			r.Fprintf(color.Error, "Failed to parse the domain names file: %v\n", err)
+			afmt.R.Fprintf(color.Error, "Failed to parse the domain names file: %v\n", err)
 			return
 		}
 		args.Domains.InsertMany(list...)
@@ -105,13 +107,13 @@ func runEmailsCommand(clArgs []string) {
 			args.Domains.InsertMany(cfg.Domains()...)
 		}
 	} else if args.Filepaths.ConfigFile != "" {
-		r.Fprintf(color.Error, "Failed to load the configuration file: %v\n", err)
+		afmt.R.Fprintf(color.Error, "Failed to load the configuration file: %v\n", err)
 		os.Exit(1)
 	}
 
-	db := openGraphDatabase(cfg)
+	db := utils.OpenGraphDatabase(cfg)
 	if db == nil {
-		r.Fprintln(color.Error, "Failed to connect with the database")
+		afmt.R.Fprintln(color.Error, "Failed to connect with the database")
 		os.Exit(1)
 	}
 
@@ -126,7 +128,7 @@ func showEmails(args *emailsArgs, db *assetdb.AssetDB) {
 	if args.Filepaths.TermOut != "" {
 		outfile, err = os.OpenFile(args.Filepaths.TermOut, os.O_WRONLY|os.O_CREATE, 0644)
 		if err != nil {
-			r.Fprintf(color.Error, "Failed to open the text output file: %v\n", err)
+			afmt.R.Fprintf(color.Error, "Failed to open the text output file: %v\n", err)
 			os.Exit(1)
 		}
 		defer func() {
@@ -139,12 +141,12 @@ func showEmails(args *emailsArgs, db *assetdb.AssetDB) {
 
 	addrs := getAddresses(db, domains)
 	if len(addrs) == 0 {
-		r.Println("No email addresses were discovered")
+		afmt.R.Println("No email addresses were discovered")
 		return
 	}
 
 	for _, addr := range addrs {
-		g.Println(addr)
+		afmt.G.Println(addr)
 	}
 }
 

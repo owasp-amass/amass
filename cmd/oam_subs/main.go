@@ -2,10 +2,29 @@
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
+// oam_subs: Analyze collected OAM subdomains
+//
+//	+----------------------------------------------------------------------------+
+//	| ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  OWASP Amass  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ |
+//	+----------------------------------------------------------------------------+
+//	|      .+++:.            :                             .+++.                 |
+//	|    +W@@@@@@8        &+W@#               o8W8:      +W@@@@@@#.   oW@@@W#+   |
+//	|   &@#+   .o@##.    .@@@o@W.o@@o       :@@#&W8o    .@#:  .:oW+  .@#+++&#&   |
+//	|  +@&        &@&     #@8 +@W@&8@+     :@W.   +@8   +@:          .@8         |
+//	|  8@          @@     8@o  8@8  WW    .@W      W@+  .@W.          o@#:       |
+//	|  WW          &@o    &@:  o@+  o@+   #@.      8@o   +W@#+.        +W@8:     |
+//	|  #@          :@W    &@+  &@+   @8  :@o       o@o     oW@@W+        oW@8    |
+//	|  o@+          @@&   &@+  &@+   #@  &@.      .W@W       .+#@&         o@W.  |
+//	|   WW         +@W@8. &@+  :&    o@+ #@      :@W&@&         &@:  ..     :@o  |
+//	|   :@W:      o@# +Wo &@+        :W: +@W&o++o@W. &@&  8@#o+&@W.  #@:    o@+  |
+//	|    :W@@WWWW@@8       +              :&W@@@@&    &W  .o#@@W&.   :W@WWW@@&   |
+//	|      +o&&&&+.                                                    +oooo.    |
+//	+----------------------------------------------------------------------------+
 package main
 
 import (
 	"bytes"
+	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -25,9 +44,11 @@ import (
 	"github.com/owasp-amass/open-asset-model/domain"
 )
 
-const subsUsageMsg = "subs [options] -d domain"
+const (
+	dbUsageMsg = "[options]"
+)
 
-type subsArgs struct {
+type dbArgs struct {
 	Domains *stringset.Set
 	Enum    int
 	Options struct {
@@ -51,45 +72,45 @@ type subsArgs struct {
 
 type outLookup map[string]*utils.Output
 
-func runSubsCommand(clArgs []string) {
-	var args subsArgs
+func main() {
+	var args dbArgs
 	var help1, help2 bool
-	subsCommand := flag.NewFlagSet("subs", flag.ContinueOnError)
+	dbCommand := flag.NewFlagSet("db", flag.ContinueOnError)
 
 	args.Domains = stringset.New()
 	defer args.Domains.Close()
 
-	subsBuf := new(bytes.Buffer)
-	subsCommand.SetOutput(subsBuf)
+	dbBuf := new(bytes.Buffer)
+	dbCommand.SetOutput(dbBuf)
 
-	subsCommand.BoolVar(&help1, "h", false, "Show the program usage message")
-	subsCommand.BoolVar(&help2, "help", false, "Show the program usage message")
-	subsCommand.Var(args.Domains, "d", "Domain names separated by commas (can be used multiple times)")
-	subsCommand.BoolVar(&args.Options.DemoMode, "demo", false, "Censor output to make it suitable for demonstrations")
-	subsCommand.BoolVar(&args.Options.IPs, "ip", false, "Show the IP addresses for discovered names")
-	subsCommand.BoolVar(&args.Options.IPv4, "ipv4", false, "Show the IPv4 addresses for discovered names")
-	subsCommand.BoolVar(&args.Options.IPv6, "ipv6", false, "Show the IPv6 addresses for discovered names")
-	subsCommand.BoolVar(&args.Options.ASNTableSummary, "summary", false, "Print Just ASN Table Summary")
-	subsCommand.BoolVar(&args.Options.DiscoveredNames, "names", false, "Print Just Discovered Names")
-	subsCommand.BoolVar(&args.Options.NoColor, "nocolor", false, "Disable colorized output")
-	subsCommand.BoolVar(&args.Options.ShowAll, "show", false, "Print the results for the enumeration index + domains provided")
-	subsCommand.BoolVar(&args.Options.Silent, "silent", false, "Disable all output during execution")
-	subsCommand.StringVar(&args.Filepaths.ConfigFile, "config", "", "Path to the YAML configuration file. Additional details below")
-	subsCommand.StringVar(&args.Filepaths.Directory, "dir", "", "Path to the directory containing the graph database")
-	subsCommand.StringVar(&args.Filepaths.Domains, "df", "", "Path to a file providing root domain names")
-	subsCommand.StringVar(&args.Filepaths.TermOut, "o", "", "Path to the text file containing terminal stdout/stderr")
+	dbCommand.BoolVar(&help1, "h", false, "Show the program usage message")
+	dbCommand.BoolVar(&help2, "help", false, "Show the program usage message")
+	dbCommand.Var(args.Domains, "d", "Domain names separated by commas (can be used multiple times)")
+	dbCommand.BoolVar(&args.Options.DemoMode, "demo", false, "Censor output to make it suitable for demonstrations")
+	dbCommand.BoolVar(&args.Options.IPs, "ip", false, "Show the IP addresses for discovered names")
+	dbCommand.BoolVar(&args.Options.IPv4, "ipv4", false, "Show the IPv4 addresses for discovered names")
+	dbCommand.BoolVar(&args.Options.IPv6, "ipv6", false, "Show the IPv6 addresses for discovered names")
+	dbCommand.BoolVar(&args.Options.ASNTableSummary, "summary", false, "Print Just ASN Table Summary")
+	dbCommand.BoolVar(&args.Options.DiscoveredNames, "names", false, "Print Just Discovered Names")
+	dbCommand.BoolVar(&args.Options.NoColor, "nocolor", false, "Disable colorized output")
+	dbCommand.BoolVar(&args.Options.ShowAll, "show", false, "Print the results for the enumeration index + domains provided")
+	dbCommand.BoolVar(&args.Options.Silent, "silent", false, "Disable all output during execution")
+	dbCommand.StringVar(&args.Filepaths.ConfigFile, "config", "", "Path to the YAML configuration file. Additional details below")
+	dbCommand.StringVar(&args.Filepaths.Directory, "dir", "", "Path to the directory containing the graph database")
+	dbCommand.StringVar(&args.Filepaths.Domains, "df", "", "Path to a file providing root domain names")
+	dbCommand.StringVar(&args.Filepaths.TermOut, "o", "", "Path to the text file containing terminal stdout/stderr")
 
 	var usage = func() {
-		afmt.G.Fprintf(color.Error, "Usage: %s %s\n\n", path.Base(os.Args[0]), subsUsageMsg)
-		subsCommand.PrintDefaults()
-		afmt.G.Fprintln(color.Error, subsBuf.String())
+		afmt.G.Fprintf(color.Error, "Usage: %s %s\n\n", path.Base(os.Args[0]), dbUsageMsg)
+		dbCommand.PrintDefaults()
+		afmt.G.Fprintln(color.Error, dbBuf.String())
 	}
 
-	if len(clArgs) < 1 {
+	if len(os.Args) < 2 {
 		usage()
 		return
 	}
-	if err := subsCommand.Parse(clArgs); err != nil {
+	if err := dbCommand.Parse(os.Args[1:]); err != nil {
 		afmt.R.Fprintf(color.Error, "%v\n", err)
 		os.Exit(1)
 	}
@@ -154,7 +175,7 @@ func runSubsCommand(clArgs []string) {
 	showData(&args, asninfo, db)
 }
 
-func showData(args *subsArgs, asninfo bool, db *assetdb.AssetDB) {
+func showData(args *dbArgs, asninfo bool, db *assetdb.AssetDB) {
 	var total int
 	var err error
 	var outfile *os.File
@@ -183,9 +204,9 @@ func showData(args *subsArgs, asninfo bool, db *assetdb.AssetDB) {
 		}
 	}
 
-	names := getNames(db, domains, asninfo)
+	names := getNames(context.Background(), domains, asninfo, db)
 	if len(names) != 0 && (asninfo || args.Options.IPv4 || args.Options.IPv6) {
-		names = addAddresses(db, names, asninfo, cache)
+		names = addAddresses(context.Background(), db, names, asninfo, cache)
 	}
 
 	asns := make(map[int]*utils.ASNSummaryData)
@@ -244,7 +265,7 @@ func showData(args *subsArgs, asninfo bool, db *assetdb.AssetDB) {
 	}
 }
 
-func getNames(db *assetdb.AssetDB, domains []string, asninfo bool) []*utils.Output {
+func getNames(ctx context.Context, domains []string, asninfo bool, db *assetdb.AssetDB) []*utils.Output {
 	if len(domains) == 0 {
 		return nil
 	}
@@ -273,7 +294,7 @@ func getNames(db *assetdb.AssetDB, domains []string, asninfo bool) []*utils.Outp
 	return names
 }
 
-func addAddresses(db *assetdb.AssetDB, names []*utils.Output, asninfo bool, cache *utils.ASNCache) []*utils.Output {
+func addAddresses(ctx context.Context, db *assetdb.AssetDB, names []*utils.Output, asninfo bool, cache *utils.ASNCache) []*utils.Output {
 	var namestrs []string
 	lookup := make(outLookup, len(names))
 	for _, n := range names {

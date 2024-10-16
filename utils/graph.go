@@ -2,16 +2,17 @@
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
-package graph
+package utils
 
 import (
 	"embed"
 	"fmt"
 	"math/rand"
-	"os"
+	"path/filepath"
 
 	"github.com/glebarez/sqlite"
-	db "github.com/owasp-amass/asset-db"
+	"github.com/owasp-amass/amass/v4/config"
+	assetdb "github.com/owasp-amass/asset-db"
 	pgmigrations "github.com/owasp-amass/asset-db/migrations/postgres"
 	sqlitemigrations "github.com/owasp-amass/asset-db/migrations/sqlite3"
 	"github.com/owasp-amass/asset-db/repository"
@@ -20,15 +21,32 @@ import (
 	"gorm.io/gorm"
 )
 
-// Graph is the object for managing a network infrastructure link graph.
-type Graph struct {
-	DB     *db.AssetDB
-	dsn    string
-	dbtype repository.DBType
+func OpenGraphDatabase(cfg *config.Config) *assetdb.AssetDB {
+	// Add the local database settings to the configuration
+	cfg.GraphDBs = append(cfg.GraphDBs, cfg.LocalDatabaseSettings(cfg.GraphDBs))
+
+	for _, db := range cfg.GraphDBs {
+		if db.Primary {
+			var dbase *assetdb.AssetDB
+
+			if db.System == "local" {
+				dbase = NewGraph(db.System, filepath.Join(config.OutputDirectory(cfg.Dir), "amass.sqlite"), db.Options)
+			} else {
+				connStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s", db.Host, db.Port, db.Username, db.Password, db.DBName)
+				dbase = NewGraph(db.System, connStr, db.Options)
+			}
+
+			if dbase != nil {
+				return dbase
+			}
+			break
+		}
+	}
+
+	return NewGraph("memory", "", "")
 }
 
-// NewGraph returns an intialized Graph object.
-func NewGraph(system, path string, options string) *Graph {
+func NewGraph(system, path string, options string) *assetdb.AssetDB {
 	var dsn string
 	var dbtype repository.DBType
 
@@ -46,15 +64,9 @@ func NewGraph(system, path string, options string) *Graph {
 		return nil
 	}
 
-	store := db.New(dbtype, dsn)
+	store := assetdb.New(dbtype, dsn)
 	if store == nil {
 		return nil
-	}
-
-	g := &Graph{
-		DB:     store,
-		dsn:    dsn,
-		dbtype: dbtype,
 	}
 
 	var name string
@@ -64,11 +76,11 @@ func NewGraph(system, path string, options string) *Graph {
 	case repository.SQLite:
 		name = "sqlite3"
 		fs = sqlitemigrations.Migrations()
-		database = sqlite.Open(g.dsn)
+		database = sqlite.Open(dsn)
 	case repository.Postgres:
 		name = "postgres"
 		fs = pgmigrations.Migrations()
-		database = postgres.Open(g.dsn)
+		database = postgres.Open(dsn)
 	}
 
 	sql, err := gorm.Open(database, &gorm.Config{})
@@ -90,36 +102,5 @@ func NewGraph(system, path string, options string) *Graph {
 	if err != nil {
 		panic(err)
 	}
-	return g
-}
-
-func (g *Graph) Remove() {
-	switch g.dbtype {
-	case repository.SQLite:
-		os.Remove(g.dsn)
-	case repository.Postgres:
-		teardownPostgres(g.dsn)
-	}
-}
-
-func teardownPostgres(dsn string) {
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
-	if err != nil {
-		panic(err)
-	}
-
-	migrationsSource := migrate.EmbedFileSystemMigrationSource{
-		FileSystem: pgmigrations.Migrations(),
-		Root:       "/",
-	}
-
-	sqlDb, err := db.DB()
-	if err != nil {
-		panic(err)
-	}
-
-	_, err = migrate.Exec(sqlDb, "postgres", migrationsSource, migrate.Down)
-	if err != nil {
-		panic(err)
-	}
+	return store
 }
