@@ -165,6 +165,9 @@ func main() {
 	nodes, edges := viz.VizData(args.Domains.Slice(), start, db)
 	// Get the directory to save the files into
 	dir := args.Filepaths.Directory
+	if pwd, err := os.Getwd(); err == nil {
+		dir = pwd
+	}
 
 	// Set output file prefix, use 'amass' if '-oA' flag is not specified
 	prefix := args.Filepaths.AllFilePrefix
