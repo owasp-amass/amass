@@ -25,12 +25,10 @@ package main
 import (
 	"bufio"
 	"bytes"
-	"embed"
 	"flag"
 	"fmt"
 	"io"
 	"log/slog"
-	"math/rand"
 	"net"
 	"net/netip"
 	"os"
@@ -41,22 +39,13 @@ import (
 
 	"github.com/caffix/stringset"
 	"github.com/fatih/color"
-	"github.com/glebarez/sqlite"
 	"github.com/owasp-amass/amass/v4/config"
 	et "github.com/owasp-amass/amass/v4/engine/types"
-	"github.com/owasp-amass/amass/v4/format"
-	assetdb "github.com/owasp-amass/asset-db"
-	db "github.com/owasp-amass/asset-db"
-	pgmigrations "github.com/owasp-amass/asset-db/migrations/postgres"
-	sqlitemigrations "github.com/owasp-amass/asset-db/migrations/sqlite3"
-	"github.com/owasp-amass/asset-db/repository"
+	"github.com/owasp-amass/amass/v4/utils/afmt"
 	"github.com/owasp-amass/open-asset-model/domain"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
-	migrate "github.com/rubenv/sql-migrate"
 	slogcommon "github.com/samber/slog-common"
 	slogsyslog "github.com/samber/slog-syslog/v2"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
 )
 
 const (
@@ -66,39 +55,24 @@ const (
 	tutorialURL          = "https://github.com/owasp-amass/amass/blob/master/doc/tutorial.md"
 )
 
-var (
-	// Colors used to ease the reading of program output
-	b = color.New(color.FgHiBlue)
-	//y       = color.New(color.FgHiYellow)
-	g = color.New(color.FgHiGreen)
-	r = color.New(color.FgHiRed)
-	//fgR    = color.New(color.FgRed)
-	//fgY    = color.New(color.FgYellow)
-	yellow = color.New(color.FgHiYellow).SprintFunc()
-	green  = color.New(color.FgHiGreen).SprintFunc()
-	blue   = color.New(color.FgHiBlue).SprintFunc()
-	//magenta = color.New(color.FgHiMagenta).SprintFunc()
-	//white   = color.New(color.FgHiWhite).SprintFunc()
-)
-
 func commandUsage(msg string, cmdFlagSet *flag.FlagSet, errBuf *bytes.Buffer) {
-	format.PrintBanner()
-	g.Fprintf(color.Error, "Usage: %s %s\n\n", path.Base(os.Args[0]), msg)
+	afmt.PrintBanner()
+	afmt.G.Fprintf(color.Error, "Usage: %s %s\n\n", path.Base(os.Args[0]), msg)
 	cmdFlagSet.PrintDefaults()
-	g.Fprintln(color.Error, errBuf.String())
+	afmt.G.Fprintln(color.Error, errBuf.String())
 
 	if msg == mainUsageMsg {
-		g.Fprintf(color.Error, "\nSubcommands: \n\n")
-		g.Fprintf(color.Error, "\t%-11s - Discover targets for enumerations\n", "amass intel")
-		g.Fprintf(color.Error, "\t%-11s - Perform enumerations and network mapping\n", "amass enum")
-		g.Fprintf(color.Error, "\t%-11s - Analyze subdomain information in the asset-db\n", "amass subs")
-		g.Fprintf(color.Error, "\t%-11s - Analyze OAM data to identify newly discovered assets\n", "amass track")
+		afmt.G.Fprintf(color.Error, "\nSubcommands: \n\n")
+		afmt.G.Fprintf(color.Error, "\t%-11s - Discover targets for enumerations\n", "amass intel")
+		afmt.G.Fprintf(color.Error, "\t%-11s - Perform enumerations and network mapping\n", "amass enum")
+		afmt.G.Fprintf(color.Error, "\t%-11s - Analyze subdomain information in the asset-db\n", "amass subs")
+		afmt.G.Fprintf(color.Error, "\t%-11s - Analyze OAM data to identify newly discovered assets\n", "amass track")
 	}
 
-	g.Fprintln(color.Error)
-	g.Fprintf(color.Error, "The user's guide can be found here: \n%s\n\n", userGuideURL)
-	g.Fprintf(color.Error, "An example configuration file can be found here: \n%s\n\n", exampleConfigFileURL)
-	g.Fprintf(color.Error, "The Amass tutorial can be found here: \n%s\n\n", tutorialURL)
+	afmt.G.Fprintln(color.Error)
+	afmt.G.Fprintf(color.Error, "The user's guide can be found here: \n%s\n\n", userGuideURL)
+	afmt.G.Fprintf(color.Error, "An example configuration file can be found here: \n%s\n\n", exampleConfigFileURL)
+	afmt.G.Fprintf(color.Error, "The Amass tutorial can be found here: \n%s\n\n", tutorialURL)
 }
 
 func main() {
@@ -117,7 +91,7 @@ func main() {
 		return
 	}
 	if err := mainFlagSet.Parse(os.Args[1:]); err != nil {
-		r.Fprintf(color.Error, "%v\n", err)
+		afmt.R.Fprintf(color.Error, "%v\n", err)
 		os.Exit(1)
 	}
 	if help1 || help2 {
@@ -125,7 +99,7 @@ func main() {
 		return
 	}
 	if version {
-		fmt.Fprintf(color.Error, "%s\n", format.Version)
+		fmt.Fprintf(color.Error, "%s\n", afmt.Version)
 		return
 	}
 
@@ -148,98 +122,14 @@ func createOutputDirectory(cfg *config.Config) {
 	// Prepare output file paths
 	dir := config.OutputDirectory(cfg.Dir)
 	if dir == "" {
-		r.Fprintln(color.Error, "Failed to obtain the output directory")
+		afmt.R.Fprintln(color.Error, "Failed to obtain the output directory")
 		os.Exit(1)
 	}
 	// If the directory does not yet exist, create it
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		r.Fprintf(color.Error, "Failed to create the directory: %v\n", err)
+		afmt.R.Fprintf(color.Error, "Failed to create the directory: %v\n", err)
 		os.Exit(1)
 	}
-}
-
-func openGraphDatabase(cfg *config.Config) *assetdb.AssetDB {
-	// Add the local database settings to the configuration
-	cfg.GraphDBs = append(cfg.GraphDBs, cfg.LocalDatabaseSettings(cfg.GraphDBs))
-
-	for _, db := range cfg.GraphDBs {
-		if db.Primary {
-			var dbase *assetdb.AssetDB
-
-			if db.System == "local" {
-				dbase = NewGraph(db.System, filepath.Join(config.OutputDirectory(cfg.Dir), "amass.sqlite"), db.Options)
-			} else {
-				connStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s", db.Host, db.Port, db.Username, db.Password, db.DBName)
-				dbase = NewGraph(db.System, connStr, db.Options)
-			}
-
-			if dbase != nil {
-				return dbase
-			}
-			break
-		}
-	}
-
-	return NewGraph("memory", "", "")
-}
-
-func NewGraph(system, path string, options string) *assetdb.AssetDB {
-	var dsn string
-	var dbtype repository.DBType
-
-	switch system {
-	case "memory":
-		dbtype = repository.SQLite
-		dsn = fmt.Sprintf("file:sqlite%d?mode=memory&cache=shared", rand.Int31n(100))
-	case "local":
-		dbtype = repository.SQLite
-		dsn = path
-	case "postgres":
-		dbtype = repository.Postgres
-		dsn = path
-	default:
-		return nil
-	}
-
-	store := db.New(dbtype, dsn)
-	if store == nil {
-		return nil
-	}
-
-	var name string
-	var fs embed.FS
-	var database gorm.Dialector
-	switch dbtype {
-	case repository.SQLite:
-		name = "sqlite3"
-		fs = sqlitemigrations.Migrations()
-		database = sqlite.Open(dsn)
-	case repository.Postgres:
-		name = "postgres"
-		fs = pgmigrations.Migrations()
-		database = postgres.Open(dsn)
-	}
-
-	sql, err := gorm.Open(database, &gorm.Config{})
-	if err != nil {
-		return nil
-	}
-
-	migrationsSource := migrate.EmbedFileSystemMigrationSource{
-		FileSystem: fs,
-		Root:       "/",
-	}
-
-	sqlDb, err := sql.DB()
-	if err != nil {
-		panic(err)
-	}
-
-	_, err = migrate.Exec(sqlDb, name, migrationsSource, migrate.Up)
-	if err != nil {
-		panic(err)
-	}
-	return store
 }
 
 func getWordList(reader io.Reader) ([]string, error) {

@@ -21,16 +21,16 @@ import (
 	"github.com/fatih/color"
 	"github.com/owasp-amass/amass/v4/config"
 	"github.com/owasp-amass/amass/v4/engine/api/graphql/client"
-	"github.com/owasp-amass/amass/v4/format"
 	"github.com/owasp-amass/amass/v4/resources"
+	"github.com/owasp-amass/amass/v4/utils/afmt"
 )
 
 const enumUsageMsg = "enum [options] -d DOMAIN"
 
 type enumArgs struct {
-	Addresses         format.ParseIPs
-	ASNs              format.ParseInts
-	CIDRs             format.ParseCIDRs
+	Addresses         afmt.ParseIPs
+	ASNs              afmt.ParseInts
+	CIDRs             afmt.ParseCIDRs
 	AltWordList       *stringset.Set
 	AltWordListMask   *stringset.Set
 	BruteWordList     *stringset.Set
@@ -46,7 +46,7 @@ type enumArgs struct {
 	MaxDepth          int
 	MinForRecursive   int
 	Names             *stringset.Set
-	Ports             format.ParseInts
+	Ports             afmt.ParseInts
 	Resolvers         *stringset.Set
 	Trusted           *stringset.Set
 	Timeout           int
@@ -65,19 +65,19 @@ type enumArgs struct {
 	}
 	Filepaths struct {
 		AllFilePrefix    string
-		AltWordlist      format.ParseStrings
+		AltWordlist      afmt.ParseStrings
 		Blacklist        string
-		BruteWordlist    format.ParseStrings
+		BruteWordlist    afmt.ParseStrings
 		ConfigFile       string
 		Directory        string
-		Domains          format.ParseStrings
+		Domains          afmt.ParseStrings
 		ExcludedSrcs     string
 		IncludedSrcs     string
 		JSONOutput       string
 		LogFile          string
-		Names            format.ParseStrings
-		Resolvers        format.ParseStrings
-		Trusted          format.ParseStrings
+		Names            afmt.ParseStrings
+		Resolvers        afmt.ParseStrings
+		Trusted          afmt.ParseStrings
 		ScriptsDirectory string
 		TermOut          string
 	}
@@ -247,7 +247,7 @@ func writeLogMessage(l *slog.Logger, message string) {
 		return
 	}
 
-	record, err := format.JSONLogToRecord(logstr)
+	record, err := afmt.JSONLogToRecord(logstr)
 	if err != nil {
 		return
 	}
@@ -313,7 +313,7 @@ func argsAndConfig(clArgs []string) (*config.Config, *enumArgs) {
 		return nil, &args
 	}
 	if err := enumCommand.Parse(clArgs); err != nil {
-		r.Fprintf(color.Error, "%v\n", err)
+		afmt.R.Fprintf(color.Error, "%v\n", err)
 		os.Exit(1)
 	}
 	if help1 || help2 {
@@ -335,7 +335,7 @@ func argsAndConfig(clArgs []string) (*config.Config, *enumArgs) {
 	}
 	if (args.Excluded.Len() > 0 || args.Filepaths.ExcludedSrcs != "") &&
 		(args.Included.Len() > 0 || args.Filepaths.IncludedSrcs != "") {
-		r.Fprintln(color.Error, "Cannot provide both include and exclude arguments")
+		afmt.R.Fprintln(color.Error, "Cannot provide both include and exclude arguments")
 		commandUsage(enumUsageMsg, enumCommand, enumBuf)
 		os.Exit(1)
 	}
@@ -352,21 +352,21 @@ func argsAndConfig(clArgs []string) (*config.Config, *enumArgs) {
 			args.Resolvers = stringset.New(cfg.Resolvers...)
 		}
 	} else if args.Filepaths.ConfigFile != "" {
-		r.Fprintf(color.Error, "Failed to load the configuration file: %v\n", err)
+		afmt.R.Fprintf(color.Error, "Failed to load the configuration file: %v\n", err)
 		os.Exit(1)
 	}
 	// Override configuration file settings with command-line arguments
 	if err := cfg.UpdateConfig(args); err != nil {
-		r.Fprintf(color.Error, "Configuration error: %v\n", err)
+		afmt.R.Fprintf(color.Error, "Configuration error: %v\n", err)
 		os.Exit(1)
 	}
 	// Some input validation
 	if !cfg.Active && len(args.Ports) > 0 {
-		r.Fprintln(color.Error, "Ports can only be scanned in the active mode")
+		afmt.R.Fprintln(color.Error, "Ports can only be scanned in the active mode")
 		os.Exit(1)
 	}
 	if len(cfg.Domains()) == 0 {
-		r.Fprintln(color.Error, "Configuration error: No root domain names were provided")
+		afmt.R.Fprintln(color.Error, "Configuration error: No root domain names were provided")
 		os.Exit(1)
 	}
 	return cfg, &args

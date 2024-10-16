@@ -2,34 +2,46 @@
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
-package graph
+package utils
 
 import (
-	"context"
 	"errors"
 	"net/netip"
 	"strings"
 	"time"
 
 	"github.com/caffix/stringset"
-	"github.com/owasp-amass/asset-db/types"
+	assetdb "github.com/owasp-amass/asset-db"
 	"github.com/owasp-amass/open-asset-model/domain"
 	"github.com/owasp-amass/open-asset-model/network"
 )
 
-// UpsertAddress creates an IP address in the graph.
-func (g *Graph) UpsertAddress(ctx context.Context, addr string) (*types.Asset, error) {
-	return g.DB.Create(nil, "", buildIPAddress(addr))
+func ReadASPrefixes(db *assetdb.AssetDB, asn int, since time.Time) []string {
+	var prefixes []string
+
+	assets, err := db.FindByContent(&network.AutonomousSystem{Number: asn}, since)
+	if err != nil || len(assets) == 0 {
+		return prefixes
+	}
+
+	if rels, err := db.OutgoingRelations(assets[0], since, "announces"); err == nil && len(rels) > 0 {
+		for _, rel := range rels {
+			if a, err := db.FindById(rel.ToAsset.ID, since); err != nil {
+				continue
+			} else if netblock, ok := a.Asset.(*network.Netblock); ok {
+				prefixes = append(prefixes, netblock.CIDR.String())
+			}
+		}
+	}
+	return prefixes
 }
 
-// NameAddrPair represents a relationship between a DNS name and an IP address it eventually resolves to.
 type NameAddrPair struct {
 	FQDN *domain.FQDN
 	Addr *network.IPAddress
 }
 
-// NamesToAddrs returns a NameAddrPair for each name / address combination discovered in the graph.
-func (g *Graph) NamesToAddrs(ctx context.Context, since time.Time, names ...string) ([]*NameAddrPair, error) {
+func NamesToAddrs(db *assetdb.AssetDB, since time.Time, names ...string) ([]*NameAddrPair, error) {
 	nameAddrMap := make(map[string]*stringset.Set, len(names))
 	defer func() {
 		for _, ss := range nameAddrMap {
@@ -60,7 +72,7 @@ func (g *Graph) NamesToAddrs(ctx context.Context, since time.Time, names ...stri
 		Addr string `gorm:"column:addr"`
 	}
 
-	if err := g.DB.RawQuery(query, &results); err == nil && len(results) > 0 {
+	if err := db.RawQuery(query, &results); err == nil && len(results) > 0 {
 		for _, res := range results {
 			if !remaining.Has(res.Name) {
 				continue
@@ -85,7 +97,7 @@ func (g *Graph) NamesToAddrs(ctx context.Context, since time.Time, names ...stri
 		query += " and relations.last_seen > '" + since.Format("2006-01-02 15:04:05") + "'"
 	}
 
-	rels, err := g.DB.RelationQuery(query)
+	rels, err := db.RelationQuery(query)
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +126,7 @@ func (g *Graph) NamesToAddrs(ctx context.Context, since time.Time, names ...stri
 		query += " and relations.last_seen > '" + since.Format("2006-01-02 15:04:05") + "'"
 	}
 
-	assets, err := g.DB.AssetQuery(query)
+	assets, err := db.AssetQuery(query)
 	if err != nil {
 		return nil, err
 	}
@@ -133,7 +145,7 @@ func (g *Graph) NamesToAddrs(ctx context.Context, since time.Time, names ...stri
 			Addr string `gorm:"column:addr"`
 		}
 
-		if err := g.DB.RawQuery(cnameQuery(name, since), &results); err == nil && len(results) > 0 {
+		if err := db.RawQuery(cnameQuery(name, since), &results); err == nil && len(results) > 0 {
 			remaining.Remove(name)
 
 			for _, res := range results {
@@ -193,49 +205,4 @@ func generatePairsFromAddrMap(addrMap map[string]*stringset.Set) ([]*NameAddrPai
 		return nil, errors.New("no addresses were discovered")
 	}
 	return pairs, nil
-}
-
-// UpsertA creates FQDN, IP address and A record edge in the graph and associates them with a source and event.
-func (g *Graph) UpsertA(ctx context.Context, fqdn, addr string) (*types.Asset, error) {
-	return g.addrRecord(ctx, fqdn, addr, "a_record")
-}
-
-// UpsertAAAA creates FQDN, IP address and AAAA record edge in the graph and associates them with a source and event.
-func (g *Graph) UpsertAAAA(ctx context.Context, fqdn, addr string) (*types.Asset, error) {
-	return g.addrRecord(ctx, fqdn, addr, "aaaa_record")
-}
-
-func (g *Graph) addrRecord(ctx context.Context, fqdn, addr, rrtype string) (*types.Asset, error) {
-	name, err := g.UpsertFQDN(ctx, fqdn)
-	if err != nil {
-		return nil, err
-	}
-
-	ip := buildIPAddress(addr)
-	if ip == nil {
-		return nil, errors.New("failed to build the OAM IPAddress")
-	}
-
-	return g.DB.Create(name, rrtype, ip)
-}
-
-func buildIPAddress(addr string) *network.IPAddress {
-	ip, err := netip.ParseAddr(addr)
-	if err != nil {
-		return nil
-	}
-
-	var t string
-	if ip.Is4() {
-		t = "IPv4"
-	} else if ip.Is6() {
-		t = "IPv6"
-	} else {
-		return nil
-	}
-
-	return &network.IPAddress{
-		Address: ip,
-		Type:    t,
-	}
 }
