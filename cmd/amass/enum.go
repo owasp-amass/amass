@@ -19,10 +19,10 @@ import (
 	"github.com/caffix/stringset"
 	pb "github.com/cheggaaa/pb/v3"
 	"github.com/fatih/color"
+	"github.com/owasp-amass/amass/v4/config"
+	"github.com/owasp-amass/amass/v4/engine/api/graphql/client"
 	"github.com/owasp-amass/amass/v4/format"
 	"github.com/owasp-amass/amass/v4/resources"
-	"github.com/owasp-amass/config/config"
-	"github.com/owasp-amass/engine/api/graphql/client"
 )
 
 const enumUsageMsg = "enum [options] -d DOMAIN"

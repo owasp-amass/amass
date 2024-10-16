@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2024. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -12,7 +12,7 @@ import (
 	"path"
 	"time"
 
-	amasshttp "github.com/owasp-amass/engine/net/http"
+	amasshttp "github.com/owasp-amass/amass/v4/utils/net/http"
 )
 
 func main() {

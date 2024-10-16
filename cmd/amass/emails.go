@@ -14,8 +14,8 @@ import (
 
 	"github.com/caffix/stringset"
 	"github.com/fatih/color"
+	"github.com/owasp-amass/amass/v4/config"
 	assetdb "github.com/owasp-amass/asset-db"
-	"github.com/owasp-amass/config/config"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/contact"
 	"github.com/owasp-amass/open-asset-model/domain"
