@@ -5,18 +5,18 @@
 package plugins
 
 import (
-	"github.com/owasp-amass/engine/plugins/api"
-	"github.com/owasp-amass/engine/plugins/archive"
-	"github.com/owasp-amass/engine/plugins/brute"
-	"github.com/owasp-amass/engine/plugins/dns"
-	"github.com/owasp-amass/engine/plugins/expansion"
-	"github.com/owasp-amass/engine/plugins/horizontals"
-	"github.com/owasp-amass/engine/plugins/rdap"
-	"github.com/owasp-amass/engine/plugins/scrape"
-	hp "github.com/owasp-amass/engine/plugins/service_discovery/http_probes"
-	"github.com/owasp-amass/engine/plugins/whois"
-	"github.com/owasp-amass/engine/plugins/whois/bgptools"
-	et "github.com/owasp-amass/engine/types"
+	"github.com/owasp-amass/amass/v4/engine/plugins/api"
+	"github.com/owasp-amass/amass/v4/engine/plugins/archive"
+	"github.com/owasp-amass/amass/v4/engine/plugins/brute"
+	"github.com/owasp-amass/amass/v4/engine/plugins/dns"
+	"github.com/owasp-amass/amass/v4/engine/plugins/expansion"
+	"github.com/owasp-amass/amass/v4/engine/plugins/horizontals"
+	"github.com/owasp-amass/amass/v4/engine/plugins/rdap"
+	"github.com/owasp-amass/amass/v4/engine/plugins/scrape"
+	hp "github.com/owasp-amass/amass/v4/engine/plugins/service_discovery/http_probes"
+	"github.com/owasp-amass/amass/v4/engine/plugins/whois"
+	"github.com/owasp-amass/amass/v4/engine/plugins/whois/bgptools"
+	et "github.com/owasp-amass/amass/v4/engine/types"
 )
 
 var pluginNewFuncs = []func() et.Plugin{

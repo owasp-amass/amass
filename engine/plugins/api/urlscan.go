@@ -14,10 +14,10 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/owasp-amass/amass/v4/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v4/engine/types"
 	"github.com/owasp-amass/amass/v4/utils/net/dns"
 	"github.com/owasp-amass/amass/v4/utils/net/http"
-	"github.com/owasp-amass/engine/plugins/support"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/domain"
 	"github.com/owasp-amass/open-asset-model/network"

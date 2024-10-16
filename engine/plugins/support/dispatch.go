@@ -8,8 +8,8 @@ import (
 	"log/slog"
 	"time"
 
+	et "github.com/owasp-amass/amass/v4/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
-	et "github.com/owasp-amass/engine/types"
 	"github.com/owasp-amass/open-asset-model/contact"
 	"github.com/owasp-amass/open-asset-model/domain"
 )

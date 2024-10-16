@@ -7,7 +7,7 @@ package whois
 import (
 	"log/slog"
 
-	et "github.com/owasp-amass/engine/types"
+	et "github.com/owasp-amass/amass/v4/engine/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/source"
 	"go.uber.org/ratelimit"

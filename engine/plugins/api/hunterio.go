@@ -15,7 +15,7 @@ import (
 	"strings"
 
 	"github.com/owasp-amass/amass/v4/utils/net/http"
-	"github.com/owasp-amass/engine/plugins/support"
+	"github.com/owasp-amass/amass/v4/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v4/engine/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/contact"

@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
+	"github.com/owasp-amass/amass/v4/engine/plugins/support"
+	et "github.com/owasp-amass/amass/v4/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
-	"github.com/owasp-amass/engine/plugins/support"
-	et "github.com/owasp-amass/engine/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
 	"github.com/owasp-amass/open-asset-model/source"

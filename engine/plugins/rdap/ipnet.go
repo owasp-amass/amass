@@ -9,10 +9,10 @@ import (
 	"time"
 
 	"github.com/openrdap/rdap"
+	"github.com/owasp-amass/amass/v4/config"
+	"github.com/owasp-amass/amass/v4/engine/plugins/support"
+	et "github.com/owasp-amass/amass/v4/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
-	"github.com/owasp-amass/config/config"
-	"github.com/owasp-amass/engine/plugins/support"
-	et "github.com/owasp-amass/engine/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/contact"
 	"github.com/owasp-amass/open-asset-model/domain"

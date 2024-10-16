@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2023-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2024. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -9,7 +9,7 @@ import (
 	"log/slog"
 	"sync"
 
-	et "github.com/owasp-amass/engine/types"
+	et "github.com/owasp-amass/amass/v4/engine/types"
 	oam "github.com/owasp-amass/open-asset-model"
 )
 
@@ -20,7 +20,7 @@ type registry struct {
 	pipelines map[string]*et.AssetPipeline
 }
 
-// Create a new instance of Registry
+// Create a new instance of Registry.
 func NewRegistry(l *slog.Logger) et.Registry {
 	return &registry{
 		logger:    l,
@@ -33,7 +33,7 @@ func (r *registry) Log() *slog.Logger {
 	return r.logger
 }
 
-// Register a Plugin Handler on the registry:
+// Register a Plugin Handler on the registry.
 func (r *registry) RegisterHandler(h *et.Handler) error {
 	r.Lock()
 	defer r.Unlock()

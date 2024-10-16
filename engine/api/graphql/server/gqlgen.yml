@@ -71,8 +71,8 @@ resolver:
 # gqlgen will search for any type names in the schema in these go packages
 # if they match it will use them, otherwise it will generate them.
 autobind:
- # - "github.com/owasp-amass/config/config"
- # - "github.com/owasp-amass/engine/api/graphql/client"
+ # - "github.com/owasp-amass/amass/v4/config"
+ # - "github.com/owasp-amass/amass/v4/engine/api/graphql/client"
 
 # This section declares type mapping between the GraphQL and go type systems
 #
@@ -101,7 +101,7 @@ models:
 
 #  LogMessaage:
 #    model:
-#      - github.com/owasp-amass/engine/pubsub.LogMessage
+#      - github.com/owasp-amass/amass/v4/engine/pubsub.LogMessage
  # OAM:
  #   model:
- #     - github.com/owasp-amass/config/config.Scope
+ #     - github.com/owasp-amass/amass/v4/config.Scope
