@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/owasp-amass/config/config"
-	"github.com/owasp-amass/engine"
-	"github.com/owasp-amass/engine/types"
+	"github.com/owasp-amass/amass/v4/config"
+	"github.com/owasp-amass/amass/v4/engine"
+	"github.com/owasp-amass/amass/v4/engine/types"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
 )
 

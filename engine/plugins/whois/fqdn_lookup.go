@@ -12,9 +12,9 @@ import (
 
 	whoisclient "github.com/likexian/whois"
 	whoisparser "github.com/likexian/whois-parser"
+	"github.com/owasp-amass/amass/v4/engine/plugins/support"
+	et "github.com/owasp-amass/amass/v4/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
-	"github.com/owasp-amass/engine/plugins/support"
-	et "github.com/owasp-amass/engine/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/domain"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"

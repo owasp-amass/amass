@@ -13,9 +13,9 @@ import (
 
 	"github.com/caffix/stringset"
 	"github.com/miekg/dns"
+	"github.com/owasp-amass/amass/v4/engine/plugins/support"
+	et "github.com/owasp-amass/amass/v4/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
-	"github.com/owasp-amass/engine/plugins/support"
-	et "github.com/owasp-amass/engine/types"
 	"github.com/owasp-amass/open-asset-model/domain"
 	"github.com/owasp-amass/resolve"
 	"golang.org/x/net/publicsuffix"

@@ -8,8 +8,8 @@ import (
 	"os"
 	"testing"
 
+	"github.com/owasp-amass/amass/v4/config"
 	"github.com/owasp-amass/asset-db/repository"
-	"github.com/owasp-amass/config/config"
 )
 
 func TestCreateSession(t *testing.T) {

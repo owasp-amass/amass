@@ -9,11 +9,11 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
+	"github.com/owasp-amass/amass/v4/config"
+	"github.com/owasp-amass/amass/v4/engine/cache"
+	"github.com/owasp-amass/amass/v4/engine/pubsub"
+	"github.com/owasp-amass/amass/v4/engine/sessions/scope"
 	assetdb "github.com/owasp-amass/asset-db"
-	"github.com/owasp-amass/config/config"
-	"github.com/owasp-amass/engine/cache"
-	"github.com/owasp-amass/engine/pubsub"
-	"github.com/owasp-amass/engine/sessions/scope"
 )
 
 type Session interface {

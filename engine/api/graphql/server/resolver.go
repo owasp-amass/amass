@@ -7,7 +7,7 @@ package server
 import (
 	"log/slog"
 
-	et "github.com/owasp-amass/engine/types"
+	et "github.com/owasp-amass/amass/v4/engine/types"
 )
 
 type Resolver struct {

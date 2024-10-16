@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2023-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2024. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -9,11 +9,11 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/owasp-amass/engine/api/graphql/server"
-	"github.com/owasp-amass/engine/dispatcher"
-	"github.com/owasp-amass/engine/registry"
-	"github.com/owasp-amass/engine/sessions"
-	et "github.com/owasp-amass/engine/types"
+	"github.com/owasp-amass/amass/v4/engine/api/graphql/server"
+	"github.com/owasp-amass/amass/v4/engine/dispatcher"
+	"github.com/owasp-amass/amass/v4/engine/registry"
+	"github.com/owasp-amass/amass/v4/engine/sessions"
+	et "github.com/owasp-amass/amass/v4/engine/types"
 )
 
 type Engine struct {

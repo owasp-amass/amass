@@ -14,9 +14,9 @@ import (
 	"errors"
 
 	"github.com/google/uuid"
-	"github.com/owasp-amass/config/config"
-	"github.com/owasp-amass/engine/api/graphql/server/model"
-	et "github.com/owasp-amass/engine/types"
+	"github.com/owasp-amass/amass/v4/config"
+	"github.com/owasp-amass/amass/v4/engine/api/graphql/server/model"
+	et "github.com/owasp-amass/amass/v4/engine/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamcert "github.com/owasp-amass/open-asset-model/certificate"
 	"github.com/owasp-amass/open-asset-model/contact"

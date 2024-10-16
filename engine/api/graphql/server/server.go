@@ -12,7 +12,7 @@ import (
 
 	"github.com/99designs/gqlgen/graphql/handler"
 	"github.com/99designs/gqlgen/graphql/handler/transport"
-	et "github.com/owasp-amass/engine/types"
+	et "github.com/owasp-amass/amass/v4/engine/types"
 )
 
 const keyServerAddr key = "serverAddr"

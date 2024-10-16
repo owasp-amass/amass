@@ -13,10 +13,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/owasp-amass/amass/v4/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v4/engine/types"
 	"github.com/owasp-amass/amass/v4/utils/net/http"
 	dbt "github.com/owasp-amass/asset-db/types"
-	"github.com/owasp-amass/engine/plugins/support"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamcert "github.com/owasp-amass/open-asset-model/certificate"
 	"github.com/owasp-amass/open-asset-model/domain"

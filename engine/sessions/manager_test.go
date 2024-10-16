@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	et "github.com/owasp-amass/engine/types"
+	et "github.com/owasp-amass/amass/v4/engine/types"
 )
 
 func TestAddSession(t *testing.T) {
