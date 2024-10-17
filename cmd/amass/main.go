@@ -106,10 +106,6 @@ func main() {
 	switch os.Args[1] {
 	case "enum":
 		runEnumCommand(os.Args[2:])
-	case "subs":
-		runSubsCommand(os.Args[2:])
-	case "emails":
-		runEmailsCommand(os.Args[2:])
 	case "help":
 		runHelpCommand(os.Args[2:])
 	default:
@@ -153,7 +149,6 @@ func makeAssets(config *config.Config) []*et.Asset {
 	for i, asset := range assets {
 		asset.Name = fmt.Sprintf("asset#%d", i+1)
 	}
-
 	return assets
 }
 
@@ -240,7 +235,6 @@ func convertScopeToAssets(scope *config.Scope) []*et.Asset {
 		}
 		assets = append(assets, &et.Asset{Data: data})
 	}
-
 	return assets
 }
 
@@ -270,7 +264,6 @@ func setupFileLogger(dir, logfile string) *slog.Logger {
 		fmt.Fprintf(os.Stderr, "Failed to open the log file: %v", err)
 		return nil
 	}
-
 	return slog.New(slog.NewJSONHandler(f, nil))
 }
 

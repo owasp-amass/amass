@@ -21,10 +21,6 @@ func runHelpCommand(clArgs []string) {
 	switch clArgs[0] {
 	case "enum":
 		runEnumCommand(help)
-	case "subs":
-		runSubsCommand(help)
-	case "emails":
-		runEmailsCommand(help)
 	default:
 		commandUsage(mainUsageMsg, helpCommand, helpBuf)
 		return
