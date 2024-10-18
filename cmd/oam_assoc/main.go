@@ -152,9 +152,12 @@ func main() {
 	}
 
 	for _, name := range args.Domains.Slice() {
-		for _, assoc := range getAssociations(name, start, db) {
-			var rel string
+		for i, assoc := range getAssociations(name, start, db) {
+			if i != 0 {
+				fmt.Println()
+			}
 
+			var rel string
 			switch v := assoc.Asset.(type) {
 			case *oamreg.DomainRecord:
 				rel = "registrant_contact"
@@ -180,7 +183,9 @@ func main() {
 			}
 
 			if verbose {
+				afmt.B.Fprintf(color.Output, "\nRegistrant:\n")
 				printContactInfo(assoc, rel, start, db)
+				fmt.Println()
 			}
 		}
 	}
@@ -197,7 +202,7 @@ func printContactInfo(assoc *dbt.Asset, regrel string, since time.Time, db *asse
 		return
 	}
 
-	for _, out := range []string{"person", "organization", "location", "phone", "email", "url"} {
+	for _, out := range []string{"person", "organization", "location", "phone", "email"} {
 		if rels, err := db.OutgoingRelations(contact, since, out); err == nil && len(rels) > 0 {
 			for _, rel := range rels {
 				if a, err := db.FindById(rel.ToAsset.ID, since); err == nil && a != nil {
