@@ -169,7 +169,9 @@ func getAssociations(name string, since time.Time, db *assetdb.AssetDB) []string
 	for _, fqdn := range fqdns {
 		if rels, err := db.OutgoingRelations(fqdn, since, "registration"); err == nil && len(rels) > 0 {
 			for _, rel := range rels {
-				assets = append(assets, rel.ToAsset)
+				if a, err := db.FindById(rel.ToAsset.ID, since); err == nil && a != nil {
+					assets = append(assets, a)
+				}
 			}
 		}
 	}
@@ -189,7 +191,10 @@ func getAssociations(name string, since time.Time, db *assetdb.AssetDB) []string
 		for _, a := range assets {
 			if rels, err := db.OutgoingRelations(a, since, "associated_with"); err == nil && len(rels) > 0 {
 				for _, rel := range rels {
-					asset := rel.ToAsset
+					asset, err := db.FindById(rel.ToAsset.ID, since)
+					if err != nil || asset == nil {
+						continue
+					}
 
 					if !set.Has(asset.ID) {
 						set.Insert(asset.ID)
