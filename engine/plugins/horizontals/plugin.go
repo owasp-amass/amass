@@ -93,7 +93,18 @@ func (h *horizPlugin) Stop() {
 func (h *horizPlugin) addAssociatedRelationship(e *et.Event, assocs []*scope.Association) {
 	for _, assoc := range assocs {
 		for _, impacted := range assoc.ImpactedAssets {
-			if match, conf := e.Session.Scope().IsAssetInScope(impacted.Asset, 0); conf > 0 && match != nil {
+			tstr := string(impacted.Asset.AssetType())
+			matches, err := e.Session.Config().CheckTransformations(tstr, tstr, h.name)
+			if err != nil || matches.Len() == 0 {
+				continue
+			}
+
+			conf := matches.Confidence(h.name)
+			if conf == -1 {
+				conf = matches.Confidence(tstr)
+			}
+
+			if match, result := e.Session.Scope().IsAssetInScope(impacted.Asset, conf); result > 0 && match != nil {
 				if a, hit := e.Session.Cache().GetAsset(match); hit && a != nil {
 					for _, assoc2 := range e.Session.Scope().AssetsWithAssociation(e.Session.Cache(), a) {
 						h.makeAssocRelationshipEntries(e, assoc.Match, assoc2)
