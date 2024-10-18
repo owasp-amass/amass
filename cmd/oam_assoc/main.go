@@ -25,6 +25,7 @@ package main
 import (
 	"bytes"
 	"flag"
+	"fmt"
 	"io"
 	"os"
 	"path"
@@ -38,6 +39,7 @@ import (
 	assetdb "github.com/owasp-amass/asset-db"
 	dbt "github.com/owasp-amass/asset-db/types"
 	"github.com/owasp-amass/open-asset-model/domain"
+	oamreg "github.com/owasp-amass/open-asset-model/registration"
 )
 
 const (
@@ -61,7 +63,7 @@ type assocArgs struct {
 
 func main() {
 	var args assocArgs
-	var help1, help2 bool
+	var help1, help2, verbose bool
 	assocCommand := flag.NewFlagSet("assoc", flag.ContinueOnError)
 
 	args.Domains = stringset.New()
@@ -72,6 +74,7 @@ func main() {
 
 	assocCommand.BoolVar(&help1, "h", false, "Show the program usage message")
 	assocCommand.BoolVar(&help2, "help", false, "Show the program usage message")
+	assocCommand.BoolVar(&verbose, "v", false, "Show additional information about the associated assets")
 	assocCommand.Var(args.Domains, "d", "Domain names separated by commas (can be used multiple times)")
 	assocCommand.StringVar(&args.Since, "since", "", "Exclude all assets discovered before (format: "+timeFormat+")")
 	assocCommand.BoolVar(&args.Options.NoColor, "nocolor", false, "Disable colorized output")
@@ -150,19 +153,71 @@ func main() {
 
 	for _, name := range args.Domains.Slice() {
 		for _, assoc := range getAssociations(name, start, db) {
-			afmt.G.Fprintln(color.Output, assoc)
+			var rel string
+
+			switch v := assoc.Asset.(type) {
+			case *oamreg.DomainRecord:
+				rel = "registrant_contact"
+				afmt.G.Fprintln(color.Output, v.Domain)
+				if verbose {
+					fmt.Fprintf(color.Output, "%s%s\n%s%s\n", afmt.Blue("Name: "),
+						afmt.Green(v.Name), afmt.Blue("Expiration: "), afmt.Green(v.ExpirationDate))
+				}
+			case *oamreg.AutnumRecord:
+				rel = "registrant"
+				afmt.G.Fprintln(color.Output, v.Handle)
+				if verbose {
+					fmt.Fprintf(color.Output, "%s%s\n%s%s\n%s%s\n", afmt.Blue("Name: "), afmt.Green(v.Name),
+						afmt.Blue("Status: "), afmt.Green(v.Status[0]), afmt.Blue("Updated: "), afmt.Green(v.UpdatedDate))
+				}
+			case *oamreg.IPNetRecord:
+				rel = "registrant"
+				afmt.G.Fprintln(color.Output, v.CIDR.String())
+				if verbose {
+					fmt.Fprintf(color.Output, "%s%s\n%s%s\n%s%s\n", afmt.Blue("Name: "), afmt.Green(v.Name),
+						afmt.Blue("Status: "), afmt.Green(v.Status[0]), afmt.Blue("Updated: "), afmt.Green(v.UpdatedDate))
+				}
+			}
+
+			if verbose {
+				printContactInfo(assoc, rel, start, db)
+			}
 		}
 	}
 }
 
-func getAssociations(name string, since time.Time, db *assetdb.AssetDB) []string {
+func printContactInfo(assoc *dbt.Asset, regrel string, since time.Time, db *assetdb.AssetDB) {
+	var contact *dbt.Asset
+	if rels, err := db.OutgoingRelations(assoc, since, regrel); err == nil && len(rels) > 0 {
+		if a, err := db.FindById(rels[0].ToAsset.ID, since); err == nil && a != nil {
+			contact = a
+		}
+	}
+	if contact == nil {
+		return
+	}
+
+	for _, out := range []string{"person", "organization", "location", "phone", "email", "url"} {
+		if rels, err := db.OutgoingRelations(contact, since, out); err == nil && len(rels) > 0 {
+			for _, rel := range rels {
+				if a, err := db.FindById(rel.ToAsset.ID, since); err == nil && a != nil {
+					fmt.Fprintf(color.Output, "%s%s%s\n",
+						afmt.Blue(string(a.Asset.AssetType())), afmt.Blue(": "), afmt.Green(a.Asset.Key()))
+				}
+			}
+		}
+	}
+}
+
+func getAssociations(name string, since time.Time, db *assetdb.AssetDB) []*dbt.Asset {
 	if !since.IsZero() {
 		since = since.UTC()
 	}
 
+	var results []*dbt.Asset
 	fqdns, err := db.FindByContent(&domain.FQDN{Name: name}, since)
 	if err != nil || len(fqdns) == 0 {
-		return []string{}
+		return results
 	}
 
 	var assets []*dbt.Asset
@@ -183,7 +238,6 @@ func getAssociations(name string, since time.Time, db *assetdb.AssetDB) []string
 		set.Insert(asset.ID)
 	}
 
-	var results []string
 	for findings := assets; len(findings) > 0; {
 		assets = findings
 		findings = []*dbt.Asset{}
@@ -199,7 +253,7 @@ func getAssociations(name string, since time.Time, db *assetdb.AssetDB) []string
 					if !set.Has(asset.ID) {
 						set.Insert(asset.ID)
 						findings = append(findings, asset)
-						results = append(results, asset.Asset.Key())
+						results = append(results, asset)
 					}
 				}
 			}
