@@ -36,7 +36,7 @@ import (
 	"github.com/owasp-amass/amass/v4/utils"
 	"github.com/owasp-amass/amass/v4/utils/afmt"
 	assetdb "github.com/owasp-amass/asset-db"
-	oam "github.com/owasp-amass/open-asset-model"
+	dbt "github.com/owasp-amass/asset-db/types"
 	"github.com/owasp-amass/open-asset-model/domain"
 )
 
@@ -148,52 +148,48 @@ func main() {
 		os.Exit(1)
 	}
 
-	for _, name := range getNewNames(args.Domains.Slice(), start, db) {
-		afmt.G.Fprintln(color.Output, name)
+	for _, name := range args.Domains.Slice() {
+		for _, assoc := range getAssociations(name, start, db) {
+			afmt.G.Fprintln(color.Output, assoc)
+		}
 	}
 }
 
-func getNewNames(domains []string, since time.Time, db *assetdb.AssetDB) []string {
-	if len(domains) == 0 {
-		return []string{}
-	}
-
-	var fqdns []oam.Asset
-	for _, d := range domains {
-		fqdns = append(fqdns, &domain.FQDN{Name: d})
-	}
-
+func getAssociations(fqdn string, since time.Time, db *assetdb.AssetDB) []string {
 	if !since.IsZero() {
 		since = since.UTC()
 	}
 
-	assets, err := db.FindByScope(fqdns, since)
-	if err != nil {
+	assets, err := db.FindByContent(&domain.FQDN{Name: fqdn}, since)
+	if err != nil || len(assets) == 0 {
 		return []string{}
 	}
 
-	if since.IsZero() {
-		var latest time.Time
+	set := stringset.New()
+	defer set.Close()
+
+	for _, asset := range assets {
+		set.Insert(asset.ID)
+	}
+
+	var results []string
+	for findings := assets; len(findings) > 0; {
+		assets = findings
+		findings = []*dbt.Asset{}
 
 		for _, a := range assets {
-			if _, ok := a.Asset.(*domain.FQDN); ok && a.LastSeen.After(latest) {
-				latest = a.LastSeen
+			if rels, err := db.OutgoingRelations(a, since, "associated_with"); err == nil && len(rels) > 0 {
+				for _, rel := range rels {
+					asset := rel.ToAsset
+
+					if !set.Has(asset.ID) {
+						set.Insert(asset.ID)
+						findings = append(findings, asset)
+						results = append(results, asset.Asset.Key())
+					}
+				}
 			}
 		}
-
-		since = latest.Truncate(24 * time.Hour)
 	}
-
-	res := stringset.New()
-	defer res.Close()
-
-	for _, a := range assets {
-		if n, ok := a.Asset.(*domain.FQDN); ok && !res.Has(n.Name) &&
-			(a.CreatedAt.Equal(since) || a.CreatedAt.After(since)) &&
-			(a.LastSeen.Equal(since) || a.LastSeen.After(since)) {
-			res.Insert(n.Name)
-		}
-	}
-
-	return res.Slice()
+	return results
 }
