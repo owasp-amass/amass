@@ -105,8 +105,17 @@ func (h *horizPlugin) addAssociatedRelationship(e *et.Event, assocs []*scope.Ass
 }
 
 func (h *horizPlugin) makeAssocRelationshipEntries(e *et.Event, assoc, assoc2 *dbt.Asset) {
+	// do not connect an asset to itself
 	if assoc.ID == assoc2.ID {
 		return
+	}
+	// check that this relationship has not already been setup during this session
+	if rels, hit := e.Session.Cache().GetOutgoingRelations(assoc, "associated_with"); hit && len(rels) > 0 {
+		for _, rel := range rels {
+			if rel.ToAsset.ID == assoc2.ID {
+				return
+			}
+		}
 	}
 
 	now := time.Now()
