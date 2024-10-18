@@ -183,7 +183,7 @@ func main() {
 			}
 
 			if verbose {
-				afmt.B.Fprintf(color.Output, "\nRegistrant:\n")
+				afmt.B.Fprintln(color.Output, "Registrant: ")
 				printContactInfo(assoc, rel, start, db)
 				fmt.Println()
 			}
