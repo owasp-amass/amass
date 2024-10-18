@@ -138,6 +138,7 @@ func (h *horizPlugin) makeAssocRelationshipEntries(e *et.Event, assoc, assoc2 *d
 		_, _ = e.Session.DB().Link(assoc, "associated_with", assoc2)
 		_, _ = e.Session.DB().Link(assoc2, "associated_with", assoc)
 	})
+	<-done
 }
 
 func (h *horizPlugin) process(e *et.Event, assets []*dbt.Asset, src *dbt.Asset) {
