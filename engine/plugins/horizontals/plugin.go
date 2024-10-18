@@ -93,15 +93,12 @@ func (h *horizPlugin) Stop() {
 func (h *horizPlugin) addAssociatedRelationship(e *et.Event, assocs []*scope.Association) {
 	for _, assoc := range assocs {
 		for _, impacted := range assoc.ImpactedAssets {
-			tstr := string(impacted.Asset.AssetType())
-			matches, err := e.Session.Config().CheckTransformations(tstr, tstr, h.name)
-			if err != nil || matches.Len() == 0 {
-				continue
-			}
+			conf := 50
 
-			conf := matches.Confidence(h.name)
-			if conf == -1 {
-				conf = matches.Confidence(tstr)
+			if e.Session.Config().DefaultTransformations != nil {
+				if c := e.Session.Config().DefaultTransformations.Confidence; c > 0 {
+					conf = c
+				}
 			}
 
 			if match, result := e.Session.Scope().IsAssetInScope(impacted.Asset, conf); result >= conf && match != nil {
