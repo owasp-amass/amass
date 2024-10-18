@@ -2,7 +2,7 @@
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
-// oam_track: Analyze collected OAM data to identify newly discovered assets
+// oam_assoc: Analyze collected OAM data to identify assets associated with the seed data
 //
 //	+----------------------------------------------------------------------------+
 //	| ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  OWASP Amass  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ |
@@ -45,7 +45,7 @@ const (
 	usageMsg   = "[options] [-since '" + timeFormat + "'] " + "-d domain"
 )
 
-type trackArgs struct {
+type assocArgs struct {
 	Domains *stringset.Set
 	Since   string
 	Options struct {
@@ -60,37 +60,37 @@ type trackArgs struct {
 }
 
 func main() {
-	var args trackArgs
+	var args assocArgs
 	var help1, help2 bool
-	trackCommand := flag.NewFlagSet("track", flag.ContinueOnError)
+	assocCommand := flag.NewFlagSet("assoc", flag.ContinueOnError)
 
 	args.Domains = stringset.New()
 	defer args.Domains.Close()
 
-	trackBuf := new(bytes.Buffer)
-	trackCommand.SetOutput(trackBuf)
+	assocBuf := new(bytes.Buffer)
+	assocCommand.SetOutput(assocBuf)
 
-	trackCommand.BoolVar(&help1, "h", false, "Show the program usage message")
-	trackCommand.BoolVar(&help2, "help", false, "Show the program usage message")
-	trackCommand.Var(args.Domains, "d", "Domain names separated by commas (can be used multiple times)")
-	trackCommand.StringVar(&args.Since, "since", "", "Exclude all assets discovered before (format: "+timeFormat+")")
-	trackCommand.BoolVar(&args.Options.NoColor, "nocolor", false, "Disable colorized output")
-	trackCommand.BoolVar(&args.Options.Silent, "silent", false, "Disable all output during execution")
-	trackCommand.StringVar(&args.Filepaths.ConfigFile, "config", "", "Path to the YAML configuration file")
-	trackCommand.StringVar(&args.Filepaths.Directory, "dir", "", "Path to the directory containing the graph database")
-	trackCommand.StringVar(&args.Filepaths.Domains, "df", "", "Path to a file providing registered domain names")
+	assocCommand.BoolVar(&help1, "h", false, "Show the program usage message")
+	assocCommand.BoolVar(&help2, "help", false, "Show the program usage message")
+	assocCommand.Var(args.Domains, "d", "Domain names separated by commas (can be used multiple times)")
+	assocCommand.StringVar(&args.Since, "since", "", "Exclude all assets discovered before (format: "+timeFormat+")")
+	assocCommand.BoolVar(&args.Options.NoColor, "nocolor", false, "Disable colorized output")
+	assocCommand.BoolVar(&args.Options.Silent, "silent", false, "Disable all output during execution")
+	assocCommand.StringVar(&args.Filepaths.ConfigFile, "config", "", "Path to the YAML configuration file")
+	assocCommand.StringVar(&args.Filepaths.Directory, "dir", "", "Path to the directory containing the graph database")
+	assocCommand.StringVar(&args.Filepaths.Domains, "df", "", "Path to a file providing registered domain names")
 
 	var usage = func() {
 		afmt.G.Fprintf(color.Error, "Usage: %s %s\n\n", path.Base(os.Args[0]), usageMsg)
-		trackCommand.PrintDefaults()
-		afmt.G.Fprintln(color.Error, trackBuf.String())
+		assocCommand.PrintDefaults()
+		afmt.G.Fprintln(color.Error, assocBuf.String())
 	}
 
 	if len(os.Args) < 2 {
 		usage()
 		return
 	}
-	if err := trackCommand.Parse(os.Args[1:]); err != nil {
+	if err := assocCommand.Parse(os.Args[1:]); err != nil {
 		afmt.R.Fprintf(color.Error, "%v\n", err)
 		os.Exit(1)
 	}
