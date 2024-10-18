@@ -155,14 +155,23 @@ func main() {
 	}
 }
 
-func getAssociations(fqdn string, since time.Time, db *assetdb.AssetDB) []string {
+func getAssociations(name string, since time.Time, db *assetdb.AssetDB) []string {
 	if !since.IsZero() {
 		since = since.UTC()
 	}
 
-	assets, err := db.FindByContent(&domain.FQDN{Name: fqdn}, since)
-	if err != nil || len(assets) == 0 {
+	fqdns, err := db.FindByContent(&domain.FQDN{Name: name}, since)
+	if err != nil || len(fqdns) == 0 {
 		return []string{}
+	}
+
+	var assets []*dbt.Asset
+	for _, fqdn := range fqdns {
+		if rels, err := db.OutgoingRelations(fqdn, since, "registration"); err == nil && len(rels) > 0 {
+			for _, rel := range rels {
+				assets = append(assets, rel.ToAsset)
+			}
+		}
 	}
 
 	set := stringset.New()
