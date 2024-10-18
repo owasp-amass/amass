@@ -66,6 +66,7 @@ func (h *horContact) check(e *et.Event) error {
 
 		if len(assets) > 0 {
 			h.plugin.process(e, assets, src)
+			h.plugin.addAssociatedRelationship(e, assocs)
 		}
 	}
 	return nil

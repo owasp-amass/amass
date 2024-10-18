@@ -14,6 +14,7 @@ import (
 
 	"github.com/miekg/dns"
 	"github.com/owasp-amass/amass/v4/engine/plugins/support"
+	"github.com/owasp-amass/amass/v4/engine/sessions/scope"
 	et "github.com/owasp-amass/amass/v4/engine/types"
 	amassnet "github.com/owasp-amass/amass/v4/utils/net"
 	dbt "github.com/owasp-amass/asset-db/types"
@@ -87,6 +88,56 @@ func (h *horizPlugin) Start(r et.Registry) error {
 
 func (h *horizPlugin) Stop() {
 	h.log.Info("Plugin stopped")
+}
+
+func (h *horizPlugin) addAssociatedRelationship(e *et.Event, assocs []*scope.Association) {
+	for _, assoc := range assocs {
+		for _, impacted := range assoc.ImpactedAssets {
+			if match, conf := e.Session.Scope().IsAssetInScope(impacted.Asset, 0); conf > 0 && match != nil {
+				if a, hit := e.Session.Cache().GetAsset(match); hit && a != nil {
+					for _, assoc2 := range e.Session.Scope().AssetsWithAssociation(e.Session.Cache(), a) {
+						h.makeAssocRelationshipEntries(e, assoc.Match, assoc2)
+					}
+				}
+			}
+		}
+	}
+}
+
+func (h *horizPlugin) makeAssocRelationshipEntries(e *et.Event, assoc, assoc2 *dbt.Asset) {
+	if assoc.ID == assoc2.ID {
+		return
+	}
+
+	now := time.Now()
+	e.Session.Cache().SetRelation(&dbt.Relation{
+		Type:      "associated_with",
+		CreatedAt: now,
+		LastSeen:  now,
+		FromAsset: assoc,
+		ToAsset:   assoc2,
+	})
+	e.Session.Cache().SetRelation(&dbt.Relation{
+		Type:      "associated_with",
+		CreatedAt: now,
+		LastSeen:  now,
+		FromAsset: assoc2,
+		ToAsset:   assoc,
+	})
+
+	done := make(chan struct{}, 1)
+	defer close(done)
+
+	support.AppendToDBQueue(func() {
+		defer func() { done <- struct{}{} }()
+
+		if e.Session.Done() {
+			return
+		}
+
+		_, _ = e.Session.DB().Link(assoc, "associated_with", assoc2)
+		_, _ = e.Session.DB().Link(assoc2, "associated_with", assoc)
+	})
 }
 
 func (h *horizPlugin) process(e *et.Event, assets []*dbt.Asset, src *dbt.Asset) {

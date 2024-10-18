@@ -59,11 +59,10 @@ func (d *dnsReverse) check(e *et.Event) error {
 		return errors.New("failed to obtain the plugin source information")
 	}
 
-	ptr := d.createPTRAlias(e, reverse, src)
+	ptr := d.createPTRAlias(e, reverse, e.Asset, src)
 	if ptr == nil {
 		return nil
 	}
-	e.Session.Cache().SetAsset(ptr)
 
 	since, err := support.TTLStartTime(e.Session.Config(), "IPAddress", "FQDN", d.plugin.name)
 	if err != nil {
@@ -171,7 +170,7 @@ func (d *dnsReverse) store(e *et.Event, ptr, src *dbt.Asset, rr []*resolve.Extra
 	return rev
 }
 
-func (d *dnsReverse) createPTRAlias(e *et.Event, name string, datasrc *dbt.Asset) *dbt.Asset {
+func (d *dnsReverse) createPTRAlias(e *et.Event, name string, ip, datasrc *dbt.Asset) *dbt.Asset {
 	done := make(chan *dbt.Asset, 1)
 	defer close(done)
 
@@ -181,14 +180,48 @@ func (d *dnsReverse) createPTRAlias(e *et.Event, name string, datasrc *dbt.Asset
 			return
 		}
 
-		ptr, err := e.Session.DB().Create(nil, "", &domain.FQDN{Name: name})
+		ptr, err := e.Session.DB().Create(ip, "ptr_record", &domain.FQDN{Name: name})
 		if err == nil && ptr != nil {
 			_, _ = e.Session.DB().Link(ptr, "source", datasrc)
 		}
 		done <- ptr
 	})
 
-	return <-done
+	ptr := <-done
+	if ptr == nil {
+		return ptr
+	}
+
+	_ = e.Dispatcher.DispatchEvent(&et.Event{
+		Name:    ptr.Asset.Key(),
+		Asset:   ptr,
+		Session: e.Session,
+	})
+
+	now := time.Now()
+	e.Session.Cache().SetRelation(&dbt.Relation{
+		Type:      "source",
+		CreatedAt: now,
+		LastSeen:  now,
+		FromAsset: ptr,
+		ToAsset:   datasrc,
+	})
+
+	if a, hit := e.Session.Cache().GetAsset(&domain.FQDN{Name: ptr.Asset.Key()}); hit && ptr != nil {
+		e.Session.Cache().SetRelation(&dbt.Relation{
+			Type:      "ptr_record",
+			CreatedAt: now,
+			LastSeen:  now,
+			FromAsset: ip,
+			ToAsset:   a,
+		})
+
+		e.Session.Log().Info("relationship discovered", "from",
+			a.Asset.Key(), "relation", "ptr_record", "to", ip.Asset.Key(),
+			slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
+	}
+
+	return ptr
 }
 
 func (d *dnsReverse) process(e *et.Event, rev []*relRev, src *dbt.Asset) {

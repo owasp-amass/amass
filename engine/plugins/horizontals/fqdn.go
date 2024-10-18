@@ -7,9 +7,7 @@ package horizontals
 import (
 	"errors"
 	"fmt"
-	"net/netip"
 
-	"github.com/coredns/coredns/plugin/pkg/dnsutil"
 	"github.com/owasp-amass/amass/v4/engine/plugins/support"
 	"github.com/owasp-amass/amass/v4/engine/sessions/scope"
 	et "github.com/owasp-amass/amass/v4/engine/types"
@@ -17,7 +15,6 @@ import (
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/domain"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
-	"github.com/owasp-amass/resolve"
 	"golang.org/x/net/publicsuffix"
 )
 
@@ -60,7 +57,7 @@ func (h *horfqdn) check(e *et.Event) error {
 	}
 
 	if hit && len(rels) > 0 {
-		h.checkPTR(e, fqdn.Name, rels, src)
+		h.checkPTR(e, rels, e.Asset, src)
 		return nil
 	}
 
@@ -84,48 +81,44 @@ func (h *horfqdn) check(e *et.Event) error {
 
 		if len(assets) > 0 {
 			h.plugin.process(e, assets, src)
+			h.plugin.addAssociatedRelationship(e, assocs)
 		}
 	}
 	return nil
 }
 
-func (h *horfqdn) checkPTR(e *et.Event, name string, rels []*dbt.Relation, src *dbt.Asset) {
-	if ipstr := dnsutil.ExtractAddressFromReverse(name + "."); ipstr != "" {
-		ipstr = resolve.RemoveLastDot(ipstr)
+func (h *horfqdn) checkPTR(e *et.Event, rels []*dbt.Relation, fqdn, src *dbt.Asset) {
+	if rs, hit := e.Session.Cache().GetIncomingRelations(fqdn, "ptr_record"); hit && len(rs) > 0 {
+		for _, r := range rs {
+			ip, ok := r.FromAsset.Asset.(*oamnet.IPAddress)
+			if !ok {
+				continue
+			}
 
-		addr, err := netip.ParseAddr(ipstr)
-		if err != nil {
-			return
-		}
+			var inscope bool
+			_, conf := e.Session.Scope().IsAssetInScope(ip, 0)
+			if conf > 0 {
+				inscope = true
+			}
 
-		ip := &oamnet.IPAddress{Address: addr, Type: "IPv4"}
-		if ip.Address.Is6() {
-			ip.Type = "IPv6"
-		}
-
-		var inscope bool
-		_, conf := e.Session.Scope().IsAssetInScope(ip, 0)
-		if conf > 0 {
-			inscope = true
-		}
-
-		for _, rel := range rels {
-			if inscope {
-				if dom, err := publicsuffix.EffectiveTLDPlusOne(rel.ToAsset.Asset.Key()); err == nil && dom != "" {
-					if e.Session.Scope().AddDomain(dom) {
-						h.plugin.log.Info(fmt.Sprintf("[%s: %s] was added to the session scope", "FQDN", dom))
+			for _, rel := range rels {
+				if inscope {
+					if dom, err := publicsuffix.EffectiveTLDPlusOne(rel.ToAsset.Asset.Key()); err == nil && dom != "" {
+						if e.Session.Scope().AddDomain(dom) {
+							h.plugin.log.Info(fmt.Sprintf("[%s: %s] was added to the session scope", "FQDN", dom))
+						}
+						h.plugin.submitFQDN(e, dom, src)
 					}
-					h.plugin.submitFQDN(e, dom, src)
-				}
-			} else if _, conf := e.Session.Scope().IsAssetInScope(rel.ToAsset.Asset, 0); conf > 0 {
-				if e.Session.Scope().Add(ip) {
-					size := 100
-					if e.Session.Config().Active {
-						size = 250
+				} else if _, conf := e.Session.Scope().IsAssetInScope(rel.ToAsset.Asset, 0); conf > 0 {
+					if e.Session.Scope().Add(ip) {
+						size := 100
+						if e.Session.Config().Active {
+							size = 250
+						}
+						h.plugin.submitIPAddresses(e, ip, src)
+						support.IPAddressSweep(e, ip, src, size, h.plugin.submitIPAddresses)
+						h.plugin.log.Info(fmt.Sprintf("[%s: %s] was added to the session scope", ip.AssetType(), ip.Key()))
 					}
-					h.plugin.submitIPAddresses(e, ip, src)
-					support.IPAddressSweep(e, ip, src, size, h.plugin.submitIPAddresses)
-					h.plugin.log.Info(fmt.Sprintf("[%s: %s] was added to the session scope", ip.AssetType(), ip.Key()))
 				}
 			}
 		}

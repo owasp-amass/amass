@@ -45,7 +45,7 @@ func (s *Scope) IsAssociated(c cache.Cache, req *Association) ([]*Association, e
 	}
 
 	// related assets that provide association matching value
-	assocs := s.assetsWithAssociation(c, req.Submission)
+	assocs := s.AssetsWithAssociation(c, req.Submission)
 	// are any of these assets in the current session scope?
 	results := s.checkRelatedAssetsforAssoc(c, req, assocs)
 
@@ -202,7 +202,7 @@ func (s *Scope) assetsRelatedToAssetWithAssoc(c cache.Cache, assoc *dbt.Asset) [
 	return results
 }
 
-func (s *Scope) assetsWithAssociation(c cache.Cache, asset *dbt.Asset) []*dbt.Asset {
+func (s *Scope) AssetsWithAssociation(c cache.Cache, asset *dbt.Asset) []*dbt.Asset {
 	set := stringset.New(asset.ID)
 	defer set.Close()
 
