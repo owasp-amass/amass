@@ -21,7 +21,6 @@ import (
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/domain"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
-	oamreg "github.com/owasp-amass/open-asset-model/registration"
 	"github.com/owasp-amass/open-asset-model/source"
 	"github.com/owasp-amass/resolve"
 	"golang.org/x/net/publicsuffix"
@@ -164,20 +163,22 @@ func (h *horizPlugin) makeAssocRelationshipEntries(e *et.Event, assoc, assoc2 *d
 func (h *horizPlugin) process(e *et.Event, assets []*dbt.Asset, src *dbt.Asset) {
 	for _, asset := range assets {
 		// check for new networks added to the scope
-		switch v := asset.Asset.(type) {
-		case *oamnet.Netblock:
-			h.ipPTRTargetsInScope(e, asset, src)
-			h.sweepAroundIPs(e, asset, src)
-			h.sweepNetblock(e, v, src)
-		case *oamreg.IPNetRecord:
-			if a, hit := e.Session.Cache().GetAsset(&oamnet.Netblock{CIDR: v.CIDR, Type: v.Type}); hit && a != nil {
-				if nb, ok := a.Asset.(*oamnet.Netblock); ok {
-					h.ipPTRTargetsInScope(e, a, src)
-					h.sweepAroundIPs(e, a, src)
-					h.sweepNetblock(e, nb, src)
+		/*
+			switch v := asset.Asset.(type) {
+			case *oamnet.Netblock:
+				h.ipPTRTargetsInScope(e, asset, src)
+				h.sweepAroundIPs(e, asset, src)
+				h.sweepNetblock(e, v, src)
+			case *oamreg.IPNetRecord:
+				if a, hit := e.Session.Cache().GetAsset(&oamnet.Netblock{CIDR: v.CIDR, Type: v.Type}); hit && a != nil {
+					if nb, ok := a.Asset.(*oamnet.Netblock); ok {
+						h.ipPTRTargetsInScope(e, a, src)
+						h.sweepAroundIPs(e, a, src)
+						h.sweepNetblock(e, nb, src)
+					}
 				}
 			}
-		}
+		*/
 
 		_ = e.Dispatcher.DispatchEvent(&et.Event{
 			Name:    asset.Asset.Key(),
