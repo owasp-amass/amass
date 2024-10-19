@@ -10,7 +10,7 @@ require (
 	github.com/caffix/fullname_parser v0.0.0-20240817200809-1b9b04da88d0
 	github.com/caffix/jarm-go v0.0.0-20240920030848-1c7ab2423494
 	github.com/caffix/pipeline v0.2.4
-	github.com/caffix/queue v0.2.0
+	github.com/caffix/queue v0.3.0
 	github.com/caffix/stringset v0.2.0
 	github.com/cheggaaa/pb/v3 v3.1.5
 	github.com/fatih/color v1.17.0
@@ -56,7 +56,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/chromedp/cdproto v0.0.0-20241014181340-cb3a7a1d51d7 // indirect
 	github.com/chromedp/chromedp v0.11.0 // indirect
-	github.com/chromedp/sysutil v1.0.0 // indirect
+	github.com/chromedp/sysutil v1.1.0 // indirect
 	github.com/d4l3k/messagediff v1.2.1 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
@@ -108,7 +108,7 @@ require (
 	golang.org/x/time v0.7.0 // indirect
 	golang.org/x/tools v0.26.0 // indirect
 	google.golang.org/protobuf v1.35.1 // indirect
-	gorm.io/datatypes v1.2.3 // indirect
+	gorm.io/datatypes v1.2.4 // indirect
 	gorm.io/driver/mysql v1.5.7 // indirect
 	modernc.org/libc v1.61.0 // indirect
 	modernc.org/mathutil v1.6.0 // indirect
