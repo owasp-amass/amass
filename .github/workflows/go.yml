@@ -17,12 +17,12 @@ jobs:
     steps:
       -
         name: setup Go ${{ matrix.go-version }}
-        uses: actions/setup-go@v3
+        uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go-version }}
       -
         name: checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       -
         name: simple test
         run: go test -v ./...
@@ -39,11 +39,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: setup Go
-        uses: actions/setup-go@v3
+        uses: actions/setup-go@v5
         with:
           go-version: 1.23.1
       - name: checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: measure coverage
         run: go test -v -coverprofile=coverage.out ./...
       - name: report coverage
