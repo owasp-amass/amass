@@ -677,10 +677,10 @@ github.com/caffix/fullname_parser v0.0.0-20240817200809-1b9b04da88d0 h1:F+TnZgFF
 github.com/caffix/fullname_parser v0.0.0-20240817200809-1b9b04da88d0/go.mod h1:Mrgv9oEs1sdvjpOk+P8owfYCTw5b37o5lbTuQvXQMlQ=
 github.com/caffix/jarm-go v0.0.0-20240920030848-1c7ab2423494 h1:+LQH8Q0QubGQkiH5pphU8puQA+BQBrie7l3jrTMGhME=
 github.com/caffix/jarm-go v0.0.0-20240920030848-1c7ab2423494/go.mod h1:ce1R1GlaHMuKS4doGF3tWPj05OtPjm0wC9glCBnKuEg=
-github.com/caffix/pipeline v0.2.5-0.20241019045954-0a8c31484ccc h1:4rrvWGPSEgKdDsChz4R1Cj0rDfEtN0lRShy7/QJaoJA=
-github.com/caffix/pipeline v0.2.5-0.20241019045954-0a8c31484ccc/go.mod h1:1LkPmGYG70t1JvQbGvLCZGkiwT8GFKtDenfGG3QWOVc=
-github.com/caffix/queue v0.3.0 h1:Kl0VUs3S79ifkm6SnvtZCuUazel3lwuaz7DSkeo03Ew=
-github.com/caffix/queue v0.3.0/go.mod h1:AnCrUsy3cwDjLJvNv7FkQx/0Q9Hb7n7agRrUP0OiYl4=
+github.com/caffix/pipeline v0.2.5 h1:KVvbr1zhiZdSGIRRKeWL8nhO6BNTT9ASnDsQnLgimKI=
+github.com/caffix/pipeline v0.2.5/go.mod h1:qaUB85j/Lg6PPmqO+WpdgXVjvYLRK864Lbp5jKzc3Ro=
+github.com/caffix/queue v0.3.1 h1:eg4V7cGomH76/Xq60MdEhSVZvO6E3iOPlacMwZOjiSA=
+github.com/caffix/queue v0.3.1/go.mod h1:AnCrUsy3cwDjLJvNv7FkQx/0Q9Hb7n7agRrUP0OiYl4=
 github.com/caffix/stringset v0.2.0 h1:kN6xnvL8jzx2YhQNOYr6A6hFzUK+iikt1JtJ2MS2LC8=
 github.com/caffix/stringset v0.2.0/go.mod h1:8PZ6GIPpMP5+r5hr790/05w3v9xI+gXRxRzJCZL57lQ=
 github.com/casbin/casbin/v2 v2.37.0/go.mod h1:vByNa/Fchek0KZUgG5wEsl7iFsiviAYKRtgrQfcJqHg=

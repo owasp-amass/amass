@@ -9,8 +9,8 @@ require (
 	github.com/adrg/strutil v0.3.1
 	github.com/caffix/fullname_parser v0.0.0-20240817200809-1b9b04da88d0
 	github.com/caffix/jarm-go v0.0.0-20240920030848-1c7ab2423494
-	github.com/caffix/pipeline v0.2.5-0.20241019045954-0a8c31484ccc
-	github.com/caffix/queue v0.3.0
+	github.com/caffix/pipeline v0.2.5
+	github.com/caffix/queue v0.3.1
 	github.com/caffix/stringset v0.2.0
 	github.com/cheggaaa/pb/v3 v3.1.5
 	github.com/fatih/color v1.17.0
