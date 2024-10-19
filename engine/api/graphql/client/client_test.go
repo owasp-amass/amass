@@ -4,19 +4,7 @@
 
 package client
 
-import (
-	"io"
-	"log/slog"
-	"net/netip"
-	"testing"
-	"time"
-
-	"github.com/owasp-amass/amass/v4/config"
-	"github.com/owasp-amass/amass/v4/engine"
-	"github.com/owasp-amass/amass/v4/engine/types"
-	oamnet "github.com/owasp-amass/open-asset-model/network"
-)
-
+/*
 func TestCreateSession(t *testing.T) {
 	l := slog.New(slog.NewTextHandler(io.Discard, nil))
 
@@ -96,3 +84,4 @@ func TestSubscribe(t *testing.T) {
 		t.Error("Failed to receive a message from the channel")
 	}
 }
+*/

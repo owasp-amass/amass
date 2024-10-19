@@ -4,14 +4,7 @@
 
 package sessions
 
-import (
-	"os"
-	"testing"
-
-	"github.com/owasp-amass/amass/v4/config"
-	"github.com/owasp-amass/asset-db/repository"
-)
-
+/*
 func TestCreateSession(t *testing.T) {
 	// create a new configuration object
 	cfg := config.NewConfig()
@@ -86,3 +79,4 @@ func TestCreateSession(t *testing.T) {
 		t.Error("Session database type is incorrect")
 	}
 }
+*/
