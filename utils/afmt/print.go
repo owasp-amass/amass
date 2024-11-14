@@ -139,8 +139,8 @@ func FprintEnumerationSummary(out io.Writer, total int, asns map[int]*utils.ASNS
 
 	fmt.Fprintln(out)
 	// Print the header information
-	title := "OAM Tool Suite "
-	site := "https://github.com/owasp-amass/oam-tools"
+	title := "OWASP Amass Project "
+	site := "https://github.com/owasp-amass/amass"
 	B.Fprint(out, title+Version)
 	num := 80 - (len(title) + len(Version) + len(site))
 	pad(num, " ")

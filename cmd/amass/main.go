@@ -49,10 +49,10 @@ import (
 )
 
 const (
-	mainUsageMsg         = "intel|enum [options]"
-	exampleConfigFileURL = "https://github.com/owasp-amass/amass/blob/master/examples/config.yaml"
-	userGuideURL         = "https://github.com/owasp-amass/amass/blob/master/doc/user_guide.md"
-	tutorialURL          = "https://github.com/owasp-amass/amass/blob/master/doc/tutorial.md"
+	mainUsageMsg      = "enum [options]"
+	documentationURL  = "https://owasp-amass.github.io/docs"
+	discordInvitation = "https://discord.gg/ANTyEDUXt5"
+	youTubeURL        = "https://www.youtube.com/@jeff_foley"
 )
 
 func commandUsage(msg string, cmdFlagSet *flag.FlagSet, errBuf *bytes.Buffer) {
@@ -63,16 +63,13 @@ func commandUsage(msg string, cmdFlagSet *flag.FlagSet, errBuf *bytes.Buffer) {
 
 	if msg == mainUsageMsg {
 		afmt.G.Fprintf(color.Error, "\nSubcommands: \n\n")
-		afmt.G.Fprintf(color.Error, "\t%-11s - Discover targets for enumerations\n", "amass intel")
 		afmt.G.Fprintf(color.Error, "\t%-11s - Perform enumerations and network mapping\n", "amass enum")
-		afmt.G.Fprintf(color.Error, "\t%-11s - Analyze subdomain information in the asset-db\n", "amass subs")
-		afmt.G.Fprintf(color.Error, "\t%-11s - Analyze OAM data to identify newly discovered assets\n", "amass track")
 	}
 
 	afmt.G.Fprintln(color.Error)
-	afmt.G.Fprintf(color.Error, "The user's guide can be found here: \n%s\n\n", userGuideURL)
-	afmt.G.Fprintf(color.Error, "An example configuration file can be found here: \n%s\n\n", exampleConfigFileURL)
-	afmt.G.Fprintf(color.Error, "The Amass tutorial can be found here: \n%s\n\n", tutorialURL)
+	afmt.G.Fprintf(color.Error, "The project documentation can be found here: \n%s\n\n", documentationURL)
+	afmt.G.Fprintf(color.Error, "The Amass Discord server can be found here: \n%s\n\n", discordInvitation)
+	afmt.G.Fprintf(color.Error, "The Amass YouTube channel can be found here: \n%s\n\n", youTubeURL)
 }
 
 func main() {
