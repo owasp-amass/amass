@@ -21,7 +21,7 @@ The OWASP Amass Project performs network mapping of attack surfaces and external
 
 ## Installation [![Go Version](https://img.shields.io/github/go-mod/go-version/owasp-amass/amass)](https://golang.org/dl/) [![Docker Image](https://img.shields.io/docker/pulls/owaspamass/amass.svg)](https://hub.docker.com/r/owaspamass/amass) [![GitHub Downloads](https://img.shields.io/github/downloads/owasp-amass/amass/latest/total.svg)](https://github.com/owasp-amass/amass/releases/latest)
 
-> You can find additional installation instructions and documentation in the [Amass Docs](https://github.com/owasp-amass/docs) repo.
+> You can find additional installation instructions and documentation in the [Amass Docs](https://owasp-amass.github.io/docs) repo.
 
 ### Docker Compose
 
@@ -29,7 +29,7 @@ The OWASP Amass Project performs network mapping of attack surfaces and external
 2. Clone the [Amass Docker Compose](https://github.com/owasp-amass/amass-docker-compose) onto your host: `git clone https://github.com/owasp-amass/amass-docker-compose.git`
 3. Consider changing the name of the directory: `mv amass-docker-compose amass`
 4. Execute your enumeration from within the directory: `docker compose run --rm amass enum -active -d example.com`
-5. Go to the Amass Docker Compose repo, or the [Amass Docs](https://github.com/owasp-amass/docs) repo, for additional instructions
+5. Go to the Amass Docker Compose repo, or the [Amass Docs](https://owasp-amass.github.io/docs) repo, for additional instructions
 
 ## Corporate Supporters
 
