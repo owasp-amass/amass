@@ -39,7 +39,10 @@ func (c *Cache) FindEntityTagById(id string) (*types.EntityTag, error) {
 
 // GetEntityTags implements the Repository interface.
 func (c *Cache) GetEntityTags(entity *types.Entity, since time.Time, names ...string) ([]*types.EntityTag, error) {
+	c.Lock()
+	defer c.Unlock()
 
+	return c.cache.GetEntityTags(entity, since, names...)
 }
 
 // DeleteEntityTag implements the Repository interface.
@@ -105,7 +108,10 @@ func (c *Cache) FindEdgeTagById(id string) (*types.EdgeTag, error) {
 
 // GetEdgeTags implements the Repository interface.
 func (c *Cache) GetEdgeTags(edge *types.Edge, since time.Time, names ...string) ([]*types.EdgeTag, error) {
+	c.Lock()
+	defer c.Unlock()
 
+	return c.cache.GetEdgeTags(edge, since, names...)
 }
 
 // DeleteEdgeTag implements the Repository interface.

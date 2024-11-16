@@ -62,12 +62,18 @@ func (c *Cache) FindEntityById(id string) (*types.Entity, error) {
 
 // FindEntityByContent implements the Repository interface.
 func (c *Cache) FindEntityByContent(asset oam.Asset, since time.Time) ([]*types.Entity, error) {
+	c.Lock()
+	defer c.Unlock()
 
+	return c.cache.FindEntityByContent(asset, since)
 }
 
 // FindEntitiesByType implements the Repository interface.
 func (c *Cache) FindEntitiesByType(atype oam.AssetType, since time.Time) ([]*types.Entity, error) {
+	c.Lock()
+	defer c.Unlock()
 
+	return c.cache.FindEntitiesByType(atype, since)
 }
 
 // DeleteEntity implements the Repository interface.
