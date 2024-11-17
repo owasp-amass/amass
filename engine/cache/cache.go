@@ -17,17 +17,23 @@ import (
 
 type Cache struct {
 	sync.Mutex
+	start time.Time
+	freq  time.Duration
 	done  chan struct{}
+	cdone chan struct{}
 	cache repository.Repository
 	db    repository.Repository
 	queue queue.Queue
 }
 
-func New(database repository.Repository) (repository.Repository, error) {
+func New(database repository.Repository, done chan struct{}) (*Cache, error) {
 	if db := assetdb.New(sqlrepo.SQLiteMemory, ""); db != nil {
 		c := &Cache{
+			start: time.Now(),
+			freq:  10 * time.Minute,
+			done:  done,
+			cdone: make(chan struct{}, 1),
 			cache: db.Repo,
-			done:  make(chan struct{}, 1),
 			db:    database,
 			queue: queue.NewQueue(),
 		}
@@ -35,8 +41,12 @@ func New(database repository.Repository) (repository.Repository, error) {
 		go c.processDBCallbacks()
 		return c, nil
 	}
-
 	return nil, errors.New("failed to create the cache repository")
+}
+
+// StartTime returns the time that the cache was created.
+func (c *Cache) StartTime() time.Time {
+	return c.start
 }
 
 // Close implements the Repository interface.
@@ -50,12 +60,12 @@ func (c *Cache) Close() error {
 		}
 	}
 
-	close(c.done)
+	close(c.cdone)
 	for {
 		if c.queue.Empty() {
 			break
 		}
-		time.Sleep(5 * time.Second)
+		time.Sleep(2 * time.Second)
 	}
 	return nil
 }
@@ -66,6 +76,13 @@ func (c *Cache) GetDBType() string {
 }
 
 func (c *Cache) appendToDBQueue(callback func()) {
+	select {
+	case <-c.done:
+		return
+	case <-c.cdone:
+		return
+	default:
+	}
 	c.queue.Append(callback)
 }
 
@@ -74,6 +91,8 @@ loop:
 	for {
 		select {
 		case <-c.done:
+			break loop
+		case <-c.cdone:
 			break loop
 		case <-c.queue.Signal():
 			element, ok := c.queue.Next()
@@ -87,10 +106,6 @@ loop:
 			}
 		}
 	}
-
-	c.queue.Process(func(data interface{}) {
-		if callback, ok := data.(func()); ok {
-			callback()
-		}
-	})
+	// drain the callback queue of all remaining elements
+	c.queue.Process(func(data interface{}) {})
 }

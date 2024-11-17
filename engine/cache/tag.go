@@ -10,6 +10,7 @@ import (
 
 	"github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
+	"github.com/owasp-amass/open-asset-model/property"
 )
 
 // CreateEntityTag implements the Repository interface.
@@ -177,4 +178,34 @@ func (c *Cache) DeleteEdgeTag(id string) error {
 	})
 
 	return nil
+}
+
+func (c *Cache) createCacheEntityTag(entity *types.Entity, name string) error {
+	_, err := c.cache.CreateEntityTag(entity, &property.SimpleProperty{
+		PropertyName:  name,
+		PropertyValue: time.Now().Format("2006-01-02 15:04:05"),
+	})
+	return err
+}
+
+func (c *Cache) checkCacheEntityTag(entity *types.Entity, name string) (*types.EntityTag, bool) {
+	if tags, err := c.cache.GetEntityTags(entity, time.Time{}, name); err == nil && len(tags) == 1 {
+		return tags[0], true
+	}
+	return nil, false
+}
+
+func (c *Cache) createCacheEdgeTag(edge *types.Edge, name string) error {
+	_, err := c.cache.CreateEdgeTag(edge, &property.SimpleProperty{
+		PropertyName:  name,
+		PropertyValue: time.Now().Format("2006-01-02 15:04:05"),
+	})
+	return err
+}
+
+func (c *Cache) checkCacheEdgeTag(edge *types.Edge, name string) (*types.EdgeTag, bool) {
+	if tags, err := c.cache.GetEdgeTags(edge, time.Time{}, name); err == nil && len(tags) == 1 {
+		return tags[0], true
+	}
+	return nil, false
 }

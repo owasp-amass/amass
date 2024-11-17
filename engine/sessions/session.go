@@ -5,14 +5,12 @@
 package sessions
 
 import (
-	"embed"
 	"errors"
 	"fmt"
 	"log/slog"
 	"path/filepath"
 	"strings"
 
-	"github.com/glebarez/sqlite"
 	"github.com/google/uuid"
 	"github.com/owasp-amass/amass/v4/config"
 	"github.com/owasp-amass/amass/v4/engine/cache"
@@ -20,12 +18,7 @@ import (
 	"github.com/owasp-amass/amass/v4/engine/sessions/scope"
 	et "github.com/owasp-amass/amass/v4/engine/types"
 	assetdb "github.com/owasp-amass/asset-db"
-	pgmigrations "github.com/owasp-amass/asset-db/migrations/postgres"
-	sqlitemigrations "github.com/owasp-amass/asset-db/migrations/sqlite3"
 	"github.com/owasp-amass/asset-db/repository"
-	migrate "github.com/rubenv/sql-migrate"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
 )
 
 type Session struct {
@@ -36,8 +29,8 @@ type Session struct {
 	scope  *scope.Scope
 	db     *assetdb.AssetDB
 	dsn    string
-	dbtype repository.DBType
-	c      cache.Cache
+	dbtype string
+	c      *cache.Cache
 	stats  *et.SessionStats
 	done   chan struct{}
 }
@@ -55,7 +48,6 @@ func CreateSession(cfg *config.Config) (et.Session, error) {
 		cfg:   cfg,
 		scope: scope.CreateFromConfigScope(cfg),
 		ps:    pubsub.NewLogger(),
-		c:     cache.NewOAMCache(nil),
 		stats: new(et.SessionStats),
 		done:  make(chan struct{}),
 	}
@@ -63,6 +55,11 @@ func CreateSession(cfg *config.Config) (et.Session, error) {
 
 	if err := s.setupDB(); err != nil {
 		return nil, err
+	}
+
+	s.c = cache.New(s.db.Repo)
+	if s.c == nil {
+		return nil, errors.New("failed to create the session cache")
 	}
 	return s, nil
 }
@@ -85,10 +82,6 @@ func (s *Session) Config() *config.Config {
 
 func (s *Session) Scope() *scope.Scope {
 	return s.scope
-}
-
-func (s *Session) DB() *assetdb.AssetDB {
-	return s.db
 }
 
 func (s *Session) Cache() cache.Cache {
@@ -119,9 +112,6 @@ func (s *Session) Kill() {
 
 func (s *Session) setupDB() error {
 	if err := s.selectDBMS(); err != nil {
-		return err
-	}
-	if err := s.migrations(); err != nil {
 		return err
 	}
 	return nil
@@ -167,45 +157,5 @@ func (s *Session) selectDBMS() error {
 		return errors.New("failed to initialize database store")
 	}
 	s.db = store
-	return nil
-}
-
-func (s *Session) migrations() error {
-	var name string
-	var fs embed.FS
-	var database gorm.Dialector
-
-	switch s.dbtype {
-	case repository.SQLite:
-		name = "sqlite3"
-		fs = sqlitemigrations.Migrations()
-		database = sqlite.Open(s.dsn)
-	case repository.Postgres:
-		name = "postgres"
-		fs = pgmigrations.Migrations()
-		database = postgres.Open(s.dsn)
-	default:
-		return fmt.Errorf("unsupported database type: %s", s.dbtype)
-	}
-	// Initialize the GORM database connection
-	sql, err := gorm.Open(database, &gorm.Config{})
-	if err != nil {
-		return fmt.Errorf("failed to open database: %s", err)
-	}
-	// Set up migrations
-	migrationsSource := migrate.EmbedFileSystemMigrationSource{
-		FileSystem: fs,
-		Root:       "/",
-	}
-	// Extract the raw SQL database instance
-	sqlDb, err := sql.DB()
-	if err != nil {
-		return fmt.Errorf("failed to extract raw SQL DB from GORM: %s", err)
-	}
-	// Run migrations
-	_, err = migrate.Exec(sqlDb, name, migrationsSource, migrate.Up)
-	if err != nil {
-		return fmt.Errorf("failed to execute migrations: %s", err)
-	}
 	return nil
 }
