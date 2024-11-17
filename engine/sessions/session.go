@@ -13,11 +13,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/owasp-amass/amass/v4/config"
-	"github.com/owasp-amass/amass/v4/engine/cache"
 	"github.com/owasp-amass/amass/v4/engine/pubsub"
 	"github.com/owasp-amass/amass/v4/engine/sessions/scope"
 	et "github.com/owasp-amass/amass/v4/engine/types"
 	assetdb "github.com/owasp-amass/asset-db"
+	"github.com/owasp-amass/asset-db/cache"
 	"github.com/owasp-amass/asset-db/repository"
 )
 
@@ -57,8 +57,9 @@ func CreateSession(cfg *config.Config) (et.Session, error) {
 		return nil, err
 	}
 
-	s.c = cache.New(s.db.Repo)
-	if s.c == nil {
+	var err error
+	s.c, err = cache.New(s.db.Repo)
+	if err != nil || s.c == nil {
 		return nil, errors.New("failed to create the session cache")
 	}
 	return s, nil
@@ -84,7 +85,7 @@ func (s *Session) Scope() *scope.Scope {
 	return s.scope
 }
 
-func (s *Session) Cache() cache.Cache {
+func (s *Session) Cache() *cache.Cache {
 	return s.c
 }
 
