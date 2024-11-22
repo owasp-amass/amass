@@ -13,7 +13,6 @@ import (
 	"github.com/owasp-amass/amass/v4/engine/cache"
 	"github.com/owasp-amass/amass/v4/engine/pubsub"
 	"github.com/owasp-amass/amass/v4/engine/sessions/scope"
-	assetdb "github.com/owasp-amass/asset-db"
 )
 
 type Session interface {
@@ -22,7 +21,6 @@ type Session interface {
 	PubSub() *pubsub.Logger
 	Config() *config.Config
 	Scope() *scope.Scope
-	DB() *assetdb.AssetDB
 	Cache() cache.Cache
 	Stats() *SessionStats
 	Done() bool

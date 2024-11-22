@@ -8,8 +8,11 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math/rand"
+	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/owasp-amass/amass/v4/config"
@@ -19,6 +22,7 @@ import (
 	assetdb "github.com/owasp-amass/asset-db"
 	"github.com/owasp-amass/asset-db/cache"
 	"github.com/owasp-amass/asset-db/repository"
+	"github.com/owasp-amass/asset-db/repository/sqlrepo"
 )
 
 type Session struct {
@@ -31,6 +35,7 @@ type Session struct {
 	dsn    string
 	dbtype string
 	c      *cache.Cache
+	tmpdir string
 	stats  *et.SessionStats
 	done   chan struct{}
 }
@@ -57,8 +62,13 @@ func CreateSession(cfg *config.Config) (et.Session, error) {
 		return nil, err
 	}
 
-	var err error
-	s.c, err = cache.New(s.db.Repo)
+	c, dir, err := createFileCacheRepo()
+	if err != nil {
+		return nil, err
+	}
+	s.tmpdir = dir
+
+	s.c, err = cache.New(c, s.db.Repo, time.Minute)
 	if err != nil || s.c == nil {
 		return nil, errors.New("failed to create the session cache")
 	}
@@ -137,12 +147,12 @@ func (s *Session) selectDBMS() error {
 			if db.System == "postgres" {
 				// Construct the connection string for a Postgres database.
 				s.dsn = fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s", db.Host, db.Port, db.Username, db.Password, db.DBName)
-				s.dbtype = repository.Postgres
+				s.dbtype = sqlrepo.Postgres
 			} else if db.System == "sqlite" || db.System == "sqlite3" {
 				// Define the connection path for an SQLite database.
 				path := filepath.Join(config.OutputDirectory(s.cfg.Dir), "amass.sqlite")
 				s.dsn = path
-				s.dbtype = repository.SQLite
+				s.dbtype = sqlrepo.SQLite
 			}
 			// Break the loop once the primary database is found.
 			break
@@ -159,4 +169,18 @@ func (s *Session) selectDBMS() error {
 	}
 	s.db = store
 	return nil
+}
+
+func createFileCacheRepo() (repository.Repository, string, error) {
+	dir, err := os.MkdirTemp("", fmt.Sprintf("test-%d", rand.Intn(100)))
+	if err != nil {
+		return nil, "", errors.New("failed to create the temp dir")
+	}
+
+	c := assetdb.New(sqlrepo.SQLite, filepath.Join(dir, "cache.sqlite"))
+	if c == nil {
+		return nil, "", errors.New("failed to create the cache db")
+	}
+
+	return c.Repo, dir, nil
 }

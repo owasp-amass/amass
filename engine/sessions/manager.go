@@ -14,6 +14,7 @@ package sessions
 import (
 	"fmt"
 	"log/slog"
+	"os"
 	"sync"
 	"time"
 
@@ -93,6 +94,9 @@ func (r *manager) CancelSession(id uuid.UUID) {
 	r.Lock()
 	if c := r.sessions[id].Cache(); c != nil {
 		c.Close()
+	}
+	if dir := r.sessions[id].tmpdir; dir != "" {
+		os.RemoveAll(dir)
 	}
 	if db := s.DB(); db != nil {
 		if err := db.Close(); err != nil {

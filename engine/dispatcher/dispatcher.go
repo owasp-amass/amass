@@ -8,6 +8,7 @@ import (
 	"errors"
 	"log/slog"
 	"os"
+	"time"
 
 	"github.com/caffix/queue"
 	et "github.com/owasp-amass/amass/v4/engine/types"
@@ -48,6 +49,8 @@ func (d *dis) Shutdown() {
 }
 
 func (d *dis) collectEvents() {
+	t := time.NewTicker(100 * time.Millisecond)
+	defer t.Stop()
 loop:
 	for {
 		select {
@@ -55,6 +58,10 @@ loop:
 			break loop
 		case <-d.completed.Signal():
 			d.completed.Process(d.completedCallback)
+		case <-t.C:
+			if d.completed.Len() > 0 {
+				d.completed.Process(d.completedCallback)
+			}
 		}
 	}
 	d.completed.Process(d.completedCallback)
@@ -84,12 +91,14 @@ func (d *dis) DispatchEvent(e *et.Event) error {
 	}
 
 	e.Dispatcher = d
-	a := e.Asset.Asset
+	a := e.Entity.Asset
 	// do not schedule the same asset more than once
-	if p, hit := e.Session.Cache().GetAsset(a); p != nil && hit {
+	c := e.Session.Cache()
+	ents, err := c.FindEntityByContent(a, c.StartTime())
+	if len(ents) > 0 {
 		return errors.New("this event was processed previously")
 	}
-	e.Session.Cache().SetAsset(e.Asset)
+	_, _ = c.CreateAsset(a)
 
 	ap, err := d.reg.GetPipeline(a.AssetType())
 	if err != nil {
