@@ -23,8 +23,9 @@ import (
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/contact"
 	"github.com/owasp-amass/open-asset-model/org"
+	"github.com/owasp-amass/open-asset-model/property"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
-	"github.com/owasp-amass/open-asset-model/source"
+	"github.com/owasp-amass/open-asset-model/relation"
 	"github.com/owasp-amass/open-asset-model/url"
 	"go.uber.org/ratelimit"
 )
@@ -38,14 +39,14 @@ type rdapPlugin struct {
 	autnum   *autnum
 	netblock *netblock
 	ipnet    *ipnet
-	source   *source.Source
+	source   *et.Source
 }
 
 func NewRDAP() et.Plugin {
 	return &rdapPlugin{
 		name:   "RDAP",
 		rlimit: ratelimit.New(10, ratelimit.WithoutSlack),
-		source: &source.Source{
+		source: &et.Source{
 			Name:       "RDAP",
 			Confidence: 100,
 		},
@@ -175,118 +176,171 @@ func (rd *rdapPlugin) Stop() {
 	rd.log.Info("Plugin stopped")
 }
 
-func (rd *rdapPlugin) storeEntity(e *et.Event, level int, entity *rdap.Entity, asset, src *dbt.Asset, m *config.Matches) []*support.Finding {
+func (rd *rdapPlugin) storeEntity(e *et.Event, level int, entity *rdap.Entity, asset *dbt.Entity, src *et.Source, m *config.Matches) []*support.Finding {
 	var findings []*support.Finding
 
 	roles := stringset.New(entity.Roles...)
 	defer roles.Close()
 
-	done := make(chan struct{}, 1)
-	support.AppendToDBQueue(func() {
-		defer func() { done <- struct{}{} }()
+	u := rd.getJSONLink(entity.Links)
+	if u == nil {
+		return nil
+	}
 
-		if e.Session.Done() {
-			return
+	var rel string
+	if roles.Has("registrant") && level == 1 {
+		rel = "registrant"
+	} else if roles.Has("administrative") {
+		rel = "admin_contact"
+	} else if roles.Has("abuse") {
+		rel = "abuse_contact"
+	} else if roles.Has("technical") {
+		rel = "technical_contact"
+	} else {
+		return nil
+	}
+
+	cr, err := e.Session.Cache().CreateAsset(&contact.ContactRecord{DiscoveredAt: u.Raw})
+	if err != nil || cr == nil {
+		return nil
+	}
+
+	var name string
+	switch v := asset.Asset.(type) {
+	case *oamreg.AutnumRecord:
+		name = "AutnumRecord: " + v.Handle
+	case *oamreg.IPNetRecord:
+		name = "IPNetRecord: " + v.Handle
+	}
+
+	findings = append(findings, &support.Finding{
+		From:     asset,
+		FromName: name,
+		To:       cr,
+		ToName:   "ContactRecord: " + u.Raw,
+		Rel:      &relation.SimpleRelation{Name: rel},
+	})
+
+	if m.IsMatch(string(oam.URL)) {
+		a, err := e.Session.Cache().CreateAsset(u)
+		if err != nil {
+			return nil
 		}
-
-		u := rd.getJSONLink(entity.Links)
-		if u == nil {
-			return
+		if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
+			Relation:   &relation.SimpleRelation{Name: "url"},
+			FromEntity: cr,
+			ToEntity:   a,
+		}); err == nil && edge != nil {
+			_, _ = e.Session.Cache().CreateEdgeProperty(edge, &property.SourceProperty{
+				Source:     src.Name,
+				Confidence: src.Confidence,
+			})
 		}
+	}
 
-		var rel string
-		if roles.Has("registrant") && level == 1 {
-			rel = "registrant"
-		} else if roles.Has("administrative") {
-			rel = "admin_contact"
-		} else if roles.Has("abuse") {
-			rel = "abuse_contact"
-		} else if roles.Has("technical") {
-			rel = "technical_contact"
-		} else {
-			return
-		}
+	v := entity.VCard
+	property := v.GetFirst("kind")
+	if property == nil {
+		return nil
+	}
 
-		cr, err := e.Session.DB().Create(asset, rel, &contact.ContactRecord{DiscoveredAt: u.Raw})
-		if err != nil || cr == nil {
-			return
-		}
-
-		var name string
-		switch v := asset.Asset.(type) {
-		case *oamreg.AutnumRecord:
-			name = "AutnumRecord: " + v.Handle
-		case *oamreg.IPNetRecord:
-			name = "IPNetRecord: " + v.Handle
-		}
-
-		findings = append(findings, &support.Finding{
-			From:     asset,
-			FromName: name,
-			To:       cr,
-			ToName:   "ContactRecord: " + u.Raw,
-			Rel:      rel,
-		})
-		_, _ = e.Session.DB().Link(cr, "source", src)
-
-		if m.IsMatch(string(oam.URL)) {
-			if _, err := e.Session.DB().Create(cr, "url", u); err != nil {
-				return
-			}
-		}
-
-		v := entity.VCard
-		property := v.GetFirst("kind")
-		if property == nil {
-			return
-		}
-
-		name = v.Name()
-		if kind := strings.Join(property.Values(), " "); name != "" && kind == "individual" {
-			if p := support.FullNameToPerson(name); p != nil && m.IsMatch(string(oam.Person)) {
-				if a, err := e.Session.DB().Create(cr, "person", p); err == nil && a != nil {
-					_, _ = e.Session.DB().Link(a, "source", src)
+	name = v.Name()
+	if kind := strings.Join(property.Values(), " "); name != "" && kind == "individual" {
+		if p := support.FullNameToPerson(name); p != nil && m.IsMatch(string(oam.Person)) {
+			if a, err := e.Session.Cache().CreateAsset(p); err == nil && a != nil {
+				if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
+					Relation:   &relation.SimpleRelation{Name: "person"},
+					FromEntity: cr,
+					ToEntity:   a,
+				}); err == nil && edge != nil {
+					_, _ = e.Session.Cache().CreateEdgeProperty(edge, &property.SourceProperty{
+						Source:     src.Name,
+						Confidence: src.Confidence,
+					})
 				}
 			}
-		} else if name != "" && m.IsMatch(string(oam.Organization)) {
-			if a, err := e.Session.DB().Create(cr, "organization", &org.Organization{Name: name}); err == nil && a != nil {
-				_, _ = e.Session.DB().Link(a, "source", src)
+		}
+	} else if name != "" && m.IsMatch(string(oam.Organization)) {
+		if a, err := e.Session.Cache().CreateAsset(&org.Organization{Name: name}); err == nil && a != nil {
+			if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
+				Relation:   &relation.SimpleRelation{Name: "organization"},
+				FromEntity: cr,
+				ToEntity:   a,
+			}); err == nil && edge != nil {
+				_, _ = e.Session.Cache().CreateEdgeProperty(edge, &property.SourceProperty{
+					Source:     src.Name,
+					Confidence: src.Confidence,
+				})
 			}
 		}
-		if adr := v.GetFirst("adr"); adr != nil && m.IsMatch(string(oam.Location)) {
-			if label, ok := adr.Parameters["label"]; ok {
-				s := strings.Join(label, " ")
+	}
+	if adr := v.GetFirst("adr"); adr != nil && m.IsMatch(string(oam.Location)) {
+		if label, ok := adr.Parameters["label"]; ok {
+			s := strings.Join(label, " ")
 
-				addr := strings.Join(strings.Split(s, "\n"), " ")
-				if loc := support.StreetAddressToLocation(addr); loc != nil {
-					if a, err := e.Session.DB().Create(cr, "location", loc); err == nil && a != nil {
-						_, _ = e.Session.DB().Link(a, "source", src)
+			addr := strings.Join(strings.Split(s, "\n"), " ")
+			if loc := support.StreetAddressToLocation(addr); loc != nil {
+				if a, err := e.Session.Cache().CreateAsset(loc); err == nil && a != nil {
+					if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
+						Relation:   &relation.SimpleRelation{Name: "location"},
+						FromEntity: cr,
+						ToEntity:   a,
+					}); err == nil && edge != nil {
+						_, _ = e.Session.Cache().CreateEdgeProperty(edge, &property.SourceProperty{
+							Source:     src.Name,
+							Confidence: src.Confidence,
+						})
 					}
 				}
 			}
 		}
-		if email := support.EmailToOAMEmailAddress(v.Email()); email != nil && m.IsMatch(string(oam.EmailAddress)) {
-			if a, err := e.Session.DB().Create(cr, "email", email); err == nil && a != nil {
-				_, _ = e.Session.DB().Link(a, "source", src)
+	}
+	if email := support.EmailToOAMEmailAddress(v.Email()); email != nil && m.IsMatch(string(oam.EmailAddress)) {
+		if a, err := e.Session.Cache().CreateAsset(email); err == nil && a != nil {
+			if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
+				Relation:   &relation.SimpleRelation{Name: "email"},
+				FromEntity: cr,
+				ToEntity:   a,
+			}); err == nil && edge != nil {
+				_, _ = e.Session.Cache().CreateEdgeProperty(edge, &property.SourceProperty{
+					Source:     src.Name,
+					Confidence: src.Confidence,
+				})
 			}
 		}
-		if m.IsMatch(string(oam.Phone)) {
-			if phone := support.PhoneToOAMPhone(v.Tel(), "", v.Country()); phone != nil {
-				phone.Type = contact.PhoneTypeRegular
-				if a, err := e.Session.DB().Create(cr, "phone", phone); err == nil && a != nil {
-					_, _ = e.Session.DB().Link(a, "source", src)
-				}
-			}
-			if fax := support.PhoneToOAMPhone(v.Fax(), "", v.Country()); fax != nil {
-				fax.Type = contact.PhoneTypeFax
-				if a, err := e.Session.DB().Create(cr, "phone", fax); err == nil && a != nil {
-					_, _ = e.Session.DB().Link(a, "source", src)
+	}
+	if m.IsMatch(string(oam.Phone)) {
+		if phone := support.PhoneToOAMPhone(v.Tel(), "", v.Country()); phone != nil {
+			phone.Type = contact.PhoneTypeRegular
+			if a, err := e.Session.Cache().CreateAsset(phone); err == nil && a != nil {
+				if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
+					Relation:   &relation.SimpleRelation{Name: "phone"},
+					FromEntity: cr,
+					ToEntity:   a,
+				}); err == nil && edge != nil {
+					_, _ = e.Session.Cache().CreateEdgeProperty(edge, &property.SourceProperty{
+						Source:     src.Name,
+						Confidence: src.Confidence,
+					})
 				}
 			}
 		}
-	})
-	<-done
-	close(done)
+		if fax := support.PhoneToOAMPhone(v.Fax(), "", v.Country()); fax != nil {
+			fax.Type = contact.PhoneTypeFax
+			if a, err := e.Session.Cache().CreateAsset(fax); err == nil && a != nil {
+				if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
+					Relation:   &relation.SimpleRelation{Name: "phone"},
+					FromEntity: cr,
+					ToEntity:   a,
+				}); err == nil && edge != nil {
+					_, _ = e.Session.Cache().CreateEdgeProperty(edge, &property.SourceProperty{
+						Source:     src.Name,
+						Confidence: src.Confidence,
+					})
+				}
+			}
+		}
+	}
 
 	level++
 	for _, ent := range entity.Entities {

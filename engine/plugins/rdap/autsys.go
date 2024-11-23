@@ -17,7 +17,9 @@ import (
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/network"
+	"github.com/owasp-amass/open-asset-model/property"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
+	"github.com/owasp-amass/open-asset-model/relation"
 )
 
 type autsys struct {
@@ -30,14 +32,9 @@ func (r *autsys) Name() string {
 }
 
 func (r *autsys) check(e *et.Event) error {
-	as, ok := e.Asset.Asset.(*network.AutonomousSystem)
+	as, ok := e.Entity.Asset.(*network.AutonomousSystem)
 	if !ok {
 		return errors.New("failed to extract the AutonomousSystem asset")
-	}
-
-	src := support.GetSource(e.Session, r.plugin.source)
-	if src == nil {
-		return errors.New("failed to obtain the plugin source information")
 	}
 
 	since, err := support.TTLStartTime(e.Session.Config(),
@@ -46,13 +43,14 @@ func (r *autsys) check(e *et.Event) error {
 		return err
 	}
 
-	var asset *dbt.Asset
+	var asset *dbt.Entity
+	src := r.plugin.source
 	var record *rdap.Autnum
-	if support.AssetMonitoredWithinTTL(e.Session, e.Asset, src, since) {
+	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, src, since) {
 		asset = r.lookup(e, strconv.Itoa(as.Number), src, since)
 	} else {
 		asset, record = r.query(e, e.Asset, src)
-		support.MarkAssetMonitored(e.Session, e.Asset, src)
+		support.MarkAssetMonitored(e.Session, e.Entity, src)
 	}
 
 	if asset != nil {
@@ -61,14 +59,14 @@ func (r *autsys) check(e *et.Event) error {
 	return nil
 }
 
-func (r *autsys) lookup(e *et.Event, num string, src *dbt.Asset, since time.Time) *dbt.Asset {
+func (r *autsys) lookup(e *et.Event, num string, src *et.Source, since time.Time) *dbt.Entity {
 	if assets := support.SourceToAssetsWithinTTL(e.Session, num, string(oam.AutnumRecord), src, since); len(assets) > 0 {
 		return assets[0]
 	}
 	return nil
 }
 
-func (r *autsys) query(e *et.Event, asset, src *dbt.Asset) (*dbt.Asset, *rdap.Autnum) {
+func (r *autsys) query(e *et.Event, asset *dbt.Entity, src *et.Source) (*dbt.Entity, *rdap.Autnum) {
 	as := asset.Asset.(*network.AutonomousSystem)
 	req := rdap.NewAutnumRequest(uint32(as.Number))
 
@@ -89,7 +87,7 @@ func (r *autsys) query(e *et.Event, asset, src *dbt.Asset) (*dbt.Asset, *rdap.Au
 	return r.store(e, record, asset, src), record
 }
 
-func (r *autsys) store(e *et.Event, resp *rdap.Autnum, asset, src *dbt.Asset) *dbt.Asset {
+func (r *autsys) store(e *et.Event, resp *rdap.Autnum, asset *dbt.Entity, src *et.Source) *dbt.Entity {
 	as := asset.Asset.(*network.AutonomousSystem)
 	autrec := &oamreg.AutnumRecord{
 		Number:      as.Number,
@@ -117,53 +115,34 @@ func (r *autsys) store(e *et.Event, resp *rdap.Autnum, asset, src *dbt.Asset) *d
 		return nil
 	}
 
-	done := make(chan *dbt.Asset, 1)
-	support.AppendToDBQueue(func() {
-		if e.Session.Done() {
-			done <- nil
-			return
+	autasset, err := e.Session.Cache().CreateAsset(autrec)
+	if err == nil && autasset != nil {
+		if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
+			Relation:   &relation.SimpleRelation{Name: "registration"},
+			FromEntity: asset,
+			ToEntity:   autasset,
+		}); err == nil && edge != nil {
+			_, _ = e.Session.Cache().CreateEdgeTag(edge, &property.SourceProperty{
+				Source:     src.Name,
+				Confidence: src.Confidence,
+			})
 		}
+	}
 
-		if a, err := e.Session.DB().Create(asset, "registration", autrec); err == nil && a != nil {
-			_, _ = e.Session.DB().Link(a, "source", src)
-			done <- a
-			return
-		}
-		done <- nil
-	})
-	autasset := <-done
-	close(done)
 	return autasset
 }
 
-func (r *autsys) process(e *et.Event, record *rdap.Autnum, as, asset, src *dbt.Asset) {
+func (r *autsys) process(e *et.Event, record *rdap.Autnum, as, asset *dbt.Entity, src *et.Source) {
 	autnum := asset.Asset.(*oamreg.AutnumRecord)
 
 	name := "AutnumRecord: " + autnum.Name
 	_ = e.Dispatcher.DispatchEvent((&et.Event{
 		Name:    name,
 		Meta:    record,
-		Asset:   asset,
+		Entity:  asset,
 		Session: e.Session,
 	}))
 
-	now := time.Now()
-	if to, hit := e.Session.Cache().GetAsset(asset.Asset); hit && to != nil {
-		e.Session.Cache().SetRelation(&dbt.Relation{
-			Type:      "registration",
-			CreatedAt: now,
-			LastSeen:  now,
-			FromAsset: as,
-			ToAsset:   to,
-		})
-		e.Session.Cache().SetRelation(&dbt.Relation{
-			Type:      "source",
-			CreatedAt: now,
-			LastSeen:  now,
-			FromAsset: to,
-			ToAsset:   src,
-		})
-		e.Session.Log().Info("relationship discovered", "from", autnum.Handle, "relation",
-			"registration", "to", name, slog.Group("plugin", "name", r.plugin.name, "handler", r.name))
-	}
+	e.Session.Log().Info("relationship discovered", "from", autnum.Handle, "relation",
+		"registration", "to", name, slog.Group("plugin", "name", r.plugin.name, "handler", r.name))
 }
