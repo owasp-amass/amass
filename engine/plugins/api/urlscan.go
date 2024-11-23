@@ -76,7 +76,7 @@ func (u *urlscan) Stop() {
 }
 
 func (u *urlscan) fqdnCheck(e *et.Event) error {
-	fqdn, ok := e.Asset.Asset.(*domain.FQDN)
+	fqdn, ok := e.Entity.Asset.(*domain.FQDN)
 	if !ok {
 		return errors.New("failed to extract the FQDN asset")
 	}
@@ -118,7 +118,7 @@ func (u *urlscan) fqdnCheck(e *et.Event) error {
 }
 
 func (u *urlscan) asnCheck(e *et.Event) error {
-	asn, ok := e.Asset.Asset.(*network.AutonomousSystem)
+	asn, ok := e.Entity.Asset.(*network.AutonomousSystem)
 	if !ok {
 		return errors.New("failed to extract the FQDN asset")
 	}

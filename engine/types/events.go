@@ -54,3 +54,8 @@ func NewEventDataElement(e *Event) *EventDataElement {
 func (ede *EventDataElement) Clone() pipeline.Data {
 	return ede
 }
+
+type Source struct {
+	Name       string
+	Confidence int
+}

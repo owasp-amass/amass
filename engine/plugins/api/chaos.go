@@ -19,7 +19,6 @@ import (
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/domain"
-	"github.com/owasp-amass/open-asset-model/source"
 	"go.uber.org/ratelimit"
 )
 
@@ -27,14 +26,14 @@ type chaos struct {
 	name   string
 	log    *slog.Logger
 	rlimit ratelimit.Limiter
-	source *source.Source
+	source *et.Source
 }
 
 func NewChaos() et.Plugin {
 	return &chaos{
 		name:   "Chaos",
 		rlimit: ratelimit.New(10, ratelimit.WithoutSlack),
-		source: &source.Source{
+		source: &et.Source{
 			Name:       "Chaos",
 			Confidence: 80,
 		},
@@ -69,7 +68,7 @@ func (c *chaos) Stop() {
 }
 
 func (c *chaos) check(e *et.Event) error {
-	fqdn, ok := e.Asset.Asset.(*domain.FQDN)
+	fqdn, ok := e.Entity.Asset.(*domain.FQDN)
 	if !ok {
 		return errors.New("failed to extract the FQDN asset")
 	}
@@ -102,7 +101,7 @@ func (c *chaos) check(e *et.Event) error {
 		return err
 	}
 
-	var names []*dbt.Asset
+	var names []*dbt.Entity
 	if support.AssetMonitoredWithinTTL(e.Session, e.Asset, src, since) {
 		names = append(names, c.lookup(e, fqdn.Name, src, since)...)
 	} else {
@@ -116,11 +115,11 @@ func (c *chaos) check(e *et.Event) error {
 	return nil
 }
 
-func (c *chaos) lookup(e *et.Event, name string, src *dbt.Asset, since time.Time) []*dbt.Asset {
+func (c *chaos) lookup(e *et.Event, name string, src *dbt.Entity, since time.Time) []*dbt.Entity {
 	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.FQDN), src, since)
 }
 
-func (c *chaos) query(e *et.Event, name string, src *dbt.Asset, keys []string) []*dbt.Asset {
+func (c *chaos) query(e *et.Event, name string, src *dbt.Entity, keys []string) []*dbt.Entity {
 	var names []string
 
 	for _, key := range keys {
@@ -152,10 +151,10 @@ func (c *chaos) query(e *et.Event, name string, src *dbt.Asset, keys []string) [
 	return c.store(e, names, src)
 }
 
-func (c *chaos) store(e *et.Event, names []string, src *dbt.Asset) []*dbt.Asset {
+func (c *chaos) store(e *et.Event, names []string, src *dbt.Entity) []*dbt.Entity {
 	return support.StoreFQDNsWithSource(e.Session, names, src, c.name, c.name+"-Handler")
 }
 
-func (c *chaos) process(e *et.Event, assets []*dbt.Asset, src *dbt.Asset) {
+func (c *chaos) process(e *et.Event, assets []*dbt.Entity, src *dbt.Entity) {
 	support.ProcessFQDNsWithSource(e, assets, src)
 }

@@ -19,7 +19,6 @@ import (
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/domain"
-	"github.com/owasp-amass/open-asset-model/source"
 	"go.uber.org/ratelimit"
 )
 
@@ -27,14 +26,14 @@ type crtsh struct {
 	name   string
 	log    *slog.Logger
 	rlimit ratelimit.Limiter
-	source *source.Source
+	source *et.Source
 }
 
 func NewCrtsh() et.Plugin {
 	return &crtsh{
 		name:   "crt.sh",
 		rlimit: ratelimit.New(2, ratelimit.WithoutSlack),
-		source: &source.Source{
+		source: &et.Source{
 			Name:       "HackerTarget",
 			Confidence: 100,
 		},
@@ -69,7 +68,7 @@ func (c *crtsh) Stop() {
 }
 
 func (c *crtsh) check(e *et.Event) error {
-	fqdn, ok := e.Asset.Asset.(*domain.FQDN)
+	fqdn, ok := e.Entity.Asset.(*domain.FQDN)
 	if !ok {
 		return errors.New("failed to extract the FQDN asset")
 	}
@@ -90,7 +89,7 @@ func (c *crtsh) check(e *et.Event) error {
 		return err
 	}
 
-	var names []*dbt.Asset
+	var names []*dbt.Entity
 	if support.AssetMonitoredWithinTTL(e.Session, e.Asset, src, since) {
 		names = append(names, c.lookup(e, fqdn.Name, src, since)...)
 	} else {
@@ -104,17 +103,17 @@ func (c *crtsh) check(e *et.Event) error {
 	return nil
 }
 
-func (c *crtsh) lookup(e *et.Event, name string, src *dbt.Asset, since time.Time) []*dbt.Asset {
+func (c *crtsh) lookup(e *et.Event, name string, src *et.Source, since time.Time) []*dbt.Entity {
 	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.FQDN), src, since)
 }
 
-func (c *crtsh) query(e *et.Event, name string, src *dbt.Asset) []*dbt.Asset {
+func (c *crtsh) query(e *et.Event, name string, src *et.Source) []*dbt.Entity {
 	c.rlimit.Take()
 	resp, err := http.RequestWebPage(context.TODO(), &http.Request{
 		URL: "https://crt.sh/?CN=" + name + "&output=json&exclude=expired",
 	})
 	if err != nil {
-		return []*dbt.Asset{}
+		return nil
 	}
 
 	var result struct {
@@ -123,7 +122,7 @@ func (c *crtsh) query(e *et.Event, name string, src *dbt.Asset) []*dbt.Asset {
 		} `json:"certs"`
 	}
 	if err := json.Unmarshal([]byte("{\"certs\":"+resp.Body+"}"), &result); err != nil {
-		return []*dbt.Asset{}
+		return nil
 	}
 
 	var names []string
@@ -140,10 +139,10 @@ func (c *crtsh) query(e *et.Event, name string, src *dbt.Asset) []*dbt.Asset {
 	return c.store(e, names, src)
 }
 
-func (c *crtsh) store(e *et.Event, names []string, src *dbt.Asset) []*dbt.Asset {
+func (c *crtsh) store(e *et.Event, names []string, src *et.Source) []*dbt.Entity {
 	return support.StoreFQDNsWithSource(e.Session, names, src, c.name, c.name+"-Handler")
 }
 
-func (c *crtsh) process(e *et.Event, assets []*dbt.Asset, src *dbt.Asset) {
+func (c *crtsh) process(e *et.Event, assets []*dbt.Entity, src *et.Source) {
 	support.ProcessFQDNsWithSource(e, assets, src)
 }

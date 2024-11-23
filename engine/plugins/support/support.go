@@ -14,22 +14,21 @@ import (
 	"strings"
 	"time"
 
-	"github.com/caffix/queue"
 	"github.com/caffix/stringset"
 	"github.com/owasp-amass/amass/v4/config"
 	et "github.com/owasp-amass/amass/v4/engine/types"
 	amassnet "github.com/owasp-amass/amass/v4/utils/net"
 	"github.com/owasp-amass/amass/v4/utils/net/dns"
-	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/domain"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
+	"github.com/owasp-amass/open-asset-model/relation"
 	"github.com/owasp-amass/open-asset-model/url"
 	"github.com/owasp-amass/resolve"
 	xurls "mvdan.cc/xurls/v2"
 )
 
-type SweepCallback func(d *et.Event, addr *oamnet.IPAddress, src *dbt.Asset)
+type SweepCallback func(d *et.Event, addr *oamnet.IPAddress, src *et.Source)
 
 const MaxHandlerInstances int = 100
 
@@ -41,9 +40,6 @@ func init() {
 	rate := resolve.NewRateTracker()
 	trusted, _ = trustedResolvers()
 	trusted.SetRateTracker(rate)
-
-	dbQueue = queue.NewQueue()
-	go processDBCallbacks()
 
 	urlre = xurls.Relaxed()
 	subre = regexp.MustCompile(dns.AnySubdomainRegexString())
@@ -150,9 +146,9 @@ func IPToNetblock(session et.Session, ip *oamnet.IPAddress) (*oamnet.Netblock, e
 	var size int
 	var found *oamnet.Netblock
 
-	if assets, hit := session.Cache().GetAssetsByType(oam.Netblock); hit && len(assets) > 0 {
-		for _, a := range assets {
-			if nb, ok := a.Asset.(*oamnet.Netblock); ok && nb.CIDR.Contains(ip.Address) {
+	if entities, err := session.Cache().FindEntitiesByType(oam.Netblock, session.Cache().StartTime()); err == nil && len(entities) > 0 {
+		for _, entity := range entities {
+			if nb, ok := entity.Asset.(*oamnet.Netblock); ok && nb.CIDR.Contains(ip.Address) {
 				if s := nb.CIDR.Masked().Bits(); s > size {
 					size = s
 					found = nb
@@ -167,10 +163,10 @@ func IPToNetblock(session et.Session, ip *oamnet.IPAddress) (*oamnet.Netblock, e
 	return found, nil
 }
 
-func IPAddressSweep(e *et.Event, addr *oamnet.IPAddress, src *dbt.Asset, size int, callback SweepCallback) {
-	// do not work on an IP address that been processed previously
-	_, hit := e.Session.Cache().GetAsset(addr)
-	if hit {
+func IPAddressSweep(e *et.Event, addr *oamnet.IPAddress, src *et.Source, size int, callback SweepCallback) {
+	// do not work on an IP address that was processed previously
+	_, err := e.Session.Cache().FindEntityByContent(addr, e.Session.Cache().StartTime())
+	if err == nil {
 		return
 	}
 
@@ -207,47 +203,38 @@ func IPAddressSweep(e *et.Event, addr *oamnet.IPAddress, src *dbt.Asset, size in
 }
 
 func IsCNAME(session et.Session, name *domain.FQDN) (*domain.FQDN, bool) {
-	fqdn, hit := session.Cache().GetAsset(name)
-	if !hit || fqdn == nil {
+	fqdns, err := session.Cache().FindEntityByContent(name, session.Cache().StartTime())
+	if err != nil || len(fqdns) != 1 {
 		return nil, false
 	}
+	fqdn := fqdns[0]
 
-	if relations, hit := session.Cache().GetRelations(&dbt.Relation{
-		Type:      "cname_record",
-		FromAsset: fqdn,
-	}); hit && len(relations) > 0 {
-		if cname, ok := relations[0].ToAsset.Asset.(*domain.FQDN); ok {
-			return cname, true
+	if edges, err := session.Cache().OutgoingEdges(fqdn, session.Cache().StartTime(), "dns_record"); err == nil && len(edges) > 0 {
+		for _, edge := range edges {
+			if rec, ok := edge.Relation.(*relation.BasicDNSRelation); ok && rec.Header.RRType == 5 {
+				if cname, ok := edge.ToEntity.Asset.(*domain.FQDN); ok {
+					return cname, true
+				}
+			}
 		}
 	}
 	return nil, false
 }
 
 func NameIPAddresses(session et.Session, name *domain.FQDN) []*oamnet.IPAddress {
-	fqdn, hit := session.Cache().GetAsset(name)
-	if !hit || fqdn == nil {
+	fqdns, err := session.Cache().FindEntityByContent(name, session.Cache().StartTime())
+	if err != nil || len(fqdns) != 1 {
 		return nil
 	}
+	fqdn := fqdns[0]
 
 	var results []*oamnet.IPAddress
-	if relations, hit := session.Cache().GetRelations(&dbt.Relation{
-		Type:      "a_record",
-		FromAsset: fqdn,
-	}); hit && len(relations) > 0 {
-		for _, r := range relations {
-			if ip, ok := r.ToAsset.Asset.(*oamnet.IPAddress); ok {
-				results = append(results, ip)
-			}
-		}
-	}
-
-	if relations, hit := session.Cache().GetRelations(&dbt.Relation{
-		Type:      "aaaa_record",
-		FromAsset: fqdn,
-	}); hit && len(relations) > 0 {
-		for _, r := range relations {
-			if ip, ok := r.ToAsset.Asset.(*oamnet.IPAddress); ok {
-				results = append(results, ip)
+	if edges, err := session.Cache().OutgoingEdges(fqdn, session.Cache().StartTime(), "dns_record"); err == nil && len(edges) > 0 {
+		for _, edge := range edges {
+			if rec, ok := edge.Relation.(*relation.BasicDNSRelation); ok && (rec.Header.RRType == 1 || rec.Header.RRType == 28) {
+				if ip, ok := edge.ToEntity.Asset.(*oamnet.IPAddress); ok {
+					results = append(results, ip)
+				}
 			}
 		}
 	}

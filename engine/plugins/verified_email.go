@@ -52,7 +52,7 @@ func (v *verifiedEmail) Stop() {
 }
 
 func (v *verifiedEmail) check(e *et.Event) error {
-	email, ok := e.Asset.Asset.(*contact.EmailAddress)
+	email, ok := e.Entity.Asset.(*contact.EmailAddress)
 	if !ok {
 		return errors.New("failed to extract the EmailAddress asset")
 	}
@@ -67,7 +67,7 @@ func (v *verifiedEmail) check(e *et.Event) error {
 	}
 
 	if storeEmail {
-		_, _ = e.Session.DB().Create(nil, "", email)
+		_, _ = e.Session.Cache().CreateAsset(email)
 	}
 	return nil
 }

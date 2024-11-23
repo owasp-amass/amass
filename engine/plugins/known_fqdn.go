@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/owasp-amass/amass/v4/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v4/engine/types"
+	"github.com/owasp-amass/amass/v4/engine/utils"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/domain"
@@ -20,13 +20,11 @@ import (
 type knownFQDN struct {
 	name string
 	log  *slog.Logger
-	rels []string
 }
 
 func NewKnownFQDN() et.Plugin {
 	return &knownFQDN{
 		name: "Known-FQDN",
-		rels: []string{"a_record", "aaaa_record", "cname_record", "ns_record", "mx_record", "srv_record", "node"},
 	}
 }
 
@@ -58,7 +56,7 @@ func (d *knownFQDN) Stop() {
 }
 
 func (d *knownFQDN) check(e *et.Event) error {
-	fqdn, ok := e.Asset.Asset.(*domain.FQDN)
+	fqdn, ok := e.Entity.Asset.(*domain.FQDN)
 	if !ok {
 		return errors.New("failed to extract the FQDN asset")
 	}
@@ -68,50 +66,21 @@ func (d *knownFQDN) check(e *et.Event) error {
 		return nil
 	}
 
-	assets := d.lookup(e, fqdn)
-	if len(assets) == 0 {
-		e.Session.Log().Error("Failed to query the asset database",
-			slog.Group("plugin", "name", d.name, "handler", d.name+"-Handler"))
-		return nil
-	}
-
-	d.process(e, assets)
+	d.process(e, d.lookup(e, e.Entity))
 	return nil
 }
 
-func (d *knownFQDN) lookup(e *et.Event, dom *domain.FQDN) []*dbt.Asset {
-	var assets []*dbt.Asset
-
-	done := make(chan struct{}, 1)
-	support.AppendToDBQueue(func() {
-		defer func() { done <- struct{}{} }()
-
-		if e.Session.Done() {
-			return
-		}
-
-		names, err := e.Session.DB().FindByScope([]oam.Asset{dom}, time.Time{})
-		if err != nil || len(names) == 0 {
-			return
-		}
-
-		for _, name := range names {
-			if rels, err := e.Session.DB().OutgoingRelations(name, time.Time{}, d.rels...); err == nil && len(rels) > 0 {
-				assets = append(assets, name)
-			}
-		}
-	})
-	<-done
-	close(done)
-	return assets
+func (d *knownFQDN) lookup(e *et.Event, dom *dbt.Entity) []*dbt.Entity {
+	names, _ := utils.FindByFQDNScope(e.Session.Cache(), dom, time.Time{})
+	return names
 }
 
-func (d *knownFQDN) process(e *et.Event, assets []*dbt.Asset) {
-	for _, a := range assets {
-		if fqdn, ok := a.Asset.(*domain.FQDN); ok {
+func (d *knownFQDN) process(e *et.Event, names []*dbt.Entity) {
+	for _, n := range names {
+		if fqdn, ok := n.Asset.(*domain.FQDN); ok {
 			_ = e.Dispatcher.DispatchEvent(&et.Event{
 				Name:    fqdn.Name,
-				Asset:   a,
+				Entity:  n,
 				Session: e.Session,
 			})
 		}

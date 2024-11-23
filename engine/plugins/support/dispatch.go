@@ -6,89 +6,71 @@ package support
 
 import (
 	"log/slog"
-	"time"
 
 	et "github.com/owasp-amass/amass/v4/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
+	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/contact"
 	"github.com/owasp-amass/open-asset-model/domain"
+	"github.com/owasp-amass/open-asset-model/property"
 )
 
 type Finding struct {
-	From     *dbt.Asset
+	From     *dbt.Entity
 	FromName string
-	To       *dbt.Asset
+	To       *dbt.Entity
 	ToName   string
 	ToMeta   interface{}
-	Rel      string
+	Rel      oam.Relation
 }
 
-func ProcessAssetsWithSource(e *et.Event, findings []*Finding, src *dbt.Asset, pname, hname string) {
-	now := time.Now()
-
+func ProcessAssetsWithSource(e *et.Event, findings []*Finding, src *et.Source, pname, hname string) {
 	for _, finding := range findings {
 		_ = e.Dispatcher.DispatchEvent(&et.Event{
 			Name:    finding.ToName,
 			Meta:    finding.ToMeta,
-			Asset:   finding.To,
+			Entity:  finding.To,
 			Session: e.Session,
 		})
 
-		if to, hit := e.Session.Cache().GetAsset(finding.To.Asset); hit && to != nil {
-			if from, hit := e.Session.Cache().GetAsset(finding.From.Asset); hit && from != nil {
-				e.Session.Cache().SetRelation(&dbt.Relation{
-					Type:      finding.Rel,
-					CreatedAt: now,
-					LastSeen:  now,
-					FromAsset: finding.From,
-					ToAsset:   finding.To,
-				})
-				e.Session.Cache().SetRelation(&dbt.Relation{
-					Type:      "source",
-					CreatedAt: now,
-					LastSeen:  now,
-					FromAsset: finding.To,
-					ToAsset:   src,
-				})
-				e.Session.Log().Info("relationship discovered", "from", finding.FromName, "relation",
-					finding.Rel, "to", finding.ToName, slog.Group("plugin", "name", pname, "handler", hname))
-			}
+		if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
+			Relation:   finding.Rel,
+			FromEntity: finding.From,
+			ToEntity:   finding.To,
+		}); err == nil && edge != nil {
+			_, _ = e.Session.Cache().CreateEdgeProperty(edge, &property.SourceProperty{
+				Source:     src.Name,
+				Confidence: src.Confidence,
+			})
+			e.Session.Log().Info("relationship discovered", "from", finding.FromName, "relation",
+				finding.Rel, "to", finding.ToName, slog.Group("plugin", "name", pname, "handler", hname))
 		}
 	}
 }
 
-func ProcessFQDNsWithSource(e *et.Event, assets []*dbt.Asset, src *dbt.Asset) {
-	now := time.Now()
-
-	for _, a := range assets {
-		fqdn, ok := a.Asset.(*domain.FQDN)
+func ProcessFQDNsWithSource(e *et.Event, entities []*dbt.Entity, src *et.Source) {
+	for _, entity := range entities {
+		fqdn, ok := entity.Asset.(*domain.FQDN)
 		if !ok || fqdn == nil {
 			continue
 		}
 
 		_ = e.Dispatcher.DispatchEvent(&et.Event{
 			Name:    fqdn.Name,
-			Asset:   a,
+			Entity:  entity,
 			Session: e.Session,
 		})
 
-		if finding, hit := e.Session.Cache().GetAsset(a.Asset); hit && finding != nil {
-			e.Session.Cache().SetRelation(&dbt.Relation{
-				Type:      "source",
-				CreatedAt: now,
-				LastSeen:  now,
-				FromAsset: finding,
-				ToAsset:   src,
-			})
-		}
+		_, _ = e.Session.Cache().CreateEntityProperty(entity, &property.SourceProperty{
+			Source:     src.Name,
+			Confidence: src.Confidence,
+		})
 	}
 }
 
-func ProcessEmailsWithSource(e *et.Event, assets []*dbt.Asset, src *dbt.Asset) {
-	now := time.Now()
-
-	for _, a := range assets {
-		email, ok := a.Asset.(*contact.EmailAddress)
+func ProcessEmailsWithSource(e *et.Event, entities []*dbt.Entity, src *et.Source) {
+	for _, entity := range entities {
+		email, ok := entity.Asset.(*contact.EmailAddress)
 		if !ok || email == nil {
 			continue
 		}
@@ -108,18 +90,13 @@ func ProcessEmailsWithSource(e *et.Event, assets []*dbt.Asset, src *dbt.Asset) {
 		_ = e.Dispatcher.DispatchEvent(&et.Event{
 			Name:    email.Address,
 			Meta:    meta,
-			Asset:   a,
+			Entity:  entity,
 			Session: e.Session,
 		})
 
-		if finding, hit := e.Session.Cache().GetAsset(a.Asset); hit && finding != nil {
-			e.Session.Cache().SetRelation(&dbt.Relation{
-				Type:      "source",
-				CreatedAt: now,
-				LastSeen:  now,
-				FromAsset: finding,
-				ToAsset:   src,
-			})
-		}
+		_, _ = e.Session.Cache().CreateEntityProperty(entity, &property.SourceProperty{
+			Source:     src.Name,
+			Confidence: src.Confidence,
+		})
 	}
 }

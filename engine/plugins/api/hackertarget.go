@@ -18,7 +18,6 @@ import (
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/domain"
-	"github.com/owasp-amass/open-asset-model/source"
 	"go.uber.org/ratelimit"
 )
 
@@ -27,7 +26,7 @@ type hackerTarget struct {
 	url    string
 	log    *slog.Logger
 	rlimit ratelimit.Limiter
-	source *source.Source
+	source *et.Source
 }
 
 func NewHackerTarget() et.Plugin {
@@ -35,7 +34,7 @@ func NewHackerTarget() et.Plugin {
 		name:   "HackerTarget",
 		url:    "https://api.hackertarget.com/hostsearch/?q=",
 		rlimit: ratelimit.New(2, ratelimit.WithoutSlack),
-		source: &source.Source{
+		source: &et.Source{
 			Name:       "HackerTarget",
 			Confidence: 80,
 		},
@@ -91,7 +90,7 @@ func (ht *hackerTarget) check(e *et.Event) error {
 		return err
 	}
 
-	var names []*dbt.Asset
+	var names []*dbt.Entity
 	if support.AssetMonitoredWithinTTL(e.Session, e.Asset, src, since) {
 		names = append(names, ht.lookup(e, fqdn.Name, src, since)...)
 	} else {
@@ -105,15 +104,15 @@ func (ht *hackerTarget) check(e *et.Event) error {
 	return nil
 }
 
-func (ht *hackerTarget) lookup(e *et.Event, name string, src *dbt.Asset, since time.Time) []*dbt.Asset {
+func (ht *hackerTarget) lookup(e *et.Event, name string, src *et.Source, since time.Time) []*dbt.Entity {
 	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.FQDN), src, since)
 }
 
-func (ht *hackerTarget) query(e *et.Event, name string, src *dbt.Asset) []*dbt.Asset {
+func (ht *hackerTarget) query(e *et.Event, name string, src *et.Source) []*dbt.Entity {
 	ht.rlimit.Take()
 	resp, err := http.RequestWebPage(context.TODO(), &http.Request{URL: ht.url + name})
 	if err != nil {
-		return []*dbt.Asset{}
+		return nil
 	}
 
 	var names []string
@@ -133,10 +132,10 @@ func (ht *hackerTarget) query(e *et.Event, name string, src *dbt.Asset) []*dbt.A
 	return ht.store(e, names, src)
 }
 
-func (ht *hackerTarget) store(e *et.Event, names []string, src *dbt.Asset) []*dbt.Asset {
+func (ht *hackerTarget) store(e *et.Event, names []string, src *et.Source) []*dbt.Entity {
 	return support.StoreFQDNsWithSource(e.Session, names, src, ht.name, ht.name+"-Handler")
 }
 
-func (ht *hackerTarget) process(e *et.Event, assets []*dbt.Asset, src *dbt.Asset) {
+func (ht *hackerTarget) process(e *et.Event, assets []*dbt.Entity, src *et.Source) {
 	support.ProcessFQDNsWithSource(e, assets, src)
 }

@@ -20,7 +20,6 @@ import (
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/domain"
-	"github.com/owasp-amass/open-asset-model/source"
 	"go.uber.org/ratelimit"
 )
 
@@ -29,7 +28,7 @@ type wayback struct {
 	URL    string
 	log    *slog.Logger
 	rlimit ratelimit.Limiter
-	source *source.Source
+	source *et.Source
 }
 
 func NewWayback() et.Plugin {
@@ -37,7 +36,7 @@ func NewWayback() et.Plugin {
 		name:   "Wayback",
 		URL:    "https://web.archive.org/cdx/search/cdx?matchType=domain&fl=original&output=json&collapse=urlkey&url=",
 		rlimit: ratelimit.New(5, ratelimit.WithoutSlack),
-		source: &source.Source{
+		source: &et.Source{
 			Name:       "Wayback",
 			Confidence: 80,
 		},
@@ -72,7 +71,7 @@ func (w *wayback) Stop() {
 }
 
 func (w *wayback) check(e *et.Event) error {
-	fqdn, ok := e.Asset.Asset.(*domain.FQDN)
+	fqdn, ok := e.Entity.Asset.(*domain.FQDN)
 	if !ok {
 		return errors.New("failed to extract the FQDN asset")
 	}
@@ -93,7 +92,7 @@ func (w *wayback) check(e *et.Event) error {
 		return err
 	}
 
-	var names []*dbt.Asset
+	var names []*dbt.Entity
 	if support.AssetMonitoredWithinTTL(e.Session, e.Asset, src, since) {
 		names = append(names, w.lookup(e, fqdn.Name, src, since)...)
 	} else {
@@ -107,15 +106,15 @@ func (w *wayback) check(e *et.Event) error {
 	return nil
 }
 
-func (w *wayback) lookup(e *et.Event, name string, src *dbt.Asset, since time.Time) []*dbt.Asset {
+func (w *wayback) lookup(e *et.Event, name string, src *et.Source, since time.Time) []*dbt.Entity {
 	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.FQDN), src, since)
 }
 
-func (w *wayback) query(e *et.Event, name string, src *dbt.Asset) []*dbt.Asset {
+func (w *wayback) query(e *et.Event, name string, src *et.Source) []*dbt.Entity {
 	w.rlimit.Take()
 	resp, err := http.RequestWebPage(context.TODO(), &http.Request{URL: w.URL + name})
 	if err != nil {
-		return []*dbt.Asset{}
+		return nil
 	}
 
 	subs := stringset.New()
@@ -123,7 +122,7 @@ func (w *wayback) query(e *et.Event, name string, src *dbt.Asset) []*dbt.Asset {
 
 	var urls [][]string
 	if err := json.Unmarshal([]byte(resp.Body), &urls); err != nil {
-		return []*dbt.Asset{}
+		return nil
 	}
 
 	for _, url := range urls {
@@ -143,10 +142,10 @@ func (w *wayback) query(e *et.Event, name string, src *dbt.Asset) []*dbt.Asset {
 	return w.store(e, subs.Slice(), src)
 }
 
-func (w *wayback) store(e *et.Event, names []string, src *dbt.Asset) []*dbt.Asset {
+func (w *wayback) store(e *et.Event, names []string, src *et.Source) []*dbt.Entity {
 	return support.StoreFQDNsWithSource(e.Session, names, src, w.name, w.name+"-Handler")
 }
 
-func (w *wayback) process(e *et.Event, assets []*dbt.Asset, src *dbt.Asset) {
+func (w *wayback) process(e *et.Event, assets []*dbt.Entity, src *et.Source) {
 	support.ProcessFQDNsWithSource(e, assets, src)
 }

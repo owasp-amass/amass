@@ -19,7 +19,6 @@ import (
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/domain"
-	"github.com/owasp-amass/open-asset-model/source"
 	"go.uber.org/ratelimit"
 )
 
@@ -28,7 +27,7 @@ type duckDuckGo struct {
 	fmtstr string
 	log    *slog.Logger
 	rlimit ratelimit.Limiter
-	source *source.Source
+	source *et.Source
 }
 
 func NewDuckDuckGo() et.Plugin {
@@ -36,7 +35,7 @@ func NewDuckDuckGo() et.Plugin {
 		name:   "DuckDuckGo",
 		fmtstr: "https://html.duckduckgo.com/html/?q=site:%s -site:www.%s",
 		rlimit: ratelimit.New(2, ratelimit.WithoutSlack),
-		source: &source.Source{
+		source: &et.Source{
 			Name:       "DuckDuckGo",
 			Confidence: 60,
 		},
@@ -71,7 +70,7 @@ func (d *duckDuckGo) Stop() {
 }
 
 func (d *duckDuckGo) check(e *et.Event) error {
-	fqdn, ok := e.Asset.Asset.(*domain.FQDN)
+	fqdn, ok := e.Entity.Asset.(*domain.FQDN)
 	if !ok {
 		return errors.New("failed to extract the FQDN asset")
 	}
@@ -92,7 +91,7 @@ func (d *duckDuckGo) check(e *et.Event) error {
 		return err
 	}
 
-	var names []*dbt.Asset
+	var names []*dbt.Entity
 	if support.AssetMonitoredWithinTTL(e.Session, e.Asset, src, since) {
 		names = append(names, d.lookup(e, fqdn.Name, src, since)...)
 	} else {
@@ -106,18 +105,18 @@ func (d *duckDuckGo) check(e *et.Event) error {
 	return nil
 }
 
-func (d *duckDuckGo) lookup(e *et.Event, name string, src *dbt.Asset, since time.Time) []*dbt.Asset {
+func (d *duckDuckGo) lookup(e *et.Event, name string, src *et.Source, since time.Time) []*dbt.Entity {
 	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.FQDN), src, since)
 }
 
-func (d *duckDuckGo) query(e *et.Event, name string, src *dbt.Asset) []*dbt.Asset {
+func (d *duckDuckGo) query(e *et.Event, name string, src *et.Source) []*dbt.Entity {
 	subs := stringset.New()
 	defer subs.Close()
 
 	d.rlimit.Take()
 	resp, err := http.RequestWebPage(context.TODO(), &http.Request{URL: fmt.Sprintf(d.fmtstr, name, name)})
 	if err != nil || resp.Body == "" {
-		return []*dbt.Asset{}
+		return nil
 	}
 
 	for _, n := range support.ScrapeSubdomainNames(resp.Body) {
@@ -131,10 +130,10 @@ func (d *duckDuckGo) query(e *et.Event, name string, src *dbt.Asset) []*dbt.Asse
 	return d.store(e, subs.Slice(), src)
 }
 
-func (d *duckDuckGo) store(e *et.Event, names []string, src *dbt.Asset) []*dbt.Asset {
+func (d *duckDuckGo) store(e *et.Event, names []string, src *et.Source) []*dbt.Entity {
 	return support.StoreFQDNsWithSource(e.Session, names, src, d.name, d.name+"-Handler")
 }
 
-func (d *duckDuckGo) process(e *et.Event, assets []*dbt.Asset, src *dbt.Asset) {
+func (d *duckDuckGo) process(e *et.Event, assets []*dbt.Entity, src *et.Source) {
 	support.ProcessFQDNsWithSource(e, assets, src)
 }

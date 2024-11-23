@@ -7,293 +7,185 @@ package support
 import (
 	"errors"
 	"log/slog"
+	"net/netip"
 	"strconv"
 	"time"
 
-	"github.com/caffix/queue"
 	et "github.com/owasp-amass/amass/v4/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
+	"github.com/owasp-amass/asset-db/utils"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamcert "github.com/owasp-amass/open-asset-model/certificate"
 	"github.com/owasp-amass/open-asset-model/domain"
+	"github.com/owasp-amass/open-asset-model/property"
+	oamreg "github.com/owasp-amass/open-asset-model/registration"
 	"github.com/owasp-amass/open-asset-model/service"
-	"github.com/owasp-amass/open-asset-model/source"
 )
 
-var dbQueue queue.Queue
+func SourceToAssetsWithinTTL(session et.Session, name, atype string, src *et.Source, since time.Time) []*dbt.Entity {
+	var result []*dbt.Entity
 
-func AppendToDBQueue(callback func()) {
-	dbQueue.Append(callback)
-}
-
-func processDBCallbacks() {
-loop:
-	for {
-		select {
-		case <-done:
-			break loop
-		case <-dbQueue.Signal():
-			dbQueue.Process(func(data interface{}) {
-				if callback, ok := data.(func()); ok {
-					callback()
-				}
-			})
+	switch atype {
+	case string(oam.FQDN):
+		roots, err := session.Cache().FindEntityByContent(&domain.FQDN{Name: name}, since)
+		if err != nil || len(roots) != 1 {
+			return nil
 		}
-	}
+		root := roots[0]
 
-	dbQueue.Process(func(data interface{}) {
-		if callback, ok := data.(func()); ok {
-			callback()
-		}
-	})
-}
-
-func GetSource(session et.Session, psrc *source.Source) *dbt.Asset {
-	src, hit := session.Cache().GetAsset(psrc)
-	if hit && src != nil {
-		return src
-	}
-
-	done := make(chan *dbt.Asset, 1)
-	AppendToDBQueue(func() {
-		if session.Done() {
-			done <- nil
-			return
-		}
-
-		if refs, err := session.DB().FindByContent(psrc, time.Time{}); err == nil {
-			for _, ref := range refs {
-				if src, ok := ref.Asset.(*source.Source); ok && src != nil && src.Name == psrc.Name {
-					if datasrc, err := session.DB().FindById(ref.ID, time.Time{}); err == nil {
-						done <- datasrc
-						return
+		if entities, err := utils.FindByFQDNScope(session.Cache(), root, since); err == nil {
+			for _, entity := range entities {
+				if tags, err := session.Cache().GetEntityTags(entity, since, src.Name); err == nil && len(tags) > 0 {
+					for _, tag := range tags {
+						if tag.Property.PropertyType() == oam.SourceProperty {
+							result = append(result, entity)
+						}
 					}
 				}
 			}
 		}
+	case string(oam.EmailAddress):
+		if ents, err := session.Cache().FindEntityByContent(EmailToOAMEmailAddress(name), since); err == nil && len(ents) == 1 {
+			entity := ents[0]
 
-		datasrc, err := session.DB().Create(nil, "", psrc)
-		if err != nil {
-			done <- nil
-			return
+			if tags, err := session.Cache().GetEntityTags(entity, since, src.Name); err == nil && len(tags) > 0 {
+				for _, tag := range tags {
+					if tag.Property.PropertyType() == oam.SourceProperty {
+						result = append(result, entity)
+					}
+				}
+			}
 		}
-		done <- datasrc
-	})
+	case string(oam.AutnumRecord):
+		num, err := strconv.Atoi(name)
+		if err != nil {
+			return nil
+		}
 
-	src = <-done
-	if src != nil {
-		session.Cache().SetAsset(src)
+		if ents, err := session.Cache().FindEntityByContent(&oamreg.AutnumRecord{Number: num}, since); err == nil && len(ents) == 1 {
+			entity := ents[0]
+
+			if tags, err := session.Cache().GetEntityTags(entity, since, src.Name); err == nil && len(tags) > 0 {
+				for _, tag := range tags {
+					if tag.Property.PropertyType() == oam.SourceProperty {
+						result = append(result, entity)
+					}
+				}
+			}
+		}
+	case string(oam.IPNetRecord):
+		prefix, err := netip.ParsePrefix(name)
+		if err != nil {
+			return nil
+		}
+
+		if ents, err := session.Cache().FindEntityByContent(&oamreg.IPNetRecord{CIDR: prefix}, since); err == nil && len(ents) == 1 {
+			entity := ents[0]
+
+			if tags, err := session.Cache().GetEntityTags(entity, since, src.Name); err == nil && len(tags) > 0 {
+				for _, tag := range tags {
+					if tag.Property.PropertyType() == oam.SourceProperty {
+						result = append(result, entity)
+					}
+				}
+			}
+		}
+	case string(oam.Service):
+		if ents, err := session.Cache().FindEntityByContent(&service.Service{Identifier: name}, since); err == nil && len(ents) == 1 {
+			entity := ents[0]
+
+			if tags, err := session.Cache().GetEntityTags(entity, since, src.Name); err == nil && len(tags) > 0 {
+				for _, tag := range tags {
+					if tag.Property.PropertyType() == oam.SourceProperty {
+						result = append(result, entity)
+					}
+				}
+			}
+		}
 	}
-	close(done)
-	return src
 }
 
-func SourceToAssetsWithinTTL(session et.Session, name, atype string, src *dbt.Asset, since time.Time) []*dbt.Asset {
-	var results []*dbt.Asset
+func StoreFQDNsWithSource(session et.Session, names []string, src *et.Source, plugin, handler string) []*dbt.Entity {
+	var results []*dbt.Entity
 
-	done := make(chan struct{}, 1)
-	AppendToDBQueue(func() {
-		defer func() { done <- struct{}{} }()
+	if len(names) == 0 || src == nil {
+		return results
+	}
 
-		if session.Done() {
-			return
+	for _, name := range names {
+		if a, err := session.Cache().CreateAsset(&domain.FQDN{Name: name}); err == nil && a != nil {
+			results = append(results, a)
+			_, _ = session.Cache().CreateEntityProperty(a, &property.SourceProperty{
+				Source:     src.Name,
+				Confidence: src.Confidence,
+			})
+		} else {
+			session.Log().Error(err.Error(), slog.Group("plugin", "name", plugin, "handler", handler))
 		}
+	}
 
-		if !since.IsZero() {
-			return
-		}
-
-		oursrc, ok := src.Asset.(*source.Source)
-		if !ok || oursrc == nil {
-			return
-		}
-
-		from := "((assets as srcs inner join relations on srcs.id = relations.to_asset_id) "
-		from2 := "inner join assets on relations.from_asset_id = assets.id) "
-		where := "where srcs.type = 'Source' and assets.type = '" + atype + "' and relations.type = 'source' "
-		where2 := "and relations.last_seen > '" + since.Format("2006-01-02 15:04:05") + "'"
-		where3 := " and srcs.content->>'name' = '" + oursrc.Name + "'"
-
-		var like string
-		switch atype {
-		case string(oam.FQDN):
-			like = " and assets.content->>'name' like '%" + name + "'"
-		case string(oam.EmailAddress):
-			like = " and assets.content->>'address' = '" + name + "'"
-		case string(oam.AutnumRecord):
-			like = " and assets.content->>'number' = " + name
-		case string(oam.IPNetRecord):
-			like = " and assets.content->>'cidr' = '" + name + "'"
-		case string(oam.NetworkEndpoint):
-			like = " and assets.content->>'address' = '" + name + "'"
-		case string(oam.Service):
-			like = " and assets.content->>'identifier' = '" + name + "'"
-		}
-
-		query := from + from2 + where + where2 + where3 + like
-		if assets, err := session.DB().AssetQuery(query); err == nil && len(assets) > 0 {
-			results = append(results, assets...)
-		}
-	})
-	<-done
-	close(done)
 	return results
 }
 
-func StoreFQDNsWithSource(session et.Session, names []string, src *dbt.Asset, plugin, handler string) []*dbt.Asset {
-	var assets []*dbt.Asset
-
-	if len(names) == 0 || src == nil {
-		return assets
-	}
-
-	done := make(chan struct{}, 1)
-	AppendToDBQueue(func() {
-		defer func() { done <- struct{}{} }()
-
-		if session.Done() {
-			return
-		}
-
-		for _, name := range names {
-			if a, err := session.DB().Create(nil, "", &domain.FQDN{Name: name}); err == nil {
-				if a != nil {
-					assets = append(assets, a)
-					_, _ = session.DB().Link(a, "source", src)
-				}
-			} else {
-				session.Log().Error(err.Error(), slog.Group("plugin", "name", plugin, "handler", handler))
-			}
-		}
-	})
-	<-done
-	close(done)
-	return assets
-}
-
-func StoreEmailsWithSource(session et.Session, emails []string, src *dbt.Asset, plugin, handler string) []*dbt.Asset {
-	var assets []*dbt.Asset
+func StoreEmailsWithSource(session et.Session, emails []string, src *et.Source, plugin, handler string) []*dbt.Entity {
+	var results []*dbt.Entity
 
 	if len(emails) == 0 || src == nil {
-		return assets
+		return results
 	}
 
-	done := make(chan struct{}, 1)
-	AppendToDBQueue(func() {
-		defer func() { done <- struct{}{} }()
-
-		if session.Done() {
-			return
+	for _, email := range emails {
+		e := EmailToOAMEmailAddress(email)
+		if e == nil {
+			continue
 		}
-
-		for _, email := range emails {
-			e := EmailToOAMEmailAddress(email)
-			if e == nil {
-				continue
-			}
-			if a, err := session.DB().Create(nil, "", e); err == nil {
-				if a != nil {
-					assets = append(assets, a)
-					_, _ = session.DB().Link(a, "source", src)
-				}
-			} else {
-				session.Log().Error(err.Error(), slog.Group("plugin", "name", plugin, "handler", handler))
-			}
+		if a, err := session.Cache().CreateAsset(e); err == nil && a != nil {
+			results = append(results, a)
+			_, _ = session.Cache().CreateEntityProperty(a, &property.SourceProperty{
+				Source:     src.Name,
+				Confidence: src.Confidence,
+			})
+		} else {
+			session.Log().Error(err.Error(), slog.Group("plugin", "name", plugin, "handler", handler))
 		}
-	})
-	<-done
-	close(done)
-	return assets
+	}
+
+	return results
 }
 
-func MarkAssetMonitored(session et.Session, asset, src *dbt.Asset) {
+func MarkAssetMonitored(session et.Session, asset *dbt.Entity, src *et.Source) {
 	if asset == nil || src == nil {
 		return
 	}
 
-	done := make(chan *dbt.Relation, 1)
-	AppendToDBQueue(func() {
-		if session.Done() {
-			done <- nil
-			return
+	if tags, err := session.Cache().GetEntityTags(asset, time.Time{}, "last_monitored"); err == nil && len(tags) > 0 {
+		for _, tag := range tags {
+			if tag.Property.Value() == src.Name {
+				_ = session.Cache().DeleteEntityTag(tag.ID)
+			}
 		}
+	}
 
-		rel, _ := session.DB().Link(asset, "monitored_by", src)
-		done <- rel
+	_, _ = session.Cache().CreateEntityProperty(asset, property.SimpleProperty{
+		PropertyName:  "last_monitored",
+		PropertyValue: src.Name,
 	})
-	rel := <-done
-	close(done)
-
-	if rel == nil {
-		return
-	}
-
-	if a, hit := session.Cache().GetAsset(asset.Asset); hit && a != nil {
-		if s, hit := session.Cache().GetAsset(src.Asset); hit && s != nil {
-			session.Cache().SetRelation(rel)
-		}
-	}
 }
 
-func AssetMonitoredWithinTTL(session et.Session, asset, src *dbt.Asset, since time.Time) bool {
+func AssetMonitoredWithinTTL(session et.Session, asset *dbt.Entity, src *et.Source, since time.Time) bool {
 	if asset == nil || src == nil || !since.IsZero() {
 		return false
 	}
 
-	oursrc, ok := src.Asset.(*source.Source)
-	if !ok || oursrc == nil {
-		return false
-	}
-
-	now := time.Now()
-	a, hit := session.Cache().GetAsset(asset.Asset)
-	if hit && a != nil {
-		if _, found := session.Cache().GetRelations(&dbt.Relation{
-			Type:      "monitored_by",
-			CreatedAt: now,
-			LastSeen:  now,
-			FromAsset: a,
-			ToAsset:   src,
-		}); found {
-			return true
+	if tags, err := session.Cache().GetEntityTags(asset, since, "last_monitored"); err == nil && len(tags) > 0 {
+		for _, tag := range tags {
+			if tag.Property.Value() == src.Name {
+				return true
+			}
 		}
 	}
 
-	done := make(chan bool, 1)
-	AppendToDBQueue(func() {
-		if session.Done() {
-			done <- false
-			return
-		}
-
-		from := "((assets inner join relations on assets.id = relations.from_asset_id) "
-		from2 := "inner join assets as srcs on relations.to_asset_id = srcs.id) "
-		where := "where srcs.type = 'Source' and assets.id = " + asset.ID + " and relations.type = 'monitored_by' "
-		where2 := "and relations.last_seen > '" + since.Format("2006-01-02 15:04:05") + "'"
-		where3 := " and srcs.content->>'name' = '" + oursrc.Name + "'"
-
-		var monitored bool
-		query := from + from2 + where + where2 + where3
-		if assets, err := session.DB().AssetQuery(query); err == nil && len(assets) > 0 {
-			monitored = true
-		}
-		done <- monitored
-	})
-
-	monitored := <-done
-	close(done)
-
-	if monitored {
-		now = time.Now()
-		session.Cache().SetRelation(&dbt.Relation{
-			Type:      "monitored_by",
-			CreatedAt: now,
-			LastSeen:  now,
-			FromAsset: a,
-			ToAsset:   src,
-		})
-	}
-	return monitored
+	return false
 }
 
 func CreateServiceAsset(session et.Session, src *dbt.Asset, relation string, serv *service.Service, cert *oamcert.TLSCertificate) (*dbt.Asset, error) {

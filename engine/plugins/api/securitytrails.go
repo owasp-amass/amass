@@ -19,7 +19,6 @@ import (
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/domain"
-	"github.com/owasp-amass/open-asset-model/source"
 	"go.uber.org/ratelimit"
 )
 
@@ -27,14 +26,14 @@ type securityTrails struct {
 	name   string
 	log    *slog.Logger
 	rlimit ratelimit.Limiter
-	source *source.Source
+	source *et.Source
 }
 
 func NewSecurityTrails() et.Plugin {
 	return &securityTrails{
 		name:   "SecurityTrails",
 		rlimit: ratelimit.New(2, ratelimit.WithoutSlack),
-		source: &source.Source{
+		source: &et.Source{
 			Name:       "SecurityTrails",
 			Confidence: 80,
 		},
@@ -102,7 +101,7 @@ func (st *securityTrails) check(e *et.Event) error {
 		return err
 	}
 
-	var names []*dbt.Asset
+	var names []*dbt.Entity
 	if support.AssetMonitoredWithinTTL(e.Session, e.Asset, src, since) {
 		names = append(names, st.lookup(e, fqdn.Name, src, since)...)
 	} else {
@@ -116,11 +115,11 @@ func (st *securityTrails) check(e *et.Event) error {
 	return nil
 }
 
-func (st *securityTrails) lookup(e *et.Event, name string, src *dbt.Asset, since time.Time) []*dbt.Asset {
+func (st *securityTrails) lookup(e *et.Event, name string, src *et.Source, since time.Time) []*dbt.Entity {
 	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.FQDN), src, since)
 }
 
-func (st *securityTrails) query(e *et.Event, name string, src *dbt.Asset, keys []string) []*dbt.Asset {
+func (st *securityTrails) query(e *et.Event, name string, src *et.Source, keys []string) []*dbt.Entity {
 	var names []string
 
 	for _, key := range keys {
@@ -153,10 +152,10 @@ func (st *securityTrails) query(e *et.Event, name string, src *dbt.Asset, keys [
 	return st.store(e, names, src)
 }
 
-func (st *securityTrails) store(e *et.Event, names []string, src *dbt.Asset) []*dbt.Asset {
+func (st *securityTrails) store(e *et.Event, names []string, src *et.Source) []*dbt.Entity {
 	return support.StoreFQDNsWithSource(e.Session, names, src, st.name, st.name+"-Handler")
 }
 
-func (st *securityTrails) process(e *et.Event, assets []*dbt.Asset, src *dbt.Asset) {
+func (st *securityTrails) process(e *et.Event, assets []*dbt.Entity, src *et.Source) {
 	support.ProcessFQDNsWithSource(e, assets, src)
 }

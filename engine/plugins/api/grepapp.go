@@ -23,7 +23,6 @@ import (
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/domain"
-	"github.com/owasp-amass/open-asset-model/source"
 	"go.uber.org/ratelimit"
 )
 
@@ -31,14 +30,14 @@ type grepApp struct {
 	name   string
 	log    *slog.Logger
 	rlimit ratelimit.Limiter
-	source *source.Source
+	source *et.Source
 }
 
 func NewGrepApp() et.Plugin {
 	return &grepApp{
 		name:   "Grep.App",
 		rlimit: ratelimit.New(2, ratelimit.WithoutSlack),
-		source: &source.Source{
+		source: &et.Source{
 			Name:       "Grep.App",
 			Confidence: 50,
 		},
@@ -95,7 +94,7 @@ func (g *grepApp) check(e *et.Event) error {
 		return err
 	}
 
-	var names []*dbt.Asset
+	var names []*dbt.Entity
 	if support.AssetMonitoredWithinTTL(e.Session, e.Asset, src, since) {
 		names = append(names, g.lookup(e, fqdn.Name, src, since)...)
 	} else {
@@ -108,11 +107,11 @@ func (g *grepApp) check(e *et.Event) error {
 	}
 	return nil
 }
-func (g *grepApp) lookup(e *et.Event, name string, src *dbt.Asset, since time.Time) []*dbt.Asset {
+func (g *grepApp) lookup(e *et.Event, name string, src *et.Source, since time.Time) []*dbt.Entity {
 	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.EmailAddress), src, since)
 }
 
-func (g *grepApp) query(e *et.Event, name string, src *dbt.Asset) []*dbt.Asset {
+func (g *grepApp) query(e *et.Event, name string, src *et.Source) []*dbt.Entity {
 	newdlt := strings.ReplaceAll(name, ".", `\.`)
 	escapedQuery := url.QueryEscape("([a-zA-Z0-9._-]+)@" + newdlt)
 	re := regexp.MustCompile(`([a-zA-Z0-9._-]+)@` + newdlt)
@@ -157,10 +156,10 @@ func (g *grepApp) query(e *et.Event, name string, src *dbt.Asset) []*dbt.Asset {
 	return g.store(e, emails.Slice(), src)
 }
 
-func (g *grepApp) store(e *et.Event, emails []string, src *dbt.Asset) []*dbt.Asset {
+func (g *grepApp) store(e *et.Event, emails []string, src *et.Source) []*dbt.Entity {
 	return support.StoreEmailsWithSource(e.Session, emails, src, g.name, g.name+"-Handler")
 }
 
-func (g *grepApp) process(e *et.Event, assets []*dbt.Asset, src *dbt.Asset) {
+func (g *grepApp) process(e *et.Event, assets []*dbt.Entity, src *et.Source) {
 	support.ProcessEmailsWithSource(e, assets, src)
 }

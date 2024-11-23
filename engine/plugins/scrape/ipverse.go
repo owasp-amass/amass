@@ -19,7 +19,6 @@ import (
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
-	"github.com/owasp-amass/open-asset-model/source"
 	"go.uber.org/ratelimit"
 )
 
@@ -28,7 +27,7 @@ type ipverse struct {
 	fmtstr string
 	log    *slog.Logger
 	rlimit ratelimit.Limiter
-	source *source.Source
+	source *et.Source
 }
 
 func NewIPVerse() et.Plugin {
@@ -36,7 +35,7 @@ func NewIPVerse() et.Plugin {
 		name:   "GitHub-IPVerse",
 		fmtstr: "https://raw.githubusercontent.com/ipverse/asn-ip/master/as/%d/aggregated.json",
 		rlimit: ratelimit.New(5, ratelimit.WithoutSlack),
-		source: &source.Source{
+		source: &et.Source{
 			Name:       "GitHub-IPVerse",
 			Confidence: 90,
 		},
@@ -70,7 +69,7 @@ func (v *ipverse) Stop() {
 }
 
 func (v *ipverse) check(e *et.Event) error {
-	_, ok := e.Asset.Asset.(*oamnet.AutonomousSystem)
+	_, ok := e.Entity.Asset.(*oamnet.AutonomousSystem)
 	if !ok {
 		return errors.New("failed to extract the AutonomousSystem asset")
 	}
@@ -86,7 +85,7 @@ func (v *ipverse) check(e *et.Event) error {
 		return err
 	}
 
-	var cidrs []*dbt.Asset
+	var cidrs []*dbt.Entity
 	if support.AssetMonitoredWithinTTL(e.Session, e.Asset, src, since) {
 		cidrs = append(cidrs, v.lookup(e, e.Asset, since)...)
 	} else {
@@ -100,11 +99,11 @@ func (v *ipverse) check(e *et.Event) error {
 	return nil
 }
 
-func (v *ipverse) lookup(e *et.Event, as *dbt.Asset, since time.Time) []*dbt.Asset {
+func (v *ipverse) lookup(e *et.Event, as *dbt.Entity, since time.Time) []*dbt.Entity {
 	done := make(chan struct{}, 1)
 	defer close(done)
 
-	var assets []*dbt.Asset
+	var assets []*dbt.Entity
 	support.AppendToDBQueue(func() {
 		defer func() { done <- struct{}{} }()
 

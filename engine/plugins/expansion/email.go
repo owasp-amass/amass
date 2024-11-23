@@ -15,19 +15,18 @@ import (
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/contact"
 	"github.com/owasp-amass/open-asset-model/domain"
-	"github.com/owasp-amass/open-asset-model/source"
 )
 
 type emailexpand struct {
 	name   string
 	log    *slog.Logger
-	source *source.Source
+	source *et.Source
 }
 
 func NewEmails() et.Plugin {
 	return &emailexpand{
 		name: "Email-Expansion",
-		source: &source.Source{
+		source: &et.Source{
 			Name:       "Email-Expansion",
 			Confidence: 100,
 		},
@@ -60,7 +59,7 @@ func (ee *emailexpand) Stop() {
 }
 
 func (ee *emailexpand) check(e *et.Event) error {
-	oame, ok := e.Asset.Asset.(*contact.EmailAddress)
+	oame, ok := e.Entity.Asset.(*contact.EmailAddress)
 	if !ok {
 		return errors.New("failed to extract the EmailAddress asset")
 	}
@@ -93,7 +92,7 @@ func (ee *emailexpand) check(e *et.Event) error {
 	return nil
 }
 
-func (ee *emailexpand) lookup(e *et.Event, asset *dbt.Asset, since time.Time) []*support.Finding {
+func (ee *emailexpand) lookup(e *et.Event, asset *dbt.Entity, since time.Time) []*support.Finding {
 	var findings []*support.Finding
 
 	done := make(chan struct{}, 1)
@@ -123,7 +122,7 @@ func (ee *emailexpand) lookup(e *et.Event, asset *dbt.Asset, since time.Time) []
 	return findings
 }
 
-func (ee *emailexpand) store(e *et.Event, asset, src *dbt.Asset) []*support.Finding {
+func (ee *emailexpand) store(e *et.Event, asset, src *et.Source) []*support.Finding {
 	oame := asset.Asset.(*contact.EmailAddress)
 	var findings []*support.Finding
 
@@ -153,6 +152,6 @@ func (ee *emailexpand) store(e *et.Event, asset, src *dbt.Asset) []*support.Find
 	return findings
 }
 
-func (ee *emailexpand) process(e *et.Event, findings []*support.Finding, src *dbt.Asset) {
+func (ee *emailexpand) process(e *et.Event, findings []*support.Finding, src *et.Source) {
 	support.ProcessAssetsWithSource(e, findings, src, ee.name, ee.name+"-Handler")
 }

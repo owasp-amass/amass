@@ -19,7 +19,6 @@ import (
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/domain"
-	"github.com/owasp-amass/open-asset-model/source"
 	"go.uber.org/ratelimit"
 )
 
@@ -30,7 +29,7 @@ type Prospeo struct {
 	queryurl string
 	log      *slog.Logger
 	rlimit   ratelimit.Limiter
-	source   *source.Source
+	source   *et.Source
 }
 
 func NewProspeo() et.Plugin {
@@ -40,7 +39,7 @@ func NewProspeo() et.Plugin {
 		counturl: "https://api.prospeo.io/email-count",
 		queryurl: "https://api.prospeo.io/domain-search",
 		rlimit:   ratelimit.New(15, ratelimit.WithoutSlack),
-		source: &source.Source{
+		source: &et.Source{
 			Name:       "Prospeo",
 			Confidence: 80,
 		},
@@ -95,7 +94,7 @@ func (p *Prospeo) check(e *et.Event) error {
 		return err
 	}
 
-	var names []*dbt.Asset
+	var names []*dbt.Entity
 	if support.AssetMonitoredWithinTTL(e.Session, e.Asset, src, since) {
 		names = append(names, p.lookup(e, fqdn.Name, src, since)...)
 	} else {
@@ -109,24 +108,24 @@ func (p *Prospeo) check(e *et.Event) error {
 	return nil
 }
 
-func (p *Prospeo) lookup(e *et.Event, name string, src *dbt.Asset, since time.Time) []*dbt.Asset {
+func (p *Prospeo) lookup(e *et.Event, name string, src *et.Source, since time.Time) []*dbt.Entity {
 	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.EmailAddress), src, since)
 }
 
-func (p *Prospeo) query(e *et.Event, name string, src *dbt.Asset) []*dbt.Asset {
+func (p *Prospeo) query(e *et.Event, name string, src *et.Source) []*dbt.Entity {
 	key, err := support.GetAPI(p.name, e)
 	if err != nil {
-		return []*dbt.Asset{}
+		return nil
 	}
 
 	rcreds, err := p.accountType(key)
 	if err != nil || key == "" {
-		return []*dbt.Asset{}
+		return nil
 	}
 
 	count, err := p.count(name, key)
 	if err != nil {
-		return []*dbt.Asset{}
+		return nil
 	}
 
 	limit := rcreds * 50
@@ -142,7 +141,7 @@ func (p *Prospeo) query(e *et.Event, name string, src *dbt.Asset) []*dbt.Asset {
 		Header: http.Header{"Content-Type": []string{"application/json"}, "X-KEY": []string{key}},
 	})
 	if err != nil {
-		return []*dbt.Asset{}
+		return nil
 	}
 
 	var r struct {
@@ -153,7 +152,7 @@ func (p *Prospeo) query(e *et.Event, name string, src *dbt.Asset) []*dbt.Asset {
 		} `json:"response"`
 	}
 	if err := json.Unmarshal([]byte(resp.Body), &r); err != nil {
-		return []*dbt.Asset{}
+		return nil
 	}
 
 	var emails []string
@@ -163,11 +162,11 @@ func (p *Prospeo) query(e *et.Event, name string, src *dbt.Asset) []*dbt.Asset {
 	return p.store(e, emails, src)
 }
 
-func (p *Prospeo) store(e *et.Event, emails []string, src *dbt.Asset) []*dbt.Asset {
+func (p *Prospeo) store(e *et.Event, emails []string, src *et.Source) []*dbt.Entity {
 	return support.StoreEmailsWithSource(e.Session, emails, src, p.name, p.name+"-Handler")
 }
 
-func (p *Prospeo) process(e *et.Event, assets []*dbt.Asset, src *dbt.Asset) {
+func (p *Prospeo) process(e *et.Event, assets []*dbt.Entity, src *et.Source) {
 	support.ProcessEmailsWithSource(e, assets, src)
 }
 

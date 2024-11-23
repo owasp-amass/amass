@@ -20,7 +20,6 @@ import (
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/domain"
-	"github.com/owasp-amass/open-asset-model/source"
 	"go.uber.org/ratelimit"
 )
 
@@ -28,14 +27,14 @@ type passiveTotal struct {
 	name   string
 	log    *slog.Logger
 	rlimit ratelimit.Limiter
-	source *source.Source
+	source *et.Source
 }
 
 func NewPassiveTotal() et.Plugin {
 	return &passiveTotal{
 		name:   "PassiveTotal",
 		rlimit: ratelimit.New(10, ratelimit.WithoutSlack),
-		source: &source.Source{
+		source: &et.Source{
 			Name:       "PassiveTotal",
 			Confidence: 30,
 		},
@@ -70,7 +69,7 @@ func (pt *passiveTotal) Stop() {
 }
 
 func (pt *passiveTotal) check(e *et.Event) error {
-	fqdn, ok := e.Asset.Asset.(*domain.FQDN)
+	fqdn, ok := e.Entity.Asset.(*domain.FQDN)
 	if !ok {
 		return errors.New("failed to extract the FQDN asset")
 	}
@@ -96,7 +95,7 @@ func (pt *passiveTotal) check(e *et.Event) error {
 		return err
 	}
 
-	var names []*dbt.Asset
+	var names []*dbt.Entity
 	if support.AssetMonitoredWithinTTL(e.Session, e.Asset, src, since) {
 		names = append(names, pt.lookup(e, fqdn.Name, src, since)...)
 	} else {
@@ -110,11 +109,11 @@ func (pt *passiveTotal) check(e *et.Event) error {
 	return nil
 }
 
-func (pt *passiveTotal) lookup(e *et.Event, name string, src *dbt.Asset, since time.Time) []*dbt.Asset {
+func (pt *passiveTotal) lookup(e *et.Event, name string, src *et.Source, since time.Time) []*dbt.Entity {
 	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.FQDN), src, since)
 }
 
-func (pt *passiveTotal) query(e *et.Event, name string, src *dbt.Asset, ds *config.DataSource) []*dbt.Asset {
+func (pt *passiveTotal) query(e *et.Event, name string, src *et.Source, ds *config.DataSource) []*dbt.Entity {
 	names := support.NewFQDNFilter()
 	defer names.Close()
 
@@ -170,10 +169,10 @@ loop:
 	return pt.store(e, names.Slice(), src)
 }
 
-func (pt *passiveTotal) store(e *et.Event, names []string, src *dbt.Asset) []*dbt.Asset {
+func (pt *passiveTotal) store(e *et.Event, names []string, src *et.Source) []*dbt.Entity {
 	return support.StoreFQDNsWithSource(e.Session, names, src, pt.name, pt.name+"-Handler")
 }
 
-func (pt *passiveTotal) process(e *et.Event, assets []*dbt.Asset, src *dbt.Asset) {
+func (pt *passiveTotal) process(e *et.Event, assets []*dbt.Entity, src *et.Source) {
 	support.ProcessFQDNsWithSource(e, assets, src)
 }

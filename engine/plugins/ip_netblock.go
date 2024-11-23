@@ -18,6 +18,7 @@ import (
 	oam "github.com/owasp-amass/open-asset-model"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
+	"github.com/owasp-amass/open-asset-model/relation"
 )
 
 type ipNetblock struct {
@@ -60,7 +61,7 @@ func (d *ipNetblock) Stop() {
 // ipLookup function queries the bgptools whois server using an
 // IP address to retrieve related ASN, netblock, and RIR details.
 func (d *ipNetblock) lookup(e *et.Event) error {
-	ip, ok := e.Asset.Asset.(*oamnet.IPAddress)
+	ip, ok := e.Entity.Asset.(*oamnet.IPAddress)
 	if !ok {
 		return errors.New("failed to extract the IPAddress asset")
 	}
@@ -90,97 +91,52 @@ func (d *ipNetblock) lookup(e *et.Event) error {
 		}
 	}
 
-	var a, nb *dbt.Asset
-	done := make(chan struct{}, 1)
-	support.AppendToDBQueue(func() {
-		defer func() { done <- struct{}{} }()
-
-		if e.Session.Done() {
-			return
-		}
-
-		var err error
-		nb, err = e.Session.DB().Create(nil, "", netblock)
-		if err == nil {
-			a, _ = e.Session.DB().Create(nb, "contains", ip)
-		}
-	})
-	<-done
-	close(done)
-
-	if a != nil && nb != nil {
-		now := time.Now()
-
-		e.Session.Cache().SetRelation(&dbt.Relation{
-			Type:      "contains",
-			CreatedAt: now,
-			LastSeen:  now,
-			FromAsset: nb,
-			ToAsset:   a,
+	if nb, err := e.Session.Cache().CreateAsset(netblock); err == nil && nb != nil {
+		_, _ = e.Session.Cache().CreateEdge(&dbt.Edge{
+			Relation:   &relation.SimpleRelation{Name: "contains"},
+			FromEntity: nb,
+			ToEntity:   e.Entity,
 		})
 
 		e.Session.Log().Info("relationship discovered", "from",
 			netblock.CIDR.String(), "relation", "contains", "to", ip.Address.String(),
 			slog.Group("plugin", "name", d.name, "handler", d.name+"-Handler"))
 	}
+
 	return nil
 }
 
 func (d *ipNetblock) reservedAS(e *et.Event, netblock *oamnet.Netblock) {
-	now := time.Now()
 	group := slog.Group("plugin", "name", d.name, "handler", d.name+"-Handler")
 
-	var asn, autnum, nb *dbt.Asset
-	done := make(chan struct{}, 1)
-	support.AppendToDBQueue(func() {
-		defer func() { done <- struct{}{} }()
-
-		if e.Session.Done() {
-			return
-		}
-
-		var err error
-		asn, err = e.Session.DB().Create(nil, "", &oamnet.AutonomousSystem{Number: 0})
-		if err == nil && asn != nil {
-			autnum, _ = e.Session.DB().Create(asn, "registration", &oamreg.AutnumRecord{
-				Number: 0,
-				Handle: "AS0",
-				Name:   "Reserved Network Address Blocks",
-			})
-			nb, _ = e.Session.DB().Create(asn, "announces", netblock)
-		}
-	})
-	<-done
-	close(done)
-
-	if asn == nil || autnum == nil {
-		return
-	}
-
-	e.Session.Cache().SetAsset(asn)
-	e.Session.Cache().SetAsset(autnum)
-	e.Session.Cache().SetRelation(&dbt.Relation{
-		Type:      "registration",
-		CreatedAt: now,
-		LastSeen:  now,
-		FromAsset: asn,
-		ToAsset:   autnum,
-	})
-
-	e.Session.Log().Info("relationship discovered", "from", 0, "relation",
-		"registration", "to", "Reserved Network Address Blocks", group)
-
-	if nb != nil {
-		e.Session.Cache().SetAsset(nb)
-		e.Session.Cache().SetRelation(&dbt.Relation{
-			Type:      "announces",
-			CreatedAt: now,
-			LastSeen:  now,
-			FromAsset: asn,
-			ToAsset:   nb,
+	asn, err := e.Session.Cache().CreateAsset(&oamnet.AutonomousSystem{Number: 0})
+	if err == nil && asn != nil {
+		autnum, err := e.Session.Cache().CreateAsset(&oamreg.AutnumRecord{
+			Number: 0,
+			Handle: "AS0",
+			Name:   "Reserved Network Address Blocks",
 		})
 
-		e.Session.Log().Info("relationship discovered", "from", 0,
-			"relation", "announces", "to", netblock.CIDR.String(), group)
+		if err == nil && autnum != nil {
+			_, _ = e.Session.Cache().CreateEdge(&dbt.Edge{
+				Relation:   &relation.SimpleRelation{Name: "registration"},
+				FromEntity: asn,
+				ToEntity:   autnum,
+			})
+
+			e.Session.Log().Info("relationship discovered", "from", 0, "relation",
+				"registration", "to", "Reserved Network Address Blocks", group)
+		}
+
+		if nb, err := e.Session.Cache().CreateAsset(netblock); err == nil && nb != nil {
+			_, _ = e.Session.Cache().CreateEdge(&dbt.Edge{
+				Relation:   &relation.SimpleRelation{Name: "announces"},
+				FromEntity: asn,
+				ToEntity:   nb,
+			})
+
+			e.Session.Log().Info("relationship discovered", "from", 0,
+				"relation", "announces", "to", netblock.CIDR.String(), group)
+		}
 	}
 }

@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"strconv"
 	"strings"
-	"time"
 	"unicode"
 
 	"github.com/caffix/stringset"
@@ -18,21 +17,20 @@ import (
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/domain"
-	"github.com/owasp-amass/open-asset-model/source"
 )
 
 type alts struct {
 	name   string
 	log    *slog.Logger
 	chars  string
-	source *source.Source
+	source *et.Source
 }
 
 func NewFQDNAlterations() et.Plugin {
 	return &alts{
 		name:  "FQDN-Alterations",
 		chars: "abcdefghijklmnopqrstuvwxyz0123456789-",
-		source: &source.Source{
+		source: &et.Source{
 			Name:       "FQDN-Alterations",
 			Confidence: 0,
 		},
@@ -67,7 +65,7 @@ func (d *alts) Stop() {
 }
 
 func (d *alts) check(e *et.Event) error {
-	fqdn, ok := e.Asset.Asset.(*domain.FQDN)
+	fqdn, ok := e.Entity.Asset.(*domain.FQDN)
 	if !ok {
 		return errors.New("failed to extract the FQDN asset")
 	}
@@ -127,7 +125,7 @@ func (d *alts) check(e *et.Event) error {
 	guesses.Remove(dom)
 	guesses.Remove(name)
 
-	var assets []*dbt.Asset
+	var assets []*dbt.Entity
 	//subre := dns.SubdomainRegex(dom)
 	for _, guess := range guesses.Slice() {
 		//if match := subre.FindString(guess); guess != match {
@@ -145,50 +143,12 @@ func (d *alts) check(e *et.Event) error {
 	return nil
 }
 
-func (d *alts) store(e *et.Event, name string, src *dbt.Asset) *dbt.Asset {
-	done := make(chan *dbt.Asset, 1)
-	support.AppendToDBQueue(func() {
-		if e.Session.Done() {
-			done <- nil
-			return
-		}
-
-		n, err := e.Session.DB().Create(nil, "", &domain.FQDN{Name: name})
-		if err == nil && n != nil {
-			_, _ = e.Session.DB().Link(n, "source", src)
-		}
-		done <- n
-	})
-	result := <-done
-	close(done)
-	return result
+func (d *alts) store(e *et.Event, name string, src *et.Source) *dbt.Entity {
+	return support.StoreFQDNsWithSource(e.Session, []string{name}, src, d.name, d.name+"-Handler")
 }
 
-func (d *alts) process(e *et.Event, fqdns []*dbt.Asset, src *dbt.Asset) {
-	now := time.Now()
-
-	for _, f := range fqdns {
-		fqdn, ok := f.Asset.(*domain.FQDN)
-		if !ok || fqdn == nil {
-			continue
-		}
-
-		_ = e.Dispatcher.DispatchEvent(&et.Event{
-			Name:    fqdn.Name,
-			Asset:   f,
-			Session: e.Session,
-		})
-
-		if c, hit := e.Session.Cache().GetAsset(fqdn); hit && c != nil {
-			e.Session.Cache().SetRelation(&dbt.Relation{
-				Type:      "source",
-				CreatedAt: now,
-				LastSeen:  now,
-				FromAsset: c,
-				ToAsset:   src,
-			})
-		}
-	}
+func (d *alts) process(e *et.Event, fqdns []*dbt.Entity, src *et.Source) {
+	support.ProcessFQDNsWithSource(e, fqdns, src)
 }
 
 // flipWords flips prefixes and suffixes found within the provided name.
