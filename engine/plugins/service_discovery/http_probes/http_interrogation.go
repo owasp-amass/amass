@@ -21,6 +21,7 @@ import (
 	oamcert "github.com/owasp-amass/open-asset-model/certificate"
 	"github.com/owasp-amass/open-asset-model/domain"
 	"github.com/owasp-amass/open-asset-model/network"
+	"github.com/owasp-amass/open-asset-model/relation"
 	"github.com/owasp-amass/open-asset-model/service"
 )
 
@@ -46,11 +47,6 @@ func (r *interrogation) check(e *et.Event) error {
 		return nil
 	}
 
-	src := support.GetSource(e.Session, r.plugin.source)
-	if src == nil {
-		return errors.New("failed to obtain the plugin source information")
-	}
-
 	matches, err := e.Session.Config().CheckTransformations(string(atype), append(r.transforms, r.plugin.name)...)
 	if err != nil || matches.Len() == 0 {
 		return nil
@@ -67,12 +63,13 @@ func (r *interrogation) check(e *et.Event) error {
 		return err
 	}
 
+	src := r.plugin.source
 	var findings []*support.Finding
-	if support.AssetMonitoredWithinTTL(e.Session, e.Asset, src, since) {
-		findings = append(findings, r.lookup(e, e.Asset, src, since)...)
+	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, src, since) {
+		findings = append(findings, r.lookup(e, e.Entity, src, since)...)
 	} else {
-		findings = append(findings, r.query(e, e.Asset, src)...)
-		support.MarkAssetMonitored(e.Session, e.Asset, src)
+		findings = append(findings, r.query(e, e.Entity, src)...)
+		support.MarkAssetMonitored(e.Session, e.Entity, src)
 	}
 
 	if len(findings) > 0 {
@@ -81,7 +78,7 @@ func (r *interrogation) check(e *et.Event) error {
 	return nil
 }
 
-func (r *interrogation) lookup(e *et.Event, asset, src *dbt.Asset, since time.Time) []*support.Finding {
+func (r *interrogation) lookup(e *et.Event, asset *dbt.Entity, src *et.Source, since time.Time) []*support.Finding {
 	fqdn := asset.Asset.Key()
 	var findings []*support.Finding
 	atype := string(oam.NetworkEndpoint)
@@ -103,11 +100,11 @@ func (r *interrogation) lookup(e *et.Event, asset, src *dbt.Asset, since time.Ti
 	return findings
 }
 
-func (r *interrogation) query(e *et.Event, asset, src *dbt.Asset) []*support.Finding {
+func (r *interrogation) query(e *et.Event, entity *dbt.Entity, src *et.Source) []*support.Finding {
 	var findings []*support.Finding
 
 	var addr, host string
-	if sa, ok := asset.Asset.(*network.SocketAddress); ok {
+	if sa, ok := entity.Asset.(*network.SocketAddress); ok {
 		addr = sa.Protocol + "://"
 		host = sa.IPAddress.String()
 
@@ -116,7 +113,7 @@ func (r *interrogation) query(e *et.Event, asset, src *dbt.Asset) []*support.Fin
 		} else {
 			addr += sa.Address.String()
 		}
-	} else if ne, ok := asset.Asset.(*domain.NetworkEndpoint); ok {
+	} else if ne, ok := entity.Asset.(*domain.NetworkEndpoint); ok {
 		host = ne.Name
 		addr = ne.Protocol + "://"
 
@@ -138,55 +135,42 @@ func (r *interrogation) query(e *et.Event, asset, src *dbt.Asset) []*support.Fin
 	return findings
 }
 
-func (r *interrogation) store(e *et.Event, resp *http.Response, asset, src *dbt.Asset) []*support.Finding {
-	addr := asset.Asset.Key()
+func (r *interrogation) store(e *et.Event, resp *http.Response, entity *dbt.Entity, src *et.Source) []*support.Finding {
+	addr := entity.Asset.Key()
 	var findings []*support.Finding
 
-	var firstAsset *dbt.Asset
+	var firstAsset *dbt.Entity
 	var firstCert *x509.Certificate
 	if resp.TLS != nil && resp.TLS.HandshakeComplete && len(resp.TLS.PeerCertificates) > 0 {
-		done := make(chan struct{}, 1)
-
-		support.AppendToDBQueue(func() {
-			defer func() { done <- struct{}{} }()
-
-			if e.Session.Done() {
-				return
+		var prev *dbt.Entity
+		// traverse the certificate chain
+		for _, cert := range resp.TLS.PeerCertificates {
+			c := support.X509ToOAMTLSCertificate(cert)
+			if c == nil {
+				break
 			}
 
-			var prev *dbt.Asset
-			// traverse the certificate chain
-			for _, cert := range resp.TLS.PeerCertificates {
-				c := support.X509ToOAMTLSCertificate(cert)
-				if c == nil {
-					break
-				}
-
-				a, err := e.Session.DB().Create(prev, "issuing_certificate", c)
-				if err != nil {
-					break
-				}
-				_, _ = e.Session.DB().Link(a, "source", src)
-
-				if prev == nil {
-					firstAsset = a
-					firstCert = cert
-				} else {
-					tls := prev.Asset.(*oamcert.TLSCertificate)
-					findings = append(findings, &support.Finding{
-						From:     prev,
-						FromName: tls.SerialNumber,
-						To:       a,
-						ToName:   c.SerialNumber,
-						ToMeta:   cert,
-						Rel:      "issuing_certificate",
-					})
-				}
-				prev = a
+			a, err := e.Session.Cache().CreateAsset(c)
+			if err != nil {
+				break
 			}
-		})
-		<-done
-		close(done)
+
+			if prev == nil {
+				firstAsset = a
+				firstCert = cert
+			} else {
+				tls := prev.Asset.(*oamcert.TLSCertificate)
+				findings = append(findings, &support.Finding{
+					From:     prev,
+					FromName: tls.SerialNumber,
+					To:       a,
+					ToName:   c.SerialNumber,
+					ToMeta:   cert,
+					Rel:      &relation.SimpleRelation{Name: "issuing_certificate"},
+				})
+			}
+			prev = a
+		}
 	}
 
 	serv := support.ServiceWithIdentifier(&r.plugin.hash, e.Session.ID().String(), addr)
@@ -202,18 +186,18 @@ func (r *interrogation) store(e *et.Event, resp *http.Response, asset, src *dbt.
 		c = firstAsset.Asset.(*oamcert.TLSCertificate)
 	}
 
-	s, err := support.CreateServiceAsset(e.Session, asset, "service", serv, c)
+	s, err := support.CreateServiceAsset(e.Session, entity, "service", serv, c)
 	if err != nil {
 		return findings
 	}
 
 	serv = s.Asset.(*service.Service)
 	findings = append(findings, &support.Finding{
-		From:     asset,
+		From:     entity,
 		FromName: addr,
 		To:       s,
 		ToName:   "Service: " + serv.Identifier,
-		Rel:      "service",
+		Rel:      &relation.SimpleRelation{Name: "port"},
 	})
 
 	if firstAsset != nil && firstCert != nil {
@@ -223,24 +207,14 @@ func (r *interrogation) store(e *et.Event, resp *http.Response, asset, src *dbt.
 			To:       firstAsset,
 			ToName:   c.SerialNumber,
 			ToMeta:   firstCert,
-			Rel:      "certificate",
+			Rel:      &relation.SimpleRelation{Name: "certificate"},
 		})
 	}
 
-	done := make(chan struct{}, 1)
-	support.AppendToDBQueue(func() {
-		defer func() { done <- struct{}{} }()
-		_, _ = e.Session.DB().Link(s, "source", src)
-		if firstAsset != nil {
-			_, _ = e.Session.DB().Link(s, "certificate", firstAsset)
-		}
-	})
-	<-done
-	close(done)
 	return findings
 }
 
-func (r *interrogation) process(e *et.Event, findings []*support.Finding, src *dbt.Asset) {
+func (r *interrogation) process(e *et.Event, findings []*support.Finding, src *et.Source) {
 	support.ProcessAssetsWithSource(e, findings, src, r.plugin.name, r.name)
 }
 

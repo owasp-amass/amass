@@ -16,6 +16,7 @@ import (
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/network"
+	"github.com/owasp-amass/open-asset-model/property"
 )
 
 type ipaddrEndpoint struct {
@@ -28,7 +29,7 @@ func (r *ipaddrEndpoint) Name() string {
 }
 
 func (r *ipaddrEndpoint) check(e *et.Event) error {
-	ip, ok := e.Asset.Asset.(*network.IPAddress)
+	ip, ok := e.Entity.Asset.(*network.IPAddress)
 	if !ok {
 		return errors.New("failed to extract the IPAddress asset")
 	}
@@ -45,22 +46,18 @@ func (r *ipaddrEndpoint) check(e *et.Event) error {
 		return nil
 	}
 
-	src := support.GetSource(e.Session, r.plugin.source)
-	if src == nil {
-		return errors.New("failed to obtain the plugin source information")
-	}
-
 	since, err := support.TTLStartTime(e.Session.Config(), string(oam.IPAddress), string(oam.SocketAddress), r.name)
 	if err != nil {
 		return err
 	}
 
+	src := r.plugin.source
 	var findings []*support.Finding
-	if support.AssetMonitoredWithinTTL(e.Session, e.Asset, src, since) {
-		findings = append(findings, r.lookup(e, e.Asset, src, since)...)
+	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, src, since) {
+		findings = append(findings, r.lookup(e, e.Entity, src, since)...)
 	} else {
-		findings = append(findings, r.store(e, e.Asset, src)...)
-		support.MarkAssetMonitored(e.Session, e.Asset, src)
+		findings = append(findings, r.store(e, e.Entity, src)...)
+		support.MarkAssetMonitored(e.Session, e.Entity, src)
 	}
 
 	if len(findings) > 0 {
@@ -71,7 +68,7 @@ func (r *ipaddrEndpoint) check(e *et.Event) error {
 	return nil
 }
 
-func (r *ipaddrEndpoint) lookup(e *et.Event, asset, src *dbt.Asset, since time.Time) []*support.Finding {
+func (r *ipaddrEndpoint) lookup(e *et.Event, asset *dbt.Entity, src *et.Source, since time.Time) []*support.Finding {
 	addr := asset.Asset.Key()
 	var findings []*support.Finding
 	atype := string(oam.SocketAddress)
@@ -93,7 +90,7 @@ func (r *ipaddrEndpoint) lookup(e *et.Event, asset, src *dbt.Asset, since time.T
 	return findings
 }
 
-func (r *ipaddrEndpoint) store(e *et.Event, asset, src *dbt.Asset) []*support.Finding {
+func (r *ipaddrEndpoint) store(e *et.Event, asset *dbt.Entity, src *et.Source) []*support.Finding {
 	var findings []*support.Finding
 	ip := asset.Asset.(*network.IPAddress)
 
@@ -139,31 +136,20 @@ func (r *ipaddrEndpoint) store(e *et.Event, asset, src *dbt.Asset) []*support.Fi
 	return findings
 }
 
-func (r *ipaddrEndpoint) process(e *et.Event, findings []*support.Finding, src *dbt.Asset) {
+func (r *ipaddrEndpoint) process(e *et.Event, findings []*support.Finding, src *et.Source) {
 	support.ProcessAssetsWithSource(e, findings, src, r.plugin.name, r.name)
 }
 
-func sweepCallback(e *et.Event, ip *network.IPAddress, src *dbt.Asset) {
-	done := make(chan *dbt.Asset, 1)
-	support.AppendToDBQueue(func() {
-		if e.Session.Done() {
-			done <- nil
-			return
-		}
-
-		addr, err := e.Session.DB().Create(nil, "", ip)
-		if err == nil && addr != nil {
-			_, _ = e.Session.DB().Link(addr, "source", src)
-		}
-		done <- addr
-	})
-
-	if addr := <-done; addr != nil {
+func sweepCallback(e *et.Event, ip *network.IPAddress, src *et.Source) {
+	if entity, err := e.Session.Cache().CreateAsset(ip); err == nil && entity != nil {
+		_, _ = e.Session.Cache().CreateEntityProperty(entity, &property.SourceProperty{
+			Source:     src.Name,
+			Confidence: src.Confidence,
+		})
 		_ = e.Dispatcher.DispatchEvent(&et.Event{
 			Name:    ip.Address.String(),
-			Asset:   addr,
+			Entity:  entity,
 			Session: e.Session,
 		})
 	}
-	close(done)
 }

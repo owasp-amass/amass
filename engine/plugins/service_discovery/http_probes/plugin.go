@@ -11,7 +11,6 @@ import (
 	"github.com/owasp-amass/amass/v4/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v4/engine/types"
 	oam "github.com/owasp-amass/open-asset-model"
-	"github.com/owasp-amass/open-asset-model/source"
 )
 
 type httpProbing struct {
@@ -20,14 +19,14 @@ type httpProbing struct {
 	fqdnend *fqdnEndpoint
 	ipaddr  *ipaddrEndpoint
 	interr  *interrogation
-	source  *source.Source
+	source  *et.Source
 	hash    maphash.Hash
 }
 
 func NewHTTPProbing() et.Plugin {
 	return &httpProbing{
 		name: "HTTP-Probes",
-		source: &source.Source{
+		source: &et.Source{
 			Name:       "HTTP-Probes",
 			Confidence: 100,
 		},
