@@ -21,13 +21,11 @@ import (
 	oamcert "github.com/owasp-amass/open-asset-model/certificate"
 	"github.com/owasp-amass/open-asset-model/contact"
 	"github.com/owasp-amass/open-asset-model/domain"
-	"github.com/owasp-amass/open-asset-model/fingerprint"
 	"github.com/owasp-amass/open-asset-model/network"
 	"github.com/owasp-amass/open-asset-model/org"
 	"github.com/owasp-amass/open-asset-model/people"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
 	oamserv "github.com/owasp-amass/open-asset-model/service"
-	"github.com/owasp-amass/open-asset-model/source"
 	"github.com/owasp-amass/open-asset-model/url"
 )
 
@@ -86,7 +84,7 @@ func (r *mutationResolver) CreateAsset(ctx context.Context, input model.CreateAs
 		return nil, err
 	}
 
-	dba, err := session.DB().Create(nil, "", assetData.OAMAsset)
+	dba, err := session.Cache().CreateAsset(assetData.OAMAsset)
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +92,7 @@ func (r *mutationResolver) CreateAsset(ctx context.Context, input model.CreateAs
 	// Create and schedule new event
 	event := &et.Event{
 		Name:       *input.AssetName,
-		Asset:      dba,
+		Entity:     dba,
 		Dispatcher: r.Dispatcher,
 		Session:    session,
 	}
@@ -171,8 +169,6 @@ func createSeedAsset(atype string) oam.Asset {
 	switch atype {
 	case string(oam.FQDN):
 		return &domain.FQDN{}
-	case string(oam.NetworkEndpoint):
-		return &domain.NetworkEndpoint{}
 	case string(oam.IPAddress):
 		return &network.IPAddress{}
 	case string(oam.Netblock):
@@ -181,8 +177,6 @@ func createSeedAsset(atype string) oam.Asset {
 		return &network.AutonomousSystem{}
 	case string(oam.AutnumRecord):
 		return &oamreg.AutnumRecord{}
-	case string(oam.SocketAddress):
-		return &network.SocketAddress{}
 	case string(oam.ContactRecord):
 		return &contact.ContactRecord{}
 	case string(oam.EmailAddress):
@@ -191,8 +185,6 @@ func createSeedAsset(atype string) oam.Asset {
 		return &contact.Location{}
 	case string(oam.Phone):
 		return &contact.Phone{}
-	case string(oam.Fingerprint):
-		return &fingerprint.Fingerprint{}
 	case string(oam.Organization):
 		return &org.Organization{}
 	case string(oam.Person):
@@ -203,8 +195,6 @@ func createSeedAsset(atype string) oam.Asset {
 		return &url.URL{}
 	case string(oam.DomainRecord):
 		return &oamreg.DomainRecord{}
-	case string(oam.Source):
-		return &source.Source{}
 	case string(oam.Service):
 		return &oamserv.Service{}
 	}

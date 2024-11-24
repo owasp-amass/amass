@@ -13,6 +13,7 @@ import (
 	et "github.com/owasp-amass/amass/v4/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
 	"github.com/owasp-amass/open-asset-model/domain"
+	"github.com/owasp-amass/open-asset-model/relation"
 )
 
 type dnsApex struct {
@@ -21,7 +22,7 @@ type dnsApex struct {
 }
 
 func (d *dnsApex) check(e *et.Event) error {
-	fqdn, ok := e.Asset.Asset.(*domain.FQDN)
+	fqdn, ok := e.Entity.Asset.(*domain.FQDN)
 	if !ok {
 		return errors.New("failed to extract the FQDN asset")
 	}
@@ -41,7 +42,7 @@ func (d *dnsApex) check(e *et.Event) error {
 	}
 
 	// determine which domain apex this name is a node in
-	var apex *dbt.Asset
+	var apex *dbt.Entity
 	best := len(fqdn.Name)
 	for _, a := range apexes {
 		n, ok := a.Asset.(*domain.FQDN)
@@ -55,25 +56,18 @@ func (d *dnsApex) check(e *et.Event) error {
 	}
 
 	if apex != nil {
-		d.store(e, fqdn.Name, e.Asset, apex)
+		d.store(e, fqdn.Name, e.Entity, apex)
 	}
 	return nil
 }
 
-func (d *dnsApex) store(e *et.Event, name string, fqdn, apex *dbt.Asset) {
-	done := make(chan struct{}, 1)
-	defer close(done)
-
-	support.AppendToDBQueue(func() {
-		defer func() { done <- struct{}{} }()
-
-		if e.Session.Done() {
-			return
-		}
-		if _, err := e.Session.DB().Link(apex, "node", fqdn); err == nil {
-			e.Session.Log().Info("relationship discovered", "from", apex.Asset.Key(), "relation",
-				"node", "to", name, slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
-		}
-	})
-	<-done
+func (d *dnsApex) store(e *et.Event, name string, fqdn, apex *dbt.Entity) {
+	if _, err := e.Session.Cache().CreateEdge(&dbt.Edge{
+		Relation:   &relation.SimpleRelation{Name: "node"},
+		FromEntity: apex,
+		ToEntity:   fqdn,
+	}); err == nil {
+		e.Session.Log().Info("relationship discovered", "from", apex.Asset.Key(), "relation",
+			"node", "to", name, slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
+	}
 }

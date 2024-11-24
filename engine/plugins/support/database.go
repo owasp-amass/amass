@@ -12,8 +12,8 @@ import (
 	"time"
 
 	et "github.com/owasp-amass/amass/v4/engine/types"
+	"github.com/owasp-amass/amass/v4/utils"
 	dbt "github.com/owasp-amass/asset-db/types"
-	"github.com/owasp-amass/asset-db/utils"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamcert "github.com/owasp-amass/open-asset-model/certificate"
 	"github.com/owasp-amass/open-asset-model/domain"
@@ -103,6 +103,8 @@ func SourceToAssetsWithinTTL(session et.Session, name, atype string, src *et.Sou
 			}
 		}
 	}
+
+	return result
 }
 
 func StoreFQDNsWithSource(session et.Session, names []string, src *et.Source, plugin, handler string) []*dbt.Entity {

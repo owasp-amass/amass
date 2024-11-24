@@ -12,7 +12,6 @@ import (
 	oamcert "github.com/owasp-amass/open-asset-model/certificate"
 	"github.com/owasp-amass/open-asset-model/contact"
 	"github.com/owasp-amass/open-asset-model/domain"
-	oamfin "github.com/owasp-amass/open-asset-model/fingerprint"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
 	"github.com/owasp-amass/open-asset-model/org"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
@@ -53,8 +52,6 @@ func (s *Scope) Add(a oam.Asset) bool {
 		newentry = s.AddOrganization(v)
 	case *contact.Location:
 		newentry = s.AddLocation(v)
-	case *oamfin.Fingerprint:
-		newentry = s.AddFingerprint(v)
 	}
 
 	return newentry
@@ -95,8 +92,6 @@ func (s *Scope) IsAssetInScope(a oam.Asset, conf int) (oam.Asset, int) {
 		match, accuracy = s.matchesOrg(v, conf)
 	case *contact.Location:
 		match, accuracy = s.matchesLocation(v, conf)
-	case *oamfin.Fingerprint:
-		match, accuracy = s.matchesFin(v)
 	}
 
 	return match, accuracy

@@ -14,8 +14,11 @@ import (
 	"github.com/owasp-amass/amass/v4/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v4/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
+	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/domain"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
+	"github.com/owasp-amass/open-asset-model/property"
+	"github.com/owasp-amass/open-asset-model/relation"
 	"github.com/owasp-amass/resolve"
 )
 
@@ -31,7 +34,7 @@ type relIP struct {
 }
 
 func (d *dnsIP) check(e *et.Event) error {
-	fqdn, ok := e.Asset.Asset.(*domain.FQDN)
+	fqdn, ok := e.Entity.Asset.(*domain.FQDN)
 	if !ok {
 		return errors.New("failed to extract the FQDN asset")
 	}
@@ -40,21 +43,17 @@ func (d *dnsIP) check(e *et.Event) error {
 		return nil
 	}
 
-	src := support.GetSource(e.Session, d.plugin.source)
-	if src == nil {
-		return errors.New("failed to obtain the plugin source information")
-	}
-
 	since, err := support.TTLStartTime(e.Session.Config(), "FQDN", "IPAddress", d.plugin.name)
 	if err != nil {
 		return err
 	}
 
 	var ips []*relIP
-	if support.AssetMonitoredWithinTTL(e.Session, e.Asset, src, since) {
+	src := d.plugin.source
+	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, src, since) {
 		ips = append(ips, d.lookup(e, fqdn.Name, since)...)
 	} else {
-		ips = append(ips, d.query(e, e.Asset, src)...)
+		ips = append(ips, d.query(e, e.Entity, src)...)
 	}
 
 	if len(ips) > 0 {
@@ -86,14 +85,14 @@ func (d *dnsIP) check(e *et.Event) error {
 func (d *dnsIP) lookup(e *et.Event, fqdn string, since time.Time) []*relIP {
 	var ips []*relIP
 
-	if assets := d.plugin.lookupWithinTTL(e.Session, fqdn, "IPAddress", since, "a_record"); len(assets) > 0 {
+	if assets := d.plugin.lookupWithinTTL(e.Session, fqdn, oam.IPAddress, since, oam.BasicDNSRelation, 1); len(assets) > 0 {
 		for _, a := range assets {
-			ips = append(ips, &relIP{rtype: "a_record", ip: a})
+			ips = append(ips, &relIP{rtype: "dns_record", ip: a})
 		}
 	}
-	if assets := d.plugin.lookupWithinTTL(e.Session, fqdn, "IPAddress", since, "aaaa_record"); len(assets) > 0 {
+	if assets := d.plugin.lookupWithinTTL(e.Session, fqdn, oam.IPAddress, since, oam.BasicDNSRelation, 28); len(assets) > 0 {
 		for _, a := range assets {
-			ips = append(ips, &relIP{rtype: "aaaa_record", ip: a})
+			ips = append(ips, &relIP{rtype: "dns_record", ip: a})
 		}
 	}
 
@@ -116,82 +115,71 @@ func (d *dnsIP) query(e *et.Event, name, src *dbt.Asset) []*relIP {
 	return ips
 }
 
-func (d *dnsIP) store(e *et.Event, fqdn, src *dbt.Asset, rr []*resolve.ExtractedAnswer) []*relIP {
+func (d *dnsIP) store(e *et.Event, fqdn *dbt.Entity, src *et.Source, rr []*resolve.ExtractedAnswer) []*relIP {
 	var ips []*relIP
 
-	done := make(chan struct{}, 1)
-	support.AppendToDBQueue(func() {
-		defer func() { done <- struct{}{} }()
-
-		if e.Session.Done() {
-			return
-		}
-
-		for _, record := range rr {
-			if record.Type == dns.TypeA {
-				if ip, err := e.Session.DB().Create(fqdn, "a_record", &oamnet.IPAddress{Address: netip.MustParseAddr(record.Data), Type: "IPv4"}); err == nil {
-					if ip != nil {
-						_, _ = e.Session.DB().Link(ip, "source", src)
-						ips = append(ips, &relIP{rtype: "a_record", ip: ip})
-					}
-				} else {
-					e.Session.Log().Error(err.Error(), slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
+	for _, record := range rr {
+		if record.Type == dns.TypeA {
+			if ip, err := e.Session.Cache().CreateAsset(&oamnet.IPAddress{Address: netip.MustParseAddr(record.Data), Type: "IPv4"}); err == nil && ip != nil {
+				if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
+					Relation: &relation.BasicDNSRelation{
+						Name: "dns_record",
+						Header: relation.RRHeader{
+							RRType: record.Type,
+							Class:  1,
+						},
+					},
+					FromEntity: fqdn,
+					ToEntity:   ip,
+				}); err == nil && edge != nil {
+					ips = append(ips, &relIP{rtype: "dns_record", ip: ip})
+					_, _ = e.Session.Cache().CreateEdgeProperty(edge, &property.SourceProperty{
+						Source:     src.Name,
+						Confidence: src.Confidence,
+					})
 				}
-			} else if record.Type == dns.TypeAAAA {
-				if ip, err := e.Session.DB().Create(fqdn, "aaaa_record", &oamnet.IPAddress{Address: netip.MustParseAddr(record.Data), Type: "IPv6"}); err == nil {
-					if ip != nil {
-						_, _ = e.Session.DB().Link(ip, "source", src)
-						ips = append(ips, &relIP{rtype: "aaaa_record", ip: ip})
-					}
-				} else {
-					e.Session.Log().Error(err.Error(), slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
+			} else {
+				e.Session.Log().Error(err.Error(), slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
+			}
+		} else if record.Type == dns.TypeAAAA {
+			if ip, err := e.Session.Cache().CreateAsset(&oamnet.IPAddress{Address: netip.MustParseAddr(record.Data), Type: "IPv6"}); err == nil {
+				if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
+					Relation: &relation.BasicDNSRelation{
+						Name: "dns_record",
+						Header: relation.RRHeader{
+							RRType: record.Type,
+							Class:  1,
+						},
+					},
+					FromEntity: fqdn,
+					ToEntity:   ip,
+				}); err == nil && edge != nil {
+					ips = append(ips, &relIP{rtype: "dns_record", ip: ip})
+					_, _ = e.Session.Cache().CreateEdgeProperty(edge, &property.SourceProperty{
+						Source:     src.Name,
+						Confidence: src.Confidence,
+					})
 				}
+			} else {
+				e.Session.Log().Error(err.Error(), slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
 			}
 		}
-	})
-	<-done
-	close(done)
+	}
+
 	return ips
 }
 
-func (d *dnsIP) process(e *et.Event, name string, addrs []*relIP, src *dbt.Asset) {
-	now := time.Now()
-
+func (d *dnsIP) process(e *et.Event, name string, addrs []*relIP, src *et.Source) {
 	for _, a := range addrs {
 		ip := a.ip.Asset.(*oamnet.IPAddress)
 
 		_ = e.Dispatcher.DispatchEvent(&et.Event{
 			Name:    ip.Address.String(),
-			Asset:   a.ip,
+			Entity:  a.ip,
 			Session: e.Session,
 		})
 
-		addr, hit := e.Session.Cache().GetAsset(a.ip.Asset)
-		if !hit || addr == nil {
-			continue
-		}
-
-		fqdn, hit := e.Session.Cache().GetAsset(&domain.FQDN{Name: name})
-		if !hit || fqdn == nil {
-			continue
-		}
-
-		e.Session.Cache().SetRelation(&dbt.Relation{
-			Type:      a.rtype,
-			CreatedAt: now,
-			LastSeen:  now,
-			FromAsset: fqdn,
-			ToAsset:   addr,
-		})
-		e.Session.Cache().SetRelation(&dbt.Relation{
-			Type:      "source",
-			CreatedAt: now,
-			LastSeen:  now,
-			FromAsset: addr,
-			ToAsset:   src,
-		})
-		e.Session.Log().Info("relationship discovered", "from",
-			name, "relation", a.rtype, "to", ip.Address.String(),
-			slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
+		e.Session.Log().Info("relationship discovered", "from", name, "relation", a.rtype,
+			"to", ip.Address.String(), slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
 	}
 }

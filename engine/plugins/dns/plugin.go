@@ -6,7 +6,6 @@ package dns
 
 import (
 	"log/slog"
-	"strings"
 	"time"
 
 	"github.com/miekg/dns"
@@ -14,8 +13,10 @@ import (
 	et "github.com/owasp-amass/amass/v4/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
+	"github.com/owasp-amass/open-asset-model/domain"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
-	"github.com/owasp-amass/open-asset-model/source"
+	"github.com/owasp-amass/open-asset-model/property"
+	"github.com/owasp-amass/open-asset-model/relation"
 )
 
 type dnsPlugin struct {
@@ -29,7 +30,7 @@ type dnsPlugin struct {
 	firstSweepSize  int
 	secondSweepSize int
 	maxSweepSize    int
-	source          *source.Source
+	source          *et.Source
 }
 
 func NewDNS() et.Plugin {
@@ -38,7 +39,7 @@ func NewDNS() et.Plugin {
 		firstSweepSize:  25,
 		secondSweepSize: 100,
 		maxSweepSize:    250,
-		source: &source.Source{
+		source: &et.Source{
 			Name:       "DNS",
 			Confidence: 100,
 		},
@@ -131,71 +132,78 @@ func (d *dnsPlugin) Stop() {
 	d.log.Info("Plugin stopped")
 }
 
-func (d *dnsPlugin) lookupWithinTTL(session et.Session, name, atype string, since time.Time, rels ...string) []*dbt.Asset {
-	var results []*dbt.Asset
+func (d *dnsPlugin) lookupWithinTTL(session et.Session, name string, atype oam.AssetType, since time.Time, reltype oam.RelationTye, rrtypes ...int) []*dbt.Entity {
+	var results []*dbt.Entity
 
-	if len(rels) == 0 {
-		return results
-	}
-	if !since.IsZero() {
+	if len(rrtypes) == 0 || !since.IsZero() {
 		return results
 	}
 
-	done := make(chan struct{}, 1)
-	support.AppendToDBQueue(func() {
-		defer func() { done <- struct{}{} }()
+	ents, err := session.Cache().FindEntityByContent(&domain.FQDN{Name: name}, time.Time{})
+	if err != nil || len(ents) != 1 {
+		return results
+	}
+	entity := ents[0]
 
-		if session.Done() {
-			return
+	if edges, err := session.Cache().OutgoingEdges(entity, since, "dns_record"); err == nil && len(edges) > 0 {
+		for _, edge := range edges {
+			if tags, err := session.Cache().GetEdgeTags(edge, since, d.source.Name); err == nil && len(tags) > 0 {
+				var found bool
+
+				for _, tag := range tags {
+					if _, ok := tag.Property.(*property.SourceProperty); ok {
+						found = true
+						break
+					}
+				}
+				if !found {
+					continue
+				}
+			}
+
+			var rrtype int
+			switch v := edge.Relation.(type) {
+			case *relation.BasicDNSRelation:
+				if v == reltype {
+					rrtype = v.Header.RRType
+				}
+			case *relation.PrefDNSRelation:
+				if v == reltype {
+					rrtype = v.Header.RRType
+				}
+			case *relation.SRVDNSRelation:
+				if v == reltype {
+					rrtype = v.Header.RRType
+				}
+			}
+
+			for _, t := range rrtypes {
+				if rrtype == t {
+					if to, err := session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && to != nil && to.Asset.AssetType() == atype {
+						results = append(results, to)
+						break
+					}
+				}
+			}
 		}
+	}
 
-		sincestr := since.Format("2006-01-02 15:04:05")
-		from := "((((assets as fqdn inner join relations as records on fqdn.id = records.from_asset_id) "
-		from2 := "inner join assets on records.to_asset_id = assets.id) "
-		from3 := "inner join relations on relations.from_asset_id = assets.id) "
-		from4 := "inner join assets as srcs on relations.to_asset_id = srcs.id) "
-		where := "where fqdn.type = 'FQDN' and assets.type = '" + atype + "'"
-		where2 := " and records.type in ('" + strings.Join(rels, "','") + "') "
-		where3 := "and records.last_seen > '" + sincestr + "' "
-		where4 := "and relations.type = 'source' and relations.last_seen > '" + sincestr + "' "
-		where5 := " and srcs.type = 'Source' and srcs.content->>'name' = 'DNS'"
-		like := " and fqdn.content->>'name' = '" + name + "'"
-
-		query := from + from2 + from3 + from4 + where + where2 + where3 + where4 + where5 + like
-		if assets, err := session.DB().AssetQuery(query); err == nil && len(assets) > 0 {
-			results = append(results, assets...)
-		}
-	})
-	<-done
-	close(done)
 	return results
 }
 
-func sweepCallback(e *et.Event, ip *oamnet.IPAddress, src *dbt.Asset) {
-	if _, hit := e.Session.Cache().GetAsset(ip); hit {
-		return
+func sweepCallback(e *et.Event, ip *oamnet.IPAddress, src *et.Source) {
+	entity, err := e.Session.Cache().CreateAsset(ip)
+	if err == nil && entity != nil {
+		_, _ = e.Session.Cache().CreateEntityProperty(entity, &property.SourceProperty{
+			Source:     src.Name,
+			Confidence: src.Confidence,
+		})
 	}
 
-	done := make(chan *dbt.Asset, 1)
-	defer close(done)
-
-	support.AppendToDBQueue(func() {
-		if e.Session.Done() {
-			done <- nil
-			return
-		}
-
-		addr, err := e.Session.DB().Create(nil, "", ip)
-		if err == nil && addr != nil {
-			_, _ = e.Session.DB().Link(addr, "source", src)
-		}
-		done <- addr
-	})
-
-	if addr := <-done; addr != nil {
+	if entity != nil {
 		_ = e.Dispatcher.DispatchEvent(&et.Event{
 			Name:    ip.Address.String(),
-			Asset:   addr,
+			Entity:  entity,
 			Session: e.Session,
 		})
 	}

@@ -10,9 +10,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/owasp-amass/amass/v4/config"
-	"github.com/owasp-amass/amass/v4/engine/cache"
 	"github.com/owasp-amass/amass/v4/engine/pubsub"
 	"github.com/owasp-amass/amass/v4/engine/sessions/scope"
+	"github.com/owasp-amass/asset-db/cache"
 )
 
 type Session interface {

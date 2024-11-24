@@ -21,7 +21,6 @@ import (
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/domain"
 	"github.com/owasp-amass/open-asset-model/network"
-	"github.com/owasp-amass/open-asset-model/source"
 	"go.uber.org/ratelimit"
 )
 
@@ -224,7 +223,7 @@ func (u *urlscan) process(e *et.Event, body string) {
 							return
 						}
 						if fqdn != nil {
-							_, _ = e.Session.DB().Create(fqdn, "source", &source.Source{Name: u.name})
+							_, _ = e.Session.DB().Create(fqdn, "source", &et.Source{Name: u.name})
 							_ = e.Dispatcher.DispatchEvent(&et.Event{
 								Name:    name,
 								Asset:   fqdn,

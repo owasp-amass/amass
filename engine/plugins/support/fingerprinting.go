@@ -14,25 +14,12 @@ import (
 	jarm "github.com/caffix/jarm-go"
 	"github.com/owasp-amass/amass/v4/utils/net"
 	oam "github.com/owasp-amass/open-asset-model"
-	"github.com/owasp-amass/open-asset-model/domain"
-	"github.com/owasp-amass/open-asset-model/network"
 )
 
 func JARMFingerprint(target oam.Asset) (string, error) {
 	var port int
 	var ipv6 bool
 	var host string
-
-	if ne, ok := target.(*domain.NetworkEndpoint); ok {
-		port = ne.Port
-		host = ne.Name
-	} else if sa, ok := target.(*network.SocketAddress); ok {
-		port = sa.Port
-		ipv6 = sa.IPAddress.Is6()
-		host = sa.IPAddress.String()
-	} else {
-		return "", errors.New("target must be a NetworkEndpoint or SocketAddress")
-	}
 
 	addr := host
 	if ipv6 {

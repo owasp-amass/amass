@@ -13,7 +13,10 @@ import (
 	"github.com/owasp-amass/amass/v4/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v4/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
+	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/domain"
+	"github.com/owasp-amass/open-asset-model/property"
+	"github.com/owasp-amass/open-asset-model/relation"
 	"github.com/owasp-amass/resolve"
 )
 
@@ -28,14 +31,9 @@ type relAlias struct {
 }
 
 func (d *dnsCNAME) check(e *et.Event) error {
-	_, ok := e.Asset.Asset.(*domain.FQDN)
+	_, ok := e.Entity.Asset.(*domain.FQDN)
 	if !ok {
 		return errors.New("failed to extract the FQDN asset")
-	}
-
-	src := support.GetSource(e.Session, d.plugin.source)
-	if src == nil {
-		return errors.New("failed to obtain the plugin source information")
 	}
 
 	since, err := support.TTLStartTime(e.Session.Config(), "FQDN", "FQDN", d.plugin.name)
@@ -44,10 +42,11 @@ func (d *dnsCNAME) check(e *et.Event) error {
 	}
 
 	var alias []*relAlias
-	if support.AssetMonitoredWithinTTL(e.Session, e.Asset, src, since) {
-		alias = append(alias, d.lookup(e, e.Asset, since)...)
+	src := d.plugin.source
+	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, src, since) {
+		alias = append(alias, d.lookup(e, e.Entity, since)...)
 	} else {
-		alias = append(alias, d.query(e, e.Asset, src)...)
+		alias = append(alias, d.query(e, e.Entity, src)...)
 	}
 
 	if len(alias) > 0 {
@@ -56,7 +55,7 @@ func (d *dnsCNAME) check(e *et.Event) error {
 	return nil
 }
 
-func (d *dnsCNAME) lookup(e *et.Event, fqdn *dbt.Asset, since time.Time) []*relAlias {
+func (d *dnsCNAME) lookup(e *et.Event, fqdn *dbt.Entity, since time.Time) []*relAlias {
 	var alias []*relAlias
 
 	n, ok := fqdn.Asset.(*domain.FQDN)
@@ -64,7 +63,7 @@ func (d *dnsCNAME) lookup(e *et.Event, fqdn *dbt.Asset, since time.Time) []*relA
 		return alias
 	}
 
-	if assets := d.plugin.lookupWithinTTL(e.Session, n.Name, "FQDN", since, "cname_record"); len(assets) > 0 {
+	if assets := d.plugin.lookupWithinTTL(e.Session, n.Name, oam.FQDN, since, oam.BasicDNSRelation, 5); len(assets) > 0 {
 		for _, a := range assets {
 			alias = append(alias, &relAlias{alias: fqdn, target: a})
 		}
@@ -72,7 +71,7 @@ func (d *dnsCNAME) lookup(e *et.Event, fqdn *dbt.Asset, since time.Time) []*relA
 	return alias
 }
 
-func (d *dnsCNAME) query(e *et.Event, name, src *dbt.Asset) []*relAlias {
+func (d *dnsCNAME) query(e *et.Event, name *dbt.Entity, src *et.Source) []*relAlias {
 	var alias []*relAlias
 
 	fqdn := name.Asset.(*domain.FQDN)
@@ -86,70 +85,53 @@ func (d *dnsCNAME) query(e *et.Event, name, src *dbt.Asset) []*relAlias {
 	return alias
 }
 
-func (d *dnsCNAME) store(e *et.Event, fqdn, src *dbt.Asset, rr []*resolve.ExtractedAnswer) []*relAlias {
+func (d *dnsCNAME) store(e *et.Event, fqdn *dbt.Entity, src *et.Source, rr []*resolve.ExtractedAnswer) []*relAlias {
 	var alias []*relAlias
 
-	done := make(chan struct{}, 1)
-	support.AppendToDBQueue(func() {
-		defer func() { done <- struct{}{} }()
-
-		if e.Session.Done() {
-			return
+	for _, record := range rr {
+		if record.Type != dns.TypeCNAME {
+			continue
 		}
 
-		for _, record := range rr {
-			if record.Type != dns.TypeCNAME {
-				continue
-			}
-
-			if cname, err := e.Session.DB().Create(fqdn, "cname_record", &domain.FQDN{Name: record.Data}); err == nil {
-				if cname != nil {
-					_, _ = e.Session.DB().Link(cname, "source", src)
-					alias = append(alias, &relAlias{alias: fqdn, target: cname})
-				}
+		if cname, err := e.Session.Cache().CreateAsset(fqdn, "cname_record", &domain.FQDN{Name: record.Data}); err == nil && cname != nil {
+			if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
+				Relation: &relation.BasicDNSRelation{
+					Name: "dns_record",
+					Header: relation.RRHeader{
+						RRType: record.Type,
+						Class:  1,
+					},
+				},
+				FromEntity: fqdn,
+				ToEntity:   cname,
+			}); err == nil && edge != nil {
+				alias = append(alias, &relAlias{alias: fqdn, target: cname})
+				_, _ = e.Session.Cache().CreateEdgeProperty(edge, &property.SourceProperty{
+					Source:     src.Name,
+					Confidence: src.Confidence,
+				})
 			} else {
 				e.Session.Log().Error(err.Error(), slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
 			}
+		} else {
+			e.Session.Log().Error(err.Error(), slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
 		}
-	})
-	<-done
-	close(done)
+	}
+
 	return alias
 }
 
 func (d *dnsCNAME) process(e *et.Event, alias []*relAlias, src *dbt.Asset) {
-	now := time.Now()
-
 	for _, a := range alias {
 		target := a.target.Asset.(*domain.FQDN)
 
 		_ = e.Dispatcher.DispatchEvent(&et.Event{
 			Name:    target.Name,
-			Asset:   a.target,
+			Entity:  a.target,
 			Session: e.Session,
 		})
 
-		e.Session.Cache().SetRelation(&dbt.Relation{
-			Type:      "source",
-			CreatedAt: now,
-			LastSeen:  now,
-			FromAsset: a.target,
-			ToAsset:   src,
-		})
-
-		src := a.alias.Asset.(*domain.FQDN)
-		if cname, hit := e.Session.Cache().GetAsset(a.alias.Asset); hit && cname != nil {
-			e.Session.Cache().SetRelation(&dbt.Relation{
-				Type:      "cname_record",
-				CreatedAt: now,
-				LastSeen:  now,
-				FromAsset: cname,
-				ToAsset:   a.target,
-			})
-
-			e.Session.Log().Info("relationship discovered", "from",
-				src.Name, "relation", "cname_record", "to", target.Name,
-				slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
-		}
+		e.Session.Log().Info("relationship discovered", "from", src.Name, "relation", "cname_record",
+			"to", target.Name, slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
 	}
 }

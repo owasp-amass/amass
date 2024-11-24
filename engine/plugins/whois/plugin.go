@@ -9,7 +9,6 @@ import (
 
 	et "github.com/owasp-amass/amass/v4/engine/types"
 	oam "github.com/owasp-amass/open-asset-model"
-	"github.com/owasp-amass/open-asset-model/source"
 	"go.uber.org/ratelimit"
 )
 
@@ -19,14 +18,14 @@ type whois struct {
 	rlimit ratelimit.Limiter
 	fqdn   *fqdnLookup
 	domrec *domrec
-	source *source.Source
+	source *et.Source
 }
 
 func NewWHOIS() et.Plugin {
 	return &whois{
 		name:   "WHOIS",
 		rlimit: ratelimit.New(10, ratelimit.WithoutSlack),
-		source: &source.Source{
+		source: &et.Source{
 			Name:       "WHOIS",
 			Confidence: 100,
 		},

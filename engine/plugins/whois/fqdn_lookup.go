@@ -31,7 +31,7 @@ func (r *fqdnLookup) Name() string {
 }
 
 func (r *fqdnLookup) check(e *et.Event) error {
-	fqdn, ok := e.Asset.Asset.(*domain.FQDN)
+	fqdn, ok := e.Entity.Asset.(*domain.FQDN)
 	if !ok {
 		return errors.New("failed to extract the FQDN asset")
 	}
@@ -41,40 +41,36 @@ func (r *fqdnLookup) check(e *et.Event) error {
 		return nil
 	}
 
-	src := support.GetSource(e.Session, r.plugin.source)
-	if src == nil {
-		return errors.New("failed to obtain the plugin source information")
-	}
-
 	since, err := support.TTLStartTime(e.Session.Config(), string(oam.FQDN), string(oam.DomainRecord), r.name)
 	if err != nil {
 		return err
 	}
 
 	var asset *dbt.Asset
+	src := r.plugin.source
 	var record *whoisparser.WhoisInfo
-	if support.AssetMonitoredWithinTTL(e.Session, e.Asset, src, since) {
+	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, src, since) {
 		asset = r.lookup(e, fqdn.Name, src, since)
 	} else {
-		asset, record = r.query(e, fqdn.Name, e.Asset, src)
-		support.MarkAssetMonitored(e.Session, e.Asset, src)
+		asset, record = r.query(e, fqdn.Name, e.Entity, src)
+		support.MarkAssetMonitored(e.Session, e.Entity, src)
 	}
 
 	if asset != nil {
-		r.process(e, record, e.Asset, asset, src)
+		r.process(e, record, e.Entity, asset, src)
 		r.waitForDomRecContacts(e, asset)
 	}
 	return nil
 }
 
-func (r *fqdnLookup) lookup(e *et.Event, name string, src *dbt.Asset, since time.Time) *dbt.Asset {
+func (r *fqdnLookup) lookup(e *et.Event, name string, src *et.Source, since time.Time) *dbt.Asset {
 	if assets := support.SourceToAssetsWithinTTL(e.Session, name, string(oam.DomainRecord), src, since); len(assets) > 0 {
 		return assets[0]
 	}
 	return nil
 }
 
-func (r *fqdnLookup) query(e *et.Event, name string, asset, src *dbt.Asset) (*dbt.Asset, *whoisparser.WhoisInfo) {
+func (r *fqdnLookup) query(e *et.Event, name string, asset *dbt.Entity, src *et.Source) (*dbt.Asset, *whoisparser.WhoisInfo) {
 	r.plugin.rlimit.Take()
 	resp, err := whoisclient.Whois(name)
 	if err != nil {
@@ -84,7 +80,7 @@ func (r *fqdnLookup) query(e *et.Event, name string, asset, src *dbt.Asset) (*db
 	return r.store(e, resp, asset, src)
 }
 
-func (r *fqdnLookup) store(e *et.Event, resp string, asset, src *dbt.Asset) (*dbt.Asset, *whoisparser.WhoisInfo) {
+func (r *fqdnLookup) store(e *et.Event, resp string, asset *dbt.Entity, src *et.Source) (*dbt.Entity, *whoisparser.WhoisInfo) {
 	fqdn := asset.Asset.(*domain.FQDN)
 
 	info, err := whoisparser.Parse(resp)
@@ -136,14 +132,14 @@ func (r *fqdnLookup) store(e *et.Event, resp string, asset, src *dbt.Asset) (*db
 	return autasset, &info
 }
 
-func (r *fqdnLookup) process(e *et.Event, record *whoisparser.WhoisInfo, fqdn, dr, src *dbt.Asset) {
+func (r *fqdnLookup) process(e *et.Event, record *whoisparser.WhoisInfo, fqdn, dr *dbt.Entity, src *et.Source) {
 	d := dr.Asset.(*oamreg.DomainRecord)
 
 	name := d.Domain + " WHOIS domain record"
 	_ = e.Dispatcher.DispatchEvent((&et.Event{
 		Name:    name,
 		Meta:    record,
-		Asset:   dr,
+		Entity:  dr,
 		Session: e.Session,
 	}))
 
@@ -171,7 +167,7 @@ func (r *fqdnLookup) process(e *et.Event, record *whoisparser.WhoisInfo, fqdn, d
 	}
 }
 
-func (r *fqdnLookup) waitForDomRecContacts(e *et.Event, dr *dbt.Asset) {
+func (r *fqdnLookup) waitForDomRecContacts(e *et.Event, dr *dbt.Entity) {
 	t := time.NewTimer(time.Minute)
 	defer t.Stop()
 	tick := time.NewTicker(10 * time.Second)

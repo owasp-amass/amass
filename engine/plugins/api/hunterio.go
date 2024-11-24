@@ -32,7 +32,7 @@ type hunterIO struct {
 	accounttype      string
 	log              *slog.Logger
 	rlimit           ratelimit.Limiter
-	source           *source.Source
+	source           *et.Source
 }
 
 func NewHunterIO() et.Plugin {
@@ -42,7 +42,7 @@ func NewHunterIO() et.Plugin {
 		queryurl:         "https://api.hunter.io/v2/domain-search?domain=",
 		emailVerifierurl: "https://api.hunter.io/v2/email-verifier?email=",
 		rlimit:           ratelimit.New(15, ratelimit.WithoutSlack),
-		source: &source.Source{
+		source: &et.Source{
 			Name:       "Hunter.io",
 			Confidence: 80,
 		},

@@ -14,9 +14,7 @@ import (
 	oamcert "github.com/owasp-amass/open-asset-model/certificate"
 	"github.com/owasp-amass/open-asset-model/contact"
 	"github.com/owasp-amass/open-asset-model/domain"
-	"github.com/owasp-amass/open-asset-model/network"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
-	"github.com/owasp-amass/open-asset-model/source"
 )
 
 // Edge represents an Amass graph edge in the viz package.
@@ -108,10 +106,6 @@ func VizData(domains []string, since time.Time, db *assetdb.AssetDB) ([]Node, []
 				out = true
 			case oam.IPNetRecord:
 				out = true
-			case oam.SocketAddress:
-				out = true
-			case oam.NetworkEndpoint:
-				out = true
 			case oam.ContactRecord:
 				out = true
 			case oam.EmailAddress:
@@ -120,8 +114,6 @@ func VizData(domains []string, since time.Time, db *assetdb.AssetDB) ([]Node, []
 				out = true
 			case oam.Phone:
 				out = true
-			case oam.Fingerprint:
-				in = true
 			case oam.Organization:
 				out = true
 			case oam.Person:
@@ -132,7 +124,6 @@ func VizData(domains []string, since time.Time, db *assetdb.AssetDB) ([]Node, []
 				out = true
 			case oam.DomainRecord:
 				out = true
-			case oam.Source:
 			case oam.Service:
 				out = true
 			default:
@@ -216,12 +207,8 @@ func newNode(db *assetdb.AssetDB, idx int, a *types.Asset, since time.Time) *Nod
 		return nil
 	}
 
-	atype := string(asset.AssetType())
-	if atype == string(oam.Source) {
-		return nil
-	}
-
 	var check bool
+	atype := string(asset.AssetType())
 	switch v := asset.(type) {
 	case *contact.ContactRecord:
 		key = "Found->" + key
@@ -232,12 +219,6 @@ func newNode(db *assetdb.AssetDB, idx int, a *types.Asset, since time.Time) *Nod
 		key = "WHOIS: " + key
 	case *oamcert.TLSCertificate:
 		key = "x509 Serial Number: " + v.SerialNumber
-	case *domain.NetworkEndpoint:
-		check = true
-	case *network.SocketAddress:
-		check = true
-	case *source.Source:
-		return nil
 	}
 	title := atype + ": " + key
 

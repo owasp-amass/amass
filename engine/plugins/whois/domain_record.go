@@ -33,14 +33,9 @@ func (r *domrec) Name() string {
 }
 
 func (r *domrec) check(e *et.Event) error {
-	_, ok := e.Asset.Asset.(*oamreg.DomainRecord)
+	_, ok := e.Entity.Asset.(*oamreg.DomainRecord)
 	if !ok {
 		return errors.New("failed to extract the DomainRecord asset")
-	}
-
-	src := support.GetSource(e.Session, r.plugin.source)
-	if src == nil {
-		return errors.New("failed to obtain the plugin source information")
 	}
 
 	matches, err := e.Session.Config().CheckTransformations(
@@ -49,11 +44,12 @@ func (r *domrec) check(e *et.Event) error {
 		return nil
 	}
 
+	src := r.plugin.source
 	var findings []*support.Finding
 	if record, ok := e.Meta.(*whoisparser.WhoisInfo); ok && record != nil {
-		findings = append(findings, r.store(e, record, e.Asset, src, matches)...)
+		findings = append(findings, r.store(e, record, e.Entity, src, matches)...)
 	} else {
-		findings = append(findings, r.lookup(e, e.Asset, src, matches)...)
+		findings = append(findings, r.lookup(e, e.Entity, src, matches)...)
 	}
 
 	if len(findings) > 0 {
@@ -62,7 +58,7 @@ func (r *domrec) check(e *et.Event) error {
 	return nil
 }
 
-func (r *domrec) lookup(e *et.Event, asset, src *dbt.Asset, m *config.Matches) []*support.Finding {
+func (r *domrec) lookup(e *et.Event, asset *dbt.Entity, src *et.Source, m *config.Matches) []*support.Finding {
 	var rtypes []string
 	var findings []*support.Finding
 	sinces := make(map[string]time.Time)
@@ -127,7 +123,7 @@ func (r *domrec) lookup(e *et.Event, asset, src *dbt.Asset, m *config.Matches) [
 	return findings
 }
 
-func (r *domrec) oneOfSources(e *et.Event, asset, src *dbt.Asset, since time.Time) bool {
+func (r *domrec) oneOfSources(e *et.Event, asset *dbt.Entity, src *et.Source, since time.Time) bool {
 	if rels, err := e.Session.DB().OutgoingRelations(asset, since, "source"); err == nil && len(rels) > 0 {
 		for _, rel := range rels {
 			if rel.ToAsset.ID == src.ID {
@@ -210,7 +206,7 @@ type domrecContact struct {
 	DiscoveredAt string
 }
 
-func (r *domrec) storeContact(e *et.Event, c *domrecContact, dr, src *dbt.Asset, m *config.Matches) []*support.Finding {
+func (r *domrec) storeContact(e *et.Event, c *domrecContact, dr *dbt.Entity, src *et.Source, m *config.Matches) []*support.Finding {
 	var findings []*support.Finding
 
 	done := make(chan struct{}, 1)
@@ -298,6 +294,6 @@ func (r *domrec) storeContact(e *et.Event, c *domrecContact, dr, src *dbt.Asset,
 	return findings
 }
 
-func (r *domrec) process(e *et.Event, findings []*support.Finding, src *dbt.Asset) {
+func (r *domrec) process(e *et.Event, findings []*support.Finding, src *et.Source) {
 	support.ProcessAssetsWithSource(e, findings, src, r.plugin.name, r.name)
 }

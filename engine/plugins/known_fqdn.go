@@ -11,7 +11,7 @@ import (
 	"time"
 
 	et "github.com/owasp-amass/amass/v4/engine/types"
-	"github.com/owasp-amass/amass/v4/engine/utils"
+	"github.com/owasp-amass/amass/v4/utils"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/domain"

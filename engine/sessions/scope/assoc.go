@@ -13,17 +13,17 @@ import (
 	"github.com/adrg/strutil"
 	"github.com/adrg/strutil/metrics"
 	"github.com/caffix/stringset"
-	"github.com/owasp-amass/amass/v4/engine/cache"
+	"github.com/owasp-amass/asset-db/cache"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamcert "github.com/owasp-amass/open-asset-model/certificate"
 	"github.com/owasp-amass/open-asset-model/contact"
-	oamfin "github.com/owasp-amass/open-asset-model/fingerprint"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
 	"github.com/owasp-amass/open-asset-model/org"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
 	oamurl "github.com/owasp-amass/open-asset-model/url"
 	"golang.org/x/net/publicsuffix"
+	"honnef.co/go/tools/lintcmd/cache"
 )
 
 type Association struct {
@@ -35,7 +35,7 @@ type Association struct {
 	ImpactedAssets []*dbt.Asset
 }
 
-func (s *Scope) IsAssociated(c cache.Cache, req *Association) ([]*Association, error) {
+func (s *Scope) IsAssociated(c *cache.Cache, req *Association) ([]*Association, error) {
 	if req == nil || req.Submission == nil || req.Submission.Asset == nil || req.Confidence < 0 || req.Confidence > 100 {
 		return nil, errors.New("invalid request")
 	}
@@ -91,7 +91,7 @@ func (s *Scope) addScopeChangesToRationale(result *Association) {
 	result.Rationale += ". The following assets were added to the session scope: " + strings.Join(changes, ", ")
 }
 
-func (s *Scope) reviewAndUpdate(c cache.Cache, req *Association) []*dbt.Asset {
+func (s *Scope) reviewAndUpdate(c *cache.Cache, req *Association) []*dbt.Asset {
 	var assocs []*dbt.Asset
 
 	if drs, hit := c.GetAssetsByType(oam.DomainRecord); hit && len(drs) > 0 {
@@ -118,7 +118,7 @@ func (s *Scope) reviewAndUpdate(c cache.Cache, req *Association) []*dbt.Asset {
 	return impacted
 }
 
-func (s *Scope) checkRelatedAssetsforAssoc(c cache.Cache, req *Association, assocs []*dbt.Asset) []*Association {
+func (s *Scope) checkRelatedAssetsforAssoc(c *cache.Cache, req *Association, assocs []*dbt.Asset) []*Association {
 	var results []*Association
 
 	for _, assoc := range assocs {
@@ -129,9 +129,6 @@ func (s *Scope) checkRelatedAssetsforAssoc(c cache.Cache, req *Association, asso
 		for _, asset := range append(s.assetsRelatedToAssetWithAssoc(c, assoc), assoc) {
 			if req.ScopeChange {
 				impacted = append(impacted, asset)
-			}
-			if _, ok := asset.Asset.(*oamfin.Fingerprint); ok {
-				continue
 			}
 			if match, conf := s.IsAssetInScope(asset.Asset, req.Confidence); conf > 0 {
 				if a, hit := c.GetAsset(match); hit && a != nil {
@@ -161,7 +158,7 @@ func (s *Scope) checkRelatedAssetsforAssoc(c cache.Cache, req *Association, asso
 	return results
 }
 
-func (s *Scope) assetsRelatedToAssetWithAssoc(c cache.Cache, assoc *dbt.Asset) []*dbt.Asset {
+func (s *Scope) assetsRelatedToAssetWithAssoc(c *cache.Cache, assoc *dbt.Asset) []*dbt.Asset {
 	set := stringset.New(assoc.ID)
 	defer set.Close()
 
@@ -182,9 +179,6 @@ func (s *Scope) assetsRelatedToAssetWithAssoc(c cache.Cache, assoc *dbt.Asset) [
 			case *contact.Location:
 				found = true
 				results = append(results, a)
-			case *oamfin.Fingerprint:
-				found = true
-				results = append(results, a)
 			}
 
 			if !found {
@@ -202,7 +196,7 @@ func (s *Scope) assetsRelatedToAssetWithAssoc(c cache.Cache, assoc *dbt.Asset) [
 	return results
 }
 
-func (s *Scope) AssetsWithAssociation(c cache.Cache, asset *dbt.Asset) []*dbt.Asset {
+func (s *Scope) AssetsWithAssociation(c *cache.Cache, asset *dbt.Asset) []*dbt.Asset {
 	set := stringset.New(asset.ID)
 	defer set.Close()
 
@@ -247,7 +241,7 @@ func (s *Scope) AssetsWithAssociation(c cache.Cache, asset *dbt.Asset) []*dbt.As
 	return results
 }
 
-func (s *Scope) awayFromAssetsWithAssociation(c cache.Cache, assoc *dbt.Asset) ([]*dbt.Asset, error) {
+func (s *Scope) awayFromAssetsWithAssociation(c *cache.Cache, assoc *dbt.Asset) ([]*dbt.Asset, error) {
 	var results []*dbt.Asset
 	// Determine relationship directions to follow on the graph
 	var out, in bool
@@ -256,17 +250,11 @@ func (s *Scope) awayFromAssetsWithAssociation(c cache.Cache, assoc *dbt.Asset) (
 	case oam.FQDN:
 		out = true
 		outRels = append(outRels, "port")
-	case oam.NetworkEndpoint:
-		out = true
-		outRels = append(outRels, "service")
 	case oam.IPAddress:
 		out = true
 		outRels = append(outRels, "port")
 		in = true
 		inRels = append(inRels, "a_record", "aaaa_record")
-	case oam.SocketAddress:
-		out = true
-		outRels = append(outRels, "service")
 	case oam.Netblock:
 		out = true
 		outRels = append(outRels, "contains")
@@ -292,9 +280,6 @@ func (s *Scope) awayFromAssetsWithAssociation(c cache.Cache, assoc *dbt.Asset) (
 	case oam.ContactRecord:
 		out = true
 		outRels = append(outRels, "organization", "location")
-	case oam.Service:
-		out = true
-		outRels = append(outRels, "fingerprint")
 	}
 	if out {
 		if rels, hit := c.GetOutgoingRelations(assoc, outRels...); hit && len(rels) > 0 {
@@ -316,7 +301,7 @@ func (s *Scope) awayFromAssetsWithAssociation(c cache.Cache, assoc *dbt.Asset) (
 	return results, nil
 }
 
-func (s *Scope) towardsAssetsWithAssociation(c cache.Cache, asset *dbt.Asset) ([]*dbt.Asset, error) {
+func (s *Scope) towardsAssetsWithAssociation(c *cache.Cache, asset *dbt.Asset) ([]*dbt.Asset, error) {
 	var results []*dbt.Asset
 	// Determine relationship directions to follow on the graph
 	var out, in bool
@@ -327,15 +312,9 @@ func (s *Scope) towardsAssetsWithAssociation(c cache.Cache, asset *dbt.Asset) ([
 		outRels = append(outRels, "registration")
 		in = true
 		inRels = append(inRels, "node")
-	case oam.NetworkEndpoint:
-		in = true
-		inRels = append(inRels, "port")
 	case oam.IPAddress:
 		in = true
 		inRels = append(inRels, "contains")
-	case oam.SocketAddress:
-		in = true
-		inRels = append(inRels, "port")
 	case oam.Netblock:
 		out = true
 		outRels = append(outRels, "registration")
@@ -348,9 +327,6 @@ func (s *Scope) towardsAssetsWithAssociation(c cache.Cache, asset *dbt.Asset) ([
 	case oam.Location:
 		in = true
 		inRels = append(inRels, "location")
-	case oam.Fingerprint:
-		in = true
-		inRels = append(inRels, "fingerprint")
 	case oam.ContactRecord:
 		in = true
 		inRels = append(inRels, "registrant", "registrant_contact", "subject_contact")
@@ -378,7 +354,7 @@ func (s *Scope) towardsAssetsWithAssociation(c cache.Cache, asset *dbt.Asset) ([
 	return results, nil
 }
 
-func (s *Scope) IsAddressInScope(c cache.Cache, ip *oamnet.IPAddress) bool {
+func (s *Scope) IsAddressInScope(c *cache.Cache, ip *oamnet.IPAddress) bool {
 	if _, conf := s.IsAssetInScope(ip, 0); conf > 0 {
 		return true
 	}
@@ -406,7 +382,7 @@ func (s *Scope) IsAddressInScope(c cache.Cache, ip *oamnet.IPAddress) bool {
 	return false
 }
 
-func (s *Scope) IsURLInScope(c cache.Cache, u *oamurl.URL) bool {
+func (s *Scope) IsURLInScope(c *cache.Cache, u *oamurl.URL) bool {
 	if ip, err := netip.ParseAddr(u.Host); err == nil {
 		ntype := "IPv4"
 		if ip.Is6() {

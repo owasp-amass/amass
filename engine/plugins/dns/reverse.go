@@ -15,8 +15,11 @@ import (
 	et "github.com/owasp-amass/amass/v4/engine/types"
 	amassnet "github.com/owasp-amass/amass/v4/utils/net"
 	dbt "github.com/owasp-amass/asset-db/types"
+	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/domain"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
+	"github.com/owasp-amass/open-asset-model/property"
+	"github.com/owasp-amass/open-asset-model/relation"
 	"github.com/owasp-amass/resolve"
 )
 
@@ -38,7 +41,7 @@ func NewReverse(p *dnsPlugin) *dnsReverse {
 }
 
 func (d *dnsReverse) check(e *et.Event) error {
-	ip, ok := e.Asset.Asset.(*oamnet.IPAddress)
+	ip, ok := e.Entity.Asset.(*oamnet.IPAddress)
 	if !ok {
 		return errors.New("failed to extract the IPAddress asset")
 	}
@@ -54,12 +57,8 @@ func (d *dnsReverse) check(e *et.Event) error {
 	}
 	reverse = resolve.RemoveLastDot(reverse)
 
-	src := support.GetSource(e.Session, d.plugin.source)
-	if src == nil {
-		return errors.New("failed to obtain the plugin source information")
-	}
-
-	ptr := d.createPTRAlias(e, reverse, e.Asset, src)
+	src := d.plugin.source
+	ptr := d.createPTRAlias(e, reverse, e.Entity, src)
 	if ptr == nil {
 		return nil
 	}
@@ -70,7 +69,7 @@ func (d *dnsReverse) check(e *et.Event) error {
 	}
 
 	var rev []*relRev
-	if support.AssetMonitoredWithinTTL(e.Session, e.Asset, src, since) {
+	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, src, since) {
 		rev = append(rev, d.lookup(e, ptr, since)...)
 	} else {
 		rev = append(rev, d.query(e, addrstr, ptr, src)...)
@@ -102,7 +101,7 @@ func (d *dnsReverse) lookup(e *et.Event, fqdn *dbt.Asset, since time.Time) []*re
 		return rev
 	}
 
-	if assets := d.plugin.lookupWithinTTL(e.Session, n.Name, "FQDN", since, "ptr_record"); len(assets) > 0 {
+	if assets := d.plugin.lookupWithinTTL(e.Session, n.Name, oam.FQDN, since, oam.BasicDNSRelation, 12); len(assets) > 0 {
 		for _, a := range assets {
 			rev = append(rev, &relRev{ipFQDN: fqdn, target: a})
 		}
@@ -122,7 +121,7 @@ func (d *dnsReverse) query(e *et.Event, ipstr string, ptr, src *dbt.Asset) []*re
 	return rev
 }
 
-func (d *dnsReverse) store(e *et.Event, ptr, src *dbt.Asset, rr []*resolve.ExtractedAnswer) []*relRev {
+func (d *dnsReverse) store(e *et.Event, ptr *dbt.Entity, src *et.Source, rr []*resolve.ExtractedAnswer) []*relRev {
 	var rev []*relRev
 
 	var passed bool
@@ -142,121 +141,77 @@ func (d *dnsReverse) store(e *et.Event, ptr, src *dbt.Asset, rr []*resolve.Extra
 		return rev
 	}
 
-	done := make(chan struct{}, 1)
-	support.AppendToDBQueue(func() {
-		defer func() { done <- struct{}{} }()
-
-		if e.Session.Done() {
-			return
+	for _, record := range rr {
+		if record.Type != dns.TypePTR {
+			continue
 		}
 
-		for _, record := range rr {
-			if record.Type != dns.TypePTR {
-				continue
+		if t, err := e.Session.Cache().CreateAsset(&domain.FQDN{Name: record.Data}); err == nil && t != nil {
+			if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
+				Relation: &relation.BasicDNSRelation{
+					Name: "dns_record",
+					Header: relation.RRHeader{
+						RRType: record.Type,
+						Class:  1,
+					},
+				},
+				FromEntity: ptr,
+				ToEntity:   t,
+			}); err == nil && edge != nil {
+				rev = append(rev, &relRev{ipFQDN: ptr, target: t})
+				_, _ = e.Session.Cache().CreateEdgeProperty(edge, &property.SourceProperty{
+					Source:     src.Name,
+					Confidence: src.Confidence,
+				})
 			}
-
-			if t, err := e.Session.DB().Create(ptr, "ptr_record", &domain.FQDN{Name: record.Data}); err == nil {
-				if t != nil {
-					rev = append(rev, &relRev{ipFQDN: ptr, target: t})
-					_, _ = e.Session.DB().Link(t, "source", src)
-				}
-			} else {
-				e.Session.Log().Error(err.Error(), slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
-			}
+		} else {
+			e.Session.Log().Error(err.Error(), slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
 		}
-	})
-	<-done
-	close(done)
+	}
+
 	return rev
 }
 
-func (d *dnsReverse) createPTRAlias(e *et.Event, name string, ip, datasrc *dbt.Asset) *dbt.Asset {
-	done := make(chan *dbt.Asset, 1)
-	defer close(done)
-
-	support.AppendToDBQueue(func() {
-		if e.Session.Done() {
-			done <- nil
-			return
-		}
-
-		ptr, err := e.Session.DB().Create(ip, "ptr_record", &domain.FQDN{Name: name})
-		if err == nil && ptr != nil {
-			_, _ = e.Session.DB().Link(ptr, "source", datasrc)
-		}
-		done <- ptr
-	})
-
-	ptr := <-done
-	if ptr == nil {
-		return ptr
+func (d *dnsReverse) createPTRAlias(e *et.Event, name string, ip *dbt.Entity, datasrc *et.Source) *dbt.Asset {
+	ptr, err := e.Session.Cache().CreateAsset(&domain.FQDN{Name: name})
+	if err != nil || ptr == nil {
+		return nil
+	}
+	if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
+		Relation:   &relation.SimpleRelation{Name: "ptr_record"},
+		FromEntity: ip,
+		ToEntity:   ptr,
+	}); err == nil && edge != nil {
+		_, _ = e.Session.Cache().CreateEdgeProperty(edge, &property.SourceProperty{
+			Source:     datasrc.Name,
+			Confidence: datasrc.Confidence,
+		})
 	}
 
 	_ = e.Dispatcher.DispatchEvent(&et.Event{
 		Name:    ptr.Asset.Key(),
-		Asset:   ptr,
+		Entity:  ptr,
 		Session: e.Session,
 	})
 
-	now := time.Now()
-	e.Session.Cache().SetRelation(&dbt.Relation{
-		Type:      "source",
-		CreatedAt: now,
-		LastSeen:  now,
-		FromAsset: ptr,
-		ToAsset:   datasrc,
-	})
-
-	if a, hit := e.Session.Cache().GetAsset(&domain.FQDN{Name: ptr.Asset.Key()}); hit && ptr != nil {
-		e.Session.Cache().SetRelation(&dbt.Relation{
-			Type:      "ptr_record",
-			CreatedAt: now,
-			LastSeen:  now,
-			FromAsset: ip,
-			ToAsset:   a,
-		})
-
-		e.Session.Log().Info("relationship discovered", "from",
-			a.Asset.Key(), "relation", "ptr_record", "to", ip.Asset.Key(),
-			slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
-	}
+	e.Session.Log().Info("relationship discovered", "from", ip.Asset.Key(), "relation", "ptr_record",
+		"to", ptr.Asset.Key(), slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
 
 	return ptr
 }
 
-func (d *dnsReverse) process(e *et.Event, rev []*relRev, src *dbt.Asset) {
-	now := time.Now()
-
+func (d *dnsReverse) process(e *et.Event, rev []*relRev, src *et.Source) {
 	for _, r := range rev {
 		ip := r.ipFQDN.Asset.(*domain.FQDN)
 		target := r.target.Asset.(*domain.FQDN)
 
 		_ = e.Dispatcher.DispatchEvent(&et.Event{
 			Name:    target.Name,
-			Asset:   r.target,
+			Entity:  r.target,
 			Session: e.Session,
 		})
 
-		e.Session.Cache().SetRelation(&dbt.Relation{
-			Type:      "source",
-			CreatedAt: now,
-			LastSeen:  now,
-			FromAsset: r.target,
-			ToAsset:   src,
-		})
-
-		if ptr, hit := e.Session.Cache().GetAsset(&domain.FQDN{Name: ip.Name}); hit && ptr != nil {
-			e.Session.Cache().SetRelation(&dbt.Relation{
-				Type:      "ptr_record",
-				CreatedAt: now,
-				LastSeen:  now,
-				FromAsset: ptr,
-				ToAsset:   r.target,
-			})
-
-			e.Session.Log().Info("relationship discovered", "from",
-				ip.Name, "relation", "ptr_record", "to", target.Name,
-				slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
-		}
+		e.Session.Log().Info("relationship discovered", "from", ip.Name, "relation", "ptr_record",
+			"to", target.Name, slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
 	}
 }
