@@ -18,7 +18,9 @@ import (
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/network"
+	"github.com/owasp-amass/open-asset-model/property"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
+	"github.com/owasp-amass/open-asset-model/relation"
 )
 
 type netblock struct {
@@ -31,14 +33,9 @@ func (nb *netblock) Name() string {
 }
 
 func (nb *netblock) check(e *et.Event) error {
-	n, ok := e.Asset.Asset.(*network.Netblock)
+	n, ok := e.Entity.Asset.(*network.Netblock)
 	if !ok {
 		return errors.New("failed to extract the Netblock asset")
-	}
-
-	src := support.GetSource(e.Session, nb.plugin.source)
-	if src == nil {
-		return errors.New("failed to obtain the plugin source information")
 	}
 
 	since, err := support.TTLStartTime(e.Session.Config(),
@@ -47,12 +44,13 @@ func (nb *netblock) check(e *et.Event) error {
 		return err
 	}
 
-	var asset *dbt.Asset
+	var asset *dbt.Entity
+	src := nb.plugin.source
 	var record *rdap.IPNetwork
-	if support.AssetMonitoredWithinTTL(e.Session, e.Asset, src, since) {
+	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, src, since) {
 		asset = nb.lookup(e, n.CIDR.String(), src, since)
 	} else {
-		asset, record = nb.query(e, e.Asset, src)
+		asset, record = nb.query(e, e.Entity, src)
 		support.MarkAssetMonitored(e.Session, e.Asset, src)
 	}
 
@@ -62,14 +60,14 @@ func (nb *netblock) check(e *et.Event) error {
 	return nil
 }
 
-func (nb *netblock) lookup(e *et.Event, cidr string, src *dbt.Asset, since time.Time) *dbt.Asset {
+func (nb *netblock) lookup(e *et.Event, cidr string, src *et.Source, since time.Time) *dbt.Entity {
 	if assets := support.SourceToAssetsWithinTTL(e.Session, cidr, string(oam.IPNetRecord), src, since); len(assets) > 0 {
 		return assets[0]
 	}
 	return nil
 }
 
-func (nb *netblock) query(e *et.Event, asset, src *dbt.Asset) (*dbt.Asset, *rdap.IPNetwork) {
+func (nb *netblock) query(e *et.Event, asset *dbt.Entity, src *et.Source) (*dbt.Entity, *rdap.IPNetwork) {
 	n := asset.Asset.(*network.Netblock)
 
 	var req *rdap.Request
@@ -96,7 +94,7 @@ func (nb *netblock) query(e *et.Event, asset, src *dbt.Asset) (*dbt.Asset, *rdap
 	return nb.store(e, record, asset, src), record
 }
 
-func (nb *netblock) store(e *et.Event, resp *rdap.IPNetwork, asset, src *dbt.Asset) *dbt.Asset {
+func (nb *netblock) store(e *et.Event, resp *rdap.IPNetwork, asset *dbt.Entity, src *et.Source) *dbt.Entity {
 	n := asset.Asset.(*network.Netblock)
 	ipnetrec := &oamreg.IPNetRecord{
 		CIDR:         n.CIDR,
@@ -130,26 +128,23 @@ func (nb *netblock) store(e *et.Event, resp *rdap.IPNetwork, asset, src *dbt.Ass
 		return nil
 	}
 
-	done := make(chan *dbt.Asset, 1)
-	support.AppendToDBQueue(func() {
-		if e.Session.Done() {
-			done <- nil
-			return
+	record, err := e.Session.Cache().CreateAsset(ipnetrec)
+	if err == nil && record != nil {
+		if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
+			Relation:   &relation.SimpleRelation{Name: "registration"},
+			FromEntity: asset,
+			ToEntity:   record,
+		}); err == nil && edge != nil {
+			_, _ = e.Session.Cache().CreateEdgeTag(edge, &property.SourceProperty{
+				Source:     src.Name,
+				Confidence: src.Confidence,
+			})
 		}
-
-		if a, err := e.Session.DB().Create(asset, "registration", ipnetrec); err == nil && a != nil {
-			_, _ = e.Session.DB().Link(a, "source", src)
-			done <- a
-			return
-		}
-		done <- nil
-	})
-	a := <-done
-	close(done)
-	return a
+	}
+	return record
 }
 
-func (nb *netblock) process(e *et.Event, record *rdap.IPNetwork, n, asset, src *dbt.Asset) {
+func (nb *netblock) process(e *et.Event, record *rdap.IPNetwork, n, asset *dbt.Entity, src *et.Source) {
 	ipnet := asset.Asset.(*oamreg.IPNetRecord)
 
 	name := "IPNetRecord: " + ipnet.Handle
@@ -160,23 +155,6 @@ func (nb *netblock) process(e *et.Event, record *rdap.IPNetwork, n, asset, src *
 		Session: e.Session,
 	}))
 
-	now := time.Now()
-	if to, hit := e.Session.Cache().GetAsset(asset.Asset); hit && to != nil {
-		e.Session.Cache().SetRelation(&dbt.Relation{
-			Type:      "registration",
-			CreatedAt: now,
-			LastSeen:  now,
-			FromAsset: n,
-			ToAsset:   to,
-		})
-		e.Session.Cache().SetRelation(&dbt.Relation{
-			Type:      "source",
-			CreatedAt: now,
-			LastSeen:  now,
-			FromAsset: to,
-			ToAsset:   src,
-		})
-		e.Session.Log().Info("relationship discovered", "from", ipnet.CIDR.String(), "relation",
-			"registration", "to", name, slog.Group("plugin", "name", nb.plugin.name, "handler", nb.name))
-	}
+	e.Session.Log().Info("relationship discovered", "from", ipnet.CIDR.String(), "relation",
+		"registration", "to", name, slog.Group("plugin", "name", nb.plugin.name, "handler", nb.name))
 }

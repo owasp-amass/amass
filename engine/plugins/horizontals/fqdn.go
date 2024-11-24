@@ -15,6 +15,7 @@ import (
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/domain"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
+	"github.com/owasp-amass/open-asset-model/property"
 	"golang.org/x/net/publicsuffix"
 )
 
@@ -28,7 +29,7 @@ func (h *horfqdn) Name() string {
 }
 
 func (h *horfqdn) check(e *et.Event) error {
-	fqdn, ok := e.Asset.Asset.(*domain.FQDN)
+	fqdn, ok := e.Entity.Asset.(*domain.FQDN)
 	if !ok {
 		return errors.New("failed to extract the FQDN asset")
 	}
@@ -41,11 +42,6 @@ func (h *horfqdn) check(e *et.Event) error {
 		return nil
 	}
 
-	src := support.GetSource(e.Session, h.plugin.source)
-	if src == nil {
-		return errors.New("failed to obtain the plugin source information")
-	}
-
 	matches, err := e.Session.Config().CheckTransformations(string(oam.FQDN), string(oam.FQDN), h.plugin.name)
 	if err != nil || matches.Len() == 0 {
 		return nil
@@ -56,13 +52,15 @@ func (h *horfqdn) check(e *et.Event) error {
 		conf = matches.Confidence(string(oam.FQDN))
 	}
 
+	src := h.plugin.Source
 	if hit && len(rels) > 0 {
 		h.checkPTR(e, rels, e.Asset, src)
 		return nil
 	}
 
 	if assocs := h.lookup(e, e.Asset, conf); len(assocs) > 0 {
-		var impacted []*dbt.Asset
+		var impacted []*dbt.Entity
+
 		for _, assoc := range assocs {
 			if assoc.ScopeChange {
 				h.plugin.log.Info(assoc.Rationale)
@@ -70,7 +68,7 @@ func (h *horfqdn) check(e *et.Event) error {
 			}
 		}
 
-		var assets []*dbt.Asset
+		var assets []*dbt.Entity
 		for _, im := range impacted {
 			if a, hit := e.Session.Cache().GetAsset(im.Asset); hit && a != nil {
 				assets = append(assets, a)
@@ -87,7 +85,7 @@ func (h *horfqdn) check(e *et.Event) error {
 	return nil
 }
 
-func (h *horfqdn) checkPTR(e *et.Event, rels []*dbt.Relation, fqdn, src *dbt.Asset) {
+func (h *horfqdn) checkPTR(e *et.Event, edges []*dbt.Edge, fqdn *dbt.Entity, src *et.Source) {
 	if rs, hit := e.Session.Cache().GetIncomingRelations(fqdn, "ptr_record"); hit && len(rs) > 0 {
 		for _, r := range rs {
 			ip, ok := r.FromAsset.Asset.(*oamnet.IPAddress)
@@ -101,15 +99,15 @@ func (h *horfqdn) checkPTR(e *et.Event, rels []*dbt.Relation, fqdn, src *dbt.Ass
 				inscope = true
 			}
 
-			for _, rel := range rels {
+			for _, edge := range edges {
 				if inscope {
-					if dom, err := publicsuffix.EffectiveTLDPlusOne(rel.ToAsset.Asset.Key()); err == nil && dom != "" {
+					if dom, err := publicsuffix.EffectiveTLDPlusOne(edge.ToEntity.Asset.Key()); err == nil && dom != "" {
 						if e.Session.Scope().AddDomain(dom) {
 							h.plugin.log.Info(fmt.Sprintf("[%s: %s] was added to the session scope", "FQDN", dom))
 						}
 						h.plugin.submitFQDN(e, dom, src)
 					}
-				} else if _, conf := e.Session.Scope().IsAssetInScope(rel.ToAsset.Asset, 0); conf > 0 {
+				} else if _, conf := e.Session.Scope().IsAssetInScope(edge.ToEntity.Asset, 0); conf > 0 {
 					if e.Session.Scope().Add(ip) {
 						size := 100
 						if e.Session.Config().Active {
@@ -125,7 +123,7 @@ func (h *horfqdn) checkPTR(e *et.Event, rels []*dbt.Relation, fqdn, src *dbt.Ass
 	}
 }
 
-func (h *horfqdn) lookup(e *et.Event, asset *dbt.Asset, conf int) []*scope.Association {
+func (h *horfqdn) lookup(e *et.Event, asset *dbt.Entity, conf int) []*scope.Association {
 	if assocs, err := e.Session.Scope().IsAssociated(e.Session.Cache(), &scope.Association{
 		Submission:  asset,
 		Confidence:  conf,
@@ -136,25 +134,15 @@ func (h *horfqdn) lookup(e *et.Event, asset *dbt.Asset, conf int) []*scope.Assoc
 	return []*scope.Association{}
 }
 
-func (h *horfqdn) store(e *et.Event, asset oam.Asset, src *dbt.Asset) *dbt.Asset {
-	done := make(chan *dbt.Asset, 1)
-	defer close(done)
+func (h *horfqdn) store(e *et.Event, asset oam.Asset, src *et.Source) *dbt.Entity {
+	a, err := e.Session.Cache().CreateAsset(asset)
+	if err != nil || a == nil {
+		return nil
+	}
 
-	support.AppendToDBQueue(func() {
-		if e.Session.Done() {
-			done <- nil
-			return
-		}
-
-		a, err := e.Session.DB().Create(nil, "", asset)
-		if err != nil || a == nil {
-			done <- nil
-			return
-		}
-
-		_, _ = e.Session.DB().Link(a, "source", src)
-		done <- a
+	_, _ = e.Session.Cache().CreateEntityProperty(a, &property.SourceProperty{
+		Source:     src.Name,
+		Confidence: src.Confidence,
 	})
-
-	return <-done
+	return a
 }

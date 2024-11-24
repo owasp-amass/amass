@@ -8,7 +8,6 @@ import (
 	"errors"
 	"log/slog"
 	"net/netip"
-	"strconv"
 	"time"
 
 	"github.com/caffix/stringset"
@@ -19,7 +18,6 @@ import (
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/domain"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
-	"github.com/owasp-amass/open-asset-model/source"
 	"github.com/owasp-amass/open-asset-model/url"
 )
 
@@ -27,7 +25,7 @@ type urlexpand struct {
 	name       string
 	log        *slog.Logger
 	transforms []string
-	source     *source.Source
+	source     *et.Source
 }
 
 func NewURLs() et.Plugin {
@@ -35,12 +33,11 @@ func NewURLs() et.Plugin {
 		name: "URL-Expansion",
 		transforms: []string{
 			string(oam.FQDN),
-			string(oam.NetworkEndpoint),
 			string(oam.IPAddress),
-			string(oam.SocketAddress),
 			string(oam.Service),
+			string(oam.File),
 		},
-		source: &source.Source{
+		source: &et.Source{
 			Name:       "URL-Expansion",
 			Confidence: 100,
 		},
@@ -73,14 +70,9 @@ func (u *urlexpand) Stop() {
 }
 
 func (u *urlexpand) check(e *et.Event) error {
-	oamu, ok := e.Asset.Asset.(*url.URL)
+	oamu, ok := e.Entity.Asset.(*url.URL)
 	if !ok {
 		return errors.New("failed to extract the URL asset")
-	}
-
-	src := support.GetSource(e.Session, u.source)
-	if src == nil {
-		return errors.New("failed to obtain the plugin source information")
 	}
 
 	matches, err := e.Session.Config().CheckTransformations(string(oam.URL), append(u.transforms, u.name)...)
@@ -107,14 +99,15 @@ func (u *urlexpand) check(e *et.Event) error {
 		return err
 	}
 
+	src := u.source
 	var findings []*support.Finding
-	if support.AssetMonitoredWithinTTL(e.Session, e.Asset, src, since) {
+	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, src, since) {
 		if inscope {
-			findings = append(findings, u.lookup(e, e.Asset, matches)...)
+			findings = append(findings, u.lookup(e, e.Entity, matches)...)
 		}
 	} else {
-		findings = append(findings, u.store(e, tstr, e.Asset, src, matches)...)
-		support.MarkAssetMonitored(e.Session, e.Asset, src)
+		findings = append(findings, u.store(e, tstr, e.Entity, src, matches)...)
+		support.MarkAssetMonitored(e.Session, e.Entity, src)
 	}
 
 	if inscope && len(findings) > 0 {
@@ -123,7 +116,7 @@ func (u *urlexpand) check(e *et.Event) error {
 	return nil
 }
 
-func (u *urlexpand) lookup(e *et.Event, asset *dbt.Asset, m *config.Matches) []*support.Finding {
+func (u *urlexpand) lookup(e *et.Event, asset *dbt.Entity, m *config.Matches) []*support.Finding {
 	rtypes := stringset.New()
 	defer rtypes.Close()
 
@@ -143,146 +136,82 @@ func (u *urlexpand) lookup(e *et.Event, asset *dbt.Asset, m *config.Matches) []*
 		switch atype {
 		case string(oam.FQDN):
 			rtypes.Insert("domain")
-		case string(oam.NetworkEndpoint):
-			rtypes.Insert("port")
 		case string(oam.IPAddress):
 			rtypes.Insert("ip_address")
-		case string(oam.SocketAddress):
-			rtypes.Insert("port")
 		case string(oam.Service):
-			rtypes.Insert("service")
+			rtypes.Insert("port")
+		case string(oam.File):
+			rtypes.Insert("file")
 		}
 	}
 
-	done := make(chan struct{}, 1)
-	support.AppendToDBQueue(func() {
-		defer func() { done <- struct{}{} }()
-
-		if e.Session.Done() {
-			return
-		}
-
-		if rels, err := e.Session.DB().OutgoingRelations(asset, time.Time{}, rtypes.Slice()...); err == nil && len(rels) > 0 {
-			for _, rel := range rels {
-				a, err := e.Session.DB().FindById(rel.ToAsset.ID, time.Time{})
-				if err != nil {
-					continue
-				}
-
-				totype := string(a.Asset.AssetType())
-				if since, ok := sinces[totype]; !ok || (ok && a.LastSeen.Before(since)) {
-					continue
-				}
-
-				oamu := asset.Asset.(*url.URL)
-				findings = append(findings, &support.Finding{
-					From:     asset,
-					FromName: "URL: " + oamu.Raw,
-					To:       a,
-					ToName:   a.Asset.Key(),
-					Rel:      rel.Type,
-				})
+	if edges, err := e.Session.Cache().OutgoingEdges(asset, time.Time{}, rtypes.Slice()...); err == nil && len(edges) > 0 {
+		for _, edge := range edges {
+			a, err := e.Session.Cache().FindEntityById(edge.ToEntity.ID)
+			if err != nil {
+				continue
 			}
+
+			totype := string(a.Asset.AssetType())
+			if since, ok := sinces[totype]; !ok || (ok && a.LastSeen.Before(since)) {
+				continue
+			}
+
+			oamu := asset.Asset.(*url.URL)
+			findings = append(findings, &support.Finding{
+				From:     asset,
+				FromName: "URL: " + oamu.Raw,
+				To:       a,
+				ToName:   a.Asset.Key(),
+				Rel:      edge.Relation,
+			})
 		}
-	})
-	<-done
-	close(done)
+	}
+
 	return findings
 }
 
-func (u *urlexpand) store(e *et.Event, tstr string, asset, src *dbt.Asset, m *config.Matches) []*support.Finding {
+func (u *urlexpand) store(e *et.Event, tstr string, asset *dbt.Entity, src *et.Source, m *config.Matches) []*support.Finding {
 	oamu := asset.Asset.(*url.URL)
 	var findings []*support.Finding
 
-	done := make(chan struct{}, 1)
-	support.AppendToDBQueue(func() {
-		defer func() { done <- struct{}{} }()
-
-		if e.Session.Done() {
-			return
+	if tstr == string(oam.FQDN) && m.IsMatch(string(oam.FQDN)) {
+		if a, err := e.Session.DB().Create(asset, "domain", &domain.FQDN{
+			Name: oamu.Host,
+		}); err == nil && a != nil {
+			_, _ = e.Session.DB().Link(a, "source", src)
+			findings = append(findings, &support.Finding{
+				From:     asset,
+				FromName: "URL: " + oamu.Raw,
+				To:       a,
+				ToName:   oamu.Host,
+				Rel:      "domain",
+			})
+		}
+	} else if ip, err := netip.ParseAddr(oamu.Host); err == nil && m.IsMatch(string(oam.IPAddress)) {
+		ntype := "IPv4"
+		if ip.Is6() {
+			ntype = "IPv6"
 		}
 
-		if tstr == string(oam.FQDN) {
-			if m.IsMatch(string(oam.FQDN)) {
-				if a, err := e.Session.DB().Create(asset, "domain", &domain.FQDN{
-					Name: oamu.Host,
-				}); err == nil && a != nil {
-					_, _ = e.Session.DB().Link(a, "source", src)
-					findings = append(findings, &support.Finding{
-						From:     asset,
-						FromName: "URL: " + oamu.Raw,
-						To:       a,
-						ToName:   oamu.Host,
-						Rel:      "domain",
-					})
-				}
-			}
-			if m.IsMatch(string(oam.NetworkEndpoint)) {
-				addr := oamu.Host + ":" + strconv.Itoa(oamu.Port)
-
-				if a, err := e.Session.DB().Create(asset, "port", &domain.NetworkEndpoint{
-					Address:  addr,
-					Name:     oamu.Host,
-					Port:     oamu.Port,
-					Protocol: oamu.Scheme,
-				}); err == nil && a != nil {
-					_, _ = e.Session.DB().Link(a, "source", src)
-					findings = append(findings, &support.Finding{
-						From:     asset,
-						FromName: "URL: " + oamu.Raw,
-						To:       a,
-						ToName:   addr,
-						Rel:      "port",
-					})
-				}
-			}
-		} else if ip, err := netip.ParseAddr(oamu.Host); err == nil {
-			if m.IsMatch(string(oam.IPAddress)) {
-				ntype := "IPv4"
-				if ip.Is6() {
-					ntype = "IPv6"
-				}
-
-				if a, err := e.Session.DB().Create(asset, "ip_address", &oamnet.IPAddress{
-					Address: ip,
-					Type:    ntype,
-				}); err == nil && a != nil {
-					_, _ = e.Session.DB().Link(a, "source", src)
-					findings = append(findings, &support.Finding{
-						From:     asset,
-						FromName: "URL: " + oamu.Raw,
-						To:       a,
-						ToName:   ip.String(),
-						Rel:      "ip_address",
-					})
-				}
-			}
-			if m.IsMatch(string(oam.SocketAddress)) {
-				addrport := ip.String() + ":" + strconv.Itoa(oamu.Port)
-
-				if a, err := e.Session.DB().Create(asset, "port", &oamnet.SocketAddress{
-					Address:   netip.MustParseAddrPort(addrport),
-					IPAddress: ip,
-					Port:      oamu.Port,
-					Protocol:  oamu.Scheme,
-				}); err == nil && a != nil {
-					_, _ = e.Session.DB().Link(a, "source", src)
-					findings = append(findings, &support.Finding{
-						From:     asset,
-						FromName: "URL: " + oamu.Raw,
-						To:       a,
-						ToName:   addrport,
-						Rel:      "port",
-					})
-				}
-			}
+		if a, err := e.Session.DB().Create(asset, "ip_address", &oamnet.IPAddress{
+			Address: ip,
+			Type:    ntype,
+		}); err == nil && a != nil {
+			_, _ = e.Session.DB().Link(a, "source", src)
+			findings = append(findings, &support.Finding{
+				From:     asset,
+				FromName: "URL: " + oamu.Raw,
+				To:       a,
+				ToName:   ip.String(),
+				Rel:      "ip_address",
+			})
 		}
-	})
-	<-done
-	close(done)
+	}
+
 	return findings
 }
 
-func (u *urlexpand) process(e *et.Event, findings []*support.Finding, src *dbt.Asset) {
+func (u *urlexpand) process(e *et.Event, findings []*support.Finding, src *et.Source) {
 	support.ProcessAssetsWithSource(e, findings, src, u.name, u.name+"-Handler")
 }

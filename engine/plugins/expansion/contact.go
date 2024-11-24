@@ -15,14 +15,13 @@ import (
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/contact"
-	"github.com/owasp-amass/open-asset-model/source"
 )
 
 type contactrec struct {
 	name       string
 	log        *slog.Logger
 	transforms []string
-	source     *source.Source
+	source     *et.Source
 }
 
 func NewContacts() et.Plugin {
@@ -36,7 +35,7 @@ func NewContacts() et.Plugin {
 			string(oam.EmailAddress),
 			string(oam.Phone),
 		},
-		source: &source.Source{
+		source: &et.Source{
 			Name:       "Contract-Record-Expansion",
 			Confidence: 100,
 		},
@@ -70,7 +69,7 @@ func (cr *contactrec) Stop() {
 }
 
 func (cr *contactrec) check(e *et.Event) error {
-	_, ok := e.Asset.Asset.(*contact.ContactRecord)
+	_, ok := e.Entity.Asset.(*contact.ContactRecord)
 	if !ok {
 		return errors.New("failed to extract the ContactRecord asset")
 	}
@@ -81,21 +80,15 @@ func (cr *contactrec) check(e *et.Event) error {
 		return nil
 	}
 
-	src := support.GetSource(e.Session, cr.source)
-	if src == nil {
-		return errors.New("failed to obtain the plugin source information")
-	}
-
-	if findings := cr.lookup(e, e.Asset, matches); len(findings) > 0 {
-		cr.process(e, findings, src)
+	if findings := cr.lookup(e, e.Entity, matches); len(findings) > 0 {
+		cr.process(e, findings, cr.source)
 	}
 	return nil
 }
 
-func (cr *contactrec) lookup(e *et.Event, asset *dbt.Asset, m *config.Matches) []*support.Finding {
+func (cr *contactrec) lookup(e *et.Event, asset *dbt.Entity, m *config.Matches) []*support.Finding {
 	var rtypes []string
 	confs := make(map[string]int)
-	var findings []*support.Finding
 	sinces := make(map[string]time.Time)
 
 	for _, atype := range cr.transforms {
@@ -130,42 +123,32 @@ func (cr *contactrec) lookup(e *et.Event, asset *dbt.Asset, m *config.Matches) [
 		}
 	}
 
-	done := make(chan struct{}, 1)
-	support.AppendToDBQueue(func() {
-		defer func() { done <- struct{}{} }()
-
-		if e.Session.Done() {
-			return
-		}
-
-		if rels, err := e.Session.DB().OutgoingRelations(asset, time.Time{}, rtypes...); err == nil && len(rels) > 0 {
-			for _, rel := range rels {
-				a, err := e.Session.DB().FindById(rel.ToAsset.ID, time.Time{})
-				if err != nil {
-					continue
-				}
-
-				totype := string(a.Asset.AssetType())
-				if since, ok := sinces[totype]; !ok || (ok && a.LastSeen.Before(since)) {
-					continue
-				}
-
-				conrec := asset.Asset.(*contact.ContactRecord)
-				findings = append(findings, &support.Finding{
-					From:     asset,
-					FromName: "ContactRecord: " + conrec.DiscoveredAt,
-					To:       a,
-					ToName:   a.Asset.Key(),
-					Rel:      rel.Type,
-				})
+	var findings []*support.Finding
+	if edges, err := e.Session.Cache().OutgoingEdges(asset, time.Time{}, rtypes...); err == nil && len(edges) > 0 {
+		for _, edge := range edges {
+			a, err := e.Session.Cache().FindEntityById(edge.ToAsset.ID)
+			if err != nil {
+				continue
 			}
+
+			totype := string(a.Asset.AssetType())
+			if since, ok := sinces[totype]; !ok || (ok && a.LastSeen.Before(since)) {
+				continue
+			}
+
+			conrec := asset.Asset.(*contact.ContactRecord)
+			findings = append(findings, &support.Finding{
+				From:     asset,
+				FromName: "ContactRecord: " + conrec.DiscoveredAt,
+				To:       a,
+				ToName:   a.Asset.Key(),
+				Rel:      edge.Relation,
+			})
 		}
-	})
-	<-done
-	close(done)
+	}
 	return findings
 }
 
-func (cr *contactrec) process(e *et.Event, findings []*support.Finding, src *dbt.Asset) {
+func (cr *contactrec) process(e *et.Event, findings []*support.Finding, src *et.Source) {
 	support.ProcessAssetsWithSource(e, findings, src, cr.name, cr.name+"-Handler")
 }

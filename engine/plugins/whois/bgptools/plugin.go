@@ -22,7 +22,6 @@ import (
 	et "github.com/owasp-amass/amass/v4/engine/types"
 	amassnet "github.com/owasp-amass/amass/v4/utils/net"
 	oam "github.com/owasp-amass/open-asset-model"
-	"github.com/owasp-amass/open-asset-model/source"
 	"go.uber.org/ratelimit"
 )
 
@@ -36,7 +35,7 @@ type bgpTools struct {
 	autsys   *autsys
 	netblock *netblock
 	rlimit   ratelimit.Limiter
-	source   *source.Source
+	source   *et.Source
 }
 
 func NewBGPTools() et.Plugin {
@@ -45,7 +44,7 @@ func NewBGPTools() et.Plugin {
 		port:   43,
 		data:   make(map[int][]netip.Prefix),
 		rlimit: ratelimit.New(1, ratelimit.WithoutSlack),
-		source: &source.Source{
+		source: &et.Source{
 			Name:       "BGP.Tools",
 			Confidence: 100,
 		},

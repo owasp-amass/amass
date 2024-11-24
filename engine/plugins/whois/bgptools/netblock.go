@@ -16,6 +16,8 @@ import (
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
+	"github.com/owasp-amass/open-asset-model/property"
+	"github.com/owasp-amass/open-asset-model/relation"
 )
 
 type netblock struct {
@@ -28,7 +30,7 @@ func (r *netblock) Name() string {
 }
 
 func (r *netblock) check(e *et.Event) error {
-	ip, ok := e.Asset.Asset.(*oamnet.IPAddress)
+	ip, ok := e.Entity.Asset.(*oamnet.IPAddress)
 	if !ok {
 		return errors.New("failed to extract the IPAddress asset")
 	}
@@ -43,61 +45,66 @@ func (r *netblock) check(e *et.Event) error {
 		return nil
 	}
 
-	src := support.GetSource(e.Session, r.plugin.source)
-	if src == nil {
-		return errors.New("failed to obtain the plugin source information")
-	}
-
 	since, err := support.TTLStartTime(e.Session.Config(),
 		string(oam.IPAddress), string(oam.Netblock), r.plugin.name)
 	if err != nil {
 		return err
 	}
 
-	nb := r.lookup(e, e.Asset, since)
+	src := r.plugin.source
+	nb := r.lookup(e, e.Entity, since, src)
 	if nb == nil {
-		nb = r.query(e, e.Asset, src)
+		nb = r.query(e, e.Entity, src)
 	}
 
 	if nb != nil {
-		r.process(e, e.Asset, nb, src)
+		r.process(e, e.Asset, nb)
 	}
 	return nil
 }
 
-func (r *netblock) lookup(e *et.Event, ip *dbt.Asset, since time.Time) *dbt.Asset {
-	done := make(chan *dbt.Asset, 1)
-	defer close(done)
+func (r *netblock) lookup(e *et.Event, ip *dbt.Entity, since time.Time, src *et.Source) *dbt.Entity {
+	addr, ok := ip.Asset.(*oamnet.IPAddress)
+	if !ok {
+		return nil
+	}
 
-	support.AppendToDBQueue(func() {
-		if e.Session.Done() {
-			done <- nil
-			return
+	edges, err := e.Session.Cache().IncomingEdges(ip, since, "contains")
+	if err != nil {
+		return nil
+	}
+
+	var size int
+	var nb *dbt.Entity
+	var target *dbt.Edge
+	for _, edge := range edges {
+		entity, err := e.Session.Cache().FindEntityById(edge.FromEntity.ID)
+		if err != nil {
+			continue
 		}
-
-		sincestr := since.Format("2006-01-02 15:04:05")
-		from := "((((assets as ip inner join relations as contains on ip.id = contains.to_asset_id) "
-		from2 := "inner join assets on contains.from_asset_id = assets.id) "
-		from3 := "inner join relations on relations.from_asset_id = assets.id) "
-		from4 := "inner join assets as srcs on relations.to_asset_id = srcs.id) "
-		where := "where ip.type = '" + string(oam.IPAddress) + "' and assets.type = '"
-		where2 := string(oam.Netblock) + "' and contains.type = 'contains' "
-		where3 := "and contains.last_seen > '" + sincestr + "' and ip.id = " + ip.ID
-		where4 := " and relations.type = 'source' and relations.last_seen > '" + sincestr + "'"
-		where5 := " and srcs.type = 'Source' and srcs.content->>'name' = '" + r.plugin.name + "'"
-
-		var nb *dbt.Asset
-		query := from + from2 + from3 + from4 + where + where2 + where3 + where4 + where5
-		if assets, err := e.Session.DB().AssetQuery(query); err == nil && len(assets) > 0 {
-			nb = assets[0]
+		if tmp, ok := entity.Asset.(*oamnet.Netblock); ok && tmp.CIDR.Contains(addr.Address) {
+			if s := tmp.CIDR.Masked().Bits(); s > size {
+				size = s
+				nb = tmp
+				target = edge
+			}
 		}
-		done <- nb
-	})
+	}
+	if target == nil {
+		return nil
+	}
 
-	return <-done
+	if tags, err := e.Session.Cache().GetEdgeTags(target, since, src.Name); err == nil && len(tags) > 0 {
+		for _, tag := range tags {
+			if _, ok := tag.Property.(*property.SourceProperty); ok {
+				return nb
+			}
+		}
+	}
+	return nil
 }
 
-func (r *netblock) query(e *et.Event, ip, src *dbt.Asset) *dbt.Asset {
+func (r *netblock) query(e *et.Event, ip *dbt.Entity, src *et.Source) *dbt.Entity {
 	var asn, most int
 	var cidr netip.Prefix
 
@@ -132,63 +139,39 @@ func (r *netblock) query(e *et.Event, ip, src *dbt.Asset) *dbt.Asset {
 	return r.store(e, cidr, ip, src)
 }
 
-func (r *netblock) store(e *et.Event, cidr netip.Prefix, ip, src *dbt.Asset) *dbt.Asset {
-	done := make(chan *dbt.Asset, 1)
-	defer close(done)
-
+func (r *netblock) store(e *et.Event, cidr netip.Prefix, ip *dbt.Entity, src *et.Source) *dbt.Entity {
 	ntype := "IPv4"
 	if cidr.Addr().Is6() {
 		ntype = "IPv6"
 	}
 
-	support.AppendToDBQueue(func() {
-		if e.Session.Done() {
-			done <- nil
-			return
-		}
-
-		nb, err := e.Session.DB().Create(nil, "", &oamnet.Netblock{
-			CIDR: cidr,
-			Type: ntype,
-		})
-		if err == nil && nb != nil {
-			_, _ = e.Session.DB().Link(nb, "contains", ip)
-			_, _ = e.Session.DB().Link(nb, "source", src)
-		}
-
-		done <- nb
+	nb, err := e.Session.DB().Create(nil, "", &oamnet.Netblock{
+		CIDR: cidr,
+		Type: ntype,
 	})
+	if err == nil && nb != nil {
+		if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
+			Relation:   &relation.SimpleRelation{Name: "contains"},
+			FromEntity: nb,
+			ToEntity:   ip,
+		}); err == nil && edge != nil {
+			_, _ = e.Session.Cache().CreateEdgeProperty(edge, &property.SourceProperty{
+				Source:     src.Name,
+				Confidence: src.Confidence,
+			})
+		}
+	}
 
-	return <-done
+	return nb
 }
 
-func (r *netblock) process(e *et.Event, ip, nb, src *dbt.Asset) {
+func (r *netblock) process(e *et.Event, ip, nb *dbt.Entity) {
 	_ = e.Dispatcher.DispatchEvent(&et.Event{
 		Name:    nb.Asset.Key(),
 		Asset:   nb,
 		Session: e.Session,
 	})
 
-	if a, hit := e.Session.Cache().GetAsset(nb.Asset); hit && a != nil {
-		now := time.Now()
-
-		e.Session.Cache().SetRelation(&dbt.Relation{
-			Type:      "contains",
-			CreatedAt: now,
-			LastSeen:  now,
-			FromAsset: a,
-			ToAsset:   ip,
-		})
-
-		e.Session.Cache().SetRelation(&dbt.Relation{
-			Type:      "source",
-			CreatedAt: now,
-			LastSeen:  now,
-			FromAsset: a,
-			ToAsset:   src,
-		})
-
-		e.Session.Log().Info("relationship discovered", "from", nb.Asset.Key(), "relation",
-			"contains", "to", ip.Asset.Key(), slog.Group("plugin", "name", r.plugin.name, "handler", r.name))
-	}
+	e.Session.Log().Info("relationship discovered", "from", nb.Asset.Key(), "relation",
+		"contains", "to", ip.Asset.Key(), slog.Group("plugin", "name", r.plugin.name, "handler", r.name))
 }

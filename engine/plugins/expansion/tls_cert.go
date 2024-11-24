@@ -23,14 +23,15 @@ import (
 	"github.com/owasp-amass/open-asset-model/domain"
 	"github.com/owasp-amass/open-asset-model/network"
 	"github.com/owasp-amass/open-asset-model/org"
-	"github.com/owasp-amass/open-asset-model/source"
+	"github.com/owasp-amass/open-asset-model/property"
+	"github.com/owasp-amass/open-asset-model/relation"
 )
 
 type tlsexpand struct {
 	name       string
 	log        *slog.Logger
 	transforms []string
-	source     *source.Source
+	source     *et.Source
 }
 
 func NewTLSCerts() et.Plugin {
@@ -46,7 +47,7 @@ func NewTLSCerts() et.Plugin {
 			string(oam.EmailAddress),
 			string(oam.TLSCertificate),
 		},
-		source: &source.Source{
+		source: &et.Source{
 			Name:       "TLCert-Expansion",
 			Confidence: 100,
 		},
@@ -79,14 +80,9 @@ func (te *tlsexpand) Stop() {
 }
 
 func (te *tlsexpand) check(e *et.Event) error {
-	_, ok := e.Asset.Asset.(*oamcert.TLSCertificate)
+	_, ok := e.Entity.Asset.(*oamcert.TLSCertificate)
 	if !ok {
 		return errors.New("failed to extract the TLSCertificate asset")
-	}
-
-	src := support.GetSource(e.Session, te.source)
-	if src == nil {
-		return errors.New("failed to obtain the plugin source information")
 	}
 
 	matches, err := e.Session.Config().CheckTransformations(
@@ -95,11 +91,12 @@ func (te *tlsexpand) check(e *et.Event) error {
 		return nil
 	}
 
+	src := te.source
 	var findings []*support.Finding
 	if cert, ok := e.Meta.(*x509.Certificate); ok && cert != nil {
-		findings = append(findings, te.store(e, cert, e.Asset, src, matches)...)
+		findings = append(findings, te.store(e, cert, e.Entity, src, matches)...)
 	} else {
-		findings = append(findings, te.lookup(e, e.Asset, src, matches)...)
+		findings = append(findings, te.lookup(e, e.Entity, src, matches)...)
 	}
 
 	if len(findings) > 0 {
@@ -108,7 +105,7 @@ func (te *tlsexpand) check(e *et.Event) error {
 	return nil
 }
 
-func (te *tlsexpand) lookup(e *et.Event, asset, src *dbt.Asset, m *config.Matches) []*support.Finding {
+func (te *tlsexpand) lookup(e *et.Event, asset *dbt.Entity, src *et.Source, m *config.Matches) []*support.Finding {
 	var rtypes []string
 	var findings []*support.Finding
 	sinces := make(map[string]time.Time)
@@ -140,51 +137,41 @@ func (te *tlsexpand) lookup(e *et.Event, asset, src *dbt.Asset, m *config.Matche
 		}
 	}
 
-	done := make(chan struct{}, 1)
-	support.AppendToDBQueue(func() {
-		defer func() { done <- struct{}{} }()
-
-		if e.Session.Done() {
-			return
-		}
-
-		if rels, err := e.Session.DB().OutgoingRelations(asset, time.Time{}, rtypes...); err == nil && len(rels) > 0 {
-			for _, rel := range rels {
-				a, err := e.Session.DB().FindById(rel.ToAsset.ID, time.Time{})
-				if err != nil {
-					continue
-				}
-				totype := string(a.Asset.AssetType())
-
-				since, ok := sinces[totype]
-				if !ok || (ok && a.LastSeen.Before(since)) {
-					continue
-				}
-
-				if !te.oneOfSources(e, a, src, since) {
-					continue
-				}
-
-				t := asset.Asset.(*oamcert.TLSCertificate)
-				findings = append(findings, &support.Finding{
-					From:     asset,
-					FromName: "TLSCertificate: " + t.SerialNumber,
-					To:       a,
-					ToName:   a.Asset.Key(),
-					Rel:      rel.Type,
-				})
+	if edges, err := e.Session.Cache().OutgoingEdges(asset, time.Time{}, rtypes...); err == nil && len(edges) > 0 {
+		for _, edge := range edges {
+			a, err := e.Session.Cache().FindEntityById(edge.ToEntity.ID)
+			if err != nil {
+				continue
 			}
+			totype := string(a.Asset.AssetType())
+
+			since, ok := sinces[totype]
+			if !ok || (ok && a.LastSeen.Before(since)) {
+				continue
+			}
+
+			if !te.oneOfSources(e, edge, src, since) {
+				continue
+			}
+
+			t := asset.Asset.(*oamcert.TLSCertificate)
+			findings = append(findings, &support.Finding{
+				From:     asset,
+				FromName: "TLSCertificate: " + t.SerialNumber,
+				To:       a,
+				ToName:   a.Asset.Key(),
+				Rel:      edge.Relation,
+			})
 		}
-	})
-	<-done
-	close(done)
+	}
+
 	return findings
 }
 
-func (te *tlsexpand) oneOfSources(e *et.Event, asset, src *dbt.Asset, since time.Time) bool {
-	if rels, err := e.Session.DB().OutgoingRelations(asset, since, "source"); err == nil && len(rels) > 0 {
-		for _, rel := range rels {
-			if rel.ToAsset.ID == src.ID {
+func (te *tlsexpand) oneOfSources(e *et.Event, edge *dbt.Edge, src *et.Source, since time.Time) bool {
+	if tags, err := e.Session.Cache().GetEdgeTags(edge, since, src.Name); err == nil && len(tags) > 0 {
+		for _, tag := range tags {
+			if _, ok := tag.Property.(*property.SourceProperty); ok {
 				return true
 			}
 		}
@@ -192,136 +179,116 @@ func (te *tlsexpand) oneOfSources(e *et.Event, asset, src *dbt.Asset, since time
 	return false
 }
 
-func (te *tlsexpand) store(e *et.Event, cert *x509.Certificate, asset, src *dbt.Asset, m *config.Matches) []*support.Finding {
+func (te *tlsexpand) store(e *et.Event, cert *x509.Certificate, asset *dbt.Entity, src *et.Source, m *config.Matches) []*support.Finding {
+	var findings []*support.Finding
 	t := asset.Asset.(*oamcert.TLSCertificate)
 
-	var findings []*support.Finding
-	done := make(chan struct{}, 1)
-	support.AppendToDBQueue(func() {
-		defer func() { done <- struct{}{} }()
-
-		if e.Session.Done() {
-			return
+	if m.IsMatch(string(oam.FQDN)) {
+		if common := t.SubjectCommonName; common != "" {
+			if a, err := e.Session.Cache().CreateAsset(&domain.FQDN{Name: common}); err == nil && a != nil {
+				findings = append(findings, &support.Finding{
+					From:     asset,
+					FromName: "TLSCertificate: " + t.SerialNumber,
+					To:       a,
+					ToName:   common,
+					Rel:      &relation.SimpleRelation{Name: "common_name"},
+				})
+			}
 		}
-
-		if m.IsMatch(string(oam.FQDN)) {
-			if common := t.SubjectCommonName; common != "" {
-				if a, err := e.Session.DB().Create(asset, "common_name", &domain.FQDN{Name: common}); err == nil && a != nil {
-					_, _ = e.Session.DB().Link(a, "source", src)
-
+		for _, n := range cert.DNSNames {
+			for _, name := range support.ScrapeSubdomainNames(strings.ToLower(strings.TrimSpace(n))) {
+				if a, err := e.Session.Cache().CreateAsset(&domain.FQDN{Name: name}); err == nil && a != nil {
 					findings = append(findings, &support.Finding{
 						From:     asset,
 						FromName: "TLSCertificate: " + t.SerialNumber,
 						To:       a,
-						ToName:   common,
-						Rel:      "common_name",
+						ToName:   name,
+						Rel:      &relation.SimpleRelation{Name: "san_dns_name"},
 					})
 				}
 			}
-			for _, n := range cert.DNSNames {
-				for _, name := range support.ScrapeSubdomainNames(strings.ToLower(strings.TrimSpace(n))) {
-					if a, err := e.Session.DB().Create(asset, "san_dns_name", &domain.FQDN{Name: name}); err == nil && a != nil {
-						_, _ = e.Session.DB().Link(a, "source", src)
-
-						findings = append(findings, &support.Finding{
-							From:     asset,
-							FromName: "TLSCertificate: " + t.SerialNumber,
-							To:       a,
-							ToName:   name,
-							Rel:      "san_dns_name",
-						})
-					}
-				}
-			}
 		}
+	}
 
-		if m.IsMatch(string(oam.EmailAddress)) {
-			for _, emailstr := range cert.EmailAddresses {
-				if email := support.EmailToOAMEmailAddress(strings.ToLower(strings.TrimSpace(emailstr))); email != nil {
-					if a, err := e.Session.DB().Create(asset, "san_email_address", email); err == nil && a != nil {
-						findings = append(findings, &support.Finding{
-							From:     asset,
-							FromName: "TLSCertificate: " + t.SerialNumber,
-							To:       a,
-							ToName:   email.Address,
-							Rel:      "san_ip_address",
-						})
-						_, _ = e.Session.DB().Link(a, "source", src)
-					}
-				}
-			}
-		}
-
-		if m.IsMatch(string(oam.IPAddress)) {
-			for _, ip := range cert.IPAddresses {
-				oamip := &network.IPAddress{Address: netip.MustParseAddr(ip.String())}
-
-				if oamip.Address.Is4() {
-					oamip.Type = "IPv4"
-				} else {
-					oamip.Type = "IPv6"
-				}
-
-				if a, err := e.Session.DB().Create(asset, "san_ip_address", oamip); err == nil && a != nil {
+	if m.IsMatch(string(oam.EmailAddress)) {
+		for _, emailstr := range cert.EmailAddresses {
+			if email := support.EmailToOAMEmailAddress(strings.ToLower(strings.TrimSpace(emailstr))); email != nil {
+				if a, err := e.Session.Cache().CreateAsset(email); err == nil && a != nil {
 					findings = append(findings, &support.Finding{
 						From:     asset,
 						FromName: "TLSCertificate: " + t.SerialNumber,
 						To:       a,
-						ToName:   oamip.Address.String(),
-						Rel:      "san_ip_address",
+						ToName:   email.Address,
+						Rel:      &relation.SimpleRelation{Name: "san_email_address"},
 					})
-					_, _ = e.Session.DB().Link(a, "source", src)
 				}
 			}
 		}
+	}
 
-		if m.IsMatch(string(oam.URL)) {
-			for _, u := range cert.URIs {
-				if oamurl := support.RawURLToOAM(u.String()); oamurl != nil {
-					if a, err := e.Session.DB().Create(asset, "san_url", oamurl); err == nil && a != nil {
-						findings = append(findings, &support.Finding{
-							From:     asset,
-							FromName: "TLSCertificate: " + t.SerialNumber,
-							To:       a,
-							ToName:   oamurl.Raw,
-							Rel:      "san_url",
-						})
-						_, _ = e.Session.DB().Link(a, "source", src)
-					}
-				}
+	if m.IsMatch(string(oam.IPAddress)) {
+		for _, ip := range cert.IPAddresses {
+			oamip := &network.IPAddress{Address: netip.MustParseAddr(ip.String())}
+
+			if oamip.Address.Is4() {
+				oamip.Type = "IPv4"
+			} else {
+				oamip.Type = "IPv6"
 			}
-			for _, u := range cert.IssuingCertificateURL {
-				if oamurl := support.RawURLToOAM(u); oamurl != nil {
-					if a, err := e.Session.DB().Create(asset, "issuing_certificate_url", oamurl); err == nil && a != nil {
-						findings = append(findings, &support.Finding{
-							From:     asset,
-							FromName: "TLSCertificate: " + t.SerialNumber,
-							To:       a,
-							ToName:   oamurl.Raw,
-							Rel:      "issuing_certificate_url",
-						})
-						_, _ = e.Session.DB().Link(a, "source", src)
-					}
-				}
+
+			if a, err := e.Session.Cache().CreateAsset(oamip); err == nil && a != nil {
+				findings = append(findings, &support.Finding{
+					From:     asset,
+					FromName: "TLSCertificate: " + t.SerialNumber,
+					To:       a,
+					ToName:   oamip.Address.String(),
+					Rel:      &relation.SimpleRelation{Name: "san_ip_address"},
+				})
 			}
-			for _, u := range cert.OCSPServer {
-				if oamurl := support.RawURLToOAM(u); oamurl != nil {
-					if a, err := e.Session.DB().Create(asset, "ocsp_server", oamurl); err == nil && a != nil {
-						findings = append(findings, &support.Finding{
-							From:     asset,
-							FromName: "TLSCertificate: " + t.SerialNumber,
-							To:       a,
-							ToName:   oamurl.Raw,
-							Rel:      "ocsp_server",
-						})
-						_, _ = e.Session.DB().Link(a, "source", src)
-					}
+		}
+	}
+
+	if m.IsMatch(string(oam.URL)) {
+		for _, u := range cert.URIs {
+			if oamurl := support.RawURLToOAM(u.String()); oamurl != nil {
+				if a, err := e.Session.Cache().CreateAsset(oamurl); err == nil && a != nil {
+					findings = append(findings, &support.Finding{
+						From:     asset,
+						FromName: "TLSCertificate: " + t.SerialNumber,
+						To:       a,
+						ToName:   oamurl.Raw,
+						Rel:      &relation.SimpleRelation{Name: "san_url"},
+					})
 				}
 			}
 		}
-	})
-	<-done
-	close(done)
+		for _, u := range cert.IssuingCertificateURL {
+			if oamurl := support.RawURLToOAM(u); oamurl != nil {
+				if a, err := e.Session.Cache().CreateAsset(oamurl); err == nil && a != nil {
+					findings = append(findings, &support.Finding{
+						From:     asset,
+						FromName: "TLSCertificate: " + t.SerialNumber,
+						To:       a,
+						ToName:   oamurl.Raw,
+						Rel:      &relation.SimpleRelation{Name: "issuing_certificate_url"},
+					})
+				}
+			}
+		}
+		for _, u := range cert.OCSPServer {
+			if oamurl := support.RawURLToOAM(u); oamurl != nil {
+				if a, err := e.Session.Cache().CreateAsset(oamurl); err == nil && a != nil {
+					findings = append(findings, &support.Finding{
+						From:     asset,
+						FromName: "TLSCertificate: " + t.SerialNumber,
+						To:       a,
+						ToName:   oamurl.Raw,
+						Rel:      &relation.SimpleRelation{Name: "ocsp_server"},
+					})
+				}
+			}
+		}
+	}
 
 	if !m.IsMatch(string(oam.ContactRecord)) {
 		return findings
@@ -344,7 +311,7 @@ type tlsContact struct {
 	DiscoveredAt string
 }
 
-func (te *tlsexpand) storeContact(e *et.Event, c *tlsContact, asset, src *dbt.Asset, m *config.Matches) []*support.Finding {
+func (te *tlsexpand) storeContact(e *et.Event, c *tlsContact, asset *dbt.Entity, src *et.Source, m *config.Matches) []*support.Finding {
 	ct := c.contact
 	var findings []*support.Finding
 
@@ -362,69 +329,84 @@ func (te *tlsexpand) storeContact(e *et.Event, c *tlsContact, asset, src *dbt.As
 		return findings
 	}
 
-	done := make(chan struct{}, 1)
-	support.AppendToDBQueue(func() {
-		defer func() { done <- struct{}{} }()
+	cr, err := e.Session.Cache().CreateAsset(&contact.ContactRecord{DiscoveredAt: c.DiscoveredAt})
+	if err != nil || cr == nil {
+		return findings
+	}
 
-		if e.Session.Done() {
-			return
-		}
-
-		cr, err := e.Session.DB().Create(asset, c.RelationName, &contact.ContactRecord{DiscoveredAt: c.DiscoveredAt})
-		if err != nil || cr == nil {
-			return
-		}
-
-		t := asset.Asset.(*oamcert.TLSCertificate)
-		findings = append(findings, &support.Finding{
-			From:     asset,
-			FromName: "TLSCertificate: " + t.SerialNumber,
-			To:       cr,
-			ToName:   "ContactRecord" + c.DiscoveredAt,
-			Rel:      c.RelationName,
-		})
-		_, _ = e.Session.DB().Link(cr, "source", src)
-
-		if foundaddr && m.IsMatch(string(oam.Location)) {
-			var addr string
-			fields := [][]string{
-				ct.Organization,
-				ct.StreetAddress,
-				ct.Locality,
-				ct.Province,
-				ct.PostalCode,
-				ct.Country,
-			}
-			for _, field := range fields {
-				if len(field) > 0 && field[0] != "" {
-					addr += " " + field[0]
-				}
-			}
-			if loc := support.StreetAddressToLocation(strings.TrimSpace(addr)); loc != nil {
-				if a, err := e.Session.DB().Create(cr, "location", loc); err == nil && a != nil {
-					_, _ = e.Session.DB().Link(a, "source", src)
-				}
-			}
-		}
-		if len(ct.Organization) > 0 && ct.Organization[0] != "" && m.IsMatch(string(oam.Organization)) {
-			if a, err := e.Session.DB().Create(
-				cr, "organization", &org.Organization{Name: ct.Organization[0]}); err == nil && a != nil {
-				_, _ = e.Session.DB().Link(a, "source", src)
-			}
-		}
-		if len(ct.OrganizationalUnit) > 0 && ct.OrganizationalUnit[0] != "" && m.IsMatch(string(oam.URL)) {
-			if u := support.ExtractURLFromString(ct.OrganizationalUnit[0]); u != nil {
-				if a, err := e.Session.DB().Create(cr, "url", u); err == nil && a != nil {
-					_, _ = e.Session.DB().Link(a, "source", src)
-				}
-			}
-		}
+	t := asset.Asset.(*oamcert.TLSCertificate)
+	findings = append(findings, &support.Finding{
+		From:     asset,
+		FromName: "TLSCertificate: " + t.SerialNumber,
+		To:       cr,
+		ToName:   "ContactRecord" + c.DiscoveredAt,
+		Rel:      &relation.SimpleRelation{Name: c.RelationName},
 	})
-	<-done
-	close(done)
+
+	if foundaddr && m.IsMatch(string(oam.Location)) {
+		var addr string
+		fields := [][]string{
+			ct.Organization,
+			ct.StreetAddress,
+			ct.Locality,
+			ct.Province,
+			ct.PostalCode,
+			ct.Country,
+		}
+		for _, field := range fields {
+			if len(field) > 0 && field[0] != "" {
+				addr += " " + field[0]
+			}
+		}
+		if loc := support.StreetAddressToLocation(strings.TrimSpace(addr)); loc != nil {
+			if a, err := e.Session.Cache().CreateAsset(loc); err == nil && a != nil {
+				if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
+					Relation:   &relation.SimpleRelation{Name: "location"},
+					FromEntity: cr,
+					ToEntity:   a,
+				}); err == nil && edge != nil {
+					_, _ = e.Session.Cache().CreateEdgeProperty(edge, &property.SourceProperty{
+						Source:     src.Name,
+						Confidence: src.Confidence,
+					})
+				}
+			}
+		}
+	}
+	if len(ct.Organization) > 0 && ct.Organization[0] != "" && m.IsMatch(string(oam.Organization)) {
+		if a, err := e.Session.Cache().CreateAsset(&org.Organization{Name: ct.Organization[0]}); err == nil && a != nil {
+			if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
+				Relation:   &relation.SimpleRelation{Name: "organization"},
+				FromEntity: cr,
+				ToEntity:   a,
+			}); err == nil && edge != nil {
+				_, _ = e.Session.Cache().CreateEdgeProperty(edge, &property.SourceProperty{
+					Source:     src.Name,
+					Confidence: src.Confidence,
+				})
+			}
+		}
+	}
+	if len(ct.OrganizationalUnit) > 0 && ct.OrganizationalUnit[0] != "" && m.IsMatch(string(oam.URL)) {
+		if u := support.ExtractURLFromString(ct.OrganizationalUnit[0]); u != nil {
+			if a, err := e.Session.Cache().CreateAsset(u); err == nil && a != nil {
+				if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
+					Relation:   &relation.SimpleRelation{Name: "url"},
+					FromEntity: cr,
+					ToEntity:   a,
+				}); err == nil && edge != nil {
+					_, _ = e.Session.Cache().CreateEdgeProperty(edge, &property.SourceProperty{
+						Source:     src.Name,
+						Confidence: src.Confidence,
+					})
+				}
+			}
+		}
+	}
+
 	return findings
 }
 
-func (te *tlsexpand) process(e *et.Event, findings []*support.Finding, src *dbt.Asset) {
+func (te *tlsexpand) process(e *et.Event, findings []*support.Finding, src *et.Source) {
 	support.ProcessAssetsWithSource(e, findings, src, te.name, te.name+"-Handler")
 }

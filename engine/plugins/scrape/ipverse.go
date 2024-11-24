@@ -19,6 +19,8 @@ import (
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
+	"github.com/owasp-amass/open-asset-model/property"
+	"github.com/owasp-amass/open-asset-model/relation"
 	"go.uber.org/ratelimit"
 )
 
@@ -74,70 +76,54 @@ func (v *ipverse) check(e *et.Event) error {
 		return errors.New("failed to extract the AutonomousSystem asset")
 	}
 
-	src := support.GetSource(e.Session, v.source)
-	if src == nil {
-		return errors.New("failed to obtain the plugin source information")
-	}
-
 	since, err := support.TTLStartTime(e.Session.Config(),
 		string(oam.AutonomousSystem), string(oam.Netblock), v.name)
 	if err != nil {
 		return err
 	}
 
+	src := v.source
 	var cidrs []*dbt.Entity
-	if support.AssetMonitoredWithinTTL(e.Session, e.Asset, src, since) {
-		cidrs = append(cidrs, v.lookup(e, e.Asset, since)...)
+	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, src, since) {
+		cidrs = append(cidrs, v.lookup(e, e.Entity, since, src)...)
 	} else {
-		cidrs = append(cidrs, v.query(e, e.Asset, src)...)
-		support.MarkAssetMonitored(e.Session, e.Asset, src)
+		cidrs = append(cidrs, v.query(e, e.Entity, src)...)
+		support.MarkAssetMonitored(e.Session, e.Entity, src)
 	}
 
 	for _, cidr := range cidrs {
-		v.process(e, e.Asset, cidr, src)
+		v.process(e, e.Entity, cidr)
 	}
 	return nil
 }
 
-func (v *ipverse) lookup(e *et.Event, as *dbt.Entity, since time.Time) []*dbt.Entity {
-	done := make(chan struct{}, 1)
-	defer close(done)
+func (v *ipverse) lookup(e *et.Event, as *dbt.Entity, since time.Time, src *et.Source) []*dbt.Entity {
+	edges, err := e.Session.Cache().OutgoingEdges(as, since, "announces")
+	if err != nil {
+		return nil
+	}
 
-	var assets []*dbt.Entity
-	support.AppendToDBQueue(func() {
-		defer func() { done <- struct{}{} }()
-
-		if e.Session.Done() {
-			return
+	for _, edge := range edges {
+		if tags, err := e.Session.Cache().GetEdgeTags(edge, since, src.Name); err == nil && len(tags) > 0 {
+			for _, tag := range tags {
+				if _, ok := tag.Property.(*property.SourceProperty); ok {
+					if nb, err := e.Session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && as != nil {
+						return nb
+					}
+				}
+			}
 		}
-
-		sincestr := since.Format("2006-01-02 15:04:05")
-		from := "((((assets as asns inner join relations as ann on asns.id = ann.from_asset_id) "
-		from2 := "inner join assets on ann.to_asset_id = assets.id) "
-		from3 := "inner join relations on relations.from_asset_id = assets.id) "
-		from4 := "inner join assets as srcs on relations.to_asset_id = srcs.id) "
-		where := "where asns.type = '" + string(oam.AutonomousSystem) + "' and assets.type = '"
-		where2 := string(oam.Netblock) + "' and ann.type = 'announces' "
-		where3 := "and ann.last_seen > '" + sincestr + "' and asns.id = " + as.ID
-		where4 := " and relations.type = 'source' and relations.last_seen > '" + sincestr + "'"
-		where5 := " and srcs.type = 'Source' and srcs.content->>'name' = '" + v.name + "'"
-
-		query := from + from2 + from3 + from4 + where + where2 + where3 + where4 + where5
-		if results, err := e.Session.DB().AssetQuery(query); err == nil && len(assets) > 0 {
-			assets = append(assets, results...)
-		}
-	})
-	<-done
-	return assets
+	}
+	return nil
 }
 
-func (v *ipverse) query(e *et.Event, asset, src *dbt.Asset) []*dbt.Asset {
+func (v *ipverse) query(e *et.Event, asset *dbt.Entity, src *et.Source) []*dbt.Entity {
 	v.rlimit.Take()
 
 	as := asset.Asset.(*oamnet.AutonomousSystem)
 	resp, err := http.RequestWebPage(context.TODO(), &http.Request{URL: fmt.Sprintf(v.fmtstr, as.Number)})
 	if err != nil || resp.Body == "" {
-		return []*dbt.Asset{}
+		return nil
 	}
 
 	type record struct {
@@ -150,7 +136,7 @@ func (v *ipverse) query(e *et.Event, asset, src *dbt.Asset) []*dbt.Asset {
 
 	var result record
 	if err := json.Unmarshal([]byte(resp.Body), &result); err != nil {
-		return []*dbt.Asset{}
+		return nil
 	}
 
 	var cidrs []netip.Prefix
@@ -163,63 +149,44 @@ func (v *ipverse) query(e *et.Event, asset, src *dbt.Asset) []*dbt.Asset {
 	return v.store(e, cidrs, asset, src)
 }
 
-func (v *ipverse) store(e *et.Event, cidrs []netip.Prefix, as, src *dbt.Asset) []*dbt.Asset {
-	done := make(chan struct{}, 1)
-	defer close(done)
+func (v *ipverse) store(e *et.Event, cidrs []netip.Prefix, as *dbt.Entity, src *et.Source) []*dbt.Entity {
+	var results []*dbt.Entity
 
-	var assets []*dbt.Asset
-	support.AppendToDBQueue(func() {
-		defer func() { done <- struct{}{} }()
-
-		if e.Session.Done() {
-			return
+	for _, cidr := range cidrs {
+		ntype := "IPv4"
+		if cidr.Addr().Is6() {
+			ntype = "IPv6"
 		}
 
-		for _, cidr := range cidrs {
-			ntype := "IPv4"
-			if cidr.Addr().Is6() {
-				ntype = "IPv6"
-			}
+		if nb, err := e.Session.Cache().CreateAsset(&oamnet.Netblock{
+			CIDR: cidr,
+			Type: ntype,
+		}); err == nil && nb != nil {
+			results = append(results, nb)
 
-			if nb, err := e.Session.DB().Create(as, "announces", &oamnet.Netblock{
-				CIDR: cidr,
-				Type: ntype,
-			}); err == nil && nb != nil {
-				assets = append(assets, nb)
-				_, _ = e.Session.DB().Link(nb, "source", src)
+			if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
+				Relation:   &relation.SimpleRelation{Name: "announces"},
+				FromEntity: as,
+				ToEntity:   nb,
+			}); err == nil && edge != nil {
+				_, _ = e.Session.Cache().CreateEdgeProperty(edge, &property.SourceProperty{
+					Source:     src.Name,
+					Confidence: src.Confidence,
+				})
 			}
 		}
+	}
 
-	})
-	<-done
-	return assets
+	return results
 }
 
-func (v *ipverse) process(e *et.Event, as, nb, src *dbt.Asset) {
+func (v *ipverse) process(e *et.Event, as, nb *dbt.Entity) {
 	_ = e.Dispatcher.DispatchEvent(&et.Event{
 		Name:    nb.Asset.Key(),
 		Asset:   nb,
 		Session: e.Session,
 	})
 
-	if a, hit := e.Session.Cache().GetAsset(nb.Asset); hit && a != nil {
-		now := time.Now()
-
-		e.Session.Cache().SetRelation(&dbt.Relation{
-			Type:      "announces",
-			CreatedAt: now,
-			LastSeen:  now,
-			FromAsset: as,
-			ToAsset:   a,
-		})
-		e.Session.Cache().SetRelation(&dbt.Relation{
-			Type:      "source",
-			CreatedAt: now,
-			LastSeen:  now,
-			FromAsset: a,
-			ToAsset:   src,
-		})
-		e.Session.Log().Info("relationship discovered", "from", as.Asset.Key(), "relation",
-			"announces", "to", nb.Asset.Key(), slog.Group("plugin", "name", v.name, "handler", v.name+"-Handler"))
-	}
+	e.Session.Log().Info("relationship discovered", "from", as.Asset.Key(), "relation",
+		"announces", "to", nb.Asset.Key(), slog.Group("plugin", "name", v.name, "handler", v.name+"-Handler"))
 }

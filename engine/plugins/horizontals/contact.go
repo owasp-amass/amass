@@ -7,12 +7,12 @@ package horizontals
 import (
 	"errors"
 
-	"github.com/owasp-amass/amass/v4/engine/plugins/support"
 	"github.com/owasp-amass/amass/v4/engine/sessions/scope"
 	et "github.com/owasp-amass/amass/v4/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/contact"
+	"github.com/owasp-amass/open-asset-model/property"
 )
 
 type horContact struct {
@@ -25,7 +25,7 @@ func (h *horContact) Name() string {
 }
 
 func (h *horContact) check(e *et.Event) error {
-	_, ok := e.Asset.Asset.(*contact.ContactRecord)
+	_, ok := e.Entity.Asset.(*contact.ContactRecord)
 	if !ok {
 		return errors.New("failed to extract the ContactRecord asset")
 	}
@@ -36,18 +36,14 @@ func (h *horContact) check(e *et.Event) error {
 		return nil
 	}
 
-	src := support.GetSource(e.Session, h.plugin.source)
-	if src == nil {
-		return errors.New("failed to obtain the plugin source information")
-	}
-
 	conf := matches.Confidence(h.plugin.name)
 	if conf == -1 {
 		conf = matches.Confidence(string(oam.ContactRecord))
 	}
 
 	if assocs := h.lookup(e, e.Asset, conf); len(assocs) > 0 {
-		var impacted []*dbt.Asset
+		var impacted []*dbt.Entity
+
 		for _, assoc := range assocs {
 			if assoc.ScopeChange {
 				h.plugin.log.Info(assoc.Rationale)
@@ -55,9 +51,10 @@ func (h *horContact) check(e *et.Event) error {
 			}
 		}
 
-		var assets []*dbt.Asset
+		src := h.plugin.source
+		var assets []*dbt.Entity
 		for _, im := range impacted {
-			if a, hit := e.Session.Cache().GetAsset(im.Asset); hit && a != nil {
+			if a, err := e.Session.Cache().FindEntityByContent(im.Asset, e.Session.Cache().StartTime()); err == nil && a != nil {
 				assets = append(assets, a)
 			} else if n := h.store(e, im.Asset, src); n != nil {
 				assets = append(assets, n)
@@ -72,49 +69,34 @@ func (h *horContact) check(e *et.Event) error {
 	return nil
 }
 
-func (h *horContact) lookup(e *et.Event, asset *dbt.Asset, conf int) []*scope.Association {
+func (h *horContact) lookup(e *et.Event, asset *dbt.Entity, conf int) []*scope.Association {
 	rtypes := []string{"organization", "location", "email"}
 
 	var results []*scope.Association
-	for _, rtype := range rtypes {
-		if relations, hit := e.Session.Cache().GetRelations(&dbt.Relation{
-			Type:      rtype,
-			FromAsset: asset,
-		}); hit && len(relations) > 0 {
-			for _, relation := range relations {
-				// check if this asset discoveries could change the scope
-				if assocs, err := e.Session.Scope().IsAssociated(e.Session.Cache(), &scope.Association{
-					Submission:  relation.ToAsset,
-					Confidence:  conf,
-					ScopeChange: true,
-				}); err == nil && len(assocs) > 0 {
-					results = append(results, assocs...)
-				}
+	if edges, err := e.Session.Cache().OutgoingEdges(asset, e.Session.Cache().StartTime(), rtypes...); err == nil && len(edges) > 0 {
+		for _, edge := range edges {
+			// check if these asset discoveries could change the scope
+			if assocs, err := e.Session.Scope().IsAssociated(e.Session.Cache(), &scope.Association{
+				Submission:  edge.ToEntity,
+				Confidence:  conf,
+				ScopeChange: true,
+			}); err == nil && len(assocs) > 0 {
+				results = append(results, assocs...)
 			}
 		}
 	}
 	return results
 }
 
-func (h *horContact) store(e *et.Event, asset oam.Asset, src *dbt.Asset) *dbt.Asset {
-	done := make(chan *dbt.Asset, 1)
-	defer close(done)
+func (h *horContact) store(e *et.Event, asset oam.Asset, src *et.Source) *dbt.Entity {
+	a, err := e.Session.Cache().CreateAsset(asset)
+	if err != nil || a == nil {
+		return nil
+	}
 
-	support.AppendToDBQueue(func() {
-		if e.Session.Done() {
-			done <- nil
-			return
-		}
-
-		a, err := e.Session.DB().Create(nil, "", asset)
-		if err != nil || a == nil {
-			done <- nil
-			return
-		}
-
-		_, _ = e.Session.DB().Link(a, "source", src)
-		done <- a
+	_, _ = e.Session.Cache().CreateEntityProperty(a, &property.SourceProperty{
+		Source:     src.Name,
+		Confidence: src.Confidence,
 	})
-
-	return <-done
+	return a
 }

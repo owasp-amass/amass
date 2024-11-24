@@ -7,7 +7,6 @@ package expansion
 import (
 	"errors"
 	"log/slog"
-	"time"
 
 	"github.com/owasp-amass/amass/v4/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v4/engine/types"
@@ -15,6 +14,7 @@ import (
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/contact"
 	"github.com/owasp-amass/open-asset-model/domain"
+	"github.com/owasp-amass/open-asset-model/relation"
 )
 
 type emailexpand struct {
@@ -59,96 +59,32 @@ func (ee *emailexpand) Stop() {
 }
 
 func (ee *emailexpand) check(e *et.Event) error {
-	oame, ok := e.Entity.Asset.(*contact.EmailAddress)
+	_, ok := e.Entity.Asset.(*contact.EmailAddress)
 	if !ok {
 		return errors.New("failed to extract the EmailAddress asset")
 	}
 
-	src := support.GetSource(e.Session, ee.source)
-	if src == nil {
-		return errors.New("failed to obtain the plugin source information")
-	}
-
-	since, err := support.TTLStartTime(e.Session.Config(), string(oam.EmailAddress), string(oam.FQDN), ee.name)
-	if err != nil {
-		return err
-	}
-
-	var findings []*support.Finding
-	_, conf := e.Session.Scope().IsAssetInScope(oame, 0)
-	inscope := conf > 0
-	if support.AssetMonitoredWithinTTL(e.Session, e.Asset, src, since) {
-		if inscope {
-			findings = append(findings, ee.lookup(e, e.Asset, since)...)
-		}
-	} else {
-		findings = append(findings, ee.store(e, e.Asset, src)...)
-		support.MarkAssetMonitored(e.Session, e.Asset, src)
-	}
-
-	if len(findings) > 0 && inscope {
+	src := ee.source
+	if findings := ee.store(e, e.Entity, src); len(findings) > 0 {
 		ee.process(e, findings, src)
 	}
 	return nil
 }
 
-func (ee *emailexpand) lookup(e *et.Event, asset *dbt.Entity, since time.Time) []*support.Finding {
+func (ee *emailexpand) store(e *et.Event, asset *dbt.Entity, src *et.Source) []*support.Finding {
 	var findings []*support.Finding
-
-	done := make(chan struct{}, 1)
-	support.AppendToDBQueue(func() {
-		defer func() { done <- struct{}{} }()
-
-		if e.Session.Done() {
-			return
-		}
-
-		if rels, err := e.Session.DB().OutgoingRelations(asset, since, string(oam.FQDN)); err == nil && len(rels) > 0 {
-			for _, rel := range rels {
-				if a, err := e.Session.DB().FindById(rel.ToAsset.ID, since); err == nil && a != nil {
-					findings = append(findings, &support.Finding{
-						From:     asset,
-						FromName: "EmailAddress: " + asset.Asset.Key(),
-						To:       a,
-						ToName:   a.Asset.Key(),
-						Rel:      rel.Type,
-					})
-				}
-			}
-		}
-	})
-	<-done
-	close(done)
-	return findings
-}
-
-func (ee *emailexpand) store(e *et.Event, asset, src *et.Source) []*support.Finding {
 	oame := asset.Asset.(*contact.EmailAddress)
-	var findings []*support.Finding
 
-	done := make(chan struct{}, 1)
-	support.AppendToDBQueue(func() {
-		defer func() { done <- struct{}{} }()
+	if a, err := e.Session.Cache().CreateAsset(&domain.FQDN{Name: oame.Domain}); err == nil && a != nil {
+		findings = append(findings, &support.Finding{
+			From:     asset,
+			FromName: "EmailAddress: " + asset.Asset.Key(),
+			To:       a,
+			ToName:   a.Asset.Key(),
+			Rel:      &relation.SimpleRelation{Name: "domain"},
+		})
+	}
 
-		if e.Session.Done() {
-			return
-		}
-
-		if a, err := e.Session.DB().Create(asset, "domain", &domain.FQDN{
-			Name: oame.Domain,
-		}); err == nil && a != nil {
-			_, _ = e.Session.DB().Link(a, "source", src)
-			findings = append(findings, &support.Finding{
-				From:     asset,
-				FromName: "EmailAddress: " + asset.Asset.Key(),
-				To:       a,
-				ToName:   a.Asset.Key(),
-				Rel:      "domain",
-			})
-		}
-	})
-	<-done
-	close(done)
 	return findings
 }
 

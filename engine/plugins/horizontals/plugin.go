@@ -22,7 +22,6 @@ import (
 	"github.com/owasp-amass/open-asset-model/domain"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
-	"github.com/owasp-amass/open-asset-model/source"
 	"github.com/owasp-amass/resolve"
 	"golang.org/x/net/publicsuffix"
 )
@@ -32,13 +31,13 @@ type horizPlugin struct {
 	log        *slog.Logger
 	horfqdn    *horfqdn
 	horContact *horContact
-	source     *source.Source
+	source     *et.Source
 }
 
 func NewHorizontals() et.Plugin {
 	return &horizPlugin{
 		name: "Horizontals",
-		source: &source.Source{
+		source: &et.Source{
 			Name:       "Horizontals",
 			Confidence: 50,
 		},
@@ -112,7 +111,7 @@ func (h *horizPlugin) addAssociatedRelationship(e *et.Event, assocs []*scope.Ass
 	}
 }
 
-func (h *horizPlugin) makeAssocRelationshipEntries(e *et.Event, assoc, assoc2 *dbt.Asset) {
+func (h *horizPlugin) makeAssocRelationshipEntries(e *et.Event, assoc, assoc2 *dbt.Entity) {
 	// do not connect an asset to itself
 	if assoc.ID == assoc2.ID {
 		return

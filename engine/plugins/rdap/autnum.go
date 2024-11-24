@@ -96,7 +96,7 @@ func (r *autnum) lookup(e *et.Event, asset *dbt.Entity, src *et.Source, m *confi
 				continue
 			}
 
-			if !r.oneOfSources(e, a, src, since) {
+			if !r.oneOfSources(e, edge, src, since) {
 				continue
 			}
 
@@ -126,8 +126,8 @@ func (r *autnum) lookup(e *et.Event, asset *dbt.Entity, src *et.Source, m *confi
 	return findings
 }
 
-func (r *autnum) oneOfSources(e *et.Event, asset *dbt.Entity, src *et.Source, since time.Time) bool {
-	if tags, err := e.Session.Cache().GetEntityTags(asset, since, src.Name); err == nil && len(tags) > 0 {
+func (r *autnum) oneOfSources(e *et.Event, edge *dbt.Edge, src *et.Source, since time.Time) bool {
+	if tags, err := e.Session.Cache().GetEdgeTags(edge, since, src.Name); err == nil && len(tags) > 0 {
 		for _, tag := range tags {
 			if _, ok := tag.Property.(*property.SourceProperty); ok {
 				return true
