@@ -81,10 +81,6 @@ func (sd *siteDossier) check(e *et.Event) error {
 		return nil
 	}
 
-	src := support.GetSource(e.Session, sd.source)
-	if src == nil {
-		return errors.New("failed to obtain the plugin source information")
-	}
 
 	since, err := support.TTLStartTime(e.Session.Config(), string(oam.FQDN), string(oam.FQDN), sd.name)
 	if err != nil {
@@ -92,21 +88,21 @@ func (sd *siteDossier) check(e *et.Event) error {
 	}
 
 	var names []*dbt.Entity
-	if support.AssetMonitoredWithinTTL(e.Session, e.Asset, src, since) {
-		names = append(names, sd.lookup(e, fqdn.Name, src, since)...)
+	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, sd.source, since) {
+		names = append(names, sd.lookup(e, fqdn.Name, sd.source, since)...)
 	} else {
-		names = append(names, sd.query(e, fqdn.Name, src)...)
-		support.MarkAssetMonitored(e.Session, e.Asset, src)
+		names = append(names, sd.query(e, fqdn.Name, sd.source)...)
+		support.MarkAssetMonitored(e.Session, e.Entity, sd.source)
 	}
 
 	if len(names) > 0 {
-		sd.process(e, names, src)
+		sd.process(e, names, sd.source)
 	}
 	return nil
 }
 
 func (sd *siteDossier) lookup(e *et.Event, name string, src *et.Source, since time.Time) []*dbt.Entity {
-	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.FQDN), src, since)
+	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.FQDN), sd.source, since)
 }
 
 func (sd *siteDossier) query(e *et.Event, name string, src *et.Source) []*dbt.Entity {
@@ -129,13 +125,13 @@ func (sd *siteDossier) query(e *et.Event, name string, src *et.Source) []*dbt.En
 		}
 	}
 
-	return sd.store(e, subs.Slice(), src)
+	return sd.store(e, subs.Slice(), sd.source)
 }
 
 func (sd *siteDossier) store(e *et.Event, names []string, src *et.Source) []*dbt.Entity {
-	return support.StoreFQDNsWithSource(e.Session, names, src, sd.name, sd.name+"-Handler")
+	return support.StoreFQDNsWithSource(e.Session, names, sd.source, sd.name, sd.name+"-Handler")
 }
 
 func (sd *siteDossier) process(e *et.Event, assets []*dbt.Entity, src *et.Source) {
-	support.ProcessFQDNsWithSource(e, assets, src)
+	support.ProcessFQDNsWithSource(e, assets, sd.source)
 }

@@ -79,11 +79,6 @@ func (d *alts) check(e *et.Event) error {
 		return nil
 	}
 
-	src := support.GetSource(e.Session, d.source)
-	if src == nil {
-		return nil
-	}
-
 	var dom string
 	name := strings.ToLower(strings.TrimSpace(fqdn.Name))
 	if a, conf := e.Session.Scope().IsAssetInScope(fqdn, 0); conf == 0 || a == nil {
@@ -99,7 +94,7 @@ func (d *alts) check(e *et.Event) error {
 		return err
 	}
 
-	if support.AssetMonitoredWithinTTL(e.Session, e.Asset, src, since) {
+	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, d.source, since) {
 		return nil
 	}
 
@@ -131,24 +126,24 @@ func (d *alts) check(e *et.Event) error {
 		//if match := subre.FindString(guess); guess != match {
 		//	continue
 		//}
-		if a := d.store(e, guess, src); a != nil {
-			assets = append(assets, a)
+		if a := d.store(e, guess); a != nil {
+			assets = append(assets, a...)
 		}
 	}
 
 	if len(assets) > 0 {
-		d.process(e, assets, src)
-		support.MarkAssetMonitored(e.Session, e.Asset, src)
+		d.process(e, assets, d.source)
+		support.MarkAssetMonitored(e.Session, e.Entity, d.source)
 	}
 	return nil
 }
 
-func (d *alts) store(e *et.Event, name string, src *et.Source) *dbt.Entity {
-	return support.StoreFQDNsWithSource(e.Session, []string{name}, src, d.name, d.name+"-Handler")
+func (d *alts) store(e *et.Event, name string) []*dbt.Entity {
+	return support.StoreFQDNsWithSource(e.Session, []string{name}, d.source, d.name, d.name+"-Handler")
 }
 
 func (d *alts) process(e *et.Event, fqdns []*dbt.Entity, src *et.Source) {
-	support.ProcessFQDNsWithSource(e, fqdns, src)
+	support.ProcessFQDNsWithSource(e, fqdns, d.source)
 }
 
 // flipWords flips prefixes and suffixes found within the provided name.

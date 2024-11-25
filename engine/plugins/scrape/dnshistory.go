@@ -81,10 +81,6 @@ func (d *dnsHistory) check(e *et.Event) error {
 		return nil
 	}
 
-	src := support.GetSource(e.Session, d.source)
-	if src == nil {
-		return errors.New("failed to obtain the plugin source information")
-	}
 
 	since, err := support.TTLStartTime(e.Session.Config(), string(oam.FQDN), string(oam.FQDN), d.name)
 	if err != nil {
@@ -92,21 +88,21 @@ func (d *dnsHistory) check(e *et.Event) error {
 	}
 
 	var names []*dbt.Entity
-	if support.AssetMonitoredWithinTTL(e.Session, e.Asset, src, since) {
-		names = append(names, d.lookup(e, fqdn.Name, src, since)...)
+	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, d.source, since) {
+		names = append(names, d.lookup(e, fqdn.Name, d.source, since)...)
 	} else {
-		names = append(names, d.query(e, fqdn.Name, src)...)
-		support.MarkAssetMonitored(e.Session, e.Asset, src)
+		names = append(names, d.query(e, fqdn.Name, d.source)...)
+		support.MarkAssetMonitored(e.Session, e.Entity, d.source)
 	}
 
 	if len(names) > 0 {
-		d.process(e, names, src)
+		d.process(e, names, d.source)
 	}
 	return nil
 }
 
 func (d *dnsHistory) lookup(e *et.Event, name string, src *et.Source, since time.Time) []*dbt.Entity {
-	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.FQDN), src, since)
+	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.FQDN), d.source, since)
 }
 
 func (d *dnsHistory) query(e *et.Event, name string, src *et.Source) []*dbt.Entity {
@@ -129,13 +125,13 @@ func (d *dnsHistory) query(e *et.Event, name string, src *et.Source) []*dbt.Enti
 		}
 	}
 
-	return d.store(e, subs.Slice(), src)
+	return d.store(e, subs.Slice(), d.source)
 }
 
 func (d *dnsHistory) store(e *et.Event, names []string, src *et.Source) []*dbt.Entity {
-	return support.StoreFQDNsWithSource(e.Session, names, src, d.name, d.name+"-Handler")
+	return support.StoreFQDNsWithSource(e.Session, names, d.source, d.name, d.name+"-Handler")
 }
 
 func (d *dnsHistory) process(e *et.Event, assets []*dbt.Entity, src *et.Source) {
-	support.ProcessFQDNsWithSource(e, assets, src)
+	support.ProcessFQDNsWithSource(e, assets, d.source)
 }

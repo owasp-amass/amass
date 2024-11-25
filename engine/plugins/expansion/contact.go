@@ -150,5 +150,5 @@ func (cr *contactrec) lookup(e *et.Event, asset *dbt.Entity, m *config.Matches) 
 }
 
 func (cr *contactrec) process(e *et.Event, findings []*support.Finding, src *et.Source) {
-	support.ProcessAssetsWithSource(e, findings, src, cr.name, cr.name+"-Handler")
+	support.ProcessAssetsWithSource(e, findings, cr.source, cr.name, cr.name+"-Handler")
 }

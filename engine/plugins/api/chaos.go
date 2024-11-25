@@ -91,35 +91,30 @@ func (c *chaos) check(e *et.Event) error {
 		return nil
 	}
 
-	src := support.GetSource(e.Session, c.source)
-	if src == nil {
-		return errors.New("failed to obtain the plugin source information")
-	}
-
 	since, err := support.TTLStartTime(e.Session.Config(), string(oam.FQDN), string(oam.FQDN), c.name)
 	if err != nil {
 		return err
 	}
 
 	var names []*dbt.Entity
-	if support.AssetMonitoredWithinTTL(e.Session, e.Asset, src, since) {
-		names = append(names, c.lookup(e, fqdn.Name, src, since)...)
+	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, c.source, since) {
+		names = append(names, c.lookup(e, fqdn.Name, since)...)
 	} else {
-		names = append(names, c.query(e, fqdn.Name, src, keys)...)
-		support.MarkAssetMonitored(e.Session, e.Asset, src)
+		names = append(names, c.query(e, fqdn.Name, keys)...)
+		support.MarkAssetMonitored(e.Session, e.Entity, c.source)
 	}
 
 	if len(names) > 0 {
-		c.process(e, names, src)
+		c.process(e, names)
 	}
 	return nil
 }
 
-func (c *chaos) lookup(e *et.Event, name string, src *dbt.Entity, since time.Time) []*dbt.Entity {
-	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.FQDN), src, since)
+func (c *chaos) lookup(e *et.Event, name string, since time.Time) []*dbt.Entity {
+	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.FQDN), c.source, since)
 }
 
-func (c *chaos) query(e *et.Event, name string, src *dbt.Entity, keys []string) []*dbt.Entity {
+func (c *chaos) query(e *et.Event, name string, keys []string) []*dbt.Entity {
 	var names []string
 
 	for _, key := range keys {
@@ -148,13 +143,13 @@ func (c *chaos) query(e *et.Event, name string, src *dbt.Entity, keys []string) 
 		}
 	}
 
-	return c.store(e, names, src)
+	return c.store(e, names)
 }
 
-func (c *chaos) store(e *et.Event, names []string, src *dbt.Entity) []*dbt.Entity {
-	return support.StoreFQDNsWithSource(e.Session, names, src, c.name, c.name+"-Handler")
+func (c *chaos) store(e *et.Event, names []string) []*dbt.Entity {
+	return support.StoreFQDNsWithSource(e.Session, names, c.source, c.name, c.name+"-Handler")
 }
 
-func (c *chaos) process(e *et.Event, assets []*dbt.Entity, src *dbt.Entity) {
-	support.ProcessFQDNsWithSource(e, assets, src)
+func (c *chaos) process(e *et.Event, assets []*dbt.Entity) {
+	support.ProcessFQDNsWithSource(e, assets, c.source)
 }

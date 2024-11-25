@@ -46,9 +46,9 @@ func (r *autnum) check(e *et.Event) error {
 
 	var findings []*support.Finding
 	if record, ok := e.Meta.(*rdap.Autnum); ok && record != nil {
-		findings = append(findings, r.store(e, record, e.Entity, r.plugin.source, matches)...)
+		findings = append(findings, r.store(e, record, e.Entity, matches)...)
 	} else {
-		findings = append(findings, r.lookup(e, e.Entity, r.plugin.source, matches)...)
+		findings = append(findings, r.lookup(e, e.Entity, matches)...)
 	}
 
 	if len(findings) > 0 {
@@ -57,7 +57,7 @@ func (r *autnum) check(e *et.Event) error {
 	return nil
 }
 
-func (r *autnum) lookup(e *et.Event, asset *dbt.Entity, src *et.Source, m *config.Matches) []*support.Finding {
+func (r *autnum) lookup(e *et.Event, asset *dbt.Entity, m *config.Matches) []*support.Finding {
 	var rtypes []string
 	var findings []*support.Finding
 	sinces := make(map[string]time.Time)
@@ -96,7 +96,7 @@ func (r *autnum) lookup(e *et.Event, asset *dbt.Entity, src *et.Source, m *confi
 				continue
 			}
 
-			if !r.oneOfSources(e, edge, src, since) {
+			if !r.oneOfSources(e, edge, r.plugin.source, since) {
 				continue
 			}
 
@@ -137,7 +137,7 @@ func (r *autnum) oneOfSources(e *et.Event, edge *dbt.Edge, src *et.Source, since
 	return false
 }
 
-func (r *autnum) store(e *et.Event, resp *rdap.Autnum, asset *dbt.Entity, src *et.Source, m *config.Matches) []*support.Finding {
+func (r *autnum) store(e *et.Event, resp *rdap.Autnum, asset *dbt.Entity, m *config.Matches) []*support.Finding {
 	var findings []*support.Finding
 	autrec := asset.Asset.(*oamreg.AutnumRecord)
 
@@ -170,12 +170,12 @@ func (r *autnum) store(e *et.Event, resp *rdap.Autnum, asset *dbt.Entity, src *e
 
 	if m.IsMatch(string(oam.ContactRecord)) {
 		for _, entity := range resp.Entities {
-			findings = append(findings, r.plugin.storeEntity(e, 1, &entity, asset, src, m)...)
+			findings = append(findings, r.plugin.storeEntity(e, 1, &entity, asset, r.plugin.source, m)...)
 		}
 	}
 	return findings
 }
 
 func (r *autnum) process(e *et.Event, findings []*support.Finding, src *et.Source) {
-	support.ProcessAssetsWithSource(e, findings, src, r.plugin.name, r.name)
+	support.ProcessAssetsWithSource(e, findings, r.plugin.source, r.plugin.name, r.name)
 }

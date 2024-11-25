@@ -73,7 +73,7 @@ func (p *Prospeo) Stop() {
 }
 
 func (p *Prospeo) check(e *et.Event) error {
-	fqdn, ok := e.Asset.Asset.(*domain.FQDN)
+	fqdn, ok := e.Entity.Asset.(*domain.FQDN)
 	if !ok {
 		return errors.New("failed to extract the FQDN asset")
 	}
@@ -84,35 +84,30 @@ func (p *Prospeo) check(e *et.Event) error {
 		return nil
 	}
 
-	src := support.GetSource(e.Session, p.source)
-	if src == nil {
-		return errors.New("failed to obtain the plugin source information")
-	}
-
 	since, err := support.TTLStartTime(e.Session.Config(), string(oam.FQDN), string(oam.EmailAddress), p.name)
 	if err != nil {
 		return err
 	}
 
 	var names []*dbt.Entity
-	if support.AssetMonitoredWithinTTL(e.Session, e.Asset, src, since) {
-		names = append(names, p.lookup(e, fqdn.Name, src, since)...)
+	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, p.source, since) {
+		names = append(names, p.lookup(e, fqdn.Name, since)...)
 	} else {
-		names = append(names, p.query(e, fqdn.Name, src)...)
-		support.MarkAssetMonitored(e.Session, e.Asset, src)
+		names = append(names, p.query(e, fqdn.Name)...)
+		support.MarkAssetMonitored(e.Session, e.Entity, p.source)
 	}
 
 	if len(names) > 0 {
-		p.process(e, names, src)
+		p.process(e, names)
 	}
 	return nil
 }
 
-func (p *Prospeo) lookup(e *et.Event, name string, src *et.Source, since time.Time) []*dbt.Entity {
-	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.EmailAddress), src, since)
+func (p *Prospeo) lookup(e *et.Event, name string, since time.Time) []*dbt.Entity {
+	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.EmailAddress), p.source, since)
 }
 
-func (p *Prospeo) query(e *et.Event, name string, src *et.Source) []*dbt.Entity {
+func (p *Prospeo) query(e *et.Event, name string) []*dbt.Entity {
 	key, err := support.GetAPI(p.name, e)
 	if err != nil {
 		return nil
@@ -159,15 +154,15 @@ func (p *Prospeo) query(e *et.Event, name string, src *et.Source) []*dbt.Entity 
 	for _, e := range r.Response.Emails {
 		emails = append(emails, e.Email)
 	}
-	return p.store(e, emails, src)
+	return p.store(e, emails)
 }
 
-func (p *Prospeo) store(e *et.Event, emails []string, src *et.Source) []*dbt.Entity {
-	return support.StoreEmailsWithSource(e.Session, emails, src, p.name, p.name+"-Handler")
+func (p *Prospeo) store(e *et.Event, emails []string) []*dbt.Entity {
+	return support.StoreEmailsWithSource(e.Session, emails, p.source, p.name, p.name+"-Handler")
 }
 
-func (p *Prospeo) process(e *et.Event, assets []*dbt.Entity, src *et.Source) {
-	support.ProcessEmailsWithSource(e, assets, src)
+func (p *Prospeo) process(e *et.Event, assets []*dbt.Entity) {
+	support.ProcessEmailsWithSource(e, assets, p.source)
 }
 
 func (p *Prospeo) accountType(key string) (int, error) {

@@ -44,16 +44,15 @@ func (r *ipnet) check(e *et.Event) error {
 		return nil
 	}
 
-	src := r.plugin.source
 	var findings []*support.Finding
 	if record, ok := e.Meta.(*rdap.IPNetwork); ok && record != nil {
-		findings = append(findings, r.store(e, record, e.Asset, src, matches)...)
+		findings = append(findings, r.store(e, record, e.Entity, r.plugin.source, matches)...)
 	} else {
-		findings = append(findings, r.lookup(e, e.Asset, src, matches)...)
+		findings = append(findings, r.lookup(e, e.Entity, r.plugin.source, matches)...)
 	}
 
 	if len(findings) > 0 {
-		r.process(e, findings, src)
+		r.process(e, findings, r.plugin.source)
 	}
 	return nil
 }
@@ -97,7 +96,7 @@ func (r *ipnet) lookup(e *et.Event, asset *dbt.Entity, src *et.Source, m *config
 				continue
 			}
 
-			if !r.oneOfSources(e, edge, src, since) {
+			if !r.oneOfSources(e, edge, r.plugin.source, since) {
 				continue
 			}
 
@@ -169,7 +168,7 @@ func (r *ipnet) store(e *et.Event, resp *rdap.IPNetwork, asset *dbt.Entity, src 
 
 	if m.IsMatch(string(oam.ContactRecord)) {
 		for _, entity := range resp.Entities {
-			findings = append(findings, r.plugin.storeEntity(e, 1, &entity, asset, src, m)...)
+			findings = append(findings, r.plugin.storeEntity(e, 1, &entity, asset, r.plugin.source, m)...)
 		}
 	}
 
@@ -177,5 +176,5 @@ func (r *ipnet) store(e *et.Event, resp *rdap.IPNetwork, asset *dbt.Entity, src 
 }
 
 func (r *ipnet) process(e *et.Event, findings []*support.Finding, src *et.Source) {
-	support.ProcessAssetsWithSource(e, findings, src, r.plugin.name, r.name)
+	support.ProcessAssetsWithSource(e, findings, r.plugin.source, r.plugin.name, r.name)
 }

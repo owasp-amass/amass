@@ -99,19 +99,18 @@ func (u *urlexpand) check(e *et.Event) error {
 		return err
 	}
 
-	src := u.source
 	var findings []*support.Finding
-	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, src, since) {
+	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, u.source, since) {
 		if inscope {
 			findings = append(findings, u.lookup(e, e.Entity, matches)...)
 		}
 	} else {
-		findings = append(findings, u.store(e, tstr, e.Entity, src, matches)...)
-		support.MarkAssetMonitored(e.Session, e.Entity, src)
+		findings = append(findings, u.store(e, tstr, e.Entity, u.source, matches)...)
+		support.MarkAssetMonitored(e.Session, e.Entity, u.source)
 	}
 
 	if inscope && len(findings) > 0 {
-		u.process(e, findings, src)
+		u.process(e, findings, u.source)
 	}
 	return nil
 }
@@ -179,7 +178,7 @@ func (u *urlexpand) store(e *et.Event, tstr string, asset *dbt.Entity, src *et.S
 		if a, err := e.Session.DB().Create(asset, "domain", &domain.FQDN{
 			Name: oamu.Host,
 		}); err == nil && a != nil {
-			_, _ = e.Session.DB().Link(a, "source", src)
+			_, _ = e.Session.DB().Link(a, "source", u.source)
 			findings = append(findings, &support.Finding{
 				From:     asset,
 				FromName: "URL: " + oamu.Raw,
@@ -198,7 +197,7 @@ func (u *urlexpand) store(e *et.Event, tstr string, asset *dbt.Entity, src *et.S
 			Address: ip,
 			Type:    ntype,
 		}); err == nil && a != nil {
-			_, _ = e.Session.DB().Link(a, "source", src)
+			_, _ = e.Session.DB().Link(a, "source", u.source)
 			findings = append(findings, &support.Finding{
 				From:     asset,
 				FromName: "URL: " + oamu.Raw,
@@ -213,5 +212,5 @@ func (u *urlexpand) store(e *et.Event, tstr string, asset *dbt.Entity, src *et.S
 }
 
 func (u *urlexpand) process(e *et.Event, findings []*support.Finding, src *et.Source) {
-	support.ProcessAssetsWithSource(e, findings, src, u.name, u.name+"-Handler")
+	support.ProcessAssetsWithSource(e, findings, u.source, u.name, u.name+"-Handler")
 }

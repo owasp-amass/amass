@@ -91,16 +91,15 @@ func (te *tlsexpand) check(e *et.Event) error {
 		return nil
 	}
 
-	src := te.source
 	var findings []*support.Finding
 	if cert, ok := e.Meta.(*x509.Certificate); ok && cert != nil {
-		findings = append(findings, te.store(e, cert, e.Entity, src, matches)...)
+		findings = append(findings, te.store(e, cert, e.Entity, te.source, matches)...)
 	} else {
-		findings = append(findings, te.lookup(e, e.Entity, src, matches)...)
+		findings = append(findings, te.lookup(e, e.Entity, te.source, matches)...)
 	}
 
 	if len(findings) > 0 {
-		te.process(e, findings, src)
+		te.process(e, findings, te.source)
 	}
 	return nil
 }
@@ -150,7 +149,7 @@ func (te *tlsexpand) lookup(e *et.Event, asset *dbt.Entity, src *et.Source, m *c
 				continue
 			}
 
-			if !te.oneOfSources(e, edge, src, since) {
+			if !te.oneOfSources(e, edge, te.source, since) {
 				continue
 			}
 
@@ -300,7 +299,7 @@ func (te *tlsexpand) store(e *et.Event, cert *x509.Certificate, asset *dbt.Entit
 		{&cert.Issuer, "issuer_contact", base + "Issuer"},
 	}
 	for _, c := range contacts {
-		findings = append(findings, te.storeContact(e, c, asset, src, m)...)
+		findings = append(findings, te.storeContact(e, c, asset, te.source, m)...)
 	}
 	return findings
 }
@@ -408,5 +407,5 @@ func (te *tlsexpand) storeContact(e *et.Event, c *tlsContact, asset *dbt.Entity,
 }
 
 func (te *tlsexpand) process(e *et.Event, findings []*support.Finding, src *et.Source) {
-	support.ProcessAssetsWithSource(e, findings, src, te.name, te.name+"-Handler")
+	support.ProcessAssetsWithSource(e, findings, te.source, te.name, te.name+"-Handler")
 }

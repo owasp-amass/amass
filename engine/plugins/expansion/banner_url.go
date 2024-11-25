@@ -69,12 +69,11 @@ func (bu *bannerURLs) check(e *et.Event) error {
 		return err
 	}
 
-	src := bu.source
 	var urls []*dbt.Entity
-	//TODO: urls = append(urls, bu.lookup(e, serv.Identifier, src, since)...)
-	if !support.AssetMonitoredWithinTTL(e.Session, e.Asset, src, since) {
-		urls = append(urls, bu.query(e, e.Asset, src)...)
-		support.MarkAssetMonitored(e.Session, e.Asset, src)
+	//TODO: urls = append(urls, bu.lookup(e, serv.Identifier, bu.source, since)...)
+	if !support.AssetMonitoredWithinTTL(e.Session, e.Entity, bu.source, since) {
+		urls = append(urls, bu.query(e, e.Entity, bu.source)...)
+		support.MarkAssetMonitored(e.Session, e.Entity, bu.source)
 	}
 
 	if len(urls) > 0 {
@@ -92,7 +91,7 @@ func (bu *bannerURLs) query(e *et.Event, asset *dbt.Entity, src *et.Source) []*d
 
 	var results []*dbt.Entity
 	if urls := support.ExtractURLsFromString(serv.Banner); len(urls) > 0 {
-		results = append(results, bu.store(e, urls, src)...)
+		results = append(results, bu.store(e, urls, bu.source)...)
 	}
 	return results
 }
@@ -124,7 +123,7 @@ func (bu *bannerURLs) process(e *et.Event, assets []*dbt.Entity) {
 func (bu *bannerURLs) processOneURL(e *et.Event, name string, asset *dbt.Entity) {
 	_ = e.Dispatcher.DispatchEvent(&et.Event{
 		Name:    name,
-		Asset:   asset,
+		Entity:  asset,
 		Session: e.Session,
 	})
 }

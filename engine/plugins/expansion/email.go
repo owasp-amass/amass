@@ -64,14 +64,13 @@ func (ee *emailexpand) check(e *et.Event) error {
 		return errors.New("failed to extract the EmailAddress asset")
 	}
 
-	src := ee.source
-	if findings := ee.store(e, e.Entity, src); len(findings) > 0 {
-		ee.process(e, findings, src)
+	if findings := ee.store(e, e.Entity); len(findings) > 0 {
+		ee.process(e, findings)
 	}
 	return nil
 }
 
-func (ee *emailexpand) store(e *et.Event, asset *dbt.Entity, src *et.Source) []*support.Finding {
+func (ee *emailexpand) store(e *et.Event, asset *dbt.Entity) []*support.Finding {
 	var findings []*support.Finding
 	oame := asset.Asset.(*contact.EmailAddress)
 
@@ -88,6 +87,6 @@ func (ee *emailexpand) store(e *et.Event, asset *dbt.Entity, src *et.Source) []*
 	return findings
 }
 
-func (ee *emailexpand) process(e *et.Event, findings []*support.Finding, src *et.Source) {
-	support.ProcessAssetsWithSource(e, findings, src, ee.name, ee.name+"-Handler")
+func (ee *emailexpand) process(e *et.Event, findings []*support.Finding) {
+	support.ProcessAssetsWithSource(e, findings, ee.source, ee.name, ee.name+"-Handler")
 }

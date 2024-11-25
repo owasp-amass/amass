@@ -14,10 +14,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/owasp-amass/amass/v4/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v4/engine/types"
 	"github.com/owasp-amass/amass/v4/utils/net/dns"
 	"github.com/owasp-amass/amass/v4/utils/net/http"
+	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/domain"
 	"github.com/owasp-amass/open-asset-model/network"
@@ -210,13 +210,30 @@ func (u *urlscan) process(e *et.Event, body string) {
 				if _, conf := e.Session.Scope().IsAssetInScope(&domain.FQDN{Name: name}, 0); conf > 0 {
 					wg.Add(1)
 
-					support.AppendToDBQueue(func() {
+					if e.Session.Done() {
+						return
+					}
+
+					if dns, err := e.Session.Cache().CreateAsset(&domain.FQDN{Name: name}); err == nil {
 						defer wg.Done()
+						if dns != nil {
 
-						if e.Session.Done() {
-							return
+							// TODO: Need to still fix this, if you see this, feel free to take over!!!!!!
+
+							if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
+								Relation: &oam.Relation{Name: "associated_with"},
+								FromEntity: &dbt.Entity{
+									Asset: &network.AutonomousSystem{Number: func() int { n, _ := strconv.Atoi(r.Page.ASN); return n }()},
+								},
+								ToEntity: dns,
+							}); err == nil {
+
+							}
+							_, _ = e.Session.Cache().CreateEntityProperty(dns, &oam.SourceProperty{
+								Source:     u.name,
+								Confidence: 100,
+							})
 						}
-
 						fqdn, err := e.Session.DB().Create(nil, "", &domain.FQDN{Name: name})
 						if err != nil {
 							e.Session.Log().Error(err.Error())
@@ -226,11 +243,11 @@ func (u *urlscan) process(e *et.Event, body string) {
 							_, _ = e.Session.DB().Create(fqdn, "source", &et.Source{Name: u.name})
 							_ = e.Dispatcher.DispatchEvent(&et.Event{
 								Name:    name,
-								Asset:   fqdn,
+								Entity:  fqdn,
 								Session: e.Session,
 							})
 						}
-					})
+					}
 				}
 			}
 		}

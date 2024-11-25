@@ -44,23 +44,22 @@ func (r *autsys) check(e *et.Event) error {
 	}
 
 	var asset *dbt.Entity
-	src := r.plugin.source
 	var record *rdap.Autnum
-	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, src, since) {
-		asset = r.lookup(e, strconv.Itoa(as.Number), src, since)
+	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, r.plugin.source, since) {
+		asset = r.lookup(e, strconv.Itoa(as.Number), since)
 	} else {
-		asset, record = r.query(e, e.Asset, src)
-		support.MarkAssetMonitored(e.Session, e.Entity, src)
+		asset, record = r.query(e, e.Entity, r.plugin.source)
+		support.MarkAssetMonitored(e.Session, e.Entity, r.plugin.source)
 	}
 
 	if asset != nil {
-		r.process(e, record, e.Asset, asset, src)
+		r.process(e, record, e.Entity, asset, r.plugin.source)
 	}
 	return nil
 }
 
-func (r *autsys) lookup(e *et.Event, num string, src *et.Source, since time.Time) *dbt.Entity {
-	if assets := support.SourceToAssetsWithinTTL(e.Session, num, string(oam.AutnumRecord), src, since); len(assets) > 0 {
+func (r *autsys) lookup(e *et.Event, num string, since time.Time) *dbt.Entity {
+	if assets := support.SourceToAssetsWithinTTL(e.Session, num, string(oam.AutnumRecord), r.plugin.source, since); len(assets) > 0 {
 		return assets[0]
 	}
 	return nil
@@ -84,7 +83,7 @@ func (r *autsys) query(e *et.Event, asset *dbt.Entity, src *et.Source) (*dbt.Ent
 	if !ok {
 		return nil, nil
 	}
-	return r.store(e, record, asset, src), record
+	return r.store(e, record, asset, r.plugin.source), record
 }
 
 func (r *autsys) store(e *et.Event, resp *rdap.Autnum, asset *dbt.Entity, src *et.Source) *dbt.Entity {
@@ -123,8 +122,8 @@ func (r *autsys) store(e *et.Event, resp *rdap.Autnum, asset *dbt.Entity, src *e
 			ToEntity:   autasset,
 		}); err == nil && edge != nil {
 			_, _ = e.Session.Cache().CreateEdgeTag(edge, &property.SourceProperty{
-				Source:     src.Name,
-				Confidence: src.Confidence,
+				Source:     r.plugin.source.Name,
+				Confidence: r.plugin.source.Confidence,
 			})
 		}
 	}
