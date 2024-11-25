@@ -18,6 +18,7 @@ import (
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/domain"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
+	"github.com/owasp-amass/open-asset-model/relation"
 	"github.com/owasp-amass/open-asset-model/url"
 )
 
@@ -105,12 +106,12 @@ func (u *urlexpand) check(e *et.Event) error {
 			findings = append(findings, u.lookup(e, e.Entity, matches)...)
 		}
 	} else {
-		findings = append(findings, u.store(e, tstr, e.Entity, u.source, matches)...)
+		findings = append(findings, u.store(e, tstr, e.Entity, matches)...)
 		support.MarkAssetMonitored(e.Session, e.Entity, u.source)
 	}
 
 	if inscope && len(findings) > 0 {
-		u.process(e, findings, u.source)
+		u.process(e, findings)
 	}
 	return nil
 }
@@ -170,21 +171,18 @@ func (u *urlexpand) lookup(e *et.Event, asset *dbt.Entity, m *config.Matches) []
 	return findings
 }
 
-func (u *urlexpand) store(e *et.Event, tstr string, asset *dbt.Entity, src *et.Source, m *config.Matches) []*support.Finding {
+func (u *urlexpand) store(e *et.Event, tstr string, asset *dbt.Entity, m *config.Matches) []*support.Finding {
 	oamu := asset.Asset.(*url.URL)
 	var findings []*support.Finding
 
 	if tstr == string(oam.FQDN) && m.IsMatch(string(oam.FQDN)) {
-		if a, err := e.Session.DB().Create(asset, "domain", &domain.FQDN{
-			Name: oamu.Host,
-		}); err == nil && a != nil {
-			_, _ = e.Session.DB().Link(a, "source", u.source)
+		if a, err := e.Session.Cache().CreateAsset(&domain.FQDN{Name: oamu.Host}); err == nil && a != nil {
 			findings = append(findings, &support.Finding{
 				From:     asset,
 				FromName: "URL: " + oamu.Raw,
 				To:       a,
 				ToName:   oamu.Host,
-				Rel:      "domain",
+				Rel:      &relation.SimpleRelation{Name: "domain"},
 			})
 		}
 	} else if ip, err := netip.ParseAddr(oamu.Host); err == nil && m.IsMatch(string(oam.IPAddress)) {
@@ -193,17 +191,16 @@ func (u *urlexpand) store(e *et.Event, tstr string, asset *dbt.Entity, src *et.S
 			ntype = "IPv6"
 		}
 
-		if a, err := e.Session.DB().Create(asset, "ip_address", &oamnet.IPAddress{
+		if a, err := e.Session.Cache().CreateAsset(&oamnet.IPAddress{
 			Address: ip,
 			Type:    ntype,
 		}); err == nil && a != nil {
-			_, _ = e.Session.DB().Link(a, "source", u.source)
 			findings = append(findings, &support.Finding{
 				From:     asset,
 				FromName: "URL: " + oamu.Raw,
 				To:       a,
 				ToName:   ip.String(),
-				Rel:      "ip_address",
+				Rel:      &relation.SimpleRelation{Name: "ip_address"},
 			})
 		}
 	}
@@ -211,6 +208,6 @@ func (u *urlexpand) store(e *et.Event, tstr string, asset *dbt.Entity, src *et.S
 	return findings
 }
 
-func (u *urlexpand) process(e *et.Event, findings []*support.Finding, src *et.Source) {
+func (u *urlexpand) process(e *et.Event, findings []*support.Finding) {
 	support.ProcessAssetsWithSource(e, findings, u.source, u.name, u.name+"-Handler")
 }

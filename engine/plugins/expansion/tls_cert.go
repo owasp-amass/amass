@@ -93,18 +93,18 @@ func (te *tlsexpand) check(e *et.Event) error {
 
 	var findings []*support.Finding
 	if cert, ok := e.Meta.(*x509.Certificate); ok && cert != nil {
-		findings = append(findings, te.store(e, cert, e.Entity, te.source, matches)...)
+		findings = append(findings, te.store(e, cert, e.Entity, matches)...)
 	} else {
-		findings = append(findings, te.lookup(e, e.Entity, te.source, matches)...)
+		findings = append(findings, te.lookup(e, e.Entity, matches)...)
 	}
 
 	if len(findings) > 0 {
-		te.process(e, findings, te.source)
+		te.process(e, findings)
 	}
 	return nil
 }
 
-func (te *tlsexpand) lookup(e *et.Event, asset *dbt.Entity, src *et.Source, m *config.Matches) []*support.Finding {
+func (te *tlsexpand) lookup(e *et.Event, asset *dbt.Entity, m *config.Matches) []*support.Finding {
 	var rtypes []string
 	var findings []*support.Finding
 	sinces := make(map[string]time.Time)
@@ -178,7 +178,7 @@ func (te *tlsexpand) oneOfSources(e *et.Event, edge *dbt.Edge, src *et.Source, s
 	return false
 }
 
-func (te *tlsexpand) store(e *et.Event, cert *x509.Certificate, asset *dbt.Entity, src *et.Source, m *config.Matches) []*support.Finding {
+func (te *tlsexpand) store(e *et.Event, cert *x509.Certificate, asset *dbt.Entity, m *config.Matches) []*support.Finding {
 	var findings []*support.Finding
 	t := asset.Asset.(*oamcert.TLSCertificate)
 
@@ -406,6 +406,6 @@ func (te *tlsexpand) storeContact(e *et.Event, c *tlsContact, asset *dbt.Entity,
 	return findings
 }
 
-func (te *tlsexpand) process(e *et.Event, findings []*support.Finding, src *et.Source) {
+func (te *tlsexpand) process(e *et.Event, findings []*support.Finding) {
 	support.ProcessAssetsWithSource(e, findings, te.source, te.name, te.name+"-Handler")
 }

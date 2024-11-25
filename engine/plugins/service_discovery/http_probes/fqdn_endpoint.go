@@ -14,6 +14,7 @@ import (
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/domain"
+	"github.com/owasp-amass/open-asset-model/relation"
 )
 
 type fqdnEndpoint struct {
@@ -26,7 +27,7 @@ func (fe *fqdnEndpoint) Name() string {
 }
 
 func (fe *fqdnEndpoint) check(e *et.Event) error {
-	fqdn, ok := e.Asset.Asset.(*domain.FQDN)
+	fqdn, ok := e.Entity.Asset.(*domain.FQDN)
 	if !ok {
 		return errors.New("failed to extract the FQDN asset")
 	}
@@ -34,29 +35,25 @@ func (fe *fqdnEndpoint) check(e *et.Event) error {
 	if !e.Session.Config().Active {
 		return nil
 	}
-	if !fe.checkFQDNResolved(e) {
+	if !support.NameResolved(e.Session, fqdn) {
 		return nil
 	}
 	if _, conf := e.Session.Scope().IsAssetInScope(fqdn, 0); conf == 0 {
 		return nil
 	}
 
-	src := support.GetSource(e.Session, fe.plugin.source)
-	if src == nil {
-		return errors.New("failed to obtain the plugin source information")
-	}
-
-	since, err := support.TTLStartTime(e.Session.Config(), string(oam.FQDN), string(oam.NetworkEndpoint), fe.name)
+	since, err := support.TTLStartTime(e.Session.Config(), string(oam.FQDN), string(oam.Service), fe.name)
 	if err != nil {
 		return err
 	}
 
+	src := fe.plugin.source
 	var findings []*support.Finding
-	if support.AssetMonitoredWithinTTL(e.Session, e.Asset, src, since) {
-		findings = append(findings, fe.lookup(e, e.Asset, src, since)...)
+	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, src, since) {
+		findings = append(findings, fe.lookup(e, e.Entity, src, since)...)
 	} else {
-		findings = append(findings, fe.store(e, e.Asset, src)...)
-		support.MarkAssetMonitored(e.Session, e.Asset, src)
+		findings = append(findings, fe.query(e, e.Entity)...)
+		support.MarkAssetMonitored(e.Session, e.Entity, src)
 	}
 
 	if len(findings) > 0 {
@@ -65,82 +62,48 @@ func (fe *fqdnEndpoint) check(e *et.Event) error {
 	return nil
 }
 
-func (fe *fqdnEndpoint) checkFQDNResolved(e *et.Event) bool {
-	for _, rtype := range []string{"cname_record", "a_record", "aaaa_record"} {
-		if _, hit := e.Session.Cache().GetRelations(&dbt.Relation{
-			FromAsset: e.Asset,
-			Type:      rtype,
-		}); hit {
-			return true
+func (fe *fqdnEndpoint) lookup(e *et.Event, host *dbt.Entity, src *et.Source, since time.Time) []*support.Finding {
+	var findings []*support.Finding
+
+	if edges, err := e.Session.Cache().OutgoingEdges(host, since, "port"); err == nil && len(edges) > 0 {
+		for _, edge := range edges {
+			if _, err := e.Session.Cache().GetEdgeTags(edge, since, src.Name); err != nil {
+				continue
+			}
+			if _, ok := edge.Relation.(*relation.PortRelation); ok {
+				if srv, err := e.Session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && srv != nil && srv.Asset.AssetType() == oam.Service {
+					findings = append(findings, &support.Finding{
+						From:     host,
+						FromName: host.Asset.Key(),
+						To:       srv,
+						ToName:   srv.Asset.Key(),
+						Rel:      edge.Relation,
+					})
+				}
+			}
 		}
 	}
-	return false
+	return findings
 }
 
-func (fe *fqdnEndpoint) lookup(e *et.Event, asset, src *dbt.Asset, since time.Time) []*support.Finding {
-	fqdn := asset.Asset.Key()
+func (fe *fqdnEndpoint) query(e *et.Event, host *dbt.Entity) []*support.Finding {
 	var findings []*support.Finding
-	atype := string(oam.NetworkEndpoint)
+	fqdn := host.Asset.(*domain.FQDN)
 
 	for _, port := range e.Session.Config().Scope.Ports {
-		name := fqdn + ":" + strconv.Itoa(port)
+		addr := fqdn.Name + ":" + strconv.Itoa(port)
 
-		endpoints := support.SourceToAssetsWithinTTL(e.Session, name, atype, src, since)
-		for _, endpoint := range endpoints {
-			findings = append(findings, &support.Finding{
-				From:     asset,
-				FromName: fqdn,
-				To:       endpoint,
-				ToName:   name,
-				Rel:      "port",
-			})
+		proto := "https"
+		if port == 80 || port == 8080 {
+			proto = "http"
 		}
+
+		findings = append(findings, fe.plugin.query(e, host, fqdn.Name, proto+"://"+addr, port)...)
 	}
+
 	return findings
 }
 
-func (fe *fqdnEndpoint) store(e *et.Event, asset, src *dbt.Asset) []*support.Finding {
-	var findings []*support.Finding
-	fqdn := asset.Asset.(*domain.FQDN)
-
-	done := make(chan struct{}, 1)
-	support.AppendToDBQueue(func() {
-		defer func() { done <- struct{}{} }()
-
-		if e.Session.Done() {
-			return
-		}
-
-		for _, port := range e.Session.Config().Scope.Ports {
-			addr := fqdn.Name + ":" + strconv.Itoa(port)
-
-			proto := "https"
-			if port == 80 || port == 8080 {
-				proto = "http"
-			}
-
-			if endpoint, err := e.Session.DB().Create(asset, "port", &domain.NetworkEndpoint{
-				Address:  addr,
-				Name:     fqdn.Name,
-				Port:     port,
-				Protocol: proto,
-			}); err == nil && endpoint != nil {
-				_, _ = e.Session.DB().Link(endpoint, "source", src)
-				findings = append(findings, &support.Finding{
-					From:     asset,
-					FromName: fqdn.Name,
-					To:       endpoint,
-					ToName:   addr,
-					Rel:      "port",
-				})
-			}
-		}
-	})
-	<-done
-	close(done)
-	return findings
-}
-
-func (fe *fqdnEndpoint) process(e *et.Event, findings []*support.Finding, src *dbt.Asset) {
+func (fe *fqdnEndpoint) process(e *et.Event, findings []*support.Finding, src *et.Source) {
 	support.ProcessAssetsWithSource(e, findings, src, fe.plugin.name, fe.name)
 }

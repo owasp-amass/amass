@@ -31,27 +31,16 @@ func (d *dnsApex) check(e *et.Event) error {
 		return nil
 	}
 
-	rels, hit := e.Session.Cache().GetRelationsByType("ns_record")
-	if !hit || len(rels) == 0 {
-		return nil
-	}
-
-	var apexes []*dbt.Asset
-	for _, r := range rels {
-		apexes = append(apexes, r.FromAsset)
-	}
-
 	// determine which domain apex this name is a node in
 	var apex *dbt.Entity
 	best := len(fqdn.Name)
-	for _, a := range apexes {
-		n, ok := a.Asset.(*domain.FQDN)
-		if !ok {
-			continue
-		}
-		if idx := strings.Index(fqdn.Name, n.Name); idx != -1 && idx != 0 && idx < best {
+	for _, name := range d.plugin.apexList.Slice() {
+		if idx := strings.Index(fqdn.Name, name); idx != -1 && idx != 0 && idx < best {
 			best = idx
-			apex = a
+			if ents, err := e.Session.Cache().FindEntityByContent(
+				&domain.FQDN{Name: name}, e.Session.Cache().StartTime()); err == nil && len(ents) == 1 {
+				apex = ents[0]
+			}
 		}
 	}
 

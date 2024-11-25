@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/caffix/stringset"
 	"github.com/miekg/dns"
 	"github.com/owasp-amass/amass/v4/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v4/engine/types"
@@ -31,6 +32,7 @@ type dnsPlugin struct {
 	secondSweepSize int
 	maxSweepSize    int
 	source          *et.Source
+	apexList        *stringset.Set
 }
 
 func NewDNS() et.Plugin {
@@ -43,6 +45,7 @@ func NewDNS() et.Plugin {
 			Name:       "DNS",
 			Confidence: 100,
 		},
+		apexList: stringset.New(),
 	}
 }
 

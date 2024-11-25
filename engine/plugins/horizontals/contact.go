@@ -41,7 +41,7 @@ func (h *horContact) check(e *et.Event) error {
 		conf = matches.Confidence(string(oam.ContactRecord))
 	}
 
-	if assocs := h.lookup(e, e.Asset, conf); len(assocs) > 0 {
+	if assocs := h.lookup(e, e.Entity, conf); len(assocs) > 0 {
 		var impacted []*dbt.Entity
 
 		for _, assoc := range assocs {
@@ -54,8 +54,8 @@ func (h *horContact) check(e *et.Event) error {
 		src := h.plugin.source
 		var assets []*dbt.Entity
 		for _, im := range impacted {
-			if a, err := e.Session.Cache().FindEntityByContent(im.Asset, e.Session.Cache().StartTime()); err == nil && a != nil {
-				assets = append(assets, a)
+			if a, err := e.Session.Cache().FindEntityByContent(im.Asset, e.Session.Cache().StartTime()); err == nil && len(a) == 1 {
+				assets = append(assets, a[0])
 			} else if n := h.store(e, im.Asset, src); n != nil {
 				assets = append(assets, n)
 			}

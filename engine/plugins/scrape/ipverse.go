@@ -86,7 +86,7 @@ func (v *ipverse) check(e *et.Event) error {
 	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, v.source, since) {
 		cidrs = append(cidrs, v.lookup(e, e.Entity, since, v.source)...)
 	} else {
-		cidrs = append(cidrs, v.query(e, e.Entity, v.source)...)
+		cidrs = append(cidrs, v.query(e, e.Entity)...)
 		support.MarkAssetMonitored(e.Session, e.Entity, v.source)
 	}
 
@@ -102,21 +102,22 @@ func (v *ipverse) lookup(e *et.Event, as *dbt.Entity, since time.Time, src *et.S
 		return nil
 	}
 
+	var results []*dbt.Entity
 	for _, edge := range edges {
 		if tags, err := e.Session.Cache().GetEdgeTags(edge, since, src.Name); err == nil && len(tags) > 0 {
 			for _, tag := range tags {
 				if _, ok := tag.Property.(*property.SourceProperty); ok {
-					if nb, err := e.Session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && as != nil {
-						return nb
+					if nb, err := e.Session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && nb != nil {
+						results = append(results, nb)
 					}
 				}
 			}
 		}
 	}
-	return nil
+	return results
 }
 
-func (v *ipverse) query(e *et.Event, asset *dbt.Entity, src *et.Source) []*dbt.Entity {
+func (v *ipverse) query(e *et.Event, asset *dbt.Entity) []*dbt.Entity {
 	v.rlimit.Take()
 
 	as := asset.Asset.(*oamnet.AutonomousSystem)

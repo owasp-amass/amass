@@ -16,6 +16,7 @@ import (
 	"github.com/owasp-amass/open-asset-model/domain"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
 	"github.com/owasp-amass/open-asset-model/property"
+	"github.com/owasp-amass/open-asset-model/relation"
 	"golang.org/x/net/publicsuffix"
 )
 
@@ -34,8 +35,15 @@ func (h *horfqdn) check(e *et.Event) error {
 		return errors.New("failed to extract the FQDN asset")
 	}
 
-	rels, hit := e.Session.Cache().GetOutgoingRelations(e.Asset, "ptr_record")
-	if !hit && !support.NameResolved(e.Session, fqdn) {
+	var ptrs []*dbt.Edge
+	if edges, err := e.Session.Cache().OutgoingEdges(e.Entity, e.Session.Cache().StartTime(), "dns_record"); err == nil {
+		for _, edge := range edges {
+			if rel, ok := edge.Relation.(*relation.BasicDNSRelation); ok && rel.Header.RRType == 12 {
+				ptrs = append(ptrs, edge)
+			}
+		}
+	}
+	if len(ptrs) == 0 && !support.NameResolved(e.Session, fqdn) {
 		return nil
 	}
 	if _, conf := e.Session.Scope().IsAssetInScope(fqdn, 0); conf > 0 {
@@ -52,13 +60,13 @@ func (h *horfqdn) check(e *et.Event) error {
 		conf = matches.Confidence(string(oam.FQDN))
 	}
 
-	src := h.plugin.Source
-	if hit && len(rels) > 0 {
-		h.checkPTR(e, rels, e.Asset, src)
+	src := h.plugin.source
+	if len(ptrs) > 0 {
+		h.checkPTR(e, ptrs, e.Entity, src)
 		return nil
 	}
 
-	if assocs := h.lookup(e, e.Asset, conf); len(assocs) > 0 {
+	if assocs := h.lookup(e, e.Entity, conf); len(assocs) > 0 {
 		var impacted []*dbt.Entity
 
 		for _, assoc := range assocs {
@@ -70,8 +78,8 @@ func (h *horfqdn) check(e *et.Event) error {
 
 		var assets []*dbt.Entity
 		for _, im := range impacted {
-			if a, hit := e.Session.Cache().GetAsset(im.Asset); hit && a != nil {
-				assets = append(assets, a)
+			if a, err := e.Session.Cache().FindEntityByContent(im.Asset, e.Session.Cache().StartTime()); err == nil && len(a) == 1 {
+				assets = append(assets, a[0])
 			} else if n := h.store(e, im.Asset, src); n != nil {
 				assets = append(assets, n)
 			}
@@ -86,9 +94,13 @@ func (h *horfqdn) check(e *et.Event) error {
 }
 
 func (h *horfqdn) checkPTR(e *et.Event, edges []*dbt.Edge, fqdn *dbt.Entity, src *et.Source) {
-	if rs, hit := e.Session.Cache().GetIncomingRelations(fqdn, "ptr_record"); hit && len(rs) > 0 {
-		for _, r := range rs {
-			ip, ok := r.FromAsset.Asset.(*oamnet.IPAddress)
+	if ins, err := e.Session.Cache().IncomingEdges(fqdn, e.Session.Cache().StartTime(), "ptr_record"); err == nil && len(ins) > 0 {
+		for _, r := range ins {
+			from, err := e.Session.Cache().FindEntityById(r.FromEntity.ID)
+			if err != nil {
+				continue
+			}
+			ip, ok := from.Asset.(*oamnet.IPAddress)
 			if !ok {
 				continue
 			}
@@ -100,14 +112,18 @@ func (h *horfqdn) checkPTR(e *et.Event, edges []*dbt.Edge, fqdn *dbt.Entity, src
 			}
 
 			for _, edge := range edges {
+				to, err := e.Session.Cache().FindEntityById(edge.ToEntity.ID)
+				if err != nil {
+					continue
+				}
 				if inscope {
-					if dom, err := publicsuffix.EffectiveTLDPlusOne(edge.ToEntity.Asset.Key()); err == nil && dom != "" {
+					if dom, err := publicsuffix.EffectiveTLDPlusOne(to.Asset.Key()); err == nil && dom != "" {
 						if e.Session.Scope().AddDomain(dom) {
 							h.plugin.log.Info(fmt.Sprintf("[%s: %s] was added to the session scope", "FQDN", dom))
 						}
 						h.plugin.submitFQDN(e, dom, src)
 					}
-				} else if _, conf := e.Session.Scope().IsAssetInScope(edge.ToEntity.Asset, 0); conf > 0 {
+				} else if _, conf := e.Session.Scope().IsAssetInScope(to.Asset, 0); conf > 0 {
 					if e.Session.Scope().Add(ip) {
 						size := 100
 						if e.Session.Config().Active {

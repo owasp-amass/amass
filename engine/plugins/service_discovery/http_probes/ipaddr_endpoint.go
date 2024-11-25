@@ -6,7 +6,6 @@ package http_probes
 
 import (
 	"errors"
-	"net/netip"
 	"strconv"
 	"time"
 
@@ -17,6 +16,7 @@ import (
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/network"
 	"github.com/owasp-amass/open-asset-model/property"
+	"github.com/owasp-amass/open-asset-model/relation"
 )
 
 type ipaddrEndpoint struct {
@@ -46,7 +46,7 @@ func (r *ipaddrEndpoint) check(e *et.Event) error {
 		return nil
 	}
 
-	since, err := support.TTLStartTime(e.Session.Config(), string(oam.IPAddress), string(oam.SocketAddress), r.name)
+	since, err := support.TTLStartTime(e.Session.Config(), string(oam.IPAddress), string(oam.Service), r.name)
 	if err != nil {
 		return err
 	}
@@ -56,7 +56,7 @@ func (r *ipaddrEndpoint) check(e *et.Event) error {
 	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, src, since) {
 		findings = append(findings, r.lookup(e, e.Entity, src, since)...)
 	} else {
-		findings = append(findings, r.store(e, e.Entity, src)...)
+		findings = append(findings, r.query(e, e.Entity)...)
 		support.MarkAssetMonitored(e.Session, e.Entity, src)
 	}
 
@@ -68,71 +68,49 @@ func (r *ipaddrEndpoint) check(e *et.Event) error {
 	return nil
 }
 
-func (r *ipaddrEndpoint) lookup(e *et.Event, asset *dbt.Entity, src *et.Source, since time.Time) []*support.Finding {
-	addr := asset.Asset.Key()
+func (r *ipaddrEndpoint) lookup(e *et.Event, ip *dbt.Entity, src *et.Source, since time.Time) []*support.Finding {
 	var findings []*support.Finding
-	atype := string(oam.SocketAddress)
 
-	for _, port := range e.Session.Config().Scope.Ports {
-		name := addr + ":" + strconv.Itoa(port)
-
-		endpoints := support.SourceToAssetsWithinTTL(e.Session, name, atype, src, since)
-		for _, endpoint := range endpoints {
-			findings = append(findings, &support.Finding{
-				From:     asset,
-				FromName: addr,
-				To:       endpoint,
-				ToName:   name,
-				Rel:      "port",
-			})
+	if edges, err := e.Session.Cache().OutgoingEdges(ip, since, "port"); err == nil && len(edges) > 0 {
+		for _, edge := range edges {
+			if _, err := e.Session.Cache().GetEdgeTags(edge, since, src.Name); err != nil {
+				continue
+			}
+			if _, ok := edge.Relation.(*relation.PortRelation); ok {
+				if srv, err := e.Session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && srv != nil && srv.Asset.AssetType() == oam.Service {
+					findings = append(findings, &support.Finding{
+						From:     ip,
+						FromName: ip.Asset.Key(),
+						To:       srv,
+						ToName:   srv.Asset.Key(),
+						Rel:      edge.Relation,
+					})
+				}
+			}
 		}
 	}
 	return findings
 }
 
-func (r *ipaddrEndpoint) store(e *et.Event, asset *dbt.Entity, src *et.Source) []*support.Finding {
+func (r *ipaddrEndpoint) query(e *et.Event, ipaddr *dbt.Entity) []*support.Finding {
 	var findings []*support.Finding
-	ip := asset.Asset.(*network.IPAddress)
+	ip := ipaddr.Asset.(*network.IPAddress)
 
-	done := make(chan struct{}, 1)
-	support.AppendToDBQueue(func() {
-		defer func() { done <- struct{}{} }()
+	for _, port := range e.Session.Config().Scope.Ports {
+		a := ip.Address.String()
+		if ip.Type == "IPv6" {
+			a = "[" + a + "]"
+		}
+		addr := a + ":" + strconv.Itoa(port)
 
-		if e.Session.Done() {
-			return
+		proto := "https"
+		if port == 80 || port == 8080 {
+			proto = "http"
 		}
 
-		for _, port := range e.Session.Config().Scope.Ports {
-			a := ip.Address.String()
-			if ip.Type == "IPv6" {
-				a = "[" + a + "]"
-			}
-			addr := a + ":" + strconv.Itoa(port)
+		findings = append(findings, r.plugin.query(e, ipaddr, ip.Address.String(), proto+"://"+addr, port)...)
+	}
 
-			proto := "https"
-			if port == 80 || port == 8080 {
-				proto = "http"
-			}
-
-			if endpoint, err := e.Session.DB().Create(asset, "port", &network.SocketAddress{
-				Address:   netip.MustParseAddrPort(addr),
-				IPAddress: netip.MustParseAddr(ip.Address.String()),
-				Port:      port,
-				Protocol:  proto,
-			}); err == nil && endpoint != nil {
-				_, _ = e.Session.DB().Link(endpoint, "source", src)
-				findings = append(findings, &support.Finding{
-					From:     asset,
-					FromName: ip.Address.String(),
-					To:       endpoint,
-					ToName:   addr,
-					Rel:      "port",
-				})
-			}
-		}
-	})
-	<-done
-	close(done)
 	return findings
 }
 

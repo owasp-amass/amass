@@ -190,79 +190,74 @@ func AssetMonitoredWithinTTL(session et.Session, asset *dbt.Entity, src *et.Sour
 	return false
 }
 
-func CreateServiceAsset(session et.Session, src *dbt.Asset, relation string, serv *service.Service, cert *oamcert.TLSCertificate) (*dbt.Asset, error) {
-	var result *dbt.Asset
+func CreateServiceAsset(session et.Session, src *dbt.Entity, rel oam.Relation, serv *service.Service, cert *oamcert.TLSCertificate) (*dbt.Entity, error) {
+	var result *dbt.Entity
 
-	done := make(chan struct{}, 1)
-	AppendToDBQueue(func() {
-		defer func() { done <- struct{}{} }()
-
-		if session.Done() {
-			return
+	var srvs []*dbt.Entity
+	if entities, err := session.Cache().FindEntitiesByType(oam.Service, time.Time{}); err == nil {
+		for _, a := range entities {
+			if s, ok := a.Asset.(*service.Service); ok && s.BannerLen == serv.BannerLen {
+				srvs = append(srvs, a)
+			}
 		}
+	}
 
-		where := "assets where assets.type = 'Service' "
-		where2 := "and assets.content->>'banner_length' = '" + strconv.Itoa(serv.BannerLen) + "'"
-		assets, _ := session.DB().AssetQuery(where + where2)
+	var match *dbt.Entity
+	for _, srv := range srvs {
+		var num int
 
-		var match *dbt.Asset
-		for _, a := range assets {
-			var num int
-
-			s := a.Asset.(*service.Service)
-			for _, key := range []string{"Server", "X-Powered-By"} {
-				if server1, ok := serv.Headers[key]; ok && server1[0] != "" {
-					if server2, ok := s.Headers[key]; ok && server1[0] == server2[0] {
-						num++
-					} else {
-						num--
-					}
+		s := srv.Asset.(*service.Service)
+		for _, key := range []string{"Server", "X-Powered-By"} {
+			if server1, ok := serv.Headers[key]; ok && server1[0] != "" {
+				if server2, ok := s.Headers[key]; ok && server1[0] == server2[0] {
+					num++
+				} else {
+					num--
 				}
 			}
+		}
 
-			if cert != nil {
-				if rels, err := session.DB().OutgoingRelations(a, time.Time{}, "certificate"); err == nil && len(rels) > 0 {
-					var found bool
+		if cert != nil {
+			if edges, err := session.Cache().OutgoingEdges(srv, time.Time{}, "certificate"); err == nil && len(edges) > 0 {
+				var found bool
 
-					for _, rel := range rels {
-						if t, err := session.DB().FindById(rel.ToAsset.ID, time.Time{}); err == nil && t != nil {
-							if c, ok := t.Asset.(*oamcert.TLSCertificate); ok && c.SerialNumber == cert.SerialNumber {
-								found = true
-								break
-							}
+				for _, edge := range edges {
+					if t, err := session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && t != nil {
+						if c, ok := t.Asset.(*oamcert.TLSCertificate); ok && c.SerialNumber == cert.SerialNumber {
+							found = true
+							break
 						}
 					}
+				}
 
-					if found {
-						num++
-					} else {
-						continue
-					}
+				if found {
+					num++
+				} else {
+					continue
 				}
 			}
-
-			if num > 0 {
-				match = a
-				break
-			}
 		}
 
-		if match != nil {
-			result = match
-			_, _ = session.DB().Link(src, relation, match)
-		} else {
-			if a, err := session.DB().Create(src, relation, serv); err == nil && a != nil {
-				result = a
-			}
+		if num > 0 {
+			match = srv
+			break
 		}
-
-	})
-	<-done
-	close(done)
-
-	var err error
-	if result == nil {
-		err = errors.New("failed to create the OAM Service asset")
 	}
+
+	if match != nil {
+		result = match
+	} else {
+		if a, err := session.Cache().CreateAsset(serv); err == nil && a != nil {
+			result = a
+		} else {
+			return nil, errors.New("failed to create the OAM Service asset")
+		}
+	}
+
+	_, err := session.Cache().CreateEdge(&dbt.Edge{
+		Relation:   rel,
+		FromEntity: src,
+		ToEntity:   result,
+	})
 	return result, err
 }

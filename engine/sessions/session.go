@@ -95,8 +95,16 @@ func (s *Session) Scope() *scope.Scope {
 	return s.scope
 }
 
+func (s *Session) DB() *assetdb.AssetDB {
+	return s.db
+}
+
 func (s *Session) Cache() *cache.Cache {
 	return s.c
+}
+
+func (s *Session) TmpDir() string {
+	return s.tmpdir
 }
 
 func (s *Session) Stats() *et.SessionStats {

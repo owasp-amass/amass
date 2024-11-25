@@ -72,7 +72,7 @@ func (bu *bannerURLs) check(e *et.Event) error {
 	var urls []*dbt.Entity
 	//TODO: urls = append(urls, bu.lookup(e, serv.Identifier, bu.source, since)...)
 	if !support.AssetMonitoredWithinTTL(e.Session, e.Entity, bu.source, since) {
-		urls = append(urls, bu.query(e, e.Entity, bu.source)...)
+		urls = append(urls, bu.query(e, e.Entity)...)
 		support.MarkAssetMonitored(e.Session, e.Entity, bu.source)
 	}
 
@@ -82,7 +82,7 @@ func (bu *bannerURLs) check(e *et.Event) error {
 	return nil
 }
 
-func (bu *bannerURLs) query(e *et.Event, asset *dbt.Entity, src *et.Source) []*dbt.Entity {
+func (bu *bannerURLs) query(e *et.Event, asset *dbt.Entity) []*dbt.Entity {
 	serv := asset.Asset.(*service.Service)
 
 	if serv.BannerLen == 0 {
@@ -91,20 +91,20 @@ func (bu *bannerURLs) query(e *et.Event, asset *dbt.Entity, src *et.Source) []*d
 
 	var results []*dbt.Entity
 	if urls := support.ExtractURLsFromString(serv.Banner); len(urls) > 0 {
-		results = append(results, bu.store(e, urls, bu.source)...)
+		results = append(results, bu.store(e, urls)...)
 	}
 	return results
 }
 
-func (bu *bannerURLs) store(e *et.Event, urls []*oamurl.URL, src *et.Source) []*dbt.Entity {
+func (bu *bannerURLs) store(e *et.Event, urls []*oamurl.URL) []*dbt.Entity {
 	var assets []*dbt.Entity
 
 	for _, u := range urls {
 		if a, err := e.Session.Cache().CreateAsset(u); err == nil && a != nil {
 			assets = append(assets, a)
-			e.Session.Cache().CreateEntityProperty(a, &property.SourceProperty{
-				Source:     src.Name,
-				Confidence: src.Confidence,
+			_, _ = e.Session.Cache().CreateEntityProperty(a, &property.SourceProperty{
+				Source:     bu.source.Name,
+				Confidence: bu.source.Confidence,
 			})
 		}
 	}

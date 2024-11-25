@@ -86,7 +86,7 @@ func (d *dnsSubs) check(e *et.Event) error {
 
 	src := d.plugin.source
 	if names := d.traverse(e, dom, e.Entity, src, since); len(names) > 0 {
-		d.process(e, names, src)
+		d.process(e, names)
 	}
 	return nil
 }
@@ -194,6 +194,7 @@ func (d *dnsSubs) query(e *et.Event, subdomain string, src *et.Source) []*relSub
 
 	for i, t := range d.types {
 		if rr, err := support.PerformQuery(subdomain, t.Qtype); err == nil && len(rr) > 0 {
+			d.plugin.apexList.Insert(subdomain)
 			if records := d.store(e, subdomain, src, rr); len(records) > 0 {
 				alias = append(alias, records...)
 			}
@@ -242,7 +243,7 @@ func (d *dnsSubs) store(e *et.Event, name string, src *et.Source, rr []*resolve.
 	}
 
 	for _, record := range rr {
-		if record.Type != dns.TypeNS || record.Type != dns.TypeMX {
+		if record.Type != dns.TypeNS && record.Type != dns.TypeMX {
 			continue
 		}
 
@@ -272,7 +273,7 @@ func (d *dnsSubs) store(e *et.Event, name string, src *et.Source, rr []*resolve.
 	return alias
 }
 
-func (d *dnsSubs) process(e *et.Event, results []*relSubs, src *et.Source) {
+func (d *dnsSubs) process(e *et.Event, results []*relSubs) {
 	for _, finding := range results {
 		fname, ok := finding.alias.Asset.(*domain.FQDN)
 		if !ok || fname == nil {

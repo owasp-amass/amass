@@ -5,12 +5,22 @@
 package http_probes
 
 import (
+	"context"
+	"crypto/x509"
 	"hash/maphash"
 	"log/slog"
+	"strings"
+	"sync"
+	"time"
 
 	"github.com/owasp-amass/amass/v4/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v4/engine/types"
+	"github.com/owasp-amass/amass/v4/utils/net/http"
+	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
+	oamcert "github.com/owasp-amass/open-asset-model/certificate"
+	"github.com/owasp-amass/open-asset-model/relation"
+	"github.com/owasp-amass/open-asset-model/service"
 )
 
 type httpProbing struct {
@@ -18,9 +28,10 @@ type httpProbing struct {
 	log     *slog.Logger
 	fqdnend *fqdnEndpoint
 	ipaddr  *ipaddrEndpoint
-	interr  *interrogation
 	source  *et.Source
 	hash    maphash.Hash
+	mlock   sync.Mutex
+	gate    map[string]struct{}
 }
 
 func NewHTTPProbing() et.Plugin {
@@ -30,6 +41,7 @@ func NewHTTPProbing() et.Plugin {
 			Name:       "HTTP-Probes",
 			Confidence: 100,
 		},
+		gate: make(map[string]struct{}),
 	}
 }
 
@@ -42,7 +54,7 @@ func (hp *httpProbing) Start(r et.Registry) error {
 	hp.log = r.Log().WithGroup("plugin").With("name", hp.name)
 
 	hp.fqdnend = &fqdnEndpoint{
-		name:   hp.name + "-FQDN-Endpoint-Handler",
+		name:   hp.name + "-FQDN-Interrogation",
 		plugin: hp,
 	}
 	if err := r.RegisterHandler(&et.Handler{
@@ -50,15 +62,18 @@ func (hp *httpProbing) Start(r et.Registry) error {
 		Name:         hp.fqdnend.name,
 		Priority:     9,
 		MaxInstances: support.MaxHandlerInstances,
-		Transforms:   []string{string(oam.NetworkEndpoint)},
-		EventType:    oam.FQDN,
-		Callback:     hp.fqdnend.check,
+		Transforms: []string{
+			string(oam.Service),
+			string(oam.TLSCertificate),
+		},
+		EventType: oam.FQDN,
+		Callback:  hp.fqdnend.check,
 	}); err != nil {
 		return err
 	}
 
 	hp.ipaddr = &ipaddrEndpoint{
-		name:   hp.name + "-IPAddress-Endpoint-Handler",
+		name:   hp.name + "-IPAddress-Interrogation",
 		plugin: hp,
 	}
 	if err := r.RegisterHandler(&et.Handler{
@@ -66,40 +81,12 @@ func (hp *httpProbing) Start(r et.Registry) error {
 		Name:         hp.ipaddr.name,
 		Priority:     9,
 		MaxInstances: support.MaxHandlerInstances,
-		Transforms:   []string{string(oam.SocketAddress)},
-		EventType:    oam.IPAddress,
-		Callback:     hp.ipaddr.check,
-	}); err != nil {
-		return err
-	}
-
-	hp.interr = &interrogation{
-		name:   hp.name + "-Interrogation",
-		plugin: hp,
-		transforms: []string{
+		Transforms: []string{
 			string(oam.Service),
 			string(oam.TLSCertificate),
 		},
-		gate: make(map[string]struct{}),
-	}
-	if err := r.RegisterHandler(&et.Handler{
-		Plugin:       hp,
-		Name:         hp.interr.name + "-NetworkEndpoint",
-		MaxInstances: support.MaxHandlerInstances / 2,
-		Transforms:   hp.interr.transforms,
-		EventType:    oam.NetworkEndpoint,
-		Callback:     hp.interr.check,
-	}); err != nil {
-		return err
-	}
-
-	if err := r.RegisterHandler(&et.Handler{
-		Plugin:       hp,
-		Name:         hp.interr.name + "-SocketAddress",
-		MaxInstances: support.MaxHandlerInstances / 2,
-		Transforms:   hp.interr.transforms,
-		EventType:    oam.SocketAddress,
-		Callback:     hp.interr.check,
+		EventType: oam.IPAddress,
+		Callback:  hp.ipaddr.check,
 	}); err != nil {
 		return err
 	}
@@ -110,4 +97,148 @@ func (hp *httpProbing) Start(r et.Registry) error {
 
 func (hp *httpProbing) Stop() {
 	hp.log.Info("Plugin stopped")
+}
+
+func (hp *httpProbing) query(e *et.Event, entity *dbt.Entity, host, target string, port int) []*support.Finding {
+	var findings []*support.Finding
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if resp, err := http.RequestWebPage(ctx, &http.Request{URL: target}); err == nil && resp != nil {
+		hp.blockUntilLocked(host)
+		findings = append(findings, hp.store(e, resp, entity, port)...)
+		hp.hostUnlock(host)
+	}
+	return findings
+}
+
+func (hp *httpProbing) store(e *et.Event, resp *http.Response, entity *dbt.Entity, port int) []*support.Finding {
+	addr := entity.Asset.Key()
+	var findings []*support.Finding
+
+	var firstAsset *dbt.Entity
+	var firstCert *x509.Certificate
+	if resp.TLS != nil && resp.TLS.HandshakeComplete && len(resp.TLS.PeerCertificates) > 0 {
+		var prev *dbt.Entity
+		// traverse the certificate chain
+		for _, cert := range resp.TLS.PeerCertificates {
+			c := support.X509ToOAMTLSCertificate(cert)
+			if c == nil {
+				break
+			}
+
+			a, err := e.Session.Cache().CreateAsset(c)
+			if err != nil {
+				break
+			}
+
+			if prev == nil {
+				firstAsset = a
+				firstCert = cert
+			} else {
+				tls := prev.Asset.(*oamcert.TLSCertificate)
+				findings = append(findings, &support.Finding{
+					From:     prev,
+					FromName: tls.SerialNumber,
+					To:       a,
+					ToName:   c.SerialNumber,
+					ToMeta:   cert,
+					Rel:      &relation.SimpleRelation{Name: "issuing_certificate"},
+				})
+			}
+			prev = a
+		}
+	}
+
+	serv := support.ServiceWithIdentifier(&hp.hash, e.Session.ID().String(), addr)
+	if serv == nil {
+		return findings
+	}
+	serv.Banner = resp.Body
+	serv.BannerLen = int(resp.Length)
+	serv.Headers = resp.Header
+
+	var c *oamcert.TLSCertificate
+	if firstAsset != nil {
+		c = firstAsset.Asset.(*oamcert.TLSCertificate)
+	}
+
+	portrel := &relation.PortRelation{
+		Name:       "port",
+		PortNumber: port,
+		Protocol:   "tcp",
+	}
+
+	s, err := support.CreateServiceAsset(e.Session, entity, portrel, serv, c)
+	if err != nil {
+		return findings
+	}
+
+	serv = s.Asset.(*service.Service)
+	// for adding the source information
+	findings = append(findings, &support.Finding{
+		From:     entity,
+		FromName: addr,
+		To:       s,
+		ToName:   "Service: " + serv.Identifier,
+		Rel:      portrel,
+	})
+
+	if firstAsset != nil && firstCert != nil {
+		findings = append(findings, &support.Finding{
+			From:     s,
+			FromName: "Service: " + serv.Identifier,
+			To:       firstAsset,
+			ToName:   c.SerialNumber,
+			ToMeta:   firstCert,
+			Rel:      &relation.SimpleRelation{Name: "certificate"},
+		})
+	}
+
+	return findings
+}
+
+func (hp *httpProbing) hostLock(host string) bool {
+	hp.mlock.Lock()
+	defer hp.mlock.Unlock()
+
+	if host == "" {
+		return true
+	}
+	key := strings.ToLower(host)
+
+	if _, ok := hp.gate[key]; ok {
+		return false
+	}
+
+	hp.gate[key] = struct{}{}
+	return true
+}
+
+func (hp *httpProbing) hostUnlock(host string) {
+	hp.mlock.Lock()
+	defer hp.mlock.Unlock()
+
+	if host == "" {
+		return
+	}
+	key := strings.ToLower(host)
+
+	delete(hp.gate, key)
+}
+
+func (hp *httpProbing) blockUntilLocked(host string) {
+	if hp.hostLock(host) {
+		return
+	}
+
+	t := time.NewTicker(500 * time.Millisecond)
+	defer t.Stop()
+
+	for range t.C {
+		if hp.hostLock(host) {
+			break
+		}
+	}
 }

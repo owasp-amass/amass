@@ -7,21 +7,18 @@ package horizontals
 import (
 	"fmt"
 	"log/slog"
-	"math/rand"
-	"net"
-	"net/netip"
-	"time"
 
 	"github.com/miekg/dns"
 	"github.com/owasp-amass/amass/v4/engine/plugins/support"
 	"github.com/owasp-amass/amass/v4/engine/sessions/scope"
 	et "github.com/owasp-amass/amass/v4/engine/types"
-	amassnet "github.com/owasp-amass/amass/v4/utils/net"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/domain"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
+	"github.com/owasp-amass/open-asset-model/property"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
+	"github.com/owasp-amass/open-asset-model/relation"
 	"github.com/owasp-amass/resolve"
 	"golang.org/x/net/publicsuffix"
 )
@@ -101,8 +98,8 @@ func (h *horizPlugin) addAssociatedRelationship(e *et.Event, assocs []*scope.Ass
 			}
 
 			if match, result := e.Session.Scope().IsAssetInScope(impacted.Asset, conf); result >= conf && match != nil {
-				if a, hit := e.Session.Cache().GetAsset(match); hit && a != nil {
-					for _, assoc2 := range e.Session.Scope().AssetsWithAssociation(e.Session.Cache(), a) {
+				if a, err := e.Session.Cache().FindEntityByContent(match, e.Session.Cache().StartTime()); err == nil && len(a) == 1 {
+					for _, assoc2 := range e.Session.Scope().AssetsWithAssociation(e.Session.Cache(), a[0]) {
 						h.makeAssocRelationshipEntries(e, assoc.Match, assoc2)
 					}
 				}
@@ -117,47 +114,27 @@ func (h *horizPlugin) makeAssocRelationshipEntries(e *et.Event, assoc, assoc2 *d
 		return
 	}
 	// check that this relationship has not already been setup during this session
-	if rels, hit := e.Session.Cache().GetOutgoingRelations(assoc, "associated_with"); hit && len(rels) > 0 {
-		for _, rel := range rels {
-			if rel.ToAsset.ID == assoc2.ID {
+	if edges, err := e.Session.Cache().OutgoingEdges(assoc, e.Session.Cache().StartTime(), "associated_with"); err == nil && len(edges) > 0 {
+		for _, edge := range edges {
+			if edge.ToEntity.ID == assoc2.ID {
 				return
 			}
 		}
 	}
 
-	now := time.Now()
-	e.Session.Cache().SetRelation(&dbt.Relation{
-		Type:      "associated_with",
-		CreatedAt: now,
-		LastSeen:  now,
-		FromAsset: assoc,
-		ToAsset:   assoc2,
+	_, _ = e.Session.Cache().CreateEdge(&dbt.Edge{
+		Relation:   &relation.SimpleRelation{Name: "associated_with"},
+		FromEntity: assoc,
+		ToEntity:   assoc2,
 	})
-	e.Session.Cache().SetRelation(&dbt.Relation{
-		Type:      "associated_with",
-		CreatedAt: now,
-		LastSeen:  now,
-		FromAsset: assoc2,
-		ToAsset:   assoc,
+	_, _ = e.Session.Cache().CreateEdge(&dbt.Edge{
+		Relation:   &relation.SimpleRelation{Name: "associated_with"},
+		FromEntity: assoc2,
+		ToEntity:   assoc,
 	})
-
-	done := make(chan struct{}, 1)
-	defer close(done)
-
-	support.AppendToDBQueue(func() {
-		defer func() { done <- struct{}{} }()
-
-		if e.Session.Done() {
-			return
-		}
-
-		_, _ = e.Session.DB().Link(assoc, "associated_with", assoc2)
-		_, _ = e.Session.DB().Link(assoc2, "associated_with", assoc)
-	})
-	<-done
 }
 
-func (h *horizPlugin) process(e *et.Event, assets []*dbt.Asset, src *dbt.Asset) {
+func (h *horizPlugin) process(e *et.Event, assets []*dbt.Entity, src *et.Source) {
 	for _, asset := range assets {
 		// check for new networks added to the scope
 		switch v := asset.Asset.(type) {
@@ -166,7 +143,10 @@ func (h *horizPlugin) process(e *et.Event, assets []*dbt.Asset, src *dbt.Asset) 
 			h.sweepAroundIPs(e, asset, src)
 			//h.sweepNetblock(e, v, src)
 		case *oamreg.IPNetRecord:
-			if a, hit := e.Session.Cache().GetAsset(&oamnet.Netblock{CIDR: v.CIDR, Type: v.Type}); hit && a != nil {
+			if ents, err := e.Session.Cache().FindEntityByContent(
+				&oamnet.Netblock{CIDR: v.CIDR, Type: v.Type}, e.Session.Cache().StartTime()); err == nil && len(ents) == 1 {
+				a := ents[0]
+
 				if _, ok := a.Asset.(*oamnet.Netblock); ok {
 					h.ipPTRTargetsInScope(e, a, src)
 					h.sweepAroundIPs(e, a, src)
@@ -177,35 +157,43 @@ func (h *horizPlugin) process(e *et.Event, assets []*dbt.Asset, src *dbt.Asset) 
 
 		_ = e.Dispatcher.DispatchEvent(&et.Event{
 			Name:    asset.Asset.Key(),
-			Asset:   asset,
+			Entity:  asset,
 			Session: e.Session,
 		})
 
-		if a, hit := e.Session.Cache().GetAsset(asset.Asset); hit && a != nil {
-			now := time.Now()
-			e.Session.Cache().SetRelation(&dbt.Relation{
-				Type:      "source",
-				CreatedAt: now,
-				LastSeen:  now,
-				FromAsset: a,
-				ToAsset:   src,
-			})
-		}
+		_, _ = e.Session.Cache().CreateEntityProperty(asset, &property.SourceProperty{
+			Source:     src.Name,
+			Confidence: src.Confidence,
+		})
 	}
 }
 
-func (h *horizPlugin) ipPTRTargetsInScope(e *et.Event, nb, src *dbt.Asset) {
-	if rels, hit := e.Session.Cache().GetOutgoingRelations(nb, "contains"); hit && len(rels) > 0 {
-		for _, rel := range rels {
-			reverse, err := dns.ReverseAddr(rel.ToAsset.Asset.Key())
+func (h *horizPlugin) ipPTRTargetsInScope(e *et.Event, nb *dbt.Entity, src *et.Source) {
+	if edges, err := e.Session.Cache().OutgoingEdges(nb, e.Session.Cache().StartTime(), "contains"); err == nil && len(edges) > 0 {
+		for _, edge := range edges {
+			to, err := e.Session.Cache().FindEntityById(edge.ToEntity.ID)
+			if err != nil {
+				continue
+			}
+			reverse, err := dns.ReverseAddr(to.Asset.Key())
 			if err != nil {
 				continue
 			}
 
-			if a, hit := e.Session.Cache().GetAsset(&domain.FQDN{Name: resolve.RemoveLastDot(reverse)}); hit && a != nil {
-				if rels, hit := e.Session.Cache().GetOutgoingRelations(a, "ptr_record"); hit && len(rels) > 0 {
-					for _, rel := range rels {
-						if dom, err := publicsuffix.EffectiveTLDPlusOne(rel.ToAsset.Asset.Key()); err == nil {
+			if ents, err := e.Session.Cache().FindEntityByContent(
+				&domain.FQDN{Name: resolve.RemoveLastDot(reverse)}, e.Session.Cache().StartTime()); err == nil && len(ents) == 1 {
+				a := ents[0]
+
+				if edges, err := e.Session.Cache().OutgoingEdges(a, e.Session.Cache().StartTime(), "dns_record"); err == nil && len(edges) > 0 {
+					for _, edge := range edges {
+						if rel, ok := edge.Relation.(*relation.BasicDNSRelation); !ok || rel.Header.RRType != 12 {
+							continue
+						}
+						to, err := e.Session.Cache().FindEntityById(edge.ToEntity.ID)
+						if err != nil {
+							continue
+						}
+						if dom, err := publicsuffix.EffectiveTLDPlusOne(to.Asset.Key()); err == nil {
 							if e.Session.Scope().AddDomain(dom) {
 								h.submitFQDN(e, dom, src)
 								h.log.Info(fmt.Sprintf("[%s: %s] was added to the session scope", "FQDN", dom))
@@ -218,131 +206,105 @@ func (h *horizPlugin) ipPTRTargetsInScope(e *et.Event, nb, src *dbt.Asset) {
 	}
 }
 
-func (h *horizPlugin) sweepAroundIPs(e *et.Event, nb, src *dbt.Asset) {
-	if rels, hit := e.Session.Cache().GetOutgoingRelations(nb, "contains"); hit && len(rels) > 0 {
-		for _, rel := range rels {
+func (h *horizPlugin) sweepAroundIPs(e *et.Event, nb *dbt.Entity, src *et.Source) {
+	if edges, err := e.Session.Cache().OutgoingEdges(nb, e.Session.Cache().StartTime(), "contains"); err == nil && len(edges) > 0 {
+		for _, edge := range edges {
 			size := 100
 			if e.Session.Config().Active {
 				size = 250
 			}
 
-			if ip, ok := rel.ToAsset.Asset.(*oamnet.IPAddress); ok {
+			to, err := e.Session.Cache().FindEntityById(edge.ToEntity.ID)
+			if err != nil {
+				continue
+			}
+			if ip, ok := to.Asset.(*oamnet.IPAddress); ok {
 				support.IPAddressSweep(e, ip, src, size, h.submitIPAddresses)
 			}
 		}
 	}
 }
 
-func (h *horizPlugin) sweepNetblock(e *et.Event, nb *oamnet.Netblock, src *dbt.Asset) {
-	for _, ip := range h.inScopeNetblockIPs(nb) {
-		h.submitIPAddresses(e, ip, src)
-	}
-}
-
-func (h *horizPlugin) inScopeNetblockIPs(nb *oamnet.Netblock) []*oamnet.IPAddress {
-	_, cidr, err := net.ParseCIDR(nb.CIDR.String())
-	if err != nil {
-		return []*oamnet.IPAddress{}
-	}
-
-	var ips []net.IP
-	if nb.CIDR.Masked().Bits() > 20 {
-		ips = amassnet.AllHosts(cidr)
-	} else {
-		ips = h.distAcrossNetblock(cidr, 2048)
-	}
-
-	var results []*oamnet.IPAddress
-	for _, ip := range ips {
-		addr := &oamnet.IPAddress{Address: netip.MustParseAddr(ip.String()), Type: "IPv4"}
-		if addr.Address.Is6() {
-			addr.Type = "IPv6"
+/*
+	func (h *horizPlugin) sweepNetblock(e *et.Event, nb *oamnet.Netblock, src *et.Source) {
+		for _, ip := range h.inScopeNetblockIPs(nb) {
+			h.submitIPAddresses(e, ip, src)
 		}
-		results = append(results, addr)
-	}
-	return results
-}
-
-func (h *horizPlugin) distAcrossNetblock(cidr *net.IPNet, num int) []net.IP {
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-
-	_, bits := cidr.Mask.Size()
-	if bits == 0 {
-		return []net.IP{}
 	}
 
-	total := 1 << bits
-	inc := total / num
-	var results []net.IP
-	for ip := cidr.IP.Mask(cidr.Mask); cidr.Contains(ip); {
-		sel := r.Intn(inc)
+	func (h *horizPlugin) inScopeNetblockIPs(nb *oamnet.Netblock) []*oamnet.IPAddress {
+		_, cidr, err := net.ParseCIDR(nb.CIDR.String())
+		if err != nil {
+			return []*oamnet.IPAddress{}
+		}
 
-		for i := 0; i < inc; i++ {
-			if i == sel {
-				results = append(results, net.ParseIP(ip.String()))
+		var ips []net.IP
+		if nb.CIDR.Masked().Bits() > 20 {
+			ips = amassnet.AllHosts(cidr)
+		} else {
+			ips = h.distAcrossNetblock(cidr, 2048)
+		}
+
+		var results []*oamnet.IPAddress
+		for _, ip := range ips {
+			addr := &oamnet.IPAddress{Address: netip.MustParseAddr(ip.String()), Type: "IPv4"}
+			if addr.Address.Is6() {
+				addr.Type = "IPv6"
 			}
-			amassnet.IPInc(ip)
+			results = append(results, addr)
 		}
-	}
-	return results
-}
-
-func (h *horizPlugin) submitIPAddresses(e *et.Event, asset *oamnet.IPAddress, src *dbt.Asset) {
-	done := make(chan *dbt.Asset, 1)
-	defer close(done)
-
-	if _, hit := e.Session.Cache().GetAsset(asset); hit {
-		return
+		return results
 	}
 
-	support.AppendToDBQueue(func() {
-		if e.Session.Done() {
-			done <- nil
-			return
+	func (h *horizPlugin) distAcrossNetblock(cidr *net.IPNet, num int) []net.IP {
+		r := rand.New(rand.NewSource(time.Now().UnixNano()))
+
+		_, bits := cidr.Mask.Size()
+		if bits == 0 {
+			return []net.IP{}
 		}
 
-		addr, err := e.Session.DB().Create(nil, "", asset)
-		if err == nil && addr != nil {
-			_, _ = e.Session.DB().Link(addr, "source", src)
-		}
-		done <- addr
-	})
+		total := 1 << bits
+		inc := total / num
+		var results []net.IP
+		for ip := cidr.IP.Mask(cidr.Mask); cidr.Contains(ip); {
+			sel := r.Intn(inc)
 
-	if a := <-done; a != nil {
+			for i := 0; i < inc; i++ {
+				if i == sel {
+					results = append(results, net.ParseIP(ip.String()))
+				}
+				amassnet.IPInc(ip)
+			}
+		}
+		return results
+	}
+*/
+func (h *horizPlugin) submitIPAddresses(e *et.Event, asset *oamnet.IPAddress, src *et.Source) {
+	addr, err := e.Session.Cache().CreateAsset(asset)
+	if err == nil && addr != nil {
+		_, _ = e.Session.Cache().CreateEntityProperty(addr, &property.SourceProperty{
+			Source:     src.Name,
+			Confidence: src.Confidence,
+		})
 		_ = e.Dispatcher.DispatchEvent(&et.Event{
-			Name:    a.Asset.Key(),
-			Asset:   a,
+			Name:    addr.Asset.Key(),
+			Entity:  addr,
 			Session: e.Session,
 		})
 	}
 }
 
-func (h *horizPlugin) submitFQDN(e *et.Event, dom string, src *dbt.Asset) {
-	done := make(chan *dbt.Asset, 1)
-	defer close(done)
-
-	fqdn := &domain.FQDN{Name: dom}
-	if _, hit := e.Session.Cache().GetAsset(fqdn); hit {
-		return
-	}
-
-	support.AppendToDBQueue(func() {
-		if e.Session.Done() {
-			done <- nil
-			return
-		}
-
-		a, err := e.Session.DB().Create(nil, "", fqdn)
-		if err == nil && a != nil {
-			_, _ = e.Session.DB().Link(a, "source", src)
-		}
-		done <- a
-	})
-
-	if a := <-done; a != nil {
+func (h *horizPlugin) submitFQDN(e *et.Event, dom string, src *et.Source) {
+	fqdn, err := e.Session.Cache().CreateAsset(&domain.FQDN{Name: dom})
+	if err == nil && fqdn != nil {
+		_, _ = e.Session.Cache().CreateEntityProperty(fqdn, &property.SourceProperty{
+			Source:     src.Name,
+			Confidence: src.Confidence,
+		})
 		_ = e.Dispatcher.DispatchEvent(&et.Event{
-			Name:    a.Asset.Key(),
-			Asset:   a,
+			Name:    fqdn.Asset.Key(),
+			Entity:  fqdn,
 			Session: e.Session,
 		})
 	}

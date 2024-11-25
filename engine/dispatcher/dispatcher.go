@@ -95,7 +95,7 @@ func (d *dis) DispatchEvent(e *et.Event) error {
 	// do not schedule the same asset more than once
 	c := e.Session.Cache()
 	ents, err := c.FindEntityByContent(a, c.StartTime())
-	if len(ents) > 0 {
+	if err == nil && len(ents) > 0 {
 		return errors.New("this event was processed previously")
 	}
 	_, _ = c.CreateAsset(a)

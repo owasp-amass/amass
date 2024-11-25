@@ -81,7 +81,7 @@ func (cr *contactrec) check(e *et.Event) error {
 	}
 
 	if findings := cr.lookup(e, e.Entity, matches); len(findings) > 0 {
-		cr.process(e, findings, cr.source)
+		cr.process(e, findings)
 	}
 	return nil
 }
@@ -126,7 +126,7 @@ func (cr *contactrec) lookup(e *et.Event, asset *dbt.Entity, m *config.Matches) 
 	var findings []*support.Finding
 	if edges, err := e.Session.Cache().OutgoingEdges(asset, time.Time{}, rtypes...); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
-			a, err := e.Session.Cache().FindEntityById(edge.ToAsset.ID)
+			a, err := e.Session.Cache().FindEntityById(edge.ToEntity.ID)
 			if err != nil {
 				continue
 			}
@@ -149,6 +149,6 @@ func (cr *contactrec) lookup(e *et.Event, asset *dbt.Entity, m *config.Matches) 
 	return findings
 }
 
-func (cr *contactrec) process(e *et.Event, findings []*support.Finding, src *et.Source) {
+func (cr *contactrec) process(e *et.Event, findings []*support.Finding) {
 	support.ProcessAssetsWithSource(e, findings, cr.source, cr.name, cr.name+"-Handler")
 }

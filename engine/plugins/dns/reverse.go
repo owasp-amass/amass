@@ -29,8 +29,8 @@ type dnsReverse struct {
 }
 
 type relRev struct {
-	ipFQDN *dbt.Asset
-	target *dbt.Asset
+	ipFQDN *dbt.Entity
+	target *dbt.Entity
 }
 
 func NewReverse(p *dnsPlugin) *dnsReverse {
@@ -77,7 +77,7 @@ func (d *dnsReverse) check(e *et.Event) error {
 	}
 
 	if len(rev) > 0 {
-		d.process(e, rev, src)
+		d.process(e, rev)
 
 		var size int
 		if _, conf := e.Session.Scope().IsAssetInScope(ip, 0); conf > 0 {
@@ -93,7 +93,7 @@ func (d *dnsReverse) check(e *et.Event) error {
 	return nil
 }
 
-func (d *dnsReverse) lookup(e *et.Event, fqdn *dbt.Asset, since time.Time) []*relRev {
+func (d *dnsReverse) lookup(e *et.Event, fqdn *dbt.Entity, since time.Time) []*relRev {
 	var rev []*relRev
 
 	n, ok := fqdn.Asset.(*domain.FQDN)
@@ -110,7 +110,7 @@ func (d *dnsReverse) lookup(e *et.Event, fqdn *dbt.Asset, since time.Time) []*re
 	return rev
 }
 
-func (d *dnsReverse) query(e *et.Event, ipstr string, ptr, src *dbt.Asset) []*relRev {
+func (d *dnsReverse) query(e *et.Event, ipstr string, ptr *dbt.Entity, src *et.Source) []*relRev {
 	var rev []*relRev
 
 	if rr, err := support.PerformQuery(ipstr, dns.TypePTR); err == nil {
@@ -151,7 +151,7 @@ func (d *dnsReverse) store(e *et.Event, ptr *dbt.Entity, src *et.Source, rr []*r
 				Relation: &relation.BasicDNSRelation{
 					Name: "dns_record",
 					Header: relation.RRHeader{
-						RRType: record.Type,
+						RRType: int(record.Type),
 						Class:  1,
 					},
 				},
@@ -172,7 +172,7 @@ func (d *dnsReverse) store(e *et.Event, ptr *dbt.Entity, src *et.Source, rr []*r
 	return rev
 }
 
-func (d *dnsReverse) createPTRAlias(e *et.Event, name string, ip *dbt.Entity, datasrc *et.Source) *dbt.Asset {
+func (d *dnsReverse) createPTRAlias(e *et.Event, name string, ip *dbt.Entity, datasrc *et.Source) *dbt.Entity {
 	ptr, err := e.Session.Cache().CreateAsset(&domain.FQDN{Name: name})
 	if err != nil || ptr == nil {
 		return nil
@@ -200,7 +200,7 @@ func (d *dnsReverse) createPTRAlias(e *et.Event, name string, ip *dbt.Entity, da
 	return ptr
 }
 
-func (d *dnsReverse) process(e *et.Event, rev []*relRev, src *et.Source) {
+func (d *dnsReverse) process(e *et.Event, rev []*relRev) {
 	for _, r := range rev {
 		ip := r.ipFQDN.Asset.(*domain.FQDN)
 		target := r.target.Asset.(*domain.FQDN)

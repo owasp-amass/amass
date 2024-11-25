@@ -212,8 +212,10 @@ func IsCNAME(session et.Session, name *domain.FQDN) (*domain.FQDN, bool) {
 	if edges, err := session.Cache().OutgoingEdges(fqdn, session.Cache().StartTime(), "dns_record"); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
 			if rec, ok := edge.Relation.(*relation.BasicDNSRelation); ok && rec.Header.RRType == 5 {
-				if cname, ok := edge.ToEntity.Asset.(*domain.FQDN); ok {
-					return cname, true
+				if to, err := session.Cache().FindEntityById(edge.ToEntity.ID); err == nil {
+					if cname, ok := to.Asset.(*domain.FQDN); ok {
+						return cname, true
+					}
 				}
 			}
 		}
@@ -232,8 +234,10 @@ func NameIPAddresses(session et.Session, name *domain.FQDN) []*oamnet.IPAddress 
 	if edges, err := session.Cache().OutgoingEdges(fqdn, session.Cache().StartTime(), "dns_record"); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
 			if rec, ok := edge.Relation.(*relation.BasicDNSRelation); ok && (rec.Header.RRType == 1 || rec.Header.RRType == 28) {
-				if ip, ok := edge.ToEntity.Asset.(*oamnet.IPAddress); ok {
-					results = append(results, ip)
+				if to, err := session.Cache().FindEntityById(edge.ToEntity.ID); err == nil {
+					if ip, ok := to.Asset.(*oamnet.IPAddress); ok {
+						results = append(results, ip)
+					}
 				}
 			}
 		}

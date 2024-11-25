@@ -116,7 +116,7 @@ func handlerTask(h *et.Handler) pipeline.TaskFunc {
 		}
 
 		tos := append(h.Transforms, h.Plugin.Name())
-		from := string(ede.Event.Asset.Asset.AssetType())
+		from := string(ede.Event.Entity.Asset.AssetType())
 		if _, err := ede.Event.Session.Config().CheckTransformations(from, tos...); err == nil {
 			if err := r.Callback(ede.Event); err != nil {
 				ede.Error = multierror.Append(ede.Error, err)
