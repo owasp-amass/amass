@@ -81,35 +81,30 @@ func (b *bing) check(e *et.Event) error {
 		return nil
 	}
 
-	src := support.GetSource(e.Session, b.source)
-	if src == nil {
-		return errors.New("failed to obtain the plugin source information")
-	}
-
 	since, err := support.TTLStartTime(e.Session.Config(), string(oam.FQDN), string(oam.FQDN), b.name)
 	if err != nil {
 		return err
 	}
 
 	var names []*dbt.Entity
-	if support.AssetMonitoredWithinTTL(e.Session, e.Asset, src, since) {
-		names = append(names, b.lookup(e, fqdn.Name, src, since)...)
+	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, b.source, since) {
+		names = append(names, b.lookup(e, fqdn.Name, since)...)
 	} else {
-		names = append(names, b.query(e, fqdn.Name, src)...)
-		support.MarkAssetMonitored(e.Session, e.Asset, src)
+		names = append(names, b.query(e, fqdn.Name)...)
+		support.MarkAssetMonitored(e.Session, e.Entity, b.source)
 	}
 
 	if len(names) > 0 {
-		b.process(e, names, src)
+		b.process(e, names)
 	}
 	return nil
 }
 
-func (b *bing) lookup(e *et.Event, name string, src *et.Source, since time.Time) []*dbt.Entity {
-	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.FQDN), src, since)
+func (b *bing) lookup(e *et.Event, name string, since time.Time) []*dbt.Entity {
+	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.FQDN), b.source, since)
 }
 
-func (b *bing) query(e *et.Event, name string, src *et.Source) []*dbt.Entity {
+func (b *bing) query(e *et.Event, name string) []*dbt.Entity {
 	subs := stringset.New()
 	defer subs.Close()
 
@@ -129,13 +124,13 @@ func (b *bing) query(e *et.Event, name string, src *et.Source) []*dbt.Entity {
 		}
 	}
 
-	return b.store(e, subs.Slice(), src)
+	return b.store(e, subs.Slice())
 }
 
-func (b *bing) store(e *et.Event, names []string, src *et.Source) []*dbt.Entity {
-	return support.StoreFQDNsWithSource(e.Session, names, src, b.name, b.name+"-Handler")
+func (b *bing) store(e *et.Event, names []string) []*dbt.Entity {
+	return support.StoreFQDNsWithSource(e.Session, names, b.source, b.name, b.name+"-Handler")
 }
 
-func (b *bing) process(e *et.Event, assets []*dbt.Entity, src *et.Source) {
-	support.ProcessFQDNsWithSource(e, assets, src)
+func (b *bing) process(e *et.Event, assets []*dbt.Entity) {
+	support.ProcessFQDNsWithSource(e, assets, b.source)
 }

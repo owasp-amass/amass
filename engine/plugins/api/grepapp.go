@@ -73,7 +73,7 @@ func (g *grepApp) Stop() {
 }
 
 func (g *grepApp) check(e *et.Event) error {
-	fqdn, ok := e.Asset.Asset.(*domain.FQDN)
+	fqdn, ok := e.Entity.Asset.(*domain.FQDN)
 	if !ok {
 		return errors.New("failed to extract the FQDN asset")
 	}
@@ -84,10 +84,6 @@ func (g *grepApp) check(e *et.Event) error {
 		return nil
 	}
 
-	src := support.GetSource(e.Session, g.source)
-	if src == nil {
-		return errors.New("failed to obtain the plugin source information")
-	}
 
 	since, err := support.TTLStartTime(e.Session.Config(), string(oam.FQDN), string(oam.EmailAddress), g.name)
 	if err != nil {
@@ -95,20 +91,20 @@ func (g *grepApp) check(e *et.Event) error {
 	}
 
 	var names []*dbt.Entity
-	if support.AssetMonitoredWithinTTL(e.Session, e.Asset, src, since) {
-		names = append(names, g.lookup(e, fqdn.Name, src, since)...)
+	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, g.source, since) {
+		names = append(names, g.lookup(e, fqdn.Name, g.source, since)...)
 	} else {
-		names = append(names, g.query(e, fqdn.Name, src)...)
-		support.MarkAssetMonitored(e.Session, e.Asset, src)
+		names = append(names, g.query(e, fqdn.Name, g.source)...)
+		support.MarkAssetMonitored(e.Session, e.Entity, g.source)
 	}
 
 	if len(names) > 0 {
-		g.process(e, names, src)
+		g.process(e, names, g.source)
 	}
 	return nil
 }
 func (g *grepApp) lookup(e *et.Event, name string, src *et.Source, since time.Time) []*dbt.Entity {
-	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.EmailAddress), src, since)
+	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.EmailAddress), g.source, since)
 }
 
 func (g *grepApp) query(e *et.Event, name string, src *et.Source) []*dbt.Entity {
@@ -153,13 +149,13 @@ func (g *grepApp) query(e *et.Event, name string, src *et.Source) []*dbt.Entity 
 		}
 	}
 
-	return g.store(e, emails.Slice(), src)
+	return g.store(e, emails.Slice(), g.source)
 }
 
 func (g *grepApp) store(e *et.Event, emails []string, src *et.Source) []*dbt.Entity {
-	return support.StoreEmailsWithSource(e.Session, emails, src, g.name, g.name+"-Handler")
+	return support.StoreEmailsWithSource(e.Session, emails, g.source, g.name, g.name+"-Handler")
 }
 
 func (g *grepApp) process(e *et.Event, assets []*dbt.Entity, src *et.Source) {
-	support.ProcessEmailsWithSource(e, assets, src)
+	support.ProcessEmailsWithSource(e, assets, g.source)
 }

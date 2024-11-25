@@ -82,10 +82,6 @@ func (w *wayback) check(e *et.Event) error {
 		return nil
 	}
 
-	src := support.GetSource(e.Session, w.source)
-	if src == nil {
-		return errors.New("failed to obtain the plugin source information")
-	}
 
 	since, err := support.TTLStartTime(e.Session.Config(), string(oam.FQDN), string(oam.FQDN), w.name)
 	if err != nil {
@@ -93,21 +89,21 @@ func (w *wayback) check(e *et.Event) error {
 	}
 
 	var names []*dbt.Entity
-	if support.AssetMonitoredWithinTTL(e.Session, e.Asset, src, since) {
-		names = append(names, w.lookup(e, fqdn.Name, src, since)...)
+	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, w.source, since) {
+		names = append(names, w.lookup(e, fqdn.Name, w.source, since)...)
 	} else {
-		names = append(names, w.query(e, fqdn.Name, src)...)
-		support.MarkAssetMonitored(e.Session, e.Asset, src)
+		names = append(names, w.query(e, fqdn.Name, w.source)...)
+		support.MarkAssetMonitored(e.Session, e.Entity, w.source)
 	}
 
 	if len(names) > 0 {
-		w.process(e, names, src)
+		w.process(e, names, w.source)
 	}
 	return nil
 }
 
 func (w *wayback) lookup(e *et.Event, name string, src *et.Source, since time.Time) []*dbt.Entity {
-	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.FQDN), src, since)
+	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.FQDN), w.source, since)
 }
 
 func (w *wayback) query(e *et.Event, name string, src *et.Source) []*dbt.Entity {
@@ -139,13 +135,13 @@ func (w *wayback) query(e *et.Event, name string, src *et.Source) []*dbt.Entity 
 		}
 	}
 
-	return w.store(e, subs.Slice(), src)
+	return w.store(e, subs.Slice(), w.source)
 }
 
 func (w *wayback) store(e *et.Event, names []string, src *et.Source) []*dbt.Entity {
-	return support.StoreFQDNsWithSource(e.Session, names, src, w.name, w.name+"-Handler")
+	return support.StoreFQDNsWithSource(e.Session, names, w.source, w.name, w.name+"-Handler")
 }
 
 func (w *wayback) process(e *et.Event, assets []*dbt.Entity, src *et.Source) {
-	support.ProcessFQDNsWithSource(e, assets, src)
+	support.ProcessFQDNsWithSource(e, assets, w.source)
 }

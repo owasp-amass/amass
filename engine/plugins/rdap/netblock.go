@@ -45,23 +45,22 @@ func (nb *netblock) check(e *et.Event) error {
 	}
 
 	var asset *dbt.Entity
-	src := nb.plugin.source
 	var record *rdap.IPNetwork
-	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, src, since) {
-		asset = nb.lookup(e, n.CIDR.String(), src, since)
+	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, nb.plugin.source, since) {
+		asset = nb.lookup(e, n.CIDR.String(), nb.plugin.source, since)
 	} else {
-		asset, record = nb.query(e, e.Entity, src)
-		support.MarkAssetMonitored(e.Session, e.Asset, src)
+		asset, record = nb.query(e, e.Entity, nb.plugin.source)
+		support.MarkAssetMonitored(e.Session, e.Entity, nb.plugin.source)
 	}
 
 	if asset != nil {
-		nb.process(e, record, e.Asset, asset, src)
+		nb.process(e, record, e.Entity, asset, nb.plugin.source)
 	}
 	return nil
 }
 
 func (nb *netblock) lookup(e *et.Event, cidr string, src *et.Source, since time.Time) *dbt.Entity {
-	if assets := support.SourceToAssetsWithinTTL(e.Session, cidr, string(oam.IPNetRecord), src, since); len(assets) > 0 {
+	if assets := support.SourceToAssetsWithinTTL(e.Session, cidr, string(oam.IPNetRecord), nb.plugin.source, since); len(assets) > 0 {
 		return assets[0]
 	}
 	return nil
@@ -91,7 +90,7 @@ func (nb *netblock) query(e *et.Event, asset *dbt.Entity, src *et.Source) (*dbt.
 	if !ok {
 		return nil, nil
 	}
-	return nb.store(e, record, asset, src), record
+	return nb.store(e, record, asset, nb.plugin.source), record
 }
 
 func (nb *netblock) store(e *et.Event, resp *rdap.IPNetwork, asset *dbt.Entity, src *et.Source) *dbt.Entity {
@@ -151,7 +150,7 @@ func (nb *netblock) process(e *et.Event, record *rdap.IPNetwork, n, asset *dbt.E
 	_ = e.Dispatcher.DispatchEvent((&et.Event{
 		Name:    name,
 		Meta:    record,
-		Asset:   asset,
+		Entity:  asset,
 		Session: e.Session,
 	}))
 

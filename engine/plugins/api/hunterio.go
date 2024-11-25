@@ -87,7 +87,7 @@ func (h *hunterIO) Stop() {
 }
 
 func (h *hunterIO) check(e *et.Event) error {
-	fqdn, ok := e.Asset.Asset.(*domain.FQDN)
+	fqdn, ok := e.Entity.Asset.(*domain.FQDN)
 	if !ok {
 		return errors.New("failed to extract the FQDN asset")
 	}
@@ -97,10 +97,6 @@ func (h *hunterIO) check(e *et.Event) error {
 		return nil
 	}
 
-	src := support.GetSource(e.Session, h.source)
-	if src == nil {
-		return errors.New("failed to obtain the plugin source information")
-	}
 
 	h.rlimit.Take()
 	if count, err := h.count(domlt); err != nil {
@@ -118,13 +114,13 @@ func (h *hunterIO) check(e *et.Event) error {
 				slog.Group("plugin", "name", h.name, "handler", h.name+"-Email-Generation-Handler"))
 			return nil
 		}
-		support.ProcessEmailsWithSource(e, results, src)
+		support.ProcessEmailsWithSource(e, results, h.source)
 	}
 	return nil
 }
 
 func (h *hunterIO) verify(e *et.Event) error {
-	email, ok := e.Asset.Asset.(*contact.EmailAddress)
+	email, ok := e.Entity.Asset.(*contact.EmailAddress)
 	if !ok {
 		return errors.New("failed to extract the EmailAddress asset")
 	}

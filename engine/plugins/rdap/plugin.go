@@ -344,7 +344,7 @@ func (rd *rdapPlugin) storeEntity(e *et.Event, level int, entity *rdap.Entity, a
 
 	level++
 	for _, ent := range entity.Entities {
-		findings = append(findings, rd.storeEntity(e, level, &ent, asset, src, m)...)
+		findings = append(findings, rd.storeEntity(e, level, &ent, asset, rd.source, m)...)
 	}
 	return findings
 }

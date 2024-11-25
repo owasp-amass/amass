@@ -92,10 +92,6 @@ func (z *zetalytics) check(e *et.Event) error {
 		return nil
 	}
 
-	src := support.GetSource(e.Session, z.source)
-	if src == nil {
-		return errors.New("failed to obtain the plugin source information")
-	}
 
 	since, err := support.TTLStartTime(e.Session.Config(), string(oam.FQDN), string(oam.FQDN), z.name)
 	if err != nil {
@@ -103,21 +99,21 @@ func (z *zetalytics) check(e *et.Event) error {
 	}
 
 	var names []*dbt.Entity
-	if support.AssetMonitoredWithinTTL(e.Session, e.Asset, src, since) {
-		names = append(names, z.lookup(e, fqdn.Name, src, since)...)
+	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, z.source, since) {
+		names = append(names, z.lookup(e, fqdn.Name, z.source, since)...)
 	} else {
-		names = append(names, z.query(e, fqdn.Name, src, keys)...)
-		support.MarkAssetMonitored(e.Session, e.Asset, src)
+		names = append(names, z.query(e, fqdn.Name, z.source, keys)...)
+		support.MarkAssetMonitored(e.Session, e.Entity, z.source)
 	}
 
 	if len(names) > 0 {
-		z.process(e, names, src)
+		z.process(e, names, z.source)
 	}
 	return nil
 }
 
 func (z *zetalytics) lookup(e *et.Event, name string, src *et.Source, since time.Time) []*dbt.Entity {
-	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.FQDN), src, since)
+	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.FQDN), z.source, since)
 }
 
 func (z *zetalytics) query(e *et.Event, name string, src *et.Source, keys []string) []*dbt.Entity {
@@ -159,13 +155,13 @@ func (z *zetalytics) query(e *et.Event, name string, src *et.Source, keys []stri
 	}
 
 	names.Prune(1000)
-	return z.store(e, names.Slice(), src)
+	return z.store(e, names.Slice(), z.source)
 }
 
 func (z *zetalytics) store(e *et.Event, names []string, src *et.Source) []*dbt.Entity {
-	return support.StoreFQDNsWithSource(e.Session, names, src, z.name, z.name+"-Handler")
+	return support.StoreFQDNsWithSource(e.Session, names, z.source, z.name, z.name+"-Handler")
 }
 
 func (z *zetalytics) process(e *et.Event, assets []*dbt.Entity, src *et.Source) {
-	support.ProcessFQDNsWithSource(e, assets, src)
+	support.ProcessFQDNsWithSource(e, assets, z.source)
 }

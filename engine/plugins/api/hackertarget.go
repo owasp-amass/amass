@@ -69,7 +69,7 @@ func (ht *hackerTarget) Stop() {
 }
 
 func (ht *hackerTarget) check(e *et.Event) error {
-	fqdn, ok := e.Asset.Asset.(*domain.FQDN)
+	fqdn, ok := e.Entity.Asset.(*domain.FQDN)
 	if !ok {
 		return errors.New("failed to extract the FQDN asset")
 	}
@@ -80,32 +80,27 @@ func (ht *hackerTarget) check(e *et.Event) error {
 		return nil
 	}
 
-	src := support.GetSource(e.Session, ht.source)
-	if src == nil {
-		return errors.New("failed to obtain the plugin source information")
-	}
-
 	since, err := support.TTLStartTime(e.Session.Config(), string(oam.FQDN), string(oam.FQDN), ht.name)
 	if err != nil {
 		return err
 	}
 
 	var names []*dbt.Entity
-	if support.AssetMonitoredWithinTTL(e.Session, e.Asset, src, since) {
-		names = append(names, ht.lookup(e, fqdn.Name, src, since)...)
+	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, ht.source, since) {
+		names = append(names, ht.lookup(e, fqdn.Name, ht.source, since)...)
 	} else {
-		names = append(names, ht.query(e, fqdn.Name, src)...)
-		support.MarkAssetMonitored(e.Session, e.Asset, src)
+		names = append(names, ht.query(e, fqdn.Name, ht.source)...)
+		support.MarkAssetMonitored(e.Session, e.Entity, ht.source)
 	}
 
 	if len(names) > 0 {
-		ht.process(e, names, src)
+		ht.process(e, names)
 	}
 	return nil
 }
 
 func (ht *hackerTarget) lookup(e *et.Event, name string, src *et.Source, since time.Time) []*dbt.Entity {
-	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.FQDN), src, since)
+	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.FQDN), ht.source, since)
 }
 
 func (ht *hackerTarget) query(e *et.Event, name string, src *et.Source) []*dbt.Entity {
@@ -129,13 +124,13 @@ func (ht *hackerTarget) query(e *et.Event, name string, src *et.Source) []*dbt.E
 		}
 	}
 
-	return ht.store(e, names, src)
+	return ht.store(e, names)
 }
 
-func (ht *hackerTarget) store(e *et.Event, names []string, src *et.Source) []*dbt.Entity {
-	return support.StoreFQDNsWithSource(e.Session, names, src, ht.name, ht.name+"-Handler")
+func (ht *hackerTarget) store(e *et.Event, names []string) []*dbt.Entity {
+	return support.StoreFQDNsWithSource(e.Session, names, ht.source, ht.name, ht.name+"-Handler")
 }
 
-func (ht *hackerTarget) process(e *et.Event, assets []*dbt.Entity, src *et.Source) {
-	support.ProcessFQDNsWithSource(e, assets, src)
+func (ht *hackerTarget) process(e *et.Event, assets []*dbt.Entity) {
+	support.ProcessFQDNsWithSource(e, assets, ht.source)
 }

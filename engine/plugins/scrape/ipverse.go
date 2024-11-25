@@ -82,13 +82,12 @@ func (v *ipverse) check(e *et.Event) error {
 		return err
 	}
 
-	src := v.source
 	var cidrs []*dbt.Entity
-	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, src, since) {
-		cidrs = append(cidrs, v.lookup(e, e.Entity, since, src)...)
+	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, v.source, since) {
+		cidrs = append(cidrs, v.lookup(e, e.Entity, since, v.source)...)
 	} else {
-		cidrs = append(cidrs, v.query(e, e.Entity, src)...)
-		support.MarkAssetMonitored(e.Session, e.Entity, src)
+		cidrs = append(cidrs, v.query(e, e.Entity, v.source)...)
+		support.MarkAssetMonitored(e.Session, e.Entity, v.source)
 	}
 
 	for _, cidr := range cidrs {
@@ -146,7 +145,7 @@ func (v *ipverse) query(e *et.Event, asset *dbt.Entity, src *et.Source) []*dbt.E
 		}
 	}
 
-	return v.store(e, cidrs, asset, src)
+	return v.store(e, cidrs, asset, v.source)
 }
 
 func (v *ipverse) store(e *et.Event, cidrs []netip.Prefix, as *dbt.Entity, src *et.Source) []*dbt.Entity {
@@ -183,7 +182,7 @@ func (v *ipverse) store(e *et.Event, cidrs []netip.Prefix, as *dbt.Entity, src *
 func (v *ipverse) process(e *et.Event, as, nb *dbt.Entity) {
 	_ = e.Dispatcher.DispatchEvent(&et.Event{
 		Name:    nb.Asset.Key(),
-		Asset:   nb,
+		Entity:  nb,
 		Session: e.Session,
 	})
 

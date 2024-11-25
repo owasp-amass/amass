@@ -68,7 +68,7 @@ func (st *securityTrails) Stop() {
 }
 
 func (st *securityTrails) check(e *et.Event) error {
-	fqdn, ok := e.Asset.Asset.(*domain.FQDN)
+	fqdn, ok := e.Entity.Asset.(*domain.FQDN)
 	if !ok {
 		return errors.New("failed to extract the FQDN asset")
 	}
@@ -91,35 +91,30 @@ func (st *securityTrails) check(e *et.Event) error {
 		return nil
 	}
 
-	src := support.GetSource(e.Session, st.source)
-	if src == nil {
-		return errors.New("failed to obtain the plugin source information")
-	}
-
 	since, err := support.TTLStartTime(e.Session.Config(), string(oam.FQDN), string(oam.FQDN), st.name)
 	if err != nil {
 		return err
 	}
 
 	var names []*dbt.Entity
-	if support.AssetMonitoredWithinTTL(e.Session, e.Asset, src, since) {
-		names = append(names, st.lookup(e, fqdn.Name, src, since)...)
+	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, st.source, since) {
+		names = append(names, st.lookup(e, fqdn.Name, since)...)
 	} else {
-		names = append(names, st.query(e, fqdn.Name, src, keys)...)
-		support.MarkAssetMonitored(e.Session, e.Asset, src)
+		names = append(names, st.query(e, fqdn.Name, keys)...)
+		support.MarkAssetMonitored(e.Session, e.Entity, st.source)
 	}
 
 	if len(names) > 0 {
-		st.process(e, names, src)
+		st.process(e, names)
 	}
 	return nil
 }
 
-func (st *securityTrails) lookup(e *et.Event, name string, src *et.Source, since time.Time) []*dbt.Entity {
-	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.FQDN), src, since)
+func (st *securityTrails) lookup(e *et.Event, name string, since time.Time) []*dbt.Entity {
+	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.FQDN), st.source, since)
 }
 
-func (st *securityTrails) query(e *et.Event, name string, src *et.Source, keys []string) []*dbt.Entity {
+func (st *securityTrails) query(e *et.Event, name string, keys []string) []*dbt.Entity {
 	var names []string
 
 	for _, key := range keys {
@@ -149,13 +144,13 @@ func (st *securityTrails) query(e *et.Event, name string, src *et.Source, keys [
 		break
 	}
 
-	return st.store(e, names, src)
+	return st.store(e, names)
 }
 
-func (st *securityTrails) store(e *et.Event, names []string, src *et.Source) []*dbt.Entity {
-	return support.StoreFQDNsWithSource(e.Session, names, src, st.name, st.name+"-Handler")
+func (st *securityTrails) store(e *et.Event, names []string) []*dbt.Entity {
+	return support.StoreFQDNsWithSource(e.Session, names, st.source, st.name, st.name+"-Handler")
 }
 
-func (st *securityTrails) process(e *et.Event, assets []*dbt.Entity, src *et.Source) {
-	support.ProcessFQDNsWithSource(e, assets, src)
+func (st *securityTrails) process(e *et.Event, assets []*dbt.Entity) {
+	support.ProcessFQDNsWithSource(e, assets, st.source)
 }
