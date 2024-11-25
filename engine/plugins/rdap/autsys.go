@@ -121,7 +121,7 @@ func (r *autsys) store(e *et.Event, resp *rdap.Autnum, asset *dbt.Entity, src *e
 			FromEntity: asset,
 			ToEntity:   autasset,
 		}); err == nil && edge != nil {
-			_, _ = e.Session.Cache().CreateEdgeTag(edge, &property.SourceProperty{
+			_, _ = e.Session.Cache().CreateEdgeProperty(edge, &property.SourceProperty{
 				Source:     r.plugin.source.Name,
 				Confidence: r.plugin.source.Confidence,
 			})

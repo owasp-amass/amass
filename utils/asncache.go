@@ -224,7 +224,7 @@ func (c *ASNCache) AddrSearch(addr string) *ASNRequest {
 
 func FillCache(cache *ASNCache, db *assetdb.AssetDB) error {
 	start := time.Now().Add(-730 * time.Hour)
-	assets, err := db.FindByType(oam.AutonomousSystem, start)
+	assets, err := db.Repo.FindEntitiesByType(oam.AutonomousSystem, start)
 	if err != nil {
 		return err
 	}
@@ -236,13 +236,13 @@ func FillCache(cache *ASNCache, db *assetdb.AssetDB) error {
 		}
 
 		var desc string
-		rels, err := db.OutgoingRelations(a, start, "registration")
-		if err != nil || len(rels) == 0 {
+		edges, err := db.Repo.OutgoingEdges(a, start, "registration")
+		if err != nil || len(edges) == 0 {
 			continue
 		}
 
-		for _, rel := range rels {
-			if asset, err := db.FindById(rel.ToAsset.ID, start); err == nil && asset != nil {
+		for _, edge := range edges {
+			if asset, err := db.Repo.FindEntityById(edge.ToEntity.ID); err == nil && asset != nil {
 				if autnum, ok := asset.Asset.(*oamreg.AutnumRecord); ok && autnum != nil {
 					desc = autnum.Handle + " - " + autnum.Name
 					break

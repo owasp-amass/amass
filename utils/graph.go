@@ -15,7 +15,7 @@ import (
 	assetdb "github.com/owasp-amass/asset-db"
 	pgmigrations "github.com/owasp-amass/asset-db/migrations/postgres"
 	sqlitemigrations "github.com/owasp-amass/asset-db/migrations/sqlite3"
-	"github.com/owasp-amass/asset-db/repository"
+	"github.com/owasp-amass/asset-db/repository/sqlrepo"
 	migrate "github.com/rubenv/sql-migrate"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -48,17 +48,17 @@ func OpenGraphDatabase(cfg *config.Config) *assetdb.AssetDB {
 
 func NewGraph(system, path string, options string) *assetdb.AssetDB {
 	var dsn string
-	var dbtype repository.DBType
+	var dbtype string
 
 	switch system {
 	case "memory":
-		dbtype = repository.SQLite
+		dbtype = sqlrepo.SQLite
 		dsn = fmt.Sprintf("file:sqlite%d?mode=memory&cache=shared", rand.Int31n(100))
 	case "local":
-		dbtype = repository.SQLite
+		dbtype = sqlrepo.SQLite
 		dsn = path
 	case "postgres":
-		dbtype = repository.Postgres
+		dbtype = sqlrepo.Postgres
 		dsn = path
 	default:
 		return nil
@@ -73,11 +73,11 @@ func NewGraph(system, path string, options string) *assetdb.AssetDB {
 	var fs embed.FS
 	var database gorm.Dialector
 	switch dbtype {
-	case repository.SQLite:
+	case sqlrepo.SQLite:
 		name = "sqlite3"
 		fs = sqlitemigrations.Migrations()
 		database = sqlite.Open(dsn)
-	case repository.Postgres:
+	case sqlrepo.Postgres:
 		name = "postgres"
 		fs = pgmigrations.Migrations()
 		database = postgres.Open(dsn)

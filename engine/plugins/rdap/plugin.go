@@ -239,13 +239,13 @@ func (rd *rdapPlugin) storeEntity(e *et.Event, level int, entity *rdap.Entity, a
 	}
 
 	v := entity.VCard
-	property := v.GetFirst("kind")
-	if property == nil {
+	prop := v.GetFirst("kind")
+	if prop == nil {
 		return nil
 	}
 
 	name = v.Name()
-	if kind := strings.Join(property.Values(), " "); name != "" && kind == "individual" {
+	if kind := strings.Join(prop.Values(), " "); name != "" && kind == "individual" {
 		if p := support.FullNameToPerson(name); p != nil && m.IsMatch(string(oam.Person)) {
 			if a, err := e.Session.Cache().CreateAsset(p); err == nil && a != nil {
 				if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{

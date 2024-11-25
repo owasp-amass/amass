@@ -24,7 +24,6 @@ import (
 	"github.com/owasp-amass/open-asset-model/relation"
 	oamurl "github.com/owasp-amass/open-asset-model/url"
 	"golang.org/x/net/publicsuffix"
-	"honnef.co/go/tools/lintcmd/cache"
 )
 
 type Association struct {

@@ -134,7 +134,7 @@ func (nb *netblock) store(e *et.Event, resp *rdap.IPNetwork, asset *dbt.Entity, 
 			FromEntity: asset,
 			ToEntity:   record,
 		}); err == nil && edge != nil {
-			_, _ = e.Session.Cache().CreateEdgeTag(edge, &property.SourceProperty{
+			_, _ = e.Session.Cache().CreateEdgeProperty(edge, &property.SourceProperty{
 				Source:     src.Name,
 				Confidence: src.Confidence,
 			})
