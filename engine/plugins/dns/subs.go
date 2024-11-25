@@ -16,7 +16,10 @@ import (
 	"github.com/owasp-amass/amass/v4/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v4/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
+	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/domain"
+	"github.com/owasp-amass/open-asset-model/property"
+	"github.com/owasp-amass/open-asset-model/relation"
 	"github.com/owasp-amass/resolve"
 	"golang.org/x/net/publicsuffix"
 )
@@ -42,8 +45,8 @@ type dnsSubs struct {
 
 type relSubs struct {
 	rtype  string
-	alias  *dbt.Asset
-	target *dbt.Asset
+	alias  *dbt.Entity
+	target *dbt.Entity
 }
 
 func NewSubs(p *dnsPlugin) *dnsSubs {
@@ -62,7 +65,7 @@ func NewSubs(p *dnsPlugin) *dnsSubs {
 }
 
 func (d *dnsSubs) check(e *et.Event) error {
-	fqdn, ok := e.Asset.Asset.(*domain.FQDN)
+	fqdn, ok := e.Entity.Asset.(*domain.FQDN)
 	if !ok {
 		return errors.New("failed to extract the FQDN asset")
 	}
@@ -76,17 +79,13 @@ func (d *dnsSubs) check(e *et.Event) error {
 		return nil
 	}
 
-	src := support.GetSource(e.Session, d.plugin.source)
-	if src == nil {
-		return errors.New("failed to obtain the plugin source information")
-	}
-
 	since, err := support.TTLStartTime(e.Session.Config(), "FQDN", "FQDN", d.plugin.name)
 	if err != nil {
 		return err
 	}
 
-	if names := d.traverse(e, dom, e.Asset, src, since); len(names) > 0 {
+	src := d.plugin.source
+	if names := d.traverse(e, dom, e.Entity, src, since); len(names) > 0 {
 		d.process(e, names, src)
 	}
 	return nil
@@ -99,29 +98,32 @@ func (d *dnsSubs) registered(e *et.Event, name string) string {
 		}
 	}
 
-	fqdn, hit := e.Session.Cache().GetAsset(&domain.FQDN{Name: name})
-	if !hit || fqdn == nil {
+	fqdns, err := e.Session.Cache().FindEntityByContent(&domain.FQDN{Name: name}, time.Time{})
+	if err != nil || len(fqdns) != 1 {
 		return ""
 	}
+	fqdn := fqdns[0]
 
-	now := time.Now()
-	var rels []*dbt.Relation
+	var rels []*dbt.Edge
 	// allow name servers and mail servers to be investigated like in-scope assets
-	for _, rtype := range []string{"ns_record", "mx_record"} {
-		if r, hit := e.Session.Cache().GetRelations(&dbt.Relation{
-			Type:      rtype,
-			CreatedAt: now,
-			LastSeen:  now,
-			ToAsset:   fqdn,
-		}); hit && len(r) > 0 {
-			rels = append(rels, r...)
+	if edges, err := e.Session.Cache().IncomingEdges(fqdn, time.Time{}, "dns_record"); err == nil && len(edges) > 0 {
+		for _, edge := range edges {
+			if r, ok := edge.Relation.(*relation.PrefDNSRelation); ok {
+				if r.Header.RRType == int(dns.TypeNS) || r.Header.RRType == int(dns.TypeMX) {
+					rels = append(rels, edge)
+				}
+			}
 		}
 	}
 
 	var inscope bool
 	for _, r := range rels {
-		if from, ok := r.FromAsset.Asset.(*domain.FQDN); ok && from != nil {
-			if _, conf := e.Session.Scope().IsAssetInScope(from, 0); conf > 0 {
+		from, err := e.Session.Cache().FindEntityById(r.FromEntity.ID)
+		if err != nil {
+			continue
+		}
+		if f, ok := from.Asset.(*domain.FQDN); ok && from != nil {
+			if _, conf := e.Session.Scope().IsAssetInScope(f, 0); conf > 0 {
 				inscope = true
 				break
 			}
@@ -135,7 +137,7 @@ func (d *dnsSubs) registered(e *et.Event, name string) string {
 	return ""
 }
 
-func (d *dnsSubs) traverse(e *et.Event, dom string, fqdn, src *dbt.Asset, since time.Time) []*relSubs {
+func (d *dnsSubs) traverse(e *et.Event, dom string, fqdn *dbt.Entity, src *et.Source, since time.Time) []*relSubs {
 	var alias []*relSubs
 
 	dlabels := strings.Split(dom, ".")
@@ -164,57 +166,29 @@ func (d *dnsSubs) traverse(e *et.Event, dom string, fqdn, src *dbt.Asset, since 
 func (d *dnsSubs) lookup(e *et.Event, subdomain string, since time.Time) []*relSubs {
 	var alias []*relSubs
 
-	done := make(chan *dbt.Asset, 1)
-	defer close(done)
-
-	support.AppendToDBQueue(func() {
-		if e.Session.Done() {
-			done <- nil
-			return
-		}
-
-		fqdns, err := e.Session.DB().FindByContent(&domain.FQDN{Name: subdomain}, time.Time{})
-		if err != nil || len(fqdns) == 0 {
-			done <- nil
-			return
-		}
-
-		var id string
-		for _, name := range fqdns {
-			if n, ok := name.Asset.(*domain.FQDN); ok && n.Name == subdomain {
-				id = name.ID
-				break
-			}
-		}
-		if id == "" {
-			done <- nil
-			return
-		}
-
-		fqdn, _ := e.Session.DB().FindById(id, time.Time{})
-		done <- fqdn
-	})
-
-	fqdn := <-done
-	if fqdn == nil {
+	fqdns, err := e.Session.Cache().FindEntityByContent(&domain.FQDN{Name: subdomain}, time.Time{})
+	if err != nil || len(fqdns) != 1 {
 		return alias
 	}
+	fqdn := fqdns[0]
 
 	n := fqdn.Asset.Key()
-	if assets := d.plugin.lookupWithinTTL(e.Session, n, "FQDN", since, "ns_record"); len(assets) > 0 {
+	// Check for NS records within the since period
+	if assets := d.plugin.lookupWithinTTL(e.Session, n, oam.FQDN, since, oam.PrefDNSRelation, 2); len(assets) > 0 {
 		for _, a := range assets {
-			alias = append(alias, &relSubs{rtype: "ns_record", alias: fqdn, target: a})
+			alias = append(alias, &relSubs{rtype: "dns_record", alias: fqdn, target: a})
 		}
 	}
-	if assets := d.plugin.lookupWithinTTL(e.Session, n, "FQDN", since, "mx_record"); len(assets) > 0 {
+	// Check for MX records within the since period
+	if assets := d.plugin.lookupWithinTTL(e.Session, n, oam.FQDN, since, oam.PrefDNSRelation, 15); len(assets) > 0 {
 		for _, a := range assets {
-			alias = append(alias, &relSubs{rtype: "mx_record", alias: fqdn, target: a})
+			alias = append(alias, &relSubs{rtype: "dns_record", alias: fqdn, target: a})
 		}
 	}
 	return alias
 }
 
-func (d *dnsSubs) query(e *et.Event, subdomain string, src *dbt.Asset) []*relSubs {
+func (d *dnsSubs) query(e *et.Event, subdomain string, src *et.Source) []*relSubs {
 	apex := true
 	var alias []*relSubs
 
@@ -259,49 +233,46 @@ func (d *dnsSubs) query(e *et.Event, subdomain string, src *dbt.Asset) []*relSub
 	return alias
 }
 
-func (d *dnsSubs) store(e *et.Event, name string, src *dbt.Asset, rr []*resolve.ExtractedAnswer) []*relSubs {
+func (d *dnsSubs) store(e *et.Event, name string, src *et.Source, rr []*resolve.ExtractedAnswer) []*relSubs {
 	var alias []*relSubs
 
-	done := make(chan struct{}, 1)
-	support.AppendToDBQueue(func() {
-		defer func() { done <- struct{}{} }()
+	fqdn, err := e.Session.Cache().CreateAsset(&domain.FQDN{Name: name})
+	if err != nil || fqdn == nil {
+		return alias
+	}
 
-		if e.Session.Done() {
-			return
+	for _, record := range rr {
+		if record.Type != dns.TypeNS || record.Type != dns.TypeMX {
+			continue
 		}
 
-		fqdn, err := e.Session.DB().Create(nil, "", &domain.FQDN{Name: name})
-		if err != nil || fqdn == nil {
-			return
-		}
-
-		for _, record := range rr {
-			var relation string
-
-			if record.Type == dns.TypeNS {
-				relation = "ns_record"
-			} else if record.Type == dns.TypeMX {
-				relation = "mx_record"
-			} else {
-				continue
+		if a, err := e.Session.Cache().CreateAsset(&domain.FQDN{Name: record.Data}); err == nil && a != nil {
+			if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
+				Relation: &relation.PrefDNSRelation{
+					Name: "dns_record",
+					Header: relation.RRHeader{
+						RRType: int(record.Type),
+						Class:  1,
+					},
+				},
+				FromEntity: fqdn,
+				ToEntity:   a,
+			}); err == nil && edge != nil {
+				alias = append(alias, &relSubs{rtype: "dns_record", alias: fqdn, target: a})
+				_, _ = e.Session.Cache().CreateEdgeProperty(edge, &property.SourceProperty{
+					Source:     src.Name,
+					Confidence: src.Confidence,
+				})
 			}
-
-			if a, err := e.Session.DB().Create(fqdn, relation, &domain.FQDN{Name: record.Data}); err == nil {
-				if a != nil {
-					_, _ = e.Session.DB().Link(a, "source", src)
-					alias = append(alias, &relSubs{rtype: relation, alias: fqdn, target: a})
-				}
-			} else {
-				e.Session.Log().Error(err.Error(), slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
-			}
+		} else {
+			e.Session.Log().Error(err.Error(), slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
 		}
-	})
-	<-done
-	close(done)
+	}
+
 	return alias
 }
 
-func (d *dnsSubs) process(e *et.Event, results []*relSubs, src *dbt.Asset) {
+func (d *dnsSubs) process(e *et.Event, results []*relSubs, src *et.Source) {
 	for _, finding := range results {
 		fname, ok := finding.alias.Asset.(*domain.FQDN)
 		if !ok || fname == nil {
@@ -310,7 +281,7 @@ func (d *dnsSubs) process(e *et.Event, results []*relSubs, src *dbt.Asset) {
 
 		_ = e.Dispatcher.DispatchEvent(&et.Event{
 			Name:    fname.Name,
-			Asset:   finding.alias,
+			Entity:  finding.alias,
 			Session: e.Session,
 		})
 
@@ -321,35 +292,12 @@ func (d *dnsSubs) process(e *et.Event, results []*relSubs, src *dbt.Asset) {
 
 		_ = e.Dispatcher.DispatchEvent(&et.Event{
 			Name:    tname.Name,
-			Asset:   finding.target,
+			Entity:  finding.target,
 			Session: e.Session,
 		})
 
-		if from, hit := e.Session.Cache().GetAsset(finding.alias.Asset); hit && from != nil {
-			if to, hit := e.Session.Cache().GetAsset(finding.target.Asset); hit && to != nil {
-				now := time.Now()
-
-				e.Session.Cache().SetRelation(&dbt.Relation{
-					Type:      finding.rtype,
-					CreatedAt: now,
-					LastSeen:  now,
-					FromAsset: from,
-					ToAsset:   to,
-				})
-
-				e.Session.Cache().SetRelation(&dbt.Relation{
-					Type:      "source",
-					CreatedAt: now,
-					LastSeen:  now,
-					FromAsset: to,
-					ToAsset:   src,
-				})
-
-				e.Session.Log().Info("relationship discovered", "from",
-					fname.Name, "relation", finding.rtype, "to", tname.Name,
-					slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
-			}
-		}
+		e.Session.Log().Info("relationship discovered", "from", fname.Name, "relation", finding.rtype,
+			"to", tname.Name, slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
 	}
 }
 

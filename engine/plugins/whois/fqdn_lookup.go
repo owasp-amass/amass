@@ -17,7 +17,9 @@ import (
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/domain"
+	"github.com/owasp-amass/open-asset-model/property"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
+	"github.com/owasp-amass/open-asset-model/relation"
 	"golang.org/x/net/publicsuffix"
 )
 
@@ -46,7 +48,7 @@ func (r *fqdnLookup) check(e *et.Event) error {
 		return err
 	}
 
-	var asset *dbt.Asset
+	var asset *dbt.Entity
 	src := r.plugin.source
 	var record *whoisparser.WhoisInfo
 	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, src, since) {
@@ -63,15 +65,16 @@ func (r *fqdnLookup) check(e *et.Event) error {
 	return nil
 }
 
-func (r *fqdnLookup) lookup(e *et.Event, name string, src *et.Source, since time.Time) *dbt.Asset {
+func (r *fqdnLookup) lookup(e *et.Event, name string, src *et.Source, since time.Time) *dbt.Entity {
 	if assets := support.SourceToAssetsWithinTTL(e.Session, name, string(oam.DomainRecord), src, since); len(assets) > 0 {
 		return assets[0]
 	}
 	return nil
 }
 
-func (r *fqdnLookup) query(e *et.Event, name string, asset *dbt.Entity, src *et.Source) (*dbt.Asset, *whoisparser.WhoisInfo) {
+func (r *fqdnLookup) query(e *et.Event, name string, asset *dbt.Entity, src *et.Source) (*dbt.Entity, *whoisparser.WhoisInfo) {
 	r.plugin.rlimit.Take()
+
 	resp, err := whoisclient.Whois(name)
 	if err != nil {
 		return nil, nil
@@ -113,22 +116,20 @@ func (r *fqdnLookup) store(e *et.Event, resp string, asset *dbt.Entity, src *et.
 		dr.ExpirationDate = tstr
 	}
 
-	done := make(chan *dbt.Asset, 1)
-	support.AppendToDBQueue(func() {
-		if e.Session.Done() {
-			done <- nil
-			return
+	autasset, err := e.Session.Cache().CreateAsset(dr)
+	if err == nil && autasset != nil {
+		if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
+			Relation:   &relation.SimpleRelation{Name: "registration"},
+			FromEntity: asset,
+			ToEntity:   autasset,
+		}); err == nil && edge != nil {
+			_, _ = e.Session.Cache().CreateEntityProperty(autasset, &property.SourceProperty{
+				Source:     src.Name,
+				Confidence: src.Confidence,
+			})
 		}
+	}
 
-		if a, err := e.Session.DB().Create(asset, "registration", dr); err == nil && a != nil {
-			_, _ = e.Session.DB().Link(a, "source", src)
-			done <- a
-			return
-		}
-		done <- nil
-	})
-	autasset := <-done
-	close(done)
 	return autasset, &info
 }
 
@@ -143,28 +144,9 @@ func (r *fqdnLookup) process(e *et.Event, record *whoisparser.WhoisInfo, fqdn, d
 		Session: e.Session,
 	}))
 
-	now := time.Now()
-	if to, hit := e.Session.Cache().GetAsset(dr.Asset); hit && to != nil {
-		e.Session.Cache().SetRelation(&dbt.Relation{
-			Type:      "registration",
-			CreatedAt: now,
-			LastSeen:  now,
-			FromAsset: fqdn,
-			ToAsset:   to,
-		})
-		e.Session.Cache().SetRelation(&dbt.Relation{
-			Type:      "source",
-			CreatedAt: now,
-			LastSeen:  now,
-			FromAsset: to,
-			ToAsset:   src,
-		})
-
-		fname := fqdn.Asset.(*domain.FQDN)
-		e.Session.Log().Info("relationship discovered", "from",
-			fname.Name, "relation", "registration", "to", name,
-			slog.Group("plugin", "name", r.plugin.name, "handler", r.name))
-	}
+	fname := fqdn.Asset.(*domain.FQDN)
+	e.Session.Log().Info("relationship discovered", "from", fname.Name, "relation",
+		"registration", "to", name, slog.Group("plugin", "name", r.plugin.name, "handler", r.name))
 }
 
 func (r *fqdnLookup) waitForDomRecContacts(e *et.Event, dr *dbt.Entity) {
@@ -182,13 +164,8 @@ func (r *fqdnLookup) waitForDomRecContacts(e *et.Event, dr *dbt.Entity) {
 		}
 
 		rtypes := []string{"registrant_contact", "admin_contact", "technical_contact", "billing_contact"}
-		for _, rtype := range rtypes {
-			if relations, hit := e.Session.Cache().GetRelations(&dbt.Relation{
-				Type:      rtype,
-				FromAsset: dr,
-			}); hit && len(relations) > 0 {
-				return
-			}
+		if edges, err := e.Session.Cache().OutgoingEdges(dr, e.Session.Cache().StartTime(), rtypes...); err == nil && len(edges) > 0 {
+			return
 		}
 	}
 }

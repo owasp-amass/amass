@@ -14,12 +14,15 @@ import (
 	"github.com/owasp-amass/amass/v4/config"
 	"github.com/owasp-amass/amass/v4/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v4/engine/types"
+	"github.com/owasp-amass/asset-db/cache"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/contact"
 	"github.com/owasp-amass/open-asset-model/domain"
 	"github.com/owasp-amass/open-asset-model/org"
+	"github.com/owasp-amass/open-asset-model/property"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
+	"github.com/owasp-amass/open-asset-model/relation"
 )
 
 type domrec struct {
@@ -82,51 +85,41 @@ func (r *domrec) lookup(e *et.Event, asset *dbt.Entity, src *et.Source, m *confi
 		}
 	}
 
-	done := make(chan struct{}, 1)
-	support.AppendToDBQueue(func() {
-		defer func() { done <- struct{}{} }()
-
-		if e.Session.Done() {
-			return
-		}
-
-		if rels, err := e.Session.DB().OutgoingRelations(asset, time.Time{}, rtypes...); err == nil && len(rels) > 0 {
-			for _, rel := range rels {
-				a, err := e.Session.DB().FindById(rel.ToAsset.ID, time.Time{})
-				if err != nil {
-					continue
-				}
-				totype := string(a.Asset.AssetType())
-
-				since, ok := sinces[totype]
-				if !ok || (ok && a.LastSeen.Before(since)) {
-					continue
-				}
-
-				if !r.oneOfSources(e, a, src, since) {
-					continue
-				}
-
-				dr := asset.Asset.(*oamreg.DomainRecord)
-				findings = append(findings, &support.Finding{
-					From:     asset,
-					FromName: "DomainRecord: " + dr.Domain,
-					To:       a,
-					ToName:   a.Asset.Key(),
-					Rel:      rel.Type,
-				})
+	if edges, err := e.Session.Cache().OutgoingEdges(asset, e.Session.Cache().StartTime(), rtypes...); err == nil && len(edges) > 0 {
+		for _, edge := range edges {
+			a, err := e.Session.Cache().FindEntityById(edge.ToEntity.ID)
+			if err != nil {
+				continue
 			}
+			totype := string(a.Asset.AssetType())
+
+			since, ok := sinces[totype]
+			if !ok || (ok && a.LastSeen.Before(since)) {
+				continue
+			}
+
+			if !r.oneOfSources(e, a, src, since) {
+				continue
+			}
+
+			dr := asset.Asset.(*oamreg.DomainRecord)
+			findings = append(findings, &support.Finding{
+				From:     asset,
+				FromName: "DomainRecord: " + dr.Domain,
+				To:       a,
+				ToName:   a.Asset.Key(),
+				Rel:      edge.Relation,
+			})
 		}
-	})
-	<-done
-	close(done)
+	}
+
 	return findings
 }
 
 func (r *domrec) oneOfSources(e *et.Event, asset *dbt.Entity, src *et.Source, since time.Time) bool {
-	if rels, err := e.Session.DB().OutgoingRelations(asset, since, "source"); err == nil && len(rels) > 0 {
-		for _, rel := range rels {
-			if rel.ToAsset.ID == src.ID {
+	if tags, err := e.Session.Cache().GetEntityTags(asset, since, src.Name); err == nil && len(tags) > 0 {
+		for _, tag := range tags {
+			if _, ok := tag.Property.(*property.SourceProperty); ok {
 				return true
 			}
 		}
@@ -134,51 +127,38 @@ func (r *domrec) oneOfSources(e *et.Event, asset *dbt.Entity, src *et.Source, si
 	return false
 }
 
-func (r *domrec) store(e *et.Event, resp *whoisparser.WhoisInfo, asset, src *dbt.Asset, m *config.Matches) []*support.Finding {
+func (r *domrec) store(e *et.Event, resp *whoisparser.WhoisInfo, asset *dbt.Entity, src *et.Source, m *config.Matches) []*support.Finding {
+	var findings []*support.Finding
 	dr := asset.Asset.(*oamreg.DomainRecord)
 
-	var findings []*support.Finding
-	done := make(chan struct{}, 1)
-	support.AppendToDBQueue(func() {
-		defer func() { done <- struct{}{} }()
+	if !m.IsMatch(string(oam.FQDN)) {
+		return findings
+	}
 
-		if e.Session.Done() {
-			return
-		}
-
-		if !m.IsMatch(string(oam.FQDN)) {
-			return
-		}
-
-		for _, ns := range resp.Domain.NameServers {
-			for _, name := range support.ScrapeSubdomainNames(strings.ToLower(strings.TrimSpace(ns))) {
-				if a, err := e.Session.DB().Create(asset, "name_server", &domain.FQDN{Name: name}); err == nil && a != nil {
-					findings = append(findings, &support.Finding{
-						From:     asset,
-						FromName: "DomainRecord: " + dr.Domain,
-						To:       a,
-						ToName:   name,
-						Rel:      "name_server",
-					})
-					_, _ = e.Session.DB().Link(a, "source", src)
-				}
-			}
-		}
-		if name := dr.WhoisServer; name != "" && len(support.ScrapeSubdomainNames(name)) > 0 {
-			if a, err := e.Session.DB().Create(asset, "whois_server", &domain.FQDN{Name: name}); err == nil && a != nil {
+	for _, ns := range resp.Domain.NameServers {
+		for _, name := range support.ScrapeSubdomainNames(strings.ToLower(strings.TrimSpace(ns))) {
+			if a, err := e.Session.Cache().CreateAsset(&domain.FQDN{Name: name}); err == nil && a != nil {
 				findings = append(findings, &support.Finding{
 					From:     asset,
 					FromName: "DomainRecord: " + dr.Domain,
 					To:       a,
 					ToName:   name,
-					Rel:      "whois_server",
+					Rel:      &relation.SimpleRelation{Name: "name_server"},
 				})
-				_, _ = e.Session.DB().Link(a, "source", src)
 			}
 		}
-	})
-	<-done
-	close(done)
+	}
+	if name := dr.WhoisServer; name != "" && len(support.ScrapeSubdomainNames(name)) > 0 {
+		if a, err := e.Session.Cache().CreateAsset(&domain.FQDN{Name: name}); err == nil && a != nil {
+			findings = append(findings, &support.Finding{
+				From:     asset,
+				FromName: "DomainRecord: " + dr.Domain,
+				To:       a,
+				ToName:   name,
+				Rel:      &relation.SimpleRelation{Name: "whois_server"},
+			})
+		}
+	}
 
 	if !m.IsMatch(string(oam.ContactRecord)) {
 		return findings
@@ -209,91 +189,92 @@ type domrecContact struct {
 func (r *domrec) storeContact(e *et.Event, c *domrecContact, dr *dbt.Entity, src *et.Source, m *config.Matches) []*support.Finding {
 	var findings []*support.Finding
 
-	done := make(chan struct{}, 1)
-	support.AppendToDBQueue(func() {
-		defer func() { done <- struct{}{} }()
+	cr, err := e.Session.Cache().CreateAsset(&contact.ContactRecord{DiscoveredAt: c.DiscoveredAt})
+	if err != nil || cr == nil {
+		return findings
+	}
 
-		if e.Session.Done() {
-			return
-		}
-
-		cr, err := e.Session.DB().Create(dr, c.RelationName, &contact.ContactRecord{DiscoveredAt: c.DiscoveredAt})
-		if err != nil || cr == nil {
-			return
-		}
-
-		record := dr.Asset.(*oamreg.DomainRecord)
-		findings = append(findings, &support.Finding{
-			From:     dr,
-			FromName: "DomainRecord: " + record.Domain,
-			To:       cr,
-			ToName:   "ContactRecord" + c.DiscoveredAt,
-			Rel:      c.RelationName,
-		})
-		_, _ = e.Session.DB().Link(cr, "source", src)
-
-		var found bool
-		wc := c.WhoisContact
-		// test if the address begins in the organization field
-		addr := fmt.Sprintf("%s %s %s %s %s %s",
-			wc.Organization, wc.Street, wc.City, wc.Province, wc.PostalCode, wc.Country)
-		if loc := support.StreetAddressToLocation(addr); loc != nil &&
-			strings.HasPrefix(loc.Building, strings.ToLower(wc.Organization)) {
-			found = true
-			addr = fmt.Sprintf("%s %s %s %s %s",
-				wc.Street, wc.City, wc.Province, wc.PostalCode, wc.Country)
-		} else {
-			wc.Organization = wc.Name
-		}
-
-		if found {
-			if p := support.FullNameToPerson(wc.Name); p != nil && m.IsMatch(string(oam.Person)) {
-				if a, err := e.Session.DB().Create(cr, "person", p); err == nil && a != nil {
-					_, _ = e.Session.DB().Link(a, "source", src)
-				}
-			}
-		}
-		if wc.Organization != "" && m.IsMatch(string(oam.Organization)) {
-			if a, err := e.Session.DB().Create(cr, "organization",
-				&org.Organization{Name: wc.Organization}); err == nil && a != nil {
-				_, _ = e.Session.DB().Link(a, "source", src)
-			}
-		}
-		if loc := support.StreetAddressToLocation(addr); loc != nil {
-			if a, err := e.Session.DB().Create(cr, "location", loc); err == nil && a != nil {
-				_, _ = e.Session.DB().Link(a, "source", src)
-			}
-		}
-		if email := support.EmailToOAMEmailAddress(wc.Email); email != nil && m.IsMatch(string(oam.EmailAddress)) {
-			if a, err := e.Session.DB().Create(cr, "email", email); err == nil && a != nil {
-				_, _ = e.Session.DB().Link(a, "source", src)
-			}
-		}
-		if m.IsMatch(string(oam.Phone)) {
-			if phone := support.PhoneToOAMPhone(wc.Phone, wc.PhoneExt, wc.Country); phone != nil {
-				phone.Type = contact.PhoneTypeRegular
-				if a, err := e.Session.DB().Create(cr, "phone", phone); err == nil && a != nil {
-					_, _ = e.Session.DB().Link(a, "source", src)
-				}
-			}
-			if fax := support.PhoneToOAMPhone(wc.Fax, wc.FaxExt, wc.Country); fax != nil {
-				fax.Type = contact.PhoneTypeFax
-				if a, err := e.Session.DB().Create(cr, "phone", fax); err == nil && a != nil {
-					_, _ = e.Session.DB().Link(a, "source", src)
-				}
-			}
-		}
-		if u := support.RawURLToOAM(wc.ReferralURL); u != nil && m.IsMatch(string(oam.URL)) {
-			if a, err := e.Session.DB().Create(cr, "url", u); err == nil && a != nil {
-				_, _ = e.Session.DB().Link(a, "source", src)
-			}
-		}
+	record := dr.Asset.(*oamreg.DomainRecord)
+	findings = append(findings, &support.Finding{
+		From:     dr,
+		FromName: "DomainRecord: " + record.Domain,
+		To:       cr,
+		ToName:   "ContactRecord" + c.DiscoveredAt,
+		Rel:      &relation.SimpleRelation{Name: c.RelationName},
 	})
-	<-done
-	close(done)
+
+	var found bool
+	wc := c.WhoisContact
+	// test if the address begins in the organization field
+	addr := fmt.Sprintf("%s %s %s %s %s %s",
+		wc.Organization, wc.Street, wc.City, wc.Province, wc.PostalCode, wc.Country)
+	if loc := support.StreetAddressToLocation(addr); loc != nil &&
+		strings.HasPrefix(loc.Building, strings.ToLower(wc.Organization)) {
+		found = true
+		addr = fmt.Sprintf("%s %s %s %s %s",
+			wc.Street, wc.City, wc.Province, wc.PostalCode, wc.Country)
+	} else {
+		wc.Organization = wc.Name
+	}
+
+	if found {
+		if p := support.FullNameToPerson(wc.Name); p != nil && m.IsMatch(string(oam.Person)) {
+			if a, err := e.Session.Cache().CreateAsset(p); err == nil && a != nil {
+				r.createSimpleEdge(e.Session.Cache(), &relation.SimpleRelation{Name: "person"}, cr, a)
+			}
+		}
+	}
+	if wc.Organization != "" && m.IsMatch(string(oam.Organization)) {
+		if a, err := e.Session.Cache().CreateAsset(&org.Organization{Name: wc.Organization}); err == nil && a != nil {
+			r.createSimpleEdge(e.Session.Cache(), &relation.SimpleRelation{Name: "organization"}, cr, a)
+		}
+	}
+	if loc := support.StreetAddressToLocation(addr); loc != nil {
+		if a, err := e.Session.Cache().CreateAsset(loc); err == nil && a != nil {
+			r.createSimpleEdge(e.Session.Cache(), &relation.SimpleRelation{Name: "location"}, cr, a)
+		}
+	}
+	if email := support.EmailToOAMEmailAddress(wc.Email); email != nil && m.IsMatch(string(oam.EmailAddress)) {
+		if a, err := e.Session.Cache().CreateAsset(email); err == nil && a != nil {
+			r.createSimpleEdge(e.Session.Cache(), &relation.SimpleRelation{Name: "email"}, cr, a)
+		}
+	}
+	if m.IsMatch(string(oam.Phone)) {
+		if phone := support.PhoneToOAMPhone(wc.Phone, wc.PhoneExt, wc.Country); phone != nil {
+			phone.Type = contact.PhoneTypeRegular
+			if a, err := e.Session.Cache().CreateAsset(phone); err == nil && a != nil {
+				r.createSimpleEdge(e.Session.Cache(), &relation.SimpleRelation{Name: "phone"}, cr, a)
+			}
+		}
+		if fax := support.PhoneToOAMPhone(wc.Fax, wc.FaxExt, wc.Country); fax != nil {
+			fax.Type = contact.PhoneTypeFax
+			if a, err := e.Session.Cache().CreateAsset(fax); err == nil && a != nil {
+				r.createSimpleEdge(e.Session.Cache(), &relation.SimpleRelation{Name: "phone"}, cr, a)
+			}
+		}
+	}
+	if u := support.RawURLToOAM(wc.ReferralURL); u != nil && m.IsMatch(string(oam.URL)) {
+		if a, err := e.Session.Cache().CreateAsset(u); err == nil && a != nil {
+			r.createSimpleEdge(e.Session.Cache(), &relation.SimpleRelation{Name: "url"}, cr, a)
+		}
+	}
+
 	return findings
 }
 
 func (r *domrec) process(e *et.Event, findings []*support.Finding, src *et.Source) {
 	support.ProcessAssetsWithSource(e, findings, src, r.plugin.name, r.name)
+}
+
+func (r *domrec) createSimpleEdge(c *cache.Cache, rel oam.Relation, from, to *dbt.Entity) {
+	if edge, err := c.CreateEdge(&dbt.Edge{
+		Relation:   rel,
+		FromEntity: from,
+		ToEntity:   to,
+	}); err == nil && edge != nil {
+		_, _ = c.CreateEdgeProperty(edge, &property.SourceProperty{
+			Source:     r.plugin.source.Name,
+			Confidence: r.plugin.source.Confidence,
+		})
+	}
 }

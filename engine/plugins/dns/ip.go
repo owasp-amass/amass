@@ -30,7 +30,7 @@ type dnsIP struct {
 
 type relIP struct {
 	rtype string
-	ip    *dbt.Asset
+	ip    *dbt.Entity
 }
 
 func (d *dnsIP) check(e *et.Event) error {
@@ -99,7 +99,7 @@ func (d *dnsIP) lookup(e *et.Event, fqdn string, since time.Time) []*relIP {
 	return ips
 }
 
-func (d *dnsIP) query(e *et.Event, name, src *dbt.Asset) []*relIP {
+func (d *dnsIP) query(e *et.Event, name *dbt.Entity, src *et.Source) []*relIP {
 	var ips []*relIP
 
 	fqdn := name.Asset.(*domain.FQDN)
@@ -125,7 +125,7 @@ func (d *dnsIP) store(e *et.Event, fqdn *dbt.Entity, src *et.Source, rr []*resol
 					Relation: &relation.BasicDNSRelation{
 						Name: "dns_record",
 						Header: relation.RRHeader{
-							RRType: record.Type,
+							RRType: int(record.Type),
 							Class:  1,
 						},
 					},
@@ -147,7 +147,7 @@ func (d *dnsIP) store(e *et.Event, fqdn *dbt.Entity, src *et.Source, rr []*resol
 					Relation: &relation.BasicDNSRelation{
 						Name: "dns_record",
 						Header: relation.RRHeader{
-							RRType: record.Type,
+							RRType: int(record.Type),
 							Class:  1,
 						},
 					},

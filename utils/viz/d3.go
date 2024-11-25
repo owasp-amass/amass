@@ -311,24 +311,20 @@ type d3Graph struct {
 func WriteD3Data(output io.Writer, nodes []Node, edges []Edge) error {
 	colors := map[string]string{
 		string(oam.FQDN):             "green",
-		string(oam.NetworkEndpoint):  "blueviolet",
 		string(oam.IPAddress):        "orange",
 		string(oam.AutnumRecord):     "yellow",
 		string(oam.IPNetRecord):      "yellow",
 		string(oam.Netblock):         "pink",
 		string(oam.AutonomousSystem): "blue",
-		string(oam.SocketAddress):    "blueviolet",
 		string(oam.ContactRecord):    "cornsilk",
 		string(oam.EmailAddress):     "chocolate",
 		string(oam.Location):         "darkgray",
 		string(oam.Phone):            "coral",
-		string(oam.Fingerprint):      "darkgoldenrod",
 		string(oam.Organization):     "aqua",
 		string(oam.Person):           "bisque",
 		string(oam.TLSCertificate):   "deeppink",
 		string(oam.URL):              "azure",
 		string(oam.DomainRecord):     "yellow",
-		string(oam.Source):           "burlywood",
 		string(oam.Service):          "darkslategrey",
 	}
 

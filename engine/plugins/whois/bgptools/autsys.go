@@ -58,7 +58,7 @@ func (r *autsys) check(e *et.Event) error {
 	}
 
 	if as != nil {
-		r.process(e, e.Asset, as)
+		r.process(e, e.Entity, as)
 	}
 	return nil
 }
@@ -135,7 +135,7 @@ func (r *autsys) process(e *et.Event, nb, as *dbt.Entity) {
 	asname := "AS" + as.Asset.Key()
 	_ = e.Dispatcher.DispatchEvent(&et.Event{
 		Name:    asname,
-		Asset:   as,
+		Entity:  as,
 		Session: e.Session,
 	})
 

@@ -26,8 +26,8 @@ type dnsCNAME struct {
 }
 
 type relAlias struct {
-	alias  *dbt.Asset
-	target *dbt.Asset
+	alias  *dbt.Entity
+	target *dbt.Entity
 }
 
 func (d *dnsCNAME) check(e *et.Event) error {
@@ -93,12 +93,12 @@ func (d *dnsCNAME) store(e *et.Event, fqdn *dbt.Entity, src *et.Source, rr []*re
 			continue
 		}
 
-		if cname, err := e.Session.Cache().CreateAsset(fqdn, "cname_record", &domain.FQDN{Name: record.Data}); err == nil && cname != nil {
+		if cname, err := e.Session.Cache().CreateAsset(&domain.FQDN{Name: record.Data}); err == nil && cname != nil {
 			if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
 				Relation: &relation.BasicDNSRelation{
 					Name: "dns_record",
 					Header: relation.RRHeader{
-						RRType: record.Type,
+						RRType: int(record.Type),
 						Class:  1,
 					},
 				},
@@ -121,7 +121,7 @@ func (d *dnsCNAME) store(e *et.Event, fqdn *dbt.Entity, src *et.Source, rr []*re
 	return alias
 }
 
-func (d *dnsCNAME) process(e *et.Event, alias []*relAlias, src *dbt.Asset) {
+func (d *dnsCNAME) process(e *et.Event, alias []*relAlias, src *et.Source) {
 	for _, a := range alias {
 		target := a.target.Asset.(*domain.FQDN)
 

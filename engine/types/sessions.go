@@ -21,7 +21,7 @@ type Session interface {
 	PubSub() *pubsub.Logger
 	Config() *config.Config
 	Scope() *scope.Scope
-	Cache() cache.Cache
+	Cache() *cache.Cache
 	Stats() *SessionStats
 	Done() bool
 	Kill()

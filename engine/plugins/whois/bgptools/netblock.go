@@ -58,7 +58,7 @@ func (r *netblock) check(e *et.Event) error {
 	}
 
 	if nb != nil {
-		r.process(e, e.Asset, nb)
+		r.process(e, e.Entity, nb)
 	}
 	return nil
 }
@@ -85,7 +85,7 @@ func (r *netblock) lookup(e *et.Event, ip *dbt.Entity, since time.Time, src *et.
 		if tmp, ok := entity.Asset.(*oamnet.Netblock); ok && tmp.CIDR.Contains(addr.Address) {
 			if s := tmp.CIDR.Masked().Bits(); s > size {
 				size = s
-				nb = tmp
+				nb = entity
 				target = edge
 			}
 		}
@@ -145,7 +145,7 @@ func (r *netblock) store(e *et.Event, cidr netip.Prefix, ip *dbt.Entity, src *et
 		ntype = "IPv6"
 	}
 
-	nb, err := e.Session.DB().Create(nil, "", &oamnet.Netblock{
+	nb, err := e.Session.Cache().CreateAsset(&oamnet.Netblock{
 		CIDR: cidr,
 		Type: ntype,
 	})
@@ -161,14 +161,13 @@ func (r *netblock) store(e *et.Event, cidr netip.Prefix, ip *dbt.Entity, src *et
 			})
 		}
 	}
-
 	return nb
 }
 
 func (r *netblock) process(e *et.Event, ip, nb *dbt.Entity) {
 	_ = e.Dispatcher.DispatchEvent(&et.Event{
 		Name:    nb.Asset.Key(),
-		Asset:   nb,
+		Entity:  nb,
 		Session: e.Session,
 	})
 

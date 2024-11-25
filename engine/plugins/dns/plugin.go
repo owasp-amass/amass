@@ -132,7 +132,7 @@ func (d *dnsPlugin) Stop() {
 	d.log.Info("Plugin stopped")
 }
 
-func (d *dnsPlugin) lookupWithinTTL(session et.Session, name string, atype oam.AssetType, since time.Time, reltype oam.RelationTye, rrtypes ...int) []*dbt.Entity {
+func (d *dnsPlugin) lookupWithinTTL(session et.Session, name string, atype oam.AssetType, since time.Time, reltype oam.RelationType, rrtypes ...int) []*dbt.Entity {
 	var results []*dbt.Entity
 
 	if len(rrtypes) == 0 || !since.IsZero() {
@@ -164,15 +164,15 @@ func (d *dnsPlugin) lookupWithinTTL(session et.Session, name string, atype oam.A
 			var rrtype int
 			switch v := edge.Relation.(type) {
 			case *relation.BasicDNSRelation:
-				if v == reltype {
+				if v.RelationType() == reltype {
 					rrtype = v.Header.RRType
 				}
 			case *relation.PrefDNSRelation:
-				if v == reltype {
+				if v.RelationType() == reltype {
 					rrtype = v.Header.RRType
 				}
 			case *relation.SRVDNSRelation:
-				if v == reltype {
+				if v.RelationType() == reltype {
 					rrtype = v.Header.RRType
 				}
 			}
