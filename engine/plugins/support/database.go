@@ -23,7 +23,7 @@ import (
 )
 
 func SourceToAssetsWithinTTL(session et.Session, name, atype string, src *et.Source, since time.Time) []*dbt.Entity {
-	var result []*dbt.Entity
+	var entities []*dbt.Entity
 
 	switch atype {
 	case string(oam.FQDN):
@@ -33,78 +33,38 @@ func SourceToAssetsWithinTTL(session et.Session, name, atype string, src *et.Sou
 		}
 		root := roots[0]
 
-		if entities, err := utils.FindByFQDNScope(session.Cache(), root, since); err == nil {
-			for _, entity := range entities {
-				if tags, err := session.Cache().GetEntityTags(entity, since, src.Name); err == nil && len(tags) > 0 {
-					for _, tag := range tags {
-						if tag.Property.PropertyType() == oam.SourceProperty {
-							result = append(result, entity)
-						}
-					}
-				}
-			}
-		}
+		entities, _ = utils.FindByFQDNScope(session.Cache(), root, since)
 	case string(oam.EmailAddress):
-		if ents, err := session.Cache().FindEntityByContent(EmailToOAMEmailAddress(name), since); err == nil && len(ents) == 1 {
-			entity := ents[0]
-
-			if tags, err := session.Cache().GetEntityTags(entity, since, src.Name); err == nil && len(tags) > 0 {
-				for _, tag := range tags {
-					if tag.Property.PropertyType() == oam.SourceProperty {
-						result = append(result, entity)
-					}
-				}
-			}
-		}
+		entities, _ = session.Cache().FindEntityByContent(EmailToOAMEmailAddress(name), since)
 	case string(oam.AutnumRecord):
 		num, err := strconv.Atoi(name)
 		if err != nil {
 			return nil
 		}
 
-		if ents, err := session.Cache().FindEntityByContent(&oamreg.AutnumRecord{Number: num}, since); err == nil && len(ents) == 1 {
-			entity := ents[0]
-
-			if tags, err := session.Cache().GetEntityTags(entity, since, src.Name); err == nil && len(tags) > 0 {
-				for _, tag := range tags {
-					if tag.Property.PropertyType() == oam.SourceProperty {
-						result = append(result, entity)
-					}
-				}
-			}
-		}
+		entities, _ = session.Cache().FindEntityByContent(&oamreg.AutnumRecord{Number: num}, since)
 	case string(oam.IPNetRecord):
 		prefix, err := netip.ParsePrefix(name)
 		if err != nil {
 			return nil
 		}
 
-		if ents, err := session.Cache().FindEntityByContent(&oamreg.IPNetRecord{CIDR: prefix}, since); err == nil && len(ents) == 1 {
-			entity := ents[0]
-
-			if tags, err := session.Cache().GetEntityTags(entity, since, src.Name); err == nil && len(tags) > 0 {
-				for _, tag := range tags {
-					if tag.Property.PropertyType() == oam.SourceProperty {
-						result = append(result, entity)
-					}
-				}
-			}
-		}
+		entities, _ = session.Cache().FindEntityByContent(&oamreg.IPNetRecord{CIDR: prefix}, since)
 	case string(oam.Service):
-		if ents, err := session.Cache().FindEntityByContent(&service.Service{Identifier: name}, since); err == nil && len(ents) == 1 {
-			entity := ents[0]
+		entities, _ = session.Cache().FindEntityByContent(&service.Service{Identifier: name}, since)
+	}
 
-			if tags, err := session.Cache().GetEntityTags(entity, since, src.Name); err == nil && len(tags) > 0 {
-				for _, tag := range tags {
-					if tag.Property.PropertyType() == oam.SourceProperty {
-						result = append(result, entity)
-					}
+	var results []*dbt.Entity
+	for _, entity := range entities {
+		if tags, err := session.Cache().GetEntityTags(entity, since, src.Name); err == nil && len(tags) > 0 {
+			for _, tag := range tags {
+				if tag.Property.PropertyType() == oam.SourceProperty {
+					results = append(results, entity)
 				}
 			}
 		}
 	}
-
-	return result
+	return results
 }
 
 func StoreFQDNsWithSource(session et.Session, names []string, src *et.Source, plugin, handler string) []*dbt.Entity {

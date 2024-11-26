@@ -44,7 +44,7 @@ func (d *dnsApex) check(e *et.Event) error {
 		}
 	}
 
-	if apex != nil {
+	if apex != nil && apex.Asset.Key() != fqdn.Name {
 		d.store(e, fqdn.Name, e.Entity, apex)
 	}
 	return nil

@@ -84,7 +84,6 @@ func (g *grepApp) check(e *et.Event) error {
 		return nil
 	}
 
-
 	since, err := support.TTLStartTime(e.Session.Config(), string(oam.FQDN), string(oam.EmailAddress), g.name)
 	if err != nil {
 		return err

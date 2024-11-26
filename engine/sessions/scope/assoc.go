@@ -336,7 +336,7 @@ func (s *Scope) towardsAssetsWithAssociation(c *cache.Cache, asset *dbt.Entity) 
 		inRels = append(inRels, "registrant", "registrant_contact", "subject_contact")
 	case oam.Service:
 		in = true
-		inRels = append(inRels, "service")
+		inRels = append(inRels, "port")
 	}
 	if out {
 		if edges, err := c.OutgoingEdges(asset, c.StartTime(), outRels...); err == nil && len(edges) > 0 {

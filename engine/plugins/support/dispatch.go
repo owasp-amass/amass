@@ -26,13 +26,6 @@ type Finding struct {
 
 func ProcessAssetsWithSource(e *et.Event, findings []*Finding, src *et.Source, pname, hname string) {
 	for _, finding := range findings {
-		_ = e.Dispatcher.DispatchEvent(&et.Event{
-			Name:    finding.ToName,
-			Meta:    finding.ToMeta,
-			Entity:  finding.To,
-			Session: e.Session,
-		})
-
 		if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
 			Relation:   finding.Rel,
 			FromEntity: finding.From,
@@ -42,6 +35,14 @@ func ProcessAssetsWithSource(e *et.Event, findings []*Finding, src *et.Source, p
 				Source:     src.Name,
 				Confidence: src.Confidence,
 			})
+
+			_ = e.Dispatcher.DispatchEvent(&et.Event{
+				Name:    finding.ToName,
+				Meta:    finding.ToMeta,
+				Entity:  finding.To,
+				Session: e.Session,
+			})
+
 			e.Session.Log().Info("relationship discovered", "from", finding.FromName, "relation",
 				finding.Rel, "to", finding.ToName, slog.Group("plugin", "name", pname, "handler", hname))
 		}
@@ -55,15 +56,15 @@ func ProcessFQDNsWithSource(e *et.Event, entities []*dbt.Entity, src *et.Source)
 			continue
 		}
 
+		_, _ = e.Session.Cache().CreateEntityProperty(entity, &property.SourceProperty{
+			Source:     src.Name,
+			Confidence: src.Confidence,
+		})
+
 		_ = e.Dispatcher.DispatchEvent(&et.Event{
 			Name:    fqdn.Name,
 			Entity:  entity,
 			Session: e.Session,
-		})
-
-		_, _ = e.Session.Cache().CreateEntityProperty(entity, &property.SourceProperty{
-			Source:     src.Name,
-			Confidence: src.Confidence,
 		})
 	}
 }
@@ -87,16 +88,16 @@ func ProcessEmailsWithSource(e *et.Event, entities []*dbt.Entity, src *et.Source
 			}
 		}
 
+		_, _ = e.Session.Cache().CreateEntityProperty(entity, &property.SourceProperty{
+			Source:     src.Name,
+			Confidence: src.Confidence,
+		})
+
 		_ = e.Dispatcher.DispatchEvent(&et.Event{
 			Name:    email.Address,
 			Meta:    meta,
 			Entity:  entity,
 			Session: e.Session,
-		})
-
-		_, _ = e.Session.Cache().CreateEntityProperty(entity, &property.SourceProperty{
-			Source:     src.Name,
-			Confidence: src.Confidence,
 		})
 	}
 }

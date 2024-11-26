@@ -94,10 +94,10 @@ func (d *dis) DispatchEvent(e *et.Event) error {
 	a := e.Entity.Asset
 	// do not schedule the same asset more than once
 	set := e.Session.EventSet()
-	if set.Has(e.Entity.Asset.Key()) {
+	if set.Has(e.Entity.ID) {
 		return errors.New("this event was processed previously")
 	}
-	set.Insert(e.Entity.Asset.Key())
+	set.Insert(e.Entity.ID)
 
 	ap, err := d.reg.GetPipeline(a.AssetType())
 	if err != nil {

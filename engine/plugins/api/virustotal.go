@@ -95,7 +95,6 @@ func (vt *virusTotal) check(e *et.Event) error {
 		return nil
 	}
 
-
 	since, err := support.TTLStartTime(e.Session.Config(), string(oam.FQDN), string(oam.FQDN), vt.name)
 	if err != nil {
 		return err
