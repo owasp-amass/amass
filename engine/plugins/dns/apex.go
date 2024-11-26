@@ -31,7 +31,7 @@ func (d *dnsApex) check(e *et.Event) error {
 		return nil
 	}
 
-	// determine which domain apex this name is a node in
+	// determine which domain apex is the parent of this name
 	var apex *dbt.Entity
 	best := len(fqdn.Name)
 	for _, name := range d.plugin.apexList.Slice() {

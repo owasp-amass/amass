@@ -57,7 +57,7 @@ func (d *dnsIP) check(e *et.Event) error {
 	}
 
 	if len(ips) > 0 {
-		d.process(e, fqdn.Name, ips, src)
+		d.process(e, fqdn.Name, ips)
 
 		for _, v := range ips {
 			ip, ok := v.ip.Asset.(*oamnet.IPAddress)
@@ -169,7 +169,7 @@ func (d *dnsIP) store(e *et.Event, fqdn *dbt.Entity, src *et.Source, rr []*resol
 	return ips
 }
 
-func (d *dnsIP) process(e *et.Event, name string, addrs []*relIP, src *et.Source) {
+func (d *dnsIP) process(e *et.Event, name string, addrs []*relIP) {
 	for _, a := range addrs {
 		ip := a.ip.Asset.(*oamnet.IPAddress)
 

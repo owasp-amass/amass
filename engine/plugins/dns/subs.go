@@ -194,9 +194,9 @@ func (d *dnsSubs) query(e *et.Event, subdomain string, src *et.Source) []*relSub
 
 	for i, t := range d.types {
 		if rr, err := support.PerformQuery(subdomain, t.Qtype); err == nil && len(rr) > 0 {
-			d.plugin.apexList.Insert(subdomain)
 			if records := d.store(e, subdomain, src, rr); len(records) > 0 {
 				alias = append(alias, records...)
+				d.plugin.apexList.Insert(subdomain)
 			}
 		} else if i == 0 {
 			// do not continue if we failed to obtain the NS record
