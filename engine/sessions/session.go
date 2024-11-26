@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/caffix/stringset"
 	"github.com/google/uuid"
 	"github.com/owasp-amass/amass/v4/config"
 	"github.com/owasp-amass/amass/v4/engine/pubsub"
@@ -38,6 +39,7 @@ type Session struct {
 	tmpdir string
 	stats  *et.SessionStats
 	done   chan struct{}
+	set    *stringset.Set
 }
 
 // CreateSession initializes a new Session object based on the provided configuration.
@@ -55,6 +57,7 @@ func CreateSession(cfg *config.Config) (et.Session, error) {
 		ps:    pubsub.NewLogger(),
 		stats: new(et.SessionStats),
 		done:  make(chan struct{}),
+		set:   stringset.New(),
 	}
 	s.log = slog.New(slog.NewJSONHandler(s.ps, nil)).With("session", s.id)
 
@@ -109,6 +112,10 @@ func (s *Session) TmpDir() string {
 
 func (s *Session) Stats() *et.SessionStats {
 	return s.stats
+}
+
+func (s *Session) EventSet() *stringset.Set {
+	return s.set
 }
 
 func (s *Session) Done() bool {

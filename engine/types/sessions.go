@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"sync"
 
+	"github.com/caffix/stringset"
 	"github.com/google/uuid"
 	"github.com/owasp-amass/amass/v4/config"
 	"github.com/owasp-amass/amass/v4/engine/pubsub"
@@ -26,6 +27,7 @@ type Session interface {
 	Cache() *cache.Cache
 	TmpDir() string
 	Stats() *SessionStats
+	EventSet() *stringset.Set
 	Done() bool
 	Kill()
 }

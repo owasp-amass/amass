@@ -103,6 +103,9 @@ func (r *manager) CancelSession(id uuid.UUID) {
 			s.Log().Error(fmt.Sprintf("failed to close the database for session %s: %v", id, err))
 		}
 	}
+	if set := s.EventSet(); set != nil {
+		set.Close()
+	}
 	delete(r.sessions, id)
 	r.Unlock()
 }
