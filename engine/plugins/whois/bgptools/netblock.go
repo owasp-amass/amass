@@ -45,8 +45,7 @@ func (r *netblock) check(e *et.Event) error {
 		return nil
 	}
 
-	since, err := support.TTLStartTime(e.Session.Config(),
-		string(oam.IPAddress), string(oam.Netblock), r.plugin.name)
+	since, err := support.TTLStartTime(e.Session.Config(), string(oam.IPAddress), string(oam.Netblock), r.plugin.name)
 	if err != nil {
 		return err
 	}
@@ -76,7 +75,6 @@ func (r *netblock) lookup(e *et.Event, ip *dbt.Entity, since time.Time, src *et.
 
 	var size int
 	var nb *dbt.Entity
-	var target *dbt.Edge
 	for _, edge := range edges {
 		entity, err := e.Session.Cache().FindEntityById(edge.FromEntity.ID)
 		if err != nil {
@@ -84,24 +82,26 @@ func (r *netblock) lookup(e *et.Event, ip *dbt.Entity, since time.Time, src *et.
 		}
 		if tmp, ok := entity.Asset.(*oamnet.Netblock); ok && tmp.CIDR.Contains(addr.Address) {
 			if s := tmp.CIDR.Masked().Bits(); s > size {
-				size = s
-				nb = entity
-				target = edge
+				var found bool
+
+				if tags, err := e.Session.Cache().GetEdgeTags(edge, since, src.Name); err == nil && len(tags) > 0 {
+					for _, tag := range tags {
+						if _, ok := tag.Property.(*property.SourceProperty); ok {
+							found = true
+							break
+						}
+					}
+				}
+
+				if found {
+					size = s
+					nb = entity
+				}
 			}
 		}
-	}
-	if target == nil {
-		return nil
 	}
 
-	if tags, err := e.Session.Cache().GetEdgeTags(target, since, src.Name); err == nil && len(tags) > 0 {
-		for _, tag := range tags {
-			if _, ok := tag.Property.(*property.SourceProperty); ok {
-				return nb
-			}
-		}
-	}
-	return nil
+	return nb
 }
 
 func (r *netblock) query(e *et.Event, ip *dbt.Entity, src *et.Source) *dbt.Entity {

@@ -57,10 +57,12 @@ loop:
 		case <-d.done:
 			break loop
 		case <-d.completed.Signal():
-			d.completed.Process(d.completedCallback)
+			if element, ok := d.completed.Next(); ok {
+				d.completedCallback(element)
+			}
 		case <-t.C:
-			if d.completed.Len() > 0 {
-				d.completed.Process(d.completedCallback)
+			if element, ok := d.completed.Next(); ok {
+				d.completedCallback(element)
 			}
 		}
 	}

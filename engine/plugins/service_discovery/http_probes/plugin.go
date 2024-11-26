@@ -9,7 +9,6 @@ import (
 	"crypto/x509"
 	"hash/maphash"
 	"log/slog"
-	"strings"
 	"sync"
 	"time"
 
@@ -24,14 +23,13 @@ import (
 )
 
 type httpProbing struct {
-	name    string
-	log     *slog.Logger
-	fqdnend *fqdnEndpoint
-	ipaddr  *ipaddrEndpoint
-	source  *et.Source
-	hash    maphash.Hash
-	mlock   sync.Mutex
-	gate    map[string]struct{}
+	name     string
+	log      *slog.Logger
+	fqdnend  *fqdnEndpoint
+	ipaddr   *ipaddrEndpoint
+	source   *et.Source
+	hash     maphash.Hash
+	servlock sync.Mutex
 }
 
 func NewHTTPProbing() et.Plugin {
@@ -41,7 +39,6 @@ func NewHTTPProbing() et.Plugin {
 			Name:       "HTTP-Probes",
 			Confidence: 100,
 		},
-		gate: make(map[string]struct{}),
 	}
 }
 
@@ -99,26 +96,26 @@ func (hp *httpProbing) Stop() {
 	hp.log.Info("Plugin stopped")
 }
 
-func (hp *httpProbing) query(e *et.Event, entity *dbt.Entity, host, target string, port int) []*support.Finding {
+func (hp *httpProbing) query(e *et.Event, entity *dbt.Entity, target string, port int) []*support.Finding {
 	var findings []*support.Finding
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	if resp, err := http.RequestWebPage(ctx, &http.Request{URL: target}); err == nil && resp != nil {
-		hp.blockUntilLocked(host)
 		findings = append(findings, hp.store(e, resp, entity, port)...)
-		hp.hostUnlock(host)
 	}
 	return findings
 }
 
 func (hp *httpProbing) store(e *et.Event, resp *http.Response, entity *dbt.Entity, port int) []*support.Finding {
-	addr := entity.Asset.Key()
-	var findings []*support.Finding
+	hp.servlock.Lock()
+	defer hp.servlock.Unlock()
 
+	addr := entity.Asset.Key()
 	var firstAsset *dbt.Entity
 	var firstCert *x509.Certificate
+	var findings []*support.Finding
 	if resp.TLS != nil && resp.TLS.HandshakeComplete && len(resp.TLS.PeerCertificates) > 0 {
 		var prev *dbt.Entity
 		// traverse the certificate chain
@@ -197,48 +194,4 @@ func (hp *httpProbing) store(e *et.Event, resp *http.Response, entity *dbt.Entit
 	}
 
 	return findings
-}
-
-func (hp *httpProbing) hostLock(host string) bool {
-	hp.mlock.Lock()
-	defer hp.mlock.Unlock()
-
-	if host == "" {
-		return true
-	}
-	key := strings.ToLower(host)
-
-	if _, ok := hp.gate[key]; ok {
-		return false
-	}
-
-	hp.gate[key] = struct{}{}
-	return true
-}
-
-func (hp *httpProbing) hostUnlock(host string) {
-	hp.mlock.Lock()
-	defer hp.mlock.Unlock()
-
-	if host == "" {
-		return
-	}
-	key := strings.ToLower(host)
-
-	delete(hp.gate, key)
-}
-
-func (hp *httpProbing) blockUntilLocked(host string) {
-	if hp.hostLock(host) {
-		return
-	}
-
-	t := time.NewTicker(500 * time.Millisecond)
-	defer t.Stop()
-
-	for range t.C {
-		if hp.hostLock(host) {
-			break
-		}
-	}
 }

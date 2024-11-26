@@ -133,6 +133,7 @@ func (r *autsys) store(e *et.Event, asn int, nb *dbt.Entity, src *et.Source) *db
 
 func (r *autsys) process(e *et.Event, nb, as *dbt.Entity) {
 	asname := "AS" + as.Asset.Key()
+
 	_ = e.Dispatcher.DispatchEvent(&et.Event{
 		Name:    asname,
 		Entity:  as,

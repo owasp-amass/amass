@@ -98,7 +98,7 @@ func (fe *fqdnEndpoint) query(e *et.Event, host *dbt.Entity) []*support.Finding 
 			proto = "http"
 		}
 
-		findings = append(findings, fe.plugin.query(e, host, fqdn.Name, proto+"://"+addr, port)...)
+		findings = append(findings, fe.plugin.query(e, host, proto+"://"+addr, port)...)
 	}
 
 	return findings

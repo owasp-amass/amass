@@ -108,7 +108,7 @@ func (r *ipaddrEndpoint) query(e *et.Event, ipaddr *dbt.Entity) []*support.Findi
 			proto = "http"
 		}
 
-		findings = append(findings, r.plugin.query(e, ipaddr, ip.Address.String(), proto+"://"+addr, port)...)
+		findings = append(findings, r.plugin.query(e, ipaddr, proto+"://"+addr, port)...)
 	}
 
 	return findings

@@ -59,7 +59,7 @@ func (r *fqdnLookup) check(e *et.Event) error {
 	}
 
 	if asset != nil {
-		r.process(e, record, e.Entity, asset, src)
+		r.process(e, record, e.Entity, asset)
 		r.waitForDomRecContacts(e, asset)
 	}
 	return nil
@@ -123,7 +123,7 @@ func (r *fqdnLookup) store(e *et.Event, resp string, asset *dbt.Entity, src *et.
 			FromEntity: asset,
 			ToEntity:   autasset,
 		}); err == nil && edge != nil {
-			_, _ = e.Session.Cache().CreateEntityProperty(autasset, &property.SourceProperty{
+			_, _ = e.Session.Cache().CreateEdgeProperty(edge, &property.SourceProperty{
 				Source:     src.Name,
 				Confidence: src.Confidence,
 			})
@@ -133,7 +133,7 @@ func (r *fqdnLookup) store(e *et.Event, resp string, asset *dbt.Entity, src *et.
 	return autasset, &info
 }
 
-func (r *fqdnLookup) process(e *et.Event, record *whoisparser.WhoisInfo, fqdn, dr *dbt.Entity, src *et.Source) {
+func (r *fqdnLookup) process(e *et.Event, record *whoisparser.WhoisInfo, fqdn, dr *dbt.Entity) {
 	d := dr.Asset.(*oamreg.DomainRecord)
 
 	name := d.Domain + " WHOIS domain record"

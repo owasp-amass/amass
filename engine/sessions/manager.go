@@ -68,11 +68,8 @@ func (r *manager) AddSession(s et.Session) (uuid.UUID, error) {
 
 // CancelSession: cancels a session in a session storage.
 func (r *manager) CancelSession(id uuid.UUID) {
-	r.Lock()
-	s, found := r.sessions[id]
-	r.Unlock()
-
-	if !found {
+	s := r.GetSession(id)
+	if s == nil {
 		return
 	}
 	s.Kill()
@@ -92,6 +89,8 @@ func (r *manager) CancelSession(id uuid.UUID) {
 	}
 
 	r.Lock()
+	defer r.Unlock()
+
 	if c := r.sessions[id].Cache(); c != nil {
 		c.Close()
 	}
@@ -107,7 +106,6 @@ func (r *manager) CancelSession(id uuid.UUID) {
 		set.Close()
 	}
 	delete(r.sessions, id)
-	r.Unlock()
 }
 
 // GetSession: returns a session from a session storage.

@@ -50,7 +50,7 @@ func (r *domrec) check(e *et.Event) error {
 	src := r.plugin.source
 	var findings []*support.Finding
 	if record, ok := e.Meta.(*whoisparser.WhoisInfo); ok && record != nil {
-		findings = append(findings, r.store(e, record, e.Entity, src, matches)...)
+		findings = append(findings, r.store(e, record, e.Entity, matches)...)
 	} else {
 		findings = append(findings, r.lookup(e, e.Entity, src, matches)...)
 	}
@@ -127,7 +127,7 @@ func (r *domrec) oneOfSources(e *et.Event, asset *dbt.Entity, src *et.Source, si
 	return false
 }
 
-func (r *domrec) store(e *et.Event, resp *whoisparser.WhoisInfo, asset *dbt.Entity, src *et.Source, m *config.Matches) []*support.Finding {
+func (r *domrec) store(e *et.Event, resp *whoisparser.WhoisInfo, asset *dbt.Entity, m *config.Matches) []*support.Finding {
 	var findings []*support.Finding
 	dr := asset.Asset.(*oamreg.DomainRecord)
 
@@ -174,7 +174,7 @@ func (r *domrec) store(e *et.Event, resp *whoisparser.WhoisInfo, asset *dbt.Enti
 	}
 	for _, c := range contacts {
 		if c.WhoisContact != nil {
-			findings = append(findings, r.storeContact(e, c, asset, src, m)...)
+			findings = append(findings, r.storeContact(e, c, asset, m)...)
 		}
 	}
 	return findings
@@ -186,7 +186,7 @@ type domrecContact struct {
 	DiscoveredAt string
 }
 
-func (r *domrec) storeContact(e *et.Event, c *domrecContact, dr *dbt.Entity, src *et.Source, m *config.Matches) []*support.Finding {
+func (r *domrec) storeContact(e *et.Event, c *domrecContact, dr *dbt.Entity, m *config.Matches) []*support.Finding {
 	var findings []*support.Finding
 
 	cr, err := e.Session.Cache().CreateAsset(&contact.ContactRecord{DiscoveredAt: c.DiscoveredAt})

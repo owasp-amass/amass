@@ -25,15 +25,15 @@ require (
 	github.com/miekg/dns v1.1.62
 	github.com/nyaruka/phonenumbers v1.4.2
 	github.com/openrdap/rdap v0.9.1
-	github.com/owasp-amass/asset-db v0.14.1
+	github.com/owasp-amass/asset-db v0.14.2
 	github.com/owasp-amass/open-asset-model v0.12.0
 	github.com/owasp-amass/resolve v0.8.1
 	github.com/rubenv/sql-migrate v1.7.0
 	github.com/samber/slog-common v0.17.1
 	github.com/samber/slog-syslog/v2 v2.5.0
-	github.com/stretchr/testify v1.9.0
+	github.com/stretchr/testify v1.10.0
 	github.com/tylertreat/BoomFilters v0.0.0-20210315201527-1a82519a3e43
-	github.com/vektah/gqlparser/v2 v2.5.19
+	github.com/vektah/gqlparser/v2 v2.5.20
 	github.com/yl2chen/cidranger v1.0.2
 	go.uber.org/ratelimit v0.3.1
 	golang.org/x/net v0.31.0
