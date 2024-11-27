@@ -88,23 +88,26 @@ func (d *dis) completedCallback(data interface{}) {
 func (d *dis) DispatchEvent(e *et.Event) error {
 	if e == nil {
 		return errors.New("the event is nil")
+	} else if e.Session == nil {
+		return errors.New("the event has no associated session")
 	} else if e.Session.Done() {
-		return errors.New("the session has been terminated")
+		return errors.New("the associated session has been terminated")
+	} else if e.Entity == nil || e.Entity.Asset == nil {
+		return errors.New("the event has no associated entity or asset")
+	}
+
+	ap, err := d.reg.GetPipeline(e.Entity.Asset.AssetType())
+	if err != nil {
+		return err
 	}
 
 	e.Dispatcher = d
-	a := e.Entity.Asset
 	// do not schedule the same asset more than once
 	set := e.Session.EventSet()
 	if set.Has(e.Entity.ID) {
 		return errors.New("this event was processed previously")
 	}
 	set.Insert(e.Entity.ID)
-
-	ap, err := d.reg.GetPipeline(a.AssetType())
-	if err != nil {
-		return err
-	}
 
 	if data := et.NewEventDataElement(e); data != nil {
 		data.Queue = d.completed

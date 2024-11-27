@@ -7,6 +7,7 @@ package whois
 import (
 	"log/slog"
 
+	"github.com/owasp-amass/amass/v4/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v4/engine/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"go.uber.org/ratelimit"
@@ -44,12 +45,13 @@ func (w *whois) Start(r et.Registry) error {
 		plugin: w,
 	}
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:     w,
-		Name:       w.fqdn.name,
-		Priority:   3,
-		Transforms: []string{string(oam.DomainRecord)},
-		EventType:  oam.FQDN,
-		Callback:   w.fqdn.check,
+		Plugin:       w,
+		Name:         w.fqdn.name,
+		Priority:     3,
+		MaxInstances: support.MaxHandlerInstances,
+		Transforms:   []string{string(oam.DomainRecord)},
+		EventType:    oam.FQDN,
+		Callback:     w.fqdn.check,
 	}); err != nil {
 		return err
 	}

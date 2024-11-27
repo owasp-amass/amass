@@ -47,26 +47,26 @@ func (nb *netblock) check(e *et.Event) error {
 	var asset *dbt.Entity
 	var record *rdap.IPNetwork
 	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, nb.plugin.source, since) {
-		asset = nb.lookup(e, n.CIDR.String(), nb.plugin.source, since)
+		asset = nb.lookup(e, n.CIDR.String(), since)
 	} else {
-		asset, record = nb.query(e, e.Entity, nb.plugin.source)
+		asset, record = nb.query(e, e.Entity)
 		support.MarkAssetMonitored(e.Session, e.Entity, nb.plugin.source)
 	}
 
 	if asset != nil {
-		nb.process(e, record, e.Entity, asset, nb.plugin.source)
+		nb.process(e, record, asset)
 	}
 	return nil
 }
 
-func (nb *netblock) lookup(e *et.Event, cidr string, src *et.Source, since time.Time) *dbt.Entity {
+func (nb *netblock) lookup(e *et.Event, cidr string, since time.Time) *dbt.Entity {
 	if assets := support.SourceToAssetsWithinTTL(e.Session, cidr, string(oam.IPNetRecord), nb.plugin.source, since); len(assets) > 0 {
 		return assets[0]
 	}
 	return nil
 }
 
-func (nb *netblock) query(e *et.Event, asset *dbt.Entity, src *et.Source) (*dbt.Entity, *rdap.IPNetwork) {
+func (nb *netblock) query(e *et.Event, asset *dbt.Entity) (*dbt.Entity, *rdap.IPNetwork) {
 	n := asset.Asset.(*network.Netblock)
 
 	var req *rdap.Request
@@ -143,7 +143,7 @@ func (nb *netblock) store(e *et.Event, resp *rdap.IPNetwork, asset *dbt.Entity, 
 	return record
 }
 
-func (nb *netblock) process(e *et.Event, record *rdap.IPNetwork, n, asset *dbt.Entity, src *et.Source) {
+func (nb *netblock) process(e *et.Event, record *rdap.IPNetwork, asset *dbt.Entity) {
 	ipnet := asset.Asset.(*oamreg.IPNetRecord)
 
 	name := "IPNetRecord: " + ipnet.Handle

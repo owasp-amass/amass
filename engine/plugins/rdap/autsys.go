@@ -48,12 +48,12 @@ func (r *autsys) check(e *et.Event) error {
 	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, r.plugin.source, since) {
 		asset = r.lookup(e, strconv.Itoa(as.Number), since)
 	} else {
-		asset, record = r.query(e, e.Entity, r.plugin.source)
+		asset, record = r.query(e, e.Entity)
 		support.MarkAssetMonitored(e.Session, e.Entity, r.plugin.source)
 	}
 
 	if asset != nil {
-		r.process(e, record, e.Entity, asset, r.plugin.source)
+		r.process(e, record, asset)
 	}
 	return nil
 }
@@ -65,7 +65,7 @@ func (r *autsys) lookup(e *et.Event, num string, since time.Time) *dbt.Entity {
 	return nil
 }
 
-func (r *autsys) query(e *et.Event, asset *dbt.Entity, src *et.Source) (*dbt.Entity, *rdap.Autnum) {
+func (r *autsys) query(e *et.Event, asset *dbt.Entity) (*dbt.Entity, *rdap.Autnum) {
 	as := asset.Asset.(*network.AutonomousSystem)
 	req := rdap.NewAutnumRequest(uint32(as.Number))
 
@@ -83,10 +83,10 @@ func (r *autsys) query(e *et.Event, asset *dbt.Entity, src *et.Source) (*dbt.Ent
 	if !ok {
 		return nil, nil
 	}
-	return r.store(e, record, asset, r.plugin.source), record
+	return r.store(e, record, asset), record
 }
 
-func (r *autsys) store(e *et.Event, resp *rdap.Autnum, asset *dbt.Entity, src *et.Source) *dbt.Entity {
+func (r *autsys) store(e *et.Event, resp *rdap.Autnum, asset *dbt.Entity) *dbt.Entity {
 	as := asset.Asset.(*network.AutonomousSystem)
 	autrec := &oamreg.AutnumRecord{
 		Number:      as.Number,
@@ -131,7 +131,7 @@ func (r *autsys) store(e *et.Event, resp *rdap.Autnum, asset *dbt.Entity, src *e
 	return autasset
 }
 
-func (r *autsys) process(e *et.Event, record *rdap.Autnum, as, asset *dbt.Entity, src *et.Source) {
+func (r *autsys) process(e *et.Event, record *rdap.Autnum, asset *dbt.Entity) {
 	autnum := asset.Asset.(*oamreg.AutnumRecord)
 
 	name := "AutnumRecord: " + autnum.Name

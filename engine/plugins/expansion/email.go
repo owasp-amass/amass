@@ -14,6 +14,7 @@ import (
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/contact"
 	"github.com/owasp-amass/open-asset-model/domain"
+	"github.com/owasp-amass/open-asset-model/property"
 	"github.com/owasp-amass/open-asset-model/relation"
 )
 
@@ -88,5 +89,16 @@ func (ee *emailexpand) store(e *et.Event, asset *dbt.Entity) []*support.Finding 
 }
 
 func (ee *emailexpand) process(e *et.Event, findings []*support.Finding) {
-	support.ProcessAssetsWithSource(e, findings, ee.source, ee.name, ee.name+"-Handler")
+	for _, f := range findings {
+		if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
+			Relation:   f.Rel,
+			FromEntity: f.From,
+			ToEntity:   f.To,
+		}); err == nil && edge != nil {
+			_, _ = e.Session.Cache().CreateEdgeProperty(edge, &property.SourceProperty{
+				Source:     ee.source.Name,
+				Confidence: ee.source.Confidence,
+			})
+		}
+	}
 }

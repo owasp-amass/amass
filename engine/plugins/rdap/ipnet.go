@@ -46,18 +46,18 @@ func (r *ipnet) check(e *et.Event) error {
 
 	var findings []*support.Finding
 	if record, ok := e.Meta.(*rdap.IPNetwork); ok && record != nil {
-		findings = append(findings, r.store(e, record, e.Entity, r.plugin.source, matches)...)
+		findings = append(findings, r.store(e, record, e.Entity, matches)...)
 	} else {
-		findings = append(findings, r.lookup(e, e.Entity, r.plugin.source, matches)...)
+		findings = append(findings, r.lookup(e, e.Entity, matches)...)
 	}
 
 	if len(findings) > 0 {
-		r.process(e, findings, r.plugin.source)
+		r.process(e, findings)
 	}
 	return nil
 }
 
-func (r *ipnet) lookup(e *et.Event, asset *dbt.Entity, src *et.Source, m *config.Matches) []*support.Finding {
+func (r *ipnet) lookup(e *et.Event, asset *dbt.Entity, m *config.Matches) []*support.Finding {
 	var rtypes []string
 	var findings []*support.Finding
 	sinces := make(map[string]time.Time)
@@ -137,7 +137,7 @@ func (r *ipnet) oneOfSources(e *et.Event, edge *dbt.Edge, src *et.Source, since 
 	return false
 }
 
-func (r *ipnet) store(e *et.Event, resp *rdap.IPNetwork, asset *dbt.Entity, src *et.Source, m *config.Matches) []*support.Finding {
+func (r *ipnet) store(e *et.Event, resp *rdap.IPNetwork, asset *dbt.Entity, m *config.Matches) []*support.Finding {
 	var findings []*support.Finding
 	iprec := asset.Asset.(*oamreg.IPNetRecord)
 
@@ -175,6 +175,6 @@ func (r *ipnet) store(e *et.Event, resp *rdap.IPNetwork, asset *dbt.Entity, src 
 	return findings
 }
 
-func (r *ipnet) process(e *et.Event, findings []*support.Finding, src *et.Source) {
+func (r *ipnet) process(e *et.Event, findings []*support.Finding) {
 	support.ProcessAssetsWithSource(e, findings, r.plugin.source, r.plugin.name, r.name)
 }

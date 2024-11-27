@@ -52,7 +52,7 @@ func (r *autnum) check(e *et.Event) error {
 	}
 
 	if len(findings) > 0 {
-		r.process(e, findings, r.plugin.source)
+		r.process(e, findings)
 	}
 	return nil
 }
@@ -176,6 +176,6 @@ func (r *autnum) store(e *et.Event, resp *rdap.Autnum, asset *dbt.Entity, m *con
 	return findings
 }
 
-func (r *autnum) process(e *et.Event, findings []*support.Finding, src *et.Source) {
+func (r *autnum) process(e *et.Event, findings []*support.Finding) {
 	support.ProcessAssetsWithSource(e, findings, r.plugin.source, r.plugin.name, r.name)
 }
