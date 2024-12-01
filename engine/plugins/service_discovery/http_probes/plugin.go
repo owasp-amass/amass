@@ -156,15 +156,17 @@ func (hp *httpProbing) store(e *et.Event, resp *http.Response, entity *dbt.Entit
 	serv.BannerLen = int(resp.Length)
 	serv.Headers = resp.Header
 
+	proto := "http"
 	var c *oamcert.TLSCertificate
 	if firstAsset != nil {
+		proto = "https"
 		c = firstAsset.Asset.(*oamcert.TLSCertificate)
 	}
 
 	portrel := &relation.PortRelation{
 		Name:       "port",
 		PortNumber: port,
-		Protocol:   "tcp",
+		Protocol:   proto,
 	}
 
 	s, err := support.CreateServiceAsset(e.Session, entity, portrel, serv, c)

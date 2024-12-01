@@ -14,21 +14,32 @@ import (
 	jarm "github.com/caffix/jarm-go"
 	"github.com/owasp-amass/amass/v4/utils/net"
 	oam "github.com/owasp-amass/open-asset-model"
+	"github.com/owasp-amass/open-asset-model/domain"
+	"github.com/owasp-amass/open-asset-model/network"
+	"github.com/owasp-amass/open-asset-model/relation"
 )
 
-func JARMFingerprint(target oam.Asset) (string, error) {
-	var port int
+func JARMFingerprint(target oam.Asset, portrel *relation.PortRelation) (string, error) {
 	var ipv6 bool
 	var host string
+
+	if fqdn, ok := target.(*domain.FQDN); ok {
+		host = fqdn.Name
+	} else if ip, ok := target.(*network.IPAddress); ok {
+		ipv6 = ip.Address.Is6()
+		host = ip.Address.String()
+	} else {
+		return "", errors.New("target must be a FQDN or IPAddress")
+	}
 
 	addr := host
 	if ipv6 {
 		addr = "[" + addr + "]"
 	}
-	addr += ":" + strconv.Itoa(port)
+	addr += ":" + strconv.Itoa(portrel.PortNumber)
 
 	var results []string
-	for _, probe := range jarm.GetProbes(host, port) {
+	for _, probe := range jarm.GetProbes(host, portrel.PortNumber) {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 

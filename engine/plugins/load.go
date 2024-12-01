@@ -54,7 +54,7 @@ var pluginNewFuncs = []func() et.Plugin{
 	scrape.NewSiteDossier,
 	whois.NewWHOIS,
 	NewIPNetblock,
-	//NewJARMFingerprint,
+	NewJARMFingerprints,
 	NewKnownFQDN,
 	NewVerifiedEmail,
 }
