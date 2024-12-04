@@ -23,9 +23,9 @@ require (
 	github.com/likexian/whois v1.15.5
 	github.com/likexian/whois-parser v1.24.20
 	github.com/miekg/dns v1.1.62
-	github.com/nyaruka/phonenumbers v1.4.2
+	github.com/nyaruka/phonenumbers v1.4.3
 	github.com/openrdap/rdap v0.9.1
-	github.com/owasp-amass/asset-db v0.14.2
+	github.com/owasp-amass/asset-db v0.15.0
 	github.com/owasp-amass/open-asset-model v0.12.0
 	github.com/owasp-amass/resolve v0.8.1
 	github.com/rubenv/sql-migrate v1.7.0
@@ -38,7 +38,7 @@ require (
 	go.uber.org/ratelimit v0.3.1
 	golang.org/x/net v0.31.0
 	gopkg.in/yaml.v3 v3.0.1
-	gorm.io/driver/postgres v1.5.10
+	gorm.io/driver/postgres v1.5.11
 	gorm.io/gorm v1.25.12
 	mvdan.cc/xurls/v2 v2.5.0
 )
@@ -54,7 +54,7 @@ require (
 	github.com/benbjohnson/clock v1.3.5 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	github.com/chromedp/cdproto v0.0.0-20241110205750-a72e6703cd9b // indirect
+	github.com/chromedp/cdproto v0.0.0-20241202193831-ec840381567d // indirect
 	github.com/chromedp/chromedp v0.11.2 // indirect
 	github.com/chromedp/sysutil v1.1.0 // indirect
 	github.com/d4l3k/messagediff v1.2.1 // indirect
@@ -110,8 +110,8 @@ require (
 	google.golang.org/protobuf v1.35.2 // indirect
 	gorm.io/datatypes v1.2.4 // indirect
 	gorm.io/driver/mysql v1.5.7 // indirect
-	modernc.org/libc v1.61.2 // indirect
+	modernc.org/libc v1.61.3 // indirect
 	modernc.org/mathutil v1.6.0 // indirect
 	modernc.org/memory v1.8.0 // indirect
-	modernc.org/sqlite v1.34.1 // indirect
+	modernc.org/sqlite v1.34.2 // indirect
 )
