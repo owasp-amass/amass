@@ -99,7 +99,7 @@ func (hp *httpProbing) Stop() {
 func (hp *httpProbing) query(e *et.Event, entity *dbt.Entity, target string, port int) []*support.Finding {
 	var findings []*support.Finding
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
 	if resp, err := http.RequestWebPage(ctx, &http.Request{URL: target}); err == nil && resp != nil {

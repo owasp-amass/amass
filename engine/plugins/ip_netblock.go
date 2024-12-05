@@ -39,12 +39,13 @@ func (d *ipNetblock) Start(r et.Registry) error {
 
 	name := d.name + "-Handler"
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:     d,
-		Name:       name,
-		Priority:   4,
-		Transforms: []string{string(oam.Netblock)},
-		EventType:  oam.IPAddress,
-		Callback:   d.lookup,
+		Plugin:       d,
+		Name:         name,
+		Priority:     4,
+		MaxInstances: support.MaxHandlerInstances,
+		Transforms:   []string{string(oam.Netblock)},
+		EventType:    oam.IPAddress,
+		Callback:     d.lookup,
 	}); err != nil {
 		d.log.Error(fmt.Sprintf("Failed to register a handler: %v", err), "handler", name)
 		return err
