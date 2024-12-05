@@ -30,19 +30,19 @@ type Scope struct {
 	locLock   sync.Mutex
 	locations map[string]oam.Asset
 
-	/*finLock      sync.Mutex
-	fingerprints map[string]map[string]oam.Asset*/
+	//finLock      sync.Mutex
+	fingerprints map[string]map[string]*Fingerprint
 }
 
 func New() *Scope {
 	return &Scope{
-		orgs:       make(map[string]oam.Asset),
-		domains:    make(map[string]oam.Asset),
-		addresses:  make(map[string]oam.Asset),
-		networks:   make(map[string]oam.Asset),
-		autsystems: make(map[int]oam.Asset),
-		locations:  make(map[string]oam.Asset),
-		//fingerprints: make(map[string]map[string]oam.Asset),
+		orgs:         make(map[string]oam.Asset),
+		domains:      make(map[string]oam.Asset),
+		addresses:    make(map[string]oam.Asset),
+		networks:     make(map[string]oam.Asset),
+		autsystems:   make(map[int]oam.Asset),
+		locations:    make(map[string]oam.Asset),
+		fingerprints: make(map[string]map[string]*Fingerprint),
 	}
 }
 

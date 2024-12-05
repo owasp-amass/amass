@@ -71,7 +71,7 @@ func (v *ipverse) Stop() {
 }
 
 func (v *ipverse) check(e *et.Event) error {
-	_, ok := e.Entity.Asset.(*oamnet.AutonomousSystem)
+	as, ok := e.Entity.Asset.(*oamnet.AutonomousSystem)
 	if !ok {
 		return errors.New("failed to extract the AutonomousSystem asset")
 	}
@@ -90,8 +90,10 @@ func (v *ipverse) check(e *et.Event) error {
 		support.MarkAssetMonitored(e.Session, e.Entity, v.source)
 	}
 
-	for _, cidr := range cidrs {
-		v.process(e, e.Entity, cidr)
+	if _, conf := e.Session.Scope().IsAssetInScope(as, 0); conf > 0 {
+		for _, cidr := range cidrs {
+			v.process(e, e.Entity, cidr)
+		}
 	}
 	return nil
 }
