@@ -103,7 +103,7 @@ func (d *dnsPlugin) Start(r et.Registry) error {
 	if err := r.RegisterHandler(&et.Handler{
 		Plugin:       d,
 		Name:         d.reverse.name,
-		Priority:     9,
+		Priority:     8,
 		MaxInstances: support.MaxHandlerInstances,
 		Transforms:   []string{string(oam.FQDN)},
 		EventType:    oam.IPAddress,

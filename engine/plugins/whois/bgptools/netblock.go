@@ -39,7 +39,7 @@ func (r *netblock) check(e *et.Event) error {
 	if reserved, _ := amassnet.IsReservedAddress(ipstr); reserved {
 		return nil
 	}
-	// check if there's a netblock and autonomous system associated with this IP address
+	// check if there's a netblock associated with this IP address
 	if _, err := support.IPToNetblock(e.Session, ip); err == nil {
 		// the rest of the work will be done further down the pipeline
 		return nil
@@ -58,6 +58,7 @@ func (r *netblock) check(e *et.Event) error {
 
 	if nb != nil {
 		r.process(e, e.Entity, nb)
+		support.AddNetblock(e.Session.ID().String(), nb.Asset.(*oamnet.Netblock))
 	}
 	return nil
 }

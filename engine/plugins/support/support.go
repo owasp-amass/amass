@@ -174,7 +174,7 @@ func IPToNetblock(session et.Session, ip *oamnet.IPAddress) (*oamnet.Netblock, e
 		return nil, errors.New("no netblock match in the cache")
 	}
 
-	addNetblock(session.ID().String(), found)
+	AddNetblock(session.ID().String(), found)
 	return found, nil
 }
 
@@ -205,7 +205,7 @@ func lookupNetblock(sessid string, ip *oamnet.IPAddress) (*oamnet.Netblock, erro
 	return found, nil
 }
 
-func addNetblock(sessid string, nb *oamnet.Netblock) {
+func AddNetblock(sessid string, nb *oamnet.Netblock) {
 	mlock.Lock()
 	defer mlock.Unlock()
 
