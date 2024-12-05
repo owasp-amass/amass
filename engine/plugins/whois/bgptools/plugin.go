@@ -69,13 +69,12 @@ func (bt *bgpTools) Start(r et.Registry) error {
 		plugin: bt,
 	}
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:       bt,
-		Name:         bt.netblock.name,
-		Priority:     1,
-		MaxInstances: support.MaxHandlerInstances,
-		Transforms:   []string{string(oam.Netblock)},
-		EventType:    oam.IPAddress,
-		Callback:     bt.netblock.check,
+		Plugin:     bt,
+		Name:       bt.netblock.name,
+		Priority:   1,
+		Transforms: []string{string(oam.Netblock)},
+		EventType:  oam.IPAddress,
+		Callback:   bt.netblock.check,
 	}); err != nil {
 		return err
 	}
