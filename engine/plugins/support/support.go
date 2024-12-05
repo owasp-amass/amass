@@ -12,6 +12,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/caffix/stringset"
@@ -28,12 +29,19 @@ import (
 	xurls "mvdan.cc/xurls/v2"
 )
 
+type sessnets struct {
+	last time.Time
+	nets map[string]*oamnet.Netblock
+}
+
 type SweepCallback func(d *et.Event, addr *oamnet.IPAddress, src *et.Source)
 
 const MaxHandlerInstances int = 100
 
 var done chan struct{}
 var subre, urlre *regexp.Regexp
+var mlock sync.Mutex
+var netblocks map[string]*sessnets
 
 func init() {
 	done = make(chan struct{})
@@ -43,6 +51,8 @@ func init() {
 
 	urlre = xurls.Relaxed()
 	subre = regexp.MustCompile(dns.AnySubdomainRegexString())
+	netblocks = make(map[string]*sessnets)
+	go checkNetblocks()
 
 	postalHost = os.Getenv("POSTAL_SERVER_HOST")
 	postalPort = os.Getenv("POSTAL_SERVER_PORT")
@@ -143,9 +153,12 @@ func IPToNetblockWithAttempts(session et.Session, ip *oamnet.IPAddress, num int,
 }
 
 func IPToNetblock(session et.Session, ip *oamnet.IPAddress) (*oamnet.Netblock, error) {
+	if nb, err := lookupNetblock(session.ID().String(), ip); err == nil {
+		return nb, nil
+	}
+
 	var size int
 	var found *oamnet.Netblock
-
 	if entities, err := session.Cache().FindEntitiesByType(oam.Netblock, session.Cache().StartTime()); err == nil && len(entities) > 0 {
 		for _, entity := range entities {
 			if nb, ok := entity.Asset.(*oamnet.Netblock); ok && nb.CIDR.Contains(ip.Address) {
@@ -160,7 +173,78 @@ func IPToNetblock(session et.Session, ip *oamnet.IPAddress) (*oamnet.Netblock, e
 	if found == nil {
 		return nil, errors.New("no netblock match in the cache")
 	}
+
+	addNetblock(session.ID().String(), found)
 	return found, nil
+}
+
+func lookupNetblock(sessid string, ip *oamnet.IPAddress) (*oamnet.Netblock, error) {
+	mlock.Lock()
+	defer mlock.Unlock()
+
+	n, ok := netblocks[sessid]
+	if !ok {
+		return nil, errors.New("no netblocks found")
+	}
+	n.last = time.Now()
+
+	var size int
+	var found *oamnet.Netblock
+	for _, nb := range n.nets {
+		if nb.CIDR.Contains(ip.Address) {
+			if s := nb.CIDR.Masked().Bits(); s > size {
+				size = s
+				found = nb
+			}
+		}
+	}
+
+	if found == nil {
+		return nil, errors.New("no netblock match")
+	}
+	return found, nil
+}
+
+func addNetblock(sessid string, nb *oamnet.Netblock) {
+	mlock.Lock()
+	defer mlock.Unlock()
+
+	if _, found := netblocks[sessid]; !found {
+		netblocks[sessid] = &sessnets{nets: make(map[string]*oamnet.Netblock)}
+	}
+
+	netblocks[sessid].last = time.Now()
+	netblocks[sessid].nets[nb.CIDR.String()] = nb
+}
+
+func checkNetblocks() {
+	t := time.NewTicker(10 * time.Minute)
+	defer t.Stop()
+
+	for {
+		select {
+		case <-done:
+			return
+		case <-t.C:
+			cleanSessionNetblocks()
+		}
+	}
+}
+
+func cleanSessionNetblocks() {
+	mlock.Lock()
+	defer mlock.Unlock()
+
+	var sessids []string
+	for sessid, n := range netblocks {
+		if time.Since(n.last) > time.Hour {
+			sessids = append(sessids, sessid)
+		}
+	}
+
+	for _, sessid := range sessids {
+		delete(netblocks, sessid)
+	}
 }
 
 func IPAddressSweep(e *et.Event, addr *oamnet.IPAddress, src *et.Source, size int, callback SweepCallback) {

@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/netip"
-	"sync"
 	"time"
 
 	"github.com/owasp-amass/amass/v4/engine/plugins/support"
@@ -22,28 +21,13 @@ import (
 	"github.com/owasp-amass/open-asset-model/relation"
 )
 
-type sessnets struct {
-	last time.Time
-	nets map[string]*oamnet.Netblock
-}
-
 type ipNetblock struct {
-	name      string
-	log       *slog.Logger
-	done      chan struct{}
-	mlock     sync.Mutex
-	netblocks map[string]*sessnets
+	name string
+	log  *slog.Logger
 }
 
 func NewIPNetblock() et.Plugin {
-	p := &ipNetblock{
-		name:      "IP-Netblock",
-		done:      make(chan struct{}, 2),
-		netblocks: make(map[string]*sessnets),
-	}
-
-	go p.checkNetblocks()
-	return p
+	return &ipNetblock{name: "IP-Netblock"}
 }
 
 func (d *ipNetblock) Name() string {
@@ -71,7 +55,6 @@ func (d *ipNetblock) Start(r et.Registry) error {
 }
 
 func (d *ipNetblock) Stop() {
-	close(d.done)
 	d.log.Info("Plugin stopped")
 }
 
@@ -100,13 +83,9 @@ func (d *ipNetblock) lookup(e *et.Event) error {
 	} else {
 		var err error
 
-		netblock, err = d.lookupNetblock(e.Session.ID().String(), ip)
+		netblock, err = support.IPToNetblockWithAttempts(e.Session, ip, 60, time.Second)
 		if err != nil {
-			netblock, err = support.IPToNetblockWithAttempts(e.Session, ip, 60, time.Second)
-			if err != nil {
-				return nil
-			}
-			d.addNetblock(e.Session.ID().String(), netblock)
+			return nil
 		}
 	}
 
@@ -150,74 +129,5 @@ func (d *ipNetblock) reservedAS(e *et.Event, netblock *oamnet.Netblock) {
 				ToEntity:   nb,
 			})
 		}
-	}
-}
-
-func (d *ipNetblock) lookupNetblock(sessid string, ip *oamnet.IPAddress) (*oamnet.Netblock, error) {
-	d.mlock.Lock()
-	defer d.mlock.Unlock()
-
-	n, ok := d.netblocks[sessid]
-	if !ok {
-		return nil, errors.New("no netblocks found")
-	}
-	n.last = time.Now()
-
-	var size int
-	var found *oamnet.Netblock
-	for _, nb := range n.nets {
-		if nb.CIDR.Contains(ip.Address) {
-			if s := nb.CIDR.Masked().Bits(); s > size {
-				size = s
-				found = nb
-			}
-		}
-	}
-
-	if found == nil {
-		return nil, errors.New("no netblock match")
-	}
-	return found, nil
-}
-
-func (d *ipNetblock) addNetblock(sessid string, nb *oamnet.Netblock) {
-	d.mlock.Lock()
-	defer d.mlock.Unlock()
-
-	if _, found := d.netblocks[sessid]; !found {
-		d.netblocks[sessid] = &sessnets{nets: make(map[string]*oamnet.Netblock)}
-	}
-
-	d.netblocks[sessid].last = time.Now()
-	d.netblocks[sessid].nets[nb.CIDR.String()] = nb
-}
-
-func (d *ipNetblock) checkNetblocks() {
-	t := time.NewTicker(10 * time.Minute)
-	defer t.Stop()
-
-	for {
-		select {
-		case <-d.done:
-			return
-		case <-t.C:
-			d.cleanSessionNetblocks()
-		}
-	}
-}
-
-func (d *ipNetblock) cleanSessionNetblocks() {
-	d.mlock.Lock()
-	defer d.mlock.Unlock()
-
-	var sessids []string
-	for sessid, n := range d.netblocks {
-		if time.Since(n.last) > time.Hour {
-			sessids = append(sessids, sessid)
-		}
-	}
-
-	for _, sessid := range sessids {
-		delete(d.netblocks, sessid)
 	}
 }
