@@ -64,7 +64,7 @@ func (r *ipaddrEndpoint) check(e *et.Event) error {
 		r.process(e, findings, src)
 	}
 
-	support.IPAddressSweep(e, ip, src, 25, sweepCallback)
+	go support.IPAddressSweep(e, ip, src, 25, sweepCallback)
 	return nil
 }
 

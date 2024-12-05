@@ -40,7 +40,7 @@ const MaxHandlerInstances int = 100
 
 var done chan struct{}
 var subre, urlre *regexp.Regexp
-var mlock sync.Mutex
+var mlock sync.RWMutex
 var netblocks map[string]*sessnets
 
 func init() {
@@ -179,8 +179,8 @@ func IPToNetblock(session et.Session, ip *oamnet.IPAddress) (*oamnet.Netblock, e
 }
 
 func lookupNetblock(sessid string, ip *oamnet.IPAddress) (*oamnet.Netblock, error) {
-	mlock.Lock()
-	defer mlock.Unlock()
+	mlock.RLock()
+	defer mlock.RUnlock()
 
 	n, ok := netblocks[sessid]
 	if !ok {
