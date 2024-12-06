@@ -46,11 +46,11 @@ func (d *dnsCNAME) check(e *et.Event) error {
 	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, src, since) {
 		alias = append(alias, d.lookup(e, e.Entity, since)...)
 	} else {
-		alias = append(alias, d.query(e, e.Entity, src)...)
+		alias = append(alias, d.query(e, e.Entity)...)
 	}
 
 	if len(alias) > 0 {
-		d.process(e, alias, src)
+		d.process(e, alias)
 	}
 	return nil
 }
@@ -71,21 +71,21 @@ func (d *dnsCNAME) lookup(e *et.Event, fqdn *dbt.Entity, since time.Time) []*rel
 	return alias
 }
 
-func (d *dnsCNAME) query(e *et.Event, name *dbt.Entity, src *et.Source) []*relAlias {
+func (d *dnsCNAME) query(e *et.Event, name *dbt.Entity) []*relAlias {
 	var alias []*relAlias
 
 	fqdn := name.Asset.(*domain.FQDN)
 	if rr, err := support.PerformQuery(fqdn.Name, dns.TypeCNAME); err == nil {
-		if records := d.store(e, name, src, rr); len(records) > 0 {
+		if records := d.store(e, name, rr); len(records) > 0 {
 			alias = append(alias, records...)
-			support.MarkAssetMonitored(e.Session, name, src)
+			support.MarkAssetMonitored(e.Session, name, d.plugin.source)
 		}
 	}
 
 	return alias
 }
 
-func (d *dnsCNAME) store(e *et.Event, fqdn *dbt.Entity, src *et.Source, rr []*resolve.ExtractedAnswer) []*relAlias {
+func (d *dnsCNAME) store(e *et.Event, fqdn *dbt.Entity, rr []*resolve.ExtractedAnswer) []*relAlias {
 	var alias []*relAlias
 
 	for _, record := range rr {
@@ -107,8 +107,8 @@ func (d *dnsCNAME) store(e *et.Event, fqdn *dbt.Entity, src *et.Source, rr []*re
 			}); err == nil && edge != nil {
 				alias = append(alias, &relAlias{alias: fqdn, target: cname})
 				_, _ = e.Session.Cache().CreateEdgeProperty(edge, &property.SourceProperty{
-					Source:     src.Name,
-					Confidence: src.Confidence,
+					Source:     d.plugin.source.Name,
+					Confidence: d.plugin.source.Confidence,
 				})
 			} else {
 				e.Session.Log().Error(err.Error(), slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
@@ -121,7 +121,7 @@ func (d *dnsCNAME) store(e *et.Event, fqdn *dbt.Entity, src *et.Source, rr []*re
 	return alias
 }
 
-func (d *dnsCNAME) process(e *et.Event, alias []*relAlias, src *et.Source) {
+func (d *dnsCNAME) process(e *et.Event, alias []*relAlias) {
 	for _, a := range alias {
 		target := a.target.Asset.(*domain.FQDN)
 
@@ -131,7 +131,7 @@ func (d *dnsCNAME) process(e *et.Event, alias []*relAlias, src *et.Source) {
 			Session: e.Session,
 		})
 
-		e.Session.Log().Info("relationship discovered", "from", src.Name, "relation", "cname_record",
-			"to", target.Name, slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
+		e.Session.Log().Info("relationship discovered", "from", d.plugin.source.Name, "relation",
+			"cname_record", "to", target.Name, slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
 	}
 }
