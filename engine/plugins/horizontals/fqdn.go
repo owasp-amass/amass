@@ -60,9 +60,8 @@ func (h *horfqdn) check(e *et.Event) error {
 		conf = matches.Confidence(string(oam.FQDN))
 	}
 
-	src := h.plugin.source
 	if len(ptrs) > 0 {
-		h.checkPTR(e, ptrs, e.Entity, src)
+		h.checkPTR(e, ptrs, e.Entity)
 		return nil
 	}
 
@@ -78,22 +77,23 @@ func (h *horfqdn) check(e *et.Event) error {
 
 		var assets []*dbt.Entity
 		for _, im := range impacted {
-			if a, err := e.Session.Cache().FindEntityByContent(im.Asset, e.Session.Cache().StartTime()); err == nil && len(a) == 1 {
+			if a, err := e.Session.Cache().FindEntityByContent(im.Asset,
+				e.Session.Cache().StartTime()); err == nil && len(a) == 1 {
 				assets = append(assets, a[0])
-			} else if n := h.store(e, im.Asset, src); n != nil {
+			} else if n := h.store(e, im.Asset); n != nil {
 				assets = append(assets, n)
 			}
 		}
 
 		if len(assets) > 0 {
-			h.plugin.process(e, assets, src)
+			h.plugin.process(e, assets)
 			h.plugin.addAssociatedRelationship(e, assocs)
 		}
 	}
 	return nil
 }
 
-func (h *horfqdn) checkPTR(e *et.Event, edges []*dbt.Edge, fqdn *dbt.Entity, src *et.Source) {
+func (h *horfqdn) checkPTR(e *et.Event, edges []*dbt.Edge, fqdn *dbt.Entity) {
 	if ins, err := e.Session.Cache().IncomingEdges(fqdn, e.Session.Cache().StartTime(), "ptr_record"); err == nil && len(ins) > 0 {
 		for _, r := range ins {
 			from, err := e.Session.Cache().FindEntityById(r.FromEntity.ID)
@@ -121,7 +121,7 @@ func (h *horfqdn) checkPTR(e *et.Event, edges []*dbt.Edge, fqdn *dbt.Entity, src
 						if e.Session.Scope().AddDomain(dom) {
 							h.plugin.log.Info(fmt.Sprintf("[%s: %s] was added to the session scope", "FQDN", dom))
 						}
-						h.plugin.submitFQDN(e, dom, src)
+						h.plugin.submitFQDN(e, dom)
 					}
 				} else if _, conf := e.Session.Scope().IsAssetInScope(to.Asset, 0); conf > 0 {
 					if e.Session.Scope().Add(ip) {
@@ -129,8 +129,8 @@ func (h *horfqdn) checkPTR(e *et.Event, edges []*dbt.Edge, fqdn *dbt.Entity, src
 						if e.Session.Config().Active {
 							size = 250
 						}
-						h.plugin.submitIPAddresses(e, ip, src)
-						support.IPAddressSweep(e, ip, src, size, h.plugin.submitIPAddresses)
+						h.plugin.submitIPAddresses(e, ip, h.plugin.source)
+						support.IPAddressSweep(e, ip, h.plugin.source, size, h.plugin.submitIPAddresses)
 						h.plugin.log.Info(fmt.Sprintf("[%s: %s] was added to the session scope", ip.AssetType(), ip.Key()))
 					}
 				}
@@ -151,15 +151,15 @@ func (h *horfqdn) lookup(e *et.Event, asset *dbt.Entity, conf int) []*scope.Asso
 	return assocs
 }
 
-func (h *horfqdn) store(e *et.Event, asset oam.Asset, src *et.Source) *dbt.Entity {
+func (h *horfqdn) store(e *et.Event, asset oam.Asset) *dbt.Entity {
 	a, err := e.Session.Cache().CreateAsset(asset)
 	if err != nil || a == nil {
 		return nil
 	}
 
 	_, _ = e.Session.Cache().CreateEntityProperty(a, &property.SourceProperty{
-		Source:     src.Name,
-		Confidence: src.Confidence,
+		Source:     h.plugin.source.Name,
+		Confidence: h.plugin.source.Confidence,
 	})
 	return a
 }

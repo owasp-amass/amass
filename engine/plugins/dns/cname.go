@@ -110,11 +110,7 @@ func (d *dnsCNAME) store(e *et.Event, fqdn *dbt.Entity, rr []*resolve.ExtractedA
 					Source:     d.plugin.source.Name,
 					Confidence: d.plugin.source.Confidence,
 				})
-			} else {
-				e.Session.Log().Error(err.Error(), slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
 			}
-		} else {
-			e.Session.Log().Error(err.Error(), slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
 		}
 	}
 

@@ -114,7 +114,8 @@ func (h *horizPlugin) makeAssocRelationshipEntries(e *et.Event, assoc, assoc2 *d
 		return
 	}
 	// check that this relationship has not already been setup during this session
-	if edges, err := e.Session.Cache().OutgoingEdges(assoc, e.Session.Cache().StartTime(), "associated_with"); err == nil && len(edges) > 0 {
+	if edges, err := e.Session.Cache().OutgoingEdges(assoc,
+		e.Session.Cache().StartTime(), "associated_with"); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
 			if edge.ToEntity.ID == assoc2.ID {
 				return
@@ -134,13 +135,13 @@ func (h *horizPlugin) makeAssocRelationshipEntries(e *et.Event, assoc, assoc2 *d
 	})
 }
 
-func (h *horizPlugin) process(e *et.Event, assets []*dbt.Entity, src *et.Source) {
+func (h *horizPlugin) process(e *et.Event, assets []*dbt.Entity) {
 	for _, asset := range assets {
 		// check for new networks added to the scope
 		switch v := asset.Asset.(type) {
 		case *oamnet.Netblock:
-			h.ipPTRTargetsInScope(e, asset, src)
-			h.sweepAroundIPs(e, asset, src)
+			h.ipPTRTargetsInScope(e, asset)
+			h.sweepAroundIPs(e, asset)
 			//h.sweepNetblock(e, v, src)
 		case *oamreg.IPNetRecord:
 			if ents, err := e.Session.Cache().FindEntityByContent(
@@ -148,8 +149,8 @@ func (h *horizPlugin) process(e *et.Event, assets []*dbt.Entity, src *et.Source)
 				a := ents[0]
 
 				if _, ok := a.Asset.(*oamnet.Netblock); ok {
-					h.ipPTRTargetsInScope(e, a, src)
-					h.sweepAroundIPs(e, a, src)
+					h.ipPTRTargetsInScope(e, a)
+					h.sweepAroundIPs(e, a)
 					//h.sweepNetblock(e, nb, src)
 				}
 			}
@@ -162,19 +163,20 @@ func (h *horizPlugin) process(e *et.Event, assets []*dbt.Entity, src *et.Source)
 		})
 
 		_, _ = e.Session.Cache().CreateEntityProperty(asset, &property.SourceProperty{
-			Source:     src.Name,
-			Confidence: src.Confidence,
+			Source:     h.source.Name,
+			Confidence: h.source.Confidence,
 		})
 	}
 }
 
-func (h *horizPlugin) ipPTRTargetsInScope(e *et.Event, nb *dbt.Entity, src *et.Source) {
+func (h *horizPlugin) ipPTRTargetsInScope(e *et.Event, nb *dbt.Entity) {
 	if edges, err := e.Session.Cache().OutgoingEdges(nb, e.Session.Cache().StartTime(), "contains"); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
 			to, err := e.Session.Cache().FindEntityById(edge.ToEntity.ID)
 			if err != nil {
 				continue
 			}
+
 			reverse, err := dns.ReverseAddr(to.Asset.Key())
 			if err != nil {
 				continue
@@ -195,7 +197,7 @@ func (h *horizPlugin) ipPTRTargetsInScope(e *et.Event, nb *dbt.Entity, src *et.S
 						}
 						if dom, err := publicsuffix.EffectiveTLDPlusOne(to.Asset.Key()); err == nil {
 							if e.Session.Scope().AddDomain(dom) {
-								h.submitFQDN(e, dom, src)
+								h.submitFQDN(e, dom)
 								h.log.Info(fmt.Sprintf("[%s: %s] was added to the session scope", "FQDN", dom))
 							}
 						}
@@ -206,7 +208,7 @@ func (h *horizPlugin) ipPTRTargetsInScope(e *et.Event, nb *dbt.Entity, src *et.S
 	}
 }
 
-func (h *horizPlugin) sweepAroundIPs(e *et.Event, nb *dbt.Entity, src *et.Source) {
+func (h *horizPlugin) sweepAroundIPs(e *et.Event, nb *dbt.Entity) {
 	if edges, err := e.Session.Cache().OutgoingEdges(nb, e.Session.Cache().StartTime(), "contains"); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
 			size := 100
@@ -219,7 +221,7 @@ func (h *horizPlugin) sweepAroundIPs(e *et.Event, nb *dbt.Entity, src *et.Source
 				continue
 			}
 			if ip, ok := to.Asset.(*oamnet.IPAddress); ok {
-				support.IPAddressSweep(e, ip, src, size, h.submitIPAddresses)
+				support.IPAddressSweep(e, ip, h.source, size, h.submitIPAddresses)
 			}
 		}
 	}
@@ -295,12 +297,12 @@ func (h *horizPlugin) submitIPAddresses(e *et.Event, asset *oamnet.IPAddress, sr
 	}
 }
 
-func (h *horizPlugin) submitFQDN(e *et.Event, dom string, src *et.Source) {
+func (h *horizPlugin) submitFQDN(e *et.Event, dom string) {
 	fqdn, err := e.Session.Cache().CreateAsset(&domain.FQDN{Name: dom})
 	if err == nil && fqdn != nil {
 		_, _ = e.Session.Cache().CreateEntityProperty(fqdn, &property.SourceProperty{
-			Source:     src.Name,
-			Confidence: src.Confidence,
+			Source:     h.source.Name,
+			Confidence: h.source.Confidence,
 		})
 		_ = e.Dispatcher.DispatchEvent(&et.Event{
 			Name:    fqdn.Asset.Key(),

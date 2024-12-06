@@ -51,18 +51,18 @@ func (h *horContact) check(e *et.Event) error {
 			}
 		}
 
-		src := h.plugin.source
 		var assets []*dbt.Entity
 		for _, im := range impacted {
-			if a, err := e.Session.Cache().FindEntityByContent(im.Asset, e.Session.Cache().StartTime()); err == nil && len(a) == 1 {
+			if a, err := e.Session.Cache().FindEntityByContent(im.Asset,
+				e.Session.Cache().StartTime()); err == nil && len(a) == 1 {
 				assets = append(assets, a[0])
-			} else if n := h.store(e, im.Asset, src); n != nil {
+			} else if n := h.store(e, im.Asset); n != nil {
 				assets = append(assets, n)
 			}
 		}
 
 		if len(assets) > 0 {
-			h.plugin.process(e, assets, src)
+			h.plugin.process(e, assets)
 			h.plugin.addAssociatedRelationship(e, assocs)
 		}
 	}
@@ -73,7 +73,8 @@ func (h *horContact) lookup(e *et.Event, asset *dbt.Entity, conf int) []*scope.A
 	labels := []string{"organization", "location", "email"}
 
 	var results []*scope.Association
-	if edges, err := e.Session.Cache().OutgoingEdges(asset, e.Session.Cache().StartTime(), labels...); err == nil && len(edges) > 0 {
+	if edges, err := e.Session.Cache().OutgoingEdges(asset,
+		e.Session.Cache().StartTime(), labels...); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
 			entity, err := e.Session.Cache().FindEntityById(edge.ToEntity.ID)
 			if err != nil {
@@ -92,15 +93,15 @@ func (h *horContact) lookup(e *et.Event, asset *dbt.Entity, conf int) []*scope.A
 	return results
 }
 
-func (h *horContact) store(e *et.Event, asset oam.Asset, src *et.Source) *dbt.Entity {
+func (h *horContact) store(e *et.Event, asset oam.Asset) *dbt.Entity {
 	a, err := e.Session.Cache().CreateAsset(asset)
 	if err != nil || a == nil {
 		return nil
 	}
 
 	_, _ = e.Session.Cache().CreateEntityProperty(a, &property.SourceProperty{
-		Source:     src.Name,
-		Confidence: src.Confidence,
+		Source:     h.plugin.source.Name,
+		Confidence: h.plugin.source.Confidence,
 	})
 	return a
 }
