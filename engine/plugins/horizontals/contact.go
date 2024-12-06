@@ -12,7 +12,6 @@ import (
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/contact"
-	"github.com/owasp-amass/open-asset-model/property"
 )
 
 type horContact struct {
@@ -51,18 +50,8 @@ func (h *horContact) check(e *et.Event) error {
 			}
 		}
 
-		var assets []*dbt.Entity
-		for _, im := range impacted {
-			if a, err := e.Session.Cache().FindEntityByContent(im.Asset,
-				e.Session.Cache().StartTime()); err == nil && len(a) == 1 {
-				assets = append(assets, a[0])
-			} else if n := h.store(e, im.Asset); n != nil {
-				assets = append(assets, n)
-			}
-		}
-
-		if len(assets) > 0 {
-			h.plugin.process(e, assets)
+		if len(impacted) > 0 {
+			h.plugin.process(e, impacted)
 			h.plugin.addAssociatedRelationship(e, assocs)
 		}
 	}
@@ -91,17 +80,4 @@ func (h *horContact) lookup(e *et.Event, asset *dbt.Entity, conf int) []*scope.A
 		}
 	}
 	return results
-}
-
-func (h *horContact) store(e *et.Event, asset oam.Asset) *dbt.Entity {
-	a, err := e.Session.Cache().CreateAsset(asset)
-	if err != nil || a == nil {
-		return nil
-	}
-
-	_, _ = e.Session.Cache().CreateEntityProperty(a, &property.SourceProperty{
-		Source:     h.plugin.source.Name,
-		Confidence: h.plugin.source.Confidence,
-	})
-	return a
 }

@@ -254,7 +254,7 @@ func (s *Scope) awayFromAssetsWithAssociation(c *cache.Cache, assoc *dbt.Entity)
 		out = true
 		outRels = append(outRels, "port")
 		in = true
-		inRels = append(inRels, "a_record", "aaaa_record")
+		inRels = append(inRels, "dns_record")
 	case oam.Netblock:
 		out = true
 		outRels = append(outRels, "contains")
