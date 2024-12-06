@@ -140,14 +140,15 @@ func (h *horfqdn) checkPTR(e *et.Event, edges []*dbt.Edge, fqdn *dbt.Entity, src
 }
 
 func (h *horfqdn) lookup(e *et.Event, asset *dbt.Entity, conf int) []*scope.Association {
-	if assocs, err := e.Session.Scope().IsAssociated(e.Session.Cache(), &scope.Association{
+	assocs, err := e.Session.Scope().IsAssociated(e.Session.Cache(), &scope.Association{
 		Submission:  asset,
 		Confidence:  conf,
 		ScopeChange: true,
-	}); err == nil {
-		return assocs
+	})
+	if err != nil {
+		return nil
 	}
-	return []*scope.Association{}
+	return assocs
 }
 
 func (h *horfqdn) store(e *et.Event, asset oam.Asset, src *et.Source) *dbt.Entity {

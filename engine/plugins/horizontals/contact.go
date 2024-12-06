@@ -70,14 +70,18 @@ func (h *horContact) check(e *et.Event) error {
 }
 
 func (h *horContact) lookup(e *et.Event, asset *dbt.Entity, conf int) []*scope.Association {
-	rtypes := []string{"organization", "location", "email"}
+	labels := []string{"organization", "location", "email"}
 
 	var results []*scope.Association
-	if edges, err := e.Session.Cache().OutgoingEdges(asset, e.Session.Cache().StartTime(), rtypes...); err == nil && len(edges) > 0 {
+	if edges, err := e.Session.Cache().OutgoingEdges(asset, e.Session.Cache().StartTime(), labels...); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
+			entity, err := e.Session.Cache().FindEntityById(edge.ToEntity.ID)
+			if err != nil {
+				continue
+			}
 			// check if these asset discoveries could change the scope
 			if assocs, err := e.Session.Scope().IsAssociated(e.Session.Cache(), &scope.Association{
-				Submission:  edge.ToEntity,
+				Submission:  entity,
 				Confidence:  conf,
 				ScopeChange: true,
 			}); err == nil && len(assocs) > 0 {
