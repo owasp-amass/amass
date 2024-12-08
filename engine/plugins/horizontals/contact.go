@@ -52,8 +52,9 @@ func (h *horContact) check(e *et.Event) error {
 
 		if len(impacted) > 0 {
 			h.plugin.process(e, impacted)
-			h.plugin.addAssociatedRelationship(e, assocs)
 		}
+
+		h.plugin.addAssociatedRelationship(e, assocs)
 	}
 	return nil
 }

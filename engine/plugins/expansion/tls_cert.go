@@ -333,15 +333,6 @@ func (te *tlsexpand) storeContact(e *et.Event, c *tlsContact, asset *dbt.Entity,
 		return findings
 	}
 
-	t := asset.Asset.(*oamcert.TLSCertificate)
-	findings = append(findings, &support.Finding{
-		From:     asset,
-		FromName: "TLSCertificate: " + t.SerialNumber,
-		To:       cr,
-		ToName:   "ContactRecord" + c.DiscoveredAt,
-		Rel:      &relation.SimpleRelation{Name: c.RelationName},
-	})
-
 	if foundaddr && m.IsMatch(string(oam.Location)) {
 		var addr string
 		fields := [][]string{
@@ -402,6 +393,15 @@ func (te *tlsexpand) storeContact(e *et.Event, c *tlsContact, asset *dbt.Entity,
 			}
 		}
 	}
+
+	t := asset.Asset.(*oamcert.TLSCertificate)
+	findings = append(findings, &support.Finding{
+		From:     asset,
+		FromName: "TLSCertificate: " + t.SerialNumber,
+		To:       cr,
+		ToName:   "ContactRecord" + c.DiscoveredAt,
+		Rel:      &relation.SimpleRelation{Name: c.RelationName},
+	})
 
 	return findings
 }

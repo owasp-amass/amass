@@ -226,16 +226,7 @@ func (rd *rdapPlugin) storeEntity(e *et.Event, level int, entity *rdap.Entity, a
 		if err != nil {
 			return nil
 		}
-		if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
-			Relation:   &relation.SimpleRelation{Name: "url"},
-			FromEntity: cr,
-			ToEntity:   a,
-		}); err == nil && edge != nil {
-			_, _ = e.Session.Cache().CreateEdgeProperty(edge, &property.SourceProperty{
-				Source:     src.Name,
-				Confidence: src.Confidence,
-			})
-		}
+		_ = rd.createContactEdge(e.Session, cr, a, &relation.SimpleRelation{Name: "url"}, src)
 	}
 
 	v := entity.VCard
@@ -248,30 +239,12 @@ func (rd *rdapPlugin) storeEntity(e *et.Event, level int, entity *rdap.Entity, a
 	if kind := strings.Join(prop.Values(), " "); name != "" && kind == "individual" {
 		if p := support.FullNameToPerson(name); p != nil && m.IsMatch(string(oam.Person)) {
 			if a, err := e.Session.Cache().CreateAsset(p); err == nil && a != nil {
-				if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
-					Relation:   &relation.SimpleRelation{Name: "person"},
-					FromEntity: cr,
-					ToEntity:   a,
-				}); err == nil && edge != nil {
-					_, _ = e.Session.Cache().CreateEdgeProperty(edge, &property.SourceProperty{
-						Source:     src.Name,
-						Confidence: src.Confidence,
-					})
-				}
+				_ = rd.createContactEdge(e.Session, cr, a, &relation.SimpleRelation{Name: "person"}, src)
 			}
 		}
 	} else if name != "" && m.IsMatch(string(oam.Organization)) {
 		if a, err := e.Session.Cache().CreateAsset(&org.Organization{Name: name}); err == nil && a != nil {
-			if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
-				Relation:   &relation.SimpleRelation{Name: "organization"},
-				FromEntity: cr,
-				ToEntity:   a,
-			}); err == nil && edge != nil {
-				_, _ = e.Session.Cache().CreateEdgeProperty(edge, &property.SourceProperty{
-					Source:     src.Name,
-					Confidence: src.Confidence,
-				})
-			}
+			_ = rd.createContactEdge(e.Session, cr, a, &relation.SimpleRelation{Name: "organization"}, src)
 		}
 	}
 	if adr := v.GetFirst("adr"); adr != nil && m.IsMatch(string(oam.Location)) {
@@ -281,63 +254,27 @@ func (rd *rdapPlugin) storeEntity(e *et.Event, level int, entity *rdap.Entity, a
 			addr := strings.Join(strings.Split(s, "\n"), " ")
 			if loc := support.StreetAddressToLocation(addr); loc != nil {
 				if a, err := e.Session.Cache().CreateAsset(loc); err == nil && a != nil {
-					if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
-						Relation:   &relation.SimpleRelation{Name: "location"},
-						FromEntity: cr,
-						ToEntity:   a,
-					}); err == nil && edge != nil {
-						_, _ = e.Session.Cache().CreateEdgeProperty(edge, &property.SourceProperty{
-							Source:     src.Name,
-							Confidence: src.Confidence,
-						})
-					}
+					_ = rd.createContactEdge(e.Session, cr, a, &relation.SimpleRelation{Name: "location"}, src)
 				}
 			}
 		}
 	}
 	if email := support.EmailToOAMEmailAddress(v.Email()); email != nil && m.IsMatch(string(oam.EmailAddress)) {
 		if a, err := e.Session.Cache().CreateAsset(email); err == nil && a != nil {
-			if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
-				Relation:   &relation.SimpleRelation{Name: "email"},
-				FromEntity: cr,
-				ToEntity:   a,
-			}); err == nil && edge != nil {
-				_, _ = e.Session.Cache().CreateEdgeProperty(edge, &property.SourceProperty{
-					Source:     src.Name,
-					Confidence: src.Confidence,
-				})
-			}
+			_ = rd.createContactEdge(e.Session, cr, a, &relation.SimpleRelation{Name: "email"}, src)
 		}
 	}
 	if m.IsMatch(string(oam.Phone)) {
 		if phone := support.PhoneToOAMPhone(v.Tel(), "", v.Country()); phone != nil {
 			phone.Type = contact.PhoneTypeRegular
 			if a, err := e.Session.Cache().CreateAsset(phone); err == nil && a != nil {
-				if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
-					Relation:   &relation.SimpleRelation{Name: "phone"},
-					FromEntity: cr,
-					ToEntity:   a,
-				}); err == nil && edge != nil {
-					_, _ = e.Session.Cache().CreateEdgeProperty(edge, &property.SourceProperty{
-						Source:     src.Name,
-						Confidence: src.Confidence,
-					})
-				}
+				_ = rd.createContactEdge(e.Session, cr, a, &relation.SimpleRelation{Name: "phone"}, src)
 			}
 		}
 		if fax := support.PhoneToOAMPhone(v.Fax(), "", v.Country()); fax != nil {
 			fax.Type = contact.PhoneTypeFax
 			if a, err := e.Session.Cache().CreateAsset(fax); err == nil && a != nil {
-				if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
-					Relation:   &relation.SimpleRelation{Name: "phone"},
-					FromEntity: cr,
-					ToEntity:   a,
-				}); err == nil && edge != nil {
-					_, _ = e.Session.Cache().CreateEdgeProperty(edge, &property.SourceProperty{
-						Source:     src.Name,
-						Confidence: src.Confidence,
-					})
-				}
+				_ = rd.createContactEdge(e.Session, cr, a, &relation.SimpleRelation{Name: "phone"}, src)
 			}
 		}
 	}
@@ -358,4 +295,23 @@ func (rd *rdapPlugin) getJSONLink(links []rdap.Link) *url.URL {
 		}
 	}
 	return url
+}
+
+func (rd *rdapPlugin) createContactEdge(sess et.Session, cr, a *dbt.Entity, rel oam.Relation, src *et.Source) error {
+	edge, err := sess.Cache().CreateEdge(&dbt.Edge{
+		Relation:   rel,
+		FromEntity: cr,
+		ToEntity:   a,
+	})
+	if err != nil {
+		return err
+	} else if edge == nil {
+		return errors.New("failed to create the edge")
+	}
+
+	_, err = sess.Cache().CreateEdgeProperty(edge, &property.SourceProperty{
+		Source:     src.Name,
+		Confidence: src.Confidence,
+	})
+	return err
 }

@@ -86,10 +86,11 @@ func (cr *contactrec) check(e *et.Event) error {
 	return nil
 }
 
-func (cr *contactrec) lookup(e *et.Event, asset *dbt.Entity, m *config.Matches) []*support.Finding {
+func (cr *contactrec) lookup(e *et.Event, entity *dbt.Entity, m *config.Matches) []*support.Finding {
 	var rtypes []string
 	confs := make(map[string]int)
 	sinces := make(map[string]time.Time)
+	conrec := entity.Asset.(*contact.ContactRecord)
 
 	for _, atype := range cr.transforms {
 		if !m.IsMatch(atype) {
@@ -124,7 +125,7 @@ func (cr *contactrec) lookup(e *et.Event, asset *dbt.Entity, m *config.Matches) 
 	}
 
 	var findings []*support.Finding
-	if edges, err := e.Session.Cache().OutgoingEdges(asset, time.Time{}, rtypes...); err == nil && len(edges) > 0 {
+	if edges, err := e.Session.Cache().OutgoingEdges(entity, time.Time{}, rtypes...); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
 			a, err := e.Session.Cache().FindEntityById(edge.ToEntity.ID)
 			if err != nil {
@@ -136,9 +137,8 @@ func (cr *contactrec) lookup(e *et.Event, asset *dbt.Entity, m *config.Matches) 
 				continue
 			}
 
-			conrec := asset.Asset.(*contact.ContactRecord)
 			findings = append(findings, &support.Finding{
-				From:     asset,
+				From:     entity,
 				FromName: "ContactRecord: " + conrec.DiscoveredAt,
 				To:       a,
 				ToName:   a.Asset.Key(),

@@ -113,15 +113,6 @@ func (h *horizPlugin) makeAssocRelationshipEntries(e *et.Event, assoc, assoc2 *d
 	if assoc.ID == assoc2.ID {
 		return
 	}
-	// check that this relationship has not already been setup during this session
-	if edges, err := e.Session.Cache().OutgoingEdges(assoc,
-		e.Session.Cache().StartTime(), "associated_with"); err == nil && len(edges) > 0 {
-		for _, edge := range edges {
-			if edge.ToEntity.ID == assoc2.ID {
-				return
-			}
-		}
-	}
 
 	_, _ = e.Session.Cache().CreateEdge(&dbt.Edge{
 		Relation:   &relation.SimpleRelation{Name: "associated_with"},
