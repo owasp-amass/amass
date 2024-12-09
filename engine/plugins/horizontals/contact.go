@@ -58,11 +58,11 @@ func (h *horContact) check(e *et.Event) error {
 	return nil
 }
 
-func (h *horContact) lookup(e *et.Event, asset *dbt.Entity, conf int) []*scope.Association {
+func (h *horContact) lookup(e *et.Event, entity *dbt.Entity, conf int) []*scope.Association {
 	labels := []string{"organization", "location", "email"}
 
 	var results []*scope.Association
-	if edges, err := e.Session.Cache().OutgoingEdges(asset,
+	if edges, err := e.Session.Cache().OutgoingEdges(entity,
 		e.Session.Cache().StartTime(), labels...); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
 			entity, err := e.Session.Cache().FindEntityById(edge.ToEntity.ID)

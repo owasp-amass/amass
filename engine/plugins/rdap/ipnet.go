@@ -137,14 +137,14 @@ func (r *ipnet) oneOfSources(e *et.Event, edge *dbt.Edge, src *et.Source, since 
 	return false
 }
 
-func (r *ipnet) store(e *et.Event, resp *rdap.IPNetwork, asset *dbt.Entity, m *config.Matches) []*support.Finding {
+func (r *ipnet) store(e *et.Event, resp *rdap.IPNetwork, entity *dbt.Entity, m *config.Matches) []*support.Finding {
 	var findings []*support.Finding
-	iprec := asset.Asset.(*oamreg.IPNetRecord)
+	iprec := entity.Asset.(*oamreg.IPNetRecord)
 
 	if u := r.plugin.getJSONLink(resp.Links); u != nil && m.IsMatch(string(oam.URL)) {
 		if a, err := e.Session.Cache().CreateAsset(u); err == nil && a != nil {
 			findings = append(findings, &support.Finding{
-				From:     asset,
+				From:     entity,
 				FromName: "IPNetRecord: " + iprec.Handle,
 				To:       a,
 				ToName:   u.Raw,
@@ -153,10 +153,12 @@ func (r *ipnet) store(e *et.Event, resp *rdap.IPNetwork, asset *dbt.Entity, m *c
 		}
 	}
 	if name := iprec.WhoisServer; name != "" && m.IsMatch(string(oam.FQDN)) {
-		if a, err := e.Session.Cache().CreateAsset(&domain.FQDN{Name: name}); err == nil && a != nil {
-			if _, conf := e.Session.Scope().IsAssetInScope(a.Asset, 0); conf > 0 {
+		fqdn := &domain.FQDN{Name: name}
+
+		if _, conf := e.Session.Scope().IsAssetInScope(fqdn, 0); conf > 0 {
+			if a, err := e.Session.Cache().CreateAsset(fqdn); err == nil && a != nil {
 				findings = append(findings, &support.Finding{
-					From:     asset,
+					From:     entity,
 					FromName: "IPNetRecord: " + iprec.Handle,
 					To:       a,
 					ToName:   name,
@@ -167,8 +169,8 @@ func (r *ipnet) store(e *et.Event, resp *rdap.IPNetwork, asset *dbt.Entity, m *c
 	}
 
 	if m.IsMatch(string(oam.ContactRecord)) {
-		for _, entity := range resp.Entities {
-			findings = append(findings, r.plugin.storeEntity(e, 1, &entity, asset, r.plugin.source, m)...)
+		for _, v := range resp.Entities {
+			findings = append(findings, r.plugin.storeEntity(e, 1, &v, entity, r.plugin.source, m)...)
 		}
 	}
 
