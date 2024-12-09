@@ -3,7 +3,7 @@ module github.com/owasp-amass/amass/v4
 go 1.23.1
 
 require (
-	github.com/99designs/gqlgen v0.17.57
+	github.com/99designs/gqlgen v0.17.58
 	github.com/PuerkitoBio/goquery v1.10.0
 	github.com/PuerkitoBio/purell v1.2.1
 	github.com/adrg/strutil v0.3.1
@@ -25,7 +25,7 @@ require (
 	github.com/miekg/dns v1.1.62
 	github.com/nyaruka/phonenumbers v1.4.3
 	github.com/openrdap/rdap v0.9.1
-	github.com/owasp-amass/asset-db v0.15.0
+	github.com/owasp-amass/asset-db v0.16.0
 	github.com/owasp-amass/open-asset-model v0.12.0
 	github.com/owasp-amass/resolve v0.8.1
 	github.com/rubenv/sql-migrate v1.7.0
@@ -54,7 +54,7 @@ require (
 	github.com/benbjohnson/clock v1.3.5 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	github.com/chromedp/cdproto v0.0.0-20241202193831-ec840381567d // indirect
+	github.com/chromedp/cdproto v0.0.0-20241208230723-d1c7de7e5dd2 // indirect
 	github.com/chromedp/chromedp v0.11.2 // indirect
 	github.com/chromedp/sysutil v1.1.0 // indirect
 	github.com/d4l3k/messagediff v1.2.1 // indirect
@@ -108,7 +108,7 @@ require (
 	golang.org/x/time v0.8.0 // indirect
 	golang.org/x/tools v0.28.0 // indirect
 	google.golang.org/protobuf v1.35.2 // indirect
-	gorm.io/datatypes v1.2.4 // indirect
+	gorm.io/datatypes v1.2.5 // indirect
 	gorm.io/driver/mysql v1.5.7 // indirect
 	modernc.org/libc v1.61.4 // indirect
 	modernc.org/mathutil v1.6.0 // indirect
