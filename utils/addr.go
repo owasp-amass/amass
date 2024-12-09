@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/caffix/stringset"
-	assetdb "github.com/owasp-amass/asset-db"
 	"github.com/owasp-amass/asset-db/repository"
 	dbt "github.com/owasp-amass/asset-db/types"
 	"github.com/owasp-amass/open-asset-model/domain"
@@ -17,18 +16,18 @@ import (
 	"github.com/owasp-amass/open-asset-model/relation"
 )
 
-func ReadASPrefixes(db *assetdb.AssetDB, asn int, since time.Time) []string {
+func ReadASPrefixes(db repository.Repository, asn int, since time.Time) []string {
 	var prefixes []string
 
-	fqdns, err := db.FindByContent(&network.AutonomousSystem{Number: asn}, since)
+	fqdns, err := db.FindEntityByContent(&network.AutonomousSystem{Number: asn}, since)
 	if err != nil || len(fqdns) != 1 {
 		return prefixes
 	}
 	fqdn := fqdns[0]
 
-	if edges, err := db.Repo.OutgoingEdges(fqdn, since, "announces"); err == nil && len(edges) > 0 {
+	if edges, err := db.OutgoingEdges(fqdn, since, "announces"); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
-			if a, err := db.Repo.FindEntityById(edge.ToEntity.ID); err != nil {
+			if a, err := db.FindEntityById(edge.ToEntity.ID); err != nil {
 				continue
 			} else if netblock, ok := a.Asset.(*network.Netblock); ok {
 				prefixes = append(prefixes, netblock.CIDR.String())
@@ -44,10 +43,10 @@ type NameAddrPair struct {
 	Addr *network.IPAddress
 }
 
-func NamesToAddrs(db *assetdb.AssetDB, since time.Time, names ...string) ([]*NameAddrPair, error) {
+func NamesToAddrs(db repository.Repository, since time.Time, names ...string) ([]*NameAddrPair, error) {
 	var fqdns []*dbt.Entity
 	for _, name := range names {
-		if ents, err := db.Repo.FindEntityByContent(&domain.FQDN{Name: name}, since); err == nil && len(ents) == 1 {
+		if ents, err := db.FindEntityByContent(&domain.FQDN{Name: name}, since); err == nil && len(ents) == 1 {
 			fqdns = append(fqdns, ents[0])
 		}
 	}
@@ -56,12 +55,12 @@ func NamesToAddrs(db *assetdb.AssetDB, since time.Time, names ...string) ([]*Nam
 	// get the IPs associated with SRV, NS, and MX records
 loop:
 	for _, fqdn := range fqdns {
-		if edges, err := db.Repo.OutgoingEdges(fqdn, since, "dns_record"); err == nil && len(edges) > 0 {
+		if edges, err := db.OutgoingEdges(fqdn, since, "dns_record"); err == nil && len(edges) > 0 {
 			for _, edge := range edges {
 				switch v := edge.Relation.(type) {
 				case *relation.BasicDNSRelation:
 					if v.Header.RRType == 1 || v.Header.RRType == 28 {
-						if ip, err := getAddr(db.Repo, edge.ToEntity, since); err == nil {
+						if ip, err := getAddr(db, edge.ToEntity, since); err == nil {
 							results = append(results, &NameAddrPair{
 								FQDN: fqdn.Asset.(*domain.FQDN),
 								Addr: ip,
@@ -69,7 +68,7 @@ loop:
 							continue loop
 						}
 					} else if v.Header.RRType == 5 {
-						if ip, err := cnameQuery(db.Repo, edge.ToEntity, since); err == nil {
+						if ip, err := cnameQuery(db, edge.ToEntity, since); err == nil {
 							results = append(results, &NameAddrPair{
 								FQDN: fqdn.Asset.(*domain.FQDN),
 								Addr: ip,
@@ -79,7 +78,7 @@ loop:
 					}
 				case *relation.PrefDNSRelation:
 					if v.Header.RRType == 2 || v.Header.RRType == 15 {
-						if ip, err := oneMoreName(db.Repo, edge.ToEntity, since); err == nil {
+						if ip, err := oneMoreName(db, edge.ToEntity, since); err == nil {
 							results = append(results, &NameAddrPair{
 								FQDN: fqdn.Asset.(*domain.FQDN),
 								Addr: ip,
@@ -89,7 +88,7 @@ loop:
 					}
 				case *relation.SRVDNSRelation:
 					if v.Header.RRType == 33 {
-						if ip, err := oneMoreName(db.Repo, edge.ToEntity, since); err == nil {
+						if ip, err := oneMoreName(db, edge.ToEntity, since); err == nil {
 							results = append(results, &NameAddrPair{
 								FQDN: fqdn.Asset.(*domain.FQDN),
 								Addr: ip,

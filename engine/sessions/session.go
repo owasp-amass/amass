@@ -32,7 +32,7 @@ type Session struct {
 	ps     *pubsub.Logger
 	cfg    *config.Config
 	scope  *scope.Scope
-	db     *assetdb.AssetDB
+	db     repository.Repository
 	dsn    string
 	dbtype string
 	c      *cache.Cache
@@ -71,7 +71,7 @@ func CreateSession(cfg *config.Config) (et.Session, error) {
 	}
 	s.tmpdir = dir
 
-	s.c, err = cache.New(c, s.db.Repo, time.Minute)
+	s.c, err = cache.New(c, s.db, time.Minute)
 	if err != nil || s.c == nil {
 		return nil, errors.New("failed to create the session cache")
 	}
@@ -98,7 +98,7 @@ func (s *Session) Scope() *scope.Scope {
 	return s.scope
 }
 
-func (s *Session) DB() *assetdb.AssetDB {
+func (s *Session) DB() repository.Repository {
 	return s.db
 }
 
@@ -178,8 +178,8 @@ func (s *Session) selectDBMS() error {
 		return errors.New("no primary database specified in the configuration")
 	}
 	// Initialize the database store
-	store := assetdb.New(s.dbtype, s.dsn)
-	if store == nil {
+	store, err := assetdb.New(s.dbtype, s.dsn)
+	if err != nil {
 		return errors.New("failed to initialize database store")
 	}
 	s.db = store
@@ -192,10 +192,11 @@ func createFileCacheRepo() (repository.Repository, string, error) {
 		return nil, "", errors.New("failed to create the temp dir")
 	}
 
-	c := assetdb.New(sqlrepo.SQLite, filepath.Join(dir, "cache.sqlite"))
-	if c == nil {
-		return nil, "", errors.New("failed to create the cache db")
+	//c := assetdb.New(sqlrepo.SQLite, filepath.Join(dir, "cache.sqlite"))
+	c, err := assetdb.New(sqlrepo.SQLiteMemory, "")
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to create the cache db: %s", err.Error())
 	}
 
-	return c.Repo, dir, nil
+	return c, dir, nil
 }

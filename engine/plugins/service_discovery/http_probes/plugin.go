@@ -19,7 +19,7 @@ import (
 	oam "github.com/owasp-amass/open-asset-model"
 	oamcert "github.com/owasp-amass/open-asset-model/certificate"
 	"github.com/owasp-amass/open-asset-model/relation"
-	"github.com/owasp-amass/open-asset-model/service"
+	oamserv "github.com/owasp-amass/open-asset-model/service"
 )
 
 type httpProbing struct {
@@ -174,7 +174,7 @@ func (hp *httpProbing) store(e *et.Event, resp *http.Response, entity *dbt.Entit
 		return findings
 	}
 
-	serv = s.Asset.(*service.Service)
+	serv = s.Asset.(*oamserv.Service)
 	// for adding the source information
 	findings = append(findings, &support.Finding{
 		From:     entity,

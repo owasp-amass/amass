@@ -39,7 +39,7 @@ import (
 	"github.com/owasp-amass/amass/v4/config"
 	"github.com/owasp-amass/amass/v4/utils"
 	"github.com/owasp-amass/amass/v4/utils/afmt"
-	assetdb "github.com/owasp-amass/asset-db"
+	"github.com/owasp-amass/asset-db/repository"
 	dbt "github.com/owasp-amass/asset-db/types"
 	"github.com/owasp-amass/open-asset-model/domain"
 )
@@ -175,7 +175,7 @@ func main() {
 	showData(&args, asninfo, db)
 }
 
-func showData(args *dbArgs, asninfo bool, db *assetdb.AssetDB) {
+func showData(args *dbArgs, asninfo bool, db repository.Repository) {
 	var total int
 	var err error
 	var outfile *os.File
@@ -265,7 +265,7 @@ func showData(args *dbArgs, asninfo bool, db *assetdb.AssetDB) {
 	}
 }
 
-func getNames(ctx context.Context, domains []string, asninfo bool, db *assetdb.AssetDB) []*utils.Output {
+func getNames(ctx context.Context, domains []string, asninfo bool, db repository.Repository) []*utils.Output {
 	if len(domains) == 0 {
 		return nil
 	}
@@ -276,8 +276,8 @@ func getNames(ctx context.Context, domains []string, asninfo bool, db *assetdb.A
 
 	var assets []*dbt.Entity
 	for _, d := range domains {
-		if ents, err := db.Repo.FindEntityByContent(&domain.FQDN{Name: d}, qtime); err == nil && len(ents) == 1 {
-			if n, err := utils.FindByFQDNScope(db.Repo, ents[0], qtime); err == nil && len(n) > 0 {
+		if ents, err := db.FindEntityByContent(&domain.FQDN{Name: d}, qtime); err == nil && len(ents) == 1 {
+			if n, err := utils.FindByFQDNScope(db, ents[0], qtime); err == nil && len(n) > 0 {
 				assets = append(assets, n...)
 			}
 		}
@@ -296,7 +296,7 @@ func getNames(ctx context.Context, domains []string, asninfo bool, db *assetdb.A
 	return names
 }
 
-func addAddresses(ctx context.Context, db *assetdb.AssetDB, names []*utils.Output, asninfo bool, cache *utils.ASNCache) []*utils.Output {
+func addAddresses(ctx context.Context, db repository.Repository, names []*utils.Output, asninfo bool, cache *utils.ASNCache) []*utils.Output {
 	var namestrs []string
 	lookup := make(outLookup, len(names))
 	for _, n := range names {

@@ -35,7 +35,7 @@ import (
 	"github.com/owasp-amass/amass/v4/config"
 	"github.com/owasp-amass/amass/v4/utils"
 	"github.com/owasp-amass/amass/v4/utils/afmt"
-	assetdb "github.com/owasp-amass/asset-db"
+	"github.com/owasp-amass/asset-db/repository"
 	dbt "github.com/owasp-amass/asset-db/types"
 	"github.com/owasp-amass/open-asset-model/domain"
 )
@@ -153,15 +153,15 @@ func main() {
 	}
 }
 
-func getNewNames(domains []string, since time.Time, db *assetdb.AssetDB) []string {
+func getNewNames(domains []string, since time.Time, db repository.Repository) []string {
 	if len(domains) == 0 {
 		return []string{}
 	}
 
 	var assets []*dbt.Entity
 	for _, d := range domains {
-		if ents, err := db.Repo.FindEntityByContent(&domain.FQDN{Name: d}, since); err == nil && len(ents) == 1 {
-			if n, err := utils.FindByFQDNScope(db.Repo, ents[0], since); err == nil && len(n) > 0 {
+		if ents, err := db.FindEntityByContent(&domain.FQDN{Name: d}, since); err == nil && len(ents) == 1 {
+			if n, err := utils.FindByFQDNScope(db, ents[0], since); err == nil && len(n) > 0 {
 				assets = append(assets, n...)
 			}
 		}

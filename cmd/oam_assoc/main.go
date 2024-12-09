@@ -36,7 +36,7 @@ import (
 	"github.com/owasp-amass/amass/v4/config"
 	"github.com/owasp-amass/amass/v4/utils"
 	"github.com/owasp-amass/amass/v4/utils/afmt"
-	assetdb "github.com/owasp-amass/asset-db"
+	"github.com/owasp-amass/asset-db/repository"
 	dbt "github.com/owasp-amass/asset-db/types"
 	"github.com/owasp-amass/open-asset-model/domain"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
@@ -191,11 +191,11 @@ func main() {
 	}
 }
 
-func printContactInfo(assoc *dbt.Entity, regrel string, since time.Time, db *assetdb.AssetDB) {
+func printContactInfo(assoc *dbt.Entity, regrel string, since time.Time, db repository.Repository) {
 	var contact *dbt.Entity
 
-	if edges, err := db.Repo.OutgoingEdges(assoc, since, regrel); err == nil && len(edges) > 0 {
-		if a, err := db.Repo.FindEntityById(edges[0].ToEntity.ID); err == nil && a != nil {
+	if edges, err := db.OutgoingEdges(assoc, since, regrel); err == nil && len(edges) > 0 {
+		if a, err := db.FindEntityById(edges[0].ToEntity.ID); err == nil && a != nil {
 			contact = a
 		}
 	}
@@ -204,9 +204,9 @@ func printContactInfo(assoc *dbt.Entity, regrel string, since time.Time, db *ass
 	}
 
 	for _, out := range []string{"person", "organization", "location", "phone", "email"} {
-		if edges, err := db.Repo.OutgoingEdges(contact, since, out); err == nil && len(edges) > 0 {
+		if edges, err := db.OutgoingEdges(contact, since, out); err == nil && len(edges) > 0 {
 			for _, edge := range edges {
-				if a, err := db.Repo.FindEntityById(edge.ToEntity.ID); err == nil && a != nil {
+				if a, err := db.FindEntityById(edge.ToEntity.ID); err == nil && a != nil {
 					fmt.Fprintf(color.Output, "%s%s%s\n",
 						afmt.Blue(string(a.Asset.AssetType())), afmt.Blue(": "), afmt.Green(a.Asset.Key()))
 				}
@@ -215,19 +215,19 @@ func printContactInfo(assoc *dbt.Entity, regrel string, since time.Time, db *ass
 	}
 }
 
-func getAssociations(name string, since time.Time, db *assetdb.AssetDB) []*dbt.Entity {
+func getAssociations(name string, since time.Time, db repository.Repository) []*dbt.Entity {
 	var results []*dbt.Entity
 
-	fqdns, err := db.Repo.FindEntityByContent(&domain.FQDN{Name: name}, since)
+	fqdns, err := db.FindEntityByContent(&domain.FQDN{Name: name}, since)
 	if err != nil || len(fqdns) == 0 {
 		return results
 	}
 
 	var assets []*dbt.Entity
 	for _, fqdn := range fqdns {
-		if edges, err := db.Repo.OutgoingEdges(fqdn, since, "registration"); err == nil && len(edges) > 0 {
+		if edges, err := db.OutgoingEdges(fqdn, since, "registration"); err == nil && len(edges) > 0 {
 			for _, edge := range edges {
-				if a, err := db.Repo.FindEntityById(edge.ToEntity.ID); err == nil && a != nil {
+				if a, err := db.FindEntityById(edge.ToEntity.ID); err == nil && a != nil {
 					assets = append(assets, a)
 				}
 			}
@@ -246,9 +246,9 @@ func getAssociations(name string, since time.Time, db *assetdb.AssetDB) []*dbt.E
 		findings = []*dbt.Entity{}
 
 		for _, a := range assets {
-			if edges, err := db.Repo.OutgoingEdges(a, since, "associated_with"); err == nil && len(edges) > 0 {
+			if edges, err := db.OutgoingEdges(a, since, "associated_with"); err == nil && len(edges) > 0 {
 				for _, edge := range edges {
-					asset, err := db.Repo.FindEntityById(edge.ToEntity.ID)
+					asset, err := db.FindEntityById(edge.ToEntity.ID)
 					if err != nil || asset == nil {
 						continue
 					}

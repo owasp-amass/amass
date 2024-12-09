@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/caffix/stringset"
-	assetdb "github.com/owasp-amass/asset-db"
+	"github.com/owasp-amass/asset-db/repository"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/network"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
@@ -222,9 +222,9 @@ func (c *ASNCache) AddrSearch(addr string) *ASNRequest {
 	}
 }
 
-func FillCache(cache *ASNCache, db *assetdb.AssetDB) error {
+func FillCache(cache *ASNCache, db repository.Repository) error {
 	start := time.Now().Add(-730 * time.Hour)
-	assets, err := db.Repo.FindEntitiesByType(oam.AutonomousSystem, start)
+	assets, err := db.FindEntitiesByType(oam.AutonomousSystem, start)
 	if err != nil {
 		return err
 	}
@@ -236,13 +236,13 @@ func FillCache(cache *ASNCache, db *assetdb.AssetDB) error {
 		}
 
 		var desc string
-		edges, err := db.Repo.OutgoingEdges(a, start, "registration")
+		edges, err := db.OutgoingEdges(a, start, "registration")
 		if err != nil || len(edges) == 0 {
 			continue
 		}
 
 		for _, edge := range edges {
-			if asset, err := db.Repo.FindEntityById(edge.ToEntity.ID); err == nil && asset != nil {
+			if asset, err := db.FindEntityById(edge.ToEntity.ID); err == nil && asset != nil {
 				if autnum, ok := asset.Asset.(*oamreg.AutnumRecord); ok && autnum != nil {
 					desc = autnum.Handle + " - " + autnum.Name
 					break
