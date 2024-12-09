@@ -131,16 +131,14 @@ func (s *Scope) checkRelatedAssetsforAssoc(c *cache.Cache, req *Association, ass
 				impacted = append(impacted, asset)
 			}
 			if match, conf := s.IsAssetInScope(asset.Asset, req.Confidence); conf > 0 {
-				if a, err := c.FindEntityByContent(match, c.StartTime()); err == nil && a != nil {
-					if conf > best {
-						best = conf
+				if conf > best {
+					best = conf
 
-						aa := assoc.Asset
-						sa := req.Submission.Asset
-						msg = fmt.Sprintf("[%s: %s] is related to an asset with associative value [%s: %s], ", sa.AssetType(), sa.Key(), aa.AssetType(), aa.Key())
-						msg += fmt.Sprintf("which has a related asset [%s: %s] that was determined associated with [%s: %s] at a confidence of %d out of 100",
-							asset.Asset.AssetType(), asset.Asset.Key(), match.AssetType(), match.Key(), conf)
-					}
+					aa := assoc.Asset
+					sa := req.Submission.Asset
+					msg = fmt.Sprintf("[%s: %s] is related to an asset with associative value [%s: %s], ", sa.AssetType(), sa.Key(), aa.AssetType(), aa.Key())
+					msg += fmt.Sprintf("which has a related asset [%s: %s] that was determined associated with [%s: %s] at a confidence of %d out of 100",
+						asset.Asset.AssetType(), asset.Asset.Key(), match.AssetType(), match.Key(), conf)
 				}
 			}
 		}
