@@ -15,7 +15,6 @@ require (
 	github.com/cheggaaa/pb/v3 v3.1.5
 	github.com/fatih/color v1.18.0
 	github.com/geziyor/geziyor v0.0.0-20240812061556-229b8ca83ac1
-	github.com/glebarez/sqlite v1.11.0
 	github.com/go-ini/ini v1.67.0
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
@@ -28,7 +27,6 @@ require (
 	github.com/owasp-amass/asset-db v0.16.0
 	github.com/owasp-amass/open-asset-model v0.12.0
 	github.com/owasp-amass/resolve v0.8.1
-	github.com/rubenv/sql-migrate v1.7.0
 	github.com/samber/slog-common v0.17.1
 	github.com/samber/slog-syslog/v2 v2.5.0
 	github.com/stretchr/testify v1.10.0
@@ -38,8 +36,6 @@ require (
 	go.uber.org/ratelimit v0.3.1
 	golang.org/x/net v0.32.0
 	gopkg.in/yaml.v3 v3.0.1
-	gorm.io/driver/postgres v1.5.11
-	gorm.io/gorm v1.25.12
 	mvdan.cc/xurls/v2 v2.5.0
 )
 
@@ -61,6 +57,7 @@ require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/glebarez/go-sqlite v1.22.0 // indirect
+	github.com/glebarez/sqlite v1.11.0 // indirect
 	github.com/go-gorp/gorp/v3 v3.1.0 // indirect
 	github.com/go-kit/kit v0.13.0 // indirect
 	github.com/go-sql-driver/mysql v1.8.1 // indirect
@@ -93,6 +90,7 @@ require (
 	github.com/prometheus/procfs v0.15.1 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
+	github.com/rubenv/sql-migrate v1.7.0 // indirect
 	github.com/samber/lo v1.47.0 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/sosodev/duration v1.3.1 // indirect
@@ -110,6 +108,8 @@ require (
 	google.golang.org/protobuf v1.35.2 // indirect
 	gorm.io/datatypes v1.2.5 // indirect
 	gorm.io/driver/mysql v1.5.7 // indirect
+	gorm.io/driver/postgres v1.5.11 // indirect
+	gorm.io/gorm v1.25.12 // indirect
 	modernc.org/libc v1.61.4 // indirect
 	modernc.org/mathutil v1.6.0 // indirect
 	modernc.org/memory v1.8.0 // indirect
