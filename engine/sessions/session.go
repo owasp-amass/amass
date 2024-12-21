@@ -23,6 +23,7 @@ import (
 	assetdb "github.com/owasp-amass/asset-db"
 	"github.com/owasp-amass/asset-db/cache"
 	"github.com/owasp-amass/asset-db/repository"
+	"github.com/owasp-amass/asset-db/repository/neo4j"
 	"github.com/owasp-amass/asset-db/repository/sqlrepo"
 )
 
@@ -168,6 +169,10 @@ func (s *Session) selectDBMS() error {
 				path := filepath.Join(config.OutputDirectory(s.cfg.Dir), "amass.sqlite")
 				s.dsn = path
 				s.dbtype = sqlrepo.SQLite
+			} else if db.System == "neo4j" || db.System == "neo4+s" || db.System == "neo4j+sec" ||
+				db.System == "bolt" || db.System == "bolt+s" || db.System == "bolt+sec" {
+				s.dsn = db.URL
+				s.dbtype = neo4j.Neo4j
 			}
 			// Break the loop once the primary database is found.
 			break
