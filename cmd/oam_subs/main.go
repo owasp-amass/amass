@@ -276,7 +276,7 @@ func getNames(ctx context.Context, domains []string, asninfo bool, db repository
 
 	var assets []*dbt.Entity
 	for _, d := range domains {
-		if ents, err := db.FindEntityByContent(&domain.FQDN{Name: d}, qtime); err == nil && len(ents) == 1 {
+		if ents, err := db.FindEntitiesByContent(&domain.FQDN{Name: d}, qtime); err == nil && len(ents) == 1 {
 			if n, err := utils.FindByFQDNScope(db, ents[0], qtime); err == nil && len(n) > 0 {
 				assets = append(assets, n...)
 			}

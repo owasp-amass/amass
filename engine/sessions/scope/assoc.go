@@ -365,7 +365,7 @@ func (s *Scope) IsAddressInScope(c *cache.Cache, ip *oamnet.IPAddress) bool {
 		return true
 	}
 
-	addrs, err := c.FindEntityByContent(ip, c.StartTime())
+	addrs, err := c.FindEntitiesByContent(ip, c.StartTime())
 	if err != nil || len(addrs) != 1 {
 		return false
 	}

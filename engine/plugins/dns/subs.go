@@ -98,7 +98,7 @@ func (d *dnsSubs) registered(e *et.Event, name string) string {
 		}
 	}
 
-	fqdns, err := e.Session.Cache().FindEntityByContent(&domain.FQDN{Name: name}, time.Time{})
+	fqdns, err := e.Session.Cache().FindEntitiesByContent(&domain.FQDN{Name: name}, time.Time{})
 	if err != nil || len(fqdns) != 1 {
 		return ""
 	}
@@ -166,7 +166,7 @@ func (d *dnsSubs) traverse(e *et.Event, dom string, fqdn *dbt.Entity, src *et.So
 func (d *dnsSubs) lookup(e *et.Event, subdomain string, since time.Time) []*relSubs {
 	var alias []*relSubs
 
-	fqdns, err := e.Session.Cache().FindEntityByContent(&domain.FQDN{Name: subdomain}, time.Time{})
+	fqdns, err := e.Session.Cache().FindEntitiesByContent(&domain.FQDN{Name: subdomain}, time.Time{})
 	if err != nil || len(fqdns) != 1 {
 		return alias
 	}

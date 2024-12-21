@@ -160,7 +160,7 @@ func getNewNames(domains []string, since time.Time, db repository.Repository) []
 
 	var assets []*dbt.Entity
 	for _, d := range domains {
-		if ents, err := db.FindEntityByContent(&domain.FQDN{Name: d}, since); err == nil && len(ents) == 1 {
+		if ents, err := db.FindEntitiesByContent(&domain.FQDN{Name: d}, since); err == nil && len(ents) == 1 {
 			if n, err := utils.FindByFQDNScope(db, ents[0], since); err == nil && len(n) > 0 {
 				assets = append(assets, n...)
 			}

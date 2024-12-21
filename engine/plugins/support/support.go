@@ -249,7 +249,7 @@ func cleanSessionNetblocks() {
 
 func IPAddressSweep(e *et.Event, addr *oamnet.IPAddress, src *et.Source, size int, callback SweepCallback) {
 	// do not work on an IP address that was processed previously
-	_, err := e.Session.Cache().FindEntityByContent(addr, e.Session.Cache().StartTime())
+	_, err := e.Session.Cache().FindEntitiesByContent(addr, e.Session.Cache().StartTime())
 	if err == nil {
 		return
 	}
@@ -287,7 +287,7 @@ func IPAddressSweep(e *et.Event, addr *oamnet.IPAddress, src *et.Source, size in
 }
 
 func IsCNAME(session et.Session, name *domain.FQDN) (*domain.FQDN, bool) {
-	fqdns, err := session.Cache().FindEntityByContent(name, session.Cache().StartTime())
+	fqdns, err := session.Cache().FindEntitiesByContent(name, session.Cache().StartTime())
 	if err != nil || len(fqdns) != 1 {
 		return nil, false
 	}
@@ -308,7 +308,7 @@ func IsCNAME(session et.Session, name *domain.FQDN) (*domain.FQDN, bool) {
 }
 
 func NameIPAddresses(session et.Session, name *domain.FQDN) []*oamnet.IPAddress {
-	fqdns, err := session.Cache().FindEntityByContent(name, session.Cache().StartTime())
+	fqdns, err := session.Cache().FindEntitiesByContent(name, session.Cache().StartTime())
 	if err != nil || len(fqdns) != 1 {
 		return nil
 	}

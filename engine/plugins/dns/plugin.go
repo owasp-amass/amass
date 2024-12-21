@@ -142,7 +142,7 @@ func (d *dnsPlugin) lookupWithinTTL(session et.Session, name string, atype oam.A
 		return results
 	}
 
-	ents, err := session.Cache().FindEntityByContent(&domain.FQDN{Name: name}, time.Time{})
+	ents, err := session.Cache().FindEntitiesByContent(&domain.FQDN{Name: name}, time.Time{})
 	if err != nil || len(ents) != 1 {
 		return results
 	}

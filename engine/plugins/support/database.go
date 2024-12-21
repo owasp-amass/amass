@@ -27,7 +27,7 @@ func SourceToAssetsWithinTTL(session et.Session, name, atype string, src *et.Sou
 
 	switch atype {
 	case string(oam.FQDN):
-		roots, err := session.Cache().FindEntityByContent(&domain.FQDN{Name: name}, since)
+		roots, err := session.Cache().FindEntitiesByContent(&domain.FQDN{Name: name}, since)
 		if err != nil || len(roots) != 1 {
 			return nil
 		}
@@ -35,23 +35,23 @@ func SourceToAssetsWithinTTL(session et.Session, name, atype string, src *et.Sou
 
 		entities, _ = utils.FindByFQDNScope(session.Cache(), root, since)
 	case string(oam.EmailAddress):
-		entities, _ = session.Cache().FindEntityByContent(EmailToOAMEmailAddress(name), since)
+		entities, _ = session.Cache().FindEntitiesByContent(EmailToOAMEmailAddress(name), since)
 	case string(oam.AutnumRecord):
 		num, err := strconv.Atoi(name)
 		if err != nil {
 			return nil
 		}
 
-		entities, _ = session.Cache().FindEntityByContent(&oamreg.AutnumRecord{Number: num}, since)
+		entities, _ = session.Cache().FindEntitiesByContent(&oamreg.AutnumRecord{Number: num}, since)
 	case string(oam.IPNetRecord):
 		prefix, err := netip.ParsePrefix(name)
 		if err != nil {
 			return nil
 		}
 
-		entities, _ = session.Cache().FindEntityByContent(&oamreg.IPNetRecord{CIDR: prefix}, since)
+		entities, _ = session.Cache().FindEntitiesByContent(&oamreg.IPNetRecord{CIDR: prefix}, since)
 	case string(oam.Service):
-		entities, _ = session.Cache().FindEntityByContent(&service.Service{Identifier: name}, since)
+		entities, _ = session.Cache().FindEntitiesByContent(&service.Service{Identifier: name}, since)
 	}
 
 	var results []*dbt.Entity

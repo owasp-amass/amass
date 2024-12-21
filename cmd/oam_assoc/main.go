@@ -218,7 +218,7 @@ func printContactInfo(assoc *dbt.Entity, regrel string, since time.Time, db repo
 func getAssociations(name string, since time.Time, db repository.Repository) []*dbt.Entity {
 	var results []*dbt.Entity
 
-	fqdns, err := db.FindEntityByContent(&domain.FQDN{Name: name}, since)
+	fqdns, err := db.FindEntitiesByContent(&domain.FQDN{Name: name}, since)
 	if err != nil || len(fqdns) == 0 {
 		return results
 	}

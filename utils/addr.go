@@ -19,7 +19,7 @@ import (
 func ReadASPrefixes(db repository.Repository, asn int, since time.Time) []string {
 	var prefixes []string
 
-	fqdns, err := db.FindEntityByContent(&network.AutonomousSystem{Number: asn}, since)
+	fqdns, err := db.FindEntitiesByContent(&network.AutonomousSystem{Number: asn}, since)
 	if err != nil || len(fqdns) != 1 {
 		return prefixes
 	}
@@ -46,7 +46,7 @@ type NameAddrPair struct {
 func NamesToAddrs(db repository.Repository, since time.Time, names ...string) ([]*NameAddrPair, error) {
 	var fqdns []*dbt.Entity
 	for _, name := range names {
-		if ents, err := db.FindEntityByContent(&domain.FQDN{Name: name}, since); err == nil && len(ents) == 1 {
+		if ents, err := db.FindEntitiesByContent(&domain.FQDN{Name: name}, since); err == nil && len(ents) == 1 {
 			fqdns = append(fqdns, ents[0])
 		}
 	}

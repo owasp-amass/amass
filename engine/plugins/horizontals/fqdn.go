@@ -77,7 +77,7 @@ func (h *horfqdn) check(e *et.Event) error {
 
 		var assets []*dbt.Entity
 		for _, im := range impacted {
-			if a, err := e.Session.Cache().FindEntityByContent(im.Asset,
+			if a, err := e.Session.Cache().FindEntitiesByContent(im.Asset,
 				e.Session.Cache().StartTime()); err == nil && len(a) == 1 {
 				assets = append(assets, a[0])
 			} else if n := h.store(e, im.Asset); n != nil {

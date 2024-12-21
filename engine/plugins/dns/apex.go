@@ -37,7 +37,7 @@ func (d *dnsApex) check(e *et.Event) error {
 	for _, name := range d.plugin.apexList.Slice() {
 		if idx := strings.Index(fqdn.Name, name); idx != -1 && idx != 0 && idx < best {
 			best = idx
-			if ents, err := e.Session.Cache().FindEntityByContent(
+			if ents, err := e.Session.Cache().FindEntitiesByContent(
 				&domain.FQDN{Name: name}, e.Session.Cache().StartTime()); err == nil && len(ents) == 1 {
 				apex = ents[0]
 			}
