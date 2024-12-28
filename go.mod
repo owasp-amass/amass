@@ -37,6 +37,7 @@ require (
 	golang.org/x/net v0.33.0
 	gopkg.in/yaml.v3 v3.0.1
 	mvdan.cc/xurls/v2 v2.5.0
+	github.com/weppos/publicsuffix-go v0.15.0
 )
 
 require (
@@ -116,3 +117,4 @@ require (
 	modernc.org/memory v1.8.0 // indirect
 	modernc.org/sqlite v1.34.3 // indirect
 )
+replace github.com/owasp-amass/amass/v4 => github.com/JohnEarle/amass-develop/v4 v4.2.1
