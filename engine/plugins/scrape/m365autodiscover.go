@@ -10,7 +10,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -51,7 +50,7 @@ func (m *m365autodiscover) Name() string {
 
 // Start registers the plugin with the Amass engine
 func (m *m365autodiscover) Start(r et.Registry) error {
-	m.log = slog.New(slog.NewTextHandler(os.Stdout, nil)).WithGroup("plugin").With("name", m.name)
+	m.log = r.Log().WithGroup("plugin").With("name", m.name)
 
 	if err := r.RegisterHandler(&et.Handler{
 		Plugin:       m,
@@ -157,7 +156,6 @@ func (m *m365autodiscover) query(e *et.Event, name string, source *et.Source) ([
 }
 
 func (m *m365autodiscover) store(e *et.Event, names []string, src *et.Source) []*dbt.Entity {
-	m.log.Info("store function called", "names", names)
 	entities := support.StoreFQDNsWithSource(e.Session, names, m.source, m.name, m.name+"-Handler")
 
 	// Create edges between the event entity and the new FQDNs
@@ -184,9 +182,6 @@ func (m *m365autodiscover) store(e *et.Event, names []string, src *et.Source) []
 			m.log.Error("Edge is nil")
 			continue
 		}
-
-		// Log the edge details
-		m.log.Info("m365Autodiscover Edge created", "from", e.Entity.ID, "to", entity.ID, "relation", "associated_with")
 
 		_, err = e.Session.Cache().CreateEdgeProperty(edge, &property.SourceProperty{
 			Source:     m.source.Name,
