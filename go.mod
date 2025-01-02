@@ -37,7 +37,6 @@ require (
 	golang.org/x/net v0.33.0
 	gopkg.in/yaml.v3 v3.0.1
 	mvdan.cc/xurls/v2 v2.5.0
-	github.com/weppos/publicsuffix-go v0.15.0
 )
 
 require (
