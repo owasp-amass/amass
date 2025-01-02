@@ -145,7 +145,9 @@ func (m *m365autodiscover) query(e *et.Event, name string, source *et.Source) ([
 	}
 
 	for _, domain := range envelope.Body.GetFederationInformationResponseMessage.Response.Domains.Domain {
-		subs.Insert(strings.ToLower(domain))
+		if !strings.Contains(strings.ToLower(domain), "onmicrosoft") {
+			subs.Insert(strings.ToLower(domain))
+		}
 	}
 
 	if subs.Len() == 0 {
