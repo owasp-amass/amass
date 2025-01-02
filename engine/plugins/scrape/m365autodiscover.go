@@ -19,8 +19,6 @@ import (
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/domain"
-	"github.com/owasp-amass/open-asset-model/property"
-	"github.com/owasp-amass/open-asset-model/relation"
 	"go.uber.org/ratelimit"
 )
 
@@ -38,7 +36,7 @@ func NewM365Autodiscover() et.Plugin {
 		rlimit: ratelimit.New(2, ratelimit.WithoutSlack),
 		source: &et.Source{
 			Name:       "M365Autodiscover",
-			Confidence: 90,
+			Confidence: 80,
 		},
 	}
 }
@@ -159,40 +157,6 @@ func (m *m365autodiscover) query(e *et.Event, name string, source *et.Source) ([
 
 func (m *m365autodiscover) store(e *et.Event, names []string, src *et.Source) []*dbt.Entity {
 	entities := support.StoreFQDNsWithSource(e.Session, names, m.source, m.name, m.name+"-Handler")
-
-	// Create edges between the event entity and the new FQDNs
-	for _, entity := range entities {
-		if entity == nil {
-			e.Session.Log().Error("Entity is nil")
-			continue
-		}
-		if e.Entity == nil {
-			e.Session.Log().Error("Event entity is nil")
-			continue
-		}
-		// REQUIRE A MORE RELEVANT RELATIONSHIP TYPE -- Pending changes to OAM model
-		edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
-			Relation:   &relation.SimpleRelation{Name: "node"},
-			FromEntity: e.Entity,
-			ToEntity:   entity,
-		})
-		if err != nil {
-			m.log.Error("Failed to create edge", "error", err)
-			continue
-		}
-		if edge == nil {
-			m.log.Error("Edge is nil")
-			continue
-		}
-
-		_, err = e.Session.Cache().CreateEdgeProperty(edge, &property.SourceProperty{
-			Source:     m.source.Name,
-			Confidence: m.source.Confidence,
-		})
-		if err != nil {
-			m.log.Error("Failed to create edge property", "error", err)
-		}
-	}
 
 	return entities
 }
