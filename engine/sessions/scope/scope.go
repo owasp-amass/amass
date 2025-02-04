@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -11,7 +11,7 @@ import (
 	oam "github.com/owasp-amass/open-asset-model"
 	oamcert "github.com/owasp-amass/open-asset-model/certificate"
 	"github.com/owasp-amass/open-asset-model/contact"
-	"github.com/owasp-amass/open-asset-model/domain"
+	"github.com/owasp-amass/open-asset-model/dns"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
 	"github.com/owasp-amass/open-asset-model/org"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
@@ -22,10 +22,10 @@ func (s *Scope) Add(a oam.Asset) bool {
 	var newentry bool
 
 	switch v := a.(type) {
-	case *domain.FQDN:
+	case *dns.FQDN:
 		newentry = s.AddFQDN(v)
-	case *contact.EmailAddress:
-		newentry = s.AddFQDN(&domain.FQDN{Name: v.Domain})
+	/*case *contact.EmailAddress:
+	newentry = s.AddFQDN(&domain.FQDN{Name: v.Domain})*/
 	case *oamnet.IPAddress:
 		newentry = s.AddIPAddress(v)
 	case *oamnet.Netblock:
@@ -62,10 +62,10 @@ func (s *Scope) IsAssetInScope(a oam.Asset, conf int) (oam.Asset, int) {
 	var match oam.Asset
 
 	switch v := a.(type) {
-	case *domain.FQDN:
+	case *dns.FQDN:
 		match, accuracy = s.matchesDomain(v)
-	case *contact.EmailAddress:
-		match, accuracy = s.matchesDomain(&domain.FQDN{Name: v.Domain})
+	/*case *contact.EmailAddress:
+	match, accuracy = s.matchesDomain(&domain.FQDN{Name: v.Domain})*/
 	case *oamnet.IPAddress:
 		match, accuracy = s.addressInScope(v)
 	case *oamnet.Netblock:
@@ -73,7 +73,7 @@ func (s *Scope) IsAssetInScope(a oam.Asset, conf int) (oam.Asset, int) {
 	case *oamnet.AutonomousSystem:
 		match, accuracy = s.matchesAutonomousSystem(v)
 	case *oamreg.DomainRecord:
-		match, accuracy = s.matchesDomain(&domain.FQDN{Name: v.Domain})
+		match, accuracy = s.matchesDomain(&dns.FQDN{Name: v.Domain})
 		if match == nil || accuracy == 0 {
 			match, accuracy = s.matchesOrg(&org.Organization{Name: v.Name}, conf)
 		}
@@ -85,9 +85,9 @@ func (s *Scope) IsAssetInScope(a oam.Asset, conf int) (oam.Asset, int) {
 			match, accuracy = s.matchesOrg(&org.Organization{Name: v.Name}, conf)
 		}
 	case *oamcert.TLSCertificate:
-		match, accuracy = s.matchesDomain(&domain.FQDN{Name: v.SubjectCommonName})
+		match, accuracy = s.matchesDomain(&dns.FQDN{Name: v.SubjectCommonName})
 	case *oamurl.URL:
-		match, accuracy = s.matchesDomain(&domain.FQDN{Name: v.Host})
+		match, accuracy = s.matchesDomain(&dns.FQDN{Name: v.Host})
 	case *org.Organization:
 		match, accuracy = s.matchesOrg(v, conf)
 	case *contact.Location:

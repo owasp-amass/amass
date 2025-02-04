@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -8,11 +8,11 @@ import (
 	"strings"
 
 	oam "github.com/owasp-amass/open-asset-model"
-	"github.com/owasp-amass/open-asset-model/domain"
+	"github.com/owasp-amass/open-asset-model/dns"
 	"golang.org/x/net/publicsuffix"
 )
 
-func (s *Scope) AddFQDN(fqdn *domain.FQDN) bool {
+func (s *Scope) AddFQDN(fqdn *dns.FQDN) bool {
 	if fqdn.Name == "" {
 		return false
 	}
@@ -34,16 +34,16 @@ func (s *Scope) AddFQDN(fqdn *domain.FQDN) bool {
 }
 
 func (s *Scope) AddDomain(d string) bool {
-	return s.AddFQDN(&domain.FQDN{Name: strings.ToLower(strings.TrimSpace(d))})
+	return s.AddFQDN(&dns.FQDN{Name: strings.ToLower(strings.TrimSpace(d))})
 }
 
-func (s *Scope) FQDNs() []*domain.FQDN {
+func (s *Scope) FQDNs() []*dns.FQDN {
 	s.domLock.Lock()
 	defer s.domLock.Unlock()
 
-	var results []*domain.FQDN
+	var results []*dns.FQDN
 	for _, v := range s.domains {
-		if fqdn, ok := v.(*domain.FQDN); ok {
+		if fqdn, ok := v.(*dns.FQDN); ok {
 			results = append(results, fqdn)
 		}
 	}
@@ -61,7 +61,7 @@ func (s *Scope) Domains() []string {
 	return results
 }
 
-func (s *Scope) matchesDomain(fqdn *domain.FQDN) (oam.Asset, int) {
+func (s *Scope) matchesDomain(fqdn *dns.FQDN) (oam.Asset, int) {
 	s.domLock.Lock()
 	defer s.domLock.Unlock()
 
