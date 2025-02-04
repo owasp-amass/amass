@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -16,10 +16,9 @@ import (
 	amassnet "github.com/owasp-amass/amass/v4/utils/net"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
-	"github.com/owasp-amass/open-asset-model/domain"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
+	"github.com/owasp-amass/open-asset-model/general"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
-	"github.com/owasp-amass/open-asset-model/property"
-	"github.com/owasp-amass/open-asset-model/relation"
 	"github.com/owasp-amass/resolve"
 )
 
@@ -96,7 +95,7 @@ func (d *dnsReverse) check(e *et.Event) error {
 func (d *dnsReverse) lookup(e *et.Event, fqdn *dbt.Entity, since time.Time) []*relRev {
 	var rev []*relRev
 
-	n, ok := fqdn.Asset.(*domain.FQDN)
+	n, ok := fqdn.Asset.(*oamdns.FQDN)
 	if !ok || n == nil {
 		return rev
 	}
@@ -146,11 +145,11 @@ func (d *dnsReverse) store(e *et.Event, ptr *dbt.Entity, src *et.Source, rr []*r
 			continue
 		}
 
-		if t, err := e.Session.Cache().CreateAsset(&domain.FQDN{Name: record.Data}); err == nil && t != nil {
+		if t, err := e.Session.Cache().CreateAsset(&oamdns.FQDN{Name: record.Data}); err == nil && t != nil {
 			if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
-				Relation: &relation.BasicDNSRelation{
+				Relation: &oamdns.BasicDNSRelation{
 					Name: "dns_record",
-					Header: relation.RRHeader{
+					Header: oamdns.RRHeader{
 						RRType: int(record.Type),
 						Class:  1,
 					},
@@ -159,7 +158,7 @@ func (d *dnsReverse) store(e *et.Event, ptr *dbt.Entity, src *et.Source, rr []*r
 				ToEntity:   t,
 			}); err == nil && edge != nil {
 				rev = append(rev, &relRev{ipFQDN: ptr, target: t})
-				_, _ = e.Session.Cache().CreateEdgeProperty(edge, &property.SourceProperty{
+				_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
 					Source:     src.Name,
 					Confidence: src.Confidence,
 				})
@@ -173,16 +172,16 @@ func (d *dnsReverse) store(e *et.Event, ptr *dbt.Entity, src *et.Source, rr []*r
 }
 
 func (d *dnsReverse) createPTRAlias(e *et.Event, name string, ip *dbt.Entity, datasrc *et.Source) *dbt.Entity {
-	ptr, err := e.Session.Cache().CreateAsset(&domain.FQDN{Name: name})
+	ptr, err := e.Session.Cache().CreateAsset(&oamdns.FQDN{Name: name})
 	if err != nil || ptr == nil {
 		return nil
 	}
 	if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
-		Relation:   &relation.SimpleRelation{Name: "ptr_record"},
+		Relation:   &general.SimpleRelation{Name: "ptr_record"},
 		FromEntity: ip,
 		ToEntity:   ptr,
 	}); err == nil && edge != nil {
-		_, _ = e.Session.Cache().CreateEdgeProperty(edge, &property.SourceProperty{
+		_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
 			Source:     datasrc.Name,
 			Confidence: datasrc.Confidence,
 		})
@@ -202,8 +201,8 @@ func (d *dnsReverse) createPTRAlias(e *et.Event, name string, ip *dbt.Entity, da
 
 func (d *dnsReverse) process(e *et.Event, rev []*relRev) {
 	for _, r := range rev {
-		ip := r.ipFQDN.Asset.(*domain.FQDN)
-		target := r.target.Asset.(*domain.FQDN)
+		ip := r.ipFQDN.Asset.(*oamdns.FQDN)
+		target := r.target.Asset.(*oamdns.FQDN)
 
 		_ = e.Dispatcher.DispatchEvent(&et.Event{
 			Name:    target.Name,

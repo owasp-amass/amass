@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -18,9 +18,8 @@ import (
 	"github.com/owasp-amass/amass/v4/utils/net/http"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
+	"github.com/owasp-amass/open-asset-model/general"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
-	"github.com/owasp-amass/open-asset-model/property"
-	"github.com/owasp-amass/open-asset-model/relation"
 	"go.uber.org/ratelimit"
 )
 
@@ -108,7 +107,7 @@ func (v *ipverse) lookup(e *et.Event, as *dbt.Entity, since time.Time, src *et.S
 	for _, edge := range edges {
 		if tags, err := e.Session.Cache().GetEdgeTags(edge, since, src.Name); err == nil && len(tags) > 0 {
 			for _, tag := range tags {
-				if _, ok := tag.Property.(*property.SourceProperty); ok {
+				if _, ok := tag.Property.(*general.SourceProperty); ok {
 					if nb, err := e.Session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && nb != nil {
 						results = append(results, nb)
 					}
@@ -167,11 +166,11 @@ func (v *ipverse) store(e *et.Event, cidrs []netip.Prefix, as *dbt.Entity, src *
 			results = append(results, nb)
 
 			if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
-				Relation:   &relation.SimpleRelation{Name: "announces"},
+				Relation:   &general.SimpleRelation{Name: "announces"},
 				FromEntity: as,
 				ToEntity:   nb,
 			}); err == nil && edge != nil {
-				_, _ = e.Session.Cache().CreateEdgeProperty(edge, &property.SourceProperty{
+				_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
 					Source:     src.Name,
 					Confidence: src.Confidence,
 				})

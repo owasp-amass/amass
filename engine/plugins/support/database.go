@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -16,10 +16,10 @@ import (
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamcert "github.com/owasp-amass/open-asset-model/certificate"
-	"github.com/owasp-amass/open-asset-model/domain"
-	"github.com/owasp-amass/open-asset-model/property"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
+	"github.com/owasp-amass/open-asset-model/general"
+	"github.com/owasp-amass/open-asset-model/platform"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
-	"github.com/owasp-amass/open-asset-model/service"
 )
 
 func SourceToAssetsWithinTTL(session et.Session, name, atype string, src *et.Source, since time.Time) []*dbt.Entity {
@@ -27,7 +27,7 @@ func SourceToAssetsWithinTTL(session et.Session, name, atype string, src *et.Sou
 
 	switch atype {
 	case string(oam.FQDN):
-		roots, err := session.Cache().FindEntitiesByContent(&domain.FQDN{Name: name}, since)
+		roots, err := session.Cache().FindEntitiesByContent(&oamdns.FQDN{Name: name}, since)
 		if err != nil || len(roots) != 1 {
 			return nil
 		}
@@ -51,7 +51,7 @@ func SourceToAssetsWithinTTL(session et.Session, name, atype string, src *et.Sou
 
 		entities, _ = session.Cache().FindEntitiesByContent(&oamreg.IPNetRecord{CIDR: prefix}, since)
 	case string(oam.Service):
-		entities, _ = session.Cache().FindEntitiesByContent(&service.Service{Identifier: name}, since)
+		entities, _ = session.Cache().FindEntitiesByContent(&platform.Service{ID: name}, since)
 	}
 
 	var results []*dbt.Entity
@@ -75,9 +75,9 @@ func StoreFQDNsWithSource(session et.Session, names []string, src *et.Source, pl
 	}
 
 	for _, name := range names {
-		if a, err := session.Cache().CreateAsset(&domain.FQDN{Name: name}); err == nil && a != nil {
+		if a, err := session.Cache().CreateAsset(&oamdns.FQDN{Name: name}); err == nil && a != nil {
 			results = append(results, a)
-			_, _ = session.Cache().CreateEntityProperty(a, &property.SourceProperty{
+			_, _ = session.Cache().CreateEntityProperty(a, &general.SourceProperty{
 				Source:     src.Name,
 				Confidence: src.Confidence,
 			})
@@ -103,7 +103,7 @@ func StoreEmailsWithSource(session et.Session, emails []string, src *et.Source, 
 		}
 		if a, err := session.Cache().CreateAsset(e); err == nil && a != nil {
 			results = append(results, a)
-			_, _ = session.Cache().CreateEntityProperty(a, &property.SourceProperty{
+			_, _ = session.Cache().CreateEntityProperty(a, &general.SourceProperty{
 				Source:     src.Name,
 				Confidence: src.Confidence,
 			})
@@ -128,7 +128,7 @@ func MarkAssetMonitored(session et.Session, asset *dbt.Entity, src *et.Source) {
 		}
 	}
 
-	_, _ = session.Cache().CreateEntityProperty(asset, property.SimpleProperty{
+	_, _ = session.Cache().CreateEntityProperty(asset, general.SimpleProperty{
 		PropertyName:  "last_monitored",
 		PropertyValue: src.Name,
 	})
@@ -150,13 +150,13 @@ func AssetMonitoredWithinTTL(session et.Session, asset *dbt.Entity, src *et.Sour
 	return false
 }
 
-func CreateServiceAsset(session et.Session, src *dbt.Entity, rel oam.Relation, serv *service.Service, cert *oamcert.TLSCertificate) (*dbt.Entity, error) {
+func CreateServiceAsset(session et.Session, src *dbt.Entity, rel oam.Relation, serv *platform.Service, cert *oamcert.TLSCertificate) (*dbt.Entity, error) {
 	var result *dbt.Entity
 
 	var srvs []*dbt.Entity
 	if entities, err := session.Cache().FindEntitiesByType(oam.Service, time.Time{}); err == nil {
 		for _, a := range entities {
-			if s, ok := a.Asset.(*service.Service); ok && s.BannerLen == serv.BannerLen {
+			if s, ok := a.Asset.(*platform.Service); ok && s.BannerLen == serv.BannerLen {
 				srvs = append(srvs, a)
 			}
 		}
@@ -166,7 +166,7 @@ func CreateServiceAsset(session et.Session, src *dbt.Entity, rel oam.Relation, s
 	for _, srv := range srvs {
 		var num int
 
-		s := srv.Asset.(*service.Service)
+		s := srv.Asset.(*platform.Service)
 		for _, key := range []string{"Server", "X-Powered-By"} {
 			if server1, ok := serv.Headers[key]; ok && server1[0] != "" {
 				if server2, ok := s.Headers[key]; ok && server1[0] == server2[0] {

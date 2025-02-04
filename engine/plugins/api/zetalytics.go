@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -19,7 +19,7 @@ import (
 	"github.com/owasp-amass/amass/v4/utils/net/http"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
-	"github.com/owasp-amass/open-asset-model/domain"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	"go.uber.org/ratelimit"
 )
 
@@ -69,7 +69,7 @@ func (z *zetalytics) Stop() {
 }
 
 func (z *zetalytics) check(e *et.Event) error {
-	fqdn, ok := e.Entity.Asset.(*domain.FQDN)
+	fqdn, ok := e.Entity.Asset.(*oamdns.FQDN)
 	if !ok {
 		return errors.New("failed to extract the FQDN asset")
 	}
@@ -88,10 +88,9 @@ func (z *zetalytics) check(e *et.Event) error {
 
 	if a, conf := e.Session.Scope().IsAssetInScope(fqdn, 0); conf == 0 || a == nil {
 		return nil
-	} else if f, ok := a.(*domain.FQDN); !ok || f == nil || !strings.EqualFold(fqdn.Name, f.Name) {
+	} else if f, ok := a.(*oamdns.FQDN); !ok || f == nil || !strings.EqualFold(fqdn.Name, f.Name) {
 		return nil
 	}
-
 
 	since, err := support.TTLStartTime(e.Session.Config(), string(oam.FQDN), string(oam.FQDN), z.name)
 	if err != nil {
@@ -147,7 +146,7 @@ func (z *zetalytics) query(e *et.Event, name string, src *et.Source, keys []stri
 		for _, s := range result.Subdomains {
 			name := strings.ToLower(strings.TrimSpace(dns.RemoveAsteriskLabel(http.CleanName(s.FQDN))))
 			// if the subdomain is not in scope, skip it
-			if _, conf := e.Session.Scope().IsAssetInScope(&domain.FQDN{Name: name}, 0); conf > 0 {
+			if _, conf := e.Session.Scope().IsAssetInScope(&oamdns.FQDN{Name: name}, 0); conf > 0 {
 				names.Insert(name)
 			}
 		}

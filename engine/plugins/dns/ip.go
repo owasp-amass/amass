@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -15,10 +15,9 @@ import (
 	et "github.com/owasp-amass/amass/v4/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
-	"github.com/owasp-amass/open-asset-model/domain"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
+	"github.com/owasp-amass/open-asset-model/general"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
-	"github.com/owasp-amass/open-asset-model/property"
-	"github.com/owasp-amass/open-asset-model/relation"
 	"github.com/owasp-amass/resolve"
 )
 
@@ -34,7 +33,7 @@ type relIP struct {
 }
 
 func (d *dnsIP) check(e *et.Event) error {
-	fqdn, ok := e.Entity.Asset.(*domain.FQDN)
+	fqdn, ok := e.Entity.Asset.(*oamdns.FQDN)
 	if !ok {
 		return errors.New("failed to extract the FQDN asset")
 	}
@@ -102,7 +101,7 @@ func (d *dnsIP) lookup(e *et.Event, fqdn string, since time.Time) []*relIP {
 func (d *dnsIP) query(e *et.Event, name *dbt.Entity, src *et.Source) []*relIP {
 	var ips []*relIP
 
-	fqdn := name.Asset.(*domain.FQDN)
+	fqdn := name.Asset.(*oamdns.FQDN)
 	for _, qtype := range d.queries {
 		if rr, err := support.PerformQuery(fqdn.Name, qtype); err == nil {
 			if records := d.store(e, name, src, rr); len(records) > 0 {
@@ -122,9 +121,9 @@ func (d *dnsIP) store(e *et.Event, fqdn *dbt.Entity, src *et.Source, rr []*resol
 		if record.Type == dns.TypeA {
 			if ip, err := e.Session.Cache().CreateAsset(&oamnet.IPAddress{Address: netip.MustParseAddr(record.Data), Type: "IPv4"}); err == nil && ip != nil {
 				if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
-					Relation: &relation.BasicDNSRelation{
+					Relation: &oamdns.BasicDNSRelation{
 						Name: "dns_record",
-						Header: relation.RRHeader{
+						Header: oamdns.RRHeader{
 							RRType: int(record.Type),
 							Class:  1,
 						},
@@ -133,7 +132,7 @@ func (d *dnsIP) store(e *et.Event, fqdn *dbt.Entity, src *et.Source, rr []*resol
 					ToEntity:   ip,
 				}); err == nil && edge != nil {
 					ips = append(ips, &relIP{rtype: "dns_record", ip: ip})
-					_, _ = e.Session.Cache().CreateEdgeProperty(edge, &property.SourceProperty{
+					_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
 						Source:     src.Name,
 						Confidence: src.Confidence,
 					})
@@ -144,9 +143,9 @@ func (d *dnsIP) store(e *et.Event, fqdn *dbt.Entity, src *et.Source, rr []*resol
 		} else if record.Type == dns.TypeAAAA {
 			if ip, err := e.Session.Cache().CreateAsset(&oamnet.IPAddress{Address: netip.MustParseAddr(record.Data), Type: "IPv6"}); err == nil {
 				if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
-					Relation: &relation.BasicDNSRelation{
+					Relation: &oamdns.BasicDNSRelation{
 						Name: "dns_record",
-						Header: relation.RRHeader{
+						Header: oamdns.RRHeader{
 							RRType: int(record.Type),
 							Class:  1,
 						},
@@ -155,7 +154,7 @@ func (d *dnsIP) store(e *et.Event, fqdn *dbt.Entity, src *et.Source, rr []*resol
 					ToEntity:   ip,
 				}); err == nil && edge != nil {
 					ips = append(ips, &relIP{rtype: "dns_record", ip: ip})
-					_, _ = e.Session.Cache().CreateEdgeProperty(edge, &property.SourceProperty{
+					_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
 						Source:     src.Name,
 						Confidence: src.Confidence,
 					})

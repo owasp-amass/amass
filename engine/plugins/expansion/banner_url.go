@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -12,8 +12,8 @@ import (
 	et "github.com/owasp-amass/amass/v4/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
-	"github.com/owasp-amass/open-asset-model/property"
-	"github.com/owasp-amass/open-asset-model/service"
+	"github.com/owasp-amass/open-asset-model/general"
+	"github.com/owasp-amass/open-asset-model/platform"
 	oamurl "github.com/owasp-amass/open-asset-model/url"
 )
 
@@ -59,7 +59,7 @@ func (bu *bannerURLs) Stop() {
 }
 
 func (bu *bannerURLs) check(e *et.Event) error {
-	_, ok := e.Entity.Asset.(*service.Service)
+	_, ok := e.Entity.Asset.(*platform.Service)
 	if !ok {
 		return errors.New("failed to extract the Service asset")
 	}
@@ -83,7 +83,7 @@ func (bu *bannerURLs) check(e *et.Event) error {
 }
 
 func (bu *bannerURLs) query(e *et.Event, asset *dbt.Entity) []*dbt.Entity {
-	serv := asset.Asset.(*service.Service)
+	serv := asset.Asset.(*platform.Service)
 
 	if serv.BannerLen == 0 {
 		return nil
@@ -102,7 +102,7 @@ func (bu *bannerURLs) store(e *et.Event, urls []*oamurl.URL) []*dbt.Entity {
 	for _, u := range urls {
 		if a, err := e.Session.Cache().CreateAsset(u); err == nil && a != nil {
 			assets = append(assets, a)
-			_, _ = e.Session.Cache().CreateEntityProperty(a, &property.SourceProperty{
+			_, _ = e.Session.Cache().CreateEntityProperty(a, &general.SourceProperty{
 				Source:     bu.source.Name,
 				Confidence: bu.source.Confidence,
 			})

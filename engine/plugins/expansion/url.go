@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -16,9 +16,9 @@ import (
 	et "github.com/owasp-amass/amass/v4/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
-	"github.com/owasp-amass/open-asset-model/domain"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
+	"github.com/owasp-amass/open-asset-model/general"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
-	"github.com/owasp-amass/open-asset-model/relation"
 	"github.com/owasp-amass/open-asset-model/url"
 )
 
@@ -90,7 +90,7 @@ func (u *urlexpand) check(e *et.Event) error {
 		}
 	} else {
 		tstr = string(oam.FQDN)
-		if _, conf := e.Session.Scope().IsAssetInScope(&domain.FQDN{Name: oamu.Host}, 0); conf > 0 {
+		if _, conf := e.Session.Scope().IsAssetInScope(&oamdns.FQDN{Name: oamu.Host}, 0); conf > 0 {
 			inscope = true
 		}
 	}
@@ -176,13 +176,13 @@ func (u *urlexpand) store(e *et.Event, tstr string, asset *dbt.Entity, m *config
 	var findings []*support.Finding
 
 	if tstr == string(oam.FQDN) && m.IsMatch(string(oam.FQDN)) {
-		if a, err := e.Session.Cache().CreateAsset(&domain.FQDN{Name: oamu.Host}); err == nil && a != nil {
+		if a, err := e.Session.Cache().CreateAsset(&oamdns.FQDN{Name: oamu.Host}); err == nil && a != nil {
 			findings = append(findings, &support.Finding{
 				From:     asset,
 				FromName: "URL: " + oamu.Raw,
 				To:       a,
 				ToName:   oamu.Host,
-				Rel:      &relation.SimpleRelation{Name: "domain"},
+				Rel:      &general.SimpleRelation{Name: "domain"},
 			})
 		}
 	} else if ip, err := netip.ParseAddr(oamu.Host); err == nil && m.IsMatch(string(oam.IPAddress)) {
@@ -200,7 +200,7 @@ func (u *urlexpand) store(e *et.Event, tstr string, asset *dbt.Entity, m *config
 				FromName: "URL: " + oamu.Raw,
 				To:       a,
 				ToName:   ip.String(),
-				Rel:      &relation.SimpleRelation{Name: "ip_address"},
+				Rel:      &general.SimpleRelation{Name: "ip_address"},
 			})
 		}
 	}

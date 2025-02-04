@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -22,28 +22,11 @@ import (
 	oamcert "github.com/owasp-amass/open-asset-model/certificate"
 	"github.com/owasp-amass/open-asset-model/contact"
 	"github.com/owasp-amass/open-asset-model/people"
-	"github.com/owasp-amass/open-asset-model/service"
+	"github.com/owasp-amass/open-asset-model/platform"
 	oamurl "github.com/owasp-amass/open-asset-model/url"
 )
 
 var postalHost, postalPort string
-
-func EmailToOAMEmailAddress(e string) *contact.EmailAddress {
-	if e == "" {
-		return nil
-	}
-	email := strings.ToLower(strings.TrimSpace(e))
-
-	parts := strings.Split(email, "@")
-	if len(parts) != 2 {
-		return nil
-	}
-	return &contact.EmailAddress{
-		Address:  email,
-		Username: parts[0],
-		Domain:   parts[1],
-	}
-}
 
 func FullNameToPerson(raw string) *people.Person {
 	if raw == "" {
@@ -218,9 +201,9 @@ func TimeToJSONString(t *time.Time) string {
 	return t.UTC().Format("2006-01-02T15:04:05Z07:00")
 }
 
-func ServiceWithIdentifier(h *maphash.Hash, sessionid, address string) *service.Service {
+func ServiceWithIdentifier(h *maphash.Hash, sessionid, address string) *platform.Service {
 	_, _ = h.WriteString(sessionid + address)
-	serv := &service.Service{
+	serv := &platform.Service{
 		Identifier: address + strconv.Itoa(int(h.Sum64())),
 	}
 	h.Reset()

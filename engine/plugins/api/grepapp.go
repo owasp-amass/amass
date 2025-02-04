@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -22,7 +22,7 @@ import (
 	"github.com/owasp-amass/amass/v4/utils/net/http"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
-	"github.com/owasp-amass/open-asset-model/domain"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	"go.uber.org/ratelimit"
 )
 
@@ -57,7 +57,7 @@ func (g *grepApp) Start(r et.Registry) error {
 		Name:         name,
 		Priority:     7,
 		MaxInstances: 10,
-		Transforms:   []string{string(oam.EmailAddress)},
+		Transforms:   []string{string(oam.Identifier)},
 		EventType:    oam.FQDN,
 		Callback:     g.check,
 	}); err != nil {
@@ -73,14 +73,14 @@ func (g *grepApp) Stop() {
 }
 
 func (g *grepApp) check(e *et.Event) error {
-	fqdn, ok := e.Entity.Asset.(*domain.FQDN)
+	fqdn, ok := e.Entity.Asset.(*oamdns.FQDN)
 	if !ok {
 		return errors.New("failed to extract the FQDN asset")
 	}
 
 	if a, conf := e.Session.Scope().IsAssetInScope(fqdn, 0); conf == 0 || a == nil {
 		return nil
-	} else if f, ok := a.(*domain.FQDN); !ok || f == nil || !strings.EqualFold(fqdn.Name, f.Name) {
+	} else if f, ok := a.(*oamdns.FQDN); !ok || f == nil || !strings.EqualFold(fqdn.Name, f.Name) {
 		return nil
 	}
 

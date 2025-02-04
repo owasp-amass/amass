@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -14,16 +14,16 @@ import (
 	jarm "github.com/caffix/jarm-go"
 	"github.com/owasp-amass/amass/v4/utils/net"
 	oam "github.com/owasp-amass/open-asset-model"
-	"github.com/owasp-amass/open-asset-model/domain"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
+	"github.com/owasp-amass/open-asset-model/general"
 	"github.com/owasp-amass/open-asset-model/network"
-	"github.com/owasp-amass/open-asset-model/relation"
 )
 
-func JARMFingerprint(target oam.Asset, portrel *relation.PortRelation) (string, error) {
+func JARMFingerprint(target oam.Asset, portrel *general.PortRelation) (string, error) {
 	var ipv6 bool
 	var host string
 
-	if fqdn, ok := target.(*domain.FQDN); ok {
+	if fqdn, ok := target.(*oamdns.FQDN); ok {
 		host = fqdn.Name
 	} else if ip, ok := target.(*network.IPAddress); ok {
 		ipv6 = ip.Address.Is6()

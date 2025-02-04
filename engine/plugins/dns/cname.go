@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -14,9 +14,8 @@ import (
 	et "github.com/owasp-amass/amass/v4/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
-	"github.com/owasp-amass/open-asset-model/domain"
-	"github.com/owasp-amass/open-asset-model/property"
-	"github.com/owasp-amass/open-asset-model/relation"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
+	"github.com/owasp-amass/open-asset-model/general"
 	"github.com/owasp-amass/resolve"
 )
 
@@ -31,7 +30,7 @@ type relAlias struct {
 }
 
 func (d *dnsCNAME) check(e *et.Event) error {
-	_, ok := e.Entity.Asset.(*domain.FQDN)
+	_, ok := e.Entity.Asset.(*oamdns.FQDN)
 	if !ok {
 		return errors.New("failed to extract the FQDN asset")
 	}
@@ -58,7 +57,7 @@ func (d *dnsCNAME) check(e *et.Event) error {
 func (d *dnsCNAME) lookup(e *et.Event, fqdn *dbt.Entity, since time.Time) []*relAlias {
 	var alias []*relAlias
 
-	n, ok := fqdn.Asset.(*domain.FQDN)
+	n, ok := fqdn.Asset.(*oamdns.FQDN)
 	if !ok || n == nil {
 		return alias
 	}
@@ -74,7 +73,7 @@ func (d *dnsCNAME) lookup(e *et.Event, fqdn *dbt.Entity, since time.Time) []*rel
 func (d *dnsCNAME) query(e *et.Event, name *dbt.Entity) []*relAlias {
 	var alias []*relAlias
 
-	fqdn := name.Asset.(*domain.FQDN)
+	fqdn := name.Asset.(*oamdns.FQDN)
 	if rr, err := support.PerformQuery(fqdn.Name, dns.TypeCNAME); err == nil {
 		if records := d.store(e, name, rr); len(records) > 0 {
 			alias = append(alias, records...)
@@ -93,11 +92,11 @@ func (d *dnsCNAME) store(e *et.Event, fqdn *dbt.Entity, rr []*resolve.ExtractedA
 			continue
 		}
 
-		if cname, err := e.Session.Cache().CreateAsset(&domain.FQDN{Name: record.Data}); err == nil && cname != nil {
+		if cname, err := e.Session.Cache().CreateAsset(&oamdns.FQDN{Name: record.Data}); err == nil && cname != nil {
 			if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
-				Relation: &relation.BasicDNSRelation{
+				Relation: &oamdns.BasicDNSRelation{
 					Name: "dns_record",
-					Header: relation.RRHeader{
+					Header: oamdns.RRHeader{
 						RRType: int(record.Type),
 						Class:  1,
 					},
@@ -106,7 +105,7 @@ func (d *dnsCNAME) store(e *et.Event, fqdn *dbt.Entity, rr []*resolve.ExtractedA
 				ToEntity:   cname,
 			}); err == nil && edge != nil {
 				alias = append(alias, &relAlias{alias: fqdn, target: cname})
-				_, _ = e.Session.Cache().CreateEdgeProperty(edge, &property.SourceProperty{
+				_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
 					Source:     d.plugin.source.Name,
 					Confidence: d.plugin.source.Confidence,
 				})
@@ -119,7 +118,7 @@ func (d *dnsCNAME) store(e *et.Event, fqdn *dbt.Entity, rr []*resolve.ExtractedA
 
 func (d *dnsCNAME) process(e *et.Event, alias []*relAlias) {
 	for _, a := range alias {
-		target := a.target.Asset.(*domain.FQDN)
+		target := a.target.Asset.(*oamdns.FQDN)
 
 		_ = e.Dispatcher.DispatchEvent(&et.Event{
 			Name:    target.Name,

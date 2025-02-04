@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -11,8 +11,8 @@ import (
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/contact"
-	"github.com/owasp-amass/open-asset-model/domain"
-	"github.com/owasp-amass/open-asset-model/property"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
+	"github.com/owasp-amass/open-asset-model/general"
 )
 
 type Finding struct {
@@ -31,7 +31,7 @@ func ProcessAssetsWithSource(e *et.Event, findings []*Finding, src *et.Source, p
 			FromEntity: finding.From,
 			ToEntity:   finding.To,
 		}); err == nil && edge != nil {
-			_, _ = e.Session.Cache().CreateEdgeProperty(edge, &property.SourceProperty{
+			_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
 				Source:     src.Name,
 				Confidence: src.Confidence,
 			})
@@ -51,12 +51,12 @@ func ProcessAssetsWithSource(e *et.Event, findings []*Finding, src *et.Source, p
 
 func ProcessFQDNsWithSource(e *et.Event, entities []*dbt.Entity, src *et.Source) {
 	for _, entity := range entities {
-		fqdn, ok := entity.Asset.(*domain.FQDN)
+		fqdn, ok := entity.Asset.(*oamdns.FQDN)
 		if !ok || fqdn == nil {
 			continue
 		}
 
-		_, _ = e.Session.Cache().CreateEntityProperty(entity, &property.SourceProperty{
+		_, _ = e.Session.Cache().CreateEntityProperty(entity, &general.SourceProperty{
 			Source:     src.Name,
 			Confidence: src.Confidence,
 		})
@@ -88,7 +88,7 @@ func ProcessEmailsWithSource(e *et.Event, entities []*dbt.Entity, src *et.Source
 			}
 		}
 
-		_, _ = e.Session.Cache().CreateEntityProperty(entity, &property.SourceProperty{
+		_, _ = e.Session.Cache().CreateEntityProperty(entity, &general.SourceProperty{
 			Source:     src.Name,
 			Confidence: src.Confidence,
 		})

@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -38,7 +38,7 @@ import (
 	"github.com/owasp-amass/amass/v4/utils/afmt"
 	"github.com/owasp-amass/asset-db/repository"
 	dbt "github.com/owasp-amass/asset-db/types"
-	"github.com/owasp-amass/open-asset-model/domain"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
 )
 
@@ -218,7 +218,7 @@ func printContactInfo(assoc *dbt.Entity, regrel string, since time.Time, db repo
 func getAssociations(name string, since time.Time, db repository.Repository) []*dbt.Entity {
 	var results []*dbt.Entity
 
-	fqdns, err := db.FindEntitiesByContent(&domain.FQDN{Name: name}, since)
+	fqdns, err := db.FindEntitiesByContent(&oamdns.FQDN{Name: name}, since)
 	if err != nil || len(fqdns) == 0 {
 		return results
 	}

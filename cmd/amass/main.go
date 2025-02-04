@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -42,7 +42,7 @@ import (
 	"github.com/owasp-amass/amass/v4/config"
 	et "github.com/owasp-amass/amass/v4/engine/types"
 	"github.com/owasp-amass/amass/v4/utils/afmt"
-	"github.com/owasp-amass/open-asset-model/domain"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
 	slogcommon "github.com/samber/slog-common"
 	slogsyslog "github.com/samber/slog-syslog/v2"
@@ -164,7 +164,7 @@ func convertScopeToAssets(scope *config.Scope) []*et.Asset {
 
 	// Convert Domains to assets.
 	for _, d := range scope.Domains {
-		fqdn := domain.FQDN{Name: d}
+		fqdn := oamdns.FQDN{Name: d}
 		data := et.AssetData{
 			OAMAsset: fqdn,
 			OAMType:  fqdn.AssetType(),

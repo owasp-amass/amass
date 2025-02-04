@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -14,10 +14,9 @@ import (
 	et "github.com/owasp-amass/amass/v4/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
-	"github.com/owasp-amass/open-asset-model/domain"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
+	"github.com/owasp-amass/open-asset-model/general"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
-	"github.com/owasp-amass/open-asset-model/property"
-	"github.com/owasp-amass/open-asset-model/relation"
 )
 
 type dnsPlugin struct {
@@ -142,7 +141,7 @@ func (d *dnsPlugin) lookupWithinTTL(session et.Session, name string, atype oam.A
 		return results
 	}
 
-	ents, err := session.Cache().FindEntitiesByContent(&domain.FQDN{Name: name}, time.Time{})
+	ents, err := session.Cache().FindEntitiesByContent(&oamdns.FQDN{Name: name}, time.Time{})
 	if err != nil || len(ents) != 1 {
 		return results
 	}
@@ -154,7 +153,7 @@ func (d *dnsPlugin) lookupWithinTTL(session et.Session, name string, atype oam.A
 				var found bool
 
 				for _, tag := range tags {
-					if _, ok := tag.Property.(*property.SourceProperty); ok {
+					if _, ok := tag.Property.(*general.SourceProperty); ok {
 						found = true
 						break
 					}
@@ -166,15 +165,15 @@ func (d *dnsPlugin) lookupWithinTTL(session et.Session, name string, atype oam.A
 
 			var rrtype int
 			switch v := edge.Relation.(type) {
-			case *relation.BasicDNSRelation:
+			case *oamdns.BasicDNSRelation:
 				if v.RelationType() == reltype {
 					rrtype = v.Header.RRType
 				}
-			case *relation.PrefDNSRelation:
+			case *oamdns.PrefDNSRelation:
 				if v.RelationType() == reltype {
 					rrtype = v.Header.RRType
 				}
-			case *relation.SRVDNSRelation:
+			case *oamdns.SRVDNSRelation:
 				if v.RelationType() == reltype {
 					rrtype = v.Header.RRType
 				}
@@ -197,7 +196,7 @@ func (d *dnsPlugin) lookupWithinTTL(session et.Session, name string, atype oam.A
 func sweepCallback(e *et.Event, ip *oamnet.IPAddress, src *et.Source) {
 	entity, err := e.Session.Cache().CreateAsset(ip)
 	if err == nil && entity != nil {
-		_, _ = e.Session.Cache().CreateEntityProperty(entity, &property.SourceProperty{
+		_, _ = e.Session.Cache().CreateEntityProperty(entity, &general.SourceProperty{
 			Source:     src.Name,
 			Confidence: src.Confidence,
 		})

@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -21,9 +21,8 @@ import (
 	amassnet "github.com/owasp-amass/amass/v4/utils/net"
 	"github.com/owasp-amass/amass/v4/utils/net/dns"
 	oam "github.com/owasp-amass/open-asset-model"
-	"github.com/owasp-amass/open-asset-model/domain"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
-	"github.com/owasp-amass/open-asset-model/relation"
 	"github.com/owasp-amass/open-asset-model/url"
 	"github.com/owasp-amass/resolve"
 	xurls "mvdan.cc/xurls/v2"
@@ -286,7 +285,7 @@ func IPAddressSweep(e *et.Event, addr *oamnet.IPAddress, src *et.Source, size in
 	}
 }
 
-func IsCNAME(session et.Session, name *domain.FQDN) (*domain.FQDN, bool) {
+func IsCNAME(session et.Session, name *oamdns.FQDN) (*oamdns.FQDN, bool) {
 	fqdns, err := session.Cache().FindEntitiesByContent(name, session.Cache().StartTime())
 	if err != nil || len(fqdns) != 1 {
 		return nil, false
@@ -295,9 +294,9 @@ func IsCNAME(session et.Session, name *domain.FQDN) (*domain.FQDN, bool) {
 
 	if edges, err := session.Cache().OutgoingEdges(fqdn, session.Cache().StartTime(), "dns_record"); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
-			if rec, ok := edge.Relation.(*relation.BasicDNSRelation); ok && rec.Header.RRType == 5 {
+			if rec, ok := edge.Relation.(*oamdns.BasicDNSRelation); ok && rec.Header.RRType == 5 {
 				if to, err := session.Cache().FindEntityById(edge.ToEntity.ID); err == nil {
-					if cname, ok := to.Asset.(*domain.FQDN); ok {
+					if cname, ok := to.Asset.(*oamdns.FQDN); ok {
 						return cname, true
 					}
 				}
@@ -307,7 +306,7 @@ func IsCNAME(session et.Session, name *domain.FQDN) (*domain.FQDN, bool) {
 	return nil, false
 }
 
-func NameIPAddresses(session et.Session, name *domain.FQDN) []*oamnet.IPAddress {
+func NameIPAddresses(session et.Session, name *oamdns.FQDN) []*oamnet.IPAddress {
 	fqdns, err := session.Cache().FindEntitiesByContent(name, session.Cache().StartTime())
 	if err != nil || len(fqdns) != 1 {
 		return nil
@@ -317,7 +316,7 @@ func NameIPAddresses(session et.Session, name *domain.FQDN) []*oamnet.IPAddress 
 	var results []*oamnet.IPAddress
 	if edges, err := session.Cache().OutgoingEdges(fqdn, session.Cache().StartTime(), "dns_record"); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
-			if rec, ok := edge.Relation.(*relation.BasicDNSRelation); ok && (rec.Header.RRType == 1 || rec.Header.RRType == 28) {
+			if rec, ok := edge.Relation.(*oamdns.BasicDNSRelation); ok && (rec.Header.RRType == 1 || rec.Header.RRType == 28) {
 				if to, err := session.Cache().FindEntityById(edge.ToEntity.ID); err == nil {
 					if ip, ok := to.Asset.(*oamnet.IPAddress); ok {
 						results = append(results, ip)
@@ -333,7 +332,7 @@ func NameIPAddresses(session et.Session, name *domain.FQDN) []*oamnet.IPAddress 
 	return nil
 }
 
-func NameResolved(session et.Session, name *domain.FQDN) bool {
+func NameResolved(session et.Session, name *oamdns.FQDN) bool {
 	if _, found := IsCNAME(session, name); found {
 		return true
 	}

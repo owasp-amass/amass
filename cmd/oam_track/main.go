@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -37,7 +37,7 @@ import (
 	"github.com/owasp-amass/amass/v4/utils/afmt"
 	"github.com/owasp-amass/asset-db/repository"
 	dbt "github.com/owasp-amass/asset-db/types"
-	"github.com/owasp-amass/open-asset-model/domain"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
 )
 
 const (
@@ -160,7 +160,7 @@ func getNewNames(domains []string, since time.Time, db repository.Repository) []
 
 	var assets []*dbt.Entity
 	for _, d := range domains {
-		if ents, err := db.FindEntitiesByContent(&domain.FQDN{Name: d}, since); err == nil && len(ents) == 1 {
+		if ents, err := db.FindEntitiesByContent(&oamdns.FQDN{Name: d}, since); err == nil && len(ents) == 1 {
 			if n, err := utils.FindByFQDNScope(db, ents[0], since); err == nil && len(n) > 0 {
 				assets = append(assets, n...)
 			}
@@ -174,7 +174,7 @@ func getNewNames(domains []string, since time.Time, db repository.Repository) []
 		var latest time.Time
 
 		for _, a := range assets {
-			if _, ok := a.Asset.(*domain.FQDN); ok && a.LastSeen.After(latest) {
+			if _, ok := a.Asset.(*oamdns.FQDN); ok && a.LastSeen.After(latest) {
 				latest = a.LastSeen
 			}
 		}
@@ -186,7 +186,7 @@ func getNewNames(domains []string, since time.Time, db repository.Repository) []
 	defer res.Close()
 
 	for _, a := range assets {
-		if n, ok := a.Asset.(*domain.FQDN); ok && !res.Has(n.Name) &&
+		if n, ok := a.Asset.(*oamdns.FQDN); ok && !res.Has(n.Name) &&
 			(a.CreatedAt.Equal(since) || a.CreatedAt.After(since)) &&
 			(a.LastSeen.Equal(since) || a.LastSeen.After(since)) {
 			res.Insert(n.Name)

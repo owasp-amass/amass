@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -20,11 +20,10 @@ import (
 	oam "github.com/owasp-amass/open-asset-model"
 	oamcert "github.com/owasp-amass/open-asset-model/certificate"
 	"github.com/owasp-amass/open-asset-model/contact"
-	"github.com/owasp-amass/open-asset-model/domain"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
+	"github.com/owasp-amass/open-asset-model/general"
 	"github.com/owasp-amass/open-asset-model/network"
 	"github.com/owasp-amass/open-asset-model/org"
-	"github.com/owasp-amass/open-asset-model/property"
-	"github.com/owasp-amass/open-asset-model/relation"
 )
 
 type tlsexpand struct {
@@ -44,7 +43,7 @@ func NewTLSCerts() et.Plugin {
 			string(oam.ContactRecord),
 			string(oam.Organization),
 			string(oam.Location),
-			string(oam.EmailAddress),
+			string(oam.Identifier),
 			string(oam.TLSCertificate),
 		},
 		source: &et.Source{
@@ -129,7 +128,7 @@ func (te *tlsexpand) lookup(e *et.Event, asset *dbt.Entity, m *config.Matches) [
 			rtypes = append(rtypes, "subject_contact", "issuer_contact")
 		case string(oam.IPAddress):
 			rtypes = append(rtypes, "san_ip_address")
-		case string(oam.EmailAddress):
+		case string(oam.Identifier):
 			rtypes = append(rtypes, "san_email_address")
 		case string(oam.TLSCertificate):
 			rtypes = append(rtypes, "issuing_certificate")
@@ -170,7 +169,7 @@ func (te *tlsexpand) lookup(e *et.Event, asset *dbt.Entity, m *config.Matches) [
 func (te *tlsexpand) oneOfSources(e *et.Event, edge *dbt.Edge, src *et.Source, since time.Time) bool {
 	if tags, err := e.Session.Cache().GetEdgeTags(edge, since, src.Name); err == nil && len(tags) > 0 {
 		for _, tag := range tags {
-			if _, ok := tag.Property.(*property.SourceProperty); ok {
+			if _, ok := tag.Property.(*general.SourceProperty); ok {
 				return true
 			}
 		}
@@ -184,25 +183,25 @@ func (te *tlsexpand) store(e *et.Event, cert *x509.Certificate, asset *dbt.Entit
 
 	if m.IsMatch(string(oam.FQDN)) {
 		if common := t.SubjectCommonName; common != "" {
-			if a, err := e.Session.Cache().CreateAsset(&domain.FQDN{Name: common}); err == nil && a != nil {
+			if a, err := e.Session.Cache().CreateAsset(&oamdns.FQDN{Name: common}); err == nil && a != nil {
 				findings = append(findings, &support.Finding{
 					From:     asset,
 					FromName: "TLSCertificate: " + t.SerialNumber,
 					To:       a,
 					ToName:   common,
-					Rel:      &relation.SimpleRelation{Name: "common_name"},
+					Rel:      &general.SimpleRelation{Name: "common_name"},
 				})
 			}
 		}
 		for _, n := range cert.DNSNames {
 			for _, name := range support.ScrapeSubdomainNames(strings.ToLower(strings.TrimSpace(n))) {
-				if a, err := e.Session.Cache().CreateAsset(&domain.FQDN{Name: name}); err == nil && a != nil {
+				if a, err := e.Session.Cache().CreateAsset(&oamdns.FQDN{Name: name}); err == nil && a != nil {
 					findings = append(findings, &support.Finding{
 						From:     asset,
 						FromName: "TLSCertificate: " + t.SerialNumber,
 						To:       a,
 						ToName:   name,
-						Rel:      &relation.SimpleRelation{Name: "san_dns_name"},
+						Rel:      &general.SimpleRelation{Name: "san_dns_name"},
 					})
 				}
 			}
@@ -211,16 +210,19 @@ func (te *tlsexpand) store(e *et.Event, cert *x509.Certificate, asset *dbt.Entit
 
 	if m.IsMatch(string(oam.EmailAddress)) {
 		for _, emailstr := range cert.EmailAddresses {
-			if email := support.EmailToOAMEmailAddress(strings.ToLower(strings.TrimSpace(emailstr))); email != nil {
-				if a, err := e.Session.Cache().CreateAsset(email); err == nil && a != nil {
-					findings = append(findings, &support.Finding{
-						From:     asset,
-						FromName: "TLSCertificate: " + t.SerialNumber,
-						To:       a,
-						ToName:   email.Address,
-						Rel:      &relation.SimpleRelation{Name: "san_email_address"},
-					})
-				}
+			email := strings.ToLower(strings.TrimSpace(emailstr))
+
+			if a, err := e.Session.Cache().CreateAsset(&general.Identifier{
+				ID: email,
+				general.EmailAddress,
+			}); err == nil && a != nil {
+				findings = append(findings, &support.Finding{
+					From:     asset,
+					FromName: "TLSCertificate: " + t.SerialNumber,
+					To:       a,
+					ToName:   email,
+					Rel:      &general.SimpleRelation{Name: "san_email_address"},
+				})
 			}
 		}
 	}
@@ -241,7 +243,7 @@ func (te *tlsexpand) store(e *et.Event, cert *x509.Certificate, asset *dbt.Entit
 					FromName: "TLSCertificate: " + t.SerialNumber,
 					To:       a,
 					ToName:   oamip.Address.String(),
-					Rel:      &relation.SimpleRelation{Name: "san_ip_address"},
+					Rel:      &general.SimpleRelation{Name: "san_ip_address"},
 				})
 			}
 		}
@@ -256,7 +258,7 @@ func (te *tlsexpand) store(e *et.Event, cert *x509.Certificate, asset *dbt.Entit
 						FromName: "TLSCertificate: " + t.SerialNumber,
 						To:       a,
 						ToName:   oamurl.Raw,
-						Rel:      &relation.SimpleRelation{Name: "san_url"},
+						Rel:      &general.SimpleRelation{Name: "san_url"},
 					})
 				}
 			}
@@ -269,7 +271,7 @@ func (te *tlsexpand) store(e *et.Event, cert *x509.Certificate, asset *dbt.Entit
 						FromName: "TLSCertificate: " + t.SerialNumber,
 						To:       a,
 						ToName:   oamurl.Raw,
-						Rel:      &relation.SimpleRelation{Name: "issuing_certificate_url"},
+						Rel:      &general.SimpleRelation{Name: "issuing_certificate_url"},
 					})
 				}
 			}
@@ -282,7 +284,7 @@ func (te *tlsexpand) store(e *et.Event, cert *x509.Certificate, asset *dbt.Entit
 						FromName: "TLSCertificate: " + t.SerialNumber,
 						To:       a,
 						ToName:   oamurl.Raw,
-						Rel:      &relation.SimpleRelation{Name: "ocsp_server"},
+						Rel:      &general.SimpleRelation{Name: "ocsp_server"},
 					})
 				}
 			}
@@ -351,11 +353,11 @@ func (te *tlsexpand) storeContact(e *et.Event, c *tlsContact, asset *dbt.Entity,
 		if loc := support.StreetAddressToLocation(strings.TrimSpace(addr)); loc != nil {
 			if a, err := e.Session.Cache().CreateAsset(loc); err == nil && a != nil {
 				if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
-					Relation:   &relation.SimpleRelation{Name: "location"},
+					Relation:   &general.SimpleRelation{Name: "location"},
 					FromEntity: cr,
 					ToEntity:   a,
 				}); err == nil && edge != nil {
-					_, _ = e.Session.Cache().CreateEdgeProperty(edge, &property.SourceProperty{
+					_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
 						Source:     src.Name,
 						Confidence: src.Confidence,
 					})
@@ -366,11 +368,11 @@ func (te *tlsexpand) storeContact(e *et.Event, c *tlsContact, asset *dbt.Entity,
 	if len(ct.Organization) > 0 && ct.Organization[0] != "" && m.IsMatch(string(oam.Organization)) {
 		if a, err := e.Session.Cache().CreateAsset(&org.Organization{Name: ct.Organization[0]}); err == nil && a != nil {
 			if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
-				Relation:   &relation.SimpleRelation{Name: "organization"},
+				Relation:   &general.SimpleRelation{Name: "organization"},
 				FromEntity: cr,
 				ToEntity:   a,
 			}); err == nil && edge != nil {
-				_, _ = e.Session.Cache().CreateEdgeProperty(edge, &property.SourceProperty{
+				_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
 					Source:     src.Name,
 					Confidence: src.Confidence,
 				})
@@ -381,11 +383,11 @@ func (te *tlsexpand) storeContact(e *et.Event, c *tlsContact, asset *dbt.Entity,
 		if u := support.ExtractURLFromString(ct.OrganizationalUnit[0]); u != nil {
 			if a, err := e.Session.Cache().CreateAsset(u); err == nil && a != nil {
 				if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
-					Relation:   &relation.SimpleRelation{Name: "url"},
+					Relation:   &general.SimpleRelation{Name: "url"},
 					FromEntity: cr,
 					ToEntity:   a,
 				}); err == nil && edge != nil {
-					_, _ = e.Session.Cache().CreateEdgeProperty(edge, &property.SourceProperty{
+					_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
 						Source:     src.Name,
 						Confidence: src.Confidence,
 					})
@@ -400,7 +402,7 @@ func (te *tlsexpand) storeContact(e *et.Event, c *tlsContact, asset *dbt.Entity,
 		FromName: "TLSCertificate: " + t.SerialNumber,
 		To:       cr,
 		ToName:   "ContactRecord" + c.DiscoveredAt,
-		Rel:      &relation.SimpleRelation{Name: c.RelationName},
+		Rel:      &general.SimpleRelation{Name: c.RelationName},
 	})
 
 	return findings

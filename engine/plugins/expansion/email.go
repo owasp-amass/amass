@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -13,9 +13,8 @@ import (
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/contact"
-	"github.com/owasp-amass/open-asset-model/domain"
-	"github.com/owasp-amass/open-asset-model/property"
-	"github.com/owasp-amass/open-asset-model/relation"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
+	"github.com/owasp-amass/open-asset-model/general"
 )
 
 type emailexpand struct {
@@ -75,13 +74,13 @@ func (ee *emailexpand) store(e *et.Event, asset *dbt.Entity) []*support.Finding 
 	var findings []*support.Finding
 	oame := asset.Asset.(*contact.EmailAddress)
 
-	if a, err := e.Session.Cache().CreateAsset(&domain.FQDN{Name: oame.Domain}); err == nil && a != nil {
+	if a, err := e.Session.Cache().CreateAsset(&oamdns.FQDN{Name: oame.Domain}); err == nil && a != nil {
 		findings = append(findings, &support.Finding{
 			From:     asset,
 			FromName: "EmailAddress: " + asset.Asset.Key(),
 			To:       a,
 			ToName:   a.Asset.Key(),
-			Rel:      &relation.SimpleRelation{Name: "domain"},
+			Rel:      &general.SimpleRelation{Name: "domain"},
 		})
 	}
 
@@ -95,7 +94,7 @@ func (ee *emailexpand) process(e *et.Event, findings []*support.Finding) {
 			FromEntity: f.From,
 			ToEntity:   f.To,
 		}); err == nil && edge != nil {
-			_, _ = e.Session.Cache().CreateEdgeProperty(edge, &property.SourceProperty{
+			_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
 				Source:     ee.source.Name,
 				Confidence: ee.source.Confidence,
 			})

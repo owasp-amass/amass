@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -41,7 +41,7 @@ import (
 	"github.com/owasp-amass/amass/v4/utils/afmt"
 	"github.com/owasp-amass/asset-db/repository"
 	dbt "github.com/owasp-amass/asset-db/types"
-	"github.com/owasp-amass/open-asset-model/domain"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
 )
 
 const (
@@ -276,7 +276,7 @@ func getNames(ctx context.Context, domains []string, asninfo bool, db repository
 
 	var assets []*dbt.Entity
 	for _, d := range domains {
-		if ents, err := db.FindEntitiesByContent(&domain.FQDN{Name: d}, qtime); err == nil && len(ents) == 1 {
+		if ents, err := db.FindEntitiesByContent(&oamdns.FQDN{Name: d}, qtime); err == nil && len(ents) == 1 {
 			if n, err := utils.FindByFQDNScope(db, ents[0], qtime); err == nil && len(n) > 0 {
 				assets = append(assets, n...)
 			}
@@ -288,7 +288,7 @@ func getNames(ctx context.Context, domains []string, asninfo bool, db repository
 
 	var names []*utils.Output
 	for _, a := range assets {
-		if n, ok := a.Asset.(*domain.FQDN); ok && !filter.Has(n.Name) {
+		if n, ok := a.Asset.(*oamdns.FQDN); ok && !filter.Has(n.Name) {
 			names = append(names, &utils.Output{Name: n.Name})
 			filter.Insert(n.Name)
 		}

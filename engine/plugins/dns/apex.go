@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -12,8 +12,8 @@ import (
 	"github.com/owasp-amass/amass/v4/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v4/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
-	"github.com/owasp-amass/open-asset-model/domain"
-	"github.com/owasp-amass/open-asset-model/relation"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
+	"github.com/owasp-amass/open-asset-model/general"
 )
 
 type dnsApex struct {
@@ -22,7 +22,7 @@ type dnsApex struct {
 }
 
 func (d *dnsApex) check(e *et.Event) error {
-	fqdn, ok := e.Entity.Asset.(*domain.FQDN)
+	fqdn, ok := e.Entity.Asset.(*oamdns.FQDN)
 	if !ok {
 		return errors.New("failed to extract the FQDN asset")
 	}
@@ -38,7 +38,7 @@ func (d *dnsApex) check(e *et.Event) error {
 		if idx := strings.Index(fqdn.Name, name); idx != -1 && idx != 0 && idx < best {
 			best = idx
 			if ents, err := e.Session.Cache().FindEntitiesByContent(
-				&domain.FQDN{Name: name}, e.Session.Cache().StartTime()); err == nil && len(ents) == 1 {
+				&oamdns.FQDN{Name: name}, e.Session.Cache().StartTime()); err == nil && len(ents) == 1 {
 				apex = ents[0]
 			}
 		}
@@ -52,7 +52,7 @@ func (d *dnsApex) check(e *et.Event) error {
 
 func (d *dnsApex) store(e *et.Event, name string, fqdn, apex *dbt.Entity) {
 	if _, err := e.Session.Cache().CreateEdge(&dbt.Edge{
-		Relation:   &relation.SimpleRelation{Name: "node"},
+		Relation:   &general.SimpleRelation{Name: "node"},
 		FromEntity: apex,
 		ToEntity:   fqdn,
 	}); err == nil {

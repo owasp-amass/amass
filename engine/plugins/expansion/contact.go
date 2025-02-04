@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -32,7 +32,7 @@ func NewContacts() et.Plugin {
 			string(oam.Person),
 			string(oam.Organization),
 			string(oam.Location),
-			string(oam.EmailAddress),
+			string(oam.Identifier),
 			string(oam.Phone),
 		},
 		source: &et.Source{
@@ -115,8 +115,8 @@ func (cr *contactrec) lookup(e *et.Event, entity *dbt.Entity, m *config.Matches)
 			rtypes = append(rtypes, "organization")
 		case string(oam.Location):
 			rtypes = append(rtypes, "location")
-		case string(oam.EmailAddress):
-			rtypes = append(rtypes, "email")
+		case string(oam.Identifier):
+			rtypes = append(rtypes, "id")
 		case string(oam.Phone):
 			rtypes = append(rtypes, "phone")
 		case string(oam.URL):
