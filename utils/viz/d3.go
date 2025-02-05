@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -310,22 +310,27 @@ type d3Graph struct {
 // WriteD3Data generates a HTML file that displays the Amass graph using D3.
 func WriteD3Data(output io.Writer, nodes []Node, edges []Edge) error {
 	colors := map[string]string{
-		string(oam.FQDN):             "green",
-		string(oam.IPAddress):        "orange",
+		string(oam.Account):          "chocolate",
 		string(oam.AutnumRecord):     "yellow",
-		string(oam.IPNetRecord):      "yellow",
-		string(oam.Netblock):         "pink",
 		string(oam.AutonomousSystem): "blue",
 		string(oam.ContactRecord):    "cornsilk",
-		string(oam.EmailAddress):     "chocolate",
+		string(oam.DomainRecord):     "yellow",
+		string(oam.File):             "azure",
+		string(oam.FQDN):             "green",
+		string(oam.FundsTransfer):    "red",
+		string(oam.Identifier):       "chocolate",
+		string(oam.IPAddress):        "orange",
+		string(oam.IPNetRecord):      "yellow",
 		string(oam.Location):         "darkgray",
-		string(oam.Phone):            "coral",
+		string(oam.Netblock):         "pink",
 		string(oam.Organization):     "aqua",
 		string(oam.Person):           "bisque",
+		string(oam.Phone):            "coral",
+		string(oam.Product):          "darkslategrey",
+		string(oam.ProductRelease):   "darkslategrey",
+		string(oam.Service):          "darkslategrey",
 		string(oam.TLSCertificate):   "deeppink",
 		string(oam.URL):              "azure",
-		string(oam.DomainRecord):     "yellow",
-		string(oam.Service):          "darkslategrey",
 	}
 
 	graph := &d3Graph{Name: "OWASP Amass - Attack Surface Mapping"}

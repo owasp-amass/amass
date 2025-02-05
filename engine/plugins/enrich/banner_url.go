@@ -2,7 +2,7 @@
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
-package expansion
+package enrich
 
 import (
 	"errors"
@@ -85,12 +85,12 @@ func (bu *bannerURLs) check(e *et.Event) error {
 func (bu *bannerURLs) query(e *et.Event, asset *dbt.Entity) []*dbt.Entity {
 	serv := asset.Asset.(*platform.Service)
 
-	if serv.BannerLen == 0 {
+	if serv.OutputLen == 0 {
 		return nil
 	}
 
 	var results []*dbt.Entity
-	if urls := support.ExtractURLsFromString(serv.Banner); len(urls) > 0 {
+	if urls := support.ExtractURLsFromString(serv.Output); len(urls) > 0 {
 		results = append(results, bu.store(e, urls)...)
 	}
 	return results

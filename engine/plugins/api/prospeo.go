@@ -19,6 +19,7 @@ import (
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
+	"github.com/owasp-amass/open-asset-model/general"
 	"go.uber.org/ratelimit"
 )
 
@@ -57,7 +58,7 @@ func (p *Prospeo) Start(r et.Registry) error {
 	if err := r.RegisterHandler(&et.Handler{
 		Plugin:     p,
 		Name:       name,
-		Transforms: []string{string(oam.EmailAddress)},
+		Transforms: []string{string(oam.Identifier)},
 		EventType:  oam.FQDN,
 		Callback:   p.check,
 	}); err != nil {
@@ -84,7 +85,7 @@ func (p *Prospeo) check(e *et.Event) error {
 		return nil
 	}
 
-	since, err := support.TTLStartTime(e.Session.Config(), string(oam.FQDN), string(oam.EmailAddress), p.name)
+	since, err := support.TTLStartTime(e.Session.Config(), string(oam.FQDN), string(oam.Identifier), p.name)
 	if err != nil {
 		return err
 	}
@@ -104,7 +105,15 @@ func (p *Prospeo) check(e *et.Event) error {
 }
 
 func (p *Prospeo) lookup(e *et.Event, name string, since time.Time) []*dbt.Entity {
-	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.EmailAddress), p.source, since)
+	var emails []*dbt.Entity
+
+	for _, e := range support.SourceToAssetsWithinTTL(e.Session, name, string(oam.Identifier), p.source, since) {
+		if email, ok := e.Asset.(*general.Identifier); ok && email != nil && email.Type == general.EmailAddress {
+			emails = append(emails, e)
+		}
+	}
+
+	return emails
 }
 
 func (p *Prospeo) query(e *et.Event, name string) []*dbt.Entity {

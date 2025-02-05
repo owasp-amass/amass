@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -13,8 +13,8 @@ import (
 	et "github.com/owasp-amass/amass/v4/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
-	"github.com/owasp-amass/open-asset-model/domain"
-	"github.com/owasp-amass/open-asset-model/relation"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
+	"github.com/owasp-amass/open-asset-model/general"
 )
 
 type fqdnEndpoint struct {
@@ -27,7 +27,7 @@ func (fe *fqdnEndpoint) Name() string {
 }
 
 func (fe *fqdnEndpoint) check(e *et.Event) error {
-	fqdn, ok := e.Entity.Asset.(*domain.FQDN)
+	fqdn, ok := e.Entity.Asset.(*oamdns.FQDN)
 	if !ok {
 		return errors.New("failed to extract the FQDN asset")
 	}
@@ -70,7 +70,7 @@ func (fe *fqdnEndpoint) lookup(e *et.Event, host *dbt.Entity, src *et.Source, si
 			if _, err := e.Session.Cache().GetEdgeTags(edge, since, src.Name); err != nil {
 				continue
 			}
-			if _, ok := edge.Relation.(*relation.PortRelation); ok {
+			if _, ok := edge.Relation.(*general.PortRelation); ok {
 				if srv, err := e.Session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && srv != nil && srv.Asset.AssetType() == oam.Service {
 					findings = append(findings, &support.Finding{
 						From:     host,
@@ -88,7 +88,7 @@ func (fe *fqdnEndpoint) lookup(e *et.Event, host *dbt.Entity, src *et.Source, si
 
 func (fe *fqdnEndpoint) query(e *et.Event, host *dbt.Entity) []*support.Finding {
 	var findings []*support.Finding
-	fqdn := host.Asset.(*domain.FQDN)
+	fqdn := host.Asset.(*oamdns.FQDN)
 
 	for _, port := range e.Session.Config().Scope.Ports {
 		addr := fqdn.Name + ":" + strconv.Itoa(port)

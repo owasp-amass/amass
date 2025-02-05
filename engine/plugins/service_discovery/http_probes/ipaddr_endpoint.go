@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -14,9 +14,8 @@ import (
 	amassnet "github.com/owasp-amass/amass/v4/utils/net"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
+	"github.com/owasp-amass/open-asset-model/general"
 	"github.com/owasp-amass/open-asset-model/network"
-	"github.com/owasp-amass/open-asset-model/property"
-	"github.com/owasp-amass/open-asset-model/relation"
 )
 
 type ipaddrEndpoint struct {
@@ -76,7 +75,7 @@ func (r *ipaddrEndpoint) lookup(e *et.Event, ip *dbt.Entity, src *et.Source, sin
 			if _, err := e.Session.Cache().GetEdgeTags(edge, since, src.Name); err != nil {
 				continue
 			}
-			if _, ok := edge.Relation.(*relation.PortRelation); ok {
+			if _, ok := edge.Relation.(*general.PortRelation); ok {
 				if srv, err := e.Session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && srv != nil && srv.Asset.AssetType() == oam.Service {
 					findings = append(findings, &support.Finding{
 						From:     ip,
@@ -120,7 +119,7 @@ func (r *ipaddrEndpoint) process(e *et.Event, findings []*support.Finding, src *
 
 func sweepCallback(e *et.Event, ip *network.IPAddress, src *et.Source) {
 	if entity, err := e.Session.Cache().CreateAsset(ip); err == nil && entity != nil {
-		_, _ = e.Session.Cache().CreateEntityProperty(entity, &property.SourceProperty{
+		_, _ = e.Session.Cache().CreateEntityProperty(entity, &general.SourceProperty{
 			Source:     src.Name,
 			Confidence: src.Confidence,
 		})

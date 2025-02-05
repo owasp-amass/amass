@@ -48,6 +48,6 @@ If you need help with installation and/or usage of the tool, please join our [Di
 
 ## Licensing [![License](https://img.shields.io/badge/license-apache%202-blue)](https://www.apache.org/licenses/LICENSE-2.0)
 
-This program is free software: you can redistribute it and/or modify it under the terms of the [Apache license](LICENSE). OWASP Amass and any contributions are Copyright © by Jeff Foley 2017-2024. Some subcomponents have separate licenses.
+This program is free software: you can redistribute it and/or modify it under the terms of the [Apache license](LICENSE). OWASP Amass and any contributions are Copyright © by Jeff Foley 2017-2025. Some subcomponents have separate licenses.
 
 ![Network graph](https://raw.githubusercontent.com/owasp-amass/docs/master/images/network_06092018.png "Amass Network Mapping")

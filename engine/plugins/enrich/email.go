@@ -2,11 +2,11 @@
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
-package expansion
+package enrich
 
 import (
-	"errors"
 	"log/slog"
+	"strings"
 
 	"github.com/owasp-amass/amass/v4/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v4/engine/types"
@@ -44,7 +44,7 @@ func (ee *emailexpand) Start(r et.Registry) error {
 		Plugin:     ee,
 		Name:       ee.name,
 		Transforms: []string{string(oam.FQDN)},
-		EventType:  oam.EmailAddress,
+		EventType:  oam.Identifier,
 		Callback:   ee.check,
 	}); err != nil {
 		return err
@@ -59,9 +59,8 @@ func (ee *emailexpand) Stop() {
 }
 
 func (ee *emailexpand) check(e *et.Event) error {
-	_, ok := e.Entity.Asset.(*contact.EmailAddress)
-	if !ok {
-		return errors.New("failed to extract the EmailAddress asset")
+	if id, ok := e.Entity.Asset.(*general.Identifier); !ok || id == nil || id.Type != general.EmailAddress {
+		return nil
 	}
 
 	if findings := ee.store(e, e.Entity); len(findings) > 0 {
@@ -72,16 +71,32 @@ func (ee *emailexpand) check(e *et.Event) error {
 
 func (ee *emailexpand) store(e *et.Event, asset *dbt.Entity) []*support.Finding {
 	var findings []*support.Finding
-	oame := asset.Asset.(*contact.EmailAddress)
+	oame := asset.Asset.(*general.Identifier)
 
-	if a, err := e.Session.Cache().CreateAsset(&oamdns.FQDN{Name: oame.Domain}); err == nil && a != nil {
+	parts := strings.Split(oame.ID, "@")
+	if len(parts) != 2 {
+		return findings
+	}
+	domain := parts[1]
+
+	if cr, err := e.Session.Cache().CreateAsset(&contact.ContactRecord{DiscoveredAt: domain}); err == nil && cr != nil {
 		findings = append(findings, &support.Finding{
 			From:     asset,
-			FromName: "EmailAddress: " + asset.Asset.Key(),
-			To:       a,
-			ToName:   a.Asset.Key(),
-			Rel:      &general.SimpleRelation{Name: "domain"},
+			FromName: "Identifier: " + asset.Asset.Key(),
+			To:       cr,
+			ToName:   "ContactRecord: " + cr.Asset.Key(),
+			Rel:      &general.SimpleRelation{Name: "registration_agency"},
 		})
+
+		if a, err := e.Session.Cache().CreateAsset(&oamdns.FQDN{Name: domain}); err == nil && a != nil {
+			findings = append(findings, &support.Finding{
+				From:     cr,
+				FromName: "ContactRecord: " + cr.Asset.Key(),
+				To:       a,
+				ToName:   a.Asset.Key(),
+				Rel:      &general.SimpleRelation{Name: "fqdn"},
+			})
+		}
 	}
 
 	return findings

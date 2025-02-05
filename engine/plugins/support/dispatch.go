@@ -10,7 +10,6 @@ import (
 	et "github.com/owasp-amass/amass/v4/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
-	"github.com/owasp-amass/open-asset-model/contact"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	"github.com/owasp-amass/open-asset-model/general"
 )
@@ -71,8 +70,8 @@ func ProcessFQDNsWithSource(e *et.Event, entities []*dbt.Entity, src *et.Source)
 
 func ProcessEmailsWithSource(e *et.Event, entities []*dbt.Entity, src *et.Source) {
 	for _, entity := range entities {
-		email, ok := entity.Asset.(*contact.EmailAddress)
-		if !ok || email == nil {
+		email, ok := entity.Asset.(*general.Identifier)
+		if !ok || email == nil || email.Type != general.EmailAddress {
 			continue
 		}
 
@@ -94,7 +93,7 @@ func ProcessEmailsWithSource(e *et.Event, entities []*dbt.Entity, src *et.Source
 		})
 
 		_ = e.Dispatcher.DispatchEvent(&et.Event{
-			Name:    email.Address,
+			Name:    email.ID,
 			Meta:    meta,
 			Entity:  entity,
 			Session: e.Session,

@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -14,9 +14,8 @@ import (
 	oam "github.com/owasp-amass/open-asset-model"
 	oamcert "github.com/owasp-amass/open-asset-model/certificate"
 	"github.com/owasp-amass/open-asset-model/contact"
-	"github.com/owasp-amass/open-asset-model/domain"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
-	"github.com/owasp-amass/open-asset-model/relation"
 )
 
 // Edge represents an Amass graph edge in the viz package.
@@ -42,7 +41,7 @@ func VizData(domains []string, since time.Time, db repository.Repository) ([]Nod
 
 	var next []*types.Entity
 	for _, d := range domains {
-		if ents, err := db.FindEntitiesByContent(&domain.FQDN{Name: d}, since); err == nil && len(ents) == 1 {
+		if ents, err := db.FindEntitiesByContent(&oamdns.FQDN{Name: d}, since); err == nil && len(ents) == 1 {
 			if n, err := utils.FindByFQDNScope(db, ents[0], since); err == nil && len(n) > 0 {
 				next = append(next, n...)
 			}
@@ -80,6 +79,15 @@ func VizData(domains []string, since time.Time, db repository.Repository) ([]Nod
 			var in, out bool
 			var inRels, outRels []string
 			switch a.Asset.AssetType() {
+			case oam.AutnumRecord:
+				out = true
+			case oam.AutonomousSystem:
+				out = true
+				outRels = append(outRels, "registration")
+			case oam.ContactRecord:
+				out = true
+			case oam.DomainRecord:
+				out = true
 			case oam.FQDN:
 				if domainNameInScope(n.Label, domains) {
 					in = true
@@ -87,41 +95,32 @@ func VizData(domains []string, since time.Time, db repository.Repository) ([]Nod
 				} else if associatedWithScope(db, a, domains, since) {
 					out = true
 				}
+			case oam.Identifier:
+				out = true
 			case oam.IPAddress:
 				in = true
 				inRels = append(inRels, "contains")
+				out = true
+			case oam.IPNetRecord:
+				out = true
+			case oam.Location:
 				out = true
 			case oam.Netblock:
 				in = true
 				inRels = append(inRels, "announces")
 				out = true
 				outRels = append(outRels, "registration")
-			case oam.AutonomousSystem:
-				out = true
-				outRels = append(outRels, "registration")
-			case oam.AutnumRecord:
-				out = true
-			case oam.IPNetRecord:
-				out = true
-			case oam.ContactRecord:
-				out = true
-			case oam.EmailAddress:
-				out = true
-			case oam.Location:
-				out = true
-			case oam.Phone:
-				out = true
 			case oam.Organization:
 				out = true
 			case oam.Person:
 				out = true
+			case oam.Phone:
+				out = true
+			case oam.Service:
+				out = true
 			case oam.TLSCertificate:
 				out = true
 			case oam.URL:
-				out = true
-			case oam.DomainRecord:
-				out = true
-			case oam.Service:
 				out = true
 			default:
 			}
@@ -208,11 +207,11 @@ func newNode(db repository.Repository, idx int, a *types.Entity, since time.Time
 	switch v := asset.(type) {
 	case *contact.ContactRecord:
 		key = "Found->" + key
+	case *oamreg.DomainRecord:
+		key = "WHOIS: " + key
 	case *contact.Location:
 		parts := []string{v.BuildingNumber, v.StreetName, v.City, v.Province, v.PostalCode}
 		key = strings.Join(parts, " ")
-	case *oamreg.DomainRecord:
-		key = "WHOIS: " + key
 	case *oamcert.TLSCertificate:
 		key = "x509 Serial Number: " + v.SerialNumber
 	}
@@ -246,7 +245,7 @@ func associatedWithScope(db repository.Repository, asset *types.Entity, scope []
 	if edges, err := db.OutgoingEdges(asset, since, "dns_record"); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
 			if to, err := db.FindEntityById(edge.ToEntity.ID); err == nil {
-				if n, ok := to.Asset.(*domain.FQDN); ok && n != nil && domainNameInScope(n.Name, scope) {
+				if n, ok := to.Asset.(*oamdns.FQDN); ok && n != nil && domainNameInScope(n.Name, scope) {
 					return true
 				}
 			}
@@ -259,15 +258,15 @@ func associatedWithScope(db repository.Repository, asset *types.Entity, scope []
 func followBackForScope(db repository.Repository, asset *types.Entity, scope []string, since time.Time) bool {
 	if edges, err := db.IncomingEdges(asset, since, "dns_record"); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
-			if rel, ok := edge.Relation.(*relation.BasicDNSRelation); ok && rel.Header.RRType != 5 {
+			if rel, ok := edge.Relation.(*oamdns.BasicDNSRelation); ok && rel.Header.RRType != 5 {
 				continue
-			} else if rel, ok := edge.Relation.(*relation.PrefDNSRelation); ok && rel.Header.RRType != 2 && rel.Header.RRType != 15 {
+			} else if rel, ok := edge.Relation.(*oamdns.PrefDNSRelation); ok && rel.Header.RRType != 2 && rel.Header.RRType != 15 {
 				continue
-			} else if rel, ok := edge.Relation.(*relation.SRVDNSRelation); ok && rel.Header.RRType != 33 {
+			} else if rel, ok := edge.Relation.(*oamdns.SRVDNSRelation); ok && rel.Header.RRType != 33 {
 				continue
 			}
 			if from, err := db.FindEntityById(edge.FromEntity.ID); err == nil {
-				if n, ok := from.Asset.(*domain.FQDN); ok && n != nil && domainNameInScope(n.Name, scope) {
+				if n, ok := from.Asset.(*oamdns.FQDN); ok && n != nil && domainNameInScope(n.Name, scope) {
 					return true
 				} else if followBackForScope(db, from, scope, since) {
 					return true

@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -18,14 +18,18 @@ import (
 	"github.com/owasp-amass/amass/v4/engine/api/graphql/server/model"
 	et "github.com/owasp-amass/amass/v4/engine/types"
 	oam "github.com/owasp-amass/open-asset-model"
+	"github.com/owasp-amass/open-asset-model/account"
 	oamcert "github.com/owasp-amass/open-asset-model/certificate"
 	"github.com/owasp-amass/open-asset-model/contact"
-	"github.com/owasp-amass/open-asset-model/domain"
+	"github.com/owasp-amass/open-asset-model/dns"
+	"github.com/owasp-amass/open-asset-model/file"
+	"github.com/owasp-amass/open-asset-model/financial"
+	"github.com/owasp-amass/open-asset-model/general"
 	"github.com/owasp-amass/open-asset-model/network"
 	"github.com/owasp-amass/open-asset-model/org"
 	"github.com/owasp-amass/open-asset-model/people"
+	"github.com/owasp-amass/open-asset-model/platform"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
-	oamserv "github.com/owasp-amass/open-asset-model/service"
 	"github.com/owasp-amass/open-asset-model/url"
 )
 
@@ -167,36 +171,48 @@ type subscriptionResolver struct{ *Resolver }
 
 func createSeedAsset(atype string) oam.Asset {
 	switch atype {
-	case string(oam.FQDN):
-		return &domain.FQDN{}
-	case string(oam.IPAddress):
-		return &network.IPAddress{}
-	case string(oam.Netblock):
-		return &network.Netblock{}
-	case string(oam.AutonomousSystem):
-		return &network.AutonomousSystem{}
+	case string(oam.Account):
+		return &account.Account{}
 	case string(oam.AutnumRecord):
 		return &oamreg.AutnumRecord{}
+	case string(oam.AutonomousSystem):
+		return &network.AutonomousSystem{}
 	case string(oam.ContactRecord):
 		return &contact.ContactRecord{}
-	case string(oam.EmailAddress):
-		return &contact.EmailAddress{}
+	case string(oam.DomainRecord):
+		return &oamreg.DomainRecord{}
+	case string(oam.File):
+		return &file.File{}
+	case string(oam.FQDN):
+		return &dns.FQDN{}
+	case string(oam.FundsTransfer):
+		return &financial.FundsTransfer{}
+	case string(oam.Identifier):
+		return &general.Identifier{}
+	case string(oam.IPAddress):
+		return &network.IPAddress{}
+	case string(oam.IPNetRecord):
+		return &oamreg.IPNetRecord{}
 	case string(oam.Location):
 		return &contact.Location{}
-	case string(oam.Phone):
-		return &contact.Phone{}
+	case string(oam.Netblock):
+		return &network.Netblock{}
 	case string(oam.Organization):
 		return &org.Organization{}
+	case string(oam.Phone):
+		return &contact.Phone{}
 	case string(oam.Person):
 		return &people.Person{}
+	case string(oam.Product):
+		return &platform.Product{}
+	case string(oam.ProductRelease):
+		return &platform.ProductRelease{}
+	case string(oam.Service):
+		return &platform.Service{}
 	case string(oam.TLSCertificate):
 		return &oamcert.TLSCertificate{}
 	case string(oam.URL):
 		return &url.URL{}
-	case string(oam.DomainRecord):
-		return &oamreg.DomainRecord{}
-	case string(oam.Service):
-		return &oamserv.Service{}
 	}
 	return nil
 }

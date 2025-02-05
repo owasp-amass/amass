@@ -34,8 +34,8 @@ func SourceToAssetsWithinTTL(session et.Session, name, atype string, src *et.Sou
 		root := roots[0]
 
 		entities, _ = utils.FindByFQDNScope(session.Cache(), root, since)
-	case string(oam.EmailAddress):
-		entities, _ = session.Cache().FindEntitiesByContent(EmailToOAMEmailAddress(name), since)
+	case string(oam.Identifier):
+		entities, _ = session.Cache().FindEntitiesByContent(&general.Identifier{ID: name}, since)
 	case string(oam.AutnumRecord):
 		num, err := strconv.Atoi(name)
 		if err != nil {
@@ -97,11 +97,10 @@ func StoreEmailsWithSource(session et.Session, emails []string, src *et.Source, 
 	}
 
 	for _, email := range emails {
-		e := EmailToOAMEmailAddress(email)
-		if e == nil {
-			continue
-		}
-		if a, err := session.Cache().CreateAsset(e); err == nil && a != nil {
+		if a, err := session.Cache().CreateAsset(&general.Identifier{
+			ID:   email,
+			Type: general.EmailAddress,
+		}); err == nil && a != nil {
 			results = append(results, a)
 			_, _ = session.Cache().CreateEntityProperty(a, &general.SourceProperty{
 				Source:     src.Name,
@@ -156,7 +155,7 @@ func CreateServiceAsset(session et.Session, src *dbt.Entity, rel oam.Relation, s
 	var srvs []*dbt.Entity
 	if entities, err := session.Cache().FindEntitiesByType(oam.Service, time.Time{}); err == nil {
 		for _, a := range entities {
-			if s, ok := a.Asset.(*platform.Service); ok && s.BannerLen == serv.BannerLen {
+			if s, ok := a.Asset.(*platform.Service); ok && s.OutputLen == serv.OutputLen {
 				srvs = append(srvs, a)
 			}
 		}
@@ -168,8 +167,8 @@ func CreateServiceAsset(session et.Session, src *dbt.Entity, rel oam.Relation, s
 
 		s := srv.Asset.(*platform.Service)
 		for _, key := range []string{"Server", "X-Powered-By"} {
-			if server1, ok := serv.Headers[key]; ok && server1[0] != "" {
-				if server2, ok := s.Headers[key]; ok && server1[0] == server2[0] {
+			if server1, ok := serv.Attributes[key]; ok && server1[0] != "" {
+				if server2, ok := s.Attributes[key]; ok && server1[0] == server2[0] {
 					num++
 				} else {
 					num--

@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -12,11 +12,10 @@ import (
 	et "github.com/owasp-amass/amass/v4/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
-	"github.com/owasp-amass/open-asset-model/domain"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
+	"github.com/owasp-amass/open-asset-model/general"
 	"github.com/owasp-amass/open-asset-model/network"
-	"github.com/owasp-amass/open-asset-model/property"
-	"github.com/owasp-amass/open-asset-model/relation"
-	"github.com/owasp-amass/open-asset-model/service"
+	"github.com/owasp-amass/open-asset-model/platform"
 )
 
 type jarmPlugin struct {
@@ -62,7 +61,7 @@ func (j *jarmPlugin) Stop() {
 }
 
 func (j *jarmPlugin) check(e *et.Event) error {
-	_, ok := e.Entity.Asset.(*service.Service)
+	_, ok := e.Entity.Asset.(*platform.Service)
 	if !ok {
 		return errors.New("failed to extract the Service asset")
 	}
@@ -108,13 +107,13 @@ func (j *jarmPlugin) query(e *et.Event) {
 
 	if edges, err := e.Session.Cache().IncomingEdges(e.Entity, e.Session.Cache().StartTime(), "port"); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
-			portrel, ok := edge.Relation.(*relation.PortRelation)
+			portrel, ok := edge.Relation.(*general.PortRelation)
 			if !ok {
 				continue
 			}
 			if a, err := e.Session.Cache().FindEntityById(edge.FromEntity.ID); err == nil && a != nil {
 				switch a.Asset.(type) {
-				case *domain.FQDN:
+				case *oamdns.FQDN:
 					if portrel.Protocol == "https" {
 						t := &fingerprint{
 							asset: e.Entity,
@@ -136,7 +135,7 @@ func (j *jarmPlugin) query(e *et.Event) {
 
 	var results []*fingerprint
 	for _, target := range targets {
-		portrel := target.port.Relation.(*relation.PortRelation)
+		portrel := target.port.Relation.(*general.PortRelation)
 		if fp, err := support.JARMFingerprint(target.asset.Asset, portrel); err == nil && fp != "" {
 			results = append(results, &fingerprint{
 				asset: target.asset,
@@ -153,7 +152,7 @@ func (j *jarmPlugin) query(e *et.Event) {
 
 func (j *jarmPlugin) store(e *et.Event, fps []*fingerprint) {
 	for _, fp := range fps {
-		_, _ = e.Session.Cache().CreateEdgeProperty(fp.port, &property.SimpleProperty{
+		_, _ = e.Session.Cache().CreateEdgeProperty(fp.port, &general.SimpleProperty{
 			PropertyName:  "JARM",
 			PropertyValue: fp.hash,
 		})

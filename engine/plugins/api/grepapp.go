@@ -84,7 +84,7 @@ func (g *grepApp) check(e *et.Event) error {
 		return nil
 	}
 
-	since, err := support.TTLStartTime(e.Session.Config(), string(oam.FQDN), string(oam.EmailAddress), g.name)
+	since, err := support.TTLStartTime(e.Session.Config(), string(oam.FQDN), string(oam.Identifier), g.name)
 	if err != nil {
 		return err
 	}
@@ -103,7 +103,7 @@ func (g *grepApp) check(e *et.Event) error {
 	return nil
 }
 func (g *grepApp) lookup(e *et.Event, name string, src *et.Source, since time.Time) []*dbt.Entity {
-	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.EmailAddress), g.source, since)
+	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.Identifier), g.source, since)
 }
 
 func (g *grepApp) query(e *et.Event, name string, src *et.Source) []*dbt.Entity {

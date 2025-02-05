@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -22,10 +22,9 @@ import (
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/contact"
+	"github.com/owasp-amass/open-asset-model/general"
 	"github.com/owasp-amass/open-asset-model/org"
-	"github.com/owasp-amass/open-asset-model/property"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
-	"github.com/owasp-amass/open-asset-model/relation"
 	"github.com/owasp-amass/open-asset-model/url"
 	"go.uber.org/ratelimit"
 )
@@ -113,7 +112,7 @@ func (rd *rdapPlugin) Start(r et.Registry) error {
 			string(oam.Person),
 			string(oam.Organization),
 			string(oam.Location),
-			string(oam.EmailAddress),
+			string(oam.Identifier),
 			string(oam.Phone),
 		},
 	}
@@ -153,7 +152,7 @@ func (rd *rdapPlugin) Start(r et.Registry) error {
 			string(oam.Person),
 			string(oam.Organization),
 			string(oam.Location),
-			string(oam.EmailAddress),
+			string(oam.Identifier),
 			string(oam.Phone),
 		},
 	}
@@ -218,7 +217,7 @@ func (rd *rdapPlugin) storeEntity(e *et.Event, level int, entity *rdap.Entity, a
 		FromName: name,
 		To:       cr,
 		ToName:   "ContactRecord: " + u.Raw,
-		Rel:      &relation.SimpleRelation{Name: rel},
+		Rel:      &general.SimpleRelation{Name: rel},
 	})
 
 	if m.IsMatch(string(oam.URL)) {
@@ -226,7 +225,7 @@ func (rd *rdapPlugin) storeEntity(e *et.Event, level int, entity *rdap.Entity, a
 		if err != nil {
 			return nil
 		}
-		_ = rd.createContactEdge(e.Session, cr, a, &relation.SimpleRelation{Name: "url"}, src)
+		_ = rd.createContactEdge(e.Session, cr, a, &general.SimpleRelation{Name: "url"}, src)
 	}
 
 	v := entity.VCard
@@ -239,12 +238,12 @@ func (rd *rdapPlugin) storeEntity(e *et.Event, level int, entity *rdap.Entity, a
 	if kind := strings.Join(prop.Values(), " "); name != "" && kind == "individual" {
 		if p := support.FullNameToPerson(name); p != nil && m.IsMatch(string(oam.Person)) {
 			if a, err := e.Session.Cache().CreateAsset(p); err == nil && a != nil {
-				_ = rd.createContactEdge(e.Session, cr, a, &relation.SimpleRelation{Name: "person"}, src)
+				_ = rd.createContactEdge(e.Session, cr, a, &general.SimpleRelation{Name: "person"}, src)
 			}
 		}
 	} else if name != "" && m.IsMatch(string(oam.Organization)) {
 		if a, err := e.Session.Cache().CreateAsset(&org.Organization{Name: name}); err == nil && a != nil {
-			_ = rd.createContactEdge(e.Session, cr, a, &relation.SimpleRelation{Name: "organization"}, src)
+			_ = rd.createContactEdge(e.Session, cr, a, &general.SimpleRelation{Name: "organization"}, src)
 		}
 	}
 	if adr := v.GetFirst("adr"); adr != nil && m.IsMatch(string(oam.Location)) {
@@ -254,27 +253,30 @@ func (rd *rdapPlugin) storeEntity(e *et.Event, level int, entity *rdap.Entity, a
 			addr := strings.Join(strings.Split(s, "\n"), " ")
 			if loc := support.StreetAddressToLocation(addr); loc != nil {
 				if a, err := e.Session.Cache().CreateAsset(loc); err == nil && a != nil {
-					_ = rd.createContactEdge(e.Session, cr, a, &relation.SimpleRelation{Name: "location"}, src)
+					_ = rd.createContactEdge(e.Session, cr, a, &general.SimpleRelation{Name: "location"}, src)
 				}
 			}
 		}
 	}
-	if email := support.EmailToOAMEmailAddress(v.Email()); email != nil && m.IsMatch(string(oam.EmailAddress)) {
-		if a, err := e.Session.Cache().CreateAsset(email); err == nil && a != nil {
-			_ = rd.createContactEdge(e.Session, cr, a, &relation.SimpleRelation{Name: "email"}, src)
+	if m.IsMatch(string(oam.Identifier)) {
+		if a, err := e.Session.Cache().CreateAsset(&general.Identifier{
+			ID:   v.Email(),
+			Type: general.EmailAddress,
+		}); err == nil && a != nil {
+			_ = rd.createContactEdge(e.Session, cr, a, &general.SimpleRelation{Name: "id"}, src)
 		}
 	}
 	if m.IsMatch(string(oam.Phone)) {
 		if phone := support.PhoneToOAMPhone(v.Tel(), "", v.Country()); phone != nil {
 			phone.Type = contact.PhoneTypeRegular
 			if a, err := e.Session.Cache().CreateAsset(phone); err == nil && a != nil {
-				_ = rd.createContactEdge(e.Session, cr, a, &relation.SimpleRelation{Name: "phone"}, src)
+				_ = rd.createContactEdge(e.Session, cr, a, &general.SimpleRelation{Name: "phone"}, src)
 			}
 		}
 		if fax := support.PhoneToOAMPhone(v.Fax(), "", v.Country()); fax != nil {
 			fax.Type = contact.PhoneTypeFax
 			if a, err := e.Session.Cache().CreateAsset(fax); err == nil && a != nil {
-				_ = rd.createContactEdge(e.Session, cr, a, &relation.SimpleRelation{Name: "phone"}, src)
+				_ = rd.createContactEdge(e.Session, cr, a, &general.SimpleRelation{Name: "phone"}, src)
 			}
 		}
 	}
@@ -309,7 +311,7 @@ func (rd *rdapPlugin) createContactEdge(sess et.Session, cr, a *dbt.Entity, rel 
 		return errors.New("failed to create the edge")
 	}
 
-	_, err = sess.Cache().CreateEdgeProperty(edge, &property.SourceProperty{
+	_, err = sess.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
 		Source:     src.Name,
 		Confidence: src.Confidence,
 	})

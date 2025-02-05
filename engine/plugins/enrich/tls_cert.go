@@ -2,7 +2,7 @@
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
-package expansion
+package enrich
 
 import (
 	"crypto/x509"
@@ -208,13 +208,13 @@ func (te *tlsexpand) store(e *et.Event, cert *x509.Certificate, asset *dbt.Entit
 		}
 	}
 
-	if m.IsMatch(string(oam.EmailAddress)) {
+	if m.IsMatch(string(oam.Identifier)) {
 		for _, emailstr := range cert.EmailAddresses {
 			email := strings.ToLower(strings.TrimSpace(emailstr))
 
 			if a, err := e.Session.Cache().CreateAsset(&general.Identifier{
-				ID: email,
-				general.EmailAddress,
+				ID:   email,
+				Type: general.EmailAddress,
 			}); err == nil && a != nil {
 				findings = append(findings, &support.Finding{
 					From:     asset,

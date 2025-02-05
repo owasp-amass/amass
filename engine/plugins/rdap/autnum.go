@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -15,10 +15,9 @@ import (
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/contact"
-	"github.com/owasp-amass/open-asset-model/domain"
-	"github.com/owasp-amass/open-asset-model/property"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
+	"github.com/owasp-amass/open-asset-model/general"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
-	"github.com/owasp-amass/open-asset-model/relation"
 	"github.com/owasp-amass/open-asset-model/url"
 )
 
@@ -102,7 +101,7 @@ func (r *autnum) lookup(e *et.Event, asset *dbt.Entity, m *config.Matches) []*su
 
 			var name string
 			switch v := a.Asset.(type) {
-			case *domain.FQDN:
+			case *oamdns.FQDN:
 				name = v.Name
 			case *contact.ContactRecord:
 				name = "ContactRecord: " + v.DiscoveredAt
@@ -129,7 +128,7 @@ func (r *autnum) lookup(e *et.Event, asset *dbt.Entity, m *config.Matches) []*su
 func (r *autnum) oneOfSources(e *et.Event, edge *dbt.Edge, src *et.Source, since time.Time) bool {
 	if tags, err := e.Session.Cache().GetEdgeTags(edge, since, src.Name); err == nil && len(tags) > 0 {
 		for _, tag := range tags {
-			if _, ok := tag.Property.(*property.SourceProperty); ok {
+			if _, ok := tag.Property.(*general.SourceProperty); ok {
 				return true
 			}
 		}
@@ -148,12 +147,12 @@ func (r *autnum) store(e *et.Event, resp *rdap.Autnum, entity *dbt.Entity, m *co
 				FromName: "AutnumRecord: " + autrec.Handle,
 				To:       a,
 				ToName:   u.Raw,
-				Rel:      &relation.SimpleRelation{Name: "rdap_url"},
+				Rel:      &general.SimpleRelation{Name: "rdap_url"},
 			})
 		}
 	}
 	if name := autrec.WhoisServer; name != "" && m.IsMatch(string(oam.FQDN)) {
-		fqdn := &domain.FQDN{Name: name}
+		fqdn := &oamdns.FQDN{Name: name}
 
 		if _, conf := e.Session.Scope().IsAssetInScope(fqdn, 0); conf > 0 {
 			if a, err := e.Session.Cache().CreateAsset(fqdn); err == nil && a != nil {
@@ -162,7 +161,7 @@ func (r *autnum) store(e *et.Event, resp *rdap.Autnum, entity *dbt.Entity, m *co
 					FromName: "AutnumRecord: " + autrec.Handle,
 					To:       a,
 					ToName:   name,
-					Rel:      &relation.SimpleRelation{Name: "whois_server"},
+					Rel:      &general.SimpleRelation{Name: "whois_server"},
 				})
 			}
 		}

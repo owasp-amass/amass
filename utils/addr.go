@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -11,9 +11,8 @@ import (
 	"github.com/caffix/stringset"
 	"github.com/owasp-amass/asset-db/repository"
 	dbt "github.com/owasp-amass/asset-db/types"
-	"github.com/owasp-amass/open-asset-model/domain"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	"github.com/owasp-amass/open-asset-model/network"
-	"github.com/owasp-amass/open-asset-model/relation"
 )
 
 func ReadASPrefixes(db repository.Repository, asn int, since time.Time) []string {
@@ -39,14 +38,14 @@ func ReadASPrefixes(db repository.Repository, asn int, since time.Time) []string
 }
 
 type NameAddrPair struct {
-	FQDN *domain.FQDN
+	FQDN *oamdns.FQDN
 	Addr *network.IPAddress
 }
 
 func NamesToAddrs(db repository.Repository, since time.Time, names ...string) ([]*NameAddrPair, error) {
 	var fqdns []*dbt.Entity
 	for _, name := range names {
-		if ents, err := db.FindEntitiesByContent(&domain.FQDN{Name: name}, since); err == nil && len(ents) == 1 {
+		if ents, err := db.FindEntitiesByContent(&oamdns.FQDN{Name: name}, since); err == nil && len(ents) == 1 {
 			fqdns = append(fqdns, ents[0])
 		}
 	}
@@ -58,11 +57,11 @@ loop:
 		if edges, err := db.OutgoingEdges(fqdn, since, "dns_record"); err == nil && len(edges) > 0 {
 			for _, edge := range edges {
 				switch v := edge.Relation.(type) {
-				case *relation.BasicDNSRelation:
+				case *oamdns.BasicDNSRelation:
 					if v.Header.RRType == 1 || v.Header.RRType == 28 {
 						if ip, err := getAddr(db, edge.ToEntity, since); err == nil {
 							results = append(results, &NameAddrPair{
-								FQDN: fqdn.Asset.(*domain.FQDN),
+								FQDN: fqdn.Asset.(*oamdns.FQDN),
 								Addr: ip,
 							})
 							continue loop
@@ -70,27 +69,27 @@ loop:
 					} else if v.Header.RRType == 5 {
 						if ip, err := cnameQuery(db, edge.ToEntity, since); err == nil {
 							results = append(results, &NameAddrPair{
-								FQDN: fqdn.Asset.(*domain.FQDN),
+								FQDN: fqdn.Asset.(*oamdns.FQDN),
 								Addr: ip,
 							})
 							continue loop
 						}
 					}
-				case *relation.PrefDNSRelation:
+				case *oamdns.PrefDNSRelation:
 					if v.Header.RRType == 2 || v.Header.RRType == 15 {
 						if ip, err := oneMoreName(db, edge.ToEntity, since); err == nil {
 							results = append(results, &NameAddrPair{
-								FQDN: fqdn.Asset.(*domain.FQDN),
+								FQDN: fqdn.Asset.(*oamdns.FQDN),
 								Addr: ip,
 							})
 							continue loop
 						}
 					}
-				case *relation.SRVDNSRelation:
+				case *oamdns.SRVDNSRelation:
 					if v.Header.RRType == 33 {
 						if ip, err := oneMoreName(db, edge.ToEntity, since); err == nil {
 							results = append(results, &NameAddrPair{
-								FQDN: fqdn.Asset.(*domain.FQDN),
+								FQDN: fqdn.Asset.(*oamdns.FQDN),
 								Addr: ip,
 							})
 							continue loop
@@ -116,7 +115,7 @@ func getAddr(db repository.Repository, ip *dbt.Entity, since time.Time) (*networ
 func oneMoreName(db repository.Repository, fqdn *dbt.Entity, since time.Time) (*network.IPAddress, error) {
 	if edges, err := db.OutgoingEdges(fqdn, since, "dns_record"); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
-			if rel, ok := edge.Relation.(*relation.BasicDNSRelation); ok && (rel.Header.RRType == 1 || rel.Header.RRType == 28) {
+			if rel, ok := edge.Relation.(*oamdns.BasicDNSRelation); ok && (rel.Header.RRType == 1 || rel.Header.RRType == 28) {
 				return getAddr(db, edge.ToEntity, since)
 			}
 		}
@@ -139,7 +138,7 @@ loop:
 
 		if edges, err := db.OutgoingEdges(n, since, "dns_record"); err == nil && len(edges) > 0 {
 			for _, edge := range edges {
-				if rel, ok := edge.Relation.(*relation.BasicDNSRelation); ok {
+				if rel, ok := edge.Relation.(*oamdns.BasicDNSRelation); ok {
 					if rel.Header.RRType == 1 || rel.Header.RRType == 28 {
 						return getAddr(db, edge.ToEntity, since)
 					} else if rel.Header.RRType == 5 {

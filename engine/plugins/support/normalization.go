@@ -204,7 +204,7 @@ func TimeToJSONString(t *time.Time) string {
 func ServiceWithIdentifier(h *maphash.Hash, sessionid, address string) *platform.Service {
 	_, _ = h.WriteString(sessionid + address)
 	serv := &platform.Service{
-		Identifier: address + strconv.Itoa(int(h.Sum64())),
+		ID: address + strconv.Itoa(int(h.Sum64())),
 	}
 	h.Reset()
 	return serv

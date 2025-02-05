@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -15,9 +15,8 @@ import (
 	amassnet "github.com/owasp-amass/amass/v4/utils/net"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
+	"github.com/owasp-amass/open-asset-model/general"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
-	"github.com/owasp-amass/open-asset-model/property"
-	"github.com/owasp-amass/open-asset-model/relation"
 )
 
 type netblock struct {
@@ -87,7 +86,7 @@ func (r *netblock) lookup(e *et.Event, ip *dbt.Entity, since time.Time, src *et.
 
 				if tags, err := e.Session.Cache().GetEdgeTags(edge, since, src.Name); err == nil && len(tags) > 0 {
 					for _, tag := range tags {
-						if _, ok := tag.Property.(*property.SourceProperty); ok {
+						if _, ok := tag.Property.(*general.SourceProperty); ok {
 							found = true
 							break
 						}
@@ -152,11 +151,11 @@ func (r *netblock) store(e *et.Event, cidr netip.Prefix, ip *dbt.Entity, src *et
 	})
 	if err == nil && nb != nil {
 		if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
-			Relation:   &relation.SimpleRelation{Name: "contains"},
+			Relation:   &general.SimpleRelation{Name: "contains"},
 			FromEntity: nb,
 			ToEntity:   ip,
 		}); err == nil && edge != nil {
-			_, _ = e.Session.Cache().CreateEdgeProperty(edge, &property.SourceProperty{
+			_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
 				Source:     src.Name,
 				Confidence: src.Confidence,
 			})

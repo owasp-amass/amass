@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -9,7 +9,7 @@ import (
 	"github.com/owasp-amass/amass/v4/engine/plugins/archive"
 	"github.com/owasp-amass/amass/v4/engine/plugins/brute"
 	"github.com/owasp-amass/amass/v4/engine/plugins/dns"
-	"github.com/owasp-amass/amass/v4/engine/plugins/expansion"
+	"github.com/owasp-amass/amass/v4/engine/plugins/enrich"
 	"github.com/owasp-amass/amass/v4/engine/plugins/horizontals"
 	"github.com/owasp-amass/amass/v4/engine/plugins/rdap"
 	"github.com/owasp-amass/amass/v4/engine/plugins/scrape"
@@ -38,11 +38,11 @@ var pluginNewFuncs = []func() et.Plugin{
 	bgptools.NewBGPTools,
 	brute.NewFQDNAlterations,
 	dns.NewDNS,
-	expansion.NewBannerURLs,
-	expansion.NewContacts,
-	expansion.NewEmails,
-	expansion.NewTLSCerts,
-	expansion.NewURLs,
+	enrich.NewBannerURLs,
+	enrich.NewContacts,
+	enrich.NewEmails,
+	enrich.NewTLSCerts,
+	enrich.NewURLs,
 	horizontals.NewHorizontals,
 	hp.NewHTTPProbing,
 	rdap.NewRDAP,

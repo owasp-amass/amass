@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -36,7 +36,7 @@ func TestActive(t *testing.T) {
 
 	// Test case 1: MarshalJSON returns the expected JSON bytes
 	t.Run("TestActive returns the expected JSON bytes", func(t *testing.T) {
-		expected := []byte(`{"seed":{},"scope":{"ports":[80,443]},"active":true,"resolvers":null,"datasource_config":{},"transformations":{}}
+		expected := []byte(`{"seed":{},"scope":{"ports":[80,443]},"active":true,"rigid_boundaries":false,"resolvers":null,"datasource_config":{},"transformations":{}}
 `)
 		_ = c.loadActiveSettings(c)
 		got, err := c.JSON()
@@ -51,7 +51,7 @@ func TestActive(t *testing.T) {
 
 	t.Run("TestActive returns the expected JSON bytes when active isnt provided", func(t *testing.T) {
 		c := NewConfig()
-		expected := []byte(`{"seed":{},"scope":{"ports":[80,443]},"resolvers":null,"datasource_config":{},"transformations":{}}
+		expected := []byte(`{"seed":{},"scope":{"ports":[80,443]},"rigid_boundaries":false,"resolvers":null,"datasource_config":{},"transformations":{}}
 `)
 
 		got, err := c.JSON()
@@ -69,7 +69,7 @@ func TestActive(t *testing.T) {
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
-		expected := []byte(`{"seed":{},"scope":{"ports":[80,443]},"resolvers":null,"datasource_config":{},"transformations":{}}
+		expected := []byte(`{"seed":{},"scope":{"ports":[80,443]},"rigid_boundaries":false,"resolvers":null,"datasource_config":{},"transformations":{}}
 `)
 
 		_ = c.loadActiveSettings(c)

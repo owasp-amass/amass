@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -14,7 +14,7 @@ import (
 	"github.com/owasp-amass/amass/v4/utils"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
-	"github.com/owasp-amass/open-asset-model/domain"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
 )
 
 type knownFQDN struct {
@@ -56,7 +56,7 @@ func (d *knownFQDN) Stop() {
 }
 
 func (d *knownFQDN) check(e *et.Event) error {
-	fqdn, ok := e.Entity.Asset.(*domain.FQDN)
+	fqdn, ok := e.Entity.Asset.(*oamdns.FQDN)
 	if !ok {
 		return errors.New("failed to extract the FQDN asset")
 	}
@@ -77,7 +77,7 @@ func (d *knownFQDN) lookup(e *et.Event, dom *dbt.Entity) []*dbt.Entity {
 
 func (d *knownFQDN) process(e *et.Event, names []*dbt.Entity) {
 	for _, n := range names {
-		if fqdn, ok := n.Asset.(*domain.FQDN); ok {
+		if fqdn, ok := n.Asset.(*oamdns.FQDN); ok {
 			_ = e.Dispatcher.DispatchEvent(&et.Event{
 				Name:    fqdn.Name,
 				Entity:  n,

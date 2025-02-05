@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -16,9 +16,9 @@ import (
 	amassnet "github.com/owasp-amass/amass/v4/utils/net"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
+	"github.com/owasp-amass/open-asset-model/general"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
-	"github.com/owasp-amass/open-asset-model/relation"
 )
 
 type ipNetblock struct {
@@ -92,7 +92,7 @@ func (d *ipNetblock) lookup(e *et.Event) error {
 
 	if nb, err := e.Session.Cache().CreateAsset(netblock); err == nil && nb != nil {
 		_, _ = e.Session.Cache().CreateEdge(&dbt.Edge{
-			Relation:   &relation.SimpleRelation{Name: "contains"},
+			Relation:   &general.SimpleRelation{Name: "contains"},
 			FromEntity: nb,
 			ToEntity:   e.Entity,
 		})
@@ -117,7 +117,7 @@ func (d *ipNetblock) reservedAS(e *et.Event, netblock *oamnet.Netblock) {
 
 		if err == nil && autnum != nil {
 			_, _ = e.Session.Cache().CreateEdge(&dbt.Edge{
-				Relation:   &relation.SimpleRelation{Name: "registration"},
+				Relation:   &general.SimpleRelation{Name: "registration"},
 				FromEntity: asn,
 				ToEntity:   autnum,
 			})
@@ -125,7 +125,7 @@ func (d *ipNetblock) reservedAS(e *et.Event, netblock *oamnet.Netblock) {
 
 		if nb, err := e.Session.Cache().CreateAsset(netblock); err == nil && nb != nil {
 			_, _ = e.Session.Cache().CreateEdge(&dbt.Edge{
-				Relation:   &relation.SimpleRelation{Name: "announces"},
+				Relation:   &general.SimpleRelation{Name: "announces"},
 				FromEntity: asn,
 				ToEntity:   nb,
 			})
