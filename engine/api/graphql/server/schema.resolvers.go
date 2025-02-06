@@ -21,7 +21,7 @@ import (
 	"github.com/owasp-amass/open-asset-model/account"
 	oamcert "github.com/owasp-amass/open-asset-model/certificate"
 	"github.com/owasp-amass/open-asset-model/contact"
-	"github.com/owasp-amass/open-asset-model/dns"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	"github.com/owasp-amass/open-asset-model/file"
 	"github.com/owasp-amass/open-asset-model/financial"
 	"github.com/owasp-amass/open-asset-model/general"
@@ -184,7 +184,7 @@ func createSeedAsset(atype string) oam.Asset {
 	case string(oam.File):
 		return &file.File{}
 	case string(oam.FQDN):
-		return &dns.FQDN{}
+		return &oamdns.FQDN{}
 	case string(oam.FundsTransfer):
 		return &financial.FundsTransfer{}
 	case string(oam.Identifier):

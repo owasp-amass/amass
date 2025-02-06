@@ -12,6 +12,7 @@ package sessions
  */
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -39,31 +40,30 @@ func NewManager(l *slog.Logger) et.SessionManager {
 
 func (r *manager) NewSession(cfg *config.Config) (et.Session, error) {
 	s, err := CreateSession(cfg)
-	if err != nil {
-		return nil, err
+	if err == nil {
+		err = r.AddSession(s)
+
+		if err == nil {
+			return s, nil
+		}
 	}
-	if _, err = r.AddSession(s); err != nil {
-		return nil, err
-	}
-	return s, nil
+	return nil, err
 }
 
 // Add: adds a session to a session storage after checking the session config.
-func (r *manager) AddSession(s et.Session) (uuid.UUID, error) {
+func (r *manager) AddSession(s et.Session) error {
 	if s == nil {
-		return uuid.UUID{}, nil
+		return errors.New("the provided session is nil")
 	}
 
 	r.Lock()
-	defer r.Unlock()
-
-	var id uuid.UUID
 	if sess, ok := s.(*Session); ok {
-		id = sess.id
-		r.sessions[id] = sess
+		r.sessions[sess.id] = sess
 	}
+	r.Unlock()
+
 	// TODO: Need to add the session config checks here (using the Registry)
-	return id, nil
+	return nil
 }
 
 // CancelSession: cancels a session in a session storage.

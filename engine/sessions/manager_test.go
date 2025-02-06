@@ -24,7 +24,7 @@ func TestAddSession(t *testing.T) {
 		done:  make(chan struct{}),
 	}
 
-	if _, err := mgr.AddSession(s); err != nil {
+	if err := mgr.AddSession(s); err != nil {
 		t.Error(err)
 	}
 }

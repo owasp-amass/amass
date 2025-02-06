@@ -40,7 +40,7 @@ type SessionStats struct {
 
 type SessionManager interface {
 	NewSession(cfg *config.Config) (Session, error)
-	AddSession(s Session) (uuid.UUID, error)
+	AddSession(s Session) error
 	CancelSession(id uuid.UUID)
 	GetSession(id uuid.UUID) Session
 	Shutdown()
