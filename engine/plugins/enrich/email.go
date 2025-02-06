@@ -59,7 +59,8 @@ func (ee *emailexpand) Stop() {
 }
 
 func (ee *emailexpand) check(e *et.Event) error {
-	if id, ok := e.Entity.Asset.(*general.Identifier); !ok || id == nil || id.Type != general.EmailAddress {
+	if id, ok := e.Entity.Asset.(*general.Identifier); !ok ||
+		id == nil || id.Type != general.EmailAddress || id.EntityID == "" {
 		return nil
 	}
 
@@ -73,7 +74,7 @@ func (ee *emailexpand) store(e *et.Event, asset *dbt.Entity) []*support.Finding 
 	var findings []*support.Finding
 	oame := asset.Asset.(*general.Identifier)
 
-	parts := strings.Split(oame.ID, "@")
+	parts := strings.Split(oame.EntityID, "@")
 	if len(parts) != 2 {
 		return findings
 	}

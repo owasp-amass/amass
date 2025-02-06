@@ -8,6 +8,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/netip"
 	"strings"
@@ -211,10 +212,14 @@ func (te *tlsexpand) store(e *et.Event, cert *x509.Certificate, asset *dbt.Entit
 	if m.IsMatch(string(oam.Identifier)) {
 		for _, emailstr := range cert.EmailAddresses {
 			email := strings.ToLower(strings.TrimSpace(emailstr))
+			if email == "" {
+				continue
+			}
 
 			if a, err := e.Session.Cache().CreateAsset(&general.Identifier{
-				ID:   email,
-				Type: general.EmailAddress,
+				UniqueID: fmt.Sprintf("%s:%s", general.EmailAddress, email),
+				EntityID: email,
+				Type:     general.EmailAddress,
 			}); err == nil && a != nil {
 				findings = append(findings, &support.Finding{
 					From:     asset,

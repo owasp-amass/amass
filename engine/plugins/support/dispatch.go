@@ -71,7 +71,7 @@ func ProcessFQDNsWithSource(e *et.Event, entities []*dbt.Entity, src *et.Source)
 func ProcessEmailsWithSource(e *et.Event, entities []*dbt.Entity, src *et.Source) {
 	for _, entity := range entities {
 		email, ok := entity.Asset.(*general.Identifier)
-		if !ok || email == nil || email.Type != general.EmailAddress {
+		if !ok || email == nil || email.Type != general.EmailAddress || email.EntityID == "" {
 			continue
 		}
 
@@ -93,7 +93,7 @@ func ProcessEmailsWithSource(e *et.Event, entities []*dbt.Entity, src *et.Source
 		})
 
 		_ = e.Dispatcher.DispatchEvent(&et.Event{
-			Name:    email.ID,
+			Name:    email.UniqueID,
 			Meta:    meta,
 			Entity:  entity,
 			Session: e.Session,

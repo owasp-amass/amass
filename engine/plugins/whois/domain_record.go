@@ -233,10 +233,11 @@ func (r *domrec) storeContact(e *et.Event, c *domrecContact, dr *dbt.Entity, m *
 			r.createSimpleEdge(e.Session.Cache(), &general.SimpleRelation{Name: "location"}, cr, a)
 		}
 	}
-	if m.IsMatch(string(oam.Identifier)) {
+	if email := strings.ToLower(wc.Email); m.IsMatch(string(oam.Identifier)) && email != "" {
 		if a, err := e.Session.Cache().CreateAsset(&general.Identifier{
-			ID:   wc.Email,
-			Type: general.EmailAddress,
+			UniqueID: fmt.Sprintf("%s:%s", general.EmailAddress, email),
+			EntityID: email,
+			Type:     general.EmailAddress,
 		}); err == nil && a != nil {
 			r.createSimpleEdge(e.Session.Cache(), &general.SimpleRelation{Name: "id"}, cr, a)
 		}

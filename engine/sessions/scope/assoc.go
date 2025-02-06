@@ -18,7 +18,7 @@ import (
 	oam "github.com/owasp-amass/open-asset-model"
 	oamcert "github.com/owasp-amass/open-asset-model/certificate"
 	"github.com/owasp-amass/open-asset-model/contact"
-	"github.com/owasp-amass/open-asset-model/dns"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
 	"github.com/owasp-amass/open-asset-model/org"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
@@ -378,7 +378,7 @@ func (s *Scope) IsAddressInScope(c *cache.Cache, ip *oamnet.IPAddress) bool {
 
 	if edges, err := c.IncomingEdges(addr, c.StartTime(), "dns_record"); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
-			if rec, ok := edge.Relation.(*dns.BasicDNSRelation); ok && rec.Header.RRType == rtype {
+			if rec, ok := edge.Relation.(*oamdns.BasicDNSRelation); ok && rec.Header.RRType == rtype {
 				from, err := c.FindEntityById(edge.FromEntity.ID)
 				if err != nil {
 					continue

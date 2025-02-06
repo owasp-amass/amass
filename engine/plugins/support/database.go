@@ -6,9 +6,11 @@ package support
 
 import (
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/netip"
 	"strconv"
+	"strings"
 	"time"
 
 	et "github.com/owasp-amass/amass/v4/engine/types"
@@ -35,7 +37,15 @@ func SourceToAssetsWithinTTL(session et.Session, name, atype string, src *et.Sou
 
 		entities, _ = utils.FindByFQDNScope(session.Cache(), root, since)
 	case string(oam.Identifier):
-		entities, _ = session.Cache().FindEntitiesByContent(&general.Identifier{ID: name}, since)
+		if parts := strings.Split(name, ":"); len(parts) == 2 {
+			id := &general.Identifier{
+				UniqueID: name,
+				EntityID: parts[1],
+				Type:     parts[0],
+			}
+
+			entities, _ = session.Cache().FindEntitiesByContent(id, since)
+		}
 	case string(oam.AutnumRecord):
 		num, err := strconv.Atoi(name)
 		if err != nil {
@@ -96,10 +106,13 @@ func StoreEmailsWithSource(session et.Session, emails []string, src *et.Source, 
 		return results
 	}
 
-	for _, email := range emails {
+	for _, e := range emails {
+		email := strings.ToLower(e)
+
 		if a, err := session.Cache().CreateAsset(&general.Identifier{
-			ID:   email,
-			Type: general.EmailAddress,
+			UniqueID: fmt.Sprintf("%s:%s", general.EmailAddress, email),
+			EntityID: email,
+			Type:     general.EmailAddress,
 		}); err == nil && a != nil {
 			results = append(results, a)
 			_, _ = session.Cache().CreateEntityProperty(a, &general.SourceProperty{

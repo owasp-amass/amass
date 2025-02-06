@@ -7,6 +7,7 @@ package rdap
 import (
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"path/filepath"
@@ -258,10 +259,13 @@ func (rd *rdapPlugin) storeEntity(e *et.Event, level int, entity *rdap.Entity, a
 			}
 		}
 	}
-	if m.IsMatch(string(oam.Identifier)) {
+	if m.IsMatch(string(oam.Identifier)) && v.Email() != "" {
+		email := strings.ToLower(v.Email())
+
 		if a, err := e.Session.Cache().CreateAsset(&general.Identifier{
-			ID:   v.Email(),
-			Type: general.EmailAddress,
+			UniqueID: fmt.Sprintf("%s:%s", general.EmailAddress, email),
+			EntityID: email,
+			Type:     general.EmailAddress,
 		}); err == nil && a != nil {
 			_ = rd.createContactEdge(e.Session, cr, a, &general.SimpleRelation{Name: "id"}, src)
 		}
