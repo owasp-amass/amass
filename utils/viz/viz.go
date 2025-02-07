@@ -15,6 +15,7 @@ import (
 	oamcert "github.com/owasp-amass/open-asset-model/certificate"
 	"github.com/owasp-amass/open-asset-model/contact"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
+	"github.com/owasp-amass/open-asset-model/org"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
 )
 
@@ -212,8 +213,10 @@ func newNode(db repository.Repository, idx int, a *types.Entity, since time.Time
 	case *contact.Location:
 		parts := []string{v.BuildingNumber, v.StreetName, v.City, v.Province, v.PostalCode}
 		key = strings.Join(parts, " ")
+	case *org.Organization:
+		key = "Name: " + v.Name
 	case *oamcert.TLSCertificate:
-		key = "x509 Serial Number: " + v.SerialNumber
+		key = "x509 Common Name: " + v.SubjectCommonName
 	}
 	title := atype + ": " + key
 
