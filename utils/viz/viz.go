@@ -5,6 +5,8 @@
 package viz
 
 import (
+	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 
@@ -214,11 +216,17 @@ func newNode(db repository.Repository, idx int, a *types.Entity, since time.Time
 		parts := []string{v.BuildingNumber, v.StreetName, v.City, v.Province, v.PostalCode}
 		key = strings.Join(parts, " ")
 	case *org.Organization:
-		key = "Name: " + v.Name
+		key = fmt.Sprintf("%s, %s", v.Name, v.ID)
 	case *oamcert.TLSCertificate:
-		key = "x509 Common Name: " + v.SubjectCommonName
+		key = fmt.Sprintf("%s, %s", v.SubjectCommonName, v.SerialNumber)
 	}
-	title := atype + ": " + key
+
+	// JSON pretty-print indentation applied to the asset
+	jsonBytes, err := json.MarshalIndent(asset, "", "    ")
+	if err != nil {
+		return nil
+	}
+	title := fmt.Sprintf("%s\n%s", atype+": "+key, string(jsonBytes))
 
 	return &Node{
 		ID:    idx,
