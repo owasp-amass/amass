@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/owasp-amass/amass/v4/config"
 	"github.com/owasp-amass/amass/v4/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v4/engine/types"
@@ -371,7 +372,10 @@ func (te *tlsexpand) storeContact(e *et.Event, c *tlsContact, asset *dbt.Entity,
 		}
 	}
 	if len(ct.Organization) > 0 && ct.Organization[0] != "" && m.IsMatch(string(oam.Organization)) {
-		if a, err := e.Session.Cache().CreateAsset(&org.Organization{Name: ct.Organization[0]}); err == nil && a != nil {
+		if a, err := e.Session.Cache().CreateAsset(&org.Organization{
+			ID:   uuid.New().String(),
+			Name: ct.Organization[0],
+		}); err == nil && a != nil {
 			if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
 				Relation:   &general.SimpleRelation{Name: "organization"},
 				FromEntity: cr,

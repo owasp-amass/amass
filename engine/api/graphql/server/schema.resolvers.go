@@ -12,7 +12,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/owasp-amass/amass/v4/config"
@@ -47,7 +46,6 @@ func (r *mutationResolver) CreateSessionFromJSON(ctx context.Context, input mode
 	var config config.Config
 
 	if err := json.Unmarshal([]byte(input.Config), &config); err != nil {
-		fmt.Println("Error unmarshalling JSON into config: " + err.Error())
 		return nil, err
 	}
 	// Populate FROM/TO in transformations
@@ -55,13 +53,12 @@ func (r *mutationResolver) CreateSessionFromJSON(ctx context.Context, input mode
 		t.Split(k)
 	}
 
-	session, err := r.Manager.NewSession(&config)
+	s, err := r.Manager.NewSession(&config)
 	if err != nil {
-		fmt.Println("Error creating new session: " + err.Error())
 		return nil, err
 	}
 
-	return &model.Session{SessionToken: session.ID().String()}, nil
+	return &model.Session{SessionToken: s.ID().String()}, nil
 }
 
 // CreateAsset is the resolver for the createAsset field.

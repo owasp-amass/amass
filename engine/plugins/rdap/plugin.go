@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/caffix/stringset"
+	"github.com/google/uuid"
 	"github.com/openrdap/rdap"
 	"github.com/openrdap/rdap/bootstrap"
 	"github.com/openrdap/rdap/bootstrap/cache"
@@ -243,7 +244,10 @@ func (rd *rdapPlugin) storeEntity(e *et.Event, level int, entity *rdap.Entity, a
 			}
 		}
 	} else if name != "" && m.IsMatch(string(oam.Organization)) {
-		if a, err := e.Session.Cache().CreateAsset(&org.Organization{Name: name}); err == nil && a != nil {
+		if a, err := e.Session.Cache().CreateAsset(&org.Organization{
+			ID:   uuid.New().String(),
+			Name: name,
+		}); err == nil && a != nil {
 			_ = rd.createContactEdge(e.Session, cr, a, &general.SimpleRelation{Name: "organization"}, src)
 		}
 	}
