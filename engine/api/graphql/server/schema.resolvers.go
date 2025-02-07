@@ -12,6 +12,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/owasp-amass/amass/v4/config"
@@ -46,6 +47,7 @@ func (r *mutationResolver) CreateSessionFromJSON(ctx context.Context, input mode
 	var config config.Config
 
 	if err := json.Unmarshal([]byte(input.Config), &config); err != nil {
+		fmt.Println("Error unmarshalling JSON into config: " + err.Error())
 		return nil, err
 	}
 	// Populate FROM/TO in transformations
@@ -55,6 +57,7 @@ func (r *mutationResolver) CreateSessionFromJSON(ctx context.Context, input mode
 
 	session, err := r.Manager.NewSession(&config)
 	if err != nil {
+		fmt.Println("Error creating new session: " + err.Error())
 		return nil, err
 	}
 

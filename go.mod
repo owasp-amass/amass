@@ -24,7 +24,7 @@ require (
 	github.com/miekg/dns v1.1.63
 	github.com/nyaruka/phonenumbers v1.5.0
 	github.com/openrdap/rdap v0.9.1
-	github.com/owasp-amass/asset-db v0.18.1
+	github.com/owasp-amass/asset-db v0.18.2
 	github.com/owasp-amass/open-asset-model v0.13.6
 	github.com/owasp-amass/resolve v0.8.1
 	github.com/samber/slog-common v0.18.1
@@ -106,7 +106,7 @@ require (
 	golang.org/x/text v0.22.0 // indirect
 	golang.org/x/time v0.10.0 // indirect
 	golang.org/x/tools v0.29.0 // indirect
-	google.golang.org/protobuf v1.36.4 // indirect
+	google.golang.org/protobuf v1.36.5 // indirect
 	gorm.io/datatypes v1.2.5 // indirect
 	gorm.io/driver/mysql v1.5.7 // indirect
 	gorm.io/driver/postgres v1.5.11 // indirect
