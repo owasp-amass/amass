@@ -18,6 +18,7 @@ import (
 	"github.com/owasp-amass/open-asset-model/contact"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	"github.com/owasp-amass/open-asset-model/org"
+	"github.com/owasp-amass/open-asset-model/platform"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
 )
 
@@ -208,15 +209,21 @@ func newNode(db repository.Repository, idx int, a *types.Entity, since time.Time
 
 	atype := string(asset.AssetType())
 	switch v := asset.(type) {
+	case *oamreg.AutnumRecord:
+		v.Raw = ""
 	case *contact.ContactRecord:
 		key = "Found->" + key
 	case *oamreg.DomainRecord:
 		key = "WHOIS: " + key
+	case *oamreg.IPNetRecord:
+		v.Raw = ""
 	case *contact.Location:
 		parts := []string{v.BuildingNumber, v.StreetName, v.City, v.Province, v.PostalCode}
 		key = strings.Join(parts, " ")
 	case *org.Organization:
 		key = fmt.Sprintf("%s, %s", v.Name, v.ID)
+	case *platform.Service:
+		v.Output = ""
 	case *oamcert.TLSCertificate:
 		key = fmt.Sprintf("%s, %s", v.SubjectCommonName, v.SerialNumber)
 	}
