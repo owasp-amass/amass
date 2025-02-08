@@ -20,6 +20,7 @@ import (
 	oamcert "github.com/owasp-amass/open-asset-model/certificate"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	"github.com/owasp-amass/open-asset-model/general"
+	"github.com/owasp-amass/open-asset-model/org"
 	"github.com/owasp-amass/open-asset-model/platform"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
 )
@@ -232,4 +233,21 @@ func CreateServiceAsset(session et.Session, src *dbt.Entity, rel oam.Relation, s
 		ToEntity:   result,
 	})
 	return result, err
+}
+
+func OrgNameExistsInContactRecord(session et.Session, cr *dbt.Entity, name string) bool {
+	if cr == nil {
+		return false
+	}
+
+	if edges, err := session.Cache().OutgoingEdges(cr, time.Time{}, "organization"); err == nil && len(edges) > 0 {
+		for _, edge := range edges {
+			if a, err := session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && a != nil {
+				if org, ok := a.Asset.(*org.Organization); ok && strings.EqualFold(org.Name, name) {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }

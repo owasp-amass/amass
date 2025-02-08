@@ -215,9 +215,9 @@ func newNode(db repository.Repository, idx int, a *types.Entity, since time.Time
 		parts := []string{v.BuildingNumber, v.StreetName, v.City, v.Province, v.PostalCode}
 		key = strings.Join(parts, " ")
 	case *org.Organization:
-		key = fmt.Sprintf("%s, %s", v.Name, v.ID)
+		key = fmt.Sprintf("%s (%s)", v.Name, v.ID)
 	case *oamcert.TLSCertificate:
-		key = fmt.Sprintf("%s, %s", v.SubjectCommonName, v.SerialNumber)
+		key = fmt.Sprintf("%s (%s)", v.SubjectCommonName, v.SerialNumber)
 	}
 	title := fmt.Sprintf("%s: %s", atype, key)
 

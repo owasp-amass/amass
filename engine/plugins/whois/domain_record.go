@@ -224,7 +224,8 @@ func (r *domrec) storeContact(e *et.Event, c *domrecContact, dr *dbt.Entity, m *
 			}
 		}
 	}
-	if wc.Organization != "" && m.IsMatch(string(oam.Organization)) {
+	if m.IsMatch(string(oam.Organization)) && wc.Organization != "" &&
+		!support.OrgNameExistsInContactRecord(e.Session, cr, wc.Organization) {
 		if a, err := e.Session.Cache().CreateAsset(&org.Organization{
 			ID:   uuid.New().String(),
 			Name: wc.Organization,

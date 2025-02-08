@@ -243,7 +243,7 @@ func (rd *rdapPlugin) storeEntity(e *et.Event, level int, entity *rdap.Entity, a
 				_ = rd.createContactEdge(e.Session, cr, a, &general.SimpleRelation{Name: "person"}, src)
 			}
 		}
-	} else if name != "" && m.IsMatch(string(oam.Organization)) {
+	} else if m.IsMatch(string(oam.Organization)) && name != "" && !support.OrgNameExistsInContactRecord(e.Session, cr, name) {
 		if a, err := e.Session.Cache().CreateAsset(&org.Organization{
 			ID:   uuid.New().String(),
 			Name: name,
