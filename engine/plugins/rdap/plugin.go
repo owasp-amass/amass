@@ -243,14 +243,13 @@ func (rd *rdapPlugin) storeEntity(e *et.Event, level int, entity *rdap.Entity, a
 				_ = rd.createContactEdge(e.Session, cr, a, &general.SimpleRelation{Name: "person"}, src)
 			}
 		}
-	} else if m.IsMatch(string(oam.Organization)) && name != "" &&
-		!support.OrgNameExistsInContactRecord(e.Session, cr, name) {
-		if a, err := support.CreateOrgAsset(e.Session, &org.Organization{
+	} else if m.IsMatch(string(oam.Organization)) {
+		o := &org.Organization{
 			ID:   uuid.New().String(),
 			Name: name,
-		}, src); err == nil && a != nil {
-			_ = rd.createContactEdge(e.Session, cr, a, &general.SimpleRelation{Name: "organization"}, src)
 		}
+
+		_, _ = support.CreateOrgAsset(e.Session, cr, &general.SimpleRelation{Name: "organization"}, o, src)
 	}
 	if adr := v.GetFirst("adr"); adr != nil && m.IsMatch(string(oam.Location)) {
 		if label, ok := adr.Parameters["label"]; ok {

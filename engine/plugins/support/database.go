@@ -18,6 +18,7 @@ import (
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamcert "github.com/owasp-amass/open-asset-model/certificate"
+	"github.com/owasp-amass/open-asset-model/contact"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	"github.com/owasp-amass/open-asset-model/general"
 	"github.com/owasp-amass/open-asset-model/org"
@@ -235,7 +236,14 @@ func CreateServiceAsset(session et.Session, src *dbt.Entity, rel oam.Relation, s
 	return result, err
 }
 
-func CreateOrgAsset(session et.Session, o *org.Organization, src *et.Source) (*dbt.Entity, error) {
+func CreateOrgAsset(session et.Session, obj *dbt.Entity, rel oam.Relation, o *org.Organization, src *et.Source) (*dbt.Entity, error) {
+	if orgent := orgDedupChecks(session, obj, rel, o); orgent != nil {
+		if err := createRelation(session, obj, rel, orgent, src); err != nil {
+			return nil, err
+		}
+		return orgent, nil
+	}
+
 	id := &general.Identifier{
 		UniqueID: fmt.Sprintf("%s:%s", "org_name", o.Name),
 		EntityID: o.Name,
@@ -243,25 +251,34 @@ func CreateOrgAsset(session et.Session, o *org.Organization, src *et.Source) (*d
 	}
 
 	if ident, err := session.Cache().CreateAsset(id); err == nil && ident != nil {
-		if o, err := session.Cache().CreateAsset(o); err == nil && o != nil {
-			if e, err := session.Cache().CreateEdge(&dbt.Edge{
-				Relation:   &general.SimpleRelation{Name: "id"},
-				FromEntity: o,
-				ToEntity:   ident,
-			}); err == nil && e != nil {
-				_, err = session.Cache().CreateEdgeProperty(e, &general.SourceProperty{
-					Source:     src.Name,
-					Confidence: src.Confidence,
-				})
-				return o, err
+		if orgent, err := session.Cache().CreateAsset(o); err == nil && orgent != nil {
+			if err := createRelation(session, orgent, &general.SimpleRelation{Name: "id"}, ident, src); err != nil {
+				return nil, err
 			}
+			if err := createRelation(session, obj, rel, orgent, src); err != nil {
+				return nil, err
+			}
+			return orgent, nil
 		}
 	}
 
 	return nil, errors.New("failed to create the OAM Organization asset")
 }
 
-func OrgHasName(session et.Session, org *dbt.Entity, name string) bool {
+func orgDedupChecks(session et.Session, obj *dbt.Entity, rel oam.Relation, o *org.Organization) *dbt.Entity {
+	var result *dbt.Entity
+
+	switch obj.Asset.(type) {
+	case *contact.ContactRecord:
+		if org, found := orgNameExistsInContactRecord(session, obj, o.Name); found {
+			result = org
+		}
+	}
+
+	return result
+}
+
+func orgHasName(session et.Session, org *dbt.Entity, name string) bool {
 	if org == nil {
 		return false
 	}
@@ -278,19 +295,38 @@ func OrgHasName(session et.Session, org *dbt.Entity, name string) bool {
 	return false
 }
 
-func OrgNameExistsInContactRecord(session et.Session, cr *dbt.Entity, name string) bool {
+func orgNameExistsInContactRecord(session et.Session, cr *dbt.Entity, name string) (*dbt.Entity, bool) {
 	if cr == nil {
-		return false
+		return nil, false
 	}
 
 	if edges, err := session.Cache().OutgoingEdges(cr, time.Time{}, "organization"); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
 			if a, err := session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && a != nil {
-				if _, ok := a.Asset.(*org.Organization); ok && OrgHasName(session, a, name) {
-					return true
+				if _, ok := a.Asset.(*org.Organization); ok && orgHasName(session, a, name) {
+					return a, true
 				}
 			}
 		}
 	}
-	return false
+	return nil, false
+}
+
+func createRelation(session et.Session, obj *dbt.Entity, rel oam.Relation, subject *dbt.Entity, src *et.Source) error {
+	edge, err := session.Cache().CreateEdge(&dbt.Edge{
+		Relation:   rel,
+		FromEntity: obj,
+		ToEntity:   subject,
+	})
+	if err != nil {
+		return err
+	} else if edge == nil {
+		return errors.New("failed to create the edge")
+	}
+
+	_, err = session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
+		Source:     src.Name,
+		Confidence: src.Confidence,
+	})
+	return err
 }

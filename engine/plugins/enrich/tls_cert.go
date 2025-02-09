@@ -371,22 +371,13 @@ func (te *tlsexpand) storeContact(e *et.Event, c *tlsContact, asset *dbt.Entity,
 			}
 		}
 	}
-	if len(ct.Organization) > 0 && ct.Organization[0] != "" && m.IsMatch(string(oam.Organization)) {
-		if a, err := support.CreateOrgAsset(e.Session, &org.Organization{
+	if m.IsMatch(string(oam.Organization)) && len(ct.Organization) > 0 && ct.Organization[0] != "" {
+		o := &org.Organization{
 			ID:   uuid.New().String(),
 			Name: ct.Organization[0],
-		}, src); err == nil && a != nil {
-			if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
-				Relation:   &general.SimpleRelation{Name: "organization"},
-				FromEntity: cr,
-				ToEntity:   a,
-			}); err == nil && edge != nil {
-				_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
-					Source:     src.Name,
-					Confidence: src.Confidence,
-				})
-			}
 		}
+
+		_, _ = support.CreateOrgAsset(e.Session, cr, &general.SimpleRelation{Name: "organization"}, o, src)
 	}
 	if len(ct.OrganizationalUnit) > 0 && ct.OrganizationalUnit[0] != "" && m.IsMatch(string(oam.URL)) {
 		if u := support.ExtractURLFromString(ct.OrganizationalUnit[0]); u != nil {

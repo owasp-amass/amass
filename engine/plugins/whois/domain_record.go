@@ -224,14 +224,14 @@ func (r *domrec) storeContact(e *et.Event, c *domrecContact, dr *dbt.Entity, m *
 			}
 		}
 	}
-	if m.IsMatch(string(oam.Organization)) && wc.Organization != "" &&
-		!support.OrgNameExistsInContactRecord(e.Session, cr, wc.Organization) {
-		if a, err := support.CreateOrgAsset(e.Session, &org.Organization{
+	if m.IsMatch(string(oam.Organization)) {
+		o := &org.Organization{
 			ID:   uuid.New().String(),
 			Name: wc.Organization,
-		}, r.plugin.source); err == nil && a != nil {
-			r.createSimpleEdge(e.Session.Cache(), &general.SimpleRelation{Name: "organization"}, cr, a)
 		}
+
+		_, _ = support.CreateOrgAsset(e.Session, cr,
+			&general.SimpleRelation{Name: "organization"}, o, r.plugin.source)
 	}
 	if loc := support.StreetAddressToLocation(addr); loc != nil {
 		if a, err := e.Session.Cache().CreateAsset(loc); err == nil && a != nil {
