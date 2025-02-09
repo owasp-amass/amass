@@ -235,6 +235,49 @@ func CreateServiceAsset(session et.Session, src *dbt.Entity, rel oam.Relation, s
 	return result, err
 }
 
+func CreateOrgAsset(session et.Session, o *org.Organization, src *et.Source) (*dbt.Entity, error) {
+	id := &general.Identifier{
+		UniqueID: fmt.Sprintf("%s:%s", "org_name", o.Name),
+		EntityID: o.Name,
+		Type:     "org_name",
+	}
+
+	if ident, err := session.Cache().CreateAsset(id); err == nil && ident != nil {
+		if o, err := session.Cache().CreateAsset(o); err == nil && o != nil {
+			if e, err := session.Cache().CreateEdge(&dbt.Edge{
+				Relation:   &general.SimpleRelation{Name: "id"},
+				FromEntity: o,
+				ToEntity:   ident,
+			}); err == nil && e != nil {
+				_, err = session.Cache().CreateEdgeProperty(e, &general.SourceProperty{
+					Source:     src.Name,
+					Confidence: src.Confidence,
+				})
+				return o, err
+			}
+		}
+	}
+
+	return nil, errors.New("failed to create the OAM Organization asset")
+}
+
+func OrgHasName(session et.Session, org *dbt.Entity, name string) bool {
+	if org == nil {
+		return false
+	}
+
+	if edges, err := session.Cache().OutgoingEdges(org, time.Time{}, "id"); err == nil && len(edges) > 0 {
+		for _, edge := range edges {
+			if a, err := session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && a != nil {
+				if id, ok := a.Asset.(*general.Identifier); ok && strings.EqualFold(id.EntityID, name) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
 func OrgNameExistsInContactRecord(session et.Session, cr *dbt.Entity, name string) bool {
 	if cr == nil {
 		return false
@@ -243,7 +286,7 @@ func OrgNameExistsInContactRecord(session et.Session, cr *dbt.Entity, name strin
 	if edges, err := session.Cache().OutgoingEdges(cr, time.Time{}, "organization"); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
 			if a, err := session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && a != nil {
-				if org, ok := a.Asset.(*org.Organization); ok && strings.EqualFold(org.Name, name) {
+				if _, ok := a.Asset.(*org.Organization); ok && OrgHasName(session, a, name) {
 					return true
 				}
 			}

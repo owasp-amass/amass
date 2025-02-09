@@ -226,10 +226,10 @@ func (r *domrec) storeContact(e *et.Event, c *domrecContact, dr *dbt.Entity, m *
 	}
 	if m.IsMatch(string(oam.Organization)) && wc.Organization != "" &&
 		!support.OrgNameExistsInContactRecord(e.Session, cr, wc.Organization) {
-		if a, err := e.Session.Cache().CreateAsset(&org.Organization{
+		if a, err := support.CreateOrgAsset(e.Session, &org.Organization{
 			ID:   uuid.New().String(),
 			Name: wc.Organization,
-		}); err == nil && a != nil {
+		}, r.plugin.source); err == nil && a != nil {
 			r.createSimpleEdge(e.Session.Cache(), &general.SimpleRelation{Name: "organization"}, cr, a)
 		}
 	}
