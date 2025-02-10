@@ -237,7 +237,7 @@ func CreateServiceAsset(session et.Session, src *dbt.Entity, rel oam.Relation, s
 }
 
 func CreateOrgAsset(session et.Session, obj *dbt.Entity, rel oam.Relation, o *org.Organization, src *et.Source) (*dbt.Entity, error) {
-	if orgent := orgDedupChecks(session, obj, rel, o); orgent != nil {
+	if orgent := orgDedupChecks(session, obj, o); orgent != nil {
 		if err := createRelation(session, obj, rel, orgent, src); err != nil {
 			return nil, err
 		}
@@ -265,12 +265,23 @@ func CreateOrgAsset(session et.Session, obj *dbt.Entity, rel oam.Relation, o *or
 	return nil, errors.New("failed to create the OAM Organization asset")
 }
 
-func orgDedupChecks(session et.Session, obj *dbt.Entity, rel oam.Relation, o *org.Organization) *dbt.Entity {
+func orgDedupChecks(session et.Session, obj *dbt.Entity, o *org.Organization) *dbt.Entity {
 	var result *dbt.Entity
 
 	switch obj.Asset.(type) {
 	case *contact.ContactRecord:
 		if org, found := orgNameExistsInContactRecord(session, obj, o.Name); found {
+			result = org
+		}
+		if org, err := orgExistsAndSharesLocEntity(session, obj, o); err == nil {
+			result = org
+		}
+	case *org.Organization:
+		if org, err := orgExistsAndSharesLocEntity(session, obj, o); err == nil {
+			result = org
+		}
+	default:
+		if org, err := orgExistsAndSharesAncestorEntity(session, o); err == nil {
 			result = org
 		}
 	}
@@ -310,6 +321,101 @@ func orgNameExistsInContactRecord(session et.Session, cr *dbt.Entity, name strin
 		}
 	}
 	return nil, false
+}
+
+func orgExistsAndSharesLocEntity(session et.Session, obj *dbt.Entity, o *org.Organization) (*dbt.Entity, error) {
+	var locs []*dbt.Entity
+
+	if edges, err := session.Cache().OutgoingEdges(obj, time.Time{}, "location"); err == nil {
+		for _, edge := range edges {
+			if a, err := session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && a != nil {
+				if _, ok := a.Asset.(*contact.Location); ok {
+					locs = append(locs, a)
+				}
+			}
+		}
+	}
+
+	var orgents, crecords []*dbt.Entity
+	for _, loc := range locs {
+		if edges, err := session.Cache().IncomingEdges(loc, time.Time{}, "location"); err == nil {
+			for _, edge := range edges {
+				if a, err := session.Cache().FindEntityById(edge.FromEntity.ID); err == nil && a != nil {
+					if _, ok := a.Asset.(*contact.ContactRecord); ok && a.ID != obj.ID {
+						crecords = append(crecords, a)
+					} else if _, ok := a.Asset.(*org.Organization); ok {
+						orgents = append(orgents, a)
+					}
+				}
+			}
+		}
+	}
+
+	for _, cr := range crecords {
+		if edges, err := session.Cache().OutgoingEdges(cr, time.Time{}, "organization"); err == nil {
+			for _, edge := range edges {
+				if a, err := session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && a != nil {
+					if _, ok := a.Asset.(*org.Organization); ok {
+						orgents = append(orgents, a)
+					}
+				}
+			}
+		}
+	}
+
+	for _, orgent := range orgents {
+		if strings.EqualFold(orgent.Asset.(*org.Organization).Name, o.Name) {
+			return orgent, nil
+		}
+	}
+
+	return nil, errors.New("no matching org found")
+}
+
+func orgExistsAndSharesAncestorEntity(session et.Session, o *org.Organization) (*dbt.Entity, error) {
+	var idents []*dbt.Entity
+
+	if assets, err := session.Cache().FindEntitiesByContent(&general.Identifier{
+		UniqueID: fmt.Sprintf("%s:%s", "org_name", o.Name),
+		EntityID: o.Name,
+		Type:     "org_name",
+	}, time.Time{}); err == nil {
+		for _, a := range assets {
+			if _, ok := a.Asset.(*general.Identifier); ok {
+				idents = append(idents, a)
+			}
+		}
+	}
+
+	var orgents []*dbt.Entity
+	for _, ident := range idents {
+		if edges, err := session.Cache().IncomingEdges(ident, time.Time{}, "id"); err == nil {
+			for _, edge := range edges {
+				if a, err := session.Cache().FindEntityById(edge.FromEntity.ID); err == nil && a != nil {
+					if _, ok := a.Asset.(*org.Organization); ok {
+						orgents = append(orgents, a)
+					}
+				}
+			}
+		}
+	}
+
+	ancestors := make(map[string]struct{})
+	for _, orgent := range orgents {
+		if edges, err := session.Cache().IncomingEdges(orgent, time.Time{}); err == nil {
+			for _, edge := range edges {
+				if a, err := session.Cache().FindEntityById(edge.FromEntity.ID); err == nil && a != nil {
+					if _, found := ancestors[a.ID]; !found {
+						ancestors[a.ID] = struct{}{}
+					} else {
+						return orgent, nil
+					}
+				}
+			}
+		}
+	}
+
+	return nil, errors.New("no matching org found")
 }
 
 func createRelation(session et.Session, obj *dbt.Entity, rel oam.Relation, subject *dbt.Entity, src *et.Source) error {
