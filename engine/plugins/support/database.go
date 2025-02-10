@@ -276,12 +276,14 @@ func orgDedupChecks(session et.Session, obj *dbt.Entity, o *org.Organization) *d
 		if org, err := orgExistsAndSharesLocEntity(session, obj, o); err == nil {
 			result = org
 		}
+		if org, err := orgExistsAndSharesAncestorEntity(session, obj, o); err == nil {
+			result = org
+		}
 	case *org.Organization:
 		if org, err := orgExistsAndSharesLocEntity(session, obj, o); err == nil {
 			result = org
 		}
-	default:
-		if org, err := orgExistsAndSharesAncestorEntity(session, o); err == nil {
+		if org, err := orgExistsAndSharesAncestorEntity(session, obj, o); err == nil {
 			result = org
 		}
 	}
@@ -372,7 +374,7 @@ func orgExistsAndSharesLocEntity(session et.Session, obj *dbt.Entity, o *org.Org
 	return nil, errors.New("no matching org found")
 }
 
-func orgExistsAndSharesAncestorEntity(session et.Session, o *org.Organization) (*dbt.Entity, error) {
+func orgExistsAndSharesAncestorEntity(session et.Session, obj *dbt.Entity, o *org.Organization) (*dbt.Entity, error) {
 	var idents []*dbt.Entity
 
 	if assets, err := session.Cache().FindEntitiesByContent(&general.Identifier{
@@ -399,16 +401,49 @@ func orgExistsAndSharesAncestorEntity(session et.Session, o *org.Organization) (
 			}
 		}
 	}
+	if len(orgents) == 0 {
+		return nil, errors.New("no matching org found")
+	}
 
+	assets := []*dbt.Entity{obj}
 	ancestors := make(map[string]struct{})
-	for _, orgent := range orgents {
-		if edges, err := session.Cache().IncomingEdges(orgent, time.Time{}); err == nil {
-			for _, edge := range edges {
-				if a, err := session.Cache().FindEntityById(edge.FromEntity.ID); err == nil && a != nil {
-					if _, found := ancestors[a.ID]; !found {
-						ancestors[a.ID] = struct{}{}
-					} else {
-						return orgent, nil
+	for len(assets) > 0 {
+		remaining := assets
+		assets = []*dbt.Entity{}
+
+		for _, r := range remaining {
+			if edges, err := session.Cache().IncomingEdges(r, time.Time{}); err == nil {
+				for _, edge := range edges {
+					if a, err := session.Cache().FindEntityById(edge.FromEntity.ID); err == nil && a != nil {
+						if _, found := ancestors[a.ID]; !found {
+							if _, conf := session.Scope().IsAssetInScope(a.Asset, 0); conf > 0 {
+								ancestors[a.ID] = struct{}{}
+								assets = append(assets, a)
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	assets = orgents
+	for len(assets) > 0 {
+		remaining := assets
+		assets = []*dbt.Entity{}
+
+		for _, orgent := range remaining {
+			if edges, err := session.Cache().IncomingEdges(orgent, time.Time{}); err == nil {
+				for _, edge := range edges {
+					if a, err := session.Cache().FindEntityById(edge.FromEntity.ID); err == nil && a != nil {
+						if _, found := ancestors[a.ID]; !found {
+							if _, conf := session.Scope().IsAssetInScope(a.Asset, 0); conf > 0 {
+								ancestors[a.ID] = struct{}{}
+								assets = append(assets, a)
+							}
+						} else {
+							return orgent, nil
+						}
 					}
 				}
 			}
