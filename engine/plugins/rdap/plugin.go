@@ -177,15 +177,13 @@ func (rd *rdapPlugin) Stop() {
 	rd.log.Info("Plugin stopped")
 }
 
-func (rd *rdapPlugin) storeEntity(e *et.Event, level int, entity *rdap.Entity, asset *dbt.Entity, src *et.Source, m *config.Matches) []*support.Finding {
-	var findings []*support.Finding
-
+func (rd *rdapPlugin) storeEntity(e *et.Event, level int, entity *rdap.Entity, asset *dbt.Entity, src *et.Source, m *config.Matches) {
 	roles := stringset.New(entity.Roles...)
 	defer roles.Close()
 
 	u := rd.getJSONLink(entity.Links)
 	if u == nil {
-		return nil
+		return
 	}
 
 	var rel string
@@ -198,12 +196,12 @@ func (rd *rdapPlugin) storeEntity(e *et.Event, level int, entity *rdap.Entity, a
 	} else if roles.Has("technical") {
 		rel = "technical_contact"
 	} else {
-		return nil
+		return
 	}
 
 	cr, err := e.Session.Cache().CreateAsset(&contact.ContactRecord{DiscoveredAt: u.Raw})
 	if err != nil || cr == nil {
-		return nil
+		return
 	}
 
 	var name string
@@ -214,6 +212,7 @@ func (rd *rdapPlugin) storeEntity(e *et.Event, level int, entity *rdap.Entity, a
 		name = "IPNetRecord: " + v.Handle
 	}
 
+	var findings []*support.Finding
 	findings = append(findings, &support.Finding{
 		From:     asset,
 		FromName: name,
@@ -221,11 +220,13 @@ func (rd *rdapPlugin) storeEntity(e *et.Event, level int, entity *rdap.Entity, a
 		ToName:   "ContactRecord: " + u.Raw,
 		Rel:      &general.SimpleRelation{Name: rel},
 	})
+	// process the relation immediately
+	support.ProcessAssetsWithSource(e, findings, rd.source, rd.name, rd.name+"-storeEntity")
 
 	if m.IsMatch(string(oam.URL)) {
 		a, err := e.Session.Cache().CreateAsset(u)
 		if err != nil {
-			return nil
+			return
 		}
 		_ = rd.createContactEdge(e.Session, cr, a, &general.SimpleRelation{Name: "url"}, src)
 	}
@@ -233,24 +234,9 @@ func (rd *rdapPlugin) storeEntity(e *et.Event, level int, entity *rdap.Entity, a
 	v := entity.VCard
 	prop := v.GetFirst("kind")
 	if prop == nil {
-		return nil
+		return
 	}
 
-	name = v.Name()
-	if kind := strings.Join(prop.Values(), " "); name != "" && kind == "individual" {
-		if p := support.FullNameToPerson(name); p != nil && m.IsMatch(string(oam.Person)) {
-			if a, err := e.Session.Cache().CreateAsset(p); err == nil && a != nil {
-				_ = rd.createContactEdge(e.Session, cr, a, &general.SimpleRelation{Name: "person"}, src)
-			}
-		}
-	} else if m.IsMatch(string(oam.Organization)) {
-		o := &org.Organization{
-			ID:   uuid.New().String(),
-			Name: name,
-		}
-
-		_, _ = support.CreateOrgAsset(e.Session, cr, &general.SimpleRelation{Name: "organization"}, o, src)
-	}
 	if adr := v.GetFirst("adr"); adr != nil && m.IsMatch(string(oam.Location)) {
 		if label, ok := adr.Parameters["label"]; ok {
 			s := strings.Join(label, " ")
@@ -263,9 +249,23 @@ func (rd *rdapPlugin) storeEntity(e *et.Event, level int, entity *rdap.Entity, a
 			}
 		}
 	}
-	if m.IsMatch(string(oam.Identifier)) && v.Email() != "" {
-		email := strings.ToLower(v.Email())
 
+	name = v.Name()
+	if kind := strings.Join(prop.Values(), " "); m.IsMatch(string(oam.Person)) && name != "" && kind == "individual" {
+		if p := support.FullNameToPerson(name); p != nil {
+			if a, err := e.Session.Cache().CreateAsset(p); err == nil && a != nil {
+				_ = rd.createContactEdge(e.Session, cr, a, &general.SimpleRelation{Name: "person"}, src)
+			}
+		}
+	} else if m.IsMatch(string(oam.Organization)) && kind == "org" {
+		o := &org.Organization{
+			ID:   uuid.New().String(),
+			Name: name,
+		}
+
+		_, _ = support.CreateOrgAsset(e.Session, cr, &general.SimpleRelation{Name: "organization"}, o, src)
+	}
+	if email := strings.ToLower(v.Email()); m.IsMatch(string(oam.Identifier)) && email != "" {
 		if a, err := e.Session.Cache().CreateAsset(&general.Identifier{
 			UniqueID: fmt.Sprintf("%s:%s", general.EmailAddress, email),
 			EntityID: email,
@@ -291,9 +291,8 @@ func (rd *rdapPlugin) storeEntity(e *et.Event, level int, entity *rdap.Entity, a
 
 	level++
 	for _, ent := range entity.Entities {
-		findings = append(findings, rd.storeEntity(e, level, &ent, asset, rd.source, m)...)
+		rd.storeEntity(e, level, &ent, asset, rd.source, m)
 	}
-	return findings
 }
 
 func (rd *rdapPlugin) getJSONLink(links []rdap.Link) *url.URL {

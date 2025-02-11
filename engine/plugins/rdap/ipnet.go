@@ -45,7 +45,7 @@ func (r *ipnet) check(e *et.Event) error {
 
 	var findings []*support.Finding
 	if record, ok := e.Meta.(*rdap.IPNetwork); ok && record != nil {
-		findings = append(findings, r.store(e, record, e.Entity, matches)...)
+		r.store(e, record, e.Entity, matches)
 	} else {
 		findings = append(findings, r.lookup(e, e.Entity, matches)...)
 	}
@@ -136,7 +136,7 @@ func (r *ipnet) oneOfSources(e *et.Event, edge *dbt.Edge, src *et.Source, since 
 	return false
 }
 
-func (r *ipnet) store(e *et.Event, resp *rdap.IPNetwork, entity *dbt.Entity, m *config.Matches) []*support.Finding {
+func (r *ipnet) store(e *et.Event, resp *rdap.IPNetwork, entity *dbt.Entity, m *config.Matches) {
 	var findings []*support.Finding
 	iprec := entity.Asset.(*oamreg.IPNetRecord)
 
@@ -167,13 +167,14 @@ func (r *ipnet) store(e *et.Event, resp *rdap.IPNetwork, entity *dbt.Entity, m *
 		}
 	}
 
+	// process the relations built above
+	support.ProcessAssetsWithSource(e, findings, r.plugin.source, r.plugin.name, r.name)
+
 	if m.IsMatch(string(oam.ContactRecord)) {
 		for _, v := range resp.Entities {
-			findings = append(findings, r.plugin.storeEntity(e, 1, &v, entity, r.plugin.source, m)...)
+			r.plugin.storeEntity(e, 1, &v, entity, r.plugin.source, m)
 		}
 	}
-
-	return findings
 }
 
 func (r *ipnet) process(e *et.Event, findings []*support.Finding) {

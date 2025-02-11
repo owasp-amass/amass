@@ -94,7 +94,7 @@ func (te *tlsexpand) check(e *et.Event) error {
 
 	var findings []*support.Finding
 	if cert, ok := e.Meta.(*x509.Certificate); ok && cert != nil {
-		findings = append(findings, te.store(e, cert, e.Entity, matches)...)
+		te.store(e, cert, e.Entity, matches)
 	} else {
 		findings = append(findings, te.lookup(e, e.Entity, matches)...)
 	}
@@ -179,7 +179,7 @@ func (te *tlsexpand) oneOfSources(e *et.Event, edge *dbt.Edge, src *et.Source, s
 	return false
 }
 
-func (te *tlsexpand) store(e *et.Event, cert *x509.Certificate, asset *dbt.Entity, m *config.Matches) []*support.Finding {
+func (te *tlsexpand) store(e *et.Event, cert *x509.Certificate, asset *dbt.Entity, m *config.Matches) {
 	var findings []*support.Finding
 	t := asset.Asset.(*oamcert.TLSCertificate)
 
@@ -297,19 +297,19 @@ func (te *tlsexpand) store(e *et.Event, cert *x509.Certificate, asset *dbt.Entit
 		}
 	}
 
-	if !m.IsMatch(string(oam.ContactRecord)) {
-		return findings
-	}
+	// process the relations built so far from the certificate
+	support.ProcessAssetsWithSource(e, findings, te.source, te.name, te.name+"-Handler")
 
-	base := "x509 Certificate: " + cert.SerialNumber.String() + ", "
-	contacts := []*tlsContact{
-		{&cert.Subject, "subject_contact", base + "Subject"},
-		{&cert.Issuer, "issuer_contact", base + "Issuer"},
+	if m.IsMatch(string(oam.ContactRecord)) {
+		base := "x509 Certificate: " + cert.SerialNumber.String() + ", "
+		contacts := []*tlsContact{
+			{&cert.Subject, "subject_contact", base + "Subject"},
+			{&cert.Issuer, "issuer_contact", base + "Issuer"},
+		}
+		for _, c := range contacts {
+			te.storeContact(e, c, asset, te.source, m)
+		}
 	}
-	for _, c := range contacts {
-		findings = append(findings, te.storeContact(e, c, asset, te.source, m)...)
-	}
-	return findings
 }
 
 type tlsContact struct {
@@ -318,9 +318,8 @@ type tlsContact struct {
 	DiscoveredAt string
 }
 
-func (te *tlsexpand) storeContact(e *et.Event, c *tlsContact, asset *dbt.Entity, src *et.Source, m *config.Matches) []*support.Finding {
+func (te *tlsexpand) storeContact(e *et.Event, c *tlsContact, asset *dbt.Entity, src *et.Source, m *config.Matches) {
 	ct := c.contact
-	var findings []*support.Finding
 
 	var foundaddr bool
 	if len(ct.Province) > 0 && len(ct.Country) > 0 {
@@ -333,13 +332,25 @@ func (te *tlsexpand) storeContact(e *et.Event, c *tlsContact, asset *dbt.Entity,
 	}
 	// only continue with the database operations if there's a contact record to create
 	if !foundaddr && !foundorgs {
-		return findings
+		return
 	}
 
 	cr, err := e.Session.Cache().CreateAsset(&contact.ContactRecord{DiscoveredAt: c.DiscoveredAt})
 	if err != nil || cr == nil {
-		return findings
+		return
 	}
+
+	var findings []*support.Finding
+	t := asset.Asset.(*oamcert.TLSCertificate)
+	findings = append(findings, &support.Finding{
+		From:     asset,
+		FromName: "TLSCertificate: " + t.SerialNumber,
+		To:       cr,
+		ToName:   "ContactRecord" + c.DiscoveredAt,
+		Rel:      &general.SimpleRelation{Name: c.RelationName},
+	})
+	// process the relation immediately
+	support.ProcessAssetsWithSource(e, findings, te.source, te.name, te.name+"-Handler")
 
 	if foundaddr && m.IsMatch(string(oam.Location)) {
 		var addr string
@@ -395,17 +406,6 @@ func (te *tlsexpand) storeContact(e *et.Event, c *tlsContact, asset *dbt.Entity,
 			}
 		}
 	}
-
-	t := asset.Asset.(*oamcert.TLSCertificate)
-	findings = append(findings, &support.Finding{
-		From:     asset,
-		FromName: "TLSCertificate: " + t.SerialNumber,
-		To:       cr,
-		ToName:   "ContactRecord" + c.DiscoveredAt,
-		Rel:      &general.SimpleRelation{Name: c.RelationName},
-	})
-
-	return findings
 }
 
 func (te *tlsexpand) process(e *et.Event, findings []*support.Finding) {

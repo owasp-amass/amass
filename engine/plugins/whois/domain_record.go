@@ -50,7 +50,7 @@ func (r *domrec) check(e *et.Event) error {
 	src := r.plugin.source
 	var findings []*support.Finding
 	if record, ok := e.Meta.(*whoisparser.WhoisInfo); ok && record != nil {
-		findings = append(findings, r.store(e, record, e.Entity, matches)...)
+		r.store(e, record, e.Entity, matches)
 	} else {
 		findings = append(findings, r.lookup(e, e.Entity, src, matches)...)
 	}
@@ -127,12 +127,12 @@ func (r *domrec) oneOfSources(e *et.Event, asset *dbt.Entity, src *et.Source, si
 	return false
 }
 
-func (r *domrec) store(e *et.Event, resp *whoisparser.WhoisInfo, asset *dbt.Entity, m *config.Matches) []*support.Finding {
+func (r *domrec) store(e *et.Event, resp *whoisparser.WhoisInfo, asset *dbt.Entity, m *config.Matches) {
 	var findings []*support.Finding
 	dr := asset.Asset.(*oamreg.DomainRecord)
 
 	if !m.IsMatch(string(oam.FQDN)) {
-		return findings
+		return
 	}
 
 	for _, ns := range resp.Domain.NameServers {
@@ -160,8 +160,11 @@ func (r *domrec) store(e *et.Event, resp *whoisparser.WhoisInfo, asset *dbt.Enti
 		}
 	}
 
+	// process the relations built above immediately
+	support.ProcessAssetsWithSource(e, findings, r.plugin.source, r.plugin.name, r.name)
+
 	if !m.IsMatch(string(oam.ContactRecord)) {
-		return findings
+		return
 	}
 
 	base := dr.WhoisServer + ", " + dr.Domain + ", "
@@ -174,10 +177,9 @@ func (r *domrec) store(e *et.Event, resp *whoisparser.WhoisInfo, asset *dbt.Enti
 	}
 	for _, c := range contacts {
 		if c.WhoisContact != nil {
-			findings = append(findings, r.storeContact(e, c, asset, m)...)
+			r.storeContact(e, c, asset, m)
 		}
 	}
-	return findings
 }
 
 type domrecContact struct {
@@ -186,14 +188,13 @@ type domrecContact struct {
 	DiscoveredAt string
 }
 
-func (r *domrec) storeContact(e *et.Event, c *domrecContact, dr *dbt.Entity, m *config.Matches) []*support.Finding {
-	var findings []*support.Finding
-
+func (r *domrec) storeContact(e *et.Event, c *domrecContact, dr *dbt.Entity, m *config.Matches) {
 	cr, err := e.Session.Cache().CreateAsset(&contact.ContactRecord{DiscoveredAt: c.DiscoveredAt})
 	if err != nil || cr == nil {
-		return findings
+		return
 	}
 
+	var findings []*support.Finding
 	record := dr.Asset.(*oamreg.DomainRecord)
 	findings = append(findings, &support.Finding{
 		From:     dr,
@@ -202,6 +203,8 @@ func (r *domrec) storeContact(e *et.Event, c *domrecContact, dr *dbt.Entity, m *
 		ToName:   "ContactRecord" + c.DiscoveredAt,
 		Rel:      &general.SimpleRelation{Name: c.RelationName},
 	})
+	// process the contact record relation immediately
+	support.ProcessAssetsWithSource(e, findings, r.plugin.source, r.plugin.name, r.name)
 
 	var found bool
 	wc := c.WhoisContact
@@ -224,6 +227,11 @@ func (r *domrec) storeContact(e *et.Event, c *domrecContact, dr *dbt.Entity, m *
 			}
 		}
 	}
+	if loc := support.StreetAddressToLocation(addr); loc != nil {
+		if a, err := e.Session.Cache().CreateAsset(loc); err == nil && a != nil {
+			r.createSimpleEdge(e.Session.Cache(), &general.SimpleRelation{Name: "location"}, cr, a)
+		}
+	}
 	if m.IsMatch(string(oam.Organization)) {
 		o := &org.Organization{
 			ID:   uuid.New().String(),
@@ -232,11 +240,6 @@ func (r *domrec) storeContact(e *et.Event, c *domrecContact, dr *dbt.Entity, m *
 
 		_, _ = support.CreateOrgAsset(e.Session, cr,
 			&general.SimpleRelation{Name: "organization"}, o, r.plugin.source)
-	}
-	if loc := support.StreetAddressToLocation(addr); loc != nil {
-		if a, err := e.Session.Cache().CreateAsset(loc); err == nil && a != nil {
-			r.createSimpleEdge(e.Session.Cache(), &general.SimpleRelation{Name: "location"}, cr, a)
-		}
 	}
 	if email := strings.ToLower(wc.Email); m.IsMatch(string(oam.Identifier)) && email != "" {
 		if a, err := e.Session.Cache().CreateAsset(&general.Identifier{
@@ -266,8 +269,6 @@ func (r *domrec) storeContact(e *et.Event, c *domrecContact, dr *dbt.Entity, m *
 			r.createSimpleEdge(e.Session.Cache(), &general.SimpleRelation{Name: "url"}, cr, a)
 		}
 	}
-
-	return findings
 }
 
 func (r *domrec) process(e *et.Event, findings []*support.Finding, src *et.Source) {

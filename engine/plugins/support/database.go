@@ -244,9 +244,10 @@ func CreateOrgAsset(session et.Session, obj *dbt.Entity, rel oam.Relation, o *or
 		return orgent, nil
 	}
 
+	name := strings.ToLower(o.Name)
 	id := &general.Identifier{
-		UniqueID: fmt.Sprintf("%s:%s", "org_name", o.Name),
-		EntityID: o.Name,
+		UniqueID: fmt.Sprintf("%s:%s", "org_name", name),
+		EntityID: name,
 		Type:     "org_name",
 	}
 
@@ -345,7 +346,7 @@ func orgExistsAndSharesLocEntity(session et.Session, obj *dbt.Entity, o *org.Org
 				if a, err := session.Cache().FindEntityById(edge.FromEntity.ID); err == nil && a != nil {
 					if _, ok := a.Asset.(*contact.ContactRecord); ok && a.ID != obj.ID {
 						crecords = append(crecords, a)
-					} else if _, ok := a.Asset.(*org.Organization); ok {
+					} else if _, ok := a.Asset.(*org.Organization); ok && a.ID != obj.ID {
 						orgents = append(orgents, a)
 					}
 				}
@@ -377,9 +378,10 @@ func orgExistsAndSharesLocEntity(session et.Session, obj *dbt.Entity, o *org.Org
 func orgExistsAndSharesAncestorEntity(session et.Session, obj *dbt.Entity, o *org.Organization) (*dbt.Entity, error) {
 	var idents []*dbt.Entity
 
+	name := strings.ToLower(o.Name)
 	if assets, err := session.Cache().FindEntitiesByContent(&general.Identifier{
-		UniqueID: fmt.Sprintf("%s:%s", "org_name", o.Name),
-		EntityID: o.Name,
+		UniqueID: fmt.Sprintf("%s:%s", "org_name", name),
+		EntityID: name,
 		Type:     "org_name",
 	}, time.Time{}); err == nil {
 		for _, a := range assets {
@@ -407,7 +409,8 @@ func orgExistsAndSharesAncestorEntity(session et.Session, obj *dbt.Entity, o *or
 
 	assets := []*dbt.Entity{obj}
 	ancestors := make(map[string]struct{})
-	for len(assets) > 0 {
+	ancestors[obj.ID] = struct{}{}
+	for i := 0; i < 10 && len(assets) > 0; i++ {
 		remaining := assets
 		assets = []*dbt.Entity{}
 
@@ -416,10 +419,8 @@ func orgExistsAndSharesAncestorEntity(session et.Session, obj *dbt.Entity, o *or
 				for _, edge := range edges {
 					if a, err := session.Cache().FindEntityById(edge.FromEntity.ID); err == nil && a != nil {
 						if _, found := ancestors[a.ID]; !found {
-							if _, conf := session.Scope().IsAssetInScope(a.Asset, 0); conf > 0 {
-								ancestors[a.ID] = struct{}{}
-								assets = append(assets, a)
-							}
+							ancestors[a.ID] = struct{}{}
+							assets = append(assets, a)
 						}
 					}
 				}
@@ -427,22 +428,22 @@ func orgExistsAndSharesAncestorEntity(session et.Session, obj *dbt.Entity, o *or
 		}
 	}
 
-	assets = orgents
-	for len(assets) > 0 {
-		remaining := assets
-		assets = []*dbt.Entity{}
+	for _, orgent := range orgents {
+		assets = []*dbt.Entity{orgent}
 
-		for _, orgent := range remaining {
-			if edges, err := session.Cache().IncomingEdges(orgent, time.Time{}); err == nil {
-				for _, edge := range edges {
-					if a, err := session.Cache().FindEntityById(edge.FromEntity.ID); err == nil && a != nil {
-						if _, found := ancestors[a.ID]; !found {
-							if _, conf := session.Scope().IsAssetInScope(a.Asset, 0); conf > 0 {
-								ancestors[a.ID] = struct{}{}
+		for i := 0; i < 10 && len(assets) > 0; i++ {
+			remaining := assets
+			assets = []*dbt.Entity{}
+
+			for _, r := range remaining {
+				if edges, err := session.Cache().IncomingEdges(r, time.Time{}); err == nil {
+					for _, edge := range edges {
+						if a, err := session.Cache().FindEntityById(edge.FromEntity.ID); err == nil && a != nil {
+							if _, found := ancestors[a.ID]; !found {
 								assets = append(assets, a)
+							} else {
+								return orgent, nil
 							}
-						} else {
-							return orgent, nil
 						}
 					}
 				}
