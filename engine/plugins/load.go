@@ -6,12 +6,13 @@ package plugins
 
 import (
 	"github.com/owasp-amass/amass/v4/engine/plugins/api"
+	"github.com/owasp-amass/amass/v4/engine/plugins/api/gleif"
+	"github.com/owasp-amass/amass/v4/engine/plugins/api/rdap"
 	"github.com/owasp-amass/amass/v4/engine/plugins/archive"
 	"github.com/owasp-amass/amass/v4/engine/plugins/brute"
 	"github.com/owasp-amass/amass/v4/engine/plugins/dns"
 	"github.com/owasp-amass/amass/v4/engine/plugins/enrich"
 	"github.com/owasp-amass/amass/v4/engine/plugins/horizontals"
-	"github.com/owasp-amass/amass/v4/engine/plugins/rdap"
 	"github.com/owasp-amass/amass/v4/engine/plugins/scrape"
 	hp "github.com/owasp-amass/amass/v4/engine/plugins/service_discovery/http_probes"
 	"github.com/owasp-amass/amass/v4/engine/plugins/whois"
@@ -43,6 +44,7 @@ var pluginNewFuncs = []func() et.Plugin{
 	enrich.NewEmails,
 	enrich.NewTLSCerts,
 	enrich.NewURLs,
+	gleif.NewGLEIF,
 	horizontals.NewHorizontals,
 	hp.NewHTTPProbing,
 	rdap.NewRDAP,
