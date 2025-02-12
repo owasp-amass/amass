@@ -2,14 +2,15 @@
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
-package api
+package gleif
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log/slog"
+	"fmt"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/owasp-amass/amass/v4/engine/plugins/support"
@@ -17,85 +18,59 @@ import (
 	"github.com/owasp-amass/amass/v4/utils/net/http"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
+	"github.com/owasp-amass/open-asset-model/general"
 	"github.com/owasp-amass/open-asset-model/org"
-	"go.uber.org/ratelimit"
 )
 
-type gleif struct {
+type fuzzyCompletions struct {
 	name   string
-	log    *slog.Logger
-	rlimit ratelimit.Limiter
-	source *et.Source
+	plugin *gleif
 }
 
-func NewGLEIF() et.Plugin {
-	return &gleif{
-		name:   "GLEIF",
-		rlimit: ratelimit.New(2, ratelimit.WithoutSlack),
-		source: &et.Source{
-			Name:       "GLEIF",
-			Confidence: 100,
-		},
-	}
-}
-
-func (g *gleif) Name() string {
-	return g.name
-}
-
-func (g *gleif) Start(r et.Registry) error {
-	g.log = r.Log().WithGroup("plugin").With("name", g.name)
-
-	if err := r.RegisterHandler(&et.Handler{
-		Plugin:       g,
-		Name:         g.name + "-Handler",
-		Priority:     6,
-		MaxInstances: 2,
-		Transforms: []string{
-			string(oam.Identifier),
-			string(oam.Organization),
-		},
-		EventType: oam.Organization,
-		Callback:  g.check,
-	}); err != nil {
-		return err
-	}
-
-	g.log.Info("Plugin started")
-	return nil
-}
-
-func (g *gleif) Stop() {
-	g.log.Info("Plugin stopped")
-}
-
-func (g *gleif) check(e *et.Event) error {
-	o, ok := e.Entity.Asset.(*org.Organization)
+func (fc *fuzzyCompletions) check(e *et.Event) error {
+	_, ok := e.Entity.Asset.(*org.Organization)
 	if !ok {
 		return errors.New("failed to extract the Organization asset")
 	}
 
-	since, err := support.TTLStartTime(e.Session.Config(), string(oam.Organization), string(oam.Organization), g.name)
+	since, err := support.TTLStartTime(e.Session.Config(), string(oam.Organization), string(oam.Organization), fc.name)
 	if err != nil {
 		return err
 	}
 
-	var names []*dbt.Entity
-	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, g.source, since) {
-		names = append(names, g.lookup(e, o, g.source, since)...)
+	var id *dbt.Entity
+	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, fc.plugin.source, since) {
+		id = fc.lookup(e, e.Entity, fc.plugin.source, since)
 	} else {
-		names = append(names, g.query(e, o, g.source)...)
-		support.MarkAssetMonitored(e.Session, e.Entity, g.source)
+		id = fc.query(e, e.Entity, fc.plugin.source)
+		support.MarkAssetMonitored(e.Session, e.Entity, fc.plugin.source)
 	}
 
-	if len(names) > 0 {
-		g.process(e, names, g.source)
+	if id != nil {
+		fc.process(e, e.Entity, id, fc.plugin.source)
 	}
 	return nil
 }
 
-func (g *gleif) lookup(e *et.Event, o *org.Organization, src *et.Source, since time.Time) []*dbt.Entity {
-	return support.SourceToAssetsWithinTTL(e.Session, o.Key(), string(oam.FQDN), g.source, since)
+func (fc *fuzzyCompletions) lookup(e *et.Event, o *dbt.Entity, src *et.Source, since time.Time) *dbt.Entity {
+	var ids []*dbt.Entity
+
+	if edges, err := e.Session.Cache().OutgoingEdges(o, since, "id"); err == nil {
+		for _, edge := range edges {
+			if a, err := e.Session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && a != nil {
+				if _, ok := a.Asset.(*general.Identifier); ok {
+					ids = append(ids, a)
+				}
+			}
+		}
+	}
+
+	for _, ident := range ids {
+		if id := ident.Asset.(*general.Identifier); id != nil && id.Type == general.LEICode {
+			return ident
+		}
+	}
+	return nil
 }
 
 type gleifFuzzy struct {
@@ -118,10 +93,11 @@ type gleifFuzzy struct {
 	} `json:"data"`
 }
 
-func (g *gleif) query(e *et.Event, o *org.Organization, src *et.Source) []*dbt.Entity {
+func (fc *fuzzyCompletions) query(e *et.Event, orgent *dbt.Entity, src *et.Source) *dbt.Entity {
+	o := orgent.Asset.(*org.Organization)
 	u := "https://api.gleif.org/api/v1/fuzzycompletions?field=fulltext&q=" + url.QueryEscape(o.Name)
 
-	g.rlimit.Take()
+	fc.plugin.rlimit.Take()
 	resp, err := http.RequestWebPage(context.TODO(), &http.Request{URL: u})
 	if err != nil || resp.Body == "" {
 		return nil
@@ -132,13 +108,31 @@ func (g *gleif) query(e *et.Event, o *org.Organization, src *et.Source) []*dbt.E
 		return nil
 	}
 
-	return g.store(e, &result, g.source)
+	var lei *general.Identifier
+	for _, d := range result.Data {
+		if strings.EqualFold(d.Attributes.Value, o.Name) {
+			lei = &general.Identifier{
+				UniqueID: fmt.Sprintf("%s:%s", general.LEICode, d.Relationships.LEIRecords.Data.ID),
+				EntityID: d.Relationships.LEIRecords.Data.ID,
+				Type:     general.LEICode,
+			}
+		}
+	}
+	if lei == nil {
+		return nil
+	}
+
+	rec, err := fc.plugin.getLEIRecord(e, lei, src)
+	if err == nil {
+		return nil
+	}
+
+	return fc.store(e, orgent, lei, fc.plugin.source)
 }
 
-func (g *gleif) store(e *et.Event, fuzzy *gleifFuzzy, src *et.Source) []*dbt.Entity {
+func (fc *fuzzyCompletions) store(e *et.Event, orgent *dbt.Entity, id *general.Identifier, src *et.Source) *dbt.Entity {
 	return nil
 }
 
-func (g *gleif) process(e *et.Event, assets []*dbt.Entity, src *et.Source) {
-	return
+func (fc *fuzzyCompletions) process(e *et.Event, orgent, ident *dbt.Entity, src *et.Source) {
 }
