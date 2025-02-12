@@ -228,7 +228,7 @@ type leiRelationshipLinks struct {
 	ReportingException  string `json:"reporting-exception"`
 }
 
-func (g *gleif) getLEIRecord(e *et.Event, ident *general.Identifier, src *et.Source) (*singleResponse, error) {
+func (g *gleif) getLEIRecord(e *et.Event, ident *general.Identifier, src *et.Source) (*leiRecord, error) {
 	g.rlimit.Take()
 
 	u := "https://api.gleif.org/api/v1/lei-records/" + ident.EntityID
@@ -243,5 +243,5 @@ func (g *gleif) getLEIRecord(e *et.Event, ident *general.Identifier, src *et.Sou
 	} else if len(result.Data.ID) == 0 {
 		return nil, errors.New("Failed to find LEI record")
 	}
-	return &result, nil
+	return &result.Data, nil
 }

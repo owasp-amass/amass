@@ -16,6 +16,7 @@ import (
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/general"
+	"github.com/owasp-amass/open-asset-model/org"
 )
 
 type relatedOrgs struct {
@@ -27,29 +28,76 @@ func (ro *relatedOrgs) check(e *et.Event) error {
 	ident, ok := e.Entity.Asset.(*general.Identifier)
 	if !ok {
 		return errors.New("failed to extract the Identifier asset")
+	} else if ident.Type != general.LEICode {
+		return nil
 	}
 
-	since, err := support.TTLStartTime(e.Session.Config(), string(oam.Identifier), string(oam.Identifier), lr.name)
+	since, err := support.TTLStartTime(e.Session.Config(), string(oam.Identifier), string(oam.Identifier), ro.name)
 	if err != nil {
 		return err
 	}
 
-	var names []*dbt.Entity
+	var orgs []*dbt.Entity
 	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, ro.plugin.source, since) {
-		names = append(names, ro.lookup(e, ident, ro.plugin.source, since)...)
+		orgs = append(orgs, ro.lookup(e, e.Entity, ro.plugin.source, since)...)
 	} else {
-		names = append(names, ro.query(e, ident, ro.plugin.source)...)
+		orgs = append(orgs, ro.query(e, ident, ro.plugin.source)...)
 		support.MarkAssetMonitored(e.Session, e.Entity, ro.plugin.source)
 	}
 
-	if len(names) > 0 {
-		ro.process(e, names, ro.plugin.source)
+	if len(orgs) > 0 {
+		ro.process(e, orgs, ro.plugin.source)
 	}
 	return nil
 }
 
-func (ro *relatedOrgs) lookup(e *et.Event, ident *general.Identifier, src *et.Source, since time.Time) []*dbt.Entity {
-	return support.SourceToAssetsWithinTTL(e.Session, ident.Key(), string(oam.Identifier), ro.plugin.source, since)
+func (ro *relatedOrgs) lookup(e *et.Event, ident *dbt.Entity, src *et.Source, since time.Time) []*dbt.Entity {
+	var o *dbt.Entity
+
+	if edges, err := e.Session.Cache().IncomingEdges(ident, since, "id"); err == nil {
+		for _, edge := range edges {
+			if tags, err := e.Session.Cache().GetEdgeTags(edge, since, src.Name); err != nil || len(tags) == 0 {
+				continue
+			}
+			if a, err := e.Session.Cache().FindEntityById(edge.FromEntity.ID); err == nil && a != nil {
+				if _, ok := a.Asset.(*org.Organization); ok {
+					o = a
+					break
+				}
+			}
+		}
+	}
+
+	var p *dbt.Entity
+	if edges, err := e.Session.Cache().OutgoingEdges(o, since, "parent"); err == nil {
+		for _, edge := range edges {
+			if tags, err := e.Session.Cache().GetEdgeTags(edge, since, src.Name); err != nil || len(tags) == 0 {
+				continue
+			}
+			if a, err := e.Session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && a != nil {
+				if _, ok := a.Asset.(*org.Organization); ok {
+					p = a
+					break
+				}
+			}
+		}
+	}
+
+	var children []*dbt.Entity
+	if edges, err := e.Session.Cache().OutgoingEdges(o, since, "subsidiary"); err == nil {
+		for _, edge := range edges {
+			if tags, err := e.Session.Cache().GetEdgeTags(edge, since, src.Name); err != nil || len(tags) == 0 {
+				continue
+			}
+			if a, err := e.Session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && a != nil {
+				if _, ok := a.Asset.(*org.Organization); ok {
+					children = append(children, a)
+				}
+			}
+		}
+	}
+
+	return append([]*dbt.Entity{o, p}, children...)
 }
 
 func (ro *relatedOrgs) query(e *et.Event, ident *general.Identifier, src *et.Source) []*dbt.Entity {
@@ -62,11 +110,11 @@ func (ro *relatedOrgs) query(e *et.Event, ident *general.Identifier, src *et.Sou
 	}
 
 	var result singleResponse
-	if err := json.Unmarshal([]byte(resp.Body), &result); err != nil || len(result.Data) == 0 {
+	if err := json.Unmarshal([]byte(resp.Body), &result); err != nil {
 		return nil
 	}
 
-	return ro.store(e, &result, ro.plugin.source)
+	return ro.store(e, &result, src)
 }
 
 func (ro *relatedOrgs) store(e *et.Event, lei *singleResponse, src *et.Source) []*dbt.Entity {

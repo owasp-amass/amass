@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"strings"
 	"time"
@@ -18,6 +19,7 @@ import (
 	"github.com/owasp-amass/amass/v4/utils/net/http"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
+	"github.com/owasp-amass/open-asset-model/contact"
 	"github.com/owasp-amass/open-asset-model/general"
 	"github.com/owasp-amass/open-asset-model/org"
 )
@@ -116,6 +118,7 @@ func (fc *fuzzyCompletions) query(e *et.Event, orgent *dbt.Entity, src *et.Sourc
 				EntityID: d.Relationships.LEIRecords.Data.ID,
 				Type:     general.LEICode,
 			}
+			break
 		}
 	}
 	if lei == nil {
@@ -123,16 +126,92 @@ func (fc *fuzzyCompletions) query(e *et.Event, orgent *dbt.Entity, src *et.Sourc
 	}
 
 	rec, err := fc.plugin.getLEIRecord(e, lei, src)
-	if err == nil {
+	if err == nil && fc.locMatch(e, orgent, rec) {
 		return nil
 	}
 
-	return fc.store(e, orgent, lei, fc.plugin.source)
+	return fc.store(e, lei, src)
 }
 
-func (fc *fuzzyCompletions) store(e *et.Event, orgent *dbt.Entity, id *general.Identifier, src *et.Source) *dbt.Entity {
+func (fc *fuzzyCompletions) locMatch(e *et.Event, orgent *dbt.Entity, rec *leiRecord) bool {
+	if edges, err := e.Session.Cache().OutgoingEdges(orgent, time.Time{}, "location"); err == nil {
+		for _, edge := range edges {
+			if a, err := e.Session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && a != nil {
+				if loc, ok := a.Asset.(*contact.Location); ok &&
+					(loc.PostalCode == rec.Attributes.Entity.LegalAddress.PostalCode ||
+						(loc.PostalCode == rec.Attributes.Entity.HeadquartersAddress.PostalCode)) {
+					return true
+				}
+			}
+		}
+	}
+
+	var crs []*dbt.Entity
+	if edges, err := e.Session.Cache().IncomingEdges(orgent, time.Time{}, "organization"); err == nil {
+		for _, edge := range edges {
+			if a, err := e.Session.Cache().FindEntityById(edge.FromEntity.ID); err == nil && a != nil {
+				if _, ok := a.Asset.(*contact.ContactRecord); ok {
+					crs = append(crs, a)
+				}
+			}
+		}
+	}
+
+	for _, cr := range crs {
+		if edges, err := e.Session.Cache().OutgoingEdges(cr, time.Time{}, "location"); err == nil {
+			for _, edge := range edges {
+				if a, err := e.Session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && a != nil {
+					if loc, ok := a.Asset.(*contact.Location); ok &&
+						(loc.PostalCode == rec.Attributes.Entity.LegalAddress.PostalCode ||
+							(loc.PostalCode == rec.Attributes.Entity.HeadquartersAddress.PostalCode)) {
+						return true
+					}
+				}
+			}
+		}
+	}
+	return false
+}
+
+func (fc *fuzzyCompletions) store(e *et.Event, id *general.Identifier, src *et.Source) *dbt.Entity {
+	a, err := e.Session.Cache().CreateAsset(id)
+
+	if err == nil && a != nil {
+		_, _ = e.Session.Cache().CreateEntityProperty(a, &general.SourceProperty{
+			Source:     src.Name,
+			Confidence: src.Confidence,
+		})
+		return a
+	}
+
+	e.Session.Log().Error(err.Error(), slog.Group("plugin", "name", fc.plugin.name, "handler", fc.name))
 	return nil
 }
 
 func (fc *fuzzyCompletions) process(e *et.Event, orgent, ident *dbt.Entity, src *et.Source) {
+	edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
+		Relation:   &general.SimpleRelation{Name: "id"},
+		FromEntity: orgent,
+		ToEntity:   ident,
+	})
+	if err != nil && edge == nil {
+		e.Session.Log().Error(err.Error(), slog.Group("plugin", "name", fc.plugin.name, "handler", fc.name))
+		return
+	}
+
+	_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
+		Source:     src.Name,
+		Confidence: src.Confidence,
+	})
+
+	id := ident.Asset.(*general.Identifier)
+	_ = e.Dispatcher.DispatchEvent(&et.Event{
+		Name:    id.UniqueID,
+		Entity:  ident,
+		Session: e.Session,
+	})
+
+	o := orgent.Asset.(*org.Organization)
+	e.Session.Log().Info("relationship discovered", "from", o.Name, "relation", "id",
+		"to", id.UniqueID, slog.Group("plugin", "name", fc.plugin.name, "handler", fc.name))
 }
