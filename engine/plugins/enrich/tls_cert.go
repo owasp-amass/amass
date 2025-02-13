@@ -14,7 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/owasp-amass/amass/v4/config"
 	"github.com/owasp-amass/amass/v4/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v4/engine/types"
@@ -340,18 +339,6 @@ func (te *tlsexpand) storeContact(e *et.Event, c *tlsContact, asset *dbt.Entity,
 		return
 	}
 
-	var findings []*support.Finding
-	t := asset.Asset.(*oamcert.TLSCertificate)
-	findings = append(findings, &support.Finding{
-		From:     asset,
-		FromName: "TLSCertificate: " + t.SerialNumber,
-		To:       cr,
-		ToName:   "ContactRecord" + c.DiscoveredAt,
-		Rel:      &general.SimpleRelation{Name: c.RelationName},
-	})
-	// process the relation immediately
-	support.ProcessAssetsWithSource(e, findings, te.source, te.name, te.name+"-Handler")
-
 	if foundaddr && m.IsMatch(string(oam.Location)) {
 		var addr string
 		fields := [][]string{
@@ -379,16 +366,13 @@ func (te *tlsexpand) storeContact(e *et.Event, c *tlsContact, asset *dbt.Entity,
 						Confidence: src.Confidence,
 					})
 				}
+				_ = e.Dispatcher.DispatchEvent(&et.Event{
+					Name:    loc.Address,
+					Entity:  a,
+					Session: e.Session,
+				})
 			}
 		}
-	}
-	if m.IsMatch(string(oam.Organization)) && len(ct.Organization) > 0 && ct.Organization[0] != "" {
-		o := &org.Organization{
-			ID:   uuid.New().String(),
-			Name: ct.Organization[0],
-		}
-
-		_, _ = support.CreateOrgAsset(e.Session, cr, &general.SimpleRelation{Name: "organization"}, o, src)
 	}
 	if len(ct.OrganizationalUnit) > 0 && ct.OrganizationalUnit[0] != "" && m.IsMatch(string(oam.URL)) {
 		if u := support.ExtractURLFromString(ct.OrganizationalUnit[0]); u != nil {
@@ -404,6 +388,35 @@ func (te *tlsexpand) storeContact(e *et.Event, c *tlsContact, asset *dbt.Entity,
 					})
 				}
 			}
+		}
+	}
+
+	var findings []*support.Finding
+	t := asset.Asset.(*oamcert.TLSCertificate)
+	findings = append(findings, &support.Finding{
+		From:     asset,
+		FromName: "TLSCertificate: " + t.SerialNumber,
+		To:       cr,
+		ToName:   "ContactRecord" + c.DiscoveredAt,
+		Rel:      &general.SimpleRelation{Name: c.RelationName},
+	})
+	// process the relation immediately
+	support.ProcessAssetsWithSource(e, findings, te.source, te.name, te.name+"-Handler")
+
+	// the organization must come last due to a potential chicken-and-egg problem
+	if m.IsMatch(string(oam.Organization)) && len(ct.Organization) > 0 && ct.Organization[0] != "" {
+		orgent, err := support.CreateOrgAsset(e.Session, cr,
+			&general.SimpleRelation{Name: "organization"},
+			&org.Organization{Name: ct.Organization[0]}, src)
+
+		if err == nil && orgent != nil {
+			o := orgent.Asset.(*org.Organization)
+
+			_ = e.Dispatcher.DispatchEvent(&et.Event{
+				Name:    fmt.Sprintf("%s:%s", o.Name, o.ID),
+				Entity:  orgent,
+				Session: e.Session,
+			})
 		}
 	}
 }

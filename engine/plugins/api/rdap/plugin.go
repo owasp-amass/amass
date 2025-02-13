@@ -14,7 +14,6 @@ import (
 	"strings"
 
 	"github.com/caffix/stringset"
-	"github.com/google/uuid"
 	"github.com/openrdap/rdap"
 	"github.com/openrdap/rdap/bootstrap"
 	"github.com/openrdap/rdap/bootstrap/cache"
@@ -212,17 +211,6 @@ func (rd *rdapPlugin) storeEntity(e *et.Event, level int, entity *rdap.Entity, a
 		name = "IPNetRecord: " + v.Handle
 	}
 
-	var findings []*support.Finding
-	findings = append(findings, &support.Finding{
-		From:     asset,
-		FromName: name,
-		To:       cr,
-		ToName:   "ContactRecord: " + u.Raw,
-		Rel:      &general.SimpleRelation{Name: rel},
-	})
-	// process the relation immediately
-	support.ProcessAssetsWithSource(e, findings, rd.source, rd.name, rd.name+"-storeEntity")
-
 	if m.IsMatch(string(oam.URL)) {
 		a, err := e.Session.Cache().CreateAsset(u)
 		if err != nil {
@@ -249,22 +237,6 @@ func (rd *rdapPlugin) storeEntity(e *et.Event, level int, entity *rdap.Entity, a
 			}
 		}
 	}
-
-	name = v.Name()
-	if kind := strings.Join(prop.Values(), " "); m.IsMatch(string(oam.Person)) && name != "" && kind == "individual" {
-		if p := support.FullNameToPerson(name); p != nil {
-			if a, err := e.Session.Cache().CreateAsset(p); err == nil && a != nil {
-				_ = rd.createContactEdge(e.Session, cr, a, &general.SimpleRelation{Name: "person"}, src)
-			}
-		}
-	} else if m.IsMatch(string(oam.Organization)) && kind == "org" {
-		o := &org.Organization{
-			ID:   uuid.New().String(),
-			Name: name,
-		}
-
-		_, _ = support.CreateOrgAsset(e.Session, cr, &general.SimpleRelation{Name: "organization"}, o, src)
-	}
 	if email := strings.ToLower(v.Email()); m.IsMatch(string(oam.Identifier)) && email != "" {
 		if a, err := e.Session.Cache().CreateAsset(&general.Identifier{
 			UniqueID: fmt.Sprintf("%s:%s", general.EmailAddress, email),
@@ -286,6 +258,45 @@ func (rd *rdapPlugin) storeEntity(e *et.Event, level int, entity *rdap.Entity, a
 			if a, err := e.Session.Cache().CreateAsset(fax); err == nil && a != nil {
 				_ = rd.createContactEdge(e.Session, cr, a, &general.SimpleRelation{Name: "phone"}, src)
 			}
+		}
+	}
+
+	var findings []*support.Finding
+	findings = append(findings, &support.Finding{
+		From:     asset,
+		FromName: name,
+		To:       cr,
+		ToName:   "ContactRecord: " + u.Raw,
+		Rel:      &general.SimpleRelation{Name: rel},
+	})
+	// process the relation immediately
+	support.ProcessAssetsWithSource(e, findings, rd.source, rd.name, rd.name+"-storeEntity")
+
+	name = v.Name()
+	// the organization must come last due to a potential chicken-and-egg problem
+	if kind := strings.Join(prop.Values(), " "); m.IsMatch(string(oam.Person)) && name != "" && kind == "individual" {
+		if p := support.FullNameToPerson(name); p != nil {
+			if a, err := e.Session.Cache().CreateAsset(p); err == nil && a != nil {
+				_ = rd.createContactEdge(e.Session, cr, a, &general.SimpleRelation{Name: "person"}, src)
+				_ = e.Dispatcher.DispatchEvent(&et.Event{
+					Name:    fmt.Sprintf("%s:%s", p.FullName, p.ID),
+					Entity:  a,
+					Session: e.Session,
+				})
+			}
+		}
+	} else if m.IsMatch(string(oam.Organization)) && kind == "org" {
+		orgent, err := support.CreateOrgAsset(e.Session, cr,
+			&general.SimpleRelation{Name: "organization"}, &org.Organization{Name: name}, src)
+
+		if err == nil && orgent != nil {
+			o := orgent.Asset.(*org.Organization)
+
+			_ = e.Dispatcher.DispatchEvent(&et.Event{
+				Name:    fmt.Sprintf("%s:%s", o.Name, o.ID),
+				Entity:  orgent,
+				Session: e.Session,
+			})
 		}
 	}
 

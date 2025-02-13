@@ -49,7 +49,7 @@ func (fc *fuzzyCompletions) check(e *et.Event) error {
 	}
 
 	if id != nil {
-		fc.process(e, e.Entity, id, fc.plugin.source)
+		fc.process(e, e.Entity, id)
 	}
 	return nil
 }
@@ -59,6 +59,9 @@ func (fc *fuzzyCompletions) lookup(e *et.Event, o *dbt.Entity, src *et.Source, s
 
 	if edges, err := e.Session.Cache().OutgoingEdges(o, since, "id"); err == nil {
 		for _, edge := range edges {
+			if tags, err := e.Session.Cache().GetEdgeTags(edge, since, src.Name); err != nil || len(tags) == 0 {
+				continue
+			}
 			if a, err := e.Session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && a != nil {
 				if _, ok := a.Asset.(*general.Identifier); ok {
 					ids = append(ids, a)
@@ -75,62 +78,66 @@ func (fc *fuzzyCompletions) lookup(e *et.Event, o *dbt.Entity, src *et.Source, s
 	return nil
 }
 
-type gleifFuzzy struct {
-	Data []struct {
-		Type       string `json:"type"`
-		Attributes struct {
-			Value string `json:"value"`
-		} `json:"attributes"`
-		Relationships struct {
-			LEIRecords struct {
-				Data struct {
-					Type string `json:"type"`
-					ID   string `json:"id"`
-				} `json:"data"`
-				Links struct {
-					Related string `json:"related"`
-				} `json:"links"`
-			} `json:"lei-records"`
-		} `json:"relationships"`
-	} `json:"data"`
-}
-
 func (fc *fuzzyCompletions) query(e *et.Event, orgent *dbt.Entity, src *et.Source) *dbt.Entity {
-	o := orgent.Asset.(*org.Organization)
-	u := "https://api.gleif.org/api/v1/fuzzycompletions?field=fulltext&q=" + url.QueryEscape(o.Name)
-
-	fc.plugin.rlimit.Take()
-	resp, err := http.RequestWebPage(context.TODO(), &http.Request{URL: u})
-	if err != nil || resp.Body == "" {
-		return nil
-	}
-
-	var result gleifFuzzy
-	if err := json.Unmarshal([]byte(resp.Body), &result); err != nil || len(result.Data) == 0 {
-		return nil
-	}
-
 	var lei *general.Identifier
-	for _, d := range result.Data {
-		if strings.EqualFold(d.Attributes.Value, o.Name) {
-			lei = &general.Identifier{
-				UniqueID: fmt.Sprintf("%s:%s", general.LEICode, d.Relationships.LEIRecords.Data.ID),
-				EntityID: d.Relationships.LEIRecords.Data.ID,
-				Type:     general.LEICode,
+
+	if leient := fc.plugin.orgEntityToLEI(e, orgent); leient != nil {
+		lei = leient.Asset.(*general.Identifier)
+	}
+
+	if lei == nil {
+		fc.plugin.rlimit.Take()
+		o := orgent.Asset.(*org.Organization)
+		u := "https://api.gleif.org/api/v1/fuzzycompletions?field=fulltext&q=" + url.QueryEscape(o.Name)
+		resp, err := http.RequestWebPage(context.TODO(), &http.Request{URL: u})
+		if err != nil || resp.Body == "" {
+			return nil
+		}
+
+		var result struct {
+			Data []struct {
+				Type       string `json:"type"`
+				Attributes struct {
+					Value string `json:"value"`
+				} `json:"attributes"`
+				Relationships struct {
+					LEIRecords struct {
+						Data struct {
+							Type string `json:"type"`
+							ID   string `json:"id"`
+						} `json:"data"`
+						Links struct {
+							Related string `json:"related"`
+						} `json:"links"`
+					} `json:"lei-records"`
+				} `json:"relationships"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal([]byte(resp.Body), &result); err != nil || len(result.Data) == 0 {
+			return nil
+		}
+
+		for _, d := range result.Data {
+			if strings.EqualFold(d.Attributes.Value, o.Name) {
+				lei = &general.Identifier{
+					UniqueID: fmt.Sprintf("%s:%s", general.LEICode, d.Relationships.LEIRecords.Data.ID),
+					EntityID: d.Relationships.LEIRecords.Data.ID,
+					Type:     general.LEICode,
+				}
+				break
 			}
-			break
+		}
+		if lei == nil {
+			return nil
 		}
 	}
-	if lei == nil {
-		return nil
-	}
 
-	rec, err := fc.plugin.getLEIRecord(e, lei, src)
+	rec, err := fc.plugin.getLEIRecord(e, lei)
 	if err == nil && fc.locMatch(e, orgent, rec) {
 		return nil
 	}
 
-	return fc.store(e, lei, src)
+	return fc.store(e, orgent, lei, rec)
 }
 
 func (fc *fuzzyCompletions) locMatch(e *et.Event, orgent *dbt.Entity, rec *leiRecord) bool {
@@ -173,38 +180,41 @@ func (fc *fuzzyCompletions) locMatch(e *et.Event, orgent *dbt.Entity, rec *leiRe
 	return false
 }
 
-func (fc *fuzzyCompletions) store(e *et.Event, id *general.Identifier, src *et.Source) *dbt.Entity {
-	a, err := e.Session.Cache().CreateAsset(id)
+func (fc *fuzzyCompletions) store(e *et.Event, orgent *dbt.Entity, id *general.Identifier, rec *leiRecord) *dbt.Entity {
+	fc.plugin.updateOrgFromLEIRecord(e, orgent, rec)
 
-	if err == nil && a != nil {
-		_, _ = e.Session.Cache().CreateEntityProperty(a, &general.SourceProperty{
-			Source:     src.Name,
-			Confidence: src.Confidence,
-		})
-		return a
+	a, err := e.Session.Cache().CreateAsset(id)
+	if err != nil || a == nil {
+		e.Session.Log().Error(err.Error(), slog.Group("plugin", "name", fc.plugin.name, "handler", fc.name))
+		return nil
 	}
 
-	e.Session.Log().Error(err.Error(), slog.Group("plugin", "name", fc.plugin.name, "handler", fc.name))
-	return nil
-}
+	_, _ = e.Session.Cache().CreateEntityProperty(a, &general.SourceProperty{
+		Source:     fc.plugin.source.Name,
+		Confidence: fc.plugin.source.Confidence,
+	})
 
-func (fc *fuzzyCompletions) process(e *et.Event, orgent, ident *dbt.Entity, src *et.Source) {
 	edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
 		Relation:   &general.SimpleRelation{Name: "id"},
 		FromEntity: orgent,
-		ToEntity:   ident,
+		ToEntity:   a,
 	})
 	if err != nil && edge == nil {
 		e.Session.Log().Error(err.Error(), slog.Group("plugin", "name", fc.plugin.name, "handler", fc.name))
-		return
+		return nil
 	}
 
 	_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
-		Source:     src.Name,
-		Confidence: src.Confidence,
+		Source:     fc.plugin.source.Name,
+		Confidence: fc.plugin.source.Confidence,
 	})
 
+	return a
+}
+
+func (fc *fuzzyCompletions) process(e *et.Event, orgent, ident *dbt.Entity) {
 	id := ident.Asset.(*general.Identifier)
+
 	_ = e.Dispatcher.DispatchEvent(&et.Event{
 		Name:    id.UniqueID,
 		Entity:  ident,

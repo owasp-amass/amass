@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	et "github.com/owasp-amass/amass/v4/engine/types"
 	"github.com/owasp-amass/amass/v4/utils"
 	dbt "github.com/owasp-amass/asset-db/types"
@@ -237,11 +238,13 @@ func CreateServiceAsset(session et.Session, src *dbt.Entity, rel oam.Relation, s
 }
 
 func CreateOrgAsset(session et.Session, obj *dbt.Entity, rel oam.Relation, o *org.Organization, src *et.Source) (*dbt.Entity, error) {
-	if orgent := orgDedupChecks(session, obj, o); orgent != nil {
-		if err := createRelation(session, obj, rel, orgent, src); err != nil {
-			return nil, err
+	if obj != nil && rel != nil && o != nil && src != nil {
+		if orgent := orgDedupChecks(session, obj, o); orgent != nil {
+			if err := createRelation(session, obj, rel, orgent, src); err != nil {
+				return nil, err
+			}
+			return orgent, nil
 		}
-		return orgent, nil
 	}
 
 	name := strings.ToLower(o.Name)
@@ -252,7 +255,17 @@ func CreateOrgAsset(session et.Session, obj *dbt.Entity, rel oam.Relation, o *or
 	}
 
 	if ident, err := session.Cache().CreateAsset(id); err == nil && ident != nil {
+		_, _ = session.Cache().CreateEntityProperty(ident, &general.SourceProperty{
+			Source:     src.Name,
+			Confidence: src.Confidence,
+		})
+
+		o.ID = uuid.New().String()
 		if orgent, err := session.Cache().CreateAsset(o); err == nil && orgent != nil {
+			_, _ = session.Cache().CreateEntityProperty(orgent, &general.SourceProperty{
+				Source:     src.Name,
+				Confidence: src.Confidence,
+			})
 			if err := createRelation(session, orgent, &general.SimpleRelation{Name: "id"}, ident, src); err != nil {
 				return nil, err
 			}
@@ -281,6 +294,9 @@ func orgDedupChecks(session et.Session, obj *dbt.Entity, o *org.Organization) *d
 			result = org
 		}
 	case *org.Organization:
+		if org, found := orgNameRelatedToOrganization(session, obj, o.Name); found {
+			result = org
+		}
 		if org, err := orgExistsAndSharesLocEntity(session, obj, o); err == nil {
 			result = org
 		}
@@ -315,6 +331,23 @@ func orgNameExistsInContactRecord(session et.Session, cr *dbt.Entity, name strin
 	}
 
 	if edges, err := session.Cache().OutgoingEdges(cr, time.Time{}, "organization"); err == nil && len(edges) > 0 {
+		for _, edge := range edges {
+			if a, err := session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && a != nil {
+				if _, ok := a.Asset.(*org.Organization); ok && orgHasName(session, a, name) {
+					return a, true
+				}
+			}
+		}
+	}
+	return nil, false
+}
+
+func orgNameRelatedToOrganization(session et.Session, orgent *dbt.Entity, name string) (*dbt.Entity, bool) {
+	if orgent == nil {
+		return nil, false
+	}
+
+	if edges, err := session.Cache().OutgoingEdges(orgent, time.Time{}, "parent", "subsidiary", "sister"); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
 			if a, err := session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && a != nil {
 				if _, ok := a.Asset.(*org.Organization); ok && orgHasName(session, a, name) {

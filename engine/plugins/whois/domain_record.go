@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	whoisparser "github.com/likexian/whois-parser"
 	"github.com/owasp-amass/amass/v4/config"
 	"github.com/owasp-amass/amass/v4/engine/plugins/support"
@@ -194,18 +193,6 @@ func (r *domrec) storeContact(e *et.Event, c *domrecContact, dr *dbt.Entity, m *
 		return
 	}
 
-	var findings []*support.Finding
-	record := dr.Asset.(*oamreg.DomainRecord)
-	findings = append(findings, &support.Finding{
-		From:     dr,
-		FromName: "DomainRecord: " + record.Domain,
-		To:       cr,
-		ToName:   "ContactRecord" + c.DiscoveredAt,
-		Rel:      &general.SimpleRelation{Name: c.RelationName},
-	})
-	// process the contact record relation immediately
-	support.ProcessAssetsWithSource(e, findings, r.plugin.source, r.plugin.name, r.name)
-
 	var found bool
 	wc := c.WhoisContact
 	// test if the address begins in the organization field
@@ -231,15 +218,6 @@ func (r *domrec) storeContact(e *et.Event, c *domrecContact, dr *dbt.Entity, m *
 		if a, err := e.Session.Cache().CreateAsset(loc); err == nil && a != nil {
 			r.createSimpleEdge(e.Session.Cache(), &general.SimpleRelation{Name: "location"}, cr, a)
 		}
-	}
-	if m.IsMatch(string(oam.Organization)) {
-		o := &org.Organization{
-			ID:   uuid.New().String(),
-			Name: wc.Organization,
-		}
-
-		_, _ = support.CreateOrgAsset(e.Session, cr,
-			&general.SimpleRelation{Name: "organization"}, o, r.plugin.source)
 	}
 	if email := strings.ToLower(wc.Email); m.IsMatch(string(oam.Identifier)) && email != "" {
 		if a, err := e.Session.Cache().CreateAsset(&general.Identifier{
@@ -267,6 +245,35 @@ func (r *domrec) storeContact(e *et.Event, c *domrecContact, dr *dbt.Entity, m *
 	if u := support.RawURLToOAM(wc.ReferralURL); u != nil && m.IsMatch(string(oam.URL)) {
 		if a, err := e.Session.Cache().CreateAsset(u); err == nil && a != nil {
 			r.createSimpleEdge(e.Session.Cache(), &general.SimpleRelation{Name: "url"}, cr, a)
+		}
+	}
+
+	var findings []*support.Finding
+	record := dr.Asset.(*oamreg.DomainRecord)
+	findings = append(findings, &support.Finding{
+		From:     dr,
+		FromName: "DomainRecord: " + record.Domain,
+		To:       cr,
+		ToName:   "ContactRecord" + c.DiscoveredAt,
+		Rel:      &general.SimpleRelation{Name: c.RelationName},
+	})
+	// process the contact record relation immediately
+	support.ProcessAssetsWithSource(e, findings, r.plugin.source, r.plugin.name, r.name)
+
+	// the organization must come last due to a potential chicken-and-egg problem
+	if m.IsMatch(string(oam.Organization)) {
+		orgent, err := support.CreateOrgAsset(e.Session, cr,
+			&general.SimpleRelation{Name: "organization"},
+			&org.Organization{Name: wc.Organization}, r.plugin.source)
+
+		if err == nil && orgent != nil {
+			o := orgent.Asset.(*org.Organization)
+
+			_ = e.Dispatcher.DispatchEvent(&et.Event{
+				Name:    fmt.Sprintf("%s:%s", o.Name, o.ID),
+				Entity:  orgent,
+				Session: e.Session,
+			})
 		}
 	}
 }
