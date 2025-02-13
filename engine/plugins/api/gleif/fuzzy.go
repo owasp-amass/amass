@@ -134,7 +134,7 @@ func (fc *fuzzyCompletions) query(e *et.Event, orgent *dbt.Entity) *dbt.Entity {
 	}
 
 	rec, err := fc.plugin.getLEIRecord(lei)
-	if err == nil && fc.locMatch(e, orgent, rec) {
+	if err != nil || !fc.locMatch(e, orgent, rec) {
 		return nil
 	}
 
