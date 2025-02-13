@@ -173,7 +173,7 @@ func (ro *relatedOrgs) store(e *et.Event, ident *dbt.Entity, leirec, parent *lei
 			orgs = append(orgs, parentent)
 			ro.plugin.updateOrgFromLEIRecord(e, parentent, parent)
 
-			_, _ = ro.plugin.createLEIIdentifier(e.Session, orgent, &general.Identifier{
+			_, _ = ro.plugin.createLEIIdentifier(e.Session, parentent, &general.Identifier{
 				UniqueID:       fmt.Sprintf("%s:%s", general.LEICode, parent.ID),
 				EntityID:       parent.ID,
 				Type:           general.LEICode,
@@ -194,7 +194,7 @@ func (ro *relatedOrgs) store(e *et.Event, ident *dbt.Entity, leirec, parent *lei
 			orgs = append(orgs, childent)
 			ro.plugin.updateOrgFromLEIRecord(e, childent, child)
 
-			_, _ = ro.plugin.createLEIIdentifier(e.Session, orgent, &general.Identifier{
+			_, _ = ro.plugin.createLEIIdentifier(e.Session, childent, &general.Identifier{
 				UniqueID:       fmt.Sprintf("%s:%s", general.LEICode, child.ID),
 				EntityID:       child.ID,
 				Type:           general.LEICode,
