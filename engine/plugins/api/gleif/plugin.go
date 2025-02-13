@@ -117,6 +117,7 @@ type multipleResponse struct {
 	} `json:"meta"`
 	Links struct {
 		First string `json:"first"`
+		Next  string `json:"next"`
 		Last  string `json:"last"`
 	} `json:"links"`
 	Data []leiRecord `json:"data"`
@@ -236,7 +237,7 @@ type leiRelationshipLinks struct {
 	ReportingException  string `json:"reporting-exception"`
 }
 
-func (g *gleif) getLEIRecord(e *et.Event, ident *general.Identifier) (*leiRecord, error) {
+func (g *gleif) getLEIRecord(ident *general.Identifier) (*leiRecord, error) {
 	g.rlimit.Take()
 
 	u := "https://api.gleif.org/api/v1/lei-records/" + ident.EntityID
@@ -248,8 +249,8 @@ func (g *gleif) getLEIRecord(e *et.Event, ident *general.Identifier) (*leiRecord
 	var result singleResponse
 	if err := json.Unmarshal([]byte(resp.Body), &result); err != nil {
 		return nil, err
-	} else if len(result.Data.ID) == 0 {
-		return nil, errors.New("failed to find LEI record")
+	} else if len(result.Data.ID) == 0 || result.Data.Type != "lei-records" {
+		return nil, errors.New("failed to find the LEI record")
 	}
 	return &result.Data, nil
 }
@@ -334,4 +335,39 @@ func (g *gleif) addAddress(e *et.Event, orgent *dbt.Entity, rel oam.Relation, ad
 	})
 
 	return nil
+}
+
+func (g *gleif) createRelation(session et.Session, obj *dbt.Entity, rel oam.Relation, subject *dbt.Entity) error {
+	edge, err := session.Cache().CreateEdge(&dbt.Edge{
+		Relation:   rel,
+		FromEntity: obj,
+		ToEntity:   subject,
+	})
+	if err != nil {
+		return err
+	} else if edge == nil {
+		return errors.New("failed to create the edge")
+	}
+
+	_, err = session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
+		Source:     g.source.Name,
+		Confidence: g.source.Confidence,
+	})
+	return err
+}
+
+func (g *gleif) createLEIIdentifier(session et.Session, orgent *dbt.Entity, lei *general.Identifier) (*dbt.Entity, error) {
+	id, err := session.Cache().CreateAsset(lei)
+	if err != nil {
+		return nil, err
+	} else if id == nil {
+		return nil, errors.New("failed to create the Identifier asset")
+	}
+
+	if orgent != nil {
+		if err := g.createRelation(session, orgent, general.SimpleRelation{Name: "id"}, id); err != nil {
+			return nil, err
+		}
+	}
+	return id, nil
 }

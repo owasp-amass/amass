@@ -42,9 +42,9 @@ func (fc *fuzzyCompletions) check(e *et.Event) error {
 
 	var id *dbt.Entity
 	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, fc.plugin.source, since) {
-		id = fc.lookup(e, e.Entity, fc.plugin.source, since)
+		id = fc.lookup(e, e.Entity, since)
 	} else {
-		id = fc.query(e, e.Entity, fc.plugin.source)
+		id = fc.query(e, e.Entity)
 		support.MarkAssetMonitored(e.Session, e.Entity, fc.plugin.source)
 	}
 
@@ -54,12 +54,13 @@ func (fc *fuzzyCompletions) check(e *et.Event) error {
 	return nil
 }
 
-func (fc *fuzzyCompletions) lookup(e *et.Event, o *dbt.Entity, src *et.Source, since time.Time) *dbt.Entity {
+func (fc *fuzzyCompletions) lookup(e *et.Event, o *dbt.Entity, since time.Time) *dbt.Entity {
 	var ids []*dbt.Entity
 
 	if edges, err := e.Session.Cache().OutgoingEdges(o, since, "id"); err == nil {
 		for _, edge := range edges {
-			if tags, err := e.Session.Cache().GetEdgeTags(edge, since, src.Name); err != nil || len(tags) == 0 {
+			if tags, err := e.Session.Cache().GetEdgeTags(edge,
+				since, fc.plugin.source.Name); err != nil || len(tags) == 0 {
 				continue
 			}
 			if a, err := e.Session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && a != nil {
@@ -78,7 +79,7 @@ func (fc *fuzzyCompletions) lookup(e *et.Event, o *dbt.Entity, src *et.Source, s
 	return nil
 }
 
-func (fc *fuzzyCompletions) query(e *et.Event, orgent *dbt.Entity, src *et.Source) *dbt.Entity {
+func (fc *fuzzyCompletions) query(e *et.Event, orgent *dbt.Entity) *dbt.Entity {
 	var lei *general.Identifier
 
 	if leient := fc.plugin.orgEntityToLEI(e, orgent); leient != nil {
@@ -132,7 +133,7 @@ func (fc *fuzzyCompletions) query(e *et.Event, orgent *dbt.Entity, src *et.Sourc
 		}
 	}
 
-	rec, err := fc.plugin.getLEIRecord(e, lei)
+	rec, err := fc.plugin.getLEIRecord(lei)
 	if err == nil && fc.locMatch(e, orgent, rec) {
 		return nil
 	}
@@ -183,33 +184,18 @@ func (fc *fuzzyCompletions) locMatch(e *et.Event, orgent *dbt.Entity, rec *leiRe
 func (fc *fuzzyCompletions) store(e *et.Event, orgent *dbt.Entity, id *general.Identifier, rec *leiRecord) *dbt.Entity {
 	fc.plugin.updateOrgFromLEIRecord(e, orgent, rec)
 
-	a, err := e.Session.Cache().CreateAsset(id)
-	if err != nil || a == nil {
+	id.Status = rec.Attributes.Registration.Status
+	id.CreationDate = rec.Attributes.Registration.InitialRegistrationDate
+	id.UpdatedDate = rec.Attributes.Registration.LastUpdateDate
+	id.ExpirationDate = rec.Attributes.Registration.NextRenewalDate
+
+	ident, err := fc.plugin.createLEIIdentifier(e.Session, orgent, id)
+	if err != nil {
 		e.Session.Log().Error(err.Error(), slog.Group("plugin", "name", fc.plugin.name, "handler", fc.name))
 		return nil
 	}
 
-	_, _ = e.Session.Cache().CreateEntityProperty(a, &general.SourceProperty{
-		Source:     fc.plugin.source.Name,
-		Confidence: fc.plugin.source.Confidence,
-	})
-
-	edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
-		Relation:   &general.SimpleRelation{Name: "id"},
-		FromEntity: orgent,
-		ToEntity:   a,
-	})
-	if err != nil && edge == nil {
-		e.Session.Log().Error(err.Error(), slog.Group("plugin", "name", fc.plugin.name, "handler", fc.name))
-		return nil
-	}
-
-	_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
-		Source:     fc.plugin.source.Name,
-		Confidence: fc.plugin.source.Confidence,
-	})
-
-	return a
+	return ident
 }
 
 func (fc *fuzzyCompletions) process(e *et.Event, orgent, ident *dbt.Entity) {

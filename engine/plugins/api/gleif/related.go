@@ -105,7 +105,7 @@ func (ro *relatedOrgs) query(e *et.Event, ident *dbt.Entity) []*dbt.Entity {
 	var orgs []*dbt.Entity
 
 	lei := ident.Asset.(*general.Identifier)
-	leirec, err := ro.plugin.getLEIRecord(e, lei)
+	leirec, err := ro.plugin.getLEIRecord(lei)
 	if err != nil || leirec == nil {
 		return orgs
 	}
@@ -123,7 +123,31 @@ func (ro *relatedOrgs) query(e *et.Event, ident *dbt.Entity) []*dbt.Entity {
 		}
 	}
 
-	return ro.store(e, ident, leirec, parent, nil)
+	var children []*leiRecord
+	if link := leirec.Relationships.DirectChildren.Links.Related; link != "" {
+		for link != "" {
+			ro.plugin.rlimit.Take()
+
+			resp, err := http.RequestWebPage(context.TODO(), &http.Request{URL: link})
+			if err != nil || resp.StatusCode != 200 || resp.Body == "" {
+				break
+			}
+			link = ""
+
+			var result multipleResponse
+			if err := json.Unmarshal([]byte(resp.Body), &result); err != nil {
+				break
+			}
+
+			for _, rec := range result.Data {
+				children = append(children, &rec)
+			}
+
+			link = result.Links.Next
+		}
+	}
+
+	return ro.store(e, ident, leirec, parent, children)
 }
 
 func (ro *relatedOrgs) store(e *et.Event, ident *dbt.Entity, leirec, parent *leiRecord, children []*leiRecord) []*dbt.Entity {
@@ -139,7 +163,50 @@ func (ro *relatedOrgs) store(e *et.Event, ident *dbt.Entity, leirec, parent *lei
 			return orgs
 		}
 	}
-	return nil
+
+	if parent != nil {
+		parentorg := &org.Organization{Name: parent.Attributes.Entity.LegalName.Name}
+
+		parentent, err := support.CreateOrgAsset(e.Session, orgent,
+			&general.SimpleRelation{Name: "parent"}, parentorg, ro.plugin.source)
+		if err == nil {
+			orgs = append(orgs, parentent)
+			ro.plugin.updateOrgFromLEIRecord(e, parentent, parent)
+
+			_, _ = ro.plugin.createLEIIdentifier(e.Session, orgent, &general.Identifier{
+				UniqueID:       fmt.Sprintf("%s:%s", general.LEICode, parent.ID),
+				EntityID:       parent.ID,
+				Type:           general.LEICode,
+				Status:         parent.Attributes.Registration.Status,
+				CreationDate:   parent.Attributes.Registration.InitialRegistrationDate,
+				UpdatedDate:    parent.Attributes.Registration.LastUpdateDate,
+				ExpirationDate: parent.Attributes.Registration.NextRenewalDate,
+			})
+		}
+	}
+
+	for _, child := range children {
+		childorg := &org.Organization{Name: child.Attributes.Entity.LegalName.Name}
+
+		childent, err := support.CreateOrgAsset(e.Session, orgent,
+			&general.SimpleRelation{Name: "subsidiary"}, childorg, ro.plugin.source)
+		if err == nil {
+			orgs = append(orgs, childent)
+			ro.plugin.updateOrgFromLEIRecord(e, childent, child)
+
+			_, _ = ro.plugin.createLEIIdentifier(e.Session, orgent, &general.Identifier{
+				UniqueID:       fmt.Sprintf("%s:%s", general.LEICode, child.ID),
+				EntityID:       child.ID,
+				Type:           general.LEICode,
+				Status:         child.Attributes.Registration.Status,
+				CreationDate:   child.Attributes.Registration.InitialRegistrationDate,
+				UpdatedDate:    child.Attributes.Registration.LastUpdateDate,
+				ExpirationDate: child.Attributes.Registration.NextRenewalDate,
+			})
+		}
+	}
+
+	return orgs
 }
 
 func (ro *relatedOrgs) process(e *et.Event, assets []*dbt.Entity) {
