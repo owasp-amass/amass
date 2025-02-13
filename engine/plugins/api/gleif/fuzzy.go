@@ -14,6 +14,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/adrg/strutil"
+	"github.com/adrg/strutil/metrics"
 	"github.com/owasp-amass/amass/v4/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v4/engine/types"
 	"github.com/owasp-amass/amass/v4/utils/net/http"
@@ -87,9 +89,10 @@ func (fc *fuzzyCompletions) query(e *et.Event, orgent *dbt.Entity) *dbt.Entity {
 	}
 
 	if lei == nil {
-		fc.plugin.rlimit.Take()
 		o := orgent.Asset.(*org.Organization)
 		u := "https://api.gleif.org/api/v1/fuzzycompletions?field=fulltext&q=" + url.QueryEscape(o.Name)
+
+		fc.plugin.rlimit.Take()
 		resp, err := http.RequestWebPage(context.TODO(), &http.Request{URL: u})
 		if err != nil || resp.Body == "" {
 			return nil
@@ -119,7 +122,7 @@ func (fc *fuzzyCompletions) query(e *et.Event, orgent *dbt.Entity) *dbt.Entity {
 		}
 
 		for _, d := range result.Data {
-			if strings.EqualFold(d.Attributes.Value, o.Name) {
+			if fc.nameMatch(o, d.Attributes.Value) {
 				lei = &general.Identifier{
 					UniqueID: fmt.Sprintf("%s:%s", general.LEICode, d.Relationships.LEIRecords.Data.ID),
 					EntityID: d.Relationships.LEIRecords.Data.ID,
@@ -139,6 +142,22 @@ func (fc *fuzzyCompletions) query(e *et.Event, orgent *dbt.Entity) *dbt.Entity {
 	}
 
 	return fc.store(e, orgent, lei, rec)
+}
+
+func (fc *fuzzyCompletions) nameMatch(o *org.Organization, name string) bool {
+	if strings.EqualFold(o.Name, name) {
+		return true
+	}
+
+	swg := metrics.NewSmithWatermanGotoh()
+	swg.CaseSensitive = false
+	swg.GapPenalty = -0.1
+	swg.Substitution = metrics.MatchMismatch{
+		Match:    1,
+		Mismatch: -0.5,
+	}
+
+	return strutil.Similarity(o.Name, name, swg) >= 0.85
 }
 
 func (fc *fuzzyCompletions) locMatch(e *et.Event, orgent *dbt.Entity, rec *leiRecord) bool {

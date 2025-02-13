@@ -34,7 +34,7 @@ require (
 	github.com/vektah/gqlparser/v2 v2.5.22
 	github.com/yl2chen/cidranger v1.0.2
 	go.uber.org/ratelimit v0.3.1
-	golang.org/x/net v0.34.0
+	golang.org/x/net v0.35.0
 	gopkg.in/yaml.v3 v3.0.1
 	mvdan.cc/xurls/v2 v2.6.0
 )
@@ -50,7 +50,7 @@ require (
 	github.com/benbjohnson/clock v1.3.5 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	github.com/chromedp/cdproto v0.0.0-20250203011601-a3c71a042730 // indirect
+	github.com/chromedp/cdproto v0.0.0-20250210231439-aea867ea8506 // indirect
 	github.com/chromedp/chromedp v0.12.1 // indirect
 	github.com/chromedp/sysutil v1.1.0 // indirect
 	github.com/d4l3k/messagediff v1.2.1 // indirect
@@ -98,20 +98,20 @@ require (
 	github.com/temoto/robotstxt v1.1.2 // indirect
 	github.com/xhit/go-str2duration/v2 v2.1.0 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
-	golang.org/x/crypto v0.32.0 // indirect
-	golang.org/x/exp v0.0.0-20250128182459-e0ece0dbea4c // indirect
+	golang.org/x/crypto v0.33.0 // indirect
+	golang.org/x/exp v0.0.0-20250210185358-939b2ce775ac // indirect
 	golang.org/x/mod v0.23.0 // indirect
 	golang.org/x/sync v0.11.0 // indirect
 	golang.org/x/sys v0.30.0 // indirect
 	golang.org/x/text v0.22.0 // indirect
 	golang.org/x/time v0.10.0 // indirect
-	golang.org/x/tools v0.29.0 // indirect
+	golang.org/x/tools v0.30.0 // indirect
 	google.golang.org/protobuf v1.36.5 // indirect
 	gorm.io/datatypes v1.2.5 // indirect
 	gorm.io/driver/mysql v1.5.7 // indirect
 	gorm.io/driver/postgres v1.5.11 // indirect
 	gorm.io/gorm v1.25.12 // indirect
-	modernc.org/libc v1.61.11 // indirect
+	modernc.org/libc v1.61.13 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.8.2 // indirect
 	modernc.org/sqlite v1.34.5 // indirect
