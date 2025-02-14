@@ -61,6 +61,8 @@ func (bt *bgpTools) Start(r et.Registry) error {
 	rr, err := support.PerformQuery("bgp.tools", dns.TypeA)
 	if err != nil {
 		return fmt.Errorf("failed to obtain the BGPTools IP address: %v", err)
+	} else if len(rr) == 0 {
+		return errors.New("failed to obtain the BGPTools IP address")
 	}
 	bt.addr = rr[0].Data
 

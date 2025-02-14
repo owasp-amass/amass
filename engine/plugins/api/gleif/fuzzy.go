@@ -141,7 +141,7 @@ func (fc *fuzzyCompletions) query(e *et.Event, orgent *dbt.Entity) *dbt.Entity {
 		return nil
 	}
 
-	return fc.store(e, orgent, lei, rec)
+	return fc.store(e, orgent, rec)
 }
 
 func (fc *fuzzyCompletions) nameMatch(o *org.Organization, name string) bool {
@@ -200,15 +200,10 @@ func (fc *fuzzyCompletions) locMatch(e *et.Event, orgent *dbt.Entity, rec *leiRe
 	return false
 }
 
-func (fc *fuzzyCompletions) store(e *et.Event, orgent *dbt.Entity, id *general.Identifier, rec *leiRecord) *dbt.Entity {
+func (fc *fuzzyCompletions) store(e *et.Event, orgent *dbt.Entity, rec *leiRecord) *dbt.Entity {
 	fc.plugin.updateOrgFromLEIRecord(e, orgent, rec)
 
-	id.Status = rec.Attributes.Registration.Status
-	id.CreationDate = rec.Attributes.Registration.InitialRegistrationDate
-	id.UpdatedDate = rec.Attributes.Registration.LastUpdateDate
-	id.ExpirationDate = rec.Attributes.Registration.NextRenewalDate
-
-	ident, err := fc.plugin.createLEIIdentifier(e.Session, orgent, id)
+	ident, err := fc.plugin.createLEIFromRecord(e, orgent, rec)
 	if err != nil {
 		e.Session.Log().Error(err.Error(), slog.Group("plugin", "name", fc.plugin.name, "handler", fc.name))
 		return nil

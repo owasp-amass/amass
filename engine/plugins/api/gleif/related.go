@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/owasp-amass/amass/v4/engine/plugins/support"
@@ -117,25 +118,36 @@ func (ro *relatedOrgs) query(e *et.Event, ident *dbt.Entity) []*dbt.Entity {
 		if resp, err := http.RequestWebPage(context.TODO(), &http.Request{URL: link}); err == nil && resp.StatusCode == 200 && resp.Body != "" {
 			var result singleResponse
 
-			if err := json.Unmarshal([]byte(resp.Body), &result); err == nil && result.Data.ID != "" {
-				parent = &result.Data
+			if err := json.Unmarshal([]byte(resp.Body), &result); err == nil {
+				if result.Data.ID != lei.EntityID {
+					parent = &result.Data
+				}
+			} else {
+				msg := fmt.Sprintf("failed to unmarshal the direct-parent page for LEI - %s: %s", lei.EntityID, err.Error())
+				e.Session.Log().Error(msg, slog.Group("plugin", "name", ro.plugin.name, "handler", ro.name))
 			}
 		}
 	}
 
 	var children []*leiRecord
 	if link := leirec.Relationships.DirectChildren.Links.Related; link != "" {
-		for link != "" {
+		last := 1
+
+		for i := 1; i <= last && link != ""; i++ {
 			ro.plugin.rlimit.Take()
 
 			resp, err := http.RequestWebPage(context.TODO(), &http.Request{URL: link})
 			if err != nil || resp.StatusCode != 200 || resp.Body == "" {
+				msg := fmt.Sprintf("failed to obtain the direct-children page for LEI - %s: %s", lei.EntityID, err.Error())
+				e.Session.Log().Error(msg, slog.Group("plugin", "name", ro.plugin.name, "handler", ro.name))
 				break
 			}
 			link = ""
 
 			var result multipleResponse
 			if err := json.Unmarshal([]byte(resp.Body), &result); err != nil {
+				msg := fmt.Sprintf("failed to unmarshal the direct-children page for LEI - %s: %s", lei.EntityID, err.Error())
+				e.Session.Log().Error(msg, slog.Group("plugin", "name", ro.plugin.name, "handler", ro.name))
 				break
 			}
 
@@ -144,6 +156,7 @@ func (ro *relatedOrgs) query(e *et.Event, ident *dbt.Entity) []*dbt.Entity {
 			}
 
 			link = result.Links.Next
+			last = result.Meta.Pagination.LastPage
 		}
 	}
 
@@ -172,16 +185,7 @@ func (ro *relatedOrgs) store(e *et.Event, ident *dbt.Entity, leirec, parent *lei
 		if err == nil {
 			orgs = append(orgs, parentent)
 			ro.plugin.updateOrgFromLEIRecord(e, parentent, parent)
-
-			_, _ = ro.plugin.createLEIIdentifier(e.Session, parentent, &general.Identifier{
-				UniqueID:       fmt.Sprintf("%s:%s", general.LEICode, parent.ID),
-				EntityID:       parent.ID,
-				Type:           general.LEICode,
-				Status:         parent.Attributes.Registration.Status,
-				CreationDate:   parent.Attributes.Registration.InitialRegistrationDate,
-				UpdatedDate:    parent.Attributes.Registration.LastUpdateDate,
-				ExpirationDate: parent.Attributes.Registration.NextRenewalDate,
-			})
+			_, _ = ro.plugin.createLEIFromRecord(e, parentent, parent)
 		}
 	}
 
@@ -193,16 +197,7 @@ func (ro *relatedOrgs) store(e *et.Event, ident *dbt.Entity, leirec, parent *lei
 		if err == nil {
 			orgs = append(orgs, childent)
 			ro.plugin.updateOrgFromLEIRecord(e, childent, child)
-
-			_, _ = ro.plugin.createLEIIdentifier(e.Session, childent, &general.Identifier{
-				UniqueID:       fmt.Sprintf("%s:%s", general.LEICode, child.ID),
-				EntityID:       child.ID,
-				Type:           general.LEICode,
-				Status:         child.Attributes.Registration.Status,
-				CreationDate:   child.Attributes.Registration.InitialRegistrationDate,
-				UpdatedDate:    child.Attributes.Registration.LastUpdateDate,
-				ExpirationDate: child.Attributes.Registration.NextRenewalDate,
-			})
+			_, _ = ro.plugin.createLEIFromRecord(e, childent, child)
 		}
 	}
 

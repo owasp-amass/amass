@@ -300,6 +300,8 @@ func (g *gleif) updateOrgFromLEIRecord(e *et.Event, orgent *dbt.Entity, lei *lei
 
 	addr := fmt.Sprintf("%s %s %s %s %s", street, city, province, postalCode, country)
 	_ = g.addAddress(e, orgent, general.SimpleRelation{Name: "location"}, addr)
+
+	_, _ = e.Session.Cache().CreateEntity(orgent)
 }
 
 func (g *gleif) addAddress(e *et.Event, orgent *dbt.Entity, rel oam.Relation, addr string) error {
@@ -370,4 +372,16 @@ func (g *gleif) createLEIIdentifier(session et.Session, orgent *dbt.Entity, lei 
 		}
 	}
 	return id, nil
+}
+
+func (g *gleif) createLEIFromRecord(e *et.Event, orgent *dbt.Entity, lei *leiRecord) (*dbt.Entity, error) {
+	return g.createLEIIdentifier(e.Session, orgent, &general.Identifier{
+		UniqueID:       fmt.Sprintf("%s:%s", general.LEICode, lei.ID),
+		EntityID:       lei.ID,
+		Type:           general.LEICode,
+		Status:         lei.Attributes.Registration.Status,
+		CreationDate:   lei.Attributes.Registration.InitialRegistrationDate,
+		UpdatedDate:    lei.Attributes.Registration.LastUpdateDate,
+		ExpirationDate: lei.Attributes.Registration.NextRenewalDate,
+	})
 }
