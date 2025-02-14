@@ -27,6 +27,7 @@ type dnsPlugin struct {
 	ip              *dnsIP
 	reverse         *dnsReverse
 	subs            *dnsSubs
+	txt             *dnsTXT
 	firstSweepSize  int
 	secondSweepSize int
 	maxSweepSize    int
@@ -124,6 +125,19 @@ func (d *dnsPlugin) Start(r et.Registry) error {
 		return err
 	}
 	go d.subs.releaseSessions()
+
+	d.txt = &dnsTXT{name: d.name + "-TXT", plugin: d}
+	if err := r.RegisterHandler(&et.Handler{
+		Plugin:       d,
+		Name:         d.txt.name,
+		Priority:     3,
+		MaxInstances: support.MaxHandlerInstances,
+		Transforms:   []string{string(oam.FQDN)},
+		EventType:    oam.FQDN,
+		Callback:     d.txt.check,
+	}); err != nil {
+		return err
+	}
 
 	d.log.Info("Plugin started")
 	return nil
