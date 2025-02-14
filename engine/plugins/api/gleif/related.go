@@ -21,11 +21,6 @@ import (
 	"github.com/owasp-amass/open-asset-model/org"
 )
 
-type relatedOrgs struct {
-	name   string
-	plugin *gleif
-}
-
 func (ro *relatedOrgs) check(e *et.Event) error {
 	ident, ok := e.Entity.Asset.(*general.Identifier)
 	if !ok {

@@ -26,11 +26,6 @@ import (
 	"github.com/owasp-amass/open-asset-model/org"
 )
 
-type fuzzyCompletions struct {
-	name   string
-	plugin *gleif
-}
-
 func (fc *fuzzyCompletions) check(e *et.Event) error {
 	_, ok := e.Entity.Asset.(*org.Organization)
 	if !ok {
