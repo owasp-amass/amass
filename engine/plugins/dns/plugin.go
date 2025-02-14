@@ -25,9 +25,9 @@ type dnsPlugin struct {
 	apex            *dnsApex
 	cname           *dnsCNAME
 	ip              *dnsIP
+	txt             *dnsTXT
 	reverse         *dnsReverse
 	subs            *dnsSubs
-	txt             *dnsTXT
 	firstSweepSize  int
 	secondSweepSize int
 	maxSweepSize    int
