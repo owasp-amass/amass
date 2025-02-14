@@ -21,11 +21,11 @@ import (
 
 type dnsPlugin struct {
 	name            string
+	txt             *dnsTXT
 	log             *slog.Logger
 	apex            *dnsApex
 	cname           *dnsCNAME
 	ip              *dnsIP
-	txt             *dnsTXT
 	reverse         *dnsReverse
 	subs            *dnsSubs
 	firstSweepSize  int
@@ -73,7 +73,7 @@ func (d *dnsPlugin) Start(r et.Registry) error {
 	if err := r.RegisterHandler(&et.Handler{
 		Plugin:       d,
 		Name:         d.cname.name,
-		Priority:     1,
+		Priority:     2,
 		MaxInstances: support.MaxHandlerInstances,
 		Transforms:   []string{string(oam.FQDN)},
 		EventType:    oam.FQDN,
@@ -90,7 +90,7 @@ func (d *dnsPlugin) Start(r et.Registry) error {
 	if err := r.RegisterHandler(&et.Handler{
 		Plugin:       d,
 		Name:         d.ip.name,
-		Priority:     2,
+		Priority:     3,
 		MaxInstances: support.MaxHandlerInstances,
 		Transforms:   []string{string(oam.IPAddress)},
 		EventType:    oam.FQDN,
@@ -130,7 +130,7 @@ func (d *dnsPlugin) Start(r et.Registry) error {
 	if err := r.RegisterHandler(&et.Handler{
 		Plugin:       d,
 		Name:         d.txt.name,
-		Priority:     3,
+		Priority:     1,
 		MaxInstances: support.MaxHandlerInstances,
 		Transforms:   []string{string(oam.FQDN)},
 		EventType:    oam.FQDN,

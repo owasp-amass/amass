@@ -20,11 +20,6 @@ type dnsTXT struct {
     plugin *dnsPlugin
 }
 
-type relTXT struct {
-    txt    *dbt.Entity
-    target *dbt.Entity
-}
-
 func (d *dnsTXT) check(e *et.Event) error {
     _, ok := e.Entity.Asset.(*oamdns.FQDN)
     if !ok {
@@ -36,93 +31,62 @@ func (d *dnsTXT) check(e *et.Event) error {
         return err
     }
 
-    var txtRecords []*relTXT
+    var txtRecords []*resolve.ExtractedAnswer
     src := d.plugin.source
     if support.AssetMonitoredWithinTTL(e.Session, e.Entity, src, since) {
-        txtRecords = append(txtRecords, d.lookup(e, e.Entity, since)...)
+        txtRecords = d.lookup(e, e.Entity, since)
     } else {
-        txtRecords = append(txtRecords, d.query(e, e.Entity)...)
+        txtRecords = d.query(e, e.Entity)
     }
 
     if len(txtRecords) > 0 {
-        d.process(e, txtRecords)
+        d.process(e, e.Entity, txtRecords)
     }
     return nil
 }
 
-func (d *dnsTXT) lookup(e *et.Event, fqdn *dbt.Entity, since time.Time) []*relTXT {
-    var txtRecords []*relTXT
+func (d *dnsTXT) lookup(e *et.Event, fqdn *dbt.Entity, since time.Time) []*resolve.ExtractedAnswer {
+    var txtRecords []*resolve.ExtractedAnswer
 
     n, ok := fqdn.Asset.(*oamdns.FQDN)
     if !ok || n == nil {
         return txtRecords
     }
 
-    if assets := d.plugin.lookupWithinTTL(e.Session, n.Name, oam.FQDN, since, oam.BasicDNSRelation, 5); len(assets) > 0 {
+    if assets := d.plugin.lookupWithinTTL(e.Session, n.Name, oam.FQDN, since, oam.BasicDNSRelation, dns.TypeTXT); len(assets) > 0 {
         for _, a := range assets {
-            txtRecords = append(txtRecords, &relTXT{txt: fqdn, target: a})
+            txtRecords = append(txtRecords, &resolve.ExtractedAnswer{
+                Type: dns.TypeTXT,
+                Data: a.Asset.(*oamdns.FQDN).Name,
+            })
         }
     }
     return txtRecords
 }
 
-func (d *dnsTXT) query(e *et.Event, name *dbt.Entity) []*relTXT {
-    var txtRecords []*relTXT
+func (d *dnsTXT) query(e *et.Event, name *dbt.Entity) []*resolve.ExtractedAnswer {
+    var txtRecords []*resolve.ExtractedAnswer
 
     fqdn := name.Asset.(*oamdns.FQDN)
     if rr, err := support.PerformQuery(fqdn.Name, dns.TypeTXT); err == nil {
-        if records := d.store(e, name, rr); len(records) > 0 {
-            txtRecords = append(txtRecords, records...)
-            support.MarkAssetMonitored(e.Session, name, d.plugin.source)
-        }
+        txtRecords = append(txtRecords, rr...)
+        support.MarkAssetMonitored(e.Session, name, d.plugin.source)
     }
 
     return txtRecords
 }
 
-func (d *dnsTXT) store(e *et.Event, fqdn *dbt.Entity, rr []*resolve.ExtractedAnswer) []*relTXT {
-    var txtRecords []*relTXT
-
-    for _, record := range rr {
+func (d *dnsTXT) process(e *et.Event, fqdn *dbt.Entity, txtRecords []*resolve.ExtractedAnswer) {
+    for _, record := range txtRecords {
         if record.Type != dns.TypeTXT {
             continue
         }
 
-        if txt, err := e.Session.Cache().CreateAsset(&oamdns.FQDN{Name: record.Data}); err == nil && txt != nil {
-            if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
-                Relation: &oamdns.BasicDNSRelation{
-                    Name: "dns_record",
-                    Header: oamdns.RRHeader{
-                        RRType: int(record.Type),
-                        Class:  1,
-                    },
-                },
-                FromEntity: fqdn,
-                ToEntity:   txt,
-            }); err == nil && edge != nil {
-                txtRecords = append(txtRecords, &relTXT{txt: fqdn, target: txt})
-                _, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
-                    Source:     d.plugin.source.Name,
-                    Confidence: d.plugin.source.Confidence,
-                })
-            }
-        }
-    }
-
-    return txtRecords
-}
-
-func (d *dnsTXT) process(e *et.Event, txtRecords []*relTXT) {
-    for _, a := range txtRecords {
-        target := a.target.Asset.(*oamdns.FQDN)
-
-        _ = e.Dispatcher.DispatchEvent(&et.Event{
-            Name:    target.Name,
-            Entity:  a.target,
-            Session: e.Session,
+        _, _ = e.Session.Cache().CreateEntityProperty(fqdn, &oamdns.DNSProperty{
+            Name:  "TXT",
+            Value: record.Data,
         })
 
-        e.Session.Log().Info("relationship discovered", "from", d.plugin.source.Name, "relation",
-            "txt_record", "to", target.Name, slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
+        e.Session.Log().Info("TXT record discovered", "fqdn", fqdn.Asset.(*oamdns.FQDN).Name, "txt", record.Data, slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
     }
 }
