@@ -77,6 +77,7 @@ func (fc *fuzzyCompletions) lookup(e *et.Event, o *dbt.Entity, since time.Time) 
 }
 
 func (fc *fuzzyCompletions) query(e *et.Event, orgent *dbt.Entity) *dbt.Entity {
+	exclusive := true
 	var lei *general.Identifier
 
 	if leient := fc.plugin.orgEntityToLEI(e, orgent); leient != nil {
@@ -115,6 +116,7 @@ func (fc *fuzzyCompletions) query(e *et.Event, orgent *dbt.Entity) *dbt.Entity {
 		if err := json.Unmarshal([]byte(resp.Body), &result); err != nil || len(result.Data) == 0 {
 			return nil
 		}
+		exclusive = len(result.Data) == 1
 
 		for _, d := range result.Data {
 			if fc.nameMatch(o, d.Attributes.Value) {
@@ -132,7 +134,7 @@ func (fc *fuzzyCompletions) query(e *et.Event, orgent *dbt.Entity) *dbt.Entity {
 	}
 
 	rec, err := fc.plugin.getLEIRecord(lei)
-	if err != nil || !fc.locMatch(e, orgent, rec) {
+	if err != nil || (!exclusive && !fc.locMatch(e, orgent, rec)) {
 		return nil
 	}
 
@@ -156,13 +158,19 @@ func (fc *fuzzyCompletions) nameMatch(o *org.Organization, name string) bool {
 }
 
 func (fc *fuzzyCompletions) locMatch(e *et.Event, orgent *dbt.Entity, rec *leiRecord) bool {
-	if edges, err := e.Session.Cache().OutgoingEdges(orgent, time.Time{}, "legal_address", "hq_address", "location"); err == nil {
+	legal_addr := rec.Attributes.Entity.LegalAddress
+	hq_addr := rec.Attributes.Entity.HeadquartersAddress
+
+	if edges, err := e.Session.Cache().OutgoingEdges(orgent,
+		time.Time{}, "legal_address", "hq_address", "location"); err == nil {
 		for _, edge := range edges {
 			if a, err := e.Session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && a != nil {
-				if loc, ok := a.Asset.(*contact.Location); ok &&
-					(loc.PostalCode == rec.Attributes.Entity.LegalAddress.PostalCode ||
-						(loc.PostalCode == rec.Attributes.Entity.HeadquartersAddress.PostalCode)) {
-					return true
+				if loc, ok := a.Asset.(*contact.Location); ok {
+					for _, p := range append([]leiAddress{legal_addr, hq_addr}, rec.Attributes.Entity.OtherAddresses...) {
+						if loc.PostalCode == p.PostalCode {
+							return true
+						}
+					}
 				}
 			}
 		}
@@ -183,10 +191,12 @@ func (fc *fuzzyCompletions) locMatch(e *et.Event, orgent *dbt.Entity, rec *leiRe
 		if edges, err := e.Session.Cache().OutgoingEdges(cr, time.Time{}, "location"); err == nil {
 			for _, edge := range edges {
 				if a, err := e.Session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && a != nil {
-					if loc, ok := a.Asset.(*contact.Location); ok &&
-						(loc.PostalCode == rec.Attributes.Entity.LegalAddress.PostalCode ||
-							(loc.PostalCode == rec.Attributes.Entity.HeadquartersAddress.PostalCode)) {
-						return true
+					if loc, ok := a.Asset.(*contact.Location); ok {
+						for _, p := range append([]leiAddress{legal_addr, hq_addr}, rec.Attributes.Entity.OtherAddresses...) {
+							if loc.PostalCode == p.PostalCode {
+								return true
+							}
+						}
 					}
 				}
 			}

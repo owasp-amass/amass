@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	et "github.com/owasp-amass/amass/v4/engine/types"
 	"github.com/owasp-amass/amass/v4/utils/net/http"
@@ -60,4 +61,15 @@ func (g *gleif) createLEIFromRecord(e *et.Event, orgent *dbt.Entity, lei *leiRec
 		UpdatedDate:    lei.Attributes.Registration.LastUpdateDate,
 		ExpirationDate: lei.Attributes.Registration.NextRenewalDate,
 	})
+}
+
+func (g *gleif) buildAddrFromLEIAddress(addr *leiAddress) string {
+	street := strings.Join(addr.AddressLines, " ")
+
+	province := addr.Region
+	if parts := strings.Split(province, "-"); len(parts) > 1 {
+		province = parts[1]
+	}
+
+	return fmt.Sprintf("%s %s %s %s %s", street, addr.City, province, addr.PostalCode, addr.Country)
 }

@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	"github.com/owasp-amass/amass/v4/engine/plugins/support"
@@ -84,17 +83,6 @@ func (g *gleif) updateOrgFromLEIRecord(e *et.Event, orgent *dbt.Entity, lei *lei
 	_ = g.addIdentifiersToOrg(e, orgent, general.SPGlobalCompanyID, lei.Attributes.SPGlobal)
 
 	_, _ = e.Session.Cache().CreateEntity(orgent)
-}
-
-func (g *gleif) buildAddrFromLEIAddress(addr *leiAddress) string {
-	street := strings.Join(addr.AddressLines, " ")
-
-	province := addr.Region
-	if parts := strings.Split(province, "-"); len(parts) > 1 {
-		province = parts[1]
-	}
-
-	return fmt.Sprintf("%s %s %s %s %s", street, addr.City, province, addr.PostalCode, addr.Country)
 }
 
 func (g *gleif) addAddress(e *et.Event, orgent *dbt.Entity, rel oam.Relation, addr string) error {
