@@ -4,7 +4,7 @@ go 1.23.1
 
 require (
 	github.com/99designs/gqlgen v0.17.64
-	github.com/PuerkitoBio/goquery v1.10.1
+	github.com/PuerkitoBio/goquery v1.10.2
 	github.com/PuerkitoBio/purell v1.2.1
 	github.com/adrg/strutil v0.3.1
 	github.com/caffix/fullname_parser v0.0.0-20240817200809-1b9b04da88d0
@@ -24,8 +24,8 @@ require (
 	github.com/miekg/dns v1.1.63
 	github.com/nyaruka/phonenumbers v1.5.0
 	github.com/openrdap/rdap v0.9.1
-	github.com/owasp-amass/asset-db v0.18.2
-	github.com/owasp-amass/open-asset-model v0.13.6
+	github.com/owasp-amass/asset-db v0.18.4
+	github.com/owasp-amass/open-asset-model v0.13.8
 	github.com/owasp-amass/resolve v0.8.1
 	github.com/samber/slog-common v0.18.1
 	github.com/samber/slog-syslog/v2 v2.5.2
@@ -114,5 +114,5 @@ require (
 	modernc.org/libc v1.61.13 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.8.2 // indirect
-	modernc.org/sqlite v1.34.5 // indirect
+	modernc.org/sqlite v1.35.0 // indirect
 )
