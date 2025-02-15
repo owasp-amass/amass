@@ -156,7 +156,7 @@ func (fc *fuzzyCompletions) nameMatch(o *org.Organization, name string) bool {
 }
 
 func (fc *fuzzyCompletions) locMatch(e *et.Event, orgent *dbt.Entity, rec *leiRecord) bool {
-	if edges, err := e.Session.Cache().OutgoingEdges(orgent, time.Time{}, "location"); err == nil {
+	if edges, err := e.Session.Cache().OutgoingEdges(orgent, time.Time{}, "legal_address", "hq_address", "location"); err == nil {
 		for _, edge := range edges {
 			if a, err := e.Session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && a != nil {
 				if loc, ok := a.Asset.(*contact.Location); ok &&

@@ -180,7 +180,6 @@ func (ro *relatedOrgs) store(e *et.Event, ident *dbt.Entity, leirec, parent *lei
 		if err == nil {
 			orgs = append(orgs, parentent)
 			ro.plugin.updateOrgFromLEIRecord(e, parentent, parent)
-			_, _ = ro.plugin.createLEIFromRecord(e, parentent, parent)
 		}
 	}
 
@@ -192,7 +191,6 @@ func (ro *relatedOrgs) store(e *et.Event, ident *dbt.Entity, leirec, parent *lei
 		if err == nil {
 			orgs = append(orgs, childent)
 			ro.plugin.updateOrgFromLEIRecord(e, childent, child)
-			_, _ = ro.plugin.createLEIFromRecord(e, childent, child)
 		}
 	}
 

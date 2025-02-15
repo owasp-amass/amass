@@ -48,27 +48,53 @@ func (g *gleif) leiToOrgEntity(e *et.Event, ident *dbt.Entity) *dbt.Entity {
 func (g *gleif) updateOrgFromLEIRecord(e *et.Event, orgent *dbt.Entity, lei *leiRecord) {
 	o := orgent.Asset.(*org.Organization)
 
+	if _, err := g.createLEIFromRecord(e, orgent, lei); err != nil {
+		msg := fmt.Sprintf("failed to create the LEI Identifier from the record: %s", err.Error())
+		e.Session.Log().Error(msg, slog.Group("plugin", "name", g.name, "handler", g.name))
+	}
+
 	o.LegalName = lei.Attributes.Entity.LegalName.Name
+	if o.LegalName != "" {
+		_ = g.addIdentifiersToOrg(e, orgent, general.LegalName, []string{o.LegalName})
+	}
+
 	o.FoundingDate = lei.Attributes.Entity.CreationDate
+	o.Jurisdiction = lei.Attributes.Entity.Jurisdiction
+	o.RegistrationID = lei.Attributes.Entity.RegisteredAs
 	if lei.Attributes.Entity.Status == "ACTIVE" {
 		o.Active = true
 	} else {
 		o.Active = false
 	}
 
-	street := strings.Join(lei.Attributes.Entity.HeadquartersAddress.AddressLines, " ")
-	city := lei.Attributes.Entity.HeadquartersAddress.City
-	province := lei.Attributes.Entity.HeadquartersAddress.Region
+	addr := g.buildAddrFromLEIAddress(&lei.Attributes.Entity.LegalAddress)
+	_ = g.addAddress(e, orgent, general.SimpleRelation{Name: "legal_address"}, addr)
+
+	addr = g.buildAddrFromLEIAddress(&lei.Attributes.Entity.HeadquartersAddress)
+	_ = g.addAddress(e, orgent, general.SimpleRelation{Name: "hq_address"}, addr)
+
+	for _, a := range lei.Attributes.Entity.OtherAddresses {
+		addr = g.buildAddrFromLEIAddress(&a)
+		_ = g.addAddress(e, orgent, general.SimpleRelation{Name: "location"}, addr)
+	}
+
+	_ = g.addIdentifiersToOrg(e, orgent, general.BankIDCode, lei.Attributes.BIC)
+	_ = g.addIdentifiersToOrg(e, orgent, general.MarketIDCode, lei.Attributes.MIC)
+	_ = g.addIdentifiersToOrg(e, orgent, general.GlobalOCID, []string{lei.Attributes.OCID})
+	_ = g.addIdentifiersToOrg(e, orgent, general.SPGlobalCompanyID, lei.Attributes.SPGlobal)
+
+	_, _ = e.Session.Cache().CreateEntity(orgent)
+}
+
+func (g *gleif) buildAddrFromLEIAddress(addr *leiAddress) string {
+	street := strings.Join(addr.AddressLines, " ")
+
+	province := addr.Region
 	if parts := strings.Split(province, "-"); len(parts) > 1 {
 		province = parts[1]
 	}
-	postalCode := lei.Attributes.Entity.HeadquartersAddress.PostalCode
-	country := lei.Attributes.Entity.HeadquartersAddress.Country
 
-	addr := fmt.Sprintf("%s %s %s %s %s", street, city, province, postalCode, country)
-	_ = g.addAddress(e, orgent, general.SimpleRelation{Name: "location"}, addr)
-
-	_, _ = e.Session.Cache().CreateEntity(orgent)
+	return fmt.Sprintf("%s %s %s %s %s", street, addr.City, province, addr.PostalCode, addr.Country)
 }
 
 func (g *gleif) addAddress(e *et.Event, orgent *dbt.Entity, rel oam.Relation, addr string) error {
@@ -88,20 +114,40 @@ func (g *gleif) addAddress(e *et.Event, orgent *dbt.Entity, rel oam.Relation, ad
 		Confidence: g.source.Confidence,
 	})
 
-	edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
-		Relation:   rel,
-		FromEntity: orgent,
-		ToEntity:   a,
-	})
-	if err != nil && edge == nil {
+	if err := g.createRelation(e.Session, orgent, rel, a); err != nil {
 		e.Session.Log().Error(err.Error(), slog.Group("plugin", "name", g.name, "handler", g.name))
 		return err
 	}
 
-	_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
-		Source:     g.source.Name,
-		Confidence: g.source.Confidence,
-	})
+	return nil
+}
+
+func (g *gleif) addIdentifiersToOrg(e *et.Event, orgent *dbt.Entity, idtype string, ids []string) error {
+	for _, id := range ids {
+		if id == "" {
+			continue
+		}
+
+		oamid := &general.Identifier{
+			UniqueID: fmt.Sprintf("%s:%s", idtype, id),
+			EntityID: id,
+			Type:     idtype,
+		}
+
+		ident, err := e.Session.Cache().CreateAsset(oamid)
+		if err != nil || ident == nil {
+			return err
+		}
+
+		_, _ = e.Session.Cache().CreateEntityProperty(ident, &general.SourceProperty{
+			Source:     g.source.Name,
+			Confidence: g.source.Confidence,
+		})
+
+		if err := g.createRelation(e.Session, orgent, general.SimpleRelation{Name: "id"}, ident); err != nil {
+			return err
+		}
+	}
 
 	return nil
 }

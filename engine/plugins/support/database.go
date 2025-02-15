@@ -238,7 +238,10 @@ func CreateServiceAsset(session et.Session, src *dbt.Entity, rel oam.Relation, s
 }
 
 func CreateOrgAsset(session et.Session, obj *dbt.Entity, rel oam.Relation, o *org.Organization, src *et.Source) (*dbt.Entity, error) {
-	if obj != nil && rel != nil && o != nil && src != nil {
+	if o == nil || o.Name == "" {
+		return nil, errors.New("missing the organization name")
+	}
+	if obj != nil && rel != nil && src != nil {
 		if orgent := orgDedupChecks(session, obj, o); orgent != nil {
 			if err := createRelation(session, obj, rel, orgent, src); err != nil {
 				return nil, err
@@ -249,9 +252,9 @@ func CreateOrgAsset(session et.Session, obj *dbt.Entity, rel oam.Relation, o *or
 
 	name := strings.ToLower(o.Name)
 	id := &general.Identifier{
-		UniqueID: fmt.Sprintf("%s:%s", "org_name", name),
+		UniqueID: fmt.Sprintf("%s:%s", general.OrganizationName, name),
 		EntityID: name,
-		Type:     "org_name",
+		Type:     general.OrganizationName,
 	}
 
 	if ident, err := session.Cache().CreateAsset(id); err == nil && ident != nil {
@@ -362,7 +365,7 @@ func orgNameRelatedToOrganization(session et.Session, orgent *dbt.Entity, name s
 func orgExistsAndSharesLocEntity(session et.Session, obj *dbt.Entity, o *org.Organization) (*dbt.Entity, error) {
 	var locs []*dbt.Entity
 
-	if edges, err := session.Cache().OutgoingEdges(obj, time.Time{}, "location"); err == nil {
+	if edges, err := session.Cache().OutgoingEdges(obj, time.Time{}, "legal_address", "hq_address", "location"); err == nil {
 		for _, edge := range edges {
 			if a, err := session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && a != nil {
 				if _, ok := a.Asset.(*contact.Location); ok {
@@ -374,7 +377,7 @@ func orgExistsAndSharesLocEntity(session et.Session, obj *dbt.Entity, o *org.Org
 
 	var orgents, crecords []*dbt.Entity
 	for _, loc := range locs {
-		if edges, err := session.Cache().IncomingEdges(loc, time.Time{}, "location"); err == nil {
+		if edges, err := session.Cache().IncomingEdges(loc, time.Time{}, "legal_address", "hq_address", "location"); err == nil {
 			for _, edge := range edges {
 				if a, err := session.Cache().FindEntityById(edge.FromEntity.ID); err == nil && a != nil {
 					if _, ok := a.Asset.(*contact.ContactRecord); ok && a.ID != obj.ID {
@@ -413,9 +416,9 @@ func orgExistsAndSharesAncestorEntity(session et.Session, obj *dbt.Entity, o *or
 
 	name := strings.ToLower(o.Name)
 	if assets, err := session.Cache().FindEntitiesByContent(&general.Identifier{
-		UniqueID: fmt.Sprintf("%s:%s", "org_name", name),
+		UniqueID: fmt.Sprintf("%s:%s", general.OrganizationName, name),
 		EntityID: name,
-		Type:     "org_name",
+		Type:     general.OrganizationName,
 	}, time.Time{}); err == nil {
 		for _, a := range assets {
 			if _, ok := a.Asset.(*general.Identifier); ok {
