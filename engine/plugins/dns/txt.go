@@ -48,7 +48,7 @@ func (d *dnsTXT) lookup(e *et.Event, fqdn *dbt.Entity, since time.Time) []*resol
     var txtRecords []*resolve.ExtractedAnswer
 
     n, ok := fqdn.Asset.(*oamdns.FQDN)
-    if (!ok || n == nil) {
+    if !ok || n == nil {
         return txtRecords
     }
 
@@ -81,13 +81,16 @@ func (d *dnsTXT) store(e *et.Event, fqdn *dbt.Entity, rr []*resolve.ExtractedAns
             continue
         }
 
+        txtValue := record.Data
 
-        _, _ = e.Session.Cache().CreateEntityProperty(fqdn, &oamdns.BasicDNSRelation{
-            Name: "TXT",
-            Header: oamdns.RRHeader{
-                RRType: int(record.Type),
-                Class:  1,
+        _, _ = session.Cache().CreateEntityProperty(fqdn, &oamdns.DNSRecordProperty{
+            PropertyName:     "dns_record",
+            Header: oamdns.RRHeader{ // these fields come from the DNS record
+                RRType: 16,
+                Class: 1,
+                TTL: 300,
             },
+            Data: txtValue,
         })
     }
 }
