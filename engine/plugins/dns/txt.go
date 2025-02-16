@@ -75,13 +75,12 @@ func (d *dnsTXT) query(e *et.Event, name *dbt.Entity) []*resolve.ExtractedAnswer
     return txtRecords
 }
 
-func (d *dnsTXT) process(e *et.Event, fqdn *dbt.Entity, txtRecords []*resolve.ExtractedAnswer) {
-    for _, record := range txtRecords {
+func (d *dnsTXT) store(e *et.Event, fqdn *dbt.Entity, rr []*resolve.ExtractedAnswer) {
+    for _, record := range rr {
         if record.Type != dns.TypeTXT {
             continue
         }
 
-        // Create a property for the TXT record data
         _, _ = e.Session.Cache().CreateEntityProperty(fqdn, &oamdns.BasicDNSRelation{
             Name: "TXT",
             Header: oamdns.RRHeader{
@@ -90,7 +89,13 @@ func (d *dnsTXT) process(e *et.Event, fqdn *dbt.Entity, txtRecords []*resolve.Ex
             },
             Data: record.Data,
         })
+    }
+}
 
+func (d *dnsTXT) process(e *et.Event, fqdn *dbt.Entity, txtRecords []*resolve.ExtractedAnswer) {
+    d.store(e, fqdn, txtRecords)
+
+    for _, record := range txtRecords {
         e.Session.Log().Info("TXT record discovered", "fqdn", fqdn.Asset.(*oamdns.FQDN).Name, "txt", record.Data, slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
     }
 }
