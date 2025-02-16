@@ -11,7 +11,6 @@ import (
     dbt "github.com/owasp-amass/asset-db/types"
     oam "github.com/owasp-amass/open-asset-model"
     oamdns "github.com/owasp-amass/open-asset-model/dns"
-    "github.com/owasp-amass/open-asset-model/general"
     "github.com/owasp-amass/resolve"
 )
 
@@ -53,7 +52,7 @@ func (d *dnsTXT) lookup(e *et.Event, fqdn *dbt.Entity, since time.Time) []*resol
         return txtRecords
     }
 
-    if assets := d.plugin.lookupWithinTTL(e.Session, n.Name, oam.FQDN, since, oam.BasicDNSRelation, dns.TypeTXT); len(assets) > 0 {
+    if assets := d.plugin.lookupWithinTTL(e.Session, n.Name, oam.FQDN, since, oam.BasicDNSRelation, int(dns.TypeTXT)); len(assets) > 0 {
         for _, a := range assets {
             txtRecords = append(txtRecords, &resolve.ExtractedAnswer{
                 Type: dns.TypeTXT,
@@ -82,7 +81,7 @@ func (d *dnsTXT) process(e *et.Event, fqdn *dbt.Entity, txtRecords []*resolve.Ex
             continue
         }
 
-        _, _ = e.Session.Cache().CreateEntityProperty(fqdn, &oamdns.DNSProperty{
+        _, _ = e.Session.Cache().CreateEntityProperty(fqdn, &oamdns.DNSRecord{
             Name:  "TXT",
             Value: record.Data,
         })
