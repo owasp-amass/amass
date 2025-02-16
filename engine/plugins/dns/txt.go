@@ -81,15 +81,13 @@ func (d *dnsTXT) store(e *et.Event, fqdn *dbt.Entity, rr []*resolve.ExtractedAns
             continue
         }
 
-        // Create a property for the TXT record data
+
         _, _ = e.Session.Cache().CreateEntityProperty(fqdn, &oamdns.BasicDNSRelation{
             Name: "TXT",
             Header: oamdns.RRHeader{
                 RRType: int(record.Type),
                 Class:  1,
             },
-            // Assuming Data is not a field in BasicDNSRelation, we will use a different approach
-            // Data: record.Data,
         })
     }
 }
