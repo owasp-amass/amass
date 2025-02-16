@@ -81,7 +81,7 @@ func (d *dnsTXT) process(e *et.Event, fqdn *dbt.Entity, txtRecords []*resolve.Ex
             continue
         }
 
-        _, _ = e.Session.Cache().CreateEntityProperty(fqdn, &oamdns.DNSRecord{
+        _, _ = e.Session.Cache().CreateEntityProperty(fqdn, &oamdns.BasicDNSRelation{
             Name:  "TXT",
             Value: record.Data,
         })
