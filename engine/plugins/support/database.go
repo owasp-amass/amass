@@ -240,49 +240,53 @@ func CreateServiceAsset(session et.Session, src *dbt.Entity, rel oam.Relation, s
 func CreateOrgAsset(session et.Session, obj *dbt.Entity, rel oam.Relation, o *org.Organization, src *et.Source) (*dbt.Entity, error) {
 	if o == nil || o.Name == "" {
 		return nil, errors.New("missing the organization name")
-	}
-	if src == nil {
+	} else if src == nil {
 		return nil, errors.New("missing the source")
 	}
-	if obj != nil && rel != nil {
-		if orgent := orgDedupChecks(session, obj, o); orgent != nil {
-			if err := createRelation(session, obj, rel, orgent, src); err != nil {
-				return nil, err
-			}
-			return orgent, nil
+
+	var orgent *dbt.Entity
+	if obj != nil {
+		orgent = orgDedupChecks(session, obj, o)
+	}
+
+	if orgent == nil {
+		name := strings.ToLower(o.Name)
+		id := &general.Identifier{
+			UniqueID: fmt.Sprintf("%s:%s", general.OrganizationName, name),
+			EntityID: name,
+			Type:     general.OrganizationName,
 		}
-	}
 
-	name := strings.ToLower(o.Name)
-	id := &general.Identifier{
-		UniqueID: fmt.Sprintf("%s:%s", general.OrganizationName, name),
-		EntityID: name,
-		Type:     general.OrganizationName,
-	}
+		if ident, err := session.Cache().CreateAsset(id); err == nil && ident != nil {
+			_, _ = session.Cache().CreateEntityProperty(ident, &general.SourceProperty{
+				Source:     src.Name,
+				Confidence: src.Confidence,
+			})
 
-	if ident, err := session.Cache().CreateAsset(id); err == nil && ident != nil {
-		_, _ = session.Cache().CreateEntityProperty(ident, &general.SourceProperty{
-			Source:     src.Name,
-			Confidence: src.Confidence,
-		})
+			o.ID = uuid.New().String()
+			orgent, err = session.Cache().CreateAsset(o)
+			if err != nil || orgent == nil {
+				return nil, errors.New("failed to create the OAM Organization asset")
+			}
 
-		o.ID = uuid.New().String()
-		if orgent, err := session.Cache().CreateAsset(o); err == nil && orgent != nil {
 			_, _ = session.Cache().CreateEntityProperty(orgent, &general.SourceProperty{
 				Source:     src.Name,
 				Confidence: src.Confidence,
 			})
+
 			if err := createRelation(session, orgent, &general.SimpleRelation{Name: "id"}, ident, src); err != nil {
 				return nil, err
 			}
-			if err := createRelation(session, obj, rel, orgent, src); err != nil {
-				return nil, err
-			}
-			return orgent, nil
 		}
 	}
 
-	return nil, errors.New("failed to create the OAM Organization asset")
+	if obj != nil && rel != nil {
+		if err := createRelation(session, obj, rel, orgent, src); err != nil {
+			return nil, err
+		}
+	}
+
+	return orgent, nil
 }
 
 func orgDedupChecks(session et.Session, obj *dbt.Entity, o *org.Organization) *dbt.Entity {

@@ -57,6 +57,12 @@ func (g *gleif) updateOrgFromLEIRecord(e *et.Event, orgent *dbt.Entity, lei *lei
 		_ = g.addIdentifiersToOrg(e, orgent, general.LegalName, []string{o.LegalName})
 	}
 
+	var otherNames []string
+	for _, other := range lei.Attributes.Entity.OtherNames {
+		otherNames = append(otherNames, other.Name)
+	}
+	_ = g.addIdentifiersToOrg(e, orgent, general.OrganizationName, otherNames)
+
 	o.FoundingDate = lei.Attributes.Entity.CreationDate
 	o.Jurisdiction = lei.Attributes.Entity.Jurisdiction
 	o.RegistrationID = lei.Attributes.Entity.RegisteredAs

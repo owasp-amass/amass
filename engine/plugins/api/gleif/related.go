@@ -170,6 +170,10 @@ func (ro *relatedOrgs) store(e *et.Event, ident *dbt.Entity, leirec, parent *lei
 		if err != nil {
 			return orgs
 		}
+
+		orgs = append(orgs, orgent)
+		ro.plugin.updateOrgFromLEIRecord(e, orgent, leirec)
+		support.MarkAssetMonitored(e.Session, orgent, ro.plugin.source)
 	}
 
 	if parent != nil {
@@ -180,6 +184,7 @@ func (ro *relatedOrgs) store(e *et.Event, ident *dbt.Entity, leirec, parent *lei
 		if err == nil {
 			orgs = append(orgs, parentent)
 			ro.plugin.updateOrgFromLEIRecord(e, parentent, parent)
+			support.MarkAssetMonitored(e.Session, parentent, ro.plugin.source)
 		}
 	}
 
@@ -191,6 +196,7 @@ func (ro *relatedOrgs) store(e *et.Event, ident *dbt.Entity, leirec, parent *lei
 		if err == nil {
 			orgs = append(orgs, childent)
 			ro.plugin.updateOrgFromLEIRecord(e, childent, child)
+			support.MarkAssetMonitored(e.Session, childent, ro.plugin.source)
 		}
 	}
 

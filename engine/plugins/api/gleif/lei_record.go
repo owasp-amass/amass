@@ -43,6 +43,11 @@ func (g *gleif) createLEIIdentifier(session et.Session, orgent *dbt.Entity, lei 
 		return nil, errors.New("failed to create the Identifier asset")
 	}
 
+	_, _ = session.Cache().CreateEntityProperty(id, &general.SourceProperty{
+		Source:     g.source.Name,
+		Confidence: g.source.Confidence,
+	})
+
 	if orgent != nil {
 		if err := g.createRelation(session, orgent, general.SimpleRelation{Name: "id"}, id); err != nil {
 			return nil, err

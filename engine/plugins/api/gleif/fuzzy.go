@@ -78,13 +78,13 @@ func (fc *fuzzyCompletions) lookup(e *et.Event, o *dbt.Entity, since time.Time) 
 
 func (fc *fuzzyCompletions) query(e *et.Event, orgent *dbt.Entity) *dbt.Entity {
 	exclusive := true
-	var lei *general.Identifier
+	var leiList []*general.Identifier
 
 	if leient := fc.plugin.orgEntityToLEI(e, orgent); leient != nil {
-		lei = leient.Asset.(*general.Identifier)
+		leiList = append(leiList, leient.Asset.(*general.Identifier))
 	}
 
-	if lei == nil {
+	if len(leiList) == 0 {
 		o := orgent.Asset.(*org.Organization)
 		u := "https://api.gleif.org/api/v1/fuzzycompletions?field=fulltext&q=" + url.QueryEscape(o.Name)
 
@@ -120,21 +120,28 @@ func (fc *fuzzyCompletions) query(e *et.Event, orgent *dbt.Entity) *dbt.Entity {
 
 		for _, d := range result.Data {
 			if fc.nameMatch(o, d.Attributes.Value) {
-				lei = &general.Identifier{
+				leiList = append(leiList, &general.Identifier{
 					UniqueID: fmt.Sprintf("%s:%s", general.LEICode, d.Relationships.LEIRecords.Data.ID),
 					EntityID: d.Relationships.LEIRecords.Data.ID,
 					Type:     general.LEICode,
-				}
+				})
 				break
 			}
 		}
-		if lei == nil {
+		if len(leiList) == 0 {
 			return nil
 		}
 	}
 
-	rec, err := fc.plugin.getLEIRecord(lei)
-	if err != nil || (!exclusive && !fc.locMatch(e, orgent, rec)) {
+	var rec *leiRecord
+	for _, lei := range leiList {
+		r, err := fc.plugin.getLEIRecord(lei)
+		if err == nil && (exclusive || fc.locMatch(e, orgent, rec)) {
+			rec = r
+			break
+		}
+	}
+	if rec == nil {
 		return nil
 	}
 
