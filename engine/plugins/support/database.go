@@ -241,7 +241,10 @@ func CreateOrgAsset(session et.Session, obj *dbt.Entity, rel oam.Relation, o *or
 	if o == nil || o.Name == "" {
 		return nil, errors.New("missing the organization name")
 	}
-	if obj != nil && rel != nil && src != nil {
+	if src == nil {
+		return nil, errors.New("missing the source")
+	}
+	if obj != nil && rel != nil {
 		if orgent := orgDedupChecks(session, obj, o); orgent != nil {
 			if err := createRelation(session, obj, rel, orgent, src); err != nil {
 				return nil, err
@@ -283,32 +286,37 @@ func CreateOrgAsset(session et.Session, obj *dbt.Entity, rel oam.Relation, o *or
 }
 
 func orgDedupChecks(session et.Session, obj *dbt.Entity, o *org.Organization) *dbt.Entity {
-	var result *dbt.Entity
-
 	switch obj.Asset.(type) {
 	case *contact.ContactRecord:
-		if org, found := orgNameExistsInContactRecord(session, obj, o.Name); found {
-			result = org
+		for _, name := range []string{o.Name, o.LegalName} {
+			if name != "" {
+				if org, found := orgNameExistsInContactRecord(session, obj, name); found {
+					return org
+				}
+			}
 		}
 		if org, err := orgExistsAndSharesLocEntity(session, obj, o); err == nil {
-			result = org
+			return org
 		}
 		if org, err := orgExistsAndSharesAncestorEntity(session, obj, o); err == nil {
-			result = org
+			return org
 		}
 	case *org.Organization:
-		if org, found := orgNameRelatedToOrganization(session, obj, o.Name); found {
-			result = org
+		for _, name := range []string{o.Name, o.LegalName} {
+			if name != "" {
+				if org, found := orgNameRelatedToOrganization(session, obj, name); found {
+					return org
+				}
+			}
 		}
 		if org, err := orgExistsAndSharesLocEntity(session, obj, o); err == nil {
-			result = org
+			return org
 		}
 		if org, err := orgExistsAndSharesAncestorEntity(session, obj, o); err == nil {
-			result = org
+			return org
 		}
 	}
-
-	return result
+	return nil
 }
 
 func orgHasName(session et.Session, org *dbt.Entity, name string) bool {

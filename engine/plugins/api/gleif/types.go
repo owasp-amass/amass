@@ -68,8 +68,8 @@ type leiRecord struct {
 		LEI    string `json:"lei"`
 		Entity struct {
 			LegalName struct {
-				Name string `json:"name"`
-				Lang string `json:"language"`
+				Name     string `json:"name"`
+				Language string `json:"language"`
 			} `json:"legalName"`
 			OtherNames               []string   `json:"otherNames"`
 			TransliteratedOtherNames []string   `json:"transliteratedOtherNames"`
@@ -168,7 +168,7 @@ type leiEntity struct {
 }
 
 type leiAddress struct {
-	Lang                        string   `json:"language"`
+	Language                    string   `json:"language"`
 	AddressLines                []string `json:"addressLines"`
 	AddressNumber               string   `json:"addressNumber"`
 	AddressNumberWithinBuilding string   `json:"addressNumberWithinBuilding"`
