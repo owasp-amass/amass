@@ -83,12 +83,12 @@ func (d *dnsTXT) store(e *et.Event, fqdn *dbt.Entity, rr []*resolve.ExtractedAns
 
         txtValue := record.Data
 
-        _, _ = session.Cache().CreateEntityProperty(fqdn, &oamdns.DNSRecordProperty{
-            PropertyName:     "dns_record",
-            Header: oamdns.RRHeader{ // these fields come from the DNS record
+        _, _ = e.Session.Cache().CreateEntityProperty(fqdn, &oamdns.DNSRecordProperty{
+            PropertyName: "dns_record",
+            Header: oamdns.RRHeader{
                 RRType: 16,
-                Class: 1,
-                TTL: 300,
+                Class:  1,
+                TTL:    300,
             },
             Data: txtValue,
         })
