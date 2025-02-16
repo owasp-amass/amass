@@ -19,6 +19,12 @@ type dnsTXT struct {
     plugin *dnsPlugin
 }
 
+// TXTRecord represents a DNS TXT record property.
+type TXTRecord struct {
+    Name  string
+    Value string
+}
+
 func (d *dnsTXT) check(e *et.Event) error {
     _, ok := e.Entity.Asset.(*oamdns.FQDN)
     if !ok {
@@ -81,7 +87,7 @@ func (d *dnsTXT) process(e *et.Event, fqdn *dbt.Entity, txtRecords []*resolve.Ex
             continue
         }
 
-        _, _ = e.Session.Cache().CreateEntityProperty(fqdn, &oamdns.TXT{
+        _, _ = e.Session.Cache().CreateEntityProperty(fqdn, &oamdns.TXTRecord{
             Name:  "TXT",
             Value: record.Data,
         })
