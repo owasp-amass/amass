@@ -19,12 +19,6 @@ type dnsTXT struct {
     plugin *dnsPlugin
 }
 
-// TXTRecord represents a DNS TXT record property.
-type TXTRecord struct {
-    Name  string
-    Value string
-}
-
 func (d *dnsTXT) check(e *et.Event) error {
     _, ok := e.Entity.Asset.(*oamdns.FQDN)
     if !ok {
@@ -54,7 +48,7 @@ func (d *dnsTXT) lookup(e *et.Event, fqdn *dbt.Entity, since time.Time) []*resol
     var txtRecords []*resolve.ExtractedAnswer
 
     n, ok := fqdn.Asset.(*oamdns.FQDN)
-    if !ok || n == nil {
+    if (!ok || n == nil) {
         return txtRecords
     }
 
@@ -86,10 +80,13 @@ func (d *dnsTXT) process(e *et.Event, fqdn *dbt.Entity, txtRecords []*resolve.Ex
         if record.Type != dns.TypeTXT {
             continue
         }
-
-        _, _ = e.Session.Cache().CreateEntityProperty(fqdn, &oamdns.TXTRecord{
-            Name:  "TXT",
-            Value: record.Data,
+        _, _ = e.Session.Cache().CreateEntityProperty(fqdn, &oamdns.BasicDNSRelation{
+            Name: "TXT",
+            Header: oamdns.RRHeader{
+                RRType: int(record.Type),
+                Class:  1,
+            },
+            Data: record.Data,
         })
 
         e.Session.Log().Info("TXT record discovered", "fqdn", fqdn.Asset.(*oamdns.FQDN).Name, "txt", record.Data, slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
