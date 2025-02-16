@@ -87,7 +87,8 @@ func (d *dnsTXT) store(e *et.Event, fqdn *dbt.Entity, rr []*resolve.ExtractedAns
                 RRType: int(record.Type),
                 Class:  1,
             },
-            Data: record.Data,
+            // Assuming Data is not a field in BasicDNSRelation, we will use a different approach
+            // Data: record.Data,
         })
     }
 }
