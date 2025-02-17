@@ -66,12 +66,12 @@ func (ro *relatedOrgs) lookup(e *et.Event, ident *dbt.Entity, since time.Time) [
 	}
 
 	var p *dbt.Entity
-	if edges, err := e.Session.Cache().OutgoingEdges(o, since, "parent"); err == nil {
+	if edges, err := e.Session.Cache().IncomingEdges(o, since, "subsidiary"); err == nil {
 		for _, edge := range edges {
 			if tags, err := e.Session.Cache().GetEdgeTags(edge, since, ro.plugin.source.Name); err != nil || len(tags) == 0 {
 				continue
 			}
-			if a, err := e.Session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && a != nil {
+			if a, err := e.Session.Cache().FindEntityById(edge.FromEntity.ID); err == nil && a != nil {
 				if _, ok := a.Asset.(*org.Organization); ok {
 					p = a
 					break

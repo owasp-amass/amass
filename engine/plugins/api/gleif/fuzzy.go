@@ -74,7 +74,6 @@ func (fc *fuzzyCompletions) lookup(e *et.Event, orgent *dbt.Entity, since time.T
 }
 
 func (fc *fuzzyCompletions) query(e *et.Event, orgent *dbt.Entity) *dbt.Entity {
-	exclusive := true
 	var leiList []*general.Identifier
 
 	if leient := fc.plugin.orgEntityToLEI(e, orgent); leient != nil {
@@ -113,27 +112,36 @@ func (fc *fuzzyCompletions) query(e *et.Event, orgent *dbt.Entity) *dbt.Entity {
 		if err := json.Unmarshal([]byte(resp.Body), &result); err != nil || len(result.Data) == 0 {
 			return nil
 		}
-		exclusive = len(result.Data) == 1
 
+		var names []string
+		m := make(map[string]string)
 		for _, d := range result.Data {
-			if support.OrganizationNameMatch(e.Session, orgent, d.Attributes.Value) {
-				leiList = append(leiList, &general.Identifier{
-					UniqueID: fmt.Sprintf("%s:%s", general.LEICode, d.Relationships.LEIRecords.Data.ID),
-					EntityID: d.Relationships.LEIRecords.Data.ID,
-					Type:     general.LEICode,
-				})
-				break
+			if d.Type == "fuzzycompletions" && d.Relationships.LEIRecords.Data.Type == "lei-records" {
+				names = append(names, d.Attributes.Value)
+				m[d.Attributes.Value] = d.Relationships.LEIRecords.Data.ID
 			}
 		}
+
+		for _, match := range support.OrganizationNameMatch(e.Session, orgent, names) {
+			lei := m[match]
+
+			leiList = append(leiList, &general.Identifier{
+				UniqueID: fmt.Sprintf("%s:%s", general.LEICode, lei),
+				EntityID: lei,
+				Type:     general.LEICode,
+			})
+		}
+
 		if len(leiList) == 0 {
 			return nil
 		}
 	}
 
 	var rec *leiRecord
+	exclusive := len(leiList) == 1
 	for _, lei := range leiList {
 		r, err := fc.plugin.getLEIRecord(lei)
-		if err == nil && r != nil && (exclusive || fc.locMatch(e, orgent, rec)) {
+		if err == nil && r != nil && (exclusive || fc.locMatch(e, orgent, r)) {
 			rec = r
 			break
 		}
