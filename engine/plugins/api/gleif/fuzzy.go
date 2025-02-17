@@ -11,11 +11,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
-	"strings"
 	"time"
 
-	"github.com/adrg/strutil"
-	"github.com/adrg/strutil/metrics"
 	"github.com/owasp-amass/amass/v4/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v4/engine/types"
 	"github.com/owasp-amass/amass/v4/utils/net/http"
@@ -51,10 +48,10 @@ func (fc *fuzzyCompletions) check(e *et.Event) error {
 	return nil
 }
 
-func (fc *fuzzyCompletions) lookup(e *et.Event, o *dbt.Entity, since time.Time) *dbt.Entity {
+func (fc *fuzzyCompletions) lookup(e *et.Event, orgent *dbt.Entity, since time.Time) *dbt.Entity {
 	var ids []*dbt.Entity
 
-	if edges, err := e.Session.Cache().OutgoingEdges(o, since, "id"); err == nil {
+	if edges, err := e.Session.Cache().OutgoingEdges(orgent, since, "id"); err == nil {
 		for _, edge := range edges {
 			if tags, err := e.Session.Cache().GetEdgeTags(edge,
 				since, fc.plugin.source.Name); err != nil || len(tags) == 0 {
@@ -119,7 +116,7 @@ func (fc *fuzzyCompletions) query(e *et.Event, orgent *dbt.Entity) *dbt.Entity {
 		exclusive = len(result.Data) == 1
 
 		for _, d := range result.Data {
-			if fc.nameMatch(o, d.Attributes.Value) {
+			if support.OrganizationNameMatch(e.Session, orgent, d.Attributes.Value) {
 				leiList = append(leiList, &general.Identifier{
 					UniqueID: fmt.Sprintf("%s:%s", general.LEICode, d.Relationships.LEIRecords.Data.ID),
 					EntityID: d.Relationships.LEIRecords.Data.ID,
@@ -136,7 +133,7 @@ func (fc *fuzzyCompletions) query(e *et.Event, orgent *dbt.Entity) *dbt.Entity {
 	var rec *leiRecord
 	for _, lei := range leiList {
 		r, err := fc.plugin.getLEIRecord(lei)
-		if err == nil && (exclusive || fc.locMatch(e, orgent, rec)) {
+		if err == nil && r != nil && (exclusive || fc.locMatch(e, orgent, rec)) {
 			rec = r
 			break
 		}
@@ -148,26 +145,13 @@ func (fc *fuzzyCompletions) query(e *et.Event, orgent *dbt.Entity) *dbt.Entity {
 	return fc.store(e, orgent, rec)
 }
 
-func (fc *fuzzyCompletions) nameMatch(o *org.Organization, name string) bool {
-	if strings.EqualFold(o.Name, name) {
-		return true
-	}
-
-	swg := metrics.NewSmithWatermanGotoh()
-	swg.CaseSensitive = false
-	swg.GapPenalty = -0.1
-	swg.Substitution = metrics.MatchMismatch{
-		Match:    1,
-		Mismatch: -0.5,
-	}
-
-	return strutil.Similarity(o.Name, name, swg) >= 0.85
-}
-
 func (fc *fuzzyCompletions) locMatch(e *et.Event, orgent *dbt.Entity, rec *leiRecord) bool {
+	if rec == nil {
+		return false
+	}
+
 	legal_addr := rec.Attributes.Entity.LegalAddress
 	hq_addr := rec.Attributes.Entity.HeadquartersAddress
-
 	if edges, err := e.Session.Cache().OutgoingEdges(orgent,
 		time.Time{}, "legal_address", "hq_address", "location"); err == nil {
 		for _, edge := range edges {

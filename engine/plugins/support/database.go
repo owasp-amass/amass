@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/adrg/strutil"
+	"github.com/adrg/strutil/metrics"
 	"github.com/google/uuid"
 	et "github.com/owasp-amass/amass/v4/engine/types"
 	"github.com/owasp-amass/amass/v4/utils"
@@ -323,20 +325,52 @@ func orgDedupChecks(session et.Session, obj *dbt.Entity, o *org.Organization) *d
 	return nil
 }
 
-func orgHasName(session et.Session, org *dbt.Entity, name string) bool {
-	if org == nil {
+func OrganizationNameMatch(session et.Session, orgent *dbt.Entity, name string) bool {
+	if orgent == nil {
 		return false
 	}
 
-	if edges, err := session.Cache().OutgoingEdges(org, time.Time{}, "id"); err == nil && len(edges) > 0 {
+	o, ok := orgent.Asset.(*org.Organization)
+	if !ok {
+		return false
+	}
+
+	var orgNames []string
+	if o.Name != "" {
+		orgNames = append(orgNames, o.Name)
+	}
+	if o.LegalName != "" {
+		orgNames = append(orgNames, o.LegalName)
+	}
+
+	if edges, err := session.Cache().OutgoingEdges(orgent, time.Time{}, "id"); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
 			if a, err := session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && a != nil {
-				if id, ok := a.Asset.(*general.Identifier); ok && strings.EqualFold(id.EntityID, name) {
-					return true
+				if id, ok := a.Asset.(*general.Identifier); ok &&
+					(id.Type == general.OrganizationName || id.Type == general.LegalName) {
+					orgNames = append(orgNames, id.EntityID)
 				}
 			}
 		}
 	}
+
+	swg := metrics.NewSmithWatermanGotoh()
+	swg.CaseSensitive = false
+	swg.GapPenalty = -0.1
+	swg.Substitution = metrics.MatchMismatch{
+		Match:    1,
+		Mismatch: -0.5,
+	}
+
+	for _, n := range orgNames {
+		if strings.EqualFold(n, name) {
+			return true
+		}
+		if strutil.Similarity(n, name, swg) >= 0.85 {
+			return true
+		}
+	}
+
 	return false
 }
 
@@ -348,7 +382,7 @@ func orgNameExistsInContactRecord(session et.Session, cr *dbt.Entity, name strin
 	if edges, err := session.Cache().OutgoingEdges(cr, time.Time{}, "organization"); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
 			if a, err := session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && a != nil {
-				if _, ok := a.Asset.(*org.Organization); ok && orgHasName(session, a, name) {
+				if _, ok := a.Asset.(*org.Organization); ok && OrganizationNameMatch(session, a, name) {
 					return a, true
 				}
 			}
@@ -362,10 +396,19 @@ func orgNameRelatedToOrganization(session et.Session, orgent *dbt.Entity, name s
 		return nil, false
 	}
 
-	if edges, err := session.Cache().OutgoingEdges(orgent, time.Time{}, "parent", "subsidiary", "sister"); err == nil && len(edges) > 0 {
+	if edges, err := session.Cache().IncomingEdges(orgent, time.Time{}, "subsidiary"); err == nil && len(edges) > 0 {
+		for _, edge := range edges {
+			if a, err := session.Cache().FindEntityById(edge.FromEntity.ID); err == nil && a != nil {
+				if _, ok := a.Asset.(*org.Organization); ok && OrganizationNameMatch(session, a, name) {
+					return a, true
+				}
+			}
+		}
+	}
+	if edges, err := session.Cache().OutgoingEdges(orgent, time.Time{}, "subsidiary"); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
 			if a, err := session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && a != nil {
-				if _, ok := a.Asset.(*org.Organization); ok && orgHasName(session, a, name) {
+				if _, ok := a.Asset.(*org.Organization); ok && OrganizationNameMatch(session, a, name) {
 					return a, true
 				}
 			}

@@ -123,8 +123,13 @@ type leiRecord struct {
 				ID    string `json:"id"`
 				Other string `json:"other"`
 			} `json:"validatedAt"`
-			ValidatedAs                string   `json:"validatedAs"`
-			OtherValidationAuthorities []string `json:"otherValidationAuthorities"`
+			ValidatedAs                string `json:"validatedAs"`
+			OtherValidationAuthorities []struct {
+				ValidatedAt struct {
+					ID string `json:"id"`
+				} `json:"validatedAt"`
+				ValidatedAs string `json:"validatedAs"`
+			} `json:"otherValidationAuthorities"`
 		} `json:"registration"`
 		BIC            []string `json:"bic"`
 		MIC            []string `json:"mic"`

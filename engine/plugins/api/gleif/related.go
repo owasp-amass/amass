@@ -179,12 +179,12 @@ func (ro *relatedOrgs) store(e *et.Event, ident *dbt.Entity, leirec, parent *lei
 	if parent != nil {
 		parentorg := &org.Organization{Name: parent.Attributes.Entity.LegalName.Name}
 
-		parentent, err := support.CreateOrgAsset(e.Session, orgent,
-			&general.SimpleRelation{Name: "parent"}, parentorg, ro.plugin.source)
+		parentent, err := support.CreateOrgAsset(e.Session, orgent, nil, parentorg, ro.plugin.source)
 		if err == nil {
 			orgs = append(orgs, parentent)
 			ro.plugin.updateOrgFromLEIRecord(e, parentent, parent)
 			support.MarkAssetMonitored(e.Session, parentent, ro.plugin.source)
+			ro.plugin.createRelation(e.Session, parentent, &general.SimpleRelation{Name: "subsidiary"}, orgent)
 		}
 	}
 
