@@ -197,8 +197,8 @@ func createFileCacheRepo() (repository.Repository, string, error) {
 		return nil, "", errors.New("failed to create the temp dir")
 	}
 
-	//c := assetdb.New(sqlrepo.SQLite, filepath.Join(dir, "cache.sqlite"))
-	c, err := assetdb.New(sqlrepo.SQLiteMemory, "")
+	//c, err := assetdb.New(sqlrepo.SQLiteMemory, "")
+	c, err := assetdb.New(sqlrepo.SQLite, filepath.Join(dir, "cache.sqlite"))
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to create the cache db: %s", err.Error())
 	}

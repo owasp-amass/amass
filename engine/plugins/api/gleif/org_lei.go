@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/owasp-amass/amass/v4/engine/plugins/support"
@@ -47,19 +48,27 @@ func (g *gleif) leiToOrgEntity(e *et.Event, ident *dbt.Entity) *dbt.Entity {
 func (g *gleif) updateOrgFromLEIRecord(e *et.Event, orgent *dbt.Entity, lei *leiRecord) {
 	o := orgent.Asset.(*org.Organization)
 
+	// check if the org entity already has a LEI identifier
+	if leient := g.orgEntityToLEI(e, orgent); leient != nil {
+		// check if the LEI identifier is the same as the one we are processing
+		if id, ok := leient.Asset.(*general.Identifier); ok && id.EntityID != lei.ID {
+			return
+		}
+	}
+
 	if _, err := g.createLEIFromRecord(e, orgent, lei); err != nil {
 		msg := fmt.Sprintf("failed to create the LEI Identifier from the record: %s", err.Error())
 		e.Session.Log().Error(msg, slog.Group("plugin", "name", g.name, "handler", g.name))
 	}
 
-	o.LegalName = lei.Attributes.Entity.LegalName.Name
+	o.LegalName = strings.ToLower(lei.Attributes.Entity.LegalName.Name)
 	if o.LegalName != "" {
 		_ = g.addIdentifiersToOrg(e, orgent, general.LegalName, []string{o.LegalName})
 	}
 
 	var otherNames []string
 	for _, other := range lei.Attributes.Entity.OtherNames {
-		otherNames = append(otherNames, other.Name)
+		otherNames = append(otherNames, strings.ToLower(other.Name))
 	}
 	_ = g.addIdentifiersToOrg(e, orgent, general.OrganizationName, otherNames)
 

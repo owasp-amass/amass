@@ -114,6 +114,8 @@ func VizData(domains []string, since time.Time, db repository.Repository) ([]Nod
 				outRels = append(outRels, "registration")
 			case oam.Organization:
 				out = true
+				in = true
+				inRels = append(inRels, "subsidiary")
 			case oam.Person:
 				out = true
 			case oam.Phone:

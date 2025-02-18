@@ -17,7 +17,7 @@ import (
 func NewGLEIF() et.Plugin {
 	return &gleif{
 		name:   "GLEIF",
-		rlimit: ratelimit.New(2, ratelimit.WithoutSlack),
+		rlimit: ratelimit.New(3, ratelimit.WithoutSlack),
 		source: &et.Source{
 			Name:       "GLEIF",
 			Confidence: 100,

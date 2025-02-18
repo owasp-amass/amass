@@ -11,6 +11,7 @@ import (
 	"net/netip"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/adrg/strutil"
@@ -28,6 +29,8 @@ import (
 	"github.com/owasp-amass/open-asset-model/platform"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
 )
+
+var createOrgLock sync.Mutex
 
 func SourceToAssetsWithinTTL(session et.Session, name, atype string, src *et.Source, since time.Time) []*dbt.Entity {
 	var entities []*dbt.Entity
@@ -240,6 +243,9 @@ func CreateServiceAsset(session et.Session, src *dbt.Entity, rel oam.Relation, s
 }
 
 func CreateOrgAsset(session et.Session, obj *dbt.Entity, rel oam.Relation, o *org.Organization, src *et.Source) (*dbt.Entity, error) {
+	createOrgLock.Lock()
+	defer createOrgLock.Unlock()
+
 	if o == nil || o.Name == "" {
 		return nil, errors.New("missing the organization name")
 	} else if src == nil {
@@ -292,14 +298,21 @@ func CreateOrgAsset(session et.Session, obj *dbt.Entity, rel oam.Relation, o *or
 }
 
 func orgDedupChecks(session et.Session, obj *dbt.Entity, o *org.Organization) *dbt.Entity {
+	var names []string
+
+	for _, name := range []string{o.Name, o.LegalName} {
+		if name != "" {
+			names = append(names, name)
+		}
+	}
+	if len(names) == 0 {
+		return nil
+	}
+
 	switch obj.Asset.(type) {
 	case *contact.ContactRecord:
-		for _, name := range []string{o.Name, o.LegalName} {
-			if name != "" {
-				if org, found := orgNameExistsInContactRecord(session, obj, name); found {
-					return org
-				}
-			}
+		if org, found := orgNameExistsInContactRecord(session, obj, names); found {
+			return org
 		}
 		if org, err := orgExistsAndSharesLocEntity(session, obj, o); err == nil {
 			return org
@@ -308,12 +321,8 @@ func orgDedupChecks(session et.Session, obj *dbt.Entity, o *org.Organization) *d
 			return org
 		}
 	case *org.Organization:
-		for _, name := range []string{o.Name, o.LegalName} {
-			if name != "" {
-				if org, found := orgNameRelatedToOrganization(session, obj, name); found {
-					return org
-				}
-			}
+		if org, found := orgNameRelatedToOrganization(session, obj, names); found {
+			return org
 		}
 		if org, err := orgExistsAndSharesLocEntity(session, obj, o); err == nil {
 			return org
@@ -322,19 +331,21 @@ func orgDedupChecks(session et.Session, obj *dbt.Entity, o *org.Organization) *d
 			return org
 		}
 	}
+
 	return nil
 }
 
-func OrganizationNameMatch(session et.Session, orgent *dbt.Entity, names []string) []string {
-	var matches []string
+func OrganizationNameMatch(session et.Session, orgent *dbt.Entity, names []string) ([]string, []string, bool) {
+	var found bool
+	var exact, partial []string
 
 	if orgent == nil || len(names) == 0 {
-		return matches
+		return exact, partial, found
 	}
 
 	o, ok := orgent.Asset.(*org.Organization)
 	if !ok {
-		return matches
+		return exact, partial, found
 	}
 
 	var orgNames []string
@@ -365,28 +376,29 @@ func OrganizationNameMatch(session et.Session, orgent *dbt.Entity, names []strin
 	}
 
 	for _, orgname := range orgNames {
-		var found bool
+		var remaining []string
 
 		for _, name := range names {
 			if strings.EqualFold(orgname, name) {
 				found = true
-				matches = append(matches, name)
+				exact = append(exact, name)
+			} else {
+				remaining = append(remaining, name)
 			}
 		}
 
-		if !found {
-			for _, name := range names {
-				if strutil.Similarity(orgname, name, swg) >= 0.85 {
-					matches = append(matches, name)
-				}
+		for _, name := range remaining {
+			if score := strutil.Similarity(orgname, name, swg); score >= 0.85 {
+				found = true
+				partial = append(partial, name)
 			}
 		}
 	}
 
-	return matches
+	return exact, partial, found
 }
 
-func orgNameExistsInContactRecord(session et.Session, cr *dbt.Entity, name string) (*dbt.Entity, bool) {
+func orgNameExistsInContactRecord(session et.Session, cr *dbt.Entity, names []string) (*dbt.Entity, bool) {
 	if cr == nil {
 		return nil, false
 	}
@@ -394,9 +406,10 @@ func orgNameExistsInContactRecord(session et.Session, cr *dbt.Entity, name strin
 	if edges, err := session.Cache().OutgoingEdges(cr, time.Time{}, "organization"); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
 			if a, err := session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && a != nil {
-				if _, ok := a.Asset.(*org.Organization); ok &&
-					len(OrganizationNameMatch(session, a, []string{name})) > 0 {
-					return a, true
+				if _, ok := a.Asset.(*org.Organization); ok {
+					if _, _, found := OrganizationNameMatch(session, a, names); found {
+						return a, true
+					}
 				}
 			}
 		}
@@ -404,7 +417,7 @@ func orgNameExistsInContactRecord(session et.Session, cr *dbt.Entity, name strin
 	return nil, false
 }
 
-func orgNameRelatedToOrganization(session et.Session, orgent *dbt.Entity, name string) (*dbt.Entity, bool) {
+func orgNameRelatedToOrganization(session et.Session, orgent *dbt.Entity, names []string) (*dbt.Entity, bool) {
 	if orgent == nil {
 		return nil, false
 	}
@@ -412,9 +425,10 @@ func orgNameRelatedToOrganization(session et.Session, orgent *dbt.Entity, name s
 	if edges, err := session.Cache().IncomingEdges(orgent, time.Time{}, "subsidiary"); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
 			if a, err := session.Cache().FindEntityById(edge.FromEntity.ID); err == nil && a != nil {
-				if _, ok := a.Asset.(*org.Organization); ok &&
-					len(OrganizationNameMatch(session, a, []string{name})) > 0 {
-					return a, true
+				if _, ok := a.Asset.(*org.Organization); ok {
+					if _, _, found := OrganizationNameMatch(session, a, names); found {
+						return a, true
+					}
 				}
 			}
 		}
@@ -422,9 +436,10 @@ func orgNameRelatedToOrganization(session et.Session, orgent *dbt.Entity, name s
 	if edges, err := session.Cache().OutgoingEdges(orgent, time.Time{}, "subsidiary"); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
 			if a, err := session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && a != nil {
-				if _, ok := a.Asset.(*org.Organization); ok &&
-					len(OrganizationNameMatch(session, a, []string{name})) > 0 {
-					return a, true
+				if _, ok := a.Asset.(*org.Organization); ok {
+					if _, _, found := OrganizationNameMatch(session, a, names); found {
+						return a, true
+					}
 				}
 			}
 		}
@@ -473,7 +488,7 @@ func orgExistsAndSharesLocEntity(session et.Session, obj *dbt.Entity, o *org.Org
 	}
 
 	for _, orgent := range orgents {
-		if len(OrganizationNameMatch(session, orgent, []string{o.Name, o.LegalName})) > 0 {
+		if _, _, found := OrganizationNameMatch(session, orgent, []string{o.Name, o.LegalName}); found {
 			return orgent, nil
 		}
 	}
@@ -485,10 +500,24 @@ func orgExistsAndSharesAncestorEntity(session et.Session, obj *dbt.Entity, o *or
 	var idents []*dbt.Entity
 
 	name := strings.ToLower(o.Name)
+	// check for known organization name identifiers
 	if assets, err := session.Cache().FindEntitiesByContent(&general.Identifier{
 		UniqueID: fmt.Sprintf("%s:%s", general.OrganizationName, name),
 		EntityID: name,
 		Type:     general.OrganizationName,
+	}, time.Time{}); err == nil {
+		for _, a := range assets {
+			if _, ok := a.Asset.(*general.Identifier); ok {
+				idents = append(idents, a)
+			}
+		}
+	}
+
+	// check for known legal name identifiers
+	if assets, err := session.Cache().FindEntitiesByContent(&general.Identifier{
+		UniqueID: fmt.Sprintf("%s:%s", general.LegalName, name),
+		EntityID: name,
+		Type:     general.LegalName,
 	}, time.Time{}); err == nil {
 		for _, a := range assets {
 			if _, ok := a.Asset.(*general.Identifier); ok {

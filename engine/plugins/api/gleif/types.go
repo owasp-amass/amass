@@ -105,6 +105,7 @@ type leiRecord struct {
 				GroupType string `json:"groupType"`
 				Events    []struct {
 					ValidationDocuments string `json:"validationDocuments"`
+					ValidationReference string `json:"validationReference"`
 					EffectiveDate       string `json:"effectiveDate"`
 					RecordedDate        string `json:"recordedDate"`
 					Type                string `json:"type"`

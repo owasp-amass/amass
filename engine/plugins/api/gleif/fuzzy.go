@@ -49,8 +49,6 @@ func (fc *fuzzyCompletions) check(e *et.Event) error {
 }
 
 func (fc *fuzzyCompletions) lookup(e *et.Event, orgent *dbt.Entity, since time.Time) *dbt.Entity {
-	var ids []*dbt.Entity
-
 	if edges, err := e.Session.Cache().OutgoingEdges(orgent, since, "id"); err == nil {
 		for _, edge := range edges {
 			if tags, err := e.Session.Cache().GetEdgeTags(edge,
@@ -58,22 +56,17 @@ func (fc *fuzzyCompletions) lookup(e *et.Event, orgent *dbt.Entity, since time.T
 				continue
 			}
 			if a, err := e.Session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && a != nil {
-				if _, ok := a.Asset.(*general.Identifier); ok {
-					ids = append(ids, a)
+				if id, ok := a.Asset.(*general.Identifier); ok && id != nil && id.Type == general.LEICode {
+					return a
 				}
 			}
-		}
-	}
-
-	for _, ident := range ids {
-		if id := ident.Asset.(*general.Identifier); id != nil && id.Type == general.LEICode {
-			return ident
 		}
 	}
 	return nil
 }
 
 func (fc *fuzzyCompletions) query(e *et.Event, orgent *dbt.Entity) *dbt.Entity {
+	exclusive := true
 	var leiList []*general.Identifier
 
 	if leient := fc.plugin.orgEntityToLEI(e, orgent); leient != nil {
@@ -112,6 +105,7 @@ func (fc *fuzzyCompletions) query(e *et.Event, orgent *dbt.Entity) *dbt.Entity {
 		if err := json.Unmarshal([]byte(resp.Body), &result); err != nil || len(result.Data) == 0 {
 			return nil
 		}
+		exclusive = len(result.Data) == 1
 
 		var names []string
 		m := make(map[string]string)
@@ -122,14 +116,27 @@ func (fc *fuzzyCompletions) query(e *et.Event, orgent *dbt.Entity) *dbt.Entity {
 			}
 		}
 
-		for _, match := range support.OrganizationNameMatch(e.Session, orgent, names) {
-			lei := m[match]
+		if exact, partial, found := support.OrganizationNameMatch(e.Session, orgent, names); found {
+			var matches []string
 
-			leiList = append(leiList, &general.Identifier{
-				UniqueID: fmt.Sprintf("%s:%s", general.LEICode, lei),
-				EntityID: lei,
-				Type:     general.LEICode,
-			})
+			if elen := len(exact); elen > 0 {
+				if elen == 1 {
+					exclusive = true
+				}
+				matches = append(matches, exact...)
+			} else if len(partial) > 0 {
+				matches = append(matches, partial...)
+			}
+
+			for _, match := range matches {
+				id := m[match]
+
+				leiList = append(leiList, &general.Identifier{
+					UniqueID: fmt.Sprintf("%s:%s", general.LEICode, id),
+					EntityID: id,
+					Type:     general.LEICode,
+				})
+			}
 		}
 
 		if len(leiList) == 0 {
@@ -138,9 +145,9 @@ func (fc *fuzzyCompletions) query(e *et.Event, orgent *dbt.Entity) *dbt.Entity {
 	}
 
 	var rec *leiRecord
-	exclusive := len(leiList) == 1
 	for _, lei := range leiList {
 		r, err := fc.plugin.getLEIRecord(lei)
+
 		if err == nil && r != nil && (exclusive || fc.locMatch(e, orgent, r)) {
 			rec = r
 			break
