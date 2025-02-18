@@ -76,10 +76,14 @@ type leiRecord struct {
 				Language string `json:"language"`
 				Type     string `json:"type"`
 			} `json:"otherNames"`
-			TransliteratedOtherNames []string   `json:"transliteratedOtherNames"`
-			LegalAddress             leiAddress `json:"legalAddress"`
-			HeadquartersAddress      leiAddress `json:"headquartersAddress"`
-			RegisteredAt             struct {
+			TransliteratedOtherNames []struct {
+				Name     string `json:"name"`
+				Language string `json:"language"`
+				Type     string `json:"type"`
+			} `json:"transliteratedOtherNames"`
+			LegalAddress        leiAddress `json:"legalAddress"`
+			HeadquartersAddress leiAddress `json:"headquartersAddress"`
+			RegisteredAt        struct {
 				ID    string `json:"id"`
 				Other string `json:"other"`
 			} `json:"registeredAt"`

@@ -17,22 +17,70 @@ import (
 	"github.com/owasp-amass/open-asset-model/general"
 )
 
-func (g *gleif) getLEIRecord(ident *general.Identifier) (*leiRecord, error) {
+func (g *gleif) getLEIRecord(id *general.Identifier) (*leiRecord, error) {
 	g.rlimit.Take()
 
-	u := "https://api.gleif.org/api/v1/lei-records/" + ident.EntityID
+	u := "https://api.gleif.org/api/v1/lei-records/" + id.EntityID
 	resp, err := http.RequestWebPage(context.TODO(), &http.Request{URL: u})
-	if err != nil || resp.Body == "" {
+	if err != nil || resp.StatusCode != 200 || resp.Body == "" {
 		return nil, err
 	}
 
 	var result singleResponse
 	if err := json.Unmarshal([]byte(resp.Body), &result); err != nil {
 		return nil, err
-	} else if len(result.Data.ID) == 0 || result.Data.Type != "lei-records" {
+	} else if result.Data.Type != "lei-records" || result.Data.ID != id.EntityID {
 		return nil, errors.New("failed to find the LEI record")
 	}
 	return &result.Data, nil
+}
+
+func (g *gleif) getDirectParent(id *general.Identifier) (*leiRecord, error) {
+	g.rlimit.Take()
+
+	u := "https://api.gleif.org/api/v1/lei-records/" + id.EntityID + "/direct-parent"
+	resp, err := http.RequestWebPage(context.TODO(), &http.Request{URL: u})
+	if err != nil || resp.StatusCode != 200 || resp.Body == "" {
+		return nil, err
+	}
+
+	var result singleResponse
+	if err := json.Unmarshal([]byte(resp.Body), &result); err != nil {
+		return nil, err
+	} else if result.Data.Type != "lei-records" {
+		return nil, errors.New("failed to find the LEI record")
+	}
+	return &result.Data, nil
+}
+
+func (g *gleif) getDirectChildren(id *general.Identifier) ([]*leiRecord, error) {
+	var children []*leiRecord
+
+	last := 1
+	link := "https://api.gleif.org/api/v1/lei-records/" + id.EntityID + "/direct-children"
+	for i := 1; i <= last && link != ""; i++ {
+		g.rlimit.Take()
+
+		resp, err := http.RequestWebPage(context.TODO(), &http.Request{URL: link})
+		if err != nil || resp.StatusCode != 200 || resp.Body == "" {
+			return nil, err
+		}
+		link = ""
+
+		var result multipleResponse
+		if err := json.Unmarshal([]byte(resp.Body), &result); err != nil {
+			return nil, err
+		}
+
+		for _, rec := range result.Data {
+			children = append(children, &rec)
+		}
+
+		link = result.Links.Next
+		last = result.Meta.Pagination.LastPage
+	}
+
+	return children, nil
 }
 
 func (g *gleif) createLEIIdentifier(session et.Session, orgent *dbt.Entity, lei *general.Identifier) (*dbt.Entity, error) {

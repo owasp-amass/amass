@@ -5,16 +5,12 @@
 package gleif
 
 import (
-	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"time"
 
 	"github.com/owasp-amass/amass/v4/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v4/engine/types"
-	"github.com/owasp-amass/amass/v4/utils/net/http"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/general"
@@ -98,82 +94,19 @@ func (ro *relatedOrgs) lookup(e *et.Event, ident *dbt.Entity, since time.Time) [
 }
 
 func (ro *relatedOrgs) query(e *et.Event, ident *dbt.Entity) []*dbt.Entity {
-	var orgs []*dbt.Entity
+	id := ident.Asset.(*general.Identifier)
 
-	lei := ident.Asset.(*general.Identifier)
-	leirec, err := ro.plugin.getLEIRecord(lei)
-	if err != nil || leirec == nil {
-		return orgs
-	}
-
-	var parent *leiRecord
-	if link := leirec.Relationships.DirectParent.Links.LEIRecord; link != "" {
-		ro.plugin.rlimit.Take()
-
-		if resp, err := http.RequestWebPage(context.TODO(), &http.Request{URL: link}); err == nil && resp.StatusCode == 200 && resp.Body != "" {
-			var result singleResponse
-
-			if err := json.Unmarshal([]byte(resp.Body), &result); err == nil {
-				if result.Data.ID != lei.EntityID {
-					parent = &result.Data
-				}
-			} else {
-				msg := fmt.Sprintf("failed to unmarshal the direct-parent page for LEI - %s: %s", lei.EntityID, err.Error())
-				e.Session.Log().Error(msg, slog.Group("plugin", "name", ro.plugin.name, "handler", ro.name))
-			}
-		}
-	}
-
-	var children []*leiRecord
-	if link := leirec.Relationships.DirectChildren.Links.Related; link != "" {
-		last := 1
-
-		for i := 1; i <= last && link != ""; i++ {
-			ro.plugin.rlimit.Take()
-
-			resp, err := http.RequestWebPage(context.TODO(), &http.Request{URL: link})
-			if err != nil || resp.StatusCode != 200 || resp.Body == "" {
-				msg := fmt.Sprintf("failed to obtain the direct-children page for LEI - %s: %s", lei.EntityID, err.Error())
-				e.Session.Log().Error(msg, slog.Group("plugin", "name", ro.plugin.name, "handler", ro.name))
-				break
-			}
-			link = ""
-
-			var result multipleResponse
-			if err := json.Unmarshal([]byte(resp.Body), &result); err != nil {
-				msg := fmt.Sprintf("failed to unmarshal the direct-children page for LEI - %s: %s", lei.EntityID, err.Error())
-				e.Session.Log().Error(msg, slog.Group("plugin", "name", ro.plugin.name, "handler", ro.name))
-				break
-			}
-
-			for _, rec := range result.Data {
-				children = append(children, &rec)
-			}
-
-			link = result.Links.Next
-			last = result.Meta.Pagination.LastPage
-		}
-	}
-
-	return ro.store(e, ident, leirec, parent, children)
+	parent, _ := ro.plugin.getDirectParent(id)
+	children, _ := ro.plugin.getDirectChildren(id)
+	return ro.store(e, ident, parent, children)
 }
 
-func (ro *relatedOrgs) store(e *et.Event, ident *dbt.Entity, leirec, parent *leiRecord, children []*leiRecord) []*dbt.Entity {
+func (ro *relatedOrgs) store(e *et.Event, ident *dbt.Entity, parent *leiRecord, children []*leiRecord) []*dbt.Entity {
 	var orgs []*dbt.Entity
 
 	orgent := ro.plugin.leiToOrgEntity(e, ident)
 	if orgent == nil {
-		var err error
-		o := &org.Organization{Name: leirec.Attributes.Entity.LegalName.Name}
-
-		orgent, err = support.CreateOrgAsset(e.Session, nil, nil, o, ro.plugin.source)
-		if err != nil {
-			return orgs
-		}
-
-		orgs = append(orgs, orgent)
-		ro.plugin.updateOrgFromLEIRecord(e, orgent, leirec)
-		support.MarkAssetMonitored(e.Session, orgent, ro.plugin.source)
+		return orgs
 	}
 
 	if parent != nil {
