@@ -327,6 +327,9 @@ func orgDedupChecks(session et.Session, obj *dbt.Entity, o *org.Organization) *d
 		if org, err := orgExistsAndSharesAncestorEntity(session, obj, o); err == nil {
 			return org
 		}
+		if org, err := orgExistsAndHasAncestorInSession(session, o); err == nil {
+			return org
+		}
 	case *org.Organization:
 		if org, found := orgNameRelatedToOrganization(session, obj, names); found {
 			return org
@@ -335,6 +338,9 @@ func orgDedupChecks(session et.Session, obj *dbt.Entity, o *org.Organization) *d
 			return org
 		}
 		if org, err := orgExistsAndSharesAncestorEntity(session, obj, o); err == nil {
+			return org
+		}
+		if org, err := orgExistsAndHasAncestorInSession(session, o); err == nil {
 			return org
 		}
 	}
@@ -504,49 +510,9 @@ func orgExistsAndSharesLocEntity(session et.Session, obj *dbt.Entity, o *org.Org
 }
 
 func orgExistsAndSharesAncestorEntity(session et.Session, obj *dbt.Entity, o *org.Organization) (*dbt.Entity, error) {
-	var idents []*dbt.Entity
-
-	name := strings.ToLower(o.Name)
-	// check for known organization name identifiers
-	if assets, err := session.Cache().FindEntitiesByContent(&general.Identifier{
-		UniqueID: fmt.Sprintf("%s:%s", general.OrganizationName, name),
-		EntityID: name,
-		Type:     general.OrganizationName,
-	}, time.Time{}); err == nil {
-		for _, a := range assets {
-			if _, ok := a.Asset.(*general.Identifier); ok {
-				idents = append(idents, a)
-			}
-		}
-	}
-
-	// check for known legal name identifiers
-	if assets, err := session.Cache().FindEntitiesByContent(&general.Identifier{
-		UniqueID: fmt.Sprintf("%s:%s", general.LegalName, name),
-		EntityID: name,
-		Type:     general.LegalName,
-	}, time.Time{}); err == nil {
-		for _, a := range assets {
-			if _, ok := a.Asset.(*general.Identifier); ok {
-				idents = append(idents, a)
-			}
-		}
-	}
-
-	var orgents []*dbt.Entity
-	for _, ident := range idents {
-		if edges, err := session.Cache().IncomingEdges(ident, time.Time{}, "id"); err == nil {
-			for _, edge := range edges {
-				if a, err := session.Cache().FindEntityById(edge.FromEntity.ID); err == nil && a != nil {
-					if _, ok := a.Asset.(*org.Organization); ok {
-						orgents = append(orgents, a)
-					}
-				}
-			}
-		}
-	}
-	if len(orgents) == 0 {
-		return nil, errors.New("no matching org found")
+	orgents, err := orgsWithSameNames(session, []string{o.Name, o.LegalName})
+	if err != nil {
+		return nil, err
 	}
 
 	assets := []*dbt.Entity{obj}
@@ -594,6 +560,92 @@ func orgExistsAndSharesAncestorEntity(session et.Session, obj *dbt.Entity, o *or
 	}
 
 	return nil, errors.New("no matching org found")
+}
+
+func orgExistsAndHasAncestorInSession(session et.Session, o *org.Organization) (*dbt.Entity, error) {
+	orgents, err := orgsWithSameNames(session, []string{o.Name, o.LegalName})
+	if err != nil {
+		return nil, err
+	}
+
+	for _, orgent := range orgents {
+		assets := []*dbt.Entity{orgent}
+
+		for i := 0; i < 10 && len(assets) > 0; i++ {
+			remaining := assets
+			assets = []*dbt.Entity{}
+
+			for _, r := range remaining {
+				if edges, err := session.Cache().IncomingEdges(r, time.Time{}); err == nil {
+					for _, edge := range edges {
+						if a, err := session.Cache().FindEntityById(edge.FromEntity.ID); err == nil && a != nil {
+							if session.EventSet().Has(a.ID) {
+								return orgent, nil
+							}
+							assets = append(assets, a)
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return nil, errors.New("no matching org found")
+}
+
+func orgsWithSameNames(session et.Session, names []string) ([]*dbt.Entity, error) {
+	var idents []*dbt.Entity
+
+	for _, n := range names {
+		if n == "" {
+			continue
+		}
+		name := strings.ToLower(n)
+
+		// check for known organization name identifiers
+		if assets, err := session.Cache().FindEntitiesByContent(&general.Identifier{
+			UniqueID: fmt.Sprintf("%s:%s", general.OrganizationName, name),
+			EntityID: name,
+			Type:     general.OrganizationName,
+		}, time.Time{}); err == nil {
+			for _, a := range assets {
+				if _, ok := a.Asset.(*general.Identifier); ok {
+					idents = append(idents, a)
+				}
+			}
+		}
+
+		// check for known legal name identifiers
+		if assets, err := session.Cache().FindEntitiesByContent(&general.Identifier{
+			UniqueID: fmt.Sprintf("%s:%s", general.LegalName, name),
+			EntityID: name,
+			Type:     general.LegalName,
+		}, time.Time{}); err == nil {
+			for _, a := range assets {
+				if _, ok := a.Asset.(*general.Identifier); ok {
+					idents = append(idents, a)
+				}
+			}
+		}
+	}
+
+	var orgents []*dbt.Entity
+	for _, ident := range idents {
+		if edges, err := session.Cache().IncomingEdges(ident, time.Time{}, "id"); err == nil {
+			for _, edge := range edges {
+				if a, err := session.Cache().FindEntityById(edge.FromEntity.ID); err == nil && a != nil {
+					if _, ok := a.Asset.(*org.Organization); ok {
+						orgents = append(orgents, a)
+					}
+				}
+			}
+		}
+	}
+
+	if len(orgents) == 0 {
+		return nil, errors.New("no matching organizations were found")
+	}
+	return orgents, nil
 }
 
 func createRelation(session et.Session, obj *dbt.Entity, rel oam.Relation, subject *dbt.Entity, src *et.Source) error {
