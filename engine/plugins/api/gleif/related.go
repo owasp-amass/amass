@@ -117,7 +117,7 @@ func (ro *relatedOrgs) store(e *et.Event, ident *dbt.Entity, parent *leiRecord, 
 			orgs = append(orgs, parentent)
 			ro.plugin.updateOrgFromLEIRecord(e, parentent, parent)
 			support.MarkAssetMonitored(e.Session, parentent, ro.plugin.source)
-			ro.plugin.createRelation(e.Session, parentent, &general.SimpleRelation{Name: "subsidiary"}, orgent)
+			_ = ro.plugin.createRelation(e.Session, parentent, &general.SimpleRelation{Name: "subsidiary"}, orgent)
 		}
 	}
 

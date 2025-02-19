@@ -97,7 +97,7 @@ func (g *gleif) updateOrgFromLEIRecord(e *et.Event, orgent *dbt.Entity, lei *lei
 
 	_ = g.addIdentifiersToOrg(e, orgent, general.BankIDCode, lei.Attributes.BIC)
 	_ = g.addIdentifiersToOrg(e, orgent, general.MarketIDCode, lei.Attributes.MIC)
-	_ = g.addIdentifiersToOrg(e, orgent, general.GlobalOCID, []string{lei.Attributes.OCID})
+	_ = g.addIdentifiersToOrg(e, orgent, general.OpenCorpID, []string{lei.Attributes.OCID})
 	_ = g.addIdentifiersToOrg(e, orgent, general.SPGlobalCompanyID, lei.Attributes.SPGlobal)
 
 	_, _ = e.Session.Cache().CreateEntity(orgent)

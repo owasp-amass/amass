@@ -65,7 +65,6 @@ func (g *gleif) getDirectChildrenRecords(id *general.Identifier) ([]*leiRecord, 
 		if err != nil || resp.StatusCode != 200 || resp.Body == "" {
 			return nil, err
 		}
-		link = ""
 
 		var result multipleResponse
 		if err := json.Unmarshal([]byte(resp.Body), &result); err != nil {
