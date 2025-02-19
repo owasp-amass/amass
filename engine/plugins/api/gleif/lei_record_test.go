@@ -29,7 +29,7 @@ func TestGetLEIRecord(t *testing.T) {
 	assert.Equal(t, "AMAZON.COM, INC.", record.Attributes.Entity.LegalName.Name)
 }
 
-func TestGetDirectParent(t *testing.T) {
+func TestGetDirectParentRecord(t *testing.T) {
 	p := NewGLEIF()
 	g := p.(*gleif)
 
@@ -40,13 +40,13 @@ func TestGetDirectParent(t *testing.T) {
 		Type:     general.LEICode,
 	}
 
-	record, err := g.getDirectParent(id)
+	record, err := g.getDirectParentRecord(id)
 	assert.NoError(t, err)
 	assert.NotNil(t, record)
 	assert.Equal(t, "AMAZON.COM, INC.", record.Attributes.Entity.LegalName.Name)
 }
 
-func TestGetDirectChildren(t *testing.T) {
+func TestGetDirectChildrenRecord(t *testing.T) {
 	p := NewGLEIF()
 	g := p.(*gleif)
 
@@ -57,7 +57,7 @@ func TestGetDirectChildren(t *testing.T) {
 		Type:     general.LEICode,
 	}
 
-	children, err := g.getDirectChildren(id)
+	children, err := g.getDirectChildrenRecords(id)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, children)
 	assert.GreaterOrEqual(t, len(children), 12)

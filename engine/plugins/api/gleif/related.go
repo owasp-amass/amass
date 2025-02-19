@@ -96,8 +96,8 @@ func (ro *relatedOrgs) lookup(e *et.Event, ident *dbt.Entity, since time.Time) [
 func (ro *relatedOrgs) query(e *et.Event, ident *dbt.Entity) []*dbt.Entity {
 	id := ident.Asset.(*general.Identifier)
 
-	parent, _ := ro.plugin.getDirectParent(id)
-	children, _ := ro.plugin.getDirectChildren(id)
+	parent, _ := ro.plugin.getDirectParentRecord(id)
+	children, _ := ro.plugin.getDirectChildrenRecords(id)
 	return ro.store(e, ident, parent, children)
 }
 

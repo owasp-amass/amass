@@ -35,7 +35,7 @@ func (g *gleif) getLEIRecord(id *general.Identifier) (*leiRecord, error) {
 	return &result.Data, nil
 }
 
-func (g *gleif) getDirectParent(id *general.Identifier) (*leiRecord, error) {
+func (g *gleif) getDirectParentRecord(id *general.Identifier) (*leiRecord, error) {
 	g.rlimit.Take()
 
 	u := "https://api.gleif.org/api/v1/lei-records/" + id.EntityID + "/direct-parent"
@@ -53,7 +53,7 @@ func (g *gleif) getDirectParent(id *general.Identifier) (*leiRecord, error) {
 	return &result.Data, nil
 }
 
-func (g *gleif) getDirectChildren(id *general.Identifier) ([]*leiRecord, error) {
+func (g *gleif) getDirectChildrenRecords(id *general.Identifier) ([]*leiRecord, error) {
 	var children []*leiRecord
 
 	last := 1

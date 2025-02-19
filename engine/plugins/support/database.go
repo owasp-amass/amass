@@ -30,8 +30,6 @@ import (
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
 )
 
-var createOrgLock sync.Mutex
-
 func SourceToAssetsWithinTTL(session et.Session, name, atype string, src *et.Source, since time.Time) []*dbt.Entity {
 	var entities []*dbt.Entity
 
@@ -242,9 +240,18 @@ func CreateServiceAsset(session et.Session, src *dbt.Entity, rel oam.Relation, s
 	return result, err
 }
 
+var createOrgLock sync.Mutex
+
+func createOrgUnlock() {
+	go func() {
+		time.Sleep(2 * time.Second)
+		createOrgLock.Unlock()
+	}()
+}
+
 func CreateOrgAsset(session et.Session, obj *dbt.Entity, rel oam.Relation, o *org.Organization, src *et.Source) (*dbt.Entity, error) {
 	createOrgLock.Lock()
-	defer createOrgLock.Unlock()
+	defer createOrgUnlock()
 
 	if o == nil || o.Name == "" {
 		return nil, errors.New("missing the organization name")
