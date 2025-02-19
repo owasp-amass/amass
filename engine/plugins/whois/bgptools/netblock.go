@@ -49,10 +49,9 @@ func (r *netblock) check(e *et.Event) error {
 		return err
 	}
 
-	src := r.plugin.source
-	nb := r.lookup(e, e.Entity, since, src)
+	nb := r.lookup(e, e.Entity, since)
 	if nb == nil {
-		nb = r.query(e, e.Entity, src)
+		nb = r.query(e, e.Entity)
 	}
 
 	if nb != nil {
@@ -62,7 +61,7 @@ func (r *netblock) check(e *et.Event) error {
 	return nil
 }
 
-func (r *netblock) lookup(e *et.Event, ip *dbt.Entity, since time.Time, src *et.Source) *dbt.Entity {
+func (r *netblock) lookup(e *et.Event, ip *dbt.Entity, since time.Time) *dbt.Entity {
 	addr, ok := ip.Asset.(*oamnet.IPAddress)
 	if !ok {
 		return nil
@@ -84,7 +83,7 @@ func (r *netblock) lookup(e *et.Event, ip *dbt.Entity, since time.Time, src *et.
 			if s := tmp.CIDR.Masked().Bits(); s > size {
 				var found bool
 
-				if tags, err := e.Session.Cache().GetEdgeTags(edge, since, src.Name); err == nil && len(tags) > 0 {
+				if tags, err := e.Session.Cache().GetEdgeTags(edge, since, r.plugin.source.Name); err == nil && len(tags) > 0 {
 					for _, tag := range tags {
 						if _, ok := tag.Property.(*general.SourceProperty); ok {
 							found = true
@@ -104,7 +103,7 @@ func (r *netblock) lookup(e *et.Event, ip *dbt.Entity, since time.Time, src *et.
 	return nb
 }
 
-func (r *netblock) query(e *et.Event, ip *dbt.Entity, src *et.Source) *dbt.Entity {
+func (r *netblock) query(e *et.Event, ip *dbt.Entity) *dbt.Entity {
 	var asn, most int
 	var cidr netip.Prefix
 
@@ -136,10 +135,10 @@ func (r *netblock) query(e *et.Event, ip *dbt.Entity, src *et.Source) *dbt.Entit
 	if asn == 0 {
 		return nil
 	}
-	return r.store(e, cidr, ip, src)
+	return r.store(e, cidr, ip)
 }
 
-func (r *netblock) store(e *et.Event, cidr netip.Prefix, ip *dbt.Entity, src *et.Source) *dbt.Entity {
+func (r *netblock) store(e *et.Event, cidr netip.Prefix, ip *dbt.Entity) *dbt.Entity {
 	ntype := "IPv4"
 	if cidr.Addr().Is6() {
 		ntype = "IPv6"
@@ -156,8 +155,8 @@ func (r *netblock) store(e *et.Event, cidr netip.Prefix, ip *dbt.Entity, src *et
 			ToEntity:   ip,
 		}); err == nil && edge != nil {
 			_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
-				Source:     src.Name,
-				Confidence: src.Confidence,
+				Source:     r.plugin.source.Name,
+				Confidence: r.plugin.source.Confidence,
 			})
 		}
 	}

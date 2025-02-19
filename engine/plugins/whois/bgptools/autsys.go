@@ -50,10 +50,9 @@ func (r *autsys) check(e *et.Event) error {
 		return err
 	}
 
-	src := r.plugin.source
-	as := r.lookup(e, e.Entity, since, src)
+	as := r.lookup(e, e.Entity, since)
 	if as == nil {
-		as = r.query(e, e.Entity, src)
+		as = r.query(e, e.Entity)
 	}
 
 	if as != nil {
@@ -62,14 +61,14 @@ func (r *autsys) check(e *et.Event) error {
 	return nil
 }
 
-func (r *autsys) lookup(e *et.Event, nb *dbt.Entity, since time.Time, src *et.Source) *dbt.Entity {
+func (r *autsys) lookup(e *et.Event, nb *dbt.Entity, since time.Time) *dbt.Entity {
 	edges, err := e.Session.Cache().IncomingEdges(nb, since, "announces")
 	if err != nil {
 		return nil
 	}
 
 	for _, edge := range edges {
-		if tags, err := e.Session.Cache().GetEdgeTags(edge, since, src.Name); err == nil && len(tags) > 0 {
+		if tags, err := e.Session.Cache().GetEdgeTags(edge, since, r.plugin.source.Name); err == nil && len(tags) > 0 {
 			for _, tag := range tags {
 				if _, ok := tag.Property.(*general.SourceProperty); ok {
 					if as, err := e.Session.Cache().FindEntityById(edge.FromEntity.ID); err == nil && as != nil {
@@ -82,7 +81,7 @@ func (r *autsys) lookup(e *et.Event, nb *dbt.Entity, since time.Time, src *et.So
 	return nil
 }
 
-func (r *autsys) query(e *et.Event, nb *dbt.Entity, src *et.Source) *dbt.Entity {
+func (r *autsys) query(e *et.Event, nb *dbt.Entity) *dbt.Entity {
 	var asn int
 
 	r.plugin.Lock()
@@ -110,10 +109,10 @@ func (r *autsys) query(e *et.Event, nb *dbt.Entity, src *et.Source) *dbt.Entity 
 	if asn == 0 {
 		return nil
 	}
-	return r.store(e, asn, nb, src)
+	return r.store(e, asn, nb)
 }
 
-func (r *autsys) store(e *et.Event, asn int, nb *dbt.Entity, src *et.Source) *dbt.Entity {
+func (r *autsys) store(e *et.Event, asn int, nb *dbt.Entity) *dbt.Entity {
 	as, err := e.Session.Cache().CreateAsset(&oamnet.AutonomousSystem{Number: asn})
 	if err == nil && as != nil {
 		if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
@@ -122,8 +121,8 @@ func (r *autsys) store(e *et.Event, asn int, nb *dbt.Entity, src *et.Source) *db
 			ToEntity:   nb,
 		}); err == nil && edge != nil {
 			_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
-				Source:     src.Name,
-				Confidence: src.Confidence,
+				Source:     r.plugin.source.Name,
+				Confidence: r.plugin.source.Confidence,
 			})
 		}
 	}
