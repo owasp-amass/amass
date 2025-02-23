@@ -65,15 +65,20 @@ func CreateSession(cfg *config.Config) (et.Session, error) {
 	}
 	s.log = slog.New(slog.NewJSONHandler(s.ps, nil)).With("session", s.id)
 
-	if err := s.setupDB(); err != nil {
-		return nil, err
-	}
-
-	c, dir, err := s.createFileCacheRepo()
+	err := s.setupDB()
 	if err != nil {
 		return nil, err
 	}
-	s.tmpdir = dir
+
+	s.tmpdir, err = s.createTemporaryDir()
+	if err != nil {
+		return nil, err
+	}
+
+	c, err := s.createFileRepo("cache.sqlite")
+	if err != nil {
+		return nil, err
+	}
 
 	s.c, err = cache.New(c, s.db, time.Minute)
 	if err != nil || s.c == nil {
@@ -194,16 +199,25 @@ func (s *Session) selectDBMS() error {
 	return nil
 }
 
-func (s *Session) createFileCacheRepo() (repository.Repository, string, error) {
-	dir, err := os.MkdirTemp("", s.ID().String())
-	if err != nil {
-		return nil, "", errors.New("failed to create the temp dir")
+func (s *Session) createTemporaryDir() (string, error) {
+	outdir := config.OutputDirectory()
+	if outdir == "" {
+		return "", errors.New("failed to obtain the output directory")
 	}
 
-	c, err := assetdb.New(sqlrepo.SQLite, filepath.Join(dir, "cache.sqlite"))
+	dir, err := os.MkdirTemp(outdir, "session-"+s.ID().String())
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to create the cache db: %s", err.Error())
+		return "", errors.New("failed to create the temp dir")
 	}
 
-	return c, dir, nil
+	return dir, nil
+}
+
+func (s *Session) createFileRepo(fname string) (repository.Repository, error) {
+	c, err := assetdb.New(sqlrepo.SQLite, filepath.Join(s.TmpDir(), fname))
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to create the db: %s", err.Error())
+	}
+	return c, nil
 }
