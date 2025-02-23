@@ -29,20 +29,21 @@ import (
 )
 
 type Session struct {
-	id     uuid.UUID
-	log    *slog.Logger
-	ps     *pubsub.Logger
-	cfg    *config.Config
-	scope  *scope.Scope
-	db     repository.Repository
-	dsn    string
-	dbtype string
-	c      *cache.Cache
-	ranger cidranger.Ranger
-	tmpdir string
-	stats  *et.SessionStats
-	done   chan struct{}
-	set    *stringset.Set
+	id       uuid.UUID
+	log      *slog.Logger
+	ps       *pubsub.Logger
+	cfg      *config.Config
+	scope    *scope.Scope
+	db       repository.Repository
+	dsn      string
+	dbtype   string
+	c        *cache.Cache
+	ranger   cidranger.Ranger
+	tmpdir   string
+	stats    *et.SessionStats
+	done     chan struct{}
+	finished bool
+	set      *stringset.Set
 }
 
 // CreateSession initializes a new Session object based on the provided configuration.
@@ -127,12 +128,7 @@ func (s *Session) EventSet() *stringset.Set {
 }
 
 func (s *Session) Done() bool {
-	select {
-	case <-s.done:
-		return true
-	default:
-	}
-	return false
+	return s.finished
 }
 
 func (s *Session) Kill() {
@@ -142,6 +138,7 @@ func (s *Session) Kill() {
 	default:
 	}
 	close(s.done)
+	s.finished = true
 }
 
 func (s *Session) setupDB() error {
