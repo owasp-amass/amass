@@ -68,12 +68,11 @@ func (nb *netblock) lookup(e *et.Event, cidr string, since time.Time) *dbt.Entit
 func (nb *netblock) query(e *et.Event, asset *dbt.Entity) (*dbt.Entity, *rdap.IPNetwork) {
 	n := asset.Asset.(*network.Netblock)
 
-	var req *rdap.Request
 	_, ipnet, err := net.ParseCIDR(n.CIDR.String())
 	if err != nil {
 		return nil, nil
 	}
-	req = rdap.NewIPNetRequest(ipnet)
+	req := rdap.NewIPNetRequest(ipnet)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -89,10 +88,10 @@ func (nb *netblock) query(e *et.Event, asset *dbt.Entity) (*dbt.Entity, *rdap.IP
 	if !ok {
 		return nil, nil
 	}
-	return nb.store(e, record, asset, nb.plugin.source), record
+	return nb.store(e, record, asset), record
 }
 
-func (nb *netblock) store(e *et.Event, resp *rdap.IPNetwork, asset *dbt.Entity, src *et.Source) *dbt.Entity {
+func (nb *netblock) store(e *et.Event, resp *rdap.IPNetwork, asset *dbt.Entity) *dbt.Entity {
 	n := asset.Asset.(*network.Netblock)
 	ipnetrec := &oamreg.IPNetRecord{
 		CIDR:         n.CIDR,
@@ -128,14 +127,19 @@ func (nb *netblock) store(e *et.Event, resp *rdap.IPNetwork, asset *dbt.Entity, 
 
 	record, err := e.Session.Cache().CreateAsset(ipnetrec)
 	if err == nil && record != nil {
+		_, _ = e.Session.Cache().CreateEntityProperty(record, &general.SourceProperty{
+			Source:     nb.plugin.source.Name,
+			Confidence: nb.plugin.source.Confidence,
+		})
+
 		if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
 			Relation:   &general.SimpleRelation{Name: "registration"},
 			FromEntity: asset,
 			ToEntity:   record,
 		}); err == nil && edge != nil {
 			_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
-				Source:     src.Name,
-				Confidence: src.Confidence,
+				Source:     nb.plugin.source.Name,
+				Confidence: nb.plugin.source.Confidence,
 			})
 		}
 	}

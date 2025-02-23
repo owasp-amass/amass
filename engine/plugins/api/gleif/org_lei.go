@@ -51,7 +51,7 @@ func (g *gleif) updateOrgFromLEIRecord(e *et.Event, orgent *dbt.Entity, lei *lei
 	// check if the org entity already has a LEI identifier
 	if leient := g.orgEntityToLEI(e, orgent); leient != nil {
 		// check if the LEI identifier is the same as the one we are processing
-		if id, ok := leient.Asset.(*general.Identifier); ok && id.EntityID != lei.ID {
+		if id, ok := leient.Asset.(*general.Identifier); ok && id.ID != lei.ID {
 			return
 		}
 	}
@@ -136,7 +136,7 @@ func (g *gleif) addIdentifiersToOrg(e *et.Event, orgent *dbt.Entity, idtype stri
 
 		oamid := &general.Identifier{
 			UniqueID: fmt.Sprintf("%s:%s", idtype, id),
-			EntityID: id,
+			ID:       id,
 			Type:     idtype,
 		}
 

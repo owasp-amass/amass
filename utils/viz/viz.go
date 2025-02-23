@@ -248,7 +248,7 @@ func domainNameInScope(name string, scope []string) bool {
 }
 
 func associatedWithScope(db repository.Repository, asset *types.Entity, scope []string, since time.Time) bool {
-	if edges, err := db.OutgoingEdges(asset, since, "dns_record"); err == nil && len(edges) > 0 {
+	if edges, err := db.OutgoingEdges(asset, since, "dns_record", "node"); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
 			if to, err := db.FindEntityById(edge.ToEntity.ID); err == nil {
 				if n, ok := to.Asset.(*oamdns.FQDN); ok && n != nil && domainNameInScope(n.Name, scope) {
@@ -262,7 +262,7 @@ func associatedWithScope(db repository.Repository, asset *types.Entity, scope []
 }
 
 func followBackForScope(db repository.Repository, asset *types.Entity, scope []string, since time.Time) bool {
-	if edges, err := db.IncomingEdges(asset, since, "dns_record"); err == nil && len(edges) > 0 {
+	if edges, err := db.IncomingEdges(asset, since, "dns_record", "node"); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
 			if rel, ok := edge.Relation.(*oamdns.BasicDNSRelation); ok && rel.Header.RRType != 5 {
 				continue

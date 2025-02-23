@@ -30,7 +30,6 @@ type bgpTools struct {
 	name     string
 	addr     string
 	port     int
-	data     map[int][]netip.Prefix
 	log      *slog.Logger
 	autsys   *autsys
 	netblock *netblock
@@ -42,7 +41,6 @@ func NewBGPTools() et.Plugin {
 	return &bgpTools{
 		name:   "BGP.Tools",
 		port:   43,
-		data:   make(map[int][]netip.Prefix),
 		rlimit: ratelimit.New(1, ratelimit.WithoutSlack),
 		source: &et.Source{
 			Name:       "BGP.Tools",

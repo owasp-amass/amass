@@ -118,7 +118,7 @@ func getEmailDomain(email *general.Identifier) (string, bool) {
 		return "", false
 	}
 
-	parts := strings.Split(email.EntityID, "@")
+	parts := strings.Split(email.ID, "@")
 
 	if len(parts) != 2 {
 		return "", false

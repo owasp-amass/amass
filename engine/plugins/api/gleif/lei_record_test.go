@@ -19,7 +19,7 @@ func TestGetLEIRecord(t *testing.T) {
 	lei := "ZXTILKJKG63JELOEG630"
 	id := &general.Identifier{
 		UniqueID: fmt.Sprintf("%s:%s", general.LEICode, lei),
-		EntityID: lei,
+		ID:       lei,
 		Type:     general.LEICode,
 	}
 
@@ -36,7 +36,7 @@ func TestGetDirectParentRecord(t *testing.T) {
 	lei := "25490065U2GR0UPXFY63"
 	id := &general.Identifier{
 		UniqueID: fmt.Sprintf("%s:%s", general.LEICode, lei),
-		EntityID: lei,
+		ID:       lei,
 		Type:     general.LEICode,
 	}
 
@@ -53,7 +53,7 @@ func TestGetDirectChildrenRecord(t *testing.T) {
 	lei := "ZXTILKJKG63JELOEG630"
 	id := &general.Identifier{
 		UniqueID: fmt.Sprintf("%s:%s", general.LEICode, lei),
-		EntityID: lei,
+		ID:       lei,
 		Type:     general.LEICode,
 	}
 

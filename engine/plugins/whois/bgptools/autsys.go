@@ -7,10 +7,13 @@ package bgptools
 import (
 	"errors"
 	"log/slog"
+	"net"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/owasp-amass/amass/v4/engine/plugins/support"
+	"github.com/owasp-amass/amass/v4/engine/sessions"
 	et "github.com/owasp-amass/amass/v4/engine/types"
 	amassnet "github.com/owasp-amass/amass/v4/utils/net"
 	dbt "github.com/owasp-amass/asset-db/types"
@@ -37,11 +40,6 @@ func (r *autsys) check(e *et.Event) error {
 
 	ipstr := nb.CIDR.Addr().String()
 	if reserved, _ := amassnet.IsReservedAddress(ipstr); reserved {
-		return nil
-	}
-	// check if there's an autonomous system associated with this netblock
-	if edges, err := e.Session.Cache().IncomingEdges(e.Entity, e.Session.Cache().StartTime(), "announces"); err == nil && len(edges) > 0 {
-		// the rest of the work will be done further down the pipeline
 		return nil
 	}
 
@@ -82,39 +80,57 @@ func (r *autsys) lookup(e *et.Event, nb *dbt.Entity, since time.Time) *dbt.Entit
 }
 
 func (r *autsys) query(e *et.Event, nb *dbt.Entity) *dbt.Entity {
-	var asn int
-
-	r.plugin.Lock()
 	cidr := nb.Asset.Key()
-	for num, anouncements := range r.plugin.data {
-		for _, prefix := range anouncements {
-			if prefix.String() == cidr {
-				asn = num
-				break
+
+	_, ipnet, _ := net.ParseCIDR(cidr)
+	if ipnet == nil {
+		return nil
+	}
+
+	first, _ := amassnet.FirstLast(ipnet)
+	if first == nil {
+		return nil
+	}
+
+	var asn int
+	src := r.plugin.source
+	if entries, err := e.Session.CIDRanger().ContainingNetworks(first); err == nil && len(entries) > 0 {
+		for _, entry := range entries {
+			if arentry, ok := entry.(*sessions.CIDRangerEntry); ok {
+				if strings.EqualFold(cidr, arentry.Net.String()) {
+					asn = arentry.ASN
+					src = arentry.Src
+					break
+				}
 			}
 		}
 	}
-	r.plugin.Unlock()
 
 	if asn == 0 {
-		if record, err := r.plugin.whois(nb.Asset.Key()); err == nil {
-			asn = record.ASN
+		arg := nb.Asset.Key()
 
-			r.plugin.Lock()
-			r.plugin.data[asn] = append(r.plugin.data[asn], record.Prefix)
-			r.plugin.Unlock()
+		if record, err := r.plugin.whois(arg); err == nil {
+			asn = record.ASN
+		} else {
+			e.Session.Log().Error("failed to obtain a response from the WHOIS server", "err",
+				err.Error(), "argument", arg, slog.Group("plugin", "name", r.plugin.name, "handler", r.name))
 		}
 	}
 
 	if asn == 0 {
 		return nil
 	}
-	return r.store(e, asn, nb)
+	return r.store(e, asn, nb, src)
 }
 
-func (r *autsys) store(e *et.Event, asn int, nb *dbt.Entity) *dbt.Entity {
+func (r *autsys) store(e *et.Event, asn int, nb *dbt.Entity, src *et.Source) *dbt.Entity {
 	as, err := e.Session.Cache().CreateAsset(&oamnet.AutonomousSystem{Number: asn})
 	if err == nil && as != nil {
+		_, _ = e.Session.Cache().CreateEntityProperty(as, &general.SourceProperty{
+			Source:     src.Name,
+			Confidence: src.Confidence,
+		})
+
 		if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
 			Relation:   &general.SimpleRelation{Name: "announces"},
 			FromEntity: as,

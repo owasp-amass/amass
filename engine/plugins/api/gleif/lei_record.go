@@ -20,7 +20,7 @@ import (
 func (g *gleif) getLEIRecord(id *general.Identifier) (*leiRecord, error) {
 	g.rlimit.Take()
 
-	u := "https://api.gleif.org/api/v1/lei-records/" + id.EntityID
+	u := "https://api.gleif.org/api/v1/lei-records/" + id.ID
 	resp, err := http.RequestWebPage(context.TODO(), &http.Request{URL: u})
 	if err != nil || resp.StatusCode != 200 || resp.Body == "" {
 		return nil, err
@@ -29,7 +29,7 @@ func (g *gleif) getLEIRecord(id *general.Identifier) (*leiRecord, error) {
 	var result singleResponse
 	if err := json.Unmarshal([]byte(resp.Body), &result); err != nil {
 		return nil, err
-	} else if result.Data.Type != "lei-records" || result.Data.ID != id.EntityID {
+	} else if result.Data.Type != "lei-records" || result.Data.ID != id.ID {
 		return nil, errors.New("failed to find the LEI record")
 	}
 	return &result.Data, nil
@@ -38,7 +38,7 @@ func (g *gleif) getLEIRecord(id *general.Identifier) (*leiRecord, error) {
 func (g *gleif) getDirectParentRecord(id *general.Identifier) (*leiRecord, error) {
 	g.rlimit.Take()
 
-	u := "https://api.gleif.org/api/v1/lei-records/" + id.EntityID + "/direct-parent"
+	u := "https://api.gleif.org/api/v1/lei-records/" + id.ID + "/direct-parent"
 	resp, err := http.RequestWebPage(context.TODO(), &http.Request{URL: u})
 	if err != nil || resp.StatusCode != 200 || resp.Body == "" {
 		return nil, err
@@ -57,7 +57,7 @@ func (g *gleif) getDirectChildrenRecords(id *general.Identifier) ([]*leiRecord, 
 	var children []*leiRecord
 
 	last := 1
-	link := "https://api.gleif.org/api/v1/lei-records/" + id.EntityID + "/direct-children"
+	link := "https://api.gleif.org/api/v1/lei-records/" + id.ID + "/direct-children"
 	for i := 1; i <= last && link != ""; i++ {
 		g.rlimit.Take()
 
@@ -106,7 +106,7 @@ func (g *gleif) createLEIIdentifier(session et.Session, orgent *dbt.Entity, lei 
 func (g *gleif) createLEIFromRecord(e *et.Event, orgent *dbt.Entity, lei *leiRecord) (*dbt.Entity, error) {
 	return g.createLEIIdentifier(e.Session, orgent, &general.Identifier{
 		UniqueID:       fmt.Sprintf("%s:%s", general.LEICode, lei.ID),
-		EntityID:       lei.ID,
+		ID:             lei.ID,
 		Type:           general.LEICode,
 		Status:         lei.Attributes.Registration.Status,
 		CreationDate:   lei.Attributes.Registration.InitialRegistrationDate,

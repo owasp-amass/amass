@@ -6,6 +6,7 @@ package types
 
 import (
 	"log/slog"
+	"net"
 	"sync"
 
 	"github.com/caffix/stringset"
@@ -15,6 +16,7 @@ import (
 	"github.com/owasp-amass/amass/v4/engine/sessions/scope"
 	"github.com/owasp-amass/asset-db/cache"
 	"github.com/owasp-amass/asset-db/repository"
+	"github.com/yl2chen/cidranger"
 )
 
 type Session interface {
@@ -25,6 +27,7 @@ type Session interface {
 	Scope() *scope.Scope
 	DB() repository.Repository
 	Cache() *cache.Cache
+	CIDRanger() cidranger.Ranger
 	TmpDir() string
 	Stats() *SessionStats
 	EventSet() *stringset.Set
@@ -44,4 +47,10 @@ type SessionManager interface {
 	CancelSession(id uuid.UUID)
 	GetSession(id uuid.UUID) Session
 	Shutdown()
+}
+
+type AmassRangerEntry interface {
+	Network() net.IPNet
+	AutonomousSystem() int
+	Source() *Source
 }

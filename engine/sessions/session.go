@@ -25,6 +25,7 @@ import (
 	"github.com/owasp-amass/asset-db/repository"
 	"github.com/owasp-amass/asset-db/repository/neo4j"
 	"github.com/owasp-amass/asset-db/repository/sqlrepo"
+	"github.com/yl2chen/cidranger"
 )
 
 type Session struct {
@@ -37,6 +38,7 @@ type Session struct {
 	dsn    string
 	dbtype string
 	c      *cache.Cache
+	ranger cidranger.Ranger
 	tmpdir string
 	stats  *et.SessionStats
 	done   chan struct{}
@@ -52,13 +54,14 @@ func CreateSession(cfg *config.Config) (et.Session, error) {
 	}
 	// Create a new session object
 	s := &Session{
-		id:    uuid.New(),
-		cfg:   cfg,
-		scope: scope.CreateFromConfigScope(cfg),
-		ps:    pubsub.NewLogger(),
-		stats: new(et.SessionStats),
-		done:  make(chan struct{}),
-		set:   stringset.New(),
+		id:     uuid.New(),
+		cfg:    cfg,
+		scope:  scope.CreateFromConfigScope(cfg),
+		ranger: NewAmassRanger(),
+		ps:     pubsub.NewLogger(),
+		stats:  new(et.SessionStats),
+		done:   make(chan struct{}),
+		set:    stringset.New(),
 	}
 	s.log = slog.New(slog.NewJSONHandler(s.ps, nil)).With("session", s.id)
 
@@ -105,6 +108,10 @@ func (s *Session) DB() repository.Repository {
 
 func (s *Session) Cache() *cache.Cache {
 	return s.c
+}
+
+func (s *Session) CIDRanger() cidranger.Ranger {
+	return s.ranger
 }
 
 func (s *Session) TmpDir() string {

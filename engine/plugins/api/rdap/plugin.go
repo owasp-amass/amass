@@ -240,7 +240,7 @@ func (rd *rdapPlugin) storeEntity(e *et.Event, level int, entity *rdap.Entity, a
 	if email := strings.ToLower(v.Email()); m.IsMatch(string(oam.Identifier)) && email != "" {
 		if a, err := e.Session.Cache().CreateAsset(&general.Identifier{
 			UniqueID: fmt.Sprintf("%s:%s", general.EmailAddress, email),
-			EntityID: email,
+			ID:       email,
 			Type:     general.EmailAddress,
 		}); err == nil && a != nil {
 			_ = rd.createContactEdge(e.Session, cr, a, &general.SimpleRelation{Name: "id"}, src)

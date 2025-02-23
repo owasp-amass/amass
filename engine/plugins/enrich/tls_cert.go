@@ -218,7 +218,7 @@ func (te *tlsexpand) store(e *et.Event, cert *x509.Certificate, asset *dbt.Entit
 
 			if a, err := e.Session.Cache().CreateAsset(&general.Identifier{
 				UniqueID: fmt.Sprintf("%s:%s", general.EmailAddress, email),
-				EntityID: email,
+				ID:       email,
 				Type:     general.EmailAddress,
 			}); err == nil && a != nil {
 				findings = append(findings, &support.Finding{

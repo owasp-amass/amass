@@ -133,7 +133,7 @@ func (fc *fuzzyCompletions) query(e *et.Event, orgent *dbt.Entity) *dbt.Entity {
 
 				leiList = append(leiList, &general.Identifier{
 					UniqueID: fmt.Sprintf("%s:%s", general.LEICode, id),
-					EntityID: id,
+					ID:       id,
 					Type:     general.LEICode,
 				})
 			}

@@ -46,7 +46,7 @@ func SourceToAssetsWithinTTL(session et.Session, name, atype string, src *et.Sou
 		if parts := strings.Split(name, ":"); len(parts) == 2 {
 			id := &general.Identifier{
 				UniqueID: name,
-				EntityID: parts[1],
+				ID:       parts[1],
 				Type:     parts[0],
 			}
 
@@ -117,7 +117,7 @@ func StoreEmailsWithSource(session et.Session, emails []string, src *et.Source, 
 
 		if a, err := session.Cache().CreateAsset(&general.Identifier{
 			UniqueID: fmt.Sprintf("%s:%s", general.EmailAddress, email),
-			EntityID: email,
+			ID:       email,
 			Type:     general.EmailAddress,
 		}); err == nil && a != nil {
 			results = append(results, a)
@@ -268,7 +268,7 @@ func CreateOrgAsset(session et.Session, obj *dbt.Entity, rel oam.Relation, o *or
 		name := strings.ToLower(o.Name)
 		id := &general.Identifier{
 			UniqueID: fmt.Sprintf("%s:%s", general.OrganizationName, name),
-			EntityID: name,
+			ID:       name,
 			Type:     general.OrganizationName,
 		}
 
@@ -374,7 +374,7 @@ func OrganizationNameMatch(session et.Session, orgent *dbt.Entity, names []strin
 			if a, err := session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && a != nil {
 				if id, ok := a.Asset.(*general.Identifier); ok &&
 					(id.Type == general.OrganizationName || id.Type == general.LegalName) {
-					orgNames = append(orgNames, id.EntityID)
+					orgNames = append(orgNames, id.ID)
 				}
 			}
 		}
@@ -605,7 +605,7 @@ func orgsWithSameNames(session et.Session, names []string) ([]*dbt.Entity, error
 		// check for known organization name identifiers
 		if assets, err := session.Cache().FindEntitiesByContent(&general.Identifier{
 			UniqueID: fmt.Sprintf("%s:%s", general.OrganizationName, name),
-			EntityID: name,
+			ID:       name,
 			Type:     general.OrganizationName,
 		}, time.Time{}); err == nil {
 			for _, a := range assets {
@@ -618,7 +618,7 @@ func orgsWithSameNames(session et.Session, names []string) ([]*dbt.Entity, error
 		// check for known legal name identifiers
 		if assets, err := session.Cache().FindEntitiesByContent(&general.Identifier{
 			UniqueID: fmt.Sprintf("%s:%s", general.LegalName, name),
-			EntityID: name,
+			ID:       name,
 			Type:     general.LegalName,
 		}, time.Time{}); err == nil {
 			for _, a := range assets {

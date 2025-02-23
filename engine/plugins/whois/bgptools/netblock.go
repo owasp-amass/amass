@@ -7,10 +7,12 @@ package bgptools
 import (
 	"errors"
 	"log/slog"
+	"net"
 	"net/netip"
 	"time"
 
 	"github.com/owasp-amass/amass/v4/engine/plugins/support"
+	"github.com/owasp-amass/amass/v4/engine/sessions"
 	et "github.com/owasp-amass/amass/v4/engine/types"
 	amassnet "github.com/owasp-amass/amass/v4/utils/net"
 	dbt "github.com/owasp-amass/asset-db/types"
@@ -39,7 +41,7 @@ func (r *netblock) check(e *et.Event) error {
 		return nil
 	}
 	// check if there's a netblock associated with this IP address
-	if _, err := support.IPToNetblock(e.Session, ip); err == nil {
+	if found, err := e.Session.CIDRanger().Contains(net.ParseIP(ipstr)); err == nil && found {
 		// the rest of the work will be done further down the pipeline
 		return nil
 	}
@@ -49,27 +51,36 @@ func (r *netblock) check(e *et.Event) error {
 		return err
 	}
 
-	nb := r.lookup(e, e.Entity, since)
-	if nb == nil {
-		nb = r.query(e, e.Entity)
+	nb, as := r.lookup(e, e.Entity, since)
+	if nb == nil || as == nil {
+		nb, as = r.query(e, e.Entity)
 	}
 
-	if nb != nil {
-		r.process(e, e.Entity, nb)
-		support.AddNetblock(e.Session.ID().String(), nb.Asset.(*oamnet.Netblock))
+	if nb != nil && as != nil {
+		if asnent, ok := as.Asset.(*oamnet.AutonomousSystem); ok {
+			if _, ipnet, err := net.ParseCIDR(nb.Asset.(*oamnet.Netblock).CIDR.String()); err == nil && ipnet != nil {
+				_ = e.Session.CIDRanger().Insert(&sessions.CIDRangerEntry{
+					Net: ipnet,
+					ASN: asnent.Number,
+					Src: r.plugin.source,
+				})
+			}
+
+			r.process(e, e.Entity, nb, as)
+		}
 	}
 	return nil
 }
 
-func (r *netblock) lookup(e *et.Event, ip *dbt.Entity, since time.Time) *dbt.Entity {
+func (r *netblock) lookup(e *et.Event, ip *dbt.Entity, since time.Time) (*dbt.Entity, *dbt.Entity) {
 	addr, ok := ip.Asset.(*oamnet.IPAddress)
 	if !ok {
-		return nil
+		return nil, nil
 	}
 
 	edges, err := e.Session.Cache().IncomingEdges(ip, since, "contains")
 	if err != nil {
-		return nil
+		return nil, nil
 	}
 
 	var size int
@@ -100,45 +111,43 @@ func (r *netblock) lookup(e *et.Event, ip *dbt.Entity, since time.Time) *dbt.Ent
 		}
 	}
 
-	return nb
-}
+	var found bool
+	var asent *dbt.Entity
+	if nb != nil {
+		edges, err := e.Session.Cache().IncomingEdges(nb, since, "announces")
+		if err == nil && len(edges) > 0 {
+			for _, edge := range edges {
+				asent, err = e.Session.Cache().FindEntityById(edge.FromEntity.ID)
 
-func (r *netblock) query(e *et.Event, ip *dbt.Entity) *dbt.Entity {
-	var asn, most int
-	var cidr netip.Prefix
-
-	r.plugin.Lock()
-	a := ip.Asset.(*oamnet.IPAddress)
-	for num, anouncements := range r.plugin.data {
-		for _, prefix := range anouncements {
-			// Select the smallest CIDR
-			if bits := prefix.Masked().Bits(); most < bits && prefix.Contains(a.Address) {
-				asn = num
-				most = bits
-				cidr = prefix
+				if err == nil && asent != nil {
+					found = true
+					break
+				}
 			}
 		}
 	}
-	r.plugin.Unlock()
-
-	if asn == 0 {
-		if record, err := r.plugin.whois(a.Address.String()); err == nil {
-			asn = record.ASN
-			cidr = record.Prefix
-
-			r.plugin.Lock()
-			r.plugin.data[asn] = append(r.plugin.data[asn], record.Prefix)
-			r.plugin.Unlock()
-		}
+	if !found {
+		return nil, nil
 	}
 
-	if asn == 0 {
-		return nil
-	}
-	return r.store(e, cidr, ip)
+	return nb, asent
 }
 
-func (r *netblock) store(e *et.Event, cidr netip.Prefix, ip *dbt.Entity) *dbt.Entity {
+func (r *netblock) query(e *et.Event, ent *dbt.Entity) (*dbt.Entity, *dbt.Entity) {
+	ip := ent.Asset.(*oamnet.IPAddress)
+	addrstr := ip.Address.String()
+
+	record, err := r.plugin.whois(addrstr)
+	if err != nil || record == nil {
+		e.Session.Log().Error("failed to obtain a response from the WHOIS server", "err",
+			err.Error(), "argument", addrstr, slog.Group("plugin", "name", r.plugin.name, "handler", r.name))
+		return nil, nil
+	}
+
+	return r.store(e, record.Prefix, ent, record.ASN)
+}
+
+func (r *netblock) store(e *et.Event, cidr netip.Prefix, ip *dbt.Entity, asn int) (*dbt.Entity, *dbt.Entity) {
 	ntype := "IPv4"
 	if cidr.Addr().Is6() {
 		ntype = "IPv6"
@@ -148,22 +157,58 @@ func (r *netblock) store(e *et.Event, cidr netip.Prefix, ip *dbt.Entity) *dbt.En
 		CIDR: cidr,
 		Type: ntype,
 	})
-	if err == nil && nb != nil {
-		if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
-			Relation:   &general.SimpleRelation{Name: "contains"},
-			FromEntity: nb,
-			ToEntity:   ip,
-		}); err == nil && edge != nil {
-			_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
-				Source:     r.plugin.source.Name,
-				Confidence: r.plugin.source.Confidence,
-			})
-		}
+
+	if err != nil || nb == nil {
+		return nil, nil
 	}
-	return nb
+
+	_, _ = e.Session.Cache().CreateEntityProperty(nb, &general.SourceProperty{
+		Source:     r.plugin.source.Name,
+		Confidence: r.plugin.source.Confidence,
+	})
+
+	edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
+		Relation:   &general.SimpleRelation{Name: "contains"},
+		FromEntity: nb,
+		ToEntity:   ip,
+	})
+	if err != nil || edge == nil {
+		return nil, nil
+	}
+
+	_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
+		Source:     r.plugin.source.Name,
+		Confidence: r.plugin.source.Confidence,
+	})
+
+	as, err := e.Session.Cache().CreateAsset(&oamnet.AutonomousSystem{Number: asn})
+	if err != nil || as == nil {
+		return nil, nil
+	}
+
+	_, _ = e.Session.Cache().CreateEntityProperty(as, &general.SourceProperty{
+		Source:     r.plugin.source.Name,
+		Confidence: r.plugin.source.Confidence,
+	})
+
+	edge, err = e.Session.Cache().CreateEdge(&dbt.Edge{
+		Relation:   &general.SimpleRelation{Name: "announces"},
+		FromEntity: as,
+		ToEntity:   nb,
+	})
+	if err != nil || edge == nil {
+		return nil, nil
+	}
+
+	_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
+		Source:     r.plugin.source.Name,
+		Confidence: r.plugin.source.Confidence,
+	})
+
+	return nb, as
 }
 
-func (r *netblock) process(e *et.Event, ip, nb *dbt.Entity) {
+func (r *netblock) process(e *et.Event, ip, nb, as *dbt.Entity) {
 	_ = e.Dispatcher.DispatchEvent(&et.Event{
 		Name:    nb.Asset.Key(),
 		Entity:  nb,
@@ -172,4 +217,14 @@ func (r *netblock) process(e *et.Event, ip, nb *dbt.Entity) {
 
 	e.Session.Log().Info("relationship discovered", "from", nb.Asset.Key(), "relation",
 		"contains", "to", ip.Asset.Key(), slog.Group("plugin", "name", r.plugin.name, "handler", r.name))
+
+	asname := "AS" + as.Asset.Key()
+	_ = e.Dispatcher.DispatchEvent(&et.Event{
+		Name:    asname,
+		Entity:  as,
+		Session: e.Session,
+	})
+
+	e.Session.Log().Info("relationship discovered", "from", asname, "relation", "announces",
+		"to", nb.Asset.Key(), slog.Group("plugin", "name", r.plugin.name, "handler", r.name))
 }
