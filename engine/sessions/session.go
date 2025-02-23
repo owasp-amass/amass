@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"math/rand"
 	"os"
 	"path/filepath"
 	"strings"
@@ -70,7 +69,7 @@ func CreateSession(cfg *config.Config) (et.Session, error) {
 		return nil, err
 	}
 
-	c, dir, err := createFileCacheRepo()
+	c, dir, err := s.createFileCacheRepo()
 	if err != nil {
 		return nil, err
 	}
@@ -195,13 +194,12 @@ func (s *Session) selectDBMS() error {
 	return nil
 }
 
-func createFileCacheRepo() (repository.Repository, string, error) {
-	dir, err := os.MkdirTemp("", fmt.Sprintf("test-%d", rand.Intn(100)))
+func (s *Session) createFileCacheRepo() (repository.Repository, string, error) {
+	dir, err := os.MkdirTemp("", s.ID().String())
 	if err != nil {
 		return nil, "", errors.New("failed to create the temp dir")
 	}
 
-	//c, err := assetdb.New(sqlrepo.SQLiteMemory, "")
 	c, err := assetdb.New(sqlrepo.SQLite, filepath.Join(dir, "cache.sqlite"))
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to create the cache db: %s", err.Error())
