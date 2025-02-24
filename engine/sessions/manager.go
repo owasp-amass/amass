@@ -111,6 +111,18 @@ func (r *manager) CancelSession(id uuid.UUID) {
 	delete(r.sessions, id)
 }
 
+func (r *manager) GetSessions() []et.Session {
+	r.RLock()
+	defer r.RUnlock()
+
+	sessions := make([]et.Session, 0, len(r.sessions))
+	for _, s := range r.sessions {
+		sessions = append(sessions, s)
+	}
+
+	return sessions
+}
+
 // GetSession: returns a session from a session storage.
 func (r *manager) GetSession(id uuid.UUID) et.Session {
 	r.RLock()

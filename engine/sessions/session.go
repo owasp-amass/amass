@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/caffix/stringset"
@@ -24,6 +25,8 @@ import (
 	"github.com/owasp-amass/asset-db/repository"
 	"github.com/owasp-amass/asset-db/repository/neo4j"
 	"github.com/owasp-amass/asset-db/repository/sqlrepo"
+	dbt "github.com/owasp-amass/asset-db/types"
+	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/yl2chen/cidranger"
 )
 
@@ -34,9 +37,10 @@ type Session struct {
 	cfg      *config.Config
 	scope    *scope.Scope
 	db       repository.Repository
+	queue    *sessionQueue
 	dsn      string
 	dbtype   string
-	c        *cache.Cache
+	cache    *cache.Cache
 	ranger   cidranger.Ranger
 	tmpdir   string
 	stats    *et.SessionStats
@@ -80,10 +84,15 @@ func CreateSession(cfg *config.Config) (et.Session, error) {
 		return nil, err
 	}
 
-	s.c, err = cache.New(c, s.db, time.Minute)
-	if err != nil || s.c == nil {
+	s.cache, err = cache.New(c, s.db, time.Minute)
+	if err != nil || s.cache == nil {
 		return nil, errors.New("failed to create the session cache")
 	}
+
+	s.queue = newSessionQueue(s)
+	s.log.Info("Session initialized")
+	s.log.Info("Temporary directory created", slog.String("dir", s.tmpdir))
+	s.log.Info("Database connection established", slog.String("dsn", s.dsn))
 	return s, nil
 }
 
@@ -112,7 +121,11 @@ func (s *Session) DB() repository.Repository {
 }
 
 func (s *Session) Cache() *cache.Cache {
-	return s.c
+	return s.cache
+}
+
+func (s *Session) Queue() et.SessionQueue {
+	return s.queue
 }
 
 func (s *Session) CIDRanger() cidranger.Ranger {
@@ -220,4 +233,72 @@ func (s *Session) createFileRepo(fname string) (repository.Repository, error) {
 		return nil, fmt.Errorf("failed to create the db: %s", err.Error())
 	}
 	return c, nil
+}
+
+type sessionQueue struct {
+	sync.Mutex
+	session *Session
+	q       map[string][]string
+}
+
+func newSessionQueue(s *Session) *sessionQueue {
+	return &sessionQueue{
+		session: s,
+		q:       make(map[string][]string),
+	}
+}
+
+func (sq *sessionQueue) Append(e *dbt.Entity) error {
+	sq.Lock()
+	defer sq.Unlock()
+
+	if e == nil {
+		return errors.New("entity is nil")
+	}
+	if e.Asset == nil {
+		return errors.New("asset is nil")
+	}
+
+	key := string(e.Asset.AssetType())
+	if key == "" {
+		return errors.New("asset type is empty")
+	}
+	if _, found := sq.q[key]; !found {
+		sq.q[key] = make([]string, 0)
+	}
+	if e.ID == "" {
+		return errors.New("entity ID is empty")
+	}
+
+	sq.q[key] = append(sq.q[key], e.ID)
+	return nil
+}
+
+func (sq *sessionQueue) Next(atype oam.AssetType, num int) ([]*dbt.Entity, error) {
+	var ids []string
+	key := string(atype)
+
+	sq.Lock()
+	if q, found := sq.q[key]; found {
+		if len(q) > num {
+			ids = q[:num]
+			sq.q[key] = q[num:]
+		} else {
+			ids = q
+			delete(sq.q, key)
+		}
+	}
+	sq.Unlock()
+
+	var results []*dbt.Entity
+	for _, id := range ids {
+		if e, err := sq.session.Cache().FindEntityById(id); err == nil {
+			results = append(results, e)
+		}
+	}
+
+	if len(results) == 0 {
+		return nil, errors.New("no entities found")
+	}
+	return results, nil
 }

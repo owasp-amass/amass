@@ -16,6 +16,8 @@ import (
 	"github.com/owasp-amass/amass/v4/engine/sessions/scope"
 	"github.com/owasp-amass/asset-db/cache"
 	"github.com/owasp-amass/asset-db/repository"
+	dbt "github.com/owasp-amass/asset-db/types"
+	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/yl2chen/cidranger"
 )
 
@@ -27,12 +29,18 @@ type Session interface {
 	Scope() *scope.Scope
 	DB() repository.Repository
 	Cache() *cache.Cache
+	Queue() SessionQueue
 	CIDRanger() cidranger.Ranger
 	TmpDir() string
 	Stats() *SessionStats
 	EventSet() *stringset.Set
 	Done() bool
 	Kill()
+}
+
+type SessionQueue interface {
+	Append(e *dbt.Entity) error
+	Next(atype oam.AssetType, num int) ([]*dbt.Entity, error)
 }
 
 type SessionStats struct {
@@ -46,6 +54,7 @@ type SessionManager interface {
 	AddSession(s Session) error
 	CancelSession(id uuid.UUID)
 	GetSession(id uuid.UUID) Session
+	GetSessions() []Session
 	Shutdown()
 }
 
