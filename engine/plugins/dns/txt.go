@@ -22,11 +22,13 @@ type dnsTXT struct {
 func (d *dnsTXT) check(e *et.Event) error {
     _, ok := e.Entity.Asset.(*oamdns.FQDN)
     if !ok {
+        slog.Error("failed to extract the FQDN asset")
         return errors.New("failed to extract the FQDN asset")
     }
 
     since, err := support.TTLStartTime(e.Session.Config(), "FQDN", "FQDN", d.plugin.name)
     if err != nil {
+        slog.Error("failed to get TTL start time", "error", err)
         return err
     }
 
@@ -40,6 +42,8 @@ func (d *dnsTXT) check(e *et.Event) error {
 
     if len(txtRecords) > 0 {
         d.process(e, e.Entity, txtRecords)
+    } else {
+        slog.Warn("no TXT records found")
     }
     return nil
 }
@@ -49,6 +53,7 @@ func (d *dnsTXT) lookup(e *et.Event, fqdn *dbt.Entity, since time.Time) []*resol
 
     n, ok := fqdn.Asset.(*oamdns.FQDN)
     if !ok || n == nil {
+        slog.Error("failed to cast asset to FQDN")
         return txtRecords
     }
 
@@ -59,6 +64,8 @@ func (d *dnsTXT) lookup(e *et.Event, fqdn *dbt.Entity, since time.Time) []*resol
                 Data: a.Asset.(*oamdns.FQDN).Name,
             })
         }
+    } else {
+        slog.Warn("no assets found within TTL")
     }
     return txtRecords
 }
@@ -66,10 +73,17 @@ func (d *dnsTXT) lookup(e *et.Event, fqdn *dbt.Entity, since time.Time) []*resol
 func (d *dnsTXT) query(e *et.Event, name *dbt.Entity) []*resolve.ExtractedAnswer {
     var txtRecords []*resolve.ExtractedAnswer
 
-    fqdn := name.Asset.(*oamdns.FQDN)
+    fqdn, ok := name.Asset.(*oamdns.FQDN)
+    if !ok {
+        slog.Error("failed to cast asset to FQDN in query")
+        return txtRecords
+    }
+
     if rr, err := support.PerformQuery(fqdn.Name, dns.TypeTXT); err == nil {
         txtRecords = append(txtRecords, rr...)
         support.MarkAssetMonitored(e.Session, name, d.plugin.source)
+    } else {
+        slog.Error("failed to perform DNS query", "error", err)
     }
 
     return txtRecords
@@ -83,7 +97,7 @@ func (d *dnsTXT) store(e *et.Event, fqdn *dbt.Entity, rr []*resolve.ExtractedAns
 
         txtValue := record.Data
 
-        _, _ = e.Session.Cache().CreateEntityProperty(fqdn, &oamdns.DNSRecordProperty{
+        _, err := e.Session.Cache().CreateEntityProperty(fqdn, &oamdns.DNSRecordProperty{
             PropertyName: "dns_record",
             Header: oamdns.RRHeader{
                 RRType: 16,
@@ -92,6 +106,9 @@ func (d *dnsTXT) store(e *et.Event, fqdn *dbt.Entity, rr []*resolve.ExtractedAns
             },
             Data: txtValue,
         })
+        if err != nil {
+            slog.Error("failed to create entity property", "error", err)
+        }
     }
 }
 
