@@ -144,9 +144,13 @@ func (d *dis) DispatchEvent(e *et.Event) error {
 		return errors.New("the event has no associated entity or asset")
 	}
 	// do not schedule the same asset more than once
-	set := e.Session.EventSet()
-	if set.Has(e.Entity.ID) {
+	if e.Session.Queue().Has(e.Entity) {
 		return errors.New("this event was processed previously")
+	}
+
+	err := e.Session.Queue().Append(e.Entity)
+	if err != nil {
+		return err
 	}
 
 	ap, err := d.reg.GetPipeline(e.Entity.Asset.AssetType())
@@ -158,10 +162,8 @@ func (d *dis) DispatchEvent(e *et.Event) error {
 		if err := d.appendToPipelineQueue(e); err != nil {
 			return err
 		}
-		return nil
 	}
-
-	return e.Session.Queue().Append(e.Entity)
+	return nil
 }
 
 func (d *dis) appendToPipelineQueue(e *et.Event) error {
@@ -176,7 +178,7 @@ func (d *dis) appendToPipelineQueue(e *et.Event) error {
 
 	e.Dispatcher = d
 	if data := et.NewEventDataElement(e); data != nil {
-		e.Session.EventSet().Insert(e.Entity.ID)
+		_ = e.Session.Queue().Processed(e.Entity)
 		data.Queue = d.completed
 		ap.Queue.Append(data)
 		// increment the number of events processed in the session

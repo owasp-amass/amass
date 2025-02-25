@@ -91,6 +91,11 @@ func (r *manager) CancelSession(id uuid.UUID) {
 	r.Lock()
 	defer r.Unlock()
 
+	if qdb := r.sessions[id].Queue(); qdb != nil {
+		if err := qdb.Close(); err != nil {
+			s.Log().Error(fmt.Sprintf("failed to close the queue for session %s: %v", id, err))
+		}
+	}
 	if c := r.sessions[id].Cache(); c != nil {
 		c.Close()
 	}
@@ -104,9 +109,6 @@ func (r *manager) CancelSession(id uuid.UUID) {
 		if err := db.Close(); err != nil {
 			s.Log().Error(fmt.Sprintf("failed to close the database for session %s: %v", id, err))
 		}
-	}
-	if set := s.EventSet(); set != nil {
-		set.Close()
 	}
 	delete(r.sessions, id)
 }

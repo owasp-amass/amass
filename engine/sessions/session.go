@@ -11,10 +11,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
-	"github.com/caffix/stringset"
 	"github.com/google/uuid"
 	"github.com/owasp-amass/amass/v4/config"
 	"github.com/owasp-amass/amass/v4/engine/pubsub"
@@ -25,8 +23,6 @@ import (
 	"github.com/owasp-amass/asset-db/repository"
 	"github.com/owasp-amass/asset-db/repository/neo4j"
 	"github.com/owasp-amass/asset-db/repository/sqlrepo"
-	dbt "github.com/owasp-amass/asset-db/types"
-	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/yl2chen/cidranger"
 )
 
@@ -46,7 +42,6 @@ type Session struct {
 	stats    *et.SessionStats
 	done     chan struct{}
 	finished bool
-	set      *stringset.Set
 }
 
 // CreateSession initializes a new Session object based on the provided configuration.
@@ -65,7 +60,6 @@ func CreateSession(cfg *config.Config) (et.Session, error) {
 		ps:     pubsub.NewLogger(),
 		stats:  new(et.SessionStats),
 		done:   make(chan struct{}),
-		set:    stringset.New(),
 	}
 	s.log = slog.New(slog.NewJSONHandler(s.ps, nil)).With("session", s.id)
 
@@ -79,7 +73,7 @@ func CreateSession(cfg *config.Config) (et.Session, error) {
 		return nil, err
 	}
 
-	c, err := s.createFileRepo("cache.sqlite")
+	c, err := s.createFileCacheRepo()
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +83,11 @@ func CreateSession(cfg *config.Config) (et.Session, error) {
 		return nil, errors.New("failed to create the session cache")
 	}
 
-	s.queue = newSessionQueue(s)
+	s.queue, err = newSessionQueue(s)
+	if err != nil {
+		return nil, err
+	}
+
 	s.log.Info("Session initialized")
 	s.log.Info("Temporary directory created", slog.String("dir", s.tmpdir))
 	s.log.Info("Database connection established", slog.String("dsn", s.dsn))
@@ -138,10 +136,6 @@ func (s *Session) TmpDir() string {
 
 func (s *Session) Stats() *et.SessionStats {
 	return s.stats
-}
-
-func (s *Session) EventSet() *stringset.Set {
-	return s.set
 }
 
 func (s *Session) Done() bool {
@@ -226,79 +220,11 @@ func (s *Session) createTemporaryDir() (string, error) {
 	return dir, nil
 }
 
-func (s *Session) createFileRepo(fname string) (repository.Repository, error) {
-	c, err := assetdb.New(sqlrepo.SQLite, filepath.Join(s.TmpDir(), fname))
+func (s *Session) createFileCacheRepo() (repository.Repository, error) {
+	c, err := assetdb.New(sqlrepo.SQLite, filepath.Join(s.TmpDir(), "cache.sqlite"))
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to create the db: %s", err.Error())
 	}
 	return c, nil
-}
-
-type sessionQueue struct {
-	sync.Mutex
-	session *Session
-	q       map[string][]string
-}
-
-func newSessionQueue(s *Session) *sessionQueue {
-	return &sessionQueue{
-		session: s,
-		q:       make(map[string][]string),
-	}
-}
-
-func (sq *sessionQueue) Append(e *dbt.Entity) error {
-	sq.Lock()
-	defer sq.Unlock()
-
-	if e == nil {
-		return errors.New("entity is nil")
-	}
-	if e.Asset == nil {
-		return errors.New("asset is nil")
-	}
-
-	key := string(e.Asset.AssetType())
-	if key == "" {
-		return errors.New("asset type is empty")
-	}
-	if _, found := sq.q[key]; !found {
-		sq.q[key] = make([]string, 0)
-	}
-	if e.ID == "" {
-		return errors.New("entity ID is empty")
-	}
-
-	sq.q[key] = append(sq.q[key], e.ID)
-	return nil
-}
-
-func (sq *sessionQueue) Next(atype oam.AssetType, num int) ([]*dbt.Entity, error) {
-	var ids []string
-	key := string(atype)
-
-	sq.Lock()
-	if q, found := sq.q[key]; found {
-		if len(q) > num {
-			ids = q[:num]
-			sq.q[key] = q[num:]
-		} else {
-			ids = q
-			delete(sq.q, key)
-		}
-	}
-	sq.Unlock()
-
-	var results []*dbt.Entity
-	for _, id := range ids {
-		if e, err := sq.session.Cache().FindEntityById(id); err == nil {
-			results = append(results, e)
-		}
-	}
-
-	if len(results) == 0 {
-		return nil, errors.New("no entities found")
-	}
-	return results, nil
 }

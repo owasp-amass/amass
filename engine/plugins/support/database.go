@@ -579,7 +579,7 @@ func orgExistsAndHasAncestorInSession(session et.Session, o *org.Organization) (
 				if edges, err := session.Cache().IncomingEdges(r, time.Time{}); err == nil {
 					for _, edge := range edges {
 						if a, err := session.Cache().FindEntityById(edge.FromEntity.ID); err == nil && a != nil {
-							if session.EventSet().Has(a.ID) {
+							if session.Queue().Has(edge.FromEntity) {
 								return orgent, nil
 							}
 							assets = append(assets, a)

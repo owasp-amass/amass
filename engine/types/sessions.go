@@ -9,7 +9,6 @@ import (
 	"net"
 	"sync"
 
-	"github.com/caffix/stringset"
 	"github.com/google/uuid"
 	"github.com/owasp-amass/amass/v4/config"
 	"github.com/owasp-amass/amass/v4/engine/pubsub"
@@ -33,14 +32,17 @@ type Session interface {
 	CIDRanger() cidranger.Ranger
 	TmpDir() string
 	Stats() *SessionStats
-	EventSet() *stringset.Set
 	Done() bool
 	Kill()
 }
 
 type SessionQueue interface {
+	Has(e *dbt.Entity) bool
 	Append(e *dbt.Entity) error
 	Next(atype oam.AssetType, num int) ([]*dbt.Entity, error)
+	Processed(e *dbt.Entity) error
+	Delete(e *dbt.Entity) error
+	Close() error
 }
 
 type SessionStats struct {
