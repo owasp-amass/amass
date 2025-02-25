@@ -21,14 +21,14 @@ type dnsTXT struct {
 
 func (d *dnsTXT) check(e *et.Event) error {
     _, ok := e.Entity.Asset.(*oamdns.FQDN)
-    if !ok {
-        slog.Error("failed to extract the FQDN asset")
+    if (!ok) {
+        slog.Error("txt-error: failed to extract the FQDN asset")
         return errors.New("failed to extract the FQDN asset")
     }
 
     since, err := support.TTLStartTime(e.Session.Config(), "FQDN", "FQDN", d.plugin.name)
     if err != nil {
-        slog.Error("failed to get TTL start time", "error", err)
+        slog.Error("txt-error: failed to get TTL start time", "error", err)
         return err
     }
 
@@ -43,7 +43,7 @@ func (d *dnsTXT) check(e *et.Event) error {
     if len(txtRecords) > 0 {
         d.process(e, e.Entity, txtRecords)
     } else {
-        slog.Warn("no TXT records found")
+        slog.Warn("txt-error: no TXT records found")
     }
     return nil
 }
@@ -53,7 +53,7 @@ func (d *dnsTXT) lookup(e *et.Event, fqdn *dbt.Entity, since time.Time) []*resol
 
     n, ok := fqdn.Asset.(*oamdns.FQDN)
     if !ok || n == nil {
-        slog.Error("failed to cast asset to FQDN")
+        slog.Error("txt-error: failed to cast asset to FQDN")
         return txtRecords
     }
 
@@ -65,7 +65,7 @@ func (d *dnsTXT) lookup(e *et.Event, fqdn *dbt.Entity, since time.Time) []*resol
             })
         }
     } else {
-        slog.Warn("no assets found within TTL")
+        slog.Warn("txt-error: no assets found within TTL")
     }
     return txtRecords
 }
@@ -75,7 +75,7 @@ func (d *dnsTXT) query(e *et.Event, name *dbt.Entity) []*resolve.ExtractedAnswer
 
     fqdn, ok := name.Asset.(*oamdns.FQDN)
     if !ok {
-        slog.Error("failed to cast asset to FQDN in query")
+        slog.Error("txt-error: failed to cast asset to FQDN in query")
         return txtRecords
     }
 
@@ -83,7 +83,7 @@ func (d *dnsTXT) query(e *et.Event, name *dbt.Entity) []*resolve.ExtractedAnswer
         txtRecords = append(txtRecords, rr...)
         support.MarkAssetMonitored(e.Session, name, d.plugin.source)
     } else {
-        slog.Error("failed to perform DNS query", "error", err)
+        slog.Error("txt-error: failed to perform DNS query", "error", err)
     }
 
     return txtRecords
@@ -107,7 +107,7 @@ func (d *dnsTXT) store(e *et.Event, fqdn *dbt.Entity, rr []*resolve.ExtractedAns
             Data: txtValue,
         })
         if err != nil {
-            slog.Error("failed to create entity property", "error", err)
+            slog.Error("txt-error: failed to create entity property", "error", err)
         }
     }
 }
