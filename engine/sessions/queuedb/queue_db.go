@@ -19,7 +19,7 @@ type QueueDB struct {
 
 type Element struct {
 	ID        uint64    `gorm:"primaryKey;column:id"`
-	CreatedAt time.Time `gorm:"index:idx_created_at;column:created_at"`
+	CreatedAt time.Time `gorm:"index:idx_created_at,sort:asc;column:created_at"`
 	UpdatedAt time.Time
 	Type      string `gorm:"index:idx_etype;column:etype"`
 	EntityID  string `gorm:"index:idx_entity_id,unique;column:entity_id"`
@@ -27,7 +27,11 @@ type Element struct {
 }
 
 func NewQueueDB(dbPath string) (*QueueDB, error) {
-	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{
+		PrepareStmt:            false,
+		SkipDefaultTransaction: true,
+		Logger:                 logger.Default.LogMode(logger.Silent),
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -101,8 +105,8 @@ func (r *QueueDB) Processed(eid string) error {
 func (r *QueueDB) Delete(eid string) error {
 	var element Element
 
-	result := r.db.Model(&Element{}).Where("entity_id = ?", eid).Find(&element)
-	if err := result.Error; err != nil {
+	err := r.db.Model(&Element{}).Where("entity_id = ?", eid).Find(&element).Error
+	if err != nil {
 		return err
 	}
 

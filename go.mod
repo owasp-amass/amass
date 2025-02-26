@@ -15,6 +15,7 @@ require (
 	github.com/cheggaaa/pb/v3 v3.1.6
 	github.com/fatih/color v1.18.0
 	github.com/geziyor/geziyor v0.0.0-20240812061556-229b8ca83ac1
+	github.com/glebarez/sqlite v1.11.0
 	github.com/go-ini/ini v1.67.0
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
@@ -36,6 +37,8 @@ require (
 	go.uber.org/ratelimit v0.3.1
 	golang.org/x/net v0.35.0
 	gopkg.in/yaml.v3 v3.0.1
+	gorm.io/gorm v1.25.12
+	gorm.io/hints v1.1.2
 	mvdan.cc/xurls/v2 v2.6.0
 )
 
@@ -57,7 +60,6 @@ require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/glebarez/go-sqlite v1.22.0 // indirect
-	github.com/glebarez/sqlite v1.11.0 // indirect
 	github.com/go-gorp/gorp/v3 v3.1.0 // indirect
 	github.com/go-json-experiment/json v0.0.0-20250223041408-d3c622f1b874 // indirect
 	github.com/go-kit/kit v0.13.0 // indirect
@@ -109,7 +111,6 @@ require (
 	gorm.io/datatypes v1.2.5 // indirect
 	gorm.io/driver/mysql v1.5.7 // indirect
 	gorm.io/driver/postgres v1.5.11 // indirect
-	gorm.io/gorm v1.25.12 // indirect
 	modernc.org/libc v1.61.13 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.8.2 // indirect

@@ -37,6 +37,14 @@ func TestNewQueueDB(t *testing.T) {
 
 	found := queueDB.db.Migrator().HasTable(&Element{})
 	assert.True(t, found, "Element table should exist")
+	found = queueDB.db.Migrator().HasIndex(&Element{}, "idx_created_at")
+	assert.True(t, found, "Index idx_created_at should exist")
+	found = queueDB.db.Migrator().HasIndex(&Element{}, "idx_etype")
+	assert.True(t, found, "Index idx_etype should exist")
+	found = queueDB.db.Migrator().HasIndex(&Element{}, "idx_entity_id")
+	assert.True(t, found, "Index idx_entity_id should exist")
+	found = queueDB.db.Migrator().HasIndex(&Element{}, "idx_processed")
+	assert.True(t, found, "Index idx_processed should exist")
 }
 
 func TestHas(t *testing.T) {

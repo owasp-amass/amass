@@ -127,10 +127,11 @@ func (d *dis) completedCallback(data interface{}) {
 		ede.Event.Session.Log().WithGroup("event").With("name", ede.Event.Name).Error(err.Error())
 	}
 	// increment the number of events processed in the session
-	stats := ede.Event.Session.Stats()
-	stats.Lock()
-	stats.WorkItemsCompleted++
-	stats.Unlock()
+	if stats := ede.Event.Session.Stats(); stats != nil {
+		stats.Lock()
+		stats.WorkItemsCompleted++
+		stats.Unlock()
+	}
 }
 
 func (d *dis) DispatchEvent(e *et.Event) error {
@@ -151,6 +152,12 @@ func (d *dis) DispatchEvent(e *et.Event) error {
 	err := e.Session.Queue().Append(e.Entity)
 	if err != nil {
 		return err
+	}
+	// increment the number of events processed in the session
+	if stats := e.Session.Stats(); stats != nil {
+		stats.Lock()
+		stats.WorkItemsTotal++
+		stats.Unlock()
 	}
 
 	ap, err := d.reg.GetPipeline(e.Entity.Asset.AssetType())
@@ -181,11 +188,6 @@ func (d *dis) appendToPipelineQueue(e *et.Event) error {
 		_ = e.Session.Queue().Processed(e.Entity)
 		data.Queue = d.completed
 		ap.Queue.Append(data)
-		// increment the number of events processed in the session
-		stats := e.Session.Stats()
-		stats.Lock()
-		stats.WorkItemsTotal++
-		stats.Unlock()
 	}
 	return nil
 }
