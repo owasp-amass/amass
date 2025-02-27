@@ -28,9 +28,7 @@ type Element struct {
 
 func NewQueueDB(dbPath string) (*QueueDB, error) {
 	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{
-		PrepareStmt:            false,
-		SkipDefaultTransaction: true,
-		Logger:                 logger.Default.LogMode(logger.Silent),
+		Logger: logger.Default.LogMode(logger.Silent),
 	})
 	if err != nil {
 		return nil, err
