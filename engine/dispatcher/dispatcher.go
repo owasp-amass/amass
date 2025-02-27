@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"runtime"
 	"time"
 
 	et "github.com/owasp-amass/amass/v4/engine/types"
@@ -72,15 +73,21 @@ func (d *dis) DispatchEvent(e *et.Event) error {
 }
 
 func (d *dis) maintainPipelines() {
-	ctick := time.NewTicker(5 * time.Second)
+	ctick := time.NewTimer(5 * time.Second)
 	defer ctick.Stop()
+	mtick := time.NewTimer(10 * time.Second)
+	defer mtick.Stop()
 loop:
 	for {
 		select {
 		case <-d.done:
 			break loop
+		case <-mtick.C:
+			checkOnTheHeap()
+			mtick.Reset(10 * time.Second)
 		case <-ctick.C:
 			d.fillPipelineQueues()
+			ctick.Reset(5 * time.Second)
 		case e := <-d.dchan:
 			if err := d.safeDispatch(e); err != nil {
 				d.logger.Error(fmt.Sprintf("Failed to dispatch event: %s", err.Error()))
@@ -89,6 +96,25 @@ loop:
 			d.completedCallback(e)
 		}
 	}
+}
+
+func checkOnTheHeap() {
+	var mstats runtime.MemStats
+	runtime.ReadMemStats(&mstats)
+
+	h := mstats.HeapAlloc
+	n := mstats.NextGC
+	if h <= n {
+		return
+	}
+
+	if diff := mstats.HeapAlloc - mstats.NextGC; bToMb(diff) > 500 {
+		runtime.GC()
+	}
+}
+
+func bToMb(b uint64) uint64 {
+	return b / 1024 / 1024
 }
 
 func (d *dis) fillPipelineQueues() {
