@@ -11,7 +11,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/caffix/queue"
 	et "github.com/owasp-amass/amass/v4/engine/types"
 	oam "github.com/owasp-amass/open-asset-model"
 )
@@ -22,11 +21,13 @@ const (
 )
 
 type dis struct {
-	logger    *slog.Logger
-	reg       et.Registry
-	mgr       et.SessionManager
-	done      chan struct{}
-	completed queue.Queue
+	logger *slog.Logger
+	reg    et.Registry
+	mgr    et.SessionManager
+	done   chan struct{}
+	dchan  chan *et.Event
+	pchan  chan *et.Event
+	cchan  chan *et.EventDataElement
 }
 
 func NewDispatcher(l *slog.Logger, r et.Registry, mgr et.SessionManager) et.Dispatcher {
@@ -35,11 +36,13 @@ func NewDispatcher(l *slog.Logger, r et.Registry, mgr et.SessionManager) et.Disp
 	}
 
 	d := &dis{
-		logger:    l,
-		reg:       r,
-		mgr:       mgr,
-		done:      make(chan struct{}),
-		completed: queue.NewQueue(),
+		logger: l,
+		reg:    r,
+		mgr:    mgr,
+		done:   make(chan struct{}),
+		dchan:  make(chan *et.Event, MinPipelineQueueSize),
+		pchan:  make(chan *et.Event, MinPipelineQueueSize),
+		cchan:  make(chan *et.EventDataElement, MinPipelineQueueSize),
 	}
 
 	go d.maintainPipelines()
@@ -55,29 +58,43 @@ func (d *dis) Shutdown() {
 	close(d.done)
 }
 
+func (d *dis) DispatchEvent(e *et.Event) error {
+	if e == nil {
+		return errors.New("the event is nil")
+	} else if e.Session == nil {
+		return errors.New("the event has no associated session")
+	} else if e.Session.Done() {
+		return errors.New("the associated session has been terminated")
+	} else if e.Entity == nil || e.Entity.Asset == nil {
+		return errors.New("the event has no associated entity or asset")
+	}
+
+	d.dchan <- e
+	return nil
+}
+
 func (d *dis) maintainPipelines() {
 	ctick := time.NewTicker(5 * time.Second)
 	defer ctick.Stop()
-	qtick := time.NewTicker(time.Second)
-	defer qtick.Stop()
 loop:
 	for {
 		select {
 		case <-d.done:
 			break loop
-		case <-qtick.C:
-			d.fillPipelineQueues()
-		case <-d.completed.Signal():
-			if element, ok := d.completed.Next(); ok {
-				d.completedCallback(element)
-			}
 		case <-ctick.C:
-			if element, ok := d.completed.Next(); ok {
-				d.completedCallback(element)
+			d.fillPipelineQueues()
+		case e := <-d.dchan:
+			if err := d.safeDispatch(e); err != nil {
+				d.logger.Error(fmt.Sprintf("Failed to dispatch event: %s", err.Error()))
+			}
+		case e := <-d.cchan:
+			d.completedCallback(e)
+		case e := <-d.pchan:
+			if err := d.appendToPipeline(e); err != nil {
+				d.logger.Error(fmt.Sprintf("Failed to append to a data pipeline: %s", err.Error()))
 			}
 		}
 	}
-	d.completed.Process(d.completedCallback)
 }
 
 func (d *dis) fillPipelineQueues() {
@@ -103,13 +120,10 @@ func (d *dis) fillPipelineQueues() {
 		for _, atype := range ptypes {
 			if entities, err := s.Queue().Next(atype, numRequested); err == nil && len(entities) > 0 {
 				for _, entity := range entities {
-					event := &et.Event{
+					d.pchan <- &et.Event{
 						Name:    fmt.Sprintf("%s - %s", string(atype), entity.Asset.Key()),
 						Entity:  entity,
 						Session: s,
-					}
-					if err := d.appendToPipelineQueue(event); err != nil {
-						s.Log().WithGroup("event").With("name", event.Name).Error(err.Error())
 					}
 				}
 			}
@@ -134,25 +148,22 @@ func (d *dis) completedCallback(data interface{}) {
 	}
 }
 
-func (d *dis) DispatchEvent(e *et.Event) error {
-	if e == nil {
-		return errors.New("the event is nil")
-	} else if e.Session == nil {
-		return errors.New("the event has no associated session")
-	} else if e.Session.Done() {
-		return errors.New("the associated session has been terminated")
-	} else if e.Entity == nil || e.Entity.Asset == nil {
-		return errors.New("the event has no associated entity or asset")
-	}
-	// do not schedule the same asset more than once
-	if e.Session.Queue().Has(e.Entity) {
-		return errors.New("this event was processed previously")
-	}
-
-	err := e.Session.Queue().Append(e.Entity)
+func (d *dis) safeDispatch(e *et.Event) error {
+	ap, err := d.reg.GetPipeline(e.Entity.Asset.AssetType())
 	if err != nil {
 		return err
 	}
+
+	// do not schedule the same asset more than once
+	if e.Session.Queue().Has(e.Entity) {
+		return nil
+	}
+
+	err = e.Session.Queue().Append(e.Entity)
+	if err != nil {
+		return err
+	}
+
 	// increment the number of events processed in the session
 	if stats := e.Session.Stats(); stats != nil {
 		stats.Lock()
@@ -160,20 +171,15 @@ func (d *dis) DispatchEvent(e *et.Event) error {
 		stats.Unlock()
 	}
 
-	ap, err := d.reg.GetPipeline(e.Entity.Asset.AssetType())
-	if err != nil {
-		return err
-	}
-
 	if qlen := ap.Queue.Len(); e.Meta != nil || qlen < MinPipelineQueueSize {
-		if err := d.appendToPipelineQueue(e); err != nil {
+		if err := d.appendToPipeline(e); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (d *dis) appendToPipelineQueue(e *et.Event) error {
+func (d *dis) appendToPipeline(e *et.Event) error {
 	if e == nil || e.Session == nil || e.Entity == nil || e.Entity.Asset == nil {
 		return errors.New("the event is nil")
 	}
@@ -186,7 +192,7 @@ func (d *dis) appendToPipelineQueue(e *et.Event) error {
 	e.Dispatcher = d
 	if data := et.NewEventDataElement(e); data != nil {
 		_ = e.Session.Queue().Processed(e.Entity)
-		data.Queue = d.completed
+		data.Queue = d.cchan
 		ap.Queue.Append(data)
 	}
 	return nil
