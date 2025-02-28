@@ -73,7 +73,7 @@ func (d *dis) DispatchEvent(e *et.Event) error {
 }
 
 func (d *dis) maintainPipelines() {
-	ctick := time.NewTimer(5 * time.Second)
+	ctick := time.NewTimer(time.Second)
 	defer ctick.Stop()
 	mtick := time.NewTimer(10 * time.Second)
 	defer mtick.Stop()
@@ -87,7 +87,7 @@ loop:
 			mtick.Reset(10 * time.Second)
 		case <-ctick.C:
 			d.fillPipelineQueues()
-			ctick.Reset(5 * time.Second)
+			ctick.Reset(time.Second)
 		case e := <-d.dchan:
 			if err := d.safeDispatch(e); err != nil {
 				d.logger.Error(fmt.Sprintf("Failed to dispatch event: %s", err.Error()))
@@ -172,8 +172,8 @@ func (d *dis) completedCallback(data interface{}) {
 }
 
 func (d *dis) safeDispatch(e *et.Event) error {
-	ap, err := d.reg.GetPipeline(e.Entity.Asset.AssetType())
-	if err != nil {
+	// there is not need to dispatch the event if there's no associated asset pipeline
+	if ap, err := d.reg.GetPipeline(e.Entity.Asset.AssetType()); err != nil || ap == nil {
 		return err
 	}
 
@@ -182,7 +182,7 @@ func (d *dis) safeDispatch(e *et.Event) error {
 		return nil
 	}
 
-	err = e.Session.Queue().Append(e.Entity)
+	err := e.Session.Queue().Append(e.Entity)
 	if err != nil {
 		return err
 	}
@@ -194,7 +194,7 @@ func (d *dis) safeDispatch(e *et.Event) error {
 		stats.Unlock()
 	}
 
-	if qlen := ap.Queue.Len(); e.Meta != nil || qlen < MinPipelineQueueSize {
+	if e.Meta != nil {
 		if err := d.appendToPipeline(e); err != nil {
 			d.logger.Error(fmt.Sprintf("Failed to append to a data pipeline: %s", err.Error()))
 			return err
