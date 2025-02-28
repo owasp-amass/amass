@@ -7,12 +7,15 @@ package enrich
 import (
 	"errors"
 	"log/slog"
+	"net/netip"
 
 	"github.com/owasp-amass/amass/v4/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v4/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	"github.com/owasp-amass/open-asset-model/general"
+	oamnet "github.com/owasp-amass/open-asset-model/network"
 	"github.com/owasp-amass/open-asset-model/platform"
 	oamurl "github.com/owasp-amass/open-asset-model/url"
 )
@@ -89,11 +92,23 @@ func (bu *bannerURLs) query(e *et.Event, asset *dbt.Entity) []*dbt.Entity {
 		return nil
 	}
 
-	var results []*dbt.Entity
+	var results []*oamurl.URL
+	// TODO: in the future, further investigation of out of scope URLs may be needed
 	if urls := support.ExtractURLsFromString(serv.Output); len(urls) > 0 {
-		results = append(results, bu.store(e, urls)...)
+		for _, u := range urls {
+			if addr, err := netip.ParseAddr(u.Host); err == nil {
+				if _, conf := e.Session.Scope().IsAssetInScope(&oamnet.IPAddress{Address: addr}, 0); conf > 0 {
+					results = append(results, u)
+				}
+			} else {
+				if _, conf := e.Session.Scope().IsAssetInScope(&oamdns.FQDN{Name: u.Host}, 0); conf > 0 {
+					results = append(results, u)
+				}
+			}
+		}
 	}
-	return results
+
+	return bu.store(e, results)
 }
 
 func (bu *bannerURLs) store(e *et.Event, urls []*oamurl.URL) []*dbt.Entity {

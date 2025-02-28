@@ -9,9 +9,9 @@ import (
 	"fmt"
 	"log/slog"
 	"net/netip"
-	"time"
 
 	"github.com/owasp-amass/amass/v4/engine/plugins/support"
+	"github.com/owasp-amass/amass/v4/engine/sessions"
 	et "github.com/owasp-amass/amass/v4/engine/types"
 	amassnet "github.com/owasp-amass/amass/v4/utils/net"
 	dbt "github.com/owasp-amass/asset-db/types"
@@ -22,12 +22,19 @@ import (
 )
 
 type ipNetblock struct {
-	name string
-	log  *slog.Logger
+	name   string
+	log    *slog.Logger
+	source *et.Source
 }
 
 func NewIPNetblock() et.Plugin {
-	return &ipNetblock{name: "IP-Netblock"}
+	return &ipNetblock{
+		name: "IP-Netblock",
+		source: &et.Source{
+			Name:       "IP-Netblock",
+			Confidence: 100,
+		},
+	}
 }
 
 func (d *ipNetblock) Name() string {
@@ -65,14 +72,13 @@ func (d *ipNetblock) lookup(e *et.Event) error {
 		return errors.New("failed to extract the IPAddress asset")
 	}
 
-	var netblock *oamnet.Netblock
 	if reserved, cidr := amassnet.IsReservedAddress(ip.Address.String()); reserved {
 		prefix, err := netip.ParsePrefix(cidr)
 		if err != nil {
 			return nil
 		}
 
-		netblock = &oamnet.Netblock{
+		netblock := &oamnet.Netblock{
 			Type: "IPv4",
 			CIDR: prefix,
 		}
@@ -81,54 +87,162 @@ func (d *ipNetblock) lookup(e *et.Event) error {
 		}
 
 		d.reservedAS(e, netblock)
-	} else {
-		var err error
-
-		netblock, err = support.IPToNetblockWithAttempts(e.Session, ip, 60, time.Second)
-		if err != nil {
-			return nil
-		}
+		return nil
 	}
 
-	if nb, err := e.Session.Cache().CreateAsset(netblock); err == nil && nb != nil {
-		_, _ = e.Session.Cache().CreateEdge(&dbt.Edge{
-			Relation:   &general.SimpleRelation{Name: "contains"},
-			FromEntity: nb,
-			ToEntity:   e.Entity,
-		})
-
-		e.Session.Log().Info("relationship discovered", "from",
-			netblock.CIDR.String(), "relation", "contains", "to", ip.Address.String(),
-			slog.Group("plugin", "name", d.name, "handler", d.name+"-Handler"))
+	entry := support.IPNetblock(e.Session, ip.Address.String())
+	if entry == nil {
+		return nil
 	}
 
+	nb, as := d.store(e, entry)
+	if nb == nil || as == nil {
+		return nil
+	}
+
+	d.process(e, e.Entity, nb, as)
 	return nil
 }
 
-func (d *ipNetblock) reservedAS(e *et.Event, netblock *oamnet.Netblock) {
-	asn, err := e.Session.Cache().CreateAsset(&oamnet.AutonomousSystem{Number: 0})
-
-	if err == nil && asn != nil {
-		autnum, err := e.Session.Cache().CreateAsset(&oamreg.AutnumRecord{
-			Number: 0,
-			Handle: "AS0",
-			Name:   "Reserved Network Address Blocks",
-		})
-
-		if err == nil && autnum != nil {
-			_, _ = e.Session.Cache().CreateEdge(&dbt.Edge{
-				Relation:   &general.SimpleRelation{Name: "registration"},
-				FromEntity: asn,
-				ToEntity:   autnum,
-			})
-		}
-
-		if nb, err := e.Session.Cache().CreateAsset(netblock); err == nil && nb != nil {
-			_, _ = e.Session.Cache().CreateEdge(&dbt.Edge{
-				Relation:   &general.SimpleRelation{Name: "announces"},
-				FromEntity: asn,
-				ToEntity:   nb,
-			})
-		}
+func (d *ipNetblock) store(e *et.Event, entry *sessions.CIDRangerEntry) (*dbt.Entity, *dbt.Entity) {
+	netblock := &oamnet.Netblock{
+		Type: "IPv4",
+		CIDR: netip.MustParsePrefix(entry.Net.String()),
 	}
+	if netblock.CIDR.Addr().Is6() {
+		netblock.Type = "IPv6"
+	}
+
+	nb, err := e.Session.Cache().CreateAsset(netblock)
+	if err != nil || nb == nil {
+		return nil, nil
+	}
+
+	_, _ = e.Session.Cache().CreateEntityProperty(nb, &general.SourceProperty{
+		Source:     entry.Src.Name,
+		Confidence: entry.Src.Confidence,
+	})
+
+	edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
+		Relation:   &general.SimpleRelation{Name: "contains"},
+		FromEntity: nb,
+		ToEntity:   e.Entity,
+	})
+	if err != nil || edge == nil {
+		return nil, nil
+	}
+
+	_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
+		Source:     entry.Src.Name,
+		Confidence: entry.Src.Confidence,
+	})
+
+	as, err := e.Session.Cache().CreateAsset(&oamnet.AutonomousSystem{Number: entry.ASN})
+	if err != nil || as == nil {
+		return nil, nil
+	}
+
+	_, _ = e.Session.Cache().CreateEntityProperty(as, &general.SourceProperty{
+		Source:     entry.Src.Name,
+		Confidence: entry.Src.Confidence,
+	})
+
+	edge, err = e.Session.Cache().CreateEdge(&dbt.Edge{
+		Relation:   &general.SimpleRelation{Name: "announces"},
+		FromEntity: as,
+		ToEntity:   nb,
+	})
+	if err != nil || edge == nil {
+		return nil, nil
+	}
+
+	_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
+		Source:     entry.Src.Name,
+		Confidence: entry.Src.Confidence,
+	})
+
+	return nb, as
+}
+
+func (d *ipNetblock) process(e *et.Event, ip, nb, as *dbt.Entity) {
+	ipstr := ip.Asset.Key()
+	nbname := nb.Asset.Key()
+
+	_ = e.Dispatcher.DispatchEvent(&et.Event{
+		Name:    nb.Asset.Key(),
+		Entity:  nb,
+		Session: e.Session,
+	})
+
+	e.Session.Log().Info("relationship discovered", "from", nbname, "relation", "contains",
+		"to", ipstr, slog.Group("plugin", "name", d.name, "handler", d.name+"-Handler"))
+
+	asname := "AS" + as.Asset.Key()
+	_ = e.Dispatcher.DispatchEvent(&et.Event{
+		Name:    asname,
+		Entity:  as,
+		Session: e.Session,
+	})
+
+	e.Session.Log().Info("relationship discovered", "from", asname, "relation", "announces",
+		"to", nbname, slog.Group("plugin", "name", d.name, "handler", d.name+"-Handler"))
+}
+
+func (d *ipNetblock) reservedAS(e *et.Event, netblock *oamnet.Netblock) {
+	nb, err := e.Session.Cache().CreateAsset(netblock)
+	if err != nil || nb == nil {
+		return
+	}
+
+	_, _ = e.Session.Cache().CreateEntityProperty(nb, &general.SourceProperty{
+		Source:     d.source.Name,
+		Confidence: d.source.Confidence,
+	})
+
+	asn, err := e.Session.Cache().CreateAsset(&oamnet.AutonomousSystem{Number: 0})
+	if err != nil || asn == nil {
+		return
+	}
+
+	_, _ = e.Session.Cache().CreateEntityProperty(nb, &general.SourceProperty{
+		Source:     d.source.Name,
+		Confidence: d.source.Confidence,
+	})
+
+	autnum, err := e.Session.Cache().CreateAsset(&oamreg.AutnumRecord{
+		Number: 0,
+		Handle: "AS0",
+		Name:   "Reserved Network Address Blocks",
+	})
+	if err == nil && autnum != nil {
+		return
+	}
+
+	edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
+		Relation:   &general.SimpleRelation{Name: "registration"},
+		FromEntity: asn,
+		ToEntity:   autnum,
+	})
+	if err == nil && edge != nil {
+		return
+	}
+
+	_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
+		Source:     d.source.Name,
+		Confidence: d.source.Confidence,
+	})
+
+	edge, err = e.Session.Cache().CreateEdge(&dbt.Edge{
+		Relation:   &general.SimpleRelation{Name: "announces"},
+		FromEntity: asn,
+		ToEntity:   nb,
+	})
+	if err == nil && edge != nil {
+		return
+	}
+
+	_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
+		Source:     d.source.Name,
+		Confidence: d.source.Confidence,
+	})
 }

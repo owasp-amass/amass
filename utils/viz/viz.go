@@ -5,6 +5,7 @@
 package viz
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	oamcert "github.com/owasp-amass/open-asset-model/certificate"
 	"github.com/owasp-amass/open-asset-model/contact"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
+	"github.com/owasp-amass/open-asset-model/org"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
 )
 
@@ -112,6 +114,8 @@ func VizData(domains []string, since time.Time, db repository.Repository) ([]Nod
 				outRels = append(outRels, "registration")
 			case oam.Organization:
 				out = true
+				in = true
+				inRels = append(inRels, "subsidiary")
 			case oam.Person:
 				out = true
 			case oam.Phone:
@@ -212,10 +216,12 @@ func newNode(db repository.Repository, idx int, a *types.Entity, since time.Time
 	case *contact.Location:
 		parts := []string{v.BuildingNumber, v.StreetName, v.City, v.Province, v.PostalCode}
 		key = strings.Join(parts, " ")
+	case *org.Organization:
+		key = fmt.Sprintf("%s (%s)", v.Name, v.ID)
 	case *oamcert.TLSCertificate:
-		key = "x509 Serial Number: " + v.SerialNumber
+		key = fmt.Sprintf("%s (%s)", v.SubjectCommonName, v.SerialNumber)
 	}
-	title := atype + ": " + key
+	title := fmt.Sprintf("%s: %s", atype, key)
 
 	return &Node{
 		ID:    idx,
@@ -242,7 +248,7 @@ func domainNameInScope(name string, scope []string) bool {
 }
 
 func associatedWithScope(db repository.Repository, asset *types.Entity, scope []string, since time.Time) bool {
-	if edges, err := db.OutgoingEdges(asset, since, "dns_record"); err == nil && len(edges) > 0 {
+	if edges, err := db.OutgoingEdges(asset, since, "dns_record", "node"); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
 			if to, err := db.FindEntityById(edge.ToEntity.ID); err == nil {
 				if n, ok := to.Asset.(*oamdns.FQDN); ok && n != nil && domainNameInScope(n.Name, scope) {
@@ -256,7 +262,7 @@ func associatedWithScope(db repository.Repository, asset *types.Entity, scope []
 }
 
 func followBackForScope(db repository.Repository, asset *types.Entity, scope []string, since time.Time) bool {
-	if edges, err := db.IncomingEdges(asset, since, "dns_record"); err == nil && len(edges) > 0 {
+	if edges, err := db.IncomingEdges(asset, since, "dns_record", "node"); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
 			if rel, ok := edge.Relation.(*oamdns.BasicDNSRelation); ok && rel.Header.RRType != 5 {
 				continue

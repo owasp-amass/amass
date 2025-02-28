@@ -6,7 +6,6 @@ package types
 
 import (
 	"github.com/caffix/pipeline"
-	"github.com/caffix/queue"
 	"github.com/google/uuid"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
@@ -44,7 +43,7 @@ type Asset struct {
 type EventDataElement struct {
 	Event *Event
 	Error error
-	Queue queue.Queue
+	Queue chan *EventDataElement
 }
 
 func NewEventDataElement(e *Event) *EventDataElement {

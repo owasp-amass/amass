@@ -49,7 +49,7 @@ func (r *domrec) check(e *et.Event) error {
 	src := r.plugin.source
 	var findings []*support.Finding
 	if record, ok := e.Meta.(*whoisparser.WhoisInfo); ok && record != nil {
-		findings = append(findings, r.store(e, record, e.Entity, matches)...)
+		r.store(e, record, e.Entity, matches)
 	} else {
 		findings = append(findings, r.lookup(e, e.Entity, src, matches)...)
 	}
@@ -126,12 +126,12 @@ func (r *domrec) oneOfSources(e *et.Event, asset *dbt.Entity, src *et.Source, si
 	return false
 }
 
-func (r *domrec) store(e *et.Event, resp *whoisparser.WhoisInfo, asset *dbt.Entity, m *config.Matches) []*support.Finding {
+func (r *domrec) store(e *et.Event, resp *whoisparser.WhoisInfo, asset *dbt.Entity, m *config.Matches) {
 	var findings []*support.Finding
 	dr := asset.Asset.(*oamreg.DomainRecord)
 
 	if !m.IsMatch(string(oam.FQDN)) {
-		return findings
+		return
 	}
 
 	for _, ns := range resp.Domain.NameServers {
@@ -159,8 +159,11 @@ func (r *domrec) store(e *et.Event, resp *whoisparser.WhoisInfo, asset *dbt.Enti
 		}
 	}
 
+	// process the relations built above immediately
+	support.ProcessAssetsWithSource(e, findings, r.plugin.source, r.plugin.name, r.name)
+
 	if !m.IsMatch(string(oam.ContactRecord)) {
-		return findings
+		return
 	}
 
 	base := dr.WhoisServer + ", " + dr.Domain + ", "
@@ -173,10 +176,9 @@ func (r *domrec) store(e *et.Event, resp *whoisparser.WhoisInfo, asset *dbt.Enti
 	}
 	for _, c := range contacts {
 		if c.WhoisContact != nil {
-			findings = append(findings, r.storeContact(e, c, asset, m)...)
+			r.storeContact(e, c, asset, m)
 		}
 	}
-	return findings
 }
 
 type domrecContact struct {
@@ -185,22 +187,11 @@ type domrecContact struct {
 	DiscoveredAt string
 }
 
-func (r *domrec) storeContact(e *et.Event, c *domrecContact, dr *dbt.Entity, m *config.Matches) []*support.Finding {
-	var findings []*support.Finding
-
+func (r *domrec) storeContact(e *et.Event, c *domrecContact, dr *dbt.Entity, m *config.Matches) {
 	cr, err := e.Session.Cache().CreateAsset(&contact.ContactRecord{DiscoveredAt: c.DiscoveredAt})
 	if err != nil || cr == nil {
-		return findings
+		return
 	}
-
-	record := dr.Asset.(*oamreg.DomainRecord)
-	findings = append(findings, &support.Finding{
-		From:     dr,
-		FromName: "DomainRecord: " + record.Domain,
-		To:       cr,
-		ToName:   "ContactRecord" + c.DiscoveredAt,
-		Rel:      &general.SimpleRelation{Name: c.RelationName},
-	})
 
 	var found bool
 	wc := c.WhoisContact
@@ -223,11 +214,6 @@ func (r *domrec) storeContact(e *et.Event, c *domrecContact, dr *dbt.Entity, m *
 			}
 		}
 	}
-	if wc.Organization != "" && m.IsMatch(string(oam.Organization)) {
-		if a, err := e.Session.Cache().CreateAsset(&org.Organization{Name: wc.Organization}); err == nil && a != nil {
-			r.createSimpleEdge(e.Session.Cache(), &general.SimpleRelation{Name: "organization"}, cr, a)
-		}
-	}
 	if loc := support.StreetAddressToLocation(addr); loc != nil {
 		if a, err := e.Session.Cache().CreateAsset(loc); err == nil && a != nil {
 			r.createSimpleEdge(e.Session.Cache(), &general.SimpleRelation{Name: "location"}, cr, a)
@@ -236,7 +222,7 @@ func (r *domrec) storeContact(e *et.Event, c *domrecContact, dr *dbt.Entity, m *
 	if email := strings.ToLower(wc.Email); m.IsMatch(string(oam.Identifier)) && email != "" {
 		if a, err := e.Session.Cache().CreateAsset(&general.Identifier{
 			UniqueID: fmt.Sprintf("%s:%s", general.EmailAddress, email),
-			EntityID: email,
+			ID:       email,
 			Type:     general.EmailAddress,
 		}); err == nil && a != nil {
 			r.createSimpleEdge(e.Session.Cache(), &general.SimpleRelation{Name: "id"}, cr, a)
@@ -262,7 +248,34 @@ func (r *domrec) storeContact(e *et.Event, c *domrecContact, dr *dbt.Entity, m *
 		}
 	}
 
-	return findings
+	var findings []*support.Finding
+	record := dr.Asset.(*oamreg.DomainRecord)
+	findings = append(findings, &support.Finding{
+		From:     dr,
+		FromName: "DomainRecord: " + record.Domain,
+		To:       cr,
+		ToName:   "ContactRecord" + c.DiscoveredAt,
+		Rel:      &general.SimpleRelation{Name: c.RelationName},
+	})
+	// process the contact record relation immediately
+	support.ProcessAssetsWithSource(e, findings, r.plugin.source, r.plugin.name, r.name)
+
+	// the organization must come last due to a potential chicken-and-egg problem
+	if m.IsMatch(string(oam.Organization)) {
+		orgent, err := support.CreateOrgAsset(e.Session, cr,
+			&general.SimpleRelation{Name: "organization"},
+			&org.Organization{Name: wc.Organization}, r.plugin.source)
+
+		if err == nil && orgent != nil {
+			o := orgent.Asset.(*org.Organization)
+
+			_ = e.Dispatcher.DispatchEvent(&et.Event{
+				Name:    fmt.Sprintf("%s:%s", o.Name, o.ID),
+				Entity:  orgent,
+				Session: e.Session,
+			})
+		}
+	}
 }
 
 func (r *domrec) process(e *et.Event, findings []*support.Finding, src *et.Source) {

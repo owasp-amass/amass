@@ -21,7 +21,7 @@ import (
 	"github.com/owasp-amass/open-asset-model/account"
 	oamcert "github.com/owasp-amass/open-asset-model/certificate"
 	"github.com/owasp-amass/open-asset-model/contact"
-	"github.com/owasp-amass/open-asset-model/dns"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	"github.com/owasp-amass/open-asset-model/file"
 	"github.com/owasp-amass/open-asset-model/financial"
 	"github.com/owasp-amass/open-asset-model/general"
@@ -53,21 +53,26 @@ func (r *mutationResolver) CreateSessionFromJSON(ctx context.Context, input mode
 		t.Split(k)
 	}
 
-	session, err := r.Manager.NewSession(&config)
+	s, err := r.Manager.NewSession(&config)
 	if err != nil {
 		return nil, err
 	}
 
-	return &model.Session{SessionToken: session.ID().String()}, nil
+	return &model.Session{SessionToken: s.ID().String()}, nil
 }
 
 // CreateAsset is the resolver for the createAsset field.
 func (r *mutationResolver) CreateAsset(ctx context.Context, input model.CreateAssetInput) (*model.Asset, error) {
-	token, _ := uuid.Parse(input.SessionToken)
-
+	// Check if the session token is valid
+	token, err := uuid.Parse(input.SessionToken)
+	if err != nil {
+		return nil, errors.New("invalid session token")
+	}
+	// Check if the session exists
+	// and if the session is not already terminated
 	session := r.Manager.GetSession(token)
 	if session == nil {
-		return nil, errors.New("invalid session")
+		return nil, errors.New("invalid session token")
 	}
 
 	data, ok := input.Data.(map[string]interface{})
@@ -111,8 +116,13 @@ func (r *mutationResolver) CreateAsset(ctx context.Context, input model.CreateAs
 // TerminateSession is the resolver for the terminateSession field.
 func (r *mutationResolver) TerminateSession(ctx context.Context, sessionToken string) (*bool, error) {
 	var result bool
-	token, _ := uuid.Parse(sessionToken)
-
+	// Check if the session token is valid
+	token, err := uuid.Parse(sessionToken)
+	if err != nil {
+		return &result, errors.New("invalid session token")
+	}
+	// Check if the session exists
+	// and if the session is not already terminated
 	if r.Manager.GetSession(token) == nil {
 		return &result, errors.New("invalid session token")
 	}
@@ -124,8 +134,13 @@ func (r *mutationResolver) TerminateSession(ctx context.Context, sessionToken st
 
 // SessionStats is the resolver for the sessionStats field.
 func (r *queryResolver) SessionStats(ctx context.Context, sessionToken string) (*model.SessionStats, error) {
-	token, _ := uuid.Parse(sessionToken)
-
+	// Check if the session token is valid
+	token, err := uuid.Parse(sessionToken)
+	if err != nil {
+		return nil, errors.New("invalid session token")
+	}
+	// Check if the session exists
+	// and if the session is not already terminated
 	session := r.Manager.GetSession(token)
 	if session == nil {
 		return nil, errors.New("invalid session token")
@@ -184,7 +199,7 @@ func createSeedAsset(atype string) oam.Asset {
 	case string(oam.File):
 		return &file.File{}
 	case string(oam.FQDN):
-		return &dns.FQDN{}
+		return &oamdns.FQDN{}
 	case string(oam.FundsTransfer):
 		return &financial.FundsTransfer{}
 	case string(oam.Identifier):

@@ -12,6 +12,7 @@ package sessions
  */
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -39,31 +40,30 @@ func NewManager(l *slog.Logger) et.SessionManager {
 
 func (r *manager) NewSession(cfg *config.Config) (et.Session, error) {
 	s, err := CreateSession(cfg)
-	if err != nil {
-		return nil, err
+	if err == nil {
+		err = r.AddSession(s)
+
+		if err == nil {
+			return s, nil
+		}
 	}
-	if _, err = r.AddSession(s); err != nil {
-		return nil, err
-	}
-	return s, nil
+	return nil, err
 }
 
 // Add: adds a session to a session storage after checking the session config.
-func (r *manager) AddSession(s et.Session) (uuid.UUID, error) {
+func (r *manager) AddSession(s et.Session) error {
 	if s == nil {
-		return uuid.UUID{}, nil
+		return errors.New("the provided session is nil")
 	}
 
 	r.Lock()
-	defer r.Unlock()
-
-	var id uuid.UUID
 	if sess, ok := s.(*Session); ok {
-		id = sess.id
-		r.sessions[id] = sess
+		r.sessions[sess.id] = sess
 	}
+	r.Unlock()
+
 	// TODO: Need to add the session config checks here (using the Registry)
-	return id, nil
+	return nil
 }
 
 // CancelSession: cancels a session in a session storage.
@@ -91,8 +91,16 @@ func (r *manager) CancelSession(id uuid.UUID) {
 	r.Lock()
 	defer r.Unlock()
 
+	if qdb := r.sessions[id].Queue(); qdb != nil {
+		if err := qdb.Close(); err != nil {
+			s.Log().Error(fmt.Sprintf("failed to close the queue for session %s: %v", id, err))
+		}
+	}
 	if c := r.sessions[id].Cache(); c != nil {
 		c.Close()
+	}
+	if s, ok := r.sessions[id].(*Session); ok {
+		s.ranger = nil
 	}
 	if dir := r.sessions[id].TmpDir(); dir != "" {
 		os.RemoveAll(dir)
@@ -102,10 +110,19 @@ func (r *manager) CancelSession(id uuid.UUID) {
 			s.Log().Error(fmt.Sprintf("failed to close the database for session %s: %v", id, err))
 		}
 	}
-	if set := s.EventSet(); set != nil {
-		set.Close()
-	}
 	delete(r.sessions, id)
+}
+
+func (r *manager) GetSessions() []et.Session {
+	r.RLock()
+	defer r.RUnlock()
+
+	sessions := make([]et.Session, 0, len(r.sessions))
+	for _, s := range r.sessions {
+		sessions = append(sessions, s)
+	}
+
+	return sessions
 }
 
 // GetSession: returns a session from a session storage.

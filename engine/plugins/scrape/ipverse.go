@@ -10,15 +10,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/netip"
-	"time"
 
 	"github.com/owasp-amass/amass/v4/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v4/engine/types"
 	"github.com/owasp-amass/amass/v4/utils/net/http"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
-	"github.com/owasp-amass/open-asset-model/general"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
 	"go.uber.org/ratelimit"
 )
@@ -29,6 +26,7 @@ type ipverse struct {
 	log    *slog.Logger
 	rlimit ratelimit.Limiter
 	source *et.Source
+	asns   map[int]struct{}
 }
 
 func NewIPVerse() et.Plugin {
@@ -40,6 +38,7 @@ func NewIPVerse() et.Plugin {
 			Name:       "GitHub-IPVerse",
 			Confidence: 90,
 		},
+		asns: make(map[int]struct{}),
 	}
 }
 
@@ -75,50 +74,31 @@ func (v *ipverse) check(e *et.Event) error {
 		return errors.New("failed to extract the AutonomousSystem asset")
 	}
 
-	since, err := support.TTLStartTime(e.Session.Config(),
-		string(oam.AutonomousSystem), string(oam.Netblock), v.name)
-	if err != nil {
-		return err
+	if _, found := v.asns[as.Number]; found {
+		return nil
 	}
 
-	var cidrs []*dbt.Entity
-	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, v.source, since) {
-		cidrs = append(cidrs, v.lookup(e, e.Entity, since, v.source)...)
-	} else {
-		cidrs = append(cidrs, v.query(e, e.Entity)...)
-		support.MarkAssetMonitored(e.Session, e.Entity, v.source)
+	rec := v.query(e.Entity)
+	if rec == nil {
+		return nil
 	}
+	v.asns[as.Number] = struct{}{}
 
-	if _, conf := e.Session.Scope().IsAssetInScope(as, 0); conf > 0 {
-		for _, cidr := range cidrs {
-			v.process(e, e.Entity, cidr)
-		}
+	for _, cidr := range append(rec.CIDRs.IPv4, rec.CIDRs.IPv6...) {
+		_ = support.AddNetblock(e.Session, cidr, as.Number, v.source)
 	}
 	return nil
 }
 
-func (v *ipverse) lookup(e *et.Event, as *dbt.Entity, since time.Time, src *et.Source) []*dbt.Entity {
-	edges, err := e.Session.Cache().OutgoingEdges(as, since, "announces")
-	if err != nil {
-		return nil
-	}
-
-	var results []*dbt.Entity
-	for _, edge := range edges {
-		if tags, err := e.Session.Cache().GetEdgeTags(edge, since, src.Name); err == nil && len(tags) > 0 {
-			for _, tag := range tags {
-				if _, ok := tag.Property.(*general.SourceProperty); ok {
-					if nb, err := e.Session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && nb != nil {
-						results = append(results, nb)
-					}
-				}
-			}
-		}
-	}
-	return results
+type record struct {
+	ASN   int `json:"asn"`
+	CIDRs struct {
+		IPv4 []string `json:"ipv4"`
+		IPv6 []string `json:"ipv6"`
+	} `json:"subnets"`
 }
 
-func (v *ipverse) query(e *et.Event, asset *dbt.Entity) []*dbt.Entity {
+func (v *ipverse) query(asset *dbt.Entity) *record {
 	v.rlimit.Take()
 
 	as := asset.Asset.(*oamnet.AutonomousSystem)
@@ -127,67 +107,9 @@ func (v *ipverse) query(e *et.Event, asset *dbt.Entity) []*dbt.Entity {
 		return nil
 	}
 
-	type record struct {
-		ASN   int `json:"asn"`
-		CIDRs struct {
-			IPv4 []string `json:"ipv4"`
-			IPv6 []string `json:"ipv6"`
-		} `json:"subnets"`
-	}
-
 	var result record
 	if err := json.Unmarshal([]byte(resp.Body), &result); err != nil {
 		return nil
 	}
-
-	var cidrs []netip.Prefix
-	for _, ip := range append(result.CIDRs.IPv4, result.CIDRs.IPv6...) {
-		if cidr, err := netip.ParsePrefix(ip); err == nil {
-			cidrs = append(cidrs, cidr)
-		}
-	}
-
-	return v.store(e, cidrs, asset, v.source)
-}
-
-func (v *ipverse) store(e *et.Event, cidrs []netip.Prefix, as *dbt.Entity, src *et.Source) []*dbt.Entity {
-	var results []*dbt.Entity
-
-	for _, cidr := range cidrs {
-		ntype := "IPv4"
-		if cidr.Addr().Is6() {
-			ntype = "IPv6"
-		}
-
-		if nb, err := e.Session.Cache().CreateAsset(&oamnet.Netblock{
-			CIDR: cidr,
-			Type: ntype,
-		}); err == nil && nb != nil {
-			results = append(results, nb)
-
-			if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
-				Relation:   &general.SimpleRelation{Name: "announces"},
-				FromEntity: as,
-				ToEntity:   nb,
-			}); err == nil && edge != nil {
-				_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
-					Source:     src.Name,
-					Confidence: src.Confidence,
-				})
-			}
-		}
-	}
-
-	return results
-}
-
-func (v *ipverse) process(e *et.Event, as, nb *dbt.Entity) {
-	_ = e.Dispatcher.DispatchEvent(&et.Event{
-		Name:    nb.Asset.Key(),
-		Entity:  nb,
-		Session: e.Session,
-	})
-
-	e.Session.Log().Info("relationship discovered", "from", as.Asset.Key(), "relation",
-		"announces", "to", nb.Asset.Key(), slog.Group("plugin", "name", v.name, "handler", v.name+"-Handler"))
+	return &result
 }
