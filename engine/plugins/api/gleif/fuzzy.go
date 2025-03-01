@@ -10,9 +10,13 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"net/url"
+	"strings"
 	"time"
 
+	"github.com/adrg/strutil"
+	"github.com/adrg/strutil/metrics"
 	"github.com/owasp-amass/amass/v4/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v4/engine/types"
 	"github.com/owasp-amass/amass/v4/utils/net/http"
@@ -150,8 +154,21 @@ func (fc *fuzzyCompletions) query(e *et.Event, orgent *dbt.Entity) *dbt.Entity {
 				}
 			}
 
+			swg := metrics.NewSmithWatermanGotoh()
+			swg.CaseSensitive = false
+			swg.GapPenalty = -0.1
+			swg.Substitution = metrics.MatchMismatch{
+				Match:    1,
+				Mismatch: -0.5,
+			}
+
 			for _, match := range partial {
-				score := 10
+				if !strings.Contains(match, o.Name) {
+					continue
+				}
+
+				sim := strutil.Similarity(o.Name, match, swg)
+				score := int(math.Round(sim * 30))
 
 				if len(partial) == 1 {
 					score += 30
@@ -166,7 +183,7 @@ func (fc *fuzzyCompletions) query(e *et.Event, orgent *dbt.Entity) *dbt.Entity {
 
 				if r, err := fc.plugin.getLEIRecord(id); err == nil {
 					if fc.locMatch(e, orgent, r) {
-						score += 30
+						score += 40
 					}
 					if score > conf {
 						rec = r
