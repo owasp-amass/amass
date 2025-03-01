@@ -50,7 +50,7 @@ func TestGetDirectChildrenRecord(t *testing.T) {
 	p := NewGLEIF()
 	g := p.(*gleif)
 
-	lei := "ZXTILKJKG63JELOEG630"
+	lei := "INR2EJN1ERAN0W5ZP974"
 	id := &general.Identifier{
 		UniqueID: fmt.Sprintf("%s:%s", general.LEICode, lei),
 		ID:       lei,
@@ -60,5 +60,5 @@ func TestGetDirectChildrenRecord(t *testing.T) {
 	children, err := g.getDirectChildrenRecords(id)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, children)
-	assert.GreaterOrEqual(t, len(children), 12)
+	assert.GreaterOrEqual(t, len(children), 11)
 }
