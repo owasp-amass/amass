@@ -45,7 +45,7 @@ func (g *gleif) leiToOrgEntity(e *et.Event, ident *dbt.Entity) *dbt.Entity {
 	return nil
 }
 
-func (g *gleif) updateOrgFromLEIRecord(e *et.Event, orgent *dbt.Entity, lei *leiRecord) {
+func (g *gleif) updateOrgFromLEIRecord(e *et.Event, orgent *dbt.Entity, lei *leiRecord, conf int) {
 	o := orgent.Asset.(*org.Organization)
 
 	// check if the org entity already has a LEI identifier
@@ -56,14 +56,14 @@ func (g *gleif) updateOrgFromLEIRecord(e *et.Event, orgent *dbt.Entity, lei *lei
 		}
 	}
 
-	if _, err := g.createLEIFromRecord(e, orgent, lei); err != nil {
+	if _, err := g.createLEIFromRecord(e, orgent, lei, conf); err != nil {
 		msg := fmt.Sprintf("failed to create the LEI Identifier from the record: %s", err.Error())
 		e.Session.Log().Error(msg, slog.Group("plugin", "name", g.name, "handler", g.name))
 	}
 
 	o.LegalName = strings.ToLower(lei.Attributes.Entity.LegalName.Name)
 	if o.LegalName != "" {
-		_ = g.addIdentifiersToOrg(e, orgent, general.LegalName, []string{o.LegalName})
+		_ = g.addIdentifiersToOrg(e, orgent, general.LegalName, []string{o.LegalName}, conf)
 	}
 
 	var otherNames []string
@@ -73,7 +73,7 @@ func (g *gleif) updateOrgFromLEIRecord(e *et.Event, orgent *dbt.Entity, lei *lei
 	for _, other := range lei.Attributes.Entity.TransliteratedOtherNames {
 		otherNames = append(otherNames, strings.ToLower(other.Name))
 	}
-	_ = g.addIdentifiersToOrg(e, orgent, general.OrganizationName, otherNames)
+	_ = g.addIdentifiersToOrg(e, orgent, general.OrganizationName, otherNames, conf)
 
 	o.FoundingDate = lei.Attributes.Entity.CreationDate
 	o.Jurisdiction = lei.Attributes.Entity.Jurisdiction
@@ -85,25 +85,24 @@ func (g *gleif) updateOrgFromLEIRecord(e *et.Event, orgent *dbt.Entity, lei *lei
 	}
 
 	addr := g.buildAddrFromLEIAddress(&lei.Attributes.Entity.LegalAddress)
-	_ = g.addAddress(e, orgent, general.SimpleRelation{Name: "legal_address"}, addr)
+	_ = g.addAddress(e, orgent, general.SimpleRelation{Name: "legal_address"}, addr, conf)
 
 	addr = g.buildAddrFromLEIAddress(&lei.Attributes.Entity.HeadquartersAddress)
-	_ = g.addAddress(e, orgent, general.SimpleRelation{Name: "hq_address"}, addr)
+	_ = g.addAddress(e, orgent, general.SimpleRelation{Name: "hq_address"}, addr, conf)
 
 	for _, a := range lei.Attributes.Entity.OtherAddresses {
 		addr = g.buildAddrFromLEIAddress(&a)
-		_ = g.addAddress(e, orgent, general.SimpleRelation{Name: "location"}, addr)
+		_ = g.addAddress(e, orgent, general.SimpleRelation{Name: "location"}, addr, conf)
 	}
 
-	_ = g.addIdentifiersToOrg(e, orgent, general.BankIDCode, lei.Attributes.BIC)
-	_ = g.addIdentifiersToOrg(e, orgent, general.MarketIDCode, lei.Attributes.MIC)
-	_ = g.addIdentifiersToOrg(e, orgent, general.OpenCorpID, []string{lei.Attributes.OCID})
-	_ = g.addIdentifiersToOrg(e, orgent, general.SPGlobalCompanyID, lei.Attributes.SPGlobal)
-
+	_ = g.addIdentifiersToOrg(e, orgent, general.BankIDCode, lei.Attributes.BIC, conf)
+	_ = g.addIdentifiersToOrg(e, orgent, general.MarketIDCode, lei.Attributes.MIC, conf)
+	_ = g.addIdentifiersToOrg(e, orgent, general.OpenCorpID, []string{lei.Attributes.OCID}, conf)
+	_ = g.addIdentifiersToOrg(e, orgent, general.SPGlobalCompanyID, lei.Attributes.SPGlobal, conf)
 	_, _ = e.Session.Cache().CreateEntity(orgent)
 }
 
-func (g *gleif) addAddress(e *et.Event, orgent *dbt.Entity, rel oam.Relation, addr string) error {
+func (g *gleif) addAddress(e *et.Event, orgent *dbt.Entity, rel oam.Relation, addr string, conf int) error {
 	loc := support.StreetAddressToLocation(addr)
 	if loc == nil {
 		return errors.New("failed to create location")
@@ -117,10 +116,10 @@ func (g *gleif) addAddress(e *et.Event, orgent *dbt.Entity, rel oam.Relation, ad
 
 	_, _ = e.Session.Cache().CreateEntityProperty(a, &general.SourceProperty{
 		Source:     g.source.Name,
-		Confidence: g.source.Confidence,
+		Confidence: conf,
 	})
 
-	if err := g.createRelation(e.Session, orgent, rel, a); err != nil {
+	if err := g.createRelation(e.Session, orgent, rel, a, conf); err != nil {
 		e.Session.Log().Error(err.Error(), slog.Group("plugin", "name", g.name, "handler", g.name))
 		return err
 	}
@@ -128,7 +127,7 @@ func (g *gleif) addAddress(e *et.Event, orgent *dbt.Entity, rel oam.Relation, ad
 	return nil
 }
 
-func (g *gleif) addIdentifiersToOrg(e *et.Event, orgent *dbt.Entity, idtype string, ids []string) error {
+func (g *gleif) addIdentifiersToOrg(e *et.Event, orgent *dbt.Entity, idtype string, ids []string, conf int) error {
 	for _, id := range ids {
 		if id == "" {
 			continue
@@ -147,10 +146,10 @@ func (g *gleif) addIdentifiersToOrg(e *et.Event, orgent *dbt.Entity, idtype stri
 
 		_, _ = e.Session.Cache().CreateEntityProperty(ident, &general.SourceProperty{
 			Source:     g.source.Name,
-			Confidence: g.source.Confidence,
+			Confidence: conf,
 		})
 
-		if err := g.createRelation(e.Session, orgent, general.SimpleRelation{Name: "id"}, ident); err != nil {
+		if err := g.createRelation(e.Session, orgent, general.SimpleRelation{Name: "id"}, ident, conf); err != nil {
 			return err
 		}
 	}
