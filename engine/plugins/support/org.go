@@ -90,7 +90,7 @@ func createOrgUnlock() {
 }
 
 func ExtractBrandName(name string) string {
-	start := `([a-zA-Z0-9]{1}[\sa-zA-Z0-9.-']+)([,\s]{1,3})`
+	start := `([a-zA-Z0-9]{1}[\sa-zA-Z0-9.\-']+)([,\s]{1,3})`
 	exp := start + "(" + strings.Join(acronyms, "|") + `)?([.,\s]{0,3})$`
 	re := regexp.MustCompile(exp)
 
