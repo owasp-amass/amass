@@ -105,6 +105,7 @@ func (d *dnsTXT) process(e *et.Event, fqdn *dbt.Entity, txtRecords []*resolve.Ex
     d.store(e, fqdn, txtRecords)
 
     for _, record := range txtRecords {
-        e.Session.Log().Info("TXT record discovered", "fqdn", fqdn.Asset.(*oamdns.FQDN).Name, "txt", record.Data, "plugin", d.plugin.name, "handler", d.name)
+        e.Session.Log().Info("relationship discovered", "from", fqdn.Asset.(*oamdns.FQDN).Name, "relation", "txt_record",
+            "to", record.Data, slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
     }
 }
