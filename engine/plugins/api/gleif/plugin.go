@@ -74,7 +74,7 @@ func (g *gleif) Stop() {
 	g.log.Info("Plugin stopped")
 }
 
-func (g *gleif) createRelation(session et.Session, obj *dbt.Entity, rel oam.Relation, subject *dbt.Entity) error {
+func (g *gleif) createRelation(session et.Session, obj *dbt.Entity, rel oam.Relation, subject *dbt.Entity, conf int) error {
 	edge, err := session.Cache().CreateEdge(&dbt.Edge{
 		Relation:   rel,
 		FromEntity: obj,
@@ -88,7 +88,7 @@ func (g *gleif) createRelation(session et.Session, obj *dbt.Entity, rel oam.Rela
 
 	_, err = session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
 		Source:     g.source.Name,
-		Confidence: g.source.Confidence,
+		Confidence: conf,
 	})
 	return err
 }

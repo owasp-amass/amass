@@ -85,6 +85,10 @@ loop:
 		case <-mtick.C:
 			checkOnTheHeap()
 			mtick.Reset(10 * time.Second)
+		default:
+		}
+
+		select {
 		case <-ctick.C:
 			d.fillPipelineQueues()
 			ctick.Reset(time.Second)

@@ -214,7 +214,7 @@ func (d *ipNetblock) reservedAS(e *et.Event, netblock *oamnet.Netblock) {
 		Handle: "AS0",
 		Name:   "Reserved Network Address Blocks",
 	})
-	if err == nil && autnum != nil {
+	if err != nil || autnum == nil {
 		return
 	}
 
@@ -223,7 +223,7 @@ func (d *ipNetblock) reservedAS(e *et.Event, netblock *oamnet.Netblock) {
 		FromEntity: asn,
 		ToEntity:   autnum,
 	})
-	if err == nil && edge != nil {
+	if err != nil || edge == nil {
 		return
 	}
 
@@ -237,7 +237,7 @@ func (d *ipNetblock) reservedAS(e *et.Event, netblock *oamnet.Netblock) {
 		FromEntity: asn,
 		ToEntity:   nb,
 	})
-	if err == nil && edge != nil {
+	if err != nil || edge == nil {
 		return
 	}
 

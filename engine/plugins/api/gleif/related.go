@@ -115,9 +115,10 @@ func (ro *relatedOrgs) store(e *et.Event, ident *dbt.Entity, parent *leiRecord, 
 		parentent, err := support.CreateOrgAsset(e.Session, orgent, nil, parentorg, ro.plugin.source)
 		if err == nil {
 			orgs = append(orgs, parentent)
-			ro.plugin.updateOrgFromLEIRecord(e, parentent, parent)
+			ro.plugin.updateOrgFromLEIRecord(e, parentent, parent, ro.plugin.source.Confidence)
 			support.MarkAssetMonitored(e.Session, parentent, ro.plugin.source)
-			_ = ro.plugin.createRelation(e.Session, parentent, &general.SimpleRelation{Name: "subsidiary"}, orgent)
+			_ = ro.plugin.createRelation(e.Session, parentent,
+				&general.SimpleRelation{Name: "subsidiary"}, orgent, ro.plugin.source.Confidence)
 		}
 	}
 
@@ -128,7 +129,7 @@ func (ro *relatedOrgs) store(e *et.Event, ident *dbt.Entity, parent *leiRecord, 
 			&general.SimpleRelation{Name: "subsidiary"}, childorg, ro.plugin.source)
 		if err == nil {
 			orgs = append(orgs, childent)
-			ro.plugin.updateOrgFromLEIRecord(e, childent, child)
+			ro.plugin.updateOrgFromLEIRecord(e, childent, child, ro.plugin.source.Confidence)
 			support.MarkAssetMonitored(e.Session, childent, ro.plugin.source)
 		}
 	}

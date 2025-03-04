@@ -10,9 +10,13 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"net/url"
+	"strings"
 	"time"
 
+	"github.com/adrg/strutil"
+	"github.com/adrg/strutil/metrics"
 	"github.com/owasp-amass/amass/v4/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v4/engine/types"
 	"github.com/owasp-amass/amass/v4/utils/net/http"
@@ -66,20 +70,28 @@ func (fc *fuzzyCompletions) lookup(e *et.Event, orgent *dbt.Entity, since time.T
 }
 
 func (fc *fuzzyCompletions) query(e *et.Event, orgent *dbt.Entity) *dbt.Entity {
-	exclusive := true
-	var leiList []*general.Identifier
+	var conf int
+	var rec *leiRecord
 
 	if leient := fc.plugin.orgEntityToLEI(e, orgent); leient != nil {
-		leiList = append(leiList, leient.Asset.(*general.Identifier))
+		lei := leient.Asset.(*general.Identifier)
+
+		if r, err := fc.plugin.getLEIRecord(lei); err == nil {
+			rec = r
+			conf = 100
+		}
 	}
 
-	if len(leiList) == 0 {
+	if rec == nil {
 		o := orgent.Asset.(*org.Organization)
-		u := "https://api.gleif.org/api/v1/fuzzycompletions?field=fulltext&q=" + url.QueryEscape(o.Name)
+		brand := support.ExtractBrandName(o.Name)
+		u := "https://api.gleif.org/api/v1/fuzzycompletions?field=fulltext&q=" + url.QueryEscape(brand)
 
 		fc.plugin.rlimit.Take()
 		resp, err := http.RequestWebPage(context.TODO(), &http.Request{URL: u})
 		if err != nil || resp.Body == "" {
+			msg := fmt.Sprintf("Failed to obtain the LEI record for %s: %s", o.Name, err)
+			e.Session.Log().Error(msg, slog.Group("plugin", "name", fc.plugin.name, "handler", fc.name))
 			return nil
 		}
 
@@ -103,9 +115,10 @@ func (fc *fuzzyCompletions) query(e *et.Event, orgent *dbt.Entity) *dbt.Entity {
 			} `json:"data"`
 		}
 		if err := json.Unmarshal([]byte(resp.Body), &result); err != nil || len(result.Data) == 0 {
+			msg := fmt.Sprintf("Failed to unmarshal the LEI record for %s: %s", o.Name, err)
+			e.Session.Log().Error(msg, slog.Group("plugin", "name", fc.plugin.name, "handler", fc.name))
 			return nil
 		}
-		exclusive = len(result.Data) == 1
 
 		var names []string
 		m := make(map[string]string)
@@ -117,47 +130,75 @@ func (fc *fuzzyCompletions) query(e *et.Event, orgent *dbt.Entity) *dbt.Entity {
 		}
 
 		if exact, partial, found := support.OrganizationNameMatch(e.Session, orgent, names); found {
-			var matches []string
+			for _, match := range exact {
+				score := 30
 
-			if elen := len(exact); elen > 0 {
-				if elen == 1 {
-					exclusive = true
+				if len(exact) == 1 {
+					score += 30
 				}
-				matches = append(matches, exact...)
-			} else if len(partial) > 0 {
-				matches = append(matches, partial...)
-			}
 
-			for _, match := range matches {
-				id := m[match]
-
-				leiList = append(leiList, &general.Identifier{
-					UniqueID: fmt.Sprintf("%s:%s", general.LEICode, id),
-					ID:       id,
+				lei := m[match]
+				id := &general.Identifier{
+					UniqueID: fmt.Sprintf("%s:%s", general.LEICode, lei),
+					ID:       lei,
 					Type:     general.LEICode,
-				})
+				}
+
+				if r, err := fc.plugin.getLEIRecord(id); err == nil {
+					if fc.locMatch(e, orgent, r) {
+						score += 40
+					}
+					if score > conf {
+						rec = r
+						conf = score
+					}
+				}
+			}
+
+			swg := metrics.NewSmithWatermanGotoh()
+			swg.CaseSensitive = false
+			swg.GapPenalty = -0.1
+			swg.Substitution = metrics.MatchMismatch{
+				Match:    1,
+				Mismatch: -0.5,
+			}
+
+			for _, match := range partial {
+				if !strings.Contains(strings.ToLower(match), strings.ToLower(brand)) {
+					continue
+				}
+
+				sim := strutil.Similarity(o.Name, match, swg)
+				score := int(math.Round(sim * 30))
+
+				if len(partial) == 1 {
+					score += 30
+				}
+
+				lei := m[match]
+				id := &general.Identifier{
+					UniqueID: fmt.Sprintf("%s:%s", general.LEICode, lei),
+					ID:       lei,
+					Type:     general.LEICode,
+				}
+
+				if r, err := fc.plugin.getLEIRecord(id); err == nil {
+					if fc.locMatch(e, orgent, r) {
+						score += 40
+					}
+					if score > conf {
+						rec = r
+						conf = score
+					}
+				}
 			}
 		}
-
-		if len(leiList) == 0 {
-			return nil
-		}
 	}
 
-	var rec *leiRecord
-	for _, lei := range leiList {
-		r, err := fc.plugin.getLEIRecord(lei)
-
-		if err == nil && r != nil && (exclusive || fc.locMatch(e, orgent, r)) {
-			rec = r
-			break
-		}
-	}
 	if rec == nil {
 		return nil
 	}
-
-	return fc.store(e, orgent, rec)
+	return fc.store(e, orgent, rec, conf)
 }
 
 func (fc *fuzzyCompletions) locMatch(e *et.Event, orgent *dbt.Entity, rec *leiRecord) bool {
@@ -211,10 +252,10 @@ func (fc *fuzzyCompletions) locMatch(e *et.Event, orgent *dbt.Entity, rec *leiRe
 	return false
 }
 
-func (fc *fuzzyCompletions) store(e *et.Event, orgent *dbt.Entity, rec *leiRecord) *dbt.Entity {
-	fc.plugin.updateOrgFromLEIRecord(e, orgent, rec)
+func (fc *fuzzyCompletions) store(e *et.Event, orgent *dbt.Entity, rec *leiRecord, conf int) *dbt.Entity {
+	fc.plugin.updateOrgFromLEIRecord(e, orgent, rec, conf)
 
-	ident, err := fc.plugin.createLEIFromRecord(e, orgent, rec)
+	ident, err := fc.plugin.createLEIFromRecord(e, orgent, rec, conf)
 	if err != nil {
 		e.Session.Log().Error(err.Error(), slog.Group("plugin", "name", fc.plugin.name, "handler", fc.name))
 		return nil

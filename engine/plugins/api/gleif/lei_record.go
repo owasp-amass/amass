@@ -82,7 +82,7 @@ func (g *gleif) getDirectChildrenRecords(id *general.Identifier) ([]*leiRecord, 
 	return children, nil
 }
 
-func (g *gleif) createLEIIdentifier(session et.Session, orgent *dbt.Entity, lei *general.Identifier) (*dbt.Entity, error) {
+func (g *gleif) createLEIIdentifier(session et.Session, orgent *dbt.Entity, lei *general.Identifier, conf int) (*dbt.Entity, error) {
 	id, err := session.Cache().CreateAsset(lei)
 	if err != nil {
 		return nil, err
@@ -92,18 +92,18 @@ func (g *gleif) createLEIIdentifier(session et.Session, orgent *dbt.Entity, lei 
 
 	_, _ = session.Cache().CreateEntityProperty(id, &general.SourceProperty{
 		Source:     g.source.Name,
-		Confidence: g.source.Confidence,
+		Confidence: conf,
 	})
 
 	if orgent != nil {
-		if err := g.createRelation(session, orgent, general.SimpleRelation{Name: "id"}, id); err != nil {
+		if err := g.createRelation(session, orgent, general.SimpleRelation{Name: "id"}, id, conf); err != nil {
 			return nil, err
 		}
 	}
 	return id, nil
 }
 
-func (g *gleif) createLEIFromRecord(e *et.Event, orgent *dbt.Entity, lei *leiRecord) (*dbt.Entity, error) {
+func (g *gleif) createLEIFromRecord(e *et.Event, orgent *dbt.Entity, lei *leiRecord, conf int) (*dbt.Entity, error) {
 	return g.createLEIIdentifier(e.Session, orgent, &general.Identifier{
 		UniqueID:       fmt.Sprintf("%s:%s", general.LEICode, lei.ID),
 		ID:             lei.ID,
@@ -112,7 +112,7 @@ func (g *gleif) createLEIFromRecord(e *et.Event, orgent *dbt.Entity, lei *leiRec
 		CreationDate:   lei.Attributes.Registration.InitialRegistrationDate,
 		UpdatedDate:    lei.Attributes.Registration.LastUpdateDate,
 		ExpirationDate: lei.Attributes.Registration.NextRenewalDate,
-	})
+	}, conf)
 }
 
 func (g *gleif) buildAddrFromLEIAddress(addr *leiAddress) string {
