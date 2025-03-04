@@ -22,7 +22,7 @@ type dnsTXT struct {
 func (d *dnsTXT) check(e *et.Event) error {
     _, ok := e.Entity.Asset.(*oamdns.FQDN)
     if !ok {
-        slog.Error("txt-error-001: failed to extract the FQDN asset", "event", e)
+        slog.Error("failed to extract the FQDN asset", "event", e)
         return errors.New("failed to extract the FQDN asset")
     }
 
@@ -43,7 +43,7 @@ func (d *dnsTXT) check(e *et.Event) error {
     if len(txtRecords) > 0 {
         d.process(e, e.Entity, txtRecords)
     } else {
-        slog.Warn("txt-error-003: no TXT records found", "event", e)
+        slog.Warn("no TXT records found", "event", e)
     }
     return nil
 }
