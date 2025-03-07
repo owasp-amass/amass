@@ -69,7 +69,15 @@ func (d *dnsPlugin) Start(r et.Registry) error {
 		return err
 	}
 
-	d.cname = &dnsCNAME{name: d.name + "-CNAME", plugin: d}
+	cname := d.name + "-CNAME"
+	d.cname = &dnsCNAME{
+		name:   cname,
+		plugin: d,
+		source: &et.Source{
+			Name:       cname,
+			Confidence: 100,
+		},
+	}
 	if err := r.RegisterHandler(&et.Handler{
 		Plugin:       d,
 		Name:         d.cname.name,
@@ -82,10 +90,15 @@ func (d *dnsPlugin) Start(r et.Registry) error {
 		return err
 	}
 
+	ipname := d.name + "-IP"
 	d.ip = &dnsIP{
-		name:    d.name + "-IP",
+		name:    ipname,
 		queries: []uint16{dns.TypeA, dns.TypeAAAA},
 		plugin:  d,
+		source: &et.Source{
+			Name:       ipname,
+			Confidence: 100,
+		},
 	}
 	if err := r.RegisterHandler(&et.Handler{
 		Plugin:       d,
@@ -126,7 +139,15 @@ func (d *dnsPlugin) Start(r et.Registry) error {
 	}
 	go d.subs.releaseSessions()
 
-	d.txt = &dnsTXT{name: d.name + "-TXT", plugin: d}
+	txtname := d.name + "-TXT"
+	d.txt = &dnsTXT{
+		name:   d.name + "-TXT",
+		plugin: d,
+		source: &et.Source{
+			Name:       txtname,
+			Confidence: 100,
+		},
+	}
 	if err := r.RegisterHandler(&et.Handler{
 		Plugin:       d,
 		Name:         d.txt.name,
