@@ -75,7 +75,7 @@ type outLookup map[string]*utils.Output
 func main() {
 	var args dbArgs
 	var help1, help2 bool
-	dbCommand := flag.NewFlagSet("db", flag.ContinueOnError)
+	dbCommand := flag.NewFlagSet("subs", flag.ContinueOnError)
 
 	args.Domains = stringset.New()
 	defer args.Domains.Close()
