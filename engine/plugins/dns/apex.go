@@ -32,16 +32,22 @@ func (d *dnsApex) check(e *et.Event) error {
 	}
 
 	// determine which domain apex is the parent of this name
-	var apex *dbt.Entity
+	var name string
 	best := len(fqdn.Name)
-	for _, name := range d.plugin.apexList.Slice() {
-		if idx := strings.Index(fqdn.Name, name); idx != -1 && idx != 0 && idx < best {
+	for _, n := range d.plugin.apexList.Slice() {
+		if idx := strings.Index(fqdn.Name, n); idx != -1 && idx != 0 && idx < best {
 			best = idx
-			if ents, err := e.Session.Cache().FindEntitiesByContent(
-				&oamdns.FQDN{Name: name}, e.Session.Cache().StartTime()); err == nil && len(ents) == 1 {
-				apex = ents[0]
-			}
+			name = n
 		}
+	}
+	if name == "" {
+		return nil
+	}
+
+	var apex *dbt.Entity
+	if ents, err := e.Session.Cache().FindEntitiesByContent(
+		&oamdns.FQDN{Name: name}, e.Session.Cache().StartTime()); err == nil && len(ents) == 1 {
+		apex = ents[0]
 	}
 
 	if apex != nil && apex.Asset.Key() != fqdn.Name {
