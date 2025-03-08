@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/miekg/dns"
 	"github.com/owasp-amass/amass/v4/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v4/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
@@ -35,7 +36,9 @@ func (fe *fqdnEndpoint) check(e *et.Event) error {
 	if !e.Session.Config().Active {
 		return nil
 	}
-	if !support.NameResolved(e.Session, fqdn) {
+	if !support.HasDNSRecordType(e, int(dns.TypeA)) &&
+		!support.HasDNSRecordType(e, int(dns.TypeAAAA)) &&
+		!support.HasDNSRecordType(e, int(dns.TypeCNAME)) {
 		return nil
 	}
 	if _, conf := e.Session.Scope().IsAssetInScope(fqdn, 0); conf == 0 {

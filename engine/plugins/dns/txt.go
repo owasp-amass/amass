@@ -45,6 +45,7 @@ func (d *dnsTXT) check(e *et.Event) error {
 
 	if len(txtRecords) > 0 {
 		d.process(e, e.Entity, txtRecords)
+		support.AddDNSRecordType(e, int(dns.TypeTXT))
 	}
 	return nil
 }

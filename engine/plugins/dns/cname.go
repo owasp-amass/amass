@@ -50,6 +50,7 @@ func (d *dnsCNAME) check(e *et.Event) error {
 
 	if len(alias) > 0 {
 		d.process(e, alias)
+		support.AddDNSRecordType(e, int(dns.TypeCNAME))
 	}
 	return nil
 }

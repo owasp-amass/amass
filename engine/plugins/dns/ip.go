@@ -39,7 +39,7 @@ func (d *dnsIP) check(e *et.Event) error {
 		return errors.New("failed to extract the FQDN asset")
 	}
 
-	if _, found := support.IsCNAME(e.Session, fqdn); found {
+	if support.HasDNSRecordType(e, int(dns.TypeCNAME)) {
 		return nil
 	}
 
@@ -171,6 +171,12 @@ func (d *dnsIP) store(e *et.Event, fqdn *dbt.Entity, rr []*resolve.ExtractedAnsw
 func (d *dnsIP) process(e *et.Event, name string, addrs []*relIP) {
 	for _, a := range addrs {
 		ip := a.ip.Asset.(*oamnet.IPAddress)
+
+		if ip.Type == "IPv4" {
+			support.AddDNSRecordType(e, int(dns.TypeA))
+		} else if ip.Type == "IPv6" {
+			support.AddDNSRecordType(e, int(dns.TypeAAAA))
+		}
 
 		_ = e.Dispatcher.DispatchEvent(&et.Event{
 			Name:    ip.Address.String(),

@@ -77,6 +77,7 @@ func (d *dnsReverse) check(e *et.Event) error {
 
 	if len(rev) > 0 {
 		d.process(e, rev)
+		support.AddDNSRecordType(e, int(dns.TypePTR))
 
 		var size int
 		if _, conf := e.Session.Scope().IsAssetInScope(ip, 0); conf > 0 {

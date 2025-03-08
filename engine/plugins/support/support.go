@@ -257,3 +257,44 @@ func NameResolved(session et.Session, name *oamdns.FQDN) bool {
 	}
 	return false
 }
+
+type FQDNMeta struct {
+	RecordTypes map[int]bool
+}
+
+func AddDNSRecordType(e *et.Event, rrtype int) {
+	if e == nil {
+		return
+	} else if _, ok := e.Entity.Asset.(*oamdns.FQDN); !ok {
+		return
+	}
+
+	if e.Meta == nil {
+		e.Meta = &FQDNMeta{
+			RecordTypes: make(map[int]bool),
+		}
+	}
+
+	if fm, ok := e.Meta.(*FQDNMeta); ok {
+		fm.RecordTypes[rrtype] = true
+	}
+}
+
+func HasDNSRecordType(e *et.Event, rrtype int) bool {
+	if e == nil {
+		return false
+	} else if _, ok := e.Entity.Asset.(*oamdns.FQDN); !ok {
+		return false
+	}
+
+	if e.Meta == nil {
+		return false
+	}
+
+	if fm, ok := e.Meta.(*FQDNMeta); ok {
+		if _, found := fm.RecordTypes[rrtype]; found {
+			return true
+		}
+	}
+	return false
+}
