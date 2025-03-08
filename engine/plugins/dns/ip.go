@@ -25,6 +25,7 @@ type dnsIP struct {
 	name    string
 	queries []uint16
 	plugin  *dnsPlugin
+	source  *et.Source
 }
 
 type relIP struct {
@@ -48,11 +49,10 @@ func (d *dnsIP) check(e *et.Event) error {
 	}
 
 	var ips []*relIP
-	src := d.plugin.source
-	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, src, since) {
+	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, d.source, since) {
 		ips = append(ips, d.lookup(e, fqdn.Name, since)...)
 	} else {
-		ips = append(ips, d.query(e, e.Entity, src)...)
+		ips = append(ips, d.query(e, e.Entity)...)
 	}
 
 	if len(ips) > 0 {
@@ -74,7 +74,7 @@ func (d *dnsIP) check(e *et.Event) error {
 				size = d.plugin.firstSweepSize
 			}
 			if size > 0 {
-				support.IPAddressSweep(e, ip, src, size, sweepCallback)
+				support.IPAddressSweep(e, ip, d.source, size, sweepCallback)
 			}
 		}
 	}
@@ -98,15 +98,15 @@ func (d *dnsIP) lookup(e *et.Event, fqdn string, since time.Time) []*relIP {
 	return ips
 }
 
-func (d *dnsIP) query(e *et.Event, name *dbt.Entity, src *et.Source) []*relIP {
+func (d *dnsIP) query(e *et.Event, name *dbt.Entity) []*relIP {
 	var ips []*relIP
 
 	fqdn := name.Asset.(*oamdns.FQDN)
 	for _, qtype := range d.queries {
 		if rr, err := support.PerformQuery(fqdn.Name, qtype); err == nil {
-			if records := d.store(e, name, src, rr); len(records) > 0 {
+			if records := d.store(e, name, rr); len(records) > 0 {
 				ips = append(ips, records...)
-				support.MarkAssetMonitored(e.Session, name, src)
+				support.MarkAssetMonitored(e.Session, name, d.source)
 			}
 		}
 	}
@@ -114,7 +114,7 @@ func (d *dnsIP) query(e *et.Event, name *dbt.Entity, src *et.Source) []*relIP {
 	return ips
 }
 
-func (d *dnsIP) store(e *et.Event, fqdn *dbt.Entity, src *et.Source, rr []*resolve.ExtractedAnswer) []*relIP {
+func (d *dnsIP) store(e *et.Event, fqdn *dbt.Entity, rr []*resolve.ExtractedAnswer) []*relIP {
 	var ips []*relIP
 
 	for _, record := range rr {
@@ -133,8 +133,8 @@ func (d *dnsIP) store(e *et.Event, fqdn *dbt.Entity, src *et.Source, rr []*resol
 				}); err == nil && edge != nil {
 					ips = append(ips, &relIP{rtype: "dns_record", ip: ip})
 					_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
-						Source:     src.Name,
-						Confidence: src.Confidence,
+						Source:     d.source.Name,
+						Confidence: d.source.Confidence,
 					})
 				}
 			} else {
@@ -155,8 +155,8 @@ func (d *dnsIP) store(e *et.Event, fqdn *dbt.Entity, src *et.Source, rr []*resol
 				}); err == nil && edge != nil {
 					ips = append(ips, &relIP{rtype: "dns_record", ip: ip})
 					_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
-						Source:     src.Name,
-						Confidence: src.Confidence,
+						Source:     d.source.Name,
+						Confidence: d.source.Confidence,
 					})
 				}
 			} else {

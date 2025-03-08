@@ -85,7 +85,7 @@ func (fc *fuzzyCompletions) query(e *et.Event, orgent *dbt.Entity) *dbt.Entity {
 	if rec == nil {
 		o := orgent.Asset.(*org.Organization)
 		brand := support.ExtractBrandName(o.Name)
-		u := "https://api.gleif.org/api/v1/fuzzycompletions?field=fulltext&q=" + url.QueryEscape(brand)
+		u := "https://api.gleif.org/api/v1/fuzzycompletions?field=entity.legalName&q=" + url.QueryEscape(brand)
 
 		fc.plugin.rlimit.Take()
 		resp, err := http.RequestWebPage(context.TODO(), &http.Request{URL: u})

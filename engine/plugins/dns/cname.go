@@ -22,6 +22,7 @@ import (
 type dnsCNAME struct {
 	name   string
 	plugin *dnsPlugin
+	source *et.Source
 }
 
 type relAlias struct {
@@ -41,8 +42,7 @@ func (d *dnsCNAME) check(e *et.Event) error {
 	}
 
 	var alias []*relAlias
-	src := d.plugin.source
-	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, src, since) {
+	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, d.source, since) {
 		alias = append(alias, d.lookup(e, e.Entity, since)...)
 	} else {
 		alias = append(alias, d.query(e, e.Entity)...)
@@ -77,7 +77,7 @@ func (d *dnsCNAME) query(e *et.Event, name *dbt.Entity) []*relAlias {
 	if rr, err := support.PerformQuery(fqdn.Name, dns.TypeCNAME); err == nil {
 		if records := d.store(e, name, rr); len(records) > 0 {
 			alias = append(alias, records...)
-			support.MarkAssetMonitored(e.Session, name, d.plugin.source)
+			support.MarkAssetMonitored(e.Session, name, d.source)
 		}
 	}
 
@@ -106,8 +106,8 @@ func (d *dnsCNAME) store(e *et.Event, fqdn *dbt.Entity, rr []*resolve.ExtractedA
 			}); err == nil && edge != nil {
 				alias = append(alias, &relAlias{alias: fqdn, target: cname})
 				_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
-					Source:     d.plugin.source.Name,
-					Confidence: d.plugin.source.Confidence,
+					Source:     d.source.Name,
+					Confidence: d.source.Confidence,
 				})
 			}
 		}

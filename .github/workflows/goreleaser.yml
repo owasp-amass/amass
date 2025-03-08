@@ -21,7 +21,7 @@ jobs:
         name: set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: 1.23.1
+          go-version: 1.24.0
       -
         name: set up CycloneDX
         uses: CycloneDX/gh-gomod-generate-sbom@v2
