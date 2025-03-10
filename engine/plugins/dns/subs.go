@@ -69,7 +69,7 @@ func (d *dnsSubs) check(e *et.Event) error {
 		return errors.New("failed to extract the FQDN asset")
 	}
 
-	if e.Meta == nil {
+	if !support.HasDNSRecordType(e, int(dns.TypeA)) && !support.HasDNSRecordType(e, int(dns.TypeAAAA)) {
 		return nil
 	}
 
