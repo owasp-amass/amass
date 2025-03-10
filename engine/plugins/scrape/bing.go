@@ -19,22 +19,24 @@ import (
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
-	"go.uber.org/ratelimit"
+	"golang.org/x/time/rate"
 )
 
 type bing struct {
 	name   string
 	fmtstr string
 	log    *slog.Logger
-	rlimit ratelimit.Limiter
+	rlimit *rate.Limiter
 	source *et.Source
 }
 
 func NewBing() et.Plugin {
+	limit := rate.Every(2 * time.Second)
+
 	return &bing{
 		name:   "Bing",
 		fmtstr: "https://www.ask.com/web?o=0&l=dir&qo=pagination&page=%d&q=site:%s -www.%s",
-		rlimit: ratelimit.New(2, ratelimit.WithoutSlack),
+		rlimit: rate.NewLimiter(limit, 1),
 		source: &et.Source{
 			Name:       "Bing",
 			Confidence: 60,
@@ -109,7 +111,7 @@ func (b *bing) query(e *et.Event, name string) []*dbt.Entity {
 	defer subs.Close()
 
 	for i := 1; i < 10; i++ {
-		b.rlimit.Take()
+		_ = b.rlimit.Wait(context.TODO())
 		resp, err := http.RequestWebPage(context.TODO(), &http.Request{URL: fmt.Sprintf(b.fmtstr, i, name, name)})
 		if err != nil || resp.Body == "" {
 			break

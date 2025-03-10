@@ -19,20 +19,22 @@ import (
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
-	"go.uber.org/ratelimit"
+	"golang.org/x/time/rate"
 )
 
 type leakix struct {
 	name   string
 	log    *slog.Logger
-	rlimit ratelimit.Limiter
+	rlimit *rate.Limiter
 	source *et.Source
 }
 
 func NewLeakIX() et.Plugin {
+	limit := rate.Every(2 * time.Second)
+
 	return &leakix{
 		name:   "LeakIX",
-		rlimit: ratelimit.New(2, ratelimit.WithoutSlack),
+		rlimit: rate.NewLimiter(limit, 1),
 		source: &et.Source{
 			Name:       "LeakIX",
 			Confidence: 80,
@@ -98,9 +100,9 @@ func (ix *leakix) check(e *et.Event) error {
 
 	var names []*dbt.Entity
 	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, ix.source, since) {
-		names = append(names, ix.lookup(e, fqdn.Name, ix.source, since)...)
+		names = append(names, ix.lookup(e, fqdn.Name, since)...)
 	} else {
-		names = append(names, ix.query(e, fqdn.Name, ix.source, keys)...)
+		names = append(names, ix.query(e, fqdn.Name, keys)...)
 		support.MarkAssetMonitored(e.Session, e.Entity, ix.source)
 	}
 
@@ -110,15 +112,15 @@ func (ix *leakix) check(e *et.Event) error {
 	return nil
 }
 
-func (ix *leakix) lookup(e *et.Event, name string, src *et.Source, since time.Time) []*dbt.Entity {
+func (ix *leakix) lookup(e *et.Event, name string, since time.Time) []*dbt.Entity {
 	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.FQDN), ix.source, since)
 }
 
-func (ix *leakix) query(e *et.Event, name string, src *et.Source, keys []string) []*dbt.Entity {
+func (ix *leakix) query(e *et.Event, name string, keys []string) []*dbt.Entity {
 	var names []string
 
 	for _, key := range keys {
-		ix.rlimit.Take()
+		_ = ix.rlimit.Wait(context.TODO())
 		resp, err := http.RequestWebPage(context.TODO(), &http.Request{
 			URL:    "https://leakix.net/api/subdomains/" + name,
 			Header: http.Header{"Accept": []string{"application/json"}, "api-key": []string{key}},

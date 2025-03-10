@@ -5,6 +5,7 @@
 package whois
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"strings"
@@ -72,7 +73,7 @@ func (r *fqdnLookup) lookup(e *et.Event, name string, src *et.Source, since time
 }
 
 func (r *fqdnLookup) query(e *et.Event, name string, asset *dbt.Entity, src *et.Source) (*dbt.Entity, *whoisparser.WhoisInfo) {
-	r.plugin.rlimit.Take()
+	_ = r.plugin.rlimit.Wait(context.TODO())
 
 	resp, err := whoisclient.Whois(name)
 	if err != nil {

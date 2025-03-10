@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/netip"
+	"time"
 
 	"github.com/owasp-amass/amass/v4/engine/plugins/support"
 	"github.com/owasp-amass/amass/v4/engine/sessions"
@@ -90,7 +91,14 @@ func (d *ipNetblock) lookup(e *et.Event) error {
 		return nil
 	}
 
-	entry := support.IPNetblock(e.Session, ip.Address.String())
+	var entry *sessions.CIDRangerEntry
+	for i := 0; i < 120; i++ {
+		entry = support.IPNetblock(e.Session, ip.Address.String())
+		if entry != nil {
+			break
+		}
+		time.Sleep(time.Second)
+	}
 	if entry == nil {
 		return nil
 	}

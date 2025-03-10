@@ -18,22 +18,24 @@ import (
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
-	"go.uber.org/ratelimit"
+	"golang.org/x/time/rate"
 )
 
 type hackerTarget struct {
 	name   string
 	url    string
 	log    *slog.Logger
-	rlimit ratelimit.Limiter
+	rlimit *rate.Limiter
 	source *et.Source
 }
 
 func NewHackerTarget() et.Plugin {
+	limit := rate.Every(2 * time.Second)
+
 	return &hackerTarget{
 		name:   "HackerTarget",
 		url:    "https://api.hackertarget.com/hostsearch/?q=",
-		rlimit: ratelimit.New(2, ratelimit.WithoutSlack),
+		rlimit: rate.NewLimiter(limit, 1),
 		source: &et.Source{
 			Name:       "HackerTarget",
 			Confidence: 80,
@@ -87,9 +89,9 @@ func (ht *hackerTarget) check(e *et.Event) error {
 
 	var names []*dbt.Entity
 	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, ht.source, since) {
-		names = append(names, ht.lookup(e, fqdn.Name, ht.source, since)...)
+		names = append(names, ht.lookup(e, fqdn.Name, since)...)
 	} else {
-		names = append(names, ht.query(e, fqdn.Name, ht.source)...)
+		names = append(names, ht.query(e, fqdn.Name)...)
 		support.MarkAssetMonitored(e.Session, e.Entity, ht.source)
 	}
 
@@ -99,12 +101,12 @@ func (ht *hackerTarget) check(e *et.Event) error {
 	return nil
 }
 
-func (ht *hackerTarget) lookup(e *et.Event, name string, src *et.Source, since time.Time) []*dbt.Entity {
+func (ht *hackerTarget) lookup(e *et.Event, name string, since time.Time) []*dbt.Entity {
 	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.FQDN), ht.source, since)
 }
 
-func (ht *hackerTarget) query(e *et.Event, name string, src *et.Source) []*dbt.Entity {
-	ht.rlimit.Take()
+func (ht *hackerTarget) query(e *et.Event, name string) []*dbt.Entity {
+	_ = ht.rlimit.Wait(context.TODO())
 	resp, err := http.RequestWebPage(context.TODO(), &http.Request{URL: ht.url + name})
 	if err != nil {
 		return nil

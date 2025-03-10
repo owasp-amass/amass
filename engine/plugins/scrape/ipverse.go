@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/owasp-amass/amass/v4/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v4/engine/types"
@@ -17,23 +18,25 @@ import (
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
-	"go.uber.org/ratelimit"
+	"golang.org/x/time/rate"
 )
 
 type ipverse struct {
 	name   string
 	fmtstr string
 	log    *slog.Logger
-	rlimit ratelimit.Limiter
+	rlimit *rate.Limiter
 	source *et.Source
 	asns   map[int]struct{}
 }
 
 func NewIPVerse() et.Plugin {
+	limit := rate.Every(2 * time.Second)
+
 	return &ipverse{
 		name:   "GitHub-IPVerse",
 		fmtstr: "https://raw.githubusercontent.com/ipverse/asn-ip/master/as/%d/aggregated.json",
-		rlimit: ratelimit.New(5, ratelimit.WithoutSlack),
+		rlimit: rate.NewLimiter(limit, 1),
 		source: &et.Source{
 			Name:       "GitHub-IPVerse",
 			Confidence: 90,
@@ -99,7 +102,7 @@ type record struct {
 }
 
 func (v *ipverse) query(asset *dbt.Entity) *record {
-	v.rlimit.Take()
+	_ = v.rlimit.Wait(context.TODO())
 
 	as := asset.Asset.(*oamnet.AutonomousSystem)
 	resp, err := http.RequestWebPage(context.TODO(), &http.Request{URL: fmt.Sprintf(v.fmtstr, as.Number)})

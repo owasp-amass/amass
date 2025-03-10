@@ -22,7 +22,7 @@ import (
 	et "github.com/owasp-amass/amass/v4/engine/types"
 	amassnet "github.com/owasp-amass/amass/v4/utils/net"
 	oam "github.com/owasp-amass/open-asset-model"
-	"go.uber.org/ratelimit"
+	"golang.org/x/time/rate"
 )
 
 type bgpTools struct {
@@ -33,15 +33,17 @@ type bgpTools struct {
 	log      *slog.Logger
 	autsys   *autsys
 	netblock *netblock
-	rlimit   ratelimit.Limiter
+	rlimit   *rate.Limiter
 	source   *et.Source
 }
 
 func NewBGPTools() et.Plugin {
+	limit := rate.Every(time.Second)
+
 	return &bgpTools{
 		name:   "BGP.Tools",
 		port:   43,
-		rlimit: ratelimit.New(1, ratelimit.WithoutSlack),
+		rlimit: rate.NewLimiter(limit, 1),
 		source: &et.Source{
 			Name:       "BGP.Tools",
 			Confidence: 100,
@@ -116,7 +118,7 @@ type bgpToolsRecord struct {
 func (bt *bgpTools) whois(ipstr string) (*bgpToolsRecord, error) {
 	addr := net.JoinHostPort(bt.addr, strconv.Itoa(bt.port))
 
-	bt.rlimit.Take()
+	_ = bt.rlimit.Wait(context.TODO())
 	conn, err := amassnet.DialContext(context.TODO(), "tcp", addr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to establish a connection with the WHOIS server: %v", err)

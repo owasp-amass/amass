@@ -19,20 +19,22 @@ import (
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
-	"go.uber.org/ratelimit"
+	"golang.org/x/time/rate"
 )
 
 type crtsh struct {
 	name   string
 	log    *slog.Logger
-	rlimit ratelimit.Limiter
+	rlimit *rate.Limiter
 	source *et.Source
 }
 
 func NewCrtsh() et.Plugin {
+	limit := rate.Every(2 * time.Second)
+
 	return &crtsh{
 		name:   "crt.sh",
-		rlimit: ratelimit.New(2, ratelimit.WithoutSlack),
+		rlimit: rate.NewLimiter(limit, 1),
 		source: &et.Source{
 			Name:       "HackerTarget",
 			Confidence: 100,
@@ -86,9 +88,9 @@ func (c *crtsh) check(e *et.Event) error {
 
 	var names []*dbt.Entity
 	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, c.source, since) {
-		names = append(names, c.lookup(e, fqdn.Name, c.source, since)...)
+		names = append(names, c.lookup(e, fqdn.Name, since)...)
 	} else {
-		names = append(names, c.query(e, fqdn.Name, c.source)...)
+		names = append(names, c.query(e, fqdn.Name)...)
 		support.MarkAssetMonitored(e.Session, e.Entity, c.source)
 	}
 
@@ -98,12 +100,12 @@ func (c *crtsh) check(e *et.Event) error {
 	return nil
 }
 
-func (c *crtsh) lookup(e *et.Event, name string, src *et.Source, since time.Time) []*dbt.Entity {
+func (c *crtsh) lookup(e *et.Event, name string, since time.Time) []*dbt.Entity {
 	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.FQDN), c.source, since)
 }
 
-func (c *crtsh) query(e *et.Event, name string, src *et.Source) []*dbt.Entity {
-	c.rlimit.Take()
+func (c *crtsh) query(e *et.Event, name string) []*dbt.Entity {
+	_ = c.rlimit.Wait(context.TODO())
 	resp, err := http.RequestWebPage(context.TODO(), &http.Request{
 		URL: "https://crt.sh/?CN=" + name + "&output=json&exclude=expired",
 	})

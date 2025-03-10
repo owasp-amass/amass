@@ -19,22 +19,24 @@ import (
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
-	"go.uber.org/ratelimit"
+	"golang.org/x/time/rate"
 )
 
 type siteDossier struct {
 	name   string
 	fmtstr string
 	log    *slog.Logger
-	rlimit ratelimit.Limiter
+	rlimit *rate.Limiter
 	source *et.Source
 }
 
 func NewSiteDossier() et.Plugin {
+	limit := rate.Every(4 * time.Second)
+
 	return &siteDossier{
 		name:   "SiteDossier",
 		fmtstr: "http://www.sitedossier.com/parentdomain/%s/%d",
-		rlimit: ratelimit.New(4, ratelimit.WithoutSlack),
+		rlimit: rate.NewLimiter(limit, 1),
 		source: &et.Source{
 			Name:       "SiteDossier",
 			Confidence: 60,
@@ -88,28 +90,28 @@ func (sd *siteDossier) check(e *et.Event) error {
 
 	var names []*dbt.Entity
 	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, sd.source, since) {
-		names = append(names, sd.lookup(e, fqdn.Name, sd.source, since)...)
+		names = append(names, sd.lookup(e, fqdn.Name, since)...)
 	} else {
-		names = append(names, sd.query(e, fqdn.Name, sd.source)...)
+		names = append(names, sd.query(e, fqdn.Name)...)
 		support.MarkAssetMonitored(e.Session, e.Entity, sd.source)
 	}
 
 	if len(names) > 0 {
-		sd.process(e, names, sd.source)
+		sd.process(e, names)
 	}
 	return nil
 }
 
-func (sd *siteDossier) lookup(e *et.Event, name string, src *et.Source, since time.Time) []*dbt.Entity {
+func (sd *siteDossier) lookup(e *et.Event, name string, since time.Time) []*dbt.Entity {
 	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.FQDN), sd.source, since)
 }
 
-func (sd *siteDossier) query(e *et.Event, name string, src *et.Source) []*dbt.Entity {
+func (sd *siteDossier) query(e *et.Event, name string) []*dbt.Entity {
 	subs := stringset.New()
 	defer subs.Close()
 
 	for i := 1; i < 20; i++ {
-		sd.rlimit.Take()
+		_ = sd.rlimit.Wait(context.TODO())
 		resp, err := http.RequestWebPage(context.TODO(), &http.Request{URL: fmt.Sprintf(sd.fmtstr, name, i)})
 		if err != nil || resp.Body == "" {
 			break
@@ -124,13 +126,13 @@ func (sd *siteDossier) query(e *et.Event, name string, src *et.Source) []*dbt.En
 		}
 	}
 
-	return sd.store(e, subs.Slice(), sd.source)
+	return sd.store(e, subs.Slice())
 }
 
-func (sd *siteDossier) store(e *et.Event, names []string, src *et.Source) []*dbt.Entity {
+func (sd *siteDossier) store(e *et.Event, names []string) []*dbt.Entity {
 	return support.StoreFQDNsWithSource(e.Session, names, sd.source, sd.name, sd.name+"-Handler")
 }
 
-func (sd *siteDossier) process(e *et.Event, assets []*dbt.Entity, src *et.Source) {
+func (sd *siteDossier) process(e *et.Event, assets []*dbt.Entity) {
 	support.ProcessFQDNsWithSource(e, assets, sd.source)
 }

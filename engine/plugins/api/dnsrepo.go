@@ -20,20 +20,22 @@ import (
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
-	"go.uber.org/ratelimit"
+	"golang.org/x/time/rate"
 )
 
 type dnsrepo struct {
 	name   string
 	log    *slog.Logger
-	rlimit ratelimit.Limiter
+	rlimit *rate.Limiter
 	source *et.Source
 }
 
 func NewDNSRepo() et.Plugin {
+	limit := rate.Every(10 * time.Second)
+
 	return &dnsrepo{
 		name:   "DNSRepo",
-		rlimit: ratelimit.New(10, ratelimit.WithoutSlack),
+		rlimit: rate.NewLimiter(limit, 1),
 		source: &et.Source{
 			Name:       "DNSRepo",
 			Confidence: 80,
@@ -97,9 +99,9 @@ func (d *dnsrepo) check(e *et.Event) error {
 
 	var names []*dbt.Entity
 	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, d.source, since) {
-		names = append(names, d.lookup(e, fqdn.Name, d.source, since)...)
+		names = append(names, d.lookup(e, fqdn.Name, since)...)
 	} else {
-		names = append(names, d.query(e, fqdn.Name, d.source, keys)...)
+		names = append(names, d.query(e, fqdn.Name, keys)...)
 		support.MarkAssetMonitored(e.Session, e.Entity, d.source)
 	}
 
@@ -109,11 +111,11 @@ func (d *dnsrepo) check(e *et.Event) error {
 	return nil
 }
 
-func (d *dnsrepo) lookup(e *et.Event, name string, src *et.Source, since time.Time) []*dbt.Entity {
+func (d *dnsrepo) lookup(e *et.Event, name string, since time.Time) []*dbt.Entity {
 	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.FQDN), d.source, since)
 }
 
-func (d *dnsrepo) query(e *et.Event, name string, src *et.Source, keys []string) []*dbt.Entity {
+func (d *dnsrepo) query(e *et.Event, name string, keys []string) []*dbt.Entity {
 	var names []string
 
 	for _, key := range keys {
@@ -127,7 +129,7 @@ func (d *dnsrepo) query(e *et.Event, name string, src *et.Source, keys []string)
 			}
 		}
 
-		d.rlimit.Take()
+		_ = d.rlimit.Wait(context.TODO())
 		if resp, err := http.RequestWebPage(context.TODO(), req); err == nil {
 			if key == "" {
 				names = append(names, d.parseHTML(e, resp.Body)...)

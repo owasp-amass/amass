@@ -53,26 +53,26 @@ func (r *ipaddrEndpoint) check(e *et.Event) error {
 	src := r.plugin.source
 	var findings []*support.Finding
 	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, src, since) {
-		findings = append(findings, r.lookup(e, e.Entity, src, since)...)
+		findings = append(findings, r.lookup(e, e.Entity, since)...)
 	} else {
 		findings = append(findings, r.query(e, e.Entity)...)
 		support.MarkAssetMonitored(e.Session, e.Entity, src)
 	}
 
 	if len(findings) > 0 {
-		r.process(e, findings, src)
+		r.process(e, findings)
 	}
 
 	go support.IPAddressSweep(e, ip, src, 25, sweepCallback)
 	return nil
 }
 
-func (r *ipaddrEndpoint) lookup(e *et.Event, ip *dbt.Entity, src *et.Source, since time.Time) []*support.Finding {
+func (r *ipaddrEndpoint) lookup(e *et.Event, ip *dbt.Entity, since time.Time) []*support.Finding {
 	var findings []*support.Finding
 
 	if edges, err := e.Session.Cache().OutgoingEdges(ip, since, "port"); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
-			if _, err := e.Session.Cache().GetEdgeTags(edge, since, src.Name); err != nil {
+			if _, err := e.Session.Cache().GetEdgeTags(edge, since, r.plugin.source.Name); err != nil {
 				continue
 			}
 			if _, ok := edge.Relation.(*general.PortRelation); ok {
@@ -113,8 +113,8 @@ func (r *ipaddrEndpoint) query(e *et.Event, ipaddr *dbt.Entity) []*support.Findi
 	return findings
 }
 
-func (r *ipaddrEndpoint) process(e *et.Event, findings []*support.Finding, src *et.Source) {
-	support.ProcessAssetsWithSource(e, findings, src, r.plugin.name, r.name)
+func (r *ipaddrEndpoint) process(e *et.Event, findings []*support.Finding) {
+	support.ProcessAssetsWithSource(e, findings, r.plugin.source, r.plugin.name, r.name)
 }
 
 func sweepCallback(e *et.Event, ip *network.IPAddress, src *et.Source) {

@@ -78,7 +78,7 @@ func (nb *netblock) query(e *et.Event, asset *dbt.Entity) (*dbt.Entity, *rdap.IP
 	defer cancel()
 	req = req.WithContext(ctx)
 
-	nb.plugin.rlimit.Take()
+	_ = nb.plugin.rlimit.Wait(context.TODO())
 	resp, err := nb.plugin.client.Do(req)
 	if err != nil {
 		return nil, nil

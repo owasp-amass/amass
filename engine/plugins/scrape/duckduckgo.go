@@ -19,22 +19,24 @@ import (
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
-	"go.uber.org/ratelimit"
+	"golang.org/x/time/rate"
 )
 
 type duckDuckGo struct {
 	name   string
 	fmtstr string
 	log    *slog.Logger
-	rlimit ratelimit.Limiter
+	rlimit *rate.Limiter
 	source *et.Source
 }
 
 func NewDuckDuckGo() et.Plugin {
+	limit := rate.Every(2 * time.Second)
+
 	return &duckDuckGo{
 		name:   "DuckDuckGo",
 		fmtstr: "https://html.duckduckgo.com/html/?q=site:%s -site:www.%s",
-		rlimit: ratelimit.New(2, ratelimit.WithoutSlack),
+		rlimit: rate.NewLimiter(limit, 1),
 		source: &et.Source{
 			Name:       "DuckDuckGo",
 			Confidence: 60,
@@ -88,27 +90,27 @@ func (d *duckDuckGo) check(e *et.Event) error {
 
 	var names []*dbt.Entity
 	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, d.source, since) {
-		names = append(names, d.lookup(e, fqdn.Name, d.source, since)...)
+		names = append(names, d.lookup(e, fqdn.Name, since)...)
 	} else {
-		names = append(names, d.query(e, fqdn.Name, d.source)...)
+		names = append(names, d.query(e, fqdn.Name)...)
 		support.MarkAssetMonitored(e.Session, e.Entity, d.source)
 	}
 
 	if len(names) > 0 {
-		d.process(e, names, d.source)
+		d.process(e, names)
 	}
 	return nil
 }
 
-func (d *duckDuckGo) lookup(e *et.Event, name string, src *et.Source, since time.Time) []*dbt.Entity {
+func (d *duckDuckGo) lookup(e *et.Event, name string, since time.Time) []*dbt.Entity {
 	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.FQDN), d.source, since)
 }
 
-func (d *duckDuckGo) query(e *et.Event, name string, src *et.Source) []*dbt.Entity {
+func (d *duckDuckGo) query(e *et.Event, name string) []*dbt.Entity {
 	subs := stringset.New()
 	defer subs.Close()
 
-	d.rlimit.Take()
+	_ = d.rlimit.Wait(context.TODO())
 	resp, err := http.RequestWebPage(context.TODO(), &http.Request{URL: fmt.Sprintf(d.fmtstr, name, name)})
 	if err != nil || resp.Body == "" {
 		return nil
@@ -122,13 +124,13 @@ func (d *duckDuckGo) query(e *et.Event, name string, src *et.Source) []*dbt.Enti
 		}
 	}
 
-	return d.store(e, subs.Slice(), d.source)
+	return d.store(e, subs.Slice())
 }
 
-func (d *duckDuckGo) store(e *et.Event, names []string, src *et.Source) []*dbt.Entity {
+func (d *duckDuckGo) store(e *et.Event, names []string) []*dbt.Entity {
 	return support.StoreFQDNsWithSource(e.Session, names, d.source, d.name, d.name+"-Handler")
 }
 
-func (d *duckDuckGo) process(e *et.Event, assets []*dbt.Entity, src *et.Source) {
+func (d *duckDuckGo) process(e *et.Event, assets []*dbt.Entity) {
 	support.ProcessFQDNsWithSource(e, assets, d.source)
 }

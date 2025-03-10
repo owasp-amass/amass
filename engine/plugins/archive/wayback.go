@@ -20,22 +20,24 @@ import (
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
-	"go.uber.org/ratelimit"
+	"golang.org/x/time/rate"
 )
 
 type wayback struct {
 	name   string
 	URL    string
 	log    *slog.Logger
-	rlimit ratelimit.Limiter
+	rlimit *rate.Limiter
 	source *et.Source
 }
 
 func NewWayback() et.Plugin {
+	limit := rate.Every(5 * time.Second)
+
 	return &wayback{
 		name:   "Wayback",
 		URL:    "https://web.archive.org/cdx/search/cdx?matchType=domain&fl=original&output=json&collapse=urlkey&url=",
-		rlimit: ratelimit.New(5, ratelimit.WithoutSlack),
+		rlimit: rate.NewLimiter(limit, 1),
 		source: &et.Source{
 			Name:       "Wayback",
 			Confidence: 80,
@@ -89,24 +91,24 @@ func (w *wayback) check(e *et.Event) error {
 
 	var names []*dbt.Entity
 	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, w.source, since) {
-		names = append(names, w.lookup(e, fqdn.Name, w.source, since)...)
+		names = append(names, w.lookup(e, fqdn.Name, since)...)
 	} else {
-		names = append(names, w.query(e, fqdn.Name, w.source)...)
+		names = append(names, w.query(e, fqdn.Name)...)
 		support.MarkAssetMonitored(e.Session, e.Entity, w.source)
 	}
 
 	if len(names) > 0 {
-		w.process(e, names, w.source)
+		w.process(e, names)
 	}
 	return nil
 }
 
-func (w *wayback) lookup(e *et.Event, name string, src *et.Source, since time.Time) []*dbt.Entity {
+func (w *wayback) lookup(e *et.Event, name string, since time.Time) []*dbt.Entity {
 	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.FQDN), w.source, since)
 }
 
-func (w *wayback) query(e *et.Event, name string, src *et.Source) []*dbt.Entity {
-	w.rlimit.Take()
+func (w *wayback) query(e *et.Event, name string) []*dbt.Entity {
+	_ = w.rlimit.Wait(context.TODO())
 	resp, err := http.RequestWebPage(context.TODO(), &http.Request{URL: w.URL + name})
 	if err != nil {
 		return nil
@@ -134,13 +136,13 @@ func (w *wayback) query(e *et.Event, name string, src *et.Source) []*dbt.Entity 
 		}
 	}
 
-	return w.store(e, subs.Slice(), w.source)
+	return w.store(e, subs.Slice())
 }
 
-func (w *wayback) store(e *et.Event, names []string, src *et.Source) []*dbt.Entity {
+func (w *wayback) store(e *et.Event, names []string) []*dbt.Entity {
 	return support.StoreFQDNsWithSource(e.Session, names, w.source, w.name, w.name+"-Handler")
 }
 
-func (w *wayback) process(e *et.Event, assets []*dbt.Entity, src *et.Source) {
+func (w *wayback) process(e *et.Event, assets []*dbt.Entity) {
 	support.ProcessFQDNsWithSource(e, assets, w.source)
 }

@@ -19,20 +19,22 @@ import (
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
-	"go.uber.org/ratelimit"
+	"golang.org/x/time/rate"
 )
 
 type securityTrails struct {
 	name   string
 	log    *slog.Logger
-	rlimit ratelimit.Limiter
+	rlimit *rate.Limiter
 	source *et.Source
 }
 
 func NewSecurityTrails() et.Plugin {
+	limit := rate.Every(2 * time.Second)
+
 	return &securityTrails{
 		name:   "SecurityTrails",
-		rlimit: ratelimit.New(2, ratelimit.WithoutSlack),
+		rlimit: rate.NewLimiter(limit, 1),
 		source: &et.Source{
 			Name:       "SecurityTrails",
 			Confidence: 80,
@@ -118,7 +120,7 @@ func (st *securityTrails) query(e *et.Event, name string, keys []string) []*dbt.
 	var names []string
 
 	for _, key := range keys {
-		st.rlimit.Take()
+		_ = st.rlimit.Wait(context.TODO())
 		resp, err := http.RequestWebPage(context.TODO(), &http.Request{
 			URL:    "https://api.securitytrails.com/v1/domain/" + name + "/subdomains",
 			Header: http.Header{"APIKEY": []string{key}},
