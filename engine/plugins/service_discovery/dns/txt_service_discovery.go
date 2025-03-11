@@ -35,31 +35,31 @@ func (t *txtServiceDiscovery) Stop() {}
 
 func (t *txtServiceDiscovery) check(e *et.Event) error {
     since := time.Time{}
-    tags, err := e.Session.Cache().GetEntityTags(e.Entity, since, t.source.Name)
-    if err != nil {
-        slog.Error("failed to get entity tags", "error", err)
-        return err
+
+    txtPlugin := &dnsTXT{
+        name:   "dnsTXT",
+        source: t.source,
     }
 
-    // Mapping of record to names
+    // Use the dnsTXT lookup method to fetch TXT records
+    txtRecords := txtPlugin.lookup(e, e.Entity, since)
+
     matchers := map[string]string{
         "google-site-verification":       "Google",
         "status-page-domain-verification": "StatusPage Domain",
-		"facebook-domain-verification=":  "Facebook"
+        "facebook-domain-verification=":  "Facebook",
     }
 
     var foundName string
-    for _, tag := range tags {
-        if dnsProp, ok := tag.Property.(*oamdns.DNSRecordProperty); ok {
-            for pattern, name := range matchers {
-                if strings.Contains(dnsProp.Data, pattern) {
-                    foundName = name
-                    break
-                }
-            }
-            if foundName != "" {
+    for _, rec := range txtRecords {
+        for pattern, name := range matchers {
+            if strings.Contains(rec.Data, pattern) {
+                foundName = name
                 break
             }
+        }
+        if foundName != "" {
+            break
         }
     }
 
