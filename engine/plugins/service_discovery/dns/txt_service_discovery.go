@@ -6,7 +6,9 @@ import (
     "time"
 
     et "github.com/owasp-amass/amass/v4/engine/types"
-    dnsPlugins "github.com/owasp-amass/amass/v4/engine/plugins/dns"
+    dbt "github.com/owasp-amass/asset-db/types"
+    oamdns "github.com/owasp-amass/open-asset-model/dns"
+    "github.com/owasp-amass/amass/v4/engine/plugins/support"
 )
 
 type txtServiceDiscovery struct {
@@ -34,12 +36,13 @@ func (t *txtServiceDiscovery) check(e *et.Event) error {
     since := time.Time{}
 
     // Use the exported type or constructor from the dns plugin
-    txtPlugin := &dnsPlugins.DNSTXT{
-        Name:   "dnsTXT",
-        Source: t.source,
+    txtPlugin := &dnsTXT{
+        name:   "dnsTXT",
+        source: t.source,
     }
 
-    txtRecords := txtPlugin.GetTXTRecords(e, e.Entity, since)
+    // Use the dnsTXT lookup method to fetch TXT records
+    txtRecords := txtPlugin.lookup(e, e.Entity, since)
 
     matchers := map[string]string{
         "google-site-verification":        "Google",
