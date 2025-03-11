@@ -1,15 +1,11 @@
 package dns
 
 import (
-    "errors"
     "log/slog"
     "strings"
     "time"
 
     et "github.com/owasp-amass/amass/v4/engine/types"
-    dbt "github.com/owasp-amass/asset-db/types"
-    oamdns "github.com/owasp-amass/open-asset-model/dns"
-    "github.com/owasp-amass/amass/v4/engine/plugins/support"
     dnsPlugins "github.com/owasp-amass/amass/v4/engine/plugins/dns"
 )
 
