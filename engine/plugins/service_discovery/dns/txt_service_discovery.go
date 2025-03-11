@@ -10,6 +10,7 @@ import (
     dbt "github.com/owasp-amass/asset-db/types"
     oamdns "github.com/owasp-amass/open-asset-model/dns"
     "github.com/owasp-amass/amass/v4/engine/plugins/support"
+    dnsPlugins "github.com/owasp-amass/amass/v4/engine/plugins/dns"
 )
 
 type txtServiceDiscovery struct {
@@ -36,25 +37,25 @@ func (t *txtServiceDiscovery) Stop() {}
 func (t *txtServiceDiscovery) check(e *et.Event) error {
     since := time.Time{}
 
-    txtPlugin := &dnsTXT{
-        name:   "dnsTXT",
-        source: t.source,
+    // Use the exported type or constructor from the dns plugin
+    txtPlugin := &dnsPlugins.DNSTXT{
+        Name:   "dnsTXT",
+        Source: t.source,
     }
 
-    // Use the dnsTXT lookup method to fetch TXT records
-    txtRecords := txtPlugin.lookup(e, e.Entity, since)
+    txtRecords := txtPlugin.GetTXTRecords(e, e.Entity, since)
 
     matchers := map[string]string{
-        "google-site-verification":       "Google",
+        "google-site-verification":        "Google",
         "status-page-domain-verification": "StatusPage Domain",
-        "facebook-domain-verification=":  "Facebook",
+        "facebook-domain-verification=":   "Facebook",
     }
 
     var foundName string
     for _, rec := range txtRecords {
-        for pattern, name := range matchers {
+        for pattern, serviceName := range matchers {
             if strings.Contains(rec.Data, pattern) {
-                foundName = name
+                foundName = serviceName
                 break
             }
         }
