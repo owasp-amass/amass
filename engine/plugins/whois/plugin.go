@@ -24,7 +24,7 @@ type whois struct {
 }
 
 func NewWHOIS() et.Plugin {
-	limit := rate.Every(10 * time.Second)
+	limit := rate.Every(time.Second)
 
 	return &whois{
 		name:   "WHOIS",
