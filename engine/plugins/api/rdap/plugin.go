@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/caffix/stringset"
 	"github.com/openrdap/rdap"
@@ -27,14 +28,14 @@ import (
 	"github.com/owasp-amass/open-asset-model/org"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
 	"github.com/owasp-amass/open-asset-model/url"
-	"go.uber.org/ratelimit"
+	"golang.org/x/time/rate"
 )
 
 type rdapPlugin struct {
 	name     string
 	log      *slog.Logger
 	client   *rdap.Client
-	rlimit   ratelimit.Limiter
+	rlimit   *rate.Limiter
 	autsys   *autsys
 	autnum   *autnum
 	netblock *netblock
@@ -43,9 +44,11 @@ type rdapPlugin struct {
 }
 
 func NewRDAP() et.Plugin {
+	limit := rate.Every(2 * time.Second)
+
 	return &rdapPlugin{
 		name:   "RDAP",
-		rlimit: ratelimit.New(10, ratelimit.WithoutSlack),
+		rlimit: rate.NewLimiter(limit, 1),
 		source: &et.Source{
 			Name:       "RDAP",
 			Confidence: 100,

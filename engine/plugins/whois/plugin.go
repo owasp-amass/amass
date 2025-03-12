@@ -6,26 +6,29 @@ package whois
 
 import (
 	"log/slog"
+	"time"
 
 	"github.com/owasp-amass/amass/v4/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v4/engine/types"
 	oam "github.com/owasp-amass/open-asset-model"
-	"go.uber.org/ratelimit"
+	"golang.org/x/time/rate"
 )
 
 type whois struct {
 	name   string
 	log    *slog.Logger
-	rlimit ratelimit.Limiter
+	rlimit *rate.Limiter
 	fqdn   *fqdnLookup
 	domrec *domrec
 	source *et.Source
 }
 
 func NewWHOIS() et.Plugin {
+	limit := rate.Every(time.Second)
+
 	return &whois{
 		name:   "WHOIS",
-		rlimit: ratelimit.New(10, ratelimit.WithoutSlack),
+		rlimit: rate.NewLimiter(limit, 1),
 		source: &et.Source{
 			Name:       "WHOIS",
 			Confidence: 100,

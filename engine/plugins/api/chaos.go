@@ -19,20 +19,22 @@ import (
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
-	"go.uber.org/ratelimit"
+	"golang.org/x/time/rate"
 )
 
 type chaos struct {
 	name   string
 	log    *slog.Logger
-	rlimit ratelimit.Limiter
+	rlimit *rate.Limiter
 	source *et.Source
 }
 
 func NewChaos() et.Plugin {
+	limit := rate.Every(10 * time.Second)
+
 	return &chaos{
 		name:   "Chaos",
-		rlimit: ratelimit.New(10, ratelimit.WithoutSlack),
+		rlimit: rate.NewLimiter(limit, 1),
 		source: &et.Source{
 			Name:       "Chaos",
 			Confidence: 80,
@@ -118,7 +120,7 @@ func (c *chaos) query(e *et.Event, name string, keys []string) []*dbt.Entity {
 	var names []string
 
 	for _, key := range keys {
-		c.rlimit.Take()
+		_ = c.rlimit.Wait(context.TODO())
 		resp, err := http.RequestWebPage(context.TODO(), &http.Request{
 			URL:    "https://dns.projectdiscovery.io/dns/" + name + "/subdomains",
 			Header: http.Header{"Authorization": []string{key}},

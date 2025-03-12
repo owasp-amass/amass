@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/miekg/dns"
 	"github.com/owasp-amass/amass/v4/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v4/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
@@ -35,7 +36,9 @@ func (fe *fqdnEndpoint) check(e *et.Event) error {
 	if !e.Session.Config().Active {
 		return nil
 	}
-	if !support.NameResolved(e.Session, fqdn) {
+	if !support.HasDNSRecordType(e, int(dns.TypeA)) &&
+		!support.HasDNSRecordType(e, int(dns.TypeAAAA)) &&
+		!support.HasDNSRecordType(e, int(dns.TypeCNAME)) {
 		return nil
 	}
 	if _, conf := e.Session.Scope().IsAssetInScope(fqdn, 0); conf == 0 {
@@ -50,24 +53,24 @@ func (fe *fqdnEndpoint) check(e *et.Event) error {
 	src := fe.plugin.source
 	var findings []*support.Finding
 	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, src, since) {
-		findings = append(findings, fe.lookup(e, e.Entity, src, since)...)
+		findings = append(findings, fe.lookup(e, e.Entity, since)...)
 	} else {
 		findings = append(findings, fe.query(e, e.Entity)...)
 		support.MarkAssetMonitored(e.Session, e.Entity, src)
 	}
 
 	if len(findings) > 0 {
-		fe.process(e, findings, src)
+		fe.process(e, findings)
 	}
 	return nil
 }
 
-func (fe *fqdnEndpoint) lookup(e *et.Event, host *dbt.Entity, src *et.Source, since time.Time) []*support.Finding {
+func (fe *fqdnEndpoint) lookup(e *et.Event, host *dbt.Entity, since time.Time) []*support.Finding {
 	var findings []*support.Finding
 
 	if edges, err := e.Session.Cache().OutgoingEdges(host, since, "port"); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
-			if _, err := e.Session.Cache().GetEdgeTags(edge, since, src.Name); err != nil {
+			if _, err := e.Session.Cache().GetEdgeTags(edge, since, fe.plugin.source.Name); err != nil {
 				continue
 			}
 			if _, ok := edge.Relation.(*general.PortRelation); ok {
@@ -104,6 +107,6 @@ func (fe *fqdnEndpoint) query(e *et.Event, host *dbt.Entity) []*support.Finding 
 	return findings
 }
 
-func (fe *fqdnEndpoint) process(e *et.Event, findings []*support.Finding, src *et.Source) {
-	support.ProcessAssetsWithSource(e, findings, src, fe.plugin.name, fe.name)
+func (fe *fqdnEndpoint) process(e *et.Event, findings []*support.Finding) {
+	support.ProcessAssetsWithSource(e, findings, fe.plugin.source, fe.plugin.name, fe.name)
 }

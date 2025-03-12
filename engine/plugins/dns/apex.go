@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/owasp-amass/amass/v4/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v4/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
@@ -27,7 +26,7 @@ func (d *dnsApex) check(e *et.Event) error {
 		return errors.New("failed to extract the FQDN asset")
 	}
 
-	if !support.NameResolved(e.Session, fqdn) {
+	if e.Meta == nil {
 		return nil
 	}
 

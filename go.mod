@@ -1,6 +1,6 @@
 module github.com/owasp-amass/amass/v4
 
-go 1.24
+go 1.24.0
 
 require (
 	github.com/99designs/gqlgen v0.17.66
@@ -27,15 +27,15 @@ require (
 	github.com/openrdap/rdap v0.9.1
 	github.com/owasp-amass/asset-db v0.19.2
 	github.com/owasp-amass/open-asset-model v0.14.0
-	github.com/owasp-amass/resolve v0.8.1
+	github.com/owasp-amass/resolve v0.8.2
 	github.com/samber/slog-common v0.18.1
 	github.com/samber/slog-syslog/v2 v2.5.2
 	github.com/stretchr/testify v1.10.0
 	github.com/tylertreat/BoomFilters v0.0.0-20210315201527-1a82519a3e43
 	github.com/vektah/gqlparser/v2 v2.5.23
 	github.com/yl2chen/cidranger v1.0.2
-	go.uber.org/ratelimit v0.3.1
 	golang.org/x/net v0.37.0
+	golang.org/x/time v0.11.0
 	gopkg.in/yaml.v3 v3.0.1
 	gorm.io/gorm v1.25.12
 	mvdan.cc/xurls/v2 v2.6.0
@@ -52,7 +52,7 @@ require (
 	github.com/benbjohnson/clock v1.3.5 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	github.com/chromedp/cdproto v0.0.0-20250304222902-64be311ed8b0 // indirect
+	github.com/chromedp/cdproto v0.0.0-20250311215558-29dfcc2791de // indirect
 	github.com/chromedp/chromedp v0.13.1 // indirect
 	github.com/chromedp/sysutil v1.1.0 // indirect
 	github.com/d4l3k/messagediff v1.2.1 // indirect
@@ -98,13 +98,13 @@ require (
 	github.com/temoto/robotstxt v1.1.2 // indirect
 	github.com/xhit/go-str2duration/v2 v2.1.0 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
+	go.uber.org/ratelimit v0.3.1 // indirect
 	golang.org/x/crypto v0.36.0 // indirect
 	golang.org/x/exp v0.0.0-20250305212735-054e65f0b394 // indirect
 	golang.org/x/mod v0.24.0 // indirect
 	golang.org/x/sync v0.12.0 // indirect
 	golang.org/x/sys v0.31.0 // indirect
 	golang.org/x/text v0.23.0 // indirect
-	golang.org/x/time v0.11.0 // indirect
 	golang.org/x/tools v0.31.0 // indirect
 	google.golang.org/protobuf v1.36.5 // indirect
 	gorm.io/datatypes v1.2.5 // indirect

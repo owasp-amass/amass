@@ -18,7 +18,6 @@ import (
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	"github.com/owasp-amass/open-asset-model/general"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
-	"github.com/owasp-amass/resolve"
 )
 
 type dnsIP struct {
@@ -39,7 +38,7 @@ func (d *dnsIP) check(e *et.Event) error {
 		return errors.New("failed to extract the FQDN asset")
 	}
 
-	if _, found := support.IsCNAME(e.Session, fqdn); found {
+	if support.HasDNSRecordType(e, int(dns.TypeCNAME)) {
 		return nil
 	}
 
@@ -114,18 +113,21 @@ func (d *dnsIP) query(e *et.Event, name *dbt.Entity) []*relIP {
 	return ips
 }
 
-func (d *dnsIP) store(e *et.Event, fqdn *dbt.Entity, rr []*resolve.ExtractedAnswer) []*relIP {
+func (d *dnsIP) store(e *et.Event, fqdn *dbt.Entity, rr []dns.RR) []*relIP {
 	var ips []*relIP
 
 	for _, record := range rr {
-		if record.Type == dns.TypeA {
-			if ip, err := e.Session.Cache().CreateAsset(&oamnet.IPAddress{Address: netip.MustParseAddr(record.Data), Type: "IPv4"}); err == nil && ip != nil {
+		if record.Header().Rrtype == dns.TypeA {
+			addr := (record.(*dns.A)).A.String()
+
+			if ip, err := e.Session.Cache().CreateAsset(&oamnet.IPAddress{Address: netip.MustParseAddr(string(addr)), Type: "IPv4"}); err == nil && ip != nil {
 				if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
 					Relation: &oamdns.BasicDNSRelation{
 						Name: "dns_record",
 						Header: oamdns.RRHeader{
-							RRType: int(record.Type),
-							Class:  1,
+							RRType: int(record.Header().Rrtype),
+							Class:  int(record.Header().Class),
+							TTL:    int(record.Header().Ttl),
 						},
 					},
 					FromEntity: fqdn,
@@ -140,14 +142,17 @@ func (d *dnsIP) store(e *et.Event, fqdn *dbt.Entity, rr []*resolve.ExtractedAnsw
 			} else {
 				e.Session.Log().Error(err.Error(), slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
 			}
-		} else if record.Type == dns.TypeAAAA {
-			if ip, err := e.Session.Cache().CreateAsset(&oamnet.IPAddress{Address: netip.MustParseAddr(record.Data), Type: "IPv6"}); err == nil {
+		} else if record.Header().Rrtype == dns.TypeAAAA {
+			addr := (record.(*dns.AAAA)).AAAA.String()
+
+			if ip, err := e.Session.Cache().CreateAsset(&oamnet.IPAddress{Address: netip.MustParseAddr(addr), Type: "IPv6"}); err == nil {
 				if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
 					Relation: &oamdns.BasicDNSRelation{
 						Name: "dns_record",
 						Header: oamdns.RRHeader{
-							RRType: int(record.Type),
-							Class:  1,
+							RRType: int(record.Header().Rrtype),
+							Class:  int(record.Header().Class),
+							TTL:    int(record.Header().Ttl),
 						},
 					},
 					FromEntity: fqdn,
@@ -171,6 +176,12 @@ func (d *dnsIP) store(e *et.Event, fqdn *dbt.Entity, rr []*resolve.ExtractedAnsw
 func (d *dnsIP) process(e *et.Event, name string, addrs []*relIP) {
 	for _, a := range addrs {
 		ip := a.ip.Asset.(*oamnet.IPAddress)
+
+		if ip.Type == "IPv4" {
+			support.AddDNSRecordType(e, int(dns.TypeA))
+		} else if ip.Type == "IPv6" {
+			support.AddDNSRecordType(e, int(dns.TypeAAAA))
+		}
 
 		_ = e.Dispatcher.DispatchEvent(&et.Event{
 			Name:    ip.Address.String(),

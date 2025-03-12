@@ -20,20 +20,22 @@ import (
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
-	"go.uber.org/ratelimit"
+	"golang.org/x/time/rate"
 )
 
 type binaryEdge struct {
 	name   string
 	log    *slog.Logger
-	rlimit ratelimit.Limiter
+	rlimit *rate.Limiter
 	source *et.Source
 }
 
 func NewBinaryEdge() et.Plugin {
+	limit := rate.Every(10 * time.Second)
+
 	return &binaryEdge{
 		name:   "BinaryEdge",
-		rlimit: ratelimit.New(10, ratelimit.WithoutSlack),
+		rlimit: rate.NewLimiter(limit, 1),
 		source: &et.Source{
 			Name:       "BinaryEdge",
 			Confidence: 80,
@@ -101,7 +103,7 @@ func (be *binaryEdge) check(e *et.Event) error {
 	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, be.source, since) {
 		names = append(names, be.lookup(e, fqdn.Name, since)...)
 	} else {
-		names = append(names, be.query(e, fqdn.Name, be.source, keys)...)
+		names = append(names, be.query(e, fqdn.Name, keys)...)
 		support.MarkAssetMonitored(e.Session, e.Entity, be.source)
 	}
 
@@ -115,7 +117,7 @@ func (be *binaryEdge) lookup(e *et.Event, name string, since time.Time) []*dbt.E
 	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.FQDN), be.source, since)
 }
 
-func (be *binaryEdge) query(e *et.Event, name string, src *et.Source, keys []string) []*dbt.Entity {
+func (be *binaryEdge) query(e *et.Event, name string, keys []string) []*dbt.Entity {
 	subs := stringset.New()
 	defer subs.Close()
 
@@ -123,7 +125,7 @@ func (be *binaryEdge) query(e *et.Event, name string, src *et.Source, keys []str
 loop:
 	for _, key := range keys {
 		for pagenum <= 500 {
-			be.rlimit.Take()
+			_ = be.rlimit.Wait(context.TODO())
 			resp, err := http.RequestWebPage(context.TODO(), &http.Request{
 				Header: http.Header{"X-KEY": []string{key}},
 				URL:    "https://api.binaryedge.io/v2/query/domains/subdomain/" + name + "?page=" + strconv.Itoa(pagenum),

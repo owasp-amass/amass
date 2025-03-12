@@ -8,13 +8,13 @@ import (
 	"log/slog"
 
 	et "github.com/owasp-amass/amass/v4/engine/types"
-	"go.uber.org/ratelimit"
+	"golang.org/x/time/rate"
 )
 
 type gleif struct {
 	name    string
 	log     *slog.Logger
-	rlimit  ratelimit.Limiter
+	rlimit  *rate.Limiter
 	fuzzy   *fuzzyCompletions
 	related *relatedOrgs
 	source  *et.Source

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/miekg/dns"
 	"github.com/owasp-amass/amass/v4/engine/plugins/support"
 	"github.com/owasp-amass/amass/v4/engine/sessions/scope"
 	et "github.com/owasp-amass/amass/v4/engine/types"
@@ -42,8 +43,12 @@ func (h *horfqdn) check(e *et.Event) error {
 			}
 		}
 	}
-	if len(ptrs) == 0 && !support.NameResolved(e.Session, fqdn) {
-		return nil
+	if len(ptrs) == 0 {
+		if !support.HasDNSRecordType(e, int(dns.TypeA)) &&
+			!support.HasDNSRecordType(e, int(dns.TypeAAAA)) &&
+			!support.HasDNSRecordType(e, int(dns.TypeCNAME)) {
+			return nil
+		}
 	}
 	if _, conf := e.Session.Scope().IsAssetInScope(fqdn, 0); conf > 0 {
 		return nil

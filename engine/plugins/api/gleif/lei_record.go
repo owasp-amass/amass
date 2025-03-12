@@ -18,7 +18,7 @@ import (
 )
 
 func (g *gleif) getLEIRecord(id *general.Identifier) (*leiRecord, error) {
-	g.rlimit.Take()
+	_ = g.rlimit.Wait(context.TODO())
 
 	u := "https://api.gleif.org/api/v1/lei-records/" + id.ID
 	resp, err := http.RequestWebPage(context.TODO(), &http.Request{URL: u})
@@ -36,7 +36,7 @@ func (g *gleif) getLEIRecord(id *general.Identifier) (*leiRecord, error) {
 }
 
 func (g *gleif) getDirectParentRecord(id *general.Identifier) (*leiRecord, error) {
-	g.rlimit.Take()
+	_ = g.rlimit.Wait(context.TODO())
 
 	u := "https://api.gleif.org/api/v1/lei-records/" + id.ID + "/direct-parent"
 	resp, err := http.RequestWebPage(context.TODO(), &http.Request{URL: u})
@@ -59,7 +59,7 @@ func (g *gleif) getDirectChildrenRecords(id *general.Identifier) ([]*leiRecord, 
 	last := 1
 	link := "https://api.gleif.org/api/v1/lei-records/" + id.ID + "/direct-children"
 	for i := 1; i <= last && link != ""; i++ {
-		g.rlimit.Take()
+		_ = g.rlimit.Wait(context.TODO())
 
 		resp, err := http.RequestWebPage(context.TODO(), &http.Request{URL: link})
 		if err != nil || resp.StatusCode != 200 || resp.Body == "" {

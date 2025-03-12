@@ -57,7 +57,7 @@ func (d *dnsReverse) check(e *et.Event) error {
 	reverse = resolve.RemoveLastDot(reverse)
 
 	src := d.plugin.source
-	ptr := d.createPTRAlias(e, reverse, e.Entity, src)
+	ptr := d.createPTRAlias(e, reverse, e.Entity)
 	if ptr == nil {
 		return nil
 	}
@@ -71,12 +71,13 @@ func (d *dnsReverse) check(e *et.Event) error {
 	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, src, since) {
 		rev = append(rev, d.lookup(e, ptr, since)...)
 	} else {
-		rev = append(rev, d.query(e, addrstr, ptr, src)...)
+		rev = append(rev, d.query(e, addrstr, ptr)...)
 		support.MarkAssetMonitored(e.Session, ptr, src)
 	}
 
 	if len(rev) > 0 {
 		d.process(e, rev)
+		support.AddDNSRecordType(e, int(dns.TypePTR))
 
 		var size int
 		if _, conf := e.Session.Scope().IsAssetInScope(ip, 0); conf > 0 {
@@ -109,49 +110,39 @@ func (d *dnsReverse) lookup(e *et.Event, fqdn *dbt.Entity, since time.Time) []*r
 	return rev
 }
 
-func (d *dnsReverse) query(e *et.Event, ipstr string, ptr *dbt.Entity, src *et.Source) []*relRev {
+func (d *dnsReverse) query(e *et.Event, ipstr string, ptr *dbt.Entity) []*relRev {
 	var rev []*relRev
 
 	if rr, err := support.PerformQuery(ipstr, dns.TypePTR); err == nil {
-		if records := d.store(e, ptr, src, rr); len(records) > 0 {
+		if records := d.store(e, ptr, rr); len(records) > 0 {
 			rev = append(rev, records...)
 		}
 	}
 	return rev
 }
 
-func (d *dnsReverse) store(e *et.Event, ptr *dbt.Entity, src *et.Source, rr []*resolve.ExtractedAnswer) []*relRev {
+func (d *dnsReverse) store(e *et.Event, ptr *dbt.Entity, rr []dns.RR) []*relRev {
 	var rev []*relRev
-
-	var passed bool
 	// additional validation of the PTR record
 	for _, record := range rr {
-		if record.Type != dns.TypePTR {
+		if record.Header().Rrtype != dns.TypePTR {
 			continue
 		}
 
-		data := strings.ToLower(strings.TrimSpace(record.Data))
-		if name := support.ScrapeSubdomainNames(data); len(name) == 1 && name[0] == data {
-			passed = true
-			break
-		}
-	}
-	if !passed {
-		return rev
-	}
-
-	for _, record := range rr {
-		if record.Type != dns.TypePTR {
+		data := strings.ToLower(strings.TrimSpace((record.(*dns.PTR)).Ptr))
+		name := support.ScrapeSubdomainNames(data)
+		if len(name) != 1 {
 			continue
 		}
 
-		if t, err := e.Session.Cache().CreateAsset(&oamdns.FQDN{Name: record.Data}); err == nil && t != nil {
+		if t, err := e.Session.Cache().CreateAsset(&oamdns.FQDN{Name: name[0]}); err == nil && t != nil {
 			if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
 				Relation: &oamdns.BasicDNSRelation{
 					Name: "dns_record",
 					Header: oamdns.RRHeader{
-						RRType: int(record.Type),
-						Class:  1,
+						RRType: int(record.Header().Rrtype),
+						Class:  int(record.Header().Class),
+						TTL:    int(record.Header().Ttl),
 					},
 				},
 				FromEntity: ptr,
@@ -159,8 +150,8 @@ func (d *dnsReverse) store(e *et.Event, ptr *dbt.Entity, src *et.Source, rr []*r
 			}); err == nil && edge != nil {
 				rev = append(rev, &relRev{ipFQDN: ptr, target: t})
 				_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
-					Source:     src.Name,
-					Confidence: src.Confidence,
+					Source:     d.plugin.source.Name,
+					Confidence: d.plugin.source.Confidence,
 				})
 			}
 		} else {
@@ -171,7 +162,7 @@ func (d *dnsReverse) store(e *et.Event, ptr *dbt.Entity, src *et.Source, rr []*r
 	return rev
 }
 
-func (d *dnsReverse) createPTRAlias(e *et.Event, name string, ip *dbt.Entity, datasrc *et.Source) *dbt.Entity {
+func (d *dnsReverse) createPTRAlias(e *et.Event, name string, ip *dbt.Entity) *dbt.Entity {
 	ptr, err := e.Session.Cache().CreateAsset(&oamdns.FQDN{Name: name})
 	if err != nil || ptr == nil {
 		return nil
@@ -182,8 +173,8 @@ func (d *dnsReverse) createPTRAlias(e *et.Event, name string, ip *dbt.Entity, da
 		ToEntity:   ptr,
 	}); err == nil && edge != nil {
 		_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
-			Source:     datasrc.Name,
-			Confidence: datasrc.Confidence,
+			Source:     d.plugin.source.Name,
+			Confidence: d.plugin.source.Confidence,
 		})
 	}
 

@@ -19,22 +19,24 @@ import (
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
-	"go.uber.org/ratelimit"
+	"golang.org/x/time/rate"
 )
 
 type rapidDNS struct {
 	name   string
 	fmtstr string
 	log    *slog.Logger
-	rlimit ratelimit.Limiter
+	rlimit *rate.Limiter
 	source *et.Source
 }
 
 func NewRapidDNS() et.Plugin {
+	limit := rate.Every(5 * time.Second)
+
 	return &rapidDNS{
 		name:   "RapidDNS",
 		fmtstr: "https://rapiddns.io/subdomain/%s?full=1",
-		rlimit: ratelimit.New(5, ratelimit.WithoutSlack),
+		rlimit: rate.NewLimiter(limit, 1),
 		source: &et.Source{
 			Name:       "RapidDNS",
 			Confidence: 70,
@@ -88,27 +90,27 @@ func (rd *rapidDNS) check(e *et.Event) error {
 
 	var names []*dbt.Entity
 	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, rd.source, since) {
-		names = append(names, rd.lookup(e, fqdn.Name, rd.source, since)...)
+		names = append(names, rd.lookup(e, fqdn.Name, since)...)
 	} else {
-		names = append(names, rd.query(e, fqdn.Name, rd.source)...)
+		names = append(names, rd.query(e, fqdn.Name)...)
 		support.MarkAssetMonitored(e.Session, e.Entity, rd.source)
 	}
 
 	if len(names) > 0 {
-		rd.process(e, names, rd.source)
+		rd.process(e, names)
 	}
 	return nil
 }
 
-func (rd *rapidDNS) lookup(e *et.Event, name string, src *et.Source, since time.Time) []*dbt.Entity {
+func (rd *rapidDNS) lookup(e *et.Event, name string, since time.Time) []*dbt.Entity {
 	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.FQDN), rd.source, since)
 }
 
-func (rd *rapidDNS) query(e *et.Event, name string, src *et.Source) []*dbt.Entity {
+func (rd *rapidDNS) query(e *et.Event, name string) []*dbt.Entity {
 	subs := stringset.New()
 	defer subs.Close()
 
-	rd.rlimit.Take()
+	_ = rd.rlimit.Wait(context.TODO())
 	resp, err := http.RequestWebPage(context.TODO(), &http.Request{URL: fmt.Sprintf(rd.fmtstr, name)})
 	if err != nil || resp.Body == "" {
 		return nil
@@ -122,13 +124,13 @@ func (rd *rapidDNS) query(e *et.Event, name string, src *et.Source) []*dbt.Entit
 		}
 	}
 
-	return rd.store(e, subs.Slice(), rd.source)
+	return rd.store(e, subs.Slice())
 }
 
-func (rd *rapidDNS) store(e *et.Event, names []string, src *et.Source) []*dbt.Entity {
+func (rd *rapidDNS) store(e *et.Event, names []string) []*dbt.Entity {
 	return support.StoreFQDNsWithSource(e.Session, names, rd.source, rd.name, rd.name+"-Handler")
 }
 
-func (rd *rapidDNS) process(e *et.Event, assets []*dbt.Entity, src *et.Source) {
+func (rd *rapidDNS) process(e *et.Event, assets []*dbt.Entity) {
 	support.ProcessFQDNsWithSource(e, assets, rd.source)
 }

@@ -75,7 +75,7 @@ func (d *alts) check(e *et.Event) error {
 		return nil
 	}
 
-	if !support.NameResolved(e.Session, fqdn) {
+	if e.Meta == nil {
 		return nil
 	}
 

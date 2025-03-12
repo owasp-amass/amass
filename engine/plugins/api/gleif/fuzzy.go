@@ -87,7 +87,7 @@ func (fc *fuzzyCompletions) query(e *et.Event, orgent *dbt.Entity) *dbt.Entity {
 		brand := support.ExtractBrandName(o.Name)
 		u := "https://api.gleif.org/api/v1/fuzzycompletions?field=entity.legalName&q=" + url.QueryEscape(brand)
 
-		fc.plugin.rlimit.Take()
+		_ = fc.plugin.rlimit.Wait(context.TODO())
 		resp, err := http.RequestWebPage(context.TODO(), &http.Request{URL: u})
 		if err != nil || resp.Body == "" {
 			msg := fmt.Sprintf("Failed to obtain the LEI record for %s: %s", o.Name, err)

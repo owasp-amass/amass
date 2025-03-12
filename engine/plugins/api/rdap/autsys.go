@@ -72,7 +72,7 @@ func (r *autsys) query(e *et.Event, asset *dbt.Entity) (*dbt.Entity, *rdap.Autnu
 	defer cancel()
 	req = req.WithContext(ctx)
 
-	r.plugin.rlimit.Take()
+	_ = r.plugin.rlimit.Wait(context.TODO())
 	resp, err := r.plugin.client.Do(req)
 	if err != nil {
 		return nil, nil

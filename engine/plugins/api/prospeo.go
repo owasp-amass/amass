@@ -20,7 +20,7 @@ import (
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	"github.com/owasp-amass/open-asset-model/general"
-	"go.uber.org/ratelimit"
+	"golang.org/x/time/rate"
 )
 
 type Prospeo struct {
@@ -29,17 +29,19 @@ type Prospeo struct {
 	counturl string
 	queryurl string
 	log      *slog.Logger
-	rlimit   ratelimit.Limiter
+	rlimit   *rate.Limiter
 	source   *et.Source
 }
 
 func NewProspeo() et.Plugin {
+	limit := rate.Every(15 * time.Second)
+
 	return &Prospeo{
 		name:     "Prospeo",
 		accturl:  "https://api.prospeo.io/account-information",
 		counturl: "https://api.prospeo.io/email-count",
 		queryurl: "https://api.prospeo.io/domain-search",
-		rlimit:   ratelimit.New(15, ratelimit.WithoutSlack),
+		rlimit:   rate.NewLimiter(limit, 1),
 		source: &et.Source{
 			Name:       "Prospeo",
 			Confidence: 80,
@@ -137,7 +139,7 @@ func (p *Prospeo) query(e *et.Event, name string) []*dbt.Entity {
 		limit = count
 	}
 
-	p.rlimit.Take()
+	_ = p.rlimit.Wait(context.TODO())
 	resp, err := http.RequestWebPage(context.TODO(), &http.Request{
 		Method: "POST",
 		Body:   `{"company": "` + name + `", "limit": ` + strconv.Itoa(limit) + `}`,
@@ -175,7 +177,8 @@ func (p *Prospeo) process(e *et.Event, assets []*dbt.Entity) {
 }
 
 func (p *Prospeo) accountType(key string) (int, error) {
-	p.rlimit.Take()
+	_ = p.rlimit.Wait(context.TODO())
+
 	resp, err := http.RequestWebPage(context.TODO(), &http.Request{
 		Method: "POST",
 		URL:    p.accturl,
@@ -197,7 +200,8 @@ func (p *Prospeo) accountType(key string) (int, error) {
 }
 
 func (p *Prospeo) count(domain string, key string) (int, error) {
-	p.rlimit.Take()
+	_ = p.rlimit.Wait(context.TODO())
+
 	resp, err := http.RequestWebPage(context.TODO(), &http.Request{
 		Method: "POST",
 		Body:   `{"domain": "` + domain + `"}`,

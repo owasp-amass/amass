@@ -20,20 +20,22 @@ import (
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
-	"go.uber.org/ratelimit"
+	"golang.org/x/time/rate"
 )
 
 type virusTotal struct {
 	name   string
 	log    *slog.Logger
-	rlimit ratelimit.Limiter
+	rlimit *rate.Limiter
 	source *et.Source
 }
 
 func NewVirusTotal() et.Plugin {
+	limit := rate.Every(5 * time.Second)
+
 	return &virusTotal{
 		name:   "VirusTotal",
-		rlimit: ratelimit.New(5, ratelimit.WithoutSlack),
+		rlimit: rate.NewLimiter(limit, 1),
 		source: &et.Source{
 			Name:       "VirusTotal",
 			Confidence: 60,
@@ -102,27 +104,27 @@ func (vt *virusTotal) check(e *et.Event) error {
 
 	var names []*dbt.Entity
 	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, vt.source, since) {
-		names = append(names, vt.lookup(e, fqdn.Name, vt.source, since)...)
+		names = append(names, vt.lookup(e, fqdn.Name, since)...)
 	} else {
-		names = append(names, vt.query(e, fqdn.Name, vt.source, keys)...)
+		names = append(names, vt.query(e, fqdn.Name, keys)...)
 		support.MarkAssetMonitored(e.Session, e.Entity, vt.source)
 	}
 
 	if len(names) > 0 {
-		vt.process(e, names, vt.source)
+		vt.process(e, names)
 	}
 	return nil
 }
 
-func (vt *virusTotal) lookup(e *et.Event, name string, src *et.Source, since time.Time) []*dbt.Entity {
+func (vt *virusTotal) lookup(e *et.Event, name string, since time.Time) []*dbt.Entity {
 	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.FQDN), vt.source, since)
 }
 
-func (vt *virusTotal) query(e *et.Event, name string, src *et.Source, keys []string) []*dbt.Entity {
+func (vt *virusTotal) query(e *et.Event, name string, keys []string) []*dbt.Entity {
 	var names []string
 
 	for _, key := range keys {
-		vt.rlimit.Take()
+		_ = vt.rlimit.Wait(context.TODO())
 		resp, err := http.RequestWebPage(context.TODO(), &http.Request{
 			URL: "https://www.virustotal.com/vtapi/v2/domain/report?domain=" + name + "&apikey=" + key,
 		})
@@ -147,13 +149,13 @@ func (vt *virusTotal) query(e *et.Event, name string, src *et.Source, keys []str
 		break
 	}
 
-	return vt.store(e, names, vt.source)
+	return vt.store(e, names)
 }
 
-func (vt *virusTotal) store(e *et.Event, names []string, src *et.Source) []*dbt.Entity {
+func (vt *virusTotal) store(e *et.Event, names []string) []*dbt.Entity {
 	return support.StoreFQDNsWithSource(e.Session, names, vt.source, vt.name, vt.name+"-Handler")
 }
 
-func (vt *virusTotal) process(e *et.Event, assets []*dbt.Entity, src *et.Source) {
+func (vt *virusTotal) process(e *et.Event, assets []*dbt.Entity) {
 	support.ProcessFQDNsWithSource(e, assets, vt.source)
 }
