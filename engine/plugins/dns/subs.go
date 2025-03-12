@@ -232,7 +232,7 @@ func (d *dnsSubs) query(e *et.Event, subdomain string) []*relSubs {
 	return alias
 }
 
-func (d *dnsSubs) store(e *et.Event, name string, rr []*resolve.ExtractedAnswer) []*relSubs {
+func (d *dnsSubs) store(e *et.Event, name string, rr []dns.RR) []*relSubs {
 	var alias []*relSubs
 
 	fqdn, err := e.Session.Cache().CreateAsset(&oamdns.FQDN{Name: name})
@@ -241,28 +241,56 @@ func (d *dnsSubs) store(e *et.Event, name string, rr []*resolve.ExtractedAnswer)
 	}
 
 	for _, record := range rr {
-		if record.Type != dns.TypeNS && record.Type != dns.TypeMX {
+		var a *dbt.Entity
+		var edge *dbt.Edge
+
+		if record.Header().Rrtype == dns.TypeNS {
+			data := resolve.RemoveLastDot((record.(*dns.NS)).Ns)
+
+			a, err = e.Session.Cache().CreateAsset(&oamdns.FQDN{Name: data})
+			if err == nil && a != nil {
+				edge, err = e.Session.Cache().CreateEdge(&dbt.Edge{
+					Relation: &oamdns.BasicDNSRelation{
+						Name: "dns_record",
+						Header: oamdns.RRHeader{
+							RRType: int(record.Header().Rrtype),
+							Class:  int(record.Header().Class),
+							TTL:    int(record.Header().Ttl),
+						},
+					},
+					FromEntity: fqdn,
+					ToEntity:   a,
+				})
+			}
+		} else if record.Header().Rrtype == dns.TypeMX {
+			data := resolve.RemoveLastDot((record.(*dns.MX)).Mx)
+
+			a, err = e.Session.Cache().CreateAsset(&oamdns.FQDN{Name: data})
+			if err == nil && a != nil {
+				edge, err = e.Session.Cache().CreateEdge(&dbt.Edge{
+					Relation: &oamdns.PrefDNSRelation{
+						Name: "dns_record",
+						Header: oamdns.RRHeader{
+							RRType: int(record.Header().Rrtype),
+							Class:  int(record.Header().Class),
+							TTL:    int(record.Header().Ttl),
+						},
+						Preference: int((record.(*dns.MX)).Preference),
+					},
+					FromEntity: fqdn,
+					ToEntity:   a,
+				})
+			}
+		} else {
 			continue
 		}
 
-		if a, err := e.Session.Cache().CreateAsset(&oamdns.FQDN{Name: record.Data}); err == nil && a != nil {
-			if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
-				Relation: &oamdns.PrefDNSRelation{
-					Name: "dns_record",
-					Header: oamdns.RRHeader{
-						RRType: int(record.Type),
-						Class:  1,
-					},
-				},
-				FromEntity: fqdn,
-				ToEntity:   a,
-			}); err == nil && edge != nil {
-				alias = append(alias, &relSubs{rtype: "dns_record", alias: fqdn, target: a})
-				_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
-					Source:     d.plugin.source.Name,
-					Confidence: d.plugin.source.Confidence,
-				})
-			}
+		if err == nil && edge != nil {
+			alias = append(alias, &relSubs{rtype: "dns_record", alias: fqdn, target: a})
+			_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
+				Source:     d.plugin.source.Name,
+				Confidence: d.plugin.source.Confidence,
+			})
 		} else {
 			e.Session.Log().Error(err.Error(), slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
 		}
@@ -295,8 +323,8 @@ func (d *dnsSubs) process(e *et.Event, results []*relSubs) {
 			Session: e.Session,
 		})
 
-		e.Session.Log().Info("relationship discovered", "from", fname.Name, "relation", finding.rtype,
-			"to", tname.Name, slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
+		e.Session.Log().Info("relationship discovered", "from", fname.Name, "relation",
+			finding.rtype, "to", tname.Name, slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
 	}
 }
 

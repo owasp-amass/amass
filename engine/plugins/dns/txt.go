@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/miekg/dns"
@@ -15,7 +16,6 @@ import (
 	et "github.com/owasp-amass/amass/v4/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
-	"github.com/owasp-amass/resolve"
 )
 
 type dnsTXT struct {
@@ -35,46 +35,43 @@ func (d *dnsTXT) check(e *et.Event) error {
 		return err
 	}
 
-	var txtRecords []*resolve.ExtractedAnswer
+	var txtRecords []dns.RR
+	var props []*oamdns.DNSRecordProperty
 	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, d.source, since) {
-		txtRecords = d.lookup(e, e.Entity, since)
+		props = d.lookup(e, e.Entity, since)
 	} else {
 		txtRecords = d.query(e, e.Entity)
 		d.store(e, e.Entity, txtRecords)
 	}
 
 	if len(txtRecords) > 0 {
-		d.process(e, e.Entity, txtRecords)
+		d.process(e, e.Entity, txtRecords, props)
 		support.AddDNSRecordType(e, int(dns.TypeTXT))
 	}
 	return nil
 }
 
-func (d *dnsTXT) lookup(e *et.Event, fqdn *dbt.Entity, since time.Time) []*resolve.ExtractedAnswer {
-	var txtRecords []*resolve.ExtractedAnswer
+func (d *dnsTXT) lookup(e *et.Event, fqdn *dbt.Entity, since time.Time) []*oamdns.DNSRecordProperty {
+	var props []*oamdns.DNSRecordProperty
 
 	n, ok := fqdn.Asset.(*oamdns.FQDN)
 	if !ok || n == nil {
-		return txtRecords
+		return props
 	}
 
 	if tags, err := e.Session.Cache().GetEntityTags(fqdn, since, "dns_record"); err == nil {
 		for _, tag := range tags {
 			if prop, ok := tag.Property.(*oamdns.DNSRecordProperty); ok && prop.Header.RRType == int(dns.TypeTXT) {
-				txtRecords = append(txtRecords, &resolve.ExtractedAnswer{
-					Name: n.Name,
-					Type: dns.TypeTXT,
-					Data: prop.Data,
-				})
+				props = append(props, prop)
 			}
 		}
 	}
 
-	return txtRecords
+	return props
 }
 
-func (d *dnsTXT) query(e *et.Event, name *dbt.Entity) []*resolve.ExtractedAnswer {
-	var txtRecords []*resolve.ExtractedAnswer
+func (d *dnsTXT) query(e *et.Event, name *dbt.Entity) []dns.RR {
+	var txtRecords []dns.RR
 
 	fqdn, ok := name.Asset.(*oamdns.FQDN)
 	if !ok {
@@ -89,18 +86,19 @@ func (d *dnsTXT) query(e *et.Event, name *dbt.Entity) []*resolve.ExtractedAnswer
 	return txtRecords
 }
 
-func (d *dnsTXT) store(e *et.Event, fqdn *dbt.Entity, rr []*resolve.ExtractedAnswer) {
+func (d *dnsTXT) store(e *et.Event, fqdn *dbt.Entity, rr []dns.RR) {
 	for _, record := range rr {
-		if record.Type != dns.TypeTXT {
+		if record.Header().Rrtype != dns.TypeTXT {
 			continue
 		}
 
-		txtValue := record.Data
+		txtValue := strings.Join((record.(*dns.TXT)).Txt, " ")
 		_, err := e.Session.Cache().CreateEntityProperty(fqdn, &oamdns.DNSRecordProperty{
 			PropertyName: "dns_record",
 			Header: oamdns.RRHeader{
 				RRType: int(dns.TypeTXT),
-				Class:  1,
+				Class:  int(record.Header().Class),
+				TTL:    int(record.Header().Ttl),
 			},
 			Data: txtValue,
 		})
@@ -112,10 +110,13 @@ func (d *dnsTXT) store(e *et.Event, fqdn *dbt.Entity, rr []*resolve.ExtractedAns
 	}
 }
 
-func (d *dnsTXT) process(e *et.Event, fqdn *dbt.Entity, txtRecords []*resolve.ExtractedAnswer) {
+func (d *dnsTXT) process(e *et.Event, fqdn *dbt.Entity, txtRecords []dns.RR, props []*oamdns.DNSRecordProperty) {
 	for _, record := range txtRecords {
-		e.Session.Log().Info("TXT record discovered", "fqdn",
-			fqdn.Asset.(*oamdns.FQDN).Name, "txt", record.Data,
-			slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
+		e.Session.Log().Info("TXT record discovered", "fqdn", fqdn.Asset.(*oamdns.FQDN).Name,
+			"txt", strings.Join((record.(*dns.TXT)).Txt, " "), slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
+	}
+	for _, prop := range props {
+		e.Session.Log().Info("TXT record discovered", "fqdn", fqdn.Asset.(*oamdns.FQDN).Name,
+			"txt", prop.Data, slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
 	}
 }

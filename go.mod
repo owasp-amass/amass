@@ -1,6 +1,6 @@
 module github.com/owasp-amass/amass/v4
 
-go 1.24
+go 1.24.0
 
 require (
 	github.com/99designs/gqlgen v0.17.66
@@ -27,7 +27,7 @@ require (
 	github.com/openrdap/rdap v0.9.1
 	github.com/owasp-amass/asset-db v0.19.2
 	github.com/owasp-amass/open-asset-model v0.14.0
-	github.com/owasp-amass/resolve v0.8.1
+	github.com/owasp-amass/resolve v0.8.2
 	github.com/samber/slog-common v0.18.1
 	github.com/samber/slog-syslog/v2 v2.5.2
 	github.com/stretchr/testify v1.10.0
@@ -52,7 +52,7 @@ require (
 	github.com/benbjohnson/clock v1.3.5 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	github.com/chromedp/cdproto v0.0.0-20250307225615-b9fffb6d31ad // indirect
+	github.com/chromedp/cdproto v0.0.0-20250311215558-29dfcc2791de // indirect
 	github.com/chromedp/chromedp v0.13.1 // indirect
 	github.com/chromedp/sysutil v1.1.0 // indirect
 	github.com/d4l3k/messagediff v1.2.1 // indirect

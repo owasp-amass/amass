@@ -7,6 +7,7 @@ package dns
 import (
 	"errors"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/miekg/dns"
@@ -85,21 +86,24 @@ func (d *dnsCNAME) query(e *et.Event, name *dbt.Entity) []*relAlias {
 	return alias
 }
 
-func (d *dnsCNAME) store(e *et.Event, fqdn *dbt.Entity, rr []*resolve.ExtractedAnswer) []*relAlias {
+func (d *dnsCNAME) store(e *et.Event, fqdn *dbt.Entity, rr []dns.RR) []*relAlias {
 	var alias []*relAlias
 
 	for _, record := range rr {
-		if record.Type != dns.TypeCNAME {
+		if record.Header().Rrtype != dns.TypeCNAME {
 			continue
 		}
 
-		if cname, err := e.Session.Cache().CreateAsset(&oamdns.FQDN{Name: record.Data}); err == nil && cname != nil {
+		data := strings.ToLower(strings.TrimSpace((record.(*dns.CNAME)).Target))
+		name := resolve.RemoveLastDot(data)
+		if cname, err := e.Session.Cache().CreateAsset(&oamdns.FQDN{Name: name}); err == nil && cname != nil {
 			if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
 				Relation: &oamdns.BasicDNSRelation{
 					Name: "dns_record",
 					Header: oamdns.RRHeader{
-						RRType: int(record.Type),
-						Class:  1,
+						RRType: int(record.Header().Rrtype),
+						Class:  int(record.Header().Class),
+						TTL:    int(record.Header().Ttl),
 					},
 				},
 				FromEntity: fqdn,

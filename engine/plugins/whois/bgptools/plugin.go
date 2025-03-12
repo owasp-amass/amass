@@ -64,7 +64,16 @@ func (bt *bgpTools) Start(r et.Registry) error {
 	} else if len(rr) == 0 {
 		return errors.New("failed to obtain the BGPTools IP address")
 	}
-	bt.addr = rr[0].Data
+
+	for _, record := range rr {
+		if record.Header().Rrtype == dns.TypeA {
+			bt.addr = strings.TrimSpace((record.(*dns.A)).A.String())
+			break
+		}
+	}
+	if bt.addr == "" {
+		return errors.New("failed to obtain the BGPTools IP address")
+	}
 
 	bt.netblock = &netblock{
 		name:   bt.name + "-IP-Handler",

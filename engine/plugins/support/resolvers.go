@@ -84,7 +84,7 @@ func NumResolvers() int {
 	return trusted.Len()
 }
 
-func PerformQuery(name string, qtype uint16) ([]*resolve.ExtractedAnswer, error) {
+func PerformQuery(name string, qtype uint16) ([]dns.RR, error) {
 	msg := resolve.QueryMsg(name, qtype)
 	if qtype == dns.TypePTR {
 		msg = resolve.ReverseMsg(name)
@@ -92,9 +92,9 @@ func PerformQuery(name string, qtype uint16) ([]*resolve.ExtractedAnswer, error)
 
 	resp, err := dnsQuery(msg, trusted, 50)
 	if err == nil && resp != nil && !wildcardDetected(resp, trusted) {
-		if ans := resolve.ExtractAnswers(resp); len(ans) > 0 {
-			if rr := resolve.AnswersByType(ans, qtype); len(rr) > 0 {
-				return normalize(rr), nil
+		if len(resp.Answer) > 0 {
+			if rr := resolve.AnswersByType(resp, qtype); len(rr) > 0 {
+				return rr, nil
 			}
 		}
 	}
@@ -108,20 +108,6 @@ func wildcardDetected(resp *dns.Msg, r *resolve.Resolvers) bool {
 		return r.WildcardDetected(context.TODO(), resp, dom)
 	}
 	return false
-}
-
-func normalize(records []*resolve.ExtractedAnswer) []*resolve.ExtractedAnswer {
-	var results []*resolve.ExtractedAnswer
-
-	for _, rr := range records {
-		results = append(results, &resolve.ExtractedAnswer{
-			Name: strings.ToLower(rr.Name),
-			Type: rr.Type,
-			Data: strings.ToLower(rr.Data),
-		})
-	}
-
-	return results
 }
 
 func dnsQuery(msg *dns.Msg, r *resolve.Resolvers, attempts int) (*dns.Msg, error) {
