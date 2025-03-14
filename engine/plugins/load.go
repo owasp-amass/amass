@@ -6,6 +6,7 @@ package plugins
 
 import (
 	"github.com/owasp-amass/amass/v4/engine/plugins/api"
+	"github.com/owasp-amass/amass/v4/engine/plugins/api/aviato"
 	"github.com/owasp-amass/amass/v4/engine/plugins/api/gleif"
 	"github.com/owasp-amass/amass/v4/engine/plugins/api/rdap"
 	"github.com/owasp-amass/amass/v4/engine/plugins/archive"
@@ -36,6 +37,7 @@ var pluginNewFuncs = []func() et.Plugin{
 	api.NewVirusTotal,
 	api.NewZetalytics,
 	archive.NewWayback,
+	aviato.NewAviato,
 	bgptools.NewBGPTools,
 	brute.NewFQDNAlterations,
 	dns.NewDNS,
