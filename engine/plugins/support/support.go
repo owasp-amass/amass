@@ -23,7 +23,6 @@ import (
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
 	"github.com/owasp-amass/open-asset-model/url"
-	"github.com/owasp-amass/resolve"
 	xurls "mvdan.cc/xurls/v2"
 )
 
@@ -36,9 +35,7 @@ var subre, urlre *regexp.Regexp
 
 func init() {
 	done = make(chan struct{})
-	rate := resolve.NewRateTracker()
-	trusted, _ = trustedResolvers()
-	trusted.SetRateTracker(rate)
+	trusted = trustedResolvers()
 
 	urlre = xurls.Relaxed()
 	subre = regexp.MustCompile(dns.AnySubdomainRegexString())

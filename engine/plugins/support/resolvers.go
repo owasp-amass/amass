@@ -7,7 +7,6 @@ package support
 import (
 	"context"
 	"errors"
-	"math/rand"
 	"strings"
 	"time"
 
@@ -80,10 +79,6 @@ var baselineResolvers = []baseline{
 
 var trusted *resolve.Resolvers
 
-func NumResolvers() int {
-	return trusted.Len()
-}
-
 func PerformQuery(name string, qtype uint16) ([]dns.RR, error) {
 	msg := resolve.QueryMsg(name, qtype)
 	if qtype == dns.TypePTR {
@@ -129,19 +124,11 @@ func dnsQuery(msg *dns.Msg, r *resolve.Resolvers, attempts int) (*dns.Msg, error
 	return nil, nil
 }
 
-func trustedResolvers() (*resolve.Resolvers, int) {
-	blr := baselineResolvers
-	rand.Shuffle(len(blr), func(i, j int) {
-		blr[i], blr[j] = blr[j], blr[i]
-	})
-
+func trustedResolvers() *resolve.Resolvers {
 	if pool := resolve.NewResolvers(); pool != nil {
-		for _, r := range blr {
-			_ = pool.AddResolvers(r.qps, r.address)
-		}
 		pool.SetTimeout(3 * time.Second)
-		pool.SetDetectionResolver(50, "8.8.8.8")
-		return pool, pool.Len()
+		pool.SetDetectionResolver("8.8.8.8")
+		return pool
 	}
-	return nil, 0
+	return nil
 }
