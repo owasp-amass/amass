@@ -85,8 +85,11 @@ func PerformQuery(name string, qtype uint16) ([]dns.RR, error) {
 		msg = resolve.ReverseMsg(name)
 	}
 
-	resp, err := dnsQuery(msg, trusted, 50)
-	if err == nil && resp != nil && !wildcardDetected(resp, trusted) {
+	resp, err := dnsQuery(msg, trusted, 10)
+	if err == nil && resp != nil {
+		if wildcardDetected(resp, trusted) {
+			return nil, errors.New("wildcard detected")
+		}
 		if len(resp.Answer) > 0 {
 			if rr := resolve.AnswersByType(resp, qtype); len(rr) > 0 {
 				return rr, nil
@@ -126,7 +129,7 @@ func dnsQuery(msg *dns.Msg, r *resolve.Resolvers, attempts int) (*dns.Msg, error
 
 func trustedResolvers() *resolve.Resolvers {
 	if pool := resolve.NewResolvers(); pool != nil {
-		pool.SetTimeout(3 * time.Second)
+		pool.SetTimeout(time.Second)
 		pool.SetDetectionResolver("8.8.8.8")
 		return pool
 	}
