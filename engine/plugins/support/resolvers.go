@@ -7,6 +7,7 @@ package support
 import (
 	"context"
 	"errors"
+	"runtime"
 	"strings"
 	"time"
 
@@ -128,8 +129,11 @@ func dnsQuery(msg *dns.Msg, r *resolve.Resolvers, attempts int) (*dns.Msg, error
 }
 
 func trustedResolvers() *resolve.Resolvers {
-	if pool := resolve.NewResolvers(); pool != nil {
-		pool.SetTimeout(time.Second)
+	timeout := 3 * time.Second
+	sel := resolve.NewAuthNSSelector(timeout)
+
+	conns := resolve.NewConnPool(runtime.NumCPU(), sel)
+	if pool := resolve.NewResolvers(0, timeout, sel, conns); pool != nil {
 		pool.SetDetectionResolver("8.8.8.8")
 		return pool
 	}
