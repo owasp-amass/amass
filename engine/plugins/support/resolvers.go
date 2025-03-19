@@ -84,7 +84,8 @@ var baselineResolvers = []baseline{
 }
 
 var trusted *pool.Pool
-var detector *wildcards.Detector
+
+//var detector *wildcards.Detector
 
 func PerformQuery(name string, qtype uint16) ([]dns.RR, error) {
 	msg := utils.QueryMsg(name, qtype)
@@ -94,9 +95,9 @@ func PerformQuery(name string, qtype uint16) ([]dns.RR, error) {
 
 	resp, err := dnsQuery(msg, trusted, 10)
 	if err == nil && resp != nil {
-		if wildcardDetected(resp, detector) {
+		/*if wildcardDetected(resp, detector) {
 			return nil, errors.New("wildcard detected")
-		}
+		}*/
 		if len(resp.Answer) > 0 {
 			if rr := utils.AnswersByType(resp, qtype); len(rr) > 0 {
 				return rr, nil
@@ -138,7 +139,7 @@ func trustedResolvers() *pool.Pool {
 	timeout := 3 * time.Second
 	sel := selectors.NewAuthoritative(timeout, servers.NewNameserver)
 	conns := conn.New(runtime.NumCPU(), sel)
-	serv := servers.NewNameserver("8.8.8.8", timeout)
-	detector = wildcards.NewDetector(serv, conns, nil)
+	//serv := servers.NewNameserver("8.8.8.8", timeout)
+	//detector = wildcards.NewDetector(serv, conns, nil)
 	return pool.New(0, sel, conns, nil)
 }
