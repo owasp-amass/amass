@@ -22,12 +22,12 @@ require (
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/likexian/whois v1.15.6
 	github.com/likexian/whois-parser v1.24.20
-	github.com/miekg/dns v1.1.63
+	github.com/miekg/dns v1.1.64
 	github.com/nyaruka/phonenumbers v1.5.0
 	github.com/openrdap/rdap v0.9.1
 	github.com/owasp-amass/asset-db v0.19.2
 	github.com/owasp-amass/open-asset-model v0.14.0
-	github.com/owasp-amass/resolve v0.9.7-0.20250318010913-eee9b5725f42
+	github.com/owasp-amass/resolve v0.9.7-0.20250319054635-4385de887f74
 	github.com/samber/slog-common v0.18.1
 	github.com/samber/slog-syslog/v2 v2.5.2
 	github.com/stretchr/testify v1.10.0
@@ -51,7 +51,7 @@ require (
 	github.com/andybalholm/cascadia v1.3.3 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	github.com/chromedp/cdproto v0.0.0-20250311215558-29dfcc2791de // indirect
+	github.com/chromedp/cdproto v0.0.0-20250318034252-a0d46a7b3aa4 // indirect
 	github.com/chromedp/chromedp v0.13.1 // indirect
 	github.com/chromedp/sysutil v1.1.0 // indirect
 	github.com/d4l3k/messagediff v1.2.1 // indirect
@@ -87,7 +87,7 @@ require (
 	github.com/prometheus/client_golang v1.21.1 // indirect
 	github.com/prometheus/client_model v0.6.1 // indirect
 	github.com/prometheus/common v0.63.0 // indirect
-	github.com/prometheus/procfs v0.15.1 // indirect
+	github.com/prometheus/procfs v0.16.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/rubenv/sql-migrate v1.7.1 // indirect
@@ -109,6 +109,6 @@ require (
 	gorm.io/driver/postgres v1.5.11 // indirect
 	modernc.org/libc v1.61.13 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
-	modernc.org/memory v1.8.2 // indirect
+	modernc.org/memory v1.9.0 // indirect
 	modernc.org/sqlite v1.36.1 // indirect
 )

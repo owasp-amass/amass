@@ -12,7 +12,12 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
-	"github.com/owasp-amass/resolve"
+	"github.com/owasp-amass/resolve/conn"
+	"github.com/owasp-amass/resolve/pool"
+	"github.com/owasp-amass/resolve/selectors"
+	"github.com/owasp-amass/resolve/servers"
+	"github.com/owasp-amass/resolve/utils"
+	"github.com/owasp-amass/resolve/wildcards"
 	"golang.org/x/net/publicsuffix"
 )
 
@@ -78,21 +83,22 @@ var baselineResolvers = []baseline{
 	{"38.132.106.139", 1},  // CyberGhost
 }
 
-var trusted *resolve.Resolvers
+var trusted *pool.Pool
+var detector *wildcards.Detector
 
 func PerformQuery(name string, qtype uint16) ([]dns.RR, error) {
-	msg := resolve.QueryMsg(name, qtype)
+	msg := utils.QueryMsg(name, qtype)
 	if qtype == dns.TypePTR {
-		msg = resolve.ReverseMsg(name)
+		msg = utils.ReverseMsg(name)
 	}
 
 	resp, err := dnsQuery(msg, trusted, 10)
 	if err == nil && resp != nil {
-		if wildcardDetected(resp, trusted) {
+		if wildcardDetected(resp, detector) {
 			return nil, errors.New("wildcard detected")
 		}
 		if len(resp.Answer) > 0 {
-			if rr := resolve.AnswersByType(resp, qtype); len(rr) > 0 {
+			if rr := utils.AnswersByType(resp, qtype); len(rr) > 0 {
 				return rr, nil
 			}
 		}
@@ -100,8 +106,8 @@ func PerformQuery(name string, qtype uint16) ([]dns.RR, error) {
 	return nil, err
 }
 
-func wildcardDetected(resp *dns.Msg, r *resolve.Resolvers) bool {
-	name := strings.ToLower(resolve.RemoveLastDot(resp.Question[0].Name))
+func wildcardDetected(resp *dns.Msg, r *wildcards.Detector) bool {
+	name := strings.ToLower(utils.RemoveLastDot(resp.Question[0].Name))
 
 	if dom, err := publicsuffix.EffectiveTLDPlusOne(name); err == nil && dom != "" {
 		return r.WildcardDetected(context.TODO(), resp, dom)
@@ -109,9 +115,9 @@ func wildcardDetected(resp *dns.Msg, r *resolve.Resolvers) bool {
 	return false
 }
 
-func dnsQuery(msg *dns.Msg, r *resolve.Resolvers, attempts int) (*dns.Msg, error) {
+func dnsQuery(msg *dns.Msg, r *pool.Pool, attempts int) (*dns.Msg, error) {
 	for num := 0; num < attempts; num++ {
-		resp, err := r.QueryBlocking(context.TODO(), msg)
+		resp, err := r.Exchange(context.TODO(), msg)
 		if err != nil {
 			continue
 		}
@@ -128,14 +134,11 @@ func dnsQuery(msg *dns.Msg, r *resolve.Resolvers, attempts int) (*dns.Msg, error
 	return nil, nil
 }
 
-func trustedResolvers() *resolve.Resolvers {
+func trustedResolvers() *pool.Pool {
 	timeout := 3 * time.Second
-	sel := resolve.NewAuthNSSelector(timeout)
-
-	conns := resolve.NewConnPool(runtime.NumCPU(), sel)
-	if pool := resolve.NewResolvers(0, timeout, sel, conns); pool != nil {
-		pool.SetDetectionResolver("8.8.8.8")
-		return pool
-	}
-	return nil
+	sel := selectors.NewAuthoritative(timeout, servers.NewNameserver)
+	conns := conn.New(runtime.NumCPU(), sel)
+	serv := servers.NewNameserver("8.8.8.8", timeout)
+	detector = wildcards.NewDetector(serv, conns, nil)
+	return pool.New(0, sel, conns, nil)
 }

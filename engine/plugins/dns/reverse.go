@@ -19,7 +19,7 @@ import (
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	"github.com/owasp-amass/open-asset-model/general"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
-	"github.com/owasp-amass/resolve"
+	"github.com/owasp-amass/resolve/utils"
 )
 
 type dnsReverse struct {
@@ -54,7 +54,7 @@ func (d *dnsReverse) check(e *et.Event) error {
 	if err != nil {
 		return nil
 	}
-	reverse = resolve.RemoveLastDot(reverse)
+	reverse = utils.RemoveLastDot(reverse)
 
 	src := d.plugin.source
 	ptr := d.createPTRAlias(e, reverse, e.Entity)
