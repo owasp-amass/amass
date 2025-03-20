@@ -27,7 +27,7 @@ require (
 	github.com/openrdap/rdap v0.9.1
 	github.com/owasp-amass/asset-db v0.19.2
 	github.com/owasp-amass/open-asset-model v0.14.0
-	github.com/owasp-amass/resolve v0.9.7-0.20250319234251-34c12575c661
+	github.com/owasp-amass/resolve v0.9.7-0.20250320055124-60c405a52198
 	github.com/samber/slog-common v0.18.1
 	github.com/samber/slog-syslog/v2 v2.5.2
 	github.com/stretchr/testify v1.10.0
@@ -51,8 +51,8 @@ require (
 	github.com/andybalholm/cascadia v1.3.3 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	github.com/chromedp/cdproto v0.0.0-20250318034252-a0d46a7b3aa4 // indirect
-	github.com/chromedp/chromedp v0.13.1 // indirect
+	github.com/chromedp/cdproto v0.0.0-20250319231242-a755498943c8 // indirect
+	github.com/chromedp/chromedp v0.13.2 // indirect
 	github.com/chromedp/sysutil v1.1.0 // indirect
 	github.com/d4l3k/messagediff v1.2.1 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
