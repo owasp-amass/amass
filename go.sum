@@ -1158,6 +1158,8 @@ github.com/owasp-amass/open-asset-model v0.14.0 h1:ycTSBJLgNviN7tnTki4XPqk3G5QoZ
 github.com/owasp-amass/open-asset-model v0.14.0/go.mod h1:DOX+SiD6PZBroSMnsILAmpf0SHi6TVpqjV4uNfBeg7g=
 github.com/owasp-amass/resolve v0.9.7-0.20250319054635-4385de887f74 h1:JEGnytmvK9I1LuhuxmlLbxZxJf407XmO1RxhjeCApbU=
 github.com/owasp-amass/resolve v0.9.7-0.20250319054635-4385de887f74/go.mod h1:hCEHzM1Ugo2b/i+0mHrT05syKHdkmQIEAOCKmh6TSPs=
+github.com/owasp-amass/resolve v0.9.7-0.20250319234251-34c12575c661 h1:B8rgrYFketO3yJjvyxEbRvFgY9pKr7bscNn2LnickDQ=
+github.com/owasp-amass/resolve v0.9.7-0.20250319234251-34c12575c661/go.mod h1:hCEHzM1Ugo2b/i+0mHrT05syKHdkmQIEAOCKmh6TSPs=
 github.com/pascaldekloe/goe v0.0.0-20180627143212-57f6aae5913c/go.mod h1:lzWF7FIEvWOWxwDKqyGYQf6ZUaNfKdP144TG7ZOy1lc=
 github.com/pascaldekloe/goe v0.1.0/go.mod h1:lzWF7FIEvWOWxwDKqyGYQf6ZUaNfKdP144TG7ZOy1lc=
 github.com/performancecopilot/speed/v4 v4.0.0/go.mod h1:qxrSyuDGrTOWfV+uKRFhfxw6h/4HXRGUiZiufxo49BM=
