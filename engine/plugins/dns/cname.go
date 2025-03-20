@@ -17,7 +17,7 @@ import (
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	"github.com/owasp-amass/open-asset-model/general"
-	"github.com/owasp-amass/resolve"
+	"github.com/owasp-amass/resolve/utils"
 )
 
 type dnsCNAME struct {
@@ -95,7 +95,7 @@ func (d *dnsCNAME) store(e *et.Event, fqdn *dbt.Entity, rr []dns.RR) []*relAlias
 		}
 
 		data := strings.ToLower(strings.TrimSpace((record.(*dns.CNAME)).Target))
-		name := resolve.RemoveLastDot(data)
+		name := utils.RemoveLastDot(data)
 		if cname, err := e.Session.Cache().CreateAsset(&oamdns.FQDN{Name: name}); err == nil && cname != nil {
 			if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
 				Relation: &oamdns.BasicDNSRelation{

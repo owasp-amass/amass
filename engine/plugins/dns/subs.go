@@ -19,7 +19,7 @@ import (
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	"github.com/owasp-amass/open-asset-model/general"
-	"github.com/owasp-amass/resolve"
+	"github.com/owasp-amass/resolve/utils"
 	"golang.org/x/net/publicsuffix"
 )
 
@@ -245,7 +245,7 @@ func (d *dnsSubs) store(e *et.Event, name string, rr []dns.RR) []*relSubs {
 		var edge *dbt.Edge
 
 		if record.Header().Rrtype == dns.TypeNS {
-			data := resolve.RemoveLastDot((record.(*dns.NS)).Ns)
+			data := utils.RemoveLastDot((record.(*dns.NS)).Ns)
 
 			a, err = e.Session.Cache().CreateAsset(&oamdns.FQDN{Name: data})
 			if err == nil && a != nil {
@@ -263,7 +263,7 @@ func (d *dnsSubs) store(e *et.Event, name string, rr []dns.RR) []*relSubs {
 				})
 			}
 		} else if record.Header().Rrtype == dns.TypeMX {
-			data := resolve.RemoveLastDot((record.(*dns.MX)).Mx)
+			data := utils.RemoveLastDot((record.(*dns.MX)).Mx)
 
 			a, err = e.Session.Cache().CreateAsset(&oamdns.FQDN{Name: data})
 			if err == nil && a != nil {

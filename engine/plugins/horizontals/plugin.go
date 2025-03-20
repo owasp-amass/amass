@@ -18,7 +18,7 @@ import (
 	"github.com/owasp-amass/open-asset-model/general"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
-	"github.com/owasp-amass/resolve"
+	"github.com/owasp-amass/resolve/utils"
 	"golang.org/x/net/publicsuffix"
 )
 
@@ -174,7 +174,7 @@ func (h *horizPlugin) ipPTRTargetsInScope(e *et.Event, nb *dbt.Entity) {
 			}
 
 			if ents, err := e.Session.Cache().FindEntitiesByContent(
-				&oamdns.FQDN{Name: resolve.RemoveLastDot(reverse)}, e.Session.Cache().StartTime()); err == nil && len(ents) == 1 {
+				&oamdns.FQDN{Name: utils.RemoveLastDot(reverse)}, e.Session.Cache().StartTime()); err == nil && len(ents) == 1 {
 				a := ents[0]
 
 				if edges, err := e.Session.Cache().OutgoingEdges(a, e.Session.Cache().StartTime(), "dns_record"); err == nil && len(edges) > 0 {
