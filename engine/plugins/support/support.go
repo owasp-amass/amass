@@ -309,6 +309,9 @@ func AddDNSRecordType(e *et.Event, rrtype int) {
 	}
 
 	if fm, ok := e.Meta.(*FQDNMeta); ok {
+		if fm.RecordTypes == nil {
+			fm.RecordTypes = make(map[int]bool)
+		}
 		fm.RecordTypes[rrtype] = true
 	}
 }
@@ -324,7 +327,7 @@ func HasDNSRecordType(e *et.Event, rrtype int) bool {
 		return false
 	}
 
-	if fm, ok := e.Meta.(*FQDNMeta); ok {
+	if fm, ok := e.Meta.(*FQDNMeta); ok && fm.RecordTypes != nil {
 		if _, found := fm.RecordTypes[rrtype]; found {
 			return true
 		}

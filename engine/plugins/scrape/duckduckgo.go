@@ -52,13 +52,12 @@ func (d *duckDuckGo) Start(r et.Registry) error {
 	d.log = r.Log().WithGroup("plugin").With("name", d.name)
 
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:       d,
-		Name:         d.name + "-Handler",
-		Priority:     7,
-		MaxInstances: 10,
-		Transforms:   []string{string(oam.FQDN)},
-		EventType:    oam.FQDN,
-		Callback:     d.check,
+		Plugin:     d,
+		Name:       d.name + "-Handler",
+		Priority:   9,
+		Transforms: []string{string(oam.FQDN)},
+		EventType:  oam.FQDN,
+		Callback:   d.check,
 	}); err != nil {
 		return err
 	}

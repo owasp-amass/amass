@@ -51,13 +51,12 @@ func (ht *hackerTarget) Start(r et.Registry) error {
 	ht.log = r.Log().WithGroup("plugin").With("name", ht.name)
 
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:       ht,
-		Name:         ht.name + "-Handler",
-		Priority:     5,
-		MaxInstances: 10,
-		Transforms:   []string{string(oam.FQDN)},
-		EventType:    oam.FQDN,
-		Callback:     ht.check,
+		Plugin:     ht,
+		Name:       ht.name + "-Handler",
+		Priority:   9,
+		Transforms: []string{string(oam.FQDN)},
+		EventType:  oam.FQDN,
+		Callback:   ht.check,
 	}); err != nil {
 		return err
 	}

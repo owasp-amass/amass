@@ -52,13 +52,12 @@ func (b *bing) Start(r et.Registry) error {
 	b.log = r.Log().WithGroup("plugin").With("name", b.name)
 
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:       b,
-		Name:         b.name + "-Handler",
-		Priority:     7,
-		MaxInstances: 10,
-		Transforms:   []string{string(oam.FQDN)},
-		EventType:    oam.FQDN,
-		Callback:     b.check,
+		Plugin:     b,
+		Name:       b.name + "-Handler",
+		Priority:   9,
+		Transforms: []string{string(oam.FQDN)},
+		EventType:  oam.FQDN,
+		Callback:   b.check,
 	}); err != nil {
 		return err
 	}

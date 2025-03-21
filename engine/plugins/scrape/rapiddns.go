@@ -52,13 +52,12 @@ func (rd *rapidDNS) Start(r et.Registry) error {
 	rd.log = r.Log().WithGroup("plugin").With("name", rd.name)
 
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:       rd,
-		Name:         rd.name + "-Handler",
-		Priority:     7,
-		MaxInstances: 10,
-		Transforms:   []string{string(oam.FQDN)},
-		EventType:    oam.FQDN,
-		Callback:     rd.check,
+		Plugin:     rd,
+		Name:       rd.name + "-Handler",
+		Priority:   9,
+		Transforms: []string{string(oam.FQDN)},
+		EventType:  oam.FQDN,
+		Callback:   rd.check,
 	}); err != nil {
 		return err
 	}

@@ -59,6 +59,7 @@ func (p *Prospeo) Start(r et.Registry) error {
 	if err := r.RegisterHandler(&et.Handler{
 		Plugin:     p,
 		Name:       name,
+		Priority:   9,
 		Transforms: []string{string(oam.Identifier)},
 		EventType:  oam.FQDN,
 		Callback:   p.check,
