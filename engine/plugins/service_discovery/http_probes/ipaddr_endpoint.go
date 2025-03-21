@@ -55,7 +55,11 @@ func (r *ipaddrEndpoint) check(e *et.Event) error {
 	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, src, since) {
 		findings = append(findings, r.lookup(e, e.Entity, since)...)
 	} else {
-		findings = append(findings, r.query(e, e.Entity)...)
+		go func() {
+			if findings := append(findings, r.query(e, e.Entity)...); len(findings) > 0 {
+				r.process(e, findings)
+			}
+		}()
 		support.MarkAssetMonitored(e.Session, e.Entity, src)
 	}
 

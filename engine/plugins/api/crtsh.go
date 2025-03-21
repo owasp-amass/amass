@@ -75,9 +75,7 @@ func (c *crtsh) check(e *et.Event) error {
 		return errors.New("failed to extract the FQDN asset")
 	}
 
-	if a, conf := e.Session.Scope().IsAssetInScope(fqdn, 0); conf == 0 || a == nil {
-		return nil
-	} else if f, ok := a.(*oamdns.FQDN); !ok || f == nil || !strings.EqualFold(fqdn.Name, f.Name) {
+	if !support.HasSLDInScope(e) {
 		return nil
 	}
 

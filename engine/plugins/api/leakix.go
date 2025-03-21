@@ -75,6 +75,10 @@ func (ix *leakix) check(e *et.Event) error {
 		return errors.New("failed to extract the FQDN asset")
 	}
 
+	if !support.HasSLDInScope(e) {
+		return nil
+	}
+
 	ds := e.Session.Config().GetDataSourceConfig(ix.name)
 	if ds == nil || len(ds.Creds) == 0 {
 		return nil
@@ -85,12 +89,6 @@ func (ix *leakix) check(e *et.Event) error {
 		if cr != nil && cr.Apikey != "" {
 			keys = append(keys, cr.Apikey)
 		}
-	}
-
-	if a, conf := e.Session.Scope().IsAssetInScope(fqdn, 0); conf == 0 || a == nil {
-		return nil
-	} else if f, ok := a.(*oamdns.FQDN); !ok || f == nil || !strings.EqualFold(fqdn.Name, f.Name) {
-		return nil
 	}
 
 	since, err := support.TTLStartTime(e.Session.Config(), string(oam.FQDN), string(oam.FQDN), ix.name)

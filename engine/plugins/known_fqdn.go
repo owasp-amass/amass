@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/owasp-amass/amass/v4/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v4/engine/types"
 	"github.com/owasp-amass/amass/v4/utils"
 	dbt "github.com/owasp-amass/asset-db/types"
@@ -38,8 +39,8 @@ func (d *knownFQDN) Start(r et.Registry) error {
 	if err := r.RegisterHandler(&et.Handler{
 		Plugin:       d,
 		Name:         d.name + "-Handler",
-		Priority:     7,
-		MaxInstances: 10,
+		Priority:     1,
+		MaxInstances: support.MaxHandlerInstances,
 		Transforms:   []string{string(oam.FQDN)},
 		EventType:    oam.FQDN,
 		Callback:     d.check,
@@ -61,11 +62,13 @@ func (d *knownFQDN) check(e *et.Event) error {
 		return errors.New("failed to extract the FQDN asset")
 	}
 
-	domlt := strings.ToLower(strings.TrimSpace(fqdn.Name))
-	if e.Session.Config().WhichDomain(domlt) != domlt {
+	if a, conf := e.Session.Scope().IsAssetInScope(fqdn, 0); conf == 0 || a == nil {
+		return nil
+	} else if f, ok := a.(*oamdns.FQDN); !ok || f == nil || !strings.EqualFold(fqdn.Name, f.Name) {
 		return nil
 	}
 
+	support.AddSLDInScope(e)
 	d.process(e, d.lookup(e, e.Entity))
 	return nil
 }

@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	"github.com/caffix/stringset"
@@ -76,6 +75,10 @@ func (d *dnsrepo) check(e *et.Event) error {
 		return errors.New("failed to extract the FQDN asset")
 	}
 
+	if !support.HasSLDInScope(e) {
+		return nil
+	}
+
 	var keys []string
 	ds := e.Session.Config().GetDataSourceConfig(d.name)
 	if ds != nil {
@@ -85,12 +88,6 @@ func (d *dnsrepo) check(e *et.Event) error {
 	}
 	// add an empty API key
 	keys = append(keys, "")
-
-	if a, conf := e.Session.Scope().IsAssetInScope(fqdn, 0); conf == 0 || a == nil {
-		return nil
-	} else if f, ok := a.(*oamdns.FQDN); !ok || f == nil || !strings.EqualFold(fqdn.Name, f.Name) {
-		return nil
-	}
 
 	since, err := support.TTLStartTime(e.Session.Config(), string(oam.FQDN), string(oam.FQDN), d.name)
 	if err != nil {
