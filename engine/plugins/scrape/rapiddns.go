@@ -52,13 +52,12 @@ func (rd *rapidDNS) Start(r et.Registry) error {
 	rd.log = r.Log().WithGroup("plugin").With("name", rd.name)
 
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:       rd,
-		Name:         rd.name + "-Handler",
-		Priority:     7,
-		MaxInstances: 10,
-		Transforms:   []string{string(oam.FQDN)},
-		EventType:    oam.FQDN,
-		Callback:     rd.check,
+		Plugin:     rd,
+		Name:       rd.name + "-Handler",
+		Priority:   9,
+		Transforms: []string{string(oam.FQDN)},
+		EventType:  oam.FQDN,
+		Callback:   rd.check,
 	}); err != nil {
 		return err
 	}
@@ -77,9 +76,7 @@ func (rd *rapidDNS) check(e *et.Event) error {
 		return errors.New("failed to extract the FQDN asset")
 	}
 
-	if a, conf := e.Session.Scope().IsAssetInScope(fqdn, 0); conf == 0 || a == nil {
-		return nil
-	} else if f, ok := a.(*oamdns.FQDN); !ok || f == nil || !strings.EqualFold(fqdn.Name, f.Name) {
+	if !support.HasSLDInScope(e) {
 		return nil
 	}
 

@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
-	"strings"
 	"time"
 
 	"github.com/owasp-amass/amass/v4/config"
@@ -51,13 +50,12 @@ func (pt *passiveTotal) Start(r et.Registry) error {
 	pt.log = r.Log().WithGroup("plugin").With("name", pt.name)
 
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:       pt,
-		Name:         pt.name + "-Handler",
-		Priority:     6,
-		MaxInstances: 10,
-		Transforms:   []string{string(oam.FQDN)},
-		EventType:    oam.FQDN,
-		Callback:     pt.check,
+		Plugin:     pt,
+		Name:       pt.name + "-Handler",
+		Priority:   9,
+		Transforms: []string{string(oam.FQDN)},
+		EventType:  oam.FQDN,
+		Callback:   pt.check,
 	}); err != nil {
 		return err
 	}
@@ -76,14 +74,12 @@ func (pt *passiveTotal) check(e *et.Event) error {
 		return errors.New("failed to extract the FQDN asset")
 	}
 
-	ds := e.Session.Config().GetDataSourceConfig(pt.name)
-	if ds == nil || len(ds.Creds) == 0 {
+	if !support.HasSLDInScope(e) {
 		return nil
 	}
 
-	if a, conf := e.Session.Scope().IsAssetInScope(fqdn, 0); conf == 0 || a == nil {
-		return nil
-	} else if f, ok := a.(*oamdns.FQDN); !ok || f == nil || !strings.EqualFold(fqdn.Name, f.Name) {
+	ds := e.Session.Config().GetDataSourceConfig(pt.name)
+	if ds == nil || len(ds.Creds) == 0 {
 		return nil
 	}
 

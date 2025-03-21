@@ -51,13 +51,12 @@ func (z *zetalytics) Start(r et.Registry) error {
 	z.log = r.Log().WithGroup("plugin").With("name", z.name)
 
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:       z,
-		Name:         z.name + "-Handler",
-		Priority:     6,
-		MaxInstances: 10,
-		Transforms:   []string{string(oam.FQDN)},
-		EventType:    oam.FQDN,
-		Callback:     z.check,
+		Plugin:     z,
+		Name:       z.name + "-Handler",
+		Priority:   9,
+		Transforms: []string{string(oam.FQDN)},
+		EventType:  oam.FQDN,
+		Callback:   z.check,
 	}); err != nil {
 		return err
 	}
@@ -76,6 +75,10 @@ func (z *zetalytics) check(e *et.Event) error {
 		return errors.New("failed to extract the FQDN asset")
 	}
 
+	if !support.HasSLDInScope(e) {
+		return nil
+	}
+
 	ds := e.Session.Config().GetDataSourceConfig(z.name)
 	if ds == nil || len(ds.Creds) == 0 {
 		return nil
@@ -86,12 +89,6 @@ func (z *zetalytics) check(e *et.Event) error {
 		if cr != nil && cr.Apikey != "" {
 			keys = append(keys, cr.Apikey)
 		}
-	}
-
-	if a, conf := e.Session.Scope().IsAssetInScope(fqdn, 0); conf == 0 || a == nil {
-		return nil
-	} else if f, ok := a.(*oamdns.FQDN); !ok || f == nil || !strings.EqualFold(fqdn.Name, f.Name) {
-		return nil
 	}
 
 	since, err := support.TTLStartTime(e.Session.Config(), string(oam.FQDN), string(oam.FQDN), z.name)

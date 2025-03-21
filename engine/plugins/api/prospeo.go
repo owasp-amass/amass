@@ -10,7 +10,6 @@ import (
 	"errors"
 	"log/slog"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/owasp-amass/amass/v4/engine/plugins/support"
@@ -60,6 +59,7 @@ func (p *Prospeo) Start(r et.Registry) error {
 	if err := r.RegisterHandler(&et.Handler{
 		Plugin:     p,
 		Name:       name,
+		Priority:   9,
 		Transforms: []string{string(oam.Identifier)},
 		EventType:  oam.FQDN,
 		Callback:   p.check,
@@ -81,9 +81,7 @@ func (p *Prospeo) check(e *et.Event) error {
 		return errors.New("failed to extract the FQDN asset")
 	}
 
-	if a, conf := e.Session.Scope().IsAssetInScope(fqdn, 0); conf == 0 || a == nil {
-		return nil
-	} else if f, ok := a.(*oamdns.FQDN); !ok || f == nil || !strings.EqualFold(fqdn.Name, f.Name) {
+	if !support.HasSLDInScope(e) {
 		return nil
 	}
 

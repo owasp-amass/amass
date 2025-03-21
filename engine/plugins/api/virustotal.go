@@ -52,13 +52,12 @@ func (vt *virusTotal) Start(r et.Registry) error {
 
 	name := vt.name + "-Handler"
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:       vt,
-		Name:         name,
-		Priority:     6,
-		MaxInstances: 10,
-		Transforms:   []string{string(oam.FQDN)},
-		EventType:    oam.FQDN,
-		Callback:     vt.check,
+		Plugin:     vt,
+		Name:       name,
+		Priority:   9,
+		Transforms: []string{string(oam.FQDN)},
+		EventType:  oam.FQDN,
+		Callback:   vt.check,
 	}); err != nil {
 		r.Log().Error(fmt.Sprintf("Failed to register a handler: %v", err),
 			slog.Group("plugin", "name", vt.name, "handler", name))
@@ -79,6 +78,10 @@ func (vt *virusTotal) check(e *et.Event) error {
 		return errors.New("failed to extract the FQDN asset")
 	}
 
+	if !support.HasSLDInScope(e) {
+		return nil
+	}
+
 	ds := e.Session.Config().GetDataSourceConfig(vt.name)
 	if ds == nil || len(ds.Creds) == 0 {
 		return nil
@@ -89,12 +92,6 @@ func (vt *virusTotal) check(e *et.Event) error {
 		if cr != nil && cr.Apikey != "" {
 			keys = append(keys, cr.Apikey)
 		}
-	}
-
-	if a, conf := e.Session.Scope().IsAssetInScope(fqdn, 0); conf == 0 || a == nil {
-		return nil
-	} else if f, ok := a.(*oamdns.FQDN); !ok || f == nil || !strings.EqualFold(fqdn.Name, f.Name) {
-		return nil
 	}
 
 	since, err := support.TTLStartTime(e.Session.Config(), string(oam.FQDN), string(oam.FQDN), vt.name)

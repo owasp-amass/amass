@@ -50,13 +50,12 @@ func (c *crtsh) Start(r et.Registry) error {
 	c.log = r.Log().WithGroup("plugin").With("name", c.name)
 
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:       c,
-		Name:         c.name + "-Handler",
-		Priority:     5,
-		MaxInstances: 10,
-		Transforms:   []string{string(oam.FQDN)},
-		EventType:    oam.FQDN,
-		Callback:     c.check,
+		Plugin:     c,
+		Name:       c.name + "-Handler",
+		Priority:   9,
+		Transforms: []string{string(oam.FQDN)},
+		EventType:  oam.FQDN,
+		Callback:   c.check,
 	}); err != nil {
 		return err
 	}
@@ -75,9 +74,7 @@ func (c *crtsh) check(e *et.Event) error {
 		return errors.New("failed to extract the FQDN asset")
 	}
 
-	if a, conf := e.Session.Scope().IsAssetInScope(fqdn, 0); conf == 0 || a == nil {
-		return nil
-	} else if f, ok := a.(*oamdns.FQDN); !ok || f == nil || !strings.EqualFold(fqdn.Name, f.Name) {
+	if !support.HasSLDInScope(e) {
 		return nil
 	}
 

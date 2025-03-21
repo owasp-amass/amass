@@ -54,7 +54,7 @@ func (h *horizPlugin) Start(r et.Registry) error {
 	if err := r.RegisterHandler(&et.Handler{
 		Plugin:       h,
 		Name:         h.horfqdn.name,
-		Priority:     3,
+		Priority:     6,
 		MaxInstances: support.MaxHandlerInstances,
 		Transforms:   []string{string(oam.FQDN)},
 		EventType:    oam.FQDN,

@@ -55,10 +55,9 @@ func (hp *httpProbing) Start(r et.Registry) error {
 		plugin: hp,
 	}
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:       hp,
-		Name:         hp.fqdnend.name,
-		Priority:     9,
-		MaxInstances: support.MaxHandlerInstances,
+		Plugin:   hp,
+		Name:     hp.fqdnend.name,
+		Priority: 9,
 		Transforms: []string{
 			string(oam.Service),
 			string(oam.TLSCertificate),
@@ -99,7 +98,7 @@ func (hp *httpProbing) Stop() {
 func (hp *httpProbing) query(e *et.Event, entity *dbt.Entity, target string, port int) []*support.Finding {
 	var findings []*support.Finding
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	if resp, err := http.RequestWebPage(ctx, &http.Request{URL: target}); err == nil && resp != nil {

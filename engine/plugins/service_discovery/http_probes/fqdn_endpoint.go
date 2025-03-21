@@ -55,7 +55,11 @@ func (fe *fqdnEndpoint) check(e *et.Event) error {
 	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, src, since) {
 		findings = append(findings, fe.lookup(e, e.Entity, since)...)
 	} else {
-		findings = append(findings, fe.query(e, e.Entity)...)
+		go func() {
+			if findings := append(findings, fe.query(e, e.Entity)...); len(findings) > 0 {
+				fe.process(e, findings)
+			}
+		}()
 		support.MarkAssetMonitored(e.Session, e.Entity, src)
 	}
 

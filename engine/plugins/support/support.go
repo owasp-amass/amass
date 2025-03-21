@@ -256,7 +256,43 @@ func NameResolved(session et.Session, name *oamdns.FQDN) bool {
 }
 
 type FQDNMeta struct {
+	SLDInScope  bool
 	RecordTypes map[int]bool
+}
+
+func AddSLDInScope(e *et.Event) {
+	if e == nil {
+		return
+	} else if _, ok := e.Entity.Asset.(*oamdns.FQDN); !ok {
+		return
+	}
+
+	if e.Meta == nil {
+		e.Meta = &FQDNMeta{
+			SLDInScope: true,
+		}
+	}
+
+	if fm, ok := e.Meta.(*FQDNMeta); ok {
+		fm.SLDInScope = true
+	}
+}
+
+func HasSLDInScope(e *et.Event) bool {
+	if e == nil {
+		return false
+	} else if _, ok := e.Entity.Asset.(*oamdns.FQDN); !ok {
+		return false
+	}
+
+	if e.Meta == nil {
+		return false
+	}
+
+	if fm, ok := e.Meta.(*FQDNMeta); ok {
+		return fm.SLDInScope
+	}
+	return false
 }
 
 func AddDNSRecordType(e *et.Event, rrtype int) {
@@ -273,6 +309,9 @@ func AddDNSRecordType(e *et.Event, rrtype int) {
 	}
 
 	if fm, ok := e.Meta.(*FQDNMeta); ok {
+		if fm.RecordTypes == nil {
+			fm.RecordTypes = make(map[int]bool)
+		}
 		fm.RecordTypes[rrtype] = true
 	}
 }
@@ -288,7 +327,7 @@ func HasDNSRecordType(e *et.Event, rrtype int) bool {
 		return false
 	}
 
-	if fm, ok := e.Meta.(*FQDNMeta); ok {
+	if fm, ok := e.Meta.(*FQDNMeta); ok && fm.RecordTypes != nil {
 		if _, found := fm.RecordTypes[rrtype]; found {
 			return true
 		}

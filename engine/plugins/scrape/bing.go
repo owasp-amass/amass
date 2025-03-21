@@ -52,13 +52,12 @@ func (b *bing) Start(r et.Registry) error {
 	b.log = r.Log().WithGroup("plugin").With("name", b.name)
 
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:       b,
-		Name:         b.name + "-Handler",
-		Priority:     7,
-		MaxInstances: 10,
-		Transforms:   []string{string(oam.FQDN)},
-		EventType:    oam.FQDN,
-		Callback:     b.check,
+		Plugin:     b,
+		Name:       b.name + "-Handler",
+		Priority:   9,
+		Transforms: []string{string(oam.FQDN)},
+		EventType:  oam.FQDN,
+		Callback:   b.check,
 	}); err != nil {
 		return err
 	}
@@ -77,9 +76,7 @@ func (b *bing) check(e *et.Event) error {
 		return errors.New("failed to extract the FQDN asset")
 	}
 
-	if a, conf := e.Session.Scope().IsAssetInScope(fqdn, 0); conf == 0 || a == nil {
-		return nil
-	} else if f, ok := a.(*oamdns.FQDN); !ok || f == nil || !strings.EqualFold(fqdn.Name, f.Name) {
+	if !support.HasSLDInScope(e) {
 		return nil
 	}
 
