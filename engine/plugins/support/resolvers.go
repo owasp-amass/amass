@@ -25,23 +25,24 @@ var trusted *pool.Pool
 var detector *wildcards.Detector
 
 func PerformQuery(name string, qtype uint16) ([]dns.RR, error) {
-	msg := utils.QueryMsg(name, qtype)
-	if qtype == dns.TypePTR {
-		msg = utils.ReverseMsg(name)
-	}
-
-	resp, err := dnsQuery(msg, trusted, 10)
-	if err == nil && resp != nil {
-		if wildcardDetected(resp, detector) {
-			return nil, errors.New("wildcard detected")
+	for num := 0; num < 10; num++ {
+		msg := utils.QueryMsg(name, qtype)
+		if qtype == dns.TypePTR {
+			msg = utils.ReverseMsg(name)
 		}
-		if len(resp.Answer) > 0 {
-			if rr := utils.AnswersByType(resp, qtype); len(rr) > 0 {
-				return rr, nil
+
+		if resp, err := dnsQuery(msg, trusted); err == nil && resp != nil {
+			if wildcardDetected(resp, detector) {
+				return nil, errors.New("wildcard detected")
+			}
+			if len(resp.Answer) > 0 {
+				if rr := utils.AnswersByType(resp, qtype); len(rr) > 0 {
+					return rr, nil
+				}
 			}
 		}
 	}
-	return nil, err
+	return nil, errors.New("no valid answers")
 }
 
 func wildcardDetected(resp *dns.Msg, r *wildcards.Detector) bool {
@@ -53,23 +54,18 @@ func wildcardDetected(resp *dns.Msg, r *wildcards.Detector) bool {
 	return false
 }
 
-func dnsQuery(msg *dns.Msg, r *pool.Pool, attempts int) (*dns.Msg, error) {
-	for num := 0; num < attempts; num++ {
-		resp, err := r.Exchange(context.TODO(), msg)
-		if err != nil {
-			continue
+func dnsQuery(msg *dns.Msg, r *pool.Pool) (*dns.Msg, error) {
+	if resp, err := r.Exchange(context.TODO(), msg); err != nil {
+		return nil, err
+	} else if resp.Rcode == dns.RcodeNameError {
+		return nil, errors.New("name does not exist")
+	} else if resp.Rcode == dns.RcodeSuccess {
+		if len(resp.Answer) == 0 {
+			return nil, errors.New("no record of this type")
 		}
-		if resp.Rcode == dns.RcodeNameError {
-			return nil, errors.New("name does not exist")
-		}
-		if resp.Rcode == dns.RcodeSuccess {
-			if len(resp.Answer) == 0 {
-				return nil, errors.New("no record of this type")
-			}
-			return resp, nil
-		}
+		return resp, nil
 	}
-	return nil, nil
+	return nil, errors.New("unexpected response")
 }
 
 func trustedResolvers() *pool.Pool {
