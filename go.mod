@@ -27,7 +27,7 @@ require (
 	github.com/openrdap/rdap v0.9.1
 	github.com/owasp-amass/asset-db v0.19.2
 	github.com/owasp-amass/open-asset-model v0.14.0
-	github.com/owasp-amass/resolve v0.9.7-0.20250321213336-d83ce7db3dc4
+	github.com/owasp-amass/resolve v0.9.7-0.20250322052446-560c34dbebe0
 	github.com/samber/slog-common v0.18.1
 	github.com/samber/slog-syslog/v2 v2.5.2
 	github.com/stretchr/testify v1.10.0
@@ -70,7 +70,7 @@ require (
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
-	github.com/jackc/pgx/v5 v5.7.2 // indirect
+	github.com/jackc/pgx/v5 v5.7.3 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect

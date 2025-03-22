@@ -1006,8 +1006,8 @@ github.com/jackc/pgpassfile v1.0.0 h1:/6Hmqy13Ss2zCq62VdNG8tM1wchn8zjSGOBJ6icpsI
 github.com/jackc/pgpassfile v1.0.0/go.mod h1:CEx0iS5ambNFdcRtxPj5JhEz+xB6uRky5eyVu/W2HEg=
 github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 h1:iCEnooe7UlwOQYpKFhBabPMi4aNAfoODPEFNiAnClxo=
 github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761/go.mod h1:5TJZWKEWniPve33vlWYSoGYefn3gLQRzjfDlhSJ9ZKM=
-github.com/jackc/pgx/v5 v5.7.2 h1:mLoDLV6sonKlvjIEsV56SkWNCnuNv531l94GaIzO+XI=
-github.com/jackc/pgx/v5 v5.7.2/go.mod h1:ncY89UGWxg82EykZUwSpUKEfccBGGYq1xjrOpsbsfGQ=
+github.com/jackc/pgx/v5 v5.7.3 h1:PO1wNKj/bTAwxSJnO1Z4Ai8j4magtqg2SLNjEDzcXQo=
+github.com/jackc/pgx/v5 v5.7.3/go.mod h1:ncY89UGWxg82EykZUwSpUKEfccBGGYq1xjrOpsbsfGQ=
 github.com/jackc/puddle/v2 v2.2.2 h1:PR8nw+E/1w0GLuRFSmiioY6UooMp6KJv0/61nB7icHo=
 github.com/jackc/puddle/v2 v2.2.2/go.mod h1:vriiEXHvEE654aYKXXjOvZM39qJ0q+azkZFrfEOc3H4=
 github.com/jarcoal/httpmock v1.3.0 h1:2RJ8GP0IIaWwcC9Fp2BmVi8Kog3v2Hn7VXM3fTd+nuc=
@@ -1156,8 +1156,8 @@ github.com/owasp-amass/asset-db v0.19.2 h1:TfrJFiT4zIHGkYAzE4rZQeF9WbX4wSu/oMoJE
 github.com/owasp-amass/asset-db v0.19.2/go.mod h1:zjGZL9WM2QeXO0w49I3emUO2Ha5ly0MXZP6L56XeHgw=
 github.com/owasp-amass/open-asset-model v0.14.0 h1:ycTSBJLgNviN7tnTki4XPqk3G5QoZajC+dIVYJVTIrU=
 github.com/owasp-amass/open-asset-model v0.14.0/go.mod h1:DOX+SiD6PZBroSMnsILAmpf0SHi6TVpqjV4uNfBeg7g=
-github.com/owasp-amass/resolve v0.9.7-0.20250321213336-d83ce7db3dc4 h1:aZcri7lOeMwhbiIdETfzbS0gJiT6a3vsiLAgVAPCVrM=
-github.com/owasp-amass/resolve v0.9.7-0.20250321213336-d83ce7db3dc4/go.mod h1:vMF+6hOgMoiwD0FGe96wxrMoeYW072hrhOLO94SdVzY=
+github.com/owasp-amass/resolve v0.9.7-0.20250322052446-560c34dbebe0 h1:qh0az8Oh7+GsziZIWCcHhyKKzGxHQ+JTjC9DxtQVmB0=
+github.com/owasp-amass/resolve v0.9.7-0.20250322052446-560c34dbebe0/go.mod h1:vMF+6hOgMoiwD0FGe96wxrMoeYW072hrhOLO94SdVzY=
 github.com/pascaldekloe/goe v0.0.0-20180627143212-57f6aae5913c/go.mod h1:lzWF7FIEvWOWxwDKqyGYQf6ZUaNfKdP144TG7ZOy1lc=
 github.com/pascaldekloe/goe v0.1.0/go.mod h1:lzWF7FIEvWOWxwDKqyGYQf6ZUaNfKdP144TG7ZOy1lc=
 github.com/performancecopilot/speed/v4 v4.0.0/go.mod h1:qxrSyuDGrTOWfV+uKRFhfxw6h/4HXRGUiZiufxo49BM=
