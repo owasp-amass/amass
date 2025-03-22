@@ -76,8 +76,8 @@ func trustedResolvers() *pool.Pool {
 	timeout := time.Second
 	cpus := runtime.NumCPU()
 	// wildcard detector
-	serv := servers.NewNameserver("8.8.8.8", timeout)
-	wconns := conn.New(cpus, selectors.NewSingle(serv))
+	serv := servers.NewNameserver("8.8.8.8")
+	wconns := conn.New(cpus, selectors.NewSingle(timeout, serv))
 	detector = wildcards.NewDetector(serv, wconns, nil)
 	// the server pool
 	sel := selectors.NewAuthoritative(timeout, servers.NewNameserver)
