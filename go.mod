@@ -27,7 +27,7 @@ require (
 	github.com/openrdap/rdap v0.9.1
 	github.com/owasp-amass/asset-db v0.19.2
 	github.com/owasp-amass/open-asset-model v0.14.0
-	github.com/owasp-amass/resolve v0.9.7-0.20250323161853-0a9316b36cba
+	github.com/owasp-amass/resolve v0.9.7-0.20250324000734-46ce1eb8c541
 	github.com/samber/slog-common v0.18.1
 	github.com/samber/slog-syslog/v2 v2.5.2
 	github.com/stretchr/testify v1.10.0
@@ -109,6 +109,6 @@ require (
 	gorm.io/driver/postgres v1.5.11 // indirect
 	modernc.org/libc v1.61.13 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
-	modernc.org/memory v1.9.0 // indirect
+	modernc.org/memory v1.9.1 // indirect
 	modernc.org/sqlite v1.36.1 // indirect
 )

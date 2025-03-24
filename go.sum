@@ -1156,8 +1156,8 @@ github.com/owasp-amass/asset-db v0.19.2 h1:TfrJFiT4zIHGkYAzE4rZQeF9WbX4wSu/oMoJE
 github.com/owasp-amass/asset-db v0.19.2/go.mod h1:zjGZL9WM2QeXO0w49I3emUO2Ha5ly0MXZP6L56XeHgw=
 github.com/owasp-amass/open-asset-model v0.14.0 h1:ycTSBJLgNviN7tnTki4XPqk3G5QoZajC+dIVYJVTIrU=
 github.com/owasp-amass/open-asset-model v0.14.0/go.mod h1:DOX+SiD6PZBroSMnsILAmpf0SHi6TVpqjV4uNfBeg7g=
-github.com/owasp-amass/resolve v0.9.7-0.20250323161853-0a9316b36cba h1:TCjN9q2Eqe8lzlg9uei0ktc2erijzQyxl9sLQqvUbp4=
-github.com/owasp-amass/resolve v0.9.7-0.20250323161853-0a9316b36cba/go.mod h1:vMF+6hOgMoiwD0FGe96wxrMoeYW072hrhOLO94SdVzY=
+github.com/owasp-amass/resolve v0.9.7-0.20250324000734-46ce1eb8c541 h1:pQwLAn8LUpLuQ6uhrnFkwkZz7XrU2HJqXuNTYgtPRJ0=
+github.com/owasp-amass/resolve v0.9.7-0.20250324000734-46ce1eb8c541/go.mod h1:vMF+6hOgMoiwD0FGe96wxrMoeYW072hrhOLO94SdVzY=
 github.com/pascaldekloe/goe v0.0.0-20180627143212-57f6aae5913c/go.mod h1:lzWF7FIEvWOWxwDKqyGYQf6ZUaNfKdP144TG7ZOy1lc=
 github.com/pascaldekloe/goe v0.1.0/go.mod h1:lzWF7FIEvWOWxwDKqyGYQf6ZUaNfKdP144TG7ZOy1lc=
 github.com/performancecopilot/speed/v4 v4.0.0/go.mod h1:qxrSyuDGrTOWfV+uKRFhfxw6h/4HXRGUiZiufxo49BM=
@@ -2197,8 +2197,8 @@ modernc.org/mathutil v1.7.1/go.mod h1:4p5IwJITfppl0G4sUEDtCr4DthTaT47/N3aT6MhfgJ
 modernc.org/memory v1.1.1/go.mod h1:/0wo5ibyrQiaoUoH7f9D8dnglAmILJ5/cxZlRECf+Nw=
 modernc.org/memory v1.2.0/go.mod h1:/0wo5ibyrQiaoUoH7f9D8dnglAmILJ5/cxZlRECf+Nw=
 modernc.org/memory v1.2.1/go.mod h1:PkUhL0Mugw21sHPeskwZW4D6VscE/GQJOnIpCnW6pSU=
-modernc.org/memory v1.9.0 h1:smV8d5mrOAvj5QIYbc2XLSRWvAIyPI+kQHqxZaxEqCM=
-modernc.org/memory v1.9.0/go.mod h1:/JP4VbVC+K5sU2wZi9bHoq2MAkCnrt2r98UGeSK7Mjw=
+modernc.org/memory v1.9.1 h1:V/Z1solwAVmMW1yttq3nDdZPJqV1rM05Ccq6KMSZ34g=
+modernc.org/memory v1.9.1/go.mod h1:/JP4VbVC+K5sU2wZi9bHoq2MAkCnrt2r98UGeSK7Mjw=
 modernc.org/opt v0.1.1/go.mod h1:WdSiB5evDcignE70guQKxYUl14mgWtbClRi5wmkkTX0=
 modernc.org/opt v0.1.3/go.mod h1:WdSiB5evDcignE70guQKxYUl14mgWtbClRi5wmkkTX0=
 modernc.org/opt v0.1.4 h1:2kNGMRiUjrp4LcaPuLY2PzUfqM/w9N23quVwhKt5Qm8=
