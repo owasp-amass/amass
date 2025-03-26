@@ -29,8 +29,8 @@ type baseline struct {
 
 // baselineResolvers is a list of trusted public DNS resolvers.
 var baselineResolvers = []baseline{
-	{"8.8.8.8", 5},         // Google Primary
-	{"8.8.4.4", 5},         // Google Secondary
+	{"8.8.8.8", 5}, // Google Primary
+	//	{"8.8.4.4", 5},         // Google Secondary
 	{"95.85.95.85", 2},     // Gcore DNS Primary
 	{"2.56.220.2", 2},      // Gcore DNS Secondary
 	{"76.76.2.0", 2},       // ControlD Primary
@@ -135,7 +135,7 @@ func trustedResolvers() *pool.Pool {
 	timeout := 2 * time.Second
 	cpus := runtime.NumCPU()
 	// wildcard detector
-	serv := servers.NewNameserver("8.8.8.8")
+	serv := servers.NewNameserver("8.8.4.4")
 	wconns := conn.New(cpus, selectors.NewSingle(timeout, serv))
 	detector = wildcards.NewDetector(serv, wconns, nil)
 	// the server pool
