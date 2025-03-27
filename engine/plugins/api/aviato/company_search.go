@@ -38,6 +38,9 @@ func (cs *companySearch) check(e *et.Event) error {
 			keys = append(keys, cr.Apikey)
 		}
 	}
+	if len(keys) == 0 {
+		return nil
+	}
 
 	since, err := support.TTLStartTime(e.Session.Config(), string(oam.Organization), string(oam.Organization), cs.name)
 	if err != nil {
@@ -86,19 +89,22 @@ func (cs *companySearch) query(e *et.Event, orgent *dbt.Entity, apikey []string)
 		headers["Authorization"] = []string{"Bearer " + key}
 
 		_ = cs.plugin.rlimit.Wait(context.TODO())
-
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
+
+		filters := []map[string]*dslEvalObj{
+			{
+				"name": &dslEvalObj{
+					Operation: "eq",
+					Value:     brand,
+				},
+			},
+		}
 
 		reqDSL := &dsl{
 			Offset:  0,
 			Limit:   10,
-			Filters: make(map[string]interface{}),
-		}
-
-		reqDSL.Filters["name"] = &dslEvalObj{
-			Operation: "eq",
-			Value:     brand,
+			Filters: filters,
 		}
 
 		dslJSON, err := json.Marshal(reqDSL)
@@ -110,7 +116,7 @@ func (cs *companySearch) query(e *et.Event, orgent *dbt.Entity, apikey []string)
 			URL:    "https://data.api.aviato.co/company/search",
 			Method: "POST",
 			Header: headers,
-			Body:   string(dslJSON),
+			Body:   `{"dsl": ` + string(dslJSON) + `}`,
 		}); err == nil && resp.StatusCode == 200 {
 			success = true
 			body = resp.Body

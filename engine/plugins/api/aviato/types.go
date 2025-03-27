@@ -24,9 +24,9 @@ type aviato struct {
 }
 
 type dsl struct {
-	Offset  int                    `json:"offset"`
-	Limit   int                    `json:"limit"`
-	Filters map[string]interface{} `json:"filters"`
+	Offset  int                      `json:"offset"`
+	Limit   int                      `json:"limit"`
+	Filters []map[string]*dslEvalObj `json:"filters"`
 }
 
 type dslEvalObj struct {
