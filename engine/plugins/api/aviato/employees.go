@@ -108,12 +108,12 @@ func (ae *employees) query(e *et.Event, ident *dbt.Entity, apikey []string) (*db
 	oamid := e.Entity.Asset.(*general.Identifier)
 
 	page := 1
+	total := 1
 	perPage := 50
-	var total int
 	var employlist []*employeeResult
 loop:
 	for _, key := range apikey {
-		for p := page; ; p++ {
+		for ; page <= total; page++ {
 			headers := http.Header{"Content-Type": []string{"application/json"}}
 			headers["Authorization"] = []string{"Bearer " + key}
 
@@ -121,7 +121,7 @@ loop:
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 
-			u := fmt.Sprintf("https://data.api.aviato.co/company/%s/employees?perPage=%d&page=%d", oamid.ID, perPage, p)
+			u := fmt.Sprintf("https://data.api.aviato.co/company/%s/employees?perPage=%d&page=%d", oamid.ID, perPage, page)
 			resp, err := http.RequestWebPage(ctx, &http.Request{URL: u, Header: headers})
 			if err != nil || resp.StatusCode != 200 {
 				continue
@@ -136,15 +136,11 @@ loop:
 				employlist = append(employlist, &emp)
 			}
 
-			if len(employlist) >= 100 {
-				break loop
-			}
-
-			page = p
 			total = result.Pages
-			if p >= total {
-				break loop
-			}
+		}
+
+		if page == total {
+			break
 		}
 	}
 
