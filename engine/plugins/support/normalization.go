@@ -54,6 +54,7 @@ func FullNameToPerson(raw string) *people.Person {
 	}
 
 	return &people.Person{
+		ID:         fullname,
 		FullName:   fullname,
 		FirstName:  name.First,
 		MiddleName: name.Middle,
