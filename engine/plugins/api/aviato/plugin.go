@@ -51,6 +51,22 @@ func (a *aviato) Start(r et.Registry) error {
 		return err
 	}
 
+	a.employees = &employees{
+		name:   a.name + "-Employees-Handler",
+		plugin: a,
+	}
+
+	if err := r.RegisterHandler(&et.Handler{
+		Plugin:     a,
+		Name:       a.employees.name,
+		Priority:   6,
+		Transforms: []string{string(oam.Person)},
+		EventType:  oam.Identifier,
+		Callback:   a.employees.check,
+	}); err != nil {
+		return err
+	}
+
 	a.log.Info("Plugin started")
 	return nil
 }
