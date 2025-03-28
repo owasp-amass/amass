@@ -57,13 +57,12 @@ func (g *gleif) Start(r et.Registry) error {
 	}
 
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:       g,
-		Name:         g.related.name,
-		Priority:     6,
-		MaxInstances: 1,
-		Transforms:   []string{string(oam.Organization)},
-		EventType:    oam.Identifier,
-		Callback:     g.related.check,
+		Plugin:     g,
+		Name:       g.related.name,
+		Priority:   6,
+		Transforms: []string{string(oam.Organization)},
+		EventType:  oam.Identifier,
+		Callback:   g.related.check,
 	}); err != nil {
 		return err
 	}
