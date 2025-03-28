@@ -59,7 +59,7 @@ type companySearchResult struct {
 			Crunchbase string `json:"crunchbase"`
 		} `json:"URLs"`
 		IndustryList []string `json:"industryList"`
-	}
+	} `json:"items"`
 }
 
 type companySearch struct {
@@ -79,8 +79,19 @@ type employeesResult struct {
 }
 
 type employeeResult struct {
-	EntityType string `json:"entityType"`
-	Person     struct {
+	StartDate    string `json:"startDate"`
+	EndDate      string `json:"endDate"`
+	EntityType   string `json:"entityType"`
+	PositionList []struct {
+		StartDate   string `json:"startDate"`
+		EndDate     string `json:"endDate"`
+		Title       string `json:"title"`
+		Description string `json:"description"`
+	} `json:"positionList"`
+	PersonID    string `json:"personID"`
+	CompanyID   string `json:"companyID"`
+	CompanyName string `json:"companyName"`
+	Person      struct {
 		ID         string `json:"id"`
 		FullName   string `json:"fullName"`
 		EntityType string `json:"entityType"`
@@ -97,17 +108,5 @@ type employeeResult struct {
 			SignalNFX  string `json:"signalNFX"`
 			Crunchbase string `json:"crunchbase"`
 		} `json:"URLs"`
-		PersonID     string `json:"personID"`
-		PositionList []struct {
-			StartDate   string `json:"startDate"`
-			EndDate     string `json:"endDate"`
-			Title       string `json:"title"`
-			Description string `json:"description"`
-		} `json:"positionList"`
-		CompanyID   string `json:"companyID"`
-		CompanyName string `json:"companyName"`
-		StartDate   string `json:"startDate"`
-		EndDate     string `json:"endDate"`
-		LinkedinID  string `json:"linkedinID"`
 	} `json:"person"`
 }

@@ -107,13 +107,13 @@ func (ae *employees) lookup(e *et.Event, ident *dbt.Entity, since time.Time) (*d
 func (ae *employees) query(e *et.Event, ident *dbt.Entity, apikey []string) (*dbt.Entity, []*dbt.Entity) {
 	oamid := e.Entity.Asset.(*general.Identifier)
 
-	page := 1
+	page := 0
 	total := 1
 	perPage := 50
 	var employlist []*employeeResult
 loop:
 	for _, key := range apikey {
-		for ; page <= total; page++ {
+		for ; page < total; page++ {
 			headers := http.Header{"Content-Type": []string{"application/json"}}
 			headers["Authorization"] = []string{"Bearer " + key}
 
@@ -139,7 +139,7 @@ loop:
 			total = result.Pages
 		}
 
-		if page == total {
+		if page >= total {
 			break
 		}
 	}
