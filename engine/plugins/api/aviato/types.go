@@ -12,6 +12,7 @@ import (
 )
 
 const (
+	AviatoPersonID  = "aviato_person_id"
 	AviatoCompanyID = "aviato_company_id"
 )
 

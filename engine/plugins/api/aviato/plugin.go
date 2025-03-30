@@ -16,7 +16,7 @@ import (
 )
 
 func NewAviato() et.Plugin {
-	limit := rate.Every(time.Second)
+	limit := rate.Every(2 * time.Second)
 
 	return &aviato{
 		name:   "Aviato",

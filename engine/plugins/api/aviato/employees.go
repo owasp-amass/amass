@@ -118,7 +118,7 @@ loop:
 			headers["Authorization"] = []string{"Bearer " + key}
 
 			_ = ae.plugin.rlimit.Wait(context.TODO())
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 			defer cancel()
 
 			u := fmt.Sprintf("https://data.api.aviato.co/company/%s/employees?perPage=%d&page=%d", oamid.ID, perPage, page)
@@ -183,10 +183,11 @@ func (ae *employees) store(e *et.Event, ident *dbt.Entity, employlist []*employe
 
 		_, _ = e.Session.Cache().CreateEntityProperty(ident, &general.SourceProperty{
 			Source:     ae.plugin.source.Name,
-			Confidence: 90,
+			Confidence: ae.plugin.source.Confidence,
 		})
 
-		if err := ae.plugin.createRelation(e.Session, orgent, general.SimpleRelation{Name: "member"}, personent, 90); err == nil {
+		if err := ae.plugin.createRelation(e.Session, orgent,
+			general.SimpleRelation{Name: "member"}, personent, ae.plugin.source.Confidence); err == nil {
 			employents = append(employents, personent)
 		}
 	}

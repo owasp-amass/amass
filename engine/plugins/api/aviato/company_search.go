@@ -90,7 +90,7 @@ func (cs *companySearch) query(e *et.Event, orgent *dbt.Entity, apikey []string)
 		headers["Authorization"] = []string{"Bearer " + key}
 
 		_ = cs.plugin.rlimit.Wait(context.TODO())
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
 
 		filters := []map[string]*dslEvalObj{
@@ -134,10 +134,10 @@ func (cs *companySearch) query(e *et.Event, orgent *dbt.Entity, apikey []string)
 		return nil
 	}
 
-	return cs.store(e, orgent, result.Items[0].ID, 90)
+	return cs.store(e, orgent, result.Items[0].ID)
 }
 
-func (cs *companySearch) store(e *et.Event, orgent *dbt.Entity, companyID string, conf int) *dbt.Entity {
+func (cs *companySearch) store(e *et.Event, orgent *dbt.Entity, companyID string) *dbt.Entity {
 	oamid := &general.Identifier{
 		UniqueID: fmt.Sprintf("%s:%s", AviatoCompanyID, companyID),
 		ID:       companyID,
@@ -151,10 +151,11 @@ func (cs *companySearch) store(e *et.Event, orgent *dbt.Entity, companyID string
 
 	_, _ = e.Session.Cache().CreateEntityProperty(ident, &general.SourceProperty{
 		Source:     cs.plugin.source.Name,
-		Confidence: conf,
+		Confidence: cs.plugin.source.Confidence,
 	})
 
-	if err := cs.plugin.createRelation(e.Session, orgent, general.SimpleRelation{Name: "id"}, ident, conf); err != nil {
+	if err := cs.plugin.createRelation(e.Session, orgent,
+		general.SimpleRelation{Name: "id"}, ident, cs.plugin.source.Confidence); err != nil {
 		return nil
 	}
 	return ident
