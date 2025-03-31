@@ -105,12 +105,16 @@ func (ae *employees) lookup(e *et.Event, ident *dbt.Entity, since time.Time) (*d
 }
 
 func (ae *employees) query(e *et.Event, ident *dbt.Entity, apikey []string) (*dbt.Entity, []*dbt.Entity) {
-	oamid := e.Entity.Asset.(*general.Identifier)
+	orgent := ae.getAssociatedOrg(e, ident)
+	if orgent == nil {
+		return nil, []*dbt.Entity{}
+	}
 
 	page := 0
 	total := 1
-	perPage := 50
-	var employlist []*employeeResult
+	perPage := 1000
+	var employents []*dbt.Entity
+	oamid := e.Entity.Asset.(*general.Identifier)
 loop:
 	for _, key := range apikey {
 		for ; page < total; page++ {
@@ -132,8 +136,10 @@ loop:
 				break loop
 			}
 
-			for _, emp := range result.Employees {
-				employlist = append(employlist, &emp)
+			if len(result.Employees) > 0 {
+				if ents := ae.store(e, ident, orgent, result.Employees); len(ents) > 0 {
+					employents = append(employents, ents...)
+				}
 			}
 
 			total = result.Pages
@@ -144,14 +150,13 @@ loop:
 		}
 	}
 
-	if len(employlist) == 0 {
+	if len(employents) == 0 {
 		return nil, []*dbt.Entity{}
 	}
-
-	return ae.store(e, ident, employlist)
+	return orgent, employents
 }
 
-func (ae *employees) store(e *et.Event, ident *dbt.Entity, employlist []*employeeResult) (*dbt.Entity, []*dbt.Entity) {
+func (ae *employees) getAssociatedOrg(e *et.Event, ident *dbt.Entity) *dbt.Entity {
 	var orgent *dbt.Entity
 
 	if edges, err := e.Session.Cache().IncomingEdges(ident, time.Time{}, "id"); err == nil {
@@ -165,10 +170,11 @@ func (ae *employees) store(e *et.Event, ident *dbt.Entity, employlist []*employe
 		}
 	}
 
+	return orgent
+}
+
+func (ae *employees) store(e *et.Event, ident, orgent *dbt.Entity, employlist []employeeResult) []*dbt.Entity {
 	var employents []*dbt.Entity
-	if orgent == nil {
-		return nil, employents
-	}
 
 	for _, emp := range employlist {
 		p := support.FullNameToPerson(emp.Person.FullName)
@@ -181,7 +187,7 @@ func (ae *employees) store(e *et.Event, ident *dbt.Entity, employlist []*employe
 			continue
 		}
 
-		_, _ = e.Session.Cache().CreateEntityProperty(ident, &general.SourceProperty{
+		_, _ = e.Session.Cache().CreateEntityProperty(personent, &general.SourceProperty{
 			Source:     ae.plugin.source.Name,
 			Confidence: ae.plugin.source.Confidence,
 		})
@@ -192,7 +198,7 @@ func (ae *employees) store(e *et.Event, ident *dbt.Entity, employlist []*employe
 		}
 	}
 
-	return orgent, employents
+	return employents
 }
 
 func (ae *employees) process(e *et.Event, orgent *dbt.Entity, employents []*dbt.Entity) {
