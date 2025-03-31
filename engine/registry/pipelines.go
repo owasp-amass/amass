@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/caffix/pipeline"
 	multierror "github.com/hashicorp/go-multierror"
@@ -115,9 +116,20 @@ func handlerTask(h *et.Handler) pipeline.TaskFunc {
 			}
 		}
 
-		tos := append(h.Transforms, h.Plugin.Name())
-		from := string(ede.Event.Entity.Asset.AssetType())
-		if _, err := ede.Event.Session.Config().CheckTransformations(from, tos...); err == nil {
+		var pmatch bool
+		for _, tf := range h.Transforms {
+			if strings.EqualFold(tf, h.Plugin.Name()) {
+				pmatch = true
+				break
+			}
+		}
+		if !pmatch {
+			from := string(ede.Event.Entity.Asset.AssetType())
+			if _, err := ede.Event.Session.Config().CheckTransformations(from, h.Transforms...); err == nil {
+				pmatch = true
+			}
+		}
+		if pmatch {
 			if err := r.Callback(ede.Event); err != nil {
 				ede.Error = multierror.Append(ede.Error, err)
 			}
