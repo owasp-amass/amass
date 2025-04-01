@@ -308,15 +308,9 @@ func StreetAddressToLocation(address string) *contact.Location {
 		return nil
 	}
 
-	var err error
-	var loc contact.Location
-	loc.Address, err = expandAddress(address)
-	if err != nil {
-		return nil
-	}
-
+	loc := &contact.Location{Address: address}
 	parsed, err := parseAddress(loc.Address)
-	if err != nil || len(parsed.Parts) < 4 {
+	if err != nil {
 		return nil
 	}
 
@@ -348,11 +342,7 @@ func StreetAddressToLocation(address string) *contact.Location {
 			}
 		}
 	}
-	if (loc.Building == "" && loc.BuildingNumber == "") ||
-		loc.StreetName == "" || loc.City == "" || loc.Province == "" {
-		return nil
-	}
-	return &loc
+	return loc
 }
 
 type parsed struct {
@@ -381,6 +371,7 @@ func parseAddress(address string) (*parsed, error) {
 	return &p, nil
 }
 
+/*
 func expandAddress(address string) (string, error) {
 	if postalHost == "" || postalPort == "" {
 		return "", errors.New("no postal server information provided")
@@ -408,3 +399,4 @@ func expandAddress(address string) (string, error) {
 	}
 	return ex.Forms[num-1], nil
 }
+*/
