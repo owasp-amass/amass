@@ -42,24 +42,13 @@ type companySearchResult struct {
 		IsEstimate bool   `json:"isEstimate"`
 	} `json:"count"`
 	Items []struct {
-		ID       string `json:"id"`
-		Name     string `json:"name"`
-		Country  string `json:"country"`
-		Region   string `json:"region"`
-		Locality string `json:"locality"`
-		URLs     struct {
-			Golden     string `json:"golden"`
-			Contact    string `json:"contact"`
-			Twitter    string `json:"twitter"`
-			Website    string `json:"website"`
-			Facebook   string `json:"facebook"`
-			Linkedin   string `json:"linkedin"`
-			Pitchbook  string `json:"pitchbook"`
-			AngelList  string `json:"angelList"`
-			SignalNFX  string `json:"signalNFX"`
-			Crunchbase string `json:"crunchbase"`
-		} `json:"URLs"`
-		IndustryList []string `json:"industryList"`
+		ID           string    `json:"id"`
+		Name         string    `json:"name"`
+		Country      string    `json:"country"`
+		Region       string    `json:"region"`
+		Locality     string    `json:"locality"`
+		URLs         URLResult `json:"URLs"`
+		IndustryList []string  `json:"industryList"`
 	} `json:"items"`
 }
 
@@ -93,21 +82,163 @@ type employeeResult struct {
 	CompanyID   string `json:"companyID"`
 	CompanyName string `json:"companyName"`
 	Person      struct {
-		ID         string `json:"id"`
-		FullName   string `json:"fullName"`
-		EntityType string `json:"entityType"`
-		Location   string `json:"location"`
-		URLs       struct {
-			Golden     string `json:"golden"`
-			Contact    string `json:"contact"`
-			Twitter    string `json:"twitter"`
-			Website    string `json:"website"`
-			Facebook   string `json:"facebook"`
-			Linkedin   string `json:"linkedin"`
-			Pitchbook  string `json:"pitchbook"`
-			AngelList  string `json:"angelList"`
-			SignalNFX  string `json:"signalNFX"`
-			Crunchbase string `json:"crunchbase"`
-		} `json:"URLs"`
+		ID         string    `json:"id"`
+		FullName   string    `json:"fullName"`
+		EntityType string    `json:"entityType"`
+		Location   string    `json:"location"`
+		URLs       URLResult `json:"URLs"`
 	} `json:"person"`
+}
+
+type companyEnrichResult struct {
+	ID              string   `json:"id"`
+	Name            string   `json:"name"`
+	LegalName       string   `json:"legalName"`
+	AlternateNames  []string `json:"alternateNames"`
+	Status          string   `json:"status"`
+	Tagline         string   `json:"tagline"`
+	Founded         string   `json:"founded"`
+	OwnershipStatus string   `json:"ownershipStatus"`
+	Headcount       int      `json:"headcount"`
+	Description     string   `json:"description"`
+	IsAcquired      bool     `json:"isAcquired"`
+	IsExited        bool     `json:"isExited"`
+	IsGovernment    bool     `json:"isGovernment"`
+	IsNonProfit     bool     `json:"isNonProfit"`
+	IsShutDown      bool     `json:"isShutDown"`
+	Locality        string   `json:"locality"`
+	Region          string   `json:"region"`
+	Country         string   `json:"country"`
+	LocationDetails struct {
+		Continent     LocationDetails `json:"continent"`
+		Country       LocationDetails `json:"country"`
+		County        LocationDetails `json:"county"`
+		LocalAdmin    LocationDetails `json:"localadmin"`
+		Locality      LocationDetails `json:"locality"`
+		Borough       LocationDetails `json:"borough"`
+		Macroregion   LocationDetails `json:"macroregion"`
+		Region        LocationDetails `json:"region"`
+		Macrohood     LocationDetails `json:"macrohood"`
+		Neighbourhood LocationDetails `json:"neighbourhood"`
+	} `json:"locationDetails"`
+	LocationIDList    []int    `json:"locationIDList"`
+	IndustryList      []string `json:"industryList"`
+	BusinessModelList []string `json:"businessModelList"`
+	ProductList       []struct {
+		ProductName    string `json:"productName"`
+		Tagline        string `json:"tagline"`
+		CreatedAt      string `json:"createdAt"`
+		ImageID        string `json:"imageID"`
+		ProductURL     string `json:"productURL"`
+		ProductHuntURL string `json:"producthuntURL"`
+	} `json:"productList"`
+	CustomerTypes  []string `json:"customerTypes"`
+	JobFamilyList  []string `json:"jobFamilyList"`
+	JobListingList []struct {
+		Category    string   `json:"category"`
+		SubCategory string   `json:"subCategory"`
+		Title       string   `json:"title"`
+		IsFullTime  bool     `json:"isFullTime"`
+		IsRemote    bool     `json:"isRemote"`
+		Locations   []string `json:"locations"`
+		Description string   `json:"mdDescription"`
+		Slug        string   `json:"slug"`
+		URL         string   `json:"url"`
+	} `json:"jobListingList"`
+	ScreenshotList   []string `json:"screenshotList"`
+	TargetMarketList []string `json:"targetMarketList"`
+	TechStackList    []struct {
+		ProductName       string   `json:"productName"`
+		ProductCategories []string `json:"productCategories"`
+	} `json:"techStackList"`
+	CIKNumber         string    `json:"CIKNumber"`
+	NAICSCode         string    `json:"NAICSCode"`
+	LinkedinFollowers int       `json:"linkedinFollowers"`
+	LinkedinID        string    `json:"linkedinID"`
+	URLs              URLResult `json:"URLs"`
+	WebTrafficSources struct {
+		Mail          float64 `json:"mail"`
+		Direct        float64 `json:"direct"`
+		Search        float64 `json:"search"`
+		Social        float64 `json:"social"`
+		Referrals     float64 `json:"referrals"`
+		PaidReferrals float64 `json:"paidReferrals"`
+	} `json:"webTrafficSources"`
+	AcquiredBy struct {
+		ID           int     `json:"id"`
+		AnnouncedOn  string  `json:"announcedOn"`
+		AcquirerName string  `json:"acquirerName"`
+		AcquireeName string  `json:"acquireeName"`
+		Price        float64 `json:"price"`
+	} `json:"acquiredBy"`
+	CageCode     string `json:"cageCode"`
+	DunsNumber   string `json:"dunsNumber"`
+	EmbeddedNews []struct {
+		Date     string `json:"date"`
+		Title    string `json:"title"`
+		Author   string `json:"author"`
+		Source   string `json:"source"`
+		URL      string `json:"linkUrl"`
+		ImageURL string `json:"imageUrl"`
+	} `json:"embeddedNews"`
+	PatentCount  int `json:"patentCount"`
+	OwnedPatents []struct {
+		InventionTitle   string `json:"inventionTitle"`
+		DatePublished    string `json:"datePublished"`
+		DocumentID       string `json:"documentId"`
+		DocumentURL      string `json:"documentUrl"`
+		LatestFilingDate string `json:"latestFilingDate"`
+	} `json:"ownedPatents"`
+	GovernmentAwards struct {
+		AwardID       string  `json:"awardId"`
+		AwardType     string  `json:"awardType"`
+		AwardAmount   float64 `json:"awardAmount"`
+		StartDate     string  `json:"startDate"`
+		EndDate       string  `json:"endDate"`
+		ActionDate    string  `json:"actionDate"`
+		DateSigned    string  `json:"dateSigned"`
+		TopTierAgency string  `json:"awardingTopTierAgency"`
+		SubTierAgency string  `json:"awardingSubTierAgency"`
+		Description   string  `json:"productOrServiceDescription"`
+		CFDAProgram   string  `json:"cfdaProgram"`
+	} `json:"governmentAwards"`
+	FinancingStatus    string  `json:"financingStatus"`
+	TotalFunding       float64 `json:"totalFunding"`
+	InvestorCount      int     `json:"investorCount"`
+	FundingRoundCount  int     `json:"fundingRoundCount"`
+	LastRoundValuation float64 `json:"lastRoundValuation"`
+	LatestDealDate     string  `json:"latestDealDate"`
+	LatestDealType     string  `json:"latestDealType"`
+	LatestDealAmount   int     `json:"latestDealAmount"`
+	StockExchange      string  `json:"stockExchange"`
+	StockSymbol        string  `json:"stockSymbol"`
+	IPODate            string  `json:"ipoDate"`
+	SharePrice         float64 `json:"sharePrice"`
+	OutstandingShares  float64 `json:"outstandingShares"`
+	MarketCap          float64 `json:"marketCap"`
+}
+
+type URLResult struct {
+	Golden     string `json:"golden"`
+	Contact    string `json:"contact"`
+	Twitter    string `json:"twitter"`
+	Website    string `json:"website"`
+	Facebook   string `json:"facebook"`
+	Linkedin   string `json:"linkedin"`
+	Pitchbook  string `json:"pitchbook"`
+	AngelList  string `json:"angelList"`
+	SignalNFX  string `json:"signalNFX"`
+	Crunchbase string `json:"crunchbase"`
+}
+
+type LocationDetails struct {
+	ID        int    `json:"id"`
+	Name      string `json:"name"`
+	PlaceType string `json:"placeType"`
+	Geometry  struct {
+		AreaSquareDegrees float64 `json:"area_square_degrees"`
+		BoundingBox       string  `json:"bbox"`
+		Latitude          float64 `json:"lat"`
+		Longitude         float64 `json:"lon"`
+	} `json:"geometry"`
 }
