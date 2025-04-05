@@ -95,6 +95,12 @@ type companyEnrichResult struct {
 	Name            string   `json:"name"`
 	LegalName       string   `json:"legalName"`
 	AlternateNames  []string `json:"alternateNames"`
+	CageCode        string   `json:"cageCode"`
+	CIKNumber       string   `json:"CIKNumber"`
+	DunsNumber      string   `json:"dunsNumber"`
+	LinkedinID      string   `json:"linkedinID"`
+	NAICSCode       string   `json:"NAICSCode"`
+	StockSymbol     string   `json:"stockSymbol"`
 	Status          string   `json:"status"`
 	Tagline         string   `json:"tagline"`
 	Founded         string   `json:"founded"`
@@ -151,11 +157,8 @@ type companyEnrichResult struct {
 		ProductName       string   `json:"productName"`
 		ProductCategories []string `json:"productCategories"`
 	} `json:"techStackList"`
-	CIKNumber         string    `json:"CIKNumber"`
-	NAICSCode         string    `json:"NAICSCode"`
-	LinkedinFollowers int       `json:"linkedinFollowers"`
-	LinkedinID        string    `json:"linkedinID"`
 	URLs              URLResult `json:"URLs"`
+	LinkedinFollowers int       `json:"linkedinFollowers"`
 	WebTrafficSources struct {
 		Mail          float64 `json:"mail"`
 		Direct        float64 `json:"direct"`
@@ -171,8 +174,6 @@ type companyEnrichResult struct {
 		AcquireeName string  `json:"acquireeName"`
 		Price        float64 `json:"price"`
 	} `json:"acquiredBy"`
-	CageCode     string `json:"cageCode"`
-	DunsNumber   string `json:"dunsNumber"`
 	EmbeddedNews []struct {
 		Date     string `json:"date"`
 		Title    string `json:"title"`
@@ -211,7 +212,6 @@ type companyEnrichResult struct {
 	LatestDealType     string  `json:"latestDealType"`
 	LatestDealAmount   int     `json:"latestDealAmount"`
 	StockExchange      string  `json:"stockExchange"`
-	StockSymbol        string  `json:"stockSymbol"`
 	IPODate            string  `json:"ipoDate"`
 	SharePrice         float64 `json:"sharePrice"`
 	OutstandingShares  float64 `json:"outstandingShares"`
