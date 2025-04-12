@@ -44,11 +44,40 @@ func (t *txtServiceDiscovery) check(e *et.Event) error {
     }
     
     matchers := map[string]string{
-        "google-site-verification":        "Google",
+        "airtable-verification": "Airtable",
+        "aliyun-site-verification": "Aliyun",
+        "anodot-domain-verification": "Anodot",
+        "apperio-domain-verification": "Apperio",
+        "apple-domain-verification": "Apple",
+        "atlassian-domain-verification": "Atlassian",
+        "bugcrowd-verification": "Bugcrowd",
+        "canva-site-verification": "Canva",
+        "cisco-ci-domain-verification": "Cisco",
+        "cursor-domain-verification-64a3xw": "Cursor",
+        "docusign=": "Docusign",
+        "dropbox-domain-verification": "Dropbox",
+        "facebook-domain-verification": "Facebook",
+        "globalsign-smime-dv": "Globalsign",
+        "google-site-verification": "Google",
+        "hubspot-developer-verification": "HubSpot",
+        "knowbe4-site-verification": "Knowbe4",
+        "krisp-domain-verification": "Krisp",
+        "lastpass-verification-code": "Lastpass",
+        "mailru-verification": "Mailru",
+        "miro-verification": "Miro",
+        "mongodb-site-verification": "MongoDB",
+        "notion-domain-verification": "Notion",
+        "onetrust-domain-verification": "OneTrust",
+        "openai-domain-verification": "OpenAI",
+        "pendo-domain-verification": "Pendo",
+        "postman-domain-verification": "Postman",
+        "segment-site-verification": "Segment",
         "status-page-domain-verification": "StatusPage",
-        "facebook-domain-verification":   "Facebook",
-        "stripe-verification":      "Stripe",
+        "stripe-verification": "Stripe",
         "twilio-domain-verification": "Twilio",
+        "yahoo-verification-key": "Yahoo",
+        "yandex-verification": "Yandex",
+        "zoom-domain-verification": "Zoom"
     }
     
     var foundName string
