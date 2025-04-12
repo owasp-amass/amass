@@ -41,6 +41,7 @@ func (t *txtServiceDiscovery) check(e *et.Event) error {
         return nil
     }
 
+    // Extract the FQDN asset from the entity
     fqdn, ok := e.Entity.Asset.(*oamdns.FQDN)
     if !ok {
         return nil
@@ -54,14 +55,14 @@ func (t *txtServiceDiscovery) check(e *et.Event) error {
     var txtRecords []dns.RR
     var props []*oamdns.DNSRecordProperty
     if support.AssetMonitoredWithinTTL(e.Session, e.Entity, t.source, since) {
-        props = t.lookup(e, e.Entity, since)
+        props = t.lookup(e, fqdn, since) // Pass the FQDN asset
     } else {
-        txtRecords = t.query(e, e.Entity)
-        t.store(e, e.Entity, txtRecords)
+        txtRecords = t.query(e, fqdn) // Pass the FQDN asset
+        t.store(e, fqdn, txtRecords) // Pass the FQDN asset
     }
 
     if len(txtRecords) > 0 || len(props) > 0 {
-        t.process(e, e.Entity, txtRecords, props)
+        t.process(e, fqdn, txtRecords, props) // Pass the FQDN asset
         support.AddDNSRecordType(e, int(dns.TypeTXT))
     }
     return nil
@@ -81,10 +82,10 @@ func (t *txtServiceDiscovery) lookup(e *et.Event, fqdn *oamdns.FQDN, since time.
     return props
 }
 
-func (t *txtServiceDiscovery) query(e *et.Event, name *oamdns.FQDN) []dns.RR {
+func (t *txtServiceDiscovery) query(e *et.Event, fqdn *oamdns.FQDN) []dns.RR {
     var txtRecords []dns.RR
 
-    if rr, err := support.PerformQuery(name.Name, dns.TypeTXT); err == nil {
+    if rr, err := support.PerformQuery(fqdn.Name, dns.TypeTXT); err == nil {
         txtRecords = append(txtRecords, rr...)
         support.MarkAssetMonitored(e.Session, e.Entity, t.source)
     }
