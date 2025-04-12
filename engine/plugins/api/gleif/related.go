@@ -25,7 +25,8 @@ func (ro *relatedOrgs) check(e *et.Event) error {
 		return nil
 	}
 
-	since, err := support.TTLStartTime(e.Session.Config(), string(oam.Identifier), string(oam.Identifier), ro.name)
+	since, err := support.TTLStartTime(e.Session.Config(),
+		string(oam.Identifier), string(oam.Identifier), ro.plugin.name)
 	if err != nil {
 		return err
 	}

@@ -266,7 +266,7 @@ func followBackForScope(db repository.Repository, asset *types.Entity, scope []s
 		for _, edge := range edges {
 			if rel, ok := edge.Relation.(*oamdns.BasicDNSRelation); ok && rel.Header.RRType != 5 {
 				continue
-			} else if rel, ok := edge.Relation.(*oamdns.PrefDNSRelation); ok && rel.Header.RRType != 2 && rel.Header.RRType != 15 {
+			} else if rel, ok := edge.Relation.(*oamdns.PrefDNSRelation); ok && rel.Header.RRType != 15 {
 				continue
 			} else if rel, ok := edge.Relation.(*oamdns.SRVDNSRelation); ok && rel.Header.RRType != 33 {
 				continue

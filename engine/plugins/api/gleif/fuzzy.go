@@ -33,7 +33,8 @@ func (fc *fuzzyCompletions) check(e *et.Event) error {
 		return errors.New("failed to extract the Organization asset")
 	}
 
-	since, err := support.TTLStartTime(e.Session.Config(), string(oam.Organization), string(oam.Organization), fc.name)
+	since, err := support.TTLStartTime(e.Session.Config(),
+		string(oam.Organization), string(oam.Organization), fc.plugin.name)
 	if err != nil {
 		return err
 	}

@@ -8,9 +8,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/caffix/pipeline"
 	multierror "github.com/hashicorp/go-multierror"
+	"github.com/owasp-amass/amass/v4/config"
 	et "github.com/owasp-amass/amass/v4/engine/types"
 )
 
@@ -115,14 +117,66 @@ func handlerTask(h *et.Handler) pipeline.TaskFunc {
 			}
 		}
 
-		tos := append(h.Transforms, h.Plugin.Name())
+		pname := h.Plugin.Name()
 		from := string(ede.Event.Entity.Asset.AssetType())
-		if _, err := ede.Event.Session.Config().CheckTransformations(from, tos...); err == nil {
-			if err := r.Callback(ede.Event); err != nil {
-				ede.Error = multierror.Append(ede.Error, err)
+		transformations := transformationsByType(ede.Event.Session.Config(), from)
+		if len(transformations) > 0 && !allExcludesPlugin(transformations, pname) {
+			pmatch := tosContainPlugin(transformations, pname)
+
+			if !pmatch {
+				if _, err := ede.Event.Session.Config().CheckTransformations(from, h.Transforms...); err == nil {
+					pmatch = true
+				}
+			}
+			if pmatch {
+				if err := r.Callback(ede.Event); err != nil {
+					ede.Error = multierror.Append(ede.Error, err)
+				}
 			}
 		}
-
 		return data, nil
 	})
+}
+
+func transformationsByType(cfg *config.Config, from string) []*config.Transformation {
+	var transformations []*config.Transformation
+
+	for _, tf := range cfg.Transformations {
+		if strings.EqualFold(tf.From, from) {
+			transformations = append(transformations, tf)
+		}
+	}
+
+	return transformations
+}
+
+func tosContainPlugin(transformations []*config.Transformation, pname string) bool {
+	for _, tf := range transformations {
+		if strings.EqualFold(tf.To, pname) {
+			return true
+		}
+	}
+	return false
+}
+
+func allExcludesPlugin(transformations []*config.Transformation, pname string) bool {
+	var all *config.Transformation
+
+	for _, tf := range transformations {
+		if strings.EqualFold(tf.To, "all") {
+			all = tf
+			break
+		}
+	}
+
+	if all == nil {
+		return false
+	}
+
+	for _, ex := range all.Exclude {
+		if strings.EqualFold(ex, pname) {
+			return true
+		}
+	}
+	return false
 }

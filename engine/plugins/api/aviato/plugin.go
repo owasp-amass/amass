@@ -16,7 +16,7 @@ import (
 )
 
 func NewAviato() et.Plugin {
-	limit := rate.Every(3 * time.Second)
+	limit := rate.Every(2 * time.Second)
 
 	return &aviato{
 		name:   "Aviato",
@@ -34,6 +34,38 @@ func (a *aviato) Name() string {
 
 func (a *aviato) Start(r et.Registry) error {
 	a.log = r.Log().WithGroup("plugin").With("name", a.name)
+
+	a.companySearch = &companySearch{
+		name:   a.name + "-Company-Search-Handler",
+		plugin: a,
+	}
+
+	if err := r.RegisterHandler(&et.Handler{
+		Plugin:     a,
+		Name:       a.companySearch.name,
+		Priority:   6,
+		Transforms: []string{string(oam.Identifier)},
+		EventType:  oam.Organization,
+		Callback:   a.companySearch.check,
+	}); err != nil {
+		return err
+	}
+
+	a.employees = &employees{
+		name:   a.name + "-Employees-Handler",
+		plugin: a,
+	}
+
+	if err := r.RegisterHandler(&et.Handler{
+		Plugin:     a,
+		Name:       a.employees.name,
+		Priority:   6,
+		Transforms: []string{string(oam.Person)},
+		EventType:  oam.Identifier,
+		Callback:   a.employees.check,
+	}); err != nil {
+		return err
+	}
 
 	a.log.Info("Plugin started")
 	return nil
