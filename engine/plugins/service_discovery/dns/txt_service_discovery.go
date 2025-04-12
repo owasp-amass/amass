@@ -7,6 +7,8 @@ import (
 
     et "github.com/owasp-amass/amass/v4/engine/types"
     oamdns "github.com/owasp-amass/open-asset-model/dns"
+    "github.com/miekg/dns"
+    "github.com/owasp-amass/amass/v4/engine/plugins/support"
 )
 
 type txtServiceDiscovery struct {
@@ -35,14 +37,84 @@ func (t *txtServiceDiscovery) Start(r et.Registry) error {
 func (t *txtServiceDiscovery) Stop() {}
 
 func (t *txtServiceDiscovery) check(e *et.Event) error {
-    since := time.Time{} // Get all TXT records
-    
-    // Get entity tags that contain TXT records
-    tags, err := e.Session.Cache().GetEntityTags(e.Entity, since, "dns_record")
+    if e == nil || e.Entity == nil || e.Entity.Asset == nil {
+        return nil
+    }
+
+    fqdn, ok := e.Entity.Asset.(*oamdns.FQDN)
+    if !ok {
+        return nil
+    }
+
+    since, err := support.TTLStartTime(e.Session.Config(), "FQDN", "FQDN", t.name)
     if err != nil {
         return err
     }
-    
+
+    var txtRecords []dns.RR
+    var props []*oamdns.DNSRecordProperty
+    if support.AssetMonitoredWithinTTL(e.Session, e.Entity, t.source, since) {
+        props = t.lookup(e, e.Entity, since)
+    } else {
+        txtRecords = t.query(e, e.Entity)
+        t.store(e, e.Entity, txtRecords)
+    }
+
+    if len(txtRecords) > 0 || len(props) > 0 {
+        t.process(e, e.Entity, txtRecords, props)
+        support.AddDNSRecordType(e, int(dns.TypeTXT))
+    }
+    return nil
+}
+
+func (t *txtServiceDiscovery) lookup(e *et.Event, fqdn *oamdns.FQDN, since time.Time) []*oamdns.DNSRecordProperty {
+    var props []*oamdns.DNSRecordProperty
+
+    if tags, err := e.Session.Cache().GetEntityTags(e.Entity, since, "dns_record"); err == nil {
+        for _, tag := range tags {
+            if prop, ok := tag.Property.(*oamdns.DNSRecordProperty); ok && prop.Header.RRType == int(dns.TypeTXT) {
+                props = append(props, prop)
+            }
+        }
+    }
+
+    return props
+}
+
+func (t *txtServiceDiscovery) query(e *et.Event, name *oamdns.FQDN) []dns.RR {
+    var txtRecords []dns.RR
+
+    if rr, err := support.PerformQuery(name.Name, dns.TypeTXT); err == nil {
+        txtRecords = append(txtRecords, rr...)
+        support.MarkAssetMonitored(e.Session, e.Entity, t.source)
+    }
+
+    return txtRecords
+}
+
+func (t *txtServiceDiscovery) store(e *et.Event, fqdn *oamdns.FQDN, rr []dns.RR) {
+    for _, record := range rr {
+        if record.Header().Rrtype != dns.TypeTXT {
+            continue
+        }
+
+        txtValue := strings.Join((record.(*dns.TXT)).Txt, " ")
+        _, err := e.Session.Cache().CreateEntityProperty(e.Entity, &oamdns.DNSRecordProperty{
+            PropertyName: "dns_record",
+            Header: oamdns.RRHeader{
+                RRType: int(dns.TypeTXT),
+                Class:  int(record.Header().Class),
+                TTL:    int(record.Header().Ttl),
+            },
+            Data: txtValue,
+        })
+        if err != nil {
+            slog.Error("Failed to create entity property", "txtValue", txtValue, "error", err)
+        }
+    }
+}
+
+func (t *txtServiceDiscovery) process(e *et.Event, fqdn *oamdns.FQDN, txtRecords []dns.RR, props []*oamdns.DNSRecordProperty) {
     matchers := map[string]string{
         "airtable-verification": "Airtable",
         "aliyun-site-verification": "Aliyun",
@@ -79,36 +151,27 @@ func (t *txtServiceDiscovery) check(e *et.Event) error {
         "yandex-verification": "Yandex",
         "zoom-domain-verification": "Zoom",
     }
-    
-    var foundName string
-    // Process each tag to find TXT records
-    for _, tag := range tags {
-        if prop, ok := tag.Property.(*oamdns.DNSRecordProperty); ok {
-            // Check if it's a TXT record (type 16)
-            if prop.Header.RRType == 16 {
-                // Check for service patterns in the TXT record data
-                for pattern, serviceName := range matchers {
-                    if strings.Contains(prop.Data, pattern) {
-                        foundName = serviceName
-                        break
-                    }
-                }
-                if foundName != "" {
-                    break
-                }
+
+    for _, record := range txtRecords {
+        txtValue := strings.Join((record.(*dns.TXT)).Txt, " ")
+        for pattern, serviceName := range matchers {
+            if strings.Contains(txtValue, pattern) {
+                slog.Info("Discovered "+serviceName+" service in TXT record",
+                    "domain", fqdn.Name,
+                    "plugin", t.name)
+                break
             }
         }
     }
-    
-    if foundName != "" {
-        fqdn, _ := e.Entity.Asset.(*oamdns.FQDN)
-        domainName := "unknown"
-        if fqdn != nil {
-            domainName = fqdn.Name
+
+    for _, prop := range props {
+        for pattern, serviceName := range matchers {
+            if strings.Contains(prop.Data, pattern) {
+                slog.Info("Discovered "+serviceName+" service in cached TXT record",
+                    "domain", fqdn.Name,
+                    "plugin", t.name)
+                break
+            }
         }
-        slog.Info("Discovered "+foundName+" service in TXT record", 
-            "domain", domainName,
-            "plugin", t.name)
     }
-    return nil
 }
