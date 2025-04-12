@@ -77,7 +77,7 @@ func (t *txtServiceDiscovery) check(e *et.Event) error {
         "twilio-domain-verification": "Twilio",
         "yahoo-verification-key": "Yahoo",
         "yandex-verification": "Yandex",
-        "zoom-domain-verification": "Zoom"
+        "zoom-domain-verification": "Zoom",
     }
     
     var foundName string
