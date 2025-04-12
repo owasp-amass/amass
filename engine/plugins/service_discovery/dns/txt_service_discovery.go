@@ -45,8 +45,10 @@ func (t *txtServiceDiscovery) check(e *et.Event) error {
     
     matchers := map[string]string{
         "google-site-verification":        "Google",
-        "status-page-domain-verification": "StatusPage Domain",
-        "facebook-domain-verification=":   "Facebook",
+        "status-page-domain-verification": "StatusPage",
+        "facebook-domain-verification":   "Facebook",
+        "stripe-verification":      "Stripe",
+        "twilio-domain-verification": "Twilio",
     }
     
     var foundName string
