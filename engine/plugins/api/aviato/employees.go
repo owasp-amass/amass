@@ -46,7 +46,7 @@ func (ae *employees) check(e *et.Event) error {
 	}
 
 	since, err := support.TTLStartTime(e.Session.Config(),
-		string(oam.Identifier), string(oam.Identifier), ae.plugin.name)
+		string(oam.Identifier), string(oam.Person), ae.plugin.name)
 	if err != nil {
 		return err
 	}

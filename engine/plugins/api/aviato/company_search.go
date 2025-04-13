@@ -43,7 +43,7 @@ func (cs *companySearch) check(e *et.Event) error {
 	}
 
 	since, err := support.TTLStartTime(e.Session.Config(),
-		string(oam.Organization), string(oam.Organization), cs.plugin.name)
+		string(oam.Organization), string(oam.Identifier), cs.plugin.name)
 	if err != nil {
 		return err
 	}

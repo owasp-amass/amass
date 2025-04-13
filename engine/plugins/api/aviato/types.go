@@ -52,6 +52,11 @@ type companySearchResult struct {
 	} `json:"items"`
 }
 
+type companyEnrich struct {
+	name   string
+	plugin *aviato
+}
+
 type companySearch struct {
 	name   string
 	plugin *aviato
