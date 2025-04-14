@@ -21,6 +21,7 @@ type aviato struct {
 	log           *slog.Logger
 	rlimit        *rate.Limiter
 	companySearch *companySearch
+	companyEnrich *companyEnrich
 	employees     *employees
 	source        *et.Source
 }

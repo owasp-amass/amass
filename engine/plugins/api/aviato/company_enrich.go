@@ -48,19 +48,17 @@ func (ce *companyEnrich) check(e *et.Event) error {
 		return err
 	}
 
-	var o *dbt.Entity
-	var data *companyEnrichResult
+	var orgent *dbt.Entity
 	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, ce.plugin.source, since) {
-		o = ce.lookup(e, e.Entity, since)
-	} else {
-		o, data = ce.query(e, e.Entity, keys)
-		if data != nil {
-			support.MarkAssetMonitored(e.Session, e.Entity, ce.plugin.source)
-		}
+		orgent = ce.lookup(e, e.Entity, since)
+	} else if o, data := ce.query(e, e.Entity, keys); data != nil {
+		orgent = o
+		ce.store(e, o, data)
+		support.MarkAssetMonitored(e.Session, e.Entity, ce.plugin.source)
 	}
 
-	if o != nil {
-		ce.process(e, e.Entity, o)
+	if orgent != nil {
+		ce.process(e, e.Entity, orgent)
 	}
 	return nil
 }
@@ -114,6 +112,10 @@ func (ce *companyEnrich) query(e *et.Event, ident *dbt.Entity, apikey []string) 
 		return nil, nil
 	}
 	return orgent, enrich
+}
+
+func (ce *companyEnrich) store(e *et.Event, orgent *dbt.Entity, data *companyEnrichResult) {
+
 }
 
 func (ce *companyEnrich) process(e *et.Event, ident, orgent *dbt.Entity) {
