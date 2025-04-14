@@ -5,6 +5,8 @@
 package aviato
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -12,6 +14,7 @@ import (
 
 	"github.com/owasp-amass/amass/v4/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v4/engine/types"
+	"github.com/owasp-amass/amass/v4/utils/net/http"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/general"
@@ -46,11 +49,14 @@ func (ce *companyEnrich) check(e *et.Event) error {
 	}
 
 	var o *dbt.Entity
+	var data *companyEnrichResult
 	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, ce.plugin.source, since) {
 		o = ce.lookup(e, e.Entity, since)
 	} else {
-		o = ce.query(e, e.Entity, keys)
-		support.MarkAssetMonitored(e.Session, e.Entity, ce.plugin.source)
+		o, data = ce.query(e, e.Entity, keys)
+		if data != nil {
+			support.MarkAssetMonitored(e.Session, e.Entity, ce.plugin.source)
+		}
 	}
 
 	if o != nil {
@@ -73,6 +79,41 @@ func (ce *companyEnrich) lookup(e *et.Event, ident *dbt.Entity, since time.Time)
 		}
 	}
 	return nil
+}
+
+func (ce *companyEnrich) query(e *et.Event, ident *dbt.Entity, apikey []string) (*dbt.Entity, *companyEnrichResult) {
+	orgent := ce.lookup(e, ident, time.Time{})
+	if orgent == nil {
+		return nil, nil
+	}
+
+	var enrich *companyEnrichResult
+	oamid := e.Entity.Asset.(*general.Identifier)
+	for _, key := range apikey {
+		headers := http.Header{"Content-Type": []string{"application/json"}}
+		headers["Authorization"] = []string{"Bearer " + key}
+
+		_ = ce.plugin.rlimit.Wait(context.TODO())
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
+
+		u := fmt.Sprintf("https://data.api.aviato.co/company/enrich?id=%s", oamid.ID)
+		resp, err := http.RequestWebPage(ctx, &http.Request{URL: u, Header: headers})
+		if err != nil || resp.StatusCode != 200 {
+			continue
+		}
+
+		var result companyEnrichResult
+		if err := json.Unmarshal([]byte(resp.Body), &result); err == nil {
+			enrich = &result
+			break
+		}
+	}
+
+	if enrich == nil {
+		return nil, nil
+	}
+	return orgent, enrich
 }
 
 func (ce *companyEnrich) process(e *et.Event, ident, orgent *dbt.Entity) {
