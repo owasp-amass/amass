@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/owasp-amass/amass/v4/engine/plugins/support"
@@ -115,7 +116,34 @@ func (ce *companyEnrich) query(e *et.Event, ident *dbt.Entity, apikey []string) 
 }
 
 func (ce *companyEnrich) store(e *et.Event, orgent *dbt.Entity, data *companyEnrichResult) {
+	o := orgent.Asset.(*org.Organization)
 
+	o.Active = false
+	if strings.EqualFold(data.Status, "active") {
+		o.Active = true
+	}
+	o.NonProfit = data.IsNonProfit
+	o.Headcount = data.Headcount
+
+	// attempt to set the legal name
+	if o.LegalName == "" && data.LegalName != "" {
+		o.LegalName = data.LegalName
+
+		oamid := &general.Identifier{
+			UniqueID: fmt.Sprintf("%s:%s", general.LegalName, o.LegalName),
+			ID:       o.LegalName,
+			Type:     general.LegalName,
+		}
+
+		if ident, err := e.Session.Cache().CreateAsset(oamid); err == nil && ident != nil {
+			_, _ = e.Session.Cache().CreateEntityProperty(ident, &general.SourceProperty{
+				Source:     ce.plugin.source.Name,
+				Confidence: ce.plugin.source.Confidence,
+			})
+
+			_ = ce.plugin.createRelation(e.Session, orgent, general.SimpleRelation{Name: "id"}, ident, ce.plugin.source.Confidence)
+		}
+	}
 }
 
 func (ce *companyEnrich) process(e *et.Event, ident, orgent *dbt.Entity) {
