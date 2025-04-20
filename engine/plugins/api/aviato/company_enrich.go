@@ -99,14 +99,17 @@ func (ce *companyEnrich) query(e *et.Event, ident *dbt.Entity, apikey []string) 
 		u := fmt.Sprintf("https://data.api.aviato.co/company/enrich?id=%s", oamid.ID)
 		resp, err := http.RequestWebPage(ctx, &http.Request{URL: u, Header: headers})
 		if err != nil || resp.StatusCode != 200 {
+			e.Session.Log().Error("msg", err.Error(), slog.Group("plugin", "name", ce.plugin.name, "handler", ce.name))
 			continue
 		}
 
 		var result companyEnrichResult
 		if err := json.Unmarshal([]byte(resp.Body), &result); err == nil {
 			enrich = &result
-			break
+		} else {
+			e.Session.Log().Error("msg", err.Error(), slog.Group("plugin", "name", ce.plugin.name, "handler", ce.name))
 		}
+		break
 	}
 
 	if enrich == nil {
@@ -144,6 +147,8 @@ func (ce *companyEnrich) store(e *et.Event, orgent *dbt.Entity, data *companyEnr
 			_ = ce.plugin.createRelation(e.Session, orgent, general.SimpleRelation{Name: "id"}, ident, ce.plugin.source.Confidence)
 		}
 	}
+	// update entity
+	_, _ = e.Session.Cache().CreateEntity(orgent)
 }
 
 func (ce *companyEnrich) process(e *et.Event, ident, orgent *dbt.Entity) {
