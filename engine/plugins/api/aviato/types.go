@@ -147,15 +147,15 @@ type companyEnrichResult struct {
 	CustomerTypes  []string `json:"customerTypes"`
 	JobFamilyList  []string `json:"jobFamilyList"`
 	JobListingList []struct {
-		Category    string   `json:"category"`
-		SubCategory string   `json:"subCategory"`
-		Title       string   `json:"title"`
-		IsFullTime  bool     `json:"isFullTime"`
-		IsRemote    bool     `json:"isRemote"`
-		Locations   []string `json:"locations"`
-		Description string   `json:"mdDescription"`
-		Slug        string   `json:"slug"`
-		URL         string   `json:"url"`
+		Category    string `json:"category"`
+		SubCategory string `json:"subCategory"`
+		Title       string `json:"title"`
+		IsFullTime  bool   `json:"isFullTime"`
+		IsRemote    bool   `json:"isRemote"`
+		//Locations   []string `json:"locations"` documentation is not clear
+		Description string `json:"mdDescription"`
+		Slug        string `json:"slug"`
+		URL         string `json:"url"`
 	} `json:"jobListingList"`
 	ScreenshotList   []string `json:"screenshotList"`
 	TargetMarketList []string `json:"targetMarketList"`
@@ -181,7 +181,7 @@ type companyEnrichResult struct {
 		Price        float64 `json:"price"`
 	} `json:"acquiredBy"`
 	EmbeddedNews []struct {
-		Date     string `json:"date"`
+		//Date     string `json:"date"` documentation is not clear
 		Title    string `json:"title"`
 		Author   string `json:"author"`
 		Source   string `json:"source"`

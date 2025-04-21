@@ -75,7 +75,7 @@ func (a *aviato) Start(r et.Registry) error {
 	if err := r.RegisterHandler(&et.Handler{
 		Plugin:     a,
 		Name:       a.companyEnrich.name,
-		Priority:   6,
+		Priority:   7,
 		Transforms: []string{string(oam.Organization)},
 		EventType:  oam.Identifier,
 		Callback:   a.companyEnrich.check,

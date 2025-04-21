@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"strings"
 	"time"
 
@@ -23,9 +24,11 @@ import (
 )
 
 func (ce *companyEnrich) check(e *et.Event) error {
-	_, ok := e.Entity.Asset.(*general.Identifier)
+	oamid, ok := e.Entity.Asset.(*general.Identifier)
 	if !ok {
 		return errors.New("failed to extract the Identifier asset")
+	} else if oamid.Type != AviatoCompanyID {
+		return nil
 	}
 
 	ds := e.Session.Config().GetDataSourceConfig(ce.plugin.name)
@@ -50,12 +53,16 @@ func (ce *companyEnrich) check(e *et.Event) error {
 	}
 
 	var orgent *dbt.Entity
-	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, ce.plugin.source, since) {
+	src := &et.Source{
+		Name:       ce.name,
+		Confidence: ce.plugin.source.Confidence,
+	}
+	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, src, since) {
 		orgent = ce.lookup(e, e.Entity, since)
 	} else if o, data := ce.query(e, e.Entity, keys); data != nil {
 		orgent = o
 		ce.store(e, o, data)
-		support.MarkAssetMonitored(e.Session, e.Entity, ce.plugin.source)
+		support.MarkAssetMonitored(e.Session, e.Entity, src)
 	}
 
 	if orgent != nil {
@@ -81,13 +88,16 @@ func (ce *companyEnrich) lookup(e *et.Event, ident *dbt.Entity, since time.Time)
 }
 
 func (ce *companyEnrich) query(e *et.Event, ident *dbt.Entity, apikey []string) (*dbt.Entity, *companyEnrichResult) {
+	oamid := e.Entity.Asset.(*general.Identifier)
+
 	orgent := ce.lookup(e, ident, time.Time{})
 	if orgent == nil {
+		msg := fmt.Sprintf("failed to find the Organization asset for %s", oamid.UniqueID)
+		e.Session.Log().Error("msg", msg, slog.Group("plugin", "name", ce.plugin.name, "handler", ce.name))
 		return nil, nil
 	}
 
 	var enrich *companyEnrichResult
-	oamid := e.Entity.Asset.(*general.Identifier)
 	for _, key := range apikey {
 		headers := http.Header{"Content-Type": []string{"application/json"}}
 		headers["Authorization"] = []string{"Bearer " + key}
@@ -96,10 +106,23 @@ func (ce *companyEnrich) query(e *et.Event, ident *dbt.Entity, apikey []string) 
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
 
-		u := fmt.Sprintf("https://data.api.aviato.co/company/enrich?id=%s", oamid.ID)
+		u := fmt.Sprintf("https://data.api.aviato.co/company/enrich?id=%s", url.QueryEscape(oamid.ID))
 		resp, err := http.RequestWebPage(ctx, &http.Request{URL: u, Header: headers})
-		if err != nil || resp.StatusCode != 200 {
-			e.Session.Log().Error("msg", err.Error(), slog.Group("plugin", "name", ce.plugin.name, "handler", ce.name))
+		if err != nil {
+			msg := fmt.Sprintf("failed to obtain the company enrich result for %s: %s", oamid.ID, err)
+			e.Session.Log().Error("msg", msg, slog.Group("plugin", "name", ce.plugin.name, "handler", ce.name))
+			continue
+		} else if resp.StatusCode != 200 {
+			msg := fmt.Sprintf("failed to obtain the company enrich result for %s: %s", oamid.ID, resp.Status)
+			e.Session.Log().Error("msg", msg, slog.Group("plugin", "name", ce.plugin.name, "handler", ce.name))
+			continue
+		} else if resp.Body == "" {
+			msg := fmt.Sprintf("failed to obtain the company enrich result for %s: empty body", oamid.ID)
+			e.Session.Log().Error("msg", msg, slog.Group("plugin", "name", ce.plugin.name, "handler", ce.name))
+			continue
+		} else if strings.Contains(resp.Body, "error") {
+			msg := fmt.Sprintf("failed to obtain the company enrich result for %s: %s", oamid.ID, resp.Body)
+			e.Session.Log().Error("msg", msg, slog.Group("plugin", "name", ce.plugin.name, "handler", ce.name))
 			continue
 		}
 
@@ -107,7 +130,8 @@ func (ce *companyEnrich) query(e *et.Event, ident *dbt.Entity, apikey []string) 
 		if err := json.Unmarshal([]byte(resp.Body), &result); err == nil {
 			enrich = &result
 		} else {
-			e.Session.Log().Error("msg", err.Error(), slog.Group("plugin", "name", ce.plugin.name, "handler", ce.name))
+			msg := fmt.Sprintf("failed to unmarshal the company enrich result for %s: %s", oamid.ID, err)
+			e.Session.Log().Error("msg", msg, slog.Group("plugin", "name", ce.plugin.name, "handler", ce.name))
 		}
 		break
 	}
@@ -138,17 +162,37 @@ func (ce *companyEnrich) store(e *et.Event, orgent *dbt.Entity, data *companyEnr
 			Type:     general.LegalName,
 		}
 
-		if ident, err := e.Session.Cache().CreateAsset(oamid); err == nil && ident != nil {
-			_, _ = e.Session.Cache().CreateEntityProperty(ident, &general.SourceProperty{
-				Source:     ce.plugin.source.Name,
-				Confidence: ce.plugin.source.Confidence,
-			})
+		ident, err := e.Session.Cache().CreateAsset(oamid)
+		if err != nil || ident == nil {
+			msg := fmt.Sprintf("failed to create the Identifier asset for %s: %s", o.LegalName, err)
+			e.Session.Log().Error("msg", msg, slog.Group("plugin", "name", ce.plugin.name, "handler", ce.name))
+			return
+		}
 
-			_ = ce.plugin.createRelation(e.Session, orgent, general.SimpleRelation{Name: "id"}, ident, ce.plugin.source.Confidence)
+		_, err = e.Session.Cache().CreateEntityProperty(ident, &general.SourceProperty{
+			Source:     ce.name,
+			Confidence: ce.plugin.source.Confidence,
+		})
+		if err != nil {
+			msg := fmt.Sprintf("failed to create the SourceProperty for %s: %s", o.LegalName, err)
+			e.Session.Log().Error("msg", msg, slog.Group("plugin", "name", ce.plugin.name, "handler", ce.name))
+			return
+		}
+
+		err = ce.plugin.createRelation(e.Session, orgent, general.SimpleRelation{Name: "id"}, ident, ce.plugin.source.Confidence)
+		if err != nil {
+			msg := fmt.Sprintf("failed to create the relation for %s: %s", o.LegalName, err)
+			e.Session.Log().Error("msg", msg, slog.Group("plugin", "name", ce.plugin.name, "handler", ce.name))
+			return
 		}
 	}
 	// update entity
-	_, _ = e.Session.Cache().CreateEntity(orgent)
+	_, err := e.Session.Cache().CreateEntity(orgent)
+	if err != nil {
+		msg := fmt.Sprintf("failed to update the Organization asset for %s: %s", o.Name, err)
+		e.Session.Log().Error("msg", msg, slog.Group("plugin", "name", ce.plugin.name, "handler", ce.name))
+		return
+	}
 }
 
 func (ce *companyEnrich) process(e *et.Event, ident, orgent *dbt.Entity) {
