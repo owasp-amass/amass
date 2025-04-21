@@ -137,9 +137,9 @@ type companyEnrichResult struct {
 	IndustryList      []string `json:"industryList"`
 	BusinessModelList []string `json:"businessModelList"`
 	ProductList       []struct {
-		ProductName    string `json:"productName"`
-		Tagline        string `json:"tagline"`
-		CreatedAt      string `json:"createdAt"`
+		ProductName string `json:"productName"`
+		Tagline     string `json:"tagline"`
+		//CreatedAt      string `json:"createdAt"` documentation is not clear
 		ImageID        string `json:"imageID"`
 		ProductURL     string `json:"productURL"`
 		ProductHuntURL string `json:"producthuntURL"`
@@ -196,7 +196,7 @@ type companyEnrichResult struct {
 		DocumentURL      string `json:"documentUrl"`
 		LatestFilingDate string `json:"latestFilingDate"`
 	} `json:"ownedPatents"`
-	GovernmentAwards struct {
+	GovernmentAwards []struct {
 		AwardID       string  `json:"awardId"`
 		AwardType     string  `json:"awardType"`
 		AwardAmount   float64 `json:"awardAmount"`

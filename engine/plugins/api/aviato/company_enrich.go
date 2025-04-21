@@ -93,7 +93,7 @@ func (ce *companyEnrich) query(e *et.Event, ident *dbt.Entity, apikey []string) 
 	orgent := ce.lookup(e, ident, time.Time{})
 	if orgent == nil {
 		msg := fmt.Sprintf("failed to find the Organization asset for %s", oamid.UniqueID)
-		e.Session.Log().Error("msg", msg, slog.Group("plugin", "name", ce.plugin.name, "handler", ce.name))
+		e.Session.Log().Error(msg, slog.Group("plugin", "name", ce.plugin.name, "handler", ce.name))
 		return nil, nil
 	}
 
@@ -110,19 +110,19 @@ func (ce *companyEnrich) query(e *et.Event, ident *dbt.Entity, apikey []string) 
 		resp, err := http.RequestWebPage(ctx, &http.Request{URL: u, Header: headers})
 		if err != nil {
 			msg := fmt.Sprintf("failed to obtain the company enrich result for %s: %s", oamid.ID, err)
-			e.Session.Log().Error("msg", msg, slog.Group("plugin", "name", ce.plugin.name, "handler", ce.name))
+			e.Session.Log().Error(msg, slog.Group("plugin", "name", ce.plugin.name, "handler", ce.name))
 			continue
 		} else if resp.StatusCode != 200 {
 			msg := fmt.Sprintf("failed to obtain the company enrich result for %s: %s", oamid.ID, resp.Status)
-			e.Session.Log().Error("msg", msg, slog.Group("plugin", "name", ce.plugin.name, "handler", ce.name))
+			e.Session.Log().Error(msg, slog.Group("plugin", "name", ce.plugin.name, "handler", ce.name))
 			continue
 		} else if resp.Body == "" {
 			msg := fmt.Sprintf("failed to obtain the company enrich result for %s: empty body", oamid.ID)
-			e.Session.Log().Error("msg", msg, slog.Group("plugin", "name", ce.plugin.name, "handler", ce.name))
+			e.Session.Log().Error(msg, slog.Group("plugin", "name", ce.plugin.name, "handler", ce.name))
 			continue
 		} else if strings.Contains(resp.Body, "error") {
 			msg := fmt.Sprintf("failed to obtain the company enrich result for %s: %s", oamid.ID, resp.Body)
-			e.Session.Log().Error("msg", msg, slog.Group("plugin", "name", ce.plugin.name, "handler", ce.name))
+			e.Session.Log().Error(msg, slog.Group("plugin", "name", ce.plugin.name, "handler", ce.name))
 			continue
 		}
 
@@ -131,7 +131,7 @@ func (ce *companyEnrich) query(e *et.Event, ident *dbt.Entity, apikey []string) 
 			enrich = &result
 		} else {
 			msg := fmt.Sprintf("failed to unmarshal the company enrich result for %s: %s", oamid.ID, err)
-			e.Session.Log().Error("msg", msg, slog.Group("plugin", "name", ce.plugin.name, "handler", ce.name))
+			e.Session.Log().Error(msg, slog.Group("plugin", "name", ce.plugin.name, "handler", ce.name))
 		}
 		break
 	}
@@ -165,7 +165,7 @@ func (ce *companyEnrich) store(e *et.Event, orgent *dbt.Entity, data *companyEnr
 		ident, err := e.Session.Cache().CreateAsset(oamid)
 		if err != nil || ident == nil {
 			msg := fmt.Sprintf("failed to create the Identifier asset for %s: %s", o.LegalName, err)
-			e.Session.Log().Error("msg", msg, slog.Group("plugin", "name", ce.plugin.name, "handler", ce.name))
+			e.Session.Log().Error(msg, slog.Group("plugin", "name", ce.plugin.name, "handler", ce.name))
 			return
 		}
 
@@ -175,14 +175,14 @@ func (ce *companyEnrich) store(e *et.Event, orgent *dbt.Entity, data *companyEnr
 		})
 		if err != nil {
 			msg := fmt.Sprintf("failed to create the SourceProperty for %s: %s", o.LegalName, err)
-			e.Session.Log().Error("msg", msg, slog.Group("plugin", "name", ce.plugin.name, "handler", ce.name))
+			e.Session.Log().Error(msg, slog.Group("plugin", "name", ce.plugin.name, "handler", ce.name))
 			return
 		}
 
 		err = ce.plugin.createRelation(e.Session, orgent, general.SimpleRelation{Name: "id"}, ident, ce.plugin.source.Confidence)
 		if err != nil {
 			msg := fmt.Sprintf("failed to create the relation for %s: %s", o.LegalName, err)
-			e.Session.Log().Error("msg", msg, slog.Group("plugin", "name", ce.plugin.name, "handler", ce.name))
+			e.Session.Log().Error(msg, slog.Group("plugin", "name", ce.plugin.name, "handler", ce.name))
 			return
 		}
 	}
@@ -190,7 +190,7 @@ func (ce *companyEnrich) store(e *et.Event, orgent *dbt.Entity, data *companyEnr
 	_, err := e.Session.Cache().CreateEntity(orgent)
 	if err != nil {
 		msg := fmt.Sprintf("failed to update the Organization asset for %s: %s", o.Name, err)
-		e.Session.Log().Error("msg", msg, slog.Group("plugin", "name", ce.plugin.name, "handler", ce.name))
+		e.Session.Log().Error(msg, slog.Group("plugin", "name", ce.plugin.name, "handler", ce.name))
 		return
 	}
 }

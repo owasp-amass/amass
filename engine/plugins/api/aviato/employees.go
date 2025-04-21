@@ -116,7 +116,7 @@ func (ae *employees) query(e *et.Event, ident *dbt.Entity, apikey []string) (*db
 	orgent := ae.getAssociatedOrg(e, ident)
 	if orgent == nil {
 		msg := fmt.Sprintf("failed to find the Organization asset for %s", oamid.UniqueID)
-		e.Session.Log().Error("msg", msg, slog.Group("plugin", "name", ae.plugin.name, "handler", ae.name))
+		e.Session.Log().Error(msg, slog.Group("plugin", "name", ae.plugin.name, "handler", ae.name))
 		return nil, []*dbt.Entity{}
 	}
 
@@ -138,26 +138,26 @@ loop:
 			resp, err := http.RequestWebPage(ctx, &http.Request{URL: u, Header: headers})
 			if err != nil {
 				msg := fmt.Sprintf("failed to obtain the employees for %s: %s", oamid.ID, err)
-				e.Session.Log().Error("msg", msg, slog.Group("plugin", "name", ae.plugin.name, "handler", ae.name))
+				e.Session.Log().Error(msg, slog.Group("plugin", "name", ae.plugin.name, "handler", ae.name))
 				continue
 			} else if resp.StatusCode != 200 {
 				msg := fmt.Sprintf("failed to obtain the employees for %s: %s", oamid.ID, resp.Status)
-				e.Session.Log().Error("msg", msg, slog.Group("plugin", "name", ae.plugin.name, "handler", ae.name))
+				e.Session.Log().Error(msg, slog.Group("plugin", "name", ae.plugin.name, "handler", ae.name))
 				continue
 			} else if resp.Body == "" {
 				msg := fmt.Sprintf("failed to obtain the employees for %s: empty body", oamid.ID)
-				e.Session.Log().Error("msg", msg, slog.Group("plugin", "name", ae.plugin.name, "handler", ae.name))
+				e.Session.Log().Error(msg, slog.Group("plugin", "name", ae.plugin.name, "handler", ae.name))
 				continue
 			} else if strings.Contains(resp.Body, "error") {
 				msg := fmt.Sprintf("failed to obtain the employees for %s: %s", oamid.ID, resp.Body)
-				e.Session.Log().Error("msg", msg, slog.Group("plugin", "name", ae.plugin.name, "handler", ae.name))
+				e.Session.Log().Error(msg, slog.Group("plugin", "name", ae.plugin.name, "handler", ae.name))
 				continue
 			}
 
 			var result employeesResult
 			if err := json.Unmarshal([]byte(resp.Body), &result); err != nil {
 				msg := fmt.Sprintf("failed to unmarshal the employees for %s: %s", oamid.ID, err)
-				e.Session.Log().Error("msg", msg, slog.Group("plugin", "name", ae.plugin.name, "handler", ae.name))
+				e.Session.Log().Error(msg, slog.Group("plugin", "name", ae.plugin.name, "handler", ae.name))
 				break loop
 			} else if len(result.Employees) == 0 {
 				break loop
@@ -212,7 +212,7 @@ func (ae *employees) store(e *et.Event, ident, orgent *dbt.Entity, employlist []
 		personent, err := e.Session.Cache().CreateAsset(p)
 		if err != nil {
 			msg := fmt.Sprintf("failed to create the Person asset for %s: %s", p.FullName, err)
-			e.Session.Log().Error("msg", msg, slog.Group("plugin", "name", ae.plugin.name, "handler", ae.name))
+			e.Session.Log().Error(msg, slog.Group("plugin", "name", ae.plugin.name, "handler", ae.name))
 			continue
 		}
 
@@ -222,7 +222,7 @@ func (ae *employees) store(e *et.Event, ident, orgent *dbt.Entity, employlist []
 		})
 		if err != nil {
 			msg := fmt.Sprintf("failed to create the Person asset source property for %s: %s", p.FullName, err)
-			e.Session.Log().Error("msg", msg, slog.Group("plugin", "name", ae.plugin.name, "handler", ae.name))
+			e.Session.Log().Error(msg, slog.Group("plugin", "name", ae.plugin.name, "handler", ae.name))
 			continue
 		}
 
@@ -231,7 +231,7 @@ func (ae *employees) store(e *et.Event, ident, orgent *dbt.Entity, employlist []
 			employents = append(employents, personent)
 		} else {
 			msg := fmt.Sprintf("failed to create the member relation for %s: %s", p.FullName, err)
-			e.Session.Log().Error("msg", msg, slog.Group("plugin", "name", ae.plugin.name, "handler", ae.name))
+			e.Session.Log().Error(msg, slog.Group("plugin", "name", ae.plugin.name, "handler", ae.name))
 		}
 	}
 
