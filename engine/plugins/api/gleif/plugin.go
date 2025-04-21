@@ -59,7 +59,7 @@ func (g *gleif) Start(r et.Registry) error {
 	if err := r.RegisterHandler(&et.Handler{
 		Plugin:     g,
 		Name:       g.related.name,
-		Priority:   6,
+		Priority:   5,
 		Transforms: []string{string(oam.Organization)},
 		EventType:  oam.Identifier,
 		Callback:   g.related.check,
