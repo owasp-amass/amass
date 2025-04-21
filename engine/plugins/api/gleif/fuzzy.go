@@ -34,7 +34,7 @@ func (fc *fuzzyCompletions) check(e *et.Event) error {
 	}
 
 	since, err := support.TTLStartTime(e.Session.Config(),
-		string(oam.Organization), string(oam.Organization), fc.plugin.name)
+		string(oam.Organization), string(oam.Identifier), fc.plugin.name)
 	if err != nil {
 		return err
 	}
@@ -115,9 +115,11 @@ func (fc *fuzzyCompletions) query(e *et.Event, orgent *dbt.Entity) *dbt.Entity {
 				} `json:"relationships"`
 			} `json:"data"`
 		}
-		if err := json.Unmarshal([]byte(resp.Body), &result); err != nil || len(result.Data) == 0 {
+		if err := json.Unmarshal([]byte(resp.Body), &result); err != nil {
 			msg := fmt.Sprintf("Failed to unmarshal the LEI record for %s: %s", o.Name, err)
 			e.Session.Log().Error(msg, slog.Group("plugin", "name", fc.plugin.name, "handler", fc.name))
+			return nil
+		} else if len(result.Data) == 0 {
 			return nil
 		}
 
