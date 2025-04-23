@@ -176,6 +176,7 @@ func (ce *companyEnrich) store(e *et.Event, orgent *dbt.Entity, data *companyEnr
 		if err != nil {
 			msg := fmt.Sprintf("failed to create the SourceProperty for %s: %s", o.LegalName, err)
 			e.Session.Log().Error(msg, slog.Group("plugin", "name", ce.plugin.name, "handler", ce.name))
+			_ = e.Session.Cache().DeleteEntity(ident.ID)
 			return
 		}
 
@@ -183,6 +184,7 @@ func (ce *companyEnrich) store(e *et.Event, orgent *dbt.Entity, data *companyEnr
 		if err != nil {
 			msg := fmt.Sprintf("failed to create the relation for %s: %s", o.LegalName, err)
 			e.Session.Log().Error(msg, slog.Group("plugin", "name", ce.plugin.name, "handler", ce.name))
+			_ = e.Session.Cache().DeleteEntity(ident.ID)
 			return
 		}
 	}
