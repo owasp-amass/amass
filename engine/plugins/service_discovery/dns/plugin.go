@@ -1,7 +1,6 @@
 package dns
 
 import (
-    "github.com/owasp-amass/amass/v4/engine/plugins/support"
     et "github.com/owasp-amass/amass/v4/engine/types"
     "sync"
 )
@@ -26,10 +25,9 @@ func (p *dnsPlugin) Start(r et.Registry) error {
     p.pluginMux.Lock()
     defer p.pluginMux.Unlock()
 
+    // Initialize and add the TXT service discovery plugin
     txtDiscovery := NewTXTServiceDiscovery()
-    if err := r.RegisterPlugin(txtDiscovery, 9); err != nil {
-        return err
-    }
+    r.AddPlugin(txtDiscovery) // Use AddPlugin instead of RegisterPlugin
     p.plugins = append(p.plugins, txtDiscovery)
 
     return nil
@@ -39,6 +37,7 @@ func (p *dnsPlugin) Stop() {
     p.pluginMux.Lock()
     defer p.pluginMux.Unlock()
 
+    // Stop all registered plugins
     for _, plugin := range p.plugins {
         plugin.Stop()
     }
