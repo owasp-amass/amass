@@ -11,7 +11,7 @@ type dnsPlugin struct {
 
 func NewDNSPlugin() et.Plugin {
     return &dnsPlugin{
-        name: "dns_service_discovery",
+        name: "txt_sd",
     }
 }
 
