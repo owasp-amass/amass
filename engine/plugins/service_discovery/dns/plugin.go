@@ -1,14 +1,12 @@
 package dns
 
 import (
+    "github.com/owasp-amass/amass/v4/engine/plugins/support"
     et "github.com/owasp-amass/amass/v4/engine/types"
-    "sync"
 )
 
 type dnsPlugin struct {
-    name      string
-    plugins   []et.Plugin
-    pluginMux sync.Mutex
+    name string
 }
 
 func NewDNSPlugin() et.Plugin {
@@ -22,24 +20,22 @@ func (p *dnsPlugin) Name() string {
 }
 
 func (p *dnsPlugin) Start(r et.Registry) error {
-    p.pluginMux.Lock()
-    defer p.pluginMux.Unlock()
-
-    // Initialize and add the TXT service discovery plugin
+    // Register the TXT service discovery plugin with priority 9
     txtDiscovery := NewTXTServiceDiscovery()
-    r.AddPlugin(txtDiscovery) // Use AddPlugin instead of RegisterPlugin
-    p.plugins = append(p.plugins, txtDiscovery)
+    if err := r.RegisterHandler(&et.Handler{
+        Plugin:     txtDiscovery,
+        Name:       txtDiscovery.Name(),
+        Priority:   9,
+        EventType:  "FQDN", // Replace with the appropriate event type if needed
+        Callback:   txtDiscovery.check, // Ensure the `check` method is implemented in txtServiceDiscovery
+        MaxInstances: support.MaxHandlerInstances,
+    }); err != nil {
+        return err
+    }
 
     return nil
 }
 
 func (p *dnsPlugin) Stop() {
-    p.pluginMux.Lock()
-    defer p.pluginMux.Unlock()
-
-    // Stop all registered plugins
-    for _, plugin := range p.plugins {
-        plugin.Stop()
-    }
-    p.plugins = nil
+    // No specific cleanup required for this plugin
 }
