@@ -20,6 +20,7 @@ import (
 	oamcert "github.com/owasp-amass/open-asset-model/certificate"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	"github.com/owasp-amass/open-asset-model/general"
+	oamnet "github.com/owasp-amass/open-asset-model/network"
 	"github.com/owasp-amass/open-asset-model/platform"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
 )
@@ -163,13 +164,36 @@ func AssetMonitoredWithinTTL(session et.Session, asset *dbt.Entity, src *et.Sour
 }
 
 func CreateServiceAsset(session et.Session, src *dbt.Entity, rel oam.Relation, serv *platform.Service, cert *oamcert.TLSCertificate) (*dbt.Entity, error) {
-	var result *dbt.Entity
-
 	var srvs []*dbt.Entity
-	if entities, err := session.Cache().FindEntitiesByType(oam.Service, time.Time{}); err == nil {
-		for _, a := range entities {
-			if s, ok := a.Asset.(*platform.Service); ok && s.OutputLen == serv.OutputLen {
-				srvs = append(srvs, a)
+
+	if rport, ok := rel.(*general.PortRelation); ok && src != nil && serv != nil {
+		srcs := []*dbt.Entity{src}
+
+		if _, ok := src.Asset.(*oamdns.FQDN); ok {
+			// check for IP assresses associated with the FQDN
+			if edges, err := session.Cache().OutgoingEdges(src, time.Time{}, "dns_record"); err == nil && len(edges) > 0 {
+				for _, edge := range edges {
+					if to, err := session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && to != nil {
+						if _, ok := to.Asset.(*oamnet.IPAddress); ok {
+							srcs = append(srcs, to)
+						}
+					}
+				}
+			}
+		}
+
+		// go though the hosts that could have previously associated with the service
+		for _, s := range srcs {
+			if edges, err := session.Cache().OutgoingEdges(s, time.Time{}, "port"); err == nil && len(edges) > 0 {
+				for _, edge := range edges {
+					if eport, ok := edge.Relation.(*general.PortRelation); ok && eport.PortNumber == rport.PortNumber && strings.EqualFold(eport.Protocol, rport.Protocol) {
+						if to, err := session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && to != nil {
+							if srv, ok := to.Asset.(*platform.Service); ok && srv.OutputLen == serv.OutputLen {
+								srvs = append(srvs, to)
+							}
+						}
+					}
+				}
 			}
 		}
 	}
@@ -216,6 +240,7 @@ func CreateServiceAsset(session et.Session, src *dbt.Entity, rel oam.Relation, s
 		}
 	}
 
+	var result *dbt.Entity
 	if match != nil {
 		result = match
 	} else {
