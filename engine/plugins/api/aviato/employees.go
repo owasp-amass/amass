@@ -10,6 +10,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/owasp-amass/amass/v4/engine/plugins/support"
@@ -46,18 +48,22 @@ func (ae *employees) check(e *et.Event) error {
 	}
 
 	since, err := support.TTLStartTime(e.Session.Config(),
-		string(oam.Identifier), string(oam.Identifier), ae.plugin.name)
+		string(oam.Identifier), string(oam.Person), ae.plugin.name)
 	if err != nil {
 		return err
 	}
 
 	var orgent *dbt.Entity
 	var employents []*dbt.Entity
-	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, ae.plugin.source, since) {
+	src := &et.Source{
+		Name:       ae.name,
+		Confidence: ae.plugin.source.Confidence,
+	}
+	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, src, since) {
 		orgent, employents = ae.lookup(e, e.Entity, since)
 	} else {
 		orgent, employents = ae.query(e, e.Entity, keys)
-		support.MarkAssetMonitored(e.Session, e.Entity, ae.plugin.source)
+		support.MarkAssetMonitored(e.Session, e.Entity, src)
 	}
 
 	if orgent != nil && len(employents) > 0 {
@@ -105,8 +111,12 @@ func (ae *employees) lookup(e *et.Event, ident *dbt.Entity, since time.Time) (*d
 }
 
 func (ae *employees) query(e *et.Event, ident *dbt.Entity, apikey []string) (*dbt.Entity, []*dbt.Entity) {
+	oamid := e.Entity.Asset.(*general.Identifier)
+
 	orgent := ae.getAssociatedOrg(e, ident)
 	if orgent == nil {
+		msg := fmt.Sprintf("failed to find the Organization asset for %s", oamid.UniqueID)
+		e.Session.Log().Error(msg, slog.Group("plugin", "name", ae.plugin.name, "handler", ae.name))
 		return nil, []*dbt.Entity{}
 	}
 
@@ -114,7 +124,6 @@ func (ae *employees) query(e *et.Event, ident *dbt.Entity, apikey []string) (*db
 	total := 1
 	perPage := 1000
 	var employents []*dbt.Entity
-	oamid := e.Entity.Asset.(*general.Identifier)
 loop:
 	for _, key := range apikey {
 		for ; page < total; page++ {
@@ -125,14 +134,32 @@ loop:
 			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 			defer cancel()
 
-			u := fmt.Sprintf("https://data.api.aviato.co/company/%s/employees?perPage=%d&page=%d", oamid.ID, perPage, page)
+			u := fmt.Sprintf("https://data.api.aviato.co/company/%s/employees?perPage=%d&page=%d", url.QueryEscape(oamid.ID), perPage, page)
 			resp, err := http.RequestWebPage(ctx, &http.Request{URL: u, Header: headers})
-			if err != nil || resp.StatusCode != 200 {
+			if err != nil {
+				msg := fmt.Sprintf("failed to obtain the employees for %s: %s", oamid.ID, err)
+				e.Session.Log().Error(msg, slog.Group("plugin", "name", ae.plugin.name, "handler", ae.name))
+				continue
+			} else if resp.StatusCode != 200 {
+				msg := fmt.Sprintf("failed to obtain the employees for %s: %s", oamid.ID, resp.Status)
+				e.Session.Log().Error(msg, slog.Group("plugin", "name", ae.plugin.name, "handler", ae.name))
+				continue
+			} else if resp.Body == "" {
+				msg := fmt.Sprintf("failed to obtain the employees for %s: empty body", oamid.ID)
+				e.Session.Log().Error(msg, slog.Group("plugin", "name", ae.plugin.name, "handler", ae.name))
+				continue
+			} else if strings.Contains(resp.Body, "error") {
+				msg := fmt.Sprintf("failed to obtain the employees for %s: %s", oamid.ID, resp.Body)
+				e.Session.Log().Error(msg, slog.Group("plugin", "name", ae.plugin.name, "handler", ae.name))
 				continue
 			}
 
 			var result employeesResult
-			if err := json.Unmarshal([]byte(resp.Body), &result); err != nil || len(result.Employees) == 0 {
+			if err := json.Unmarshal([]byte(resp.Body), &result); err != nil {
+				msg := fmt.Sprintf("failed to unmarshal the employees for %s: %s", oamid.ID, err)
+				e.Session.Log().Error(msg, slog.Group("plugin", "name", ae.plugin.name, "handler", ae.name))
+				break loop
+			} else if len(result.Employees) == 0 {
 				break loop
 			}
 
@@ -183,18 +210,28 @@ func (ae *employees) store(e *et.Event, ident, orgent *dbt.Entity, employlist []
 		}
 
 		personent, err := e.Session.Cache().CreateAsset(p)
-		if err != nil || personent == nil {
+		if err != nil {
+			msg := fmt.Sprintf("failed to create the Person asset for %s: %s", p.FullName, err)
+			e.Session.Log().Error(msg, slog.Group("plugin", "name", ae.plugin.name, "handler", ae.name))
 			continue
 		}
 
-		_, _ = e.Session.Cache().CreateEntityProperty(personent, &general.SourceProperty{
-			Source:     ae.plugin.source.Name,
+		_, err = e.Session.Cache().CreateEntityProperty(personent, &general.SourceProperty{
+			Source:     ae.name,
 			Confidence: ae.plugin.source.Confidence,
 		})
+		if err != nil {
+			msg := fmt.Sprintf("failed to create the Person asset source property for %s: %s", p.FullName, err)
+			e.Session.Log().Error(msg, slog.Group("plugin", "name", ae.plugin.name, "handler", ae.name))
+			continue
+		}
 
 		if err := ae.plugin.createRelation(e.Session, orgent,
 			general.SimpleRelation{Name: "member"}, personent, ae.plugin.source.Confidence); err == nil {
 			employents = append(employents, personent)
+		} else {
+			msg := fmt.Sprintf("failed to create the member relation for %s: %s", p.FullName, err)
+			e.Session.Log().Error(msg, slog.Group("plugin", "name", ae.plugin.name, "handler", ae.name))
 		}
 	}
 

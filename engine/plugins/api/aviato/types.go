@@ -21,6 +21,7 @@ type aviato struct {
 	log           *slog.Logger
 	rlimit        *rate.Limiter
 	companySearch *companySearch
+	companyEnrich *companyEnrich
 	employees     *employees
 	source        *et.Source
 }
@@ -50,6 +51,11 @@ type companySearchResult struct {
 		URLs         URLResult `json:"URLs"`
 		IndustryList []string  `json:"industryList"`
 	} `json:"items"`
+}
+
+type companyEnrich struct {
+	name   string
+	plugin *aviato
 }
 
 type companySearch struct {
@@ -131,9 +137,9 @@ type companyEnrichResult struct {
 	IndustryList      []string `json:"industryList"`
 	BusinessModelList []string `json:"businessModelList"`
 	ProductList       []struct {
-		ProductName    string `json:"productName"`
-		Tagline        string `json:"tagline"`
-		CreatedAt      string `json:"createdAt"`
+		ProductName string `json:"productName"`
+		Tagline     string `json:"tagline"`
+		//CreatedAt      string `json:"createdAt"` documentation is not clear
 		ImageID        string `json:"imageID"`
 		ProductURL     string `json:"productURL"`
 		ProductHuntURL string `json:"producthuntURL"`
@@ -141,15 +147,15 @@ type companyEnrichResult struct {
 	CustomerTypes  []string `json:"customerTypes"`
 	JobFamilyList  []string `json:"jobFamilyList"`
 	JobListingList []struct {
-		Category    string   `json:"category"`
-		SubCategory string   `json:"subCategory"`
-		Title       string   `json:"title"`
-		IsFullTime  bool     `json:"isFullTime"`
-		IsRemote    bool     `json:"isRemote"`
-		Locations   []string `json:"locations"`
-		Description string   `json:"mdDescription"`
-		Slug        string   `json:"slug"`
-		URL         string   `json:"url"`
+		Category    string `json:"category"`
+		SubCategory string `json:"subCategory"`
+		Title       string `json:"title"`
+		IsFullTime  bool   `json:"isFullTime"`
+		IsRemote    bool   `json:"isRemote"`
+		//Locations   []string `json:"locations"` documentation is not clear
+		Description string `json:"mdDescription"`
+		Slug        string `json:"slug"`
+		URL         string `json:"url"`
 	} `json:"jobListingList"`
 	ScreenshotList   []string `json:"screenshotList"`
 	TargetMarketList []string `json:"targetMarketList"`
@@ -175,7 +181,7 @@ type companyEnrichResult struct {
 		Price        float64 `json:"price"`
 	} `json:"acquiredBy"`
 	EmbeddedNews []struct {
-		Date     string `json:"date"`
+		//Date     string `json:"date"` documentation is not clear
 		Title    string `json:"title"`
 		Author   string `json:"author"`
 		Source   string `json:"source"`
@@ -190,7 +196,7 @@ type companyEnrichResult struct {
 		DocumentURL      string `json:"documentUrl"`
 		LatestFilingDate string `json:"latestFilingDate"`
 	} `json:"ownedPatents"`
-	GovernmentAwards struct {
+	GovernmentAwards []struct {
 		AwardID       string  `json:"awardId"`
 		AwardType     string  `json:"awardType"`
 		AwardAmount   float64 `json:"awardAmount"`

@@ -375,6 +375,7 @@ func orgExistsAndSharesAncestorEntity(session et.Session, obj *dbt.Entity, o *or
 		}
 	}
 
+	visited := make(map[string]struct{})
 	for _, orgent := range orgents {
 		assets = []*dbt.Entity{orgent}
 
@@ -385,7 +386,13 @@ func orgExistsAndSharesAncestorEntity(session et.Session, obj *dbt.Entity, o *or
 			for _, r := range remaining {
 				if edges, err := session.Cache().IncomingEdges(r, time.Time{}); err == nil {
 					for _, edge := range edges {
-						if a, err := session.Cache().FindEntityById(edge.FromEntity.ID); err == nil && a != nil {
+						id := edge.FromEntity.ID
+						if _, found := visited[id]; found {
+							continue
+						}
+						visited[id] = struct{}{}
+
+						if a, err := session.Cache().FindEntityById(id); err == nil && a != nil {
 							if _, found := ancestors[a.ID]; !found {
 								assets = append(assets, a)
 							} else {
@@ -407,6 +414,7 @@ func orgExistsAndHasAncestorInSession(session et.Session, o *org.Organization) (
 		return nil, err
 	}
 
+	visited := make(map[string]struct{})
 	for _, orgent := range orgents {
 		assets := []*dbt.Entity{orgent}
 
@@ -417,7 +425,13 @@ func orgExistsAndHasAncestorInSession(session et.Session, o *org.Organization) (
 			for _, r := range remaining {
 				if edges, err := session.Cache().IncomingEdges(r, time.Time{}); err == nil {
 					for _, edge := range edges {
-						if a, err := session.Cache().FindEntityById(edge.FromEntity.ID); err == nil && a != nil {
+						id := edge.FromEntity.ID
+						if _, found := visited[id]; found {
+							continue
+						}
+						visited[id] = struct{}{}
+
+						if a, err := session.Cache().FindEntityById(id); err == nil && a != nil {
 							if session.Queue().Has(edge.FromEntity) {
 								return orgent, nil
 							}

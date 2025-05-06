@@ -43,17 +43,21 @@ func (cs *companySearch) check(e *et.Event) error {
 	}
 
 	since, err := support.TTLStartTime(e.Session.Config(),
-		string(oam.Organization), string(oam.Organization), cs.plugin.name)
+		string(oam.Organization), string(oam.Identifier), cs.plugin.name)
 	if err != nil {
 		return err
 	}
 
 	var id *dbt.Entity
-	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, cs.plugin.source, since) {
+	src := &et.Source{
+		Name:       cs.name,
+		Confidence: cs.plugin.source.Confidence,
+	}
+	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, src, since) {
 		id = cs.lookup(e, e.Entity, since)
 	} else {
 		id = cs.query(e, e.Entity, keys)
-		support.MarkAssetMonitored(e.Session, e.Entity, cs.plugin.source)
+		support.MarkAssetMonitored(e.Session, e.Entity, src)
 	}
 
 	if id != nil {
@@ -118,10 +122,18 @@ func (cs *companySearch) query(e *et.Event, orgent *dbt.Entity, apikey []string)
 			Method: "POST",
 			Header: headers,
 			Body:   `{"dsl": ` + string(dslJSON) + `}`,
-		}); err == nil && resp.StatusCode == 200 {
-			success = true
-			body = resp.Body
-			break
+		}); err == nil {
+			if resp.StatusCode == 200 {
+				success = true
+				body = resp.Body
+				break
+			} else {
+				msg := fmt.Sprintf("failed to obtain the company search result for %s: %s", o.Name, resp.Status)
+				e.Session.Log().Error(msg, slog.Group("plugin", "name", cs.plugin.name, "handler", cs.name))
+			}
+		} else {
+			msg := fmt.Sprintf("failed to obtain the company search result for %s: %s", o.Name, err)
+			e.Session.Log().Error(msg, slog.Group("plugin", "name", cs.plugin.name, "handler", cs.name))
 		}
 	}
 
@@ -130,7 +142,11 @@ func (cs *companySearch) query(e *et.Event, orgent *dbt.Entity, apikey []string)
 	}
 
 	var result companySearchResult
-	if err := json.Unmarshal([]byte(body), &result); err != nil || len(result.Items) == 0 {
+	if err := json.Unmarshal([]byte(body), &result); err != nil {
+		msg := fmt.Sprintf("failed to unmarshal the company search result for %s: %s", o.Name, err)
+		e.Session.Log().Error(msg, slog.Group("plugin", "name", cs.plugin.name, "handler", cs.name))
+		return nil
+	} else if len(result.Items) == 0 {
 		return nil
 	}
 
@@ -146,16 +162,26 @@ func (cs *companySearch) store(e *et.Event, orgent *dbt.Entity, companyID string
 
 	ident, err := e.Session.Cache().CreateAsset(oamid)
 	if err != nil || ident == nil {
+		msg := fmt.Sprintf("failed to create the identifier asset for %s: %s", companyID, err)
+		e.Session.Log().Error(msg, slog.Group("plugin", "name", cs.plugin.name, "handler", cs.name))
 		return nil
 	}
 
-	_, _ = e.Session.Cache().CreateEntityProperty(ident, &general.SourceProperty{
-		Source:     cs.plugin.source.Name,
+	_, err = e.Session.Cache().CreateEntityProperty(ident, &general.SourceProperty{
+		Source:     cs.name,
 		Confidence: cs.plugin.source.Confidence,
 	})
+	if err != nil {
+		msg := fmt.Sprintf("failed to create the identifier source property for %s: %s", companyID, err)
+		e.Session.Log().Error(msg, slog.Group("plugin", "name", cs.plugin.name, "handler", cs.name))
+		return nil
+	}
 
 	if err := cs.plugin.createRelation(e.Session, orgent,
 		general.SimpleRelation{Name: "id"}, ident, cs.plugin.source.Confidence); err != nil {
+		msg := fmt.Sprintf("failed to create the identifier relation for %s: %s", companyID, err)
+		e.Session.Log().Error(msg, slog.Group("plugin", "name", cs.plugin.name, "handler", cs.name))
+		_ = e.Session.Cache().DeleteEntity(ident.ID)
 		return nil
 	}
 	return ident

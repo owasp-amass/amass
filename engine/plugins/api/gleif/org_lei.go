@@ -99,7 +99,12 @@ func (g *gleif) updateOrgFromLEIRecord(e *et.Event, orgent *dbt.Entity, lei *lei
 	_ = g.addIdentifiersToOrg(e, orgent, general.MarketIDCode, lei.Attributes.MIC, conf)
 	_ = g.addIdentifiersToOrg(e, orgent, general.OpenCorpID, []string{lei.Attributes.OCID}, conf)
 	_ = g.addIdentifiersToOrg(e, orgent, general.SPGlobalCompanyID, lei.Attributes.SPGlobal, conf)
-	_, _ = e.Session.Cache().CreateEntity(orgent)
+
+	// update the Organization
+	if _, err := e.Session.Cache().CreateEntity(orgent); err != nil {
+		msg := fmt.Sprintf("failed to update the Organization asset for %s: %s", o.Name, err)
+		e.Session.Log().Error(msg, slog.Group("plugin", "name", g.name, "handler", g.name))
+	}
 }
 
 func (g *gleif) addAddress(e *et.Event, orgent *dbt.Entity, rel oam.Relation, addr string, conf int) error {
