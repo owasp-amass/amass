@@ -54,20 +54,20 @@ func (cr *companyRounds) check(e *et.Event) error {
 	}
 
 	var orgent *dbt.Entity
-	var employents []*dbt.Entity
+	var fundents []*dbt.Entity
 	src := &et.Source{
 		Name:       cr.name,
 		Confidence: cr.plugin.source.Confidence,
 	}
 	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, src, since) {
-		orgent, employents = cr.lookup(e, e.Entity, since)
+		orgent, fundents = cr.lookup(e, e.Entity, since)
 	} else {
-		orgent, employents = cr.query(e, e.Entity, keys)
+		orgent, fundents = cr.query(e, e.Entity, keys)
 		support.MarkAssetMonitored(e.Session, e.Entity, src)
 	}
 
-	if orgent != nil && len(employents) > 0 {
-		cr.process(e, orgent, employents)
+	if orgent != nil && len(fundents) > 0 {
+		cr.process(e, orgent, fundents)
 	}
 	return nil
 }
