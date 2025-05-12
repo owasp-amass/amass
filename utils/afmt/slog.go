@@ -17,7 +17,7 @@ func JSONLogToRecord(logstr string) (slog.Record, error) {
 	j := make(map[string]interface{})
 	// unmarshal the log message sent from the engine session
 	if err := json.Unmarshal([]byte(logstr), &j); err != nil {
-		return slog.Record{}, errors.New("Failed to unmarchal the JSON")
+		return slog.Record{}, errors.New("failed to unmarchal the JSON")
 	}
 
 	var ltime time.Time
@@ -30,20 +30,20 @@ func JSONLogToRecord(logstr string) (slog.Record, error) {
 	var level slog.Level
 	// extract the log level for the new record
 	if val, found := j[slog.LevelKey]; !found {
-		return slog.Record{}, errors.New("Failed to find the level key")
+		return slog.Record{}, errors.New("failed to find the level key")
 	} else if str, ok := val.(string); !ok {
-		return slog.Record{}, errors.New("Failed to cast the level value")
+		return slog.Record{}, errors.New("failed to cast the level value")
 	} else if level.UnmarshalText([]byte(str)) != nil {
-		return slog.Record{}, errors.New("Failed to unmarshal the level text")
+		return slog.Record{}, errors.New("failed to unmarshal the level text")
 	}
 	delete(j, slog.LevelKey)
 
 	var msg string
 	// extract the log message for the new record
 	if val, found := j[slog.MessageKey]; !found {
-		return slog.Record{}, errors.New("Failed to find the msg key")
+		return slog.Record{}, errors.New("failed to find the msg key")
 	} else if str, ok := val.(string); !ok {
-		return slog.Record{}, errors.New("Failed to cast the msg value")
+		return slog.Record{}, errors.New("failed to cast the msg value")
 	} else {
 		msg = str
 	}

@@ -344,7 +344,7 @@ scope:
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer os.Remove(absPath) // clean up
+			defer func() { _ = os.Remove(absPath) }() // clean up
 
 			if _, err := tmpfile.Write(tt.args.cfg); err != nil {
 				t.Fatal(err)

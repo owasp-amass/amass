@@ -101,9 +101,9 @@ func main() {
 	dbCommand.StringVar(&args.Filepaths.TermOut, "o", "", "Path to the text file containing terminal stdout/stderr")
 
 	var usage = func() {
-		afmt.G.Fprintf(color.Error, "Usage: %s %s\n\n", path.Base(os.Args[0]), dbUsageMsg)
+		_, _ = afmt.G.Fprintf(color.Error, "Usage: %s %s\n\n", path.Base(os.Args[0]), dbUsageMsg)
 		dbCommand.PrintDefaults()
-		afmt.G.Fprintln(color.Error, dbBuf.String())
+		_, _ = afmt.G.Fprintln(color.Error, dbBuf.String())
 	}
 
 	if len(os.Args) < 2 {
@@ -111,7 +111,7 @@ func main() {
 		return
 	}
 	if err := dbCommand.Parse(os.Args[1:]); err != nil {
-		afmt.R.Fprintf(color.Error, "%v\n", err)
+		_, _ = afmt.R.Fprintf(color.Error, "%v\n", err)
 		os.Exit(1)
 	}
 	if help1 || help2 {
@@ -132,7 +132,7 @@ func main() {
 	if args.Filepaths.Domains != "" {
 		list, err := config.GetListFromFile(args.Filepaths.Domains)
 		if err != nil {
-			afmt.R.Fprintf(color.Error, "Failed to parse the domain names file: %v\n", err)
+			_, _ = afmt.R.Fprintf(color.Error, "Failed to parse the domain names file: %v\n", err)
 			return
 		}
 		args.Domains.InsertMany(list...)
@@ -148,13 +148,13 @@ func main() {
 			args.Domains.InsertMany(cfg.Domains()...)
 		}
 	} else if args.Filepaths.ConfigFile != "" {
-		afmt.R.Fprintf(color.Error, "Failed to load the configuration file: %v\n", err)
+		_, _ = afmt.R.Fprintf(color.Error, "Failed to load the configuration file: %v\n", err)
 		os.Exit(1)
 	}
 
 	db := utils.OpenGraphDatabase(cfg)
 	if db == nil {
-		afmt.R.Fprintln(color.Error, "Failed to connect with the database")
+		_, _ = afmt.R.Fprintln(color.Error, "Failed to connect with the database")
 		os.Exit(1)
 	}
 
@@ -184,7 +184,7 @@ func showData(args *dbArgs, asninfo bool, db repository.Repository) {
 	if args.Filepaths.TermOut != "" {
 		outfile, err = os.OpenFile(args.Filepaths.TermOut, os.O_WRONLY|os.O_CREATE, 0644)
 		if err != nil {
-			afmt.R.Fprintf(color.Error, "Failed to open the text output file: %v\n", err)
+			_, _ = afmt.R.Fprintf(color.Error, "Failed to open the text output file: %v\n", err)
 			os.Exit(1)
 		}
 		defer func() {
@@ -199,7 +199,7 @@ func showData(args *dbArgs, asninfo bool, db repository.Repository) {
 	if asninfo {
 		cache = utils.NewASNCache()
 		if err := utils.FillCache(cache, db); err != nil {
-			afmt.R.Printf("Failed to populate the ASN cache: %v\n", err)
+			_, _ = afmt.R.Printf("Failed to populate the ASN cache: %v\n", err)
 			return
 		}
 	}
@@ -234,17 +234,17 @@ func showData(args *dbArgs, asninfo bool, db repository.Repository) {
 		if args.Options.DiscoveredNames {
 			var written bool
 			if outfile != nil {
-				fmt.Fprintf(outfile, "%s%s\n", name, ips)
+				_, _ = fmt.Fprintf(outfile, "%s%s\n", name, ips)
 				written = true
 			}
 			if !written {
-				fmt.Fprintf(color.Output, "%s%s\n", afmt.Green(name), afmt.Yellow(ips))
+				_, _ = fmt.Fprintf(color.Output, "%s%s\n", afmt.Green(name), afmt.Yellow(ips))
 			}
 		}
 	}
 
 	if total == 0 {
-		afmt.R.Println("No names were discovered")
+		_, _ = afmt.R.Println("No names were discovered")
 		return
 	}
 	if args.Options.ASNTableSummary {

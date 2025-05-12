@@ -105,11 +105,11 @@ func TestLoadDatabaseEnvSettings(t *testing.T) {
 	c := NewConfig()
 
 	// Scenario 1: Test with valid environment variables
-	os.Setenv(amassUser, "the_inceptions")
-	os.Setenv(amassPass, "was_here")
-	os.Setenv(assetDB, "192.168.24.14")
-	os.Setenv(assetPort, "5432")
-	os.Setenv(assetDBName, "inceptionsdb")
+	_ = os.Setenv(amassUser, "the_inceptions")
+	_ = os.Setenv(amassPass, "was_here")
+	_ = os.Setenv(assetDB, "192.168.24.14")
+	_ = os.Setenv(assetPort, "5432")
+	_ = os.Setenv(assetDBName, "inceptionsdb")
 
 	err := c.LoadDatabaseEnvSettings()
 	if err != nil {
@@ -122,14 +122,14 @@ func TestLoadDatabaseEnvSettings(t *testing.T) {
 	}
 
 	// Clean up environment variables
-	os.Unsetenv(amassUser)
-	os.Unsetenv(amassPass)
-	os.Unsetenv(assetDB)
-	os.Unsetenv(assetPort)
-	os.Unsetenv(assetDBName)
+	_ = os.Unsetenv(amassUser)
+	_ = os.Unsetenv(amassPass)
+	_ = os.Unsetenv(assetDB)
+	_ = os.Unsetenv(assetPort)
+	_ = os.Unsetenv(assetDBName)
 
 	// // Scenario 2: Test with just the user environment variables
-	os.Setenv(amassUser, "the_inceptions")
+	_ = os.Setenv(amassUser, "the_inceptions")
 	err = c.LoadDatabaseEnvSettings()
 	if err != nil {
 		t.Errorf("Got an error when only the user environment variable is set, expected nil. Error: %v", err)
@@ -141,7 +141,7 @@ func TestLoadDatabaseEnvSettings(t *testing.T) {
 	}
 
 	// Clean up environment variables
-	os.Unsetenv(amassUser)
+	_ = os.Unsetenv(amassUser)
 
 	// // Scenario 3: Test with no environment variables
 	err = c.LoadDatabaseEnvSettings()

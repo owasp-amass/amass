@@ -27,13 +27,13 @@ func makeTempDir() (string, error) {
 func TestNewQueueDB(t *testing.T) {
 	dir, err := makeTempDir()
 	assert.NoError(t, err)
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	dbPath := filepath.Join(dir, "test.sqlite")
 	queueDB, err := NewQueueDB(dbPath)
 	assert.NoError(t, err)
 	assert.NotNil(t, queueDB, "QueueDB should not be nil")
-	defer queueDB.Close()
+	defer func() { _ = queueDB.Close() }()
 
 	found := queueDB.db.Migrator().HasTable(&Element{})
 	assert.True(t, found, "Element table should exist")
@@ -50,12 +50,12 @@ func TestNewQueueDB(t *testing.T) {
 func TestHas(t *testing.T) {
 	dir, err := makeTempDir()
 	assert.NoError(t, err)
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	dbPath := filepath.Join(dir, "test.sqlite")
 	queueDB, err := NewQueueDB(dbPath)
 	assert.NoError(t, err)
-	defer queueDB.Close()
+	defer func() { _ = queueDB.Close() }()
 
 	eid := "entity1"
 	assert.False(t, queueDB.Has(eid), "The element should not be in the database")
@@ -72,12 +72,12 @@ func TestHas(t *testing.T) {
 func TestAppend(t *testing.T) {
 	dir, err := makeTempDir()
 	assert.NoError(t, err)
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	dbPath := filepath.Join(dir, "test.sqlite")
 	queueDB, err := NewQueueDB(dbPath)
 	assert.NoError(t, err)
-	defer queueDB.Close()
+	defer func() { _ = queueDB.Close() }()
 
 	eid := "entity1"
 	err = queueDB.Append(oam.FQDN, eid)
@@ -94,12 +94,12 @@ func TestAppend(t *testing.T) {
 func TestNext(t *testing.T) {
 	dir, err := makeTempDir()
 	assert.NoError(t, err)
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	dbPath := filepath.Join(dir, "test.sqlite")
 	queueDB, err := NewQueueDB(dbPath)
 	assert.NoError(t, err)
-	defer queueDB.Close()
+	defer func() { _ = queueDB.Close() }()
 
 	eid1 := "entity1"
 	eid2 := "entity2"
@@ -118,12 +118,12 @@ func TestNext(t *testing.T) {
 func TestNextWithProcessed(t *testing.T) {
 	dir, err := makeTempDir()
 	assert.NoError(t, err)
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	dbPath := filepath.Join(dir, "test.sqlite")
 	queueDB, err := NewQueueDB(dbPath)
 	assert.NoError(t, err)
-	defer queueDB.Close()
+	defer func() { _ = queueDB.Close() }()
 
 	eid1 := "entity1"
 	eid2 := "entity2"
@@ -144,12 +144,12 @@ func TestNextWithProcessed(t *testing.T) {
 func TestNextWithMultipleTypes(t *testing.T) {
 	dir, err := makeTempDir()
 	assert.NoError(t, err)
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	dbPath := filepath.Join(dir, "test.sqlite")
 	queueDB, err := NewQueueDB(dbPath)
 	assert.NoError(t, err)
-	defer queueDB.Close()
+	defer func() { _ = queueDB.Close() }()
 
 	eid1 := "entity1"
 	eid2 := "entity2"
@@ -186,12 +186,12 @@ func TestNextWithMultipleTypes(t *testing.T) {
 func TestProcessed(t *testing.T) {
 	dir, err := makeTempDir()
 	assert.NoError(t, err)
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	dbPath := filepath.Join(dir, "test.sqlite")
 	queueDB, err := NewQueueDB(dbPath)
 	assert.NoError(t, err)
-	defer queueDB.Close()
+	defer func() { _ = queueDB.Close() }()
 
 	eid := "entity1"
 	err = queueDB.Append(oam.FQDN, eid)
@@ -209,12 +209,12 @@ func TestProcessed(t *testing.T) {
 func TestDelete(t *testing.T) {
 	dir, err := makeTempDir()
 	assert.NoError(t, err)
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	dbPath := filepath.Join(dir, "test.sqlite")
 	queueDB, err := NewQueueDB(dbPath)
 	assert.NoError(t, err)
-	defer queueDB.Close()
+	defer func() { _ = queueDB.Close() }()
 
 	eid := "entity1"
 	err = queueDB.Append(oam.FQDN, eid)

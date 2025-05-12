@@ -54,11 +54,7 @@ func VizData(domains []string, since time.Time, db repository.Repository) ([]Nod
 	var viznodes []Node
 	var vizedges []Edge
 	nodeToIdx := make(map[string]int)
-	for {
-		if len(next) == 0 {
-			break
-		}
-
+	for len(next) > 0 {
 		var assets []*types.Entity
 		assets = append(assets, next...)
 		next = []*types.Entity{}

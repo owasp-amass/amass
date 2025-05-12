@@ -63,9 +63,9 @@ func main() {
 	i2yCommand.StringVar(&datasrcFile, "df", "oam_datasources.yaml", "YAML data sources file name.")
 
 	var usage = func() {
-		g.Fprintf(color.Error, "Usage: %s %s\n\n", path.Base(os.Args[0]), usageMsg)
+		_, _ = g.Fprintf(color.Error, "Usage: %s %s\n\n", path.Base(os.Args[0]), usageMsg)
 		i2yCommand.PrintDefaults()
-		g.Fprintln(color.Error, i2yBuf.String())
+		_, _ = g.Fprintln(color.Error, i2yBuf.String())
 	}
 
 	if len(os.Args) < 2 {
@@ -73,7 +73,7 @@ func main() {
 		return
 	}
 	if err := i2yCommand.Parse(os.Args[1:]); err != nil {
-		r.Fprintf(color.Error, "%v\n", err)
+		_, _ = r.Fprintf(color.Error, "%v\n", err)
 		os.Exit(1)
 	}
 	if help1 || help2 {
@@ -82,7 +82,7 @@ func main() {
 	}
 	if iniFile == "" {
 		usage()
-		r.Fprintln(color.Error, "Failed to parse the INI file: File not present, got \""+iniFile+"\" as the path.")
+		_, _ = r.Fprintln(color.Error, "Failed to parse the INI file: File not present, got \""+iniFile+"\" as the path.")
 		return
 	}
 
@@ -193,7 +193,7 @@ func main() {
 		if err != nil {
 			log.Println("Failed to write datasources file:", err)
 		} else {
-			fmt.Println(b.Sprint("Wrote data sources file successfully at: ") + p.Sprint(datasrcFile))
+			_, _ = fmt.Println(b.Sprint("Wrote data sources file successfully at: ") + p.Sprint(datasrcFile))
 		}
 	}
 
@@ -205,7 +205,7 @@ func main() {
 		if err != nil {
 			log.Println("Failed to write config file:", err)
 		} else {
-			fmt.Println(b.Sprint("Wrote config file successfully at ") + p.Sprint(configFile))
+			_, _ = fmt.Println(b.Sprint("Wrote config file successfully at ") + p.Sprint(configFile))
 		}
 	}
 }

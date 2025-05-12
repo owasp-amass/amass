@@ -92,25 +92,25 @@ func TestRequestWebPage(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if username, password, ok := r.BasicAuth(); !ok || username != name || password != pass {
 			w.WriteHeader(http.StatusUnauthorized)
-			fmt.Fprint(w, "Authentication Failed")
+			_, _ = fmt.Fprint(w, "Authentication Failed")
 			return
 		}
 		if val := r.Header.Get(hkey); val != name {
 			w.WriteHeader(http.StatusBadRequest)
-			fmt.Fprint(w, "Header value was missing")
+			_, _ = fmt.Fprint(w, "Header value was missing")
 			return
 		}
 		if r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusBadRequest)
-			fmt.Fprint(w, "Method was not POST")
+			_, _ = fmt.Fprint(w, "Method was not POST")
 			return
 		}
 		if in, err := io.ReadAll(r.Body); err != nil || string(in) != post {
 			w.WriteHeader(http.StatusBadRequest)
-			fmt.Fprint(w, "POST body did not match")
+			_, _ = fmt.Fprint(w, "POST body did not match")
 			return
 		}
-		fmt.Fprint(w, succ)
+		_, _ = fmt.Fprint(w, succ)
 	}))
 	defer ts.Close()
 

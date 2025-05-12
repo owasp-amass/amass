@@ -107,7 +107,7 @@ func WriteGEXFData(output io.Writer, nodes []Node, edges []Edge) error {
 	if _, err := bufwr.WriteString("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"); err != nil {
 		return err
 	}
-	bufwr.Flush()
+	_ = bufwr.Flush()
 
 	doc := &gexf{
 		XMLName: xml.Name{
@@ -174,6 +174,7 @@ func WriteGEXFData(output io.Writer, nodes []Node, edges []Edge) error {
 
 	enc := xml.NewEncoder(bufwr)
 	enc.Indent("  ", "    ")
-	defer bufwr.Flush()
+	defer func() { _ = bufwr.Flush() }()
+
 	return enc.Encode(doc)
 }

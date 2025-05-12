@@ -66,7 +66,7 @@ func FprintBanner(out io.Writer) {
 
 	pad := func(num int) {
 		for i := 0; i < num; i++ {
-			fmt.Fprint(out, " ")
+			_, _ = fmt.Fprint(out, " ")
 		}
 	}
 
@@ -133,28 +133,28 @@ func PrintEnumerationSummary(total int, asns map[int]*utils.ASNSummaryData, demo
 func FprintEnumerationSummary(out io.Writer, total int, asns map[int]*utils.ASNSummaryData, demo bool) {
 	pad := func(num int, chr string) {
 		for i := 0; i < num; i++ {
-			B.Fprint(out, chr)
+			_, _ = B.Fprint(out, chr)
 		}
 	}
 
-	fmt.Fprintln(out)
+	_, _ = fmt.Fprintln(out)
 	// Print the header information
 	title := "OWASP Amass Project "
 	site := "https://github.com/owasp-amass/amass"
-	B.Fprint(out, title+Version)
+	_, _ = B.Fprint(out, title+Version)
 	num := 80 - (len(title) + len(Version) + len(site))
 	pad(num, " ")
-	B.Fprintf(out, "%s\n", site)
+	_, _ = B.Fprintf(out, "%s\n", site)
 	pad(8, "----------")
-	fmt.Fprintf(out, "\n%s%s", Yellow(strconv.Itoa(total)), Green(" names discovered"))
-	fmt.Fprintln(out)
+	_, _ = fmt.Fprintf(out, "\n%s%s", Yellow(strconv.Itoa(total)), Green(" names discovered"))
+	_, _ = fmt.Fprintln(out)
 
 	if len(asns) == 0 {
 		return
 	}
 	// Another line gets printed
 	pad(8, "----------")
-	fmt.Fprintln(out)
+	_, _ = fmt.Fprintln(out)
 	// Print the ASN and netblock information
 	for asn, data := range asns {
 		asnstr := strconv.Itoa(asn)
@@ -164,7 +164,7 @@ func FprintEnumerationSummary(out io.Writer, total int, asns map[int]*utils.ASNS
 			asnstr = censorString(asnstr, 0, len(asnstr))
 			datastr = censorString(datastr, 0, len(datastr))
 		}
-		fmt.Fprintf(out, "%s%s %s %s\n", Blue("ASN: "), Yellow(asnstr), Green("-"), Green(datastr))
+		_, _ = fmt.Fprintf(out, "%s%s %s %s\n", Blue("ASN: "), Yellow(asnstr), Green("-"), Green(datastr))
 
 		for cidr, ips := range data.Netblocks {
 			countstr := strconv.Itoa(ips)
@@ -176,7 +176,7 @@ func FprintEnumerationSummary(out io.Writer, total int, asns map[int]*utils.ASNS
 
 			countstr = fmt.Sprintf("\t%-4s", countstr)
 			cidrstr = fmt.Sprintf("\t%-18s", cidrstr)
-			fmt.Fprintf(out, "%s%s %s\n", Yellow(cidrstr), Yellow(countstr), Blue("Subdomain Name(s)"))
+			_, _ = fmt.Fprintf(out, "%s%s %s\n", Yellow(cidrstr), Yellow(countstr), Blue("Subdomain Name(s)"))
 		}
 	}
 }

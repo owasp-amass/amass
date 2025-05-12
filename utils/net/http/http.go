@@ -348,7 +348,7 @@ func TLSConn(ctx context.Context, host string, port int) (*tls.Conn, error) {
 	c := tls.Client(conn, &tls.Config{InsecureSkipVerify: true})
 	// attempt to acquire the certificate chain
 	if err := c.HandshakeContext(tCtx); err != nil {
-		c.Close()
+		_ = c.Close()
 		return nil, err
 	}
 	return c, nil

@@ -90,9 +90,9 @@ func main() {
 	vizCommand.BoolVar(&args.Options.Silent, "silent", false, "Disable all output during execution")
 
 	var usage = func() {
-		afmt.G.Fprintf(color.Error, "Usage: %s %s\n\n", path.Base(os.Args[0]), usageMsg)
+		_, _ = afmt.G.Fprintf(color.Error, "Usage: %s %s\n\n", path.Base(os.Args[0]), usageMsg)
 		vizCommand.PrintDefaults()
-		afmt.G.Fprintln(color.Error, vizBuf.String())
+		_, _ = afmt.G.Fprintln(color.Error, vizBuf.String())
 	}
 
 	if len(os.Args) < 2 {
@@ -100,7 +100,7 @@ func main() {
 		return
 	}
 	if err := vizCommand.Parse(os.Args[1:]); err != nil {
-		afmt.R.Fprintf(color.Error, "%v\n", err)
+		_, _ = afmt.R.Fprintf(color.Error, "%v\n", err)
 		os.Exit(1)
 	}
 	if help1 || help2 {
@@ -117,18 +117,18 @@ func main() {
 	if args.Filepaths.Domains != "" {
 		list, err := config.GetListFromFile(args.Filepaths.Domains)
 		if err != nil {
-			afmt.R.Fprintf(color.Error, "Failed to parse the domain names file: %v\n", err)
+			_, _ = afmt.R.Fprintf(color.Error, "Failed to parse the domain names file: %v\n", err)
 			os.Exit(1)
 		}
 		args.Domains.InsertMany(list...)
 	}
 	if args.Domains.Len() == 0 {
-		afmt.R.Fprintln(color.Error, "No root domain names were provided")
+		_, _ = afmt.R.Fprintln(color.Error, "No root domain names were provided")
 		os.Exit(1)
 	}
 	// Make sure at least one graph file format has been identified on the command-line
 	if !args.Options.D3 && !args.Options.DOT && !args.Options.GEXF {
-		afmt.R.Fprintln(color.Error, "At least one file format must be selected")
+		_, _ = afmt.R.Fprintln(color.Error, "At least one file format must be selected")
 		os.Exit(1)
 	}
 
@@ -137,7 +137,7 @@ func main() {
 	if args.Since != "" {
 		start, err = time.Parse(timeFormat, args.Since)
 		if err != nil {
-			afmt.R.Fprintf(color.Error, "%s is not in the correct format: %s\n", args.Since, timeFormat)
+			_, _ = afmt.R.Fprintf(color.Error, "%s is not in the correct format: %s\n", args.Since, timeFormat)
 			os.Exit(1)
 		}
 	}
@@ -152,13 +152,13 @@ func main() {
 			args.Domains.InsertMany(cfg.Domains()...)
 		}
 	} else if args.Filepaths.ConfigFile != "" {
-		afmt.R.Fprintf(color.Error, "Failed to load the configuration file: %v\n", err)
+		_, _ = afmt.R.Fprintf(color.Error, "Failed to load the configuration file: %v\n", err)
 		os.Exit(1)
 	}
 	// Connect with the graph database containing the enumeration data
 	db := utils.OpenGraphDatabase(cfg)
 	if db == nil {
-		afmt.R.Fprintln(color.Error, "Failed to connect with the database")
+		_, _ = afmt.R.Fprintln(color.Error, "Failed to connect with the database")
 		os.Exit(1)
 	}
 	// Obtain the visualization nodes & edges from the graph
@@ -177,7 +177,7 @@ func main() {
 
 	if args.Filepaths.Output != "" {
 		if finfo, err := os.Stat(args.Filepaths.Output); os.IsNotExist(err) || !finfo.IsDir() {
-			afmt.R.Fprintln(color.Error, "The output location does not exist or is not a directory")
+			_, _ = afmt.R.Fprintln(color.Error, "The output location does not exist or is not a directory")
 			os.Exit(1)
 		}
 		dir = args.Filepaths.Output
@@ -195,7 +195,7 @@ func main() {
 		err = writeGraphOutputFile("gexf", path, nodes, edges)
 	}
 	if err != nil {
-		afmt.R.Fprintf(color.Error, "Failed to write the output file: %v\n", err)
+		_, _ = afmt.R.Fprintf(color.Error, "Failed to write the output file: %v\n", err)
 		os.Exit(1)
 	}
 }

@@ -156,7 +156,7 @@ func runEnumCommand(clArgs []string) {
 	client := client.NewClient(url)
 	token, err := client.CreateSession(cfg)
 	if err != nil {
-		fmt.Println(err)
+		_, _ = fmt.Println(err)
 		return
 	}
 	defer client.TerminateSession(token)
@@ -167,7 +167,7 @@ func runEnumCommand(clArgs []string) {
 
 	messages, err := client.Subscribe(token)
 	if err != nil {
-		fmt.Println(err)
+		_, _ = fmt.Println(err)
 		return
 	}
 
@@ -313,7 +313,7 @@ func argsAndConfig(clArgs []string) (*config.Config, *enumArgs) {
 		return nil, &args
 	}
 	if err := enumCommand.Parse(clArgs); err != nil {
-		afmt.R.Fprintf(color.Error, "%v\n", err)
+		_, _ = afmt.R.Fprintf(color.Error, "%v\n", err)
 		os.Exit(1)
 	}
 	if help1 || help2 {
@@ -335,12 +335,12 @@ func argsAndConfig(clArgs []string) (*config.Config, *enumArgs) {
 	}
 	if (args.Excluded.Len() > 0 || args.Filepaths.ExcludedSrcs != "") &&
 		(args.Included.Len() > 0 || args.Filepaths.IncludedSrcs != "") {
-		afmt.R.Fprintln(color.Error, "Cannot provide both include and exclude arguments")
+		_, _ = afmt.R.Fprintln(color.Error, "Cannot provide both include and exclude arguments")
 		commandUsage(enumUsageMsg, enumCommand, enumBuf)
 		os.Exit(1)
 	}
 	if err := processEnumInputFiles(&args); err != nil {
-		fmt.Fprintf(color.Error, "%v\n", err)
+		_, _ = fmt.Fprintf(color.Error, "%v\n", err)
 		os.Exit(1)
 	}
 
@@ -352,21 +352,21 @@ func argsAndConfig(clArgs []string) (*config.Config, *enumArgs) {
 			args.Resolvers = stringset.New(cfg.Resolvers...)
 		}
 	} else if args.Filepaths.ConfigFile != "" {
-		afmt.R.Fprintf(color.Error, "Failed to load the configuration file: %v\n", err)
+		_, _ = afmt.R.Fprintf(color.Error, "Failed to load the configuration file: %v\n", err)
 		os.Exit(1)
 	}
 	// Override configuration file settings with command-line arguments
 	if err := cfg.UpdateConfig(args); err != nil {
-		afmt.R.Fprintf(color.Error, "Configuration error: %v\n", err)
+		_, _ = afmt.R.Fprintf(color.Error, "Configuration error: %v\n", err)
 		os.Exit(1)
 	}
 	// Some input validation
 	if !cfg.Active && len(args.Ports) > 0 {
-		afmt.R.Fprintln(color.Error, "Ports can only be scanned in the active mode")
+		_, _ = afmt.R.Fprintln(color.Error, "Ports can only be scanned in the active mode")
 		os.Exit(1)
 	}
 	if len(cfg.Domains()) == 0 {
-		afmt.R.Fprintln(color.Error, "Configuration error: No root domain names were provided")
+		_, _ = afmt.R.Fprintln(color.Error, "Configuration error: No root domain names were provided")
 		os.Exit(1)
 	}
 	return cfg, &args

@@ -57,19 +57,19 @@ const (
 
 func commandUsage(msg string, cmdFlagSet *flag.FlagSet, errBuf *bytes.Buffer) {
 	afmt.PrintBanner()
-	afmt.G.Fprintf(color.Error, "Usage: %s %s\n\n", path.Base(os.Args[0]), msg)
+	_, _ = afmt.G.Fprintf(color.Error, "Usage: %s %s\n\n", path.Base(os.Args[0]), msg)
 	cmdFlagSet.PrintDefaults()
-	afmt.G.Fprintln(color.Error, errBuf.String())
+	_, _ = afmt.G.Fprintln(color.Error, errBuf.String())
 
 	if msg == mainUsageMsg {
-		afmt.G.Fprintf(color.Error, "\nSubcommands: \n\n")
-		afmt.G.Fprintf(color.Error, "\t%-11s - Perform enumerations and network mapping\n", "amass enum")
+		_, _ = afmt.G.Fprintf(color.Error, "\nSubcommands: \n\n")
+		_, _ = afmt.G.Fprintf(color.Error, "\t%-11s - Perform enumerations and network mapping\n", "amass enum")
 	}
 
-	afmt.G.Fprintln(color.Error)
-	afmt.G.Fprintf(color.Error, "The project documentation can be found here: \n%s\n\n", documentationURL)
-	afmt.G.Fprintf(color.Error, "The Amass Discord server can be found here: \n%s\n\n", discordInvitation)
-	afmt.G.Fprintf(color.Error, "The Amass YouTube channel can be found here: \n%s\n\n", youTubeURL)
+	_, _ = afmt.G.Fprintln(color.Error)
+	_, _ = afmt.G.Fprintf(color.Error, "The project documentation can be found here: \n%s\n\n", documentationURL)
+	_, _ = afmt.G.Fprintf(color.Error, "The Amass Discord server can be found here: \n%s\n\n", discordInvitation)
+	_, _ = afmt.G.Fprintf(color.Error, "The Amass YouTube channel can be found here: \n%s\n\n", youTubeURL)
 }
 
 func main() {
@@ -88,7 +88,7 @@ func main() {
 		return
 	}
 	if err := mainFlagSet.Parse(os.Args[1:]); err != nil {
-		afmt.R.Fprintf(color.Error, "%v\n", err)
+		_, _ = afmt.R.Fprintf(color.Error, "%v\n", err)
 		os.Exit(1)
 	}
 	if help1 || help2 {
@@ -96,7 +96,7 @@ func main() {
 		return
 	}
 	if version {
-		fmt.Fprintf(color.Error, "%s\n", afmt.Version)
+		_, _ = fmt.Fprintf(color.Error, "%s\n", afmt.Version)
 		return
 	}
 
@@ -115,12 +115,12 @@ func createOutputDirectory(cfg *config.Config) {
 	// Prepare output file paths
 	dir := config.OutputDirectory(cfg.Dir)
 	if dir == "" {
-		afmt.R.Fprintln(color.Error, "Failed to obtain the output directory")
+		_, _ = afmt.R.Fprintln(color.Error, "Failed to obtain the output directory")
 		os.Exit(1)
 	}
 	// If the directory does not yet exist, create it
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		afmt.R.Fprintf(color.Error, "Failed to create the directory: %v\n", err)
+		_, _ = afmt.R.Fprintf(color.Error, "Failed to create the directory: %v\n", err)
 		os.Exit(1)
 	}
 }
@@ -247,7 +247,7 @@ func selectLogger(dir, logfile string) *slog.Logger {
 func setupFileLogger(dir, logfile string) *slog.Logger {
 	if dir != "" {
 		if err := os.MkdirAll(dir, 0640); err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to create the log directory: %v", err)
+			_, _ = fmt.Fprintf(os.Stderr, "Failed to create the log directory: %v", err)
 		}
 	}
 
@@ -258,7 +258,7 @@ func setupFileLogger(dir, logfile string) *slog.Logger {
 
 	f, err := os.OpenFile(p, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to open the log file: %v", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Failed to open the log file: %v", err)
 		return nil
 	}
 	return slog.New(slog.NewJSONHandler(f, nil))
@@ -281,7 +281,7 @@ func setupSyslogLogger() *slog.Logger {
 
 	writer, err := net.Dial(transport, net.JoinHostPort(host, port))
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to create the connection to the log server: %v", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Failed to create the connection to the log server: %v", err)
 		return nil
 	}
 
