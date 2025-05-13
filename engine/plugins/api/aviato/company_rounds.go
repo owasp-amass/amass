@@ -217,37 +217,66 @@ func (cr *companyRounds) getAssociatedOrg(e *et.Event, ident *dbt.Entity) *dbt.E
 func (cr *companyRounds) store(e *et.Event, ident, orgent *dbt.Entity, funds *companyRoundsResult) []*dbt.Entity {
 	var fundents []*dbt.Entity
 
-	/*for _, round := range funds.FundingRounds {
-		p := support.FullNameToPerson(emp.Person.FullName)
-		if p == nil {
-			continue
-		}
+	if orgent == nil {
+		return fundents
+	}
+	o := orgent.Asset.(*org.Organization)
 
-		personent, err := e.Session.Cache().CreateAsset(p)
-		if err != nil {
-			msg := fmt.Sprintf("failed to create the Person asset for %s: %s", p.FullName, err)
+	for _, round := range funds.FundingRounds {
+		orgacc := cr.orgCheckingAccount(e, orgent)
+		if orgacc == nil {
+			msg := fmt.Sprintf("failed to create the checking account for %s", o.Name)
 			e.Session.Log().Error(msg, slog.Group("plugin", "name", cr.plugin.name, "handler", cr.name))
 			continue
 		}
 
-		_, err = e.Session.Cache().CreateEntityProperty(personent, &general.SourceProperty{
-			Source:     cr.name,
+		seedacc := cr.createSeedAccount(e, &round)
+		if seedacc == nil {
+			msg := fmt.Sprintf("failed to create the seed account for %s", o.Name)
+			e.Session.Log().Error(msg, slog.Group("plugin", "name", cr.plugin.name, "handler", cr.name))
+			continue
+		}
+
+		f := &financial.FundsTransfer{
+			ID:           fmt.Sprintf("%s:%s", round.Name, round.Stage),
+			Amount:       float64(round.MoneyRaised),
+			Currency:     "USD",
+			ExchangeDate: round.AnnouncedOn,
+		}
+
+		fundent, err := e.Session.Cache().CreateAsset(f)
+		if err != nil {
+			msg := fmt.Sprintf("failed to create the FundsTransfer asset for %s: %s", f.ID, err)
+			e.Session.Log().Error(msg, slog.Group("plugin", "name", cr.plugin.name, "handler", cr.name))
+			continue
+		}
+
+		_, err = e.Session.Cache().CreateEntityProperty(fundent, &general.SourceProperty{
+			Source:     cr.plugin.source.Name,
 			Confidence: cr.plugin.source.Confidence,
 		})
 		if err != nil {
-			msg := fmt.Sprintf("failed to create the Person asset source property for %s: %s", p.FullName, err)
+			msg := fmt.Sprintf("failed to create the FundsTransfer asset source property for %s: %s", f.ID, err)
 			e.Session.Log().Error(msg, slog.Group("plugin", "name", cr.plugin.name, "handler", cr.name))
 			continue
 		}
 
-		if err := cr.plugin.createRelation(e.Session, orgent,
-			general.SimpleRelation{Name: "member"}, personent, cr.plugin.source.Confidence); err == nil {
-			employents = append(employents, personent)
-		} else {
-			msg := fmt.Sprintf("failed to create the member relation for %s: %s", p.FullName, err)
+		if err := cr.plugin.createRelation(e.Session, fundent,
+			general.SimpleRelation{Name: "recipient"}, orgacc, cr.plugin.source.Confidence); err != nil {
+			msg := fmt.Sprintf("failed to create the recipient relation for %s: %s", f.ID, err)
 			e.Session.Log().Error(msg, slog.Group("plugin", "name", cr.plugin.name, "handler", cr.name))
+			continue
 		}
-	}*/
+
+		if err := cr.plugin.createRelation(e.Session, fundent,
+			general.SimpleRelation{Name: "sender"}, seedacc, cr.plugin.source.Confidence); err != nil {
+			msg := fmt.Sprintf("failed to create the sender relation for %s: %s", f.ID, err)
+			e.Session.Log().Error(msg, slog.Group("plugin", "name", cr.plugin.name, "handler", cr.name))
+			continue
+		}
+
+		fundents = append(fundents, fundent)
+	}
 
 	return fundents
 }
@@ -298,6 +327,52 @@ func (cr *companyRounds) orgCheckingAccount(e *et.Event, orgent *dbt.Entity) *db
 		general.SimpleRelation{Name: "account"}, accountent, cr.plugin.source.Confidence); err != nil {
 		msg := fmt.Sprintf("failed to create the account relation for %s: %s", o.Name, err)
 		e.Session.Log().Error(msg, slog.Group("plugin", "name", cr.plugin.name, "handler", cr.name))
+	}
+
+	return accountent
+}
+
+func (cr *companyRounds) createSeedAccount(e *et.Event, round *companyFundingRound) *dbt.Entity {
+	name := fmt.Sprintf("%s:%s", round.Name, round.Stage)
+	accountent, err := e.Session.Cache().CreateAsset(&account.Account{
+		ID:      name,
+		Type:    account.Checking,
+		Number:  "default",
+		Balance: float64(round.MoneyRaised),
+		Active:  false,
+	})
+	if err != nil {
+		msg := fmt.Sprintf("failed to create the Account asset for %s: %s", name, err)
+		e.Session.Log().Error(msg, slog.Group("plugin", "name", cr.plugin.name, "handler", cr.name))
+		return nil
+	}
+
+	_, err = e.Session.Cache().CreateEntityProperty(accountent, &general.SourceProperty{
+		Source:     cr.plugin.source.Name,
+		Confidence: cr.plugin.source.Confidence,
+	})
+	if err != nil {
+		msg := fmt.Sprintf("failed to create the Account asset source property for %s: %s", name, err)
+		e.Session.Log().Error(msg, slog.Group("plugin", "name", cr.plugin.name, "handler", cr.name))
+		return nil
+	}
+
+	investors := cr.createOrgInvestors(e, round)
+	if ents := cr.createPersonInvestors(e, round); len(ents) > 0 {
+		investors = append(investors, ents...)
+	}
+	if len(investors) == 0 {
+		msg := fmt.Sprintf("failed to create the investors for %s", name)
+		e.Session.Log().Error(msg, slog.Group("plugin", "name", cr.plugin.name, "handler", cr.name))
+		return nil
+	}
+
+	for _, investor := range investors {
+		if err := cr.plugin.createRelation(e.Session, investor,
+			general.SimpleRelation{Name: "account"}, accountent, cr.plugin.source.Confidence); err != nil {
+			msg := fmt.Sprintf("failed to create the account relation for %s: %s", investor.ID, err)
+			e.Session.Log().Error(msg, slog.Group("plugin", "name", cr.plugin.name, "handler", cr.name))
+		}
 	}
 
 	return accountent
