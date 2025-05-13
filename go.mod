@@ -25,8 +25,8 @@ require (
 	github.com/miekg/dns v1.1.66
 	github.com/nyaruka/phonenumbers v1.6.1
 	github.com/openrdap/rdap v0.9.1
-	github.com/owasp-amass/asset-db v0.20.1-0.20250422212517-edfa9f156280
-	github.com/owasp-amass/open-asset-model v0.14.1-0.20250420012929-46911eee600a
+	github.com/owasp-amass/asset-db v0.20.1-0.20250512195943-e082b30197fb
+	github.com/owasp-amass/open-asset-model v0.14.1-0.20250512191847-44621818e90d
 	github.com/owasp-amass/resolve v0.9.7-0.20250325214539-07077e8c54af
 	github.com/samber/slog-common v0.18.1
 	github.com/samber/slog-syslog/v2 v2.5.2
@@ -106,7 +106,7 @@ require (
 	gorm.io/datatypes v1.2.5 // indirect
 	gorm.io/driver/mysql v1.5.7 // indirect
 	gorm.io/driver/postgres v1.5.11 // indirect
-	modernc.org/libc v1.65.4 // indirect
+	modernc.org/libc v1.65.6 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.10.0 // indirect
 	modernc.org/sqlite v1.37.0 // indirect
