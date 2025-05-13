@@ -65,48 +65,50 @@ type companyRounds struct {
 }
 
 type companyRoundsResult struct {
-	FundingRounds []struct {
-		ID                  int    `json:"id"`
-		AnnouncedOn         string `json:"announcedOn"`
-		MoneyRaised         int    `json:"moneyRaised"`
-		Name                string `json:"name"`
-		Stage               string `json:"stage"`
-		LeadPersonInvestors []struct {
-			PersonID   string    `json:"id"`
-			FullName   string    `json:"fullName"`
-			EntityType string    `json:"entityType"`
-			Location   string    `json:"location"`
-			URLs       URLResult `json:"URLs"`
-		} `json:"leadPersonInvestorList"`
-		PersonInvestors []struct {
-			PersonID   string    `json:"id"`
-			FullName   string    `json:"fullName"`
-			EntityType string    `json:"entityType"`
-			Location   string    `json:"location"`
-			URLs       URLResult `json:"URLs"`
-		} `json:"personInvestorList"`
-		LeadCompanyInvestors []struct {
-			CompanyID    string    `json:"id"`
-			Name         string    `json:"name"`
-			Country      string    `json:"country"`
-			Region       string    `json:"region"`
-			Locality     string    `json:"locality"`
-			URLs         URLResult `json:"URLs"`
-			IndustryList []string  `json:"industryList"`
-		} `json:"leadCompanyInvestorList"`
-		CompanyInvestors []struct {
-			CompanyID    string    `json:"id"`
-			Name         string    `json:"name"`
-			Country      string    `json:"country"`
-			Region       string    `json:"region"`
-			Locality     string    `json:"locality"`
-			URLs         URLResult `json:"URLs"`
-			IndustryList []string  `json:"industryList"`
-		} `json:"companyInvestorList"`
-		CompanyID string `json:"companyID"`
-	}
-	Pages        int `json:"pages"`
-	TotalResults int `json:"totalResults"`
+	FundingRounds []companyFundingRound `json:"fundingRounds"`
+	Pages         int                   `json:"pages"`
+	TotalResults  int                   `json:"totalResults"`
+}
+
+type companyFundingRound struct {
+	ID                  int    `json:"id"`
+	AnnouncedOn         string `json:"announcedOn"`
+	MoneyRaised         int    `json:"moneyRaised"`
+	Name                string `json:"name"`
+	Stage               string `json:"stage"`
+	LeadPersonInvestors []struct {
+		PersonID   string    `json:"id"`
+		FullName   string    `json:"fullName"`
+		EntityType string    `json:"entityType"`
+		Location   string    `json:"location"`
+		URLs       URLResult `json:"URLs"`
+	} `json:"leadPersonInvestorList"`
+	PersonInvestors []struct {
+		PersonID   string    `json:"id"`
+		FullName   string    `json:"fullName"`
+		EntityType string    `json:"entityType"`
+		Location   string    `json:"location"`
+		URLs       URLResult `json:"URLs"`
+	} `json:"personInvestorList"`
+	LeadCompanyInvestors []struct {
+		CompanyID    string    `json:"id"`
+		Name         string    `json:"name"`
+		Country      string    `json:"country"`
+		Region       string    `json:"region"`
+		Locality     string    `json:"locality"`
+		URLs         URLResult `json:"URLs"`
+		IndustryList []string  `json:"industryList"`
+	} `json:"leadCompanyInvestorList"`
+	CompanyInvestors []struct {
+		CompanyID    string    `json:"id"`
+		Name         string    `json:"name"`
+		Country      string    `json:"country"`
+		Region       string    `json:"region"`
+		Locality     string    `json:"locality"`
+		URLs         URLResult `json:"URLs"`
+		IndustryList []string  `json:"industryList"`
+	} `json:"companyInvestorList"`
+	CompanyID string `json:"companyID"`
 }
 
 type companySearch struct {
