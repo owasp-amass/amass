@@ -167,6 +167,7 @@ Did you write a blog post, magazine article or do a podcast about or mentioning 
   * [OWASP Amass: Discovering Your Exposure on the Internet](https://wiki.owasp.org/index.php/OWASP_Portland_2019_Training_Day)
 * [Blackhat Trainings](https://www.blackhat.com/trainings/):
   * [Black Hat Training, Making the Cloud Rain Shells!: Discovery and Recon](https://www.blackhat.com/eu-18/training/schedule/index.html#aws--azure-exploitation-making-the-cloud-rain-shells-11060)
+* [Certified Ethical Hacker Training](https://www.linkedin.com/learning/certified-ethical-hacker-ceh/introducing-open-source-intelligence-osint-techniques), by Omar Santos, available on LinkedIn Learning
 
 ## Summits & Open Source Events
 
