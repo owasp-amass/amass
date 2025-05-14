@@ -35,18 +35,38 @@ func (a *aviato) Name() string {
 func (a *aviato) Start(r et.Registry) error {
 	a.log = r.Log().WithGroup("plugin").With("name", a.name)
 
-	a.companySearch = &companySearch{
-		name:   a.name + "-Company-Search-Handler",
+	a.companyEnrich = &companyEnrich{
+		name:   a.name + "-Company-Enrich-Handler",
 		plugin: a,
 	}
 
 	if err := r.RegisterHandler(&et.Handler{
 		Plugin:     a,
-		Name:       a.companySearch.name,
-		Priority:   6,
-		Transforms: []string{string(oam.Identifier)},
-		EventType:  oam.Organization,
-		Callback:   a.companySearch.check,
+		Name:       a.companyEnrich.name,
+		Priority:   7,
+		Transforms: []string{string(oam.Organization)},
+		EventType:  oam.Identifier,
+		Callback:   a.companyEnrich.check,
+	}); err != nil {
+		return err
+	}
+
+	a.companyRounds = &companyRounds{
+		name:   a.name + "-Company-Rounds-Handler",
+		plugin: a,
+	}
+
+	if err := r.RegisterHandler(&et.Handler{
+		Plugin:   a,
+		Name:     a.companyRounds.name,
+		Priority: 7,
+		Transforms: []string{
+			string(oam.Organization),
+			string(oam.Account),
+			string(oam.FundsTransfer),
+		},
+		EventType: oam.Identifier,
+		Callback:  a.companyRounds.check,
 	}); err != nil {
 		return err
 	}
@@ -67,18 +87,18 @@ func (a *aviato) Start(r et.Registry) error {
 		return err
 	}
 
-	a.companyEnrich = &companyEnrich{
-		name:   a.name + "-Company-Enrich-Handler",
+	a.companySearch = &companySearch{
+		name:   a.name + "-Company-Search-Handler",
 		plugin: a,
 	}
 
 	if err := r.RegisterHandler(&et.Handler{
 		Plugin:     a,
-		Name:       a.companyEnrich.name,
-		Priority:   7,
-		Transforms: []string{string(oam.Organization)},
-		EventType:  oam.Identifier,
-		Callback:   a.companyEnrich.check,
+		Name:       a.companySearch.name,
+		Priority:   6,
+		Transforms: []string{string(oam.Identifier)},
+		EventType:  oam.Organization,
+		Callback:   a.companySearch.check,
 	}); err != nil {
 		return err
 	}

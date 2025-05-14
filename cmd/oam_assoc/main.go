@@ -84,9 +84,9 @@ func main() {
 	assocCommand.StringVar(&args.Filepaths.Domains, "df", "", "Path to a file providing registered domain names")
 
 	var usage = func() {
-		afmt.G.Fprintf(color.Error, "Usage: %s %s\n\n", path.Base(os.Args[0]), usageMsg)
+		_, _ = afmt.G.Fprintf(color.Error, "Usage: %s %s\n\n", path.Base(os.Args[0]), usageMsg)
 		assocCommand.PrintDefaults()
-		afmt.G.Fprintln(color.Error, assocBuf.String())
+		_, _ = afmt.G.Fprintln(color.Error, assocBuf.String())
 	}
 
 	if len(os.Args) < 2 {
@@ -94,7 +94,7 @@ func main() {
 		return
 	}
 	if err := assocCommand.Parse(os.Args[1:]); err != nil {
-		afmt.R.Fprintf(color.Error, "%v\n", err)
+		_, _ = afmt.R.Fprintf(color.Error, "%v\n", err)
 		os.Exit(1)
 	}
 	if help1 || help2 {
@@ -111,13 +111,13 @@ func main() {
 	if args.Filepaths.Domains != "" {
 		list, err := config.GetListFromFile(args.Filepaths.Domains)
 		if err != nil {
-			afmt.R.Fprintf(color.Error, "Failed to parse the domain names file: %v\n", err)
+			_, _ = afmt.R.Fprintf(color.Error, "Failed to parse the domain names file: %v\n", err)
 			os.Exit(1)
 		}
 		args.Domains.InsertMany(list...)
 	}
 	if args.Domains.Len() == 0 {
-		afmt.R.Fprintln(color.Error, "No root domain names were provided")
+		_, _ = afmt.R.Fprintln(color.Error, "No root domain names were provided")
 		os.Exit(1)
 	}
 
@@ -126,7 +126,7 @@ func main() {
 	if args.Since != "" {
 		start, err = time.Parse(timeFormat, args.Since)
 		if err != nil {
-			afmt.R.Fprintf(color.Error, "%s is not in the correct format: %s\n", args.Since, timeFormat)
+			_, _ = afmt.R.Fprintf(color.Error, "%s is not in the correct format: %s\n", args.Since, timeFormat)
 			os.Exit(1)
 		}
 	}
@@ -141,51 +141,51 @@ func main() {
 			args.Domains.InsertMany(cfg.Domains()...)
 		}
 	} else if args.Filepaths.ConfigFile != "" {
-		afmt.R.Fprintf(color.Error, "Failed to load the configuration file: %v\n", err)
+		_, _ = afmt.R.Fprintf(color.Error, "Failed to load the configuration file: %v\n", err)
 		os.Exit(1)
 	}
 	// Connect with the graph database containing the enumeration data
 	db := utils.OpenGraphDatabase(cfg)
 	if db == nil {
-		afmt.R.Fprintln(color.Error, "Failed to connect with the database")
+		_, _ = afmt.R.Fprintln(color.Error, "Failed to connect with the database")
 		os.Exit(1)
 	}
 
 	for _, name := range args.Domains.Slice() {
 		for i, assoc := range getAssociations(name, start, db) {
 			if i != 0 {
-				fmt.Println()
+				_, _ = fmt.Println()
 			}
 
 			var rel string
 			switch v := assoc.Asset.(type) {
 			case *oamreg.DomainRecord:
 				rel = "registrant_contact"
-				afmt.G.Fprintln(color.Output, v.Domain)
+				_, _ = afmt.G.Fprintln(color.Output, v.Domain)
 				if verbose {
-					fmt.Fprintf(color.Output, "%s%s\n%s%s\n", afmt.Blue("Name: "),
+					_, _ = fmt.Fprintf(color.Output, "%s%s\n%s%s\n", afmt.Blue("Name: "),
 						afmt.Green(v.Name), afmt.Blue("Expiration: "), afmt.Green(v.ExpirationDate))
 				}
 			case *oamreg.AutnumRecord:
 				rel = "registrant"
-				afmt.G.Fprintln(color.Output, v.Handle)
+				_, _ = afmt.G.Fprintln(color.Output, v.Handle)
 				if verbose {
-					fmt.Fprintf(color.Output, "%s%s\n%s%s\n%s%s\n", afmt.Blue("Name: "), afmt.Green(v.Name),
+					_, _ = fmt.Fprintf(color.Output, "%s%s\n%s%s\n%s%s\n", afmt.Blue("Name: "), afmt.Green(v.Name),
 						afmt.Blue("Status: "), afmt.Green(v.Status[0]), afmt.Blue("Updated: "), afmt.Green(v.UpdatedDate))
 				}
 			case *oamreg.IPNetRecord:
 				rel = "registrant"
-				afmt.G.Fprintln(color.Output, v.CIDR.String())
+				_, _ = afmt.G.Fprintln(color.Output, v.CIDR.String())
 				if verbose {
-					fmt.Fprintf(color.Output, "%s%s\n%s%s\n%s%s\n", afmt.Blue("Name: "), afmt.Green(v.Name),
+					_, _ = fmt.Fprintf(color.Output, "%s%s\n%s%s\n%s%s\n", afmt.Blue("Name: "), afmt.Green(v.Name),
 						afmt.Blue("Status: "), afmt.Green(v.Status[0]), afmt.Blue("Updated: "), afmt.Green(v.UpdatedDate))
 				}
 			}
 
 			if verbose {
-				afmt.B.Fprintln(color.Output, "Registrant|")
+				_, _ = afmt.B.Fprintln(color.Output, "Registrant|")
 				printContactInfo(assoc, rel, start, db)
-				fmt.Println()
+				_, _ = fmt.Println()
 			}
 		}
 	}
@@ -207,7 +207,7 @@ func printContactInfo(assoc *dbt.Entity, regrel string, since time.Time, db repo
 		if edges, err := db.OutgoingEdges(contact, since, out); err == nil && len(edges) > 0 {
 			for _, edge := range edges {
 				if a, err := db.FindEntityById(edge.ToEntity.ID); err == nil && a != nil {
-					fmt.Fprintf(color.Output, "%s%s%s\n",
+					_, _ = fmt.Fprintf(color.Output, "%s%s%s\n",
 						afmt.Blue(string(a.Asset.AssetType())), afmt.Blue(": "), afmt.Green(a.Asset.Key()))
 				}
 			}

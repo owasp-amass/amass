@@ -50,7 +50,7 @@ func (r *mutationResolver) CreateSessionFromJSON(ctx context.Context, input mode
 	}
 	// Populate FROM/TO in transformations
 	for k, t := range config.Transformations {
-		t.Split(k)
+		_ = t.Split(k)
 	}
 
 	s, err := r.Manager.NewSession(&config)

@@ -97,13 +97,13 @@ func (r *manager) CancelSession(id uuid.UUID) {
 		}
 	}
 	if c := r.sessions[id].Cache(); c != nil {
-		c.Close()
+		_ = c.Close()
 	}
 	if s, ok := r.sessions[id].(*Session); ok {
 		s.ranger = nil
 	}
 	if dir := r.sessions[id].TmpDir(); dir != "" {
-		os.RemoveAll(dir)
+		_ = os.RemoveAll(dir)
 	}
 	if db := s.DB(); db != nil {
 		if err := db.Close(); err != nil {

@@ -54,11 +54,7 @@ func VizData(domains []string, since time.Time, db repository.Repository) ([]Nod
 	var viznodes []Node
 	var vizedges []Edge
 	nodeToIdx := make(map[string]int)
-	for {
-		if len(next) == 0 {
-			break
-		}
-
+	for len(next) > 0 {
 		var assets []*types.Entity
 		assets = append(assets, next...)
 		next = []*types.Entity{}
@@ -81,6 +77,10 @@ func VizData(domains []string, since time.Time, db repository.Repository) ([]Nod
 			var in, out bool
 			var inRels, outRels []string
 			switch a.Asset.AssetType() {
+			case oam.Account:
+				out = true
+				in = true
+				inRels = append(inRels, "sender", "recipient")
 			case oam.AutnumRecord:
 				out = true
 			case oam.AutonomousSystem:
@@ -97,6 +97,8 @@ func VizData(domains []string, since time.Time, db repository.Repository) ([]Nod
 				} else if associatedWithScope(db, a, domains, since) {
 					out = true
 				}
+			case oam.FundsTransfer:
+				out = true
 			case oam.Identifier:
 				out = true
 			case oam.IPAddress:

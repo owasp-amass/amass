@@ -132,7 +132,7 @@ func (bt *bgpTools) whois(ipstr string) (*bgpToolsRecord, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to establish a connection with the WHOIS server: %v", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	n, err := io.WriteString(conn, fmt.Sprintf("begin\n%s\nend", ipstr))
 	if err != nil || n == 0 {

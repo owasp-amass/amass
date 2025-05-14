@@ -124,9 +124,10 @@ func (c *Config) LoadSettings(path string) error {
 	if cfg.Section(ini.DefaultSection).HasKey("mode") {
 		mode := cfg.Section(ini.DefaultSection).Key("mode").String()
 
-		if mode == "passive" {
+		switch mode {
+		case "passive":
 			c.Passive = true
-		} else if mode == "active" {
+		case "active":
 			c.Active = true
 		}
 	}

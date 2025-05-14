@@ -50,7 +50,7 @@ func (c *Client) Query(query string) (string, error) {
 	} else if res.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("response indicated status: %s", res.Status)
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {

@@ -47,7 +47,7 @@ func JARMFingerprint(target oam.Asset, portrel *general.PortRelation) (string, e
 		if err != nil {
 			return "", err
 		}
-		defer c.Close()
+		defer func() { _ = c.Close() }()
 
 		data := jarm.BuildProbe(probe)
 		_ = c.SetWriteDeadline(time.Now().Add(5 * time.Second))

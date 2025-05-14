@@ -177,9 +177,10 @@ func (d *dnsIP) process(e *et.Event, name string, addrs []*relIP) {
 	for _, a := range addrs {
 		ip := a.ip.Asset.(*oamnet.IPAddress)
 
-		if ip.Type == "IPv4" {
+		switch ip.Type {
+		case "IPv4":
 			support.AddDNSRecordType(e, int(dns.TypeA))
-		} else if ip.Type == "IPv6" {
+		case "IPv6":
 			support.AddDNSRecordType(e, int(dns.TypeAAAA))
 		}
 

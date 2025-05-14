@@ -72,9 +72,10 @@ func GetPublicDNSResolvers() error {
 		}
 		if i == 0 {
 			for idx, val := range record {
-				if val == "ip_address" {
+				switch val {
+				case "ip_address":
 					ipIdx = idx
-				} else if val == "reliability" {
+				case "reliability":
 					reliabilityIdx = idx
 				}
 			}

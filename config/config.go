@@ -395,7 +395,7 @@ func GetListFromFile(path string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error opening the file %s: %v", absPath, err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	reader = file
 
 	// We need to determine if this is a gzipped file or a plain text file, so we
@@ -416,7 +416,7 @@ func GetListFromFile(path string) ([]string, error) {
 		if err != nil {
 			return nil, fmt.Errorf("error gz-reading the file %s: %v", absPath, err)
 		}
-		defer gzReader.Close()
+		defer func() { _ = gzReader.Close() }()
 		reader = gzReader
 	}
 

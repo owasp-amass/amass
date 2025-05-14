@@ -83,7 +83,7 @@ func TestLoadResolverSettings(t *testing.T) {
 	if err != nil {
 		t.Errorf("Got an error when valid resolvers and valid file path are provided, expected nil. Error: %v", err)
 	}
-	defer os.Remove("testResolvers.txt")
+	defer func() { _ = os.Remove("testResolvers.txt") }()
 }
 
 func TestLoadResolversFromFile(t *testing.T) {
@@ -101,7 +101,7 @@ func TestLoadResolversFromFile(t *testing.T) {
 	if err == nil {
 		t.Errorf("Expected an error when file contains invalid IPs, got nil")
 	}
-	os.Remove("invalidResolvers.txt")
+	_ = os.Remove("invalidResolvers.txt")
 
 	// Test with valid IPs in file
 	_ = os.WriteFile("validResolvers.txt", []byte("192.0.2.3\n192.0.2.4"), 0644)
@@ -117,5 +117,5 @@ func TestLoadResolversFromFile(t *testing.T) {
 	if resolvers[0] != "192.0.2.3" || resolvers[1] != "192.0.2.4" {
 		t.Errorf("Resolvers do not match expected values. Got: %v", resolvers)
 	}
-	os.Remove("validResolvers.txt")
+	_ = os.Remove("validResolvers.txt")
 }

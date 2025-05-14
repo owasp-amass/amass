@@ -109,12 +109,13 @@ func (nb *netblock) store(e *et.Event, resp *rdap.IPNetwork, asset *dbt.Entity) 
 
 	var reg, last bool
 	for _, event := range resp.Events {
-		if event.Action == "registration" {
+		switch event.Action {
+		case "registration":
 			if t, err := time.Parse(time.RFC3339, event.Date); err == nil {
 				ipnetrec.CreatedDate = support.TimeToJSONString(&t)
 				reg = true
 			}
-		} else if event.Action == "last changed" {
+		case "last changed":
 			if t, err := time.Parse(time.RFC3339, event.Date); err == nil {
 				ipnetrec.UpdatedDate = support.TimeToJSONString(&t)
 				last = true

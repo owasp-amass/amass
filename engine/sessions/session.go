@@ -175,17 +175,30 @@ func (s *Session) selectDBMS() error {
 		if db.Primary {
 			// Convert the database system name to lowercase for consistent comparison.
 			db.System = strings.ToLower(db.System)
-			if db.System == "postgres" {
+
+			switch db.System {
+			case "postgres":
 				// Construct the connection string for a Postgres database.
 				s.dsn = fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s", db.Host, db.Port, db.Username, db.Password, db.DBName)
 				s.dbtype = sqlrepo.Postgres
-			} else if db.System == "sqlite" || db.System == "sqlite3" {
+			case "sqlite":
+				fallthrough
+			case "sqlite3":
 				// Define the connection path for an SQLite database.
 				path := filepath.Join(config.OutputDirectory(s.cfg.Dir), "amass.sqlite")
 				s.dsn = path
 				s.dbtype = sqlrepo.SQLite
-			} else if db.System == "neo4j" || db.System == "neo4+s" || db.System == "neo4j+sec" ||
-				db.System == "bolt" || db.System == "bolt+s" || db.System == "bolt+sec" {
+			case "neo4j":
+				fallthrough
+			case "neo4+s":
+				fallthrough
+			case "neo4j+sec":
+				fallthrough
+			case "bolt":
+				fallthrough
+			case "bolt+s":
+				fallthrough
+			case "bolt+sec":
 				s.dsn = db.URL
 				s.dbtype = neo4j.Neo4j
 			}

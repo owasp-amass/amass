@@ -81,9 +81,9 @@ func main() {
 	trackCommand.StringVar(&args.Filepaths.Domains, "df", "", "Path to a file providing registered domain names")
 
 	var usage = func() {
-		afmt.G.Fprintf(color.Error, "Usage: %s %s\n\n", path.Base(os.Args[0]), usageMsg)
+		_, _ = afmt.G.Fprintf(color.Error, "Usage: %s %s\n\n", path.Base(os.Args[0]), usageMsg)
 		trackCommand.PrintDefaults()
-		afmt.G.Fprintln(color.Error, trackBuf.String())
+		_, _ = afmt.G.Fprintln(color.Error, trackBuf.String())
 	}
 
 	if len(os.Args) < 2 {
@@ -91,7 +91,7 @@ func main() {
 		return
 	}
 	if err := trackCommand.Parse(os.Args[1:]); err != nil {
-		afmt.R.Fprintf(color.Error, "%v\n", err)
+		_, _ = afmt.R.Fprintf(color.Error, "%v\n", err)
 		os.Exit(1)
 	}
 	if help1 || help2 {
@@ -108,13 +108,13 @@ func main() {
 	if args.Filepaths.Domains != "" {
 		list, err := config.GetListFromFile(args.Filepaths.Domains)
 		if err != nil {
-			afmt.R.Fprintf(color.Error, "Failed to parse the domain names file: %v\n", err)
+			_, _ = afmt.R.Fprintf(color.Error, "Failed to parse the domain names file: %v\n", err)
 			os.Exit(1)
 		}
 		args.Domains.InsertMany(list...)
 	}
 	if args.Domains.Len() == 0 {
-		afmt.R.Fprintln(color.Error, "No root domain names were provided")
+		_, _ = afmt.R.Fprintln(color.Error, "No root domain names were provided")
 		os.Exit(1)
 	}
 
@@ -123,7 +123,7 @@ func main() {
 	if args.Since != "" {
 		start, err = time.Parse(timeFormat, args.Since)
 		if err != nil {
-			afmt.R.Fprintf(color.Error, "%s is not in the correct format: %s\n", args.Since, timeFormat)
+			_, _ = afmt.R.Fprintf(color.Error, "%s is not in the correct format: %s\n", args.Since, timeFormat)
 			os.Exit(1)
 		}
 	}
@@ -138,18 +138,18 @@ func main() {
 			args.Domains.InsertMany(cfg.Domains()...)
 		}
 	} else if args.Filepaths.ConfigFile != "" {
-		afmt.R.Fprintf(color.Error, "Failed to load the configuration file: %v\n", err)
+		_, _ = afmt.R.Fprintf(color.Error, "Failed to load the configuration file: %v\n", err)
 		os.Exit(1)
 	}
 	// Connect with the graph database containing the enumeration data
 	db := utils.OpenGraphDatabase(cfg)
 	if db == nil {
-		afmt.R.Fprintln(color.Error, "Failed to connect with the database")
+		_, _ = afmt.R.Fprintln(color.Error, "Failed to connect with the database")
 		os.Exit(1)
 	}
 
 	for _, name := range getNewNames(args.Domains.Slice(), start, db) {
-		afmt.G.Fprintln(color.Output, name)
+		_, _ = afmt.G.Fprintln(color.Output, name)
 	}
 }
 
