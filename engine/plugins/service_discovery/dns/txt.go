@@ -58,9 +58,9 @@ type txtServiceDiscovery struct {
 // NewTXTServiceDiscovery initializes and returns a new instance of the plugin
 func NewTXTServiceDiscovery() et.Plugin {
     return &txtServiceDiscovery{
-        name: "txt_sd",
+        name: "txt_service_discovery",
         source: &et.Source{
-            Name:       "txt_sd",
+            Name:       "txt_service_discovery",
             Confidence: 100,
         },
     }
@@ -79,8 +79,9 @@ func (t *txtServiceDiscovery) Start(r et.Registry) error {
 // Stop is called when the plugin is stopped (currently does nothing)
 func (t *txtServiceDiscovery) Stop() {}
 
-// check handles the main logic for processing events and discovering services
-func (t *txtServiceDiscovery) check(e *et.Event) error {
+// Check handles the main logic for processing events and discovering services
+// Exported to allow access from the registration in plugin.go
+func (t *txtServiceDiscovery) Check(e *et.Event) error {
     // Ensure the event and its associated entity are valid
     if e == nil || e.Entity == nil || e.Entity.Asset == nil {
         return nil
@@ -117,6 +118,11 @@ func (t *txtServiceDiscovery) check(e *et.Event) error {
         support.AddDNSRecordType(e, int(dns.TypeTXT))
     }
     return nil
+}
+
+// check provides backward compatibility with existing code
+func (t *txtServiceDiscovery) check(e *et.Event) error {
+    return t.Check(e)
 }
 
 // lookup retrieves cached TXT records from the database
