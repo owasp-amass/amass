@@ -361,11 +361,6 @@ func (cr *companyRounds) createSeedAccount(e *et.Event, round *companyFundingRou
 	if ents := cr.createPersonInvestors(e, round); len(ents) > 0 {
 		investors = append(investors, ents...)
 	}
-	if len(investors) == 0 {
-		msg := fmt.Sprintf("failed to create the investors for %s", name)
-		e.Session.Log().Error(msg, slog.Group("plugin", "name", cr.plugin.name, "handler", cr.name))
-		return nil
-	}
 
 	for _, investor := range investors {
 		if err := cr.plugin.createRelation(e.Session, investor,
