@@ -1,6 +1,7 @@
 package dns
 
 import (
+    "fmt"
     "log/slog"
     "strings"
     "time"
@@ -73,50 +74,115 @@ func (t *txtServiceDiscovery) Name() string {
 
 // Start is called when the plugin is started (currently does nothing)
 func (t *txtServiceDiscovery) Start(r et.Registry) error {
+    slog.Debug("TXT service discovery plugin started", "plugin", t.name)
     return nil
 }
 
 // Stop is called when the plugin is stopped (currently does nothing)
-func (t *txtServiceDiscovery) Stop() {}
+func (t *txtServiceDiscovery) Stop() {
+    slog.Debug("TXT service discovery plugin stopped", "plugin", t.name)
+}
 
 // Check handles the main logic for processing events and discovering services
 // Exported to allow access from the registration in plugin.go
 func (t *txtServiceDiscovery) Check(e *et.Event) error {
+    slog.Debug("TXT service discovery check started", "plugin", t.name)
+    
     // Ensure the event and its associated entity are valid
-    if e == nil || e.Entity == nil || e.Entity.Asset == nil {
+    if e == nil {
+        slog.Debug("Skipping check - event is nil", "plugin", t.name)
+        return nil
+    }
+    if e.Entity == nil {
+        slog.Debug("Skipping check - entity is nil", "plugin", t.name)
+        return nil
+    }
+    if e.Entity.Asset == nil {
+        slog.Debug("Skipping check - asset is nil", "plugin", t.name)
         return nil
     }
 
     // Extract the FQDN asset from the entity
     fqdn, ok := e.Entity.Asset.(*oamdns.FQDN)
     if !ok {
+        slog.Debug("Skipping check - asset is not FQDN", 
+            "plugin", t.name, 
+            "assetType", fmt.Sprintf("%T", e.Entity.Asset))
         return nil
     }
+
+    slog.Debug("Processing FQDN", "domain", fqdn.Name, "plugin", t.name)
 
     // Determine the TTL start time for the asset
     since, err := support.TTLStartTime(e.Session.Config(), "FQDN", "FQDN", t.name)
     if err != nil {
+        slog.Error("Failed to get TTL start time", 
+            "domain", fqdn.Name, 
+            "plugin", t.name, 
+            "error", err)
         return err
     }
+    slog.Debug("TTL start time calculated", 
+        "domain", fqdn.Name, 
+        "plugin", t.name, 
+        "since", since)
 
     var txtRecords []dns.RR
     var props []*oamdns.DNSRecordProperty
 
     // Check if the asset has been monitored within the TTL
-    if support.AssetMonitoredWithinTTL(e.Session, e.Entity, t.source, since) {
+    if monitored := support.AssetMonitoredWithinTTL(e.Session, e.Entity, t.source, since); monitored {
+        slog.Debug("Asset monitored within TTL, retrieving cached records", 
+            "domain", fqdn.Name, 
+            "plugin", t.name)
         // Retrieve cached TXT records
         props = t.lookup(e, fqdn, since)
+        slog.Debug("Retrieved cached TXT records", 
+            "domain", fqdn.Name, 
+            "plugin", t.name, 
+            "recordCount", len(props))
     } else {
+        slog.Debug("Asset not monitored within TTL, querying DNS", 
+            "domain", fqdn.Name, 
+            "plugin", t.name)
         // Query DNS for TXT records and store them
         txtRecords = t.query(e, fqdn)
-        t.store(e, fqdn, txtRecords)
+        slog.Debug("DNS query completed", 
+            "domain", fqdn.Name, 
+            "plugin", t.name, 
+            "recordCount", len(txtRecords))
+        
+        if len(txtRecords) > 0 {
+            slog.Debug("Storing TXT records", 
+                "domain", fqdn.Name, 
+                "plugin", t.name, 
+                "recordCount", len(txtRecords))
+            t.store(e, fqdn, txtRecords)
+        } else {
+            slog.Debug("No TXT records to store", 
+                "domain", fqdn.Name, 
+                "plugin", t.name)
+        }
     }
 
     // Process the TXT records if any were found
     if len(txtRecords) > 0 || len(props) > 0 {
+        slog.Debug("Processing TXT records", 
+            "domain", fqdn.Name, 
+            "plugin", t.name, 
+            "newRecords", len(txtRecords), 
+            "cachedRecords", len(props))
         t.process(e, fqdn, txtRecords, props)
         support.AddDNSRecordType(e, int(dns.TypeTXT))
+    } else {
+        slog.Debug("No TXT records found to process", 
+            "domain", fqdn.Name, 
+            "plugin", t.name)
     }
+    
+    slog.Debug("TXT service discovery check completed", 
+        "domain", fqdn.Name, 
+        "plugin", t.name)
     return nil
 }
 
@@ -127,45 +193,124 @@ func (t *txtServiceDiscovery) check(e *et.Event) error {
 
 // lookup retrieves cached TXT records from the database
 func (t *txtServiceDiscovery) lookup(e *et.Event, fqdn *oamdns.FQDN, since time.Time) []*oamdns.DNSRecordProperty {
+    slog.Debug("Looking up cached TXT records", 
+        "domain", fqdn.Name, 
+        "plugin", t.name,
+        "since", since)
+        
     var props []*oamdns.DNSRecordProperty
 
     // Fetch records tagged as "dns_record" from the cache
-    if tags, err := e.Session.Cache().GetEntityTags(e.Entity, since, "dns_record"); err == nil {
-        for _, tag := range tags {
-            // Filter records to include only TXT records
-            if prop, ok := tag.Property.(*oamdns.DNSRecordProperty); ok && prop.Header.RRType == int(dns.TypeTXT) {
-                props = append(props, prop)
-            }
+    tags, err := e.Session.Cache().GetEntityTags(e.Entity, since, "dns_record")
+    if err != nil {
+        slog.Error("Failed to retrieve entity tags", 
+            "domain", fqdn.Name, 
+            "plugin", t.name, 
+            "error", err)
+        return props
+    }
+    
+    slog.Debug("Retrieved entity tags", 
+        "domain", fqdn.Name, 
+        "plugin", t.name, 
+        "tagCount", len(tags))
+
+    // Filter records to include only TXT records
+    for i, tag := range tags {
+        prop, ok := tag.Property.(*oamdns.DNSRecordProperty)
+        if !ok {
+            slog.Debug("Skipping non-DNSRecordProperty tag", 
+                "domain", fqdn.Name, 
+                "plugin", t.name, 
+                "tagIndex", i,
+                "propertyType", fmt.Sprintf("%T", tag.Property))
+            continue
         }
+        
+        if prop.Header.RRType != int(dns.TypeTXT) {
+            slog.Debug("Skipping non-TXT DNS record", 
+                "domain", fqdn.Name, 
+                "plugin", t.name, 
+                "tagIndex", i,
+                "rrType", prop.Header.RRType)
+            continue
+        }
+        
+        props = append(props, prop)
+        slog.Debug("Found cached TXT record", 
+            "domain", fqdn.Name, 
+            "plugin", t.name, 
+            "tagIndex", i,
+            "data", prop.Data)
     }
 
+    slog.Debug("Lookup completed", 
+        "domain", fqdn.Name, 
+        "plugin", t.name, 
+        "recordCount", len(props))
     return props
 }
 
 // query performs a DNS query to fetch TXT records for the given FQDN
 func (t *txtServiceDiscovery) query(e *et.Event, fqdn *oamdns.FQDN) []dns.RR {
+    slog.Debug("Starting DNS query for TXT records", 
+        "domain", fqdn.Name, 
+        "plugin", t.name)
+    
     var txtRecords []dns.RR
 
     // Perform the DNS query for TXT records
-    if rr, err := support.PerformQuery(fqdn.Name, dns.TypeTXT); err == nil {
-        txtRecords = append(txtRecords, rr...)
-        // Mark the asset as monitored to avoid redundant queries
-        support.MarkAssetMonitored(e.Session, e.Entity, t.source)
+    rr, err := support.PerformQuery(fqdn.Name, dns.TypeTXT)
+    if err != nil {
+        slog.Error("DNS query failed", 
+            "domain", fqdn.Name, 
+            "plugin", t.name, 
+            "error", err)
+        return txtRecords
     }
+    
+    txtRecords = append(txtRecords, rr...)
+    slog.Debug("DNS query successful", 
+        "domain", fqdn.Name, 
+        "plugin", t.name, 
+        "recordCount", len(txtRecords))
+    
+    // Mark the asset as monitored to avoid redundant queries
+    support.MarkAssetMonitored(e.Session, e.Entity, t.source)
+    slog.Debug("Asset marked as monitored", 
+        "domain", fqdn.Name, 
+        "plugin", t.name)
 
     return txtRecords
 }
 
 // store saves the retrieved TXT records into the database
 func (t *txtServiceDiscovery) store(e *et.Event, fqdn *oamdns.FQDN, rr []dns.RR) {
-    for _, record := range rr {
+    slog.Debug("Storing TXT records", 
+        "domain", fqdn.Name, 
+        "plugin", t.name, 
+        "recordCount", len(rr))
+    
+    recordsStored := 0
+    for i, record := range rr {
         // Ensure the record is of type TXT
         if record.Header().Rrtype != dns.TypeTXT {
+            slog.Debug("Skipping non-TXT record", 
+                "domain", fqdn.Name, 
+                "plugin", t.name, 
+                "recordIndex", i,
+                "recordType", record.Header().Rrtype)
             continue
         }
 
         // Combine the TXT record data into a single string
         txtValue := strings.Join((record.(*dns.TXT)).Txt, " ")
+        slog.Debug("Storing TXT record", 
+            "domain", fqdn.Name, 
+            "plugin", t.name, 
+            "recordIndex", i,
+            "value", txtValue)
+            
         // Save the record in the database as a DNSRecordProperty
         _, err := e.Session.Cache().CreateEntityProperty(e.Entity, &oamdns.DNSRecordProperty{
             PropertyName: "dns_record",
@@ -177,37 +322,96 @@ func (t *txtServiceDiscovery) store(e *et.Event, fqdn *oamdns.FQDN, rr []dns.RR)
             Data: txtValue,
         })
         if err != nil {
-            slog.Error("Failed to create entity property", "txtValue", txtValue, "error", err)
+            slog.Error("Failed to create entity property", 
+                "domain", fqdn.Name,
+                "plugin", t.name,
+                "txtValue", txtValue, 
+                "error", err)
+        } else {
+            recordsStored++
+            slog.Debug("TXT record stored successfully", 
+                "domain", fqdn.Name,
+                "plugin", t.name,
+                "recordIndex", i)
         }
     }
+    
+    slog.Debug("TXT record storage completed", 
+        "domain", fqdn.Name, 
+        "plugin", t.name,
+        "recordsStored", recordsStored)
 }
 
 // process analyzes TXT records to identify services based on predefined patterns
 func (t *txtServiceDiscovery) process(e *et.Event, fqdn *oamdns.FQDN, txtRecords []dns.RR, props []*oamdns.DNSRecordProperty) {
+    slog.Debug("Starting TXT record processing", 
+        "domain", fqdn.Name, 
+        "plugin", t.name,
+        "newRecords", len(txtRecords),
+        "cachedRecords", len(props))
+
     // Analyze newly queried TXT records
-    for _, record := range txtRecords {
+    for i, record := range txtRecords {
         txtValue := strings.Join((record.(*dns.TXT)).Txt, " ")
+        slog.Debug("Analyzing TXT record", 
+            "domain", fqdn.Name, 
+            "plugin", t.name,
+            "recordIndex", i,
+            "value", txtValue)
+            
+        matchFound := false
         for pattern, serviceName := range matchers {
             if strings.Contains(txtValue, pattern) {
+                matchFound = true
                 // Log the discovered service
                 slog.Info("Discovered "+serviceName+" service in TXT record",
                     "domain", fqdn.Name,
-                    "plugin", t.name)
+                    "plugin", t.name,
+                    "pattern", pattern,
+                    "txtValue", txtValue)
                 break
             }
+        }
+        
+        if !matchFound {
+            slog.Debug("No service pattern matches in TXT record", 
+                "domain", fqdn.Name,
+                "plugin", t.name,
+                "txtValue", txtValue)
         }
     }
 
     // Analyze cached TXT records
-    for _, prop := range props {
+    for i, prop := range props {
+        slog.Debug("Analyzing cached TXT record", 
+            "domain", fqdn.Name, 
+            "plugin", t.name,
+            "recordIndex", i,
+            "value", prop.Data)
+            
+        matchFound := false
         for pattern, serviceName := range matchers {
             if strings.Contains(prop.Data, pattern) {
+                matchFound = true
                 // Log the discovered service
                 slog.Info("Discovered "+serviceName+" service in cached TXT record",
                     "domain", fqdn.Name,
-                    "plugin", t.name)
+                    "plugin", t.name,
+                    "pattern", pattern,
+                    "txtValue", prop.Data)
                 break
             }
         }
+        
+        if !matchFound {
+            slog.Debug("No service pattern matches in cached TXT record", 
+                "domain", fqdn.Name,
+                "plugin", t.name,
+                "txtValue", prop.Data)
+        }
     }
+    
+    slog.Debug("Completed TXT record processing", 
+        "domain", fqdn.Name, 
+        "plugin", t.name)
 }
