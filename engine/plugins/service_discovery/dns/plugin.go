@@ -6,7 +6,6 @@ import (
     "github.com/owasp-amass/amass/v4/engine/plugins/support"
     et "github.com/owasp-amass/amass/v4/engine/types"
     oam "github.com/owasp-amass/open-asset-model"
-    oamdns "github.com/owasp-amass/open-asset-model/dns"
 )
 
 // dnsPlugin manages DNS-based service discovery plugins
@@ -33,13 +32,13 @@ func (p *dnsPlugin) Name() string {
 // Start implements the Service interface
 func (p *dnsPlugin) Start(r et.Registry) error {
     p.registry = r
-    
+
     // Initialize and register the TXT service discovery plugin
     txtDiscovery := NewTXTServiceDiscovery()
     if err := p.registerHandler(txtDiscovery, 9, oam.FQDN); err != nil {
         return err
     }
-    
+
     return nil
 }
 
@@ -47,7 +46,7 @@ func (p *dnsPlugin) Start(r et.Registry) error {
 func (p *dnsPlugin) Stop() {
     p.pluginMux.Lock()
     defer p.pluginMux.Unlock()
-    
+
     // Stop all registered plugins
     for _, plugin := range p.plugins {
         plugin.Stop()
@@ -59,10 +58,10 @@ func (p *dnsPlugin) Stop() {
 func (p *dnsPlugin) registerHandler(plugin et.Plugin, priority int, eventType oam.AssetType) error {
     p.pluginMux.Lock()
     defer p.pluginMux.Unlock()
-    
+
     // Add the plugin to our managed list
     p.plugins = append(p.plugins, plugin)
-    
+
     // Get the appropriate callback function based on plugin type
     var callback func(*et.Event) error
     if txtPlugin, ok := plugin.(*txtServiceDiscovery); ok {
@@ -70,7 +69,7 @@ func (p *dnsPlugin) registerHandler(plugin et.Plugin, priority int, eventType oa
     } else {
         return nil
     }
-    
+
     // Register the handler with the registry
     return p.registry.RegisterHandler(&et.Handler{
         Plugin:       plugin,
