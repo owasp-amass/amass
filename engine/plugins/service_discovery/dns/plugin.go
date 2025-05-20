@@ -5,7 +5,8 @@ import (
 
     "github.com/owasp-amass/amass/v4/engine/plugins/support"
     et "github.com/owasp-amass/amass/v4/engine/types"
-    "github.com/owasp-amass/open-asset-model/domain"
+    oam "github.com/owasp-amass/open-asset-model"
+    oamdns "github.com/owasp-amass/open-asset-model/dns"
 )
 
 // dnsPlugin manages DNS-based service discovery plugins
@@ -35,7 +36,7 @@ func (p *dnsPlugin) Start(r et.Registry) error {
     
     // Initialize and register the TXT service discovery plugin
     txtDiscovery := NewTXTServiceDiscovery()
-    if err := p.registerHandler(txtDiscovery, 9, domain.FQDN); err != nil {
+    if err := p.registerHandler(txtDiscovery, 9, oam.FQDN); err != nil {
         return err
     }
     
@@ -55,7 +56,7 @@ func (p *dnsPlugin) Stop() {
 }
 
 // registerHandler registers a plugin as a handler with the registry and adds it to the managed plugins list
-func (p *dnsPlugin) registerHandler(plugin et.Plugin, priority int, eventType domain.AssetType) error {
+func (p *dnsPlugin) registerHandler(plugin et.Plugin, priority int, eventType oam.AssetType) error {
     p.pluginMux.Lock()
     defer p.pluginMux.Unlock()
     
