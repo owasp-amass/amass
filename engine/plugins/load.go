@@ -16,7 +16,7 @@ import (
 	"github.com/owasp-amass/amass/v4/engine/plugins/horizontals"
 	"github.com/owasp-amass/amass/v4/engine/plugins/scrape"
 	hp "github.com/owasp-amass/amass/v4/engine/plugins/service_discovery/http_probes"
-	dnsp "github.com/owasp-amass/amass/v4/engine/plugins/service_discovery/dns"
+	"github.com/owasp-amass/amass/v4/engine/plugins/service_discovery/dns"
 	"github.com/owasp-amass/amass/v4/engine/plugins/whois"
 	"github.com/owasp-amass/amass/v4/engine/plugins/whois/bgptools"
 	et "github.com/owasp-amass/amass/v4/engine/types"
@@ -50,7 +50,7 @@ var pluginNewFuncs = []func() et.Plugin{
 	gleif.NewGLEIF,
 	horizontals.NewHorizontals,
 	hp.NewHTTPProbing,
-	dnsp.NewDNSPlugin,
+	NewDNSPlugin,
 	rdap.NewRDAP,
 	scrape.NewBing,
 	scrape.NewDNSHistory,
