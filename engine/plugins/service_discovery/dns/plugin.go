@@ -1,7 +1,11 @@
+// engine/plugins/service_discovery/dns/plugin.go
+// Updated to align with http_probes plugin structure and logging conventions.
+// SPDX-License-Identifier: Apache-2.0
+
 package dns
 
 import (
-    "log"
+    "log/slog"
     "sync"
 
     "github.com/owasp-amass/amass/v4/engine/plugins/support"
@@ -9,95 +13,91 @@ import (
     oam "github.com/owasp-amass/open-asset-model"
 )
 
-// dnsPlugin manages DNS-based service discovery plugins
+// dnsPlugin manages DNS‑based service‑discovery sub‑plugins (e.g. TXT).
+// It follows the same skeleton used by service_discovery/http_probes/plugin.go
+// so that logging, lifecycle and handler‑registration behaviours are consistent
+// across discovery stacks.
+
 type dnsPlugin struct {
-    name      string
-    registry  et.Registry
-    plugins   []et.Plugin
-    pluginMux sync.Mutex
+    name     string
+    source   *et.Source
+
+    // runtime state
+    registry et.Registry
+    log      *slog.Logger
+
+    // child plugins that this manager started & must stop
+    plugins []et.Plugin
+    mu      sync.Mutex
 }
 
-// NewDNSPlugin returns an initialized DNS service discovery plugin manager
+// NewDNSPlugin instantiates the manager so it can be wired into engine/plugins/load.go.
 func NewDNSPlugin() et.Plugin {
-    log.Println("[dnsPlugin] Initializing DNS service discovery plugin manager")
     return &dnsPlugin{
-        name:    "dns_service_discovery",
-        plugins: []et.Plugin{},
+        name: "dns_service_discovery",
+        source: &et.Source{
+            Name:       "dns_service_discovery",
+            Confidence: 100,
+        },
     }
 }
 
-// Name implements the Service interface
-func (p *dnsPlugin) Name() string {
-    log.Printf("[dnsPlugin] Returning plugin name: %s", p.name)
-    return p.name
-}
+// Name implements et.Plugin.
+func (p *dnsPlugin) Name() string { return p.name }
 
-// Start implements the Service interface
+// Start initialises the manager and registers handlers for its children.
 func (p *dnsPlugin) Start(r et.Registry) error {
-    log.Println("[dnsPlugin] Starting DNS service discovery plugin manager")
     p.registry = r
+    p.log = r.Log().WithGroup("plugin").With("name", p.name)
 
-    // Initialize and register the TXT service discovery plugin
-    log.Println("[dnsPlugin] Initializing TXT service discovery plugin")
-    txtDiscovery := NewTXTServiceDiscovery()
-    if err := p.registerHandler(txtDiscovery, 9, oam.FQDN); err != nil {
-        log.Printf("[dnsPlugin] Failed to register TXT service discovery plugin: %v", err)
+    // --- register TXT‑based discovery --------------------------------------
+    txt := NewTXTServiceDiscovery()
+    if err := p.registerHandler(txt, 9, oam.FQDN); err != nil {
+        p.log.Error("could not register TXT discovery handler", "err", err)
         return err
     }
-    log.Println("[dnsPlugin] Successfully registered TXT service discovery plugin")
 
+    p.log.Info("DNS service‑discovery manager started")
     return nil
 }
 
-// Stop implements the Service interface
+// Stop terminates all children and releases resources.
 func (p *dnsPlugin) Stop() {
-    log.Println("[dnsPlugin] Stopping DNS service discovery plugin manager")
-    p.pluginMux.Lock()
-    defer p.pluginMux.Unlock()
+    p.mu.Lock()
+    defer p.mu.Unlock()
 
-    // Stop all registered plugins
-    for _, plugin := range p.plugins {
-        log.Printf("[dnsPlugin] Stopping plugin: %s", plugin.Name())
-        plugin.Stop()
+    for _, child := range p.plugins {
+        p.log.Info("stopping child plugin", "child", child.Name())
+        child.Stop()
     }
-    p.plugins = []et.Plugin{}
-    log.Println("[dnsPlugin] All plugins stopped")
+    p.plugins = nil
+    p.log.Info("DNS service‑discovery manager stopped")
 }
 
-// registerHandler registers a plugin as a handler with the registry and adds it to the managed plugins list
-func (p *dnsPlugin) registerHandler(plugin et.Plugin, priority int, eventType oam.AssetType) error {
-    log.Printf("[dnsPlugin] Registering plugin: %s with priority: %d and event type: %v", plugin.Name(), priority, eventType)
-    p.pluginMux.Lock()
-    defer p.pluginMux.Unlock()
-
-    // Add the plugin to our managed list
-    p.plugins = append(p.plugins, plugin)
-    log.Printf("[dnsPlugin] Plugin added to managed list: %s", plugin.Name())
-
-    // Get the appropriate callback function based on plugin type
-    var callback func(*et.Event) error
-    if txtPlugin, ok := plugin.(*txtServiceDiscovery); ok {
-        callback = txtPlugin.Check
-        log.Printf("[dnsPlugin] Using Check callback for plugin: %s", plugin.Name())
-    } else {
-        log.Printf("[dnsPlugin] Plugin type assertion failed for: %s", plugin.Name())
+// registerHandler wraps a child plugin in an et.Handler and registers it.
+func (p *dnsPlugin) registerHandler(child et.Plugin, priority int, evt oam.AssetType) error {
+    // capture the child’s Check method if it has one.
+    var cb func(*et.Event) error
+    switch v := any(child).(type) {
+    case interface{ Check(*et.Event) error }:
+        cb = v.Check
+    default:
+        // Child does not expose event processing; still add to list so we can Stop() it.
+        p.log.Warn("child plugin exposes no Check method – handler not registered", "child", child.Name())
         return nil
     }
 
-    // Register the handler with the registry
-    err := p.registry.RegisterHandler(&et.Handler{
-        Plugin:       plugin,
-        Name:         plugin.Name(),
+    // remember to Stop() later
+    p.mu.Lock()
+    p.plugins = append(p.plugins, child)
+    p.mu.Unlock()
+
+    return p.registry.RegisterHandler(&et.Handler{
+        Plugin:       child,
+        Name:         child.Name(),
         Priority:     priority,
-        EventType:    eventType,
-        Callback:     callback,
+        EventType:    evt,
+        Callback:     cb,
         MaxInstances: support.MaxHandlerInstances,
     })
-    if err != nil {
-        log.Printf("[dnsPlugin] Failed to register handler for plugin: %s, error: %v", plugin.Name(), err)
-        return err
-    }
-    log.Printf("[dnsPlugin] Successfully registered handler for plugin: %s", plugin.Name())
-
-    return nil
 }
