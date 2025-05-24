@@ -8,7 +8,7 @@ import (
 
     et "github.com/owasp-amass/amass/v4/engine/types"
     oamdns "github.com/owasp-amass/open-asset-model/dns"
-    oam "github.com/owasp-amass/open-asset-model" // Import oam
+    oam "github.com/owasp-amass/open-asset-model"
     "github.com/miekg/dns"
     "github.com/owasp-amass/amass/v4/engine/plugins/support"
 )
