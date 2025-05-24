@@ -87,7 +87,7 @@ func (t *txtServiceDiscovery) Stop() {
 // Exported to allow access from the registration in plugin.go
 func (t *txtServiceDiscovery) Check(e *et.Event) error {
     slog.Debug("TXT service discovery check started", "plugin", t.name)
-    
+
     // Ensure the event and its associated entity are valid
     if e == nil {
         slog.Debug("Skipping check - event is nil", "plugin", t.name)
@@ -115,7 +115,7 @@ func (t *txtServiceDiscovery) Check(e *et.Event) error {
 
     // Determine the TTL start time for the asset
     since, err := support.TTLStartTime(e.Session.Config(), "FQDN", "FQDN", t.name)
-    err != nil {
+    if err != nil {
         slog.Error("Failed to get TTL start time", 
             "domain", fqdn.Name, 
             "plugin", t.name, 
