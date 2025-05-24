@@ -7,7 +7,8 @@ RUN go install -v ./...
 FROM alpine:latest
 RUN apk add --no-cache bash ca-certificates
 RUN apk --no-cache --update upgrade
-COPY --from=build /go/bin/oam_enum /bin/amass
+COPY --from=build /go/bin/amass /bin/amass
+COPY --from=build /go/bin/oam_enum /bin/enum
 COPY --from=build /go/bin/amass_engine /bin/engine
 COPY --from=build /go/bin/ae_isready /bin/ae_isready
 COPY --from=build /go/bin/oam_subs /bin/subs
