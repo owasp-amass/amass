@@ -115,7 +115,7 @@ func (t *txtServiceDiscovery) Check(e *et.Event) error {
 
     // Determine the TTL start time for the asset
     since, err := support.TTLStartTime(e.Session.Config(), "FQDN", "FQDN", t.name)
-    if err != nil {
+    err != nil {
         slog.Error("Failed to get TTL start time", 
             "domain", fqdn.Name, 
             "plugin", t.name, 
@@ -414,4 +414,29 @@ func (t *txtServiceDiscovery) process(e *et.Event, fqdn *oamdns.FQDN, txtRecords
     slog.Debug("Completed TXT record processing", 
         "domain", fqdn.Name, 
         "plugin", t.name)
+}
+
+// registerHandler registers a child plugin's handler for processing events
+func (p *dnsPlugin) registerHandler(child et.Plugin, priority int, evt oam.AssetType) error {
+    var cb func(*et.Event) error
+    switch v := any(child).(type) {
+    case interface{ Check(*et.Event) error }:
+        cb = v.Check
+    default:
+        p.log.Warn("child plugin exposes no Check method – handler not registered", "child", child.Name())
+        return nil
+    }
+
+    p.mu.Lock()
+    p.plugins = append(p.plugins, child)
+    p.mu.Unlock()
+
+    return p.registry.RegisterHandler(&et.Handler{
+        Plugin:       child,
+        Name:         child.Name(),
+        Priority:     priority,
+        EventType:    evt,
+        Callback:     cb,
+        MaxInstances: support.MaxHandlerInstances,
+    })
 }
