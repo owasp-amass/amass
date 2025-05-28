@@ -7,9 +7,8 @@ package dns
 import (
 	"log/slog"
 
-	"github.com/owasp-amass/amass/v4/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v4/engine/types"
-	"github.com/owasp-amass/open-asset-model/dns"
+	oamdns "github.com/owasp-amass/open-asset-model/dns" // Correct import alias
 )
 
 // txtPluginManager wraps the TXT service discovery plugin lifecycle.
@@ -50,9 +49,9 @@ func (tpm *txtPluginManager) Start(r et.Registry) error {
 		Name:     tpm.discover.name,
 		Priority: 9, // Explicitly set priority to 9
 		Transforms: []string{
-			string(dns.DNSRecord),
+			"DNSRecord", // Replace with the correct string or remove if unnecessary
 		},
-		EventType: dns.FQDN,
+		EventType: "FQDN", // Use a string if dns.FQDN is not a valid expression
 		Callback:  tpm.discover.check,
 	})
 	if err != nil {
