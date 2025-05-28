@@ -1,103 +1,69 @@
-// engine/plugins/service_discovery/dns/plugin.go
-// Updated to align with http_probes plugin structure and logging conventions.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
 package dns
 
 import (
-    "log/slog"
-    "sync"
+	"log/slog"
 
-    "github.com/owasp-amass/amass/v4/engine/plugins/support"
-    et "github.com/owasp-amass/amass/v4/engine/types"
-    oam "github.com/owasp-amass/open-asset-model"
+	"github.com/owasp-amass/amass/v4/engine/plugins/support"
+	et "github.com/owasp-amass/amass/v4/engine/types"
+	"github.com/owasp-amass/open-asset-model/dns"
 )
 
-// dnsPlugin manages DNS‑based service‑discovery sub‑plugins (e.g. TXT).
-// It follows the same skeleton used by service_discovery/http_probes/plugin.go
-// so that logging, lifecycle and handler‑registration behaviours are consistent
-// across discovery stacks.
-
-type dnsPlugin struct {
-    name     string
-    source   *et.Source
-
-    // runtime state
-    registry et.Registry
-    log      *slog.Logger
-
-    // child plugins that this manager started & must stop
-    plugins []et.Plugin
-    mu      sync.Mutex
+// txtPluginManager wraps the TXT service discovery plugin lifecycle.
+type txtPluginManager struct {
+	name     string
+	log      *slog.Logger
+	source   *et.Source
+	discover *txtServiceDiscovery
 }
 
-// NewDNSPlugin instantiates the manager so it can be wired into engine/plugins/load.go.
-func NewDNSPlugin() et.Plugin {
-    return &dnsPlugin{
-        name: "dns_service_discovery",
-        source: &et.Source{
-            Name:       "dns_service_discovery",
-            Confidence: 100,
-        },
-    }
+// NewTXTPlugin returns a new instance of the TXT service discovery plugin as an et.Plugin.
+func NewTXTPlugin() et.Plugin {
+	return &txtPluginManager{
+		name: "TXT-Service-Discovery",
+		source: &et.Source{
+			Name:       "TXT-Service-Discovery",
+			Confidence: 100,
+		},
+	}
 }
 
-// Name implements et.Plugin.
-func (p *dnsPlugin) Name() string { return p.name }
-
-// Start initialises the manager and registers handlers for its children.
-func (p *dnsPlugin) Start(r et.Registry) error {
-    p.registry = r
-    p.log = r.Log().WithGroup("plugin").With("name", p.name)
-
-    // --- register TXT‑based discovery --------------------------------------
-    txt := NewTXTServiceDiscovery()
-    if err := p.registerHandler(txt, 9, oam.FQDN); err != nil {
-        p.log.Error("could not register TXT discovery handler", "err", err)
-        return err
-    }
-
-    p.log.Info("DNS service‑discovery manager started")
-    return nil
+// Name returns the plugin's name.
+func (tpm *txtPluginManager) Name() string {
+	return tpm.name
 }
 
-// Stop terminates all children and releases resources.
-func (p *dnsPlugin) Stop() {
-    p.mu.Lock()
-    defer p.mu.Unlock()
+// Start registers the plugin handler with the registry.
+func (tpm *txtPluginManager) Start(r et.Registry) error {
+	tpm.log = r.Log().WithGroup("plugin").With("name", tpm.name)
 
-    for _, child := range p.plugins {
-        p.log.Info("stopping child plugin", "child", child.Name())
-        child.Stop()
-    }
-    p.plugins = nil
-    p.log.Info("DNS service‑discovery manager stopped")
+	tpm.discover = &txtServiceDiscovery{
+		name:   tpm.name + "-FQDN-Check",
+		source: tpm.source,
+	}
+
+	err := r.RegisterHandler(&et.Handler{
+		Plugin:   tpm,
+		Name:     tpm.discover.name,
+		Priority: 9, // Explicitly set priority to 9
+		Transforms: []string{
+			string(dns.DNSRecord),
+		},
+		EventType: dns.FQDN,
+		Callback:  tpm.discover.check,
+	})
+	if err != nil {
+		return err
+	}
+
+	tpm.log.Info("Plugin started")
+	return nil
 }
 
-// registerHandler wraps a child plugin in an et.Handler and registers it.
-func (p *dnsPlugin) registerHandler(child et.Plugin, priority int, evt oam.AssetType) error {
-    // capture the child’s Check method if it has one.
-    var cb func(*et.Event) error
-    switch v := any(child).(type) {
-    case interface{ Check(*et.Event) error }:
-        cb = v.Check
-    default:
-        // Child does not expose event processing; still add to list so we can Stop() it.
-        p.log.Warn("child plugin exposes no Check method – handler not registered", "child", child.Name())
-        return nil
-    }
-
-    // remember to Stop() later
-    p.mu.Lock()
-    p.plugins = append(p.plugins, child)
-    p.mu.Unlock()
-
-    return p.registry.RegisterHandler(&et.Handler{
-        Plugin:       child,
-        Name:         child.Name(),
-        Priority:     priority,
-        EventType:    evt,
-        Callback:     cb,
-        MaxInstances: support.MaxHandlerInstances,
-    })
+// Stop logs that the plugin has stopped.
+func (tpm *txtPluginManager) Stop() {
+	tpm.log.Info("Plugin stopped")
 }
