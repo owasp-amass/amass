@@ -8,7 +8,6 @@ import (
 	"log/slog"
 
 	et "github.com/owasp-amass/amass/v4/engine/types"
-	oamdns "github.com/owasp-amass/open-asset-model/dns" // Correct import alias
 )
 
 // txtPluginManager wraps the TXT service discovery plugin lifecycle.
