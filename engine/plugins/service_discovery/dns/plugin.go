@@ -45,14 +45,14 @@ func (tpm *txtPluginManager) Start(r et.Registry) error {
 	}
 
 	err := r.RegisterHandler(&et.Handler{
-		Plugin:   tpm,
-		Name:     tpm.discover.name,
-		Priority: 9,
+		Plugin:     tpm,
+		Name:       tpm.discover.name,
+		Priority:   9,
 		Transforms: []string{
-			"DNSRecord", // Replace with the correct string or remove if unnecessary
+			"DNSRecord",
 		},
-		EventType: string(oamdns.FQDN), // Use oamdns.FQDN if it is a valid constant
-		Callback:  tpm.discover.check,
+		EventType:  (oamdns.FQDN{}).AssetType(),
+		Callback:   tpm.discover.check,
 	})
 	if err != nil {
 		return err
