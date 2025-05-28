@@ -1,5 +1,6 @@
-// Copyright © by Jeff Foley 2017-2025. All rights reserved.
-// Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// Copyright © by Jeff Foley 2017-2025. All rights 
+// reserved. Use of this source code is governed by Apache 
+// 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
 package dns
@@ -8,7 +9,7 @@ import (
 	"log/slog"
 
 	et "github.com/owasp-amass/amass/v4/engine/types"
-	oamdns "github.com/owasp-amass/open-asset-model/dns" // Import the oamdns package
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
 )
 
 // txtPluginManager wraps the TXT service discovery plugin lifecycle.
@@ -19,7 +20,7 @@ type txtPluginManager struct {
 	discover *txtServiceDiscovery
 }
 
-// NewTXTPlugin returns a new instance of the TXT service discovery plugin as an et.Plugin.
+// NewTXTPlugin returns a new instance of the TXT service discovery plugin.
 func NewTXTPlugin() et.Plugin {
 	return &txtPluginManager{
 		name: "TXT-Service-Discovery",
@@ -28,6 +29,12 @@ func NewTXTPlugin() et.Plugin {
 			Confidence: 100,
 		},
 	}
+}
+
+// NewDNSPlugin is provided for backward compatibility with the plugin loader.
+// It simply returns the TXT plugin under the original DNS‐plugin factory name.
+func NewDNSPlugin() et.Plugin {
+	return NewTXTPlugin()
 }
 
 // Name returns the plugin's name.
@@ -48,9 +55,7 @@ func (tpm *txtPluginManager) Start(r et.Registry) error {
 		Plugin:     tpm,
 		Name:       tpm.discover.name,
 		Priority:   9,
-		Transforms: []string{
-			"DNSRecord",
-		},
+		Transforms: []string{"DNSRecord"},
 		EventType:  (oamdns.FQDN{}).AssetType(),
 		Callback:   tpm.discover.check,
 	})
