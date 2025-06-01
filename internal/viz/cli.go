@@ -65,7 +65,7 @@ func NewFlagset(args *Args, errorHandling flag.ErrorHandling) *flag.FlagSet {
 	return fs
 }
 
-func CLIWorkflow() {
+func CLIWorkflow(clArgs []string) {
 	var args Args
 	args.Domains = stringset.New()
 	defer args.Domains.Close()
@@ -85,7 +85,7 @@ func CLIWorkflow() {
 		return
 	}
 
-	if err := vizCommand.Parse(os.Args[1:]); err != nil {
+	if err := vizCommand.Parse(clArgs); err != nil {
 		_, _ = afmt.R.Fprintf(color.Error, "%v\n", err)
 		os.Exit(1)
 	}

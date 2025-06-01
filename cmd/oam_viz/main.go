@@ -23,9 +23,11 @@
 package main
 
 import (
+	"os"
+
 	"github.com/owasp-amass/amass/v4/internal/viz"
 )
 
 func main() {
-	viz.CLIWorkflow()
+	viz.CLIWorkflow(os.Args[1:])
 }
