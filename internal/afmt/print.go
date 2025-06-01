@@ -12,7 +12,7 @@ import (
 	"strings"
 
 	"github.com/fatih/color"
-	"github.com/owasp-amass/amass/v4/utils"
+	amassnet "github.com/owasp-amass/amass/v4/internal/net"
 )
 
 // Banner is the ASCII art logo used within help output.
@@ -80,8 +80,8 @@ func FprintBanner(out io.Writer) {
 }
 
 // DesiredAddrTypes removes undesired address types from the AddressInfo slice.
-func DesiredAddrTypes(addrs []utils.AddressInfo, ipv4, ipv6 bool) []utils.AddressInfo {
-	var kept []utils.AddressInfo
+func DesiredAddrTypes(addrs []amassnet.AddressInfo, ipv4, ipv6 bool) []amassnet.AddressInfo {
+	var kept []amassnet.AddressInfo
 
 	for _, addr := range addrs {
 		if ipv4 && IsIPv4(addr.Address) {
@@ -105,7 +105,7 @@ func IsIPv6(ip net.IP) bool {
 }
 
 // UpdateSummaryData updates the summary maps using the provided requests.Output data.
-func UpdateSummaryData(output *utils.Output, asns map[int]*utils.ASNSummaryData) {
+func UpdateSummaryData(output *amassnet.Output, asns map[int]*amassnet.ASNSummaryData) {
 	for _, addr := range output.Addresses {
 		if addr.CIDRStr == "" {
 			continue
@@ -113,7 +113,7 @@ func UpdateSummaryData(output *utils.Output, asns map[int]*utils.ASNSummaryData)
 
 		data, found := asns[addr.ASN]
 		if !found {
-			asns[addr.ASN] = &utils.ASNSummaryData{
+			asns[addr.ASN] = &amassnet.ASNSummaryData{
 				Name:      addr.Description,
 				Netblocks: make(map[string]int),
 			}
@@ -125,12 +125,12 @@ func UpdateSummaryData(output *utils.Output, asns map[int]*utils.ASNSummaryData)
 }
 
 // PrintEnumerationSummary outputs the summary information utilized by the command-line tools.
-func PrintEnumerationSummary(total int, asns map[int]*utils.ASNSummaryData, demo bool) {
+func PrintEnumerationSummary(total int, asns map[int]*amassnet.ASNSummaryData, demo bool) {
 	FprintEnumerationSummary(color.Error, total, asns, demo)
 }
 
 // FprintEnumerationSummary outputs the summary information utilized by the command-line tools.
-func FprintEnumerationSummary(out io.Writer, total int, asns map[int]*utils.ASNSummaryData, demo bool) {
+func FprintEnumerationSummary(out io.Writer, total int, asns map[int]*amassnet.ASNSummaryData, demo bool) {
 	pad := func(num int, chr string) {
 		for i := 0; i < num; i++ {
 			_, _ = B.Fprint(out, chr)
@@ -208,7 +208,7 @@ func censorNetBlock(input string) string {
 }
 
 // OutputLineParts returns the parts of a line to be printed for a requests.Output.
-func OutputLineParts(out *utils.Output, addrs, demo bool) (name, ips string) {
+func OutputLineParts(out *amassnet.Output, addrs, demo bool) (name, ips string) {
 	if addrs {
 		for i, a := range out.Addresses {
 			if i != 0 {

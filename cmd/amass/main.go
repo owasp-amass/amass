@@ -41,7 +41,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/owasp-amass/amass/v4/config"
 	et "github.com/owasp-amass/amass/v4/engine/types"
-	"github.com/owasp-amass/amass/v4/utils/afmt"
+	"github.com/owasp-amass/amass/v4/internal/afmt"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
 	slogcommon "github.com/samber/slog-common"

@@ -2,7 +2,7 @@
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
-package utils
+package net
 
 import (
 	"net"
@@ -17,27 +17,6 @@ import (
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
 	"github.com/yl2chen/cidranger"
 )
-
-var reservedCIDRs = []string{
-	"192.168.0.0/16",
-	"172.16.0.0/12",
-	"10.0.0.0/8",
-	"127.0.0.0/8",
-	"224.0.0.0/4",
-	"240.0.0.0/4",
-	"100.64.0.0/10",
-	"198.18.0.0/15",
-	"169.254.0.0/16",
-	"192.88.99.0/24",
-	"192.0.0.0/24",
-	"192.0.2.0/24",
-	"192.94.77.0/24",
-	"192.94.78.0/24",
-	"192.52.193.0/24",
-	"192.12.109.0/24",
-	"192.31.196.0/24",
-	"192.0.0.0/29",
-}
 
 // ASNCache builds a cache of ASN and netblock information.
 type ASNCache struct {
@@ -82,17 +61,6 @@ type ASNRequest struct {
 	AllocationDate time.Time
 	Description    string
 	Netblocks      []string
-}
-
-// The reserved network address ranges
-var reservedAddrRanges []*net.IPNet
-
-func init() {
-	for _, cidr := range reservedCIDRs {
-		if _, ipnet, err := net.ParseCIDR(cidr); err == nil {
-			reservedAddrRanges = append(reservedAddrRanges, ipnet)
-		}
-	}
 }
 
 func (e *cacheRangerEntry) Network() net.IPNet {

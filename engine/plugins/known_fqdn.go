@@ -12,7 +12,7 @@ import (
 
 	"github.com/owasp-amass/amass/v4/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v4/engine/types"
-	"github.com/owasp-amass/amass/v4/utils"
+	"github.com/owasp-amass/amass/v4/internal/db"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
@@ -74,7 +74,7 @@ func (d *knownFQDN) check(e *et.Event) error {
 }
 
 func (d *knownFQDN) lookup(e *et.Event, dom *dbt.Entity) []*dbt.Entity {
-	names, _ := utils.FindByFQDNScope(e.Session.Cache(), dom, time.Time{})
+	names, _ := db.FindByFQDNScope(e.Session.Cache(), dom, time.Time{})
 	return names
 }
 

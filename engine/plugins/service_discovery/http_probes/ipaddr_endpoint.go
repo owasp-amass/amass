@@ -11,7 +11,7 @@ import (
 
 	"github.com/owasp-amass/amass/v4/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v4/engine/types"
-	amassnet "github.com/owasp-amass/amass/v4/utils/net"
+	amassnet "github.com/owasp-amass/amass/v4/internal/net"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/general"

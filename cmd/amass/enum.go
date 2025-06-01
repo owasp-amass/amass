@@ -21,8 +21,8 @@ import (
 	"github.com/fatih/color"
 	"github.com/owasp-amass/amass/v4/config"
 	"github.com/owasp-amass/amass/v4/engine/api/graphql/client"
+	"github.com/owasp-amass/amass/v4/internal/afmt"
 	"github.com/owasp-amass/amass/v4/resources"
-	"github.com/owasp-amass/amass/v4/utils/afmt"
 )
 
 const enumUsageMsg = "enum [options] -d DOMAIN"
