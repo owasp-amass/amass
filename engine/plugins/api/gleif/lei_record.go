@@ -12,7 +12,7 @@ import (
 	"strings"
 
 	et "github.com/owasp-amass/amass/v4/engine/types"
-	"github.com/owasp-amass/amass/v4/utils/net/http"
+	"github.com/owasp-amass/amass/v4/internal/net/http"
 	dbt "github.com/owasp-amass/asset-db/types"
 	"github.com/owasp-amass/open-asset-model/general"
 )

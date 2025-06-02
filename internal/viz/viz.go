@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/owasp-amass/amass/v4/utils"
+	amassdb "github.com/owasp-amass/amass/v4/internal/db"
 	"github.com/owasp-amass/asset-db/repository"
 	"github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
@@ -44,7 +44,7 @@ func VizData(domains []string, since time.Time, db repository.Repository) ([]Nod
 	var next []*types.Entity
 	for _, d := range domains {
 		if ents, err := db.FindEntitiesByContent(&oamdns.FQDN{Name: d}, since); err == nil && len(ents) == 1 {
-			if n, err := utils.FindByFQDNScope(db, ents[0], since); err == nil && len(n) > 0 {
+			if n, err := amassdb.FindByFQDNScope(db, ents[0], since); err == nil && len(n) > 0 {
 				next = append(next, n...)
 			}
 		}

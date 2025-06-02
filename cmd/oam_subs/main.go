@@ -37,8 +37,9 @@ import (
 	"github.com/caffix/stringset"
 	"github.com/fatih/color"
 	"github.com/owasp-amass/amass/v4/config"
-	"github.com/owasp-amass/amass/v4/utils"
-	"github.com/owasp-amass/amass/v4/utils/afmt"
+	"github.com/owasp-amass/amass/v4/internal/afmt"
+	amassdb "github.com/owasp-amass/amass/v4/internal/db"
+	amassnet "github.com/owasp-amass/amass/v4/internal/net"
 	"github.com/owasp-amass/asset-db/repository"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
@@ -70,7 +71,7 @@ type dbArgs struct {
 	}
 }
 
-type outLookup map[string]*utils.Output
+type outLookup map[string]*amassnet.Output
 
 func main() {
 	var args dbArgs
@@ -152,7 +153,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	db := utils.OpenGraphDatabase(cfg)
+	db := amassdb.OpenGraphDatabase(cfg)
 	if db == nil {
 		_, _ = afmt.R.Fprintln(color.Error, "Failed to connect with the database")
 		os.Exit(1)
@@ -195,10 +196,10 @@ func showData(args *dbArgs, asninfo bool, db repository.Repository) {
 		_, _ = outfile.Seek(0, 0)
 	}
 
-	var cache *utils.ASNCache
+	var cache *amassnet.ASNCache
 	if asninfo {
-		cache = utils.NewASNCache()
-		if err := utils.FillCache(cache, db); err != nil {
+		cache = amassnet.NewASNCache()
+		if err := amassnet.FillCache(cache, db); err != nil {
 			_, _ = afmt.R.Printf("Failed to populate the ASN cache: %v\n", err)
 			return
 		}
@@ -209,7 +210,7 @@ func showData(args *dbArgs, asninfo bool, db repository.Repository) {
 		names = addAddresses(context.Background(), db, names, asninfo, cache)
 	}
 
-	asns := make(map[int]*utils.ASNSummaryData)
+	asns := make(map[int]*amassnet.ASNSummaryData)
 	for _, out := range names {
 		if len(domains) > 0 && !domainNameInScope(out.Name, domains) {
 			continue
@@ -265,7 +266,7 @@ func showData(args *dbArgs, asninfo bool, db repository.Repository) {
 	}
 }
 
-func getNames(ctx context.Context, domains []string, asninfo bool, db repository.Repository) []*utils.Output {
+func getNames(ctx context.Context, domains []string, asninfo bool, db repository.Repository) []*amassnet.Output {
 	if len(domains) == 0 {
 		return nil
 	}
@@ -277,7 +278,7 @@ func getNames(ctx context.Context, domains []string, asninfo bool, db repository
 	var assets []*dbt.Entity
 	for _, d := range domains {
 		if ents, err := db.FindEntitiesByContent(&oamdns.FQDN{Name: d}, qtime); err == nil && len(ents) == 1 {
-			if n, err := utils.FindByFQDNScope(db, ents[0], qtime); err == nil && len(n) > 0 {
+			if n, err := amassdb.FindByFQDNScope(db, ents[0], qtime); err == nil && len(n) > 0 {
 				assets = append(assets, n...)
 			}
 		}
@@ -286,17 +287,17 @@ func getNames(ctx context.Context, domains []string, asninfo bool, db repository
 		return nil
 	}
 
-	var names []*utils.Output
+	var names []*amassnet.Output
 	for _, a := range assets {
 		if n, ok := a.Asset.(*oamdns.FQDN); ok && !filter.Has(n.Name) {
-			names = append(names, &utils.Output{Name: n.Name})
+			names = append(names, &amassnet.Output{Name: n.Name})
 			filter.Insert(n.Name)
 		}
 	}
 	return names
 }
 
-func addAddresses(ctx context.Context, db repository.Repository, names []*utils.Output, asninfo bool, cache *utils.ASNCache) []*utils.Output {
+func addAddresses(ctx context.Context, db repository.Repository, names []*amassnet.Output, asninfo bool, cache *amassnet.ASNCache) []*amassnet.Output {
 	var namestrs []string
 	lookup := make(outLookup, len(names))
 	for _, n := range names {
@@ -305,7 +306,7 @@ func addAddresses(ctx context.Context, db repository.Repository, names []*utils.
 	}
 
 	qtime := time.Time{}
-	if pairs, err := utils.NamesToAddrs(db, qtime, namestrs...); err == nil {
+	if pairs, err := amassnet.NamesToAddrs(db, qtime, namestrs...); err == nil {
 		for _, p := range pairs {
 			addr := p.Addr.Address.String()
 
@@ -313,13 +314,13 @@ func addAddresses(ctx context.Context, db repository.Repository, names []*utils.
 				continue
 			}
 			if o, found := lookup[p.FQDN.Name]; found {
-				o.Addresses = append(o.Addresses, utils.AddressInfo{Address: net.ParseIP(addr)})
+				o.Addresses = append(o.Addresses, amassnet.AddressInfo{Address: net.ParseIP(addr)})
 			}
 		}
 	}
 
 	if !asninfo || cache == nil {
-		var output []*utils.Output
+		var output []*amassnet.Output
 		for _, o := range lookup {
 			if len(o.Addresses) > 0 {
 				output = append(output, o)
@@ -346,11 +347,11 @@ func domainNameInScope(name string, scope []string) bool {
 	return discovered
 }
 
-func addInfrastructureInfo(lookup outLookup, cache *utils.ASNCache) []*utils.Output {
-	output := make([]*utils.Output, 0, len(lookup))
+func addInfrastructureInfo(lookup outLookup, cache *amassnet.ASNCache) []*amassnet.Output {
+	output := make([]*amassnet.Output, 0, len(lookup))
 
 	for _, o := range lookup {
-		var newaddrs []utils.AddressInfo
+		var newaddrs []amassnet.AddressInfo
 
 		for _, a := range o.Addresses {
 			i := cache.AddrSearch(a.Address.String())
@@ -359,7 +360,7 @@ func addInfrastructureInfo(lookup outLookup, cache *utils.ASNCache) []*utils.Out
 			}
 
 			_, netblock, _ := net.ParseCIDR(i.Prefix)
-			newaddrs = append(newaddrs, utils.AddressInfo{
+			newaddrs = append(newaddrs, amassnet.AddressInfo{
 				Address:     a.Address,
 				ASN:         i.ASN,
 				CIDRStr:     i.Prefix,

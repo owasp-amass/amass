@@ -14,7 +14,7 @@ import (
 	"time"
 
 	et "github.com/owasp-amass/amass/v4/engine/types"
-	"github.com/owasp-amass/amass/v4/utils"
+	"github.com/owasp-amass/amass/v4/internal/db"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamcert "github.com/owasp-amass/open-asset-model/certificate"
@@ -36,7 +36,7 @@ func SourceToAssetsWithinTTL(session et.Session, name, atype string, src *et.Sou
 		}
 		root := roots[0]
 
-		entities, _ = utils.FindByFQDNScope(session.Cache(), root, since)
+		entities, _ = db.FindByFQDNScope(session.Cache(), root, since)
 	case string(oam.Identifier):
 		if parts := strings.Split(name, ":"); len(parts) == 2 {
 			id := &general.Identifier{

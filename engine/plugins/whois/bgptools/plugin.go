@@ -20,7 +20,7 @@ import (
 	"github.com/miekg/dns"
 	"github.com/owasp-amass/amass/v4/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v4/engine/types"
-	amassnet "github.com/owasp-amass/amass/v4/utils/net"
+	amassnet "github.com/owasp-amass/amass/v4/internal/net"
 	oam "github.com/owasp-amass/open-asset-model"
 	"golang.org/x/time/rate"
 )

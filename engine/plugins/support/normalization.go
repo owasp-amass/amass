@@ -18,7 +18,7 @@ import (
 	"github.com/PuerkitoBio/purell"
 	fnparser "github.com/caffix/fullname_parser"
 	"github.com/nyaruka/phonenumbers"
-	"github.com/owasp-amass/amass/v4/utils/net/http"
+	"github.com/owasp-amass/amass/v4/internal/net/http"
 	oamcert "github.com/owasp-amass/open-asset-model/certificate"
 	"github.com/owasp-amass/open-asset-model/contact"
 	"github.com/owasp-amass/open-asset-model/people"

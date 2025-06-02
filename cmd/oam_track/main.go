@@ -33,8 +33,8 @@ import (
 	"github.com/caffix/stringset"
 	"github.com/fatih/color"
 	"github.com/owasp-amass/amass/v4/config"
-	"github.com/owasp-amass/amass/v4/utils"
-	"github.com/owasp-amass/amass/v4/utils/afmt"
+	"github.com/owasp-amass/amass/v4/internal/afmt"
+	amassdb "github.com/owasp-amass/amass/v4/internal/db"
 	"github.com/owasp-amass/asset-db/repository"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
@@ -142,7 +142,7 @@ func main() {
 		os.Exit(1)
 	}
 	// Connect with the graph database containing the enumeration data
-	db := utils.OpenGraphDatabase(cfg)
+	db := amassdb.OpenGraphDatabase(cfg)
 	if db == nil {
 		_, _ = afmt.R.Fprintln(color.Error, "Failed to connect with the database")
 		os.Exit(1)
@@ -161,7 +161,7 @@ func getNewNames(domains []string, since time.Time, db repository.Repository) []
 	var assets []*dbt.Entity
 	for _, d := range domains {
 		if ents, err := db.FindEntitiesByContent(&oamdns.FQDN{Name: d}, since); err == nil && len(ents) == 1 {
-			if n, err := utils.FindByFQDNScope(db, ents[0], since); err == nil && len(n) > 0 {
+			if n, err := amassdb.FindByFQDNScope(db, ents[0], since); err == nil && len(n) > 0 {
 				assets = append(assets, n...)
 			}
 		}

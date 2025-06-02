@@ -12,7 +12,7 @@ import (
 	"path"
 	"time"
 
-	amasshttp "github.com/owasp-amass/amass/v4/utils/net/http"
+	amasshttp "github.com/owasp-amass/amass/v4/internal/net/http"
 )
 
 func main() {
