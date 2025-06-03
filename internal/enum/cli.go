@@ -28,6 +28,7 @@ const (
 )
 
 type Args struct {
+	Help              bool
 	Addresses         afmt.ParseIPs
 	ASNs              afmt.ParseInts
 	CIDRs             afmt.ParseCIDRs
@@ -83,14 +84,13 @@ type Args struct {
 	}
 }
 
-func commandUsage(msg string, cmdFlagSet *flag.FlagSet, errBuf *bytes.Buffer) {
-	afmt.PrintBanner()
-	_, _ = afmt.G.Fprintf(color.Error, "Usage: %s %s\n\n", path.Base(os.Args[0]), msg)
-	cmdFlagSet.PrintDefaults()
-	_, _ = afmt.G.Fprintln(color.Error, errBuf.String())
+func NewFlagset(args *Args, errorHandling flag.ErrorHandling) *flag.FlagSet {
+	fs := flag.NewFlagSet("enum", errorHandling)
 
-	_, _ = afmt.G.Fprintln(color.Error)
-	_, _ = afmt.G.Fprintf(color.Error, "The Amass Discord server can be found here: \n%s\n\n", discordInvitation)
+	defineArgumentFlags(fs, args)
+	defineOptionFlags(fs, args)
+	defineFilepathFlags(fs, args)
+	return fs
 }
 
 func defineArgumentFlags(fs *flag.FlagSet, args *Args) {
@@ -117,6 +117,8 @@ func defineArgumentFlags(fs *flag.FlagSet, args *Args) {
 }
 
 func defineOptionFlags(fs *flag.FlagSet, args *Args) {
+	fs.BoolVar(&args.Help, "h", false, "Show the program usage message")
+	fs.BoolVar(&args.Help, "help", false, "Show the program usage message")
 	fs.BoolVar(&args.Options.Active, "active", false, "Attempt zone transfers and certificate name grabs")
 	fs.BoolVar(&args.Options.BruteForcing, "brute", false, "Execute brute forcing after searches")
 	fs.BoolVar(&args.Options.DemoMode, "demo", false, "Censor output to make it suitable for demonstrations")
@@ -265,17 +267,11 @@ func argsAndConfig(clArgs []string) (*config.Config, *Args) {
 		Resolvers:         stringset.New(),
 		Trusted:           stringset.New(),
 	}
-	var help1, help2 bool
-	fs := flag.NewFlagSet("enum", flag.ContinueOnError)
 
+	fs := NewFlagset(&args, flag.ContinueOnError)
+	// set up the flag set to write errors to a buffer
 	enumBuf := new(bytes.Buffer)
 	fs.SetOutput(enumBuf)
-
-	fs.BoolVar(&help1, "h", false, "Show the program usage message")
-	fs.BoolVar(&help2, "help", false, "Show the program usage message")
-	defineArgumentFlags(fs, &args)
-	defineOptionFlags(fs, &args)
-	defineFilepathFlags(fs, &args)
 
 	if len(clArgs) < 1 {
 		commandUsage(UsageMsg, fs, enumBuf)
@@ -285,7 +281,7 @@ func argsAndConfig(clArgs []string) (*config.Config, *Args) {
 		_, _ = afmt.R.Fprintf(color.Error, "%v\n", err)
 		os.Exit(1)
 	}
-	if help1 || help2 {
+	if args.Help {
 		commandUsage(UsageMsg, fs, enumBuf)
 		return nil, &args
 	}
@@ -339,6 +335,16 @@ func argsAndConfig(clArgs []string) (*config.Config, *Args) {
 		os.Exit(1)
 	}
 	return cfg, &args
+}
+
+func commandUsage(msg string, cmdFlagSet *flag.FlagSet, errBuf *bytes.Buffer) {
+	afmt.PrintBanner()
+	_, _ = afmt.G.Fprintf(color.Error, "Usage: %s %s\n\n", path.Base(os.Args[0]), msg)
+	cmdFlagSet.PrintDefaults()
+	_, _ = afmt.G.Fprintln(color.Error, errBuf.String())
+
+	_, _ = afmt.G.Fprintln(color.Error)
+	_, _ = afmt.G.Fprintf(color.Error, "The Amass Discord server can be found here: \n%s\n\n", discordInvitation)
 }
 
 // Setup the amass enumeration settings
