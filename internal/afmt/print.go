@@ -38,6 +38,9 @@ const (
 
 	// Description is the slogan for the Amass Project.
 	Description = "In-depth Attack Surface Mapping and Asset Discovery"
+
+	// The URL to the Amass Project's Discord server.
+	DiscordInvitation string = "https://discord.gg/ANTyEDUXt5"
 )
 
 var (

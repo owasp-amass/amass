@@ -24,10 +24,11 @@ package main
 
 import (
 	"os"
+	"path"
 
 	"github.com/owasp-amass/amass/v4/internal/enum"
 )
 
 func main() {
-	enum.CLIWorkflow(os.Args[1:])
+	enum.CLIWorkflow(path.Base(os.Args[0]), os.Args[1:])
 }

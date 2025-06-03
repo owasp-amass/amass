@@ -24,10 +24,11 @@ package main
 
 import (
 	"os"
+	"path"
 
 	"github.com/owasp-amass/amass/v4/internal/track"
 )
 
 func main() {
-	track.CLIWorkflow(os.Args[1:])
+	track.CLIWorkflow(path.Base(os.Args[0]), os.Args[1:])
 }

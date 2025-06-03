@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path"
 	"time"
 
 	"github.com/caffix/stringset"
@@ -26,7 +25,7 @@ import (
 
 const (
 	TimeFormat = "01/02 15:04:05 2006 MST"
-	UsageMsg   = "assoc [options] [-since '" + TimeFormat + "'] " + "-d domain"
+	UsageMsg   = "[options] [-since '" + TimeFormat + "'] " + "-d domain"
 )
 
 type Args struct {
@@ -61,20 +60,27 @@ func NewFlagset(args *Args, errorHandling flag.ErrorHandling) *flag.FlagSet {
 	return fs
 }
 
-func CLIWorkflow(clArgs []string) {
+func CLIWorkflow(cmdName string, clArgs []string) {
 	var args Args
-	fs := NewFlagset(&args, flag.ContinueOnError)
-
 	args.Domains = stringset.New()
 	defer args.Domains.Close()
 
+	fs := NewFlagset(&args, flag.ContinueOnError)
 	assocBuf := new(bytes.Buffer)
 	fs.SetOutput(assocBuf)
 
 	var usage = func() {
-		_, _ = afmt.G.Fprintf(color.Error, "Usage: %s %s\n\n", path.Base(os.Args[0]), UsageMsg)
-		fs.PrintDefaults()
-		_, _ = afmt.G.Fprintln(color.Error, assocBuf.String())
+		afmt.PrintBanner()
+		_, _ = afmt.G.Fprintf(color.Error, "Usage: %s %s\n\n", cmdName, UsageMsg)
+
+		if args.Help {
+			fs.PrintDefaults()
+			_, _ = afmt.G.Fprintln(color.Error, assocBuf.String())
+			return
+		}
+
+		_, _ = afmt.G.Fprintln(color.Error, "Use the -h or --help flag to see the flags and default values")
+		_, _ = afmt.G.Fprintf(color.Error, "\nThe Amass Discord server can be found here: %s\n\n", afmt.DiscordInvitation)
 	}
 
 	if len(os.Args) < 2 {

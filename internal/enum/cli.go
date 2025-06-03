@@ -11,7 +11,6 @@ import (
 	"io"
 	"os"
 	"os/signal"
-	"path"
 	"time"
 
 	"github.com/caffix/stringset"
@@ -23,8 +22,7 @@ import (
 )
 
 const (
-	UsageMsg          string = "enum [options] -d DOMAIN"
-	discordInvitation string = "https://discord.gg/ANTyEDUXt5"
+	UsageMsg string = "[options] -d DOMAIN"
 )
 
 type Args struct {
@@ -149,9 +147,9 @@ func defineFilepathFlags(fs *flag.FlagSet, args *Args) {
 	fs.StringVar(&args.Filepaths.TermOut, "o", "", "Path to the text file containing terminal stdout/stderr")
 }
 
-func CLIWorkflow(clArgs []string) {
+func CLIWorkflow(cmdName string, clArgs []string) {
 	// Extract the correct config from the user provided arguments and/or configuration file
-	cfg, args := argsAndConfig(clArgs)
+	cfg, args := argsAndConfig(cmdName, clArgs)
 	if cfg == nil {
 		return
 	}
@@ -253,7 +251,7 @@ func CLIWorkflow(clArgs []string) {
 	}
 }
 
-func argsAndConfig(clArgs []string) (*config.Config, *Args) {
+func argsAndConfig(cmdName string, clArgs []string) (*config.Config, *Args) {
 	args := Args{
 		AltWordList:       stringset.New(),
 		AltWordListMask:   stringset.New(),
@@ -273,16 +271,31 @@ func argsAndConfig(clArgs []string) (*config.Config, *Args) {
 	enumBuf := new(bytes.Buffer)
 	fs.SetOutput(enumBuf)
 
+	var usage = func() {
+		afmt.PrintBanner()
+		_, _ = afmt.G.Fprintf(color.Error, "Usage: %s %s\n\n", cmdName, UsageMsg)
+
+		if args.Help {
+			fs.PrintDefaults()
+			_, _ = afmt.G.Fprintln(color.Error, enumBuf.String())
+			return
+		}
+
+		_, _ = afmt.G.Fprintln(color.Error, "Use the -h or --help flag to see the flags and default values")
+		_, _ = afmt.G.Fprintf(color.Error, "\nThe Amass Discord server can be found here: %s\n\n", afmt.DiscordInvitation)
+	}
+
 	if len(clArgs) < 1 {
-		commandUsage(UsageMsg, fs, enumBuf)
+		usage()
 		return nil, &args
 	}
 	if err := fs.Parse(clArgs); err != nil {
+		usage()
 		_, _ = afmt.R.Fprintf(color.Error, "%v\n", err)
 		os.Exit(1)
 	}
 	if args.Help {
-		commandUsage(UsageMsg, fs, enumBuf)
+		usage()
 		return nil, &args
 	}
 	if args.Options.NoColor {
@@ -301,7 +314,7 @@ func argsAndConfig(clArgs []string) (*config.Config, *Args) {
 	if (args.Excluded.Len() > 0 || args.Filepaths.ExcludedSrcs != "") &&
 		(args.Included.Len() > 0 || args.Filepaths.IncludedSrcs != "") {
 		_, _ = afmt.R.Fprintln(color.Error, "Cannot provide both include and exclude arguments")
-		commandUsage(UsageMsg, fs, enumBuf)
+		usage()
 		os.Exit(1)
 	}
 	if err := processInputFiles(&args); err != nil {
@@ -335,16 +348,6 @@ func argsAndConfig(clArgs []string) (*config.Config, *Args) {
 		os.Exit(1)
 	}
 	return cfg, &args
-}
-
-func commandUsage(msg string, cmdFlagSet *flag.FlagSet, errBuf *bytes.Buffer) {
-	afmt.PrintBanner()
-	_, _ = afmt.G.Fprintf(color.Error, "Usage: %s %s\n\n", path.Base(os.Args[0]), msg)
-	cmdFlagSet.PrintDefaults()
-	_, _ = afmt.G.Fprintln(color.Error, errBuf.String())
-
-	_, _ = afmt.G.Fprintln(color.Error)
-	_, _ = afmt.G.Fprintf(color.Error, "The Amass Discord server can be found here: \n%s\n\n", discordInvitation)
 }
 
 // Setup the amass enumeration settings

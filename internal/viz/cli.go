@@ -9,7 +9,6 @@ import (
 	"flag"
 	"io"
 	"os"
-	"path"
 	"path/filepath"
 	"time"
 
@@ -65,27 +64,34 @@ func NewFlagset(args *Args, errorHandling flag.ErrorHandling) *flag.FlagSet {
 	return fs
 }
 
-func CLIWorkflow(clArgs []string) {
+func CLIWorkflow(cmdName string, clArgs []string) {
 	var args Args
 	args.Domains = stringset.New()
 	defer args.Domains.Close()
 
-	vizCommand := NewFlagset(&args, flag.ContinueOnError)
+	fs := NewFlagset(&args, flag.ContinueOnError)
 	vizBuf := new(bytes.Buffer)
-	vizCommand.SetOutput(vizBuf)
+	fs.SetOutput(vizBuf)
 
 	var usage = func() {
-		_, _ = afmt.G.Fprintf(color.Error, "Usage: %s %s\n\n", path.Base(os.Args[0]), UsageMsg)
-		vizCommand.PrintDefaults()
-		_, _ = afmt.G.Fprintln(color.Error, vizBuf.String())
+		afmt.PrintBanner()
+		_, _ = afmt.G.Fprintf(color.Error, "Usage: %s %s\n\n", cmdName, UsageMsg)
+
+		if args.Help {
+			fs.PrintDefaults()
+			_, _ = afmt.G.Fprintln(color.Error, vizBuf.String())
+			return
+		}
+
+		_, _ = afmt.G.Fprintln(color.Error, "Use the -h or --help flag to see the flags and default values")
+		_, _ = afmt.G.Fprintf(color.Error, "\nThe Amass Discord server can be found here: %s\n\n", afmt.DiscordInvitation)
 	}
 
 	if len(os.Args) < 2 {
 		usage()
 		return
 	}
-
-	if err := vizCommand.Parse(clArgs); err != nil {
+	if err := fs.Parse(clArgs); err != nil {
 		_, _ = afmt.R.Fprintf(color.Error, "%v\n", err)
 		os.Exit(1)
 	}
