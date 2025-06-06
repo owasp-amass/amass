@@ -2,7 +2,7 @@
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
-// oam_subs: Analyze collected OAM subdomains
+// oam_subs: Analyze and present collected OAM subdomains and associated data
 //
 //	+----------------------------------------------------------------------------+
 //	| ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  OWASP Amass  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ |

@@ -2,7 +2,7 @@
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
-package enum
+package tools
 
 import (
 	"context"
@@ -11,16 +11,14 @@ import (
 	"log/slog"
 	"net"
 	"os"
-	"path/filepath"
 	"strings"
-	"time"
 
 	afmt "github.com/owasp-amass/amass/v4/internal/afmt"
 	slogcommon "github.com/samber/slog-common"
 	slogsyslog "github.com/samber/slog-syslog/v2"
 )
 
-func writeLogMessage(l *slog.Logger, message string) {
+func WriteLogMessage(l *slog.Logger, message string) {
 	logstr := channelJSONLog(message)
 	if logstr == "" {
 		return
@@ -61,25 +59,16 @@ func channelJSONLog(data string) string {
 	return logstr
 }
 
-func selectLogger(dir, logfile string) *slog.Logger {
+func NewFileLogger(dir, logfile string) *slog.Logger {
 	if logfile == "" {
-		if l := setupSyslogLogger(); l != nil {
-			return l
-		}
+		return nil
 	}
-	return setupFileLogger(dir, logfile)
-}
+	p := logfile
 
-func setupFileLogger(dir, logfile string) *slog.Logger {
 	if dir != "" {
 		if err := os.MkdirAll(dir, 0640); err != nil {
 			_, _ = fmt.Fprintf(os.Stderr, "Failed to create the log directory: %v", err)
 		}
-	}
-
-	p := filepath.Join(dir, fmt.Sprintf("amass_enum_%s.log", time.Now().Format("2006-01-02T15:04:05")))
-	if logfile != "" {
-		p = logfile
 	}
 
 	f, err := os.OpenFile(p, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
@@ -90,7 +79,7 @@ func setupFileLogger(dir, logfile string) *slog.Logger {
 	return slog.New(slog.NewJSONHandler(f, nil))
 }
 
-func setupSyslogLogger() *slog.Logger {
+func NewSyslogLogger() *slog.Logger {
 	port := os.Getenv("SYSLOG_PORT")
 	host := strings.ToLower(os.Getenv("SYSLOG_HOST"))
 	transport := strings.ToLower(os.Getenv("SYSLOG_TRANSPORT"))

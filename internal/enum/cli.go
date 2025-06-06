@@ -19,10 +19,12 @@ import (
 	"github.com/owasp-amass/amass/v4/config"
 	"github.com/owasp-amass/amass/v4/engine/api/graphql/client"
 	"github.com/owasp-amass/amass/v4/internal/afmt"
+	"github.com/owasp-amass/amass/v4/internal/tools"
 )
 
 const (
-	UsageMsg string = "[options] -d DOMAIN"
+	UsageMsg    string = "[options] -d DOMAIN"
+	Description string = "Interface with the engine that performs enumerations"
 )
 
 type Args struct {
@@ -204,7 +206,7 @@ func CLIWorkflow(cmdName string, clArgs []string) {
 			case <-done:
 				return
 			case message := <-messages:
-				writeLogMessage(l, message)
+				tools.WriteLogMessage(l, message)
 			case <-t.C:
 				if stats, err := client.SessionStats(token); err == nil {
 					if !args.Options.Silent {

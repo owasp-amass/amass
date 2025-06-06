@@ -20,8 +20,9 @@ import (
 )
 
 const (
-	TimeFormat string = "01/02 15:04:05 2006 MST"
-	UsageMsg   string = "-d3|-dot|-gexf [options] -d domain"
+	TimeFormat  string = "01/02 15:04:05 2006 MST"
+	UsageMsg    string = "-d3|-dot|-gexf [options] -d domain"
+	Description string = "Analyze OAM data to generate graph visualizations"
 )
 
 type Args struct {

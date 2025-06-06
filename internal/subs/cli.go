@@ -27,7 +27,8 @@ import (
 )
 
 const (
-	UsageMsg = "[options]"
+	UsageMsg    = "[options]"
+	Description = "Analyze and present discovered subdomains and associated data"
 )
 
 type Args struct {

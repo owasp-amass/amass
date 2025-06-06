@@ -31,6 +31,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/owasp-amass/amass/v4/internal/afmt"
+	ae "github.com/owasp-amass/amass/v4/internal/amass_engine"
 	"github.com/owasp-amass/amass/v4/internal/assoc"
 	"github.com/owasp-amass/amass/v4/internal/enum"
 	"github.com/owasp-amass/amass/v4/internal/subs"
@@ -39,48 +40,72 @@ import (
 )
 
 const (
-	usageMsg string = "assoc|enum|subs|track|viz [options]"
+	usageMsg string = "[assoc|engine|enum|subs|track|viz] [options]"
 )
 
-func commandUsage(msg string, cmdFlagSet *flag.FlagSet, errBuf *bytes.Buffer) {
-	afmt.PrintBanner()
-	_, _ = afmt.G.Fprintf(color.Error, "Usage: %s %s\n\n", path.Base(os.Args[0]), msg)
-	cmdFlagSet.PrintDefaults()
-	_, _ = afmt.G.Fprintln(color.Error, errBuf.String())
+type Args struct {
+	Help    bool
+	Version bool
+}
 
-	if msg == usageMsg {
-		_, _ = afmt.G.Fprintf(color.Error, "\nSubcommands: \n\n")
-		_, _ = afmt.G.Fprintf(color.Error, "\t%-11s - Perform enumerations and network mapping\n", "amass enum")
-	}
+type subDesc struct {
+	Name        string
+	Description string
+}
 
-	_, _ = afmt.G.Fprintln(color.Error)
-	_, _ = afmt.G.Fprintf(color.Error, "The Amass Discord server can be found here: \n%s\n\n", afmt.DiscordInvitation)
+var subcommands = []subDesc{
+	{"assoc", assoc.Description},
+	{"engine", ae.Description},
+	{"enum", enum.Description},
+	{"subs", subs.Description},
+	{"track", track.Description},
+	{"viz", viz.Description},
 }
 
 func main() {
-	var version, help1, help2 bool
-	mainFlagSet := flag.NewFlagSet("amass", flag.ContinueOnError)
+	var args Args
+	fs := flag.NewFlagSet("amass", flag.ContinueOnError)
+
+	fs.BoolVar(&args.Help, "h", false, "Show the program usage message")
+	fs.BoolVar(&args.Help, "help", false, "Show the program usage message")
+	fs.BoolVar(&args.Version, "version", false, "Print the Amass version number")
 
 	defaultBuf := new(bytes.Buffer)
-	mainFlagSet.SetOutput(defaultBuf)
+	fs.SetOutput(defaultBuf)
 
-	mainFlagSet.BoolVar(&help1, "h", false, "Show the program usage message")
-	mainFlagSet.BoolVar(&help2, "help", false, "Show the program usage message")
-	mainFlagSet.BoolVar(&version, "version", false, "Print the version number of this Amass binary")
+	var usage = func() {
+		afmt.PrintBanner()
+		_, _ = afmt.G.Fprintf(color.Error, "Usage: %s %s\n\n", path.Base(os.Args[0]), usageMsg)
+
+		if args.Help {
+			fs.PrintDefaults()
+			_, _ = afmt.G.Fprintln(color.Error, defaultBuf.String())
+			_, _ = afmt.G.Fprintf(color.Error, "Subcommands: \n\n")
+			for _, sub := range subcommands {
+				_, _ = afmt.G.Fprintf(color.Error, "\t%-5s\t%s\n", sub.Name, sub.Description)
+			}
+			_, _ = afmt.G.Fprintln(color.Error)
+			return
+		}
+
+		_, _ = afmt.G.Fprintln(color.Error, "Use the -h or --help flag to see the flags and subcommands")
+		_, _ = afmt.G.Fprintf(color.Error, "\nThe Amass Discord server can be found here: %s\n\n", afmt.DiscordInvitation)
+	}
 
 	if len(os.Args) < 2 {
-		commandUsage(usageMsg, mainFlagSet, defaultBuf)
+		usage()
 		return
 	}
-	if err := mainFlagSet.Parse(os.Args[1:]); err != nil {
+	if err := fs.Parse(os.Args[1:]); err != nil {
+		usage()
 		_, _ = afmt.R.Fprintf(color.Error, "%v\n", err)
 		os.Exit(1)
 	}
-	if help1 || help2 {
-		commandUsage(usageMsg, mainFlagSet, defaultBuf)
+	if args.Help {
+		usage()
 		return
 	}
-	if version {
+	if args.Version {
 		_, _ = afmt.G.Fprintf(color.Error, "%s\n", afmt.Version)
 		return
 	}
@@ -89,6 +114,8 @@ func main() {
 	switch os.Args[1] {
 	case "assoc":
 		assoc.CLIWorkflow(cmdName, os.Args[2:])
+	case "engine":
+		ae.CLIWorkflow(cmdName, os.Args[2:])
 	case "enum":
 		enum.CLIWorkflow(cmdName, os.Args[2:])
 	case "subs":
@@ -98,7 +125,8 @@ func main() {
 	case "viz":
 		viz.CLIWorkflow(cmdName, os.Args[2:])
 	default:
-		commandUsage(usageMsg, mainFlagSet, defaultBuf)
+		usage()
+		_, _ = afmt.R.Fprintf(color.Error, "subcommand provided but not defined: %s\n", os.Args[1])
 		os.Exit(1)
 	}
 }

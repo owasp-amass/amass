@@ -2,7 +2,7 @@
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
-// oam_viz: Analyze collected OAM data to generate files renderable as graph visualizations
+// oam_viz: Analyze collected OAM data to generate graph visualizations
 //
 //	+----------------------------------------------------------------------------+
 //	| ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  OWASP Amass  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ |

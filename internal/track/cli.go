@@ -22,8 +22,9 @@ import (
 )
 
 const (
-	TimeFormat = "01/02 15:04:05 2006 MST"
-	UsageMsg   = "track [options] [-since '" + TimeFormat + "'] " + "-d domain"
+	TimeFormat  = "01/02 15:04:05 2006 MST"
+	UsageMsg    = "[options] [-since '" + TimeFormat + "'] " + "-d domain"
+	Description = "Analyze OAM data to identify newly discovered assets"
 )
 
 type Args struct {

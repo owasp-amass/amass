@@ -2,7 +2,7 @@
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
-// In-depth Attack Surface Mapping and Asset Discovery
+// oam_enum: Interface with the engine that performs enumerations and network mapping
 //
 //	+----------------------------------------------------------------------------+
 //	| ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  OWASP Amass  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ |
