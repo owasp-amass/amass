@@ -407,3 +407,21 @@ func (t *txtServiceDiscovery) process(e *et.Event, fqdn *oamdns.FQDN, txtRecords
         "domain", fqdn.Name, 
         "plugin", t.name)
 }
+
+// retrieveEntityTags retrieves cached TXT records from the database
+func (t *txtServiceDiscovery) retrieveEntityTags(e *et.Event, fqdn *oamdns.FQDN, since time.Time) []*oamdns.DNSRecordProperty {
+    slog.Debug("Retrieving entity tags using lookup method", 
+        "domain", fqdn.Name, 
+        "plugin", t.name,
+        "since", since)
+
+    // Use the lookup method to fetch cached TXT records
+    props := t.lookup(e, fqdn, since)
+
+    slog.Debug("Entity tags retrieved", 
+        "domain", fqdn.Name, 
+        "plugin", t.name, 
+        "recordCount", len(props))
+
+    return props
+}
