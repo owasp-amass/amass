@@ -17,7 +17,7 @@ type txtPluginManager struct {
 	name     string
 	log      *slog.Logger
 	source   *et.Source
-	discover *txt_service_discovery
+	discover *txtServiceDiscovery // Corrected the struct name
 }
 
 // NewTXTPlugin returns a new instance of the TXT service discovery plugin.
@@ -32,7 +32,7 @@ func NewTXTPlugin() et.Plugin {
 }
 
 // NewDNSPlugin is provided for backward compatibility with the plugin loader.
-// It simply returns the TXT plugin under the original DNS‐plugin factory name.
+// It simply returns the TXT plugin under the original DNS-plugin factory name.
 func NewDNSPlugin() et.Plugin {
 	return NewTXTPlugin()
 }
@@ -46,7 +46,7 @@ func (tpm *txtPluginManager) Name() string {
 func (tpm *txtPluginManager) Start(r et.Registry) error {
 	tpm.log = r.Log().WithGroup("plugin").With("name", tpm.name)
 
-	tpm.discover = &txtServiceDiscovery{
+	tpm.discover = &txtServiceDiscovery{ // Corrected the struct name
 		name:   tpm.name + "-FQDN-Check",
 		source: tpm.source,
 	}
@@ -60,6 +60,7 @@ func (tpm *txtPluginManager) Start(r et.Registry) error {
 		Callback:   tpm.discover.check,
 	})
 	if err != nil {
+		tpm.log.Error("Failed to register handler", "error", err)
 		return err
 	}
 
