@@ -2,27 +2,29 @@
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
-package viz
+package track
 
 import (
 	"bytes"
 	"flag"
 	"io"
 	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/caffix/stringset"
 	"github.com/fatih/color"
 	"github.com/owasp-amass/amass/v4/config"
 	"github.com/owasp-amass/amass/v4/internal/afmt"
-	"github.com/owasp-amass/amass/v4/internal/db"
+	amassdb "github.com/owasp-amass/amass/v4/internal/db"
+	"github.com/owasp-amass/asset-db/repository"
+	dbt "github.com/owasp-amass/asset-db/types"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
 )
 
 const (
-	TimeFormat  string = "01/02 15:04:05 2006 MST"
-	UsageMsg    string = "-d3|-dot|-gexf [options] -d domain"
-	Description string = "Analyze OAM data to generate graph visualizations"
+	TimeFormat  = "01/02 15:04:05 2006 MST"
+	UsageMsg    = "[options] [-since '" + TimeFormat + "'] " + "-d domain"
+	Description = "Analyze OAM data to identify newly discovered assets"
 )
 
 type Args struct {
@@ -30,38 +32,28 @@ type Args struct {
 	Domains *stringset.Set
 	Since   string
 	Options struct {
-		D3      bool
-		DOT     bool
-		GEXF    bool
 		NoColor bool
 		Silent  bool
 	}
 	Filepaths struct {
-		ConfigFile    string
-		Directory     string
-		Domains       string
-		Output        string
-		AllFilePrefix string
+		ConfigFile string
+		Directory  string
+		Domains    string
 	}
 }
 
 func NewFlagset(args *Args, errorHandling flag.ErrorHandling) *flag.FlagSet {
-	fs := flag.NewFlagSet("viz", errorHandling)
+	fs := flag.NewFlagSet("track", flag.ContinueOnError)
 
 	fs.BoolVar(&args.Help, "h", false, "Show the program usage message")
 	fs.BoolVar(&args.Help, "help", false, "Show the program usage message")
 	fs.Var(args.Domains, "d", "Domain names separated by commas (can be used multiple times)")
-	fs.StringVar(&args.Since, "since", "", "Include only assets validated after (format: "+TimeFormat+")")
+	fs.StringVar(&args.Since, "since", "", "Exclude all assets discovered before (format: "+TimeFormat+")")
+	fs.BoolVar(&args.Options.NoColor, "nocolor", false, "Disable colorized output")
+	fs.BoolVar(&args.Options.Silent, "silent", false, "Disable all output during execution")
 	fs.StringVar(&args.Filepaths.ConfigFile, "config", "", "Path to the YAML configuration file")
 	fs.StringVar(&args.Filepaths.Directory, "dir", "", "Path to the directory containing the graph database")
 	fs.StringVar(&args.Filepaths.Domains, "df", "", "Path to a file providing registered domain names")
-	fs.StringVar(&args.Filepaths.Output, "o", "", "Path to the directory for output files being generated")
-	fs.StringVar(&args.Filepaths.AllFilePrefix, "oA", "", "Path prefix used for naming all output files")
-	fs.BoolVar(&args.Options.D3, "d3", false, "Generate the D3 v4 force simulation HTML file")
-	fs.BoolVar(&args.Options.DOT, "dot", false, "Generate the DOT output file")
-	fs.BoolVar(&args.Options.GEXF, "gexf", false, "Generate the Gephi Graph Exchange XML Format (GEXF) file")
-	fs.BoolVar(&args.Options.NoColor, "nocolor", false, "Disable colorized output")
-	fs.BoolVar(&args.Options.Silent, "silent", false, "Disable all output during execution")
 	return fs
 }
 
@@ -71,8 +63,8 @@ func CLIWorkflow(cmdName string, clArgs []string) {
 	defer args.Domains.Close()
 
 	fs := NewFlagset(&args, flag.ContinueOnError)
-	vizBuf := new(bytes.Buffer)
-	fs.SetOutput(vizBuf)
+	trackBuf := new(bytes.Buffer)
+	fs.SetOutput(trackBuf)
 
 	var usage = func() {
 		afmt.PrintBanner()
@@ -80,7 +72,7 @@ func CLIWorkflow(cmdName string, clArgs []string) {
 
 		if args.Help {
 			fs.PrintDefaults()
-			_, _ = afmt.G.Fprintln(color.Error, vizBuf.String())
+			_, _ = afmt.G.Fprintln(color.Error, trackBuf.String())
 			return
 		}
 
@@ -119,11 +111,6 @@ func CLIWorkflow(cmdName string, clArgs []string) {
 		_, _ = afmt.R.Fprintln(color.Error, "No root domain names were provided")
 		os.Exit(1)
 	}
-	// Make sure at least one graph file format has been identified on the command-line
-	if !args.Options.D3 && !args.Options.DOT && !args.Options.GEXF {
-		_, _ = afmt.R.Fprintln(color.Error, "At least one file format must be selected")
-		os.Exit(1)
-	}
 
 	var err error
 	var start time.Time
@@ -149,70 +136,56 @@ func CLIWorkflow(cmdName string, clArgs []string) {
 		os.Exit(1)
 	}
 	// Connect with the graph database containing the enumeration data
-	db := db.OpenGraphDatabase(cfg)
+	db := amassdb.OpenGraphDatabase(cfg)
 	if db == nil {
 		_, _ = afmt.R.Fprintln(color.Error, "Failed to connect with the database")
 		os.Exit(1)
 	}
-	// Obtain the visualization nodes & edges from the graph
-	nodes, edges := VizData(args.Domains.Slice(), start, db)
-	// Get the directory to save the files into
-	dir := args.Filepaths.Directory
-	if pwd, err := os.Getwd(); err == nil {
-		dir = pwd
-	}
 
-	// Set output file prefix, use 'amass' if '-oA' flag is not specified
-	prefix := args.Filepaths.AllFilePrefix
-	if prefix == "" {
-		prefix = "amass"
-	}
-
-	if args.Filepaths.Output != "" {
-		if finfo, err := os.Stat(args.Filepaths.Output); os.IsNotExist(err) || !finfo.IsDir() {
-			_, _ = afmt.R.Fprintln(color.Error, "The output location does not exist or is not a directory")
-			os.Exit(1)
-		}
-		dir = args.Filepaths.Output
-	}
-	if args.Options.D3 {
-		path := filepath.Join(dir, prefix+".html")
-		err = writeGraphOutputFile("d3", path, nodes, edges)
-	}
-	if args.Options.DOT {
-		path := filepath.Join(dir, prefix+".dot")
-		err = writeGraphOutputFile("dot", path, nodes, edges)
-	}
-	if args.Options.GEXF {
-		path := filepath.Join(dir, prefix+".gexf")
-		err = writeGraphOutputFile("gexf", path, nodes, edges)
-	}
-	if err != nil {
-		_, _ = afmt.R.Fprintf(color.Error, "Failed to write the output file: %v\n", err)
-		os.Exit(1)
+	for _, name := range getNewNames(args.Domains.Slice(), start, db) {
+		_, _ = afmt.G.Fprintln(color.Output, name)
 	}
 }
 
-func writeGraphOutputFile(t string, path string, nodes []Node, edges []Edge) error {
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE, 0644)
-	if err != nil {
-		return err
+func getNewNames(domains []string, since time.Time, db repository.Repository) []string {
+	if len(domains) == 0 {
+		return []string{}
 	}
-	defer func() {
-		_ = f.Sync()
-		_ = f.Close()
-	}()
 
-	_ = f.Truncate(0)
-	_, _ = f.Seek(0, 0)
-
-	switch t {
-	case "d3":
-		err = WriteD3Data(f, nodes, edges)
-	case "dot":
-		err = WriteDOTData(f, nodes, edges)
-	case "gexf":
-		err = WriteGEXFData(f, nodes, edges)
+	var assets []*dbt.Entity
+	for _, d := range domains {
+		if ents, err := db.FindEntitiesByContent(&oamdns.FQDN{Name: d}, since); err == nil && len(ents) == 1 {
+			if n, err := amassdb.FindByFQDNScope(db, ents[0], since); err == nil && len(n) > 0 {
+				assets = append(assets, n...)
+			}
+		}
 	}
-	return err
+	if len(assets) == 0 {
+		return []string{}
+	}
+
+	if since.IsZero() {
+		var latest time.Time
+
+		for _, a := range assets {
+			if _, ok := a.Asset.(*oamdns.FQDN); ok && a.LastSeen.After(latest) {
+				latest = a.LastSeen
+			}
+		}
+
+		since = latest.Truncate(24 * time.Hour)
+	}
+
+	res := stringset.New()
+	defer res.Close()
+
+	for _, a := range assets {
+		if n, ok := a.Asset.(*oamdns.FQDN); ok && !res.Has(n.Name) &&
+			(a.CreatedAt.Equal(since) || a.CreatedAt.After(since)) &&
+			(a.LastSeen.Equal(since) || a.LastSeen.After(since)) {
+			res.Insert(n.Name)
+		}
+	}
+
+	return res.Slice()
 }

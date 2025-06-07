@@ -2,7 +2,7 @@
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
-// oam_viz: Analyze collected OAM data to generate files renderable as graph visualizations
+// oam_viz: Analyze collected OAM data to generate graph visualizations
 //
 //	+----------------------------------------------------------------------------+
 //	| ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  OWASP Amass  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ |
@@ -24,10 +24,11 @@ package main
 
 import (
 	"os"
+	"path"
 
 	"github.com/owasp-amass/amass/v4/internal/viz"
 )
 
 func main() {
-	viz.CLIWorkflow(os.Args[1:])
+	viz.CLIWorkflow(path.Base(os.Args[0]), os.Args[1:])
 }

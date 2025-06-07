@@ -8,6 +8,7 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"strings"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/owasp-amass/amass/v4/config"
 	"github.com/owasp-amass/amass/v4/internal/afmt"
+	"github.com/owasp-amass/amass/v4/internal/tools"
 	"github.com/owasp-amass/amass/v4/resources"
 )
 
@@ -92,6 +94,15 @@ func createOutputDirectory(cfg *config.Config) {
 		_, _ = afmt.R.Fprintf(color.Error, "Failed to create the directory: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+func selectLogger(dir, logfile string) *slog.Logger {
+	if logfile == "" {
+		if l := tools.NewSyslogLogger(); l != nil {
+			return l
+		}
+	}
+	return tools.NewFileLogger(dir, logfile)
 }
 
 func getWordList(reader io.Reader) ([]string, error) {

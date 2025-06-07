@@ -11,7 +11,6 @@ import (
 	"io"
 	"os"
 	"os/signal"
-	"path"
 	"time"
 
 	"github.com/caffix/stringset"
@@ -20,14 +19,16 @@ import (
 	"github.com/owasp-amass/amass/v4/config"
 	"github.com/owasp-amass/amass/v4/engine/api/graphql/client"
 	"github.com/owasp-amass/amass/v4/internal/afmt"
+	"github.com/owasp-amass/amass/v4/internal/tools"
 )
 
 const (
-	UsageMsg          string = "enum [options] -d DOMAIN"
-	discordInvitation string = "https://discord.gg/ANTyEDUXt5"
+	UsageMsg    string = "[options] -d DOMAIN"
+	Description string = "Interface with the engine that performs enumerations"
 )
 
 type Args struct {
+	Help              bool
 	Addresses         afmt.ParseIPs
 	ASNs              afmt.ParseInts
 	CIDRs             afmt.ParseCIDRs
@@ -83,14 +84,13 @@ type Args struct {
 	}
 }
 
-func commandUsage(msg string, cmdFlagSet *flag.FlagSet, errBuf *bytes.Buffer) {
-	afmt.PrintBanner()
-	_, _ = afmt.G.Fprintf(color.Error, "Usage: %s %s\n\n", path.Base(os.Args[0]), msg)
-	cmdFlagSet.PrintDefaults()
-	_, _ = afmt.G.Fprintln(color.Error, errBuf.String())
+func NewFlagset(args *Args, errorHandling flag.ErrorHandling) *flag.FlagSet {
+	fs := flag.NewFlagSet("enum", errorHandling)
 
-	_, _ = afmt.G.Fprintln(color.Error)
-	_, _ = afmt.G.Fprintf(color.Error, "The Amass Discord server can be found here: \n%s\n\n", discordInvitation)
+	defineArgumentFlags(fs, args)
+	defineOptionFlags(fs, args)
+	defineFilepathFlags(fs, args)
+	return fs
 }
 
 func defineArgumentFlags(fs *flag.FlagSet, args *Args) {
@@ -117,6 +117,8 @@ func defineArgumentFlags(fs *flag.FlagSet, args *Args) {
 }
 
 func defineOptionFlags(fs *flag.FlagSet, args *Args) {
+	fs.BoolVar(&args.Help, "h", false, "Show the program usage message")
+	fs.BoolVar(&args.Help, "help", false, "Show the program usage message")
 	fs.BoolVar(&args.Options.Active, "active", false, "Attempt zone transfers and certificate name grabs")
 	fs.BoolVar(&args.Options.BruteForcing, "brute", false, "Execute brute forcing after searches")
 	fs.BoolVar(&args.Options.DemoMode, "demo", false, "Censor output to make it suitable for demonstrations")
@@ -147,9 +149,9 @@ func defineFilepathFlags(fs *flag.FlagSet, args *Args) {
 	fs.StringVar(&args.Filepaths.TermOut, "o", "", "Path to the text file containing terminal stdout/stderr")
 }
 
-func CLIWorkflow(clArgs []string) {
+func CLIWorkflow(cmdName string, clArgs []string) {
 	// Extract the correct config from the user provided arguments and/or configuration file
-	cfg, args := argsAndConfig(clArgs)
+	cfg, args := argsAndConfig(cmdName, clArgs)
 	if cfg == nil {
 		return
 	}
@@ -204,7 +206,7 @@ func CLIWorkflow(clArgs []string) {
 			case <-done:
 				return
 			case message := <-messages:
-				writeLogMessage(l, message)
+				tools.WriteLogMessage(l, message)
 			case <-t.C:
 				if stats, err := client.SessionStats(token); err == nil {
 					if !args.Options.Silent {
@@ -251,7 +253,7 @@ func CLIWorkflow(clArgs []string) {
 	}
 }
 
-func argsAndConfig(clArgs []string) (*config.Config, *Args) {
+func argsAndConfig(cmdName string, clArgs []string) (*config.Config, *Args) {
 	args := Args{
 		AltWordList:       stringset.New(),
 		AltWordListMask:   stringset.New(),
@@ -265,28 +267,37 @@ func argsAndConfig(clArgs []string) (*config.Config, *Args) {
 		Resolvers:         stringset.New(),
 		Trusted:           stringset.New(),
 	}
-	var help1, help2 bool
-	fs := flag.NewFlagSet("enum", flag.ContinueOnError)
 
+	fs := NewFlagset(&args, flag.ContinueOnError)
+	// set up the flag set to write errors to a buffer
 	enumBuf := new(bytes.Buffer)
 	fs.SetOutput(enumBuf)
 
-	fs.BoolVar(&help1, "h", false, "Show the program usage message")
-	fs.BoolVar(&help2, "help", false, "Show the program usage message")
-	defineArgumentFlags(fs, &args)
-	defineOptionFlags(fs, &args)
-	defineFilepathFlags(fs, &args)
+	var usage = func() {
+		afmt.PrintBanner()
+		_, _ = afmt.G.Fprintf(color.Error, "Usage: %s %s\n\n", cmdName, UsageMsg)
+
+		if args.Help {
+			fs.PrintDefaults()
+			_, _ = afmt.G.Fprintln(color.Error, enumBuf.String())
+			return
+		}
+
+		_, _ = afmt.G.Fprintln(color.Error, "Use the -h or --help flag to see the flags and default values")
+		_, _ = afmt.G.Fprintf(color.Error, "\nThe Amass Discord server can be found here: %s\n\n", afmt.DiscordInvitation)
+	}
 
 	if len(clArgs) < 1 {
-		commandUsage(UsageMsg, fs, enumBuf)
+		usage()
 		return nil, &args
 	}
 	if err := fs.Parse(clArgs); err != nil {
+		usage()
 		_, _ = afmt.R.Fprintf(color.Error, "%v\n", err)
 		os.Exit(1)
 	}
-	if help1 || help2 {
-		commandUsage(UsageMsg, fs, enumBuf)
+	if args.Help {
+		usage()
 		return nil, &args
 	}
 	if args.Options.NoColor {
@@ -305,7 +316,7 @@ func argsAndConfig(clArgs []string) (*config.Config, *Args) {
 	if (args.Excluded.Len() > 0 || args.Filepaths.ExcludedSrcs != "") &&
 		(args.Included.Len() > 0 || args.Filepaths.IncludedSrcs != "") {
 		_, _ = afmt.R.Fprintln(color.Error, "Cannot provide both include and exclude arguments")
-		commandUsage(UsageMsg, fs, enumBuf)
+		usage()
 		os.Exit(1)
 	}
 	if err := processInputFiles(&args); err != nil {
