@@ -59,9 +59,9 @@ type txtServiceDiscovery struct {
 // NewTXTServiceDiscovery initializes and returns a new instance of the plugin
 func NewTXTServiceDiscovery() et.Plugin {
     return &txtServiceDiscovery{
-        name: "txt_service_discovery",
+        name: "txtServiceDiscovery",
         source: &et.Source{
-            Name:       "txt_service_discovery",
+            Name:       "txtServiceDiscovery",
             Confidence: 100,
         },
     }
@@ -437,9 +437,9 @@ type txtPluginManager struct {
 // NewTXTPlugin returns a new instance of the TXT service discovery plugin.
 func NewTXTPlugin() et.Plugin {
     return &txtPluginManager{
-        name: "txt_service_discovery",
+        name: "txtServiceDiscovery",
         source: &et.Source{
-            Name:       "txt_service_discovery",
+            Name:       "txtServiceDiscovery",
             Confidence: 100,
         },
     }
