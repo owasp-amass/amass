@@ -57,6 +57,8 @@ type txtServiceDiscovery struct {
 }
 
 // check satisfies the HandlerFunc signature expected by the registry.
+// Instead of performing live DNS lookups, it relies entirely on TXT records
+// already cached by the core DNS TXT plugin.
 func (t *txtServiceDiscovery) check(e *et.Event) error {
     if e == nil || e.Entity == nil {
         return nil
@@ -69,20 +71,26 @@ func (t *txtServiceDiscovery) check(e *et.Event) error {
         return nil
     }
 
-    // Perform a live DNS lookup for TXT records.
-    txtRRs, err := support.PerformQuery(fqdn.Name, dns.TypeTXT)
+    // Look back through the TTL window for cached TXT‑record properties.
+    since, err := support.TTLStartTime(e.Session.Config(), "FQDN", "FQDN", t.name)
     if err != nil {
-        return nil // non‑fatal
+        return err
     }
 
-    // Collect TXT strings from the response.
     var entries []string
-    for _, rr := range txtRRs {
-        if txt, ok := rr.(*dns.TXT); ok {
-            entries = append(entries, txt.Txt...)
-        } else {
-            entries = append(entries, strings.Fields(rr.String())...)
+    if tags, err := e.Session.Cache().GetEntityTags(entity, since, "dns_record"); err == nil {
+        for _, tag := range tags {
+            if prop, ok := tag.Property.(*oamdns.DNSRecordProperty); ok && prop.Header.RRType == int(dns.TypeTXT) {
+                if data, ok := prop.Data.(string); ok {
+                    entries = append(entries, data)
+                }
+            }
         }
+    }
+
+    // If no TXT records are present in cache, nothing to do.
+    if len(entries) == 0 {
+        return nil
     }
 
     // Match patterns and build findings.
