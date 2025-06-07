@@ -6,8 +6,7 @@ import (
     "github.com/miekg/dns"
     "github.com/owasp-amass/amass/v4/engine/plugins/support"
     et "github.com/owasp-amass/amass/v4/engine/types"
-    dbt "github.com/owasp-amass/asset-db/types"
-    oamdns "github.com/owasp-amass/open-asset-model/dns"
+        oamdns "github.com/owasp-amass/open-asset-model/dns"
     "github.com/owasp-amass/open-asset-model/general"
 )
 
@@ -64,7 +63,7 @@ func (t *txtServiceDiscovery) check(e *et.Event) error {
         return nil
     }
 
-    entity := e.Entity // *dbt.Entity
+    entity := e.Entity
 
     fqdn, ok := entity.Asset.(*oamdns.FQDN)
     if !ok || fqdn == nil {
@@ -81,9 +80,7 @@ func (t *txtServiceDiscovery) check(e *et.Event) error {
     if tags, err := e.Session.Cache().GetEntityTags(entity, since, "dns_record"); err == nil {
         for _, tag := range tags {
             if prop, ok := tag.Property.(*oamdns.DNSRecordProperty); ok && prop.Header.RRType == int(dns.TypeTXT) {
-                if data, ok := prop.Data.(string); ok {
-                    entries = append(entries, data)
-                }
+                entries = append(entries, prop.Data)
             }
         }
     }
