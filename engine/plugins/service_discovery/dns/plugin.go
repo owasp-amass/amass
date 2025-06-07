@@ -10,7 +10,9 @@ import (
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 )
 
-// txtPluginManager drives the TXT-service-discovery plugin.
+/*
+   txtPluginManager – mirrors the structure used by http_probes/plugin.go
+*/
 type txtPluginManager struct {
 	name     string
 	log      *slog.Logger
@@ -20,10 +22,10 @@ type txtPluginManager struct {
 
 /* ---------- factory helpers ---------- */
 
-// NewTXTPlugin is the canonical entry-point looked up by the plugin loader.
+// NewTXTPlugin is the canonical constructor.
 func NewTXTPlugin() et.Plugin {
 	return &txtPluginManager{
-		name: pluginName, // "txt_service_discovery"
+		name: pluginName, // constant defined in dns/txt.go
 		source: &et.Source{
 			Name:       pluginName,
 			Confidence: 100,
@@ -31,26 +33,26 @@ func NewTXTPlugin() et.Plugin {
 	}
 }
 
-// NewDNSPlugin exists for backward compatibility with older loaders.
+// NewDNSPlugin exists only for backward compatibility.
 func NewDNSPlugin() et.Plugin { return NewTXTPlugin() }
 
 /* ---------- et.Plugin interface ---------- */
 
-// Name returns the canonical plugin identifier.
+// Name allows the manager to satisfy et.Plugin.
 func (tpm *txtPluginManager) Name() string { return tpm.name }
 
-// Start registers the handler with the engine and begins operation.
+// Start registers the handler with the engine.
 func (tpm *txtPluginManager) Start(r et.Registry) error {
-	// Namespace the logger: every log line begins with  plugin name=txt_service_discovery …
+	// Namespace logger:  plugin name=txt_service_discovery …
 	tpm.log = r.Log().WithGroup("plugin").With("name", tpm.name)
 
-	// Create the handler that does the work.
+	// Handler that actually does the TXT-record work.
 	tpm.discover = &txtServiceDiscovery{
-		name:   tpm.name + "-FQDN-Check", // e.g. txt_service_discovery-FQDN-Check
+		name:   tpm.name + "-FQDN-Check",
 		source: tpm.source,
 	}
 
-	// Register the handler with the registry.
+	// Register with the engine.
 	if err := r.RegisterHandler(&et.Handler{
 		Plugin:     tpm,
 		Name:       tpm.discover.name,
@@ -67,7 +69,5 @@ func (tpm *txtPluginManager) Start(r et.Registry) error {
 	return nil
 }
 
-// Stop is invoked by the engine when the plugin is being shut down.
-func (tpm *txtPluginManager) Stop() {
-	tpm.log.Info("Plugin stopped")
-}
+// Stop is called when the engine shuts down.
+func (tpm *txtPluginManager) Stop() { tpm.log.Info("Plugin stopped") }
