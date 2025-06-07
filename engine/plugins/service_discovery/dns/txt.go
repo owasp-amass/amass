@@ -5,6 +5,8 @@ import (
 
     "github.com/miekg/dns"
     "github.com/owasp-amass/amass/v4/engine/plugins/support"
+    et "github.com/owasp-amass/amass/v4/engine/types"
+    dbt "github.com/owasp-amass/asset-db/types"
     oamdns "github.com/owasp-amass/open-asset-model/dns"
     "github.com/owasp-amass/open-asset-model/general"
 )
@@ -51,14 +53,11 @@ var matchers = map[string]string{
 // It is instantiated from plugin.go and registered as a handler there.
 type txtServiceDiscovery struct {
     name   string
-    source *et.Source // kept for future use even if not referenced directly in this file
+    source *et.Source
 }
 
 // check satisfies the HandlerFunc signature expected by the registry.
-// It inspects the FQDN in the event, queries its TXT records, matches them
-// against the known patterns, and emits findings via the common helper.
 func (t *txtServiceDiscovery) check(e *et.Event) error {
-    // Sanity‑check the event and extract the underlying FQDN asset.
     if e == nil || e.Entity == nil {
         return nil
     }
@@ -73,10 +72,10 @@ func (t *txtServiceDiscovery) check(e *et.Event) error {
     // Perform a live DNS lookup for TXT records.
     txtRRs, err := support.PerformQuery(fqdn.Name, dns.TypeTXT)
     if err != nil {
-        return nil // Non‑fatal: just skip processing on lookup error.
+        return nil // non‑fatal
     }
 
-    // Gather all TXT strings.
+    // Collect TXT strings from the response.
     var entries []string
     for _, rr := range txtRRs {
         if txt, ok := rr.(*dns.TXT); ok {
@@ -86,7 +85,7 @@ func (t *txtServiceDiscovery) check(e *et.Event) error {
         }
     }
 
-    // Build findings for matched patterns.
+    // Match patterns and build findings.
     var findings []*support.Finding
     for _, txt := range entries {
         for pattern, service := range matchers {
@@ -103,7 +102,6 @@ func (t *txtServiceDiscovery) check(e *et.Event) error {
         }
     }
 
-    // Emit results through the shared helper.
     if len(findings) > 0 {
         support.ProcessAssetsWithSource(e, findings, t.source, t.name, t.name)
     }
