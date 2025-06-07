@@ -5,8 +5,6 @@ import (
 
     "github.com/miekg/dns"
     "github.com/owasp-amass/amass/v4/engine/plugins/support"
-    et "github.com/owasp-amass/amass/v4/engine/types"
-    dbt "github.com/owasp-amass/asset-db/types"
     oamdns "github.com/owasp-amass/open-asset-model/dns"
     "github.com/owasp-amass/open-asset-model/general"
 )
@@ -53,7 +51,7 @@ var matchers = map[string]string{
 // It is instantiated from plugin.go and registered as a handler there.
 type txtServiceDiscovery struct {
     name   string
-    source *et.Source
+    source *et.Source // kept for future use even if not referenced directly in this file
 }
 
 // check satisfies the HandlerFunc signature expected by the registry.
@@ -65,10 +63,7 @@ func (t *txtServiceDiscovery) check(e *et.Event) error {
         return nil
     }
 
-    entity, ok := e.Entity.(*dbt.Entity)
-    if !ok || entity == nil {
-        return nil
-    }
+    entity := e.Entity // *dbt.Entity
 
     fqdn, ok := entity.Asset.(*oamdns.FQDN)
     if !ok || fqdn == nil {
