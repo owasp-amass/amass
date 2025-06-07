@@ -17,7 +17,7 @@ type txtPluginManager struct {
 	name     string
 	log      *slog.Logger
 	source   *et.Source
-	discover *txtServiceDiscovery
+	discover *txt_service_discovery
 }
 
 // NewTXTPlugin returns a new instance of the TXT service discovery plugin.
