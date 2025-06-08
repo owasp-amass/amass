@@ -9,13 +9,10 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"os"
 	"strings"
 
 	"github.com/caffix/stringset"
-	"github.com/fatih/color"
 	"github.com/owasp-amass/amass/v4/config"
-	"github.com/owasp-amass/amass/v4/internal/afmt"
 	"github.com/owasp-amass/amass/v4/internal/tools"
 	"github.com/owasp-amass/amass/v4/resources"
 )
@@ -80,20 +77,6 @@ func processInputFiles(args *Args) error {
 		return err
 	}
 	return nil
-}
-
-func createOutputDirectory(cfg *config.Config) {
-	// Prepare output file paths
-	dir := config.OutputDirectory(cfg.Dir)
-	if dir == "" {
-		_, _ = afmt.R.Fprintln(color.Error, "Failed to obtain the output directory")
-		os.Exit(1)
-	}
-	// If the directory does not yet exist, create it
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		_, _ = afmt.R.Fprintf(color.Error, "Failed to create the directory: %v\n", err)
-		os.Exit(1)
-	}
 }
 
 func selectLogger(dir, logfile string) *slog.Logger {

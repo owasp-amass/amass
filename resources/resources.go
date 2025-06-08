@@ -10,7 +10,7 @@ import (
 	"io/fs"
 )
 
-//go:embed alterations.txt namelist.txt
+//go:embed alterations.txt config.yaml datasources.yaml namelist.txt
 var resourceFS embed.FS
 
 func GetResourceFile(path string) (fs.File, error) {
