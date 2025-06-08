@@ -8,6 +8,7 @@ import (
 	"errors"
 	"log/slog"
 	"os"
+	"time"
 
 	"github.com/owasp-amass/amass/v4/engine/api/graphql/server"
 	"github.com/owasp-amass/amass/v4/engine/dispatcher"
@@ -51,7 +52,24 @@ func NewEngine(l *slog.Logger) (*Engine, error) {
 		mgr.Shutdown()
 		return nil, errors.New("failed to create the API server")
 	}
-	go func() { _ = srv.Start() }()
+
+	ch := make(chan error, 1)
+	go func(errch chan error) { errch <- srv.Start() }(ch)
+
+	t := time.NewTimer(2 * time.Second)
+	defer t.Stop()
+
+	select {
+	case err := <-ch:
+		if err != nil {
+			_ = srv.Shutdown()
+			dis.Shutdown()
+			mgr.Shutdown()
+			return nil, err
+		}
+	case <-t.C:
+		// If the server does not return an error within 2 seconds, we assume it started successfully
+	}
 
 	return &Engine{
 		Log:        l,

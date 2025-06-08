@@ -7,6 +7,7 @@ package client
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -122,10 +123,18 @@ func (c *Client) SessionStats(token uuid.UUID) (*et.SessionStats, error) {
 	}
 
 	var gqlResp struct {
-		Data struct{ SessionStats et.SessionStats }
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+		Data struct {
+			SessionStats et.SessionStats `json:"sessionStats"`
+		} `json:"data"`
 	}
 	if err := json.Unmarshal([]byte(res), &gqlResp); err != nil {
 		return &et.SessionStats{}, err
+	}
+	if len(gqlResp.Errors) > 0 && gqlResp.Errors[0].Message != "" {
+		return &et.SessionStats{}, errors.New(gqlResp.Errors[0].Message)
 	}
 	return &gqlResp.Data.SessionStats, nil
 }
