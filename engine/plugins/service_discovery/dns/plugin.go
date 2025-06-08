@@ -10,9 +10,7 @@ import (
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 )
 
-/*
-   txtPluginManager – mirrors the structure used by http_probes/plugin.go
-*/
+// txtPluginManager coordinates the TXT-service-discovery plugin.
 type txtPluginManager struct {
 	name     string
 	log      *slog.Logger
@@ -22,7 +20,7 @@ type txtPluginManager struct {
 
 /* ---------- factory helpers ---------- */
 
-// NewTXTPlugin is the canonical constructor.
+// NewTXTPlugin is the canonical constructor used by load.go.
 func NewTXTPlugin() et.Plugin {
 	return &txtPluginManager{
 		name: pluginName, // constant defined in dns/txt.go
@@ -33,41 +31,46 @@ func NewTXTPlugin() et.Plugin {
 	}
 }
 
-// NewDNSPlugin exists only for backward compatibility.
+// NewDNSPlugin remains for backward compatibility.
 func NewDNSPlugin() et.Plugin { return NewTXTPlugin() }
 
 /* ---------- et.Plugin interface ---------- */
 
-// Name allows the manager to satisfy et.Plugin.
+// Name satisfies et.Plugin.
 func (tpm *txtPluginManager) Name() string { return tpm.name }
 
 // Start registers the handler with the engine.
 func (tpm *txtPluginManager) Start(r et.Registry) error {
-	// Namespace logger:  plugin name=txt_service_discovery …
+	// Create a scoped logger: plugin name=txt_service_discovery …
 	tpm.log = r.Log().WithGroup("plugin").With("name", tpm.name)
 
-	// Handler that actually does the TXT-record work.
+	// Worker that performs the TXT-record analysis.
+	const handlerSuffix = "-FQDN-Check"
 	tpm.discover = &txtServiceDiscovery{
-		name:   tpm.name + "-FQDN-Check",
+		name:   tpm.name + handlerSuffix,
 		source: tpm.source,
 	}
 
-	// Register with the engine.
+	// Register the handler.
 	if err := r.RegisterHandler(&et.Handler{
 		Plugin:     tpm,
 		Name:       tpm.discover.name,
-		Priority:   9,
-		Transforms: []string{"DNSRecord"},
+		Priority:   9,                      // below core DNS handlers
+		Transforms: []string{"DNSRecord"},  // consume DNS-record events only
 		EventType:  (oamdns.FQDN{}).AssetType(),
 		Callback:   tpm.discover.check,
 	}); err != nil {
-		tpm.log.Error("Failed to register handler", "error", err)
+		tpm.log.Error("failed to register handler", "error", err)
 		return err
 	}
 
-	tpm.log.Info("Plugin started")
+	tpm.log.Info("plugin started")
 	return nil
 }
 
 // Stop is called when the engine shuts down.
-func (tpm *txtPluginManager) Stop() { tpm.log.Info("Plugin stopped") }
+func (tpm *txtPluginManager) Stop() {
+	if tpm.log != nil {
+		tpm.log.Info("plugin stopped")
+	}
+}
