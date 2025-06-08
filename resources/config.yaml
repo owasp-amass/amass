@@ -1,0 +1,62 @@
+scope:
+#  domains: # registered domain names in scope
+#    - owasp.org
+#  ips: # IP addresses in scope, multiple methods of inserting IP addresses can be used
+#    - 192.0.2.1
+#    - 192.0.2.2
+#    - 192.168.0.3-8
+#    - 192.168.0.10-192.168.0.20
+#  cidrs: # CIDR ranges that are in scope
+#    - 192.0.2.0/24
+#    - 192.0.2.128/25
+  ports: # ports to be used when actively scanning services
+    - 80
+    - 443
+    - 8000
+    - 8080
+    - 8443
+    - 8888
+#  blacklist: # subdomains to be blacklisted
+#    - example.owasp.org
+options:
+  datasources: "./datasources.yaml"
+  # engine: "http://127.0.0.1:4000/graphql"
+  # database: "bolt://neo4j:amass4OWASP@neo4j:7687/neo4j"
+  # database: "postgres://amass:amass4OWASP@assetdb:5432/assetdb"
+  bruteforce:
+    enabled: false
+    wordlists: # wordlist(s) to use that are specific to brute forcing
+      - "./wordlists/short-wordlist.txt"
+  alterations:
+    enabled: false
+    wordlists: # wordlist(s) to use that are specific to name alterations
+      - "./wordlists/alterations.txt"
+  default_transform_values: # default, global values for transformations, if not specified in the transformation.
+    ttl: 10080 # minutes
+    confidence: 50 # 50%
+    priority: 5
+
+transformations:
+  Account->ALL:
+  AutnumRecord->ALL:
+  AutonomousSystem->ALL:
+  ContactRecord->ALL:
+  DomainRecord->ALL:
+  File->ALL:
+  FQDN->ALL:
+  FQDN->DNS:
+    ttl: 1440
+  FundsTransfer->ALL:
+  Identifier->ALL:
+  IPAddress->ALL:
+  IPNetRecord->ALL:
+  Location->ALL:
+  Netblock->ALL:
+  Organization->ALL:
+  Person->ALL:
+  Phone->ALL:
+  Product->ALL:
+  ProductRelease->ALL:
+  Service->ALL:
+  TLSCertificate->ALL:
+  URL->ALL:

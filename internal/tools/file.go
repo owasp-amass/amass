@@ -12,9 +12,9 @@ import (
 	"github.com/owasp-amass/amass/v4/config"
 )
 
-func CreateOutputDirectory(cfg *config.Config) error {
+func CreateOutputDirectory(dirpath string) error {
 	// Prepare output file paths
-	dir := config.OutputDirectory(cfg.Dir)
+	dir := config.OutputDirectory(dirpath)
 	if dir == "" {
 		return errors.New("failed to obtain the path for the output directory")
 	}

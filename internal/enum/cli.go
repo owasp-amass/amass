@@ -156,12 +156,17 @@ func CLIWorkflow(cmdName string, clArgs []string) {
 		return
 	}
 
-	if err := tools.CreateOutputDirectory(cfg); err != nil {
+	if err := tools.CreateOutputDirectory(cfg.Dir); err != nil {
 		_, _ = afmt.R.Fprintf(color.Error, "Failed to create the output directory: %v\n", err)
 		os.Exit(1)
 	}
 
 	dir := config.OutputDirectory(cfg.Dir)
+	if dir == "" {
+		_, _ = afmt.R.Fprintln(color.Error, "failed to obtain the path for the output directory")
+		os.Exit(1)
+	}
+
 	l := selectLogger(dir, args.Filepaths.LogFile)
 	// Create the client that will provide a connection to the engine
 	url := "http://127.0.0.1:4000/graphql"
