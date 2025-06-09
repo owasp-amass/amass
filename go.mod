@@ -25,7 +25,7 @@ require (
 	github.com/miekg/dns v1.1.66
 	github.com/nyaruka/phonenumbers v1.6.3
 	github.com/openrdap/rdap v0.9.1
-	github.com/owasp-amass/asset-db v0.20.1-0.20250512195943-e082b30197fb
+	github.com/owasp-amass/asset-db v0.20.1-0.20250608222032-5cb8dc9be958
 	github.com/owasp-amass/open-asset-model v0.14.1-0.20250512191847-44621818e90d
 	github.com/owasp-amass/resolve v0.9.7-0.20250325214539-07077e8c54af
 	github.com/samber/slog-common v0.18.1
@@ -34,8 +34,8 @@ require (
 	github.com/tylertreat/BoomFilters v0.0.0-20250603162721-abf33679c3cf
 	github.com/vektah/gqlparser/v2 v2.5.27
 	github.com/yl2chen/cidranger v1.0.2
-	golang.org/x/net v0.40.0
-	golang.org/x/time v0.11.0
+	golang.org/x/net v0.41.0
+	golang.org/x/time v0.12.0
 	gopkg.in/yaml.v3 v3.0.1
 	gorm.io/gorm v1.30.0
 	mvdan.cc/xurls/v2 v2.6.0
@@ -95,18 +95,18 @@ require (
 	github.com/sosodev/duration v1.3.1 // indirect
 	github.com/temoto/robotstxt v1.1.2 // indirect
 	github.com/xhit/go-str2duration/v2 v2.1.0 // indirect
-	golang.org/x/crypto v0.38.0 // indirect
-	golang.org/x/exp v0.0.0-20250531010427-b6e5de432a8b // indirect
-	golang.org/x/mod v0.24.0 // indirect
-	golang.org/x/sync v0.14.0 // indirect
+	golang.org/x/crypto v0.39.0 // indirect
+	golang.org/x/exp v0.0.0-20250606033433-dcc06ee1d476 // indirect
+	golang.org/x/mod v0.25.0 // indirect
+	golang.org/x/sync v0.15.0 // indirect
 	golang.org/x/sys v0.33.0 // indirect
-	golang.org/x/text v0.25.0 // indirect
-	golang.org/x/tools v0.33.0 // indirect
+	golang.org/x/text v0.26.0 // indirect
+	golang.org/x/tools v0.34.0 // indirect
 	google.golang.org/protobuf v1.36.6 // indirect
 	gorm.io/datatypes v1.2.5 // indirect
-	gorm.io/driver/mysql v1.5.7 // indirect
+	gorm.io/driver/mysql v1.6.0 // indirect
 	gorm.io/driver/postgres v1.6.0 // indirect
-	modernc.org/libc v1.65.8 // indirect
+	modernc.org/libc v1.65.10 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 	modernc.org/sqlite v1.37.1 // indirect
