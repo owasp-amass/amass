@@ -16,7 +16,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/owasp-amass/amass/v4/config"
 	"github.com/owasp-amass/amass/v4/internal/afmt"
-	"github.com/owasp-amass/amass/v4/internal/db"
+	"github.com/owasp-amass/amass/v4/internal/tools"
 )
 
 const (
@@ -149,7 +149,7 @@ func CLIWorkflow(cmdName string, clArgs []string) {
 		os.Exit(1)
 	}
 	// Connect with the graph database containing the enumeration data
-	db := db.OpenGraphDatabase(cfg)
+	db := tools.OpenGraphDatabase(cfg)
 	if db == nil {
 		_, _ = afmt.R.Fprintln(color.Error, "Failed to connect with the database")
 		os.Exit(1)

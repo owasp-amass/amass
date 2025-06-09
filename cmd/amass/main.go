@@ -36,6 +36,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/google/uuid"
+	"github.com/owasp-amass/amass/v4/config"
 	"github.com/owasp-amass/amass/v4/engine/api/graphql/client"
 	"github.com/owasp-amass/amass/v4/internal/afmt"
 	ae "github.com/owasp-amass/amass/v4/internal/amass_engine"
@@ -136,7 +137,7 @@ func main() {
 				os.Exit(1)
 			}
 			// Give the engine time to start
-			time.Sleep(2 * time.Second)
+			time.Sleep(5 * time.Second)
 			// Check if the engine is running after attempting to start it
 			if !engineIsRunning() {
 				_, _ = afmt.R.Fprintf(color.Error, "The Amass engine failed to start.\n")
@@ -186,6 +187,6 @@ func startEngine() error {
 	cmd.Stdout = io.Discard
 	cmd.Stderr = io.Discard
 	cmd.Stdin = os.Stdin
-	cmd.Dir = path.Dir(p)
+	cmd.Dir = config.OutputDirectory("")
 	return cmd.Start()
 }

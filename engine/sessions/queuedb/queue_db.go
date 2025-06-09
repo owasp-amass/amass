@@ -27,8 +27,9 @@ type Element struct {
 }
 
 func NewQueueDB(dbPath string) (*QueueDB, error) {
+	dbPath += "?_pragma=busy_timeout(30000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)"
+
 	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{
-		PrepareStmt:            false,
 		SkipDefaultTransaction: true,
 		Logger:                 logger.Default.LogMode(logger.Silent),
 	})
@@ -41,7 +42,7 @@ func NewQueueDB(dbPath string) (*QueueDB, error) {
 		return nil, err
 	}
 
-	sqlDB.SetMaxOpenConns(3)
+	sqlDB.SetMaxOpenConns(1)
 	sqlDB.SetMaxIdleConns(5)
 	sqlDB.SetConnMaxLifetime(time.Hour)
 	sqlDB.SetConnMaxIdleTime(10 * time.Minute)

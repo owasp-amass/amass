@@ -45,8 +45,7 @@ func (c *Config) loadEngineSettings(cfg *Config) error {
 	// Attempt to retrieve the "engine" value from the configuration options.
 	apiURIInterface, ok := c.Options["engine"]
 	if !ok {
-		_ = c.LoadEngineEnvSettings()
-		return nil
+		return c.LoadEngineEnvSettings()
 	}
 	// Assert that the "engine" option is of type string; if not, return an error specifying the incorrect type received.
 	apiURI, ok := apiURIInterface.(string)

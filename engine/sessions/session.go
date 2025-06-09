@@ -185,8 +185,8 @@ func (s *Session) selectDBMS() error {
 				fallthrough
 			case "sqlite3":
 				// Define the connection path for an SQLite database.
-				path := filepath.Join(config.OutputDirectory(s.cfg.Dir), "amass.sqlite")
-				s.dsn = path
+				path := filepath.Join(config.OutputDirectory(s.cfg.Dir), "assetdb.db")
+				s.dsn = path + "?_pragma=busy_timeout(30000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)"
 				s.dbtype = sqlrepo.SQLite
 			case "neo4j":
 				fallthrough
@@ -213,7 +213,7 @@ func (s *Session) selectDBMS() error {
 	// Initialize the database store
 	store, err := assetdb.New(s.dbtype, s.dsn)
 	if err != nil {
-		return errors.New("failed to initialize database store")
+		return errors.New("failed to initialize database store: " + err.Error())
 	}
 	s.db = store
 	return nil
@@ -234,8 +234,10 @@ func (s *Session) createTemporaryDir() (string, error) {
 }
 
 func (s *Session) createFileCacheRepo() (repository.Repository, error) {
-	c, err := assetdb.New(sqlrepo.SQLite, filepath.Join(s.TmpDir(), "cache.sqlite"))
+	path := filepath.Join(s.TmpDir(), "cache.db")
+	dsn := path + "?_pragma=busy_timeout(30000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)"
 
+	c, err := assetdb.New(sqlrepo.SQLite, dsn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create the db: %s", err.Error())
 	}
