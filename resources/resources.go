@@ -13,6 +13,13 @@ import (
 //go:embed alterations.txt config.yaml datasources.yaml namelist.txt
 var resourceFS embed.FS
 
+var DefaultFilesList = []string{
+	"alterations.txt",
+	"config.yaml",
+	"datasources.yaml",
+	"namelist.txt",
+}
+
 func GetResourceFile(path string) (fs.File, error) {
 	file, err := resourceFS.Open(path)
 

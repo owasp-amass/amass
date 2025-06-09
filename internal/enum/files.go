@@ -79,11 +79,9 @@ func processInputFiles(args *Args) error {
 	return nil
 }
 
-func selectLogger(dir, logfile string) *slog.Logger {
+func selectLogger(dir, logfile string) (*slog.Logger, error) {
 	if logfile == "" {
-		if l := tools.NewSyslogLogger(); l != nil {
-			return l
-		}
+		return tools.NewSyslogLogger()
 	}
 	return tools.NewFileLogger(dir, logfile)
 }

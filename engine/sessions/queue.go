@@ -19,7 +19,7 @@ type sessionQueue struct {
 }
 
 func newSessionQueue(s *Session) (*sessionQueue, error) {
-	dbfile := filepath.Join(s.TmpDir(), "queue.sqlite")
+	dbfile := filepath.Join(s.TmpDir(), "queue.db")
 
 	db, err := qdb.NewQueueDB(dbfile)
 	if err != nil {

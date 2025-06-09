@@ -167,7 +167,11 @@ func CLIWorkflow(cmdName string, clArgs []string) {
 		os.Exit(1)
 	}
 
-	l := selectLogger(dir, args.Filepaths.LogFile)
+	if err := tools.CreateDefaultConfigFiles(dir); err != nil {
+		_, _ = afmt.R.Fprintf(color.Error, "Failed to create the default config files: %v\n", err)
+		os.Exit(1)
+	}
+
 	// Create the client that will provide a connection to the engine
 	url := "http://127.0.0.1:4000/graphql"
 	if cfg.EngineAPI != nil && cfg.EngineAPI.URL != "" {
@@ -177,10 +181,21 @@ func CLIWorkflow(cmdName string, clArgs []string) {
 	client := client.NewClient(url)
 	token, err := client.CreateSession(cfg)
 	if err != nil {
-		fmt.Println(err)
-		return
+		_, _ = afmt.R.Fprintf(color.Error, "Failed to create a session with the Amass engine: %v\n", err)
+		os.Exit(1)
 	}
 	defer client.TerminateSession(token)
+
+	logfile := args.Filepaths.LogFile
+	if logfile == "" {
+		logfile = fmt.Sprintf("session-%v.log", token)
+	}
+
+	l, err := selectLogger(dir, logfile)
+	if err != nil {
+		_, _ = afmt.R.Fprintf(color.Error, "Failed to create the logger: %v\n", err)
+		os.Exit(1)
+	}
 
 	// Create interrupt channel and subscribe to server log messages
 	interrupt := make(chan os.Signal, 1)
@@ -188,8 +203,8 @@ func CLIWorkflow(cmdName string, clArgs []string) {
 
 	messages, err := client.Subscribe(token)
 	if err != nil {
-		_, _ = fmt.Println(err)
-		return
+		_, _ = afmt.R.Fprintf(color.Error, "Failed to subscribe to the Amass engine log messages: %v\n", err)
+		os.Exit(1)
 	}
 
 	var count int

@@ -86,7 +86,12 @@ func CLIWorkflow(cmdName string, clArgs []string) {
 		color.Error = io.Discard
 	}
 
-	l := selectLogger(args.Filepaths.LogDir)
+	l, err := selectLogger(args.Filepaths.LogDir)
+	if err != nil {
+		_, _ = afmt.R.Fprintf(color.Error, "Failed to create the logger: %v", err)
+		os.Exit(1)
+	}
+
 	e, err := engine.NewEngine(l)
 	if err != nil {
 		_, _ = afmt.R.Fprintf(color.Error, "Failed to start the engine: %v", err)
@@ -111,17 +116,17 @@ func CLIWorkflow(cmdName string, clArgs []string) {
 	l.Info("Terminating the collection engine")
 }
 
-func selectLogger(dir string) *slog.Logger {
+func selectLogger(dir string) (*slog.Logger, error) {
 	filename := fmt.Sprintf("amass_engine_%s.log", time.Now().Format("2006-01-02T15:04:05"))
 
 	if dir != "" {
 		return tools.NewFileLogger(dir, filename)
 	}
-	if l := tools.NewSyslogLogger(); l != nil {
-		return l
+	if l, err := tools.NewSyslogLogger(); err == nil && l != nil {
+		return l, nil
 	}
-	if l := tools.NewFileLogger("", filename); l != nil {
-		return l
+	if l, err := tools.NewFileLogger("", filename); err == nil && l != nil {
+		return l, nil
 	}
-	return slog.New(slog.NewTextHandler(os.Stdout, nil))
+	return slog.New(slog.NewTextHandler(os.Stdout, nil)), nil
 }

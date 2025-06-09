@@ -2,7 +2,7 @@
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
-package db
+package tools
 
 import (
 	"fmt"
@@ -25,7 +25,9 @@ func OpenGraphDatabase(cfg *config.Config) repository.Repository {
 
 			switch db.System {
 			case "local":
-				dbase = NewGraph(db.System, filepath.Join(config.OutputDirectory(cfg.Dir), "amass.sqlite"), db.Options)
+				path := filepath.Join(config.OutputDirectory(cfg.Dir), "assetdb.db")
+				path += "?_pragma=busy_timeout(30000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)"
+				dbase = NewGraph(db.System, path, db.Options)
 			case "postgres":
 				connStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s", db.Host, db.Port, db.Username, db.Password, db.DBName)
 				dbase = NewGraph(db.System, connStr, db.Options)

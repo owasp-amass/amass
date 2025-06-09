@@ -25,14 +25,14 @@ options:
   # database: "postgres://amass:amass4OWASP@assetdb:5432/assetdb"
   bruteforce:
     enabled: false
-    wordlists: # wordlist(s) to use that are specific to brute forcing
-      - "./wordlists/short-wordlist.txt"
+    wordlists: # wordlist(s) specific to FQDN brute forcing
+      - "./namelist.txt"
   alterations:
     enabled: false
-    wordlists: # wordlist(s) to use that are specific to name alterations
-      - "./wordlists/alterations.txt"
-  default_transform_values: # default, global values for transformations, if not specified in the transformation.
-    ttl: 10080 # minutes
+    wordlists: # wordlist(s) specific to name alterations
+      - "./alterations.txt"
+  default_transform_values:
+    ttl: 10080 # minutes. If not specified, the default is 1440 minutes (1 day)
     confidence: 50 # 50%
     priority: 5
 

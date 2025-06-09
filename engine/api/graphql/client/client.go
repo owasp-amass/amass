@@ -79,10 +79,20 @@ func (c *Client) CreateSession(config *config.Config) (uuid.UUID, error) {
 	}
 
 	var resp struct {
-		Data struct{ CreateSessionFromJson struct{ SessionToken string } }
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+		Data struct {
+			CreateSessionFromJson struct {
+				SessionToken string
+			} `json:"createSessionFromJson"`
+		} `json:"data"`
 	}
 	if err := json.Unmarshal([]byte(res), &resp); err != nil {
 		return token, err
+	}
+	if len(resp.Errors) > 0 && resp.Errors[0].Message != "" {
+		return token, errors.New(resp.Errors[0].Message)
 	}
 
 	return uuid.Parse(resp.Data.CreateSessionFromJson.SessionToken)
@@ -122,7 +132,7 @@ func (c *Client) SessionStats(token uuid.UUID) (*et.SessionStats, error) {
 		return &et.SessionStats{}, err
 	}
 
-	var gqlResp struct {
+	var resp struct {
 		Errors []struct {
 			Message string `json:"message"`
 		} `json:"errors"`
@@ -130,13 +140,13 @@ func (c *Client) SessionStats(token uuid.UUID) (*et.SessionStats, error) {
 			SessionStats et.SessionStats `json:"sessionStats"`
 		} `json:"data"`
 	}
-	if err := json.Unmarshal([]byte(res), &gqlResp); err != nil {
+	if err := json.Unmarshal([]byte(res), &resp); err != nil {
 		return &et.SessionStats{}, err
 	}
-	if len(gqlResp.Errors) > 0 && gqlResp.Errors[0].Message != "" {
-		return &et.SessionStats{}, errors.New(gqlResp.Errors[0].Message)
+	if len(resp.Errors) > 0 && resp.Errors[0].Message != "" {
+		return &et.SessionStats{}, errors.New(resp.Errors[0].Message)
 	}
-	return &gqlResp.Data.SessionStats, nil
+	return &resp.Data.SessionStats, nil
 }
 
 // Creates subscription to receove a stream of log messages from the sever

@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
 
 	afmt "github.com/owasp-amass/amass/v4/internal/afmt"
@@ -59,33 +60,32 @@ func channelJSONLog(data string) string {
 	return logstr
 }
 
-func NewFileLogger(dir, logfile string) *slog.Logger {
+func NewFileLogger(dir, logfile string) (*slog.Logger, error) {
 	if logfile == "" {
-		return nil
+		return nil, fmt.Errorf("no log file specified")
 	}
-	p := logfile
 
 	if dir != "" {
 		if err := os.MkdirAll(dir, 0640); err != nil {
-			_, _ = fmt.Fprintf(os.Stderr, "Failed to create the log directory: %v", err)
+			return nil, fmt.Errorf("failed to create the log directory: %v", err)
 		}
 	}
 
-	f, err := os.OpenFile(p, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	f, err := os.OpenFile(filepath.Join(dir, logfile), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "Failed to open the log file: %v", err)
-		return nil
+		return nil, fmt.Errorf("failed to open the log file: %v", err)
 	}
-	return slog.New(slog.NewJSONHandler(f, nil))
+
+	return slog.New(slog.NewJSONHandler(f, nil)), nil
 }
 
-func NewSyslogLogger() *slog.Logger {
+func NewSyslogLogger() (*slog.Logger, error) {
 	port := os.Getenv("SYSLOG_PORT")
 	host := strings.ToLower(os.Getenv("SYSLOG_HOST"))
 	transport := strings.ToLower(os.Getenv("SYSLOG_TRANSPORT"))
 
 	if host == "" {
-		return nil
+		return nil, fmt.Errorf("no syslog host specified")
 	}
 	if port == "" {
 		port = "514"
@@ -96,15 +96,14 @@ func NewSyslogLogger() *slog.Logger {
 
 	writer, err := net.Dial(transport, net.JoinHostPort(host, port))
 	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "Failed to create the connection to the log server: %v", err)
-		return nil
+		return nil, fmt.Errorf("failed to create the connection to the log server: %v", err)
 	}
 
 	return slog.New(slogsyslog.Option{
 		Level:     slog.LevelInfo,
 		Converter: syslogConverter,
 		Writer:    writer,
-	}.NewSyslogHandler())
+	}.NewSyslogHandler()), nil
 }
 
 func syslogConverter(addSource bool, replaceAttr func(groups []string, a slog.Attr) slog.Attr, loggerAttr []slog.Attr, groups []string, record *slog.Record) map[string]any {

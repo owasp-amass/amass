@@ -16,6 +16,7 @@ import (
 	"github.com/owasp-amass/amass/v4/config"
 	"github.com/owasp-amass/amass/v4/internal/afmt"
 	amassdb "github.com/owasp-amass/amass/v4/internal/db"
+	"github.com/owasp-amass/amass/v4/internal/tools"
 	"github.com/owasp-amass/asset-db/repository"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
@@ -136,7 +137,7 @@ func CLIWorkflow(cmdName string, clArgs []string) {
 		os.Exit(1)
 	}
 	// Connect with the graph database containing the enumeration data
-	db := amassdb.OpenGraphDatabase(cfg)
+	db := tools.OpenGraphDatabase(cfg)
 	if db == nil {
 		_, _ = afmt.R.Fprintln(color.Error, "Failed to connect with the database")
 		os.Exit(1)
