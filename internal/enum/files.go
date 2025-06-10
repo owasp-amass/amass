@@ -80,8 +80,9 @@ func processInputFiles(args *Args) error {
 }
 
 func selectLogger(dir, logfile string) (*slog.Logger, error) {
-	if logfile == "" {
-		return tools.NewSyslogLogger()
+	l, err := tools.NewSyslogLogger()
+	if err == nil {
+		return l, nil
 	}
 	return tools.NewFileLogger(dir, logfile)
 }
