@@ -16,7 +16,7 @@ import (
 	"github.com/owasp-amass/amass/v4/engine/plugins/horizontals"
 	"github.com/owasp-amass/amass/v4/engine/plugins/scrape"
 	hp "github.com/owasp-amass/amass/v4/engine/plugins/service_discovery/http_probes"
-	txtsd "github.com/owasp-amass/amass/v4/engine/plugins/service_discovery/dns"
+	dns_sd "github.com/owasp-amass/amass/v4/engine/plugins/service_discovery/dns"
 	"github.com/owasp-amass/amass/v4/engine/plugins/whois"
 	"github.com/owasp-amass/amass/v4/engine/plugins/whois/bgptools"
 	et "github.com/owasp-amass/amass/v4/engine/types"
@@ -42,6 +42,7 @@ var pluginNewFuncs = []func() et.Plugin{
 	bgptools.NewBGPTools,
 	brute.NewFQDNAlterations,
 	dns.NewDNS,
+	dns_sd.NewDNSPlugin,
 	enrich.NewBannerURLs,
 	enrich.NewContacts,
 	enrich.NewEmails,
@@ -57,7 +58,6 @@ var pluginNewFuncs = []func() et.Plugin{
 	scrape.NewIPVerse,
 	scrape.NewRapidDNS,
 	scrape.NewSiteDossier,
-	txtsd.NewDNSPlugin,
 	whois.NewWHOIS,
 	NewIPNetblock,
 	NewJARMFingerprints,

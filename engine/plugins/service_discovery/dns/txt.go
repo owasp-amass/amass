@@ -1,16 +1,17 @@
-// Package dns provides service-discovery checks that mine cached DNS TXT
-// records for evidence of third-party services in use.
-//
-// This implementation is identical to the original functionality –
-// matching substrings from the `matchers` map and emitting service
-// findings – with one extra safety-net: if the user has not configured a
-// TTL for the “FQDN → FQDN” transformation, we default to the past 24 h
-// instead of aborting.
+// SPDX-License-Identifier: Apache-2.0
+// Copyright © Jeff Foley 2017-2025.
+
+// Package dns provides a service-discovery check that mines cached DNS
+// TXT-records for “verification” strings which reveal third-party
+// services in use.  Every log line includes component=txt_service_discovery
+// so you can grep that single token.
 package dns
 
 import (
 	"strings"
 	"time"
+
+	"log/slog"
 
 	"github.com/miekg/dns"
 	"github.com/owasp-amass/amass/v4/engine/plugins/support"
@@ -19,8 +20,10 @@ import (
 	"github.com/owasp-amass/open-asset-model/general"
 )
 
-// pluginName is the canonical identifier used across logs, cache look-ups, and the registry.
-const pluginName = "txt_service_discovery"
+const (
+	pluginName   = "txt_service_discovery" // shared with plugin.go
+	componentKey = "component"             // uniform log key
+)
 
 // matchers maps TXT-record substrings to friendly service names.
 var matchers = map[string]string{
@@ -60,32 +63,38 @@ var matchers = map[string]string{
 	"zoom-domain-verification":        "Zoom",
 }
 
-// txtServiceDiscovery inspects cached DNS TXT records and tags the FQDN with discovered services.
+// txtServiceDiscovery inspects cached DNS TXT records and tags the FQDN
+// with discovered services.
 type txtServiceDiscovery struct {
 	name   string
 	source *et.Source
 }
 
 // check implements the HandlerFunc expected by the Engine registry.
-// It avoids live DNS look-ups and relies exclusively on the TXT records
-// already stored by the core “engine/plugins/dns/txt.go” plugin.
 func (t *txtServiceDiscovery) check(e *et.Event) error {
+	log := slog.Default().With(componentKey, pluginName)
+
 	if e == nil || e.Entity == nil {
+		log.Info("event or entity is nil – skipping")
 		return nil
 	}
 
 	entity := e.Entity
 	fqdn, ok := entity.Asset.(*oamdns.FQDN)
 	if !ok {
+		log.Info("entity is not an FQDN – skipping")
 		return nil
 	}
+
+	log = log.With("fqdn", fqdn.Name)
 
 	// Determine the TTL window shared with the core DNS-TXT plugin.
 	since, err := support.TTLStartTime(e.Session.Config(), "FQDN", "FQDN", pluginName)
 	if err != nil {
-		// If no transformation stanza exists, fall back to the past 24 h
-		// so the plugin still runs instead of silently bailing out.
 		since = time.Now().Add(-24 * time.Hour)
+		log.Info("no TTL config found – using 24-hour fallback")
+	} else {
+		log.Info("using TTL window", "since", since.Format(time.RFC3339))
 	}
 
 	// Pull TXT records from cache.
@@ -96,17 +105,28 @@ func (t *txtServiceDiscovery) check(e *et.Event) error {
 				entries = append(entries, prop.Data)
 			}
 		}
+	} else {
+		log.Info("cache access error", "error", err)
 	}
 
 	if len(entries) == 0 {
-		return nil // nothing to analyse
+		log.Info("no TXT entries found – nothing to analyse")
+		return nil
 	}
+
+	log.Info("analysing TXT entries", "count", len(entries))
 
 	// Build findings when patterns match.
 	var findings []*support.Finding
 	for _, txt := range entries {
+		log.Info("TXT entry", "text", truncate(txt, 120))
 		for needle, svc := range matchers {
 			if strings.Contains(txt, needle) {
+				log.Info("service match",
+					"service", svc,
+					"needle", needle,
+					"txt_snippet", truncate(txt, 80),
+				)
 				findings = append(findings, &support.Finding{
 					From:     entity,
 					FromName: fqdn.Name,
@@ -120,7 +140,20 @@ func (t *txtServiceDiscovery) check(e *et.Event) error {
 	}
 
 	if len(findings) > 0 {
+		log.Info("emitting findings", "count", len(findings))
 		support.ProcessAssetsWithSource(e, findings, t.source, t.name, t.name)
+	} else {
+		log.Info("no service strings matched any TXT entries")
 	}
+
 	return nil
+}
+
+// truncate returns s if it is already short, otherwise keeps the first n
+// runes and appends “…”.
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "…"
 }
