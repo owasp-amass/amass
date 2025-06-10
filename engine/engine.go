@@ -56,7 +56,7 @@ func NewEngine(l *slog.Logger) (*Engine, error) {
 	ch := make(chan error, 1)
 	go func(errch chan error) { errch <- srv.Start() }(ch)
 
-	t := time.NewTimer(2 * time.Second)
+	t := time.NewTimer(3 * time.Second)
 	defer t.Stop()
 
 	select {

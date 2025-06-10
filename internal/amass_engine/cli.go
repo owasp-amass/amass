@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/fatih/color"
+	"github.com/owasp-amass/amass/v4/config"
 	"github.com/owasp-amass/amass/v4/engine"
 	"github.com/owasp-amass/amass/v4/engine/plugins"
 	"github.com/owasp-amass/amass/v4/internal/afmt"
@@ -125,8 +126,11 @@ func selectLogger(dir string) (*slog.Logger, error) {
 	if l, err := tools.NewSyslogLogger(); err == nil && l != nil {
 		return l, nil
 	}
-	if l, err := tools.NewFileLogger("", filename); err == nil && l != nil {
+
+	dir = config.OutputDirectory("")
+	if l, err := tools.NewFileLogger(dir, filename); err == nil && l != nil {
 		return l, nil
 	}
+
 	return slog.New(slog.NewTextHandler(os.Stdout, nil)), nil
 }
