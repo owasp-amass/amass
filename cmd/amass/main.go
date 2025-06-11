@@ -31,7 +31,6 @@ import (
 	"os/exec"
 	"path"
 	"runtime"
-	"syscall"
 	"time"
 
 	"github.com/fatih/color"
@@ -179,9 +178,9 @@ func startEngine() error {
 	cmd := exec.Command("cmd", "/C", "start", p, "engine")
 	if runtime.GOOS != "windows" {
 		cmd = exec.Command("nohup", p, "engine")
-		cmd.SysProcAttr = &syscall.SysProcAttr{
+		/*cmd.SysProcAttr = &syscall.SysProcAttr{
 			Setpgid: true, // Set the process group ID to allow for process management
-		}
+		}*/
 	}
 	cmd.Stdout = io.Discard
 	cmd.Stderr = io.Discard
