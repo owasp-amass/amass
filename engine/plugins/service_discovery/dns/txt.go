@@ -2,9 +2,9 @@
 // Copyright © Jeff Foley 2017-2025.
 
 // Package dns provides a service-discovery check that mines cached DNS
-// TXT-records for “verification” strings which reveal third-party
-// services in use.  Every log line includes component=txt_service_discovery
-// so you can grep that single token.
+// TXT records for verification strings which reveal third-party services
+// in use.  Every log line includes component=txt_service_discovery so it
+// is trivial to grep the full trace.
 package dns
 
 import (
@@ -20,10 +20,7 @@ import (
 	"github.com/owasp-amass/open-asset-model/general"
 )
 
-const (
-	pluginName   = "txt_service_discovery" // shared with plugin.go
-	componentKey = "component"             // uniform log key
-)
+const pluginName = "txt_service_discovery" // shared constant
 
 // matchers maps TXT-record substrings to friendly service names.
 var matchers = map[string]string{
@@ -68,36 +65,46 @@ var matchers = map[string]string{
 type txtServiceDiscovery struct {
 	name   string
 	source *et.Source
+	log    *slog.Logger // engine logger injected by plugin.go
 }
 
-// check implements the HandlerFunc expected by the Engine registry.
+// check implements the HandlerFunc expected by the registry.
 func (t *txtServiceDiscovery) check(e *et.Event) error {
-	log := slog.Default().With(componentKey, pluginName)
+	// Fall back to slog.Default if, for some reason, plugin.go didn’t
+	// inject the logger (e.g. a unit test bypassing the engine).
+	log := t.log
+	if log == nil {
+		log = slog.Default()
+	}
+	log = log.With("component", pluginName) // uniform key
+
+	/* ---------- input validation ---------- */
 
 	if e == nil || e.Entity == nil {
-		log.Info("event or entity is nil – skipping")
+		log.Info("event or entity nil – skipping")
 		return nil
 	}
 
 	entity := e.Entity
 	fqdn, ok := entity.Asset.(*oamdns.FQDN)
 	if !ok {
-		log.Info("entity is not an FQDN – skipping")
+		log.Info("entity not FQDN – skipping")
 		return nil
 	}
-
 	log = log.With("fqdn", fqdn.Name)
 
-	// Determine the TTL window shared with the core DNS-TXT plugin.
+	/* ---------- TTL window ---------- */
+
 	since, err := support.TTLStartTime(e.Session.Config(), "FQDN", "FQDN", pluginName)
 	if err != nil {
 		since = time.Now().Add(-24 * time.Hour)
-		log.Info("no TTL config found – using 24-hour fallback")
+		log.Info("no TTL config – using 24-hour fallback")
 	} else {
-		log.Info("using TTL window", "since", since.Format(time.RFC3339))
+		log.Info("TTL window", "since", since.Format(time.RFC3339))
 	}
 
-	// Pull TXT records from cache.
+	/* ---------- gather TXT records from cache ---------- */
+
 	var entries []string
 	if tags, err := e.Session.Cache().GetEntityTags(entity, since, "dns_record"); err == nil {
 		for _, tag := range tags {
@@ -113,20 +120,16 @@ func (t *txtServiceDiscovery) check(e *et.Event) error {
 		log.Info("no TXT entries found – nothing to analyse")
 		return nil
 	}
-
 	log.Info("analysing TXT entries", "count", len(entries))
 
-	// Build findings when patterns match.
+	/* ---------- match against known service strings ---------- */
+
 	var findings []*support.Finding
 	for _, txt := range entries {
-		log.Info("TXT entry", "text", truncate(txt, 120))
+		log.Debug("TXT entry", "text", truncate(txt, 120))
 		for needle, svc := range matchers {
 			if strings.Contains(txt, needle) {
-				log.Info("service match",
-					"service", svc,
-					"needle", needle,
-					"txt_snippet", truncate(txt, 80),
-				)
+				log.Info("service match", "service", svc, "needle", needle)
 				findings = append(findings, &support.Finding{
 					From:     entity,
 					FromName: fqdn.Name,
@@ -139,18 +142,19 @@ func (t *txtServiceDiscovery) check(e *et.Event) error {
 		}
 	}
 
+	/* ---------- emit discoveries ---------- */
+
 	if len(findings) > 0 {
 		log.Info("emitting findings", "count", len(findings))
 		support.ProcessAssetsWithSource(e, findings, t.source, t.name, t.name)
 	} else {
-		log.Info("no service strings matched any TXT entries")
+		log.Info("no matchers hit")
 	}
 
 	return nil
 }
 
-// truncate returns s if it is already short, otherwise keeps the first n
-// runes and appends “…”.
+// truncate shortens very long log strings for readability.
 func truncate(s string, n int) string {
 	if len(s) <= n {
 		return s
