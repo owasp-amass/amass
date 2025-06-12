@@ -25,7 +25,7 @@ require (
 	github.com/miekg/dns v1.1.66
 	github.com/nyaruka/phonenumbers v1.6.3
 	github.com/openrdap/rdap v0.9.1
-	github.com/owasp-amass/asset-db v0.20.1-0.20250608222032-5cb8dc9be958
+	github.com/owasp-amass/asset-db v0.21.0
 	github.com/owasp-amass/open-asset-model v0.14.1-0.20250512191847-44621818e90d
 	github.com/owasp-amass/resolve v0.9.7-0.20250325214539-07077e8c54af
 	github.com/samber/slog-common v0.18.1
@@ -51,7 +51,7 @@ require (
 	github.com/andybalholm/cascadia v1.3.3 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	github.com/chromedp/cdproto v0.0.0-20250530212709-4dcc110a7b92 // indirect
+	github.com/chromedp/cdproto v0.0.0-20250611220608-a17eb1ae8ff0 // indirect
 	github.com/chromedp/chromedp v0.13.6 // indirect
 	github.com/chromedp/sysutil v1.1.0 // indirect
 	github.com/d4l3k/messagediff v1.2.1 // indirect
@@ -90,7 +90,7 @@ require (
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/rubenv/sql-migrate v1.8.0 // indirect
-	github.com/samber/lo v1.50.0 // indirect
+	github.com/samber/lo v1.51.0 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/sosodev/duration v1.3.1 // indirect
 	github.com/temoto/robotstxt v1.1.2 // indirect
@@ -109,5 +109,5 @@ require (
 	modernc.org/libc v1.65.10 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
-	modernc.org/sqlite v1.37.1 // indirect
+	modernc.org/sqlite v1.38.0 // indirect
 )
