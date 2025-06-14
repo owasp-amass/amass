@@ -9,8 +9,7 @@
 package dns
 
 import (
-    "fmt"
-    "strings"
+        "strings"
     "time"
 
     "log/slog"
