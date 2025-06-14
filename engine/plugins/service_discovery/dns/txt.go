@@ -21,9 +21,8 @@ import (
     "github.com/owasp-amass/open-asset-model/general"
 )
 
-const pluginName = "txt_service_discovery" // must match plugin.go registration
+const pluginName = "txt_service_discovery" 
 
-// matchers maps TXT‑record substrings to the corresponding service names.
 var matchers = map[string]string{
     "airtable-verification":           "Airtable",
     "aliyun-site-verification":        "Aliyun",
@@ -61,15 +60,12 @@ var matchers = map[string]string{
     "zoom-domain-verification":        "Zoom",
 }
 
-// txtServiceDiscovery is a handler registered with the Engine.
 type txtServiceDiscovery struct {
     name   string
     source *et.Source
 }
 
-// check analyses cached TXT records and emits findings for recognised
-// verification strings. All messages are logged through the session logger
-// so they surface in the enum‑log file.
+
 func (t *txtServiceDiscovery) check(e *et.Event) error {
     ctxAttr := slog.Group(
         "ctx",
@@ -77,13 +73,13 @@ func (t *txtServiceDiscovery) check(e *et.Event) error {
         slog.String("handler", t.name),
     )
 
-    // Basic nil‑safety.
+
     if e == nil || e.Entity == nil {
         e.Session.Log().Debug("event or entity is nil – skipping", ctxAttr)
         return nil
     }
 
-    // We only operate on FQDN entities.
+
     entity := e.Entity
     fqdn, ok := entity.Asset.(*oamdns.FQDN)
     if !ok {
@@ -91,14 +87,13 @@ func (t *txtServiceDiscovery) check(e *et.Event) error {
         return nil
     }
 
-    // Determine the start‑time window for graph‑cache look‑ups.
+
     since, err := support.TTLStartTime(e.Session.Config(), "FQDN", "FQDN", pluginName)
     if err != nil {
         since = time.Now().Add(-24 * time.Hour) // fall‑back window
         e.Session.Log().Debug("no TTL config – defaulting to 24h", ctxAttr)
     }
 
-    // Retrieve TXT records from the cache.
     var txtEntries []string
     tags, cacheErr := e.Session.Cache().GetEntityTags(entity, since, "dns_record")
     if cacheErr != nil {
@@ -116,7 +111,7 @@ func (t *txtServiceDiscovery) check(e *et.Event) error {
         return nil
     }
 
-    // Analyse records for known service verifiers.
+
     var findings []*support.Finding
     for _, txt := range txtEntries {
         for needle, svc := range matchers {
@@ -136,7 +131,7 @@ func (t *txtServiceDiscovery) check(e *et.Event) error {
                     ToMeta:   truncate(txt, 180),
                     Rel:      &general.SimpleRelation{Name: "TXT record"},
                 })
-                break // one match per TXT record is sufficient
+                break 
             }
         }
     }
@@ -151,7 +146,7 @@ func (t *txtServiceDiscovery) check(e *et.Event) error {
     return nil
 }
 
-// truncate keeps the first n runes and appends an ellipsis if s is longer.
+
 func truncate(s string, n int) string {
     if len(s) <= n {
         return s
