@@ -25,6 +25,10 @@ func CreateOutputDirectory(dirpath string) error {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("mkdir failed for %s: %v", dir, err)
 	}
+	// ensure that the permissions are set correctly
+	if err := os.Chmod(dir, 0755); err != nil {
+		return fmt.Errorf("failed to set permissions to 0755 for %s: %v", dir, err)
+	}
 	return nil
 }
 
