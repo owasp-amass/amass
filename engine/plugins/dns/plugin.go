@@ -128,13 +128,12 @@ func (d *dnsPlugin) Start(r et.Registry) error {
 
 	d.subs = NewSubs(d)
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:       d,
-		Name:         d.subs.name,
-		Priority:     4,
-		MaxInstances: support.MaxHandlerInstances,
-		Transforms:   []string{string(oam.FQDN)},
-		EventType:    oam.FQDN,
-		Callback:     d.subs.check,
+		Plugin:     d,
+		Name:       d.subs.name,
+		Priority:   4,
+		Transforms: []string{string(oam.FQDN)},
+		EventType:  oam.FQDN,
+		Callback:   d.subs.check,
 	}); err != nil {
 		return err
 	}
