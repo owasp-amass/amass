@@ -176,7 +176,7 @@ func (d *dis) completedCallback(data interface{}) {
 }
 
 func (d *dis) safeDispatch(e *et.Event) error {
-	// there is not need to dispatch the event if there's no associated asset pipeline
+	// there is no need to dispatch the event if there's no associated asset pipeline
 	if ap, err := d.reg.GetPipeline(e.Entity.Asset.AssetType()); err != nil || ap == nil {
 		return err
 	}

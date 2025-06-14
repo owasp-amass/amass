@@ -6,9 +6,9 @@ package dns
 
 import (
 	"log/slog"
+	"sync"
 	"time"
 
-	"github.com/caffix/stringset"
 	"github.com/miekg/dns"
 	"github.com/owasp-amass/amass/v4/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v4/engine/types"
@@ -32,7 +32,8 @@ type dnsPlugin struct {
 	secondSweepSize int
 	maxSweepSize    int
 	source          *et.Source
-	apexList        *stringset.Set
+	apexLock        sync.Mutex
+	apexList        map[string]*dbt.Entity
 }
 
 func NewDNS() et.Plugin {
@@ -45,7 +46,7 @@ func NewDNS() et.Plugin {
 			Name:       "DNS",
 			Confidence: 100,
 		},
-		apexList: stringset.New(),
+		apexList: make(map[string]*dbt.Entity),
 	}
 }
 
@@ -127,13 +128,12 @@ func (d *dnsPlugin) Start(r et.Registry) error {
 
 	d.subs = NewSubs(d)
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:       d,
-		Name:         d.subs.name,
-		Priority:     4,
-		MaxInstances: support.MaxHandlerInstances,
-		Transforms:   []string{string(oam.FQDN)},
-		EventType:    oam.FQDN,
-		Callback:     d.subs.check,
+		Plugin:     d,
+		Name:       d.subs.name,
+		Priority:   4,
+		Transforms: []string{string(oam.FQDN)},
+		EventType:  oam.FQDN,
+		Callback:   d.subs.check,
 	}); err != nil {
 		return err
 	}
@@ -244,4 +244,34 @@ func sweepCallback(e *et.Event, ip *oamnet.IPAddress, src *et.Source) {
 			Session: e.Session,
 		})
 	}
+}
+
+func (d *dnsPlugin) addApex(name string, entity *dbt.Entity) {
+	d.apexLock.Lock()
+	defer d.apexLock.Unlock()
+
+	if _, found := d.apexList[name]; !found {
+		d.apexList[name] = entity
+	}
+}
+
+func (d *dnsPlugin) getApex(name string) *dbt.Entity {
+	d.apexLock.Lock()
+	defer d.apexLock.Unlock()
+
+	if entity, found := d.apexList[name]; found {
+		return entity
+	}
+	return nil
+}
+
+func (d *dnsPlugin) getApexList() []string {
+	d.apexLock.Lock()
+	defer d.apexLock.Unlock()
+
+	var results []string
+	for name := range d.apexList {
+		results = append(results, name)
+	}
+	return results
 }

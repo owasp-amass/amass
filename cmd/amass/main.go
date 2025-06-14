@@ -26,17 +26,11 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
-	"io"
 	"os"
-	"os/exec"
 	"path"
-	"runtime"
-	"syscall"
 	"time"
 
 	"github.com/fatih/color"
-	"github.com/google/uuid"
-	"github.com/owasp-amass/amass/v4/engine/api/graphql/client"
 	"github.com/owasp-amass/amass/v4/internal/afmt"
 	ae "github.com/owasp-amass/amass/v4/internal/amass_engine"
 	"github.com/owasp-amass/amass/v4/internal/assoc"
@@ -156,41 +150,4 @@ func main() {
 		_, _ = afmt.R.Fprintf(color.Error, "subcommand provided but not defined: %s\n", os.Args[1])
 		os.Exit(1)
 	}
-}
-
-func engineIsRunning() bool {
-	c := client.NewClient("http://127.0.0.1:4000/graphql")
-
-	if _, err := c.SessionStats(uuid.New()); err != nil && err.Error() == "invalid session token" {
-		return true
-	}
-	return false
-}
-
-func startEngine() error {
-	p, err := os.Executable()
-	if err != nil {
-		return fmt.Errorf("failed to get executable path: %w", err)
-	}
-	if p == "" {
-		return fmt.Errorf("executable path is empty")
-	}
-
-	cmd := exec.Command("cmd", "/C", "start", p, "engine")
-	if runtime.GOOS != "windows" {
-		cmd = exec.Command("nohup", p, "engine")
-		cmd.SysProcAttr = &syscall.SysProcAttr{
-			Setpgid: true, // Set the process group ID to allow for process management
-		}
-	}
-	cmd.Stdout = io.Discard
-	cmd.Stderr = io.Discard
-	cmd.Stdin = os.Stdin
-
-	cmd.Dir, err = os.Getwd()
-	if err != nil {
-		return err
-	}
-
-	return cmd.Start()
 }

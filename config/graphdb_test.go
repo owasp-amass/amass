@@ -145,7 +145,7 @@ func TestLoadDatabaseEnvSettings(t *testing.T) {
 
 	// // Scenario 3: Test with no environment variables
 	err = c.LoadDatabaseEnvSettings()
-	if err != nil {
-		t.Errorf("Expected no error when no environment variables are set, got an error %v", err)
+	if err.Error() != "environment variable AMASS_DB_USER is not set" {
+		t.Errorf("Expected a different error, got: %v", err)
 	}
 }

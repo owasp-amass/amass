@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/owasp-amass/amass/v4/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v4/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
@@ -28,12 +29,14 @@ func (d *dnsApex) check(e *et.Event) error {
 
 	if e.Meta == nil {
 		return nil
+	} else if m, ok := e.Meta.(*support.FQDNMeta); !ok || len(m.RecordTypes) == 0 {
+		return nil
 	}
 
 	// determine which domain apex is the parent of this name
 	var name string
 	best := len(fqdn.Name)
-	for _, n := range d.plugin.apexList.Slice() {
+	for _, n := range d.plugin.getApexList() {
 		if idx := strings.Index(fqdn.Name, n); idx != -1 && idx != 0 && idx < best {
 			best = idx
 			name = n
@@ -43,13 +46,7 @@ func (d *dnsApex) check(e *et.Event) error {
 		return nil
 	}
 
-	var apex *dbt.Entity
-	if ents, err := e.Session.Cache().FindEntitiesByContent(
-		&oamdns.FQDN{Name: name}, e.Session.Cache().StartTime()); err == nil && len(ents) == 1 {
-		apex = ents[0]
-	}
-
-	if apex != nil && apex.Asset.Key() != fqdn.Name {
+	if apex := d.plugin.getApex(name); apex != nil && apex.Asset.Key() != fqdn.Name {
 		d.store(e, fqdn.Name, e.Entity, apex)
 	}
 	return nil
