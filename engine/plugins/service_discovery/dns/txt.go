@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright © Jeff Foley 2017-2025.
-
-// Package dns provides a service-discovery check that mines cached DNS
-// TXT-records for “verification” strings which reveal third-party
-// services in use.  Every log line includes plugin and handler names so you
-// can grep for a single token.
+//
+// Package dns provides a service‑discovery check that inspects cached DNS
+// TXT records for third‑party “verification” strings that reveal services in
+// use. All log messages go through the engine session logger so they appear
+// in the standard enum log file. Each log line carries consistent
+// slog.Group metadata (plugin & handler) so you can grep on a single token.
 package dns
 
 import (
+    "fmt"
     "strings"
     "time"
 
@@ -21,10 +23,10 @@ import (
 )
 
 const (
-    pluginName = "txt_service_discovery" // shared with plugin.go
+    pluginName   = "txt_service_discovery" // kept in‑sync with plugin.go registration
 )
 
-// matchers maps TXT-record substrings to friendly service names.
+// matchers maps TXT‑record substrings to human‑readable service names.
 var matchers = map[string]string{
     "airtable-verification":           "Airtable",
     "aliyun-site-verification":        "Aliyun",
@@ -53,109 +55,97 @@ var matchers = map[string]string{
     "openai-domain-verification":      "OpenAI",
     "pendo-domain-verification":       "Pendo",
     "postman-domain-verification":     "Postman",
-    "salesforce-site-verification":    "Salesforce",
     "segment-site-verification":       "Segment",
-    "sendgrid-site-verification":      "SendGrid",
-    "statuspage-site-verification":    "Statuspage",
-    "stripe-domain-verification":      "Stripe",
-    "zendesk-domain-verification":     "Zendesk",
+    "status-page-domain-verification": "StatusPage",
+    "stripe-verification":             "Stripe",
+    "twilio-domain-verification":      "Twilio",
     "yahoo-verification-key":          "Yahoo",
     "yandex-verification":             "Yandex",
     "zoom-domain-verification":        "Zoom",
 }
 
-// txtServiceDiscovery inspects cached DNS TXT records and tags the FQDN
-// with discovered services.
+// txtServiceDiscovery implements a HandlerFunc registered with the Engine.
 type txtServiceDiscovery struct {
     name   string
     source *et.Source
 }
 
-// check implements the HandlerFunc expected by the Engine registry.
+// check inspects cached TXT records, builds findings, and logs via
+// e.Session.Log() so messages land in the enum log file (same approach as
+// company_enrich.go).
 func (t *txtServiceDiscovery) check(e *et.Event) error {
-    // Use the engine session logger so that output is routed to the enumerations
-    // log, and include plugin + handler context in every line.
-    log := e.Session.Log().With(
-        slog.Group("plugin", "name", pluginName, "handler", t.name),
-    )
+    // Build the slog.Group once so every log entry carries identical context.
+    lg := func() slog.Logger { return *e.Session.Log() } // helper to satisfy generics
+    grp := slog.Group("plugin", "name", pluginName, "handler", t.name)
 
     if e == nil || e.Entity == nil {
-        log.Info("event or entity is nil – skipping")
+        e.Session.Log().Debug("event or entity is nil – skipping", grp)
         return nil
     }
 
-    fqdn, ok := e.Entity.Asset.(*oamdns.FQDN)
+    entity := e.Entity
+    fqdn, ok := entity.Asset.(*oamdns.FQDN)
     if !ok {
-        log.Info("entity is not an FQDN – skipping")
+        e.Session.Log().Debug("entity is not an FQDN – skipping", grp)
         return nil
     }
 
-    log = log.With("fqdn", fqdn.Name)
-
-    // Determine the TTL window shared with the core DNS-TXT plugin.
+    // Determine the TTL window we share with the core DNS‑TXT plugin.
     since, err := support.TTLStartTime(e.Session.Config(), "FQDN", "FQDN", pluginName)
     if err != nil {
         since = time.Now().Add(-24 * time.Hour)
-        log.Info("no TTL config found – using 24-hour fallback")
-    } else {
-        log.Info("using TTL window", "since", since.Format(time.RFC3339))
+        e.Session.Log().Debug("no TTL config – defaulting to 24h", grp)
     }
 
-    // Pull TXT records from cache.
+    // Pull TXT records from the graph cache.
     var entries []string
-    if tags, err := e.Session.Cache().GetEntityTags(e.Entity, since, "dns_record"); err == nil {
+    if tags, err := e.Session.Cache().GetEntityTags(entity, since, "dns_record"); err == nil {
         for _, tag := range tags {
             if prop, ok := tag.Property.(*oamdns.DNSRecordProperty); ok && prop.Header.RRType == int(dns.TypeTXT) {
                 entries = append(entries, prop.Data)
             }
         }
     } else {
-        log.Info("cache access error", "error", err)
+        msg := fmt.Sprintf("cache access error: %v", err)
+        e.Session.Log().Error(msg, grp)
     }
 
     if len(entries) == 0 {
-        log.Info("no TXT entries found – nothing to analyse")
+        e.Session.Log().Debug("no TXT records found – nothing to analyse", grp)
         return nil
     }
 
-    log.Info("analysing TXT entries", "count", len(entries))
-
-    // Build findings when patterns match.
+    // Analyse records.
     var findings []*support.Finding
     for _, txt := range entries {
-        log.Info("TXT entry", "text", truncate(txt, 120))
         for needle, svc := range matchers {
-            if strings.Contains(strings.ToLower(txt), needle) {
-                log.Info(
-                    "service match",
-                    "service", svc,
-                    "needle", needle,
-                    "txt_snippet", truncate(txt, 80),
-                )
+            if strings.Contains(txt, needle) {
+                e.Session.Log().Info("service detected via TXT", slog.String("service", svc), slog.String("needle", needle), grp)
+
                 findings = append(findings, &support.Finding{
-                    From:     e.Entity,
+                    From:     entity,
                     FromName: fqdn.Name,
-                    To:       e.Entity,
+                    To:       entity,
                     ToName:   svc,
-                    ToMeta:   txt,
+                    ToMeta:   truncate(txt, 180),
                     Rel:      &general.SimpleRelation{Name: "TXT record"},
                 })
+                break // one match per TXT is plenty
             }
         }
     }
 
-    if len(findings) > 0 {
-        log.Info("emitting findings", "count", len(findings))
-        support.ProcessAssetsWithSource(e, findings, t.source, t.name, t.name)
-    } else {
-        log.Info("no service strings matched any TXT entries")
+    if len(findings) == 0 {
+        e.Session.Log().Debug("no services matched any TXT strings", grp)
+        return nil
     }
 
+    e.Session.Log().Info("emitting findings", slog.Int("count", len(findings)), grp)
+    support.ProcessAssetsWithSource(e, findings, t.source, t.name, t.name)
     return nil
 }
 
-// truncate returns s if it is already short, otherwise keeps the first n
-// runes and appends “…”.
+// truncate keeps the first n runes and appends an ellipsis if the input is too long.
 func truncate(s string, n int) string {
     if len(s) <= n {
         return s
