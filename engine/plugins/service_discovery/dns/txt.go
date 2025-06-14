@@ -2,10 +2,10 @@
 // Copyright © Jeff Foley 2017-2025.
 //
 // Package dns provides a service‑discovery check that inspects cached DNS
-// TXT records for third‑party “verification” strings that reveal services in
-// use. All log messages go through the engine session logger so they appear
-// in the standard enum log file. Each log line carries consistent
-// slog.Group metadata (plugin & handler) so you can grep on a single token.
+// TXT records for third‑party “verification” strings that reveal external
+// services in use. All log messages are written via e.Session.Log(), just
+// like engine/plugins/api/aviato/company_enrich.go, so the output lands in
+// the shared enum log file.
 package dns
 
 import (
@@ -22,11 +22,9 @@ import (
     "github.com/owasp-amass/open-asset-model/general"
 )
 
-const (
-    pluginName   = "txt_service_discovery" // kept in‑sync with plugin.go registration
-)
+const pluginName = "txt_service_discovery" // must match plugin.go registration
 
-// matchers maps TXT‑record substrings to human‑readable service names.
+// matchers maps TXT‑record substrings to the corresponding service names.
 var matchers = map[string]string{
     "airtable-verification":           "Airtable",
     "aliyun-site-verification":        "Aliyun",
@@ -64,63 +62,72 @@ var matchers = map[string]string{
     "zoom-domain-verification":        "Zoom",
 }
 
-// txtServiceDiscovery implements a HandlerFunc registered with the Engine.
+// txtServiceDiscovery is a handler registered with the Engine.
 type txtServiceDiscovery struct {
     name   string
     source *et.Source
 }
 
-// check inspects cached TXT records, builds findings, and logs via
-// e.Session.Log() so messages land in the enum log file (same approach as
-// company_enrich.go).
+// check analyses cached TXT records and emits findings for recognised
+// verification strings. All messages are logged through the session logger
+// so they surface in the enum‑log file.
 func (t *txtServiceDiscovery) check(e *et.Event) error {
-    // Build the slog.Group once so every log entry carries identical context.
-    lg := func() slog.Logger { return *e.Session.Log() } // helper to satisfy generics
-    grp := slog.Group("plugin", "name", pluginName, "handler", t.name)
+    ctxAttr := slog.Group(
+        "ctx",
+        slog.String("plugin", pluginName),
+        slog.String("handler", t.name),
+    )
 
+    // Basic nil‑safety.
     if e == nil || e.Entity == nil {
-        e.Session.Log().Debug("event or entity is nil – skipping", grp)
+        e.Session.Log().Debug("event or entity is nil – skipping", ctxAttr)
         return nil
     }
 
+    // We only operate on FQDN entities.
     entity := e.Entity
     fqdn, ok := entity.Asset.(*oamdns.FQDN)
     if !ok {
-        e.Session.Log().Debug("entity is not an FQDN – skipping", grp)
+        e.Session.Log().Debug("entity is not an FQDN – skipping", ctxAttr)
         return nil
     }
 
-    // Determine the TTL window we share with the core DNS‑TXT plugin.
+    // Determine the start‑time window for graph‑cache look‑ups.
     since, err := support.TTLStartTime(e.Session.Config(), "FQDN", "FQDN", pluginName)
     if err != nil {
-        since = time.Now().Add(-24 * time.Hour)
-        e.Session.Log().Debug("no TTL config – defaulting to 24h", grp)
+        since = time.Now().Add(-24 * time.Hour) // fall‑back window
+        e.Session.Log().Debug("no TTL config – defaulting to 24h", ctxAttr)
     }
 
-    // Pull TXT records from the graph cache.
-    var entries []string
-    if tags, err := e.Session.Cache().GetEntityTags(entity, since, "dns_record"); err == nil {
+    // Retrieve TXT records from the cache.
+    var txtEntries []string
+    tags, cacheErr := e.Session.Cache().GetEntityTags(entity, since, "dns_record")
+    if cacheErr != nil {
+        e.Session.Log().Error("cache access error", slog.String("err", cacheErr.Error()), ctxAttr)
+    } else {
         for _, tag := range tags {
             if prop, ok := tag.Property.(*oamdns.DNSRecordProperty); ok && prop.Header.RRType == int(dns.TypeTXT) {
-                entries = append(entries, prop.Data)
+                txtEntries = append(txtEntries, prop.Data)
             }
         }
-    } else {
-        msg := fmt.Sprintf("cache access error: %v", err)
-        e.Session.Log().Error(msg, grp)
     }
 
-    if len(entries) == 0 {
-        e.Session.Log().Debug("no TXT records found – nothing to analyse", grp)
+    if len(txtEntries) == 0 {
+        e.Session.Log().Debug("no TXT records found – nothing to analyse", ctxAttr)
         return nil
     }
 
-    // Analyse records.
+    // Analyse records for known service verifiers.
     var findings []*support.Finding
-    for _, txt := range entries {
+    for _, txt := range txtEntries {
         for needle, svc := range matchers {
             if strings.Contains(txt, needle) {
-                e.Session.Log().Info("service detected via TXT", slog.String("service", svc), slog.String("needle", needle), grp)
+                e.Session.Log().Info(
+                    "service detected via TXT",
+                    slog.String("service", svc),
+                    slog.String("needle", needle),
+                    ctxAttr,
+                )
 
                 findings = append(findings, &support.Finding{
                     From:     entity,
@@ -130,22 +137,22 @@ func (t *txtServiceDiscovery) check(e *et.Event) error {
                     ToMeta:   truncate(txt, 180),
                     Rel:      &general.SimpleRelation{Name: "TXT record"},
                 })
-                break // one match per TXT is plenty
+                break // one match per TXT record is sufficient
             }
         }
     }
 
     if len(findings) == 0 {
-        e.Session.Log().Debug("no services matched any TXT strings", grp)
+        e.Session.Log().Debug("no services matched any TXT strings", ctxAttr)
         return nil
     }
 
-    e.Session.Log().Info("emitting findings", slog.Int("count", len(findings)), grp)
+    e.Session.Log().Info("emitting findings", slog.Int("count", len(findings)), ctxAttr)
     support.ProcessAssetsWithSource(e, findings, t.source, t.name, t.name)
     return nil
 }
 
-// truncate keeps the first n runes and appends an ellipsis if the input is too long.
+// truncate keeps the first n runes and appends an ellipsis if s is longer.
 func truncate(s string, n int) string {
     if len(s) <= n {
         return s
