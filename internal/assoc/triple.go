@@ -51,6 +51,14 @@ type Property struct {
 	Attributes map[string]string
 }
 
+func (n *Node) IsWildcard() bool {
+	return n.Key == "*" && (n.Type != oam.AssetType("*") || len(n.Attributes) == 0)
+}
+
+func (p *Predicate) IsWildcard() bool {
+	return p.Label == "*" && (p.Type != oam.RelationType("*") || len(p.Attributes) == 0)
+}
+
 func ParseTriple(triple string) (*Triple, error) {
 	tristrs, direction, err := splitTriple(triple)
 	if err != nil {
@@ -72,6 +80,14 @@ func ParseTriple(triple string) (*Triple, error) {
 		return nil, fmt.Errorf("invalid object: %v", err)
 	}
 
+	if subject.Type != "*" && predicate.Type != "*" && !predicate.IsWildcard() && object.Type != "*" {
+		if direction == DirectionOutgoing && !oam.ValidRelationship(subject.Type, predicate.Label, predicate.Type, object.Type) {
+			return nil, fmt.Errorf("%s-%s->%s is not a valid triple in the Open Asset Model", subject.Type, predicate.Label, object.Type)
+		} else if direction == DirectionIncoming && !oam.ValidRelationship(object.Type, predicate.Label, predicate.Type, subject.Type) {
+			return nil, fmt.Errorf("%s<-%s-%s is not a valid triple in the Open Asset Model", object.Type, predicate.Label, subject.Type)
+		}
+	}
+
 	return &Triple{
 		Direction: direction,
 		Subject:   subject,
@@ -82,7 +98,7 @@ func ParseTriple(triple string) (*Triple, error) {
 
 func splitTriple(triple string) ([]string, int, error) {
 	start := 0
-	var tstrs []string
+	var results []string
 	direction := DirectionOutgoing
 
 	for _, i := range []int{0, 1, 2} {
@@ -101,7 +117,7 @@ func splitTriple(triple string) ([]string, int, error) {
 		if eidx <= sidx {
 			return nil, direction, fmt.Errorf("the %s must contain a closing angle bracket after an opening angle bracket", tripleFields[i])
 		}
-		tstrs = append(tstrs, strings.TrimSpace(triple[sidx:eidx]))
+		results = append(results, strings.TrimSpace(substr[sidx:eidx]))
 
 		start += eidx + 1 // Move past the closing angle bracket
 		substr = triple[start:]
@@ -133,7 +149,7 @@ func splitTriple(triple string) ([]string, int, error) {
 		}
 	}
 
-	return tstrs, direction, nil
+	return results, direction, nil
 }
 
 func parseNode(nodestr string) (*Node, error) {
@@ -141,12 +157,19 @@ func parseNode(nodestr string) (*Node, error) {
 	if len(parts) == 1 && parts[0] == "*" {
 		return &Node{
 			Key:        "*",
+			Type:       oam.AssetType("*"),
 			Attributes: make(map[string]string),
 		}, nil
 	}
 
 	node := &Node{Attributes: make(map[string]string)}
 	for i, part := range parts {
+		if i == 0 && strings.TrimSpace(part) == "*" {
+			node.Key = "*"
+			node.Type = oam.AssetType("*")
+			continue
+		}
+
 		kv := strings.Split(part, ":")
 		if len(kv) != 2 {
 			return nil, fmt.Errorf("%s must be a key/value pair separated by a ':'", part)
@@ -195,12 +218,19 @@ func parsePredicate(predstr string) (*Predicate, error) {
 	if len(parts) == 1 && parts[0] == "*" {
 		return &Predicate{
 			Label:      "*",
+			Type:       oam.RelationType("*"),
 			Attributes: make(map[string]string),
 		}, nil
 	}
 
 	pred := &Predicate{Attributes: make(map[string]string)}
 	for i, part := range parts {
+		if i == 0 && strings.TrimSpace(part) == "*" {
+			pred.Label = "*"
+			pred.Type = oam.RelationType("*")
+			continue
+		}
+
 		kv := strings.Split(part, ":")
 		if len(kv) != 2 {
 			return nil, fmt.Errorf("%s must be a key/value pair separated by a ':'", part)

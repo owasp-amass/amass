@@ -7,20 +7,13 @@ package assoc
 import (
 	"bytes"
 	"flag"
-	"fmt"
 	"io"
 	"os"
-	"time"
 
-	"github.com/caffix/stringset"
 	"github.com/fatih/color"
 	"github.com/owasp-amass/amass/v4/config"
 	"github.com/owasp-amass/amass/v4/internal/afmt"
 	"github.com/owasp-amass/amass/v4/internal/tools"
-	"github.com/owasp-amass/asset-db/repository"
-	dbt "github.com/owasp-amass/asset-db/types"
-	oamdns "github.com/owasp-amass/open-asset-model/dns"
-	oamreg "github.com/owasp-amass/open-asset-model/registration"
 )
 
 const (
@@ -31,8 +24,7 @@ const (
 
 type Args struct {
 	Help    bool
-	Domains *stringset.Set
-	Since   string
+	Triples []string // The triples to use for the association walk
 	Options struct {
 		Verbose bool
 		NoColor bool
@@ -41,7 +33,7 @@ type Args struct {
 	Filepaths struct {
 		ConfigFile string
 		Directory  string
-		Domains    string
+		TripleFile string
 	}
 }
 
@@ -50,21 +42,28 @@ func NewFlagset(args *Args, errorHandling flag.ErrorHandling) *flag.FlagSet {
 
 	fs.BoolVar(&args.Help, "h", false, "Show the program usage message")
 	fs.BoolVar(&args.Help, "help", false, "Show the program usage message")
-	fs.Var(args.Domains, "d", "Domain names separated by commas (can be used multiple times)")
-	fs.StringVar(&args.Since, "since", "", "Exclude all assets discovered before (format: "+TimeFormat+")")
+	fs.StringVar(&args.Triples[0], "t1", "", "1st triple to use for the association walk")
+	fs.StringVar(&args.Triples[1], "t2", "", "2nd triple to use for the association walk")
+	fs.StringVar(&args.Triples[2], "t3", "", "3rd triple to use for the association walk")
+	fs.StringVar(&args.Triples[3], "t4", "", "4th triple to use for the association walk")
+	fs.StringVar(&args.Triples[4], "t5", "", "5th triple to use for the association walk")
+	fs.StringVar(&args.Triples[5], "t6", "", "6th triple to use for the association walk")
+	fs.StringVar(&args.Triples[6], "t7", "", "7th triple to use for the association walk")
+	fs.StringVar(&args.Triples[7], "t8", "", "8th triple to use for the association walk")
+	fs.StringVar(&args.Triples[8], "t9", "", "9th triple to use for the association walk")
+	fs.StringVar(&args.Triples[9], "t10", "", "10th triple to use for the association walk")
 	fs.BoolVar(&args.Options.Verbose, "v", false, "Show additional information about the associated assets")
 	fs.BoolVar(&args.Options.NoColor, "nocolor", false, "Disable colorized output")
 	fs.BoolVar(&args.Options.Silent, "silent", false, "Disable all output during execution")
 	fs.StringVar(&args.Filepaths.ConfigFile, "config", "", "Path to the YAML configuration file")
 	fs.StringVar(&args.Filepaths.Directory, "dir", "", "Path to the directory containing the graph database")
-	fs.StringVar(&args.Filepaths.Domains, "df", "", "Path to a file providing registered domain names")
+	fs.StringVar(&args.Filepaths.TripleFile, "tf", "", "Path to a file providing triples for each step in the walk")
 	return fs
 }
 
 func CLIWorkflow(cmdName string, clArgs []string) {
 	var args Args
-	args.Domains = stringset.New()
-	defer args.Domains.Close()
+	args.Triples = make([]string, 10)
 
 	fs := NewFlagset(&args, flag.ContinueOnError)
 	assocBuf := new(bytes.Buffer)
@@ -103,27 +102,17 @@ func CLIWorkflow(cmdName string, clArgs []string) {
 		color.Output = io.Discard
 		color.Error = io.Discard
 	}
-	if args.Filepaths.Domains != "" {
-		list, err := config.GetListFromFile(args.Filepaths.Domains)
+	if args.Filepaths.TripleFile != "" {
+		list, err := config.GetListFromFile(args.Filepaths.TripleFile)
 		if err != nil {
-			_, _ = afmt.R.Fprintf(color.Error, "Failed to parse the domain names file: %v\n", err)
+			_, _ = afmt.R.Fprintf(color.Error, "Failed to parse the triple file: %v\n", err)
 			os.Exit(1)
 		}
-		args.Domains.InsertMany(list...)
+		copy(list, args.Triples)
 	}
-	if args.Domains.Len() == 0 {
-		_, _ = afmt.R.Fprintln(color.Error, "No root domain names were provided")
+	if args.Triples[0] == "" {
+		_, _ = afmt.R.Fprintln(color.Error, "No triples were provided for the association walk")
 		os.Exit(1)
-	}
-
-	var err error
-	var start time.Time
-	if args.Since != "" {
-		start, err = time.Parse(TimeFormat, args.Since)
-		if err != nil {
-			_, _ = afmt.R.Fprintf(color.Error, "%s is not in the correct format: %s\n", args.Since, TimeFormat)
-			os.Exit(1)
-		}
 	}
 
 	cfg := config.NewConfig()
@@ -131,9 +120,6 @@ func CLIWorkflow(cmdName string, clArgs []string) {
 	if err := config.AcquireConfig(args.Filepaths.Directory, args.Filepaths.ConfigFile, cfg); err == nil {
 		if args.Filepaths.Directory == "" {
 			args.Filepaths.Directory = cfg.Dir
-		}
-		if args.Domains.Len() == 0 {
-			args.Domains.InsertMany(cfg.Domains()...)
 		}
 	} else if args.Filepaths.ConfigFile != "" {
 		_, _ = afmt.R.Fprintf(color.Error, "Failed to load the configuration file: %v\n", err)
@@ -146,117 +132,35 @@ func CLIWorkflow(cmdName string, clArgs []string) {
 		os.Exit(1)
 	}
 
-	for _, name := range args.Domains.Slice() {
-		for i, assoc := range getAssociations(name, start, db) {
-			if i != 0 {
-				_, _ = fmt.Println()
-			}
-
-			var rel string
-			switch v := assoc.Asset.(type) {
-			case *oamreg.DomainRecord:
-				rel = "registrant_contact"
-				_, _ = afmt.G.Fprintln(color.Output, v.Domain)
-				if args.Options.Verbose {
-					_, _ = fmt.Fprintf(color.Output, "%s%s\n%s%s\n", afmt.Blue("Name: "),
-						afmt.Green(v.Name), afmt.Blue("Expiration: "), afmt.Green(v.ExpirationDate))
-				}
-			case *oamreg.AutnumRecord:
-				rel = "registrant"
-				_, _ = afmt.G.Fprintln(color.Output, v.Handle)
-				if args.Options.Verbose {
-					_, _ = fmt.Fprintf(color.Output, "%s%s\n%s%s\n%s%s\n", afmt.Blue("Name: "), afmt.Green(v.Name),
-						afmt.Blue("Status: "), afmt.Green(v.Status[0]), afmt.Blue("Updated: "), afmt.Green(v.UpdatedDate))
-				}
-			case *oamreg.IPNetRecord:
-				rel = "registrant"
-				_, _ = afmt.G.Fprintln(color.Output, v.CIDR.String())
-				if args.Options.Verbose {
-					_, _ = fmt.Fprintf(color.Output, "%s%s\n%s%s\n%s%s\n", afmt.Blue("Name: "), afmt.Green(v.Name),
-						afmt.Blue("Status: "), afmt.Green(v.Status[0]), afmt.Blue("Updated: "), afmt.Green(v.UpdatedDate))
-				}
-			}
-
-			if args.Options.Verbose {
-				_, _ = afmt.B.Fprintln(color.Output, "Registrant|")
-				printContactInfo(assoc, rel, start, db)
-				_, _ = fmt.Println()
-			}
+	var triples []*Triple
+	for _, tstr := range args.Triples {
+		if tstr == "" {
+			break
 		}
-	}
-}
 
-func getAssociations(name string, since time.Time, db repository.Repository) []*dbt.Entity {
-	var results []*dbt.Entity
-
-	fqdns, err := db.FindEntitiesByContent(&oamdns.FQDN{Name: name}, since)
-	if err != nil || len(fqdns) == 0 {
-		return results
-	}
-
-	var assets []*dbt.Entity
-	for _, fqdn := range fqdns {
-		if edges, err := db.OutgoingEdges(fqdn, since, "registration"); err == nil && len(edges) > 0 {
-			for _, edge := range edges {
-				if a, err := db.FindEntityById(edge.ToEntity.ID); err == nil && a != nil {
-					assets = append(assets, a)
-				}
-			}
+		triple, err := ParseTriple(tstr)
+		if err != nil {
+			_, _ = afmt.R.Fprintf(color.Error, "Failed to parse the triple '%s': %v\n", tstr, err)
+			os.Exit(1)
 		}
+		triples = append(triples, triple)
+	}
+	if len(triples) == 0 {
+		_, _ = afmt.R.Fprintln(color.Error, "No valid triples were provided for the association walk")
+		os.Exit(1)
 	}
 
-	set := stringset.New()
-	defer set.Close()
-
-	for _, asset := range assets {
-		set.Insert(asset.ID)
+	results, err := Extract(db, triples)
+	if err != nil {
+		_, _ = afmt.R.Fprintf(color.Error, "Failed to extract associations: %v\n", err)
+		os.Exit(1)
+	}
+	if len(results.Data) == 0 {
+		_, _ = afmt.R.Fprintln(color.Error, "No associations were found for the provided triples")
+		os.Exit(0)
 	}
 
-	for findings := assets; len(findings) > 0; {
-		assets = findings
-		findings = []*dbt.Entity{}
-
-		for _, a := range assets {
-			if edges, err := db.OutgoingEdges(a, since, "associated_with"); err == nil && len(edges) > 0 {
-				for _, edge := range edges {
-					asset, err := db.FindEntityById(edge.ToEntity.ID)
-					if err != nil || asset == nil {
-						continue
-					}
-
-					if !set.Has(asset.ID) {
-						set.Insert(asset.ID)
-						findings = append(findings, asset)
-						results = append(results, asset)
-					}
-				}
-			}
-		}
-	}
-
-	return results
-}
-
-func printContactInfo(assoc *dbt.Entity, regrel string, since time.Time, db repository.Repository) {
-	var contact *dbt.Entity
-
-	if edges, err := db.OutgoingEdges(assoc, since, regrel); err == nil && len(edges) > 0 {
-		if a, err := db.FindEntityById(edges[0].ToEntity.ID); err == nil && a != nil {
-			contact = a
-		}
-	}
-	if contact == nil {
-		return
-	}
-
-	for _, out := range []string{"person", "organization", "location", "phone", "email"} {
-		if edges, err := db.OutgoingEdges(contact, since, out); err == nil && len(edges) > 0 {
-			for _, edge := range edges {
-				if a, err := db.FindEntityById(edge.ToEntity.ID); err == nil && a != nil {
-					_, _ = fmt.Fprintf(color.Output, "%s%s%s\n",
-						afmt.Blue(string(a.Asset.AssetType())), afmt.Blue(": "), afmt.Green(a.Asset.Key()))
-				}
-			}
-		}
+	for _, d := range results.Data {
+		afmt.G.Fprintf(color.Error, "%s\n", d.Key())
 	}
 }
