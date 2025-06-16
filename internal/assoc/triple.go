@@ -23,9 +23,9 @@ var (
 
 type Triple struct {
 	Direction int // 0 for incoming, 1 for outgoing
-	Subject   string
-	Predicate string
-	Object    string
+	Subject   *Node
+	Predicate *Predicate
+	Object    *Node
 }
 
 type Node struct {
@@ -33,7 +33,7 @@ type Node struct {
 	Type       oam.AssetType
 	Since      time.Time
 	Attributes map[string]string
-	Properties []Property
+	Properties []*Property
 }
 
 type Predicate struct {
@@ -41,12 +41,11 @@ type Predicate struct {
 	Type       oam.RelationType
 	Since      time.Time
 	Attributes map[string]string
-	Properties []Property
+	Properties []*Property
 }
 
 type Property struct {
 	Name       string
-	Value      string
 	Since      time.Time
 	Type       oam.PropertyType
 	Attributes map[string]string
@@ -55,14 +54,29 @@ type Property struct {
 func ParseTriple(triple string) (*Triple, error) {
 	tristrs, direction, err := splitTriple(triple)
 	if err != nil {
-		return nil, fmt.Errorf("invalid triple format: %w", err)
+		return nil, fmt.Errorf("invalid triple format: %v", err)
+	}
+
+	subject, err := parseNode(tristrs[0])
+	if err != nil {
+		return nil, fmt.Errorf("invalid subject: %v", err)
+	}
+
+	predicate, err := parsePredicate(tristrs[1])
+	if err != nil {
+		return nil, fmt.Errorf("invalid predicate: %v", err)
+	}
+
+	object, err := parseNode(tristrs[2])
+	if err != nil {
+		return nil, fmt.Errorf("invalid object: %v", err)
 	}
 
 	return &Triple{
 		Direction: direction,
-		Subject:   parts[0],
-		Predicate: parts[1],
-		Object:    parts[2],
+		Subject:   subject,
+		Predicate: predicate,
+		Object:    object,
 	}, nil
 }
 
@@ -71,7 +85,7 @@ func splitTriple(triple string) ([]string, int, error) {
 	var tstrs []string
 	direction := DirectionOutgoing
 
-	for i := 0; i < 3; i++ {
+	for _, i := range []int{0, 1, 2} {
 		substr := triple[start:]
 
 		sidx := strings.Index(substr, "<")
@@ -91,7 +105,9 @@ func splitTriple(triple string) ([]string, int, error) {
 
 		start += eidx + 1 // Move past the closing angle bracket
 		substr = triple[start:]
-		if i == 0 {
+
+		switch i {
+		case 0:
 			if idx := strings.Index(substr, "<-"); idx != -1 && (idx == 0 || idx == 1) {
 				direction = DirectionIncoming
 				start += 2 // Move past the "<-"
@@ -100,7 +116,7 @@ func splitTriple(triple string) ([]string, int, error) {
 			} else {
 				return nil, direction, fmt.Errorf("triple must contain a hyphen or '<-' after the subject")
 			}
-		} else if i == 1 {
+		case 1:
 			if idx := strings.Index(substr, "->"); idx != -1 && (idx == 0 || idx == 1) {
 				if direction == DirectionIncoming {
 					return nil, direction, fmt.Errorf("triple cannot have both '<-' and '->'")
@@ -118,4 +134,154 @@ func splitTriple(triple string) ([]string, int, error) {
 	}
 
 	return tstrs, direction, nil
+}
+
+func parseNode(nodestr string) (*Node, error) {
+	parts := strings.Split(nodestr, ",")
+	if len(parts) == 1 && parts[0] == "*" {
+		return &Node{
+			Key:        "*",
+			Attributes: make(map[string]string),
+		}, nil
+	}
+
+	node := &Node{Attributes: make(map[string]string)}
+	for i, part := range parts {
+		kv := strings.Split(part, ":")
+		if len(kv) != 2 {
+			return nil, fmt.Errorf("%s must be a key/value pair separated by a ':'", part)
+		}
+		k := strings.TrimSpace(kv[0])
+		v := strings.TrimSpace(kv[1])
+
+		if i == 0 {
+			atype, err := keyToAssetType(k)
+			if err != nil {
+				return nil, err
+			}
+			node.Type = atype
+			node.Key = v
+		} else if strings.EqualFold(k, "prop") {
+			prop, err := parseProperty(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid property: %v", err)
+			}
+			node.Properties = append(node.Properties, prop)
+		} else if strings.EqualFold(k, "since") {
+			since, err := time.Parse(time.DateOnly, v)
+			if err != nil {
+				return nil, err
+			}
+			node.Since = since
+		} else {
+			node.Attributes[k] = v
+		}
+	}
+
+	return node, nil
+}
+
+func keyToAssetType(key string) (oam.AssetType, error) {
+	for _, atype := range oam.AssetList {
+		if strings.EqualFold(string(atype), key) {
+			return atype, nil
+		}
+	}
+	return "", fmt.Errorf("%s does not match any asset type", key)
+}
+
+func parsePredicate(predstr string) (*Predicate, error) {
+	parts := strings.Split(predstr, ",")
+	if len(parts) == 1 && parts[0] == "*" {
+		return &Predicate{
+			Label:      "*",
+			Attributes: make(map[string]string),
+		}, nil
+	}
+
+	pred := &Predicate{Attributes: make(map[string]string)}
+	for i, part := range parts {
+		kv := strings.Split(part, ":")
+		if len(kv) != 2 {
+			return nil, fmt.Errorf("%s must be a key/value pair separated by a ':'", part)
+		}
+		k := strings.TrimSpace(kv[0])
+		v := strings.TrimSpace(kv[1])
+
+		if i == 0 {
+			rtype, err := keyToRelationType(k)
+			if err != nil {
+				return nil, err
+			}
+			pred.Type = rtype
+			pred.Label = v
+		} else if strings.EqualFold(k, "prop") {
+			prop, err := parseProperty(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid property: %v", err)
+			}
+			pred.Properties = append(pred.Properties, prop)
+		} else if strings.EqualFold(k, "since") {
+			since, err := time.Parse(time.DateOnly, v)
+			if err != nil {
+				return nil, err
+			}
+			pred.Since = since
+		} else {
+			pred.Attributes[k] = v
+		}
+	}
+
+	return pred, nil
+}
+
+func keyToRelationType(key string) (oam.RelationType, error) {
+	for _, rtype := range oam.RelationList {
+		if strings.EqualFold(string(rtype), key) {
+			return rtype, nil
+		}
+	}
+	return "", fmt.Errorf("%s does not match any relation type", key)
+}
+
+func parseProperty(propstr string) (*Property, error) {
+	parts := strings.Split(propstr, ",")
+	prop := &Property{Attributes: make(map[string]string)}
+
+	for i, part := range parts {
+		kv := strings.Split(part, ":")
+		if len(kv) != 2 {
+			return nil, fmt.Errorf("%s must be a key/value pair separated by a ':'", part)
+		}
+		k := strings.TrimSpace(kv[0])
+		v := strings.TrimSpace(kv[1])
+
+		if i == 0 {
+			ptype, err := keyToPropertyType(k)
+			if err != nil {
+				return nil, err
+			}
+			prop.Type = ptype
+			prop.Name = v
+		} else if strings.EqualFold(k, "since") {
+			since, err := time.Parse(time.DateOnly, v)
+			if err != nil {
+				return nil, err
+			}
+			prop.Since = since
+		} else {
+			prop.Attributes[k] = v
+		}
+	}
+
+	return prop, nil
+}
+
+func keyToPropertyType(key string) (oam.PropertyType, error) {
+	for _, ptype := range oam.PropertyList {
+		if strings.EqualFold(string(ptype), key) {
+			return ptype, nil
+		}
+	}
+	return "", fmt.Errorf("%s does not match any property type", key)
 }
