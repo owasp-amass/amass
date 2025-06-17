@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/caffix/stringset"
 	"github.com/owasp-amass/asset-db/repository"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
@@ -46,6 +47,7 @@ func Extract(db repository.Repository, triples []*Triple) (*Results, error) {
 	subents := []*dbt.Entity{ent}
 	for i, triple := range triples {
 		ents := subents
+		objids := stringset.New()
 		subents = []*dbt.Entity{}
 
 		for _, ent := range ents {
@@ -53,8 +55,15 @@ func Extract(db repository.Repository, triples []*Triple) (*Results, error) {
 			if err != nil || len(objects) == 0 {
 				continue // skip this entity if no objects are found
 			}
-			subents = append(subents, objects...)
+
+			for _, obj := range objects {
+				if !objids.Has(obj.ID) {
+					objids.Insert(obj.ID)
+					subents = append(subents, obj)
+				}
+			}
 		}
+		objids.Close()
 
 		if len(subents) == 0 {
 			return nil, fmt.Errorf("no objects found for triple %d", i+1)
@@ -90,7 +99,7 @@ func getObjects(db repository.Repository, ent *dbt.Entity, triple *Triple) ([]*d
 		return nil, fmt.Errorf("failed to get edges for entity %s: %v", ent.ID, err)
 	}
 
-	objects := make([]*dbt.Entity, 0, len(edges))
+	var objects []*dbt.Entity
 	for _, edge := range edges {
 		// perform filtering based on the predicate in the triple and the edge relation
 		if edge == nil || (triple.Predicate.Type != oam.RelationType("*") && triple.Predicate.Type != edge.Relation.RelationType()) {
@@ -108,9 +117,12 @@ func getObjects(db repository.Repository, ent *dbt.Entity, triple *Triple) ([]*d
 		if err != nil {
 			return nil, fmt.Errorf("failed to find the object entity %s: %v", objent.ID, err)
 		}
+		if obj == nil {
+			return nil, errors.New("failed to return the object entity")
+		}
 
 		// perform filtering based on the object in the triple and the entity asset
-		if obj != nil && (triple.Object.Since.IsZero() || !obj.LastSeen.Before(triple.Object.Since)) && (triple.Object.Type == "*" ||
+		if (triple.Object.Since.IsZero() || !obj.LastSeen.Before(triple.Object.Since)) && (triple.Object.Type == "*" ||
 			triple.Object.Type == obj.Asset.AssetType()) && (triple.Object.Key == "*" || triple.Object.Key == obj.Asset.Key()) {
 			objects = append(objects, obj)
 		}

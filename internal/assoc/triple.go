@@ -126,9 +126,9 @@ func splitTriple(triple string) ([]string, int, error) {
 		case 0:
 			if idx := strings.Index(substr, "<-"); idx != -1 && (idx == 0 || idx == 1) {
 				direction = DirectionIncoming
-				start += 2 // move past the "<-"
+				start += idx + 2 // move past the "<-"
 			} else if idx := strings.Index(substr, "-"); idx != -1 && (idx == 0 || idx == 1) {
-				start += 1 // move past the "-"
+				start += idx + 1 // move past the "-"
 			} else {
 				return nil, direction, fmt.Errorf("triple must contain a hyphen or '<-' after the subject")
 			}
@@ -137,12 +137,12 @@ func splitTriple(triple string) ([]string, int, error) {
 				if direction == DirectionIncoming {
 					return nil, direction, fmt.Errorf("triple cannot have both '<-' and '->'")
 				}
-				start += 2 // move past the "<-"
+				start += idx + 2 // move past the "<-"
 			} else if idx := strings.Index(substr, "-"); idx != -1 && (idx == 0 || idx == 1) {
 				if direction == DirectionOutgoing {
 					return nil, direction, fmt.Errorf("triple must have a direction specified with '<-' or '->'")
 				}
-				start += 1 // move past the "-"
+				start += idx + 1 // move past the "-"
 			} else {
 				return nil, direction, fmt.Errorf("triple must contain a hyphen or '<-' after the predicate")
 			}
@@ -266,6 +266,10 @@ func parsePredicate(predstr string) (*Predicate, error) {
 }
 
 func keyToRelationType(key string) (oam.RelationType, error) {
+	if key == "*" {
+		return oam.RelationType("*"), nil
+	}
+
 	for _, rtype := range oam.RelationList {
 		if strings.EqualFold(string(rtype), key) {
 			return rtype, nil

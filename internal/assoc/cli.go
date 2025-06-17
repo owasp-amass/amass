@@ -108,6 +108,9 @@ func CLIWorkflow(cmdName string, clArgs []string) {
 			_, _ = afmt.R.Fprintf(color.Error, "Failed to parse the triple file: %v\n", err)
 			os.Exit(1)
 		}
+		if len(list) > 10 {
+			list = list[:10]
+		}
 		copy(list, args.Triples)
 	}
 	if args.Triples[0] == "" {
@@ -161,6 +164,6 @@ func CLIWorkflow(cmdName string, clArgs []string) {
 	}
 
 	for _, d := range results.Data {
-		_, _ = afmt.G.Fprintf(color.Error, "%s\n", d.Key())
+		_, _ = afmt.G.Fprintf(color.Output, "%s\n", d.Key())
 	}
 }
