@@ -108,7 +108,7 @@ func splitTriple(triple string) ([]string, int, error) {
 		if sidx == -1 {
 			return nil, direction, fmt.Errorf("triple must contain an opening angle bracket for the %s", tripleFields[i])
 		}
-		sidx += 1 // Move past the opening angle bracket
+		sidx += 1 // move past the opening angle bracket
 
 		eidx := strings.Index(substr, ">")
 		if eidx == -1 {
@@ -119,16 +119,16 @@ func splitTriple(triple string) ([]string, int, error) {
 		}
 		results = append(results, strings.TrimSpace(substr[sidx:eidx]))
 
-		start += eidx + 1 // Move past the closing angle bracket
+		start += eidx + 1 // move past the closing angle bracket
 		substr = triple[start:]
 
 		switch i {
 		case 0:
 			if idx := strings.Index(substr, "<-"); idx != -1 && (idx == 0 || idx == 1) {
 				direction = DirectionIncoming
-				start += 2 // Move past the "<-"
+				start += 2 // move past the "<-"
 			} else if idx := strings.Index(substr, "-"); idx != -1 && (idx == 0 || idx == 1) {
-				start += 1 // Move past the "-"
+				start += 1 // move past the "-"
 			} else {
 				return nil, direction, fmt.Errorf("triple must contain a hyphen or '<-' after the subject")
 			}
@@ -137,12 +137,12 @@ func splitTriple(triple string) ([]string, int, error) {
 				if direction == DirectionIncoming {
 					return nil, direction, fmt.Errorf("triple cannot have both '<-' and '->'")
 				}
-				start += 2 // Move past the "<-"
+				start += 2 // move past the "<-"
 			} else if idx := strings.Index(substr, "-"); idx != -1 && (idx == 0 || idx == 1) {
 				if direction == DirectionOutgoing {
 					return nil, direction, fmt.Errorf("triple must have a direction specified with '<-' or '->'")
 				}
-				start += 1 // Move past the "-"
+				start += 1 // move past the "-"
 			} else {
 				return nil, direction, fmt.Errorf("triple must contain a hyphen or '<-' after the predicate")
 			}

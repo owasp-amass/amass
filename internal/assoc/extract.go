@@ -51,7 +51,7 @@ func Extract(db repository.Repository, triples []*Triple) (*Results, error) {
 		for _, ent := range ents {
 			objects, err := getObjects(db, ent, triple)
 			if err != nil || len(objects) == 0 {
-				continue // Skip this entity if no objects are found
+				continue // skip this entity if no objects are found
 			}
 			subents = append(subents, objects...)
 		}
@@ -92,8 +92,12 @@ func getObjects(db repository.Repository, ent *dbt.Entity, triple *Triple) ([]*d
 
 	objects := make([]*dbt.Entity, 0, len(edges))
 	for _, edge := range edges {
-		var objent *dbt.Entity
+		// perform filtering based on the predicate in the triple and the edge relation
+		if edge == nil || (triple.Predicate.Type != oam.RelationType("*") && triple.Predicate.Type != edge.Relation.RelationType()) {
+			continue // skip edges that do not match the predicate type
+		}
 
+		var objent *dbt.Entity
 		if triple.Direction == DirectionIncoming {
 			objent = edge.FromEntity
 		} else {
@@ -104,7 +108,10 @@ func getObjects(db repository.Repository, ent *dbt.Entity, triple *Triple) ([]*d
 		if err != nil {
 			return nil, fmt.Errorf("failed to find the object entity %s: %v", objent.ID, err)
 		}
-		if obj != nil {
+
+		// perform filtering based on the object in the triple and the entity asset
+		if obj != nil && (triple.Object.Since.IsZero() || !obj.LastSeen.Before(triple.Object.Since)) && (triple.Object.Type == "*" ||
+			triple.Object.Type == obj.Asset.AssetType()) && (triple.Object.Key == "*" || triple.Object.Key == obj.Asset.Key()) {
 			objects = append(objects, obj)
 		}
 	}

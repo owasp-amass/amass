@@ -161,6 +161,6 @@ func CLIWorkflow(cmdName string, clArgs []string) {
 	}
 
 	for _, d := range results.Data {
-		afmt.G.Fprintf(color.Error, "%s\n", d.Key())
+		_, _ = afmt.G.Fprintf(color.Error, "%s\n", d.Key())
 	}
 }
