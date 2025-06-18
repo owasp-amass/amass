@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
+	"reflect"
 	"strconv"
 	"strings"
 
@@ -51,6 +52,14 @@ func Extract(db repository.Repository, triples []*Triple) (*Results, error) {
 		subents = []*dbt.Entity{}
 
 		for _, ent := range ents {
+			// filter based on the entity asset and the triple subject
+			if (!triple.Object.Since.IsZero() && ent.LastSeen.Before(triple.Object.Since)) ||
+				(triple.Object.Type != "*" && triple.Object.Type != ent.Asset.AssetType()) ||
+				(triple.Object.Key != "*" && triple.Object.Key != ent.Asset.Key()) ||
+				!allAttrsMatch(ent.Asset, triple.Object.Attributes) {
+				continue
+			}
+
 			objects, err := getObjects(db, ent, triple)
 			if err != nil || len(objects) == 0 {
 				continue // skip this entity if no objects are found
@@ -102,8 +111,10 @@ func getObjects(db repository.Repository, ent *dbt.Entity, triple *Triple) ([]*d
 	var objects []*dbt.Entity
 	for _, edge := range edges {
 		// perform filtering based on the predicate in the triple and the edge relation
-		if edge == nil || (triple.Predicate.Type != oam.RelationType("*") && triple.Predicate.Type != edge.Relation.RelationType()) {
-			continue // skip edges that do not match the predicate type
+		if edge == nil || (triple.Predicate.Type != oam.RelationType("*") &&
+			triple.Predicate.Type != edge.Relation.RelationType()) ||
+			!allAttrsMatch(edge.Relation, triple.Predicate.Attributes) {
+			continue // skip edges that do not match the predicate
 		}
 
 		var objent *dbt.Entity
@@ -122,8 +133,10 @@ func getObjects(db repository.Repository, ent *dbt.Entity, triple *Triple) ([]*d
 		}
 
 		// perform filtering based on the object in the triple and the entity asset
-		if (triple.Object.Since.IsZero() || !obj.LastSeen.Before(triple.Object.Since)) && (triple.Object.Type == "*" ||
-			triple.Object.Type == obj.Asset.AssetType()) && (triple.Object.Key == "*" || triple.Object.Key == obj.Asset.Key()) {
+		if (triple.Object.Since.IsZero() || !obj.LastSeen.Before(triple.Object.Since)) &&
+			(triple.Object.Type == "*" || triple.Object.Type == obj.Asset.AssetType()) &&
+			(triple.Object.Key == "*" || triple.Object.Key == obj.Asset.Key()) &&
+			allAttrsMatch(obj.Asset, triple.Object.Attributes) {
 			objects = append(objects, obj)
 		}
 	}
@@ -215,4 +228,67 @@ func subjectToAsset(subject *Node) (oam.Asset, error) {
 	}
 
 	return nil, fmt.Errorf("unknown asset type: %s", subtype)
+}
+
+func allAttrsMatch(s any, attrs map[string]string) bool {
+	for k, v := range attrs {
+		if !attrMatch(s, k, v) {
+			return false
+		}
+	}
+	return true
+}
+
+func attrMatch(s any, path, value string) bool {
+	val := reflect.ValueOf(s)
+	labels := strings.Split(path, ".")
+
+	// follow the path through the nested structs
+	for _, label := range labels {
+		if val.Kind() == reflect.Ptr {
+			val = val.Elem()
+		}
+		if val.Kind() != reflect.Struct {
+			return false
+		}
+
+		var index int
+		var found bool
+		st := val.Type()
+		for i := range st.NumField() {
+			field := st.Field(i)
+			// handle cases like `json:"name,omitempty"`
+			tag := strings.SplitN(field.Tag.Get("json"), ",", 2)[0]
+
+			if tag == label {
+				found = true
+				index = i
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+
+		val = val.Field(index)
+	}
+
+	// compare val to the value parameter
+	switch val.Kind() {
+	case reflect.Bool:
+		b := "false"
+		if val.Bool() {
+			b = "true"
+		}
+		return strings.EqualFold(b, value)
+	case reflect.String:
+		return strings.EqualFold(value, val.String())
+	case reflect.Int:
+		return strconv.FormatInt(val.Int(), 10) == value
+	case reflect.Float64:
+		fmt64 := strconv.FormatFloat(val.Float(), 'f', -1, 64)
+		return fmt64 == value
+	}
+
+	return false
 }
