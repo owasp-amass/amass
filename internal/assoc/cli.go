@@ -6,6 +6,7 @@ package assoc
 
 import (
 	"bytes"
+	"encoding/json"
 	"flag"
 	"io"
 	"os"
@@ -158,12 +159,13 @@ func CLIWorkflow(cmdName string, clArgs []string) {
 		_, _ = afmt.R.Fprintf(color.Error, "Failed to extract associations: %v\n", err)
 		os.Exit(1)
 	}
-	if len(results.Data) == 0 {
-		_, _ = afmt.R.Fprintln(color.Error, "No associations were found for the provided triples")
-		os.Exit(0)
+
+	// Marshal with indentation (e.g., 4 spaces)
+	prettyJSON, err := json.MarshalIndent(results, "", "    ")
+	if err != nil {
+		_, _ = afmt.R.Fprintf(color.Error, "Error marshaling JSON: %v", err)
+		os.Exit(1)
 	}
 
-	for _, d := range results.Data {
-		_, _ = afmt.G.Fprintf(color.Output, "%s\n", d.Key())
-	}
+	_, _ = afmt.G.Fprintln(color.Output, string(prettyJSON))
 }

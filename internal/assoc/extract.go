@@ -11,8 +11,8 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"time"
 
-	"github.com/caffix/stringset"
 	"github.com/owasp-amass/asset-db/repository"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
@@ -32,7 +32,26 @@ import (
 )
 
 type Results struct {
-	Data []oam.Asset `json:"data"`
+	Node *node `json:"entity"`
+}
+
+type node struct {
+	Ent       *dbt.Entity   `json:"-"`
+	ID        string        `json:"id"`
+	Type      oam.AssetType `json:"type"`
+	CreatedAt string        `json:"created_at"`
+	LastSeen  string        `json:"last_seen"`
+	Asset     oam.Asset     `json:"asset"`
+	Relations []*link       `json:"edges"`
+}
+
+type link struct {
+	ID        string           `json:"id"`
+	Type      oam.RelationType `json:"type"`
+	CreatedAt string           `json:"created_at"`
+	LastSeen  string           `json:"last_seen"`
+	Relation  oam.Relation     `json:"relation"`
+	Node      *node            `json:"entity"`
 }
 
 func Extract(db repository.Repository, triples []*Triple) (*Results, error) {
@@ -45,49 +64,50 @@ func Extract(db repository.Repository, triples []*Triple) (*Results, error) {
 		return nil, fmt.Errorf("failed to find first subject: %w", err)
 	}
 
-	subents := []*dbt.Entity{ent}
-	for i, triple := range triples {
-		ents := subents
-		objids := stringset.New()
-		subents = []*dbt.Entity{}
+	results := Results{
+		Node: &node{
+			Ent:       ent,
+			ID:        ent.ID,
+			Type:      ent.Asset.AssetType(),
+			CreatedAt: ent.CreatedAt.Format(time.DateOnly),
+			LastSeen:  ent.LastSeen.Format(time.DateOnly),
+			Asset:     ent.Asset,
+			Relations: []*link{},
+		},
+	}
 
-		for _, ent := range ents {
+	nextlinks := []*link{{Node: results.Node}}
+	for i, triple := range triples {
+		next := nextlinks
+		nextlinks = []*link{}
+
+		for _, n := range next {
+			ent := n.Node.Ent
 			// filter based on the entity asset and the triple subject
-			if (!triple.Object.Since.IsZero() && ent.LastSeen.Before(triple.Object.Since)) ||
-				(triple.Object.Type != "*" && triple.Object.Type != ent.Asset.AssetType()) ||
-				(triple.Object.Key != "*" && triple.Object.Key != ent.Asset.Key()) ||
-				!allAttrsMatch(ent.Asset, triple.Object.Attributes) {
+			if (!triple.Subject.Since.IsZero() && ent.LastSeen.Before(triple.Subject.Since)) ||
+				(triple.Subject.Type != "*" && triple.Subject.Type != ent.Asset.AssetType()) ||
+				(triple.Subject.Key != "*" && triple.Subject.Key != ent.Asset.Key()) ||
+				!allAttrsMatch(ent.Asset, triple.Subject.Attributes) {
 				continue
 			}
 
-			objects, err := getObjects(db, ent, triple)
-			if err != nil || len(objects) == 0 {
+			links, err := getData(db, ent, triple)
+			if err != nil || len(links) == 0 {
 				continue // skip this entity if no objects are found
 			}
-
-			for _, obj := range objects {
-				if !objids.Has(obj.ID) {
-					objids.Insert(obj.ID)
-					subents = append(subents, obj)
-				}
-			}
+			nextlinks = append(nextlinks, links...)
+			n.Node.Relations = append(n.Node.Relations, links...)
 		}
-		objids.Close()
 
-		if len(subents) == 0 {
+		if len(nextlinks) == 0 {
 			return nil, fmt.Errorf("no objects found for triple %d", i+1)
 		}
-	}
-
-	var results Results
-	for _, ent := range subents {
-		results.Data = append(results.Data, ent.Asset)
 	}
 
 	return &results, nil
 }
 
-func getObjects(db repository.Repository, ent *dbt.Entity, triple *Triple) ([]*dbt.Entity, error) {
+func getData(db repository.Repository, ent *dbt.Entity, triple *Triple) ([]*link, error) {
 	if ent == nil || triple == nil {
 		return nil, errors.New("entity or triple cannot be nil")
 	}
@@ -108,7 +128,7 @@ func getObjects(db repository.Repository, ent *dbt.Entity, triple *Triple) ([]*d
 		return nil, fmt.Errorf("failed to get edges for entity %s: %v", ent.ID, err)
 	}
 
-	var objects []*dbt.Entity
+	var results []*link
 	for _, edge := range edges {
 		// perform filtering based on the predicate in the triple and the edge relation
 		if edge == nil || (triple.Predicate.Type != oam.RelationType("*") &&
@@ -137,14 +157,29 @@ func getObjects(db repository.Repository, ent *dbt.Entity, triple *Triple) ([]*d
 			(triple.Object.Type == "*" || triple.Object.Type == obj.Asset.AssetType()) &&
 			(triple.Object.Key == "*" || triple.Object.Key == obj.Asset.Key()) &&
 			allAttrsMatch(obj.Asset, triple.Object.Attributes) {
-			objects = append(objects, obj)
+			results = append(results, &link{
+				ID:        edge.ID,
+				Type:      edge.Relation.RelationType(),
+				CreatedAt: edge.CreatedAt.Format(time.DateOnly),
+				LastSeen:  edge.LastSeen.Format(time.DateOnly),
+				Relation:  edge.Relation,
+				Node: &node{
+					ID:        obj.ID,
+					Ent:       obj,
+					Type:      obj.Asset.AssetType(),
+					CreatedAt: obj.CreatedAt.Format(time.DateOnly),
+					LastSeen:  obj.LastSeen.Format(time.DateOnly),
+					Asset:     obj.Asset,
+					Relations: []*link{},
+				},
+			})
 		}
 	}
 
-	if len(objects) == 0 {
+	if len(results) == 0 {
 		return nil, fmt.Errorf("no objects found for entity %s with predicate %s", ent.ID, triple.Predicate.Label)
 	}
-	return objects, nil
+	return results, nil
 }
 
 func findFirstSubject(db repository.Repository, subject *Node) (*dbt.Entity, error) {
