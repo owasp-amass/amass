@@ -64,50 +64,65 @@ func Extract(db repository.Repository, triples []*Triple) (*Results, error) {
 		return nil, fmt.Errorf("failed to find first subject: %w", err)
 	}
 
-	results := Results{
-		Node: &node{
-			Ent:       ent,
-			ID:        ent.ID,
-			Type:      ent.Asset.AssetType(),
-			CreatedAt: ent.CreatedAt.Format(time.DateOnly),
-			LastSeen:  ent.LastSeen.Format(time.DateOnly),
-			Asset:     ent.Asset,
-			Relations: []*link{},
-		},
+	n := &node{
+		Ent:       ent,
+		ID:        ent.ID,
+		Type:      ent.Asset.AssetType(),
+		CreatedAt: ent.CreatedAt.Format(time.DateOnly),
+		LastSeen:  ent.LastSeen.Format(time.DateOnly),
+		Asset:     ent.Asset,
+		Relations: []*link{},
 	}
 
-	nextlinks := []*link{{Node: results.Node}}
-	for i, triple := range triples {
-		next := nextlinks
-		nextlinks = []*link{}
-
-		for _, n := range next {
-			ent := n.Node.Ent
-			// filter based on the entity asset and the triple subject
-			if (!triple.Subject.Since.IsZero() && ent.LastSeen.Before(triple.Subject.Since)) ||
-				(triple.Subject.Type != "*" && triple.Subject.Type != ent.Asset.AssetType()) ||
-				(triple.Subject.Key != "*" && triple.Subject.Key != ent.Asset.Key()) ||
-				!allAttrsMatch(ent.Asset, triple.Subject.Attributes) {
-				continue
-			}
-
-			links, err := getData(db, ent, triple)
-			if err != nil || len(links) == 0 {
-				continue // skip this entity if no objects are found
-			}
-			nextlinks = append(nextlinks, links...)
-			n.Node.Relations = append(n.Node.Relations, links...)
-		}
-
-		if len(nextlinks) == 0 {
-			return nil, fmt.Errorf("no objects found for triple %d", i+1)
-		}
+	rels, err := performWalk(db, triples, 0, []*link{{Node: n}})
+	if err != nil {
+		return nil, err
+	}
+	if len(rels) != 1 {
+		return nil, errors.New("failed to extract the walk from the first subject")
 	}
 
-	return &results, nil
+	return &Results{Node: n}, nil
 }
 
-func getData(db repository.Repository, ent *dbt.Entity, triple *Triple) ([]*link, error) {
+func performWalk(db repository.Repository, triples []*Triple, idx int, links []*link) ([]*link, error) {
+	var rels []*link
+	triple := triples[idx]
+
+	for _, n := range links {
+		ent := n.Node.Ent
+
+		// filter based on the entity asset and the triple subject
+		if (!triple.Subject.Since.IsZero() && ent.LastSeen.Before(triple.Subject.Since)) ||
+			(triple.Subject.Type != "*" && triple.Subject.Type != ent.Asset.AssetType()) ||
+			(triple.Subject.Key != "*" && triple.Subject.Key != ent.Asset.Key()) ||
+			!allAttrsMatch(ent.Asset, triple.Subject.Attributes) {
+			continue
+		}
+
+		entRels, err := predAndObject(db, ent, triple)
+		if err != nil || len(entRels) == 0 {
+			continue // skip this entity if no objects are found
+		}
+
+		if idx+1 < len(triples) {
+			entRels, err = performWalk(db, triples, idx+1, entRels)
+			if err != nil || len(entRels) == 0 {
+				continue // skip if the walk could not be completed
+			}
+		}
+
+		rels = append(rels, n)
+		n.Node.Relations = append(n.Node.Relations, entRels...)
+	}
+
+	if len(rels) == 0 {
+		return nil, fmt.Errorf("no objects found for triple %d", idx+1)
+	}
+	return rels, nil
+}
+
+func predAndObject(db repository.Repository, ent *dbt.Entity, triple *Triple) ([]*link, error) {
 	if ent == nil || triple == nil {
 		return nil, errors.New("entity or triple cannot be nil")
 	}
