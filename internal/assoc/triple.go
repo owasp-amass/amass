@@ -279,6 +279,11 @@ func keyToRelationType(key string) (oam.RelationType, error) {
 }
 
 func parseProperty(propstr string) (*Property, error) {
+	if !strings.HasPrefix(propstr, "[") || !strings.HasSuffix(propstr, "]") {
+		return nil, fmt.Errorf("property must be enclosed in square brackets, e.g., [type:property_name]")
+	}
+
+	propstr = strings.Trim(propstr, "[]")
 	parts := strings.Split(propstr, ",")
 	prop := &Property{Attributes: make(map[string]string)}
 
