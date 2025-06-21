@@ -9,10 +9,10 @@
 package dns
 
 import (
-        "strings"
-    "time"
-
+    "fmt"
     "log/slog"
+    "strings"
+    "time"
 
     "github.com/miekg/dns"
     "github.com/owasp-amass/amass/v4/engine/plugins/support"
@@ -21,7 +21,7 @@ import (
     "github.com/owasp-amass/open-asset-model/general"
 )
 
-const pluginName = "txt_service_discovery" 
+const pluginName = "txt_service_discovery"
 
 var matchers = map[string]string{
     "airtable-verification":           "Airtable",
@@ -65,61 +65,95 @@ type txtServiceDiscovery struct {
     source *et.Source
 }
 
-
 func (t *txtServiceDiscovery) check(e *et.Event) error {
-    ctxAttr := slog.Group(
-        "ctx",
-        slog.String("plugin", pluginName),
-        slog.String("handler", t.name),
-    )
-
-
-    if e == nil || e.Entity == nil {
-        e.Session.Log().Debug("event or entity is nil – skipping", ctxAttr)
-        return nil
+    // Create context attributes for consistent logging
+    ctxAttr := slog.Group("plugin", "name", t.name, "handler", "check")
+    
+    e.Session.Log().Debug("TXT service discovery check started", ctxAttr)
+    
+    // Validate event and entity
+    if e == nil {
+        e.Session.Log().Error("event is nil", ctxAttr)
+        return fmt.Errorf("event is nil")
     }
-
-
+    
+    if e.Entity == nil {
+        e.Session.Log().Error("entity is nil", ctxAttr)
+        return fmt.Errorf("entity is nil")
+    }
+    
+    if e.Entity.Asset == nil {
+        e.Session.Log().Error("entity asset is nil", ctxAttr)
+        return fmt.Errorf("entity asset is nil")
+    }
+    
+    e.Session.Log().Debug("event validation passed", ctxAttr, slog.String("assetType", fmt.Sprintf("%T", e.Entity.Asset)))
+    
     entity := e.Entity
     fqdn, ok := entity.Asset.(*oamdns.FQDN)
     if !ok {
-        e.Session.Log().Debug("entity is not an FQDN – skipping", ctxAttr)
+        e.Session.Log().Debug("entity is not an FQDN – skipping", ctxAttr, slog.String("actualType", fmt.Sprintf("%T", entity.Asset)))
         return nil
     }
-
+    
+    e.Session.Log().Info("processing FQDN for TXT service discovery", ctxAttr, slog.String("domain", fqdn.Name))
 
     since, err := support.TTLStartTime(e.Session.Config(), "FQDN", "FQDN", pluginName)
     if err != nil {
         since = time.Now().Add(-24 * time.Hour) // fall‑back window
-        e.Session.Log().Debug("no TTL config – defaulting to 24h", ctxAttr)
+        e.Session.Log().Debug("no TTL config – defaulting to 24h", ctxAttr, slog.String("domain", fqdn.Name))
+    } else {
+        e.Session.Log().Debug("TTL start time determined", ctxAttr, slog.String("domain", fqdn.Name), slog.Time("since", since))
     }
 
     var txtEntries []string
     tags, cacheErr := e.Session.Cache().GetEntityTags(entity, since, "dns_record")
     if cacheErr != nil {
-        e.Session.Log().Error("cache access error", slog.String("err", cacheErr.Error()), ctxAttr)
+        e.Session.Log().Error("cache access error", slog.String("err", cacheErr.Error()), ctxAttr, slog.String("domain", fqdn.Name))
     } else {
-        for _, tag := range tags {
+        e.Session.Log().Debug("retrieved entity tags from cache", ctxAttr, slog.String("domain", fqdn.Name), slog.Int("tagCount", len(tags)))
+        
+        for i, tag := range tags {
             if prop, ok := tag.Property.(*oamdns.DNSRecordProperty); ok && prop.Header.RRType == int(dns.TypeTXT) {
                 txtEntries = append(txtEntries, prop.Data)
+                e.Session.Log().Debug("found TXT record in cache", ctxAttr, 
+                    slog.String("domain", fqdn.Name), 
+                    slog.Int("tagIndex", i),
+                    slog.String("txtData", truncate(prop.Data, 100)))
+            } else {
+                e.Session.Log().Debug("skipping non-TXT tag", ctxAttr, 
+                    slog.String("domain", fqdn.Name), 
+                    slog.Int("tagIndex", i),
+                    slog.String("tagType", fmt.Sprintf("%T", tag.Property)))
             }
         }
     }
 
     if len(txtEntries) == 0 {
-        e.Session.Log().Debug("no TXT records found – nothing to analyse", ctxAttr)
+        e.Session.Log().Debug("no TXT records found – nothing to analyse", ctxAttr, slog.String("domain", fqdn.Name))
         return nil
     }
-
+    
+    e.Session.Log().Info("found TXT records for analysis", ctxAttr, 
+        slog.String("domain", fqdn.Name), 
+        slog.Int("recordCount", len(txtEntries)))
 
     var findings []*support.Finding
-    for _, txt := range txtEntries {
+    for i, txt := range txtEntries {
+        e.Session.Log().Debug("analyzing TXT record", ctxAttr, 
+            slog.String("domain", fqdn.Name), 
+            slog.Int("recordIndex", i),
+            slog.String("txtContent", truncate(txt, 150)))
+            
+        matchFound := false
         for needle, svc := range matchers {
             if strings.Contains(txt, needle) {
-                e.Session.Log().Info(
-                    "service detected via TXT",
+                matchFound = true
+                e.Session.Log().Info("service detected via TXT",
                     slog.String("service", svc),
                     slog.String("needle", needle),
+                    slog.String("domain", fqdn.Name),
+                    slog.String("txtRecord", truncate(txt, 180)),
                     ctxAttr,
                 )
 
@@ -131,21 +165,31 @@ func (t *txtServiceDiscovery) check(e *et.Event) error {
                     ToMeta:   truncate(txt, 180),
                     Rel:      &general.SimpleRelation{Name: "TXT record"},
                 })
-                break 
+                break // Only match first pattern per TXT record
             }
+        }
+        
+        if !matchFound {
+            e.Session.Log().Debug("no service patterns matched in TXT record", ctxAttr,
+                slog.String("domain", fqdn.Name),
+                slog.Int("recordIndex", i),
+                slog.String("txtContent", truncate(txt, 100)))
         }
     }
 
     if len(findings) == 0 {
-        e.Session.Log().Debug("no services matched any TXT strings", ctxAttr)
+        e.Session.Log().Debug("no services matched any TXT strings", ctxAttr, slog.String("domain", fqdn.Name))
         return nil
     }
 
-    e.Session.Log().Info("emitting findings", slog.Int("count", len(findings)), ctxAttr)
+    e.Session.Log().Info("emitting findings", slog.Int("count", len(findings)), ctxAttr, slog.String("domain", fqdn.Name))
+    
+    // Process the findings
     support.ProcessAssetsWithSource(e, findings, t.source, t.name, t.name)
+    
+    e.Session.Log().Debug("TXT service discovery check completed", ctxAttr, slog.String("domain", fqdn.Name))
     return nil
 }
-
 
 func truncate(s string, n int) string {
     if len(s) <= n {
