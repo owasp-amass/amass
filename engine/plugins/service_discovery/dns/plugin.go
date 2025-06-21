@@ -41,7 +41,7 @@ func (tpm *txtPluginManager) Start(r et.Registry) error {
 		Plugin:     tpm,
 		Name:       tpm.discover.name,
 		Priority:   9,                      
-		Transforms: []string{(oamdns.FQDN{}).AssetType()},
+		Transforms: []string{string((oamdns.FQDN{}).AssetType())},
 		EventType:  (oamdns.FQDN{}).AssetType(),
 		Callback:   tpm.discover.check,
 	}); err != nil {
