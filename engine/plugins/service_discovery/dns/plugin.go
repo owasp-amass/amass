@@ -7,6 +7,8 @@ import (
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 )
 
+const pluginName = "txt_service_discovery"
+
 type txtPluginManager struct {
 	name     string
 	log      *slog.Logger
@@ -14,7 +16,7 @@ type txtPluginManager struct {
 	discover *txtServiceDiscovery
 }
 
-func NewTXTPlugin() et.Plugin {
+func NewDNSPlugin() et.Plugin { // ← constructor the loader calls
 	return &txtPluginManager{
 		name: pluginName,
 		source: &et.Source{
@@ -24,23 +26,29 @@ func NewTXTPlugin() et.Plugin {
 	}
 }
 
-func NewDNSPlugin() et.Plugin { return NewTXTPlugin() }
+// Optional legacy wrapper
+func NewTXTPlugin() et.Plugin { return NewDNSPlugin() }
+
 func (tpm *txtPluginManager) Name() string { return tpm.name }
 
 func (tpm *txtPluginManager) Start(r et.Registry) error {
 	tpm.log = r.Log().WithGroup("plugin").With("name", tpm.name)
 
-	const handlerSuffix = "-FQDN-Check"
-	tpm.discover = &txtServiceDiscovery{
-		name:   tpm.name + handlerSuffix,
-		source: tpm.source,
+	// Make the source visible to –src / graph users
+	if err := r.RegisterSource(tpm.source); err != nil {
+		return err
 	}
 
-	// Register the handler.
+	tpm.discover = &txtServiceDiscovery{
+		name:   tpm.name + "-FQDN-Check",
+		source: tpm.source,
+		//   log: tpm.log,            // handy if txtServiceDiscovery logs
+	}
+
 	if err := r.RegisterHandler(&et.Handler{
 		Plugin:     tpm,
 		Name:       tpm.discover.name,
-		Priority:   9,                      
+		Priority:   9,
 		Transforms: []string{string((oamdns.FQDN{}).AssetType())},
 		EventType:  (oamdns.FQDN{}).AssetType(),
 		Callback:   tpm.discover.check,
@@ -52,6 +60,7 @@ func (tpm *txtPluginManager) Start(r et.Registry) error {
 	tpm.log.Info("plugin started")
 	return nil
 }
+
 func (tpm *txtPluginManager) Stop() {
 	if tpm.log != nil {
 		tpm.log.Info("plugin stopped")
