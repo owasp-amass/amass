@@ -36,22 +36,32 @@ type Results struct {
 }
 
 type node struct {
-	Ent       *dbt.Entity   `json:"-"`
-	ID        string        `json:"id"`
-	Type      oam.AssetType `json:"type"`
-	CreatedAt string        `json:"created_at"`
-	LastSeen  string        `json:"last_seen"`
-	Asset     oam.Asset     `json:"asset"`
-	Relations []*link       `json:"edges"`
+	Ent        *dbt.Entity   `json:"-"`
+	ID         string        `json:"id"`
+	Type       oam.AssetType `json:"type"`
+	CreatedAt  string        `json:"created_at"`
+	LastSeen   string        `json:"last_seen"`
+	Asset      oam.Asset     `json:"asset"`
+	Relations  []*link       `json:"edges"`
+	Properties []*prop       `json:"properties"`
 }
 
 type link struct {
+	ID         string           `json:"id"`
+	Type       oam.RelationType `json:"type"`
+	CreatedAt  string           `json:"created_at"`
+	LastSeen   string           `json:"last_seen"`
+	Relation   oam.Relation     `json:"relation"`
+	Node       *node            `json:"entity"`
+	Properties []*prop          `json:"properties"`
+}
+
+type prop struct {
 	ID        string           `json:"id"`
-	Type      oam.RelationType `json:"type"`
+	Type      oam.PropertyType `json:"type"`
 	CreatedAt string           `json:"created_at"`
 	LastSeen  string           `json:"last_seen"`
-	Relation  oam.Relation     `json:"relation"`
-	Node      *node            `json:"entity"`
+	Property  oam.Property     `json:"property"`
 }
 
 func Extract(db repository.Repository, triples []*Triple) (*Results, error) {
@@ -99,6 +109,12 @@ func performWalk(db repository.Repository, triples []*Triple, idx int, links []*
 			!allAttrsMatch(ent.Asset, triple.Subject.Attributes) {
 			continue
 		}
+
+		subjectProps, ok := entityPropsMatch(db, ent, triple.Subject.Properties)
+		if !ok {
+			continue // skip this entity if properties do not match
+		}
+		n.Node.Properties = subjectProps
 
 		entRels, err := predAndObject(db, ent, triple)
 		if err != nil || len(entRels) == 0 {
@@ -152,6 +168,11 @@ func predAndObject(db repository.Repository, ent *dbt.Entity, triple *Triple) ([
 			continue // skip edges that do not match the predicate
 		}
 
+		linkProps, ok := edgePropsMatch(db, edge, triple.Predicate.Properties)
+		if !ok {
+			continue // skip edges that do not match the properties
+		}
+
 		var objent *dbt.Entity
 		if triple.Direction == DirectionIncoming {
 			objent = edge.FromEntity
@@ -172,22 +193,27 @@ func predAndObject(db repository.Repository, ent *dbt.Entity, triple *Triple) ([
 			(triple.Object.Type == "*" || triple.Object.Type == obj.Asset.AssetType()) &&
 			(triple.Object.Key == "*" || triple.Object.Key == obj.Asset.Key()) &&
 			allAttrsMatch(obj.Asset, triple.Object.Attributes) {
-			results = append(results, &link{
-				ID:        edge.ID,
-				Type:      edge.Relation.RelationType(),
-				CreatedAt: edge.CreatedAt.Format(time.DateOnly),
-				LastSeen:  edge.LastSeen.Format(time.DateOnly),
-				Relation:  edge.Relation,
-				Node: &node{
-					ID:        obj.ID,
-					Ent:       obj,
-					Type:      obj.Asset.AssetType(),
-					CreatedAt: obj.CreatedAt.Format(time.DateOnly),
-					LastSeen:  obj.LastSeen.Format(time.DateOnly),
-					Asset:     obj.Asset,
-					Relations: []*link{},
-				},
-			})
+
+			if objectProps, ok := entityPropsMatch(db, obj, triple.Object.Properties); ok {
+				results = append(results, &link{
+					ID:        edge.ID,
+					Type:      edge.Relation.RelationType(),
+					CreatedAt: edge.CreatedAt.Format(time.DateOnly),
+					LastSeen:  edge.LastSeen.Format(time.DateOnly),
+					Relation:  edge.Relation,
+					Node: &node{
+						ID:         obj.ID,
+						Ent:        obj,
+						Type:       obj.Asset.AssetType(),
+						CreatedAt:  obj.CreatedAt.Format(time.DateOnly),
+						LastSeen:   obj.LastSeen.Format(time.DateOnly),
+						Asset:      obj.Asset,
+						Relations:  []*link{},
+						Properties: objectProps,
+					},
+					Properties: linkProps,
+				})
+			}
 		}
 	}
 
@@ -341,4 +367,139 @@ func attrMatch(s any, path, value string) bool {
 	}
 
 	return false
+}
+
+func entityPropsMatch(db repository.Repository, ent *dbt.Entity, propstrs []*Property) ([]*prop, bool) {
+	unfiltered, err := db.GetEntityTags(ent, time.Time{})
+	if err != nil || len(unfiltered) == 0 {
+		// return an empty slice if no tags are found or an error occurs
+		return []*prop{}, true
+	}
+
+	var names []string
+	for _, p := range propstrs {
+		names = append(names, p.Name)
+	}
+
+	var since time.Time
+	for _, p := range propstrs {
+		if p.Since.IsZero() {
+			continue // skip properties without a since value
+		}
+		if since.IsZero() || p.Since.Before(since) {
+			since = p.Since // find the earliest since value
+		}
+	}
+
+	tags, err := db.GetEntityTags(ent, since, names...)
+	if err != nil || len(tags) == 0 {
+		// return an empty slice if no tags are found or an error occurs
+		return []*prop{}, false
+	}
+
+	matchedProps := []*prop{}
+	for _, t := range tags {
+		if t == nil || t.Property.Name() == "" || t.Property.Value() == "" {
+			continue // skip invalid properties
+		}
+
+		passed := true
+		for _, s := range propstrs {
+			if !strings.EqualFold(t.Property.Name(), s.Name) {
+				continue
+			}
+			if !s.Since.IsZero() || t.LastSeen.Before(s.Since) {
+				passed = false // property does not match the since value
+				break
+			}
+			if !allAttrsMatch(t.Property, s.Attributes) {
+				passed = false // property does not match the attributes
+				break
+			}
+		}
+
+		if passed {
+			matchedProps = append(matchedProps, &prop{
+				ID:        t.ID,
+				Type:      t.Property.PropertyType(),
+				CreatedAt: t.CreatedAt.Format(time.DateOnly),
+				LastSeen:  t.LastSeen.Format(time.DateOnly),
+				Property:  t.Property,
+			})
+		}
+	}
+
+	if len(matchedProps) == 0 {
+		// if no properties matched, return an empty slice and indicate failure
+		return []*prop{}, false
+	}
+	return matchedProps, true
+}
+
+func edgePropsMatch(db repository.Repository, edge *dbt.Edge, propstrs []*Property) ([]*prop, bool) {
+	unfiltered, err := db.GetEdgeTags(edge, time.Time{})
+	if err != nil || len(unfiltered) == 0 {
+		// return an empty slice if no tags are found or an error occurs
+		return []*prop{}, true
+	}
+
+	var names []string
+	for _, p := range propstrs {
+		names = append(names, p.Name)
+	}
+
+	var since time.Time
+	for _, p := range propstrs {
+		if p.Since.IsZero() {
+			continue // skip properties without a since value
+		}
+		if since.IsZero() || p.Since.Before(since) {
+			since = p.Since // find the earliest since value
+		}
+	}
+
+	tags, err := db.GetEdgeTags(edge, since, names...)
+	if err != nil || len(tags) == 0 {
+		// indicate failure if no tags are found or an error occurs
+		return []*prop{}, false
+	}
+
+	matchedProps := []*prop{}
+	for _, t := range tags {
+		if t == nil || t.Property.Name() == "" || t.Property.Value() == "" {
+			continue // skip invalid properties
+		}
+
+		passed := true
+		for _, s := range propstrs {
+			if !strings.EqualFold(t.Property.Name(), s.Name) {
+				continue
+			}
+			if !s.Since.IsZero() || t.LastSeen.Before(s.Since) {
+				passed = false // property does not match the since value
+
+				break
+			}
+			if !allAttrsMatch(t.Property, s.Attributes) {
+				passed = false // property does not match the attributes
+				break
+			}
+		}
+
+		if passed {
+			matchedProps = append(matchedProps, &prop{
+				ID:        t.ID,
+				Type:      t.Property.PropertyType(),
+				CreatedAt: t.CreatedAt.Format(time.DateOnly),
+				LastSeen:  t.LastSeen.Format(time.DateOnly),
+				Property:  t.Property,
+			})
+		}
+	}
+
+	if len(matchedProps) == 0 {
+		// if no properties matched, return an empty slice and indicate failure
+		return []*prop{}, false
+	}
+	return matchedProps, true
 }

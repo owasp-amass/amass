@@ -301,7 +301,7 @@ func parseProperty(propstr string) (*Property, error) {
 				return nil, err
 			}
 			prop.Type = ptype
-			prop.Name = v
+			prop.Name = strings.ToLower(v)
 		} else if strings.EqualFold(k, "since") {
 			since, err := time.Parse(time.DateOnly, v)
 			if err != nil {
