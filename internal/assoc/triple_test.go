@@ -6,7 +6,6 @@ package assoc
 
 import (
 	"fmt"
-	"strings"
 	"testing"
 	"time"
 
@@ -94,7 +93,7 @@ func TestParseProperty(t *testing.T) {
 	// test that the expected attribute value is correctly parsed out
 	ptype = "dnsrecordproperty"
 	pname = "dns_record"
-	pstr = fmt.Sprintf("[%s:%s,header.rr_type:16]", string(ptype), strings.ToUpper(pname))
+	pstr = fmt.Sprintf("[%s:%s,header.rr_type:16]", string(ptype), pname)
 	p, err = parseProperty(pstr)
 	assert.NoError(t, err, "Failed to parse properly formed property")
 	assert.NotNil(t, p, "Returned nil when parsing a properly formed property")
