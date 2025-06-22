@@ -1,61 +1,56 @@
 package dns
 
 import (
-	"log/slog"
+    "context"
+    "log/slog"
 
-	et "github.com/owasp-amass/amass/v4/engine/types"
-	oamdns "github.com/owasp-amass/open-asset-model/dns"
-	oam "github.com/owasp-amass/open-asset-model"
+    "github.com/owasp-amass/amass/v4/engine/registry"
+    et "github.com/owasp-amass/amass/v4/engine/types"
+
+    oam    "github.com/owasp-amass/open-asset-model"
+    oamdns "github.com/owasp-amass/open-asset-model/dns"
 )
 
-type txtPluginManager struct {
-	name     string
-	log      *slog.Logger
-	source   *et.Source
-	discover *txtServiceDiscovery
+// txtServiceDiscoveryPlugin implements et.Plugin.
+type txtServiceDiscoveryPlugin struct{ name string }
+
+func NewDNSPlugin() et.Plugin { return &txtServiceDiscoveryPlugin{name: "txt_service_discovery"} }
+func (p *txtServiceDiscoveryPlugin) Name() string   { return p.name }
+func (p *txtServiceDiscoveryPlugin) Version() string{ return "0.1.1" }
+
+func (p *txtServiceDiscoveryPlugin) Start(ctx context.Context, r *registry.Registry) error {
+    // *** Registration – make sure the EventType and the Transform match ***
+    if err := r.RegisterHandler(&et.Handler{
+        Plugin:     p,
+        Name:       p.name,
+        Priority:   9,
+        Transforms: []string{string(oam.FQDN)}, // ← trailing comma present
+        EventType:  oam.FQDN,
+        Callback:   p.check,
+    }); err != nil {
+        return err
+    }
+    slog.Info("txt_service_discovery: handler registered") // INFO‑level so it appears in your log
+    return nil
 }
+func (p *txtServiceDiscoveryPlugin) Stop() {}
 
-func NewTXTPlugin() et.Plugin {
-	return &txtPluginManager{
-		name: pluginName,
-		source: &et.Source{
-			Name:       pluginName,
-			Confidence: 100,
-		},
-	}
-}
+func (p *txtServiceDiscoveryPlugin) check(ctx context.Context, evt *et.Event, pub *et.Publisher) error {
+    fqdn, ok := evt.Asset.(oamdns.FQDN)
+    if !ok {
+        return nil // filtered out
+    }
 
-func NewDNSPlugin() et.Plugin { return NewTXTPlugin() }
-func (tpm *txtPluginManager) Name() string { return tpm.name }
+    // ─── Very simple proof‑of‑life ─────────────────────────────────────────────
+    slog.Info("txt_service_discovery: received FQDN", "fqdn", fqdn.Name())
 
-func (tpm *txtPluginManager) Start(r et.Registry) error {
-	tpm.log = r.Log().WithGroup("plugin").With("name", tpm.name)
-
-	const handlerSuffix = "-FQDN-Check"
-	tpm.discover = &txtServiceDiscovery{
-		name:   tpm.name + handlerSuffix,
-		source: tpm.source,
-	}
-
-	// Register the handler.
-	if err := r.RegisterHandler(&et.Handler{
-		Plugin:     tpm,
-		Name:       tpm.discover.name,
-		Priority:   9,
-		Transforms: []string{string(oam.FQDN)},
-		EventType:  (oamdns.FQDN{}).AssetType(),
-		Callback:   tpm.discover.check,
-	}); err != nil {
-		tpm.log.Error("failed to register handler", "error", err)
-		return err
-	}
-
-	tpm.log.Info("plugin started")
-	return nil
-}
-
-func (tpm *txtPluginManager) Stop() {
-	if tpm.log != nil {
-		tpm.log.Info("plugin stopped")
-	}
+    // publish a synthetic “service discovered” event so that we always see at
+    // least one INFO line while you develop the real TXT‑parsing logic.
+    dummy := oamdns.TXTRecord{
+        Record:  "demo=1",
+        FQDN:    fqdn,
+        Sources: []oam.SourceRef{evt.ID()}, // keeps provenance intact
+    }
+    pub.Publish(ctx, &et.Event{Asset: dummy})
+    return nil
 }
