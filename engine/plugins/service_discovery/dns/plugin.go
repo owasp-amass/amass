@@ -5,6 +5,7 @@ import (
 
 	et "github.com/owasp-amass/amass/v4/engine/types"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
+	oam "github.com/owasp-amass/open-asset-model"
 )
 
 type txtPluginManager struct {
@@ -42,7 +43,7 @@ func (tpm *txtPluginManager) Start(r et.Registry) error {
 		Name:       tpm.discover.name,
 		Priority:   9,
 		Transforms: []string{string(oam.FQDN)},
-		EventType:  (oamdns.FQDN{}).AssetType(), // Fixed: use oamdns instead of oam
+		EventType:  (oamdns.FQDN{}).AssetType(),
 		Callback:   tpm.discover.check,
 	}); err != nil {
 		tpm.log.Error("failed to register handler", "error", err)
