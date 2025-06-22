@@ -5,6 +5,8 @@
 package assoc
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -59,4 +61,44 @@ func TestWildcardTriple(t *testing.T) {
 	assert.Equal(t, triple.Object.Key, "*", "Expected object to be wildcard")
 	assert.Equal(t, triple.Object.Type, oam.AssetType("*"), "Expected object type to be wildcard")
 	assert.False(t, triple.Object.IsWildcard(), "Expected object to not be wildcard")
+}
+
+func TestParseProperty(t *testing.T) {
+	// no square brackets should result in an error
+	p, err := parseProperty("sourceproperty:*")
+	assert.Error(t, err, "Failed to detect missing square brackets")
+	assert.Nil(t, p, "Returned a property without square brackets")
+
+	// no opening square bracket should result in an error
+	p, err = parseProperty("sourceproperty:*]")
+	assert.Error(t, err, "Failed to detect missing opening square brackets")
+	assert.Nil(t, p, "Returned a property without opening square brackets")
+
+	// no closing square bracket should result in an error
+	p, err = parseProperty("[sourceproperty:*")
+	assert.Error(t, err, "Failed to detect missing closing square brackets")
+	assert.Nil(t, p, "Returned a property without closing square brackets")
+
+	// test that the expected since value is correctly parsed out
+	ptype := "sourceproperty"
+	pname := "hackertarget"
+	since, _ := time.Parse(time.DateOnly, "2025-06-21")
+	pstr := fmt.Sprintf("[%s:%s,since:%s]", string(ptype), pname, since.Format(time.DateOnly))
+	p, err = parseProperty(pstr)
+	assert.NoError(t, err, "Failed to parse properly formed property")
+	assert.NotNil(t, p, "Returned nil when parsing a properly formed property")
+	assert.Equal(t, p.Type, oam.SourceProperty, "Failed to return the correct property type")
+	assert.Equal(t, p.Name, pname, "Failed to parse the provided property name")
+	assert.Equal(t, p.Since, since, "Expected property since to match")
+
+	// test that the expected attribute value is correctly parsed out
+	ptype = "dnsrecordproperty"
+	pname = "dns_record"
+	pstr = fmt.Sprintf("[%s:%s,header.rr_type:16]", string(ptype), strings.ToUpper(pname))
+	p, err = parseProperty(pstr)
+	assert.NoError(t, err, "Failed to parse properly formed property")
+	assert.NotNil(t, p, "Returned nil when parsing a properly formed property")
+	assert.Equal(t, p.Type, oam.DNSRecordProperty, "Failed to return the correct property type")
+	assert.Equal(t, p.Name, pname, "Failed to parse the provided property name")
+	assert.Equal(t, p.Attributes["header.rr_type"], "16", "Expected property attribute to match")
 }
