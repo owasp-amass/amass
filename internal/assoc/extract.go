@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/caffix/stringset"
 	"github.com/owasp-amass/asset-db/repository"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
@@ -132,10 +133,11 @@ func performWalk(db repository.Repository, triples []*Triple, idx int, links []*
 		n.Node.Relations = append(n.Node.Relations, entRels...)
 	}
 
+	var err error
 	if len(rels) == 0 {
-		return nil, fmt.Errorf("no objects found for triple %d", idx+1)
+		err = errors.New("no walks were successful")
 	}
-	return rels, nil
+	return rels, err
 }
 
 func predAndObject(db repository.Repository, ent *dbt.Entity, triple *Triple) ([]*link, error) {
@@ -370,15 +372,11 @@ func attrMatch(s any, path, value string) bool {
 }
 
 func entityPropsMatch(db repository.Repository, ent *dbt.Entity, propstrs []*Property) ([]*prop, bool) {
-	unfiltered, err := db.GetEntityTags(ent, time.Time{})
-	if err != nil || len(unfiltered) == 0 {
-		// return an empty slice if no tags are found or an error occurs
-		return []*prop{}, true
-	}
-
 	var names []string
 	for _, p := range propstrs {
-		names = append(names, p.Name)
+		if p.Name != "*" {
+			names = append(names, p.Name)
+		}
 	}
 
 	var since time.Time
@@ -394,7 +392,15 @@ func entityPropsMatch(db repository.Repository, ent *dbt.Entity, propstrs []*Pro
 	tags, err := db.GetEntityTags(ent, since, names...)
 	if err != nil || len(tags) == 0 {
 		// return an empty slice if no tags are found or an error occurs
-		return []*prop{}, false
+		return []*prop{}, len(propstrs) == 0
+	}
+
+	set := stringset.New()
+	defer set.Close()
+
+	for _, p := range propstrs {
+		pkey := fmt.Sprintf("%s:%s", string(p.Type), p.Name)
+		set.Insert(pkey)
 	}
 
 	matchedProps := []*prop{}
@@ -405,16 +411,16 @@ func entityPropsMatch(db repository.Repository, ent *dbt.Entity, propstrs []*Pro
 
 		passed := true
 		for _, s := range propstrs {
-			if !strings.EqualFold(t.Property.Name(), s.Name) {
-				continue
-			}
-			if !s.Since.IsZero() || t.LastSeen.Before(s.Since) {
-				passed = false // property does not match the since value
-				break
-			}
-			if !allAttrsMatch(t.Property, s.Attributes) {
-				passed = false // property does not match the attributes
-				break
+			if s.Type == t.Property.PropertyType() &&
+				(s.Name == "*" || strings.EqualFold(t.Property.Name(), s.Name)) {
+				if !s.Since.IsZero() && t.LastSeen.Before(s.Since) {
+					passed = false // property does not match the since value
+					break
+				}
+				if !allAttrsMatch(t.Property, s.Attributes) {
+					passed = false // property does not match the attributes
+					break
+				}
 			}
 		}
 
@@ -429,23 +435,15 @@ func entityPropsMatch(db repository.Repository, ent *dbt.Entity, propstrs []*Pro
 		}
 	}
 
-	if len(matchedProps) == 0 {
-		// if no properties matched, return an empty slice and indicate failure
-		return []*prop{}, false
-	}
-	return matchedProps, true
+	return matchedProps, len(matchedProps) >= set.Len()
 }
 
 func edgePropsMatch(db repository.Repository, edge *dbt.Edge, propstrs []*Property) ([]*prop, bool) {
-	unfiltered, err := db.GetEdgeTags(edge, time.Time{})
-	if err != nil || len(unfiltered) == 0 {
-		// return an empty slice if no tags are found or an error occurs
-		return []*prop{}, true
-	}
-
 	var names []string
 	for _, p := range propstrs {
-		names = append(names, p.Name)
+		if p.Name != "*" {
+			names = append(names, p.Name)
+		}
 	}
 
 	var since time.Time
@@ -461,7 +459,15 @@ func edgePropsMatch(db repository.Repository, edge *dbt.Edge, propstrs []*Proper
 	tags, err := db.GetEdgeTags(edge, since, names...)
 	if err != nil || len(tags) == 0 {
 		// indicate failure if no tags are found or an error occurs
-		return []*prop{}, false
+		return []*prop{}, len(propstrs) == 0
+	}
+
+	set := stringset.New()
+	defer set.Close()
+
+	for _, p := range propstrs {
+		pkey := fmt.Sprintf("%s:%s", string(p.Type), p.Name)
+		set.Insert(pkey)
 	}
 
 	matchedProps := []*prop{}
@@ -472,17 +478,16 @@ func edgePropsMatch(db repository.Repository, edge *dbt.Edge, propstrs []*Proper
 
 		passed := true
 		for _, s := range propstrs {
-			if !strings.EqualFold(t.Property.Name(), s.Name) {
-				continue
-			}
-			if !s.Since.IsZero() || t.LastSeen.Before(s.Since) {
-				passed = false // property does not match the since value
-
-				break
-			}
-			if !allAttrsMatch(t.Property, s.Attributes) {
-				passed = false // property does not match the attributes
-				break
+			if s.Type == t.Property.PropertyType() &&
+				(s.Name == "*" || strings.EqualFold(t.Property.Name(), s.Name)) {
+				if !s.Since.IsZero() && t.LastSeen.Before(s.Since) {
+					passed = false // property does not match the since value
+					break
+				}
+				if !allAttrsMatch(t.Property, s.Attributes) {
+					passed = false // property does not match the attributes
+					break
+				}
 			}
 		}
 
@@ -497,9 +502,5 @@ func edgePropsMatch(db repository.Repository, edge *dbt.Edge, propstrs []*Proper
 		}
 	}
 
-	if len(matchedProps) == 0 {
-		// if no properties matched, return an empty slice and indicate failure
-		return []*prop{}, false
-	}
-	return matchedProps, true
+	return matchedProps, len(matchedProps) >= set.Len()
 }
