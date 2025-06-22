@@ -152,9 +152,36 @@ func splitTriple(triple string) ([]string, int, error) {
 	return results, direction, nil
 }
 
+func splitElement(estr string) []string {
+	var parts []string
+
+	inBracket := false
+	var currentPart strings.Builder
+	for _, r := range estr {
+		switch r {
+		case '[':
+			inBracket = true
+			currentPart.WriteRune(r)
+		case ']':
+			inBracket = false
+			currentPart.WriteRune(r)
+		case ',':
+			if inBracket {
+				currentPart.WriteRune(r)
+			} else {
+				parts = append(parts, currentPart.String())
+				currentPart.Reset()
+			}
+		default:
+			currentPart.WriteRune(r)
+		}
+	}
+
+	return append(parts, currentPart.String()) // Add the last part
+}
+
 func parseNode(nodestr string) (*Node, error) {
-	parts := strings.Split(nodestr, ",")
-	if len(parts) == 1 && parts[0] == "*" {
+	if p := strings.Split(nodestr, ","); len(p) == 1 && p[0] == "*" {
 		return &Node{
 			Key:        "*",
 			Type:       oam.AssetType("*"),
@@ -163,14 +190,14 @@ func parseNode(nodestr string) (*Node, error) {
 	}
 
 	node := &Node{Attributes: make(map[string]string)}
-	for i, part := range parts {
+	for i, part := range splitElement(nodestr) {
 		if i == 0 && strings.TrimSpace(part) == "*" {
 			node.Key = "*"
 			node.Type = oam.AssetType("*")
 			continue
 		}
 
-		kv := strings.Split(part, ":")
+		kv := strings.SplitN(part, ":", 2)
 		if len(kv) != 2 {
 			return nil, fmt.Errorf("%s must be a key/value pair separated by a ':'", part)
 		}
@@ -187,7 +214,7 @@ func parseNode(nodestr string) (*Node, error) {
 		} else if strings.EqualFold(k, "prop") {
 			prop, err := parseProperty(v)
 			if err != nil {
-				return nil, fmt.Errorf("invalid property: %v", err)
+				return nil, fmt.Errorf("invalid property - %s: %v", v, err)
 			}
 			node.Properties = append(node.Properties, prop)
 		} else if strings.EqualFold(k, "since") {
@@ -214,8 +241,7 @@ func keyToAssetType(key string) (oam.AssetType, error) {
 }
 
 func parsePredicate(predstr string) (*Predicate, error) {
-	parts := strings.Split(predstr, ",")
-	if len(parts) == 1 && parts[0] == "*" {
+	if p := strings.Split(predstr, ","); len(p) == 1 && p[0] == "*" {
 		return &Predicate{
 			Label:      "*",
 			Type:       oam.RelationType("*"),
@@ -224,14 +250,14 @@ func parsePredicate(predstr string) (*Predicate, error) {
 	}
 
 	pred := &Predicate{Attributes: make(map[string]string)}
-	for i, part := range parts {
+	for i, part := range splitElement(predstr) {
 		if i == 0 && strings.TrimSpace(part) == "*" {
 			pred.Label = "*"
 			pred.Type = oam.RelationType("*")
 			continue
 		}
 
-		kv := strings.Split(part, ":")
+		kv := strings.SplitN(part, ":", 2)
 		if len(kv) != 2 {
 			return nil, fmt.Errorf("%s must be a key/value pair separated by a ':'", part)
 		}
@@ -301,7 +327,7 @@ func parseProperty(propstr string) (*Property, error) {
 				return nil, err
 			}
 			prop.Type = ptype
-			prop.Name = strings.ToLower(v)
+			prop.Name = v
 		} else if strings.EqualFold(k, "since") {
 			since, err := time.Parse(time.DateOnly, v)
 			if err != nil {
