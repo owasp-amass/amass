@@ -40,9 +40,9 @@ func (tpm *txtPluginManager) Start(r et.Registry) error {
 	if err := r.RegisterHandler(&et.Handler{
 		Plugin:     tpm,
 		Name:       tpm.discover.name,
-		Priority:   9,                      
-		Transforms: []string{string(oam.FQDN)}
-		EventType:  (oamdns.FQDN{}).AssetType(),
+		Priority:   9,
+		Transforms: []string{string(oam.FQDN)},
+		EventType:  (oamdns.FQDN{}).AssetType(), // Fixed: use oamdns instead of oam
 		Callback:   tpm.discover.check,
 	}); err != nil {
 		tpm.log.Error("failed to register handler", "error", err)
@@ -52,6 +52,7 @@ func (tpm *txtPluginManager) Start(r et.Registry) error {
 	tpm.log.Info("plugin started")
 	return nil
 }
+
 func (tpm *txtPluginManager) Stop() {
 	if tpm.log != nil {
 		tpm.log.Info("plugin stopped")
