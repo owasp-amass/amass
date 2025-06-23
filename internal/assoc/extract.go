@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
-	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -106,8 +105,8 @@ func performWalk(db repository.Repository, triples []*Triple, idx int, links []*
 		// filter based on the entity asset and the triple subject
 		if (!triple.Subject.Since.IsZero() && ent.LastSeen.Before(triple.Subject.Since)) ||
 			(triple.Subject.Type != "*" && triple.Subject.Type != ent.Asset.AssetType()) ||
-			(triple.Subject.Key != "*" && triple.Subject.Key != ent.Asset.Key()) ||
-			!allAttrsMatch(ent.Asset, triple.Subject.Attributes) {
+			(triple.Subject.Key != "*" && !valueMatch(ent.Asset.Key(), triple.Subject.Key,
+				triple.Subject.Regexp)) || !allAttrsMatch(ent.Asset, triple.Subject.Attributes) {
 			continue
 		}
 
@@ -146,7 +145,7 @@ func predAndObject(db repository.Repository, ent *dbt.Entity, triple *Triple) ([
 	}
 
 	var labels []string
-	if triple.Predicate.Label != "*" {
+	if triple.Predicate.Label != "*" && triple.Predicate.Regexp == nil {
 		labels = []string{triple.Predicate.Label}
 	}
 
@@ -165,7 +164,8 @@ func predAndObject(db repository.Repository, ent *dbt.Entity, triple *Triple) ([
 	for _, edge := range edges {
 		// perform filtering based on the predicate in the triple and the edge relation
 		if edge == nil || (triple.Predicate.Type != oam.RelationType("*") &&
-			triple.Predicate.Type != edge.Relation.RelationType()) ||
+			triple.Predicate.Type != edge.Relation.RelationType()) || (triple.Predicate.Label != "*" &&
+			!valueMatch(edge.Relation.Label(), triple.Predicate.Label, triple.Predicate.Regexp)) ||
 			!allAttrsMatch(edge.Relation, triple.Predicate.Attributes) {
 			continue // skip edges that do not match the predicate
 		}
@@ -193,8 +193,8 @@ func predAndObject(db repository.Repository, ent *dbt.Entity, triple *Triple) ([
 		// perform filtering based on the object in the triple and the entity asset
 		if (triple.Object.Since.IsZero() || !obj.LastSeen.Before(triple.Object.Since)) &&
 			(triple.Object.Type == "*" || triple.Object.Type == obj.Asset.AssetType()) &&
-			(triple.Object.Key == "*" || triple.Object.Key == obj.Asset.Key()) &&
-			allAttrsMatch(obj.Asset, triple.Object.Attributes) {
+			(triple.Object.Key == "*" || valueMatch(obj.Asset.Key(), triple.Object.Key,
+				triple.Object.Regexp)) && allAttrsMatch(obj.Asset, triple.Object.Attributes) {
 
 			if objectProps, ok := entityPropsMatch(db, obj, triple.Object.Properties); ok {
 				results = append(results, &link{
@@ -308,73 +308,10 @@ func subjectToAsset(subject *Node) (oam.Asset, error) {
 	return nil, fmt.Errorf("unknown asset type: %s", subtype)
 }
 
-func allAttrsMatch(s any, attrs map[string]string) bool {
-	for k, v := range attrs {
-		if !attrMatch(s, k, v) {
-			return false
-		}
-	}
-	return true
-}
-
-func attrMatch(s any, path, value string) bool {
-	val := reflect.ValueOf(s)
-	labels := strings.Split(path, ".")
-
-	// follow the path through the nested structs
-	for _, label := range labels {
-		if val.Kind() == reflect.Ptr {
-			val = val.Elem()
-		}
-		if val.Kind() != reflect.Struct {
-			return false
-		}
-
-		var index int
-		var found bool
-		st := val.Type()
-		for i := range st.NumField() {
-			field := st.Field(i)
-			// handle cases like `json:"name,omitempty"`
-			tag := strings.SplitN(field.Tag.Get("json"), ",", 2)[0]
-
-			if tag == label {
-				found = true
-				index = i
-				break
-			}
-		}
-		if !found {
-			return false
-		}
-
-		val = val.Field(index)
-	}
-
-	// compare val to the value parameter
-	switch val.Kind() {
-	case reflect.Bool:
-		b := "false"
-		if val.Bool() {
-			b = "true"
-		}
-		return strings.EqualFold(b, value)
-	case reflect.String:
-		return strings.EqualFold(value, val.String())
-	case reflect.Int:
-		return strconv.FormatInt(val.Int(), 10) == value
-	case reflect.Float64:
-		fmt64 := strconv.FormatFloat(val.Float(), 'f', -1, 64)
-		return fmt64 == value
-	}
-
-	return false
-}
-
 func entityPropsMatch(db repository.Repository, ent *dbt.Entity, propstrs []*Property) ([]*prop, bool) {
 	var names []string
 	for _, p := range propstrs {
-		if p.Name != "*" {
+		if p.Name != "*" && p.Regexp == nil {
 			names = append(names, p.Name)
 		}
 	}
@@ -412,7 +349,7 @@ func entityPropsMatch(db repository.Repository, ent *dbt.Entity, propstrs []*Pro
 		passed := true
 		for _, s := range propstrs {
 			if s.Type == t.Property.PropertyType() &&
-				(s.Name == "*" || strings.EqualFold(t.Property.Name(), s.Name)) {
+				(s.Name == "*" || valueMatch(t.Property.Name(), s.Name, s.Regexp)) {
 				if !s.Since.IsZero() && t.LastSeen.Before(s.Since) {
 					passed = false // property does not match the since value
 					break
@@ -441,7 +378,7 @@ func entityPropsMatch(db repository.Repository, ent *dbt.Entity, propstrs []*Pro
 func edgePropsMatch(db repository.Repository, edge *dbt.Edge, propstrs []*Property) ([]*prop, bool) {
 	var names []string
 	for _, p := range propstrs {
-		if p.Name != "*" {
+		if p.Name != "*" && p.Regexp == nil {
 			names = append(names, p.Name)
 		}
 	}
@@ -479,7 +416,7 @@ func edgePropsMatch(db repository.Repository, edge *dbt.Edge, propstrs []*Proper
 		passed := true
 		for _, s := range propstrs {
 			if s.Type == t.Property.PropertyType() &&
-				(s.Name == "*" || strings.EqualFold(t.Property.Name(), s.Name)) {
+				(s.Name == "*" || valueMatch(t.Property.Name(), s.Name, s.Regexp)) {
 				if !s.Since.IsZero() && t.LastSeen.Before(s.Since) {
 					passed = false // property does not match the since value
 					break
