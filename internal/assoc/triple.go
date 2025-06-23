@@ -57,14 +57,6 @@ type AttrValue struct {
 	Regexp *regexp.Regexp
 }
 
-func (n *Node) IsWildcard() bool {
-	return n.Key == "*" && (n.Type != oam.AssetType("*") || len(n.Attributes) == 0)
-}
-
-func (p *Predicate) IsWildcard() bool {
-	return p.Label == "*" && (p.Type != oam.RelationType("*") || len(p.Attributes) == 0)
-}
-
 func ParseTriple(triple string) (*Triple, error) {
 	elements, direction, err := splitTriple(triple)
 	if err != nil {
@@ -107,17 +99,20 @@ func splitTriple(s string) ([]string, int, error) {
 	direction := DirectionUnknown
 
 	var currentPart strings.Builder
-	var inAngle, inSquare, inSlash, atHyphen, atOpeningAngle bool
+	var inAngle, inSquare, inRegex bool
+	var atHyphen, atPound, atSlash, atOpeningAngle bool
 	for _, r := range s {
 		switch r {
 		case '<':
 			if !inAngle {
 				atOpeningAngle = true
 			}
+			atPound = false
+			atSlash = false
 			atHyphen = false
 			currentPart.WriteRune(r)
 		case '>':
-			if inAngle && !inSlash {
+			if inAngle && !inRegex {
 				inAngle = false
 				currentPart.WriteRune(r)
 				elements = append(elements, strings.TrimSpace(currentPart.String()))
@@ -127,6 +122,8 @@ func splitTriple(s string) ([]string, int, error) {
 			} else {
 				return nil, direction, fmt.Errorf("unexpected closing angle bracket '>'")
 			}
+			atPound = false
+			atSlash = false
 			atHyphen = false
 			atOpeningAngle = false
 		case '-':
@@ -147,29 +144,42 @@ func splitTriple(s string) ([]string, int, error) {
 			} else {
 				currentPart.WriteRune(r)
 			}
+			atPound = false
+			atSlash = false
 			atOpeningAngle = false
 		case '[':
-			if inAngle && !inSlash {
+			if inAngle && !inRegex {
 				inSquare = true
 			}
+			atPound = false
+			atSlash = false
 			atHyphen = false
 			atOpeningAngle = false
 			currentPart.WriteRune(r)
 		case ']':
-			if inSquare && !inSlash {
+			if inSquare && !inRegex {
 				inSquare = false
 			}
+			atPound = false
+			atSlash = false
+			atHyphen = false
+			atOpeningAngle = false
+			currentPart.WriteRune(r)
+		case '#':
+			if inRegex && atSlash {
+				inRegex = false
+			}
+			atPound = true
+			atSlash = false
 			atHyphen = false
 			atOpeningAngle = false
 			currentPart.WriteRune(r)
 		case '/':
-			if inAngle {
-				if inSlash {
-					inSlash = false
-				} else {
-					inSlash = true
-				}
+			if inAngle && atPound {
+				inRegex = true
 			}
+			atSlash = true
+			atPound = false
 			atHyphen = false
 			atOpeningAngle = false
 			currentPart.WriteRune(r)
@@ -177,6 +187,8 @@ func splitTriple(s string) ([]string, int, error) {
 			if atOpeningAngle {
 				inAngle = true
 			}
+			atPound = false
+			atSlash = false
 			atHyphen = false
 			atOpeningAngle = false
 			currentPart.WriteRune(r)
@@ -198,33 +210,41 @@ func splitTriple(s string) ([]string, int, error) {
 func splitElement(estr string) []string {
 	var parts []string
 
-	var inBracket, inSlash bool
+	var atPound, atSlash bool
+	var inBracket, inRegex bool
 	var currentPart strings.Builder
 	for _, r := range estr {
 		switch r {
 		case '[':
-			if !inSlash {
+			if !inRegex {
 				inBracket = true
 			}
 			currentPart.WriteRune(r)
 		case ']':
-			if inBracket && !inSlash {
+			if inBracket && !inRegex {
 				inBracket = false
 			}
 			currentPart.WriteRune(r)
 		case ',':
-			if inBracket || inSlash {
+			if inBracket || inRegex {
 				currentPart.WriteRune(r)
 			} else {
 				parts = append(parts, strings.TrimSpace(currentPart.String()))
 				currentPart.Reset()
 			}
-		case '/':
-			if inSlash {
-				inSlash = false
-			} else {
-				inSlash = true
+		case '#':
+			if inRegex && atSlash {
+				inRegex = false
 			}
+			atPound = true
+			atSlash = false
+			currentPart.WriteRune(r)
+		case '/':
+			if atPound {
+				inRegex = true
+			}
+			atSlash = true
+			atPound = false
 			currentPart.WriteRune(r)
 		default:
 			currentPart.WriteRune(r)
@@ -293,9 +313,9 @@ func parseNode(nodestr string) (*Node, error) {
 			av := &AttrValue{Value: v}
 			if restr, yes := isRegexp(v); yes {
 				if re, err := regexp.Compile(restr); err != nil {
-					return nil, fmt.Errorf("invalid regular expression for asset key: %v", err)
+					return nil, fmt.Errorf("invalid regular expression for asset attribute: %v", err)
 				} else {
-					node.Regexp = re
+					av.Regexp = re
 				}
 			}
 			node.Attributes[k] = av
@@ -373,9 +393,9 @@ func parsePredicate(predstr string) (*Predicate, error) {
 			av := &AttrValue{Value: v}
 			if restr, yes := isRegexp(v); yes {
 				if re, err := regexp.Compile(restr); err != nil {
-					return nil, fmt.Errorf("invalid regular expression for relation label: %v", err)
+					return nil, fmt.Errorf("invalid regular expression for relation attribute: %v", err)
 				} else {
-					pred.Regexp = re
+					av.Regexp = re
 				}
 			}
 			pred.Attributes[k] = av
@@ -439,9 +459,9 @@ func parseProperty(propstr string) (*Property, error) {
 			av := &AttrValue{Value: v}
 			if restr, yes := isRegexp(v); yes {
 				if re, err := regexp.Compile(restr); err != nil {
-					return nil, fmt.Errorf("invalid regular expression for property name: %v", err)
+					return nil, fmt.Errorf("invalid regular expression for property attribute: %v", err)
 				} else {
-					prop.Regexp = re
+					av.Regexp = re
 				}
 			}
 			prop.Attributes[k] = av
