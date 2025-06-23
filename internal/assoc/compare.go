@@ -9,11 +9,21 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	oam "github.com/owasp-amass/open-asset-model"
 )
 
+func (n *Node) IsWildcard() bool {
+	return n.Key == "*" && (n.Type != oam.AssetType("*") || len(n.Attributes) == 0)
+}
+
+func (p *Predicate) IsWildcard() bool {
+	return p.Label == "*" && (p.Type != oam.RelationType("*") || len(p.Attributes) == 0)
+}
+
 func isRegexp(s string) (string, bool) {
-	if strings.HasPrefix(s, "/") && strings.HasSuffix(s, "/") && len(s) > 2 {
-		return s[1 : len(s)-1], true
+	if strings.HasPrefix(s, "#/") && strings.HasSuffix(s, "/#") && len(s) > 4 {
+		return s[2 : len(s)-2], true
 	}
 	return s, false
 }
