@@ -99,5 +99,5 @@ func TestParseProperty(t *testing.T) {
 	assert.NotNil(t, p, "Returned nil when parsing a properly formed property")
 	assert.Equal(t, p.Type, oam.DNSRecordProperty, "Failed to return the correct property type")
 	assert.Equal(t, p.Name, pname, "Failed to parse the provided property name")
-	assert.Equal(t, p.Attributes["header.rr_type"], "16", "Expected property attribute to match")
+	assert.Equal(t, p.Attributes["header.rr_type"].Value, "16", "Expected property attribute to match")
 }

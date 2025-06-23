@@ -6,6 +6,7 @@ package assoc
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -15,10 +16,7 @@ import (
 const (
 	DirectionIncoming = iota
 	DirectionOutgoing
-)
-
-var (
-	tripleFields = []string{"subject", "predicate", "object"}
+	DirectionUnknown
 )
 
 type Triple struct {
@@ -30,25 +28,33 @@ type Triple struct {
 
 type Node struct {
 	Key        string
+	Regexp     *regexp.Regexp
 	Type       oam.AssetType
 	Since      time.Time
-	Attributes map[string]string
+	Attributes map[string]*AttrValue
 	Properties []*Property
 }
 
 type Predicate struct {
 	Label      string
+	Regexp     *regexp.Regexp
 	Type       oam.RelationType
 	Since      time.Time
-	Attributes map[string]string
+	Attributes map[string]*AttrValue
 	Properties []*Property
 }
 
 type Property struct {
 	Name       string
+	Regexp     *regexp.Regexp
 	Since      time.Time
 	Type       oam.PropertyType
-	Attributes map[string]string
+	Attributes map[string]*AttrValue
+}
+
+type AttrValue struct {
+	Value  string
+	Regexp *regexp.Regexp
 }
 
 func (n *Node) IsWildcard() bool {
@@ -60,22 +66,22 @@ func (p *Predicate) IsWildcard() bool {
 }
 
 func ParseTriple(triple string) (*Triple, error) {
-	tristrs, direction, err := splitTriple(triple)
+	elements, direction, err := splitTriple(triple)
 	if err != nil {
 		return nil, fmt.Errorf("invalid triple format: %v", err)
 	}
 
-	subject, err := parseNode(tristrs[0])
+	subject, err := parseNode(elements[0])
 	if err != nil {
 		return nil, fmt.Errorf("invalid subject: %v", err)
 	}
 
-	predicate, err := parsePredicate(tristrs[1])
+	predicate, err := parsePredicate(elements[1])
 	if err != nil {
 		return nil, fmt.Errorf("invalid predicate: %v", err)
 	}
 
-	object, err := parseNode(tristrs[2])
+	object, err := parseNode(elements[2])
 	if err != nil {
 		return nil, fmt.Errorf("invalid object: %v", err)
 	}
@@ -96,100 +102,153 @@ func ParseTriple(triple string) (*Triple, error) {
 	}, nil
 }
 
-func splitTriple(triple string) ([]string, int, error) {
-	start := 0
-	var results []string
-	direction := DirectionOutgoing
+func splitTriple(s string) ([]string, int, error) {
+	var elements []string
+	direction := DirectionUnknown
 
-	for _, i := range []int{0, 1, 2} {
-		substr := triple[start:]
-
-		sidx := strings.Index(substr, "<")
-		if sidx == -1 {
-			return nil, direction, fmt.Errorf("triple must contain an opening angle bracket for the %s", tripleFields[i])
-		}
-		sidx += 1 // move past the opening angle bracket
-
-		eidx := strings.Index(substr, ">")
-		if eidx == -1 {
-			return nil, direction, fmt.Errorf("triple must contain a closing angle bracket for the %s", tripleFields[i])
-		}
-		if eidx <= sidx {
-			return nil, direction, fmt.Errorf("the %s must contain a closing angle bracket after an opening angle bracket", tripleFields[i])
-		}
-		results = append(results, strings.TrimSpace(substr[sidx:eidx]))
-
-		start += eidx + 1 // move past the closing angle bracket
-		substr = triple[start:]
-
-		switch i {
-		case 0:
-			if idx := strings.Index(substr, "<-"); idx != -1 && (idx == 0 || idx == 1) {
-				direction = DirectionIncoming
-				start += idx + 2 // move past the "<-"
-			} else if idx := strings.Index(substr, "-"); idx != -1 && (idx == 0 || idx == 1) {
-				start += idx + 1 // move past the "-"
-			} else {
-				return nil, direction, fmt.Errorf("triple must contain a hyphen or '<-' after the subject")
+	var currentPart strings.Builder
+	var inAngle, inSquare, inSlash, atHyphen, atOpeningAngle bool
+	for _, r := range s {
+		switch r {
+		case '<':
+			if !inAngle {
+				atOpeningAngle = true
 			}
-		case 1:
-			if idx := strings.Index(substr, "->"); idx != -1 && (idx == 0 || idx == 1) {
-				if direction == DirectionIncoming {
-					return nil, direction, fmt.Errorf("triple cannot have both '<-' and '->'")
-				}
-				start += idx + 2 // move past the "<-"
-			} else if idx := strings.Index(substr, "-"); idx != -1 && (idx == 0 || idx == 1) {
-				if direction == DirectionOutgoing {
-					return nil, direction, fmt.Errorf("triple must have a direction specified with '<-' or '->'")
-				}
-				start += idx + 1 // move past the "-"
+			atHyphen = false
+			currentPart.WriteRune(r)
+		case '>':
+			if inAngle && !inSlash {
+				inAngle = false
+				currentPart.WriteRune(r)
+				elements = append(elements, strings.TrimSpace(currentPart.String()))
+				currentPart.Reset()
+			} else if atHyphen && !inAngle && direction == DirectionUnknown && len(elements) == 2 {
+				direction = DirectionOutgoing
 			} else {
-				return nil, direction, fmt.Errorf("triple must contain a hyphen or '<-' after the predicate")
+				return nil, direction, fmt.Errorf("unexpected closing angle bracket '>'")
 			}
+			atHyphen = false
+			atOpeningAngle = false
+		case '-':
+			if atOpeningAngle {
+				if direction == DirectionUnknown && len(elements) == 1 {
+					direction = DirectionIncoming
+					tmpstr := currentPart.String()
+					currentPart.Reset()
+					currentPart.WriteString(tmpstr[:len(tmpstr)-1]) // Remove the trailing '<'
+				} else {
+					return nil, direction, fmt.Errorf("unexpected hyphen '-' after opening angle bracket '<'")
+				}
+				inAngle = false
+			} else if !inAngle && direction == DirectionUnknown && len(elements) == 1 {
+				atHyphen = true
+			} else if !inAngle && len(elements) == 2 {
+				atHyphen = true
+			} else {
+				currentPart.WriteRune(r)
+			}
+			atOpeningAngle = false
+		case '[':
+			if inAngle && !inSlash {
+				inSquare = true
+			}
+			atHyphen = false
+			atOpeningAngle = false
+			currentPart.WriteRune(r)
+		case ']':
+			if inSquare && !inSlash {
+				inSquare = false
+			}
+			atHyphen = false
+			atOpeningAngle = false
+			currentPart.WriteRune(r)
+		case '/':
+			if inAngle {
+				if inSlash {
+					inSlash = false
+				} else {
+					inSlash = true
+				}
+			}
+			atHyphen = false
+			atOpeningAngle = false
+			currentPart.WriteRune(r)
+		default:
+			if atOpeningAngle {
+				inAngle = true
+			}
+			atHyphen = false
+			atOpeningAngle = false
+			currentPart.WriteRune(r)
 		}
 	}
 
-	return results, direction, nil
+	if inAngle {
+		return nil, direction, fmt.Errorf("unclosed angle bracket '<'")
+	}
+	if direction == DirectionUnknown {
+		return nil, direction, fmt.Errorf("triple must contain a direction specified with '<-' or '->'")
+	}
+	if len(elements) != 3 {
+		return nil, direction, fmt.Errorf("triple must contain exactly three elements")
+	}
+	return elements, direction, nil
 }
 
 func splitElement(estr string) []string {
 	var parts []string
 
-	inBracket := false
+	var inBracket, inSlash bool
 	var currentPart strings.Builder
 	for _, r := range estr {
 		switch r {
 		case '[':
-			inBracket = true
+			if !inSlash {
+				inBracket = true
+			}
 			currentPart.WriteRune(r)
 		case ']':
-			inBracket = false
+			if inBracket && !inSlash {
+				inBracket = false
+			}
 			currentPart.WriteRune(r)
 		case ',':
-			if inBracket {
+			if inBracket || inSlash {
 				currentPart.WriteRune(r)
 			} else {
-				parts = append(parts, currentPart.String())
+				parts = append(parts, strings.TrimSpace(currentPart.String()))
 				currentPart.Reset()
 			}
+		case '/':
+			if inSlash {
+				inSlash = false
+			} else {
+				inSlash = true
+			}
+			currentPart.WriteRune(r)
 		default:
 			currentPart.WriteRune(r)
 		}
 	}
 
-	return append(parts, currentPart.String()) // Add the last part
+	return append(parts, strings.TrimSpace(currentPart.String())) // Add the last part
 }
 
 func parseNode(nodestr string) (*Node, error) {
-	if p := strings.Split(nodestr, ","); len(p) == 1 && p[0] == "*" {
+	if !strings.HasPrefix(nodestr, "<") || !strings.HasSuffix(nodestr, ">") {
+		return nil, fmt.Errorf("node must be enclosed in angle brackets, e.g., <type:asset_key>")
+	}
+	nodestr = strings.Trim(nodestr, "<>")
+
+	if p := strings.TrimSpace(nodestr); p == "*" {
 		return &Node{
 			Key:        "*",
 			Type:       oam.AssetType("*"),
-			Attributes: make(map[string]string),
+			Attributes: make(map[string]*AttrValue),
 		}, nil
 	}
 
-	node := &Node{Attributes: make(map[string]string)}
+	node := &Node{Attributes: make(map[string]*AttrValue)}
 	for i, part := range splitElement(nodestr) {
 		if i == 0 && strings.TrimSpace(part) == "*" {
 			node.Key = "*"
@@ -211,6 +270,13 @@ func parseNode(nodestr string) (*Node, error) {
 			}
 			node.Type = atype
 			node.Key = v
+			if restr, yes := isRegexp(v); yes {
+				if re, err := regexp.Compile(restr); err != nil {
+					return nil, fmt.Errorf("invalid regular expression for asset key: %v", err)
+				} else {
+					node.Regexp = re
+				}
+			}
 		} else if strings.EqualFold(k, "prop") {
 			prop, err := parseProperty(v)
 			if err != nil {
@@ -224,7 +290,15 @@ func parseNode(nodestr string) (*Node, error) {
 			}
 			node.Since = since
 		} else {
-			node.Attributes[k] = v
+			av := &AttrValue{Value: v}
+			if restr, yes := isRegexp(v); yes {
+				if re, err := regexp.Compile(restr); err != nil {
+					return nil, fmt.Errorf("invalid regular expression for asset key: %v", err)
+				} else {
+					node.Regexp = re
+				}
+			}
+			node.Attributes[k] = av
 		}
 	}
 
@@ -241,15 +315,20 @@ func keyToAssetType(key string) (oam.AssetType, error) {
 }
 
 func parsePredicate(predstr string) (*Predicate, error) {
-	if p := strings.Split(predstr, ","); len(p) == 1 && p[0] == "*" {
+	if !strings.HasPrefix(predstr, "<") || !strings.HasSuffix(predstr, ">") {
+		return nil, fmt.Errorf("predicate must be enclosed in angle brackets, e.g., <type:relation_label>")
+	}
+	predstr = strings.Trim(predstr, "<>")
+
+	if p := strings.TrimSpace(predstr); p == "*" {
 		return &Predicate{
 			Label:      "*",
 			Type:       oam.RelationType("*"),
-			Attributes: make(map[string]string),
+			Attributes: make(map[string]*AttrValue),
 		}, nil
 	}
 
-	pred := &Predicate{Attributes: make(map[string]string)}
+	pred := &Predicate{Attributes: make(map[string]*AttrValue)}
 	for i, part := range splitElement(predstr) {
 		if i == 0 && strings.TrimSpace(part) == "*" {
 			pred.Label = "*"
@@ -271,6 +350,13 @@ func parsePredicate(predstr string) (*Predicate, error) {
 			}
 			pred.Type = rtype
 			pred.Label = v
+			if restr, yes := isRegexp(v); yes {
+				if re, err := regexp.Compile(restr); err != nil {
+					return nil, fmt.Errorf("invalid regular expression for relation label: %v", err)
+				} else {
+					pred.Regexp = re
+				}
+			}
 		} else if strings.EqualFold(k, "prop") {
 			prop, err := parseProperty(v)
 			if err != nil {
@@ -284,7 +370,15 @@ func parsePredicate(predstr string) (*Predicate, error) {
 			}
 			pred.Since = since
 		} else {
-			pred.Attributes[k] = v
+			av := &AttrValue{Value: v}
+			if restr, yes := isRegexp(v); yes {
+				if re, err := regexp.Compile(restr); err != nil {
+					return nil, fmt.Errorf("invalid regular expression for relation label: %v", err)
+				} else {
+					pred.Regexp = re
+				}
+			}
+			pred.Attributes[k] = av
 		}
 	}
 
@@ -311,7 +405,7 @@ func parseProperty(propstr string) (*Property, error) {
 
 	propstr = strings.Trim(propstr, "[]")
 	parts := strings.Split(propstr, ",")
-	prop := &Property{Attributes: make(map[string]string)}
+	prop := &Property{Attributes: make(map[string]*AttrValue)}
 
 	for i, part := range parts {
 		kv := strings.Split(part, ":")
@@ -328,6 +422,13 @@ func parseProperty(propstr string) (*Property, error) {
 			}
 			prop.Type = ptype
 			prop.Name = v
+			if restr, yes := isRegexp(v); yes {
+				if re, err := regexp.Compile(restr); err != nil {
+					return nil, fmt.Errorf("invalid regular expression for property name: %v", err)
+				} else {
+					prop.Regexp = re
+				}
+			}
 		} else if strings.EqualFold(k, "since") {
 			since, err := time.Parse(time.DateOnly, v)
 			if err != nil {
@@ -335,7 +436,15 @@ func parseProperty(propstr string) (*Property, error) {
 			}
 			prop.Since = since
 		} else {
-			prop.Attributes[k] = v
+			av := &AttrValue{Value: v}
+			if restr, yes := isRegexp(v); yes {
+				if re, err := regexp.Compile(restr); err != nil {
+					return nil, fmt.Errorf("invalid regular expression for property name: %v", err)
+				} else {
+					prop.Regexp = re
+				}
+			}
+			prop.Attributes[k] = av
 		}
 	}
 
