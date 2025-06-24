@@ -17,7 +17,7 @@ type txtPluginManager struct {
 	discover *txtServiceDiscovery
 }
 
-func NewTXTPlugin() et.Plugin {
+func NewDNSPlugin() et.Plugin {
 	return &txtPluginManager{
 		name: pluginName,
 		source: &et.Source{
@@ -27,7 +27,7 @@ func NewTXTPlugin() et.Plugin {
 	}
 }
 
-func NewDNSPlugin() et.Plugin { return NewTXTPlugin() }
+func NewDNSPlugin() et.Plugin { return NewDNSPlugin() }
 func (tpm *txtPluginManager) Name() string { return tpm.name }
 
 func (tpm *txtPluginManager) Start(r et.Registry) error {
