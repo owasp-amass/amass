@@ -3,7 +3,7 @@ module github.com/owasp-amass/amass/v4
 go 1.24.0
 
 require (
-	github.com/99designs/gqlgen v0.17.74
+	github.com/99designs/gqlgen v0.17.75
 	github.com/PuerkitoBio/goquery v1.10.3
 	github.com/PuerkitoBio/purell v1.2.1
 	github.com/adrg/strutil v0.3.1
@@ -25,14 +25,14 @@ require (
 	github.com/miekg/dns v1.1.66
 	github.com/nyaruka/phonenumbers v1.6.3
 	github.com/openrdap/rdap v0.9.1
-	github.com/owasp-amass/asset-db v0.21.0
+	github.com/owasp-amass/asset-db v0.22.1
 	github.com/owasp-amass/open-asset-model v0.14.1-0.20250512191847-44621818e90d
 	github.com/owasp-amass/resolve v0.9.7-0.20250325214539-07077e8c54af
-	github.com/samber/slog-common v0.18.1
+	github.com/samber/slog-common v0.19.0
 	github.com/samber/slog-syslog/v2 v2.5.2
 	github.com/stretchr/testify v1.10.0
 	github.com/tylertreat/BoomFilters v0.0.0-20250603162721-abf33679c3cf
-	github.com/vektah/gqlparser/v2 v2.5.27
+	github.com/vektah/gqlparser/v2 v2.5.28
 	github.com/yl2chen/cidranger v1.0.2
 	golang.org/x/net v0.41.0
 	golang.org/x/time v0.12.0
@@ -51,8 +51,8 @@ require (
 	github.com/andybalholm/cascadia v1.3.3 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	github.com/chromedp/cdproto v0.0.0-20250611220608-a17eb1ae8ff0 // indirect
-	github.com/chromedp/chromedp v0.13.6 // indirect
+	github.com/chromedp/cdproto v0.0.0-20250621212827-3f1355e655b9 // indirect
+	github.com/chromedp/chromedp v0.13.7 // indirect
 	github.com/chromedp/sysutil v1.1.0 // indirect
 	github.com/d4l3k/messagediff v1.2.1 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
@@ -61,8 +61,8 @@ require (
 	github.com/go-gorp/gorp/v3 v3.1.0 // indirect
 	github.com/go-json-experiment/json v0.0.0-20250517221953-25912455fbc8 // indirect
 	github.com/go-kit/kit v0.13.0 // indirect
-	github.com/go-sql-driver/mysql v1.9.2 // indirect
-	github.com/go-viper/mapstructure/v2 v2.2.1 // indirect
+	github.com/go-sql-driver/mysql v1.9.3 // indirect
+	github.com/go-viper/mapstructure/v2 v2.3.0 // indirect
 	github.com/gobwas/httphead v0.1.0 // indirect
 	github.com/gobwas/pool v0.2.1 // indirect
 	github.com/gobwas/ws v1.4.0 // indirect
@@ -85,7 +85,7 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/prometheus/client_golang v1.22.0 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
-	github.com/prometheus/common v0.64.0 // indirect
+	github.com/prometheus/common v0.65.0 // indirect
 	github.com/prometheus/procfs v0.16.1 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
@@ -96,7 +96,7 @@ require (
 	github.com/temoto/robotstxt v1.1.2 // indirect
 	github.com/xhit/go-str2duration/v2 v2.1.0 // indirect
 	golang.org/x/crypto v0.39.0 // indirect
-	golang.org/x/exp v0.0.0-20250606033433-dcc06ee1d476 // indirect
+	golang.org/x/exp v0.0.0-20250620022241-b7579e27df2b // indirect
 	golang.org/x/mod v0.25.0 // indirect
 	golang.org/x/sync v0.15.0 // indirect
 	golang.org/x/sys v0.33.0 // indirect
@@ -106,7 +106,7 @@ require (
 	gorm.io/datatypes v1.2.5 // indirect
 	gorm.io/driver/mysql v1.6.0 // indirect
 	gorm.io/driver/postgres v1.6.0 // indirect
-	modernc.org/libc v1.65.10 // indirect
+	modernc.org/libc v1.66.1 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 	modernc.org/sqlite v1.38.0 // indirect
