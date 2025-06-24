@@ -112,7 +112,12 @@ func CLIWorkflow(cmdName string, clArgs []string) {
 		if len(list) > 10 {
 			list = list[:10]
 		}
-		copy(list, args.Triples)
+		for i, l := range list {
+			if l == "" || args.Triples[i] != "" {
+				continue
+			}
+			args.Triples[i] = l
+		}
 	}
 	if args.Triples[0] == "" {
 		_, _ = afmt.R.Fprintln(color.Error, "No triples were provided for the association walk")
