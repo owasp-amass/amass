@@ -4,17 +4,11 @@
 package dns
 
 import (
-	"fmt"
 	"log/slog"
-	"strings"
-	"time"
 
-	"github.com/miekg/dns"
-	"github.com/owasp-amass/amass/v4/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v4/engine/types"
-
-	oamdns "github.com/owasp-amass/open-asset-model/dns"     // FQDN, DNS‑specific assets
-	oamsvc "github.com/owasp-amass/open-asset-model/service" // generic Service asset
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
+	oam "github.com/owasp-amass/open-asset-model"
 )
 
 const pluginName = "txt_service_discovery"
