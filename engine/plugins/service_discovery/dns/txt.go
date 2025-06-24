@@ -1,6 +1,3 @@
-// SPDX‑License‑Identifier: Apache‑2.0
-// Copyright © OWASP Amass contributors.
-
 package dns
 
 import (
@@ -11,120 +8,54 @@ import (
 	oam "github.com/owasp-amass/open-asset-model"
 )
 
-const pluginName = "txt_service_discovery"
-
-// A mapping of verification‑token prefixes → human‑readable SaaS names.
-var matchers = map[string]string{
-	"airtable-verification":           "Airtable",
-	"aliyun-site-verification":        "Aliyun",
-	"anodot-domain-verification":      "Anodot",
-	"apperio-domain-verification":     "Apperio",
-	"apple-domain-verification":       "Apple",
-	"atlassian-domain-verification":   "Atlassian",
-	"bugcrowd-verification":           "Bugcrowd",
-	"canva-site-verification":         "Canva",
-	"cisco-ci-domain-verification":    "Cisco",
-	"facebook-domain-verification":    "Facebook",
-	"globalsign-domain-verification":  "GlobalSign",
-	"google-site-verification":        "Google",
-	"hubspot-site-verification":       "HubSpot",
-	"mailru-verification":             "Mail.ru",
-	"miro-verification":               "Miro",
-	"mongodb-site-verification":       "MongoDB",
-	"notion-domain-verification":      "Notion",
-	"onetrust-domain-verification":    "OneTrust",
-	"openai-domain-verification":      "OpenAI",
-	"pendo-domain-verification":       "Pendo",
-	"postman-domain-verification":     "Postman",
-	"segment-site-verification":       "Segment",
-	"status-page-domain-verification": "StatusPage",
-	"stripe-verification":             "Stripe",
-	"twilio-domain-verification":      "Twilio",
-	"yahoo-verification-key":          "Yahoo",
-	"yandex-verification":             "Yandex",
-	"zoom-domain-verification":        "Zoom",
+type txtPluginManager struct {
+	name     string
+	log      *slog.Logger
+	source   *et.Source
+	discover *txtServiceDiscovery
 }
 
-// txtServiceDiscovery is the handler attached by plugin.go
-type txtServiceDiscovery struct {
-	name   string
-	source *et.Source
+func NewTXTPlugin() et.Plugin {
+	return &txtPluginManager{
+		name: pluginName,
+		source: &et.Source{
+			Name:       pluginName,
+			Confidence: 100,
+		},
+	}
 }
 
-// check is invoked for every FQDN asset passed through the engine.
-func (t *txtServiceDiscovery) check(e *et.Event) error {
-	if e == nil || e.Entity == nil {
-		return fmt.Errorf("%s: received nil event or entity", t.name)
+func NewDNSPlugin() et.Plugin { return NewTXTPlugin() }
+func (tpm *txtPluginManager) Name() string { return tpm.name }
+
+func (tpm *txtPluginManager) Start(r et.Registry) error {
+	tpm.log = r.Log().WithGroup("plugin").With("name", tpm.name)
+
+	const handlerSuffix = "-FQDN-Check"
+	tpm.discover = &txtServiceDiscovery{
+		name:   tpm.name + handlerSuffix,
+		source: tpm.source,
 	}
 
-	fqdn, ok := e.Entity.Asset.(*oamdns.FQDN)
-	if !ok {
-		// Not an FQDN asset – ignore silently.
-		return nil
+	// Register the handler.
+	if err := r.RegisterHandler(&et.Handler{
+		Plugin:     tpm,
+		Name:       tpm.discover.name,
+		Priority:   9,
+		Transforms: []string{string(oam.FQDN)},
+		EventType:  (oamdns.FQDN{}).AssetType(),
+		Callback:   tpm.discover.check,
+	}); err != nil {
+		tpm.log.Error("failed to register handler", "error", err)
+		return err
 	}
 
-	ctx := e.Session.Log().WithGroup("plugin").With(
-		slog.String("name", t.name),
-		slog.String("fqdn", fqdn.Name),
-	)
-
-	// Look back as far as the configured TTL for DNS data (fallback: 24 h).
-	since, err := support.TTLStartTime(e.Session.Config(), "FQDN", "FQDN", pluginName)
-	if err != nil {
-		since = time.Now().Add(-24 * time.Hour)
-	}
-
-	// Pull any TXT records already cached for this FQDN.
-	var txts []string
-	tags, err := e.Session.Cache().GetEntityTags(e.Entity, since, "dns_record")
-	if err == nil {
-		for _, tag := range tags {
-			if prop, ok := tag.Property.(*oamdns.DNSRecordProperty); ok &&
-				prop.Header.RRType == int(dns.TypeTXT) {
-				txts = append(txts, prop.Data)
-			}
-		}
-	}
-
-	if len(txts) == 0 {
-		return nil // nothing to inspect
-	}
-
-	var findings []*support.Finding
-
-scanLoop:
-	for _, txt := range txts {
-		for needle, serviceName := range matchers {
-			if strings.Contains(txt, needle) {
-				ctx.Info("service detected from TXT record",
-					slog.String("service", serviceName),
-					slog.String("txt", truncate(txt, 120)),
-				)
-
-				findings = append(findings, &support.Finding{
-					Entity: &oamsvc.Service{
-						Name: serviceName,
-						FQDN: fqdn.Name,
-					},
-				})
-				// A single TXT string can only represent one SaaS verification,
-				// so once matched break to next TXT entry.
-				continue scanLoop
-			}
-		}
-	}
-
-	if len(findings) > 0 {
-		support.ProcessAssetsWithSource(e, findings, t.source, t.name, t.name)
-	}
-
+	tpm.log.Info("plugin started")
 	return nil
 }
 
-// truncate shortens long TXT blobs for readable logging.
-func truncate(s string, max int) string {
-	if len(s) <= max {
-		return s
+func (tpm *txtPluginManager) Stop() {
+	if tpm.log != nil {
+		tpm.log.Info("plugin stopped")
 	}
-	return s[:max] + "…"
 }
