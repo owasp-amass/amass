@@ -1,5 +1,5 @@
 // SPDX‑License‑Identifier: Apache‑2.0
-// Copyright © Jeff Foley 2017‑2025.
+// Copyright © OWASP Amass contributors.
 
 package dns
 
@@ -11,14 +11,15 @@ import (
 
 	"github.com/miekg/dns"
 	"github.com/owasp-amass/amass/v4/engine/plugins/support"
-	et     "github.com/owasp-amass/amass/v4/engine/types"
-	oamdns "github.com/owasp-amass/open-asset-model/dns"
-	oam    "github.com/owasp-amass/open-asset-model"
+	et "github.com/owasp-amass/amass/v4/engine/types"
+
+	oamdns "github.com/owasp-amass/open-asset-model/dns"     // FQDN, DNS‑specific assets
+	oamsvc "github.com/owasp-amass/open-asset-model/service" // generic Service asset
 )
 
 const pluginName = "txt_service_discovery"
 
-// A (constantly growing) list of verification strings → human‑readable service.
+// A mapping of verification‑token prefixes → human‑readable SaaS names.
 var matchers = map[string]string{
 	"airtable-verification":           "Airtable",
 	"aliyun-site-verification":        "Aliyun",
@@ -50,72 +51,75 @@ var matchers = map[string]string{
 	"zoom-domain-verification":        "Zoom",
 }
 
-// Handler implementation ----------------------------------------------------
-
+// txtServiceDiscovery is the handler attached by plugin.go
 type txtServiceDiscovery struct {
 	name   string
 	source *et.Source
 }
 
+// check is invoked for every FQDN asset passed through the engine.
 func (t *txtServiceDiscovery) check(e *et.Event) error {
-	ctx := slog.Group("plugin", "name", t.name)
-
-	// Sanity‑check the event.
 	if e == nil || e.Entity == nil {
-		return fmt.Errorf("nil event or entity")
+		return fmt.Errorf("%s: received nil event or entity", t.name)
 	}
+
 	fqdn, ok := e.Entity.Asset.(*oamdns.FQDN)
 	if !ok {
-		// Not our problem – quietly ignore.
+		// Not an FQDN asset – ignore silently.
 		return nil
 	}
 
-	// Work out how far back in cache we should look.
+	ctx := e.Session.Log().WithGroup("plugin").With(
+		slog.String("name", t.name),
+		slog.String("fqdn", fqdn.Name),
+	)
+
+	// Look back as far as the configured TTL for DNS data (fallback: 24 h).
 	since, err := support.TTLStartTime(e.Session.Config(), "FQDN", "FQDN", pluginName)
 	if err != nil {
 		since = time.Now().Add(-24 * time.Hour)
 	}
 
-	// Pull TXT records for this FQDN from the asset cache.
-	var txtEntries []string
+	// Pull any TXT records already cached for this FQDN.
+	var txts []string
 	tags, err := e.Session.Cache().GetEntityTags(e.Entity, since, "dns_record")
 	if err == nil {
 		for _, tag := range tags {
 			if prop, ok := tag.Property.(*oamdns.DNSRecordProperty); ok &&
 				prop.Header.RRType == int(dns.TypeTXT) {
-				txtEntries = append(txtEntries, prop.Data)
+				txts = append(txts, prop.Data)
 			}
 		}
 	}
 
-	if len(txtEntries) == 0 {
-		return nil
+	if len(txts) == 0 {
+		return nil // nothing to inspect
 	}
 
-	// Look for verification strings.
 	var findings []*support.Finding
-	for _, txt := range txtEntries {
-		for needle, svc := range matchers {
+
+scanLoop:
+	for _, txt := range txts {
+		for needle, serviceName := range matchers {
 			if strings.Contains(txt, needle) {
-				e.Session.Log().Info("service detected from TXT record",
-					ctx,
-					slog.String("service", svc),
-					slog.String("fqdn", fqdn.Name),
+				ctx.Info("service detected from TXT record",
+					slog.String("service", serviceName),
 					slog.String("txt", truncate(txt, 120)),
 				)
 
 				findings = append(findings, &support.Finding{
-					Asset: &oamdns.Service{
-						Name: svc,
-						// We hang the service off the *same* FQDN entity.
+					Entity: &oamsvc.Service{
+						Name: serviceName,
 						FQDN: fqdn.Name,
 					},
 				})
+				// A single TXT string can only represent one SaaS verification,
+				// so once matched break to next TXT entry.
+				continue scanLoop
 			}
 		}
 	}
 
-	// Persist any discoveries & queue follow‑up processing.
 	if len(findings) > 0 {
 		support.ProcessAssetsWithSource(e, findings, t.source, t.name, t.name)
 	}
@@ -123,10 +127,10 @@ func (t *txtServiceDiscovery) check(e *et.Event) error {
 	return nil
 }
 
-// Utility: make long TXT blobs readable in logs.
-func truncate(s string, n int) string {
-	if len(s) <= n {
+// truncate shortens long TXT blobs for readable logging.
+func truncate(s string, max int) string {
+	if len(s) <= max {
 		return s
 	}
-	return s[:n] + "…"
+	return s[:max] + "…"
 }
