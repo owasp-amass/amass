@@ -119,6 +119,92 @@ func TestExtract(t *testing.T) {
 	assert.NotNil(t, results, "Results should not be nil for the fourth triple")
 }
 
+func TestPredAndObject(t *testing.T) {
+	now := time.Now()
+
+	// create a new in-memory SQLite database for testing
+	db, err := assetdb.New(sqlrepo.SQLiteMemory, "")
+	assert.NoError(t, err, "Failed to create the in-memory sqlite database")
+	assert.NotNil(t, db, "Asset database should not be nil")
+	defer func() { _ = db.Close() }()
+
+	ipstr := "192.168.1.1"
+	cidr := "192.168.1.0/24"
+	// create an asset and relations for an FQDN that resolves to an IP address
+	fentity, err := db.CreateAsset(oamdns.FQDN{Name: "owasp.org"})
+	assert.NoError(t, err, "Failed to create FQDN asset")
+	assert.NotNil(t, fentity, "FQDN entity should not be nil")
+	ipentity, err := db.CreateAsset(oamnet.IPAddress{Address: netip.MustParseAddr(ipstr)})
+	assert.NoError(t, err, "Failed to create the fqdn asset")
+	assert.NotNil(t, ipentity, "The entity should not be nil")
+	edge1, err := db.CreateEdge(&dbt.Edge{
+		Relation: oamdns.BasicDNSRelation{
+			Name: "dns_record",
+			Header: oamdns.RRHeader{
+				RRType: 1,
+				Class:  1,
+				TTL:    3600,
+			},
+		},
+		FromEntity: fentity,
+		ToEntity:   ipentity,
+	})
+	assert.NoError(t, err, "Failed to create edge")
+	assert.NotNil(t, edge1, "Edge should not be nil")
+	nentity, err := db.CreateAsset(oamnet.Netblock{CIDR: netip.MustParsePrefix(cidr), Type: "IPv4"})
+	assert.NoError(t, err, "Failed to create the netblock asset")
+	assert.NotNil(t, nentity, "The netblock entity should not be nil")
+	edge2, err := db.CreateEdge(&dbt.Edge{
+		Relation:   oamgen.SimpleRelation{Name: "contains"},
+		FromEntity: nentity,
+		ToEntity:   ipentity,
+	})
+	assert.NoError(t, err, "Failed to create the contains edge")
+	assert.NotNil(t, edge2, "The contains edge should not be nil")
+
+	// create a triple that will fail to extract associations
+	triple, err := ParseTriple("<fqdn:owasp.org> - <basicdnsrelation:*,header.rr_type:28> -> <*>")
+	assert.NoError(t, err, "Failed to parse the first triple")
+	assert.NotNil(t, triple, "Parsed first triple should not be nil")
+
+	// test for failure when the triple does not match the associations
+	links, err := predAndObject(db, fentity, triple)
+	assert.Error(t, err, "Expect failure when the triple does not match the associations")
+	assert.Nil(t, links, "The result should be nil when an error is returned")
+
+	// create a triple that will successfully extract the associations
+	tstr := fmt.Sprintf("<fqdn:owasp.org> - <*,since:%s> -> <ipaddress:%s>", now.Format(time.DateOnly), ipstr)
+	triple, err = ParseTriple(tstr)
+	assert.NoError(t, err, "Failed to parse the second triple")
+	assert.NotNil(t, triple, "Parsed second triple should not be nil")
+
+	// test for success when the triple properly matches the associations
+	links, err = predAndObject(db, fentity, triple)
+	assert.NoError(t, err, "Expected to extract an edge")
+	assert.Equal(t, 1, len(links), "Expected one edge to be returned")
+
+	// create a triple that will succeed to extract the associations with a since value
+	tstr = fmt.Sprintf("<*><-<simplerelation:contains,since:%s>-<netblock:#/192.*/24/#>", now.Format(time.DateOnly))
+	triple, err = ParseTriple(tstr)
+	assert.NoError(t, err, "Failed to parse the third triple")
+	assert.NotNil(t, triple, "Parsed third triple should not be nil")
+
+	// test for success when the triple does match the associations
+	links, err = predAndObject(db, ipentity, triple)
+	assert.NoError(t, err, "Expected to extract an edge")
+	assert.Equal(t, 1, len(links), "Expected one edge to be returned")
+
+	// create a triple that will fail to extract the associations
+	triple, err = ParseTriple("<*><-<*:#/con.*/#>-<ipaddress:*>")
+	assert.NoError(t, err, "Failed to parse the fourth triple")
+	assert.NotNil(t, triple, "Parsed fourth triple should not be nil")
+
+	// test for failure when the triple does not match the associations
+	links, err = predAndObject(db, ipentity, triple)
+	assert.Error(t, err, "Expected to fail the extraction")
+	assert.Nil(t, links, "The result should be nil when an error is returned")
+}
+
 func TestFindFirstSubject(t *testing.T) {
 	// create a new in-memory SQLite database for testing
 	db, err := assetdb.New(sqlrepo.SQLiteMemory, "")
