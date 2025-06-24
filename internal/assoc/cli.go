@@ -15,19 +15,18 @@ import (
 	"github.com/owasp-amass/amass/v4/config"
 	"github.com/owasp-amass/amass/v4/internal/afmt"
 	"github.com/owasp-amass/amass/v4/internal/tools"
+	"github.com/owasp-amass/asset-db/triples"
 )
 
 const (
-	TimeFormat  = "01/02 15:04:05 2006 MST"
-	UsageMsg    = "[options] [-since '" + TimeFormat + "'] " + "-d domain"
-	Description = "Show assets in the OAM associated with the asset of interest"
+	UsageMsg    = "[options] [-tf path] [-t1 triple] ... [-t10 triple]"
+	Description = "Query the OAM along the walk defined by the triples"
 )
 
 type Args struct {
 	Help    bool
 	Triples []string // The triples to use for the association walk
 	Options struct {
-		Verbose bool
 		NoColor bool
 		Silent  bool
 	}
@@ -53,12 +52,11 @@ func NewFlagset(args *Args, errorHandling flag.ErrorHandling) *flag.FlagSet {
 	fs.StringVar(&args.Triples[7], "t8", "", "8th triple to use for the association walk")
 	fs.StringVar(&args.Triples[8], "t9", "", "9th triple to use for the association walk")
 	fs.StringVar(&args.Triples[9], "t10", "", "10th triple to use for the association walk")
-	fs.BoolVar(&args.Options.Verbose, "v", false, "Show additional information about the associated assets")
 	fs.BoolVar(&args.Options.NoColor, "nocolor", false, "Disable colorized output")
 	fs.BoolVar(&args.Options.Silent, "silent", false, "Disable all output during execution")
 	fs.StringVar(&args.Filepaths.ConfigFile, "config", "", "Path to the YAML configuration file")
 	fs.StringVar(&args.Filepaths.Directory, "dir", "", "Path to the directory containing the graph database")
-	fs.StringVar(&args.Filepaths.TripleFile, "tf", "", "Path to a file providing triples for each step in the walk")
+	fs.StringVar(&args.Filepaths.TripleFile, "tf", "", "Path to a file containing a triples list")
 	return fs
 }
 
@@ -141,25 +139,25 @@ func CLIWorkflow(cmdName string, clArgs []string) {
 		os.Exit(1)
 	}
 
-	var triples []*Triple
+	var tris []*triples.Triple
 	for _, tstr := range args.Triples {
 		if tstr == "" {
 			break
 		}
 
-		triple, err := ParseTriple(tstr)
+		triple, err := triples.ParseTriple(tstr)
 		if err != nil {
 			_, _ = afmt.R.Fprintf(color.Error, "Failed to parse the triple '%s': %v\n", tstr, err)
 			os.Exit(1)
 		}
-		triples = append(triples, triple)
+		tris = append(tris, triple)
 	}
-	if len(triples) == 0 {
+	if len(tris) == 0 {
 		_, _ = afmt.R.Fprintln(color.Error, "No valid triples were provided for the association walk")
 		os.Exit(1)
 	}
 
-	results, err := Extract(db, triples)
+	results, err := triples.Extract(db, tris)
 	if err != nil {
 		_, _ = afmt.R.Fprintf(color.Error, "Failed to extract associations: %v\n", err)
 		os.Exit(1)
