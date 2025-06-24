@@ -4,11 +4,10 @@ import (
 	"log/slog"
 
 	et "github.com/owasp-amass/amass/v4/engine/types"
-	oamdns "github.com/owasp-amass/open-asset-model/dns"
-	oam "github.com/owasp-amass/open-asset-model"
+	"github.com/owasp-amass/amass/v4/requests"
 )
 
-const pluginName = "txt_service_discovery"
+const pluginName = "TXT-Service-Discovery"
 
 type txtPluginManager struct {
 	name     string
@@ -17,7 +16,7 @@ type txtPluginManager struct {
 	discover *txtServiceDiscovery
 }
 
-func NewDNSPlugin() et.Plugin {
+func NewTXTPlugin() et.Plugin {
 	return &txtPluginManager{
 		name: pluginName,
 		source: &et.Source{
@@ -27,37 +26,55 @@ func NewDNSPlugin() et.Plugin {
 	}
 }
 
-func NewDNSPlugin() et.Plugin { return NewDNSPlugin() }
-func (tpm *txtPluginManager) Name() string { return tpm.name }
+// NewDNSPlugin provides backward compatibility with the plugin loader
+func NewDNSPlugin() et.Plugin {
+	return NewTXTPlugin()
+}
 
+// Name returns the plugin's name
+func (tpm *txtPluginManager) Name() string {
+	return tpm.name
+}
+
+// Start initializes and registers the plugin handlers
 func (tpm *txtPluginManager) Start(r et.Registry) error {
 	tpm.log = r.Log().WithGroup("plugin").With("name", tpm.name)
+	tpm.log.Info("starting TXT service discovery plugin")
 
-	const handlerSuffix = "-FQDN-Check"
+	// Initialize the discovery handler
 	tpm.discover = &txtServiceDiscovery{
-		name:   tpm.name + handlerSuffix,
+		name:   tpm.name + "-Handler",
 		source: tpm.source,
 	}
 
-	// Register the handler.
-	if err := r.RegisterHandler(&et.Handler{
-		Plugin:     tpm,
-		Name:       tpm.discover.name,
-		Priority:   9,
-		Transforms: []string{string(oam.FQDN)},
-		EventType:  (oamdns.FQDN{}).AssetType(),
-		Callback:   tpm.discover.check,
-	}); err != nil {
-		tpm.log.Error("failed to register handler", "error", err)
+	// Register handler for DNS requests
+	if err := tpm.registerHandler(r); err != nil {
+		tpm.log.Error("failed to register DNS handler", "error", err)
 		return err
 	}
 
-	tpm.log.Info("plugin started")
+	tpm.log.Info("TXT service discovery plugin started successfully")
 	return nil
 }
 
+// registerHandler registers the plugin handler with the registry
+func (tpm *txtPluginManager) registerHandler(r et.Registry) error {
+	return r.RegisterHandler(&et.Handler{
+		Plugin:   tpm,
+		Name:     tpm.discover.name,
+		Priority: 9,
+		Callback: func(data pipeline.Data) pipeline.Data {
+			if req, ok := data.(*requests.DNSRequest); ok {
+				return tpm.discover.processDNSRequest(req)
+			}
+			return data
+		},
+	})
+}
+
+// Stop cleanly shuts down the plugin
 func (tpm *txtPluginManager) Stop() {
 	if tpm.log != nil {
-		tpm.log.Info("plugin stopped")
+		tpm.log.Info("TXT service discovery plugin stopped")
 	}
 }
