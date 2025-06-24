@@ -180,3 +180,10 @@ func (t *txtServiceDiscovery) check(e *et.Event) error {
 	e.Session.Log().Debug("TXT service discovery check completed", ctxAttr, slog.String("domain", fqdn.Name))
 	return nil
 }
+
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "…"
+}
