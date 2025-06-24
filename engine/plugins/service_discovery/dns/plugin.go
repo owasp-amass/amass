@@ -3,11 +3,12 @@ package dns
 import (
 	"log/slog"
 
-	et "github.com/owasp-amass/amass/v4/engine/types"
+	et     "github.com/owasp-amass/amass/v4/engine/types"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
-	oam "github.com/owasp-amass/open-asset-model"
+	oam    "github.com/owasp-amass/open-asset-model"
 )
 
+// txtPluginManager implements the et.Plugin interface.
 type txtPluginManager struct {
 	name     string
 	log      *slog.Logger
@@ -15,6 +16,7 @@ type txtPluginManager struct {
 	discover *txtServiceDiscovery
 }
 
+// NewTXTPlugin is exposed for tests; production code uses NewDNSPlugin.
 func NewTXTPlugin() et.Plugin {
 	return &txtPluginManager{
 		name: pluginName,
@@ -25,24 +27,28 @@ func NewTXTPlugin() et.Plugin {
 	}
 }
 
+// Kept for stylistic symmetry with the existing HTTP‑probes module.
 func NewDNSPlugin() et.Plugin { return NewTXTPlugin() }
+
 func (tpm *txtPluginManager) Name() string { return tpm.name }
 
 func (tpm *txtPluginManager) Start(r et.Registry) error {
 	tpm.log = r.Log().WithGroup("plugin").With("name", tpm.name)
 
-	const handlerSuffix = "-FQDN-Check"
+	const handlerSuffix = "-FQDN‑Check"
+
 	tpm.discover = &txtServiceDiscovery{
 		name:   tpm.name + handlerSuffix,
 		source: tpm.source,
 	}
 
-	// Register the handler.
+	// Register a handler that receives every FQDN event and, when a match
+	// is found, *creates* new Service assets – hence the Service transform.
 	if err := r.RegisterHandler(&et.Handler{
 		Plugin:     tpm,
 		Name:       tpm.discover.name,
 		Priority:   9,
-		Transforms: []string{string(oam.FQDN)},
+		Transforms: []string{string(oam.Service)},
 		EventType:  (oamdns.FQDN{}).AssetType(),
 		Callback:   tpm.discover.check,
 	}); err != nil {
