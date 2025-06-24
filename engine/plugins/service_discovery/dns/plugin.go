@@ -1,3 +1,6 @@
+// Copyright © by Jeff Foley 2017-2025.
+// SPDX-License-Identifier: Apache-2.0
+
 package dns
 
 import (
@@ -8,6 +11,9 @@ import (
 	oam    "github.com/owasp-amass/open-asset-model"
 )
 
+
+const pluginName = "txt_"
+
 // txtPluginManager implements the et.Plugin interface.
 type txtPluginManager struct {
 	name     string
@@ -16,7 +22,6 @@ type txtPluginManager struct {
 	discover *txtServiceDiscovery
 }
 
-// NewTXTPlugin is exposed for tests; production code uses NewDNSPlugin.
 func NewTXTPlugin() et.Plugin {
 	return &txtPluginManager{
 		name: pluginName,
@@ -27,7 +32,6 @@ func NewTXTPlugin() et.Plugin {
 	}
 }
 
-// Kept for stylistic symmetry with the existing HTTP‑probes module.
 func NewDNSPlugin() et.Plugin { return NewTXTPlugin() }
 
 func (tpm *txtPluginManager) Name() string { return tpm.name }
@@ -35,10 +39,9 @@ func (tpm *txtPluginManager) Name() string { return tpm.name }
 func (tpm *txtPluginManager) Start(r et.Registry) error {
 	tpm.log = r.Log().WithGroup("plugin").With("name", tpm.name)
 
-	const handlerSuffix = "-FQDN‑Check"
-
 	tpm.discover = &txtServiceDiscovery{
-		name:   tpm.name + handlerSuffix,
+		name:   tpm.name + "-FQDN-Check",
+		log:    tpm.log,
 		source: tpm.source,
 	}
 
@@ -48,7 +51,7 @@ func (tpm *txtPluginManager) Start(r et.Registry) error {
 		Plugin:     tpm,
 		Name:       tpm.discover.name,
 		Priority:   9,
-		Transforms: []string{string(oam.Service)},
+		Transforms: []string{string(oam.FQDN)},
 		EventType:  (oamdns.FQDN{}).AssetType(),
 		Callback:   tpm.discover.check,
 	}); err != nil {
