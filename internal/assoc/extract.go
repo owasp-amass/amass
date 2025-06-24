@@ -103,33 +103,32 @@ func performWalk(db repository.Repository, triples []*Triple, idx int, links []*
 		ent := n.Node.Ent
 
 		// filter based on the entity asset and the triple subject
-		if (!triple.Subject.Since.IsZero() && ent.LastSeen.Before(triple.Subject.Since)) ||
-			(triple.Subject.Type != "*" && triple.Subject.Type != ent.Asset.AssetType()) ||
-			(triple.Subject.Key != "*" && !valueMatch(ent.Asset.Key(), triple.Subject.Key,
-				triple.Subject.Regexp)) || !allAttrsMatch(ent.Asset, triple.Subject.Attributes) {
-			continue
-		}
+		if (triple.Subject.Since.IsZero() || !ent.LastSeen.Before(triple.Subject.Since)) &&
+			(triple.Subject.Type == "*" || triple.Subject.Type == ent.Asset.AssetType()) &&
+			(triple.Subject.Key == "*" || valueMatch(ent.Asset.Key(), triple.Subject.Key,
+				triple.Subject.Regexp)) && allAttrsMatch(ent.Asset, triple.Subject.Attributes) {
 
-		subjectProps, ok := entityPropsMatch(db, ent, triple.Subject.Properties)
-		if !ok {
-			continue // skip this entity if properties do not match
-		}
-		n.Node.Properties = subjectProps
+			if subjectProps, ok := entityPropsMatch(db, ent, triple.Subject.Properties); ok {
+				if entRels, err := predAndObject(db, ent, triple); err == nil && len(entRels) > 0 {
+					var include bool
 
-		entRels, err := predAndObject(db, ent, triple)
-		if err != nil || len(entRels) == 0 {
-			continue // skip this entity if no objects are found
-		}
+					if idx+1 < len(triples) {
+						if entRels, err := performWalk(db, triples, idx+1, entRels); err == nil && len(entRels) > 0 {
+							include = true // continue walking if there are more triples to process
+							n.Node.Relations = append(n.Node.Relations, entRels...)
+						}
+					} else {
+						include = true // last triple, include all relations
+						n.Node.Relations = append(n.Node.Relations, entRels...)
+					}
 
-		if idx+1 < len(triples) {
-			entRels, err = performWalk(db, triples, idx+1, entRels)
-			if err != nil || len(entRels) == 0 {
-				continue // skip if the walk could not be completed
+					if include {
+						rels = append(rels, n)
+						n.Node.Properties = subjectProps
+					}
+				}
 			}
 		}
-
-		rels = append(rels, n)
-		n.Node.Relations = append(n.Node.Relations, entRels...)
 	}
 
 	var err error
@@ -163,58 +162,48 @@ func predAndObject(db repository.Repository, ent *dbt.Entity, triple *Triple) ([
 	var results []*link
 	for _, edge := range edges {
 		// perform filtering based on the predicate in the triple and the edge relation
-		if edge == nil || (triple.Predicate.Type != oam.RelationType("*") &&
-			triple.Predicate.Type != edge.Relation.RelationType()) || (triple.Predicate.Label != "*" &&
-			!valueMatch(edge.Relation.Label(), triple.Predicate.Label, triple.Predicate.Regexp)) ||
-			!allAttrsMatch(edge.Relation, triple.Predicate.Attributes) {
-			continue // skip edges that do not match the predicate
-		}
+		if edge != nil && (triple.Predicate.Type == oam.RelationType("*") ||
+			triple.Predicate.Type == edge.Relation.RelationType()) && (triple.Predicate.Label == "*" ||
+			valueMatch(edge.Relation.Label(), triple.Predicate.Label, triple.Predicate.Regexp)) &&
+			allAttrsMatch(edge.Relation, triple.Predicate.Attributes) {
+			if linkProps, ok := edgePropsMatch(db, edge, triple.Predicate.Properties); ok {
+				var objent *dbt.Entity
 
-		linkProps, ok := edgePropsMatch(db, edge, triple.Predicate.Properties)
-		if !ok {
-			continue // skip edges that do not match the properties
-		}
+				if triple.Direction == DirectionIncoming {
+					objent = edge.FromEntity
+				} else {
+					objent = edge.ToEntity
+				}
 
-		var objent *dbt.Entity
-		if triple.Direction == DirectionIncoming {
-			objent = edge.FromEntity
-		} else {
-			objent = edge.ToEntity
-		}
+				if obj, err := db.FindEntityById(objent.ID); err == nil && obj != nil {
+					// perform filtering based on the object in the triple and the entity asset
+					if (triple.Object.Since.IsZero() || !obj.LastSeen.Before(triple.Object.Since)) &&
+						(triple.Object.Type == "*" || triple.Object.Type == obj.Asset.AssetType()) &&
+						(triple.Object.Key == "*" || valueMatch(obj.Asset.Key(), triple.Object.Key,
+							triple.Object.Regexp)) && allAttrsMatch(obj.Asset, triple.Object.Attributes) {
 
-		obj, err := db.FindEntityById(objent.ID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to find the object entity %s: %v", objent.ID, err)
-		}
-		if obj == nil {
-			return nil, errors.New("failed to return the object entity")
-		}
-
-		// perform filtering based on the object in the triple and the entity asset
-		if (triple.Object.Since.IsZero() || !obj.LastSeen.Before(triple.Object.Since)) &&
-			(triple.Object.Type == "*" || triple.Object.Type == obj.Asset.AssetType()) &&
-			(triple.Object.Key == "*" || valueMatch(obj.Asset.Key(), triple.Object.Key,
-				triple.Object.Regexp)) && allAttrsMatch(obj.Asset, triple.Object.Attributes) {
-
-			if objectProps, ok := entityPropsMatch(db, obj, triple.Object.Properties); ok {
-				results = append(results, &link{
-					ID:        edge.ID,
-					Type:      edge.Relation.RelationType(),
-					CreatedAt: edge.CreatedAt.Format(time.DateOnly),
-					LastSeen:  edge.LastSeen.Format(time.DateOnly),
-					Relation:  edge.Relation,
-					Node: &node{
-						ID:         obj.ID,
-						Ent:        obj,
-						Type:       obj.Asset.AssetType(),
-						CreatedAt:  obj.CreatedAt.Format(time.DateOnly),
-						LastSeen:   obj.LastSeen.Format(time.DateOnly),
-						Asset:      obj.Asset,
-						Relations:  []*link{},
-						Properties: objectProps,
-					},
-					Properties: linkProps,
-				})
+						if objectProps, ok := entityPropsMatch(db, obj, triple.Object.Properties); ok {
+							results = append(results, &link{
+								ID:        edge.ID,
+								Type:      edge.Relation.RelationType(),
+								CreatedAt: edge.CreatedAt.Format(time.DateOnly),
+								LastSeen:  edge.LastSeen.Format(time.DateOnly),
+								Relation:  edge.Relation,
+								Node: &node{
+									ID:         obj.ID,
+									Ent:        obj,
+									Type:       obj.Asset.AssetType(),
+									CreatedAt:  obj.CreatedAt.Format(time.DateOnly),
+									LastSeen:   obj.LastSeen.Format(time.DateOnly),
+									Asset:      obj.Asset,
+									Relations:  []*link{},
+									Properties: objectProps,
+								},
+								Properties: linkProps,
+							})
+						}
+					}
+				}
 			}
 		}
 	}
