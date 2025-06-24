@@ -8,6 +8,8 @@ import (
 	oam "github.com/owasp-amass/open-asset-model"
 )
 
+const pluginName = "txt_service_discovery"
+
 type txtPluginManager struct {
 	name     string
 	log      *slog.Logger
