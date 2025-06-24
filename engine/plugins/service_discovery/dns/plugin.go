@@ -1,20 +1,13 @@
-// Copyright © by Jeff Foley 2017-2025.
-// SPDX-License-Identifier: Apache-2.0
-
 package dns
 
 import (
 	"log/slog"
 
-	et     "github.com/owasp-amass/amass/v4/engine/types"
+	et "github.com/owasp-amass/amass/v4/engine/types"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
-	oam    "github.com/owasp-amass/open-asset-model"
+	oam "github.com/owasp-amass/open-asset-model"
 )
 
-
-const pluginName = "txt_"
-
-// txtPluginManager implements the et.Plugin interface.
 type txtPluginManager struct {
 	name     string
 	log      *slog.Logger
@@ -33,20 +26,18 @@ func NewTXTPlugin() et.Plugin {
 }
 
 func NewDNSPlugin() et.Plugin { return NewTXTPlugin() }
-
 func (tpm *txtPluginManager) Name() string { return tpm.name }
 
 func (tpm *txtPluginManager) Start(r et.Registry) error {
 	tpm.log = r.Log().WithGroup("plugin").With("name", tpm.name)
 
+	const handlerSuffix = "-FQDN-Check"
 	tpm.discover = &txtServiceDiscovery{
-		name:   tpm.name + "-FQDN-Check",
-		log:    tpm.log,
+		name:   tpm.name + handlerSuffix,
 		source: tpm.source,
 	}
 
-	// Register a handler that receives every FQDN event and, when a match
-	// is found, *creates* new Service assets – hence the Service transform.
+	// Register the handler.
 	if err := r.RegisterHandler(&et.Handler{
 		Plugin:     tpm,
 		Name:       tpm.discover.name,
