@@ -25,7 +25,7 @@ require (
 	github.com/miekg/dns v1.1.66
 	github.com/nyaruka/phonenumbers v1.6.3
 	github.com/openrdap/rdap v0.9.1
-	github.com/owasp-amass/asset-db v0.22.1
+	github.com/owasp-amass/asset-db v0.22.2
 	github.com/owasp-amass/open-asset-model v0.14.1-0.20250512191847-44621818e90d
 	github.com/owasp-amass/resolve v0.9.7-0.20250325214539-07077e8c54af
 	github.com/samber/slog-common v0.19.0
@@ -59,7 +59,7 @@ require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/glebarez/go-sqlite v1.22.0 // indirect
 	github.com/go-gorp/gorp/v3 v3.1.0 // indirect
-	github.com/go-json-experiment/json v0.0.0-20250517221953-25912455fbc8 // indirect
+	github.com/go-json-experiment/json v0.0.0-20250625182306-a9cfae7f3654 // indirect
 	github.com/go-kit/kit v0.13.0 // indirect
 	github.com/go-sql-driver/mysql v1.9.3 // indirect
 	github.com/go-viper/mapstructure/v2 v2.3.0 // indirect
