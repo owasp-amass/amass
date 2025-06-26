@@ -10,11 +10,15 @@ import (
 	"flag"
 	"io"
 	"os"
+	"time"
 
 	"github.com/fatih/color"
 	"github.com/owasp-amass/amass/v4/config"
 	"github.com/owasp-amass/amass/v4/internal/afmt"
 	"github.com/owasp-amass/amass/v4/internal/tools"
+	assetdb "github.com/owasp-amass/asset-db"
+	"github.com/owasp-amass/asset-db/cache"
+	"github.com/owasp-amass/asset-db/repository/sqlrepo"
 	"github.com/owasp-amass/asset-db/triples"
 )
 
@@ -138,6 +142,18 @@ func CLIWorkflow(cmdName string, clArgs []string) {
 		_, _ = afmt.R.Fprintln(color.Error, "Failed to connect with the database")
 		os.Exit(1)
 	}
+	// create a new in-memory SQLite database for performance
+	cdb, err := assetdb.New(sqlrepo.SQLiteMemory, "")
+	if err != nil {
+		_, _ = afmt.R.Fprintf(color.Error, "Failed to create an in-memory SQLite database: %v\n", err)
+		os.Exit(1)
+	}
+	// Create a cache for the database to speed up the association walk
+	c, err := cache.New(cdb, db, time.Minute)
+	if err != nil {
+		_, _ = afmt.R.Fprintf(color.Error, "Failed to create a cache for the database: %v\n", err)
+		os.Exit(1)
+	}
 
 	var tris []*triples.Triple
 	for _, tstr := range args.Triples {
@@ -157,14 +173,14 @@ func CLIWorkflow(cmdName string, clArgs []string) {
 		os.Exit(1)
 	}
 
-	results, err := triples.Extract(db, tris)
+	results, err := triples.Extract(c, tris)
 	if err != nil {
 		_, _ = afmt.R.Fprintf(color.Error, "Failed to extract associations: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Marshal with indentation (e.g., 4 spaces)
-	prettyJSON, err := json.MarshalIndent(results, "", "    ")
+	// Marshal with indentation (e.g., 2 spaces)
+	prettyJSON, err := json.MarshalIndent(results, "", "  ")
 	if err != nil {
 		_, _ = afmt.R.Fprintf(color.Error, "Error marshaling JSON: %v", err)
 		os.Exit(1)
