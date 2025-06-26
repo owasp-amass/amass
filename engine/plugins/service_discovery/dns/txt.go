@@ -59,7 +59,7 @@ func (t *txtServiceDiscovery) check(e *et.Event) error {
 	// Create context attributes for consistent logging
 	ctxAttr := slog.Group("plugin", "name", t.name, "handler", "check")
 
-	e.Session.Log().info("TXT service discovery check started", ctxAttr)
+	e.Session.Log().Info("TXT service discovery check started", ctxAttr)
 
 	// Validate event and entity
 	if e == nil {
@@ -77,12 +77,12 @@ func (t *txtServiceDiscovery) check(e *et.Event) error {
 		return fmt.Errorf("entity asset is nil")
 	}
 
-	e.Session.Log().info("event validation passed", ctxAttr, slog.String("assetType", fmt.Sprintf("%T", e.Entity.Asset)))
+	e.Session.Log().Info("event validation passed", ctxAttr, slog.String("assetType", fmt.Sprintf("%T", e.Entity.Asset)))
 
 	entity := e.Entity
 	fqdn, ok := entity.Asset.(*oamdns.FQDN)
 	if !ok {
-		e.Session.Log().info("entity is not an FQDN – skipping", ctxAttr, slog.String("actualType", fmt.Sprintf("%T", entity.Asset)))
+		e.Session.Log().Info("entity is not an FQDN – skipping", ctxAttr, slog.String("actualType", fmt.Sprintf("%T", entity.Asset)))
 		return nil
 	}
 
@@ -91,9 +91,9 @@ func (t *txtServiceDiscovery) check(e *et.Event) error {
 	since, err := support.TTLStartTime(e.Session.Config(), "FQDN", "FQDN", pluginName)
 	if err != nil {
 		since = time.Now().Add(-24 * time.Hour) // fall‑back window
-		e.Session.Log().info("no TTL config – defaulting to 24h", ctxAttr, slog.String("domain", fqdn.Name))
+		e.Session.Log().Info("no TTL config – defaulting to 24h", ctxAttr, slog.String("domain", fqdn.Name))
 	} else {
-		e.Session.Log().info("TTL start time determined", ctxAttr, slog.String("domain", fqdn.Name), slog.Time("since", since))
+		e.Session.Log().Info("TTL start time determined", ctxAttr, slog.String("domain", fqdn.Name), slog.Time("since", since))
 	}
 
 	var txtEntries []string
@@ -101,17 +101,17 @@ func (t *txtServiceDiscovery) check(e *et.Event) error {
 	if cacheErr != nil {
 		e.Session.Log().Error("cache access error", slog.String("err", cacheErr.Error()), ctxAttr, slog.String("domain", fqdn.Name))
 	} else {
-		e.Session.Log().info("retrieved entity tags from cache", ctxAttr, slog.String("domain", fqdn.Name), slog.Int("tagCount", len(tags)))
+		e.Session.Log().Info("retrieved entity tags from cache", ctxAttr, slog.String("domain", fqdn.Name), slog.Int("tagCount", len(tags)))
 
 		for i, tag := range tags {
 			if prop, ok := tag.Property.(*oamdns.DNSRecordProperty); ok && prop.Header.RRType == int(dns.TypeTXT) {
 				txtEntries = append(txtEntries, prop.Data)
-				e.Session.Log().info("found TXT record in cache", ctxAttr,
+				e.Session.Log().Info("found TXT record in cache", ctxAttr,
 					slog.String("domain", fqdn.Name),
 					slog.Int("tagIndex", i),
 					slog.String("txtData", truncate(prop.Data, 100)))
 			} else {
-				e.Session.Log().info("skipping non-TXT tag", ctxAttr,
+				e.Session.Log().Info("skipping non-TXT tag", ctxAttr,
 					slog.String("domain", fqdn.Name),
 					slog.Int("tagIndex", i),
 					slog.String("tagType", fmt.Sprintf("%T", tag.Property)))
@@ -120,7 +120,7 @@ func (t *txtServiceDiscovery) check(e *et.Event) error {
 	}
 
 	if len(txtEntries) == 0 {
-		e.Session.Log().info("no TXT records found – nothing to analyse", ctxAttr, slog.String("domain", fqdn.Name))
+		e.Session.Log().Info("no TXT records found – nothing to analyse", ctxAttr, slog.String("domain", fqdn.Name))
 		return nil
 	}
 
@@ -130,7 +130,7 @@ func (t *txtServiceDiscovery) check(e *et.Event) error {
 
 	var findings []*support.Finding
 	for i, txt := range txtEntries {
-		e.Session.Log().info("analyzing TXT record", ctxAttr,
+		e.Session.Log().Info("analyzing TXT record", ctxAttr,
 			slog.String("domain", fqdn.Name),
 			slog.Int("recordIndex", i),
 			slog.String("txtContent", truncate(txt, 150)))
@@ -160,7 +160,7 @@ func (t *txtServiceDiscovery) check(e *et.Event) error {
 		}
 
 		if !matchFound {
-			e.Session.Log().info("no service patterns matched in TXT record", ctxAttr,
+			e.Session.Log().Info("no service patterns matched in TXT record", ctxAttr,
 				slog.String("domain", fqdn.Name),
 				slog.Int("recordIndex", i),
 				slog.String("txtContent", truncate(txt, 100)))
@@ -168,7 +168,7 @@ func (t *txtServiceDiscovery) check(e *et.Event) error {
 	}
 
 	if len(findings) == 0 {
-		e.Session.Log().info("no services matched any TXT strings", ctxAttr, slog.String("domain", fqdn.Name))
+		e.Session.Log().Info("no services matched any TXT strings", ctxAttr, slog.String("domain", fqdn.Name))
 		return nil
 	}
 
@@ -177,7 +177,7 @@ func (t *txtServiceDiscovery) check(e *et.Event) error {
 	// Process the findings
 	support.ProcessAssetsWithSource(e, findings, t.source, t.name, t.name)
 
-	e.Session.Log().info("TXT service discovery check completed", ctxAttr, slog.String("domain", fqdn.Name))
+	e.Session.Log().Info("TXT service discovery check completed", ctxAttr, slog.String("domain", fqdn.Name))
 	return nil
 }
 
