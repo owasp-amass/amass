@@ -154,6 +154,7 @@ func CLIWorkflow(cmdName string, clArgs []string) {
 		_, _ = afmt.R.Fprintf(color.Error, "Failed to create a cache for the database: %v\n", err)
 		os.Exit(1)
 	}
+	defer func() { _ = c.Close() }()
 
 	var tris []*triples.Triple
 	for _, tstr := range args.Triples {
