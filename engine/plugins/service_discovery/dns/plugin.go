@@ -26,7 +26,7 @@ func NewTXTPlugin() et.Plugin {
 	}
 }
 
-func NewDNSPlugin() et.Plugin { return NewTXTPlugin() }
+func NewTXT_SD_Plugin() et.Plugin { return NewTXTPlugin() }
 func (tpm *txtPluginManager) Name() string { return tpm.name }
 
 func (tpm *txtPluginManager) Start(r et.Registry) error {
