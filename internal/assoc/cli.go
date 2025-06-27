@@ -163,8 +163,8 @@ func CLIWorkflow(cmdName string, clArgs []string) {
 		os.Exit(1)
 	}
 
-	// Marshal with indentation (e.g., 4 spaces)
-	prettyJSON, err := json.MarshalIndent(results, "", "    ")
+	// Marshal with indentation (e.g., 2 spaces)
+	prettyJSON, err := json.MarshalIndent(results, "", "  ")
 	if err != nil {
 		_, _ = afmt.R.Fprintf(color.Error, "Error marshaling JSON: %v", err)
 		os.Exit(1)
