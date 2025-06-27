@@ -44,7 +44,7 @@ func (tpm *txtPluginManager) Start(r et.Registry) error {
 		Name:       tpm.discover.name,
 		Priority:   9,
 		Transforms: []string{string(oam.FQDN)},
-		EventType:  (oam.FQDN).AssetType(),
+		EventType:  oam.FQDN,
 		Callback:   tpm.discover.check,
 	}); err != nil {
 		tpm.log.Error("failed to register handler", "error", err)
