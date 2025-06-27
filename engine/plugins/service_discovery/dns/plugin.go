@@ -7,6 +7,8 @@ import (
 	oam "github.com/owasp-amass/open-asset-model"
 )
 
+const pluginName = "TXT-Service-Discovery"
+
 type txtPluginManager struct {
 	name     string
 	log      *slog.Logger
@@ -52,6 +54,7 @@ func (tpm *txtPluginManager) Start(r et.Registry) error {
 	tpm.log.Info("plugin started")
 	return nil
 }
+
 func (tpm *txtPluginManager) Stop() {
 	if tpm.log != nil {
 		tpm.log.Info("plugin stopped")
