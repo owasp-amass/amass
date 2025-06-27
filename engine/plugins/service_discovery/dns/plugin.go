@@ -7,7 +7,7 @@ import (
 	oam "github.com/owasp-amass/open-asset-model"
 )
 
-const pluginName = "TXT-Service-Discovery"
+const pluginName = "txt_Service_Discovery"
 
 type txtPluginManager struct {
 	name     string
