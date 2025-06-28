@@ -80,7 +80,7 @@ func (t *txtServiceDiscovery) check(e *et.Event) error {
 	e.Session.Log().Info("event validation passed", ctxAttr, slog.String("assetType", fmt.Sprintf("%T", e.Entity.Asset)))
 
 	entity := e.Entity
-	fqdn, ok := entity.Asset.(*oamdns.FQDN)
+	fqdn, ok := entity.Asset.(*oam.FQDN)
 	if !ok {
 		e.Session.Log().Info("entity is not an FQDN – skipping", ctxAttr, slog.String("actualType", fmt.Sprintf("%T", entity.Asset)))
 		return nil
