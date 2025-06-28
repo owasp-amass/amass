@@ -7,6 +7,8 @@ import (
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 )
 
+const pluginName = "txt_service_discovery"
+
 type txtPluginManager struct {
 	name     string
 	log      *slog.Logger
