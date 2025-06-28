@@ -104,7 +104,7 @@ func (t *txtServiceDiscovery) check(e *et.Event) error {
 		e.Session.Log().Info("retrieved entity tags from cache", ctxAttr, slog.String("domain", fqdn.Name), slog.Int("tagCount", len(tags)))
 
 		for i, tag := range tags {
-			if prop, ok := tag.Property.(*oamdns.DNSRecordProperty); ok && prop.Header.RRType == int(dns.TypeTXT) {
+			if prop, ok := tag.Property.(*oam.DNSRecordProperty); ok && prop.Header.RRType == int(dns.TypeTXT) {
 				txtEntries = append(txtEntries, prop.Data)
 				e.Session.Log().Info("found TXT record in cache", ctxAttr,
 					slog.String("domain", fqdn.Name),
