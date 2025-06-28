@@ -21,8 +21,6 @@ import (
     "github.com/owasp-amass/open-asset-model/general"
 )
 
-const pluginName = "txt_service_discovery"
-
 var matchers = map[string]string{
     "airtable-verification":           "Airtable",
     "aliyun-site-verification":        "Aliyun",
