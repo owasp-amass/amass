@@ -38,7 +38,6 @@ func (tpm *txtPluginManager) Start(r et.Registry) error {
 		source: tpm.source,
 	}
 
-	// Register the handler.
 	if err := r.RegisterHandler(&et.Handler{
 		Plugin:     tpm,
 		Name:       tpm.discover.name,
