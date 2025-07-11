@@ -130,7 +130,7 @@ func main() {
 				os.Exit(1)
 			}
 			// Give the engine time to start
-			time.Sleep(5 * time.Second)
+			time.Sleep(10 * time.Second)
 			// Check if the engine is running after attempting to start it
 			if !engineIsRunning() {
 				_, _ = afmt.R.Fprintf(color.Error, "The Amass engine failed to start.\n")

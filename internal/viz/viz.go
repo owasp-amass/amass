@@ -228,7 +228,7 @@ func newNode(db repository.Repository, idx int, a *types.Entity, since time.Time
 	return &Node{
 		ID:    idx,
 		Type:  atype,
-		Label: key,
+		Label: strings.ReplaceAll(key, "\"", ""),
 		Title: title,
 	}
 }
