@@ -33,8 +33,7 @@ builds:
         goarch: arm
     hooks:
       pre:
-        - go install github.com/owasp-amass/engine@master
-        - cp {{ .Env.HOME }}/go/bin/amass_engine ./resources/amass_engine
+        - CGO_ENABLED=0 go install github.com/owasp-amass/engine@main
 
 archives:
   -
@@ -49,8 +48,8 @@ archives:
     files:
       - LICENSE
       - README.md
-      - examples/config.yaml
-      - examples/datasources.yaml
+      - resources/config.yaml
+      - resources/datasources.yaml
 
 sboms:
   - documents:

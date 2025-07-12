@@ -1,2 +1,1 @@
-*.ads linguist-language=Lua
 *.go text eol=lf

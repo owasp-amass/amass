@@ -52,12 +52,6 @@ datasources:
 #        apikey: null
 #      account2: 
 #        apikey: null
-#  - name: Censys
-#    ttl: 10080
-#    creds:
-#      account: 
-#        apikey: null
-#        secret: null
 #  - name: Chaos
 #    ttl: 4320
 #    creds:
