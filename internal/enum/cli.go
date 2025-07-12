@@ -16,10 +16,10 @@ import (
 	"github.com/caffix/stringset"
 	pb "github.com/cheggaaa/pb/v3"
 	"github.com/fatih/color"
-	"github.com/owasp-amass/amass/v4/config"
-	"github.com/owasp-amass/amass/v4/engine/api/graphql/client"
-	"github.com/owasp-amass/amass/v4/internal/afmt"
-	"github.com/owasp-amass/amass/v4/internal/tools"
+	"github.com/owasp-amass/amass/v5/config"
+	"github.com/owasp-amass/amass/v5/engine/api/graphql/client"
+	"github.com/owasp-amass/amass/v5/internal/afmt"
+	"github.com/owasp-amass/amass/v5/internal/tools"
 )
 
 const (

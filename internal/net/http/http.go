@@ -24,8 +24,8 @@ import (
 	"github.com/PuerkitoBio/goquery"
 	"github.com/geziyor/geziyor"
 	"github.com/geziyor/geziyor/client"
-	amassnet "github.com/owasp-amass/amass/v4/internal/net"
-	"github.com/owasp-amass/amass/v4/internal/net/dns"
+	amassnet "github.com/owasp-amass/amass/v5/internal/net"
+	"github.com/owasp-amass/amass/v5/internal/net/dns"
 	bf "github.com/tylertreat/BoomFilters"
 )
 

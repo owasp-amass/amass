@@ -9,17 +9,16 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
-	"os"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/caffix/stringset"
-	"github.com/owasp-amass/amass/v4/config"
-	"github.com/owasp-amass/amass/v4/engine/sessions"
-	et "github.com/owasp-amass/amass/v4/engine/types"
-	amassnet "github.com/owasp-amass/amass/v4/internal/net"
-	"github.com/owasp-amass/amass/v4/internal/net/dns"
+	"github.com/owasp-amass/amass/v5/config"
+	"github.com/owasp-amass/amass/v5/engine/sessions"
+	et "github.com/owasp-amass/amass/v5/engine/types"
+	amassnet "github.com/owasp-amass/amass/v5/internal/net"
+	"github.com/owasp-amass/amass/v5/internal/net/dns"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
 	"github.com/owasp-amass/open-asset-model/url"
@@ -39,9 +38,6 @@ func init() {
 
 	urlre = xurls.Relaxed()
 	subre = regexp.MustCompile(dns.AnySubdomainRegexString())
-
-	postalHost = os.Getenv("POSTAL_SERVER_HOST")
-	postalPort = os.Getenv("POSTAL_SERVER_PORT")
 }
 
 func ScrapeSubdomainNames(s string) []string {

@@ -26,7 +26,7 @@ import (
 	"os"
 	"path"
 
-	ae "github.com/owasp-amass/amass/v4/internal/amass_engine"
+	ae "github.com/owasp-amass/amass/v5/internal/amass_engine"
 )
 
 func main() {

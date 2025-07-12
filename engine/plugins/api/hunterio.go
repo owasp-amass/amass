@@ -14,9 +14,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/owasp-amass/amass/v4/internal/net/http"
-	"github.com/owasp-amass/amass/v4/engine/plugins/support"
-	et "github.com/owasp-amass/amass/v4/engine/types"
+	"github.com/owasp-amass/amass/v5/internal/net/http"
+	"github.com/owasp-amass/amass/v5/engine/plugins/support"
+	et "github.com/owasp-amass/amass/v5/engine/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/contact"
 	"github.com/owasp-amass/open-asset-model/domain"

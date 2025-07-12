@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/owasp-amass/amass/v4/engine/plugins/support"
-	et "github.com/owasp-amass/amass/v4/engine/types"
+	"github.com/owasp-amass/amass/v5/engine/plugins/support"
+	et "github.com/owasp-amass/amass/v5/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/general"

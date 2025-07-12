@@ -10,11 +10,11 @@ import (
 	"os"
 	"time"
 
-	"github.com/owasp-amass/amass/v4/engine/api/graphql/server"
-	"github.com/owasp-amass/amass/v4/engine/dispatcher"
-	"github.com/owasp-amass/amass/v4/engine/registry"
-	"github.com/owasp-amass/amass/v4/engine/sessions"
-	et "github.com/owasp-amass/amass/v4/engine/types"
+	"github.com/owasp-amass/amass/v5/engine/api/graphql/server"
+	"github.com/owasp-amass/amass/v5/engine/dispatcher"
+	"github.com/owasp-amass/amass/v5/engine/registry"
+	"github.com/owasp-amass/amass/v5/engine/sessions"
+	et "github.com/owasp-amass/amass/v5/engine/types"
 )
 
 type Engine struct {

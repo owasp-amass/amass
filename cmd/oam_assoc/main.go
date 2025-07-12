@@ -26,7 +26,7 @@ import (
 	"os"
 	"path"
 
-	"github.com/owasp-amass/amass/v4/internal/assoc"
+	"github.com/owasp-amass/amass/v5/internal/assoc"
 )
 
 func main() {

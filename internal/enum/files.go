@@ -12,9 +12,9 @@ import (
 	"strings"
 
 	"github.com/caffix/stringset"
-	"github.com/owasp-amass/amass/v4/config"
-	"github.com/owasp-amass/amass/v4/internal/tools"
-	"github.com/owasp-amass/amass/v4/resources"
+	"github.com/owasp-amass/amass/v5/config"
+	"github.com/owasp-amass/amass/v5/internal/tools"
+	"github.com/owasp-amass/amass/v5/resources"
 )
 
 // Obtain parameters from provided input files

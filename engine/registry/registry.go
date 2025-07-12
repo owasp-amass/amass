@@ -9,7 +9,7 @@ import (
 	"log/slog"
 	"sync"
 
-	et "github.com/owasp-amass/amass/v4/engine/types"
+	et "github.com/owasp-amass/amass/v5/engine/types"
 	oam "github.com/owasp-amass/open-asset-model"
 )
 

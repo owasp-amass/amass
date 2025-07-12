@@ -12,7 +12,7 @@ import (
 	"strings"
 
 	"github.com/fatih/color"
-	amassnet "github.com/owasp-amass/amass/v4/internal/net"
+	amassnet "github.com/owasp-amass/amass/v5/internal/net"
 )
 
 // Banner is the ASCII art logo used within help output.
@@ -31,7 +31,7 @@ const Banner = `        .+++:.            :                             .+++.
 
 const (
 	// Version is used to display the current version of Amass.
-	Version = "v4.2.0"
+	Version = "v5.0.0"
 
 	// Author is used to display the Amass Project Team.
 	Author = "OWASP Amass Project - @owaspamass"
