@@ -12,6 +12,7 @@ import (
 
 	"github.com/owasp-amass/amass/v5/engine/api/graphql/server"
 	"github.com/owasp-amass/amass/v5/engine/dispatcher"
+	"github.com/owasp-amass/amass/v5/engine/plugins"
 	"github.com/owasp-amass/amass/v5/engine/registry"
 	"github.com/owasp-amass/amass/v5/engine/sessions"
 	et "github.com/owasp-amass/amass/v5/engine/types"
@@ -40,6 +41,14 @@ func NewEngine(l *slog.Logger) (*Engine, error) {
 	if dis == nil {
 		mgr.Shutdown()
 		return nil, errors.New("failed to create the event scheduler")
+	}
+
+	if err := plugins.LoadAndStartPlugins(reg); err != nil {
+		return nil, err
+	}
+
+	if err := reg.BuildPipelines(); err != nil {
+		return nil, err
 	}
 
 	srv := server.NewServer(l, dis, mgr)

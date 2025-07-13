@@ -134,7 +134,6 @@ func main() {
 				_, _ = afmt.R.Fprintf(color.Error, "The Amass engine did not respond: %v\n", err)
 				os.Exit(1)
 			}
-			time.Sleep(10 * time.Second)
 		}
 
 		enum.CLIWorkflow(cmdName, os.Args[2:])
@@ -155,12 +154,10 @@ func waitForEngineResponse() error {
 	t := time.NewTicker(time.Second)
 	defer t.Stop()
 
-	for _ = range 60 {
-		select {
-		case <-t.C:
-			if engineIsRunning() {
-				return nil
-			}
+	for range 60 {
+		<-t.C
+		if engineIsRunning() {
+			return nil
 		}
 	}
 	return fmt.Errorf("the Amass engine did not respond within the timeout period")
