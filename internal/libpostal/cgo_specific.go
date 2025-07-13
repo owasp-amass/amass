@@ -22,6 +22,11 @@ import (
 	"unsafe"
 )
 
+type ParserOptions struct {
+	Language string
+	Country  string
+}
+
 var (
 	postalLock           sync.Mutex
 	postalLibAvailable   bool
@@ -31,6 +36,13 @@ var (
 func init() {
 	if bool(C.libpostal_setup()) && bool(C.libpostal_setup_parser()) {
 		postalLibAvailable = true
+	}
+}
+
+func getDefaultParserOptions() ParserOptions {
+	return ParserOptions{
+		Language: "",
+		Country:  "",
 	}
 }
 

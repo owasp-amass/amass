@@ -130,12 +130,11 @@ func main() {
 				os.Exit(1)
 			}
 			// Give the engine time to start
-			time.Sleep(10 * time.Second)
-			// Check if the engine is running after attempting to start it
-			if !engineIsRunning() {
-				_, _ = afmt.R.Fprintf(color.Error, "The Amass engine failed to start.\n")
+			if err := waitForEngineResponse(); err != nil {
+				_, _ = afmt.R.Fprintf(color.Error, "The Amass engine did not respond: %v\n", err)
 				os.Exit(1)
 			}
+			time.Sleep(10 * time.Second)
 		}
 
 		enum.CLIWorkflow(cmdName, os.Args[2:])
@@ -150,4 +149,19 @@ func main() {
 		_, _ = afmt.R.Fprintf(color.Error, "subcommand provided but not defined: %s\n", os.Args[1])
 		os.Exit(1)
 	}
+}
+
+func waitForEngineResponse() error {
+	t := time.NewTicker(time.Second)
+	defer t.Stop()
+
+	for _ = range 60 {
+		select {
+		case <-t.C:
+			if engineIsRunning() {
+				return nil
+			}
+		}
+	}
+	return fmt.Errorf("the Amass engine did not respond within the timeout period")
 }

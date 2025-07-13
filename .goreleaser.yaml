@@ -1,3 +1,4 @@
+version: 2
 project_name: amass
 
 before:
@@ -6,8 +7,10 @@ before:
 
 builds:
   -
-    main: ./cmd/amass/
+    main: ./cmd/amass
     binary: amass
+    env:
+      - CGO_ENABLED=0
     goos:
       - windows
       - linux
@@ -18,6 +21,9 @@ builds:
       - 386
       - arm
       - arm64
+    goarm:
+      - 6
+      - 7
     ignore:
       - goos: darwin
         goarch: 386
@@ -31,18 +37,10 @@ builds:
         goarch: arm64
       - goos: freebsd
         goarch: arm
-    hooks:
-      pre:
-        - CGO_ENABLED=0 go install github.com/owasp-amass/engine@main
 
 archives:
   -
-    name_template: >-
-      {{ .ProjectName }}_
-      {{- title .Os }}_
-      {{- if eq .Arch "darwin" }}macos
-      {{- else if eq .Arch "386" }}i386
-      {{- else }}{{ .Arch }}{{ end }}
+    name_template: "{{ .ProjectName }}_{{ title .Os }}_{{ if eq .Arch \"darwin\" }}macos{{ else if eq .Arch \"386\" }}i386{{ else }}{{ .Arch }}{{ end }}"
     wrap_in_directory: true
     format: zip
     files:
@@ -59,7 +57,7 @@ sboms:
     env:
       - GOOS={{ .Os }}
       - GOARCH={{ .Arch }}
-    args: [ "app", "-main", "cmd/amass", "-licenses", "-packages", "-json", "-output", "$document", "../" ]
+    args: [ "app", "-main", "cmd/amass", "-licenses", "-packages", "-json", "-output", "$document", "." ]
 
 checksum:
   name_template: "{{ .ProjectName }}_checksums.txt"

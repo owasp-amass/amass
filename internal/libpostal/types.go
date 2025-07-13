@@ -6,19 +6,7 @@ package libpostal
 
 const ErrPostalLibNotAvailable = "libpostal is not available"
 
-type ParserOptions struct {
-	Language string
-	Country  string
-}
-
 type ParsedComponent struct {
 	Label string `json:"label"`
 	Value string `json:"value"`
-}
-
-func getDefaultParserOptions() ParserOptions {
-	return ParserOptions{
-		Language: "",
-		Country:  "",
-	}
 }

@@ -30,15 +30,11 @@ func NewEngine(l *slog.Logger) (*Engine, error) {
 		l = slog.New(slog.NewTextHandler(os.Stdout, nil))
 	}
 
-	reg := registry.NewRegistry(l)
-	if reg == nil {
-		return nil, errors.New("failed to create the handler registry")
-	}
-
 	mgr := sessions.NewManager(l)
 	if mgr == nil {
 		return nil, errors.New("failed to create the session manager")
 	}
+	reg := registry.NewRegistry(l)
 
 	dis := dispatcher.NewDispatcher(l, reg, mgr)
 	if dis == nil {
@@ -68,7 +64,7 @@ func NewEngine(l *slog.Logger) (*Engine, error) {
 			return nil, err
 		}
 	case <-t.C:
-		// If the server does not return an error within 2 seconds, we assume it started successfully
+		// If the server does not return an error within 3 seconds, we assume it started successfully
 	}
 
 	return &Engine{
