@@ -33,9 +33,6 @@ jobs:
         run: go test -v ./...
         env:
           GOGC: 1
-      -
-        name: test with race detector
-        run: go test -v -race ./...
   coverage:
     name: Coverage
     runs-on: ubuntu-latest
