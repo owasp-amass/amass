@@ -12,6 +12,8 @@ jobs:
         os: [ "ubuntu-latest", "macos-latest", "windows-latest" ]
         go-version: [ "1.24.0" ]
     runs-on: ${{ matrix.os }}
+    env:
+      CGO_ENABLED: 0
     steps:
       -
         name: setup
