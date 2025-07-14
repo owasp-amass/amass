@@ -32,31 +32,49 @@ options:
     wordlists: # wordlist(s) specific to name alterations
       - "./alterations.txt"
   default_transform_values:
-    ttl: 10080 # minutes. If not specified, the default is 1440 minutes (1 day)
+    ttl: 1440 # minutes. If not specified, the default is 1440 minutes (1 day)
     confidence: 50 # 50%
     priority: 5
 
 transformations:
   Account->ALL:
+    ttl: 1080 # 7 days
   AutnumRecord->ALL:
   AutonomousSystem->ALL:
+  AutonomousSystem->RDAP:
+    ttl: 43200 # 30 days
   ContactRecord->ALL:
   DomainRecord->ALL:
   File->ALL:
   FQDN->ALL:
   FQDN->DNS:
     ttl: 1440
+  FQDN->DomainRecord:
+    ttl: 43200 # 30 days
   FundsTransfer->ALL:
+    ttl: 1080 # 7 days
   Identifier->ALL:
+  Identifier->GLEIF:
+    ttl: 43200 # 30 days
+  Identifier->RDAP:
+    ttl: 43200 # 30 days
   IPAddress->ALL:
   IPNetRecord->ALL:
   Location->ALL:
   Netblock->ALL:
+  Netblock->RDAP:
+    ttl: 43200 # 30 days
   Organization->ALL:
+  Organization->GLEIF:
+    ttl: 43200 # 30 days
   Person->ALL:
+    ttl: 43200 # 30 days
   Phone->ALL:
+    ttl: 1080 # 7 days
   Product->ALL:
+    ttl: 10080 # 7 days
   ProductRelease->ALL:
   Service->ALL:
   TLSCertificate->ALL:
+    ttl: 10080 # 7 days
   URL->ALL:

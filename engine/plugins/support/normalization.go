@@ -5,10 +5,7 @@
 package support
 
 import (
-	"context"
 	"crypto/x509"
-	"encoding/json"
-	"errors"
 	"hash/maphash"
 	"net/url"
 	"strconv"
@@ -18,15 +15,12 @@ import (
 	"github.com/PuerkitoBio/purell"
 	fnparser "github.com/caffix/fullname_parser"
 	"github.com/nyaruka/phonenumbers"
-	"github.com/owasp-amass/amass/v4/internal/net/http"
 	oamcert "github.com/owasp-amass/open-asset-model/certificate"
 	"github.com/owasp-amass/open-asset-model/contact"
 	"github.com/owasp-amass/open-asset-model/people"
 	"github.com/owasp-amass/open-asset-model/platform"
 	oamurl "github.com/owasp-amass/open-asset-model/url"
 )
-
-var postalHost, postalPort string
 
 func FullNameToPerson(raw string) *people.Person {
 	if raw == "" {
@@ -302,101 +296,3 @@ func X509ToOAMTLSCertificate(cert *x509.Certificate) *oamcert.TLSCertificate {
 	}
 	return c
 }
-
-func StreetAddressToLocation(address string) *contact.Location {
-	if address == "" {
-		return nil
-	}
-
-	loc := &contact.Location{Address: address}
-	parsed, err := parseAddress(loc.Address)
-	if err != nil {
-		return nil
-	}
-
-	for _, part := range parsed.Parts {
-		switch part.Label {
-		case "house":
-			loc.Building = part.Value
-		case "house_number":
-			loc.BuildingNumber = part.Value
-		case "road":
-			loc.StreetName = part.Value
-		case "unit":
-			loc.Unit = part.Value
-		case "po_box":
-			loc.POBox = part.Value
-		case "city":
-			loc.City = part.Value
-		case "state":
-			loc.Province = part.Value
-		case "postcode":
-			loc.PostalCode = part.Value
-		case "country":
-			loc.Country = part.Value
-		case "suburb":
-			fallthrough
-		case "city_district":
-			if s := part.Value; s != "" {
-				loc.Locality = s
-			}
-		}
-	}
-	return loc
-}
-
-type parsed struct {
-	Parts []struct {
-		Label string `json:"label"`
-		Value string `json:"value"`
-	} `json:"parts"`
-}
-
-func parseAddress(address string) (*parsed, error) {
-	if postalHost == "" || postalPort == "" {
-		return nil, errors.New("no postal server information provided")
-	}
-
-	resp, err := http.RequestWebPage(context.TODO(), &http.Request{
-		URL: "http://" + postalHost + ":" + postalPort + "/parse?address=" + url.QueryEscape(address),
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	var p parsed
-	if err := json.Unmarshal([]byte("{\"parts\":"+resp.Body+"}"), &p); err != nil {
-		return nil, err
-	}
-	return &p, nil
-}
-
-/*
-func expandAddress(address string) (string, error) {
-	if postalHost == "" || postalPort == "" {
-		return "", errors.New("no postal server information provided")
-	}
-
-	resp, err := http.RequestWebPage(context.TODO(), &http.Request{
-		URL: "http://" + postalHost + ":" + postalPort + "/expand?address=" + url.QueryEscape(address),
-	})
-	if err != nil {
-		return "", err
-	}
-
-	type expanded struct {
-		Forms []string `json:"forms"`
-	}
-
-	var ex expanded
-	if err := json.Unmarshal([]byte("{\"forms\":"+resp.Body+"}"), &ex); err != nil {
-		return "", err
-	}
-
-	num := len(ex.Forms)
-	if num == 0 {
-		return "", errors.New("the libpostal expansion returned zero normalized strings")
-	}
-	return ex.Forms[num-1], nil
-}
-*/

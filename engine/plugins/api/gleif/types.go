@@ -7,7 +7,7 @@ package gleif
 import (
 	"log/slog"
 
-	et "github.com/owasp-amass/amass/v4/engine/types"
+	et "github.com/owasp-amass/amass/v5/engine/types"
 	"golang.org/x/time/rate"
 )
 

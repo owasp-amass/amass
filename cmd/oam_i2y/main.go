@@ -32,7 +32,7 @@ import (
 	"path/filepath"
 
 	"github.com/fatih/color"
-	"github.com/owasp-amass/amass/v4/config"
+	"github.com/owasp-amass/amass/v5/config"
 	"gopkg.in/yaml.v3"
 )
 

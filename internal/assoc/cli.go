@@ -12,9 +12,9 @@ import (
 	"os"
 
 	"github.com/fatih/color"
-	"github.com/owasp-amass/amass/v4/config"
-	"github.com/owasp-amass/amass/v4/internal/afmt"
-	"github.com/owasp-amass/amass/v4/internal/tools"
+	"github.com/owasp-amass/amass/v5/config"
+	"github.com/owasp-amass/amass/v5/internal/afmt"
+	"github.com/owasp-amass/amass/v5/internal/tools"
 	"github.com/owasp-amass/asset-db/triples"
 )
 

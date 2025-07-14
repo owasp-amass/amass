@@ -26,7 +26,7 @@ import (
 	"os"
 	"path"
 
-	"github.com/owasp-amass/amass/v4/internal/enum"
+	"github.com/owasp-amass/amass/v5/internal/enum"
 )
 
 func main() {

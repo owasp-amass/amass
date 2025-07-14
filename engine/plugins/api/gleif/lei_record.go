@@ -11,8 +11,8 @@ import (
 	"fmt"
 	"strings"
 
-	et "github.com/owasp-amass/amass/v4/engine/types"
-	"github.com/owasp-amass/amass/v4/internal/net/http"
+	et "github.com/owasp-amass/amass/v5/engine/types"
+	"github.com/owasp-amass/amass/v5/internal/net/http"
 	dbt "github.com/owasp-amass/asset-db/types"
 	"github.com/owasp-amass/open-asset-model/general"
 )

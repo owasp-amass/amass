@@ -23,14 +23,6 @@ The OWASP Amass Project performs network mapping of attack surfaces and external
 
 > You can find additional installation instructions and documentation in the [Amass Docs](https://owasp-amass.github.io/docs) repo.
 
-### Docker Compose
-
-1. Install [Docker](https://www.docker.com) with Docker Compose
-2. Clone the [Amass Docker Compose](https://github.com/owasp-amass/amass-docker-compose) onto your host: `git clone https://github.com/owasp-amass/amass-docker-compose.git`
-3. Consider changing the name of the directory: `mv amass-docker-compose amass`
-4. Execute your enumeration from within the directory: `docker compose run --rm amass enum -active -d example.com`
-5. Go to the Amass Docker Compose repo, or the [Amass Docs](https://owasp-amass.github.io/docs) repo, for additional instructions
-
 ## Corporate Supporters
 
 [![WhoisXML API Logo](https://raw.githubusercontent.com/owasp-amass/docs/master/images/supporters/whoisxmlapi_logo.png)](https://www.whoisxmlapi.com/)

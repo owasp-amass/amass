@@ -19,8 +19,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
-	"github.com/owasp-amass/amass/v4/config"
-	et "github.com/owasp-amass/amass/v4/engine/types"
+	"github.com/owasp-amass/amass/v5/config"
+	et "github.com/owasp-amass/amass/v5/engine/types"
 )
 
 type Handler func(message string)

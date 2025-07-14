@@ -10,9 +10,9 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
-	"github.com/owasp-amass/amass/v4/config"
-	"github.com/owasp-amass/amass/v4/engine/pubsub"
-	"github.com/owasp-amass/amass/v4/engine/sessions/scope"
+	"github.com/owasp-amass/amass/v5/config"
+	"github.com/owasp-amass/amass/v5/engine/pubsub"
+	"github.com/owasp-amass/amass/v5/engine/sessions/scope"
 	"github.com/owasp-amass/asset-db/cache"
 	"github.com/owasp-amass/asset-db/repository"
 	dbt "github.com/owasp-amass/asset-db/types"

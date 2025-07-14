@@ -15,7 +15,7 @@ import (
 
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/99designs/gqlgen/graphql/introspection"
-	"github.com/owasp-amass/amass/v4/engine/api/graphql/server/model"
+	"github.com/owasp-amass/amass/v5/engine/api/graphql/server/model"
 	gqlparser "github.com/vektah/gqlparser/v2"
 	"github.com/vektah/gqlparser/v2/ast"
 )

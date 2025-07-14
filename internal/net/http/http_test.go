@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/caffix/stringset"
-	amassdns "github.com/owasp-amass/amass/v4/internal/net/dns"
+	amassdns "github.com/owasp-amass/amass/v5/internal/net/dns"
 )
 
 func TestCopyCookies(t *testing.T) {

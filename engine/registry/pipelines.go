@@ -12,8 +12,8 @@ import (
 
 	"github.com/caffix/pipeline"
 	multierror "github.com/hashicorp/go-multierror"
-	"github.com/owasp-amass/amass/v4/config"
-	et "github.com/owasp-amass/amass/v4/engine/types"
+	"github.com/owasp-amass/amass/v5/config"
+	et "github.com/owasp-amass/amass/v5/engine/types"
 )
 
 func (r *registry) BuildPipelines() error {

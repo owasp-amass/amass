@@ -11,9 +11,9 @@ import (
 	"time"
 
 	whoisparser "github.com/likexian/whois-parser"
-	"github.com/owasp-amass/amass/v4/config"
-	"github.com/owasp-amass/amass/v4/engine/plugins/support"
-	et "github.com/owasp-amass/amass/v4/engine/types"
+	"github.com/owasp-amass/amass/v5/config"
+	"github.com/owasp-amass/amass/v5/engine/plugins/support"
+	et "github.com/owasp-amass/amass/v5/engine/types"
 	"github.com/owasp-amass/asset-db/cache"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"

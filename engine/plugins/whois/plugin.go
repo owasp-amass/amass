@@ -8,7 +8,7 @@ import (
 	"log/slog"
 	"time"
 
-	et "github.com/owasp-amass/amass/v4/engine/types"
+	et "github.com/owasp-amass/amass/v5/engine/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"golang.org/x/time/rate"
 )

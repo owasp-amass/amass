@@ -14,9 +14,9 @@ import (
 	"time"
 
 	"github.com/caffix/stringset"
-	"github.com/owasp-amass/amass/v4/engine/plugins/support"
-	et "github.com/owasp-amass/amass/v4/engine/types"
-	"github.com/owasp-amass/amass/v4/internal/net/http"
+	"github.com/owasp-amass/amass/v5/engine/plugins/support"
+	et "github.com/owasp-amass/amass/v5/engine/types"
+	"github.com/owasp-amass/amass/v5/internal/net/http"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	amassdb "github.com/owasp-amass/amass/v4/internal/db"
+	amassdb "github.com/owasp-amass/amass/v5/internal/db"
 	"github.com/owasp-amass/asset-db/repository"
 	"github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
@@ -228,7 +228,7 @@ func newNode(db repository.Repository, idx int, a *types.Entity, since time.Time
 	return &Node{
 		ID:    idx,
 		Type:  atype,
-		Label: key,
+		Label: strings.ReplaceAll(key, "\"", ""),
 		Title: title,
 	}
 }

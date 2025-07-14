@@ -10,11 +10,12 @@ import (
 	"os"
 	"time"
 
-	"github.com/owasp-amass/amass/v4/engine/api/graphql/server"
-	"github.com/owasp-amass/amass/v4/engine/dispatcher"
-	"github.com/owasp-amass/amass/v4/engine/registry"
-	"github.com/owasp-amass/amass/v4/engine/sessions"
-	et "github.com/owasp-amass/amass/v4/engine/types"
+	"github.com/owasp-amass/amass/v5/engine/api/graphql/server"
+	"github.com/owasp-amass/amass/v5/engine/dispatcher"
+	"github.com/owasp-amass/amass/v5/engine/plugins"
+	"github.com/owasp-amass/amass/v5/engine/registry"
+	"github.com/owasp-amass/amass/v5/engine/sessions"
+	et "github.com/owasp-amass/amass/v5/engine/types"
 )
 
 type Engine struct {
@@ -30,20 +31,24 @@ func NewEngine(l *slog.Logger) (*Engine, error) {
 		l = slog.New(slog.NewTextHandler(os.Stdout, nil))
 	}
 
-	reg := registry.NewRegistry(l)
-	if reg == nil {
-		return nil, errors.New("failed to create the handler registry")
-	}
-
 	mgr := sessions.NewManager(l)
 	if mgr == nil {
 		return nil, errors.New("failed to create the session manager")
 	}
+	reg := registry.NewRegistry(l)
 
 	dis := dispatcher.NewDispatcher(l, reg, mgr)
 	if dis == nil {
 		mgr.Shutdown()
 		return nil, errors.New("failed to create the event scheduler")
+	}
+
+	if err := plugins.LoadAndStartPlugins(reg); err != nil {
+		return nil, err
+	}
+
+	if err := reg.BuildPipelines(); err != nil {
+		return nil, err
 	}
 
 	srv := server.NewServer(l, dis, mgr)
@@ -68,7 +73,7 @@ func NewEngine(l *slog.Logger) (*Engine, error) {
 			return nil, err
 		}
 	case <-t.C:
-		// If the server does not return an error within 2 seconds, we assume it started successfully
+		// If the server does not return an error within 3 seconds, we assume it started successfully
 	}
 
 	return &Engine{

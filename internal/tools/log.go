@@ -14,7 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	afmt "github.com/owasp-amass/amass/v4/internal/afmt"
+	afmt "github.com/owasp-amass/amass/v5/internal/afmt"
 	slogcommon "github.com/samber/slog-common"
 	slogsyslog "github.com/samber/slog-syslog/v2"
 )

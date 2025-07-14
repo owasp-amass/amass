@@ -16,11 +16,10 @@ import (
 	"time"
 
 	"github.com/fatih/color"
-	"github.com/owasp-amass/amass/v4/config"
-	"github.com/owasp-amass/amass/v4/engine"
-	"github.com/owasp-amass/amass/v4/engine/plugins"
-	"github.com/owasp-amass/amass/v4/internal/afmt"
-	"github.com/owasp-amass/amass/v4/internal/tools"
+	"github.com/owasp-amass/amass/v5/config"
+	"github.com/owasp-amass/amass/v5/engine"
+	"github.com/owasp-amass/amass/v5/internal/afmt"
+	"github.com/owasp-amass/amass/v5/internal/tools"
 )
 
 const (
@@ -99,16 +98,6 @@ func CLIWorkflow(cmdName string, clArgs []string) {
 		os.Exit(1)
 	}
 	defer e.Shutdown()
-
-	if err := plugins.LoadAndStartPlugins(e.Registry); err != nil {
-		_, _ = afmt.R.Fprintf(color.Error, "Failed to start the plugins: %v", err)
-		os.Exit(1)
-	}
-
-	if err := e.Registry.BuildPipelines(); err != nil {
-		_, _ = afmt.R.Fprintf(color.Error, "Failed to build the handler pipelines: %v", err)
-		os.Exit(1)
-	}
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)

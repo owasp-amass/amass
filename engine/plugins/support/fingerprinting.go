@@ -12,7 +12,7 @@ import (
 	"time"
 
 	jarm "github.com/caffix/jarm-go"
-	"github.com/owasp-amass/amass/v4/internal/net"
+	"github.com/owasp-amass/amass/v5/internal/net"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	"github.com/owasp-amass/open-asset-model/general"

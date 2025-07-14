@@ -5,7 +5,9 @@
 package viz
 
 import (
+	"encoding/json"
 	"io"
+	"strings"
 	"text/template"
 
 	oam "github.com/owasp-amass/open-asset-model"
@@ -336,11 +338,13 @@ func WriteD3Data(output io.Writer, nodes []Node, edges []Edge) error {
 	graph := &d3Graph{Name: "OWASP Amass - Attack Surface Mapping"}
 
 	for idx, node := range nodes {
-		graph.Nodes = append(graph.Nodes, d3Node{
-			ID:    idx,
-			Label: node.Title,
-			Color: colors[node.Type],
-		})
+		if label, err := json.Marshal(node.Title); err == nil {
+			graph.Nodes = append(graph.Nodes, d3Node{
+				ID:    idx,
+				Label: strings.Trim(string(label), "\""),
+				Color: colors[node.Type],
+			})
+		}
 	}
 
 	for _, edge := range edges {

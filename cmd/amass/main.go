@@ -31,13 +31,15 @@ import (
 	"time"
 
 	"github.com/fatih/color"
-	"github.com/owasp-amass/amass/v4/internal/afmt"
-	ae "github.com/owasp-amass/amass/v4/internal/amass_engine"
-	"github.com/owasp-amass/amass/v4/internal/assoc"
-	"github.com/owasp-amass/amass/v4/internal/enum"
-	"github.com/owasp-amass/amass/v4/internal/subs"
-	"github.com/owasp-amass/amass/v4/internal/track"
-	"github.com/owasp-amass/amass/v4/internal/viz"
+	"github.com/owasp-amass/amass/v5/config"
+	"github.com/owasp-amass/amass/v5/internal/afmt"
+	ae "github.com/owasp-amass/amass/v5/internal/amass_engine"
+	"github.com/owasp-amass/amass/v5/internal/assoc"
+	"github.com/owasp-amass/amass/v5/internal/enum"
+	"github.com/owasp-amass/amass/v5/internal/subs"
+	"github.com/owasp-amass/amass/v5/internal/tools"
+	"github.com/owasp-amass/amass/v5/internal/track"
+	"github.com/owasp-amass/amass/v5/internal/viz"
 )
 
 const (
@@ -111,6 +113,24 @@ func main() {
 		return
 	}
 
+	// Ensure the output directory exists
+	if err := tools.CreateOutputDirectory(""); err != nil {
+		_, _ = afmt.R.Fprintf(color.Error, "Failed to create the output directory: %v\n", err)
+		os.Exit(1)
+	}
+
+	dir := config.OutputDirectory("")
+	if dir == "" {
+		_, _ = afmt.R.Fprintln(color.Error, "failed to obtain the path for the output directory")
+		os.Exit(1)
+	}
+
+	// Ensure the default config files exist
+	if err := tools.CreateDefaultConfigFiles(dir); err != nil {
+		_, _ = afmt.R.Fprintf(color.Error, "Failed to create the default config files: %v\n", err)
+		os.Exit(1)
+	}
+
 	cmdName := fmt.Sprintf("%s %s", path.Base(os.Args[0]), os.Args[1])
 	switch os.Args[1] {
 	case "assoc":
@@ -130,10 +150,8 @@ func main() {
 				os.Exit(1)
 			}
 			// Give the engine time to start
-			time.Sleep(5 * time.Second)
-			// Check if the engine is running after attempting to start it
-			if !engineIsRunning() {
-				_, _ = afmt.R.Fprintf(color.Error, "The Amass engine failed to start.\n")
+			if err := waitForEngineResponse(); err != nil {
+				_, _ = afmt.R.Fprintf(color.Error, "The Amass engine did not respond: %v\n", err)
 				os.Exit(1)
 			}
 		}
@@ -150,4 +168,17 @@ func main() {
 		_, _ = afmt.R.Fprintf(color.Error, "subcommand provided but not defined: %s\n", os.Args[1])
 		os.Exit(1)
 	}
+}
+
+func waitForEngineResponse() error {
+	t := time.NewTicker(time.Second)
+	defer t.Stop()
+
+	for range 60 {
+		<-t.C
+		if engineIsRunning() {
+			return nil
+		}
+	}
+	return fmt.Errorf("the Amass engine did not respond within the timeout period")
 }
