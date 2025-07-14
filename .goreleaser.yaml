@@ -15,7 +15,6 @@ builds:
       - windows
       - linux
       - darwin
-      - freebsd
     goarch:
       - amd64
       - 386
@@ -35,14 +34,11 @@ builds:
         goarch: arm
       - goos: windows
         goarch: arm64
-      - goos: freebsd
-        goarch: arm
 
 archives:
   -
     name_template: "{{ .ProjectName }}_{{ title .Os }}_{{ if eq .Arch \"darwin\" }}macos{{ else if eq .Arch \"386\" }}i386{{ else }}{{ .Arch }}{{ end }}"
     wrap_in_directory: true
-    format: zip
     files:
       - LICENSE
       - README.md

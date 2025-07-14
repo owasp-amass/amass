@@ -31,11 +31,13 @@ import (
 	"time"
 
 	"github.com/fatih/color"
+	"github.com/owasp-amass/amass/v5/config"
 	"github.com/owasp-amass/amass/v5/internal/afmt"
 	ae "github.com/owasp-amass/amass/v5/internal/amass_engine"
 	"github.com/owasp-amass/amass/v5/internal/assoc"
 	"github.com/owasp-amass/amass/v5/internal/enum"
 	"github.com/owasp-amass/amass/v5/internal/subs"
+	"github.com/owasp-amass/amass/v5/internal/tools"
 	"github.com/owasp-amass/amass/v5/internal/track"
 	"github.com/owasp-amass/amass/v5/internal/viz"
 )
@@ -109,6 +111,24 @@ func main() {
 	if args.Version {
 		_, _ = afmt.G.Fprintf(color.Error, "%s\n", afmt.Version)
 		return
+	}
+
+	// Ensure the output directory exists
+	if err := tools.CreateOutputDirectory(""); err != nil {
+		_, _ = afmt.R.Fprintf(color.Error, "Failed to create the output directory: %v\n", err)
+		os.Exit(1)
+	}
+
+	dir := config.OutputDirectory("")
+	if dir == "" {
+		_, _ = afmt.R.Fprintln(color.Error, "failed to obtain the path for the output directory")
+		os.Exit(1)
+	}
+
+	// Ensure the default config files exist
+	if err := tools.CreateDefaultConfigFiles(dir); err != nil {
+		_, _ = afmt.R.Fprintf(color.Error, "Failed to create the default config files: %v\n", err)
+		os.Exit(1)
 	}
 
 	cmdName := fmt.Sprintf("%s %s", path.Base(os.Args[0]), os.Args[1])
