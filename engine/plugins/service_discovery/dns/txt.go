@@ -103,12 +103,9 @@ func (t *txtServiceDiscovery) check(e *et.Event) error {
 	}
 
 	var findings []*support.Finding
-	for i, txt := range txtEntries {
-		matchFound := false
+	for _, txt := range txtEntries {
 		for needle, svc := range matchers {
 			if strings.Contains(txt, needle) {
-				matchFound = true
-
 				findings = append(findings, &support.Finding{
 					From:     entity,
 					FromName: fqdn.Name,
