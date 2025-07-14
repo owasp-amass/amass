@@ -16,6 +16,7 @@ import (
 	"github.com/owasp-amass/amass/v5/engine/plugins/horizontals"
 	"github.com/owasp-amass/amass/v5/engine/plugins/scrape"
 	hp "github.com/owasp-amass/amass/v5/engine/plugins/service_discovery/http_probes"
+	dnssd "github.com/owasp-amass/amass/v5/engine/plugins/service_discovery/dns"
 	"github.com/owasp-amass/amass/v5/engine/plugins/whois"
 	"github.com/owasp-amass/amass/v5/engine/plugins/whois/bgptools"
 	et "github.com/owasp-amass/amass/v5/engine/types"
@@ -41,6 +42,7 @@ var pluginNewFuncs = []func() et.Plugin{
 	bgptools.NewBGPTools,
 	brute.NewFQDNAlterations,
 	dns.NewDNS,
+	dnssd.NewTXTPlugin,
 	enrich.NewBannerURLs,
 	enrich.NewContacts,
 	enrich.NewEmails,
