@@ -5,21 +5,21 @@
 package plugins
 
 import (
-	"github.com/owasp-amass/amass/v4/engine/plugins/api"
-	"github.com/owasp-amass/amass/v4/engine/plugins/api/aviato"
-	"github.com/owasp-amass/amass/v4/engine/plugins/api/gleif"
-	"github.com/owasp-amass/amass/v4/engine/plugins/api/rdap"
-	"github.com/owasp-amass/amass/v4/engine/plugins/archive"
-	"github.com/owasp-amass/amass/v4/engine/plugins/brute"
-	"github.com/owasp-amass/amass/v4/engine/plugins/dns"
-	"github.com/owasp-amass/amass/v4/engine/plugins/enrich"
-	"github.com/owasp-amass/amass/v4/engine/plugins/horizontals"
-	"github.com/owasp-amass/amass/v4/engine/plugins/scrape"
-	hp "github.com/owasp-amass/amass/v4/engine/plugins/service_discovery/http_probes"
+	"github.com/owasp-amass/amass/v5/engine/plugins/api"
+	"github.com/owasp-amass/amass/v5/engine/plugins/api/aviato"
+	"github.com/owasp-amass/amass/v5/engine/plugins/api/gleif"
+	"github.com/owasp-amass/amass/v5/engine/plugins/api/rdap"
+	"github.com/owasp-amass/amass/v5/engine/plugins/archive"
+	"github.com/owasp-amass/amass/v5/engine/plugins/brute"
+	"github.com/owasp-amass/amass/v5/engine/plugins/dns"
+	"github.com/owasp-amass/amass/v5/engine/plugins/enrich"
+	"github.com/owasp-amass/amass/v5/engine/plugins/horizontals"
+	"github.com/owasp-amass/amass/v5/engine/plugins/scrape"
+	hp "github.com/owasp-amass/amass/v5/engine/plugins/service_discovery/http_probes"
 	dns_sd "github.com/owasp-amass/amass/v4/engine/plugins/service_discovery/dns"
-	"github.com/owasp-amass/amass/v4/engine/plugins/whois"
-	"github.com/owasp-amass/amass/v4/engine/plugins/whois/bgptools"
-	et "github.com/owasp-amass/amass/v4/engine/types"
+	"github.com/owasp-amass/amass/v5/engine/plugins/whois"
+	"github.com/owasp-amass/amass/v5/engine/plugins/whois/bgptools"
+	et "github.com/owasp-amass/amass/v5/engine/types"
 )
 
 var pluginNewFuncs = []func() et.Plugin{
@@ -46,7 +46,6 @@ var pluginNewFuncs = []func() et.Plugin{
 	enrich.NewContacts,
 	enrich.NewEmails,
 	enrich.NewTLSCerts,
-	dns_sd.NewTXT_SD_Plugin,
 	enrich.NewURLs,
 	gleif.NewGLEIF,
 	horizontals.NewHorizontals,
@@ -54,6 +53,7 @@ var pluginNewFuncs = []func() et.Plugin{
 	rdap.NewRDAP,
 	scrape.NewBing,
 	scrape.NewDNSHistory,
+	dns_sd.NewTXT_SD_Plugin,
 	scrape.NewDuckDuckGo,
 	scrape.NewIPVerse,
 	scrape.NewRapidDNS,
