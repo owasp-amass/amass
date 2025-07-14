@@ -9,7 +9,7 @@ import (
 	"github.com/miekg/dns"
 	"github.com/owasp-amass/amass/v4/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v4/engine/types"
-	oam "github.com/owasp-amass/open-asset-model/dns"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	"github.com/owasp-amass/open-asset-model/general"
 )
 
@@ -76,7 +76,7 @@ func (t *txtServiceDiscovery) check(e *et.Event) error {
 	}
 
 	entity := e.Entity
-	fqdn, ok := entity.Asset.(*oam.FQDN)
+	fqdn, ok := entity.Asset.(*oamdns.FQDN)
 	if !ok {
 		return nil
 	}
@@ -91,8 +91,8 @@ func (t *txtServiceDiscovery) check(e *et.Event) error {
 	if cacheErr != nil {
 		e.Session.Log().Error("cache access error", slog.String("err", cacheErr.Error()), ctxAttr, slog.String("domain", fqdn.Name))
 	} else {
-		for i, tag := range tags {
-			if prop, ok := tag.Property.(*oam.DNSRecordProperty); ok && prop.Header.RRType == int(dns.TypeTXT) {
+		for _, tag := range tags {
+			if prop, ok := tag.Property.(*oamdns.DNSRecordProperty); ok && prop.Header.RRType == int(dns.TypeTXT) {
 				txtEntries = append(txtEntries, prop.Data)
 			}
 		}
