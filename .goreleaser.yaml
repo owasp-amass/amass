@@ -37,7 +37,7 @@ builds:
 
 archives:
   -
-    name_template: "{{ .ProjectName }}_{{ title .Os }}_{{ if eq .Arch \"darwin\" }}macos{{ else if eq .Arch \"386\" }}i386{{ else }}{{ .Arch }}{{ end }}"
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}"
     wrap_in_directory: true
     files:
       - LICENSE
@@ -47,7 +47,7 @@ archives:
 
 sboms:
   - documents:
-      - "{{ .Binary }}_{{ .Os }}_{{ .Arch }}.bom.json"
+      - "{{ .Binary }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}.bom.json"
     artifacts: binary
     cmd: cyclonedx-gomod
     env:
