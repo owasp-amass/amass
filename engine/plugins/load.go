@@ -1,22 +1,24 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
 package plugins
 
 import (
-	"github.com/owasp-amass/amass/v4/engine/plugins/api"
-	"github.com/owasp-amass/amass/v4/engine/plugins/archive"
-	"github.com/owasp-amass/amass/v4/engine/plugins/brute"
-	"github.com/owasp-amass/amass/v4/engine/plugins/dns"
-	"github.com/owasp-amass/amass/v4/engine/plugins/expansion"
-	"github.com/owasp-amass/amass/v4/engine/plugins/horizontals"
-	"github.com/owasp-amass/amass/v4/engine/plugins/rdap"
-	"github.com/owasp-amass/amass/v4/engine/plugins/scrape"
-	hp "github.com/owasp-amass/amass/v4/engine/plugins/service_discovery/http_probes"
-	"github.com/owasp-amass/amass/v4/engine/plugins/whois"
-	"github.com/owasp-amass/amass/v4/engine/plugins/whois/bgptools"
-	et "github.com/owasp-amass/amass/v4/engine/types"
+	"github.com/owasp-amass/amass/v5/engine/plugins/api"
+	"github.com/owasp-amass/amass/v5/engine/plugins/api/aviato"
+	"github.com/owasp-amass/amass/v5/engine/plugins/api/gleif"
+	"github.com/owasp-amass/amass/v5/engine/plugins/api/rdap"
+	"github.com/owasp-amass/amass/v5/engine/plugins/archive"
+	"github.com/owasp-amass/amass/v5/engine/plugins/brute"
+	"github.com/owasp-amass/amass/v5/engine/plugins/dns"
+	"github.com/owasp-amass/amass/v5/engine/plugins/enrich"
+	"github.com/owasp-amass/amass/v5/engine/plugins/horizontals"
+	"github.com/owasp-amass/amass/v5/engine/plugins/scrape"
+	hp "github.com/owasp-amass/amass/v5/engine/plugins/service_discovery/http_probes"
+	"github.com/owasp-amass/amass/v5/engine/plugins/whois"
+	"github.com/owasp-amass/amass/v5/engine/plugins/whois/bgptools"
+	et "github.com/owasp-amass/amass/v5/engine/types"
 )
 
 var pluginNewFuncs = []func() et.Plugin{
@@ -35,14 +37,16 @@ var pluginNewFuncs = []func() et.Plugin{
 	api.NewVirusTotal,
 	api.NewZetalytics,
 	archive.NewWayback,
+	aviato.NewAviato,
 	bgptools.NewBGPTools,
 	brute.NewFQDNAlterations,
 	dns.NewDNS,
-	expansion.NewBannerURLs,
-	expansion.NewContacts,
-	expansion.NewEmails,
-	expansion.NewTLSCerts,
-	expansion.NewURLs,
+	enrich.NewBannerURLs,
+	enrich.NewContacts,
+	enrich.NewEmails,
+	enrich.NewTLSCerts,
+	enrich.NewURLs,
+	gleif.NewGLEIF,
 	horizontals.NewHorizontals,
 	hp.NewHTTPProbing,
 	rdap.NewRDAP,

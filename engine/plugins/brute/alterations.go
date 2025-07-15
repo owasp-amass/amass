@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -12,11 +12,11 @@ import (
 	"unicode"
 
 	"github.com/caffix/stringset"
-	"github.com/owasp-amass/amass/v4/engine/plugins/support"
-	et "github.com/owasp-amass/amass/v4/engine/types"
+	"github.com/owasp-amass/amass/v5/engine/plugins/support"
+	et "github.com/owasp-amass/amass/v5/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
-	"github.com/owasp-amass/open-asset-model/domain"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
 )
 
 type alts struct {
@@ -47,7 +47,7 @@ func (d *alts) Start(r et.Registry) error {
 	if err := r.RegisterHandler(&et.Handler{
 		Plugin:       d,
 		Name:         d.name + "-Handler",
-		Priority:     7,
+		Priority:     8,
 		MaxInstances: support.MaxHandlerInstances,
 		Transforms:   []string{"fqdn"},
 		EventType:    oam.FQDN,
@@ -65,7 +65,7 @@ func (d *alts) Stop() {
 }
 
 func (d *alts) check(e *et.Event) error {
-	fqdn, ok := e.Entity.Asset.(*domain.FQDN)
+	fqdn, ok := e.Entity.Asset.(*oamdns.FQDN)
 	if !ok {
 		return errors.New("failed to extract the FQDN asset")
 	}
@@ -75,7 +75,7 @@ func (d *alts) check(e *et.Event) error {
 		return nil
 	}
 
-	if !support.NameResolved(e.Session, fqdn) {
+	if e.Meta == nil {
 		return nil
 	}
 
@@ -83,7 +83,7 @@ func (d *alts) check(e *et.Event) error {
 	name := strings.ToLower(strings.TrimSpace(fqdn.Name))
 	if a, conf := e.Session.Scope().IsAssetInScope(fqdn, 0); conf == 0 || a == nil {
 		return nil
-	} else if dfqdn, ok := a.(*domain.FQDN); !ok || dfqdn == nil {
+	} else if dfqdn, ok := a.(*oamdns.FQDN); !ok || dfqdn == nil {
 		return nil
 	} else {
 		dom = dfqdn.Name

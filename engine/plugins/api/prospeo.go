@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -10,16 +10,16 @@ import (
 	"errors"
 	"log/slog"
 	"strconv"
-	"strings"
 	"time"
 
-	"github.com/owasp-amass/amass/v4/engine/plugins/support"
-	et "github.com/owasp-amass/amass/v4/engine/types"
-	"github.com/owasp-amass/amass/v4/utils/net/http"
+	"github.com/owasp-amass/amass/v5/engine/plugins/support"
+	et "github.com/owasp-amass/amass/v5/engine/types"
+	"github.com/owasp-amass/amass/v5/internal/net/http"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
-	"github.com/owasp-amass/open-asset-model/domain"
-	"go.uber.org/ratelimit"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
+	"github.com/owasp-amass/open-asset-model/general"
+	"golang.org/x/time/rate"
 )
 
 type Prospeo struct {
@@ -28,17 +28,19 @@ type Prospeo struct {
 	counturl string
 	queryurl string
 	log      *slog.Logger
-	rlimit   ratelimit.Limiter
+	rlimit   *rate.Limiter
 	source   *et.Source
 }
 
 func NewProspeo() et.Plugin {
+	limit := rate.Every(15 * time.Second)
+
 	return &Prospeo{
 		name:     "Prospeo",
 		accturl:  "https://api.prospeo.io/account-information",
 		counturl: "https://api.prospeo.io/email-count",
 		queryurl: "https://api.prospeo.io/domain-search",
-		rlimit:   ratelimit.New(15, ratelimit.WithoutSlack),
+		rlimit:   rate.NewLimiter(limit, 1),
 		source: &et.Source{
 			Name:       "Prospeo",
 			Confidence: 80,
@@ -57,7 +59,8 @@ func (p *Prospeo) Start(r et.Registry) error {
 	if err := r.RegisterHandler(&et.Handler{
 		Plugin:     p,
 		Name:       name,
-		Transforms: []string{string(oam.EmailAddress)},
+		Priority:   9,
+		Transforms: []string{string(oam.Identifier)},
 		EventType:  oam.FQDN,
 		Callback:   p.check,
 	}); err != nil {
@@ -73,18 +76,16 @@ func (p *Prospeo) Stop() {
 }
 
 func (p *Prospeo) check(e *et.Event) error {
-	fqdn, ok := e.Entity.Asset.(*domain.FQDN)
+	fqdn, ok := e.Entity.Asset.(*oamdns.FQDN)
 	if !ok {
 		return errors.New("failed to extract the FQDN asset")
 	}
 
-	if a, conf := e.Session.Scope().IsAssetInScope(fqdn, 0); conf == 0 || a == nil {
-		return nil
-	} else if f, ok := a.(*domain.FQDN); !ok || f == nil || !strings.EqualFold(fqdn.Name, f.Name) {
+	if !support.HasSLDInScope(e) {
 		return nil
 	}
 
-	since, err := support.TTLStartTime(e.Session.Config(), string(oam.FQDN), string(oam.EmailAddress), p.name)
+	since, err := support.TTLStartTime(e.Session.Config(), string(oam.FQDN), string(oam.Identifier), p.name)
 	if err != nil {
 		return err
 	}
@@ -104,7 +105,15 @@ func (p *Prospeo) check(e *et.Event) error {
 }
 
 func (p *Prospeo) lookup(e *et.Event, name string, since time.Time) []*dbt.Entity {
-	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.EmailAddress), p.source, since)
+	var emails []*dbt.Entity
+
+	for _, e := range support.SourceToAssetsWithinTTL(e.Session, name, string(oam.Identifier), p.source, since) {
+		if email, ok := e.Asset.(*general.Identifier); ok && email != nil && email.Type == general.EmailAddress {
+			emails = append(emails, e)
+		}
+	}
+
+	return emails
 }
 
 func (p *Prospeo) query(e *et.Event, name string) []*dbt.Entity {
@@ -128,7 +137,7 @@ func (p *Prospeo) query(e *et.Event, name string) []*dbt.Entity {
 		limit = count
 	}
 
-	p.rlimit.Take()
+	_ = p.rlimit.Wait(context.TODO())
 	resp, err := http.RequestWebPage(context.TODO(), &http.Request{
 		Method: "POST",
 		Body:   `{"company": "` + name + `", "limit": ` + strconv.Itoa(limit) + `}`,
@@ -166,7 +175,8 @@ func (p *Prospeo) process(e *et.Event, assets []*dbt.Entity) {
 }
 
 func (p *Prospeo) accountType(key string) (int, error) {
-	p.rlimit.Take()
+	_ = p.rlimit.Wait(context.TODO())
+
 	resp, err := http.RequestWebPage(context.TODO(), &http.Request{
 		Method: "POST",
 		URL:    p.accturl,
@@ -188,7 +198,8 @@ func (p *Prospeo) accountType(key string) (int, error) {
 }
 
 func (p *Prospeo) count(domain string, key string) (int, error) {
-	p.rlimit.Take()
+	_ = p.rlimit.Wait(context.TODO())
+
 	resp, err := http.RequestWebPage(context.TODO(), &http.Request{
 		Method: "POST",
 		Body:   `{"domain": "` + domain + `"}`,

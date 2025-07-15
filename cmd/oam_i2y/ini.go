@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -15,7 +15,7 @@ import (
 
 	"github.com/caffix/stringset"
 	"github.com/go-ini/ini"
-	"github.com/owasp-amass/amass/v4/utils/net/dns"
+	"github.com/owasp-amass/amass/v5/internal/net/dns"
 )
 
 // Updater allows an object to implement a method that updates a configuration.
@@ -124,9 +124,10 @@ func (c *Config) LoadSettings(path string) error {
 	if cfg.Section(ini.DefaultSection).HasKey("mode") {
 		mode := cfg.Section(ini.DefaultSection).Key("mode").String()
 
-		if mode == "passive" {
+		switch mode {
+		case "passive":
 			c.Passive = true
-		} else if mode == "active" {
+		case "active":
 			c.Active = true
 		}
 	}

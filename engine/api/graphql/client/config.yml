@@ -29,19 +29,20 @@ options:
   confidence: 50 # default confidence level for all transformations unless otherwise specified
 
 transformations:
+  ContactRecord->ALL:
+  DomainRecord->ALL:
   FQDN->FQDN:
-  FQDN->IPAddress: 
+  FQDN->IPAddress:
+  Identifier->ALL:
   IPAddress->FQDN:
   IPAddress->Netblock:
   IPAddress->ASN:
   IPAddress->RIROrg:
-  ContactRecord->ALL:
-  Organization->ALL:
   Location->ALL:
-  EmailAddress->ALL:
-  Phone->ALL:
+  Netblock->ALL:
+  Organization->ALL:
   Person->ALL:
-  DomainRecord->ALL:
-  URL->ALL:
+  Phone->ALL:
   TLSCertificate->ALL:
+  URL->ALL:
   # leaving both priority and confidence out

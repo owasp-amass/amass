@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -10,11 +10,12 @@ import (
 	"strings"
 	"time"
 
-	et "github.com/owasp-amass/amass/v4/engine/types"
-	"github.com/owasp-amass/amass/v4/utils"
+	"github.com/owasp-amass/amass/v5/engine/plugins/support"
+	et "github.com/owasp-amass/amass/v5/engine/types"
+	"github.com/owasp-amass/amass/v5/internal/db"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
-	"github.com/owasp-amass/open-asset-model/domain"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
 )
 
 type knownFQDN struct {
@@ -39,7 +40,7 @@ func (d *knownFQDN) Start(r et.Registry) error {
 		Plugin:       d,
 		Name:         d.name + "-Handler",
 		Priority:     7,
-		MaxInstances: 10,
+		MaxInstances: support.MaxHandlerInstances,
 		Transforms:   []string{string(oam.FQDN)},
 		EventType:    oam.FQDN,
 		Callback:     d.check,
@@ -56,28 +57,30 @@ func (d *knownFQDN) Stop() {
 }
 
 func (d *knownFQDN) check(e *et.Event) error {
-	fqdn, ok := e.Entity.Asset.(*domain.FQDN)
+	fqdn, ok := e.Entity.Asset.(*oamdns.FQDN)
 	if !ok {
 		return errors.New("failed to extract the FQDN asset")
 	}
 
-	domlt := strings.ToLower(strings.TrimSpace(fqdn.Name))
-	if e.Session.Config().WhichDomain(domlt) != domlt {
+	if a, conf := e.Session.Scope().IsAssetInScope(fqdn, 0); conf == 0 || a == nil {
+		return nil
+	} else if f, ok := a.(*oamdns.FQDN); !ok || f == nil || !strings.EqualFold(fqdn.Name, f.Name) {
 		return nil
 	}
 
+	support.AddSLDInScope(e)
 	d.process(e, d.lookup(e, e.Entity))
 	return nil
 }
 
 func (d *knownFQDN) lookup(e *et.Event, dom *dbt.Entity) []*dbt.Entity {
-	names, _ := utils.FindByFQDNScope(e.Session.Cache(), dom, time.Time{})
+	names, _ := db.FindByFQDNScope(e.Session.Cache(), dom, time.Time{})
 	return names
 }
 
 func (d *knownFQDN) process(e *et.Event, names []*dbt.Entity) {
 	for _, n := range names {
-		if fqdn, ok := n.Asset.(*domain.FQDN); ok {
+		if fqdn, ok := n.Asset.(*oamdns.FQDN); ok {
 			_ = e.Dispatcher.DispatchEvent(&et.Event{
 				Name:    fqdn.Name,
 				Entity:  n,

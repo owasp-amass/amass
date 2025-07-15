@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -55,7 +55,7 @@ func (pq *PipelineQueue) Next(ctx context.Context) bool {
 	t := time.NewTicker(100 * time.Millisecond)
 	defer t.Stop()
 
-	if pq.Queue.Len() > 0 {
+	if pq.Len() > 0 {
 		return true
 	}
 
@@ -64,11 +64,11 @@ func (pq *PipelineQueue) Next(ctx context.Context) bool {
 		case <-ctx.Done():
 			return false
 		case <-t.C:
-			if pq.Queue.Len() > 0 {
+			if pq.Len() > 0 {
 				return true
 			}
-		case <-pq.Queue.Signal():
-			if pq.Queue.Len() > 0 {
+		case <-pq.Signal():
+			if pq.Len() > 0 {
 				return true
 			}
 		}

@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -9,12 +9,13 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/owasp-amass/amass/v4/engine/plugins/support"
-	et "github.com/owasp-amass/amass/v4/engine/types"
+	"github.com/miekg/dns"
+	"github.com/owasp-amass/amass/v5/engine/plugins/support"
+	et "github.com/owasp-amass/amass/v5/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
-	"github.com/owasp-amass/open-asset-model/domain"
-	"github.com/owasp-amass/open-asset-model/relation"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
+	"github.com/owasp-amass/open-asset-model/general"
 )
 
 type fqdnEndpoint struct {
@@ -27,7 +28,7 @@ func (fe *fqdnEndpoint) Name() string {
 }
 
 func (fe *fqdnEndpoint) check(e *et.Event) error {
-	fqdn, ok := e.Entity.Asset.(*domain.FQDN)
+	fqdn, ok := e.Entity.Asset.(*oamdns.FQDN)
 	if !ok {
 		return errors.New("failed to extract the FQDN asset")
 	}
@@ -35,7 +36,9 @@ func (fe *fqdnEndpoint) check(e *et.Event) error {
 	if !e.Session.Config().Active {
 		return nil
 	}
-	if !support.NameResolved(e.Session, fqdn) {
+	if !support.HasDNSRecordType(e, int(dns.TypeA)) &&
+		!support.HasDNSRecordType(e, int(dns.TypeAAAA)) &&
+		!support.HasDNSRecordType(e, int(dns.TypeCNAME)) {
 		return nil
 	}
 	if _, conf := e.Session.Scope().IsAssetInScope(fqdn, 0); conf == 0 {
@@ -50,27 +53,31 @@ func (fe *fqdnEndpoint) check(e *et.Event) error {
 	src := fe.plugin.source
 	var findings []*support.Finding
 	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, src, since) {
-		findings = append(findings, fe.lookup(e, e.Entity, src, since)...)
+		findings = append(findings, fe.lookup(e, e.Entity, since)...)
 	} else {
-		findings = append(findings, fe.query(e, e.Entity)...)
+		go func() {
+			if findings := append(findings, fe.query(e, e.Entity)...); len(findings) > 0 {
+				fe.process(e, findings)
+			}
+		}()
 		support.MarkAssetMonitored(e.Session, e.Entity, src)
 	}
 
 	if len(findings) > 0 {
-		fe.process(e, findings, src)
+		fe.process(e, findings)
 	}
 	return nil
 }
 
-func (fe *fqdnEndpoint) lookup(e *et.Event, host *dbt.Entity, src *et.Source, since time.Time) []*support.Finding {
+func (fe *fqdnEndpoint) lookup(e *et.Event, host *dbt.Entity, since time.Time) []*support.Finding {
 	var findings []*support.Finding
 
 	if edges, err := e.Session.Cache().OutgoingEdges(host, since, "port"); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
-			if _, err := e.Session.Cache().GetEdgeTags(edge, since, src.Name); err != nil {
+			if _, err := e.Session.Cache().GetEdgeTags(edge, since, fe.plugin.source.Name); err != nil {
 				continue
 			}
-			if _, ok := edge.Relation.(*relation.PortRelation); ok {
+			if _, ok := edge.Relation.(*general.PortRelation); ok {
 				if srv, err := e.Session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && srv != nil && srv.Asset.AssetType() == oam.Service {
 					findings = append(findings, &support.Finding{
 						From:     host,
@@ -88,7 +95,7 @@ func (fe *fqdnEndpoint) lookup(e *et.Event, host *dbt.Entity, src *et.Source, si
 
 func (fe *fqdnEndpoint) query(e *et.Event, host *dbt.Entity) []*support.Finding {
 	var findings []*support.Finding
-	fqdn := host.Asset.(*domain.FQDN)
+	fqdn := host.Asset.(*oamdns.FQDN)
 
 	for _, port := range e.Session.Config().Scope.Ports {
 		addr := fqdn.Name + ":" + strconv.Itoa(port)
@@ -104,6 +111,6 @@ func (fe *fqdnEndpoint) query(e *et.Event, host *dbt.Entity) []*support.Finding 
 	return findings
 }
 
-func (fe *fqdnEndpoint) process(e *et.Event, findings []*support.Finding, src *et.Source) {
-	support.ProcessAssetsWithSource(e, findings, src, fe.plugin.name, fe.name)
+func (fe *fqdnEndpoint) process(e *et.Event, findings []*support.Finding) {
+	support.ProcessAssetsWithSource(e, findings, fe.plugin.source, fe.plugin.name, fe.name)
 }

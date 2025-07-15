@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -18,11 +18,11 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
-	"github.com/owasp-amass/amass/v4/engine/plugins/support"
-	et "github.com/owasp-amass/amass/v4/engine/types"
-	amassnet "github.com/owasp-amass/amass/v4/utils/net"
+	"github.com/owasp-amass/amass/v5/engine/plugins/support"
+	et "github.com/owasp-amass/amass/v5/engine/types"
+	amassnet "github.com/owasp-amass/amass/v5/internal/net"
 	oam "github.com/owasp-amass/open-asset-model"
-	"go.uber.org/ratelimit"
+	"golang.org/x/time/rate"
 )
 
 type bgpTools struct {
@@ -30,20 +30,20 @@ type bgpTools struct {
 	name     string
 	addr     string
 	port     int
-	data     map[int][]netip.Prefix
 	log      *slog.Logger
 	autsys   *autsys
 	netblock *netblock
-	rlimit   ratelimit.Limiter
+	rlimit   *rate.Limiter
 	source   *et.Source
 }
 
 func NewBGPTools() et.Plugin {
+	limit := rate.Every(time.Second)
+
 	return &bgpTools{
 		name:   "BGP.Tools",
 		port:   43,
-		data:   make(map[int][]netip.Prefix),
-		rlimit: ratelimit.New(1, ratelimit.WithoutSlack),
+		rlimit: rate.NewLimiter(limit, 1),
 		source: &et.Source{
 			Name:       "BGP.Tools",
 			Confidence: 100,
@@ -61,8 +61,19 @@ func (bt *bgpTools) Start(r et.Registry) error {
 	rr, err := support.PerformQuery("bgp.tools", dns.TypeA)
 	if err != nil {
 		return fmt.Errorf("failed to obtain the BGPTools IP address: %v", err)
+	} else if len(rr) == 0 {
+		return errors.New("failed to obtain the BGPTools IP address")
 	}
-	bt.addr = rr[0].Data
+
+	for _, record := range rr {
+		if record.Header().Rrtype == dns.TypeA {
+			bt.addr = strings.TrimSpace((record.(*dns.A)).A.String())
+			break
+		}
+	}
+	if bt.addr == "" {
+		return errors.New("failed to obtain the BGPTools IP address")
+	}
 
 	bt.netblock = &netblock{
 		name:   bt.name + "-IP-Handler",
@@ -116,12 +127,12 @@ type bgpToolsRecord struct {
 func (bt *bgpTools) whois(ipstr string) (*bgpToolsRecord, error) {
 	addr := net.JoinHostPort(bt.addr, strconv.Itoa(bt.port))
 
-	bt.rlimit.Take()
+	_ = bt.rlimit.Wait(context.TODO())
 	conn, err := amassnet.DialContext(context.TODO(), "tcp", addr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to establish a connection with the WHOIS server: %v", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	n, err := io.WriteString(conn, fmt.Sprintf("begin\n%s\nend", ipstr))
 	if err != nil || n == 0 {

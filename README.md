@@ -23,14 +23,6 @@ The OWASP Amass Project performs network mapping of attack surfaces and external
 
 > You can find additional installation instructions and documentation in the [Amass Docs](https://owasp-amass.github.io/docs) repo.
 
-### Docker Compose
-
-1. Install [Docker](https://www.docker.com) with Docker Compose
-2. Clone the [Amass Docker Compose](https://github.com/owasp-amass/amass-docker-compose) onto your host: `git clone https://github.com/owasp-amass/amass-docker-compose.git`
-3. Consider changing the name of the directory: `mv amass-docker-compose amass`
-4. Execute your enumeration from within the directory: `docker compose run --rm amass enum -active -d example.com`
-5. Go to the Amass Docker Compose repo, or the [Amass Docs](https://owasp-amass.github.io/docs) repo, for additional instructions
-
 ## Corporate Supporters
 
 [![WhoisXML API Logo](https://raw.githubusercontent.com/owasp-amass/docs/master/images/supporters/whoisxmlapi_logo.png)](https://www.whoisxmlapi.com/)
@@ -48,6 +40,6 @@ If you need help with installation and/or usage of the tool, please join our [Di
 
 ## Licensing [![License](https://img.shields.io/badge/license-apache%202-blue)](https://www.apache.org/licenses/LICENSE-2.0)
 
-This program is free software: you can redistribute it and/or modify it under the terms of the [Apache license](LICENSE). OWASP Amass and any contributions are Copyright © by Jeff Foley 2017-2024. Some subcomponents have separate licenses.
+This program is free software: you can redistribute it and/or modify it under the terms of the [Apache license](LICENSE). OWASP Amass and any contributions are Copyright © by Jeff Foley 2017-2025. Some subcomponents have separate licenses.
 
 ![Network graph](https://raw.githubusercontent.com/owasp-amass/docs/master/images/network_06092018.png "Amass Network Mapping")

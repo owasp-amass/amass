@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -8,10 +8,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/caffix/pipeline"
 	multierror "github.com/hashicorp/go-multierror"
-	et "github.com/owasp-amass/amass/v4/engine/types"
+	"github.com/owasp-amass/amass/v5/config"
+	et "github.com/owasp-amass/amass/v5/engine/types"
 )
 
 func (r *registry) BuildPipelines() error {
@@ -83,7 +85,7 @@ func makeSink() pipeline.SinkFunc {
 			return errors.New("pipeline sink failed to extract the EventDataElement")
 		}
 
-		ede.Queue.Append(ede)
+		ede.Queue <- ede
 		return nil
 	})
 }
@@ -106,23 +108,75 @@ func handlerTask(h *et.Handler) pipeline.TaskFunc {
 
 		select {
 		case <-ctx.Done():
-			ede.Queue.Append(ede)
+			ede.Queue <- ede
 			return nil, nil
 		default:
 			if ede.Event.Session.Done() {
-				ede.Queue.Append(ede)
+				ede.Queue <- ede
 				return nil, nil
 			}
 		}
 
-		tos := append(h.Transforms, h.Plugin.Name())
+		pname := h.Plugin.Name()
 		from := string(ede.Event.Entity.Asset.AssetType())
-		if _, err := ede.Event.Session.Config().CheckTransformations(from, tos...); err == nil {
-			if err := r.Callback(ede.Event); err != nil {
-				ede.Error = multierror.Append(ede.Error, err)
+		transformations := transformationsByType(ede.Event.Session.Config(), from)
+		if len(transformations) > 0 && !allExcludesPlugin(transformations, pname) {
+			pmatch := tosContainPlugin(transformations, pname)
+
+			if !pmatch {
+				if _, err := ede.Event.Session.Config().CheckTransformations(from, h.Transforms...); err == nil {
+					pmatch = true
+				}
+			}
+			if pmatch {
+				if err := r.Callback(ede.Event); err != nil {
+					ede.Error = multierror.Append(ede.Error, err)
+				}
 			}
 		}
-
 		return data, nil
 	})
+}
+
+func transformationsByType(cfg *config.Config, from string) []*config.Transformation {
+	var transformations []*config.Transformation
+
+	for _, tf := range cfg.Transformations {
+		if strings.EqualFold(tf.From, from) {
+			transformations = append(transformations, tf)
+		}
+	}
+
+	return transformations
+}
+
+func tosContainPlugin(transformations []*config.Transformation, pname string) bool {
+	for _, tf := range transformations {
+		if strings.EqualFold(tf.To, pname) {
+			return true
+		}
+	}
+	return false
+}
+
+func allExcludesPlugin(transformations []*config.Transformation, pname string) bool {
+	var all *config.Transformation
+
+	for _, tf := range transformations {
+		if strings.EqualFold(tf.To, "all") {
+			all = tf
+			break
+		}
+	}
+
+	if all == nil {
+		return false
+	}
+
+	for _, ex := range all.Exclude {
+		if strings.EqualFold(ex, pname) {
+			return true
+		}
+	}
+	return false
 }

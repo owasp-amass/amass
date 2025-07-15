@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -9,31 +9,32 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
-	"strings"
 	"time"
 
-	"github.com/owasp-amass/amass/v4/config"
-	"github.com/owasp-amass/amass/v4/engine/plugins/support"
-	et "github.com/owasp-amass/amass/v4/engine/types"
-	"github.com/owasp-amass/amass/v4/utils/net/dns"
-	"github.com/owasp-amass/amass/v4/utils/net/http"
+	"github.com/owasp-amass/amass/v5/config"
+	"github.com/owasp-amass/amass/v5/engine/plugins/support"
+	et "github.com/owasp-amass/amass/v5/engine/types"
+	"github.com/owasp-amass/amass/v5/internal/net/dns"
+	"github.com/owasp-amass/amass/v5/internal/net/http"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
-	"github.com/owasp-amass/open-asset-model/domain"
-	"go.uber.org/ratelimit"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
+	"golang.org/x/time/rate"
 )
 
 type passiveTotal struct {
 	name   string
 	log    *slog.Logger
-	rlimit ratelimit.Limiter
+	rlimit *rate.Limiter
 	source *et.Source
 }
 
 func NewPassiveTotal() et.Plugin {
+	limit := rate.Every(10 * time.Second)
+
 	return &passiveTotal{
 		name:   "PassiveTotal",
-		rlimit: ratelimit.New(10, ratelimit.WithoutSlack),
+		rlimit: rate.NewLimiter(limit, 1),
 		source: &et.Source{
 			Name:       "PassiveTotal",
 			Confidence: 30,
@@ -49,13 +50,12 @@ func (pt *passiveTotal) Start(r et.Registry) error {
 	pt.log = r.Log().WithGroup("plugin").With("name", pt.name)
 
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:       pt,
-		Name:         pt.name + "-Handler",
-		Priority:     6,
-		MaxInstances: 10,
-		Transforms:   []string{string(oam.FQDN)},
-		EventType:    oam.FQDN,
-		Callback:     pt.check,
+		Plugin:     pt,
+		Name:       pt.name + "-Handler",
+		Priority:   9,
+		Transforms: []string{string(oam.FQDN)},
+		EventType:  oam.FQDN,
+		Callback:   pt.check,
 	}); err != nil {
 		return err
 	}
@@ -69,19 +69,17 @@ func (pt *passiveTotal) Stop() {
 }
 
 func (pt *passiveTotal) check(e *et.Event) error {
-	fqdn, ok := e.Entity.Asset.(*domain.FQDN)
+	fqdn, ok := e.Entity.Asset.(*oamdns.FQDN)
 	if !ok {
 		return errors.New("failed to extract the FQDN asset")
 	}
 
-	ds := e.Session.Config().GetDataSourceConfig(pt.name)
-	if ds == nil || len(ds.Creds) == 0 {
+	if !support.HasSLDInScope(e) {
 		return nil
 	}
 
-	if a, conf := e.Session.Scope().IsAssetInScope(fqdn, 0); conf == 0 || a == nil {
-		return nil
-	} else if f, ok := a.(*domain.FQDN); !ok || f == nil || !strings.EqualFold(fqdn.Name, f.Name) {
+	ds := e.Session.Config().GetDataSourceConfig(pt.name)
+	if ds == nil || len(ds.Creds) == 0 {
 		return nil
 	}
 
@@ -92,9 +90,9 @@ func (pt *passiveTotal) check(e *et.Event) error {
 
 	var names []*dbt.Entity
 	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, pt.source, since) {
-		names = append(names, pt.lookup(e, fqdn.Name, pt.source, since)...)
+		names = append(names, pt.lookup(e, fqdn.Name, since)...)
 	} else {
-		names = append(names, pt.query(e, fqdn.Name, pt.source, ds)...)
+		names = append(names, pt.query(e, fqdn.Name, ds)...)
 		support.MarkAssetMonitored(e.Session, e.Entity, pt.source)
 	}
 
@@ -104,11 +102,11 @@ func (pt *passiveTotal) check(e *et.Event) error {
 	return nil
 }
 
-func (pt *passiveTotal) lookup(e *et.Event, name string, src *et.Source, since time.Time) []*dbt.Entity {
+func (pt *passiveTotal) lookup(e *et.Event, name string, since time.Time) []*dbt.Entity {
 	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.FQDN), pt.source, since)
 }
 
-func (pt *passiveTotal) query(e *et.Event, name string, src *et.Source, ds *config.DataSource) []*dbt.Entity {
+func (pt *passiveTotal) query(e *et.Event, name string, ds *config.DataSource) []*dbt.Entity {
 	names := support.NewFQDNFilter()
 	defer names.Close()
 
@@ -124,7 +122,8 @@ loop:
 			if lastid != "" {
 				url += "&lastId=" + lastid
 			}
-			pt.rlimit.Take()
+
+			_ = pt.rlimit.Wait(context.TODO())
 			resp, err := http.RequestWebPage(context.TODO(), &http.Request{
 				URL: url,
 				Auth: &http.BasicAuth{
@@ -148,7 +147,7 @@ loop:
 			for _, sub := range result.Subdomains {
 				n := dns.RemoveAsteriskLabel(http.CleanName(sub + "." + name))
 				// if the subdomain is not in scope, skip it
-				if _, conf := e.Session.Scope().IsAssetInScope(&domain.FQDN{Name: n}, 0); conf > 0 {
+				if _, conf := e.Session.Scope().IsAssetInScope(&oamdns.FQDN{Name: n}, 0); conf > 0 {
 					names.Insert(n)
 				}
 			}

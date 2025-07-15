@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -9,30 +9,21 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
-	"os"
 	"regexp"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/caffix/stringset"
-	"github.com/owasp-amass/amass/v4/config"
-	et "github.com/owasp-amass/amass/v4/engine/types"
-	amassnet "github.com/owasp-amass/amass/v4/utils/net"
-	"github.com/owasp-amass/amass/v4/utils/net/dns"
-	oam "github.com/owasp-amass/open-asset-model"
-	"github.com/owasp-amass/open-asset-model/domain"
+	"github.com/owasp-amass/amass/v5/config"
+	"github.com/owasp-amass/amass/v5/engine/sessions"
+	et "github.com/owasp-amass/amass/v5/engine/types"
+	amassnet "github.com/owasp-amass/amass/v5/internal/net"
+	"github.com/owasp-amass/amass/v5/internal/net/dns"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
-	"github.com/owasp-amass/open-asset-model/relation"
 	"github.com/owasp-amass/open-asset-model/url"
-	"github.com/owasp-amass/resolve"
 	xurls "mvdan.cc/xurls/v2"
 )
-
-type sessnets struct {
-	last time.Time
-	nets map[string]*oamnet.Netblock
-}
 
 type SweepCallback func(d *et.Event, addr *oamnet.IPAddress, src *et.Source)
 
@@ -40,22 +31,13 @@ const MaxHandlerInstances int = 100
 
 var done chan struct{}
 var subre, urlre *regexp.Regexp
-var mlock sync.RWMutex
-var netblocks map[string]*sessnets
 
 func init() {
 	done = make(chan struct{})
-	rate := resolve.NewRateTracker()
-	trusted, _ = trustedResolvers()
-	trusted.SetRateTracker(rate)
+	trusted = trustedResolvers()
 
 	urlre = xurls.Relaxed()
 	subre = regexp.MustCompile(dns.AnySubdomainRegexString())
-	netblocks = make(map[string]*sessnets)
-	go checkNetblocks()
-
-	postalHost = os.Getenv("POSTAL_SERVER_HOST")
-	postalPort = os.Getenv("POSTAL_SERVER_PORT")
 }
 
 func ScrapeSubdomainNames(s string) []string {
@@ -137,114 +119,46 @@ func GetAPI(name string, e *et.Event) (string, error) {
 	return "", errors.New("no API key found")
 }
 
-func IPToNetblockWithAttempts(session et.Session, ip *oamnet.IPAddress, num int, d time.Duration) (*oamnet.Netblock, error) {
-	var err error
-	var nb *oamnet.Netblock
+func IPNetblock(session et.Session, addrstr string) *sessions.CIDRangerEntry {
+	ip := net.ParseIP(addrstr)
+	if ip == nil {
+		return nil
+	}
 
-	for i := 0; i < num; i++ {
-		nb, err = IPToNetblock(session, ip)
-		if err == nil {
-			break
+	entries, err := session.CIDRanger().ContainingNetworks(ip)
+	if err != nil || len(entries) == 0 {
+		return nil
+	}
+
+	var bits int
+	var arentry *sessions.CIDRangerEntry
+	for _, entry := range entries {
+		e, ok := entry.(*sessions.CIDRangerEntry)
+		if !ok {
+			continue
 		}
-		time.Sleep(d)
-	}
 
-	return nb, err
-}
-
-func IPToNetblock(session et.Session, ip *oamnet.IPAddress) (*oamnet.Netblock, error) {
-	if nb, err := lookupNetblock(session.ID().String(), ip); err == nil {
-		return nb, nil
-	}
-
-	var size int
-	var found *oamnet.Netblock
-	if entities, err := session.Cache().FindEntitiesByType(oam.Netblock, session.Cache().StartTime()); err == nil && len(entities) > 0 {
-		for _, entity := range entities {
-			if nb, ok := entity.Asset.(*oamnet.Netblock); ok && nb.CIDR.Contains(ip.Address) {
-				if s := nb.CIDR.Masked().Bits(); s > size {
-					size = s
-					found = nb
-				}
-			}
+		n := e.Net
+		if ones, _ := n.Mask.Size(); ones > bits {
+			bits = ones
+			arentry = e
 		}
 	}
 
-	if found == nil {
-		return nil, errors.New("no netblock match in the cache")
-	}
-
-	AddNetblock(session.ID().String(), found)
-	return found, nil
+	return arentry
 }
 
-func lookupNetblock(sessid string, ip *oamnet.IPAddress) (*oamnet.Netblock, error) {
-	mlock.RLock()
-	defer mlock.RUnlock()
-
-	n, ok := netblocks[sessid]
-	if !ok {
-		return nil, errors.New("no netblocks found")
-	}
-	n.last = time.Now()
-
-	var size int
-	var found *oamnet.Netblock
-	for _, nb := range n.nets {
-		if nb.CIDR.Contains(ip.Address) {
-			if s := nb.CIDR.Masked().Bits(); s > size {
-				size = s
-				found = nb
-			}
-		}
+func AddNetblock(session et.Session, cidr string, asn int, src *et.Source) error {
+	_, ipnet, err := net.ParseCIDR(cidr)
+	if err != nil {
+		return err
 	}
 
-	if found == nil {
-		return nil, errors.New("no netblock match")
-	}
-	return found, nil
-}
-
-func AddNetblock(sessid string, nb *oamnet.Netblock) {
-	mlock.Lock()
-	defer mlock.Unlock()
-
-	if _, found := netblocks[sessid]; !found {
-		netblocks[sessid] = &sessnets{nets: make(map[string]*oamnet.Netblock)}
-	}
-
-	netblocks[sessid].last = time.Now()
-	netblocks[sessid].nets[nb.CIDR.String()] = nb
-}
-
-func checkNetblocks() {
-	t := time.NewTicker(10 * time.Minute)
-	defer t.Stop()
-
-	for {
-		select {
-		case <-done:
-			return
-		case <-t.C:
-			cleanSessionNetblocks()
-		}
-	}
-}
-
-func cleanSessionNetblocks() {
-	mlock.Lock()
-	defer mlock.Unlock()
-
-	var sessids []string
-	for sessid, n := range netblocks {
-		if time.Since(n.last) > time.Hour {
-			sessids = append(sessids, sessid)
-		}
-	}
-
-	for _, sessid := range sessids {
-		delete(netblocks, sessid)
-	}
+	return session.CIDRanger().Insert(&sessions.CIDRangerEntry{
+		Net: ipnet,
+		ASN: asn,
+		Src: src,
+	})
 }
 
 func IPAddressSweep(e *et.Event, addr *oamnet.IPAddress, src *et.Source, size int, callback SweepCallback) {
@@ -254,24 +168,18 @@ func IPAddressSweep(e *et.Event, addr *oamnet.IPAddress, src *et.Source, size in
 		return
 	}
 
-	n, err := IPToNetblockWithAttempts(e.Session, addr, 60, time.Second)
-	if err != nil {
-		return
+	var mask net.IPMask
+	addrstr := addr.Address.String()
+	ip := net.ParseIP(addrstr)
+	if amassnet.IsIPv4(ip) {
+		mask = net.CIDRMask(18, 32)
+	} else if amassnet.IsIPv6(ip) {
+		mask = net.CIDRMask(64, 128)
 	}
 
-	addrstr := addr.Address.String()
-	_, cidr, err := net.ParseCIDR(n.CIDR.String())
-	if err != nil || cidr == nil {
-		a := net.ParseIP(addrstr)
-		mask := net.CIDRMask(18, 32)
-		if amassnet.IsIPv6(a) {
-			mask = net.CIDRMask(64, 128)
-		}
-
-		cidr = &net.IPNet{
-			IP:   a.Mask(mask),
-			Mask: mask,
-		}
+	cidr := &net.IPNet{
+		IP:   ip.Mask(mask),
+		Mask: mask,
 	}
 
 	for _, ip := range amassnet.CIDRSubset(cidr, addrstr, size) {
@@ -286,7 +194,7 @@ func IPAddressSweep(e *et.Event, addr *oamnet.IPAddress, src *et.Source, size in
 	}
 }
 
-func IsCNAME(session et.Session, name *domain.FQDN) (*domain.FQDN, bool) {
+func IsCNAME(session et.Session, name *oamdns.FQDN) (*oamdns.FQDN, bool) {
 	fqdns, err := session.Cache().FindEntitiesByContent(name, session.Cache().StartTime())
 	if err != nil || len(fqdns) != 1 {
 		return nil, false
@@ -295,9 +203,9 @@ func IsCNAME(session et.Session, name *domain.FQDN) (*domain.FQDN, bool) {
 
 	if edges, err := session.Cache().OutgoingEdges(fqdn, session.Cache().StartTime(), "dns_record"); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
-			if rec, ok := edge.Relation.(*relation.BasicDNSRelation); ok && rec.Header.RRType == 5 {
+			if rec, ok := edge.Relation.(*oamdns.BasicDNSRelation); ok && rec.Header.RRType == 5 {
 				if to, err := session.Cache().FindEntityById(edge.ToEntity.ID); err == nil {
-					if cname, ok := to.Asset.(*domain.FQDN); ok {
+					if cname, ok := to.Asset.(*oamdns.FQDN); ok {
 						return cname, true
 					}
 				}
@@ -307,7 +215,7 @@ func IsCNAME(session et.Session, name *domain.FQDN) (*domain.FQDN, bool) {
 	return nil, false
 }
 
-func NameIPAddresses(session et.Session, name *domain.FQDN) []*oamnet.IPAddress {
+func NameIPAddresses(session et.Session, name *oamdns.FQDN) []*oamnet.IPAddress {
 	fqdns, err := session.Cache().FindEntitiesByContent(name, session.Cache().StartTime())
 	if err != nil || len(fqdns) != 1 {
 		return nil
@@ -317,7 +225,7 @@ func NameIPAddresses(session et.Session, name *domain.FQDN) []*oamnet.IPAddress 
 	var results []*oamnet.IPAddress
 	if edges, err := session.Cache().OutgoingEdges(fqdn, session.Cache().StartTime(), "dns_record"); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
-			if rec, ok := edge.Relation.(*relation.BasicDNSRelation); ok && (rec.Header.RRType == 1 || rec.Header.RRType == 28) {
+			if rec, ok := edge.Relation.(*oamdns.BasicDNSRelation); ok && (rec.Header.RRType == 1 || rec.Header.RRType == 28) {
 				if to, err := session.Cache().FindEntityById(edge.ToEntity.ID); err == nil {
 					if ip, ok := to.Asset.(*oamnet.IPAddress); ok {
 						results = append(results, ip)
@@ -333,12 +241,92 @@ func NameIPAddresses(session et.Session, name *domain.FQDN) []*oamnet.IPAddress 
 	return nil
 }
 
-func NameResolved(session et.Session, name *domain.FQDN) bool {
+func NameResolved(session et.Session, name *oamdns.FQDN) bool {
 	if _, found := IsCNAME(session, name); found {
 		return true
 	}
 	if ips := NameIPAddresses(session, name); len(ips) > 0 {
 		return true
+	}
+	return false
+}
+
+type FQDNMeta struct {
+	SLDInScope  bool
+	RecordTypes map[int]bool
+}
+
+func AddSLDInScope(e *et.Event) {
+	if e == nil {
+		return
+	} else if _, ok := e.Entity.Asset.(*oamdns.FQDN); !ok {
+		return
+	}
+
+	if e.Meta == nil {
+		e.Meta = &FQDNMeta{
+			SLDInScope: true,
+		}
+	}
+
+	if fm, ok := e.Meta.(*FQDNMeta); ok {
+		fm.SLDInScope = true
+	}
+}
+
+func HasSLDInScope(e *et.Event) bool {
+	if e == nil {
+		return false
+	} else if _, ok := e.Entity.Asset.(*oamdns.FQDN); !ok {
+		return false
+	}
+
+	if e.Meta == nil {
+		return false
+	}
+
+	if fm, ok := e.Meta.(*FQDNMeta); ok {
+		return fm.SLDInScope
+	}
+	return false
+}
+
+func AddDNSRecordType(e *et.Event, rrtype int) {
+	if e == nil {
+		return
+	} else if _, ok := e.Entity.Asset.(*oamdns.FQDN); !ok {
+		return
+	}
+
+	if e.Meta == nil {
+		e.Meta = &FQDNMeta{
+			RecordTypes: make(map[int]bool),
+		}
+	}
+
+	if fm, ok := e.Meta.(*FQDNMeta); ok {
+		if fm.RecordTypes == nil {
+			fm.RecordTypes = make(map[int]bool)
+		}
+		fm.RecordTypes[rrtype] = true
+	}
+}
+
+func HasDNSRecordType(e *et.Event, rrtype int) bool {
+	if e == nil {
+		return false
+	} else if _, ok := e.Entity.Asset.(*oamdns.FQDN); !ok {
+		return false
+	}
+
+	if e.Meta == nil {
+		return false
+	}
+
+	if fm, ok := e.Meta.(*FQDNMeta); ok && fm.RecordTypes != nil {
+		if _, found := fm.RecordTypes[rrtype]; found {
+			return true
+		}
 	}
 	return false
 }

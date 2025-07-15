@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -11,21 +11,20 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
-	"github.com/owasp-amass/amass/v4/engine/plugins/support"
-	et "github.com/owasp-amass/amass/v4/engine/types"
+	"github.com/owasp-amass/amass/v5/engine/plugins/support"
+	et "github.com/owasp-amass/amass/v5/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
-	"github.com/owasp-amass/open-asset-model/domain"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
+	"github.com/owasp-amass/open-asset-model/general"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
-	"github.com/owasp-amass/open-asset-model/property"
-	"github.com/owasp-amass/open-asset-model/relation"
-	"github.com/owasp-amass/resolve"
 )
 
 type dnsIP struct {
 	name    string
 	queries []uint16
 	plugin  *dnsPlugin
+	source  *et.Source
 }
 
 type relIP struct {
@@ -34,12 +33,12 @@ type relIP struct {
 }
 
 func (d *dnsIP) check(e *et.Event) error {
-	fqdn, ok := e.Entity.Asset.(*domain.FQDN)
+	fqdn, ok := e.Entity.Asset.(*oamdns.FQDN)
 	if !ok {
 		return errors.New("failed to extract the FQDN asset")
 	}
 
-	if _, found := support.IsCNAME(e.Session, fqdn); found {
+	if support.HasDNSRecordType(e, int(dns.TypeCNAME)) {
 		return nil
 	}
 
@@ -49,11 +48,10 @@ func (d *dnsIP) check(e *et.Event) error {
 	}
 
 	var ips []*relIP
-	src := d.plugin.source
-	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, src, since) {
+	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, d.source, since) {
 		ips = append(ips, d.lookup(e, fqdn.Name, since)...)
 	} else {
-		ips = append(ips, d.query(e, e.Entity, src)...)
+		ips = append(ips, d.query(e, e.Entity)...)
 	}
 
 	if len(ips) > 0 {
@@ -75,7 +73,7 @@ func (d *dnsIP) check(e *et.Event) error {
 				size = d.plugin.firstSweepSize
 			}
 			if size > 0 {
-				support.IPAddressSweep(e, ip, src, size, sweepCallback)
+				support.IPAddressSweep(e, ip, d.source, size, sweepCallback)
 			}
 		}
 	}
@@ -99,15 +97,15 @@ func (d *dnsIP) lookup(e *et.Event, fqdn string, since time.Time) []*relIP {
 	return ips
 }
 
-func (d *dnsIP) query(e *et.Event, name *dbt.Entity, src *et.Source) []*relIP {
+func (d *dnsIP) query(e *et.Event, name *dbt.Entity) []*relIP {
 	var ips []*relIP
 
-	fqdn := name.Asset.(*domain.FQDN)
+	fqdn := name.Asset.(*oamdns.FQDN)
 	for _, qtype := range d.queries {
 		if rr, err := support.PerformQuery(fqdn.Name, qtype); err == nil {
-			if records := d.store(e, name, src, rr); len(records) > 0 {
+			if records := d.store(e, name, rr); len(records) > 0 {
 				ips = append(ips, records...)
-				support.MarkAssetMonitored(e.Session, name, src)
+				support.MarkAssetMonitored(e.Session, name, d.source)
 			}
 		}
 	}
@@ -115,49 +113,55 @@ func (d *dnsIP) query(e *et.Event, name *dbt.Entity, src *et.Source) []*relIP {
 	return ips
 }
 
-func (d *dnsIP) store(e *et.Event, fqdn *dbt.Entity, src *et.Source, rr []*resolve.ExtractedAnswer) []*relIP {
+func (d *dnsIP) store(e *et.Event, fqdn *dbt.Entity, rr []dns.RR) []*relIP {
 	var ips []*relIP
 
 	for _, record := range rr {
-		if record.Type == dns.TypeA {
-			if ip, err := e.Session.Cache().CreateAsset(&oamnet.IPAddress{Address: netip.MustParseAddr(record.Data), Type: "IPv4"}); err == nil && ip != nil {
+		if record.Header().Rrtype == dns.TypeA {
+			addr := (record.(*dns.A)).A.String()
+
+			if ip, err := e.Session.Cache().CreateAsset(&oamnet.IPAddress{Address: netip.MustParseAddr(string(addr)), Type: "IPv4"}); err == nil && ip != nil {
 				if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
-					Relation: &relation.BasicDNSRelation{
+					Relation: &oamdns.BasicDNSRelation{
 						Name: "dns_record",
-						Header: relation.RRHeader{
-							RRType: int(record.Type),
-							Class:  1,
+						Header: oamdns.RRHeader{
+							RRType: int(record.Header().Rrtype),
+							Class:  int(record.Header().Class),
+							TTL:    int(record.Header().Ttl),
 						},
 					},
 					FromEntity: fqdn,
 					ToEntity:   ip,
 				}); err == nil && edge != nil {
 					ips = append(ips, &relIP{rtype: "dns_record", ip: ip})
-					_, _ = e.Session.Cache().CreateEdgeProperty(edge, &property.SourceProperty{
-						Source:     src.Name,
-						Confidence: src.Confidence,
+					_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
+						Source:     d.source.Name,
+						Confidence: d.source.Confidence,
 					})
 				}
 			} else {
 				e.Session.Log().Error(err.Error(), slog.Group("plugin", "name", d.plugin.name, "handler", d.name))
 			}
-		} else if record.Type == dns.TypeAAAA {
-			if ip, err := e.Session.Cache().CreateAsset(&oamnet.IPAddress{Address: netip.MustParseAddr(record.Data), Type: "IPv6"}); err == nil {
+		} else if record.Header().Rrtype == dns.TypeAAAA {
+			addr := (record.(*dns.AAAA)).AAAA.String()
+
+			if ip, err := e.Session.Cache().CreateAsset(&oamnet.IPAddress{Address: netip.MustParseAddr(addr), Type: "IPv6"}); err == nil {
 				if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
-					Relation: &relation.BasicDNSRelation{
+					Relation: &oamdns.BasicDNSRelation{
 						Name: "dns_record",
-						Header: relation.RRHeader{
-							RRType: int(record.Type),
-							Class:  1,
+						Header: oamdns.RRHeader{
+							RRType: int(record.Header().Rrtype),
+							Class:  int(record.Header().Class),
+							TTL:    int(record.Header().Ttl),
 						},
 					},
 					FromEntity: fqdn,
 					ToEntity:   ip,
 				}); err == nil && edge != nil {
 					ips = append(ips, &relIP{rtype: "dns_record", ip: ip})
-					_, _ = e.Session.Cache().CreateEdgeProperty(edge, &property.SourceProperty{
-						Source:     src.Name,
-						Confidence: src.Confidence,
+					_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
+						Source:     d.source.Name,
+						Confidence: d.source.Confidence,
 					})
 				}
 			} else {
@@ -172,6 +176,13 @@ func (d *dnsIP) store(e *et.Event, fqdn *dbt.Entity, src *et.Source, rr []*resol
 func (d *dnsIP) process(e *et.Event, name string, addrs []*relIP) {
 	for _, a := range addrs {
 		ip := a.ip.Asset.(*oamnet.IPAddress)
+
+		switch ip.Type {
+		case "IPv4":
+			support.AddDNSRecordType(e, int(dns.TypeA))
+		case "IPv6":
+			support.AddDNSRecordType(e, int(dns.TypeAAAA))
+		}
 
 		_ = e.Dispatcher.DispatchEvent(&et.Event{
 			Name:    ip.Address.String(),

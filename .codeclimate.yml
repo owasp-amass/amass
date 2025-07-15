@@ -31,7 +31,4 @@ checks:
     config:
       threshold: 10
 exclude_patterns:
-- "doc/"
-- "examples/"
-- "images/"
 - "resources/"

@@ -1,10 +1,11 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
 package whois
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"strings"
@@ -12,14 +13,13 @@ import (
 
 	whoisclient "github.com/likexian/whois"
 	whoisparser "github.com/likexian/whois-parser"
-	"github.com/owasp-amass/amass/v4/engine/plugins/support"
-	et "github.com/owasp-amass/amass/v4/engine/types"
+	"github.com/owasp-amass/amass/v5/engine/plugins/support"
+	et "github.com/owasp-amass/amass/v5/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
-	"github.com/owasp-amass/open-asset-model/domain"
-	"github.com/owasp-amass/open-asset-model/property"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
+	"github.com/owasp-amass/open-asset-model/general"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
-	"github.com/owasp-amass/open-asset-model/relation"
 	"golang.org/x/net/publicsuffix"
 )
 
@@ -33,7 +33,7 @@ func (r *fqdnLookup) Name() string {
 }
 
 func (r *fqdnLookup) check(e *et.Event) error {
-	fqdn, ok := e.Entity.Asset.(*domain.FQDN)
+	fqdn, ok := e.Entity.Asset.(*oamdns.FQDN)
 	if !ok {
 		return errors.New("failed to extract the FQDN asset")
 	}
@@ -73,7 +73,7 @@ func (r *fqdnLookup) lookup(e *et.Event, name string, src *et.Source, since time
 }
 
 func (r *fqdnLookup) query(e *et.Event, name string, asset *dbt.Entity, src *et.Source) (*dbt.Entity, *whoisparser.WhoisInfo) {
-	r.plugin.rlimit.Take()
+	_ = r.plugin.rlimit.Wait(context.TODO())
 
 	resp, err := whoisclient.Whois(name)
 	if err != nil {
@@ -84,7 +84,7 @@ func (r *fqdnLookup) query(e *et.Event, name string, asset *dbt.Entity, src *et.
 }
 
 func (r *fqdnLookup) store(e *et.Event, resp string, asset *dbt.Entity, src *et.Source) (*dbt.Entity, *whoisparser.WhoisInfo) {
-	fqdn := asset.Asset.(*domain.FQDN)
+	fqdn := asset.Asset.(*oamdns.FQDN)
 
 	info, err := whoisparser.Parse(resp)
 	if err != nil || info.Domain.Domain != fqdn.Name {
@@ -119,11 +119,11 @@ func (r *fqdnLookup) store(e *et.Event, resp string, asset *dbt.Entity, src *et.
 	autasset, err := e.Session.Cache().CreateAsset(dr)
 	if err == nil && autasset != nil {
 		if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
-			Relation:   &relation.SimpleRelation{Name: "registration"},
+			Relation:   &general.SimpleRelation{Name: "registration"},
 			FromEntity: asset,
 			ToEntity:   autasset,
 		}); err == nil && edge != nil {
-			_, _ = e.Session.Cache().CreateEdgeProperty(edge, &property.SourceProperty{
+			_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
 				Source:     src.Name,
 				Confidence: src.Confidence,
 			})
@@ -144,7 +144,7 @@ func (r *fqdnLookup) process(e *et.Event, record *whoisparser.WhoisInfo, fqdn, d
 		Session: e.Session,
 	}))
 
-	fname := fqdn.Asset.(*domain.FQDN)
+	fname := fqdn.Asset.(*oamdns.FQDN)
 	e.Session.Log().Info("relationship discovered", "from", fname.Name, "relation",
 		"registration", "to", name, slog.Group("plugin", "name", r.plugin.name, "handler", r.name))
 }

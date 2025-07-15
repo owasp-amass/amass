@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -13,28 +13,30 @@ import (
 	"time"
 
 	"github.com/caffix/stringset"
-	"github.com/owasp-amass/amass/v4/engine/plugins/support"
-	et "github.com/owasp-amass/amass/v4/engine/types"
-	"github.com/owasp-amass/amass/v4/utils/net/http"
+	"github.com/owasp-amass/amass/v5/engine/plugins/support"
+	et "github.com/owasp-amass/amass/v5/engine/types"
+	"github.com/owasp-amass/amass/v5/internal/net/http"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
-	"github.com/owasp-amass/open-asset-model/domain"
-	"go.uber.org/ratelimit"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
+	"golang.org/x/time/rate"
 )
 
 type bing struct {
 	name   string
 	fmtstr string
 	log    *slog.Logger
-	rlimit ratelimit.Limiter
+	rlimit *rate.Limiter
 	source *et.Source
 }
 
 func NewBing() et.Plugin {
+	limit := rate.Every(2 * time.Second)
+
 	return &bing{
 		name:   "Bing",
 		fmtstr: "https://www.ask.com/web?o=0&l=dir&qo=pagination&page=%d&q=site:%s -www.%s",
-		rlimit: ratelimit.New(2, ratelimit.WithoutSlack),
+		rlimit: rate.NewLimiter(limit, 1),
 		source: &et.Source{
 			Name:       "Bing",
 			Confidence: 60,
@@ -50,13 +52,12 @@ func (b *bing) Start(r et.Registry) error {
 	b.log = r.Log().WithGroup("plugin").With("name", b.name)
 
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:       b,
-		Name:         b.name + "-Handler",
-		Priority:     7,
-		MaxInstances: 10,
-		Transforms:   []string{string(oam.FQDN)},
-		EventType:    oam.FQDN,
-		Callback:     b.check,
+		Plugin:     b,
+		Name:       b.name + "-Handler",
+		Priority:   9,
+		Transforms: []string{string(oam.FQDN)},
+		EventType:  oam.FQDN,
+		Callback:   b.check,
 	}); err != nil {
 		return err
 	}
@@ -70,14 +71,12 @@ func (b *bing) Stop() {
 }
 
 func (b *bing) check(e *et.Event) error {
-	fqdn, ok := e.Entity.Asset.(*domain.FQDN)
+	fqdn, ok := e.Entity.Asset.(*oamdns.FQDN)
 	if !ok {
 		return errors.New("failed to extract the FQDN asset")
 	}
 
-	if a, conf := e.Session.Scope().IsAssetInScope(fqdn, 0); conf == 0 || a == nil {
-		return nil
-	} else if f, ok := a.(*domain.FQDN); !ok || f == nil || !strings.EqualFold(fqdn.Name, f.Name) {
+	if !support.HasSLDInScope(e) {
 		return nil
 	}
 
@@ -109,7 +108,7 @@ func (b *bing) query(e *et.Event, name string) []*dbt.Entity {
 	defer subs.Close()
 
 	for i := 1; i < 10; i++ {
-		b.rlimit.Take()
+		_ = b.rlimit.Wait(context.TODO())
 		resp, err := http.RequestWebPage(context.TODO(), &http.Request{URL: fmt.Sprintf(b.fmtstr, i, name, name)})
 		if err != nil || resp.Body == "" {
 			break
@@ -118,7 +117,7 @@ func (b *bing) query(e *et.Event, name string) []*dbt.Entity {
 		for _, n := range support.ScrapeSubdomainNames(resp.Body) {
 			nstr := strings.ToLower(strings.TrimSpace(n))
 			// if the subdomain is not in scope, skip it
-			if _, conf := e.Session.Scope().IsAssetInScope(&domain.FQDN{Name: nstr}, 0); conf > 0 {
+			if _, conf := e.Session.Scope().IsAssetInScope(&oamdns.FQDN{Name: nstr}, 0); conf > 0 {
 				subs.Insert(nstr)
 			}
 		}

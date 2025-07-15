@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -12,8 +12,8 @@ import (
 	"strings"
 
 	"github.com/caffix/stringset"
-	amassnet "github.com/owasp-amass/amass/v4/utils/net"
-	"github.com/owasp-amass/amass/v4/utils/net/dns"
+	amassnet "github.com/owasp-amass/amass/v5/internal/net"
+	"github.com/owasp-amass/amass/v5/internal/net/dns"
 )
 
 func (c *Config) loadSeedandScopeSettings() error {
@@ -46,33 +46,30 @@ func (c *Config) loadSeedandScopeSettings() error {
 }
 
 func (s *Scope) isScopeEmpty(scopeSwitch bool) bool {
-	isEmpty := true
-
 	if len(s.Domains) > 0 {
-		isEmpty = false
+		return false
 	}
 	if len(s.Addresses) > 0 {
-		isEmpty = false
+		return false
 	}
 	if len(s.CIDRs) > 0 {
-		isEmpty = false
+		return false
 	}
 	if len(s.ASNs) > 0 {
-		isEmpty = false
+		return false
 	}
 	if len(s.IP) > 0 {
-		isEmpty = false
+		return false
 	}
 	if scopeSwitch && portCheck(s.Ports) {
-		isEmpty = false
+		return false
 	} else if len(s.Ports) > 0 {
-		isEmpty = false
+		return false
 	}
 	if len(s.Blacklist) > 0 {
-		isEmpty = false
+		return false
 	}
-
-	return isEmpty
+	return true
 }
 
 func (s *Scope) populate() error {

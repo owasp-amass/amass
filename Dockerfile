@@ -1,13 +1,14 @@
-FROM golang:1.23-alpine AS build
+FROM golang:1.24.4-alpine AS build
 RUN apk --no-cache add git
 WORKDIR /go/src/github.com/owasp-amass/amass
 COPY . .
-RUN go install -v ./...
+RUN CGO_ENABLED=0 go install -v ./...
 
 FROM alpine:latest
 RUN apk add --no-cache bash ca-certificates
 RUN apk --no-cache --update upgrade
 COPY --from=build /go/bin/amass /bin/amass
+COPY --from=build /go/bin/oam_enum /bin/enum
 COPY --from=build /go/bin/amass_engine /bin/engine
 COPY --from=build /go/bin/ae_isready /bin/ae_isready
 COPY --from=build /go/bin/oam_subs /bin/subs

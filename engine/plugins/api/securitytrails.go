@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -12,27 +12,29 @@ import (
 	"strings"
 	"time"
 
-	"github.com/owasp-amass/amass/v4/engine/plugins/support"
-	et "github.com/owasp-amass/amass/v4/engine/types"
-	"github.com/owasp-amass/amass/v4/utils/net/dns"
-	"github.com/owasp-amass/amass/v4/utils/net/http"
+	"github.com/owasp-amass/amass/v5/engine/plugins/support"
+	et "github.com/owasp-amass/amass/v5/engine/types"
+	"github.com/owasp-amass/amass/v5/internal/net/dns"
+	"github.com/owasp-amass/amass/v5/internal/net/http"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
-	"github.com/owasp-amass/open-asset-model/domain"
-	"go.uber.org/ratelimit"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
+	"golang.org/x/time/rate"
 )
 
 type securityTrails struct {
 	name   string
 	log    *slog.Logger
-	rlimit ratelimit.Limiter
+	rlimit *rate.Limiter
 	source *et.Source
 }
 
 func NewSecurityTrails() et.Plugin {
+	limit := rate.Every(2 * time.Second)
+
 	return &securityTrails{
 		name:   "SecurityTrails",
-		rlimit: ratelimit.New(2, ratelimit.WithoutSlack),
+		rlimit: rate.NewLimiter(limit, 1),
 		source: &et.Source{
 			Name:       "SecurityTrails",
 			Confidence: 80,
@@ -48,13 +50,12 @@ func (st *securityTrails) Start(r et.Registry) error {
 	st.log = r.Log().WithGroup("plugin").With("name", st.name)
 
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:       st,
-		Name:         st.name + "-Handler",
-		Priority:     6,
-		MaxInstances: 10,
-		Transforms:   []string{string(oam.FQDN)},
-		EventType:    oam.FQDN,
-		Callback:     st.check,
+		Plugin:     st,
+		Name:       st.name + "-Handler",
+		Priority:   9,
+		Transforms: []string{string(oam.FQDN)},
+		EventType:  oam.FQDN,
+		Callback:   st.check,
 	}); err != nil {
 		return err
 	}
@@ -68,9 +69,13 @@ func (st *securityTrails) Stop() {
 }
 
 func (st *securityTrails) check(e *et.Event) error {
-	fqdn, ok := e.Entity.Asset.(*domain.FQDN)
+	fqdn, ok := e.Entity.Asset.(*oamdns.FQDN)
 	if !ok {
 		return errors.New("failed to extract the FQDN asset")
+	}
+
+	if !support.HasSLDInScope(e) {
+		return nil
 	}
 
 	ds := e.Session.Config().GetDataSourceConfig(st.name)
@@ -83,12 +88,6 @@ func (st *securityTrails) check(e *et.Event) error {
 		if cr != nil && cr.Apikey != "" {
 			keys = append(keys, cr.Apikey)
 		}
-	}
-
-	if a, conf := e.Session.Scope().IsAssetInScope(fqdn, 0); conf == 0 || a == nil {
-		return nil
-	} else if f, ok := a.(*domain.FQDN); !ok || f == nil || !strings.EqualFold(fqdn.Name, f.Name) {
-		return nil
 	}
 
 	since, err := support.TTLStartTime(e.Session.Config(), string(oam.FQDN), string(oam.FQDN), st.name)
@@ -118,7 +117,7 @@ func (st *securityTrails) query(e *et.Event, name string, keys []string) []*dbt.
 	var names []string
 
 	for _, key := range keys {
-		st.rlimit.Take()
+		_ = st.rlimit.Wait(context.TODO())
 		resp, err := http.RequestWebPage(context.TODO(), &http.Request{
 			URL:    "https://api.securitytrails.com/v1/domain/" + name + "/subdomains",
 			Header: http.Header{"APIKEY": []string{key}},
@@ -137,7 +136,7 @@ func (st *securityTrails) query(e *et.Event, name string, keys []string) []*dbt.
 		for _, sub := range result.Subdomains {
 			nstr := strings.ToLower(strings.TrimSpace(dns.RemoveAsteriskLabel(sub + "." + name)))
 			// if the subdomain is not in scope, skip it
-			if _, conf := e.Session.Scope().IsAssetInScope(&domain.FQDN{Name: nstr}, 0); conf > 0 {
+			if _, conf := e.Session.Scope().IsAssetInScope(&oamdns.FQDN{Name: nstr}, 0); conf > 0 {
 				names = append(names, nstr)
 			}
 		}

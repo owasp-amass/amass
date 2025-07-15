@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -9,17 +9,16 @@ import (
 	"log/slog"
 
 	"github.com/miekg/dns"
-	"github.com/owasp-amass/amass/v4/engine/plugins/support"
-	"github.com/owasp-amass/amass/v4/engine/sessions/scope"
-	et "github.com/owasp-amass/amass/v4/engine/types"
+	"github.com/owasp-amass/amass/v5/engine/plugins/support"
+	"github.com/owasp-amass/amass/v5/engine/sessions/scope"
+	et "github.com/owasp-amass/amass/v5/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
-	"github.com/owasp-amass/open-asset-model/domain"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
+	"github.com/owasp-amass/open-asset-model/general"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
-	"github.com/owasp-amass/open-asset-model/property"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
-	"github.com/owasp-amass/open-asset-model/relation"
-	"github.com/owasp-amass/resolve"
+	"github.com/owasp-amass/resolve/utils"
 	"golang.org/x/net/publicsuffix"
 )
 
@@ -55,7 +54,7 @@ func (h *horizPlugin) Start(r et.Registry) error {
 	if err := r.RegisterHandler(&et.Handler{
 		Plugin:       h,
 		Name:         h.horfqdn.name,
-		Priority:     3,
+		Priority:     6,
 		MaxInstances: support.MaxHandlerInstances,
 		Transforms:   []string{string(oam.FQDN)},
 		EventType:    oam.FQDN,
@@ -108,6 +107,7 @@ func (h *horizPlugin) addAssociatedRelationship(e *et.Event, assocs []*scope.Ass
 	}
 }
 
+// TODO: this needs to be cleaned up
 func (h *horizPlugin) makeAssocRelationshipEntries(e *et.Event, assoc, assoc2 *dbt.Entity) {
 	// do not connect an asset to itself
 	if assoc.ID == assoc2.ID {
@@ -115,12 +115,12 @@ func (h *horizPlugin) makeAssocRelationshipEntries(e *et.Event, assoc, assoc2 *d
 	}
 
 	_, _ = e.Session.Cache().CreateEdge(&dbt.Edge{
-		Relation:   &relation.SimpleRelation{Name: "associated_with"},
+		Relation:   &general.SimpleRelation{Name: "associated_with"},
 		FromEntity: assoc,
 		ToEntity:   assoc2,
 	})
 	_, _ = e.Session.Cache().CreateEdge(&dbt.Edge{
-		Relation:   &relation.SimpleRelation{Name: "associated_with"},
+		Relation:   &general.SimpleRelation{Name: "associated_with"},
 		FromEntity: assoc2,
 		ToEntity:   assoc,
 	})
@@ -153,7 +153,7 @@ func (h *horizPlugin) process(e *et.Event, assets []*dbt.Entity) {
 			Session: e.Session,
 		})
 
-		_, _ = e.Session.Cache().CreateEntityProperty(asset, &property.SourceProperty{
+		_, _ = e.Session.Cache().CreateEntityProperty(asset, &general.SourceProperty{
 			Source:     h.source.Name,
 			Confidence: h.source.Confidence,
 		})
@@ -174,12 +174,12 @@ func (h *horizPlugin) ipPTRTargetsInScope(e *et.Event, nb *dbt.Entity) {
 			}
 
 			if ents, err := e.Session.Cache().FindEntitiesByContent(
-				&domain.FQDN{Name: resolve.RemoveLastDot(reverse)}, e.Session.Cache().StartTime()); err == nil && len(ents) == 1 {
+				&oamdns.FQDN{Name: utils.RemoveLastDot(reverse)}, e.Session.Cache().StartTime()); err == nil && len(ents) == 1 {
 				a := ents[0]
 
 				if edges, err := e.Session.Cache().OutgoingEdges(a, e.Session.Cache().StartTime(), "dns_record"); err == nil && len(edges) > 0 {
 					for _, edge := range edges {
-						if rel, ok := edge.Relation.(*relation.BasicDNSRelation); !ok || rel.Header.RRType != 12 {
+						if rel, ok := edge.Relation.(*oamdns.BasicDNSRelation); !ok || rel.Header.RRType != 12 {
 							continue
 						}
 						to, err := e.Session.Cache().FindEntityById(edge.ToEntity.ID)
@@ -276,7 +276,7 @@ func (h *horizPlugin) sweepAroundIPs(e *et.Event, nb *dbt.Entity) {
 func (h *horizPlugin) submitIPAddresses(e *et.Event, asset *oamnet.IPAddress, src *et.Source) {
 	addr, err := e.Session.Cache().CreateAsset(asset)
 	if err == nil && addr != nil {
-		_, _ = e.Session.Cache().CreateEntityProperty(addr, &property.SourceProperty{
+		_, _ = e.Session.Cache().CreateEntityProperty(addr, &general.SourceProperty{
 			Source:     src.Name,
 			Confidence: src.Confidence,
 		})
@@ -289,9 +289,9 @@ func (h *horizPlugin) submitIPAddresses(e *et.Event, asset *oamnet.IPAddress, sr
 }
 
 func (h *horizPlugin) submitFQDN(e *et.Event, dom string) {
-	fqdn, err := e.Session.Cache().CreateAsset(&domain.FQDN{Name: dom})
+	fqdn, err := e.Session.Cache().CreateAsset(&oamdns.FQDN{Name: dom})
 	if err == nil && fqdn != nil {
-		_, _ = e.Session.Cache().CreateEntityProperty(fqdn, &property.SourceProperty{
+		_, _ = e.Session.Cache().CreateEntityProperty(fqdn, &general.SourceProperty{
 			Source:     h.source.Name,
 			Confidence: h.source.Confidence,
 		})

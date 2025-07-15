@@ -1,0 +1,80 @@
+scope:
+#  domains: # registered domain names in scope
+#    - owasp.org
+#  ips: # IP addresses in scope, multiple methods of inserting IP addresses can be used
+#    - 192.0.2.1
+#    - 192.0.2.2
+#    - 192.168.0.3-8
+#    - 192.168.0.10-192.168.0.20
+#  cidrs: # CIDR ranges that are in scope
+#    - 192.0.2.0/24
+#    - 192.0.2.128/25
+  ports: # ports to be used when actively scanning services
+    - 80
+    - 443
+    - 8000
+    - 8080
+    - 8443
+    - 8888
+#  blacklist: # subdomains to be blacklisted
+#    - example.owasp.org
+options:
+  datasources: "./datasources.yaml"
+  # engine: "http://127.0.0.1:4000/graphql"
+  # database: "bolt://neo4j:amass4OWASP@neo4j:7687/neo4j"
+  # database: "postgres://amass:amass4OWASP@assetdb:5432/assetdb"
+  bruteforce:
+    enabled: false
+    wordlists: # wordlist(s) specific to FQDN brute forcing
+      - "./namelist.txt"
+  alterations:
+    enabled: false
+    wordlists: # wordlist(s) specific to name alterations
+      - "./alterations.txt"
+  default_transform_values:
+    ttl: 1440 # minutes. If not specified, the default is 1440 minutes (1 day)
+    confidence: 50 # 50%
+    priority: 5
+
+transformations:
+  Account->ALL:
+    ttl: 1080 # 7 days
+  AutnumRecord->ALL:
+  AutonomousSystem->ALL:
+  AutonomousSystem->RDAP:
+    ttl: 43200 # 30 days
+  ContactRecord->ALL:
+  DomainRecord->ALL:
+  File->ALL:
+  FQDN->ALL:
+  FQDN->DNS:
+    ttl: 1440
+  FQDN->DomainRecord:
+    ttl: 43200 # 30 days
+  FundsTransfer->ALL:
+    ttl: 1080 # 7 days
+  Identifier->ALL:
+  Identifier->GLEIF:
+    ttl: 43200 # 30 days
+  Identifier->RDAP:
+    ttl: 43200 # 30 days
+  IPAddress->ALL:
+  IPNetRecord->ALL:
+  Location->ALL:
+  Netblock->ALL:
+  Netblock->RDAP:
+    ttl: 43200 # 30 days
+  Organization->ALL:
+  Organization->GLEIF:
+    ttl: 43200 # 30 days
+  Person->ALL:
+    ttl: 43200 # 30 days
+  Phone->ALL:
+    ttl: 1080 # 7 days
+  Product->ALL:
+    ttl: 10080 # 7 days
+  ProductRelease->ALL:
+  Service->ALL:
+  TLSCertificate->ALL:
+    ttl: 10080 # 7 days
+  URL->ALL:

@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -6,22 +6,22 @@ package dns
 
 import (
 	"log/slog"
+	"sync"
 	"time"
 
-	"github.com/caffix/stringset"
 	"github.com/miekg/dns"
-	"github.com/owasp-amass/amass/v4/engine/plugins/support"
-	et "github.com/owasp-amass/amass/v4/engine/types"
+	"github.com/owasp-amass/amass/v5/engine/plugins/support"
+	et "github.com/owasp-amass/amass/v5/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
-	"github.com/owasp-amass/open-asset-model/domain"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
+	"github.com/owasp-amass/open-asset-model/general"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
-	"github.com/owasp-amass/open-asset-model/property"
-	"github.com/owasp-amass/open-asset-model/relation"
 )
 
 type dnsPlugin struct {
 	name            string
+	txt             *dnsTXT
 	log             *slog.Logger
 	apex            *dnsApex
 	cname           *dnsCNAME
@@ -32,7 +32,8 @@ type dnsPlugin struct {
 	secondSweepSize int
 	maxSweepSize    int
 	source          *et.Source
-	apexList        *stringset.Set
+	apexLock        sync.Mutex
+	apexList        map[string]*dbt.Entity
 }
 
 func NewDNS() et.Plugin {
@@ -45,7 +46,7 @@ func NewDNS() et.Plugin {
 			Name:       "DNS",
 			Confidence: 100,
 		},
-		apexList: stringset.New(),
+		apexList: make(map[string]*dbt.Entity),
 	}
 }
 
@@ -69,11 +70,19 @@ func (d *dnsPlugin) Start(r et.Registry) error {
 		return err
 	}
 
-	d.cname = &dnsCNAME{name: d.name + "-CNAME", plugin: d}
+	cname := d.name + "-CNAME"
+	d.cname = &dnsCNAME{
+		name:   cname,
+		plugin: d,
+		source: &et.Source{
+			Name:       cname,
+			Confidence: 100,
+		},
+	}
 	if err := r.RegisterHandler(&et.Handler{
 		Plugin:       d,
 		Name:         d.cname.name,
-		Priority:     1,
+		Priority:     2,
 		MaxInstances: support.MaxHandlerInstances,
 		Transforms:   []string{string(oam.FQDN)},
 		EventType:    oam.FQDN,
@@ -82,15 +91,20 @@ func (d *dnsPlugin) Start(r et.Registry) error {
 		return err
 	}
 
+	ipname := d.name + "-IP"
 	d.ip = &dnsIP{
-		name:    d.name + "-IP",
+		name:    ipname,
 		queries: []uint16{dns.TypeA, dns.TypeAAAA},
 		plugin:  d,
+		source: &et.Source{
+			Name:       ipname,
+			Confidence: 100,
+		},
 	}
 	if err := r.RegisterHandler(&et.Handler{
 		Plugin:       d,
 		Name:         d.ip.name,
-		Priority:     2,
+		Priority:     3,
 		MaxInstances: support.MaxHandlerInstances,
 		Transforms:   []string{string(oam.IPAddress)},
 		EventType:    oam.FQDN,
@@ -114,17 +128,37 @@ func (d *dnsPlugin) Start(r et.Registry) error {
 
 	d.subs = NewSubs(d)
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:       d,
-		Name:         d.subs.name,
-		Priority:     4,
-		MaxInstances: support.MaxHandlerInstances,
-		Transforms:   []string{string(oam.FQDN)},
-		EventType:    oam.FQDN,
-		Callback:     d.subs.check,
+		Plugin:     d,
+		Name:       d.subs.name,
+		Priority:   4,
+		Transforms: []string{string(oam.FQDN)},
+		EventType:  oam.FQDN,
+		Callback:   d.subs.check,
 	}); err != nil {
 		return err
 	}
 	go d.subs.releaseSessions()
+
+	txtname := d.name + "-TXT"
+	d.txt = &dnsTXT{
+		name:   d.name + "-TXT",
+		plugin: d,
+		source: &et.Source{
+			Name:       txtname,
+			Confidence: 100,
+		},
+	}
+	if err := r.RegisterHandler(&et.Handler{
+		Plugin:       d,
+		Name:         d.txt.name,
+		Priority:     1,
+		MaxInstances: support.MaxHandlerInstances,
+		Transforms:   []string{string(oam.FQDN)},
+		EventType:    oam.FQDN,
+		Callback:     d.txt.check,
+	}); err != nil {
+		return err
+	}
 
 	d.log.Info("Plugin started")
 	return nil
@@ -142,7 +176,7 @@ func (d *dnsPlugin) lookupWithinTTL(session et.Session, name string, atype oam.A
 		return results
 	}
 
-	ents, err := session.Cache().FindEntitiesByContent(&domain.FQDN{Name: name}, time.Time{})
+	ents, err := session.Cache().FindEntitiesByContent(&oamdns.FQDN{Name: name}, time.Time{})
 	if err != nil || len(ents) != 1 {
 		return results
 	}
@@ -154,7 +188,7 @@ func (d *dnsPlugin) lookupWithinTTL(session et.Session, name string, atype oam.A
 				var found bool
 
 				for _, tag := range tags {
-					if _, ok := tag.Property.(*property.SourceProperty); ok {
+					if _, ok := tag.Property.(*general.SourceProperty); ok {
 						found = true
 						break
 					}
@@ -166,15 +200,15 @@ func (d *dnsPlugin) lookupWithinTTL(session et.Session, name string, atype oam.A
 
 			var rrtype int
 			switch v := edge.Relation.(type) {
-			case *relation.BasicDNSRelation:
+			case *oamdns.BasicDNSRelation:
 				if v.RelationType() == reltype {
 					rrtype = v.Header.RRType
 				}
-			case *relation.PrefDNSRelation:
+			case *oamdns.PrefDNSRelation:
 				if v.RelationType() == reltype {
 					rrtype = v.Header.RRType
 				}
-			case *relation.SRVDNSRelation:
+			case *oamdns.SRVDNSRelation:
 				if v.RelationType() == reltype {
 					rrtype = v.Header.RRType
 				}
@@ -197,7 +231,7 @@ func (d *dnsPlugin) lookupWithinTTL(session et.Session, name string, atype oam.A
 func sweepCallback(e *et.Event, ip *oamnet.IPAddress, src *et.Source) {
 	entity, err := e.Session.Cache().CreateAsset(ip)
 	if err == nil && entity != nil {
-		_, _ = e.Session.Cache().CreateEntityProperty(entity, &property.SourceProperty{
+		_, _ = e.Session.Cache().CreateEntityProperty(entity, &general.SourceProperty{
 			Source:     src.Name,
 			Confidence: src.Confidence,
 		})
@@ -210,4 +244,34 @@ func sweepCallback(e *et.Event, ip *oamnet.IPAddress, src *et.Source) {
 			Session: e.Session,
 		})
 	}
+}
+
+func (d *dnsPlugin) addApex(name string, entity *dbt.Entity) {
+	d.apexLock.Lock()
+	defer d.apexLock.Unlock()
+
+	if _, found := d.apexList[name]; !found {
+		d.apexList[name] = entity
+	}
+}
+
+func (d *dnsPlugin) getApex(name string) *dbt.Entity {
+	d.apexLock.Lock()
+	defer d.apexLock.Unlock()
+
+	if entity, found := d.apexList[name]; found {
+		return entity
+	}
+	return nil
+}
+
+func (d *dnsPlugin) getApexList() []string {
+	d.apexLock.Lock()
+	defer d.apexLock.Unlock()
+
+	var results []string
+	for name := range d.apexList {
+		results = append(results, name)
+	}
+	return results
 }

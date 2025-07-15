@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -17,7 +17,7 @@ import (
 	"strings"
 
 	"github.com/caffix/stringset"
-	"github.com/owasp-amass/amass/v4/utils/net/http"
+	"github.com/owasp-amass/amass/v5/internal/net/http"
 )
 
 // DefaultQueriesPerPublicResolver is the number of queries sent to each public DNS resolver per second.
@@ -72,9 +72,10 @@ func GetPublicDNSResolvers() error {
 		}
 		if i == 0 {
 			for idx, val := range record {
-				if val == "ip_address" {
+				switch val {
+				case "ip_address":
 					ipIdx = idx
-				} else if val == "reliability" {
+				case "reliability":
 					reliabilityIdx = idx
 				}
 			}

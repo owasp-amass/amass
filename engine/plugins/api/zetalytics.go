@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -13,27 +13,29 @@ import (
 	"strings"
 	"time"
 
-	"github.com/owasp-amass/amass/v4/engine/plugins/support"
-	et "github.com/owasp-amass/amass/v4/engine/types"
-	"github.com/owasp-amass/amass/v4/utils/net/dns"
-	"github.com/owasp-amass/amass/v4/utils/net/http"
+	"github.com/owasp-amass/amass/v5/engine/plugins/support"
+	et "github.com/owasp-amass/amass/v5/engine/types"
+	"github.com/owasp-amass/amass/v5/internal/net/dns"
+	"github.com/owasp-amass/amass/v5/internal/net/http"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
-	"github.com/owasp-amass/open-asset-model/domain"
-	"go.uber.org/ratelimit"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
+	"golang.org/x/time/rate"
 )
 
 type zetalytics struct {
 	name   string
 	log    *slog.Logger
-	rlimit ratelimit.Limiter
+	rlimit *rate.Limiter
 	source *et.Source
 }
 
 func NewZetalytics() et.Plugin {
+	limit := rate.Every(5 * time.Second)
+
 	return &zetalytics{
 		name:   "ZETAlytics",
-		rlimit: ratelimit.New(5, ratelimit.WithoutSlack),
+		rlimit: rate.NewLimiter(limit, 1),
 		source: &et.Source{
 			Name:       "ZETAlytics",
 			Confidence: 100,
@@ -49,13 +51,12 @@ func (z *zetalytics) Start(r et.Registry) error {
 	z.log = r.Log().WithGroup("plugin").With("name", z.name)
 
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:       z,
-		Name:         z.name + "-Handler",
-		Priority:     6,
-		MaxInstances: 10,
-		Transforms:   []string{string(oam.FQDN)},
-		EventType:    oam.FQDN,
-		Callback:     z.check,
+		Plugin:     z,
+		Name:       z.name + "-Handler",
+		Priority:   9,
+		Transforms: []string{string(oam.FQDN)},
+		EventType:  oam.FQDN,
+		Callback:   z.check,
 	}); err != nil {
 		return err
 	}
@@ -69,9 +70,13 @@ func (z *zetalytics) Stop() {
 }
 
 func (z *zetalytics) check(e *et.Event) error {
-	fqdn, ok := e.Entity.Asset.(*domain.FQDN)
+	fqdn, ok := e.Entity.Asset.(*oamdns.FQDN)
 	if !ok {
 		return errors.New("failed to extract the FQDN asset")
+	}
+
+	if !support.HasSLDInScope(e) {
+		return nil
 	}
 
 	ds := e.Session.Config().GetDataSourceConfig(z.name)
@@ -86,13 +91,6 @@ func (z *zetalytics) check(e *et.Event) error {
 		}
 	}
 
-	if a, conf := e.Session.Scope().IsAssetInScope(fqdn, 0); conf == 0 || a == nil {
-		return nil
-	} else if f, ok := a.(*domain.FQDN); !ok || f == nil || !strings.EqualFold(fqdn.Name, f.Name) {
-		return nil
-	}
-
-
 	since, err := support.TTLStartTime(e.Session.Config(), string(oam.FQDN), string(oam.FQDN), z.name)
 	if err != nil {
 		return err
@@ -100,23 +98,23 @@ func (z *zetalytics) check(e *et.Event) error {
 
 	var names []*dbt.Entity
 	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, z.source, since) {
-		names = append(names, z.lookup(e, fqdn.Name, z.source, since)...)
+		names = append(names, z.lookup(e, fqdn.Name, since)...)
 	} else {
-		names = append(names, z.query(e, fqdn.Name, z.source, keys)...)
+		names = append(names, z.query(e, fqdn.Name, keys)...)
 		support.MarkAssetMonitored(e.Session, e.Entity, z.source)
 	}
 
 	if len(names) > 0 {
-		z.process(e, names, z.source)
+		z.process(e, names)
 	}
 	return nil
 }
 
-func (z *zetalytics) lookup(e *et.Event, name string, src *et.Source, since time.Time) []*dbt.Entity {
+func (z *zetalytics) lookup(e *et.Event, name string, since time.Time) []*dbt.Entity {
 	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.FQDN), z.source, since)
 }
 
-func (z *zetalytics) query(e *et.Event, name string, src *et.Source, keys []string) []*dbt.Entity {
+func (z *zetalytics) query(e *et.Event, name string, keys []string) []*dbt.Entity {
 	names := support.NewFQDNFilter()
 	defer names.Close()
 
@@ -125,7 +123,7 @@ func (z *zetalytics) query(e *et.Event, name string, src *et.Source, keys []stri
 		url := "https://zonecruncher.com/api/v1/subdomains?q=" + name +
 			"&token=" + key + "&tsfield=last_seen&start=" + strconv.FormatInt(start, 10)
 
-		z.rlimit.Take()
+		_ = z.rlimit.Wait(context.TODO())
 		resp, err := http.RequestWebPage(context.TODO(), &http.Request{URL: url})
 		if err != nil || resp.Body == "" {
 			continue
@@ -147,7 +145,7 @@ func (z *zetalytics) query(e *et.Event, name string, src *et.Source, keys []stri
 		for _, s := range result.Subdomains {
 			name := strings.ToLower(strings.TrimSpace(dns.RemoveAsteriskLabel(http.CleanName(s.FQDN))))
 			// if the subdomain is not in scope, skip it
-			if _, conf := e.Session.Scope().IsAssetInScope(&domain.FQDN{Name: name}, 0); conf > 0 {
+			if _, conf := e.Session.Scope().IsAssetInScope(&oamdns.FQDN{Name: name}, 0); conf > 0 {
 				names.Insert(name)
 			}
 		}
@@ -155,13 +153,13 @@ func (z *zetalytics) query(e *et.Event, name string, src *et.Source, keys []stri
 	}
 
 	names.Prune(1000)
-	return z.store(e, names.Slice(), z.source)
+	return z.store(e, names.Slice())
 }
 
-func (z *zetalytics) store(e *et.Event, names []string, src *et.Source) []*dbt.Entity {
+func (z *zetalytics) store(e *et.Event, names []string) []*dbt.Entity {
 	return support.StoreFQDNsWithSource(e.Session, names, z.source, z.name, z.name+"-Handler")
 }
 
-func (z *zetalytics) process(e *et.Event, assets []*dbt.Entity, src *et.Source) {
+func (z *zetalytics) process(e *et.Event, assets []*dbt.Entity) {
 	support.ProcessFQDNsWithSource(e, assets, z.source)
 }

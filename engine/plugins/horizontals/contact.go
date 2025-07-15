@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -7,8 +7,8 @@ package horizontals
 import (
 	"errors"
 
-	"github.com/owasp-amass/amass/v4/engine/sessions/scope"
-	et "github.com/owasp-amass/amass/v4/engine/types"
+	"github.com/owasp-amass/amass/v5/engine/sessions/scope"
+	et "github.com/owasp-amass/amass/v5/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/contact"
@@ -59,7 +59,7 @@ func (h *horContact) check(e *et.Event) error {
 }
 
 func (h *horContact) lookup(e *et.Event, entity *dbt.Entity, conf int) []*scope.Association {
-	labels := []string{"organization", "location", "email"}
+	labels := []string{"organization", "location", "id"}
 
 	var results []*scope.Association
 	if edges, err := e.Session.Cache().OutgoingEdges(entity,

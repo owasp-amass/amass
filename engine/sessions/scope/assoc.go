@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -18,10 +18,10 @@ import (
 	oam "github.com/owasp-amass/open-asset-model"
 	oamcert "github.com/owasp-amass/open-asset-model/certificate"
 	"github.com/owasp-amass/open-asset-model/contact"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
 	"github.com/owasp-amass/open-asset-model/org"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
-	"github.com/owasp-amass/open-asset-model/relation"
 	oamurl "github.com/owasp-amass/open-asset-model/url"
 	"golang.org/x/net/publicsuffix"
 )
@@ -40,7 +40,7 @@ func (s *Scope) IsAssociated(c *cache.Cache, req *Association) ([]*Association, 
 		return nil, errors.New("invalid request")
 	}
 	if atype := req.Submission.Asset.AssetType(); atype != oam.FQDN &&
-		atype != oam.EmailAddress && atype != oam.Organization && atype != oam.Location {
+		atype != oam.Identifier && atype != oam.Organization && atype != oam.Location {
 		return nil, errors.New("the request included a submission with an unsupported asset type")
 	}
 
@@ -378,7 +378,7 @@ func (s *Scope) IsAddressInScope(c *cache.Cache, ip *oamnet.IPAddress) bool {
 
 	if edges, err := c.IncomingEdges(addr, c.StartTime(), "dns_record"); err == nil && len(edges) > 0 {
 		for _, edge := range edges {
-			if rec, ok := edge.Relation.(*relation.BasicDNSRelation); ok && rec.Header.RRType == rtype {
+			if rec, ok := edge.Relation.(*oamdns.BasicDNSRelation); ok && rec.Header.RRType == rtype {
 				from, err := c.FindEntityById(edge.FromEntity.ID)
 				if err != nil {
 					continue

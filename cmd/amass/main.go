@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -23,282 +23,162 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"flag"
 	"fmt"
-	"io"
-	"log/slog"
-	"net"
-	"net/netip"
 	"os"
 	"path"
-	"path/filepath"
-	"strings"
 	"time"
 
-	"github.com/caffix/stringset"
 	"github.com/fatih/color"
-	"github.com/owasp-amass/amass/v4/config"
-	et "github.com/owasp-amass/amass/v4/engine/types"
-	"github.com/owasp-amass/amass/v4/utils/afmt"
-	"github.com/owasp-amass/open-asset-model/domain"
-	oamnet "github.com/owasp-amass/open-asset-model/network"
-	slogcommon "github.com/samber/slog-common"
-	slogsyslog "github.com/samber/slog-syslog/v2"
+	"github.com/owasp-amass/amass/v5/config"
+	"github.com/owasp-amass/amass/v5/internal/afmt"
+	ae "github.com/owasp-amass/amass/v5/internal/amass_engine"
+	"github.com/owasp-amass/amass/v5/internal/assoc"
+	"github.com/owasp-amass/amass/v5/internal/enum"
+	"github.com/owasp-amass/amass/v5/internal/subs"
+	"github.com/owasp-amass/amass/v5/internal/tools"
+	"github.com/owasp-amass/amass/v5/internal/track"
+	"github.com/owasp-amass/amass/v5/internal/viz"
 )
 
 const (
-	mainUsageMsg      = "enum [options]"
-	documentationURL  = "https://owasp-amass.github.io/docs"
-	discordInvitation = "https://discord.gg/ANTyEDUXt5"
-	youTubeURL        = "https://www.youtube.com/@jeff_foley"
+	usageMsg string = "[assoc|engine|enum|subs|track|viz] [options]"
 )
 
-func commandUsage(msg string, cmdFlagSet *flag.FlagSet, errBuf *bytes.Buffer) {
-	afmt.PrintBanner()
-	afmt.G.Fprintf(color.Error, "Usage: %s %s\n\n", path.Base(os.Args[0]), msg)
-	cmdFlagSet.PrintDefaults()
-	afmt.G.Fprintln(color.Error, errBuf.String())
+type Args struct {
+	Help    bool
+	Version bool
+}
 
-	if msg == mainUsageMsg {
-		afmt.G.Fprintf(color.Error, "\nSubcommands: \n\n")
-		afmt.G.Fprintf(color.Error, "\t%-11s - Perform enumerations and network mapping\n", "amass enum")
-	}
+type subDesc struct {
+	Name        string
+	Description string
+}
 
-	afmt.G.Fprintln(color.Error)
-	afmt.G.Fprintf(color.Error, "The project documentation can be found here: \n%s\n\n", documentationURL)
-	afmt.G.Fprintf(color.Error, "The Amass Discord server can be found here: \n%s\n\n", discordInvitation)
-	afmt.G.Fprintf(color.Error, "The Amass YouTube channel can be found here: \n%s\n\n", youTubeURL)
+var subcommands = []subDesc{
+	{"assoc", assoc.Description},
+	{"engine", ae.Description},
+	{"enum", enum.Description},
+	{"subs", subs.Description},
+	{"track", track.Description},
+	{"viz", viz.Description},
 }
 
 func main() {
-	var version, help1, help2 bool
-	mainFlagSet := flag.NewFlagSet("amass", flag.ContinueOnError)
+	var args Args
+	fs := flag.NewFlagSet("amass", flag.ContinueOnError)
+
+	fs.BoolVar(&args.Help, "h", false, "Show the program usage message")
+	fs.BoolVar(&args.Help, "help", false, "Show the program usage message")
+	fs.BoolVar(&args.Version, "version", false, "Print the Amass version number")
 
 	defaultBuf := new(bytes.Buffer)
-	mainFlagSet.SetOutput(defaultBuf)
+	fs.SetOutput(defaultBuf)
 
-	mainFlagSet.BoolVar(&help1, "h", false, "Show the program usage message")
-	mainFlagSet.BoolVar(&help2, "help", false, "Show the program usage message")
-	mainFlagSet.BoolVar(&version, "version", false, "Print the version number of this Amass binary")
+	var usage = func() {
+		afmt.PrintBanner()
+		_, _ = afmt.G.Fprintf(color.Error, "Usage: %s %s\n\n", path.Base(os.Args[0]), usageMsg)
+
+		if args.Help {
+			fs.PrintDefaults()
+			_, _ = afmt.G.Fprintln(color.Error, defaultBuf.String())
+			_, _ = afmt.G.Fprintf(color.Error, "Subcommands: \n\n")
+			for _, sub := range subcommands {
+				_, _ = afmt.G.Fprintf(color.Error, "\t%-5s\t%s\n", sub.Name, sub.Description)
+			}
+			_, _ = afmt.G.Fprintln(color.Error)
+			return
+		}
+
+		_, _ = afmt.G.Fprintln(color.Error, "Use the -h or --help flag to see the flags and subcommands")
+		_, _ = afmt.G.Fprintf(color.Error, "\nThe Amass Discord server can be found here: %s\n\n", afmt.DiscordInvitation)
+	}
 
 	if len(os.Args) < 2 {
-		commandUsage(mainUsageMsg, mainFlagSet, defaultBuf)
+		usage()
 		return
 	}
-	if err := mainFlagSet.Parse(os.Args[1:]); err != nil {
-		afmt.R.Fprintf(color.Error, "%v\n", err)
+	if err := fs.Parse(os.Args[1:]); err != nil {
+		usage()
+		_, _ = afmt.R.Fprintf(color.Error, "%v\n", err)
 		os.Exit(1)
 	}
-	if help1 || help2 {
-		commandUsage(mainUsageMsg, mainFlagSet, defaultBuf)
+	if args.Help {
+		usage()
 		return
 	}
-	if version {
-		fmt.Fprintf(color.Error, "%s\n", afmt.Version)
+	if args.Version {
+		_, _ = afmt.G.Fprintf(color.Error, "%s\n", afmt.Version)
 		return
 	}
 
-	switch os.Args[1] {
-	case "enum":
-		runEnumCommand(os.Args[2:])
-	case "help":
-		runHelpCommand(os.Args[2:])
-	default:
-		commandUsage(mainUsageMsg, mainFlagSet, defaultBuf)
+	// Ensure the output directory exists
+	if err := tools.CreateOutputDirectory(""); err != nil {
+		_, _ = afmt.R.Fprintf(color.Error, "Failed to create the output directory: %v\n", err)
 		os.Exit(1)
 	}
-}
 
-func createOutputDirectory(cfg *config.Config) {
-	// Prepare output file paths
-	dir := config.OutputDirectory(cfg.Dir)
+	dir := config.OutputDirectory("")
 	if dir == "" {
-		afmt.R.Fprintln(color.Error, "Failed to obtain the output directory")
+		_, _ = afmt.R.Fprintln(color.Error, "failed to obtain the path for the output directory")
 		os.Exit(1)
 	}
-	// If the directory does not yet exist, create it
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		afmt.R.Fprintf(color.Error, "Failed to create the directory: %v\n", err)
+
+	// Ensure the default config files exist
+	if err := tools.CreateDefaultConfigFiles(dir); err != nil {
+		_, _ = afmt.R.Fprintf(color.Error, "Failed to create the default config files: %v\n", err)
+		os.Exit(1)
+	}
+
+	cmdName := fmt.Sprintf("%s %s", path.Base(os.Args[0]), os.Args[1])
+	switch os.Args[1] {
+	case "assoc":
+		assoc.CLIWorkflow(cmdName, os.Args[2:])
+	case "engine":
+		if engineIsRunning() {
+			_, _ = afmt.R.Fprintf(color.Error, "The Amass engine is already running.\n")
+			os.Exit(1)
+		}
+
+		ae.CLIWorkflow(cmdName, os.Args[2:])
+	case "enum":
+		// The engine must be started before running the enum command
+		if !engineIsRunning() {
+			if err := startEngine(); err != nil {
+				_, _ = afmt.R.Fprintf(color.Error, "Failed to start the Amass engine: %v\n", err)
+				os.Exit(1)
+			}
+			// Give the engine time to start
+			if err := waitForEngineResponse(); err != nil {
+				_, _ = afmt.R.Fprintf(color.Error, "The Amass engine did not respond: %v\n", err)
+				os.Exit(1)
+			}
+		}
+
+		enum.CLIWorkflow(cmdName, os.Args[2:])
+	case "subs":
+		subs.CLIWorkflow(cmdName, os.Args[2:])
+	case "track":
+		track.CLIWorkflow(cmdName, os.Args[2:])
+	case "viz":
+		viz.CLIWorkflow(cmdName, os.Args[2:])
+	default:
+		usage()
+		_, _ = afmt.R.Fprintf(color.Error, "subcommand provided but not defined: %s\n", os.Args[1])
 		os.Exit(1)
 	}
 }
 
-func getWordList(reader io.Reader) ([]string, error) {
-	var words []string
+func waitForEngineResponse() error {
+	t := time.NewTicker(time.Second)
+	defer t.Stop()
 
-	scanner := bufio.NewScanner(reader)
-	for scanner.Scan() {
-		// Get the next word in the list
-		w := strings.TrimSpace(scanner.Text())
-		if err := scanner.Err(); err == nil && w != "" {
-			words = append(words, w)
+	for range 60 {
+		<-t.C
+		if engineIsRunning() {
+			return nil
 		}
 	}
-	return stringset.Deduplicate(words), nil
-}
-
-// returns Asset objects by converting the contests of config.Scope
-func makeAssets(config *config.Config) []*et.Asset {
-	assets := convertScopeToAssets(config.Scope)
-
-	for i, asset := range assets {
-		asset.Name = fmt.Sprintf("asset#%d", i+1)
-	}
-	return assets
-}
-
-// ipnet2Prefix converts a net.IPNet to a netip.Prefix.
-func ipnet2Prefix(ipn net.IPNet) netip.Prefix {
-	addr, _ := netip.AddrFromSlice(ipn.IP)
-	cidr, _ := ipn.Mask.Size()
-	return netip.PrefixFrom(addr, cidr)
-}
-
-// convertScopeToAssets converts all items in a Scope to a slice of *Asset.
-func convertScopeToAssets(scope *config.Scope) []*et.Asset {
-	const ipv4 = "IPv4"
-	const ipv6 = "IPv6"
-	var assets []*et.Asset
-
-	// Convert Domains to assets.
-	for _, d := range scope.Domains {
-		fqdn := domain.FQDN{Name: d}
-		data := et.AssetData{
-			OAMAsset: fqdn,
-			OAMType:  fqdn.AssetType(),
-		}
-		asset := &et.Asset{
-			Data: data,
-		}
-		assets = append(assets, asset)
-	}
-
-	var ipType string
-	// Convert Addresses to assets.
-	for _, ip := range scope.Addresses {
-		// Convert net.IP to net.IPAddr.
-		if addr, ok := netip.AddrFromSlice(ip); ok {
-			// Determine the IP type based on the address characteristics.
-			if addr.Is4In6() {
-				addr = netip.AddrFrom4(addr.As4())
-				ipType = ipv4
-			} else if addr.Is6() {
-				ipType = ipv6
-			} else {
-				ipType = ipv4
-			}
-
-			// Create an asset from the IP address and append it to the assets slice.
-			asset := oamnet.IPAddress{Address: addr, Type: ipType}
-			data := et.AssetData{
-				OAMAsset: asset,
-				OAMType:  asset.AssetType(),
-			}
-			assets = append(assets, &et.Asset{Data: data})
-		}
-	}
-
-	// Convert CIDRs to assets.
-	for _, cidr := range scope.CIDRs {
-		prefix := ipnet2Prefix(*cidr) // Convert net.IPNet to netip.Prefix.
-
-		// Determine the IP type based on the address characteristics.
-		addr := prefix.Addr()
-		if addr.Is4In6() {
-			ipType = ipv4
-		} else if addr.Is6() {
-			ipType = ipv6
-		} else {
-			ipType = ipv4
-		}
-
-		// Create an asset from the CIDR and append it to the assets slice.
-		asset := oamnet.Netblock{CIDR: prefix, Type: ipType}
-		data := et.AssetData{
-			OAMAsset: asset,
-			OAMType:  asset.AssetType(),
-		}
-		assets = append(assets, &et.Asset{Data: data})
-	}
-
-	// Convert ASNs to assets.
-	for _, asn := range scope.ASNs {
-		asset := oamnet.AutonomousSystem{Number: asn}
-		data := et.AssetData{
-			OAMAsset: asset,
-			OAMType:  asset.AssetType(),
-		}
-		assets = append(assets, &et.Asset{Data: data})
-	}
-	return assets
-}
-
-func selectLogger(dir, logfile string) *slog.Logger {
-	if logfile == "" {
-		if l := setupSyslogLogger(); l != nil {
-			return l
-		}
-	}
-	return setupFileLogger(dir, logfile)
-}
-
-func setupFileLogger(dir, logfile string) *slog.Logger {
-	if dir != "" {
-		if err := os.MkdirAll(dir, 0640); err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to create the log directory: %v", err)
-		}
-	}
-
-	p := filepath.Join(dir, fmt.Sprintf("amass_client_%s.log", time.Now().Format("2006-01-02T15:04:05")))
-	if logfile != "" {
-		p = logfile
-	}
-
-	f, err := os.OpenFile(p, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to open the log file: %v", err)
-		return nil
-	}
-	return slog.New(slog.NewJSONHandler(f, nil))
-}
-
-func setupSyslogLogger() *slog.Logger {
-	port := os.Getenv("SYSLOG_PORT")
-	host := strings.ToLower(os.Getenv("SYSLOG_HOST"))
-	transport := strings.ToLower(os.Getenv("SYSLOG_TRANSPORT"))
-
-	if host == "" {
-		return nil
-	}
-	if port == "" {
-		port = "514"
-	}
-	if transport == "" {
-		transport = "udp"
-	}
-
-	writer, err := net.Dial(transport, net.JoinHostPort(host, port))
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to create the connection to the log server: %v", err)
-		return nil
-	}
-
-	return slog.New(slogsyslog.Option{
-		Level:     slog.LevelInfo,
-		Converter: syslogConverter,
-		Writer:    writer,
-	}.NewSyslogHandler())
-}
-
-func syslogConverter(addSource bool, replaceAttr func(groups []string, a slog.Attr) slog.Attr, loggerAttr []slog.Attr, groups []string, record *slog.Record) map[string]any {
-	attrs := slogcommon.AppendRecordAttrsToAttrs(loggerAttr, groups, record)
-	attrs = slogcommon.ReplaceAttrs(replaceAttr, []string{}, attrs...)
-
-	return map[string]any{
-		"level":   record.Level.String(),
-		"message": record.Message,
-		"attrs":   slogcommon.AttrsToMap(attrs...),
-	}
+	return fmt.Errorf("the Amass engine did not respond within the timeout period")
 }

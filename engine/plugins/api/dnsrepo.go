@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -10,30 +10,31 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	"github.com/caffix/stringset"
-	"github.com/owasp-amass/amass/v4/engine/plugins/support"
-	et "github.com/owasp-amass/amass/v4/engine/types"
-	"github.com/owasp-amass/amass/v4/utils/net/http"
+	"github.com/owasp-amass/amass/v5/engine/plugins/support"
+	et "github.com/owasp-amass/amass/v5/engine/types"
+	"github.com/owasp-amass/amass/v5/internal/net/http"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
-	"github.com/owasp-amass/open-asset-model/domain"
-	"go.uber.org/ratelimit"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
+	"golang.org/x/time/rate"
 )
 
 type dnsrepo struct {
 	name   string
 	log    *slog.Logger
-	rlimit ratelimit.Limiter
+	rlimit *rate.Limiter
 	source *et.Source
 }
 
 func NewDNSRepo() et.Plugin {
+	limit := rate.Every(10 * time.Second)
+
 	return &dnsrepo{
 		name:   "DNSRepo",
-		rlimit: ratelimit.New(10, ratelimit.WithoutSlack),
+		rlimit: rate.NewLimiter(limit, 1),
 		source: &et.Source{
 			Name:       "DNSRepo",
 			Confidence: 80,
@@ -49,13 +50,12 @@ func (d *dnsrepo) Start(r et.Registry) error {
 	d.log = r.Log().WithGroup("plugin").With("name", d.name)
 
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:       d,
-		Name:         d.name + "-Handler",
-		Priority:     5,
-		MaxInstances: 10,
-		Transforms:   []string{string(oam.FQDN)},
-		EventType:    oam.FQDN,
-		Callback:     d.check,
+		Plugin:     d,
+		Name:       d.name + "-Handler",
+		Priority:   9,
+		Transforms: []string{string(oam.FQDN)},
+		EventType:  oam.FQDN,
+		Callback:   d.check,
 	}); err != nil {
 		return err
 	}
@@ -69,9 +69,13 @@ func (d *dnsrepo) Stop() {
 }
 
 func (d *dnsrepo) check(e *et.Event) error {
-	fqdn, ok := e.Entity.Asset.(*domain.FQDN)
+	fqdn, ok := e.Entity.Asset.(*oamdns.FQDN)
 	if !ok {
 		return errors.New("failed to extract the FQDN asset")
+	}
+
+	if !support.HasSLDInScope(e) {
+		return nil
 	}
 
 	var keys []string
@@ -84,12 +88,6 @@ func (d *dnsrepo) check(e *et.Event) error {
 	// add an empty API key
 	keys = append(keys, "")
 
-	if a, conf := e.Session.Scope().IsAssetInScope(fqdn, 0); conf == 0 || a == nil {
-		return nil
-	} else if f, ok := a.(*domain.FQDN); !ok || f == nil || !strings.EqualFold(fqdn.Name, f.Name) {
-		return nil
-	}
-
 	since, err := support.TTLStartTime(e.Session.Config(), string(oam.FQDN), string(oam.FQDN), d.name)
 	if err != nil {
 		return err
@@ -97,9 +95,9 @@ func (d *dnsrepo) check(e *et.Event) error {
 
 	var names []*dbt.Entity
 	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, d.source, since) {
-		names = append(names, d.lookup(e, fqdn.Name, d.source, since)...)
+		names = append(names, d.lookup(e, fqdn.Name, since)...)
 	} else {
-		names = append(names, d.query(e, fqdn.Name, d.source, keys)...)
+		names = append(names, d.query(e, fqdn.Name, keys)...)
 		support.MarkAssetMonitored(e.Session, e.Entity, d.source)
 	}
 
@@ -109,11 +107,11 @@ func (d *dnsrepo) check(e *et.Event) error {
 	return nil
 }
 
-func (d *dnsrepo) lookup(e *et.Event, name string, src *et.Source, since time.Time) []*dbt.Entity {
+func (d *dnsrepo) lookup(e *et.Event, name string, since time.Time) []*dbt.Entity {
 	return support.SourceToAssetsWithinTTL(e.Session, name, string(oam.FQDN), d.source, since)
 }
 
-func (d *dnsrepo) query(e *et.Event, name string, src *et.Source, keys []string) []*dbt.Entity {
+func (d *dnsrepo) query(e *et.Event, name string, keys []string) []*dbt.Entity {
 	var names []string
 
 	for _, key := range keys {
@@ -127,7 +125,7 @@ func (d *dnsrepo) query(e *et.Event, name string, src *et.Source, keys []string)
 			}
 		}
 
-		d.rlimit.Take()
+		_ = d.rlimit.Wait(context.TODO())
 		if resp, err := http.RequestWebPage(context.TODO(), req); err == nil {
 			if key == "" {
 				names = append(names, d.parseHTML(e, resp.Body)...)
@@ -151,7 +149,7 @@ func (d *dnsrepo) parseHTML(e *et.Event, body string) []string {
 		if sub != "" {
 			// if the subdomain is not in scope, skip it
 			name := http.CleanName(sub)
-			if _, conf := e.Session.Scope().IsAssetInScope(&domain.FQDN{Name: name}, 0); conf > 0 {
+			if _, conf := e.Session.Scope().IsAssetInScope(&oamdns.FQDN{Name: name}, 0); conf > 0 {
 				names = append(names, name)
 			}
 		}
@@ -186,7 +184,7 @@ func (d *dnsrepo) parseJSON(e *et.Event, body string) []string {
 					name = sub[:slen-1]
 				}
 				// if the subdomain is not in scope, skip it
-				if _, conf := e.Session.Scope().IsAssetInScope(&domain.FQDN{Name: name}, 0); conf > 0 {
+				if _, conf := e.Session.Scope().IsAssetInScope(&oamdns.FQDN{Name: name}, 0); conf > 0 {
 					set.Insert(name)
 				}
 			}

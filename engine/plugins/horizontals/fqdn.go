@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -8,15 +8,15 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/owasp-amass/amass/v4/engine/plugins/support"
-	"github.com/owasp-amass/amass/v4/engine/sessions/scope"
-	et "github.com/owasp-amass/amass/v4/engine/types"
+	"github.com/miekg/dns"
+	"github.com/owasp-amass/amass/v5/engine/plugins/support"
+	"github.com/owasp-amass/amass/v5/engine/sessions/scope"
+	et "github.com/owasp-amass/amass/v5/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
-	"github.com/owasp-amass/open-asset-model/domain"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
+	"github.com/owasp-amass/open-asset-model/general"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
-	"github.com/owasp-amass/open-asset-model/property"
-	"github.com/owasp-amass/open-asset-model/relation"
 	"golang.org/x/net/publicsuffix"
 )
 
@@ -30,7 +30,7 @@ func (h *horfqdn) Name() string {
 }
 
 func (h *horfqdn) check(e *et.Event) error {
-	fqdn, ok := e.Entity.Asset.(*domain.FQDN)
+	fqdn, ok := e.Entity.Asset.(*oamdns.FQDN)
 	if !ok {
 		return errors.New("failed to extract the FQDN asset")
 	}
@@ -38,13 +38,17 @@ func (h *horfqdn) check(e *et.Event) error {
 	var ptrs []*dbt.Edge
 	if edges, err := e.Session.Cache().OutgoingEdges(e.Entity, e.Session.Cache().StartTime(), "dns_record"); err == nil {
 		for _, edge := range edges {
-			if rel, ok := edge.Relation.(*relation.BasicDNSRelation); ok && rel.Header.RRType == 12 {
+			if rel, ok := edge.Relation.(*oamdns.BasicDNSRelation); ok && rel.Header.RRType == 12 {
 				ptrs = append(ptrs, edge)
 			}
 		}
 	}
-	if len(ptrs) == 0 && !support.NameResolved(e.Session, fqdn) {
-		return nil
+	if len(ptrs) == 0 {
+		if !support.HasDNSRecordType(e, int(dns.TypeA)) &&
+			!support.HasDNSRecordType(e, int(dns.TypeAAAA)) &&
+			!support.HasDNSRecordType(e, int(dns.TypeCNAME)) {
+			return nil
+		}
 	}
 	if _, conf := e.Session.Scope().IsAssetInScope(fqdn, 0); conf > 0 {
 		return nil
@@ -157,7 +161,7 @@ func (h *horfqdn) store(e *et.Event, asset oam.Asset) *dbt.Entity {
 		return nil
 	}
 
-	_, _ = e.Session.Cache().CreateEntityProperty(a, &property.SourceProperty{
+	_, _ = e.Session.Cache().CreateEntityProperty(a, &general.SourceProperty{
 		Source:     h.plugin.source.Name,
 		Confidence: h.plugin.source.Confidence,
 	})

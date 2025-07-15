@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -12,14 +12,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/owasp-amass/amass/v4/engine/plugins/support"
-	et "github.com/owasp-amass/amass/v4/engine/types"
-	"github.com/owasp-amass/amass/v4/utils/net/http"
+	"github.com/owasp-amass/amass/v5/engine/plugins/support"
+	et "github.com/owasp-amass/amass/v5/engine/types"
+	"github.com/owasp-amass/amass/v5/internal/net/http"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamcert "github.com/owasp-amass/open-asset-model/certificate"
-	"github.com/owasp-amass/open-asset-model/relation"
-	oamserv "github.com/owasp-amass/open-asset-model/service"
+	"github.com/owasp-amass/open-asset-model/general"
+	"github.com/owasp-amass/open-asset-model/platform"
 )
 
 type httpProbing struct {
@@ -55,10 +55,9 @@ func (hp *httpProbing) Start(r et.Registry) error {
 		plugin: hp,
 	}
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:       hp,
-		Name:         hp.fqdnend.name,
-		Priority:     9,
-		MaxInstances: support.MaxHandlerInstances,
+		Plugin:   hp,
+		Name:     hp.fqdnend.name,
+		Priority: 9,
 		Transforms: []string{
 			string(oam.Service),
 			string(oam.TLSCertificate),
@@ -99,7 +98,7 @@ func (hp *httpProbing) Stop() {
 func (hp *httpProbing) query(e *et.Event, entity *dbt.Entity, target string, port int) []*support.Finding {
 	var findings []*support.Finding
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	if resp, err := http.RequestWebPage(ctx, &http.Request{URL: target}); err == nil && resp != nil {
@@ -141,7 +140,7 @@ func (hp *httpProbing) store(e *et.Event, resp *http.Response, entity *dbt.Entit
 					To:       a,
 					ToName:   c.SerialNumber,
 					ToMeta:   cert,
-					Rel:      &relation.SimpleRelation{Name: "issuing_certificate"},
+					Rel:      &general.SimpleRelation{Name: "issuing_certificate"},
 				})
 			}
 			prev = a
@@ -152,9 +151,9 @@ func (hp *httpProbing) store(e *et.Event, resp *http.Response, entity *dbt.Entit
 	if serv == nil {
 		return findings
 	}
-	serv.Banner = resp.Body
-	serv.BannerLen = int(resp.Length)
-	serv.Headers = resp.Header
+	serv.Output = resp.Body
+	serv.OutputLen = int(resp.Length)
+	serv.Attributes = resp.Header
 
 	proto := "http"
 	var c *oamcert.TLSCertificate
@@ -163,7 +162,7 @@ func (hp *httpProbing) store(e *et.Event, resp *http.Response, entity *dbt.Entit
 		c = firstAsset.Asset.(*oamcert.TLSCertificate)
 	}
 
-	portrel := &relation.PortRelation{
+	portrel := &general.PortRelation{
 		Name:       "port",
 		PortNumber: port,
 		Protocol:   proto,
@@ -174,24 +173,24 @@ func (hp *httpProbing) store(e *et.Event, resp *http.Response, entity *dbt.Entit
 		return findings
 	}
 
-	serv = s.Asset.(*oamserv.Service)
+	serv = s.Asset.(*platform.Service)
 	// for adding the source information
 	findings = append(findings, &support.Finding{
 		From:     entity,
 		FromName: addr,
 		To:       s,
-		ToName:   "Service: " + serv.Identifier,
+		ToName:   "Service: " + serv.ID,
 		Rel:      portrel,
 	})
 
 	if firstAsset != nil && firstCert != nil {
 		findings = append(findings, &support.Finding{
 			From:     s,
-			FromName: "Service: " + serv.Identifier,
+			FromName: "Service: " + serv.ID,
 			To:       firstAsset,
 			ToName:   c.SerialNumber,
 			ToMeta:   firstCert,
-			Rel:      &relation.SimpleRelation{Name: "certificate"},
+			Rel:      &general.SimpleRelation{Name: "certificate"},
 		})
 	}
 

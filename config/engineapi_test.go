@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -99,12 +99,12 @@ func TestLoadEngineEnvSettings_ValidEnvSettings(t *testing.T) {
 	c := NewConfig()
 
 	// Set the required environment variables
-	os.Setenv(engineHost, "127.0.0.1")
-	os.Setenv(engineUser, "username")
-	os.Setenv(enginePass, "password")
-	os.Setenv(engineScheme, "http")
-	os.Setenv(enginePort, "80")
-	os.Setenv(enginePath, "path")
+	_ = os.Setenv(engineHost, "127.0.0.1")
+	_ = os.Setenv(engineUser, "username")
+	_ = os.Setenv(enginePass, "password")
+	_ = os.Setenv(engineScheme, "http")
+	_ = os.Setenv(enginePort, "80")
+	_ = os.Setenv(enginePath, "path")
 
 	err := c.LoadEngineEnvSettings()
 	assert.NoError(t, err, "LoadEngineEnvSettings should not return an error with valid environment settings")
@@ -123,12 +123,12 @@ func TestLoadEngineEnvSettings_MissingEnvSettings(t *testing.T) {
 	c := NewConfig()
 
 	// Unset the required environment variables
-	os.Unsetenv(engineHost)
-	os.Unsetenv(engineUser)
-	os.Unsetenv(enginePass)
-	os.Unsetenv(engineScheme)
-	os.Unsetenv(enginePort)
-	os.Unsetenv(enginePath)
+	_ = os.Unsetenv(engineHost)
+	_ = os.Unsetenv(engineUser)
+	_ = os.Unsetenv(enginePass)
+	_ = os.Unsetenv(engineScheme)
+	_ = os.Unsetenv(enginePort)
+	_ = os.Unsetenv(enginePath)
 
 	err := c.LoadEngineEnvSettings()
 	_ = c.loadEngineURI(c.EngineAPI.URL)

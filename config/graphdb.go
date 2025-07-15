@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -39,8 +39,9 @@ func (c *Config) loadDatabaseSettings(cfg *Config) error {
 
 	dbURIInterface, ok := c.Options["database"]
 	if !ok {
-		_ = c.LoadDatabaseEnvSettings()
-		return nil
+		if err := c.LoadDatabaseEnvSettings(); err != nil {
+			return nil
+		}
 	}
 
 	dbURI, ok := dbURIInterface.(string)
@@ -48,10 +49,11 @@ func (c *Config) loadDatabaseSettings(cfg *Config) error {
 		return fmt.Errorf("expected 'database' to be a string, got %T", dbURIInterface)
 	}
 
-	if err := c.loadDatabase(dbURI); err != nil {
-		return err
+	if _, err := url.Parse(dbURI); err == nil {
+		if err := c.loadDatabase(dbURI); err != nil {
+			return err
+		}
 	}
-
 	return nil
 }
 
@@ -62,9 +64,12 @@ func (c *Config) LoadDatabaseEnvSettings() error {
 		Primary: true,
 		System:  "postgres",
 	}
-	u := "amass"
+
+	var u string
 	if uenv, set := os.LookupEnv(amassUser); set {
 		u = uenv
+	} else {
+		return fmt.Errorf("environment variable %s is not set", amassUser)
 	}
 	db.Username = u
 	h := "localhost"

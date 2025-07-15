@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -6,20 +6,23 @@ package support
 
 import (
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/netip"
 	"strconv"
+	"strings"
 	"time"
 
-	et "github.com/owasp-amass/amass/v4/engine/types"
-	"github.com/owasp-amass/amass/v4/utils"
+	et "github.com/owasp-amass/amass/v5/engine/types"
+	"github.com/owasp-amass/amass/v5/internal/db"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamcert "github.com/owasp-amass/open-asset-model/certificate"
-	"github.com/owasp-amass/open-asset-model/domain"
-	"github.com/owasp-amass/open-asset-model/property"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
+	"github.com/owasp-amass/open-asset-model/general"
+	oamnet "github.com/owasp-amass/open-asset-model/network"
+	"github.com/owasp-amass/open-asset-model/platform"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
-	"github.com/owasp-amass/open-asset-model/service"
 )
 
 func SourceToAssetsWithinTTL(session et.Session, name, atype string, src *et.Source, since time.Time) []*dbt.Entity {
@@ -27,15 +30,23 @@ func SourceToAssetsWithinTTL(session et.Session, name, atype string, src *et.Sou
 
 	switch atype {
 	case string(oam.FQDN):
-		roots, err := session.Cache().FindEntitiesByContent(&domain.FQDN{Name: name}, since)
+		roots, err := session.Cache().FindEntitiesByContent(&oamdns.FQDN{Name: name}, since)
 		if err != nil || len(roots) != 1 {
 			return nil
 		}
 		root := roots[0]
 
-		entities, _ = utils.FindByFQDNScope(session.Cache(), root, since)
-	case string(oam.EmailAddress):
-		entities, _ = session.Cache().FindEntitiesByContent(EmailToOAMEmailAddress(name), since)
+		entities, _ = db.FindByFQDNScope(session.Cache(), root, since)
+	case string(oam.Identifier):
+		if parts := strings.Split(name, ":"); len(parts) == 2 {
+			id := &general.Identifier{
+				UniqueID: name,
+				ID:       parts[1],
+				Type:     parts[0],
+			}
+
+			entities, _ = session.Cache().FindEntitiesByContent(id, since)
+		}
 	case string(oam.AutnumRecord):
 		num, err := strconv.Atoi(name)
 		if err != nil {
@@ -51,7 +62,7 @@ func SourceToAssetsWithinTTL(session et.Session, name, atype string, src *et.Sou
 
 		entities, _ = session.Cache().FindEntitiesByContent(&oamreg.IPNetRecord{CIDR: prefix}, since)
 	case string(oam.Service):
-		entities, _ = session.Cache().FindEntitiesByContent(&service.Service{Identifier: name}, since)
+		entities, _ = session.Cache().FindEntitiesByContent(&platform.Service{ID: name}, since)
 	}
 
 	var results []*dbt.Entity
@@ -75,9 +86,9 @@ func StoreFQDNsWithSource(session et.Session, names []string, src *et.Source, pl
 	}
 
 	for _, name := range names {
-		if a, err := session.Cache().CreateAsset(&domain.FQDN{Name: name}); err == nil && a != nil {
+		if a, err := session.Cache().CreateAsset(&oamdns.FQDN{Name: name}); err == nil && a != nil {
 			results = append(results, a)
-			_, _ = session.Cache().CreateEntityProperty(a, &property.SourceProperty{
+			_, _ = session.Cache().CreateEntityProperty(a, &general.SourceProperty{
 				Source:     src.Name,
 				Confidence: src.Confidence,
 			})
@@ -96,14 +107,16 @@ func StoreEmailsWithSource(session et.Session, emails []string, src *et.Source, 
 		return results
 	}
 
-	for _, email := range emails {
-		e := EmailToOAMEmailAddress(email)
-		if e == nil {
-			continue
-		}
-		if a, err := session.Cache().CreateAsset(e); err == nil && a != nil {
+	for _, e := range emails {
+		email := strings.ToLower(e)
+
+		if a, err := session.Cache().CreateAsset(&general.Identifier{
+			UniqueID: fmt.Sprintf("%s:%s", general.EmailAddress, email),
+			ID:       email,
+			Type:     general.EmailAddress,
+		}); err == nil && a != nil {
 			results = append(results, a)
-			_, _ = session.Cache().CreateEntityProperty(a, &property.SourceProperty{
+			_, _ = session.Cache().CreateEntityProperty(a, &general.SourceProperty{
 				Source:     src.Name,
 				Confidence: src.Confidence,
 			})
@@ -128,7 +141,7 @@ func MarkAssetMonitored(session et.Session, asset *dbt.Entity, src *et.Source) {
 		}
 	}
 
-	_, _ = session.Cache().CreateEntityProperty(asset, property.SimpleProperty{
+	_, _ = session.Cache().CreateEntityProperty(asset, general.SimpleProperty{
 		PropertyName:  "last_monitored",
 		PropertyValue: src.Name,
 	})
@@ -150,14 +163,37 @@ func AssetMonitoredWithinTTL(session et.Session, asset *dbt.Entity, src *et.Sour
 	return false
 }
 
-func CreateServiceAsset(session et.Session, src *dbt.Entity, rel oam.Relation, serv *service.Service, cert *oamcert.TLSCertificate) (*dbt.Entity, error) {
-	var result *dbt.Entity
-
+func CreateServiceAsset(session et.Session, src *dbt.Entity, rel oam.Relation, serv *platform.Service, cert *oamcert.TLSCertificate) (*dbt.Entity, error) {
 	var srvs []*dbt.Entity
-	if entities, err := session.Cache().FindEntitiesByType(oam.Service, time.Time{}); err == nil {
-		for _, a := range entities {
-			if s, ok := a.Asset.(*service.Service); ok && s.BannerLen == serv.BannerLen {
-				srvs = append(srvs, a)
+
+	if rport, ok := rel.(*general.PortRelation); ok && src != nil && serv != nil {
+		srcs := []*dbt.Entity{src}
+
+		if _, ok := src.Asset.(*oamdns.FQDN); ok {
+			// check for IP assresses associated with the FQDN
+			if edges, err := session.Cache().OutgoingEdges(src, time.Time{}, "dns_record"); err == nil && len(edges) > 0 {
+				for _, edge := range edges {
+					if to, err := session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && to != nil {
+						if _, ok := to.Asset.(*oamnet.IPAddress); ok {
+							srcs = append(srcs, to)
+						}
+					}
+				}
+			}
+		}
+
+		// go though the hosts that could have previously associated with the service
+		for _, s := range srcs {
+			if edges, err := session.Cache().OutgoingEdges(s, time.Time{}, "port"); err == nil && len(edges) > 0 {
+				for _, edge := range edges {
+					if eport, ok := edge.Relation.(*general.PortRelation); ok && eport.PortNumber == rport.PortNumber && strings.EqualFold(eport.Protocol, rport.Protocol) {
+						if to, err := session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && to != nil {
+							if srv, ok := to.Asset.(*platform.Service); ok && srv.OutputLen == serv.OutputLen {
+								srvs = append(srvs, to)
+							}
+						}
+					}
+				}
 			}
 		}
 	}
@@ -166,10 +202,10 @@ func CreateServiceAsset(session et.Session, src *dbt.Entity, rel oam.Relation, s
 	for _, srv := range srvs {
 		var num int
 
-		s := srv.Asset.(*service.Service)
+		s := srv.Asset.(*platform.Service)
 		for _, key := range []string{"Server", "X-Powered-By"} {
-			if server1, ok := serv.Headers[key]; ok && server1[0] != "" {
-				if server2, ok := s.Headers[key]; ok && server1[0] == server2[0] {
+			if server1, ok := serv.Attributes[key]; ok && server1[0] != "" {
+				if server2, ok := s.Attributes[key]; ok && server1[0] == server2[0] {
 					num++
 				} else {
 					num--
@@ -204,6 +240,7 @@ func CreateServiceAsset(session et.Session, src *dbt.Entity, rel oam.Relation, s
 		}
 	}
 
+	var result *dbt.Entity
 	if match != nil {
 		result = match
 	} else {

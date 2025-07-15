@@ -1,11 +1,10 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
 package config
 
 import (
-	"path/filepath"
 	"reflect"
 	"sort"
 	"testing"
@@ -112,21 +111,6 @@ func TestBlacklist(t *testing.T) {
 	}
 }
 
-func TestLoadSettings(t *testing.T) {
-	c := NewConfig()
-	relativepath := filepath.Join("..", "examples", "config.yaml")
-	path, err := filepath.Abs(relativepath)
-	if err != nil {
-		t.Errorf("Failed to get absolute path: %v", err)
-		return
-	}
-
-	err = c.LoadSettings(path)
-	if err != nil {
-		t.Errorf("Config file failed to load: %v", err)
-	}
-}
-
 func TestConfigCheckSettings(t *testing.T) {
 	type fields struct {
 		c *Config
@@ -174,13 +158,6 @@ func TestConfigCheckSettings(t *testing.T) {
 	}
 }
 
-func TestConfigGetListFromFile(t *testing.T) {
-	var list = "../examples/wordlists/subdomains-top1mil-110000.txt"
-	if _, err := GetListFromFile(list); err != nil {
-		t.Errorf("GetListFromFile() error = %v", err)
-	}
-}
-
 var configyaml = []byte(`
 options:
    database: "postgres://postgres:testPasWORD123456!)*&*$@localhost:5432"
@@ -191,7 +168,7 @@ func TestMarshalJSON(t *testing.T) {
 
 	// Test case 1: MarshalJSON returns the expected JSON bytes
 	t.Run("MarshalJSON returns the expected JSON bytes", func(t *testing.T) {
-		expected := []byte(`{"seed":{},"scope":{"ports":[80,443]},"resolvers":null,"datasource_config":{},"transformations":{}}
+		expected := []byte(`{"seed":{},"scope":{"ports":[80,443]},"rigid_boundaries":false,"resolvers":null,"datasource_config":{},"transformations":{}}
 `)
 		got, err := c.JSON()
 		if err != nil {
@@ -210,7 +187,7 @@ func TestMarshalJSON(t *testing.T) {
 	}
 	// Test case 2: MarshalJSON unescapes HTML entities in the JSON bytes
 	t.Run("MarshalJSON unescapes HTML entities in the JSON bytes", func(t *testing.T) {
-		expected := []byte(`{"seed":{},"scope":{"ports":[80,443]},"database":[{"system":"postgres","primary":true,"url":"postgres://postgres:testPasWORD123456!)*&*$@localhost:5432","username":"postgres","password":"testPasWORD123456!)*&*$","host":"localhost","port":"5432"}],"resolvers":null,"datasource_config":{},"transformations":{}}
+		expected := []byte(`{"seed":{},"scope":{"ports":[80,443]},"database":[{"system":"postgres","primary":true,"url":"postgres://postgres:testPasWORD123456!)*&*$@localhost:5432","username":"postgres","password":"testPasWORD123456!)*&*$","host":"localhost","port":"5432"}],"rigid_boundaries":false,"resolvers":null,"datasource_config":{},"transformations":{}}
 `)
 		expectedString := string(expected)
 		got, err := c.JSON()

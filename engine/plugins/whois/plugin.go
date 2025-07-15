@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -6,26 +6,28 @@ package whois
 
 import (
 	"log/slog"
+	"time"
 
-	"github.com/owasp-amass/amass/v4/engine/plugins/support"
-	et "github.com/owasp-amass/amass/v4/engine/types"
+	et "github.com/owasp-amass/amass/v5/engine/types"
 	oam "github.com/owasp-amass/open-asset-model"
-	"go.uber.org/ratelimit"
+	"golang.org/x/time/rate"
 )
 
 type whois struct {
 	name   string
 	log    *slog.Logger
-	rlimit ratelimit.Limiter
+	rlimit *rate.Limiter
 	fqdn   *fqdnLookup
 	domrec *domrec
 	source *et.Source
 }
 
 func NewWHOIS() et.Plugin {
+	limit := rate.Every(time.Second)
+
 	return &whois{
 		name:   "WHOIS",
-		rlimit: ratelimit.New(10, ratelimit.WithoutSlack),
+		rlimit: rate.NewLimiter(limit, 1),
 		source: &et.Source{
 			Name:       "WHOIS",
 			Confidence: 100,
@@ -45,13 +47,12 @@ func (w *whois) Start(r et.Registry) error {
 		plugin: w,
 	}
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:       w,
-		Name:         w.fqdn.name,
-		Priority:     3,
-		MaxInstances: support.MaxHandlerInstances,
-		Transforms:   []string{string(oam.DomainRecord)},
-		EventType:    oam.FQDN,
-		Callback:     w.fqdn.check,
+		Plugin:     w,
+		Name:       w.fqdn.name,
+		Priority:   9,
+		Transforms: []string{string(oam.DomainRecord)},
+		EventType:  oam.FQDN,
+		Callback:   w.fqdn.check,
 	}); err != nil {
 		return err
 	}
@@ -66,7 +67,7 @@ func (w *whois) Start(r et.Registry) error {
 			string(oam.Person),
 			string(oam.Organization),
 			string(oam.Location),
-			string(oam.EmailAddress),
+			string(oam.Identifier),
 			string(oam.Phone),
 		},
 	}

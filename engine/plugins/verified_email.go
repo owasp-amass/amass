@@ -1,16 +1,15 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
 package plugins
 
 import (
-	"errors"
 	"log/slog"
 
-	et "github.com/owasp-amass/amass/v4/engine/types"
+	et "github.com/owasp-amass/amass/v5/engine/types"
 	oam "github.com/owasp-amass/open-asset-model"
-	"github.com/owasp-amass/open-asset-model/contact"
+	"github.com/owasp-amass/open-asset-model/general"
 )
 
 type verifiedEmail struct {
@@ -35,9 +34,9 @@ func (v *verifiedEmail) Start(r et.Registry) error {
 	if err := r.RegisterHandler(&et.Handler{
 		Plugin:     v,
 		Name:       name,
-		Transforms: []string{"emailaddress"},
+		Transforms: []string{string(oam.Identifier)},
 		Priority:   9,
-		EventType:  oam.EmailAddress,
+		EventType:  oam.Identifier,
 		Callback:   v.check,
 	}); err != nil {
 		return err
@@ -52,9 +51,9 @@ func (v *verifiedEmail) Stop() {
 }
 
 func (v *verifiedEmail) check(e *et.Event) error {
-	email, ok := e.Entity.Asset.(*contact.EmailAddress)
-	if !ok {
-		return errors.New("failed to extract the EmailAddress asset")
+	email, ok := e.Entity.Asset.(*general.Identifier)
+	if !ok || email.Type != general.EmailAddress {
+		return nil
 	}
 
 	var storeEmail bool

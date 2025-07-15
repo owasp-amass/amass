@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -7,6 +7,7 @@ package client
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -18,8 +19,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
-	"github.com/owasp-amass/amass/v4/config"
-	et "github.com/owasp-amass/amass/v4/engine/types"
+	"github.com/owasp-amass/amass/v5/config"
+	et "github.com/owasp-amass/amass/v5/engine/types"
 )
 
 type Handler func(message string)
@@ -50,7 +51,7 @@ func (c *Client) Query(query string) (string, error) {
 	} else if res.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("response indicated status: %s", res.Status)
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
@@ -78,10 +79,20 @@ func (c *Client) CreateSession(config *config.Config) (uuid.UUID, error) {
 	}
 
 	var resp struct {
-		Data struct{ CreateSessionFromJson struct{ SessionToken string } }
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+		Data struct {
+			CreateSessionFromJson struct {
+				SessionToken string
+			} `json:"createSessionFromJson"`
+		} `json:"data"`
 	}
 	if err := json.Unmarshal([]byte(res), &resp); err != nil {
 		return token, err
+	}
+	if len(resp.Errors) > 0 && resp.Errors[0].Message != "" {
+		return token, errors.New(resp.Errors[0].Message)
 	}
 
 	return uuid.Parse(resp.Data.CreateSessionFromJson.SessionToken)
@@ -121,13 +132,21 @@ func (c *Client) SessionStats(token uuid.UUID) (*et.SessionStats, error) {
 		return &et.SessionStats{}, err
 	}
 
-	var gqlResp struct {
-		Data struct{ SessionStats et.SessionStats }
+	var resp struct {
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+		Data struct {
+			SessionStats et.SessionStats `json:"sessionStats"`
+		} `json:"data"`
 	}
-	if err := json.Unmarshal([]byte(res), &gqlResp); err != nil {
+	if err := json.Unmarshal([]byte(res), &resp); err != nil {
 		return &et.SessionStats{}, err
 	}
-	return &gqlResp.Data.SessionStats, nil
+	if len(resp.Errors) > 0 && resp.Errors[0].Message != "" {
+		return &et.SessionStats{}, errors.New(resp.Errors[0].Message)
+	}
+	return &resp.Data.SessionStats, nil
 }
 
 // Creates subscription to receove a stream of log messages from the sever

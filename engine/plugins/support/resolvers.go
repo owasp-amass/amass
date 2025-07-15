@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -7,12 +7,18 @@ package support
 import (
 	"context"
 	"errors"
-	"math/rand"
+	"runtime"
 	"strings"
 	"time"
 
 	"github.com/miekg/dns"
-	"github.com/owasp-amass/resolve"
+	"github.com/owasp-amass/resolve/conn"
+	"github.com/owasp-amass/resolve/pool"
+	"github.com/owasp-amass/resolve/selectors"
+	"github.com/owasp-amass/resolve/servers"
+	"github.com/owasp-amass/resolve/types"
+	"github.com/owasp-amass/resolve/utils"
+	"github.com/owasp-amass/resolve/wildcards"
 	"golang.org/x/net/publicsuffix"
 )
 
@@ -23,8 +29,8 @@ type baseline struct {
 
 // baselineResolvers is a list of trusted public DNS resolvers.
 var baselineResolvers = []baseline{
-	{"8.8.8.8", 5},         // Google Primary
-	{"8.8.4.4", 5},         // Google Secondary
+	{"8.8.8.8", 5}, // Google Primary
+	//	{"8.8.4.4", 5},         // Google Secondary
 	{"95.85.95.85", 2},     // Gcore DNS Primary
 	{"2.56.220.2", 2},      // Gcore DNS Secondary
 	{"76.76.2.0", 2},       // ControlD Primary
@@ -78,31 +84,32 @@ var baselineResolvers = []baseline{
 	{"38.132.106.139", 1},  // CyberGhost
 }
 
-var trusted *resolve.Resolvers
+var trusted *pool.Pool
+var detector *wildcards.Detector
 
-func NumResolvers() int {
-	return trusted.Len()
-}
+func PerformQuery(name string, qtype uint16) ([]dns.RR, error) {
+	for num := 0; num < 10; num++ {
+		msg := utils.QueryMsg(name, qtype)
+		if qtype == dns.TypePTR {
+			msg = utils.ReverseMsg(name)
+		}
 
-func PerformQuery(name string, qtype uint16) ([]*resolve.ExtractedAnswer, error) {
-	msg := resolve.QueryMsg(name, qtype)
-	if qtype == dns.TypePTR {
-		msg = resolve.ReverseMsg(name)
-	}
-
-	resp, err := dnsQuery(msg, trusted, 50)
-	if err == nil && resp != nil && !wildcardDetected(resp, trusted) {
-		if ans := resolve.ExtractAnswers(resp); len(ans) > 0 {
-			if rr := resolve.AnswersByType(ans, qtype); len(rr) > 0 {
-				return normalize(rr), nil
+		if resp, err := dnsQuery(msg, trusted); err == nil && resp != nil {
+			if wildcardDetected(resp, detector) {
+				return nil, errors.New("wildcard detected")
+			}
+			if len(resp.Answer) > 0 {
+				if rr := utils.AnswersByType(resp, qtype); len(rr) > 0 {
+					return rr, nil
+				}
 			}
 		}
 	}
-	return nil, err
+	return nil, errors.New("no valid answers")
 }
 
-func wildcardDetected(resp *dns.Msg, r *resolve.Resolvers) bool {
-	name := strings.ToLower(resolve.RemoveLastDot(resp.Question[0].Name))
+func wildcardDetected(resp *dns.Msg, r *wildcards.Detector) bool {
+	name := strings.ToLower(utils.RemoveLastDot(resp.Question[0].Name))
 
 	if dom, err := publicsuffix.EffectiveTLDPlusOne(name); err == nil && dom != "" {
 		return r.WildcardDetected(context.TODO(), resp, dom)
@@ -110,52 +117,34 @@ func wildcardDetected(resp *dns.Msg, r *resolve.Resolvers) bool {
 	return false
 }
 
-func normalize(records []*resolve.ExtractedAnswer) []*resolve.ExtractedAnswer {
-	var results []*resolve.ExtractedAnswer
-
-	for _, rr := range records {
-		results = append(results, &resolve.ExtractedAnswer{
-			Name: strings.ToLower(rr.Name),
-			Type: rr.Type,
-			Data: strings.ToLower(rr.Data),
-		})
+func dnsQuery(msg *dns.Msg, r *pool.Pool) (*dns.Msg, error) {
+	if resp, err := r.Exchange(context.TODO(), msg); err != nil {
+		return nil, err
+	} else if resp.Rcode == dns.RcodeNameError {
+		return nil, errors.New("name does not exist")
+	} else if resp.Rcode == dns.RcodeSuccess {
+		if len(resp.Answer) == 0 {
+			return nil, errors.New("no record of this type")
+		}
+		return resp, nil
 	}
-
-	return results
+	return nil, errors.New("unexpected response")
 }
 
-func dnsQuery(msg *dns.Msg, r *resolve.Resolvers, attempts int) (*dns.Msg, error) {
-	for num := 0; num < attempts; num++ {
-		resp, err := r.QueryBlocking(context.TODO(), msg)
-		if err != nil {
-			continue
-		}
-		if resp.Rcode == dns.RcodeNameError {
-			return nil, errors.New("name does not exist")
-		}
-		if resp.Rcode == dns.RcodeSuccess {
-			if len(resp.Answer) == 0 {
-				return nil, errors.New("no record of this type")
-			}
-			return resp, nil
-		}
+func trustedResolvers() *pool.Pool {
+	timeout := 2 * time.Second
+	cpus := runtime.NumCPU()
+	// wildcard detector
+	serv := servers.NewNameserver("8.8.4.4")
+	wconns := conn.New(cpus, selectors.NewSingle(timeout, serv))
+	detector = wildcards.NewDetector(serv, wconns, nil)
+	// the server pool
+	var servs []types.Nameserver
+	for _, r := range baselineResolvers {
+		servs = append(servs, servers.NewNameserver(r.address))
 	}
-	return nil, nil
-}
-
-func trustedResolvers() (*resolve.Resolvers, int) {
-	blr := baselineResolvers
-	rand.Shuffle(len(blr), func(i, j int) {
-		blr[i], blr[j] = blr[j], blr[i]
-	})
-
-	if pool := resolve.NewResolvers(); pool != nil {
-		for _, r := range blr {
-			_ = pool.AddResolvers(r.qps, r.address)
-		}
-		pool.SetTimeout(3 * time.Second)
-		pool.SetDetectionResolver(50, "8.8.8.8")
-		return pool, pool.Len()
-	}
-	return nil, 0
+	sel := selectors.NewRandom(timeout, servs...)
+	//sel := selectors.NewAuthoritative(timeout, servers.NewNameserver)
+	conns := conn.New(cpus, sel)
+	return pool.New(0, sel, conns, nil)
 }

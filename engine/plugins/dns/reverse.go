@@ -1,4 +1,4 @@
-// Copyright © by Jeff Foley 2017-2024. All rights reserved.
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
 // Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -11,16 +11,15 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
-	"github.com/owasp-amass/amass/v4/engine/plugins/support"
-	et "github.com/owasp-amass/amass/v4/engine/types"
-	amassnet "github.com/owasp-amass/amass/v4/utils/net"
+	"github.com/owasp-amass/amass/v5/engine/plugins/support"
+	et "github.com/owasp-amass/amass/v5/engine/types"
+	amassnet "github.com/owasp-amass/amass/v5/internal/net"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
-	"github.com/owasp-amass/open-asset-model/domain"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
+	"github.com/owasp-amass/open-asset-model/general"
 	oamnet "github.com/owasp-amass/open-asset-model/network"
-	"github.com/owasp-amass/open-asset-model/property"
-	"github.com/owasp-amass/open-asset-model/relation"
-	"github.com/owasp-amass/resolve"
+	"github.com/owasp-amass/resolve/utils"
 )
 
 type dnsReverse struct {
@@ -55,10 +54,10 @@ func (d *dnsReverse) check(e *et.Event) error {
 	if err != nil {
 		return nil
 	}
-	reverse = resolve.RemoveLastDot(reverse)
+	reverse = utils.RemoveLastDot(reverse)
 
 	src := d.plugin.source
-	ptr := d.createPTRAlias(e, reverse, e.Entity, src)
+	ptr := d.createPTRAlias(e, reverse, e.Entity)
 	if ptr == nil {
 		return nil
 	}
@@ -72,12 +71,13 @@ func (d *dnsReverse) check(e *et.Event) error {
 	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, src, since) {
 		rev = append(rev, d.lookup(e, ptr, since)...)
 	} else {
-		rev = append(rev, d.query(e, addrstr, ptr, src)...)
+		rev = append(rev, d.query(e, addrstr, ptr)...)
 		support.MarkAssetMonitored(e.Session, ptr, src)
 	}
 
 	if len(rev) > 0 {
 		d.process(e, rev)
+		support.AddDNSRecordType(e, int(dns.TypePTR))
 
 		var size int
 		if _, conf := e.Session.Scope().IsAssetInScope(ip, 0); conf > 0 {
@@ -96,7 +96,7 @@ func (d *dnsReverse) check(e *et.Event) error {
 func (d *dnsReverse) lookup(e *et.Event, fqdn *dbt.Entity, since time.Time) []*relRev {
 	var rev []*relRev
 
-	n, ok := fqdn.Asset.(*domain.FQDN)
+	n, ok := fqdn.Asset.(*oamdns.FQDN)
 	if !ok || n == nil {
 		return rev
 	}
@@ -110,58 +110,48 @@ func (d *dnsReverse) lookup(e *et.Event, fqdn *dbt.Entity, since time.Time) []*r
 	return rev
 }
 
-func (d *dnsReverse) query(e *et.Event, ipstr string, ptr *dbt.Entity, src *et.Source) []*relRev {
+func (d *dnsReverse) query(e *et.Event, ipstr string, ptr *dbt.Entity) []*relRev {
 	var rev []*relRev
 
 	if rr, err := support.PerformQuery(ipstr, dns.TypePTR); err == nil {
-		if records := d.store(e, ptr, src, rr); len(records) > 0 {
+		if records := d.store(e, ptr, rr); len(records) > 0 {
 			rev = append(rev, records...)
 		}
 	}
 	return rev
 }
 
-func (d *dnsReverse) store(e *et.Event, ptr *dbt.Entity, src *et.Source, rr []*resolve.ExtractedAnswer) []*relRev {
+func (d *dnsReverse) store(e *et.Event, ptr *dbt.Entity, rr []dns.RR) []*relRev {
 	var rev []*relRev
-
-	var passed bool
 	// additional validation of the PTR record
 	for _, record := range rr {
-		if record.Type != dns.TypePTR {
+		if record.Header().Rrtype != dns.TypePTR {
 			continue
 		}
 
-		data := strings.ToLower(strings.TrimSpace(record.Data))
-		if name := support.ScrapeSubdomainNames(data); len(name) == 1 && name[0] == data {
-			passed = true
-			break
-		}
-	}
-	if !passed {
-		return rev
-	}
-
-	for _, record := range rr {
-		if record.Type != dns.TypePTR {
+		data := strings.ToLower(strings.TrimSpace((record.(*dns.PTR)).Ptr))
+		name := support.ScrapeSubdomainNames(data)
+		if len(name) != 1 {
 			continue
 		}
 
-		if t, err := e.Session.Cache().CreateAsset(&domain.FQDN{Name: record.Data}); err == nil && t != nil {
+		if t, err := e.Session.Cache().CreateAsset(&oamdns.FQDN{Name: name[0]}); err == nil && t != nil {
 			if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
-				Relation: &relation.BasicDNSRelation{
+				Relation: &oamdns.BasicDNSRelation{
 					Name: "dns_record",
-					Header: relation.RRHeader{
-						RRType: int(record.Type),
-						Class:  1,
+					Header: oamdns.RRHeader{
+						RRType: int(record.Header().Rrtype),
+						Class:  int(record.Header().Class),
+						TTL:    int(record.Header().Ttl),
 					},
 				},
 				FromEntity: ptr,
 				ToEntity:   t,
 			}); err == nil && edge != nil {
 				rev = append(rev, &relRev{ipFQDN: ptr, target: t})
-				_, _ = e.Session.Cache().CreateEdgeProperty(edge, &property.SourceProperty{
-					Source:     src.Name,
-					Confidence: src.Confidence,
+				_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
+					Source:     d.plugin.source.Name,
+					Confidence: d.plugin.source.Confidence,
 				})
 			}
 		} else {
@@ -172,19 +162,19 @@ func (d *dnsReverse) store(e *et.Event, ptr *dbt.Entity, src *et.Source, rr []*r
 	return rev
 }
 
-func (d *dnsReverse) createPTRAlias(e *et.Event, name string, ip *dbt.Entity, datasrc *et.Source) *dbt.Entity {
-	ptr, err := e.Session.Cache().CreateAsset(&domain.FQDN{Name: name})
+func (d *dnsReverse) createPTRAlias(e *et.Event, name string, ip *dbt.Entity) *dbt.Entity {
+	ptr, err := e.Session.Cache().CreateAsset(&oamdns.FQDN{Name: name})
 	if err != nil || ptr == nil {
 		return nil
 	}
 	if edge, err := e.Session.Cache().CreateEdge(&dbt.Edge{
-		Relation:   &relation.SimpleRelation{Name: "ptr_record"},
+		Relation:   &general.SimpleRelation{Name: "ptr_record"},
 		FromEntity: ip,
 		ToEntity:   ptr,
 	}); err == nil && edge != nil {
-		_, _ = e.Session.Cache().CreateEdgeProperty(edge, &property.SourceProperty{
-			Source:     datasrc.Name,
-			Confidence: datasrc.Confidence,
+		_, _ = e.Session.Cache().CreateEdgeProperty(edge, &general.SourceProperty{
+			Source:     d.plugin.source.Name,
+			Confidence: d.plugin.source.Confidence,
 		})
 	}
 
@@ -202,8 +192,8 @@ func (d *dnsReverse) createPTRAlias(e *et.Event, name string, ip *dbt.Entity, da
 
 func (d *dnsReverse) process(e *et.Event, rev []*relRev) {
 	for _, r := range rev {
-		ip := r.ipFQDN.Asset.(*domain.FQDN)
-		target := r.target.Asset.(*domain.FQDN)
+		ip := r.ipFQDN.Asset.(*oamdns.FQDN)
+		target := r.target.Asset.(*oamdns.FQDN)
 
 		_ = e.Dispatcher.DispatchEvent(&et.Event{
 			Name:    target.Name,
