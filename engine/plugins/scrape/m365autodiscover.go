@@ -10,21 +10,23 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/caffix/stringset"
-	"github.com/owasp-amass/amass/v4/engine/plugins/support"
-	et "github.com/owasp-amass/amass/v4/engine/types"
+	"github.com/owasp-amass/amass/v5/engine/plugins/support"
+	et "github.com/owasp-amass/amass/v5/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
-	"github.com/owasp-amass/open-asset-model/domain"
-	"go.uber.org/ratelimit"
+	oamdns "github.com/owasp-amass/open-asset-model/dns"
+	"github.com/owasp-amass/open-asset-model/general"
+	"golang.org/x/time/rate"
 )
 
 type m365autodiscover struct {
 	name   string
-	rlimit ratelimit.Limiter
+	rlimit *rate.Limiter
 	log    *slog.Logger
 	source *et.Source
 }
@@ -33,7 +35,7 @@ type m365autodiscover struct {
 func NewM365Autodiscover() et.Plugin {
 	return &m365autodiscover{
 		name:   "M365Autodiscover",
-		rlimit: ratelimit.New(2, ratelimit.WithoutSlack),
+		rlimit: rate.NewLimiter(rate.Every(500*time.Millisecond), 1), // 2 requests per second
 		source: &et.Source{
 			Name:       "M365Autodiscover",
 			Confidence: 80,
@@ -48,11 +50,13 @@ func (m *m365autodiscover) Name() string {
 
 // Start registers the plugin with the Amass engine
 func (m *m365autodiscover) Start(r et.Registry) error {
-	m.log = r.Log().WithGroup("plugin").With("name", m.name)
+	//m.log = r.Log().WithGroup("plugin").With("name", m.name)
+	m.log = slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	if err := r.RegisterHandler(&et.Handler{
 		Plugin:       m,
 		Name:         m.name + "-Handler",
+		Transforms:   []string{string(oam.FQDN)},
 		Priority:     5,
 		MaxInstances: 5,
 		EventType:    oam.FQDN,
@@ -70,13 +74,28 @@ func (m *m365autodiscover) Stop() {
 }
 
 func (m *m365autodiscover) check(e *et.Event) error {
-	entities, err := m.query(e, e.Entity.Asset.(*domain.FQDN).Name, m.source)
+	m.log.Info("Checking domain", "domain", e.Entity.Asset.(*oamdns.FQDN).Name)
+	entities, err := m.query(e, e.Entity.Asset.(*oamdns.FQDN).Name, m.source)
 	if err != nil {
 		return nil
 	}
 	support.MarkAssetMonitored(e.Session, e.Entity, m.source)
 
 	if len(entities) > 0 {
+		// Create a relationship between the original FQDN and the discovered ones
+		for _, entity := range entities {
+			if _, err := e.Session.Cache().CreateEdge(&dbt.Edge{
+				Relation:   &general.SimpleRelation{Name: "shares entra tenant with"},
+				FromEntity: e.Entity,
+				ToEntity:   entity,
+			}); err == nil {
+				m.log.Info("relationship discovered",
+					"from", e.Entity.Asset.Key(),
+					"relation", "shares entra tenant with",
+					"to", entity.Asset.Key(),
+					slog.Group("plugin", "name", m.name, "handler", m.name+"-Handler"))
+			}
+		}
 		m.process(e, entities, m.source)
 	}
 	return nil
@@ -88,7 +107,9 @@ func (m *m365autodiscover) query(e *et.Event, name string, source *et.Source) ([
 		return nil, fmt.Errorf("invalid event or session")
 	}
 
-	m.rlimit.Take()
+	if err := m.rlimit.Wait(context.Background()); err != nil {
+		return nil, err
+	}
 
 	subs := stringset.New()
 	defer subs.Close()
@@ -156,6 +177,13 @@ func (m *m365autodiscover) query(e *et.Event, name string, source *et.Source) ([
 }
 
 func (m *m365autodiscover) store(e *et.Event, names []string, src *et.Source) []*dbt.Entity {
+	/* Can be used for adding findings to scope
+	for _, domain := range names {
+		if e.Session.Scope().AddDomain(domain) {
+			m.log.Info("Added new domain to scope", "domain", domain)
+		}
+	}
+	*/
 	entities := support.StoreFQDNsWithSource(e.Session, names, m.source, m.name, m.name+"-Handler")
 
 	return entities
