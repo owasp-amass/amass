@@ -1,7 +1,10 @@
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
+
 package dns
 
 import (
-	"fmt"
 	"log/slog"
 	"strings"
 	"time"
@@ -50,29 +53,24 @@ var matchers = map[string]string{
 	"zoom-domain-verification":        "Zoom",
 }
 
-type txtServiceDiscovery struct {
+type txtHandler struct {
 	name   string
 	source *et.Source
+	plugin *dnsPlugin
 }
 
-func (t *txtServiceDiscovery) check(e *et.Event) error {
+func (r *txtHandler) check(e *et.Event) error {
 	// Create context attributes for consistent logging
-	ctxAttr := slog.Group("plugin", "name", t.name, "handler", "check")
-
-	// Validate event and entity
-	if e == nil {
-		e.Session.Log().Error("event is nil", ctxAttr)
-		return fmt.Errorf("event is nil")
-	}
+	ctxAttr := slog.Group("plugin", "name", r.plugin.name, "handler", r.name)
 
 	if e.Entity == nil {
 		e.Session.Log().Error("entity is nil", ctxAttr)
-		return fmt.Errorf("entity is nil")
+		return nil
 	}
 
 	if e.Entity.Asset == nil {
 		e.Session.Log().Error("entity asset is nil", ctxAttr)
-		return fmt.Errorf("entity asset is nil")
+		return nil
 	}
 
 	entity := e.Entity
@@ -81,25 +79,18 @@ func (t *txtServiceDiscovery) check(e *et.Event) error {
 		return nil
 	}
 
-	since, err := support.TTLStartTime(e.Session.Config(), "FQDN", "FQDN", pluginName)
+	since, err := support.TTLStartTime(e.Session.Config(), "FQDN", "FQDN", r.plugin.name)
 	if err != nil {
 		since = time.Now().Add(-24 * time.Hour) // fall‑back window
 	}
 
 	var txtEntries []string
-	tags, cacheErr := e.Session.Cache().GetEntityTags(entity, since, "dns_record")
-	if cacheErr != nil {
-		e.Session.Log().Error("cache access error", slog.String("err", cacheErr.Error()), ctxAttr, slog.String("domain", fqdn.Name))
-	} else {
+	if tags, err := e.Session.Cache().GetEntityTags(entity, since, "dns_record"); err == nil {
 		for _, tag := range tags {
 			if prop, ok := tag.Property.(*oamdns.DNSRecordProperty); ok && prop.Header.RRType == int(dns.TypeTXT) {
 				txtEntries = append(txtEntries, prop.Data)
 			}
 		}
-	}
-
-	if len(txtEntries) == 0 {
-		return nil
 	}
 
 	var findings []*support.Finding
@@ -118,14 +109,11 @@ func (t *txtServiceDiscovery) check(e *et.Event) error {
 			}
 		}
 	}
-
 	if len(findings) == 0 {
 		return nil
 	}
 
 	// Process the findings
-	support.ProcessAssetsWithSource(e, findings, t.source, t.name, t.name)
-
 	return nil
 }
 

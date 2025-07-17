@@ -1,3 +1,7 @@
+// Copyright © by Jeff Foley 2017-2025. All rights reserved.
+// Use of this source code is governed by Apache 2 LICENSE that can be found in the LICENSE file.
+// SPDX-License-Identifier: Apache-2.0
+
 package dns
 
 import (
@@ -7,54 +11,54 @@ import (
 	oam "github.com/owasp-amass/open-asset-model"
 )
 
-const pluginName = "txt_service_discovery"
-
-type txtPluginManager struct {
-	name     string
-	log      *slog.Logger
-	source   *et.Source
-	discover *txtServiceDiscovery
+type dnsPlugin struct {
+	name   string
+	log    *slog.Logger
+	source *et.Source
+	txt    *txtHandler
 }
 
 func NewTXTPlugin() et.Plugin {
-	return &txtPluginManager{
-		name: pluginName,
+	return &dnsPlugin{
+		name: "DNS-Service-Discovery",
 		source: &et.Source{
-			Name:       pluginName,
+			Name:       "DNS-Service-Discovery",
 			Confidence: 100,
 		},
 	}
 }
 
-func (tpm *txtPluginManager) Name() string { return tpm.name }
+func (p *dnsPlugin) Name() string {
+	return p.name
+}
 
-func (tpm *txtPluginManager) Start(r et.Registry) error {
-	tpm.log = r.Log().WithGroup("plugin").With("name", tpm.name)
+func (p *dnsPlugin) Start(r et.Registry) error {
+	p.log = r.Log().WithGroup("plugin").With("name", p.name)
 
-	const handlerSuffix = "-FQDN-Check"
-	tpm.discover = &txtServiceDiscovery{
-		name:   tpm.name + handlerSuffix,
-		source: tpm.source,
+	p.txt = &txtHandler{
+		name:   p.name + "-TXT-Handler",
+		source: p.source,
+		plugin: p,
 	}
 
 	if err := r.RegisterHandler(&et.Handler{
-		Plugin:     tpm,
-		Name:       tpm.discover.name,
+		Plugin:     p,
+		Name:       p.txt.name,
 		Priority:   9,
 		Transforms: []string{string(oam.FQDN)},
 		EventType:  oam.FQDN,
-		Callback:   tpm.discover.check,
+		Callback:   p.txt.check,
 	}); err != nil {
-		tpm.log.Error("failed to register handler", "error", err)
+		p.log.Error("failed to register handler", "error", err)
 		return err
 	}
 
-	tpm.log.Info("plugin started")
+	p.log.Info("plugin started")
 	return nil
 }
 
-func (tpm *txtPluginManager) Stop() {
-	if tpm.log != nil {
-		tpm.log.Info("plugin stopped")
+func (p *dnsPlugin) Stop() {
+	if p.log != nil {
+		p.log.Info("plugin stopped")
 	}
 }
