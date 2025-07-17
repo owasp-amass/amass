@@ -18,9 +18,9 @@ type dnsPlugin struct {
 	txt    *txtHandler
 }
 
-func NewTXTPlugin() et.Plugin {
+func NewDNSPlugin() et.Plugin {
 	return &dnsPlugin{
-		name: "DNS-Service-Discovery",
+		name: "DNS-SD",
 		source: &et.Source{
 			Name:       "DNS-Service-Discovery",
 			Confidence: 100,
@@ -58,7 +58,5 @@ func (p *dnsPlugin) Start(r et.Registry) error {
 }
 
 func (p *dnsPlugin) Stop() {
-	if p.log != nil {
-		p.log.Info("plugin stopped")
-	}
+	p.log.Info("plugin stopped")
 }

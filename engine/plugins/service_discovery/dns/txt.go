@@ -5,15 +5,14 @@
 package dns
 
 import (
+	"fmt"
 	"log/slog"
 	"strings"
-	"time"
 
 	"github.com/miekg/dns"
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
-	"github.com/owasp-amass/open-asset-model/general"
 )
 
 var matchers = map[string]string{
@@ -61,31 +60,15 @@ type txtHandler struct {
 
 func (r *txtHandler) check(e *et.Event) error {
 	// Create context attributes for consistent logging
-	ctxAttr := slog.Group("plugin", "name", r.plugin.name, "handler", r.name)
-
-	if e.Entity == nil {
-		e.Session.Log().Error("entity is nil", ctxAttr)
-		return nil
-	}
-
-	if e.Entity.Asset == nil {
-		e.Session.Log().Error("entity asset is nil", ctxAttr)
-		return nil
-	}
-
-	entity := e.Entity
-	fqdn, ok := entity.Asset.(*oamdns.FQDN)
-	if !ok {
-		return nil
-	}
+	attr := slog.Group("plugin", "name", r.plugin.name, "handler", r.name)
 
 	since, err := support.TTLStartTime(e.Session.Config(), "FQDN", "FQDN", r.plugin.name)
 	if err != nil {
-		since = time.Now().Add(-24 * time.Hour) // fall‑back window
+		return err
 	}
 
 	var txtEntries []string
-	if tags, err := e.Session.Cache().GetEntityTags(entity, since, "dns_record"); err == nil {
+	if tags, err := e.Session.Cache().GetEntityTags(e.Entity, since, "dns_record"); err == nil {
 		for _, tag := range tags {
 			if prop, ok := tag.Property.(*oamdns.DNSRecordProperty); ok && prop.Header.RRType == int(dns.TypeTXT) {
 				txtEntries = append(txtEntries, prop.Data)
@@ -93,33 +76,13 @@ func (r *txtHandler) check(e *et.Event) error {
 		}
 	}
 
-	var findings []*support.Finding
 	for _, txt := range txtEntries {
-		for needle, svc := range matchers {
-			if strings.Contains(txt, needle) {
-				findings = append(findings, &support.Finding{
-					From:     entity,
-					FromName: fqdn.Name,
-					To:       entity,
-					ToName:   svc,
-					ToMeta:   truncate(txt, 180),
-					Rel:      &general.SimpleRelation{Name: "TXT record"},
-				})
-				break // Only match first pattern per TXT record
+		for key, svc := range matchers {
+			if strings.Contains(txt, key) {
+				e.Session.Log().Info(fmt.Sprintf("TXT record for domain verification: %s", svc), attr)
+				break
 			}
 		}
 	}
-	if len(findings) == 0 {
-		return nil
-	}
-
-	// Process the findings
 	return nil
-}
-
-func truncate(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	return s[:n] + "…"
 }
