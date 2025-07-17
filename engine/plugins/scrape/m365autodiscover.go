@@ -6,11 +6,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -20,7 +20,7 @@ import (
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
-	"github.com/owasp-amass/open-asset-model/general"
+	"golang.org/x/net/publicsuffix"
 	"golang.org/x/time/rate"
 )
 
@@ -50,8 +50,8 @@ func (m *m365autodiscover) Name() string {
 
 // Start registers the plugin with the Amass engine
 func (m *m365autodiscover) Start(r et.Registry) error {
-	//m.log = r.Log().WithGroup("plugin").With("name", m.name)
-	m.log = slog.New(slog.NewTextHandler(os.Stdout, nil))
+	m.log = r.Log().WithGroup("plugin").With("name", m.name)
+	//m.log = slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	if err := r.RegisterHandler(&et.Handler{
 		Plugin:       m,
@@ -74,41 +74,51 @@ func (m *m365autodiscover) Stop() {
 }
 
 func (m *m365autodiscover) check(e *et.Event) error {
-	m.log.Info("Checking domain", "domain", e.Entity.Asset.(*oamdns.FQDN).Name)
-	entities, err := m.query(e, e.Entity.Asset.(*oamdns.FQDN).Name, m.source)
-	if err != nil {
+	fqdn, ok := e.Entity.Asset.(*oamdns.FQDN)
+	if !ok {
+		return errors.New("failed to extract the FQDN asset")
+	}
+
+	// Only run the query for root domains (e.g., owasp.org) that are in scope
+	eTLDPlusOne, err := publicsuffix.EffectiveTLDPlusOne(fqdn.Name)
+	if err != nil || fqdn.Name != eTLDPlusOne {
+		// This is a subdomain, so we don't need to query it
+		m.log.Info("subdomain, so we don't need to query it")
 		return nil
 	}
-	support.MarkAssetMonitored(e.Session, e.Entity, m.source)
 
-	if len(entities) > 0 {
-		// Create a relationship between the original FQDN and the discovered ones
-		for _, entity := range entities {
-			if _, err := e.Session.Cache().CreateEdge(&dbt.Edge{
-				Relation:   &general.SimpleRelation{Name: "shares entra tenant with"},
-				FromEntity: e.Entity,
-				ToEntity:   entity,
-			}); err == nil {
-				m.log.Info("relationship discovered",
-					"from", e.Entity.Asset.Key(),
-					"relation", "shares entra tenant with",
-					"to", entity.Asset.Key(),
-					slog.Group("plugin", "name", m.name, "handler", m.name+"-Handler"))
-			}
-		}
-		m.process(e, entities, m.source)
+	// Check if the FQDN is in scope
+	if _, conf := e.Session.Scope().IsAssetInScope(fqdn, 0); conf == 0 {
+		return nil
+	}
+
+	since, err := support.TTLStartTime(e.Session.Config(), string(oam.FQDN), string(oam.FQDN), m.name)
+	if err != nil {
+		return err
+	}
+
+	var names []*dbt.Entity
+	if support.AssetMonitoredWithinTTL(e.Session, e.Entity, m.source, since) {
+		names = append(names, m.lookup(e, fqdn.Name, since)...)
+	} else {
+		names = append(names, m.query(e, fqdn.Name, m.source)...)
+		support.MarkAssetMonitored(e.Session, e.Entity, m.source)
+	}
+
+	if len(names) > 0 {
+		m.process(e, names)
 	}
 	return nil
 }
 
-func (m *m365autodiscover) query(e *et.Event, name string, source *et.Source) ([]*dbt.Entity, error) {
+func (m *m365autodiscover) query(e *et.Event, name string, source *et.Source) []*dbt.Entity {
 	if e == nil || e.Session == nil {
 		m.log.Info("Invalid Event Or Session")
-		return nil, fmt.Errorf("invalid event or session")
+		return nil
 	}
 
 	if err := m.rlimit.Wait(context.Background()); err != nil {
-		return nil, err
+		return nil
 	}
 
 	subs := stringset.New()
@@ -137,13 +147,14 @@ func (m *m365autodiscover) query(e *et.Event, name string, source *et.Source) ([
 
 	resp, err := postSOAP(ctx, "https://autodiscover-s.outlook.com/autodiscover/autodiscover.svc", soapEnvelope)
 	if err != nil {
-		return nil, err
+
+		return nil
 	}
 	defer resp.Body.Close()
 
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, err
+		return nil
 	}
 
 	var envelope struct {
@@ -160,7 +171,7 @@ func (m *m365autodiscover) query(e *et.Event, name string, source *et.Source) ([
 	}
 
 	if err := xml.NewDecoder(bytes.NewReader(responseBody)).Decode(&envelope); err != nil {
-		return nil, err
+		return nil
 	}
 
 	for _, domain := range envelope.Body.GetFederationInformationResponseMessage.Response.Domains.Domain {
@@ -170,26 +181,24 @@ func (m *m365autodiscover) query(e *et.Event, name string, source *et.Source) ([
 	}
 
 	if subs.Len() == 0 {
-		return nil, fmt.Errorf("no valid domains found")
+		return nil
 	}
 
-	return m.store(e, subs.Slice(), m.source), nil
+	return m.store(e, subs.Slice(), m.source)
 }
 
 func (m *m365autodiscover) store(e *et.Event, names []string, src *et.Source) []*dbt.Entity {
-	/* Can be used for adding findings to scope
+	// Add Domains to Scope
 	for _, domain := range names {
 		if e.Session.Scope().AddDomain(domain) {
-			m.log.Info("Added new domain to scope", "domain", domain)
+			m.log.Info("m365autodiscover: Added new domain to scope", "domain", domain)
 		}
 	}
-	*/
 	entities := support.StoreFQDNsWithSource(e.Session, names, m.source, m.name, m.name+"-Handler")
-
 	return entities
 }
 
-func (m *m365autodiscover) process(e *et.Event, assets []*dbt.Entity, source *et.Source) {
+func (m *m365autodiscover) process(e *et.Event, assets []*dbt.Entity) {
 	support.ProcessFQDNsWithSource(e, assets, m.source)
 }
 
