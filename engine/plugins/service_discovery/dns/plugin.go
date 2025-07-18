@@ -22,8 +22,8 @@ func NewDNSPlugin() et.Plugin {
 	return &dnsPlugin{
 		name: "DNS-SD",
 		source: &et.Source{
-			Name:       "DNS-Service-Discovery",
-			Confidence: 100,
+			Name:       "DNS-SD",
+			Confidence: 80,
 		},
 	}
 }
