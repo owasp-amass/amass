@@ -8,11 +8,15 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/miekg/dns"
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	et "github.com/owasp-amass/amass/v5/engine/types"
+	dbt "github.com/owasp-amass/asset-db/types"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
+	"github.com/owasp-amass/open-asset-model/general"
+	"github.com/owasp-amass/open-asset-model/org"
 )
 
 type txtHandler struct {
@@ -22,32 +26,67 @@ type txtHandler struct {
 }
 
 func (r *txtHandler) check(e *et.Event) error {
-	// Create context attributes for consistent logging
-	attr := slog.Group("plugin", "name", r.plugin.name, "handler", r.name)
-
 	since, err := support.TTLStartTime(e.Session.Config(), "FQDN", "FQDN", r.plugin.name)
 	if err != nil {
 		return err
 	}
 
-	var txtEntries []string
+	if orgs := r.store(e, r.lookup(e, since)); len(orgs) > 0 {
+		r.process(e, orgs)
+	}
+	return nil
+}
+
+func (r *txtHandler) lookup(e *et.Event, since time.Time) []string {
+	var rdata []string
+
 	if tags, err := e.Session.Cache().GetEntityTags(e.Entity, since, "dns_record"); err == nil {
 		for _, tag := range tags {
 			if prop, ok := tag.Property.(*oamdns.DNSRecordProperty); ok && prop.Header.RRType == int(dns.TypeTXT) {
-				txtEntries = append(txtEntries, prop.Data)
+				rdata = append(rdata, prop.Data)
 			}
 		}
 	}
 
-	for _, txt := range txtEntries {
-		for prefix, org := range prefixes {
-			if strings.Contains(txt, prefix) {
-				e.Session.Log().Info(fmt.Sprintf("TXT record for domain verification: %s", org), attr)
-				break
+	return rdata
+}
+
+func (r *txtHandler) store(e *et.Event, records []string) []*dbt.Entity {
+	var orgs []*dbt.Entity
+
+	for _, txt := range records {
+		for prefix, name := range prefixes {
+			if !strings.HasPrefix(txt, prefix) {
+				continue
 			}
+
+			o, err := support.CreateOrgAsset(e.Session, e.Entity,
+				&general.SimpleRelation{Name: "verified_for"},
+				&org.Organization{Name: name}, r.plugin.source)
+
+			if err == nil && o != nil {
+				orgs = append(orgs, o)
+				fqdn := e.Entity.Asset.(*oamdns.FQDN).Name
+				e.Session.Log().Info(fmt.Sprintf("%s has a site verification record for %s: %s",
+					fqdn, name, txt), slog.Group("plugin", "name", r.plugin.name, "handler", r.name))
+			}
+			break
 		}
 	}
-	return nil
+
+	return orgs
+}
+
+func (r *txtHandler) process(e *et.Event, entities []*dbt.Entity) {
+	for _, entity := range entities {
+		if o, ok := entity.Asset.(*org.Organization); ok && o != nil {
+			_ = e.Dispatcher.DispatchEvent(&et.Event{
+				Name:    o.Name,
+				Entity:  entity,
+				Session: e.Session,
+			})
+		}
+	}
 }
 
 var prefixes = map[string]string{
