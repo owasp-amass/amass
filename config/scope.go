@@ -155,11 +155,16 @@ func convertPortRangeToSlice(portRange string) ([]int, error) {
 // returns true is ports match default ports (80,443), otherwise return false
 func portCheck(ports []int) bool {
 	defaultPorts := []int{80, 443}
-	if len(ports) != len(defaultPorts) {
+
+	portSet := make(map[int]struct{}, len(ports))
+	for _, v := range ports {
+		portSet[v] = struct{}{}
+	}
+	if len(portSet) > len(defaultPorts) {
 		return false
 	}
-	for i, v := range ports {
-		if v != defaultPorts[i] {
+	for _, v := range defaultPorts {
+		if _, found := portSet[v]; !found {
 			return false
 		}
 	}
