@@ -1151,8 +1151,8 @@ github.com/opentracing/opentracing-go v1.2.0/go.mod h1:GxEUsuufX4nBwe+T+Wl9TAgYr
 github.com/openzipkin/zipkin-go v0.2.5/go.mod h1:KpXfKdgRDnnhsxw4pNIH9Md5lyFqKUa4YDFlwRYAMyE=
 github.com/orisano/pixelmatch v0.0.0-20220722002657-fb0b55479cde h1:x0TT0RDC7UhAVbbWWBzr41ElhJx5tXPWkIHA2HWPRuw=
 github.com/orisano/pixelmatch v0.0.0-20220722002657-fb0b55479cde/go.mod h1:nZgzbfBr3hhjoZnS66nKrHmduYNpc34ny7RK4z5/HM0=
-github.com/owasp-amass/asset-db v0.23.0 h1:+ZaQcWsd1QugvofTHmjVIj1mKIYMhrKlBDRYtWNH7Ss=
-github.com/owasp-amass/asset-db v0.23.0/go.mod h1:KN5WEsygKj1Sha2lVGioxyVO6h9GQ1Gzfbpor9y2Jkg=
+github.com/owasp-amass/asset-db v0.23.1 h1:hFF/DPgp0DplLeZvt6ksv8qS3s9ex8nccmquZyJGPKM=
+github.com/owasp-amass/asset-db v0.23.1/go.mod h1:KN5WEsygKj1Sha2lVGioxyVO6h9GQ1Gzfbpor9y2Jkg=
 github.com/owasp-amass/open-asset-model v0.15.0 h1:j+iXhkxmRIM+XdtJerazBA4KcJIdUZ+DLB88QRCcSdo=
 github.com/owasp-amass/open-asset-model v0.15.0/go.mod h1:DOX+SiD6PZBroSMnsILAmpf0SHi6TVpqjV4uNfBeg7g=
 github.com/owasp-amass/resolve v0.9.7-0.20250325214539-07077e8c54af h1:wAvOhna/FnerxTkGpEIEbkgCjdpHGZsE9qoe2zc1w9A=
@@ -1387,8 +1387,8 @@ golang.org/x/exp v0.0.0-20200119233911-0405dc783f0a/go.mod h1:2RIsYlXP63K8oxa1u0
 golang.org/x/exp v0.0.0-20200207192155-f17229e696bd/go.mod h1:J/WKrq2StrnmMY6+EHIKF9dgMWnmCNThgcyBT1FY9mM=
 golang.org/x/exp v0.0.0-20200224162631-6cc2880d07d6/go.mod h1:3jZMyOhIsHpP37uCMkUooju7aAi5cS1Q23tOzKc+0MU=
 golang.org/x/exp v0.0.0-20220827204233-334a2380cb91/go.mod h1:cyybsKvd6eL0RnXn6p/Grxp8F5bW7iYuBgsNCOHpMYE=
-golang.org/x/exp v0.0.0-20250717185816-542afb5b7346 h1:vuCObX8mQzik1tfEcYxWZBuVsmQtD1IjxCyPKM18Bh4=
-golang.org/x/exp v0.0.0-20250717185816-542afb5b7346/go.mod h1:A+z0yzpGtvnG90cToK5n2tu8UJVP2XUATh+r+sfOOOc=
+golang.org/x/exp v0.0.0-20250718183923-645b1fa84792 h1:R9PFI6EUdfVKgwKjZef7QIwGcBKu86OEFpJ9nUEP2l4=
+golang.org/x/exp v0.0.0-20250718183923-645b1fa84792/go.mod h1:A+z0yzpGtvnG90cToK5n2tu8UJVP2XUATh+r+sfOOOc=
 golang.org/x/image v0.0.0-20180708004352-c73c2afc3b81/go.mod h1:ux5Hcp/YLpHSI86hEcLt0YII63i6oz57MZXIpbrjZUs=
 golang.org/x/image v0.0.0-20190227222117-0694c2d4d067/go.mod h1:kZ7UVZpmo3dzQBMxlp+ypCbDeSB+sBbTgSJuh5dn5js=
 golang.org/x/image v0.0.0-20190802002840-cff245a6509b/go.mod h1:FeLwcggjj3mMvU+oOTbSwawSJRM1uh48EjtB4UJZlP0=
