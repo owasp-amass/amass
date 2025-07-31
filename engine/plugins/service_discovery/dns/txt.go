@@ -169,7 +169,7 @@ var prefixes = map[string]string{
 	"lastpass-verification-code=":       "LastPass US LP",
 	"LDLAUNCHPAD=":                           "LaunchPad Cloud",
 	"loaderio=":                              "Loader.io",
-	"loadmill-challenge=":                    "Loadmill Ltd"
+	"loadmill-challenge=":                    "Loadmill Ltd",
 	"logmein-domain-confirmation":            "GoTo Technologies USA, Inc.",
 	"logmein-verification-code=":        "LogMeIn, Inc.",
 	"mailchimp=":                        "Intuit Inc.",
