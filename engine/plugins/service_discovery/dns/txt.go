@@ -245,5 +245,5 @@ var prefixes = map[string]string{
 	"zendeskverification=":                   "Zendesk Inc.",
 	"zoho-verification=":                "Zoho Corporation Pvt. Ltd.",
 	"ZOOM_verify_":                      "Zoom Communications, Inc.",
-	"zoom-domain-verification":          "Zoom Communications, Inc."
+	"zoom-domain-verification":          "Zoom Communications, Inc.",
 }
