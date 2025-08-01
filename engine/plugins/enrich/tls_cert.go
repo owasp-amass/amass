@@ -16,6 +16,7 @@ import (
 
 	"github.com/owasp-amass/amass/v5/config"
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
+	"github.com/owasp-amass/amass/v5/engine/plugins/support/org"
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
@@ -24,7 +25,7 @@ import (
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	"github.com/owasp-amass/open-asset-model/general"
 	"github.com/owasp-amass/open-asset-model/network"
-	"github.com/owasp-amass/open-asset-model/org"
+	oamorg "github.com/owasp-amass/open-asset-model/org"
 )
 
 type tlsexpand struct {
@@ -405,12 +406,12 @@ func (te *tlsexpand) storeContact(e *et.Event, c *tlsContact, asset *dbt.Entity,
 
 	// the organization must come last due to a potential chicken-and-egg problem
 	if m.IsMatch(string(oam.Organization)) && len(ct.Organization) > 0 && ct.Organization[0] != "" {
-		orgent, err := support.CreateOrgAsset(e.Session, cr,
+		orgent, err := org.CreateOrgAsset(e.Session, cr,
 			&general.SimpleRelation{Name: "organization"},
-			&org.Organization{Name: ct.Organization[0]}, src)
+			&oamorg.Organization{Name: ct.Organization[0]}, src)
 
 		if err == nil && orgent != nil {
-			o := orgent.Asset.(*org.Organization)
+			o := orgent.Asset.(*oamorg.Organization)
 
 			_ = e.Dispatcher.DispatchEvent(&et.Event{
 				Name:    fmt.Sprintf("%s:%s", o.Name, o.ID),

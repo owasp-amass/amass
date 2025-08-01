@@ -12,11 +12,12 @@ import (
 
 	"github.com/miekg/dns"
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
+	"github.com/owasp-amass/amass/v5/engine/plugins/support/org"
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	"github.com/owasp-amass/open-asset-model/general"
-	"github.com/owasp-amass/open-asset-model/org"
+	oamorg "github.com/owasp-amass/open-asset-model/org"
 )
 
 type txtHandler struct {
@@ -60,9 +61,9 @@ func (r *txtHandler) store(e *et.Event, records []string) []*dbt.Entity {
 				continue
 			}
 
-			o, err := support.CreateOrgAsset(e.Session, e.Entity,
+			o, err := org.CreateOrgAsset(e.Session, e.Entity,
 				&general.SimpleRelation{Name: "verified_for"},
-				&org.Organization{Name: name}, r.plugin.source)
+				&oamorg.Organization{Name: name}, r.plugin.source)
 
 			if err == nil && o != nil {
 				orgs = append(orgs, o)
@@ -79,7 +80,7 @@ func (r *txtHandler) store(e *et.Event, records []string) []*dbt.Entity {
 
 func (r *txtHandler) process(e *et.Event, entities []*dbt.Entity) {
 	for _, entity := range entities {
-		if o, ok := entity.Asset.(*org.Organization); ok && o != nil {
+		if o, ok := entity.Asset.(*oamorg.Organization); ok && o != nil {
 			_ = e.Dispatcher.DispatchEvent(&et.Event{
 				Name:    o.Name,
 				Entity:  entity,

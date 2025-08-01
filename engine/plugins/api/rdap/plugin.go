@@ -20,12 +20,13 @@ import (
 	"github.com/openrdap/rdap/bootstrap/cache"
 	"github.com/owasp-amass/amass/v5/config"
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
+	"github.com/owasp-amass/amass/v5/engine/plugins/support/org"
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/contact"
 	"github.com/owasp-amass/open-asset-model/general"
-	"github.com/owasp-amass/open-asset-model/org"
+	oamorg "github.com/owasp-amass/open-asset-model/org"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
 	"github.com/owasp-amass/open-asset-model/url"
 	"golang.org/x/time/rate"
@@ -289,11 +290,11 @@ func (rd *rdapPlugin) storeEntity(e *et.Event, level int, entity *rdap.Entity, a
 			}
 		}
 	} else if m.IsMatch(string(oam.Organization)) && kind == "org" {
-		orgent, err := support.CreateOrgAsset(e.Session, cr,
-			&general.SimpleRelation{Name: "organization"}, &org.Organization{Name: name}, src)
+		orgent, err := org.CreateOrgAsset(e.Session, cr,
+			&general.SimpleRelation{Name: "organization"}, &oamorg.Organization{Name: name}, src)
 
 		if err == nil && orgent != nil {
-			o := orgent.Asset.(*org.Organization)
+			o := orgent.Asset.(*oamorg.Organization)
 
 			_ = e.Dispatcher.DispatchEvent(&et.Event{
 				Name:    fmt.Sprintf("%s:%s", o.Name, o.ID),

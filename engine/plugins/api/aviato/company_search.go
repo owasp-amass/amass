@@ -13,16 +13,17 @@ import (
 	"time"
 
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
+	"github.com/owasp-amass/amass/v5/engine/plugins/support/org"
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	"github.com/owasp-amass/amass/v5/internal/net/http"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/general"
-	"github.com/owasp-amass/open-asset-model/org"
+	oamorg "github.com/owasp-amass/open-asset-model/org"
 )
 
 func (cs *companySearch) check(e *et.Event) error {
-	_, ok := e.Entity.Asset.(*org.Organization)
+	_, ok := e.Entity.Asset.(*oamorg.Organization)
 	if !ok {
 		return errors.New("failed to extract the Organization asset")
 	}
@@ -84,8 +85,8 @@ func (cs *companySearch) lookup(e *et.Event, orgent *dbt.Entity, since time.Time
 }
 
 func (cs *companySearch) query(e *et.Event, orgent *dbt.Entity, apikey []string) *dbt.Entity {
-	o := orgent.Asset.(*org.Organization)
-	brand := support.ExtractBrandName(o.Name)
+	o := orgent.Asset.(*oamorg.Organization)
+	brand := org.ExtractBrandName(o.Name)
 
 	var body string
 	success := false
@@ -196,7 +197,7 @@ func (cs *companySearch) process(e *et.Event, orgent, ident *dbt.Entity) {
 		Session: e.Session,
 	})
 
-	o := orgent.Asset.(*org.Organization)
+	o := orgent.Asset.(*oamorg.Organization)
 	e.Session.Log().Info("relationship discovered", "from", o.Name, "relation", "id",
 		"to", id.UniqueID, slog.Group("plugin", "name", cs.plugin.name, "handler", cs.name))
 }

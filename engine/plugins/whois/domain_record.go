@@ -13,6 +13,7 @@ import (
 	whoisparser "github.com/likexian/whois-parser"
 	"github.com/owasp-amass/amass/v5/config"
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
+	"github.com/owasp-amass/amass/v5/engine/plugins/support/org"
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	"github.com/owasp-amass/asset-db/cache"
 	dbt "github.com/owasp-amass/asset-db/types"
@@ -20,7 +21,7 @@ import (
 	"github.com/owasp-amass/open-asset-model/contact"
 	oamdns "github.com/owasp-amass/open-asset-model/dns"
 	"github.com/owasp-amass/open-asset-model/general"
-	"github.com/owasp-amass/open-asset-model/org"
+	oamorg "github.com/owasp-amass/open-asset-model/org"
 	oamreg "github.com/owasp-amass/open-asset-model/registration"
 )
 
@@ -262,12 +263,12 @@ func (r *domrec) storeContact(e *et.Event, c *domrecContact, dr *dbt.Entity, m *
 
 	// the organization must come last due to a potential chicken-and-egg problem
 	if m.IsMatch(string(oam.Organization)) {
-		orgent, err := support.CreateOrgAsset(e.Session, cr,
+		orgent, err := org.CreateOrgAsset(e.Session, cr,
 			&general.SimpleRelation{Name: "organization"},
-			&org.Organization{Name: wc.Organization}, r.plugin.source)
+			&oamorg.Organization{Name: wc.Organization}, r.plugin.source)
 
 		if err == nil && orgent != nil {
-			o := orgent.Asset.(*org.Organization)
+			o := orgent.Asset.(*oamorg.Organization)
 
 			_ = e.Dispatcher.DispatchEvent(&et.Event{
 				Name:    fmt.Sprintf("%s:%s", o.Name, o.ID),

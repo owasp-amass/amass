@@ -12,11 +12,12 @@ import (
 	"time"
 
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
+	"github.com/owasp-amass/amass/v5/engine/plugins/support/org"
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/general"
-	"github.com/owasp-amass/open-asset-model/org"
+	oamorg "github.com/owasp-amass/open-asset-model/org"
 )
 
 func (g *gleif) orgEntityToLEI(e *et.Event, orgent *dbt.Entity) *dbt.Entity {
@@ -36,7 +37,7 @@ func (g *gleif) leiToOrgEntity(e *et.Event, ident *dbt.Entity) *dbt.Entity {
 	if edges, err := e.Session.Cache().IncomingEdges(ident, time.Time{}, "id"); err == nil {
 		for _, edge := range edges {
 			if a, err := e.Session.Cache().FindEntityById(edge.FromEntity.ID); err == nil && a != nil {
-				if _, ok := a.Asset.(*org.Organization); ok {
+				if _, ok := a.Asset.(*oamorg.Organization); ok {
 					return a
 				}
 			}
@@ -45,8 +46,8 @@ func (g *gleif) leiToOrgEntity(e *et.Event, ident *dbt.Entity) *dbt.Entity {
 	return nil
 }
 
-func (g *gleif) updateOrgFromLEIRecord(e *et.Event, orgent *dbt.Entity, lei *leiRecord, conf int) {
-	o := orgent.Asset.(*org.Organization)
+func (g *gleif) updateOrgFromLEIRecord(e *et.Event, orgent *dbt.Entity, lei *org.LEIRecord, conf int) {
+	o := orgent.Asset.(*oamorg.Organization)
 
 	// check if the org entity already has a LEI identifier
 	if leient := g.orgEntityToLEI(e, orgent); leient != nil {

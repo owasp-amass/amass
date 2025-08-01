@@ -16,6 +16,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
+	"github.com/owasp-amass/amass/v5/engine/plugins/support/org"
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	"github.com/owasp-amass/amass/v5/internal/net/http"
 	dbt "github.com/owasp-amass/asset-db/types"
@@ -23,7 +24,7 @@ import (
 	"github.com/owasp-amass/open-asset-model/account"
 	"github.com/owasp-amass/open-asset-model/financial"
 	"github.com/owasp-amass/open-asset-model/general"
-	"github.com/owasp-amass/open-asset-model/org"
+	oamorg "github.com/owasp-amass/open-asset-model/org"
 	"github.com/owasp-amass/open-asset-model/people"
 )
 
@@ -83,7 +84,7 @@ func (cr *companyRounds) lookup(e *et.Event, ident *dbt.Entity, since time.Time)
 				continue
 			}
 			if a, err := e.Session.Cache().FindEntityById(edge.FromEntity.ID); err == nil && a != nil {
-				if _, ok := a.Asset.(*org.Organization); ok {
+				if _, ok := a.Asset.(*oamorg.Organization); ok {
 					orgent = a
 					break
 				}
@@ -203,7 +204,7 @@ func (cr *companyRounds) getAssociatedOrg(e *et.Event, ident *dbt.Entity) *dbt.E
 	if edges, err := e.Session.Cache().IncomingEdges(ident, time.Time{}, "id"); err == nil {
 		for _, edge := range edges {
 			if a, err := e.Session.Cache().FindEntityById(edge.FromEntity.ID); err == nil && a != nil {
-				if _, ok := a.Asset.(*org.Organization); ok {
+				if _, ok := a.Asset.(*oamorg.Organization); ok {
 					orgent = a
 					break
 				}
@@ -220,7 +221,7 @@ func (cr *companyRounds) store(e *et.Event, ident, orgent *dbt.Entity, funds *co
 	if orgent == nil {
 		return fundents
 	}
-	o := orgent.Asset.(*org.Organization)
+	o := orgent.Asset.(*oamorg.Organization)
 
 	for _, round := range funds.FundingRounds {
 		orgacc := cr.orgCheckingAccount(e, orgent)
@@ -283,7 +284,7 @@ func (cr *companyRounds) store(e *et.Event, ident, orgent *dbt.Entity, funds *co
 
 func (cr *companyRounds) orgCheckingAccount(e *et.Event, orgent *dbt.Entity) *dbt.Entity {
 	var accountent *dbt.Entity
-	o := orgent.Asset.(*org.Organization)
+	o := orgent.Asset.(*oamorg.Organization)
 
 	if edges, err := e.Session.Cache().OutgoingEdges(orgent, time.Time{}, "account"); err == nil {
 		for _, edge := range edges {
@@ -402,7 +403,7 @@ func (cr *companyRounds) createOrgInvestors(e *et.Event, round *companyFundingRo
 					continue
 				}
 				if a, err := e.Session.Cache().FindEntityById(edge.FromEntity.ID); err == nil && a != nil {
-					if _, ok := a.Asset.(*org.Organization); ok {
+					if _, ok := a.Asset.(*oamorg.Organization); ok {
 						orgent = a
 						break
 					}
@@ -415,8 +416,8 @@ func (cr *companyRounds) createOrgInvestors(e *et.Event, round *companyFundingRo
 		}
 
 		// create the Organization asset
-		o := &org.Organization{Name: investor.Name}
-		orgent, err = support.CreateOrgAsset(e.Session, nil, nil, o, cr.plugin.source)
+		o := &oamorg.Organization{Name: investor.Name}
+		orgent, err = org.CreateOrgAsset(e.Session, nil, nil, o, cr.plugin.source)
 		if err != nil {
 			msg := fmt.Sprintf("failed to create the Organization asset for %s: %s", o.Name, err)
 			e.Session.Log().Error(msg, slog.Group("plugin", "name", cr.plugin.name, "handler", cr.name))

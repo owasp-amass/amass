@@ -10,11 +10,12 @@ import (
 	"time"
 
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
+	"github.com/owasp-amass/amass/v5/engine/plugins/support/org"
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/general"
-	"github.com/owasp-amass/open-asset-model/org"
+	oamorg "github.com/owasp-amass/open-asset-model/org"
 )
 
 func (ro *relatedOrgs) check(e *et.Event) error {
@@ -54,7 +55,7 @@ func (ro *relatedOrgs) lookup(e *et.Event, ident *dbt.Entity, since time.Time) [
 				continue
 			}
 			if a, err := e.Session.Cache().FindEntityById(edge.FromEntity.ID); err == nil && a != nil {
-				if _, ok := a.Asset.(*org.Organization); ok {
+				if _, ok := a.Asset.(*oamorg.Organization); ok {
 					o = a
 					break
 				}
@@ -69,7 +70,7 @@ func (ro *relatedOrgs) lookup(e *et.Event, ident *dbt.Entity, since time.Time) [
 				continue
 			}
 			if a, err := e.Session.Cache().FindEntityById(edge.FromEntity.ID); err == nil && a != nil {
-				if _, ok := a.Asset.(*org.Organization); ok {
+				if _, ok := a.Asset.(*oamorg.Organization); ok {
 					p = a
 					break
 				}
@@ -84,7 +85,7 @@ func (ro *relatedOrgs) lookup(e *et.Event, ident *dbt.Entity, since time.Time) [
 				continue
 			}
 			if a, err := e.Session.Cache().FindEntityById(edge.ToEntity.ID); err == nil && a != nil {
-				if _, ok := a.Asset.(*org.Organization); ok {
+				if _, ok := a.Asset.(*oamorg.Organization); ok {
 					children = append(children, a)
 				}
 			}
@@ -97,12 +98,12 @@ func (ro *relatedOrgs) lookup(e *et.Event, ident *dbt.Entity, since time.Time) [
 func (ro *relatedOrgs) query(e *et.Event, ident *dbt.Entity) []*dbt.Entity {
 	id := ident.Asset.(*general.Identifier)
 
-	parent, _ := ro.plugin.getDirectParentRecord(id)
-	children, _ := ro.plugin.getDirectChildrenRecords(id)
+	parent, _ := org.GLEIFGetDirectParentRecord(id.ID)
+	children, _ := org.GLEIFGetDirectChildrenRecords(id.ID)
 	return ro.store(e, ident, parent, children)
 }
 
-func (ro *relatedOrgs) store(e *et.Event, ident *dbt.Entity, parent *leiRecord, children []*leiRecord) []*dbt.Entity {
+func (ro *relatedOrgs) store(e *et.Event, ident *dbt.Entity, parent *org.LEIRecord, children []*org.LEIRecord) []*dbt.Entity {
 	var orgs []*dbt.Entity
 
 	orgent := ro.plugin.leiToOrgEntity(e, ident)
@@ -111,9 +112,9 @@ func (ro *relatedOrgs) store(e *et.Event, ident *dbt.Entity, parent *leiRecord, 
 	}
 
 	if parent != nil {
-		parentorg := &org.Organization{Name: parent.Attributes.Entity.LegalName.Name}
+		parentorg := &oamorg.Organization{Name: parent.Attributes.Entity.LegalName.Name}
 
-		parentent, err := support.CreateOrgAsset(e.Session, orgent, nil, parentorg, ro.plugin.source)
+		parentent, err := org.CreateOrgAsset(e.Session, orgent, nil, parentorg, ro.plugin.source)
 		if err == nil {
 			orgs = append(orgs, parentent)
 			ro.plugin.updateOrgFromLEIRecord(e, parentent, parent, ro.plugin.source.Confidence)
@@ -124,9 +125,9 @@ func (ro *relatedOrgs) store(e *et.Event, ident *dbt.Entity, parent *leiRecord, 
 	}
 
 	for _, child := range children {
-		childorg := &org.Organization{Name: child.Attributes.Entity.LegalName.Name}
+		childorg := &oamorg.Organization{Name: child.Attributes.Entity.LegalName.Name}
 
-		childent, err := support.CreateOrgAsset(e.Session, orgent,
+		childent, err := org.CreateOrgAsset(e.Session, orgent,
 			&general.SimpleRelation{Name: "subsidiary"}, childorg, ro.plugin.source)
 		if err == nil {
 			orgs = append(orgs, childent)
@@ -140,7 +141,7 @@ func (ro *relatedOrgs) store(e *et.Event, ident *dbt.Entity, parent *leiRecord, 
 
 func (ro *relatedOrgs) process(e *et.Event, assets []*dbt.Entity) {
 	for _, orgent := range assets {
-		o := orgent.Asset.(*org.Organization)
+		o := orgent.Asset.(*oamorg.Organization)
 
 		_ = e.Dispatcher.DispatchEvent(&et.Event{
 			Name:    fmt.Sprintf("%s:%s", o.Name, o.ID),
