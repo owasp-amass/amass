@@ -1,9 +1,5 @@
 # [![OWASP Logo](https://raw.githubusercontent.com/owasp-amass/docs/master/images/owasp_logo.png) OWASP Amass Project](https://owasp.org/www-project-amass/)
 
-<p align="center">
-  <video src="https://raw.githubusercontent.com/owasp-amass/docs/master/images/amass_v5_video.mp4" width="600" controls></video>
-</p>
-
 [![OWASP Flagship](https://img.shields.io/badge/owasp-flagship%20project-48A646.svg)](https://owasp.org/projects/#sec-flagships)
 [![GitHub Release](https://img.shields.io/github/release/owasp-amass/amass)](https://github.com/owasp-amass/amass/releases/latest)
 [![Go Report](https://goreportcard.com/badge/github.com/owasp-amass/amass)](https://goreportcard.com/report/github.com/owasp-amass/amass)
