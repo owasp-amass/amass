@@ -6,21 +6,16 @@ package gleif
 
 import (
 	"errors"
-	"time"
 
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/general"
-	"golang.org/x/time/rate"
 )
 
 func NewGLEIF() et.Plugin {
-	limit := rate.Every(3 * time.Second)
-
 	return &gleif{
-		name:   "GLEIF",
-		rlimit: rate.NewLimiter(limit, 1),
+		name: "GLEIF",
 		source: &et.Source{
 			Name:       "GLEIF",
 			Confidence: 100,

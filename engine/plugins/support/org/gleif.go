@@ -9,48 +9,36 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
 	"net/url"
-	"strings"
 	"time"
 
-	"github.com/adrg/strutil"
-	"github.com/adrg/strutil/metrics"
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	"github.com/owasp-amass/amass/v5/internal/net/http"
 	dbt "github.com/owasp-amass/asset-db/types"
 	"github.com/owasp-amass/open-asset-model/contact"
+	"golang.org/x/time/rate"
 )
 
+var gleifLimit *rate.Limiter
+
+func init() {
+	limit := rate.Every(3 * time.Second)
+
+	gleifLimit = rate.NewLimiter(limit, 1)
+}
+
 // GLEIFSearchFuzzyCompletions performs the fuzzy completion search for the given name.
-func GLEIFSearchFuzzyCompletions(e *et.Event, orgent *dbt.Entity, name string) (*LEIRecord, error) {
+func GLEIFSearchFuzzyCompletions(name string) (*FuzzyCompletionsResponse, error) {
 	u := "https://api.gleif.org/api/v1/fuzzycompletions?field=entity.legalName&q=" + url.QueryEscape(name)
 
+	_ = gleifLimit.Wait(context.TODO())
 	resp, err := http.RequestWebPage(context.TODO(), &http.Request{URL: u})
 	if err != nil || resp.Body == "" {
 		msg := fmt.Sprintf("Failed to obtain the LEI record for %s: %s", name, err)
 		return nil, fmt.Errorf("GLEIFSearchFuzzyCompletions: %s", msg)
 	}
 
-	var result struct {
-		Data []struct {
-			Type       string `json:"type"`
-			Attributes struct {
-				Value string `json:"value"`
-			} `json:"attributes"`
-			Relationships struct {
-				LEIRecords struct {
-					Data struct {
-						Type string `json:"type"`
-						ID   string `json:"id"`
-					} `json:"data"`
-					Links struct {
-						Related string `json:"related"`
-					} `json:"links"`
-				} `json:"lei-records"`
-			} `json:"relationships"`
-		} `json:"data"`
-	}
+	var result FuzzyCompletionsResponse
 	if err := json.Unmarshal([]byte(resp.Body), &result); err != nil {
 		msg := fmt.Sprintf("Failed to unmarshal the LEI record for %s: %s", name, err)
 		return nil, fmt.Errorf("GLEIFSearchFuzzyCompletions: %s", msg)
@@ -58,82 +46,14 @@ func GLEIFSearchFuzzyCompletions(e *et.Event, orgent *dbt.Entity, name string) (
 		return nil, fmt.Errorf("GLEIFSearchFuzzyCompletions: no results found")
 	}
 
-	var names []string
-	m := make(map[string]string)
-	for _, d := range result.Data {
-		if d.Type == "fuzzycompletions" && d.Relationships.LEIRecords.Data.Type == "lei-records" {
-			names = append(names, d.Attributes.Value)
-			m[d.Attributes.Value] = d.Relationships.LEIRecords.Data.ID
-		}
-	}
-
-	var rec *LEIRecord
-	if exact, partial, found := NameMatch(e.Session, orgent, names); found {
-		var conf int
-
-		for _, match := range exact {
-			score := 30
-
-			if len(exact) == 1 {
-				score += 30
-			}
-
-			lei := m[match]
-			if r, err := GLEIFGetLEIRecord(lei); err == nil {
-				if locMatch(e, orgent, r) {
-					score += 40
-				}
-				if score > conf {
-					rec = r
-					conf = score
-				}
-			}
-		}
-
-		swg := metrics.NewSmithWatermanGotoh()
-		swg.CaseSensitive = false
-		swg.GapPenalty = -0.1
-		swg.Substitution = metrics.MatchMismatch{
-			Match:    1,
-			Mismatch: -0.5,
-		}
-
-		for _, match := range partial {
-			if !strings.Contains(strings.ToLower(match), strings.ToLower(name)) {
-				continue
-			}
-
-			sim := strutil.Similarity(name, match, swg)
-			score := int(math.Round(sim * 30))
-
-			if len(partial) == 1 {
-				score += 30
-			}
-
-			lei := m[match]
-			if r, err := GLEIFGetLEIRecord(lei); err == nil {
-				if locMatch(e, orgent, r) {
-					score += 40
-				}
-				if score > conf {
-					rec = r
-					conf = score
-				}
-			}
-		}
-	}
-
-	if rec == nil {
-		msg := fmt.Sprintf("Failed to find a matching LEI record for %s", name)
-		return nil, fmt.Errorf("GLEIFSearchFuzzyCompletions: %w", errors.New(msg))
-	}
-	return rec, nil
+	return &result, nil
 }
 
 // GLEIFGetLEIRecord retrieves the LEI record for the given identifier.
 func GLEIFGetLEIRecord(id string) (*LEIRecord, error) {
 	u := "https://api.gleif.org/api/v1/lei-records/" + id
 
+	_ = gleifLimit.Wait(context.TODO())
 	resp, err := http.RequestWebPage(context.TODO(), &http.Request{URL: u})
 	if err != nil || resp.StatusCode != 200 || resp.Body == "" {
 		return nil, err
@@ -152,6 +72,7 @@ func GLEIFGetLEIRecord(id string) (*LEIRecord, error) {
 func GLEIFGetDirectParentRecord(id string) (*LEIRecord, error) {
 	u := "https://api.gleif.org/api/v1/lei-records/" + id + "/direct-parent"
 
+	_ = gleifLimit.Wait(context.TODO())
 	resp, err := http.RequestWebPage(context.TODO(), &http.Request{URL: u})
 	if err != nil || resp.StatusCode != 200 || resp.Body == "" {
 		return nil, err
@@ -173,6 +94,8 @@ func GLEIFGetDirectChildrenRecords(id string) ([]*LEIRecord, error) {
 	last := 1
 	link := "https://api.gleif.org/api/v1/lei-records/" + id + "/direct-children"
 	for i := 1; i <= last && link != ""; i++ {
+		_ = gleifLimit.Wait(context.TODO())
+
 		resp, err := http.RequestWebPage(context.TODO(), &http.Request{URL: link})
 		if err != nil || resp.StatusCode != 200 || resp.Body == "" {
 			return nil, err
@@ -194,8 +117,8 @@ func GLEIFGetDirectChildrenRecords(id string) ([]*LEIRecord, error) {
 	return children, nil
 }
 
-// locMatch checks if the LEI record matches the location of the organization entity.
-func locMatch(e *et.Event, orgent *dbt.Entity, rec *LEIRecord) bool {
+// LocMatch checks if the LEI record matches the location of the organization entity.
+func LocMatch(e *et.Event, orgent *dbt.Entity, rec *LEIRecord) bool {
 	if rec == nil {
 		return false
 	}

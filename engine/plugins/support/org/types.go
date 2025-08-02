@@ -35,6 +35,26 @@ type MultipleResponse struct {
 	Data []LEIRecord `json:"data"`
 }
 
+type FuzzyCompletionsResponse struct {
+	Data []struct {
+		Type       string `json:"type"`
+		Attributes struct {
+			Value string `json:"value"`
+		} `json:"attributes"`
+		Relationships struct {
+			LEIRecords struct {
+				Data struct {
+					Type string `json:"type"`
+					ID   string `json:"id"`
+				} `json:"data"`
+				Links struct {
+					Related string `json:"related"`
+				} `json:"links"`
+			} `json:"lei-records"`
+		} `json:"relationships"`
+	} `json:"data"`
+}
+
 type LEIRecord struct {
 	Type       string `json:"type"`
 	ID         string `json:"id"`

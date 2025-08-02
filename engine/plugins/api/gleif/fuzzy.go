@@ -5,11 +5,14 @@
 package gleif
 
 import (
-	"context"
 	"errors"
 	"log/slog"
+	"math"
+	"strings"
 	"time"
 
+	"github.com/adrg/strutil"
+	"github.com/adrg/strutil/metrics"
 	"github.com/owasp-amass/amass/v5/engine/plugins/support"
 	"github.com/owasp-amass/amass/v5/engine/plugins/support/org"
 	et "github.com/owasp-amass/amass/v5/engine/types"
@@ -78,14 +81,20 @@ func (fc *fuzzyCompletions) query(e *et.Event, orgent *dbt.Entity) *dbt.Entity {
 	if rec == nil {
 		o := orgent.Asset.(*oamorg.Organization)
 		brand := org.ExtractBrandName(o.Name)
-		_ = fc.plugin.rlimit.Wait(context.TODO())
 
-		var err error
-		rec, err = org.GLEIFSearchFuzzyCompletions(e, orgent, brand)
+		result, err := org.GLEIFSearchFuzzyCompletions(brand)
 		if err != nil {
 			e.Session.Log().Error(err.Error(), slog.Group("plugin", "name", fc.plugin.name, "handler", fc.name))
 			return nil
 		}
+
+		m := make(map[string]string)
+		for _, d := range result.Data {
+			if d.Type == "fuzzycompletions" && d.Relationships.LEIRecords.Data.Type == "lei-records" {
+				m[d.Attributes.Value] = d.Relationships.LEIRecords.Data.ID
+			}
+		}
+		rec = filterFuzzyCompletions(e, orgent, brand, m)
 	}
 
 	if rec == nil {
@@ -94,6 +103,76 @@ func (fc *fuzzyCompletions) query(e *et.Event, orgent *dbt.Entity) *dbt.Entity {
 		return nil
 	}
 	return fc.store(e, orgent, rec, conf)
+}
+
+func filterFuzzyCompletions(e *et.Event, orgent *dbt.Entity, brand string, m map[string]string) *org.LEIRecord {
+	var rec *org.LEIRecord
+	o := orgent.Asset.(*oamorg.Organization)
+
+	var names []string
+	for k := range m {
+		names = append(names, k)
+	}
+	if len(names) == 0 {
+		return nil
+	}
+
+	if exact, partial, found := org.NameMatch(e.Session, orgent, names); found {
+		var conf int
+
+		for _, match := range exact {
+			score := 30
+
+			if len(exact) == 1 {
+				score += 30
+			}
+
+			lei := m[match]
+			if r, err := org.GLEIFGetLEIRecord(lei); err == nil {
+				if org.LocMatch(e, orgent, r) {
+					score += 40
+				}
+				if score > conf {
+					rec = r
+					conf = score
+				}
+			}
+		}
+
+		swg := metrics.NewSmithWatermanGotoh()
+		swg.CaseSensitive = false
+		swg.GapPenalty = -0.1
+		swg.Substitution = metrics.MatchMismatch{
+			Match:    1,
+			Mismatch: -0.5,
+		}
+
+		for _, match := range partial {
+			if !strings.Contains(strings.ToLower(match), strings.ToLower(brand)) {
+				continue
+			}
+
+			sim := strutil.Similarity(o.Name, match, swg)
+			score := int(math.Round(sim * 30))
+
+			if len(partial) == 1 {
+				score += 30
+			}
+
+			lei := m[match]
+			if r, err := org.GLEIFGetLEIRecord(lei); err == nil {
+				if org.LocMatch(e, orgent, r) {
+					score += 40
+				}
+				if score > conf {
+					rec = r
+					conf = score
+				}
+			}
+		}
+	}
+
+	return rec
 }
 
 func (fc *fuzzyCompletions) store(e *et.Event, orgent *dbt.Entity, rec *org.LEIRecord, conf int) *dbt.Entity {

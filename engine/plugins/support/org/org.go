@@ -7,16 +7,19 @@ package org
 import (
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/adrg/strutil"
+	"github.com/adrg/strutil/metrics"
 	"github.com/google/uuid"
 	et "github.com/owasp-amass/amass/v5/engine/types"
 	dbt "github.com/owasp-amass/asset-db/types"
 	oam "github.com/owasp-amass/open-asset-model"
 	"github.com/owasp-amass/open-asset-model/general"
-	"github.com/owasp-amass/open-asset-model/org"
+	oamorg "github.com/owasp-amass/open-asset-model/org"
 )
 
 var createOrgLock sync.Mutex
@@ -30,7 +33,7 @@ func createOrgUnlock(delay bool) {
 	}(delay)
 }
 
-func CreateOrgAsset(session et.Session, obj *dbt.Entity, rel oam.Relation, o *org.Organization, src *et.Source) (*dbt.Entity, error) {
+func CreateOrgAsset(session et.Session, obj *dbt.Entity, rel oam.Relation, o *oamorg.Organization, src *et.Source) (*dbt.Entity, error) {
 	createOrgLock.Lock()
 	defer createOrgUnlock(rel == nil)
 
@@ -59,7 +62,7 @@ func CreateOrgAsset(session et.Session, obj *dbt.Entity, rel oam.Relation, o *or
 				Confidence: src.Confidence,
 			})
 
-			o.ID = uuid.New().String()
+			o.ID = determineOrgID(name)
 			orgent, err = session.Cache().CreateAsset(o)
 			if err != nil || orgent == nil {
 				return nil, errors.New("failed to create the OAM Organization asset")
@@ -83,6 +86,64 @@ func CreateOrgAsset(session et.Session, obj *dbt.Entity, rel oam.Relation, o *or
 	}
 
 	return orgent, nil
+}
+
+func determineOrgID(name string) string {
+	var rec *LEIRecord
+
+	if records, err := GLEIFSearchFuzzyCompletions(name); err == nil && records != nil && len(records.Data) > 0 {
+		swg := metrics.NewSmithWatermanGotoh()
+		swg.CaseSensitive = false
+		swg.GapPenalty = -0.1
+		swg.Substitution = metrics.MatchMismatch{
+			Match:    1,
+			Mismatch: -0.5,
+		}
+
+		var conf int
+		for _, data := range records.Data {
+			if data.Type != "fuzzycompletions" || data.Relationships.LEIRecords.Data.Type != "lei-records" {
+				continue
+			}
+
+			match := data.Attributes.Value
+			lei := data.Relationships.LEIRecords.Data.ID
+			if !strings.Contains(strings.ToLower(match), strings.ToLower(name)) {
+				continue
+			}
+
+			sim := strutil.Similarity(name, match, swg)
+			score := int(math.Round(sim * 30))
+
+			if len(records.Data) == 1 {
+				score += 30
+			}
+
+			if score > conf {
+				if r, err := GLEIFGetLEIRecord(lei); err == nil {
+					rec = r
+					conf = score
+				}
+			}
+		}
+	}
+
+	if rec != nil {
+		result := fmt.Sprintf("%s:%s:", rec.Attributes.Entity.LegalName.Name, rec.Attributes.Entity.Jurisdiction)
+
+		if val := rec.Attributes.Entity.RegisteredAs; val != "" {
+			result += val
+		} else if val := rec.Attributes.Entity.RegisteredAt.Other; val != "" {
+			result += val
+		} else {
+			result += rec.ID
+		}
+
+		return result
+	}
+	// If no LEI record is found, generate a UUID as the identifier.
+	// This ensures that the organization has a unique identifier even without an LEI record
+	return uuid.New().String()
 }
 
 func createRelation(session et.Session, obj *dbt.Entity, rel oam.Relation, subject *dbt.Entity, src *et.Source) error {

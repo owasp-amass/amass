@@ -8,13 +8,11 @@ import (
 	"log/slog"
 
 	et "github.com/owasp-amass/amass/v5/engine/types"
-	"golang.org/x/time/rate"
 )
 
 type gleif struct {
 	name    string
 	log     *slog.Logger
-	rlimit  *rate.Limiter
 	fuzzy   *fuzzyCompletions
 	related *relatedOrgs
 	source  *et.Source
