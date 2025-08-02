@@ -25,10 +25,13 @@ import (
 var createOrgLock sync.Mutex
 
 func createOrgUnlock(delay bool) {
+	if !delay {
+		createOrgLock.Unlock()
+		return
+	}
+	// If a delay is requested, wait before unlocking
 	go func(d bool) {
-		if d {
-			time.Sleep(2 * time.Second)
-		}
+		time.Sleep(2 * time.Second)
 		createOrgLock.Unlock()
 	}(delay)
 }
