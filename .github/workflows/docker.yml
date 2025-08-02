@@ -31,7 +31,6 @@ jobs:
         with:
           images: owaspamass/amass
           tags: |
-            type=ref,event=latest
             type=semver,pattern=v{{major}}
             type=semver,pattern=v{{major}}.{{minor}}
             type=semver,pattern=v{{major}}.{{minor}}.{{patch}}

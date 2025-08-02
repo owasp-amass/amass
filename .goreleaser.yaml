@@ -45,16 +45,6 @@ archives:
       - resources/config.yaml
       - resources/datasources.yaml
 
-sboms:
-  - documents:
-      - "{{ .Binary }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}.bom.json"
-    artifacts: binary
-    cmd: cyclonedx-gomod
-    env:
-      - GOOS={{ .Os }}
-      - GOARCH={{ .Arch }}
-    args: [ "app", "-main", "cmd/amass", "-licenses", "-packages", "-json", "-output", "$document", "." ]
-
 checksum:
   name_template: "{{ .ProjectName }}_checksums.txt"
 
