@@ -59,21 +59,3 @@ release:
   github:
     owner: owasp-amass
     name: amass
-
-homebrew_casks:
-  -
-    name: amass
-    repository:
-      owner: owasp-amass
-      name: homebrew-amass
-      branch: main
-      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
-    url:
-      template: "https://github.com/owasp-amass/amass/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
-    commit_author:
-      name: caffix
-      email: caffix@users.noreply.github.com
-    homepage: "https://owasp.org/www-project-amass/"
-    description: "In-depth Attack Surface Mapping and Asset Discovery"
-    caveats: "This is a cask for the Amass tool, which is used for network mapping and attack surface discovery."
-    license: "Apache-2.0"
