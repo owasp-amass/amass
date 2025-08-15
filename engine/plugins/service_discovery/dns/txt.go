@@ -215,7 +215,6 @@ var prefixes = map[string]string{
 	"square-verification=":              "Block, Inc.",
 	"status-page-domain-verification=":  "Atlassian Corporation Plc",
 	"statuspage-domain-verification=":   "Atlassian Corporation Plc",
-	"store.wps.cn:":                          "Kingsoft Office",
 	"storiesonboard-verification=":      "DevMads Ltd.",
 	"stripe-verification=":              "Stripe, Inc.",
 	"swisssign-check=":                       "SwissSign AG",
@@ -227,7 +226,7 @@ var prefixes = map[string]string{
 	"typeform-site-verification=":       "Typeform S.L.",
 	"ulogin-verification:":                   "Electronic Arts Inc.",
 	"upspin=":                           "Google LLC",
-	"uwsgi:":                                 "uWSGI", // open source repo - belongs to an individual instead of an org
+	"uwsgi:":                                 "uWSGI", // open source repo - belongs to an individual instead of an org - shall we remove?
 	"vercel-domain-verification=":       "Vercel Inc.",
 	"webexdomainverification.":          "Cisco Systems, Inc.",
 	"webexdomainverification=":          "Cisco Systems, Inc.",
