@@ -234,7 +234,7 @@ var prefixes = map[string]string{
 	"webexdomainverification.":          "Cisco Systems, Inc.",
 	"webexdomainverification=":          "Cisco Systems, Inc.",
 	"webflow-verification=":             "Webflow, Inc.",
-	"wiz-domain-verification="           "Wiz, Inc.",
+	"wiz-domain-verification=":           "Wiz, Inc.",
 	"wmail-verification:":                    "Bookry Ltd",
 	"workplace-domain-verification=":    "Meta Platforms, Inc.",
 	"worksmobile-certification=":             "LINE WORKS Corporation",
