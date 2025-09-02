@@ -171,7 +171,7 @@ var prefixes = map[string]string{
 	"loadmill-challenge=":                    "Loadmill Ltd",
 	"logmein-domain-confirmation":            "GoTo Technologies USA, Inc.",
 	"logmein-verification-code=":        "LogMeIn, Inc.",
-	"loom-site-verification="				"Loom, Inc.",
+	"loom-site-verification=":				"Loom, Inc.",
 	"mailchimp=":                        "Intuit Inc.",
 	"mailigen-site-verification=":            "Mailigen, SIA",
 	"mailjet-domain-validation=":             "Mailjet SAS",
