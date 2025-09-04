@@ -5,11 +5,13 @@
 package assoc
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"flag"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/fatih/color"
 	"github.com/owasp-amass/amass/v5/config"
@@ -102,7 +104,7 @@ func CLIWorkflow(cmdName string, clArgs []string) {
 		color.Error = io.Discard
 	}
 	if args.Filepaths.TripleFile != "" {
-		list, err := config.GetListFromFile(args.Filepaths.TripleFile)
+		list, err := readTriplesTextFromFile(args.Filepaths.TripleFile)
 		if err != nil {
 			_, _ = afmt.R.Fprintf(color.Error, "Failed to parse the triple file: %v\n", err)
 			os.Exit(1)
@@ -171,4 +173,26 @@ func CLIWorkflow(cmdName string, clArgs []string) {
 	}
 
 	_, _ = afmt.G.Fprintln(color.Output, string(prettyJSON))
+}
+
+func readTriplesTextFromFile(filePath string) ([]string, error) {
+	var triples []string
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line != "" {
+			triples = append(triples, line)
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	return triples, nil
 }
