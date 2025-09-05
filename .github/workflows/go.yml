@@ -13,6 +13,10 @@ jobs:
       matrix:
         os: [ "ubuntu-latest", "macos-latest", "windows-latest" ]
         go-version: [ "1.24.0" ]
+        include:
+         - os: self-hosted  # Add a native RISC-V leg that uses your self-hosted riscv64 runner
+           runs_on: [ self-hosted, Linux, riscv64 ] 
+           go-version: '1.24.0'
     runs-on: ${{ matrix.os }}
     env:
       CGO_ENABLED: 0
